@@ -6,7 +6,6 @@ import yaml
 import re
 import collections
 import os
-import time
 import requests
 import urllib
 from distutils.spawn import find_executable
@@ -15,6 +14,7 @@ import teuthology
 from . import misc
 from . import provision
 from .config import config
+from .contextutil import safe_while
 from .lockstatus import get_status
 
 log = logging.getLogger(__name__)
@@ -544,10 +544,12 @@ def update_lock(name, description=None, status=None, ssh_pub_key=None):
     if not status:
         status_info = get_status(name)
         if status_info['is_vm']:
-            ssh_key = None
-            while not ssh_key:
-                time.sleep(10)
-                ssh_key = ssh_keyscan([name])
+            with safe_while(sleep=1, tries=15, _raise=False,
+                            action='ssh-keyscan') as proceed:
+                while proceed():
+                    ssh_key = ssh_keyscan([name])
+                    if ssh_key:
+                        break
     updated = {}
     if description is not None:
         updated['description'] = description
@@ -604,7 +606,7 @@ def ssh_keyscan(hostnames):
         raise TypeError("'hostnames' must be a list")
     hostnames = [misc.canonicalize_hostname(name, user=None) for name in
                  hostnames]
-    args = ['ssh-keyscan', '-t', 'rsa'] + hostnames
+    args = ['ssh-keyscan', '-T', '1', '-t', 'rsa'] + hostnames
     p = subprocess.Popen(
         args=args,
         stdout=subprocess.PIPE,

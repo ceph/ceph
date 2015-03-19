@@ -62,7 +62,7 @@ class TestSafeWhile(object):
                     pass
 
         msg = error.value[0]
-        assert "'doing the thing'" in msg
+        assert "'doing the thing' reached maximum tries" in msg
 
     def test_no_raise(self):
         with self.s_while(_raise=False, _sleeper=self.fake_sleep) as proceed:
