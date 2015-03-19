@@ -1,0 +1,234 @@
+ceph_test_async_driver_SOURCES = test/msgr/test_async_driver.cc
+ceph_test_async_driver_LDADD = $(LIBOS) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
+ceph_test_async_driver_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+bin_DEBUGPROGRAMS += ceph_test_async_driver
+
+ceph_test_msgr_SOURCES = test/msgr/test_msgr.cc
+ceph_test_msgr_LDADD = $(LIBOS) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
+ceph_test_msgr_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+bin_DEBUGPROGRAMS += ceph_test_msgr
+
+ceph_streamtest_SOURCES = test/streamtest.cc
+ceph_streamtest_LDADD = $(LIBOS) $(CEPH_GLOBAL)
+bin_DEBUGPROGRAMS += ceph_streamtest
+
+ceph_test_trans_SOURCES = test/test_trans.cc
+ceph_test_trans_LDADD = $(LIBOS) $(CEPH_GLOBAL)
+bin_DEBUGPROGRAMS += ceph_test_trans
+
+ceph_test_mon_workloadgen_SOURCES = test/mon/test_mon_workloadgen.cc
+ceph_test_mon_workloadgen_LDADD = $(LIBOS) $(LIBOSDC) $(CEPH_GLOBAL)
+bin_DEBUGPROGRAMS += ceph_test_mon_workloadgen
+
+ceph_test_mon_msg_SOURCES = test/mon/test-mon-msg.cc
+ceph_test_mon_msg_LDADD = $(LIBOS) $(LIBOSDC) $(CEPH_GLOBAL) $(UNITTEST_LDADD)
+ceph_test_mon_msg_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+bin_DEBUGPROGRAMS += ceph_test_mon_msg
+
+ceph_perf_objectstore_SOURCES = test/objectstore/ObjectStoreTransactionBenchmark.cc
+ceph_perf_objectstore_LDADD = $(LIBOS) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
+ceph_perf_objectstore_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+bin_DEBUGPROGRAMS += ceph_perf_objectstore
+
+if LINUX
+ceph_test_objectstore_SOURCES = test/objectstore/store_test.cc
+ceph_test_objectstore_LDADD = $(LIBOS) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
+ceph_test_objectstore_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+bin_DEBUGPROGRAMS += ceph_test_objectstore
+
+ceph_test_filestore_SOURCES = test/filestore/TestFileStore.cc
+ceph_test_filestore_LDADD = $(LIBOS) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
+ceph_test_filestore_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+bin_DEBUGPROGRAMS += ceph_test_filestore
+endif
+
+ceph_test_objectstore_workloadgen_SOURCES = \
+	test/objectstore/workload_generator.cc \
+	test/objectstore/TestObjectStoreState.cc
+ceph_test_objectstore_workloadgen_LDADD = $(LIBOS) $(CEPH_GLOBAL)
+bin_DEBUGPROGRAMS += ceph_test_objectstore_workloadgen
+
+ceph_test_filestore_idempotent_SOURCES = \
+	test/objectstore/test_idempotent.cc \
+	test/objectstore/FileStoreTracker.cc \
+	test/common/ObjectContents.cc
+ceph_test_filestore_idempotent_LDADD = $(LIBOS) $(CEPH_GLOBAL)
+bin_DEBUGPROGRAMS += ceph_test_filestore_idempotent
+
+ceph_test_filestore_idempotent_sequence_SOURCES = \
+	test/objectstore/test_idempotent_sequence.cc \
+	test/objectstore/DeterministicOpSequence.cc \
+	test/objectstore/TestObjectStoreState.cc \
+	test/objectstore/FileStoreDiff.cc
+ceph_test_filestore_idempotent_sequence_LDADD = $(LIBOS) $(CEPH_GLOBAL)
+bin_DEBUGPROGRAMS += ceph_test_filestore_idempotent_sequence
+
+ceph_xattr_bench_SOURCES = test/xattr_bench.cc
+ceph_xattr_bench_LDADD = $(LIBOS) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
+ceph_xattr_bench_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+bin_DEBUGPROGRAMS += ceph_xattr_bench
+
+ceph_test_filejournal_SOURCES = test/test_filejournal.cc
+ceph_test_filejournal_LDADD = $(LIBOS) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
+ceph_test_filejournal_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+bin_DEBUGPROGRAMS += ceph_test_filejournal
+
+ceph_test_object_map_SOURCES = \
+	test/ObjectMap/test_object_map.cc \
+	test/ObjectMap/KeyValueDBMemory.cc
+ceph_test_object_map_LDADD = $(LIBOS) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
+ceph_test_object_map_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+bin_DEBUGPROGRAMS += ceph_test_object_map
+
+ceph_test_keyvaluedb_atomicity_SOURCES = test/ObjectMap/test_keyvaluedb_atomicity.cc
+ceph_test_keyvaluedb_atomicity_LDADD = $(LIBOS) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
+ceph_test_keyvaluedb_atomicity_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+bin_DEBUGPROGRAMS += ceph_test_keyvaluedb_atomicity
+
+ceph_test_keyvaluedb_iterators_SOURCES = \
+	test/ObjectMap/test_keyvaluedb_iterators.cc \
+	test/ObjectMap/KeyValueDBMemory.cc
+ceph_test_keyvaluedb_iterators_LDADD = $(LIBOS) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
+ceph_test_keyvaluedb_iterators_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+bin_DEBUGPROGRAMS += ceph_test_keyvaluedb_iterators
+
+
+if ENABLE_CLIENT # These need both server and client
+if WITH_RADOS
+
+ceph_smalliobenchfs_SOURCES = \
+	test/bench/small_io_bench_fs.cc \
+	test/bench/testfilestore_backend.cc \
+	test/bench/detailed_stat_collector.cc \
+	test/bench/bencher.cc
+ceph_smalliobenchfs_LDADD = $(LIBRADOS) $(BOOST_PROGRAM_OPTIONS_LIBS) $(LIBOS) $(CEPH_GLOBAL)
+bin_DEBUGPROGRAMS += ceph_smalliobenchfs
+
+ceph_smalliobenchdumb_SOURCES = \
+	test/bench/small_io_bench_dumb.cc \
+	test/bench/dumb_backend.cc \
+	test/bench/detailed_stat_collector.cc \
+	test/bench/bencher.cc
+ceph_smalliobenchdumb_LDADD = $(LIBRADOS) $(BOOST_PROGRAM_OPTIONS_LIBS) $(LIBOS) $(CEPH_GLOBAL)
+bin_DEBUGPROGRAMS += ceph_smalliobenchdumb
+
+ceph_tpbench_SOURCES = \
+	test/bench/tp_bench.cc \
+	test/bench/detailed_stat_collector.cc
+ceph_tpbench_LDADD = $(LIBRADOS) $(BOOST_PROGRAM_OPTIONS_LIBS) $(LIBOS) $(CEPH_GLOBAL)
+bin_DEBUGPROGRAMS += ceph_tpbench
+
+endif # WITH_RADOS
+endif # ENABLE_CLIENT
+
+
+if WITH_MON
+ceph_test_keys_SOURCES = test/testkeys.cc
+ceph_test_keys_LDADD = $(LIBMON) $(CEPH_GLOBAL) 
+bin_DEBUGPROGRAMS += ceph_test_keys
+
+get_command_descriptions_SOURCES = test/common/get_command_descriptions.cc
+get_command_descriptions_LDADD = $(LIBMON) $(LIBCOMMON) $(CEPH_GLOBAL)
+noinst_PROGRAMS += get_command_descriptions
+
+unittest_mon_moncap_SOURCES = test/mon/moncap.cc
+unittest_mon_moncap_LDADD = $(LIBMON) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
+unittest_mon_moncap_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+check_PROGRAMS += unittest_mon_moncap
+
+unittest_mon_pgmap_SOURCES = test/mon/PGMap.cc
+unittest_mon_pgmap_LDADD = $(LIBMON) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
+unittest_mon_pgmap_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+check_PROGRAMS += unittest_mon_pgmap
+
+endif # WITH_MON
+
+
+if WITH_OSD
+unittest_ecbackend_SOURCES = test/osd/TestECBackend.cc
+unittest_ecbackend_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+unittest_ecbackend_LDADD = $(LIBOSD) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
+check_PROGRAMS += unittest_ecbackend
+
+unittest_osdscrub_SOURCES = test/osd/TestOSDScrub.cc
+unittest_osdscrub_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+unittest_osdscrub_LDADD = $(LIBOSD) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
+check_PROGRAMS += unittest_osdscrub
+if LINUX
+unittest_osdscrub_LDADD += -ldl
+endif # LINUX
+
+unittest_pglog_SOURCES = test/osd/TestPGLog.cc
+unittest_pglog_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+unittest_pglog_LDADD = $(LIBOSD) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
+check_PROGRAMS += unittest_pglog
+if LINUX
+unittest_pglog_LDADD += -ldl
+endif # LINUX
+
+unittest_hitset_SOURCES = test/osd/hitset.cc
+unittest_hitset_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+unittest_hitset_LDADD = $(LIBOSD) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
+check_PROGRAMS += unittest_hitset
+
+unittest_osd_osdcap_SOURCES = test/osd/osdcap.cc 
+unittest_osd_osdcap_LDADD = $(LIBOSD) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
+unittest_osd_osdcap_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+check_PROGRAMS += unittest_osd_osdcap
+
+ceph_test_snap_mapper_SOURCES = test/test_snap_mapper.cc
+ceph_test_snap_mapper_LDADD = $(LIBOSD) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
+ceph_test_snap_mapper_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+bin_DEBUGPROGRAMS += ceph_test_snap_mapper
+
+endif # WITH_OSD
+
+
+unittest_chain_xattr_SOURCES = test/objectstore/chain_xattr.cc
+unittest_chain_xattr_LDADD = $(LIBOS) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
+unittest_chain_xattr_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+check_PROGRAMS += unittest_chain_xattr
+
+unittest_flatindex_SOURCES = test/os/TestFlatIndex.cc
+unittest_flatindex_LDADD = $(LIBOS) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
+unittest_flatindex_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+check_PROGRAMS += unittest_flatindex
+
+unittest_lfnindex_SOURCES = test/os/TestLFNIndex.cc
+unittest_lfnindex_LDADD = $(LIBOS) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
+unittest_lfnindex_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+check_PROGRAMS += unittest_lfnindex
+
+
+if WITH_MDS
+
+# This should go to client once LIBMDS_TYPES exists
+ceph_dencoder_SOURCES = \
+	test/encoding/ceph_dencoder.cc \
+	$(DENCODER_SOURCES)
+ceph_dencoder_LDADD = \
+	$(LIBRBD_TYPES) \
+	$(LIBOSD_TYPES) \
+	$(LIBOS_TYPES) \
+	$(LIBMDS) \
+	$(LIBMON_TYPES) \
+	$(DENCODER_DEPS) \
+	$(CEPH_GLOBAL)
+
+# These should always use explicit _CFLAGS/_CXXFLAGS so avoid basename conflicts
+ceph_dencoder_CFLAGS = ${AM_CFLAGS}
+ceph_dencoder_CXXFLAGS = ${AM_CXXFLAGS}
+
+if COMPILER_HAS_VTA
+ceph_dencoder_CFLAGS += -fno-var-tracking-assignments
+ceph_dencoder_CXXFLAGS += -fno-var-tracking-assignments
+endif
+
+bin_PROGRAMS += ceph-dencoder
+
+unittest_mds_authcap_SOURCES = test/mds/TestMDSAuthCaps.cc 
+unittest_mds_authcap_LDADD = $(LIBMDS) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
+unittest_mds_authcap_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+check_PROGRAMS += unittest_mds_authcap
+
+endif # WITH_MDS
