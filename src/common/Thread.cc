@@ -31,6 +31,23 @@
 #include <sched.h>
 #endif
 
+static int _set_affinity(int id)
+{
+#ifdef HAVE_SCHED
+  if (id >= 0 && id < CPU_SETSIZE) {
+    cpu_set_t cpuset;
+    CPU_ZERO(&cpuset);
+
+    CPU_SET(id, &cpuset);
+
+    if (sched_setaffinity(0, sizeof(cpuset), &cpuset) < 0)
+      return -errno;
+    /* guaranteed to take effect immediately */
+    sched_yield();
+  }
+#endif
+  return 0;
+}
 
 Thread::Thread()
   : thread_id(0),
@@ -63,7 +80,7 @@ void *Thread::entry_wrapper()
 		    IOPRIO_PRIO_VALUE(ioprio_class, ioprio_priority));
   }
   if (pid && cpuid >= 0)
-    set_affinity(cpuid);
+    _set_affinity(cpuid);
   return entry();
 }
 
@@ -168,19 +185,8 @@ int Thread::set_ioprio(int cls, int prio)
 
 int Thread::set_affinity(int id)
 {
-#ifdef HAVE_SCHED
-  if (pid && id >= 0 && id < CPU_SETSIZE) {
-    cpu_set_t cpuset;
-    CPU_ZERO(&cpuset);
-
-    CPU_SET(id, &cpuset);
-
-    if (sched_setaffinity(0, sizeof(cpuset), &cpuset) < 0)
-      return -errno;
-    /* guaranteed to take effect immediately */
-    sched_yield();
-  }
-#endif
   cpuid = id;
+  if (pid && ceph_gettid() == pid)
+    _set_affinity(id);
   return 0;
 }
