@@ -3807,7 +3807,7 @@ void CInode::validated_data::dump(Formatter *f) const
       f->dump_int("read_ret_val", backtrace.ondisk_read_retval);
       f->dump_stream("ondisk_value") << backtrace.ondisk_value;
       f->dump_stream("memoryvalue") << backtrace.memory_value;
-      f->dump_stream("error_str") << backtrace.error_str;
+      f->dump_string("error_str", backtrace.error_str.str());
     }
     f->close_section(); // backtrace
     f->open_object_section("raw_rstats");
@@ -3817,7 +3817,7 @@ void CInode::validated_data::dump(Formatter *f) const
       f->dump_int("read_ret_val", raw_rstats.ondisk_read_retval);
       f->dump_stream("ondisk_value") << raw_rstats.ondisk_value;
       f->dump_stream("memory_value") << raw_rstats.memory_value;
-      f->dump_stream("error_str") << raw_rstats.error_str;
+      f->dump_string("error_str", raw_rstats.error_str.str());
     }
     f->close_section(); // raw_rstats
     // dump failure return code
