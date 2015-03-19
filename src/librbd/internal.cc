@@ -24,10 +24,10 @@
 #include "librbd/CopyupRequest.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageWatcher.h"
-
 #include "librbd/internal.h"
 #include "librbd/ObjectMap.h"
 #include "librbd/parent_types.h"
+#include "librbd/RebuildObjectMapRequest.h"
 #include "include/util.h"
 
 #include "librados/snap_set_diff.h"
@@ -2666,7 +2666,7 @@ reprotect_and_return_err:
       RWLock::RLocker l(ictx->snap_lock);
       RWLock::RLocker l2(ictx->parent_lock);
 
-      if (ictx->read_only || ictx->snap_id != CEPH_NOSNAP) {
+      if (ictx->read_only) {
         return -EROFS;
       }
 
@@ -2737,7 +2737,31 @@ reprotect_and_return_err:
 
   int async_rebuild_object_map(ImageCtx *ictx, Context *ctx,
                                ProgressContext &prog_ctx) {
-    // TODO rebuild image HEAD
+    assert(ictx->owner_lock.is_locked());
+    assert(!ictx->image_watcher->is_lock_supported() ||
+	   ictx->image_watcher->is_lock_owner());
+
+    CephContext *cct = ictx->cct;
+    ldout(cct, 20) << "async_rebuild_object_map " << ictx << dendl;
+
+    int r = ictx_check(ictx);
+    if (r < 0) {
+      return r;
+    }
+
+    {
+      RWLock::RLocker snap_locker(ictx->snap_lock);
+      if (ictx->read_only) {
+        return -EROFS;
+      }
+      if (!ictx->test_features(RBD_FEATURE_OBJECT_MAP)) {
+        return -EINVAL;
+      }
+    }
+
+    RebuildObjectMapRequest *req = new RebuildObjectMapRequest(*ictx, ctx,
+                                                               prog_ctx);
+    req->send();
     return 0;
   }
 
