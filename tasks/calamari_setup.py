@@ -156,21 +156,24 @@ def fix_yum_repos(remote, distro):
 
 def get_iceball_with_http(urlbase, ice_version, ice_distro, destdir):
     '''
-    Copy iceball with http to destdir
+    Copy iceball with http to destdir.  Try both .tar.gz and .iso.
     '''
-    url = '/'.join((
-        urlbase,
-        '{ver}/ICE-{ver}-{distro}.tar.gz'.format(
-            ver=ice_version, distro=ice_distro
-        )
-    ))
+    urlprefix = os.path.join(urlbase, '{ver}/ICE-{ver}-{distro}'.format(
+                             ver=ice_version, distro=ice_distro))
+    urls = [urlprefix + ext for ext in ('.tar.gz', '.iso')]
+
     # stream=True means we don't download until copyfileobj below,
     # and don't need a temp file
-    r = requests.get(url, stream=True)
-    filename = url.split('/')[-1]
-    with open(filename, 'w') as f:
-        shutil.copyfileobj(r.raw, f)
-    log.info('saved %s as %s' % (url, filename))
+    for url in urls:
+        r = requests.get(url, stream=True)
+        if not r.ok:
+            continue
+        filename = os.path.join(destdir, url.split('/')[-1])
+        with open(filename, 'w') as f:
+            shutil.copyfileobj(r.raw, f)
+        log.info('saved %s as %s' % (url, filename))
+        return filename
+    raise RuntimeError("Failed to download %s", str(urls))
 
 
 def create_iceball(ice_tool_dir, git_icetool_loc, ice_version, version, ice_distro):
@@ -203,6 +206,9 @@ def create_iceball(ice_tool_dir, git_icetool_loc, ice_version, version, ice_dist
                            (exec_ice, ice_distro))
     subprocess.check_call('rm -rf teuth-virtenv'.split(),
                           cwd=ice_tool_loc)
+    return os.path.join(
+        ice_tool_loc, 'ICE-{0}-{1}.tar.gz'.format(ice_version, ice_distro)
+    )
 
 
 @contextlib.contextmanager
