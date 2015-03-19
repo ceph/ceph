@@ -150,7 +150,7 @@ def main(ctx):
             '-f is only supported by --lock and --unlock'
     if machines:
         assert ctx.lock or ctx.unlock or ctx.list or ctx.list_targets \
-            or ctx.update, \
+            or ctx.update or ctx.brief, \
             'machines cannot be specified with that operation'
     else:
         assert ctx.num_to_lock or ctx.list or ctx.list_targets or \
