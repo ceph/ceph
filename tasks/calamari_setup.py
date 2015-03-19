@@ -153,6 +153,7 @@ def fix_yum_repos(remote, distro):
     return True
 
 
+
 def get_iceball_with_http(urlbase, ice_version, ice_distro, destdir):
     '''
     Copy iceball with http to destdir
@@ -172,6 +173,38 @@ def get_iceball_with_http(urlbase, ice_version, ice_distro, destdir):
     log.info('saved %s as %s' % (url, filename))
 
 
+def create_iceball(ice_tool_dir, git_icetool_loc, ice_version, version, ice_distro):
+    ice_tool_loc = os.path.join(ice_tool_dir, 'ice-tools')
+    if not os.path.isdir(ice_tool_loc):
+        try:
+            subprocess.check_call(['git', 'clone',
+                                   git_icetool_loc + os.sep +
+                                   'ice-tools.git',
+                                   ice_tool_loc])
+        except subprocess.CalledProcessError:
+            raise RuntimeError('git clone of ice-tools failed')
+    exec_ice = os.path.join(ice_tool_loc,
+                            'teuth-virtenv/bin/make_iceball')
+    try:
+        subprocess.check_call('virtualenv teuth-virtenv'.split(),
+                              cwd=ice_tool_loc)
+        subprocess.check_call(
+            'teuth-virtenv/bin/python setup.py develop'.split(),
+            cwd=ice_tool_loc
+        )
+        subprocess.check_call(
+            'teuth-virtenv/bin/pip install -r requirements.txt'.split(),
+            cwd=ice_tool_loc
+        )
+        subprocess.check_call([exec_ice, '-I', ice_version,
+                               '-b', version, '-o', ice_distro])
+    except subprocess.CalledProcessError:
+        raise RuntimeError('%s failed for %s distro' %
+                           (exec_ice, ice_distro))
+    subprocess.check_call('rm -rf teuth-virtenv'.split(),
+                          cwd=ice_tool_loc)
+
+
 @contextlib.contextmanager
 def calamari_install(config, cal_svr):
     """
@@ -183,14 +216,24 @@ def calamari_install(config, cal_svr):
         -- Running ice-setup.py on the calamari server.
         -- Running calamari-ctl initialize.
     """
-    ice_distro = str(cal_svr.os)
-    ice_distro = ice_distro.replace(" ", "")
+    def translate_os_to_ice_distro(osname):
+        convert = {'ubuntu12.04': 'precise', 'ubuntu14.04': 'trusty',
+                   'rhel7.0': 'rhel7', 'debian7': 'wheezy'}
+
+        ice_distro = osname.replace(' ', '')
+
+        if ice_distro in convert:
+            ice_distro = convert[ice_distro]
+
+        return ice_distro
+
+    ice_distro = translate_os_to_ice_distro(str(cal_svr.os))
+
     client_id = str(cal_svr)
     at_loc = client_id.find('@')
     if at_loc > 0:
         client_id = client_id[at_loc + 1:]
-    convert = {'ubuntu12.04': 'precise', 'ubuntu14.04': 'trusty',
-               'rhel7.0': 'rhel7', 'debian7': 'wheezy'}
+
     version = config.get('version', 'v0.80.1')
     email = config.get('email', 'x@x.com')
     ice_tool_dir = config.get('ice_tool_dir', '%s%s%s' %
@@ -199,50 +242,23 @@ def calamari_install(config, cal_svr):
     calamari_password = config.get('calamari_passwd', 'admin')
     git_icetool_loc = config.get('ice_git_location',
                                  'git@github.com:inktankstorage')
-    if ice_distro in convert:
-        ice_distro = convert[ice_distro]
-    log.info('calamari server on %s' % ice_distro)
     iceball_loc = config.get('iceball_location', '.')
     ice_version = config.get('ice_version', ICE_VERSION_DEFAULT)
+
+    log.info('calamari server on %s' % ice_distro)
     delete_iceball = False
+    destdir = '/tmp'
+
     if iceball_loc.startswith('http'):
         get_iceball_with_http(iceball_loc, ice_version, ice_distro, '/tmp')
-        iceball_loc = '/tmp'
         delete_iceball = True
-    elif iceball_loc == '.':
-        ice_tool_loc = os.path.join(ice_tool_dir, 'ice-tools')
-        if not os.path.isdir(ice_tool_loc):
-            try:
-                subprocess.check_call(['git', 'clone',
-                                       git_icetool_loc + os.sep +
-                                       'ice-tools.git',
-                                       ice_tool_loc])
-            except subprocess.CalledProcessError:
-                raise RuntimeError('git clone of ice-tools failed')
-        exec_ice = os.path.join(ice_tool_loc,
-                                'teuth-virtenv/bin/make_iceball')
-        try:
-            subprocess.check_call('virtualenv teuth-virtenv'.split(),
-                                  cwd=ice_tool_loc)
-            subprocess.check_call(
-                'teuth-virtenv/bin/python setup.py develop'.split(),
-                cwd=ice_tool_loc
-            )
-            subprocess.check_call(
-                'teuth-virtenv/bin/pip install -r requirements.txt'.split(),
-                cwd=ice_tool_loc
-            )
-            subprocess.check_call([exec_ice, '-I', ice_version,
-                                   '-b', version, '-o', ice_distro])
-            delete_iceball = True
-        except subprocess.CalledProcessError:
-            raise RuntimeError('%s failed for %s distro' %
-                               (exec_ice, ice_distro))
-        subprocess.check_call('rm -rf teuth-virtenv'.split(),
-                              cwd=ice_tool_loc)
+    elif iceball_loc == '.':  # TODO this is a bad sentinel
+        create_iceball(ice_tool_dir, git_icetool_loc, ice_version, version, ice_distro)
+        # TODO move the ICEBALL to /tmp
+        delete_iceball = True
 
     gz_file = 'ICE-{0}-{1}.tar.gz'.format(ice_version, ice_distro)
-    lgz_file = os.path.join(iceball_loc, gz_file)
+    lgz_file = os.path.join(destdir, gz_file)
     cal_svr.put_file(lgz_file, os.path.join('/tmp/', gz_file))
     ret = cal_svr.run(args=['gunzip', run.Raw('<'), "/tmp/%s" % gz_file,
                       run.Raw('|'), 'tar', 'xvf', run.Raw('-')])
@@ -312,7 +328,7 @@ def deploy_ceph(ctx, cal_svr):
             if daemon_type == 'mon':
                 all_mons.add(remote.shortname)
     first_cmds = [['new'] + list(all_mons), ['install'] + list(all_machines),
-                  ['mon', 'create-initial'] ]
+                  ['mon', 'create-initial']]
     ret = True
     for entry in first_cmds:
         arg_list = ['ceph-deploy'] + entry
