@@ -22,12 +22,12 @@ WBThrottle::WBThrottle(CephContext *cct) :
   PerfCountersBuilder b(
     cct, string("WBThrottle"),
     l_wbthrottle_first, l_wbthrottle_last);
-  b.add_u64(l_wbthrottle_bytes_dirtied, "bytes_dirtied");
-  b.add_u64(l_wbthrottle_bytes_wb, "bytes_wb");
-  b.add_u64(l_wbthrottle_ios_dirtied, "ios_dirtied");
-  b.add_u64(l_wbthrottle_ios_wb, "ios_wb");
-  b.add_u64(l_wbthrottle_inodes_dirtied, "inodes_dirtied");
-  b.add_u64(l_wbthrottle_inodes_wb, "inodes_wb");
+  b.add_u64(l_wbthrottle_bytes_dirtied, "bytes_dirtied", "Dirty data");
+  b.add_u64(l_wbthrottle_bytes_wb, "bytes_wb", "Written data");
+  b.add_u64(l_wbthrottle_ios_dirtied, "ios_dirtied", "Dirty operations");
+  b.add_u64(l_wbthrottle_ios_wb, "ios_wb", "Written operations");
+  b.add_u64(l_wbthrottle_inodes_dirtied, "inodes_dirtied", "Entries waiting for write");
+  b.add_u64(l_wbthrottle_inodes_wb, "inodes_wb", "Written entries");
   logger = b.create_perf_counters();
   cct->get_perfcounters_collection()->add(logger);
   for (unsigned i = l_wbthrottle_first + 1; i != l_wbthrottle_last; ++i)
