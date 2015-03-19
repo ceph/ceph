@@ -624,7 +624,6 @@ CEPH_RADOS_API uint64_t rados_get_instance_id(rados_t cluster);
  *
  * @param cluster which cluster the pool is in
  * @param pool_name name of the pool
- * @param pool_id unique id of the pool
  * @param ioctx where to store the io context
  * @returns 0 on success, negative error code on failure
  */
