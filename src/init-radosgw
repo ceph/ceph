@@ -52,12 +52,6 @@ case "$1" in
                 continue
             fi
 
-            # is the socket defined?  if it's not, this instance shouldn't run as a daemon.
-            rgw_socket=`$RADOSGW -n $name --show-config-value rgw_socket_path`
-            if [ -z "$rgw_socket" ]; then
-                continue
-            fi
-
             # mapped to this host?
             host=`ceph-conf -n $name host`
             hostname=`hostname -s`
