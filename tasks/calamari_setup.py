@@ -255,35 +255,79 @@ def calamari_install(config, cal_svr):
     delete_iceball = False
 
     if iceball_loc.startswith('http'):
-        get_iceball_with_http(iceball_loc, ice_version, ice_distro, '/tmp')
+        iceball_file = get_iceball_with_http(
+            iceball_loc, ice_version, ice_distro, '/tmp'
+        )
         delete_iceball = True
     elif iceball_loc == '.':  # TODO this is a bad sentinel
-        create_iceball(ice_tool_dir, git_icetool_loc, ice_version, version, ice_distro)
-        # TODO move the ICEBALL to /tmp
+        iceball_file = create_iceball(
+            ice_tool_dir, git_icetool_loc, ice_version, version, ice_distro
+        )
+        shutil.move(iceball_file, '/tmp')
+        iceball_file = os.path.join('/tmp', iceball_file)
         delete_iceball = True
+    else:
+        prefix = os.path.join(iceball_loc,
+            'ICE-{0}-{1}'.format(ice_version, ice_distro))
+        for name in [prefix + ext for ext in ('.iso', '.tar.gz')]:
+            if os.path.exists(name):
+                iceball_file = name
+                break
+        else:
+            raise RuntimeError(
+                'Can''t find {0} at {1}'.format(prefix, iceball_loc)
+            )
 
-    gz_file = 'ICE-{0}-{1}.tar.gz'.format(ice_version, ice_distro)
-    lgz_file = os.path.join(destdir, gz_file)
-    cal_svr.put_file(lgz_file, os.path.join('/tmp/', gz_file))
-    ret = cal_svr.run(args=['gunzip', run.Raw('<'), "/tmp/%s" % gz_file,
-                      run.Raw('|'), 'tar', 'xvf', run.Raw('-')])
+    remote_iceball_file = os.path.join('/tmp', os.path.split(iceball_file)[1])
+    cal_svr.put_file(iceball_file, remote_iceball_file)
+    if iceball_file.endswith('.tar.gz'):   # XXX specify tar/iso in config?
+        icetype = 'tarball'
+    elif iceball_file.endswith('.iso'):
+        icetype = 'iso'
+    else:
+        raise RuntimeError('Can''t handle iceball {0}'.format(iceball_file))
+
+    if icetype == 'tarball':
+        ret = cal_svr.run(args=['gunzip', run.Raw('<'), remote_iceball_file,
+                          run.Raw('|'), 'tar', 'xvf', run.Raw('-')])
+        if ret.exitstatus:
+            raise RuntimeError('remote iceball untar failed')
+    elif icetype == 'iso':
+        mountpoint = '/mnt/'   # XXX create?
+        ret = cal_svr.run(
+            args=['sudo', 'mount', '-r', remote_iceball_file, mountpoint,]
+        )
+
+    # install ice_setup package
+    args = {
+        'deb':'sudo dpkg -i /mnt/ice-setup*deb',
+        'rpm':'sudo yum localinstall /mnt/ice_setup*rpm'
+    }.get(cal_svr.system_type, None)
+    if not args:
+        raise RuntimeError('{0}: unknown system type'.format(cal_svr))
+    ret = cal_svr.run(args=args)
     if ret.exitstatus:
-        raise RuntimeError('remote tar failed')
+        raise RuntimeError('ice_setup package install failed')
+
+    # Run ice_setup
     icesetdata = 'yes\n\n%s\nhttp\n' % client_id
     ice_in = StringIO(icesetdata)
-    ice_setup_io = StringIO()
-    ret = cal_svr.run(args=['sudo', 'python', 'ice_setup.py'], stdin=ice_in,
-                      stdout=ice_setup_io)
-    log.debug(ice_setup_io.getvalue())
-    # Run Calamari-ceph connect.
+    ice_out = StringIO()
+    args = 'sudo ice_setup'
+    if icetype == 'iso':
+        args += ' -d /mnt'
+    ret = cal_svr.run(args=args, stdin=ice_in, stdout=ice_out)
+    log.debug(ice_out.getvalue())
     if ret.exitstatus:
         raise RuntimeError('ice_setup.py failed')
+
+    # Run calamari-ctl initialize.
     icesetdata = '%s\n%s\n%s\n%s\n' % (calamari_user, email, calamari_password,
                                        calamari_password)
     ice_in = StringIO(icesetdata)
     ret = cal_svr.run(args=['sudo', 'calamari-ctl', 'initialize'],
-                      stdin=ice_in, stdout=ice_setup_io)
-    log.debug(ice_setup_io.getvalue())
+                      stdin=ice_in, stdout=ice_out)
+    log.debug(ice_out.getvalue())
     if ret.exitstatus:
         raise RuntimeError('calamari-ctl initialize failed')
     try:
@@ -291,7 +335,7 @@ def calamari_install(config, cal_svr):
     finally:
         log.info('Cleaning up after Calamari installation')
         if delete_iceball:
-            os.unlink(gz_file)
+            os.unlink(iceball_file)
 
 
 @contextlib.contextmanager
