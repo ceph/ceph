@@ -173,6 +173,7 @@ void AsyncTrimRequest::send_pre_remove() {
       } else {
         // flag the objects as pending deletion
         Context *ctx = create_callback_context();
+        RWLock::WLocker object_map_locker(m_image_ctx.object_map_lock);
         if (!m_image_ctx.object_map.aio_update(m_delete_start, m_num_objects,
 					       OBJECT_PENDING, OBJECT_EXISTS,
                                                ctx)) {
@@ -210,6 +211,7 @@ bool AsyncTrimRequest::send_post_remove() {
       } else {
         // flag the pending objects as removed
         Context *ctx = create_callback_context();
+        RWLock::WLocker object_map_locker(m_image_ctx.object_map_lock);
         if (!m_image_ctx.object_map.aio_update(m_delete_start, m_num_objects,
 					       OBJECT_NONEXISTENT,
 					       OBJECT_PENDING, ctx)) {
