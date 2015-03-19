@@ -187,6 +187,7 @@ namespace librbd {
       } else {
 	m_state = STATE_OBJECT_MAP;
         Context *ctx = create_callback_context();
+        RWLock::WLocker object_map_locker(m_ictx->object_map_lock);
         if (!m_ictx->object_map.aio_update(m_object_no, OBJECT_EXISTS,
 					   boost::optional<uint8_t>(), ctx)) {
           delete ctx;
