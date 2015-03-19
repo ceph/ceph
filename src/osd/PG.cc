@@ -280,8 +280,12 @@ void PG::proc_master_log(
   peer_info[from] = oinfo;
   dout(10) << " peer osd." << from << " now " << oinfo << " " << omissing << dendl;
   might_have_unfound.insert(from);
-  info.last_epoch_started = oinfo.last_epoch_started;
+
+  // See doc/dev/osd_internals/last_epoch_started
+  if (oinfo.last_epoch_started > info.last_epoch_started)
+    info.last_epoch_started = oinfo.last_epoch_started;
   info.history.merge(oinfo.history);
+  assert(info.last_epoch_started >= info.history.last_epoch_started);
 
   peer_missing[from].swap(omissing);
 }
@@ -893,7 +897,8 @@ map<pg_shard_t, pg_info_t>::const_iterator PG::find_best_info(
   for (map<pg_shard_t, pg_info_t>::const_iterator i = infos.begin();
        i != infos.end();
        ++i) {
-    if (max_last_epoch_started_found < i->second.history.last_epoch_started) {
+    if (!cct->_conf->osd_find_best_info_ignore_history_les &&
+	max_last_epoch_started_found < i->second.history.last_epoch_started) {
       min_last_update_acceptable = eversion_t::max();
       max_last_epoch_started_found = i->second.history.last_epoch_started;
     }
@@ -1479,11 +1484,17 @@ void PG::activate(ObjectStore::Transaction& t,
 
   if (is_primary()) {
     // only update primary last_epoch_started if we will go active
-    if (acting.size() >= pool.info.min_size)
+    if (acting.size() >= pool.info.min_size) {
+      assert(cct->_conf->osd_find_best_info_ignore_history_les ||
+	     info.last_epoch_started <= activation_epoch);
       info.last_epoch_started = activation_epoch;
+    }
   } else if (is_acting(pg_whoami)) {
-    // update last_epoch_started on acting replica to whatever the primary sent
-    info.last_epoch_started = activation_epoch;
+    /* update last_epoch_started on acting replica to whatever the primary sent
+     * unless it's smaller (could happen if we are going peered rather than
+     * active, see doc/dev/osd_internals/last_epoch_started.rst) */
+    if (info.last_epoch_started < activation_epoch)
+      info.last_epoch_started = activation_epoch;
   }
 
   const pg_missing_t &missing = pg_log.get_missing();
@@ -2910,6 +2921,15 @@ void PG::append_log(
 {
   if (transaction_applied)
     update_snap_map(logv, t);
+
+  /* The primary has sent an info updating the history, but it may not
+   * have arrived yet.  We want to make sure that we cannot remember this
+   * write without remembering that it happened in an interval which went
+   * active in epoch history.last_epoch_started.
+   */
+  if (info.last_epoch_started != info.history.last_epoch_started) {
+    info.history.last_epoch_started = info.last_epoch_started;
+  }
   dout(10) << "append_log " << pg_log.get_log() << " " << logv << dendl;
 
   map<string,bufferlist> keys;
