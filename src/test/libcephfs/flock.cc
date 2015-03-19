@@ -171,10 +171,10 @@ static void thread_ConcurrentLocking(str_ConcurrentLocking& s) {
 
   const int fd = ceph_open(cmount, s.file, O_RDWR | O_CREAT, fileMode);
   ASSERT_GE(fd, 0); 
-  PING_MAIN(1); // (1)
 
   ASSERT_EQ(-EWOULDBLOCK,
 	    ceph_flock(cmount, fd, LOCK_EX | LOCK_NB, pthread_self()));
+  PING_MAIN(1); // (1)
   ASSERT_EQ(0, ceph_flock(cmount, fd, LOCK_EX, pthread_self()));
   PING_MAIN(2); // (2)
 
@@ -386,8 +386,6 @@ static void process_ConcurrentLocking(str_ConcurrentLocking& s) {
   const pid_t mypid = getpid();
   PROCESS_SLOW_MS();
 
-  PING_MAIN(1); // (1)
-
   struct ceph_mount_info *cmount = NULL;
   struct timespec ts;
 
@@ -400,6 +398,7 @@ static void process_ConcurrentLocking(str_ConcurrentLocking& s) {
 
   ASSERT_EQ(-EWOULDBLOCK,
 	    ceph_flock(cmount, fd, LOCK_EX | LOCK_NB, mypid));
+  PING_MAIN(1); // (1)
   ASSERT_EQ(0, ceph_flock(cmount, fd, LOCK_EX, mypid));
   PING_MAIN(2); // (2)
 
@@ -462,8 +461,8 @@ TEST(LibCephFS, InterProcessLocking) {
   ASSERT_EQ(0, ceph_flock(cmount, fd, LOCK_EX, mypid));
 
   // Synchronization point with process (failure: process is dead)
-  WAIT_WORKER(1); // (1)
   PING_WORKER(1); // (R1)
+  WAIT_WORKER(1); // (1)
 
   // Shall not have lock immediately
   NOT_WAIT_WORKER(2); // (2)
@@ -568,8 +567,8 @@ TEST(LibCephFS, ThreesomeInterProcessLocking) {
   ASSERT_EQ(0, ceph_flock(cmount, fd, LOCK_EX, mypid));
 
   // Synchronization point with process (failure: process is dead)
-  TWICE(WAIT_WORKER(1)); // (1)
   TWICE(PING_WORKER(1)); // (R1)
+  TWICE(WAIT_WORKER(1)); // (1)
 
   // Shall not have lock immediately
   NOT_WAIT_WORKER(2); // (2)
