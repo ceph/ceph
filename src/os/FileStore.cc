@@ -579,29 +579,29 @@ FileStore::FileStore(const std::string &base, const std::string &jdev, osflagbit
   // initialize logger
   PerfCountersBuilder plb(g_ceph_context, internal_name, l_os_first, l_os_last);
 
-  plb.add_u64(l_os_jq_max_ops, "journal_queue_max_ops");
-  plb.add_u64(l_os_jq_ops, "journal_queue_ops");
-  plb.add_u64_counter(l_os_j_ops, "journal_ops");
-  plb.add_u64(l_os_jq_max_bytes, "journal_queue_max_bytes");
-  plb.add_u64(l_os_jq_bytes, "journal_queue_bytes");
-  plb.add_u64_counter(l_os_j_bytes, "journal_bytes");
-  plb.add_time_avg(l_os_j_lat, "journal_latency");
-  plb.add_u64_counter(l_os_j_wr, "journal_wr");
-  plb.add_u64_avg(l_os_j_wr_bytes, "journal_wr_bytes");
-  plb.add_u64(l_os_oq_max_ops, "op_queue_max_ops");
-  plb.add_u64(l_os_oq_ops, "op_queue_ops");
-  plb.add_u64_counter(l_os_ops, "ops");
-  plb.add_u64(l_os_oq_max_bytes, "op_queue_max_bytes");
-  plb.add_u64(l_os_oq_bytes, "op_queue_bytes");
-  plb.add_u64_counter(l_os_bytes, "bytes");
-  plb.add_time_avg(l_os_apply_lat, "apply_latency");
-  plb.add_u64(l_os_committing, "committing");
+  plb.add_u64(l_os_jq_max_ops, "journal_queue_max_ops", "Max operations in journal queue");
+  plb.add_u64(l_os_jq_ops, "journal_queue_ops", "Operations in journal queue");
+  plb.add_u64_counter(l_os_j_ops, "journal_ops", "Total journal entries written");
+  plb.add_u64(l_os_jq_max_bytes, "journal_queue_max_bytes", "Max data in journal queue");
+  plb.add_u64(l_os_jq_bytes, "journal_queue_bytes", "Size of journal queue");
+  plb.add_u64_counter(l_os_j_bytes, "journal_bytes", "Total operations size in journal");
+  plb.add_time_avg(l_os_j_lat, "journal_latency", "Average journal queue completing latency");
+  plb.add_u64_counter(l_os_j_wr, "journal_wr", "Journal write IOs");
+  plb.add_u64_avg(l_os_j_wr_bytes, "journal_wr_bytes", "Journal data written");
+  plb.add_u64(l_os_oq_max_ops, "op_queue_max_ops", "Max operations in writing to FS queue");
+  plb.add_u64(l_os_oq_ops, "op_queue_ops", "Operations in writing to FS queue");
+  plb.add_u64_counter(l_os_ops, "ops", "Operations written to store");
+  plb.add_u64(l_os_oq_max_bytes, "op_queue_max_bytes", "Max data in writing to FS queue");
+  plb.add_u64(l_os_oq_bytes, "op_queue_bytes", "Size of writing to FS queue");
+  plb.add_u64_counter(l_os_bytes, "bytes", "Data written to store");
+  plb.add_time_avg(l_os_apply_lat, "apply_latency", "Apply latency");
+  plb.add_u64(l_os_committing, "committing", "Is currently committing");
 
-  plb.add_u64_counter(l_os_commit, "commitcycle");
-  plb.add_time_avg(l_os_commit_len, "commitcycle_interval");
-  plb.add_time_avg(l_os_commit_lat, "commitcycle_latency");
-  plb.add_u64_counter(l_os_j_full, "journal_full");
-  plb.add_time_avg(l_os_queue_lat, "queue_transaction_latency_avg");
+  plb.add_u64_counter(l_os_commit, "commitcycle", "Commit cycles");
+  plb.add_time_avg(l_os_commit_len, "commitcycle_interval", "Average interval between commits");
+  plb.add_time_avg(l_os_commit_lat, "commitcycle_latency", "Average latency of commit");
+  plb.add_u64_counter(l_os_j_full, "journal_full", "Journal writes while full");
+  plb.add_time_avg(l_os_queue_lat, "queue_transaction_latency_avg", "Store operation queue latency");
 
   logger = plb.create_perf_counters();
 
