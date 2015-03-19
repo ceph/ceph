@@ -1081,10 +1081,16 @@ public:
   void discard_delayed_expire(CDir *dir);
 
 
+protected:
+  void dump_cache(const char *fn, Formatter *f);
+public:
+  void dump_cache() {dump_cache(NULL, NULL);}
+  void dump_cache(const std::string &filename);
+  void dump_cache(Formatter *f);
+
   // == crap fns ==
  public:
   void show_cache();
-  void dump_cache(const char *fn=0);
   void show_subtrees(int dbl=10);
 
   CInode *hack_pick_random_inode() {

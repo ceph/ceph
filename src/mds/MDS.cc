@@ -347,6 +347,13 @@ bool MDS::asok_command(string command, cmdmap_t& cmdmap, string format,
         return true;
       }
       command_export_dir(f, path, (mds_rank_t)rank);
+    } else if (command == "dump cache") {
+      string path;
+      if(!cmd_getval(g_ceph_context, cmdmap, "path", path)) {
+        mdcache->dump_cache(f);
+      } else {
+        mdcache->dump_cache(path);
+      }
     } else if (command == "force_readonly") {
       mds_lock.Lock();
       mdcache->force_readonly();
@@ -601,6 +608,11 @@ void MDS::set_up_admin_socket()
                                      "name=rank,type=CephInt",
                                      asok_hook,
                                      "migrate a subtree to named MDS");
+  assert(r == 0);
+  r = admin_socket->register_command("dump cache",
+                                     "dump cache name=path,type=CephString,req=false",
+                                     asok_hook,
+                                     "dump metadata cache (optionally to a file)");
   assert(r == 0);
   r = admin_socket->register_command("session evict",
 				     "session evict name=client_id,type=CephString",
@@ -1225,9 +1237,6 @@ COMMAND("heap " \
 	"mds", "*", "cli,rest")
 };
 
-// FIXME: reinstate dumpcache as an admin socket command
-//  -- it makes no sense for it to be a remote command when
-//     the output is a local file
 // FIXME: reinstate issue_caps, try_eval, fragment_dir, merge_dir
 //  *if* it makes sense to do so (or should these be admin socket things?)
 
