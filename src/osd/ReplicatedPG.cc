@@ -3510,6 +3510,22 @@ static string list_entries(const T& m) {
   return s;
 }
 
+bool ReplicatedPG::maybe_create_new_object(OpContext *ctx)
+{
+  ObjectState& obs = ctx->new_obs;
+  if (!obs.exists) {
+    ctx->delta_stats.num_objects++;
+    obs.exists = true;
+    obs.oi.new_object();
+    return true;
+  } else if (obs.oi.is_whiteout()) {
+    dout(10) << __func__ << " clearing whiteout on " << obs.oi.soid << dendl;
+    ctx->new_obs.oi.clear_flag(object_info_t::FLAG_WHITEOUT);
+    --ctx->delta_stats.num_whiteouts;
+  }
+  return false;
+}
+
 int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 {
   int result = 0;
@@ -4280,13 +4296,10 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
           result = -EOPNOTSUPP;
           break;
         }
-        if (!obs.exists) {
+	if (maybe_create_new_object(ctx)) {
           ctx->mod_desc.create();
           t->touch(soid);
-          ctx->delta_stats.num_objects++;
-          obs.exists = true;
-	  obs.oi.new_object();
-        }
+	}
         t->set_alloc_hint(soid, op.alloc_hint.expected_object_size,
                           op.alloc_hint.expected_write_size);
         ctx->delta_stats.num_wr++;
@@ -4370,11 +4383,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	}
 	write_update_size_and_usage(ctx->delta_stats, oi, ctx->modified_ranges,
 				    op.extent.offset, op.extent.length, true);
-	if (!obs.exists) {
-	  ctx->delta_stats.num_objects++;
-	  obs.exists = true;
-	  obs.oi.set_omap_digest(-1);
-	}
+	maybe_create_new_object(ctx);
 	if (op.extent.offset == 0 && op.extent.length == oi.size)
 	  obs.oi.set_data_digest(osd_op.indata.crc32c(-1));
 	else
@@ -4431,11 +4440,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  }
 	  t->write(soid, op.extent.offset, op.extent.length, osd_op.indata, op.flags);
 	}
-	if (!obs.exists) {
-	  ctx->delta_stats.num_objects++;
-	  obs.exists = true;
-	  obs.oi.set_omap_digest(-1);  // no omap yet
-	}
+	maybe_create_new_object(ctx);
 	obs.oi.set_data_digest(osd_op.indata.crc32c(-1));
 
 	interval_set<uint64_t> ch;
@@ -4505,14 +4510,10 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	    // category is no longer implemented.
 	  }
           if (result >= 0) {
-            if (!obs.exists)
+	    if (maybe_create_new_object(ctx)) {
               ctx->mod_desc.create();
+	    }
             t->touch(soid);
-            if (!obs.exists) {
-              ctx->delta_stats.num_objects++;
-              obs.exists = true;
-	      obs.oi.new_object();
-            }
           }
 	}
       }
@@ -4589,11 +4590,8 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       ++ctx->num_read;
       ++ctx->num_write;
       {
-	if (!obs.exists) {
+	if (maybe_create_new_object(ctx)) {
 	  t->touch(obs.oi.soid);
-	  ctx->delta_stats.num_objects++;
-	  obs.exists = true;
-	  obs.oi.new_object();
 	}
 	if (op.clonerange.src_offset + op.clonerange.length > src_obc->obs.oi.size) {
 	  dout(10) << " clonerange source " << osd_op.soid << " "
@@ -4704,12 +4702,9 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  result = -ENAMETOOLONG;
 	  break;
 	}
-	if (!obs.exists) {
+	if (maybe_create_new_object(ctx)) {
 	  ctx->mod_desc.create();
 	  t->touch(soid);
-	  ctx->delta_stats.num_objects++;
-	  obs.exists = true;
-	  obs.oi.new_object();
 	}
 	string aname;
 	bp.copy(op.xattr.name_len, aname);
@@ -5078,13 +5073,11 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       ctx->mod_desc.mark_unrollbackable();
       ++ctx->num_write;
       {
-	if (!obs.exists) {
-	  ctx->delta_stats.num_objects++;
-	  obs.exists = true;
-	  obs.oi.set_data_digest(-1);
+	if (maybe_create_new_object(ctx)) {
+	  t->touch(soid);
+	} else {
+	  obs.oi.clear_omap_digest();
 	}
-	obs.oi.clear_omap_digest();
-	t->touch(soid);
 	map<string, bufferlist> to_set;
 	try {
 	  ::decode(to_set, bp);
@@ -5116,13 +5109,11 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       ctx->mod_desc.mark_unrollbackable();
       ++ctx->num_write;
       {
-	if (!obs.exists) {
-	  ctx->delta_stats.num_objects++;
-	  obs.exists = true;
-	  obs.oi.set_data_digest(-1);
+	if (maybe_create_new_object(ctx)) {
+	  t->touch(soid);
+	} else {
+	  obs.oi.clear_omap_digest();
 	}
-	obs.oi.clear_omap_digest();
-	t->touch(soid);
 	t->omap_setheader(soid, osd_op.indata);
 	ctx->delta_stats.num_wr++;
       }
@@ -5507,10 +5498,7 @@ int ReplicatedPG::_rollback_to(OpContext *ctx, ceph_osd_op& op)
       }
 
       // Adjust the cached objectcontext
-      if (!obs.exists) {
-	obs.exists = true; //we're about to recreate it
-	ctx->delta_stats.num_objects++;
-      }
+      maybe_create_new_object(ctx);
       ctx->delta_stats.num_bytes -= obs.oi.size;
       ctx->delta_stats.num_bytes += rollback_to->obs.oi.size;
       obs.oi.size = rollback_to->obs.oi.size;
@@ -5862,16 +5850,6 @@ int ReplicatedPG::prepare_transaction(OpContext *ctx)
   if (ctx->op_t->empty() && !ctx->modify) {
     unstable_stats.add(ctx->delta_stats);
     return result;
-  }
-
-  // cache: clear whiteout?
-  if (pool.info.cache_mode != pg_pool_t::CACHEMODE_NONE) {
-    if (ctx->user_modify &&
-	ctx->obc->obs.oi.is_whiteout()) {
-      dout(10) << __func__ << " clearing whiteout on " << soid << dendl;
-      ctx->new_obs.oi.clear_flag(object_info_t::FLAG_WHITEOUT);
-      --ctx->delta_stats.num_whiteouts;
-    }
   }
 
   // clone, if necessary
