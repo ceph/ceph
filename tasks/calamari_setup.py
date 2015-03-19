@@ -218,9 +218,9 @@ def calamari_install(config, cal_svr):
 
     The steps here are:
         -- Get the iceball, building it if necessary.
-        -- Copy the iceball to the calamari server, and untarring it.
-        -- Running ice-setup.py on the calamari server.
-        -- Running calamari-ctl initialize.
+        -- Copy the iceball to the calamari server, and untar/mount it.
+        -- Run ice-setup on the calamari server.
+        -- Run calamari-ctl initialize.
     """
     def translate_os_to_ice_distro(osname):
         convert = {'ubuntu12.04': 'precise', 'ubuntu14.04': 'trusty',
@@ -245,15 +245,14 @@ def calamari_install(config, cal_svr):
     ice_tool_dir = config.get('ice_tool_dir', '%s%s%s' %
                               (os.environ['HOME'], os.sep, 'src'))
     calamari_user = config.get('calamari_user', 'admin')
-    calamari_password = config.get('calamari_passwd', 'admin')
+    calamari_password = config.get('calamari_password', 'admin')
     git_icetool_loc = config.get('ice_git_location',
-                                 'git@github.com:inktankstorage')
+                                 'git@github.com:ceph')
     iceball_loc = config.get('iceball_location', '.')
     ice_version = config.get('ice_version', ICE_VERSION_DEFAULT)
 
-    log.info('calamari server on %s' % ice_distro)
+    log.info('calamari server distro: %s' % ice_distro)
     delete_iceball = False
-    destdir = '/tmp'
 
     if iceball_loc.startswith('http'):
         get_iceball_with_http(iceball_loc, ice_version, ice_distro, '/tmp')
