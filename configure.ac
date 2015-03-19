@@ -279,6 +279,12 @@ else
     AC_MSG_FAILURE([no suitable crypto library found])
 fi
 
+AC_ARG_ENABLE(gitversion,
+    [AC_HELP_STRING([--enable-gitversion], [build Ceph with git version string])],
+    [], [enable_gitversion=yes])
+
+AM_CONDITIONAL(NO_GIT_VERSION, [test "x$enable_gitversion" = "xno"])
+
 AC_ARG_ENABLE([root-make-check],
             [AS_HELP_STRING([--enable-root-make-check], [enable make check tests that require root privileges])],
             [],
