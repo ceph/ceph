@@ -182,6 +182,40 @@ TEST(chain_xattr, chunk_aligned) {
     ASSERT_EQ(0, chain_fremovexattr(fd, name2.c_str()));
   }
 
+  for (int len = CHAIN_XATTR_SHORT_BLOCK_LEN - 10;
+       len < CHAIN_XATTR_SHORT_BLOCK_LEN + 10;
+       ++len) {
+    cout << len << std::endl;
+    const string x(len, 'x');
+    char buf[len*2];
+    ASSERT_EQ(len, chain_setxattr(file, name.c_str(), x.c_str(), len));
+    char attrbuf[4096];
+    int l = ceph_os_listxattr(file, attrbuf, sizeof(attrbuf));
+    for (char *p = attrbuf; p - attrbuf < l; p += strlen(p) + 1) {
+      cout << "  attr " << p << std::endl;
+    }
+    ASSERT_EQ(len, chain_getxattr(file, name.c_str(), buf, len*2));
+  }
+
+  {
+    // test tail path in chain_getxattr
+    const char *aname = "user.baz";
+    char buf[CHAIN_XATTR_SHORT_BLOCK_LEN*3];
+    memset(buf, 'x', sizeof(buf));
+    ASSERT_EQ(sizeof(buf), chain_setxattr(file, aname, buf, sizeof(buf)));
+    ASSERT_EQ(-ERANGE, chain_getxattr(file, aname, buf,
+				      CHAIN_XATTR_SHORT_BLOCK_LEN*2));
+  }
+  {
+    // test tail path in chain_fgetxattr
+    const char *aname = "user.biz";
+    char buf[CHAIN_XATTR_SHORT_BLOCK_LEN*3];
+    memset(buf, 'x', sizeof(buf));
+    ASSERT_EQ(sizeof(buf), chain_fsetxattr(fd, aname, buf, sizeof(buf)));
+    ASSERT_EQ(-ERANGE, chain_fgetxattr(fd, aname, buf,
+				       CHAIN_XATTR_SHORT_BLOCK_LEN*2));
+  }
+
   ::close(fd);
   ::unlink(file);
 }
