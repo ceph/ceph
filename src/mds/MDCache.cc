@@ -11807,63 +11807,124 @@ void MDCache::show_cache()
   }
 }
 
-
-void MDCache::dump_cache(const char *fn)
+void MDCache::dump_cache(std::string const &file_name)
 {
-  int r;
-  char deffn[200];
-  if (!fn) {
-    snprintf(deffn, sizeof(deffn), "cachedump.%d.mds%d", (int)mds->mdsmap->get_epoch(), int(mds->get_nodeid()));
-    fn = deffn;
-  }
+  dump_cache(file_name.c_str(), NULL);
+}
 
-  dout(1) << "dump_cache to " << fn << dendl;
+void MDCache::dump_cache(Formatter *f)
+{
+  dump_cache(NULL, f);
+}
 
-  int fd = ::open(fn, O_WRONLY|O_CREAT|O_EXCL, 0600);
-  if (fd < 0) {
-    derr << "failed to open " << fn << ": " << cpp_strerror(errno) << dendl;
-    return;
+/**
+ * Dump the metadata cache, either to a Formatter, if
+ * provided, else to a plain text file.
+ */
+void MDCache::dump_cache(const char *fn, Formatter *f)
+{
+  int r = 0;
+  int fd = -1;
+
+  if (f) {
+    f->open_array_section("inodes");
+  } else {
+    char deffn[200];
+    if (!fn) {
+      snprintf(deffn, sizeof(deffn), "cachedump.%d.mds%d", (int)mds->mdsmap->get_epoch(), int(mds->get_nodeid()));
+      fn = deffn;
+    }
+
+    dout(1) << "dump_cache to " << fn << dendl;
+
+    fd = ::open(fn, O_WRONLY|O_CREAT|O_EXCL, 0600);
+    if (fd < 0) {
+      derr << "failed to open " << fn << ": " << cpp_strerror(errno) << dendl;
+      return;
+    }
   }
   
   for (ceph::unordered_map<vinodeno_t,CInode*>::iterator it = inode_map.begin();
        it != inode_map.end();
        ++it) {
     CInode *in = it->second;
-    ostringstream ss;
-    ss << *in << std::endl;
-    std::string s = ss.str();
-    r = safe_write(fd, s.c_str(), s.length());
-    if (r < 0)
-      goto out;
+    if (f) {
+      f->open_object_section("inode");
+      in->dump(f);
+    } else {
+      ostringstream ss;
+      ss << *in << std::endl;
+      std::string s = ss.str();
+      r = safe_write(fd, s.c_str(), s.length());
+      if (r < 0) {
+        goto out;
+      }
+    }
 
     list<CDir*> dfs;
     in->get_dirfrags(dfs);
+    if (f) {
+      f->open_array_section("dirfrags");
+    }
     for (list<CDir*>::iterator p = dfs.begin(); p != dfs.end(); ++p) {
       CDir *dir = *p;
-      ostringstream tt;
-      tt << " " << *dir << std::endl;
-      string t = tt.str();
-      r = safe_write(fd, t.c_str(), t.length());
-      if (r < 0)
-	goto out;
+      if (f) {
+        f->open_object_section("dir");
+        dir->dump(f);
+      } else {
+        ostringstream tt;
+        tt << " " << *dir << std::endl;
+        string t = tt.str();
+        r = safe_write(fd, t.c_str(), t.length());
+        if (r < 0) {
+          goto out;
+        }
+      }
       
+      if (f) {
+        f->open_array_section("dentries");
+      }
       for (CDir::map_t::iterator q = dir->items.begin();
 	   q != dir->items.end();
 	   ++q) {
 	CDentry *dn = q->second;
-	ostringstream uu;
-	uu << "  " << *dn << std::endl;
-	string u = uu.str();
-	r = safe_write(fd, u.c_str(), u.length());
-	if (r < 0)
-	  goto out;
+        if (f) {
+	  f->open_object_section("dentry");
+          dn->dump(f);
+          f->close_section();
+        } else {
+          ostringstream uu;
+          uu << "  " << *dn << std::endl;
+          string u = uu.str();
+          r = safe_write(fd, u.c_str(), u.length());
+          if (r < 0) {
+            goto out;
+          }
+        }
+      }
+      if (f) {
+	f->close_section();  //dentries
       }
       dir->check_rstats();
+      if (f) {
+	f->close_section();  //dir
+      }
+    }
+    if (f) {
+      f->close_section();  // dirfrags
+    }
+
+    if (f) {
+      f->close_section();  // inode
     }
   }
 
  out:
-  ::close(fd);
+  if (f) {
+    f->close_section();  // inodes
+  } else {
+    ::close(fd);
+  }
 }
 
 

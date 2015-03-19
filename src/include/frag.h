@@ -498,6 +498,21 @@ public:
     }
     out << ")";
   }
+
+  void dump(Formatter *f) const {
+    f->open_array_section("splits");
+    for (compact_map<frag_t,int32_t>::const_iterator p = _splits.begin();
+         p != _splits.end();
+         ++p) {
+      f->open_object_section("split");
+      std::ostringstream frag_str;
+      frag_str << p->first;
+      f->dump_string("frag", frag_str.str());
+      f->dump_int("children", p->second);
+      f->close_section(); // split
+    }
+    f->close_section(); // splits
+  }
 };
 WRITE_CLASS_ENCODER(fragtree_t)
 
