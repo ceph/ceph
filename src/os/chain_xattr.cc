@@ -116,7 +116,8 @@ static int getxattr_len(const char *fn, const char *name)
       break;
     total += r;
     i++;
-  } while (r == CHAIN_XATTR_MAX_BLOCK_LEN);
+  } while (r == CHAIN_XATTR_MAX_BLOCK_LEN ||
+	   r == CHAIN_XATTR_SHORT_BLOCK_LEN);
 
   return total;
 }
@@ -135,7 +136,6 @@ int chain_getxattr(const char *fn, const char *name, void *val, size_t size)
   do {
     chunk_size = (size < CHAIN_XATTR_MAX_BLOCK_LEN ? size : CHAIN_XATTR_MAX_BLOCK_LEN);
     get_raw_xattr_name(name, i, raw_name, sizeof(raw_name));
-    size -= chunk_size;
 
     r = sys_getxattr(fn, raw_name, (char *)val + pos, chunk_size);
     if (i && r == -ENODATA) {
@@ -147,17 +147,21 @@ int chain_getxattr(const char *fn, const char *name, void *val, size_t size)
       break;
     }
 
-    if (r > 0)
+    if (r > 0) {
       pos += r;
+      size -= r;
+    }
 
     i++;
-  } while (size && r == CHAIN_XATTR_MAX_BLOCK_LEN);
+  } while (size && (r == CHAIN_XATTR_MAX_BLOCK_LEN ||
+		    r == CHAIN_XATTR_SHORT_BLOCK_LEN));
 
   if (r >= 0) {
     ret = pos;
     /* is there another chunk? that can happen if the last read size span over
        exactly one block */
-    if (chunk_size == CHAIN_XATTR_MAX_BLOCK_LEN) {
+    if (chunk_size == CHAIN_XATTR_MAX_BLOCK_LEN ||
+	chunk_size == CHAIN_XATTR_SHORT_BLOCK_LEN) {
       get_raw_xattr_name(name, i, raw_name, sizeof(raw_name));
       r = sys_getxattr(fn, raw_name, 0, 0);
       if (r > 0) { // there's another chunk.. the original buffer was too small
@@ -183,7 +187,8 @@ static int chain_fgetxattr_len(int fd, const char *name)
       break;
     total += r;
     i++;
-  } while (r == CHAIN_XATTR_MAX_BLOCK_LEN);
+  } while (r == CHAIN_XATTR_MAX_BLOCK_LEN ||
+	   r == CHAIN_XATTR_SHORT_BLOCK_LEN);
 
   return total;
 }
@@ -202,7 +207,6 @@ int chain_fgetxattr(int fd, const char *name, void *val, size_t size)
   do {
     chunk_size = (size < CHAIN_XATTR_MAX_BLOCK_LEN ? size : CHAIN_XATTR_MAX_BLOCK_LEN);
     get_raw_xattr_name(name, i, raw_name, sizeof(raw_name));
-    size -= chunk_size;
 
     r = sys_fgetxattr(fd, raw_name, (char *)val + pos, chunk_size);
     if (i && r == -ENODATA) {
@@ -214,17 +218,21 @@ int chain_fgetxattr(int fd, const char *name, void *val, size_t size)
       break;
     }
 
-    if (r > 0)
+    if (r > 0) {
       pos += r;
+      size -= r;
+    }
 
     i++;
-  } while (size && r == CHAIN_XATTR_MAX_BLOCK_LEN);
+  } while (size && (r == CHAIN_XATTR_MAX_BLOCK_LEN ||
+		    r == CHAIN_XATTR_SHORT_BLOCK_LEN));
 
   if (r >= 0) {
     ret = pos;
     /* is there another chunk? that can happen if the last read size span over
        exactly one block */
-    if (chunk_size == CHAIN_XATTR_MAX_BLOCK_LEN) {
+    if (chunk_size == CHAIN_XATTR_MAX_BLOCK_LEN ||
+	chunk_size == CHAIN_XATTR_SHORT_BLOCK_LEN) {
       get_raw_xattr_name(name, i, raw_name, sizeof(raw_name));
       r = sys_fgetxattr(fd, raw_name, 0, 0);
       if (r > 0) { // there's another chunk.. the original buffer was too small
@@ -238,14 +246,24 @@ int chain_fgetxattr(int fd, const char *name, void *val, size_t size)
 
 // setxattr
 
+static int get_xattr_block_size(size_t size)
+{
+  if (size <= CHAIN_XATTR_SHORT_LEN_THRESHOLD)
+    // this may fit in the inode; stripe over short attrs so that XFS
+    // won't kick it out.
+    return CHAIN_XATTR_SHORT_BLOCK_LEN;
+  return CHAIN_XATTR_MAX_BLOCK_LEN;
+}
+
 int chain_setxattr(const char *fn, const char *name, const void *val, size_t size)
 {
   int i = 0, pos = 0;
   char raw_name[CHAIN_XATTR_MAX_NAME_LEN * 2 + 16];
   int ret = 0;
+  size_t max_chunk_size = get_xattr_block_size(size);
 
   do {
-    size_t chunk_size = (size < CHAIN_XATTR_MAX_BLOCK_LEN ? size : CHAIN_XATTR_MAX_BLOCK_LEN);
+    size_t chunk_size = (size < max_chunk_size ? size : max_chunk_size);
     get_raw_xattr_name(name, i, raw_name, sizeof(raw_name));
     size -= chunk_size;
 
@@ -278,9 +296,10 @@ int chain_fsetxattr(int fd, const char *name, const void *val, size_t size)
   int i = 0, pos = 0;
   char raw_name[CHAIN_XATTR_MAX_NAME_LEN * 2 + 16];
   int ret = 0;
+  size_t max_chunk_size = get_xattr_block_size(size);
 
   do {
-    size_t chunk_size = (size < CHAIN_XATTR_MAX_BLOCK_LEN ? size : CHAIN_XATTR_MAX_BLOCK_LEN);
+    size_t chunk_size = (size < max_chunk_size ? size : max_chunk_size);
     get_raw_xattr_name(name, i, raw_name, sizeof(raw_name));
     size -= chunk_size;
 
