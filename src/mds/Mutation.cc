@@ -313,6 +313,11 @@ void MDRequestImpl::print(ostream &out)
   out << ")";
 }
 
+void MDRequestImpl::dump(Formatter *f) const
+{
+  _dump(ceph_clock_now(g_ceph_context), f);
+}
+
 void MDRequestImpl::_dump(utime_t now, Formatter *f) const
 {
   f->dump_string("flag_point", state_string());
