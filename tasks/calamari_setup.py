@@ -153,7 +153,6 @@ def fix_yum_repos(remote, distro):
     return True
 
 
-
 def get_iceball_with_http(urlbase, ice_version, ice_distro, destdir):
     '''
     Copy iceball with http to destdir.  Try both .tar.gz and .iso.
@@ -268,14 +267,14 @@ def calamari_install(config, cal_svr):
         delete_iceball = True
     else:
         prefix = os.path.join(iceball_loc,
-            'ICE-{0}-{1}'.format(ice_version, ice_distro))
+                              'ICE-{0}-{1}'.format(ice_version, ice_distro))
         for name in [prefix + ext for ext in ('.iso', '.tar.gz')]:
             if os.path.exists(name):
                 iceball_file = name
                 break
         else:
             raise RuntimeError(
-                'Can''t find {0} at {1}'.format(prefix, iceball_loc)
+                'Can\'t find {0} at {1} in iso or tar.gz format'.format(prefix, iceball_loc)
             )
 
     remote_iceball_file = os.path.join('/tmp', os.path.split(iceball_file)[1])
@@ -295,13 +294,13 @@ def calamari_install(config, cal_svr):
     elif icetype == 'iso':
         mountpoint = '/mnt/'   # XXX create?
         ret = cal_svr.run(
-            args=['sudo', 'mount', '-r', remote_iceball_file, mountpoint,]
+            args=['sudo', 'mount', '-r', remote_iceball_file, mountpoint]
         )
 
     # install ice_setup package
     args = {
-        'deb':'sudo dpkg -i /mnt/ice-setup*deb',
-        'rpm':'sudo yum localinstall /mnt/ice_setup*rpm'
+        'deb': 'sudo dpkg -i /mnt/ice-setup*deb',
+        'rpm': 'sudo yum -y localinstall /mnt/ice_setup*rpm'
     }.get(cal_svr.system_type, None)
     if not args:
         raise RuntimeError('{0}: unknown system type'.format(cal_svr))
@@ -411,7 +410,7 @@ def undeploy_ceph(ctx, cal_svr):
     for remote in ctx.cluster.remotes:
         ret &= remote.run(args=['sudo', 'stop', 'ceph-all', run.Raw('||'),
                                 'sudo', 'service', 'ceph', 'stop']
-                         ).exitstatus
+                          ).exitstatus
         all_machines.append(remote.shortname)
     all_machines = set(all_machines)
     cmd1 = ['ceph-deploy', 'uninstall']
