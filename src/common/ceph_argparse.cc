@@ -131,6 +131,44 @@ void vec_to_argv(const char *argv0, std::vector<const char*>& args,
     (*argv)[(*argc)++] = args[i];
 }
 
+void ceph_arg_value_type(const char * nextargstr, bool *boolOption, bool *boolNumeric)
+{
+   bool isNumeric = true;
+   bool isOption;   
+   if(nextargstr == NULL) 
+    return;
+   
+   if(strlen(nextargstr) < 2)
+    isOption = false;
+   else {
+   if((nextargstr[0] == '-') && (nextargstr[1] == '-')) 
+    isOption = true;
+   else 
+    isOption = false;
+    }
+
+   for(unsigned int i = 0; i < strlen(nextargstr); i++) {
+    if(!(nextargstr[i] >= '0' && nextargstr[i] <= '9')) {
+        // May be negative numeral value
+        if((i == 0) && (strlen(nextargstr) >= 2))  {
+	if(nextargstr[0] == '-')
+          continue;
+	}
+        isNumeric = false;
+        break;
+        }
+    }
+
+   // -<option>
+   if(nextargstr[0] == '-' && isNumeric == false)
+    isOption = true;
+
+   *boolOption = isOption;
+   *boolNumeric = isNumeric;
+   
+   return;
+}
+
 bool parse_ip_port_vec(const char *s, vector<entity_addr_t>& vec)
 {
   const char *p = s;
@@ -331,6 +369,8 @@ bool ceph_argparse_withint(std::vector<const char*> &args,
 {
   bool r;
   va_list ap;
+  bool isOption = false;
+  bool isNumeric = true;
   std::string str;
   va_start(ap, oss);
   r = va_ceph_argparse_witharg(args, i, &str, ap);
@@ -338,6 +378,18 @@ bool ceph_argparse_withint(std::vector<const char*> &args,
   if (!r) {
     return false;
   }
+
+  ceph_arg_value_type(str.c_str(),&isOption,&isNumeric);
+  if((isOption == true) || (isNumeric == false)) {
+     *ret = EXIT_FAILURE;
+     if(isOption == true) {
+     *oss << "Missing option value";
+        }
+     else {
+        *oss << "The option value '"<<str<<"' is invalid";
+        }
+     return true;
+    }
 
   std::string err;
   int myret = strict_strtol(str.c_str(), 10, &err);
@@ -353,6 +405,8 @@ bool ceph_argparse_withlonglong(std::vector<const char*> &args,
 	std::ostream *oss, ...)
 {
   bool r;
+  bool isOption = false;
+  bool isNumeric = true;
   va_list ap;
   std::string str;
   va_start(ap, oss);
@@ -361,6 +415,18 @@ bool ceph_argparse_withlonglong(std::vector<const char*> &args,
   if (!r) {
     return false;
   }
+
+  ceph_arg_value_type(str.c_str(),&isOption,&isNumeric);
+  if((isOption == true) || (isNumeric == false)) {
+     *ret = EXIT_FAILURE;
+     if(isOption == true) {
+     *oss << "Missing option value";
+        }
+     else {
+        *oss << "The option value '"<<str<<"' is invalid";
+        }
+     return true;
+    }
 
   std::string err;
   long long myret = strict_strtoll(str.c_str(), 10, &err);

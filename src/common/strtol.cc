@@ -26,26 +26,33 @@ using std::ostringstream;
 long long strict_strtoll(const char *str, int base, std::string *err)
 {
   char *endptr;
+  std::string errStr;
   errno = 0; /* To distinguish success/failure after call (see man page) */
   long long ret = strtoll(str, &endptr, base);
 
   if ((errno == ERANGE && (ret == LLONG_MAX || ret == LLONG_MIN))
       || (errno != 0 && ret == 0)) {
-    ostringstream oss;
-    oss << "strict_strtoll: integer underflow or overflow parsing '" << str << "'";
-    *err = oss.str();
+    errStr = "The option value '";
+    errStr.append(str);
+    errStr.append("'");
+    errStr.append(" seems to be invalid");
+    *err = errStr;
     return 0;
   }
   if (endptr == str) {
-    ostringstream oss;
-    oss << "strict_strtoll: expected integer, got: '" << str << "'";
-    *err = oss.str();
+    errStr = "The option value '";
+    errStr.append(str);
+    errStr.append("'");
+    errStr.append(" seems to be invalid");
+    *err =  errStr;
     return 0;
   }
   if (*endptr != '\0') {
-    ostringstream oss;
-    oss << "strict_strtoll: garbage at end of string. got: '" << str << "'";
-    *err = oss.str();
+    errStr = "The option value '";
+    errStr.append(str);
+    errStr.append("'");
+    errStr.append(" seems to be invalid");
+    *err =  errStr;
     return 0;
   }
   *err = "";
@@ -54,19 +61,16 @@ long long strict_strtoll(const char *str, int base, std::string *err)
 
 int strict_strtol(const char *str, int base, std::string *err)
 {
+  std::string errStr;
   long long ret = strict_strtoll(str, base, err);
   if (!err->empty())
     return 0;
-  if (ret <= INT_MIN) {
-    ostringstream oss;
-    oss << "strict_strtol: integer underflow parsing '" << str << "'";
-    *err = oss.str();
-    return 0;
-  }
-  if (ret >= INT_MAX) {
-    ostringstream oss;
-    oss << "strict_strtol: integer overflow parsing '" << str << "'";
-    *err = oss.str();
+  if ((ret <= INT_MIN) || (ret >= INT_MAX)) {
+    errStr = "The option value '";
+    errStr.append(str);
+    errStr.append("'");
+    errStr.append(" seems to be invalid");
+    *err = errStr;
     return 0;
   }
   return static_cast<int>(ret);
