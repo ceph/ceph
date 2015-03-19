@@ -25,6 +25,8 @@ protected:
    * Trim goes through the following state machine to remove whole objects,
    * clean partially trimmed objects, and update the object map:
    *
+   * @verbatim
+   *
    *     <start> . . . . > STATE_FINISHED . . . . . . . . .
    *      |   .                                           .
    *      |   . . . . . . . . . . . .                     .
@@ -39,6 +41,8 @@ protected:
    *        .                                           ^
    *        .                                           .
    *        . . . . . . . . . . . . . . . . . . . . . . .
+   *
+   * @endverbatim
    *
    * The _PRE_REMOVE/_POST_REMOVE states are skipped if the object map
    * isn't enabled. The _REMOVE_OBJECTS state is skipped if no whole objects

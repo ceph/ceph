@@ -635,7 +635,7 @@ public:
    * @param expected_num_objs - expected number of objects in this collection
    * @param spos              - sequence position
    *
-   * @Return 0 on success, an error code otherwise
+   * @return 0 on success, an error code otherwise
    */
   int _collection_hint_expected_num_objs(coll_t c, uint32_t pg_num,
       uint64_t expected_num_objs,

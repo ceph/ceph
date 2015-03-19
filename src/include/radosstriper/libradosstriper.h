@@ -257,7 +257,7 @@ int rados_striper_setxattr(rados_striper_t striper,
  * Delete an extended attribute from a striped object.
  *
  * @param striper the striper in which the rmxattr will occur
- * @param o the name of the object
+ * @param oid name of the object
  * @param name which xattr to delete
  * @returns 0 on success, negative error code on failure
  */

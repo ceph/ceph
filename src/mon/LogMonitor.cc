@@ -535,10 +535,10 @@ bool LogMonitor::_create_sub_summary(MLog *mlog, int level)
 }
 
 /**
- * Create an incremental log message from version @sv to @summary.version
+ * Create an incremental log message from version \p sv to \p summary.version
  *
  * @param mlog	Log message we'll send to the client with the messages received
- *		since version @sv, inclusive.
+ *		since version \p sv, inclusive.
  * @param level	The max log level of the messages the client is interested in.
  * @param sv	The version the client is looking for.
  */
