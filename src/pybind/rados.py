@@ -2007,7 +2007,8 @@ class Object(object):
     def write(self, string_to_write):
         self.require_object_exists()
         ret = self.ioctx.write(self.key, string_to_write, self.offset)
-        self.offset += ret
+        if ret == 0:
+            self.offset += len(string_to_write)
         return ret
 
     @set_object_locator

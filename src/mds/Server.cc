@@ -3134,16 +3134,7 @@ void Server::handle_client_readdir(MDRequestRef& mdr)
   snapid_t snapid = mdr->snapid;
   dout(10) << "snapid " << snapid << dendl;
 
-  // purge stale snap data?
-  const set<snapid_t> *snaps = 0;
   SnapRealm *realm = diri->find_snaprealm();
-  if (realm->get_last_destroyed() > dir->fnode.snap_purged_thru) {
-    snaps = &realm->get_snaps();
-    dout(10) << " last_destroyed " << realm->get_last_destroyed() << " > " << dir->fnode.snap_purged_thru
-	     << ", doing snap purge with " << *snaps << dendl;
-    dir->fnode.snap_purged_thru = realm->get_last_destroyed();
-    assert(snapid == CEPH_NOSNAP || snaps->count(snapid));  // just checkin'! 
-  }
 
   unsigned max = req->head.args.readdir.max_entries;
   if (!max)
@@ -3180,9 +3171,7 @@ void Server::handle_client_readdir(MDRequestRef& mdr)
 
     if (dnl->is_null())
       continue;
-    if (snaps && dn->last != CEPH_NOSNAP)
-      if (dir->try_trim_snap_dentry(dn, *snaps))
-	continue;
+
     if (dn->last < snapid || dn->first > snapid) {
       dout(20) << "skipping non-overlapping snap " << *dn << dendl;
       continue;
@@ -3265,9 +3254,6 @@ void Server::handle_client_readdir(MDRequestRef& mdr)
   ::encode(complete, dirbl);
   dirbl.claim_append(dnbl);
   
-  if (snaps)
-    dir->log_mark_dirty();
-
   // yay, reply
   dout(10) << "reply to " << *req << " readdir num=" << numfiles
 	   << " bytes=" << dirbl.length()
@@ -7901,6 +7887,10 @@ void Server::_rmsnap_finish(MDRequestRef& mdr, CInode *diri, snapid_t snapid)
   // yay
   mdr->in[0] = diri;
   respond_to_request(mdr, 0);
+
+  // purge snapshot data
+  if (diri->snaprealm->have_past_parents_open())
+    diri->purge_stale_snap_data(diri->snaprealm->get_snaps());
 }
 
 

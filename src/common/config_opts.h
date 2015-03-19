@@ -445,6 +445,7 @@ OPTION(mds_op_complaint_time, OPT_FLOAT, 30) // how many seconds old makes an op
 OPTION(mds_op_log_threshold, OPT_INT, 5) // how many op log messages to show in one go
 OPTION(mds_snap_min_uid, OPT_U32, 0) // The minimum UID required to create a snapshot
 OPTION(mds_snap_max_uid, OPT_U32, 65536) // The maximum UID allowed to create a snapshot
+OPTION(mds_snap_rstat, OPT_BOOL, false) // enable/disbale nested stat for snapshot
 OPTION(mds_verify_backtrace, OPT_U32, 1)
 
 OPTION(mds_action_on_write_error, OPT_U32, 1) // 0: ignore; 1: force readonly; 2: crash
