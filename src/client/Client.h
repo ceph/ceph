@@ -841,12 +841,16 @@ public:
   // full path xattr ops
   int getxattr(const char *path, const char *name, void *value, size_t size);
   int lgetxattr(const char *path, const char *name, void *value, size_t size);
+  int fgetxattr(int fd, const char *name, void *value, size_t size);
   int listxattr(const char *path, char *list, size_t size);
   int llistxattr(const char *path, char *list, size_t size);
+  int flistxattr(int fd, char *list, size_t size);
   int removexattr(const char *path, const char *name);
   int lremovexattr(const char *path, const char *name);
+  int fremovexattr(int fd, const char *name);
   int setxattr(const char *path, const char *name, const void *value, size_t size, int flags);
   int lsetxattr(const char *path, const char *name, const void *value, size_t size, int flags);
+  int fsetxattr(int fd, const char *name, const void *value, size_t size, int flags);
 
   int sync_fs();
   int64_t drop_caches();
