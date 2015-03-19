@@ -98,6 +98,30 @@ function rados_put_get() {
     rm $dir/ORIGINAL
 }
 
+function rados_put_error_get() {
+    local dir=$1
+    local poolname=$2
+
+    for marker in AAA BBB CCCC DDDD ; do
+        printf "%*s" 1024 $marker
+    done > $dir/ORIGINAL
+
+    #
+    # get and put an object, compare they are equal
+    #
+    ./rados --pool $poolname put SOMETHINGERR $dir/ORIGINAL || return 1
+    # need to wait for file flush to disk
+    sleep 3
+    file=`find test-erasure-code -name "*SOMETHINGERR*" | grep "ffffffffffffffff_0"`
+    # Change the file contents
+    echo "test" > $file
+    ./rados --pool $poolname get SOMETHINGERR $dir/COPY || return 1
+    diff $dir/ORIGINAL $dir/COPY || return 1
+
+    rm $dir/COPY
+    rm $dir/ORIGINAL
+}
+
 function plugin_exists() {
     local plugin=$1
 
@@ -290,6 +314,34 @@ function TEST_chunk_mapping() {
 
     delete_pool remap-pool
     ./ceph osd erasure-code-profile rm remap-profile
+}
+
+function TEST_read_all_flag() {
+    local dir=$1
+
+    # Set flag
+    ./ceph tell osd.* injectargs "--osd-pool-erasure-code-subread-all=true"
+
+    local poolname=pool-jerasure
+    local profile=profile-jerasure
+
+    ./ceph osd erasure-code-profile set $profile \
+        plugin=jerasure \
+        k=4 m=2 \
+        ruleset-failure-domain=osd || return 1
+    ./ceph osd pool create $poolname 12 12 erasure $profile \
+        || return 1
+
+    rados_put_get $dir $poolname || return 1
+
+    rados_put_error_get $dir $poolname || return 1
+
+    delete_pool $poolname
+    ./ceph osd erasure-code-profile rm $profile
+
+    # Unset flag
+    ./ceph tell osd.* injectargs "--osd-pool-erasure-code-subread-all=false"
+
 }
 
 main test-erasure-code
