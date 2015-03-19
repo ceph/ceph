@@ -1448,11 +1448,11 @@ int RGWCopyObj_ObjStore_S3::get_params()
   const char *md_directive = s->info.env->get("HTTP_X_AMZ_METADATA_DIRECTIVE");
   if (md_directive) {
     if (strcasecmp(md_directive, "COPY") == 0) {
-      replace_attrs = false;
+      attrs_mod = RGWRados::ATTRSMOD_NONE;
     } else if (strcasecmp(md_directive, "REPLACE") == 0) {
-      replace_attrs = true;
+      attrs_mod = RGWRados::ATTRSMOD_REPLACE;
     } else if (!source_zone.empty()) {
-      replace_attrs = false; // default for intra-region copy
+      attrs_mod = RGWRados::ATTRSMOD_NONE; // default for intra-region copy
     } else {
       ldout(s->cct, 0) << "invalid metadata directive" << dendl;
       return -EINVAL;
@@ -1463,7 +1463,7 @@ int RGWCopyObj_ObjStore_S3::get_params()
       (dest_bucket_name.compare(src_bucket_name) == 0) &&
       (dest_object.compare(src_object.name) == 0) &&
       src_object.instance.empty() &&
-      !replace_attrs) {
+      (attrs_mod != RGWRados::ATTRSMOD_REPLACE)) {
     /* can only copy object into itself if replacing attrs */
     ldout(s->cct, 0) << "can't copy object into itself if not replacing attrs" << dendl;
     return -ERR_INVALID_REQUEST;
