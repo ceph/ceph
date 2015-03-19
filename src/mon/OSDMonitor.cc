@@ -5143,7 +5143,11 @@ bool OSDMonitor::prepare_command_impl(MMonCommand *m,
       }
       if (!force) {
 	err = -EPERM;
-	ss << "will not override erasure code profile " << name;
+	ss << "will not override erasure code profile " << name
+	   << " because the existing profile "
+	   << osdmap.get_erasure_code_profile(name)
+	   << " is different from the proposed profile "
+	   << profile_map;
 	goto reply;
       }
     }
