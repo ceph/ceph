@@ -69,6 +69,8 @@ struct MDSCapParser : qi::grammar<Iterator, MDSAuthCaps()>
         (lit("r"))[_val = MDSCapSpec(true, false, false)]
         );
 
+    rootsquash = -(lit("root_squash")[_val = 1]);
+
     grant = lit("allow") >> (capspec >> match)[_val = phoenix::construct<MDSCapGrant>(_1, _2)];
     grants %= (grant % (*lit(' ') >> (lit(';') | lit(',')) >> *lit(' ')));
     mdscaps = grants  [_val = phoenix::construct<MDSAuthCaps>(_1)]; 
@@ -79,6 +81,7 @@ struct MDSCapParser : qi::grammar<Iterator, MDSAuthCaps()>
   qi::rule<Iterator, string()> path;
   qi::rule<Iterator, int()> uid;
   qi::rule<Iterator, MDSCapMatch()> match;
+  qi::rule<Iterator, bool()> rootsquash;
   qi::rule<Iterator, MDSCapGrant()> grant;
   qi::rule<Iterator, std::vector<MDSCapGrant>()> grants;
   qi::rule<Iterator, MDSAuthCaps()> mdscaps;
