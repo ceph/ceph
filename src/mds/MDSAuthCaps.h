@@ -25,11 +25,13 @@ struct MDSCapSpec {
   bool read;
   bool write;
   bool any;
+  bool squash_root;
 
-  MDSCapSpec() : read(false), write(false), any(false) {}
-  MDSCapSpec(bool r_, bool w_, bool a_) : read(r_), write(w_), any(a_) {}
+  MDSCapSpec() : read(false), write(false), any(false), squash_root(false) {}
+  MDSCapSpec(bool r_, bool w_, bool a_, bool rs_)
+    : read(r_), write(w_), any(a_), squash_root(rs_) {}
 
-  bool allow_all() const {return any;}
+  bool allow_all() const { return any; }
 };
 
 struct MDSCapMatch {
