@@ -20,7 +20,8 @@ librbd_internal_la_SOURCES = \
 	librbd/ImageWatcher.cc \
 	librbd/internal.cc \
 	librbd/LibrbdWriteback.cc \
-	librbd/ObjectMap.cc
+	librbd/ObjectMap.cc \
+	librbd/RebuildObjectMapRequest.cc
 noinst_LTLIBRARIES += librbd_internal.la
 
 librbd_api_la_SOURCES = \
@@ -64,6 +65,7 @@ noinst_HEADERS += \
 	librbd/LibrbdWriteback.h \
 	librbd/ObjectMap.h \
 	librbd/parent_types.h \
+	librbd/RebuildObjectMapRequest.h \
 	librbd/SnapInfo.h \
 	librbd/TaskFinisher.h \
 	librbd/WatchNotifyTypes.h
