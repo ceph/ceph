@@ -411,6 +411,7 @@ private:
 
   void dump_info(Formatter *f);
   int dump_osd_metadata(int osd, Formatter *f, ostream *err);
+  void print_nodes(ostream& out) const;
 
   void check_subs();
   void check_sub(Subscription *sub);

@@ -130,6 +130,7 @@ public:
   void tick();     // check state, take actions
 
   void dump_info(Formatter *f);
+  void print_nodes(ostream& out) const;
 
   void check_subs();
   void check_sub(Subscription *sub);

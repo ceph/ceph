@@ -154,6 +154,11 @@ void MonmapMonitor::dump_info(Formatter *f)
   f->close_section();
 }
 
+void MonmapMonitor::print_nodes(ostream& out) const
+{
+  mon->monmap->print_nodes(out);
+}
+
 bool MonmapMonitor::preprocess_command(MMonCommand *m)
 {
   int r = -1;

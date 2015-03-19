@@ -154,6 +154,7 @@ public:
     }
     void decode(bufferlist::iterator& p);
     void dump(Formatter *f) const;
+    void print_nodes(Formatter *f) const;
     static void generate_test_instances(list<mds_info_t*>& ls);
   private:
     void encode_versioned(bufferlist& bl, uint64_t features) const;
@@ -595,6 +596,7 @@ public:
 
   void print(ostream& out);
   void print_summary(Formatter *f, ostream *out);
+  void print_nodes(ostream& out) const;
 
   void dump(Formatter *f) const;
   static void generate_test_instances(list<MDSMap*>& ls);

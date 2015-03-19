@@ -843,6 +843,7 @@ public:
   void print_summary(Formatter *f, ostream& out) const;
   void print_oneline_summary(ostream& out) const;
   void print_tree(ostream *out, Formatter *f) const;
+  void print_list(ostream *out) const;
 
   string get_flag_string() const;
   static string get_flag_string(unsigned flags);

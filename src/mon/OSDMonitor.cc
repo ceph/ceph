@@ -994,6 +994,11 @@ int OSDMonitor::dump_osd_metadata(int osd, Formatter *f, ostream *err)
   return 0;
 }
 
+void OSDMonitor::print_nodes(ostream& out) const
+{
+  osdmap.print_list(&out);
+}
+
 void OSDMonitor::share_map_with_random_osd()
 {
   if (osdmap.get_num_up_osds() == 0) {
