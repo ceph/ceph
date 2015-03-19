@@ -311,6 +311,11 @@ int IoCtx::aio_flush_async(AioCompletion *c) {
 }
 
 int IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
+                       ObjectReadOperation *op, bufferlist *pbl) {
+  return aio_operate(oid, c, op, 0, pbl);
+}
+
+int IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
                        ObjectReadOperation *op, int flags,
                        bufferlist *pbl) {
   TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
