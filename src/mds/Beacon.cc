@@ -105,19 +105,26 @@ void Beacon::handle_mds_beacon(MMDSBeacon *m)
 
   // update lab
   if (seq_stamp.count(seq)) {
-    assert(seq_stamp[seq] > last_acked_stamp);
-    last_acked_stamp = seq_stamp[seq];
     utime_t now = ceph_clock_now(g_ceph_context);
-    utime_t rtt = now - last_acked_stamp;
+    if (seq_stamp[seq] > last_acked_stamp) {
+      last_acked_stamp = seq_stamp[seq];
+      utime_t rtt = now - last_acked_stamp;
 
-    dout(10) << "handle_mds_beacon " << ceph_mds_state_name(m->get_state())
-	     << " seq " << m->get_seq() 
-	     << " rtt " << rtt << dendl;
+      dout(10) << "handle_mds_beacon " << ceph_mds_state_name(m->get_state())
+	       << " seq " << m->get_seq() << " rtt " << rtt << dendl;
 
-    if (was_laggy && rtt < g_conf->mds_beacon_grace) {
-      dout(0) << "handle_mds_beacon no longer laggy" << dendl;
-      was_laggy = false;
-      laggy_until = now;
+      if (was_laggy && rtt < g_conf->mds_beacon_grace) {
+	dout(0) << "handle_mds_beacon no longer laggy" << dendl;
+	was_laggy = false;
+	laggy_until = now;
+      }
+    } else {
+      // Mark myself laggy if system clock goes backwards. Hopping
+      // later beacons will clear it.
+      dout(1) << "handle_mds_beacon system clock goes backwards, "
+	      << "mark myself laggy" << dendl;
+      last_acked_stamp = now - utime_t(g_conf->mds_beacon_grace + 1, 0);
+      was_laggy = true;
     }
 
     // clean up seq_stamp map
