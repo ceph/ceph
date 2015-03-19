@@ -323,8 +323,7 @@ bool ObjectMap::aio_update(uint64_t start_object_no, uint64_t end_object_no,
   assert(m_image_ctx.test_features(RBD_FEATURE_OBJECT_MAP));
   assert(m_image_ctx.owner_lock.is_locked());
   assert(m_image_ctx.image_watcher->is_lock_owner());
-
-  RWLock::WLocker l(m_image_ctx.object_map_lock);
+  assert(m_image_ctx.object_map_lock.is_wlocked());
   assert(start_object_no < end_object_no);
 
   CephContext *cct = m_image_ctx.cct;
