@@ -172,10 +172,18 @@ void MDSTable::load_2(int r, bufferlist& bl, Context *onfinish)
 
   dout(10) << "load_2 got " << bl.length() << " bytes" << dendl;
   bufferlist::iterator p = bl.begin();
-  ::decode(version, p);
-  projected_version = committed_version = version;
-  dout(10) << "load_2 loaded v" << version << dendl;
-  decode_state(p);
+
+  try {
+    ::decode(version, p);
+    projected_version = committed_version = version;
+    dout(10) << "load_2 loaded v" << version << dendl;
+    decode_state(p);
+  } catch (buffer::error &e) {
+    mds->clog->error() << "error decoding table object '" << get_object_name()
+                       << "': " << e.what();
+    mds->damaged();
+    assert(r >= 0);  // Should be unreachable because damaged() calls respawn()
+  }
 
   if (onfinish) {
     onfinish->complete(0);
