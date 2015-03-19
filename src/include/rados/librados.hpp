@@ -790,7 +790,7 @@ namespace librados
     /**
      * Retrieve hit set for a given hash, and time
      *
-     * @param uint32_t [in] hash position
+     * @param hash [in] hash position
      * @param c [in] completion
      * @param stamp [in] time interval that falls within the hit set's interval
      * @param pbl [out] buffer to store the result in
