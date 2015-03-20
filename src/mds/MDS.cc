@@ -438,15 +438,34 @@ int MDS::_command_flush_journal(std::stringstream *ss)
 
   // Flush initially so that all the segments older than our new one
   // will be elegible for expiry
-  C_SaferCond mdlog_flushed;
-  mdlog->flush();
-  mdlog->wait_for_safe(new MDSInternalContextWrapper(this, &mdlog_flushed));
-  mds_lock.Unlock();
-  r = mdlog_flushed.wait();
-  mds_lock.Lock();
-  if (r != 0) {
-    *ss << "Error " << r << " (" << cpp_strerror(r) << ") while flushing journal";
-    return r;
+  {
+    C_SaferCond mdlog_flushed;
+    mdlog->flush();
+    mdlog->wait_for_safe(new MDSInternalContextWrapper(this, &mdlog_flushed));
+    mds_lock.Unlock();
+    r = mdlog_flushed.wait();
+    mds_lock.Lock();
+    if (r != 0) {
+      *ss << "Error " << r << " (" << cpp_strerror(r) << ") while flushing journal";
+      return r;
+    }
+  }
+
+  // Because we may not be the last wait_for_safe context on MDLog, and
+  // subsequent contexts might wake up in the middle of our later trim_all
+  // and interfere with expiry (by e.g. marking dirs/dentries dirty
+  // on previous log segments), we run a second wait_for_safe here.
+  // See #10368
+  {
+    C_SaferCond mdlog_cleared;
+    mdlog->wait_for_safe(new MDSInternalContextWrapper(this, &mdlog_cleared));
+    mds_lock.Unlock();
+    r = mdlog_cleared.wait();
+    mds_lock.Lock();
+    if (r != 0) {
+      *ss << "Error " << r << " (" << cpp_strerror(r) << ") while flushing journal";
+      return r;
+    }
   }
 
   // Put all the old log segments into expiring or expired state
