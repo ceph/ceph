@@ -1194,6 +1194,26 @@ void RGWSetBucketVersioning::execute()
   }
 }
 
+int RGWGetBucketWebsite::verify_permission()
+{
+  if (s->user.user_id.compare(s->bucket_owner.get_id()) != 0)
+    return -EACCES;
+
+  return 0;
+}
+
+void RGWGetBucketWebsite::pre_exec()
+{
+  rgw_bucket_object_pre_exec(s);
+}
+
+void RGWGetBucketWebsite::execute()
+{
+  if (!s->bucket_info.has_website) {
+    ret = -ENOENT;
+  }
+}
+
 int RGWStatBucket::verify_permission()
 {
   if (!verify_bucket_permission(s, RGW_PERM_READ))
