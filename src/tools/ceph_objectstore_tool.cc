@@ -2506,8 +2506,9 @@ int main(int argc, char **argv)
     cerr << "On-disk features: " << superblock.compat_features << std::endl;
   }
   if (supported.compare(superblock.compat_features) == -1) {
+    CompatSet unsupported = supported.unsupported(superblock.compat_features);
     cerr << "On-disk OSD incompatible features set "
-      << superblock.compat_features << std::endl;
+      << unsupported << std::endl;
     ret = EINVAL;
     goto out;
   }
