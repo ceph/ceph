@@ -1975,12 +1975,12 @@ TEST_F(TestLibRBD, FlushAioPP)
     ASSERT_EQ(0, image.aio_flush(flush_comp));
     ASSERT_EQ(0, flush_comp->wait_for_complete());
     ASSERT_EQ(1, flush_comp->is_complete());
-    delete flush_comp;
+    flush_comp->release();
 
     for (i = 0; i < num_aios; ++i) {
       librbd::RBD::AioCompletion *comp = write_comps[i];
       ASSERT_EQ(1, comp->is_complete());
-      delete comp;
+      comp->release();
     }
     ASSERT_PASSED(validate_object_map, image);
   }
