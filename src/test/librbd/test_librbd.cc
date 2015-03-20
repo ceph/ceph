@@ -2711,3 +2711,65 @@ TEST_F(TestLibRBD, UpdateFeatures)
   // cannot disable exclusive lock w/ object map
   ASSERT_EQ(-EINVAL, image.update_features(RBD_FEATURE_EXCLUSIVE_LOCK, false));
 }
+
+TEST_F(TestLibRBD, RebuildObjectMap)
+{
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(m_pool_name.c_str(), ioctx));
+
+  librbd::RBD rbd;
+  std::string name = get_temp_image_name();
+  uint64_t size = 1 << 20;
+  int order = 18;
+  ASSERT_EQ(0, create_image_pp(rbd, ioctx, name.c_str(), size, &order));
+
+  PrintProgress prog_ctx;
+  std::string object_map_oid;
+  bufferlist bl;
+  bl.append("foo");
+  {
+    librbd::Image image;
+    ASSERT_EQ(0, rbd.open(ioctx, image, name.c_str(), NULL));
+
+    uint64_t features;
+    ASSERT_EQ(0, image.features(&features));
+    if ((features & RBD_FEATURE_OBJECT_MAP) == 0) {
+      ASSERT_EQ(-EINVAL, image.rebuild_object_map(prog_ctx));
+      return;
+    }
+
+    ASSERT_EQ(bl.length(), image.write(0, bl.length(), bl));
+
+    librbd::image_info_t info;
+    ASSERT_EQ(0, image.stat(info, sizeof(info)));
+
+    char prefix[RBD_MAX_BLOCK_NAME_SIZE + 1];
+    strncpy(prefix, info.block_name_prefix, RBD_MAX_BLOCK_NAME_SIZE);
+    prefix[RBD_MAX_BLOCK_NAME_SIZE] = '\0';
+
+    std::string image_id(prefix + strlen(RBD_DATA_PREFIX));
+    object_map_oid = RBD_OBJECT_MAP_PREFIX + image_id;
+  }
+
+  // corrupt the object map
+  ASSERT_EQ(0, ioctx.write(object_map_oid, bl, bl.length(), 0));
+
+  librbd::Image image1;
+  ASSERT_EQ(0, rbd.open(ioctx, image1, name.c_str(), NULL));
+
+  uint64_t flags;
+  ASSERT_EQ(0, image1.get_flags(&flags));
+  ASSERT_TRUE((flags & RBD_FLAG_OBJECT_MAP_INVALID) != 0);
+
+  ASSERT_EQ(0, image1.rebuild_object_map(prog_ctx));
+
+  librbd::Image image2;
+  ASSERT_EQ(0, rbd.open(ioctx, image2, name.c_str(), NULL));
+
+  bufferlist read_bl;
+  ASSERT_EQ(bl.length(), image2.read(0, bl.length(), read_bl));
+  ASSERT_TRUE(bl.contents_equal(read_bl));
+
+  ASSERT_PASSED(validate_object_map, image1);
+  ASSERT_PASSED(validate_object_map, image2);
+}
