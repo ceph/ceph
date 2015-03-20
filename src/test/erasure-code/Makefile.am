@@ -197,9 +197,17 @@ check_PROGRAMS += unittest_erasure_code_plugin_lrc
 
 unittest_erasure_code_shec_SOURCES = \
 	test/erasure-code/TestErasureCodeShec.cc \
-	${libec_shec_la_SOURCES}
-unittest_erasure_code_shec_CFLAGS = ${libec_shec_la_CFLAGS}
-unittest_erasure_code_shec_CXXFLAGS = ${libec_shec_la_CXXFLAGS} $(UNITTEST_CXXFLAGS)
+	${shec_sources}
+unittest_erasure_code_shec_CFLAGS = ${libec_shec_la_CFLAGS} \
+	-I$(srcdir)/erasure-code/jerasure/jerasure/include \
+	-I$(srcdir)/erasure-code/jerasure/gf-complete/include \
+	-I$(srcdir)/erasure-code/jerasure \
+	-I$(srcdir)/erasure-code/shec
+unittest_erasure_code_shec_CXXFLAGS = ${libec_shec_la_CXXFLAGS} $(UNITTEST_CXXFLAGS) \
+	-I$(srcdir)/erasure-code/jerasure/jerasure/include \
+	-I$(srcdir)/erasure-code/jerasure/gf-complete/include \
+	-I$(srcdir)/erasure-code/jerasure \
+	-I$(srcdir)/erasure-code/shec
 unittest_erasure_code_shec_LDADD = $(LIBOSD) $(LIBCOMMON) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 if LINUX
 unittest_erasure_code_shec_LDADD += -ldl
@@ -208,9 +216,17 @@ check_PROGRAMS += unittest_erasure_code_shec
 
 unittest_erasure_code_shec_all_SOURCES = \
 	test/erasure-code/TestErasureCodeShec_all.cc \
-	${libec_shec_la_SOURCES}
-unittest_erasure_code_shec_all_CFLAGS = ${libec_shec_la_CFLAGS}
-unittest_erasure_code_shec_all_CXXFLAGS = ${libec_shec_la_CXXFLAGS} $(UNITTEST_CXXFLAGS)
+	${shec_sources}
+unittest_erasure_code_shec_all_CFLAGS = ${libec_shec_la_CFLAGS} \
+	-I$(srcdir)/erasure-code/jerasure/jerasure/include \
+	-I$(srcdir)/erasure-code/jerasure/gf-complete/include \
+	-I$(srcdir)/erasure-code/jerasure \
+	-I$(srcdir)/erasure-code/shec
+unittest_erasure_code_shec_all_CXXFLAGS = ${libec_shec_la_CXXFLAGS} $(UNITTEST_CXXFLAGS) \
+	-I$(srcdir)/erasure-code/jerasure/jerasure/include \
+	-I$(srcdir)/erasure-code/jerasure/gf-complete/include \
+	-I$(srcdir)/erasure-code/jerasure \
+	-I$(srcdir)/erasure-code/shec
 unittest_erasure_code_shec_all_LDADD = $(LIBOSD) $(LIBCOMMON) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 if LINUX
 unittest_erasure_code_shec_all_LDADD += -ldl
@@ -219,9 +235,17 @@ check_PROGRAMS += unittest_erasure_code_shec_all
 
 unittest_erasure_code_shec_thread_SOURCES = \
 	test/erasure-code/TestErasureCodeShec_thread.cc \
-	${libec_shec_la_SOURCES}
-unittest_erasure_code_shec_thread_CFLAGS = ${libec_shec_la_CFLAGS}
-unittest_erasure_code_shec_thread_CXXFLAGS = ${libec_shec_la_CXXFLAGS} $(UNITTEST_CXXFLAGS)
+	${shec_sources}
+unittest_erasure_code_shec_thread_CFLAGS = ${libec_shec_la_CFLAGS} \
+	-I$(srcdir)/erasure-code/jerasure/jerasure/include \
+	-I$(srcdir)/erasure-code/jerasure/gf-complete/include \
+	-I$(srcdir)/erasure-code/jerasure \
+	-I$(srcdir)/erasure-code/shec
+unittest_erasure_code_shec_thread_CXXFLAGS = ${libec_shec_la_CXXFLAGS} $(UNITTEST_CXXFLAGS) \
+	-I$(srcdir)/erasure-code/jerasure/jerasure/include \
+	-I$(srcdir)/erasure-code/jerasure/gf-complete/include \
+	-I$(srcdir)/erasure-code/jerasure \
+	-I$(srcdir)/erasure-code/shec
 unittest_erasure_code_shec_thread_LDADD = $(LIBOSD) $(LIBCOMMON) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 if LINUX
 unittest_erasure_code_shec_thread_LDADD += -ldl

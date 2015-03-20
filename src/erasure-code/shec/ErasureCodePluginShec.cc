@@ -1,5 +1,3 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
 /*
  * Ceph - scalable distributed file system
  *
@@ -18,7 +16,7 @@
  *
  */
 
-#include "ceph_ver.h"
+#include "./ceph_ver.h"
 #include "common/debug.h"
 #include "erasure-code/ErasureCodePlugin.h"
 #include "ErasureCodeShecTableCache.h"
@@ -28,33 +26,34 @@
 #undef dout_prefix
 #define dout_prefix _prefix(_dout)
 
-static ostream& _prefix(std::ostream* _dout)
-{
+static ostream& _prefix(std::ostream* _dout) {
   return *_dout << "ErasureCodePluginShec: ";
 }
 
 class ErasureCodePluginShec : public ErasureCodePlugin {
-public:
+ public:
   ErasureCodeShecTableCache tcache;
 
-  virtual int factory(const map<std::string,std::string> &parameters,
-		      ErasureCodeInterfaceRef *erasure_code) {
+  virtual int factory(const map<std::string, std::string> &parameters,
+                      ErasureCodeInterfaceRef *erasure_code) {
     ErasureCodeShec *interface;
     std::string t = "multiple";
 
-    if (parameters.find("technique") != parameters.end()){
+    if (parameters.find("technique") != parameters.end()) {
       t = parameters.find("technique")->second;
     }
 
-    if (t == "single"){
-      interface = new ErasureCodeShecReedSolomonVandermonde(tcache, ErasureCodeShec::SINGLE);
-    } else if (t == "multiple"){
-      interface = new ErasureCodeShecReedSolomonVandermonde(tcache, ErasureCodeShec::MULTIPLE);
+    if (t == "single") {
+      interface = new ErasureCodeShecReedSolomonVandermonde
+        (tcache, ErasureCodeShec::SINGLE);
+    } else if (t == "multiple") {
+      interface = new ErasureCodeShecReedSolomonVandermonde
+        (tcache, ErasureCodeShec::MULTIPLE);
     } else {
       derr << "technique=" << t << " is not a valid coding technique. "
-	   << " Choose one of the following: "
-	   << "single, multiple"
-	   << dendl;
+           << " Choose one of the following: "
+           << "single, multiple"
+           << dendl;
       return -ENOENT;
     }
     int err = interface->init(parameters);
@@ -72,17 +71,16 @@ public:
 extern "C" {
 #include "jerasure/include/galois.h"
 
-extern gf_t *gfp_array[];
-extern int  gfp_is_composite[];
+  extern gf_t *gfp_array[];
+  extern int  gfp_is_composite[];
 }
 
 const char *__erasure_code_version() { return CEPH_GIT_NICE_VER; }
 
-int __erasure_code_init(char *plugin_name, char *directory = (char *)"")
-{
+int __erasure_code_init(char *plugin_name, char *directory = (char *)("")) {
   ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
   int w[] = { 8, 16, 32 };
-  for(int i = 0; i < 3; i++) {
+  for (int i = 0; i < 3; ++i) {
     int r = galois_init_default_field(w[i]);
     if (r) {
       derr << "failed to gf_init_easy(" << w[i] << ")" << dendl;
