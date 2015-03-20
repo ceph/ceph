@@ -64,7 +64,6 @@ class SnappyCompressor : public Compressor {
     BufferlistSource source(src);
     size_t res_len = 0;
     // Trick, decompress only need first 32bits buffer
-    list<bufferptr>::const_iterator pb = src.buffers().begin();
     if (!snappy::GetUncompressedLength(src.get_contiguous(0, 8), 8, &res_len))
       return -1;
     bufferptr ptr(res_len);
