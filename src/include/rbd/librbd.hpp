@@ -123,6 +123,9 @@ public:
   /* exclusive lock feature */
   int is_exclusive_lock_owner(bool *is_owner);
 
+  /* object map feature */
+  int rebuild_object_map(ProgressContext &prog_ctx);
+
   int copy(IoCtx& dest_io_ctx, const char *destname);
   int copy2(Image& dest);
   int copy_with_progress(IoCtx& dest_io_ctx, const char *destname,
