@@ -67,9 +67,11 @@ void ceph::crypto::init(CephContext *cct)
 void ceph::crypto::shutdown()
 {
   SECStatus s;
+  pthread_mutex_lock(&crypto_init_mutex);
   s = NSS_Shutdown();
   assert(s == SECSuccess);
   crypto_init_pid = 0;
+  pthread_mutex_unlock(&crypto_init_mutex);
 }
 
 ceph::crypto::HMACSHA1::~HMACSHA1()
