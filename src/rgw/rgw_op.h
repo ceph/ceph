@@ -39,6 +39,8 @@ enum RGWOpType {
   RGW_OP_GET_BUCKET_LOGGING,
   RGW_OP_GET_BUCKET_VERSIONING,
   RGW_OP_SET_BUCKET_VERSIONING,
+  RGW_OP_GET_BUCKET_WEBSITE,
+  RGW_OP_SET_BUCKET_WEBSITE,
   RGW_OP_STAT_BUCKET,
   RGW_OP_CREATE_BUCKET,
   RGW_OP_DELETE_BUCKET,
@@ -352,6 +354,22 @@ public:
   virtual const string name() { return "set_bucket_versioning"; }
   virtual RGWOpType get_type() { return RGW_OP_SET_BUCKET_VERSIONING; }
   virtual uint32_t op_mask() { return RGW_OP_TYPE_WRITE; }
+};
+
+class RGWGetBucketWebsite : public RGWOp {
+protected:
+  int ret;
+public:
+  RGWGetBucketWebsite() : ret(0) {}
+
+  int verify_permission();
+  void pre_exec();
+  void execute();
+
+  virtual void send_response() = 0;
+  virtual const string name() { return "get_bucket_website"; }
+  virtual RGWOpType get_type() { return RGW_OP_GET_BUCKET_WEBSITE; }
+  virtual uint32_t op_mask() { return RGW_OP_TYPE_READ; }
 };
 
 class RGWStatBucket : public RGWOp {

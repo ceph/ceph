@@ -83,6 +83,14 @@ public:
   void send_response();
 };
 
+class RGWGetBucketWebsite_ObjStore_S3 : public RGWGetBucketWebsite {
+public:
+  RGWGetBucketWebsite_ObjStore_S3() {}
+  ~RGWGetBucketWebsite_ObjStore_S3() {}
+
+  void send_response();
+};
+
 class RGWStatBucket_ObjStore_S3 : public RGWStatBucket_ObjStore {
 public:
   RGWStatBucket_ObjStore_S3() {}

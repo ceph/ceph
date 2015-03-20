@@ -495,6 +495,71 @@ void RGWSetBucketVersioning_ObjStore_S3::send_response()
 }
 
 
+void RGWGetBucketWebsite_ObjStore_S3::send_response()
+{
+  if (ret)
+    set_req_state_err(s, ret);
+  dump_errno(s);
+  end_header(s, this, "application/xml");
+  dump_start(s);
+
+  if (ret < 0) {
+    return;
+  }
+
+  RGWBucketWebsiteConf& conf = s->bucket_info.website_conf;
+  list<RGWBWRoutingRule>& rules = conf.routing_rules.rules;
+
+  s->formatter->open_object_section_in_ns("WebsiteConfiguration",
+					  "http://doc.s3.amazonaws.com/doc/2006-03-01/");
+  s->formatter->open_object_section("IndexDocument");
+  s->formatter->dump_string("Suffix", conf.index_doc_suffix);
+  s->formatter->close_section();
+  s->formatter->open_object_section("ErrorDocument");
+  s->formatter->dump_string("Key", conf.error_doc);
+  s->formatter->close_section();
+
+  s->formatter->open_object_section("RoutingRules");
+  list<RGWBWRoutingRule>::iterator iter;
+  for (iter = rules.begin(); iter != rules.end(); ++iter) {
+    s->formatter->open_object_section("RoutingRule");
+
+    s->formatter->open_object_section("Condition");
+    if (!iter->condition.key_prefix_equals.empty()) {
+      s->formatter->dump_string("KeyPrefixEquals", iter->condition.key_prefix_equals);
+    }
+    if (iter->condition.http_error_code_returned_equals > 0) {
+      s->formatter->dump_int("HttpErrorCodeReturnedEquals", iter->condition.http_error_code_returned_equals);
+    }
+    s->formatter->close_section(); // Condition
+
+    s->formatter->open_object_section("Redirect");
+
+    if (!iter->redirect_info.replace_key_prefix_with.empty()) {
+      s->formatter->dump_string("ReplaceKeyPrefixWith", iter->redirect_info.replace_key_prefix_with);
+    }
+    if (!iter->redirect_info.replace_key_with.empty()) {
+      s->formatter->dump_string("ReplaceKeyWith", iter->redirect_info.replace_key_with);
+    }
+    if (!iter->redirect_info.redirect.hostname.empty()) {
+      s->formatter->dump_string("HostName", iter->redirect_info.redirect.hostname);
+    }
+    if (!iter->redirect_info.redirect.protocol.empty()) {
+      s->formatter->dump_string("Protocol", iter->redirect_info.redirect.protocol);
+    }
+    if (iter->redirect_info.redirect.http_redirect_code > 0) {
+      s->formatter->dump_int("HttpRedirectCode", iter->redirect_info.redirect.http_redirect_code);
+    }
+    s->formatter->close_section(); // Redirect
+
+
+    s->formatter->close_section(); // RoutingRule
+  }
+  s->formatter->close_section(); // RoutingRules
+  s->formatter->close_section(); // WebsiteConfiguration
+  rgw_flush_formatter_and_reset(s, s->formatter);
+}
+
 static void dump_bucket_metadata(struct req_state *s, RGWBucketEnt& bucket)
 {
   char buf[32];
