@@ -114,6 +114,15 @@ public:
   virtual unsigned get_alignment() const = 0;
   virtual int parse(const map<std::string,std::string> &parameters) = 0;
   virtual void prepare() = 0;
+  
+  virtual int shec_matrix_decode(int *erased, int *avails,
+				 char **data_ptrs, char **coding_ptrs, int size);
+  virtual int* shec_reedsolomon_coding_matrix(int is_single);
+
+private:
+  virtual double shec_calc_recovery_efficiency1(int k, int m1, int m2, int c1, int c2);
+  virtual int shec_make_decoding_matrix(bool prepare, int *erased, int *avails,
+					int *decoding_matrix, int *dm_ids, int *minimum);
 };
 
 class ErasureCodeShecReedSolomonVandermonde : public ErasureCodeShec {
