@@ -2030,6 +2030,9 @@ RGWOp *RGWHandler_ObjStore_Bucket_S3::op_get()
   if (s->info.args.sub_resource_exists("versioning"))
     return new RGWGetBucketVersioning_ObjStore_S3;
 
+  if (s->info.args.sub_resource_exists("website"))
+    return new RGWGetBucketWebsite_ObjStore_S3;
+
   if (is_acl_op()) {
     return new RGWGetACLs_ObjStore_S3;
   } else if (is_cors_op()) {
