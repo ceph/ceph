@@ -15,8 +15,18 @@ Upgrading
   many objects are stored on the node; do not be alarmed if they do
   not marked "up" by the cluster immediately after starting.
 
+* librbd and librados include lttng tracepoints on distros with
+  liblttng 2.4 or later (only Ubuntu Trusty for the ceph.com
+  packages). When running a daemon that uses these libraries, i.e. an
+  application that calls fork(2) or clone(2) without exec(3), you must
+  set LD_PRELOAD=liblttng-ust-fork.so.0 to prevent a crash in the
+  lttng atexit handler when the process exits. The only ceph tool that
+  requires this is rbd-fuse.
 
-
+* If rgw_socket_path is defined and rgw_frontends defines a
+  socket_port and socket_host, we now allow the rgw_frontends settings
+  to take precedence.  This change should only affect users who have
+  made non-standard changes to their radosgw configuration.
 
 
 v0.93
