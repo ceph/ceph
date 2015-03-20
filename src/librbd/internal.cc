@@ -1212,6 +1212,17 @@ reprotect_and_return_err:
       return r;
     }
 
+    r = detect_format(io_ctx, dstname, NULL, NULL);
+    if (r < 0 && r != -ENOENT) {
+      lderr(cct) << "error checking for existing image called "
+		 << dstname << ":" << cpp_strerror(r) << dendl;
+      return r;
+    }
+    if (r == 0) {
+      lderr(cct) << "rbd image " << dstname << " already exists" << dendl;
+      return -EEXIST;
+    }
+
     string src_oid =
       old_format ? old_header_name(srcname) : id_obj_name(srcname);
     string dst_oid =
@@ -1249,17 +1260,6 @@ reprotect_and_return_err:
       if (!outbl.empty())
 	last_read = outbl.rbegin()->first;
     } while (r == MAX_READ);
-
-    r = detect_format(io_ctx, dstname, NULL, NULL);
-    if (r < 0 && r != -ENOENT) {
-      lderr(cct) << "error checking for existing image called "
-		 << dstname << ":" << cpp_strerror(r) << dendl;
-      return r;
-    }
-    if (r == 0) {
-      lderr(cct) << "rbd image " << dstname << " already exists" << dendl;
-      return -EEXIST;
-    }
 
     librados::ObjectWriteOperation op;
     op.create(true);
