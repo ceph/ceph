@@ -593,6 +593,24 @@ static int process_request(RGWRados *store, RGWREST *rest, RGWRequest *req, RGWC
     abort_early(s, op, -ERR_USER_SUSPENDED);
     goto done;
   }
+
+  req->log(s, "init permissions");
+  ret = handler->init_permissions();
+  if (ret < 0) {
+    abort_early(s, op, ret);
+    goto done;
+  }
+
+  if (op->supports_website()) {
+    req->log(s, "recalculating target");
+    ret = handler->retarget(op, &op);
+    if (ret < 0) {
+      abort_early(s, op, ret);
+      goto done;
+    }
+    req->op = op;
+  }
+
   req->log(s, "reading permissions");
   ret = handler->read_permissions(op);
   if (ret < 0) {
