@@ -340,7 +340,7 @@ static int read_policy(RGWRados *store, struct req_state *s,
  * only_bucket: If true, reads the bucket ACL rather than the object ACL.
  * Returns: 0 on success, -ERR# otherwise.
  */
-static int rgw_build_policies(RGWRados *store, struct req_state *s, bool only_bucket, bool prefetch_data)
+static int rgw_build_bucket_policies(RGWRados *store, struct req_state *s)
 {
   int ret = 0;
   rgw_obj_key obj;
@@ -423,9 +423,20 @@ static int rgw_build_policies(RGWRados *store, struct req_state *s, bool only_bu
     }
   }
 
-  /* we're passed only_bucket = true when we specifically need the bucket's
-     acls, that happens on write operations */
-  if (!only_bucket && !s->object.empty()) {
+  return 0;
+}
+
+/**
+ * Get the AccessControlPolicy for a bucket or object off of disk.
+ * s: The req_state to draw information from.
+ * only_bucket: If true, reads the bucket ACL rather than the object ACL.
+ * Returns: 0 on success, -ERR# otherwise.
+ */
+static int rgw_build_object_policies(RGWRados *store, struct req_state *s, bool prefetch_data)
+{
+  int ret = 0;
+
+  if (!s->object.empty()) {
     if (!s->bucket_exists) {
       return -ERR_NO_SUCH_BUCKET;
     }
@@ -3600,12 +3611,29 @@ int RGWHandler::init(RGWRados *_store, struct req_state *_s, RGWClientIO *cio)
   return 0;
 }
 
-int RGWHandler::do_read_permissions(RGWOp *op, bool only_bucket)
+int RGWHandler::do_init_permissions()
 {
-  int ret = rgw_build_policies(store, s, only_bucket, op->prefetch_data());
+  int ret = rgw_build_bucket_policies(store, s);
 
   if (ret < 0) {
-    ldout(s->cct, 10) << "read_permissions on " << s->bucket << ":" <<s->object << " only_bucket=" << only_bucket << " ret=" << ret << dendl;
+    ldout(s->cct, 10) << "read_permissions on " << s->bucket << " ret=" << ret << dendl;
+    if (ret == -ENODATA)
+      ret = -EACCES;
+  }
+
+  return ret;
+}
+
+int RGWHandler::do_read_permissions(RGWOp *op, bool only_bucket)
+{
+  if (only_bucket) {
+    /* already read bucket info */
+    return 0;
+  }
+  int ret = rgw_build_object_policies(store, s, op->prefetch_data());
+
+  if (ret < 0) {
+    ldout(s->cct, 10) << "read_permissions on " << s->bucket << ":" << s->object << " ret=" << ret << dendl;
     if (ret == -ENODATA)
       ret = -EACCES;
   }

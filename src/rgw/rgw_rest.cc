@@ -1230,6 +1230,11 @@ static http_op op_from_method(const char *method)
   return OP_UNKNOWN;
 }
 
+int RGWHandler_ObjStore::init_permissions()
+{
+  return do_init_permissions();
+}
+
 int RGWHandler_ObjStore::read_permissions(RGWOp *op_obj)
 {
   bool only_bucket;
@@ -1267,6 +1272,33 @@ int RGWHandler_ObjStore::read_permissions(RGWOp *op_obj)
   }
 
   return do_read_permissions(op_obj, only_bucket);
+}
+
+int RGWHandler_ObjStore::retarget(RGWOp *op, RGWOp **new_op) {
+  *new_op = op;
+
+  if (!s->bucket_info.has_website) {
+    return 0;
+  }
+
+  RGWRedirectInfo rinfo;
+  rgw_obj_key new_obj;
+  s->bucket_info.website_conf.get_effective_target(s->object.name, &new_obj.name, &rinfo);
+
+
+
+#warning FIXME
+#if 0
+  if (s->object.empty() != new_obj.empty()) {
+    op->put();
+    s->object = new_obj;
+    *new_op = get_op();
+  }
+#endif
+
+  s->object = new_obj;
+
+  return 0;
 }
 
 void RGWRESTMgr::register_resource(string resource, RGWRESTMgr *mgr)

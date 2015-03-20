@@ -311,7 +311,9 @@ protected:
 public:
   RGWHandler_ObjStore() {}
   virtual ~RGWHandler_ObjStore() {}
+  int init_permissions();
   int read_permissions(RGWOp *op);
+  int retarget(RGWOp *op, RGWOp **new_op);
 
   virtual int authorize() = 0;
 };
