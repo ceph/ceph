@@ -2,6 +2,23 @@
  Release Notes
 ===============
 
+v0.94 Hammer (draft)
+============
+
+
+Upgrading
+---------
+
+* The ceph-osd daemons will perform a disk-format upgrade improve the
+  PG metadata layout and to repair a minor bug in the on-disk format.
+  It may take a minute or two for this to complete, depending on how
+  many objects are stored on the node; do not be alarmed if they do
+  not marked "up" by the cluster immediately after starting.
+
+
+
+
+
 v0.93
 =====
 
