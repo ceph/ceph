@@ -1985,6 +1985,9 @@ int object_map_read(cls_method_context_t hctx, BitVector<2> &object_map)
   if (r < 0) {
     return r;
   }
+  if (size == 0) {
+    return -ENOENT;
+  }
 
   bufferlist bl;
   r = cls_cxx_read(hctx, 0, size, &bl);
