@@ -1050,6 +1050,8 @@ struct req_state {
    uint32_t perm_mask;
    utime_t header_time;
 
+   string account_name;
+
    rgw_bucket bucket;
    string bucket_name_str;
    rgw_obj_key object;
