@@ -3028,7 +3028,7 @@ reprotect_and_return_err:
   ssize_t read(ImageCtx *ictx, const vector<pair<uint64_t,uint64_t> >& image_extents,
 		char *buf, bufferlist *pbl, int op_flags)
   {
-    Mutex mylock("IoCtxImpl::write::mylock");
+    Mutex mylock("librbd::read::mylock");
     Cond cond;
     bool done;
     int ret;
