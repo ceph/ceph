@@ -481,15 +481,27 @@ void ObjectMap::ResizeRequest::finish(ObjectMap *object_map) {
 }
 
 void ObjectMap::UpdateRequest::send() {
+  assert(m_image_ctx.object_map_lock.is_wlocked());
   CephContext *cct = m_image_ctx.cct;
 
-  ldout(cct, 20) << &m_image_ctx << " updating on-disk object map: ["
+  // safe to update in-memory state first without handling rollback since any
+  // failures will invalidate the object map
+  ldout(cct, 20) << &m_image_ctx << " updating object map: ["
 		 << m_start_object_no << "," << m_end_object_no << ") = "
 		 << (m_current_state ?
 		       stringify(static_cast<uint32_t>(*m_current_state)) : "")
 		 << "->" << static_cast<uint32_t>(m_new_state)
 		 << dendl;
-  
+  ObjectMap& object_map = m_image_ctx.object_map;
+  for (uint64_t object_no = m_start_object_no;
+       object_no < MIN(m_end_object_no, object_map.m_object_map.size());
+       ++object_no) {
+    if (!m_current_state ||
+	object_map.m_object_map[object_no] == *m_current_state) {
+      object_map.m_object_map[object_no] = m_new_state;
+    }
+  }
+
   librados::ObjectWriteOperation op;
   rados::cls::lock::assert_locked(&op, RBD_LOCK_NAME, LOCK_EXCLUSIVE, "", "");
   cls_client::object_map_update(&op, m_start_object_no, m_end_object_no,
@@ -503,17 +515,8 @@ void ObjectMap::UpdateRequest::send() {
 }
 
 void ObjectMap::UpdateRequest::finish(ObjectMap *object_map) {
-  CephContext *cct = m_image_ctx.cct;
-
-  ldout(cct, 20) << &m_image_ctx << " updating in-memory object map" << dendl;
-  for (uint64_t object_no = m_start_object_no;
-       object_no < MIN(m_end_object_no, object_map->m_object_map.size());
-       ++object_no) {
-    if (!m_current_state ||
-	object_map->m_object_map[object_no] == *m_current_state) {
-      object_map->m_object_map[object_no] = m_new_state;
-    }
-  }
+  ldout(m_image_ctx.cct, 20) << &m_image_ctx << " on-disk object map updated"
+                             << dendl;
 }
 
 } // namespace librbd
