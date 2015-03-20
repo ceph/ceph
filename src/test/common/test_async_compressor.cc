@@ -81,11 +81,25 @@ TEST_F(AsyncCompressorTest, GrubWaitTest) {
   async_compressor->init();
 }
 
+TEST_F(AsyncCompressorTest, DecompressInjectTest) {
+  bufferlist compress_data, decompress_data, rawdata;
+  generate_random_data(rawdata, 1<<22);
+  bool finished;
+  uint64_t id = async_compressor->async_compress(rawdata);
+  ASSERT_EQ(0, async_compressor->get_compress_data(id, compress_data, true, &finished));
+  ASSERT_TRUE(finished == true);
+  char error[] = "asjdfkwejrljqwaelrj";
+  memcpy(compress_data.c_str()+1024, error, sizeof(error)-1);
+  id = async_compressor->async_decompress(compress_data);
+  ASSERT_EQ(-EIO, async_compressor->get_decompress_data(id, decompress_data, true, &finished));
+}
+
 class SyntheticWorkload {
   set<pair<uint64_t, uint64_t> > compress_jobs, decompress_jobs;
   AsyncCompressor *async_compressor;
   vector<bufferlist> rand_data, compress_data;
   gen_type rng;
+  static const uint64_t MAX_INFLIGHT = 128;
 
  public:
   SyntheticWorkload(AsyncCompressor *ac): async_compressor(ac), rng(time(NULL)) {
@@ -124,32 +138,35 @@ class SyntheticWorkload {
     bool finished;
     set<pair<uint64_t, uint64_t> >::iterator prev;
     uint64_t c_reap = 0, d_reap = 0;
-    for (set<pair<uint64_t, uint64_t> >::iterator it = compress_jobs.begin();
-         it != compress_jobs.end();) {
-      prev = it;
-      it++;
-      async_compressor->get_compress_data(prev->first, data, blocking, &finished);
-      if (finished) {
-        c_reap++;
-        if (compress_data[prev->second].length())
-          ASSERT_TRUE(compress_data[prev->second].contents_equal(data));
-        else
-          compress_data[prev->second].swap(data);
-        compress_jobs.erase(prev);
+    do {
+      for (set<pair<uint64_t, uint64_t> >::iterator it = compress_jobs.begin();
+           it != compress_jobs.end();) {
+        prev = it;
+        it++;
+        ASSERT_EQ(0, async_compressor->get_compress_data(prev->first, data, blocking, &finished));
+        if (finished) {
+          c_reap++;
+          if (compress_data[prev->second].length())
+            ASSERT_TRUE(compress_data[prev->second].contents_equal(data));
+          else
+            compress_data[prev->second].swap(data);
+          compress_jobs.erase(prev);
+        }
       }
-    }
 
-    for (set<pair<uint64_t, uint64_t> >::iterator it = decompress_jobs.begin();
-         it != decompress_jobs.end();) {
-      prev = it;
-      it++;
-      async_compressor->get_decompress_data(prev->first, data, blocking, &finished);
-      if (finished) {
-        d_reap++;
-        ASSERT_TRUE(rand_data[prev->second].contents_equal(data));
-        decompress_jobs.erase(prev);
+      for (set<pair<uint64_t, uint64_t> >::iterator it = decompress_jobs.begin();
+           it != decompress_jobs.end();) {
+        prev = it;
+        it++;
+        ASSERT_EQ(0, async_compressor->get_decompress_data(prev->first, data, blocking, &finished));
+        if (finished) {
+          d_reap++;
+          ASSERT_TRUE(rand_data[prev->second].contents_equal(data));
+          decompress_jobs.erase(prev);
+        }
       }
-    }
+      usleep(1000 * 500);
+    } while (compress_jobs.size() + decompress_jobs.size() > MAX_INFLIGHT);
     cerr << " reap compress jobs " << c_reap << " decompress jobs " << d_reap << std::endl;
   }
   void print_internal_state() {
@@ -164,7 +181,7 @@ TEST_F(AsyncCompressorTest, SyntheticTest) {
   gen_type rng(time(NULL));
   boost::uniform_int<> true_false(0, 99);
   int val;
-  for (int i = 0; i < 10000; ++i) {
+  for (int i = 0; i < 3000; ++i) {
     if (!(i % 10)) {
       cerr << "Op " << i << ": ";
       test_ac.print_internal_state();

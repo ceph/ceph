@@ -35,7 +35,8 @@ class AsyncCompressor {
   enum {
     WAIT,
     WORKING,
-    DONE
+    DONE,
+    ERROR
   } status;
   struct Job {
     uint64_t id;
@@ -79,7 +80,6 @@ class AsyncCompressor {
           break;
         } else {
           Mutex::Locker (async_compressor->job_lock);
-          assert(item->status.read() == DONE);
           async_compressor->jobs.erase(item->id);
           item = NULL;
         }
@@ -89,16 +89,19 @@ class AsyncCompressor {
     void _process(Job *item, ThreadPool::TPHandle &handle) {
       assert(item->status.read() == WORKING);
       bufferlist out;
+      int r;
       if (item->is_compress)
-        async_compressor->compressor->compress(item->data, out);
+        r = async_compressor->compressor->compress(item->data, out);
       else
-        async_compressor->compressor->decompress(item->data, out);
-      item->data.swap(out);
+        r = async_compressor->compressor->decompress(item->data, out);
+      if (!r) {
+        item->data.swap(out);
+        assert(item->status.cas(WORKING, DONE));
+      } else {
+        item->status.set(ERROR);
+      }
     }
-    void _process_finish(Job *item) {
-      assert(item->status.read() == WORKING);
-      item->status.set(DONE);
-    }
+    void _process_finish(Job *item) {}
     void _clear() {}
   } compress_wq;
   friend class CompressWQ;
