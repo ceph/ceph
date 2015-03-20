@@ -209,7 +209,7 @@ namespace librbd {
     int get_lock_owner_info(entity_name_t *locker, std::string *cookie,
 			    std::string *address, uint64_t *handle);
     int lock();
-    void release_lock();
+    bool release_lock();
     bool try_request_lock();
 
     void schedule_retry_aio_requests(bool use_timer);
@@ -220,6 +220,7 @@ namespace librbd {
 
     WatchNotify::ClientId get_client_id();
 
+    void notify_release_lock();
     void notify_released_lock();
     void notify_request_lock();
     int notify_lock_owner(bufferlist &bl);
