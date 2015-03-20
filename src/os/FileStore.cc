@@ -437,6 +437,101 @@ int FileStore::lfn_link(coll_t c, coll_t newcid, const ghobject_t& o, const ghob
   return 0;
 }
 
+int FileStore::lfn_rename(coll_t c, coll_t newcid, const ghobject_t& o, const ghobject_t& newoid)
+{
+  Index index_new, index_old;
+  IndexedPath path_new, path_old;
+  int exist;
+  int r;
+  bool index_same = false;
+  if (c < newcid) {
+    r = get_index(newcid, &index_new);
+    if (r < 0)
+      return r;
+    r = get_index(c, &index_old);
+    if (r < 0)
+      return r;
+  } else if (c == newcid) {
+    r = get_index(c, &index_old);
+    if (r < 0)
+      return r;
+    index_new = index_old;
+    index_same = true;
+  } else {
+    r = get_index(c, &index_old);
+    if (r < 0)
+      return r;
+    r = get_index(newcid, &index_new);
+    if (r < 0)
+      return r;
+  }
+
+  assert(NULL != index_old.index);
+  assert(NULL != index_new.index);
+
+  if (!index_same) {
+
+    RWLock::RLocker l1((index_old.index)->access_lock);
+
+    r = index_old->lookup(o, &path_old, &exist);
+    if (r < 0) {
+      assert(!m_filestore_fail_eio || r != -EIO);
+      return r;
+    }
+    if (!exist)
+      return -ENOENT;
+
+    RWLock::WLocker l2((index_new.index)->access_lock);
+
+    r = index_new->lookup(newoid, &path_new, &exist);
+    if (r < 0) {
+      assert(!m_filestore_fail_eio || r != -EIO);
+      return r;
+    }
+
+    dout(25) << "lfn_rename path_old: " << path_old << dendl;
+    dout(25) << "lfn_rename path_new: " << path_new << dendl;
+    r = ::rename(path_old->path(), path_new->path());
+    if (r < 0)
+      return -errno;
+
+    r = index_new->created(newoid, path_new->path());
+    if (r < 0) {
+      assert(!m_filestore_fail_eio || r != -EIO);
+      return r;
+    }
+  } else {
+    RWLock::WLocker l1((index_old.index)->access_lock);
+
+    r = index_old->lookup(o, &path_old, &exist);
+    if (r < 0) {
+      assert(!m_filestore_fail_eio || r != -EIO);
+      return r;
+    }
+    if (!exist)
+      return -ENOENT;
+
+    r = index_new->lookup(newoid, &path_new, &exist);
+    if (r < 0) {
+      assert(!m_filestore_fail_eio || r != -EIO);
+      return r;
+    }
+
+    dout(25) << "lfn_rename path_old: " << path_old << dendl;
+    dout(25) << "lfn_rename path_new: " << path_new << dendl;
+    r = ::rename(path_old->path(), path_new->path());
+    if (r < 0)
+      return -errno;
+
+    r = index_new->created(newoid, path_new->path());
+    if (r < 0) {
+      assert(!m_filestore_fail_eio || r != -EIO);
+      return r;
+    }
+  }
+  return 0;
+}
+
 int FileStore::lfn_unlink(coll_t cid, const ghobject_t& o,
 			  const SequencerPosition &spos,
 			  bool force_clear_omap)
@@ -5090,10 +5185,7 @@ int FileStore::_collection_move_rename(coll_t oldcid, const ghobject_t& oldoid,
       _set_replay_guard(**fd, spos, &o, true);
     }
 
-    r = lfn_link(oldcid, c, oldoid, o);
-    if (replaying && !backend->can_checkpoint() &&
-	r == -EEXIST)    // crashed between link() and set_replay_guard()
-      r = 0;
+    r = lfn_rename(oldcid, c, oldoid, o);
 
     _inject_failure();
 
@@ -5108,10 +5200,6 @@ int FileStore::_collection_move_rename(coll_t oldcid, const ghobject_t& oldoid,
 
     lfn_close(fd);
     fd = FDRef();
-
-    if (r == 0)
-      r = lfn_unlink(oldcid, oldoid, spos, true);
-
     if (r == 0)
       r = lfn_open(c, o, 0, &fd);
 
