@@ -3121,9 +3121,17 @@ reprotect_and_return_err:
     bool done;
     int ret;
 
+    uint64_t mylen = len;
+    ictx->snap_lock.get_read();
+    int r = clip_io(ictx, off, &mylen);
+    ictx->snap_lock.put_read();
+    if (r < 0) {
+      return r;
+    }
+
     Context *ctx = new C_SafeCond(&mylock, &cond, &done, &ret);
     AioCompletion *c = aio_create_completion_internal(ctx, rbd_ctx_cb);
-    int r = aio_discard(ictx, off, len, c);
+    r = aio_discard(ictx, off, mylen, c);
     if (r < 0) {
       c->release();
       delete ctx;
@@ -3142,8 +3150,8 @@ reprotect_and_return_err:
     elapsed = ceph_clock_now(ictx->cct) - start_time;
     ictx->perfcounter->inc(l_librbd_discard_latency, elapsed);
     ictx->perfcounter->inc(l_librbd_discard);
-    ictx->perfcounter->inc(l_librbd_discard_bytes, len);
-    return len;
+    ictx->perfcounter->inc(l_librbd_discard_bytes, mylen);
+    return mylen;
   }
 
   ssize_t handle_sparse_read(CephContext *cct,
