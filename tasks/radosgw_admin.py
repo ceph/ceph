@@ -821,7 +821,7 @@ def task(ctx, config):
     while time.time() - timestamp <= (20 * 60):      # wait up to 20 minutes
         (err, out) = rgwadmin(ctx, client, ['usage', 'show', '--categories', 'delete_obj'])  # last operation we did is delete obj, wait for it to flush
         if successful_ops(out) > 0:
-            break;
+            break
         time.sleep(1)
 
     assert time.time() - timestamp <= (20 * 60)
@@ -830,7 +830,16 @@ def task(ctx, config):
     (err, out) = rgwadmin(ctx, client, ['usage', 'show'], check_status=True)
     assert len(out['entries']) > 0
     assert len(out['summary']) > 0
-    user_summary = out['summary'][0]
+
+    # find summary for user1
+    user_summary = None
+    for summary in out['summary']:
+        if summary.get('user') == user1:
+            user_summary = summary
+
+    if not user_summary:
+        raise AssertionError('No summary info found for user: %s' % user1)
+
     total = user_summary['total']
     assert total['successful_ops'] > 0
 
