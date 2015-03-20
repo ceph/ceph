@@ -239,9 +239,6 @@ void PGBackend::rollback_stash(
   version_t old_version,
   ObjectStore::Transaction *t) {
   assert(!hoid.is_temp());
-  t->remove(
-    coll,
-    ghobject_t(hoid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard));
   t->collection_move_rename(
     coll,
     ghobject_t(hoid, old_version, get_parent()->whoami_shard().shard),

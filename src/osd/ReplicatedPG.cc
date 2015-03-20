@@ -9168,7 +9168,6 @@ void ReplicatedBackend::submit_push_data(
       dout(10) << __func__ << ": Removing oid "
 	       << target_oid << " from the temp collection" << dendl;
       clear_temp_obj(target_oid);
-      t->remove(coll, recovery_info.soid);
       t->collection_move_rename(coll, target_oid, coll, recovery_info.soid);
     }
 

@@ -289,8 +289,6 @@ void ECBackend::handle_recovery_push(
     dout(10) << __func__ << ": Removing oid "
 	     << tobj.hobj << " from the temp collection" << dendl;
     clear_temp_obj(tobj.hobj);
-    m->t->remove(coll, ghobject_t(
-	op.soid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard));
     m->t->collection_move_rename(
       coll, tobj,
       coll, ghobject_t(
