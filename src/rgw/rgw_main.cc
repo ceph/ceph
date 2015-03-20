@@ -282,10 +282,17 @@ void RGWFCGXProcess::run()
   string socket_port;
   string socket_host;
 
-  conf->get_val("socket_path", g_conf->rgw_socket_path, &socket_path);
+  conf->get_val("socket_path", "", &socket_path);
   conf->get_val("socket_port", g_conf->rgw_port, &socket_port);
   conf->get_val("socket_host", g_conf->rgw_host, &socket_host);
 
+  if (socket_path.empty() && socket_port.empty() && socket_host.empty()) {
+    socket_path = g_conf->rgw_socket_path;
+    if (socket_path.empty()) {
+      dout(0) << "ERROR: no socket server point defined, cannot start fcgi frontend" << dendl;
+      return;
+    }
+  }
 
   if (!socket_path.empty()) {
     string path_str = socket_path;
