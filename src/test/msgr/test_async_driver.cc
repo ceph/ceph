@@ -253,7 +253,7 @@ TEST(EventCenterTest, FileEventExpansion) {
   for (int i = 0; i < 10000; i++) {
     int sd = ::socket(AF_INET, SOCK_STREAM, 0);
     center.create_file_event(sd, EVENT_READABLE, e);
-    sds.push_back(::socket(AF_INET, SOCK_STREAM, 0));
+    sds.push_back(sd);
   }
 
   for (vector<int>::iterator it = sds.begin(); it != sds.end(); ++it)

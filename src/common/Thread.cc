@@ -1,4 +1,4 @@
- // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 /*
  * Ceph - scalable distributed file system
@@ -27,13 +27,34 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/types.h>
+#ifdef HAVE_SCHED
+#include <sched.h>
+#endif
 
+static int _set_affinity(int id)
+{
+#ifdef HAVE_SCHED
+  if (id >= 0 && id < CPU_SETSIZE) {
+    cpu_set_t cpuset;
+    CPU_ZERO(&cpuset);
+
+    CPU_SET(id, &cpuset);
+
+    if (sched_setaffinity(0, sizeof(cpuset), &cpuset) < 0)
+      return -errno;
+    /* guaranteed to take effect immediately */
+    sched_yield();
+  }
+#endif
+  return 0;
+}
 
 Thread::Thread()
   : thread_id(0),
     pid(0),
     ioprio_class(-1),
-    ioprio_priority(-1)
+    ioprio_priority(-1),
+    cpuid(-1)
 {
 }
 
@@ -58,6 +79,8 @@ void *Thread::entry_wrapper()
 		    pid,
 		    IOPRIO_PRIO_VALUE(ioprio_class, ioprio_priority));
   }
+  if (pid && cpuid >= 0)
+    _set_affinity(cpuid);
   return entry();
 }
 
@@ -157,5 +180,13 @@ int Thread::set_ioprio(int cls, int prio)
     return ceph_ioprio_set(IOPRIO_WHO_PROCESS,
 			   pid,
 			   IOPRIO_PRIO_VALUE(cls, prio));
+  return 0;
+}
+
+int Thread::set_affinity(int id)
+{
+  cpuid = id;
+  if (pid && ceph_gettid() == pid)
+    _set_affinity(id);
   return 0;
 }
