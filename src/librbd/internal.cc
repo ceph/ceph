@@ -3020,9 +3020,23 @@ reprotect_and_return_err:
 
   ssize_t read(ImageCtx *ictx, uint64_t ofs, size_t len, char *buf, int op_flags)
   {
+    utime_t start_time, elapsed;
+    ssize_t ret;
+    ldout(ictx->cct, 20) << "read " << ictx << " off = " << ofs << " len = "
+			 << len << dendl;
+    start_time = ceph_clock_now(ictx->cct);
+
     vector<pair<uint64_t,uint64_t> > extents;
     extents.push_back(make_pair(ofs, len));
-    return read(ictx, extents, buf, NULL, op_flags);
+    ret = read(ictx, extents, buf, NULL, op_flags);
+    if (ret < 0)
+      return ret;
+
+    elapsed = ceph_clock_now(ictx->cct) - start_time;
+    ictx->perfcounter->tinc(l_librbd_rd_latency, elapsed);
+    ictx->perfcounter->inc(l_librbd_rd);
+    ictx->perfcounter->inc(l_librbd_rd_bytes, ret);
+    return ret;
   }
 
   ssize_t read(ImageCtx *ictx, const vector<pair<uint64_t,uint64_t> >& image_extents,
