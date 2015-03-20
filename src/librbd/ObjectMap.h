@@ -123,6 +123,7 @@ private:
   bool m_enabled;
 
   void invalidate(uint64_t snap_id);
+  void resize(uint64_t num_objs, uint8_t default_state);
 };
 
 } // namespace librbd

@@ -161,9 +161,28 @@ void ObjectMap::refresh(uint64_t snap_id)
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 10) << &m_image_ctx << " refreshing object map" << dendl;
 
+  uint64_t num_objs = Striper::get_num_objects(
+    m_image_ctx.layout, m_image_ctx.get_image_size(snap_id));
+
   std::string oid(object_map_name(m_image_ctx.id, snap_id));
   int r = cls_client::object_map_load(&m_image_ctx.md_ctx, oid,
                                       &m_object_map);
+  if (r == -EINVAL) {
+    // object map is corrupt on-disk -- clear it and properly size it
+    // so future IO can keep the object map in sync
+    invalidate(snap_id);
+
+    librados::ObjectWriteOperation op;
+    rados::cls::lock::assert_locked(&op, RBD_LOCK_NAME, LOCK_EXCLUSIVE, "", "");
+    op.truncate(0);
+    cls_client::object_map_resize(&op, num_objs, OBJECT_NONEXISTENT);
+
+    r = m_image_ctx.md_ctx.operate(oid, &op);
+    if (r == 0) {
+      m_object_map.clear();
+      resize(num_objs, OBJECT_NONEXISTENT);
+    }
+  }
   if (r < 0) {
     lderr(cct) << "error refreshing object map: " << cpp_strerror(r)
                << dendl;
@@ -175,12 +194,20 @@ void ObjectMap::refresh(uint64_t snap_id)
   ldout(cct, 20) << "refreshed object map: " << m_object_map.size()
                  << dendl;
 
-  uint64_t num_objs = Striper::get_num_objects(
-    m_image_ctx.layout, m_image_ctx.get_image_size(snap_id));
   if (m_object_map.size() < num_objs) {
     lderr(cct) << "object map smaller than current object count: "
                << m_object_map.size() << " != " << num_objs << dendl;
     invalidate(snap_id);
+
+    // correct the size issue so future IO can keep the object map in sync
+    librados::ObjectWriteOperation op;
+    rados::cls::lock::assert_locked(&op, RBD_LOCK_NAME, LOCK_EXCLUSIVE, "", "");
+    cls_client::object_map_resize(&op, num_objs, OBJECT_NONEXISTENT);
+
+    r = m_image_ctx.md_ctx.operate(oid, &op);
+    if (r == 0) {
+      resize(num_objs, OBJECT_NONEXISTENT);
+    }
   } else if (m_object_map.size() > num_objs) {
     // resize op might have been interrupted
     ldout(cct, 1) << "object map larger than current object count: "
@@ -347,6 +374,15 @@ void ObjectMap::invalidate(uint64_t snap_id) {
   }
 }
 
+void ObjectMap::resize(uint64_t num_objs, uint8_t defualt_state) {
+  size_t orig_object_map_size = m_object_map.size();
+  m_object_map.resize(num_objs);
+  for (uint64_t i = orig_object_map_size;
+       i < m_object_map.size(); ++i) {
+    m_object_map[i] = defualt_state;
+  }
+}
+
 bool ObjectMap::Request::should_complete(int r) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << &m_image_ctx << " should_complete: r=" << r << dendl;
@@ -437,12 +473,7 @@ void ObjectMap::ResizeRequest::finish(ObjectMap *object_map) {
 
   ldout(cct, 5) << &m_image_ctx << " resizing in-memory object map: "
 		<< m_num_objs << dendl;
-  size_t orig_object_map_size = object_map->m_object_map.size();
-  object_map->m_object_map.resize(m_num_objs);
-  for (uint64_t i = orig_object_map_size;
-       i < object_map->m_object_map.size(); ++i) {
-    object_map->m_object_map[i] = m_default_object_state;
-  }
+  object_map->resize(m_num_objs, m_default_object_state);
 }
 
 void ObjectMap::UpdateRequest::send() {
