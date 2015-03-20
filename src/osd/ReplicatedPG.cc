@@ -1945,10 +1945,17 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op,
 	map<time_t,HitSetRef>::iterator itor;
 	bool in_other_hit_sets = false;
 	for (itor = agent_state->hit_set_map.begin(); itor != agent_state->hit_set_map.end(); ++itor) {
-	  if (itor->second->contains(missing_oid)) {
-	    in_other_hit_sets = true;
-	    break;
-	  }
+          if (obc.get()) {
+            if (obc->obs.oi.soid != hobject_t() && itor->second->contains(obc->obs.oi.soid)) {
+              in_other_hit_sets = true;
+              break;
+            }
+          } else {
+            if (missing_oid != hobject_t() && itor->second->contains(missing_oid)) {
+              in_other_hit_sets = true;
+              break;
+            }
+          }
 	}
 	if (in_other_hit_sets) {
 	  promote_object(obc, missing_oid, oloc, promote_op);
