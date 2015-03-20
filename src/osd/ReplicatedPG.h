@@ -1169,7 +1169,10 @@ protected:
    */
   void do_cache_redirect(OpRequestRef op);
   /**
-   * This function starts up a copy from
+   * This function attempts to start a promote.  Either it succeeds,
+   * or places op on a wait list.  If op is null, failure means that
+   * this is a noop.  If a future user wants to be able to distinguish
+   * these cases, a return value should be added.
    */
   void promote_object(ObjectContextRef obc,            ///< [optional] obc
 		      const hobject_t& missing_object, ///< oid (if !obc)
