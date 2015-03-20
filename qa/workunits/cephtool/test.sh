@@ -335,8 +335,7 @@ function test_tiering()
   ceph osd pool create cachepool 2
   ceph osd tier add-cache datapool cachepool 1024000
   ceph osd tier cache-mode cachepool writeback
-  dd if=/dev/zero of=/tmp/add-cache bs=4K count=1
-  rados -p datapool put object /tmp/add-cache
+  rados -p datapool put object /etc/passwd
   rados -p cachepool stat object
   rados -p cachepool cache-flush object
   rados -p datapool stat object
@@ -344,7 +343,6 @@ function test_tiering()
   ceph osd tier remove datapool cachepool
   ceph osd pool delete cachepool cachepool --yes-i-really-really-mean-it
   ceph osd pool delete datapool datapool --yes-i-really-really-mean-it
-  rm -rf /tmp/add-cache
 
   # protection against pool removal when used as tiers
   ceph osd pool create datapool 2
@@ -362,12 +360,17 @@ function test_tiering()
   # check health check
   ceph osd pool create datapool 2
   ceph osd pool create cache4 2
-  ceph osd tier add datapool cache4
+  ceph osd tier add-cache datapool cache4 1024000
+  ceph osd tier cache-mode cache4 writeback
+  tmpfile=$(mktemp|grep tmp)
+  dd if=/dev/zero of=$tmpfile  bs=4K count=1
   ceph osd pool set cache4 target_max_objects 5
-  ceph osd pool set cache4 target_max_bytes 1000
+  #4096 * 5 = 20480, 20480 near/at 21000,
+  ceph osd pool set cache4 target_max_bytes 21000
   for f in `seq 1 5` ; do
-    rados -p cache4 put foo$f /etc/passwd
+    rados -p cache4 put foo$f $tmpfile
   done
+  rm -f $tmpfile
   while ! ceph df | grep cache4 | grep ' 5 ' ; do
     echo waiting for pg stats to flush
     sleep 2
@@ -375,6 +378,7 @@ function test_tiering()
   ceph health | grep WARN | grep cache4
   ceph health detail | grep cache4 | grep 'target max' | grep objects
   ceph health detail | grep cache4 | grep 'target max' | grep 'B'
+  ceph osd tier remove-overlay datapool
   ceph osd tier remove datapool cache4
   ceph osd pool delete cache4 cache4 --yes-i-really-really-mean-it
   ceph osd pool delete datapool datapool --yes-i-really-really-mean-it
