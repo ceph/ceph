@@ -90,28 +90,9 @@ configuration details, perform the following steps using ``ceph-deploy``.
    to re-install Ceph.
 
 
-#. Add the initial monitor(s) and gather the keys (new in
-   ``ceph-deploy`` v1.1.3). ::
+#. Add the initial monitor(s) and gather the keys::
 
 	ceph-deploy mon create-initial
-
-   **Note:** In earlier versions of ``ceph-deploy``, you must create the
-   initial monitor(s) and gather keys in two discrete steps. First, create
-   the monitor. ::
-
-	ceph-deploy mon create {ceph-node}
-
-   For example::
-
-	ceph-deploy mon create node1
-
-   Then, gather the keys. ::
-
-	ceph-deploy gatherkeys {ceph-node}
-
-   For example::
-
-	ceph-deploy gatherkeys node1
 
    Once you complete the process, your local directory should have the following
    keyrings:
