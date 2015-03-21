@@ -1732,7 +1732,7 @@ int do_import(ObjectStore *store, OSDSuperblock& sb)
       cerr << std::endl;
       cerr << "If you wish to import, first do 'ceph-objectstore-tool...--op set-allow-sharded-objects'" << std::endl;
     }
-    return 1;
+    return 11;  // Assume no +EAGAIN gets to end of main() until we clean up error code handling
   }
 
   // Don't import if pool no longer exists
@@ -1745,7 +1745,7 @@ int do_import(ObjectStore *store, OSDSuperblock& sb)
   if (!curmap.have_pg_pool(pgid.pgid.m_pool)) {
     cerr << "Pool " << pgid.pgid.m_pool << " no longer exists" << std::endl;
     // Special exit code for this error, used by test code
-    return 10;
+    return 10;  // Assume no +ECHILD gets to end of main() until we clean up error code handling
   }
 
   log_oid = OSD::make_pg_log_oid(pgid);
@@ -3078,5 +3078,8 @@ out:
     return 1;
   }
 
+  // Check for -errno accidentally getting here
+  if (ret < 0)
+    ret = 1;
   return ret;
 }
