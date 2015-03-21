@@ -3,8 +3,29 @@ Release timeline
 ================
 
 There are approximately four stable releases a year. Every other
-release is a LTS (Long Term Support). A LTS release has more frequent
-point releases. All stable releases are supported for 18 months.
+release is a LTS (Long Term Support). A LTS release is supported for 18
+months. A stable release that is not LTS is supported until the next
+stable release is published. A development / testing release is not
+supported.
+
+* Long Term Support release : 18 months
+* Stable release : until the next stable release is published
+* Development / testing release : not supported
+
+Supporting a release means:
+
+* `Integration and upgrade tests
+  <https://github.com/ceph/ceph-qa-suite>`_ are run on a regular basis
+  and `their results <http://pulpito.ceph.com/>`_ analyzed by Ceph
+  developers.
+* `Issues <http://tracker.ceph.com/projects/ceph/issues?query_id=27>`_
+  fixed in the development branch is scheduled to be backported to the
+  release.
+* When an issue found in the release is `reported
+  <http://tracker.ceph.com/projects/ceph/issues/new>`_ it will be
+  handled by Ceph developers.
+* The `stable releases and backport team <http://tracker.ceph.com/projects/ceph-releases>`_
+  publishes ``point releases`` including fixes that have been backported to the release.
 
 +----------------+-----------+-----------+-----------+-----------+-----------+
 |                |Development|`Dumpling`_|`Emperor`_ |`Firefly`_ |`Giant`_   |
