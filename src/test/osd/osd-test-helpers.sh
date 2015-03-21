@@ -87,3 +87,49 @@ function get_pg() {
     ./ceph osd map $poolname $objectname | \
        perl -p -e 's/.*\((.*?)\) -> up.*/$1/'
 }
+
+function kill_osd_daemon() {
+    local dir=$1
+    local osdid=$2
+    pidfile=$(find $dir | grep pidfile | grep "osd-$osdid\.")
+    pid=$(cat $pidfile)
+    for try in 0 1 1 1 2 3 ; do
+	      alive=0
+       	kill -9 $pid 2> /dev/null || break
+	      alive=1
+        sleep $try
+    done
+    return $alive
+}
+
+function check_osd_status() {
+    local osdid=$1
+    local st=$2
+	
+    status=1	
+    for ((i=0; i < 30; i++)); do
+        if ! ceph osd dump | grep "osd.$osdid $st"; then
+            sleep 1
+        else
+            status=0
+            break
+        fi
+    done
+    return $status
+}
+
+function check_pg_status() {
+    local pgid=$1
+    local st=$2
+
+    status=1	
+    for ((i=0; i < 30; i++)); do
+        if ! ceph pg dump | grep "$pgid" | grep "$st"; then
+            sleep 1
+        else
+            status=0
+            break
+        fi
+    done
+    return $status
+}
