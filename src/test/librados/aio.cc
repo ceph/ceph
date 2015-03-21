@@ -1491,6 +1491,53 @@ TEST(LibRadosAio, OmapPP) {
     ASSERT_EQ(set_got.size(), (unsigned)0);
   }
 
+  // omap_clear clears header *and* keys
+  {
+    boost::scoped_ptr<AioCompletion> my_completion(cluster.aio_create_completion(0, 0, 0));
+    ObjectWriteOperation op;
+    bufferlist bl;
+    bl.append("some data");
+    map<string,bufferlist> to_set;
+    to_set["foo"] = bl;
+    to_set["foo2"] = bl;
+    to_set["qfoo3"] = bl;
+    op.omap_set(to_set);
+    op.omap_set_header(bl);
+    ioctx.aio_operate("foo3", my_completion.get(), &op);
+    {
+      TestAlarm alarm;
+      ASSERT_EQ(0, my_completion->wait_for_complete());
+    }
+    EXPECT_EQ(0, my_completion->get_return_value());
+  }
+  {
+    boost::scoped_ptr<AioCompletion> my_completion(cluster.aio_create_completion(0, 0, 0));
+    ObjectWriteOperation op;
+    op.omap_clear();
+    ioctx.aio_operate("foo3", my_completion.get(), &op);
+    {
+      TestAlarm alarm;
+      ASSERT_EQ(0, my_completion->wait_for_complete());
+    }
+    EXPECT_EQ(0, my_completion->get_return_value());
+  }
+  {
+    boost::scoped_ptr<AioCompletion> my_completion(cluster.aio_create_completion(0, 0, 0));
+    ObjectReadOperation op;
+    set<string> set_got;
+    bufferlist hdr;
+    op.omap_get_keys("", -1, &set_got, 0);
+    op.omap_get_header(&hdr, NULL);
+    ioctx.aio_operate("foo3", my_completion.get(), &op, 0);
+    {
+      TestAlarm alarm;
+      ASSERT_EQ(0, my_completion->wait_for_complete());
+    }
+    EXPECT_EQ(0, my_completion->get_return_value());
+    ASSERT_EQ(set_got.size(), (unsigned)0);
+    ASSERT_EQ(hdr.length(), 0u);
+  }
+
   ioctx.remove("test_obj");
   destroy_one_pool_pp(pool_name, cluster);
 }
