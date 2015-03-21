@@ -265,7 +265,10 @@ class Thrasher:
             proc = imp_remote.run(args=cmd, wait=True, check_status=False)
             if proc.exitstatus == 10:
                 self.log("Pool went away before processing an import"
-                         "...ignored");
+                         "...ignored")
+            elif proc.exitstatus == 11:
+                self.log("Attempt to import an incompatible export"
+                         "...ignored")
             elif proc.exitstatus:
                 raise Exception("ceph-objectstore-tool: "
                                 "import failure with status {ret}".
