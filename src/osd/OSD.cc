@@ -2041,7 +2041,8 @@ void OSD::final_init()
     "injectdataerr",
     "injectdataerr " \
     "name=pool,type=CephString " \
-    "name=objname,type=CephObjectname",
+    "name=objname,type=CephObjectname " \
+    "name=shardid,type=CephInt,req=false,range=0|255",
     test_ops_hook,
     "inject data error into omap");
   assert(r == 0);
@@ -2050,7 +2051,8 @@ void OSD::final_init()
     "injectmdataerr",
     "injectmdataerr " \
     "name=pool,type=CephString " \
-    "name=objname,type=CephObjectname",
+    "name=objname,type=CephObjectname " \
+    "name=shardid,type=CephInt,req=false,range=0|255",
     test_ops_hook,
     "inject metadata error");
   assert(r == 0);
@@ -3965,8 +3967,8 @@ void OSD::check_ops_in_flight()
 //   setomapheader <pool-id> [namespace/]<obj-name> <header>
 //   getomap <pool> [namespace/]<obj-name>
 //   truncobj <pool-id> [namespace/]<obj-name> <newlen>
-//   injectmdataerr [namespace/]<obj-name>
-//   injectdataerr [namespace/]<obj-name>
+//   injectmdataerr [namespace/]<obj-name> [shardid]
+//   injectdataerr [namespace/]<obj-name> [shardid]
 void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
      std::string command, cmdmap_t& cmdmap, ostream &ss)
 {
@@ -4009,13 +4011,19 @@ void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
       ss << "Invalid namespace/objname";
       return;
     }
-    if (curmap->pg_is_ec(rawpg)) {
-      ss << "Must not call on ec pool";
-      return;
-    }
-    spg_t pgid = spg_t(curmap->raw_pg_to_pg(rawpg), shard_id_t::NO_SHARD);
 
+    int64_t shardid;
+    cmd_getval(service->cct, cmdmap, "shardid", shardid, int64_t(shard_id_t::NO_SHARD));
     hobject_t obj(object_t(objname), string(""), CEPH_NOSNAP, rawpg.ps(), pool, nspace);
+    ghobject_t gobj(obj, ghobject_t::NO_GEN, shard_id_t(uint8_t(shardid)));
+    spg_t pgid(curmap->raw_pg_to_pg(rawpg), shard_id_t(shardid));
+    if (curmap->pg_is_ec(rawpg)) {
+        if ((command != "injectdataerr") && (command != "injectmdataerr")) {
+            ss << "Must not call on ec pool, except injectdataerr or injectmdataerr";
+            return;
+        }
+    }
+
     ObjectStore::Transaction t;
 
     if (command == "setomapval") {
@@ -4081,10 +4089,10 @@ void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
       else
 	ss << "ok";
     } else if (command == "injectdataerr") {
-      store->inject_data_error(obj);
+      store->inject_data_error(gobj);
       ss << "ok";
     } else if (command == "injectmdataerr") {
-      store->inject_mdata_error(obj);
+      store->inject_mdata_error(gobj);
       ss << "ok";
     }
     return;
