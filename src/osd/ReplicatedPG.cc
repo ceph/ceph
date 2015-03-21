@@ -5070,8 +5070,6 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       {
 	if (maybe_create_new_object(ctx)) {
 	  t->touch(soid);
-	} else {
-	  obs.oi.clear_omap_digest();
 	}
 	map<string, bufferlist> to_set;
 	try {
@@ -5093,6 +5091,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	ctx->delta_stats.num_wr++;
       }
       obs.oi.set_flag(object_info_t::FLAG_OMAP);
+      obs.oi.clear_omap_digest();
       break;
 
     case CEPH_OSD_OP_OMAPSETHEADER:
@@ -5113,6 +5112,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	ctx->delta_stats.num_wr++;
       }
       obs.oi.set_flag(object_info_t::FLAG_OMAP);
+      obs.oi.clear_omap_digest();
       break;
 
     case CEPH_OSD_OP_OMAPCLEAR:
