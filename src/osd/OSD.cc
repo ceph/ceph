@@ -2169,6 +2169,8 @@ void OSD::create_logger()
   osd_plb.add_u64_counter(l_osd_object_ctx_cache_hit, "object_ctx_cache_hit", "Object context cache hits");
   osd_plb.add_u64_counter(l_osd_object_ctx_cache_total, "object_ctx_cache_total", "Object context cache lookups");
 
+  osd_plb.add_u64_counter(l_osd_op_cache_hit, "op_cache_hit");
+
   logger = osd_plb.create_perf_counters();
   cct->get_perfcounters_collection()->add(logger);
 }
