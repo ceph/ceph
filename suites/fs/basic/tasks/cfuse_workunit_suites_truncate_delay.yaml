@@ -10,7 +10,6 @@ tasks:
 - ceph-fuse:
 - exec:
     client.0:
-      - cd $TESTDIR/mnt.*
-      - dd if=/dev/zero of=./foo count=100
+      - cd $TESTDIR/mnt.* && dd if=/dev/zero of=./foo count=100
       - sleep 2
-      - truncate --size 0 ./foo
+      - cd $TESTDIR/mnt.* && truncate --size 0 ./foo
