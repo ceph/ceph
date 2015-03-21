@@ -1829,7 +1829,7 @@ void ReplicatedPG::do_op(OpRequestRef& op)
   }
 
   op->mark_started();
-  ctx->src_obc = src_obc;
+  ctx->src_obc.swap(src_obc);
 
   execute_ctx(ctx);
 }
@@ -8604,8 +8604,6 @@ void ReplicatedBackend::sub_op_modify_impl(OpRequestRef op)
 
   rm->bytes_written = rm->opt.get_encoded_bytes();
   
-  op->mark_started();
-
   rm->localt.append(rm->opt);
   rm->localt.register_on_commit(
     parent->bless_context(
