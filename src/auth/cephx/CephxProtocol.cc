@@ -25,14 +25,13 @@
 
 
 void cephx_calc_client_server_challenge(CephContext *cct, CryptoKey& secret, uint64_t server_challenge, 
-		  uint64_t client_challenge, uint64_t *key, std::string &ret)
+		  uint64_t client_challenge, uint64_t *key, std::string &error)
 {
   CephXChallengeBlob b;
   b.server_challenge = server_challenge;
   b.client_challenge = client_challenge;
 
   bufferlist enc;
-  std::string error;
   if (encode_encrypt(cct, b, secret, enc, error))
     return;
 
