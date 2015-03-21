@@ -246,7 +246,7 @@ def calamari_install(config, cal_svr):
     calamari_user = config.get('calamari_user', 'admin')
     calamari_password = config.get('calamari_password', 'admin')
     git_icetool_loc = config.get('ice_git_location',
-                                 'git@github.com:ceph')
+                                 'git@github.com:inktankstorage')
     iceball_loc = config.get('iceball_location', '.')
     ice_version = config.get('ice_version', ICE_VERSION_DEFAULT)
 
