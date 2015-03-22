@@ -1091,7 +1091,8 @@ bool MDSMonitor::management_command(
         // Ensure fs name is not empty so that we can implement
         // commmands that refer to FS by name in future.
         ss << "Filesystem name may not be empty";
-        return -EINVAL;
+        r = -EINVAL;
+        return true;
     }
 
     if (pending_mdsmap.get_enabled()
@@ -1108,6 +1109,7 @@ bool MDSMonitor::management_command(
       /* We currently only support one filesystem, so cannot create a second */
       ss << "A filesystem already exists, use `ceph fs rm` if you wish to delete it";
       r = -EINVAL;
+      return true;
     }
 
     pg_pool_t const *data_pool = mon->osdmon()->osdmap.get_pg_pool(data);
@@ -1115,14 +1117,11 @@ bool MDSMonitor::management_command(
     pg_pool_t const *metadata_pool = mon->osdmon()->osdmap.get_pg_pool(metadata);
     assert(metadata_pool != NULL);  // Checked it existed above
 
-    // Automatically set crash_replay_interval on data pool if it
-    // isn't already set.
-    if (data_pool->get_crash_replay_interval() == 0) {
-      r = mon->osdmon()->set_crash_replay_interval(data, g_conf->osd_default_data_pool_replay_window);
-      assert(r == 0);  // We just did get_pg_pool so it must exist and be settable
-      request_proposal(mon->osdmon());
-    }
-
+    // we must make these checks before we even allow ourselves to *think*
+    // about requesting a proposal to the osdmonitor and bail out now if
+    // we believe we must.  bailing out *after* we request the proposal is
+    // bad business as we could have changed the osdmon's state and ending up
+    // returning an error to the user.
     r = _check_pool(data, &ss);
     if (r) {
       return true;
@@ -1131,6 +1130,14 @@ bool MDSMonitor::management_command(
     r = _check_pool(metadata, &ss);
     if (r) {
       return true;
+    }
+
+    // Automatically set crash_replay_interval on data pool if it
+    // isn't already set.
+    if (data_pool->get_crash_replay_interval() == 0) {
+      r = mon->osdmon()->set_crash_replay_interval(data, g_conf->osd_default_data_pool_replay_window);
+      assert(r == 0);  // We just did get_pg_pool so it must exist and be settable
+      request_proposal(mon->osdmon());
     }
 
     // All checks passed, go ahead and create.
