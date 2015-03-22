@@ -23,19 +23,9 @@ import httplib2
 import util.rgw as rgw_utils
 
 from teuthology import misc as teuthology
-from util.rgw import rgwadmin
+from util.rgw import rgwadmin, get_user_summary, get_user_successful_ops
 
 log = logging.getLogger(__name__)
-
-
-def successful_ops(out):
-    """Extract total from the first summary entry (presumed to be only one)"""
-    summary = out['summary']
-    if len(summary) == 0:
-        return 0
-    entry = summary[0]
-    return entry['total']['successful_ops']
-
 
 def create_presigned_url(conn, method, bucket_name, key_name, expiration):
     return conn.generate_url(expires_in=expiration,
@@ -820,7 +810,7 @@ def task(ctx, config):
     timestamp = time.time()
     while time.time() - timestamp <= (20 * 60):      # wait up to 20 minutes
         (err, out) = rgwadmin(ctx, client, ['usage', 'show', '--categories', 'delete_obj'])  # last operation we did is delete obj, wait for it to flush
-        if successful_ops(out) > 0:
+        if get_user_successful_ops(out, user1) > 0:
             break
         time.sleep(1)
 
@@ -831,14 +821,7 @@ def task(ctx, config):
     assert len(out['entries']) > 0
     assert len(out['summary']) > 0
 
-    # find summary for user1
-    user_summary = None
-    for summary in out['summary']:
-        if summary.get('user') == user1:
-            user_summary = summary
-
-    if not user_summary:
-        raise AssertionError('No summary info found for user: %s' % user1)
+    user_summary = get_user_summary(out, user1)
 
     total = user_summary['total']
     assert total['successful_ops'] > 0

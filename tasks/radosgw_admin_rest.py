@@ -20,19 +20,9 @@ import time
 
 from boto.connection import AWSAuthConnection
 from teuthology import misc as teuthology
+from util.rgw import get_user_summary, get_user_successful_ops
 
 log = logging.getLogger(__name__)
-
-def successful_ops(out):
-    """
-    Extract successful operations
-    :param out: list
-    """
-    summary = out['summary']
-    if len(summary) == 0:
-        return 0
-    entry = summary[0]
-    return entry['total']['successful_ops']
 
 def rgwadmin(ctx, client, cmd):
     """
@@ -522,7 +512,7 @@ def task(ctx, config):
     while time.time() - timestamp <= (20 * 60):      # wait up to 20 minutes
         (ret, out) = rgwadmin_rest(admin_conn, ['usage', 'show'], {'categories' : 'delete_obj'})  # last operation we did is delete obj, wait for it to flush
 
-        if successful_ops(out) > 0:
+        if get_user_successful_ops(out, user1) > 0:
             break
         time.sleep(1)
 
@@ -533,7 +523,7 @@ def task(ctx, config):
     assert ret == 200
     assert len(out['entries']) > 0
     assert len(out['summary']) > 0
-    user_summary = out['summary'][0]
+    user_summary = get_user_summary(out, user1)
     total = user_summary['total']
     assert total['successful_ops'] > 0
 

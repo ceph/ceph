@@ -49,6 +49,24 @@ def rgwadmin(ctx, client, cmd, stdin=StringIO(), check_status=False):
             log.info(' raw result: %s' % j)
     return (r, j)
 
+def get_user_summary(out, user):
+    """Extract the summary for a given user"""
+    user_summary = None
+    for summary in out['summary']:
+        if summary.get('user') == user:
+            user_summary = summary
+
+    if not user_summary:
+        raise AssertionError('No summary info found for user: %s' % user)
+
+    return user_summary
+
+def get_user_successful_ops(out, user):
+    summary = out['summary']
+    if len(summary) == 0:
+        return 0
+    return get_user_summary(out, user)['total']['successful_ops']
+
 def get_zone_host_and_port(ctx, client, zone):
     _, region_map = rgwadmin(ctx, client, check_status=True,
                              cmd=['-n', client, 'region-map', 'get'])
