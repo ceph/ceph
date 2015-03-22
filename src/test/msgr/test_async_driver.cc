@@ -250,7 +250,7 @@ TEST(EventCenterTest, FileEventExpansion) {
   EventCenter center(g_ceph_context);
   center.init(100);
   EventCallbackRef e(new FakeEvent());
-  for (int i = 0; i < 10000; i++) {
+  for (int i = 0; i < 300; i++) {
     int sd = ::socket(AF_INET, SOCK_STREAM, 0);
     center.create_file_event(sd, EVENT_READABLE, e);
     sds.push_back(sd);
