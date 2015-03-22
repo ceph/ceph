@@ -4666,7 +4666,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	    break;
 	  }
 	  dout(10) << " found existing watch " << w << " by " << entity << dendl;
-	  p->second->got_ping(ceph_clock_now(NULL));
+	  p->second->got_ping(ceph_clock_now(cct));
 	  result = 0;
         } else if (op.watch.op == CEPH_OSD_WATCH_OP_UNWATCH) {
 	  map<pair<uint64_t, entity_name_t>, watch_info_t>::iterator oi_iter =
@@ -11798,7 +11798,7 @@ void ReplicatedPG::hit_set_setup()
 
 void ReplicatedPG::hit_set_create()
 {
-  utime_t now = ceph_clock_now(NULL);
+  utime_t now = ceph_clock_now(cct);
   // make a copy of the params to modify
   HitSet::Params params(pool.info.hit_set_params);
 
@@ -12387,7 +12387,7 @@ bool ReplicatedPG::agent_maybe_flush(ObjectContextRef& obc)
     return false;
   }
 
-  utime_t now = ceph_clock_now(NULL);
+  utime_t now = ceph_clock_now(cct);
   utime_t ob_local_mtime;
   if (obc->obs.oi.local_mtime != utime_t()) {
     ob_local_mtime = obc->obs.oi.local_mtime;
@@ -12464,9 +12464,9 @@ bool ReplicatedPG::agent_maybe_evict(ObjectContextRef& obc)
     uint64_t atime_upper = 0, atime_lower = 0;
     if (atime < 0 && obc->obs.oi.mtime != utime_t()) {
       if (obc->obs.oi.local_mtime != utime_t()) {
-        atime = ceph_clock_now(NULL).sec() - obc->obs.oi.local_mtime;
+        atime = ceph_clock_now(cct).sec() - obc->obs.oi.local_mtime;
       } else {
-        atime = ceph_clock_now(NULL).sec() - obc->obs.oi.mtime;
+        atime = ceph_clock_now(cct).sec() - obc->obs.oi.mtime;
       }
     }
     if (atime < 0) {
@@ -12762,7 +12762,7 @@ void ReplicatedPG::agent_estimate_atime_temp(const hobject_t& oid,
     else
       return;
   }
-  time_t now = ceph_clock_now(NULL).sec();
+  time_t now = ceph_clock_now(cct).sec();
   for (map<time_t,HitSetRef>::reverse_iterator p =
 	 agent_state->hit_set_map.rbegin();
        p != agent_state->hit_set_map.rend();

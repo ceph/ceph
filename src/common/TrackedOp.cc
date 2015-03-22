@@ -243,7 +243,7 @@ void OpTracker::get_age_ms_histogram(pow2_hist_t *h)
 {
   h->clear();
 
-  utime_t now = ceph_clock_now(NULL);
+  utime_t now = ceph_clock_now(g_ceph_context);
   unsigned bin = 30;
   uint32_t lb = 1 << (bin-1);  // lower bound for this bin
   int count = 0;
