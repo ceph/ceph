@@ -3777,6 +3777,10 @@ void PG::replica_scrub(
 void PG::scrub(ThreadPool::TPHandle &handle)
 {
   lock();
+  if (deleting) {
+    unlock();
+    return;
+  }
   if (g_conf->osd_scrub_sleep > 0 &&
       (scrubber.state == PG::Scrubber::NEW_CHUNK ||
        scrubber.state == PG::Scrubber::INACTIVE)) {
@@ -3787,10 +3791,6 @@ void PG::scrub(ThreadPool::TPHandle &handle)
     t.sleep();
     lock();
     dout(20) << __func__ << " slept for " << t << dendl;
-  }
-  if (deleting) {
-    unlock();
-    return;
   }
 
   if (!is_primary() || !is_active() || !is_clean() || !is_scrubbing()) {

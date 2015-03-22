@@ -3087,18 +3087,18 @@ ReplicatedPG::RepGather *ReplicatedPG::trim_object(const hobject_t &coid)
 
 void ReplicatedPG::snap_trimmer()
 {
+  lock();
+  if (deleting) {
+    unlock();
+    return;
+  }
   if (g_conf->osd_snap_trim_sleep > 0) {
+    unlock();
     utime_t t;
     t.set_from_double(g_conf->osd_snap_trim_sleep);
     t.sleep();
     lock();
     dout(20) << __func__ << " slept for " << t << dendl;
-  } else {
-    lock();
-  }
-  if (deleting) {
-    unlock();
-    return;
   }
   dout(10) << "snap_trimmer entry" << dendl;
   if (is_primary()) {
