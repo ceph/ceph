@@ -825,11 +825,14 @@ class Snap(object):
 
 class Completion(object):
     """completion object"""
-    def __init__(self, ioctx, rados_comp, oncomplete, onsafe):
+    def __init__(self, ioctx, rados_comp, oncomplete, onsafe,
+                 complete_cb, safe_cb):
         self.rados_comp = rados_comp
         self.oncomplete = oncomplete
         self.onsafe = onsafe
         self.ioctx = ioctx
+        self.complete_cb = complete_cb
+        self.safe_cb = safe_cb
 
     def wait_for_safe(self):
         """
@@ -875,6 +878,8 @@ class Completion(object):
         run_in_thread(self.ioctx.librados.rados_aio_release,
                       (self.rados_comp,))
 
+RADOS_CB = CFUNCTYPE(c_int, c_void_p, c_void_p)
+
 class Ioctx(object):
     """rados.Ioctx object"""
     def __init__(self, name, librados, io):
@@ -885,9 +890,6 @@ class Ioctx(object):
         self.locator_key = ""
         self.safe_cbs = {}
         self.complete_cbs = {}
-        RADOS_CB = CFUNCTYPE(c_int, c_void_p, c_void_p)
-        self.__aio_safe_cb_c = RADOS_CB(self.__aio_safe_cb)
-        self.__aio_complete_cb_c = RADOS_CB(self.__aio_complete_cb)
         self.lock = threading.Lock()
 
     def __enter__(self):
@@ -940,16 +942,17 @@ class Ioctx(object):
         complete_cb = None
         safe_cb = None
         if oncomplete:
-            complete_cb = self.__aio_complete_cb_c
+            complete_cb = RADOS_CB(self.__aio_complete_cb)
         if onsafe:
-            safe_cb = self.__aio_safe_cb_c
+            safe_cb = RADOS_CB(self.__aio_safe_cb)
         ret = run_in_thread(self.librados.rados_aio_create_completion,
                             (c_void_p(0), complete_cb, safe_cb,
                             byref(completion)))
         if ret < 0:
             raise make_ex(ret, "error getting a completion")
         with self.lock:
-            completion_obj = Completion(self, completion, oncomplete, onsafe)
+            completion_obj = Completion(self, completion, oncomplete, onsafe,
+                                        complete_cb, safe_cb)
             if oncomplete:
                 self.complete_cbs[completion.value] = completion_obj
             if onsafe:
