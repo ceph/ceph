@@ -4498,8 +4498,11 @@ int Monitor::mkfs(bufferlist& osdmapbl)
   if (is_keyring_required()) {
     KeyRing keyring;
     string keyring_filename;
-    if (!ceph_resolve_file_search(g_conf->keyring, keyring_filename)) {
-      derr << "unable to find a keyring file on " << g_conf->keyring << dendl;
+
+    r = ceph_resolve_file_search(g_conf->keyring, keyring_filename);
+    if (r) {
+      derr << "unable to find a keyring file on " << g_conf->keyring
+	   << ": " << cpp_strerror(r) << dendl;
       if (g_conf->key != "") {
 	string keyring_plaintext = "[mon.]\n\tkey = " + g_conf->key +
 	  "\n\tcaps mon = \"allow *\"\n";

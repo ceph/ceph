@@ -121,7 +121,8 @@ static int lookup(const std::deque<std::string> &sections,
   else if (ret == 0) {
     if (resolve_search) {
       string result;
-      if (ceph_resolve_file_search(val, result))
+      ret = ceph_resolve_file_search(val, result);
+      if (!ret)
 	puts(result.c_str());
     }
     else {
