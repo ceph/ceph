@@ -6833,6 +6833,11 @@ void ReplicatedPG::finish_promote(int r, CopyResults *results,
     }
     tctx->new_obs.oi.size = results->object_size;
     tctx->new_obs.oi.user_version = results->user_version;
+    // Don't care src object whether have data or omap digest
+    if (results->object_size)
+      tctx->new_obs.oi.set_data_digest(results->data_digest);
+    if (results->has_omap)
+      tctx->new_obs.oi.set_omap_digest(results->omap_digest);
 
     if (soid.snap != CEPH_NOSNAP) {
       if (!results->snaps.empty()) {
