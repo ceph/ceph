@@ -3748,7 +3748,7 @@ extern "C" int rados_write_op_operate(rados_write_op_t write_op,
   object_t obj(oid);
   ::ObjectOperation *oo = (::ObjectOperation *) write_op;
   librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
-  int retval = ctx->operate(obj, oo, mtime, flags);
+  int retval = ctx->operate(obj, oo, mtime, translate_flags(flags));
   tracepoint(librados, rados_write_op_operate_exit, retval);
   return retval;
 }
@@ -3765,7 +3765,7 @@ extern "C" int rados_aio_write_op_operate(rados_write_op_t write_op,
   ::ObjectOperation *oo = (::ObjectOperation *) write_op;
   librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
   librados::AioCompletionImpl *c = (librados::AioCompletionImpl*)completion;
-  int retval = ctx->aio_operate(obj, oo, c, ctx->snapc, flags);
+  int retval = ctx->aio_operate(obj, oo, c, ctx->snapc, translate_flags(flags));
   tracepoint(librados, rados_aio_write_op_operate_exit, retval);
   return retval;
 }
@@ -4077,7 +4077,8 @@ extern "C" int rados_read_op_operate(rados_read_op_t read_op,
   tracepoint(librados, rados_read_op_operate_enter, read_op, io, oid, flags);
   object_t obj(oid);
   librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
-  int retval = ctx->operate_read(obj, (::ObjectOperation *)read_op, NULL, flags);
+  int retval = ctx->operate_read(obj, (::ObjectOperation *)read_op, NULL,
+				 translate_flags(flags));
   tracepoint(librados, rados_read_op_operate_exit, retval);
   return retval;
 }
@@ -4093,7 +4094,7 @@ extern "C" int rados_aio_read_op_operate(rados_read_op_t read_op,
   librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
   librados::AioCompletionImpl *c = (librados::AioCompletionImpl*)completion;
   int retval = ctx->aio_operate_read(obj, (::ObjectOperation *)read_op,
-			       c, flags, NULL);
+				     c, translate_flags(flags), NULL);
   tracepoint(librados, rados_aio_read_op_operate_exit, retval);
   return retval;
 }
