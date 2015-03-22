@@ -5,7 +5,6 @@ libec_shec_la_SOURCES = \
 	erasure-code/shec/ErasureCodePluginShec.cc \
 	erasure-code/shec/ErasureCodeShec.cc \
 	erasure-code/shec/ErasureCodeShecTableCache.cc \
-	erasure-code/shec/shec.cc \
 	erasure-code/shec/determinant.c \
 	erasure-code/jerasure/jerasure/src/cauchy.c \
 	erasure-code/jerasure/jerasure/src/galois.c \
@@ -26,7 +25,6 @@ libec_shec_la_SOURCES = \
 noinst_HEADERS += \
 	erasure-code/shec/ErasureCodeShec.h \
 	erasure-code/shec/ErasureCodeShecTableCache.h \
-	erasure-code/shec/shec.h \
 	erasure-code/jerasure/jerasure/include/cauchy.h \
 	erasure-code/jerasure/jerasure/include/galois.h \
 	erasure-code/jerasure/jerasure/include/jerasure.h \
