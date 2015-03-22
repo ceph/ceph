@@ -38,7 +38,7 @@ three steps:
    `Upgrading Monitors`_, the ``ceph-deploy`` syntax might look like this::
    
 	ceph-deploy install --release {release-name} ceph-node1[ ceph-node2]
-	ceph-deploy install --release firefly mon1 mon2 mon3
+	ceph-deploy install --release firefly osdhost1 osdhost2 osdhost3
 
    **Note:** The ``ceph-deploy install`` command will upgrade the packages 
    in the specified node(s) from the old release to the release you specify. 
@@ -561,7 +561,7 @@ To upgrade monitors, perform the following steps:
    For example::
 
 	ceph-deploy install --release {release-name} ceph-node1[ ceph-node2]
-	ceph-deploy install --release dumpling mon1 mon2 mon3
+	ceph-deploy install --release dumpling osdhost1 osdhost2 osdhost3
 
    You may also use the package manager for your Linux distribution on 
    each individual node. To upgrade packages manually on each Debian/Ubuntu 
@@ -605,7 +605,7 @@ To upgrade a Ceph OSD Daemon, perform the following steps:
    once. For example::
 
 	ceph-deploy install --release {release-name} ceph-node1[ ceph-node2]
-	ceph-deploy install --release dumpling mon1 mon2 mon3
+	ceph-deploy install --release dumpling osdhost1 osdhost2 osdhost3
 
    You may also use the package manager on each node to upgrade packages 
    manually. For Debian/Ubuntu hosts, perform the following steps on each
@@ -651,7 +651,7 @@ To upgrade a Ceph Metadata Server, perform the following steps:
    on each node. For example::
 
 	ceph-deploy install --release {release-name} ceph-node1[ ceph-node2]
-	ceph-deploy install --release dumpling mon1 mon2 mon3
+	ceph-deploy install --release dumpling osdhost1 osdhost2 osdhost3
 
    To upgrade packages manually, perform the following steps on each
    Debian/Ubuntu host. :: 
