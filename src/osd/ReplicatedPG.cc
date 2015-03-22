@@ -6486,14 +6486,16 @@ void ReplicatedPG::process_copy_chunk(hobject_t oid, ceph_tid_t tid, int r)
   _build_finish_copy_transaction(cop, cop->results.final_tx);
 
   // verify digests?
-  dout(20) << __func__ << std::hex
-	   << " got digest: rx data 0x" << cop->results.data_digest
-	   << " omap 0x" << cop->results.omap_digest
-	   << ", source: data 0x" << cop->results.source_data_digest
-	   << " omap 0x" <<  cop->results.source_omap_digest
-	   << std::dec
-	   << " flags " << cop->results.flags
-	   << dendl;
+  if (cop->results.is_data_digest() || cop->results.is_omap_digest()) {
+    dout(20) << __func__ << std::hex
+      << " got digest: rx data 0x" << cop->results.data_digest
+      << " omap 0x" << cop->results.omap_digest
+      << ", source: data 0x" << cop->results.source_data_digest
+      << " omap 0x" <<  cop->results.source_omap_digest
+      << std::dec
+      << " flags " << cop->results.flags
+      << dendl;
+  }
   if (cop->results.is_data_digest() &&
       cop->results.data_digest != cop->results.source_data_digest) {
     derr << __func__ << std::hex << " data digest 0x" << cop->results.data_digest
