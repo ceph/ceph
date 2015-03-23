@@ -453,7 +453,7 @@ private:
    *
    * We use this variable to assess if the Leader should take into consideration
    * an uncommitted value sent by a Peon. Given that the Peon will send back to
-   * the Leader the last Proposal Number he accepted, the Leader will be able
+   * the Leader the last Proposal Number it accepted, the Leader will be able
    * to infer if this value is more recent than the one the Leader has, thus
    * more relevant.
    */
@@ -463,7 +463,7 @@ private:
    *
    * If the system fails in-between the accept replies from the Peons and the
    * instruction to commit from the Leader, then we may end up with accepted
-   * but yet-uncommitted values. During the Leader's recovery, he will attempt
+   * but yet-uncommitted values. During the Leader's recovery, it will attempt
    * to bring the whole system to the latest state, and that means committing
    * past accepted but uncommitted values.
    *
@@ -764,14 +764,14 @@ private:
    *
    * Once a Peon receives a collect message from the Leader it will reply
    * with its first and last committed versions, as well as information so
-   * the Leader may know if his Proposal Number was, or was not, accepted by
+   * the Leader may know if its Proposal Number was, or was not, accepted by
    * the Peon. The Peon will accept the Leader's Proposal Number iif it is
    * higher than the Peon's currently accepted Proposal Number. The Peon may
    * also inform the Leader of accepted but uncommitted values.
    *
    * @invariant The message is an operation of type OP_COLLECT.
    * @pre We are a Peon.
-   * @post Replied to the Leader, accepting or not accepting his PN.
+   * @post Replied to the Leader, accepting or not accepting its PN.
    *
    * @param collect The collect message sent by the Leader to the Peon.
    */
@@ -859,7 +859,7 @@ private:
    * @pre We are a Peon
    * @pre We are on STATE_ACTIVE
    * @post We are on STATE_UPDATING iif we accept the Leader's proposal
-   * @post We send a reply message to the Leader iif we accept his proposal
+   * @post We send a reply message to the Leader iif we accept its proposal
    *
    * @invariant The received message is an operation of type OP_BEGIN
    *
@@ -1152,7 +1152,7 @@ public:
    * quorum, thus automatically assume we are on STATE_RECOVERING, which means
    * we will soon be enrolled into the Leader's collect phase.
    *
-   * @pre There is a Leader, and he's about to start the collect phase.
+   * @pre There is a Leader, and it?s about to start the collect phase.
    * @post We are on STATE_RECOVERING and will soon receive collect phase's 
    *	   messages.
    */

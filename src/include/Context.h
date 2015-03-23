@@ -191,7 +191,7 @@ public:
   }
   void complete(int r) {
     // Neuter any ContextInstanceType custom complete(), because although
-    // I want to look like him, I don't actually want to run his code.
+    // I want to look like it, I don't actually want to run its code.
     Context::complete(r);
   }
   void finish(int r) {

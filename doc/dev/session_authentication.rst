@@ -5,7 +5,7 @@ Peter Reiher
 7/30/12
 
 The original Cephx protocol authenticated the client to the authenticator and set up a session 
-key used to authenticate the client to the server he needs to talk to.  It did not, however, 
+key used to authenticate the client to the server it needs to talk to.  It did not, however,
 authenticate the ongoing messages between the client and server.  Based on the fact that they
 share a secret key, these ongoing session messages can be easily authenticated by using the
 key to sign the messages.  
