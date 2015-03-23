@@ -1,5 +1,6 @@
 import logging
 import ast
+import re
 
 from cStringIO import StringIO
 
@@ -197,3 +198,42 @@ def get_koji_package_name(package, build_info, arch="x86_64"):
     )
 
     return pkg_name
+
+
+def get_package_version(remote, package):
+    installed_ver = None
+    if remote.os.package_type == "deb":
+        proc = remote.run(
+            args=[
+                'dpkg-query', '-W', '-f', '${Version}', package
+            ],
+            stdout=StringIO(),
+        )
+    else:
+        proc = remote.run(
+            args=[
+                'rpm', '-q', package, '--qf', '%{VERSION}'
+            ],
+            stdout=StringIO(),
+        )
+    if proc.exitstatus == 0:
+        installed_ver = proc.stdout.getvalue().strip()
+        # Does this look like a version string?
+        # this assumes a version string starts with non-alpha characters
+        if installed_ver and re.match('^[^a-zA-Z]', installed_ver):
+            log.info("The installed version of {pkg} is {ver}".format(
+                pkg=package,
+                ver=installed_ver,
+            ))
+        else:
+            installed_ver = None
+    else:
+        # should this throw an exception and stop the job?
+        log.warning(
+            "Unable to determine if {pkg} is installed: {stdout}".format(
+                pkg=package,
+                stdout=proc.stdout.getvalue().strip(),
+            )
+        )
+
+    return installed_ver

@@ -145,3 +145,62 @@ class TestPackaging(object):
         m_ctx.summary = dict()
         with pytest.raises(RuntimeError):
             packaging.get_koji_build_info(1, m_remote, m_ctx)
+
+    def test_get_package_version_deb_found(self):
+        remote = Mock()
+        remote.os.package_type = "deb"
+        proc = Mock()
+        proc.exitstatus = 0
+        proc.stdout.getvalue.return_value = "2.2"
+        remote.run.return_value = proc
+        result = packaging.get_package_version(remote, "apache2")
+        assert result == "2.2"
+
+    def test_get_package_version_deb_command(self):
+        remote = Mock()
+        remote.os.package_type = "deb"
+        packaging.get_package_version(remote, "apache2")
+        args, kwargs = remote.run.call_args
+        expected_args = ['dpkg-query', '-W', '-f', '${Version}', 'apache2']
+        assert expected_args == kwargs['args']
+
+    def test_get_package_version_rpm_found(self):
+        remote = Mock()
+        remote.os.package_type = "rpm"
+        proc = Mock()
+        proc.exitstatus = 0
+        proc.stdout.getvalue.return_value = "2.2"
+        remote.run.return_value = proc
+        result = packaging.get_package_version(remote, "httpd")
+        assert result == "2.2"
+
+    def test_get_package_version_rpm_command(self):
+        remote = Mock()
+        remote.os.package_type = "rpm"
+        packaging.get_package_version(remote, "httpd")
+        args, kwargs = remote.run.call_args
+        expected_args = ['rpm', '-q', 'httpd', '--qf', '%{VERSION}']
+        assert expected_args == kwargs['args']
+
+    def test_get_package_version_not_found(self):
+        remote = Mock()
+        remote.os.package_type = "rpm"
+        proc = Mock()
+        proc.exitstatus = 1
+        proc.stdout.getvalue.return_value = "not installed"
+        remote.run.return_value = proc
+        result = packaging.get_package_version(remote, "httpd")
+        assert result is None
+
+    def test_get_package_version_invalid_version(self):
+        # this tests the possibility that the package is not found
+        # but the exitstatus is still 0.  Not entirely sure we'll ever
+        # hit this condition, but I want to test the codepath regardless
+        remote = Mock()
+        remote.os.package_type = "rpm"
+        proc = Mock()
+        proc.exitstatus = 0
+        proc.stdout.getvalue.return_value = "not installed"
+        remote.run.return_value = proc
+        result = packaging.get_package_version(remote, "httpd")
+        assert result is None
