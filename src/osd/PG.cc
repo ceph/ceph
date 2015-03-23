@@ -2943,9 +2943,7 @@ void PG::append_log(
     // degraded objects
     if (!transaction_applied) {
       if (p->is_delete())
-	remove_snap_mapped_object(
-	  t,
-	  p->soid);
+	t.remove(coll, p->soid);
 
       assert(
 	p->soid > info.last_backfill ||
