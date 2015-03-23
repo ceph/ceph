@@ -61,7 +61,7 @@ ostream& ObjBencher::out(ostream& os, utime_t& t)
   if (show_time)
     return t.localtime(os) << " ";
   else
-    return os << " ";
+    return os;
 }
 
 ostream& ObjBencher::out(ostream& os)
@@ -455,13 +455,11 @@ int ObjBencher::write_bench(int secondsToRun, int maxObjectsToCreate,
   double bandwidth;
   bandwidth = ((double)data.finished)*((double)data.object_size)/(double)timePassed;
   bandwidth = bandwidth/(1024*1024); // we want it in MB/sec
-  char bw[20];
-  snprintf(bw, sizeof(bw), "%.3lf \n", bandwidth);
 
   out(cout) << "Total time run:         " << timePassed << std::endl
        << "Total writes made:      " << data.finished << std::endl
        << "Write size:             " << data.object_size << std::endl
-       << "Bandwidth (MB/sec):     " << bw << std::endl
+       << "Bandwidth (MB/sec):     " << setprecision(3) << bandwidth << std::endl
        << "Stddev Bandwidth:       " << vec_stddev(data.history.bandwidth) << std::endl
        << "Max bandwidth (MB/sec): " << data.idata.max_bandwidth << std::endl
        << "Min bandwidth (MB/sec): " << data.idata.min_bandwidth << std::endl
@@ -655,16 +653,14 @@ int ObjBencher::seq_read_bench(int seconds_to_run, int num_objects, int concurre
   double bandwidth;
   bandwidth = ((double)data.finished)*((double)data.object_size)/(double)runtime;
   bandwidth = bandwidth/(1024*1024); // we want it in MB/sec
-  char bw[20];
-  snprintf(bw, sizeof(bw), "%.3lf \n", bandwidth);
 
-  out(cout) << "Total time run:        " << runtime << std::endl
+  out(cout) << "Total time run:       " << runtime << std::endl
        << "Total reads made:     " << data.finished << std::endl
        << "Read size:            " << data.object_size << std::endl
-       << "Bandwidth (MB/sec):    " << bw << std::endl
-       << "Average Latency:       " << data.avg_latency << std::endl
-       << "Max latency:           " << data.max_latency << std::endl
-       << "Min latency:           " << data.min_latency << std::endl;
+       << "Bandwidth (MB/sec):   " << setprecision(3) << bandwidth << std::endl
+       << "Average Latency:      " << data.avg_latency << std::endl
+       << "Max latency:          " << data.max_latency << std::endl
+       << "Min latency:          " << data.min_latency << std::endl;
 
   completions_done();
 
@@ -846,16 +842,14 @@ int ObjBencher::rand_read_bench(int seconds_to_run, int num_objects, int concurr
   double bandwidth;
   bandwidth = ((double)data.finished)*((double)data.object_size)/(double)runtime;
   bandwidth = bandwidth/(1024*1024); // we want it in MB/sec
-  char bw[20];
-  snprintf(bw, sizeof(bw), "%.3lf \n", bandwidth);
 
-  out(cout) << "Total time run:        " << runtime << std::endl
+  out(cout) << "Total time run:       " << runtime << std::endl
        << "Total reads made:     " << data.finished << std::endl
        << "Read size:            " << data.object_size << std::endl
-       << "Bandwidth (MB/sec):    " << bw << std::endl
-       << "Average Latency:       " << data.avg_latency << std::endl
-       << "Max latency:           " << data.max_latency << std::endl
-       << "Min latency:           " << data.min_latency << std::endl;
+       << "Bandwidth (MB/sec):   " << setprecision(3) << bandwidth << std::endl
+       << "Average Latency:      " << data.avg_latency << std::endl
+       << "Max latency:          " << data.max_latency << std::endl
+       << "Min latency:          " << data.min_latency << std::endl;
 
   completions_done();
 
