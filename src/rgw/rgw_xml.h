@@ -68,8 +68,12 @@ class RGWXMLParser : public XMLObj
   int buf_len;
   XMLObj *cur_obj;
   vector<XMLObj *> objs;
+  list<XMLObj *> allocated_objs;
+  list<XMLObj> unallocated_objs;
 protected:
-  virtual XMLObj *alloc_obj(const char *el) = 0;
+  virtual XMLObj *alloc_obj(const char *el) {
+    return NULL;
+  }
 public:
   RGWXMLParser();
   virtual ~RGWXMLParser();

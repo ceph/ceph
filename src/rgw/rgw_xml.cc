@@ -148,17 +148,21 @@ RGWXMLParser::
   XML_ParserFree(p);
 
   free(buf);
-  vector<XMLObj *>::iterator iter;
-  for (iter = objs.begin(); iter != objs.end(); ++iter) {
+  list<XMLObj *>::iterator iter;
+  for (iter = allocated_objs.begin(); iter != allocated_objs.end(); ++iter) {
     XMLObj *obj = *iter;
     delete obj;
   }
 }
 
+
 bool RGWXMLParser::xml_start(const char *el, const char **attr) {
   XMLObj * obj = alloc_obj(el);
   if (!obj) {
-    obj = new XMLObj();
+    unallocated_objs.push_back(XMLObj());
+    obj = &unallocated_objs.back();
+  } else {
+    allocated_objs.push_back(obj);
   }
   if (!obj->xml_start(cur_obj, el, attr))
     return false;
