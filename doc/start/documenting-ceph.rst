@@ -446,10 +446,13 @@ Push the Change
 
 Once you have one or more commits, you must push them from the local copy of the
 repository to ``github``. A graphical tool like ``git-gui`` provides a user
-interface for pushing to the repository. ::
+interface for pushing to the repository. If you created a branch previously::
+
+	git push origin wip-doc-{your-branch-name}
+
+Otherwise::
 
 	git push
-
 
 
 Make a Pull Request
