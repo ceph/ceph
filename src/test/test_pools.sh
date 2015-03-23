@@ -1,7 +1,7 @@
 #!/bin/bash -x
 
 #
-# Test pools
+# Test the pools
 #
 
 # Includes
