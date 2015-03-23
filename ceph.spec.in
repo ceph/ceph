@@ -60,6 +60,7 @@ BuildRequires:	python
 BuildRequires:	python-argparse
 BuildRequires:	python-nose
 BuildRequires:	python-requests
+BuildRequires:	python-sphinx
 BuildRequires:	python-virtualenv
 BuildRequires:	util-linux
 BuildRequires:	xfsprogs
