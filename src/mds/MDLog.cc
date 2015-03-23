@@ -585,7 +585,7 @@ class C_MaybeExpiredSegment : public MDSInternalContext {
 };
 
 /**
- * Like ::trim, but instead of trimming to max_segments, trim all but the latest
+ * Like MDLog::trim, but instead of trimming to max_segments, trim all but the latest
  * segment.
  */
 int MDLog::trim_all()

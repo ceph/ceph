@@ -43,10 +43,10 @@
 
 /**
  * crush_find_rule - find a crush_rule id for a given ruleset, type, and size.
- * @map: the crush_map
- * @ruleset: the storage ruleset id (user defined)
- * @type: storage ruleset type (user defined)
- * @size: output set size
+ * @param map: the crush_map
+ * @param ruleset: the storage ruleset id (user defined)
+ * @param type: storage ruleset type (user defined)
+ * @param size: output set size
  */
 int crush_find_rule(const struct crush_map *map, int ruleset, int type, int size)
 {
@@ -388,22 +388,22 @@ static int is_out(const struct crush_map *map,
 
 /**
  * crush_choose_firstn - choose numrep distinct items of given type
- * @map: the crush_map
- * @bucket: the bucket we are choose an item from
- * @x: crush input value
- * @numrep: the number of items to choose
- * @type: the type of item to choose
- * @out: pointer to output vector
- * @outpos: our position in that vector
- * @out_size: size of the out vector
- * @tries: number of attempts to make
- * @recurse_tries: number of attempts to have recursive chooseleaf make
- * @local_retries: localized retries
- * @local_fallback_retries: localized fallback retries
- * @recurse_to_leaf: true if we want one device under each item of given type (chooseleaf instead of choose)
- * @vary_r: pass r to recursive calls
- * @out2: second output vector for leaf items (if @recurse_to_leaf)
- * @parent_r: r value passed from the parent
+ * @param map: the crush_map
+ * @param bucket: the bucket we are choose an item from
+ * @param x: crush input value
+ * @param numrep: the number of items to choose
+ * @param type: the type of item to choose
+ * @param out: pointer to output vector
+ * @param outpos: our position in that vector
+ * @param out_size: size of the out vector
+ * @param tries: number of attempts to make
+ * @param recurse_tries: number of attempts to have recursive chooseleaf make
+ * @param local_retries: localized retries
+ * @param local_fallback_retries: localized fallback retries
+ * @param recurse_to_leaf: true if we want one device under each item of given type (chooseleaf instead of choose)
+ * @param vary_r: pass r to recursive calls
+ * @param out2: second output vector for leaf items (if @recurse_to_leaf)
+ * @param parent_r: r value passed from the parent
  */
 static int crush_choose_firstn(const struct crush_map *map,
 			       struct crush_bucket *bucket,
@@ -769,14 +769,14 @@ static void crush_choose_indep(const struct crush_map *map,
 
 /**
  * crush_do_rule - calculate a mapping with the given input and rule
- * @map: the crush_map
- * @ruleno: the rule id
- * @x: hash input
- * @result: pointer to result vector
- * @result_max: maximum result size
- * @weight: weight vector (for map leaves)
- * @weight_max: size of weight vector
- * @scratch: scratch vector for private use; must be >= 3 * result_max
+ * @param map: the crush_map
+ * @param ruleno: the rule id
+ * @param x: hash input
+ * @param result: pointer to result vector
+ * @param result_max: maximum result size
+ * @param weight: weight vector (for map leaves)
+ * @param weight_max: size of weight vector
+ * @param scratch: scratch vector for private use; must be >= 3 * result_max
  */
 int crush_do_rule(const struct crush_map *map,
 		  int ruleno, int x, int *result, int result_max,
