@@ -292,7 +292,7 @@ void Paxos::handle_collect(MMonPaxos *collect)
 /**
  * @note This is Okay. We share our versions between peer_last_committed and
  *	 our last_committed (inclusive), and add their bufferlists to the
- *	 message. It will be the peer's job to apply them to his store, as
+ *	 message. It will be the peer's job to apply them to its store, as
  *	 these bufferlists will contain raw transactions.
  *	 This function is called by both the Peon and the Leader. The Peon will
  *	 share the state with the Leader during handle_collect(), sharing any

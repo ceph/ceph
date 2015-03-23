@@ -18,18 +18,18 @@ The basic idea of the protocol is based on Kerberos.  A client wishes to obtain 
 a server.  The server will only offer the requested service to authorized clients.  Rather 
 than requiring each server to deal with authentication and authorization issues, the system 
 uses an authorization server.  Thus, the client must first communicate with the authorization 
-server to authenticate himself and to obtain credentials that will grant him access to the 
-service he wants. 
+server to authenticate itself and to obtain credentials that will grant it access to the
+service it wants.
 
 Authorization is not the same as authentication.  Authentication provides evidence that some 
-party is who he claims to be.  Authorization provides evidence that a particular party is 
+party is who it claims to be.  Authorization provides evidence that a particular party is
 allowed to do something.  Generally, secure authorization implies secure authentication 
 (since without authentication, you may authorize something for an imposter), but the reverse 
 is not necessarily true.  One can authenticate without authorizing.  The purpose 
 of this protocol is to authorize.
 
-The basic approach is to use symmetric cryptography throughout.  Each client C has his own 
-secret key, known only to himself and the authorization server A.  Each server S has its own 
+The basic approach is to use symmetric cryptography throughout.  Each client C has its own
+secret key, known only to itself and the authorization server A.  Each server S has its own
 secret key, known only to itself and the authorization server A.  Authorization information 
 will be passed in tickets, encrypted with the secret key of the entity that offers the service.
 There will be a ticket that A gives to C, which permits C to ask A for other tickets.  This 
@@ -45,11 +45,11 @@ the system.
 Several parties need to prove something to each other if this protocol is to achieve its 
 desired security effects.
 
-1.  The client C must prove to the authenticator A that he really is C.  Since everything
+1.  The client C must prove to the authenticator A that it really is C.  Since everything
 is being done via messages, the client must also prove that the message proving authenticity
 is fresh, and is not being replayed by an attacker.
 
-2.  The authenticator A must prove to client C that he really is the authenticator.  Again,
+2.  The authenticator A must prove to client C that it really is the authenticator.  Again,
 proof that replay is not occurring is also required.
 
 3.  A and C must securely share a session key to be used for distribution of later
@@ -59,7 +59,7 @@ known only to A and C.
 4.  A must receive evidence from C that allows A to look up C's authorized operations with
 server S.  
 
-5.  C must receive a ticket from A that will prove to S that C can perform his authorized
+5.  C must receive a ticket from A that will prove to S that C can perform its authorized
 operations.   This ticket must be usable only by C.
 
 6.  C must receive from A a session key to protect the communications between C and S.  The
@@ -141,18 +141,18 @@ We now call the same routine the client used to calculate the hash, based on the
 the client challenge (which is in the incoming message), the server challenge (which we saved), 
 and the client's key (which we just obtained).  We check to see if the client sent the same 
 thing we expected.  If so, we know we're talking to the right client.  We know the session is 
-fresh, because he used the challenge we sent him to calculate his crypto hash.  So we can 
-give him an authentication ticket.
+fresh, because it used the challenge we sent it to calculate its crypto hash.  So we can
+give it an authentication ticket.
 
 We fetch C's ``eauth`` structure.  This contains an ID, a key, and a set of caps (capabilities).
 
-The client sent us his old ticket in the message, if he had one.  If so, we set a flag, 
+The client sent us its old ticket in the message, if it had one.  If so, we set a flag,
 ``should_enc_ticket``, to true and set the global ID to the global ID in that old ticket.  
-If the attempt to decode his old ticket fails (most probably because he didn't have one), 
+If the attempt to decode its old ticket fails (most probably because it didn't have one),
 ``should_enc_ticket`` remains false.  Now we set up the new ticket, filling in timestamps, 
 the name of C, the global ID provided in the method call (unless there was an old ticket), and 
 his ``auid``, obtained from the ``eauth`` structure obtained above.  We need a new session key 
-to help the client communicate securely with us, not using his permanent key.    We set the 
+to help the client communicate securely with us, not using its permanent key.    We set the
 service ID to ``CEPH_ENTITY_TYPE_AUTH``, which will tell the client C what to do with the 
 message we send it.  We build a cephx response header and call 
 ``cephx_build_service_ticket_reply()``.
@@ -181,13 +181,13 @@ filled in.  There's a global ID that comes up as a result of this fiddling that 
 the reply message.  The reply message is built here (mostly from the ``response_bl`` buffer) 
 and sent off.
 
-This completes Phase I of the protocol.  At this point, C has authenticated himself to A, and A has generated a new session key and ticket allowing C to obtain server tickets from A.
+This completes Phase I of the protocol.  At this point, C has authenticated itself to A, and A has generated a new session key and ticket allowing C to obtain server tickets from A.
 
 Phase II
 --------
 
 This phase starts when C receives the message from A containing a new ticket and session key.
-The goal of this phase is to provide A with a session key and ticket allowing him to 
+The goal of this phase is to provide A with a session key and ticket allowing it to
 communicate with S.
 
 The message A sent to C is dispatched to ``build_request()`` in ``CephxClientHandler.cc``, 
@@ -240,12 +240,12 @@ put it in the buffer provided in the call to ``cephx_verify_authorizer()`` and r
 to ``handle`_request()``.  This will be used to prove to C that A (rather than an attacker) 
 created this response.
 
-Having verified that the message is valid and from C, now we need to build him a ticket for S.  
-We need to know what S he wants to communicate with and what services he wants.  Pull the 
-ticket request that describes those things out of his message.  Now run through the ticket 
-request to see what he wanted.  (He could potentially be asking for multiple different 
+Having verified that the message is valid and from C, now we need to build it a ticket for S.
+We need to know what S it wants to communicate with and what services it wants.  Pull the
+ticket request that describes those things out of its message.  Now run through the ticket
+request to see what it wanted.  (He could potentially be asking for multiple different
 services in the same request, but we will assume it's just one, for this discussion.)  Once we 
-know which service ID he's after, call ``build_session_auth_info()``.
+know which service ID it's after, call ``build_session_auth_info()``.
 
 ``build_session_auth_info()`` is in ``CephxKeyServer.cc``.  It checks to see if the 
 secret for the ``service_ID`` of S is available and puts it into the subfield of one of 
@@ -314,22 +314,22 @@ we need, since we now have a ticket we didn't have before.  If we've taken care 
 everything we need, we'll return 0.
 
 This ends phase II of the protocol.  We have now successfully set up a ticket and session key 
-for client C to talk to server S.  S will know that C is who he claims to be, since A will 
-verify it.  C will know it is S he's talking to, again because A verified it.  The only
+for client C to talk to server S.  S will know that C is who it claims to be, since A will
+verify it.  C will know it is S it's talking to, again because A verified it.  The only
 copies of the session key for C and S to communicate were sent encrypted under the permanent
 keys of C and S, respectively, so no other party (excepting A, who is trusted by all) knows
 that session key.  The ticket will securely indicate to S what C is allowed to do, attested 
 to by A.  The nonces passed back and forth between A and C ensure that they have not been 
-subject to a replay attack.  C has not yet actually talked to S, but he is ready to.
+subject to a replay attack.  C has not yet actually talked to S, but it is ready to.
 
 Much of the security here falls apart if one of the permanent keys is compromised.  Compromise
 of C's key means that the attacker can pose as C and obtain all of C's privileges, and can
 eavesdrop on C's legitimate conversations.  He can also pretend to be A, but only in 
-conversations with C.  Since he does not (by hypothesis) have keys for any services, he
-cannot generate any new tickets for services, though he can replay old tickets and session
+conversations with C.  Since it does not (by hypothesis) have keys for any services, he
+cannot generate any new tickets for services, though it can replay old tickets and session
 keys until S's permanent key is changed or the old tickets time out. 
 
 Compromise of S's key means that the attacker can pose as S to anyone, and can eavesdrop on 
 any user's conversation with S.  Unless some client's key is also compromised, the attacker
-cannot generate new fake client tickets for S, since doing so requires him to authenticate
-himself as A, using the client key he doesn't know.
+cannot generate new fake client tickets for S, since doing so requires it to authenticate
+himself as A, using the client key it doesn't know.
