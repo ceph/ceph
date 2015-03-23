@@ -1,6 +1,6 @@
 .\" Man page generated from reStructuredText.
 .
-.TH "RADOSGW" "8" "January 12, 2014" "dev" "Ceph"
+.TH "RADOSGW" "8" "January 20, 2015" "dev" "Ceph"
 .SH NAME
 radosgw \- rados REST gateway
 .
@@ -72,91 +72,213 @@ capable web server.
 .INDENT 0.0
 .TP
 .B \-c ceph.conf, \-\-conf=ceph.conf
-Use \fIceph.conf\fP configuration file instead of the default
+Use \fBceph.conf\fP configuration file instead of the default
 \fB/etc/ceph/ceph.conf\fP to determine monitor addresses during startup.
 .UNINDENT
 .INDENT 0.0
 .TP
 .B \-m monaddress[:port]
-Connect to specified monitor (instead of looking through
-\fBceph.conf\fP).
+Connect to specified monitor (instead of looking through \fBceph.conf\fP).
+.UNINDENT
+.INDENT 0.0
+.TP
+.B \-i ID, \-\-id ID
+Set the ID portion of name for radosgw
+.UNINDENT
+.INDENT 0.0
+.TP
+.B \-n TYPE.ID, \-\-name TYPE.ID
+Set the rados user name for the gateway (eg. client.radosgw.gateway)
+.UNINDENT
+.INDENT 0.0
+.TP
+.B \-\-cluster NAME
+Set the cluster name (default: ceph)
+.UNINDENT
+.INDENT 0.0
+.TP
+.B \-d
+Run in foreground, log to stderr
+.UNINDENT
+.INDENT 0.0
+.TP
+.B \-f
+Run in foreground, log to usual location
 .UNINDENT
 .INDENT 0.0
 .TP
 .B \-\-rgw\-socket\-path=path
 Specify a unix domain socket path.
 .UNINDENT
+.INDENT 0.0
+.TP
+.B \-\-rgw\-region=region
+The region where radosgw runs
+.UNINDENT
+.INDENT 0.0
+.TP
+.B \-\-rgw\-zone=zone
+The zone where radosgw runs
+.UNINDENT
 .SH CONFIGURATION
 .sp
-Currently it\(aqs the easiest to use the RADOS Gateway with Apache and mod_fastcgi:
+Earlier RADOS Gateway had to be configured with \fBApache\fP and \fBmod_fastcgi\fP\&.
+Now, \fBmod_proxy_fcgi\fP module is used instead of \fBmod_fastcgi\fP as the later
+doesn\(aqt come under a free license. \fBmod_proxy_fcgi\fP works differently than a
+traditional FastCGI module. This module requires the service of \fBmod_proxy\fP
+which provides support for the FastCGI protocol. So, to be able to handle
+FastCGI protocol, both \fBmod_proxy\fP and \fBmod_proxy_fcgi\fP have to be present
+in the server. Unlike \fBmod_fastcgi\fP, \fBmod_proxy_fcgi\fP cannot start the
+application process. Some platforms have \fBfcgistarter\fP for that purpose.
+However, external launching of application or process management may be available
+in the FastCGI application framework in use.
+.sp
+\fBApache\fP can be configured in a way that enables \fBmod_proxy_fcgi\fP to be used
+with localhost tcp or through unix domain socket. \fBmod_proxy_fcgi\fP that doesn\(aqt
+support unix domain socket such as the ones in Apache 2.2 and earlier versions of
+Apache 2.4, needs to be configured for use with localhost tcp.
 .INDENT 0.0
+.IP 1. 3
+Modify \fB/etc/ceph/ceph.conf\fP file to make radosgw use tcp instead of unix
+domain socket.
+.INDENT 3.0
 .INDENT 3.5
 .sp
 .nf
 .ft C
-FastCgiExternalServer /var/www/s3gw.fcgi \-socket /tmp/radosgw.sock
+[client.radosgw.gateway]
+host = gateway
+keyring = /etc/ceph/keyring.radosgw.gateway
 
+; ********
+; tcp fastcgi
+        rgw socket path = ""
+        rgw frontends = fastcgi socket_port=9000 socket_host=0.0.0.0
+.ft P
+.fi
+.UNINDENT
+.UNINDENT
+.IP 2. 3
+Modify Apache\(aqs configuration file so that \fBmod_proxy_fcgi\fP can be used
+with localhost tcp.
+.sp
+Debian/Ubuntu:
+.INDENT 3.0
+.INDENT 3.5
+.sp
+.nf
+.ft C
 <VirtualHost *:80>
-  ServerName rgw.example1.com
-  ServerAlias rgw
-  ServerAdmin webmaster@example1.com
-  DocumentRoot /var/www
+ServerName localhost
+DocumentRoot /var/www/html
 
-  RewriteEngine On
-  RewriteRule ^/([a\-zA\-Z0\-9\-_.]*)([/]?.*) /s3gw.fcgi?page=$1&params=$2&%{QUERY_STRING} [E=HTTP_AUTHORIZATION:%{HTTP:Authorization},L]
+ErrorLog /var/log/apache2/error.log
+CustomLog /var/log/apache2/access.log combined
 
-  <IfModule mod_fastcgi.c>
-    <Directory /var/www>
-      Options +ExecCGI
-      AllowOverride All
-      SetHandler fastcgi\-script
-      Order allow,deny
-      Allow from all
-      AuthBasicAuthoritative Off
-    </Directory>
-  </IfModule>
+LogLevel debug
 
-  AllowEncodedSlashes On
-  ServerSignature Off
+
+RewriteEngine On
+
+RewriteRule .* \- [E=HTTP_AUTHORIZATION:%{HTTP:Authorization},L]
+
+SetEnv proxy\-nokeepalive 1
+
+ProxyPass / fcgi://127.0.01:9000/
 </VirtualHost>
 .ft P
 .fi
 .UNINDENT
 .UNINDENT
 .sp
-And the corresponding radosgw script (/var/www/s3gw.fcgi):
-.INDENT 0.0
+CentOS/RHEL:
+.INDENT 3.0
 .INDENT 3.5
 .sp
 .nf
 .ft C
-#!/bin/sh
-exec /usr/bin/radosgw \-c /etc/ceph/ceph.conf \-n client.radosgw.gateway
+<VirtualHost *:80>
+ServerName localhost
+DocumentRoot /var/www/html
+
+ErrorLog /var/log/httpd/error.log
+CustomLog /var/log/httpd/access.log combined
+
+LogLevel debug
+
+
+RewriteEngine On
+
+RewriteRule .* \- [E=HTTP_AUTHORIZATION:%{HTTP:Authorization},L]
+
+SetEnv proxy\-nokeepalive 1
+
+ProxyPass / fcgi://127.0.01:9000/
+</VirtualHost>
+.ft P
+.fi
+.UNINDENT
+.UNINDENT
+.IP 3. 3
+Modify Apache\(aqs configuration file so that \fBmod_proxy_fcgi\fP can be used
+through unix domain socket.
+.sp
+Debian/Ubuntu:
+.INDENT 3.0
+.INDENT 3.5
+.sp
+.nf
+.ft C
+<VirtualHost *:80>
+ServerName localhost
+DocumentRoot /var/www/html
+
+ErrorLog /var/log/apache2/error.log
+CustomLog /var/log/apache2/access.log combined
+
+LogLevel debug
+
+
+RewriteEngine On
+
+RewriteRule .* \- [E=HTTP_AUTHORIZATION:%{HTTP:Authorization},L]
+
+ProxyPass / unix:///tmp/.radosgw.sock|fcgi://localhost:9000/ disablereuse=On
+</VirtualHost>
 .ft P
 .fi
 .UNINDENT
 .UNINDENT
 .sp
-The radosgw daemon is a standalone process which needs a configuration
-section in the ceph.conf The section name should start with
-\(aqclient.radosgw.\(aq as specified in /etc/init.d/radosgw:
-.INDENT 0.0
+CentOS/RHEL:
+.INDENT 3.0
 .INDENT 3.5
 .sp
 .nf
 .ft C
-[client.radosgw.gateway]
-    host = gateway
-    keyring = /etc/ceph/keyring.radosgw.gateway
-    rgw socket path = /tmp/radosgw.sock
+<VirtualHost *:80>
+ServerName localhost
+DocumentRoot /var/www/html
+
+ErrorLog /var/log/httpd/error.log
+CustomLog /var/log/httpd/access.log combined
+
+LogLevel debug
+
+
+RewriteEngine On
+
+RewriteRule .* \- [E=HTTP_AUTHORIZATION:%{HTTP:Authorization},L]
+
+ProxyPass / unix:///tmp/.radosgw.sock|fcgi://localhost:9000/ disablereuse=On
+</VirtualHost>
 .ft P
 .fi
 .UNINDENT
 .UNINDENT
-.sp
-You will also have to generate a key for the radosgw to use for
-authentication with the cluster:
-.INDENT 0.0
+.IP 4. 3
+Generate a key for radosgw to use for authentication with the cluster.
+.INDENT 3.0
 .INDENT 3.5
 .sp
 .nf
@@ -167,9 +289,9 @@ ceph\-authtool \-n client.radosgw.gateway \-\-cap mon \(aqallow rw\(aq \-\-cap o
 .fi
 .UNINDENT
 .UNINDENT
-.sp
-And add the key to the auth entries:
-.INDENT 0.0
+.IP 5. 3
+Add the key to the auth entries.
+.INDENT 3.0
 .INDENT 3.5
 .sp
 .nf
@@ -179,22 +301,38 @@ ceph auth add client.radosgw.gateway \-\-in\-file=keyring.radosgw.gateway
 .fi
 .UNINDENT
 .UNINDENT
+.IP 6. 3
+Start Apache and radosgw.
 .sp
-Now you can start Apache and the radosgw daemon:
-.INDENT 0.0
+Debian/Ubuntu:
+.INDENT 3.0
 .INDENT 3.5
 .sp
 .nf
 .ft C
-/etc/init.d/apache2 start
-/etc/init.d/radosgw start
+sudo /etc/init.d/apache2 start
+sudo /etc/init.d/radosgw start
 .ft P
 .fi
 .UNINDENT
 .UNINDENT
+.sp
+CentOS/RHEL:
+.INDENT 3.0
+.INDENT 3.5
+.sp
+.nf
+.ft C
+sudo apachectl start
+sudo /etc/init.d/ceph\-radosgw start
+.ft P
+.fi
+.UNINDENT
+.UNINDENT
+.UNINDENT
 .SH USAGE LOGGING
 .sp
-The \fBradosgw\fP maintains an asynchronous usage log. It accumulates
+\fBradosgw\fP maintains an asynchronous usage log. It accumulates
 statistics about user operations and flushes it periodically. The
 logs can be accessed and managed through \fBradosgw\-admin\fP\&.
 .sp
