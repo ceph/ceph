@@ -170,8 +170,8 @@ public:
   /**
    * Returns set S of strings such that for any object
    * h where h.match(bits, mask), there is some string
-   * s \in S such that s is a prefix of h.to_str().
-   * Furthermore, for any s \in S, s is a prefix of
+   * s \f$\in\f$ S such that s is a prefix of h.to_str().
+   * Furthermore, for any s $f\in\f$ S, s is a prefix of
    * h.str() implies that h.match(bits, mask).
    */
   static set<string> get_prefixes(
