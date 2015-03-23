@@ -1066,6 +1066,11 @@ int main(int argc, const char **argv)
   int r = 0;
   RGWRados *store = RGWStoreManager::get_storage(g_ceph_context, true, true);
   if (!store) {
+    mutex.Lock();
+    init_timer.cancel_all_events();
+    init_timer.shutdown();
+    mutex.Unlock();
+
     derr << "Couldn't init storage provider (RADOS)" << dendl;
     return EIO;
   }
