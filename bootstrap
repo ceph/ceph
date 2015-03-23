@@ -5,6 +5,17 @@ case "$(uname -s)" in
 Linux)
     case "$(lsb_release --id --short)" in
     Ubuntu|Debian)
+        # Note that we install the system version of python-libvirt here
+        # instead of relying on PyPI for that particular module. THe reason for
+        # this is that Ubuntu Precise ships libvirt 0.9.8, and PyPI's
+        # python-libvirt packages require libvirt >= 1.0.2.
+        # Some options for resolving this situation would be choosing some or
+        # all of the following:
+        #   A) Removing support for Precise,
+        #   B) Removing support for downburst,
+        #   C) Adding "Precise" conditionals somewhere, eg. conditionalizing
+        #   this bootstrap script to only use the python-libvirt package on
+        #   Ubuntu Precise.
         for package in python-dev python-pip python-virtualenv libevent-dev python-libvirt libmysqlclient-dev; do
             if [ "$(dpkg --status -- $package|sed -n 's/^Status: //p')" != "install ok installed" ]; then
                 # add a space after old values
