@@ -142,14 +142,21 @@ void SessionMap::_load_finish(
 {
   if (operation_r < 0) {
     derr << "_load_finish got " << cpp_strerror(operation_r) << dendl;
-    assert(0 == "failed to load sessionmap");
+    mds->clog->error() << "error reading sessionmap '" << get_object_name()
+                       << "' " << operation_r << " ("
+                       << cpp_strerror(operation_r) << ")";
+    mds->damaged();
+    assert(0);  // Should be unreachable because damaged() calls respawn()
   }
 
   // Decode header
   if (first) {
     if (header_r != 0) {
       derr << __func__ << ": header error: " << cpp_strerror(header_r) << dendl;
-      assert(0 == "error reading header!");
+      mds->clog->error() << "error reading sessionmap header "
+                         << header_r << " (" << cpp_strerror(header_r) << ")";
+      mds->damaged();
+      assert(0);  // Should be unreachable because damaged() calls respawn()
     }
 
     if(header_bl.length() == 0) {
@@ -158,18 +165,33 @@ void SessionMap::_load_finish(
       return;
     }
 
-    decode_header(header_bl);
+    try {
+      decode_header(header_bl);
+    } catch (buffer::error &e) {
+      mds->clog->error() << "corrupt sessionmap header: " << e.what();
+      mds->damaged();
+      assert(0);  // Should be unreachable because damaged() calls respawn()
+    }
     dout(10) << __func__ << " loaded version " << version << dendl;
   }
 
   if (values_r != 0) {
     derr << __func__ << ": error reading values: "
       << cpp_strerror(values_r) << dendl;
-    assert(0 == "error reading values");
+    mds->clog->error() << "error reading sessionmap values: " 
+                       << values_r << " (" << cpp_strerror(values_r) << ")";
+    mds->damaged();
+    assert(0);  // Should be unreachable because damaged() calls respawn()
   }
 
   // Decode session_vals
-  decode_values(session_vals);
+  try {
+    decode_values(session_vals);
+  } catch (buffer::error &e) {
+    mds->clog->error() << "corrupt sessionmap values: " << e.what();
+    mds->damaged();
+    assert(0);  // Should be unreachable because damaged() calls respawn()
+  }
 
   if (session_vals.size() == g_conf->mds_sessionmap_keys_per_op) {
     // Issue another read if we're not at the end of the omap

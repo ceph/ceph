@@ -100,7 +100,12 @@ public:
     STATE_CLIENTREPLAY = CEPH_MDS_STATE_CLIENTREPLAY, // up, active
     STATE_ACTIVE =     CEPH_MDS_STATE_ACTIVE,         // up, active
     STATE_STOPPING  =  CEPH_MDS_STATE_STOPPING,       // up, exporting metadata (-> standby or out)
-    STATE_DNE       =  CEPH_MDS_STATE_DNE             // down, rank does not exist
+    STATE_DNE       =  CEPH_MDS_STATE_DNE,             // down, rank does not exist
+
+    // State which a daemon may send to MDSMonitor in its beacon
+    // to indicate that offline repair is required.  Daemon must stop
+    // immediately after indicating this state.
+    STATE_DAMAGED   = CEPH_MDS_STATE_DAMAGED
 
     /*
      * In addition to explicit states, an MDS rank implicitly in state:
@@ -136,12 +141,8 @@ public:
     std::string standby_for_name;
     std::set<mds_rank_t> export_targets;
 
-#if 1
     mds_info_t() : global_id(MDS_GID_NONE), rank(MDS_RANK_NONE), inc(0), state(STATE_STANDBY), state_seq(0),
 		   standby_for_rank(MDS_NO_STANDBY_PREF) { }
-#else
-    mds_info_t();
-#endif
 
     bool laggy() const { return !(laggy_since == utime_t()); }
     void clear_laggy() { laggy_since = utime_t(); }
@@ -197,7 +198,8 @@ protected:
 
   std::set<mds_rank_t> in;              // currently defined cluster
   std::map<mds_rank_t,int32_t> inc;     // most recent incarnation.
-  std::set<mds_rank_t> failed, stopped; // which roles are failed or stopped
+  // which ranks are failed, stopped, damaged (i.e. not held by a daemon)
+  std::set<mds_rank_t> failed, stopped, damaged;
   std::map<mds_rank_t, mds_gid_t> up;        // who is in those roles
   std::map<mds_gid_t, mds_info_t> mds_info;
 
