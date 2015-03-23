@@ -21,6 +21,7 @@ librgw_la_SOURCES =  \
 	rgw/rgw_xml.cc \
 	rgw/rgw_usage.cc \
 	rgw/rgw_json_enc.cc \
+	rgw/rgw_xml_enc.cc \
 	rgw/rgw_user.cc \
 	rgw/rgw_bucket.cc\
 	rgw/rgw_tools.cc \
