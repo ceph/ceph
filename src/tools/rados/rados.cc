@@ -17,7 +17,6 @@
 #include "include/rados/librados.hpp"
 #include "include/rados/rados_types.hpp"
 #include "rados_sync.h"
-using namespace librados;
 
 #include "common/config.h"
 #include "common/ceph_argparse.h"
@@ -45,8 +44,13 @@ using namespace librados;
 #include "include/compat.h"
 #include "common/hobject.h"
 
+#include "PoolDump.h"
+#include "tools/RadosImport.h"
+
 int rados_tool_sync(const std::map < std::string, std::string > &opts,
                              std::vector<const char*> &args);
+
+using namespace librados;
 
 // two steps seem to be necessary to do this right
 #define STR(x) _STR(x)
@@ -117,13 +121,18 @@ void usage(ostream& out)
 "       Upload <local-directory> to <rados-pool>\n"
 "   export [options] <rados-pool> <local-directory>\n"
 "       Download <rados-pool> to <local-directory>\n"
-"   options:\n"
+"   options for import and export:\n"
 "       -f / --force                 Copy everything, even if it hasn't changed.\n"
 "       -d / --delete-after          After synchronizing, delete unreferenced\n"
 "                                    files or objects from the target bucket\n"
 "                                    or directory.\n"
 "       --workers                    Number of worker threads to spawn \n"
 "                                    (default " STR(DEFAULT_NUM_RADOS_WORKER_THREADS) ")\n"
+"\n"
+"   dump\n"
+"       Stream pool contents to standard out\n"
+"   undump\n"
+"       Load pool contents from standard in\n"
 "\n"
 "ADVISORY LOCKS\n"
 "   lock list <obj-name>\n"
@@ -1129,6 +1138,23 @@ static int do_cache_flush_evict_all(IoCtx& io_ctx, bool blocking)
   return errors ? -1 : 0;
 }
 
+
+static int do_dump(IoCtx &io_ctx)
+{
+  int file_fd = STDOUT_FILENO;
+  int r = PoolDump(file_fd).dump(&io_ctx);
+  return r;
+}
+
+
+static int do_undump(IoCtx &io_ctx)
+{
+  // FIXME: refactor RadosImport to take the pre-constructed ioctx
+  int file_fd = STDIN_FILENO;
+  return RadosImport(file_fd, 0).import(io_ctx.get_pool_name());
+}
+
+
 /**********************************************
 
 **********************************************/
@@ -1423,7 +1449,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       vec.push_back(pool_name);
     }
 
-    map<string,pool_stat_t> stats;
+    map<string,librados::pool_stat_t> stats;
     ret = rados.get_pool_stats(vec, stats);
     if (ret < 0) {
       cerr << "error fetching pool stats: " << cpp_strerror(ret) << std::endl;
@@ -1441,11 +1467,11 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       formatter->open_object_section("stats");
       formatter->open_array_section("pools");
     }
-    for (map<string,pool_stat_t>::iterator i = stats.begin();
+    for (map<string,librados::pool_stat_t>::iterator i = stats.begin();
 	 i != stats.end();
 	 ++i) {
       const char *pool_name = i->first.c_str();
-      pool_stat_t& s = i->second;
+      librados::pool_stat_t& s = i->second;
       if (!formatter) {
 	printf("%-15s "
 	       "%12lld %12lld %12lld %12lld"
@@ -2612,6 +2638,26 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     ret = do_cache_flush_evict_all(io_ctx, false);
     if (ret < 0) {
       cerr << "error from cache-try-flush-evict-all: "
+	   << cpp_strerror(ret) << std::endl;
+      goto out;
+    }
+  } else if (strcmp(nargs[0], "dump") == 0) {
+    if (!pool_name) {
+      usage_exit();
+    }
+    ret = do_dump(io_ctx);
+    if (ret < 0) {
+      cerr << "error from dump: "
+	   << cpp_strerror(ret) << std::endl;
+      goto out;
+    }
+  } else if (strcmp(nargs[0], "undump") == 0) {
+    if (!pool_name) {
+      usage_exit();
+    }
+    ret = do_undump(io_ctx);
+    if (ret < 0) {
+      cerr << "error from undump: "
 	   << cpp_strerror(ret) << std::endl;
       goto out;
     }

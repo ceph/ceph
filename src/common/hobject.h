@@ -49,6 +49,10 @@ public:
     return key;
   }
 
+  void set_key(const std::string &key_) {
+    key = key_;
+  }
+
   string to_str() const;
   
   uint32_t get_hash() const { 
