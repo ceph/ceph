@@ -443,6 +443,14 @@ private:
   void handle_mds_recovery(mds_rank_t who);
   void handle_mds_failure(mds_rank_t who);
 
+  /**
+   * Report state DAMAGED to the mon, and then pass on to respawn().  Call
+   * this when an unrecoverable error is encountered while attempting
+   * to load an MDS rank's data structures.  This is *not* for use with
+   * errors affecting normal dirfrag/inode objects -- they should be handled
+   * through cleaner scrub/repair mechanisms.
+   */
+  void damaged();
   void suicide();
   void respawn();
   void handle_write_error(int err);

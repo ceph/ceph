@@ -819,9 +819,10 @@ void MDLog::_recovery_thread(MDSInternalContextBase *completion)
     // Nothing graceful we can do for this
     assert(write_result >= 0);
   } else if (read_result != 0) {
-    // No graceful way of handling this: give up and leave it for support
-    // to work out why RADOS preventing access.
-    assert(0);
+    mds->clog->error() << "failed to read JournalPointer: " << read_result
+                       << " (" << cpp_strerror(read_result) << ")";
+    mds->damaged();
+    assert(0);  // Should be unreachable because damaged() calls respawn()
   }
 
   // If the back pointer is non-null, that means that a journal
@@ -1108,15 +1109,25 @@ void MDLog::_replay_thread()
       r = journaler->get_error();
       dout(0) << "_replay journaler got error " << r << ", aborting" << dendl;
       if (r == -ENOENT) {
-	// journal has been trimmed by somebody else?
-	assert(journaler->is_readonly());
-	r = -EAGAIN;
+        if (journaler->is_readonly()) {
+          // journal has been trimmed by somebody else
+          r = -EAGAIN;
+        } else {
+          mds->clog->error() << "missing journal object";
+          mds->damaged();
+          assert(0);  // Should be unreachable because damaged() calls respawn()
+        }
       } else if (r == -EINVAL) {
         if (journaler->get_read_pos() < journaler->get_expire_pos()) {
           // this should only happen if you're following somebody else
-          assert(journaler->is_readonly());
-          dout(0) << "expire_pos is higher than read_pos, returning EAGAIN" << dendl;
-          r = -EAGAIN;
+          if(journaler->is_readonly()) {
+            dout(0) << "expire_pos is higher than read_pos, returning EAGAIN" << dendl;
+            r = -EAGAIN;
+          } else {
+            mds->clog->error() << "invalid journaler offsets";
+            mds->damaged();
+            assert(0);  // Should be unreachable because damaged() calls respawn()
+          }
         } else {
           /* re-read head and check it
            * Given that replay happens in a separate thread and
@@ -1135,7 +1146,11 @@ void MDLog::_replay_thread()
             } else {
                 dout(0) << "got error while reading head: " << cpp_strerror(err)
                         << dendl;
-                mds->suicide();
+
+                mds->clog->error() << "error reading journal header";
+                mds->damaged();
+                assert(0);  // Should be unreachable because damaged() calls
+                            // respawn()
             }
           }
 	  standby_trim_segments();
@@ -1171,8 +1186,17 @@ void MDLog::_replay_thread()
       bl.hexdump(*_dout);
       *_dout << dendl;
 
-      assert(!!"corrupt log event" == g_conf->mds_log_skip_corrupt_events);
-      continue;
+      mds->clog->error() << "corrupt journal event at " << pos << "~"
+                         << bl.length() << " / "
+                         << journaler->get_write_pos();
+      if (g_conf->mds_log_skip_corrupt_events) {
+        continue;
+      } else {
+        mds->damaged();
+        assert(0);  // Should be unreachable because damaged() calls
+                    // respawn()
+      }
+
     }
     le->set_start_off(pos);
 

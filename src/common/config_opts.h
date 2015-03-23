@@ -452,6 +452,7 @@ OPTION(mds_snap_rstat, OPT_BOOL, false) // enable/disbale nested stat for snapsh
 OPTION(mds_verify_backtrace, OPT_U32, 1)
 
 OPTION(mds_action_on_write_error, OPT_U32, 1) // 0: ignore; 1: force readonly; 2: crash
+OPTION(mds_mon_shutdown_timeout, OPT_DOUBLE, 5)
 
 // Maximum number of concurrent stray files to purge
 OPTION(mds_max_purge_files, OPT_U32, 64)
