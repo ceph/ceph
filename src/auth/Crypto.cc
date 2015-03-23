@@ -13,6 +13,8 @@
 
 #include <sstream>
 #include "Crypto.h"
+#ifdef _WIN32
+#else
 #ifdef USE_CRYPTOPP
 # include <cryptopp/modes.h>
 # include <cryptopp/aes.h>
@@ -22,7 +24,7 @@
 # include <nss.h>
 # include <pk11pub.h>
 #endif
-
+#endif
 #include "include/assert.h"
 #include "common/Clock.h"
 #include "common/armor.h"
@@ -86,7 +88,8 @@ void CryptoNone::decrypt(const bufferptr& secret, const bufferlist& in,
   out = in;
 }
 
-
+#ifdef _WIN32
+#else
 // ---------------------------------------------------
 #ifdef USE_CRYPTOPP
 # define AES_KEY_LEN     ((size_t)CryptoPP::AES::DEFAULT_KEYLENGTH)
@@ -215,29 +218,36 @@ static void nss_aes_operation(CK_ATTRIBUTE_TYPE op, const bufferptr& secret,
 #else
 # error "No supported crypto implementation found."
 #endif
-
+#endif
 int CryptoAES::create(bufferptr& secret)
 {
+#ifdef _WIN32
+#else
   bufferlist bl;
   int r = get_random_bytes(AES_KEY_LEN, bl);
   if (r < 0)
     return r;
   secret = buffer::ptr(bl.c_str(), bl.length());
+#endif
   return 0;
 }
 
 int CryptoAES::validate_secret(bufferptr& secret)
 {
+#ifdef _WIN32
+#else
   if (secret.length() < (size_t)AES_KEY_LEN) {
     return -EINVAL;
   }
-
+#endif
   return 0;
 }
 
 void CryptoAES::encrypt(const bufferptr& secret, const bufferlist& in, bufferlist& out,
 			std::string &error) const
 {
+#ifdef _WIN32
+#else
   if (secret.length() < AES_KEY_LEN) {
     error = "key is too short";
     return;
@@ -272,11 +282,14 @@ void CryptoAES::encrypt(const bufferptr& secret, const bufferlist& in, bufferlis
 #else
 # error "No supported crypto implementation found."
 #endif
+#endif
 }
 
 void CryptoAES::decrypt(const bufferptr& secret, const bufferlist& in, 
 			bufferlist& out, std::string &error) const
 {
+#ifdef _WIN32
+#else
 #ifdef USE_CRYPTOPP
   const unsigned char *key = (const unsigned char *)secret.c_str();
 
@@ -306,6 +319,7 @@ void CryptoAES::decrypt(const bufferptr& secret, const bufferlist& in,
   nss_aes_operation(CKA_DECRYPT, secret, in, out, error);
 #else
 # error "No supported crypto implementation found."
+#endif
 #endif
 }
 
