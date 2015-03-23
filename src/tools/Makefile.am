@@ -57,4 +57,5 @@ noinst_HEADERS += \
 	tools/rados/rados_sync.h \
 	tools/RadosDump.h \
 	tools/RadosImport.h\
-	tools/ceph_objectstore_tool.h
+	tools/ceph_objectstore_tool.h \
+	tools/rados/PoolDump.h
