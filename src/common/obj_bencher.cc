@@ -78,6 +78,7 @@ void *ObjBencher::status_printer(void *_bencher) {
   int previous_writes = 0;
   int cycleSinceChange = 0;
   double bandwidth;
+  int iops;
   utime_t ONE_SECOND;
   ONE_SECOND.set_from_double(1.0);
   bencher->lock.Lock();
@@ -115,6 +116,21 @@ void *ObjBencher::status_printer(void *_bencher) {
         data.idata.min_bandwidth = bandwidth;
 
       data.history.bandwidth.push_back(bandwidth);
+    }
+
+    if (cycleSinceChange)
+      iops = (double)(data.finished - previous_writes)
+        / cycleSinceChange;
+    else
+      iops = 0;
+
+    if (!isnan(iops)) {
+      if (iops > data.idata.max_iops)
+        data.idata.max_iops = iops;
+      if (iops < data.idata.min_iops)
+        data.idata.min_iops = iops;
+
+      data.history.iops.push_back(iops);
     }
 
     double avg_bandwidth = (double) (data.trans_size) * (data.finished)
@@ -463,6 +479,10 @@ int ObjBencher::write_bench(int secondsToRun, int maxObjectsToCreate,
        << "Stddev Bandwidth:       " << vec_stddev(data.history.bandwidth) << std::endl
        << "Max bandwidth (MB/sec): " << data.idata.max_bandwidth << std::endl
        << "Min bandwidth (MB/sec): " << data.idata.min_bandwidth << std::endl
+       << "Average IOPS:           " << (int)(data.finished/timePassed) << std::endl
+       << "Stddev IOPS:            " << vec_stddev(data.history.iops) << std::endl
+       << "Max IOPS:               " << data.idata.max_iops << std::endl
+       << "Min IOPS:               " << data.idata.min_iops << std::endl
        << "Average Latency:        " << data.avg_latency << std::endl
        << "Stddev Latency:         " << vec_stddev(data.history.latency) << std::endl
        << "Max latency:            " << data.max_latency << std::endl
@@ -658,6 +678,10 @@ int ObjBencher::seq_read_bench(int seconds_to_run, int num_objects, int concurre
        << "Total reads made:     " << data.finished << std::endl
        << "Read size:            " << data.object_size << std::endl
        << "Bandwidth (MB/sec):   " << setprecision(3) << bandwidth << std::endl
+       << "Average IOPS          " << (int)(data.finished/runtime) << std::endl
+       << "Stddev IOPS:          " << vec_stddev(data.history.iops) << std::endl
+       << "Max IOPS:             " << data.idata.max_iops << std::endl
+       << "Min IOPS:             " << data.idata.min_iops << std::endl
        << "Average Latency:      " << data.avg_latency << std::endl
        << "Max latency:          " << data.max_latency << std::endl
        << "Min latency:          " << data.min_latency << std::endl;
@@ -847,6 +871,10 @@ int ObjBencher::rand_read_bench(int seconds_to_run, int num_objects, int concurr
        << "Total reads made:     " << data.finished << std::endl
        << "Read size:            " << data.object_size << std::endl
        << "Bandwidth (MB/sec):   " << setprecision(3) << bandwidth << std::endl
+       << "Average IOPS:         " << (int)(data.finished/runtime) << std::endl
+       << "Stddev IOPS:          " << vec_stddev(data.history.iops) << std::endl
+       << "Max IOPS:             " << data.idata.max_iops << std::endl
+       << "Min IOPS:             " << data.idata.min_iops << std::endl
        << "Average Latency:      " << data.avg_latency << std::endl
        << "Max latency:          " << data.max_latency << std::endl
        << "Min latency:          " << data.min_latency << std::endl;
