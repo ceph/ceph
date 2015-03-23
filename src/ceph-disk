@@ -1755,7 +1755,7 @@ def start_daemon(
                     'osd.{osd_id}'.format(osd_id=osd_id),
                     ],
                 )
-        elif os.path.exists(os.path.join(path, 'systemd')):
+        elif is_systemd():
             command_check_call(
                 [
                     'systemctl',
@@ -2013,6 +2013,8 @@ def activate(
                 )
             if conf_val is not None:
                 init = conf_val
+            elif is_systemd():
+                init = 'systemd'
             else:
                 (distro, release, codename) = platform.dist()
                 if distro == 'Ubuntu':
