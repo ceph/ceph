@@ -6284,10 +6284,11 @@ void ReplicatedPG::process_copy_chunk(hobject_t oid, ceph_tid_t tid, int r)
     return;
   }
 
-  if (cop->omap_data.length())
+  if (cop->omap_data.length() || cop->omap_header.length())
     cop->results.has_omap = true;
 
-  if (r >= 0 && pool.info.require_rollback() && cop->omap_data.length()) {
+  if (r >= 0 && pool.info.require_rollback() &&
+      (cop->omap_data.length() || cop->omap_header.length())) {
     r = -EOPNOTSUPP;
   }
   cop->objecter_tid = 0;
