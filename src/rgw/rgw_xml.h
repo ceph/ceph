@@ -144,10 +144,10 @@ void do_decode_xml_obj(list<T>& l, const string& name, XMLObj *obj)
 {
   l.clear();
 
-  XMLObjIter iter = obj->find_first(name);
+  XMLObjIter iter = obj->find(name);
   XMLObj *o;
 
-  while (o = iter.get_next()) {
+  while ((o = iter.get_next())) {
     T val;
     decode_xml_obj(val, o);
     l.push_back(val);
@@ -159,7 +159,7 @@ void do_decode_xml_obj(vector<T>& l, const string& name, XMLObj *obj)
 {
   l.clear();
 
-  XMLObjIter iter = obj->find_first(name);
+  XMLObjIter iter = obj->find(name);
   XMLObj *o;
 
   while (o = iter.get_next()) {
@@ -172,7 +172,7 @@ void do_decode_xml_obj(vector<T>& l, const string& name, XMLObj *obj)
 template<class T>
 bool RGWXMLDecoder::decode_xml(const char *name, T& val, XMLObj *obj, bool mandatory)
 {
-  XMLObjIter iter = obj->find_first(name);
+  XMLObjIter iter = obj->find(name);
   XMLObj *o = iter.get_next();
   if (!o) {
     if (mandatory) {
@@ -199,7 +199,7 @@ bool RGWXMLDecoder::decode_xml(const char *name, C& container, void (*cb)(C&, XM
 {
   container.clear();
 
-  XMLObjIter iter = obj->find_first(name);
+  XMLObjIter iter = obj->find(name);
   XMLObj *o = iter.get_next();
   if (!o) {
     if (mandatory) {
@@ -223,7 +223,7 @@ bool RGWXMLDecoder::decode_xml(const char *name, C& container, void (*cb)(C&, XM
 template<class T>
 void RGWXMLDecoder::decode_xml(const char *name, T& val, T& default_val, XMLObj *obj)
 {
-  XMLObjIter iter = obj->find_first(name);
+  XMLObjIter iter = obj->find(name);
   XMLObj *o = iter.get_next();
   if (!o) {
     val = default_val;

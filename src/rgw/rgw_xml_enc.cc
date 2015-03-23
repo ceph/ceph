@@ -25,6 +25,16 @@ void RGWBWRedirectInfo::dump_xml(Formatter *f) const
   }
 }
 
+void RGWBWRedirectInfo::decode_xml(XMLObj *obj) {
+  RGWXMLDecoder::decode_xml("Protocol", redirect.protocol, obj);
+  RGWXMLDecoder::decode_xml("Hostname", redirect.hostname, obj);
+  int code = 0;
+  RGWXMLDecoder::decode_xml("HttpRedirectCode", code, obj);
+  redirect.http_redirect_code = code;
+  RGWXMLDecoder::decode_xml("ReplaceKeyPrefixWith", replace_key_prefix_with, obj);
+  RGWXMLDecoder::decode_xml("ReplcaeKeyWith", replace_key_with, obj);
+}
+
 void RGWBWRoutingRuleCondition::dump_xml(Formatter *f) const
 {
   if (!key_prefix_equals.empty()) {
@@ -35,10 +45,22 @@ void RGWBWRoutingRuleCondition::dump_xml(Formatter *f) const
   }
 }
 
+void RGWBWRoutingRuleCondition::decode_xml(XMLObj *obj) {
+  RGWXMLDecoder::decode_xml("KeyPrefixEquals", key_prefix_equals, obj);
+  int code = 0;
+  RGWXMLDecoder::decode_xml("HttpErrorCodeReturnedEquals", code, obj);
+  http_error_code_returned_equals = code;
+}
+
 void RGWBWRoutingRule::dump_xml(Formatter *f) const
 {
   encode_xml("Condition", condition, f);
   encode_xml("Redirect", redirect_info, f);
+}
+
+void RGWBWRoutingRule::decode_xml(XMLObj *obj) {
+  RGWXMLDecoder::decode_xml("Condition", condition, obj);
+  RGWXMLDecoder::decode_xml("Redirect", redirect_info, obj);
 }
 
 static void encode_xml(const char *name, const std::list<RGWBWRoutingRule>& l, ceph::Formatter *f)
@@ -61,5 +83,22 @@ void RGWBucketWebsiteConf::dump_xml(Formatter *f) const
   if (!routing_rules.rules.empty()) {
     encode_xml("RoutingRules", routing_rules.rules, f);
   }
+}
+
+void decode_xml_obj(list<RGWBWRoutingRule>& l, XMLObj *obj)
+{
+  do_decode_xml_obj(l, "RoutingRule", obj);
+}
+
+void RGWBucketWebsiteConf::decode_xml(XMLObj *obj) {
+  XMLObj *o = obj->find_first("IndexDocument");
+  if (o) {
+    RGWXMLDecoder::decode_xml("Suffix", index_doc_suffix, obj);
+  }
+  o = obj->find_first("ErrorDocument");
+  if (o) {
+    RGWXMLDecoder::decode_xml("Key", error_doc, obj);
+  }
+  RGWXMLDecoder::decode_xml("RoutingRules", routing_rules.rules, obj);
 }
 
