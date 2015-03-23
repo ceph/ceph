@@ -189,7 +189,7 @@ The following entries describe each capability.
               bootstrapping an OSD.
 
 
-``profile bootstrap-osd``
+``profile bootstrap-mds``
 
 :Description: Gives a user permissions to bootstrap a metadata server. 
               Conferred on deployment tools such as ``ceph-deploy``, etc.
