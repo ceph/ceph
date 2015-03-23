@@ -169,20 +169,20 @@ The high level process is for the current PG primary to:
      we learn about a *last epoch started* that is newer than our own, we can
      prune older *past intervals* and reduce the peer OSDs we need to contact.
 
-  5. if anyone else has (in his PG log) operations that I do not have,
+  5. if anyone else has (in its PG log) operations that I do not have,
      instruct them to send me the missing log entries so that the primary's
      *PG log* is up to date (includes the newest write)..
 
   5. for each member of the current *acting set*:
 
-     a) ask him for copies of all PG log entries since *last epoch start*
+     a) ask it for copies of all PG log entries since *last epoch start*
 	so that I can verify that they agree with mine (or know what
-	objects I will be telling him to delete).
+	objects I will be telling it to delete).
 
 	If the cluster failed before an operation was persisted by all
 	members of the *acting set*, and the subsequent *peering* did not
 	remember that operation, and a node that did remember that
-	operation later rejoined, his logs would record a different
+	operation later rejoined, its logs would record a different
 	(divergent) history than the *authoritative history* that was
 	reconstructed in the *peering* after the failure.
 
@@ -193,8 +193,8 @@ The high level process is for the current PG primary to:
 	any OSD that stores data from a divergent update to delete the
 	affected (and now deemed to be apocryphal) objects.
 
-     b) ask him for his *missing set* (object updates recorded
-	in his PG log, but for which he does not have the new data).
+     b) ask it for its *missing set* (object updates recorded
+	in its PG log, but for which it does not have the new data).
 	This is the list of objects that must be fully replicated
 	before we can accept writes.
 
