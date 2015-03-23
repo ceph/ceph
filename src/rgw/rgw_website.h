@@ -1,6 +1,8 @@
 #ifndef RGW_WEBSITE_H
 #define RGW_WEBSITE_H
 
+#include "rgw_xml.h"
+
 struct RGWRedirectInfo
 {
   string protocol;
@@ -50,6 +52,7 @@ struct RGWBWRedirectInfo
   }
 
   void dump(Formatter *f) const;
+  void dump_xml(Formatter *f) const;
   void decode_json(JSONObj *obj);
 };
 WRITE_CLASS_ENCODER(RGWBWRedirectInfo)
@@ -73,6 +76,7 @@ struct RGWBWRoutingRuleCondition
   }
 
   void dump(Formatter *f) const;
+  void dump_xml(Formatter *f) const;
   void decode_json(JSONObj *obj);
 
   bool check_key_condition(const string& key);
@@ -101,6 +105,7 @@ struct RGWBWRoutingRule
   }
 
   void dump(Formatter *f) const;
+  void dump_xml(Formatter *f) const;
   void decode_json(JSONObj *obj);
 
   bool check_key_condition(const string& key) {
@@ -128,6 +133,7 @@ struct RGWBWRoutingRules
   }
 
   void dump(Formatter *f) const;
+  void dump_xml(Formatter *f) const;
   void decode_json(JSONObj *obj);
 
   bool check_key_condition(const string& key, RGWBWRoutingRule **rule);
@@ -163,6 +169,7 @@ struct RGWBucketWebsiteConf
 
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
+  void dump_xml(Formatter *f) const;
 
   void get_effective_target(const string& key, string *effective_key, RGWRedirectInfo *redirect);
 };
