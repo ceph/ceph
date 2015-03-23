@@ -237,6 +237,19 @@ Commands
 :command:`mv` [*src-image*] [*dest-image*]
   Renames an image.  Note: rename across pools is not supported.
 
+:command:`image-meta list` [*image-name*]
+  Show metadata held on the image. The first column is the key
+  and the second column is the value.
+
+:command:`image-meta get` [**image-name*] [*key*]
+  Get metadata value with the key.
+
+:command:`image-meta set` [*image-name*] [*key*] [*value*]
+  Set metadata key with the value. They will displayed in `metadata-list`
+
+:command:`image-meta remove` [*image-name*] [*key*]
+  Remove metadata key with the value.
+
 :command:`snap` ls [*image-name*]
   Dumps the list of snapshots inside a specific image.
 
