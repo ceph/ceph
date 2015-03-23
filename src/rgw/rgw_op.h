@@ -372,6 +372,25 @@ public:
   virtual uint32_t op_mask() { return RGW_OP_TYPE_READ; }
 };
 
+class RGWSetBucketWebsite : public RGWOp {
+protected:
+  int ret;
+  RGWBucketWebsiteConf website_conf;
+public:
+  RGWSetBucketWebsite() : ret(0) {}
+
+  int verify_permission();
+  void pre_exec();
+  void execute();
+
+  virtual int get_params() { return 0; }
+
+  virtual void send_response() = 0;
+  virtual const string name() { return "set_bucket_website"; }
+  virtual RGWOpType get_type() { return RGW_OP_SET_BUCKET_WEBSITE; }
+  virtual uint32_t op_mask() { return RGW_OP_TYPE_WRITE; }
+};
+
 class RGWStatBucket : public RGWOp {
 protected:
   int ret;
