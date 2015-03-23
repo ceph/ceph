@@ -93,11 +93,11 @@ void decode_xml_obj(list<RGWBWRoutingRule>& l, XMLObj *obj)
 void RGWBucketWebsiteConf::decode_xml(XMLObj *obj) {
   XMLObj *o = obj->find_first("IndexDocument");
   if (o) {
-    RGWXMLDecoder::decode_xml("Suffix", index_doc_suffix, obj);
+    RGWXMLDecoder::decode_xml("Suffix", index_doc_suffix, o);
   }
   o = obj->find_first("ErrorDocument");
   if (o) {
-    RGWXMLDecoder::decode_xml("Key", error_doc, obj);
+    RGWXMLDecoder::decode_xml("Key", error_doc, o);
   }
   RGWXMLDecoder::decode_xml("RoutingRules", routing_rules.rules, obj);
 }
