@@ -494,6 +494,47 @@ void RGWSetBucketVersioning_ObjStore_S3::send_response()
   end_header(s);
 }
 
+int RGWSetBucketWebsite_ObjStore_S3::get_params()
+{
+#define GET_BUCKET_WEBSITE_BUF_MAX (128 * 1024)
+
+  char *data;
+  int len = 0;
+  int r = rgw_rest_read_all_input(s, &data, &len, GET_BUCKET_WEBSITE_BUF_MAX);
+  if (r < 0) {
+    return r;
+  }
+
+  bufferlist bl;
+  bl.append(data, len);
+
+  RGWXMLDecoder::XMLParser parser;
+  parser.init();
+
+  if (!parser.parse(data, len, 1)) {
+    string str(data, len);
+    ldout(s->cct, 5) << "failed to parse xml: " << str << dendl;
+    return -EINVAL;
+  }
+
+  try {
+    RGWXMLDecoder::decode_xml("WebsiteConfiguration", website_conf, &parser, true);
+  } catch (RGWXMLDecoder::err& err) {
+    string str(data, len);
+    ldout(s->cct, 5) << "unexpected xml: " << str << dendl;
+    return -EINVAL;
+  }
+
+  return 0;
+}
+
+void RGWSetBucketWebsite_ObjStore_S3::send_response()
+{
+  if (ret)
+    set_req_state_err(s, ret);
+  dump_errno(s);
+  end_header(s);
+}
 
 void RGWGetBucketWebsite_ObjStore_S3::send_response()
 {
@@ -2016,6 +2057,8 @@ RGWOp *RGWHandler_ObjStore_Bucket_S3::op_put()
     return NULL;
   if (s->info.args.sub_resource_exists("versioning"))
     return new RGWSetBucketVersioning_ObjStore_S3;
+  if (s->info.args.sub_resource_exists("website"))
+    return new RGWSetBucketWebsite_ObjStore_S3;
   if (is_acl_op()) {
     return new RGWPutACLs_ObjStore_S3;
   } else if (is_cors_op()) {
