@@ -139,7 +139,11 @@ Add the keyrings for ``client.cinder``, ``client.glance``, and
   ssh {your-cinder-backup-server} sudo chown cinder:cinder /etc/ceph/ceph.client.cinder-backup.keyring
 
 Nodes running ``nova-compute`` need the keyring file for the ``nova-compute``
-process. They also need to store the secret key of the ``client.cinder`` user in
+process::
+
+  ceph auth get-or-create client.cinder | ssh {your-nova-compute-server} sudo tee /etc/ceph/ceph.client.cinder.keyring
+
+They also need to store the secret key of the ``client.cinder`` user in
 ``libvirt``. The libvirt process needs it to access the cluster while attaching
 a block device from Cinder.
 
