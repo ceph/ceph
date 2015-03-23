@@ -2048,7 +2048,7 @@ public:
    * @param start list objects that sort >= this value
    * @param min return at least this many results, unless we reach the end
    * @param max return no more than this many results
-   * @param snapid return no objects with snap < snapid
+   * @param snap return no objects with snap < snapid
    * @param ls [out] result
    * @param next [out] next item sorts >= this value
    * @return zero on success, or negative error

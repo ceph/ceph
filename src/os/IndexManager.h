@@ -77,7 +77,7 @@ public:
    * Reserve and return index for c
    *
    * @param [in] c Collection for which to get index
-   * @param [in] path Path to collection
+   * @param [in] baseDir base directory of collections
    * @param [out] index Index for c
    * @return error code
    */

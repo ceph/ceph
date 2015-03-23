@@ -234,9 +234,8 @@ public:
   int aio_flush(RBD::AioCompletion *c);
 
   /**
-   * Drop any cached data for an image
+   * Drop any cached data for this image
    *
-   * @param image the image to invalidate cached data for
    * @returns 0 on success, negative error code on failure
    */
   int invalidate_cache();

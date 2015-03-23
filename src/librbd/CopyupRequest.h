@@ -31,6 +31,9 @@ namespace librbd {
      * Copyup requests go through the following state machine to read from the
      * parent image, update the object map, and copyup the object:
      *
+     *
+     * @verbatim
+     *
      * <start>
      *    |
      *    v
@@ -40,6 +43,9 @@ namespace librbd {
      *                            .   |
      *                            v   v
      *                           <finish>
+     *
+     * @endverbatim
+     *
      * The _OBJECT_MAP state is skipped if the object map isn't enabled.
      */
     enum State {

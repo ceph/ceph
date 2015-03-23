@@ -689,7 +689,7 @@ protected:
    *
    * @param idata: the index data parsed from the index entry left by the dead
    * client.
-   * @param errno: the error that caused the client to realize the other client
+   * @param error: the error that caused the client to realize the other client
    * died (should be -ENOENT or -ETIMEDOUT)
    * @post: rolls forward if -ENOENT, otherwise rolls back.
    */

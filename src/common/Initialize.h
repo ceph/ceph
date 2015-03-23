@@ -59,8 +59,8 @@ class Initialize {
   /**
    * This form of constructor causes its function argument to be invoked
    * when the object is constructed.  When used with a static Initialize
-   * object, this will cause #func to run before main() runs, so that
-   * #func can perform once-only initialization.
+   * object, this will cause \p func to run before main() runs, so that
+   * \p func can perform once-only initialization.
    *
    * \param func
    *      This function is invoked with no arguments when the object is

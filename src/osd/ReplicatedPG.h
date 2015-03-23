@@ -1309,7 +1309,6 @@ protected:
    * @param src: The source object
    * @param oloc: the source object locator
    * @param version: the version of the source object to copy (0 for any)
-   * @param temp_dest_oid: the temporary object to use for large objects
    */
   void start_copy(CopyCallback *cb, ObjectContextRef obc, hobject_t src,
 		  object_locator_t oloc, version_t version, unsigned flags,
