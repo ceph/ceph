@@ -2363,6 +2363,19 @@ void MDS::handle_signal(int signum)
   mds_lock.Unlock();
 }
 
+void MDS::damaged()
+{
+  set_want_state(MDSMap::STATE_DAMAGED);
+  beacon.notify_health(this);  // Include latest status in our swan song
+  beacon.send_and_wait(g_conf->mds_mon_shutdown_timeout);
+
+  // It's okay if we timed out and the mon didn't get our beacon, because
+  // another daemon (or ourselves after respawn) will eventually take the
+  // rank and report DAMAGED again when it hits same problem we did.
+
+  respawn();  // Respawn into standby in case mon has other work for us
+}
+
 void MDS::suicide()
 {
   assert(mds_lock.is_locked());

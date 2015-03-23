@@ -1169,7 +1169,9 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
 	  dout(10) << "EMetaBlob.replay created base " << *diri << dendl;
 	} else {
 	  dout(0) << "EMetaBlob.replay missing dir ino  " << (*lp).ino << dendl;
-	  assert(0);
+          mds->clog->error() << "failure replaying journal (EMetaBlob)";
+          mds->damaged();
+          assert(0);  // Should be unreachable because damaged() calls respawn()
 	}
       }
 
@@ -1880,7 +1882,9 @@ void ETableServer::replay(MDS *mds)
     server->_server_update(mutation);
     break;
   default:
-    assert(0);
+    mds->clog->error() << "invalid tableserver op in ETableServer";
+    mds->damaged();
+    assert(0);  // Should be unreachable because damaged() calls respawn()
   }
   
   assert(version == server->get_version());
@@ -2435,7 +2439,9 @@ void ESlaveUpdate::replay(MDS *mds)
     break;
 
   default:
-    assert(0);
+    mds->clog->error() << "invalid op in ESlaveUpdate";
+    mds->damaged();
+    assert(0);  // Should be unreachable because damaged() calls respawn()
   }
 }
 
@@ -2936,10 +2942,13 @@ void EImportFinish::replay(MDS *mds)
       mds->mdcache->try_trim_non_auth_subtree(dir);
    }
   } else {
+    // this shouldn't happen unless this is an old journal
     dout(10) << "EImportFinish.replay " << base << " success=" << success
 	     << " on subtree not marked as ambiguous" 
 	     << dendl;
-    assert(0 == "this shouldn't happen unless this is an old journal");
+    mds->clog->error() << "failure replaying journal (EImportFinish)";
+    mds->damaged();
+    assert(0);  // Should be unreachable because damaged() calls respawn()
   }
 }
 
