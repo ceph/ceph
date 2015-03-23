@@ -87,7 +87,15 @@ case "$1" in
         $0 start
         ;;
     stop)
-        start-stop-daemon --stop -x $RADOSGW --oknodo
+        timeout=0
+        for name in `ceph-conf --list-sections $PREFIX`;
+        do
+          t=`$RADOSGW -n $name --show-config-value rgw_exit_timeout_secs`
+          if [ $t -gt $timeout ]; then timeout=$t; fi
+        done
+
+        if [ $timeout -gt 0 ]; then TIMEOUT="-R $timeout"; fi
+        start-stop-daemon --stop -x $RADOSGW --oknodo $TIMEOUT
         ;;
     status)
         daemon_is_running $RADOSGW
