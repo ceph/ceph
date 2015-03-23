@@ -238,3 +238,254 @@ bool RGWXMLParser::parse(const char *_buf, int len, int done)
 
   return success;
 }
+
+void decode_xml_obj(unsigned long& val, XMLObj *obj)
+{
+  string& s = obj->get_data();
+  const char *start = s.c_str();
+  char *p;
+
+  errno = 0;
+  val = strtoul(start, &p, 10);
+
+  /* Check for various possible errors */
+
+ if ((errno == ERANGE && val == ULONG_MAX) ||
+     (errno != 0 && val == 0)) {
+   throw RGWXMLDecoder::err("failed to number");
+ }
+
+ if (p == start) {
+   throw RGWXMLDecoder::err("failed to parse number");
+ }
+
+ while (*p != '\0') {
+   if (!isspace(*p)) {
+     throw RGWXMLDecoder::err("failed to parse number");
+   }
+   p++;
+ }
+}
+
+
+void decode_xml_obj(long& val, XMLObj *obj)
+{
+  string s = obj->get_data();
+  const char *start = s.c_str();
+  char *p;
+
+  errno = 0;
+  val = strtol(start, &p, 10);
+
+  /* Check for various possible errors */
+
+ if ((errno == ERANGE && (val == LONG_MAX || val == LONG_MIN)) ||
+     (errno != 0 && val == 0)) {
+   throw RGWXMLDecoder::err("failed to parse number");
+ }
+
+ if (p == start) {
+   throw RGWXMLDecoder::err("failed to parse number");
+ }
+
+ while (*p != '\0') {
+   if (!isspace(*p)) {
+     throw RGWXMLDecoder::err("failed to parse number");
+   }
+   p++;
+ }
+}
+
+void decode_xml_obj(long long& val, XMLObj *obj)
+{
+  string s = obj->get_data();
+  const char *start = s.c_str();
+  char *p;
+
+  errno = 0;
+  val = strtoll(start, &p, 10);
+
+  /* Check for various possible errors */
+
+ if ((errno == ERANGE && (val == LLONG_MAX || val == LLONG_MIN)) ||
+     (errno != 0 && val == 0)) {
+   throw RGWXMLDecoder::err("failed to parse number");
+ }
+
+ if (p == start) {
+   throw RGWXMLDecoder::err("failed to parse number");
+ }
+
+ while (*p != '\0') {
+   if (!isspace(*p)) {
+     throw RGWXMLDecoder::err("failed to parse number");
+   }
+   p++;
+ }
+}
+
+void decode_xml_obj(unsigned long long& val, XMLObj *obj)
+{
+  string s = obj->get_data();
+  const char *start = s.c_str();
+  char *p;
+
+  errno = 0;
+  val = strtoull(start, &p, 10);
+
+  /* Check for various possible errors */
+
+ if ((errno == ERANGE && val == ULLONG_MAX) ||
+     (errno != 0 && val == 0)) {
+   throw RGWXMLDecoder::err("failed to number");
+ }
+
+ if (p == start) {
+   throw RGWXMLDecoder::err("failed to parse number");
+ }
+
+ while (*p != '\0') {
+   if (!isspace(*p)) {
+     throw RGWXMLDecoder::err("failed to parse number");
+   }
+   p++;
+ }
+}
+
+void decode_xml_obj(int& val, XMLObj *obj)
+{
+  long l;
+  decode_xml_obj(l, obj);
+#if LONG_MAX > INT_MAX
+  if (l > INT_MAX || l < INT_MIN) {
+    throw RGWXMLDecoder::err("integer out of range");
+  }
+#endif
+
+  val = (int)l;
+}
+
+void decode_xml_obj(unsigned& val, XMLObj *obj)
+{
+  unsigned long l;
+  decode_xml_obj(l, obj);
+#if ULONG_MAX > UINT_MAX
+  if (l > UINT_MAX) {
+    throw RGWXMLDecoder::err("unsigned integer out of range");
+  }
+#endif
+
+  val = (unsigned)l;
+}
+
+void decode_xml_obj(bool& val, XMLObj *obj)
+{
+  string s = obj->get_data();
+  if (strcasecmp(s.c_str(), "true") == 0) {
+    val = true;
+    return;
+  }
+  if (strcasecmp(s.c_str(), "false") == 0) {
+    val = false;
+    return;
+  }
+  int i;
+  decode_xml_obj(i, obj);
+  val = (bool)i;
+}
+
+void decode_xml_obj(bufferlist& val, XMLObj *obj)
+{
+  string s = obj->get_data();
+
+  bufferlist bl;
+  bl.append(s.c_str(), s.size());
+  try {
+    val.decode_base64(bl);
+  } catch (buffer::error& err) {
+   throw RGWXMLDecoder::err("failed to decode base64");
+  }
+}
+
+void decode_xml_obj(utime_t& val, XMLObj *obj)
+{
+  string s = obj->get_data();
+  uint64_t epoch;
+  uint64_t nsec;
+  int r = utime_t::parse_date(s, &epoch, &nsec);
+  if (r == 0) {
+    val = utime_t(epoch, nsec);
+  } else {
+    throw RGWXMLDecoder::err("failed to decode utime_t");
+  }
+}
+
+void encode_xml(const char *name, const string& val, Formatter *f)
+{
+  f->dump_string(name, val);
+}
+
+void encode_xml(const char *name, const char *val, Formatter *f)
+{
+  f->dump_string(name, val);
+}
+
+void encode_xml(const char *name, bool val, Formatter *f)
+{
+  string s;
+  if (val)
+    s = "True";
+  else
+    s = "False";
+
+  f->dump_string(name, s);
+}
+
+void encode_xml(const char *name, int val, Formatter *f)
+{
+  f->dump_int(name, val);
+}
+
+void encode_xml(const char *name, long val, Formatter *f)
+{
+  f->dump_int(name, val);
+}
+
+void encode_xml(const char *name, unsigned val, Formatter *f)
+{
+  f->dump_unsigned(name, val);
+}
+
+void encode_xml(const char *name, unsigned long val, Formatter *f)
+{
+  f->dump_unsigned(name, val);
+}
+
+void encode_xml(const char *name, unsigned long long val, Formatter *f)
+{
+  f->dump_unsigned(name, val);
+}
+
+void encode_xml(const char *name, long long val, Formatter *f)
+{
+  f->dump_int(name, val);
+}
+
+void encode_xml(const char *name, const utime_t& val, Formatter *f)
+{
+  val.gmtime(f->dump_stream(name));
+}
+
+void encode_xml(const char *name, const bufferlist& bl, Formatter *f)
+{
+  /* need to copy data from bl, as it is const bufferlist */
+  bufferlist src = bl;
+
+  bufferlist b64;
+  src.encode_base64(b64);
+
+  string s(b64.c_str(), b64.length());
+
+  encode_xml(name, s, f);
+}
+
