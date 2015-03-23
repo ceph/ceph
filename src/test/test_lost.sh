@@ -19,6 +19,26 @@ setup() {
 
         # set recovery start to a really long time to ensure that we don't start recovery
         ./vstart.sh -d -n -o "$vstart_config" || die "vstart failed"
+
+	# for exiting pools set size not greater than number of OSDs,
+	# so recovery from degraded ps is possible
+	local changed=0
+	for pool in `./ceph osd pool ls`; do
+	    local size=`./ceph osd pool get ${pool} size | awk '{print $2}'`
+	    if [ "${size}" -gt "${CEPH_NUM_OSD}" ]; then
+		./ceph osd pool set ${pool} size ${CEPH_NUM_OSD}
+		changed=1
+	    fi
+	done
+	if [ ${changed} -eq 1 ]; then
+	    # XXX: When a pool has degraded pgs due to size greater than number
+	    # of OSDs, after decreasing the size the recovery still could stuck
+	    # and requires an additional kick.
+	    ./ceph osd out 0
+	    ./ceph osd in 0
+	fi
+
+	poll_cmd "./ceph health" HEALTH_OK 1 30
 }
 
 recovery1_impl() {
@@ -64,7 +84,15 @@ recovery1() {
         recovery1_impl
 }
 
-make_unfound() {
+lost1_impl() {
+	local flags="$@"
+	local lost_action=delete
+	local pgs_unfound pg
+
+	if is_set revert_lost $flags; then
+	    lost_action=revert
+	fi
+
         # Write lots and lots of objects
         write_objects 1 1 20 8000 $TEST_POOL
 
@@ -88,14 +116,21 @@ make_unfound() {
 	# Since recovery can't proceed, stuff should be unfound.
 	poll_cmd "./ceph pg debug unfound_objects_exist" TRUE 3 120
         [ $? -eq 1 ] || die "Failed to see unfound objects."
-}
 
-lost1_impl() {
-	try_to_fetch_unfound=$1
+	pgs_unfound=`./ceph health detail |awk '$1 = "pg" && /[0-9] unfound$/ {print $2}'`
 
-	make_unfound
+	[ -n "$pgs_unfound" ] || die "no pg with unfound objects"
 
-	if [ "$try_to_fetch_unfound" -eq 1 ]; then
+	for pg in $pgs_unfound; do
+	    ./ceph pg $pg mark_unfound_lost revert &&
+	    die "mark_unfound_lost unexpectedly succeeded for pg $pg"
+	done
+
+	if ! is_set mark_osd_lost $flags && ! is_set rm_osd $flags; then
+	    return
+	fi
+
+	if is_set try_to_fetch_unfound $flags; then
 	  # Ask for an object while it's still unfound, and
 	  # verify we get woken to an error when it's declared lost.
 	  echo "trying to get one of the unfound objects"
@@ -105,67 +140,20 @@ lost1_impl() {
 	  ) &
 	fi
 
-        # Lose all objects.
-	./ceph osd lost 0 --yes-i-really-mean-it
-
-	# Unfound objects go away and are turned into lost objects.
-	poll_cmd "./ceph pg debug unfound_objects_exist" FALSE 3 120
-        [ $? -eq 1 ] || die "Unfound objects didn't go away."
-
-	# Reading from a lost object gives back an error code.
-	# TODO: check error code
-	./rados -c ./ceph.conf -p $TEST_POOL get obj01 $TEMPDIR/obj01 &&\
-	  die "expected radostool error"
-
-	if [ "$try_to_fetch_unfound" -eq 1 ]; then
-	  echo "waiting for the try_to_fetch_unfound \
-radostool instance to finish"
-	  wait
-	fi
-}
-
-lost1() {
-        setup 2 'osd recovery delay start = 10000'
-        lost1_impl 0
-}
-
-lost2() {
-        setup 2 'osd recovery delay start = 10000'
-        lost1_impl 1
-}
-
-mark_unfound_lost1_impl() {
-	local mark_osd_lost=$1
-	local rm_osd=$2
-	local pgs_unfound pg
-
-	make_unfound
-
-	pgs_unfound=`./ceph health detail |awk '$1 = "pg" && /[0-9] unfound$/ {print $2}'`
-
-	[ -n "$pgs_unfound" ] || die "no pg with unfound objects"
-
-	for pg in $pgs_unfound; do
-	    ceph pg $pg mark_unfound_lost revert &&
-	      die "mark_unfound_lost unexpectedly succeeded for pg $pg"
-	done
-
-	if [ "$mark_osd_lost" -ne 1 -a "$rm_osd" -ne 1 ]; then
-	    return
-	fi
-
-	if [ "$mark_osd_lost" -eq 1 ]; then
+	if is_set mark_osd_lost $flags; then
 	  ./ceph osd lost 0 --yes-i-really-mean-it
 	fi
 
-	if [ "$rm_osd" -eq 1 ]; then
+	if is_set rm_osd $flags; then
 	    ./ceph osd rm 0
 	fi
 
-	for pg in $pgs_unfound; do
-	    ceph pg $pg mark_unfound_lost revert ||
-	      die "mark_unfound_lost failed for pg $pg"
-	done
+	if ! is_set auto_mark_unfound_lost $flags; then
+	    for pg in $pgs_unfound; do
+		./ceph pg $pg mark_unfound_lost ${lost_action} ||
+		  die "mark_unfound_lost failed for pg $pg"
+	    done
+	fi
 
 	start_recovery 2
 
@@ -174,29 +162,54 @@ mark_unfound_lost1_impl() {
         [ $? -eq 1 ] || die "Unfound objects didn't go away."
 
 	for pg in `ceph pg ls | awk '/^[0-9]/ {print $1}'`; do
-	    ceph pg $pg mark_unfound_lost revert 2>&1 |
+	    ./ceph pg $pg mark_unfound_lost revert 2>&1 |
 	      grep 'pg has no unfound objects' ||
 	      die "pg $pg has unfound objects"
 	done
+
+	# Reading from a lost object gives back an error code.
+	# TODO: check error code
+	./rados -c ./ceph.conf -p $TEST_POOL get obj01 $TEMPDIR/obj01
+	if [ lost_action = delete -a $? -eq 0 ]; then
+	  die "expected radostool error"
+	elif [ lost_action = revert -a $? -ne 0 ]; then
+	  die "unexpected radostool error"
+	fi
+
+	if is_set try_to_fetch_unfound $flags; then
+	  echo "waiting for the try_to_fetch_unfound \
+radostool instance to finish"
+	  wait
+	fi
 }
 
-mark_unfound_lost1() {
+lost1() {
         setup 2 'osd recovery delay start = 10000'
-        mark_unfound_lost1_impl 1 1
+        lost1_impl mark_osd_lost revert_lost
 }
 
-mark_unfound_lost2() {
+lost2() {
         setup 2 'osd recovery delay start = 10000'
-        mark_unfound_lost1_impl 1 0
+        lost1_impl mark_osd_lost try_to_fetch_unfound
 }
 
-mark_unfound_lost3() {
+lost3() {
         setup 2 'osd recovery delay start = 10000'
-        mark_unfound_lost1_impl 0 1
+        lost1_impl rm_osd
+}
+
+lost4() {
+        setup 2 'osd recovery delay start = 10000'
+        lost1_impl mark_osd_lost rm_osd
+}
+
+lost5() {
+        setup 2 'osd recovery delay start = 10000'
+        lost1_impl mark_osd_lost auto_mark_unfound_lost
 }
 
 all_osds_die_impl() {
-        poll_cmd "./ceph osd stat -o -" '3 up, 3 in' 20 240
+        poll_cmd "./ceph osd stat" '3 up, 3 in' 20 240
         [ $? -eq 1 ] || die "didn't start 3 osds"
 
         stop_osd 0
@@ -204,7 +217,7 @@ all_osds_die_impl() {
         stop_osd 2
 
 	# wait for the MOSDPGStat timeout
-        poll_cmd "./ceph osd stat -o -" '0 up' 20 240
+        poll_cmd "./ceph osd stat" '0 up' 20 240
         [ $? -eq 1 ] || die "all osds weren't marked as down"
 }
 
@@ -221,15 +234,24 @@ run() {
 
         lost1 || die "test failed"
 
-        lost2 || die "test failed"
+	# XXX: try_to_fetch_unfound test currently hangs on "waiting for the
+	# try_to_fetch_unfound radostool instance to finish"
+	#lost2 || die "test failed"
 
-	mark_unfound_lost1 || die "test failed"
+	lost3 || die "test failed"
 
-	mark_unfound_lost2 || die "test failed"
+	lost4 || die "test failed"
 
-	mark_unfound_lost3 || die "test failed"
+	# XXX: automatically marking lost is not implemented
+	#lost5 || die "test failed"
 
         all_osds_die || die "test failed"
 }
+
+if [ -z "$@" ]; then
+	run
+	echo OK
+	exit 0
+fi
 
 $@

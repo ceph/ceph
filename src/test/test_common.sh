@@ -38,6 +38,21 @@ die() {
         exit 1
 }
 
+# Test that flag is set (the element is found in the list)
+is_set()
+{
+	local flag=$1; shift
+	local flags="$@"
+	local i
+
+	for i in ${flags}; do
+		if [ "${flag}" = "${i}" ]; then
+			return 0
+		fi
+	done
+	return 1
+}
+
 # Stop an OSD started by vstart
 stop_osd() {
         osd_index=$1
