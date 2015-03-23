@@ -7,7 +7,7 @@ libradosstriper_la_SOURCES = \
 libradosstriper_la_CXXFLAGS = ${AM_CXXFLAGS}
 
 LIBRADOSSTRIPER_DEPS = $(LIBRADOS_DEPS) librados_api.la
-libradosstriper_la_LIBADD = $(LIBRADOSSTRIPER_DEPS)
+libradosstriper_la_LIBADD = $(LIBRADOSSTRIPER_DEPS) $(PTHREAD_LIBS) $(CRYPTO_LIBS) $(EXTRALIBS)
 libradosstriper_la_LDFLAGS = ${AM_LDFLAGS} -version-info 1:0:0
 if LINUX
 libradosstriper_la_LDFLAGS += -export-symbols-regex '^radosstriper_.*'
