@@ -238,6 +238,7 @@ def grep(term, file_path):
     with open(file_path) as _file:
         for line in _file.readlines():
             if term in line:
+                LOG.info('detected init as systemd')
                 return True
         return False
 
