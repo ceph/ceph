@@ -925,6 +925,9 @@ map<pg_shard_t, pg_info_t>::const_iterator PG::find_best_info(
     // Only consider peers with last_update >= min_last_update_acceptable
     if (p->second.last_update < min_last_update_acceptable)
       continue;
+    // disqualify anyone with a too old last_epoch_started
+    if (p->second.last_epoch_started < max_last_epoch_started_found)
+      continue;
     // Disquality anyone who is incomplete (not fully backfilled)
     if (p->second.is_incomplete())
       continue;

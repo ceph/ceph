@@ -183,14 +183,12 @@ public:
   set<pg_t> creating_pgs;   // lru: front = new additions, back = recently pinged
   map<int,set<pg_t> > creating_pgs_by_osd;
 
-  enum StuckPG {
-    STUCK_INACTIVE,
-    STUCK_UNCLEAN,
-    STUCK_UNDERSIZED,
-    STUCK_DEGRADED,
-    STUCK_STALE,
-    STUCK_NONE
-  };
+  // Bits that use to be enum StuckPG
+  static const int STUCK_INACTIVE = (1<<0);
+  static const int STUCK_UNCLEAN = (1<<1);
+  static const int STUCK_UNDERSIZED = (1<<2);
+  static const int STUCK_DEGRADED = (1<<3);
+  static const int STUCK_STALE = (1<<4);
   
   PGMap()
     : version(0),
@@ -272,10 +270,10 @@ public:
   void dump_pg_stats_plain(ostream& ss,
 			   const ceph::unordered_map<pg_t, pg_stat_t>& pg_stats,
 			   bool brief) const;
-  void get_stuck_stats(StuckPG type, utime_t cutoff,
+  void get_stuck_stats(int types, utime_t cutoff,
 		       ceph::unordered_map<pg_t, pg_stat_t>& stuck_pgs) const;
-  void dump_stuck(Formatter *f, StuckPG type, utime_t cutoff) const;
-  void dump_stuck_plain(ostream& ss, StuckPG type, utime_t cutoff) const;
+  void dump_stuck(Formatter *f, int types, utime_t cutoff) const;
+  void dump_stuck_plain(ostream& ss, int types, utime_t cutoff) const;
 
   void dump(ostream& ss) const;
   void dump_basic(ostream& ss) const;
