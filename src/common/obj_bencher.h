@@ -22,11 +22,14 @@
 struct bench_interval_data {
   double min_bandwidth;
   double max_bandwidth;
+  int min_iops;
+  int max_iops;
 };
 
 struct bench_history {
   vector<double> bandwidth;
   vector<double> latency;
+  vector<long> iops;
 };
 
 struct bench_data {
