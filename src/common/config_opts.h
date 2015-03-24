@@ -703,7 +703,7 @@ OPTION(rocksdb_write_buffer_size, OPT_U64, 0) // rocksdb write buffer size
 OPTION(rocksdb_target_file_size_base, OPT_U64, 0) // target file size for compaction
 OPTION(rocksdb_cache_size, OPT_U64, 0) // rocksdb cache size
 OPTION(rocksdb_block_size, OPT_U64, 0) // rocksdb block size
-OPTION(rocksdb_bloom_size, OPT_INT, 0) // rocksdb bloom bits per entry
+OPTION(rocksdb_bloom_bits_per_key, OPT_INT, 10) // rocksdb bloom bits per entry
 OPTION(rocksdb_write_buffer_num, OPT_INT, 0) // rocksdb bloom bits per entry
 OPTION(rocksdb_background_compactions, OPT_INT, 0) // number for background compaction jobs
 OPTION(rocksdb_background_flushes, OPT_INT, 0) // number for background flush jobs

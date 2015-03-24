@@ -8,6 +8,7 @@
 #include <errno.h>
 
 #include "rocksdb/db.h"
+#include "rocksdb/table.h"
 #include "rocksdb/env.h"
 #include "rocksdb/write_batch.h"
 #include "rocksdb/slice.h"
@@ -25,7 +26,7 @@ int RocksDBStore::init()
   options.write_buffer_size = g_conf->rocksdb_write_buffer_size;
   options.cache_size = g_conf->rocksdb_cache_size;
   options.block_size = g_conf->rocksdb_block_size;
-  options.bloom_size = g_conf->rocksdb_bloom_size;
+  options.bloom_bits_per_key = g_conf->rocksdb_bloom_bits_per_key;
   options.compression_type = g_conf->rocksdb_compression;
   options.paranoid_checks = g_conf->rocksdb_paranoid;
   options.max_open_files = g_conf->rocksdb_max_open_files;
@@ -48,6 +49,7 @@ int RocksDBStore::init()
 int RocksDBStore::do_open(ostream &out, bool create_if_missing)
 {
   rocksdb::Options ldoptions;
+  rocksdb::BlockBasedTableOptions table_options;
 
   if (options.write_buffer_size)
     ldoptions.write_buffer_size = options.write_buffer_size;
@@ -62,15 +64,12 @@ int RocksDBStore::do_open(ostream &out, bool create_if_missing)
   if (options.max_open_files)
     ldoptions.max_open_files = options.max_open_files;
   if (options.cache_size) {
-    ldoptions.block_cache = rocksdb::NewLRUCache(options.cache_size);
+    table_options.block_cache = rocksdb::NewLRUCache(options.cache_size);
   }
   if (options.block_size)
-    ldoptions.block_size = options.block_size;
-  if (options.bloom_size) {
-    const rocksdb::FilterPolicy *_filterpolicy =
-	rocksdb::NewBloomFilterPolicy(options.bloom_size);
-    ldoptions.filter_policy = _filterpolicy;
-    filterpolicy = _filterpolicy;
+    table_options.block_size = options.block_size;
+  if (options.bloom_bits_per_key) {
+    table_options.filter_policy.reset(rocksdb::NewBloomFilterPolicy(options.bloom_bits_per_key, true));
   }
   if (options.compression_type.length() == 0)
     ldoptions.compression = rocksdb::kNoCompression;
@@ -83,7 +82,7 @@ int RocksDBStore::do_open(ostream &out, bool create_if_missing)
   else
     ldoptions.compression = rocksdb::kNoCompression;
   if (options.block_restart_interval)
-    ldoptions.block_restart_interval = options.block_restart_interval;
+    table_options.block_restart_interval = options.block_restart_interval;
 
   ldoptions.error_if_exists = options.error_if_exists;
   ldoptions.paranoid_checks = options.paranoid_checks;
@@ -108,6 +107,8 @@ int RocksDBStore::do_open(ostream &out, bool create_if_missing)
   if(options.wal_dir.length())
     ldoptions.wal_dir = options.wal_dir;
 
+  //apply table_options
+  ldoptions.table_factory.reset(NewBlockBasedTableFactory(table_options));
 
   //rocksdb::DB *_db;
   rocksdb::Status status = rocksdb::DB::Open(ldoptions, path, &db);
