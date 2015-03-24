@@ -225,6 +225,29 @@ class ExecutableNotFound(CephDiskException):
 
 ####### utils
 
+def grep(term, file_path):
+    # A small grep-like function that will search for a word in a file and
+    # return True if it does and False if it does not.
+
+    # Implemented initially to have a similar behavior as the init system
+    # detection in Ceph's init scripts::
+
+    #     # detect systemd
+    #     # SYSTEMD=0
+    #     grep -qs systemd /proc/1/comm && SYSTEMD=1
+
+    # .. note:: Because we intent to be operating in silent mode, we explicitly
+    # return ``False`` if the file does not exist.
+    if not os.path.isfile(file_path):
+        return False
+
+    with open(file_path) as _file:
+        for line in _file.readlines():
+            if term in line:
+                LOG.info('detected init as systemd')
+                return True
+        return False
+
 
 def maybe_mkdir(*a, **kw):
     """
@@ -359,6 +382,18 @@ def platform_information():
     )
 
 
+def is_systemd():
+    """
+    Attempt to detect if a remote system is a systemd one or not
+    by looking into ``/proc`` just like the ceph init script does::
+
+        # detect systemd
+        # SYSTEMD=0
+        grep -qs systemd /proc/1/comm && SYSTEMD=1
+    """
+    return grep('systemd', '/proc/1/comm')
+
+
 def get_dev_name(path):
     """
     get device name from path.  e.g.::
@@ -466,6 +501,7 @@ def list_partitions(basename):
             partitions.append(name)
     return partitions
 
+
 def get_partition_base(dev):
     """
     Get the base device for a partition
@@ -483,6 +519,7 @@ def get_partition_base(dev):
         if os.path.exists(os.path.join('/sys/block', basename, name)):
             return '/dev/' + basename
     raise Error('no parent device for partition', dev)
+
 
 def is_partition(dev):
     """
@@ -1860,7 +1897,7 @@ def start_daemon(
                     'osd.{osd_id}'.format(osd_id=osd_id),
                     ],
                 )
-        elif os.path.exists(os.path.join(path, 'systemd')):
+        elif is_systemd():
             command_check_call(
                 [
                     'systemctl',
@@ -2118,6 +2155,8 @@ def activate(
                 )
             if conf_val is not None:
                 init = conf_val
+            elif is_systemd():
+                init = 'systemd'
             else:
                 (distro, release, codename) = platform.dist()
                 if distro == 'Ubuntu':
