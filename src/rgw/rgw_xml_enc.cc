@@ -6,13 +6,15 @@
 
 #include "common/Formatter.h"
 
+#define dout_subsys ceph_subsys_rgw
+
 void RGWBWRedirectInfo::dump_xml(Formatter *f) const
 {
   if (!redirect.protocol.empty()) {
     encode_xml("Protocol", redirect.protocol, f);
   }
   if (!redirect.hostname.empty()) {
-    encode_xml("Hostname", redirect.hostname, f);
+    encode_xml("HostName", redirect.hostname, f);
   }
   if (redirect.http_redirect_code > 0) {
     encode_xml("HttpRedirectCode", (int)redirect.http_redirect_code, f);
@@ -27,12 +29,12 @@ void RGWBWRedirectInfo::dump_xml(Formatter *f) const
 
 void RGWBWRedirectInfo::decode_xml(XMLObj *obj) {
   RGWXMLDecoder::decode_xml("Protocol", redirect.protocol, obj);
-  RGWXMLDecoder::decode_xml("Hostname", redirect.hostname, obj);
+  RGWXMLDecoder::decode_xml("HostName", redirect.hostname, obj);
   int code = 0;
   RGWXMLDecoder::decode_xml("HttpRedirectCode", code, obj);
   redirect.http_redirect_code = code;
   RGWXMLDecoder::decode_xml("ReplaceKeyPrefixWith", replace_key_prefix_with, obj);
-  RGWXMLDecoder::decode_xml("ReplcaeKeyWith", replace_key_with, obj);
+  RGWXMLDecoder::decode_xml("ReplaceKeyWith", replace_key_with, obj);
 }
 
 void RGWBWRoutingRuleCondition::dump_xml(Formatter *f) const
@@ -70,6 +72,14 @@ static void encode_xml(const char *name, const std::list<RGWBWRoutingRule>& l, c
 
 void RGWBucketWebsiteConf::dump_xml(Formatter *f) const
 {
+  if (!redirect_all.hostname.empty()) {
+    f->open_object_section("RedirectAllRequestsTo");
+    encode_xml("HostName", redirect_all.hostname, f);
+    if (!redirect_all.protocol.empty()) {
+      encode_xml("Protocol", redirect_all.protocol, f);
+    }
+    f->close_section();
+  }
   if (!index_doc_suffix.empty()) {
     f->open_object_section("IndexDocument");
     encode_xml("Suffix", index_doc_suffix, f);
@@ -91,14 +101,20 @@ void decode_xml_obj(list<RGWBWRoutingRule>& l, XMLObj *obj)
 }
 
 void RGWBucketWebsiteConf::decode_xml(XMLObj *obj) {
-  XMLObj *o = obj->find_first("IndexDocument");
+  XMLObj *o = obj->find_first("RedirectAllRequestsTo");
   if (o) {
-    RGWXMLDecoder::decode_xml("Suffix", index_doc_suffix, o);
+    RGWXMLDecoder::decode_xml("HostName", redirect_all.hostname, o, true);
+    RGWXMLDecoder::decode_xml("Protocol", redirect_all.protocol, o);
+  } else {
+    o = obj->find_first("IndexDocument");
+    if (o) {
+      RGWXMLDecoder::decode_xml("Suffix", index_doc_suffix, o);
+    }
+    o = obj->find_first("ErrorDocument");
+    if (o) {
+      RGWXMLDecoder::decode_xml("Key", error_doc, o);
+    }
+    RGWXMLDecoder::decode_xml("RoutingRules", routing_rules.rules, obj);
   }
-  o = obj->find_first("ErrorDocument");
-  if (o) {
-    RGWXMLDecoder::decode_xml("Key", error_doc, o);
-  }
-  RGWXMLDecoder::decode_xml("RoutingRules", routing_rules.rules, obj);
 }
 
