@@ -135,6 +135,7 @@ Parameters
    striping: striping v2 support
    exclusive-lock: exclusive locking support
    object-map: object map support (requires exclusive-lock)
+   fast-diff: fast diff calculations (requires object-map)
 
 .. option:: --image-shared
 
