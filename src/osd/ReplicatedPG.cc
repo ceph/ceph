@@ -2060,9 +2060,12 @@ void ReplicatedPG::finish_proxy_read(hobject_t oid, ceph_tid_t tid, int r)
     return;
   }
   assert(q->second.size());
-  OpRequestRef op = q->second.front();
-  assert(op == prdop->op);
-  q->second.pop_front();
+  list<OpRequestRef>::iterator it = std::find(q->second.begin(),
+                                              q->second.end(),
+					      prdop->op);
+  assert(it != q->second.end());
+  OpRequestRef op = *it;
+  q->second.erase(it);
   if (q->second.size() == 0) {
     in_progress_proxy_reads.erase(oid);
   }
