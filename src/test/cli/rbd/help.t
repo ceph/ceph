@@ -21,9 +21,10 @@
            <path> <image-name>                  import image from file (dest
                                                 defaults as the filename part
                                                 of file). "-" for stdin
-    diff <image-name> [--from-snap <snap-name>] print extents that differ since
+    diff [--from-snap <snap-name>] [--object-extents] <image-name>
+                                                print extents that differ since
                                                 a previous snap, or image creation
-    export-diff <image-name> [--from-snap <snap-name>] <path>
+    export-diff [--from-snap <snap-name>] [--object-extents] <image-name> <path>
                                                 export an incremental diff to
                                                 path, or "-" for stdout
     merge-diff <diff1> <diff2> <path>           merge <diff1> and <diff2> into
