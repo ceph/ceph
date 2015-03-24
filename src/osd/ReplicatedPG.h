@@ -367,26 +367,6 @@ public:
   const pg_pool_t &get_pool() const {
     return pool.info;
   }
-  map<pg_shard_t, const pg_missing_t *> get_all_missing() const {
-    map<pg_shard_t, const pg_missing_t *> all_missing;
-    all_missing[pg_whoami] = &(pg_log.get_missing());
-    for (map<pg_shard_t, pg_missing_t>::const_iterator i = peer_missing.begin();
-	 i != peer_missing.end();
-	 ++i) {
-      all_missing[i->first] = &(i->second);
-    }
-    return all_missing;
-  }
-  const map<pg_shard_t, const pg_info_t *> get_all_info() const {
-    map<pg_shard_t, const pg_info_t *> all_info;
-    all_info[pg_whoami] = &info;
-    for (map<pg_shard_t, pg_info_t>::const_iterator i = peer_info.begin();
-	 i != peer_info.end();
-	 ++i) {
-      all_info[i->first] = &(i->second);
-    }
-    return all_info;
-  }
   ObjectContextRef get_obc(
     const hobject_t &hoid,
     map<string, bufferlist> &attrs) {
@@ -415,13 +395,11 @@ public:
     if (peer == get_primary())
       return true;
     assert(peer_info.count(peer));
-    bool should_send_backfill = hoid.pool != (int64_t)info.pgid.pool() ||
+    bool should_send = hoid.pool != (int64_t)info.pgid.pool() ||
       hoid <= MAX(last_backfill_started, peer_info[peer].last_backfill);
-    if (!should_send_backfill)
+    if (!should_send)
       assert(is_backfill_targets(peer));
-
-    assert(peer_missing.count(peer));
-    return should_send_backfill && !peer_missing[peer].is_missing(hoid);
+    return should_send;
   }
   
   void update_peer_last_complete_ondisk(
@@ -1514,11 +1492,6 @@ public:
   void wait_for_all_missing(OpRequestRef op);
 
   bool is_degraded_or_backfilling_object(const hobject_t& oid);
-
-  /* true if the object is missing on any peer, *healthy_copies will be
-   * set to the number of complete peers not missing the object
-   */
-  bool is_degraded_object(const hobject_t &oid, int *healthy_copies);
   void wait_for_degraded_object(const hobject_t& oid, OpRequestRef op);
 
   bool maybe_await_blocked_snapset(const hobject_t &soid, OpRequestRef op);
