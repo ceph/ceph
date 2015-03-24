@@ -2272,8 +2272,10 @@ void Server::apply_allocated_inos(MDRequestRef& mdr)
   }
   if (mdr->prealloc_inos.size()) {
     assert(session);
-    session->pending_prealloc_inos.subtract(mdr->prealloc_inos);
-    session->info.prealloc_inos.insert(mdr->prealloc_inos);
+    if (!mdr->killed) {
+      session->pending_prealloc_inos.subtract(mdr->prealloc_inos);
+      session->info.prealloc_inos.insert(mdr->prealloc_inos);
+    }
     mds->sessionmap.mark_dirty(session);
     mds->inotable->apply_alloc_ids(mdr->prealloc_inos);
   }
