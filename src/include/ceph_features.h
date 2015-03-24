@@ -62,7 +62,6 @@
 #define CEPH_FEATURE_CRUSH_V4      (1ULL<<48)  /* straw2 buckets */
 #define CEPH_FEATURE_OSD_MIN_SIZE_RECOVERY (1ULL<<49)
 // duplicated since it was introduced at the same time as MIN_SIZE_RECOVERY
-#define CEPH_FEATURE_OSD_DEGRADED_WRITES (1ULL<<49)
 #define CEPH_FEATURE_OSD_PROXY_FEATURES (1ULL<<49)  /* overlap w/ above */
 
 #define CEPH_FEATURE_RESERVED2 (1ULL<<61)  /* slow down, we are almost out... */
@@ -149,7 +148,6 @@ static inline unsigned long long ceph_sanitize_features(unsigned long long f) {
 	 CEPH_FEATURE_MDS_QUOTA | \
          CEPH_FEATURE_CRUSH_V4 |	     \
          CEPH_FEATURE_OSD_MIN_SIZE_RECOVERY |		 \
-         CEPH_FEATURE_OSD_DEGRADED_WRITES |		 \
 	 0ULL)
 
 #define CEPH_FEATURES_SUPPORTED_DEFAULT  CEPH_FEATURES_ALL

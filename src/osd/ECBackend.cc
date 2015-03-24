@@ -805,6 +805,7 @@ void ECBackend::handle_sub_write(
 {
   if (msg)
     msg->mark_started();
+  assert(!get_parent()->get_log().get_missing().is_missing(op.soid));
   if (!get_parent()->pgb_is_primary())
     get_parent()->update_stats(op.stats);
   ObjectStore::Transaction *localt = new ObjectStore::Transaction;
@@ -1542,13 +1543,6 @@ void ECBackend::start_write(Op *op) {
       trans.find(i->shard);
     assert(iter != trans.end());
     bool should_send = get_parent()->should_send_op(*i, op->hoid);
-    if (should_send) {
-      dout(10) << __func__ << ": sending transaction for object "
-	       << op->hoid << " to shard " << *i << dendl;
-    } else {
-      dout(10) << __func__ << ": NOT sending transaction for object "
-	       << op->hoid << " to shard " << *i << dendl;
-    }
     pg_stat_t stats =
       should_send ?
       get_info().stats :
