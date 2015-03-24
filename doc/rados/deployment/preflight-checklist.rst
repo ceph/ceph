@@ -102,8 +102,6 @@ Ensure that your Admin node has connectivity to the network and to your Server
 node (e.g., ensure ``iptables``, ``ufw`` or other tools that may prevent
 connections, traffic forwarding, etc. to allow what you need).
 
-.. tip:: The ``ceph-deploy`` tool is new and you may encounter some issues
-   without  effective error messages. 
 
 Once you have completed this pre-flight checklist, you are ready to begin using
 ``ceph-deploy``.
