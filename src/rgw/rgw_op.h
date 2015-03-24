@@ -391,6 +391,22 @@ public:
   virtual uint32_t op_mask() { return RGW_OP_TYPE_WRITE; }
 };
 
+class RGWDeleteBucketWebsite : public RGWOp {
+protected:
+  int ret;
+public:
+  RGWDeleteBucketWebsite() : ret(0) {}
+
+  int verify_permission();
+  void pre_exec();
+  void execute();
+
+  virtual void send_response() = 0;
+  virtual const string name() { return "delete_bucket_website"; }
+  virtual RGWOpType get_type() { return RGW_OP_SET_BUCKET_WEBSITE; }
+  virtual uint32_t op_mask() { return RGW_OP_TYPE_WRITE; }
+};
+
 class RGWStatBucket : public RGWOp {
 protected:
   int ret;

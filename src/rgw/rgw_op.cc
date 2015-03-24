@@ -1244,6 +1244,31 @@ void RGWSetBucketWebsite::execute()
   }
 }
 
+int RGWDeleteBucketWebsite::verify_permission()
+{
+  if (s->user.user_id.compare(s->bucket_owner.get_id()) != 0)
+    return -EACCES;
+
+  return 0;
+}
+
+void RGWDeleteBucketWebsite::pre_exec()
+{
+  rgw_bucket_object_pre_exec(s);
+}
+
+void RGWDeleteBucketWebsite::execute()
+{
+  s->bucket_info.has_website = false;
+  s->bucket_info.website_conf = RGWBucketWebsiteConf();
+
+  ret = store->put_bucket_instance_info(s->bucket_info, false, 0, &s->bucket_attrs);
+  if (ret < 0) {
+    ldout(s->cct, 0) << "NOTICE: put_bucket_info on bucket=" << s->bucket.name << " returned err=" << ret << dendl;
+    return;
+  }
+}
+
 int RGWStatBucket::verify_permission()
 {
   if (!verify_bucket_permission(s, RGW_PERM_READ))
