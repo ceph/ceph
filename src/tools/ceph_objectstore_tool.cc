@@ -1857,7 +1857,8 @@ int do_import(ObjectStore *store, OSDSuperblock& sb)
   if (ret) return ret;
 
   // done, clear removal flag
-  cout << "done, clearing removal flag flag" << std::endl;
+  if (debug)
+    cerr << "done, clearing removal flag" << std::endl;
   set<string> remove;
   remove.insert("_remove");
   t->omap_rmkeys(coll, pgid.make_pgmeta_oid(), remove);
