@@ -44,6 +44,7 @@
 #include "include/interval_set.h"
 #include "include/stringify.h"
 
+#include <boost/assign/list_of.hpp>
 #include <boost/scope_exit.hpp>
 
 using namespace std;
@@ -1992,21 +1993,24 @@ int iterate_cb(uint64_t off, size_t len, int exists, void *arg)
   return 0;
 }
 
-void scribble(librbd::Image& image, int n, int max, interval_set<uint64_t> *exists, interval_set<uint64_t> *what)
+void scribble(librbd::Image& image, int n, int max,
+              interval_set<uint64_t> *exists,
+              interval_set<uint64_t> *what)
 {
   uint64_t size;
   image.size(&size);
   interval_set<uint64_t> exists_at_start = *exists;
+
   for (int i=0; i<n; i++) {
     uint64_t off = rand() % (size - max + 1);
     uint64_t len = 1 + rand() % max;
     if (rand() % 4 == 0) {
       ASSERT_EQ((int)len, image.discard(off, len));
-      interval_set<uint64_t> w;      
+      interval_set<uint64_t> w;
       w.insert(off, len);
 
       // the zeroed bit no longer exists...
-      w.intersection_of(*exists); 
+      w.intersection_of(*exists);
       exists->subtract(w);
 
       // the bits we discarded are no long written...
@@ -2033,20 +2037,62 @@ void scribble(librbd::Image& image, int n, int max, interval_set<uint64_t> *exis
   }
 }
 
-TEST_F(TestLibRBD, DiffIterate)
+interval_set<uint64_t> round_diff_interval(const interval_set<uint64_t>& diff,
+                                           uint64_t object_size)
+{
+  if (object_size == 0) {
+    return diff;
+  }
+
+  interval_set<uint64_t> rounded_diff;
+  for (interval_set<uint64_t>::const_iterator it = diff.begin();
+       it != diff.end(); ++it) {
+    uint64_t off = it.get_start();
+    uint64_t len = it.get_len();
+    off -= off % object_size;
+    len += (object_size - (len % object_size));
+    interval_set<uint64_t> interval;
+    interval.insert(off, len);
+    rounded_diff.union_of(interval);
+  }
+  return rounded_diff;
+}
+
+template <typename T>
+class DiffIterateTest : public TestLibRBD {
+public:
+  static const uint8_t whole_object = T::whole_object;
+};
+
+template <bool _whole_object>
+class DiffIterateParams {
+public:
+  static const uint8_t whole_object = _whole_object;
+};
+
+typedef ::testing::Types<DiffIterateParams<false>,
+                         DiffIterateParams<true> > DiffIterateTypes;
+TYPED_TEST_CASE(DiffIterateTest, DiffIterateTypes);
+
+TYPED_TEST(DiffIterateTest, DiffIterate)
 {
   librados::IoCtx ioctx;
-  ASSERT_EQ(0, _rados.ioctx_create(m_pool_name.c_str(), ioctx));
+  ASSERT_EQ(0, this->_rados.ioctx_create(this->m_pool_name.c_str(), ioctx));
 
   {
     librbd::RBD rbd;
     librbd::Image image;
     int order = 0;
-    std::string name = get_temp_image_name();
+    std::string name = this->get_temp_image_name();
     uint64_t size = 20 << 20;
 
     ASSERT_EQ(0, create_image_pp(rbd, ioctx, name.c_str(), size, &order));
     ASSERT_EQ(0, rbd.open(ioctx, image, name.c_str(), NULL));
+
+    uint64_t object_size = 0;
+    if (this->whole_object) {
+      object_size = 1 << order;
+    }
 
     interval_set<uint64_t> exists;
     interval_set<uint64_t> one, two;
@@ -2054,17 +2100,20 @@ TEST_F(TestLibRBD, DiffIterate)
     cout << " wrote " << one << std::endl;
     ASSERT_EQ(0, image.snap_create("one"));
     scribble(image, 10, 102400, &exists, &two);
+
+    two = round_diff_interval(two, object_size);
     cout << " wrote " << two << std::endl;
 
     interval_set<uint64_t> diff;
-    ASSERT_EQ(0, image.diff_iterate("one", 0, size, iterate_cb, (void *)&diff));
+    ASSERT_EQ(0, image.diff_iterate2("one", 0, size, true, this->whole_object,
+                                     iterate_cb, (void *)&diff));
     cout << " diff was " << diff << std::endl;
     if (!two.subset_of(diff)) {
       interval_set<uint64_t> i;
       i.intersection_of(two, diff);
       interval_set<uint64_t> l = two;
       l.subtract(i);
-      cout << " ... two - (two*diff) = " << l << std::endl;     
+      cout << " ... two - (two*diff) = " << l << std::endl;
     }
     ASSERT_TRUE(two.subset_of(diff));
   }
@@ -2072,8 +2121,15 @@ TEST_F(TestLibRBD, DiffIterate)
 }
 
 struct diff_extent {
-  diff_extent(uint64_t offset, uint64_t length, bool exists) :
-    offset(offset), length(length), exists(exists) {}
+  diff_extent(uint64_t _offset, uint64_t _length, bool _exists,
+              uint64_t object_size) :
+    offset(_offset), length(_length), exists(_exists)
+  {
+    if (object_size != 0) {
+      offset -= offset % object_size;
+      length = object_size;
+    }
+  }
   uint64_t offset;
   uint64_t length;
   bool exists;
@@ -2090,64 +2146,68 @@ int vector_iterate_cb(uint64_t off, size_t len, int exists, void *arg)
 {
   cout << "iterate_cb " << off << "~" << len << std::endl;
   vector<diff_extent> *diff = static_cast<vector<diff_extent> *>(arg);
-  diff->push_back(diff_extent(off, len, exists));
+  diff->push_back(diff_extent(off, len, exists, 0));
   return 0;
 }
 
-TEST_F(TestLibRBD, DiffIterateDiscard)
+TYPED_TEST(DiffIterateTest, DiffIterateDiscard)
 {
   librados::IoCtx ioctx;
-  ASSERT_EQ(0, _rados.ioctx_create(m_pool_name.c_str(), ioctx));
+  ASSERT_EQ(0, this->_rados.ioctx_create(this->m_pool_name.c_str(), ioctx));
 
   librbd::RBD rbd;
   librbd::Image image;
   int order = 0;
-  std::string name = get_temp_image_name();
+  std::string name = this->get_temp_image_name();
   uint64_t size = 20 << 20;
 
   ASSERT_EQ(0, create_image_pp(rbd, ioctx, name.c_str(), size, &order));
   ASSERT_EQ(0, rbd.open(ioctx, image, name.c_str(), NULL));
 
+  uint64_t object_size = 0;
+  if (this->whole_object) {
+    object_size = 1 << order;
+  }
   vector<diff_extent> extents;
   ceph::bufferlist bl;
 
-  ASSERT_EQ(0, image.diff_iterate(NULL, 0, size,
-      			    vector_iterate_cb, (void *) &extents));
+  ASSERT_EQ(0, image.diff_iterate2(NULL, 0, size, true, this->whole_object,
+      			           vector_iterate_cb, (void *) &extents));
   ASSERT_EQ(0u, extents.size());
 
   char data[256];
   memset(data, 1, sizeof(data));
   bl.append(data, 256);
   ASSERT_EQ(256, image.write(0, 256, bl));
-  ASSERT_EQ(0, image.diff_iterate(NULL, 0, size,
-      			    vector_iterate_cb, (void *) &extents));
+  ASSERT_EQ(0, image.diff_iterate2(NULL, 0, size, true, this->whole_object,
+      			           vector_iterate_cb, (void *) &extents));
   ASSERT_EQ(1u, extents.size());
-  ASSERT_EQ(diff_extent(0, 256, true), extents[0]);
+  ASSERT_EQ(diff_extent(0, 256, true, object_size), extents[0]);
 
   int obj_ofs = 256;
   ASSERT_EQ(obj_ofs, image.discard(0, obj_ofs));
 
   extents.clear();
-  ASSERT_EQ(0, image.diff_iterate(NULL, 0, size,
-      			    vector_iterate_cb, (void *) &extents));
+  ASSERT_EQ(0, image.diff_iterate2(NULL, 0, size, true, this->whole_object,
+      			           vector_iterate_cb, (void *) &extents));
   ASSERT_EQ(0u, extents.size());
 
   ASSERT_EQ(0, image.snap_create("snap1"));
   ASSERT_EQ(256, image.write(0, 256, bl));
-  ASSERT_EQ(0, image.diff_iterate(NULL, 0, size,
-      			    vector_iterate_cb, (void *) &extents));
+  ASSERT_EQ(0, image.diff_iterate2(NULL, 0, size, true, this->whole_object,
+      			           vector_iterate_cb, (void *) &extents));
   ASSERT_EQ(1u, extents.size());
-  ASSERT_EQ(diff_extent(0, 256, true), extents[0]);
+  ASSERT_EQ(diff_extent(0, 256, true, object_size), extents[0]);
   ASSERT_EQ(0, image.snap_create("snap2"));
 
   ASSERT_EQ(obj_ofs, image.discard(0, obj_ofs));
 
   extents.clear();
   ASSERT_EQ(0, image.snap_set("snap2"));
-  ASSERT_EQ(0, image.diff_iterate("snap1", 0, size,
-      			    vector_iterate_cb, (void *) &extents));
+  ASSERT_EQ(0, image.diff_iterate2("snap1", 0, size, true, this->whole_object,
+      			           vector_iterate_cb, (void *) &extents));
   ASSERT_EQ(1u, extents.size());
-  ASSERT_EQ(diff_extent(0, 256, true), extents[0]);
+  ASSERT_EQ(diff_extent(0, 256, true, object_size), extents[0]);
 
   ASSERT_EQ(0, image.snap_set(NULL));
   ASSERT_EQ(1 << order, image.discard(0, 1 << order));
@@ -2155,26 +2215,31 @@ TEST_F(TestLibRBD, DiffIterateDiscard)
   ASSERT_EQ(0, image.snap_set("snap3"));
 
   extents.clear();
-  ASSERT_EQ(0, image.diff_iterate("snap1", 0, size,
-      			    vector_iterate_cb, (void *) &extents));
+  ASSERT_EQ(0, image.diff_iterate2("snap1", 0, size, true, this->whole_object,
+      			           vector_iterate_cb, (void *) &extents));
   ASSERT_EQ(1u, extents.size());
-  ASSERT_EQ(diff_extent(0, 256, false), extents[0]);
-  ASSERT_PASSED(validate_object_map, image);
+  ASSERT_EQ(diff_extent(0, 256, false, object_size), extents[0]);
+  ASSERT_PASSED(this->validate_object_map, image);
 }
 
-TEST_F(TestLibRBD, DiffIterateStress)
+TYPED_TEST(DiffIterateTest, DiffIterateStress)
 {
   librados::IoCtx ioctx;
-  ASSERT_EQ(0, _rados.ioctx_create(m_pool_name.c_str(), ioctx));
+  ASSERT_EQ(0, this->_rados.ioctx_create(this->m_pool_name.c_str(), ioctx));
 
   librbd::RBD rbd;
   librbd::Image image;
   int order = 0;
-  std::string name = get_temp_image_name();
+  std::string name = this->get_temp_image_name();
   uint64_t size = 400 << 20;
 
   ASSERT_EQ(0, create_image_pp(rbd, ioctx, name.c_str(), size, &order));
   ASSERT_EQ(0, rbd.open(ioctx, image, name.c_str(), NULL));
+
+  uint64_t object_size = 0;
+  if (this->whole_object) {
+    object_size = 1 << order;
+  }
 
   interval_set<uint64_t> curexists;
   vector<interval_set<uint64_t> > wrote;
@@ -2197,49 +2262,57 @@ TEST_F(TestLibRBD, DiffIterateStress)
       interval_set<uint64_t> diff, actual, uex;
       for (int k=i+1; k<=j; k++)
         diff.union_of(wrote[k]);
-      cout << "from " << i << " to " << j << " diff " << diff << std::endl;
+      cout << "from " << i << " to " << j << " diff "
+           << round_diff_interval(diff, object_size) << std::endl;
 
       // limit to extents that exists both at the beginning and at the end
       uex.union_of(exists[i], exists[j]);
       diff.intersection_of(uex);
-      cout << "  limited diff " << diff << std::endl;
+      diff = round_diff_interval(diff, object_size);
+      cout << " limited diff " << diff << std::endl;
 
       image.snap_set(snap[j].c_str());
-      ASSERT_EQ(0, image.diff_iterate(snap[i].c_str(), 0, size, iterate_cb, (void *)&actual));
+      ASSERT_EQ(0, image.diff_iterate2(snap[i].c_str(), 0, size, true,
+                                       this->whole_object, iterate_cb,
+                                       (void *)&actual));
       cout << " actual was " << actual << std::endl;
       if (!diff.subset_of(actual)) {
         interval_set<uint64_t> i;
         i.intersection_of(diff, actual);
         interval_set<uint64_t> l = diff;
         l.subtract(i);
-        cout << " ... diff - (actual*diff) = " << l << std::endl;     
+        cout << " ... diff - (actual*diff) = " << l << std::endl;
       }
       ASSERT_TRUE(diff.subset_of(actual));
     }
   }
 
-  ASSERT_PASSED(validate_object_map, image);
+  ASSERT_PASSED(this->validate_object_map, image);
 }
 
-TEST_F(TestLibRBD, DiffIterateRegression6926)
+TYPED_TEST(DiffIterateTest, DiffIterateRegression6926)
 {
   librados::IoCtx ioctx;
-  ASSERT_EQ(0, _rados.ioctx_create(m_pool_name.c_str(), ioctx));
+  ASSERT_EQ(0, this->_rados.ioctx_create(this->m_pool_name.c_str(), ioctx));
 
   librbd::RBD rbd;
   librbd::Image image;
   int order = 0;
-  std::string name = get_temp_image_name();
+  std::string name = this->get_temp_image_name();
   uint64_t size = 20 << 20;
 
   ASSERT_EQ(0, create_image_pp(rbd, ioctx, name.c_str(), size, &order));
   ASSERT_EQ(0, rbd.open(ioctx, image, name.c_str(), NULL));
 
+  uint64_t object_size = 0;
+  if (this->whole_object) {
+    object_size = 1 << order;
+  }
   vector<diff_extent> extents;
   ceph::bufferlist bl;
 
-  ASSERT_EQ(0, image.diff_iterate(NULL, 0, size,
-      			    vector_iterate_cb, (void *) &extents));
+  ASSERT_EQ(0, image.diff_iterate2(NULL, 0, size, true, this->whole_object,
+      			           vector_iterate_cb, (void *) &extents));
   ASSERT_EQ(0u, extents.size());
 
   ASSERT_EQ(0, image.snap_create("snap1"));
@@ -2249,16 +2322,67 @@ TEST_F(TestLibRBD, DiffIterateRegression6926)
   ASSERT_EQ(256, image.write(0, 256, bl));
 
   extents.clear();
-  ASSERT_EQ(0, image.diff_iterate(NULL, 0, size,
-      			    vector_iterate_cb, (void *) &extents));
+  ASSERT_EQ(0, image.diff_iterate2(NULL, 0, size, true, this->whole_object,
+      			           vector_iterate_cb, (void *) &extents));
   ASSERT_EQ(1u, extents.size());
-  ASSERT_EQ(diff_extent(0, 256, true), extents[0]);
+  ASSERT_EQ(diff_extent(0, 256, true, object_size), extents[0]);
 
   ASSERT_EQ(0, image.snap_set("snap1"));
   extents.clear();
-  ASSERT_EQ(0, image.diff_iterate(NULL, 0, size,
-      			    vector_iterate_cb, (void *) &extents));
+  ASSERT_EQ(0, image.diff_iterate2(NULL, 0, size, true, this->whole_object,
+      			           vector_iterate_cb, (void *) &extents));
   ASSERT_EQ(static_cast<size_t>(0), extents.size());
+}
+
+TYPED_TEST(DiffIterateTest, DiffIterateIgnoreParent)
+{
+  REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
+
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, this->_rados.ioctx_create(this->m_pool_name.c_str(), ioctx));
+
+  librbd::RBD rbd;
+  librbd::Image image;
+  std::string name = this->get_temp_image_name();
+  uint64_t size = 20 << 20;
+  int order = 0;
+
+  ASSERT_EQ(0, create_image_pp(rbd, ioctx, name.c_str(), size, &order));
+  ASSERT_EQ(0, rbd.open(ioctx, image, name.c_str(), NULL));
+
+  uint64_t object_size = 0;
+  if (this->whole_object) {
+    object_size = 1 << order;
+  }
+
+  bufferlist bl;
+  bl.append(buffer::create(size));
+  bl.zero();
+  interval_set<uint64_t> one;
+  one.insert(0, size);
+  ASSERT_EQ((int)size, image.write(0, size, bl));
+  ASSERT_EQ(0, image.snap_create("one"));
+  ASSERT_EQ(0, image.snap_protect("one"));
+
+  std::string clone_name = this->get_temp_image_name();
+  ASSERT_EQ(0, rbd.clone(ioctx, name.c_str(), "one", ioctx, clone_name.c_str(),
+                         RBD_FEATURE_LAYERING, &order));
+  ASSERT_EQ(0, rbd.open(ioctx, image, clone_name.c_str(), NULL));
+
+  interval_set<uint64_t> exists;
+  interval_set<uint64_t> two;
+  scribble(image, 10, 102400, &exists, &two);
+  two = round_diff_interval(two, object_size);
+  cout << " wrote " << two << " to clone" << std::endl;
+
+  interval_set<uint64_t> diff;
+  ASSERT_EQ(0, image.diff_iterate2(NULL, 0, size, false, this->whole_object,
+                                   iterate_cb, (void *)&diff));
+  cout << " diff was " << diff << std::endl;
+  if (!this->whole_object) {
+    ASSERT_FALSE(one.subset_of(diff));
+  }
+  ASSERT_TRUE(two.subset_of(diff));
 }
 
 TEST_F(TestLibRBD, ZeroLengthWrite)
@@ -2459,6 +2583,44 @@ TEST_F(TestLibRBD, SnapCreateViaLockOwner)
   ASSERT_EQ(0, image2.snap_create("snap1"));
   ASSERT_TRUE(image1.snap_exists("snap1"));
   ASSERT_TRUE(image2.snap_exists("snap1"));
+
+  ASSERT_EQ(0, image1.is_exclusive_lock_owner(&lock_owner));
+  ASSERT_TRUE(lock_owner);
+}
+
+TEST_F(TestLibRBD, SnapRemoveViaLockOwner)
+{
+  REQUIRE_FEATURE(RBD_FEATURE_LAYERING | RBD_FEATURE_EXCLUSIVE_LOCK);
+
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(m_pool_name.c_str(), ioctx));
+
+  librbd::RBD rbd;
+  std::string name = get_temp_image_name();
+  uint64_t size = 2 << 20;
+  int order = 0;
+  ASSERT_EQ(0, create_image_pp(rbd, ioctx, name.c_str(), size, &order));
+
+  librbd::Image image1;
+  ASSERT_EQ(0, rbd.open(ioctx, image1, name.c_str(), NULL));
+
+  bufferlist bl;
+  ASSERT_EQ(0, image1.write(0, 0, bl));
+  ASSERT_EQ(0, image1.snap_create("snap1"));
+
+  bool lock_owner;
+  ASSERT_EQ(0, image1.is_exclusive_lock_owner(&lock_owner));
+  ASSERT_TRUE(lock_owner);
+
+  librbd::Image image2;
+  ASSERT_EQ(0, rbd.open(ioctx, image2, name.c_str(), NULL));
+
+  ASSERT_EQ(0, image2.is_exclusive_lock_owner(&lock_owner));
+  ASSERT_FALSE(lock_owner);
+
+  ASSERT_EQ(0, image2.snap_remove("snap1"));
+  ASSERT_FALSE(image1.snap_exists("snap1"));
+  ASSERT_FALSE(image2.snap_exists("snap1"));
 
   ASSERT_EQ(0, image1.is_exclusive_lock_owner(&lock_owner));
   ASSERT_TRUE(lock_owner);
