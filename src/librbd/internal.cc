@@ -55,6 +55,34 @@ using librados::IoCtx;
 using librados::Rados;
 
 namespace librbd {
+
+namespace {
+
+int remove_object_map(ImageCtx *ictx) {
+  assert(ictx->snap_lock.is_locked());
+  CephContext *cct = ictx->cct;
+
+  int r;
+  for (std::map<snap_t, SnapInfo>::iterator it = ictx->snap_info.begin();
+       it != ictx->snap_info.end(); ++it) {
+    std::string oid(ObjectMap::object_map_name(ictx->id, it->first));
+    r = ictx->md_ctx.remove(oid);
+    if (r < 0 && r != -ENOENT) {
+      lderr(cct) << "failed to remove object map " << oid << ": "
+                 << cpp_strerror(r) << dendl;
+      return r;
+    }
+  }
+
+  r = ictx->md_ctx.remove(ObjectMap::object_map_name(ictx->id, CEPH_NOSNAP));
+  if (r < 0 && r != -ENOENT) {
+    lderr(cct) << "failed to remove object map: " << cpp_strerror(r) << dendl;
+  }
+  return 0;
+}
+
+} // anonymous namespace
+
   const string id_obj_name(const string &name)
   {
     return RBD_ID_PREFIX + name;
@@ -1381,18 +1409,28 @@ reprotect_and_return_err:
     }
 
     uint64_t mask = features;
-    if ((features & RBD_FEATURE_EXCLUSIVE_LOCK) != 0 && !enabled) {
-      if ((new_features & RBD_FEATURE_OBJECT_MAP) != 0) {
-        lderr(cct) << "cannot disable exclusive lock" << dendl;
-        return -EINVAL;
+    if (enabled) {
+      if ((features & RBD_FEATURE_OBJECT_MAP) != 0) {
+        if ((new_features & RBD_FEATURE_EXCLUSIVE_LOCK) == 0) {
+          lderr(cct) << "cannot enable object map" << dendl;
+          return -EINVAL;
+        }
+        mask |= RBD_FEATURE_EXCLUSIVE_LOCK;
       }
-      mask |= RBD_FEATURE_OBJECT_MAP;
-    } else if ((features & RBD_FEATURE_OBJECT_MAP) != 0 && enabled) {
-      if ((new_features & RBD_FEATURE_EXCLUSIVE_LOCK) == 0) {
-        lderr(cct) << "cannot enable object map" << dendl;
-        return -EINVAL;
+    } else {
+      if ((features & RBD_FEATURE_EXCLUSIVE_LOCK) != 0) {
+        if ((new_features & RBD_FEATURE_OBJECT_MAP) != 0) {
+          lderr(cct) << "cannot disable exclusive lock" << dendl;
+          return -EINVAL;
+        }
+        mask |= RBD_FEATURE_OBJECT_MAP;
+      } else if ((features & RBD_FEATURE_OBJECT_MAP) != 0) {
+        r = remove_object_map(ictx);
+        if (r < 0) {
+          lderr(cct) << "failed to remove object map" << dendl;
+          return r;
+        }
       }
-      mask |= RBD_FEATURE_EXCLUSIVE_LOCK;
     }
 
     ldout(cct, 10) << "update_features: features=" << new_features << ", mask="
