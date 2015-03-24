@@ -536,6 +536,16 @@ void RGWSetBucketWebsite_ObjStore_S3::send_response()
   end_header(s);
 }
 
+void RGWDeleteBucketWebsite_ObjStore_S3::send_response()
+{
+  if (!ret) {
+    ret = STATUS_NO_CONTENT;
+  }
+  set_req_state_err(s, ret);
+  dump_errno(s);
+  end_header(s);
+}
+
 void RGWGetBucketWebsite_ObjStore_S3::send_response()
 {
   if (ret)
@@ -2072,6 +2082,10 @@ RGWOp *RGWHandler_ObjStore_Bucket_S3::op_delete()
   if (is_cors_op()) {
     return new RGWDeleteCORS_ObjStore_S3;
   }
+
+  if (s->info.args.sub_resource_exists("website"))
+    return new RGWDeleteBucketWebsite_ObjStore_S3;
+
   return new RGWDeleteBucket_ObjStore_S3;
 }
 
