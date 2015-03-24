@@ -2850,6 +2850,13 @@ void Client::check_caps(Inode *in, bool is_delayed)
   unsigned used = get_caps_used(in);
   unsigned cap_used;
 
+  if (in->is_dir() && (in->flags & I_COMPLETE)) {
+    // we do this here because we don't want to drop to Fs (and then
+    // drop the Fs if we do a create!) if that alone makes us send lookups
+    // to the MDS. Doing it in in->caps_wanted() has knock-on effects elsewhere
+    wanted |= CEPH_CAP_FILE_EXCL;
+  }
+
   int retain = wanted | used | CEPH_CAP_PIN;
   if (!unmounting) {
     if (wanted)
