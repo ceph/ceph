@@ -100,6 +100,14 @@ public:
   void send_response();
 };
 
+class RGWDeleteBucketWebsite_ObjStore_S3 : public RGWDeleteBucketWebsite {
+public:
+  RGWDeleteBucketWebsite_ObjStore_S3() {}
+  ~RGWDeleteBucketWebsite_ObjStore_S3() {}
+
+  void send_response();
+};
+
 class RGWStatBucket_ObjStore_S3 : public RGWStatBucket_ObjStore {
 public:
   RGWStatBucket_ObjStore_S3() {}
