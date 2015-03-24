@@ -163,8 +163,13 @@ def lock_machines(ctx, config):
     try:
         yield
     finally:
-        if ctx.config.get('unlock_on_failure', False) or \
-                get_status(ctx.summary) == 'pass':
+        # If both unlock_on_failure and nuke-on-error are set, don't unlock now
+        # because we're just going to nuke (and unlock) later.
+        unlock_on_failure = (
+            ctx.config.get('unlock_on_failure', False)
+            and not ctx.config.get('nuke-on-error', False)
+        )
+        if get_status(ctx.summary) == 'pass' or unlock_on_failure:
             log.info('Unlocking machines...')
             for machine in ctx.config['targets'].iterkeys():
                 lock.unlock_one(ctx, machine, ctx.owner, ctx.archive)
