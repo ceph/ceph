@@ -466,14 +466,20 @@ def complete(sigdict, args, target):
 ###
 # ping a monitor
 ###
-def ping_monitor(cluster_handle, name):
+def ping_monitor(cluster_handle, name, timeout):
     if 'mon.' not in name:
         print >> sys.stderr, '"ping" expects a monitor to ping; try "ping mon.<id>"'
         return 1
 
     mon_id = name[len('mon.'):]
-    s = cluster_handle.ping_monitor(mon_id)
-    print s
+    if (mon_id == '*') :
+        cluster_handle.connect(timeout=timeout)
+        for m in monids() :
+            s = cluster_handle.ping_monitor(m)
+            print "mon.{0}".format(m) + '\n' + s
+    else :
+            s = cluster_handle.ping_monitor(mon_id)
+            print s
     return 0
 
 ###
@@ -639,7 +645,7 @@ def main():
 
     try:
         if childargs and childargs[0] == 'ping':
-            return ping_monitor(cluster_handle, childargs[1])
+            return ping_monitor(cluster_handle, childargs[1], timeout)
         cluster_handle.connect(timeout=timeout)
     except KeyboardInterrupt:
         print >> sys.stderr, 'Cluster connection aborted'
