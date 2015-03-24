@@ -2997,10 +2997,9 @@ reprotect_and_return_err:
   }
 
 
-  int diff_iterate(ImageCtx *ictx, const char *fromsnapname,
-		   uint64_t off, uint64_t len,
-		   int (*cb)(uint64_t, size_t, int, void *),
-		   void *arg)
+  int diff_iterate(ImageCtx *ictx, const char *fromsnapname, uint64_t off,
+                   uint64_t len, bool include_parent, bool whole_object,
+		   int (*cb)(uint64_t, size_t, int, void *), void *arg)
   {
     utime_t start_time, elapsed;
 
@@ -3057,7 +3056,7 @@ reprotect_and_return_err:
 
     // check parent overlap only if we are comparing to the beginning of time
     interval_set<uint64_t> parent_diff;
-    if (from_snap_id == 0) {
+    if (include_parent && from_snap_id == 0) {
       RWLock::RLocker l(ictx->snap_lock);
       RWLock::RLocker l2(ictx->parent_lock);
       uint64_t overlap = end_size;
@@ -3065,7 +3064,8 @@ reprotect_and_return_err:
       r = 0;
       if (ictx->parent && overlap > 0) {
 	ldout(ictx->cct, 10) << " first getting parent diff" << dendl;
-	r = diff_iterate(ictx->parent, NULL, 0, overlap, simple_diff_cb, &parent_diff);
+	r = diff_iterate(ictx->parent, NULL, 0, overlap, include_parent,
+                         whole_object, simple_diff_cb, &parent_diff);
       }
       if (r < 0)
 	return r;
@@ -3121,8 +3121,16 @@ reprotect_and_return_err:
 			   end_snap_id,
 			   &diff, &end_exists);
 	ldout(ictx->cct, 20) << "  diff " << diff << " end_exists=" << end_exists << dendl;
-	if (diff.empty())
+	if (diff.empty()) {
 	  continue;
+        } else if (whole_object) {
+          // provide the full object extents to the callback
+          for (vector<ObjectExtent>::iterator q = p->second.begin();
+               q != p->second.end(); ++q) {
+            cb(off + q->offset, q->length, end_exists, arg);
+          }
+          continue;
+        }
 
 	for (vector<ObjectExtent>::iterator q = p->second.begin(); q != p->second.end(); ++q) {
 	  ldout(ictx->cct, 20) << "diff_iterate object " << p->first
