@@ -479,6 +479,16 @@ int ImageWatcher::notify_snap_create(const std::string &snap_name) {
   return notify_lock_owner(bl);
 }
 
+int ImageWatcher::notify_snap_remove(const std::string &snap_name) {
+  assert(m_image_ctx.owner_lock.is_locked());
+  assert(!is_lock_owner());
+
+  bufferlist bl;
+  ::encode(NotifyMessage(SnapRemovePayload(snap_name)), bl);
+
+  return notify_lock_owner(bl);
+}
+
 int ImageWatcher::notify_rebuild_object_map(uint64_t request_id,
                                             ProgressContext &prog_ctx) {
   assert(m_image_ctx.owner_lock.is_locked());
@@ -907,6 +917,19 @@ void ImageWatcher::handle_payload(const SnapCreatePayload &payload,
   }
 }
 
+void ImageWatcher::handle_payload(const SnapRemovePayload &payload,
+				  bufferlist *out) {
+  RWLock::RLocker l(m_image_ctx.owner_lock);
+  if (m_lock_owner_state == LOCK_OWNER_STATE_LOCKED) {
+    ldout(m_image_ctx.cct, 10) << "remote snap_remove request: "
+			       << payload.snap_name << dendl;
+    int r = librbd::snap_remove_helper(&m_image_ctx, NULL,
+                                       payload.snap_name.c_str());
+
+    ::encode(ResponseMessage(r), *out);
+  }
+}
+
 void ImageWatcher::handle_payload(const RebuildObjectMapPayload& payload,
                                   bufferlist *out) {
   RWLock::RLocker l(m_image_ctx.owner_lock);
@@ -930,6 +953,7 @@ void ImageWatcher::handle_payload(const RebuildObjectMapPayload& payload,
     ::encode(ResponseMessage(0), *out);
   }
 }
+
 void ImageWatcher::handle_payload(const UnknownPayload &payload,
 				  bufferlist *out) {
   RWLock::RLocker l(m_image_ctx.owner_lock);
