@@ -612,10 +612,13 @@ void Client::trim_dentry(Dentry *dn)
   ldout(cct, 15) << "trim_dentry unlinking dn " << dn->name 
 		 << " in dir " << hex << dn->dir->parent_inode->ino 
 		 << dendl;
-  dn->dir->release_count++;
-  if (dn->dir->parent_inode->flags & I_COMPLETE) {
-    ldout(cct, 10) << " clearing (I_COMPLETE|I_DIR_ORDERED) on " << *dn->dir->parent_inode << dendl;
-    dn->dir->parent_inode->flags &= ~(I_COMPLETE | I_DIR_ORDERED);
+  if (dn->inode) {
+    dn->dir->release_count++;
+    if (dn->dir->parent_inode->flags & I_COMPLETE) {
+      ldout(cct, 10) << " clearing (I_COMPLETE|I_DIR_ORDERED) on "
+		     << *dn->dir->parent_inode << dendl;
+      dn->dir->parent_inode->flags &= ~(I_COMPLETE | I_DIR_ORDERED);
+    }
   }
   unlink(dn, false, false);  // drop dir, drop dentry
 }
