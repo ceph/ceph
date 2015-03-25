@@ -118,6 +118,12 @@ void Server::dispatch(Message *m)
     if (m->get_type() == CEPH_MSG_CLIENT_REQUEST &&
 	(mds->is_reconnect() || mds->get_want_state() == CEPH_MDS_STATE_RECONNECT)) {
       MClientRequest *req = static_cast<MClientRequest*>(m);
+      Session *session = get_session(req);
+      if (!session || session->is_closed()) {
+	dout(5) << "session is closed, dropping " << req->get_reqid() << dendl;
+	req->put();
+	return;
+      }
       bool queue_replay = false;
       if (req->is_replay()) {
 	dout(3) << "queuing replayed op" << dendl;
@@ -126,8 +132,7 @@ void Server::dispatch(Message *m)
 	// process completed request in clientreplay stage. The completed request
 	// might have created new file/directorie. This guarantees MDS sends a reply
 	// to client before other request modifies the new file/directorie.
-	Session *session = get_session(req);
-	if (session && session->have_completed_request(req->get_reqid().tid, NULL)) {
+	if (session->have_completed_request(req->get_reqid().tid, NULL)) {
 	  dout(3) << "queuing completed op" << dendl;
 	  queue_replay = true;
 	}
