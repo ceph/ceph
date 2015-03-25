@@ -48,7 +48,8 @@ public:
 
   void refresh(uint64_t snap_id);
   void rollback(uint64_t snap_id);
-  void snapshot(uint64_t snap_id);
+  void snapshot_add(uint64_t snap_id);
+  int snapshot_remove(uint64_t snap_id);
 
   bool enabled() const;
 
