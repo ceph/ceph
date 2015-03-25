@@ -395,6 +395,10 @@ void Objecter::shutdown()
     if (timer.cancel_event(tick_event)) {
       ldout(cct, 10) <<  " successfully canceled tick" << dendl;
       tick_event = NULL;
+    } else {
+      ldout(cct, 10) << tick_event << " not found in the timer" << dendl;
+      delete tick_event;
+      tick_event = NULL;
     }
   }
 
