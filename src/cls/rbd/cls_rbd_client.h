@@ -130,6 +130,9 @@ namespace librbd {
 			   uint64_t start_object_no, uint64_t end_object_no,
 			   uint8_t new_object_state,
 			   const boost::optional<uint8_t> &current_object_state);
+    void object_map_snap_add(librados::ObjectWriteOperation *rados_op);
+    void object_map_snap_remove(librados::ObjectWriteOperation *rados_op,
+                                const ceph::BitVector<2> &object_map);
 
     // class operations on the old format, kept for
     // backwards compatability
