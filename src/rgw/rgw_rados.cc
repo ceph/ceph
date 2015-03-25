@@ -5464,7 +5464,7 @@ int RGWRados::Object::Read::prepare(int64_t *pofs, int64_t *pend)
 
     if (conds.mod_ptr) {
       ldout(cct, 10) << "If-Modified-Since: " << *conds.mod_ptr << " Last-Modified: " << ctime << dendl;
-      if (ctime < *conds.mod_ptr) {
+      if (ctime <= *conds.mod_ptr) {
         return -ERR_NOT_MODIFIED;
       }
     }
