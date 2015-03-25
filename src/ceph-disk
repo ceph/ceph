@@ -32,7 +32,6 @@ import tempfile
 import uuid
 import time
 import shlex
-import stat
 
 """
 Prepare:
