@@ -123,6 +123,11 @@ Upgrading
   many objects are stored on the node; do not be alarmed if they do
   not marked "up" by the cluster immediately after starting.
 
+* If upgrading from v0.93, set
+   osd enable degraded writes = false
+  on all osds prior to upgrading.  The degraded writes feature has
+  been reverted due to 11155.
+
 Upgrading from v0.80.x Giant
 ----------------------------
 
@@ -340,6 +345,7 @@ Notable changes since v0.93
 * rgw: fix sysvinit script when rgw_socket_path is not defined (#11159 Yehuda Sadeh, Dan Mick)
 * rgw: pass civetweb configurables through (#10907 Yehuda Sadeh)
 * rgw: use new watch/notify API (Yehuda Sadeh, Sage Weil)
+* osd: reverted degraded writes feature due to 11155
 
 Notable changes since v0.87.x Giant
 -----------------------------------
