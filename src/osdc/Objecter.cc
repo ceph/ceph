@@ -739,7 +739,7 @@ void Objecter::_linger_submit(LingerOp *info)
 
   // Populate Op::target
   OSDSession *s = NULL;
-  _calc_target(&info->target);
+  _calc_target(&info->target, &info->last_force_resend);
 
   // Create LingerOp<->OSDSession relation
   int r = _get_session(info->target.osd, &s, lc);
@@ -931,7 +931,7 @@ void Objecter::_scan_requests(OSDSession *s,
     Op *op = p->second;
     ++p;   // check_op_pool_dne() may touch ops; prevent iterator invalidation
     ldout(cct, 10) << " checking op " << op->tid << dendl;
-    int r = _calc_target(&op->target);
+    int r = _calc_target(&op->target, &op->last_force_resend);
     switch (r) {
     case RECALC_OP_TARGET_NO_ACTION:
       if (!force_resend &&
@@ -1147,7 +1147,7 @@ void Objecter::handle_osd_map(MOSDMap *m)
        p != need_resend_linger.end(); ++p) {
     LingerOp *op = *p;
     if (!op->session) {
-      _calc_target(&op->target);
+      _calc_target(&op->target, &op->last_force_resend);
       OSDSession *s = NULL;
       int const r = _get_session(op->target.osd, &s, lc);
       assert(r == 0);
@@ -2120,7 +2120,7 @@ ceph_tid_t Objecter::_op_submit(Op *op, RWLock::Context& lc)
   assert(op->session == NULL);
   OSDSession *s = NULL;
 
-  bool const check_for_latest_map = _calc_target(&op->target) == RECALC_OP_TARGET_POOL_DNE;
+  bool const check_for_latest_map = _calc_target(&op->target, &op->last_force_resend) == RECALC_OP_TARGET_POOL_DNE;
 
   // Try to get a session, including a retry if we need to take write lock
   int r = _get_session(op->target.osd, &s, lc);
@@ -2398,7 +2398,7 @@ int64_t Objecter::get_object_pg_hash_position(int64_t pool, const string& key,
   return p->raw_hash_to_pg(p->hash_key(key, ns));
 }
 
-int Objecter::_calc_target(op_target_t *t, bool any_change)
+int Objecter::_calc_target(op_target_t *t, epoch_t *last_force_resend,  bool any_change)
 {
   assert(rwlock.is_locked());
 
@@ -2414,7 +2414,11 @@ int Objecter::_calc_target(op_target_t *t, bool any_change)
   bool force_resend = false;
   bool need_check_tiering = false;
   if (osdmap->get_epoch() == pi->last_force_op_resend) {
-    force_resend = true;
+    if (last_force_resend && *last_force_resend < pi->last_force_op_resend) {
+      *last_force_resend = pi->last_force_op_resend;
+      force_resend = true;
+    } else if (last_force_resend == 0)
+      force_resend = true;
   }
   if (t->target_oid.name.empty() || force_resend) {
     t->target_oid = t->base_oid;
@@ -2658,7 +2662,7 @@ int Objecter::_recalc_linger_op_target(LingerOp *linger_op, RWLock::Context& lc)
 {
   assert(rwlock.is_wlocked());
 
-  int r = _calc_target(&linger_op->target, true);
+  int r = _calc_target(&linger_op->target, &linger_op->last_force_resend, true);
   if (r == RECALC_OP_TARGET_NEED_RESEND) {
     ldout(cct, 10) << "recalc_linger_op_target tid " << linger_op->linger_id
 		   << " pgid " << linger_op->target.pgid
