@@ -108,7 +108,7 @@ public:
 			     const string& type,
 			     const string& data,
 			     const string& journal,
-			     osflagbits_t flag = 0);
+			     osflagbits_t flags = 0);
 
   Logger *logger;
 
@@ -2016,7 +2016,7 @@ public:
    * collection_getattrs - get all xattrs of a collection
    *
    * @param cid collection name
-   * @param asert map of keys and buffers that contain the values
+   * @param aset map of keys and buffers that contain the values
    * @returns 0 on success, negative error code on failure
    */
   virtual int collection_getattrs(coll_t cid, map<string,bufferptr> &aset)
@@ -2063,7 +2063,7 @@ public:
    * @param c collection
    * @param start list object that sort >= this value
    * @param end list objects that sort < this value
-   * @param snapid return no objects with snap < snapid
+   * @param seq return no objects with snap < seq
    * @param ls [out] result
    * @return zero on success, or negative error
    */

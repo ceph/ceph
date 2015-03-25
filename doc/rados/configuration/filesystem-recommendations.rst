@@ -55,9 +55,10 @@ it for ``btrfs`` and ``XFS``.::
 Filesystem Background Info
 ==========================
 
-The ``XFS`` and ``btrfs`` file systems provide numerous advantages in highly 
-scaled data storage environments when `compared`_ to ``ext3`` and ``ext4``.
-Both ``XFS`` and ``btrfs`` are `journaling file systems`_, which means that
+The ``XFS``, ``btrfs`` and ``ext4`` file systems provide numerous advantages in highly 
+scaled data storage environments when `compared`_ to ``ext3``.
+
+``XFS``, ``btrfs`` and ``ext4`` are `journaling file systems`_, which means that
 they are more robust when recovering from crashes, power outages, etc. These
 filesystems journal all of the changes they will make before performing writes.
 

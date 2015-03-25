@@ -9,7 +9,8 @@ INPUT = src
 RECURSIVE = YES
 EXCLUDE = src/gmock \
 	src/test/virtualenv \
-	src/out
+	src/out \
+        src/tracing
 VERBATIM_HEADERS = NO
 GENERATE_HTML = NO
 GENERATE_LATEX = NO

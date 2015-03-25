@@ -147,6 +147,20 @@ int RGWMongoose::send_100_continue()
   return mg_write(conn, buf, sizeof(buf) - 1);
 }
 
+static void dump_date_header(bufferlist &out)
+{
+  char timestr[TIME_BUF_SIZE];
+  const time_t gtime = time(NULL);
+  struct tm result;
+  struct tm const * const tmp = gmtime_r(&gtime, &result);
+
+  if (tmp == NULL)
+    return;
+
+  if (strftime(timestr, sizeof(timestr), "Date: %a, %d %b %Y %H:%M:%S %Z\r\n", tmp))
+    out.append(timestr);
+}
+
 int RGWMongoose::complete_header()
 {
   header_done = true;
@@ -154,6 +168,8 @@ int RGWMongoose::complete_header()
   if (!has_content_length) {
     return 0;
   }
+
+  dump_date_header(header_data);
 
   if (explicit_keepalive)
     header_data.append("Connection: Keep-Alive\r\n");

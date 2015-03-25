@@ -326,14 +326,17 @@ bottleneck when individual images get large or busy.
 The striping is controlled by three parameters:
 
 .. option:: order
+
   The size of objects we stripe over is a power of two, specifically 2^[*order*] bytes.  The default
   is 22, or 4 MB.
 
 .. option:: stripe_unit
+
   Each [*stripe_unit*] contiguous bytes are stored adjacently in the same object, before we move on
   to the next object.
 
 .. option:: stripe_count
+
   After we write [*stripe_unit*] bytes to [*stripe_count*] objects, we loop back to the initial object
   and write another stripe, until the object reaches its maximum size (as specified by [*order*].  At that
   point, we move on to the next [*stripe_count*] objects.
@@ -362,6 +365,17 @@ the running kernel.
 * crc - Enable CRC32C checksumming for data writes (default).
 
 * nocrc - Disable CRC32C checksumming for data writes.
+
+* cephx_require_signatures - Require cephx message signing, i.e. MSG_AUTH
+  feature bit (since 3.19, default).
+
+* nocephx_require_signatures - Don't require cephx message signing (since
+  3.19).
+
+* tcp_nodelay - Disable Nagle's algorithm on client sockets (since 4.0,
+  default).
+
+* notcp_nodelay - Enable Nagle's algorithm on client sockets (since 4.0).
 
 * osdkeepalive=x - OSD keepalive timeout (default is 5 seconds).
 

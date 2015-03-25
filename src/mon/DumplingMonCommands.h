@@ -332,8 +332,9 @@ COMMAND("osd find " \
 	"osd", "r", "cli,rest")
 COMMAND("osd map " \
 	"name=pool,type=CephPoolname " \
-	"name=object,type=CephObjectname", \
-	"find pg for <object> in <pool>", "osd", "r", "cli,rest")
+	"name=object,type=CephObjectname " \
+	"name=nspace,type=CephString,req=false", \
+	"find pg for <object> in <pool> with [namespace]", "osd", "r", "cli,rest")
 COMMAND("osd scrub " \
 	"name=who,type=CephString", \
 	"initiate scrub on osd <who>", "osd", "rw", "cli,rest")

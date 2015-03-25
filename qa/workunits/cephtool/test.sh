@@ -852,6 +852,8 @@ function test_mon_mds()
 
 function test_mon_mon()
 {
+  # print help message
+  ceph mon
   # no mon add/remove
   ceph mon dump
   ceph mon getmap -o $TMPDIR/monmap.$$
@@ -974,10 +976,12 @@ function test_mon_osd()
   [ "$id" = "$id2" ]
   ceph osd rm $id
 
+  ceph osd
   ceph osd ls
   ceph osd pool create data 10
   ceph osd lspools | grep data
   ceph osd map data foo | grep 'pool.*data.*object.*foo.*pg.*up.*acting'
+  ceph osd map data foo namespace| grep 'pool.*data.*object.*namespace/foo.*pg.*up.*acting'
   ceph osd pool delete data data --yes-i-really-really-mean-it
 
   ceph osd pause
@@ -1158,6 +1162,7 @@ function test_mon_osd_pool_set()
 {
   TEST_POOL_GETSET=pool_getset
   ceph osd pool create $TEST_POOL_GETSET 10
+  ceph osd pool get $TEST_POOL_GETSET all
 
   for s in pg_num pgp_num size min_size crash_replay_interval crush_ruleset; do
     ceph osd pool get $TEST_POOL_GETSET $s

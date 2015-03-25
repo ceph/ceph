@@ -230,7 +230,7 @@ TEST_P(StriperTestRT, StripedRoundtrip) {
     // recreate object
     ASSERT_EQ(0, striper.write(soid, bl1, testData.size*2, 0));
     // remove the object size attribute from the striped object
-    std::string firstOid = getObjName(soid, 0);
+    char* firstOid = getObjName(soid, 0);
     ASSERT_EQ(0, ioctx.rmxattr(firstOid, "striper.size"));
     // check that stat fails
     uint64_t size;
@@ -244,6 +244,7 @@ TEST_P(StriperTestRT, StripedRoundtrip) {
          object_nb++) {
       ASSERT_EQ(-ENOENT, ioctx.stat(getObjName(soid, object_nb), &size, &mtime));
     }
+    free(firstOid);
   }
 }
 

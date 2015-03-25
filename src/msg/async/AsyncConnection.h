@@ -63,7 +63,7 @@ class AsyncConnection : public Connection {
   int randomize_out_seq();
   void handle_ack(uint64_t seq);
   void _send_keepalive_or_ack(bool ack=false, utime_t *t=NULL);
-  int write_message(ceph_msg_header& header, ceph_msg_footer& footer, bufferlist& blist);
+  int write_message(const ceph_msg_header& header, const ceph_msg_footer& footer, bufferlist& blist);
   int _reply_accept(char tag, ceph_msg_connect &connect, ceph_msg_connect_reply &reply,
                     bufferlist authorizer_reply) {
     bufferlist reply_bl;
@@ -203,7 +203,6 @@ class AsyncConnection : public Connection {
       return statenames[state];
   }
 
-  CephContext *cc;
   AsyncMessenger *async_msgr;
   int global_seq;
   __u32 connect_seq, peer_global_seq;
@@ -225,11 +224,7 @@ class AsyncConnection : public Connection {
   EventCallbackRef reset_handler;
   EventCallbackRef remote_reset_handler;
   EventCallbackRef connect_handler;
-  EventCallbackRef fast_connect_handler;
   EventCallbackRef accept_handler;
-  EventCallbackRef fast_accept_handler;
-  EventCallbackRef stop_handler;
-  EventCallbackRef signal_handler;
   EventCallbackRef local_deliver_handler;
   bool keepalive;
   struct iovec msgvec[IOV_MAX];
@@ -237,8 +232,6 @@ class AsyncConnection : public Connection {
   uint32_t recv_max_prefetch;
   uint32_t recv_start;
   uint32_t recv_end;
-  Mutex stop_lock; // used to protect `mark_down_cond`
-  Cond stop_cond;
   set<uint64_t> register_time_events; // need to delete it if stop
 
   // Tis section are temp variables used by state transition
@@ -265,8 +258,8 @@ class AsyncConnection : public Connection {
                      // there won't exists conflicting connection so we use
                      // "replacing" to skip RESETSESSION to avoid detect wrong
                      // presentation
-  bool once_session_reset;
   bool is_reset_from_peer;
+  bool once_ready;
   atomic_t stopping;
 
   // used only for local state, it will be overwrite when state transition

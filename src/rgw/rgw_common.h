@@ -149,7 +149,7 @@ using ceph::crypto::MD5;
 #define ERR_INTERNAL_ERROR       2200
 
 #ifndef UINT32_MAX
-#define UINT32_MAX (4294967295)
+#define UINT32_MAX (0xffffffffu)
 #endif
 
 typedef void *RGWAccessHandle;

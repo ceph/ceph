@@ -151,6 +151,12 @@ unittest_histogram_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 unittest_histogram_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 check_PROGRAMS += unittest_histogram
 
+unittest_prioritized_queue_SOURCES = test/common/test_prioritized_queue.cc
+unittest_prioritized_queue_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+unittest_prioritized_queue_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
+check_PROGRAMS += unittest_prioritized_queue
+
+
 unittest_str_map_SOURCES = test/common/test_str_map.cc
 unittest_str_map_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 unittest_str_map_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
@@ -389,6 +395,7 @@ unittest_bit_vector_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 check_PROGRAMS += unittest_bit_vector
 
 check_SCRIPTS += test/pybind/test_ceph_argparse.py
+check_SCRIPTS += test/pybind/test_ceph_daemon.py
 
 ceph_test_objectcacher_stress_SOURCES = \
 	test/osdc/object_cacher_stress.cc \

@@ -98,24 +98,26 @@ struct config_option config_optionsp[] = {
 
 const int NUM_CONFIG_OPTIONS = sizeof(config_optionsp) / sizeof(config_option);
 
-bool ceph_resolve_file_search(const std::string& filename_list,
-			      std::string& result)
+int ceph_resolve_file_search(const std::string& filename_list,
+			     std::string& result)
 {
   list<string> ls;
   get_str_list(filename_list, ls);
 
+  int ret = -ENOENT;
   list<string>::iterator iter;
   for (iter = ls.begin(); iter != ls.end(); ++iter) {
     int fd = ::open(iter->c_str(), O_RDONLY);
-    if (fd < 0)
+    if (fd < 0) {
+      ret = -errno;
       continue;
-
+    }
     close(fd);
     result = *iter;
-    return true;
+    return 0;
   }
 
-  return false;
+  return ret;
 }
 
 md_config_t::md_config_t()
@@ -1131,9 +1133,4 @@ void md_config_t::diff(
     if (strcmp(local_val, other_val))
       diff->insert(make_pair(opt->name, make_pair(local_val, other_val)));
   }
-}
-
-md_config_obs_t::
-~md_config_obs_t()
-{
 }

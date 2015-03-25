@@ -2,6 +2,250 @@
  Release Notes
 ===============
 
+v0.94 Hammer (draft)
+============
+
+
+Upgrading
+---------
+
+* The ceph-osd daemons will perform a disk-format upgrade improve the
+  PG metadata layout and to repair a minor bug in the on-disk format.
+  It may take a minute or two for this to complete, depending on how
+  many objects are stored on the node; do not be alarmed if they do
+  not marked "up" by the cluster immediately after starting.
+
+* librbd and librados include lttng tracepoints on distros with
+  liblttng 2.4 or later (only Ubuntu Trusty for the ceph.com
+  packages). When running a daemon that uses these libraries, i.e. an
+  application that calls fork(2) or clone(2) without exec(3), you must
+  set LD_PRELOAD=liblttng-ust-fork.so.0 to prevent a crash in the
+  lttng atexit handler when the process exits. The only ceph tool that
+  requires this is rbd-fuse.
+
+* If rgw_socket_path is defined and rgw_frontends defines a
+  socket_port and socket_host, we now allow the rgw_frontends settings
+  to take precedence.  This change should only affect users who have
+  made non-standard changes to their radosgw configuration.
+
+
+v0.93
+=====
+
+This is the first release candidate for Hammer, and includes all of
+the features that will be present in the final release.  We welcome
+and encourage any and all testing in non-production clusters to identify
+any problems with functionality, stability, or performance before the
+final Hammer release.
+
+We suggest some caution in one area: librbd.  There is a lot of new
+functionality around object maps and locking that is disabled by
+default but may still affect stability for existing images.  We are
+continuing to shake out those bugs so that the final Hammer release
+(probably v0.94) will be rock solid.
+
+Major features since Giant include:
+
+* cephfs: journal scavenger repair tool (John Spray)
+* crush: new and improved straw2 bucket type (Sage Weil, Christina Anderson, Xiaoxi Chen)
+* doc: improved guidance for CephFS early adopters (John Spray)
+* librbd: add per-image object map for improved performance (Jason Dillaman)
+* librbd: copy-on-read (Min Chen, Li Wang, Yunchuan Wen, Cheng Cheng)
+* librados: fadvise-style IO hints (Jianpeng Ma)
+* mds: many many snapshot-related fixes (Yan, Zheng)
+* mon: new 'ceph osd df' command (Mykola Golub)
+* mon: new 'ceph pg ls ...' command (Xinxin Shu)
+* osd: improved performance for high-performance backends
+* osd: improved recovery behavior (Samuel Just)
+* osd: improved cache tier behavior with reads (Zhiqiang Wang)
+* rgw: S3-compatible bucket versioning support (Yehuda Sadeh)
+* rgw: large bucket index sharding (Guang Yang, Yehuda Sadeh)
+* RDMA "xio" messenger support (Matt Benjamin, Vu Pham)
+
+Upgrading
+---------
+
+* If you are upgrading from v0.92, you must stop all OSD daemons and flush their
+  journals (``ceph-osd -i NNN --flush-journal'') before upgrading.  There was
+  a transaction encoding bug in v0.92 that broke compatibility.  Upgrading from
+  v0.91 or anything earlier is safe.
+
+* No special restrictions when upgrading from firefly or giant.
+
+Notable Changes
+---------------
+
+* build: CMake support (Ali Maredia, Casey Bodley, Adam Emerson, Marcus Watts, Matt Benjamin)
+* ceph-disk: do not re-use partition if encryption is required (Loic Dachary)
+* ceph-disk: support LUKS for encrypted partitions (Andrew Bartlett, Loic Dachary)
+* ceph-fuse,libcephfs: add support for O_NOFOLLOW and O_PATH (Greg Farnum)
+* ceph-fuse,libcephfs: resend requests before completing cap reconnect (#10912 Yan, Zheng)
+* ceph-fuse: select kernel cache invalidation mechanism based on kernel version (Greg Farnum)
+* ceph-objectstore-tool: improved import (David Zafman)
+* ceph-objectstore-tool: misc improvements, fixes (#9870 #9871 David Zafman)
+* ceph: add 'ceph osd df [tree]' command (#10452 Mykola Golub)
+* ceph: fix 'ceph tell ...' command validation (#10439 Joao Eduardo Luis)
+* ceph: improve 'ceph osd tree' output (Mykola Golub)
+* cephfs-journal-tool: add recover_dentries function (#9883 John Spray)
+* common: add newline to flushed json output (Sage Weil)
+* common: filtering for 'perf dump' (John Spray)
+* common: fix Formatter factory breakage (#10547 Loic Dachary)
+* common: make json-pretty output prettier (Sage Weil)
+* crush: new and improved straw2 bucket type (Sage Weil, Christina Anderson, Xiaoxi Chen)
+* crush: update tries stats for indep rules (#10349 Loic Dachary)
+* crush: use larger choose_tries value for erasure code rulesets (#10353 Loic Dachary)
+* debian,rpm: move RBD udev rules to ceph-common (#10864 Ken Dreyer)
+* debian: split python-ceph into python-{rbd,rados,cephfs} (Boris Ranto)
+* doc: CephFS disaster recovery guidance (John Spray)
+* doc: CephFS for early adopters (John Spray)
+* doc: fix OpenStack Glance docs (#10478 Sebastien Han)
+* doc: misc updates (#9793 #9922 #10204 #10203 Travis Rhoden, Hazem, Ayari, Florian Coste, Andy Allan, Frank Yu, Baptiste Veuillez-Mainard, Yuan Zhou, Armando Segnini, Robert Jansen, Tyler Brekke, Viktor Suprun)
+* doc: replace cloudfiles with swiftclient Python Swift example (Tim Freund)
+* erasure-code: add mSHEC erasure code support (Takeshi Miyamae)
+* erasure-code: improved docs (#10340 Loic Dachary)
+* erasure-code: set max_size to 20 (#10363 Loic Dachary)
+* libcephfs,ceph-fuse: fix getting zero-length xattr (#10552 Yan, Zheng)
+* librados: add blacklist_add convenience method (Jason Dillaman)
+* librados: expose rados_{read|write}_op_assert_version in C API (Kim Vandry)
+* librados: fix pool name caching (#10458 Radoslaw Zarzynski)
+* librados: fix resource leak, misc bugs (#10425 Radoslaw Zarzynski)
+* librados: fix some watch/notify locking (Jason Dillaman, Josh Durgin)
+* libradosstriper: fix write_full when ENOENT (#10758 Sebastien Ponce)
+* librbd: CRC protection for RBD image map (Jason Dillaman)
+* librbd: add per-image object map for improved performance (Jason Dillaman)
+* librbd: add support for an "object map" indicating which objects exist (Jason Dillaman)
+* librbd: adjust internal locking (Josh Durgin, Jason Dillaman)
+* librbd: better handling of watch errors (Jason Dillaman)
+* librbd: coordinate maint operations through lock owner (Jason Dillaman)
+* librbd: copy-on-read (Min Chen, Li Wang, Yunchuan Wen, Cheng Cheng, Jason Dillaman)
+* librbd: enforce write ordering with a snapshot (Jason Dillaman)
+* librbd: fadvise-style hints; add misc hints for certain operations (Jianpeng Ma)
+* librbd: fix coverity false-positives (Jason Dillaman)
+* librbd: fix snap create races (Jason Dillaman)
+* librbd: flush AIO operations asynchronously (#10714 Jason Dillaman)
+* librbd: make async versions of long-running maint operations (Jason Dillaman)
+* librbd: mock tests (Jason Dillaman)
+* librbd: optionally blacklist clients before breaking locks (#10761 Jason Dillaman)
+* librbd: prevent copyup during shrink (Jason Dillaman)
+* mds: add cephfs-table-tool (John Spray)
+* mds: avoid sending traceless replies in most cases (Yan, Zheng)
+* mds: export dir asok command (John Spray)
+* mds: fix stray/purge perfcounters (#10388 John Spray)
+* mds: handle heartbeat_reset during shutdown (#10382 John Spray)
+* mds: many many snapshot-related fixes (Yan, Zheng)
+* mds: refactor, improve Session storage (John Spray)
+* misc coverity fixes (Danny Al-Gaaf)
+* mon: add noforward flag for some mon commands (Mykola Golub)
+* mon: disallow empty pool names (#10555 Wido den Hollander)
+* mon: do not deactivate last mds (#10862 John Spray)
+* mon: drop old ceph_mon_store_converter (Sage Weil)
+* mon: fix 'ceph pg dump_stuck degraded' (Xinxin Shu)
+* mon: fix 'profile osd' use of config-key function on mon (#10844 Joao Eduardo Luis)
+* mon: fix compatset initalization during mkfs (Joao Eduardo Luis)
+* mon: fix feature tracking during elections (Joao Eduardo Luis)
+* mon: fix mds gid/rank/state parsing (John Spray)
+* mon: ignore failure reports from before up_from (#10762 Dan van der Ster, Sage Weil)
+* mon: improved corrupt CRUSH map detection (Joao Eduardo Luis)
+* mon: include pg_temp count in osdmap summary (Sage Weil)
+* mon: log health summary to cluster log (#9440 Joao Eduardo Luis)
+* mon: make 'mds fail' idempotent (John Spray)
+* mon: make pg dump {sum,pgs,pgs_brief} work for format=plain (#5963 #6759 Mykola Golub)
+* mon: new pool safety flags nodelete, nopgchange, nosizechange (#9792 Mykola Golub)
+* mon: new, friendly 'ceph pg ls ...' command (Xinxin Shu)
+* mon: prevent MDS transition from STOPPING (#10791 Greg Farnum)
+* mon: propose all pending work in one transaction (Sage Weil)
+* mon: remove pg_temps for nonexistent pools (Joao Eduardo Luis)
+* mon: require mon_allow_pool_delete option to remove pools (Sage Weil)
+* mon: set globalid prealloc to larger value (Sage Weil)
+* mon: skip zeroed osd stats in get_rule_avail (#10257 Joao Eduardo Luis)
+* mon: validate min_size range (Jianpeng Ma)
+* msgr: async: bind threads to CPU cores, improved poll (Haomai Wang)
+* msgr: fix crc configuration (Mykola Golub)
+* msgr: misc unit tests (Haomai Wang)
+* msgr: xio: XioMessenger RDMA support (Casey Bodley, Vu Pham, Matt Benjamin)
+* osd, librados: fadvise-style librados hints (Jianpeng Ma)
+* osd, librados: fix xattr_cmp_u64 (Dongmao Zhang)
+* osd,mon: add 'norebalance' flag (Kefu Chai)
+* osd,mon: specify OSD features explicitly in MOSDBoot (#10911 Sage Weil)
+* osd: add option to prioritize heartbeat network traffic (Jian Wen)
+* osd: add support for the SHEC erasure-code algorithm (Takeshi Miyamae, Loic Dachary)
+* osd: allow recovery while below min_size (Samuel Just)
+* osd: allow recovery with fewer than min_size OSDs (Samuel Just)
+* osd: allow writes to degraded objects (Samuel Just)
+* osd: allow writes to degraded objects (Samuel Just)
+* osd: avoid publishing unchanged PG stats (Sage Weil)
+* osd: cache recent ObjectContexts (Dong Yuan)
+* osd: clear cache on interval change (Samuel Just)
+* osd: do no proxy reads unless target OSDs are new (#10788 Sage Weil)
+* osd: do not update digest on inconsistent object (#10524 Samuel Just)
+* osd: don't record digests for snapdirs (#10536 Samuel Just)
+* osd: fix OSDCap parser on old (el6) boost::spirit (#10757 Kefu Chai)
+* osd: fix OSDCap parsing on el6 (#10757 Kefu Chai)
+* osd: fix ObjectStore::Transaction encoding version (#10734 Samuel Just)
+* osd: fix auth object selection during repair (#10524 Samuel Just)
+* osd: fix bug in pending digest updates (#10840 Samuel Just)
+* osd: fix cancel_proxy_read_ops (Sage Weil)
+* osd: fix cleanup of interrupted pg deletion (#10617 Sage Weil)
+* osd: fix journal wrapping bug (#10883 David Zafman)
+* osd: fix leak in SnapTrimWQ (#10421 Kefu Chai)
+* osd: fix memstore free space calculation (Xiaoxi Chen)
+* osd: fix mixed-version peering issues (Samuel Just)
+* osd: fix object digest update bug (#10840 Samuel Just)
+* osd: fix ordering issue with new transaction encoding (#10534 Dong Yuan)
+* osd: fix past_interval generation (#10427 #10430 David Zafman)
+* osd: fix short read handling on push (#8121 David Zafman)
+* osd: fix watch timeout cache state update (#10784 David Zafman)
+* osd: force promotion of watch/notify ops (Zhiqiang Wang)
+* osd: improve idempotency detection across cache promotion/demotion (#8935 Sage Weil, Samuel Just)
+* osd: include activating peers in blocked_by (#10477 Sage Weil)
+* osd: jerasure and gf-complete updates from upstream (#10216 Loic Dachary)
+* osd: journal: check fsync/fdatasync result (Jianpeng Ma)
+* osd: journal: fix hang on shutdown (#10474 David Zafman)
+* osd: journal: fix header.committed_up_to (Xinze Chi)
+* osd: journal: initialize throttle (Ning Yao)
+* osd: journal: misc bug fixes (#6003 David Zafman, Samuel Just)
+* osd: misc cleanup (Xinze Chi, Yongyue Sun)
+* osd: new 'activating' state between peering and active (Sage Weil)
+* osd: preserve reqids for idempotency checks for promote/demote (Sage Weil, Zhiqiang Wang, Samuel Just)
+* osd: remove dead locking code (Xinxin Shu)
+* osd: restrict scrub to certain times of day (Xinze Chi)
+* osd: rocksdb: fix shutdown (Hoamai Wang)
+* pybind: fix memory leak in librados bindings (Billy Olsen)
+* qa: fix mds tests (#10539 John Spray)
+* qa: ignore duplicates in rados ls (Josh Durgin)
+* qa: improve hadoop tests (Noah Watkins)
+* qa: reorg fs quota tests (Greg Farnum)
+* rados: fix usage (Jianpeng Ma)
+* radosgw-admin: add replicalog update command (Yehuda Sadeh)
+* rbd-fuse: clean up on shutdown (Josh Durgin)
+* rbd: add 'merge-diff' function (MingXin Liu, Yunchuan Wen, Li Wang)
+* rbd: fix buffer handling on image import (#10590 Jason Dillaman)
+* rbd: leave exclusive lockin goff by default (Jason Dillaman)
+* rbd: update init-rbdmap to fix dup mount point (Karel Striegel)
+* rbd: use IO hints for import, export, and bench operations (#10462 Jason Dillaman)
+* rbd_recover_tool: RBD image recovery tool (Min Chen)
+* rgw: S3-style object versioning support (Yehuda Sadeh)
+* rgw: check keystone auth for S3 POST requests (#10062 Abhishek Lekshmanan)
+* rgw: extend replica log API (purge-all) (Yehuda Sadeh)
+* rgw: fail S3 POST if keystone not configured (#10688 Valery Tschopp, Yehuda Sadeh)
+* rgw: fix XML header on get ACL request (#10106 Yehuda Sadeh)
+* rgw: fix bucket removal with data purge (Yehuda Sadeh)
+* rgw: fix replica log indexing (#8251 Yehuda Sadeh)
+* rgw: fix swift metadata header name (Dmytro Iurchenko)
+* rgw: remove multipart entries from bucket index on abort (#10719 Yehuda Sadeh)
+* rgw: respond with 204 to POST on containers (#10667 Yuan Zhou)
+* rgw: reuse fcgx connection struct (#10194 Yehuda Sadeh)
+* rgw: support multiple host names (#7467 Yehuda Sadeh)
+* rgw: swift: dump container's custom metadata (#10665 Ahmad Faheem, Dmytro Iurchenko)
+* rgw: swift: support Accept header for response format (#10746 Dmytro Iurchenko)
+* rgw: swift: support for X-Remove-Container-Meta-{key} (#10475 Dmytro Iurchenko)
+* rpm: move rgw logrotate to radosgw subpackage (Ken Dreyer)
+* tests: centos-6 dockerfile (#10755 Loic Dachary)
+* tests: unit tests for shared_cache (Dong Yuan)
+* vstart.sh: work with cmake (Yehuda Sadeh)
+
+
+
 v0.92
 =====
 
@@ -512,6 +756,95 @@ Notable Changes
 * udev: fix rules for CentOS7/RHEL7 (Loic Dachary)
 * use clock_gettime instead of gettimeofday (Jianpeng Ma)
 * vstart.sh: set up environment for s3-tests (Luis Pabon)
+
+
+v0.87.1 Giant
+=============
+
+This is the first (and possibly final) point release for Giant.  Our focus
+on stability fixes will be directed towards Hammer and Firefly.
+
+We recommend that all v0.87 Giant users upgrade to this release.
+
+Upgrading
+---------
+
+* Due to a change in the Linux kernel version 3.18 and the limits of the FUSE
+  interface, ceph-fuse needs be mounted as root on at least some systems. See
+  issues #9997, #10277, and #10542 for details.
+
+Notable Changes
+---------------
+
+* build: disable stack-execute bit on assembler objects (#10114 Dan Mick)
+* build: support boost 1.57.0 (#10688 Ken Dreyer)
+* ceph-disk: fix dmcrypt file permissions (#9785 Loic Dachary)
+* ceph-disk: run partprobe after zap, behave with partx or partprobe (#9665 #9721 Loic Dachary)
+* cephfs-journal-tool: fix import for aged journals (#9977 John Spray)
+* cephfs-journal-tool: fix journal import (#10025 John Spray)
+* ceph-fuse: use remount to trim kernel dcache (#10277 Yan, Zheng)
+* common: add cctid meta variable (#6228 Adam Crume)
+* common: fix dump of shard for ghobject_t (#10063 Loic Dachary)
+* crush: fix bucket weight underflow (#9998 Pawel Sadowski)
+* erasure-code: enforce chunk size alignment (#10211 Loic Dachary)
+* erasure-code: regression test suite (#9420 Loic Dachary)
+* erasure-code: relax caucy w restrictions (#10325 Loic Dachary)
+* libcephfs,ceph-fuse: allow xattr caps on inject_release_failure (#9800 John Spray)
+* libcephfs,ceph-fuse: fix cap flush tid comparison (#9869 Greg Farnum)
+* libcephfs,ceph-fuse: new flag to indicated sorted dcache (#9178 Yan, Zheng)
+* libcephfs,ceph-fuse: prune cache before reconnecting to MDS (Yan, Zheng)
+* librados: limit number of in-flight read requests (#9854 Jason Dillaman)
+* libradospy: fix thread shutdown (#8797 Dan Mick)
+* libradosstriper: fix locking issue in truncate (#10129 Sebastien Ponce)
+* librbd: complete pending ops before closing mage (#10299 Jason Dillaman)
+* librbd: fix error path on image open failure (#10030 Jason Dillaman)
+* librbd: gracefully handle deleted/renamed pools (#10270 Jason Dillaman)
+* librbd: handle errors when creating ioctx while listing children (#10123 Jason Dillaman)
+* mds: fix compat version in MClientSession (#9945 John Spray)
+* mds: fix journaler write error handling (#10011 John Spray)
+* mds: fix locking for file size recovery (#10229 Yan, Zheng)
+* mds: handle heartbeat_reset during shutdown (#10382 John Spray)
+* mds: store backtrace for straydir (Yan, Zheng)
+* mon: allow tiers for FS pools (#10135 John Spray)
+* mon: fix caching of last_epoch_clean, osdmap trimming (#9987 Sage Weil)
+* mon: fix 'fs ls' on peons (#10288 John Spray)
+* mon: fix MDS health status from peons (#10151 John Spray)
+* mon: fix paxos off-by-one (#9301 Sage Weil)
+* msgr: simple: do not block on takeover while holding global lock (#9921 Greg Farnum)
+* osd: deep scrub must not abort if hinfo is missing (#10018 Loic Dachary)
+* osd: fix misdirected op detection (#9835 Sage Weil)
+* osd: fix past_interval display for acting (#9752 Loic Dachary)
+* osd: fix PG peering backoff when behind on osdmaps (#10431 Sage Weil)
+* osd: handle no-op write with snapshot case (#10262 Ssage Weil)
+* osd: use fast-dispatch (Sage Weil, Greg Farnum)
+* rados: fix write to /dev/null (Loic Dachary)
+* radosgw-admin: create subuser when needed (#10103 Yehuda Sadeh)
+* rbd: avoid invalidating aio_write buffer during image import (#10590 Jason Dillaman)
+* rbd: fix export with images > 2GB (Vicente Cheng)
+* rgw: change multipart upload id magic (#10271 Georgios Dimitrakakis, Yehuda Sadeh)
+* rgw: check keystone auth for S3 POST (#10062 Abhishek Lekshmanan)
+* rgw: check timestamp for S3 keystone auth (#10062 Abhishek Lekshmanan)
+* rgw: fix partial GET with swift (#10553 Yehuda Sadeh)
+* rgw: fix quota disable (#9907 Dong Lei)
+* rgw: fix rare corruption of object metadata on put (#9576 Yehuda Sadeh)
+* rgw: fix S3 object copy content-type (#9478 Yehuda Sadeh)
+* rgw: headers end with \r\n (#9254 Benedikt Fraunhofer, Yehuda Sadeh)
+* rgw: remove swift user manifest DLO hash calculation (#9973 Yehuda Sadeh)
+* rgw: return correct len when len is 0 (#9877 Yehuda Sadeh)
+* rgw: return X-Timestamp field (#8911 Yehuda Sadeh)
+* rgw: run radosgw as apache with systemd (#10125)
+* rgw: sent ETag on S3 object copy (#9479 Yehuda Sadeh)
+* rgw: sent HTTP status reason explicitly in fastcgi (Yehuda Sadeh)
+* rgw: set length for keystone token validation (#7796 Mark Kirkwood, Yehuda Sadeh)
+* rgw: set ulimit -n on sysvinit before starting daemon (#9587 Sage Weil)
+* rgw: update bucket index on set_attrs (#5595 Yehuda Sadeh)
+* rgw: update swift subuser permission masks when authenticating (#9918 Yehuda Sadeh)
+* rgw: URL decode HTTP query params correction (#10271 Georgios Dimitrakakis, Yehuda Sadeh)
+* rgw: use cached attrs while reading object attrs (#10307 Yehuda Sadeh)
+* rgw: use strict_strtoll for content length (#10701 Axel Dunkel, Yehuda Sadeh)
+
+For more detailed information, see :download:`the complete changelog <changelog/v0.87.1.txt>`.
+
 
 
 v0.87 Giant
@@ -1645,6 +1978,97 @@ Notable Changes
 * test_librbd_fsx: test krbd as well as librbd (Ilya Dryomov)
 
 
+v0.80.9 Firefly
+===============
+
+This is a bugfix release for firefly.  It fixes a performance
+regression in librbd, an important CRUSH misbehavior (see below), and
+several RGW bugs.  We have also backported support for flock/fcntl
+locks to ceph-fuse and libcephfs.
+
+We recommend that all Firefly users upgrade.
+
+For more detailed information, see :download:`the complete changelog <changelog/v0.80.9.txt>`.
+
+Adjusting CRUSH maps
+--------------------
+
+* This point release fixes several issues with CRUSH that trigger
+  excessive data migration when adjusting OSD weights.  These are most
+  obvious when a very small weight change (e.g., a change from 0 to
+  .01) triggers a large amount of movement, but the same set of bugs
+  can also lead to excessive (though less noticeable) movement in
+  other cases.
+
+  However, because the bug may already have affected your cluster,
+  fixing it may trigger movement *back* to the more correct location.
+  For this reason, you must manually opt-in to the fixed behavior.
+
+  In order to set the new tunable to correct the behavior::
+
+     ceph osd crush set-tunable straw_calc_version 1
+
+  Note that this change will have no immediate effect.  However, from
+  this point forward, any 'straw' bucket in your CRUSH map that is
+  adjusted will get non-buggy internal weights, and that transition
+  may trigger some rebalancing.
+
+  You can estimate how much rebalancing will eventually be necessary
+  on your cluster with::
+
+     ceph osd getcrushmap -o /tmp/cm
+     crushtool -i /tmp/cm --num-rep 3 --test --show-mappings > /tmp/a 2>&1
+     crushtool -i /tmp/cm --set-straw-calc-version 1 -o /tmp/cm2
+     crushtool -i /tmp/cm2 --reweight -o /tmp/cm2
+     crushtool -i /tmp/cm2 --num-rep 3 --test --show-mappings > /tmp/b 2>&1
+     wc -l /tmp/a                          # num total mappings
+     diff -u /tmp/a /tmp/b | grep -c ^+    # num changed mappings
+
+   Divide the total number of lines in /tmp/a with the number of lines
+   changed.  We've found that most clusters are under 10%.
+
+   You can force all of this rebalancing to happen at once with::
+
+     ceph osd crush reweight-all
+
+   Otherwise, it will happen at some unknown point in the future when
+   CRUSH weights are next adjusted.
+
+Notable Changes
+---------------
+
+* ceph-fuse: flock, fcntl lock support (Yan, Zheng, Greg Farnum)
+* crush: fix straw bucket weight calculation, add straw_calc_version tunable (#10095 Sage Weil)
+* crush: fix tree bucket (Rongzu Zhu)
+* crush: fix underflow of tree weights (Loic Dachary, Sage Weil)
+* crushtool: add --reweight (Sage Weil)
+* librbd: complete pending operations before losing image (#10299 Jason Dillaman)
+* librbd: fix read caching performance regression (#9854 Jason Dillaman)
+* librbd: gracefully handle deleted/renamed pools (#10270 Jason Dillaman)
+* mon: fix dump of chooseleaf_vary_r tunable (Sage Weil)
+* osd: fix PG ref leak in snaptrimmer on peering (#10421 Kefu Chai)
+* osd: handle no-op write with snapshot (#10262 Sage Weil)
+* radosgw-admin: create subuser when creating user (#10103 Yehuda Sadeh)
+* rgw: change multipart uplaod id magic (#10271 Georgio Dimitrakakis, Yehuda Sadeh)
+* rgw: don't overwrite bucket/object owner when setting ACLs (#10978 Yehuda Sadeh)
+* rgw: enable IPv6 for embedded civetweb (#10965 Yehuda Sadeh)
+* rgw: fix partial swift GET (#10553 Yehuda Sadeh)
+* rgw: fix quota disable (#9907 Dong Lei)
+* rgw: index swift keys appropriately (#10471 Hemant Burman, Yehuda Sadeh)
+* rgw: make setattrs update bucket index (#5595 Yehuda Sadeh)
+* rgw: pass civetweb configurables (#10907 Yehuda Sadeh)
+* rgw: remove swift user manifest (DLO) hash calculation (#9973 Yehuda Sadeh)
+* rgw: return correct len for 0-len objects (#9877 Yehuda Sadeh)
+* rgw: S3 object copy content-type fix (#9478 Yehuda Sadeh)
+* rgw: send ETag on S3 object copy (#9479 Yehuda Sadeh)
+* rgw: send HTTP status reason explicitly in fastcgi (Yehuda Sadeh)
+* rgw: set ulimit -n from sysvinit (el6) init script (#9587 Sage Weil)
+* rgw: update swift subuser permission masks when authenticating (#9918 Yehuda Sadeh)
+* rgw: URL decode query params correctly (#10271 Georgio Dimitrakakis, Yehuda Sadeh)
+* rgw: use attrs when reading object attrs (#10307 Yehuda Sadeh)
+* rgw: use \r\n for http headers (#9254 Benedikt Fraunhofer, Yehuda Sadeh)
+
+
 v0.80.8 Firefly
 ===============
 
@@ -1655,6 +2079,8 @@ fix, and some packaging updates.
 
 We recommend that all users for v0.80.x firefly upgrade when it is
 convenient to do so.
+
+For more detailed information, see :download:`the complete changelog <changelog/v0.80.8.txt>`.
 
 Notable Changes
 ---------------
@@ -3799,6 +4225,50 @@ Notable Changes
 * rgw: complete in-progress requests before shutting down
 * rgw: fix S3 auth with response-* query string params (Sylvain Munaut, Yehuda Sadeh)
 * sysvinit: add condrestart command (Dan van der Ster)
+
+
+v0.67.12 "Dumpling"
+===================
+
+This stable update for Dumpling fixes a few longstanding issues with
+backfill in the OSD that can lead to stalled IOs.  There is also a fix
+for memory utilization for reads in librbd when caching is enabled,
+and then several other small fixes across the rest of the system.
+
+Dumpling users who have encountered IO stalls during backfill and who
+do not expect to upgrade to Firefly soon should upgrade.  Everyone
+else should upgrade to Firefly already.  This is likely to be the last stable
+release for the 0.67.x Dumpling series.
+
+
+Notable Changes
+---------------
+
+* buffer: fix buffer rebuild alignment corner case (#6614 #6003 Loic Dachary, Samuel Just)
+* ceph-disk: reprobe partitions after zap (#9665 #9721 Loic Dachary)
+* ceph-disk: use partx instead of partprobe when appropriate (Loic Dachary)
+* common: add $cctid meta variable (#6228 Adam Crume)
+* crush: fix get_full_location_ordered (Sage Weil)
+* crush: pick ruleset id that matches rule_id (#9675 Xiaoxi Chen)
+* libcephfs: fix tid wrap bug (#9869 Greg Farnum)
+* libcephfs: get osd location on -1 should return EINVAL (Sage Weil)
+* librados: fix race condition with C API and op timeouts (#9582 Sage Weil)
+* librbd: constrain max number of in-flight read requests (#9854 Jason Dillaman)
+* librbd: enforce cache size on read requests (Jason Dillaman)
+* librbd: fix invalid close in image open failure path (#10030 Jason Dillaman)
+* librbd: fix read hang on sparse files (Jason Dillaman)
+* librbd: gracefully handle deleted/renamed pools (#10270 #10122 Jason Dillaman)
+* librbd: protect list_children from invalid child pool ioctxs (#10123 Jason Dillaman)
+* mds: fix ctime updates from clients without dirty caps (#9514 Greg Farnum)
+* mds: fix rare NULL dereference in cap update path (Greg Farnum)
+* mds: store backtrace on straydir (Yan, Zheng)
+* osd: fix journal committed_thru update after replay (#6756 Samuel Just)
+* osd: fix memory leak, busy loop on snap trim (#9113 Samuel Just)
+* osd: fix misc peering, recovery bugs (#10168 Samuel Just)
+* osd: fix purged_snap field on backfill start (#9487 Sage Weil)
+* osd: handle no-op write with snapshot corner case (#10262 Sage Weil, Loic Dachary)
+* osd: respect RWORDERED rados flag (Sage Weil)
+* osd: several backfill fixes and refactors (Samuel Just, David Zafman)
 
 
 v0.67.11 "Dumpling"

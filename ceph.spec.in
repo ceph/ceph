@@ -665,6 +665,7 @@ fi
 %config(noreplace) %{_sysconfdir}/ceph/rbdmap
 %{_initrddir}/rbdmap
 %{python_sitelib}/ceph_argparse.py*
+%{python_sitelib}/ceph_daemon.py*
 %if 0%{?rhel} >= 7 || 0%{?fedora}
 /usr/lib/udev/rules.d/50-rbd.rules
 %else
@@ -854,6 +855,7 @@ ln -sf %{_libdir}/librbd.so.1 /usr/lib64/qemu/librbd.so.1
 %{_bindir}/ceph_erasure_code
 %{_bindir}/ceph_erasure_code_benchmark
 %{_bindir}/ceph_omapbench
+%{_bindir}/ceph_perf_objectstore
 %{_bindir}/ceph_psim
 %{_bindir}/ceph_radosacl
 %{_bindir}/ceph_rgw_jsonparser

@@ -101,8 +101,8 @@ Package: ceph-mds
 Architecture: linux-any
 Depends: ceph, ${misc:Depends}, ${shlibs:Depends}
 Recommends: ceph-fs-common, ceph-fuse, libcephfs1
-Replaces: ceph (<< 0.58-1)
-Breaks: ceph (<< 0.58-1)
+Replaces: ceph (<< 0.93-417)
+Breaks: ceph (<< 0.93-417)
 Description: metadata server for the ceph distributed file system
  Ceph is a massively scalable, open-source, distributed
  storage system that runs on commodity hardware and delivers object,

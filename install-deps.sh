@@ -54,8 +54,20 @@ CentOS|Fedora|SUSE*|RedHatEnterpriseServer)
             SUSE*)
                 $SUDO zypper -y yum-utils
                 ;;
-            *)
+            Fedora)
                 $SUDO yum install -y yum-utils
+                ;;
+            CentOS|RedHatEnterpriseServer)
+                $SUDO yum install -y yum-utils
+                MAJOR_VERSION=$(lsb_release -rs | cut -f1 -d.)
+                if test $(lsb_release -si) == RedHatEnterpriseServer ; then
+                    $SUDO yum install subscription-manager
+                    $SUDO subscription-manager repos --enable=rhel-$MAJOR_VERSION-server-optional-rpms
+                fi
+                $SUDO yum-config-manager --add-repo https://dl.fedoraproject.org/pub/epel/$MAJOR_VERSION/x86_64/ 
+                $SUDO yum install --nogpgcheck -y epel-release
+                $SUDO rpm --import /etc/pki/rpm-gpg/RPM-GPG-KEY-EPEL-$MAJOR_VERSION
+                $SUDO rm -f /etc/yum.repos.d/dl.fedoraproject.org*
                 ;;
         esac
         sed -e 's/@//g' < ceph.spec.in > $DIR/ceph.spec

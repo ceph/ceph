@@ -208,11 +208,10 @@ public:
     // and push them in FIFO order to front of the input queue,
     // and mark the connection as flow-controlled
     XioSubmit::Queue requeue_q;
-    XioSubmit *xs;
     XioMsg *xmsg;
 
     while (q_iter != send_q.end()) {
-      xs = &(*q_iter);
+      XioSubmit *xs = &(*q_iter);
       // skip retires and anything for other connections
       if ((xs->type != XioSubmit::OUTGOING_MSG) ||
 	  (xs->xcon != xcon))
@@ -424,20 +423,18 @@ public:
 
   void shutdown()
   {
-    XioPortal *portal;
     int nportals = portals.size();
     for (int p_ix = 0; p_ix < nportals; ++p_ix) {
-      portal = portals[p_ix];
+      XioPortal *portal = portals[p_ix];
       portal->shutdown();
     }
   }
 
   void join()
   {
-    XioPortal *portal;
     int nportals = portals.size();
     for (int p_ix = 0; p_ix < nportals; ++p_ix) {
-      portal = portals[p_ix];
+      XioPortal *portal = portals[p_ix];
       portal->join();
     }
   }

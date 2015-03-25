@@ -41,7 +41,7 @@ HeartbeatMap::~HeartbeatMap()
   assert(m_workers.empty());
 }
 
-heartbeat_handle_d *HeartbeatMap::add_worker(string name)
+heartbeat_handle_d *HeartbeatMap::add_worker(const string& name)
 {
   m_rwlock.get_write();
   ldout(m_cct, 10) << "add_worker '" << name << "'" << dendl;
@@ -52,7 +52,7 @@ heartbeat_handle_d *HeartbeatMap::add_worker(string name)
   return h;
 }
 
-void HeartbeatMap::remove_worker(heartbeat_handle_d *h)
+void HeartbeatMap::remove_worker(const heartbeat_handle_d *h)
 {
   m_rwlock.get_write();
   ldout(m_cct, 10) << "remove_worker '" << h->name << "'" << dendl;
@@ -61,7 +61,7 @@ void HeartbeatMap::remove_worker(heartbeat_handle_d *h)
   delete h;
 }
 
-bool HeartbeatMap::_check(heartbeat_handle_d *h, const char *who, time_t now)
+bool HeartbeatMap::_check(const heartbeat_handle_d *h, const char *who, time_t now)
 {
   bool healthy = true;
   time_t was;

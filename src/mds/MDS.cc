@@ -347,6 +347,13 @@ bool MDS::asok_command(string command, cmdmap_t& cmdmap, string format,
         return true;
       }
       command_export_dir(f, path, (mds_rank_t)rank);
+    } else if (command == "dump cache") {
+      string path;
+      if(!cmd_getval(g_ceph_context, cmdmap, "path", path)) {
+        mdcache->dump_cache(f);
+      } else {
+        mdcache->dump_cache(path);
+      }
     } else if (command == "force_readonly") {
       mds_lock.Lock();
       mdcache->force_readonly();
@@ -419,6 +426,11 @@ int MDS::_command_flush_journal(std::stringstream *ss)
     return -EROFS;
   }
 
+  if (!is_active()) {
+    dout(5) << __func__ << ": MDS not active, no-op" << dendl;
+    return 0;
+  }
+
   // I need to seal off the current segment, and then mark all previous segments
   // for expiry
   mdlog->start_new_segment();
@@ -426,15 +438,34 @@ int MDS::_command_flush_journal(std::stringstream *ss)
 
   // Flush initially so that all the segments older than our new one
   // will be elegible for expiry
-  C_SaferCond mdlog_flushed;
-  mdlog->flush();
-  mdlog->wait_for_safe(new MDSInternalContextWrapper(this, &mdlog_flushed));
-  mds_lock.Unlock();
-  r = mdlog_flushed.wait();
-  mds_lock.Lock();
-  if (r != 0) {
-    *ss << "Error " << r << " (" << cpp_strerror(r) << ") while flushing journal";
-    return r;
+  {
+    C_SaferCond mdlog_flushed;
+    mdlog->flush();
+    mdlog->wait_for_safe(new MDSInternalContextWrapper(this, &mdlog_flushed));
+    mds_lock.Unlock();
+    r = mdlog_flushed.wait();
+    mds_lock.Lock();
+    if (r != 0) {
+      *ss << "Error " << r << " (" << cpp_strerror(r) << ") while flushing journal";
+      return r;
+    }
+  }
+
+  // Because we may not be the last wait_for_safe context on MDLog, and
+  // subsequent contexts might wake up in the middle of our later trim_all
+  // and interfere with expiry (by e.g. marking dirs/dentries dirty
+  // on previous log segments), we run a second wait_for_safe here.
+  // See #10368
+  {
+    C_SaferCond mdlog_cleared;
+    mdlog->wait_for_safe(new MDSInternalContextWrapper(this, &mdlog_cleared));
+    mds_lock.Unlock();
+    r = mdlog_cleared.wait();
+    mds_lock.Lock();
+    if (r != 0) {
+      *ss << "Error " << r << " (" << cpp_strerror(r) << ") while flushing journal";
+      return r;
+    }
   }
 
   // Put all the old log segments into expiring or expired state
@@ -567,63 +598,71 @@ void MDS::set_up_admin_socket()
   asok_hook = new MDSSocketHook(this);
   r = admin_socket->register_command("status", "status", asok_hook,
 				     "high-level status of MDS");
-  assert(0 == r);
+  assert(r == 0);
   r = admin_socket->register_command("dump_ops_in_flight",
 				     "dump_ops_in_flight", asok_hook,
 				     "show the ops currently in flight");
-  assert(0 == r);
+  assert(r == 0);
   r = admin_socket->register_command("ops",
 				     "ops", asok_hook,
 				     "show the ops currently in flight");
-  assert(0 == r);
+  assert(r == 0);
   r = admin_socket->register_command("dump_historic_ops", "dump_historic_ops",
 				     asok_hook,
 				     "show slowest recent ops");
+  assert(r == 0);
   r = admin_socket->register_command("scrub_path",
                                      "scrub_path name=path,type=CephString",
                                      asok_hook,
                                      "scrub an inode and output results");
+  assert(r == 0);
   r = admin_socket->register_command("flush_path",
                                      "flush_path name=path,type=CephString",
                                      asok_hook,
                                      "flush an inode (and its dirfrags)");
+  assert(r == 0);
   r = admin_socket->register_command("export dir",
                                      "export dir "
                                      "name=path,type=CephString "
                                      "name=rank,type=CephInt",
                                      asok_hook,
                                      "migrate a subtree to named MDS");
-  assert(0 == r);
+  assert(r == 0);
+  r = admin_socket->register_command("dump cache",
+                                     "dump cache name=path,type=CephString,req=false",
+                                     asok_hook,
+                                     "dump metadata cache (optionally to a file)");
+  assert(r == 0);
   r = admin_socket->register_command("session evict",
 				     "session evict name=client_id,type=CephString",
 				     asok_hook,
 				     "Evict a CephFS client");
-  assert(0 == r);
+  assert(r == 0);
   r = admin_socket->register_command("osdmap barrier",
 				     "osdmap barrier name=target_epoch,type=CephInt",
 				     asok_hook,
 				     "Wait until the MDS has this OSD map epoch");
-  assert(0 == r);
+  assert(r == 0);
   r = admin_socket->register_command("session ls",
 				     "session ls",
 				     asok_hook,
 				     "Enumerate connected CephFS clients");
-  assert(0 == r);
+  assert(r == 0);
   r = admin_socket->register_command("flush journal",
 				     "flush journal",
 				     asok_hook,
 				     "Flush the journal to the backing store");
-  assert(0 == r);
+  assert(r == 0);
   r = admin_socket->register_command("force_readonly",
 				     "force_readonly",
 				     asok_hook,
 				     "Force MDS to read-only mode");
-  assert(0 == r);
+  assert(r == 0);
   r = admin_socket->register_command("get subtrees",
 				     "get subtrees",
 				     asok_hook,
 				     "Return the subtree map");
-  assert(0 == r);
+  assert(r == 0);
 }
 
 void MDS::clean_up_admin_socket()
@@ -700,7 +739,8 @@ void MDS::create_logger()
 
     mds_plb.add_u64_counter(l_mds_request, "request");
     mds_plb.add_u64_counter(l_mds_reply, "reply");
-    mds_plb.add_time_avg(l_mds_reply_latency, "reply_latency");
+    mds_plb.add_time_avg(l_mds_reply_latency, "reply_latency",
+        "Reply latency", "rlat");
     mds_plb.add_u64_counter(l_mds_forward, "forward");
     
     mds_plb.add_u64_counter(l_mds_dir_fetch, "dir_fetch");
@@ -708,14 +748,14 @@ void MDS::create_logger()
     mds_plb.add_u64_counter(l_mds_dir_split, "dir_split");
 
     mds_plb.add_u64(l_mds_inode_max, "inode_max");
-    mds_plb.add_u64(l_mds_inodes, "inodes");
+    mds_plb.add_u64(l_mds_inodes, "inodes", "Inodes", "inos");
     mds_plb.add_u64(l_mds_inodes_top, "inodes_top");
     mds_plb.add_u64(l_mds_inodes_bottom, "inodes_bottom");
     mds_plb.add_u64(l_mds_inodes_pin_tail, "inodes_pin_tail");  
     mds_plb.add_u64(l_mds_inodes_pinned, "inodes_pinned");
-    mds_plb.add_u64_counter(l_mds_inodes_expired, "inodes_expired");
-    mds_plb.add_u64_counter(l_mds_inodes_with_caps, "inodes_with_caps");
-    mds_plb.add_u64_counter(l_mds_caps, "caps");
+    mds_plb.add_u64(l_mds_inodes_expired, "inodes_expired");
+    mds_plb.add_u64(l_mds_inodes_with_caps, "inodes_with_caps");
+    mds_plb.add_u64(l_mds_caps, "caps", "Capabilities", "caps");
     mds_plb.add_u64(l_mds_subtrees, "subtrees");
     
     mds_plb.add_u64_counter(l_mds_traverse, "traverse"); 
@@ -1216,9 +1256,6 @@ COMMAND("heap " \
 	"mds", "*", "cli,rest")
 };
 
-// FIXME: reinstate dumpcache as an admin socket command
-//  -- it makes no sense for it to be a remote command when
-//     the output is a local file
 // FIXME: reinstate issue_caps, try_eval, fragment_dir, merge_dir
 //  *if* it makes sense to do so (or should these be admin socket things?)
 
@@ -3008,7 +3045,7 @@ void MDS::heartbeat_reset()
   // after a call to suicide() completes, in which case MDS::hb
   // has been freed and we are a no-op.
   if (!hb) {
-      assert(state == CEPH_MDS_STATE_DNE);
+      assert(want_state == CEPH_MDS_STATE_DNE);
       return;
   }
 

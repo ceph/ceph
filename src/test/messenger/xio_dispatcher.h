@@ -76,7 +76,7 @@ public:
   virtual void ms_handle_remote_reset(Connection *con);
 
   /**
-   * @defgroup Authentication
+   * @defgroup test_xio_dispatcher_h_auth Authentication
    * @{
    */
   /**

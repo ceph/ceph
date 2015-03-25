@@ -166,10 +166,9 @@ Enable Password-less SSH
 ------------------------
 
 Since ``ceph-deploy`` will not prompt for a password, you must generate
-SSH keys on the admin node and distribute the public key to each Ceph node.
-
-.. note:: ``ceph-deploy`` v1.1.3 and later releases will attempt to generate
-   the SSH keys for initial monitors. 
+SSH keys on the admin node and distribute the public key to each Ceph
+node. ``ceph-deploy`` will attempt to generate the SSH keys for initial
+monitors.
 
 #. Generate the SSH keys, but do not use ``sudo`` or the
    ``root`` user. Leave the passphrase empty::

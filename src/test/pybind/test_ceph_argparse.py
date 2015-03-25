@@ -548,10 +548,11 @@ class TestOSD(TestArgparse):
 
     def test_map(self):
         self.assert_valid_command(['osd', 'map', 'poolname', 'objectname'])
+        self.assert_valid_command(['osd', 'map', 'poolname', 'objectname', 'nspace'])
         assert_equal({}, validate_command(sigdict, ['osd', 'map']))
         assert_equal({}, validate_command(sigdict, ['osd', 'map', 'poolname']))
         assert_equal({}, validate_command(sigdict, ['osd', 'map',
-                                                    'poolname', 'objectname',
+                                                    'poolname', 'objectname', 'nspace',
                                                     'toomany']))
 
     def test_metadata(self):

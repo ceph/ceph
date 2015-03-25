@@ -236,7 +236,7 @@ void PG::lock_suspend_timeout(ThreadPool::TPHandle &handle)
   handle.reset_tp_timeout();
 }
 
-void PG::lock(bool no_lockdep)
+void PG::lock(bool no_lockdep) const
 {
   _lock.Lock(no_lockdep);
   // if we have unrecorded dirty state with the lock dropped, there is a bug
@@ -791,6 +791,8 @@ bool PG::all_unfound_are_queried_or_lost(const OSDMapRef osdmap) const
     map<pg_shard_t, pg_info_t>::const_iterator iter = peer_info.find(*peer);
     if (iter != peer_info.end() &&
         (iter->second.is_empty() || iter->second.dne()))
+      continue;
+    if (!osdmap->exists(peer->osd))
       continue;
     const osd_info_t &osd_info(osdmap->get_info(peer->osd));
     if (osd_info.lost_at <= osd_info.up_from) {
@@ -2312,7 +2314,7 @@ void PG::_update_calc_stats()
 
     // a degraded objects has fewer replicas or EC shards than the
     // pool specifies
-    uint64_t degraded = 0;
+    int64_t degraded = 0;
 
     // if acting is smaller than desired, add in those missing replicas
     if (actingset.size() < target)
@@ -2334,7 +2336,9 @@ void PG::_update_calc_stats()
       degraded += peer_missing[*i].num_missing();
 
       // not yet backfilled
-      degraded += num_objects - peer_info[*i].stats.stats.sum.num_objects;
+      int64_t diff = num_objects - peer_info[*i].stats.stats.sum.num_objects;
+      if (diff > 0)
+        degraded += diff;
     }
     info.stats.stats.sum.num_objects_degraded = degraded;
     info.stats.stats.sum.num_objects_unfound = get_num_unfound();

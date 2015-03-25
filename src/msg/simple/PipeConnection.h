@@ -19,7 +19,7 @@
 
 class Pipe;
 
-struct PipeConnection : public Connection {
+class PipeConnection : public Connection {
   Pipe* pipe;
 
   friend class boost::intrusive_ptr<PipeConnection>;

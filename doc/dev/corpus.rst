@@ -16,7 +16,7 @@ decode old objects across that $version (this is normally the case).
 
 
 How to generate an object corpus
-================================
+--------------------------------
 
 We can generate an object corpus for a particular version of ceph like so.
 
@@ -24,7 +24,7 @@ We can generate an object corpus for a particular version of ceph like so.
 
 	git clone ceph.git
 	cd ceph
-	git submodule update --init
+	git submodule update --init --recursive
 
 #. Build with flag to dump objects to /tmp/foo::
 

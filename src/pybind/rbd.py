@@ -31,53 +31,70 @@ RBD_FEATURE_EXCLUSIVE_LOCK = 4
 
 RBD_FLAG_OBJECT_MAP_INVALID = 1
 
+
 class Error(Exception):
     pass
+
 
 class PermissionError(Error):
     pass
 
+
 class ImageNotFound(Error):
     pass
+
 
 class ImageExists(Error):
     pass
 
+
 class IOError(Error):
     pass
+
 
 class NoSpace(Error):
     pass
 
+
 class IncompleteWriteError(Error):
     pass
+
 
 class InvalidArgument(Error):
     pass
 
+
 class LogicError(Error):
     pass
+
 
 class ReadOnlyImage(Error):
     pass
 
+
 class ImageBusy(Error):
     pass
+
 
 class ImageHasSnapshots(Error):
     pass
 
+
 class FunctionNotSupported(Error):
     pass
+
 
 class ArgumentOutOfRange(Error):
     pass
 
+
 class ConnectionShutdown(Error):
     pass
 
+
 class Timeout(Error):
     pass
+
 
 def make_ex(ret, msg):
     """
@@ -110,6 +127,7 @@ def make_ex(ret, msg):
     else:
         return Error(msg + (": error code %d" % ret))
 
+
 class rbd_image_info_t(Structure):
     _fields_ = [("size", c_uint64),
                 ("obj_size", c_uint64),
@@ -119,10 +137,12 @@ class rbd_image_info_t(Structure):
                 ("parent_pool", c_int64),
                 ("parent_name", c_char * 96)]
 
+
 class rbd_snap_info_t(Structure):
     _fields_ = [("id", c_uint64),
                 ("size", c_uint64),
                 ("name", c_char_p)]
+
 
 def load_librbd():
     """
@@ -138,6 +158,7 @@ def load_librbd():
         return CDLL('librbd.so.1')
     except OSError as e:
         raise EnvironmentError("Unable to load librbd: %s" % e)
+
 
 class RBD(object):
     """
@@ -256,8 +277,8 @@ class RBD(object):
         ret = self.librbd.rbd_clone(p_ioctx.io, c_char_p(p_name),
                                     c_char_p(p_snapname),
                                     c_ioctx.io, c_char_p(c_name),
-                                          c_uint64(features),
-                                          byref(c_int(order)))
+                                    c_uint64(features),
+                                    byref(c_int(order)))
         if ret < 0:
             raise make_ex(ret, 'error creating clone')
 
@@ -319,6 +340,7 @@ class RBD(object):
         ret = self.librbd.rbd_rename(ioctx.io, c_char_p(src), c_char_p(dest))
         if ret != 0:
             raise make_ex(ret, 'error renaming image')
+
 
 class Image(object):
     """
@@ -467,11 +489,12 @@ class Image(object):
             name = create_string_buffer(size)
             snapname = create_string_buffer(size)
             ret = self.librbd.rbd_get_parent_info(self.image, pool, len(pool),
-                name, len(name), snapname, len(snapname))
+                                                  name, len(name), snapname,
+                                                  len(snapname))
             if ret == -errno.ERANGE:
                 size *= 2
 
-        if (ret != 0):
+        if ret != 0:
             raise make_ex(ret, 'error getting parent info for image %s' % (self.name,))
         return (pool.value, name.value, snapname.value)
 
@@ -483,7 +506,7 @@ class Image(object):
         """
         old = c_uint8()
         ret = self.librbd.rbd_get_old_format(self.image, byref(old))
-        if (ret != 0):
+        if ret != 0:
             raise make_ex(ret, 'error getting old_format for image' % (self.name))
         return old.value != 0
 
@@ -496,7 +519,7 @@ class Image(object):
         """
         image_size = c_uint64()
         ret = self.librbd.rbd_get_size(self.image, byref(image_size))
-        if (ret != 0):
+        if ret != 0:
             raise make_ex(ret, 'error getting size for image' % (self.name))
         return image_size.value
 
@@ -508,7 +531,7 @@ class Image(object):
         """
         features = c_uint64()
         ret = self.librbd.rbd_get_features(self.image, byref(features))
-        if (ret != 0):
+        if ret != 0:
             raise make_ex(ret, 'error getting features for image' % (self.name))
         return features.value
 
@@ -523,7 +546,7 @@ class Image(object):
         """
         overlap = c_uint64()
         ret = self.librbd.rbd_get_overlap(self.image, byref(overlap))
-        if (ret != 0):
+        if ret != 0:
             raise make_ex(ret, 'error getting overlap for image' % (self.name))
         return overlap.value
 
@@ -535,7 +558,7 @@ class Image(object):
         """
         flags = c_uint64()
         ret = self.librbd.rbd_get_flags(self.image, byref(flags))
-        if (ret != 0):
+        if ret != 0:
             raise make_ex(ret, 'error getting flags for image' % (self.name))
         return flags.value
 
@@ -547,7 +570,7 @@ class Image(object):
         """
         owner = c_int()
         ret = self.librbd.rbd_is_exclusive_lock_owner(self.image, byref(owner))
-        if (ret != 0):
+        if ret != 0:
             raise make_ex(ret, 'error getting lock status for image' % (self.name))
         return owner.value == 1
 
@@ -691,20 +714,22 @@ class Image(object):
         :type offset: int
         :param length: how many bytes to read
         :type length: int
-	:param fadvise_flags: fadvise flags for this read
-	:type fadvise_flags: int
+        :param fadvise_flags: fadvise flags for this read
+        :type fadvise_flags: int
         :returns: str - the data read
         :raises: :class:`InvalidArgument`, :class:`IOError`
         """
         ret_buf = create_string_buffer(length)
-	if fadvise_flags == 0:
-	  ret = self.librbd.rbd_read(self.image, c_uint64(offset),
-				      c_size_t(length), byref(ret_buf))
-	else:
-	  ret = self.librbd.rbd_read2(self.image, c_uint64(offset),
-					c_size_t(length), byref(ret_buf), c_int(fadvise_flags))
+        if fadvise_flags == 0:
+            ret = self.librbd.rbd_read(self.image, c_uint64(offset),
+                                       c_size_t(length), byref(ret_buf))
+        else:
+            ret = self.librbd.rbd_read2(self.image, c_uint64(offset),
+                                        c_size_t(length), byref(ret_buf),
+                                        c_int(fadvise_flags))
         if ret < 0:
             raise make_ex(ret, 'error reading %s %ld~%ld' % (self.image, offset, length))
+
         return ctypes.string_at(ret_buf, ret)
 
     def diff_iterate(self, offset, length, from_snapshot, iterate_cb):
@@ -768,8 +793,8 @@ class Image(object):
         :type data: str
         :param offset: where to start writing data
         :type offset: int
-	:param fadvise_flags: fadvise flags for this write
-	:type fadvise_flags: int
+        :param fadvise_flags: fadvise flags for this write
+        :type fadvise_flags: int
         :returns: int - the number of bytes written
         :raises: :class:`IncompleteWriteError`, :class:`LogicError`,
                  :class:`InvalidArgument`, :class:`IOError`
@@ -777,12 +802,14 @@ class Image(object):
         if not isinstance(data, str):
             raise TypeError('data must be a string')
         length = len(data)
-	if fadvise_flags == 0:
-	  ret = self.librbd.rbd_write(self.image, c_uint64(offset),
-	                              c_size_t(length), c_char_p(data))
-	else:
-	  ret = self.librbd.rbd_write2(self.image, c_uint64(offset),
-	                              c_size_t(length), c_char_p(data), c_int(fadvise_flags))
+
+        if fadvise_flags == 0:
+            ret = self.librbd.rbd_write(self.image, c_uint64(offset),
+                                        c_size_t(length), c_char_p(data))
+        else:
+            ret = self.librbd.rbd_write2(self.image, c_uint64(offset),
+                                         c_size_t(length), c_char_p(data),
+                                         c_int(fadvise_flags))
 
         if ret == length:
             return ret
@@ -848,7 +875,7 @@ written." % (self.name, ret, length))
         Flatten clone image (copy all blocks from parent to child)
         """
         ret = self.librbd.rbd_flatten(self.image)
-        if (ret < 0):
+        if ret < 0:
             raise make_ex(ret, "error flattening %s" % self.name)
 
     def list_children(self):
@@ -980,6 +1007,7 @@ written." % (self.name, ret, length))
         if ret < 0:
             raise make_ex(ret, 'error unlocking image')
 
+
 class DiffIterateCB(object):
     def __init__(self, cb):
         self.cb = cb
@@ -987,6 +1015,7 @@ class DiffIterateCB(object):
     def callback(self, offset, length, exists, unused):
         self.cb(offset, length, exists == 1)
         return 0
+
 
 class SnapIterator(object):
     """

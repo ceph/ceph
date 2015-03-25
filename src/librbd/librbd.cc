@@ -793,6 +793,51 @@ namespace librbd {
     return r;
   }
 
+  int Image::metadata_get(const std::string &key, std::string *value)
+  {
+    ImageCtx *ictx = (ImageCtx *)ctx;
+    tracepoint(librbd, metadata_get_enter, ictx, key.c_str());
+    int r = librbd::metadata_get(ictx, key, value);
+    if (r < 0)
+      tracepoint(librbd, metadata_get_exit, r, key.c_str(), NULL);
+    else
+      tracepoint(librbd, metadata_get_exit, r, key.c_str(), value->c_str());
+    return r;
+  }
+
+  int Image::metadata_set(const std::string &key, const std::string &value)
+  {
+    ImageCtx *ictx = (ImageCtx *)ctx;
+    tracepoint(librbd, metadata_set_enter, ictx, key.c_str(), value.c_str());
+    int r = librbd::metadata_set(ictx, key, value);
+    tracepoint(librbd, metadata_set_exit, r);
+    return r;
+  }
+
+  int Image::metadata_remove(const std::string &key)
+  {
+    ImageCtx *ictx = (ImageCtx *)ctx;
+    tracepoint(librbd, metadata_remove_enter, ictx, key.c_str());
+    int r = librbd::metadata_remove(ictx, key);
+    tracepoint(librbd, metadata_remove_exit, r);
+    return r;
+  }
+
+  int Image::metadata_list(const std::string &start, uint64_t max, map<string, bufferlist> *pairs)
+  {
+    ImageCtx *ictx = (ImageCtx *)ctx;
+    tracepoint(librbd, metadata_list_enter, ictx);
+    int r = librbd::metadata_list(ictx, start, max, pairs);
+    if (r >= 0) {
+      for (map<string, bufferlist>::iterator it = pairs->begin();
+           it != pairs->end(); ++it) {
+        tracepoint(librbd, metadata_list_entry, it->first.c_str(), it->second.c_str());
+      }
+    }
+    tracepoint(librbd, metadata_list_exit, r);
+    return r;
+  }
+
 } // namespace librbd
 
 extern "C" void rbd_version(int *major, int *minor, int *extra)
@@ -1695,6 +1740,82 @@ extern "C" int rbd_invalidate_cache(rbd_image_t image)
   tracepoint(librbd, invalidate_cache_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only);
   int r = librbd::invalidate_cache(ictx);
   tracepoint(librbd, invalidate_cache_exit, r);
+  return r;
+}
+
+extern "C" int rbd_metadata_get(rbd_image_t image, const char *key, char *value, size_t *vallen)
+{
+  librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
+  string val_s;
+  tracepoint(librbd, metadata_get_enter, ictx, key);
+  int r = librbd::metadata_get(ictx, key, &val_s);
+  if (r < 0) {
+    tracepoint(librbd, metadata_get_exit, r, key, NULL);
+    return r;
+  }
+  if (*vallen < val_s.size()) {
+    r = -ERANGE;
+    *vallen = val_s.size();
+    tracepoint(librbd, metadata_get_exit, r, key, NULL);
+  } else {
+    strncpy(value, val_s.c_str(), val_s.size());
+    tracepoint(librbd, metadata_get_exit, r, key, value);
+  }
+  return r;
+}
+
+extern "C" int rbd_metadata_set(rbd_image_t image, const char *key, const char *value)
+{
+  librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
+  tracepoint(librbd, metadata_set_enter, ictx, key, value);
+  int r = librbd::metadata_set(ictx, key, value);
+  tracepoint(librbd, metadata_set_exit, r);
+  return r;
+}
+
+extern "C" int rbd_metadata_remove(rbd_image_t image, const char *key)
+{
+  librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
+  tracepoint(librbd, metadata_remove_enter, ictx, key);
+  int r = librbd::metadata_remove(ictx, key);
+  tracepoint(librbd, metadata_remove_exit, r);
+  return r;
+}
+
+extern "C" int rbd_metadata_list(rbd_image_t image, const char *start, uint64_t max,
+                                 char *key, size_t *key_len, char *value, size_t *val_len)
+{
+  librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
+  tracepoint(librbd, metadata_list_enter, ictx);
+  map<string, bufferlist> pairs;
+  int r = librbd::metadata_list(ictx, start, max, &pairs);
+  size_t key_total_len = 0, val_total_len = 0;
+  bool too_short = false;
+  for (map<string, bufferlist>::iterator it = pairs.begin();
+       it != pairs.end(); ++it) {
+    key_total_len += it->first.size() + 1;
+    val_total_len += it->second.length() + 1;
+  }
+  if (*key_len < key_total_len || *val_len < key_total_len)
+    too_short = true;
+  *key_len = key_total_len;
+  *val_len = val_total_len;
+  if (too_short) {
+    tracepoint(librbd, metadata_list_exit, -ERANGE);
+    return -ERANGE;
+  }
+
+  char *key_p = key, *value_p = value;
+
+  for (map<string, bufferlist>::iterator it = pairs.begin();
+       it != pairs.end(); ++it) {
+    strncpy(key_p, it->first.c_str(), it->first.size());
+    key_p += it->first.size() + 1;
+    strncpy(value_p, it->second.c_str(), it->second.length());
+    value_p += it->second.length() + 1;
+    tracepoint(librbd, metadata_list_entry, it->first.c_str(), it->second.c_str());
+  }
+  tracepoint(librbd, metadata_list_exit, r);
   return r;
 }
 

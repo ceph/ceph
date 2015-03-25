@@ -129,6 +129,11 @@ enum {
   l_osdc_osd_session_open,
   l_osdc_osd_session_close,
   l_osdc_osd_laggy,
+
+  l_osdc_osdop_omap_wr,
+  l_osdc_osdop_omap_rd,
+  l_osdc_osdop_omap_del,
+
   l_osdc_last,
 };
 
@@ -182,7 +187,8 @@ void Objecter::init()
   if (!logger) {
     PerfCountersBuilder pcb(cct, "objecter", l_osdc_first, l_osdc_last);
 
-    pcb.add_u64(l_osdc_op_active, "op_active");
+    pcb.add_u64(l_osdc_op_active, "op_active",
+        "Operations active", "actv");
     pcb.add_u64(l_osdc_op_laggy, "op_laggy");
     pcb.add_u64_counter(l_osdc_op_send, "op_send");
     pcb.add_u64_counter(l_osdc_op_send_bytes, "op_send_bytes");
@@ -191,8 +197,10 @@ void Objecter::init()
     pcb.add_u64_counter(l_osdc_op_commit, "op_commit");
 
     pcb.add_u64_counter(l_osdc_op, "op");
-    pcb.add_u64_counter(l_osdc_op_r, "op_r");
-    pcb.add_u64_counter(l_osdc_op_w, "op_w");
+    pcb.add_u64_counter(l_osdc_op_r, "op_r",
+        "Read operations", "read");
+    pcb.add_u64_counter(l_osdc_op_w, "op_w",
+        "Write operations", "writ");
     pcb.add_u64_counter(l_osdc_op_rmw, "op_rmw");
     pcb.add_u64_counter(l_osdc_op_pg, "op_pg");
 
@@ -253,6 +261,10 @@ void Objecter::init()
     pcb.add_u64_counter(l_osdc_osd_session_open, "osd_session_open");
     pcb.add_u64_counter(l_osdc_osd_session_close, "osd_session_close");
     pcb.add_u64(l_osdc_osd_laggy, "osd_laggy");
+
+    pcb.add_u64_counter(l_osdc_osdop_omap_wr, "omap_wr");
+    pcb.add_u64_counter(l_osdc_osdop_omap_rd, "omap_rd");
+    pcb.add_u64_counter(l_osdc_osdop_omap_del, "omap_del");
 
     logger = pcb.create_perf_counters();
     cct->get_perfcounters_collection()->add(logger);
@@ -2072,6 +2084,22 @@ void Objecter::_send_op_account(Op *op)
     case CEPH_OSD_OP_TMAPUP: code = l_osdc_osdop_tmap_up; break;
     case CEPH_OSD_OP_TMAPPUT: code = l_osdc_osdop_tmap_put; break;
     case CEPH_OSD_OP_TMAPGET: code = l_osdc_osdop_tmap_get; break;
+
+    // OMAP read operations
+    case CEPH_OSD_OP_OMAPGETVALS:
+    case CEPH_OSD_OP_OMAPGETKEYS:
+    case CEPH_OSD_OP_OMAPGETHEADER:
+    case CEPH_OSD_OP_OMAPGETVALSBYKEYS:
+    case CEPH_OSD_OP_OMAP_CMP: code = l_osdc_osdop_omap_rd; break;
+
+    // OMAP write operations
+    case CEPH_OSD_OP_OMAPSETVALS:
+    case CEPH_OSD_OP_OMAPSETHEADER: code = l_osdc_osdop_omap_wr; break;
+
+    // OMAP del operations
+    case CEPH_OSD_OP_OMAPCLEAR:
+    case CEPH_OSD_OP_OMAPRMKEYS: code = l_osdc_osdop_omap_del; break;
+
     case CEPH_OSD_OP_CALL: code = l_osdc_osdop_call; break;
     case CEPH_OSD_OP_WATCH: code = l_osdc_osdop_watch; break;
     case CEPH_OSD_OP_NOTIFY: code = l_osdc_osdop_notify; break;

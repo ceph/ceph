@@ -126,6 +126,7 @@ public:
     const CInode *get_inode() const { return inode; }
     inodeno_t get_remote_ino() const { return remote_ino; }
     unsigned char get_remote_d_type() const { return remote_d_type; }
+    std::string get_remote_d_type_string() const;
 
     void set_remote(inodeno_t ino, unsigned char d_type) { 
       remote_ino = ino;
@@ -148,10 +149,6 @@ public:
   elist<CDentry*>::item item_stray;
 
 protected:
-  int auth_pins, nested_auth_pins;
-#ifdef MDS_AUTHPIN_SET
-  multiset<void*> auth_pin_set;
-#endif
   friend class Migrator;
   friend class Locker;
   friend class MDCache;
@@ -176,7 +173,6 @@ public:
     dir(0),
     version(0), projected_version(0),
     item_dirty(this),
-    auth_pins(0), nested_auth_pins(0),
     lock(this, &lock_type),
     versionlock(this, &versionlock_type) {
     g_num_dn++;
@@ -189,7 +185,6 @@ public:
     dir(0),
     version(0), projected_version(0),
     item_dirty(this),
-    auth_pins(0), nested_auth_pins(0),
     lock(this, &lock_type),
     versionlock(this, &versionlock_type) {
     g_num_dn++;
@@ -263,10 +258,7 @@ public:
   void adjust_nested_auth_pins(int adjustment, int diradj, void *by);
   bool is_frozen() const;
   bool is_freezing() const;
-  bool is_auth_pinned() const { return auth_pins || nested_auth_pins; }
-  int get_num_auth_pins() const { return auth_pins; }
   int get_num_dir_auth_pins() const;
-  int get_num_nested_auth_pins() const { return nested_auth_pins; }
   
   // remote links
   void link_remote(linkage_t *dnl, CInode *in);
@@ -397,6 +389,7 @@ public:
   
   ostream& print_db_line_prefix(ostream& out);
   void print(ostream& out);
+  void dump(Formatter *f) const;
 
   friend class CDir;
 };

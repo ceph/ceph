@@ -1558,8 +1558,13 @@ void ReplicatedPG::do_op(OpRequestRef& op)
 
   bool in_hit_set = false;
   if (hit_set) {
-    if (missing_oid != hobject_t() && hit_set->contains(missing_oid))
-      in_hit_set = true;
+    if (obc.get()) {
+      if (obc->obs.oi.soid != hobject_t() && hit_set->contains(obc->obs.oi.soid))
+	in_hit_set = true;
+    } else {
+      if (missing_oid != hobject_t() && hit_set->contains(missing_oid))
+        in_hit_set = true;
+    }
     hit_set->insert(oid);
     if (hit_set->is_full() ||
 	hit_set_start_stamp + pool.info.hit_set_period <= m->get_recv_stamp()) {
@@ -1775,7 +1780,7 @@ void ReplicatedPG::do_op(OpRequestRef& op)
   }
 
   op->mark_started();
-  ctx->src_obc = src_obc;
+  ctx->src_obc.swap(src_obc);
 
   execute_ctx(ctx);
 }
@@ -1818,6 +1823,7 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op,
   }
 
   if (obc.get() && obc->obs.exists) {
+    osd->logger->inc(l_osd_op_cache_hit);
     return false;
   }
 
@@ -7471,7 +7477,7 @@ void ReplicatedPG::eval_repop(RepGather *repop)
 	     waiting_for_ack[repop->v].begin();
 	   i != waiting_for_ack[repop->v].end();
 	   ++i) {
-	MOSDOp *m = (MOSDOp*)i->first->get_req();
+	MOSDOp *m = static_cast<MOSDOp*>(i->first->get_req());
 	MOSDOpReply *reply = new MOSDOpReply(m, 0, get_osdmap()->get_epoch(), 0, true);
 	reply->set_reply_versions(repop->ctx->at_version,
 				  i->second);
@@ -8531,8 +8537,6 @@ void ReplicatedBackend::sub_op_modify_impl(OpRequestRef op)
 
   rm->bytes_written = rm->opt.get_encoded_bytes();
   
-  op->mark_started();
-
   rm->localt.append(rm->opt);
   rm->localt.register_on_commit(
     parent->bless_context(

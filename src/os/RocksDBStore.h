@@ -253,7 +253,6 @@ public:
   static string combine_strings(const string &prefix, const string &value);
   static int split_key(rocksdb::Slice in, string *prefix, string *key);
   static bufferlist to_bufferlist(rocksdb::Slice in);
-  static bool in_prefix(const string &prefix, rocksdb::Slice key);
   static string past_prefix(const string &prefix);
 
   virtual uint64_t get_estimated_size(map<string,uint64_t> &extra) {

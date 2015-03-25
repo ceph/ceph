@@ -537,14 +537,14 @@ int Monitor::preinit()
   assert(!logger);
   {
     PerfCountersBuilder pcb(g_ceph_context, "mon", l_mon_first, l_mon_last);
-    pcb.add_u64(l_mon_num_sessions, "num_sessions");
-    pcb.add_u64_counter(l_mon_session_add, "session_add");
-    pcb.add_u64_counter(l_mon_session_rm, "session_rm");
-    pcb.add_u64_counter(l_mon_session_trim, "session_trim");
-    pcb.add_u64_counter(l_mon_num_elections, "num_elections");
-    pcb.add_u64_counter(l_mon_election_call, "election_call");
-    pcb.add_u64_counter(l_mon_election_win, "election_win");
-    pcb.add_u64_counter(l_mon_election_lose, "election_lose");
+    pcb.add_u64(l_mon_num_sessions, "num_sessions", "Open sessions", "sess");
+    pcb.add_u64_counter(l_mon_session_add, "session_add", "Created sessions", "sadd");
+    pcb.add_u64_counter(l_mon_session_rm, "session_rm", "Removed sessions", "srm");
+    pcb.add_u64_counter(l_mon_session_trim, "session_trim", "Trimmed sessions");
+    pcb.add_u64_counter(l_mon_num_elections, "num_elections", "Elections participated in");
+    pcb.add_u64_counter(l_mon_election_call, "election_call", "Elections started");
+    pcb.add_u64_counter(l_mon_election_win, "election_win", "Elections won");
+    pcb.add_u64_counter(l_mon_election_lose, "election_lose", "Elections lost");
     logger = pcb.create_perf_counters();
     cct->get_perfcounters_collection()->add(logger);
   }
@@ -552,29 +552,29 @@ int Monitor::preinit()
   assert(!cluster_logger);
   {
     PerfCountersBuilder pcb(g_ceph_context, "cluster", l_cluster_first, l_cluster_last);
-    pcb.add_u64(l_cluster_num_mon, "num_mon");
-    pcb.add_u64(l_cluster_num_mon_quorum, "num_mon_quorum");
-    pcb.add_u64(l_cluster_num_osd, "num_osd");
-    pcb.add_u64(l_cluster_num_osd_up, "num_osd_up");
-    pcb.add_u64(l_cluster_num_osd_in, "num_osd_in");
-    pcb.add_u64(l_cluster_osd_epoch, "osd_epoch");
-    pcb.add_u64(l_cluster_osd_bytes, "osd_bytes");
-    pcb.add_u64(l_cluster_osd_bytes_used, "osd_bytes_used");
-    pcb.add_u64(l_cluster_osd_bytes_avail, "osd_bytes_avail");
-    pcb.add_u64(l_cluster_num_pool, "num_pool");
-    pcb.add_u64(l_cluster_num_pg, "num_pg");
-    pcb.add_u64(l_cluster_num_pg_active_clean, "num_pg_active_clean");
-    pcb.add_u64(l_cluster_num_pg_active, "num_pg_active");
-    pcb.add_u64(l_cluster_num_pg_peering, "num_pg_peering");
-    pcb.add_u64(l_cluster_num_object, "num_object");
-    pcb.add_u64(l_cluster_num_object_degraded, "num_object_degraded");
-    pcb.add_u64(l_cluster_num_object_misplaced, "num_object_misplaced");
-    pcb.add_u64(l_cluster_num_object_unfound, "num_object_unfound");
-    pcb.add_u64(l_cluster_num_bytes, "num_bytes");
-    pcb.add_u64(l_cluster_num_mds_up, "num_mds_up");
-    pcb.add_u64(l_cluster_num_mds_in, "num_mds_in");
-    pcb.add_u64(l_cluster_num_mds_failed, "num_mds_failed");
-    pcb.add_u64(l_cluster_mds_epoch, "mds_epoch");
+    pcb.add_u64(l_cluster_num_mon, "num_mon", "Monitors");
+    pcb.add_u64(l_cluster_num_mon_quorum, "num_mon_quorum", "Monitors in quorum");
+    pcb.add_u64(l_cluster_num_osd, "num_osd", "OSDs");
+    pcb.add_u64(l_cluster_num_osd_up, "num_osd_up", "OSDs that are up");
+    pcb.add_u64(l_cluster_num_osd_in, "num_osd_in", "OSD in state \"in\" (they are in cluster)");
+    pcb.add_u64(l_cluster_osd_epoch, "osd_epoch", "Current epoch of OSD map");
+    pcb.add_u64(l_cluster_osd_bytes, "osd_bytes", "Total capacity of cluster");
+    pcb.add_u64(l_cluster_osd_bytes_used, "osd_bytes_used", "Used space");
+    pcb.add_u64(l_cluster_osd_bytes_avail, "osd_bytes_avail", "Available space");
+    pcb.add_u64(l_cluster_num_pool, "num_pool", "Pools");
+    pcb.add_u64(l_cluster_num_pg, "num_pg", "Placement groups");
+    pcb.add_u64(l_cluster_num_pg_active_clean, "num_pg_active_clean", "Placement groups in active+clean state");
+    pcb.add_u64(l_cluster_num_pg_active, "num_pg_active", "Placement groups in active state");
+    pcb.add_u64(l_cluster_num_pg_peering, "num_pg_peering", "Placement groups in peering state");
+    pcb.add_u64(l_cluster_num_object, "num_object", "Objects");
+    pcb.add_u64(l_cluster_num_object_degraded, "num_object_degraded", "Degraded (missing replicas) objects");
+    pcb.add_u64(l_cluster_num_object_misplaced, "num_object_misplaced", "Misplaced (wrong location in the cluster) objects");
+    pcb.add_u64(l_cluster_num_object_unfound, "num_object_unfound", "Unfound objects");
+    pcb.add_u64(l_cluster_num_bytes, "num_bytes", "Size of all objects");
+    pcb.add_u64(l_cluster_num_mds_up, "num_mds_up", "MDSs that are up");
+    pcb.add_u64(l_cluster_num_mds_in, "num_mds_in", "MDS in state \"in\" (they are in cluster)");
+    pcb.add_u64(l_cluster_num_mds_failed, "num_mds_failed", "Failed MDS");
+    pcb.add_u64(l_cluster_mds_epoch, "mds_epoch", "Current epoch of MDS map");
     cluster_logger = pcb.create_perf_counters();
   }
 
@@ -1876,7 +1876,7 @@ void Monitor::lose_election(epoch_t epoch, set<int> &q, int l, uint64_t features
     (*p)->election_finished();
   health_monitor->start(epoch);
 
-  logger->inc(l_mon_election_win);
+  logger->inc(l_mon_election_lose);
 
   finish_election();
 }
@@ -4498,8 +4498,11 @@ int Monitor::mkfs(bufferlist& osdmapbl)
   if (is_keyring_required()) {
     KeyRing keyring;
     string keyring_filename;
-    if (!ceph_resolve_file_search(g_conf->keyring, keyring_filename)) {
-      derr << "unable to find a keyring file on " << g_conf->keyring << dendl;
+
+    r = ceph_resolve_file_search(g_conf->keyring, keyring_filename);
+    if (r) {
+      derr << "unable to find a keyring file on " << g_conf->keyring
+	   << ": " << cpp_strerror(r) << dendl;
       if (g_conf->key != "") {
 	string keyring_plaintext = "[mon.]\n\tkey = " + g_conf->key +
 	  "\n\tcaps mon = \"allow *\"\n";
