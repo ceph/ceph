@@ -30,15 +30,22 @@ def main():
     try:
         fcntl.flock(f2, fcntl.LOCK_EX)
     except IOError, e:
-        if e.errno == errno.EINTR:
-            pass
+        if e.errno != errno.EINTR:
+            raise
     else:
         raise RuntimeError("expect flock to block")
 
     fcntl.flock(f1, fcntl.LOCK_UN)
 
     lockdata = struct.pack('hhllhh', fcntl.F_WRLCK, 0, 0, 10, 0, 0)
-    fcntl.fcntl(f1, fcntl.F_OFD_SETLK, lockdata)
+    try:
+        fcntl.fcntl(f1, fcntl.F_OFD_SETLK, lockdata)
+    except IOError, e:
+        if e.errno != errno.EINVAL:
+            raise
+        else:
+            print 'kernel does not support fcntl.F_OFD_SETLK'
+            return
 
     lockdata = struct.pack('hhllhh', fcntl.F_WRLCK, 0, 10, 10, 0, 0)
     fcntl.fcntl(f2, fcntl.F_OFD_SETLK, lockdata)
@@ -52,8 +59,8 @@ def main():
         lockdata = struct.pack('hhllhh', fcntl.F_WRLCK, 0, 0, 0, 0, 0)
         fcntl.fcntl(f2, fcntl.F_OFD_SETLKW, lockdata)
     except IOError, e:
-        if e.errno == errno.EINTR:
-            pass
+        if e.errno != errno.EINTR:
+            raise
     else:
         raise RuntimeError("expect posix lock to block")
 
