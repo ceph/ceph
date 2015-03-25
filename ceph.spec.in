@@ -50,7 +50,7 @@ Requires:	hdparm
 Requires:	cryptsetup
 Requires(post):	binutils
 # We require this to be present for %%{_tmpfilesdir}
-%if 0%{_with_systemd}
+%if 0%{?_with_systemd}
 Requires: systemd
 %endif
 BuildRequires:	gcc-c++
@@ -505,7 +505,7 @@ install -D src/init-ceph $RPM_BUILD_ROOT%{_initrddir}/ceph
 install -D src/init-radosgw $RPM_BUILD_ROOT%{_initrddir}/ceph-radosgw
 install -D src/init-rbdmap $RPM_BUILD_ROOT%{_initrddir}/rbdmap
 install -D src/rbdmap $RPM_BUILD_ROOT%{_sysconfdir}/ceph/rbdmap
-%if 0%{_with_systemd}
+%if 0%{?_with_systemd}
   install -m 0644 -D systemd/ceph.tmpfiles.d $RPM_BUILD_ROOT%{_tmpfilesdir}/%{name}.conf
 %endif
 mkdir -p $RPM_BUILD_ROOT%{_sbindir}
@@ -601,7 +601,7 @@ fi
 %{_bindir}/ceph-debugpack
 %{_bindir}/ceph-coverage
 %{_initrddir}/ceph
-%if 0%{_with_systemd}
+%if 0%{?_with_systemd}
 %{_tmpfilesdir}/%{name}.conf
 %endif
 %{_sbindir}/ceph-disk
