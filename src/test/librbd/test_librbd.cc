@@ -333,7 +333,7 @@ int test_ls(rados_ioctx_t io_ctx, size_t num_expected, ...)
     printf("expected = %s\n", expected);
     std::set<std::string>::iterator it = image_names.find(expected);
     if (it != image_names.end()) {
-      printf("found %s\n", cur_name);
+      printf("found %s\n", expected);
       image_names.erase(it);
     } else {
       ADD_FAILURE() << "Unable to find image " << expected;
