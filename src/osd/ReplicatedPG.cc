@@ -8107,7 +8107,7 @@ int ReplicatedPG::find_object_context(const hobject_t& oid,
 				      bool map_snapid_to_clone,
 				      hobject_t *pmissing)
 {
-  assert(oid.pool == info.pgid.pool());
+  assert(oid.pool == static_cast<int64_t>(info.pgid.pool()));
   // want the head?
   if (oid.snap == CEPH_NOSNAP) {
     ObjectContextRef obc = get_object_context(oid, can_create);
