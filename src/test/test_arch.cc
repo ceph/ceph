@@ -47,8 +47,19 @@ TEST(Arch, all)
 
   int expected;
 
+#if (__arm__ || __aarch64__)
+
   expected = (strstr(flags, " neon ") || strstr(flags, " asimd ")) ? 1 : 0;
   EXPECT_EQ(expected, ceph_arch_neon);
+
+#endif
+#if (__aarch64__)
+
+  expected = strstr(flags, " crc32 ") ? 1 : 0;
+  EXPECT_EQ(expected, ceph_arch_aarch64_crc32);
+
+#endif
+#if (__x86_64__)
 
   expected = strstr(flags, " pclmulqdq ") ? 1 : 0;
   EXPECT_EQ(expected, ceph_arch_intel_pclmul);
@@ -67,6 +78,9 @@ TEST(Arch, all)
 
   expected = strstr(flags, " sse2 ") ? 1 : 0;
   EXPECT_EQ(expected, ceph_arch_intel_sse2);
+
+#endif
+
 #endif
 }
 
