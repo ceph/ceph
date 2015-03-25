@@ -1548,8 +1548,6 @@ void Objecter::tick()
   RWLock::RLocker rl(rwlock);
 
   ldout(cct, 10) << "tick" << dendl;
-  if (!initialized.read())
-    return;
 
   // we are only called by C_Tick
   assert(tick_event);
