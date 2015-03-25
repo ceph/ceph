@@ -2752,7 +2752,7 @@ int main(int argc, const char **argv)
       }
     } else if (ceph_argparse_withlonglong(args, i, &bench_io_threads, &err, "--io-threads", (char*)NULL)) {
     } else if (ceph_argparse_withlonglong(args, i, &bench_bytes, &err, "--io-total", (char*)NULL)) {
-    } else if (ceph_argparse_witharg(args, i, &bench_pattern, &err, "--io-pattern", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &bench_pattern, "--io-pattern", (char*)NULL)) {
     } else if (ceph_argparse_witharg(args, i, &val, "--path", (char*)NULL)) {
       path = strdup(val.c_str());
     } else if (ceph_argparse_witharg(args, i, &val, "--dest", (char*)NULL)) {
