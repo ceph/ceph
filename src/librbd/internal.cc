@@ -708,8 +708,8 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
       }
     }
 
-    r = ictx->md_ctx.remove(ObjectMap::object_map_name(ictx->id, snap_id));
-    if (r < 0 && r != -ENOENT) {
+    r = ictx->object_map.snapshot_remove(snap_id);
+    if (r < 0) {
       lderr(ictx->cct) << "snap_remove: failed to remove snapshot object map"
 		       << dendl;
       return 0;
@@ -1971,7 +1971,7 @@ reprotect_and_return_err:
 
     RWLock::WLocker l(ictx->snap_lock);
     if (!ictx->old_format) {
-      ictx->object_map.snapshot(snap_id);
+      ictx->object_map.snapshot_add(snap_id);
       if (lock_owner) {
 	// immediately start using the new snap context if we
 	// own the exclusive lock
