@@ -78,8 +78,21 @@ int RGWRESTConn::complete_request(RGWRESTStreamWriteRequest *req, string& etag, 
   return ret;
 }
 
-int RGWRESTConn::get_obj(const string& uid, req_info *info /* optional */, rgw_obj& obj, bool prepend_metadata,
-                                 RGWGetDataCB *cb, RGWRESTStreamReadRequest **req)
+static void set_date_header(const time_t *t, map<string, string>& headers, const string& header_name)
+{
+  if (!t) {
+    return;
+  }
+  stringstream s;
+  utime_t tm = utime_t(*t, 0);
+  tm.asctime(s);
+  headers["HTTP_IF_MODIFIED_SINCE"] = s.str();
+}
+
+
+int RGWRESTConn::get_obj(const string& uid, req_info *info /* optional */, rgw_obj& obj,
+                         const time_t *mod_ptr, const time_t *unmod_ptr,
+                         bool prepend_metadata, RGWGetDataCB *cb, RGWRESTStreamReadRequest **req)
 {
   string url;
   int ret = get_url(url);
@@ -108,6 +121,10 @@ int RGWRESTConn::get_obj(const string& uid, req_info *info /* optional */, rgw_o
       extra_headers[iter->first] = iter->second;
     }
   }
+
+  set_date_header(mod_ptr, extra_headers, "HTTP_IF_MODIFIED_SINCE");
+  set_date_header(unmod_ptr, extra_headers, "HTTP_IF_UNMODIFIED_SINCE");
+
   return (*req)->get_obj(key, extra_headers, obj);
 }
 

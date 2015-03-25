@@ -2433,6 +2433,7 @@ void RGWCopyObj::execute()
                         if_match,
                         if_nomatch,
                         attrs_mod,
+                        copy_if_newer,
                         attrs, RGW_OBJ_CATEGORY_MAIN,
                         olh_epoch,
                         (version_id.empty() ? NULL : &version_id),

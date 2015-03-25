@@ -3777,6 +3777,7 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
                const char *if_match,
                const char *if_nomatch,
                AttrsMod attrs_mod,
+               bool copy_if_newer,
                map<string, bufferlist>& attrs,
                RGWObjCategory category,
                uint64_t olh_epoch,
@@ -3837,8 +3838,26 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
   string etag;
   map<string, string> req_headers;
   time_t set_mtime;
+
+  RGWObjState *dest_state = NULL;
+
+  time_t dest_mtime;
+  const time_t *pmod = mod_ptr;
+
+  if (copy_if_newer) {
+    /* need to get mtime for destination */
+    ret = get_obj_state(&obj_ctx, dest_obj, &dest_state, NULL);
+    if (ret < 0)
+      return ret;
+
+    if (dest_state->exists) {
+      dest_mtime = dest_state->mtime;
+      pmod = &dest_mtime;
+    }
+  }
+
  
-  ret = conn->get_obj(user_id, info, src_obj, true, &cb, &in_stream_req);
+  ret = conn->get_obj(user_id, info, src_obj, pmod, unmod_ptr, true, &cb, &in_stream_req);
   if (ret < 0) {
     goto set_err_state;
   }
@@ -3959,6 +3978,7 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
                const char *if_match,
                const char *if_nomatch,
                AttrsMod attrs_mod,
+               bool copy_if_newer,
                map<string, bufferlist>& attrs,
                RGWObjCategory category,
                uint64_t olh_epoch,
@@ -3993,7 +4013,7 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
   if (remote_src || !source_zone.empty()) {
     return fetch_remote_obj(obj_ctx, user_id, client_id, op_id, info, source_zone,
                dest_obj, src_obj, dest_bucket_info, src_bucket_info, src_mtime, mtime, mod_ptr,
-               unmod_ptr, if_match, if_nomatch, attrs_mod, attrs, category,
+               unmod_ptr, if_match, if_nomatch, attrs_mod, copy_if_newer, attrs, category,
                olh_epoch, version_id, ptag, petag, err, progress_cb, progress_data);
   }
 
