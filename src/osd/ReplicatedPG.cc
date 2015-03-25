@@ -440,36 +440,6 @@ void ReplicatedPG::wait_for_all_missing(OpRequestRef op)
   op->mark_delayed("waiting for all missing");
 }
 
-bool ReplicatedPG::is_degraded_object(const hobject_t &soid, int *healthy_copies)
-{
-  bool degraded = false;
-  assert(healthy_copies);
-  *healthy_copies = 0;
-
-  if (pg_log.get_missing().missing.count(soid)) {
-    degraded = true;
-  } else {
-    *healthy_copies += 1;
-  }
-
-  for (set<pg_shard_t>::iterator i = actingbackfill.begin();
-       i != actingbackfill.end();
-       ++i) {
-    if (*i == get_primary()) continue;
-    pg_shard_t peer = *i;
-    if (peer_missing.count(peer) &&
-        peer_missing[peer].missing.count(soid)) {
-      degraded = true;
-      continue;
-    }
-
-    assert(peer_info.count(peer));
-    if (!peer_info[peer].is_incomplete())
-      *healthy_copies += 1;
-  }
-  return degraded;
-}
-
 bool ReplicatedPG::is_degraded_or_backfilling_object(const hobject_t& soid)
 {
   if (pg_log.get_missing().missing.count(soid))
@@ -1474,26 +1444,7 @@ void ReplicatedPG::do_op(OpRequestRef& op)
   }
 
   // degraded object?
-  
-  /* We continue to block writes on degraded objects for an EC pools because
-   * we have to reset can_rollback_to when we get a repop without the
-   * transaction.  If two replicas do that on sequential ops on different
-   * objects and then crash, other unstable objects before those two would
-   * also be unable to be rolled back, and would also wind up unfound.
-   * We can enable degraded writes on ec pools by blocking such a write
-   * to a peer until all previous writes have completed.  For now, we
-   * will simply block them.
-   *
-   * We also block if our peers do not support DEGRADED_WRITES.
-   */
-  int valid_copies = 0;
-  if (write_ordered &&
-      is_degraded_object(head, &valid_copies) &&
-      (valid_copies < pool.info.min_size ||
-       waiting_for_degraded_object.count(head) ||
-       pool.info.ec_pool() ||
-       !cct->_conf->osd_enable_degraded_writes ||
-       !(get_min_peer_features() & CEPH_FEATURE_OSD_DEGRADED_WRITES))) {
+  if (write_ordered && is_degraded_or_backfilling_object(head)) {
     wait_for_degraded_object(head, op);
     return;
   }
@@ -2236,6 +2187,19 @@ void ReplicatedPG::promote_object(ObjectContextRef obc,
     obc = get_object_context(missing_oid, true);
   }
   dout(10) << __func__ << " " << obc->obs.oi.soid << dendl;
+  if (scrubber.write_blocked_by_scrub(obc->obs.oi.soid)) {
+    dout(10) << __func__ << " " << obc->obs.oi.soid
+	     << " blocked by scrub" << dendl;
+    if (op) {
+      waiting_for_active.push_back(op);
+      dout(10) << __func__ << " " << obc->obs.oi.soid
+	       << " placing op in waiting_for_active" << dendl;
+    } else {
+      dout(10) << __func__ << " " << obc->obs.oi.soid
+	       << " no op, dropping on the floor" << dendl;
+    }
+    return;
+  }
 
   PromoteCallback *cb = new PromoteCallback(obc, this);
   object_locator_t my_oloc = oloc;
@@ -5078,8 +5042,6 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       {
 	if (maybe_create_new_object(ctx)) {
 	  t->touch(soid);
-	} else {
-	  obs.oi.clear_omap_digest();
 	}
 	map<string, bufferlist> to_set;
 	try {
@@ -5101,6 +5063,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	ctx->delta_stats.num_wr++;
       }
       obs.oi.set_flag(object_info_t::FLAG_OMAP);
+      obs.oi.clear_omap_digest();
       break;
 
     case CEPH_OSD_OP_OMAPSETHEADER:
@@ -5121,6 +5084,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	ctx->delta_stats.num_wr++;
       }
       obs.oi.set_flag(object_info_t::FLAG_OMAP);
+      obs.oi.clear_omap_digest();
       break;
 
     case CEPH_OSD_OP_OMAPCLEAR:
@@ -7650,40 +7614,6 @@ void ReplicatedPG::issue_repop(RepGather *repop, utime_t now)
     repop->ctx->reqid,
     repop->ctx->op);
   repop->ctx->op_t = NULL;
-
-  if (is_degraded_or_backfilling_object(soid)) {
-    dout(10) << __func__ << ": " << soid
-	     << " degraded, maintaining missing sets"
-	     << dendl;
-    assert(!is_missing_object(soid));
-    for (vector<pg_log_entry_t>::iterator j = repop->ctx->log.begin();
-	 j != repop->ctx->log.end();
-	 ++j) {
-      for (set<pg_shard_t>::const_iterator peer = actingbackfill.begin();
-	   peer != actingbackfill.end();
-	   ++peer) {
-	if (*peer == pg_whoami) {
-	  assert(!is_missing_object(j->soid));
-	  continue;
-	}
-	map<pg_shard_t, pg_missing_t>::iterator pm = peer_missing.find(*peer);
-	assert(pm != peer_missing.end());
-	if (!pm->second.is_missing(soid)) {
-	  assert(!pm->second.is_missing(j->soid));
-	  continue;
-	}
-	dout(10) << __func__ << ": " << soid << " missing on "
-		 << *peer << ", adding event " << *j << " to missing"
-		 << dendl;
-	pm->second.add_next_event(*j);
-      }
-      missing_loc.rebuild_object_location(
-	j->soid,
-	actingbackfill,
-	get_all_missing(),
-	get_all_info());
-    }
-  }
 }
 
 template<typename T, int MSGTYPE>
@@ -8548,6 +8478,9 @@ void ReplicatedBackend::sub_op_modify_impl(OpRequestRef op)
   // sanity checks
   assert(m->map_epoch >= get_info().history.same_interval_since);
   
+  // we better not be missing this.
+  assert(!parent->get_log().get_missing().is_missing(soid));
+
   int ackerosd = m->get_source().num();
   
   op->mark_started();
