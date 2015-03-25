@@ -1008,6 +1008,8 @@ void ReplicatedPG::do_pg_op(OpRequestRef op)
 	dout(10) << " pgnls result=" << result << " outdata.length()="
 		 << osd_op.outdata.length() << dendl;
       }
+      delete filter;
+      filter = NULL;
       break;
 
     case CEPH_OSD_OP_PGLS_FILTER:
@@ -1156,6 +1158,8 @@ void ReplicatedPG::do_pg_op(OpRequestRef op)
 	dout(10) << " pgls result=" << result << " outdata.length()="
 		 << osd_op.outdata.length() << dendl;
       }
+      delete filter;
+      filter = NULL;
       break;
 
     case CEPH_OSD_OP_PG_HITSET_LS:
@@ -1209,7 +1213,6 @@ void ReplicatedPG::do_pg_op(OpRequestRef op)
 	  }
 	  if (is_unreadable_object(oid)) {
 	    wait_for_unreadable_object(oid, op);
-	    delete filter;
 	    return;
 	  }
 	  result = osd->store->read(coll, oid, 0, 0, osd_op.outdata);
