@@ -3745,7 +3745,7 @@ int FileStore::snapshot(const string& name)
 
 int FileStore::_fgetattr(int fd, const char *name, bufferptr& bp)
 {
-  char val[100];
+  char val[CHAIN_XATTR_MAX_BLOCK_LEN];
   int l = chain_fgetxattr(fd, name, val, sizeof(val));
   if (l >= 0) {
     bp = buffer::create(l);
