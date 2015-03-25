@@ -4991,9 +4991,14 @@ int Client::_lookup(Inode *dir, const string& dname, Inode **target)
 		       << " vs lease_gen " << dn->lease_gen << dendl;
       }
       // dir lease?
-      if (dir->caps_issued_mask(CEPH_CAP_FILE_SHARED) &&
-	  dn->cap_shared_gen == dir->shared_gen) {
-	goto hit_dn;
+      if (dir->caps_issued_mask(CEPH_CAP_FILE_SHARED)) {
+	if (dn->cap_shared_gen == dir->shared_gen)
+	  goto hit_dn;
+	if (!dn->inode && (dir->flags & I_COMPLETE)) {
+	  ldout(cct, 10) << "_lookup concluded ENOENT locally for "
+			 << *dir << " dn '" << dname << "'" << dendl;
+	  return -ENOENT;
+	}
       }
     } else {
       ldout(cct, 20) << " no cap on " << dn->inode->vino() << dendl;
