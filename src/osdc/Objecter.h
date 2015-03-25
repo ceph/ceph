@@ -1193,6 +1193,8 @@ public:
 
     int *data_offset;
 
+    epoch_t last_force_resend;
+
     Op(const object_t& o, const object_locator_t& ol, vector<OSDOp>& op,
        int f, Context *ac, Context *co, version_t *ov, int *offset = NULL) :
       session(NULL), incarnation(0),
@@ -1214,7 +1216,8 @@ public:
       budgeted(false),
       should_resend(true),
       ctx_budgeted(false),
-      data_offset(offset) {
+      data_offset(offset),
+      last_force_resend(0) {
       ops.swap(op);
       
       /* initialize out_* to match op vector */
@@ -1549,6 +1552,8 @@ public:
     ceph_tid_t ping_tid;
     epoch_t map_dne_bound;
 
+    epoch_t last_force_resend;
+
     void _queued_async() {
       assert(watch_lock.is_locked());
       watch_pending_async.push_back(ceph_clock_now(NULL));
@@ -1576,7 +1581,8 @@ public:
 		 session(NULL),
 		 register_tid(0),
 		 ping_tid(0),
-		 map_dne_bound(0) {}
+		 map_dne_bound(0),
+		 last_force_resend(0) {}
 
     // no copy!
     const LingerOp &operator=(const LingerOp& r);
@@ -1731,7 +1737,7 @@ public:
   bool _osdmap_full_flag() const;
 
   bool target_should_be_paused(op_target_t *op);
-  int _calc_target(op_target_t *t, bool any_change=false);
+  int _calc_target(op_target_t *t, epoch_t *last_force_resend=0, bool any_change=false);
   int _map_session(op_target_t *op, OSDSession **s,
 		   RWLock::Context& lc);
 
