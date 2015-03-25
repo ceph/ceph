@@ -872,6 +872,7 @@ protected:
   uint64_t olh_epoch;
 
   time_t delete_at;
+  bool copy_if_newer;
 
   int init_common();
 
@@ -894,6 +895,7 @@ public:
     last_ofs = 0;
     olh_epoch = 0;
     delete_at = 0;
+    copy_if_newer = false;
   }
 
   static bool parse_copy_location(const string& src,
