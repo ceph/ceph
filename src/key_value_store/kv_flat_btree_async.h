@@ -132,17 +132,26 @@ struct object_data {
   uint64_t version; //the version at time of read
   uint64_t size; //the number of elements in the omap
 
-  object_data()
+  object_data() 
+  : unwritable(false),
+    version(0),
+    size(0) 
   {}
 
   object_data(string the_name)
-  : name(the_name)
+  : name(the_name),
+    unwritable(false),
+    version(0),
+    size(0) 
   {}
 
   object_data(key_data min, key_data kdat, string the_name)
   : min_kdata(min),
     max_kdata(kdat),
-    name(the_name)
+    name(the_name),
+    unwritable(false),
+    version(0),
+    size(0) 
   {}
 
   object_data(key_data min, key_data kdat, string the_name,
@@ -150,14 +159,19 @@ struct object_data {
   : min_kdata(min),
     max_kdata(kdat),
     name(the_name),
-    omap(the_omap)
+    omap(the_omap),
+    unwritable(false),
+    version(0),
+    size(0) 
   {}
 
   object_data(key_data min, key_data kdat, string the_name, int the_version)
   : min_kdata(min),
     max_kdata(kdat),
     name(the_name),
-    version(the_version)
+    unwritable(false),
+    version(the_version),
+    size(0) 
   {}
 
   void encode(bufferlist &bl) const {
@@ -244,6 +258,7 @@ struct delete_data {
   uint64_t version;
 
   delete_data()
+  : version(0)
   {}
 
   delete_data(key_data n, key_data x, string o, uint64_t v)
@@ -752,6 +767,7 @@ KvFlatBtreeAsync(int k_val, string name, int cache, double cache_r,
     client_name(string(name).append(".")),
     pool_name("rbd"),
     interrupt(&KeyValueStructure::nothing),
+    wait_ms(0),
     timeout(100000,0),
     cache_size(cache),
     cache_refresh(cache_r),

@@ -136,7 +136,7 @@ struct AuthAuthorizer {
   bufferlist bl;
   CryptoKey session_key;
 
-  AuthAuthorizer(__u32 p) : protocol(p) {}
+  explicit AuthAuthorizer(__u32 p) : protocol(p) {}
   virtual ~AuthAuthorizer() {}
   virtual bool verify_reply(bufferlist::iterator& reply) = 0;
 };

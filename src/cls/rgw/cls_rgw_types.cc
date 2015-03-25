@@ -263,6 +263,7 @@ void rgw_bucket_olh_log_entry::generate_test_instances(list<rgw_bucket_olh_log_e
   entry->key.name = "key.name";
   entry->key.instance = "key.instance";
   entry->delete_marker = true;
+  o.push_back(entry);
   o.push_back(new rgw_bucket_olh_log_entry);
 }
 
