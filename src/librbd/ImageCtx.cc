@@ -436,6 +436,14 @@ namespace librbd {
     snap_ids.insert(pair<string, snap_t>(in_snap_name, id));
   }
 
+  void ImageCtx::rm_snap(string in_snap_name, snap_t id)
+  {
+    assert(snap_lock.is_wlocked());
+    snaps.erase(std::remove(snaps.begin(), snaps.end(), id), snaps.end());
+    snap_info.erase(id);
+    snap_ids.erase(in_snap_name);
+  }
+
   uint64_t ImageCtx::get_image_size(snap_t in_snap_id) const
   {
     assert(snap_lock.is_locked());

@@ -682,46 +682,50 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
     RWLock::RLocker md_locker(ictx->md_lock);
     snap_t snap_id;
     {
-      // block for purposes of auto-destruction of snap_locker on early return
-      RWLock::RLocker snap_locker(ictx->snap_lock);
+      RWLock::WLocker snap_locker(ictx->snap_lock);
       snap_id = ictx->get_snap_id(snap_name);
-      if (snap_id == CEPH_NOSNAP)
-	return -ENOENT;
-
-      parent_spec our_pspec;
-      RWLock::RLocker parent_locker(ictx->parent_lock);
-      r = ictx->get_parent_spec(snap_id, &our_pspec);
-      if (r < 0) {
-	lderr(ictx->cct) << "snap_remove: can't get parent spec" << dendl;
-	return r;
+      if (snap_id == CEPH_NOSNAP) {
+        return -ENOENT;
       }
 
-      if (ictx->parent_md.spec != our_pspec &&
-	  (scan_for_parents(ictx, our_pspec, snap_id) == -ENOENT)) {
-        r = cls_client::remove_child(&ictx->md_ctx, RBD_CHILDREN,
-				     our_pspec, ictx->id);
-	if (r < 0 && r != -ENOENT) {
-          lderr(ictx->cct) << "snap_remove: failed to deregister from parent "
-                           << "image" << dendl;
+      r = ictx->object_map.snapshot_remove(snap_id);
+      if (r < 0) {
+        lderr(ictx->cct) << "snap_remove: failed to remove snapshot object map"
+		         << dendl;
+        return r;
+      }
+
+      {
+        parent_spec our_pspec;
+        RWLock::RLocker parent_locker(ictx->parent_lock);
+        r = ictx->get_parent_spec(snap_id, &our_pspec);
+        if (r < 0) {
+	  lderr(ictx->cct) << "snap_remove: can't get parent spec" << dendl;
 	  return r;
         }
+
+        if (ictx->parent_md.spec != our_pspec &&
+	    (scan_for_parents(ictx, our_pspec, snap_id) == -ENOENT)) {
+          r = cls_client::remove_child(&ictx->md_ctx, RBD_CHILDREN,
+				       our_pspec, ictx->id);
+	  if (r < 0 && r != -ENOENT) {
+            lderr(ictx->cct) << "snap_remove: failed to deregister from parent "
+                             << "image" << dendl;
+	    return r;
+          }
+        }
       }
-    }
 
-    r = ictx->object_map.snapshot_remove(snap_id);
-    if (r < 0) {
-      lderr(ictx->cct) << "snap_remove: failed to remove snapshot object map"
-		       << dendl;
-      return 0;
-    }
-
-    r = rm_snap(ictx, snap_name);
-    if (r < 0) {
-      return r;
+      r = rm_snap(ictx, snap_name, snap_id);
+      if (r < 0) {
+        return r;
+      }
     }
 
     r = ictx->data_ctx.selfmanaged_snap_remove(snap_id);
     if (r < 0) {
+      lderr(ictx->cct) << "snap_remove: failed to remove RADOS snapshot"
+                       << dendl;
       return r;
     }
 
@@ -2003,17 +2007,19 @@ reprotect_and_return_err:
     return 0;
   }
 
-  int rm_snap(ImageCtx *ictx, const char *snap_name)
+  int rm_snap(ImageCtx *ictx, const char *snap_name, uint64_t snap_id)
   {
+    assert(ictx->snap_lock.is_wlocked());
+
     int r;
     if (ictx->old_format) {
       r = cls_client::old_snapshot_remove(&ictx->md_ctx,
 					  ictx->header_oid, snap_name);
     } else {
-      RWLock::RLocker l(ictx->snap_lock);
-      r = cls_client::snapshot_remove(&ictx->md_ctx,
-				      ictx->header_oid,
-				      ictx->get_snap_id(snap_name));
+      r = cls_client::snapshot_remove(&ictx->md_ctx, ictx->header_oid, snap_id);
+      if (r == 0) {
+        ictx->rm_snap(snap_name, snap_id);
+      }
     }
 
     if (r < 0) {
