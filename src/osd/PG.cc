@@ -4189,9 +4189,13 @@ void PG::scrub_compare_maps()
       maps[*i] = &scrubber.received_maps[*i];
     }
 
+    // can we relate scrub digests to oi digests?
+    bool okseed = (get_min_peer_features() & CEPH_FEATURE_OSD_OBJECT_DIGEST);
+    assert(okseed == (scrubber.seed == 0xffffffff));
+
     get_pgbackend()->be_compare_scrubmaps(
       maps,
-      scrubber.seed == 0xffffffff,  // can we relate scrub digests to oi digests?
+      okseed,
       scrubber.missing,
       scrubber.inconsistent,
       authoritative,
