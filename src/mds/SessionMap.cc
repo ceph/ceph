@@ -355,10 +355,10 @@ void SessionMap::save(MDSInternalContextBase *onsave, version_t needv)
 
   dout(20) << " updating keys:" << dendl;
   map<string, bufferlist> to_set;
-  for(std::set<entity_name_t>::const_iterator i = dirty_sessions.begin();
+  for(std::set<entity_name_t>::iterator i = dirty_sessions.begin();
       i != dirty_sessions.end(); ++i) {
     const entity_name_t name = *i;
-    const Session *session = session_map[name];
+    Session *session = session_map[name];
 
     if (session->is_open() ||
 	session->is_closing() ||
@@ -375,6 +375,8 @@ void SessionMap::save(MDSInternalContextBase *onsave, version_t needv)
 
       // Add to RADOS op
       to_set[k.str()] = bl;
+
+      session->clear_dirty_completed_requests();
     } else {
       dout(20) << "  " << name << " (ignoring)" << dendl;
     }
@@ -728,4 +730,78 @@ version_t SessionMap::mark_projected(Session *s)
   s->push_pv(projected);
   return projected;
 }
+
+
+class C_IO_SM_Save_One : public SessionMapIOContext {
+  MDSInternalContextBase *on_safe;
+public:
+  C_IO_SM_Save_One(SessionMap *cm, MDSInternalContextBase *on_safe_)
+    : SessionMapIOContext(cm), on_safe(on_safe_) {}
+  void finish(int r) {
+    if (r != 0) {
+      get_mds()->handle_write_error(r);
+    } else {
+      on_safe->complete(r);
+    }
+  }
+};
+
+
+void SessionMap::save_if_dirty(entity_name_t session_id,
+                               MDSGatherBuilder *gather_bld)
+{
+  assert(gather_bld != NULL);
+
+  if (session_map.count(session_id) == 0) {
+    // Session isn't around any more, never mind.
+    return;
+  }
+
+  Session *session = session_map[session_id];
+  if (!session->has_dirty_completed_requests()) {
+    // Session hasn't had completed_requests
+    // modified since last write, no need to
+    // write it now.
+    return;
+  }
+
+  if (dirty_sessions.count(session_id) > 0) {
+    // Session is already dirtied, will be written, no
+    // need to pre-empt that.
+    return;
+  }
+
+  // Okay, passed all our checks, now we write
+  // this session out.  The version we write
+  // into the OMAP may now be higher-versioned
+  // than the version in the header, but that's
+  // okay because it's never a problem to have
+  // an overly-fresh copy of a session.
+  session->clear_dirty_completed_requests();
+
+  MDSInternalContextBase *on_safe = gather_bld->new_sub();
+
+  map<string, bufferlist> to_set;
+
+  // Serialize K
+  std::ostringstream k;
+  k << session_id;
+
+  // Serialize V
+  bufferlist bl;
+  session->info.encode(bl);
+
+  // Add to RADOS op
+  to_set[k.str()] = bl;
+
+  ObjectOperation op;
+  op.omap_set(to_set);
+
+  SnapContext snapc;
+  object_t oid = get_object_name();
+  object_locator_t oloc(mds->mdsmap->get_metadata_pool());
+  mds->objecter->mutate(oid, oloc, op, snapc, ceph_clock_now(g_ceph_context),
+      0, NULL, new C_OnFinisher(new C_IO_SM_Save_One(this, on_safe), &mds->finisher));
+}
+
 
