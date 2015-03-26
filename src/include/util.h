@@ -75,4 +75,8 @@ struct ceph_data_stats
 typedef struct ceph_data_stats ceph_data_stats_t;
 
 int get_fs_stats(ceph_data_stats_t &stats, const char *path);
+
+/// collect info from @p uname(2), @p /proc/meminfo and @p /proc/cpuinfo
+void collect_sys_info(map<string, string> *m, CephContext *cct);
+
 #endif /* CEPH_UTIL_H */
