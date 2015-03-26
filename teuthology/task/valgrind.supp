@@ -235,3 +235,12 @@
 	...
 	fun:exit
 }
+{
+	lttng appears to not clean up state
+	Memcheck:Leak
+	...
+	fun:lttng_ust_baddr_statedump_init
+	fun:lttng_ust_init
+	fun:call_init.part.0
+	...
+}
