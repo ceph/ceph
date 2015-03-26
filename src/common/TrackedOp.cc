@@ -94,22 +94,35 @@ void OpTracker::dump_historic_ops(Formatter *f)
   history.dump_ops(now, f);
 }
 
+class InitiateCompare {
+public:
+  bool operator() (TrackedOp* const &l, TrackedOp* const &r) const {
+    // A TrackedOp is older than the other one if initiated_at is less
+    return l->get_initiated() < r->get_initiated();
+  }
+};
+
 void OpTracker::dump_ops_in_flight(Formatter *f)
 {
   f->open_object_section("ops_in_flight"); // overall dump
   uint64_t total_ops_in_flight = 0;
   f->open_array_section("ops"); // list of TrackedOps
   utime_t now = ceph_clock_now(cct);
+
+  multiset<TrackedOp*, InitiateCompare> all_ops;
   for (uint32_t i = 0; i < num_optracker_shards; i++) {
     ShardedTrackingData* sdata = sharded_in_flight_list[i];
     assert(NULL != sdata); 
-    Mutex::Locker locker(sdata->ops_in_flight_lock_sharded);    
-    for (xlist<TrackedOp*>::iterator p = sdata->ops_in_flight_sharded.begin(); !p.end(); ++p) {
-      f->open_object_section("op");
-      (*p)->dump(now, f);
-      f->close_section(); // this TrackedOp
-      total_ops_in_flight++;
-    }
+    Mutex::Locker locker(sdata->ops_in_flight_lock_sharded);
+    all_ops.insert(sdata->ops_in_flight_sharded.begin(),
+                   sdata->ops_in_flight_sharded.end());
+  }
+  for (multiset<TrackedOp*, InitiateCompare>::iterator it = all_ops.begin();
+       it != all_ops.end(); it++) {
+    f->open_object_section("op");
+    (*it)->dump(now, f);
+    f->close_section(); // this TrackedOp
+    total_ops_in_flight++;
   }
   f->close_section(); // list of TrackedOps
   f->dump_int("num_ops", total_ops_in_flight);
