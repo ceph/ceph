@@ -294,7 +294,8 @@ def calamari_install(config, cal_svr):
     elif icetype == 'iso':
         mountpoint = '/mnt/'   # XXX create?
         ret = cal_svr.run(
-            args=['sudo', 'mount', '-r', remote_iceball_file, mountpoint]
+            args=['sudo', 'mount', '-o', 'loop', '-r',
+                  remote_iceball_file, mountpoint]
         )
 
     # install ice_setup package
