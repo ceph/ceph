@@ -235,6 +235,10 @@ COMMAND("report name=tags,type=CephString,n=N,req=false", \
 	"mon", "r", "cli,rest")
 COMMAND("quorum_status", "report status of monitor quorum", \
 	"mon", "r", "cli,rest")
+COMMAND("mon_metadata name=id,type=CephString",
+	"fetch metadata for mon <id>",
+	"mon", "r", "cli,rest")
+
 COMMAND_WITH_FLAG("mon_status", "report status of monitors", "mon", "r", "cli,rest",
 	     NOFORWARD)
 COMMAND("sync force " \
@@ -360,7 +364,6 @@ COMMAND("mon add " \
 COMMAND("mon remove " \
 	"name=name,type=CephString", \
 	"remove monitor named <name>", "mon", "rw", "cli,rest")
-
 
 /*
  * OSD commands

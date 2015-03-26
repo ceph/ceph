@@ -203,4 +203,7 @@ static inline ostream& operator<<(ostream& out, const ScrubResult& r) {
   return out << "ScrubResult(keys " << r.prefix_keys << " crc " << r.prefix_crc << ")";
 }
 
+/// for information like os, kernel, hostname, memory info, cpu model.
+typedef map<string, string> Metadata;
+
 #endif

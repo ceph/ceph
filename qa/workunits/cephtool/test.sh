@@ -563,6 +563,8 @@ function test_mon_misc()
   mymsg="this is a test log message $$.$(date)"
   ceph log "$mymsg"
   ceph_watch_wait "$mymsg"
+
+  ceph mon_metadata a
 }
 
 function check_mds_active()
