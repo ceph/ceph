@@ -37,6 +37,7 @@
 #include "messages/MGenericMessage.h"
 #include "messages/MMonCommand.h"
 #include "messages/MMonCommandAck.h"
+#include "messages/MMonMetadata.h"
 #include "messages/MMonSync.h"
 #include "messages/MMonScrub.h"
 #include "messages/MMonProbe.h"
@@ -288,10 +289,9 @@ void Monitor::do_admin_command(string command, cmdmap_t& cmdmap, string format,
   }
   args = "[" + args + "]";
  
-  bool read_only = false;
-  if (command == "mon_status" || command == "quorum_status") {
-    read_only = true;
-  }
+  bool read_only = (command == "mon_status" ||
+		    command == "mon_metadata" ||
+		    command == "quorum_status");
 
   (read_only ? audit_clog->debug() : audit_clog->info())
     << "from='admin socket' entity='admin socket' "
@@ -738,6 +738,8 @@ int Monitor::init()
 
   // i'm ready!
   messenger->add_dispatcher_tail(this);
+
+  collect_sys_info(&metadata[rank], g_ceph_context);
 
   bootstrap();
 
@@ -1879,6 +1881,9 @@ void Monitor::lose_election(epoch_t epoch, set<int> &q, int l, uint64_t features
   logger->inc(l_mon_election_lose);
 
   finish_election();
+
+  messenger->send_message(new MMonMetadata(metadata[rank]),
+			  monmap->get_inst(get_leader()));
 }
 
 void Monitor::finish_election()
@@ -2837,6 +2842,17 @@ void Monitor::handle_command(MMonCommand *m)
     ss2 << "report " << rdata.crc32c(6789);
     rs = ss2.str();
     r = 0;
+  } else if (prefix == "mon_metadata") {
+    int mon = -1;
+    cmd_getval(g_ceph_context, cmdmap, "rank", mon);
+    if (!f)
+      f.reset(Formatter::create("json-pretty"));
+    f->open_object_section("mon_metadata");
+    r = get_mon_metadata(mon, f.get(), ds);
+    f->close_section();
+    f->flush(ds);
+    rdata.append(ds);
+    rs = "";
   } else if (prefix == "quorum_status") {
     // make sure our map is readable and up to date
     if (!is_leader() && !is_peon()) {
@@ -3407,6 +3423,9 @@ void Monitor::dispatch(MonSession *s, Message *m, const bool src_is_mon)
      */
     case CEPH_MSG_MON_GET_MAP:
       return handle_mon_get_map(static_cast<MMonGetMap*>(m));
+
+    case CEPH_MSG_MON_METADATA:
+      return handle_mon_metadata(static_cast<MMonMetadata*>(m));
 
     default:
       break;
@@ -4148,7 +4167,59 @@ void Monitor::handle_mon_get_map(MMonGetMap *m)
   m->put();
 }
 
+void Monitor::handle_mon_metadata(MMonMetadata *m)
+{
+  if (!is_leader())
+    return;
 
+  dout(10) << __func__ << dendl;
+  metadata[m->get_source().num()] = m->data;
+
+  if (metadata.size() == monmap->size()) {
+    update_mon_metadata();
+    metadata.clear();
+  }
+}
+
+void Monitor::update_mon_metadata()
+{
+  bufferlist bl;
+  int err = store->get(MONITOR_STORE_PREFIX, "last_metadata", bl);
+  map<int, Metadata> last_metadata;
+  if (!err) {
+    bufferlist::iterator iter = bl.begin();
+    ::decode(last_metadata, iter);
+    metadata.insert(last_metadata.begin(), last_metadata.end());
+  }
+  MonitorDBStore::TransactionRef t = paxos->get_pending_transaction();
+  bl.clear();
+  ::encode(metadata, bl);
+  t->put(MONITOR_STORE_PREFIX, "last_metadata", bl);
+  paxos->trigger_propose();
+}
+
+int Monitor::get_mon_metadata(int mon, Formatter *f, ostream& err)
+{
+  assert(f);
+
+  bufferlist bl;
+  int r = store->get(MONITOR_STORE_PREFIX, "last_metadata", bl);
+  if (r)
+    return r;
+
+  map<int, Metadata> last_metadata;
+  bufferlist::iterator it;
+  ::decode(last_metadata, it);
+
+  if (!last_metadata.count(mon)) {
+    return -EINVAL;
+  }
+  const Metadata& m = last_metadata[mon];
+  for (Metadata::const_iterator p = m.begin(); p != m.end(); ++p) {
+    f->dump_string(p->first.c_str(), p->second);
+  }
+  return 0;
+}
 
 // ----------------------------------------------
 // scrub
