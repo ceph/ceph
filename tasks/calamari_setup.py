@@ -16,6 +16,17 @@ from teuthology import misc
 log = logging.getLogger(__name__)
 
 
+DEFAULTS = {
+    'version': 'v0.80.9',
+    'test_image': None,
+    'start_browser': False,
+    'email': 'x@y.com',
+    'no_epel': True,
+    'calamari_user': 'admin',
+    'calamari_password': 'admin',
+}
+
+
 @contextlib.contextmanager
 def task(ctx, config):
     """
@@ -25,24 +36,23 @@ def task(ctx, config):
         version: 'v80.1'
         test_image: <path to tarball or iso>
 
-    Options are:
+    Options are (see DEFAULTS above):
 
-    version -- ceph version we are testing against (defaults to 80.1)
+    version -- ceph version we are testing against
     test_image -- Can be an HTTP URL, in which case fetch from this
                   http path; can also be local path
     start_browser -- If True, start a browser.  To be used by runs that will
                      bring up a browser quickly for human use.  Set to False
                      for overnight suites that are testing for problems in
-                     the installation itself (defaults to False).
-    email -- email address for the user (defaults to x@y.com)
+                     the installation itself
+    email -- email address for the user
     no_epel -- indicates if we should remove epel files prior to yum
-               installations.  Defaults to True.
-    calamari_user -- user name to log into gui (defaults to admin)
-    calamari_password -- calamari user password (defaults to admin)
+               installations.
+    calamari_user -- user name to log into gui
+    calamari_password -- calamari user password
     """
+    config = DEFAULTS.update(config)
     cal_svr = None
-    start_browser = config.get('start_browser', False)
-    no_epel = config.get('no_epel', True)
     for remote_, roles in ctx.cluster.remotes.items():
         if 'client.0' in roles:
             cal_svr = remote_
@@ -50,11 +60,11 @@ def task(ctx, config):
     if not cal_svr:
         raise RuntimeError('client.0 not found in roles')
     with contextutil.nested(
-        lambda: adjust_yum_repos(ctx, cal_svr, no_epel),
+        lambda: adjust_yum_repos(ctx, cal_svr, config['no_epel']),
         lambda: calamari_install(config, cal_svr),
         lambda: ceph_install(ctx, cal_svr),
         lambda: calamari_connect(ctx, cal_svr),
-        lambda: browser(start_browser, cal_svr.hostname),
+        lambda: browser(config['start_browser'], cal_svr.hostname),
     ):
         yield
 
@@ -173,10 +183,7 @@ def calamari_install(config, cal_svr):
     if at_loc > 0:
         client_id = client_id[at_loc + 1:]
 
-    email = config.get('email', 'x@x.com')
-    calamari_user = config.get('calamari_user', 'admin')
-    calamari_password = config.get('calamari_password', 'admin')
-    test_image = config.get('test_image', '.')
+    test_image = config['test_image']
 
     log.info('calamari test image: %s' % test_image)
     delete_iceball = False
@@ -232,8 +239,12 @@ def calamari_install(config, cal_svr):
         raise RuntimeError('ice_setup.py failed')
 
     # Run calamari-ctl initialize.
-    icesetdata = '%s\n%s\n%s\n%s\n' % (calamari_user, email, calamari_password,
-                                       calamari_password)
+    icesetdata = '%s\n%s\n%s\n%s\n' % (
+        config['calamari_user'],
+        config['email'],
+        config['calamari_password'],
+        config['calamari_password'],
+    )
     ice_in = StringIO(icesetdata)
     ret = cal_svr.run(args=['sudo', 'calamari-ctl', 'initialize'],
                       stdin=ice_in, stdout=ice_out)
