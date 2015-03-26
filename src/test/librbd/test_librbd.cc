@@ -2185,7 +2185,7 @@ TYPED_TEST(DiffIterateTest, DiffIterateDiscard)
   ASSERT_EQ(diff_extent(0, 256, true, object_size), extents[0]);
 
   int obj_ofs = 256;
-  ASSERT_EQ(obj_ofs, image.discard(0, obj_ofs));
+  ASSERT_EQ(1 << order, image.discard(0, 1 << order));
 
   extents.clear();
   ASSERT_EQ(0, image.diff_iterate2(NULL, 0, size, true, this->whole_object,
