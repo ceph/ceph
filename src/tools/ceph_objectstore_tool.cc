@@ -1232,8 +1232,9 @@ int skip_object(bufferlist &bl)
     case TYPE_ATTRS:
     case TYPE_OMAP_HDR:
     case TYPE_OMAP:
-      if (debug)
-        cerr << "Skip type " << (int)type << std::endl;
+#ifdef DIAGNOSTIC
+      cerr << "Skip type " << (int)type << std::endl;
+#endif
       break;
     case TYPE_OBJECT_END:
       done = true;
@@ -1442,8 +1443,6 @@ int get_object(ObjectStore *store, coll_t coll, bufferlist &bl, OSDMap &curmap)
   if (ob.hoid.hobj.nspace != g_ceph_context->_conf->osd_hit_set_namespace) {
     object_t oid = ob.hoid.hobj.oid;
     object_locator_t loc(ob.hoid.hobj);
-    // XXX: Do we need to set the hash?
-    // loc.hash = ob.hoid.hash;
     pg_t raw_pgid = curmap.object_locator_to_pg(oid, loc);
     pg_t pgid = curmap.raw_pg_to_pg(raw_pgid);
   
