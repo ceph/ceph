@@ -37,3 +37,8 @@ class TestDaemonWatcher(TestCase):
         dw = DaemonWatcher(None)
         # Can't count on having a tty available during tests, so only test the false case
         self.assertEqual(dw.supports_color(StringIO()), False)
+# Local Variables:
+# compile-command: "cd ../.. ; make -j4 &&
+#  PYTHONPATH=pybind nosetests --stop \
+#  test/pybind/test_ceph_daemon.py
+# End:
