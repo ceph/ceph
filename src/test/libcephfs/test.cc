@@ -136,6 +136,8 @@ TEST(LibCephFS, ReleaseMounted) {
   ASSERT_EQ(0, ceph_conf_read_file(cmount, NULL));
   ASSERT_EQ(0, ceph_mount(cmount, "/"));
   ASSERT_EQ(-EISCONN, ceph_release(cmount));
+  ASSERT_EQ(0, ceph_unmount(cmount));
+  ASSERT_EQ(0, ceph_release(cmount));
 }
 
 TEST(LibCephFS, UnmountRelease) {
