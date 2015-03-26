@@ -3387,18 +3387,16 @@ void Monitor::dispatch(MonSession *s, Message *m, const bool src_is_mon)
   assert(m != NULL);
 
   /* deal with all messages that do not necessarily need caps */
-  bool dealt_with = true;
   switch (m->get_type()) {
     // auth
     case MSG_MON_GLOBAL_ID:
     case CEPH_MSG_AUTH:
       /* no need to check caps here */
       paxos_service[PAXOS_AUTH]->dispatch((PaxosServiceMessage*)m);
-      break;
+      return;
 
     case CEPH_MSG_PING:
-      handle_ping(static_cast<MPing*>(m));
-      break;
+      return handle_ping(static_cast<MPing*>(m));
 
     /* MMonGetMap may be used by clients to obtain a monmap *before*
      * authenticating with the monitor.  We need to handle these without
@@ -3408,18 +3406,13 @@ void Monitor::dispatch(MonSession *s, Message *m, const bool src_is_mon)
      * not authenticate when obtaining a monmap.
      */
     case CEPH_MSG_MON_GET_MAP:
-      handle_mon_get_map(static_cast<MMonGetMap*>(m));
-      break;
+      return handle_mon_get_map(static_cast<MMonGetMap*>(m));
 
     default:
-      dealt_with = false;
       break;
   }
-  if (dealt_with)
-    return;
 
   /* deal with all messages which caps should be checked somewhere else */
-  dealt_with = true;
   switch (m->get_type()) {
 
     // OSDs
@@ -3431,42 +3424,37 @@ void Monitor::dispatch(MonSession *s, Message *m, const bool src_is_mon)
     case MSG_OSD_PGTEMP:
     case MSG_REMOVE_SNAPS:
       paxos_service[PAXOS_OSDMAP]->dispatch((PaxosServiceMessage*)m);
-      break;
+      return;
 
     // MDSs
     case MSG_MDS_BEACON:
     case MSG_MDS_OFFLOAD_TARGETS:
       paxos_service[PAXOS_MDSMAP]->dispatch((PaxosServiceMessage*)m);
-      break;
-
+      return;
 
     // pg
     case CEPH_MSG_STATFS:
     case MSG_PGSTATS:
     case MSG_GETPOOLSTATS:
       paxos_service[PAXOS_PGMAP]->dispatch((PaxosServiceMessage*)m);
-      break;
+      return;
 
     case CEPH_MSG_POOLOP:
       paxos_service[PAXOS_OSDMAP]->dispatch((PaxosServiceMessage*)m);
-      break;
+      return;
 
     // log
     case MSG_LOG:
       paxos_service[PAXOS_LOG]->dispatch((PaxosServiceMessage*)m);
-      break;
+      return;
 
     // handle_command() does its own caps checking
     case MSG_MON_COMMAND:
-      handle_command(static_cast<MMonCommand*>(m));
-      break;
+      return handle_command(static_cast<MMonCommand*>(m));
 
     default:
-      dealt_with = false;
       break;
   }
-  if (dealt_with)
-    return;
 
   /* messages we, the Monitor class, need to deal with
    * but may be sent by clients. */
@@ -3478,25 +3466,19 @@ void Monitor::dispatch(MonSession *s, Message *m, const bool src_is_mon)
     goto drop;
   }
 
-  dealt_with = true;
   switch (m->get_type()) {
 
     // misc
     case CEPH_MSG_MON_GET_VERSION:
-      handle_get_version(static_cast<MMonGetVersion*>(m));
-      break;
+      return handle_get_version(static_cast<MMonGetVersion*>(m));
 
     case CEPH_MSG_MON_SUBSCRIBE:
       /* FIXME: check what's being subscribed, filter accordingly */
-      handle_subscribe(static_cast<MMonSubscribe*>(m));
-      break;
+      return handle_subscribe(static_cast<MMonSubscribe*>(m));
 
     default:
-      dealt_with = false;
       break;
   }
-  if (dealt_with)
-    return;
 
   if (!src_is_mon) {
     dout(1) << __func__ << " unexpected monitor message from"
@@ -3506,36 +3488,32 @@ void Monitor::dispatch(MonSession *s, Message *m, const bool src_is_mon)
   }
 
   /* messages that should only be sent by another monitor */
-  dealt_with = true;
   switch (m->get_type()) {
 
     case MSG_ROUTE:
-      handle_route(static_cast<MRoute*>(m));
-      break;
+      return handle_route(static_cast<MRoute*>(m));
 
     case MSG_MON_PROBE:
-      handle_probe(static_cast<MMonProbe*>(m));
-      break;
+      return handle_probe(static_cast<MMonProbe*>(m));
 
     // Sync (i.e., the new slurp, but on steroids)
     case MSG_MON_SYNC:
-      handle_sync(static_cast<MMonSync*>(m));
-      break;
+      return handle_sync(static_cast<MMonSync*>(m));
+
     case MSG_MON_SCRUB:
-      handle_scrub(static_cast<MMonScrub*>(m));
-      break;
+      return handle_scrub(static_cast<MMonScrub*>(m));
 
     /* log acks are sent from a monitor we sent the MLog to, and are
        never sent by clients to us. */
     case MSG_LOGACK:
       log_client.handle_log_ack((MLogAck*)m);
       m->put();
-      break;
+      return;
 
     // monmap
     case MSG_MON_JOIN:
       paxos_service[PAXOS_MONMAP]->dispatch((PaxosServiceMessage*)m);
-      break;
+      return;
 
     // paxos
     case MSG_MON_PAXOS:
@@ -3544,8 +3522,7 @@ void Monitor::dispatch(MonSession *s, Message *m, const bool src_is_mon)
         if (!src_is_mon ||
             !s->is_capable("mon", MON_CAP_X)) {
           //can't send these!
-          pm->put();
-          break;
+	  goto drop;
         }
 
         if (state == STATE_SYNCHRONIZING) {
@@ -3553,24 +3530,20 @@ void Monitor::dispatch(MonSession *s, Message *m, const bool src_is_mon)
           // good, thus just drop them and ignore them.
           dout(10) << __func__ << " ignore paxos msg from "
             << pm->get_source_inst() << dendl;
-          pm->put();
-          break;
+	  goto drop;
         }
 
         // sanitize
         if (pm->epoch > get_epoch()) {
           bootstrap();
-          pm->put();
-          break;
+	  goto drop;
         }
         if (pm->epoch != get_epoch()) {
-          pm->put();
-          break;
+	  goto drop;
         }
 
-        paxos->dispatch((PaxosServiceMessage*)m);
+        return paxos->dispatch((PaxosServiceMessage*)m);
       }
-      break;
 
     // elector messages
     case MSG_MON_ELECTION:
@@ -3579,38 +3552,28 @@ void Monitor::dispatch(MonSession *s, Message *m, const bool src_is_mon)
           !s->is_capable("mon", MON_CAP_X)) {
         dout(0) << "MMonElection received from entity without enough caps!"
           << s->caps << dendl;
-        m->put();
-        break;
+	goto drop;
       }
-      if (!is_probing() && !is_synchronizing()) {
-        elector.dispatch(m);
-      } else {
-        m->put();
+      if (is_probing() || is_synchronizing()) {
+	goto drop;
       }
-      break;
+      return elector.dispatch(m);
 
     case MSG_FORWARD:
-      handle_forward(static_cast<MForward *>(m));
-      break;
+      return handle_forward(static_cast<MForward *>(m));
 
     case MSG_TIMECHECK:
-      handle_timecheck(static_cast<MTimeCheck *>(m));
-      break;
+      return handle_timecheck(static_cast<MTimeCheck *>(m));
 
     case MSG_MON_HEALTH:
       health_monitor->dispatch(static_cast<MMonHealth *>(m));
-      break;
+      return;
 
     default:
-      dealt_with = false;
-      break;
+      dout(1) << "dropping unexpected " << *m << dendl;
+      m->put();
+      return;
   }
-  if (!dealt_with) {
-    dout(1) << "dropping unexpected " << *m << dendl;
-    goto drop;
-  }
-  return;
-
 drop:
   m->put();
 }
