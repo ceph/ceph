@@ -10519,6 +10519,7 @@ void ReplicatedPG::_clear_recovery_state()
 
 void ReplicatedPG::cancel_pull(const hobject_t &soid)
 {
+  dout(20) << __func__ << ": soid" << dendl;
   assert(recovering.count(soid));
   ObjectContextRef obc = recovering[soid];
   if (obc) {
@@ -10528,6 +10529,16 @@ void ReplicatedPG::cancel_pull(const hobject_t &soid)
   }
   recovering.erase(soid);
   finish_recovery_op(soid);
+  if (waiting_for_degraded_object.count(soid)) {
+    dout(20) << " kicking degraded waiters on " << soid << dendl;
+    requeue_ops(waiting_for_degraded_object[soid]);
+    waiting_for_degraded_object.erase(soid);
+  }
+  if (waiting_for_unreadable_object.count(soid)) {
+    dout(20) << " kicking unreadable waiters on " << soid << dendl;
+    requeue_ops(waiting_for_unreadable_object[soid]);
+    waiting_for_unreadable_object.erase(soid);
+  }
   if (is_missing_object(soid))
     pg_log.set_last_requested(0); // get recover_primary to start over
 }
