@@ -1852,8 +1852,20 @@ int do_import(ObjectStore *store, OSDSuperblock& sb)
     return EFAULT;
   }
 
+  pg_log_t newlog, reject;
+  pg_log_t::filter_log(pgid, curmap, g_ceph_context->_conf->osd_hit_set_namespace,
+    ms.log, newlog, reject);
+  if (debug) {
+    for (list<pg_log_entry_t>::iterator i = newlog.log.begin();
+         i != newlog.log.end(); ++i)
+      cerr << "Keeping log entry " << *i << std::endl;
+    for (list<pg_log_entry_t>::iterator i = reject.log.begin();
+         i != reject.log.end(); ++i)
+      cerr << "Skipping log entry " << *i << std::endl;
+  }
+
   t = new ObjectStore::Transaction;
-  ret = write_pg(*t, ms.map_epoch, ms.info, ms.log, ms.past_intervals);
+  ret = write_pg(*t, ms.map_epoch, ms.info, newlog, ms.past_intervals);
   if (ret) return ret;
 
   // done, clear removal flag
