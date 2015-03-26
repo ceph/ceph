@@ -14,7 +14,7 @@ class TestInstall(object):
                                          m_get_baseurl):
         m_block.return_value = "0.89.0"
         m_get_package_version.return_value = "0.89.0"
-        install.verify_ceph_version(Mock(), Mock(), Mock())
+        install.verify_package_version(Mock(), Mock(), Mock())
 
     @patch("teuthology.task.install._get_baseurl")
     @patch("teuthology.task.install._block_looking_for_package_version")
@@ -24,4 +24,4 @@ class TestInstall(object):
         m_block.return_value = "0.89.0"
         m_get_package_version.return_value = "0.89.1"
         with pytest.raises(RuntimeError):
-            install.verify_ceph_version(Mock(), Mock(), Mock())
+            install.verify_package_version(Mock(), Mock(), Mock())

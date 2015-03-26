@@ -480,10 +480,13 @@ def _update_rpm_package_list_and_install(ctx, remote, rpm, config):
                         run.Raw(';'), 'fi'])
 
 
-def verify_ceph_version(ctx, config, remote):
+def verify_package_version(ctx, config, remote):
     """
-    Ensures that the version of ceph installed is what
+    Ensures that the version of package installed is what
     was asked for in the config.
+
+    For most cases this is for ceph, but we also install samba
+    for example.
     """
     base_url = _get_baseurl(ctx, remote, config)
     version = _block_looking_for_package_version(
@@ -491,17 +494,20 @@ def verify_ceph_version(ctx, config, remote):
         base_url,
         config.get('wait_for_package', False)
     )
-    installed_ver = packaging.get_package_version(remote, 'ceph')
+    pkg_to_check = config.get('project', 'ceph')
+    installed_ver = packaging.get_package_version(remote, pkg_to_check)
     if installed_ver and version in installed_ver:
-        msg = "The correct ceph version {ver} is installed.".format(
-            ver=version
+        msg = "The correct {pkg} version {ver} is installed.".format(
+            ver=version,
+            pkg=pkg_to_check
         )
         log.info(msg)
     else:
         raise RuntimeError(
-            "Ceph version {ver} was not installed, found {installed}.".format(
+            "{pkg} version {ver} was not installed, found {installed}.".format(
                 ver=version,
-                installed=installed_ver
+                installed=installed_ver,
+                pkg=pkg_to_check
             )
         )
 
@@ -565,7 +571,7 @@ def install_packages(ctx, pkgs, config):
 
     for remote in ctx.cluster.remotes.iterkeys():
         # verifies that the install worked as expected
-        verify_ceph_version(ctx, config, remote)
+        verify_package_version(ctx, config, remote)
 
 
 def _remove_deb(ctx, config, remote, debs):
@@ -1074,7 +1080,7 @@ def upgrade_common(ctx, config, deploy_style):
         node['project'] = project
 
         deploy_style(ctx, node, remote, pkgs, system_type)
-        verify_ceph_version(ctx, node, remote)
+        verify_package_version(ctx, node, remote)
 
 
 docstring_for_upgrade = """"
