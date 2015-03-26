@@ -7,6 +7,7 @@ import contextlib
 import logging
 
 from teuthology.orchestra import run
+from teuthology.contextutil import safe_while
 
 log = logging.getLogger(__name__)
 
@@ -57,7 +58,7 @@ def task(ctx, config):
                 obj(n),
                 "/etc/resolv.conf"],
             logger=log.getChild('watch.{id}'.format(id=n)))
-        return remote.run(
+        proc = remote.run(
             args = [
                 "rados",
                 "-p", pool,
@@ -67,7 +68,28 @@ def task(ctx, config):
             stdout=StringIO(),
             stderr=StringIO(),
             wait=False)
-    watches = [start_watch(i) for i in range(20)]
+        return proc
+
+    num = 20
+
+    watches = [start_watch(i) for i in range(num)]
+
+    # wait for them all to register
+    for i in range(num):
+        with safe_while() as proceed:
+            while proceed():
+                proc = remote.run(
+                    args = [
+                        "rados",
+                        "-p", pool,
+                        "listwatchers",
+                        obj(i)],
+                    stdout=StringIO())
+                lines = proc.stdout.getvalue()
+                num_watchers = lines.count('watcher=')
+                log.info('i see %d watchers for %s', num_watchers, obj(i))
+                if num_watchers >= 1:
+                    break
 
     def notify(n, msg):
         remote.run(
