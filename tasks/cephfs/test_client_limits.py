@@ -4,14 +4,12 @@ Exercise the MDS's behaviour when clients and the MDCache reach or
 exceed the limits of how many caps/inodes they should hold.
 """
 
-import contextlib
 import logging
 from unittest import SkipTest
 from teuthology.orchestra.run import CommandFailedError
+from tasks.cephfs.cephfs_test_case import CephFSTestCase
 
-from tasks.cephfs.filesystem import Filesystem
 from tasks.cephfs.fuse_mount import FuseMount
-from tasks.cephfs.cephfs_test_case import CephFSTestCase, run_tests
 
 
 log = logging.getLogger(__name__)
@@ -27,10 +25,8 @@ CAP_RECALL_MIN = 100
 
 
 class TestClientLimits(CephFSTestCase):
-    # Environment references
-    mds_session_timeout = None
-    mds_reconnect_timeout = None
-    ms_max_backoff = None
+    REQUIRE_KCLIENT_REMOTE = True
+    CLIENTS_REQUIRED = 2
 
     def wait_for_health(self, pattern, timeout):
         """
@@ -147,37 +143,3 @@ class TestClientLimits(CephFSTestCase):
         # Client B should complete
         self.fs.mds_asok(['session', 'evict', "%s" % mount_a_client_id])
         rproc.wait()
-
-
-@contextlib.contextmanager
-def task(ctx, config):
-    fs = Filesystem(ctx)
-
-    # Pick out the clients we will use from the configuration
-    # =======================================================
-    if len(ctx.mounts) < 2:
-        raise RuntimeError("Need at least two clients")
-    mount_a = ctx.mounts.values()[0]
-    mount_b = ctx.mounts.values()[1]
-
-    if not isinstance(mount_a, FuseMount) or not isinstance(mount_b, FuseMount):
-        # kclient kill() power cycles nodes, so requires clients to each be on
-        # their own node
-        if mount_a.client_remote.hostname == mount_b.client_remote.hostname:
-            raise RuntimeError("kclient clients must be on separate nodes")
-
-    # Stash references on ctx so that we can easily debug in interactive mode
-    # =======================================================================
-    ctx.filesystem = fs
-    ctx.mount_a = mount_a
-    ctx.mount_b = mount_b
-
-    run_tests(ctx, config, TestClientLimits, {
-        'fs': fs,
-        'mount_a': mount_a,
-        'mount_b': mount_b
-    })
-
-    # Continue to any downstream tasks
-    # ================================
-    yield

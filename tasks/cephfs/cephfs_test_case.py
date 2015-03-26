@@ -1,7 +1,8 @@
 import logging
 import unittest
+from unittest import case
 import time
-from teuthology.task import interactive
+from tasks.cephfs.fuse_mount import FuseMount
 
 
 log = logging.getLogger(__name__)
@@ -15,11 +16,55 @@ class CephFSTestCase(unittest.TestCase):
     Handles resetting the cluster under test between tests.
     """
     # Environment references
+    mounts = None
+    fs = None
+    ctx = None
+
+    # FIXME weird explicit naming
     mount_a = None
     mount_b = None
-    fs = None
+
+    # Declarative test requirements: subclasses should override these to indicate
+    # their special needs.  If not met, tests will be skipped.
+    CLIENTS_REQUIRED = 1
+    MDSS_REQUIRED = 1
+    REQUIRE_KCLIENT_REMOTE = False
+    REQUIRE_ONE_CLIENT_REMOTE = False
+
+    LOAD_SETTINGS = []
 
     def setUp(self):
+        if len(self.fs.mds_ids) < self.MDSS_REQUIRED:
+            raise case.SkipTest("Only have {0} MDSs, require {1}".format(
+                len(self.fs.mds_ids), self.MDSS_REQUIRED
+            ))
+
+        if len(self.mounts) < self.CLIENTS_REQUIRED:
+            raise case.SkipTest("Only have {0} clients, require {1}".format(
+                len(self.mounts), self.CLIENTS_REQUIRED
+            ))
+
+        if self.REQUIRE_KCLIENT_REMOTE:
+            if not isinstance(self.mounts[0], FuseMount) or not isinstance(self.mounts[1], FuseMount):
+                # kclient kill() power cycles nodes, so requires clients to each be on
+                # their own node
+                if self.mounts[0].client_remote.hostname == self.mounts[1].client_remote.hostname:
+                    raise case.SkipTest("kclient clients must be on separate nodes")
+
+        if self.REQUIRE_ONE_CLIENT_REMOTE:
+            if self.mounts[0].client_remote.hostname in self.fs.get_mds_hostnames():
+                raise case.SkipTest("Require first client to be on separate server from MDSs")
+
+        # Unmount all surplus clients
+        for i in range(self.CLIENTS_REQUIRED, len(self.mounts)):
+            mount = self.mounts[i]
+            log.info("Unmounting unneeded client {0}".format(mount.client_id))
+            mount.umount_wait()
+
+        # Create friendly mount_a, mount_b attrs
+        for i in range(0, self.CLIENTS_REQUIRED):
+            setattr(self, "mount_{0}".format(chr(ord('a') + i)), self.mounts[i])
+
         self.fs.clear_firewall()
 
         # Unmount in order to start each test on a fresh mount, such
@@ -55,6 +100,12 @@ class CephFSTestCase(unittest.TestCase):
             if not self.mount_b.is_mounted():
                 self.mount_b.mount()
                 self.mount_b.wait_until_mounted()
+
+        # Load an config settings of interest
+        for setting in self.LOAD_SETTINGS:
+            setattr(self, setting, int(self.fs.mds_asok(
+                ['config', 'get', setting], self.fs.mds_ids[0]
+            )[setting]))
 
         self.configs_set = set()
 
@@ -138,86 +189,3 @@ class CephFSTestCase(unittest.TestCase):
                 elapsed += period
 
         log.debug("wait_until_true: success")
-
-
-class LogStream(object):
-    def __init__(self):
-        self.buffer = ""
-
-    def write(self, data):
-        self.buffer += data
-        if "\n" in self.buffer:
-            lines = self.buffer.split("\n")
-            for line in lines[:-1]:
-                log.info(line)
-            self.buffer = lines[-1]
-
-    def flush(self):
-        pass
-
-
-class InteractiveFailureResult(unittest.TextTestResult):
-    """
-    Specialization that implements interactive-on-error style
-    behavior.
-    """
-    ctx = None
-
-    def addFailure(self, test, err):
-        log.error(self._exc_info_to_string(err, test))
-        log.error("Failure in test '{0}', going interactive".format(
-            self.getDescription(test)
-        ))
-        interactive.task(ctx=self.ctx, config=None)
-
-    def addError(self, test, err):
-        log.error(self._exc_info_to_string(err, test))
-        log.error("Error in test '{0}', going interactive".format(
-            self.getDescription(test)
-        ))
-        interactive.task(ctx=self.ctx, config=None)
-
-
-def run_tests(ctx, config, test_klass, params):
-    for k, v in params.items():
-        setattr(test_klass, k, v)
-
-    # Execute test suite
-    # ==================
-    if config and 'test_name' in config:
-        # Test names like TestCase.this_test
-        suite = unittest.TestLoader().loadTestsFromName(
-            "{0}.{1}".format(test_klass.__module__, config['test_name']))
-    else:
-        suite = unittest.TestLoader().loadTestsFromTestCase(test_klass)
-
-    if ctx.config.get("interactive-on-error", False):
-        InteractiveFailureResult.ctx = ctx
-        result_class = InteractiveFailureResult
-    else:
-        result_class = unittest.TextTestResult
-
-    # Unmount all clients not involved
-    for mount in ctx.mounts.values():
-        if mount is not params.get('mount_a') and mount is not params.get('mount_b'):
-            if mount.is_mounted():
-                log.info("Unmounting unneeded client {0}".format(mount.client_id))
-                mount.umount_wait()
-
-    # Execute!
-    result = unittest.TextTestRunner(
-        stream=LogStream(),
-        resultclass=result_class,
-        verbosity=2,
-        failfast=True).run(suite)
-
-    if not result.wasSuccessful():
-        result.printErrors()  # duplicate output at end for convenience
-
-        bad_tests = []
-        for test, error in result.errors:
-            bad_tests.append(str(test))
-        for test, failure in result.failures:
-            bad_tests.append(str(test))
-
-        raise RuntimeError("Test failure: {0}".format(", ".join(bad_tests)))

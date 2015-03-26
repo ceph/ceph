@@ -3,17 +3,11 @@
 Teuthology task for exercising CephFS client recovery
 """
 
-import contextlib
 import logging
 import time
-import unittest
 
 from teuthology.orchestra.run import CommandFailedError, ConnectionLostError
-from teuthology.task import interactive
-
-from tasks.cephfs.cephfs_test_case import CephFSTestCase, run_tests
-from tasks.cephfs.filesystem import Filesystem
-from tasks.cephfs.fuse_mount import FuseMount
+from tasks.cephfs.cephfs_test_case import CephFSTestCase
 
 
 log = logging.getLogger(__name__)
@@ -25,6 +19,12 @@ MDS_RESTART_GRACE = 60
 
 
 class TestClientRecovery(CephFSTestCase):
+    REQUIRE_KCLIENT_REMOTE = True
+    REQUIRE_ONE_CLIENT_REMOTE = True
+    CLIENTS_REQUIRED = 2
+
+    LOAD_SETTINGS = ["mds_session_timeout", "mds_reconnect_timeout", "ms_max_backoff"]
+
     # Environment references
     mds_session_timeout = None
     mds_reconnect_timeout = None
@@ -328,96 +328,3 @@ class TestClientRecovery(CephFSTestCase):
         except (CommandFailedError, ConnectionLostError):
             # We killed it, so it raises an error
             pass
-
-
-class LogStream(object):
-    def __init__(self):
-        self.buffer = ""
-
-    def write(self, data):
-        self.buffer += data
-        if "\n" in self.buffer:
-            lines = self.buffer.split("\n")
-            for line in lines[:-1]:
-                log.info(line)
-            self.buffer = lines[-1]
-
-    def flush(self):
-        pass
-
-
-class InteractiveFailureResult(unittest.TextTestResult):
-    """
-    Specialization that implements interactive-on-error style
-    behavior.
-    """
-    ctx = None
-
-    def addFailure(self, test, err):
-        log.error(self._exc_info_to_string(err, test))
-        log.error("Failure in test '{0}', going interactive".format(
-            self.getDescription(test)
-        ))
-        interactive.task(ctx=self.ctx, config=None)
-
-    def addError(self, test, err):
-        log.error(self._exc_info_to_string(err, test))
-        log.error("Error in test '{0}', going interactive".format(
-            self.getDescription(test)
-        ))
-        interactive.task(ctx=self.ctx, config=None)
-
-
-@contextlib.contextmanager
-def task(ctx, config):
-    """
-    Execute CephFS client recovery test suite.
-
-    Requires:
-    - An outer ceph_fuse task with at least two clients
-    - That the clients are on a separate host to the MDS
-    """
-    fs = Filesystem(ctx)
-
-    # Pick out the clients we will use from the configuration
-    # =======================================================
-    if len(ctx.mounts) < 2:
-        raise RuntimeError("Need at least two clients")
-    mount_a = ctx.mounts.values()[0]
-    mount_b = ctx.mounts.values()[1]
-
-    if not isinstance(mount_a, FuseMount) or not isinstance(mount_b, FuseMount):
-        # kclient kill() power cycles nodes, so requires clients to each be on
-        # their own node
-        if mount_a.client_remote.hostname == mount_b.client_remote.hostname:
-            raise RuntimeError("kclient clients must be on separate nodes")
-
-    # Check we have at least one remote client for use with network-dependent tests
-    # =============================================================================
-    if mount_a.client_remote.hostname in fs.get_mds_hostnames():
-        raise RuntimeError("Require first client to on separate server from MDSs")
-
-    # Stash references on ctx so that we can easily debug in interactive mode
-    # =======================================================================
-    ctx.filesystem = fs
-    ctx.mount_a = mount_a
-    ctx.mount_b = mount_b
-
-    run_tests(ctx, config, TestClientRecovery, {
-        "mds_reconnect_timeout": int(fs.mds_asok(
-            ['config', 'get', 'mds_reconnect_timeout'], fs.mds_ids[0]
-        )['mds_reconnect_timeout']),
-        "mds_session_timeout": int(fs.mds_asok(
-            ['config', 'get', 'mds_session_timeout'], fs.mds_ids[0]
-        )['mds_session_timeout']),
-        "ms_max_backoff": int(fs.mds_asok(
-            ['config', 'get', 'ms_max_backoff'], fs.mds_ids[0]
-        )['ms_max_backoff']),
-        "fs": fs,
-        "mount_a": mount_a,
-        "mount_b": mount_b
-    })
-
-    # Continue to any downstream tasks
-    # ================================
-    yield

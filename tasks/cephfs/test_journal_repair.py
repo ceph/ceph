@@ -3,7 +3,6 @@
 Test our tools for recovering the content of damaged journals
 """
 
-import contextlib
 import json
 import logging
 import os
@@ -11,9 +10,10 @@ from textwrap import dedent
 import time
 from StringIO import StringIO
 import re
+
 from teuthology.orchestra.run import CommandFailedError
-from tasks.cephfs.filesystem import Filesystem, ObjectNotFound, ROOT_INO
-from tasks.cephfs.cephfs_test_case import CephFSTestCase, run_tests
+from tasks.cephfs.filesystem import ObjectNotFound, ROOT_INO
+from tasks.cephfs.cephfs_test_case import CephFSTestCase
 from teuthology.orchestra import run
 
 
@@ -21,6 +21,8 @@ log = logging.getLogger(__name__)
 
 
 class TestJournalRepair(CephFSTestCase):
+    MDSS_REQUIRED = 2
+
     def test_inject_to_empty(self):
         """
         That when some dentries in the journal but nothing is in
@@ -375,28 +377,3 @@ class TestJournalRepair(CephFSTestCase):
                             "pending_destroy": []},
              "result": 0}
         )
-
-
-@contextlib.contextmanager
-def task(ctx, config):
-    fs = Filesystem(ctx)
-
-    # Pick out the clients we will use from the configuration
-    # =======================================================
-    if len(ctx.mounts) < 1:
-        raise RuntimeError("Need at least one clients")
-    mount_a = ctx.mounts.values()[0]
-
-    # Stash references on ctx so that we can easily debug in interactive mode
-    # =======================================================================
-    ctx.filesystem = fs
-    ctx.mount_a = mount_a
-
-    run_tests(ctx, config, TestJournalRepair, {
-        'fs': fs,
-        'mount_a': mount_a
-    })
-
-    # Continue to any downstream tasks
-    # ================================
-    yield
