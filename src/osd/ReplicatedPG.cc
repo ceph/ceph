@@ -9295,16 +9295,6 @@ bool ReplicatedBackend::handle_pull_response(
   }
 }
 
-struct C_OnPushCommit : public Context {
-  ReplicatedPG *pg;
-  OpRequestRef op;
-  C_OnPushCommit(ReplicatedPG *pg, OpRequestRef op) : pg(pg), op(op) {}
-  void finish(int) {
-    op->mark_event("committed");
-    log_subop_stats(pg->osd->logger, op, l_osd_sop_push);
-  }
-};
-
 void ReplicatedBackend::handle_push(
   pg_shard_t from, PushOp &pop, PushReplyOp *response,
   ObjectStore::Transaction *t)
