@@ -11382,27 +11382,25 @@ void ReplicatedPG::_scrub(
     ++scrubber.shallow_errors;
   }
 
-  if (scrubber.shallow_errors == 0) {
-    for (map<hobject_t,pair<uint32_t,uint32_t> >::const_iterator p =
-	   missing_digest.begin();
-	 p != missing_digest.end();
-	 ++p) {
-      if (p->first.is_snapdir())
-	continue;
-      dout(10) << __func__ << " recording digests for " << p->first << dendl;
-      ObjectContextRef obc = get_object_context(p->first, false);
-      assert(obc);
-      RepGather *repop = simple_repop_create(obc);
-      OpContext *ctx = repop->ctx;
-      ctx->at_version = get_next_version();
-      ctx->mtime = utime_t();      // do not update mtime
-      ctx->new_obs.oi.set_data_digest(p->second.first);
-      ctx->new_obs.oi.set_omap_digest(p->second.second);
-      finish_ctx(ctx, pg_log_entry_t::MODIFY, true, true);
-      ctx->on_finish = new C_ScrubDigestUpdated(this);
-      simple_repop_submit(repop);
-      ++scrubber.num_digest_updates_pending;
-    }
+  for (map<hobject_t,pair<uint32_t,uint32_t> >::const_iterator p =
+	 missing_digest.begin();
+       p != missing_digest.end();
+       ++p) {
+    if (p->first.is_snapdir())
+      continue;
+    dout(10) << __func__ << " recording digests for " << p->first << dendl;
+    ObjectContextRef obc = get_object_context(p->first, false);
+    assert(obc);
+    RepGather *repop = simple_repop_create(obc);
+    OpContext *ctx = repop->ctx;
+    ctx->at_version = get_next_version();
+    ctx->mtime = utime_t();      // do not update mtime
+    ctx->new_obs.oi.set_data_digest(p->second.first);
+    ctx->new_obs.oi.set_omap_digest(p->second.second);
+    finish_ctx(ctx, pg_log_entry_t::MODIFY, true, true);
+    ctx->on_finish = new C_ScrubDigestUpdated(this);
+    simple_repop_submit(repop);
+    ++scrubber.num_digest_updates_pending;
   }
   
   dout(10) << "_scrub (" << mode << ") finish" << dendl;
