@@ -23,6 +23,35 @@ Once you deploy monitors and OSDs you may deploy the metadata server(s). ::
 You may specify a daemon instance a name (optional) if you would like to run
 multiple daemons on a single server.
 
+Add a Metadata Server [Manualy]
+=====================
+
+Once you deploy monitors and OSDs you may deploy the metadata server:
+1. Add it in config file (ceph.conf) ::
+
+	[mds]
+	mds data = /var/lib/ceph/mds/$cluster-$id
+	keyring = /var/lib/ceph/mds/$cluster-$id/$cluster.keyring
+	
+	[mds.a]
+	host = {hostname}
+
+2. Create working directory ::
+
+	$ sudo mkdir /var/lib/ceph/mds/ceph-a
+	
+3. Create the authentication key (only if you use cephX) ::
+
+	$ sudo ceph auth get-or-create mds.a mds 'allow ' osd 'allow *' mon 'allow rwx' > /var/lib/ceph/mds/ceph-a/ceph.keyring
+
+4. Start mds daemon ::
+
+	 $ sudo service ceph start mds.0
+	 
+5. Check ::
+	
+	$ ceph mds stat
+	e22: 1/1/1 up {0=a=up:active}
 
 Remove a Metadata Server
 ========================
@@ -44,3 +73,15 @@ Coming soon...
 
 
 .. _MDS Config Reference: ../../../cephfs/mds-config-ref
+
+Remove a Metadata Server [Manualy]
+========================
+
+1. Remove mds section in your config file ::
+
+	[mds.a]
+	host = {hostname}
+	
+2. Remove mds from cluster ::
+
+	$ sudo ceph mds rm mds.a
