@@ -17,7 +17,6 @@
 #include <iostream>
 #include <errno.h>
 #include <sys/stat.h>
-#include <sys/utsname.h>
 #include <signal.h>
 #include <ctype.h>
 #include <boost/scoped_ptr.hpp>
@@ -130,6 +129,7 @@
 
 #include "common/cmdparse.h"
 #include "include/str_list.h"
+#include "include/util.h"
 
 #include "include/assert.h"
 #include "common/config.h"
@@ -4461,53 +4461,6 @@ void OSD::_send_boot()
   monc->send_mon_message(mboot);
 }
 
-bool OSD::_lsb_release_set (char *buf, const char *str, map<string,string> *pm, const char *key)
-{
-  if (strncmp (buf, str, strlen (str)) == 0) {
-    char *value;
-
-    if (buf[strlen(buf)-1] == '\n')
-      buf[strlen(buf)-1] = '\0';
-
-    value = buf + strlen (str) + 1;
-    (*pm)[key] = value;
-
-    return true;
-  }
-  return false;
-}
-
-void OSD::_lsb_release_parse (map<string,string> *pm)
-{
-  FILE *fp = NULL;
-  char buf[512];
-
-  fp = popen("lsb_release -idrc", "r");
-  if (!fp) {
-    int ret = -errno;
-    derr << "lsb_release_parse - failed to call lsb_release binary with error: " << cpp_strerror(ret) << dendl;
-    return;
-  }
-
-  while (fgets(buf, sizeof(buf) - 1, fp) != NULL) {
-    if (_lsb_release_set(buf, "Distributor ID:", pm, "distro")) 
-      continue;
-    if (_lsb_release_set(buf, "Description:", pm, "distro_description"))
-      continue;
-    if (_lsb_release_set(buf, "Release:", pm, "distro_version"))
-      continue;
-    if (_lsb_release_set(buf, "Codename:", pm, "distro_codename"))
-      continue;
-    
-    derr << "unhandled output: " << buf << dendl;
-  }
-
-  if (pclose(fp)) {
-    int ret = -errno;
-    derr << "lsb_release_parse - pclose failed: " << cpp_strerror(ret) << dendl;
-  }
-}
-
 void OSD::_collect_metadata(map<string,string> *pm)
 {
   (*pm)["ceph_version"] = pretty_version_to_str();
@@ -4524,64 +4477,7 @@ void OSD::_collect_metadata(map<string,string> *pm)
   (*pm)["osd_objectstore"] = g_conf->osd_objectstore;
   store->collect_metadata(pm);
 
-  // kernel info
-  struct utsname u;
-  int r = uname(&u);
-  if (r >= 0) {
-    (*pm)["os"] = u.sysname;
-    (*pm)["kernel_version"] = u.release;
-    (*pm)["kernel_description"] = u.version;
-    (*pm)["hostname"] = u.nodename;
-    (*pm)["arch"] = u.machine;
-  }
-
-  // memory
-  FILE *f = fopen("/proc/meminfo", "r");
-  if (f) {
-    char buf[100];
-    while (!feof(f)) {
-      char *line = fgets(buf, sizeof(buf), f);
-      if (!line)
-	break;
-      char key[40];
-      long long value;
-      int r = sscanf(line, "%s %lld", key, &value);
-      if (r == 2) {
-	if (strcmp(key, "MemTotal:") == 0)
-	  (*pm)["mem_total_kb"] = stringify(value);
-	else if (strcmp(key, "SwapTotal:") == 0)
-	  (*pm)["mem_swap_kb"] = stringify(value);
-      }
-    }
-    fclose(f);
-  }
-
-  // processor
-  f = fopen("/proc/cpuinfo", "r");
-  if (f) {
-    char buf[100];
-    while (!feof(f)) {
-      char *line = fgets(buf, sizeof(buf), f);
-      if (!line)
-	break;
-      if (strncmp(line, "model name", 10) == 0) {
-	char *c = strchr(buf, ':');
-	c++;
-	while (*c == ' ')
-	  ++c;
-	char *nl = c;
-	while (*nl != '\n')
-	  ++nl;
-	*nl = '\0';
-	(*pm)["cpu"] = c;
-	break;
-      }
-    }
-    fclose(f);
-  }
-
-  // distro info
-  _lsb_release_parse(pm); 
+  collect_sys_info(pm, g_ceph_context);
 
   dout(10) << __func__ << " " << *pm << dendl;
 }
