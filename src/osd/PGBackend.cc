@@ -628,21 +628,48 @@ void PGBackend::be_compare_scrubmaps(
     if (!cur_inconsistent.empty() || !cur_missing.empty()) {
       authoritative[*k] = auth_list;
     }
-    if (clean &&
-	okseed &&
-	parent->get_pool().is_replicated() &&
-	auth_object.digest_present && auth_object.omap_digest_present &&
-	(!auth_oi.is_data_digest() || !auth_oi.is_omap_digest() ||
-	 (g_conf->osd_debug_scrub_chance_rewrite_digest &&
+
+    if (okseed &&
+	clean &&
+	parent->get_pool().is_replicated()) {
+      enum {
+	NO = 0,
+	MAYBE = 1,
+	FORCE = 2,
+      } update = NO;
+
+      // recorded digest != actual digest?
+      if (auth_oi.is_data_digest() && auth_object.digest_present &&
+	  auth_oi.data_digest != auth_object.digest) {
+	++deep_errors;
+	errorstream << __func__ << ": " << pgid << " recorded data digest 0x"
+		    << std::hex << auth_oi.data_digest << " != on disk 0x"
+		    << auth_object.digest << std::dec << " on " << auth_oi.soid;
+      }
+      if (auth_oi.is_omap_digest() && auth_object.omap_digest_present &&
+	  auth_oi.omap_digest != auth_object.omap_digest) {
+	++deep_errors;
+	errorstream << __func__ << ": " << pgid << " recorded omap digest 0x"
+		    << std::hex << auth_oi.data_digest << " != on disk 0x"
+		    << auth_object.digest << std::dec << " on " << auth_oi.soid;
+      }
+
+      if (auth_object.digest_present && auth_object.omap_digest_present &&
+	  (!auth_oi.is_data_digest() || !auth_oi.is_omap_digest())) {
+	dout(20) << __func__ << " missing digest on " << *k << dendl;
+	update = MAYBE;
+      }
+      if (g_conf->osd_debug_scrub_chance_rewrite_digest &&
 	  (((unsigned)rand() % 100) >
-	    g_conf->osd_debug_scrub_chance_rewrite_digest)))) {
-      if (!cur_inconsistent.empty() || !cur_missing.empty()) {
-	dout(20) << __func__ << " not updating oi digest on "
-		 << *k << " since it is inconsistent" << dendl;
-      } else {
+	   g_conf->osd_debug_scrub_chance_rewrite_digest)) {
+	dout(20) << __func__ << " randomly updating digest on " << *k << dendl;
+	update = MAYBE;
+      }
+      if (update != NO) {
 	utime_t age = now - auth_oi.local_mtime;
-	if (age > g_conf->osd_deep_scrub_update_digest_min_age) {
-	  dout(20) << __func__ << " noting missing digest on " << *k << dendl;
+	if (update == FORCE ||
+	    age > g_conf->osd_deep_scrub_update_digest_min_age) {
+	  dout(20) << __func__ << " will update digest on " << *k << dendl;
 	  missing_digest[*k] = make_pair(auth_object.digest,
 					 auth_object.omap_digest);
 	} else {
