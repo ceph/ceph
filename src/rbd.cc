@@ -1368,6 +1368,32 @@ static void update_snap_name(char *imgname, char **snap)
     *snap = s;
 }
 
+static bool is_valid_name(const char *name)
+{
+   char ch;
+   unsigned int i; 
+
+   if(name == NULL)
+     return true;
+
+   if(strlen(name) == 0)
+     return false;
+   
+   for (i = 0; i < strlen(name); i++ ) {
+      ch = name[i];
+      if ( !( ( ch >= '0' && ch <= '9' ) ||
+                ( ch >= 'a' && ch <= 'z' ) ||
+               ( ch >= 'A' && ch <= 'Z' ) ||
+               ( ch == '_' )                    ||
+               ( ch == '-' ) ) )
+              {             
+                return false;
+              }
+    }
+   return true;
+}
+
+
 static void set_pool_image_name(const char *orig_img, char **new_pool, 
 				char **new_img, char **snap)
 {
@@ -3038,6 +3064,28 @@ if (!set_conf_param(v, p1, p2, p3)) { \
   // the relevant parts
   set_pool_image_name(imgname, (char **)&poolname,
 		      (char **)&imgname, (char **)&snapname);
+
+  if(!is_valid_name(poolname) || !is_valid_name(snapname) || !is_valid_name(imgname)) {
+    if(!is_valid_name(poolname) && !is_valid_name(snapname) && !is_valid_name(imgname)) 
+	cerr << "rbd: The pool, image and snap names are invalid"<<std::endl;
+    else if(!is_valid_name(poolname) && !is_valid_name(imgname)) 
+	cerr << "rbd: The pool and image names are invalid"<<std::endl;
+    else if(!is_valid_name(poolname) && !is_valid_name(snapname))
+ 	cerr << "rbd: The pool and snap names are invalid"<<std::endl;
+    else if(!is_valid_name(snapname) && !is_valid_name(imgname))
+	cerr << "rbd: The snap and image names are invalid"<<std::endl;
+    else if(!is_valid_name(poolname))
+	cerr << "rbd: The pool name is invalid"<<std::endl;
+    else if(!is_valid_name(imgname))
+	cerr << "rbd: The image name is invalid"<<std::endl;
+    else if(!is_valid_name(snapname))
+	cerr << "rbd: The snap name is invalid"<<std::endl;
+
+
+      return EXIT_FAILURE;
+  }
+
+  
   if (snapname && opt_cmd != OPT_SNAP_CREATE && opt_cmd != OPT_SNAP_ROLLBACK &&
       opt_cmd != OPT_SNAP_REMOVE && opt_cmd != OPT_INFO &&
       opt_cmd != OPT_EXPORT && opt_cmd != OPT_EXPORT_DIFF && opt_cmd != OPT_DIFF && opt_cmd != OPT_COPY &&
@@ -3058,6 +3106,27 @@ if (!set_conf_param(v, p1, p2, p3)) { \
 
   set_pool_image_name(destname, (char **)&dest_poolname,
 		      (char **)&destname, (char **)&dest_snapname);
+
+
+  if(!is_valid_name(dest_poolname) || !is_valid_name(destname) || !is_valid_name(dest_snapname)) {
+     if(!is_valid_name(dest_poolname) && !is_valid_name(destname) && !is_valid_name(dest_snapname))
+         cerr << "rbd: The destination pool, image and snap names are invalid"<<std::endl;
+     else if(!is_valid_name(dest_poolname) && !is_valid_name(destname))
+         cerr << "rbd: The destination pool and image names are invalid"<<std::endl;
+     else if(!is_valid_name(dest_poolname) && !is_valid_name(dest_snapname))
+         cerr << "rbd: The destination pool and snap names are invalid"<<std::endl;
+     else if(!is_valid_name(dest_snapname) && !is_valid_name(destname))
+         cerr << "rbd: The destination snap and image names are invalid"<<std::endl;
+     else if(!is_valid_name(dest_poolname))
+         cerr << "rbd: The destination pool name is invalid"<<std::endl;
+     else if(!is_valid_name(destname))
+         cerr << "rbd: The destination image name is invalid"<<std::endl;
+     else if(!is_valid_name(dest_snapname))
+         cerr << "rbd: The destination snap name is invalid"<<std::endl;
+
+     return EXIT_FAILURE;
+  }
+
 
   if (opt_cmd == OPT_IMPORT) {
     if (poolname && dest_poolname) {
