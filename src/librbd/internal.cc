@@ -1212,6 +1212,17 @@ reprotect_and_return_err:
       return r;
     }
 
+    r = detect_format(io_ctx, dstname, NULL, NULL);
+    if (r < 0 && r != -ENOENT) {
+      lderr(cct) << "error checking for existing image called "
+		 << dstname << ":" << cpp_strerror(r) << dendl;
+      return r;
+    }
+    if (r == 0) {
+      lderr(cct) << "rbd image " << dstname << " already exists" << dendl;
+      return -EEXIST;
+    }
+
     string src_oid =
       old_format ? old_header_name(srcname) : id_obj_name(srcname);
     string dst_oid =
@@ -1249,17 +1260,6 @@ reprotect_and_return_err:
       if (!outbl.empty())
 	last_read = outbl.rbegin()->first;
     } while (r == MAX_READ);
-
-    r = detect_format(io_ctx, dstname, NULL, NULL);
-    if (r < 0 && r != -ENOENT) {
-      lderr(cct) << "error checking for existing image called "
-		 << dstname << ":" << cpp_strerror(r) << dendl;
-      return r;
-    }
-    if (r == 0) {
-      lderr(cct) << "rbd image " << dstname << " already exists" << dendl;
-      return -EEXIST;
-    }
 
     librados::ObjectWriteOperation op;
     op.create(true);
@@ -3020,15 +3020,29 @@ reprotect_and_return_err:
 
   ssize_t read(ImageCtx *ictx, uint64_t ofs, size_t len, char *buf, int op_flags)
   {
+    utime_t start_time, elapsed;
+    ssize_t ret;
+    ldout(ictx->cct, 20) << "read " << ictx << " off = " << ofs << " len = "
+			 << len << dendl;
+    start_time = ceph_clock_now(ictx->cct);
+
     vector<pair<uint64_t,uint64_t> > extents;
     extents.push_back(make_pair(ofs, len));
-    return read(ictx, extents, buf, NULL, op_flags);
+    ret = read(ictx, extents, buf, NULL, op_flags);
+    if (ret < 0)
+      return ret;
+
+    elapsed = ceph_clock_now(ictx->cct) - start_time;
+    ictx->perfcounter->tinc(l_librbd_rd_latency, elapsed);
+    ictx->perfcounter->inc(l_librbd_rd);
+    ictx->perfcounter->inc(l_librbd_rd_bytes, ret);
+    return ret;
   }
 
   ssize_t read(ImageCtx *ictx, const vector<pair<uint64_t,uint64_t> >& image_extents,
 		char *buf, bufferlist *pbl, int op_flags)
   {
-    Mutex mylock("IoCtxImpl::write::mylock");
+    Mutex mylock("librbd::read::mylock");
     Cond cond;
     bool done;
     int ret;
@@ -3107,9 +3121,17 @@ reprotect_and_return_err:
     bool done;
     int ret;
 
+    uint64_t mylen = len;
+    ictx->snap_lock.get_read();
+    int r = clip_io(ictx, off, &mylen);
+    ictx->snap_lock.put_read();
+    if (r < 0) {
+      return r;
+    }
+
     Context *ctx = new C_SafeCond(&mylock, &cond, &done, &ret);
     AioCompletion *c = aio_create_completion_internal(ctx, rbd_ctx_cb);
-    int r = aio_discard(ictx, off, len, c);
+    r = aio_discard(ictx, off, mylen, c);
     if (r < 0) {
       c->release();
       delete ctx;
@@ -3128,8 +3150,8 @@ reprotect_and_return_err:
     elapsed = ceph_clock_now(ictx->cct) - start_time;
     ictx->perfcounter->inc(l_librbd_discard_latency, elapsed);
     ictx->perfcounter->inc(l_librbd_discard);
-    ictx->perfcounter->inc(l_librbd_discard_bytes, len);
-    return len;
+    ictx->perfcounter->inc(l_librbd_discard_bytes, mylen);
+    return mylen;
   }
 
   ssize_t handle_sparse_read(CephContext *cct,
