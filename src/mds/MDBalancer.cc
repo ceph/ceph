@@ -218,7 +218,7 @@ void MDBalancer::send_heartbeat()
 
 
   set<mds_rank_t> up;
-  mds->get_mds_map()->get_mds_set(up);
+  mds->get_mds_map()->get_up_mds_set(up);
   for (set<mds_rank_t>::iterator p = up.begin(); p != up.end(); ++p) {
     if (*p == mds->get_nodeid())
       continue;
