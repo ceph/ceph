@@ -107,6 +107,7 @@ class AdminSocketHook;
 
 class MMonGetMap;
 class MMonGetVersion;
+class MMonMetadata;
 class MMonSync;
 class MMonScrub;
 class MMonProbe;
@@ -637,6 +638,7 @@ public:
   void handle_get_version(MMonGetVersion *m);
   void handle_subscribe(MMonSubscribe *m);
   void handle_mon_get_map(MMonGetMap *m);
+
   static void _generate_command_map(map<string,cmd_vartype>& cmdmap,
                                     map<string,string> &param_str_map);
   static const MonCommand *_get_moncommand(const string &cmd_prefix,
@@ -650,6 +652,10 @@ public:
   bool _add_bootstrap_peer_hint(string cmd, cmdmap_t& cmdmap, ostream& ss);
   void handle_command(class MMonCommand *m);
   void handle_route(MRoute *m);
+
+  void handle_mon_metadata(MMonMetadata *m);
+  int get_mon_metadata(int mon, Formatter *f, ostream& err);
+  map<int, Metadata> metadata;
 
   /**
    *
@@ -846,6 +852,9 @@ public:
 
   int write_default_keyring(bufferlist& bl);
   void extract_save_mon_key(KeyRing& keyring);
+
+  void update_mon_metadata(int from, const Metadata& m);
+  int load_metadata(map<int, Metadata>& m);
 
   // features
   static CompatSet get_initial_supported_features();
