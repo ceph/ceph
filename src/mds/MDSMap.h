@@ -520,7 +520,7 @@ public:
     return mds_rank_t(in.size()) >= max_mds;
   }
   bool is_degraded() const {   // degraded = some recovery in process.  fixes active membership and recovery_set.
-    if (!failed.empty())
+    if (!failed.empty() || !damaged.empty())
       return true;
     for (std::map<mds_gid_t,mds_info_t>::const_iterator p = mds_info.begin();
 	 p != mds_info.end();
