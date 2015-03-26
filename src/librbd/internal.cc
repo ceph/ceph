@@ -58,6 +58,111 @@ namespace librbd {
 
 namespace {
 
+enum ObjectDiffState {
+  OBJECT_DIFF_STATE_NONE    = 0,
+  OBJECT_DIFF_STATE_UPDATED = 1,
+  OBJECT_DIFF_STATE_HOLE    = 2
+};
+
+int diff_object_map(ImageCtx* ictx, uint64_t from_snap_id, uint64_t to_snap_id,
+                    BitVector<2>* object_diff_state) {
+  assert(ictx->snap_lock.is_locked());
+  CephContext* cct = ictx->cct;
+
+  if (from_snap_id == 0) {
+    if (!ictx->snaps.empty()) {
+      from_snap_id = ictx->snaps.front();
+    } else {
+      from_snap_id = CEPH_NOSNAP;
+    }
+  }
+
+  object_diff_state->clear();
+  int r;
+  uint64_t current_snap_id = from_snap_id;
+  uint64_t next_snap_id = to_snap_id;
+  BitVector<2> prev_object_map;
+  while (true) {
+    uint64_t current_size = ictx->size;
+    if (current_snap_id != CEPH_NOSNAP) {
+      std::map<librados::snap_t, SnapInfo>::const_iterator snap_it =
+        ictx->snap_info.find(current_snap_id);
+      assert(snap_it != ictx->snap_info.end());
+      current_size = snap_it->second.size;
+
+      ++snap_it;
+      if (snap_it != ictx->snap_info.end()) {
+        next_snap_id = snap_it->first;
+      } else {
+        next_snap_id = CEPH_NOSNAP;
+      }
+    }
+
+    uint64_t flags;
+    r = ictx->get_flags(from_snap_id, &flags);
+    if (r < 0) {
+      lderr(cct) << "diff_object_map: failed to retrieve image flags" << dendl;
+      return r;
+    }
+    if ((flags & RBD_FLAG_OBJECT_MAP_INVALID) != 0) {
+      ldout(cct, 1) << "diff_object_map: cannot perform fast diff on invalid "
+                    << "object map" << dendl;
+      return -EINVAL;
+    }
+
+    BitVector<2> object_map;
+    std::string oid(ObjectMap::object_map_name(ictx->id, current_snap_id));
+    r = cls_client::object_map_load(&ictx->md_ctx, oid, &object_map);
+    if (r < 0) {
+      lderr(cct) << "diff_object_map: failed to load object map " << oid
+                 << dendl;
+      return r;
+    }
+    ldout(cct, 20) << "diff_object_map: loaded object map " << oid << dendl;
+
+    uint64_t num_objs = Striper::get_num_objects(ictx->layout, current_size);
+    if (object_map.size() < num_objs) {
+      ldout(cct, 1) << "diff_object_map: object map too small: "
+                    << object_map.size() << " < " << num_objs << dendl;
+      return -EINVAL;
+    }
+    object_map.resize(num_objs);
+
+    uint64_t overlap = MIN(object_map.size(), prev_object_map.size());
+    for (uint64_t i = 0; i < overlap; ++i) {
+      if (object_map[i] == OBJECT_NONEXISTENT) {
+        if (prev_object_map[i] != OBJECT_NONEXISTENT) {
+          (*object_diff_state)[i] = OBJECT_DIFF_STATE_HOLE;
+        }
+      } else if (prev_object_map[i] != object_map[i] &&
+                 !(prev_object_map[i] == OBJECT_EXISTS &&
+                   object_map[i] == OBJECT_EXISTS_CLEAN)) {
+        (*object_diff_state)[i] = OBJECT_DIFF_STATE_UPDATED;
+      }
+    }
+    ldout(cct, 20) << "diff_object_map: computed overlap diffs" << dendl;
+
+    object_diff_state->resize(object_map.size());
+    if (object_map.size() > prev_object_map.size()) {
+      for (uint64_t i = overlap; i < object_diff_state->size(); ++i) {
+        if (object_map[i] == OBJECT_NONEXISTENT) {
+          (*object_diff_state)[i] = OBJECT_DIFF_STATE_NONE;
+        } else {
+          (*object_diff_state)[i] = OBJECT_DIFF_STATE_UPDATED;
+        }
+      }
+    }
+    ldout(cct, 20) << "diff_object_map: computed resize diffs" << dendl;
+
+    if (current_snap_id == next_snap_id || next_snap_id > to_snap_id) {
+      break;
+    }
+    current_snap_id = next_snap_id;
+    prev_object_map = object_map;
+  }
+  return 0;
+}
+
 int remove_object_map(ImageCtx *ictx) {
   assert(ictx->snap_lock.is_locked());
   CephContext *cct = ictx->cct;
@@ -3102,6 +3207,22 @@ reprotect_and_return_err:
       return -EINVAL;
     }
 
+    bool fast_diff_enabled = false;
+    BitVector<2> object_diff_state;
+    {
+      RWLock::RLocker snap_locker(ictx->snap_lock);
+      if (whole_object && (ictx->features & RBD_FEATURE_FAST_DIFF) != 0) {
+        r = diff_object_map(ictx, from_snap_id, end_snap_id,
+                            &object_diff_state);
+        if (r < 0) {
+          ldout(ictx->cct, 1) << "diff_iterate fast diff disabled" << dendl;
+        } else {
+          ldout(ictx->cct, 1) << "diff_iterate fast diff enabled" << dendl;
+          fast_diff_enabled = true;
+        }
+      }
+    }
+
     // we must list snaps via the head, not end snap
     head_ctx.snap_set_read(CEPH_SNAPDIR);
 
@@ -3146,9 +3267,22 @@ reprotect_and_return_err:
 	   ++p) {
 	ldout(ictx->cct, 20) << "diff_iterate object " << p->first << dendl;
 
+        if (fast_diff_enabled) {
+          const uint64_t object_no = p->second.front().objectno;
+          if (object_diff_state[object_no] != OBJECT_DIFF_STATE_NONE) {
+            bool updated = (object_diff_state[object_no] ==
+                              OBJECT_DIFF_STATE_UPDATED);
+            for (std::vector<ObjectExtent>::iterator q = p->second.begin();
+                 q != p->second.end(); ++q) {
+              cb(off + q->offset, q->length, updated, arg);
+            }
+          }
+          continue;
+        }
+
 	librados::snap_set_t snap_set;
-	int r = head_ctx.list_snaps(p->first.name, &snap_set);
-	if (r == -ENOENT) {
+        r = head_ctx.list_snaps(p->first.name, &snap_set);
+        if (r == -ENOENT) {
 	  if (from_snap_id == 0 && !parent_diff.empty()) {
 	    // report parent diff instead
 	    for (vector<ObjectExtent>::iterator q = p->second.begin(); q != p->second.end(); ++q) {
