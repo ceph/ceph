@@ -45,6 +45,17 @@ void PGLog::IndexedLog::advance_rollback_info_trimmed_to(
   }
 }
 
+void PGLog::IndexedLog::filter_log(spg_t pgid, const OSDMap &map, const string &hit_set_namespace)
+{
+  IndexedLog out;
+  pg_log_t reject;
+
+  pg_log_t::filter_log(pgid, map, hit_set_namespace, *this, out, reject);
+
+  *this = out;
+  index();
+}
+
 void PGLog::IndexedLog::split_into(
   pg_t child_pgid,
   unsigned split_bits,
