@@ -390,9 +390,11 @@ enum scrub_error_type PGBackend::be_compare_scrub_objects(
       if (error != CLEAN)
         errorstream << ", ";
       error = DEEP_ERROR;
+      bool known = okseed && auth_oi.is_data_digest() &&
+	auth.digest == auth_oi.data_digest;
       errorstream << "data_digest 0x" << std::hex << candidate.digest
 		  << " != "
-		  << (auth_oi.is_data_digest() && okseed ? "known" : "best guess")
+		  << (known ? "known" : "best guess")
 		  << " data_digest 0x" << auth.digest << std::dec
 		  << " from auth shard " << auth_shard;
     }
@@ -402,9 +404,11 @@ enum scrub_error_type PGBackend::be_compare_scrub_objects(
       if (error != CLEAN)
         errorstream << ", ";
       error = DEEP_ERROR;
+      bool known = okseed && auth_oi.is_omap_digest() &&
+	auth.digest == auth_oi.omap_digest;
       errorstream << "omap_digest 0x" << std::hex << candidate.omap_digest
 		  << " != "
-		  << (auth_oi.is_omap_digest() && okseed ? "known" : "best guess")
+		  << (known ? "known" : "best guess")
 		  << " omap_digest 0x" << auth.omap_digest << std::dec
 		  << " from auth shard " << auth_shard;
     }
