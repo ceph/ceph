@@ -2287,6 +2287,10 @@ struct pg_log_t {
     }      
   }
 
+  static void filter_log(spg_t import_pgid, const OSDMap &curmap,
+    const string &hit_set_namespace, const pg_log_t &in,
+    pg_log_t &out, pg_log_t &reject);
+
   /**
    * copy entries from the tail of another pg_log_t
    *
