@@ -1,7 +1,7 @@
-import contextlib
+
 from textwrap import dedent
-from tasks.cephfs.cephfs_test_case import run_tests, CephFSTestCase
-from tasks.cephfs.filesystem import Filesystem, ObjectNotFound, ROOT_INO
+from tasks.cephfs.cephfs_test_case import CephFSTestCase
+from tasks.cephfs.filesystem import ObjectNotFound, ROOT_INO
 
 
 class TestFlush(CephFSTestCase):
@@ -111,28 +111,3 @@ class TestFlush(CephFSTestCase):
         with self.assertRaises(ObjectNotFound):
             self.fs.read_backtrace(file_ino)
         self.assertEqual(self.fs.list_dirfrag(ROOT_INO), [])
-
-
-@contextlib.contextmanager
-def task(ctx, config):
-    fs = Filesystem(ctx)
-
-    # Pick out the clients we will use from the configuration
-    # =======================================================
-    if len(ctx.mounts) < 1:
-        raise RuntimeError("Need at least one client")
-    mount = ctx.mounts.values()[0]
-
-    # Stash references on ctx so that we can easily debug in interactive mode
-    # =======================================================================
-    ctx.filesystem = fs
-    ctx.mount = mount
-
-    run_tests(ctx, config, TestFlush, {
-        'fs': fs,
-        'mount_a': mount,
-    })
-
-    # Continue to any downstream tasks
-    # ================================
-    yield

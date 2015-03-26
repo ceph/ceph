@@ -1,26 +1,26 @@
 
-"""
-Exercise the MDS and Client behaviour when the cluster fills up.
-"""
 
-import contextlib
 import json
 import logging
 import os
 from textwrap import dedent
 import time
 from teuthology.orchestra.run import CommandFailedError
-
-from tasks.cephfs.filesystem import Filesystem
-from tasks.cephfs.cephfs_test_case import CephFSTestCase, run_tests
+from unittest import case
+from tasks.cephfs.cephfs_test_case import CephFSTestCase
 
 
 log = logging.getLogger(__name__)
 
 
 class TestClusterFull(CephFSTestCase):
+    """
+    Exercise the MDS and Client behaviour when the cluster fills up.
+    """
     # Persist-between-tests constants
     pool_capacity = None
+
+    CLIENTS_REQUIRED = 2
 
     def setUp(self):
         super(TestClusterFull, self).setUp()
@@ -30,6 +30,12 @@ class TestClusterFull(CephFSTestCase):
             # `max_avail` attribute of pools that sometimes occurs in between
             # tests (reason as yet unclear, but this dodges the issue)
             TestClusterFull.pool_capacity = self.fs.get_pool_df(self._data_pool_name())['max_avail']
+
+        objectstore = self.fs.get_config("osd_objectstore", "osd")
+        if objectstore != "memstore":
+            # You certainly *could* run this on a real OSD, but you don't want to sit
+            # here for hours waiting for the test to fill up a 1TB drive!
+            raise case.SkipTest("Require `memstore` OSD backend to simulate full drives")
 
     def test_barrier(self):
         """
@@ -333,31 +339,3 @@ class TestClusterFull(CephFSTestCase):
             """)
 
         self._remote_write_test(remote_script)
-
-
-@contextlib.contextmanager
-def task(ctx, config):
-    fs = Filesystem(ctx)
-
-    # Pick out the clients we will use from the configuration
-    # =======================================================
-    if len(ctx.mounts) < 2:
-        raise RuntimeError("Need at least two clients")
-    mount_a = ctx.mounts.values()[0]
-    mount_b = ctx.mounts.values()[1]
-
-    # Stash references on ctx so that we can easily debug in interactive mode
-    # =======================================================================
-    ctx.filesystem = fs
-    ctx.mount_a = mount_a
-    ctx.mount_b = mount_b
-
-    run_tests(ctx, config, TestClusterFull, {
-        'fs': fs,
-        'mount_a': mount_a,
-        'mount_b': mount_b
-    })
-
-    # Continue to any downstream tasks
-    # ================================
-    yield
