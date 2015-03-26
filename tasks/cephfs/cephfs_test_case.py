@@ -2,7 +2,13 @@ import logging
 import unittest
 from unittest import case
 import time
+import os
+import re
+from StringIO import StringIO
+
 from tasks.cephfs.fuse_mount import FuseMount
+from teuthology.orchestra import run
+from teuthology.orchestra.run import CommandFailedError
 
 
 log = logging.getLogger(__name__)
@@ -189,3 +195,53 @@ class CephFSTestCase(unittest.TestCase):
                 elapsed += period
 
         log.debug("wait_until_true: success")
+
+    def assert_mds_crash(self, daemon_id):
+        """
+        Assert that the a particular MDS daemon crashes (block until
+        it does)
+        """
+        try:
+            self.fs.mds_daemons[daemon_id].proc.wait()
+        except CommandFailedError as e:
+            log.info("MDS '{0}' crashed with status {1} as expected".format(daemon_id, e.exitstatus))
+            self.fs.mds_daemons[daemon_id].proc = None
+
+            # Go remove the coredump from the crash, otherwise teuthology.internal.coredump will
+            # catch it later and treat it as a failure.
+            p = self.fs.mds_daemons[daemon_id].remote.run(args=[
+                "sudo", "sysctl", "-n", "kernel.core_pattern"], stdout=StringIO())
+            core_pattern = p.stdout.getvalue().strip()
+            if os.path.dirname(core_pattern):  # Non-default core_pattern with a directory in it
+                # We have seen a core_pattern that looks like it's from teuthology's coredump
+                # task, so proceed to clear out the core file
+                log.info("Clearing core from pattern: {0}".format(core_pattern))
+
+                # Determine the PID of the crashed MDS by inspecting the MDSMap, it had
+                # to talk to the mons to get assigned a rank to reach the point of crashing
+                addr = self.fs.mon_manager.get_mds_status(daemon_id)['addr']
+                pid_str = addr.split("/")[1]
+                log.info("Determined crasher PID was {0}".format(pid_str))
+
+                # Substitute PID into core_pattern to get a glob
+                core_glob = core_pattern.replace("%p", pid_str)
+                core_glob = re.sub("%[a-z]", "*", core_glob)  # Match all for all other % tokens
+
+                # Verify that we see the expected single coredump matching the expected pattern
+                ls_proc = self.fs.mds_daemons[daemon_id].remote.run(args=[
+                    "sudo", "ls", run.Raw(core_glob)
+                ], stdout=StringIO())
+                cores = [f for f in ls_proc.stdout.getvalue().strip().split("\n") if f]
+                log.info("Enumerated cores: {0}".format(cores))
+                self.assertEqual(len(cores), 1)
+
+                log.info("Found core file {0}, deleting it".format(cores[0]))
+
+                self.fs.mds_daemons[daemon_id].remote.run(args=[
+                    "sudo", "rm", "-f", cores[0]
+                ])
+            else:
+                log.info("No core_pattern directory set, nothing to clear (internal.coredump not enabled?)")
+
+        else:
+            raise AssertionError("MDS daemon '{0}' did not crash as expected".format(daemon_id))
