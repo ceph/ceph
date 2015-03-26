@@ -1912,10 +1912,11 @@ public:
         const char *if_nomatch;
         uint64_t olh_epoch;
 	time_t delete_at;
+        bool canceled;
 
         MetaParams() : mtime(NULL), rmattrs(NULL), data(NULL), manifest(NULL), ptag(NULL),
                  remove_objs(NULL), set_mtime(0), category(RGW_OBJ_CATEGORY_MAIN), flags(0),
-                 if_match(NULL), if_nomatch(NULL), olh_epoch(0), delete_at(0) {}
+                 if_match(NULL), if_nomatch(NULL), olh_epoch(0), delete_at(0), canceled(false) {}
       } meta;
 
       Write(RGWRados::Object *_target) : target(_target) {}
@@ -2702,13 +2703,14 @@ protected:
   RGWObjectCtx& obj_ctx;
   bool is_complete;
   RGWBucketInfo bucket_info;
+  bool canceled;
 
   virtual int do_complete(string& etag, time_t *mtime, time_t set_mtime,
                           map<string, bufferlist>& attrs, time_t delete_at,
                           const char *if_match = NULL, const char *if_nomatch = NULL) = 0;
 
 public:
-  RGWPutObjProcessor(RGWObjectCtx& _obj_ctx, RGWBucketInfo& _bi) : store(NULL), obj_ctx(_obj_ctx), is_complete(false), bucket_info(_bi) {}
+  RGWPutObjProcessor(RGWObjectCtx& _obj_ctx, RGWBucketInfo& _bi) : store(NULL), obj_ctx(_obj_ctx), is_complete(false), bucket_info(_bi), canceled(false) {}
   virtual ~RGWPutObjProcessor() {}
   virtual int prepare(RGWRados *_store, string *oid_rand) {
     store = _store;
@@ -2724,6 +2726,8 @@ public:
                        const char *if_match = NULL, const char *if_nomatch = NULL);
 
   CephContext *ctx();
+
+  bool is_canceled() { return canceled; }
 };
 
 struct put_obj_aio_info {
