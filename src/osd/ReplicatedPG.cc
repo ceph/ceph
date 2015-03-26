@@ -11251,26 +11251,6 @@ void ReplicatedPG::_scrub(
 
     dout(20) << mode << "  " << soid << " " << oi << dendl;
 
-    if (pool.info.is_replicated() &&
-	(get_min_peer_features() & CEPH_FEATURE_OSD_OBJECT_DIGEST)) {
-      if (oi.is_data_digest() && p->second.digest_present &&
-	  oi.data_digest != p->second.digest) {
-	osd->clog->error() << mode << " " << info.pgid << " " << soid
-			   << " on disk data digest 0x" << std::hex
-			   << p->second.digest << " != 0x"
-			   << oi.data_digest << std::dec;
-	++scrubber.deep_errors;
-      }
-      if (oi.is_omap_digest() && p->second.omap_digest_present &&
-	  oi.omap_digest != p->second.omap_digest) {
-	osd->clog->error() << mode << " " << info.pgid << " " << soid
-			   << " on disk omap digest 0x" << std::hex
-			   << p->second.omap_digest << " != 0x"
-			   << oi.omap_digest << std::dec;
-	++scrubber.deep_errors;
-      }
-    }
-
     if (soid.is_snap()) {
       stat.num_bytes += snapset.get_clone_bytes(soid.snap);
     } else {
