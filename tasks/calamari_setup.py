@@ -6,7 +6,6 @@ import logging
 import os
 import requests
 import shutil
-import subprocess
 import webbrowser
 
 from cStringIO import StringIO
@@ -16,8 +15,6 @@ from teuthology import misc
 
 log = logging.getLogger(__name__)
 
-ICE_VERSION_DEFAULT = '1.2.2'
-
 
 @contextlib.contextmanager
 def task(ctx, config):
@@ -26,22 +23,13 @@ def task(ctx, config):
 
     - calamari_setup:
         version: 'v80.1'
-        ice_tool_dir: <directory>
-        iceball_location: <directory>
+        test_image: <path to tarball or iso>
 
     Options are:
 
     version -- ceph version we are testing against (defaults to 80.1)
-    ice_tool_dir -- optional local directory where ice-tool exists or will
-                    be loaded (defaults to src in home directory)
-    ice_version  -- version of ICE we're testing (with default)
-    iceball_location -- Can be an HTTP URL, in which case fetch from this
-                        location, using 'ice_version' and distro information
-                        to select the right tarball.  Can also be a local
-                        path.  If local path is '.', and iceball is
-                        not already present, then we try to build
-                        an iceball using the ice_tool_dir commands.
-    ice_git_location -- location of ice tool on git
+    test_image -- Can be an HTTP URL, in which case fetch from this
+                  http path; can also be local path
     start_browser -- If True, start a browser.  To be used by runs that will
                      bring up a browser quickly for human use.  Set to False
                      for overnight suites that are testing for problems in
@@ -153,61 +141,20 @@ def fix_yum_repos(remote, distro):
     return True
 
 
-def get_iceball_with_http(urlbase, ice_version, ice_distro, destdir):
+def get_iceball_with_http(url, destdir):
     '''
     Copy iceball with http to destdir.  Try both .tar.gz and .iso.
     '''
-    urlprefix = os.path.join(urlbase, '{ver}/ICE-{ver}-{distro}'.format(
-                             ver=ice_version, distro=ice_distro))
-    urls = [urlprefix + ext for ext in ('.tar.gz', '.iso')]
-
     # stream=True means we don't download until copyfileobj below,
     # and don't need a temp file
-    for url in urls:
-        r = requests.get(url, stream=True)
-        if not r.ok:
-            continue
-        filename = os.path.join(destdir, url.split('/')[-1])
-        with open(filename, 'w') as f:
-            shutil.copyfileobj(r.raw, f)
-        log.info('saved %s as %s' % (url, filename))
-        return filename
-    raise RuntimeError("Failed to download %s", str(urls))
-
-
-def create_iceball(ice_tool_dir, git_icetool_loc, ice_version, version, ice_distro):
-    ice_tool_loc = os.path.join(ice_tool_dir, 'ice-tools')
-    if not os.path.isdir(ice_tool_loc):
-        try:
-            subprocess.check_call(['git', 'clone',
-                                   git_icetool_loc + os.sep +
-                                   'ice-tools.git',
-                                   ice_tool_loc])
-        except subprocess.CalledProcessError:
-            raise RuntimeError('git clone of ice-tools failed')
-    exec_ice = os.path.join(ice_tool_loc,
-                            'teuth-virtenv/bin/make_iceball')
-    try:
-        subprocess.check_call('virtualenv teuth-virtenv'.split(),
-                              cwd=ice_tool_loc)
-        subprocess.check_call(
-            'teuth-virtenv/bin/python setup.py develop'.split(),
-            cwd=ice_tool_loc
-        )
-        subprocess.check_call(
-            'teuth-virtenv/bin/pip install -r requirements.txt'.split(),
-            cwd=ice_tool_loc
-        )
-        subprocess.check_call([exec_ice, '-I', ice_version,
-                               '-b', version, '-o', ice_distro])
-    except subprocess.CalledProcessError:
-        raise RuntimeError('%s failed for %s distro' %
-                           (exec_ice, ice_distro))
-    subprocess.check_call('rm -rf teuth-virtenv'.split(),
-                          cwd=ice_tool_loc)
-    return os.path.join(
-        ice_tool_loc, 'ICE-{0}-{1}.tar.gz'.format(ice_version, ice_distro)
-    )
+    r = requests.get(url, stream=True)
+    if not r.ok:
+        raise RuntimeError("Failed to download %s", str(url))
+    filename = os.path.join(destdir, url.split('/')[-1])
+    with open(filename, 'w') as f:
+        shutil.copyfileobj(r.raw, f)
+    log.info('saved %s as %s' % (url, filename))
+    return filename
 
 
 @contextlib.contextmanager
@@ -216,66 +163,29 @@ def calamari_install(config, cal_svr):
     Install calamari
 
     The steps here are:
-        -- Get the iceball, building it if necessary.
+        -- Get the iceball, locally or from http
         -- Copy the iceball to the calamari server, and untar/mount it.
         -- Run ice-setup on the calamari server.
         -- Run calamari-ctl initialize.
     """
-    def translate_os_to_ice_distro(osname):
-        convert = {'ubuntu12.04': 'precise', 'ubuntu14.04': 'trusty',
-                   'rhel7.0': 'rhel7', 'debian7': 'wheezy'}
-
-        ice_distro = osname.replace(' ', '')
-
-        if ice_distro in convert:
-            ice_distro = convert[ice_distro]
-
-        return ice_distro
-
-    ice_distro = translate_os_to_ice_distro(str(cal_svr.os))
-
     client_id = str(cal_svr)
     at_loc = client_id.find('@')
     if at_loc > 0:
         client_id = client_id[at_loc + 1:]
 
-    version = config.get('version', 'v0.80.1')
     email = config.get('email', 'x@x.com')
-    ice_tool_dir = config.get('ice_tool_dir', '%s%s%s' %
-                              (os.environ['HOME'], os.sep, 'src'))
     calamari_user = config.get('calamari_user', 'admin')
     calamari_password = config.get('calamari_password', 'admin')
-    git_icetool_loc = config.get('ice_git_location',
-                                 'git@github.com:inktankstorage')
-    iceball_loc = config.get('iceball_location', '.')
-    ice_version = config.get('ice_version', ICE_VERSION_DEFAULT)
+    test_image = config.get('test_image', '.')
 
-    log.info('calamari server distro: %s' % ice_distro)
+    log.info('calamari test image: %s' % test_image)
     delete_iceball = False
 
-    if iceball_loc.startswith('http'):
-        iceball_file = get_iceball_with_http(
-            iceball_loc, ice_version, ice_distro, '/tmp'
-        )
-        delete_iceball = True
-    elif iceball_loc == '.':  # TODO this is a bad sentinel
-        iceball_file = create_iceball(
-            ice_tool_dir, git_icetool_loc, ice_version, version, ice_distro
-        )
-        shutil.move(iceball_file, '/tmp')
-        iceball_file = os.path.join('/tmp', iceball_file)
+    if test_image.startswith('http'):
+        iceball_file = get_iceball_with_http(test_image, '/tmp')
         delete_iceball = True
     else:
-        prefix = os.path.join(iceball_loc,
-                              'ICE-{0}-{1}'.format(ice_version, ice_distro))
-        for name in [prefix + ext for ext in ('.iso', '.tar.gz')]:
-            if os.path.exists(name):
-                iceball_file = name
-                break
-        else:
-            raise RuntimeError(
-                'Can\'t find {0} at {1} in iso or tar.gz format'.format(prefix, iceball_loc)
-            )
+        iceball_file = test_image
 
     remote_iceball_file = os.path.join('/tmp', os.path.split(iceball_file)[1])
     cal_svr.put_file(iceball_file, remote_iceball_file)
