@@ -581,6 +581,7 @@ void PGBackend::be_compare_scrubmaps(
     ScrubMap::object& auth_object = auth->second->objects[*k];
     set<pg_shard_t> cur_missing;
     set<pg_shard_t> cur_inconsistent;
+    bool clean = true;
     for (j = maps.begin(); j != maps.end(); ++j) {
       if (j == auth)
 	continue;
@@ -595,6 +596,7 @@ void PGBackend::be_compare_scrubmaps(
 				   j->second->objects[*k],
 				   ss);
         if (error != CLEAN) {
+	  clean = false;
 	  cur_inconsistent.insert(j->first);
           if (error == SHALLOW_ERROR)
 	    ++shallow_errors;
@@ -606,6 +608,7 @@ void PGBackend::be_compare_scrubmaps(
 	  auth_list.push_back(j->first);
 	}
       } else {
+	clean = false;
 	cur_missing.insert(j->first);
 	++shallow_errors;
 	errorstream << __func__ << ": " << pgid << " shard " << j->first
@@ -621,7 +624,8 @@ void PGBackend::be_compare_scrubmaps(
     if (!cur_inconsistent.empty() || !cur_missing.empty()) {
       authoritative[*k] = auth_list;
     }
-    if (okseed &&
+    if (clean &&
+	okseed &&
 	parent->get_pool().is_replicated() &&
 	auth_object.digest_present && auth_object.omap_digest_present &&
 	(!auth_oi.is_data_digest() || !auth_oi.is_omap_digest() ||
