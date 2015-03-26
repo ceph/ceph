@@ -2870,16 +2870,26 @@ TEST_F(TestLibRBD, UpdateFeatures)
   ASSERT_EQ(-EINVAL, image.update_features(0, true));
 
   ASSERT_EQ(0, image.update_features(RBD_FEATURE_EXCLUSIVE_LOCK |
-                                       RBD_FEATURE_OBJECT_MAP, false));
+                                       RBD_FEATURE_OBJECT_MAP |
+                                       RBD_FEATURE_FAST_DIFF, false));
 
   // cannot enable object map w/o exclusive lock
   ASSERT_EQ(-EINVAL, image.update_features(RBD_FEATURE_OBJECT_MAP, true));
-
   ASSERT_EQ(0, image.update_features(RBD_FEATURE_EXCLUSIVE_LOCK, true));
-  ASSERT_EQ(0, image.update_features(RBD_FEATURE_OBJECT_MAP, true));
+
+  // cannot enable fast diff w/o object map
+  ASSERT_EQ(-EINVAL, image.update_features(RBD_FEATURE_FAST_DIFF, true));
+  ASSERT_EQ(0, image.update_features(RBD_FEATURE_OBJECT_MAP |
+                                       RBD_FEATURE_FAST_DIFF, true));
+
+  // cannot disable object map w/ fast diff
+  ASSERT_EQ(-EINVAL, image.update_features(RBD_FEATURE_OBJECT_MAP, false));
+  ASSERT_EQ(0, image.update_features(RBD_FEATURE_FAST_DIFF, false));
 
   // cannot disable exclusive lock w/ object map
   ASSERT_EQ(-EINVAL, image.update_features(RBD_FEATURE_EXCLUSIVE_LOCK, false));
+  ASSERT_EQ(0, image.update_features(RBD_FEATURE_OBJECT_MAP, false));
+  ASSERT_EQ(0, image.update_features(RBD_FEATURE_EXCLUSIVE_LOCK, false));
 }
 
 TEST_F(TestLibRBD, RebuildObjectMap)
