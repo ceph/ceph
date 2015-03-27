@@ -4196,6 +4196,7 @@ void PG::scrub_compare_maps()
     get_pgbackend()->be_compare_scrubmaps(
       maps,
       okseed,
+      state_test(PG_STATE_REPAIR),
       scrubber.missing,
       scrubber.inconsistent,
       authoritative,
