@@ -1051,6 +1051,8 @@ struct req_state {
    string region_endpoint;
    string bucket_instance_id;
 
+   string redirect;
+
    RGWBucketInfo bucket_info;
    map<string, bufferlist> bucket_attrs;
    bool bucket_exists;

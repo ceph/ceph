@@ -586,20 +586,27 @@ void abort_early(struct req_state *s, RGWOp *op, int err_no)
   set_req_state_err(s, err_no);
   dump_errno(s);
   dump_bucket_from_state(s);
-  if (err_no == -ERR_PERMANENT_REDIRECT && !s->region_endpoint.empty()) {
-    string dest_uri = s->region_endpoint;
-    /*
-     * reqest_uri is always start with slash, so we need to remove
-     * the unnecessary slash at the end of dest_uri.
-     */
-    if (dest_uri[dest_uri.size() - 1] == '/') {
-      dest_uri = dest_uri.substr(0, dest_uri.size() - 1);
+  if (err_no == -ERR_PERMANENT_REDIRECT) {
+    string dest_uri;
+    if (!s->redirect.empty()) {
+      dest_uri = s->redirect;
+    } else if (!s->region_endpoint.empty()) {
+      string dest_uri = s->region_endpoint;
+      /*
+       * reqest_uri is always start with slash, so we need to remove
+       * the unnecessary slash at the end of dest_uri.
+       */
+      if (dest_uri[dest_uri.size() - 1] == '/') {
+        dest_uri = dest_uri.substr(0, dest_uri.size() - 1);
+      }
+      dest_uri += s->info.request_uri;
+      dest_uri += "?";
+      dest_uri += s->info.request_params;
     }
-    dest_uri += s->info.request_uri;
-    dest_uri += "?";
-    dest_uri += s->info.request_params;
 
-    dump_redirect(s, dest_uri);
+    if (!dest_uri.empty()) {
+      dump_redirect(s, dest_uri);
+    }
   }
   end_header(s, op);
   rgw_flush_formatter_and_reset(s, s->formatter);
@@ -1281,11 +1288,18 @@ int RGWHandler_ObjStore::retarget(RGWOp *op, RGWOp **new_op) {
     return 0;
   }
 
-  RGWRedirectInfo rinfo;
   rgw_obj_key new_obj;
-  s->bucket_info.website_conf.get_effective_target(s->object.name, &new_obj.name, &rinfo);
+  s->bucket_info.website_conf.get_effective_key(s->object.name, &new_obj.name);
 
+  RGWBWRoutingRule rrule;
+  bool should_redirect = s->bucket_info.website_conf.should_redirect(new_obj.name, &rrule);
 
+  if (should_redirect) {
+    const string& hostname = s->info.env->get("HTTP_HOST", "");
+    const string& protocol = (s->info.env->get("SERVER_PORT_SECURE") ? "https" : "http");
+    rrule.apply_rule(protocol, hostname, new_obj.name, &s->redirect);
+    return -ERR_PERMANENT_REDIRECT;
+  }
 
 #warning FIXME
 #if 0
