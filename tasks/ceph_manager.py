@@ -192,14 +192,14 @@ class Thrasher:
                     remotes.iterkeys()
             if ('keyvaluestore_backend' in
                     self.ceph_manager.ctx.ceph.conf['osd']):
-                prefix = ("sudo ceph-objectstore-tool "
+                prefix = ("sudo adjust-ulimits ceph-objectstore-tool "
                           "--data-path {fpath} --journal-path {jpath} "
                           "--type keyvaluestore "
                           "--log-file="
                           "/var/log/ceph/objectstore_tool.\\$pid.log ".
                           format(fpath=FSPATH, jpath=JPATH))
             else:
-                prefix = ("sudo ceph-objectstore-tool "
+                prefix = ("sudo adjust-ulimits ceph-objectstore-tool "
                           "--data-path {fpath} --journal-path {jpath} "
                           "--log-file="
                           "/var/log/ceph/objectstore_tool.\\$pid.log ".
@@ -294,14 +294,14 @@ class Thrasher:
             JPATH = os.path.join(FSPATH, "journal")
             if ('keyvaluestore_backend' in
                     self.ceph_manager.ctx.ceph.conf['osd']):
-                prefix = ("sudo ceph-objectstore-tool "
+                prefix = ("sudo adjust-ulimits ceph-objectstore-tool "
                           "--data-path {fpath} --journal-path {jpath} "
                           "--type keyvaluestore "
                           "--log-file="
                           "/var/log/ceph/objectstore_tool.\\$pid.log ".
                           format(fpath=FSPATH, jpath=JPATH))
             else:
-                prefix = ("sudo ceph-objectstore-tool "
+                prefix = ("sudo adjust-ulimits ceph-objectstore-tool "
                           "--data-path {fpath} --journal-path {jpath} "
                           "--log-file="
                           "/var/log/ceph/objectstore_tool.\\$pid.log ".
@@ -702,7 +702,7 @@ class ObjectStoreTool:
     def build_cmd(self, options, args, stdin):
         lines = []
         if self.object_name:
-            lines.append("object=$(sudo ceph-objectstore-tool "
+            lines.append("object=$(sudo adjust-ulimits ceph-objectstore-tool "
                          "{paths} --pgid {pgid} --op list |"
                          "grep '\"oid\":\"{name}\"')".
                          format(paths=self.paths,
@@ -710,7 +710,7 @@ class ObjectStoreTool:
                                 name=self.object_name))
             args = '"$object" ' + args
             options += " --pgid {pgid}".format(pgid=self.pgid)
-        cmd = ("sudo ceph-objectstore-tool {paths} {options} {args}".
+        cmd = ("sudo adjust-ulimits ceph-objectstore-tool {paths} {options} {args}".
                format(paths=self.paths,
                       args=args,
                       options=options))
