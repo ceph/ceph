@@ -4882,14 +4882,23 @@ int RGWRados::set_attrs(void *ctx, rgw_obj& obj,
   if (!op.size())
     return 0;
 
+  bufferlist bl;
   RGWRados::Bucket bop(this, bucket);
   RGWRados::Bucket::UpdateIndex index_op(&bop, obj, state);
 
   string tag;
   if (state) {
+    string tag;
+    append_rand_alpha(cct, tag, tag, 32);
+    state->write_tag = tag;
     r = index_op.prepare(CLS_RGW_OP_ADD);
+
     if (r < 0)
       return r;
+
+    bl.append(tag.c_str(), tag.size() + 1);
+
+    op.setxattr(RGW_ATTR_ID_TAG,  bl);
   }
 
   r = ref.ioctx.operate(ref.oid, &op);
@@ -4917,6 +4926,7 @@ int RGWRados::set_attrs(void *ctx, rgw_obj& obj,
     return r;
 
   if (state) {
+    state->obj_tag.swap(bl);
     if (rmattrs) {
       for (iter = rmattrs->begin(); iter != rmattrs->end(); ++iter) {
         state->attrset.erase(iter->first);
