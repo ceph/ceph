@@ -187,7 +187,8 @@ bool OpTracker::check_ops_in_flight(std::vector<string> &warning_vector)
 
   int slow = 0;     // total slow
   int warned = 0;   // total logged
-  for (uint32_t iter = 0; iter < num_optracker_shards; iter++) {
+  for (uint32_t iter = 0;
+       iter < num_optracker_shards && warned < log_threshold; iter++) {
     ShardedTrackingData* sdata = sharded_in_flight_list[iter];
     assert(NULL != sdata);
     Mutex::Locker locker(sdata->ops_in_flight_lock_sharded);
