@@ -1161,7 +1161,7 @@ bool Locker::_rdlock_kick(SimpleLock *lock, bool as_anon)
 	CInode *in = static_cast<CInode*>(lock->get_parent());
 	if (lock->get_state() == LOCK_EXCL &&
 	    in->get_target_loner() >= 0 &&
-	    !as_anon)   // as_anon => caller wants SYNC, not XSYN
+	    !in->is_dir() && !as_anon)   // as_anon => caller wants SYNC, not XSYN
 	  file_xsyn(lock);
 	else
 	  simple_sync(lock);
