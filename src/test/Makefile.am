@@ -278,6 +278,11 @@ unittest_bufferlist_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 unittest_bufferlist_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 check_PROGRAMS += unittest_bufferlist
 
+unittest_xlist_SOURCES = test/test_xlist.cc
+unittest_xlist_LDADD = $(UNITTEST_LDADD) $(LIBCOMMON)
+unittest_xlist_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+check_PROGRAMS += unittest_xlist
+
 unittest_crc32c_SOURCES = test/common/test_crc32c.cc
 unittest_crc32c_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 unittest_crc32c_CXXFLAGS = $(UNITTEST_CXXFLAGS)
