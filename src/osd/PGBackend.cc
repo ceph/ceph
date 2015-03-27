@@ -571,14 +571,10 @@ void PGBackend::be_compare_scrubmaps(
       be_select_auth_object(*k, maps, okseed, &auth_oi);
     list<pg_shard_t> auth_list;
     if (auth == maps.end()) {
-      // Something is better than nothing
-      // TODO: something is NOT better than nothing, do something like
-      // unfound_lost if no valid copies can be found, or just mark unfound
-      auth = maps.begin();
-      dout(10) << __func__ << ": selecting osd " << auth->first
-	       << " for obj " << *k
-	       << ", something is better than nothing, FIXME"
-	       << dendl;
+      dout(10) << __func__ << ": unable to find any auth object" << dendl;
+      ++shallow_errors;
+      errorstream << __func__ << ": " << pgid << " shard " << j->first
+		  << ": soid failed to pick suitable auth object";
       continue;
     }
     auth_list.push_back(auth->first);
