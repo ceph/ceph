@@ -2228,7 +2228,8 @@ int metadata_set(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 
   for (map<string, bufferlist>::iterator it = data.begin();
        it != data.end(); ++it) {
-    CLS_LOG(20, "metdata_set key=%s value=%s", it->first.c_str(), it->second.c_str());
+    CLS_LOG(20, "metdata_set key=%s value=%.*s", it->first.c_str(),
+	    it->second.length(), it->second.c_str());
     raw_data[metadata_key_for_name(it->first)].swap(it->second);
   }
   int r = cls_cxx_map_set_vals(hctx, &raw_data);
