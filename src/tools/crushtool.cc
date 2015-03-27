@@ -313,35 +313,35 @@ int main(int argc, const char **argv)
       compile = true;
     } else if (ceph_argparse_flag(args, i, "-t", "--test", (char*)NULL)) {
       test = true;
-    } else if (ceph_argparse_withint(args, i, &full_location, &err, "--show-location", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &full_location, &err, "--show-location", (char*)NULL)) {
     } else if (ceph_argparse_flag(args, i, "-s", "--simulate", (char*)NULL)) {
       tester.set_random_placement();
     } else if (ceph_argparse_flag(args, i, "--enable-unsafe-tunables", (char*)NULL)) {
       unsafe_tunables = true;
-    } else if (ceph_argparse_withint(args, i, &choose_local_tries, &err,
+    } else if (ceph_argparse_witharg(args, i, &choose_local_tries, &err,
 				     "--set_choose_local_tries", (char*)NULL)) {
       adjust = true;
-    } else if (ceph_argparse_withint(args, i, &choose_local_fallback_tries, &err,
+    } else if (ceph_argparse_witharg(args, i, &choose_local_fallback_tries, &err,
 				     "--set_choose_local_fallback_tries", (char*)NULL)) {
       adjust = true;
-    } else if (ceph_argparse_withint(args, i, &choose_total_tries, &err,
+    } else if (ceph_argparse_witharg(args, i, &choose_total_tries, &err,
 				     "--set_choose_total_tries", (char*)NULL)) {
       adjust = true;
-    } else if (ceph_argparse_withint(args, i, &chooseleaf_descend_once, &err,
+    } else if (ceph_argparse_witharg(args, i, &chooseleaf_descend_once, &err,
 				     "--set_chooseleaf_descend_once", (char*)NULL)) {
       adjust = true;
-    } else if (ceph_argparse_withint(args, i, &chooseleaf_vary_r, &err,
+    } else if (ceph_argparse_witharg(args, i, &chooseleaf_vary_r, &err,
 				     "--set_chooseleaf_vary_r", (char*)NULL)) {
       adjust = true;
-    } else if (ceph_argparse_withint(args, i, &straw_calc_version, &err,
+    } else if (ceph_argparse_witharg(args, i, &straw_calc_version, &err,
 				     "--set_straw_calc_version", (char*)NULL)) {
       adjust = true;
-    } else if (ceph_argparse_withint(args, i, &allowed_bucket_algs, &err,
+    } else if (ceph_argparse_witharg(args, i, &allowed_bucket_algs, &err,
 				     "--set_allowed_bucket_algs", (char*)NULL)) {
       adjust = true;
     } else if (ceph_argparse_flag(args, i, "--reweight", (char*)NULL)) {
       reweight = true;
-    } else if (ceph_argparse_withint(args, i, &add_item, &err, "--add_item", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &add_item, &err, "--add_item", (char*)NULL)) {
       if (!err.str().empty()) {
 	cerr << err.str() << std::endl;
 	exit(EXIT_FAILURE);
@@ -358,7 +358,7 @@ int main(int argc, const char **argv)
       }
       add_name.assign(*i);
       i = args.erase(i);
-    } else if (ceph_argparse_withint(args, i, &add_item, &err, "--update_item", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &add_item, &err, "--update_item", (char*)NULL)) {
       update_item = true;
       if (!err.str().empty()) {
 	cerr << err.str() << std::endl;
@@ -413,72 +413,72 @@ int main(int argc, const char **argv)
       i = args.erase(i);
     } else if (ceph_argparse_flag(args, i, "--build", (char*)NULL)) {
       build = true;
-    } else if (ceph_argparse_withint(args, i, &num_osds, &err, "--num_osds", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &num_osds, &err, "--num_osds", (char*)NULL)) {
       if (!err.str().empty()) {
 	cerr << err.str() << std::endl;
 	exit(EXIT_FAILURE);
       }
-    } else if (ceph_argparse_withint(args, i, &x, &err, "--num_rep", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &x, &err, "--num_rep", (char*)NULL)) {
       if (!err.str().empty()) {
 	cerr << err.str() << std::endl;
 	exit(EXIT_FAILURE);
       }
       tester.set_num_rep(x);
-    } else if (ceph_argparse_withint(args, i, &x, &err, "--max_x", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &x, &err, "--max_x", (char*)NULL)) {
       if (!err.str().empty()) {
 	cerr << err.str() << std::endl;
 	exit(EXIT_FAILURE);
       }
       tester.set_max_x(x);
-    } else if (ceph_argparse_withint(args, i, &x, &err, "--min_x", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &x, &err, "--min_x", (char*)NULL)) {
       if (!err.str().empty()) {
 	cerr << err.str() << std::endl;
 	exit(EXIT_FAILURE);
       }
       tester.set_min_x(x);
-    } else if (ceph_argparse_withint(args, i, &x, &err, "--x", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &x, &err, "--x", (char*)NULL)) {
       if (!err.str().empty()) {
 	cerr << err.str() << std::endl;
 	exit(EXIT_FAILURE);
       }
       tester.set_x(x);
-    } else if (ceph_argparse_withint(args, i, &x, &err, "--max_rule", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &x, &err, "--max_rule", (char*)NULL)) {
       if (!err.str().empty()) {
 	cerr << err.str() << std::endl;
 	exit(EXIT_FAILURE);
       }
       tester.set_max_rule(x);
-    } else if (ceph_argparse_withint(args, i, &x, &err, "--min_rule", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &x, &err, "--min_rule", (char*)NULL)) {
       if (!err.str().empty()) {
 	cerr << err.str() << std::endl;
 	exit(EXIT_FAILURE);
       }
       tester.set_min_rule(x);
-    } else if (ceph_argparse_withint(args, i, &x, &err, "--rule", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &x, &err, "--rule", (char*)NULL)) {
       if (!err.str().empty()) {
 	cerr << err.str() << std::endl;
 	exit(EXIT_FAILURE);
       }
       tester.set_rule(x);
-    } else if (ceph_argparse_withint(args, i, &x, &err, "--batches", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &x, &err, "--batches", (char*)NULL)) {
       if (!err.str().empty()) {
 	cerr << err.str() << std::endl;
 	exit(EXIT_FAILURE);
       }
       tester.set_batches(x);
-    } else if (ceph_argparse_withfloat(args, i, &y, &err, "--mark-down-ratio", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &y, &err, "--mark-down-ratio", (char*)NULL)) {
       if (!err.str().empty()) {
         cerr << err.str() << std::endl;
         exit(EXIT_FAILURE);
       }
       tester.set_device_down_ratio(y);
-    } else if (ceph_argparse_withfloat(args, i, &y, &err, "--mark-down-bucket-ratio", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &y, &err, "--mark-down-bucket-ratio", (char*)NULL)) {
       if (!err.str().empty()) {
         cerr << err.str() << std::endl;
         exit(EXIT_FAILURE);
       }
       tester.set_bucket_down_ratio(y);
-    } else if (ceph_argparse_withint(args, i, &tmp, &err, "--weight", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &tmp, &err, "--weight", (char*)NULL)) {
       if (!err.str().empty()) {
 	cerr << err.str() << std::endl;
 	exit(EXIT_FAILURE);

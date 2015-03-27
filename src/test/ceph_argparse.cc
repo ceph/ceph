@@ -286,9 +286,9 @@ TEST(CephArgParse, WithInt) {
   {
     if (ceph_argparse_double_dash(bazstuff1.arr, i)) {
       break;
-    } else if (ceph_argparse_withint(bazstuff1.arr, i, &foo, &err, "--foo", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(bazstuff1.arr, i, &foo, &err, "--foo", (char*)NULL)) {
       ASSERT_EQ(string(""), err.str());
-    } else if (ceph_argparse_withint(bazstuff1.arr, i, &bar, &err, "--bar", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(bazstuff1.arr, i, &bar, &err, "--bar", (char*)NULL)) {
       ASSERT_EQ(string(""), err.str());
     }
     else {
@@ -306,7 +306,7 @@ TEST(CephArgParse, WithInt) {
   {
     if (ceph_argparse_double_dash(bazstuff2.arr, i)) {
       break;
-    } else if (ceph_argparse_withint(bazstuff2.arr, i, &foo, &err2, "--foo", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(bazstuff2.arr, i, &foo, &err2, "--foo", (char*)NULL)) {
       ASSERT_NE(string(""), err2.str());
     }
     else {
@@ -322,9 +322,9 @@ TEST(CephArgParse, WithInt) {
   {
     if (ceph_argparse_double_dash(bazstuff3.arr, i)) {
       break;
-    } else if (ceph_argparse_withint(bazstuff3.arr, i, &foo, &err, "--foo", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(bazstuff3.arr, i, &foo, &err, "--foo", (char*)NULL)) {
       ASSERT_EQ(string(""), err.str());
-    } else if (ceph_argparse_withint(bazstuff3.arr, i, &bar, &err, "--bar", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(bazstuff3.arr, i, &bar, &err, "--bar", (char*)NULL)) {
       ASSERT_EQ(string(""), err.str());
     }
     else {

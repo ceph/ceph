@@ -86,7 +86,7 @@ int main(int argc, const char **argv)
       print_json = true;
     } else if (ceph_argparse_flag(args, i, "--tree", (char*)NULL)) {
       tree = true;
-    } else if (ceph_argparse_withint(args, i, &num_osd, &err, "--createsimple", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &num_osd, &err, "--createsimple", (char*)NULL)) {
       if (!err.str().empty()) {
 	cerr << err.str() << std::endl;
 	exit(EXIT_FAILURE);
@@ -106,12 +106,12 @@ int main(int argc, const char **argv)
       test_random = true;
     } else if (ceph_argparse_flag(args, i, "--clobber", (char*)NULL)) {
       clobber = true;
-    } else if (ceph_argparse_withint(args, i, &pg_bits, &err, "--pg_bits", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &pg_bits, &err, "--pg_bits", (char*)NULL)) {
       if (!err.str().empty()) {
 	cerr << err.str() << std::endl;
 	exit(EXIT_FAILURE);
       }
-    } else if (ceph_argparse_withint(args, i, &pgp_bits, &err, "--pgp_bits", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &pgp_bits, &err, "--pgp_bits", (char*)NULL)) {
       if (!err.str().empty()) {
 	cerr << err.str() << std::endl;
 	exit(EXIT_FAILURE);
@@ -126,9 +126,9 @@ int main(int argc, const char **argv)
       test_map_object = val;
     } else if (ceph_argparse_flag(args, i, "--test_crush", (char*)NULL)) {
       test_crush = true;
-    } else if (ceph_argparse_withint(args, i, &range_first, &err, "--range_first", (char*)NULL)) {
-    } else if (ceph_argparse_withint(args, i, &range_last, &err, "--range_last", (char*)NULL)) {
-    } else if (ceph_argparse_withint(args, i, &pool, &err, "--pool", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &range_first, &err, "--range_first", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &range_last, &err, "--range_last", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &pool, &err, "--pool", (char*)NULL)) {
       if (!err.str().empty()) {
         cerr << err.str() << std::endl;
         exit(EXIT_FAILURE);
