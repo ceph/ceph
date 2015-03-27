@@ -23,3 +23,7 @@ roles:
   - osd.12
   - osd.13
 - - client.0
+overrides:
+  ceph:
+    log-whitelist:
+    - Missing health data for MDS
