@@ -748,20 +748,29 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
     if (r < 0)
       return r;
 
+    bool fast_diff_enabled = false;
     {
       RWLock::RLocker snap_locker(ictx->snap_lock);
       if (ictx->get_snap_id(snap_name) == CEPH_NOSNAP) {
         return -ENOENT;
       }
+      fast_diff_enabled = ((ictx->features & RBD_FEATURE_FAST_DIFF) != 0);
     }
 
-    r = invoke_async_request(ictx, "snap_remove",
-                             boost::bind(&snap_remove_helper, ictx, _1,
-                                         snap_name),
-                             boost::bind(&ImageWatcher::notify_snap_remove,
-                                         ictx->image_watcher, snap_name));
-    if (r < 0 && r != -EEXIST) {
-      return r;
+    if (fast_diff_enabled) {
+      r = invoke_async_request(ictx, "snap_remove",
+                               boost::bind(&snap_remove_helper, ictx, _1,
+                                           snap_name),
+                               boost::bind(&ImageWatcher::notify_snap_remove,
+                                           ictx->image_watcher, snap_name));
+      if (r < 0 && r != -EEXIST) {
+        return r;
+      }
+    } else {
+      r = snap_remove_helper(ictx, NULL, snap_name);
+      if (r < 0) {
+        return r;
+      }
     }
 
     notify_change(ictx->md_ctx, ictx->header_oid, ictx);
@@ -772,9 +781,14 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
 
   int snap_remove_helper(ImageCtx *ictx, Context *ctx, const char *snap_name)
   {
-    assert(ictx->owner_lock.is_locked());
-    assert(!ictx->image_watcher->is_lock_supported() ||
-           ictx->image_watcher->is_lock_owner());
+    {
+      RWLock::RLocker snap_locker(ictx->snap_lock);
+      if ((ictx->features & RBD_FEATURE_FAST_DIFF) != 0) {
+        assert(ictx->owner_lock.is_locked());
+        assert(!ictx->image_watcher->is_lock_supported() ||
+               ictx->image_watcher->is_lock_owner());
+      }
+    }
 
     ldout(ictx->cct, 20) << "snap_remove_helper " << ictx << " " << snap_name
                          << dendl;
