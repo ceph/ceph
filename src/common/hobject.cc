@@ -292,7 +292,7 @@ ostream& operator<<(ostream& out, const ghobject_t& o)
   if (o.generation != ghobject_t::NO_GEN ||
       o.shard_id != shard_id_t::NO_SHARD) {
     assert(o.shard_id != shard_id_t::NO_SHARD);
-    out << "/" << o.generation << "/" << (unsigned)(o.shard_id);
+    out << "/" << std::hex << o.generation << "/" << (unsigned)(o.shard_id) << std::dec;
   }
   return out;
 }
