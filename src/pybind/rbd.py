@@ -750,7 +750,8 @@ class Image(object):
 
         return ctypes.string_at(ret_buf, ret)
 
-    def diff_iterate(self, offset, length, from_snapshot, iterate_cb):
+    def diff_iterate(self, offset, length, from_snapshot, iterate_cb,
+                     include_parent = True, whole_object = False):
         """
         Iterate over the changed extents of an image.
 
@@ -783,6 +784,10 @@ class Image(object):
         :param iterate_cb: function to call for each extent
         :type iterate_cb: function acception arguments for offset,
                            length, and exists
+        :param include_parent: True if full history diff should include parent
+        :type include_parent: bool
+        :param whole_object: True if diff extents should cover whole object
+        :type whole_object: bool
         :raises: :class:`InvalidArgument`, :class:`IOError`,
                  :class:`ImageNotFound`
         """
@@ -792,12 +797,14 @@ class Image(object):
         RBD_DIFF_CB = CFUNCTYPE(c_int, c_uint64, c_size_t, c_int, c_void_p)
         cb_holder = DiffIterateCB(iterate_cb)
         cb = RBD_DIFF_CB(cb_holder.callback)
-        ret = self.librbd.rbd_diff_iterate(self.image,
-                                           c_char_p(from_snapshot),
-                                           c_uint64(offset),
-                                           c_uint64(length),
-                                           cb,
-                                           c_void_p(None))
+        ret = self.librbd.rbd_diff_iterate2(self.image,
+                                            c_char_p(from_snapshot),
+                                            c_uint64(offset),
+                                            c_uint64(length),
+                                            c_uint8(include_parent),
+                                            c_uint8(whole_object),
+                                            cb,
+                                            c_void_p(None))
         if ret < 0:
             msg = 'error generating diff from snapshot %s' % from_snapshot
             raise make_ex(ret, msg)
