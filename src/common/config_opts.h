@@ -695,27 +695,40 @@ OPTION(kinetic_user_id, OPT_INT, 1) // kinetic user to authenticate as
 OPTION(kinetic_hmac_key, OPT_STR, "asdfasdf") // kinetic key to authenticate with
 OPTION(kinetic_use_ssl, OPT_BOOL, false) // whether to secure kinetic traffic with TLS
 
-OPTION(rocksdb_compact_on_mount, OPT_BOOL, false)
-OPTION(rocksdb_write_buffer_size, OPT_U64, 0) // rocksdb write buffer size
-OPTION(rocksdb_target_file_size_base, OPT_U64, 0) // target file size for compaction
+
+//in memory write buffer configuration
+OPTION(rocksdb_write_buffer_size, OPT_U64, 8*1024*1024) // rocksdb write buffer size, should be larger than average write size.
+OPTION(rocksdb_write_buffer_num, OPT_INT, 2) // The maximum number of write buffers that are built up in memory.
+OPTION(rocksdb_min_write_buffer_number_to_merge, OPT_INT, 1) // The min write buffers that will be merged together before writing to storage.
+//on disk level0 configuration
+OPTION(rocksdb_level0_file_num_compaction_trigger, OPT_INT, 4) // Number of files to trigger level-0 compaction
+OPTION(rocksdb_level0_slowdown_writes_trigger, OPT_INT, -1)  // number of level-0 files at which we start slowing down write. -1 means not set.
+OPTION(rocksdb_level0_stop_writes_trigger, OPT_INT, -1)  // number of level-0 files at which we stop writes. -1 means not set.
+//on disk level1+ configuration
+OPTION(rocksdb_max_bytes_for_level_base, OPT_U64, 10*1024*1024)  // max total bytes for level 1
+OPTION(rocksdb_max_bytes_for_level_multiplier, OPT_INT, 10)  // max total bytes for level 1
+OPTION(rocksdb_target_file_size_base, OPT_U64, 2*1024*1024) // target file size for level 1
+OPTION(rocksdb_target_file_size_multiplier, OPT_INT, 1) // target file size for Level-N = (multiplier)^(N-1) * file_size_base
+OPTION(rocksdb_num_levels, OPT_INT, 7) // number of levels for this database,chang
 OPTION(rocksdb_cache_size, OPT_U64, 0) // rocksdb cache size
-OPTION(rocksdb_block_size, OPT_U64, 0) // rocksdb block size
+OPTION(rocksdb_block_size, OPT_U64, 4*1024) // rocksdb block size
 OPTION(rocksdb_bloom_bits_per_key, OPT_INT, 10) // rocksdb bloom bits per entry
-OPTION(rocksdb_write_buffer_num, OPT_INT, 0) // rocksdb bloom bits per entry
-OPTION(rocksdb_background_compactions, OPT_INT, 0) // number for background compaction jobs
-OPTION(rocksdb_background_flushes, OPT_INT, 0) // number for background flush jobs
-OPTION(rocksdb_max_open_files, OPT_INT, 0) // rocksdb max open files
-OPTION(rocksdb_compression, OPT_STR, "") // rocksdb uses compression : none, snappy, zlib, bzip2
-OPTION(rocksdb_paranoid, OPT_BOOL, false) // rocksdb paranoid flag
+//concurrency of compaction and flush
+OPTION(rocksdb_max_background_compactions, OPT_INT, 1) // number for background compaction jobs
+OPTION(rocksdb_compaction_threads, OPT_INT, 1) // number for background compaction jobs
+OPTION(rocksdb_max_background_flushes, OPT_INT, 1) // number for background flush jobs
+OPTION(rocksdb_flusher_threads, OPT_INT, 1) // number for background compaction jobs
+//Other
+OPTION(rocksdb_max_open_files, OPT_INT, 5000) // rocksdb max open files
+OPTION(rocksdb_compression, OPT_STR, "snappy") // rocksdb uses compression : none, snappy, zlib, bzip2
+OPTION(rocksdb_compact_on_mount, OPT_BOOL, false)
+OPTION(rocksdb_paranoid, OPT_BOOL, false) // RocksDB will aggressively check consistency of the data.
 OPTION(rocksdb_log, OPT_STR, "/dev/null")  // enable rocksdb log file
-OPTION(rocksdb_level0_file_num_compaction_trigger, OPT_U64, 0) // Number of files to trigger level-0 compaction
-OPTION(rocksdb_level0_slowdown_writes_trigger, OPT_U64, 0)  // number of level-0 files at which we start slowing down write.
-OPTION(rocksdb_level0_stop_writes_trigger, OPT_U64, 0)  // number of level-0 files at which we stop writes
-OPTION(rocksdb_disableDataSync, OPT_BOOL, true) // if true, data files are not synced to stable storage
-OPTION(rocksdb_disableWAL, OPT_BOOL, false)  // diable write ahead log
-OPTION(rocksdb_num_levels, OPT_INT, 0) // number of levels for this database
-OPTION(rocksdb_wal_dir, OPT_STR, "")  // directory for rocksdb write ahead log
 OPTION(rocksdb_info_log_level, OPT_STR, "info")  // info log level : debug , info , warn, error, fatal
+OPTION(rocksdb_wal_dir, OPT_STR, "")  //  rocksdb write ahead log file, put it to fast device will benifit wrtie performance
+OPTION(rocksdb_disableDataSync, OPT_BOOL, true) // if true, data files are not synced to stable storage
+OPTION(rocksdb_disableWAL, OPT_BOOL, false)  // if true, writes will not first go to the write ahead log
+
 
 /**
  * osd_client_op_priority and osd_recovery_op_priority adjust the relative
