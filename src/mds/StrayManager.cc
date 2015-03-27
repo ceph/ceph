@@ -297,13 +297,13 @@ void StrayManager::_purge_stray_logged(CDentry *dn, version_t pdv, LogSegment *l
   // drop inode
   if (in->is_dirty())
     in->mark_clean();
+  in->mdcache->remove_inode(in);
 
   // drop dentry?
   if (dn->is_new()) {
     dout(20) << " dn is new, removing" << dendl;
     dn->mark_clean();
     dn->dir->remove_dentry(dn);
-    in->mdcache->remove_inode(in);
   } else {
     in->mdcache->touch_dentry_bottom(dn);  // drop dn as quickly as possible.
   }
