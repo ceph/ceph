@@ -349,6 +349,17 @@ public:
   void get_failed_mds_set(std::set<mds_rank_t>& s) {
     s = failed;
   }
+
+  /**
+   * Get MDS ranks which are in but not up.
+   */
+  void get_down_mds_set(std::set<mds_rank_t> *s)
+  {
+    assert(s != NULL);
+    s->insert(failed.begin(), failed.end());
+    s->insert(damaged.begin(), damaged.end());
+  }
+
   int get_failed() {
     if (!failed.empty()) return *failed.begin();
     return -1;
@@ -520,7 +531,7 @@ public:
     return mds_rank_t(in.size()) >= max_mds;
   }
   bool is_degraded() const {   // degraded = some recovery in process.  fixes active membership and recovery_set.
-    if (!failed.empty())
+    if (!failed.empty() || !damaged.empty())
       return true;
     for (std::map<mds_gid_t,mds_info_t>::const_iterator p = mds_info.begin();
 	 p != mds_info.end();
@@ -551,10 +562,19 @@ public:
     return up.empty();
   }
 
-  // inst
+  /**
+   * Get whether a rank is 'up', i.e. has
+   * an MDS daemon's entity_inst_t associated
+   * with it.
+   */
   bool have_inst(mds_rank_t m) {
     return up.count(m);
   }
+
+  /**
+   * Get the MDS daemon entity_inst_t for a rank
+   * known to be up.
+   */
   const entity_inst_t get_inst(mds_rank_t m) {
     assert(up.count(m));
     return mds_info[up[m]].get_inst();
@@ -563,6 +583,14 @@ public:
     assert(up.count(m));
     return mds_info[up[m]].addr;
   }
+
+  /**
+   * Get the MDS daemon entity_inst_t for a rank,
+   * if it is up.
+   * 
+   * @return true if the rank was up and the inst
+   *         was populated, else false.
+   */
   bool get_inst(mds_rank_t m, entity_inst_t& inst) {
     if (up.count(m)) {
       inst = get_inst(m);

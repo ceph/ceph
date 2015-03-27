@@ -131,6 +131,10 @@ void MDSMap::dump(Formatter *f) const
   for (set<mds_rank_t>::const_iterator p = failed.begin(); p != failed.end(); ++p)
     f->dump_int("mds", *p);
   f->close_section();
+  f->open_array_section("damaged");
+  for (set<mds_rank_t>::const_iterator p = damaged.begin(); p != damaged.end(); ++p)
+    f->dump_int("mds", *p);
+  f->close_section();
   f->open_array_section("stopped");
   for (set<mds_rank_t>::const_iterator p = stopped.begin(); p != stopped.end(); ++p)
     f->dump_int("mds", *p);
