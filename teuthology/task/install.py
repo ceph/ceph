@@ -488,6 +488,14 @@ def verify_package_version(ctx, config, remote):
     For most cases this is for ceph, but we also install samba
     for example.
     """
+    # Do not verify the version if the ceph-deploy task is being used to
+    # install ceph. Verifying the ceph installed by ceph-deploy should work,
+    # but the qa suites will need reorganized first to run ceph-deploy
+    # before the install task.
+    # see: http://tracker.ceph.com/issues/11248
+    if config.get("extras"):
+        log.info("Skipping version verification...")
+        return True
     base_url = _get_baseurl(ctx, remote, config)
     version = _block_looking_for_package_version(
         remote,
