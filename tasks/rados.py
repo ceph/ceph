@@ -89,6 +89,38 @@ def task(ctx, config):
             pool_prefix: foo
             ...
 
+    The tests are run asynchronously, they are not complete when the task
+    returns. For instance:
+
+        - rados:
+            clients: [client.0]
+            pools: [ecbase]
+            ops: 4000
+            objects: 500
+            op_weights:
+              read: 100
+              write: 100
+              delete: 50
+              copy_from: 50
+        - print: "**** done rados ec-cache-agent (part 2)"
+
+     will run the print task immediately after the rados tasks begins but
+     not after it completes. To make the rados task a blocking / sequential
+     task, use:
+
+        - sequential:
+          - rados:
+              clients: [client.0]
+              pools: [ecbase]
+              ops: 4000
+              objects: 500
+              op_weights:
+                read: 100
+                write: 100
+                delete: 50
+                copy_from: 50
+        - print: "**** done rados ec-cache-agent (part 2)"
+
     """
     log.info('Beginning rados...')
     assert isinstance(config, dict), \
