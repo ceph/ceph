@@ -498,6 +498,12 @@ map<pg_shard_t, ScrubMap *>::const_iterator
       // invalid object info, probably corrupt
       continue;
     }
+
+    // note candidate in case we can't find anything better, because
+    // something is better than nothing.  FIXME.
+    auth = j;
+    *auth_oi = oi;
+
     uint64_t correct_size = be_get_ondisk_size(oi.size);
     if (correct_size != i->second.size) {
       // invalid size, probably corrupt
@@ -528,12 +534,12 @@ map<pg_shard_t, ScrubMap *>::const_iterator
 	continue;
       }
     }
-    dout(10) << __func__ << ": selecting osd " << j->first
-	     << " for obj " << obj
-	     << dendl;
-    auth = j;
-    *auth_oi = oi;
+    break;
   }
+  dout(10) << __func__ << ": selecting osd " << auth->first
+	   << " for obj " << obj
+	   << " with oi " << *auth_oi
+	   << dendl;
   return auth;
 }
 
