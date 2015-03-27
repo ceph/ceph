@@ -18,6 +18,26 @@ bool RGWBWRoutingRuleCondition::check_key_condition(const string& key) {
 }
 
 
+void RGWBWRoutingRule::apply_rule(const string& default_protocol, const string& default_hostname,
+                                           const string& key, string *new_url)
+{
+  RGWRedirectInfo& redirect = redirect_info.redirect;
+
+  string protocol = (redirect.protocol.empty() ? redirect.protocol : default_protocol);
+  string hostname = (redirect.hostname.empty() ? redirect.hostname : default_hostname);
+
+  *new_url = protocol + "://" + hostname + "/";
+
+  if (!redirect_info.replace_key_prefix_with.empty()) {
+    *new_url = redirect_info.replace_key_prefix_with;
+    *new_url += key.substr(condition.key_prefix_equals.size());
+  } else if (!redirect_info.replace_key_with.empty()) {
+    *new_url = redirect_info.replace_key_with;
+  } else {
+    *new_url = key;
+  }
+}
+
 bool RGWBWRoutingRules::check_key_condition(const string& key, RGWBWRoutingRule **rule)
 {
   for (list<RGWBWRoutingRule>::iterator iter = rules.begin(); iter != rules.end(); ++iter) {
@@ -40,30 +60,25 @@ bool RGWBWRoutingRules::check_error_code_condition(int error_code, RGWBWRoutingR
   return false;
 }
 
-void RGWBucketWebsiteConf::get_effective_target(const string& key, string *effective_key, RGWRedirectInfo *redirect)
+bool RGWBucketWebsiteConf::should_redirect(const string& key, RGWBWRoutingRule *redirect)
 {
   RGWBWRoutingRule *rule;
-  string new_key;
 
-  if (routing_rules.check_key_condition(key, &rule)) {
-    RGWBWRoutingRuleCondition& condition = rule->condition;
-    RGWBWRedirectInfo& info = rule->redirect_info;
-
-    if (!info.replace_key_prefix_with.empty()) {
-      *effective_key = info.replace_key_prefix_with;
-      *effective_key += key.substr(condition.key_prefix_equals.size());
-    } else if (!info.replace_key_with.empty()) {
-      *effective_key = info.replace_key_with;
-    } else {
-      *effective_key = key;
-    }
-
-    *redirect = info.redirect;
+  if (!routing_rules.check_key_condition(key, &rule)) {
+    return false;
   }
 
-  if (effective_key->empty()) {
+  *redirect = *rule;
+
+  return true;
+}
+
+void RGWBucketWebsiteConf::get_effective_key(const string& key, string *effective_key)
+{
+
+  if (key.empty()) {
     *effective_key = index_doc_suffix;
-  } else if ((*effective_key)[effective_key->size() - 1] == '/') {
-    *effective_key += index_doc_suffix;
+  } else if (key[key.size() - 1] == '/') {
+    *effective_key = key + index_doc_suffix;
   }
 }
