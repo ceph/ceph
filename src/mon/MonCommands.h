@@ -155,6 +155,8 @@ COMMAND("pg scrub name=pgid,type=CephPgid", "start scrub on <pgid>", \
 	"pg", "rw", "cli,rest")
 COMMAND("pg deep-scrub name=pgid,type=CephPgid", "start deep-scrub on <pgid>", \
 	"pg", "rw", "cli,rest")
+COMMAND("pg stop-scrub name=pgid,type=CephPgid", "stop manual scrub on <pgid>", \
+	"pg", "rw", "cli,rest")
 COMMAND("pg repair name=pgid,type=CephPgid", "start repair on <pgid>", \
 	"pg", "rw", "cli,rest")
 COMMAND("pg debug " \
@@ -409,6 +411,9 @@ COMMAND("osd scrub " \
 COMMAND("osd deep-scrub " \
 	"name=who,type=CephString", \
 	"initiate deep scrub on osd <who>", "osd", "rw", "cli,rest")
+COMMAND("osd stop-scrub " \
+	"name=who,type=CephString", \
+	"stop manual scrub on osd <who>", "osd", "rw", "cli,rest")
 COMMAND("osd repair " \
 	"name=who,type=CephString", \
 	"initiate repair on osd <who>", "osd", "rw", "cli,rest")
