@@ -78,6 +78,7 @@ overwrite_conf=1
 cephx=1 #turn cephx on by default
 cache=""
 memstore=0
+newstore=0
 journal=1
 
 MON_ADDR=""
@@ -271,6 +272,7 @@ else
         debug monc = 20
         debug journal = 20
         debug filestore = 20
+        debug newstore = 30
         debug rgw = 20
         debug objclass = 20'
     CMDSDEBUG='
