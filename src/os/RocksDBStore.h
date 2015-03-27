@@ -110,48 +110,68 @@ public:
    */
   struct options_t {
     uint64_t write_buffer_size; /// in-memory write buffer size
-    uint64_t write_buffer_num; /// in-memory write buffer number
-    uint64_t target_file_size_base; /// Target file size for compaction
-    int max_background_compactions; /// Maximum number of concurrent background compaction jobs
-    int max_background_flushes; /// Maximum number of concurrent background memtable flushea jobs
-    int max_open_files; /// maximum number of files RocksDB can open at once
+    int write_buffer_num; /// in-memory write buffer number
+    int min_write_buffer_number_to_merge;
+    
+    int level0_file_num_compaction_trigger;
+    int level0_slowdown_writes_trigger;
+    int level0_stop_writes_trigger;
+
+    uint64_t max_bytes_for_level_base;
+    int max_bytes_for_level_multiplier;
+    uint64_t target_file_size_base;
+    int target_file_size_multiplier;
+    int num_levels;
     uint64_t cache_size; /// size of extra decompressed cache to use
     uint64_t block_size; /// user data per block
     int bloom_bits_per_key; /// number of bits per entry to put in a bloom filter
+   
+    int max_background_compactions;
+    int compaction_threads;
+    int max_background_flushes;
+    int flusher_threads;
+
+    uint64_t max_open_files;
     string compression_type; /// whether to use libsnappy compression or not
-
-    // don't change these ones. No, seriously
-    int block_restart_interval;
-    bool error_if_exists;
     bool paranoid_checks;
-    uint64_t level0_file_num_compaction_trigger;
-    uint64_t level0_slowdown_writes_trigger;
-    uint64_t level0_stop_writes_trigger;
-    bool disableDataSync;
-    bool disableWAL;
-    int num_levels;
-
     string log_file;
     string wal_dir;
     string info_log_level;
+    bool disableDataSync;
+    bool disableWAL;
+
+    int block_restart_interval;
+    bool error_if_exists;
 
     options_t() :
-      write_buffer_size(0), //< 0 means default
-      max_open_files(0), //< 0 means default
-      cache_size(0), //< 0 means no cache (default)
-      block_size(0), //< 0 means default
-      bloom_bits_per_key(10), //< 10 is the default value which yields ~1% false positive rate.
-      compression_type("none"), //< set to false for no compression
-      block_restart_interval(0), //< 0 means default
-      error_if_exists(false), //< set to true if you want to check nonexistence
-      paranoid_checks(false), //< set to true if you want paranoid checks
+      write_buffer_size(0),
+      write_buffer_num(0),
+      min_write_buffer_number_to_merge(0),
       level0_file_num_compaction_trigger(0),
-      level0_slowdown_writes_trigger(0),
-      level0_stop_writes_trigger(0),
+      level0_slowdown_writes_trigger(-1),
+      level0_stop_writes_trigger(-1),
+      max_bytes_for_level_base(0),
+      max_bytes_for_level_multiplier(0),
+      target_file_size_base(0),
+      target_file_size_multiplier(0),
+      num_levels(0),
+      cache_size(0), /// size of extra decompressed cache to use
+      block_size(0), /// user data per block
+      bloom_bits_per_key(0), /// number of bits per entry to put in a bloom filter
+      max_background_compactions(0),
+      compaction_threads(0),
+      max_background_flushes(0),
+      flusher_threads(0),
+
+      max_open_files(0),
+      compression_type("none"),
+      paranoid_checks(false), //< set to true if you want paranoid checks
+      info_log_level("info"),
       disableDataSync(false),
       disableWAL(false),
-      num_levels(0),
-      info_log_level("info")
+
+      block_restart_interval(0), //< 0 means default
+      error_if_exists(false) //< set to true if you want to check nonexistence
     {}
   } options;
 
