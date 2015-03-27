@@ -117,6 +117,8 @@ struct RGWBWRoutingRule
   bool check_error_code_condition(int error_code) {
     return condition.check_error_code_condition(error_code);
   }
+
+  void apply_rule(const string& default_protocol, const string& default_hostname, const string& key, string *redirect);
 };
 WRITE_CLASS_ENCODER(RGWBWRoutingRule)
 
@@ -175,7 +177,8 @@ struct RGWBucketWebsiteConf
   void decode_xml(XMLObj *obj);
   void dump_xml(Formatter *f) const;
 
-  void get_effective_target(const string& key, string *effective_key, RGWRedirectInfo *redirect);
+  bool should_redirect(const string& key, RGWBWRoutingRule *redirect);
+  void get_effective_key(const string& key, string *effective_key);
 };
 WRITE_CLASS_ENCODER(RGWBucketWebsiteConf)
 
