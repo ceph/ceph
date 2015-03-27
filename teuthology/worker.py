@@ -123,13 +123,12 @@ def main(ctx):
             ceph_branch = job_config.get('branch', 'master')
             suite_branch = job_config.get('suite_branch', ceph_branch)
             job_config['suite_path'] = fetch_qa_suite(suite_branch)
-        except BranchNotFoundError:
-            log.exception(
-                "Branch not found; throwing job away")
-            # Optionally, we could mark the job as dead, but we don't have a
-            # great way to express why it is dead.
-            report.try_delete_jobs(job_config['name'],
-                                   job_config['job_id'])
+        except BranchNotFoundError as exc:
+            log.exception("Branch not found; marking job as dead")
+            report.try_push_job_info(
+                job_config,
+                dict(status='dead', failure_reason=str(exc))
+            )
             continue
 
         teuth_bin_path = os.path.join(teuth_path, 'virtualenv', 'bin')
