@@ -102,8 +102,7 @@ configuration details, perform the following steps using ``ceph-deploy``.
    - ``{cluster-name}.bootstrap-mds.keyring``
    - ``{cluster-name}.bootstrap-rgw.keyring``
 
-.. note:: The bootstrap-rgw keyring is only created during installation of clusters
-   running Hammer or newer
+   .. note:: The bootstrap-rgw keyring is only created during installation of clusters running Hammer or newer
 
 
 #. Add two OSDs. For fast setup, this quick start uses a directory rather
