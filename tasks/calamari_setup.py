@@ -51,7 +51,9 @@ def task(ctx, config):
     calamari_user -- user name to log into gui
     calamari_password -- calamari user password
     """
-    config = DEFAULTS.update(config)
+    local_config = DEFAULTS
+    local_config.update(config)
+    config = local_config
     cal_svr = None
     for remote_, roles in ctx.cluster.remotes.items():
         if 'client.0' in roles:
