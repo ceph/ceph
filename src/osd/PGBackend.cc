@@ -579,8 +579,8 @@ void PGBackend::be_compare_scrubmaps(
     if (auth == maps.end()) {
       dout(10) << __func__ << ": unable to find any auth object" << dendl;
       ++shallow_errors;
-      errorstream << __func__ << ": " << pgid << " shard " << j->first
-		  << ": soid failed to pick suitable auth object";
+      errorstream << pgid << " shard " << j->first
+		  << ": soid failed to pick suitable auth object\n";
       continue;
     }
     auth_list.push_back(auth->first);
@@ -609,8 +609,8 @@ void PGBackend::be_compare_scrubmaps(
 	    ++shallow_errors;
           else
 	    ++deep_errors;
-	  errorstream << __func__ << ": " << pgid << " shard " << j->first
-		      << ": soid " << *k << " " << ss.str();
+	  errorstream << pgid << " shard " << j->first << ": soid " << *k
+		      << " " << ss.str() << "\n";
 	} else {
 	  auth_list.push_back(j->first);
 	}
@@ -618,8 +618,8 @@ void PGBackend::be_compare_scrubmaps(
 	clean = false;
 	cur_missing.insert(j->first);
 	++shallow_errors;
-	errorstream << __func__ << ": " << pgid << " shard " << j->first
-		    << " missing " << *k;
+	errorstream << pgid << " shard " << j->first << " missing " << *k
+		    << "\n";
       }
     }
     if (!cur_missing.empty()) {
@@ -645,18 +645,20 @@ void PGBackend::be_compare_scrubmaps(
       if (auth_oi.is_data_digest() && auth_object.digest_present &&
 	  auth_oi.data_digest != auth_object.digest) {
 	++deep_errors;
-	errorstream << __func__ << ": " << pgid << " recorded data digest 0x"
+	errorstream << pgid << " recorded data digest 0x"
 		    << std::hex << auth_oi.data_digest << " != on disk 0x"
-		    << auth_object.digest << std::dec << " on " << auth_oi.soid;
+		    << auth_object.digest << std::dec << " on " << auth_oi.soid
+		    << "\n";
 	if (repair)
 	  update = FORCE;
       }
       if (auth_oi.is_omap_digest() && auth_object.omap_digest_present &&
 	  auth_oi.omap_digest != auth_object.omap_digest) {
 	++deep_errors;
-	errorstream << __func__ << ": " << pgid << " recorded omap digest 0x"
+	errorstream << pgid << " recorded omap digest 0x"
 		    << std::hex << auth_oi.data_digest << " != on disk 0x"
-		    << auth_object.digest << std::dec << " on " << auth_oi.soid;
+		    << auth_object.digest << std::dec << " on " << auth_oi.soid
+		    << "\n";
 	if (repair)
 	  update = FORCE;
       }
