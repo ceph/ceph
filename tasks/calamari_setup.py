@@ -185,6 +185,8 @@ def calamari_install(config, cal_svr):
 
     test_image = config['test_image']
 
+    if not test_image:
+        raise RuntimeError('Must supply test image')
     log.info('calamari test image: %s' % test_image)
     delete_iceball = False
 
