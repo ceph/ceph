@@ -4210,7 +4210,7 @@ void PG::scrub_compare_maps()
       ss);
     dout(2) << ss.str() << dendl;
 
-    if (!authoritative.empty()) {
+    if (!ss.str().empty()) {
       osd->clog->error(ss);
     }
 
