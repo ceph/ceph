@@ -951,8 +951,6 @@ protected:
     return true;
   }
 
-  friend struct C_OnPushCommit;
-
   // projected object info
   SharedLRU<hobject_t, ObjectContext> object_contexts;
   // map from oid.snapdir() to SnapSetContext *
