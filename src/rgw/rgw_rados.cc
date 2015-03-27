@@ -4177,10 +4177,18 @@ int RGWRados::set_attrs(void *ctx, rgw_obj& obj,
     return 0;
 
   string tag;
+  bufferlist bl;
   if (state) {
-    r = prepare_update_index(state, bucket, CLS_RGW_OP_ADD, obj, tag);
+    /* we don't pass state here, because we need to generate a new tag, not reuse the
+     * same tag, otherwise we might race and clobber another operation on the same object
+     */
+    r = prepare_update_index(NULL, bucket, CLS_RGW_OP_ADD, obj, tag);
     if (r < 0)
       return r;
+
+    bl.append(tag.c_str(), tag.size() + 1);
+
+    op.setxattr(RGW_ATTR_ID_TAG,  bl);
   }
 
   r = ref.ioctx.operate(ref.oid, &op);
@@ -4207,6 +4215,7 @@ int RGWRados::set_attrs(void *ctx, rgw_obj& obj,
     return r;
 
   if (state) {
+    state->obj_tag.swap(bl);
     if (rmattrs) {
       for (iter = rmattrs->begin(); iter != rmattrs->end(); ++iter) {
         state->attrset.erase(iter->first);
