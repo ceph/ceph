@@ -764,6 +764,10 @@ public class CephMountTest {
     int crop_size = 333333;
     mount.ftruncate(fd, crop_size);
     mount.fstat(fd, st);
+    if (st.size != crop_size) {
+      System.err.println("ftruncate error: st.size=" + st.size + " crop_size=" + crop_size);
+      assertTrue(false);
+    }
     assertTrue(st.size == crop_size);
     mount.close(fd);
 
