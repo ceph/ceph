@@ -599,6 +599,11 @@ public:
   void decode(bufferlist::iterator& bl);
 
   inline bool operator==(const coll_t& rhs) const {
+    // only compare type if meta
+    if (type != rhs.type)
+      return false;
+    if (type == TYPE_META)
+      return true;
     return type == rhs.type && pgid == rhs.pgid;
   }
   inline bool operator!=(const coll_t& rhs) const {
