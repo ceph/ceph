@@ -1017,6 +1017,56 @@ def main(argv):
     else:
         logging.warning("SKIPPING IMPORT-RADOS TESTS DUE TO PREVIOUS FAILURES")
 
+    # Cause REP_POOL to split and test import with object/log filtering
+    cmd = "./ceph osd pool set {pool} pg_num 32".format(pool=REP_POOL)
+    logging.debug(cmd)
+    ret = call(cmd, shell=True, stdout=nullfd, stderr=nullfd)
+    time.sleep(15)
+    cmd = "./ceph osd pool set {pool} pgp_num 32".format(pool=REP_POOL)
+    logging.debug(cmd)
+    ret = call(cmd, shell=True, stdout=nullfd, stderr=nullfd)
+    wait_for_health()
+    kill_daemons()
+
+    print "Remove pgs for another import"
+    RM_ERRORS = 0
+    for pg in ALLREPPGS:
+        for osd in get_osds(pg, OSDDIR):
+            cmd = (CFSD_PREFIX + "--op remove --pgid {pg}").format(pg=pg, osd=osd)
+            logging.debug(cmd)
+            ret = call(cmd, shell=True, stdout=nullfd)
+            if ret != 0:
+                logging.error("Removing failed for pg {pg} on {osd} with {ret}".format(pg=pg, osd=osd, ret=ret))
+                RM_ERRORS += 1
+
+    ERRORS += RM_ERRORS
+
+    IMP_ERRORS = 0
+    if RM_ERRORS == 0:
+        print "Test pg import after PGs have split"
+        for osd in [f for f in os.listdir(OSDDIR) if os.path.isdir(os.path.join(OSDDIR, f)) and string.find(f, "osd") == 0]:
+            dir = os.path.join(TESTDIR, osd)
+            PGS = [f for f in os.listdir(dir) if os.path.isfile(os.path.join(dir, f))]
+            for pg in PGS:
+                if pg not in ALLREPPGS:
+                    continue
+                file = os.path.join(dir, pg)
+                cmd = (CFSD_PREFIX + "--op import --file {file}").format(osd=osd, file=file)
+                logging.debug(cmd)
+                ret = call(cmd, shell=True, stdout=nullfd)
+                if ret != 0:
+                    logging.error("Import failed from {file} with {ret}".format(file=file, ret=ret))
+                    IMP_ERRORS += 1
+    else:
+        logging.warning("SKIPPING IMPORT TESTS DUE TO PREVIOUS FAILURES")
+
+    ERRORS += IMP_ERRORS
+
+    # Start up again to make sure imports didn't corrupt anything
+    if IMP_ERRORS == 0:
+        vstart(new=False)
+        wait_for_health()
+
     call("/bin/rm -rf {dir}".format(dir=TESTDIR), shell=True)
     call("/bin/rm -rf {dir}".format(dir=DATADIR), shell=True)
 
