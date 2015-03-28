@@ -12,8 +12,8 @@ fi
 
 ld_lib_path="$LD_LIBRARY_PATH"
 if [ -z "$ld_lib_path" ] ; then
-	echo "Setting ld_lib_path to /usr/lib/jni"
-	ld_lib_path="/usr/lib/jni"
+	echo "Setting ld_lib_path to /usr/lib/jni:/usr/lib64"
+	ld_lib_path="/usr/lib/jni:/usr/lib64"
 else
 	echo "ld_lib_path was set to $ld_lib_path"
 fi
