@@ -10196,11 +10196,15 @@ void ReplicatedPG::hit_set_persist()
     // Once we hit a degraded object just skip further trim
     if (is_degraded_or_backfilling_object(aoid))
       return;
+    if (scrubber.write_blocked_by_scrub(aoid))
+      return;
   }
 
   oid = get_hit_set_archive_object(start, now);
   // If the current object is degraded we skip this persist request
   if (is_degraded_or_backfilling_object(oid))
+    return;
+  if (scrubber.write_blocked_by_scrub(oid))
     return;
 
   // If backfill is in progress and we could possibly overlap with the
@@ -10337,6 +10341,10 @@ void ReplicatedPG::hit_set_persist()
   hit_set_trim(repop, max);
 
   info.stats.stats.add(ctx->delta_stats);
+  if (scrubber.active) {
+    if (oid < scrubber.start)
+      scrub_cstat.add(ctx->delta_stats);
+  }
 
   simple_repop_submit(repop);
 }
