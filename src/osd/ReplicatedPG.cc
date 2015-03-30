@@ -1539,7 +1539,8 @@ void ReplicatedPG::do_op(OpRequestRef& op)
   }
 
   if (agent_state) {
-    agent_choose_mode();
+    if (agent_choose_mode(false, op))
+      return;
   }
 
   if ((m->get_flags() & CEPH_OSD_FLAG_IGNORE_CACHE) == 0 &&
@@ -10858,12 +10859,13 @@ void ReplicatedPG::agent_choose_mode_restart()
   unlock();
 }
 
-void ReplicatedPG::agent_choose_mode(bool restart)
+bool ReplicatedPG::agent_choose_mode(bool restart, OpRequestRef op)
 {
+  bool requeued = false;
   // Let delay play out
   if (agent_state->delaying) {
     dout(20) << __func__ << this << " delaying, ignored" << dendl;
-    return;
+    return requeued;
   }
 
   uint64_t divisor = pool.info.get_pg_num_divisor(info.pgid.pgid);
@@ -11011,8 +11013,11 @@ void ReplicatedPG::agent_choose_mode(bool restart)
 	    << dendl;
     if (agent_state->evict_mode == TierAgentState::EVICT_MODE_FULL &&
 	is_active()) {
+      if (op)
+	requeue_op(op);
       requeue_ops(waiting_for_active);
       requeue_ops(waiting_for_cache_not_full);
+      requeued = true;
     }
     agent_state->evict_mode = evict_mode;
   }
@@ -11040,6 +11045,7 @@ void ReplicatedPG::agent_choose_mode(bool restart)
       osd->agent_adjust_pg(this, old_effort, agent_state->evict_effort);
     }
   }
+  return requeued;
 }
 
 void ReplicatedPG::agent_estimate_atime_temp(const hobject_t& oid,
