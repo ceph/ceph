@@ -785,9 +785,9 @@ TEST(ErasureCodeShec, init_29)
   EXPECT_TRUE(shec->matrix != NULL);
   EXPECT_EQ(0, r);
   //k,m,c are default values
-  EXPECT_EQ(2u, shec->k);
-  EXPECT_EQ(1u, shec->m);
-  EXPECT_EQ(1u, shec->c);
+  EXPECT_EQ(4u, shec->k);
+  EXPECT_EQ(3u, shec->m);
+  EXPECT_EQ(2u, shec->c);
 
   delete shec;
   delete parameters;
