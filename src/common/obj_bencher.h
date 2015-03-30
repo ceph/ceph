@@ -35,7 +35,6 @@ struct bench_history {
 struct bench_data {
   bool done; //is the benchmark is done
   int object_size; //the size of the objects
-  int trans_size; //size of the write/read to perform
   // same as object_size for write tests
   int in_flight; //number of reads/writes being waited on
   int started;
