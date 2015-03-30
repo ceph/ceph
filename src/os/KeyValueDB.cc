@@ -22,7 +22,8 @@ KeyValueDB *KeyValueDB::create(CephContext *cct, const string& type,
   }
 #endif
 #ifdef HAVE_LIBROCKSDB
-  if (type == "rocksdb") {
+  if (type == "rocksdb" &&
+      cct->check_experimental_feature_enabled("rocksdb")) {
     return new RocksDBStore(cct, dir);
   }
 #endif
@@ -40,7 +41,8 @@ int KeyValueDB::test_init(const string& type, const string& dir)
   }
 #endif
 #ifdef HAVE_LIBROCKSDB
-  if (type == "rocksdb"){
+  if (type == "rocksdb" &&
+      cct->check_experimental_feature_enabled("rocksdb")){
     return RocksDBStore::_test_init(dir);
   }
 #endif
