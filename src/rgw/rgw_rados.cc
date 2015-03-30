@@ -2315,6 +2315,7 @@ int rgw_policy_from_attrset(CephContext *cct, map<string, bufferlist>& attrset, 
  *     Any skipped results will have the matching portion of their name
  *     inserted in common_prefixes with a "true" mark.
  * marker: if filled in, begin the listing with this object.
+ * end_marker: if filled in, end the listing with this object.
  * result: the objects are put in here.
  * common_prefixes: if delim is filled in, any matching prefixes are placed
  *     here.
@@ -2335,12 +2336,19 @@ int RGWRados::Bucket::List::list_objects(int max, vector<RGWObjEnt> *result,
   }
   result->clear();
 
-  rgw_obj marker_obj, prefix_obj;
+  rgw_obj marker_obj, end_marker_obj, prefix_obj;
   marker_obj.set_instance(params.marker.instance);
   marker_obj.set_ns(params.ns);
   marker_obj.set_obj(params.marker.name);
   rgw_obj_key cur_marker;
   marker_obj.get_index_key(&cur_marker);
+
+  end_marker_obj.set_instance(params.end_marker.instance);
+  end_marker_obj.set_ns(params.ns);
+  end_marker_obj.set_obj(params.end_marker.name);
+  rgw_obj_key cur_end_marker;
+  end_marker_obj.get_index_key(&cur_end_marker);
+  const bool cur_end_marker_valid = !cur_end_marker.empty();
 
   prefix_obj.set_ns(params.ns);
   prefix_obj.set_obj(params.prefix);
@@ -2405,6 +2413,11 @@ int RGWRados::Bucket::List::list_objects(int max, vector<RGWObjEnt> *result,
 
         /* we're not looking at the namespace this object is in, next! */
         continue;
+      }
+
+      if (cur_end_marker_valid && cur_end_marker <= obj) {
+        truncated = false;
+        goto done;
       }
 
       if (count < max) {
