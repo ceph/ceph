@@ -95,6 +95,7 @@ EXTRA_DIST += \
 	$(srcdir)/upstart/radosgw-all-starter.conf \
 	$(srcdir)/upstart/rbdmap.conf \
 	ceph.in \
+	ceph-detect-init \
 	ceph-disk \
 	ceph-disk-prepare \
 	ceph-disk-activate \
