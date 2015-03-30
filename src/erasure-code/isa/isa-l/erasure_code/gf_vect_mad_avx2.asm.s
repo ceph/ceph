@@ -28,145 +28,80 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 ;;;
-;;; gf_vect_dot_prod_avx2(len, vec, *g_tbls, **buffs, *dest);
+;;; gf_vect_mad_avx2(len, vec, vec_i, mul_array, src, dest);
 ;;;
 
-%ifidn __OUTPUT_FORMAT__, elf64
+%ifidn __OUTPUT_FORMAT__, win64
+ %define arg0   rcx
+ %define arg0.w ecx
+ %define arg1   rdx
+ %define arg2   r8
+ %define arg3   r9
+ %define arg4   r12 		; must be saved and loaded
+ %define arg5   r15
+
+ %define tmp    r11
+ %define tmp.w  r11d
+ %define tmp.b  r11b
+ %define return rax
+ %define return.w eax
+ %define PS 8
+ %define stack_size 16*3 + 3*8
+ %define arg(x)      [rsp + stack_size + PS + PS*x]
+ %define func(x) proc_frame x
+
+ %macro FUNC_SAVE 0
+	sub	rsp, stack_size
+	vmovdqa	[rsp+16*0],xmm6
+	vmovdqa	[rsp+16*1],xmm7
+	vmovdqa	[rsp+16*2],xmm8
+	save_reg	r12,  3*16 + 0*8
+	save_reg	r15,  3*16 + 1*8
+	end_prolog
+	mov	arg4, arg(4)
+	mov	arg5, arg(5)
+ %endmacro
+
+ %macro FUNC_RESTORE 0
+	vmovdqa	xmm6, [rsp+16*0]
+	vmovdqa	xmm7, [rsp+16*1]
+	vmovdqa	xmm8, [rsp+16*2]
+	mov	r12,  [rsp + 3*16 + 0*8]
+	mov	r15,  [rsp + 3*16 + 1*8]
+	add	rsp, stack_size
+ %endmacro
+
+%elifidn __OUTPUT_FORMAT__, elf64
  %define arg0  rdi
+ %define arg0.w edi
  %define arg1  rsi
  %define arg2  rdx
  %define arg3  rcx
  %define arg4  r8
  %define arg5  r9
 
- %define tmp   r11
- %define tmp.w r11d
- %define tmp.b r11b
- %define tmp2  r10
- %define tmp3  r9
+ %define tmp      r11
+ %define tmp.w    r11d
+ %define tmp.b    r11b
  %define return rax
- %macro  SLDR   2
- %endmacro
- %define SSTR   SLDR
- %define PS     8
+ %define return.w eax
+
  %define func(x) x:
  %define FUNC_SAVE
  %define FUNC_RESTORE
 %endif
 
-%ifidn __OUTPUT_FORMAT__, win64
- %define arg0   rcx
- %define arg1   rdx
- %define arg2   r8
- %define arg3   r9
 
- %define arg4   r12 		; must be saved and loaded
- %define tmp    r11
- %define tmp.w  r11d
- %define tmp.b  r11b
- %define tmp2   r10
- %define tmp3   rdi 		; must be saved and loaded
- %define return rax
- %macro  SLDR   2
- %endmacro
- %define SSTR   SLDR
- %define PS     8
- %define frame_size 2*8
- %define arg(x)      [rsp + frame_size + PS + PS*x]
-
- %define func(x) proc_frame x
- %macro FUNC_SAVE 0
-	rex_push_reg	r12
-	push_reg	rdi
-	end_prolog
-	mov	arg4, arg(4)
- %endmacro
-
- %macro FUNC_RESTORE 0
-	pop	rdi
-	pop	r12
- %endmacro
-%endif
-
-%ifidn __OUTPUT_FORMAT__, elf32
-
-;;;================== High Address;
-;;;	arg4
-;;;	arg3
-;;;	arg2
-;;;	arg1
-;;;	arg0
-;;;	return
-;;;<================= esp of caller
-;;;	ebp
-;;;<================= ebp = esp
-;;;	esi
-;;;	edi
-;;;	ebx
-;;;<================= esp of callee
-;;;
-;;;================== Low Address;
-
- %define PS 4
- %define LOG_PS 2
- %define func(x) x:
- %define arg(x) [ebp + PS*2 + PS*x]
-
- %define trans   ecx			;trans is for the variables in stack
- %define arg0    trans
- %define arg0_m  arg(0)
- %define arg1    trans
- %define arg1_m  arg(1)
- %define arg2    arg2_m
- %define arg2_m  arg(2)
- %define arg3    ebx
- %define arg4    trans
- %define arg4_m  arg(4)
- %define tmp	 edx
- %define tmp.w   edx
- %define tmp.b   dl
- %define tmp2    edi
- %define tmp3    esi
- %define return  eax
- %macro SLDR     2			;stack load/restore
-	mov %1, %2
- %endmacro
- %define SSTR SLDR
-
- %macro FUNC_SAVE 0
-	push	ebp
-	mov	ebp, esp
-	push	esi
-	push	edi
-	push	ebx
-	mov	arg3, arg(3)
- %endmacro
-
- %macro FUNC_RESTORE 0
-	pop	ebx
-	pop	edi
-	pop	esi
-	mov	esp, ebp
-	pop	ebp
- %endmacro
-
-%endif	; output formats
-
+;;; gf_vect_mad_avx2(len, vec, vec_i, mul_array, src, dest)
 %define len   arg0
+%define len.w arg0.w
 %define vec   arg1
-%define mul_array arg2
-%define	src   arg3
-%define dest  arg4
-
-%define vec_i tmp2
-%define ptr   tmp3
+%define vec_i    arg2
+%define mul_array arg3
+%define	src   arg4
+%define dest  arg5
 %define pos   return
-
-%ifidn PS,4				;32-bit code
- %define  vec_m  arg1_m
- %define  len_m  arg0_m
- %define  dest_m arg4_m
-%endif
+%define pos.w return.w
 
 %ifndef EC_ALIGNED_ADDR
 ;;; Use Un-aligned load/store
@@ -183,72 +118,59 @@
  %endif
 %endif
 
-%ifidn PS,8				;64-bit code
- default rel
- [bits 64]
-%endif
 
+default rel
+
+[bits 64]
 section .text
 
-%define xmask0f  ymm3
-%define xmask0fx xmm3
-%define xgft_lo  ymm4
-%define xgft_hi  ymm5
+%define xmask0f  ymm8
+%define xmask0fx xmm8
+%define xgft_lo  ymm7
+%define xgft_hi  ymm6
 
 %define x0     ymm0
 %define xtmpa  ymm1
-%define xp     ymm2
+%define xtmph  ymm2
+%define xtmpl  ymm3
+%define xd     ymm4
+%define xtmpd  ymm5
 
 align 16
-global gf_vect_dot_prod_avx2:function
-func(gf_vect_dot_prod_avx2)
+global gf_vect_mad_avx2:function
+func(gf_vect_mad_avx2)
 	FUNC_SAVE
-	SLDR 	len, len_m
 	sub	len, 32
-	SSTR 	len_m, len
 	jl	.return_fail
 	xor	pos, pos
 	mov	tmp.b, 0x0f
 	vpinsrb	xmask0fx, xmask0fx, tmp.w, 0
 	vpbroadcastb xmask0f, xmask0fx	;Construct mask 0x0f0f0f...
 
-.loop32:
-	vpxor	xp, xp
-	mov	tmp, mul_array
-	xor	vec_i, vec_i
-
-.next_vect:
-
-	mov	ptr, [src+vec_i*PS]
-
-	vmovdqu	xgft_lo, [tmp]		;Load array Cx{00}, Cx{01}, Cx{02}, ...
-					; " Cx{00}, Cx{10}, Cx{20}, ... , Cx{f0}
+	sal	vec_i, 5		;Multiply by 32
+	vmovdqu	xgft_lo, [vec_i+mul_array]	;Load array Cx{00}, Cx{01}, Cx{02}, ...
+						; " Cx{00}, Cx{10}, Cx{20}, ... , Cx{f0}
 	vperm2i128 xgft_hi, xgft_lo, xgft_lo, 0x11 ; swapped to hi | hi
 	vperm2i128 xgft_lo, xgft_lo, xgft_lo, 0x00 ; swapped to lo | lo
 
-	XLDR	x0, [ptr+pos]		;Get next source vector
+	XLDR	xtmpd, [dest+len]	;backup the last 32 bytes in dest
 
-	add	tmp, 32
-	add	vec_i, 1
+.loop32:
+	XLDR	xd, [dest+pos]		;Get next dest vector
+.loop32_overlap:
+	XLDR	x0, [src+pos]		;Get next source vector
 
 	vpand	xtmpa, x0, xmask0f	;Mask low src nibble in bits 4-0
 	vpsraw	x0, x0, 4		;Shift to put high nibble into bits 4-0
 	vpand	x0, x0, xmask0f		;Mask high src nibble in bits 4-0
 
-	vpshufb	xgft_hi, xgft_hi, x0	;Lookup mul table of high nibble
-	vpshufb	xgft_lo, xgft_lo, xtmpa	;Lookup mul table of low nibble
-	vpxor	xgft_hi, xgft_hi, xgft_lo ;GF add high and low partials
-	vpxor	xp, xp, xgft_hi		;xp += partial
+	vpshufb	xtmph, xgft_hi, x0	;Lookup mul table of high nibble
+	vpshufb	xtmpl, xgft_lo, xtmpa	;Lookup mul table of low nibble
+	vpxor	xtmph, xtmph, xtmpl ;GF add high and low partials
+	vpxor	xd, xd, xtmph		;xd += partial
 
-	SLDR	vec, vec_m
-	cmp	vec_i, vec
-	jl	.next_vect
-
-	SLDR 	dest, dest_m
-	XSTR	[dest+pos], xp
-
+	XSTR	[dest+pos], xd
 	add	pos, 32			;Loop on 32 bytes at a time
-	SLDR 	len, len_m
 	cmp	pos, len
 	jle	.loop32
 
@@ -258,7 +180,8 @@ func(gf_vect_dot_prod_avx2)
 
 	;; Tail len
 	mov	pos, len	;Overlapped offset length-32
-	jmp	.loop32		;Do one more overlap pass
+	vmovdqa	xd, xtmpd	;Restore xd
+	jmp	.loop32_overlap	;Do one more overlap pass
 
 .return_pass:
 	mov	return, 0
@@ -282,5 +205,5 @@ global %1_slver
 	dw 0x%4
 	db 0x%3, 0x%2
 %endmacro
-;;;       func                  core, ver, snum
-slversion gf_vect_dot_prod_avx2, 04,  04,  0190
+;;;       func             core, ver, snum
+slversion gf_vect_mad_avx2, 04,  00,  0202
