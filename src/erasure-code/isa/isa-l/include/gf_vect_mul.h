@@ -1,5 +1,5 @@
 /**********************************************************************
-  Copyright(c) 2011-2014 Intel Corporation All rights reserved.
+  Copyright(c) 2011-2015 Intel Corporation All rights reserved.
 
   Redistribution and use in source and binary forms, with or without
   modification, are permitted provided that the following conditions
@@ -52,8 +52,8 @@ extern "C" {
  * 32-element constant array based on constant C. gftbl(C) = {C{00},
  * C{01}, C{02}, ... , C{0f} }, {C{00}, C{10}, C{20}, ... , C{f0} }. Len
  * and src must be aligned to 32B.
-
  * @requires SSE4.1
+ *
  * @param len   Length of vector in bytes. Must be aligned to 32B.
  * @param gftbl Pointer to 32-byte array of pre-calculated constants based on C.
  * @param src   Pointer to src data array. Must be aligned to 32B.
@@ -73,8 +73,8 @@ int gf_vect_mul_sse(int len, unsigned char *gftbl, void *src, void *dest);
  * 32-element constant array based on constant C. gftbl(C) = {C{00},
  * C{01}, C{02}, ... , C{0f} }, {C{00}, C{10}, C{20}, ... , C{f0} }. Len
  * and src must be aligned to 32B.
-
  * @requires AVX
+ *
  * @param len   Length of vector in bytes. Must be aligned to 32B.
  * @param gftbl Pointer to 32-byte array of pre-calculated constants based on C.
  * @param src   Pointer to src data array. Must be aligned to 32B.
