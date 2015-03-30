@@ -361,3 +361,40 @@ TEST_F(TestInternal, MultipleResize) {
   ASSERT_EQ(0, librbd::get_size(ictx, &size));
   ASSERT_EQ(0U, size);
 }
+
+TEST_F(TestInternal, MetadatConfig) {
+  REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
+
+  const char *test_confs[] = {
+    "aaaaaaa",
+    "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "cccccccccccccc",
+  };
+  const string prefix = "test_config_";
+  bool is_continue;
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  librbd::Image image1;
+  map<string, bufferlist> pairs, res;
+  pairs[prefix+test_confs[0]].append("value1");
+  pairs[prefix+test_confs[1]].append("value2");
+  pairs[prefix+test_confs[2]].append("value3");
+  pairs[prefix+"asdfsdaf"].append("value6");
+  pairs[prefix+"zxvzxcv123"].append("value5");
+
+  is_continue = ictx->_aware_metadata_confs(prefix, test_confs, sizeof(test_confs) / sizeof(char*),
+                                            pairs, &res);
+  ASSERT_TRUE(is_continue);
+  ASSERT_TRUE(res.size() == 3U);
+  ASSERT_TRUE(res.count(test_confs[0]));
+  ASSERT_TRUE(res.count(test_confs[1]));
+  ASSERT_TRUE(res.count(test_confs[2]));
+  res.clear();
+
+  pairs["zzzzzzzz"].append("value7");
+  is_continue = ictx->_aware_metadata_confs(prefix, test_confs, sizeof(test_confs) / sizeof(char*),
+                                            pairs, &res);
+  ASSERT_FALSE(is_continue);
+  ASSERT_TRUE(res.size() == 3U);
+}

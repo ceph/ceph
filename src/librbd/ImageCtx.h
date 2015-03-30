@@ -210,6 +210,7 @@ namespace librbd {
     void aware_metadata_confs();
     static bool _aware_metadata_confs(const string &prefix, const char **configs, size_t len,
                                       map<string, bufferlist> &pairs, map<string, bufferlist> *res);
+  };
 }
 
 #endif

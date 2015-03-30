@@ -811,14 +811,14 @@ namespace librbd {
     size_t conf_prefix_len = prefix.size();
 
     string start = prefix;
-    int r = 0, j = 0;
     for (map<string, bufferlist>::iterator it = pairs.begin(); it != pairs.end(); ++it) {
-      if (it->first.size() <= conf_prefix_len || !it->first.compare(0, conf_prefix_len, prefix))
+      if (it->first.size() <= conf_prefix_len || it->first.compare(0, conf_prefix_len, prefix))
         return false;
 
-      for (int i = 0; i < len; ++i) {
-        if (!it->first.compare(conf_prefix_len, it->first.size() - conf_prefix_len, configs[i])) {
-          res->insert(make_pair(it->first, it->second));
+      for (size_t i = 0; i < len; ++i) {
+        string key = it->first.substr(conf_prefix_len, it->first.size() - conf_prefix_len);
+        if (!key.compare(configs[i])) {
+          res->insert(make_pair(key, it->second));
           break;
         }
       }
@@ -841,7 +841,6 @@ namespace librbd {
       "rbd_balance_snap_reads"
     };
     static uint64_t max_conf_items = 128;
-    size_t conf_prefix_len = METADATA_CONF_PREFIX.size();
 
     string start = METADATA_CONF_PREFIX;
     int r = 0, j = 0;
@@ -853,6 +852,8 @@ namespace librbd {
         lderr(cct) << __func__ << " couldn't list conf metadatas: " << r << dendl;
         break;
       }
+      if (pairs.empty())
+        break;
       
       is_continue = _aware_metadata_confs(METADATA_CONF_PREFIX, aware_confs, sizeof(aware_confs) / sizeof(char*),
                                           pairs, &res);
