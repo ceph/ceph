@@ -11354,6 +11354,7 @@ void ReplicatedPG::_scrub(
     ctx->mtime = utime_t();      // do not update mtime
     ctx->new_obs.oi.set_data_digest(p->second.first);
     ctx->new_obs.oi.set_omap_digest(p->second.second);
+    ctx->mtime = utime_t();      // do not update mtime
     finish_ctx(ctx, pg_log_entry_t::MODIFY, true, true);
     ctx->on_finish = new C_ScrubDigestUpdated(this);
     simple_repop_submit(repop);
