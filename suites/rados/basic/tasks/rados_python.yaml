@@ -1,6 +1,8 @@
 tasks:
 - install:
 - ceph:
+    log-whitelist:
+    - wrongly marked me down
 - workunit:
     clients:
       client.0:
