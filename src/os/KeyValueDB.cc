@@ -33,18 +33,16 @@ KeyValueDB *KeyValueDB::create(CephContext *cct, const string& type,
 
 int KeyValueDB::test_init(const string& type, const string& dir)
 {
-  if (type == "leveldb"){
+  if (type == "leveldb") {
     return LevelDBStore::_test_init(dir);
   }
 #ifdef HAVE_KINETIC
-  if (type == "kinetic" &&
-      cct->check_experimental_feature_enabled("kinetic")) {
+  if (type == "kinetic") {
     return KineticStore::_test_init(g_ceph_context);
   }
 #endif
 #ifdef HAVE_LIBROCKSDB
-  if (type == "rocksdb" &&
-      cct->check_experimental_feature_enabled("rocksdb")){
+  if (type == "rocksdb") {
     return RocksDBStore::_test_init(dir);
   }
 #endif
