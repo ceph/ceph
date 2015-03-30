@@ -33,6 +33,29 @@ using librados::IoCtx;
 
 namespace librbd {
   const string ImageCtx::METADATA_CONF_PREFIX = "conf_";
+  const char *aware_confs[] = {
+    "rbd_cache",
+    "rbd_cache_writethrough_until_flush",
+    "rbd_cache_size",
+    "rbd_cache_max_dirty",
+    "rbd_cache_target_dirty",
+    "rbd_cache_max_dirty_age",
+    "rbd_cache_max_dirty_object",
+    "rbd_cache_block_writes_upfront",
+    "rbd_concurrent_management_ops",
+    "rbd_balance_snap_reads",
+    "rbd_localize_snap_reads",
+    "rbd_balance_parent_reads",
+    "rbd_localize_parent_reads",
+    "rbd_readahead_trigger_requests",
+    "rbd_readahead_max_bytes",
+    "rbd_readahead_disable_after_bytes",
+    "rbd_clone_copy_on_read",
+    "rbd_blacklist_on_break_lock",
+    "rbd_blacklist_expire_seconds",
+    "rbd_request_timed_out_seconds",
+  };
+  const size_t aware_confs_len = 20;
 
   ImageCtx::ImageCtx(const string &image_name, const string &image_id,
 		     const char *snap, IoCtx& p, bool ro)
@@ -828,18 +851,6 @@ namespace librbd {
 
   void ImageCtx::aware_metadata_confs() {
     ldout(cct, 20) << __func__ << dendl;
-    static const char *aware_confs[] = {
-      "rbd_cache",
-      "rbd_cache_writethrough_until_flush",
-      "rbd_cache_size",
-      "rbd_cache_max_dirty",
-      "rbd_cache_target_dirty",
-      "rbd_cache_max_dirty_age",
-      "rbd_cache_max_dirty_object",
-      "rbd_cache_block_writes_upfront",
-      "rbd_concurrent_management_ops",
-      "rbd_balance_snap_reads"
-    };
     static uint64_t max_conf_items = 128;
 
     string start = METADATA_CONF_PREFIX;
@@ -855,7 +866,7 @@ namespace librbd {
       if (pairs.empty())
         break;
       
-      is_continue = _aware_metadata_confs(METADATA_CONF_PREFIX, aware_confs, sizeof(aware_confs) / sizeof(char*),
+      is_continue = _aware_metadata_confs(METADATA_CONF_PREFIX, aware_confs, aware_confs_len,
                                           pairs, &res);
       for (map<string, bufferlist>::iterator it = res.begin(); it != res.end(); ++it) {
         j = cct->_conf->set_val(it->first.c_str(), it->second.c_str());
