@@ -528,6 +528,7 @@ map<pg_shard_t, ScrubMap *>::const_iterator
 	     << dendl;
     auth = j;
     *auth_oi = oi;
+    break;
   }
   return auth;
 }
