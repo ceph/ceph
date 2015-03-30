@@ -130,6 +130,7 @@ namespace librbd {
 
     xlist<AsyncResizeRequest*> async_resize_reqs;
 
+    static const string METADATA_CONF_PREFIX;
     /**
      * Either image_name or image_id must be set.
      * If id is not known, pass the empty std::string,
@@ -206,7 +207,9 @@ namespace librbd {
     void flush_async_operations(Context *on_finish);
 
     void cancel_async_requests();
-  };
+    void aware_metadata_confs();
+    static bool _aware_metadata_confs(const string &prefix, const char **configs, size_t len,
+                                      map<string, bufferlist> &pairs, map<string, bufferlist> *res);
 }
 
 #endif
