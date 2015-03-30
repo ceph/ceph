@@ -191,8 +191,6 @@ int ObjBencher::aio_bench(
         cerr << "Must write data before running a read benchmark!" << std::endl;
       return r;
     }
-  } else {
-    object_size = op_size;
   }
 
   char* contentsChars = new char[object_size];
