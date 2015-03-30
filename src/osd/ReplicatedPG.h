@@ -917,7 +917,8 @@ protected:
   /// clear agent state
   void agent_clear();
 
-  void agent_choose_mode(bool restart = false);  ///< choose (new) agent mode(s)
+  /// choose (new) agent mode(s), returns true if op is requeued
+  bool agent_choose_mode(bool restart = false, OpRequestRef op = OpRequestRef());
   void agent_choose_mode_restart();
 
   /// true if we can send an ondisk/commit for v
