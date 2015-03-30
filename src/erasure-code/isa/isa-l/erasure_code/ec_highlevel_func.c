@@ -1,5 +1,5 @@
 /**********************************************************************
-  Copyright(c) 2011-2014 Intel Corporation All rights reserved.
+  Copyright(c) 2011-2015 Intel Corporation All rights reserved.
 
   Redistribution and use in source and binary forms, with or without
   modification, are permitted provided that the following conditions
@@ -42,7 +42,6 @@ void ec_init_tables(int k, int rows, unsigned char *a, unsigned char *g_tbls)
 	}
 }
 
-#if __WORDSIZE == 64 || _WIN64 || __x86_64__
 void ec_encode_data_sse(int len, int k, int rows, unsigned char *g_tbls, unsigned char **data,
 			unsigned char **coding)
 {
@@ -77,7 +76,6 @@ void ec_encode_data_sse(int len, int k, int rows, unsigned char *g_tbls, unsigne
 void ec_encode_data_avx(int len, int k, int rows, unsigned char *g_tbls, unsigned char **data,
 			unsigned char **coding)
 {
-
 	if (len < 16) {
 		ec_encode_data_base(len, k, rows, g_tbls, data, coding);
 		return;
@@ -129,6 +127,123 @@ void ec_encode_data_avx2(int len, int k, int rows, unsigned char *g_tbls, unsign
 		break;
 	case 1:
 		gf_vect_dot_prod_avx2(len, k, g_tbls, data, *coding);
+		break;
+	case 0:
+		break;
+	}
+
+}
+
+#if __WORDSIZE == 64 || _WIN64 || __x86_64__
+
+void ec_encode_data_update_sse(int len, int k, int rows, int vec_i, unsigned char *g_tbls,
+			       unsigned char *data, unsigned char **coding)
+{
+	if (len < 16) {
+		ec_encode_data_update_base(len, k, rows, vec_i, g_tbls, data, coding);
+		return;
+	}
+
+	while (rows > 6) {
+		gf_6vect_mad_sse(len, k, vec_i, g_tbls, data, coding);
+		g_tbls += 6 * k * 32;
+		coding += 6;
+		rows -= 6;
+	}
+	switch (rows) {
+	case 6:
+		gf_6vect_mad_sse(len, k, vec_i, g_tbls, data, coding);
+		break;
+	case 5:
+		gf_5vect_mad_sse(len, k, vec_i, g_tbls, data, coding);
+		break;
+	case 4:
+		gf_4vect_mad_sse(len, k, vec_i, g_tbls, data, coding);
+		break;
+	case 3:
+		gf_3vect_mad_sse(len, k, vec_i, g_tbls, data, coding);
+		break;
+	case 2:
+		gf_2vect_mad_sse(len, k, vec_i, g_tbls, data, coding);
+		break;
+	case 1:
+		gf_vect_mad_sse(len, k, vec_i, g_tbls, data, *coding);
+		break;
+	case 0:
+		break;
+	}
+
+}
+
+void ec_encode_data_update_avx(int len, int k, int rows, int vec_i, unsigned char *g_tbls,
+			       unsigned char *data, unsigned char **coding)
+{
+	if (len < 16) {
+		ec_encode_data_update_base(len, k, rows, vec_i, g_tbls, data, coding);
+		return;
+	}
+	while (rows > 6) {
+		gf_6vect_mad_avx(len, k, vec_i, g_tbls, data, coding);
+		g_tbls += 6 * k * 32;
+		coding += 6;
+		rows -= 6;
+	}
+	switch (rows) {
+	case 6:
+		gf_6vect_mad_avx(len, k, vec_i, g_tbls, data, coding);
+		break;
+	case 5:
+		gf_5vect_mad_avx(len, k, vec_i, g_tbls, data, coding);
+		break;
+	case 4:
+		gf_4vect_mad_avx(len, k, vec_i, g_tbls, data, coding);
+		break;
+	case 3:
+		gf_3vect_mad_avx(len, k, vec_i, g_tbls, data, coding);
+		break;
+	case 2:
+		gf_2vect_mad_avx(len, k, vec_i, g_tbls, data, coding);
+		break;
+	case 1:
+		gf_vect_mad_avx(len, k, vec_i, g_tbls, data, *coding);
+		break;
+	case 0:
+		break;
+	}
+
+}
+
+void ec_encode_data_update_avx2(int len, int k, int rows, int vec_i, unsigned char *g_tbls,
+				unsigned char *data, unsigned char **coding)
+{
+	if (len < 32) {
+		ec_encode_data_update_base(len, k, rows, vec_i, g_tbls, data, coding);
+		return;
+	}
+	while (rows > 6) {
+		gf_6vect_mad_avx2(len, k, vec_i, g_tbls, data, coding);
+		g_tbls += 6 * k * 32;
+		coding += 6;
+		rows -= 6;
+	}
+	switch (rows) {
+	case 6:
+		gf_6vect_mad_avx2(len, k, vec_i, g_tbls, data, coding);
+		break;
+	case 5:
+		gf_5vect_mad_avx2(len, k, vec_i, g_tbls, data, coding);
+		break;
+	case 4:
+		gf_4vect_mad_avx2(len, k, vec_i, g_tbls, data, coding);
+		break;
+	case 3:
+		gf_3vect_mad_avx2(len, k, vec_i, g_tbls, data, coding);
+		break;
+	case 2:
+		gf_2vect_mad_avx2(len, k, vec_i, g_tbls, data, coding);
+		break;
+	case 1:
+		gf_vect_mad_avx2(len, k, vec_i, g_tbls, data, *coding);
 		break;
 	case 0:
 		break;

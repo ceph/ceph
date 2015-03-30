@@ -1,5 +1,5 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;  Copyright(c) 2011-2014 Intel Corporation All rights reserved.
+;  Copyright(c) 2011-2015 Intel Corporation All rights reserved.
 ;
 ;  Redistribution and use in source and binary forms, with or without
 ;  modification, are permitted provided that the following conditions
@@ -30,8 +30,6 @@
 ;;;
 ;;; gf_6vect_dot_prod_avx2(len, vec, *g_tbls, **buffs, **dests);
 ;;;
-;;; Author: Gregory Tucker
-
 
 %ifidn __OUTPUT_FORMAT__, elf64
  %define arg0  rdi
@@ -332,5 +330,3 @@ global %1_slver
 %endmacro
 ;;;       func                   core, ver, snum
 slversion gf_6vect_dot_prod_avx2, 04,  03,  019a
-; inform linker that this doesn't require executable stack
-section .note.GNU-stack noalloc noexec nowrite progbits
