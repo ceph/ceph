@@ -765,6 +765,26 @@ public:
 		 pg_info_t &info, LogEntryHandler *rollbacker,
 		 bool &dirty_info, bool &dirty_big_info);
 
+  static void append_log_entries_update_missing(
+    const hobject_t &last_backfill,
+    const list<pg_log_entry_t> &entries,
+    IndexedLog *log,
+    pg_missing_t &missing,
+    LogEntryHandler *rollbacker,
+    const DoutPrefixProvider *dpp);
+  void append_new_log_entries(
+    const hobject_t &last_backfill,
+    const list<pg_log_entry_t> &entries,
+    LogEntryHandler *rollbacker) {
+    append_log_entries_update_missing(
+      last_backfill,
+      entries,
+      &log,
+      missing,
+      rollbacker,
+      this);
+  }
+
   void write_log(ObjectStore::Transaction& t,
 		 map<string,bufferlist> *km,
 		 const coll_t& coll,

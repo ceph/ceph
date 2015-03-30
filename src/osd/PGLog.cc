@@ -568,6 +568,35 @@ void PGLog::rewind_divergent_log(ObjectStore::Transaction& t, eversion_t newhead
   dirty_big_info = true;
 }
 
+void PGLog::append_log_entries_update_missing(
+  const hobject_t &last_backfill,
+  const list<pg_log_entry_t> &entries,
+  IndexedLog *log,
+  pg_missing_t &missing,
+  LogEntryHandler *rollbacker,
+  const DoutPrefixProvider *dpp)
+{
+  if (log && !entries.empty()) {
+    assert(log->head < entries.begin()->version);
+    log->head = entries.rbegin()->version;
+  }
+  for (list<pg_log_entry_t>::const_iterator p = entries.begin();
+       p != entries.end();
+       ++p) {
+    if (log) {
+      log->log.push_back(*p);
+      pg_log_entry_t &ne = log->log.back();
+      ldpp_dout(dpp, 20) << "update missing, append " << ne << dendl;
+      log->index(ne);
+    }
+    if (p->soid <= last_backfill) {
+      missing.add_next_event(*p);
+      if (p->is_delete() && rollbacker)
+	rollbacker->remove(p->soid);
+    }
+  }
+}
+
 void PGLog::merge_log(ObjectStore::Transaction& t,
                       pg_info_t &oinfo, pg_log_t &olog, pg_shard_t fromosd,
                       pg_info_t &info, LogEntryHandler *rollbacker,
@@ -675,21 +704,15 @@ void PGLog::merge_log(ObjectStore::Transaction& t,
       log.log.pop_back();
     }
 
-    // index, update missing, delete deleted
-    for (list<pg_log_entry_t>::iterator p = from; p != to; ++p) {
-      pg_log_entry_t &ne = *p;
-      ldpp_dout(dpp, 20) "merge_log " << ne << dendl;
-      log.index(ne);
-      if (ne.soid <= info.last_backfill) {
-	missing.add_next_event(ne);
-	if (ne.is_delete())
-	  rollbacker->remove(ne.soid);
-      }
-    }
-
-    // splice
-    log.log.splice(log.log.end(), 
-		   olog.log, from, to);
+    list<pg_log_entry_t> entries;
+    entries.splice(entries.end(), olog.log, from, to);
+    append_log_entries_update_missing(
+      info.last_backfill,
+      entries,
+      &log,
+      missing,
+      rollbacker,
+      this);
     log.index();   
 
     info.last_update = log.head = olog.head;
