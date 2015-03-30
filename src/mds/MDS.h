@@ -454,7 +454,7 @@ private:
   void dec_dispatch_depth() { --dispatch_depth; }
 
   // messages
-  bool _dispatch(Message *m);
+  bool _dispatch(Message *m, bool new_msg);
 
   protected:
   bool is_stale_message(Message *m);
@@ -488,7 +488,7 @@ public:
   }
   virtual void finish(int r) {
     mds->inc_dispatch_depth();
-    mds->_dispatch(m);
+    mds->_dispatch(m, false);
     mds->dec_dispatch_depth();
   }
 };
