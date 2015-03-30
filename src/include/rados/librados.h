@@ -105,6 +105,24 @@ enum {
 };
 /** @} */
 
+/**
+ * @defgroup librados_h_operation_flags Operation Flags
+ * Flags for rados_read_op_opeprate(), rados_write_op_operate(),
+ * rados_aio_read_op_operate(), and rados_aio_write_op_operate().
+ * See librados.hpp for details.
+ * @{
+ */
+enum {
+  LIBRADOS_OPERATION_NOFLAG             = 0,
+  LIBRADOS_OPERATION_BALANCE_READS      = 1,
+  LIBRADOS_OPERATION_LOCALIZE_READS     = 2,
+  LIBRADOS_OPERATION_ORDER_READS_WRITES = 4,
+  LIBRADOS_OPERATION_IGNORE_CACHE       = 8,
+  LIBRADOS_OPERATION_SKIPRWLOCKS        = 16,
+  LIBRADOS_OPERATION_IGNORE_OVERLAY     = 32,
+};
+/** @} */
+
 /*
  * snap id contants
  */
@@ -2390,7 +2408,7 @@ CEPH_RADOS_API void rados_write_op_set_alloc_hint(rados_write_op_t write_op,
  * @param io the ioctx that the object is in
  * @param oid the object id
  * @param mtime the time to set the mtime to, NULL for the current time
- * @param flags flags to apply to the entire operation (OPERATION_*)
+ * @param flags flags to apply to the entire operation (LIBRADOS_OPERATION_*)
  */
 CEPH_RADOS_API int rados_write_op_operate(rados_write_op_t write_op,
 			                  rados_ioctx_t io,
@@ -2404,7 +2422,7 @@ CEPH_RADOS_API int rados_write_op_operate(rados_write_op_t write_op,
  * @param completion what to do when operation has been attempted
  * @param oid the object id
  * @param mtime the time to set the mtime to, NULL for the current time
- * @param flags flags to apply to the entire operation (OPERATION_*)
+ * @param flags flags to apply to the entire operation (LIBRADOS_OPERATION_*)
  */
 CEPH_RADOS_API int rados_aio_write_op_operate(rados_write_op_t write_op,
                                               rados_ioctx_t io,
@@ -2651,7 +2669,7 @@ CEPH_RADOS_API void rados_read_op_omap_get_vals_by_keys(rados_read_op_t read_op,
  * @param read_op operation to perform
  * @param io the ioctx that the object is in
  * @param oid the object id
- * @param flags flags to apply to the entire operation (OPERATION_*)
+ * @param flags flags to apply to the entire operation (LIBRADOS_OPERATION_*)
  */
 CEPH_RADOS_API int rados_read_op_operate(rados_read_op_t read_op,
 			                 rados_ioctx_t io,
@@ -2664,7 +2682,7 @@ CEPH_RADOS_API int rados_read_op_operate(rados_read_op_t read_op,
  * @param io the ioctx that the object is in
  * @param completion what to do when operation has been attempted
  * @param oid the object id
- * @param flags flags to apply to the entire operation (OPERATION_*)
+ * @param flags flags to apply to the entire operation (LIBRADOS_OPERATION_*)
  */
 CEPH_RADOS_API int rados_aio_read_op_operate(rados_read_op_t read_op,
 			                     rados_ioctx_t io,
