@@ -11343,6 +11343,7 @@ void ReplicatedPG::_scrub(
       RepGather *repop = simple_repop_create(obc);
       OpContext *ctx = repop->ctx;
       ctx->at_version = get_next_version();
+      ctx->mtime = utime_t();      // do not update mtime
       ctx->new_obs.oi.set_data_digest(p->second.first);
       ctx->new_obs.oi.set_omap_digest(p->second.second);
       finish_ctx(ctx, pg_log_entry_t::MODIFY, true, true);
