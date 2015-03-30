@@ -2445,7 +2445,7 @@ bool MDS::ms_dispatch(Message *m)
     ret = true;
   } else {
     inc_dispatch_depth();
-    ret = _dispatch(m);
+    ret = _dispatch(m, true);
     dec_dispatch_depth();
   }
   mds_lock.Unlock();
@@ -2674,7 +2674,7 @@ void MDS::_advance_queues()
 
 /* If this function returns true, it has put the message. If it returns false,
  * it has not put the message. */
-bool MDS::_dispatch(Message *m)
+bool MDS::_dispatch(Message *m, bool new_msg)
 {
   if (is_stale_message(m)) {
     m->put();
@@ -2685,6 +2685,9 @@ bool MDS::_dispatch(Message *m)
   if (!handle_core_message(m)) {
     if (beacon.is_laggy()) {
       dout(10) << " laggy, deferring " << *m << dendl;
+      waiting_for_nolaggy.push_back(m);
+    } else if (new_msg && !waiting_for_nolaggy.empty()) {
+      dout(10) << " there are deferred messages, deferring " << *m << dendl;
       waiting_for_nolaggy.push_back(m);
     } else {
       if (!handle_deferrable_message(m)) {
