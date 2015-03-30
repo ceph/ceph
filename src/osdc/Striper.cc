@@ -59,6 +59,10 @@ void Striper::file_to_extents(CephContext *cct, const char *object_format,
   __u32 su = layout->fl_stripe_unit;
   __u32 stripe_count = layout->fl_stripe_count;
   assert(object_size >= su);
+  if (stripe_count == 1) {
+    ldout(cct, 20) << " sc is one, reset su to os" << dendl;
+    su = object_size;
+  }
   uint64_t stripes_per_object = object_size / su;
   ldout(cct, 20) << " su " << su << " sc " << stripe_count << " os " << object_size
 		 << " stripes_per_object " << stripes_per_object << dendl;
