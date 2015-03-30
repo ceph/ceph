@@ -103,7 +103,7 @@ void *ObjBencher::status_printer(void *_bencher) {
     }
     if (cycleSinceChange)
       bandwidth = (double)(data.finished - previous_writes)
-        * (data.trans_size)
+        * (data.object_size)
         / (1024*1024)
         / cycleSinceChange;
     else
@@ -133,7 +133,7 @@ void *ObjBencher::status_printer(void *_bencher) {
       data.history.iops.push_back(iops);
     }
 
-    double avg_bandwidth = (double) (data.trans_size) * (data.finished)
+    double avg_bandwidth = (double) (data.object_size) * (data.finished)
       / (double)(cur_time - data.start_time) / (1024*1024);
     if (previous_writes != data.finished) {
       previous_writes = data.finished;
@@ -199,7 +199,6 @@ int ObjBencher::aio_bench(
   lock.Lock();
   data.done = false;
   data.object_size = object_size;
-  data.trans_size = op_size;
   data.in_flight = 0;
   data.started = 0;
   data.finished = num_objects;
