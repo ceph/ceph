@@ -117,7 +117,7 @@ public:
     int max_open_files; /// maximum number of files RocksDB can open at once
     uint64_t cache_size; /// size of extra decompressed cache to use
     uint64_t block_size; /// user data per block
-    int bloom_size; /// number of bits per entry to put in a bloom filter
+    int bloom_bits_per_key; /// number of bits per entry to put in a bloom filter
     string compression_type; /// whether to use libsnappy compression or not
 
     // don't change these ones. No, seriously
@@ -140,7 +140,7 @@ public:
       max_open_files(0), //< 0 means default
       cache_size(0), //< 0 means no cache (default)
       block_size(0), //< 0 means default
-      bloom_size(0), //< 0 means no bloom filter (default)
+      bloom_bits_per_key(10), //< 10 is the default value which yields ~1% false positive rate.
       compression_type("none"), //< set to false for no compression
       block_restart_interval(0), //< 0 means default
       error_if_exists(false), //< set to true if you want to check nonexistence

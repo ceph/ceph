@@ -17,12 +17,14 @@ KeyValueDB *KeyValueDB::create(CephContext *cct, const string& type,
     return new LevelDBStore(cct, dir);
   }
 #ifdef HAVE_KINETIC
-  if (type == "kinetic") {
+  if (type == "kinetic" &&
+      cct->check_experimental_feature_enabled("kinetic")) {
     return new KineticStore(cct);
   }
 #endif
 #ifdef HAVE_LIBROCKSDB
-  if (type == "rocksdb") {
+  if (type == "rocksdb" &&
+      cct->check_experimental_feature_enabled("rocksdb")) {
     return new RocksDBStore(cct, dir);
   }
 #endif
@@ -35,12 +37,14 @@ int KeyValueDB::test_init(const string& type, const string& dir)
     return LevelDBStore::_test_init(dir);
   }
 #ifdef HAVE_KINETIC
-  if (type == "kinetic") {
+  if (type == "kinetic" &&
+      cct->check_experimental_feature_enabled("kinetic")) {
     return KineticStore::_test_init(g_ceph_context);
   }
 #endif
 #ifdef HAVE_LIBROCKSDB
-  if (type == "rocksdb"){
+  if (type == "rocksdb" &&
+      cct->check_experimental_feature_enabled("rocksdb")){
     return RocksDBStore::_test_init(dir);
   }
 #endif
