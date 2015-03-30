@@ -11011,8 +11011,8 @@ void ReplicatedPG::agent_choose_mode(bool restart)
 	    << dendl;
     if (agent_state->evict_mode == TierAgentState::EVICT_MODE_FULL &&
 	is_active()) {
-      requeue_ops(waiting_for_cache_not_full);
       requeue_ops(waiting_for_active);
+      requeue_ops(waiting_for_cache_not_full);
     }
     agent_state->evict_mode = evict_mode;
   }
