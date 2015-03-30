@@ -2233,9 +2233,6 @@ void ReplicatedPG::execute_ctx(OpContext *ctx)
     ctx->user_at_version = obc->obs.oi.user_version;
   dout(30) << __func__ << " user_at_version " << ctx->user_at_version << dendl;
 
-  // note my stats
-  utime_t now = ceph_clock_now(cct);
-
   if (op->may_read()) {
     dout(10) << " taking ondisk_read_lock" << dendl;
     obc->ondisk_read_lock();
@@ -2359,7 +2356,7 @@ void ReplicatedPG::execute_ctx(OpContext *ctx)
 
   repop->src_obc.swap(src_obc); // and src_obc.
 
-  issue_repop(repop, now);
+  issue_repop(repop);
 
   eval_repop(repop);
   repop->put();
@@ -7362,7 +7359,7 @@ void ReplicatedPG::eval_repop(RepGather *repop)
   }
 }
 
-void ReplicatedPG::issue_repop(RepGather *repop, utime_t now)
+void ReplicatedPG::issue_repop(RepGather *repop)
 {
   OpContext *ctx = repop->ctx;
   const hobject_t& soid = ctx->obs->oi.soid;
@@ -7489,7 +7486,7 @@ ReplicatedPG::RepGather *ReplicatedPG::simple_repop_create(ObjectContextRef obc)
 void ReplicatedPG::simple_repop_submit(RepGather *repop)
 {
   dout(20) << __func__ << " " << repop << dendl;
-  issue_repop(repop, repop->ctx->mtime);
+  issue_repop(repop);
   eval_repop(repop);
   repop->put();
 }
