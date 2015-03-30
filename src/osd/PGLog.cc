@@ -656,18 +656,6 @@ void PGLog::merge_log(ObjectStore::Transaction& t,
     }
     mark_dirty_from(lower_bound);
 
-    // index, update missing, delete deleted
-    for (list<pg_log_entry_t>::iterator p = from; p != to; ++p) {
-      pg_log_entry_t &ne = *p;
-      dout(20) << "merge_log " << ne << dendl;
-      log.index(ne);
-      if (cmp(ne.soid, info.last_backfill, info.last_backfill_bitwise) <= 0) {
-	missing.add_next_event(ne);
-	if (ne.is_delete())
-	  rollbacker->remove(ne.soid);
-      }
-    }
-      
     // move aside divergent items
     list<pg_log_entry_t> divergent;
     while (!log.empty()) {
@@ -685,6 +673,18 @@ void PGLog::merge_log(ObjectStore::Transaction& t,
       dout(10) << "merge_log divergent " << oe << dendl;
       divergent.push_front(oe);
       log.log.pop_back();
+    }
+
+    // index, update missing, delete deleted
+    for (list<pg_log_entry_t>::iterator p = from; p != to; ++p) {
+      pg_log_entry_t &ne = *p;
+      ldpp_dout(dpp, 20) "merge_log " << ne << dendl;
+      log.index(ne);
+      if (ne.soid <= info.last_backfill) {
+	missing.add_next_event(ne);
+	if (ne.is_delete())
+	  rollbacker->remove(ne.soid);
+      }
     }
 
     // splice
