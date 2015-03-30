@@ -1641,6 +1641,7 @@ public:
         string prefix;
         string delim;
         rgw_obj_key marker;
+        rgw_obj_key end_marker;
         string ns;
         bool enforce_ns;
         RGWAccessListFilter *filter;
