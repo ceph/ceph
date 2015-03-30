@@ -2425,6 +2425,7 @@ reprotect_and_return_err:
     int r = ictx->init();
     if (r < 0)
       goto err_close;
+    ictx->aware_metadata_confs();
 
     if (!ictx->read_only) {
       r = ictx->register_watch();

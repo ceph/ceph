@@ -32,6 +32,8 @@ using librados::snap_t;
 using librados::IoCtx;
 
 namespace librbd {
+  const string ImageCtx::METADATA_CONF_PREFIX = "conf_";
+
   ImageCtx::ImageCtx(const string &image_name, const string &image_id,
 		     const char *snap, IoCtx& p, bool ro)
     : cct((CephContext*)p.cct()),
@@ -803,4 +805,67 @@ namespace librbd {
       async_requests_cond.Wait(async_ops_lock);
     }
   }
+
+  bool ImageCtx::_aware_metadata_confs(const string &prefix, const char **configs, size_t len,
+                                       map<string, bufferlist> &pairs, map<string, bufferlist> *res) {
+    size_t conf_prefix_len = prefix.size();
+
+    string start = prefix;
+    int r = 0, j = 0;
+    for (map<string, bufferlist>::iterator it = pairs.begin(); it != pairs.end(); ++it) {
+      if (it->first.size() <= conf_prefix_len || !it->first.compare(0, conf_prefix_len, prefix))
+        return false;
+
+      for (int i = 0; i < len; ++i) {
+        if (!it->first.compare(conf_prefix_len, it->first.size() - conf_prefix_len, configs[i])) {
+          res->insert(make_pair(it->first, it->second));
+          break;
+        }
+      }
+    }
+    return true;
+  }
+
+  void ImageCtx::aware_metadata_confs() {
+    ldout(cct, 20) << __func__ << dendl;
+    static const char *aware_confs[] = {
+      "rbd_cache",
+      "rbd_cache_writethrough_until_flush",
+      "rbd_cache_size",
+      "rbd_cache_max_dirty",
+      "rbd_cache_target_dirty",
+      "rbd_cache_max_dirty_age",
+      "rbd_cache_max_dirty_object",
+      "rbd_cache_block_writes_upfront",
+      "rbd_concurrent_management_ops",
+      "rbd_balance_snap_reads"
+    };
+    static uint64_t max_conf_items = 128;
+    size_t conf_prefix_len = METADATA_CONF_PREFIX.size();
+
+    string start = METADATA_CONF_PREFIX;
+    int r = 0, j = 0;
+    bool is_continue;
+    do {
+      map<string, bufferlist> pairs, res;
+      r = cls_client::metadata_list(&md_ctx, header_oid, start, max_conf_items, &pairs);
+      if (r < 0) {
+        lderr(cct) << __func__ << " couldn't list conf metadatas: " << r << dendl;
+        break;
+      }
+      
+      is_continue = _aware_metadata_confs(METADATA_CONF_PREFIX, aware_confs, sizeof(aware_confs) / sizeof(char*),
+                                          pairs, &res);
+      for (map<string, bufferlist>::iterator it = res.begin(); it != res.end(); ++it) {
+        j = cct->_conf->set_val(it->first.c_str(), it->second.c_str());
+        if (j < 0)
+          lderr(cct) << __func__ << " failed to set config " << it->first << " with value "
+                     << it->second.c_str() << ": " << j << dendl;
+        break;
+      }
+      start = pairs.rbegin()->first;
+    } while (is_continue);
+    cct->_conf->apply_changes(NULL);
+  }
+
 }
