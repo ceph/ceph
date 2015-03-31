@@ -486,6 +486,7 @@ int md_config_t::parse_option(std::vector<const char*>& args,
   }
 
   for (o = 0; o < NUM_CONFIG_OPTIONS; ++o) {
+    ostringstream err;
     const config_option *opt = config_optionsp + o;
     std::string as_option("--");
     as_option += opt->name;
@@ -509,8 +510,13 @@ int md_config_t::parse_option(std::vector<const char*>& args,
 	}
       }
     }
-    else if (ceph_argparse_witharg(args, i, &val,
+    else if (ceph_argparse_witharg(args, i, &val, err,
 				   as_option.c_str(), (char*)NULL)) {
+      if (!err.str().empty()) {
+	*oss << err.str();
+	ret = -EINVAL;
+	break;
+      }
       if (oss && (
 		  ((opt->type == OPT_STR) || (opt->type == OPT_ADDR) ||
 		   (opt->type == OPT_UUID)) &&

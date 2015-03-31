@@ -74,7 +74,10 @@ TEST(CephArgParse, SimpleArgParse) {
 
   found_foo = false;
   found_bar = "";
+  bool baz_found = false;
+  std::string found_baz = "";
   VectorContainer foo(FOO);
+  ostringstream err;
   for (std::vector<const char*>::iterator i = foo.arr.begin();
        i != foo.arr.end(); )
   {
@@ -83,11 +86,17 @@ TEST(CephArgParse, SimpleArgParse) {
       }
       else if (ceph_argparse_witharg(foo.arr, i, &found_bar, "--bar", (char*)NULL)) {
       }
+      else if (ceph_argparse_witharg(foo.arr, i, &found_baz, err, "--baz", (char*)NULL)) {
+	ASSERT_NE(string(""), err.str());
+	baz_found = true;
+      }
       else
 	++i;
   }
   ASSERT_EQ(found_foo, true);
   ASSERT_EQ(found_bar, "");
+  ASSERT_EQ(baz_found, true);
+  ASSERT_EQ(found_baz, "");
 
   found_foo = false;
   found_bar = "";
