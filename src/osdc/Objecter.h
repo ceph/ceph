@@ -1711,6 +1711,14 @@ public:
 
   bool osdmap_full_flag() const;
 
+  /**
+   * Test pg_pool_t::FLAG_FULL on a pool
+   *
+   * @return true if the pool exists and has the flag set, or
+   *         the global full flag is set, else false
+   */
+  bool osdmap_pool_full(const int64_t pool_id) const;
+
  private:
   map<uint64_t, LingerOp*>  linger_ops;
   // we use this just to confirm a cookie is valid before dereferencing the ptr

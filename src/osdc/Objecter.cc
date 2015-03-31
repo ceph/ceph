@@ -2292,13 +2292,7 @@ start:
   return ret;
 }
 
-/**
- * Any write op which is in progress at the start of this call shall no longer
- * be in progress when this call ends.  Operations started after the start
- * of this call may still be in progress when this call ends.
- *
- * @return the latest possible epoch in which a cancelled op could have existed
- */
+
 epoch_t Objecter::op_cancel_writes(int r, int64_t pool)
 {
   rwlock.get_write();
@@ -2374,6 +2368,23 @@ bool Objecter::osdmap_full_flag() const
   RWLock::RLocker rl(rwlock);
 
   return _osdmap_full_flag();
+}
+
+bool Objecter::osdmap_pool_full(const int64_t pool_id) const
+{
+  RWLock::RLocker rl(rwlock);
+
+  if (_osdmap_full_flag()) {
+    return true;
+  }
+
+  const pg_pool_t *pool = osdmap->get_pg_pool(pool_id);
+  if (pool == NULL) {
+    ldout(cct, 4) << __func__ << ": DNE pool " << pool_id << dendl;
+    return false;
+  }
+
+  return pool->has_flag(pg_pool_t::FLAG_FULL);
 }
 
 /**
