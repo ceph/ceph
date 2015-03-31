@@ -157,30 +157,14 @@ namespace librbd {
 			       uint64_t trunc_size, __u32 trunc_seq,
 			       Context *oncommit)
   {
-    m_ictx->snap_lock.get_read();
-    librados::snap_t snap_id = m_ictx->snap_id;
-    m_ictx->parent_lock.get_read();
-    uint64_t overlap = 0;
-    m_ictx->get_parent_overlap(snap_id, &overlap);
-    m_ictx->parent_lock.put_read();
-    m_ictx->snap_lock.put_read();
-
     uint64_t object_no = oid_to_object_no(oid.name, m_ictx->object_prefix);
     
-    // reverse map this object extent onto the parent
-    vector<pair<uint64_t,uint64_t> > objectx;
-    Striper::extent_to_file(m_ictx->cct, &m_ictx->layout,
-			  object_no, 0, m_ictx->layout.fl_object_size,
-			  objectx);
-    uint64_t object_overlap = m_ictx->prune_parent_extents(objectx, overlap);
     write_result_d *result = new write_result_d(oid.name, oncommit);
     m_writes[oid.name].push(result);
     ldout(m_ictx->cct, 20) << "write will wait for result " << result << dendl;
     C_OrderedWrite *req_comp = new C_OrderedWrite(m_ictx->cct, result, this);
-    AioWrite *req = new AioWrite(m_ictx, oid.name,
-				 object_no, off, objectx, object_overlap,
-				 bl, snapc, snap_id,
-				 req_comp);
+    AioWrite *req = new AioWrite(m_ictx, oid.name, object_no, off, bl, snapc,
+                                 req_comp);
     req->send();
     return ++m_tid;
   }

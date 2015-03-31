@@ -3304,31 +3304,23 @@ reprotect_and_return_err:
     RWLock::RLocker md_locker(ictx->md_lock);
 
     uint64_t clip_len = len;
-    snapid_t snap_id;
     ::SnapContext snapc;
-    uint64_t overlap = 0;
     {
       // prevent image size from changing between computing clip and recording
       // pending async operation
       RWLock::RLocker snap_locker(ictx->snap_lock);
+      if (ictx->snap_id != CEPH_NOSNAP || ictx->read_only) {
+        c->fail(cct, -EROFS);
+        return;
+      }
+
       r = clip_io(ictx, off, &clip_len);
       if (r < 0) {
         c->fail(cct, r);
         return;
       }
 
-      snap_id = ictx->snap_id;
       snapc = ictx->snapc;
-      ictx->parent_lock.get_read();
-      ictx->get_parent_overlap(ictx->snap_id, &overlap);
-      ictx->parent_lock.put_read();
-
-      if (snap_id != CEPH_NOSNAP || ictx->read_only) {
-        c->fail(cct, -EROFS);
-        return;
-      }
-
-      ldout(cct, 20) << "  parent overlap " << overlap << dendl;
 
       c->init_time(ictx, AIO_TYPE_WRITE);
     }
@@ -3364,16 +3356,8 @@ reprotect_and_return_err:
 	c->add_request();
 	ictx->write_to_cache(p->oid, bl, p->length, p->offset, req_comp, op_flags);
       } else {
-	// reverse map this object extent onto the parent
-	vector<pair<uint64_t,uint64_t> > objectx;
-	Striper::extent_to_file(ictx->cct, &ictx->layout,
-			      p->objectno, 0, ictx->layout.fl_object_size,
-			      objectx);
-	uint64_t object_overlap = ictx->prune_parent_extents(objectx, overlap);
-
 	AioWrite *req = new AioWrite(ictx, p->oid.name, p->objectno, p->offset,
-				     objectx, object_overlap,
-				     bl, snapc, snap_id, req_comp);
+				     bl, snapc, req_comp);
 	c->add_request();
 
 	req->set_op_flags(op_flags);
@@ -3405,13 +3389,16 @@ reprotect_and_return_err:
     RWLock::RLocker md_locker(ictx->md_lock);
 
     uint64_t clip_len = len;
-    snapid_t snap_id;
     ::SnapContext snapc;
-    uint64_t overlap;
     {
       // prevent image size from changing between computing clip and recording
       // pending async operation
       RWLock::RLocker snap_locker(ictx->snap_lock);
+      if (ictx->snap_id != CEPH_NOSNAP || ictx->read_only) {
+        c->fail(cct, -EROFS);
+        return;
+      }
+
       r = clip_io(ictx, off, &clip_len);
       if (r < 0) {
         c->fail(cct, r);
@@ -3419,16 +3406,7 @@ reprotect_and_return_err:
       }
 
       // TODO: check for snap
-      snap_id = ictx->snap_id;
       snapc = ictx->snapc;
-      ictx->parent_lock.get_read();
-      ictx->get_parent_overlap(ictx->snap_id, &overlap);
-      ictx->parent_lock.put_read();
-
-      if (snap_id != CEPH_NOSNAP || ictx->read_only) {
-        c->fail(cct, -EROFS);
-        return;
-      }
 
       c->init_time(ictx, AIO_TYPE_DISCARD);
     }
@@ -3455,26 +3433,14 @@ reprotect_and_return_err:
       AbstractWrite *req;
       c->add_request();
 
-      // reverse map this object extent onto the parent
-      vector<pair<uint64_t,uint64_t> > objectx;
-      uint64_t object_overlap = 0;
-      if (off < overlap) {   // we might overlap...
-	Striper::extent_to_file(ictx->cct, &ictx->layout,
-			      p->objectno, 0, ictx->layout.fl_object_size,
-			      objectx);
-	object_overlap = ictx->prune_parent_extents(objectx, overlap);
-      }
-
       if (p->offset == 0 && p->length == ictx->layout.fl_object_size) {
-	req = new AioRemove(ictx, p->oid.name, p->objectno, objectx, object_overlap,
-			    snapc, snap_id, req_comp);
+	req = new AioRemove(ictx, p->oid.name, p->objectno, snapc, req_comp);
       } else if (p->offset + p->length == ictx->layout.fl_object_size) {
-	req = new AioTruncate(ictx, p->oid.name, p->objectno, p->offset, objectx, object_overlap,
-			      snapc, snap_id, req_comp);
+	req = new AioTruncate(ictx, p->oid.name, p->objectno, p->offset, snapc,
+                              req_comp);
       } else {
 	req = new AioZero(ictx, p->oid.name, p->objectno, p->offset, p->length,
-			  objectx, object_overlap,
-			  snapc, snap_id, req_comp);
+			  snapc, req_comp);
       }
 
       req->send();
@@ -3588,7 +3554,6 @@ reprotect_and_return_err:
     }
 
     snap_t snap_id;
-    ::SnapContext snapc;
     map<object_t,vector<ObjectExtent> > object_extents;
     uint64_t buffer_ofs = 0;
     {
@@ -3596,7 +3561,6 @@ reprotect_and_return_err:
       // pending async operation
       RWLock::RLocker snap_locker(ictx->snap_lock);
       snap_id = ictx->snap_id;
-      snapc = ictx->snapc;
 
       // map
       for (vector<pair<uint64_t,uint64_t> >::const_iterator p =
@@ -3624,16 +3588,18 @@ reprotect_and_return_err:
     c->read_buf_len = buffer_ofs;
     c->read_bl = pbl;
 
-    for (map<object_t,vector<ObjectExtent> >::iterator p = object_extents.begin(); p != object_extents.end(); ++p) {
-      for (vector<ObjectExtent>::iterator q = p->second.begin(); q != p->second.end(); ++q) {
-	ldout(ictx->cct, 20) << " oid " << q->oid << " " << q->offset << "~" << q->length
-			     << " from " << q->buffer_extents << dendl;
+    for (map<object_t,vector<ObjectExtent> >::iterator p = object_extents.begin();
+         p != object_extents.end(); ++p) {
+      for (vector<ObjectExtent>::iterator q = p->second.begin();
+           q != p->second.end(); ++q) {
+	ldout(ictx->cct, 20) << " oid " << q->oid << " " << q->offset << "~"
+                             << q->length << " from " << q->buffer_extents
+                             << dendl;
 
 	C_AioRead *req_comp = new C_AioRead(ictx->cct, c);
-	AioRead *req = new AioRead(ictx, q->oid.name, 
-				   q->objectno, q->offset, q->length,
-				   q->buffer_extents, snapc,
-				   snap_id, true, req_comp, op_flags);
+	AioRead *req = new AioRead(ictx, q->oid.name, q->objectno, q->offset,
+                                   q->length, q->buffer_extents, snap_id, true,
+                                   req_comp, op_flags);
 	req_comp->set_req(req);
 	c->add_request();
 
