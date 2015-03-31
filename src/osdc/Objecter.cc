@@ -2332,7 +2332,11 @@ epoch_t Objecter::op_cancel_writes(int r, int64_t pool)
 
   rwlock.unlock();
 
-  return epoch;
+  if (to_cancel.size()) {
+    return epoch;
+  } else {
+    return -1;
+  }
 }
 
 bool Objecter::is_pg_changed(
