@@ -529,7 +529,8 @@ def cluster(ctx, config):
                     if mount_options is None:
                         mount_options = ['noatime','user_subvol_rm_allowed']
                     if mkfs_options is None:
-                        mkfs_options = ['-m', 'single',
+                        mkfs_options = ['-f',
+                                        '-m', 'single',
                                         '-l', '32768',
                                         '-n', '32768']
                 if fs == 'xfs':
@@ -557,15 +558,7 @@ def cluster(ctx, config):
                         stdout=StringIO(),
                         )
 
-                try:
-                    remote.run(args= ['yes', run.Raw('|')] + ['sudo'] + mkfs + [dev])
-                except run.CommandFailedError:
-                    # Newer btfs-tools doesn't prompt for overwrite, use -f
-                    if '-f' not in mount_options:
-                        mkfs_options.append('-f')
-                        mkfs = ['mkfs.%s' % fs] + mkfs_options
-                        log.info('%s on %s on %s' % (mkfs, dev, remote))
-                    remote.run(args= ['yes', run.Raw('|')] + ['sudo'] + mkfs + [dev])
+                remote.run(args= ['yes', run.Raw('|')] + ['sudo'] + mkfs + [dev])
 
                 log.info('mount %s on %s -o %s' % (dev, remote,
                                                    ','.join(mount_options)))
