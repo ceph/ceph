@@ -90,6 +90,7 @@ using namespace std;
 #include "messages/MMonGetVersion.h"
 #include "messages/MMonGetVersionReply.h"
 #include "messages/MMonHealth.h"
+#include "messages/MMonMetadata.h"
 #include "messages/MDataPing.h"
 #include "messages/MAuth.h"
 #include "messages/MAuthReply.h"
@@ -395,6 +396,9 @@ Message *decode_message(CephContext *cct, int crcflags,
     break;
   case CEPH_MSG_MON_GET_VERSION_REPLY:
     m = new MMonGetVersionReply();
+    break;
+  case CEPH_MSG_MON_METADATA:
+    m = new MMonMetadata();
     break;
 
   case MSG_OSD_BOOT:
