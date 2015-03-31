@@ -28,7 +28,7 @@ private:
 
 public:
   MMonMetadata() :
-    Message(CEPH_MSG_MON_METADATA, HEAD_VERSION)
+    Message(CEPH_MSG_MON_METADATA)
   {}
   MMonMetadata(const Metadata& metadata) :
     Message(CEPH_MSG_MON_METADATA, HEAD_VERSION),
