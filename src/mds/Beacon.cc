@@ -16,6 +16,7 @@
 #include "common/dout.h"
 #include "common/HeartbeatMap.h"
 #include "include/stringify.h"
+#include "include/util.h"
 
 #include "messages/MMDSBeacon.h"
 #include "mon/MonClient.h"
@@ -206,7 +207,12 @@ void Beacon::_send()
   beacon->set_standby_for_name(standby_for_name);
   beacon->set_health(health);
   beacon->set_compat(compat);
-
+  // piggyback the sys info on beacon msg
+  if (want_state == MDSMap::STATE_BOOT) {
+    map<string, string> sys_info;
+    collect_sys_info(&sys_info, cct);
+    beacon->set_sys_info(sys_info);
+  }
   monc->send_mon_message(beacon);
 }
 
