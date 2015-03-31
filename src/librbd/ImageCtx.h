@@ -210,8 +210,8 @@ namespace librbd {
     void aware_metadata_confs();
     static bool _aware_metadata_confs(const string &prefix, const char **configs, size_t len,
                                       map<string, bufferlist> &pairs, map<string, bufferlist> *res);
-    static const char *aware_confs[];
-    static const size_t aware_confs_len;
+    static const char *AWARE_CONFS[];
+    static const size_t AWARE_CONFS_LEN;
   };
 }
 
