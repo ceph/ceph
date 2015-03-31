@@ -34,7 +34,10 @@ logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.WARNING)
 
 def wait_for_health():
     print "Wait for health_ok...",
+    tries = 0
     while call("./ceph health 2> /dev/null | grep -v 'HEALTH_OK\|HEALTH_WARN' > /dev/null", shell=True) == 0:
+        if ++tries == 30:
+            raise Exception("Time exceeded to go to health")
         time.sleep(5)
     print "DONE"
 
