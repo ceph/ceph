@@ -33,7 +33,7 @@ using librados::IoCtx;
 
 namespace librbd {
   const string ImageCtx::METADATA_CONF_PREFIX = "conf_";
-  const char *aware_confs[] = {
+  const char *ImageCtx::AWARE_CONFS[] = {
     "rbd_cache",
     "rbd_cache_writethrough_until_flush",
     "rbd_cache_size",
@@ -55,7 +55,7 @@ namespace librbd {
     "rbd_blacklist_expire_seconds",
     "rbd_request_timed_out_seconds",
   };
-  const size_t aware_confs_len = 20;
+  const size_t ImageCtx::AWARE_CONFS_LEN = 20;
 
   ImageCtx::ImageCtx(const string &image_name, const string &image_id,
 		     const char *snap, IoCtx& p, bool ro)
@@ -92,52 +92,11 @@ namespace librbd {
   {
     md_ctx.dup(p);
     data_ctx.dup(p);
+    if (snap)
+      snap_name = snap;
 
     memset(&header, 0, sizeof(header));
     memset(&layout, 0, sizeof(layout));
-
-    string pname = string("librbd-") + id + string("-") +
-      data_ctx.get_pool_name() + string("/") + name;
-    if (snap) {
-      snap_name = snap;
-      pname += "@";
-      pname += snap_name;
-    }
-    perf_start(pname);
-
-    if (cct->_conf->rbd_cache) {
-      Mutex::Locker l(cache_lock);
-      ldout(cct, 20) << "enabling caching..." << dendl;
-      writeback_handler = new LibrbdWriteback(this, cache_lock);
-
-      uint64_t init_max_dirty = cct->_conf->rbd_cache_max_dirty;
-      if (cct->_conf->rbd_cache_writethrough_until_flush)
-	init_max_dirty = 0;
-      ldout(cct, 20) << "Initial cache settings:"
-		     << " size=" << cct->_conf->rbd_cache_size
-		     << " num_objects=" << 10
-		     << " max_dirty=" << init_max_dirty
-		     << " target_dirty=" << cct->_conf->rbd_cache_target_dirty
-		     << " max_dirty_age="
-		     << cct->_conf->rbd_cache_max_dirty_age << dendl;
-
-      object_cacher = new ObjectCacher(cct, pname, *writeback_handler, cache_lock,
-				       NULL, NULL,
-				       cct->_conf->rbd_cache_size,
-				       10,  /* reset this in init */
-				       init_max_dirty,
-				       cct->_conf->rbd_cache_target_dirty,
-				       cct->_conf->rbd_cache_max_dirty_age,
-				       cct->_conf->rbd_cache_block_writes_upfront);
-      object_set = new ObjectCacher::ObjectSet(NULL, data_ctx.get_id(), 0);
-      object_set->return_enoent = true;
-      object_cacher->start();
-    }
-
-    if (cct->_conf->rbd_clone_copy_on_read) {
-      copyup_finisher = new Finisher(cct);
-      copyup_finisher->start();
-    }
   }
 
   ImageCtx::~ImageCtx() {
@@ -163,6 +122,13 @@ namespace librbd {
 
   int ImageCtx::init() {
     int r;
+    string pname = string("librbd-") + id + string("-") +
+      data_ctx.get_pool_name() + string("/") + name;
+    if (!snap_name.empty()) {
+      pname += "@";
+      pname += snap_name;
+    }
+
     if (id.length()) {
       old_format = false;
     } else {
@@ -205,9 +171,45 @@ namespace librbd {
       header_oid = old_header_name(name);
     }
 
+    if (cct->_conf->rbd_cache) {
+      Mutex::Locker l(cache_lock);
+      ldout(cct, 20) << "enabling caching..." << dendl;
+      writeback_handler = new LibrbdWriteback(this, cache_lock);
+
+      uint64_t init_max_dirty = cct->_conf->rbd_cache_max_dirty;
+      if (cct->_conf->rbd_cache_writethrough_until_flush)
+	init_max_dirty = 0;
+      ldout(cct, 20) << "Initial cache settings:"
+		     << " size=" << cct->_conf->rbd_cache_size
+		     << " num_objects=" << 10
+		     << " max_dirty=" << init_max_dirty
+		     << " target_dirty=" << cct->_conf->rbd_cache_target_dirty
+		     << " max_dirty_age="
+		     << cct->_conf->rbd_cache_max_dirty_age << dendl;
+
+      object_cacher = new ObjectCacher(cct, pname, *writeback_handler, cache_lock,
+				       NULL, NULL,
+				       cct->_conf->rbd_cache_size,
+				       10,  /* reset this in init */
+				       init_max_dirty,
+				       cct->_conf->rbd_cache_target_dirty,
+				       cct->_conf->rbd_cache_max_dirty_age,
+				       cct->_conf->rbd_cache_block_writes_upfront);
+      object_set = new ObjectCacher::ObjectSet(NULL, data_ctx.get_id(), 0);
+      object_set->return_enoent = true;
+      object_cacher->start();
+    }
+
+    if (cct->_conf->rbd_clone_copy_on_read) {
+      copyup_finisher = new Finisher(cct);
+      copyup_finisher->start();
+    }
+
     md_config_t *conf = cct->_conf;
     readahead.set_trigger_requests(conf->rbd_readahead_trigger_requests);
     readahead.set_max_readahead_size(conf->rbd_readahead_max_bytes);
+
+    perf_start(pname);
     return 0;
   }
 
@@ -866,7 +868,7 @@ namespace librbd {
       if (pairs.empty())
         break;
       
-      is_continue = _aware_metadata_confs(METADATA_CONF_PREFIX, aware_confs, aware_confs_len,
+      is_continue = _aware_metadata_confs(METADATA_CONF_PREFIX, AWARE_CONFS, AWARE_CONFS_LEN,
                                           pairs, &res);
       for (map<string, bufferlist>::iterator it = res.begin(); it != res.end(); ++it) {
         j = cct->_conf->set_val(it->first.c_str(), it->second.c_str());
