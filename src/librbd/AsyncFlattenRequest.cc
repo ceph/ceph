@@ -38,39 +38,17 @@ public:
       return -ERESTART;
     }
 
-    RWLock::RLocker l2(m_image_ctx.snap_lock);
-    uint64_t overlap;
-    {
-      RWLock::RLocker l3(m_image_ctx.parent_lock);
+    bufferlist bl;
+    string oid = m_image_ctx.get_object_name(m_object_no);
+    AioWrite *req = new AioWrite(&m_image_ctx, oid, m_object_no, 0, bl, m_snapc,
+                                 this);
+    if (!req->has_parent()) {
       // stop early if the parent went away - it just means
-      // another flatten finished first, so this one is useless.
-      if (!m_image_ctx.parent) {
-        return 1;
-      }
-
-      // resize might have occurred while flatten is running
-      uint64_t parent_overlap;
-      int r = m_image_ctx.get_parent_overlap(CEPH_NOSNAP, &parent_overlap);
-      assert(r == 0);
-      overlap = min(m_image_ctx.size, parent_overlap);
-    }
-
-    // map child object onto the parent
-    vector<pair<uint64_t,uint64_t> > objectx;
-    Striper::extent_to_file(cct, &m_image_ctx.layout, m_object_no,
-			    0, m_object_size, objectx);
-    uint64_t object_overlap = m_image_ctx.prune_parent_extents(objectx, overlap);
-    assert(object_overlap <= m_object_size);
-    if (object_overlap == 0) {
-      // resize shrunk image while flattening
+      // another flatten finished first or the image was resized
+      delete req;
       return 1;
     }
 
-    bufferlist bl;
-    string oid = m_image_ctx.get_object_name(m_object_no);
-    AioWrite *req = new AioWrite(&m_image_ctx, oid, m_object_no, 0, objectx,
-                                 object_overlap, bl, m_snapc, CEPH_NOSNAP,
-                                 this);
     int r = req->send();
     assert(r == 0);
     return 0;
