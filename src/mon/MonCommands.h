@@ -269,6 +269,9 @@ COMMAND("mds dump "
 COMMAND("mds getmap " \
 	"name=epoch,type=CephInt,req=false,range=0", \
 	"get MDS map, optionally from epoch", "mds", "r", "cli,rest")
+COMMAND("mds metadata name=who,type=CephString",
+	"fetch metadata for mds <who>",
+	"mds", "r", "cli,rest")
 COMMAND("mds tell " \
 	"name=who,type=CephString " \
 	"name=args,type=CephString,n=N", \
