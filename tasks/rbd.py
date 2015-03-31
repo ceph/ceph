@@ -289,6 +289,7 @@ def run_xfstests_one_client(ctx, role, properties):
         tests = properties.get('tests')
         randomize = properties.get('randomize')
 
+
         (remote,) = ctx.cluster.only(role).remotes.keys()
 
         # Fetch the test script
@@ -296,13 +297,16 @@ def run_xfstests_one_client(ctx, role, properties):
         test_script = 'run_xfstests_krbd.sh'
         test_path = os.path.join(test_root, test_script)
 
-        git_branch = 'master'
-        test_url = 'https://raw.github.com/ceph/ceph/{branch}/qa/{script}'.format(branch=git_branch, script=test_script)
+        git_branch = properties.get('xfstests_branch', 'master')
+        xfstests_url = properties.get('xfstests_url', 'https://raw.github.com/ceph/ceph/{branch}/qa'.format(branch=git_branch))
+        xfstests_krbd_url = xfstests_url + '/' + test_script
 
-        log.info('Fetching {script} for {role} from {url}'.format(script=test_script,
-                                                                role=role,
-                                                                url=test_url))
-        args = [ 'wget', '-O', test_path, '--', test_url ]
+        log.info('Fetching {script} for {role} from {url}'.format(
+            script=test_script,
+            role=role,
+            url=xfstests_krbd_url))
+
+        args = [ 'wget', '-O', test_path, '--', xfstests_krbd_url ]
         remote.run(args=args)
 
         log.info('Running xfstests on {role}:'.format(role=role))
@@ -319,6 +323,7 @@ def run_xfstests_one_client(ctx, role, properties):
         args = [
             '/usr/bin/sudo',
             'TESTDIR={tdir}'.format(tdir=testdir),
+            'URL_BASE={url}'.format(url=xfstests_url),
             'adjust-ulimits',
             'ceph-coverage',
             '{tdir}/archive/coverage'.format(tdir=testdir),
@@ -366,6 +371,8 @@ def xfstests(ctx, config):
                 fs_type: 'xfs'
                 tests: 'generic/100 xfs/003 xfs/005 xfs/006 generic/015'
                 randomize: true
+                xfstests_branch: master
+                xfstests_url: 'https://raw.github.com/ceph/branch/master/qa'
     """
     if config is None:
         config = { 'all': None }
@@ -423,6 +430,8 @@ def xfstests(ctx, config):
             fs_type=properties.get('fs_type', 'xfs'),
             randomize=properties.get('randomize', False),
             tests=properties.get('tests'),
+            xfstests_url=properties.get('xfstests_url'),
+            xfstests_branch=properties.get('xfstests_branch')
             )
 
         log.info('Setting up xfstests using RBD images:')
