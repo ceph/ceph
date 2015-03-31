@@ -159,6 +159,8 @@ public:
     cct(c),
     logger(NULL),
     path(path),
+    filterpolicy(NULL),
+    db(NULL),
     compact_queue_lock("RocksDBStore::compact_thread_lock"),
     compact_queue_stop(false),
     compact_thread(this),
