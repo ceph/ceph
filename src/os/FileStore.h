@@ -96,7 +96,6 @@ public:
     return target_version;
   }
 
-  bool need_journal() { return true; }
   int peek_journal_fsid(uuid_d *fsid);
 
   struct FSPerfTracker {
@@ -423,6 +422,15 @@ public:
   }
   int mkfs();
   int mkjournal();
+  bool wants_journal() {
+    return true;
+  }
+  bool allows_journal() {
+    return true;
+  }
+  bool needs_journal() {
+    return false;
+  }
 
   int write_version_stamp();
   int version_stamp_is_valid(uint32_t *version);

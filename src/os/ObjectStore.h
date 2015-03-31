@@ -1761,20 +1761,15 @@ public:
   virtual unsigned get_max_attr_name_length() = 0;
   virtual int mkfs() = 0;  // wipe
   virtual int mkjournal() = 0; // journal only
+  virtual bool needs_journal() = 0;  //< requires a journal
+  virtual bool wants_journal() = 0;  //< prefers a journal
+  virtual bool allows_journal() = 0; //< allows a journal
   virtual void set_allow_sharded_objects() = 0;
   virtual bool get_allow_sharded_objects() = 0;
 
   virtual int statfs(struct statfs *buf) = 0;
 
   virtual void collect_metadata(map<string,string> *pm) { }
-
-  /**
-   * check whether need journal device
-   *
-   * It's not constant for backend store. FileStore could have journaless mode
-   * and KeyValueStore could have journal device for special backend.
-   */
-  virtual bool need_journal() = 0;
 
   /**
    * check the journal uuid/fsid, without opening
