@@ -66,7 +66,6 @@ CLEANFILES += $(shell_scripts)
 # extra bits
 
 EXTRA_DIST += \
-	$(srcdir)/verify-mds-journal.sh \
 	$(srcdir)/vstart.sh \
 	$(srcdir)/stop.sh \
 	ceph-run \
