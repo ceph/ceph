@@ -3329,7 +3329,7 @@ bool Client::_flush(Inode *in, Context *onfinish)
     return true;
   }
 
-  if (objecter->osdmap_full_flag()) {
+  if (objecter->osdmap_pool_full(in->layout.fl_pg_pool)) {
     ldout(cct, 1) << __func__ << ": FULL, purging for ENOSPC" << dendl;
     objectcacher->purge_set(&in->oset);
     if (onfinish) {
@@ -7353,12 +7353,12 @@ int Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf)
   if ((uint64_t)(offset+size) > mdsmap->get_max_filesize()) //too large!
     return -EFBIG;
 
-  if (objecter->osdmap_full_flag()) {
-    return -ENOSPC;
-  }
-
   //ldout(cct, 7) << "write fh " << fh << " size " << size << " offset " << offset << dendl;
   Inode *in = f->inode;
+
+  if (objecter->osdmap_pool_full(in->layout.fl_pg_pool)) {
+    return -ENOSPC;
+  }
 
   assert(in->snapid == CEPH_NOSNAP);
 
@@ -10125,10 +10125,12 @@ int Client::_fallocate(Fh *fh, int mode, int64_t offset, int64_t length)
   if ((mode & FALLOC_FL_PUNCH_HOLE) && !(mode & FALLOC_FL_KEEP_SIZE))
     return -EOPNOTSUPP;
 
-  if (objecter->osdmap_full_flag() && !(mode & FALLOC_FL_PUNCH_HOLE))
-    return -ENOSPC;
-
   Inode *in = fh->inode;
+
+  if (objecter->osdmap_pool_full(in->layout.fl_pg_pool)
+      && !(mode & FALLOC_FL_PUNCH_HOLE)) {
+    return -ENOSPC;
+  }
 
   if (in->snapid != CEPH_NOSNAP)
     return -EROFS;
