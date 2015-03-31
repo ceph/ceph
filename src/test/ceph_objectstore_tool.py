@@ -124,10 +124,10 @@ def cat_file(level, filename):
     print "<EOF>"
 
 
-def vstart(new):
+def vstart(new, opt=""):
     print "vstarting....",
-    OPT = new and "-n" or ""
-    call("MON=1 OSD=4 CEPH_PORT=7400 ./vstart.sh -l {opt} -d mon osd > /dev/null 2>&1".format(opt=OPT), shell=True)
+    NEW = new and "-n" or ""
+    call("MON=1 OSD=4 CEPH_PORT=7400 ./vstart.sh -l {new} -d mon osd {opt} > /dev/null 2>&1".format(new=NEW, opt=opt), shell=True)
     print "DONE"
 
 
