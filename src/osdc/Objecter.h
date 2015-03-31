@@ -1993,6 +1993,15 @@ private:
   friend class C_CancelOp;
 public:
   int op_cancel(ceph_tid_t tid, int r);
+
+  /**
+   * Any write op which is in progress at the start of this call shall no
+   * longer be in progress when this call ends.  Operations started after the
+   * start of this call may still be in progress when this call ends.
+   *
+   * @return the latest possible epoch in which a cancelled op could have
+   *         existed, or -1 if nothing was cancelled.
+   */
   epoch_t op_cancel_writes(int r, int64_t pool=-1);
 
   // commands
