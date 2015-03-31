@@ -1519,8 +1519,9 @@ bool Locker::xlock_start(SimpleLock *lock, MDRequestRef& mut)
 	}
       }
 
-      if (!lock->is_stable() && !(lock->get_state() == LOCK_XLOCKDONE &&
-				  lock->get_xlock_by_client() == client))
+      if (!lock->is_stable() && (lock->get_state() != LOCK_XLOCKDONE ||
+				 lock->get_xlock_by_client() != client ||
+				 lock->is_waiter_for(SimpleLock::WAIT_STABLE)))
 	break;
 
       if (lock->get_state() == LOCK_LOCK || lock->get_state() == LOCK_XLOCKDONE) {
