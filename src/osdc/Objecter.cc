@@ -2299,7 +2299,7 @@ start:
  *
  * @return the latest possible epoch in which a cancelled op could have existed
  */
-epoch_t Objecter::op_cancel_writes(int r)
+epoch_t Objecter::op_cancel_writes(int r, int64_t pool)
 {
   rwlock.get_write();
 
@@ -2310,7 +2310,8 @@ epoch_t Objecter::op_cancel_writes(int r)
     OSDSession *s = siter->second;
     s->lock.get_read();
     for (map<ceph_tid_t, Op*>::iterator op_i = s->ops.begin(); op_i != s->ops.end(); ++op_i) {
-      if (op_i->second->target.flags & CEPH_OSD_FLAG_WRITE) {
+      if (op_i->second->target.flags & CEPH_OSD_FLAG_WRITE
+        && (pool == -1 || op_i->second->target.target_oloc.pool == pool)) {
         to_cancel.push_back(op_i->first);
       }
     }

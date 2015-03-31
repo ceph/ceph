@@ -2011,7 +2011,7 @@ private:
   friend class C_CancelOp;
 public:
   int op_cancel(ceph_tid_t tid, int r);
-  epoch_t op_cancel_writes(int r);
+  epoch_t op_cancel_writes(int r, int64_t pool=-1);
 
   // commands
   int osd_command(int osd, vector<string>& cmd,
