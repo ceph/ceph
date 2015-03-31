@@ -2687,6 +2687,7 @@ int main(int argc, const char **argv)
   env_to_vec(args);
 
   int opt_cmd = OPT_NO_CMD;
+  int invalid_count = 0;
   global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
 
   const char *poolname = NULL;
@@ -3065,25 +3066,27 @@ if (!set_conf_param(v, p1, p2, p3)) { \
   set_pool_image_name(imgname, (char **)&poolname,
 		      (char **)&imgname, (char **)&snapname);
 
-  if(!is_valid_name(poolname) || !is_valid_name(snapname) || !is_valid_name(imgname)) {
-    if(!is_valid_name(poolname) && !is_valid_name(snapname) && !is_valid_name(imgname)) 
-	cerr << "rbd: The pool, image and snap names are invalid"<<std::endl;
-    else if(!is_valid_name(poolname) && !is_valid_name(imgname)) 
-	cerr << "rbd: The pool and image names are invalid"<<std::endl;
-    else if(!is_valid_name(poolname) && !is_valid_name(snapname))
- 	cerr << "rbd: The pool and snap names are invalid"<<std::endl;
-    else if(!is_valid_name(snapname) && !is_valid_name(imgname))
-	cerr << "rbd: The snap and image names are invalid"<<std::endl;
-    else if(!is_valid_name(poolname))
-	cerr << "rbd: The pool name is invalid"<<std::endl;
-    else if(!is_valid_name(imgname))
-	cerr << "rbd: The image name is invalid"<<std::endl;
-    else if(!is_valid_name(snapname))
-	cerr << "rbd: The snap name is invalid"<<std::endl;
 
+  if(!is_valid_name(poolname)) 
+    invalid_count++;
+  
+  if(!is_valid_name(snapname)) 
+    invalid_count++;
 
-      return EXIT_FAILURE;
+  if(!is_valid_name(imgname)) 
+    invalid_count++;
+  
+
+  if(invalid_count > 0) {
+    if(invalid_count == 3)
+      cerr << "rbd: The pool, image and snap names are invalid"<<std::endl;
+    else if(invalid_count == 2)
+      cerr <<"rbd: The pool/image/snap names are invalid"<<std::endl;
+    else if(invalid_count == 1)
+      cerr <<"rbd: The pool/image/snap name is invalid"<<std::endl;
+    return EXIT_FAILURE;
   }
+ 
 
   
   if (snapname && opt_cmd != OPT_SNAP_CREATE && opt_cmd != OPT_SNAP_ROLLBACK &&
@@ -3107,24 +3110,26 @@ if (!set_conf_param(v, p1, p2, p3)) { \
   set_pool_image_name(destname, (char **)&dest_poolname,
 		      (char **)&destname, (char **)&dest_snapname);
 
+  invalid_count = 0;
 
-  if(!is_valid_name(dest_poolname) || !is_valid_name(destname) || !is_valid_name(dest_snapname)) {
-     if(!is_valid_name(dest_poolname) && !is_valid_name(destname) && !is_valid_name(dest_snapname))
-         cerr << "rbd: The destination pool, image and snap names are invalid"<<std::endl;
-     else if(!is_valid_name(dest_poolname) && !is_valid_name(destname))
-         cerr << "rbd: The destination pool and image names are invalid"<<std::endl;
-     else if(!is_valid_name(dest_poolname) && !is_valid_name(dest_snapname))
-         cerr << "rbd: The destination pool and snap names are invalid"<<std::endl;
-     else if(!is_valid_name(dest_snapname) && !is_valid_name(destname))
-         cerr << "rbd: The destination snap and image names are invalid"<<std::endl;
-     else if(!is_valid_name(dest_poolname))
-         cerr << "rbd: The destination pool name is invalid"<<std::endl;
-     else if(!is_valid_name(destname))
-         cerr << "rbd: The destination image name is invalid"<<std::endl;
-     else if(!is_valid_name(dest_snapname))
-         cerr << "rbd: The destination snap name is invalid"<<std::endl;
+  if(!is_valid_name(dest_poolname))
+    invalid_count++;
 
-     return EXIT_FAILURE;
+  if(!is_valid_name(destname))
+    invalid_count++;
+
+  if(!is_valid_name(dest_snapname))
+    invalid_count++;
+
+
+  if(invalid_count > 0) {
+    if(invalid_count == 3)
+      cerr << "rbd: The destination pool, image and snap names are invalid"<<std::endl;
+    else if(invalid_count == 2)
+      cerr <<"rbd: The destination pool/image/snap names are invalid"<<std::endl;
+    else if(invalid_count == 1)
+      cerr <<"rbd: The destination pool/image/snap name is invalid"<<std::endl;
+    return EXIT_FAILURE;
   }
 
 
