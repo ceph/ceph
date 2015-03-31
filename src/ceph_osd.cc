@@ -61,10 +61,19 @@ void handle_osd_signal(int signum)
 
 void usage() 
 {
-  derr << "usage: ceph-osd -i osdid [--osd-data=path] [--osd-journal=path] "
-       << "[--mkfs] [--mkjournal] [--convert-filestore]" << dendl;
-  derr << "   --debug_osd N   set debug level (e.g. 10)" << dendl;
+  cout << "usage: ceph-osd -i <osdid>\n"
+       << "  --osd-data=path   data directory\n"
+       << "  --osd-journal=path\n"
+       << "                    journal file or block device\n"
+       << "  --mkfs            create a [new] data directory\n"
+       << "  --convert-filestore\n"
+       << "                    run any pending upgrade operations\n"
+       << "  --flush-journal   flush all data out of journal\n"
+       << "  --mkjournal       initialize a new journal\n"
+       << "  --debug_osd N     set debug level (e.g. 10)"
+       << std::endl;
   generic_server_usage();
+  cout.flush();
 }
 
 int preload_erasure_code()
