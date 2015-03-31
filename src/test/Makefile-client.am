@@ -291,7 +291,8 @@ unittest_librbd_LDADD = \
 	librados_test_stub.la librados_internal.la \
 	$(LIBOSDC) $(UNITTEST_LDADD) \
 	$(CEPH_GLOBAL) $(RADOS_TEST_LDADD)
-check_PROGRAMS += unittest_librbd
+noinst_PROGRAMS += unittest_librbd
+check_SCRIPTS += test/run-rbd-unit-tests.sh
 
 ceph_test_librbd_SOURCES =
 nodist_EXTRA_ceph_test_librbd_SOURCES = dummy.cc
