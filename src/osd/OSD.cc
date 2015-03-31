@@ -6173,8 +6173,6 @@ void OSD::handle_osd_map(MOSDMap *m)
  
   map_lock.get_write();
 
-  C_Contexts *fin = new C_Contexts(cct);
-
   // advance through the new maps
   for (epoch_t cur = start; cur <= superblock.newest_map; cur++) {
     dout(10) << " advance to epoch " << cur << " (<= newest " << superblock.newest_map << ")" << dendl;
@@ -6204,7 +6202,7 @@ void OSD::handle_osd_map(MOSDMap *m)
     osdmap = newmap;
 
     superblock.current_epoch = cur;
-    advance_map(t, fin);
+    advance_map();
     had_map_since = ceph_clock_now(cct);
   }
 
@@ -6308,7 +6306,7 @@ void OSD::handle_osd_map(MOSDMap *m)
     0,
     _t,
     new C_OnMapApply(&service, _t, pinned_maps, osdmap->get_epoch()),
-    0, fin);
+    0, 0);
   service.publish_superblock(superblock);
 
   map_lock.put_write();
@@ -6475,10 +6473,9 @@ bool OSD::advance_pg(
 }
 
 /** 
- * scan placement groups, initiate any replication
- * activities.
+ * update service map; check pg creations
  */
-void OSD::advance_map(ObjectStore::Transaction& t, C_Contexts *tfin)
+void OSD::advance_map()
 {
   assert(osd_lock.is_locked());
 
