@@ -314,10 +314,6 @@ static int bucket_straw2_choose(struct crush_bucket_straw2 *bucket,
 		u &= 0xffff;
 
 		/*
-		 * for some reason slightly less than 0x10000 produces
-		 * a slightly more accurate distribution... probably a
-		 * rounding effect.
-		 *
 		 * the natural log lookup table maps [0,0xffff]
 		 * (corresponding to real numbers [1/0x10000, 1] to
 		 * [0, 0xffffffffffff] (corresponding to real numbers

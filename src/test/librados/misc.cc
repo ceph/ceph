@@ -713,6 +713,12 @@ TEST_F(LibRadosMiscPP, CopyScrubPP) {
   ASSERT_EQ(0, ioctx.omap_set_header("big3", x));
   ASSERT_EQ(0, ioctx.omap_set("big3", to_set));
 
+  // big append
+  cbl = bl;
+  ASSERT_EQ(0, ioctx.write_full("big4", cbl));
+  cbl = bl;
+  ASSERT_EQ(0, ioctx.append("big4", cbl, cbl.length()));
+
   // deep scrub to ensure digests are in place
   {
     for (int i=0; i<10; ++i) {
@@ -751,6 +757,12 @@ TEST_F(LibRadosMiscPP, CopyScrubPP) {
     ObjectWriteOperation op;
     op.copy_from("big3", ioctx, 0);
     ASSERT_EQ(0, ioctx.operate("big3.copy", &op));
+  }
+
+  {
+    ObjectWriteOperation op;
+    op.copy_from("big4", ioctx, 0);
+    ASSERT_EQ(0, ioctx.operate("big4.copy", &op));
   }
 
   // deep scrub to ensure digests are correct
