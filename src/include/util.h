@@ -79,4 +79,10 @@ int get_fs_stats(ceph_data_stats_t &stats, const char *path);
 /// collect info from @p uname(2), @p /proc/meminfo and @p /proc/cpuinfo
 void collect_sys_info(map<string, string> *m, CephContext *cct);
 
+/// dump service ids grouped by their host to the specified formatter
+/// @param f formatter for the output
+/// @param services a map from hostname to a list of service id hosted by this host
+/// @param type the service type of given @p services, for example @p osd or @p mon.
+void dump_services(Formatter* f, const map<string, list<int> >& services, const char* type);
+
 #endif /* CEPH_UTIL_H */

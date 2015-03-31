@@ -235,3 +235,21 @@ void collect_sys_info(map<string, string> *m, CephContext *cct)
   // distro info
   lsb_release_parse(m, cct);
 }
+
+void dump_services(Formatter* f, const map<string, list<int> >& services, const char* type)
+{
+  assert(f);
+
+  f->open_object_section(type);
+  for (map<string, list<int> >::const_iterator host = services.begin();
+       host != services.end(); ++host) {
+    f->open_array_section(host->first.c_str());
+    const list<int>& hosted = host->second;
+    for (list<int>::const_iterator s = hosted.begin();
+	 s != hosted.end(); ++s) {
+      f->dump_int(type, *s);
+    }
+    f->close_section();
+  }
+  f->close_section();
+}

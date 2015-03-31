@@ -1792,6 +1792,34 @@ int MDSMonitor::dump_metadata(const std::string &who, Formatter *f, ostream& err
   return 0;
 }
 
+int MDSMonitor::print_nodes(Formatter *f)
+{
+  assert(f);
+
+  map<mds_gid_t, Metadata> metadata;
+  if (int r = load_metadata(metadata)) {
+    return r;
+  }
+
+  map<string, list<int> > mdses; // hostname => rank
+  for (map<mds_gid_t, Metadata>::iterator it = metadata.begin();
+       it != metadata.end(); ++it) {
+    const Metadata& m = it->second;
+    Metadata::const_iterator hostname = m.find("hostname");
+    if (hostname == m.end()) {
+      // not likely though
+      continue;
+    }
+    const mds_gid_t gid = it->first;
+    assert(mdsmap.get_state_gid(gid) != MDSMap::STATE_NULL);
+    const MDSMap::mds_info_t& mds_info = mdsmap.get_info_gid(gid);
+    mdses[hostname->second].push_back(mds_info.rank);
+  }
+
+  dump_services(f, mdses, "mds");
+  return 0;
+}
+
 void MDSMonitor::tick()
 {
   // make sure mds's are still alive

@@ -386,6 +386,8 @@ private:
   bool preprocess_remove_snaps(struct MRemoveSnaps *m);
   bool prepare_remove_snaps(struct MRemoveSnaps *m);
 
+  int load_metadata(int osd, map<string, string>& m, ostream *err);
+
  public:
   OSDMonitor(Monitor *mn, Paxos *p, string service_name)
   : PaxosService(mn, p, service_name),
@@ -418,6 +420,7 @@ private:
 
   void dump_info(Formatter *f);
   int dump_osd_metadata(int osd, Formatter *f, ostream *err);
+  void print_nodes(Formatter *f);
 
   void check_subs();
   void check_sub(Subscription *sub);

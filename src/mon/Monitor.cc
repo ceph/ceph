@@ -2844,6 +2844,28 @@ void Monitor::handle_command(MMonCommand *m)
     ss2 << "report " << rdata.crc32c(6789);
     rs = ss2.str();
     r = 0;
+  } else if (prefix == "node ls") {
+    string node_type("all");
+    cmd_getval(g_ceph_context, cmdmap, "type", node_type);
+    if (!f)
+      f.reset(Formatter::create("json-pretty"));
+    if (node_type == "all") {
+      f->open_object_section("nodes");
+      print_nodes(f.get(), ds);
+      osdmon()->print_nodes(f.get());
+      mdsmon()->print_nodes(f.get());
+      f->close_section();
+    } else if (node_type == "mon") {
+      print_nodes(f.get(), ds);
+    } else if (node_type == "osd") {
+      osdmon()->print_nodes(f.get());
+    } else if (node_type == "mds") {
+      mdsmon()->print_nodes(f.get());
+    }
+    f->flush(ds);
+    rdata.append(ds);
+    rs = "";
+    r = 0;
   } else if (prefix == "mon_metadata") {
     string name;
     cmd_getval(g_ceph_context, cmdmap, "id", name);
@@ -4268,6 +4290,30 @@ int Monitor::get_mon_metadata(int mon, Formatter *f, ostream& err)
   for (Metadata::const_iterator p = m.begin(); p != m.end(); ++p) {
     f->dump_string(p->first.c_str(), p->second);
   }
+  return 0;
+}
+
+int Monitor::print_nodes(Formatter *f, ostream& err)
+{
+  map<int, Metadata> metadata;
+  if (int r = load_metadata(metadata)) {
+    err << "Unable to load metadata.\n";
+    return r;
+  }
+
+  map<string, list<int> > mons;	// hostname => mon
+  for (map<int, Metadata>::iterator it = metadata.begin();
+       it != metadata.end(); ++it) {
+    const Metadata& m = it->second;
+    Metadata::const_iterator hostname = m.find("hostname");
+    if (hostname == m.end()) {
+      // not likely though
+      continue;
+    }
+    mons[hostname->second].push_back(it->first);
+  }
+
+  dump_services(f, mons, "mon");
   return 0;
 }
 

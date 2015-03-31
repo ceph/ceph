@@ -655,6 +655,7 @@ public:
 
   void handle_mon_metadata(MMonMetadata *m);
   int get_mon_metadata(int mon, Formatter *f, ostream& err);
+  int print_nodes(Formatter *f, ostream& err);
   map<int, Metadata> metadata;
 
   /**
