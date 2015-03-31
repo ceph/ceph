@@ -299,7 +299,7 @@ def main(argv):
     sys.stdout = os.fdopen(sys.stdout.fileno(), 'w', 0)
     nullfd = open(os.devnull, "w")
 
-    call("rm -fr ceph_objectstore_tool_dir ; mkdir ceph_objectstore_tool_dir", shell=True)
+    call("rm -fr {dir}; mkdir {dir}".format(dir=CEPH_DIR), shell=True)
     os.environ["CEPH_DIR"] = CEPH_DIR
     OSDDIR = os.path.join(CEPH_DIR, "dev")
     REP_POOL = "rep_pool"
@@ -1033,5 +1033,5 @@ if __name__ == "__main__":
         status = main(sys.argv[1:])
     finally:
         kill_daemons()
-        call("/bin/rm -fr ceph_objectstore_tool_dir", shell=True)
+        call("/bin/rm -fr {dir}".format(dir=CEPH_DIR), shell=True)
     sys.exit(status)
