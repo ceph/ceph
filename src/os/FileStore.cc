@@ -426,6 +426,9 @@ int FileStore::lfn_link(coll_t c, coll_t newcid, const ghobject_t& o, const ghob
     if (r < 0)
       return -errno;
 
+    // make sure old fd for unlinked/overwritten file is gone
+    fdcache.clear(newoid);
+
     r = index_new->created(newoid, path_new->path());
     if (r < 0) {
       assert(!m_filestore_fail_eio || r != -EIO);
