@@ -131,6 +131,7 @@ public:
 
   void dump_info(Formatter *f);
   int dump_metadata(const string& who, Formatter *f, ostream& err);
+  int print_nodes(Formatter *f);
 
   void check_subs();
   void check_sub(Subscription *sub);
