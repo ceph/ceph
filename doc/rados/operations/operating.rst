@@ -156,7 +156,7 @@ include:
 Running Ceph with sysvinit
 --------------------------
 
-Using traditional ``sysvinit`` is the recommended way to run  Ceph with CentOS,
+Using traditional ``sysvinit`` is the recommended way to run  Ceph with CentOS,
 Red Hat, Fedora, Debian and SLES distributions. You may also use it for older
 distributions of Ubuntu.
 
@@ -328,7 +328,7 @@ Starting a Daemon
 ~~~~~~~~~~~~~~~~~
 
 To start a Ceph daemon on the local Ceph Node,  use the following syntax::
-
+
 	sudo service ceph start {daemon-type}.{instance}
 	sudo service ceph start osd.0
 
@@ -352,7 +352,29 @@ To stop a Ceph daemon on another node, use the following syntax::
 	sudo service ceph -a stop osd.0
 
 
+Stopping an Entire Cluster
+==========================
 
+To stop an entire ceph cluster (for example, if you must physically move
+hosts in a data center) first set the noout flag to prevent OSDs from being
+removed::
+	
+	ceph osd set noout
+
+Then shutdown all the services in your cluster in the manner appropriate for your platform.
+
+.. note:: Ceph is known to complain in small ways when coming up after a complete shutdown.
+	It's behaviors in this case are not well validated at this point. Nothing should
+	go really wrong, but there may be some irritations associated with this operation.
+	One example of such behavior is OSD heartbeats getting missed even though everything
+	seems correct, apparently pointing to a low-level networking problem. This will most
+	often happen on the first OSDs that are brought back online. After starting back up,
+	if anything seems amiss, restart the daemons that are misbehaving and their behavior
+	should return to normal.
+	
+Once the cluster is back up, don't forget to unset noout::
+	
+	ceph osd unset noout
 
 .. _Valgrind: http://www.valgrind.org/
 .. _Upstart: http://upstart.ubuntu.com/index.html
