@@ -482,6 +482,14 @@ protected:
   list<Cond*> waiting_for_pool_perm;
   int check_pool_perm(Inode *in, int need);
 
+  /**
+   * Call this when an OSDMap is seen with a full flag (global or per pool)
+   * set.
+   *
+   * @param pool the pool ID affected, or -1 if all.
+   */
+  void _handle_full_flag(int64_t pool);
+
  public:
   void set_filer_flags(int flags);
   void clear_filer_flags(int flags);

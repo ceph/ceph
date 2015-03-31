@@ -2091,37 +2091,66 @@ void Client::handle_client_reply(MClientReply *reply)
     mount_cond.Signal();
 }
 
+void Client::_handle_full_flag(int64_t pool)
+{
+  ldout(cct, 1) << __func__ << ": FULL: cancelling outstanding operations "
+    << "on " << pool << dendl;
+  // Cancel all outstanding ops with -ENOSPC: it is necessary to do this rather
+  // than blocking, because otherwise when we fill up we potentially lock caps
+  // forever on files with dirty pages, and we need to be able to release
+  // those caps to the MDS so that it can delete files and free up space.
+  epoch_t cancelled_epoch = objecter->op_cancel_writes(-ENOSPC, pool);
+
+  // For all inodes with a pending flush write op (i.e. one of the ones we
+  // will cancel), we've got to purge_set their data from ObjectCacher
+  // so that it doesn't re-issue the write in response to the ENOSPC error.
+  // Fortunately since we're cancelling *everything*, we don't need to know
+  // which ops belong to which ObjectSet, we can just blow all the un-flushed
+  // cached data away and mark any dirty inodes' async_err field with -ENOSPC
+  // (i.e. we only need to know which inodes had outstanding ops, not the exact
+  // op-to-inode relation)
+  for (unordered_map<vinodeno_t,Inode*>::iterator i = inode_map.begin();
+       i != inode_map.end(); ++i)
+  {
+    Inode *inode = i->second;
+    if (inode->oset.dirty_or_tx
+        && (pool == -1 || inode->layout.fl_pg_pool == pool)) {
+      ldout(cct, 4) << __func__ << ": FULL: inode 0x" << std::hex << i->first << std::dec
+        << " has dirty objects, purging and setting ENOSPC" << dendl;
+      objectcacher->purge_set(&inode->oset);
+      inode->async_err = -ENOSPC;
+    }
+  }
+
+  if (cancelled_epoch != (epoch_t)-1) {
+    set_cap_epoch_barrier(cancelled_epoch);
+  }
+}
+
 void Client::handle_osd_map(MOSDMap *m)
 {
   if (objecter->osdmap_full_flag()) {
-    ldout(cct, 1) << __func__ << ": FULL: cancelling outstanding operations" << dendl;
-    // Cancel all outstanding ops with -ENOSPC: it is necessary to do this rather than blocking,
-    // because otherwise when we fill up we potentially lock caps forever on files with
-    // dirty pages, and we need to be able to release those caps to the MDS so that it can
-    // delete files and free up space.
-    epoch_t cancelled_epoch = objecter->op_cancel_writes(-ENOSPC);
+    _handle_full_flag(-1);
+  } else {
+    // Accumulate local list of full pools so that I can drop
+    // the OSDMap lock before handling them.
+    std::vector<int64_t> full_pools;
 
-    // For all inodes with a pending flush write op (i.e. one of the ones we
-    // will cancel), we've got to purge_set their data from ObjectCacher
-    // so that it doesn't re-issue the write in response to the ENOSPC error.
-    // Fortunately since we're cancelling *everything*, we don't need to know
-    // which ops belong to which ObjectSet, we can just blow all the un-flushed
-    // cached data away and mark any dirty inodes' async_err field with -ENOSPC
-    // (i.e. we only need to know which inodes had outstanding ops, not the exact
-    // op-to-inode relation)
-    for (unordered_map<vinodeno_t,Inode*>::iterator i = inode_map.begin();
-         i != inode_map.end(); ++i)
-    {
-      Inode *inode = i->second;
-      if (inode->oset.dirty_or_tx) {
-        ldout(cct, 4) << __func__ << ": FULL: inode 0x" << std::hex << i->first << std::dec
-          << " has dirty objects, purging and setting ENOSPC" << dendl;
-        objectcacher->purge_set(&inode->oset);
-        inode->async_err = -ENOSPC;
+    const OSDMap *osd_map = objecter->get_osdmap_read();
+    const map<int64_t,pg_pool_t>& pools = osd_map->get_pools();
+    for (map<int64_t,pg_pool_t>::const_iterator i = pools.begin();
+         i != pools.end(); ++i) {
+      if (i->second.has_flag(pg_pool_t::FLAG_FULL)) {
+        full_pools.push_back(i->first);
       }
     }
 
-    set_cap_epoch_barrier(cancelled_epoch);
+    objecter->put_osdmap_read();
+
+    for (std::vector<int64_t>::iterator i = full_pools.begin();
+         i != full_pools.end(); ++i) {
+      _handle_full_flag(*i);
+    }
   }
 
   m->put();
