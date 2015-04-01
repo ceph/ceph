@@ -120,6 +120,7 @@ SUBSYS(asok, 1, 5)
 SUBSYS(throttle, 1, 1)
 SUBSYS(refs, 0, 0)
 SUBSYS(xio, 1, 5)
+SUBSYS(newstore, 1, 5)
 
 OPTION(key, OPT_STR, "")
 OPTION(keyfile, OPT_STR, "")
@@ -753,6 +754,16 @@ OPTION(osd_bench_max_block_size, OPT_U64, 64 << 20) // cap the block size at 64M
 OPTION(osd_bench_duration, OPT_U32, 30) // duration of 'osd bench', capped at 30s to avoid triggering timeouts
 
 OPTION(memstore_device_bytes, OPT_U64, 1024*1024*1024)
+
+OPTION(newstore_max_dir_size, OPT_U32, 1000000)
+OPTION(newstore_onode_map_size, OPT_U32, 1024)   // onodes per collection
+OPTION(newstore_backend, OPT_STR, "rocksdb")
+OPTION(newstore_fail_eio, OPT_BOOL, true)
+OPTION(newstore_sync_queue_transaction, OPT_BOOL, false)  // perform write synchronously from queue_transaction
+OPTION(newstore_fsync_threads, OPT_INT, 16)  // num threads calling fsync
+OPTION(newstore_fsync_thread_timeout, OPT_INT, 30) // thread timeout value
+OPTION(newstore_fsync_thread_suicide_timeout, OPT_INT, 120) // suicide timeout value
+OPTION(newstore_fid_prealloc, OPT_INT, 1024)
 
 OPTION(filestore_omap_backend, OPT_STR, "leveldb")
 

@@ -171,6 +171,9 @@ case $1 in
     --memstore )
 	    memstore=1
 	    ;;
+    --newstore )
+	    newstore=1
+	    ;;
     --hitset )
 	    hitset="$hitset $2 $3"
 	    shift
@@ -268,6 +271,10 @@ fi
 if [ "$memstore" -eq 1 ]; then
     COSDMEMSTORE='
 	osd objectstore = memstore'
+fi
+if [ "$newstore" -eq 1 ]; then
+    COSDMEMSTORE='
+	osd objectstore = newstore'
 fi
 
 # lockdep everywhere?
