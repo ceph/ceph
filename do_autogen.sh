@@ -29,8 +29,8 @@ die() {
 debug_level=0
 verbose=0
 profile=0
-CONFIGURE_FLAGS=""
-while getopts  "d:e:hHTPjpnvO:" flag
+CONFIGURE_FLAGS="--with-lttng"
+while getopts  "d:e:hHTPLjpnvO:" flag
 do
     case $flag in
     d) debug_level=$OPTARG;;
@@ -52,6 +52,8 @@ do
     v) verbose=1;;
 
     e) encode_dump=$OPTARG;;
+
+    L) CONFIGURE_FLAGS="$CONFIGURE_FLAGS --without-lttng";;
 
     *)
         echo
