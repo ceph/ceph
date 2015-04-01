@@ -1251,7 +1251,7 @@ int MemStore::_omap_rmkeyrange(coll_t cid, const ghobject_t &oid,
   ObjectRef o = c->get_object(oid);
   if (!o)
     return -ENOENT;
-  map<string,bufferlist>::iterator p = o->omap.upper_bound(first);
+  map<string,bufferlist>::iterator p = o->omap.lower_bound(first);
   map<string,bufferlist>::iterator e = o->omap.lower_bound(last);
   while (p != e)
     o->omap.erase(p++);
