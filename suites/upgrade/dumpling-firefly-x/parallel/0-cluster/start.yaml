@@ -6,6 +6,7 @@ overrides:
     log-whitelist:
       - scrub mismatch
       - ScrubResult
+      - failed to encode map
 roles:
 - - mon.a
   - mds.a

@@ -3,6 +3,8 @@ overrides:
     conf:
       mon:
         mon warn on legacy crush tunables: false
+    log-whitelist:
+    - failed to encode map
 roles:
 - - mon.a
   - mon.b
