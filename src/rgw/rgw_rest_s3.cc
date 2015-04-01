@@ -1438,6 +1438,19 @@ done:
   rgw_flush_formatter_and_reset(s, s->formatter);
 }
 
+int RGWDeleteObj_ObjStore_S3::get_params()
+{
+  const char *if_unmod = s->info.env->get("HTTP_X_AMZ_DELETE_IF_UNMODIFIED_SINCE");
+
+  if (if_unmod) {
+    if (parse_time(if_unmod, &unmod_since) < 0) {
+      ldout(s->cct, 10) << "failed to parse time: " << if_unmod << dendl;
+      return -EINVAL;
+    }
+  }
+
+  return 0;
+}
 
 void RGWDeleteObj_ObjStore_S3::send_response()
 {
