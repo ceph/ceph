@@ -2155,6 +2155,14 @@ void Client::handle_osd_map(MOSDMap *m)
          i != full_pools.end(); ++i) {
       _handle_full_flag(*i);
     }
+
+    // Subscribe to subsequent maps to watch for the full flag going
+    // away.  For the global full flag objecter does this for us, but
+    // it pays no attention to the per-pool full flag so in this branch
+    // we do it ourselves.
+    if (!full_pools.empty()) {
+      objecter->maybe_request_map();
+    }
   }
 
   m->put();
