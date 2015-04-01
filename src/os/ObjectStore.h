@@ -144,8 +144,8 @@ public:
      * Async flush_commit
      *
      * There are two cases:
-     * 1) sequencer is currently idle: the method returns true and
-     *    c is deleted
+     * 1) sequencer is currently idle: the method returns true.  c is
+     *    not touched.
      * 2) sequencer is not idle: the method returns false and c is
      *    called asyncronously with a value of 0 once all transactions
      *    queued on this sequencer prior to the call have been applied
@@ -185,7 +185,6 @@ public:
     /// @see Sequencer_impl::flush_commit()
     bool flush_commit(Context *c) {
       if (!p) {
-	delete c;
 	return true;
       } else {
 	return p->flush_commit(c);
