@@ -596,9 +596,8 @@ def main(argv):
     print "Test --op list variants"
 
     # retrieve all objects from all PGs
-    cmd = (CFSD_PREFIX + "--op list --format json").format(osd=osd)
-    logging.debug(cmd)
     tmpfd = open(TMPFILE, "w")
+    cmd = (CFSD_PREFIX + "--op list --format json").format(osd=osd)
     logging.debug(cmd)
     ret = call(cmd, shell=True, stdout=tmpfd)
     if ret != 0:
@@ -610,9 +609,8 @@ def main(argv):
     (pgid, jsondict) = json.loads(JSONOBJ[0])[0]
 
     # retrieve all objects in a given PG
-    cmd = (CFSD_PREFIX + "--op list --pgid {pg} --format json").format(osd=osd, pg=pgid)
-    logging.debug(cmd)
     tmpfd = open(OTHERFILE, "a")
+    cmd = (CFSD_PREFIX + "--op list --pgid {pg} --format json").format(osd=osd, pg=pgid)
     logging.debug(cmd)
     ret = call(cmd, shell=True, stdout=tmpfd)
     if ret != 0:
@@ -629,9 +627,8 @@ def main(argv):
         ERRORS += 1
 
     # retrieve all objects with a given name in a given PG
-    cmd = (CFSD_PREFIX + "--op list --pgid {pg} {object} --format json").format(osd=osd, pg=pgid, object=jsondict['oid'])
-    logging.debug(cmd)
     tmpfd = open(OTHERFILE, "w")
+    cmd = (CFSD_PREFIX + "--op list --pgid {pg} {object} --format json").format(osd=osd, pg=pgid, object=jsondict['oid'])
     logging.debug(cmd)
     ret = call(cmd, shell=True, stdout=tmpfd)
     if ret != 0:
@@ -651,8 +648,8 @@ def main(argv):
     for pg in ALLPGS:
         OSDS = get_osds(pg, OSDDIR)
         for osd in OSDS:
-            cmd = (CFSD_PREFIX + "--op list --pgid {pg}").format(osd=osd, pg=pg)
             tmpfd = open(TMPFILE, "a")
+            cmd = (CFSD_PREFIX + "--op list --pgid {pg}").format(osd=osd, pg=pg)
             logging.debug(cmd)
             ret = call(cmd, shell=True, stdout=tmpfd)
             if ret != 0:
