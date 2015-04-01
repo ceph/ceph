@@ -2422,7 +2422,10 @@ void RGWDeleteObj::pre_exec()
 
 void RGWDeleteObj::execute()
 {
-  ret = -EINVAL;
+  ret = get_params();
+  if (ret < 0) {
+    return;
+  }
   rgw_obj obj(s->bucket, s->object);
   if (!s->object.empty()) {
     RGWObjectCtx *obj_ctx = static_cast<RGWObjectCtx *>(s->obj_ctx);
@@ -2439,12 +2442,15 @@ void RGWDeleteObj::execute()
     del_op.params.bucket_owner = s->bucket_owner.get_id();
     del_op.params.versioning_status = s->bucket_info.versioning_status();
     del_op.params.obj_owner = s->owner;
+    del_op.params.unmod_since = unmod_since;
 
     ret = del_op.delete_obj();
     if (ret >= 0) {
       delete_marker = del_op.result.delete_marker;
       version_id = del_op.result.version_id;
     }
+  } else {
+    ret = -EINVAL;
   }
 }
 

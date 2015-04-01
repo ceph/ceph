@@ -613,9 +613,11 @@ protected:
   int ret;
   bool delete_marker;
   string version_id;
+  time_t unmod_since; /* if unmodified since */
+
 
 public:
-  RGWDeleteObj() : ret(0), delete_marker(false) {}
+  RGWDeleteObj() : ret(0), delete_marker(false), unmod_since(0) {}
 
   int verify_permission();
   void pre_exec();
@@ -624,6 +626,7 @@ public:
   virtual void send_response() = 0;
   virtual const string name() { return "delete_obj"; }
   virtual RGWOpType get_type() { return RGW_OP_DELETE_OBJ; }
+  virtual int get_params() { return 0; }
   virtual uint32_t op_mask() { return RGW_OP_TYPE_DELETE; }
 };
 
