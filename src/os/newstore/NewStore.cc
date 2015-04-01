@@ -47,6 +47,7 @@
   * abstract out fs specifics
   * fid xattr backpointer
   * kill collection_list_range
+  * inline first fsync_item in TransContext to void allocation?
 
  */
 
@@ -2896,6 +2897,34 @@ int NewStore::_do_write(TransContext *txc,
       goto out;
     }
     txc->sync_fd(fd);
+  } else if (offset == 0 &&
+	     length >= o->onode.size) {
+    // overwrite to new fid
+    assert(o->onode.data_map.size() == 1);
+    fragment_t& f = o->onode.data_map.begin()->second;
+    assert(f.offset == 0);
+    assert(f.length == o->onode.size);
+
+    wal_op_t *op = _get_wal_op(txc);
+    op->op = wal_op_t::OP_REMOVE;
+    op->fid = f.fid;
+
+    f.length = length;
+    o->onode.size = length;
+    fd = _create_fid(txc, &f.fid);
+    if (fd < 0) {
+      r = fd;
+      goto out;
+    }
+    dout(20) << __func__ << " replace old fid " << op->fid
+	     << " with new fid " << f.fid
+	     << ", writing " << offset << "~" << length << dendl;
+    r = bl.write_fd(fd);
+    if (r < 0) {
+      derr << __func__ << " bl.write_fd error: " << cpp_strerror(r) << dendl;
+      goto out;
+    }
+    txc->sync_fd(fd);
   } else {
     // WAL
     assert(o->onode.data_map.size() == 1);
@@ -3510,13 +3539,13 @@ int NewStore::_clone(TransContext *txc,
   newo->onode.attrs = oldo->onode.attrs;
 
   // clone omap
-  if (o->onode.omap_head) {
+  if (newo->onode.omap_head) {
     dout(20) << __func__ << " clearing old omap data" << dendl;
-    _do_omap_clear(txc, o->onode.omap_head, true);
+    _do_omap_clear(txc, newo->onode.omap_head, true);
   }
   if (oldo->onode.omap_head) {
     dout(20) << __func__ << " copying omap data" << dendl;
-    _get_omap_id(txc, o);
+    _get_omap_id(txc, newo);
     KeyValueDB::Iterator it = db->get_iterator(PREFIX_OMAP);
     string head, tail;
     get_omap_header(oldo->onode.omap_head, &head);
@@ -3530,7 +3559,7 @@ int NewStore::_clone(TransContext *txc,
       } else {
 	dout(30) << __func__ << "  got header/data " << it->key() << dendl;
 	assert(it->key() < tail);
-	rewrite_omap_key(o->onode.omap_head, it->key(), &key);
+	rewrite_omap_key(newo->onode.omap_head, it->key(), &key);
 	txc->t->set(PREFIX_OMAP, key, it->value());
       }
       it->next();
