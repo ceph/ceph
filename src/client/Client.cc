@@ -2095,20 +2095,23 @@ void Client::_handle_full_flag(int64_t pool)
 {
   ldout(cct, 1) << __func__ << ": FULL: cancelling outstanding operations "
     << "on " << pool << dendl;
-  // Cancel all outstanding ops with -ENOSPC: it is necessary to do this rather
-  // than blocking, because otherwise when we fill up we potentially lock caps
-  // forever on files with dirty pages, and we need to be able to release
-  // those caps to the MDS so that it can delete files and free up space.
+  // Cancel all outstanding ops in this pool with -ENOSPC: it is necessary
+  // to do this rather than blocking, because otherwise when we fill up we
+  // potentially lock caps forever on files with dirty pages, and we need
+  // to be able to release those caps to the MDS so that it can delete files
+  // and free up space.
   epoch_t cancelled_epoch = objecter->op_cancel_writes(-ENOSPC, pool);
 
-  // For all inodes with a pending flush write op (i.e. one of the ones we
-  // will cancel), we've got to purge_set their data from ObjectCacher
-  // so that it doesn't re-issue the write in response to the ENOSPC error.
-  // Fortunately since we're cancelling *everything*, we don't need to know
-  // which ops belong to which ObjectSet, we can just blow all the un-flushed
-  // cached data away and mark any dirty inodes' async_err field with -ENOSPC
-  // (i.e. we only need to know which inodes had outstanding ops, not the exact
-  // op-to-inode relation)
+  // For all inodes with layouts in this pool and a pending flush write op
+  // (i.e. one of the ones we will cancel), we've got to purge_set their data
+  // from ObjectCacher so that it doesn't re-issue the write in response to
+  // the ENOSPC error.
+  // Fortunately since we're cancelling everything in a given pool, we don't
+  // need to know which ops belong to which ObjectSet, we can just blow all
+  // the un-flushed cached data away and mark any dirty inodes' async_err
+  // field with -ENOSPC as long as we're sure all the ops we cancelled were
+  // affecting this pool, and all the objectsets we're purging were also
+  // in this pool.
   for (unordered_map<vinodeno_t,Inode*>::iterator i = inode_map.begin();
        i != inode_map.end(); ++i)
   {
@@ -2133,7 +2136,8 @@ void Client::handle_osd_map(MOSDMap *m)
     _handle_full_flag(-1);
   } else {
     // Accumulate local list of full pools so that I can drop
-    // the OSDMap lock before handling them.
+    // the objecter lock before re-entering objecter in
+    // cancel_writes
     std::vector<int64_t> full_pools;
 
     const OSDMap *osd_map = objecter->get_osdmap_read();
