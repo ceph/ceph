@@ -57,6 +57,12 @@ public:
   const string &get_key() const {
     return key;
   }
+  void set_key(const string& k) {
+    if (k == oid.name)
+      key.clear();
+    else
+      key = k;
+  }
 
   string to_str() const;
   
@@ -198,6 +204,10 @@ public:
   }
   void build_filestore_key_cache() {    
     filestore_key_cache = _reverse_nibbles(hash);
+  }
+  void set_filestore_key_u32(uint32_t value) {
+    filestore_key_cache = value;
+    hash = _reverse_nibbles(value);
   }
 
   const string& get_effective_key() const {
