@@ -813,12 +813,14 @@ protected:
   bool delete_marker;
   bool multipart_delete;
   string version_id;
+  time_t unmod_since; /* if unmodified since */
   std::unique_ptr<RGWBulkDelete::Deleter> deleter;
 
 public:
   RGWDeleteObj()
     : delete_marker(false),
       multipart_delete(false),
+      unmod_since(0),
       deleter(nullptr) {
   }
 
@@ -827,7 +829,7 @@ public:
   void execute();
   int handle_slo_manifest(bufferlist& bl);
 
-  virtual int get_params() { return 0; };
+  virtual int get_params() { return 0; }
   virtual void send_response() = 0;
   virtual const string name() { return "delete_obj"; }
   virtual RGWOpType get_type() { return RGW_OP_DELETE_OBJ; }

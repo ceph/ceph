@@ -2864,14 +2864,14 @@ void RGWDeleteObj::pre_exec()
 
 void RGWDeleteObj::execute()
 {
-  op_ret = -EINVAL;
-  rgw_obj obj(s->bucket, s->object);
-  map<string, bufferlist> attrs;
-
   op_ret = get_params();
   if (op_ret < 0) {
     return;
   }
+
+  rgw_obj obj(s->bucket, s->object);
+  map<string, bufferlist> attrs;
+
 
   if (!s->object.empty()) {
     if (need_object_expiration() || multipart_delete) {
@@ -2913,6 +2913,7 @@ void RGWDeleteObj::execute()
     del_op.params.bucket_owner = s->bucket_owner.get_id();
     del_op.params.versioning_status = s->bucket_info.versioning_status();
     del_op.params.obj_owner = s->owner;
+    del_op.params.unmod_since = unmod_since;
 
     op_ret = del_op.delete_obj();
     if (op_ret >= 0) {
@@ -2926,6 +2927,8 @@ void RGWDeleteObj::execute()
       op_ret = -ENOENT;
       return;
     }
+  } else {
+    op_ret = -EINVAL;
   }
 }
 
