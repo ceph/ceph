@@ -17,6 +17,7 @@ overrides:
     log-whitelist:
     - scrub mismatch
     - ScrubResult
+    - failed to encode map
     conf:
       mon:
         mon warn on legacy crush tunables: false
