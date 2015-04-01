@@ -838,11 +838,11 @@ public:
         ::decode(keys, data_bl_p);
       }
 
-      ghobject_t get_oid(__le32 oid_id) {
+      const ghobject_t &get_oid(__le32 oid_id) {
         assert(oid_id < objects.size());
         return objects[oid_id];
       }
-      coll_t get_cid(__le32 cid_id) {
+      const coll_t &get_cid(__le32 cid_id) {
         assert(cid_id < colls.size());
         return colls[cid_id];
       }
