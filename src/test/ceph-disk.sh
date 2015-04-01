@@ -15,7 +15,7 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU Library Public License for more details.
 #
-set -xe
+set -e
 
 source test/test_btrfs_common.sh
 
@@ -58,7 +58,6 @@ function setup() {
     teardown
     mkdir $DIR
     mkdir $OSD_DATA
-#    mkdir $OSD_DATA/ceph-0
     touch $DIR/ceph.conf # so ceph-disk think ceph is the cluster
 }
 
@@ -92,10 +91,13 @@ function run_mon() {
 }
 
 function kill_daemons() {
+    if ! test -e $DIR ; then
+        return
+    fi
     for pidfile in $(find $DIR | grep pidfile) ; do
         pid=$(cat $pidfile)
         for try in 0 1 1 1 2 3 ; do
-            kill $pid || break
+            kill $pid 2>/dev/null || break
             sleep $try
         done
     done
@@ -347,11 +349,12 @@ function loop_sanity_check() {
     local major=$(lsb_release -rs | cut -f1 -d.)
     if test $major != 6 || test $id != CentOS -a $id != RedHatEnterpriseServer ; then
         echo "/dev/loop is assumed to be configured with max_part > 0"
-        echo "and /dev/disk/by-partuuid to be populated by udev"
+        echo "and /dev/disk/by-partuuid to be populated by udev on"
+        lsb_release -a
         return 0
     fi
     local name=$DIR/sanity.disk
-    dd if=/dev/zero of=$name bs=1024k count=10 > /dev/null
+    dd if=/dev/zero of=$name bs=1024k count=10 > /dev/null 2>&1
     losetup --find $name
     local dev=$(losetup --associated $name | cut -f1 -d:)
     local guid=$($uuidgen)
@@ -369,21 +372,18 @@ function loop_sanity_check() {
 function create_dev() {
     local name=$1
 
-    set -x
     echo create_dev $name >&2
     dd if=/dev/zero of=$name bs=1024k count=400 > /dev/null
     losetup --find $name
     local dev=$(losetup --associated $name | cut -f1 -d:)
     ceph-disk zap $dev > /dev/null 2>&1
     echo $dev
-    set +x
 }
 
 function destroy_dev() {
     local name=$1
     local dev=$2
 
-    set -x
     echo destroy_dev $name $dev >&2
     for partition in 1 2 3 4 ; do
         umount ${dev}p${partition} > /dev/null 2>&1 || true
@@ -391,7 +391,6 @@ function destroy_dev() {
     ceph-disk zap $dev > /dev/null 2>&1
     losetup --detach $dev
     rm $name
-    set +x
 }
 
 function activate_dev_body() {
