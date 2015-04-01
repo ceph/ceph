@@ -29,7 +29,7 @@ class Thread {
   void *entry_wrapper();
 
  public:
-  Thread(const Thread& other);
+  explicit Thread(const Thread& other);
   const Thread& operator=(const Thread& other);
 
   Thread();
