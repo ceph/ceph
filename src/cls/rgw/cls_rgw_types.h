@@ -36,6 +36,14 @@ enum RGWBILogFlags {
   RGW_BILOG_FLAG_VERSIONED_OP = 0x1,
 };
 
+enum RGWCheckMTimeType {
+  CLS_RGW_CHECK_TIME_MTIME_EQ = 0,
+  CLS_RGW_CHECK_TIME_MTIME_LT = 1,
+  CLS_RGW_CHECK_TIME_MTIME_LE = 2,
+  CLS_RGW_CHECK_TIME_MTIME_GT = 3,
+  CLS_RGW_CHECK_TIME_MTIME_GE = 4,
+};
+
 struct rgw_bucket_pending_info {
   RGWPendingState state;
   utime_t timestamp;
