@@ -560,12 +560,13 @@ public:
   void replay_advance_version();
 
   /**
-   * If a session exists with this ID, and it has
+   * For these session IDs, if a session exists with this ID, and it has
    * dirty completed_requests, then persist it immediately
    * (ahead of usual project/dirty versioned writes
    *  of the map).
    */
-  void save_if_dirty(entity_name_t, MDSGatherBuilder *gather_bld);
+  void save_if_dirty(const std::set<entity_name_t> &tgt_sessions,
+                     MDSGatherBuilder *gather_bld);
 };
 
 

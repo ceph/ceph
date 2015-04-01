@@ -747,61 +747,85 @@ public:
 };
 
 
-void SessionMap::save_if_dirty(entity_name_t session_id,
+void SessionMap::save_if_dirty(const std::set<entity_name_t> &tgt_sessions,
                                MDSGatherBuilder *gather_bld)
 {
   assert(gather_bld != NULL);
 
-  if (session_map.count(session_id) == 0) {
-    // Session isn't around any more, never mind.
-    return;
+  std::vector<entity_name_t> write_sessions;
+
+  // Decide which sessions require a write
+  for (std::set<entity_name_t>::iterator i = tgt_sessions.begin();
+       i != tgt_sessions.end(); ++i) {
+    const entity_name_t &session_id = *i;
+
+    if (session_map.count(session_id) == 0) {
+      // Session isn't around any more, never mind.
+      continue;
+    }
+
+    Session *session = session_map[session_id];
+    if (!session->has_dirty_completed_requests()) {
+      // Session hasn't had completed_requests
+      // modified since last write, no need to
+      // write it now.
+      continue;
+    }
+
+    if (dirty_sessions.count(session_id) > 0) {
+      // Session is already dirtied, will be written, no
+      // need to pre-empt that.
+      continue;
+    }
+    // Okay, passed all our checks, now we write
+    // this session out.  The version we write
+    // into the OMAP may now be higher-versioned
+    // than the version in the header, but that's
+    // okay because it's never a problem to have
+    // an overly-fresh copy of a session.
+    write_sessions.push_back(*i);
   }
 
-  Session *session = session_map[session_id];
-  if (!session->has_dirty_completed_requests()) {
-    // Session hasn't had completed_requests
-    // modified since last write, no need to
-    // write it now.
-    return;
-  }
+  dout(4) << __func__ << ": writing " << write_sessions.size() << dendl;
 
-  if (dirty_sessions.count(session_id) > 0) {
-    // Session is already dirtied, will be written, no
-    // need to pre-empt that.
-    return;
-  }
-
-  // Okay, passed all our checks, now we write
-  // this session out.  The version we write
-  // into the OMAP may now be higher-versioned
-  // than the version in the header, but that's
-  // okay because it's never a problem to have
-  // an overly-fresh copy of a session.
-  session->clear_dirty_completed_requests();
-
-  MDSInternalContextBase *on_safe = gather_bld->new_sub();
-
+  // Batch writes into mds_sessionmap_keys_per_op
+  const uint32_t kpo = g_conf->mds_sessionmap_keys_per_op;
   map<string, bufferlist> to_set;
+  for (uint32_t i = 0; i < write_sessions.size(); ++i) {
+    // Start a new write transaction?
+    if (i % g_conf->mds_sessionmap_keys_per_op == 0) {
+      to_set.clear();
+    }
 
-  // Serialize K
-  std::ostringstream k;
-  k << session_id;
+    const entity_name_t &session_id = write_sessions[i];
+    Session *session = session_map[session_id];
+    session->clear_dirty_completed_requests();
 
-  // Serialize V
-  bufferlist bl;
-  session->info.encode(bl);
+    // Serialize K
+    std::ostringstream k;
+    k << session_id;
 
-  // Add to RADOS op
-  to_set[k.str()] = bl;
+    // Serialize V
+    bufferlist bl;
+    session->info.encode(bl);
 
-  ObjectOperation op;
-  op.omap_set(to_set);
+    // Add to RADOS op
+    to_set[k.str()] = bl;
 
-  SnapContext snapc;
-  object_t oid = get_object_name();
-  object_locator_t oloc(mds->mdsmap->get_metadata_pool());
-  mds->objecter->mutate(oid, oloc, op, snapc, ceph_clock_now(g_ceph_context),
-      0, NULL, new C_OnFinisher(new C_IO_SM_Save_One(this, on_safe), &mds->finisher));
+    // Complete this write transaction?
+    if (i == write_sessions.size() - 1
+        || i % kpo == kpo - 1) {
+      ObjectOperation op;
+      op.omap_set(to_set);
+
+      SnapContext snapc;
+      object_t oid = get_object_name();
+      object_locator_t oloc(mds->mdsmap->get_metadata_pool());
+      MDSInternalContextBase *on_safe = gather_bld->new_sub();
+      mds->objecter->mutate(oid, oloc, op, snapc, ceph_clock_now(g_ceph_context),
+          0, NULL, new C_OnFinisher(new C_IO_SM_Save_One(this, on_safe), &mds->finisher));
+    }
+  }
 }
 
 
