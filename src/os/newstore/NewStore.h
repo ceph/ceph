@@ -288,12 +288,10 @@ public:
     bool flush_commit(Context *c) {
       Mutex::Locker l(qlock);
       if (q.empty()) {
-	delete c;
 	return true;
       }
       TransContext *txc = &q.back();
       if (txc->state > TransContext::STATE_KV_DONE) {
-	delete c;
 	return true;
       }
       assert(txc->state <= TransContext::STATE_KV_DONE);
