@@ -1,12 +1,12 @@
 
 overrides:
-    ceph:
-        conf:
-            osd:
-              osd objectstore: memstore
-              memstore device bytes: 100000000
+  ceph:
+    conf:
+      osd:
+        osd objectstore: memstore
+        memstore device bytes: 100000000
 
 tasks:
-    - cephfs_test_runner:
-        modules:
-            - tasks.cephfs.test_full
+  - cephfs_test_runner:
+      modules:
+        - tasks.cephfs.test_full

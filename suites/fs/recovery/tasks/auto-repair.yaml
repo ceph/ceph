@@ -1,5 +1,5 @@
 
 tasks:
-    - cephfs_test_runner:
-        modules:
-            - tasks.cephfs.test_auto_repair
+  - cephfs_test_runner:
+      modules:
+        - tasks.cephfs.test_auto_repair
