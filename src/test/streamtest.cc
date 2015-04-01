@@ -144,7 +144,7 @@ int main(int argc, const char **argv)
   }
 
   ObjectStore::Transaction ft;
-  ft.create_collection(coll_t());
+  ft.create_collection(coll_t(), 0);
   fs->apply_transaction(ft);
 
   utime_t now = ceph_clock_now(g_ceph_context);

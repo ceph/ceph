@@ -1343,7 +1343,8 @@ int ObjectStoreTool::do_import(ObjectStore *store, OSDSuperblock& sb,
 
   if (!dry_run) {
     ObjectStore::Transaction *t = new ObjectStore::Transaction;
-    PG::_create(*t, pgid);
+    PG::_create(*t, pgid,
+		pgid.get_split_bits(curmap.get_pg_pool(pgid.pool())->get_pg_num()));
     PG::_init(*t, pgid, NULL);
 
     // mark this coll for removal until we're done

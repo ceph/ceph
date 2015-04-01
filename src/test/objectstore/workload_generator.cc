@@ -379,7 +379,7 @@ TestObjectStoreState::coll_entry_t
   m_collections.insert(make_pair(entry->m_id, entry));
 
   dout(2) << __func__ << " id " << entry->m_id << " coll " << entry->m_coll << dendl;
-  t->create_collection(entry->m_coll);
+  t->create_collection(entry->m_coll, 32);
   dout(2) << __func__ << " meta " << coll_t::meta() << "/" << entry->m_meta_obj << dendl;
   t->touch(coll_t::meta(), entry->m_meta_obj);
   return entry;
