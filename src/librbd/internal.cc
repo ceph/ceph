@@ -3576,9 +3576,13 @@ reprotect_and_return_err:
 	req = new AioTruncate(ictx, p->oid.name, p->objectno, p->offset, objectx, object_overlap,
 			      snapc, snap_id, req_comp);
       } else {
-	req = new AioZero(ictx, p->oid.name, p->objectno, p->offset, p->length,
-			  objectx, object_overlap,
-			  snapc, snap_id, req_comp);
+	if(ictx->cct->_conf->rbd_skip_partial_discard) {
+	  continue;
+	} else {
+	  req = new AioZero(ictx, p->oid.name, p->objectno, p->offset, p->length,
+			    objectx, object_overlap,
+			    snapc, snap_id, req_comp);
+	}
       }
 
       r = req->send();
