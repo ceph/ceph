@@ -57,7 +57,6 @@ public:
   };
 
   /* kept in upper case for consistency with coll_t's */
-  static const coll_t META_COLL;
   static const coll_t TEMP_COLL;
 
  protected:
