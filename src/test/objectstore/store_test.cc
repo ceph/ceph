@@ -90,7 +90,7 @@ TEST_P(StoreTest, SimpleMetaColTest) {
   int r = 0;
   {
     ObjectStore::Transaction t;
-    t.create_collection(cid);
+    t.create_collection(cid, 0);
     cerr << "create collection" << std::endl;
     r = store->apply_transaction(t);
     ASSERT_EQ(r, 0);
@@ -104,7 +104,7 @@ TEST_P(StoreTest, SimpleMetaColTest) {
   }
   {
     ObjectStore::Transaction t;
-    t.create_collection(cid);
+    t.create_collection(cid, 0);
     cerr << "add collection" << std::endl;
     r = store->apply_transaction(t);
     ASSERT_EQ(r, 0);
@@ -123,7 +123,7 @@ TEST_P(StoreTest, SimplePGColTest) {
   int r = 0;
   {
     ObjectStore::Transaction t;
-    t.create_collection(cid);
+    t.create_collection(cid, 4);
     cerr << "create collection" << std::endl;
     r = store->apply_transaction(t);
     ASSERT_EQ(r, 0);
@@ -137,7 +137,7 @@ TEST_P(StoreTest, SimplePGColTest) {
   }
   {
     ObjectStore::Transaction t;
-    t.create_collection(cid);
+    t.create_collection(cid, 4);
     cerr << "add collection" << std::endl;
     r = store->apply_transaction(t);
     ASSERT_EQ(r, 0);
@@ -176,7 +176,7 @@ TEST_P(StoreTest, SimpleColPreHashTest) {
   {
     // Create a collection along with a hint
     ObjectStore::Transaction t;
-    t.create_collection(cid);
+    t.create_collection(cid, 5);
     cerr << "create collection" << std::endl;
     bufferlist hint;
     ::encode(pg_num, hint);
@@ -207,7 +207,7 @@ TEST_P(StoreTest, SimpleObjectTest) {
   coll_t cid;
   {
     ObjectStore::Transaction t;
-    t.create_collection(cid);
+    t.create_collection(cid, 0);
     cerr << "Creating collection " << cid << std::endl;
     r = store->apply_transaction(t);
     ASSERT_EQ(r, 0);
@@ -253,7 +253,7 @@ TEST_P(StoreTest, SimpleListTest) {
   coll_t cid(spg_t(pg_t(0, 1), shard_id_t(1)));
   {
     ObjectStore::Transaction t;
-    t.create_collection(cid);
+    t.create_collection(cid, 0);
     cerr << "Creating collection " << cid << std::endl;
     r = store->apply_transaction(t);
     ASSERT_EQ(r, 0);
@@ -332,10 +332,11 @@ TEST_P(StoreTest, Sort) {
 
 TEST_P(StoreTest, MultipoolListTest) {
   int r;
-  coll_t cid = coll_t(spg_t(pg_t(1, 1), shard_id_t::NO_SHARD));
+  int poolid = 4373;
+  coll_t cid = coll_t(spg_t(pg_t(0, poolid), shard_id_t::NO_SHARD));
   {
     ObjectStore::Transaction t;
-    t.create_collection(cid);
+    t.create_collection(cid, 0);
     cerr << "Creating collection " << cid << std::endl;
     r = store->apply_transaction(t);
     ASSERT_EQ(r, 0);
@@ -391,7 +392,7 @@ TEST_P(StoreTest, SimpleCloneTest) {
   coll_t cid;
   {
     ObjectStore::Transaction t;
-    t.create_collection(cid);
+    t.create_collection(cid, 0);
     cerr << "Creating collection " << cid << std::endl;
     r = store->apply_transaction(t);
     ASSERT_EQ(r, 0);
@@ -432,7 +433,7 @@ TEST_P(StoreTest, SimpleCloneRangeTest) {
   coll_t cid;
   {
     ObjectStore::Transaction t;
-    t.create_collection(cid);
+    t.create_collection(cid, 0);
     cerr << "Creating collection " << cid << std::endl;
     r = store->apply_transaction(t);
     ASSERT_EQ(r, 0);
@@ -490,7 +491,7 @@ TEST_P(StoreTest, SimpleObjectLongnameTest) {
   coll_t cid;
   {
     ObjectStore::Transaction t;
-    t.create_collection(cid);
+    t.create_collection(cid, 0);
     cerr << "Creating collection " << cid << std::endl;
     r = store->apply_transaction(t);
     ASSERT_EQ(r, 0);
@@ -522,7 +523,7 @@ TEST_P(StoreTest, ManyObjectTest) {
   set<ghobject_t> created;
   {
     ObjectStore::Transaction t;
-    t.create_collection(cid);
+    t.create_collection(cid, 0);
     r = store->apply_transaction(t);
     ASSERT_EQ(r, 0);
   }
@@ -749,7 +750,7 @@ public:
 
   int init() {
     ObjectStore::Transaction t;
-    t.create_collection(cid);
+    t.create_collection(cid, 0);
     return store->apply_transaction(t);
   }
 
@@ -1220,7 +1221,7 @@ TEST_P(StoreTest, HashCollisionTest) {
   int r;
   {
     ObjectStore::Transaction t;
-    t.create_collection(cid);
+    t.create_collection(cid, 0);
     r = store->apply_transaction(t);
     ASSERT_EQ(r, 0);
   }
@@ -1301,7 +1302,7 @@ TEST_P(StoreTest, ScrubTest) {
   int r;
   {
     ObjectStore::Transaction t;
-    t.create_collection(cid);
+    t.create_collection(cid, 0);
     r = store->apply_transaction(t);
     ASSERT_EQ(r, 0);
   }
@@ -1397,7 +1398,7 @@ TEST_P(StoreTest, OMapTest) {
   int r;
   {
     ObjectStore::Transaction t;
-    t.create_collection(cid);
+    t.create_collection(cid, 0);
     r = store->apply_transaction(t);
     ASSERT_EQ(r, 0);
   }
@@ -1524,7 +1525,7 @@ TEST_P(StoreTest, XattrTest) {
   int r;
   {
     ObjectStore::Transaction t;
-    t.create_collection(cid);
+    t.create_collection(cid, 0);
     t.touch(cid, hoid);
     r = store->apply_transaction(t);
     ASSERT_EQ(r, 0);
@@ -1601,12 +1602,12 @@ void colsplittest(
   unsigned num_objects,
   unsigned common_suffix_size
   ) {
-  coll_t cid(spg_t(pg_t(5,2),shard_id_t::NO_SHARD));
-  coll_t tid(spg_t(pg_t(3,2),shard_id_t::NO_SHARD));
+  coll_t cid(spg_t(pg_t(0,52),shard_id_t::NO_SHARD));
+  coll_t tid(spg_t(pg_t(1<<common_suffix_size,52),shard_id_t::NO_SHARD));
   int r = 0;
   {
     ObjectStore::Transaction t;
-    t.create_collection(cid);
+    t.create_collection(cid, common_suffix_size);
     r = store->apply_transaction(t);
     ASSERT_EQ(r, 0);
   }
@@ -1627,8 +1628,8 @@ void colsplittest(
   }
   {
     ObjectStore::Transaction t;
-    t.create_collection(tid);
-    t.split_collection(cid, common_suffix_size+1, 0, tid);
+    t.create_collection(tid, common_suffix_size + 1);
+    t.split_collection(cid, common_suffix_size+1, 1, tid);
     r = store->apply_transaction(t);
     ASSERT_EQ(r, 0);
   }
@@ -1687,7 +1688,7 @@ TEST_P(StoreTest, TwoHash) {
   int r;
   {
     ObjectStore::Transaction t;
-    t.create_collection(cid);
+    t.create_collection(cid, 0);
     r = store->apply_transaction(t);
     ASSERT_EQ(r, 0);
   }
@@ -1756,7 +1757,7 @@ TEST_P(StoreTest, MoveRename) {
   int r;
   {
     ObjectStore::Transaction t;
-    t.create_collection(cid);
+    t.create_collection(cid, 0);
     t.touch(cid, oid);
     r = store->apply_transaction(t);
     ASSERT_EQ(r, 0);
@@ -1836,7 +1837,7 @@ TEST_P(StoreTest, BigRGWObjectName) {
   int r;
   {
     ObjectStore::Transaction t;
-    t.create_collection(cid);
+    t.create_collection(cid, 0);
     t.touch(cid, oidhead);
     t.collection_move_rename(cid, oidhead, cid, oid);
     t.touch(cid, oidhead);
@@ -1878,7 +1879,7 @@ TEST_P(StoreTest, SetAllocHint) {
   int r;
   {
     ObjectStore::Transaction t;
-    t.create_collection(cid);
+    t.create_collection(cid, 0);
     t.touch(cid, hoid);
     r = store->apply_transaction(t);
     ASSERT_EQ(r, 0);
