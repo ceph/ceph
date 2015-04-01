@@ -96,6 +96,9 @@ class TestJournalRepair(CephFSTestCase):
         # will be invisible in readdir).
         # FIXME: hook in forward scrub here to regenerate backtraces
         proc = self.mount_a.run_shell(['ls', '-R'])
+        self.mount_a.umount_wait()  # remount to clear client cache before our second ls
+        self.mount_a.mount()
+        self.mount_a.wait_until_mounted()
 
         proc = self.mount_a.run_shell(['ls', '-R'])
         self.assertEqual(proc.stdout.getvalue().strip(),
