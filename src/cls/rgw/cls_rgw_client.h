@@ -315,6 +315,7 @@ void cls_rgw_bucket_complete_op(librados::ObjectWriteOperation& o, RGWModifyOp o
 
 void cls_rgw_remove_obj(librados::ObjectWriteOperation& o, list<string>& keep_attr_prefixes);
 void cls_rgw_obj_check_attrs_prefix(librados::ObjectOperation& o, const string& prefix, bool fail_if_exist);
+void cls_rgw_obj_check_mtime(librados::ObjectOperation& o, const utime_t& mtime, RGWCheckMTimeType type);
 
 int cls_rgw_bi_get(librados::IoCtx& io_ctx, const string oid,
                    BIIndexType index_type, cls_rgw_obj_key& key,

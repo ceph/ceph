@@ -36,6 +36,7 @@ cls_method_handle_t h_rgw_bucket_trim_olh_log;
 cls_method_handle_t h_rgw_bucket_clear_olh;
 cls_method_handle_t h_rgw_obj_remove;
 cls_method_handle_t h_rgw_obj_check_attrs_prefix;
+cls_method_handle_t h_rgw_obj_check_mtime;
 cls_method_handle_t h_rgw_bi_get_op;
 cls_method_handle_t h_rgw_bi_put_op;
 cls_method_handle_t h_rgw_bi_list_op;
@@ -2017,6 +2018,63 @@ static int rgw_obj_check_attrs_prefix(cls_method_context_t hctx, bufferlist *in,
   return 0;
 }
 
+static int rgw_obj_check_mtime(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  // decode request
+  rgw_cls_obj_check_mtime op;
+  bufferlist::iterator iter = in->begin();
+  try {
+    ::decode(op, iter);
+  } catch (buffer::error& err) {
+    CLS_LOG(0, "ERROR: %s(): failed to decode request", __func__);
+    return -EINVAL;
+  }
+
+  time_t mtime;
+  int ret = cls_cxx_stat(hctx, NULL, &mtime);
+  if (ret < 0 && ret != -ENOENT) {
+    CLS_LOG(0, "ERROR: %s(): cls_cxx_stat() returned %d", __func__, ret);
+    return ret;
+  }
+  if (ret == -ENOENT) {
+    CLS_LOG(10, "object does not exist, skipping check");
+  }
+
+  utime_t obj_ut(mtime, 0);
+
+  CLS_LOG(10, "%s: obj_ut=%lld.%06lld op.mtime=%lld.%06lld", __func__,
+          (long long)obj_ut.sec(), (long long)obj_ut.nsec(),
+          (long long)op.mtime.sec(), (long long)op.mtime.nsec());
+
+  bool check;
+
+  switch (op.type) {
+  case CLS_RGW_CHECK_TIME_MTIME_EQ:
+    check = (obj_ut == op.mtime);
+    break;
+  case CLS_RGW_CHECK_TIME_MTIME_LT:
+    check = (obj_ut < op.mtime);
+    break;
+  case CLS_RGW_CHECK_TIME_MTIME_LE:
+    check = (obj_ut <= op.mtime);
+    break;
+  case CLS_RGW_CHECK_TIME_MTIME_GT:
+    check = (obj_ut > op.mtime);
+    break;
+  case CLS_RGW_CHECK_TIME_MTIME_GE:
+    check = (obj_ut >= op.mtime);
+    break;
+  default:
+    return -EINVAL;
+  };
+
+  if (!check) {
+    return -ECANCELED;
+  }
+
+  return 0;
+}
+
 static int rgw_bi_get_op(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
   // decode request
@@ -3064,6 +3122,7 @@ void __cls_init()
 
   cls_register_cxx_method(h_class, "obj_remove", CLS_METHOD_RD | CLS_METHOD_WR, rgw_obj_remove, &h_rgw_obj_remove);
   cls_register_cxx_method(h_class, "obj_check_attrs_prefix", CLS_METHOD_RD, rgw_obj_check_attrs_prefix, &h_rgw_obj_check_attrs_prefix);
+  cls_register_cxx_method(h_class, "obj_check_mtime", CLS_METHOD_RD, rgw_obj_check_mtime, &h_rgw_obj_check_mtime);
 
   cls_register_cxx_method(h_class, "bi_get", CLS_METHOD_RD, rgw_bi_get_op, &h_rgw_bi_get_op);
   cls_register_cxx_method(h_class, "bi_put", CLS_METHOD_RD | CLS_METHOD_WR, rgw_bi_put_op, &h_rgw_bi_put_op);

@@ -5983,6 +5983,11 @@ void RGWRados::cls_obj_check_prefix_exist(ObjectOperation& op, const string& pre
   cls_rgw_obj_check_attrs_prefix(op, prefix, fail_if_exist);
 }
 
+void RGWRados::cls_obj_check_mtime(ObjectOperation& op, const utime_t& mtime, RGWCheckMTimeType type)
+{
+  cls_rgw_obj_check_mtime(op, mtime, type);
+}
+
 
 /**
  * Delete an object.

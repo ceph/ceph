@@ -1581,6 +1581,7 @@ class RGWRados
 
   void remove_rgw_head_obj(librados::ObjectWriteOperation& op);
   void cls_obj_check_prefix_exist(librados::ObjectOperation& op, const string& prefix, bool fail_if_exist);
+  void cls_obj_check_mtime(librados::ObjectOperation& op, const utime_t& mtime, RGWCheckMTimeType type);
 protected:
   CephContext *cct;
 
