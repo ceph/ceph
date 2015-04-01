@@ -238,10 +238,7 @@ void LogSegment::try_to_expire(MDS *mds, MDSGatherBuilder &gather_bld, int op_pr
   }
 
   // updates to sessions for completed_requests
-  for (std::set<entity_name_t>::iterator i = touched_sessions.begin();
-       i != touched_sessions.end(); ++i) {
-    mds->sessionmap.save_if_dirty(*i, &gather_bld);
-  }
+  mds->sessionmap.save_if_dirty(touched_sessions, &gather_bld);
   touched_sessions.clear();
 
   // pending commit atids
