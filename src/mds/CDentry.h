@@ -165,6 +165,7 @@ protected:
 public:
   elist<CDentry*>::item item_dirty;
   elist<CDentry*>::item item_stray;
+  elist<CDentry*>::item item_scrub;
 
   const scrub_info_t *scrub_info() const {
     if(!scrub_infop)
@@ -230,6 +231,7 @@ public:
   }
   ~CDentry() {
     assert(!scrub_infop);
+    assert(!item_scrub.is_on_list());
     g_num_dn--;
     g_num_dns++;
   }

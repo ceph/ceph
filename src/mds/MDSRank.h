@@ -107,6 +107,7 @@ class Objecter;
 class MonClient;
 class Finisher;
 class MMDSMap;
+class ScrubStack;
 
 /**
  * The public part of this class's interface is what's exposed to all
@@ -151,6 +152,7 @@ class MDSRank {
     Locker       *locker;
     MDLog        *mdlog;
     MDBalancer   *balancer;
+    ScrubStack   *scrubstack;
 
     InoTable     *inotable;
 

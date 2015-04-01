@@ -23,6 +23,7 @@ LIBMDS_SOURCES = \
 	mds/MDSTableClient.cc \
 	mds/MDSTableServer.cc \
 	mds/SimpleLock.cc \
+	mds/ScrubStack.cc \
 	mds/SnapRealm.cc \
 	mds/SnapServer.cc \
 	mds/snap.cc \
