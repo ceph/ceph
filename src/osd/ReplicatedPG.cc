@@ -6642,11 +6642,10 @@ void ReplicatedPG::finish_promote(int r, CopyResults *results,
 	vector<snapid_t>::iterator p = snapset.snaps.begin();
 	while (p != snapset.snaps.end() && *p > soid.snap)
 	  ++p;
-	assert(p != snapset.snaps.end());
-	do {
+	while (p != snapset.snaps.end() && *p > results->snap_seq) {
 	  tctx->new_obs.oi.snaps.push_back(*p);
 	  ++p;
-	} while (p != snapset.snaps.end() && *p > results->snap_seq);
+	}
       }
       dout(20) << __func__ << " snaps " << tctx->new_obs.oi.snaps << dendl;
       assert(!tctx->new_obs.oi.snaps.empty());
