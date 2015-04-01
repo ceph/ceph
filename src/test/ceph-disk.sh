@@ -65,6 +65,9 @@ function teardown() {
         rm -fr $DIR/*/*db
         teardown_btrfs $DIR
     fi
+    grep " $(pwd)/$DIR/" < /proc/mounts | while read mounted rest ; do
+        umount $mounted
+    done
     rm -fr $DIR
 }
 
@@ -367,28 +370,59 @@ function loop_sanity_check() {
     return $status
 }
 
-function create_dev() {
-    local name=$1
+function reset_dev() {
+    local dev=$1
 
-    echo create_dev $name >&2
-    dd if=/dev/zero of=$name bs=1024k count=400 > /dev/null
-    losetup --find $name
-    local dev=$(losetup --associated $name | cut -f1 -d:)
+    if test -z "$dev" ; then
+        return
+    fi
+
+    grep "^$dev" < /proc/mounts | while read mounted rest ; do
+        umount $mounted
+    done
+    local dev_base=$(basename $dev)
+    (
+        ls /sys/block/$dev_base/$dev_base*/holders 2> /dev/null
+        ls /sys/block/$dev_base/holders 2> /dev/null
+        ) | grep '^dm-' | while read dm ; do
+	dmsetup remove /dev/$dm
+    done
     ceph-disk zap $dev > /dev/null 2>&1
+}
+
+function reset_leftover_dev() {
+    local path=$1
+
+    losetup --all | sed -e 's/://' | while read dev id associated_path ; do
+        if test $associated_path = "($path)" ; then
+            reset_dev $dev
+            losetup --detach $dev
+        fi
+    done
+}
+
+function create_dev() {
+    local path=$1
+
+    echo -n "create_dev $path ... " >&2
+    reset_leftover_dev $path
+    dd if=/dev/zero of=$path bs=1024k count=400 > /dev/null 2>&1
+    losetup --find $path
+    local dev=$(losetup --associated $path | cut -f1 -d:)
+    test "$dev" || return 1
+    reset_dev $dev
+    echo $dev >&2
     echo $dev
 }
 
 function destroy_dev() {
-    local name=$1
+    local path=$1
     local dev=$2
 
-    echo destroy_dev $name $dev >&2
-    for partition in 1 2 3 4 ; do
-        umount ${dev}p${partition} > /dev/null 2>&1 || true
-    done
-    ceph-disk zap $dev > /dev/null 2>&1
+    echo destroy_dev $path $dev >&2
+    reset_dev $dev
     losetup --detach $dev
-    rm $name
+    rm -f $path
 }
 
 function activate_dev_body() {
