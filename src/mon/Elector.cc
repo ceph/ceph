@@ -198,6 +198,7 @@ void Elector::victory()
     MMonElection *m = new MMonElection(MMonElection::OP_VICTORY, epoch, mon->monmap);
     m->quorum = quorum;
     m->quorum_features = features;
+    m->quorum_plugins = plugins;
     m->sharing_bl = *cmds_bl;
     mon->messenger->send_message(m, mon->monmap->get_inst(*p));
   }
@@ -217,11 +218,20 @@ void Elector::handle_propose(MMonElection *m)
   dout(10) << __func__ << " required features " << required_features
            << ", peer features " << m->get_connection()->get_features()
            << dendl;
+  uint64_t required_plugins = mon->get_required_plugins();
+  dout(10) << __func__ << " required plugins " << required_plugins
+           << ", peer plugins " << m->get_plugins()
+           << dendl;
   if ((required_features ^ m->get_connection()->get_features()) &
       required_features) {
     dout(5) << " ignoring propose from mon" << from
 	    << " without required features" << dendl;
     nak_old_peer(m);
+    return;
+  } else if (required_plugins.compatible_with(m->get_features())) { // verify it's doing the right thing
+    dout(5) << " ignoring propose from mon" << from
+	    << " without required plugins" << dendl;
+    m->put();
     return;
   } else if (m->epoch > epoch) {
     bump_epoch(m->epoch);
@@ -290,6 +300,14 @@ void Elector::handle_ack(MMonElection *m)
     return;
   }
   
+  map<string,string> required_plugins = mon->get_required_plugins();
+  if (required_plugins.compatible_with(m->get_plugins())) {
+    dout(5) << " ignoring ack from mon" << from
+	    << " without required plugins" << dendl;
+    m->put();
+    return;
+  }
+  
   if (electing_me) {
     // thanks
     acked_me[from] = m->get_connection()->get_features();
@@ -313,7 +331,9 @@ void Elector::handle_ack(MMonElection *m)
 
 void Elector::handle_victory(MMonElection *m)
 {
-  dout(5) << "handle_victory from " << m->get_source() << " quorum_features " << m->quorum_features << dendl;
+  dout(5) << "handle_victory from " << m->get_source() << " quorum_features " << m->quorum_features
+	  << " quorum_plugins " << m->quorum_plugins
+	  << dendl;
   int from = m->get_source().num();
 
   assert(from < mon->rank);
@@ -333,7 +353,7 @@ void Elector::handle_victory(MMonElection *m)
   bump_epoch(m->epoch);
   
   // they win
-  mon->lose_election(epoch, m->quorum, from, m->quorum_features);
+  mon->lose_election(epoch, m->quorum, from, m->quorum_features, m->quorum_plugins);
   
   // cancel my timer
   cancel_timer();
@@ -377,15 +397,19 @@ void Elector::nak_old_peer(MMonElection *m)
 void Elector::handle_nak(MMonElection *m)
 {
   dout(1) << "handle_nak from " << m->get_source()
-	  << " quorum_features " << m->quorum_features << dendl;
+	  << " quorum_features " << m->quorum_features;
+	  << " quorum_plugins " << m->quorum_plugins << dendl;
 
   CompatSet other;
   bufferlist::iterator bi = m->sharing_bl.begin();
   other.decode(bi);
   CompatSet diff = Monitor::get_supported_features().unsupported(other);
   
-  derr << "Shutting down because I do not support required monitor features: { "
-       << diff << " }" << dendl;
+  if (diff)
+    derr << "Shutting down because I do not support required monitor features: { "
+	 << diff << " }" << dendl;
+  if (compare plugins)
+    complain
   
   exit(0);
   // the end!

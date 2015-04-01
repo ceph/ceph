@@ -21,7 +21,7 @@
 
 class MMonElection : public Message {
 
-  static const int HEAD_VERSION = 5;
+  static const int HEAD_VERSION = 6;
   static const int COMPAT_VERSION = 2;
 
 public:
@@ -45,6 +45,7 @@ public:
   bufferlist monmap_bl;
   set<int32_t> quorum;
   uint64_t quorum_features;
+  map<string,string> quorum_plugins;
   bufferlist sharing_bl;
   /* the following were both used in the next branch for a while
    * on user cluster, so we've left them in for compatibility. */
@@ -92,6 +93,7 @@ public:
     ::encode(defunct_one, payload);
     ::encode(defunct_two, payload);
     ::encode(sharing_bl, payload);
+    ::encode(quorum_plugins, payload);
   }
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
@@ -113,6 +115,8 @@ public:
     }
     if (header.version >= 5)
       ::decode(sharing_bl, p);
+    if (header.version >= 6)
+      ::decode(quorum_plugins, p);
   }
   
 };

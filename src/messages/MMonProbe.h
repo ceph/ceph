@@ -22,7 +22,7 @@
 
 class MMonProbe : public Message {
 public:
-  static const int HEAD_VERSION = 6;
+  static const int HEAD_VERSION = 7;
   static const int COMPAT_VERSION = 5;
 
   enum {
@@ -55,6 +55,7 @@ public:
   version_t paxos_last_version;
   bool has_ever_joined;
   uint64_t required_features;
+  map<string,string> required_plugins;
 
   MMonProbe()
     : Message(MSG_MON_PROBE, HEAD_VERSION, COMPAT_VERSION) {}
@@ -86,6 +87,8 @@ public:
       out << " new";
     if (required_features)
       out << " required_features " << required_features;
+    if (required_plugins)
+      out << " required_plugins " << required_plugins;
     out << ")";
   }
   
@@ -107,6 +110,7 @@ public:
     ::encode(paxos_first_version, payload);
     ::encode(paxos_last_version, payload);
     ::encode(required_features, payload);
+    ::encode(required_plugins, payload);
   }
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
@@ -122,6 +126,8 @@ public:
       ::decode(required_features, p);
     else
       required_features = 0;
+    if (header.version >= 7)
+      ::decode(required_plugins, p);
   }
 };
 
