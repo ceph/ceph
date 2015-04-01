@@ -75,7 +75,7 @@ int main(int argc, const char **argv) {
       break;
     } else if (ceph_argparse_witharg(args, i, &val, "-p", "--pool", (char*)NULL)) {
       pool_name = val;
-    } else if (ceph_argparse_withfloat(args, i, &latency_multiplier, &err, "--latency-multiplier",
+    } else if (ceph_argparse_witharg(args, i, &latency_multiplier, &err, "--latency-multiplier",
 				     (char*)NULL)) {
       if (!err.str().empty()) {
 	cerr << err.str() << std::endl;

@@ -2721,7 +2721,7 @@ int main(int argc, const char **argv)
       fromsnapname = strdup(val.c_str());
     } else if (ceph_argparse_witharg(args, i, &val, "-i", "--image", (char*)NULL)) {
       imgname = strdup(val.c_str());
-    } else if (ceph_argparse_withlonglong(args, i, &sizell, &err, "-s", "--size", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &sizell, &err, "-s", "--size", (char*)NULL)) {
       if (!err.str().empty()) {
 	cerr << "rbd: " << err.str() << std::endl;
 	return EXIT_FAILURE;
@@ -2734,14 +2734,14 @@ int main(int argc, const char **argv)
       size_set = true;
     } else if (ceph_argparse_flag(args, i, "-l", "--long", (char*)NULL)) {
       lflag = true;
-    } else if (ceph_argparse_withlonglong(args, i, &stripe_unit, &err, "--stripe-unit", (char*)NULL)) {
-    } else if (ceph_argparse_withlonglong(args, i, &stripe_count, &err, "--stripe-count", (char*)NULL)) {
-    } else if (ceph_argparse_withint(args, i, &order, &err, "--order", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &stripe_unit, &err, "--stripe-unit", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &stripe_count, &err, "--stripe-count", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &order, &err, "--order", (char*)NULL)) {
       if (!err.str().empty()) {
 	cerr << "rbd: " << err.str() << std::endl;
 	return EXIT_FAILURE;
       }
-    } else if (ceph_argparse_withlonglong(args, i, &bench_io_size, &err, "--io-size", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &bench_io_size, &err, "--io-size", (char*)NULL)) {
       if (!err.str().empty()) {
 	cerr << "rbd: " << err.str() << std::endl;
 	return EXIT_FAILURE;
@@ -2750,9 +2750,9 @@ int main(int argc, const char **argv)
 	cerr << "rbd: io-size must be > 0" << std::endl;
 	return EXIT_FAILURE;
       }
-    } else if (ceph_argparse_withlonglong(args, i, &bench_io_threads, &err, "--io-threads", (char*)NULL)) {
-    } else if (ceph_argparse_withlonglong(args, i, &bench_bytes, &err, "--io-total", (char*)NULL)) {
-    } else if (ceph_argparse_witharg(args, i, &bench_pattern, &err, "--io-pattern", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &bench_io_threads, &err, "--io-threads", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &bench_bytes, &err, "--io-total", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &bench_pattern, "--io-pattern", (char*)NULL)) {
     } else if (ceph_argparse_witharg(args, i, &val, "--path", (char*)NULL)) {
       path = strdup(val.c_str());
     } else if (ceph_argparse_witharg(args, i, &val, "--dest", (char*)NULL)) {

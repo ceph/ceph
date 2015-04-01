@@ -187,37 +187,37 @@ int main(int argc, const char **argv)
   std::ostringstream err;
   std::vector<const char*>::iterator i;
   for (i = args.begin(); i != args.end();) {
-    if (ceph_argparse_withlonglong(args, i, &delay_ns, &err, "--delay-ns", (char*)NULL)) {
+    if (ceph_argparse_witharg(args, i, &delay_ns, &err, "--delay-ns", (char*)NULL)) {
       if (!err.str().empty()) {
 	cerr << argv[0] << ": " << err.str() << std::endl;
 	return EXIT_FAILURE;
       }
-    } else if (ceph_argparse_withlonglong(args, i, &num_ops, &err, "--ops", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &num_ops, &err, "--ops", (char*)NULL)) {
       if (!err.str().empty()) {
 	cerr << argv[0] << ": " << err.str() << std::endl;
 	return EXIT_FAILURE;
       }
-    } else if (ceph_argparse_withlonglong(args, i, &num_objs, &err, "--objects", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &num_objs, &err, "--objects", (char*)NULL)) {
       if (!err.str().empty()) {
 	cerr << argv[0] << ": " << err.str() << std::endl;
 	return EXIT_FAILURE;
       }
-    } else if (ceph_argparse_withlonglong(args, i, &obj_bytes, &err, "--obj-size", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &obj_bytes, &err, "--obj-size", (char*)NULL)) {
       if (!err.str().empty()) {
 	cerr << argv[0] << ": " << err.str() << std::endl;
 	return EXIT_FAILURE;
       }
-    } else if (ceph_argparse_withlonglong(args, i, &max_len, &err, "--max-op-size", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &max_len, &err, "--max-op-size", (char*)NULL)) {
       if (!err.str().empty()) {
 	cerr << argv[0] << ": " << err.str() << std::endl;
 	return EXIT_FAILURE;
       }
-    } else if (ceph_argparse_withfloat(args, i, &percent_reads, &err, "--percent-read", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &percent_reads, &err, "--percent-read", (char*)NULL)) {
       if (!err.str().empty()) {
 	cerr << argv[0] << ": " << err.str() << std::endl;
 	return EXIT_FAILURE;
       }
-    } else if (ceph_argparse_withint(args, i, &seed, &err, "--seed", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &seed, &err, "--seed", (char*)NULL)) {
       if (!err.str().empty()) {
 	cerr << argv[0] << ": " << err.str() << std::endl;
 	return EXIT_FAILURE;
