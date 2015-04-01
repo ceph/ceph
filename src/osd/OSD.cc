@@ -48,8 +48,6 @@
 
 #include "ReplicatedPG.h"
 
-#include "Ager.h"
-
 
 #include "msg/Messenger.h"
 #include "msg/Message.h"
@@ -1304,19 +1302,6 @@ int OSD::mkfs(CephContext *cct, ObjectStore *store, const string &dev,
     if (ret) {
       derr << "OSD::mkfs: couldn't mount ObjectStore: error " << ret << dendl;
       goto free_store;
-    }
-
-    // age?
-    if (cct->_conf->osd_age_time != 0) {
-      if (cct->_conf->osd_age_time >= 0) {
-        dout(0) << "aging..." << dendl;
-        Ager ager(cct, store);
-        ager.age(cct->_conf->osd_age_time,
-          cct->_conf->osd_age,
-          cct->_conf->osd_age - .05,
-          50000,
-          cct->_conf->osd_age - .05);
-      }
     }
 
     OSDSuperblock sb;

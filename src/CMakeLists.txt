@@ -451,7 +451,6 @@ set(osd_srcs
   osd/ECBackend.cc
   osd/ECTransaction.cc
   osd/PGBackend.cc
-  osd/Ager.cc
   osd/OSD.cc
   osd/OSDCap.cc
   osd/Watch.cc
