@@ -52,7 +52,7 @@ Ubuntu|Debian|Devuan)
 CentOS|Fedora|SUSE*|RedHatEnterpriseServer)
         case $(lsb_release -si) in
             SUSE*)
-                $SUDO zypper -y yum-utils
+                $SUDO zypper --non-interactive install yum-utils
                 ;;
             Fedora)
                 $SUDO yum install -y yum-utils
