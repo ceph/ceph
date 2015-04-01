@@ -2442,7 +2442,7 @@ int NewStore::queue_transactions(
   if (!posr)
     posr = &default_osr;
   if (posr->p) {
-    osr = static_cast<OpSequencer *>(posr->p);
+    osr = static_cast<OpSequencer *>(posr->p.get());
     dout(5) << __func__ << " existing " << *osr << "/" << osr->parent << dendl; //<< " w/ q " << osr->q << dendl;
   } else {
     osr = new OpSequencer;
