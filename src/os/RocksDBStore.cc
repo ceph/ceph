@@ -24,25 +24,35 @@ using std::string;
 int RocksDBStore::init()
 {
   options.write_buffer_size = g_conf->rocksdb_write_buffer_size;
-  options.cache_size = g_conf->rocksdb_cache_size;
-  options.block_size = g_conf->rocksdb_block_size;
-  options.bloom_bits_per_key = g_conf->rocksdb_bloom_bits_per_key;
-  options.compression_type = g_conf->rocksdb_compression;
-  options.paranoid_checks = g_conf->rocksdb_paranoid;
-  options.max_open_files = g_conf->rocksdb_max_open_files;
-  options.log_file = g_conf->rocksdb_log;
   options.write_buffer_num = g_conf->rocksdb_write_buffer_num;
-  options.max_background_compactions = g_conf->rocksdb_background_compactions;
-  options.max_background_flushes = g_conf->rocksdb_background_flushes;
-  options.target_file_size_base = g_conf->rocksdb_target_file_size_base;
+  options.min_write_buffer_number_to_merge = g_conf->rocksdb_min_write_buffer_number_to_merge;
+
   options.level0_file_num_compaction_trigger = g_conf->rocksdb_level0_file_num_compaction_trigger;
   options.level0_slowdown_writes_trigger = g_conf->rocksdb_level0_slowdown_writes_trigger;
   options.level0_stop_writes_trigger = g_conf->rocksdb_level0_stop_writes_trigger;
-  options.disableDataSync = g_conf->rocksdb_disableDataSync;
+
+  options.max_bytes_for_level_base = g_conf->rocksdb_max_bytes_for_level_base;
+  options.max_bytes_for_level_multiplier = g_conf->rocksdb_max_bytes_for_level_multiplier;
+  options.target_file_size_base = g_conf->rocksdb_target_file_size_base;
+  options.target_file_size_multiplier = g_conf->rocksdb_target_file_size_multiplier;
   options.num_levels = g_conf->rocksdb_num_levels;
-  options.disableWAL = g_conf->rocksdb_disableWAL;
-  options.wal_dir = g_conf->rocksdb_wal_dir;
+  options.cache_size = g_conf->rocksdb_cache_size;
+  options.block_size = g_conf->rocksdb_block_size;
+  options.bloom_bits_per_key = g_conf->rocksdb_bloom_bits_per_key;
+
+  options.max_background_compactions = g_conf->rocksdb_max_background_compactions;
+  options.compaction_threads = g_conf->rocksdb_compaction_threads;
+  options.max_background_flushes = g_conf->rocksdb_max_background_flushes;
+  options.flusher_threads = g_conf->rocksdb_flusher_threads;
+
+  options.max_open_files = g_conf->rocksdb_max_open_files;
+  options.compression_type = g_conf->rocksdb_compression;
+  options.paranoid_checks = g_conf->rocksdb_paranoid;
+  options.log_file = g_conf->rocksdb_log;
   options.info_log_level = g_conf->rocksdb_info_log_level;
+  options.wal_dir = g_conf->rocksdb_wal_dir;
+  options.disableDataSync = g_conf->rocksdb_disableDataSync;
+  options.disableWAL = g_conf->rocksdb_disableWAL;
   return 0;
 }
 
@@ -50,27 +60,37 @@ int RocksDBStore::do_open(ostream &out, bool create_if_missing)
 {
   rocksdb::Options ldoptions;
   rocksdb::BlockBasedTableOptions table_options;
+  auto env = rocksdb::Env::Default();
 
-  if (options.write_buffer_size)
-    ldoptions.write_buffer_size = options.write_buffer_size;
-  if (options.write_buffer_num)
-    ldoptions.max_write_buffer_number = options.write_buffer_num;
-  if (options.max_background_compactions)
-    ldoptions.max_background_compactions = options.max_background_compactions;
-  if (options.max_background_flushes)
-    ldoptions.max_background_flushes = options.max_background_flushes;
-  if (options.target_file_size_base)
-    ldoptions.target_file_size_base = options.target_file_size_base;
-  if (options.max_open_files)
-    ldoptions.max_open_files = options.max_open_files;
+  ldoptions.write_buffer_size = options.write_buffer_size;
+  ldoptions.max_write_buffer_number = options.write_buffer_num;
+  ldoptions.min_write_buffer_number_to_merge  = options.min_write_buffer_number_to_merge;
+  
+  ldoptions.level0_file_num_compaction_trigger = options.level0_file_num_compaction_trigger;
+  if(options.level0_slowdown_writes_trigger >= 0)
+    ldoptions.level0_slowdown_writes_trigger = options.level0_slowdown_writes_trigger;
+  if(options.level0_stop_writes_trigger >= 0)
+    ldoptions.level0_stop_writes_trigger = options.level0_stop_writes_trigger;
+
+  ldoptions.max_bytes_for_level_base = options.max_bytes_for_level_base;
+  ldoptions.max_bytes_for_level_multiplier = options.max_bytes_for_level_multiplier;
+  ldoptions.target_file_size_base = options.target_file_size_base;
+  ldoptions.target_file_size_multiplier = options.target_file_size_multiplier;
+  ldoptions.num_levels = options.num_levels;
   if (options.cache_size) {
     table_options.block_cache = rocksdb::NewLRUCache(options.cache_size);
   }
-  if (options.block_size)
-    table_options.block_size = options.block_size;
-  if (options.bloom_bits_per_key) {
-    table_options.filter_policy.reset(rocksdb::NewBloomFilterPolicy(options.bloom_bits_per_key, true));
-  }
+  table_options.block_size = options.block_size;
+  table_options.filter_policy.reset(rocksdb::NewBloomFilterPolicy(options.bloom_bits_per_key, true));
+
+  ldoptions.max_background_compactions = options.max_background_compactions;
+  ldoptions.max_background_flushes = options.max_background_flushes;
+  //High priority threadpool is used for flusher
+  env->SetBackgroundThreads(options.flusher_threads, rocksdb::Env::Priority::HIGH);
+  //Low priority threadpool is used for compaction
+  env->SetBackgroundThreads(options.compaction_threads, rocksdb::Env::Priority::LOW);
+
+  ldoptions.max_open_files = options.max_open_files;
   if (options.compression_type.length() == 0)
     ldoptions.compression = rocksdb::kNoCompression;
   else if(options.compression_type == "snappy")
@@ -81,6 +101,18 @@ int RocksDBStore::do_open(ostream &out, bool create_if_missing)
     ldoptions.compression = rocksdb::kBZip2Compression;
   else
     ldoptions.compression = rocksdb::kNoCompression;
+
+  if(options.disableDataSync) {
+    derr << "Warning: DataSync is disabled, may lose data on node failure" << dendl;
+    ldoptions.disableDataSync = options.disableDataSync;
+  }
+
+  if(options.disableWAL) {
+    derr << "Warning: Write Ahead Log is disabled, may lose data on failure" << dendl;
+  }  
+  if(options.wal_dir.length())
+    ldoptions.wal_dir = options.wal_dir;
+
   if (options.block_restart_interval)
     table_options.block_restart_interval = options.block_restart_interval;
 
@@ -88,28 +120,17 @@ int RocksDBStore::do_open(ostream &out, bool create_if_missing)
   ldoptions.paranoid_checks = options.paranoid_checks;
   ldoptions.create_if_missing = create_if_missing;
   if (options.log_file.length()) {
-    rocksdb::Env *env = rocksdb::Env::Default();
     env->NewLogger(options.log_file, &ldoptions.info_log);
     ldoptions.info_log->SetInfoLogLevel((rocksdb::InfoLogLevel)get_info_log_level(options.info_log_level));
   } else {
     ldoptions.info_log_level = (rocksdb::InfoLogLevel)get_info_log_level(options.info_log_level);
   }
-  if(options.disableDataSync)
-    ldoptions.disableDataSync = options.disableDataSync;
-  if(options.num_levels)
-    ldoptions.num_levels = options.num_levels;
-  if(options.level0_file_num_compaction_trigger)
-    ldoptions.level0_file_num_compaction_trigger = options.level0_file_num_compaction_trigger;
-  if(options.level0_slowdown_writes_trigger)
-    ldoptions.level0_slowdown_writes_trigger = options.level0_slowdown_writes_trigger;
-  if(options.level0_stop_writes_trigger)
-    ldoptions.level0_stop_writes_trigger = options.level0_stop_writes_trigger;
-  if(options.wal_dir.length())
-    ldoptions.wal_dir = options.wal_dir;
 
   //apply table_options
   ldoptions.table_factory.reset(NewBlockBasedTableFactory(table_options));
 
+  //apply env setting
+  ldoptions.env = env;
   //rocksdb::DB *_db;
   rocksdb::Status status = rocksdb::DB::Open(ldoptions, path, &db);
   if (!status.ok()) {
