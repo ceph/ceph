@@ -399,6 +399,21 @@ TEST_P(StoreTest, SimpleObjectTest) {
   }
   {
     ObjectStore::Transaction t;
+    bufferlist bl;
+    bl.append("abcde01234012340123401234abcde01234012340123401234abcde01234012340123401234abcde01234012340123401234");
+    t.write(cid, hoid, 0, bl.length(), bl);
+    cerr << "larger overwrite" << std::endl;
+    r = store->apply_transaction(t);
+    ASSERT_EQ(r, 0);
+
+    bufferlist in;
+    r = store->read(cid, hoid, 0, bl.length(), in);
+    ASSERT_EQ(bl.length(), r);
+    in.hexdump(cout);
+    ASSERT_TRUE(in.contents_equal(bl));
+  }
+  {
+    ObjectStore::Transaction t;
     t.remove(cid, hoid);
     t.remove_collection(cid);
     cerr << "Cleaning" << std::endl;
