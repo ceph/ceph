@@ -326,10 +326,43 @@ class TestStrays(CephFSTestCase):
         into one of his hardlinks.
         """
         # Create file_a, file_b, and a hardlink to file_b
+        size_mb = 8
+        self.mount_a.write_n_mb("file_a", size_mb)
+        file_a_ino = self.mount_a.path_to_ino("file_a")
+
+        self.mount_a.write_n_mb("file_b", size_mb)
+        file_b_ino = self.mount_a.path_to_ino("file_b")
+
+        self.mount_a.run_shell(["ln", "file_b", "linkto_b"])
+        self.assertEqual(self.mount_a.path_to_ino("linkto_b"), file_b_ino)
 
         # mv file_a file_b
+        self.mount_a.run_shell(["mv", "file_a", "file_b"])
 
-        # Proceed as with test_hardlink_reintegration
+        self.fs.mds_asok(['flush', 'journal'])
+
+        # Initially, linkto_b will still be a remote inode pointing to a newly created
+        # stray from when file_b was unlinked due to the 'mv'.  No data objects should
+        # have been deleted, as both files still have linkage.
+        self.assertEqual(self.get_mdc_stat("num_strays"), 1)
+        self.assertEqual(self.get_mdc_stat("strays_created"), 1)
+        self.assertTrue(self.get_backtrace_path(file_b_ino).startswith("stray"))
+        self.assertTrue(self.fs.data_objects_present(file_a_ino, size_mb * 1024 * 1024))
+        self.assertTrue(self.fs.data_objects_present(file_b_ino, size_mb * 1024 * 1024))
+
+        # Trigger reintegration and wait for it to happen
+        self.assertEqual(self.get_mdc_stat("strays_reintegrated"), 0)
+        self.mount_a.run_shell(["mv", "linkto_b", "file_c"])
+        self.wait_until_equal(
+            lambda: self.get_mdc_stat("strays_reintegrated"),
+            expect_val=1, timeout=60, reject_fn=lambda x: x > 1
+        )
+
+        self.fs.mds_asok(['flush', 'journal'])
+
+        post_reint_bt = self.fs.read_backtrace(file_b_ino)
+        self.assertEqual(post_reint_bt['ancestors'][0]['dname'], "file_c")
+        self.assertEqual(self.get_mdc_stat("num_strays"), 0)
 
     def test_migration_on_shutdown(self):
         """
