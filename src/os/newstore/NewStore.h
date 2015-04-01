@@ -147,6 +147,7 @@ public:
   };
 
   class OpSequencer;
+  typedef boost::intrusive_ptr<OpSequencer> OpSequencerRef;
 
   struct fsync_item {
     boost::intrusive::list_member_hook<> queue_item;
@@ -191,7 +192,7 @@ public:
       return "???";
     }
 
-    OpSequencer *osr;
+    OpSequencerRef osr;
     boost::intrusive::list_member_hook<> sequencer_item;
 
     list<fsync_item> fds;     ///< these fds need to be synced
@@ -714,6 +715,13 @@ static inline void intrusive_ptr_add_ref(NewStore::Onode *o) {
   o->get();
 }
 static inline void intrusive_ptr_release(NewStore::Onode *o) {
+  o->put();
+}
+
+static inline void intrusive_ptr_add_ref(NewStore::OpSequencer *o) {
+  o->get();
+}
+static inline void intrusive_ptr_release(NewStore::OpSequencer *o) {
   o->put();
 }
 

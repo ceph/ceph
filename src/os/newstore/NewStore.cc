@@ -2048,7 +2048,7 @@ void NewStore::_txc_finish_fsync(TransContext *txc)
    * even though fsyncs will complete in any order.
    */
 
-  OpSequencer *osr = txc->osr;
+  OpSequencer *osr = txc->osr.get();
   Mutex::Locker l(osr->qlock);
   txc->state = TransContext::STATE_FSYNC_DONE;
 
@@ -2200,12 +2200,12 @@ void NewStore::_txc_finish_apply(TransContext *txc)
     txc->removed_collections.pop_front();
   }
 
-  OpSequencer *osr = txc->osr;
+  OpSequencerRef osr = txc->osr;
   osr->qlock.Lock();
   txc->state = TransContext::STATE_DONE;
   osr->qlock.Unlock();
 
-  _osr_reap_done(osr);
+  _osr_reap_done(osr.get());
 }
 
 void NewStore::_osr_reap_done(OpSequencer *osr)
