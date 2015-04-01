@@ -299,6 +299,9 @@ public:
     void _wake() {
       pool->_wake();
     }
+    void _wait() {
+      pool->_wait();
+    }
     void drain() {
       pool->drain(this);
     }
@@ -375,6 +378,9 @@ public:
   void wake() {
     Mutex::Locker l(_lock);
     _cond.Signal();
+  }
+  void _wait() {
+    _cond.Wait(_lock);
   }
 
   /// start thread pool thread
