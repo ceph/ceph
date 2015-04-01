@@ -59,7 +59,7 @@ int main(int argc, const char **argv)
   char buf[1 << 20];
   bufferlist bl;
   bl.append(buf, sizeof(buf));
-  t.create_collection(coll_t());
+  t.create_collection(coll_t(), 0);
 
   for (int i=0; i<mb; i++) {
     char f[30];
