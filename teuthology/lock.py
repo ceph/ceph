@@ -492,9 +492,10 @@ def find_stale_locks(owner=None):
         ... because we really want "nodes that were locked for a particular job
         and are still locked" and the above is currently the best way to guess.
         """
+        desc = node_dict['description']
         if (node_dict['locked'] is True and
-            node_dict['description'] is not None and
-                node_dict['description'].count('/') > 1):
+            desc is not None and desc.startswith('/') and
+                desc.count('/') > 1):
             return True
         return False
 
