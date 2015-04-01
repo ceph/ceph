@@ -3073,7 +3073,7 @@ void OSD::handle_pg_peering_evt(
     switch (result) {
     case RES_NONE: {
       const pg_pool_t* pp = osdmap->get_pg_pool(pgid.pool());
-      PG::_create(*rctx.transaction, pgid);
+      PG::_create(*rctx.transaction, pgid, pgid.get_split_bits(pp->get_pg_num()));
       PG::_init(*rctx.transaction, pgid, pp);
 
       PG *pg = _create_lock_pg(
@@ -7007,7 +7007,7 @@ void OSD::handle_pg_create(OpRequestRef op)
     PG *pg = NULL;
     if (can_create_pg(pgid)) {
       const pg_pool_t* pp = osdmap->get_pg_pool(pgid.pool());
-      PG::_create(*rctx.transaction, pgid);
+      PG::_create(*rctx.transaction, pgid, pgid.get_split_bits(pp->get_pg_num()));
       PG::_init(*rctx.transaction, pgid, pp);
 
       pg_interval_map_t pi;

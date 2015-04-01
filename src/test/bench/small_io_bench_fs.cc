@@ -171,12 +171,12 @@ int main(int argc, char **argv)
     spg_t pgid(pg_t(num, 0), shard_id_t::NO_SHARD);
     std::cout << "collection " << pgid << std::endl;
     ObjectStore::Transaction t;
-    t.create_collection(coll_t(pgid));
+    t.create_collection(coll_t(pgid), 0);
     fs.apply_transaction(t);
   }
   {
     ObjectStore::Transaction t;
-    t.create_collection(coll_t());
+    t.create_collection(coll_t(), 0);
     fs.apply_transaction(t);
   }
 

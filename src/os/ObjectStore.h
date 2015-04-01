@@ -1190,7 +1190,7 @@ public:
       data.ops++;
     }
     /// Create the collection
-    void create_collection(coll_t cid) {
+    void create_collection(coll_t cid, int bits) {
       if (use_tbl) {
         __u32 op = OP_MKCOLL;
         ::encode(op, tbl);
@@ -1199,6 +1199,7 @@ public:
         Op* _op = _get_next_op();
         _op->op = OP_MKCOLL;
         _op->cid = _get_coll_id(cid);
+	_op->split_bits = bits;
       }
       data.ops++;
     }
