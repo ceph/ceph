@@ -203,6 +203,20 @@ function test_activate_dir_magic() {
     grep --quiet $uuid $osd_data/ceph_fsid || return 1
 }
 
+function test_pool_read_write() {
+    local osd_uuid=$1
+
+    $timeout $TIMEOUT ./ceph osd pool set $TEST_POOL size 1 || return 1
+
+    local id=$(ceph osd create $osd_uuid)
+    local weight=1
+    ./ceph osd crush add osd.$id $weight root=default host=localhost || return 1
+    echo FOO > $DIR/BAR
+    $timeout $TIMEOUT ./rados --pool $TEST_POOL put BAR $DIR/BAR || return 1
+    $timeout $TIMEOUT ./rados --pool $TEST_POOL get BAR $DIR/BAR.copy || return 1
+    $diff $DIR/BAR $DIR/BAR.copy || return 1
+}
+
 function test_activate() {
     local to_prepare=$1
     local to_activate=$2
@@ -218,15 +232,8 @@ function test_activate() {
         activate \
         --mark-init=none \
         $to_activate || return 1
-    $timeout $TIMEOUT ./ceph osd pool set $TEST_POOL size 1 || return 1
 
-    local id=$(ceph osd create $osd_uuid)
-    local weight=1
-    ./ceph osd crush add osd.$id $weight root=default host=localhost || return 1
-    echo FOO > $DIR/BAR
-    $timeout $TIMEOUT ./rados --pool $TEST_POOL put BAR $DIR/BAR || return 1
-    $timeout $TIMEOUT ./rados --pool $TEST_POOL get BAR $DIR/BAR.copy || return 1
-    $diff $DIR/BAR $DIR/BAR.copy || return 1
+    test_pool_read_write $osd_uuid || return 1
 }
 
 function test_activate_dmcrypt() {
@@ -259,15 +266,8 @@ function test_activate_dmcrypt() {
         activate \
         --mark-init=none \
         /dev/mapper/$uuid || return 1
-    $timeout $TIMEOUT ./ceph osd pool set $TEST_POOL size 1 || return 1
 
-    local id=$($cat $OSD_DATA/ceph-?/whoami || $cat $to_activate/whoami)
-    local weight=1
-    ./ceph osd crush add osd.$id $weight root=default host=localhost || return 1
-    echo FOO > $DIR/BAR
-    $timeout $TIMEOUT ./rados --pool $TEST_POOL put BAR $DIR/BAR || return 1
-    $timeout $TIMEOUT ./rados --pool $TEST_POOL get BAR $DIR/BAR.copy || return 1
-    $diff $DIR/BAR $DIR/BAR.copy || return 1
+    test_pool_read_write $osd_uuid || return 1
 }
 
 function test_activate_dir() {
