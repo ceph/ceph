@@ -475,6 +475,11 @@ function activate_dev_body() {
 }
 
 function test_activate_dev() {
+    test_setup_dev_and_run activate_dev_body
+}
+
+function test_setup_dev_and_run() {
+    local action=$1
     if test $(id -u) != 0 ; then
         echo "SKIP because not root"
         return 0
@@ -490,9 +495,8 @@ function test_activate_dev() {
     local newdisk
     newdisk=$(create_dev $dir/vdh.disk) || return 1
 
-    activate_dev_body $disk $journal $newdisk
+    $action $disk $journal $newdisk
     status=$?
-    test $status != 0 && teardown
 
     destroy_dev $dir/vdf.disk $disk
     destroy_dev $dir/vdg.disk $journal
