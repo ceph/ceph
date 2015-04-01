@@ -15,8 +15,6 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU Library Public License for more details.
 #
-set -e
-
 source test/test_btrfs_common.sh
 
 PS4='${FUNCNAME[0]}: $LINENO: '
@@ -450,17 +448,21 @@ function test_activate_dev() {
 
     loop_sanity_check || return 1
 
-    local disk=$(create_dev vdf.disk)
-    local journal=$(create_dev vdg.disk)
-    local newdisk=$(create_dev vdh.disk)
+    local dir=$(pwd)/$DIR
+    local disk
+    disk=$(create_dev $dir/vdf.disk) || return 1
+    local journal
+    journal=$(create_dev $dir/vdg.disk) || return 1
+    local newdisk
+    newdisk=$(create_dev $dir/vdh.disk) || return 1
 
     activate_dev_body $disk $journal $newdisk
     status=$?
     test $status != 0 && teardown
 
-    destroy_dev vdf.disk $disk
-    destroy_dev vdg.disk $journal
-    destroy_dev vdh.disk $newdisk
+    destroy_dev $dir/vdf.disk $disk
+    destroy_dev $dir/vdg.disk $journal
+    destroy_dev $dir/vdh.disk $newdisk
 
     return $status
 }
@@ -583,8 +585,10 @@ function run() {
     local actions=${@:-$default_actions}
     for action in $actions  ; do
         setup
-        $action || return 1
+        $action
+        status=$?
         teardown
+        test $status != 0 || return $status
     done
 }
 
