@@ -8,3 +8,8 @@ roles:
   - osd.2
   - osd.3
 - - client.0
+overrides:
+  ceph:
+    log-whitelist:
+    - failed to encode map
+
