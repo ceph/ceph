@@ -342,6 +342,10 @@ struct pg_t {
    */
   unsigned get_split_bits(unsigned pg_num) const;
 
+  bool contains(int bits, const ghobject_t& oid) {
+    return oid.match(bits, ps());
+  }
+
   void encode(bufferlist& bl) const {
     __u8 v = 1;
     ::encode(v, bl);
