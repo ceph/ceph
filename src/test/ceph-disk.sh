@@ -482,20 +482,6 @@ function test_setup_dev_and_run() {
     return $status
 }
 
-function destroy_dmcrypt_dev() {
-    local name=$1
-    local dev=$2
-    local uuid=$3
-
-    for partition in 1 2 3 4 ; do
-        umount /dev/mapper/$uuid || true
-	/sbin/cryptsetup remove /dev/mapper/$uuid || true
-	dmsetup remove /dev/mapper/$uuid || true
-    done
-    losetup --detach $dev
-    rm $name
-}
-
 function activate_dmcrypt_dev_body() {
     local disk=$1
     local journal=$2
@@ -512,26 +498,7 @@ function activate_dmcrypt_dev_body() {
 }
 
 function test_activate_dmcrypt_dev() {
-    if test $(id -u) != 0 ; then
-        echo "SKIP because not root"
-        return 0
-    fi
-
-    loop_sanity_check || return 1
-
-    local disk=$(create_dev vdf.disk)
-    local journal=$(create_dev vdg.disk)
-    local newdisk=$(create_dev vdh.disk)
-
-    activate_dmcrypt_dev_body $disk $journal $newdisk
-    status=$?
-    test $status != 0 && teardown
-
-    destroy_dmcrypt_dev vdf.disk $disk
-    destroy_dmcrypt_dev vdg.disk $journal
-    destroy_dmcrypt_dev vdh.disk $newdisk
-
-    return $status
+    test_setup_dev_and_run activate_dmcrypt_dev_body
 }
 
 function activate_dmcrypt_plain_dev_body() {
@@ -550,23 +517,7 @@ function activate_dmcrypt_plain_dev_body() {
 }
 
 function test_activate_dmcrypt_plain_dev() {
-    if test $(id -u) != 0 ; then
-        echo "SKIP because not root"
-        return 0
-    fi
-
-    local disk=$(create_dev vdf.disk)
-    local journal=$(create_dev vdg.disk)
-    local newdisk=$(create_dev vdh.disk)
-
-    activate_dmcrypt_plain_dev_body $disk $journal $newdisk
-    status=$?
-
-    destroy_dmcrypt_dev vdf.disk $disk
-    destroy_dmcrypt_dev vdg.disk $journal
-    destroy_dmcrypt_dev vdh.disk $newdisk
-
-    return $status
+    test_setup_dev_and_run activate_dmcrypt_plain_dev_body
 }
 
 function test_find_cluster_by_uuid() {
