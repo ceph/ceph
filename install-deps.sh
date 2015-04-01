@@ -49,9 +49,9 @@ Ubuntu|Debian|Devuan)
         packages=$(echo $packages) # change newlines into spaces
         $SUDO bash -c "DEBIAN_FRONTEND=noninteractive apt-get install -y $packages"
         ;;
-CentOS|Fedora|SUSE*|RedHatEnterpriseServer)
+CentOS|Fedora|SUSE*|RedHatEnterpriseServer|openSUSE*)
         case $(lsb_release -si) in
-            SUSE*)
+            SUSE*|openSUSE*)
                 $SUDO zypper --non-interactive install yum-utils
                 ;;
             Fedora)
