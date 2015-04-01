@@ -1393,6 +1393,30 @@ static bool is_valid_name(const char *name)
    return true;
 }
 
+int check_names(const char *poolname, const char *imagename, const char *snapname)
+{ 
+  int invalid_count = 0;
+
+  if(!is_valid_name(poolname)) {
+    cerr << "rbd: The pool name '"<<poolname<<"' is invalid"<<std::endl;
+    invalid_count++;
+  }
+
+  if(!is_valid_name(imagename)) {
+    cerr << "rbd: The image name '"<<imagename<<"' is invalid"<<std::endl;
+    invalid_count++;
+  }
+
+  if(!is_valid_name(snapname)) {
+    cerr << "rbd: The snap name '"<<snapname<<"' is invalid"<<std::endl; 
+    invalid_count++;
+  }
+
+  if(invalid_count)
+    return EXIT_FAILURE;
+
+  return EXIT_SUCCESS;
+}
 
 static void set_pool_image_name(const char *orig_img, char **new_pool, 
 				char **new_img, char **snap)
@@ -2687,7 +2711,7 @@ int main(int argc, const char **argv)
   env_to_vec(args);
 
   int opt_cmd = OPT_NO_CMD;
-  int invalid_count = 0;
+  int ret;
   global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
 
   const char *poolname = NULL;
@@ -3066,27 +3090,9 @@ if (!set_conf_param(v, p1, p2, p3)) { \
   set_pool_image_name(imgname, (char **)&poolname,
 		      (char **)&imgname, (char **)&snapname);
 
-
-  if(!is_valid_name(poolname)) 
-    invalid_count++;
-  
-  if(!is_valid_name(snapname)) 
-    invalid_count++;
-
-  if(!is_valid_name(imgname)) 
-    invalid_count++;
-  
-
-  if(invalid_count > 0) {
-    if(invalid_count == 3)
-      cerr << "rbd: The pool, image and snap names are invalid"<<std::endl;
-    else if(invalid_count == 2)
-      cerr <<"rbd: The pool/image/snap names are invalid"<<std::endl;
-    else if(invalid_count == 1)
-      cerr <<"rbd: The pool/image/snap name is invalid"<<std::endl;
-    return EXIT_FAILURE;
-  }
- 
+  ret = check_names(poolname,imgname,snapname); 
+  if(ret != EXIT_SUCCESS)
+    return ret;
 
   
   if (snapname && opt_cmd != OPT_SNAP_CREATE && opt_cmd != OPT_SNAP_ROLLBACK &&
@@ -3110,27 +3116,9 @@ if (!set_conf_param(v, p1, p2, p3)) { \
   set_pool_image_name(destname, (char **)&dest_poolname,
 		      (char **)&destname, (char **)&dest_snapname);
 
-  invalid_count = 0;
-
-  if(!is_valid_name(dest_poolname))
-    invalid_count++;
-
-  if(!is_valid_name(destname))
-    invalid_count++;
-
-  if(!is_valid_name(dest_snapname))
-    invalid_count++;
-
-
-  if(invalid_count > 0) {
-    if(invalid_count == 3)
-      cerr << "rbd: The destination pool, image and snap names are invalid"<<std::endl;
-    else if(invalid_count == 2)
-      cerr <<"rbd: The destination pool/image/snap names are invalid"<<std::endl;
-    else if(invalid_count == 1)
-      cerr <<"rbd: The destination pool/image/snap name is invalid"<<std::endl;
-    return EXIT_FAILURE;
-  }
+  ret = check_names(dest_poolname,destname,dest_snapname);
+  if(ret != EXIT_SUCCESS)
+    return ret;
 
 
   if (opt_cmd == OPT_IMPORT) {
