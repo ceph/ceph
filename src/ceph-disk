@@ -1468,12 +1468,32 @@ def prepare_dev(
         except subprocess.CalledProcessError as e:
             raise Error(e)
 
+def check_journal_reqs(args):
+    _, allows_journal = command([
+        'ceph-osd', '--check-allows-journal',
+        '-i', '0',
+        '--cluster', args.cluster,
+    ])
+    _, wants_journal = command([
+        'ceph-osd', '--check-wants-journal',
+        '-i', '0',
+        '--cluster', args.cluster,
+    ])
+    _, needs_journal = command([
+        'ceph-osd', '--check-needs-journal',
+        '-i', '0',
+        '--cluster', args.cluster,
+    ])
+    return (not allows_journal, not wants_journal, not needs_journal)
 
 def main_prepare(args):
     journal_dm_keypath = None
     osd_dm_keypath = None
 
     try:
+        # first learn what the osd allows/wants/needs
+        (allows_journal, wants_journal, needs_journal) = check_journal_reqs(args)
+
         prepare_lock.acquire()  # noqa
         if not os.path.exists(args.data):
             if args.data_dev:
@@ -1486,6 +1506,9 @@ def main_prepare(args):
         dmode = os.stat(args.data).st_mode
         if stat.S_ISBLK(dmode):
             verify_not_in_use(args.data, True)
+
+        if args.journal and not allows_journal:
+            raise Error('journal specified but not allowed by osd backend')
 
         if args.journal and os.path.exists(args.journal):
             jmode = os.stat(args.journal).st_mode
@@ -1609,31 +1632,36 @@ def main_prepare(args):
             raise Error('invalid osd_dmcrypt_type parameter (must be luks or plain): ', dmcrypt_type)
 
         # colocate journal with data?
-        if stat.S_ISBLK(dmode) and not is_partition(args.data) and args.journal is None and args.journal_file is None:
+        if wants_journal and stat.S_ISBLK(dmode) and not is_partition(args.data) and args.journal is None and args.journal_file is None:
             LOG.info('Will colocate journal with data on %s', args.data)
             args.journal = args.data
 
-        if args.journal_uuid is None:
+        if args.journal and args.journal_uuid is None:
             args.journal_uuid = str(uuid.uuid4())
         if args.osd_uuid is None:
             args.osd_uuid = str(uuid.uuid4())
 
         # dm-crypt keys?
         if args.dmcrypt:
-            journal_dm_keypath = get_or_create_dmcrypt_key(args.journal_uuid, args.dmcrypt_key_dir, dmcrypt_keysize, luks)
+            if args.journal:
+                journal_dm_keypath = get_or_create_dmcrypt_key(args.journal_uuid, args.dmcrypt_key_dir, dmcrypt_keysize, luks)
             osd_dm_keypath = get_or_create_dmcrypt_key(args.osd_uuid, args.dmcrypt_key_dir, dmcrypt_keysize, luks)
 
         # prepare journal
-        (journal_symlink, journal_dmcrypt, journal_uuid) = prepare_journal(
-            data=args.data,
-            journal=args.journal,
-            journal_size=journal_size,
-            journal_uuid=args.journal_uuid,
-            force_file=args.journal_file,
-            force_dev=args.journal_dev,
-            journal_dm_keypath=journal_dm_keypath,
-            cryptsetup_parameters=cryptsetup_parameters,
-            luks=luks
+        journal_symlink = None
+        journal_dmcrypt = None
+        journal_uuid = None
+        if args.journal:
+            (journal_symlink, journal_dmcrypt, journal_uuid) = prepare_journal(
+                data=args.data,
+                journal=args.journal,
+                journal_size=journal_size,
+                journal_uuid=args.journal_uuid,
+                force_file=args.journal_file,
+                force_dev=args.journal_dev,
+                journal_dm_keypath=journal_dm_keypath,
+                cryptsetup_parameters=cryptsetup_parameters,
+                luks=luks
             )
 
         # prepare data
