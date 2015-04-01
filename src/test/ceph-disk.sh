@@ -410,8 +410,22 @@ function activate_dev_body() {
     setup
     run_mon
     #
+    # Create an OSD without a journal and an objectstore
+    # that does not use a journal.
+    #
+    ceph-disk zap $disk || return 1
+    CEPH_ARGS="$CEPH_ARGS --osd-objectstore=memstore" \
+        test_activate $disk ${disk}p1 || return 1
+    kill_daemons
+    umount ${disk}p1 || return 1
+    teardown
+
+    setup
+    run_mon
+    #
     # Create an OSD with data on a disk, journal on another
     #
+    ceph-disk zap $disk || return 1
     test_activate $disk ${disk}p1 $journal || return 1
     kill_daemons
     umount ${disk}p1 || return 1
