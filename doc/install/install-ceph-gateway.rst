@@ -10,28 +10,29 @@ The :term:`Ceph Object Gateway` daemon runs on Apache and FastCGI.
 
 To run a :term:`Ceph Object Storage` service, you must install Apache and
 Ceph Object Gateway daemon on the host that is going to provide the gateway
-service, i.e, the `gateway host`. If you plan to run a Ceph Object Storage
+service, i.e, the ``gateway host``. If you plan to run a Ceph Object Storage
 service with a federated architecture (multiple regions and zones), you must
 also install the synchronization agent.
 
 .. note:: Previous versions of Inktank Ceph Enterprise shipped with
-   `mod_fastcgi`. The current version ships with `mod_proxy_fcgi` instead.
+   ``mod_fastcgi``. The current version ships with ``mod_proxy_fcgi`` instead.
 
 In distros that ship Apache 2.4 (such as RHEL 7, CentOS 7 or Ubuntu 14.04
-`Trusty`), `mod_proxy_fcgi` is already present. When you install the `httpd`
-package with `yum`, `mod_proxy_fcgi` becomes available for use on your server.
+``Trusty``), ``mod_proxy_fcgi`` is already present. When you install the
+``httpd`` package with ``yum``, ``mod_proxy_fcgi`` becomes available for use
+on your server.
 
 In distros that ship Apache 2.2 (such as RHEL 6, CentOS 6 or Ubuntu 12.04
-`Precise`), `mod_proxy_fcgi` comes as a separate package. In *RHEL 6/CentOS 6*,
-it is available in `EPEL 6` repo and can be installed with `yum install
-mod_proxy_fcgi`. For Ubuntu *12.04*, a backport has been created for
-`mod_proxy_fcgi` which is available in `Precise` backport repository.
+``Precise``), ``mod_proxy_fcgi`` comes as a separate package. In
+**RHEL 6/CentOS 6**, it is available in ``EPEL 6`` repo and can be installed with
+``yum install mod_proxy_fcgi``. For **Ubuntu 12.04**, a backport has been created
+for ``mod_proxy_fcgi`` which is available in ``Precise`` backport repository.
 
 
 Install Apache
 ==============
 
-To install Apache on the `gateway host`, execute the following:
+To install Apache on the ``gateway host``, execute the following:
 
 On Debian-based distros, run::
 
@@ -45,30 +46,31 @@ On RPM-based distros, run::
 Configure Apache
 ================
 
-Make the following changes in Apache's configuration on the `gateway host`:
+Make the following changes in Apache's configuration on the ``gateway host``:
 
 Debian-based distros
 --------------------
 
-#. Open the `apache2.conf` file::
+#. Open the ``apache2.conf`` file::
 
 	sudo vim /etc/apache2/apache2.conf
 
-#. Add a line for the `ServerName` in the Apache configuration file. Provide
-   the fully qualified domain name of the server machine (e.g., hostname -f)::
+#. Add a line for the ``ServerName`` in the Apache configuration file. Provide
+   the fully qualified domain name of the server machine
+   (e.g., ``hostname -f``)::
 
 	ServerName {fqdn}
 
-#. Update `/etc/apache2/apache2.conf` to load `mod_proxy_fcgi` module. Add the
-   following to the file::
+#. Update ``/etc/apache2/apache2.conf`` to load ``mod_proxy_fcgi`` module. Add
+   the following to the file::
 
 	<IfModule !proxy_fcgi_module>
 	LoadModule proxy_fcgi_module modules/mod_proxy_fcgi.so
 	</IfModule>
 
-#. Edit the line `Listen 80` in `/etc/apache2/apache2.conf` with the public IP
-   address of the host that you are configuring as a gateway server. Write
-   `Listen {IP ADDRESS}:80` in place of `Listen 80`.
+#. Edit the line ``Listen 80`` in ``/etc/apache2/apache2.conf`` with the public
+   IP address of the host that you are configuring as a gateway server. Write
+   ``Listen {IP ADDRESS}:80`` in place of ``Listen 80``.
 
 #. Start Apache service::
 
@@ -77,25 +79,26 @@ Debian-based distros
 RPM-based distros
 -----------------
 
-#. Open the `httpd.conf` file::
+#. Open the ``httpd.conf`` file::
 
 	sudo vim /etc/httpd/conf/httpd.conf
 
-#. Uncomment `#ServerName` in the file and add the name of your server. Provide
-   the fully qualified domain name of the server machine (e.g., `hostname -f`)::
+#. Uncomment ``#ServerName`` in the file and add the name of your server. Provide
+   the fully qualified domain name of the server machine
+   (e.g., ``hostname -f``)::
 
 	ServerName {fqdn}
 
-#. Update `/etc/httpd/conf/httpd.conf` to load `mod_proxy_fcgi` module. Add the
-   following to the file::
+#. Update ``/etc/httpd/conf/httpd.conf`` to load ``mod_proxy_fcgi`` module. Add
+   the following to the file::
 
 	<IfModule !proxy_fcgi_module>
 	LoadModule proxy_fcgi_module modules/mod_proxy_fcgi.so
 	</IfModule>
 
-#. Edit the line `Listen 80` in `/etc/httpd/conf/httpd.conf` with the public IP
-   address of the host that you are configuring as a gateway server.Write
-   `Listen {IP ADDRESS}:80` in place of `Listen 80`.
+#. Edit the line ``Listen 80`` in ``/etc/httpd/conf/httpd.conf`` with the public
+   IP address of the host that you are configuring as a gateway server. Write
+   ``Listen {IP ADDRESS}:80`` in place of ``Listen 80``.
 
 #. Start httpd service
 
@@ -224,7 +227,7 @@ following::
 RPM-based distros
 -----------------
 
-To install the Ceph Object Gateway daemon on the `gateway host`, execute the
+To install the Ceph Object Gateway daemon on the ``gateway host``, execute the
 following:: 
 
 	sudo yum install ceph-radosgw
