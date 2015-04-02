@@ -98,6 +98,23 @@ public:
   typedef ceph::shared_ptr<MonOpRequest> Ref;
 
   void send_reply(Message *reply);
+
+  void _dump(utime_t now, Formatter *t) const {
+    Message *m = request;
+    {
+      f->open_array_section("events");
+      Mutex::Locker l(lock);
+      for (list<pair<utime_t,string> >::const_iterator i = events.begin();
+           i != events.end(); ++i) {
+        f->open_object_section("event");
+        f->dump_stream("time") << i->first;
+        f->dump_string("event", i->second);
+        f->close_section();
+      }
+      f->close_section();
+    }
+  }
+
 };
 
 typedef MonOpRequest::Ref MonOpRequestRef;
