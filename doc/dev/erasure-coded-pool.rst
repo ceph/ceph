@@ -90,7 +90,7 @@ Choose an alternate erasure code plugin::
  m=1
  plugin=example
  technique=xor
- $ ceph osd create ecpool 12 12 erasure \
+ $ ceph osd pool create ecpool 12 12 erasure \
      myprofile
 
 Display the default erasure code profile::

@@ -1764,28 +1764,33 @@ void MDS::handle_mds_map(MMDSMap *m)
   }
 
   // did someone fail?
-  if (true) {
-    // new failed?
-    set<mds_rank_t> oldfailed, failed;
-    oldmap->get_failed_mds_set(oldfailed);
-    mdsmap->get_failed_mds_set(failed);
-    for (set<mds_rank_t>::iterator p = failed.begin(); p != failed.end(); ++p)
-      if (oldfailed.count(*p) == 0) {
-	messenger->mark_down(oldmap->get_inst(*p).addr);
-	handle_mds_failure(*p);
+  //   new down?
+  {
+    set<mds_rank_t> olddown, down;
+    oldmap->get_down_mds_set(&olddown);
+    mdsmap->get_down_mds_set(&down);
+    for (set<mds_rank_t>::iterator p = down.begin(); p != down.end(); ++p) {
+      if (olddown.count(*p) == 0) {
+        messenger->mark_down(oldmap->get_inst(*p).addr);
+        handle_mds_failure(*p);
       }
-    
-    // or down then up?
-    //  did their addr/inst change?
+    }
+  }
+
+  // did someone fail?
+  //   did their addr/inst change?
+  {
     set<mds_rank_t> up;
     mdsmap->get_up_mds_set(up);
-    for (set<mds_rank_t>::iterator p = up.begin(); p != up.end(); ++p) 
+    for (set<mds_rank_t>::iterator p = up.begin(); p != up.end(); ++p) {
       if (oldmap->have_inst(*p) &&
-	  oldmap->get_inst(*p) != mdsmap->get_inst(*p)) {
-	messenger->mark_down(oldmap->get_inst(*p).addr);
-	handle_mds_failure(*p);
+         oldmap->get_inst(*p) != mdsmap->get_inst(*p)) {
+        messenger->mark_down(oldmap->get_inst(*p).addr);
+        handle_mds_failure(*p);
       }
+    }
   }
+
   if (is_clientreplay() || is_active() || is_stopping()) {
     // did anyone stop?
     set<mds_rank_t> oldstopped, stopped;
@@ -2497,7 +2502,7 @@ bool MDS::ms_dispatch(Message *m)
     ret = true;
   } else {
     inc_dispatch_depth();
-    ret = _dispatch(m);
+    ret = _dispatch(m, true);
     dec_dispatch_depth();
   }
   mds_lock.Unlock();
@@ -2726,7 +2731,7 @@ void MDS::_advance_queues()
 
 /* If this function returns true, it has put the message. If it returns false,
  * it has not put the message. */
-bool MDS::_dispatch(Message *m)
+bool MDS::_dispatch(Message *m, bool new_msg)
 {
   if (is_stale_message(m)) {
     m->put();
@@ -2737,6 +2742,9 @@ bool MDS::_dispatch(Message *m)
   if (!handle_core_message(m)) {
     if (beacon.is_laggy()) {
       dout(10) << " laggy, deferring " << *m << dendl;
+      waiting_for_nolaggy.push_back(m);
+    } else if (new_msg && !waiting_for_nolaggy.empty()) {
+      dout(10) << " there are deferred messages, deferring " << *m << dendl;
       waiting_for_nolaggy.push_back(m);
     } else {
       if (!handle_deferrable_message(m)) {

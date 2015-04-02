@@ -333,7 +333,7 @@ int test_ls(rados_ioctx_t io_ctx, size_t num_expected, ...)
     printf("expected = %s\n", expected);
     std::set<std::string>::iterator it = image_names.find(expected);
     if (it != image_names.end()) {
-      printf("found %s\n", cur_name);
+      printf("found %s\n", expected);
       image_names.erase(it);
     } else {
       ADD_FAILURE() << "Unable to find image " << expected;
@@ -1962,12 +1962,12 @@ TEST_F(TestLibRBD, FlushAioPP)
     ASSERT_EQ(0, image.aio_flush(flush_comp));
     ASSERT_EQ(0, flush_comp->wait_for_complete());
     ASSERT_EQ(1, flush_comp->is_complete());
-    delete flush_comp;
+    flush_comp->release();
 
     for (i = 0; i < num_aios; ++i) {
       librbd::RBD::AioCompletion *comp = write_comps[i];
       ASSERT_EQ(1, comp->is_complete());
-      delete comp;
+      comp->release();
     }
     ASSERT_PASSED(validate_object_map, image);
   }

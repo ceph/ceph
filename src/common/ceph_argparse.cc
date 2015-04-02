@@ -45,6 +45,26 @@
 #undef generic_dout
 #undef dendl
 
+struct strict_str_convert {
+  const char *str;
+  std::string *err;
+  strict_str_convert(const char *str,  std::string *err)
+    : str(str), err(err) {}
+
+  inline operator float() const
+  {
+    return strict_strtof(str, err);
+  }
+  inline operator int() const
+  {
+    return strict_strtol(str, 10, err);
+  }
+  inline operator long long() const
+  {
+    return  strict_strtoll(str, 10, err);
+  }
+};
+
 void string_to_vec(std::vector<std::string>& args, std::string argstr)
 {
   istringstream iss(argstr);
@@ -352,6 +372,56 @@ static bool va_ceph_argparse_witharg(std::vector<const char*> &args,
   }
 }
 
+template<class T>
+bool ceph_argparse_witharg(std::vector<const char*> &args,
+	std::vector<const char*>::iterator &i, T *ret,
+	std::ostream *oss, ...)
+{
+  bool r;
+  va_list ap;
+  bool isOption = false;
+  bool isNumeric = true;
+  std::string str;
+  va_start(ap, oss);
+  r = va_ceph_argparse_witharg(args, i, &str, ap);
+  va_end(ap);
+  if (!r) {
+    return false;
+  }
+
+  ceph_arg_value_type(str.c_str(),&isOption,&isNumeric);
+  if((isOption == true) || (isNumeric == false)) {
+     *ret = EXIT_FAILURE;
+     if(isOption == true) {
+     *oss << "Missing option value";
+        }
+     else {
+        *oss << "The option value '"<<str<<"' is invalid";
+        }
+     return true;
+    }
+
+  std::string err;
+  T myret = strict_str_convert(str.c_str(), &err);
+  *ret = myret;
+  if (!err.empty()) {
+    *oss << err;
+  }
+  return true;
+}
+
+template bool ceph_argparse_witharg<int>(std::vector<const char*> &args,
+	std::vector<const char*>::iterator &i, int *ret,
+	std::ostream *oss, ...);
+
+template bool ceph_argparse_witharg<long long>(std::vector<const char*> &args,
+	std::vector<const char*>::iterator &i, long long *ret,
+	std::ostream *oss, ...);
+
+template bool ceph_argparse_witharg<float>(std::vector<const char*> &args,
+	std::vector<const char*>::iterator &i, float *ret,
+	std::ostream *oss, ...);
+
 bool ceph_argparse_witharg(std::vector<const char*> &args,
 	std::vector<const char*>::iterator &i, std::string *ret, ...)
 {
@@ -361,103 +431,6 @@ bool ceph_argparse_witharg(std::vector<const char*> &args,
   r = va_ceph_argparse_witharg(args, i, ret, ap);
   va_end(ap);
   return r;
-}
-
-bool ceph_argparse_withint(std::vector<const char*> &args,
-	std::vector<const char*>::iterator &i, int *ret,
-	std::ostream *oss, ...)
-{
-  bool r;
-  va_list ap;
-  bool isOption = false;
-  bool isNumeric = true;
-  std::string str;
-  va_start(ap, oss);
-  r = va_ceph_argparse_witharg(args, i, &str, ap);
-  va_end(ap);
-  if (!r) {
-    return false;
-  }
-
-  ceph_arg_value_type(str.c_str(),&isOption,&isNumeric);
-  if((isOption == true) || (isNumeric == false)) {
-     *ret = EXIT_FAILURE;
-     if(isOption == true) {
-     *oss << "Missing option value";
-        }
-     else {
-        *oss << "The option value '"<<str<<"' is invalid";
-        }
-     return true;
-    }
-
-  std::string err;
-  int myret = strict_strtol(str.c_str(), 10, &err);
-  *ret = myret;
-  if (!err.empty()) {
-    *oss << err;
-  }
-  return true;
-}
-
-bool ceph_argparse_withlonglong(std::vector<const char*> &args,
-	std::vector<const char*>::iterator &i, long long *ret,
-	std::ostream *oss, ...)
-{
-  bool r;
-  bool isOption = false;
-  bool isNumeric = true;
-  va_list ap;
-  std::string str;
-  va_start(ap, oss);
-  r = va_ceph_argparse_witharg(args, i, &str, ap);
-  va_end(ap);
-  if (!r) {
-    return false;
-  }
-
-  ceph_arg_value_type(str.c_str(),&isOption,&isNumeric);
-  if((isOption == true) || (isNumeric == false)) {
-     *ret = EXIT_FAILURE;
-     if(isOption == true) {
-     *oss << "Missing option value";
-        }
-     else {
-        *oss << "The option value '"<<str<<"' is invalid";
-        }
-     return true;
-    }
-
-  std::string err;
-  long long myret = strict_strtoll(str.c_str(), 10, &err);
-  *ret = myret;
-  if (!err.empty()) {
-    *oss << err;
-  }
-  return true;
-}
-
-bool ceph_argparse_withfloat(std::vector<const char*> &args,
-	std::vector<const char*>::iterator &i, float *ret,
-	std::ostream *oss, ...)
-{
-  bool r;
-  va_list ap;
-  std::string str;
-  va_start(ap, oss);
-  r = va_ceph_argparse_witharg(args, i, &str, ap);
-  va_end(ap);
-  if (!r) {
-    return false;
-  }
-
-  std::string err;
-  float myret = strict_strtof(str.c_str(), &err);
-  *ret = myret;
-  if (!err.empty()) {
-    *oss << err;
-  }
-  return true;
 }
 
 CephInitParameters ceph_argparse_early_args

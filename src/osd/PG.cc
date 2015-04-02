@@ -2699,31 +2699,27 @@ void PG::_upgrade_v7(ObjectStore *store, const interval_set<snapid_t> &snapcolls
   }
 }
 
-int PG::_write_info(ObjectStore::Transaction& t, epoch_t epoch,
-		    pg_info_t &info, coll_t coll,
-		    map<epoch_t,pg_interval_t> &past_intervals,
-		    ghobject_t &pgmeta_oid,
-		    bool dirty_big_info)
+int PG::_prepare_write_info(map<string,bufferlist> *km,
+			    epoch_t epoch,
+			    pg_info_t &info, coll_t coll,
+			    map<epoch_t,pg_interval_t> &past_intervals,
+			    ghobject_t &pgmeta_oid,
+			    bool dirty_big_info)
 {
-  // pg state
-  map<string,bufferlist> v;
-
   // info.  store purged_snaps separately.
   interval_set<snapid_t> purged_snaps;
-  ::encode(epoch, v[epoch_key]);
+  ::encode(epoch, (*km)[epoch_key]);
   purged_snaps.swap(info.purged_snaps);
-  ::encode(info, v[info_key]);
+  ::encode(info, (*km)[info_key]);
   purged_snaps.swap(info.purged_snaps);
 
   if (dirty_big_info) {
     // potentially big stuff
-    bufferlist& bigbl = v[biginfo_key];
+    bufferlist& bigbl = (*km)[biginfo_key];
     ::encode(past_intervals, bigbl);
     ::encode(info.purged_snaps, bigbl);
     //dout(20) << "write_info bigbl " << bigbl.length() << dendl;
   }
-
-  t.omap_setkeys(coll, pgmeta_oid, v);
 
   return 0;
 }
@@ -2757,14 +2753,14 @@ void PG::_init(ObjectStore::Transaction& t, spg_t pgid, const pg_pool_t *pool)
   t.omap_setkeys(coll, pgmeta_oid, values);
 }
 
-void PG::write_info(ObjectStore::Transaction& t)
+void PG::prepare_write_info(map<string,bufferlist> *km)
 {
   info.stats.stats.add(unstable_stats);
   unstable_stats.clear();
 
-  int ret = _write_info(t, get_osdmap()->get_epoch(), info, coll,
-			past_intervals, pgmeta_oid,
-			dirty_big_info);
+  int ret = _prepare_write_info(km, get_osdmap()->get_epoch(), info, coll,
+				past_intervals, pgmeta_oid,
+				dirty_big_info);
   assert(ret == 0);
   last_persisted_osdmap_ref = osdmap_ref;
 
@@ -2867,9 +2863,12 @@ epoch_t PG::peek_map_epoch(ObjectStore *store,
 
 void PG::write_if_dirty(ObjectStore::Transaction& t)
 {
+  map<string,bufferlist> km;
   if (dirty_big_info || dirty_info)
-    write_info(t);
-  pg_log.write_log(t, coll, pgmeta_oid);
+    prepare_write_info(&km);
+  pg_log.write_log(t, &km, coll, pgmeta_oid);
+  if (!km.empty())
+    t.omap_setkeys(coll, pgmeta_oid, km);
 }
 
 void PG::trim_peers()
@@ -2894,7 +2893,7 @@ void PG::trim_peers()
   }
 }
 
-void PG::add_log_entry(const pg_log_entry_t& e, bufferlist& log_bl)
+void PG::add_log_entry(const pg_log_entry_t& e)
 {
   // raise last_complete only if we were previously up to date
   if (info.last_complete == info.last_update)
@@ -2912,8 +2911,6 @@ void PG::add_log_entry(const pg_log_entry_t& e, bufferlist& log_bl)
   // log mutation
   pg_log.add(e);
   dout(10) << "add_log_entry " << e << dendl;
-
-  e.encode_with_checksum(log_bl);
 }
 
 
@@ -2937,37 +2934,10 @@ void PG::append_log(
   }
   dout(10) << "append_log " << pg_log.get_log() << " " << logv << dendl;
 
-  map<string,bufferlist> keys;
   for (vector<pg_log_entry_t>::const_iterator p = logv.begin();
        p != logv.end();
        ++p) {
-    // we might get log entries for missing objects since we can write to
-    // degraded objects
-    if (!transaction_applied) {
-      if (p->is_delete())
-	remove_snap_mapped_object(
-	  t,
-	  p->soid);
-
-      assert(
-	p->soid > info.last_backfill ||
-	pg_log.get_missing().is_missing(p->soid) ||
-	(p->is_clone() || p->is_promote() ||
-	 (p->is_modify() && (p->prior_version == eversion_t())))
-	);
-
-      if (p->soid <= info.last_backfill) {
-	dout(10) << __func__ << ": transaction empty, adding event "
-		 << *p << " to missing"
-		 << dendl;
-	pg_log.missing_add_event(*p);
-      } else {
-	dout(10) << __func__ << ": transaction empty, backfill, "
-		 << "not adding event " << *p << " to missing"
-		 << dendl;
-      }
-    }
-    add_log_entry(*p, keys[p->get_key_name()]);
+    add_log_entry(*p);
   }
 
   PGLogEntryHandler handler;
@@ -2988,9 +2958,6 @@ void PG::append_log(
 	get_osdmap()->get_epoch(),
 	trim_rollback_to));
   }
-
-  dout(10) << "append_log  adding " << keys.size() << " keys" << dendl;
-  t.omap_setkeys(coll, pgmeta_oid, keys);
 
   pg_log.trim(&handler, trim_to, info);
 
@@ -4747,12 +4714,6 @@ void PG::start_peering_interval(
 
   reg_next_scrub();
 
-  // set CREATING bit until we have peered for the first time.
-  if (is_primary() && info.history.last_epoch_started == 0)
-    state_set(PG_STATE_CREATING);
-  else
-    state_clear(PG_STATE_CREATING);
-
   // did acting, up, primary|acker change?
   if (!lastmap) {
     dout(10) << " no lastmap" << dendl;
@@ -5600,6 +5561,10 @@ PG::RecoveryState::Primary::Primary(my_context ctx)
   context< RecoveryMachine >().log_enter(state_name);
   PG *pg = context< RecoveryMachine >().pg;
   assert(pg->want_acting.empty());
+
+  // set CREATING bit until we have peered for the first time.
+  if (pg->info.history.last_epoch_started == 0)
+    pg->state_set(PG_STATE_CREATING);
 }
 
 boost::statechart::result PG::RecoveryState::Primary::react(const MNotifyRec& notevt)
@@ -5633,6 +5598,7 @@ void PG::RecoveryState::Primary::exit()
   utime_t dur = ceph_clock_now(pg->cct) - enter_time;
   pg->osd->recoverystate_perf->tinc(rs_primary_latency, dur);
   pg->clear_primary_state();
+  pg->state_clear(PG_STATE_CREATING);
 }
 
 /*---------Peering--------*/
