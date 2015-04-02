@@ -22,6 +22,7 @@
 #include <stdio.h>
 #include <signal.h>
 #include "osd/PGLog.h"
+#include "osd/OSDMap.h"
 #include "common/ceph_argparse.h"
 #include "global/global_init.h"
 #include <gtest/gtest.h>
@@ -1860,6 +1861,116 @@ TEST_F(PGLogTest, merge_log_prior_version_have) {
 
   t.setup();
   run_test_case(t);
+}
+
+TEST_F(PGLogTest, filter_log_1) {
+  {
+    clear();
+
+    int osd_id = 1;
+    epoch_t epoch = 40;
+    int64_t pool_id = 0;
+    int bits = 2;
+    int max_osd = 4;
+    int pg_num = max_osd << bits;
+    int num_objects = 1000;
+    int num_internal = 10;
+
+    // Set up splitting map
+    //ceph::shared_ptr<OSDMap> osdmap(new OSDMap());
+    OSDMap *osdmap = new OSDMap;
+    uuid_d test_uuid;
+    test_uuid.generate_random();
+    osdmap->build_simple(g_ceph_context, epoch, test_uuid, max_osd, bits, bits);
+    osdmap->set_state(osd_id, CEPH_OSD_EXISTS);
+
+    const string hit_set_namespace("internal");
+
+    ObjectStore::Transaction t;
+    pg_info_t info;
+    list<hobject_t> remove_snap;
+    //bool dirty_info = false;
+    //bool dirty_big_info = false;
+
+    hobject_t divergent_object;
+    eversion_t divergent_version;
+    eversion_t prior_version;
+    eversion_t newhead;
+    {
+      pg_log_entry_t e;
+      e.mod_desc.mark_unrollbackable();
+      e.op = pg_log_entry_t::MODIFY;
+      e.soid.pool = pool_id;
+
+      uuid_d uuid_name;
+      int i;
+      for (i = 1; i <= num_objects; ++i) {
+        e.version = eversion_t(epoch, i);
+        // Use this to generate random file names
+        uuid_name.generate_random();
+        ostringstream name;
+        name << uuid_name;
+        e.soid.oid.name = name.str();
+	// First has no namespace
+        if (i != 1) {
+           // num_internal have the internal namspace
+          if (i <= num_internal + 1) {
+            e.soid.nspace = hit_set_namespace;
+          } else { // rest have different namespaces
+            ostringstream ns;
+            ns << "ns" << i;
+            e.soid.nspace = ns.str();
+          }
+        }
+        log.log.push_back(e);
+        if (i == 1)
+          log.tail = e.version;
+        //cout << "object " << e.soid << std::endl;
+      }
+      log.head = e.version;
+      log.index();
+    }
+
+    spg_t pgid(pg_t(2, pool_id), shard_id_t::NO_SHARD);
+
+    // See if we created the right number of entries
+    int total = log.log.size();
+    ASSERT_EQ(total, num_objects);
+
+    // Some should be removed
+    log.filter_log(pgid, *osdmap, hit_set_namespace);
+    EXPECT_LE(log.log.size(), total);
+
+    // If we filter a second time, there should be the same total
+    total = log.log.size();
+    log.filter_log(pgid, *osdmap, hit_set_namespace);
+    EXPECT_EQ(log.log.size(), total);
+
+    // Increase pg_num as if there would be a split
+    int new_pg_num = pg_num * 16;
+    OSDMap::Incremental inc(epoch + 1);
+    inc.fsid = test_uuid;
+    const pg_pool_t *pool = osdmap->get_pg_pool(pool_id);
+    pg_pool_t newpool;
+    newpool = *pool;
+    newpool.set_pg_num(new_pg_num);
+    newpool.set_pgp_num(new_pg_num);
+    inc.new_pools[pool_id] = newpool;
+    int ret = osdmap->apply_incremental(inc);
+    ASSERT_EQ(ret, 0);
+
+    // We should have fewer entries after a filter
+    log.filter_log(pgid, *osdmap, hit_set_namespace);
+    EXPECT_LE(log.log.size(), total);
+
+    // Make sure all internal entries are retained
+    int count = 0;
+    for (list<pg_log_entry_t>::iterator i = log.log.begin();
+         i != log.log.end(); ++i) {
+      if (i->soid.nspace == hit_set_namespace) count++;
+    }
+    EXPECT_EQ(count, num_internal);
+  }
 }
 
 int main(int argc, char **argv) {
