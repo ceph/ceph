@@ -75,7 +75,11 @@ BuildRequires:	python
 BuildRequires:	python-argparse
 BuildRequires:	python-nose
 BuildRequires:	python-requests
+%if 0%{?rhel} >= 7 || 0%{?fedora}
 BuildRequires:	python-sphinx
+%else
+BuildRequires:	python-sphinx10
+%endif
 BuildRequires:	python-virtualenv
 BuildRequires:	util-linux
 BuildRequires:	xfsprogs
