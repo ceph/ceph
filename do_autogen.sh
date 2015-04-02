@@ -10,6 +10,7 @@ do_autogen.sh: make a ceph build by running autogen, etc.
                                  level 1: -g
                                  level 3: -Wextra
                                  level 4: even more...
+-L                               --without-lttng
 -T                               --without-tcmalloc
 -e <path>                        dump encoded objects to <path>
 -P                               profiling build
@@ -30,8 +31,8 @@ die() {
 debug_level=0
 verbose=0
 profile=0
-CONFIGURE_FLAGS="--disable-static"
-while getopts  "d:e:hHrTPjpnvO:" flag
+CONFIGURE_FLAGS="--disable-static --with-lttng"
+while getopts  "d:e:hHrTPLjpnvO:" flag
 do
     case $flag in
     d) debug_level=$OPTARG;;
@@ -55,6 +56,8 @@ do
     v) verbose=1;;
 
     e) encode_dump=$OPTARG;;
+
+    L) CONFIGURE_FLAGS="$CONFIGURE_FLAGS --without-lttng";;
 
     *)
         echo
