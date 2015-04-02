@@ -165,9 +165,9 @@ following configuration to ``/etc/ceph/ceph.conf`` in your ``admin node``::
 
 .. note:: ``Apache 2.4.9`` supports Unix Domain Socket (UDS) but as
    ``Ubuntu 14.04`` ships with ``Apache 2.4.7`` it doesn't have UDS support and
-   has to be configured for use with localhost TCP. A bug
-   `backport support for unix domain sockets`_ has been filed for backporting
-   UDS support in ``Apache 2.4.7`` for ``Ubuntu 14.04``.
+   has to be configured for use with localhost TCP. A bug has been filed for
+   backporting UDS support in ``Apache 2.4.7`` for ``Ubuntu 14.04``.
+   See: `Backport support for UDS in Ubuntu Trusty`_
 
 Here, ``{hostname}`` is the short hostname (output of command ``hostname -s``)
 of the node that is going to provide the gateway service i.e, the
@@ -212,9 +212,9 @@ It involves the following steps:
 #. Push the updated ``ceph.conf`` file from the admin node to all other nodes in
    the cluster including the ``gateway host``::
 
-		ceph-deploy --overwrite-conf config push [HOST][HOST...]
+		ceph-deploy --overwrite-conf config push [HOST] [HOST...]
 
-   Give the hostnames of the other Ceph nodes in place of ``[HOST][HOST...]``.
+   Give the hostnames of the other Ceph nodes in place of ``[HOST] [HOST...]``.
 
 
 Copy ceph.client.admin.keyring from admin node to gateway host
@@ -339,7 +339,7 @@ Execute the following steps:
    localhost TCP and do not support Unix Domain Socket, add the following
    contents to the file::
 
-	<VirtualHost {IP ADDRESS}:80>
+	<VirtualHost *:80>
 	ServerName localhost
 	DocumentRoot /var/www/html
 
@@ -358,16 +358,13 @@ Execute the following steps:
 
 	</VirtualHost>
 
-   .. note:: The ``<VirtualHost>`` configuration parameter should be updated to
-	   listen to the public IP address of the gateway server. Replace
-	   ``{IP ADDRESS}`` with the public IP address of the host that you are
-	   configuring as a gateway server. Also, for Debian-based distros replace
-	   ``/var/log/httpd/`` with ``/var/log/apache2``.
+   .. note:: For Debian-based distros replace ``/var/log/httpd/``
+      with ``/var/log/apache2``.
 
 #. For distros with Apache 2.4.9 or later that support Unix Domain Socket,
    add the following contents to the file::
 
-	<VirtualHost {IP ADDRESS}:80>
+	<VirtualHost *:80>
 	ServerName localhost
 	DocumentRoot /var/www/html
 
@@ -386,11 +383,6 @@ Execute the following steps:
 
 	</VirtualHost>
 
-
-   .. note:: The ``<VirtualHost>`` configuration parameter should be updated
-      to listen to the public IP address of the gateway server. Replace ``{IP ADDRESS}``
-      with the public IP address of the host that you are configuring as a
-      gateway server.
 
 Restart Apache
 ==============
@@ -634,5 +626,5 @@ The output should be::
 .. _Pool Configuration: ../../rados/configuration/pool-pg-config-ref/
 .. _Pools: ../../rados/operations/pools
 .. _User Management: ../../rados/operations/user-management
-.. _backport support for unix domain sockets: https://bugs.launchpad.net/ubuntu/+source/apache2/+bug/1411030
+.. _Backport support for UDS in Ubuntu Trusty: https://bugs.launchpad.net/ubuntu/+source/apache2/+bug/1411030
 .. _Admin Guide: ../admin
