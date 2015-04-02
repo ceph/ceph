@@ -5133,15 +5133,16 @@ Notable Changes
 * librbd: protect list_children from invalid child pool ioctxs (#10123 Jason Dillaman)
 * mds: fix ctime updates from clients without dirty caps (#9514 Greg Farnum)
 * mds: fix rare NULL dereference in cap update path (Greg Farnum)
+* mds: fix assertion caused by system clock backwards (#11053 Yan, Zheng)
 * mds: store backtrace on straydir (Yan, Zheng)
 * osd: fix journal committed_thru update after replay (#6756 Samuel Just)
 * osd: fix memory leak, busy loop on snap trim (#9113 Samuel Just)
 * osd: fix misc peering, recovery bugs (#10168 Samuel Just)
-* osd: fix purged_snap field on backfill start (#9487 Sage Weil)
+* osd: fix purged_snap field on backfill start (#9487 Sage Weil, Samuel Just)
 * osd: handle no-op write with snapshot corner case (#10262 Sage Weil, Loic Dachary)
 * osd: respect RWORDERED rados flag (Sage Weil)
 * osd: several backfill fixes and refactors (Samuel Just, David Zafman)
-
+* rgw: send http status reason explicitly in fastcgi (Yehuda Sadeh)
 
 v0.67.11 "Dumpling"
 ===================
