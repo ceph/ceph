@@ -21,7 +21,7 @@ if test -d ".git" ; then
 fi
 AC_MSG_NOTICE([RPM_RELEASE='$RPM_RELEASE'])
 
-AC_CHECK_PROG(SPHINX_BUILD, sphinx-build, yes, no)
+AC_CHECK_PROGS(SPHINX_BUILD, sphinx-1.0-build sphinx-build, no)
 if test x"$SPHINX_BUILD" = x"no"; then
   AC_MSG_ERROR([sphinx-build not found (python-sphinx)])
 fi
