@@ -1,5 +1,7 @@
 AUTOMAKE_OPTIONS = gnu
 
+EXTRA_DIST = conf.py
+
 dist_man_MANS = 
 
 if ENABLE_CLIENT
