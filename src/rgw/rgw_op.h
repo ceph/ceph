@@ -614,10 +614,11 @@ protected:
   bool delete_marker;
   string version_id;
   time_t unmod_since; /* if unmodified since */
+  bool no_precondition_error;
 
 
 public:
-  RGWDeleteObj() : ret(0), delete_marker(false), unmod_since(0) {}
+  RGWDeleteObj() : ret(0), delete_marker(false), unmod_since(0), no_precondition_error(false) {}
 
   int verify_permission();
   void pre_exec();
