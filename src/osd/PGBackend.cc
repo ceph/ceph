@@ -331,42 +331,41 @@ void PGBackend::be_scan_list(
        ++p, i++) {
     handle.reset_tp_timeout();
     hobject_t poid = *p;
+    ScrubMap::object &o = map.objects[poid];
 
     struct stat st;
     int r = store->stat(
-      coll,
-      ghobject_t(
-	poid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
-      &st,
-      true);
-    if (r == 0) {
-      ScrubMap::object &o = map.objects[poid];
-      o.size = st.st_size;
-      assert(!o.negative);
-      store->getattrs(
 	coll,
 	ghobject_t(
 	  poid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
-	o.attrs);
+	&st,
+	true);
+    if (r == 0) {
+      o.size = st.st_size;
+      assert(!o.negative);
+      r = store->getattrs(
+	  coll,
+	  ghobject_t(
+	    poid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
+	  o.attrs);
+    }
 
+    if (r == 0) {
       // calculate the CRC32 on deep scrubs
-      if (deep) {
-	be_deep_scrub(*p, seed, o, handle);
-      }
-
-      dout(25) << __func__ << "  " << poid << dendl;
-    } else if (r == -ENOENT) {
+      if (deep)
+        be_deep_scrub(*p, seed, o, handle);
+    }else if (r == -ENOENT) {
       dout(25) << __func__ << "  " << poid << " got " << r
-	       << ", skipping" << dendl;
+	<< ", skipping" << dendl;
     } else if (r == -EIO) {
       dout(25) << __func__ << "  " << poid << " got " << r
-	       << ", read_error" << dendl;
-      ScrubMap::object &o = map.objects[poid];
+	<< ", read_error" << dendl;
       o.read_error = true;
     } else {
       derr << __func__ << " got: " << cpp_strerror(r) << dendl;
       assert(0);
     }
+    dout(25) << __func__ << "  " << poid << dendl;
   }
 }
 
@@ -529,6 +528,7 @@ map<pg_shard_t, ScrubMap *>::const_iterator
 	     << dendl;
     auth = j;
     *auth_oi = oi;
+    break;
   }
   return auth;
 }
