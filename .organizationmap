@@ -139,9 +139,12 @@ IWeb <contact@iweb.com> David Moreau Simard <dmsimard@iweb.com>
 Karlsruhe Institute of Technology <ceph@lists.kit.edu> Daniel J. Hofmann <daniel@trvx.org>
 Keeper Technology <contact@keepertech.com> Wyllys Ingersoll <wyllys.ingersoll@keepertech.com>
 Lebanon Evangelical School <contact@lesbg.com> Jonathan Dieter <jdieter@lesbg.com>
+Linaro <contact@linaro.org> Yazen Ghannam <yazen.ghannam@linaro.org>
+Linaro <contact@linaro.org> Steve Capper <steve.capper@linaro.org>
 Los Alamos National Laboratory <contact@lanl.gov> Esteban Molina-Estolano <eestolan@lanl.gov>
 Mellanox <contact@mellanox.com> Vu Pham <vu@mellanox.com>
 Mirantis <contact@mirantis.com> Andrew Woodward <awoodward@mirantis.com>
+Mirantis <contact@mirantis.com> Dmitry Yatsushkevich <dyatsushkevich@mirantis.com>
 Mirantis <contact@mirantis.com> Dmytro Iurchenko <diurchenko@mirantis.com>
 Mirantis <contact@mirantis.com> Kiseleva Alyona <akiselyova@mirantis.com>
 Mirantis <contact@mirantis.com> Mykola Golub <mgolub@mirantis.com>
@@ -155,7 +158,7 @@ Pacific Northwest National Laboratory <contact@pnl.gov> Evan Felix <evan.felix@p
 Pacific Northwest National Laboratory <contact@pnl.gov> Scott Devoid <devoid@anl.gov>
 Piston Cloud Computing <info@pistoncloud.com> Mike Lundy <mike@fluffypenguin.org>
 Pogoapp <contact@pogoapp.com> Paul Meserve <paul@pogodan.com>
-Red Hat <contact@redhat.com> Alexandre Marangone <amarangone@redhat.com>
+Red Hat <contact@redhat.com> Alexandre Marangone <amarango@redhat.com>
 Red Hat <contact@redhat.com> Alex Elder <aelder@redhat.com>
 Red Hat <contact@redhat.com> Alfredo Deza <adeza@redhat.com>
 Red Hat <contact@redhat.com> Boris Ranto <branto@redhat.com>
@@ -214,7 +217,6 @@ SanDisk	<contact@sandisk.com> Shishir Gowda <shishir.gowda@sandisk.com>
 SanDisk <contact@sandisk.com> Somnath Roy <somnath.roy@sandisk.com>
 SanDisk <contact@sandisk.com> Sushma Gurram <sushma.gurram@sandisk.com>
 Science & Technology Facilities Council <contact@stfc.ac.uk> George Ryall <george.ryall@stfc.ac.uk>
-Seagate <contact@seagate.com> Simon Guinot <simon.guinot@sequanux.org>
 SendFaster <contact@sendfaster.com> Christopher O'Connell <jwriteclub@gmail.com>
 Spectra Logic <contact@spectralogic.com> Alan Somers <asomers@gmail.com>
 SUSE <contact@suse.com> Adam Spiers <aspiers@suse.com>
@@ -250,6 +252,7 @@ Unaffiliated <no@organization.net> Andy Allan <andy@gravitystorm.co.uk>
 Unaffiliated <no@organization.net> Anis Ayari <ayari_anis@live.fr>
 Unaffiliated <no@organization.net> Armando Segnini <armaseg@gmail.com>
 Unaffiliated <no@organization.net> BJ Lougee <almightybeeij@gmail.com>
+Unaffiliated <no@organization.net> Bosse Klykken <larkly@gmail.com>
 Unaffiliated <no@organization.net> Cheng Cheng <ccheng.leo@gmail.com>
 Unaffiliated <no@organization.net> Christos Stavrakakis <stavr.chris@gmail.com>
 Unaffiliated <no@organization.net> Colin Mattson <colinmattson@gmail.com>
@@ -269,6 +272,7 @@ Unaffiliated <no@organization.net> François Lafont <flafdivers@free.fr>
 Unaffiliated <no@organization.net> Frank Yu <flyxiaoyu@gmail.com>
 Unaffiliated <no@organization.net> Gaurav Kumar Garg <garg.gaurav52@gmail.com>
 Unaffiliated <no@organization.net> Huang Jun <hjwsm1989@gmail.com>
+Unaffiliated <no@organization.net> Ian Kelling <ian@iankelling.org>
 Unaffiliated <no@organization.net> Janne Grunau <j@jannau.net>
 Unaffiliated <no@organization.net> Javier Guerra <javier@guerrag.com>
 Unaffiliated <no@organization.net> Jiang Heng <jiangheng0511@gmail.com>
@@ -280,6 +284,7 @@ Unaffiliated <no@organization.net> Kevin Cox <kevincox@kevincox.ca>
 Unaffiliated <no@organization.net> Kim Vandry <vandry@TZoNE.ORG>
 Unaffiliated <no@organization.net> koleosfuscus <koleosfuscus@yahoo.com>
 Unaffiliated <no@organization.net> Laurent Guerby <laurent@guerby.net>
+Unaffiliated <no@organization.net> Lee Revell <rlrevell@gmail.com>
 Unaffiliated <no@organization.net> Matt Richards <mattjrichards@gmail.com>
 Unaffiliated <no@organization.net> Mehdi Abaakouk <sileht@sileht.net>
 Unaffiliated <no@organization.net> Michael Nelson <mikenel@tnld.net>
@@ -292,10 +297,12 @@ Unaffiliated <no@organization.net> Rohan Mars <code@rohanmars.com>
 Unaffiliated <no@organization.net> Roman Haritonov <reclosedev@gmail.com>
 Unaffiliated <no@organization.net> Shanggao Qiu <qiushanggao@qq.com>
 Unaffiliated <no@organization.net> Shawn Edwards <lesser.evil@gmail.com>
+Unaffiliated <no@organization.net> Simon Guinot <simon.guinot@sequanux.org>
 Unaffiliated <no@organization.net> Stephen F Taylor <steveftaylor@gmail.com>
 Unaffiliated <no@organization.net> Steve Stock <steve@technolope.org>
 Unaffiliated <no@organization.net> Tim Freund <tim@freunds.net>
 Unaffiliated <no@organization.net> Thomas Johnson <ntmatter@gmail.com>
+Unaffiliated <no@organization.net> Vartika Rai <vartikarai17@gmail.com>
 Unaffiliated <no@organization.net> Vicente Cheng <freeze.bilsted@gmail.com>
 Unaffiliated <no@organization.net> Viktor Suprun <popsul1993@gmail.com>
 Unaffiliated <no@organization.net> Volker Voigt <volker.voigt@1und1.de>
