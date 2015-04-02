@@ -2469,6 +2469,9 @@ void RGWDeleteObj::execute()
       delete_marker = del_op.result.delete_marker;
       version_id = del_op.result.version_id;
     }
+    if (ret == -ERR_PRECONDITION_FAILED && no_precondition_error) {
+      ret = 0;
+    }
 
     /* Check whether the object has expired. Swift API documentation
      * stands that we should return 404 Not Found in such case. */
