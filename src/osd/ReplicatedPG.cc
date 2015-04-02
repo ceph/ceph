@@ -5428,8 +5428,10 @@ void ReplicatedPG::make_writeable(OpContext *ctx)
     ctx->op_t = t;
     
     ctx->delta_stats.num_objects++;
-    if (snap_oi->is_dirty())
+    if (snap_oi->is_dirty()) {
       ctx->delta_stats.num_objects_dirty++;
+      osd->logger->inc(l_osd_tier_dirty);
+    }
     if (snap_oi->is_omap())
       ctx->delta_stats.num_objects_omap++;
     ctx->delta_stats.num_object_clones++;
