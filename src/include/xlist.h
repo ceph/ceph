@@ -16,6 +16,7 @@
 #define CEPH_XLIST_H
 
 #include "include/assert.h"
+#include <iterator>
 #include <cstdlib>
 
 template<typename T>
@@ -56,6 +57,8 @@ public:
       _list->push_back(this);
     }
   };
+
+  typedef item* const_reference;
 
 private:
   item *_front, *_back;
@@ -151,7 +154,7 @@ public:
     remove(_back);
   }
 
-  class iterator {
+  class iterator: std::iterator<std::forward_iterator_tag, T> {
   private:
     item *cur;
   public:
@@ -164,12 +167,18 @@ public:
       return *this;
     }
     bool end() const { return cur == 0; }
+    bool operator==(const iterator& rhs) const {
+      return cur == rhs.cur;
+    }
+    bool operator!=(const iterator& rhs) const {
+      return cur != rhs.cur;
+    }
   };
 
   iterator begin() { return iterator(_front); }
   iterator end() { return iterator(NULL); }
 
-  class const_iterator {
+  class const_iterator: std::iterator<std::forward_iterator_tag, T> {
   private:
     item *cur;
   public:
