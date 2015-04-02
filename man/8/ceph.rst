@@ -854,6 +854,10 @@ Only for erasure coded pools::
 
 	ceph osd pool get <poolname> erasure_code_profile
 
+Use ``all`` to get all pool parameters that apply to the pool's type::
+
+	ceph osd pool get <poolname> all
+
 Subcommand ``get-quota`` obtains object or byte limits for pool.
 
 Usage::
