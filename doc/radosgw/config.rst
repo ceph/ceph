@@ -40,7 +40,7 @@ the node containing the gateway instance.
 
 See `User Management`_ for additional details on Ceph authentication.
 
-#. Create a keyring for the gateway. ::
+#. Create a keyring for the gateway::
 
 	sudo ceph-authtool --create-keyring /etc/ceph/ceph.client.radosgw.keyring
 	sudo chmod +r /etc/ceph/ceph.client.radosgw.keyring
@@ -72,6 +72,7 @@ See `User Management`_ for additional details on Ceph authentication.
 	sudo mv ceph.client.radosgw.keyring /etc/ceph/ceph.client.radosgw.keyring
 
 
+   .. note:: The 5th step is optional if ``admin node`` is the ``gateway host``.
 
 Create Pools
 ============
@@ -107,8 +108,9 @@ naming convention you prefer. For example:
 
 
 See `Configuration Reference - Pools`_ for details on the default pools for
-gateways. See `Pools`_ for details on creating pools. Execute the following 
-to create a pool:: 
+gateways. See `Pools`_ for details on creating pools. As already said, if
+write permission is given, Ceph Object Gateway will create pools automatically.
+To create a pool manually, execute the following::
 
 	ceph osd pool create {poolname} {pg-num} {pgp-num} {replicated | erasure} [{erasure-code-profile}]  {ruleset-name} {ruleset-number}
 
@@ -128,319 +130,501 @@ you have created all of the foregoing pools::
 Add a Gateway Configuration to Ceph
 ===================================
 
-Add the Ceph Object Gateway configuration to your Ceph Configuration file. The
-Ceph Object Gateway configuration requires you to identify the Ceph Object
-Gateway instance. Then, you must specify the host name where you installed the
-Ceph Object Gateway daemon, a keyring (for use with cephx), the socket path for 
-FastCGI and a log file. For example::  
+Add the Ceph Object Gateway configuration to your Ceph Configuration file in
+``admin node``. The Ceph Object Gateway configuration requires you to
+identify the Ceph Object Gateway instance. Then, you must specify the host name
+where you installed the Ceph Object Gateway daemon, a keyring (for use with
+cephx), the socket path for FastCGI and a log file.
 
-	[client.radosgw.{instance-name}]
-	host = {host-name}
-	keyring = /etc/ceph/ceph.client.radosgw.keyring
-	rgw socket path = /var/run/ceph/ceph.radosgw.{instance-name}.fastcgi.sock
-	log file = /var/log/radosgw/client.radosgw.{instance-name}.log
-
-The ``[client.radosgw.*]`` portion of the gateway instance identifies this
-portion of the Ceph configuration file as configuring a Ceph Storage Cluster
-client where the client type is  a Ceph Object Gateway (i.e., ``radosgw``). The
-instance name follows. For example:: 
+For distros with Apache 2.2 and early versions of Apache 2.4 (RHEL 6, Ubuntu
+12.04, 14.04 etc), append the following configuration to ``/etc/ceph/ceph.conf``
+in your ``admin node``::
 
 	[client.radosgw.gateway]
-	host = ceph-gateway
+	host = {hostname}
+	keyring = /etc/ceph/ceph.client.radosgw.keyring
+	rgw socket path = ""
+	log file = /var/log/radosgw/client.radosgw.gateway.log
+	rgw frontends = fastcgi socket_port=9000 socket_host=0.0.0.0
+	rgw print continue = false
+
+
+.. note:: Apache 2.2 and early versions of Apache 2.4 do not use Unix Domain
+   Sockets but use localhost TCP.
+
+For distros with Apache 2.4.9 or later (RHEL 7, CentOS 7 etc), append the
+following configuration to ``/etc/ceph/ceph.conf`` in your ``admin node``::
+
+	[client.radosgw.gateway]
+	host = {hostname}
 	keyring = /etc/ceph/ceph.client.radosgw.keyring
 	rgw socket path = /var/run/ceph/ceph.radosgw.gateway.fastcgi.sock
 	log file = /var/log/radosgw/client.radosgw.gateway.log
-
-.. note:: The ``host`` must be your machine hostname, not the FQDN. Make sure 
-   that the name you use for the FastCGI socket is not the same as the one 
-   used for the object gateway, which is 
-   ``ceph-client.radosgw.{instance-name}.asok`` by default. You must use the 
-   same name in your S3 FastCGI file too. See `Add a Ceph Object Gateway 
-   Script`_ for details.
-
-Configuring Print Continue
---------------------------
-
-On CentOS/RHEL distributions, turn off ``print continue``. If you have it set
-to ``true``, you may encounter problems with ``PUT`` operations. ::
-
 	rgw print continue = false
 
-Configuring Operations Logging
-------------------------------
 
-In early releases of Ceph (v0.66 and earlier), the Ceph Object Gateway will log
-every successful operation in the Ceph Object Gateway backend by default. This
-means that every request, whether it is a read request or a write request will
-generate a gateway operation that writes data. This does not come without cost,
-and may affect overall performance. Turning off logging completely can be done
-by adding the following config option to the Ceph configuration file::
+.. note:: ``Apache 2.4.9`` supports Unix Domain Socket (UDS) but as
+   ``Ubuntu 14.04`` ships with ``Apache 2.4.7`` it doesn't have UDS support and
+   has to be configured for use with localhost TCP. A bug has been filed for
+   backporting UDS support in ``Apache 2.4.7`` for ``Ubuntu 14.04``.
+   See: `Backport support for UDS in Ubuntu Trusty`_
 
-        rgw enable ops log = false
+Here, ``{hostname}`` is the short hostname (output of command ``hostname -s``)
+of the node that is going to provide the gateway service i.e, the
+``gateway host``.
 
-Another way to reduce the logging load is to send operations logging data to a
-UNIX domain socket, instead of writing it to the Ceph Object Gateway backend::
-
-        rgw ops log rados = false
-        rgw enable ops log = true
-        rgw ops log socket path = <path to socket>
-
-When specifying a UNIX domain socket, it is also possible to specify the maximum
-amount of memory that will be used to keep the data backlog::
-
-        rgw ops log data backlog = <size in bytes>
-
-Any backlogged data in excess to the specified size will be lost, so the socket
-needs to be read constantly.
+The ``[client.radosgw.gateway]`` portion of the gateway instance identifies this
+portion of the Ceph configuration file as configuring a Ceph Storage Cluster
+client where the client type is a Ceph Object Gateway (i.e., ``radosgw``).
 
 
-Enabling Subdomain S3 Calls
----------------------------
+.. note:: The last line in the configuration i.e, ``rgw print continue = false``
+   is added to avoid issues with ``PUT`` operations.
 
-To use a Ceph Object Gateway with subdomain S3 calls (e.g.,
-``http://bucketname.hostname``), you must add the Ceph Object Gateway DNS name
-under the ``[client.radosgw.gateway]`` section of your Ceph configuration file::
+Once you finish the setup procedure, if you encounter issues with your
+configuration, you can add debugging to the ``[global]`` section of your Ceph
+configuration file and restart the gateway to help troubleshoot any
+configuration issues. For example::
 
-	[client.radosgw.gateway]
-		...
-		rgw dns name = {hostname}
-
-You should also consider installing a DNS server such as `Dnsmasq`_ on your
-client machine(s) when using ``http://{bucketname}.{hostname}`` syntax. The
-``dnsmasq.conf`` file should include the following settings:: 
-
-	address=/{hostname}/{host-ip-address}
-	listen-address={client-loopback-ip}
-
-Then, add the ``{client-loopback-ip}`` IP address as the first DNS nameserver
-on client the machine(s).
-
-See `Add Wildcard to DNS`_ for details.
+	[global]
+	#append the following in the global section.
+	debug ms = 1
+	debug rgw = 20
 
 
-Redeploy Ceph Configuration
----------------------------
+Distribute updated Ceph configuration file
+==========================================
 
-To use ``ceph-deploy`` to push a new copy of the configuration file to the hosts
-in your cluster, execute the following::
+The updated Ceph configuration file needs to be distributed to all Ceph cluster
+nodes from the ``admin node``.
 
-	ceph-deploy config push {host-name [host-name]...}
+It involves the following steps:
+
+#. Pull the updated ``ceph.conf`` from ``/etc/ceph/`` to the root directory of
+   the cluster in admin node (e.g. ``my-cluster`` directory). The contents of
+   ``ceph.conf`` in ``my-cluster`` will get overwritten. To do so, execute the
+   following::
+
+		ceph-deploy --overwrite-conf config pull {hostname}
+
+   Here, ``{hostname}`` is the short hostname of the Ceph admin node.
+
+#. Push the updated ``ceph.conf`` file from the admin node to all other nodes in
+   the cluster including the ``gateway host``::
+
+		ceph-deploy --overwrite-conf config push [HOST] [HOST...]
+
+   Give the hostnames of the other Ceph nodes in place of ``[HOST] [HOST...]``.
 
 
-Add a Ceph Object Gateway Script
-================================
+Copy ceph.client.admin.keyring from admin node to gateway host
+==============================================================
 
-Add a ``s3gw.fcgi`` file (use the same name referenced in the first line 
-of ``rgw.conf``). For Debian/Ubuntu distributions, save the file to the 
-``/var/www`` directory. For CentOS/RHEL distributions, save the file to the
-``/var/www/html`` directory. Assuming a cluster named ``ceph`` (default), 
-and the user created in previous steps, the contents of the file should 
-include::
+As the ``gateway host`` can be a different node that is not part of the cluster,
+the ``ceph.client.admin.keyring`` needs to be copied from the ``admin node`` to
+the ``gateway host``. To do so, execute the following on ``admin node``::
+
+	sudo scp /etc/ceph/ceph.client.admin.keyring  ceph@{hostname}:/home/ceph
+	ssh {hostname}
+	sudo mv ceph.client.admin.keyring /etc/ceph/ceph.client.admin.keyring
+
+
+.. note:: The above step need not be executed if ``admin node`` is the
+   ``gateway host``.
+
+
+Create a CGI wrapper script
+===========================
+
+The wrapper script provides the interface between the webserver and the radosgw
+process. This script needs to be in a web accessible location and should be
+executable.
+
+Execute the following steps on the ``gateway host``:
+
+#. Create the script::
+
+	sudo vi /var/www/html/s3gw.fcgi
+
+
+#. Add the following content to the script::
 
 	#!/bin/sh
 	exec /usr/bin/radosgw -c /etc/ceph/ceph.conf -n client.radosgw.gateway
 
-Ensure that you apply execute permissions to ``s3gw.fcgi``. ::
 
-	sudo chmod +x s3gw.fcgi
+#. Provide execute permissions to the script::
 
-On some distributions, you must also change the ownership to ``apache``. :: 
+	sudo chmod +x /var/www/html/s3gw.fcgi
 
-	sudo chown apache:apache s3gw.fcgi
 
+Adjust CGI wrapper script permission
+====================================
+
+On some distros, ``apache`` should have execute permission on the ``s3gw.fcgi``
+script. To change permission on the file, execute::
+
+	sudo chown apache:apache /var/www/html/s3gw.fcgi
 
 
 Create Data Directory
 =====================
 
 Deployment scripts may not create the default Ceph Object Gateway data
-directory.  Create data directories for each instance of a ``radosgw`` daemon
-(if you haven't done so already). The ``host``  variables in the Ceph
-configuration file determine which host runs each instance of a ``radosgw``
-daemon. The typical form specifies the ``radosgw`` daemon, the cluster name and
-the daemon ID. ::
+directory. Create data directories for each instance of a ``radosgw``
+daemon (if you haven't done so already). The ``host`` variables in the
+Ceph configuration file determine which host runs each instance of a
+``radosgw`` daemon. The typical form specifies the ``radosgw`` daemon,
+the cluster name and the daemon ID.
 
-	sudo mkdir -p /var/lib/ceph/radosgw/{$cluster}-{$id}
-
-Using the exemplary ``ceph.conf`` settings above, you would execute the following::
+To create the directory on the ``gateway host``, execute the following::
 
 	sudo mkdir -p /var/lib/ceph/radosgw/ceph-radosgw.gateway
 
 
+Adjust Socket Directory Permissions
+===================================
 
-Create a Gateway Configuration
-==============================
+On some distros, the ``radosgw`` daemon runs as the unprivileged ``apache``
+UID, and this UID must have write access to the location where it will write
+its socket file.
 
-On the host where you installed the Ceph Object Gateway, create an ``rgw.conf``
-file. For Debian/Ubuntu systems, place the file in the
-``/etc/apache2/sites-available`` directory. For CentOS/RHEL systems, place the
-file in the ``/etc/httpd/conf.d`` directory. 
+To grant permissions to the default socket location, execute the following on
+the ``gateway host``::
 
-We recommend deploying FastCGI as an external server, because allowing Apache to
-manage FastCGI sometimes introduces high latency. To manage FastCGI as an
-external server, use the ``FastCgiExternalServer`` directive.  See
-`FastCgiExternalServer`_ for details on this directive.  See `Module
-mod_fastcgi`_ for general details. See `Apache Virtual Host documentation`_ for
-details on ``<VirtualHost>`` format  and settings. See `<IfModule> Directive`_
-for additional details. 
-
-Ceph Object Gateway requires a rewrite rule for the Amazon S3-compatible
-interface. It's required for passing in the ``HTTP_AUTHORIZATION env`` for S3,
-which is filtered out by Apache. The rewrite rule is not necessary for the
-OpenStack Swift-compatible interface.
-
-You should configure Apache to allow encoded slashes, provide paths for log
-files and to turn off server signatures. See below for an exemplary embodiment 
-of a gateway configuration for Debian/Ubuntu and CentOS/RHEL.
-
-.. rubric:: Debian/Ubuntu
-
-.. literalinclude:: rgw-debian.conf
-   :language: ini
-
-.. rubric:: CentOS/RHEL
-
-.. literalinclude:: rgw-centos.conf
-   :language: ini
+	sudo chown apache:apache /var/run/ceph
 
 
-#. Replace the ``/{path}/{socket-name}`` entry with path to the socket and
-   the socket name. For example, 
-   ``/var/run/ceph/ceph.radosgw.gateway.fastcgi.sock``. Ensure that you use the 
-   same path and socket name in your ``ceph.conf`` entry.
+Change Log File Owner
+=====================
 
-#. Replace the ``{fqdn}`` entry with the fully-qualified domain name of the 
-   server. 
-   
-#. Replace the ``{email.address}`` entry with the email address for the 
-   server administrator.
-   
-#. Add a ``ServerAlias`` if you wish to use S3-style subdomains 
-   (of course you do).
+On some distros, the ``radosgw`` daemon runs as the unprivileged ``apache`` UID,
+but the ``root`` user owns the log file by default. You must change it to the
+``apache`` user so that Apache can populate the log file. To do so, execute
+the following::
 
-#. Save the configuration to a file (e.g., ``rgw.conf``).
-
-Finally, if you enabled SSL, make sure that you set the port to your SSL port
-(usually 443) and your configuration file includes the following::
-
-	SSLEngine on
-	SSLCertificateFile /etc/apache2/ssl/apache.crt
-	SSLCertificateKeyFile /etc/apache2/ssl/apache.key
-	SetEnv SERVER_PORT_SECURE 443
+	sudo chown apache:apache /var/log/radosgw/client.radosgw.gateway.log
 
 
-.. _Module mod_fastcgi: http://www.fastcgi.com/drupal/node/25
-.. _FastCgiExternalServer: http://www.fastcgi.com/drupal/node/25#FastCgiExternalServer
-.. _Apache Virtual Host documentation: http://httpd.apache.org/docs/2.2/vhosts/
-.. _<IfModule> Directive: http://httpd.apache.org/docs/2.2/mod/core.html#ifmodule
-	
-	
-.. important:: If you are using CentOS, RHEL or a similar distribution, make 
-   sure that ``FastCgiWrapper`` is turned ``off`` in 
-   ``/etc/httpd/conf.d/fastcgi.conf``. It is usually ``on`` by default.
+Start radosgw service
+=====================
 
-For Debian/Ubuntu distributions, enable the site for ``rgw.conf``. :: 
+The Ceph Object gateway daemon needs to be started. To do so, execute the
+following on the ``gateway host``:
 
-	sudo a2ensite rgw.conf
-
-Then, disable the default site. :: 
-
-	sudo a2dissite default
-	
-
-Adjust Path Ownership/Permissions
-=================================
-
-On some distributions, you must change ownership for ``/var/run/ceph`` to
-ensure that Apache has permissions to create a socket ::
-
-	sudo chown apache:apache /path/to/file   
-
-On some systems, you may need to set SELinux to ``Permissive``. If you are
-unable to communicate with the gateway after attempting to start it, try 
-executing::
-
-	getenforce
-	
-If the result is ``1`` or ``Enforcing``, execute::
-
-	sudo setenforce 0
-
-Then, restart Apache and the gateway daemon to see if that resolves the issue. 
-If it does, you can configure your system to disable SELinux.
-
-
-Restart Services and Start the Gateway
-======================================
-
-To ensure that all components have reloaded their configurations,  we recommend
-restarting your ``ceph`` and ``apache`` services. Then,  start up the
-``radosgw`` service.
-
-For the Ceph Storage Cluster, see `Operating a Cluster`_ for details. Some 
-versions of Ceph use different methods for starting and stopping clusters.
-
-
-Restart Apache
---------------
-
-On Debian/Ubuntu systems, use ``apache2``. For example::
-
-	sudo service apache2 restart
-	sudo /etc/init.d/apache2 restart
-
-On CentOS/RHEL systems, use ``httpd``. For example:: 
-
-	sudo /etc/init.d/httpd restart
-
-
-Start the Gateway
------------------
-
-On Debian/Ubuntu systems, use ``radosgw``. For example:: 
+On Debian-based distros::
 
 	sudo /etc/init.d/radosgw start
-	
-On CentOS/RHEL systems, use ``ceph-radosgw``. For example::
+
+On RPM-based distros::
 
 	sudo /etc/init.d/ceph-radosgw start
 
 
-Verify the Runtime
-------------------
+Create a Gateway Configuration file
+===================================
 
-Once the service is up and running, you can make an anonymous GET request to see
-if the gateway returns a response. A simple HTTP request to the domain name
-should return the following:
+On the host where you installed the Ceph Object Gateway i.e, ``gateway host``,
+create an ``rgw.conf`` file. Place the file in the ``/etc/httpd/conf.d``
+directory. It is a ``httpd`` configuration file which is needed for the
+``radosgw`` service. This file must be readable by the web server.
 
-.. code-block:: xml
+Execute the following steps:
 
-   <ListAllMyBucketsResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
-	   <Owner>
-		   <ID>anonymous</ID>
-		   <DisplayName/>
-	   </Owner>
-	   <Buckets/>
-   </ListAllMyBucketsResult>
+#. Create the file::
+
+	sudo vi /etc/httpd/conf.d/rgw.conf
+
+#. For distros with Apache 2.2 and early versions of Apache 2.4 that use
+   localhost TCP and do not support Unix Domain Socket, add the following
+   contents to the file::
+
+	<VirtualHost *:80>
+	ServerName localhost
+	DocumentRoot /var/www/html
+
+	ErrorLog /var/log/httpd/rgw_error.log
+	CustomLog /var/log/httpd/rgw_access.log combined
+
+	# LogLevel debug
+
+	RewriteEngine On
+
+	RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization},L]
+
+	SetEnv proxy-nokeepalive 1
+
+	ProxyPass / fcgi://localhost:9000/
+
+	</VirtualHost>
+
+   .. note:: For Debian-based distros replace ``/var/log/httpd/``
+      with ``/var/log/apache2``.
+
+#. For distros with Apache 2.4.9 or later that support Unix Domain Socket,
+   add the following contents to the file::
+
+	<VirtualHost *:80>
+	ServerName localhost
+	DocumentRoot /var/www/html
+
+	ErrorLog /var/log/httpd/rgw_error.log
+	CustomLog /var/log/httpd/rgw_access.log combined
+
+	# LogLevel debug
+
+	RewriteEngine On
+
+	RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization},L]
+
+	SetEnv proxy-nokeepalive 1
+
+	ProxyPass / unix:///var/run/ceph/ceph.radosgw.gateway.fastcgi.sock|fcgi://localhost:9000/
+
+	</VirtualHost>
 
 
-If you receive an error, check your settings and try again. See 
-`Adjust Path Ownership/Permissions`_ for details.
+Restart Apache
+==============
+
+The Apache service needs to be restarted to accept the new configuration.
+
+For Debian-based distros, run::
+
+	sudo service apache2 restart
+
+For RPM-based distros, run::
+
+	sudo service httpd restart
+
+Or::
+
+	sudo systemctl restart httpd
+
 
 Using The Gateway
 =================
 
-To use the REST interfaces, first create an initial Ceph Object Gateway user for
-the S3 interface. Then, create a subuser for the swift interface. See the `Admin
-Guide`_ for details.
+To use the REST interfaces, first create an initial Ceph Object Gateway
+user for the S3 interface. Then, create a subuser for the Swift interface.
+See the `Admin Guide`_ for more details on user management.
+
+Create a radosgw user for S3 access
+------------------------------------
+
+A ``radosgw`` user needs to be created and granted access. The command
+``man radosgw-admin`` will provide information on additional command options.
+
+To create the user, execute the following on the ``gateway host``::
+
+	sudo radosgw-admin user create --uid="testuser" --display-name="First User"
+
+The output of the command will be something like the following::
+
+	{"user_id": "testuser",
+	"display_name": "First User",
+	"email": "",
+	"suspended": 0,
+	"max_buckets": 1000,
+	"auid": 0,
+	"subusers": [],
+	"keys": [
+	{ "user": "testuser",
+	"access_key": "I0PJDPCIYZ665MW88W9R",
+	"secret_key": "dxaXZ8U90SXydYzyS5ivamEP20hkLSUViiaR+ZDA"}],
+	"swift_keys": [],
+	"caps": [],
+	"op_mask": "read, write, delete",
+	"default_placement": "",
+	"placement_tags": [],
+	"bucket_quota": { "enabled": false,
+	"max_size_kb": -1,
+	"max_objects": -1},
+	"user_quota": { "enabled": false,
+	"max_size_kb": -1,
+	"max_objects": -1},
+	"temp_url_keys": []}
 
 
+.. note:: The values of ``keys->access_key`` and ``keys->secret_key`` are
+   needed for access validation.
 
-.. _Dnsmasq: https://help.ubuntu.com/community/Dnsmasq
+Create a Swift user
+-------------------
+
+A Swift subuser needs to be created if this kind of access is needed. Creating
+a Swift user is a two step process. The first step is to create the user.
+The second is to create the secret key.
+
+Execute the following steps on the ``gateway host``:
+
+Create the Swift user::
+
+	sudo radosgw-admin subuser create --uid=testuser --subuser=testuser:swift
+
+The output will be something like the following::
+
+	--access=full
+	{ "user_id": "testuser",
+	"display_name": "First User",
+	"email": "",
+	"suspended": 0,
+	"max_buckets": 1000,
+	"auid": 0,
+	"subusers": [
+	{ "id": "testuser:swift",
+	"permissions": "full-control"}],
+	"keys": [
+	{ "user": "testuser:swift",
+	"access_key": "3Y1LNW4Q6X0Y53A52DET",
+	"secret_key": ""},
+	{ "user": "testuser",
+	"access_key": "I0PJDPCIYZ665MW88W9R",
+	"secret_key": "dxaXZ8U90SXydYzyS5ivamEP20hkLSUViiaR+ZDA"}],
+	"swift_keys": [],
+	"caps": [],
+	"op_mask": "read, write, delete",
+	"default_placement": "",
+	"placement_tags": [],
+	"bucket_quota": { "enabled": false,
+	"max_size_kb": -1,
+	"max_objects": -1},
+	"user_quota": { "enabled": false,
+	"max_size_kb": -1,
+	"max_objects": -1},
+	"temp_url_keys": []}
+
+Create the secret key::
+
+	sudo radosgw-admin key create --subuser=testuser:swift --key-type=swift --gen-secret
+
+The output will be something like the following::
+
+	{ "user_id": "testuser",
+	"display_name": "First User",
+	"email": "",
+	"suspended": 0,
+	"max_buckets": 1000,
+	"auid": 0,
+	"subusers": [
+	{ "id": "testuser:swift",
+	"permissions": "full-control"}],
+	"keys": [
+	{ "user": "testuser:swift",
+	"access_key": "3Y1LNW4Q6X0Y53A52DET",
+	"secret_key": ""},
+	{ "user": "testuser",
+	"access_key": "I0PJDPCIYZ665MW88W9R",
+	"secret_key": "dxaXZ8U90SXydYzyS5ivamEP20hkLSUViiaR+ZDA"}],
+	"swift_keys": [
+	{ "user": "testuser:swift",
+	"secret_key": "244+fz2gSqoHwR3lYtSbIyomyPHf3i7rgSJrF\/IA"}],
+	"caps": [],
+	"op_mask": "read, write, delete",
+	"default_placement": "",
+	"placement_tags": [],
+	"bucket_quota": { "enabled": false,
+	"max_size_kb": -1,
+	"max_objects": -1},
+	"user_quota": { "enabled": false,
+	"max_size_kb": -1,
+	"max_objects": -1},
+	"temp_url_keys": []}
+
+Access Verification
+===================
+
+You then need to verify if the created users are able to access the gateway.
+
+Test S3 access
+--------------
+
+You need to write and run a Python test script for verifying S3 access. The S3
+access test script will connect to the ``radosgw``, create a new bucket and list
+all buckets. The values for ``aws_access_key_id`` and ``aws_secret_access_key``
+are taken from the values of ``access_key`` and ``secret_key`` returned by the
+``radosgw_admin`` command.
+
+Execute the following steps:
+
+#. You will need to install the ``python-boto`` package.
+
+   For Debian-based distros, run::
+
+		sudo apt-get install python-boto
+
+   For RPM-based distros, run::
+
+		sudo yum install python-boto
+
+#. Create the Python script::
+
+	vi s3test.py
+
+#. Add the following contents to the file::
+
+	import boto
+	import boto.s3.connection
+	access_key = 'I0PJDPCIYZ665MW88W9R'
+	secret_key = 'dxaXZ8U90SXydYzyS5ivamEP20hkLSUViiaR+ZDA'
+	conn = boto.connect_s3(
+	aws_access_key_id = access_key,
+	aws_secret_access_key = secret_key,
+	host = '{hostname}',
+	is_secure=False,
+	calling_format = boto.s3.connection.OrdinaryCallingFormat(),
+	)
+	bucket = conn.create_bucket('my-new-bucket')
+	for bucket in conn.get_all_buckets():
+		print "{name}\t{created}".format(
+			name = bucket.name,
+			created = bucket.creation_date,
+	)
+
+   Replace ``{hostname}`` with the hostname of the host where you have
+   configured the gateway service i.e, the ``gateway host``.
+
+#. Run the script::
+
+	python s3test.py
+
+   The output will be something like the following::
+
+		my-new-bucket 2015-02-16T17:09:10.000Z
+
+Test swift access
+-----------------
+
+Swift access can be verified via the ``swift`` command line client. The command
+``man swift`` will provide more information on available command line options.
+
+To install ``swift`` client, execute the following::
+
+	sudo yum install python-setuptools
+	sudo easy_install pip
+	sudo pip install --upgrade setuptools
+	sudo pip install --upgrade python-swiftclient
+
+To test swift access, execute the following::
+
+	swift -A http://{IP ADDRESS}/auth/1.0 -U testuser:swift -K ‘{swift_secret_key}’ list
+
+Replace ``{IP ADDRESS}`` with the public IP address of the gateway server and
+``{swift_secret_key}`` with its value from the output of
+``radosgw-admin key create`` command executed for the ``swift`` user.
+
+For example::
+
+	swift -A http://10.19.143.116/auth/1.0 -U testuser:swift -K ‘244+fz2gSqoHwR3lYtSbIyomyPHf3i7rgSJrF/IA’ list
+
+The output should be::
+
+	my-new-bucket
+
+
 .. _Configuration Reference - Pools: ../config-ref#pools
 .. _Pool Configuration: ../../rados/configuration/pool-pg-config-ref/
 .. _Pools: ../../rados/operations/pools
 .. _User Management: ../../rados/operations/user-management
-.. _Operating a Cluster: ../../rados/rados/operations/operating
+.. _Backport support for UDS in Ubuntu Trusty: https://bugs.launchpad.net/ubuntu/+source/apache2/+bug/1411030
 .. _Admin Guide: ../admin
-.. _Add Wildcard to DNS: ../../install/install-ceph-gateway#add-wildcard-to-dns
