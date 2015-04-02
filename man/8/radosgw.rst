@@ -68,47 +68,51 @@ Configuration
 =============
 
 Earlier RADOS Gateway had to be configured with ``Apache`` and ``mod_fastcgi``.
-Now, ``mod_proxy_fcgi`` module is used instead of ``mod_fastcgi`` as the later
-doesn't come under a free license. ``mod_proxy_fcgi`` works differently than a
-traditional FastCGI module. This module requires the service of ``mod_proxy``
-which provides support for the FastCGI protocol. So, to be able to handle
-FastCGI protocol, both ``mod_proxy`` and ``mod_proxy_fcgi`` have to be present
-in the server. Unlike ``mod_fastcgi``, ``mod_proxy_fcgi`` cannot start the
-application process. Some platforms have ``fcgistarter`` for that purpose.
-However, external launching of application or process management may be available
-in the FastCGI application framework in use.
+Now, ``mod_proxy_fcgi`` module is used instead of ``mod_fastcgi``.
+``mod_proxy_fcgi`` works differently than a traditional FastCGI module. This
+module requires the service of ``mod_proxy`` which provides support for the
+FastCGI protocol. So, to be able to handle FastCGI protocol, both ``mod_proxy``
+and ``mod_proxy_fcgi`` have to be present in the server. Unlike ``mod_fastcgi``,
+``mod_proxy_fcgi`` cannot start the application process. Some platforms have
+``fcgistarter`` for that purpose. However, external launching of application
+or process management may be available in the FastCGI application framework
+in use.
 
 ``Apache`` can be configured in a way that enables ``mod_proxy_fcgi`` to be used
 with localhost tcp or through unix domain socket. ``mod_proxy_fcgi`` that doesn't
 support unix domain socket such as the ones in Apache 2.2 and earlier versions of
-Apache 2.4, needs to be configured for use with localhost tcp.
+Apache 2.4, needs to be configured for use with localhost tcp. Later versions of
+Apache like Apache 2.4.9 or later support unix domain socket and as such they
+allow for the configuration with unix domain socket instead of localhost tcp.
 
-#. Modify ``/etc/ceph/ceph.conf`` file to make radosgw use tcp instead of unix
-   domain socket. ::
+The following steps show the configuration in Ceph's configuration file i.e,
+``/etc/ceph/ceph.conf`` and the gateway configuration file i.e,
+``/etc/httpd/conf.d/rgw.conf`` with localhost tcp and through unix domain socket:
+
+#. For distros with Apache 2.2 and early versions of Apache 2.4 that use
+   localhost TCP and do not support Unix Domain Socket, append the following
+   contents to ``/etc/ceph/ceph.conf``::
 
 	[client.radosgw.gateway]
-	host = gateway
-	keyring = /etc/ceph/keyring.radosgw.gateway
+	host = {hostname}
+	keyring = /etc/ceph/ceph.client.radosgw.keyring
+	rgw socket path = ""
+	log file = /var/log/radosgw/client.radosgw.gateway.log
+	rgw frontends = fastcgi socket_port=9000 socket_host=0.0.0.0
+	rgw print continue = false
 
-	; ********
-	; tcp fastcgi
-		rgw socket path = ""
-		rgw frontends = fastcgi socket_port=9000 socket_host=0.0.0.0
-
-#. Modify Apache's configuration file so that ``mod_proxy_fcgi`` can be used
-   with localhost tcp.
+#. Add the following content in ``/etc/httpd/conf.d/rgw.conf``:
 
    Debian/Ubuntu::
 
-		<VirtualHost *:80>
+		<VirtualHost {IP ADDRESS}:80>
 		ServerName localhost
 		DocumentRoot /var/www/html
 
-		ErrorLog /var/log/apache2/error.log
-		CustomLog /var/log/apache2/access.log combined
+		ErrorLog /var/log/apache2/rgw_error.log
+		CustomLog /var/log/apache2/rgw_access.log combined
 
-		LogLevel debug
-
+		# LogLevel debug
 
 		RewriteEngine On
 
@@ -116,20 +120,20 @@ Apache 2.4, needs to be configured for use with localhost tcp.
 
 		SetEnv proxy-nokeepalive 1
 
-		ProxyPass / fcgi://127.0.01:9000/
+		ProxyPass / fcgi://localhost:9000/
+
 		</VirtualHost>
 
    CentOS/RHEL::
 
-		<VirtualHost *:80>
+		<VirtualHost {IP ADDRESS}:80>
 		ServerName localhost
 		DocumentRoot /var/www/html
 
-		ErrorLog /var/log/httpd/error.log
-		CustomLog /var/log/httpd/access.log combined
+		ErrorLog /var/log/httpd/rgw_error.log
+		CustomLog /var/log/httpd/rgw_access.log combined
 
-		LogLevel debug
-
+		# LogLevel debug
 
 		RewriteEngine On
 
@@ -137,49 +141,46 @@ Apache 2.4, needs to be configured for use with localhost tcp.
 
 		SetEnv proxy-nokeepalive 1
 
-		ProxyPass / fcgi://127.0.01:9000/
+		ProxyPass / fcgi://localhost:9000/
+
 		</VirtualHost>
 
-#. Modify Apache's configuration file so that ``mod_proxy_fcgi`` can be used
-   through unix domain socket.
+#. For distros with Apache 2.4.9 or later that support Unix Domain Socket,
+   append the following configuration to ``/etc/ceph/ceph.conf``::
 
-   Debian/Ubuntu::
+	[client.radosgw.gateway]
+	host = {hostname}
+	keyring = /etc/ceph/ceph.client.radosgw.keyring
+	rgw socket path = /var/run/ceph/ceph.radosgw.gateway.fastcgi.sock
+	log file = /var/log/radosgw/client.radosgw.gateway.log
+	rgw print continue = false
 
-		<VirtualHost *:80>
-		ServerName localhost
-		DocumentRoot /var/www/html
-
-		ErrorLog /var/log/apache2/error.log
-		CustomLog /var/log/apache2/access.log combined
-
-		LogLevel debug
-
-
-		RewriteEngine On
-
-		RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization},L]
-
-		ProxyPass / unix:///tmp/.radosgw.sock|fcgi://localhost:9000/ disablereuse=On
-		</VirtualHost>
+#. Add the following content in ``/etc/httpd/conf.d/rgw.conf``::
 
    CentOS/RHEL::
 
-		<VirtualHost *:80>
+		<VirtualHost {IP ADDRESS}:80>
 		ServerName localhost
 		DocumentRoot /var/www/html
 
-		ErrorLog /var/log/httpd/error.log
-		CustomLog /var/log/httpd/access.log combined
+		ErrorLog /var/log/httpd/rgw_error.log
+		CustomLog /var/log/httpd/rgw_access.log combined
 
-		LogLevel debug
-
+		# LogLevel debug
 
 		RewriteEngine On
 
 		RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization},L]
 
-		ProxyPass / unix:///tmp/.radosgw.sock|fcgi://localhost:9000/ disablereuse=On
+		SetEnv proxy-nokeepalive 1
+
+		ProxyPass / unix:///var/run/ceph/ceph.radosgw.gateway.fastcgi.sock|fcgi://localhost:9000/
+
 		</VirtualHost>
+
+   The latest version of Ubuntu i.e, 14.04 has ``Apache 2.4.7`` which does not
+   have Unix Domain Support in it and as such has to be configured with localhost
+   tcp.
 
 #. Generate a key for radosgw to use for authentication with the cluster. ::
 
