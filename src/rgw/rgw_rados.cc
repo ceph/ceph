@@ -6063,6 +6063,8 @@ int RGWRados::Object::Delete::delete_obj()
   if (r < 0)
     return r;
 
+  ObjectWriteOperation op;
+
   if (params.unmod_since > 0) {
     time_t ctime = state->mtime;
 
@@ -6070,6 +6072,9 @@ int RGWRados::Object::Delete::delete_obj()
     if (ctime > params.unmod_since) {
       return -ERR_PRECONDITION_FAILED;
     }
+
+    /* only delete object if mtime is less than or equal to params.unmod_since */
+    store->cls_obj_check_mtime(op, utime_t(params.unmod_since, 0), CLS_RGW_CHECK_TIME_MTIME_LE);
   }
   uint64_t obj_size = state->size;
 
@@ -6091,8 +6096,6 @@ int RGWRados::Object::Delete::delete_obj()
       }
     }
   }
-
-  ObjectWriteOperation op;
 
   r = target->prepare_atomic_modification(op, false, NULL, NULL, NULL, true);
   if (r < 0)
