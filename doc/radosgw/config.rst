@@ -72,7 +72,7 @@ See `User Management`_ for additional details on Ceph authentication.
 	sudo mv ceph.client.radosgw.keyring /etc/ceph/ceph.client.radosgw.keyring
 
 
-   .. note:: The 5th step is optional if `admin node` is the `gateway host`.
+   .. note:: The 5th step is optional if ``admin node`` is the ``gateway host``.
 
 Create Pools
 ============
@@ -131,14 +131,14 @@ Add a Gateway Configuration to Ceph
 ===================================
 
 Add the Ceph Object Gateway configuration to your Ceph Configuration file in
-`admin node`. The Ceph Object Gateway configuration requires you to
+``admin node``. The Ceph Object Gateway configuration requires you to
 identify the Ceph Object Gateway instance. Then, you must specify the host name
 where you installed the Ceph Object Gateway daemon, a keyring (for use with
 cephx), the socket path for FastCGI and a log file.
 
 For distros with Apache 2.2 and early versions of Apache 2.4 (RHEL 6, Ubuntu
-12.04, 14.04 etc), append the following configuration to `/etc/ceph/ceph.conf`
-in your `admin node`::
+12.04, 14.04 etc), append the following configuration to ``/etc/ceph/ceph.conf``
+in your ``admin node``::
 
 	[client.radosgw.gateway]
 	host = {hostname}
@@ -153,7 +153,7 @@ in your `admin node`::
    Sockets but use localhost TCP.
 
 For distros with Apache 2.4.9 or later (RHEL 7, CentOS 7 etc), append the
-following configuration to `/etc/ceph/ceph.conf` in your `admin node`::
+following configuration to ``/etc/ceph/ceph.conf`` in your ``admin node``::
 
 	[client.radosgw.gateway]
 	host = {hostname}
@@ -163,24 +163,26 @@ following configuration to `/etc/ceph/ceph.conf` in your `admin node`::
 	rgw print continue = false
 
 
-.. note:: `Apache 2.4.9` supports Unix Domain Socket (UDS) but as `Ubuntu 14.04`
-   ships with `Apache 2.4.7` it doesn't have UDS support and has to be configured
-   for use with localhost TCP. A bug `backport support for unix domain sockets`_
-   has been filed for backporting UDS support in `Apache 2.4.7` for `Ubuntu 14.04`.
+.. note:: ``Apache 2.4.9`` supports Unix Domain Socket (UDS) but as
+   ``Ubuntu 14.04`` ships with ``Apache 2.4.7`` it doesn't have UDS support and
+   has to be configured for use with localhost TCP. A bug
+   `backport support for unix domain sockets`_ has been filed for backporting
+   UDS support in ``Apache 2.4.7`` for ``Ubuntu 14.04``.
 
-Here, `{hostname}` is the short hostname (output of command `hostname -s`) of the
-node that is going to provide the gateway service i.e, the `gateway host`.
+Here, ``{hostname}`` is the short hostname (output of command ``hostname -s``)
+of the node that is going to provide the gateway service i.e, the
+``gateway host``.
 
-The `[client.radosgw.gateway]` portion of the gateway instance identifies this
+The ``[client.radosgw.gateway]`` portion of the gateway instance identifies this
 portion of the Ceph configuration file as configuring a Ceph Storage Cluster
-client where the client type is a Ceph Object Gateway (i.e., `radosgw`).
+client where the client type is a Ceph Object Gateway (i.e., ``radosgw``).
 
 
-.. note:: The last line in the configuration i.e, `rgw print continue = false`
-   is added to avoid issues with `PUT` operations.
+.. note:: The last line in the configuration i.e, ``rgw print continue = false``
+   is added to avoid issues with ``PUT`` operations.
 
 Once you finish the setup procedure, if you encounter issues with your
-configuration,  you can add debugging to the `[global]` section of your Ceph
+configuration, you can add debugging to the ``[global]`` section of your Ceph
 configuration file and restart the gateway to help troubleshoot any
 configuration issues. For example::
 
@@ -194,41 +196,41 @@ Distribute updated Ceph configuration file
 ==========================================
 
 The updated Ceph configuration file needs to be distributed to all Ceph cluster
-nodes from the `admin node`.
+nodes from the ``admin node``.
 
 It involves the following steps:
 
-#. Pull the updated `ceph.conf` from `/etc/ceph/` to the root directory of the
-   cluster in admin node (e.g. `my-cluster` directory). The contents of
-   `ceph.conf` in `ceph-config` will get overwritten. To do so, execute the
+#. Pull the updated ``ceph.conf`` from ``/etc/ceph/`` to the root directory of
+   the cluster in admin node (e.g. ``my-cluster`` directory). The contents of
+   ``ceph.conf`` in ``my-cluster`` will get overwritten. To do so, execute the
    following::
 
 		ceph-deploy --overwrite-conf config pull {hostname}
 
-   Here, `{hostname}` is the short hostname of the Ceph admin node.
+   Here, ``{hostname}`` is the short hostname of the Ceph admin node.
 
-#. Push the updated `ceph.conf` file from the admin node to all other nodes in
-   the cluster including the `gateway host`::
+#. Push the updated ``ceph.conf`` file from the admin node to all other nodes in
+   the cluster including the ``gateway host``::
 
 		ceph-deploy --overwrite-conf config push [HOST][HOST...]
 
-   Give the hostnames of the other Ceph nodes in place of `[HOST][HOST...]`.
+   Give the hostnames of the other Ceph nodes in place of ``[HOST][HOST...]``.
 
 
 Copy ceph.client.admin.keyring from admin node to gateway host
 ==============================================================
 
-As the `gateway host` can be a different node that is not part of the cluster,
-the `ceph.client.admin.keyring` needs to be copied from the `admin node` to
-the `gateway host`. To do so, execute the following on `admin node`::
+As the ``gateway host`` can be a different node that is not part of the cluster,
+the ``ceph.client.admin.keyring`` needs to be copied from the ``admin node`` to
+the ``gateway host``. To do so, execute the following on ``admin node``::
 
 	sudo scp /etc/ceph/ceph.client.admin.keyring  ceph@{hostname}:/home/ceph
 	ssh {hostname}
 	sudo mv ceph.client.admin.keyring /etc/ceph/ceph.client.admin.keyring
 
 
-.. note:: The above step need not be executed if `admin node` is the
-   `gateway host`.
+.. note:: The above step need not be executed if ``admin node`` is the
+   ``gateway host``.
 
 
 Create a CGI wrapper script
@@ -238,7 +240,7 @@ The wrapper script provides the interface between the webserver and the radosgw
 process. This script needs to be in a web accessible location and should be
 executable.
 
-Execute the following steps on the `gateway host`:
+Execute the following steps on the ``gateway host``:
 
 #. Create the script::
 
@@ -259,7 +261,7 @@ Execute the following steps on the `gateway host`:
 Adjust CGI wrapper script permission
 ====================================
 
-On some distros, `apache` should have execute permission on the `s3gw.fcgi`
+On some distros, ``apache`` should have execute permission on the ``s3gw.fcgi``
 script. To change permission on the file, execute::
 
 	sudo chown apache:apache /var/www/html/s3gw.fcgi
@@ -269,13 +271,13 @@ Create Data Directory
 =====================
 
 Deployment scripts may not create the default Ceph Object Gateway data
-directory. Create data directories for each instance of a `radosgw`
-daemon (if you haven't done so already). The `host` variables in the
+directory. Create data directories for each instance of a ``radosgw``
+daemon (if you haven't done so already). The ``host`` variables in the
 Ceph configuration file determine which host runs each instance of a
-`radosgw` daemon. The typical form specifies the `radosgw` daemon, the
-cluster name and the daemon ID.
+``radosgw`` daemon. The typical form specifies the ``radosgw`` daemon,
+the cluster name and the daemon ID.
 
-To create the directory on the `gateway host`, execute the following::
+To create the directory on the ``gateway host``, execute the following::
 
 	sudo mkdir -p /var/lib/ceph/radosgw/ceph-radosgw.gateway
 
@@ -283,12 +285,12 @@ To create the directory on the `gateway host`, execute the following::
 Adjust Socket Directory Permissions
 ===================================
 
-On some distros, the `radosgw` daemon runs as the unprivileged `apache`
+On some distros, the ``radosgw`` daemon runs as the unprivileged ``apache``
 UID, and this UID must have write access to the location where it will write
 its socket file.
 
 To grant permissions to the default socket location, execute the following on
-the `gateway host`::
+the ``gateway host``::
 
 	sudo chown apache:apache /var/run/ceph
 
@@ -296,9 +298,9 @@ the `gateway host`::
 Change Log File Owner
 =====================
 
-On some distros, the `radosgw` daemon runs as the unprivileged `apache` UID,
-but the `root` user owns the log file by default. You must change it to the
-`apache` user so that Apache can populate the log file. To do so, execute
+On some distros, the ``radosgw`` daemon runs as the unprivileged ``apache`` UID,
+but the ``root`` user owns the log file by default. You must change it to the
+``apache`` user so that Apache can populate the log file. To do so, execute
 the following::
 
 	sudo chown apache:apache /var/log/radosgw/client.radosgw.gateway.log
@@ -308,7 +310,7 @@ Start radosgw service
 =====================
 
 The Ceph Object gateway daemon needs to be started. To do so, execute the
-following on the `gateway host`:
+following on the ``gateway host``:
 
 On Debian-based distros::
 
@@ -322,10 +324,10 @@ On RPM-based distros::
 Create a Gateway Configuration file
 ===================================
 
-On the host where you installed the Ceph Object Gateway i.e, `gateway host`,
-create an `rgw.conf` file. Place the file in the `/etc/httpd/conf.d` directory.
-It is a `httpd` configuration file which is needed for the radosgw service.
-This file must be readable by the web server.
+On the host where you installed the Ceph Object Gateway i.e, ``gateway host``,
+create an ``rgw.conf`` file. Place the file in the ``/etc/httpd/conf.d``
+directory. It is a ``httpd`` configuration file which is needed for the
+``radosgw`` service. This file must be readable by the web server.
 
 Execute the following steps:
 
@@ -356,11 +358,11 @@ Execute the following steps:
 
 	</VirtualHost>
 
-   .. note:: The `<VirtualHost>` configuration parameter should be updated to
+   .. note:: The ``<VirtualHost>`` configuration parameter should be updated to
 	   listen to the public IP address of the gateway server. Replace
-	   `{IP ADDRESS}` with the public IP address of the host that you are
+	   ``{IP ADDRESS}`` with the public IP address of the host that you are
 	   configuring as a gateway server. Also, for Debian-based distros replace
-	   `/var/log/httpd/` with `/var/log/apache2`.
+	   ``/var/log/httpd/`` with ``/var/log/apache2``.
 
 #. For distros with Apache 2.4.9 or later that support Unix Domain Socket,
    add the following contents to the file::
@@ -385,10 +387,10 @@ Execute the following steps:
 	</VirtualHost>
 
 
-   .. note:: The `<VirtualHost>` configuration parameter should be updated to
-	   listen to the public IP address of the gateway server. Replace
-	   `{IP ADDRESS}` with the public IP address of the host that you are
-	   configuring as a gateway server.
+   .. note:: The ``<VirtualHost>`` configuration parameter should be updated
+      to listen to the public IP address of the gateway server. Replace ``{IP ADDRESS}``
+      with the public IP address of the host that you are configuring as a
+      gateway server.
 
 Restart Apache
 ==============
@@ -418,10 +420,10 @@ See the `Admin Guide`_ for more details on user management.
 Create a radosgw user for S3 access
 ------------------------------------
 
-A `radosgw` user needs to be created and granted access. The command
-`man radosgw-admin` will provide information on additional command options.
+A ``radosgw`` user needs to be created and granted access. The command
+``man radosgw-admin`` will provide information on additional command options.
 
-To create the user, execute the following on the `gateway host`::
+To create the user, execute the following on the ``gateway host``::
 
 	sudo radosgw-admin user create --uid="testuser" --display-name="First User"
 
@@ -452,8 +454,8 @@ The output of the command will be something like the following::
 	"temp_url_keys": []}
 
 
-.. note:: The values of `keys->access_key` and `keys->secret_key` are needed for access
-   validation.
+.. note:: The values of ``keys->access_key`` and ``keys->secret_key`` are
+   needed for access validation.
 
 Create a Swift user
 -------------------
@@ -462,7 +464,7 @@ A Swift subuser needs to be created if this kind of access is needed. Creating
 a Swift user is a two step process. The first step is to create the user.
 The second is to create the secret key.
 
-Execute the following steps on the `gateway host`:
+Execute the following steps on the ``gateway host``:
 
 Create the Swift user::
 
@@ -546,14 +548,14 @@ Test S3 access
 --------------
 
 You need to write and run a Python test script for verifying S3 access. The S3
-access test script will connect to the `radosgw`, create a new bucket and list
-all buckets. The values for `aws_access_key_id` and `aws_secret_access_key` are
-taken from the values of `access_key` and `secret_key` returned by the
-`radosgw_admin` command.
+access test script will connect to the ``radosgw``, create a new bucket and list
+all buckets. The values for ``aws_access_key_id`` and ``aws_secret_access_key``
+are taken from the values of ``access_key`` and ``secret_key`` returned by the
+``radosgw_admin`` command.
 
 Execute the following steps:
 
-#. You will need to install the `python-boto` package.
+#. You will need to install the ``python-boto`` package.
 
    For Debian-based distros, run::
 
@@ -587,8 +589,8 @@ Execute the following steps:
 			created = bucket.creation_date,
 	)
 
-   Replace `{hostname}` with the hostname of the host where you have configured
-   the gateway service i.e, the `gateway host`.
+   Replace ``{hostname}`` with the hostname of the host where you have
+   configured the gateway service i.e, the ``gateway host``.
 
 #. Run the script::
 
@@ -601,10 +603,10 @@ Execute the following steps:
 Test swift access
 -----------------
 
-Swift access can be verified via the `swift` command line client. The command
-`man swift` will provide more information on available command line options.
+Swift access can be verified via the ``swift`` command line client. The command
+``man swift`` will provide more information on available command line options.
 
-To install `swift` client, execute the following::
+To install ``swift`` client, execute the following::
 
 	sudo yum install python-setuptools
 	sudo easy_install pip
@@ -615,9 +617,9 @@ To test swift access, execute the following::
 
 	swift -A http://{IP ADDRESS}/auth/1.0 -U testuser:swift -K ‘{swift_secret_key}’ list
 
-Replace `{IP ADDRESS}` with the public IP address of the gateway server and
-`{swift_secret_key}` with its value from the output of `radosgw-admin key create`
-command executed for the `swift` user.
+Replace ``{IP ADDRESS}`` with the public IP address of the gateway server and
+``{swift_secret_key}`` with its value from the output of
+``radosgw-admin key create`` command executed for the ``swift`` user.
 
 For example::
 
