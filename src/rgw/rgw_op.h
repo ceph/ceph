@@ -814,6 +814,7 @@ protected:
   bool multipart_delete;
   string version_id;
   time_t unmod_since; /* if unmodified since */
+  bool no_precondition_error;
   std::unique_ptr<RGWBulkDelete::Deleter> deleter;
 
 public:
@@ -821,6 +822,7 @@ public:
     : delete_marker(false),
       multipart_delete(false),
       unmod_since(0),
+      no_precondition_error(false),
       deleter(nullptr) {
   }
 

@@ -2927,6 +2927,10 @@ void RGWDeleteObj::execute()
       op_ret = -ENOENT;
       return;
     }
+
+    if (op_ret == -ERR_PRECONDITION_FAILED && no_precondition_error) {
+      op_ret = 0;
+    }
   } else {
     op_ret = -EINVAL;
   }
