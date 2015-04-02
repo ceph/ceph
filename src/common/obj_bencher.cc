@@ -170,12 +170,11 @@ void *ObjBencher::status_printer(void *_bencher) {
 int ObjBencher::aio_bench(
   int operation, int secondsToRun,
   int maxObjectsToCreate,
-  int concurrentios, int op_size, bool cleanup, const char* run_name) {
+  int concurrentios, int object_size, bool cleanup, const char* run_name) {
 
   if (concurrentios <= 0) 
     return -EINVAL;
 
-  int object_size = op_size;
   int num_objects = 0;
   int r = 0;
   int prevPid = 0;
