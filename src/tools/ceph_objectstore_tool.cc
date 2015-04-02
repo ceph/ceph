@@ -1232,8 +1232,9 @@ int skip_object(bufferlist &bl)
     case TYPE_ATTRS:
     case TYPE_OMAP_HDR:
     case TYPE_OMAP:
-      if (debug)
-        cerr << "Skip type " << (int)type << std::endl;
+#ifdef DIAGNOSTIC
+      cerr << "Skip type " << (int)type << std::endl;
+#endif
       break;
     case TYPE_OBJECT_END:
       done = true;
@@ -1442,8 +1443,6 @@ int get_object(ObjectStore *store, coll_t coll, bufferlist &bl, OSDMap &curmap)
   if (ob.hoid.hobj.nspace != g_ceph_context->_conf->osd_hit_set_namespace) {
     object_t oid = ob.hoid.hobj.oid;
     object_locator_t loc(ob.hoid.hobj);
-    // XXX: Do we need to set the hash?
-    // loc.hash = ob.hoid.hash;
     pg_t raw_pgid = curmap.object_locator_to_pg(oid, loc);
     pg_t pgid = curmap.raw_pg_to_pg(raw_pgid);
   
@@ -1853,12 +1852,25 @@ int do_import(ObjectStore *store, OSDSuperblock& sb)
     return EFAULT;
   }
 
+  pg_log_t newlog, reject;
+  pg_log_t::filter_log(pgid, curmap, g_ceph_context->_conf->osd_hit_set_namespace,
+    ms.log, newlog, reject);
+  if (debug) {
+    for (list<pg_log_entry_t>::iterator i = newlog.log.begin();
+         i != newlog.log.end(); ++i)
+      cerr << "Keeping log entry " << *i << std::endl;
+    for (list<pg_log_entry_t>::iterator i = reject.log.begin();
+         i != reject.log.end(); ++i)
+      cerr << "Skipping log entry " << *i << std::endl;
+  }
+
   t = new ObjectStore::Transaction;
-  ret = write_pg(*t, ms.map_epoch, ms.info, ms.log, ms.past_intervals);
+  ret = write_pg(*t, ms.map_epoch, ms.info, newlog, ms.past_intervals);
   if (ret) return ret;
 
   // done, clear removal flag
-  cout << "done, clearing removal flag flag" << std::endl;
+  if (debug)
+    cerr << "done, clearing removal flag" << std::endl;
   set<string> remove;
   remove.insert("_remove");
   t->omap_rmkeys(coll, pgid.make_pgmeta_oid(), remove);
