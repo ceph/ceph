@@ -1081,7 +1081,9 @@ void Server::reply_client_request(MDRequestRef& mdr, MClientReply *reply)
   if (req->may_write() && mdr->session && reply->get_result() == 0) {
     inodeno_t created = mdr->alloc_ino ? mdr->alloc_ino : mdr->used_prealloc_ino;
     mdr->session->add_completed_request(mdr->reqid.tid, created);
-    mdr->ls->touched_sessions.insert(mdr->session->info.inst.name);
+    if (mdr->ls) {
+      mdr->ls->touched_sessions.insert(mdr->session->info.inst.name);
+    }
   }
 
   // give any preallocated inos to the session
