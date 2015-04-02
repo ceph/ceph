@@ -14,19 +14,20 @@ service, i.e, the ``gateway host``. If you plan to run a Ceph Object Storage
 service with a federated architecture (multiple regions and zones), you must
 also install the synchronization agent.
 
-.. note:: Previous versions of Inktank Ceph Enterprise shipped with
-   ``mod_fastcgi``. The current version ships with ``mod_proxy_fcgi`` instead.
+.. note:: Previous versions of Ceph shipped with ``mod_fastcgi``. The current
+   version ships with ``mod_proxy_fcgi`` instead.
 
 In distros that ship Apache 2.4 (such as RHEL 7, CentOS 7 or Ubuntu 14.04
 ``Trusty``), ``mod_proxy_fcgi`` is already present. When you install the
-``httpd`` package with ``yum``, ``mod_proxy_fcgi`` becomes available for use
-on your server.
+``httpd`` package with ``yum`` or the ``apache2`` package with ``apt-get``,
+``mod_proxy_fcgi`` becomes available for use on your server.
 
 In distros that ship Apache 2.2 (such as RHEL 6, CentOS 6 or Ubuntu 12.04
 ``Precise``), ``mod_proxy_fcgi`` comes as a separate package. In
 **RHEL 6/CentOS 6**, it is available in ``EPEL 6`` repo and can be installed with
-``yum install mod_proxy_fcgi``. For **Ubuntu 12.04**, a backport has been created
-for ``mod_proxy_fcgi`` which is available in ``Precise`` backport repository.
+``yum install mod_proxy_fcgi``. For **Ubuntu 12.04**, a backport for
+``mod_proxy_fcgi`` is in progress and a bug has been filed for the same.
+See: `ceph radosgw needs mod-proxy-fcgi for apache 2.2`_
 
 
 Install Apache
@@ -256,6 +257,7 @@ to configure your Ceph Object Gateway. There are two approaches:
 
 Choose the approach that best reflects your cluster.
 
+.. _ceph radosgw needs mod-proxy-fcgi for apache 2.2: https://bugs.launchpad.net/precise-backports/+bug/1422417
 .. _Ubuntu Server Guide: https://help.ubuntu.com/12.04/serverguide/httpd.html
 .. _Setting up an SSL secured Webserver with CentOS: http://wiki.centos.org/HowTos/Https
 .. _simple: ../../radosgw/config
