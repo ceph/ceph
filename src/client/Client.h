@@ -80,8 +80,6 @@ enum {
   l_c_first = 20000,
   l_c_reply,
   l_c_lat,
-  l_c_owrlat,
-  l_c_ordlat,
   l_c_wrlat,
   l_c_last,
 };

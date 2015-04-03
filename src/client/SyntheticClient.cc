@@ -2389,12 +2389,6 @@ int SyntheticClient::object_rw(int nobj, int osize, int wrpc,
 
     utime_t lat = ceph_clock_now(client->cct);
     lat -= start;
-    if (client->logger) {
-      if (write) 
-	client->logger->tset(l_c_owrlat, lat);
-      else 
-	client->logger->tset(l_c_ordlat, lat);
-    }
   }
 
   return 0;
