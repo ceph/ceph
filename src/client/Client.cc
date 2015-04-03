@@ -426,8 +426,6 @@ int Client::init()
   plb.add_time_avg(l_c_reply, "reply", "Latency of receiving a reply on metadata request");
   plb.add_time_avg(l_c_lat, "lat", "Latency of processing a metadata request");
   plb.add_time_avg(l_c_wrlat, "wrlat", "Latency of a file data write operation");
-  plb.add_time_avg(l_c_owrlat, "owrlat");
-  plb.add_time_avg(l_c_ordlat, "ordlat");
   logger = plb.create_perf_counters();
   cct->get_perfcounters_collection()->add(logger);
 
