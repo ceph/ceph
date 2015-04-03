@@ -545,7 +545,8 @@ def main():
             # for both:
             childargs = childargs[2:]
         else:
-            print >> sys.stderr, 'daemon requires at least 3 arguments'
+            print >> sys.stderr, '{0} requires at least {1} arguments'.format(
+                childargs[0], require_args)
             return errno.EINVAL
 
     if sockpath and daemon_perf:
