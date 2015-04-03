@@ -1,0 +1,16 @@
+tasks:
+- exec:
+    client.0:
+      - ceph osd deep-scrub '*'
+- sequential:
+  - rados:
+      clients: [client.0]
+      pools: [ecbase]
+      ops: 4000
+      objects: 500
+      op_weights:
+        read: 100
+        write: 100
+        delete: 50
+        copy_from: 50
+- print: "**** done rados ec-cache-agent (part 2)"
