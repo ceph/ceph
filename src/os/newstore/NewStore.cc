@@ -1043,9 +1043,14 @@ void NewStore::_queue_reap_collection(CollectionRef& c)
 
 void NewStore::_reap_collections()
 {
-  Mutex::Locker l(reap_lock);
-  for (list<CollectionRef>::iterator p = removed_collections.begin();
-       p != removed_collections.end();
+  reap_lock.Lock();
+
+  list<CollectionRef> removed_colls;
+  removed_colls.swap(removed_collections);
+  reap_lock.Unlock();
+
+  for (list<CollectionRef>::iterator p = removed_colls.begin();
+       p != removed_colls.end();
        ++p) {
     CollectionRef c = *p;
     dout(10) << __func__ << " " << c->cid << dendl;
