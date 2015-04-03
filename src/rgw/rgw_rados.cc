@@ -3909,6 +3909,31 @@ int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
 }
 
 /**
+  * Check to see if the bucket metadata could be synced
+  * bucket: the bucket to check
+  * Returns false is the bucket is not synced
+  */
+bool RGWRados::is_syncing_bucket_meta(rgw_bucket& bucket)
+{
+  /* region is not master region */
+  if (!region.is_master) {
+    return false;
+  }
+
+  /* single region and a single zone */
+  if (region_map.regions.size() == 1 && region.zones.size() == 1) {
+    return false;
+  }
+
+  /* zone is not master */
+  if (region.master_zone.compare(zone_name) != 0) {
+    return false;
+  }
+
+  return true;
+}
+  
+/**
  * Delete a bucket.
  * bucket: the name of the bucket to delete
  * Returns 0 on success, -ERR# otherwise.
@@ -3949,6 +3974,16 @@ int RGWRados::delete_bucket(rgw_bucket& bucket, RGWObjVersionTracker& objv_track
   if (r < 0)
     return r;
 
+  /* if the bucked is not synced we can remove the meta file */
+  if (!is_syncing_bucket_meta(bucket)) {
+    RGWObjVersionTracker objv_tracker;
+    string entry;
+    get_bucket_instance_entry(bucket, entry);
+    r= rgw_bucket_instance_remove_entry(this, entry, &objv_tracker);
+    if (r < 0) {
+      return r;
+    }
+  }
   return 0;
 }
 

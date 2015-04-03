@@ -1774,6 +1774,11 @@ public:
    */
   virtual int delete_bucket(rgw_bucket& bucket, RGWObjVersionTracker& objv_tracker);
 
+  /**
+   * Check to see if the bucket metadata is synced
+   */
+  bool is_syncing_bucket_meta(rgw_bucket& bucket);
+  
   int set_bucket_owner(rgw_bucket& bucket, ACLOwner& owner);
   int set_buckets_enabled(std::vector<rgw_bucket>& buckets, bool enabled);
   int bucket_suspended(rgw_bucket& bucket, bool *suspended);
