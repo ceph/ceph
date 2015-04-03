@@ -5702,10 +5702,6 @@ int RGWRados::get_obj_iterate_cb(RGWObjectCtx *ctx, RGWObjState *astate,
     }
   }
 
-  r = flush_read_list(d);
-  if (r < 0)
-    return r;
-
   get_obj_bucket_and_oid_loc(obj, bucket, oid, key);
 
   d->throttle.get(len);
@@ -5728,6 +5724,11 @@ int RGWRados::get_obj_iterate_cb(RGWObjectCtx *ctx, RGWObjState *astate,
   ldout(cct, 20) << "rados->aio_operate r=" << r << " bl.length=" << pbl->length() << dendl;
   if (r < 0)
     goto done_err;
+
+  // Flush data to client if there is any
+  r = flush_read_list(d);
+  if (r < 0)
+    return r;
 
   return 0;
 
