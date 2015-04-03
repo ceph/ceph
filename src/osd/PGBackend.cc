@@ -110,6 +110,10 @@ int PGBackend::objects_list_partial(
   // it might have multiple generations though, which would
   // be filtered).
   ghobject_t _next(begin, 0, shard_id_t::NO_SHARD);
+
+  if (begin == hobject_t())
+    _next = ghobject_t();
+
   ls->reserve(max);
   int r = 0;
   while (!_next.is_max() && ls->size() < (unsigned)min) {
