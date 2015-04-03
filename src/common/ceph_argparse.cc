@@ -337,7 +337,7 @@ static bool va_ceph_argparse_witharg(std::vector<const char*> &args,
 template<class T>
 bool ceph_argparse_witharg(std::vector<const char*> &args,
 	std::vector<const char*>::iterator &i, T *ret,
-	std::ostream *oss, ...)
+	std::ostream &oss, ...)
 {
   bool r;
   va_list ap;
@@ -353,22 +353,22 @@ bool ceph_argparse_witharg(std::vector<const char*> &args,
   T myret = strict_str_convert(str.c_str(), &err);
   *ret = myret;
   if (!err.empty()) {
-    *oss << err;
+    oss << err;
   }
   return true;
 }
 
 template bool ceph_argparse_witharg<int>(std::vector<const char*> &args,
 	std::vector<const char*>::iterator &i, int *ret,
-	std::ostream *oss, ...);
+	std::ostream &oss, ...);
 
 template bool ceph_argparse_witharg<long long>(std::vector<const char*> &args,
 	std::vector<const char*>::iterator &i, long long *ret,
-	std::ostream *oss, ...);
+	std::ostream &oss, ...);
 
 template bool ceph_argparse_witharg<float>(std::vector<const char*> &args,
 	std::vector<const char*>::iterator &i, float *ret,
-	std::ostream *oss, ...);
+	std::ostream &oss, ...);
 
 bool ceph_argparse_witharg(std::vector<const char*> &args,
 	std::vector<const char*>::iterator &i, std::string *ret, ...)
