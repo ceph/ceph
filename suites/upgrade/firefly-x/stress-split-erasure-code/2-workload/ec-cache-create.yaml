@@ -1,0 +1,33 @@
+overrides:
+  ceph:
+    crush_tunables: firefly
+    log-whitelist:
+      - must scrub before tier agent can activate
+tasks:
+- exec:
+    client.0:
+      - ceph osd erasure-code-profile set teuthologyprofile ruleset-failure-domain=osd k=2 m=1
+      - ceph osd pool create ecbase 4 4 erasure teuthologyprofile
+      - ceph osd pool create eccache 4
+      - ceph osd tier add ecbase eccache
+      - ceph osd tier cache-mode eccache writeback
+      - ceph osd tier set-overlay ecbase eccache
+      - ceph osd pool set eccache hit_set_type bloom
+      - ceph osd pool set eccache hit_set_count 8
+      - ceph osd pool set eccache hit_set_period 60
+      - ceph osd pool set eccache target_max_objects 250
+- exec:
+    client.0:
+      - ceph osd deep-scrub '*'
+- sequential:
+  - rados:
+      clients: [client.0]
+      pools: [ecbase]
+      ops: 4000
+      objects: 500
+      op_weights:
+        read: 100
+        write: 100
+        delete: 50
+        copy_from: 50
+- print: "**** done rados ec-cache-agent (part 1)"
