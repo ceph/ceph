@@ -124,7 +124,7 @@ void AsyncFlattenRequest::send() {
   AsyncObjectThrottle *throttle = new AsyncObjectThrottle(
     *this, context_factory, create_callback_context(), m_prog_ctx, 0,
     m_overlap_objects);
-  throttle->start_ops(cct->_conf->rbd_concurrent_management_ops);
+  throttle->start_ops(m_image_ctx.rbd_concurrent_management_ops);
 }
 
 bool AsyncFlattenRequest::send_update_header() {

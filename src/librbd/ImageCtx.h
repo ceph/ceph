@@ -130,7 +130,33 @@ namespace librbd {
 
     xlist<AsyncResizeRequest*> async_resize_reqs;
 
+    // Configuration
     static const string METADATA_CONF_PREFIX;
+    static const char *AWARE_CONFS[];
+    static const size_t AWARE_CONFS_LEN;
+    bool rbd_cache;
+    bool rbd_cache_writethrough_until_flush;
+    uint64_t rbd_cache_size;
+    uint64_t rbd_cache_max_dirty;
+    uint64_t rbd_cache_target_dirty;
+    double rbd_cache_max_dirty_age;
+    uint32_t rbd_cache_max_dirty_object;
+    bool rbd_cache_block_writes_upfront;
+    uint32_t rbd_concurrent_management_ops;
+    bool rbd_balance_snap_reads;
+    bool rbd_localize_snap_reads;
+    bool rbd_balance_parent_reads;
+    bool rbd_localize_parent_reads;
+    uint32_t rbd_readahead_trigger_requests;
+    uint64_t rbd_readahead_max_bytes;
+    uint64_t rbd_readahead_disable_after_bytes;
+    bool rbd_clone_copy_on_read;
+    bool rbd_blacklist_on_break_lock;
+    uint32_t rbd_blacklist_expire_seconds;
+    uint32_t rbd_request_timed_out_seconds;
+    static bool _aware_metadata_confs(const string &prefix, const char **configs, size_t len,
+                                      map<string, bufferlist> &pairs, map<string, bufferlist> *res);
+
     /**
      * Either image_name or image_id must be set.
      * If id is not known, pass the empty std::string,
@@ -208,10 +234,6 @@ namespace librbd {
 
     void cancel_async_requests();
     void aware_metadata_confs();
-    static bool _aware_metadata_confs(const string &prefix, const char **configs, size_t len,
-                                      map<string, bufferlist> &pairs, map<string, bufferlist> *res);
-    static const char *AWARE_CONFS[];
-    static const size_t AWARE_CONFS_LEN;
   };
 }
 
