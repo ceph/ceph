@@ -172,7 +172,7 @@ def fetch_qa_suite(branch, lock=True):
     # only let one worker create/update the checkout at a time
     lock_path = dest_path.rstrip('/') + '.lock'
     with FileLock(lock_path, noop=not lock):
-        with safe_while() as proceed:
+        with safe_while(sleep=10, tries=60) as proceed:
             while proceed():
                 try:
                     enforce_repo_state(qa_suite_url, dest_path, branch)
@@ -198,7 +198,7 @@ def fetch_teuthology(branch, lock=True):
     teuthology_git_upstream = config.ceph_git_base_url + \
         'teuthology.git'
     with FileLock(lock_path, noop=not lock):
-        with safe_while() as proceed:
+        with safe_while(sleep=10, tries=60) as proceed:
             while proceed():
                 try:
                     enforce_repo_state(teuthology_git_upstream, dest_path,
