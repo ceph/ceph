@@ -478,7 +478,7 @@ void ECBackend::continue_recovery_op(
 	op.hoid, want, true, &to_read);
       if (r != 0) {
 	// we must have lost a recovery source
-	assert(!op.recovery_progress.first);
+	assert(op.recovery_progress.first);
 	dout(10) << __func__ << ": canceling recovery op for obj " << op.hoid
 		 << dendl;
 	get_parent()->cancel_pull(op.hoid);
