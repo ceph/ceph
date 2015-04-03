@@ -40,10 +40,9 @@ long long strict_strtoll(const char *str, int base, std::string *err)
     return 0;
   }
   if (endptr == str) {
-    errStr = "The option value '";
+    errStr = "Expected option value to be integer, got '";
     errStr.append(str);
     errStr.append("'");
-    errStr.append(" seems to be invalid");
     *err =  errStr;
     return 0;
   }
