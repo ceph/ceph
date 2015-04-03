@@ -89,7 +89,7 @@ namespace librbd {
 
   static inline bool is_copy_on_read(ImageCtx *ictx, librados::snap_t snap_id) {
     assert(ictx->snap_lock.is_locked());
-    return (ictx->cct->_conf->rbd_clone_copy_on_read) &&
+    return (ictx->rbd_clone_copy_on_read) &&
            (!ictx->read_only) && (snap_id == CEPH_NOSNAP);
   }
 
