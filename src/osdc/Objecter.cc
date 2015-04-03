@@ -189,82 +189,82 @@ void Objecter::init()
 
     pcb.add_u64(l_osdc_op_active, "op_active",
         "Operations active", "actv");
-    pcb.add_u64(l_osdc_op_laggy, "op_laggy");
-    pcb.add_u64_counter(l_osdc_op_send, "op_send");
-    pcb.add_u64_counter(l_osdc_op_send_bytes, "op_send_bytes");
-    pcb.add_u64_counter(l_osdc_op_resend, "op_resend");
-    pcb.add_u64_counter(l_osdc_op_ack, "op_ack");
-    pcb.add_u64_counter(l_osdc_op_commit, "op_commit");
+    pcb.add_u64(l_osdc_op_laggy, "op_laggy", "Laggy operations");
+    pcb.add_u64_counter(l_osdc_op_send, "op_send", "Sent operations");
+    pcb.add_u64_counter(l_osdc_op_send_bytes, "op_send_bytes", "Sent data");
+    pcb.add_u64_counter(l_osdc_op_resend, "op_resend", "Resent operations");
+    pcb.add_u64_counter(l_osdc_op_ack, "op_ack", "Commit callbacks");
+    pcb.add_u64_counter(l_osdc_op_commit, "op_commit", "Operation commits");
 
-    pcb.add_u64_counter(l_osdc_op, "op");
+    pcb.add_u64_counter(l_osdc_op, "op", "Operations");
     pcb.add_u64_counter(l_osdc_op_r, "op_r",
         "Read operations", "read");
     pcb.add_u64_counter(l_osdc_op_w, "op_w",
         "Write operations", "writ");
-    pcb.add_u64_counter(l_osdc_op_rmw, "op_rmw");
-    pcb.add_u64_counter(l_osdc_op_pg, "op_pg");
+    pcb.add_u64_counter(l_osdc_op_rmw, "op_rmw", "Read-modify-write operations");
+    pcb.add_u64_counter(l_osdc_op_pg, "op_pg", "PG operation");
 
-    pcb.add_u64_counter(l_osdc_osdop_stat, "osdop_stat");
-    pcb.add_u64_counter(l_osdc_osdop_create, "osdop_create");
-    pcb.add_u64_counter(l_osdc_osdop_read, "osdop_read");
-    pcb.add_u64_counter(l_osdc_osdop_write, "osdop_write");
-    pcb.add_u64_counter(l_osdc_osdop_writefull, "osdop_writefull");
-    pcb.add_u64_counter(l_osdc_osdop_append, "osdop_append");
-    pcb.add_u64_counter(l_osdc_osdop_zero, "osdop_zero");
-    pcb.add_u64_counter(l_osdc_osdop_truncate, "osdop_truncate");
-    pcb.add_u64_counter(l_osdc_osdop_delete, "osdop_delete");
-    pcb.add_u64_counter(l_osdc_osdop_mapext, "osdop_mapext");
-    pcb.add_u64_counter(l_osdc_osdop_sparse_read, "osdop_sparse_read");
-    pcb.add_u64_counter(l_osdc_osdop_clonerange, "osdop_clonerange");
-    pcb.add_u64_counter(l_osdc_osdop_getxattr, "osdop_getxattr");
-    pcb.add_u64_counter(l_osdc_osdop_setxattr, "osdop_setxattr");
-    pcb.add_u64_counter(l_osdc_osdop_cmpxattr, "osdop_cmpxattr");
-    pcb.add_u64_counter(l_osdc_osdop_rmxattr, "osdop_rmxattr");
-    pcb.add_u64_counter(l_osdc_osdop_resetxattrs, "osdop_resetxattrs");
-    pcb.add_u64_counter(l_osdc_osdop_tmap_up, "osdop_tmap_up");
-    pcb.add_u64_counter(l_osdc_osdop_tmap_put, "osdop_tmap_put");
-    pcb.add_u64_counter(l_osdc_osdop_tmap_get, "osdop_tmap_get");
-    pcb.add_u64_counter(l_osdc_osdop_call, "osdop_call");
-    pcb.add_u64_counter(l_osdc_osdop_watch, "osdop_watch");
-    pcb.add_u64_counter(l_osdc_osdop_notify, "osdop_notify");
-    pcb.add_u64_counter(l_osdc_osdop_src_cmpxattr, "osdop_src_cmpxattr");
+    pcb.add_u64_counter(l_osdc_osdop_stat, "osdop_stat", "Stat operations");
+    pcb.add_u64_counter(l_osdc_osdop_create, "osdop_create", "Create object operations");
+    pcb.add_u64_counter(l_osdc_osdop_read, "osdop_read", "Read operations");
+    pcb.add_u64_counter(l_osdc_osdop_write, "osdop_write", "Write operations");
+    pcb.add_u64_counter(l_osdc_osdop_writefull, "osdop_writefull", "Write full object operations");
+    pcb.add_u64_counter(l_osdc_osdop_append, "osdop_append", "Append operation");
+    pcb.add_u64_counter(l_osdc_osdop_zero, "osdop_zero", "Set object to zero operations");
+    pcb.add_u64_counter(l_osdc_osdop_truncate, "osdop_truncate", "Truncate object operations");
+    pcb.add_u64_counter(l_osdc_osdop_delete, "osdop_delete", "Delete object operations");
+    pcb.add_u64_counter(l_osdc_osdop_mapext, "osdop_mapext", "Map extent operations");
+    pcb.add_u64_counter(l_osdc_osdop_sparse_read, "osdop_sparse_read", "Sparse read operations");
+    pcb.add_u64_counter(l_osdc_osdop_clonerange, "osdop_clonerange", "Clone range operations");
+    pcb.add_u64_counter(l_osdc_osdop_getxattr, "osdop_getxattr", "Get xattr operations");
+    pcb.add_u64_counter(l_osdc_osdop_setxattr, "osdop_setxattr", "Set xattr operations");
+    pcb.add_u64_counter(l_osdc_osdop_cmpxattr, "osdop_cmpxattr", "Xattr comparison operations");
+    pcb.add_u64_counter(l_osdc_osdop_rmxattr, "osdop_rmxattr", "Remove xattr operations");
+    pcb.add_u64_counter(l_osdc_osdop_resetxattrs, "osdop_resetxattrs", "Reset xattr operations");
+    pcb.add_u64_counter(l_osdc_osdop_tmap_up, "osdop_tmap_up", "TMAP update operations");
+    pcb.add_u64_counter(l_osdc_osdop_tmap_put, "osdop_tmap_put", "TMAP put operations");
+    pcb.add_u64_counter(l_osdc_osdop_tmap_get, "osdop_tmap_get", "TMAP get operations");
+    pcb.add_u64_counter(l_osdc_osdop_call, "osdop_call", "Call (execute) operations");
+    pcb.add_u64_counter(l_osdc_osdop_watch, "osdop_watch", "Watch by object operations");
+    pcb.add_u64_counter(l_osdc_osdop_notify, "osdop_notify", "Notify about object operations");
+    pcb.add_u64_counter(l_osdc_osdop_src_cmpxattr, "osdop_src_cmpxattr", "Extended attribute comparison in multi operations");
     pcb.add_u64_counter(l_osdc_osdop_pgls, "osdop_pgls");
     pcb.add_u64_counter(l_osdc_osdop_pgls_filter, "osdop_pgls_filter");
-    pcb.add_u64_counter(l_osdc_osdop_other, "osdop_other");
+    pcb.add_u64_counter(l_osdc_osdop_other, "osdop_other", "Other operations");
 
-    pcb.add_u64(l_osdc_linger_active, "linger_active");
-    pcb.add_u64_counter(l_osdc_linger_send, "linger_send");
-    pcb.add_u64_counter(l_osdc_linger_resend, "linger_resend");
-    pcb.add_u64_counter(l_osdc_linger_ping, "linger_ping");
+    pcb.add_u64(l_osdc_linger_active, "linger_active", "Active lingering operations");
+    pcb.add_u64_counter(l_osdc_linger_send, "linger_send", "Sent lingering operations");
+    pcb.add_u64_counter(l_osdc_linger_resend, "linger_resend", "Resent lingering operations");
+    pcb.add_u64_counter(l_osdc_linger_ping, "linger_ping", "Sent pings to lingering operations");
 
-    pcb.add_u64(l_osdc_poolop_active, "poolop_active");
-    pcb.add_u64_counter(l_osdc_poolop_send, "poolop_send");
-    pcb.add_u64_counter(l_osdc_poolop_resend, "poolop_resend");
+    pcb.add_u64(l_osdc_poolop_active, "poolop_active", "Active pool operations");
+    pcb.add_u64_counter(l_osdc_poolop_send, "poolop_send", "Sent pool operations");
+    pcb.add_u64_counter(l_osdc_poolop_resend, "poolop_resend", "Resent pool operations");
 
-    pcb.add_u64(l_osdc_poolstat_active, "poolstat_active");
-    pcb.add_u64_counter(l_osdc_poolstat_send, "poolstat_send");
-    pcb.add_u64_counter(l_osdc_poolstat_resend, "poolstat_resend");
+    pcb.add_u64(l_osdc_poolstat_active, "poolstat_active", "Active get pool stat operations");
+    pcb.add_u64_counter(l_osdc_poolstat_send, "poolstat_send", "Pool stat operations sent");
+    pcb.add_u64_counter(l_osdc_poolstat_resend, "poolstat_resend", "Resent pool stats");
 
-    pcb.add_u64(l_osdc_statfs_active, "statfs_active");
-    pcb.add_u64_counter(l_osdc_statfs_send, "statfs_send");
-    pcb.add_u64_counter(l_osdc_statfs_resend, "statfs_resend");
+    pcb.add_u64(l_osdc_statfs_active, "statfs_active", "Statfs operations");
+    pcb.add_u64_counter(l_osdc_statfs_send, "statfs_send", "Sent FS stats");
+    pcb.add_u64_counter(l_osdc_statfs_resend, "statfs_resend", "Resent FS stats");
 
-    pcb.add_u64(l_osdc_command_active, "command_active");
-    pcb.add_u64_counter(l_osdc_command_send, "command_send");
-    pcb.add_u64_counter(l_osdc_command_resend, "command_resend");
+    pcb.add_u64(l_osdc_command_active, "command_active", "Active commands");
+    pcb.add_u64_counter(l_osdc_command_send, "command_send", "Sent commands");
+    pcb.add_u64_counter(l_osdc_command_resend, "command_resend", "Resent commands");
 
-    pcb.add_u64(l_osdc_map_epoch, "map_epoch");
-    pcb.add_u64_counter(l_osdc_map_full, "map_full");
-    pcb.add_u64_counter(l_osdc_map_inc, "map_inc");
+    pcb.add_u64(l_osdc_map_epoch, "map_epoch", "OSD map epoch");
+    pcb.add_u64_counter(l_osdc_map_full, "map_full", "Full OSD maps received");
+    pcb.add_u64_counter(l_osdc_map_inc, "map_inc", "Incremental OSD maps received");
 
-    pcb.add_u64(l_osdc_osd_sessions, "osd_sessions");  // open sessions
-    pcb.add_u64_counter(l_osdc_osd_session_open, "osd_session_open");
-    pcb.add_u64_counter(l_osdc_osd_session_close, "osd_session_close");
-    pcb.add_u64(l_osdc_osd_laggy, "osd_laggy");
+    pcb.add_u64(l_osdc_osd_sessions, "osd_sessions", "Open sessions");  // open sessions
+    pcb.add_u64_counter(l_osdc_osd_session_open, "osd_session_open", "Sessions opened");
+    pcb.add_u64_counter(l_osdc_osd_session_close, "osd_session_close", "Sessions closed");
+    pcb.add_u64(l_osdc_osd_laggy, "osd_laggy", "Laggy OSD sessions");
 
-    pcb.add_u64_counter(l_osdc_osdop_omap_wr, "omap_wr");
-    pcb.add_u64_counter(l_osdc_osdop_omap_rd, "omap_rd");
-    pcb.add_u64_counter(l_osdc_osdop_omap_del, "omap_del");
+    pcb.add_u64_counter(l_osdc_osdop_omap_wr, "omap_wr", "OSD OMAP write operations");
+    pcb.add_u64_counter(l_osdc_osdop_omap_rd, "omap_rd", "OSD OMAP read operations");
+    pcb.add_u64_counter(l_osdc_osdop_omap_del, "omap_del", "OSD OMAP delete operations");
 
     logger = pcb.create_perf_counters();
     cct->get_perfcounters_collection()->add(logger);
