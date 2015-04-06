@@ -57,7 +57,9 @@
 GenericFileStoreBackend::GenericFileStoreBackend(FileStore *fs):
   FileStoreBackend(fs),
   ioctl_fiemap(false),
+  seek_data_hole(false),
   m_filestore_fiemap(g_conf->filestore_fiemap),
+  m_filestore_seek_data_hole(g_conf->filestore_seek_data_hole),
   m_filestore_fsync_flushes_journal_data(g_conf->filestore_fsync_flushes_journal_data) {}
 
 int GenericFileStoreBackend::detect_features()
@@ -110,24 +112,53 @@ int GenericFileStoreBackend::detect_features()
   }
 
   // fiemap an extent inside that
-  struct fiemap *fiemap;
-  int r = do_fiemap(fd, 2430421, 59284, &fiemap);
-  if (r < 0) {
-    dout(0) << "detect_features: FIEMAP ioctl is NOT supported" << dendl;
-    ioctl_fiemap = false;
-  } else {
-    if (fiemap->fm_mapped_extents == 0) {
-      dout(0) << "detect_features: FIEMAP ioctl is supported, but buggy -- upgrade your kernel" << dendl;
-      ioctl_fiemap = false;
-    } else {
-      dout(0) << "detect_features: FIEMAP ioctl is supported and appears to work" << dendl;
-      ioctl_fiemap = true;
-    }
-    free(fiemap);
-  }
   if (!m_filestore_fiemap) {
     dout(0) << "detect_features: FIEMAP ioctl is disabled via 'filestore fiemap' config option" << dendl;
     ioctl_fiemap = false;
+  } else {
+    struct fiemap *fiemap;
+    int r = do_fiemap(fd, 2430421, 59284, &fiemap);
+    if (r < 0) {
+      dout(0) << "detect_features: FIEMAP ioctl is NOT supported" << dendl;
+      ioctl_fiemap = false;
+    } else {
+      if (fiemap->fm_mapped_extents == 0) {
+        dout(0) << "detect_features: FIEMAP ioctl is supported, but buggy -- upgrade your kernel" << dendl;
+        ioctl_fiemap = false;
+      } else {
+        dout(0) << "detect_features: FIEMAP ioctl is supported and appears to work" << dendl;
+        ioctl_fiemap = true;
+      }
+      free(fiemap);
+    }
+  }
+
+  // SEEK_DATA/SEEK_HOLE detection
+  if (!m_filestore_seek_data_hole) {
+    dout(0) << "detect_features: SEEK_DATA/SEEK_HOLE is disabled via 'filestore seek data hole' config option" << dendl;
+    seek_data_hole = false;
+  } else {
+#if defined(__linux__) && defined(SEEK_HOLE) && defined(SEEK_DATA)
+    // If compiled on an OS with SEEK_HOLE/SEEK_DATA support, but running
+    // on an OS that doesn't support SEEK_HOLE/SEEK_DATA, EINVAL is returned.
+    // Fall back to use fiemap.
+    off_t hole_pos;
+
+    hole_pos = lseek(fd, 0, SEEK_HOLE);
+    if (hole_pos < 0) {
+      if (errno == EINVAL) {
+        dout(0) << "detect_features: lseek SEEK_DATA/SEEK_HOLE is NOT supported" << dendl;
+        seek_data_hole = false;
+      } else {
+        derr << "detect_features: failed to lseek " << fn << ": " << cpp_strerror(-errno) << dendl;
+        VOID_TEMP_FAILURE_RETRY(::close(fd));
+        return -errno;
+      }
+    } else {
+      dout(0) << "detect_features: lseek SEEK_DATA/SEEK_HOLE is supported" << dendl;
+      seek_data_hole = true;
+    }
+#endif
   }
 
   ::unlink(fn);
