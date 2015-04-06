@@ -389,10 +389,6 @@ Options
 Quota Options
 =============
 
-.. option:: --bucket
-
-	Specified bucket for quota command.
-
 .. option:: --max-objects
 
 	Specify max objects (negative value to disable).
