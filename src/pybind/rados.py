@@ -11,7 +11,10 @@ import ctypes
 import errno
 import threading
 import time
+
 from datetime import datetime
+from functools import wraps
+from itertools import chain
 
 ANONYMOUS_AUID = 0xffffffffffffffff
 ADMIN_AUID = 0
@@ -216,6 +219,48 @@ def run_in_thread(target, args, timeout=0):
     return t.retval
 
 
+# helper to specify an optional argument, where in addition to `cls`, `None`
+# is also acceptable
+def opt(cls):
+    return (cls, None)
+
+
+# validate argument types of an instance method
+# kwargs is an un-ordered dict, so use args instead
+def requires(*types):
+    def is_type_of(v, t):
+        if t is None:
+            return v is None
+        else:
+            return isinstance(v, t)
+
+    def check_type(val, arg_name, arg_type):
+        if isinstance(arg_type, tuple):
+            if any(is_type_of(val, t) for t in arg_type):
+                return
+            type_names = ' or '.join('None' if t is None else t.__name__
+                                     for t in arg_type)
+            raise TypeError('%s must be %s' % (arg_name, type_names))
+        else:
+            if is_type_of(val, arg_type):
+                return
+            assert(arg_type is not None)
+            raise TypeError('%s must be %s' % (arg_name, arg_type.__name__))
+
+    def wrapper(f):
+        @wraps(f)
+        def validate_func(*args, **kwargs):
+            # ignore the `self` arg
+            pos_args = zip(args[1:], types)
+            named_args = ((kwargs[name], (name, spec)) for name, spec in types
+                          if name in kwargs)
+            for arg_val, (arg_name, arg_type) in chain(pos_args, named_args):
+                check_type(arg_val, arg_name, arg_type)
+            return f(*args, **kwargs)
+        return validate_func
+    return wrapper
+
+
 class Rados(object):
     """librados python wrapper"""
     def require_state(self, *args):
@@ -229,6 +274,8 @@ class Rados(object):
         raise RadosStateError("You cannot perform that operation on a \
 Rados object in state %s." % self.state)
 
+    @requires(('rados_id', opt(str)), ('name', opt(str)), ('clustername', opt(str)),
+              ('conffile', opt(str)))
     def __init__(self, rados_id=None, name=None, clustername=None,
                  conf_defaults=None, conffile=None, conf=None, flags=0):
         library_path = find_library('rados')
@@ -241,14 +288,6 @@ Rados object in state %s." % self.state)
         self.conffile = conffile
         self.cluster = c_void_p()
         self.rados_id = rados_id
-        if rados_id is not None and not isinstance(rados_id, str):
-            raise TypeError('rados_id must be a string or None')
-        if conffile is not None and not isinstance(conffile, str):
-            raise TypeError('conffile must be a string or None')
-        if name is not None and not isinstance(name, str):
-            raise TypeError('name must be a string or None')
-        if clustername is not None and not isinstance(clustername, str):
-            raise TypeError('clustername must be a string or None')
         if rados_id and name:
             raise Error("Rados(): can't supply both rados_id and name")
         elif rados_id:
@@ -308,6 +347,8 @@ Rados object in state %s." % self.state)
                       (byref(major), byref(minor), byref(extra)))
         return Version(major.value, minor.value, extra.value)
 
+
+    @requires(('path', opt(str)))
     def conf_read_file(self, path=None):
         """
         Configure the cluster handle using a Ceph config file.
@@ -316,8 +357,6 @@ Rados object in state %s." % self.state)
         :type path: str
         """
         self.require_state("configuring", "connected")
-        if path is not None and not isinstance(path, str):
-            raise TypeError('path must be a string')
         ret = run_in_thread(self.librados.rados_conf_read_file,
                             (self.cluster, c_char_p(path)))
         if (ret != 0):
@@ -360,6 +399,7 @@ Rados object in state %s." % self.state)
         if (ret != 0):
             raise make_ex(ret, "error calling conf_parse_env")
 
+    @requires(('option', str))
     def conf_get(self, option):
         """
         Get the value of a configuration option
@@ -371,8 +411,6 @@ Rados object in state %s." % self.state)
         :raises: :class:`TypeError`
         """
         self.require_state("configuring", "connected")
-        if not isinstance(option, str):
-            raise TypeError('option must be a string')
         length = 20
         while True:
             ret_buf = create_string_buffer(length)
@@ -388,6 +426,7 @@ Rados object in state %s." % self.state)
             else:
                 raise make_ex(ret, "error calling conf_get")
 
+    @requires(('option', str), ('val', str))
     def conf_set(self, option, val):
         """
         Set the value of a configuration option
@@ -400,10 +439,6 @@ Rados object in state %s." % self.state)
         :raises: :class:`TypeError`, :class:`ObjectNotFound`
         """
         self.require_state("configuring", "connected")
-        if not isinstance(option, str):
-            raise TypeError('option must be a string')
-        if not isinstance(val, str):
-            raise TypeError('val must be a string')
         ret = run_in_thread(self.librados.rados_conf_set,
                             (self.cluster, c_char_p(option), c_char_p(val)))
         if (ret != 0):
@@ -480,6 +515,7 @@ Rados object in state %s." % self.state)
                 'kb_avail': stats.kb_avail,
                 'num_objects': stats.num_objects}
 
+    @requires(('pool_name', str))
     def pool_exists(self, pool_name):
         """
         Checks if a given pool exists.
@@ -491,8 +527,6 @@ Rados object in state %s." % self.state)
         :returns: bool - whether the pool exists, false otherwise.
         """
         self.require_state("connected")
-        if not isinstance(pool_name, str):
-            raise TypeError('pool_name must be a string')
         ret = run_in_thread(self.librados.rados_pool_lookup,
                             (self.cluster, c_char_p(pool_name)))
         if (ret >= 0):
@@ -502,6 +536,7 @@ Rados object in state %s." % self.state)
         else:
             raise make_ex(ret, "error looking up pool '%s'" % pool_name)
 
+    @requires(('pool_name', str))
     def pool_lookup(self, pool_name):
         """
         Returns a pool's ID based on its name.
@@ -513,8 +548,6 @@ Rados object in state %s." % self.state)
         :returns: int - pool ID, or None if it doesn't exist
         """
         self.require_state("connected")
-        if not isinstance(pool_name, str):
-            raise TypeError('pool_name must be a string')
         ret = run_in_thread(self.librados.rados_pool_lookup,
                             (self.cluster, c_char_p(pool_name)))
         if (ret >= 0):
@@ -524,6 +557,7 @@ Rados object in state %s." % self.state)
         else:
             raise make_ex(ret, "error looking up pool '%s'" % pool_name)
 
+    @requires(('pool_id', int))
     def pool_reverse_lookup(self, pool_id):
         """
         Returns a pool's name based on its ID.
@@ -535,8 +569,6 @@ Rados object in state %s." % self.state)
         :returns: string - pool name, or None if it doesn't exist
         """
         self.require_state("connected")
-        if not isinstance(pool_id, int):
-            raise TypeError('pool_id must be an integer')
         size = c_size_t(512)
         while True:
             c_name = create_string_buffer(size.value)
@@ -552,6 +584,7 @@ Rados object in state %s." % self.state)
                 return c_name.value
                 break
 
+    @requires(('pool_name', str), ('auid', opt(int)), ('crush_rule', opt(str)))
     def create_pool(self, pool_name, auid=None, crush_rule=None):
         """
         Create a pool:
@@ -570,10 +603,6 @@ Rados object in state %s." % self.state)
         :raises: :class:`TypeError`, :class:`Error`
         """
         self.require_state("connected")
-        if not isinstance(pool_name, str):
-            raise TypeError('pool_name must be a string')
-        if crush_rule is not None and not isinstance(crush_rule, str):
-            raise TypeError('cruse_rule must be a string')
         if auid is None:
             if crush_rule is None:
                 ret = run_in_thread(self.librados.rados_pool_create,
@@ -595,6 +624,7 @@ Rados object in state %s." % self.state)
         if ret < 0:
             raise make_ex(ret, "error creating pool '%s'" % pool_name)
 
+    @requires(('pool_id', int))
     def get_pool_base_tier(self, pool_id):
         """
         Get base pool
@@ -602,8 +632,6 @@ Rados object in state %s." % self.state)
         :returns: base pool, or pool_id if tiering is not configured for the pool
         """
         self.require_state("connected")
-        if not isinstance(pool_id, int):
-            raise TypeError('pool_id must be an int')
         base_tier = c_int64(0)
         ret = run_in_thread(self.librados.rados_pool_get_base_tier,
                             (self.cluster, c_int64(pool_id), byref(base_tier)))
@@ -611,6 +639,7 @@ Rados object in state %s." % self.state)
             raise make_ex(ret, "get_pool_base_tier(%d)" % pool_id)
         return base_tier.value
 
+    @requires(('pool_name', str))
     def delete_pool(self, pool_name):
         """
         Delete a pool and all data inside it.
@@ -624,8 +653,6 @@ Rados object in state %s." % self.state)
         :raises: :class:`TypeError`, :class:`Error`
         """
         self.require_state("connected")
-        if not isinstance(pool_name, str):
-            raise TypeError('pool_name must be a string')
         ret = run_in_thread(self.librados.rados_pool_delete,
                             (self.cluster, c_char_p(pool_name)))
         if ret < 0:
@@ -665,6 +692,7 @@ Rados object in state %s." % self.state)
             raise make_ex(ret, "error getting cluster fsid")
         return fsid.value
 
+    @requires(('ioctx_name', str))
     def open_ioctx(self, ioctx_name):
         """
         Create an io context
@@ -679,8 +707,6 @@ Rados object in state %s." % self.state)
         :returns: Ioctx - Rados Ioctx object
         """
         self.require_state("connected")
-        if not isinstance(ioctx_name, str):
-            raise TypeError('the name of the pool must be a string')
         ioctx = c_void_p()
         ret = run_in_thread(self.librados.rados_ioctx_create,
                             (self.cluster, c_char_p(ioctx_name), byref(ioctx)))
@@ -1318,6 +1344,7 @@ class Ioctx(object):
             raise make_ex(ret, "error changing auid of '%s' to %d"
                           % (self.name, auid))
 
+    @requires(('loc_key', str))
     def set_locator_key(self, loc_key):
         """
         Set the key for mapping objects to pgs within an io context.
@@ -1334,8 +1361,6 @@ class Ioctx(object):
         :raises: :class:`TypeError`
         """
         self.require_ioctx_open()
-        if not isinstance(loc_key, str):
-            raise TypeError('loc_key must be a string')
         run_in_thread(self.librados.rados_ioctx_locator_set_key,
                       (self.io, c_char_p(loc_key)))
         self.locator_key = loc_key
@@ -1348,6 +1373,8 @@ class Ioctx(object):
         """
         return self.locator_key
 
+
+    @requires(('nspace', str))
     def set_namespace(self, nspace):
         """
         Set the namespace for objects within an io context.
@@ -1365,8 +1392,6 @@ class Ioctx(object):
         self.require_ioctx_open()
         if nspace is None:
             nspace = ""
-        if not isinstance(nspace, str):
-            raise TypeError('namespace must be a string')
         run_in_thread(self.librados.rados_ioctx_set_namespace,
                       (self.io, c_char_p(nspace)))
         self.nspace = nspace
@@ -1393,6 +1418,8 @@ class Ioctx(object):
             run_in_thread(self.librados.rados_ioctx_destroy, (self.io,))
             self.state = "closed"
 
+
+    @requires(('key', str), ('data', str))
     def write(self, key, data, offset=0):
         """
         Write data to an object synchronously
@@ -1409,10 +1436,6 @@ class Ioctx(object):
         :returns: int - 0 on success
         """
         self.require_ioctx_open()
-        if not isinstance(key, str):
-            raise TypeError('key must be a string')
-        if not isinstance(data, str):
-            raise TypeError('data must be a string')
         length = len(data)
         ret = run_in_thread(self.librados.rados_write,
                             (self.io, c_char_p(key), c_char_p(data),
@@ -1426,6 +1449,7 @@ class Ioctx(object):
             raise LogicError("Ioctx.write(%s): rados_write \
 returned %d, but should return zero on success." % (self.name, ret))
 
+    @requires(('key', str), ('data', str))
     def write_full(self, key, data):
         """
         Write an entire object synchronously.
@@ -1443,10 +1467,6 @@ returned %d, but should return zero on success." % (self.name, ret))
         :returns: int - 0 on success
         """
         self.require_ioctx_open()
-        if not isinstance(key, str):
-            raise TypeError('key must be a string')
-        if not isinstance(data, str):
-            raise TypeError('data must be a string')
         length = len(data)
         ret = run_in_thread(self.librados.rados_write_full,
                             (self.io, c_char_p(key), c_char_p(data),
@@ -1460,6 +1480,7 @@ returned %d, but should return zero on success." % (self.name, ret))
             raise LogicError("Ioctx.write_full(%s): rados_write_full \
 returned %d, but should return zero on success." % (self.name, ret))
 
+    @requires(('key', str), ('data', str))
     def append(self, key, data):
         """
         Append data to an object synchronously
@@ -1474,10 +1495,6 @@ returned %d, but should return zero on success." % (self.name, ret))
         :returns: int - 0 on success
         """
         self.require_ioctx_open()
-        if not isinstance(key, str):
-            raise TypeError('key must be a string')
-        if not isinstance(data, str):
-            raise TypeError('data must be a string')
         length = len(data)
         ret = run_in_thread(self.librados.rados_append,
                             (self.io, c_char_p(key), c_char_p(data),
@@ -1491,6 +1508,7 @@ returned %d, but should return zero on success." % (self.name, ret))
             raise LogicError("Ioctx.append(%s): rados_append \
 returned %d, but should return zero on success." % (self.name, ret))
 
+    @requires(('key', str))
     def read(self, key, length=8192, offset=0):
         """
         Read data from an object synchronously
@@ -1507,8 +1525,6 @@ returned %d, but should return zero on success." % (self.name, ret))
         :returns: str - data read from object
         """
         self.require_ioctx_open()
-        if not isinstance(key, str):
-            raise TypeError('key must be a string')
         ret_buf = create_string_buffer(length)
         ret = run_in_thread(self.librados.rados_read,
                             (self.io, c_char_p(key), ret_buf, c_size_t(length),
@@ -1567,6 +1583,7 @@ returned %d, but should return zero on success." % (self.name, ret))
                 "num_wr": stats.num_wr,
                 "num_wr_kb": stats.num_wr_kb}
 
+    @requires(('key', str))
     def remove_object(self, key):
         """
         Delete an object
@@ -1581,14 +1598,13 @@ returned %d, but should return zero on success." % (self.name, ret))
         :returns: bool - True on success
         """
         self.require_ioctx_open()
-        if not isinstance(key, str):
-            raise TypeError('key must be a string')
         ret = run_in_thread(self.librados.rados_remove,
                             (self.io, c_char_p(key)))
         if ret < 0:
             raise make_ex(ret, "Failed to remove '%s'" % key)
         return True
 
+    @requires(('key', str))
     def trunc(self, key, size):
         """
         Resize an object
@@ -1607,14 +1623,13 @@ returned %d, but should return zero on success." % (self.name, ret))
         """
 
         self.require_ioctx_open()
-        if not isinstance(key, str):
-            raise TypeError('key must be a string')
         ret = run_in_thread(self.librados.rados_trunc,
                             (self.io, c_char_p(key), c_uint64(size)))
         if ret < 0:
             raise make_ex(ret, "Ioctx.trunc(%s): failed to truncate %s" % (self.name, key))
         return ret
 
+    @requires(('key', str))
     def stat(self, key):
         """
         Get object stats (size/mtime)
@@ -1627,8 +1642,6 @@ returned %d, but should return zero on success." % (self.name, ret))
         :returns: (size,timestamp)
         """
         self.require_ioctx_open()
-        if not isinstance(key, str):
-            raise TypeError('key must be a string')
         psize = c_uint64()
         pmtime = c_uint64()
 
@@ -1639,6 +1652,7 @@ returned %d, but should return zero on success." % (self.name, ret))
             raise make_ex(ret, "Failed to stat %r" % key)
         return psize.value, time.localtime(pmtime.value)
 
+    @requires(('key', str), ('xattr_name', str))
     def get_xattr(self, key, xattr_name):
         """
         Get the value of an extended attribute on an object.
@@ -1653,8 +1667,6 @@ returned %d, but should return zero on success." % (self.name, ret))
         :returns: str - value of the xattr
         """
         self.require_ioctx_open()
-        if not isinstance(xattr_name, str):
-            raise TypeError('xattr_name must be a string')
         ret_length = 4096
         while ret_length < 4096 * 1024 * 1024:
             ret_buf = create_string_buffer(ret_length)
@@ -1669,6 +1681,7 @@ returned %d, but should return zero on success." % (self.name, ret))
                 break
         return ctypes.string_at(ret_buf, ret)
 
+    @requires(('oid', str))
     def get_xattrs(self, oid):
         """
         Start iterating over xattrs on an object.
@@ -1681,8 +1694,6 @@ returned %d, but should return zero on success." % (self.name, ret))
         :returns: XattrIterator
         """
         self.require_ioctx_open()
-        if not isinstance(oid, str):
-            raise TypeError('oid must be a string')
         it = c_void_p(0)
         ret = run_in_thread(self.librados.rados_getxattrs,
                             (self.io, oid, byref(it)))
@@ -1690,6 +1701,7 @@ returned %d, but should return zero on success." % (self.name, ret))
             raise make_ex(ret, "Failed to get rados xattrs for object %r" % oid)
         return XattrIterator(self, it, oid)
 
+    @requires(('key', str), ('xattr_name', str), ('xattr_value', str))
     def set_xattr(self, key, xattr_name, xattr_value):
         """
         Set an extended attribute on an object.
@@ -1706,12 +1718,6 @@ returned %d, but should return zero on success." % (self.name, ret))
         :returns: bool - True on success, otherwise raise an error
         """
         self.require_ioctx_open()
-        if not isinstance(key, str):
-            raise TypeError('key must be a string')
-        if not isinstance(xattr_name, str):
-            raise TypeError('xattr_name must be a string')
-        if not isinstance(xattr_value, str):
-            raise TypeError('xattr_value must be a string')
         ret = run_in_thread(self.librados.rados_setxattr,
                             (self.io, c_char_p(key), c_char_p(xattr_name),
                              c_char_p(xattr_value), c_size_t(len(xattr_value))))
@@ -1719,6 +1725,7 @@ returned %d, but should return zero on success." % (self.name, ret))
             raise make_ex(ret, "Failed to set xattr %r" % xattr_name)
         return True
 
+    @requires(('key', str), ('xattr_name', str))
     def rm_xattr(self, key, xattr_name):
         """
         Removes an extended attribute on from an object.
@@ -1733,10 +1740,6 @@ returned %d, but should return zero on success." % (self.name, ret))
         :returns: bool - True on success, otherwise raise an error
         """
         self.require_ioctx_open()
-        if not isinstance(key, str):
-            raise TypeError('key must be a string')
-        if not isinstance(xattr_name, str):
-            raise TypeError('xattr_name must be a string')
         ret = run_in_thread(self.librados.rados_rmxattr,
                             (self.io, c_char_p(key), c_char_p(xattr_name)))
         if ret < 0:
@@ -1762,6 +1765,7 @@ returned %d, but should return zero on success." % (self.name, ret))
         self.require_ioctx_open()
         return SnapIterator(self)
 
+    @requires(('snap_name', str))
     def create_snap(self, snap_name):
         """
         Create a pool-wide snapshot
@@ -1773,13 +1777,12 @@ returned %d, but should return zero on success." % (self.name, ret))
         :raises: :class:`Error`
         """
         self.require_ioctx_open()
-        if not isinstance(snap_name, str):
-            raise TypeError('snap_name must be a string')
         ret = run_in_thread(self.librados.rados_ioctx_snap_create,
                             (self.io, c_char_p(snap_name)))
         if (ret != 0):
             raise make_ex(ret, "Failed to create snap %s" % snap_name)
 
+    @requires(('snap_name', str))
     def remove_snap(self, snap_name):
         """
         Removes a pool-wide snapshot
@@ -1791,13 +1794,12 @@ returned %d, but should return zero on success." % (self.name, ret))
         :raises: :class:`Error`
         """
         self.require_ioctx_open()
-        if not isinstance(snap_name, str):
-            raise TypeError('snap_name must be a string')
         ret = run_in_thread(self.librados.rados_ioctx_snap_remove,
                             (self.io, c_char_p(snap_name)))
         if (ret != 0):
             raise make_ex(ret, "Failed to remove snap %s" % snap_name)
 
+    @requires(('snap_name', str))
     def lookup_snap(self, snap_name):
         """
         Get the id of a pool snapshot
@@ -1810,8 +1812,6 @@ returned %d, but should return zero on success." % (self.name, ret))
         :returns: Snap - on success
         """
         self.require_ioctx_open()
-        if not isinstance(snap_name, str):
-            raise TypeError('snap_name must be a string')
         snap_id = c_uint64()
         ret = run_in_thread(self.librados.rados_ioctx_snap_lookup,
                             (self.io, c_char_p(snap_name), byref(snap_id)))
@@ -1831,6 +1831,8 @@ returned %d, but should return zero on success." % (self.name, ret))
         self.require_ioctx_open()
         return run_in_thread(self.librados.rados_get_last_version, (self.io,))
 
+    @requires(('key', str), ('name', str), ('cookie', str), ('desc', str),
+              ('duration', opt(int)), ('flags', int))
     def lock_exclusive(self, key, name, cookie, desc="", duration=None, flags=0):
 
         """
@@ -1853,18 +1855,6 @@ returned %d, but should return zero on success." % (self.name, ret))
         :raises: :class:`Error`
         """
         self.require_ioctx_open()
-        if not isinstance(key, str):
-            raise TypeError('key must be a string')
-        if not isinstance(name, str):
-            raise TypeError('name must be a string')
-        if not isinstance(cookie, str):
-            raise TypeError('cookie must be a string')
-        if not isinstance(desc, str):
-            raise TypeError('desc must be a string')
-        if duration is not None and not isinstance(duration, int):
-            raise TypeError('duration must be a integer')
-        if not isinstance(flags, int):
-            raise TypeError('flags must be a integer')
 
         ret = run_in_thread(self.librados.rados_lock_exclusive,
                             (self.io, c_char_p(key), c_char_p(name), c_char_p(cookie),
@@ -1874,6 +1864,8 @@ returned %d, but should return zero on success." % (self.name, ret))
         if ret < 0:
             raise make_ex(ret, "Ioctx.rados_lock_exclusive(%s): failed to set lock %s on %s" % (self.name, name, key))
 
+    @requires(('key', str), ('name', str), ('cookie', str), ('tag', str),
+              ('desc', str), ('duration', opt(int)), ('flags', int))
     def lock_shared(self, key, name, cookie, tag, desc="", duration=None, flags=0):
 
         """
@@ -1898,20 +1890,6 @@ returned %d, but should return zero on success." % (self.name, ret))
         :raises: :class:`Error`
         """
         self.require_ioctx_open()
-        if not isinstance(key, str):
-            raise TypeError('key must be a string')
-        if not isinstance(name, str):
-            raise TypeError('name must be a string')
-        if not isinstance(cookie, str):
-            raise TypeError('cookie must be a string')
-        if not isinstance(tag, str):
-            raise TypeError('tag must be a string')
-        if not isinstance(desc, str):
-            raise TypeError('desc must be a string')
-        if duration is not None and not isinstance(duration, int):
-            raise TypeError('duration must be a integer')
-        if not isinstance(flags, int):
-            raise TypeError('flags must be a integer')
 
         ret = run_in_thread(self.librados.rados_lock_shared,
                             (self.io, c_char_p(key), c_char_p(name), c_char_p(cookie),
@@ -1921,6 +1899,7 @@ returned %d, but should return zero on success." % (self.name, ret))
         if ret < 0:
             raise make_ex(ret, "Ioctx.rados_lock_exclusive(%s): failed to set lock %s on %s" % (self.name, name, key))
 
+    @requires(('key', str), ('name', str), ('cookie', str))
     def unlock(self, key, name, cookie):
 
         """
@@ -1937,12 +1916,6 @@ returned %d, but should return zero on success." % (self.name, ret))
         :raises: :class:`Error`
         """
         self.require_ioctx_open()
-        if not isinstance(key, str):
-            raise TypeError('key must be a string')
-        if not isinstance(name, str):
-            raise TypeError('name must be a string')
-        if not isinstance(cookie, str):
-            raise TypeError('cookie must be a string')
 
         ret = run_in_thread(self.librados.rados_unlock,
                             (self.io, c_char_p(key), c_char_p(name), c_char_p(cookie)))
