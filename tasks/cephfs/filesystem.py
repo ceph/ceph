@@ -70,6 +70,26 @@ class Filesystem(object):
         self.mon_remote.run(args=['sudo', 'ceph', 'osd', 'pool', 'delete',
                                   'data', 'data', '--yes-i-really-really-mean-it'])
 
+    def legacy_configured(self):
+        """
+        Check if a legacy (i.e. pre "fs new") filesystem configuration is present.  If this is
+        the case, the caller should avoid using Filesystem.create
+        """
+        try:
+            proc = self.mon_remote.run(args=['sudo', 'ceph', '--format=json-pretty', 'osd', 'lspools'],
+                                  stdout=StringIO())
+            pools = json.loads(proc.stdout.getvalue())
+            metadata_pool_exists = 'metadata' in [p['poolname'] for p in pools]
+        except CommandFailedError as e:
+            # For use in upgrade tests, Ceph cuttlefish and earlier don't support
+            # structured output (--format) from the CLI.
+            if e.exitstatus == 22:
+                metadata_pool_exists = True
+            else:
+                raise
+
+        return metadata_pool_exists
+
     def _df(self):
         return json.loads(self.mon_manager.raw_cluster_cmd("df", "--format=json-pretty"))
 
