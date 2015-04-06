@@ -31,7 +31,7 @@ extern "C" {
 
 #define LIBRBD_VER_MAJOR 0
 #define LIBRBD_VER_MINOR 1
-#define LIBRBD_VER_EXTRA 9
+#define LIBRBD_VER_EXTRA 10
 
 #define LIBRBD_VERSION(maj, min, extra) ((maj << 16) + (min << 8) + extra)
 
@@ -148,6 +148,8 @@ CEPH_RBD_API int rbd_stat(rbd_image_t image, rbd_image_info_t *info,
 CEPH_RBD_API int rbd_get_old_format(rbd_image_t image, uint8_t *old);
 CEPH_RBD_API int rbd_get_size(rbd_image_t image, uint64_t *size);
 CEPH_RBD_API int rbd_get_features(rbd_image_t image, uint64_t *features);
+CEPH_RBD_API int rbd_update_features(rbd_image_t image, uint64_t features,
+                                     uint8_t enabled);
 CEPH_RBD_API int rbd_get_stripe_unit(rbd_image_t image, uint64_t *stripe_unit);
 CEPH_RBD_API int rbd_get_stripe_count(rbd_image_t image,
                                       uint64_t *stripe_count);

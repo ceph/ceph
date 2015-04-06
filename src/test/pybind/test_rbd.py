@@ -73,6 +73,16 @@ def remove_image():
     if image_name is not None:
         RBD().remove(ioctx, image_name)
 
+def require_new_format():
+    def wrapper(fn):
+        def _require_new_format(*args, **kwargs):
+            global features
+            if features is None:
+                raise SkipTest
+            return fn(*args, **kwargs)
+        return functools.wraps(fn)(_require_new_format)
+    return wrapper
+
 def require_features(required_features):
     def wrapper(fn):
         def _require_features(*args, **kwargs):
@@ -282,6 +292,13 @@ class TestImage(object):
     def tearDown(self):
         self.image.close()
         remove_image()
+
+    @require_new_format()
+    @blacklist_features([RBD_FEATURE_EXCLUSIVE_LOCK])
+    def test_update_features(self):
+        features = self.image.features()
+        self.image.update_features(RBD_FEATURE_EXCLUSIVE_LOCK, True)
+        eq(features | RBD_FEATURE_EXCLUSIVE_LOCK, self.image.features())
 
     def test_invalidate_cache(self):
         self.image.write('abc', 0)
