@@ -5099,7 +5099,7 @@ Notable Changes
 * sysvinit: add condrestart command (Dan van der Ster)
 
 
-v0.67.12 "Dumpling"
+v0.67.12 "Dumpling" (draft)
 ===================
 
 This stable update for Dumpling fixes a few longstanding issues with
