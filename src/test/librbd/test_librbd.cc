@@ -2672,3 +2672,42 @@ TEST_F(TestLibRBD, Metadata)
   ASSERT_EQ(3U, pairs.size());
   ASSERT_EQ(-ENOENT, image1.metadata_get("key4", &value));
 }
+
+TEST_F(TestLibRBD, UpdateFeatures)
+{
+  REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
+
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(m_pool_name.c_str(), ioctx));
+
+  librbd::RBD rbd;
+  std::string name = get_temp_image_name();
+  uint64_t size = 1 << 20;
+  int order = 0;
+  ASSERT_EQ(0, create_image_pp(rbd, ioctx, name.c_str(), size, &order));
+
+  librbd::Image image;
+  ASSERT_EQ(0, rbd.open(ioctx, image, name.c_str(), NULL));
+
+  uint8_t old_format;
+  ASSERT_EQ(0, image.old_format(&old_format));
+  if (old_format) {
+    ASSERT_EQ(-EINVAL, image.update_features(RBD_FEATURE_EXCLUSIVE_LOCK, true));
+    return;
+  }
+
+  // must provide a single feature
+  ASSERT_EQ(-EINVAL, image.update_features(0, true));
+
+  ASSERT_EQ(0, image.update_features(RBD_FEATURE_EXCLUSIVE_LOCK |
+                                       RBD_FEATURE_OBJECT_MAP, false));
+
+  // cannot enable object map w/o exclusive lock
+  ASSERT_EQ(-EINVAL, image.update_features(RBD_FEATURE_OBJECT_MAP, true));
+
+  ASSERT_EQ(0, image.update_features(RBD_FEATURE_EXCLUSIVE_LOCK, true));
+  ASSERT_EQ(0, image.update_features(RBD_FEATURE_OBJECT_MAP, true));
+
+  // cannot disable exclusive lock w/ object map
+  ASSERT_EQ(-EINVAL, image.update_features(RBD_FEATURE_EXCLUSIVE_LOCK, false));
+}

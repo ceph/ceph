@@ -18,4 +18,7 @@
                                    	 RBD_FEATURE_EXCLUSIVE_LOCK | \
                                          RBD_FEATURE_OBJECT_MAP)
 
+#define RBD_FEATURES_MUTABLE            (RBD_FEATURE_EXCLUSIVE_LOCK | \
+                                         RBD_FEATURE_OBJECT_MAP)
+
 #endif

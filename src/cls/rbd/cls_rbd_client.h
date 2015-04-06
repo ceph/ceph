@@ -35,6 +35,8 @@ namespace librbd {
 		     const std::string &object_prefix);
     int get_features(librados::IoCtx *ioctx, const std::string &oid,
 		     snapid_t snap_id, uint64_t *features);
+    int set_features(librados::IoCtx *ioctx, const std::string &oid,
+                     uint64_t features, uint64_t mask);
     int get_object_prefix(librados::IoCtx *ioctx, const std::string &oid,
 			  std::string *object_prefix);
     int get_size(librados::IoCtx *ioctx, const std::string &oid,
@@ -74,7 +76,6 @@ namespace librbd {
 		      const std::vector<snapid_t> &ids,
 		      std::vector<string> *names,
 		      std::vector<uint64_t> *sizes,
-		      std::vector<uint64_t> *features,
 		      std::vector<parent_info> *parents,
 		      std::vector<uint8_t> *protection_statuses);
     int copyup(librados::IoCtx *ioctx, const std::string &oid,
