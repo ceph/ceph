@@ -41,3 +41,6 @@ def _get_manpages():
                 )
 
 man_pages = list(_get_manpages())
+# sphinx warns if no toc is found, so feed it with a random file
+# which is also rendered in this run.
+master_doc = '8/ceph'
