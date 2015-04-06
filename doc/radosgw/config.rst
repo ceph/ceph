@@ -325,13 +325,20 @@ Create a Gateway Configuration file
 ===================================
 
 On the host where you installed the Ceph Object Gateway i.e, ``gateway host``,
-create an ``rgw.conf`` file. Place the file in the ``/etc/httpd/conf.d``
-directory. It is a ``httpd`` configuration file which is needed for the
-``radosgw`` service. This file must be readable by the web server.
+create an ``rgw.conf`` file. Place the file in ``/etc/apache2/conf-available``
+directory for ``Debian-based`` distros and in ``/etc/httpd/conf.d`` directory
+for ``RPM-based`` distros. It is a Apache configuration file which is needed
+for the ``radosgw`` service. This file must be readable by the web server.
 
 Execute the following steps:
 
-#. Create the file::
+#. Create the file:
+
+   For Debian-based distros, execute::
+
+	sudo vi /etc/apache2/conf-available/rgw.conf
+
+   For RPM-based distros, execute::
 
 	sudo vi /etc/httpd/conf.d/rgw.conf
 
@@ -598,12 +605,21 @@ Test swift access
 Swift access can be verified via the ``swift`` command line client. The command
 ``man swift`` will provide more information on available command line options.
 
-To install ``swift`` client, execute the following::
+To install ``swift`` client, execute the following:
 
-	sudo yum install python-setuptools
-	sudo easy_install pip
-	sudo pip install --upgrade setuptools
-	sudo pip install --upgrade python-swiftclient
+   For Debian-based distros::
+
+		sudo apt-get install python-setuptools
+		sudo easy_install pip
+		sudo pip install --upgrade setuptools
+		sudo pip install --upgrade python-swiftclient
+
+   For RPM-based distros::
+
+		sudo yum install python-setuptools
+		sudo easy_install pip
+		sudo pip install --upgrade setuptools
+		sudo pip install --upgrade python-swiftclient
 
 To test swift access, execute the following::
 
