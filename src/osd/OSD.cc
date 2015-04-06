@@ -181,6 +181,7 @@ CompatSet OSD::get_osd_compat_set() {
 OSDService::OSDService(OSD *osd) :
   osd(osd),
   cct(osd->cct),
+  meta_osr(new ObjectStore::Sequencer("meta")),
   whoami(osd->whoami), store(osd->store),
   log_client(osd->log_client), clog(osd->clog),
   pg_recovery_stats(osd->pg_recovery_stats),
@@ -1288,6 +1289,9 @@ int OSD::mkfs(CephContext *cct, ObjectStore *store, const string &dev,
 {
   int ret;
 
+  ceph::shared_ptr<ObjectStore::Sequencer> osr(
+    new ObjectStore::Sequencer("mkfs"));
+
   try {
     // if we are fed a uuid for this osd, use it.
     store->set_fsid(cct->_conf->osd_uuid);
@@ -1338,7 +1342,7 @@ int OSD::mkfs(CephContext *cct, ObjectStore *store, const string &dev,
       ObjectStore::Transaction t;
       t.create_collection(coll_t(), 0);
       t.write(coll_t(), OSD_SUPERBLOCK_POBJECT, 0, bl.length(), bl);
-      ret = store->apply_transaction(t);
+      ret = store->apply_transaction(osr.get(), t);
       if (ret) {
 	derr << "OSD::mkfs: error while writing OSD_SUPERBLOCK_POBJECT: "
 	     << "apply_transaction returned " << ret << dendl;
@@ -1346,7 +1350,10 @@ int OSD::mkfs(CephContext *cct, ObjectStore *store, const string &dev,
       }
     }
 
-    store->sync_and_flush();
+    C_SaferCond waiter;
+    if (!osr->flush_commit(&waiter)) {
+      waiter.wait();
+    }
 
     ret = write_meta(store, sb.cluster_fsid, sb.osd_fsid, whoami);
     if (ret) {
@@ -1767,7 +1774,7 @@ int OSD::init()
     dout(5) << "Upgrading superblock adding: " << diff << dendl;
     ObjectStore::Transaction t;
     write_superblock(t);
-    r = store->apply_transaction(t);
+    r = store->apply_transaction(service.meta_osr.get(), t);
     if (r < 0)
       goto out;
   }
@@ -1777,7 +1784,7 @@ int OSD::init()
     dout(10) << "init creating/touching snapmapper object" << dendl;
     ObjectStore::Transaction t;
     t.touch(coll_t(), OSD::make_snapmapper_oid());
-    r = store->apply_transaction(t);
+    r = store->apply_transaction(service.meta_osr.get(), t);
     if (r < 0)
       goto out;
   }
@@ -2308,7 +2315,7 @@ int OSD::shutdown()
   superblock.clean_thru = osdmap->get_epoch();
   ObjectStore::Transaction t;
   write_superblock(t);
-  int r = store->apply_transaction(t);
+  int r = store->apply_transaction(service.meta_osr.get(), t);
   if (r) {
     derr << "OSD::shutdown: error writing superblock: "
 	 << cpp_strerror(r) << dendl;
@@ -2414,6 +2421,8 @@ void OSD::recursive_remove_collection(ObjectStore *store, spg_t pgid, coll_t tmp
     coll_t(),
     make_snapmapper_oid());
 
+  ceph::shared_ptr<ObjectStore::Sequencer> osr(
+    new ObjectStore::Sequencer("rm"));
   ObjectStore::Transaction t;
   SnapMapper mapper(&driver, 0, 0, 0, pgid.shard);
 
@@ -2431,16 +2440,20 @@ void OSD::recursive_remove_collection(ObjectStore *store, spg_t pgid, coll_t tmp
       assert(0);
     t.remove(tmp, *p);
     if (removed > 300) {
-      int r = store->apply_transaction(t);
+      int r = store->apply_transaction(osr.get(), t);
       assert(r == 0);
       t = ObjectStore::Transaction();
       removed = 0;
     }
   }
   t.remove_collection(tmp);
-  int r = store->apply_transaction(t);
+  int r = store->apply_transaction(osr.get(), t);
   assert(r == 0);
-  store->sync_and_flush();
+
+  C_SaferCond waiter;
+  if (!osr->flush_commit(&waiter)) {
+    waiter.wait();
+  }
 }
 
 
@@ -2798,7 +2811,7 @@ void OSD::load_pgs()
     dout(1) << __func__ << " removing legacy infos object" << dendl;
     ObjectStore::Transaction t;
     t.remove(coll_t(), OSD::make_infos_oid());
-    int r = store->apply_transaction(t);
+    int r = store->apply_transaction(service.meta_osr.get(), t);
     if (r != 0) {
       derr << __func__ << ": apply_transaction returned "
 	   << cpp_strerror(r) << dendl;
@@ -2941,13 +2954,13 @@ void OSD::build_past_intervals_parallel()
 
     // don't let the transaction get too big
     if (++num >= cct->_conf->osd_target_transaction_size) {
-      store->apply_transaction(t);
+      store->apply_transaction(service.meta_osr.get(), t);
       t = ObjectStore::Transaction();
       num = 0;
     }
   }
   if (!t.empty())
-    store->apply_transaction(t);
+    store->apply_transaction(service.meta_osr.get(), t);
 }
 
 /*
@@ -3950,7 +3963,7 @@ void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
       val.append(valstr);
       newattrs[key] = val;
       t.omap_setkeys(coll_t(pgid), obj, newattrs);
-      r = store->apply_transaction(t);
+      r = store->apply_transaction(service->meta_osr.get(), t);
       if (r < 0)
         ss << "error=" << r;
       else
@@ -3962,7 +3975,7 @@ void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
 
       keys.insert(key);
       t.omap_rmkeys(coll_t(pgid), obj, keys);
-      r = store->apply_transaction(t);
+      r = store->apply_transaction(service->meta_osr.get(), t);
       if (r < 0)
         ss << "error=" << r;
       else
@@ -3974,7 +3987,7 @@ void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
       cmd_getval(service->cct, cmdmap, "header", headerstr);
       newheader.append(headerstr);
       t.omap_setheader(coll_t(pgid), obj, newheader);
-      r = store->apply_transaction(t);
+      r = store->apply_transaction(service->meta_osr.get(), t);
       if (r < 0)
         ss << "error=" << r;
       else
@@ -3997,7 +4010,7 @@ void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
       int64_t trunclen;
       cmd_getval(service->cct, cmdmap, "len", trunclen);
       t.truncate(coll_t(pgid), obj, trunclen);
-      r = store->apply_transaction(t);
+      r = store->apply_transaction(service->meta_osr.get(), t);
       if (r < 0)
 	ss << "error=" << r;
       else
@@ -4949,6 +4962,9 @@ void OSD::do_command(Connection *con, ceph_tid_t tid, vector<string>& cmd, buffe
     cmd_getval(cct, cmdmap, "count", count, (int64_t)1 << 30);
     cmd_getval(cct, cmdmap, "size", bsize, (int64_t)4 << 20);
 
+    ceph::shared_ptr<ObjectStore::Sequencer> osr(
+      new ObjectStore::Sequencer("bench"));
+
     uint32_t duration = g_conf->osd_bench_duration;
 
     if (bsize > (int64_t) g_conf->osd_bench_max_block_size) {
@@ -5013,7 +5029,13 @@ void OSD::do_command(Connection *con, ceph_tid_t tid, vector<string>& cmd, buffe
 
     ObjectStore::Transaction *cleanupt = new ObjectStore::Transaction;
 
-    store->sync_and_flush();
+    {
+      C_SaferCond waiter;
+      if (!osr->flush_commit(&waiter)) {
+	waiter.wait();
+      }
+    }
+
     utime_t start = ceph_clock_now(cct);
     for (int64_t pos = 0; pos < count; pos += bsize) {
       char nm[30];
@@ -5022,14 +5044,20 @@ void OSD::do_command(Connection *con, ceph_tid_t tid, vector<string>& cmd, buffe
       hobject_t soid(sobject_t(oid, 0));
       ObjectStore::Transaction *t = new ObjectStore::Transaction;
       t->write(coll_t(), soid, 0, bsize, bl);
-      store->queue_transaction_and_cleanup(NULL, t);
+      store->queue_transaction_and_cleanup(osr.get(), t);
       cleanupt->remove(coll_t(), soid);
     }
-    store->sync_and_flush();
+
+    {
+      C_SaferCond waiter;
+      if (!osr->flush_commit(&waiter)) {
+	waiter.wait();
+      }
+    }
     utime_t end = ceph_clock_now(cct);
 
     // clean up
-    store->queue_transaction_and_cleanup(NULL, cleanupt);
+    store->queue_transaction_and_cleanup(osr.get(), cleanupt);
 
     uint64_t rate = (double)count / (end - start);
     if (f) {
