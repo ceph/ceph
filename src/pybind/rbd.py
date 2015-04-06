@@ -535,6 +535,24 @@ class Image(object):
             raise make_ex(ret, 'error getting features for image' % (self.name))
         return features.value
 
+    def update_features(self, features, enabled):
+        """
+        Updates the features bitmask of the image by enabling/disabling
+        a single feature.  The feature must support the ability to be
+        dynamically enabled/disabled.
+
+        :param features: feature bitmask to enable/disable
+        :type features: int
+        :param enabled: whether to enable/disable the feature
+        :type enabled: bool
+        :raises: :class:`InvalidArgument`
+        """
+        ret = self.librbd.rbd_update_features(self.image, c_uint64(features),
+                                              c_uint8(enabled));
+        if ret != 0:
+            raise make_ex(ret, 'error updating features for image %s' %
+                               (self.name))
+
     def overlap(self):
         """
         Gets the number of overlapping bytes between the image and its parent

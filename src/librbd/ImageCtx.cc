@@ -419,13 +419,12 @@ namespace librbd {
   }
 
   void ImageCtx::add_snap(string in_snap_name, snap_t id, uint64_t in_size,
-			  uint64_t features, parent_info parent,
-			  uint8_t protection_status, uint64_t flags)
+			  parent_info parent, uint8_t protection_status,
+                          uint64_t flags)
   {
     assert(snap_lock.is_wlocked());
     snaps.push_back(id);
-    SnapInfo info(in_snap_name, in_size, features, parent, protection_status,
-		  flags);
+    SnapInfo info(in_snap_name, in_size, parent, protection_status, flags);
     snap_info.insert(pair<snap_t, SnapInfo>(id, info));
     snap_ids.insert(pair<string, snap_t>(in_snap_name, id));
   }
@@ -448,27 +447,10 @@ namespace librbd {
     return 0;
   }
 
-  int ImageCtx::get_features(snap_t in_snap_id, uint64_t *out_features) const
-  {
-    assert(snap_lock.is_locked());
-    if (in_snap_id == CEPH_NOSNAP) {
-      *out_features = features;
-      return 0;
-    }
-    const SnapInfo *info = get_snap_info(in_snap_id);
-    if (info) {
-      *out_features = info->features;
-      return 0;
-    }
-    return -ENOENT;
-  }
-
   bool ImageCtx::test_features(uint64_t test_features) const
   {
     RWLock::RLocker l(snap_lock);
-    uint64_t snap_features = 0;
-    get_features(snap_id, &snap_features);
-    return ((snap_features & test_features) == test_features);
+    return ((features & test_features) == test_features);
   }
 
   int ImageCtx::get_flags(librados::snap_t _snap_id, uint64_t *_flags) const
