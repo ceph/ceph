@@ -1441,6 +1441,15 @@ EOF
   ceph osd setcrushmap -i $map
 }
 
+function test_mon_ping()
+{
+  ceph ping mon.a
+  ceph ping mon.b
+  expect_false ceph ping mon.foo
+
+  ceph ping mon.*
+}
+
 #
 # New tests should be added to the TESTS array below
 #
@@ -1476,6 +1485,7 @@ MON_TESTS+=" mon_osd_misc"
 MON_TESTS+=" mon_heap_profiler"
 MON_TESTS+=" mon_tell"
 MON_TESTS+=" mon_crushmap_validation"
+MON_TESTS+=" mon_ping"
 
 OSD_TESTS+=" osd_bench"
 
