@@ -2146,23 +2146,24 @@ void ReplicatedPG::promote_object(ObjectContextRef obc,
 				  const object_locator_t& oloc,
 				  OpRequestRef op)
 {
-  if (!obc) { // we need to create an ObjectContext
-    assert(missing_oid != hobject_t());
-    obc = get_object_context(missing_oid, true);
-  }
-  dout(10) << __func__ << " " << obc->obs.oi.soid << dendl;
-  if (scrubber.write_blocked_by_scrub(obc->obs.oi.soid)) {
-    dout(10) << __func__ << " " << obc->obs.oi.soid
+  hobject_t hoid = obc ? obc->obs.oi.soid : missing_oid;
+  assert(hoid != hobject_t());
+  if (scrubber.write_blocked_by_scrub(hoid)) {
+    dout(10) << __func__ << " " << hoid
 	     << " blocked by scrub" << dendl;
     if (op) {
       waiting_for_active.push_back(op);
-      dout(10) << __func__ << " " << obc->obs.oi.soid
+      dout(10) << __func__ << " " << hoid
 	       << " placing op in waiting_for_active" << dendl;
     } else {
-      dout(10) << __func__ << " " << obc->obs.oi.soid
+      dout(10) << __func__ << " " << hoid
 	       << " no op, dropping on the floor" << dendl;
     }
     return;
+  }
+  if (!obc) { // we need to create an ObjectContext
+    assert(missing_oid != hobject_t());
+    obc = get_object_context(missing_oid, true);
   }
 
   PromoteCallback *cb = new PromoteCallback(obc, this);
