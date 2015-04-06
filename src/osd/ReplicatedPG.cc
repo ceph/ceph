@@ -5789,7 +5789,7 @@ hobject_t ReplicatedPG::get_temp_recovery_object(eversion_t version, snapid_t sn
   ostringstream ss;
   ss << "temp_recovering_" << info.pgid  // (note this includes the shardid)
      << "_" << version
-     << "_" << info.history.last_epoch_started
+     << "_" << info.last_epoch_started
      << "_" << snap;
   // pgid + version + interval + snapid is unique, and short
   hobject_t hoid = info.pgid.make_temp_object(ss.str());
