@@ -292,6 +292,8 @@ struct PGLog {
       set<eversion_t> *trimmed);
 
     ostream& print(ostream& out) const;
+
+    void filter_log(spg_t pgid, const OSDMap &map, const string &hit_set_namespace);
   };
 
 
