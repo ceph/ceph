@@ -61,10 +61,25 @@ void handle_osd_signal(int signum)
 
 void usage() 
 {
-  derr << "usage: ceph-osd -i osdid [--osd-data=path] [--osd-journal=path] "
-       << "[--mkfs] [--mkjournal] [--convert-filestore]" << dendl;
-  derr << "   --debug_osd N   set debug level (e.g. 10)" << dendl;
+  cout << "usage: ceph-osd -i <osdid>\n"
+       << "  --osd-data=path   data directory\n"
+       << "  --osd-journal=path\n"
+       << "                    journal file or block device\n"
+       << "  --mkfs            create a [new] data directory\n"
+       << "  --convert-filestore\n"
+       << "                    run any pending upgrade operations\n"
+       << "  --flush-journal   flush all data out of journal\n"
+       << "  --mkjournal       initialize a new journal\n"
+       << "  --check-wants-journal\n"
+       << "                    check whether a journal is desired\n"
+       << "  --check-allows-journal\n"
+       << "                    check whether a journal is allowed\n"
+       << "  --check-needs-journal\n"
+       << "                    check whether a journal is required\n"
+       << "  --debug_osd N     set debug level (e.g. 10)"
+       << std::endl;
   generic_server_usage();
+  cout.flush();
 }
 
 int preload_erasure_code()
@@ -99,6 +114,9 @@ int main(int argc, const char **argv)
   // osd specific args
   bool mkfs = false;
   bool mkjournal = false;
+  bool check_wants_journal = false;
+  bool check_allows_journal = false;
+  bool check_needs_journal = false;
   bool mkkey = false;
   bool flushjournal = false;
   bool dump_journal = false;
@@ -106,7 +124,6 @@ int main(int argc, const char **argv)
   bool get_journal_fsid = false;
   bool get_osd_fsid = false;
   bool get_cluster_fsid = false;
-  bool check_need_journal = false;
   std::string dump_pg_log;
 
   std::string val;
@@ -120,6 +137,12 @@ int main(int argc, const char **argv)
       mkfs = true;
     } else if (ceph_argparse_flag(args, i, "--mkjournal", (char*)NULL)) {
       mkjournal = true;
+    } else if (ceph_argparse_flag(args, i, "--check-allows-journal", (char*)NULL)) {
+      check_allows_journal = true;
+    } else if (ceph_argparse_flag(args, i, "--check-wants-journal", (char*)NULL)) {
+      check_wants_journal = true;
+    } else if (ceph_argparse_flag(args, i, "--check-needs-journal", (char*)NULL)) {
+      check_needs_journal = true;
     } else if (ceph_argparse_flag(args, i, "--mkkey", (char*)NULL)) {
       mkkey = true;
     } else if (ceph_argparse_flag(args, i, "--flush-journal", (char*)NULL)) {
@@ -136,8 +159,6 @@ int main(int argc, const char **argv)
       get_osd_fsid = true;
     } else if (ceph_argparse_flag(args, i, "--get-journal-fsid", "--get-journal-uuid", (char*)NULL)) {
       get_journal_fsid = true;
-    } else if (ceph_argparse_flag(args, i, "--check-needs-journal", (char*)NULL)) {
-      check_need_journal = true;
     } else {
       ++i;
     }
@@ -259,6 +280,33 @@ int main(int argc, const char **argv)
 	 << " for object store " << g_conf->osd_data << dendl;
     exit(0);
   }
+  if (check_wants_journal) {
+    if (store->wants_journal()) {
+      cout << "yes" << std::endl;
+      exit(0);
+    } else {
+      cout << "no" << std::endl;
+      exit(1);
+    }
+  }
+  if (check_allows_journal) {
+    if (store->allows_journal()) {
+      cout << "yes" << std::endl;
+      exit(0);
+    } else {
+      cout << "no" << std::endl;
+      exit(1);
+    }
+  }
+  if (check_needs_journal) {
+    if (store->needs_journal()) {
+      cout << "yes" << std::endl;
+      exit(0);
+    } else {
+      cout << "no" << std::endl;
+      exit(1);
+    }
+  }
   if (flushjournal) {
     common_init_finish(g_ceph_context);
     int err = store->mount();
@@ -315,14 +363,6 @@ int main(int argc, const char **argv)
     if (r == 0)
       cout << fsid << std::endl;
     exit(r);
-  }
-
-  if (check_need_journal) {
-    if (store->need_journal())
-      cout << "yes" << std::endl;
-    else
-      cout << "no" << std::endl;
-    exit(0);
   }
 
   string magic;
