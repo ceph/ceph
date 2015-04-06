@@ -15,8 +15,6 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU Library Public License for more details.
 #
-set -xe
-
 source test/test_btrfs_common.sh
 
 PS4='${FUNCNAME[0]}: $LINENO: '
@@ -58,7 +56,6 @@ function setup() {
     teardown
     mkdir $DIR
     mkdir $OSD_DATA
-#    mkdir $OSD_DATA/ceph-0
     touch $DIR/ceph.conf # so ceph-disk think ceph is the cluster
 }
 
@@ -68,6 +65,9 @@ function teardown() {
         rm -fr $DIR/*/*db
         teardown_btrfs $DIR
     fi
+    grep " $(pwd)/$DIR/" < /proc/mounts | while read mounted rest ; do
+        umount $mounted
+    done
     rm -fr $DIR
 }
 
@@ -92,10 +92,13 @@ function run_mon() {
 }
 
 function kill_daemons() {
+    if ! test -e $DIR ; then
+        return
+    fi
     for pidfile in $(find $DIR | grep pidfile) ; do
         pid=$(cat $pidfile)
         for try in 0 1 1 1 2 3 ; do
-            kill $pid || break
+            kill $pid 2>/dev/null || break
             sleep $try
         done
     done
@@ -200,6 +203,20 @@ function test_activate_dir_magic() {
     grep --quiet $uuid $osd_data/ceph_fsid || return 1
 }
 
+function test_pool_read_write() {
+    local osd_uuid=$1
+
+    $timeout $TIMEOUT ./ceph osd pool set $TEST_POOL size 1 || return 1
+
+    local id=$(ceph osd create $osd_uuid)
+    local weight=1
+    ./ceph osd crush add osd.$id $weight root=default host=localhost || return 1
+    echo FOO > $DIR/BAR
+    $timeout $TIMEOUT ./rados --pool $TEST_POOL put BAR $DIR/BAR || return 1
+    $timeout $TIMEOUT ./rados --pool $TEST_POOL get BAR $DIR/BAR.copy || return 1
+    $diff $DIR/BAR $DIR/BAR.copy || return 1
+}
+
 function test_activate() {
     local to_prepare=$1
     local to_activate=$2
@@ -215,15 +232,8 @@ function test_activate() {
         activate \
         --mark-init=none \
         $to_activate || return 1
-    $timeout $TIMEOUT ./ceph osd pool set $TEST_POOL size 1 || return 1
 
-    local id=$(ceph osd create $osd_uuid)
-    local weight=1
-    ./ceph osd crush add osd.$id $weight root=default host=localhost || return 1
-    echo FOO > $DIR/BAR
-    $timeout $TIMEOUT ./rados --pool $TEST_POOL put BAR $DIR/BAR || return 1
-    $timeout $TIMEOUT ./rados --pool $TEST_POOL get BAR $DIR/BAR.copy || return 1
-    $diff $DIR/BAR $DIR/BAR.copy || return 1
+    test_pool_read_write $osd_uuid || return 1
 }
 
 function test_activate_dmcrypt() {
@@ -233,61 +243,31 @@ function test_activate_dmcrypt() {
     local journal_p=$4
     local uuid=$5
     local juuid=$6
+    local plain=$7
 
     $mkdir -p $OSD_DATA
 
+    if test $plain = plain ; then
+        echo "osd_dmcrypt_type=plain" > $DIR/ceph.conf
+    fi
+    
     ./ceph-disk $CEPH_DISK_ARGS \
 		prepare --dmcrypt --dmcrypt-key-dir $DIR/keys --osd-uuid=$uuid --journal-uuid=$juuid $to_prepare $journal || return 1
 
-    /sbin/cryptsetup --key-file $DIR/keys/$uuid.luks.key luksOpen $to_activate $uuid
-    /sbin/cryptsetup --key-file $DIR/keys/$juuid.luks.key luksOpen ${journal}${journal_p} $juuid
+    if test $plain = plain ; then
+        /sbin/cryptsetup --key-file $DIR/keys/$uuid --key-size 256 create $uuid $to_activate
+        /sbin/cryptsetup --key-file $DIR/keys/$juuid --key-size 256 create $juuid $journal
+    else
+        /sbin/cryptsetup --key-file $DIR/keys/$uuid.luks.key luksOpen $to_activate $uuid
+        /sbin/cryptsetup --key-file $DIR/keys/$juuid.luks.key luksOpen ${journal}${journal_p} $juuid
+    fi
     
     $timeout $TIMEOUT ./ceph-disk $CEPH_DISK_ARGS \
         activate \
         --mark-init=none \
         /dev/mapper/$uuid || return 1
-    $timeout $TIMEOUT ./ceph osd pool set $TEST_POOL size 1 || return 1
 
-    local id=$($cat $OSD_DATA/ceph-?/whoami || $cat $to_activate/whoami)
-    local weight=1
-    ./ceph osd crush add osd.$id $weight root=default host=localhost || return 1
-    echo FOO > $DIR/BAR
-    $timeout $TIMEOUT ./rados --pool $TEST_POOL put BAR $DIR/BAR || return 1
-    $timeout $TIMEOUT ./rados --pool $TEST_POOL get BAR $DIR/BAR.copy || return 1
-    $diff $DIR/BAR $DIR/BAR.copy || return 1
-}
-
-function test_activate_dmcrypt_plain() {
-    local to_prepare=$1
-    local to_activate=$2
-    local journal=$3
-    local journal_p=$4
-    local uuid=$5
-    local juuid=$6
-
-    $mkdir -p $OSD_DATA
-
-    echo "osd_dmcrypt_type=plain" > $DIR/ceph.conf
-    
-    ./ceph-disk $CEPH_DISK_ARGS \
-		prepare --dmcrypt --dmcrypt-key-dir $DIR/keys --osd-uuid=$uuid --journal-uuid=$juuid $to_prepare $journal || return 1
-
-    /sbin/cryptsetup --key-file $DIR/keys/$uuid --key-size 256 create $uuid $to_activate
-    /sbin/cryptsetup --key-file $DIR/keys/$juuid --key-size 256 create $juuid $journal
-    
-    $timeout $TIMEOUT ./ceph-disk $CEPH_DISK_ARGS \
-        activate \
-        --mark-init=none \
-        /dev/mapper/$uuid || return 1
-    $timeout $TIMEOUT ./ceph osd pool set $TEST_POOL size 1 || return 1
-
-    local id=$($cat $OSD_DATA/ceph-?/whoami || $cat $to_activate/whoami)
-    local weight=1
-    ./ceph osd crush add osd.$id $weight root=default host=localhost || return 1
-    echo FOO > $DIR/BAR
-    $timeout $TIMEOUT ./rados --pool $TEST_POOL put BAR $DIR/BAR || return 1
-    $timeout $TIMEOUT ./rados --pool $TEST_POOL get BAR $DIR/BAR.copy || return 1
-    $diff $DIR/BAR $DIR/BAR.copy || return 1
+    test_pool_read_write $osd_uuid || return 1
 }
 
 function test_activate_dir() {
@@ -347,11 +327,12 @@ function loop_sanity_check() {
     local major=$(lsb_release -rs | cut -f1 -d.)
     if test $major != 6 || test $id != CentOS -a $id != RedHatEnterpriseServer ; then
         echo "/dev/loop is assumed to be configured with max_part > 0"
-        echo "and /dev/disk/by-partuuid to be populated by udev"
+        echo "and /dev/disk/by-partuuid to be populated by udev on"
+        lsb_release -a
         return 0
     fi
     local name=$DIR/sanity.disk
-    dd if=/dev/zero of=$name bs=1024k count=10 > /dev/null
+    dd if=/dev/zero of=$name bs=1024k count=10 > /dev/null 2>&1
     losetup --find $name
     local dev=$(losetup --associated $name | cut -f1 -d:)
     local guid=$($uuidgen)
@@ -366,32 +347,59 @@ function loop_sanity_check() {
     return $status
 }
 
-function create_dev() {
-    local name=$1
+function reset_dev() {
+    local dev=$1
 
-    set -x
-    echo create_dev $name >&2
-    dd if=/dev/zero of=$name bs=1024k count=400 > /dev/null
-    losetup --find $name
-    local dev=$(losetup --associated $name | cut -f1 -d:)
+    if test -z "$dev" ; then
+        return
+    fi
+
+    grep "^$dev" < /proc/mounts | while read mounted rest ; do
+        umount $mounted
+    done
+    local dev_base=$(basename $dev)
+    (
+        ls /sys/block/$dev_base/$dev_base*/holders 2> /dev/null
+        ls /sys/block/$dev_base/holders 2> /dev/null
+        ) | grep '^dm-' | while read dm ; do
+	dmsetup remove /dev/$dm
+    done
     ceph-disk zap $dev > /dev/null 2>&1
+}
+
+function reset_leftover_dev() {
+    local path=$1
+
+    losetup --all | sed -e 's/://' | while read dev id associated_path ; do
+        if test $associated_path = "($path)" ; then
+            reset_dev $dev
+            losetup --detach $dev
+        fi
+    done
+}
+
+function create_dev() {
+    local path=$1
+
+    echo -n "create_dev $path ... " >&2
+    reset_leftover_dev $path
+    dd if=/dev/zero of=$path bs=1024k count=400 > /dev/null 2>&1
+    losetup --find $path
+    local dev=$(losetup --associated $path | cut -f1 -d:)
+    test "$dev" || return 1
+    reset_dev $dev
+    echo $dev >&2
     echo $dev
-    set +x
 }
 
 function destroy_dev() {
-    local name=$1
+    local path=$1
     local dev=$2
 
-    set -x
-    echo destroy_dev $name $dev >&2
-    for partition in 1 2 3 4 ; do
-        umount ${dev}p${partition} > /dev/null 2>&1 || true
-    done
-    ceph-disk zap $dev > /dev/null 2>&1
+    echo destroy_dev $path $dev >&2
+    reset_dev $dev
     losetup --detach $dev
-    rm $name
-    set +x
+    rm -f $path
 }
 
 function activate_dev_body() {
@@ -402,8 +410,22 @@ function activate_dev_body() {
     setup
     run_mon
     #
+    # Create an OSD without a journal and an objectstore
+    # that does not use a journal.
+    #
+    ceph-disk zap $disk || return 1
+    CEPH_ARGS="$CEPH_ARGS --osd-objectstore=memstore" \
+        test_activate $disk ${disk}p1 || return 1
+    kill_daemons
+    umount ${disk}p1 || return 1
+    teardown
+
+    setup
+    run_mon
+    #
     # Create an OSD with data on a disk, journal on another
     #
+    ceph-disk zap $disk || return 1
     test_activate $disk ${disk}p1 $journal || return 1
     kill_daemons
     umount ${disk}p1 || return 1
@@ -444,6 +466,11 @@ function activate_dev_body() {
 }
 
 function test_activate_dev() {
+    test_setup_dev_and_run activate_dev_body
+}
+
+function test_setup_dev_and_run() {
+    local action=$1
     if test $(id -u) != 0 ; then
         echo "SKIP because not root"
         return 0
@@ -451,33 +478,22 @@ function test_activate_dev() {
 
     loop_sanity_check || return 1
 
-    local disk=$(create_dev vdf.disk)
-    local journal=$(create_dev vdg.disk)
-    local newdisk=$(create_dev vdh.disk)
+    local dir=$(pwd)/$DIR
+    local disk
+    disk=$(create_dev $dir/vdf.disk) || return 1
+    local journal
+    journal=$(create_dev $dir/vdg.disk) || return 1
+    local newdisk
+    newdisk=$(create_dev $dir/vdh.disk) || return 1
 
-    activate_dev_body $disk $journal $newdisk
+    $action $disk $journal $newdisk
     status=$?
-    test $status != 0 && teardown
 
-    destroy_dev vdf.disk $disk
-    destroy_dev vdg.disk $journal
-    destroy_dev vdh.disk $newdisk
+    destroy_dev $dir/vdf.disk $disk
+    destroy_dev $dir/vdg.disk $journal
+    destroy_dev $dir/vdh.disk $newdisk
 
     return $status
-}
-
-function destroy_dmcrypt_dev() {
-    local name=$1
-    local dev=$2
-    local uuid=$3
-
-    for partition in 1 2 3 4 ; do
-        umount /dev/mapper/$uuid || true
-	/sbin/cryptsetup remove /dev/mapper/$uuid || true
-	dmsetup remove /dev/mapper/$uuid || true
-    done
-    losetup --detach $dev
-    rm $name
 }
 
 function activate_dmcrypt_dev_body() {
@@ -489,33 +505,14 @@ function activate_dmcrypt_dev_body() {
 
     setup
     run_mon
-    test_activate_dmcrypt $disk ${disk}p1 $journal p1 $uuid $juuid|| return 1
+    test_activate_dmcrypt $disk ${disk}p1 $journal p1 $uuid $juuid not_plain || return 1
     kill_daemons
     umount /dev/mapper/$uuid || return 1
     teardown
 }
 
 function test_activate_dmcrypt_dev() {
-    if test $(id -u) != 0 ; then
-        echo "SKIP because not root"
-        return 0
-    fi
-
-    loop_sanity_check || return 1
-
-    local disk=$(create_dev vdf.disk)
-    local journal=$(create_dev vdg.disk)
-    local newdisk=$(create_dev vdh.disk)
-
-    activate_dmcrypt_dev_body $disk $journal $newdisk
-    status=$?
-    test $status != 0 && teardown
-
-    destroy_dmcrypt_dev vdf.disk $disk
-    destroy_dmcrypt_dev vdg.disk $journal
-    destroy_dmcrypt_dev vdh.disk $newdisk
-
-    return $status
+    test_setup_dev_and_run activate_dmcrypt_dev_body
 }
 
 function activate_dmcrypt_plain_dev_body() {
@@ -527,30 +524,14 @@ function activate_dmcrypt_plain_dev_body() {
 
     setup
     run_mon
-    test_activate_dmcrypt_plain $disk ${disk}p1 $journal p1 $uuid $juuid|| return 1
+    test_activate_dmcrypt $disk ${disk}p1 $journal p1 $uuid $juuid plain || return 1
     kill_daemons
     umount /dev/mapper/$uuid || return 1
     teardown
 }
 
 function test_activate_dmcrypt_plain_dev() {
-    if test $(id -u) != 0 ; then
-        echo "SKIP because not root"
-        return 0
-    fi
-
-    local disk=$(create_dev vdf.disk)
-    local journal=$(create_dev vdg.disk)
-    local newdisk=$(create_dev vdh.disk)
-
-    activate_dmcrypt_plain_dev_body $disk $journal $newdisk
-    status=$?
-
-    destroy_dmcrypt_dev vdf.disk $disk
-    destroy_dmcrypt_dev vdg.disk $journal
-    destroy_dmcrypt_dev vdh.disk $newdisk
-
-    return $status
+    test_setup_dev_and_run activate_dmcrypt_plain_dev_body
 }
 
 function test_find_cluster_by_uuid() {
@@ -584,8 +565,10 @@ function run() {
     local actions=${@:-$default_actions}
     for action in $actions  ; do
         setup
-        $action || return 1
+        $action
+        status=$?
         teardown
+        test $status != 0 || return $status
     done
 }
 
