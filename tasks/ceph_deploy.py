@@ -7,12 +7,14 @@ import contextlib
 import os
 import time
 import logging
+import traceback
 
 from teuthology import misc as teuthology
 from teuthology import contextutil
 from teuthology.config import config as teuth_config
 from teuthology.task import install as install_fn
 from teuthology.orchestra import run
+from tasks.cephfs.filesystem import Filesystem
 
 log = logging.getLogger(__name__)
 
@@ -26,20 +28,20 @@ def download_ceph_deploy(ctx, config):
     """
     log.info('Downloading ceph-deploy...')
     testdir = teuthology.get_testdir(ctx)
-    ceph_admin = teuthology.get_first_mon(ctx, config)
+    ceph_admin = ctx.cluster.only(teuthology.get_first_mon(ctx, config))
     default_cd_branch = {'ceph-deploy-branch': 'master'}
     ceph_deploy_branch = config.get(
         'ceph-deploy',
         default_cd_branch).get('ceph-deploy-branch')
 
-    ctx.cluster.only(ceph_admin).run(
+    ceph_admin.run(
         args=[
             'git', 'clone', '-b', ceph_deploy_branch,
             teuth_config.ceph_git_base_url + 'ceph-deploy.git',
             '{tdir}/ceph-deploy'.format(tdir=testdir),
             ],
         )
-    ctx.cluster.only(ceph_admin).run(
+    ceph_admin.run(
         args=[
             'cd',
             '{tdir}/ceph-deploy'.format(tdir=testdir),
@@ -52,7 +54,7 @@ def download_ceph_deploy(ctx, config):
         yield
     finally:
         log.info('Removing ceph-deploy ...')
-        ctx.cluster.only(ceph_admin).run(
+        ceph_admin.run(
             args=[
                 'rm',
                 '-rf',
@@ -91,19 +93,38 @@ def is_healthy(ctx, config):
             break
         time.sleep(10)
 
-def get_nodes_using_roles(ctx, config, role):
-    """Extract the names of nodes that match a given role from a cluster"""
-    newl = []
+
+def get_nodes_using_role(ctx, target_role):
+    """
+    Extract the names of nodes that match a given role from a cluster, and modify the
+    cluster's service IDs to match the resulting node-based naming scheme that ceph-deploy
+    uses, such that if "mon.a" is on host "foo23", it'll be renamed to "mon.foo23".
+    """
+
+    # Nodes containing a service of the specified role
+    nodes_of_interest = []
+
+    # Prepare a modified version of cluster.remotes with ceph-deploy-ized names
+    modified_remotes = {}
+
     for _remote, roles_for_host in ctx.cluster.remotes.iteritems():
-        for id_ in teuthology.roles_of_type(roles_for_host, role):
-            rem = _remote
-            if role == 'mon':
-                req1 = str(rem).split('@')[-1]
+        modified_remotes[_remote] = []
+        for svc_id in roles_for_host:
+            if svc_id.startswith("{0}.".format(target_role)):
+                fqdn = str(_remote).split('@')[-1]
+                nodename = str(str(_remote).split('.')[0]).split('@')[1]
+                if target_role == 'mon':
+                    nodes_of_interest.append(fqdn)
+                else:
+                    nodes_of_interest.append(nodename)
+
+                modified_remotes[_remote].append("{0}.{1}".format(target_role, nodename))
             else:
-                req = str(rem).split('.')[0]
-                req1 = str(req).split('@')[1]
-            newl.append(req1)
-    return newl
+                modified_remotes[_remote].append(svc_id)
+
+    ctx.cluster.remotes = modified_remotes
+
+    return nodes_of_interest
 
 def get_dev_for_osd(ctx, config):
     """Get a list of all osd device names."""
@@ -174,12 +195,12 @@ def build_ceph_cluster(ctx, config):
                 ceph_branch = '--{var}={val}'.format(var=var, val=val)
         node_dev_list = []
         all_nodes = get_all_nodes(ctx, config)
-        mds_nodes = get_nodes_using_roles(ctx, config, 'mds')
+        mds_nodes = get_nodes_using_role(ctx, 'mds')
         mds_nodes = " ".join(mds_nodes)
-        mon_node = get_nodes_using_roles(ctx, config, 'mon')
+        mon_node = get_nodes_using_role(ctx, 'mon')
         mon_nodes = " ".join(mon_node)
         new_mon = './ceph-deploy new'+" "+mon_nodes
-        install_nodes = './ceph-deploy install '+ceph_branch+" "+all_nodes
+        install_nodes = './ceph-deploy install ' + (ceph_branch if ceph_branch else "--dev=master") + " " + all_nodes
         purge_nodes = './ceph-deploy purge'+" "+all_nodes
         purgedata_nodes = './ceph-deploy purgedata'+" "+all_nodes
         mon_hostname = mon_nodes.split(' ')[0]
@@ -338,11 +359,20 @@ def build_ceph_cluster(ctx, config):
                         data=conf_data,
                         perms='0644'
                     )
+
+            log.info('Configuring CephFS...')
+            ceph_fs = Filesystem(ctx, admin_remote=clients.remotes.keys()[0])
+            if not ceph_fs.legacy_configured():
+                ceph_fs.create()
         else:
             raise RuntimeError(
                 "The cluster is NOT operational due to insufficient OSDs")
         yield
 
+    except Exception:
+        log.info("Error encountered, logging exception before tearing down ceph-deploy")
+        log.info(traceback.format_exc())
+        raise
     finally:
         log.info('Stopping ceph...')
         ctx.cluster.run(args=['sudo', 'stop', 'ceph-all', run.Raw('||'),
