@@ -13,6 +13,12 @@ Highlights since Giant include:
 * *RADOS Performance*: a range of improvements have been made in the
   OSD and client-side librados code that improve the throughput on
   flash backends and improve parallelism and scaling on fast machines.
+* *Simplified RGW deployment*: the ceph-deploy tool now has a new
+  'ceph-deploy rgw create HOST' command that quickly deploys a
+  instance of the S3/Swift gateway using the embedded Civetweb server.
+  This is vastly simpler than the previous Apache-based deployment.
+  There are a few rough edges (e.g., around SSL support) but we
+  encourage users to try `the new method`_.
 * *RGW object versioning*: RGW now supports the S3 object versioning
   API, which preserves old version of objects instead of overwriting
   them.
@@ -47,6 +53,8 @@ Highlights since Giant include:
   pertinent details on OSD disk utilizations.  The 'ceph pg ls ...'
   command makes it much simpler to query PG states while diagnosing
   cluster issues.
+
+.. _the new method: ../start/quick-ceph-deploy/#add-an-rgw-instance
 
 Other highlights since Firefly include:
 
@@ -87,12 +95,12 @@ Dedication
 ----------
 
 This release is dedicated in memoriam to Sandon Van Ness, aka
-Houkouonchi, a valued member of the Ceph team who unexpectedly passed
-away a few weeks ago.  Sandon was responsible for maintaining the
-large and complex Sepia lab that houses the Ceph project's build and
-test infrastructure.  His efforts have made an important impact on our
-ability to reliably test Ceph with a relatively small group of people.
-He was a valued member of the team and we will miss him.
+Houkouonchi, who unexpectedly passed away a few weeks ago.  Sandon was
+responsible for maintaining the large and complex Sepia lab that
+houses the Ceph project's build and test infrastructure.  His efforts
+have made an important impact on our ability to reliably test Ceph
+with a relatively small group of people.  He was a valued member of
+the team and we will miss him.  H is also for Houkouonchi.
 
 Upgrading
 ---------
