@@ -7,6 +7,27 @@ release = 'dev'
 
 exclude_patterns = ['**/.#*', '**/*~']
 
+def _get_description(fname):
+    with file(fname) as f:
+        one = None
+        for line in f:
+            line = line.rstrip('\n')
+            if not line:
+                continue
+            if line.startswith(':') and line.endswith(':'):
+                continue
+            one = line
+            break
+        two = f.readline()
+        three = f.readline()
+        print one, three
+        assert one == three
+        assert all(c=='=' for c in one.rstrip('\n'))
+        two = two.strip()
+        name, description = two.split('--', 1)
+        assert name.strip() == base
+        return description.strip()
+
 def _get_manpages():
     src_dir = os.path.dirname(__file__)
     top_srcdir = os.path.dirname(src_dir)
@@ -22,16 +43,7 @@ def _get_manpages():
                 continue
             if base == 'index':
                 continue
-            with file(os.path.join(section_dir, filename)) as f:
-                one = f.readline()
-                two = f.readline()
-                three = f.readline()
-                assert one == three
-                assert all(c=='=' for c in one.rstrip('\n'))
-                two = two.strip()
-                name, rest = two.split('--', 1)
-                assert name.strip() == base
-                description = rest.strip()
+            description = os.path.join(section_dir, filename)
             yield (
                 os.path.join(section, base),
                 base,
