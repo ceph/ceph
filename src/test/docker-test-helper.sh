@@ -18,7 +18,7 @@ function get_image_name() {
     local os_type=$1
     local os_version=$2
 
-    echo ceph-$os_type-$os_version
+    echo ceph-$os_type-$os_version-$USER
 }
 
 function setup_container() {
