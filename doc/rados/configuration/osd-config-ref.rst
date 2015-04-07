@@ -475,7 +475,7 @@ Ceph performs well as the OSD map grows larger.
 
 ``osd map cache size`` 
 
-:Description: The size of the OSD map cache in megabytes.
+:Description: The number of OSD maps to keep cached.
 :Type: 32-bit Integer
 :Default: ``500``
 

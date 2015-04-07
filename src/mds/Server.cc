@@ -45,8 +45,6 @@
 
 #include "messages/MLock.h"
 
-#include "messages/MDentryUnlink.h"
-
 #include "events/EUpdate.h"
 #include "events/ESlaveUpdate.h"
 #include "events/ESession.h"
@@ -92,9 +90,12 @@ class ServerContext : public MDSInternalContextBase {
 void Server::create_logger()
 {
   PerfCountersBuilder plb(g_ceph_context, "mds_server", l_mdss_first, l_mdss_last);
-  plb.add_u64_counter(l_mdss_handle_client_request,"handle_client_request");
-  plb.add_u64_counter(l_mdss_handle_slave_request, "handle_slave_request");
-  plb.add_u64_counter(l_mdss_handle_client_session, "handle_client_session");
+  plb.add_u64_counter(l_mdss_handle_client_request,"handle_client_request",
+      "Client requests", "hcr");
+  plb.add_u64_counter(l_mdss_handle_slave_request, "handle_slave_request",
+      "Slave requests", "hsr");
+  plb.add_u64_counter(l_mdss_handle_client_session, "handle_client_session",
+      "Client session messages", "hcs");
   plb.add_u64_counter(l_mdss_dispatch_client_request, "dispatch_client_request");
   plb.add_u64_counter(l_mdss_dispatch_slave_request, "dispatch_server_request");
   logger = plb.create_perf_counters();
@@ -117,6 +118,12 @@ void Server::dispatch(Message *m)
     if (m->get_type() == CEPH_MSG_CLIENT_REQUEST &&
 	(mds->is_reconnect() || mds->get_want_state() == CEPH_MDS_STATE_RECONNECT)) {
       MClientRequest *req = static_cast<MClientRequest*>(m);
+      Session *session = get_session(req);
+      if (!session || session->is_closed()) {
+	dout(5) << "session is closed, dropping " << req->get_reqid() << dendl;
+	req->put();
+	return;
+      }
       bool queue_replay = false;
       if (req->is_replay()) {
 	dout(3) << "queuing replayed op" << dendl;
@@ -125,8 +132,7 @@ void Server::dispatch(Message *m)
 	// process completed request in clientreplay stage. The completed request
 	// might have created new file/directorie. This guarantees MDS sends a reply
 	// to client before other request modifies the new file/directorie.
-	Session *session = get_session(req);
-	if (session && session->have_completed_request(req->get_reqid().tid, NULL)) {
+	if (session->have_completed_request(req->get_reqid().tid, NULL)) {
 	  dout(3) << "queuing completed op" << dendl;
 	  queue_replay = true;
 	}
@@ -267,9 +273,9 @@ void Server::handle_client_session(MClientSession *m)
     if (session->is_closed())
       mds->sessionmap.add_session(session);
 
+    pv = mds->sessionmap.mark_projected(session);
     sseq = mds->sessionmap.set_state(session, Session::STATE_OPENING);
     mds->sessionmap.touch_session(session);
-    pv = ++mds->sessionmap.projected;
     mdlog->start_submit_entry(new ESession(m->get_source_inst(), true, pv, m->client_meta),
 			      new C_MDS_session_finish(mds, session, sseq, true, pv));
     mdlog->flush();
@@ -359,6 +365,8 @@ void Server::_session_logged(Session *session, uint64_t state_seq, bool open, ve
   dout(10) << "_session_logged " << session->info.inst << " state_seq " << state_seq << " " << (open ? "open":"close")
 	   << " " << pv << dendl;
 
+  mds->sessionmap.mark_dirty(session);
+
   if (piv) {
     mds->inotable->apply_release_ids(inos);
     assert(mds->inotable->get_version() == piv);
@@ -432,18 +440,29 @@ void Server::_session_logged(Session *session, uint64_t state_seq, bool open, ve
   } else {
     assert(0);
   }
-  mds->sessionmap.version++;  // noop
 }
 
+/**
+ * Inject sessions from some source other than actual connections.
+ *
+ * For example:
+ *  - sessions inferred from journal replay
+ *  - sessions learned from other MDSs during rejoin
+ *  - sessions learned from other MDSs during dir/caps migration
+ *  - sessions learned from other MDSs during a cross-MDS rename
+ */
 version_t Server::prepare_force_open_sessions(map<client_t,entity_inst_t>& cm,
 					      map<client_t,uint64_t>& sseqmap)
 {
-  version_t pv = ++mds->sessionmap.projected;
+  version_t pv = mds->sessionmap.get_projected();
+
   dout(10) << "prepare_force_open_sessions " << pv 
 	   << " on " << cm.size() << " clients"
 	   << dendl;
   for (map<client_t,entity_inst_t>::iterator p = cm.begin(); p != cm.end(); ++p) {
+
     Session *session = mds->sessionmap.get_or_add_session(p->second);
+    pv = mds->sessionmap.mark_projected(session);
     if (session->is_closed() || 
 	session->is_closing() ||
 	session->is_killing())
@@ -453,7 +472,6 @@ version_t Server::prepare_force_open_sessions(map<client_t,entity_inst_t>& cm,
 	     session->is_opening() ||
 	     session->is_stale());
     session->inc_importing();
-//  mds->sessionmap.touch_session(session);
   }
   return pv;
 }
@@ -468,8 +486,13 @@ void Server::finish_force_open_sessions(map<client_t,entity_inst_t>& cm,
    * trying to force open a session...  
    */
   dout(10) << "finish_force_open_sessions on " << cm.size() << " clients,"
-	   << " v " << mds->sessionmap.version << " -> " << (mds->sessionmap.version+1) << dendl;
+	   << " initial v " << mds->sessionmap.get_version() << dendl;
+  
+
+  int sessions_inserted = 0;
   for (map<client_t,entity_inst_t>::iterator p = cm.begin(); p != cm.end(); ++p) {
+    sessions_inserted++;
+
     Session *session = mds->sessionmap.get_session(p->second.name);
     assert(session);
     
@@ -489,10 +512,15 @@ void Server::finish_force_open_sessions(map<client_t,entity_inst_t>& cm,
       dout(10) << "force_open_sessions skipping already-open " << session->info.inst << dendl;
       assert(session->is_open() || session->is_stale());
     }
-    if (dec_import)
+
+    if (dec_import) {
       session->dec_importing();
+    }
+
+    mds->sessionmap.mark_dirty(session);
   }
-  mds->sessionmap.version++;
+
+  dout(10) << __func__ << ": final v " << mds->sessionmap.get_version() << dendl;
 }
 
 class C_MDS_TerminatedSessions : public ServerContext {
@@ -614,7 +642,7 @@ void Server::kill_session(Session *session, Context *on_safe)
 void Server::journal_close_session(Session *session, int state, Context *on_safe)
 {
   uint64_t sseq = mds->sessionmap.set_state(session, state);
-  version_t pv = ++mds->sessionmap.projected;
+  version_t pv = mds->sessionmap.mark_projected(session);
   version_t piv = 0;
 
   // release alloc and pending-alloc inos for this session
@@ -816,17 +844,15 @@ void Server::recover_filelocks(CInode *in, bufferlist locks, int64_t client)
   for (int i = 0; i < numlocks; ++i) {
     ::decode(lock, p);
     lock.client = client;
-    in->fcntl_locks.held_locks.insert(pair<uint64_t, ceph_filelock>
-				      (lock.start, lock));
-    ++in->fcntl_locks.client_held_lock_counts[client];
+    in->get_fcntl_lock_state()->held_locks.insert(pair<uint64_t, ceph_filelock>(lock.start, lock));
+    ++in->get_fcntl_lock_state()->client_held_lock_counts[client];
   }
   ::decode(numlocks, p);
   for (int i = 0; i < numlocks; ++i) {
     ::decode(lock, p);
     lock.client = client;
-    in->flock_locks.held_locks.insert(pair<uint64_t, ceph_filelock>
-				      (lock.start, lock));
-    ++in->flock_locks.client_held_lock_counts[client];
+    in->get_flock_lock_state()->held_locks.insert(pair<uint64_t, ceph_filelock> (lock.start, lock));
+    ++in->get_flock_lock_state()->client_held_lock_counts[client];
   }
 }
 
@@ -1125,9 +1151,10 @@ void Server::reply_client_request(MDRequestRef& mdr, MClientReply *reply)
 
   // take a closer look at tracei, if it happens to be a remote link
   if (tracei && 
-      tracei->get_parent_dn() &&
-      tracei->get_parent_dn()->get_projected_linkage()->is_remote())
-    mdcache->eval_remote(tracei->get_parent_dn());
+      tracedn &&
+      tracedn->get_projected_linkage()->is_remote()) {
+    mdcache->eval_remote(tracedn);
+  }
 }
 
 
@@ -2137,7 +2164,8 @@ CInode* Server::prepare_new_inode(MDRequestRef& mdr, CDir *dir, inodeno_t useino
   if (mdr->session->info.prealloc_inos.size()) {
     mdr->used_prealloc_ino = 
       in->inode.ino = mdr->session->take_ino(useino);  // prealloc -> used
-    mds->sessionmap.projected++;
+    mds->sessionmap.mark_projected(mdr->session);
+
     dout(10) << "prepare_new_inode used_prealloc " << mdr->used_prealloc_ino
 	     << " (" << mdr->session->info.prealloc_inos
 	     << ", " << mdr->session->info.prealloc_inos.size() << " left)"
@@ -2161,7 +2189,7 @@ CInode* Server::prepare_new_inode(MDRequestRef& mdr, CDir *dir, inodeno_t useino
     mds->inotable->project_alloc_ids(mdr->prealloc_inos, got);
     assert(mdr->prealloc_inos.size());  // or else fix projected increment semantics
     mdr->session->pending_prealloc_inos.insert(mdr->prealloc_inos);
-    mds->sessionmap.projected++;
+    mds->sessionmap.mark_projected(mdr->session);
     dout(10) << "prepare_new_inode prealloc " << mdr->prealloc_inos << dendl;
   }
 
@@ -2217,7 +2245,7 @@ CInode* Server::prepare_new_inode(MDRequestRef& mdr, CDir *dir, inodeno_t useino
 
   if (!mds->mdsmap->get_inline_data_enabled() ||
       !mdr->session->connection->has_feature(CEPH_FEATURE_MDS_INLINE_DATA))
-    in->inode.inline_version = CEPH_INLINE_NONE;
+    in->inode.inline_data.version = CEPH_INLINE_NONE;
 
   mdcache->add_inode(in);  // add
   dout(10) << "prepare_new_inode " << *in << dendl;
@@ -2226,14 +2254,14 @@ CInode* Server::prepare_new_inode(MDRequestRef& mdr, CDir *dir, inodeno_t useino
 
 void Server::journal_allocated_inos(MDRequestRef& mdr, EMetaBlob *blob)
 {
-  dout(20) << "journal_allocated_inos sessionmapv " << mds->sessionmap.projected
+  dout(20) << "journal_allocated_inos sessionmapv " << mds->sessionmap.get_projected()
 	   << " inotablev " << mds->inotable->get_projected_version()
 	   << dendl;
   blob->set_ino_alloc(mdr->alloc_ino,
 		      mdr->used_prealloc_ino,
 		      mdr->prealloc_inos,
 		      mdr->client_request->get_source(),
-		      mds->sessionmap.projected,
+		      mds->sessionmap.get_projected(),
 		      mds->inotable->get_projected_version());
 }
 
@@ -2249,15 +2277,17 @@ void Server::apply_allocated_inos(MDRequestRef& mdr)
   }
   if (mdr->prealloc_inos.size()) {
     assert(session);
-    session->pending_prealloc_inos.subtract(mdr->prealloc_inos);
-    session->info.prealloc_inos.insert(mdr->prealloc_inos);
-    mds->sessionmap.version++;
+    if (!mdr->killed) {
+      session->pending_prealloc_inos.subtract(mdr->prealloc_inos);
+      session->info.prealloc_inos.insert(mdr->prealloc_inos);
+    }
+    mds->sessionmap.mark_dirty(session);
     mds->inotable->apply_alloc_ids(mdr->prealloc_inos);
   }
   if (mdr->used_prealloc_ino) {
     assert(session);
     session->info.used_inos.erase(mdr->used_prealloc_ino);
-    mds->sessionmap.version++;
+    mds->sessionmap.mark_dirty(session);
   }
 }
 
@@ -2753,7 +2783,7 @@ void Server::handle_client_open(MDRequestRef& mdr)
     return;
   }
 
-  if (cur->inode.inline_version != CEPH_INLINE_NONE &&
+  if (cur->inode.inline_data.version != CEPH_INLINE_NONE &&
       !mdr->session->connection->has_feature(CEPH_FEATURE_MDS_INLINE_DATA)) {
     dout(7) << "old client cannot open inline data file " << *cur << dendl;
     respond_to_request(mdr, -EPERM);
@@ -3112,16 +3142,7 @@ void Server::handle_client_readdir(MDRequestRef& mdr)
   snapid_t snapid = mdr->snapid;
   dout(10) << "snapid " << snapid << dendl;
 
-  // purge stale snap data?
-  const set<snapid_t> *snaps = 0;
   SnapRealm *realm = diri->find_snaprealm();
-  if (realm->get_last_destroyed() > dir->fnode.snap_purged_thru) {
-    snaps = &realm->get_snaps();
-    dout(10) << " last_destroyed " << realm->get_last_destroyed() << " > " << dir->fnode.snap_purged_thru
-	     << ", doing snap purge with " << *snaps << dendl;
-    dir->fnode.snap_purged_thru = realm->get_last_destroyed();
-    assert(snapid == CEPH_NOSNAP || snaps->count(snapid));  // just checkin'! 
-  }
 
   unsigned max = req->head.args.readdir.max_entries;
   if (!max)
@@ -3158,9 +3179,7 @@ void Server::handle_client_readdir(MDRequestRef& mdr)
 
     if (dnl->is_null())
       continue;
-    if (snaps && dn->last != CEPH_NOSNAP)
-      if (dir->try_trim_snap_dentry(dn, *snaps))
-	continue;
+
     if (dn->last < snapid || dn->first > snapid) {
       dout(20) << "skipping non-overlapping snap " << *dn << dendl;
       continue;
@@ -3243,9 +3262,6 @@ void Server::handle_client_readdir(MDRequestRef& mdr)
   ::encode(complete, dirbl);
   dirbl.claim_append(dnbl);
   
-  if (snaps)
-    dir->log_mark_dirty();
-
   // yay, reply
   dout(10) << "reply to " << *req << " readdir num=" << numfiles
 	   << " bytes=" << dirbl.length()
@@ -3343,14 +3359,14 @@ void Server::handle_client_file_setlock(MDRequestRef& mdr)
     interrupt = true;
     // fall-thru
   case CEPH_LOCK_FLOCK:
-    lock_state = &cur->flock_locks;
+    lock_state = cur->get_flock_lock_state();
     break;
 
   case CEPH_LOCK_FCNTL_INTR:
     interrupt = true;
     // fall-thru
   case CEPH_LOCK_FCNTL:
-    lock_state = &cur->fcntl_locks;
+    lock_state = cur->get_fcntl_lock_state();
     break;
 
   default:
@@ -3433,11 +3449,11 @@ void Server::handle_client_file_readlock(MDRequestRef& mdr)
   ceph_lock_state_t *lock_state = NULL;
   switch (req->head.args.filelock_change.rule) {
   case CEPH_LOCK_FLOCK:
-    lock_state = &cur->flock_locks;
+    lock_state = cur->get_flock_lock_state();
     break;
 
   case CEPH_LOCK_FCNTL:
-    lock_state = &cur->fcntl_locks;
+    lock_state = cur->get_fcntl_lock_state();
     break;
 
   default:
@@ -3620,6 +3636,10 @@ void Server::do_open_truncate(MDRequestRef& mdr, int cmode)
 
   journal_and_reply(mdr, in, dn, le, new C_MDS_inode_update_finish(mds, mdr, in, old_size > 0,
 								   changed_ranges));
+  // Although the `open` part can give an early reply, the truncation won't
+  // happen until our EUpdate is persistent, to give the client a prompt
+  // response we must also flush that event.
+  mdlog->flush();
 }
 
 
@@ -5335,8 +5355,11 @@ void Server::_unlink_local_finish(MDRequestRef& mdr,
   dn->get_dir()->try_remove_unlinked_dn(dn);
 
   // clean up?
-  if (straydn)
-    mdcache->eval_stray(straydn);
+  if (straydn) {
+    // Tip off the MDCache that this dentry is a stray that
+    // might be elegible for purge.
+    mdcache->notify_stray(straydn);
+  }
 }
 
 bool Server::_rmdir_prepare_witness(MDRequestRef& mdr, mds_rank_t who, CDentry *dn, CDentry *straydn)
@@ -6123,7 +6146,7 @@ void Server::handle_client_rename(MDRequestRef& mdr)
   
   _rename_prepare(mdr, &le->metablob, &le->client_map, srcdn, destdn, straydn);
   if (le->client_map.length())
-    le->cmapv = mds->sessionmap.projected;
+    le->cmapv = mds->sessionmap.get_projected();
 
   // -- commit locally --
   C_MDS_rename_finish *fin = new C_MDS_rename_finish(mds, mdr, srcdn, destdn, straydn);
@@ -6170,8 +6193,9 @@ void Server::_rename_finish(MDRequestRef& mdr, CDentry *srcdn, CDentry *destdn, 
     mds->locker->eval(in, CEPH_CAP_LOCKS, true);
 
   // clean up?
-  if (straydn) 
-    mdcache->eval_stray(straydn);
+  if (straydn) {
+    mdcache->notify_stray(straydn);
+  }
 }
 
 
@@ -6679,6 +6703,20 @@ void Server::_rename_apply(MDRequestRef& mdr, CDentry *srcdn, CDentry *destdn, C
     } else {
       // FIXME: fix up snaprealm!
     }
+  }
+
+  if (srcdn->get_dir()->inode->is_stray() &&
+      srcdn->get_dir()->inode->get_stray_owner() == mds->whoami) {
+    // A reintegration event or a migration away from me
+    dout(20) << __func__ << ": src dentry was a stray, updating stats" << dendl;
+    mdcache->notify_stray_removed();
+  }
+
+  if (destdn->get_dir()->inode->is_stray() &&
+      destdn->get_dir()->inode->get_stray_owner() == mds->whoami) {
+    // A stray migration (to me)
+    dout(20) << __func__ << ": dst dentry was a stray, updating stats" << dendl;
+    mdcache->notify_stray_created();
   }
 
   // src
@@ -7875,6 +7913,10 @@ void Server::_rmsnap_finish(MDRequestRef& mdr, CInode *diri, snapid_t snapid)
   // yay
   mdr->in[0] = diri;
   respond_to_request(mdr, 0);
+
+  // purge snapshot data
+  if (diri->snaprealm->have_past_parents_open())
+    diri->purge_stale_snap_data(diri->snaprealm->get_snaps());
 }
 
 

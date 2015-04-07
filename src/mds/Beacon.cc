@@ -32,10 +32,10 @@
 
 
 Beacon::Beacon(CephContext *cct_, MonClient *monc_, std::string name_) :
-  Dispatcher(cct_), lock("Beacon"), monc(monc_), timer(g_ceph_context, lock), name(name_)
+  Dispatcher(cct_), lock("Beacon"), monc(monc_), timer(g_ceph_context, lock),
+  name(name_), awaiting_seq(-1)
 {
   want_state = MDSMap::STATE_NULL;
-  last_send = 0;
   last_seq = 0;
   sender = NULL;
   was_laggy = false;
@@ -106,25 +106,37 @@ void Beacon::handle_mds_beacon(MMDSBeacon *m)
 
   // update lab
   if (seq_stamp.count(seq)) {
-    assert(seq_stamp[seq] > last_acked_stamp);
-    last_acked_stamp = seq_stamp[seq];
     utime_t now = ceph_clock_now(g_ceph_context);
-    utime_t rtt = now - last_acked_stamp;
+    if (seq_stamp[seq] > last_acked_stamp) {
+      last_acked_stamp = seq_stamp[seq];
+      utime_t rtt = now - last_acked_stamp;
 
-    dout(10) << "handle_mds_beacon " << ceph_mds_state_name(m->get_state())
-	     << " seq " << m->get_seq() 
-	     << " rtt " << rtt << dendl;
+      dout(10) << "handle_mds_beacon " << ceph_mds_state_name(m->get_state())
+	       << " seq " << m->get_seq() << " rtt " << rtt << dendl;
 
-    if (was_laggy && rtt < g_conf->mds_beacon_grace) {
-      dout(0) << "handle_mds_beacon no longer laggy" << dendl;
-      was_laggy = false;
-      laggy_until = now;
+      if (was_laggy && rtt < g_conf->mds_beacon_grace) {
+	dout(0) << "handle_mds_beacon no longer laggy" << dendl;
+	was_laggy = false;
+	laggy_until = now;
+      }
+    } else {
+      // Mark myself laggy if system clock goes backwards. Hopping
+      // later beacons will clear it.
+      dout(1) << "handle_mds_beacon system clock goes backwards, "
+	      << "mark myself laggy" << dendl;
+      last_acked_stamp = now - utime_t(g_conf->mds_beacon_grace + 1, 0);
+      was_laggy = true;
     }
 
     // clean up seq_stamp map
     while (!seq_stamp.empty() &&
 	   seq_stamp.begin()->first <= seq)
       seq_stamp.erase(seq_stamp.begin());
+
+    // Wake a waiter up if present
+    if (awaiting_seq == seq) {
+      waiting_cond.Signal();
+    }
   } else {
     dout(10) << "handle_mds_beacon " << ceph_mds_state_name(m->get_state())
 	     << " seq " << m->get_seq() << " dne" << dendl;
@@ -136,6 +148,25 @@ void Beacon::send()
 {
   Mutex::Locker l(lock);
   _send();
+}
+
+
+void Beacon::send_and_wait(const double duration)
+{
+  Mutex::Locker l(lock);
+  _send();
+  awaiting_seq = last_seq;
+  dout(20) << __func__ << ": awaiting " << awaiting_seq
+           << " for up to " << duration << "s" << dendl;
+
+  utime_t timeout;
+  timeout.set_from_double(ceph_clock_now(cct) + duration);
+  while ((!seq_stamp.empty() && seq_stamp.begin()->first <= awaiting_seq)
+         && ceph_clock_now(cct) < timeout) {
+    waiting_cond.WaitUntil(lock, timeout);
+  }
+
+  awaiting_seq = -1;
 }
 
 

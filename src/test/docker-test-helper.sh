@@ -48,7 +48,7 @@ function setup_container() {
         os_version=$os_version user_id=$(id -u) \
             perl -p -e 's/%%(\w+)%%/$ENV{$1}/g' \
             dockerfile/Dockerfile.in > dockerfile/Dockerfile
-        docker $opts build --rm=true --tag=$image dockerfile
+        docker $opts build --tag=$image dockerfile
         rm -fr dockerfile
     fi
 }
@@ -95,8 +95,8 @@ function setup_downstream() {
         fi
         cd $downstream
         git reset --hard $ref || return 1
-        git submodule sync || return 1
-        git submodule update --init || return 1
+        git submodule sync --recursive || return 1
+        git submodule update --force --init --recursive || return 1
     )
 }
 
@@ -121,9 +121,8 @@ function run_in_docker() {
     local image=$(get_image_name $os_type $os_version)
     local upstream=$(get_upstream)
     local ccache
-    if test -d $HOME/.ccache ; then
-        ccache="--volume $HOME/.ccache:$HOME/.ccache"
-    fi
+    mkdir -p $HOME/.ccache
+    ccache="--volume $HOME/.ccache:$HOME/.ccache"
     if $dev ; then
         dev="--volume /dev:/dev"
     else

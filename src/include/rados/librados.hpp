@@ -30,8 +30,8 @@ namespace librados
   struct ObjListCtx;
   struct PoolAsyncCompletionImpl;
   class RadosClient;
-  class ListObjectImpl;
-  struct NObjectIteratorImpl;
+  struct ListObjectImpl;
+  class NObjectIteratorImpl;
 
   typedef void *list_ctx_t;
   typedef uint64_t auid_t;
@@ -252,13 +252,13 @@ namespace librados
    * for CACHE_FLUSH and CACHE_EVICT operations.
    */
   enum ObjectOperationGlobalFlags {
-    OPERATION_NOFLAG         = 0,
-    OPERATION_BALANCE_READS  = 1,
-    OPERATION_LOCALIZE_READS = 2,
-    OPERATION_ORDER_READS_WRITES = 4,
-    OPERATION_IGNORE_CACHE = 8,
-    OPERATION_SKIPRWLOCKS = 16,
-    OPERATION_IGNORE_OVERLAY = 32,
+    OPERATION_NOFLAG             = LIBRADOS_OPERATION_NOFLAG,
+    OPERATION_BALANCE_READS      = LIBRADOS_OPERATION_BALANCE_READS,
+    OPERATION_LOCALIZE_READS     = LIBRADOS_OPERATION_LOCALIZE_READS,
+    OPERATION_ORDER_READS_WRITES = LIBRADOS_OPERATION_ORDER_READS_WRITES,
+    OPERATION_IGNORE_CACHE       = LIBRADOS_OPERATION_IGNORE_CACHE,
+    OPERATION_SKIPRWLOCKS        = LIBRADOS_OPERATION_SKIPRWLOCKS,
+    OPERATION_IGNORE_OVERLAY     = LIBRADOS_OPERATION_IGNORE_OVERLAY,
   };
 
   /*
@@ -460,7 +460,7 @@ namespace librados
      * Get up to max_return keys and values beginning after start_after
      *
      * @param start_after [in] list no keys smaller than start_after
-     * @parem max_return [in] list no more than max_return key/value pairs
+     * @param max_return [in] list no more than max_return key/value pairs
      * @param out_vals [out] place returned values in out_vals on completion
      * @param prval [out] place error code in prval upon completion
      */
@@ -477,7 +477,7 @@ namespace librados
      *
      * @param start_after [in] list keys starting after start_after
      * @param filter_prefix [in] list only keys beginning with filter_prefix
-     * @parem max_return [in] list no more than max_return key/value pairs
+     * @param max_return [in] list no more than max_return key/value pairs
      * @param out_vals [out] place returned values in out_vals on completion
      * @param prval [out] place error code in prval upon completion
      */
@@ -495,7 +495,7 @@ namespace librados
      * Get up to max_return keys beginning after start_after
      *
      * @param start_after [in] list keys starting after start_after
-     * @parem max_return [in] list no more than max_return keys
+     * @param max_return [in] list no more than max_return keys
      * @param out_keys [out] place returned values in out_keys on completion
      * @param prval [out] place error code in prval upon completion
      */
@@ -515,8 +515,8 @@ namespace librados
     /**
      * get key/value pairs for specified keys
      *
-     * @param to_get [in] keys to get
-     * @param out_vals [out] place key/value pairs found here on completion
+     * @param keys [in] keys to get
+     * @param map [out] place key/value pairs found here on completion
      * @param prval [out] place error code in prval upon completion
      */
     void omap_get_vals_by_keys(const std::set<std::string> &keys,
@@ -550,7 +550,7 @@ namespace librados
     /**
      * query dirty state of an object
      *
-     * @param out_dirty [out] pointer to resulting bool
+     * @param isdirty [out] pointer to resulting bool
      * @param prval [out] place error code in prval upon completion
      */
     void is_dirty(bool *isdirty, int *prval);
@@ -790,7 +790,7 @@ namespace librados
     /**
      * Retrieve hit set for a given hash, and time
      *
-     * @param uint32_t [in] hash position
+     * @param hash [in] hash position
      * @param c [in] completion
      * @param stamp [in] time interval that falls within the hit set's interval
      * @param pbl [out] buffer to store the result in
@@ -864,9 +864,8 @@ namespace librados
      * The return value of the completion will be 0 on success, negative
      * error code on failure.
      *
-     * @param io the context to operate in
      * @param oid the name of the object
-     * @param completion what to do when the remove is safe and complete
+     * @param c what to do when the remove is safe and complete
      * @returns 0 on success, -EROFS if the io context specifies a snap_seq
      * other than SNAP_HEAD
      */

@@ -188,7 +188,7 @@ public:
   /**
    * @param mn A Monitor instance
    * @param p A Paxos instance
-   * @parem name Our service's name.
+   * @param name Our service's name.
    */
   PaxosService(Monitor *mn, Paxos *p, string name) 
     : mon(mn), paxos(p), service_name(name),
@@ -661,7 +661,7 @@ public:
   }
 
   /**
-   * @defgroup PaxosService_h_Trim
+   * @defgroup PaxosService_h_Trim Functions for trimming states
    * @{
    */
   /**
@@ -672,8 +672,8 @@ public:
   void maybe_trim();
 
   /**
-   * Auxiliary function to trim our state from version @from to version @to,
-   * not including; i.e., the interval [from, to[
+   * Auxiliary function to trim our state from version @p from to version
+   * @p to, not including; i.e., the interval [from, to[
    *
    * @param t The transaction to which we will add the trim operations.
    * @param from the lower limit of the interval to be trimmed

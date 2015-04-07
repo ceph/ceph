@@ -43,7 +43,7 @@ In the ceph source directory, checkout next branch (for point releases use the {
 
 Checkout the submodules::
 
-    git submodule update --init
+    git submodule update --force --init --recursive
 
 4.  Update Build version numbers
 ================================

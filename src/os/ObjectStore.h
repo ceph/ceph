@@ -108,7 +108,7 @@ public:
 			     const string& type,
 			     const string& data,
 			     const string& journal,
-			     osflagbits_t flag = 0);
+			     osflagbits_t flags = 0);
 
   Logger *logger;
 
@@ -1761,20 +1761,15 @@ public:
   virtual unsigned get_max_attr_name_length() = 0;
   virtual int mkfs() = 0;  // wipe
   virtual int mkjournal() = 0; // journal only
+  virtual bool needs_journal() = 0;  //< requires a journal
+  virtual bool wants_journal() = 0;  //< prefers a journal
+  virtual bool allows_journal() = 0; //< allows a journal
   virtual void set_allow_sharded_objects() = 0;
   virtual bool get_allow_sharded_objects() = 0;
 
   virtual int statfs(struct statfs *buf) = 0;
 
   virtual void collect_metadata(map<string,string> *pm) { }
-
-  /**
-   * check whether need journal device
-   *
-   * It's not constant for backend store. FileStore could have journaless mode
-   * and KeyValueStore could have journal device for special backend.
-   */
-  virtual bool need_journal() = 0;
 
   /**
    * check the journal uuid/fsid, without opening
@@ -2016,7 +2011,7 @@ public:
    * collection_getattrs - get all xattrs of a collection
    *
    * @param cid collection name
-   * @param asert map of keys and buffers that contain the values
+   * @param aset map of keys and buffers that contain the values
    * @returns 0 on success, negative error code on failure
    */
   virtual int collection_getattrs(coll_t cid, map<string,bufferptr> &aset)
@@ -2048,7 +2043,7 @@ public:
    * @param start list objects that sort >= this value
    * @param min return at least this many results, unless we reach the end
    * @param max return no more than this many results
-   * @param snapid return no objects with snap < snapid
+   * @param snap return no objects with snap < snapid
    * @param ls [out] result
    * @param next [out] next item sorts >= this value
    * @return zero on success, or negative error
@@ -2063,7 +2058,7 @@ public:
    * @param c collection
    * @param start list object that sort >= this value
    * @param end list objects that sort < this value
-   * @param snapid return no objects with snap < snapid
+   * @param seq return no objects with snap < seq
    * @param ls [out] result
    * @return zero on success, or negative error
    */

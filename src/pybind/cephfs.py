@@ -6,32 +6,42 @@ from ctypes import CDLL, c_char_p, c_size_t, c_void_p, c_int, c_long, c_uint, c_
 from ctypes.util import find_library
 import errno
 
+
 class Error(Exception):
     pass
+
 
 class PermissionError(Error):
     pass
 
+
 class ObjectNotFound(Error):
     pass
+
 
 class NoData(Error):
     pass
 
+
 class ObjectExists(Error):
     pass
+
 
 class IOError(Error):
     pass
 
+
 class NoSpace(Error):
     pass
+
 
 class IncompleteWriteError(Error):
     pass
 
+
 class LibCephFSStateError(Error):
     pass
+
 
 def make_ex(ret, msg):
     """
@@ -58,6 +68,7 @@ def make_ex(ret, msg):
     else:
         return Error(msg + (": error code %d" % ret))
 
+
 class cephfs_statvfs(Structure):
     _fields_ = [("f_bsize", c_uint),
                 ("f_frsize", c_uint),
@@ -71,6 +82,7 @@ class cephfs_statvfs(Structure):
                 ("f_flag", c_uint),
                 ("f_namemax", c_uint)]
 
+
 # struct timespec {
 #   long int tv_sec;
 #   long int tv_nsec;
@@ -78,6 +90,7 @@ class cephfs_statvfs(Structure):
 class cephfs_timespec(Structure):
     _fields_ = [('tv_sec', c_long),
                 ('tv_nsec', c_long)]
+
 
 # struct stat {
 #   unsigned long st_dev;
@@ -97,23 +110,24 @@ class cephfs_timespec(Structure):
 #   long int __unused[3];
 # };
 class cephfs_stat(Structure):
-    _fields_ = [('st_dev', c_ulong), # ID of device containing file
-                ('st_ino', c_ulong), # inode number
-                ('st_nlink', c_ulong), # number of hard links
-                ('st_mode', c_uint), # protection
-                ('st_uid', c_uint), # user ID of owner
-                ('st_gid', c_uint), # group ID of owner
+    _fields_ = [('st_dev', c_ulong),            # ID of device containing file
+                ('st_ino', c_ulong),            # inode number
+                ('st_nlink', c_ulong),          # number of hard links
+                ('st_mode', c_uint),            # protection
+                ('st_uid', c_uint),             # user ID of owner
+                ('st_gid', c_uint),             # group ID of owner
                 ('__pad0', c_int),
-                ('st_rdev', c_ulong), # device ID (if special file)
-                ('st_size', c_long), # total size, in bytes
-                ('st_blksize', c_long), # blocksize for file system I/O
-                ('st_blocks', c_long), # number of 512B blocks allocated
-                ('st_atime', cephfs_timespec), # time of last access
-                ('st_mtime', cephfs_timespec), # time of last modification
-                ('st_ctime', cephfs_timespec), # time of last status change
+                ('st_rdev', c_ulong),           # device ID (if special file)
+                ('st_size', c_long),            # total size, in bytes
+                ('st_blksize', c_long),         # blocksize for file system I/O
+                ('st_blocks', c_long),          # num of 512B blocks allocated
+                ('st_atime', cephfs_timespec),  # time of last access
+                ('st_mtime', cephfs_timespec),  # time of last modification
+                ('st_ctime', cephfs_timespec),  # time of last status change
                 ('__unused1', c_long),
                 ('__unused2', c_long),
-                ('__unused3', c_long) ]
+                ('__unused3', c_long)]
+
 
 def load_libcephfs():
     """
@@ -129,6 +143,7 @@ def load_libcephfs():
         return CDLL('libcephfs.so.1')
     except OSError as e:
         raise EnvironmentError("Unable to load libcephfs: %s" % e)
+
 
 class LibCephFS(object):
     """libcephfs python wrapper"""
@@ -147,7 +162,7 @@ class LibCephFS(object):
             raise TypeError('conffile must be a string or None')
         ret = self.libcephfs.ceph_create(byref(self.cluster), c_char_p(0))
         if ret != 0:
-            raise Error("libcephfs_initialize failed with error code: %d" %ret)
+            raise Error("libcephfs_initialize failed with error code: %d" % ret)
         self.state = "configuring"
         if conffile is not None:
             # read the default conf file when '' is given
@@ -168,8 +183,8 @@ class LibCephFS(object):
     def conf_parse_argv(self, argv):
         self.require_state("configuring")
         c_argv = (c_char_p * len(argv))(*argv)
-        ret = self.libcephfs.ceph_conf_parse_argv(
-                self.cluster, len(argv), c_argv)
+        ret = self.libcephfs.ceph_conf_parse_argv(self.cluster, len(argv),
+                                                  c_argv)
         if ret != 0:
             raise make_ex(ret, "error calling conf_parse_argv")
 
@@ -213,7 +228,7 @@ class LibCephFS(object):
         while True:
             ret_buf = create_string_buffer(length)
             ret = self.libcephfs.ceph_conf_get(self.cluster, option,
-                                                ret_buf, c_size_t(length))
+                                               ret_buf, c_size_t(length))
             if ret == 0:
                 return ret_buf.value
             elif ret == -errno.ENAMETOOLONG:
@@ -230,7 +245,7 @@ class LibCephFS(object):
         if not isinstance(val, str):
             raise TypeError('val must be a string')
         ret = self.libcephfs.ceph_conf_set(self.cluster, c_char_p(option),
-                                            c_char_p(val))
+                                           c_char_p(val))
         if ret != 0:
             raise make_ex(ret, "error calling conf_set")
 
@@ -266,7 +281,7 @@ class LibCephFS(object):
                 'f_favail': statbuf.f_favail,
                 'f_fsid': statbuf.f_fsid,
                 'f_flag': statbuf.f_flag,
-                'f_namemax': statbuf.f_namemax }
+                'f_namemax': statbuf.f_namemax}
 
     def sync_fs(self):
         self.require_state("mounted")
@@ -329,13 +344,9 @@ class LibCephFS(object):
         if not isinstance(value, str):
             raise TypeError('value must be a string')
         self.require_state("mounted")
-        ret = self.libcephfs.ceph_setxattr(
-                    self.cluster,
-                    c_char_p(path),
-                    c_char_p(name),
-                    c_char_p(value),
-                    c_size_t(len(value)),
-                    c_int(flags))
+        ret = self.libcephfs.ceph_setxattr(self.cluster, c_char_p(path),
+                                           c_char_p(name), c_char_p(value),
+                                           c_size_t(len(value)), c_int(flags))
         if ret < 0:
             raise make_ex(ret, "error in setxattr")
 
@@ -344,10 +355,8 @@ class LibCephFS(object):
         if not isinstance(path, str):
             raise TypeError('path must be a string')
         statbuf = cephfs_stat()
-        ret = self.libcephfs.ceph_stat(
-                self.cluster,
-                c_char_p(path),
-                byref(statbuf))
+        ret = self.libcephfs.ceph_stat(self.cluster, c_char_p(path),
+                                       byref(statbuf))
         if ret < 0:
             raise make_ex(ret, "error in stat: %s" % path)
         return {'st_dev': statbuf.st_dev,
@@ -362,7 +371,7 @@ class LibCephFS(object):
                 'st_blocks': statbuf.st_blocks,
                 'st_atime': statbuf.st_atime,
                 'st_mtime': statbuf.st_mtime,
-                'st_ctime': statbuf.st_ctime }
+                'st_ctime': statbuf.st_ctime}
 
     def unlink(self, path):
         self.require_state("mounted")
@@ -384,15 +393,12 @@ class LibCephFS(object):
         outsp = pointer(pointer(c_char()))
         outslen = c_long()
 
-        ret = self.libcephfs.ceph_mds_command(
-                self.cluster,
-                c_char_p(mds_spec),
-                cmdarr,
-                len(args),
-                c_char_p(input_data), len(input_data),
-                outbufp, byref(outbuflen),
-                outsp, byref(outslen)
-        )
+        ret = self.libcephfs.ceph_mds_command(self.cluster, c_char_p(mds_spec),
+                                              cmdarr, len(args),
+                                              c_char_p(input_data),
+                                              len(input_data), outbufp,
+                                              byref(outbuflen), outsp,
+                                              byref(outslen))
 
         my_outbuf = outbufp.contents[:(outbuflen.value)]
         my_outs = outsp.contents[:(outslen.value)]

@@ -100,6 +100,7 @@ namespace librbd {
   int get_old_format(ImageCtx *ictx, uint8_t *old);
   int get_size(ImageCtx *ictx, uint64_t *size);
   int get_features(ImageCtx *ictx, uint64_t *features);
+  int update_features(ImageCtx *ictx, uint64_t features, bool enabled);
   int get_overlap(ImageCtx *ictx, uint64_t *overlap);
   int get_parent_info(ImageCtx *ictx, std::string *parent_pool_name,
 		      std::string *parent_name, std::string *parent_snap_name);
@@ -207,6 +208,10 @@ namespace librbd {
   int flush(ImageCtx *ictx);
   int _flush(ImageCtx *ictx);
   int invalidate_cache(ImageCtx *ictx);
+  int metadata_list(ImageCtx *ictx, const string &last, uint64_t max, map<string, bufferlist> *pairs);
+  int metadata_get(ImageCtx *ictx, const std::string &key, std::string *value);
+  int metadata_set(ImageCtx *ictx, const std::string &key, const std::string &value);
+  int metadata_remove(ImageCtx *ictx, const std::string &key);
 
   ssize_t handle_sparse_read(CephContext *cct,
 			     ceph::bufferlist data_bl,

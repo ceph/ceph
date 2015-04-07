@@ -73,7 +73,7 @@ exactly the same in your tree and the submitters'. If you stick strictly to
 rule (c), you should ask the submitter to rediff, but this is a totally
 counter-productive waste of time and energy. Rule (b) allows you to adjust
 the code, but then it is very impolite to change one submitter's code and
-make him endorse your bugs. To solve this problem, it is recommended that
+make them endorse your bugs. To solve this problem, it is recommended that
 you add a line between the last Signed-off-by header and yours, indicating
 the nature of your changes. While there is nothing mandatory about this, it
 seems like prepending the description with your mail and/or name, all

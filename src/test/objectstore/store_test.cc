@@ -700,14 +700,13 @@ public:
 
   void getattrs() {
     ghobject_t obj;
-    int retry;
     {
       Mutex::Locker locker(lock);
       if (!can_unlink())
         return ;
       wait_for_ready();
 
-      retry = 10;
+      int retry = 10;
       do {
         obj = get_uniform_random_object();
         if (!--retry)

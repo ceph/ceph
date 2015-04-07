@@ -45,6 +45,24 @@ int RGWListBuckets_ObjStore_SWIFT::get_params()
   return 0;
 }
 
+static void dump_account_metadata(struct req_state *s, uint32_t buckets_count,
+                                  uint64_t buckets_object_count, uint64_t buckets_size, uint64_t buckets_size_rounded)
+{
+  char buf[32];
+  utime_t now = ceph_clock_now(g_ceph_context);
+  snprintf(buf, sizeof(buf), "%0.5f", (double)now);
+  /* Adding X-Timestamp to keep align with Swift API */
+  s->cio->print("X-Timestamp: %s\r\n", buf);
+  snprintf(buf, sizeof(buf), "%lld", (long long)buckets_count);
+  s->cio->print("X-Account-Container-Count: %s\r\n", buf);
+  snprintf(buf, sizeof(buf), "%lld", (long long)buckets_object_count);
+  s->cio->print("X-Account-Object-Count: %s\r\n", buf);
+  snprintf(buf, sizeof(buf), "%lld", (long long)buckets_size);
+  s->cio->print("X-Account-Bytes-Used: %s\r\n", buf);
+  snprintf(buf, sizeof(buf), "%lld", (long long)buckets_size_rounded);
+  s->cio->print("X-Account-Bytes-Used-Actual: %s\r\n", buf);
+}
+
 void RGWListBuckets_ObjStore_SWIFT::send_response_begin(bool has_buckets)
 {
   if (ret) {
@@ -53,6 +71,8 @@ void RGWListBuckets_ObjStore_SWIFT::send_response_begin(bool has_buckets)
     ret = STATUS_NO_CONTENT;
     set_req_state_err(s, ret);
   }
+  /* Adding account stats in the header to keep align with Swift API */
+  dump_account_metadata(s, buckets_count, buckets_objcount, buckets_size, buckets_size_rounded);
   dump_errno(s);
   end_header(s, NULL);
 
@@ -131,12 +151,15 @@ int RGWListBucket_ObjStore_SWIFT::get_params()
   return 0;
 }
 
+static void dump_container_metadata(struct req_state *, RGWBucketEnt&);
+
 void RGWListBucket_ObjStore_SWIFT::send_response()
 {
   vector<RGWObjEnt>::iterator iter = objs.begin();
   map<string, bool>::iterator pref_iter = common_prefixes.begin();
 
   dump_start(s);
+  dump_container_metadata(s, bucket);
 
   s->formatter->open_array_section_with_attrs("container", FormatterAttrs("name", s->bucket.name.c_str(), NULL));
 
@@ -225,6 +248,9 @@ next:
 static void dump_container_metadata(struct req_state *s, RGWBucketEnt& bucket)
 {
   char buf[32];
+  /* Adding X-Timestamp to keep align with Swift API */
+  snprintf(buf, sizeof(buf), "%lld.00000", (long long)s->bucket_info.creation_time);
+  s->cio->print("X-Timestamp: %s\r\n", buf);
   snprintf(buf, sizeof(buf), "%lld", (long long)bucket.count);
   s->cio->print("X-Container-Object-Count: %s\r\n", buf);
   snprintf(buf, sizeof(buf), "%lld", (long long)bucket.size);
@@ -257,20 +283,6 @@ static void dump_container_metadata(struct req_state *s, RGWBucketEnt& bucket)
       }
     }
   }
-}
-
-static void dump_account_metadata(struct req_state *s, uint32_t buckets_count,
-                                  uint64_t buckets_object_count, uint64_t buckets_size, uint64_t buckets_size_rounded)
-{
-  char buf[32];
-  snprintf(buf, sizeof(buf), "%lld", (long long)buckets_count);
-  s->cio->print("X-Account-Container-Count: %s\r\n", buf);
-  snprintf(buf, sizeof(buf), "%lld", (long long)buckets_object_count);
-  s->cio->print("X-Account-Object-Count: %s\r\n", buf);
-  snprintf(buf, sizeof(buf), "%lld", (long long)buckets_size);
-  s->cio->print("X-Account-Bytes-Used: %s\r\n", buf);
-  snprintf(buf, sizeof(buf), "%lld", (long long)buckets_size_rounded);
-  s->cio->print("X-Account-Bytes-Used-Actual: %s\r\n", buf);
 }
 
 void RGWStatAccount_ObjStore_SWIFT::send_response()
@@ -436,6 +448,7 @@ void RGWPutObj_ObjStore_SWIFT::send_response()
   if (!ret)
     ret = STATUS_CREATED;
   dump_etag(s, etag.c_str());
+  dump_last_modified(s, mtime);
   set_req_state_err(s, ret);
   dump_errno(s);
   end_header(s, this);
@@ -491,6 +504,8 @@ void RGWPutMetadata_ObjStore_SWIFT::send_response()
       ret = STATUS_ACCEPTED;
   }
   set_req_state_err(s, ret);
+  if (!s->err.is_err())
+    dump_content_length(s, 0);
   dump_errno(s);
   end_header(s, this);
   rgw_flush_formatter_and_reset(s, s->formatter);
@@ -557,6 +572,13 @@ int RGWCopyObj_ObjStore_SWIFT::get_params()
   dest_bucket_name = s->bucket_name_str;
   dest_object = s->object.name;
 
+  const char * const fresh_meta = s->info.env->get("HTTP_X_FRESH_METADATA");
+  if (fresh_meta && strcasecmp(fresh_meta, "TRUE") == 0) {
+    attrs_mod = RGWRados::ATTRSMOD_REPLACE;
+  } else {
+    attrs_mod = RGWRados::ATTRSMOD_MERGE;
+  }
+
   return 0;
 }
 
@@ -610,7 +632,7 @@ int RGWGetObj_ObjStore_SWIFT::send_response_data(bufferlist& bl, off_t bl_ofs, o
 
   dump_content_length(s, total_len);
   dump_last_modified(s, lastmod);
-  s->cio->print("X-Timestamp: %lld\r\n", (long long)lastmod);
+  s->cio->print("X-Timestamp: %lld.00000\r\n", (long long)lastmod);
 
   if (!ret) {
     map<string, bufferlist>::iterator iter = attrs.find(RGW_ATTR_ETAG);

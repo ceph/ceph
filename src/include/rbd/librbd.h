@@ -31,7 +31,7 @@ extern "C" {
 
 #define LIBRBD_VER_MAJOR 0
 #define LIBRBD_VER_MINOR 1
-#define LIBRBD_VER_EXTRA 9
+#define LIBRBD_VER_EXTRA 10
 
 #define LIBRBD_VERSION(maj, min, extra) ((maj << 16) + (min << 8) + extra)
 
@@ -148,6 +148,8 @@ CEPH_RBD_API int rbd_stat(rbd_image_t image, rbd_image_info_t *info,
 CEPH_RBD_API int rbd_get_old_format(rbd_image_t image, uint8_t *old);
 CEPH_RBD_API int rbd_get_size(rbd_image_t image, uint64_t *size);
 CEPH_RBD_API int rbd_get_features(rbd_image_t image, uint64_t *features);
+CEPH_RBD_API int rbd_update_features(rbd_image_t image, uint64_t features,
+                                     uint8_t enabled);
 CEPH_RBD_API int rbd_get_stripe_unit(rbd_image_t image, uint64_t *stripe_unit);
 CEPH_RBD_API int rbd_get_stripe_count(rbd_image_t image,
                                       uint64_t *stripe_count);
@@ -442,6 +444,35 @@ CEPH_RBD_API int rbd_aio_flush(rbd_image_t image, rbd_completion_t c);
  * @returns 0 on success, negative error code on failure
  */
 CEPH_RBD_API int rbd_invalidate_cache(rbd_image_t image);
+
+CEPH_RBD_API int rbd_metadata_get(rbd_image_t image, const char *key, char *value, size_t *val_len);
+CEPH_RBD_API int rbd_metadata_set(rbd_image_t image, const char *key, const char *value);
+CEPH_RBD_API int rbd_metadata_remove(rbd_image_t image, const char *key);
+/**
+ * List all metadatas associated with this image.
+ *
+ * This iterates over all metadatas, key_len and val_len are filled in
+ * with the number of bytes put into the keys and values buffers.
+ *
+ * If the provided buffers are too short, the required lengths are
+ * still filled in, but the data is not and -ERANGE is returned.
+ * Otherwise, the buffers are filled with the keys and values
+ * of the image, with a '\0' after each.
+ *
+ * @param image which image (and implicitly snapshot) to list clones of
+ * @param start_after which name to begin listing after
+ *        (use the empty string to start at the beginning)
+ * @param max the maximum number of names to lis(if 0 means no limit)
+ * @param keys buffer in which to store pool names
+ * @param keys_len number of bytes in pools buffer
+ * @param values buffer in which to store image names
+ * @param vals_len number of bytes in images buffer
+ * @returns number of children on success, negative error code on failure
+ * @returns -ERANGE if either buffer is too short
+ */
+CEPH_RBD_API int rbd_metadata_list(rbd_image_t image, const char *start, uint64_t max,
+    char *keys, size_t *key_len, char *values, size_t *vals_len);
+
 
 #ifdef __cplusplus
 }

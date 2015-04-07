@@ -32,7 +32,6 @@ import tempfile
 import uuid
 import time
 import shlex
-import stat
 
 """
 Prepare:
@@ -964,6 +963,9 @@ def unmount(
 
 ###########################################
 
+def extract_parted_partition_numbers(partitions):
+    numbers_as_strings = re.findall('^\d+', partitions, re.MULTILINE)
+    return map(int, numbers_as_strings)
 
 def get_free_partition_index(dev):
     """
@@ -988,31 +990,19 @@ def get_free_partition_index(dev):
 
     if not lines:
         raise Error('parted failed to output anything')
-    lines = str(lines).splitlines(True)
-
-    # work around buggy libreadline(?) library in rhel/centos.
-    idiot_prefix = '\x1b\x5b\x3f\x31\x30\x33\x34\x68'
-    if lines[0].startswith(idiot_prefix):
-        lines[0] = lines[0][8:]
-
-    if lines[0] not in ['CHS;\n', 'CYL;\n', 'BYT;\n']:
-        raise Error('weird parted units', lines[0])
-    del lines[0]
-
-    if not lines[0].startswith('/dev/'):
-        raise Error('weird parted disk entry', lines[0])
-    del lines[0]
-
-    seen = set()
-    for line in lines:
-        idx, _ = line.split(':', 1)
-        idx = int(idx)
-        seen.add(idx)
-
-    num = 1
-    while num in seen:
-        num += 1
-    return num
+    if ('CHS;' not in lines and
+        'CYL;' not in lines and
+        'BYT;' not in lines):
+        raise Error('parted output expected to contain one of ' +
+                    'CHH; CYL; or BYT; : ' + lines)
+    if dev not in lines:
+        raise Error('parted output expected to contain ' + dev + ': ' + lines)
+    _, partitions = lines.split(dev)
+    partition_numbers = extract_parted_partition_numbers(partitions)
+    if partition_numbers:
+        return max(partition_numbers) + 1
+    else:
+        return 1
 
 
 def update_partition(action, dev, description):
@@ -1478,12 +1468,32 @@ def prepare_dev(
         except subprocess.CalledProcessError as e:
             raise Error(e)
 
+def check_journal_reqs(args):
+    _, allows_journal = command([
+        'ceph-osd', '--check-allows-journal',
+        '-i', '0',
+        '--cluster', args.cluster,
+    ])
+    _, wants_journal = command([
+        'ceph-osd', '--check-wants-journal',
+        '-i', '0',
+        '--cluster', args.cluster,
+    ])
+    _, needs_journal = command([
+        'ceph-osd', '--check-needs-journal',
+        '-i', '0',
+        '--cluster', args.cluster,
+    ])
+    return (not allows_journal, not wants_journal, not needs_journal)
 
 def main_prepare(args):
     journal_dm_keypath = None
     osd_dm_keypath = None
 
     try:
+        # first learn what the osd allows/wants/needs
+        (allows_journal, wants_journal, needs_journal) = check_journal_reqs(args)
+
         prepare_lock.acquire()  # noqa
         if not os.path.exists(args.data):
             if args.data_dev:
@@ -1496,6 +1506,9 @@ def main_prepare(args):
         dmode = os.stat(args.data).st_mode
         if stat.S_ISBLK(dmode):
             verify_not_in_use(args.data, True)
+
+        if args.journal and not allows_journal:
+            raise Error('journal specified but not allowed by osd backend')
 
         if args.journal and os.path.exists(args.journal):
             jmode = os.stat(args.journal).st_mode
@@ -1619,31 +1632,36 @@ def main_prepare(args):
             raise Error('invalid osd_dmcrypt_type parameter (must be luks or plain): ', dmcrypt_type)
 
         # colocate journal with data?
-        if stat.S_ISBLK(dmode) and not is_partition(args.data) and args.journal is None and args.journal_file is None:
+        if wants_journal and stat.S_ISBLK(dmode) and not is_partition(args.data) and args.journal is None and args.journal_file is None:
             LOG.info('Will colocate journal with data on %s', args.data)
             args.journal = args.data
 
-        if args.journal_uuid is None:
+        if args.journal and args.journal_uuid is None:
             args.journal_uuid = str(uuid.uuid4())
         if args.osd_uuid is None:
             args.osd_uuid = str(uuid.uuid4())
 
         # dm-crypt keys?
         if args.dmcrypt:
-            journal_dm_keypath = get_or_create_dmcrypt_key(args.journal_uuid, args.dmcrypt_key_dir, dmcrypt_keysize, luks)
+            if args.journal:
+                journal_dm_keypath = get_or_create_dmcrypt_key(args.journal_uuid, args.dmcrypt_key_dir, dmcrypt_keysize, luks)
             osd_dm_keypath = get_or_create_dmcrypt_key(args.osd_uuid, args.dmcrypt_key_dir, dmcrypt_keysize, luks)
 
         # prepare journal
-        (journal_symlink, journal_dmcrypt, journal_uuid) = prepare_journal(
-            data=args.data,
-            journal=args.journal,
-            journal_size=journal_size,
-            journal_uuid=args.journal_uuid,
-            force_file=args.journal_file,
-            force_dev=args.journal_dev,
-            journal_dm_keypath=journal_dm_keypath,
-            cryptsetup_parameters=cryptsetup_parameters,
-            luks=luks
+        journal_symlink = None
+        journal_dmcrypt = None
+        journal_uuid = None
+        if args.journal:
+            (journal_symlink, journal_dmcrypt, journal_uuid) = prepare_journal(
+                data=args.data,
+                journal=args.journal,
+                journal_size=journal_size,
+                journal_uuid=args.journal_uuid,
+                force_file=args.journal_file,
+                force_dev=args.journal_dev,
+                journal_dm_keypath=journal_dm_keypath,
+                cryptsetup_parameters=cryptsetup_parameters,
+                luks=luks
             )
 
         # prepare data
@@ -2257,6 +2275,10 @@ def main_activate_journal(args):
         osd_uuid = get_journal_osd_uuid(args.dev)
         path = os.path.join('/dev/disk/by-partuuid/', osd_uuid.lower())
 
+        if is_suppressed(path):
+            LOG.info('suppressed activate request on %s', path)
+            return
+
         (cluster, osd_id) = mount_activate(
             dev=path,
             activate_key_template=args.activate_key_template,
@@ -2292,6 +2314,10 @@ def main_activate_all(args):
                 path = os.path.join('/dev/mapper', uuid)
             else:
                 path = os.path.join(dir, name)
+
+            if is_suppressed(path):
+                LOG.info('suppressed activate request on %s', path)
+                continue
 
             LOG.info('Activating %s', path)
             activate_lock.acquire()  # noqa
@@ -2631,7 +2657,7 @@ def main_list(args):
 def is_suppressed(path):
     disk = os.path.realpath(path)
     try:
-        if not disk.startswith('/dev/') or not stat.S_ISBLK(os.lstat(path).st_mode):
+        if not disk.startswith('/dev/') or not stat.S_ISBLK(os.lstat(disk).st_mode):
             return False
         base = get_dev_name(disk)
         while len(base):

@@ -138,8 +138,8 @@ static int on_msg(struct xio_session *session,
 
   ldout(cct,25) << "on_msg session " << session << " xcon " << xcon << dendl;
 
-  static uint32_t nreqs;
   if (unlikely(XioPool::trace_mempool)) {
+    static uint32_t nreqs;
     if (unlikely((++nreqs % 65536) == 0)) {
       xp_stats.dump(__func__, nreqs);
     }
@@ -212,10 +212,12 @@ static int on_cancel_request(struct xio_session *session,
 }
 
 /* free functions */
-static string xio_uri_from_entity(const entity_addr_t& addr, bool want_port)
+static string xio_uri_from_entity(const string &type,
+				  const entity_addr_t& addr, bool want_port)
 {
   const char *host = NULL;
   char addr_buf[129];
+  string xio_uri;
 
   switch(addr.addr.ss_family) {
   case AF_INET:
@@ -231,8 +233,12 @@ static string xio_uri_from_entity(const entity_addr_t& addr, bool want_port)
     break;
   };
 
+  if (type == "rdma" || type == "tcp")
+      xio_uri = type + "://";
+  else
+      xio_uri = "rdma://";
+
   /* The following can only succeed if the host is rdma-capable */
-  string xio_uri = "rdma://";
   xio_uri += host;
   if (want_port) {
     xio_uri += ":";
@@ -525,7 +531,7 @@ xio_count_buffers(buffer::list& bl, int& req_size, int& msg_off, int& req_off)
 
   const std::list<buffer::ptr>& buffers = bl.buffers();
   list<bufferptr>::const_iterator pb;
-  size_t size, off, count;
+  size_t size, off;
   int result;
   int first = 1;
 
@@ -541,7 +547,7 @@ xio_count_buffers(buffer::list& bl, int& req_size, int& msg_off, int& req_off)
       size = pb->length();
       first = 0;
     }
-    count = size - off;
+    size_t count = size - off;
     if (!count) continue;
     if (req_size + count > MAX_XIO_BUF_SIZE) {
 	count = MAX_XIO_BUF_SIZE - req_size;
@@ -573,7 +579,7 @@ xio_place_buffers(buffer::list& bl, XioMsg *xmsg, struct xio_msg*& req,
   const std::list<buffer::ptr>& buffers = bl.buffers();
   list<bufferptr>::const_iterator pb;
   struct xio_iovec_ex* iov;
-  size_t size, off, count;
+  size_t size, off;
   const char *data = NULL;
   int first = 1;
 
@@ -589,7 +595,7 @@ xio_place_buffers(buffer::list& bl, XioMsg *xmsg, struct xio_msg*& req,
       data = pb->c_str();	 // is c_str() efficient?
       first = 0;
     }
-    count = size - off;
+    size_t count = size - off;
     if (!count) continue;
     if (req_size + count > MAX_XIO_BUF_SIZE) {
 	count = MAX_XIO_BUF_SIZE - req_size;
@@ -644,32 +650,33 @@ int XioMessenger::bind(const entity_addr_t& addr)
   if (a->is_blank_ip()) {
     a = &_addr;
     std::vector <std::string> my_sections;
-    g_conf->get_my_sections(my_sections);
+    cct->_conf->get_my_sections(my_sections);
     std::string rdma_local_str;
-    if (g_conf->get_val_from_conf_file(my_sections, "rdma local",
+    if (cct->_conf->get_val_from_conf_file(my_sections, "rdma local",
 				      rdma_local_str, true) == 0) {
       struct entity_addr_t local_rdma_addr;
       local_rdma_addr = *a;
       const char *ep;
       if (!local_rdma_addr.parse(rdma_local_str.c_str(), &ep)) {
-	derr << "ERROR:  Cannot parse rdma local: " << rdma_local_str << dendl;
+	ldout(cct,0) << "ERROR:  Cannot parse rdma local: " << rdma_local_str << dendl;
 	return -EINVAL;
       }
       if (*ep) {
-	derr << "WARNING: 'rdma local trailing garbage ignored: '" << ep << dendl;
+	ldout(cct,0) << "WARNING: 'rdma local trailing garbage ignored: '" << ep << dendl;
       }
       int p = _addr.get_port();
       _addr.set_sockaddr(reinterpret_cast<struct sockaddr *>(
 			  &local_rdma_addr.ss_addr()));
       _addr.set_port(p);
     } else {
-      derr << "WARNING: need 'rdma local' config for remote use!" <<dendl;
+      ldout(cct,0) << "WARNING: need 'rdma local' config for remote use!" <<dendl;
     }
   }
 
   entity_addr_t shift_addr = *a;
 
-  string base_uri = xio_uri_from_entity(shift_addr, false /* want_port */);
+  string base_uri = xio_uri_from_entity(cct->_conf->xio_transport_type,
+					shift_addr, false /* want_port */);
   ldout(cct,4) << "XioMessenger " << this << " bind: xio_uri "
     << base_uri << ':' << shift_addr.get_port() << dendl;
 
@@ -754,9 +761,9 @@ int XioMessenger::_send_message_impl(Message* m, XioConnection* xcon)
 {
   int code = 0;
 
-  static uint32_t nreqs;
   Mutex::Locker l(xcon->lock);
   if (unlikely(XioPool::trace_mempool)) {
+    static uint32_t nreqs;
     if (unlikely((++nreqs % 65536) == 0)) {
       xp_stats.dump(__func__, nreqs);
     }
@@ -915,7 +922,8 @@ ConnectionRef XioMessenger::get_connection(const entity_inst_t& dest)
   }
   else {
     conns_sp.unlock();
-    string xio_uri = xio_uri_from_entity(dest.addr, true /* want_port */);
+    string xio_uri = xio_uri_from_entity(cct->_conf->xio_transport_type,
+					 dest.addr, true /* want_port */);
 
     ldout(cct,4) << "XioMessenger " << this << " get_connection: xio_uri "
       << xio_uri << dendl;

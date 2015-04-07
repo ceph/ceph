@@ -602,14 +602,12 @@ class ObjectCacher {
    * the return value is total bytes read
    */
   int readx(OSDRead *rd, ObjectSet *oset, Context *onfinish);
-  int writex(OSDWrite *wr, ObjectSet *oset, Mutex& wait_on_lock,
-	     Context *onfreespace);
+  int writex(OSDWrite *wr, ObjectSet *oset, Context *onfreespace);
   bool is_cached(ObjectSet *oset, vector<ObjectExtent>& extents, snapid_t snapid);
 
 private:
   // write blocking
-  int _wait_for_write(OSDWrite *wr, uint64_t len, ObjectSet *oset, Mutex& lock,
-		      Context *onfreespace);
+  int _wait_for_write(OSDWrite *wr, uint64_t len, ObjectSet *oset, Context *onfreespace);
   void maybe_wait_for_writeback(uint64_t len);
   bool _flush_set_finish(C_GatherBuilder *gather, Context *onfinish);
 
@@ -678,11 +676,10 @@ public:
 
   int file_write(ObjectSet *oset, ceph_file_layout *layout, const SnapContext& snapc,
                  loff_t offset, uint64_t len, 
-                 bufferlist& bl, utime_t mtime, int flags,
-		 Mutex& wait_on_lock) {
+                 bufferlist& bl, utime_t mtime, int flags) {
     OSDWrite *wr = prepare_write(snapc, bl, mtime, flags);
     Striper::file_to_extents(cct, oset->ino, layout, offset, len, oset->truncate_size, wr->extents);
-    return writex(wr, oset, wait_on_lock, NULL);
+    return writex(wr, oset, NULL);
   }
 
   bool file_flush(ObjectSet *oset, ceph_file_layout *layout, const SnapContext& snapc,

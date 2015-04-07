@@ -116,6 +116,7 @@ public:
   int old_format(uint8_t *old);
   int size(uint64_t *size);
   int features(uint64_t *features);
+  int update_features(uint64_t features, bool enabled);
   int overlap(uint64_t *overlap);
   int get_flags(uint64_t *flags);
 
@@ -234,12 +235,19 @@ public:
   int aio_flush(RBD::AioCompletion *c);
 
   /**
-   * Drop any cached data for an image
+   * Drop any cached data for this image
    *
-   * @param image the image to invalidate cached data for
    * @returns 0 on success, negative error code on failure
    */
   int invalidate_cache();
+
+  int metadata_get(const std::string &key, std::string *value);
+  int metadata_set(const std::string &key, const std::string &value);
+  int metadata_remove(const std::string &key);
+  /**
+   * Returns a pair of key/value for this image
+   */
+  int metadata_list(const std::string &start, uint64_t max, std::map<std::string, ceph::bufferlist> *pairs);
 
 private:
   friend class RBD;

@@ -419,13 +419,12 @@ namespace librbd {
   }
 
   void ImageCtx::add_snap(string in_snap_name, snap_t id, uint64_t in_size,
-			  uint64_t features, parent_info parent,
-			  uint8_t protection_status, uint64_t flags)
+			  parent_info parent, uint8_t protection_status,
+                          uint64_t flags)
   {
     assert(snap_lock.is_wlocked());
     snaps.push_back(id);
-    SnapInfo info(in_snap_name, in_size, features, parent, protection_status,
-		  flags);
+    SnapInfo info(in_snap_name, in_size, parent, protection_status, flags);
     snap_info.insert(pair<snap_t, SnapInfo>(id, info));
     snap_ids.insert(pair<string, snap_t>(in_snap_name, id));
   }
@@ -448,27 +447,10 @@ namespace librbd {
     return 0;
   }
 
-  int ImageCtx::get_features(snap_t in_snap_id, uint64_t *out_features) const
-  {
-    assert(snap_lock.is_locked());
-    if (in_snap_id == CEPH_NOSNAP) {
-      *out_features = features;
-      return 0;
-    }
-    const SnapInfo *info = get_snap_info(in_snap_id);
-    if (info) {
-      *out_features = info->features;
-      return 0;
-    }
-    return -ENOENT;
-  }
-
   bool ImageCtx::test_features(uint64_t test_features) const
   {
     RWLock::RLocker l(snap_lock);
-    uint64_t snap_features = 0;
-    get_features(snap_id, &snap_features);
-    return ((snap_features & test_features) == test_features);
+    return ((features & test_features) == test_features);
   }
 
   int ImageCtx::get_flags(librados::snap_t _snap_id, uint64_t *_flags) const
@@ -602,23 +584,8 @@ namespace librbd {
     wr->extents.push_back(extent);
     {
       Mutex::Locker l(cache_lock);
-      object_cacher->writex(wr, object_set, cache_lock, onfinish);
+      object_cacher->writex(wr, object_set, onfinish);
     }
-  }
-
-  int ImageCtx::read_from_cache(object_t o, uint64_t object_no, bufferlist *bl,
-				size_t len, uint64_t off) {
-    int r;
-    Mutex mylock("librbd::ImageCtx::read_from_cache");
-    Cond cond;
-    bool done;
-    Context *onfinish = new C_SafeCond(&mylock, &cond, &done, &r);
-    aio_read_from_cache(o, object_no, bl, len, off, onfinish, 0);
-    mylock.Lock();
-    while (!done)
-      cond.Wait(mylock);
-    mylock.Unlock();
-    return r;
   }
 
   void ImageCtx::user_flushed() {
@@ -665,14 +632,26 @@ namespace librbd {
 
   void ImageCtx::shutdown_cache() {
     flush_async_operations();
-    invalidate_cache();
+    invalidate_cache(true);
     object_cacher->stop();
   }
 
-  int ImageCtx::invalidate_cache() {
+  int ImageCtx::invalidate_cache(bool purge_on_error) {
+    int result;
     C_SaferCond ctx;
     invalidate_cache(&ctx);
-    return ctx.wait();
+    result = ctx.wait();
+
+    if (result && purge_on_error) {
+      cache_lock.Lock();
+      if (object_cacher != NULL) {
+	lderr(cct) << "invalidate cache met error " << cpp_strerror(result) << " !Purging cache..." << dendl;
+	object_cacher->purge_set(object_set);
+      }
+      cache_lock.Unlock();
+    }
+
+    return result;
   }
 
   void ImageCtx::invalidate_cache(Context *on_finish) {
@@ -710,11 +689,10 @@ namespace librbd {
   }
 
   void ImageCtx::clear_nonexistence_cache() {
+    assert(cache_lock.is_locked());
     if (!object_cacher)
       return;
-    cache_lock.Lock();
     object_cacher->clear_nonexistence(object_set);
-    cache_lock.Unlock();
   }
 
   int ImageCtx::register_watch() {

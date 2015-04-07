@@ -21,6 +21,11 @@ if test -d ".git" ; then
 fi
 AC_MSG_NOTICE([RPM_RELEASE='$RPM_RELEASE'])
 
+AC_CHECK_PROGS(SPHINX_BUILD, sphinx-1.0-build sphinx-build, no)
+if test x"$SPHINX_BUILD" = x"no"; then
+  AC_MSG_ERROR([sphinx-build not found (python-sphinx)])
+fi
+
 AC_CONFIG_MACRO_DIR([m4])
 
 AC_CONFIG_SUBDIRS([src/gmock])
@@ -377,6 +382,12 @@ else
     AC_MSG_FAILURE([no suitable crypto library found])
 fi
 
+AC_ARG_ENABLE(gitversion,
+    [AC_HELP_STRING([--enable-gitversion], [build Ceph with git version string])],
+    [], [enable_gitversion=yes])
+
+AM_CONDITIONAL(NO_GIT_VERSION, [test "x$enable_gitversion" = "xno"])
+
 AC_ARG_ENABLE([root-make-check],
             [AS_HELP_STRING([--enable-root-make-check], [enable make check tests that require root privileges])],
             [],
@@ -702,6 +713,7 @@ fi
 # Find supported SIMD / NEON / SSE extensions supported by the compiler
 AX_ARM_FEATURES()
 AM_CONDITIONAL(HAVE_NEON, [ test "x$ax_cv_support_neon_ext" = "xyes"])
+AM_CONDITIONAL(HAVE_ARMV8_CRC, [ test "x$ax_cv_support_crc_ext" = "xyes"])
 AX_INTEL_FEATURES()
 AM_CONDITIONAL(HAVE_SSSE3, [ test "x$ax_cv_support_ssse3_ext" = "xyes"])
 AM_CONDITIONAL(HAVE_SSE4_PCLMUL, [ test "x$ax_cv_support_pclmuldq_ext" = "xyes"])

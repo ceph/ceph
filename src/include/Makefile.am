@@ -90,6 +90,8 @@ noinst_HEADERS += \
 	include/elist.h \
 	include/uuid.h \
 	include/xlist.h \
+	include/compact_map.h \
+	include/compact_set.h \
 	include/rados/librados.h \
 	include/rados/rados_types.h \
 	include/rados/rados_types.hpp \

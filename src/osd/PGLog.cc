@@ -722,7 +722,9 @@ void PGLog::check() {
 }
 
 void PGLog::write_log(
-  ObjectStore::Transaction& t, const coll_t& coll, const ghobject_t &log_oid)
+  ObjectStore::Transaction& t,
+  map<string,bufferlist> *km,
+  const coll_t& coll, const ghobject_t &log_oid)
 {
   if (is_dirty()) {
     dout(10) << "write_log with: "
@@ -733,7 +735,7 @@ void PGLog::write_log(
 	     << ", trimmed: " << trimmed
 	     << dendl;
     _write_log(
-      t, log, coll, log_oid, divergent_priors,
+      t, km, log, coll, log_oid, divergent_priors,
       dirty_to,
       dirty_from,
       writeout_from,
@@ -747,19 +749,24 @@ void PGLog::write_log(
   }
 }
 
-void PGLog::write_log(ObjectStore::Transaction& t, pg_log_t &log,
+void PGLog::write_log(
+    ObjectStore::Transaction& t,
+    map<string,bufferlist> *km,
+    pg_log_t &log,
     const coll_t& coll, const ghobject_t &log_oid,
     map<eversion_t, hobject_t> &divergent_priors)
 {
   _write_log(
-    t, log, coll, log_oid,
+    t, km, log, coll, log_oid,
     divergent_priors, eversion_t::max(), eversion_t(), eversion_t(),
     set<eversion_t>(),
     true, true, 0);
 }
 
 void PGLog::_write_log(
-  ObjectStore::Transaction& t, pg_log_t &log,
+  ObjectStore::Transaction& t,
+  map<string,bufferlist> *km,
+  pg_log_t &log,
   const coll_t& coll, const ghobject_t &log_oid,
   map<eversion_t, hobject_t> &divergent_priors,
   eversion_t dirty_to,
@@ -799,13 +806,12 @@ void PGLog::_write_log(
     clear_after(log_keys_debug, dirty_from.get_key_name());
   }
 
-  map<string,bufferlist> keys;
   for (list<pg_log_entry_t>::iterator p = log.log.begin();
        p != log.log.end() && p->version < dirty_to;
        ++p) {
     bufferlist bl(sizeof(*p) * 2);
     p->encode_with_checksum(bl);
-    keys[p->get_key_name()].claim(bl);
+    (*km)[p->get_key_name()].claim(bl);
   }
 
   for (list<pg_log_entry_t>::reverse_iterator p = log.log.rbegin();
@@ -815,13 +821,15 @@ void PGLog::_write_log(
        ++p) {
     bufferlist bl(sizeof(*p) * 2);
     p->encode_with_checksum(bl);
-    keys[p->get_key_name()].claim(bl);
+    (*km)[p->get_key_name()].claim(bl);
   }
 
   if (log_keys_debug) {
-    for (map<string, bufferlist>::iterator i = keys.begin();
-	 i != keys.end();
+    for (map<string, bufferlist>::iterator i = (*km).begin();
+	 i != (*km).end();
 	 ++i) {
+      if (i->first[0] == '_')
+	continue;
       assert(!log_keys_debug->count(i->first));
       log_keys_debug->insert(i->first);
     }
@@ -829,14 +837,13 @@ void PGLog::_write_log(
 
   if (dirty_divergent_priors) {
     //dout(10) << "write_log: writing divergent_priors" << dendl;
-    ::encode(divergent_priors, keys["divergent_priors"]);
+    ::encode(divergent_priors, (*km)["divergent_priors"]);
   }
-  ::encode(log.can_rollback_to, keys["can_rollback_to"]);
-  ::encode(log.rollback_info_trimmed_to, keys["rollback_info_trimmed_to"]);
+  ::encode(log.can_rollback_to, (*km)["can_rollback_to"]);
+  ::encode(log.rollback_info_trimmed_to, (*km)["rollback_info_trimmed_to"]);
 
   if (!to_remove.empty())
     t.omap_rmkeys(coll, log_oid, to_remove);
-  t.omap_setkeys(coll, log_oid, keys);
 }
 
 void PGLog::read_log(ObjectStore *store, coll_t pg_coll,

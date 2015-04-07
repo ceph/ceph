@@ -19,9 +19,6 @@
 #include <errno.h>
 #include <iostream>
 #include <fstream>
-#ifdef HAVE_SCHED
-#include <sched.h>
-#endif
 
 #include "AsyncMessenger.h"
 
@@ -51,18 +48,6 @@ static ostream& _prefix(std::ostream *_dout, Worker *w) {
 static ostream& _prefix(std::ostream *_dout, WorkerPool *p) {
   return *_dout << " WorkerPool -- ";
 }
-
-
-class C_conn_accept : public EventCallback {
-  AsyncConnectionRef conn;
-  int fd;
-
- public:
-  C_conn_accept(AsyncConnectionRef c, int s): conn(c), fd(s) {}
-  void do_request(int id) {
-    conn->accept(fd);
-  }
-};
 
 
 class C_processor_accept : public EventCallback {
@@ -302,27 +287,11 @@ void *Worker::entry()
 {
   ldout(cct, 10) << __func__ << " starting" << dendl;
   if (cct->_conf->ms_async_set_affinity) {
-#ifdef HAVE_SCHED
-    int cpuid;
-    cpu_set_t cpuset;
-    CPU_ZERO(&cpuset);
-
-    cpuid = pool->get_cpuid(id);
-    if (cpuid < 0) {
-      cpuid = sched_getcpu();
+    int cid = pool->get_cpuid(id);
+    if (cid >= 0 && set_affinity(cid)) {
+      ldout(cct, 0) << __func__ << " sched_setaffinity failed: "
+                    << cpp_strerror(errno) << dendl;
     }
-
-    if (cpuid < CPU_SETSIZE) {
-      CPU_SET(cpuid, &cpuset);
-
-      if (sched_setaffinity(0, sizeof(cpuset), &cpuset) < 0) {
-        ldout(cct, 0) << __func__ << " sched_setaffinity failed: "
-            << cpp_strerror(errno) << dendl;
-      }
-      /* guaranteed to take effect immediately */
-      sched_yield();
-    }
-#endif
   }
 
   center.set_owner(pthread_self());
@@ -546,7 +515,7 @@ AsyncConnectionRef AsyncMessenger::add_accept(int sd)
   lock.Lock();
   Worker *w = pool->get_worker();
   AsyncConnectionRef conn = new AsyncConnection(cct, this, &w->center);
-  w->center.dispatch_event_external(EventCallbackRef(new C_conn_accept(conn, sd)));
+  conn->accept(sd);
   accepting_conns.insert(conn);
   lock.Unlock();
   return conn;

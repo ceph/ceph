@@ -621,7 +621,6 @@ public:
    *
    * Will return the weight for the first instance it finds.
    *
-   * @param cct cct
    * @param id item id to check
    * @return weight of item
    */

@@ -9,3 +9,4 @@ src/erasure-code/jerasure/jerasure git://apt-mirror.front.sepia.ceph.com/jerasur
 src/erasure-code/jerasure/gf-complete git://apt-mirror.front.sepia.ceph.com/gf-complete.git
 src/rocksdb git://apt-mirror.front.sepia.ceph.com/rocksdb.git
 ceph-erasure-code-corpus git://apt-mirror.front.sepia.ceph.com/ceph-erasure-code-corpus.git
+src/gmock git://apt-mirror.front.sepia.ceph.com/gmock.git

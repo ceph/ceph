@@ -275,9 +275,9 @@ int main(int argc, char **argv)
   for (unsigned int k = 1; k <= 12; k++) {
     for (unsigned int m = 1; (m <= k) && (k + m <= 20); m++) {
       for (unsigned int c = 1; c <= m; c++) {
-	sprintf(param[i].sk, "%d", k);
-	sprintf(param[i].sm, "%d", m);
-	sprintf(param[i].sc, "%d", c);
+	sprintf(param[i].sk, "%u", k);
+	sprintf(param[i].sm, "%u", m);
+	sprintf(param[i].sc, "%u", c);
 
 	param[i].k = param[i].sk;
 	param[i].m = param[i].sm;
@@ -317,7 +317,7 @@ int main(int argc, char **argv)
   }
   std::cout << "cannot recovery patterns:" << std::endl;
   for (std::vector<Recover_d>::const_iterator i = cannot_recover.begin();
-       i != cannot_recover.end(); i++) {
+       i != cannot_recover.end(); ++i) {
     std::cout << "---" << std::endl;
     std::cout << "k = " << i->k << ", m = " << i->m << ", c = " << i->c
 	<< std::endl;

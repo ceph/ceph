@@ -39,7 +39,7 @@
 #include "Beacon.h"
 
 
-#define CEPH_MDS_PROTOCOL    24 /* cluster internal */
+#define CEPH_MDS_PROTOCOL    25 /* cluster internal */
 
 enum {
   l_mds_first = 2000,
@@ -443,6 +443,14 @@ private:
   void handle_mds_recovery(mds_rank_t who);
   void handle_mds_failure(mds_rank_t who);
 
+  /**
+   * Report state DAMAGED to the mon, and then pass on to respawn().  Call
+   * this when an unrecoverable error is encountered while attempting
+   * to load an MDS rank's data structures.  This is *not* for use with
+   * errors affecting normal dirfrag/inode objects -- they should be handled
+   * through cleaner scrub/repair mechanisms.
+   */
+  void damaged();
   void suicide();
   void respawn();
   void handle_write_error(int err);
@@ -454,7 +462,7 @@ private:
   void dec_dispatch_depth() { --dispatch_depth; }
 
   // messages
-  bool _dispatch(Message *m);
+  bool _dispatch(Message *m, bool new_msg);
 
   protected:
   bool is_stale_message(Message *m);
@@ -488,7 +496,7 @@ public:
   }
   virtual void finish(int r) {
     mds->inc_dispatch_depth();
-    mds->_dispatch(m);
+    mds->_dispatch(m, false);
     mds->dec_dispatch_depth();
   }
 };

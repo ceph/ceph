@@ -47,10 +47,6 @@ else
     fi
 fi
 
-if [ ! -e build-doc/doxygen/xml ]; then
-    doxygen
-fi
-
 cat src/osd/PG.h src/osd/PG.cc | doc/scripts/gen_state_diagram.py > doc/dev/peering_graph.generated.dot
 
 cd build-doc

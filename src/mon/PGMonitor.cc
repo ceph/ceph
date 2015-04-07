@@ -1193,7 +1193,7 @@ void PGMonitor::send_pg_creates(int osd, Connection *con)
     m->mkpg[*q] = pg_create_t(pg_map.pg_stat[*q].created,
 			      pg_map.pg_stat[*q].parent,
 			      pg_map.pg_stat[*q].parent_split_bits);
-    // Need the create time from the monitor using his clock to set last_scrub_stamp
+    // Need the create time from the monitor using its clock to set last_scrub_stamp
     // upon pg creation.
     m->ctimes[*q] = pg_map.pg_stat[*q].last_scrub_stamp;
   }

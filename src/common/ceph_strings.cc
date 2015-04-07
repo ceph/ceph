@@ -64,6 +64,7 @@ const char *ceph_mds_state_name(int s)
 		/* down and out */
 	case CEPH_MDS_STATE_DNE:        return "down:dne";
 	case CEPH_MDS_STATE_STOPPED:    return "down:stopped";
+	case CEPH_MDS_STATE_DAMAGED:   return "down:damaged";
 		/* up and out */
 	case CEPH_MDS_STATE_BOOT:       return "up:boot";
 	case CEPH_MDS_STATE_STANDBY:    return "up:standby";

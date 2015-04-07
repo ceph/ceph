@@ -233,7 +233,7 @@ protected:
    * put() should be called on destruction of some previously copied pointer.
    * put_unlock() when done with the current pointer (_most common_).
    */  
-  Mutex _lock;
+  mutable Mutex _lock;
   atomic_t ref;
 
 #ifdef PG_DEBUG_REFS
@@ -248,8 +248,8 @@ public:
 
 
   void lock_suspend_timeout(ThreadPool::TPHandle &handle);
-  void lock(bool no_lockdep = false);
-  void unlock() {
+  void lock(bool no_lockdep = false) const;
+  void unlock() const {
     //generic_dout(0) << this << " " << info.pgid << " unlock" << dendl;
     assert(!dirty_info);
     assert(!dirty_big_info);
@@ -2107,10 +2107,11 @@ public:
 		    spg_t pgid, const pg_pool_t *pool);
 
 private:
-  void write_info(ObjectStore::Transaction& t);
+  void prepare_write_info(map<string,bufferlist> *km);
 
 public:
-  static int _write_info(ObjectStore::Transaction& t, epoch_t epoch,
+  static int _prepare_write_info(map<string,bufferlist> *km,
+    epoch_t epoch,
     pg_info_t &info, coll_t coll,
     map<epoch_t,pg_interval_t> &past_intervals,
     ghobject_t &pgmeta_oid,
@@ -2125,7 +2126,7 @@ public:
     return at_version;
   }
 
-  void add_log_entry(const pg_log_entry_t& e, bufferlist& log_bl);
+  void add_log_entry(const pg_log_entry_t& e);
   void append_log(
     const vector<pg_log_entry_t>& logv,
     eversion_t trim_to,

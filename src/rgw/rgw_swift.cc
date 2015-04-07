@@ -523,6 +523,8 @@ int RGWSwift::validate_keystone_token(RGWRados *store, const string& token, stru
   if (ret < 0)
     return ret;
 
+  keystone_token_cache->add(token_id, t);
+
   ret = update_user_info(store, info, rgw_user);
   if (ret < 0)
     return ret;
@@ -550,7 +552,7 @@ int authenticate_temp_url(RGWRados *store, req_state *s)
   /* need to get user info of bucket owner */
   RGWBucketInfo bucket_info;
 
-  int ret = store->get_bucket_info(*(RGWObjectCtx *)s->obj_ctx, s->bucket_name_str, bucket_info, NULL);
+  int ret = store->get_bucket_info(*static_cast<RGWObjectCtx *>(s->obj_ctx), s->bucket_name_str, bucket_info, NULL);
   if (ret < 0)
     return -EPERM;
 

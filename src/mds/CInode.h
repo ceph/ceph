@@ -21,6 +21,7 @@
 #include "include/elist.h"
 #include "include/types.h"
 #include "include/lru.h"
+#include "include/compact_set.h"
 
 #include "mdstypes.h"
 #include "flock.h"
@@ -70,18 +71,16 @@ extern int num_cinode_locks;
  * handle CInodes from the backing store without hitting all
  * the business logic in CInode proper.
  */
-class InodeStore {
+class InodeStoreBase {
 public:
   inode_t                    inode;        // the inode itself
   std::string                symlink;      // symlink dest, if symlink
   std::map<std::string, bufferptr> xattrs;
   fragtree_t                 dirfragtree;  // dir frag tree, if any.  always consistent with our dirfrag map.
-  std::map<snapid_t, old_inode_t> old_inodes;   // key = last, value.first = first
-  bufferlist		     snap_blob;    // Encoded copy of SnapRealm, because we can't
-                                           // rehydrate it without full MDCache
+  compact_map<snapid_t, old_inode_t> old_inodes;   // key = last, value.first = first
   snapid_t                  oldest_snap;
 
-  InodeStore() : oldest_snap(CEPH_NOSNAP) { }
+  InodeStoreBase() : oldest_snap(CEPH_NOSNAP) { }
 
   /* Helpers */
   bool is_file() const    { return inode.is_file(); }
@@ -90,20 +89,39 @@ public:
   static object_t get_object_name(inodeno_t ino, frag_t fg, const char *suffix);
 
   /* Full serialization for use in ".inode" root inode objects */
-  void encode(bufferlist &bl) const;
-  void decode(bufferlist::iterator &bl);
+  void encode(bufferlist &bl, const bufferlist *snap_blob=NULL) const;
+  void decode(bufferlist::iterator &bl, bufferlist& snap_blob);
 
   /* Serialization without ENCODE_START/FINISH blocks for use embedded in dentry */
-  void encode_bare(bufferlist &bl) const;
-  void decode_bare(bufferlist::iterator &bl, __u8 struct_v=5);
+  void encode_bare(bufferlist &bl, const bufferlist *snap_blob=NULL) const;
+  void decode_bare(bufferlist::iterator &bl, bufferlist &snap_blob, __u8 struct_v=5);
 
-  /* For use in debug and ceph-dencoder */
+  /* For test/debug output */
   void dump(Formatter *f) const;
+};
+
+class InodeStore : public InodeStoreBase {
+public:
+  bufferlist snap_blob;  // Encoded copy of SnapRealm, because we can't
+			 // rehydrate it without full MDCache
+  void encode(bufferlist &bl) const {
+    InodeStoreBase::encode(bl, &snap_blob);
+  }
+  void decode(bufferlist::iterator &bl) {
+    InodeStoreBase::decode(bl, snap_blob);
+  }
+  void encode_bare(bufferlist &bl) const {
+    InodeStoreBase::encode_bare(bl, &snap_blob);
+  }
+  void decode_bare(bufferlist::iterator &bl) {
+    InodeStoreBase::decode_bare(bl, snap_blob);
+  }
+
   static void generate_test_instances(std::list<InodeStore*>& ls);
 };
 
 // cached inode wrapper
-class CInode : public MDSCacheObject, public InodeStore {
+class CInode : public MDSCacheObject, public InodeStoreBase {
   /*
    * This class uses a boost::pool to handle allocation. This is *not*
    * thread-safe, so don't do allocations from multiple threads!
@@ -218,7 +236,7 @@ public:
   SnapRealm        *snaprealm;
   SnapRealm        *containing_realm;
   snapid_t          first, last;
-  std::set<snapid_t> dirty_old_rstats;
+  compact_set<snapid_t> dirty_old_rstats;
 
   bool is_multiversion() const {
     return snaprealm ||  // other snaprealms will link to me
@@ -271,6 +289,8 @@ public:
       : inode(in), xattrs(xp), snapnode(sn) {}
   };
   std::list<projected_inode_t*> projected_nodes;   // projected values (only defined while dirty)
+  int num_projected_xattrs;
+  int num_projected_srnodes;
   
   inode_t *project_inode(std::map<std::string,bufferptr> *px=0);
   void pop_and_dirty_projected_inode(LogSegment *ls);
@@ -315,11 +335,13 @@ public:
   }
 
   std::map<std::string,bufferptr> *get_projected_xattrs() {
-    for (std::list<projected_inode_t*>::reverse_iterator p = projected_nodes.rbegin();
-	 p != projected_nodes.rend();
-	 ++p)
-      if ((*p)->xattrs)
-	return (*p)->xattrs;
+    if (num_projected_xattrs > 0) {
+      for (std::list<projected_inode_t*>::reverse_iterator p = projected_nodes.rbegin();
+	   p != projected_nodes.rend();
+	   ++p)
+	if ((*p)->xattrs)
+	  return (*p)->xattrs;
+    }
     return &xattrs;
   }
   std::map<std::string,bufferptr> *get_previous_projected_xattrs() {
@@ -334,34 +356,30 @@ public:
 
   sr_t *project_snaprealm(snapid_t snapid=0);
   const sr_t *get_projected_srnode() const {
-    if (projected_nodes.empty()) {
-      if (snaprealm)
-	return &snaprealm->srnode;
-      else
-	return NULL;
-    } else {
+    if (num_projected_srnodes > 0) {
       for (std::list<projected_inode_t*>::const_reverse_iterator p = projected_nodes.rbegin();
-          p != projected_nodes.rend();
-          ++p)
-        if ((*p)->snapnode)
-          return (*p)->snapnode;
+	  p != projected_nodes.rend();
+	  ++p)
+	if ((*p)->snapnode)
+	  return (*p)->snapnode;
     }
-    return &snaprealm->srnode;
+    if (snaprealm)
+      return &snaprealm->srnode;
+    else
+      return NULL;
   }
   sr_t *get_projected_srnode() {
-    if (projected_nodes.empty()) {
-      if (snaprealm)
-	return &snaprealm->srnode;
-      else
-	return NULL;
-    } else {
+    if (num_projected_srnodes > 0) {
       for (std::list<projected_inode_t*>::reverse_iterator p = projected_nodes.rbegin();
-          p != projected_nodes.rend();
-          ++p)
-        if ((*p)->snapnode)
-          return (*p)->snapnode;
+	   p != projected_nodes.rend();
+	   ++p)
+	if ((*p)->snapnode)
+	  return (*p)->snapnode;
     }
-    return &snaprealm->srnode;
+    if (snaprealm)
+      return &snaprealm->srnode;
+    else
+      return NULL;
   }
   void project_past_snaprealm_parent(SnapRealm *newparent);
 
@@ -377,7 +395,7 @@ public:
 
   // -- cache infrastructure --
 private:
-  std::map<frag_t,CDir*> dirfrags; // cached dir fragments under this Inode
+  compact_map<frag_t,CDir*> dirfrags; // cached dir fragments under this Inode
   int stickydir_ref;
 
 public:
@@ -412,7 +430,7 @@ public:
  protected:
   // parent dentries in cache
   CDentry         *parent;             // primary link
-  std::set<CDentry*>    remote_parents;     // if hard linked
+  compact_set<CDentry*>    remote_parents;     // if hard linked
 
   std::list<CDentry*>   projected_parent;   // for in-progress rename, (un)link, etc.
 
@@ -422,12 +440,12 @@ public:
 protected:
   // file capabilities
   std::map<client_t, Capability*> client_caps;         // client -> caps
-  std::map<int32_t, int32_t>      mds_caps_wanted;     // [auth] mds -> caps wanted
+  compact_map<int32_t, int32_t>      mds_caps_wanted;     // [auth] mds -> caps wanted
   int                   replica_caps_wanted; // [replica] what i've requested from auth
 
-  std::map<int, std::set<client_t> > client_snap_caps;     // [auth] [snap] dirty metadata we still need from the head
+  compact_map<int, std::set<client_t> > client_snap_caps;     // [auth] [snap] dirty metadata we still need from the head
 public:
-  std::map<snapid_t, std::set<client_t> > client_need_snapflush;
+  compact_map<snapid_t, std::set<client_t> > client_need_snapflush;
 
   void add_need_snapflush(CInode *snapin, snapid_t snapid, client_t client);
   void remove_need_snapflush(CInode *snapin, snapid_t snapid, client_t client);
@@ -435,12 +453,54 @@ public:
 
 protected:
 
-  ceph_lock_state_t fcntl_locks;
-  ceph_lock_state_t flock_locks;
+  ceph_lock_state_t *fcntl_locks;
+  ceph_lock_state_t *flock_locks;
 
+  ceph_lock_state_t *get_fcntl_lock_state() {
+    if (!fcntl_locks)
+      fcntl_locks = new ceph_lock_state_t(g_ceph_context);
+    return fcntl_locks;
+  }
+  void clear_fcntl_lock_state() {
+    delete fcntl_locks;
+    fcntl_locks = NULL;
+  }
+  ceph_lock_state_t *get_flock_lock_state() {
+    if (!flock_locks)
+      flock_locks = new ceph_lock_state_t(g_ceph_context);
+    return flock_locks;
+  }
+  void clear_flock_lock_state() {
+    delete flock_locks;
+    flock_locks = NULL;
+  }
   void clear_file_locks() {
-    fcntl_locks.clear();
-    flock_locks.clear();
+    clear_fcntl_lock_state();
+    clear_flock_lock_state();
+  }
+  void _encode_file_locks(bufferlist& bl) const {
+    bool has_fcntl_locks = fcntl_locks && !fcntl_locks->empty();
+    ::encode(has_fcntl_locks, bl);
+    if (has_fcntl_locks)
+      ::encode(*fcntl_locks, bl);
+    bool has_flock_locks = flock_locks && !flock_locks->empty();
+    ::encode(has_flock_locks, bl);
+    if (has_flock_locks)
+      ::encode(*flock_locks, bl);
+  }
+  void _decode_file_locks(bufferlist::iterator& p) {
+    bool has_fcntl_locks;
+    ::decode(has_fcntl_locks, p);
+    if (has_fcntl_locks)
+      ::decode(*get_fcntl_lock_state(), p);
+    else
+      clear_fcntl_lock_state();
+    bool has_flock_locks;
+    ::decode(has_flock_locks, p);
+    if (has_flock_locks)
+      ::decode(*get_flock_lock_state(), p);
+    else
+      clear_flock_lock_state();
   }
 
   // LogSegment lists i (may) belong to
@@ -453,14 +513,7 @@ public:
   elist<CInode*>::item item_dirty_dirfrag_nest;
   elist<CInode*>::item item_dirty_dirfrag_dirfragtree;
 
-private:
-  // auth pin
-  int auth_pins;
-  int nested_auth_pins;
 public:
-#ifdef MDS_AUTHPIN_SET
-  multiset<void*> auth_pin_set;
-#endif
   int auth_pin_freeze_allowance;
 
   inode_load_vec_t pop;
@@ -470,6 +523,7 @@ public:
   friend class Locker;
   friend class Migrator;
   friend class MDCache;
+  friend class StrayManager;
   friend class CDir;
   friend class CInodeExport;
 
@@ -480,16 +534,17 @@ public:
     first(f), last(l),
     last_journaled(0), //last_open_journaled(0), 
     //hack_accessed(true),
+    num_projected_xattrs(0),
+    num_projected_srnodes(0),
     stickydir_ref(0),
     parent(0),
     inode_auth(CDIR_AUTH_DEFAULT),
     replica_caps_wanted(0),
-    fcntl_locks(g_ceph_context), flock_locks(g_ceph_context),
+    fcntl_locks(0), flock_locks(0),
     item_dirty(this), item_caps(this), item_open_file(this), item_dirty_parent(this),
     item_dirty_dirfrag_dir(this), 
     item_dirty_dirfrag_nest(this), 
     item_dirty_dirfrag_dirfragtree(this), 
-    auth_pins(0), nested_auth_pins(0),
     auth_pin_freeze_allowance(0),
     pop(ceph_clock_now(g_ceph_context)),
     versionlock(this, &versionlock_type),
@@ -514,12 +569,18 @@ public:
     g_num_inos++;
     close_dirfrags();
     close_snaprealm();
+    clear_file_locks();
+    assert(num_projected_xattrs == 0);
+    assert(num_projected_srnodes == 0);
   }
   
 
   // -- accessors --
   bool is_root() const { return inode.ino == MDS_INO_ROOT; }
   bool is_stray() const { return MDS_INO_IS_STRAY(inode.ino); }
+  mds_rank_t get_stray_owner() const {
+    return (mds_rank_t)MDS_INO_STRAY_OWNER(inode.ino);
+  }
   bool is_mdsdir() const { return MDS_INO_IS_MDSDIR(inode.ino); }
   bool is_base() const { return is_root() || is_mdsdir(); }
   bool is_system() const { return inode.ino < MDS_INO_SYSTEM_BASE; }
@@ -624,7 +685,7 @@ public:
 
   // -- waiting --
 protected:
-  std::map<frag_t, std::list<MDSInternalContextBase*> > waiting_on_dir;
+  compact_map<frag_t, std::list<MDSInternalContextBase*> > waiting_on_dir;
 public:
   void add_dir_waiter(frag_t fg, MDSInternalContextBase *c);
   void take_dir_waiting(frag_t fg, std::list<MDSInternalContextBase*>& ls);
@@ -776,8 +837,8 @@ public:
   bool is_any_caps() { return !client_caps.empty(); }
   bool is_any_nonstale_caps() { return count_nonstale_caps(); }
 
-  const std::map<int32_t,int32_t>& get_mds_caps_wanted() const { return mds_caps_wanted; }
-  std::map<int32_t,int32_t>& get_mds_caps_wanted() { return mds_caps_wanted; }
+  const compact_map<int32_t,int32_t>& get_mds_caps_wanted() const { return mds_caps_wanted; }
+  compact_map<int32_t,int32_t>& get_mds_caps_wanted() { return mds_caps_wanted; }
 
   const std::map<client_t,Capability*>& get_client_caps() const { return client_caps; }
   Capability *get_client_cap(client_t client) {
@@ -818,15 +879,10 @@ public:
   bool issued_caps_need_gather(SimpleLock *lock);
   void replicate_relax_locks();
 
-
   // -- authority --
   mds_authority_t authority() const;
 
-
   // -- auth pins --
-  bool is_auth_pinned() const { return auth_pins || nested_auth_pins; }
-  int get_num_auth_pins() const { return auth_pins; }
-  int get_num_nested_auth_pins() const { return nested_auth_pins; }
   void adjust_nested_auth_pins(int a, void *by);
   bool can_auth_pin() const;
   void auth_pin(void *by);
@@ -902,6 +958,7 @@ public:
   }
 
   void print(ostream& out);
+  void dump(Formatter *f) const;
 
   /**
    * @defgroup Scrubbing and fsck
@@ -952,8 +1009,8 @@ public:
    *
    * @param results A freshly-created validated_data struct, with values set
    * as described in the struct documentation.
-   * @param Context The callback to activate once the validation has
-   * been completed.
+   * @param mdr The request to be responeded upon the completion of the
+   * validation.
    */
   void validate_disk_state(validated_data *results,
                            MDRequestRef& mdr);

@@ -88,6 +88,12 @@ check_SCRIPTS += test/ceph-disk.sh
 endif
 
 EXTRA_DIST += \
+	$(srcdir)/test/python/ceph-disk/setup.py \
+	$(srcdir)/test/python/ceph-disk/tox.ini \
+	$(srcdir)/test/python/ceph-disk/tests/test_ceph_disk.py \
+	$(srcdir)/test/python/brag-client/setup.py \
+	$(srcdir)/test/python/brag-client/tox.ini \
+	$(srcdir)/test/python/brag-client/tests/test_ceph_brag.py \
 	$(srcdir)/test/debian-jessie/Dockerfile.in \
 	$(srcdir)/test/debian-jessie/install-deps.sh \
 	$(srcdir)/test/debian-jessie/debian \
@@ -103,6 +109,9 @@ EXTRA_DIST += \
 	$(srcdir)/test/centos-7/Dockerfile.in \
 	$(srcdir)/test/centos-7/install-deps.sh \
 	$(srcdir)/test/centos-7/ceph.spec.in \
+	$(srcdir)/test/opensuse-13.2/Dockerfile.in \
+	$(srcdir)/test/opensuse-13.2/install-deps.sh \
+	$(srcdir)/test/opensuse-13.2/ceph.spec.in \
 	$(srcdir)/test/mon/mon-test-helpers.sh \
 	$(srcdir)/test/osd/osd-test-helpers.sh \
         $(srcdir)/test/coverage.sh \
@@ -151,6 +160,12 @@ unittest_histogram_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 unittest_histogram_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 check_PROGRAMS += unittest_histogram
 
+unittest_prioritized_queue_SOURCES = test/common/test_prioritized_queue.cc
+unittest_prioritized_queue_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+unittest_prioritized_queue_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
+check_PROGRAMS += unittest_prioritized_queue
+
+
 unittest_str_map_SOURCES = test/common/test_str_map.cc
 unittest_str_map_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 unittest_str_map_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
@@ -196,12 +211,12 @@ unittest_workqueue_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 unittest_workqueue_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 check_PROGRAMS += unittest_workqueue
 
-unittest_striper_SOURCES = test/test_striper.cc 
+unittest_striper_SOURCES = test/test_striper.cc
 unittest_striper_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 unittest_striper_LDADD = $(LIBOSDC) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 check_PROGRAMS += unittest_striper
 
-unittest_prebufferedstreambuf_SOURCES = test/test_prebufferedstreambuf.cc 
+unittest_prebufferedstreambuf_SOURCES = test/test_prebufferedstreambuf.cc
 unittest_prebufferedstreambuf_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 unittest_prebufferedstreambuf_LDADD = $(LIBCOMMON) $(UNITTEST_LDADD) $(EXTRALIBS)
 check_PROGRAMS += unittest_prebufferedstreambuf
@@ -238,7 +253,7 @@ check_PROGRAMS += unittest_mds_types
 
 unittest_osd_types_SOURCES = test/osd/types.cc
 unittest_osd_types_CXXFLAGS = $(UNITTEST_CXXFLAGS)
-unittest_osd_types_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL) 
+unittest_osd_types_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 check_PROGRAMS += unittest_osd_types
 
 unittest_lru_SOURCES = test/common/test_lru.cc
@@ -262,9 +277,14 @@ unittest_signals_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 check_PROGRAMS += unittest_signals
 
 unittest_bufferlist_SOURCES = test/bufferlist.cc
-unittest_bufferlist_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL) 
+unittest_bufferlist_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 unittest_bufferlist_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 check_PROGRAMS += unittest_bufferlist
+
+unittest_xlist_SOURCES = test/test_xlist.cc
+unittest_xlist_LDADD = $(UNITTEST_LDADD) $(LIBCOMMON)
+unittest_xlist_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+check_PROGRAMS += unittest_xlist
 
 unittest_crc32c_SOURCES = test/common/test_crc32c.cc
 unittest_crc32c_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
@@ -389,6 +409,7 @@ unittest_bit_vector_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 check_PROGRAMS += unittest_bit_vector
 
 check_SCRIPTS += test/pybind/test_ceph_argparse.py
+check_SCRIPTS += test/pybind/test_ceph_daemon.py
 
 ceph_test_objectcacher_stress_SOURCES = \
 	test/osdc/object_cacher_stress.cc \

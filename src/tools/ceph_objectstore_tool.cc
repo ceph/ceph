@@ -830,13 +830,16 @@ int write_info(ObjectStore::Transaction &t, epoch_t epoch, pg_info_t &info,
   //Empty for this
   coll_t coll(info.pgid);
   ghobject_t pgmeta_oid(info.pgid.make_pgmeta_oid());
-  int ret = PG::_write_info(t, epoch,
+  map<string,bufferlist> km;
+  int ret = PG::_prepare_write_info(
+    &km, epoch,
     info, coll,
     past_intervals,
     pgmeta_oid,
     true);
   if (ret < 0) ret = -ret;
   if (ret) cerr << "Failed to write info" << std::endl;
+  t.omap_setkeys(coll, pgmeta_oid, km);
   return ret;
 }
 
@@ -848,7 +851,9 @@ int write_pg(ObjectStore::Transaction &t, epoch_t epoch, pg_info_t &info,
     return ret;
   map<eversion_t, hobject_t> divergent_priors;
   coll_t coll(info.pgid);
-  PGLog::write_log(t, log, coll, info.pgid.make_pgmeta_oid(), divergent_priors);
+  map<string,bufferlist> km;
+  PGLog::write_log(t, &km, log, coll, info.pgid.make_pgmeta_oid(), divergent_priors);
+  t.omap_setkeys(coll, info.pgid.make_pgmeta_oid(), km);
   return 0;
 }
 

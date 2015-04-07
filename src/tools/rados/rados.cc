@@ -501,7 +501,7 @@ public:
     librados::AioCompletion *completion;
 
     LoadGenOp() {}
-    LoadGenOp(LoadGen *_lg) : lg(_lg), completion(NULL) {}
+    LoadGenOp(LoadGen *_lg) : id(0), type(0), off(0), len(0), lg(_lg), completion(NULL) {}
   };
 
   int max_op;
@@ -543,6 +543,7 @@ public:
     min_op_len = 1024;
     target_throughput = 5 * 1024 * 1024; // B/sec
     max_op_len = 2 * 1024 * 1024;
+    max_ops = 0; 
     max_backlog = target_throughput * 2;
     run_length = 60;
 
@@ -1316,14 +1317,14 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   // open rados
   ret = rados.init_with_context(g_ceph_context);
   if (ret) {
-     cerr << "couldn't initialize rados! error " << ret << std::endl;
+     cerr << "couldn't initialize rados: " << cpp_strerror(ret) << std::endl;
      ret = -1;
      goto out;
   }
 
   ret = rados.connect();
   if (ret) {
-     cerr << "couldn't connect to cluster! error " << ret << std::endl;
+     cerr << "couldn't connect to cluster: " << cpp_strerror(ret) << std::endl;
      ret = -1;
      goto out;
   }

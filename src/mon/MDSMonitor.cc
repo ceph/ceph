@@ -547,6 +547,38 @@ bool MDSMonitor::prepare_beacon(MMDSBeacon *m)
         m->put();
         return false;
       }
+    } else if (state == MDSMap::STATE_DAMAGED) {
+      if (!mon->osdmon()->is_writeable()) {
+        dout(4) << __func__ << ": DAMAGED from rank " << info.rank
+                << " waiting for osdmon writeable to blacklist it" << dendl;
+        mon->osdmon()->wait_for_writeable(new C_RetryMessage(this, m));
+        return false;
+      }
+
+      // Record this MDS rank as damaged, so that other daemons
+      // won't try to run it.
+      dout(4) << __func__ << ": marking rank "
+              << info.rank << " damaged" << dendl;
+
+
+      // Blacklist this MDS daemon
+      const utime_t until = ceph_clock_now(g_ceph_context);
+      pending_mdsmap.last_failure_osd_epoch = mon->osdmon()->blacklist(
+          info.addr, until);
+      request_proposal(mon->osdmon());
+
+      // Clear out daemon state and add rank to damaged list
+      pending_mdsmap.up.erase(info.rank);
+      pending_mdsmap.damaged.insert(info.rank);
+      last_beacon.erase(gid);
+
+      // Call erase() last because the `info` reference becomes invalid
+      // after we remove the instance from the map.
+      pending_mdsmap.mds_info.erase(gid);
+
+      // Respond to MDS, so that it knows it can continue to shut down
+      mon->send_reply(m, new MMDSBeacon(mon->monmap->fsid, m->get_global_id(),
+                    m->get_name(), mdsmap.get_epoch(), state, seq));
     } else {
       info.state = state;
       info.state_seq = seq;
@@ -745,7 +777,7 @@ bool MDSMonitor::preprocess_command(MMonCommand *m)
       if (err == -ENOENT) {
 	r = -ENOENT;
       } else {
-	assert(r == 0);
+	assert(err == 0);
 	assert(b.length());
 	MDSMap mm;
 	mm.decode(b);
@@ -1471,6 +1503,17 @@ int MDSMonitor::filesystem_command(
       return -EAGAIN; // don't propose yet; wait for message to be retried
     }
 
+  } else if (prefix == "mds repaired") {
+    mds_rank_t rank;
+    cmd_getval(g_ceph_context, cmdmap, "rank", rank);
+    if (pending_mdsmap.damaged.count(rank)) {
+      dout(4) << "repaired: restoring rank " << rank << dendl;
+      pending_mdsmap.damaged.erase(rank);
+      pending_mdsmap.failed.insert(rank);
+    } else {
+      dout(4) << "repaired: no-op on rank " << rank << dendl;
+    }
+    r = 0;
   } else if (prefix == "mds rm") {
     mds_gid_t gid;
     if (!cmd_getval(g_ceph_context, cmdmap, "gid", gid)) {

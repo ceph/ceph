@@ -612,10 +612,13 @@ void Client::trim_dentry(Dentry *dn)
   ldout(cct, 15) << "trim_dentry unlinking dn " << dn->name 
 		 << " in dir " << hex << dn->dir->parent_inode->ino 
 		 << dendl;
-  dn->dir->release_count++;
-  if (dn->dir->parent_inode->flags & I_COMPLETE) {
-    ldout(cct, 10) << " clearing (I_COMPLETE|I_DIR_ORDERED) on " << *dn->dir->parent_inode << dendl;
-    dn->dir->parent_inode->flags &= ~(I_COMPLETE | I_DIR_ORDERED);
+  if (dn->inode) {
+    dn->dir->release_count++;
+    if (dn->dir->parent_inode->flags & I_COMPLETE) {
+      ldout(cct, 10) << " clearing (I_COMPLETE|I_DIR_ORDERED) on "
+		     << *dn->dir->parent_inode << dendl;
+      dn->dir->parent_inode->flags &= ~(I_COMPLETE | I_DIR_ORDERED);
+    }
   }
   unlink(dn, false, false);  // drop dir, drop dentry
 }
@@ -2850,6 +2853,13 @@ void Client::check_caps(Inode *in, bool is_delayed)
   unsigned used = get_caps_used(in);
   unsigned cap_used;
 
+  if (in->is_dir() && (in->flags & I_COMPLETE)) {
+    // we do this here because we don't want to drop to Fs (and then
+    // drop the Fs if we do a create!) if that alone makes us send lookups
+    // to the MDS. Doing it in in->caps_wanted() has knock-on effects elsewhere
+    wanted |= CEPH_CAP_FILE_EXCL;
+  }
+
   int retain = wanted | used | CEPH_CAP_PIN;
   if (!unmounting) {
     if (wanted)
@@ -4988,9 +4998,14 @@ int Client::_lookup(Inode *dir, const string& dname, Inode **target)
 		       << " vs lease_gen " << dn->lease_gen << dendl;
       }
       // dir lease?
-      if (dir->caps_issued_mask(CEPH_CAP_FILE_SHARED) &&
-	  dn->cap_shared_gen == dir->shared_gen) {
-	goto hit_dn;
+      if (dir->caps_issued_mask(CEPH_CAP_FILE_SHARED)) {
+	if (dn->cap_shared_gen == dir->shared_gen)
+	  goto hit_dn;
+	if (!dn->inode && (dir->flags & I_COMPLETE)) {
+	  ldout(cct, 10) << "_lookup concluded ENOENT locally for "
+			 << *dir << " dn '" << dname << "'" << dendl;
+	  return -ENOENT;
+	}
       }
     } else {
       ldout(cct, 20) << " no cap on " << dn->inode->vino() << dendl;
@@ -5773,6 +5788,20 @@ int Client::lutime(const char *relpath, struct utimbuf *buf)
   stat_set_atime_sec(&attr, buf->actime);
   stat_set_atime_nsec(&attr, 0);
   return _setattr(in, &attr, CEPH_SETATTR_MTIME|CEPH_SETATTR_ATIME);
+}
+
+int Client::flock(int fd, int operation, uint64_t owner)
+{
+  Mutex::Locker lock(client_lock);
+  tout(cct) << "flock" << std::endl;
+  tout(cct) << fd << std::endl;
+  tout(cct) << operation << std::endl;
+  tout(cct) << owner << std::endl;
+  Fh *f = get_filehandle(fd);
+  if (!f)
+    return -EBADF;
+
+  return _flock(f, operation, owner, NULL);
 }
 
 int Client::opendir(const char *relpath, dir_result_t **dirpp) 
@@ -7345,9 +7374,7 @@ int Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf)
 
     // async, caching, non-blocking.
     r = objectcacher->file_write(&in->oset, &in->layout, in->snaprealm->get_snap_context(),
-			         offset, size, bl, ceph_clock_now(cct), 0,
-			         client_lock);
-
+			         offset, size, bl, ceph_clock_now(cct), 0);
     put_cap_ref(in, CEPH_CAP_FILE_BUFFER);
 
     if (r < 0)
@@ -8417,6 +8444,15 @@ int Client::lgetxattr(const char *path, const char *name, void *value, size_t si
   return Client::_getxattr(ceph_inode, name, value, size, getuid(), getgid());
 }
 
+int Client::fgetxattr(int fd, const char *name, void *value, size_t size)
+{
+  Mutex::Locker lock(client_lock);
+  Fh *f = get_filehandle(fd);
+  if (!f)
+    return -EBADF;
+  return Client::_getxattr(f->inode, name, value, size, getuid(), getgid());
+}
+
 int Client::listxattr(const char *path, char *list, size_t size)
 {
   Mutex::Locker lock(client_lock);
@@ -8435,6 +8471,15 @@ int Client::llistxattr(const char *path, char *list, size_t size)
   if (r < 0)
     return r;
   return Client::_listxattr(ceph_inode, list, size, getuid(), getgid());
+}
+
+int Client::flistxattr(int fd, char *list, size_t size)
+{
+  Mutex::Locker lock(client_lock);
+  Fh *f = get_filehandle(fd);
+  if (!f)
+    return -EBADF;
+  return Client::_listxattr(f->inode, list, size, getuid(), getgid());
 }
 
 int Client::removexattr(const char *path, const char *name)
@@ -8457,6 +8502,15 @@ int Client::lremovexattr(const char *path, const char *name)
   return Client::_removexattr(ceph_inode, name, getuid(), getgid());
 }
 
+int Client::fremovexattr(int fd, const char *name)
+{
+  Mutex::Locker lock(client_lock);
+  Fh *f = get_filehandle(fd);
+  if (!f)
+    return -EBADF;
+  return Client::_removexattr(f->inode, name, getuid(), getgid());
+}
+
 int Client::setxattr(const char *path, const char *name, const void *value, size_t size, int flags)
 {
   Mutex::Locker lock(client_lock);
@@ -8475,6 +8529,15 @@ int Client::lsetxattr(const char *path, const char *name, const void *value, siz
   if (r < 0)
     return r;
   return Client::_setxattr(ceph_inode, name, value, size, flags, getuid(), getgid());
+}
+
+int Client::fsetxattr(int fd, const char *name, const void *value, size_t size, int flags)
+{
+  Mutex::Locker lock(client_lock);
+  Fh *f = get_filehandle(fd);
+  if (!f)
+    return -EBADF;
+  return Client::_setxattr(f->inode, name, value, size, flags, getuid(), getgid());
 }
 
 int Client::_getxattr(Inode *in, const char *name, void *value, size_t size,

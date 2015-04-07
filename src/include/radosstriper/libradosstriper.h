@@ -57,7 +57,7 @@ void rados_striper_destroy(rados_striper_t striper);
  * Already existing objects will be opened with their own layout.
  *
  * @param striper the targetted striper
- * @param stiper_unit the stripe_unit value of the new object layout
+ * @param stripe_unit the stripe_unit value of the new object layout
  * @returns 0 on success, negative error code on failure
  */
 int rados_striper_set_object_layout_stripe_unit(rados_striper_t striper,
@@ -202,7 +202,7 @@ int rados_striper_remove(rados_striper_t striper,
  * @note the truncation can not happen if any I/O is ongoing (it
  * will return EBUSY). Identically, no I/O will be able to start
  * during truncation (same EBUSY return code)
- * @param striper the striper in which the truncation will occur
+ * @param io the rados context to use
  * @param soid the name of the striped object
  * @param size the new size of the object in bytes
  * @returns 0 on success, negative error code on failure
@@ -225,7 +225,7 @@ int rados_striper_trunc(rados_ioctx_t io, const char *soid, uint64_t size);
  * Get the value of an extended attribute on a striped object.
  *
  * @param striper the striper in which the getxattr will occur
- * @param o name of the striped object
+ * @param oid name of the striped object
  * @param name which extended attribute to read
  * @param buf where to store the result
  * @param len size of buf in bytes
@@ -241,7 +241,7 @@ int rados_striper_getxattr(rados_striper_t striper,
  * Set an extended attribute on a striped object.
  *
  * @param striper the striper in which the setxattr will occur
- * @param o name of the object
+ * @param oid name of the object
  * @param name which extended attribute to set
  * @param buf what to store in the xattr
  * @param len the number of bytes in buf
@@ -257,7 +257,7 @@ int rados_striper_setxattr(rados_striper_t striper,
  * Delete an extended attribute from a striped object.
  *
  * @param striper the striper in which the rmxattr will occur
- * @param o the name of the object
+ * @param oid name of the object
  * @param name which xattr to delete
  * @returns 0 on success, negative error code on failure
  */

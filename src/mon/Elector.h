@@ -56,7 +56,7 @@ class Elector {
    *
    * @remarks This function assumes as a default firing value the duration of
    *	      the monitor's lease interval, and adds to it the value specified
-   *	      in @plus
+   *	      in @e plus
    *
    * @post expire_event is set
    *
@@ -127,7 +127,7 @@ class Elector {
    */
   int	    leader_acked;
   /**
-   * Indicates when we have acked him
+   * Indicates when we have acked it
    */
   utime_t   ack_stamp;
   /**
@@ -245,7 +245,7 @@ class Elector {
   void victory();
 
   /**
-   * Handle a message from some other node proposing himself to become him
+   * Handle a message from some other node proposing itself to become it
    * the Leader.
    *
    * If the message appears to be old (i.e., its epoch is lower than our epoch),
@@ -253,16 +253,16 @@ class Elector {
    *
    *  @li Ignore it because it's nothing more than an old proposal
    *  @li Start new elections if we verify that it was sent by a monitor from
-   *	  outside the quorum; given its old state, it's fair to assume he just
-   *	  started, so we should start new elections so he may rejoin
+   *	  outside the quorum; given its old state, it's fair to assume it just
+   *	  started, so we should start new elections so it may rejoin
    *
    * If we did not ignore the received message, then we know that this message
-   * was sent by some other node proposing himself to become the Leader. So, we
+   * was sent by some other node proposing itself to become the Leader. So, we
    * will take one of the following actions:
    *
-   *  @li Ignore him because we already acked another node with higher rank
-   *  @li Ignore him and start a new election because we outrank him
-   *  @li Defer to him because he outranks us and the node we previously
+   *  @li Ignore it because we already acked another node with higher rank
+   *  @li Ignore it and start a new election because we outrank it
+   *  @li Defer to it because it outranks us and the node we previously
    *	  acked, if any
    *
    *

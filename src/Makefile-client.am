@@ -5,7 +5,9 @@ bin_SCRIPTS += \
 	ceph \
 	ceph-post-file
 
-python_PYTHON += pybind/ceph_argparse.py
+python_PYTHON += \
+	pybind/ceph_argparse.py \
+	pybind/ceph_daemon.py
 
 ceph_syn_SOURCES = ceph_syn.cc
 ceph_syn_SOURCES += client/SyntheticClient.cc # uses g_conf.. needs cleanup
@@ -72,9 +74,11 @@ ceph_fuse_SOURCES = ceph_fuse.cc
 ceph_fuse_LDADD = $(LIBCLIENT_FUSE) $(CEPH_GLOBAL)
 bin_PROGRAMS += ceph-fuse
 
+if WITH_RBD
 rbd_fuse_SOURCES = rbd_fuse/rbd-fuse.cc
 rbd_fuse_LDADD = -lfuse $(LIBRBD) $(LIBRADOS) $(CEPH_GLOBAL)
 bin_PROGRAMS += rbd-fuse
+endif # WITH_RBD
 endif # WITH_FUSE
 
 
@@ -90,6 +94,7 @@ python_PYTHON += pybind/cephfs.py
 libcephfs_la_SOURCES = libcephfs.cc
 libcephfs_la_LIBADD = $(LIBCLIENT) $(LIBCOMMON) $(PTHREAD_LIBS) $(CRYPTO_LIBS) $(EXTRALIBS)
 libcephfs_la_LDFLAGS = ${AM_LDFLAGS} -version-info 1:0:0 -export-symbols-regex '^ceph_.*'
+libcephfs_la_LDFLAGS += -Xcompiler -Xlinker -Xcompiler '--exclude-libs=libcommon.a'
 lib_LTLIBRARIES += libcephfs.la
 
 # jni library (java source is in src/java)
