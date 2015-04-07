@@ -241,7 +241,7 @@ Commands
   Show metadata held on the image. The first column is the key
   and the second column is the value.
 
-:command:`image-meta get` [**image-name*] [*key*]
+:command:`image-meta get` [*image-name*] [*key*]
   Get metadata value with the key.
 
 :command:`image-meta set` [*image-name*] [*key*] [*value*]
