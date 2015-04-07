@@ -569,6 +569,7 @@ NewStore::NewStore(CephContext *cct, const string& path)
   : ObjectStore(path),
     cct(cct),
     db(NULL),
+    fs(NULL),
     path_fd(-1),
     fsid_fd(-1),
     frag_fd(-1),
@@ -633,6 +634,9 @@ int NewStore::_open_path()
 	 << dendl;
     return r;
   }
+  assert(fs == NULL);
+  fs = FS::create(path_fd);
+  dout(1) << __func__ << " using fs driver '" << fs->get_name() << "'" << dendl;
   return 0;
 }
 
@@ -640,6 +644,8 @@ void NewStore::_close_path()
 {
   VOID_TEMP_FAILURE_RETRY(::close(path_fd));
   path_fd = -1;
+  delete fs;
+  fs = NULL;
 }
 
 int NewStore::_open_frag()
