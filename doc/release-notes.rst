@@ -113,7 +113,7 @@ Upgrading
   We *have* tested:
 
    * Firefly to Hammer
-   * Firefly to Giant to Hammer
+   * Giant to Hammer
    * Dumpling to Firefly to Hammer
 
 * Please upgrade daemons in the following order:
