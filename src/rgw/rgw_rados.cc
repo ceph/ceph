@@ -3555,8 +3555,9 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
                                       dest_bucket_info, dest_obj.bucket, dest_obj.get_object(),
                                       cct->_conf->rgw_obj_stripe_size, tag, dest_bucket_info.versioning_enabled());
   int ret = processor.prepare(this, NULL);
-  if (ret < 0)
+  if (ret < 0) {
     return ret;
+  }
 
   RGWRESTConn *conn;
   if (source_zone.empty()) {
@@ -3595,12 +3596,14 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
   time_t set_mtime;
  
   ret = conn->get_obj(user_id, info, src_obj, true, &cb, &in_stream_req);
-  if (ret < 0)
+  if (ret < 0) {
     goto set_err_state;
+  }
 
   ret = conn->complete_request(in_stream_req, etag, &set_mtime, req_headers);
-  if (ret < 0)
+  if (ret < 0) {
     goto set_err_state;
+  }
 
   { /* opening scope so that we can do goto, sorry */
     bufferlist& extra_data_bl = processor.get_extra_data();
@@ -3634,8 +3637,9 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
   }
 
   ret = cb.complete(etag, mtime, set_mtime, src_attrs);
-  if (ret < 0)
+  if (ret < 0) {
     goto set_err_state;
+  }
 
   ret = opstate.set_state(RGWOpState::OPSTATE_COMPLETE);
   if (ret < 0) {
@@ -3775,8 +3779,9 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
   RGWObjManifest manifest;
   RGWObjState *astate = NULL;
   ret = get_obj_state(&obj_ctx, src_obj, &astate, NULL);
-  if (ret < 0)
+  if (ret < 0) {
     return ret;
+  }
 
   vector<rgw_obj> ref_objs;
 
@@ -3801,10 +3806,11 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
       uint64_t head_size = astate->manifest.get_head_size();
 
       if (head_size > 0) {
-	if (head_size > max_chunk_size)
-	  copy_data = true;
-	else
+        if (head_size > max_chunk_size) {
+          copy_data = true;
+        } else {
           copy_first = true;
+        }
       }
     }
   }
@@ -3825,8 +3831,9 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
 
   RGWObjManifest::obj_iterator miter = astate->manifest.obj_begin();
 
-  if (copy_first) // we need to copy first chunk, not increase refcount
+  if (copy_first) { // we need to copy first chunk, not increase refcount
     ++miter;
+  }
 
   rgw_rados_ref ref;
   rgw_bucket bucket;
@@ -3855,8 +3862,9 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
 
   string tag;
 
-  if (ptag)
+  if (ptag) {
     tag = *ptag;
+  }
 
   if (tag.empty()) {
     append_rand_alpha(cct, tag, tag, 32);
@@ -3877,8 +3885,9 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
       ref.ioctx.locator_set_key(key);
 
       ret = ref.ioctx.operate(oid, &op);
-      if (ret < 0)
+      if (ret < 0) {
         goto done_ret;
+      }
 
       ref_objs.push_back(loc);
     }
@@ -3892,8 +3901,9 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
 
   if (copy_first) {
     ret = read_op.read(0, max_chunk_size, first_chunk);
-    if (ret < 0)
+    if (ret < 0) {
       goto done_ret;
+    }
 
     pmanifest->set_head(dest_obj);
     pmanifest->set_head_size(first_chunk.length());
@@ -3909,8 +3919,9 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
   write_op.meta.olh_epoch = olh_epoch;
 
   ret = write_op.write_meta(end + 1, attrs);
-  if (ret < 0)
+  if (ret < 0) {
     goto done_ret;
+  }
 
   return 0;
 
