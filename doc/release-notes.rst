@@ -6,7 +6,7 @@ v0.94 Hammer
 ============
 
 This major release is expected to form the basis of the next long-term
-stable series.  It is intended to supercede v0.80.x Firefly.
+stable series.  It is intended to supersede v0.80.x Firefly.
 
 Highlights since Giant include:
 
