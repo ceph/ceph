@@ -41,7 +41,6 @@
       - DBObjectMap::clone lock ordering
       - HashIndex::get_path_contents_by_hash
       - HashIndex::list_by_hash
-  * open-by-handle
   * use work queue for wal fsyncs and kv record removals
   * avoid mtime updates when doing open-by-handle
   * abstract out fs specifics
@@ -1854,6 +1853,18 @@ int NewStore::_recover_next_fid()
 
 int NewStore::_open_fid(fid_t fid)
 {
+  if (fid.handle.length() && g_conf->newstore_open_by_handle) {
+    int fd = fs->open_handle(path_fd, fid.handle, O_RDWR);
+    if (fd >= 0) {
+      dout(30) << __func__ << " " << fid << " = " << fd
+	       << " (open by handle)" << dendl;
+      return fd;
+    }
+    int err = -errno;
+    dout(30) << __func__ << " " << fid << " = " << cpp_strerror(err)
+	     << " (with open by handle, falling back to file name)" << dendl;
+  }
+
   char fn[32];
   snprintf(fn, sizeof(fn), "%u/%u", fid.fset, fid.fno);
   int fd = ::openat(frag_fd, fn, O_RDWR);
@@ -1928,15 +1939,18 @@ int NewStore::_create_fid(TransContext *txc, fid_t *fid)
     return r;
   }
 
-#if 0
-  // store a handle, too
-  void *hp;
-  size_t hlen;
-  int r = fd_to_handle(fd, &hp, &hlen);
-  if (r >= 0) {
-    fid->handle = string((char *)hp, hlen);
+  if (g_conf->newstore_open_by_handle) {
+    int r = fs->get_handle(fd, &fid->handle);
+    if (r < 0) {
+      dout(30) << __func__ << " get_handle got " << cpp_strerror(r) << dendl;
+    } else {
+      dout(30) << __func__ << " got handle: ";
+      bufferlist bl;
+      bl.append(fid->handle);
+      bl.hexdump(*_dout);
+      *_dout << dendl;
+    }
   }
-#endif
 
   dout(30) << __func__ << " " << *fid << " = " << fd << dendl;
   return fd;
