@@ -463,6 +463,17 @@ TEST_F(LibRadosIo, RmXattr) {
       rados_setxattr(ioctx, "foo", attr1, attr1_buf, sizeof(attr1_buf)));
   ASSERT_EQ(0, rados_rmxattr(ioctx, "foo", attr1));
   ASSERT_EQ(-ENODATA, rados_getxattr(ioctx, "foo", attr1, buf, sizeof(buf)));
+
+  // Test rmxattr on a removed object
+  char buf2[128];
+  char attr2[] = "attr2";
+  char attr2_buf[] = "foo bar baz";
+  memset(buf2, 0xbb, sizeof(buf2));
+  ASSERT_EQ(0, rados_write(ioctx, "foo_rmxattr", buf2, sizeof(buf2), 0));
+  ASSERT_EQ(0,
+      rados_setxattr(ioctx, "foo_rmxattr", attr2, attr2_buf, sizeof(attr2_buf)));
+  ASSERT_EQ(0, rados_remove(ioctx, "foo_rmxattr"));
+  ASSERT_EQ(-ENOENT, rados_rmxattr(ioctx, "foo_rmxattr", attr2));
 }
 
 TEST_F(LibRadosIoPP, RmXattrPP) {
@@ -479,6 +490,20 @@ TEST_F(LibRadosIoPP, RmXattrPP) {
   ASSERT_EQ(0, ioctx.rmxattr("foo", attr1));
   bufferlist bl3;
   ASSERT_EQ(-ENODATA, ioctx.getxattr("foo", attr1, bl3));
+
+  // Test rmxattr on a removed object
+  char buf2[128];
+  char attr2[] = "attr2";
+  char attr2_buf[] = "foo bar baz";
+  memset(buf2, 0xbb, sizeof(buf2));
+  bufferlist bl21;
+  bl21.append(buf, sizeof(buf));
+  ASSERT_EQ(0, ioctx.write("foo_rmxattr", bl21, sizeof(buf2), 0));
+  bufferlist bl22;
+  bl22.append(attr2_buf, sizeof(attr2_buf));
+  ASSERT_EQ(0, ioctx.setxattr("foo_rmxattr", attr2, bl22));
+  ASSERT_EQ(0, ioctx.remove("foo_rmxattr"));
+  ASSERT_EQ(-ENOENT, ioctx.rmxattr("foo_rmxattr", attr2));
 }
 
 TEST_F(LibRadosIo, XattrIter) {
@@ -960,6 +985,17 @@ TEST_F(LibRadosIoEC, RmXattr) {
       rados_setxattr(ioctx, "foo", attr1, attr1_buf, sizeof(attr1_buf)));
   ASSERT_EQ(0, rados_rmxattr(ioctx, "foo", attr1));
   ASSERT_EQ(-ENODATA, rados_getxattr(ioctx, "foo", attr1, buf, sizeof(buf)));
+
+  // Test rmxattr on a removed object
+  char buf2[128];
+  char attr2[] = "attr2";
+  char attr2_buf[] = "foo bar baz";
+  memset(buf2, 0xbb, sizeof(buf2));
+  ASSERT_EQ(0, rados_write(ioctx, "foo_rmxattr", buf2, sizeof(buf2), 0));
+  ASSERT_EQ(0,
+      rados_setxattr(ioctx, "foo_rmxattr", attr2, attr2_buf, sizeof(attr2_buf)));
+  ASSERT_EQ(0, rados_remove(ioctx, "foo_rmxattr"));
+  ASSERT_EQ(-ENOENT, rados_rmxattr(ioctx, "foo_rmxattr", attr2));
 }
 
 TEST_F(LibRadosIoECPP, RmXattrPP) {
@@ -976,6 +1012,20 @@ TEST_F(LibRadosIoECPP, RmXattrPP) {
   ASSERT_EQ(0, ioctx.rmxattr("foo", attr1));
   bufferlist bl3;
   ASSERT_EQ(-ENODATA, ioctx.getxattr("foo", attr1, bl3));
+
+  // Test rmxattr on a removed object
+  char buf2[128];
+  char attr2[] = "attr2";
+  char attr2_buf[] = "foo bar baz";
+  memset(buf2, 0xbb, sizeof(buf2));
+  bufferlist bl21;
+  bl21.append(buf, sizeof(buf));
+  ASSERT_EQ(0, ioctx.write("foo_rmxattr", bl21, sizeof(buf2), 0));
+  bufferlist bl22;
+  bl22.append(attr2_buf, sizeof(attr2_buf));
+  ASSERT_EQ(0, ioctx.setxattr("foo_rmxattr", attr2, bl22));
+  ASSERT_EQ(0, ioctx.remove("foo_rmxattr"));
+  ASSERT_EQ(-ENOENT, ioctx.rmxattr("foo_rmxattr", attr2));
 }
 
 TEST_F(LibRadosIoEC, XattrIter) {
