@@ -30,6 +30,10 @@ Readahead::extent_t Readahead::update(const vector<extent_t>& extents, uint64_t 
   for (vector<extent_t>::const_iterator p = extents.begin(); p != extents.end(); ++p) {
     _observe_read(p->first, p->second);
   }
+  if (m_readahead_pos >= limit) {
+    m_lock.Unlock();
+    return extent_t(0, 0);
+  }
   pair<uint64_t, uint64_t> extent = _compute_readahead(limit);
   m_lock.Unlock();
   return extent;
@@ -38,6 +42,10 @@ Readahead::extent_t Readahead::update(const vector<extent_t>& extents, uint64_t 
 Readahead::extent_t Readahead::update(uint64_t offset, uint64_t length, uint64_t limit) {
   m_lock.Lock();
   _observe_read(offset, length);
+  if (m_readahead_pos >= limit) {
+    m_lock.Unlock();
+    return extent_t(0, 0);
+  }
   extent_t extent = _compute_readahead(limit);
   m_lock.Unlock();
   return extent;
@@ -52,6 +60,7 @@ void Readahead::_observe_read(uint64_t offset, uint64_t length) {
     m_consec_read_bytes = 0;
     m_readahead_trigger_pos = 0;
     m_readahead_size = 0;
+    m_readahead_pos = 0;
   }
   m_last_pos = offset + length;
 }
@@ -70,6 +79,9 @@ Readahead::extent_t Readahead::_compute_readahead(uint64_t limit) {
       } else {
 	// continuing readahead trigger
 	m_readahead_size *= 2;
+	if (m_last_pos > m_readahead_pos) {
+	  m_readahead_pos = m_last_pos;
+	}
       }
       m_readahead_size = MAX(m_readahead_size, m_readahead_min_bytes);
       m_readahead_size = MIN(m_readahead_size, m_readahead_max_bytes);
