@@ -164,9 +164,9 @@ cluster, for example a cluster where the monitors cannot form a
 quorum.
 
 
-#. Stop all ``ceph-mon'' daemons on all monitor hosts.::
+#. Stop all ``ceph-mon`` daemons on all monitor hosts. ::
 
-        ssh {mon-host}
+	ssh {mon-host}
 	service ceph stop mon || stop ceph-mon-all
 	# and repeat for all mons
 
@@ -199,10 +199,10 @@ quorum.
 
 #. Start only the surviving monitors.
 
-#. Verify the monitors form a quorum (``ceph -s'').
+#. Verify the monitors form a quorum (``ceph -s``).
 
 #. You may wish to archive the removed monitors' data directory in
-   ``/var/lib/ceph/mon'' in a safe location, or delete it if you are
+   ``/var/lib/ceph/mon`` in a safe location, or delete it if you are
    confident the remaining monitors are healthy and are sufficiently
    redundant.
 
