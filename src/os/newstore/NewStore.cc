@@ -2941,7 +2941,7 @@ int NewStore::_do_overlay_trim(TransContext *txc,
       o->onode.overlay_map.erase(p++);
       continue;
     }
-    if (p->first > offset) {
+    if (p->first >= offset) {
       dout(20) << __func__ << " trim_front " << p->first << " " << p->second
 	       << dendl;
       overlay_t& ov = o->onode.overlay_map[offset + length] = p->second;
