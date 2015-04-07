@@ -146,7 +146,7 @@ a {
     color: #F05C56;
     text-decoration: none;
 }
- 
+
 a:hover {
     color: #F05C56;
     text-decoration: underline;
@@ -276,6 +276,10 @@ div.admonition.important {
     background-color: #F05C56;
     border: 1px solid #9C4850;
     color: #fff;
+}
+
+div.admonition.important a {
+    color: #E6E8E8;
 }
 
 div.tip tt.literal {
