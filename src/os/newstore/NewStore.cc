@@ -1870,8 +1870,8 @@ int NewStore::_create_fid(TransContext *txc, fid_t *fid)
 	fid_last.fno < g_conf->newstore_max_dir_size) {
       ++fid_last.fno;
       if (fid_last.fno >= fid_max.fno) {
-	// raise fid_max, same fset
-	fid_max.fno += g_conf->newstore_fid_prealloc;
+	// raise fid_max, same fset, capping to max_dir_size
+	fid_max.fno = min(fid_max.fno + g_conf->newstore_fid_prealloc, g_conf->newstore_max_dir_size);
 	assert(fid_max.fno >= fid_last.fno);
 	bufferlist bl;
 	::encode(fid_max, bl);
