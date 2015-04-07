@@ -54,6 +54,7 @@
 const string PREFIX_SUPER = "S"; // field -> value
 const string PREFIX_COLL = "C"; // collection name -> (nothing)
 const string PREFIX_OBJ = "O";  // object name -> onode
+const string PREFIX_OVERLAY = "V"; // u64 + offset -> value
 const string PREFIX_OMAP = "M"; // u64 + keyname -> value
 const string PREFIX_WAL = "L";  // write ahead log
 
@@ -285,6 +286,16 @@ static int get_key_object(const string& key, ghobject_t *oid)
   if (r < 2)
     return -7;
   return 0;
+}
+
+
+void get_overlay_key(uint64_t nid, uint64_t offset, string *out)
+{
+  char buf[64];
+  // note: these don't have to sort by nid; no need to pad 0's
+  snprintf(buf, sizeof(buf), "%llx %016llx", (unsigned long long)nid,
+	   (unsigned long long)offset);
+  *out = buf;
 }
 
 // '-' < '.' < '~'
@@ -1157,7 +1168,8 @@ int NewStore::_do_read(
     bufferlist& bl,
     uint32_t op_flags)
 {
-  map<uint64_t,fragment_t>::iterator p;
+  map<uint64_t,fragment_t>::iterator fp, fend;
+  map<uint64_t,overlay_t>::iterator op, oend;
   int r;
   int fd = -1;
   fid_t cur_fid;
@@ -1178,79 +1190,113 @@ int NewStore::_do_read(
 
   r = 0;
 
-  p = o->onode.data_map.begin();   // fixme
-  if (p->first > offset && p != o->onode.data_map.begin()) {
-    --p;
+  // loop over overlays and data fragments.  overlays take precedence.
+  fend = o->onode.data_map.end();
+  fp = o->onode.data_map.begin();   // fixme
+  if (fp != o->onode.data_map.begin()) {
+    --fp;
   }
-  for ( ; length > 0 && p != o->onode.data_map.end(); ++p) {
-    assert(p->first == 0);
-    assert(p->second.offset == 0);
-    assert(p->second.length == o->onode.size);
-    dout(30) << __func__ << " x " << p->first << "~" << p->second.length
-	     << " in " << p->second.fid << dendl;
-    if (p->first + p->second.length <= offset) {
-      dout(30) << __func__ << " skipping " << p->first << "~" << p->second.length
+  oend = o->onode.overlay_map.end();
+  op = o->onode.overlay_map.begin(); // fixme
+  if (op != o->onode.overlay_map.begin()) {
+    --op;
+  }
+  while (length > 0) {
+    if (op != oend && op->first + op->second.length < offset) {
+      dout(20) << __func__ << " skip overlay " << op->first << " " << op->second
 	       << dendl;
+      ++op;
       continue;
     }
-    if (p->first > offset) {
-      unsigned l = p->first - offset;
-      dout(30) << __func__ << " zero " << offset << "~" << l << dendl;
-      bufferptr bp(l);
-      bp.zero();
-      bl.append(bp);
-      length = length - l;
+    if (fp != fend && fp->first + fp->second.length <= offset) {
+      dout(30) << __func__ << " skip frag " << fp->first << "~" << fp->second
+	       << dendl;
+      ++fp;
+      continue;
     }
-    if (p->second.fid != cur_fid) {
-      cur_fid = p->second.fid;
-      if (fd >= 0) {
-	VOID_TEMP_FAILURE_RETRY(::close(fd));
+
+    // overlay?
+    if (op != oend && op->first <= offset) {
+      uint64_t x_off = offset - op->first + op->second.value_offset;
+      uint64_t x_len = MIN(op->first + op->second.length - offset, length);
+      dout(20) << __func__ << "  overlay " << op->first << " " << op->second
+	       << " use " << x_off << "~" << x_len << dendl;
+      bufferlist v;
+      string key;
+      get_overlay_key(o->onode.nid, op->second.key, &key);
+      db->get(PREFIX_OVERLAY, key, &v);
+      bufferlist frag;
+      frag.substr_of(v, x_off, x_len);
+      bl.claim_append(frag);
+      ++op;
+      length -= x_len;
+      offset += x_len;
+      continue;
+    }
+
+    unsigned x_len = length;
+    if (op != oend &&
+	op->first > offset &&
+	op->first - offset < x_len) {
+      x_len = op->first - offset;
+    }
+
+    // frag?
+    if (fp != fend && fp->first <= offset) {
+      if (fp->second.fid != cur_fid) {
+	cur_fid = fp->second.fid;
+	if (fd >= 0) {
+	  VOID_TEMP_FAILURE_RETRY(::close(fd));
+	}
+	fd = _open_fid(cur_fid);
+	if (fd < 0) {
+	  r = fd;
+	  goto out;
+	}
       }
-      fd = _open_fid(cur_fid);
-      if (fd < 0) {
-	r = fd;
+      uint64_t x_off = offset - fp->first - fp->second.offset;
+      x_len = MIN(x_len, fp->second.length - x_off);
+      dout(30) << __func__ << " data " << fp->first << " " << fp->second
+	       << " use " << x_off << "~" << x_len
+	       << " fid " << cur_fid << " offset " << x_off + fp->second.offset
+	       << dendl;
+      r = ::lseek64(fd, x_off, SEEK_SET);
+      if (r < 0) {
+	r = -errno;
 	goto out;
       }
+      bufferlist t;
+      r = t.read_fd(fd, x_len);
+      if (r < 0) {
+	goto out;
+      }
+      bl.claim_append(t);
+      if ((unsigned)r < x_len) {
+	dout(10) << __func__ << "   short read " << r << " < " << x_len
+		 << " from " << cur_fid << dendl;
+	bufferptr z(x_len - r);
+	z.zero();
+	bl.append(z);
+      }
+      offset += x_len;
+      length -= x_len;
+      if (x_off + x_len == fp->second.length) {
+	++fp;
+      }
+      continue;
     }
-    unsigned x_off;
-    if (p->first < offset) {
-      x_off = offset - p->first;
-    } else {
-      x_off = 0;
-    }
-    unsigned x_len = MIN(length, p->second.length - x_off);
-    dout(30) << __func__ << " data " << offset << "~" << x_len
-	     << " fid " << cur_fid << " offset " << x_off + p->second.offset
-	     << dendl;
-    r = ::lseek64(fd, p->second.offset + x_off, SEEK_SET);
-    if (r < 0) {
-      r = -errno;
-      goto out;
-    }
-    bufferlist t;
-    r = t.read_fd(fd, x_len);
-    if (r < 0) {
-      goto out;
-    }
-    bl.claim_append(t);
-    if ((unsigned)r < x_len) {
-      dout(10) << __func__ << "   short read " << r << " < " << x_len
-	       << " from " << cur_fid << " offset " << p->second.offset + x_off
-	       << dendl;
-      bufferptr z(x_len - r);
-      z.zero();
-      bl.append(z);
-    }
-    offset += x_len;
-    length -= x_len;
-  }
-  if (length > 0 && p == o->onode.data_map.end()) {
-    dout(30) << __func__ << " trailing zero " << offset << "~" << length << dendl;
-    bufferptr bp(length);
+
+    // zero.
+    dout(30) << __func__ << " zero " << offset << "~" << x_len << dendl;
+    bufferptr bp(x_len);
     bp.zero();
     bl.push_back(bp);
+    offset += x_len;
+    length -= x_len;
+    continue;
   }
   r = bl.length();
+
  out:
   if (fd >= 0) {
     VOID_TEMP_FAILURE_RETRY(::close(fd));
@@ -2727,6 +2773,173 @@ int NewStore::_touch(TransContext *txc,
   return r;
 }
 
+int NewStore::_do_overlay_clear(TransContext *txc,
+				OnodeRef o)
+{
+  dout(10) << __func__ << " " << o->oid << dendl;
+
+  map<uint64_t,overlay_t>::iterator p = o->onode.overlay_map.begin();
+  while (p != o->onode.overlay_map.end()) {
+    dout(20) << __func__ << " rm " << p->first << " " << p->second << dendl;
+    string key;
+    get_overlay_key(o->onode.nid, p->first, &key);
+    txc->t->rmkey(PREFIX_OVERLAY, key);
+    o->onode.overlay_map.erase(p++);
+  }
+  o->onode.shared_overlays.clear();
+  return 0;
+}
+
+int NewStore::_do_overlay_trim(TransContext *txc,
+			       OnodeRef o,
+			       uint64_t offset,
+			       uint64_t length)
+{
+  dout(10) << __func__ << " " << o->oid << " "
+	   << offset << "~" << length << dendl;
+
+  map<uint64_t,overlay_t>::iterator p = o->onode.overlay_map.begin(); // fixme
+  if (p != o->onode.overlay_map.begin()) {
+    --p;
+  }
+  while (p != o->onode.overlay_map.end()) {
+    if (p->first >= offset + length) {
+      dout(20) << __func__ << " stop at " << p->first << " " << p->second
+	       << dendl;
+      break;
+    }
+    if (p->first + p->second.length < offset) {
+      dout(20) << __func__ << " skip " << p->first << " " << p->second
+	       << dendl;
+      ++p;
+      continue;
+    }
+    if (p->first >= offset &&
+	p->first + p->second.length <= offset + length) {
+      dout(20) << __func__ << " rm " << p->first << " " << p->second
+	       << dendl;
+      if (o->onode.shared_overlays.count(p->second.key) == 0) {
+	string key;
+	get_overlay_key(o->onode.nid, p->first, &key);
+	txc->t->rmkey(PREFIX_OVERLAY, key);
+      }
+      o->onode.overlay_map.erase(p++);
+      continue;
+    }
+    if (p->first >= offset) {
+      dout(20) << __func__ << " trim_front " << p->first << " " << p->second
+	       << dendl;
+      overlay_t& ov = o->onode.overlay_map[offset + length] = p->second;
+      uint64_t by = offset + length - p->first;
+      ov.value_offset += by;
+      ov.length -= by;
+      o->onode.overlay_map.erase(p++);
+      continue;
+    }
+    if (p->first < offset &&
+	p->first + p->second.length <= offset + length) {
+      dout(20) << __func__ << " trim_tail " << p->first << " " << p->second
+	       << dendl;
+      p->second.length = offset - p->first;
+      ++p;
+      continue;
+    }
+    dout(20) << __func__ << " split " << p->first << " " << p->second
+	     << dendl;
+    assert(p->first < offset);
+    assert(p->first + p->second.length > offset + length);
+    overlay_t& nov = o->onode.overlay_map[offset + length] = p->second;
+    p->second.length = offset - p->first;
+    uint64_t by = offset + length - p->first;
+    nov.value_offset += by;
+    nov.length -= by;
+    o->onode.shared_overlays.insert(p->second.key);
+    ++p;
+  }
+  return 0;
+}
+
+int NewStore::_do_overlay_write(TransContext *txc,
+				OnodeRef o,
+				uint64_t offset,
+				uint64_t length,
+				const bufferlist& bl)
+{
+  _do_overlay_trim(txc, o, offset, length);
+
+  dout(10) << __func__ << " " << o->oid << " "
+	   << offset << "~" << length << dendl;
+  overlay_t& ov = o->onode.overlay_map[offset] =
+    overlay_t(++o->onode.last_overlay_key, 0, length);
+  dout(20) << __func__ << " added " << offset << " " << ov << dendl;
+  string key;
+  get_overlay_key(o->onode.nid, o->onode.last_overlay_key, &key);
+  txc->t->set(PREFIX_OVERLAY, key, bl);
+  return 0;
+}
+
+int NewStore::_do_write_all_overlays(TransContext *txc,
+				     OnodeRef o)
+{
+  if (o->onode.overlay_map.empty())
+    return 0;
+
+  // overwrite to new fid
+  if (o->onode.data_map.empty()) {
+    // create
+    fragment_t &f = o->onode.data_map[0];
+    f.offset = 0;
+    f.length = o->onode.size;
+    int fd = _create_fid(txc, &f.fid);
+    if (fd < 0) {
+      return fd;
+    }
+    VOID_TEMP_FAILURE_RETRY(::close(fd));
+    dout(20) << __func__ << " create " << f.fid << dendl;
+  }
+
+  assert(o->onode.data_map.size() == 1);
+  fragment_t& f = o->onode.data_map.begin()->second;
+  assert(f.offset == 0);
+  assert(f.length == o->onode.size);
+
+  for (map<uint64_t,overlay_t>::iterator p = o->onode.overlay_map.begin();
+       p != o->onode.overlay_map.end();
+       ++p) {
+    dout(10) << __func__ << " overlay " << p->first
+	     << "~" << p->second << dendl;
+    string key;
+    get_overlay_key(o->onode.nid, p->second.key, &key);
+    bufferlist bl;
+    db->get(PREFIX_OVERLAY, key, &bl);
+
+    wal_op_t *op = _get_wal_op(txc);
+    op->op = wal_op_t::OP_WRITE;
+    op->offset = p->first;
+    op->length = p->second.length;
+    op->fid = f.fid;
+    op->data.substr_of(bl, p->second.value_offset, p->second.length);
+
+    txc->t->rmkey(PREFIX_OVERLAY, key);
+  }
+
+  // this may double delete something we did above, but that's less
+  // work than doing careful ref counting of the overlay key/value
+  // pairs.
+  for (set<uint64_t>::iterator p = o->onode.shared_overlays.begin();
+       p != o->onode.shared_overlays.end();
+       ++p) {
+    dout(10) << __func__ << " shared overlay " << *p << dendl;
+    string key;
+    get_overlay_key(o->onode.nid, *p, &key);
+    txc->t->rmkey(PREFIX_OVERLAY, key);
+  }
+
+  o->onode.overlay_map.clear();
+  txc->write_onode(o);
+  return 0;
+}
+
 int NewStore::_do_write(TransContext *txc,
 			OnodeRef o,
 			uint64_t offset, uint64_t length,
@@ -2749,6 +2962,7 @@ int NewStore::_do_write(TransContext *txc,
   if (o->onode.size == offset ||
       o->onode.size == 0 ||
       o->onode.data_map.empty()) {
+    _do_overlay_clear(txc, o);
     if (o->onode.data_map.empty()) {
       // create
       fragment_t &f = o->onode.data_map[0];
@@ -2794,6 +3008,8 @@ int NewStore::_do_write(TransContext *txc,
     assert(f.offset == 0);
     assert(f.length == o->onode.size);
 
+    _do_overlay_clear(txc, o);
+
     wal_op_t *op = _get_wal_op(txc);
     op->op = wal_op_t::OP_REMOVE;
     op->fid = f.fid;
@@ -2814,12 +3030,37 @@ int NewStore::_do_write(TransContext *txc,
       goto out;
     }
     txc->sync_fd(fd);
+  } else if ((int)o->onode.overlay_map.size() < g_conf->newstore_overlay_max &&
+	     (int)length < g_conf->newstore_overlay_max_length) {
+    // write an overlay
+    r = _do_overlay_write(txc, o, offset, length, bl);
+    if (r < 0)
+      goto out;
+    if (offset + length > o->onode.size) {
+      // make sure the data fragment matches
+      if (!o->onode.data_map.empty()) {
+	assert(o->onode.data_map.size() == 1);
+	fragment_t& f = o->onode.data_map.begin()->second;
+	assert(f.offset == 0);
+	assert(f.length == o->onode.size);
+	r = _clean_fid_tail(txc, f);
+	if (r < 0)
+	  goto out;
+	f.length = offset + length;
+      }
+      dout(20) << __func__ << " extending size to " << offset + length << dendl;
+      o->onode.size = offset + length;
+    }
+    txc->write_onode(o);
   } else {
     // WAL
     assert(o->onode.data_map.size() == 1);
     fragment_t& f = o->onode.data_map.begin()->second;
     assert(f.offset == 0);
     assert(f.length == o->onode.size);
+    r = _do_write_all_overlays(txc, o);
+    if (r < 0)
+      goto out;
     r = _clean_fid_tail(txc, f);
     if (r < 0)
       goto out;
@@ -2965,53 +3206,95 @@ int NewStore::_zero(TransContext *txc,
 
 int NewStore::_do_truncate(TransContext *txc, OnodeRef o, uint64_t offset)
 {
-  if (o->onode.data_map.empty()) {
-    o->onode.size = offset;
-  } else if (offset == 0) {
-    while (!o->onode.data_map.empty()) {
+  // trim down fragments
+  map<uint64_t,fragment_t>::iterator fp = o->onode.data_map.end();
+  if (fp != o->onode.data_map.begin())
+    --fp;
+  while (fp != o->onode.data_map.end()) {
+    if (fp->first + fp->second.length <= offset) {
+      break;
+    }
+    if (fp->first >= offset) {
+      dout(20) << __func__ << " wal rm fragment " << fp->first << " "
+	       << fp->second << dendl;
       wal_op_t *op = _get_wal_op(txc);
       op->op = wal_op_t::OP_REMOVE;
-      op->fid = o->onode.data_map.rbegin()->second.fid;
-      o->onode.data_map.erase(o->onode.data_map.rbegin()->first);
+      op->fid = fp->second.fid;
+      if (fp != o->onode.data_map.begin()) {
+	o->onode.data_map.erase(fp--);
+	continue;
+      } else {
+	o->onode.data_map.erase(fp);
+	break;
+      }
+    } else {
+      assert(fp->first + fp->second.length > offset);
+      assert(fp->first < offset);
+      uint64_t newlen = offset - fp->first;
+      dout(20) << __func__ << " wal truncate fragment " << fp->first << " "
+	       << fp->second << " to " << newlen << dendl;
+      fragment_t& f = fp->second;
+      f.length = newlen;
+      wal_op_t *op = _get_wal_op(txc);
+      op->op = wal_op_t::OP_TRUNCATE;
+      op->offset = offset;
+      op->fid = f.fid;
+      break;
     }
-  } else if (offset < o->onode.size) {
-    assert(o->onode.data_map.size() == 1);
-    fragment_t& f = o->onode.data_map.begin()->second;
-    assert(f.offset == 0);
-    assert(f.length == o->onode.size);
-    f.length = offset;
-    wal_op_t *op = _get_wal_op(txc);
-    op->op = wal_op_t::OP_TRUNCATE;
-    op->offset = offset;
-    op->fid = f.fid;
-    assert(f.offset == 0);
-  } else if (offset > o->onode.size) {
+  }
+
+  // truncate up trailing fragment?
+  if (!o->onode.data_map.empty() && offset > o->onode.size) {
     // resize file up.  make sure we don't have trailing bytes
     assert(o->onode.data_map.size() == 1);
     fragment_t& f = o->onode.data_map.begin()->second;
     assert(f.offset == 0);
     assert(f.length == o->onode.size);
+    dout(20) << __func__ << " truncate up " << f << " to " << offset << dendl;
     int r = _clean_fid_tail(txc, f);
     if (r < 0)
       return r;
-    if (false) {  // hmm don't bother!!
-      // truncate up.  don't bother to fsync since it's all zeros.
-      int fd = _open_fid(f.fid);
-      if (fd < 0) {
-	return fd;
-      }
-      r = ::ftruncate(fd, offset);
-      if (r < 0) {
-	r = -errno;
-	derr << "error from ftruncate on " << f.fid << " to " << offset << ": "
-	     << cpp_strerror(r) << dendl;
-	VOID_TEMP_FAILURE_RETRY(::close(fd));
-	return r;
-      }
-      VOID_TEMP_FAILURE_RETRY(::close(fd));
-    }
     f.length = offset;
   }
+
+  // trim down overlays
+  map<uint64_t,overlay_t>::iterator op = o->onode.overlay_map.end();
+  if (op != o->onode.overlay_map.begin())
+    --op;
+  while (op != o->onode.overlay_map.end()) {
+    if (op->first + op->second.length <= offset) {
+      break;
+    }
+    if (op->first >= offset) {
+      if (!o->onode.shared_overlays.count(op->second.key)) {
+	dout(20) << __func__ << " rm overlay " << op->first << " "
+		 << op->second << dendl;
+	string key;
+	get_overlay_key(o->onode.nid, op->second.key, &key);
+	txc->t->rmkey(PREFIX_OVERLAY, key);
+      } else {
+	dout(20) << __func__ << " rm overlay " << op->first << " "
+		 << op->second << " (shared)" << dendl;
+      }
+      if (op != o->onode.overlay_map.begin()) {
+	o->onode.overlay_map.erase(op--);
+	continue;
+      } else {
+	o->onode.overlay_map.erase(op);
+	break;
+      }
+    } else {
+      assert(op->first + op->second.length > offset);
+      assert(op->first < offset);
+      uint64_t newlen = offset - op->first;
+      dout(20) << __func__ << " truncate overlay " << op->first << " "
+	       << op->second << " to " << newlen << dendl;
+      overlay_t& ov = op->second;
+      ov.length = newlen;
+      break;
+    }
+  }
+
   o->onode.size = offset;
   txc->write_onode(o);
   return 0;
