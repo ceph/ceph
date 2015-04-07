@@ -954,6 +954,11 @@ AC_CHECK_HEADERS([ \
 	utime.h \
 ])
 
+# name_to_handle_at
+AC_CHECK_FUNC([name_to_handle_at],
+	[AC_DEFINE([HAVE_NAME_TO_HANDLE_AT], [], [name_to_handle_at exists])],
+	[])
+
 # sync_file_range
 AC_CHECK_FUNC([sync_file_range],
 	[AC_DEFINE([HAVE_SYNC_FILE_RANGE], [], [sync_file_range(2) is supported])],
