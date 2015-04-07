@@ -33,7 +33,7 @@ def base(ctx, config):
     run.wait(
         ctx.cluster.run(
             args=[
-                'mkdir', '-m0755', '--',
+                'mkdir', '-p', '-m0755', '--',
                 testdir,
                 ],
             wait=False,
@@ -453,7 +453,7 @@ def syslog(ctx, config):
     run.wait(
         ctx.cluster.run(
             args=[
-                'mkdir', '-m0755', '--',
+                'mkdir', '-p', '-m0755', '--',
                 '{adir}/syslog'.format(adir=archive_dir),
                 ],
             wait=False,
