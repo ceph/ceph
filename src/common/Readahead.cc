@@ -70,6 +70,9 @@ Readahead::extent_t Readahead::_compute_readahead(uint64_t limit) {
       } else {
 	// continuing readahead trigger
 	m_readahead_size *= 2;
+	if (m_last_pos > m_readahead_pos) {
+	  m_readahead_pos = m_last_pos;
+	}
       }
       m_readahead_size = MAX(m_readahead_size, m_readahead_min_bytes);
       m_readahead_size = MIN(m_readahead_size, m_readahead_max_bytes);
