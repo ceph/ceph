@@ -8,8 +8,9 @@ release = 'dev'
 exclude_patterns = ['**/.#*', '**/*~']
 
 def _get_manpages():
-    import os
-    man_dir = os.path.dirname(__file__)
+    src_dir = os.path.dirname(__file__)
+    top_srcdir = os.path.dirname(src_dir)
+    man_dir = os.path.join(top_srcdir, 'doc', 'man')
     sections = os.listdir(man_dir)
     for section in sections:
         section_dir = os.path.join(man_dir, section)
