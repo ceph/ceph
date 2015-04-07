@@ -560,18 +560,18 @@ void ObjectCacher::perf_start()
   string n = "objectcacher-" + name;
   PerfCountersBuilder plb(cct, n, l_objectcacher_first, l_objectcacher_last);
 
-  plb.add_u64_counter(l_objectcacher_cache_ops_hit, "cache_ops_hit");
-  plb.add_u64_counter(l_objectcacher_cache_ops_miss, "cache_ops_miss");
-  plb.add_u64_counter(l_objectcacher_cache_bytes_hit, "cache_bytes_hit");
-  plb.add_u64_counter(l_objectcacher_cache_bytes_miss, "cache_bytes_miss");
-  plb.add_u64_counter(l_objectcacher_data_read, "data_read");
-  plb.add_u64_counter(l_objectcacher_data_written, "data_written");
-  plb.add_u64_counter(l_objectcacher_data_flushed, "data_flushed");
+  plb.add_u64_counter(l_objectcacher_cache_ops_hit, "cache_ops_hit", "Hit operations");
+  plb.add_u64_counter(l_objectcacher_cache_ops_miss, "cache_ops_miss", "Miss operations");
+  plb.add_u64_counter(l_objectcacher_cache_bytes_hit, "cache_bytes_hit", "Hit data");
+  plb.add_u64_counter(l_objectcacher_cache_bytes_miss, "cache_bytes_miss", "Miss data");
+  plb.add_u64_counter(l_objectcacher_data_read, "data_read", "Read data");
+  plb.add_u64_counter(l_objectcacher_data_written, "data_written", "Data written to cache");
+  plb.add_u64_counter(l_objectcacher_data_flushed, "data_flushed", "Data flushed");
   plb.add_u64_counter(l_objectcacher_overwritten_in_flush,
-                      "data_overwritten_while_flushing");
-  plb.add_u64_counter(l_objectcacher_write_ops_blocked, "write_ops_blocked");
-  plb.add_u64_counter(l_objectcacher_write_bytes_blocked, "write_bytes_blocked");
-  plb.add_time(l_objectcacher_write_time_blocked, "write_time_blocked");
+                      "data_overwritten_while_flushing", "Data overwritten while flushing");
+  plb.add_u64_counter(l_objectcacher_write_ops_blocked, "write_ops_blocked", "Write operations, delayed due to dirty limits");
+  plb.add_u64_counter(l_objectcacher_write_bytes_blocked, "write_bytes_blocked", "Write data blocked on dirty limit");
+  plb.add_time(l_objectcacher_write_time_blocked, "write_time_blocked", "Time spent blocking a write due to dirty limits");
 
   perfcounter = plb.create_perf_counters();
   cct->get_perfcounters_collection()->add(perfcounter);
