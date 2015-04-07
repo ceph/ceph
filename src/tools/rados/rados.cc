@@ -158,7 +158,7 @@ void usage(ostream& out)
 "   --target-pool=pool\n"
 "        select target pool by name\n"
 "   -b op_size\n"
-"        set the size of write ops for put or benchmarking\n"
+"        set the block size for put/get ops and for write benchmarking\n"
 "   -s name\n"
 "   --snap name\n"
 "        select given snap name for (read) IO\n"
