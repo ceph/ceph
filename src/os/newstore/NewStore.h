@@ -24,6 +24,7 @@
 #include "common/RWLock.h"
 #include "common/WorkQueue.h"
 #include "os/ObjectStore.h"
+#include "os/fs/FS.h"
 #include "os/KeyValueDB.h"
 
 #include "newstore_types.h"
@@ -364,6 +365,7 @@ public:
 private:
   CephContext *cct;
   KeyValueDB *db;
+  FS *fs;
   uuid_d fsid;
   int path_fd;  ///< open handle to $path
   int fsid_fd;  ///< open handle (locked) to $path/fsid
