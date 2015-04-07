@@ -55,6 +55,7 @@ setup(
             'teuthology-lock = scripts.lock:main',
             'teuthology-schedule = scripts.schedule:main',
             'teuthology-updatekeys = scripts.updatekeys:main',
+            'teuthology-update-inventory = scripts.update_inventory:main',
             'teuthology-coverage = scripts.coverage:main',
             'teuthology-results = scripts.results:main',
             'teuthology-report = scripts.report:main',
