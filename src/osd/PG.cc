@@ -671,8 +671,8 @@ void PG::generate_past_intervals()
 
     cur_map = osd->get_map(cur_epoch);
     pg_t pgid = get_pgid().pgid;
-    if (cur_map->get_pools().count(pgid.pool()))
-      pgid = pgid.get_ancestor(cur_map->get_pg_num(pgid.pool()));
+    if (last_map->get_pools().count(pgid.pool()))
+      pgid = pgid.get_ancestor(last_map->get_pg_num(pgid.pool()));
     cur_map->pg_to_up_acting_osds(pgid, &up, &up_primary, &acting, &primary);
 
     std::stringstream debug;
