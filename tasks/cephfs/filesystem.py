@@ -38,7 +38,7 @@ class Filesystem(object):
      * Assume a single filesystem+cluster
      * Assume a single MDS
     """
-    def __init__(self, ctx):
+    def __init__(self, ctx, admin_remote=None):
         self._ctx = ctx
 
         self.mds_ids = list(misc.all_roles_of_type(ctx.cluster, 'mds'))
@@ -46,8 +46,11 @@ class Filesystem(object):
             raise RuntimeError("This task requires at least one MDS")
 
         first_mon = misc.get_first_mon(ctx, None)
-        (self.mon_remote,) = ctx.cluster.only(first_mon).remotes.iterkeys()
-        self.mon_manager = ceph_manager.CephManager(self.mon_remote, ctx=ctx, logger=log.getChild('ceph_manager'))
+        if admin_remote is None:
+            (self.admin_remote,) = ctx.cluster.only(first_mon).remotes.iterkeys()
+        else:
+            self.admin_remote = admin_remote
+        self.mon_manager = ceph_manager.CephManager(self.admin_remote, ctx=ctx, logger=log.getChild('ceph_manager'))
         self.mds_daemons = dict([(mds_id, self._ctx.daemons.get_daemon('mds', mds_id)) for mds_id in self.mds_ids])
 
         client_list = list(misc.all_roles_of_type(self._ctx.cluster, 'client'))
@@ -59,15 +62,15 @@ class Filesystem(object):
         osd_count = len(list(misc.all_roles_of_type(self._ctx.cluster, 'osd')))
         pgs_per_fs_pool = pg_warn_min_per_osd * osd_count
 
-        self.mon_remote.run(args=['sudo', 'ceph', 'osd', 'pool', 'create', 'metadata', pgs_per_fs_pool.__str__()])
-        self.mon_remote.run(args=['sudo', 'ceph', 'osd', 'pool', 'create', 'data', pgs_per_fs_pool.__str__()])
-        self.mon_remote.run(args=['sudo', 'ceph', 'fs', 'new', 'default', 'metadata', 'data'])
+        self.admin_remote.run(args=['sudo', 'ceph', 'osd', 'pool', 'create', 'metadata', pgs_per_fs_pool.__str__()])
+        self.admin_remote.run(args=['sudo', 'ceph', 'osd', 'pool', 'create', 'data', pgs_per_fs_pool.__str__()])
+        self.admin_remote.run(args=['sudo', 'ceph', 'fs', 'new', 'default', 'metadata', 'data'])
 
     def delete(self):
-        self.mon_remote.run(args=['sudo', 'ceph', 'fs', 'rm', 'default', '--yes-i-really-mean-it'])
-        self.mon_remote.run(args=['sudo', 'ceph', 'osd', 'pool', 'delete',
+        self.admin_remote.run(args=['sudo', 'ceph', 'fs', 'rm', 'default', '--yes-i-really-mean-it'])
+        self.admin_remote.run(args=['sudo', 'ceph', 'osd', 'pool', 'delete',
                                   'metadata', 'metadata', '--yes-i-really-really-mean-it'])
-        self.mon_remote.run(args=['sudo', 'ceph', 'osd', 'pool', 'delete',
+        self.admin_remote.run(args=['sudo', 'ceph', 'osd', 'pool', 'delete',
                                   'data', 'data', '--yes-i-really-really-mean-it'])
 
     def legacy_configured(self):
@@ -76,8 +79,8 @@ class Filesystem(object):
         the case, the caller should avoid using Filesystem.create
         """
         try:
-            proc = self.mon_remote.run(args=['sudo', 'ceph', '--format=json-pretty', 'osd', 'lspools'],
-                                  stdout=StringIO())
+            proc = self.admin_remote.run(args=['sudo', 'ceph', '--format=json-pretty', 'osd', 'lspools'],
+                                       stdout=StringIO())
             pools = json.loads(proc.stdout.getvalue())
             metadata_pool_exists = 'metadata' in [p['poolname'] for p in pools]
         except CommandFailedError as e:

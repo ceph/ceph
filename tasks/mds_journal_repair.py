@@ -276,7 +276,7 @@ class TestJournalRepair(CephFSTestCase):
         self.fs.table_tool(["0", "reset", "session"])
         self.fs.journal_tool(["journal", "reset"], rank=0)
         self.fs.erase_mds_objects(1)
-        self.fs.mon_remote.run(args=['sudo', 'ceph', 'fs', 'reset', 'default', '--yes-i-really-mean-it'])
+        self.fs.admin_remote.run(args=['sudo', 'ceph', 'fs', 'reset', 'default', '--yes-i-really-mean-it'])
 
         # Bring an MDS back online, mount a client, and see that we can walk the full
         # filesystem tree again
