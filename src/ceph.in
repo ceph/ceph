@@ -551,11 +551,27 @@ def main():
             # for both:
             childargs = childargs[2:]
         else:
-            print >> sys.stderr, 'daemon requires at least 3 arguments'
+            print >> sys.stderr, '{0} requires at least {1} arguments'.format(
+                childargs[0], require_args)
             return errno.EINVAL
 
     if sockpath and daemon_perf:
-        DaemonWatcher(sockpath).run()
+        interval = 1
+        count = None
+        if len(childargs) > 0:
+            try:
+                interval = float(childargs[0])
+                if interval < 0:
+                    raise ValueError
+            except ValueError:
+                print >> sys.stderr, 'daemonperf: interval should be a positive number'
+                return errno.EINVAL
+        if len(childargs) > 1:
+            if not childargs[1].isdigit():
+                print >> sys.stderr, 'daemonperf: count should be a positive integer'
+                return errno.EINVAL
+            count = int(childargs[1])
+        DaemonWatcher(sockpath).run(interval, count)
         return 0
     elif sockpath:
         try:

@@ -244,7 +244,7 @@ class DaemonWatcher(object):
                 if schema_data.get('nick'):
                     self._stats[section_name][name] = schema_data['nick']
 
-    def run(self, ostr=sys.stdout):
+    def run(self, interval, count=None, ostr=sys.stdout):
         """
         Print output at regular intervals until interrupted.
 
@@ -267,8 +267,12 @@ class DaemonWatcher(object):
                     self._print_headers(ostr)
                     rows_since_header = 0
                 self._print_vals(ostr, dump, last_dump)
+                if count is not None:
+                    count -= 1
+                    if count <= 0:
+                        break
                 rows_since_header += 1
                 last_dump = dump
-                time.sleep(1)
+                time.sleep(interval)
         except KeyboardInterrupt:
             return
