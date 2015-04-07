@@ -155,7 +155,7 @@ The following steps show the configuration in Ceph's configuration file i.e,
 	log file = /var/log/radosgw/client.radosgw.gateway.log
 	rgw print continue = false
 
-#. Add the following content in ``/etc/httpd/conf.d/rgw.conf``::
+#. Add the following content in ``/etc/httpd/conf.d/rgw.conf``:
 
    CentOS/RHEL::
 
