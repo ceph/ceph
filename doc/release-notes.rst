@@ -3,7 +3,7 @@
 ===============
 
 v0.94 Hammer (draft)
-============
+====================
 
 This major release is expected to form the basis of the next long-term
 stable series.  It is intended to supercede v0.80.x Firefly.
@@ -125,6 +125,7 @@ Upgrading
 
 * If upgrading from v0.93, set
    osd enable degraded writes = false
+
   on all osds prior to upgrading.  The degraded writes feature has
   been reverted due to 11155.
 
@@ -146,7 +147,7 @@ Upgrading from v0.80.x Giant
 
 * If you are upgrading specifically from v0.92, you must stop all OSD
   daemons and flush their journals (``ceph-osd -i NNN
-  --flush-journal'') before upgrading.  There was a transaction
+  --flush-journal``) before upgrading.  There was a transaction
   encoding bug in v0.92 that broke compatibility.  Upgrading from v0.93,
   v0.91, or anything earlier is safe.
 
@@ -565,8 +566,7 @@ Notable changes since v0.87.x Giant
 * mds: constify MDSCacheObjects (John Spray)
 * mds: dirfrag buf fix (Yan, Zheng)
 * mds: disallow most commands on inactive MDS's (Greg Farnum)
-* mds: drop dentries, leases on de* The ceph-osd daemons will perform a disk-format upgrade improve the
-leted directories (#10164 Yan, Zheng)
+* mds: drop dentries, leases on deleted directories (#10164 Yan, Zheng)
 * mds: export dir asok command (John Spray)
 * mds: fix MDLog IO callback deadlock (John Spray)
 * mds: fix compat_version for MClientSession (#9945 John Spray)
@@ -607,7 +607,7 @@ leted directories (#10164 Yan, Zheng)
 * mon: fix 'mds fail' for standby MDSs (John Spray)
 * mon: fix 'osd crush link' id resolution (John Spray)
 * mon: fix 'profile osd' use of config-key function on mon (#10844 Joao Eduardo Luis)
-* mon: fix *_ratio units and types (Sage Weil)
+* mon: fix *_ratio* units and types (Sage Weil)
 * mon: fix JSON dumps to dump floats as flots and not strings (Sage Weil)
 * mon: fix MDS health status from peons (#10151 John Spray)
 * mon: fix caching for min_last_epoch_clean (#9987 Sage Weil)
@@ -938,7 +938,7 @@ Upgrading
 ---------
 
 * If you are upgrading from v0.92, you must stop all OSD daemons and flush their
-  journals (``ceph-osd -i NNN --flush-journal'') before upgrading.  There was
+  journals (``ceph-osd -i NNN --flush-journal``) before upgrading.  There was
   a transaction encoding bug in v0.92 that broke compatibility.  Upgrading from
   v0.91 or anything earlier is safe.
 
@@ -1423,7 +1423,7 @@ Notable Changes
 * mds: store backtrace for stray dir (Yan, Zheng)
 * mds: verify backtrace when fetching dirfrag (#9557 Yan, Zheng)
 * mon: add max pgs per osd warning (Sage Weil)
-* mon: fix *_ratio units and types (Sage Weil)
+* mon: fix *_ratio* units and types (Sage Weil)
 * mon: fix JSON dumps to dump floats as flots and not strings (Sage Weil)
 * mon: fix formatter 'pg stat' command output (Sage Weil)
 * msgr: async: several fixes (Haomai Wang)
