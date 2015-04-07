@@ -928,20 +928,36 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
   }
 
   /* Execute filesystem add/remove, or pass through to filesystem_command */
-  bool const handled = management_command(prefix, cmdmap, ss, r);
-  if (!handled) {
-    if (!pending_mdsmap.get_enabled()) {
-      ss << "No filesystem configured: use `ceph fs new` to create a filesystem";
-      r = -ENOENT;
-    } else {
-      bool const completed = filesystem_command(m, prefix, cmdmap, ss, r);
-      if (!completed) {
-        // Do not reply, the message has been enqueued for retry
-        return false;
-      }
-    }
+  r = management_command(m, prefix, cmdmap, ss);
+  if (r >= 0)
+    goto out;
+  
+  if (r == -EAGAIN) {
+    // message has been enqueued for retry; return.
+    return false;
+  } else if (r != -ENOSYS) {
+    // MDSMonitor::management_command() returns -ENOSYS if it knows nothing
+    // about the command passed to it, in which case we will check whether
+    // MDSMonitor::filesystem_command() knows about it.  If on the other hand
+    // the error code is different from -ENOSYS, we will treat it as is and
+    // behave accordingly.
+    goto out;
   }
 
+  if (!pending_mdsmap.get_enabled()) {
+    ss << "No filesystem configured: use `ceph fs new` to create a filesystem";
+    r = -ENOENT;
+  } else {
+    bool const completed = filesystem_command(m, prefix, cmdmap, ss, r);
+    if (!completed) {
+      // Do not reply, the message has been enqueued for retry
+      return false;
+    }
+    // we expect MDSMonitor::filesystem_command() to set 'r = 0' in
+    // case of success.
+  }
+
+out:
   /* Compose response */
   string rs;
   getline(ss, rs);
@@ -1004,11 +1020,11 @@ int MDSMonitor::_check_pool(
  * @return true if such a command was found, else false to
  *         fall through and look for other types of command.
  */
-bool MDSMonitor::management_command(
+int MDSMonitor::management_command(
+    MMonCommand *m,
     std::string const &prefix,
     map<string, cmd_vartype> &cmdmap,
-    std::stringstream &ss,
-    int &r)
+    std::stringstream &ss)
 {
   if (prefix == "mds newfs") {
     /* Legacy `newfs` command, takes pool numbers instead of
@@ -1020,24 +1036,22 @@ bool MDSMonitor::management_command(
     if (!cmd_getval(g_ceph_context, cmdmap, "metadata", metadata)) {
       ss << "error parsing 'metadata' value '"
          << cmd_vartype_stringify(cmdmap["metadata"]) << "'";
-      r = -EINVAL;
-      return true;
+      return -EINVAL;
     }
     if (!cmd_getval(g_ceph_context, cmdmap, "data", data)) {
       ss << "error parsing 'data' value '"
          << cmd_vartype_stringify(cmdmap["data"]) << "'";
-      r = -EINVAL;
-      return true;
+      return -EINVAL;
     }
  
-    r = _check_pool(data, &ss);
-    if (r) {
-      return true;
+    int r = _check_pool(data, &ss);
+    if (r < 0) {
+      return r;
     }
 
     r = _check_pool(metadata, &ss);
-    if (r) {
-      return true;
+    if (r < 0) {
+      return r;
     }
 
     // be idempotent.. success if it already exists and matches
@@ -1046,43 +1060,37 @@ bool MDSMonitor::management_command(
 	mdsmap.get_first_data_pool() == data &&
 	mdsmap.fs_name == MDS_FS_NAME_DEFAULT) {
       ss << "filesystem '" << MDS_FS_NAME_DEFAULT << "' already exists";
-      r = 0;
-      return true;
+      return 0;
     }
 
     string sure;
     cmd_getval(g_ceph_context, cmdmap, "sure", sure);
     if (pending_mdsmap.get_enabled() && sure != "--yes-i-really-mean-it") {
       ss << "this is DANGEROUS and will wipe out the mdsmap's fs, and may clobber data in the new pools you specify.  add --yes-i-really-mean-it if you do.";
-      r = -EPERM;
-
-      return true;
+      return -EPERM;
     } else {
       newmap.inc = pending_mdsmap.inc;
       pending_mdsmap = newmap;
       pending_mdsmap.epoch = mdsmap.epoch + 1;
       create_new_fs(pending_mdsmap, MDS_FS_NAME_DEFAULT, metadata, data);
       ss << "new fs with metadata pool " << metadata << " and data pool " << data;
-      r = 0;
-      return true;
+      return 0;
     }
   } else if (prefix == "fs new") {
     string metadata_name;
     cmd_getval(g_ceph_context, cmdmap, "metadata", metadata_name);
     int64_t metadata = mon->osdmon()->osdmap.lookup_pg_pool_name(metadata_name);
     if (metadata < 0) {
-      r = -ENOENT;
       ss << "pool '" << metadata_name << "' does not exist";
-      return true;
+      return -ENOENT;
     }
 
     string data_name;
     cmd_getval(g_ceph_context, cmdmap, "data", data_name);
     int64_t data = mon->osdmon()->osdmap.lookup_pg_pool_name(data_name);
     if (data < 0) {
-      r = -ENOENT;
       ss << "pool '" << data_name << "' does not exist";
-      return true;
+      return -ENOENT;
     }
    
     string fs_name;
@@ -1091,8 +1099,7 @@ bool MDSMonitor::management_command(
         // Ensure fs name is not empty so that we can implement
         // commmands that refer to FS by name in future.
         ss << "Filesystem name may not be empty";
-        r = -EINVAL;
-        return true;
+        return -EINVAL;
     }
 
     if (pending_mdsmap.get_enabled()
@@ -1100,16 +1107,14 @@ bool MDSMonitor::management_command(
         && *(pending_mdsmap.data_pools.begin()) == data
         && pending_mdsmap.metadata_pool == metadata) {
       // Identical FS created already, this is a no-op
-      r = 0;
       ss << "filesystem '" << fs_name << "' already exists";
-      return true;
+      return 0;
     }
 
     if (pending_mdsmap.get_enabled()) {
       /* We currently only support one filesystem, so cannot create a second */
       ss << "A filesystem already exists, use `ceph fs rm` if you wish to delete it";
-      r = -EINVAL;
-      return true;
+      return -EINVAL;
     }
 
     pg_pool_t const *data_pool = mon->osdmon()->osdmap.get_pg_pool(data);
@@ -1122,19 +1127,27 @@ bool MDSMonitor::management_command(
     // we believe we must.  bailing out *after* we request the proposal is
     // bad business as we could have changed the osdmon's state and ending up
     // returning an error to the user.
-    r = _check_pool(data, &ss);
-    if (r) {
-      return true;
+    int r = _check_pool(data, &ss);
+    if (r < 0) {
+      return r;
     }
 
     r = _check_pool(metadata, &ss);
-    if (r) {
-      return true;
+    if (r < 0) {
+      return r;
     }
 
     // Automatically set crash_replay_interval on data pool if it
     // isn't already set.
     if (data_pool->get_crash_replay_interval() == 0) {
+      // We will be changing osdmon's state and requesting the osdmon to
+      // propose.  We thus need to make sure the osdmon is writeable before
+      // we do this, waiting if it's not.
+      if (!mon->osdmon()->is_writeable()) {
+        mon->osdmon()->wait_for_writeable(new C_RetryMessage(this, m));
+        return -EAGAIN;
+      }
+
       r = mon->osdmon()->set_crash_replay_interval(data, g_conf->osd_default_data_pool_replay_window);
       assert(r == 0);  // We just did get_pg_pool so it must exist and be settable
       request_proposal(mon->osdmon());
@@ -1148,8 +1161,7 @@ bool MDSMonitor::management_command(
     pending_mdsmap.last_failure_osd_epoch = mdsmap.last_failure_osd_epoch;
     create_new_fs(pending_mdsmap, fs_name, metadata, data);
     ss << "new fs with metadata pool " << metadata << " and data pool " << data;
-    r = 0;
-    return true;
+    return 0;
   } else if (prefix == "fs rm") {
     // Check caller has correctly named the FS to delete
     // (redundant while there is only one FS, but command
@@ -1159,15 +1171,13 @@ bool MDSMonitor::management_command(
     if (!pending_mdsmap.get_enabled() || fs_name != pending_mdsmap.fs_name) {
         // Consider absence success to make deletes idempotent
         ss << "filesystem '" << fs_name << "' does not exist";
-        r = 0;
-        return true;
+        return 0;
     }
 
     // Check that no MDS daemons are active
     if (!pending_mdsmap.up.empty()) {
       ss << "all MDS daemons must be inactive before removing filesystem";
-      r = -EINVAL;
-      return true;
+      return -EINVAL;
     }
 
     // Check for confirmation flag
@@ -1176,8 +1186,7 @@ bool MDSMonitor::management_command(
     if (sure != "--yes-i-really-mean-it") {
       ss << "this is a DESTRUCTIVE operation and will make data in your filesystem permanently" \
             "inaccessible.  Add --yes-i-really-mean-it if you are sure you wish to continue.";
-      r = -EPERM;
-      return true;
+      return -EPERM;
     }
 
     MDSMap newmap;
@@ -1189,10 +1198,9 @@ bool MDSMonitor::management_command(
     pending_mdsmap.cas_pool = -1;
     pending_mdsmap.created = ceph_clock_now(g_ceph_context);
 
-    r = 0;
-    return true;
+    return 0;
   } else {
-    return false;
+    return -ENOSYS;
   }
 }
 
