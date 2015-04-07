@@ -5100,7 +5100,7 @@ Notable Changes
 
 
 v0.67.12 "Dumpling" (draft)
-===================
+===========================
 
 This stable update for Dumpling fixes a few longstanding issues with
 backfill in the OSD that can lead to stalled IOs.  There is also a fix
