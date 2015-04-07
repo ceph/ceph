@@ -502,7 +502,8 @@ namespace librbd {
       }
 
       r = ictx->image_watcher->notify_snap_create(snap_name);
-      if (r == -EEXIST) {
+      if (r == 0 || r == -EEXIST) {
+        notify_change(ictx->md_ctx, ictx->header_oid, ictx);
         return 0;
       } else if (r != -ETIMEDOUT) {
 	return r;
