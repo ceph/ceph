@@ -121,9 +121,8 @@ function run_in_docker() {
     local image=$(get_image_name $os_type $os_version)
     local upstream=$(get_upstream)
     local ccache
-    if test -d $HOME/.ccache ; then
-        ccache="--volume $HOME/.ccache:$HOME/.ccache"
-    fi
+    mkdir -p $HOME/.ccache
+    ccache="--volume $HOME/.ccache:$HOME/.ccache"
     if $dev ; then
         dev="--volume /dev:/dev"
     else
