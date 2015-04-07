@@ -8,6 +8,8 @@ if ENABLE_SERVER
 
 libos_la_SOURCES = \
 	os/chain_xattr.cc \
+	os/fs/FS.cc \
+	os/fs/XFS.cc \
 	os/newstore/NewStore.cc \
 	os/DBObjectMap.cc \
 	os/GenericObjectMap.cc \
@@ -61,6 +63,8 @@ noinst_HEADERS += \
 	os/FileStore.h \
 	os/FlatIndex.h \
 	os/FDCache.h \
+	os/fs/FS.h \
+	os/fs/XFS.h \
 	os/GenericFileStoreBackend.h \
 	os/HashIndex.h \
 	os/IndexManager.h \
