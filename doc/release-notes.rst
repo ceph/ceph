@@ -2,8 +2,8 @@
  Release Notes
 ===============
 
-v0.94 Hammer (draft)
-====================
+v0.94 Hammer
+============
 
 This major release is expected to form the basis of the next long-term
 stable series.  It is intended to supercede v0.80.x Firefly.
@@ -136,6 +136,10 @@ Upgrading
 
   on all osds prior to upgrading.  The degraded writes feature has
   been reverted due to 11155.
+
+* The LTTNG tracing in librbd and librados is disabled in the release packages
+  until we find a way to avoid violating distro security policies when linking
+  libust.
 
 Upgrading from v0.80.x Giant
 ----------------------------
@@ -324,6 +328,7 @@ Notable changes since v0.93
 * build: reorganize Makefile to allow modular builds (Boris Ranto)
 * ceph-fuse: be more forgiving on remount (#10982 Greg Farnum)
 * ceph: improve CLI parsing (#11093 David Zafman)
+* common: fix cluster logging to default channel (#11177 Sage Weil)
 * crush: fix parsing of straw2 buckets (#11015 Sage Weil)
 * doc: update man pages (David Zafman)
 * librados: fix leak in C_TwoContexts (Xiong Yiliang)
@@ -333,6 +338,7 @@ Notable changes since v0.93
 * librbd: fix ordering/queueing of resize operations (Jason Dillaman)
 * librbd: validate image is r/w on resize/flatten (Jason Dillaman)
 * librbd: various internal locking fixes (Jason Dillaman)
+* lttng: tracing is disabled until we streamline dependencies (Josh Durgin)
 * mon: add bootstrap-rgw profile (Sage Weil)
 * mon: do not pollute mon dir with CSV files from CRUSH check (Loic Dachary)
 * mon: fix clock drift time check interval (#10546 Joao Eduardo Luis)
