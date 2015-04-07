@@ -88,12 +88,36 @@ struct fragment_t {
 };
 WRITE_CLASS_ENCODER(fragment_t)
 
+ostream& operator<<(ostream& out, const fragment_t& o);
+
+struct overlay_t {
+  uint64_t key;          ///< key (offset of start of original k/v pair)
+  uint32_t value_offset; ///< offset in associated value for this extent
+  uint32_t length;
+
+  overlay_t() : key(0), value_offset(0), length(0) {}
+  overlay_t(uint64_t k, uint32_t vo, uint32_t l)
+    : key(k), value_offset(vo), length(l) {}
+
+  void encode(bufferlist& bl) const;
+  void decode(bufferlist::iterator& p);
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<overlay_t*>& o);
+
+};
+WRITE_CLASS_ENCODER(overlay_t)
+
+ostream& operator<<(ostream& out, const overlay_t& o);
+
 /// onode: per-object metadata
 struct onode_t {
   uint64_t nid;                        ///< numeric id (locally unique)
   uint64_t size;                       ///< object size
   map<string, bufferptr> attrs;        ///< attrs
   map<uint64_t, fragment_t> data_map;  ///< data (offset to fragment mapping)
+  map<uint64_t,overlay_t> overlay_map; ///< overlay data (stored in db)
+  set<uint64_t> shared_overlays;       ///< overlay keys that are shared
+  uint32_t last_overlay_key;           ///< key for next overlay
   uint64_t omap_head;                  ///< id for omap root node
 
   uint32_t expected_object_size;
@@ -102,6 +126,7 @@ struct onode_t {
   onode_t()
     : nid(0),
       size(0),
+      last_overlay_key(0),
       omap_head(0),
       expected_object_size(0),
       expected_write_size(0) {}
