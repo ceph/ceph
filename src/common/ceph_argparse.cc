@@ -151,20 +151,22 @@ void vec_to_argv(const char *argv0, std::vector<const char*>& args,
     (*argv)[(*argc)++] = args[i];
 }
 
-void ceph_arg_value_type(const char * nextargstr, bool *boolOption, bool *boolNumeric)
+void ceph_arg_value_type(const char * nextargstr, bool *bool_option, bool *bool_numeric)
 {
-   bool isNumeric = true;
-   bool isOption;   
-   if(nextargstr == NULL) 
+   bool is_numeric = true;
+   bool is_option;   
+
+   if(nextargstr == NULL) { 
     return;
+   }
    
-   if(strlen(nextargstr) < 2)
-    isOption = false;
-   else {
-   if((nextargstr[0] == '-') && (nextargstr[1] == '-')) 
-    isOption = true;
-   else 
-    isOption = false;
+   if(strlen(nextargstr) < 2) {
+    is_option = false;
+   }else {
+     if((nextargstr[0] == '-') && (nextargstr[1] == '-')) 
+       is_option = true;
+     else 
+       is_option = false;
     }
 
    for(unsigned int i = 0; i < strlen(nextargstr); i++) {
@@ -174,17 +176,18 @@ void ceph_arg_value_type(const char * nextargstr, bool *boolOption, bool *boolNu
 	if(nextargstr[0] == '-')
           continue;
 	}
-        isNumeric = false;
+        is_numeric = false;
         break;
         }
     }
 
    // -<option>
-   if(nextargstr[0] == '-' && isNumeric == false)
-    isOption = true;
+   if(nextargstr[0] == '-' && is_numeric == false) {
+    is_option = true;
+   }
 
-   *boolOption = isOption;
-   *boolNumeric = isNumeric;
+   *bool_option = is_option;
+   *bool_numeric = is_numeric;
    
    return;
 }
@@ -379,8 +382,8 @@ bool ceph_argparse_witharg(std::vector<const char*> &args,
 {
   bool r;
   va_list ap;
-  bool isOption = false;
-  bool isNumeric = true;
+  bool is_option = false;
+  bool is_numeric = true;
   std::string str;
   va_start(ap, oss);
   r = va_ceph_argparse_witharg(args, i, &str, ap);
@@ -389,10 +392,10 @@ bool ceph_argparse_witharg(std::vector<const char*> &args,
     return false;
   }
 
-  ceph_arg_value_type(str.c_str(),&isOption,&isNumeric);
-  if((isOption == true) || (isNumeric == false)) {
+  ceph_arg_value_type(str.c_str(),&is_option,&is_numeric);
+  if((is_option == true) || (is_numeric == false)) {
      *ret = EXIT_FAILURE;
-     if(isOption == true) {
+     if(is_option == true) {
      *oss << "Missing option value";
         }
      else {
