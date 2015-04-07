@@ -92,6 +92,52 @@ void fragment_t::generate_test_instances(list<fragment_t*>& o)
   o.push_back(new fragment_t(789, 1024, fid_t(3, 400)));
 }
 
+ostream& operator<<(ostream& out, const fragment_t& f)
+{
+  out << "fragment(" << f.offset << "~" << f.length << " " << f.fid << ")";
+  return out;
+}
+
+// overlay_t
+
+void overlay_t::encode(bufferlist& bl) const
+{
+  ENCODE_START(1, 1, bl);
+  ::encode(key, bl);
+  ::encode(value_offset, bl);
+  ::encode(length, bl);
+  ENCODE_FINISH(bl);
+}
+
+void overlay_t::decode(bufferlist::iterator& p)
+{
+  DECODE_START(1, p);
+  ::decode(key, p);
+  ::decode(value_offset, p);
+  ::decode(length, p);
+  DECODE_FINISH(p);
+}
+
+void overlay_t::dump(Formatter *f) const
+{
+  f->dump_unsigned("key", key);
+  f->dump_unsigned("value_offset", value_offset);
+  f->dump_unsigned("length", length);
+}
+
+void overlay_t::generate_test_instances(list<overlay_t*>& o)
+{
+  o.push_back(new overlay_t());
+  o.push_back(new overlay_t(789, 1024, 1232232));
+}
+
+ostream& operator<<(ostream& out, const overlay_t& o)
+{
+  out << "overlay(" << o.value_offset << "~" << o.length
+      << " key " << o.key << ")";
+  return out;
+}
+
 // onode_t
 
 void onode_t::encode(bufferlist& bl) const
@@ -101,6 +147,9 @@ void onode_t::encode(bufferlist& bl) const
   ::encode(size, bl);
   ::encode(attrs, bl);
   ::encode(data_map, bl);
+  ::encode(overlay_map, bl);
+  ::encode(shared_overlays, bl);
+  ::encode(last_overlay_key, bl);
   ::encode(omap_head, bl);
   ::encode(expected_object_size, bl);
   ::encode(expected_write_size, bl);
@@ -114,6 +163,9 @@ void onode_t::decode(bufferlist::iterator& p)
   ::decode(size, p);
   ::decode(attrs, p);
   ::decode(data_map, p);
+  ::decode(overlay_map, p);
+  ::decode(shared_overlays, p);
+  ::decode(last_overlay_key, p);
   ::decode(omap_head, p);
   ::decode(expected_object_size, p);
   ::decode(expected_write_size, p);
@@ -141,6 +193,22 @@ void onode_t::dump(Formatter *f) const
     f->close_section();
   }
   f->close_section();
+  f->open_object_section("overlays");
+  for (map<uint64_t, overlay_t>::const_iterator p = overlay_map.begin();
+       p != overlay_map.end(); ++p) {
+    f->open_object_section("overlay");
+    f->dump_unsigned("offset", p->first);
+    p->second.dump(f);
+    f->close_section();
+  }
+  f->close_section();
+  f->open_array_section("shared_overlays");
+  for (set<uint64_t>::const_iterator p = shared_overlays.begin();
+       p != shared_overlays.end(); ++p) {
+    f->dump_unsigned("offset", *p);
+  }
+  f->close_section();
+  f->dump_unsigned("last_overlay_key", last_overlay_key);
   f->dump_unsigned("omap_head", omap_head);
   f->dump_unsigned("expected_object_size", expected_object_size);
   f->dump_unsigned("expected_write_size", expected_write_size);

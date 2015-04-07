@@ -619,6 +619,19 @@ private:
 	     uint64_t offset, size_t len,
 	     const bufferlist& bl,
 	     uint32_t fadvise_flags);
+  int _do_overlay_clear(TransContext *txc,
+			OnodeRef o);
+  int _do_overlay_trim(TransContext *txc,
+		       OnodeRef o,
+		       uint64_t offset,
+		       uint64_t length);
+  int _do_overlay_write(TransContext *txc,
+			OnodeRef o,
+			uint64_t offset,
+			uint64_t length,
+			const bufferlist& bl);
+  int _do_write_all_overlays(TransContext *txc,
+			     OnodeRef o);
   int _do_write(TransContext *txc,
 		OnodeRef o,
 		uint64_t offset, uint64_t length,
