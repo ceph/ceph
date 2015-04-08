@@ -45,6 +45,9 @@ Highlights since Giant include:
 * *CRUSH improvements*: We have added a new straw2 bucket algorithm
   that reduces the amount of data migration required when changes are
   made to the cluster.
+* *Shingled erasure codes (SHEC)*: The OSDs now have experimental
+  support for shingled erasure codes, which allow a small amount of
+  additional storage to be traded for improved recovery performance.
 * *RADOS cache tiering*: A series of changes have been made in the
   cache tiering code that improve performance and reduce latency.
 * *RDMA support*: There is now experimental support the RDMA via the
@@ -87,7 +90,7 @@ Other highlights since Firefly include:
 
 I would like to take this opportunity to call out the amazing growth
 in contributors to Ceph beyond the core development team from Inktank.
-Hammer features major new features and improvements from Intel,
+Hammer features major new features and improvements from Intel, Fujitsu,
 UnitedStack, Yahoo, UbuntuKylin, CohortFS, Mellanox, CERN, Deutsche
 Telekom, Mirantis, and SanDisk.
 
