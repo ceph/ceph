@@ -979,6 +979,7 @@ OPTION(rgw_op_thread_timeout, OPT_INT, 10*60)
 OPTION(rgw_op_thread_suicide_timeout, OPT_INT, 0)
 OPTION(rgw_thread_pool_size, OPT_INT, 100)
 OPTION(rgw_num_control_oids, OPT_INT, 8)
+OPTION(rgw_num_rados_handles, OPT_U32, 1)
 
 OPTION(rgw_zone, OPT_STR, "") // zone name
 OPTION(rgw_zone_root_pool, OPT_STR, ".rgw.root")    // pool where zone specific info is stored
