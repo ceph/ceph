@@ -96,8 +96,8 @@ void Server::create_logger()
       "Slave requests", "hsr");
   plb.add_u64_counter(l_mdss_handle_client_session, "handle_client_session",
       "Client session messages", "hcs");
-  plb.add_u64_counter(l_mdss_dispatch_client_request, "dispatch_client_request");
-  plb.add_u64_counter(l_mdss_dispatch_slave_request, "dispatch_server_request");
+  plb.add_u64_counter(l_mdss_dispatch_client_request, "dispatch_client_request", "Client requests dispatched");
+  plb.add_u64_counter(l_mdss_dispatch_slave_request, "dispatch_server_request", "Server requests dispatched");
   logger = plb.create_perf_counters();
   g_ceph_context->get_perfcounters_collection()->add(logger);
 }
