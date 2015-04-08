@@ -251,14 +251,9 @@ bool AsyncTrimRequest::send_clean_boundary() {
       lost_exclusive_lock = true;
     } else {
       ::SnapContext snapc;
-      uint64_t parent_overlap;
       {
         RWLock::RLocker l2(m_image_ctx.snap_lock);
         snapc = m_image_ctx.snapc;
-
-        RWLock::RLocker l3(m_image_ctx.parent_lock);
-        int r = m_image_ctx.get_parent_overlap(CEPH_NOSNAP, &parent_overlap);
-        assert(r == 0);
       }
 
       // discard the weird boundary, if any
@@ -273,21 +268,13 @@ bool AsyncTrimRequest::send_clean_boundary() {
         ldout(cct, 20) << " ex " << *p << dendl;
         Context *req_comp = new C_ContextCompletion(*completion);
 
-        // reverse map this object extent onto the parent
-        vector<pair<uint64_t,uint64_t> > objectx;
-        Striper::extent_to_file(cct, &m_image_ctx.layout, p->objectno, 0,
-				m_image_ctx.layout.fl_object_size, objectx);
-        uint64_t object_overlap =
-	  m_image_ctx.prune_parent_extents(objectx, parent_overlap);
-
         AbstractWrite *req;
         if (p->offset == 0) {
-          req = new AioRemove(&m_image_ctx, p->oid.name, p->objectno, objectx,
-                              object_overlap, snapc, CEPH_NOSNAP, req_comp);
+          req = new AioRemove(&m_image_ctx, p->oid.name, p->objectno, snapc,
+                              req_comp);
         } else {
-          req = new AioTruncate(&m_image_ctx, p->oid.name, p->objectno, p->offset,
-                                objectx, object_overlap, snapc, CEPH_NOSNAP,
-                                req_comp);
+          req = new AioTruncate(&m_image_ctx, p->oid.name, p->objectno,
+                                p->offset, snapc, req_comp);
         }
         int r = req->send();
         if (r < 0) {
