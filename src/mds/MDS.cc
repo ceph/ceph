@@ -737,64 +737,64 @@ void MDS::create_logger()
   {
     PerfCountersBuilder mds_plb(g_ceph_context, "mds", l_mds_first, l_mds_last);
 
-    mds_plb.add_u64_counter(l_mds_request, "request");
-    mds_plb.add_u64_counter(l_mds_reply, "reply");
+    mds_plb.add_u64_counter(l_mds_request, "request", "Requests");
+    mds_plb.add_u64_counter(l_mds_reply, "reply", "Replies");
     mds_plb.add_time_avg(l_mds_reply_latency, "reply_latency",
         "Reply latency", "rlat");
-    mds_plb.add_u64_counter(l_mds_forward, "forward");
+    mds_plb.add_u64_counter(l_mds_forward, "forward", "Forwarding request");
     
-    mds_plb.add_u64_counter(l_mds_dir_fetch, "dir_fetch");
-    mds_plb.add_u64_counter(l_mds_dir_commit, "dir_commit");
-    mds_plb.add_u64_counter(l_mds_dir_split, "dir_split");
+    mds_plb.add_u64_counter(l_mds_dir_fetch, "dir_fetch", "Directory fetch");
+    mds_plb.add_u64_counter(l_mds_dir_commit, "dir_commit", "Directory commit");
+    mds_plb.add_u64_counter(l_mds_dir_split, "dir_split", "Directory split");
 
-    mds_plb.add_u64(l_mds_inode_max, "inode_max");
+    mds_plb.add_u64(l_mds_inode_max, "inode_max", "Max inodes, cache size");
     mds_plb.add_u64(l_mds_inodes, "inodes", "Inodes", "inos");
-    mds_plb.add_u64(l_mds_inodes_top, "inodes_top");
-    mds_plb.add_u64(l_mds_inodes_bottom, "inodes_bottom");
-    mds_plb.add_u64(l_mds_inodes_pin_tail, "inodes_pin_tail");  
-    mds_plb.add_u64(l_mds_inodes_pinned, "inodes_pinned");
-    mds_plb.add_u64(l_mds_inodes_expired, "inodes_expired");
-    mds_plb.add_u64(l_mds_inodes_with_caps, "inodes_with_caps");
+    mds_plb.add_u64(l_mds_inodes_top, "inodes_top", "Inodes on top");
+    mds_plb.add_u64(l_mds_inodes_bottom, "inodes_bottom", "Inodes on bottom");
+    mds_plb.add_u64(l_mds_inodes_pin_tail, "inodes_pin_tail", "Inodes on pin tail");  
+    mds_plb.add_u64(l_mds_inodes_pinned, "inodes_pinned", "Inodes pinned");
+    mds_plb.add_u64(l_mds_inodes_expired, "inodes_expired", "Inodes expired");
+    mds_plb.add_u64(l_mds_inodes_with_caps, "inodes_with_caps", "Inodes with capabilities");
     mds_plb.add_u64(l_mds_caps, "caps", "Capabilities", "caps");
-    mds_plb.add_u64(l_mds_subtrees, "subtrees");
+    mds_plb.add_u64(l_mds_subtrees, "subtrees", "Subtrees");
     
-    mds_plb.add_u64_counter(l_mds_traverse, "traverse"); 
-    mds_plb.add_u64_counter(l_mds_traverse_hit, "traverse_hit");
-    mds_plb.add_u64_counter(l_mds_traverse_forward, "traverse_forward");
-    mds_plb.add_u64_counter(l_mds_traverse_discover, "traverse_discover");
-    mds_plb.add_u64_counter(l_mds_traverse_dir_fetch, "traverse_dir_fetch");
-    mds_plb.add_u64_counter(l_mds_traverse_remote_ino, "traverse_remote_ino");
-    mds_plb.add_u64_counter(l_mds_traverse_lock, "traverse_lock");
+    mds_plb.add_u64_counter(l_mds_traverse, "traverse", "Traverses"); 
+    mds_plb.add_u64_counter(l_mds_traverse_hit, "traverse_hit", "Traverse hits");
+    mds_plb.add_u64_counter(l_mds_traverse_forward, "traverse_forward", "Traverse forwards");
+    mds_plb.add_u64_counter(l_mds_traverse_discover, "traverse_discover", "Traverse directory discovers");
+    mds_plb.add_u64_counter(l_mds_traverse_dir_fetch, "traverse_dir_fetch", "Traverse incomplete directory content fetchings");
+    mds_plb.add_u64_counter(l_mds_traverse_remote_ino, "traverse_remote_ino", "Traverse remote dentries");
+    mds_plb.add_u64_counter(l_mds_traverse_lock, "traverse_lock", "Traverse locks");
     
-    mds_plb.add_u64(l_mds_load_cent, "load_cent");
-    mds_plb.add_u64(l_mds_dispatch_queue_len, "q");
+    mds_plb.add_u64(l_mds_load_cent, "load_cent", "Load per cent");
+    mds_plb.add_u64(l_mds_dispatch_queue_len, "q", "Dispatch queue length");
     
-    mds_plb.add_u64_counter(l_mds_exported, "exported");
-    mds_plb.add_u64_counter(l_mds_exported_inodes, "exported_inodes");
-    mds_plb.add_u64_counter(l_mds_imported, "imported");
-    mds_plb.add_u64_counter(l_mds_imported_inodes, "imported_inodes");
+    mds_plb.add_u64_counter(l_mds_exported, "exported", "Exports");
+    mds_plb.add_u64_counter(l_mds_exported_inodes, "exported_inodes", "Exported inodes");
+    mds_plb.add_u64_counter(l_mds_imported, "imported", "Imports");
+    mds_plb.add_u64_counter(l_mds_imported_inodes, "imported_inodes", "Imported inodes");
     logger = mds_plb.create_perf_counters();
     g_ceph_context->get_perfcounters_collection()->add(logger);
   }
 
   {
     PerfCountersBuilder mdm_plb(g_ceph_context, "mds_mem", l_mdm_first, l_mdm_last);
-    mdm_plb.add_u64(l_mdm_ino, "ino");
-    mdm_plb.add_u64_counter(l_mdm_inoa, "ino+");
-    mdm_plb.add_u64_counter(l_mdm_inos, "ino-");
-    mdm_plb.add_u64(l_mdm_dir, "dir");
-    mdm_plb.add_u64_counter(l_mdm_dira, "dir+");
-    mdm_plb.add_u64_counter(l_mdm_dirs, "dir-");
-    mdm_plb.add_u64(l_mdm_dn, "dn");
-    mdm_plb.add_u64_counter(l_mdm_dna, "dn+");
-    mdm_plb.add_u64_counter(l_mdm_dns, "dn-");
-    mdm_plb.add_u64(l_mdm_cap, "cap");
-    mdm_plb.add_u64_counter(l_mdm_capa, "cap+");
-    mdm_plb.add_u64_counter(l_mdm_caps, "cap-");
-    mdm_plb.add_u64(l_mdm_rss, "rss");
-    mdm_plb.add_u64(l_mdm_heap, "heap");
-    mdm_plb.add_u64(l_mdm_malloc, "malloc");
-    mdm_plb.add_u64(l_mdm_buf, "buf");
+    mdm_plb.add_u64(l_mdm_ino, "ino", "Inodes");
+    mdm_plb.add_u64_counter(l_mdm_inoa, "ino+", "Inodes opened");
+    mdm_plb.add_u64_counter(l_mdm_inos, "ino-", "Inodes closed");
+    mdm_plb.add_u64(l_mdm_dir, "dir", "Directories");
+    mdm_plb.add_u64_counter(l_mdm_dira, "dir+", "Directories opened");
+    mdm_plb.add_u64_counter(l_mdm_dirs, "dir-", "Directories closed");
+    mdm_plb.add_u64(l_mdm_dn, "dn", "Dentries");
+    mdm_plb.add_u64_counter(l_mdm_dna, "dn+", "Dentries opened");
+    mdm_plb.add_u64_counter(l_mdm_dns, "dn-", "Dentries closed");
+    mdm_plb.add_u64(l_mdm_cap, "cap", "Capabilities");
+    mdm_plb.add_u64_counter(l_mdm_capa, "cap+", "Capabilities added");
+    mdm_plb.add_u64_counter(l_mdm_caps, "cap-", "Capabilities removed");
+    mdm_plb.add_u64(l_mdm_rss, "rss", "RSS");
+    mdm_plb.add_u64(l_mdm_heap, "heap", "Heap size");
+    mdm_plb.add_u64(l_mdm_malloc, "malloc", "Malloc size");
+    mdm_plb.add_u64(l_mdm_buf, "buf", "Buffer size");
     mlogger = mdm_plb.create_perf_counters();
     g_ceph_context->get_perfcounters_collection()->add(mlogger);
   }
