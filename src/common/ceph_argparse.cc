@@ -297,8 +297,9 @@ bool ceph_argparse_binary_flag(std::vector<const char*> &args,
   return r;
 }
 
-static bool va_ceph_argparse_witharg(std::vector<const char*> &args,
-	std::vector<const char*>::iterator &i, std::string *ret, va_list ap)
+static int va_ceph_argparse_witharg(std::vector<const char*> &args,
+	std::vector<const char*>::iterator &i, std::string *ret,
+	std::ostream &oss, va_list ap)
 {
   const char *first = *i;
   char tmp[strlen(first)+1];
@@ -309,7 +310,7 @@ static bool va_ceph_argparse_witharg(std::vector<const char*> &args,
   while (1) {
     const char *a = va_arg(ap, char*);
     if (a == NULL)
-      return false;
+      return 0;
     int strlen_a = strlen(a);
     char a2[strlen_a+1];
     dashes_to_underscores(a, a2);
@@ -317,18 +318,19 @@ static bool va_ceph_argparse_witharg(std::vector<const char*> &args,
       if (first[strlen_a] == '=') {
 	*ret = first + strlen_a + 1;
 	i = args.erase(i);
-	return true;
+	return 1;
       }
       else if (first[strlen_a] == '\0') {
 	// find second part (or not)
 	if (i+1 == args.end()) {
-	  cerr << "Option " << *i << " requires an argument." << std::endl;
-	  _exit(1);
+	  oss << "Option " << *i << " requires an argument.";
+	  i = args.erase(i);
+	  return -EINVAL;
 	}
 	i = args.erase(i);
 	*ret = *i;
 	i = args.erase(i);
-	return true;
+	return 1;
       }
     }
   }
@@ -337,48 +339,64 @@ static bool va_ceph_argparse_witharg(std::vector<const char*> &args,
 template<class T>
 bool ceph_argparse_witharg(std::vector<const char*> &args,
 	std::vector<const char*>::iterator &i, T *ret,
-	std::ostream *oss, ...)
+	std::ostream &oss, ...)
 {
-  bool r;
+  int r;
   va_list ap;
   std::string str;
   va_start(ap, oss);
-  r = va_ceph_argparse_witharg(args, i, &str, ap);
+  r = va_ceph_argparse_witharg(args, i, &str, oss, ap);
   va_end(ap);
-  if (!r) {
+  if (r == 0) {
     return false;
   }
 
-  std::string err;
-  T myret = strict_str_convert(str.c_str(), &err);
-  *ret = myret;
-  if (!err.empty()) {
-    *oss << err;
+  if (r == 1) {
+    std::string err;
+    T myret = strict_str_convert(str.c_str(), &err);
+    *ret = myret;
+    if (!err.empty()) {
+      oss << err;
+    }
   }
   return true;
 }
 
 template bool ceph_argparse_witharg<int>(std::vector<const char*> &args,
 	std::vector<const char*>::iterator &i, int *ret,
-	std::ostream *oss, ...);
+	std::ostream &oss, ...);
 
 template bool ceph_argparse_witharg<long long>(std::vector<const char*> &args,
 	std::vector<const char*>::iterator &i, long long *ret,
-	std::ostream *oss, ...);
+	std::ostream &oss, ...);
 
 template bool ceph_argparse_witharg<float>(std::vector<const char*> &args,
 	std::vector<const char*>::iterator &i, float *ret,
-	std::ostream *oss, ...);
+	std::ostream &oss, ...);
+
+bool ceph_argparse_witharg(std::vector<const char*> &args,
+	std::vector<const char*>::iterator &i, std::string *ret,
+	std::ostream &oss, ...)
+{
+  int r;
+  va_list ap;
+  va_start(ap, oss);
+  r = va_ceph_argparse_witharg(args, i, ret, oss, ap);
+  va_end(ap);
+  return r != 0;
+}
 
 bool ceph_argparse_witharg(std::vector<const char*> &args,
 	std::vector<const char*>::iterator &i, std::string *ret, ...)
 {
-  bool r;
+  int r;
   va_list ap;
   va_start(ap, ret);
-  r = va_ceph_argparse_witharg(args, i, ret, ap);
+  r = va_ceph_argparse_witharg(args, i, ret, cerr, ap);
   va_end(ap);
-  return r;
+  if (r < 0)
+    _exit(1);
+  return r != 0;
 }
 
 CephInitParameters ceph_argparse_early_args

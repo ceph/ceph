@@ -204,6 +204,8 @@ function test_mon_injectargs()
   check_response "osd_debug_op_order = 'true'"
   ceph tell osd.0 injectargs -- '--osd_debug_op_order --osd_failsafe_full_ratio .98' >& $TMPFILE || return 1
   check_response "osd_debug_op_order = 'true' osd_failsafe_full_ratio = '0.98'" 
+  ceph tell osd.0 injectargs -- '--osd_failsafe_full_ratio' >& $TMPFILE || return 1
+  check_response "Option --osd_failsafe_full_ratio requires an argument"
 }
 
 function test_mon_injectargs_SI()
