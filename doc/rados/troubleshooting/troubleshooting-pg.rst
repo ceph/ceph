@@ -432,9 +432,8 @@ mapping. It can be resolved by:
   coded pool to be modified, it will become clean automatically)
 
 * use a hand made CRUSH ruleset that tries more times to find a good
-  mapping.  (that requires the creation of another pool as erasure
-  code profiles cannot be dynamically modified). It can be done by
-  setting ``set_choose_tries`` to a value greater than the default.
+  mapping. It can be done by setting ``set_choose_tries`` to a value
+  greater than the default.
 
 You should first verify the problem with ``crushtool`` after
 extracting the crushmap from the cluster so your experiments do not
