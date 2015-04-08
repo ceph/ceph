@@ -1524,15 +1524,13 @@ fail:
       rados[i] = NULL;
     }
   }
-  num_rados_handles = 0;
   if (rados) {
     delete[] rados;
-    rados = NULL;
   }
-
   return ret;
-}
-
+  
+  }
+  
 /**
  * Add new connection to connections map
  * @param region_conn_map map which new connection will be added to 
@@ -9013,11 +9011,11 @@ librados::Rados* RGWRados::get_rados_handle()
     } else {
       handle_lock.put_read();
       handle_lock.get_write();
-      uint32_t handle = next_rados_handle.read();
-      if (handle == num_rados_handles) {
+
+      if (next_rados_handle.read() == num_rados_handles) {
         next_rados_handle.set(0);
-        handle = 0;
       }
+      int handle = next_rados_handle.read();
       rados_map[id] = handle;
       next_rados_handle.inc();
       handle_lock.put_write();
