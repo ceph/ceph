@@ -537,8 +537,8 @@ NewStore::OnodeRef NewStore::Collection::get_onode(
   int r = store->db->get(PREFIX_OBJ, key, &v);
   dout(20) << " r " << r << " v.len " << v.length() << dendl;
   Onode *on;
-  assert(r >= 0);
   if (v.length() == 0) {
+    assert(r == -ENOENT);
     if (!create)
       return OnodeRef();
 
@@ -547,6 +547,7 @@ NewStore::OnodeRef NewStore::Collection::get_onode(
     on->dirty = true;
   } else {
     // loaded
+    assert(r >=0);
     on = new Onode(oid, key);
     bufferlist::iterator p = v.begin();
     ::decode(on->onode, p);
