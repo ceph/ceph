@@ -34,6 +34,23 @@ using librados::snap_t;
 using librados::IoCtx;
 
 namespace librbd {
+
+namespace {
+
+class ThreadPoolSingleton : public ThreadPool {
+public:
+  ThreadPoolSingleton(CephContext *cct)
+    : ThreadPool(cct, "librbd::thread_pool", cct->_conf->rbd_op_threads,
+                 "rbd_op_threads") {
+    start();
+  }
+  virtual ~ThreadPoolSingleton() {
+    stop();
+  }
+};
+
+} // anonymous namespace
+
   const string ImageCtx::METADATA_CONF_PREFIX = "conf_";
 
   ImageCtx::ImageCtx(const string &image_name, const string &image_id,
@@ -67,7 +84,7 @@ namespace librbd {
       object_cacher(NULL), writeback_handler(NULL), object_set(NULL),
       readahead(),
       total_bytes_read(0), copyup_finisher(NULL),
-      object_map(*this)
+      object_map(*this), aio_work_queue(NULL)
   {
     md_ctx.dup(p);
     data_ctx.dup(p);
@@ -76,6 +93,13 @@ namespace librbd {
 
     memset(&header, 0, sizeof(header));
     memset(&layout, 0, sizeof(layout));
+
+    ThreadPoolSingleton *thread_pool_singleton;
+    cct->lookup_or_create_singleton_object<ThreadPoolSingleton>(
+      thread_pool_singleton, "librbd::thread_pool");
+    aio_work_queue = new ContextWQ("librbd::aio_work_queue",
+                                   cct->_conf->rbd_op_thread_timeout,
+                                   thread_pool_singleton);
   }
 
   ImageCtx::~ImageCtx() {
@@ -97,6 +121,8 @@ namespace librbd {
       copyup_finisher = NULL;
     }
     delete[] format_string;
+
+    delete aio_work_queue;
   }
 
   int ImageCtx::init() {
