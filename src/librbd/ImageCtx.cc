@@ -81,7 +81,7 @@ public:
       object_cacher(NULL), writeback_handler(NULL), object_set(NULL),
       readahead(),
       total_bytes_read(0), copyup_finisher(NULL),
-      object_map(*this), aio_work_queue(NULL)
+      object_map(*this), aio_work_queue(NULL), op_work_queue(NULL)
   {
     md_ctx.dup(p);
     data_ctx.dup(p);
@@ -138,6 +138,9 @@ public:
     aio_work_queue = new ContextWQ("librbd::aio_work_queue",
                                    cct->_conf->rbd_op_thread_timeout,
                                    thread_pool_singleton);
+    op_work_queue = new ContextWQ("librbd::op_work_queue",
+                                  cct->_conf->rbd_op_thread_timeout,
+                                  thread_pool_singleton);
   }
 
   ImageCtx::~ImageCtx() {
@@ -160,6 +163,7 @@ public:
     }
     delete[] format_string;
 
+    delete op_work_queue;
     delete aio_work_queue;
   }
 

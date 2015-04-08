@@ -2472,6 +2472,8 @@ reprotect_and_return_err:
       flush(ictx);
     }
 
+    ictx->op_work_queue->drain();
+
     if (ictx->copyup_finisher != NULL) {
       ictx->copyup_finisher->wait_for_empty();
       ictx->copyup_finisher->stop();
