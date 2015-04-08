@@ -18,7 +18,7 @@ function get_image_name() {
     local os_type=$1
     local os_version=$2
 
-    echo ceph-$os_type-$os_version
+    echo ceph-$os_type-$os_version-$USER
 }
 
 function setup_container() {
@@ -145,17 +145,6 @@ function run_in_docker() {
         fi
     fi
     return $status
-}
-
-declare -A OS_TYPE2VERSIONS=([ubuntu]="12.04 14.04" [centos]="6 7")
-
-function self_in_docker() {
-    local script=$1
-    shift
-
-    if test $# -gt 0 ; then
-        eval OS_TYPE2VERSIONS="$@"
-    fi
 }
 
 function remove_all() {
