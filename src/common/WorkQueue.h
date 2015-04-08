@@ -433,4 +433,40 @@ public:
   }
 };
 
+class ContextWQ : public ThreadPool::WorkQueue<Context> {
+public:
+  ContextWQ(const string &name, time_t ti, ThreadPool *tp)
+    : ThreadPool::WorkQueue<Context>(name, ti, 0, tp) {}
+
+  virtual bool _enqueue(Context *c) {
+    _queue.push_back(c);
+    return true;
+  }
+  virtual void _enqueue_front(Context *c) {
+    _queue.push_front(c);
+  }
+  virtual void _clear() {
+    _queue.clear();
+  }
+  virtual bool _empty() {
+    return _queue.empty();
+  }
+  virtual void _dequeue(Context *c) {
+    _queue.remove(c);
+  }
+  virtual Context *_dequeue() {
+    if (_queue.empty()) {
+      return NULL;
+    }
+    Context *c = _queue.front();
+    _queue.pop_front();
+    return c;
+  }
+  virtual void _process(Context *c) {
+    c->complete(0);
+  }
+private:
+  list<Context*> _queue;
+};
+
 #endif
