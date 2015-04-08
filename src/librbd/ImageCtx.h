@@ -25,6 +25,7 @@
 #include "librbd/parent_types.h"
 
 class CephContext;
+class ContextWQ;
 class PerfCounters;
 
 namespace librbd {
@@ -88,6 +89,8 @@ namespace librbd {
     ObjectCacher *object_cacher;
     LibrbdWriteback *writeback_handler;
     ObjectCacher::ObjectSet *object_set;
+
+    ContextWQ *aio_work_queue;
 
     /**
      * Either image_name or image_id must be set.
