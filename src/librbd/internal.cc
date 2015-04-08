@@ -10,6 +10,7 @@
 #include "common/errno.h"
 #include "common/ContextCompletion.h"
 #include "common/Throttle.h"
+#include "common/WorkQueue.h"
 #include "cls/lock/cls_lock_client.h"
 #include "include/stringify.h"
 
@@ -2471,6 +2472,8 @@ reprotect_and_return_err:
         ictx->image_watcher->prepare_unlock();
       }
     }
+
+    ictx->aio_work_queue->drain();
 
     ictx->cancel_async_requests();
     ictx->readahead.wait_for_pending();
