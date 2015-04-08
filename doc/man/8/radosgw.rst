@@ -89,7 +89,9 @@ allow for the configuration with unix domain socket instead of localhost tcp.
 
 The following steps show the configuration in Ceph's configuration file i.e,
 ``/etc/ceph/ceph.conf`` and the gateway configuration file i.e,
-``/etc/httpd/conf.d/rgw.conf`` with localhost tcp and through unix domain socket:
+``/etc/httpd/conf.d/rgw.conf`` (RPM-based distros) or
+``/etc/apache2/conf-available/rgw.conf`` (Debian-based distros) with localhost
+tcp and through unix domain socket:
 
 #. For distros with Apache 2.2 and early versions of Apache 2.4 that use
    localhost TCP and do not support Unix Domain Socket, append the following
@@ -103,9 +105,9 @@ The following steps show the configuration in Ceph's configuration file i.e,
 	rgw frontends = fastcgi socket_port=9000 socket_host=0.0.0.0
 	rgw print continue = false
 
-#. Add the following content in ``/etc/httpd/conf.d/rgw.conf``:
+#. Add the following content in the gateway configuration file:
 
-   Debian/Ubuntu::
+   For Debian/Ubuntu add in ``/etc/apache2/conf-available/rgw.conf``::
 
 		<VirtualHost *:80>
 		ServerName localhost
@@ -126,7 +128,7 @@ The following steps show the configuration in Ceph's configuration file i.e,
 
 		</VirtualHost>
 
-   CentOS/RHEL::
+   For CentOS/RHEL add in ``/etc/httpd/conf.d/rgw.conf``::
 
 		<VirtualHost *:80>
 		ServerName localhost
@@ -157,9 +159,9 @@ The following steps show the configuration in Ceph's configuration file i.e,
 	log file = /var/log/radosgw/client.radosgw.gateway.log
 	rgw print continue = false
 
-#. Add the following content in ``/etc/httpd/conf.d/rgw.conf``:
+#. Add the following content in the gateway configuration file:
 
-   CentOS/RHEL::
+   For CentOS/RHEL add in ``/etc/httpd/conf.d/rgw.conf``::
 
 		<VirtualHost *:80>
 		ServerName localhost
