@@ -28,7 +28,7 @@ protected:
   map<snapid_t, SnapInfo> snaps;
   map<int, set<snapid_t> > need_to_purge;
   
-  map<version_t, SnapInfo> pending_create;
+  map<version_t, SnapInfo> pending_update;
   map<version_t, pair<snapid_t,snapid_t> > pending_destroy; // (removed_snap, seq)
   set<version_t>           pending_noop;
 
@@ -44,7 +44,7 @@ public:
     ::encode(last_snap, bl);
     ::encode(snaps, bl);
     ::encode(need_to_purge, bl);
-    ::encode(pending_create, bl);
+    ::encode(pending_update, bl);
     ::encode(pending_destroy, bl);
     ::encode(pending_noop, bl);
     ENCODE_FINISH(bl);
@@ -54,7 +54,7 @@ public:
     ::decode(last_snap, bl);
     ::decode(snaps, bl);
     ::decode(need_to_purge, bl);
-    ::decode(pending_create, bl);
+    ::decode(pending_update, bl);
     if (struct_v >= 2)
       ::decode(pending_destroy, bl);
     else {
