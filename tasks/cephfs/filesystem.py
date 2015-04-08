@@ -51,7 +51,9 @@ class Filesystem(object):
         else:
             self.admin_remote = admin_remote
         self.mon_manager = ceph_manager.CephManager(self.admin_remote, ctx=ctx, logger=log.getChild('ceph_manager'))
-        self.mds_daemons = dict([(mds_id, self._ctx.daemons.get_daemon('mds', mds_id)) for mds_id in self.mds_ids])
+        if hasattr(self._ctx, "daemons"):
+            # Presence of 'daemons' attribute implies ceph task rather than ceph_deploy task
+            self.mds_daemons = dict([(mds_id, self._ctx.daemons.get_daemon('mds', mds_id)) for mds_id in self.mds_ids])
 
         client_list = list(misc.all_roles_of_type(self._ctx.cluster, 'client'))
         self.client_id = client_list[0]
