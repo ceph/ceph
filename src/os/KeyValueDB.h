@@ -93,7 +93,12 @@ public:
     ks.insert(key);
     map<string,bufferlist> om;
     int r = get(prefix, ks, &om);
-    *value = om[key];
+    if (om.find(key) != om.end()) {
+      *value = om[key];
+    } else {
+      *value = bufferlist();
+      r = -ENOENT;
+    }
     return r;
   }
 
