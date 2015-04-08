@@ -4876,7 +4876,7 @@ COMMAND("heap " \
 	"name=heapcmd,type=CephChoices,strings=dump|start_profiler|stop_profiler|release|stats", \
 	"show heap usage info (available only if compiled with tcmalloc)", \
 	"osd", "rw", "cli,rest")
-COMMAND("debug_dump_missing " \
+COMMAND("debug dump_missing " \
 	"name=filename,type=CephFilepath",
 	"dump missing objects to a named file", "osd", "r", "cli,rest")
 COMMAND("debug kick_recovery_wq " \
