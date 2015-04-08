@@ -34,8 +34,7 @@ The list of debian packages dependencies can be installed with:
 	./install-deps.sh
 
 Note: libsnappy-dev and libleveldb-dev are not available upstream for
-natty, oneiric, and squeeze.  Backports for Ceph can be found at
-ceph.com/debian-leveldb.
+Debian Squeeze.  Backports for Ceph can be found at ceph.com/debian-leveldb.
 
 rpm-based
 ---------
