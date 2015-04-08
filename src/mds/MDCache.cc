@@ -11651,21 +11651,21 @@ void MDCache::register_perfcounters()
     /* Stray/purge statistics */
     pcb.add_u64(l_mdc_num_strays, "num_strays",
         "Stray dentries", "stry");
-    pcb.add_u64(l_mdc_num_strays_purging, "num_strays_purging");
-    pcb.add_u64(l_mdc_num_strays_delayed, "num_strays_delayed");
-    pcb.add_u64(l_mdc_num_purge_ops, "num_purge_ops");
-    pcb.add_u64_counter(l_mdc_strays_created, "strays_created");
+    pcb.add_u64(l_mdc_num_strays_purging, "num_strays_purging", "Stray dentries purging");
+    pcb.add_u64(l_mdc_num_strays_delayed, "num_strays_delayed", "Stray dentries delayed");
+    pcb.add_u64(l_mdc_num_purge_ops, "num_purge_ops", "Purge operations");
+    pcb.add_u64_counter(l_mdc_strays_created, "strays_created", "Stray dentries created");
     pcb.add_u64_counter(l_mdc_strays_purged, "strays_purged",
         "Stray dentries purged", "purg");
-    pcb.add_u64_counter(l_mdc_strays_reintegrated, "strays_reintegrated");
-    pcb.add_u64_counter(l_mdc_strays_migrated, "strays_migrated");
+    pcb.add_u64_counter(l_mdc_strays_reintegrated, "strays_reintegrated", "Stray dentries reintegrated");
+    pcb.add_u64_counter(l_mdc_strays_migrated, "strays_migrated", "Stray dentries migrated");
 
     /* Recovery queue statistics */
-    pcb.add_u64(l_mdc_num_recovering_processing, "num_recovering_processing");
+    pcb.add_u64(l_mdc_num_recovering_processing, "num_recovering_processing", "Files currently being recovered");
     pcb.add_u64(l_mdc_num_recovering_enqueued, "num_recovering_enqueued",
         "Files waiting for recovery", "recy");
-    pcb.add_u64(l_mdc_num_recovering_prioritized, "num_recovering_prioritized");
-    pcb.add_u64_counter(l_mdc_recovery_started, "recovery_started");
+    pcb.add_u64(l_mdc_num_recovering_prioritized, "num_recovering_prioritized", "Files waiting for recovery with elevated priority");
+    pcb.add_u64_counter(l_mdc_recovery_started, "recovery_started", "File recoveries started");
     pcb.add_u64_counter(l_mdc_recovery_completed, "recovery_completed",
         "File recoveries completed", "recd");
 
