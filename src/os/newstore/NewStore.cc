@@ -1605,14 +1605,14 @@ int NewStore::collection_list_range(
 
 // omap reads
 
-NewStore::OmapIteratorImpl::OmapIteratorImpl(CollectionRef c, OnodeRef o)
-  : c(c), o(o)
+NewStore::OmapIteratorImpl::OmapIteratorImpl(CollectionRef c, OnodeRef o, KeyValueDB::Iterator it)
+  : c(c), o(o), it(it)
 {
   RWLock::RLocker l(c->lock);
   if (o->onode.omap_head) {
     get_omap_header(o->onode.omap_head, &head);
     get_omap_tail(o->onode.omap_head, &tail);
-    it->upper_bound(head);
+    it->lower_bound(head);
   }
 }
 
@@ -1620,7 +1620,7 @@ int NewStore::OmapIteratorImpl::seek_to_first()
 {
   RWLock::RLocker l(c->lock);
   if (o->onode.omap_head) {
-    it->upper_bound(head);
+    it->lower_bound(head);
   } else {
     it = KeyValueDB::Iterator();
   }
@@ -1633,7 +1633,7 @@ int NewStore::OmapIteratorImpl::upper_bound(const string& after)
   if (o->onode.omap_head) {
     string key;
     get_omap_key(o->onode.omap_head, after, &key);
-    it->upper_bound(head);
+    it->upper_bound(key);
   } else {
     it = KeyValueDB::Iterator();
   }
@@ -1646,7 +1646,7 @@ int NewStore::OmapIteratorImpl::lower_bound(const string& to)
   if (o->onode.omap_head) {
     string key;
     get_omap_key(o->onode.omap_head, to, &key);
-    it->lower_bound(head);
+    it->lower_bound(key);
   } else {
     it = KeyValueDB::Iterator();
   }
@@ -1656,16 +1656,17 @@ int NewStore::OmapIteratorImpl::lower_bound(const string& to)
 bool NewStore::OmapIteratorImpl::valid()
 {
   RWLock::RLocker l(c->lock);
-  return it->valid();
+  if (it->valid() && it->raw_key().second <= tail) {
+    return true;
+  } else {
+    return false;
+  }
 }
 
 int NewStore::OmapIteratorImpl::next()
 {
   RWLock::RLocker l(c->lock);
   it->next();
-  if (!it->valid() || it->key() >= tail) {
-    it = KeyValueDB::Iterator();
-  }
   return 0;
 }
 
@@ -1673,7 +1674,10 @@ string NewStore::OmapIteratorImpl::key()
 {
   RWLock::RLocker l(c->lock);
   assert(it->valid());
-  return it->key();
+  string db_key = it->raw_key().second;
+  string user_key;
+  decode_omap_key(db_key, &user_key);
+  return user_key;
 }
 
 bufferlist NewStore::OmapIteratorImpl::value()
@@ -1888,7 +1892,22 @@ ObjectMap::ObjectMapIterator NewStore::get_omap_iterator(
   const ghobject_t &oid  ///< [in] object
   )
 {
-  assert(0);
+
+  dout(10) << __func__ << " " << cid << " " << oid << dendl;
+  CollectionRef c = _get_collection(cid);
+  if (!c) {
+    dout(10) << __func__ << " " << cid << "doesn't exist" <<dendl;
+    return ObjectMap::ObjectMapIterator();
+  }
+  RWLock::RLocker l(c->lock);
+  OnodeRef o = c->get_onode(oid, false);
+  if (!o) {
+    dout(10) << __func__ << " " << oid << "doesn't exist" <<dendl;
+    return ObjectMap::ObjectMapIterator();
+  }
+  dout(10) << __func__ << " header = " << o->onode.omap_head <<dendl;
+  KeyValueDB::Iterator it = db->get_iterator(PREFIX_OMAP);
+  return ObjectMap::ObjectMapIterator(new OmapIteratorImpl(c, o, it));
 }
 
 
