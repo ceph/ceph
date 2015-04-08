@@ -2139,6 +2139,10 @@ reprotect_and_return_err:
   void close_image(ImageCtx *ictx)
   {
     ldout(ictx->cct, 20) << "close_image " << ictx << dendl;
+
+    ictx->aio_work_queue.drain();
+    ictx->thread_pool.stop();
+
     if (ictx->object_cacher) {
       ictx->shutdown_cache(); // implicitly flushes
     } else {
