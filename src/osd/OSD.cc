@@ -48,8 +48,6 @@
 
 #include "ReplicatedPG.h"
 
-#include "Ager.h"
-
 
 #include "msg/Messenger.h"
 #include "msg/Message.h"
@@ -1309,19 +1307,6 @@ int OSD::mkfs(CephContext *cct, ObjectStore *store, const string &dev,
       goto free_store;
     }
 
-    // age?
-    if (cct->_conf->osd_age_time != 0) {
-      if (cct->_conf->osd_age_time >= 0) {
-        dout(0) << "aging..." << dendl;
-        Ager ager(cct, store);
-        ager.age(cct->_conf->osd_age_time,
-          cct->_conf->osd_age,
-          cct->_conf->osd_age - .05,
-          50000,
-          cct->_conf->osd_age - .05);
-      }
-    }
-
     OSDSuperblock sb;
     bufferlist sbbl;
     ret = store->read(META_COLL, OSD_SUPERBLOCK_POBJECT, 0, 0, sbbl);
@@ -1349,37 +1334,6 @@ int OSD::mkfs(CephContext *cct, ObjectStore *store, const string &dev,
       sb.osd_fsid = store->get_fsid();
       sb.whoami = whoami;
       sb.compat_features = get_osd_initial_compat_set();
-
-      // benchmark?
-      if (cct->_conf->osd_auto_weight) {
-	bufferlist bl;
-	bufferptr bp(1048576);
-	bp.zero();
-	bl.push_back(bp);
-	dout(0) << "testing disk bandwidth..." << dendl;
-	utime_t start = ceph_clock_now(cct);
-	object_t oid("disk_bw_test");
-	for (int i=0; i<1000; i++) {
-	  ObjectStore::Transaction *t = new ObjectStore::Transaction;
-	  t->write(META_COLL, hobject_t(sobject_t(oid, 0)), i*bl.length(), bl.length(), bl);
-	  store->queue_transaction_and_cleanup(NULL, t);
-	}
-	store->sync();
-	utime_t end = ceph_clock_now(cct);
-	end -= start;
-	dout(0) << "measured " << (1000.0 / (double)end) << " mb/sec" << dendl;
-	ObjectStore::Transaction tr;
-	tr.remove(META_COLL, hobject_t(sobject_t(oid, 0)));
-	ret = store->apply_transaction(tr);
-	if (ret) {
-	  derr << "OSD::mkfs: error while benchmarking: apply_transaction returned "
-	       << ret << dendl;
-	  goto umount_store;
-	}
-	
-	// set osd weight
-	sb.weight = (1000.0 / (double)end);
-      }
 
       bufferlist bl;
       ::encode(sb, bl);

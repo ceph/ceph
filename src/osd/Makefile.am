@@ -16,7 +16,6 @@ libosd_la_SOURCES = \
 	osd/ECMsgTypes.cc \
 	osd/ECTransaction.cc \
 	osd/PGBackend.cc \
-	osd/Ager.cc \
 	osd/HitSet.cc \
 	osd/OSD.cc \
 	osd/OSDCap.cc \
@@ -38,7 +37,6 @@ endif
 noinst_LTLIBRARIES += libosd.la
 
 noinst_HEADERS += \
-	osd/Ager.h \
 	osd/ClassHandler.h \
 	osd/HitSet.h \
 	osd/OSD.h \
