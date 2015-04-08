@@ -1558,6 +1558,8 @@ int Client::make_request(MetaRequest *request,
   MClientReply *reply = request->reply;
   request->reply = NULL;
   r = reply->get_result();
+  if (r >= 0)
+    request->success = true;
 
   // kick dispatcher (we've got it!)
   assert(request->dispatch_cond);
@@ -1591,9 +1593,18 @@ void Client::put_request(MetaRequest *request)
       put_inode(request->take_inode());
     if (request->old_inode())
       put_inode(request->take_old_inode());
-    if (request->other_inode())
-      put_inode(request->take_other_inode());
+    int op = -1;
+    if (request->success)
+      op = request->get_op();
+    Inode *other_in = request->take_other_inode();
     delete request;
+
+    if (other_in) {
+      if (other_in->dir &&
+	  (op == CEPH_MDS_OP_RMDIR || op == CEPH_MDS_OP_RENAME))
+	_try_to_trim_inode(other_in);
+      put_inode(other_in);
+    }
   }
 }
 
@@ -9372,7 +9383,7 @@ int Client::_rmdir(Inode *dir, const char *name, int uid, int gid)
 
   req->dentry_drop = CEPH_CAP_FILE_SHARED;
   req->dentry_unless = CEPH_CAP_FILE_EXCL;
-  req->inode_drop = CEPH_CAP_LINK_SHARED | CEPH_CAP_LINK_EXCL;
+  req->other_inode_drop = CEPH_CAP_LINK_SHARED | CEPH_CAP_LINK_EXCL;
 
   Dentry *de;
   int res = get_or_create(dir, name, &de);
@@ -9384,7 +9395,7 @@ int Client::_rmdir(Inode *dir, const char *name, int uid, int gid)
     goto fail;
   if (req->get_op() == CEPH_MDS_OP_RMDIR) {
     req->set_dentry(de);
-    req->set_inode(in);
+    req->set_other_inode(in);
   } else {
     unlink(de, true, true);
   }
