@@ -371,6 +371,7 @@ protected:
   obj_version ep_objv;
   bool has_cors;
   RGWCORSConfiguration cors_config;
+  set<string> rmattr_names;
 
   bufferlist in_data;
 
