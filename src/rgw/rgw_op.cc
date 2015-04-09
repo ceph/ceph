@@ -1227,6 +1227,7 @@ void RGWListBucket::execute()
   list_op.params.prefix = prefix;
   list_op.params.delim = delimiter;
   list_op.params.marker = marker;
+  list_op.params.end_marker = end_marker;
   list_op.params.list_versions = list_versions;
 
   ret = list_op.list_objects(max, &objs, &common_prefixes, &is_truncated);
