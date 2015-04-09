@@ -132,8 +132,7 @@ namespace librbd {
 
     // Configuration
     static const string METADATA_CONF_PREFIX;
-    static const char *AWARE_CONFS[];
-    static const size_t AWARE_CONFS_LEN;
+    std::vector<string> aware_confs;
     bool rbd_cache;
     bool rbd_cache_writethrough_until_flush;
     uint64_t rbd_cache_size;
@@ -154,7 +153,7 @@ namespace librbd {
     bool rbd_blacklist_on_break_lock;
     uint32_t rbd_blacklist_expire_seconds;
     uint32_t rbd_request_timed_out_seconds;
-    static bool _aware_metadata_confs(const string &prefix, const char **configs, size_t len,
+    static bool _aware_metadata_confs(const string &prefix, const std::vector<string> &configs,
                                       map<string, bufferlist> &pairs, map<string, bufferlist> *res);
 
     /**

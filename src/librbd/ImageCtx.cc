@@ -16,6 +16,7 @@
 #include "librbd/ObjectMap.h"
 
 #include <boost/bind.hpp>
+#include <boost/assign/list_of.hpp>
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -33,29 +34,6 @@ using librados::IoCtx;
 
 namespace librbd {
   const string ImageCtx::METADATA_CONF_PREFIX = "conf_";
-  const char *ImageCtx::AWARE_CONFS[] = {
-    "rbd_cache",
-    "rbd_cache_writethrough_until_flush",
-    "rbd_cache_size",
-    "rbd_cache_max_dirty",
-    "rbd_cache_target_dirty",
-    "rbd_cache_max_dirty_age",
-    "rbd_cache_max_dirty_object",
-    "rbd_cache_block_writes_upfront",
-    "rbd_concurrent_management_ops",
-    "rbd_balance_snap_reads",
-    "rbd_localize_snap_reads",
-    "rbd_balance_parent_reads",
-    "rbd_localize_parent_reads",
-    "rbd_readahead_trigger_requests",
-    "rbd_readahead_max_bytes",
-    "rbd_readahead_disable_after_bytes",
-    "rbd_clone_copy_on_read",
-    "rbd_blacklist_on_break_lock",
-    "rbd_blacklist_expire_seconds",
-    "rbd_request_timed_out_seconds",
-  };
-  const size_t ImageCtx::AWARE_CONFS_LEN = 20;
 
   ImageCtx::ImageCtx(const string &image_name, const string &image_id,
 		     const char *snap, IoCtx& p, bool ro)
@@ -97,6 +75,28 @@ namespace librbd {
 
     memset(&header, 0, sizeof(header));
     memset(&layout, 0, sizeof(layout));
+
+    aware_confs = boost::assign::list_of(
+        "rbd_cache")(
+        "rbd_cache_writethrough_until_flush")(
+        "rbd_cache_size")(
+        "rbd_cache_max_dirty")(
+        "rbd_cache_target_dirty")(
+        "rbd_cache_max_dirty_age")(
+        "rbd_cache_max_dirty_object")(
+        "rbd_cache_block_writes_upfront")(
+        "rbd_concurrent_management_ops")(
+        "rbd_balance_snap_reads")(
+        "rbd_localize_snap_reads")(
+        "rbd_balance_parent_reads")(
+        "rbd_localize_parent_reads")(
+        "rbd_readahead_trigger_requests")(
+        "rbd_readahead_max_bytes")(
+        "rbd_readahead_disable_after_bytes")(
+        "rbd_clone_copy_on_read")(
+        "rbd_blacklist_on_break_lock")(
+        "rbd_blacklist_expire_seconds")(
+        "rbd_request_timed_out_seconds");
   }
 
   ImageCtx::~ImageCtx() {
@@ -832,7 +832,7 @@ namespace librbd {
     }
   }
 
-  bool ImageCtx::_aware_metadata_confs(const string &prefix, const char **configs, size_t len,
+  bool ImageCtx::_aware_metadata_confs(const string &prefix, const std::vector<string> &configs,
                                        map<string, bufferlist> &pairs, map<string, bufferlist> *res) {
     size_t conf_prefix_len = prefix.size();
 
@@ -841,9 +841,10 @@ namespace librbd {
       if (it->first.size() <= conf_prefix_len || it->first.compare(0, conf_prefix_len, prefix))
         return false;
 
-      for (size_t i = 0; i < len; ++i) {
-        string key = it->first.substr(conf_prefix_len, it->first.size() - conf_prefix_len);
-        if (!key.compare(configs[i])) {
+      string key = it->first.substr(conf_prefix_len, it->first.size() - conf_prefix_len);
+      for (std::vector<string>::const_iterator cit = configs.begin();
+           cit != configs.end(); ++cit) {
+        if (!key.compare(*cit)) {
           res->insert(make_pair(key, it->second));
           break;
         }
@@ -869,8 +870,7 @@ namespace librbd {
       if (pairs.empty())
         break;
       
-      is_continue = _aware_metadata_confs(METADATA_CONF_PREFIX, AWARE_CONFS, AWARE_CONFS_LEN,
-                                          pairs, &res);
+      is_continue = _aware_metadata_confs(METADATA_CONF_PREFIX, aware_confs, pairs, &res);
       for (map<string, bufferlist>::iterator it = res.begin(); it != res.end(); ++it) {
         j = cct->_conf->set_val(it->first.c_str(), it->second.c_str());
         if (j < 0)
