@@ -2261,7 +2261,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       usage_exit();
     RadosBencher bencher(g_ceph_context, rados, io_ctx);
     bencher.set_show_time(show_time);
-    ret = bencher.aio_bench(operation, seconds, num_objs,
+    ret = bencher.aio_bench(operation, seconds,
 			    concurrent_ios, op_size, cleanup, run_name);
     if (ret != 0)
       cerr << "error during benchmark: " << ret << std::endl;
