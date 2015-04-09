@@ -172,11 +172,16 @@ class Downburst(object):
         self.remove_config()
 
 
-def create_if_vm(ctx, machine_name):
+def create_if_vm(ctx, machine_name, _downburst=None):
     """
     Use downburst to create a virtual machine
+
+    :param _downburst: Only used for unit testing.
     """
-    status_info = get_status(machine_name)
+    if _downburst:
+        status_info = _downburst.status
+    else:
+        status_info = get_status(machine_name)
     if not status_info.get('is_vm', False):
         return False
     os_type = get_distro(ctx)
@@ -188,30 +193,41 @@ def create_if_vm(ctx, machine_name):
             'Usage of a custom downburst config has been deprecated.'
         )
 
-    dbrst = Downburst(name=machine_name, os_type=os_type,
-                      os_version=os_version, status=status_info)
+    dbrst = _downburst or Downburst(name=machine_name, os_type=os_type,
+                                    os_version=os_version, status=status_info)
     return dbrst.create()
 
 
-def destroy_if_vm(ctx, machine_name, user=None, description=None):
+def destroy_if_vm(ctx, machine_name, user=None, description=None,
+                  _downburst=None):
     """
     Use downburst to destroy a virtual machine
 
     Return False only on vm downburst failures.
+
+    :param _downburst: Only used for unit testing.
     """
-    status_info = get_status(machine_name)
+    if _downburst:
+        status_info = _downburst.status
+    else:
+        status_info = get_status(machine_name)
     os_type = get_distro(ctx)
     os_version = get_distro_version(ctx)
     if not status_info or not status_info.get('is_vm', False):
         return True
     if user is not None and user != status_info['locked_by']:
-        log.error("Tried to destroy {node} as {as_user} but it is locked by {locked_by}".format(
-            node=machine_name, as_user=user, locked_by=status_info['locked_by']))
+        msg = "Tried to destroy {node} as {as_user} but it is locked " + \
+            "by {locked_by}"
+        log.error(msg.format(node=machine_name, as_user=user,
+                             locked_by=status_info['locked_by']))
         return False
-    if description is not None and description != status_info['description']:
-        log.error("Tried to destroy {node} with description {desc_arg} but it is locked with description {desc_lock}".format(
-            node=machine_name, desc_arg=description, desc_lock=status_info['description']))
+    if (description is not None and description !=
+            status_info['description']):
+        msg = "Tried to destroy {node} with description {desc_arg} " + \
+            "but it is locked with description {desc_lock}"
+        log.error(msg.format(node=machine_name, desc_arg=description,
+                             desc_lock=status_info['description']))
         return False
-    dbrst = Downburst(name=machine_name, os_type=os_type,
-                      os_version=os_version, status=status_info)
+    dbrst = _downburst or Downburst(name=machine_name, os_type=os_type,
+                                    os_version=os_version, status=status_info)
     return dbrst.destroy()
