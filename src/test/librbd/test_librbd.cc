@@ -827,8 +827,16 @@ TEST_F(TestLibRBD, TestIO)
   ASSERT_EQ(10, rbd_write(image, info.size - 10, 100, test_data));
 
   rbd_aio_create_completion(NULL, (rbd_callback_t) simple_read_cb, &comp);
-  ASSERT_EQ(-EINVAL, rbd_aio_write(image, info.size, 1, test_data, comp));
-  ASSERT_EQ(-EINVAL, rbd_aio_read(image, info.size, 1, test_data, comp));
+  ASSERT_EQ(0, rbd_aio_write(image, info.size, 1, test_data, comp));
+  ASSERT_EQ(0, rbd_aio_wait_for_complete(comp));
+  ASSERT_EQ(-EINVAL, rbd_aio_get_return_value(comp));
+  rbd_aio_release(comp);
+
+  rbd_aio_create_completion(NULL, (rbd_callback_t) simple_read_cb, &comp);
+  ASSERT_EQ(0, rbd_aio_read(image, info.size, 1, test_data, comp));
+  ASSERT_EQ(0, rbd_aio_wait_for_complete(comp));
+  ASSERT_EQ(-EINVAL, rbd_aio_get_return_value(comp));
+  rbd_aio_release(comp);
 
   ASSERT_PASSED(validate_object_map, image);
   ASSERT_EQ(0, rbd_close(image));
@@ -903,15 +911,16 @@ TEST_F(TestLibRBD, TestIOWithIOHint)
 			    LIBRADOS_OP_FLAG_FADVISE_DONTNEED));
 
   rbd_aio_create_completion(NULL, (rbd_callback_t) simple_read_cb, &comp);
-  ASSERT_EQ(-EINVAL, rbd_aio_write(image, info.size, 1, test_data, comp));
-  ASSERT_EQ(-EINVAL, rbd_aio_read2(image, info.size, 1, test_data, comp,
-				    LIBRADOS_OP_FLAG_FADVISE_DONTNEED));
+  ASSERT_EQ(0, rbd_aio_read2(image, info.size, 1, test_data, comp,
+			     LIBRADOS_OP_FLAG_FADVISE_DONTNEED));
+  ASSERT_EQ(0, rbd_aio_wait_for_complete(comp));
+  ASSERT_EQ(-EINVAL, rbd_aio_get_return_value(comp));
+  rbd_aio_release(comp);
 
   ASSERT_PASSED(validate_object_map, image);
   ASSERT_EQ(0, rbd_close(image));
 
   rados_ioctx_destroy(ioctx);
-
 }
 
 TEST_F(TestLibRBD, TestEmptyDiscard)
