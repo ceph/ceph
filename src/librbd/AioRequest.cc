@@ -231,13 +231,14 @@ namespace librbd {
     return finished;
   }
 
-  int AioRead::send() {
-    ldout(m_ictx->cct, 20) << "send " << this << " " << m_oid << " " << m_object_off << "~" << m_object_len << dendl;
+  void AioRead::send() {
+    ldout(m_ictx->cct, 20) << "send " << this << " " << m_oid << " "
+                           << m_object_off << "~" << m_object_len << dendl;
 
     // send read request to parent if the object doesn't exist locally
     if (!m_ictx->object_map.object_may_exist(m_object_no)) {
       complete(-ENOENT);
-      return 0;
+      return;
     }
 
     librados::AioCompletion *rados_completion =
@@ -254,8 +255,9 @@ namespace librbd {
     op.set_op_flags2(m_op_flags);
 
     r = m_ictx->data_ctx.aio_operate(m_oid, rados_completion, &op, flags, NULL);
+    assert(r == 0);
+
     rados_completion->release();
-    return r;
   }
 
   /** write **/
@@ -434,16 +436,13 @@ namespace librbd {
     return finished;
   }
 
-  int AbstractWrite::send() {
+  void AbstractWrite::send() {
     ldout(m_ictx->cct, 20) << "send " << this << " " << m_oid << " "
 			   << m_object_off << "~" << m_object_len << dendl;
 
-    if (send_pre()) {
-      return 0;
-    } else {
+    if (!send_pre()) {
       send_write();
     }
-    return 0;
   }
 
   bool AbstractWrite::send_pre() {

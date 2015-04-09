@@ -289,12 +289,7 @@ bool AsyncTrimRequest::send_clean_boundary() {
                                 objectx, object_overlap, snapc, CEPH_NOSNAP,
                                 req_comp);
         }
-        int r = req->send();
-        if (r < 0) {
-          req_comp->complete(r);
-          delete req;
-          break;
-        }
+        req->send();
       }
     }
 

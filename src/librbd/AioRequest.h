@@ -37,7 +37,7 @@ namespace librbd {
     void complete(int r);
 
     virtual bool should_complete(int r) = 0;
-    virtual int send() = 0;
+    virtual void send() = 0;
 
   protected:
     void read_from_parent(vector<pair<uint64_t,uint64_t> >& image_extents,
@@ -63,7 +63,7 @@ namespace librbd {
 	    Context *completion, int op_flags);
     virtual ~AioRead() {}
     virtual bool should_complete(int r);
-    virtual int send();
+    virtual void send();
     void guard_read();
 
     ceph::bufferlist &data() {
@@ -118,7 +118,7 @@ namespace librbd {
 		  bool hide_enoent);
     virtual ~AbstractWrite() {}
     virtual bool should_complete(int r);
-    virtual int send();
+    virtual void send();
 
     bool has_parent() const {
       return !m_object_image_extents.empty();
