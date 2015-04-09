@@ -8689,7 +8689,6 @@ void ReplicatedPG::on_shutdown()
 
   // remove from queues
   osd->recovery_wq.dequeue(this);
-  osd->scrub_wq.dequeue(this);
   osd->snap_trim_wq.dequeue(this);
   osd->pg_stat_queue_dequeue(this);
   osd->dequeue_pg(this, 0);
@@ -8698,6 +8697,7 @@ void ReplicatedPG::on_shutdown()
   // handles queue races
   deleting = true;
 
+  clear_scrub_reserved();
   unreg_next_scrub();
   cancel_copy_ops(false);
   cancel_flush_ops(false);
