@@ -5,6 +5,7 @@
 #include "librbd/ImageWatcher.h"
 #include "librbd/internal.h"
 #include <boost/scope_exit.hpp>
+#include <boost/assign/list_of.hpp>
 #include <utility>
 #include <vector>
 
@@ -365,11 +366,10 @@ TEST_F(TestInternal, MultipleResize) {
 TEST_F(TestInternal, MetadatConfig) {
   REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
 
-  const char *test_confs[] = {
-    "aaaaaaa",
-    "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-    "cccccccccccccc",
-  };
+  const vector<string> test_confs = boost::assign::list_of(
+    "aaaaaaa")(
+    "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")(
+    "cccccccccccccc");
   const string prefix = "test_config_";
   bool is_continue;
   librbd::ImageCtx *ictx;
@@ -383,8 +383,7 @@ TEST_F(TestInternal, MetadatConfig) {
   pairs[prefix+"asdfsdaf"].append("value6");
   pairs[prefix+"zxvzxcv123"].append("value5");
 
-  is_continue = ictx->_aware_metadata_confs(prefix, test_confs, sizeof(test_confs) / sizeof(char*),
-                                            pairs, &res);
+  is_continue = ictx->_aware_metadata_confs(prefix, test_confs, pairs, &res);
   ASSERT_TRUE(is_continue);
   ASSERT_TRUE(res.size() == 3U);
   ASSERT_TRUE(res.count(test_confs[0]));
@@ -393,8 +392,7 @@ TEST_F(TestInternal, MetadatConfig) {
   res.clear();
 
   pairs["zzzzzzzz"].append("value7");
-  is_continue = ictx->_aware_metadata_confs(prefix, test_confs, sizeof(test_confs) / sizeof(char*),
-                                            pairs, &res);
+  is_continue = ictx->_aware_metadata_confs(prefix, test_confs, pairs, &res);
   ASSERT_FALSE(is_continue);
   ASSERT_TRUE(res.size() == 3U);
 }
