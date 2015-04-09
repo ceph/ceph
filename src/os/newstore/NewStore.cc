@@ -2980,6 +2980,33 @@ int NewStore::_do_write(TransContext *txc,
     dout(20) << __func__ << " zero-length write" << dendl;
     goto out;
   }
+
+  if ((int)o->onode.overlay_map.size() < g_conf->newstore_overlay_max &&
+      (int)length < g_conf->newstore_overlay_max_length) {
+    // write an overlay
+    r = _do_overlay_write(txc, o, offset, length, bl);
+    if (r < 0)
+      goto out;
+    if (offset + length > o->onode.size) {
+      // make sure the data fragment matches
+      if (!o->onode.data_map.empty()) {
+	assert(o->onode.data_map.size() == 1);
+	fragment_t& f = o->onode.data_map.begin()->second;
+	assert(f.offset == 0);
+	assert(f.length == o->onode.size);
+	r = _clean_fid_tail(txc, f);
+	if (r < 0)
+	  goto out;
+	f.length = offset + length;
+      }
+      dout(20) << __func__ << " extending size to " << offset + length << dendl;
+      o->onode.size = offset + length;
+    }
+    txc->write_onode(o);
+    r = 0;
+    goto out;
+  }
+
   if (o->onode.size == offset ||
       o->onode.size == 0 ||
       o->onode.data_map.empty()) {
@@ -3021,8 +3048,12 @@ int NewStore::_do_write(TransContext *txc,
       goto out;
     }
     txc->sync_fd(fd);
-  } else if (offset == 0 &&
-	     length >= o->onode.size) {
+    r = 0;
+    goto out;
+  }
+
+  if (offset == 0 &&
+      length >= o->onode.size) {
     // overwrite to new fid
     assert(o->onode.data_map.size() == 1);
     fragment_t& f = o->onode.data_map.begin()->second;
@@ -3051,29 +3082,11 @@ int NewStore::_do_write(TransContext *txc,
       goto out;
     }
     txc->sync_fd(fd);
-  } else if ((int)o->onode.overlay_map.size() < g_conf->newstore_overlay_max &&
-	     (int)length < g_conf->newstore_overlay_max_length) {
-    // write an overlay
-    r = _do_overlay_write(txc, o, offset, length, bl);
-    if (r < 0)
-      goto out;
-    if (offset + length > o->onode.size) {
-      // make sure the data fragment matches
-      if (!o->onode.data_map.empty()) {
-	assert(o->onode.data_map.size() == 1);
-	fragment_t& f = o->onode.data_map.begin()->second;
-	assert(f.offset == 0);
-	assert(f.length == o->onode.size);
-	r = _clean_fid_tail(txc, f);
-	if (r < 0)
-	  goto out;
-	f.length = offset + length;
-      }
-      dout(20) << __func__ << " extending size to " << offset + length << dendl;
-      o->onode.size = offset + length;
-    }
-    txc->write_onode(o);
-  } else {
+    r = 0;
+    goto out;
+  }
+
+  if (true) {
     // WAL
     assert(o->onode.data_map.size() == 1);
     fragment_t& f = o->onode.data_map.begin()->second;
