@@ -1433,10 +1433,15 @@ int RGWDeleteObj_ObjStore_S3::get_params()
   }
 
   if (if_unmod) {
-    if (parse_time(if_unmod, &unmod_since) < 0) {
-      ldout(s->cct, 10) << "failed to parse time: " << if_unmod << dendl;
+    string if_unmod_str(if_unmod);
+    string if_unmod_decoded;
+    url_decode(if_unmod_str, if_unmod_decoded);
+    uint64_t epoch;
+    if (utime_t::parse_date(if_unmod_decoded, &epoch, NULL) < 0) {
+      ldout(s->cct, 10) << "failed to parse time: " << if_unmod_decoded << dendl;
       return -EINVAL;
     }
+    unmod_since = epoch;
   }
 
   return 0;
