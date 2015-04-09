@@ -168,9 +168,31 @@ following differences:
 Cutting a new stable release
 ============================
 
-When all bugs with severity ``Critical`` are fixed for the release
-being prepared, it is published as follows:
+A new stable release can be cut when:
 
+* all bugs with severity ``Critical`` are fixed
+* integration and upgrade tests run successfully
+
+Publishing a new stable release implies a risk of regression or
+discovering new bugs during the upgrade, no matter how carefully it is
+tested. The decision to cut a release must take this into account: it
+may not be wise to publish a stable release that only fixes a few
+minor bugs. For instance if only one commit has been backported to a
+stable release that is not a LTS, it is better to wait until there are
+more.
+
+When a stable release reaches its end of life, it may be safer to
+recommend an upgrade to the next long term support release instead of
+proposing a new point release to fix a problem. For instance, the
+Dumpling v0.67.11 release has bugs related to backfilling which have
+been fixed in Firefly v0.80.x. A backport fixing these backfilling
+bugs has been tested in the draft point release Dumpling v0.67.12 but
+they are large enough to introduce a risk of regression. As Dumpling
+is approaching its end of life, users suffering from this bug can
+upgrade to Firefly to fix it. Unless users manifest themselves and ask
+for Dumpling v0.67.12, this draft release may never be published.
+
+* The ``Ceph lead`` decides a new stable release must be published
 * The ``release master`` gets approval from all leads
 * The ``release master`` writes and commits the release notes
 * The ``release master`` informs the ``quality engineer`` that the
@@ -186,6 +208,7 @@ being prepared, it is published as follows:
 
 The person responsible for each role is:
 
+* Sage Weil is the ``Ceph lead``
 * Sage Weil is the ``release master`` for major stable releases
   (Firefly 0.80, Giant 0.87 etc.)
 * Loic Dachary is the ``release master`` for stable point releases
