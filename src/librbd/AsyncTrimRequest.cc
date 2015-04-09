@@ -279,12 +279,7 @@ bool AsyncTrimRequest::send_clean_boundary() {
           req = new AioTruncate(&m_image_ctx, p->oid.name, p->objectno,
                                 p->offset, snapc, req_comp);
         }
-        int r = req->send();
-        if (r < 0) {
-          req_comp->complete(r);
-          delete req;
-          break;
-        }
+        req->send();
       }
     }
 
