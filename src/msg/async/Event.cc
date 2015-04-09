@@ -373,9 +373,9 @@ int EventCenter::process_events(int timeout_microseconds)
     external_lock.Unlock();
     while (!cur_process.empty()) {
       EventCallbackRef e = cur_process.front();
-      cur_process.pop_front();
       if (e)
         e->do_request(0);
+      cur_process.pop_front();
     }
   }
   return numevents;
