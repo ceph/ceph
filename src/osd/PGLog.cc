@@ -185,6 +185,18 @@ void PGLog::proc_replica_log(
   dout(10) << "proc_replica_log for osd." << from << ": "
 	   << oinfo << " " << olog << " " << omissing << dendl;
 
+  if (olog.head < log.tail) {
+    dout(10) << __func__ << ": osd." << from << " does not overlap, not looking "
+	     << "for divergent objects" << dendl;
+    return;
+  }
+  if (olog.head == log.head) {
+    dout(10) << __func__ << ": osd." << from << " same log head, not looking "
+	     << "for divergent objects" << dendl;
+    return;
+  }
+  assert(olog.head >= log.tail);
+
   /*
     basically what we're doing here is rewinding the remote log,
     dropping divergent entries, until we find something that matches
@@ -202,48 +214,54 @@ void PGLog::proc_replica_log(
 	     << " have " << i->second.have << dendl;
   }
 
-  list<pg_log_entry_t>::const_iterator fromiter = log.log.end();
-  eversion_t lower_bound = log.tail;
+  list<pg_log_entry_t>::const_reverse_iterator first_non_divergent =
+    log.log.rbegin();
   while (1) {
-    if (fromiter == log.log.begin())
+    if (first_non_divergent == log.log.rend())
       break;
-    --fromiter;
-    if (fromiter->version <= olog.head) {
-      dout(20) << "merge_log cut point (usually last shared) is "
-	       << *fromiter << dendl;
-      lower_bound = fromiter->version;
-      ++fromiter;
+    if (first_non_divergent->version <= olog.head) {
+      dout(20) << "merge_log point (usually last shared) is "
+	       << *first_non_divergent << dendl;
       break;
     }
+    ++first_non_divergent;
   }
+
+  /* Because olog.head >= log.tail, we know that both pgs must at least have
+   * the event represented by log.tail.  Thus, lower_bound >= log.tail.  It's
+   * possible that olog/log contain no actual events between olog.head and
+   * log.tail, however, since they might have been split out.  Thus, if
+   * we cannot find an event e such that log.tail <= e.version <= log.head,
+   * the last_update must actually be log.tail.
+   */
+  eversion_t lu =
+    (first_non_divergent == log.log.rend() ||
+     first_non_divergent->version < log.tail) ?
+    log.tail :
+    first_non_divergent->version;
 
   list<pg_log_entry_t> divergent;
   list<pg_log_entry_t>::const_iterator pp = olog.log.end();
-  eversion_t lu(oinfo.last_update);
   while (true) {
-    if (pp == olog.log.begin()) {
-      if (pp != olog.log.end())   // no last_update adjustment if we discard nothing!
-	lu = olog.tail;
+    if (pp == olog.log.begin())
       break;
-    }
+
     --pp;
     const pg_log_entry_t& oe = *pp;
 
     // don't continue past the tail of our log.
     if (oe.version <= log.tail) {
-      lu = oe.version;
       ++pp;
       break;
     }
 
-    if (oe.version <= lower_bound) {
-      lu = oe.version;
+    if (oe.version <= lu) {
       ++pp;
       break;
     }
 
     divergent.push_front(oe);
-  }    
+  }
 
 
   IndexedLog folog;
