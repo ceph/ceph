@@ -138,6 +138,14 @@ public:
       fullauth.index();
       fulldiv.index();
     }
+    void set_div_bounds(eversion_t head, eversion_t tail) {
+      fulldiv.tail = divinfo.log_tail = tail;
+      fulldiv.head = divinfo.last_update = head;
+    }
+    void set_auth_bounds(eversion_t head, eversion_t tail) {
+      fullauth.tail = authinfo.log_tail = tail;
+      fullauth.head = authinfo.last_update = head;
+    }
     const IndexedLog &get_fullauth() const { return fullauth; }
     const IndexedLog &get_fulldiv() const { return fulldiv; }
     const pg_info_t &get_authinfo() const { return authinfo; }
@@ -234,6 +242,8 @@ public:
 
     proc_replica_log(
       t, oinfo, olog, omissing, pg_shard_t(1, 0));
+
+    assert(oinfo.last_update >= log.tail);
 
     if (!tcase.base.empty()) {
       ASSERT_EQ(tcase.base.rbegin()->version, oinfo.last_update);
@@ -1859,6 +1869,20 @@ TEST_F(PGLogTest, merge_log_prior_version_have) {
   t.init.add(mk_obj(1), mk_evt(10, 101), mk_evt(10, 100));
 
   t.setup();
+  run_test_case(t);
+}
+
+TEST_F(PGLogTest, merge_log_split_missing_entries_at_head) {
+  TestCase t;
+  t.auth.push_back(mk_ple_mod_rb(mk_obj(1), mk_evt(10, 100), mk_evt(8, 70)));
+  t.auth.push_back(mk_ple_mod_rb(mk_obj(1), mk_evt(15, 150), mk_evt(10, 100)));
+
+  t.div.push_back(mk_ple_mod(mk_obj(1), mk_evt(8, 70), mk_evt(8, 65)));
+
+  t.setup();
+  t.set_div_bounds(mk_evt(9, 79), mk_evt(8, 69));
+  t.set_auth_bounds(mk_evt(10, 160), mk_evt(9, 77));
+  t.final.add(mk_obj(1), mk_evt(15, 150), mk_evt(8, 70));
   run_test_case(t);
 }
 
