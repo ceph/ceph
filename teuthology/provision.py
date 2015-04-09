@@ -211,8 +211,6 @@ def destroy_if_vm(ctx, machine_name, user=None, description=None,
         status_info = _downburst.status
     else:
         status_info = get_status(machine_name)
-    os_type = get_distro(ctx)
-    os_version = get_distro_version(ctx)
     if not status_info or not status_info.get('is_vm', False):
         return True
     if user is not None and user != status_info['locked_by']:
@@ -228,6 +226,6 @@ def destroy_if_vm(ctx, machine_name, user=None, description=None,
         log.error(msg.format(node=machine_name, desc_arg=description,
                              desc_lock=status_info['description']))
         return False
-    dbrst = _downburst or Downburst(name=machine_name, os_type=os_type,
-                                    os_version=os_version, status=status_info)
+    dbrst = _downburst or Downburst(name=machine_name, os_type=None,
+                                    os_version=None, status=status_info)
     return dbrst.destroy()
