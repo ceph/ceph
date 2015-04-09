@@ -921,7 +921,7 @@ OPTION(rbd_skip_partial_discard, OPT_BOOL, false) // when trying to discard a ra
  * rbd_create3()/RBD::create3() and rbd_clone2/RBD::clone2() are only
  * affected by rbd_default_order.
  */
-OPTION(rbd_default_format, OPT_INT, 1)
+OPTION(rbd_default_format, OPT_INT, 2)
 OPTION(rbd_default_order, OPT_INT, 22)
 OPTION(rbd_default_stripe_count, OPT_U64, 0) // changing requires stripingv2 feature
 OPTION(rbd_default_stripe_unit, OPT_U64, 0) // changing to non-object size requires stripingv2 feature
