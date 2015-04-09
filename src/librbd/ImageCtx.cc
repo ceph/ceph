@@ -1,6 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 #include <errno.h>
+#include <boost/assign/list_of.hpp>
 
 #include "common/ceph_context.h"
 #include "common/dout.h"
@@ -16,7 +17,6 @@
 #include "librbd/ObjectMap.h"
 
 #include <boost/bind.hpp>
-#include <boost/assign/list_of.hpp>
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -75,28 +75,6 @@ namespace librbd {
 
     memset(&header, 0, sizeof(header));
     memset(&layout, 0, sizeof(layout));
-
-    aware_confs = boost::assign::list_of(
-        "rbd_cache")(
-        "rbd_cache_writethrough_until_flush")(
-        "rbd_cache_size")(
-        "rbd_cache_max_dirty")(
-        "rbd_cache_target_dirty")(
-        "rbd_cache_max_dirty_age")(
-        "rbd_cache_max_dirty_object")(
-        "rbd_cache_block_writes_upfront")(
-        "rbd_concurrent_management_ops")(
-        "rbd_balance_snap_reads")(
-        "rbd_localize_snap_reads")(
-        "rbd_balance_parent_reads")(
-        "rbd_localize_parent_reads")(
-        "rbd_readahead_trigger_requests")(
-        "rbd_readahead_max_bytes")(
-        "rbd_readahead_disable_after_bytes")(
-        "rbd_clone_copy_on_read")(
-        "rbd_blacklist_on_break_lock")(
-        "rbd_blacklist_expire_seconds")(
-        "rbd_request_timed_out_seconds");
   }
 
   ImageCtx::~ImageCtx() {
@@ -832,8 +810,8 @@ namespace librbd {
     }
   }
 
-  bool ImageCtx::_filter_metadata_confs(const string &prefix, const std::vector<string> &configs,
-                                       map<string, bufferlist> &pairs, map<string, bufferlist> *res) {
+  bool ImageCtx::_filter_metadata_confs(const string &prefix, const vector<string> &configs,
+                                        map<string, bufferlist> &pairs, map<string, bufferlist> *res) {
     size_t conf_prefix_len = prefix.size();
 
     string start = prefix;
@@ -856,6 +834,27 @@ namespace librbd {
   void ImageCtx::apply_metadata_confs() {
     ldout(cct, 20) << __func__ << dendl;
     static uint64_t max_conf_items = 128;
+    const std::vector<string> configs = boost::assign::list_of(
+        "rbd_cache")(
+        "rbd_cache_writethrough_until_flush")(
+        "rbd_cache_size")(
+        "rbd_cache_max_dirty")(
+        "rbd_cache_target_dirty")(
+        "rbd_cache_max_dirty_age")(
+        "rbd_cache_max_dirty_object")(
+        "rbd_cache_block_writes_upfront")(
+        "rbd_concurrent_management_ops")(
+        "rbd_balance_snap_reads")(
+        "rbd_localize_snap_reads")(
+        "rbd_balance_parent_reads")(
+        "rbd_localize_parent_reads")(
+        "rbd_readahead_trigger_requests")(
+        "rbd_readahead_max_bytes")(
+        "rbd_readahead_disable_after_bytes")(
+        "rbd_clone_copy_on_read")(
+        "rbd_blacklist_on_break_lock")(
+        "rbd_blacklist_expire_seconds")(
+        "rbd_request_timed_out_seconds");
 
     string start = METADATA_CONF_PREFIX;
     int r = 0, j = 0;
@@ -870,7 +869,7 @@ namespace librbd {
       if (pairs.empty())
         break;
       
-      is_continue = _filter_metadata_confs(METADATA_CONF_PREFIX, aware_confs, pairs, &res);
+      is_continue = _filter_metadata_confs(METADATA_CONF_PREFIX, configs, pairs, &res);
       for (map<string, bufferlist>::iterator it = res.begin(); it != res.end(); ++it) {
         j = cct->_conf->set_val(it->first.c_str(), it->second.c_str());
         if (j < 0)
@@ -880,8 +879,6 @@ namespace librbd {
       }
       start = pairs.rbegin()->first;
     } while (is_continue);
-
-    cct->_conf->apply_changes(NULL);
 
     md_config_t *conf = cct->_conf;
     rbd_cache = conf->rbd_cache;

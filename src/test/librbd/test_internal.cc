@@ -383,7 +383,7 @@ TEST_F(TestInternal, MetadatConfig) {
   pairs[prefix+"asdfsdaf"].append("value6");
   pairs[prefix+"zxvzxcv123"].append("value5");
 
-  is_continue = ictx->_aware_metadata_confs(prefix, test_confs, pairs, &res);
+  is_continue = ictx->_filter_metadata_confs(prefix, test_confs, pairs, &res);
   ASSERT_TRUE(is_continue);
   ASSERT_TRUE(res.size() == 3U);
   ASSERT_TRUE(res.count(test_confs[0]));
@@ -392,7 +392,7 @@ TEST_F(TestInternal, MetadatConfig) {
   res.clear();
 
   pairs["zzzzzzzz"].append("value7");
-  is_continue = ictx->_aware_metadata_confs(prefix, test_confs, pairs, &res);
+  is_continue = ictx->_filter_metadata_confs(prefix, test_confs, pairs, &res);
   ASSERT_FALSE(is_continue);
   ASSERT_TRUE(res.size() == 3U);
 }

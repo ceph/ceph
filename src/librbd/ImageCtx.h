@@ -132,7 +132,6 @@ namespace librbd {
 
     // Configuration
     static const string METADATA_CONF_PREFIX;
-    std::vector<string> aware_confs;
     bool rbd_cache;
     bool rbd_cache_writethrough_until_flush;
     uint64_t rbd_cache_size;
