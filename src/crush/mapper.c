@@ -307,28 +307,38 @@ static int bucket_straw2_choose(struct crush_bucket_straw2 *bucket,
 {
 	unsigned i, high = 0;
 	unsigned u;
+	unsigned w;
 	__s64 ln, draw, high_draw = 0;
 
 	for (i = 0; i < bucket->h.size; i++) {
-		u = crush_hash32_3(bucket->h.hash, x, bucket->h.items[i], r);
-		u &= 0xffff;
+		w = bucket->item_weights[i];
+		if (w) {
+			u = crush_hash32_3(bucket->h.hash, x,
+					   bucket->h.items[i], r);
+			u &= 0xffff;
 
-		/*
-		 * for some reason slightly less than 0x10000 produces
-		 * a slightly more accurate distribution... probably a
-		 * rounding effect.
-		 *
-		 * the natural log lookup table maps [0,0xffff]
-		 * (corresponding to real numbers [1/0x10000, 1] to
-		 * [0, 0xffffffffffff] (corresponding to real numbers
-		 * [-11.090355,0]).
-		 */
-		ln = crush_ln(u) - 0x1000000000000ll;
+			/*
+			 * for some reason slightly less than 0x10000 produces
+			 * a slightly more accurate distribution... probably a
+			 * rounding effect.
+			 *
+			 * the natural log lookup table maps [0,0xffff]
+			 * (corresponding to real numbers [1/0x10000, 1] to
+			 * [0, 0xffffffffffff] (corresponding to real numbers
+			 * [-11.090355,0]).
+			 */
+			ln = crush_ln(u) - 0x1000000000000ll;
 
-		/*
-		 * divide by 16.16 fixed-point weight
-		 */
-		draw = ln / bucket->item_weights[i];
+			/*
+			 * divide by 16.16 fixed-point weight.  note
+			 * that the ln value is negative, so a larger
+			 * weight means a larger (less negative) value
+			 * for draw.
+			 */
+			draw = ln / w;
+		} else {
+			draw = INT64_MIN;
+		}
 
 		if (i == 0 || draw > high_draw) {
 			high = i;
