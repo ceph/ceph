@@ -967,6 +967,9 @@ struct rgw_obj_key {
     }
     return (r < 0);
   }
+  bool operator<=(const rgw_obj_key& k) const {
+    return !(k < *this);
+  }
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
     ::encode(name, bl);

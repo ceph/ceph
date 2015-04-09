@@ -117,6 +117,7 @@ int RGWListBucket_ObjStore_SWIFT::get_params()
 {
   prefix = s->info.args.get("prefix");
   marker = s->info.args.get("marker");
+  end_marker = s->info.args.get("end_marker");
   max_keys = s->info.args.get("limit");
   ret = parse_max_keys();
   if (ret < 0) {
