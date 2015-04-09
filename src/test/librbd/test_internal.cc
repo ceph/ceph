@@ -254,7 +254,7 @@ TEST_F(TestInternal, AioWriteRequestsLock) {
   librbd::AioCompletion *c =
     librbd::aio_create_completion_internal(ctx, librbd::rbd_ctx_cb);
   c->get();
-  ASSERT_EQ(0, aio_write(ictx, 0, buffer.size(), buffer.c_str(), c, 0));
+  aio_write(ictx, 0, buffer.size(), buffer.c_str(), c, 0);
 
   bool is_owner;
   ASSERT_EQ(0, librbd::is_exclusive_lock_owner(ictx, &is_owner));
@@ -277,7 +277,7 @@ TEST_F(TestInternal, AioDiscardRequestsLock) {
   librbd::AioCompletion *c =
     librbd::aio_create_completion_internal(ctx, librbd::rbd_ctx_cb);
   c->get();
-  ASSERT_EQ(0, aio_discard(ictx, 0, 256, c));
+  aio_discard(ictx, 0, 256, c);
 
   bool is_owner;
   ASSERT_EQ(0, librbd::is_exclusive_lock_owner(ictx, &is_owner));

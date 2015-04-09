@@ -171,13 +171,13 @@ public:
     if (!ictx->image_watcher->is_lock_owner() &&
         (m_expected_aio_restarts == 0 ||
 	 m_aio_completion_restarts < m_expected_aio_restarts)) {
-      EXPECT_EQ(0, ictx->image_watcher->request_lock(
+      ictx->image_watcher->request_lock(
         boost::bind(&TestImageWatcher::handle_restart_aio, this, ictx, _1),
-	aio_completion));
+	aio_completion);
     } else {
       {
 	Mutex::Locker l2(aio_completion->lock);
-	aio_completion->complete();
+	aio_completion->complete(ictx->cct);
       }
 
       m_aio_completions.erase(aio_completion);
@@ -553,12 +553,12 @@ TEST_F(TestImageWatcher, RequestLock) {
 
   {
     RWLock::WLocker l(ictx->owner_lock);
-    ASSERT_EQ(0, ictx->image_watcher->request_lock(
+    ictx->image_watcher->request_lock(
       boost::bind(&TestImageWatcher::handle_restart_aio, this, ictx, _1),
-      create_aio_completion(*ictx)));
-    ASSERT_EQ(0, ictx->image_watcher->request_lock(
+      create_aio_completion(*ictx));
+    ictx->image_watcher->request_lock(
       boost::bind(&TestImageWatcher::handle_restart_aio, this, ictx, _1),
-      create_aio_completion(*ictx)));
+      create_aio_completion(*ictx));
   }
 
   ASSERT_TRUE(wait_for_notifies(*ictx));
@@ -603,9 +603,9 @@ TEST_F(TestImageWatcher, RequestLockTimedOut) {
 
   {
     RWLock::WLocker l(ictx->owner_lock);
-    ASSERT_EQ(0, ictx->image_watcher->request_lock(
+    ictx->image_watcher->request_lock(
       boost::bind(&TestImageWatcher::handle_restart_aio, this, ictx, _1),
-      create_aio_completion(*ictx)));
+      create_aio_completion(*ictx));
   }
 
   ASSERT_TRUE(wait_for_notifies(*ictx));
@@ -630,9 +630,9 @@ TEST_F(TestImageWatcher, RequestLockTryLockRace) {
 
   {
     RWLock::WLocker l(ictx->owner_lock);
-    ASSERT_EQ(0, ictx->image_watcher->request_lock(
+    ictx->image_watcher->request_lock(
       boost::bind(&TestImageWatcher::handle_restart_aio, this, ictx, _1),
-      create_aio_completion(*ictx)));
+      create_aio_completion(*ictx));
   }
 
   ASSERT_TRUE(wait_for_notifies(*ictx));
@@ -665,9 +665,9 @@ TEST_F(TestImageWatcher, RequestLockPreTryLockFailed) {
 
   {
     RWLock::WLocker l(ictx->owner_lock);
-    ASSERT_EQ(0, ictx->image_watcher->request_lock(
+    ictx->image_watcher->request_lock(
       boost::bind(&TestImageWatcher::handle_restart_aio, this, ictx, _1),
-      create_aio_completion(*ictx)));
+      create_aio_completion(*ictx));
   }
   ASSERT_TRUE(wait_for_aio_completions(*ictx));
 }
@@ -687,9 +687,9 @@ TEST_F(TestImageWatcher, RequestLockPostTryLockFailed) {
   m_expected_aio_restarts = 1;
   {
     RWLock::WLocker l(ictx->owner_lock);
-    ASSERT_EQ(0, ictx->image_watcher->request_lock(
+    ictx->image_watcher->request_lock(
       boost::bind(&TestImageWatcher::handle_restart_aio, this, ictx, _1),
-      create_aio_completion(*ictx)));
+      create_aio_completion(*ictx));
   }
 
   ASSERT_TRUE(wait_for_notifies(*ictx));
