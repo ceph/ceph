@@ -91,15 +91,7 @@ namespace librbd {
 			   << ", oid " << m_oid
                            << ", extents " << m_image_extents
                            << dendl;
-    int r = aio_read(m_ictx->parent, m_image_extents, NULL, &m_copyup_data,
-		     comp, 0);
-    if (r < 0) {
-      lderr(m_ictx->cct) << __func__ << " " << this
-                         << ": error reading from parent: "
-                         << cpp_strerror(r) << dendl;
-      comp->release();
-      complete(r);
-    }
+    aio_read(m_ictx->parent, m_image_extents, NULL, &m_copyup_data, comp, 0);
   }
 
   void CopyupRequest::queue_send()
