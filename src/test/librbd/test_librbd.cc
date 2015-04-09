@@ -83,6 +83,10 @@ static int create_image_full(rados_ioctx_t ioctx, const char *name,
 			      uint64_t features)
 {
   if (old_format) {
+    // ensure old-format tests actually use the old format
+    CephContext *cct = reinterpret_cast<CephContext*>(rados_ioctx_cct(ioctx));
+    cct->_conf->set_val_or_die("rbd_default_format", "1");
+
     return rbd_create(ioctx, name, size, order);
   } else if ((features & RBD_FEATURE_STRIPINGV2) != 0) {
     return rbd_create3(ioctx, name, size, features, order, 65536, 16);
@@ -113,6 +117,10 @@ static int create_image_pp(librbd::RBD &rbd,
   if (r < 0)
     return r;
   if (old_format) {
+    // ensure old-format tests actually use the old format
+    CephContext *cct = reinterpret_cast<CephContext*>(ioctx.cct());
+    cct->_conf->set_val_or_die("rbd_default_format", "1");
+
     return rbd.create(ioctx, name, size, order);
   } else {
     return rbd.create2(ioctx, name, size, features, order);
