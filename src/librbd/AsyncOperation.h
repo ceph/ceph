@@ -26,6 +26,10 @@ public:
     assert(!m_xlist_item.is_on_list());
   }
 
+  inline bool started() const {
+    return m_xlist_item.is_on_list();
+  }
+
   void start_op(ImageCtx &image_ctx);
   void finish_op();
 
