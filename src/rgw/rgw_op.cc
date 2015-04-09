@@ -1218,7 +1218,7 @@ void RGWListBucket::execute()
     ret = store->update_containers_stats(m);
     if (ret > 0) {
       bucket = m.begin()->second;
-    } 
+    }
   }
 
   RGWRados::Bucket target(store, s->bucket);
@@ -1968,6 +1968,12 @@ void RGWPostObj::execute()
     goto done;
   }
 
+  ret = store->check_quota(s->bucket_owner.get_id(), s->bucket,
+                           user_quota, bucket_quota, s->content_length);
+  if (ret < 0) {
+    goto done;
+  }
+
   processor = select_processor(*static_cast<RGWObjectCtx *>(s->obj_ctx));
 
   ret = processor->prepare(store, NULL);
@@ -2002,6 +2008,12 @@ void RGWPostObj::execute()
   }
 
   s->obj_size = ofs;
+
+  ret = store->check_quota(s->bucket_owner.get_id(), s->bucket,
+                           user_quota, bucket_quota, s->obj_size);
+  if (ret < 0) {
+    goto done;
+  }
 
   hash.Final(m);
   buf_to_hex(m, CEPH_CRYPTO_MD5_DIGESTSIZE, calc_md5);
@@ -2835,7 +2847,7 @@ static int list_multipart_parts(RGWRados *store, struct req_state *s,
   int ret;
 
   parts.clear();
-  
+
   if (sorted_omap) {
     string p;
     p = "part.";
