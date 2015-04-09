@@ -198,7 +198,7 @@ int ObjBencher::aio_bench(
   data.object_size = object_size;
   data.in_flight = 0;
   data.started = 0;
-  data.finished = num_objects;
+  data.finished = 0;
   data.min_latency = 9999.0; // this better be higher than initial latency!
   data.max_latency = 0;
   data.avg_latency = 0;
@@ -342,6 +342,7 @@ int ObjBencher::write_bench(int secondsToRun,
 
   pthread_create(&print_thread, NULL, ObjBencher::status_printer, (void *)this);
   lock.Lock();
+  data.finished = 0;
   data.start_time = ceph_clock_now(cct);
   lock.Unlock();
   for (int i = 0; i<concurrentios; ++i) {
