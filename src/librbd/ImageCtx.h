@@ -153,8 +153,8 @@ namespace librbd {
     bool rbd_blacklist_on_break_lock;
     uint32_t rbd_blacklist_expire_seconds;
     uint32_t rbd_request_timed_out_seconds;
-    static bool _aware_metadata_confs(const string &prefix, const std::vector<string> &configs,
-                                      map<string, bufferlist> &pairs, map<string, bufferlist> *res);
+    static bool _filter_metadata_confs(const string &prefix, const std::vector<string> &configs,
+                                       map<string, bufferlist> &pairs, map<string, bufferlist> *res);
 
     /**
      * Either image_name or image_id must be set.
@@ -232,7 +232,7 @@ namespace librbd {
     void flush_async_operations(Context *on_finish);
 
     void cancel_async_requests();
-    void aware_metadata_confs();
+    void apply_metadata_confs();
   };
 }
 
