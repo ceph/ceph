@@ -75,6 +75,7 @@ private:
     STATE_GROW_OBJECT_MAP,
     STATE_UPDATE_HEADER,
     STATE_SHRINK_OBJECT_MAP,
+    STATE_UPDATE_SIZE_OVERLAP,
     STATE_FINISHED
   };
 
@@ -97,8 +98,8 @@ private:
   void send_update_header();
 
   void compute_parent_overlap();
-  void increment_refresh_seq();
   void update_size_and_overlap();
+  void send_notify_change();
 
 };
 

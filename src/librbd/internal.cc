@@ -1796,7 +1796,6 @@ reprotect_and_return_err:
     } while (r == -ERESTART);
 
     ictx->perfcounter->inc(l_librbd_resize);
-    notify_change(ictx->md_ctx, ictx->header_oid, ictx);
     ldout(cct, 2) << "resize finished" << dendl;
     return r;
   }
