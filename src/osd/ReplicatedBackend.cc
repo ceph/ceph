@@ -709,12 +709,18 @@ void ReplicatedBackend::sub_op_modify_reply(OpRequestRef op)
     if (r->ack_type & CEPH_OSD_FLAG_ONDISK) {
       assert(ip_op.waiting_for_commit.count(from));
       ip_op.waiting_for_commit.erase(from);
-      if (ip_op.op)
-	ip_op.op->mark_event("sub_op_commit_rec");
+      if (ip_op.op) {
+        ostringstream ss;
+        ss << "sub_op_commit_rec from " << from;
+	ip_op.op->mark_event(ss.str());
+      }
     } else {
       assert(ip_op.waiting_for_applied.count(from));
-      if (ip_op.op)
-	ip_op.op->mark_event("sub_op_applied_rec");
+      if (ip_op.op) {
+        ostringstream ss;
+        ss << "sub_op_applied_rec from " << from;
+	ip_op.op->mark_event(ss.str());
+      }
     }
     ip_op.waiting_for_applied.erase(from);
 
