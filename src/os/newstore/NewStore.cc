@@ -1198,12 +1198,12 @@ int NewStore::_do_read(
 
   // loop over overlays and data fragments.  overlays take precedence.
   fend = o->onode.data_map.end();
-  fp = o->onode.data_map.begin();   // fixme
+  fp = o->onode.data_map.lower_bound(offset);
   if (fp != o->onode.data_map.begin()) {
     --fp;
   }
   oend = o->onode.overlay_map.end();
-  op = o->onode.overlay_map.begin(); // fixme
+  op = o->onode.overlay_map.lower_bound(offset);
   if (op != o->onode.overlay_map.begin()) {
     --op;
   }
@@ -2819,7 +2819,8 @@ int NewStore::_do_overlay_trim(TransContext *txc,
   dout(10) << __func__ << " " << o->oid << " "
 	   << offset << "~" << length << dendl;
 
-  map<uint64_t,overlay_t>::iterator p = o->onode.overlay_map.begin(); // fixme
+  map<uint64_t,overlay_t>::iterator p =
+    o->onode.overlay_map.lower_bound(offset);
   if (p != o->onode.overlay_map.begin()) {
     --p;
   }
