@@ -49,8 +49,7 @@ public:
       return 1;
     }
 
-    int r = req->send();
-    assert(r == 0);
+    req->send();
     return 0;
   }
 
