@@ -150,7 +150,7 @@ namespace librbd {
       }
 
       header_oid = header_name(id);
-      aware_metadata_confs();
+      apply_metadata_confs();
       r = cls_client::get_immutable_metadata(&md_ctx, header_oid,
 					     &object_prefix, &order);
       if (r < 0) {
@@ -169,7 +169,7 @@ namespace librbd {
 
       init_layout();
     } else {
-      aware_metadata_confs();
+      apply_metadata_confs();
       header_oid = old_header_name(name);
     }
 
@@ -832,7 +832,7 @@ namespace librbd {
     }
   }
 
-  bool ImageCtx::_aware_metadata_confs(const string &prefix, const std::vector<string> &configs,
+  bool ImageCtx::_filter_metadata_confs(const string &prefix, const std::vector<string> &configs,
                                        map<string, bufferlist> &pairs, map<string, bufferlist> *res) {
     size_t conf_prefix_len = prefix.size();
 
@@ -853,7 +853,7 @@ namespace librbd {
     return true;
   }
 
-  void ImageCtx::aware_metadata_confs() {
+  void ImageCtx::apply_metadata_confs() {
     ldout(cct, 20) << __func__ << dendl;
     static uint64_t max_conf_items = 128;
 
@@ -870,7 +870,7 @@ namespace librbd {
       if (pairs.empty())
         break;
       
-      is_continue = _aware_metadata_confs(METADATA_CONF_PREFIX, aware_confs, pairs, &res);
+      is_continue = _filter_metadata_confs(METADATA_CONF_PREFIX, aware_confs, pairs, &res);
       for (map<string, bufferlist>::iterator it = res.begin(); it != res.end(); ++it) {
         j = cct->_conf->set_val(it->first.c_str(), it->second.c_str());
         if (j < 0)
