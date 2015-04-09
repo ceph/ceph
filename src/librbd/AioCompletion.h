@@ -101,37 +101,8 @@ namespace librbd {
       start_time = ceph_clock_now(ictx->cct);
     }
 
-    void complete() {
-      utime_t elapsed;
-      assert(lock.is_locked());
-      elapsed = ceph_clock_now(ictx->cct) - start_time;
-      switch (aio_type) {
-      case AIO_TYPE_READ:
-	ictx->perfcounter->tinc(l_librbd_aio_rd_latency, elapsed); break;
-      case AIO_TYPE_WRITE:
-	ictx->perfcounter->tinc(l_librbd_aio_wr_latency, elapsed); break;
-      case AIO_TYPE_DISCARD:
-	ictx->perfcounter->tinc(l_librbd_aio_discard_latency, elapsed); break;
-      case AIO_TYPE_FLUSH:
-	ictx->perfcounter->tinc(l_librbd_aio_flush_latency, elapsed); break;
-      default:
-	lderr(ictx->cct) << "completed invalid aio_type: " << aio_type << dendl;
-	break;
-      }
-
-      {
-        Mutex::Locker l(ictx->aio_lock);
-        assert(ictx->pending_aio != 0);
-        --ictx->pending_aio;
-        ictx->pending_aio_cond.Signal();
-      }
-
-      if (complete_cb) {
-	complete_cb(rbd_comp, complete_arg);
-      }
-      done = true;
-      cond.Signal();
-    }
+    void complete(CephContext *cct);
+    void fail(CephContext *cct, int r);
 
     void set_complete_cb(void *cb_arg, callback_t cb) {
       complete_cb = cb;
