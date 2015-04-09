@@ -71,8 +71,7 @@ public:
     AioWrite *req = new AioWrite(&m_image_ctx, oid, m_object_no, 0, objectx,
                                  object_overlap, bl, m_snapc, CEPH_NOSNAP,
                                  this);
-    int r = req->send();
-    assert(r == 0);
+    req->send();
     return 0;
   }
 
