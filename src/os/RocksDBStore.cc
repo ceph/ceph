@@ -147,12 +147,12 @@ int RocksDBStore::do_open(ostream &out, bool create_if_missing)
 
 
   PerfCountersBuilder plb(g_ceph_context, "rocksdb", l_rocksdb_first, l_rocksdb_last);
-  plb.add_u64_counter(l_rocksdb_gets, "rocksdb_get");
-  plb.add_u64_counter(l_rocksdb_txns, "rocksdb_transaction");
-  plb.add_u64_counter(l_rocksdb_compact, "rocksdb_compact");
-  plb.add_u64_counter(l_rocksdb_compact_range, "rocksdb_compact_range");
-  plb.add_u64_counter(l_rocksdb_compact_queue_merge, "rocksdb_compact_queue_merge");
-  plb.add_u64(l_rocksdb_compact_queue_len, "rocksdb_compact_queue_len");
+  plb.add_u64_counter(l_rocksdb_gets, "rocksdb_get", "Gets");
+  plb.add_u64_counter(l_rocksdb_txns, "rocksdb_transaction", "Transactions");
+  plb.add_u64_counter(l_rocksdb_compact, "rocksdb_compact", "Compactions");
+  plb.add_u64_counter(l_rocksdb_compact_range, "rocksdb_compact_range", "Compactions by range");
+  plb.add_u64_counter(l_rocksdb_compact_queue_merge, "rocksdb_compact_queue_merge", "Mergings of ranges in compaction queue");
+  plb.add_u64(l_rocksdb_compact_queue_len, "rocksdb_compact_queue_len", "Length of compaction queue");
   logger = plb.create_perf_counters();
   cct->get_perfcounters_collection()->add(logger);
   return 0;

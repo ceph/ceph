@@ -81,12 +81,12 @@ int LevelDBStore::do_open(ostream &out, bool create_if_missing)
   }
 
   PerfCountersBuilder plb(g_ceph_context, "leveldb", l_leveldb_first, l_leveldb_last);
-  plb.add_u64_counter(l_leveldb_gets, "leveldb_get");
-  plb.add_u64_counter(l_leveldb_txns, "leveldb_transaction");
-  plb.add_u64_counter(l_leveldb_compact, "leveldb_compact");
-  plb.add_u64_counter(l_leveldb_compact_range, "leveldb_compact_range");
-  plb.add_u64_counter(l_leveldb_compact_queue_merge, "leveldb_compact_queue_merge");
-  plb.add_u64(l_leveldb_compact_queue_len, "leveldb_compact_queue_len");
+  plb.add_u64_counter(l_leveldb_gets, "leveldb_get", "Gets");
+  plb.add_u64_counter(l_leveldb_txns, "leveldb_transaction", "Transactions");
+  plb.add_u64_counter(l_leveldb_compact, "leveldb_compact", "Compactions");
+  plb.add_u64_counter(l_leveldb_compact_range, "leveldb_compact_range", "Compactions by range");
+  plb.add_u64_counter(l_leveldb_compact_queue_merge, "leveldb_compact_queue_merge", "Mergings of ranges in compaction queue");
+  plb.add_u64(l_leveldb_compact_queue_len, "leveldb_compact_queue_len", "Length of compaction queue");
   logger = plb.create_perf_counters();
   cct->get_perfcounters_collection()->add(logger);
   return 0;
