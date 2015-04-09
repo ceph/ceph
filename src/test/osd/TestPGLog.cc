@@ -1280,8 +1280,8 @@ TEST_F(PGLogTest, proc_replica_log) {
     pg_shard_t from;
 
     eversion_t last_update(1, 1);
-    oinfo.last_update = last_update;
-    eversion_t last_complete(2, 1);
+    log.head = olog.head = oinfo.last_update = last_update;
+    eversion_t last_complete(1, 1);
     oinfo.last_complete = last_complete;
 
     EXPECT_TRUE(t.empty());
