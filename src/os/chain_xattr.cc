@@ -138,7 +138,7 @@ int chain_getxattr(const char *fn, const char *name, void *val, size_t size)
     get_raw_xattr_name(name, i, raw_name, sizeof(raw_name));
 
     r = sys_getxattr(fn, raw_name, (char *)val + pos, chunk_size);
-    if (i && r == -ENODATA) {
+    if (i && r == -ENOATTR) {
       ret = pos;
       break;
     }
@@ -209,7 +209,7 @@ int chain_fgetxattr(int fd, const char *name, void *val, size_t size)
     get_raw_xattr_name(name, i, raw_name, sizeof(raw_name));
 
     r = sys_fgetxattr(fd, raw_name, (char *)val + pos, chunk_size);
-    if (i && r == -ENODATA) {
+    if (i && r == -ENOATTR) {
       ret = pos;
       break;
     }
@@ -282,10 +282,10 @@ int chain_setxattr(const char *fn, const char *name, const void *val, size_t siz
     do {
       get_raw_xattr_name(name, i, raw_name, sizeof(raw_name));
       r = sys_removexattr(fn, raw_name);
-      if (r < 0 && r != -ENODATA)
+      if (r < 0 && r != -ENOATTR)
 	ret = r;
       i++;
-    } while (r != -ENODATA);
+    } while (r != -ENOATTR);
   }
   
   return ret;
@@ -318,10 +318,10 @@ int chain_fsetxattr(int fd, const char *name, const void *val, size_t size)
     do {
       get_raw_xattr_name(name, i, raw_name, sizeof(raw_name));
       r = sys_fremovexattr(fd, raw_name);
-      if (r < 0 && r != -ENODATA)
+      if (r < 0 && r != -ENOATTR)
 	ret = r;
       i++;
-    } while (r != -ENODATA);
+    } while (r != -ENOATTR);
   }
   
   return ret;
