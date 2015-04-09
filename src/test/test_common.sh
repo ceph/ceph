@@ -38,12 +38,33 @@ die() {
         exit 1
 }
 
+# Test that flag is set (the element is found in the list)
+is_set()
+{
+	local flag=$1; shift
+	local flags="$@"
+	local i
+
+	for i in ${flags}; do
+		if [ "${flag}" = "${i}" ]; then
+			return 0
+		fi
+	done
+	return 1
+}
+
 # Stop an OSD started by vstart
 stop_osd() {
         osd_index=$1
         pidfile="out/osd.$osd_index.pid"
         if [ -e $pidfile ]; then
-                kill `cat $pidfile` && return 0
+                if kill `cat $pidfile` ; then
+                        poll_cmd "eval test -e $pidfile ; echo \$?" "1" 1 30
+                        [ $? -eq 1 ] && return 0
+                        echo "ceph-osd process did not terminate correctly"
+                else
+                        echo "kill `cat $pidfile` failed"
+                fi
         else
                 echo "ceph-osd process $osd_index is not running"
         fi
@@ -144,7 +165,7 @@ start_recovery() {
         CEPH_NUM_OSD=$1
         osd=0
         while [ $osd -lt $CEPH_NUM_OSD ]; do
-                ./ceph -c ./ceph.conf osd tell $osd debug kick_recovery_wq 0
+                ./ceph -c ./ceph.conf tell osd.$osd debug kick_recovery_wq 0
                 osd=$((osd+1))
         done
 }
