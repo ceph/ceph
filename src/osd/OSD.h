@@ -220,24 +220,12 @@ class DeletingState {
 public:
   const spg_t pgid;
   const PGRef old_pg_state;
+  list<coll_t> colls_to_remove;
   DeletingState(const pair<spg_t, PGRef> &in) :
     lock("DeletingState::lock"), status(QUEUED), stop_deleting(false),
-    pgid(in.first), old_pg_state(in.second) {}
-
-  /// transition status to clearing
-  bool start_clearing() {
-    Mutex::Locker l(lock);
-    assert(
-      status == QUEUED ||
-      status == DELETED_DIR);
-    if (stop_deleting) {
-      status = CANCELED;
-      cond.Signal();
-      return false;
+    pgid(in.first), old_pg_state(in.second) {
+      old_pg_state->get_colls(&colls_to_remove);
     }
-    status = CLEARING_DIR;
-    return true;
-  } ///< @return false if we should cancel deletion
 
   /// transition status to CLEARING_WAITING
   bool pause_clearing() {
@@ -251,6 +239,22 @@ public:
     status = CLEARING_WAITING;
     return true;
   } ///< @return false if we should cancel deletion
+
+  /// start or resume the clearing - transition the status to CLEARING_DIR
+  bool start_or_resume_clearing() {
+    Mutex::Locker l(lock);
+    assert(
+      status == QUEUED ||
+      status == DELETED_DIR ||
+      status == CLEARING_WAITING);
+    if (stop_deleting) {
+      status = CANCELED;
+      cond.Signal();
+      return false;
+    }
+    status = CLEARING_DIR;
+    return true;
+  } ///< @return false if we should cancel the deletion
 
   /// transition status to CLEARING_DIR
   bool resume_clearing() {
