@@ -85,11 +85,6 @@ void StrayManager::purge(CDentry *dn, uint32_t op_allowance)
   num_strays_purging++;
   logger->set(l_mdc_num_strays_purging, num_strays_purging);
 
-  if (dn->item_stray.is_on_list()) {
-    dn->item_stray.remove_myself();
-    num_strays_delayed--;
-    logger->set(l_mdc_num_strays_delayed, num_strays_delayed);
-  }
 
   // CHEAT.  there's no real need to journal our intent to purge, since
   // that is implicit in the dentry's presence and non-use in the stray
@@ -321,6 +316,12 @@ void StrayManager::enqueue(CDentry *dn, bool trunc)
   dn->state_set(CDentry::STATE_PURGING);
   dn->get(CDentry::PIN_PURGING);
   in->state_set(CInode::STATE_PURGING);
+
+  if (dn->item_stray.is_on_list()) {
+    dn->item_stray.remove_myself();
+    num_strays_delayed--;
+    logger->set(l_mdc_num_strays_delayed, num_strays_delayed);
+  }
 
   /* We must clear this as soon as enqueuing it, to prevent the journal
    * expiry code from seeing a dirty parent and trying to write a backtrace */
@@ -581,10 +582,6 @@ bool StrayManager::eval_stray(CDentry *dn, bool delay)
       dout(20) << " caps | leases" << dendl;
       return false;  // wait
     }
-    if (dn->state_test(CDentry::STATE_PURGING)) {
-      dout(20) << " already purging" << dendl;
-      return false;  // already purging
-    }
     if (in->state_test(CInode::STATE_NEEDSRECOVER) ||
 	in->state_test(CInode::STATE_RECOVERING)) {
       dout(20) << " pending recovery" << dendl;
@@ -760,12 +757,6 @@ void StrayManager::truncate(CDentry *dn, uint32_t op_allowance)
   assert(in);
   dout(10) << __func__ << ": " << *dn << " " << *in << dendl;
   assert(!dn->is_replicated());
-
-  if (dn->item_stray.is_on_list()) {
-    dn->item_stray.remove_myself();
-    num_strays_delayed--;
-    logger->set(l_mdc_num_strays_delayed, num_strays_delayed);
-  }
 
   num_strays_purging++;
   logger->set(l_mdc_num_strays_purging, num_strays_purging);
