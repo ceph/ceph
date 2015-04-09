@@ -178,8 +178,8 @@ int ImageWatcher::try_lock() {
   return 0;
 }
 
-int ImageWatcher::request_lock(
-    const boost::function<int(AioCompletion*)>& restart_op, AioCompletion* c) {
+void ImageWatcher::request_lock(
+    const boost::function<void(AioCompletion*)>& restart_op, AioCompletion* c) {
   assert(m_image_ctx.owner_lock.is_locked());
   assert(m_lock_owner_state == LOCK_OWNER_STATE_NOT_LOCKED);
 
@@ -190,7 +190,7 @@ int ImageWatcher::request_lock(
 			       << dendl;
     m_aio_requests.push_back(std::make_pair(restart_op, c));
     if (request_pending) {
-      return 0;
+      return;
     }
   }
 
@@ -203,7 +203,6 @@ int ImageWatcher::request_lock(
       boost::bind(&ImageWatcher::notify_request_lock, this));
     m_task_finisher->queue(TASK_CODE_REQUEST_LOCK, ctx);
   }
-  return 0;
 }
 
 bool ImageWatcher::try_request_lock() {
