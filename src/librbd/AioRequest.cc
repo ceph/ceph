@@ -267,15 +267,8 @@ namespace librbd {
 			   << " parent completion " << m_parent_completion
 			   << " extents " << parent_extents
 			   << dendl;
-    int r = aio_read(m_ictx->parent, parent_extents, NULL, &m_read_data,
-	             m_parent_completion, 0);
-    if (r < 0) {
-      lderr(m_ictx->cct) << "read_from_parent " << this
-                         << ": error reading from parent: "
-                         << cpp_strerror(r) << dendl;
-      m_parent_completion->release();
-      complete(r);
-    }
+    aio_read(m_ictx->parent, parent_extents, NULL, &m_read_data,
+             m_parent_completion, 0);
   }
 
   /** write **/
