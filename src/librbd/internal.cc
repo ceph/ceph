@@ -2183,6 +2183,10 @@ reprotect_and_return_err:
     SimpleThrottle throttle(cct->_conf->rbd_concurrent_management_ops, false);
 
     for (uint64_t ono = 0; ono < overlap_objects; ono++) {
+      if (throttle.pending_error()) {
+        return throttle.wait_for_ret();
+      }
+
       {
 	RWLock::RLocker l(ictx->parent_lock);
 	// stop early if the parent went away - it just means
@@ -2206,12 +2210,7 @@ reprotect_and_return_err:
       Context *comp = new C_SimpleThrottle(&throttle);
       AioWrite *req = new AioWrite(ictx, oid, ono, 0, objectx, object_overlap,
 				   bl, snapc, CEPH_NOSNAP, comp);
-      r = req->send();
-      if (r < 0) {
-	lderr(cct) << "failed to flatten object " << oid << dendl;
-	goto err;
-      }
-
+      req->send();
       prog_ctx.update_progress(ono, overlap_objects);
     }
 
@@ -2956,8 +2955,7 @@ reprotect_and_return_err:
 				     objectx, object_overlap,
 				     bl, snapc, snap_id, req_comp);
 	c->add_request();
-	r = req->send();
-        assert(r == 0);
+	req->send();
       }
     }
 
@@ -3039,10 +3037,10 @@ reprotect_and_return_err:
 			  snapc, snap_id, req_comp);
       }
 
-      r = req->send();
-      assert(r == 0);
+      req->send();
     }
 
+    r = 0;
     if (ictx->object_cacher) {
       Mutex::Locker l(ictx->cache_lock);
       ictx->object_cacher->discard_set(ictx->object_set, extents);
@@ -3133,13 +3131,12 @@ reprotect_and_return_err:
 				    q->length, q->offset,
 				    cache_comp);
 	} else {
-	  r = req->send();
-          assert(r == 0);
+	  req->send();
 	}
       }
     }
 
-    c->finish_adding_requests(cct);
+    c->finish_adding_requests(ictx->cct);
     c->put();
 
     ictx->perfcounter->inc(l_librbd_aio_rd);
