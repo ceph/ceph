@@ -56,6 +56,7 @@ bool AsyncResizeRequest::safely_cancel(int r) {
   case STATE_GROW_OBJECT_MAP:
   case STATE_UPDATE_HEADER:
   case STATE_SHRINK_OBJECT_MAP:
+  case STATE_UPDATE_SIZE_OVERLAP:
     ldout(cct, 5) << "delaying cancel request" << dendl;
     return false;
   default:
@@ -98,15 +99,17 @@ bool AsyncResizeRequest::should_complete(int r) {
     ldout(cct, 5) << "UPDATE_HEADER" << dendl;
     if (send_shrink_object_map()) {
       update_size_and_overlap();
-      increment_refresh_seq();
-      return true;
     }
     break;
 
   case STATE_SHRINK_OBJECT_MAP:
     ldout(cct, 5) << "SHRINK_OBJECT_MAP" << dendl;
     update_size_and_overlap();
-    increment_refresh_seq();
+    break;
+
+  case STATE_UPDATE_SIZE_OVERLAP:
+    ldout(cct, 5) << "NOTIFY_CHANGE" << dendl;
+    send_notify_change();
     return true;
 
   case STATE_FINISHED:
@@ -301,13 +304,9 @@ void AsyncResizeRequest::compute_parent_overlap() {
   }
 }
 
-void AsyncResizeRequest::increment_refresh_seq() {
-  m_image_ctx.refresh_lock.Lock();
-  ++m_image_ctx.refresh_seq;
-  m_image_ctx.refresh_lock.Unlock();
-}
-
 void AsyncResizeRequest::update_size_and_overlap() {
+  m_state = STATE_UPDATE_SIZE_OVERLAP;
+
   RWLock::WLocker snap_locker(m_image_ctx.snap_lock);
   m_image_ctx.size = m_new_size;
 
@@ -315,6 +314,13 @@ void AsyncResizeRequest::update_size_and_overlap() {
   if (m_image_ctx.parent != NULL && m_new_size < m_original_size) {
     m_image_ctx.parent_md.overlap = m_new_parent_overlap;
   }
+}
+
+void AsyncResizeRequest::send_notify_change() {
+  ldout(m_image_ctx.cct, 5) << this << " send_grow_object_map: "
+                            << " original_size=" << m_original_size
+                            << " new_size=" << m_new_size << dendl;
+  notify_change(m_image_ctx.md_ctx, m_image_ctx.header_oid, &m_image_ctx);
 }
 
 } // namespace librbd
