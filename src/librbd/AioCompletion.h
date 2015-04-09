@@ -98,7 +98,9 @@ namespace librbd {
       }
     }
 
-    void complete();
+    void fail(CephContext *cct, int r);
+
+    void complete(CephContext *cct);
 
     void set_complete_cb(void *cb_arg, callback_t cb) {
       complete_cb = cb;
@@ -145,7 +147,7 @@ namespace librbd {
       --blockers;
       if (pending_count == 0 && blockers == 0) {
         finalize(cct, rval);
-        complete();
+        complete(cct);
       }
     }
   };
