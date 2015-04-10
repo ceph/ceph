@@ -97,7 +97,6 @@ private:
   void send_update_header();
 
   void compute_parent_overlap();
-  void increment_refresh_seq();
   void update_size_and_overlap();
 
 };
