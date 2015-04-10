@@ -23,7 +23,7 @@ public:
       m_on_finish->complete(-ERESTART);
       delete this;
     } else if (should_complete(r)) {
-      m_on_finish->complete(r);
+      m_on_finish->complete(filter_return_code(r));
       delete this;
     }
   }
@@ -48,7 +48,9 @@ protected:
     return true;
   }
   virtual bool should_complete(int r) = 0;
-
+  virtual int filter_return_code(int r) {
+    return r;
+  }
 private:
   bool m_canceled;
   xlist<AsyncRequest *>::item m_xlist_item;
