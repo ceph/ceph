@@ -36,23 +36,6 @@ class NewStore : public ObjectStore {
   // types
 public:
 
-  struct FragmentHandle {
-    int fd;
-    FragmentHandle() : fd(-1) {}
-    FragmentHandle(int f) : fd(f) {}
-    ~FragmentHandle() {
-      if (fd >= 0)
-	::close(fd);
-    }
-    int fsync() {
-      return ::fsync(fd);
-    }
-    int fdatasync() {
-      return ::fdatasync(fd);
-    }
-  };
-  typedef ceph::shared_ptr<FragmentHandle> FragmentHandleRef;
-
   class TransContext;
 
   /// an in-memory object
