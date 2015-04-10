@@ -103,6 +103,9 @@ EXTRA_DIST += \
 	$(srcdir)/test/ubuntu-14.04/Dockerfile.in \
 	$(srcdir)/test/ubuntu-14.04/install-deps.sh \
 	$(srcdir)/test/ubuntu-14.04/debian \
+	$(srcdir)/test/fedora-21/Dockerfile.in \
+	$(srcdir)/test/fedora-21/install-deps.sh \
+	$(srcdir)/test/fedora-21/ceph.spec.in \
 	$(srcdir)/test/centos-6/Dockerfile.in \
 	$(srcdir)/test/centos-6/install-deps.sh \
 	$(srcdir)/test/centos-6/ceph.spec.in \
