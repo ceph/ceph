@@ -2277,7 +2277,14 @@ int NewStore::_do_wal_transaction(wal_transaction_t& wt)
       {
 	dout(20) << __func__ << " write " << p->fid << " "
 		 << p->offset << "~" << p->length << dendl;
-	int fd = _open_fid(p->fid, O_RDWR);
+	unsigned flags = O_RDWR;
+	if (g_conf->newstore_o_direct &&
+	    (p->offset & ~CEPH_PAGE_MASK) == 0 &&
+	    (p->length & ~CEPH_PAGE_MASK) == 0) {
+	  dout(20) << __func__ << " page-aligned, using O_DIRECT" << dendl;
+	  flags |= O_DIRECT;
+	}
+	int fd = _open_fid(p->fid, flags);
 	if (fd < 0)
 	  return fd;
 	int r = ::lseek64(fd, p->offset, SEEK_SET);
@@ -3022,12 +3029,19 @@ int NewStore::_do_write(TransContext *txc,
       o->onode.size == 0 ||
       o->onode.data_map.empty()) {
     _do_overlay_clear(txc, o);
+    unsigned flags = O_RDWR;
+    if (g_conf->newstore_o_direct &&
+	(offset & ~CEPH_PAGE_MASK) == 0 &&
+	(length & ~CEPH_PAGE_MASK) == 0) {
+      dout(20) << __func__ << " page-aligned, using O_DIRECT" << dendl;
+      flags |= O_DIRECT;
+    }
     if (o->onode.data_map.empty()) {
       // create
       fragment_t &f = o->onode.data_map[0];
       f.offset = 0;
       f.length = MAX(offset + length, o->onode.size);
-      fd = _create_fid(txc, &f.fid, O_RDWR);
+      fd = _create_fid(txc, &f.fid, flags);
       if (fd < 0) {
 	r = fd;
 	goto out;
@@ -3039,7 +3053,7 @@ int NewStore::_do_write(TransContext *txc,
       // append (possibly with gap)
       assert(o->onode.data_map.size() == 1);
       fragment_t &f = o->onode.data_map.rbegin()->second;
-      fd = _open_fid(f.fid, O_RDWR);
+      fd = _open_fid(f.fid, flags);
       if (fd < 0) {
 	r = fd;
 	goto out;
