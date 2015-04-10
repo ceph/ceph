@@ -1,4 +1,11 @@
 
+v0.80.10
+--------
+
+-  The return code for librbd's rbd_aio_read and Image::aio_read API methods no
+  longer returns the number of bytes read upon success.  Instead, it returns 0
+  upon success and a negative value upon failure.
+
 v0.81
 -----
 
