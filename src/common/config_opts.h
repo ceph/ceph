@@ -803,6 +803,7 @@ OPTION(newstore_nid_prealloc, OPT_INT, 1024)
 OPTION(newstore_overlay_max_length, OPT_INT, 65536)
 OPTION(newstore_overlay_max, OPT_INT, 32)
 OPTION(newstore_open_by_handle, OPT_BOOL, true)
+OPTION(newstore_o_direct, OPT_BOOL, true)
 
 OPTION(filestore_omap_backend, OPT_STR, "leveldb")
 
