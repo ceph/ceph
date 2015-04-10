@@ -2305,19 +2305,12 @@ int NewStore::_do_wal_transaction(wal_transaction_t& wt)
 	int fd = _open_fid(p->fid, O_RDWR);
 	if (fd < 0)
 	  return fd;
-	int r = ::lseek64(fd, p->offset, SEEK_SET);
+	int r = fs->zero(fd, p->offset, p->length);
 	if (r < 0) {
-	  r = -errno;
-	  derr << __func__ << " lseek64 on " << fd << " got: "
+	  derr << __func__ << " zero on " << fd << " got: "
 	       << cpp_strerror(r) << dendl;
 	  return r;
 	}
-#warning use hole punch ioctl to zero when available
-	bufferlist bl;
-	bufferptr bp(p->length);
-	bp.zero();
-	bl.append(bp);
-	bl.write_fd(fd);
 	sync_fds.push_back(fd);
       }
       break;
