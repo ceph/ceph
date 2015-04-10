@@ -153,12 +153,12 @@ int ImageWatcher::try_lock() {
       }
     }
 
-    if (m_image_ctx.rbd_blacklist_on_break_lock) {
+    if (m_image_ctx.blacklist_on_break_lock) {
       ldout(m_image_ctx.cct, 1) << "blacklisting client: " << locker << "@"
 				<< locker_address << dendl;
       librados::Rados rados(m_image_ctx.md_ctx);
       r = rados.blacklist_add(locker_address,
-			      m_image_ctx.rbd_blacklist_expire_seconds);
+			      m_image_ctx.blacklist_expire_seconds);
       if (r < 0) {
         lderr(m_image_ctx.cct) << "unable to blacklist client: "
 			       << cpp_strerror(r) << dendl;
@@ -662,7 +662,7 @@ void ImageWatcher::schedule_async_request_timed_out(const AsyncRequestId &id) {
   Task task(TASK_CODE_ASYNC_REQUEST, id);
   m_task_finisher->cancel(task);
 
-  m_task_finisher->add_event_after(task, m_image_ctx.rbd_request_timed_out_seconds, ctx);
+  m_task_finisher->add_event_after(task, m_image_ctx.request_timed_out_seconds, ctx);
 }
 
 void ImageWatcher::async_request_timed_out(const AsyncRequestId &id) {

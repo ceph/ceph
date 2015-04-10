@@ -366,10 +366,11 @@ TEST_F(TestInternal, MultipleResize) {
 TEST_F(TestInternal, MetadatConfig) {
   REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
 
-  const vector<string> test_confs = boost::assign::list_of(
-    "aaaaaaa")(
-    "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")(
-    "cccccccccccccc");
+  map<string, bool> test_confs = boost::assign::map_list_of(
+    "aaaaaaa", false)(
+    "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", false)(
+    "cccccccccccccc", false);
+  map<string, bool>::iterator it = test_confs.begin();
   const string prefix = "test_config_";
   bool is_continue;
   librbd::ImageCtx *ictx;
@@ -377,18 +378,26 @@ TEST_F(TestInternal, MetadatConfig) {
 
   librbd::Image image1;
   map<string, bufferlist> pairs, res;
-  pairs[prefix+test_confs[0]].append("value1");
-  pairs[prefix+test_confs[1]].append("value2");
-  pairs[prefix+test_confs[2]].append("value3");
+  pairs[prefix+it->first].append("value1");
+  it++;
+  pairs[prefix+it->first].append("value2");
+  it++;
+  pairs[prefix+it->first].append("value3");
   pairs[prefix+"asdfsdaf"].append("value6");
   pairs[prefix+"zxvzxcv123"].append("value5");
 
   is_continue = ictx->_filter_metadata_confs(prefix, test_confs, pairs, &res);
   ASSERT_TRUE(is_continue);
   ASSERT_TRUE(res.size() == 3U);
-  ASSERT_TRUE(res.count(test_confs[0]));
-  ASSERT_TRUE(res.count(test_confs[1]));
-  ASSERT_TRUE(res.count(test_confs[2]));
+  it = test_confs.begin();
+  ASSERT_TRUE(res.count(it->first));
+  ASSERT_TRUE(it->second);
+  it++;
+  ASSERT_TRUE(res.count(it->first));
+  ASSERT_TRUE(it->second);
+  it++;
+  ASSERT_TRUE(res.count(it->first));
+  ASSERT_TRUE(it->second);
   res.clear();
 
   pairs["zzzzzzzz"].append("value7");
