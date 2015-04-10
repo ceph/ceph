@@ -98,7 +98,6 @@ bool AsyncResizeRequest::should_complete(int r) {
     ldout(cct, 5) << "UPDATE_HEADER" << dendl;
     if (send_shrink_object_map()) {
       update_size_and_overlap();
-      increment_refresh_seq();
       return true;
     }
     break;
@@ -106,7 +105,6 @@ bool AsyncResizeRequest::should_complete(int r) {
   case STATE_SHRINK_OBJECT_MAP:
     ldout(cct, 5) << "SHRINK_OBJECT_MAP" << dendl;
     update_size_and_overlap();
-    increment_refresh_seq();
     return true;
 
   case STATE_FINISHED:
@@ -299,12 +297,6 @@ void AsyncResizeRequest::compute_parent_overlap() {
   } else {
     m_new_parent_overlap = MIN(m_new_size, m_image_ctx.parent_md.overlap);
   }
-}
-
-void AsyncResizeRequest::increment_refresh_seq() {
-  m_image_ctx.refresh_lock.Lock();
-  ++m_image_ctx.refresh_seq;
-  m_image_ctx.refresh_lock.Unlock();
 }
 
 void AsyncResizeRequest::update_size_and_overlap() {
