@@ -27,6 +27,7 @@ public:
   static std::string object_map_name(const std::string &image_id,
 				     uint64_t snap_id);
 
+  ceph::BitVector<2u>::Reference operator[](uint64_t object_no);
   uint8_t operator[](uint64_t object_no) const;
   inline uint64_t size() const {
     return m_object_map.size();
@@ -37,6 +38,7 @@ public:
 
   bool object_may_exist(uint64_t object_no) const;
 
+  void aio_save(Context *on_finish);
   void aio_resize(uint64_t new_size, uint8_t default_object_state,
 		  Context *on_finish);
   bool aio_update(uint64_t object_no, uint8_t new_state,

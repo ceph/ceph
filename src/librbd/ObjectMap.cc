@@ -33,6 +33,13 @@ std::string ObjectMap::object_map_name(const std::string &image_id,
   return oid;
 }
 
+ceph::BitVector<2u>::Reference ObjectMap::operator[](uint64_t object_no)
+{
+  assert(m_image_ctx.object_map_lock.is_wlocked());
+  assert(object_no < m_object_map.size());
+  return m_object_map[object_no];
+}
+
 uint8_t ObjectMap::operator[](uint64_t object_no) const
 {
   assert(m_image_ctx.object_map_lock.is_locked());
@@ -301,6 +308,26 @@ void ObjectMap::snapshot(uint64_t snap_id) {
 	       << cpp_strerror(r) << dendl;
     invalidate(snap_id);
   }
+}
+
+void ObjectMap::aio_save(Context *on_finish)
+{
+  assert(m_image_ctx.test_features(RBD_FEATURE_OBJECT_MAP));
+  assert(m_image_ctx.owner_lock.is_locked());
+  RWLock::RLocker object_map_locker(m_image_ctx.object_map_lock);
+
+  librados::ObjectWriteOperation op;
+  if (m_snap_id == CEPH_NOSNAP) {
+    rados::cls::lock::assert_locked(&op, RBD_LOCK_NAME, LOCK_EXCLUSIVE, "", "");
+  }
+  cls_client::object_map_save(&op, m_object_map);
+
+  std::string oid(object_map_name(m_image_ctx.id, m_snap_id));
+  librados::AioCompletion *comp = librados::Rados::aio_create_completion(
+    on_finish, NULL, rados_ctx_cb);
+
+  int r = m_image_ctx.md_ctx.aio_operate(oid, comp, &op);
+  assert(r == 0);
 }
 
 void ObjectMap::aio_resize(uint64_t new_size, uint8_t default_object_state,
