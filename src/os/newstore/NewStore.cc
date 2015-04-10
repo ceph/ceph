@@ -2096,27 +2096,23 @@ void NewStore::_txc_finish_kv(TransContext *txc)
   txc->osr->qlock.Lock();
   txc->state = TransContext::STATE_KV_DONE;
 
-  // loop in case we race with OpSequencer::flush_commit()
-  do {
-    txc->osr->qlock.Unlock();
-    if (txc->onreadable_sync) {
-      txc->onreadable_sync->complete(0);
-      txc->onreadable_sync = NULL;
-    }
-    if (txc->onreadable) {
-      finisher.queue(txc->onreadable);
-      txc->onreadable = NULL;
-    }
-    if (txc->oncommit) {
-      txc->oncommit->complete(0);
-      txc->oncommit = NULL;
-    }
-    while (!txc->oncommits.empty()) {
-      txc->oncommits.front()->complete(0);
-      txc->oncommits.pop_front();
-    }
-    txc->osr->qlock.Lock();
-  } while (txc->oncommit || !txc->oncommits.empty());
+  // warning: we're calling onreadable_sync inside the sequencer lock
+  if (txc->onreadable_sync) {
+    txc->onreadable_sync->complete(0);
+    txc->onreadable_sync = NULL;
+  }
+  if (txc->onreadable) {
+    finisher.queue(txc->onreadable);
+    txc->onreadable = NULL;
+  }
+  if (txc->oncommit) {
+    finisher.queue(txc->oncommit);
+    txc->oncommit = NULL;
+  }
+  while (!txc->oncommits.empty()) {
+    finisher.queue(txc->oncommits.front());
+    txc->oncommits.pop_front();
+  }
 
   if (txc->wal_txn) {
     dout(20) << __func__ << " starting wal apply" << dendl;
