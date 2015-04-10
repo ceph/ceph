@@ -168,6 +168,7 @@ public:
       STATE_KV_DONE,
       STATE_WAL_QUEUED,
       STATE_WAL_APPLYING,
+      STATE_WAL_CLEANUP,   // remove wal kv record
       STATE_WAL_DONE,
       STATE_FINISHING,
       STATE_DONE,
@@ -186,6 +187,7 @@ public:
       case STATE_KV_DONE: return "kv_done";
       case STATE_WAL_QUEUED: return "wal_queued";
       case STATE_WAL_APPLYING: return "wal_applying";
+      case STATE_WAL_CLEANUP: return "wal_cleanup";
       case STATE_WAL_DONE: return "wal_done";
       case STATE_FINISHING: return "finishing";
       case STATE_DONE: return "done";
