@@ -525,6 +525,11 @@ int RGWSwift::validate_keystone_token(RGWRados *store, const string& token, stru
   if (ret < 0)
     return ret;
 
+  if (t.expired()) {
+    ldout(cct, 0) << "got expired token: " << t.token.tenant.name << ":" << t.user.name << " expired: " << t.token.expires << dendl;
+    return -EPERM;
+  }
+
   keystone_token_cache->add(token_id, t);
 
   ret = update_user_info(store, info, rgw_user);
