@@ -2,6 +2,13 @@
  Release Notes
 ===============
 
+v0.94.1 Hammer (draft)
+======================
+
+* crush: fix has_v4_buckets (#11364 Sage Weil)
+* crush: fix divide-by-0 in straw2 (#11357 Sage Weil)
+* osd: fix negative degraded objects during backfilling (#7737 Guang Yang)
+
 v0.94 Hammer
 ============
 
