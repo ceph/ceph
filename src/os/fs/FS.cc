@@ -18,6 +18,11 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 
+// from include/linux/falloc.h:
+#ifndef FALLOC_FL_PUNCH_HOLE
+# define FALLOC_FL_PUNCH_HOLE 0x2
+#endif
+
 #include "FS.h"
 
 #include "XFS.h"
@@ -102,4 +107,39 @@ int FS::copy_file_range(int to_fd, uint64_t to_offset,
 			uint64_t from_offset, uint64_t from_len)
 {
   assert(0 == "write me");
+}
+
+int FS::zero(int fd, uint64_t offset, uint64_t length)
+{
+  int r;
+
+#ifdef CEPH_HAVE_FALLOCATE
+# if !defined(DARWIN) && !defined(__FreeBSD__)
+  // first try fallocate
+  r = fallocate(fd, FALLOC_FL_PUNCH_HOLE, offset, length);
+  if (r < 0) {
+    r = -errno;
+  }
+  if (r != -EOPNOTSUPP) {
+    goto out;  // a real error
+  }
+# endif
+#endif
+
+  {
+    // fall back to writing zeros
+    bufferlist bl;
+    bufferptr bp(length);
+    bp.zero();
+    bl.append(bp);
+    int r = ::lseek64(fd, offset, SEEK_SET);
+    if (r < 0) {
+      r = -errno;
+      goto out;
+    }
+    r = bl.write_fd(fd);
+  }
+
+ out:
+  return r;
 }
