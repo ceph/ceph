@@ -1254,7 +1254,7 @@ int NewStore::_do_read(
 	if (fd >= 0) {
 	  VOID_TEMP_FAILURE_RETRY(::close(fd));
 	}
-	fd = _open_fid(cur_fid);
+	fd = _open_fid(cur_fid, O_RDONLY);
 	if (fd < 0) {
 	  r = fd;
 	  goto out;
@@ -1967,10 +1967,10 @@ int NewStore::_recover_next_fid()
   return 0;
 }
 
-int NewStore::_open_fid(fid_t fid)
+int NewStore::_open_fid(fid_t fid, unsigned flags)
 {
   if (fid.handle.length() && g_conf->newstore_open_by_handle) {
-    int fd = fs->open_handle(path_fd, fid.handle, O_RDWR);
+    int fd = fs->open_handle(path_fd, fid.handle, flags);
     if (fd >= 0) {
       dout(30) << __func__ << " " << fid << " = " << fd
 	       << " (open by handle)" << dendl;
@@ -1983,7 +1983,7 @@ int NewStore::_open_fid(fid_t fid)
 
   char fn[32];
   snprintf(fn, sizeof(fn), "%u/%u", fid.fset, fid.fno);
-  int fd = ::openat(frag_fd, fn, O_RDWR);
+  int fd = ::openat(frag_fd, fn, flags);
   if (fd < 0) {
     int r = -errno;
     derr << __func__ << " on " << fid << ": " << cpp_strerror(r) << dendl;
@@ -1993,7 +1993,7 @@ int NewStore::_open_fid(fid_t fid)
   return fd;
 }
 
-int NewStore::_create_fid(TransContext *txc, fid_t *fid)
+int NewStore::_create_fid(TransContext *txc, fid_t *fid, unsigned flags)
 {
   {
     Mutex::Locker l(fid_lock);
@@ -2047,7 +2047,7 @@ int NewStore::_create_fid(TransContext *txc, fid_t *fid)
   dout(10) << __func__ << " " << fid_last << dendl;
   char s[32];
   snprintf(s, sizeof(s), "%u", fid->fno);
-  int fd = ::openat(fset_fd, s, O_RDWR|O_CREAT, 0644);
+  int fd = ::openat(fset_fd, s, flags | O_CREAT, 0644);
   if (fd < 0) {
     int r = -errno;
     derr << __func__ << " cannot create " << path << "/fragments/"
@@ -2392,7 +2392,7 @@ int NewStore::_do_wal_transaction(wal_transaction_t& wt)
       {
 	dout(20) << __func__ << " write " << p->fid << " "
 		 << p->offset << "~" << p->length << dendl;
-	int fd = _open_fid(p->fid);
+	int fd = _open_fid(p->fid, O_RDWR);
 	if (fd < 0)
 	  return fd;
 	int r = ::lseek64(fd, p->offset, SEEK_SET);
@@ -2410,7 +2410,7 @@ int NewStore::_do_wal_transaction(wal_transaction_t& wt)
       {
 	dout(20) << __func__ << " zero " << p->fid << " "
 		 << p->offset << "~" << p->length << dendl;
-	int fd = _open_fid(p->fid);
+	int fd = _open_fid(p->fid, O_RDWR);
 	if (fd < 0)
 	  return fd;
 	int r = ::lseek64(fd, p->offset, SEEK_SET);
@@ -2433,7 +2433,7 @@ int NewStore::_do_wal_transaction(wal_transaction_t& wt)
       {
 	dout(20) << __func__ << " truncate " << p->fid << " "
 		 << p->offset << dendl;
-	int fd = _open_fid(p->fid);
+	int fd = _open_fid(p->fid, O_RDWR);
 	if (fd < 0)
 	  return fd;
 	int r = ::ftruncate(fd, p->offset);
@@ -3037,7 +3037,7 @@ int NewStore::_do_write_all_overlays(TransContext *txc,
     fragment_t &f = o->onode.data_map[0];
     f.offset = 0;
     f.length = o->onode.size;
-    int fd = _create_fid(txc, &f.fid);
+    int fd = _create_fid(txc, &f.fid, O_RDWR);
     if (fd < 0) {
       return fd;
     }
@@ -3142,7 +3142,7 @@ int NewStore::_do_write(TransContext *txc,
       fragment_t &f = o->onode.data_map[0];
       f.offset = 0;
       f.length = MAX(offset + length, o->onode.size);
-      fd = _create_fid(txc, &f.fid);
+      fd = _create_fid(txc, &f.fid, O_RDWR);
       if (fd < 0) {
 	r = fd;
 	goto out;
@@ -3154,7 +3154,7 @@ int NewStore::_do_write(TransContext *txc,
       // append (possibly with gap)
       assert(o->onode.data_map.size() == 1);
       fragment_t &f = o->onode.data_map.rbegin()->second;
-      fd = _open_fid(f.fid);
+      fd = _open_fid(f.fid, O_RDWR);
       if (fd < 0) {
 	r = fd;
 	goto out;
@@ -3194,7 +3194,7 @@ int NewStore::_do_write(TransContext *txc,
 
     f.length = length;
     o->onode.size = length;
-    fd = _create_fid(txc, &f.fid);
+    fd = _create_fid(txc, &f.fid, O_RDWR);
     if (fd < 0) {
       r = fd;
       goto out;
@@ -3247,7 +3247,7 @@ int NewStore::_do_write(TransContext *txc,
 
 int NewStore::_clean_fid_tail(TransContext *txc, const fragment_t& f)
 {
-  int fd = _open_fid(f.fid);
+  int fd = _open_fid(f.fid, O_RDWR);
   if (fd < 0) {
     return fd;
   }
@@ -3331,7 +3331,7 @@ int NewStore::_zero(TransContext *txc,
 
     if (offset >= o->onode.size) {
       // after tail
-      int fd = _open_fid(f.fid);
+      int fd = _open_fid(f.fid, O_RDWR);
       if (fd < 0) {
 	r = fd;
 	goto out;

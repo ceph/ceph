@@ -417,8 +417,8 @@ private:
   void _reap_collections();
 
   int _recover_next_fid();
-  int _create_fid(TransContext *txc, fid_t *fid);
-  int _open_fid(fid_t fid);
+  int _create_fid(TransContext *txc, fid_t *fid, unsigned flags);
+  int _open_fid(fid_t fid, unsigned flags);
   int _remove_fid(fid_t fid);
 
   int _recover_next_nid();
