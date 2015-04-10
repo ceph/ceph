@@ -281,8 +281,8 @@ def main(ctx):
                 )
                 if len(result) < ctx.num_to_lock:
                     log.error("Locking failed.")
-                    for machn in result:
-                        unlock_one(ctx, machn)
+                    for machine in result:
+                        unlock_one(ctx, machine, user)
                     ret = 1
                 else:
                     log.info("Successfully Locked:\n%s\n" % shortnames)
@@ -371,7 +371,7 @@ def lock_many(ctx, num, machine_type, user=None, description=None,
                     else:
                         log.error('Unable to create virtual machine: %s',
                                   machine)
-                        unlock_one(ctx, machine)
+                        unlock_one(ctx, machine, user)
                 return ok_machs
             return machines
         elif response.status_code == 503:
@@ -426,9 +426,7 @@ def unlock_many(names, user):
     return response.ok
 
 
-def unlock_one(ctx, name, user=None, description=None):
-    if user is None:
-        user = misc.get_user()
+def unlock_one(ctx, name, user, description=None):
     name = misc.canonicalize_hostname(name, user=None)
     if not provision.destroy_if_vm(ctx, name, user, description):
         log.error('downburst destroy failed for %s', name)
