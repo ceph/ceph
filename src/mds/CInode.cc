@@ -304,10 +304,14 @@ void CInode::split_need_snapflush(CInode *cowin, CInode *in)
 {
   dout(10) << "split_need_snapflush [" << cowin->first << "," << cowin->last << "] for " << *cowin << dendl;
   for (compact_map<snapid_t, set<client_t> >::iterator p = client_need_snapflush.lower_bound(cowin->first);
-       p != client_need_snapflush.end() && p->first <= cowin->last;
-       ++p) {
-    assert(!p->second.empty());
-    cowin->auth_pin(this);
+       p != client_need_snapflush.end() && p->first < in->first; ) {
+    compact_map<snapid_t, set<client_t> >::iterator q = p;
+    ++p;
+    assert(!q->second.empty());
+    if (cowin->last >= q->first)
+      cowin->auth_pin(this);
+    else
+      client_need_snapflush.erase(q);
     in->auth_unpin(this);
   }
 }
