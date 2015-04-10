@@ -2732,6 +2732,9 @@ reprotect_and_return_err:
     }
 
     ldout(cct, 10) << "rebuild object map finished" << dendl;
+    if (r < 0) {
+      notify_change(ictx->md_ctx, ictx->header_oid, ictx);
+    }
     return r;
   }
 
