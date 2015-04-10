@@ -41,6 +41,9 @@ private:
    *  . . . > STATE_VERIFY_OBJECTS
    *             |
    *             v
+   *          STATE_SAVE_OBJECT_MAP
+   *             |
+   *             v
    *          STATE_UPDATE_HEADER
    *
    * The _RESIZE_OBJECT_MAP state will be skipped if the object map
@@ -51,6 +54,7 @@ private:
     STATE_RESIZE_OBJECT_MAP,
     STATE_TRIM_IMAGE,
     STATE_VERIFY_OBJECTS,
+    STATE_SAVE_OBJECT_MAP,
     STATE_UPDATE_HEADER
   };
 
@@ -62,6 +66,7 @@ private:
   void send_resize_object_map();
   void send_trim_image();
   void send_verify_objects();
+  bool send_save_object_map();
   bool send_update_header();
 
   uint64_t get_image_size() const;
