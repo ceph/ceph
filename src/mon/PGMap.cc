@@ -885,7 +885,7 @@ void PGMap::print_osd_blocked_by_stats(std::ostream *ss) const
 void PGMap::recovery_summary(Formatter *f, list<string> *psl,
                              const pool_stat_t& delta_sum) const
 {
-  if (delta_sum.stats.sum.num_objects_degraded) {
+  if (delta_sum.stats.sum.num_objects_degraded && delta_sum.stats.sum.num_objects_degraded > 0) {
     double pc = (double)delta_sum.stats.sum.num_objects_degraded /
       (double)delta_sum.stats.sum.num_object_copies * (double)100.0;
     char b[20];
