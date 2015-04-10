@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 #include <errno.h>
 #include <boost/assign/list_of.hpp>
+#include <stddef.h>
 
 #include "common/ceph_context.h"
 #include "common/dout.h"
@@ -151,42 +152,42 @@ namespace librbd {
       header_oid = old_header_name(name);
     }
 
-    if (rbd_cache) {
+    if (cache) {
       Mutex::Locker l(cache_lock);
       ldout(cct, 20) << "enabling caching..." << dendl;
       writeback_handler = new LibrbdWriteback(this, cache_lock);
 
-      uint64_t init_max_dirty = rbd_cache_max_dirty;
-      if (rbd_cache_writethrough_until_flush)
+      uint64_t init_max_dirty = cache_max_dirty;
+      if (cache_writethrough_until_flush)
 	init_max_dirty = 0;
       ldout(cct, 20) << "Initial cache settings:"
-		     << " size=" << rbd_cache_size
+		     << " size=" << cache_size
 		     << " num_objects=" << 10
 		     << " max_dirty=" << init_max_dirty
-		     << " target_dirty=" << rbd_cache_target_dirty
+		     << " target_dirty=" << cache_target_dirty
 		     << " max_dirty_age="
-		     << rbd_cache_max_dirty_age << dendl;
+		     << cache_max_dirty_age << dendl;
 
       object_cacher = new ObjectCacher(cct, pname, *writeback_handler, cache_lock,
 				       NULL, NULL,
-				       rbd_cache_size,
+				       cache_size,
 				       10,  /* reset this in init */
 				       init_max_dirty,
-				       rbd_cache_target_dirty,
-				       rbd_cache_max_dirty_age,
-				       rbd_cache_block_writes_upfront);
+				       cache_target_dirty,
+				       cache_max_dirty_age,
+				       cache_block_writes_upfront);
       object_set = new ObjectCacher::ObjectSet(NULL, data_ctx.get_id(), 0);
       object_set->return_enoent = true;
       object_cacher->start();
     }
 
-    if (rbd_clone_copy_on_read) {
+    if (clone_copy_on_read) {
       copyup_finisher = new Finisher(cct);
       copyup_finisher->start();
     }
 
-    readahead.set_trigger_requests(rbd_readahead_trigger_requests);
-    readahead.set_max_readahead_size(rbd_readahead_max_bytes);
+    readahead.set_trigger_requests(readahead_trigger_requests);
+    readahead.set_max_readahead_size(readahead_max_bytes);
 
     perf_start(pname);
     return 0;
@@ -222,12 +223,12 @@ namespace librbd {
 
     // size object cache appropriately
     if (object_cacher) {
-      uint64_t obj = rbd_cache_max_dirty_object;
+      uint64_t obj = cache_max_dirty_object;
       if (!obj) {
-        obj = rbd_cache_size / (1ull << order);
+        obj = cache_size / (1ull << order);
         obj = obj * 4 + 10;
       }
-      ldout(cct, 10) << " cache bytes " << rbd_cache_size << " order " << (int)order
+      ldout(cct, 10) << " cache bytes " << cache_size << " order " << (int)order
 		     << " -> about " << obj << " objects" << dendl;
       object_cacher->set_max_objects(obj);
     }
@@ -291,9 +292,9 @@ namespace librbd {
     if (snap_id == LIBRADOS_SNAP_HEAD)
       return flags;
 
-    if (rbd_balance_snap_reads)
+    if (balance_snap_reads)
       flags |= librados::OPERATION_BALANCE_READS;
-    else if (rbd_localize_snap_reads)
+    else if (localize_snap_reads)
       flags |= librados::OPERATION_LOCALIZE_READS;
     return flags;
   }
@@ -613,12 +614,12 @@ namespace librbd {
   }
 
   void ImageCtx::user_flushed() {
-    if (object_cacher && rbd_cache_writethrough_until_flush) {
+    if (object_cacher && cache_writethrough_until_flush) {
       md_lock.get_read();
       bool flushed_before = flush_encountered;
       md_lock.put_read();
 
-      uint64_t max_dirty = rbd_cache_max_dirty;
+      uint64_t max_dirty = cache_max_dirty;
       if (!flushed_before && max_dirty > 0) {
 	md_lock.get_write();
 	flush_encountered = true;
@@ -810,7 +811,7 @@ namespace librbd {
     }
   }
 
-  bool ImageCtx::_filter_metadata_confs(const string &prefix, const vector<string> &configs,
+  bool ImageCtx::_filter_metadata_confs(const string &prefix, map<string, bool> &configs,
                                         map<string, bufferlist> &pairs, map<string, bufferlist> *res) {
     size_t conf_prefix_len = prefix.size();
 
@@ -820,9 +821,10 @@ namespace librbd {
         return false;
 
       string key = it->first.substr(conf_prefix_len, it->first.size() - conf_prefix_len);
-      for (std::vector<string>::const_iterator cit = configs.begin();
+      for (map<string, bool>::iterator cit = configs.begin();
            cit != configs.end(); ++cit) {
-        if (!key.compare(*cit)) {
+        if (!key.compare(cit->first)) {
+          cit->second = true;
           res->insert(make_pair(key, it->second));
           break;
         }
@@ -834,31 +836,32 @@ namespace librbd {
   void ImageCtx::apply_metadata_confs() {
     ldout(cct, 20) << __func__ << dendl;
     static uint64_t max_conf_items = 128;
-    const std::vector<string> configs = boost::assign::list_of(
-        "rbd_cache")(
-        "rbd_cache_writethrough_until_flush")(
-        "rbd_cache_size")(
-        "rbd_cache_max_dirty")(
-        "rbd_cache_target_dirty")(
-        "rbd_cache_max_dirty_age")(
-        "rbd_cache_max_dirty_object")(
-        "rbd_cache_block_writes_upfront")(
-        "rbd_concurrent_management_ops")(
-        "rbd_balance_snap_reads")(
-        "rbd_localize_snap_reads")(
-        "rbd_balance_parent_reads")(
-        "rbd_localize_parent_reads")(
-        "rbd_readahead_trigger_requests")(
-        "rbd_readahead_max_bytes")(
-        "rbd_readahead_disable_after_bytes")(
-        "rbd_clone_copy_on_read")(
-        "rbd_blacklist_on_break_lock")(
-        "rbd_blacklist_expire_seconds")(
-        "rbd_request_timed_out_seconds");
+    std::map<string, bool> configs = boost::assign::map_list_of(
+        "rbd_cache", false)(
+        "rbd_cache_writethrough_until_flush", false)(
+        "rbd_cache_size", false)(
+        "rbd_cache_max_dirty", false)(
+        "rbd_cache_target_dirty", false)(
+        "rbd_cache_max_dirty_age", false)(
+        "rbd_cache_max_dirty_object", false)(
+        "rbd_cache_block_writes_upfront", false)(
+        "rbd_concurrent_management_ops", false)(
+        "rbd_balance_snap_reads", false)(
+        "rbd_localize_snap_reads", false)(
+        "rbd_balance_parent_reads", false)(
+        "rbd_localize_parent_reads", false)(
+        "rbd_readahead_trigger_requests", false)(
+        "rbd_readahead_max_bytes", false)(
+        "rbd_readahead_disable_after_bytes", false)(
+        "rbd_clone_copy_on_read", false)(
+        "rbd_blacklist_on_break_lock", false)(
+        "rbd_blacklist_expire_seconds", false)(
+        "rbd_request_timed_out_seconds", false);
 
     string start = METADATA_CONF_PREFIX;
     int r = 0, j = 0;
     bool is_continue;
+    md_config_t local_config_t;
     do {
       map<string, bufferlist> pairs, res;
       r = cls_client::metadata_list(&md_ctx, header_oid, start, max_conf_items, &pairs);
@@ -871,7 +874,7 @@ namespace librbd {
       
       is_continue = _filter_metadata_confs(METADATA_CONF_PREFIX, configs, pairs, &res);
       for (map<string, bufferlist>::iterator it = res.begin(); it != res.end(); ++it) {
-        j = cct->_conf->set_val(it->first.c_str(), it->second.c_str());
+        j = local_config_t.set_val(it->first.c_str(), it->second.c_str());
         if (j < 0)
           lderr(cct) << __func__ << " failed to set config " << it->first << " with value "
                      << it->second.c_str() << ": " << j << dendl;
@@ -880,26 +883,33 @@ namespace librbd {
       start = pairs.rbegin()->first;
     } while (is_continue);
 
-    md_config_t *conf = cct->_conf;
-    rbd_cache = conf->rbd_cache;
-    rbd_cache_writethrough_until_flush = conf->rbd_cache_writethrough_until_flush;
-    rbd_cache_size = conf->rbd_cache_size;
-    rbd_cache_max_dirty = conf->rbd_cache_max_dirty;
-    rbd_cache_target_dirty = conf->rbd_cache_target_dirty;
-    rbd_cache_max_dirty_age = conf->rbd_cache_max_dirty_age;
-    rbd_cache_max_dirty_object = conf->rbd_cache_max_dirty_object;
-    rbd_cache_block_writes_upfront = conf->rbd_cache_block_writes_upfront;
-    rbd_concurrent_management_ops = conf->rbd_concurrent_management_ops;
-    rbd_balance_snap_reads = conf->rbd_balance_snap_reads;
-    rbd_localize_snap_reads = conf->rbd_localize_snap_reads;
-    rbd_balance_parent_reads = conf->rbd_balance_parent_reads;
-    rbd_localize_parent_reads = conf->rbd_localize_parent_reads;
-    rbd_readahead_trigger_requests = conf->rbd_readahead_trigger_requests;
-    rbd_readahead_max_bytes = conf->rbd_readahead_max_bytes;
-    rbd_readahead_disable_after_bytes = conf->rbd_readahead_disable_after_bytes;
-    rbd_clone_copy_on_read = conf->rbd_clone_copy_on_read;
-    rbd_blacklist_on_break_lock = conf->rbd_blacklist_on_break_lock;
-    rbd_blacklist_expire_seconds = conf->rbd_blacklist_expire_seconds;
-    rbd_request_timed_out_seconds = conf->rbd_request_timed_out_seconds;
+#define ASSIGN_OPTION(config)                                                      \
+    do {                                                                           \
+      if (configs[#config])                                                        \
+        config = local_config_t.rbd_##config;                                      \
+      else                                                                         \
+        config = cct->_conf->rbd_##config;                                         \
+    } while (0);
+
+    ASSIGN_OPTION(cache);
+    ASSIGN_OPTION(cache_writethrough_until_flush);
+    ASSIGN_OPTION(cache_size);
+    ASSIGN_OPTION(cache_max_dirty);
+    ASSIGN_OPTION(cache_target_dirty);
+    ASSIGN_OPTION(cache_max_dirty_age);
+    ASSIGN_OPTION(cache_max_dirty_object);
+    ASSIGN_OPTION(cache_block_writes_upfront);
+    ASSIGN_OPTION(concurrent_management_ops);
+    ASSIGN_OPTION(balance_snap_reads);
+    ASSIGN_OPTION(localize_snap_reads);
+    ASSIGN_OPTION(balance_parent_reads);
+    ASSIGN_OPTION(localize_parent_reads);
+    ASSIGN_OPTION(readahead_trigger_requests);
+    ASSIGN_OPTION(readahead_max_bytes);
+    ASSIGN_OPTION(readahead_disable_after_bytes);
+    ASSIGN_OPTION(clone_copy_on_read);
+    ASSIGN_OPTION(blacklist_on_break_lock);
+    ASSIGN_OPTION(blacklist_expire_seconds);
+    ASSIGN_OPTION(request_timed_out_seconds);
   }
 }
