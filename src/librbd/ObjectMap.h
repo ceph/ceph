@@ -59,6 +59,10 @@ private:
 
   protected:
     virtual bool should_complete(int r);
+    virtual int filter_return_code(int r) {
+      // never propagate an error back to the caller
+      return 0;
+    }
     virtual void finish(ObjectMap *object_map) = 0;
 
   private:
@@ -76,7 +80,7 @@ private:
     State m_state;
 
     bool invalidate();
-  }; 
+  };
 
   class ResizeRequest : public Request {
   public:
