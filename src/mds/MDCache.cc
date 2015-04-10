@@ -1482,11 +1482,25 @@ CInode *MDCache::cow_inode(CInode *in, snapid_t last)
 {
   assert(last >= in->first);
 
-  CInode *oldin = new CInode(this, true, in->first, last);
+  SnapRealm *realm = in->find_snaprealm();
+  const set<snapid_t>& snaps = realm->get_snaps();
+
+  // make sure snap inode's last match existing snapshots.
+  // MDCache::pick_inode_snap() requires this.
+  snapid_t last_snap = last;
+  if (snaps.count(last) == 0) {
+    set<snapid_t>::const_iterator p = snaps.upper_bound(last);
+    if (p != snaps.begin()) {
+      --p;
+      if (*p >= in->first)
+	last_snap = *p;
+    }
+  }
+
+  CInode *oldin = new CInode(this, true, in->first, last_snap);
   oldin->inode = *in->get_previous_projected_inode();
   oldin->symlink = in->symlink;
   oldin->xattrs = *in->get_previous_projected_xattrs();
-
   oldin->inode.trim_client_ranges(last);
 
   if (in->first < in->oldest_snap)
@@ -1496,9 +1510,6 @@ CInode *MDCache::cow_inode(CInode *in, snapid_t last)
 
   dout(10) << "cow_inode " << *in << " to " << *oldin << dendl;
   add_inode(oldin);
-  
-  SnapRealm *realm = in->find_snaprealm();
-  const set<snapid_t>& snaps = realm->get_snaps();
 
   if (in->last != CEPH_NOSNAP) {
     CInode *head_in = get_inode(in->ino());
