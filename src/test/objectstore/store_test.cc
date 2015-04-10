@@ -2030,6 +2030,81 @@ TEST_P(StoreTest, OMapTest) {
   ASSERT_EQ(r, 0);
 }
 
+TEST_P(StoreTest, OMapIterator) {
+  coll_t cid;
+  ghobject_t hoid(hobject_t("tesomap", "", CEPH_NOSNAP, 0, 0, ""));
+  int count = 0;
+  int r;
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    r = store->apply_transaction(t);
+    ASSERT_EQ(r, 0);
+  }
+
+  map<string, bufferlist> attrs;
+  {
+    ObjectStore::Transaction t;
+    t.touch(cid, hoid);
+    t.omap_clear(cid, hoid);
+    map<string, bufferlist> start_set;
+    t.omap_setkeys(cid, hoid, start_set);
+    store->apply_transaction(t);
+  }
+  ObjectMap::ObjectMapIterator iter = store->get_omap_iterator(cid, hoid);
+  bool correct;
+  //basic iteration
+  for (int i = 0; i < 100; i++) {
+    if (!(i%5)) {
+      std::cout << "On iteration " << i << std::endl;
+    }
+    ObjectStore::Transaction t;
+    bufferlist bl;
+    iter = store->get_omap_iterator(cid, hoid);
+
+    for (iter->seek_to_first(), count=0; iter->valid(); iter->next(), count++) {
+      string key = iter->key();
+      bufferlist value = iter->value();
+      correct = attrs.count(key) && (string(value.c_str()) == string(attrs[key].c_str()));
+      if (!correct) {
+	if (attrs.count(key) > 0) {
+	  std::cout << "key " << key << "in omap , " << value.c_str() << " : " << attrs[key].c_str() << std::endl;
+	}
+	else
+	  std::cout << "key " << key << "should not exists in omap" << std::endl;
+      }
+      ASSERT_EQ(correct, true);
+    }
+    ASSERT_EQ(attrs.size(), count);
+
+    char buf[100];
+    snprintf(buf, sizeof(buf), "%d", i);
+    bl.clear();
+    bufferptr bp(buf, strlen(buf) + 1);
+    bl.append(bp);
+    map<string, bufferlist> to_add;
+    to_add.insert(pair<string, bufferlist>("key-" + string(buf), bl));
+    attrs.insert(pair<string, bufferlist>("key-" + string(buf), bl));
+    t.omap_setkeys(cid, hoid, to_add);
+    store->apply_transaction(t);
+  }
+  //lower bound
+  string bound_key = "key-5";
+  iter->lower_bound(bound_key);
+  correct = bound_key <= iter->key();
+  if (!correct) {
+    std::cout << "lower bound, bound key is " << bound_key << " < iter key is " << iter->key() << std::endl;
+  }
+  ASSERT_EQ(correct, true);
+  //upper bound
+  iter->upper_bound(bound_key);
+  correct = iter->key() > bound_key;
+  if (!correct) {
+    std::cout << "upper bound, bound key is " << bound_key << " >= iter key is " << iter->key() << std::endl;
+  }
+  ASSERT_EQ(correct, true);
+}
+
 TEST_P(StoreTest, XattrTest) {
   coll_t cid;
   ghobject_t hoid(hobject_t("tesomap", "", CEPH_NOSNAP, 0, 0, ""));
