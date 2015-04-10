@@ -2983,7 +2983,7 @@ int NewStore::_do_write(TransContext *txc,
   }
 
   if ((int)o->onode.overlay_map.size() < g_conf->newstore_overlay_max &&
-      (int)length < g_conf->newstore_overlay_max_length) {
+      (int)length <= g_conf->newstore_overlay_max_length) {
     // write an overlay
     r = _do_overlay_write(txc, o, offset, length, bl);
     if (r < 0)
