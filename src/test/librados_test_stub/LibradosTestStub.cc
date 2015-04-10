@@ -143,6 +143,13 @@ extern "C" int rados_create(rados_t *cluster, const char * const id) {
   return 0;
 }
 
+extern "C" rados_config_t rados_ioctx_cct(rados_ioctx_t ioctx)
+{
+  librados::TestIoCtxImpl *ctx =
+    reinterpret_cast<librados::TestIoCtxImpl*>(ioctx);
+  return reinterpret_cast<rados_config_t>(ctx->get_rados_client()->cct());
+}
+
 extern "C" int rados_ioctx_create(rados_t cluster, const char *pool_name,
                                   rados_ioctx_t *ioctx) {
   librados::TestRadosClient *client =

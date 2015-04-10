@@ -2758,6 +2758,7 @@ int main(int argc, const char **argv)
       usage();
       return 0;
     } else if (ceph_argparse_flag(args, i, "--new-format", (char*)NULL)) {
+      cerr << "rbd: --new-format is deprecated" << std::endl;
       format = 2;
       format_specified = true;
     } else if (ceph_argparse_witharg(args, i, &val, "--image-format",
