@@ -72,7 +72,7 @@ bool CrushWrapper::has_v4_buckets() const
     crush_bucket *b = crush->buckets[i];
     if (!b)
       continue;
-    if (b->type == CRUSH_BUCKET_STRAW2)
+    if (b->alg == CRUSH_BUCKET_STRAW2)
       return true;
   }
   return false;
