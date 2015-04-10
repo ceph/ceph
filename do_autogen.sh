@@ -19,6 +19,7 @@ do_autogen.sh: make a ceph build by running autogen, etc.
 -j                               with java
 -r                               with rocksdb
 -J				 --with-jemalloc
+-L				 --without-lttng
 
 EOF
 }
