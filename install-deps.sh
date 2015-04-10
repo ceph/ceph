@@ -48,10 +48,11 @@ Ubuntu|Debian|Devuan)
         case $(lsb_release -sc) in
             squeeze|wheezy)
                 packages=$(echo $packages | perl -pe 's/[-\w]*babeltrace[-\w]*//g')
+                backports="-t $(lsb_release -sc)-backports"
                 ;;
         esac
         packages=$(echo $packages) # change newlines into spaces
-        $SUDO bash -c "DEBIAN_FRONTEND=noninteractive apt-get install -y $packages"
+        $SUDO bash -c "DEBIAN_FRONTEND=noninteractive apt-get install $backports -y $packages"
         ;;
 CentOS|Fedora|RedHatEnterpriseServer)
         case $(lsb_release -si) in
