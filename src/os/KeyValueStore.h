@@ -567,7 +567,6 @@ class KeyValueStore : public ObjectStore,
 
   void start_sync() {}
   void sync() {}
-  void flush() {}
 
   void set_fsid(uuid_d u) { fsid = u; }
   uuid_d get_fsid() { return fsid; }
