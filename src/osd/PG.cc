@@ -3298,7 +3298,11 @@ void PG::reg_next_scrub()
       (info.stats.stats_invalid && g_conf->osd_scrub_invalid_stats)) {
     scrubber.scrub_reg_stamp = utime_t();
   } else {
-    scrubber.scrub_reg_stamp = info.history.last_scrub_stamp;
+    if (info.history.last_scrub_stamp + cct->_conf->osd_scrub_min_interval <
+        info.history.last_deep_scrub_stamp + cct->_conf->osd_deep_scrub_interval)
+      scrubber.scrub_reg_stamp = info.history.last_scrub_stamp;
+    else
+      scrubber.scrub_reg_stamp = info.history.last_deep_scrub_stamp;
   }
   if (is_primary())
     osd->reg_last_pg_scrub(info.pgid, scrubber.scrub_reg_stamp);
