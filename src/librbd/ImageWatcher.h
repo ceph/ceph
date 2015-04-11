@@ -49,6 +49,8 @@ namespace librbd {
     int notify_resize(uint64_t request_id, uint64_t size,
 		      ProgressContext &prog_ctx);
     int notify_snap_create(const std::string &snap_name);
+    int notify_rebuild_object_map(uint64_t request_id,
+                                  ProgressContext &prog_ctx);
 
     static void notify_header_update(librados::IoCtx &io_ctx,
 				     const std::string &oid);
@@ -139,7 +141,7 @@ namespace librbd {
     public:
       RemoteContext(ImageWatcher &image_watcher,
 		    const WatchNotify::AsyncRequestId &id,
-		    RemoteProgressContext *prog_ctx)
+		    ProgressContext *prog_ctx)
         : m_image_watcher(image_watcher), m_async_request_id(id),
 	  m_prog_ctx(prog_ctx)
       {
@@ -154,7 +156,7 @@ namespace librbd {
     private:
       ImageWatcher &m_image_watcher;
       WatchNotify::AsyncRequestId m_async_request_id;
-      RemoteProgressContext *m_prog_ctx;
+      ProgressContext *m_prog_ctx;
     };
 
     struct HandlePayloadVisitor : public boost::static_visitor<void> {
@@ -239,6 +241,12 @@ namespace librbd {
     int notify_async_complete(const WatchNotify::AsyncRequestId &id,
 			      int r);
 
+    int prepare_async_request(const WatchNotify::AsyncRequestId& id,
+                              bool* new_request, Context** ctx,
+                              ProgressContext** prog_ctx);
+    void cleanup_async_request(const WatchNotify::AsyncRequestId& id,
+                               Context *ctx);
+
     void handle_payload(const WatchNotify::HeaderUpdatePayload& payload,
 		        bufferlist *out);
     void handle_payload(const WatchNotify::AcquiredLockPayload& payload,
@@ -257,6 +265,8 @@ namespace librbd {
 		        bufferlist *out);
     void handle_payload(const WatchNotify::SnapCreatePayload& payload,
 		        bufferlist *out);
+    void handle_payload(const WatchNotify::RebuildObjectMapPayload& payload,
+                        bufferlist *out);
     void handle_payload(const WatchNotify::UnknownPayload& payload,
 		        bufferlist *out);
 
