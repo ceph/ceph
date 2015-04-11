@@ -31,22 +31,12 @@ ObjectStore *ObjectStore::create(CephContext *cct,
 				 const string& journal,
 			         osflagbits_t flags)
 {
-  if (type == "filestore") {
-    return new FileStore(data, journal, flags);
+
+  PluginRegistry *reg = cct->get_plugin_registry();
+  Factory *factory = dynamic_cast<Factory*>(reg->get("objectstore", type));
+  if (factory) {
+    return factory->factory(cct, type, data, journal, flags);
   }
-  if (type == "memstore") {
-    return new MemStore(cct, data);
-  }
-  if (type == "keyvaluestore" &&
-      cct->check_experimental_feature_enabled("keyvaluestore")) {
-    return new KeyValueStore(data);
-  }
-#if defined(HAVE_LIBAIO)
-  if (type == "newstore" &&
-      cct->check_experimental_feature_enabled("newstore")) {
-    return new NewStore(cct, data);
-  }
-#endif
   return NULL;
 }
 
