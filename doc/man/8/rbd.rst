@@ -291,7 +291,7 @@ Commands
 :command:`map` [*image-name*] [-o | --options *map-options* ] [--read-only]
   Maps the specified image to a block device via the rbd kernel module.
 
-:command:`unmap` [*device-path*]
+:command:`unmap` [*image-name*] | [*device-path*]
   Unmaps the block device that was mapped via the rbd kernel module.
 
 :command:`showmapped`
