@@ -1697,6 +1697,8 @@ int FileStore::umount()
 {
   dout(5) << "umount " << basedir << dendl;
   
+  flush();
+  sync();
   do_force_sync();
 
   lock.Lock();
