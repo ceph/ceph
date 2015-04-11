@@ -31,6 +31,7 @@
 #include "include/str_list.h"
 #include "common/Mutex.h"
 #include "common/Cond.h"
+#include "common/PluginRegistry.h"
 
 #include <iostream>
 #include <pthread.h>
@@ -370,7 +371,8 @@ CephContext::CephContext(uint32_t module_type_)
     _perf_counters_conf_obs(NULL),
     _heartbeat_map(NULL),
     _crypto_none(NULL),
-    _crypto_aes(NULL)
+    _crypto_aes(NULL),
+    _plugin_registry(NULL)
 {
   ceph_spin_init(&_service_thread_lock);
   ceph_spin_init(&_associated_objs_lock);
@@ -388,6 +390,8 @@ CephContext::CephContext(uint32_t module_type_)
   _perf_counters_collection = new PerfCountersCollection(this);
   _admin_socket = new AdminSocket(this);
   _heartbeat_map = new HeartbeatMap(this);
+
+  _plugin_registry = new PluginRegistry(this);
 
   _admin_hook = new CephContextHook(this);
   _admin_socket->register_command("perfcounters_dump", "perfcounters_dump", _admin_hook, "");
@@ -422,6 +426,8 @@ CephContext::~CephContext()
   if (_conf->lockdep) {
     lockdep_unregister_ceph_context(this);
   }
+
+  delete _plugin_registry;
 
   _admin_socket->unregister_command("perfcounters_dump");
   _admin_socket->unregister_command("perf dump");

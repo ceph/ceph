@@ -73,7 +73,8 @@ libcommon_internal_la_SOURCES = \
 	common/module.c \
 	common/Readahead.cc \
 	common/Cycles.cc \
-	common/ContextCompletion.cc
+	common/ContextCompletion.cc \
+	common/PluginRegistry.cc
 
 libcommon_internal_la_SOURCES += \
 	common/blkdev.cc
@@ -232,7 +233,8 @@ noinst_HEADERS += \
 	common/Cycles.h \
 	common/Initialize.h \
 	common/ContextCompletion.h \
-	common/bit_vector.hpp
+	common/bit_vector.hpp \
+	common/PluginRegistry.h
 
 if ENABLE_XIO
 noinst_HEADERS += \

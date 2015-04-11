@@ -37,6 +37,7 @@ class CryptoAES;
 class CryptoHandler;
 
 namespace ceph {
+  class PluginRegistry;
   class HeartbeatMap;
   namespace log {
     class Log;
@@ -130,6 +131,10 @@ public:
   bool check_experimental_feature_enabled(const std::string& feature,
 					  std::ostream *message);
 
+  PluginRegistry *get_plugin_registry() {
+    return _plugin_registry;
+  }
+
 private:
   CephContext(const CephContext &rhs);
   CephContext &operator=(const CephContext &rhs);
@@ -172,6 +177,8 @@ private:
   CephContextObs *_cct_obs;
   ceph_spinlock_t _feature_lock;
   std::set<std::string> _experimental_features;
+
+  PluginRegistry *_plugin_registry;
 
   friend class CephContextObs;
 };
