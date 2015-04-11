@@ -5,6 +5,7 @@
 #include "librbd/ImageWatcher.h"
 #include "librbd/internal.h"
 #include <boost/scope_exit.hpp>
+#include <boost/assign/list_of.hpp>
 #include <utility>
 #include <vector>
 
@@ -353,4 +354,47 @@ TEST_F(TestInternal, MultipleResize) {
 
   ASSERT_EQ(0, librbd::get_size(ictx, &size));
   ASSERT_EQ(0U, size);
+}
+
+TEST_F(TestInternal, MetadatConfig) {
+  REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
+
+  map<string, bool> test_confs = boost::assign::map_list_of(
+    "aaaaaaa", false)(
+    "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", false)(
+    "cccccccccccccc", false);
+  map<string, bool>::iterator it = test_confs.begin();
+  const string prefix = "test_config_";
+  bool is_continue;
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  librbd::Image image1;
+  map<string, bufferlist> pairs, res;
+  pairs[prefix+it->first].append("value1");
+  it++;
+  pairs[prefix+it->first].append("value2");
+  it++;
+  pairs[prefix+it->first].append("value3");
+  pairs[prefix+"asdfsdaf"].append("value6");
+  pairs[prefix+"zxvzxcv123"].append("value5");
+
+  is_continue = ictx->_filter_metadata_confs(prefix, test_confs, pairs, &res);
+  ASSERT_TRUE(is_continue);
+  ASSERT_TRUE(res.size() == 3U);
+  it = test_confs.begin();
+  ASSERT_TRUE(res.count(it->first));
+  ASSERT_TRUE(it->second);
+  it++;
+  ASSERT_TRUE(res.count(it->first));
+  ASSERT_TRUE(it->second);
+  it++;
+  ASSERT_TRUE(res.count(it->first));
+  ASSERT_TRUE(it->second);
+  res.clear();
+
+  pairs["zzzzzzzz"].append("value7");
+  is_continue = ictx->_filter_metadata_confs(prefix, test_confs, pairs, &res);
+  ASSERT_FALSE(is_continue);
+  ASSERT_TRUE(res.size() == 3U);
 }
