@@ -1782,11 +1782,11 @@ reprotect_and_return_err:
 	  ldout(ictx->cct, 5) << "resize timed out notifying lock owner"
                               << dendl;
 	}
+      }
 
-	r = async_resize(ictx, &ctx, size, prog_ctx);
-	if (r < 0) {
-	  return r;
-	}
+      r = async_resize(ictx, &ctx, size, prog_ctx);
+      if (r < 0) {
+        return r;
       }
 
       r = ctx.wait();
@@ -1804,10 +1804,6 @@ reprotect_and_return_err:
   int async_resize(ImageCtx *ictx, Context *ctx, uint64_t size,
 		   ProgressContext &prog_ctx)
   {
-    assert(ictx->owner_lock.is_locked());
-    assert(!ictx->image_watcher->is_lock_supported() ||
-	   ictx->image_watcher->is_lock_owner());
-
     CephContext *cct = ictx->cct;
     ictx->snap_lock.get_read();
     ldout(cct, 20) << "async_resize " << ictx << " " << ictx->size << " -> "
@@ -1833,7 +1829,6 @@ reprotect_and_return_err:
   void async_resize_helper(ImageCtx *ictx, Context *ctx, uint64_t new_size,
                            ProgressContext& prog_ctx)
   {
-    assert(ictx->owner_lock.is_locked());
     AsyncResizeRequest *req = new AsyncResizeRequest(*ictx, ctx, new_size,
                                                      prog_ctx);
     req->send();

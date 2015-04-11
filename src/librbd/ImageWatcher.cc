@@ -844,7 +844,6 @@ void ImageWatcher::handle_payload(const FlattenPayload &payload,
 
 void ImageWatcher::handle_payload(const ResizePayload &payload,
 				  bufferlist *out) {
-  RWLock::RLocker l(m_image_ctx.owner_lock);
   if (m_lock_owner_state == LOCK_OWNER_STATE_LOCKED) {
     int r = 0;
     bool new_request = false;
