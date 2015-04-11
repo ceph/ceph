@@ -562,6 +562,7 @@ public:
   void flush();
   void sync_and_flush();
 
+  int flush_journal();
   int dump_journal(ostream& out);
 
   void set_fsid(uuid_d u) {
