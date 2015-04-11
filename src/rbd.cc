@@ -137,7 +137,7 @@ void usage()
 "  status <image-name>                         show the status of this image\n"
 "  map <image-name>                            map image to a block device\n"
 "                                              using the kernel\n"
-"  unmap <device>                              unmap a rbd device that was\n"
+"  unmap <image-name> | <device>               unmap a rbd device that was\n"
 "                                              mapped by the kernel\n"
 "  showmapped                                  show the rbd images mapped\n"
 "                                              by the kernel\n"
@@ -2425,7 +2425,8 @@ static int do_kernel_showmapped(Formatter *f)
   return r;
 }
 
-static int do_kernel_unmap(const char *dev)
+static int do_kernel_unmap(const char *dev, const char *poolname,
+                           const char *imgname, const char *snapname)
 {
   struct krbd_ctx *krbd;
   int r;
@@ -2434,7 +2435,10 @@ static int do_kernel_unmap(const char *dev)
   if (r < 0)
     return r;
 
-  r = krbd_unmap(krbd, dev);
+  if (dev)
+    r = krbd_unmap(krbd, dev);
+  else
+    r = krbd_unmap_by_spec(krbd, poolname, imgname, snapname);
 
   krbd_destroy(krbd);
   return r;
@@ -2969,15 +2973,13 @@ if (!set_conf_param(v, p1, p2, p3)) { \
       case OPT_WATCH:
       case OPT_STATUS:
       case OPT_MAP:
+      case OPT_UNMAP:
       case OPT_BENCH_WRITE:
       case OPT_LOCK_LIST:
       case OPT_METADATA_LIST:
       case OPT_DIFF:
       case OPT_OBJECT_MAP_REBUILD:
 	SET_CONF_PARAM(v, &imgname, NULL, NULL);
-	break;
-      case OPT_UNMAP:
-	SET_CONF_PARAM(v, &devpath, NULL, NULL);
 	break;
       case OPT_EXPORT:
       case OPT_EXPORT_DIFF:
@@ -3105,7 +3107,7 @@ if (!set_conf_param(v, p1, p2, p3)) { \
   if (opt_cmd != OPT_LIST &&
       opt_cmd != OPT_IMPORT &&
       opt_cmd != OPT_IMPORT_DIFF &&
-      opt_cmd != OPT_UNMAP &&
+      opt_cmd != OPT_UNMAP && /* needs imgname but handled below */
       opt_cmd != OPT_SHOWMAPPED &&
       opt_cmd != OPT_MERGE_DIFF && !imgname) {
     cerr << "rbd: image name was not specified" << std::endl;
@@ -3126,9 +3128,16 @@ if (!set_conf_param(v, p1, p2, p3)) { \
     }
   }
 
-  if (opt_cmd == OPT_UNMAP && !devpath) {
-    cerr << "rbd: device path was not specified" << std::endl;
-    return EXIT_FAILURE;
+  if (opt_cmd == OPT_UNMAP) {
+    if (!imgname) {
+      cerr << "rbd: unmap requires either image name or device path" << std::endl;
+      return EXIT_FAILURE;
+    }
+
+    if (strncmp(imgname, "/dev/", 5) == 0) {
+      devpath = imgname;
+      imgname = NULL;
+    }
   }
 
   if (opt_cmd == OPT_FEATURE_DISABLE || opt_cmd == OPT_FEATURE_ENABLE) {
@@ -3157,7 +3166,7 @@ if (!set_conf_param(v, p1, p2, p3)) { \
       opt_cmd != OPT_SNAP_REMOVE && opt_cmd != OPT_INFO &&
       opt_cmd != OPT_EXPORT && opt_cmd != OPT_EXPORT_DIFF &&
       opt_cmd != OPT_DIFF && opt_cmd != OPT_COPY &&
-      opt_cmd != OPT_MAP && opt_cmd != OPT_CLONE &&
+      opt_cmd != OPT_MAP && opt_cmd != OPT_UNMAP && opt_cmd != OPT_CLONE &&
       opt_cmd != OPT_SNAP_PROTECT && opt_cmd != OPT_SNAP_UNPROTECT &&
       opt_cmd != OPT_CHILDREN && opt_cmd != OPT_OBJECT_MAP_REBUILD) {
     cerr << "rbd: snapname specified for a command that doesn't use it"
@@ -3627,7 +3636,7 @@ if (!set_conf_param(v, p1, p2, p3)) { \
     break;
 
   case OPT_UNMAP:
-    r = do_kernel_unmap(devpath);
+    r = do_kernel_unmap(devpath, poolname, imgname, snapname);
     if (r < 0) {
       cerr << "rbd: unmap failed: " << cpp_strerror(-r) << std::endl;
       return -r;
