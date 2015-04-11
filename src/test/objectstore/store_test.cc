@@ -2182,7 +2182,6 @@ TEST_P(StoreTest, MoveRename) {
 
 TEST_P(StoreTest, BigRGWObjectName) {
   store->set_allow_sharded_objects();
-  store->sync_and_flush();
   coll_t cid(spg_t(pg_t(0,12),shard_id_t::NO_SHARD));
   ghobject_t oid(
     hobject_t(
