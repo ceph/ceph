@@ -407,7 +407,7 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
 
     int r;
     CephContext *cct = ictx->cct;
-    SimpleThrottle throttle(cct->_conf->rbd_concurrent_management_ops, true);
+    SimpleThrottle throttle(ictx->concurrent_management_ops, true);
 
     for (uint64_t i = 0; i < numseg; i++) {
       string oid = ictx->get_object_name(i);
@@ -1544,9 +1544,9 @@ reprotect_and_return_err:
     ictx->parent = new ImageCtx("", parent_image_id, NULL, p_ioctx, true);
 
     // set rados flags for reading the parent image
-    if (ictx->cct->_conf->rbd_balance_parent_reads)
+    if (ictx->balance_parent_reads)
       ictx->parent->set_read_flag(librados::OPERATION_BALANCE_READS);
-    else if (ictx->cct->_conf->rbd_localize_parent_reads)
+    else if (ictx->localize_parent_reads)
       ictx->parent->set_read_flag(librados::OPERATION_LOCALIZE_READS);
 
     r = open_image(ictx->parent);
@@ -2435,7 +2435,7 @@ reprotect_and_return_err:
       return r;
     }
 
-    SimpleThrottle throttle(cct->_conf->rbd_concurrent_management_ops, false);
+    SimpleThrottle throttle(src->concurrent_management_ops, false);
     uint64_t period = src->get_stripe_period();
     for (uint64_t offset = 0; offset < src_size; offset += period) {
       uint64_t len = min(period, src_size - offset);
@@ -2862,8 +2862,7 @@ reprotect_and_return_err:
       return -EINVAL;
     }
 
-    md_config_t *conf = ictx->cct->_conf;
-    if (conf->rbd_blacklist_on_break_lock) {
+    if (ictx->blacklist_on_break_lock) {
       typedef std::map<rados::cls::lock::locker_id_t,
 		       rados::cls::lock::locker_info_t> Lockers;
       Lockers lockers;
@@ -2893,7 +2892,7 @@ reprotect_and_return_err:
       RWLock::RLocker locker(ictx->md_lock);
       librados::Rados rados(ictx->md_ctx);
       r = rados.blacklist_add(client_address,
-			      conf->rbd_blacklist_expire_seconds);
+			      ictx->blacklist_expire_seconds);
       if (r < 0) {
         lderr(ictx->cct) << "unable to blacklist client: " << cpp_strerror(r)
           	       << dendl;
@@ -3759,8 +3758,7 @@ reprotect_and_return_err:
   };
 
   static void readahead(ImageCtx *ictx,
-			const vector<pair<uint64_t,uint64_t> >& image_extents,
-			const md_config_t *conf)
+			const vector<pair<uint64_t,uint64_t> >& image_extents)
   {
     uint64_t total_bytes = 0;
     for (vector<pair<uint64_t,uint64_t> >::const_iterator p = image_extents.begin();
@@ -3769,8 +3767,8 @@ reprotect_and_return_err:
       total_bytes += p->second;
     }
     ictx->md_lock.get_write();
-    bool abort = conf->rbd_readahead_disable_after_bytes != 0 &&
-      ictx->total_bytes_read > (uint64_t)conf->rbd_readahead_disable_after_bytes;
+    bool abort = ictx->readahead_disable_after_bytes != 0 &&
+      ictx->total_bytes_read > ictx->readahead_disable_after_bytes;
     ictx->total_bytes_read += total_bytes;
     ictx->snap_lock.get_read();
     uint64_t image_size = ictx->get_image_size(ictx->snap_id);
@@ -3815,10 +3813,9 @@ reprotect_and_return_err:
     }
 
     // readahead
-    const md_config_t *conf = ictx->cct->_conf;
-    if (ictx->object_cacher && conf->rbd_readahead_max_bytes > 0 &&
+    if (ictx->object_cacher && ictx->readahead_max_bytes > 0 &&
 	!(op_flags & LIBRADOS_OP_FLAG_FADVISE_RANDOM)) {
-      readahead(ictx, image_extents, conf);
+      readahead(ictx, image_extents);
     }
 
     snap_t snap_id;
