@@ -139,7 +139,6 @@ void AsyncTrimRequest::send() {
 }
 
 void AsyncTrimRequest::send_remove_objects() {
-  CephContext *cct = m_image_ctx.cct;
   ldout(m_image_ctx.cct, 5) << this << " send_remove_objects: "
 			    << " delete_start=" << m_delete_start
 			    << " num_objects=" << m_num_objects << dendl;
@@ -151,7 +150,7 @@ void AsyncTrimRequest::send_remove_objects() {
       boost::lambda::_1, &m_image_ctx, boost::lambda::_2));
   AsyncObjectThrottle *throttle = new AsyncObjectThrottle(
     *this, context_factory, ctx, m_prog_ctx, m_delete_start, m_num_objects);
-  throttle->start_ops(cct->_conf->rbd_concurrent_management_ops);
+  throttle->start_ops(m_image_ctx.concurrent_management_ops);
 }
 
 void AsyncTrimRequest::send_pre_remove() {
