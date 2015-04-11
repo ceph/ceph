@@ -69,6 +69,8 @@ OPTION(mon_cluster_log_file_level, OPT_STR, "info")
 
 OPTION(enable_experimental_unrecoverable_data_corrupting_features, OPT_STR, "")
 
+OPTION(plugin_dir, OPT_STR, CEPH_PKGLIBDIR)
+
 OPTION(xio_trace_mempool, OPT_BOOL, false) // mempool allocation counters
 OPTION(xio_trace_msgcnt, OPT_BOOL, false) // incoming/outgoing msg counters
 OPTION(xio_trace_xcon, OPT_BOOL, false) // Xio message encode/decode trace
