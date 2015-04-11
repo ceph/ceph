@@ -2271,8 +2271,8 @@ void OSD::suicide(int exitcode)
   recovery_tp.pause();
   command_tp.pause();
 
-  derr << " flushing io" << dendl;
-  store->sync_and_flush();
+  derr << " sync store" << dendl;
+  store->sync();
 
   derr << " removing pid file" << dendl;
   pidfile_remove();
