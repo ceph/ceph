@@ -164,14 +164,12 @@ int action_on_all_objects_in_pg(ObjectStore *store, string pgidstr, action_on_ob
     if (r < 0)
       break;
   }
-  store->sync_and_flush();
   return r;
 }
 
 int action_on_all_objects_in_exact_pg(ObjectStore *store, coll_t coll, action_on_object_t &action, bool debug)
 {
   int r = _action_on_all_objects_in_pg(store, coll, action, debug);
-  store->sync_and_flush();
   return r;
 }
 
@@ -212,7 +210,6 @@ int _action_on_all_objects(ObjectStore *store, action_on_object_t &action, bool 
 int action_on_all_objects(ObjectStore *store, action_on_object_t &action, bool debug)
 {
   int r = _action_on_all_objects(store, action, debug);
-  store->sync_and_flush();
   return r;
 }
 
