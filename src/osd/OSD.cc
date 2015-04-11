@@ -2322,8 +2322,6 @@ int OSD::shutdown()
   }
 
   dout(10) << "syncing store" << dendl;
-  store->flush();
-  store->sync();
   store->umount();
   delete store;
   store = 0;
