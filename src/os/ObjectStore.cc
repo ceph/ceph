@@ -37,6 +37,12 @@ ObjectStore *ObjectStore::create(CephContext *cct,
       cct->check_experimental_feature_enabled("keyvaluestore")) {
     return new KeyValueStore(data);
   }
+
+  PluginRegistry *reg = cct->get_plugin_registry();
+  Factory *factory = dynamic_cast<Factory*>(reg->get("objectstore", type));
+  if (factory) {
+    return factory->factory(cct, type, data, journal, flags);
+  }
   return NULL;
 }
 
