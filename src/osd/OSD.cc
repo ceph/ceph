@@ -1657,7 +1657,7 @@ bool OSD::asok_command(string command, cmdmap_t& cmdmap, string format,
     }
     f->close_section();
   } else if (command == "flush_journal") {
-    store->sync_and_flush();
+    store->flush_journal();
   } else if (command == "dump_ops_in_flight" ||
 	     command == "ops") {
     if (!op_tracker.tracking_enabled) {
