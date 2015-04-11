@@ -20,6 +20,7 @@
 #include "osd/osd_types.h"
 #include "common/TrackedOp.h"
 #include "common/WorkQueue.h"
+#include "common/PluginRegistry.h"
 #include "ObjectMap.h"
 
 #include <errno.h>
@@ -109,6 +110,14 @@ public:
 			     const string& data,
 			     const string& journal,
 			     osflagbits_t flags = 0);
+
+  struct Factory : public ceph::Plugin {
+    virtual ObjectStore *factory(CephContext *cct,
+				 const string& type,
+				 const string& data,
+				 const string& journal,
+				 osflagbits_t flags) = 0;
+  };
 
   Logger *logger;
 
