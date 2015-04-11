@@ -714,7 +714,7 @@ OPTION(rocksdb_level0_stop_writes_trigger, OPT_U64, 0)  // number of level-0 fil
 OPTION(rocksdb_disableDataSync, OPT_BOOL, true) // if true, data files are not synced to stable storage
 OPTION(rocksdb_disableWAL, OPT_BOOL, false)  // diable write ahead log
 OPTION(rocksdb_num_levels, OPT_INT, 0) // number of levels for this database
-OPTION(rocksdb_wal_dir, OPT_STR, "")  //  rocksdb write ahead log file
+OPTION(rocksdb_wal_dir, OPT_STR, "")  // directory for rocksdb write ahead log
 OPTION(rocksdb_info_log_level, OPT_STR, "info")  // info log level : debug , info , warn, error, fatal
 
 /**
