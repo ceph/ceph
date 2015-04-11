@@ -731,6 +731,17 @@ namespace librbd {
       return 0;
     }
 
+    void object_map_save(librados::ObjectWriteOperation *rados_op,
+                         const ceph::BitVector<2> &object_map)
+    {
+      ceph::BitVector<2> object_map_copy(object_map);
+      object_map_copy.set_crc_enabled(false);
+
+      bufferlist in;
+      ::encode(object_map_copy, in);
+      rados_op->exec("rbd", "object_map_save", in);
+    }
+
     void object_map_resize(librados::ObjectWriteOperation *rados_op,
                            uint64_t object_count, uint8_t default_state)
     {

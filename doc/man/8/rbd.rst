@@ -252,6 +252,10 @@ Commands
 :command:`image-meta remove` [*image-name*] [*key*]
   Remove metadata key with the value.
 
+:command:`object-map` rebuild [*image-name*]
+  Rebuilds an invalid object map for the specified image. An image snapshot can be
+  specified to rebuild an invalid object map for a snapshot.
+
 :command:`snap` ls [*image-name*]
   Dumps the list of snapshots inside a specific image.
 
