@@ -38,6 +38,7 @@ class CephContextObs;
 class CryptoHandler;
 
 namespace ceph {
+  class PluginRegistry;
   class HeartbeatMap;
   namespace log {
     class Log;
@@ -151,6 +152,10 @@ public:
   bool check_experimental_feature_enabled(const std::string& feature,
 					  std::ostream *message);
 
+  PluginRegistry *get_plugin_registry() {
+    return _plugin_registry;
+  }
+
 private:
   struct SingletonWrapper : boost::noncopyable {
     virtual ~SingletonWrapper() {}
@@ -223,6 +228,7 @@ private:
   };
   PerfCounters *_cct_perf;
   ceph_spinlock_t _cct_perf_lock;
+  PluginRegistry *_plugin_registry;
 
   friend class CephContextObs;
 };
