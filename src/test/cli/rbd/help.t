@@ -50,7 +50,7 @@
     status <image-name>                         show the status of this image
     map <image-name>                            map image to a block device
                                                 using the kernel
-    unmap <device>                              unmap a rbd device that was
+    unmap <image-name> | <device>               unmap a rbd device that was
                                                 mapped by the kernel
     showmapped                                  show the rbd images mapped
                                                 by the kernel
