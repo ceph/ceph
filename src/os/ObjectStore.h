@@ -2139,7 +2139,6 @@ public:
     ) = 0;
 
   virtual void sync(Context *onsync) {}
-  virtual void sync() {}
 
   virtual int flush_journal() { return -EOPNOTSUPP; }
 

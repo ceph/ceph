@@ -566,7 +566,6 @@ class KeyValueStore : public ObjectStore,
                       BufferTransaction &t);
 
   void start_sync() {}
-  void sync() {}
 
   void set_fsid(uuid_d u) { fsid = u; }
   uuid_d get_fsid() { return fsid; }
