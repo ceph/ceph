@@ -95,6 +95,7 @@ cls_method_handle_t h_dir_add_image;
 cls_method_handle_t h_dir_remove_image;
 cls_method_handle_t h_dir_rename_image;
 cls_method_handle_t h_object_map_load;
+cls_method_handle_t h_object_map_save;
 cls_method_handle_t h_object_map_resize;
 cls_method_handle_t h_object_map_update;
 cls_method_handle_t h_metadata_set;
@@ -1985,6 +1986,9 @@ int object_map_read(cls_method_context_t hctx, BitVector<2> &object_map)
   if (r < 0) {
     return r;
   }
+  if (size == 0) {
+    return -ENOENT;
+  }
 
   bufferlist bl;
   r = cls_cxx_read(hctx, 0, size, &bl);
@@ -2023,6 +2027,32 @@ int object_map_load(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   object_map.set_crc_enabled(false);
   ::encode(object_map, *out);
   return 0;
+}
+
+/**
+ * Save an rbd image's object map
+ *
+ * Input:
+ * @param object map bit vector
+ *
+ * Output:
+ * @returns 0 on success, negative error code on failure
+ */
+int object_map_save(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  BitVector<2> object_map;
+  try {
+    bufferlist::iterator iter = in->begin();
+    ::decode(object_map, iter);
+  } catch (const buffer::error &err) {
+    return -EINVAL;
+  }
+
+  bufferlist bl;
+  ::encode(object_map, bl);
+  CLS_LOG(20, "object_map_save: object size=%" PRIu64 ", byte size=%u",
+	  object_map.size(), bl.length());
+  return cls_cxx_write_full(hctx, &bl);
 }
 
 /**
@@ -2669,6 +2699,9 @@ void __cls_init()
   cls_register_cxx_method(h_class, "object_map_load",
                           CLS_METHOD_RD,
 			  object_map_load, &h_object_map_load);
+  cls_register_cxx_method(h_class, "object_map_save",
+                          CLS_METHOD_RD | CLS_METHOD_WR,
+			  object_map_save, &h_object_map_save);
   cls_register_cxx_method(h_class, "object_map_resize",
                           CLS_METHOD_RD | CLS_METHOD_WR,
 			  object_map_resize, &h_object_map_resize);

@@ -164,6 +164,10 @@ CEPH_RBD_API int rbd_get_flags(rbd_image_t image, uint64_t *flags);
 /* exclusive lock feature */
 CEPH_RBD_API int rbd_is_exclusive_lock_owner(rbd_image_t image, int *is_owner);
 
+/* object map feature */
+CEPH_RBD_API int rbd_rebuild_object_map(rbd_image_t image,
+                                        librbd_progress_fn_t cb, void *cbdata);
+
 CEPH_RBD_API int rbd_copy(rbd_image_t image, rados_ioctx_t dest_io_ctx,
                           const char *destname);
 CEPH_RBD_API int rbd_copy2(rbd_image_t src, rbd_image_t dest);

@@ -387,6 +387,12 @@ namespace librbd {
     return r;
   }
 
+  int Image::rebuild_object_map(ProgressContext &prog_ctx)
+  {
+    ImageCtx *ictx = reinterpret_cast<ImageCtx*>(ctx);
+    return librbd::rebuild_object_map(ictx, prog_ctx);
+  }
+
   int Image::copy(IoCtx& dest_io_ctx, const char *destname)
   {
     ImageCtx *ictx = (ImageCtx *)ctx;
@@ -518,8 +524,7 @@ namespace librbd {
   {
     ImageCtx *ictx = (ImageCtx *)ctx;
     tracepoint(librbd, snap_create_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only, snap_name);
-    RWLock::RLocker owner_locker(ictx->owner_lock);
-    int r = librbd::snap_create(ictx, snap_name, true);
+    int r = librbd::snap_create(ictx, snap_name);
     tracepoint(librbd, snap_create_exit, r);
     return r;
   }
@@ -1269,13 +1274,20 @@ extern "C" int rbd_is_exclusive_lock_owner(rbd_image_t image, int *is_owner)
   return r;
 }
 
+extern "C" int rbd_rebuild_object_map(rbd_image_t image,
+                                      librbd_progress_fn_t cb, void *cbdata)
+{
+  librbd::ImageCtx *ictx = reinterpret_cast<librbd::ImageCtx*>(image);
+  librbd::CProgressContext prog_ctx(cb, cbdata);
+  return librbd::rebuild_object_map(ictx, prog_ctx);
+}
+
 /* snapshots */
 extern "C" int rbd_snap_create(rbd_image_t image, const char *snap_name)
 {
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
   tracepoint(librbd, snap_create_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only, snap_name);
-  RWLock::RLocker owner_locker(ictx->owner_lock);
-  int r = librbd::snap_create(ictx, snap_name, true);
+  int r = librbd::snap_create(ictx, snap_name);
   tracepoint(librbd, snap_create_exit, r);
   return r;
 }

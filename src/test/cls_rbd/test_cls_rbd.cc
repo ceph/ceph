@@ -51,6 +51,7 @@ using ::librbd::cls_client::set_stripe_unit_count;
 using ::librbd::cls_client::old_snapshot_add;
 using ::librbd::cls_client::get_mutable_metadata;
 using ::librbd::cls_client::object_map_load;
+using ::librbd::cls_client::object_map_save;
 using ::librbd::cls_client::object_map_resize;
 using ::librbd::cls_client::object_map_update;
 using ::librbd::cls_client::get_flags;
@@ -910,6 +911,27 @@ TEST_F(TestClsRbd, get_mutable_metadata_features)
 	    incompatible_features);
 
   ioctx.close();
+}
+
+TEST_F(TestClsRbd, object_map_save)
+{
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
+
+  string oid = get_temp_image_name();
+  BitVector<2> ref_bit_vector;
+  ref_bit_vector.resize(32);
+  for (uint64_t i = 0; i < ref_bit_vector.size(); ++i) {
+    ref_bit_vector[i] = 1;
+  }
+
+  librados::ObjectWriteOperation op;
+  object_map_save(&op, ref_bit_vector);
+  ASSERT_EQ(0, ioctx.operate(oid, &op));
+
+  BitVector<2> osd_bit_vector;
+  ASSERT_EQ(0, object_map_load(&ioctx, oid, &osd_bit_vector));
+  ASSERT_EQ(ref_bit_vector, osd_bit_vector);
 }
 
 TEST_F(TestClsRbd, object_map_resize)

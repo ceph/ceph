@@ -24,10 +24,10 @@
 #include "librbd/CopyupRequest.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageWatcher.h"
-
 #include "librbd/internal.h"
 #include "librbd/ObjectMap.h"
 #include "librbd/parent_types.h"
+#include "librbd/RebuildObjectMapRequest.h"
 #include "include/util.h"
 
 #include "librados/snap_set_diff.h"
@@ -79,6 +79,81 @@ int remove_object_map(ImageCtx *ictx) {
     lderr(cct) << "failed to remove object map: " << cpp_strerror(r) << dendl;
   }
   return 0;
+}
+
+int prepare_image_update(ImageCtx *ictx) {
+  assert(ictx->owner_lock.is_locked() && !ictx->owner_lock.is_wlocked());
+  if (ictx->image_watcher == NULL) {
+    return -EROFS;
+  } else if (!ictx->image_watcher->is_lock_supported() ||
+             ictx->image_watcher->is_lock_owner()) {
+    return 0;
+  }
+
+  // need to upgrade to a write lock
+  int r = 0;
+  bool acquired_lock = false;
+  ictx->owner_lock.put_read();
+  {
+    RWLock::WLocker l(ictx->owner_lock);
+    if (!ictx->image_watcher->is_lock_owner()) {
+      r = ictx->image_watcher->try_lock();
+      acquired_lock = ictx->image_watcher->is_lock_owner();
+    }
+  }
+  if (acquired_lock) {
+    // finish any AIO that was previously waiting on acquiring the
+    // exclusive lock
+    ictx->flush_async_operations();
+  }
+  ictx->owner_lock.get_read();
+  return r;
+}
+
+int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
+                         const boost::function<int(Context*)>& local_request,
+                         const boost::function<int()>& remote_request) {
+  int r;
+  do {
+    C_SaferCond ctx;
+    {
+      RWLock::RLocker l(ictx->owner_lock);
+      {
+        RWLock::RLocker snap_locker(ictx->snap_lock);
+        if (ictx->read_only || ictx->snap_id != CEPH_NOSNAP) {
+          return -EROFS;
+        }
+      }
+
+      while (ictx->image_watcher->is_lock_supported()) {
+        r = prepare_image_update(ictx);
+        if (r < 0) {
+          return -EROFS;
+        } else if (ictx->image_watcher->is_lock_owner()) {
+          break;
+        }
+
+        r = remote_request();
+        if (r != -ETIMEDOUT && r != -ERESTART) {
+          return r;
+        }
+        ldout(ictx->cct, 5) << request_type << " timed out notifying lock owner"
+                            << dendl;
+      }
+
+      r = local_request(&ctx);
+      if (r < 0) {
+        return r;
+      }
+    }
+
+    r = ctx.wait();
+    if (r == -ERESTART) {
+      ldout(ictx->cct, 5) << request_type << " interrupted: restarting"
+                          << dendl;
+    }
+  } while (r == -ERESTART);
+  return r;
 }
 
 } // anonymous namespace
@@ -471,43 +546,13 @@ int remove_object_map(ImageCtx *ictx) {
     return 0;
   }
 
-  static int prepare_image_update(ImageCtx *ictx)
+  int snap_create(ImageCtx *ictx, const char *snap_name)
   {
-    assert(ictx->owner_lock.is_locked() && !ictx->owner_lock.is_wlocked());
-    if (ictx->image_watcher == NULL) {
-      return -EROFS;
-    } else if (!ictx->image_watcher->is_lock_supported() ||
-	       ictx->image_watcher->is_lock_owner()) {
-      return 0;
-    }
-
-    // need to upgrade to a write lock
-    int r = 0;
-    bool acquired_lock = false;
-    ictx->owner_lock.put_read();
-    {
-      RWLock::WLocker l(ictx->owner_lock);
-      if (!ictx->image_watcher->is_lock_owner()) {
-	r = ictx->image_watcher->try_lock();
-        acquired_lock = ictx->image_watcher->is_lock_owner();
-      }
-    }
-    if (acquired_lock) {
-      // finish any AIO that was previously waiting on acquiring the
-      // exclusive lock
-      ictx->flush_async_operations();
-    }
-    ictx->owner_lock.get_read();
-    return r;
-  }
-
-  int snap_create(ImageCtx *ictx, const char *snap_name, bool notify)
-  {
-    assert(ictx->owner_lock.is_locked());
     ldout(ictx->cct, 20) << "snap_create " << ictx << " " << snap_name << dendl;
 
-    if (ictx->read_only)
+    if (ictx->read_only) {
       return -EROFS;
+    }
 
     int r = ictx_check(ictx);
     if (r < 0)
@@ -520,45 +565,51 @@ int remove_object_map(ImageCtx *ictx) {
       }
     }
 
-    bool lock_owner = false;
-    while (ictx->image_watcher->is_lock_supported()) {
-      r = prepare_image_update(ictx);
-      if (r < 0) {
-	return -EROFS;
-      } else if (ictx->image_watcher->is_lock_owner()) {
-	lock_owner = true;
-	break;
-      }
-
-      r = ictx->image_watcher->notify_snap_create(snap_name);
-      if (r == 0 || r == -EEXIST) {
-        notify_change(ictx->md_ctx, ictx->header_oid, ictx);
-        return 0;
-      } else if (r != -ETIMEDOUT) {
-	return r;
-      }
-      ldout(ictx->cct, 5) << "snap_create timed out notifying lock owner" << dendl;
+    r = invoke_async_request(ictx, "snap_create",
+                             boost::bind(&snap_create_helper, ictx, _1,
+                                         snap_name),
+                             boost::bind(&ImageWatcher::notify_snap_create,
+                                         ictx->image_watcher, snap_name));
+    if (r < 0 && r != -EEXIST) {
+      return r;
     }
 
-    RWLock::WLocker l2(ictx->md_lock);
+    ictx->perfcounter->inc(l_librbd_snap_create);
+    notify_change(ictx->md_ctx, ictx->header_oid, ictx);
+    return 0;
+  }
+
+  int snap_create_helper(ImageCtx* ictx, Context* ctx,
+                         const char* snap_name) {
+    assert(ictx->owner_lock.is_locked());
+    assert(!ictx->image_watcher->is_lock_supported() ||
+	   ictx->image_watcher->is_lock_owner());
+
+    ldout(ictx->cct, 20) << "snap_create_helper " << ictx << " " << snap_name
+                         << dendl;
+
+    int r = ictx_check(ictx);
+    if (r < 0) {
+      return r;
+    }
+
+    RWLock::WLocker md_locker(ictx->md_lock);
     r = _flush(ictx);
     if (r < 0) {
       return r;
     }
 
     do {
-      r = add_snap(ictx, snap_name, lock_owner);
+      r = add_snap(ictx, snap_name);
     } while (r == -ESTALE);
 
     if (r < 0) {
       return r;
     }
 
-    if (notify) {
-      notify_change(ictx->md_ctx, ictx->header_oid, ictx);
+    if (ctx != NULL) {
+      ctx->complete(0);
     }
-
-    ictx->perfcounter->inc(l_librbd_snap_create);
     return 0;
   }
 
@@ -1758,42 +1809,12 @@ reprotect_and_return_err:
     }
 
     uint64_t request_id = ictx->async_request_seq.inc();
-    do {
-      C_SaferCond ctx;
-      {
-	RWLock::RLocker l(ictx->owner_lock);
-	while (ictx->image_watcher->is_lock_supported()) {
-	  r = prepare_image_update(ictx);
-	  if (r < 0) {
-	    return -EROFS;
-	  } else if (ictx->image_watcher->is_lock_owner()) {
-	    break;
-	  }
-
-          RWLock::RLocker snap_locker(ictx->snap_lock);
-          if (ictx->snap_id != CEPH_NOSNAP || ictx->read_only) {
-            return -EROFS;
-          }
-
-	  r = ictx->image_watcher->notify_resize(request_id, size, prog_ctx);
-	  if (r != -ETIMEDOUT && r != -ERESTART) {
-	    return r;
-	  }
-	  ldout(ictx->cct, 5) << "resize timed out notifying lock owner"
-                              << dendl;
-	}
-
-	r = async_resize(ictx, &ctx, size, prog_ctx);
-	if (r < 0) {
-	  return r;
-	}
-      }
-
-      r = ctx.wait();
-      if (r == -ERESTART) {
-	ldout(ictx->cct, 5) << "resize interrupted: restarting" << dendl;
-      }
-    } while (r == -ERESTART);
+    r = invoke_async_request(ictx, "resize",
+                             boost::bind(&async_resize, ictx, _1, size,
+                                         boost::ref(prog_ctx)),
+                             boost::bind(&ImageWatcher::notify_resize,
+                                         ictx->image_watcher, request_id, size,
+                                         boost::ref(prog_ctx)));
 
     ictx->perfcounter->inc(l_librbd_resize);
     notify_change(ictx->md_ctx, ictx->header_oid, ictx);
@@ -1874,12 +1895,17 @@ reprotect_and_return_err:
   }
 
 
-  int add_snap(ImageCtx *ictx, const char *snap_name, bool lock_owner)
+  int add_snap(ImageCtx *ictx, const char *snap_name)
   {
     assert(ictx->owner_lock.is_locked());
     assert(ictx->md_lock.is_wlocked());
-    uint64_t snap_id;
 
+    bool lock_owner = ictx->image_watcher->is_lock_owner();
+    if (ictx->image_watcher->is_lock_supported()) {
+      assert(lock_owner);
+    }
+
+    uint64_t snap_id;
     int r = ictx->md_ctx.selfmanaged_snap_create(&snap_id);
     if (r < 0) {
       lderr(ictx->cct) << "failed to create snap id: " << cpp_strerror(-r)
@@ -1892,7 +1918,7 @@ reprotect_and_return_err:
 				       snap_id, snap_name);
     } else {
       librados::ObjectWriteOperation op;
-      if (ictx->image_watcher->is_lock_supported()) {
+      if (lock_owner) {
 	ictx->image_watcher->assert_header_locked(&op);
       }
       cls_client::snapshot_add(&op, snap_id, snap_name);
@@ -2602,45 +2628,13 @@ reprotect_and_return_err:
       return r;
     }
 
-    {
-      RWLock::RLocker snap_locker(ictx->snap_lock);
-      if (ictx->read_only || ictx->snap_id != CEPH_NOSNAP) {
-        return -EROFS;
-      }
-    }
-
     uint64_t request_id = ictx->async_request_seq.inc();
-    do {
-      C_SaferCond ctx;
-      {
-        RWLock::RLocker l(ictx->owner_lock);
-        while (ictx->image_watcher->is_lock_supported()) {
-          r = prepare_image_update(ictx);
-          if (r < 0) {
-            return -EROFS;
-          } else if (ictx->image_watcher->is_lock_owner()) {
-	    break;
-	  }
-
-          r = ictx->image_watcher->notify_flatten(request_id, prog_ctx);
-          if (r != -ETIMEDOUT && r != -ERESTART) {
-            return r;
-          }
-          ldout(ictx->cct, 5) << "flatten timed out notifying lock owner"
-                              << dendl;
-        }
-
-        r = async_flatten(ictx, &ctx, prog_ctx);
-        if (r < 0) {
-	  return r;
-        }
-      }
-
-      r = ctx.wait();
-      if (r == -ERESTART) {
-	ldout(ictx->cct, 5) << "flatten interrupted: restarting" << dendl;
-      }
-    } while (r == -ERESTART);
+    r = invoke_async_request(ictx, "flatten",
+                             boost::bind(&async_flatten, ictx, _1,
+                                         boost::ref(prog_ctx)),
+                             boost::bind(&ImageWatcher::notify_flatten,
+                                         ictx->image_watcher, request_id,
+                                         boost::ref(prog_ctx)));
 
     notify_change(ictx->md_ctx, ictx->header_oid, ictx);
     ldout(cct, 20) << "flatten finished" << dendl;
@@ -2672,7 +2666,7 @@ reprotect_and_return_err:
       RWLock::RLocker l(ictx->snap_lock);
       RWLock::RLocker l2(ictx->parent_lock);
 
-      if (ictx->read_only || ictx->snap_id != CEPH_NOSNAP) {
+      if (ictx->read_only) {
         return -EROFS;
       }
 
@@ -2699,6 +2693,77 @@ reprotect_and_return_err:
     AsyncFlattenRequest *req =
       new AsyncFlattenRequest(*ictx, ctx, object_size, overlap_objects,
 			      snapc, prog_ctx);
+    req->send();
+    return 0;
+  }
+
+  int rebuild_object_map(ImageCtx *ictx, ProgressContext &prog_ctx) {
+    CephContext *cct = ictx->cct;
+    ldout(cct, 10) << "rebuild_object_map" << dendl;
+
+    int r = ictx_check(ictx);
+    if (r < 0) {
+      return r;
+    }
+
+    uint64_t snap_id;
+    {
+      RWLock::RLocker snap_locker(ictx->snap_lock);
+      snap_id = ictx->snap_id;
+    }
+
+    if (snap_id == CEPH_NOSNAP) {
+      uint64_t request_id = ictx->async_request_seq.inc();
+      r = invoke_async_request(ictx, "rebuild object map",
+                               boost::bind(&async_rebuild_object_map, ictx, _1,
+                                           boost::ref(prog_ctx)),
+                               boost::bind(&ImageWatcher::notify_rebuild_object_map,
+                                           ictx->image_watcher, request_id,
+                                           boost::ref(prog_ctx)));
+    } else {
+      C_SaferCond ctx;
+      {
+        RWLock::RLocker owner_locker(ictx->owner_lock);
+        r = async_rebuild_object_map(ictx, &ctx, prog_ctx);
+      }
+      if (r == 0) {
+        r = ctx.wait();
+      }
+    }
+
+    ldout(cct, 10) << "rebuild object map finished" << dendl;
+    if (r < 0) {
+      notify_change(ictx->md_ctx, ictx->header_oid, ictx);
+    }
+    return r;
+  }
+
+  int async_rebuild_object_map(ImageCtx *ictx, Context *ctx,
+                               ProgressContext &prog_ctx) {
+    assert(ictx->owner_lock.is_locked());
+    assert(!ictx->image_watcher->is_lock_supported() ||
+	   ictx->image_watcher->is_lock_owner());
+
+    CephContext *cct = ictx->cct;
+    ldout(cct, 20) << "async_rebuild_object_map " << ictx << dendl;
+
+    int r = ictx_check(ictx);
+    if (r < 0) {
+      return r;
+    }
+
+    {
+      RWLock::RLocker snap_locker(ictx->snap_lock);
+      if (ictx->read_only) {
+        return -EROFS;
+      }
+      if (!ictx->test_features(RBD_FEATURE_OBJECT_MAP)) {
+        return -EINVAL;
+      }
+    }
+
+    RebuildObjectMapRequest *req = new RebuildObjectMapRequest(*ictx, ctx,
+                                                               prog_ctx);
     req->send();
     return 0;
   }
