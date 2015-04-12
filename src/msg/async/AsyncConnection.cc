@@ -1752,7 +1752,9 @@ int AsyncConnection::handle_connect_msg(ceph_msg_connect &connect, bufferlist &a
     existing->replacing = true;
     existing->state_offset = 0;
     existing->state = STATE_ACCEPTING_WAIT_CONNECT_MSG;
-    // there should exist any buffer
+    // Discard existing prefetch buffer in `recv_buf`
+    existing->recv_start = existing->recv_end = 0;
+    // there shouldn't exist any buffer
     assert(recv_start == recv_end);
 
     if (existing->_reply_accept(CEPH_MSGR_TAG_RETRY_GLOBAL, connect, reply, authorizer_reply) < 0) {
