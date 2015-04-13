@@ -6,6 +6,7 @@ import contextlib
 import logging
 import paramiko
 import re
+from datetime import datetime
 
 from cStringIO import StringIO
 from teuthology import contextutil
@@ -14,6 +15,31 @@ from ..orchestra import run
 
 log = logging.getLogger(__name__)
 ssh_keys_user = 'ssh-keys-user'
+
+
+def timestamp(format_='%Y-%m-%d_%H:%M:%S:%f'):
+    """
+    Return a UTC timestamp suitable for use in filenames
+    """
+    return datetime.utcnow().strftime(format_)
+
+
+def backup_file(remote, path, sudo=False):
+    """
+    Creates a backup of a file on the remote, simply by copying it and adding a
+    timestamp to the name.
+    """
+    backup_path = "{path}_{timestamp}".format(
+        path=path, timestamp=timestamp()
+    )
+    args = [
+        'cp', '-v', '-a', path, backup_path,
+    ]
+    if sudo:
+        args.insert(0, 'sudo')
+    remote.run(args=args)
+    return backup_path
+
 
 def generate_keys():
     """
@@ -60,12 +86,18 @@ def cleanup_added_key(ctx):
             log.info('  cleaning up keys for user {user} on {host}'.format(host=hostname, user=username))
             misc.delete_file(remote, '/home/{user}/.ssh/id_rsa'.format(user=username))
             misc.delete_file(remote, '/home/{user}/.ssh/id_rsa.pub'.format(user=username))
-            cmd = "sed -i /#TEUTHOLOGY_START/,/#TEUTHOLOGY_END/d /home/{user}/.ssh/authorized_keys".format(user=username).split()
-            remote.run(args=cmd)
+            auth_keys_file = '/home/{user}/.ssh/authorized_keys'.format(
+                user=username)
+            backup_file(remote, auth_keys_file)
+            args = [
+                'sed', '-i', '/#TEUTHOLOGY_START/,/#TEUTHOLOGY_END/d',
+                auth_keys_file,
+            ]
+            remote.run(args=args)
 
 @contextlib.contextmanager
-def tweak_ssh_config(ctx, config):   
-    """ 
+def tweak_ssh_config(ctx, config):
+    """
     Turn off StrictHostKeyChecking
     """
     run.wait(
@@ -88,7 +120,7 @@ def tweak_ssh_config(ctx, config):
         )
     )
 
-    try: 
+    try:
         yield
 
     finally:
@@ -100,7 +132,7 @@ def tweak_ssh_config(ctx, config):
         )
 
 @contextlib.contextmanager
-def push_keys_to_host(ctx, config, public_key, private_key):   
+def push_keys_to_host(ctx, config, public_key, private_key):
     """
     Push keys to all hosts
     """
@@ -137,11 +169,13 @@ def push_keys_to_host(ctx, config, public_key, private_key):
             misc.create_file(remote, pub_key_file, pub_key_data)
 
             # add appropriate entries to the authorized_keys file for this host
-            auth_keys_file = '/home/{user}/.ssh/authorized_keys'.format(user=username)
+            auth_keys_file = '/home/{user}/.ssh/authorized_keys'.format(
+                user=username)
+            backup_file(remote, auth_keys_file)
             lines = '#TEUTHOLOGY_START\n' + auth_keys_data + '\n#TEUTHOLOGY_END\n'
             misc.append_lines_to_file(remote, auth_keys_file, lines)
 
-    try: 
+    try:
         yield
 
     finally:
@@ -155,11 +189,11 @@ def task(ctx, config):
     """
     Creates a set of RSA keys, distributes the same key pair
     to all hosts listed in ctx.cluster, and adds all hosts
-    to all others authorized_keys list. 
+    to all others authorized_keys list.
 
-    During cleanup it will delete .ssh/id_rsa, .ssh/id_rsa.pub 
+    During cleanup it will delete .ssh/id_rsa, .ssh/id_rsa.pub
     and remove the entries in .ssh/authorized_keys while leaving
-    pre-existing entries in place. 
+    pre-existing entries in place.
     """
 
     if config is None:
@@ -167,7 +201,7 @@ def task(ctx, config):
     assert isinstance(config, dict), \
         "task hadoop only supports a dictionary for configuration"
 
-    # this does not need to do cleanup and does not depend on 
+    # this does not need to do cleanup and does not depend on
     # ctx, so I'm keeping it outside of the nested calls
     public_key_string, private_key_string = generate_keys()
 
