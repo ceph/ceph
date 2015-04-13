@@ -2,12 +2,30 @@
  Release Notes
 ===============
 
-v0.94.1 Hammer (draft)
-======================
+v0.94.1 Hammer
+==============
 
-* crush: fix has_v4_buckets (#11364 Sage Weil)
+This bug fix release fixes a few critical issues with CRUSH.  The most
+important addresses a bug in feature bit enforcement that may prevent
+pre-hammer clients from communicating with the cluster during an
+upgrade.  This only manifests in some cases (for example, when the
+'rack' type is in use in the CRUSH map, and possibly other cases), but for
+safety we strongly recommend that all users use 0.94.1 instead of 0.94 when
+upgrading.
+
+There is also a fix in the new straw2 buckets when OSD weights are 0.
+
+We recommend that all v0.94 users upgrade.
+
+Notable changes
+---------------
+
 * crush: fix divide-by-0 in straw2 (#11357 Sage Weil)
+* crush: fix has_v4_buckets (#11364 Sage Weil)
 * osd: fix negative degraded objects during backfilling (#7737 Guang Yang)
+
+For more detailed information, see :download:`the complete changelog <changelog/v0.94.1.txt>`.
+
 
 v0.94 Hammer
 ============
