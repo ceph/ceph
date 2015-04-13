@@ -17,6 +17,11 @@ endif # WITH_PROFILER
 
 noinst_LTLIBRARIES += libperfglue.la
 
+# Do not use TCMALLOC with dencoder
+DENCODER_SOURCES += \
+	perfglue/disabled_heap_profiler.cc \
+	perfglue/disabled_stubs.cc
+
 noinst_HEADERS += \
 	perfglue/cpu_profiler.h \
 	perfglue/heap_profiler.h
