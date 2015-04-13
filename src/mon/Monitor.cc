@@ -24,7 +24,6 @@
 
 #include "osd/OSDMap.h"
 
-#include "MonitorStore.h"
 #include "MonitorDBStore.h"
 
 #include "msg/Messenger.h"

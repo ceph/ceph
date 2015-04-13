@@ -16,7 +16,6 @@ libmon_la_SOURCES = \
 	mon/LogMonitor.cc \
 	mon/AuthMonitor.cc \
 	mon/Elector.cc \
-	mon/MonitorStore.cc \
 	mon/HealthMonitor.cc \
 	mon/DataHealthService.cc \
 	mon/ConfigKeyService.cc
@@ -39,7 +38,6 @@ noinst_HEADERS += \
 	mon/DumplingMonCommands.h \
 	mon/MonMap.h \
 	mon/Monitor.h \
-	mon/MonitorStore.h \
 	mon/MonitorDBStore.h \
 	mon/OSDMonitor.h \
 	mon/PGMap.h \
