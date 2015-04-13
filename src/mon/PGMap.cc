@@ -1014,7 +1014,7 @@ void PGMap::recovery_summary(Formatter *f, list<string> *psl,
       psl->push_back(ss.str());
     }
   }
-  if (delta_sum.stats.sum.num_objects_unfound) {
+  if (delta_sum.stats.sum.num_objects_unfound && delta_sum.stats.sum.num_objects > 0) {
     double pc = (double)delta_sum.stats.sum.num_objects_unfound /
       (double)delta_sum.stats.sum.num_objects * (double)100.0;
     char b[20];
