@@ -2257,34 +2257,39 @@ TYPED_TEST(DiffIterateTest, DiffIterateStress)
     snap.push_back(s);
   }
 
-  for (int i=0; i<n-1; i++) {
-    for (int j=i+1; j<n; j++) {
-      interval_set<uint64_t> diff, actual, uex;
-      for (int k=i+1; k<=j; k++)
-        diff.union_of(wrote[k]);
-      cout << "from " << i << " to " << j << " diff "
-           << round_diff_interval(diff, object_size) << std::endl;
+  for (int h=0; h<n-1; h++) {
+    for (int i=0; i<n-h-1; i++) {
+      for (int j=(h==0 ? i+1 : n-1); j<n; j++) {
+        interval_set<uint64_t> diff, actual, uex;
+        for (int k=i+1; k<=j; k++)
+          diff.union_of(wrote[k]);
+        cout << "from " << i << " to "
+             << (h != 0 ? string("HEAD") : stringify(j)) << " diff "
+             << round_diff_interval(diff, object_size) << std::endl;
 
-      // limit to extents that exists both at the beginning and at the end
-      uex.union_of(exists[i], exists[j]);
-      diff.intersection_of(uex);
-      diff = round_diff_interval(diff, object_size);
-      cout << " limited diff " << diff << std::endl;
+        // limit to extents that exists both at the beginning and at the end
+        uex.union_of(exists[i], exists[j]);
+        diff.intersection_of(uex);
+        diff = round_diff_interval(diff, object_size);
+        cout << " limited diff " << diff << std::endl;
 
-      image.snap_set(snap[j].c_str());
-      ASSERT_EQ(0, image.diff_iterate2(snap[i].c_str(), 0, size, true,
-                                       this->whole_object, iterate_cb,
-                                       (void *)&actual));
-      cout << " actual was " << actual << std::endl;
-      if (!diff.subset_of(actual)) {
-        interval_set<uint64_t> i;
-        i.intersection_of(diff, actual);
-        interval_set<uint64_t> l = diff;
-        l.subtract(i);
-        cout << " ... diff - (actual*diff) = " << l << std::endl;
+        ASSERT_EQ(0, image.snap_set(h==0 ? snap[j].c_str() : NULL));
+        ASSERT_EQ(0, image.diff_iterate2(snap[i].c_str(), 0, size, true,
+                                         this->whole_object, iterate_cb,
+                                         (void *)&actual));
+        cout << " actual was " << actual << std::endl;
+        if (!diff.subset_of(actual)) {
+          interval_set<uint64_t> i;
+          i.intersection_of(diff, actual);
+          interval_set<uint64_t> l = diff;
+          l.subtract(i);
+          cout << " ... diff - (actual*diff) = " << l << std::endl;
+        }
+        ASSERT_TRUE(diff.subset_of(actual));
       }
-      ASSERT_TRUE(diff.subset_of(actual));
     }
+    ASSERT_EQ(0, image.snap_set(NULL));
+    ASSERT_EQ(0, image.snap_remove(snap[n-h-1].c_str()));
   }
 
   ASSERT_PASSED(this->validate_object_map, image);
