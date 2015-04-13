@@ -241,3 +241,243 @@ class TestDistroDefaults(object):
         assert suite.get_distro_defaults('rhel', 'magna') == ('x86_64',
                                                               'rhel7_0',
                                                               'rpm')
+
+
+def make_fake_listdir(fake_filesystem):
+    """
+    Build a fake listdir(), to be used instead of os.listir().
+
+    An example fake_filesystem value:
+        >>> fake_fs = {
+            'a_directory': {
+                'another_directory': {
+                    'a_file': None,
+                    'another_file': None,
+                },
+                'random_file': None,
+                'yet_another_directory': {
+                    'empty_directory': {},
+                },
+            },
+        }
+
+        >>> fake_listdir = make_fake_listdir(fake_fs)
+        >>> fake_listdir('a_directory/yet_another_directory')
+        ['empty_directory']
+
+    :param fake_filesystem: A dict representing a filesystem layout
+    """
+    assert isinstance(fake_filesystem, dict)
+
+    def fake_listdir(path, fsdict=False):
+        if fsdict is False:
+            fsdict = fake_filesystem
+
+        remainder = path.strip('/') + '/'
+        subdict = fsdict
+        while '/' in remainder:
+            next_dir, remainder = remainder.split('/', 1)
+            if next_dir not in subdict:
+                raise OSError(
+                    '[Errno 2] No such file or directory: %s' % next_dir)
+            subdict = subdict.get(next_dir)
+            if not isinstance(subdict, dict):
+                raise OSError('[Errno 20] Not a directory: %s' % next_dir)
+            if subdict and not remainder:
+                return subdict.keys()
+        return []
+
+    return fake_listdir
+
+
+def fake_isfile(path):
+    """
+    To be used in conjunction with make_fake_listdir()
+
+    Any path ending in '.yaml', '+', or '%' is a file. Nothing else is.
+
+    :param path: A string representing a path
+    """
+    if path.endswith('.yaml'):
+        return True
+    if path.endswith('+') or path.endswith('%'):
+        return True
+    return False
+
+
+def fake_isdir(path):
+    """
+    To be used in conjunction with make_fake_listdir()
+
+    Any path ending in '/' is a directory. Anything that is a file according to
+    fake_isfile() is not. Anything else is a directory.
+
+    :param path: A string representing a path
+    """
+    if path.endswith('/'):
+        return True
+    if fake_isfile(path):
+        return False
+    return True
+
+
+class TestBuildMatrix(object):
+    def fragment_occurences(self, jobs, fragment):
+        # What fraction of jobs contain fragment?
+        count = 0
+        for (description, fragment_list) in jobs:
+            for item in fragment_list:
+                if item.endswith(fragment):
+                    count += 1
+        return count / float(len(jobs))
+
+    def test_concatenate_1x2x3(self):
+        fake_fs = {
+            'd0_0': {
+                '+': None,
+                'd1_0': {
+                    'd1_0_0.yaml': None,
+                },
+                'd1_1': {
+                    'd1_1_0.yaml': None,
+                    'd1_1_1.yaml': None,
+                },
+                'd1_2': {
+                    'd1_2_0.yaml': None,
+                    'd1_2_1.yaml': None,
+                    'd1_2_2.yaml': None,
+                },
+            },
+        }
+        fake_listdir = make_fake_listdir(fake_fs)
+        result = suite.build_matrix('d0_0', fake_isfile, fake_isdir,
+                                    fake_listdir)
+        assert len(result) == 1
+
+    def test_convolve_2x2(self):
+        fake_fs = {
+            'd0_0': {
+                '%': None,
+                'd1_0': {
+                    'd1_0_0.yaml': None,
+                    'd1_0_1.yaml': None,
+                },
+                'd1_1': {
+                    'd1_1_0.yaml': None,
+                    'd1_1_1.yaml': None,
+                },
+            },
+        }
+        fake_listdir = make_fake_listdir(fake_fs)
+        result = suite.build_matrix('d0_0', fake_isfile, fake_isdir,
+                                    fake_listdir)
+        assert len(result) == 4
+        assert self.fragment_occurences(result, 'd1_1_1.yaml') == 0.5
+
+    def test_convolve_2x2x2(self):
+        fake_fs = {
+            'd0_0': {
+                '%': None,
+                'd1_0': {
+                    'd1_0_0.yaml': None,
+                    'd1_0_1.yaml': None,
+                },
+                'd1_1': {
+                    'd1_1_0.yaml': None,
+                    'd1_1_1.yaml': None,
+                },
+                'd1_2': {
+                    'd1_2_0.yaml': None,
+                    'd1_2_1.yaml': None,
+                },
+            },
+        }
+        fake_listdir = make_fake_listdir(fake_fs)
+        result = suite.build_matrix('d0_0', fake_isfile, fake_isdir,
+                                    fake_listdir)
+        assert len(result) == 8
+        assert self.fragment_occurences(result, 'd1_2_0.yaml') == 0.5
+
+    def test_convolve_1x2x4(self):
+        fake_fs = {
+            'd0_0': {
+                '%': None,
+                'd1_0': {
+                    'd1_0_0.yaml': None,
+                },
+                'd1_1': {
+                    'd1_1_0.yaml': None,
+                    'd1_1_1.yaml': None,
+                },
+                'd1_2': {
+                    'd1_2_0.yaml': None,
+                    'd1_2_1.yaml': None,
+                    'd1_2_2.yaml': None,
+                    'd1_2_3.yaml': None,
+                },
+            },
+        }
+        fake_listdir = make_fake_listdir(fake_fs)
+        result = suite.build_matrix('d0_0', fake_isfile, fake_isdir,
+                                    fake_listdir)
+        assert len(result) == 8
+        assert self.fragment_occurences(result, 'd1_2_2.yaml') == 0.25
+
+    def test_emulate_teuthology_noceph(self):
+        fake_fs = {
+            'teuthology': {
+                'no-ceph': {
+                    '%': None,
+                    'clusters': {
+                        'single.yaml': None,
+                    },
+                    'distros': {
+                        'baremetal.yaml': None,
+                        'rhel7.0.yaml': None,
+                        'ubuntu12.04.yaml': None,
+                        'ubuntu14.04.yaml': None,
+                        'vps.yaml': None,
+                        'vps_centos6.5.yaml': None,
+                        'vps_debian7.yaml': None,
+                        'vps_rhel6.4.yaml': None,
+                        'vps_rhel6.5.yaml': None,
+                        'vps_rhel7.0.yaml': None,
+                        'vps_ubuntu14.04.yaml': None,
+                    },
+                    'tasks': {
+                        'teuthology.yaml': None,
+                    },
+                },
+            },
+        }
+        fake_listdir = make_fake_listdir(fake_fs)
+        result = suite.build_matrix('teuthology/no-ceph', fake_isfile,
+                                    fake_isdir, fake_listdir)
+        assert len(result) == 11
+        assert self.fragment_occurences(result, 'vps.yaml') == 1 / 11.0
+
+    def test_sort_order(self):
+        # This test ensures that 'ceph' comes before 'ceph-thrash' when yaml
+        # fragments are sorted.
+        fake_fs = {
+            'thrash': {
+                '%': None,
+                'ceph-thrash': {'default.yaml': None},
+                'ceph': {'base.yaml': None},
+                'clusters': {'mds-1active-1standby.yaml': None},
+                'debug': {'mds_client.yaml': None},
+                'fs': {'btrfs.yaml': None},
+                'msgr-failures': {'none.yaml': None},
+                'overrides': {'whitelist_wrongly_marked_down.yaml': None},
+                'tasks': {'cfuse_workunit_suites_fsstress.yaml': None},
+            },
+        }
+        fake_listdir = make_fake_listdir(fake_fs)
+        result = suite.build_matrix('thrash', fake_isfile,
+                                    fake_isdir, fake_listdir)
+        assert len(result) == 1
+        assert self.fragment_occurences(result, 'base.yaml') == 1
+        fragments = result[0][1]
+        assert fragments[0] == 'thrash/ceph/base.yaml'
+        assert fragments[1] == 'thrash/ceph-thrash/default.yaml'
+
