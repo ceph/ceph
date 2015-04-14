@@ -52,26 +52,17 @@ Make the following changes in Apache's configuration on the ``gateway host``:
 Debian-based distros
 --------------------
 
-#. Open the ``apache2.conf`` file::
-
-	sudo vim /etc/apache2/apache2.conf
-
-#. Add a line for the ``ServerName`` in the Apache configuration file. Provide
+#. Add a line for the ``ServerName`` in ``/etc/apache2/apache2.conf``. Provide
    the fully qualified domain name of the server machine
    (e.g., ``hostname -f``)::
 
 	ServerName {fqdn}
 
-#. Update ``/etc/apache2/apache2.conf`` to load ``mod_proxy_fcgi`` module. Add
-   the following to the file::
+#. Load ``mod_proxy_fcgi`` module.
 
-	<IfModule !proxy_fcgi_module>
-	LoadModule proxy_fcgi_module modules/mod_proxy_fcgi.so
-	</IfModule>
+   Execute::
 
-#. Edit the line ``Listen 80`` in ``/etc/apache2/apache2.conf`` with the public
-   IP address of the host that you are configuring as a gateway server. Write
-   ``Listen {IP ADDRESS}:80`` in place of ``Listen 80``.
+		sudo a2enmod proxy_fcgi
 
 #. Start Apache service::
 
