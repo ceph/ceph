@@ -2939,6 +2939,9 @@ TEST_F(TestLibRBD, RebuildObjectMap)
 
     ASSERT_EQ(bl.length(), image.write(0, bl.length(), bl));
 
+    ASSERT_EQ(0, image.snap_create("snap1"));
+    ASSERT_EQ(bl.length(), image.write(1<<order, bl.length(), bl));
+
     librbd::image_info_t info;
     ASSERT_EQ(0, image.stat(info, sizeof(info)));
 
@@ -2967,6 +2970,10 @@ TEST_F(TestLibRBD, RebuildObjectMap)
 
   bufferlist read_bl;
   ASSERT_EQ(bl.length(), image2.read(0, bl.length(), read_bl));
+  ASSERT_TRUE(bl.contents_equal(read_bl));
+
+  read_bl.clear();
+  ASSERT_EQ(bl.length(), image2.read(1<<order, bl.length(), read_bl));
   ASSERT_TRUE(bl.contents_equal(read_bl));
 
   ASSERT_PASSED(validate_object_map, image1);
