@@ -312,20 +312,20 @@ bool RebuildObjectMapRequest::send_update_header() {
     } else {
       ldout(cct, 5) << this << " send_update_header" << dendl;
 
+      uint64_t flags = RBD_FLAG_OBJECT_MAP_INVALID | RBD_FLAG_FAST_DIFF_INVALID;
+
       librados::ObjectWriteOperation op;
       if (m_image_ctx.image_watcher->is_lock_supported()) {
         m_image_ctx.image_watcher->assert_header_locked(&op);
       }
-      cls_client::set_flags(&op, m_image_ctx.snap_id, 0,
-                            RBD_FLAG_OBJECT_MAP_INVALID);
+      cls_client::set_flags(&op, m_image_ctx.snap_id, 0, flags);
 
       int r = m_image_ctx.md_ctx.aio_operate(m_image_ctx.header_oid,
                                              create_callback_completion(), &op);
       assert(r == 0);
 
       RWLock::WLocker snap_locker(m_image_ctx.snap_lock);
-      m_image_ctx.update_flags(m_image_ctx.snap_id, RBD_FLAG_OBJECT_MAP_INVALID,
-                               false);
+      m_image_ctx.update_flags(m_image_ctx.snap_id, flags, false);
       return false;
     }
   }

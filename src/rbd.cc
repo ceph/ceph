@@ -249,7 +249,8 @@ static void format_features(Formatter *f, uint64_t features)
 static void format_flags(Formatter *f, uint64_t flags)
 {
   std::map<uint64_t, std::string> mapping = boost::assign::map_list_of(
-    RBD_FLAG_OBJECT_MAP_INVALID, "object map invalid");
+    RBD_FLAG_OBJECT_MAP_INVALID, "object map invalid")(
+    RBD_FLAG_FAST_DIFF_INVALID, "fast diff invalid");
   format_bitmask(f, "flag", mapping, flags);
 }
 
