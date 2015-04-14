@@ -60,7 +60,7 @@ Standards-Version: 3.9.3
 Package: ceph
 Architecture: linux-any
 Depends: binutils,
-         ceph-common (>= 0.78-500),
+         ceph-common (>= 0.94.1.6),
          cryptsetup-bin | cryptsetup,
          gdisk,
          parted,
@@ -188,10 +188,10 @@ Depends: librbd1 (= ${binary:Version}), ${misc:Depends}, ${shlibs:Depends},
 	 python-requests
 Conflicts: ceph-client-tools
 Replaces: ceph-client-tools,
-	  ceph (<< 0.78-500),
+	  ceph (<< 0.94.1.6),
 	  python-ceph (<< 0.92-1223),
 	  librbd1 (<< 0.92-1238)
-Breaks: ceph (<< 0.78-500),
+Breaks: ceph (<< 0.94.1.6),
 	python-ceph (<< 0.92-1223),
 	librbd1 (<< 0.92-1238)
 Suggests: ceph, ceph-mds
