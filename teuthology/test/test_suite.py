@@ -4,6 +4,7 @@ from datetime import datetime
 from mock import patch, Mock
 
 from teuthology import suite
+from teuthology.config import config
 
 
 class TestSuiteOffline(object):
@@ -25,7 +26,9 @@ class TestSuiteOffline(object):
         assert name.startswith('USER-')
 
     def test_gitbuilder_url(self):
-        ref_url = "http://gitbuilder.ceph.com/ceph-deb-squeeze-x86_64-basic/"
+        ref_url = "http://{host}/ceph-deb-squeeze-x86_64-basic/".format(
+            host=config.gitbuilder_host
+        )
         assert suite.get_gitbuilder_url('ceph', 'squeeze', 'deb', 'x86_64',
                                         'basic') == ref_url
 
