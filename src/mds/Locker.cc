@@ -2722,6 +2722,12 @@ void Locker::process_request_cap_release(MDRequestRef& mdr, client_t client, con
     caps &= cap->issued();
   }
   cap->confirm_receipt(seq, caps);
+
+  if (!in->client_need_snapflush.empty() &&
+      (cap->issued() & CEPH_CAP_ANY_FILE_WR) == 0) {
+    _do_null_snapflush(in, client);
+  }
+
   adjust_cap_wanted(cap, wanted, issue_seq);
   
   if (mdr)
