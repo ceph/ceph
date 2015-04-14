@@ -47,7 +47,6 @@
 
 #include "messages/MMonCommand.h"
 #include "messages/MPing.h"
-#include "mon/MonitorStore.h"
 #include "mon/MonitorDBStore.h"
 
 #include <memory>
