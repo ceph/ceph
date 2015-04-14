@@ -164,7 +164,7 @@ def task(ctx, config):
         smbd_cmd = [
                 'sudo',
                 'daemon-helper',
-                'kill',
+                'term',
                 'nostdin',
                 '/usr/local/samba/sbin/smbd',
                 '-F',
