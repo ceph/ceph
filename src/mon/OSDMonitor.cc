@@ -625,6 +625,11 @@ public:
     max_var(-1),
     stddev(0),
     sum(0) {
+    // FIXME: average_util should be calculated from the same set of
+    // nodes that dump_item considers when calculating the stddev.  we
+    // probably need to make two tree traversals for that to work,
+    // maybe with a callback like precalc_item() that's looks similar
+    // to dump_item()?
     if (pgm->osd_sum.kb)
       average_util = 100.0 * (double)pgm->osd_sum.kb_used / (double)pgm->osd_sum.kb;
   }
