@@ -25,10 +25,13 @@ namespace {
 class C_VerifyObject : public C_AsyncObjectThrottle {
 public:
   C_VerifyObject(AsyncObjectThrottle &throttle, ImageCtx *image_ctx,
-                 uint64_t object_no)
+                 uint64_t snap_id, uint64_t object_no)
     : C_AsyncObjectThrottle(throttle), m_image_ctx(*image_ctx),
-      m_object_no(object_no), m_oid(m_image_ctx.get_object_name(m_object_no))
+      m_snap_id(snap_id), m_object_no(object_no),
+      m_oid(m_image_ctx.get_object_name(m_object_no))
   {
+    m_io_ctx.dup(m_image_ctx.md_ctx);
+    m_io_ctx.snap_set_read(CEPH_SNAPDIR);
   }
 
   virtual void complete(int r) {
@@ -41,19 +44,26 @@ public:
   }
 
   virtual int send() {
-    send_assert_exists();
+    send_list_snaps();
     return 0;
   }
 
 private:
   ImageCtx &m_image_ctx;
+  librados::IoCtx m_io_ctx;
   uint64_t m_snap_id;
   uint64_t m_object_no;
   std::string m_oid;
 
+  librados::snap_set_t m_snap_set;
+  int m_snap_list_ret;
+
   bool should_complete(int r) {
     CephContext *cct = m_image_ctx.cct;
-    if  (r < 0 && r != -ENOENT) {
+    if (r == 0) {
+      r = m_snap_list_ret;
+    }
+    if (r < 0 && r != -ENOENT) {
       lderr(cct) << m_oid << " C_VerifyObject::should_complete: "
                  << "encountered an error: " << cpp_strerror(r) << dendl;
       return true;
@@ -61,23 +71,65 @@ private:
 
     ldout(cct, 20) << m_oid << " C_VerifyObject::should_complete: " << " r="
                    << r << dendl;
-    return update_object_map(r == 0);
+    return update_object_map(get_object_state());
   }
 
-  void send_assert_exists() {
-    ldout(m_image_ctx.cct, 5) << m_oid << " C_VerifyObject::send_assert_exists"
+  void send_list_snaps() {
+    ldout(m_image_ctx.cct, 5) << m_oid << " C_VerifyObject::send_list_snaps"
                               << dendl;
 
     librados::AioCompletion *comp = librados::Rados::aio_create_completion(
       this, NULL, rados_ctx_cb);
 
     librados::ObjectReadOperation op;
-    op.assert_exists();
-    int r = m_image_ctx.data_ctx.aio_operate(m_oid, comp, &op, NULL);
+    op.list_snaps(&m_snap_set, &m_snap_list_ret);
+
+    int r = m_io_ctx.aio_operate(m_oid, comp, &op, NULL);
     assert(r == 0);
   }
 
-  bool update_object_map(bool exists) {
+  uint8_t get_object_state() {
+    RWLock::RLocker snap_locker(m_image_ctx.snap_lock);
+    for (std::vector<librados::clone_info_t>::const_iterator r =
+           m_snap_set.clones.begin(); r != m_snap_set.clones.end(); ++r) {
+      librados::snap_t from_snap_id;
+      librados::snap_t to_snap_id;
+      if (r->cloneid == librados::SNAP_HEAD) {
+        from_snap_id = next_valid_snap_id(m_snap_set.seq + 1);
+        to_snap_id = librados::SNAP_HEAD;
+      } else {
+        from_snap_id = next_valid_snap_id(r->snaps[0]);
+        to_snap_id = r->snaps[r->snaps.size()-1];
+      }
+
+      if (to_snap_id < m_snap_id) {
+        continue;
+      } else if (m_snap_id < from_snap_id) {
+        break;
+      }
+
+      RWLock::RLocker snap_locker(m_image_ctx.snap_lock);
+      if ((m_image_ctx.features & RBD_FEATURE_FAST_DIFF) != 0 &&
+          from_snap_id != m_snap_id) {
+        return OBJECT_EXISTS_CLEAN;
+      }
+      return OBJECT_EXISTS;
+    }
+    return OBJECT_NONEXISTENT;
+  }
+
+  uint64_t next_valid_snap_id(uint64_t snap_id) {
+    assert(m_image_ctx.snap_lock.is_locked());
+
+    std::map<librados::snap_t, SnapInfo>::iterator it =
+      m_image_ctx.snap_info.lower_bound(snap_id);
+    if (it == m_image_ctx.snap_info.end()) {
+      return CEPH_NOSNAP;
+    }
+    return it->first;
+  }
+
+  bool update_object_map(uint8_t new_state) {
     CephContext *cct = m_image_ctx.cct;
     bool lost_exclusive_lock = false;
 
@@ -90,11 +142,10 @@ private:
       } else {
         RWLock::WLocker l(m_image_ctx.object_map_lock);
         uint8_t state = m_image_ctx.object_map[m_object_no];
-        uint8_t new_state = state;
-        if (exists && state == OBJECT_NONEXISTENT) {
-          new_state = OBJECT_EXISTS;
-        } else if (!exists && state != OBJECT_NONEXISTENT) {
-          new_state = OBJECT_NONEXISTENT;
+        if (state == OBJECT_EXISTS && new_state == OBJECT_NONEXISTENT &&
+            m_snap_id == CEPH_NOSNAP) {
+          // might be writing object to OSD concurrently
+          new_state = state;
         }
 
         if (new_state != state) {
@@ -256,17 +307,18 @@ void RebuildObjectMapRequest::send_verify_objects() {
   m_state = STATE_VERIFY_OBJECTS;
   ldout(cct, 5) << this << " send_verify_objects" << dendl;
 
+  uint64_t snap_id;
   uint64_t num_objects;
   {
     RWLock::RLocker l(m_image_ctx.snap_lock);
-    uint64_t snap_id = m_image_ctx.snap_id;
+    snap_id = m_image_ctx.snap_id;
     num_objects = Striper::get_num_objects(m_image_ctx.layout,
                                            m_image_ctx.get_image_size(snap_id));
   }
 
   AsyncObjectThrottle::ContextFactory context_factory(
     boost::lambda::bind(boost::lambda::new_ptr<C_VerifyObject>(),
-      boost::lambda::_1, &m_image_ctx, boost::lambda::_2));
+      boost::lambda::_1, &m_image_ctx, snap_id, boost::lambda::_2));
   AsyncObjectThrottle *throttle = new AsyncObjectThrottle(
     *this, context_factory, create_callback_context(), m_prog_ctx, 0,
     num_objects);
