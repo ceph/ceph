@@ -489,9 +489,14 @@ void ObjectMap::invalidate(uint64_t snap_id) {
     return;
   }
 
+  flags = RBD_FLAG_OBJECT_MAP_INVALID;
+  if ((m_image_ctx.features & RBD_FEATURE_FAST_DIFF) != 0) {
+    flags |= RBD_FLAG_FAST_DIFF_INVALID;
+  }
+
   CephContext *cct = m_image_ctx.cct;
   lderr(cct) << &m_image_ctx << " invalidating object map" << dendl;
-  int r = m_image_ctx.update_flags(snap_id, RBD_FLAG_OBJECT_MAP_INVALID, true);
+  int r = m_image_ctx.update_flags(snap_id, flags, true);
   if (r < 0) {
     lderr(cct) << "failed to invalidate in-memory object map: "
                << cpp_strerror(r) << dendl;
@@ -499,8 +504,7 @@ void ObjectMap::invalidate(uint64_t snap_id) {
   }
 
   librados::ObjectWriteOperation op;
-  cls_client::set_flags(&op, snap_id, m_image_ctx.flags,
-                        RBD_FLAG_OBJECT_MAP_INVALID);
+  cls_client::set_flags(&op, snap_id, flags, flags);
 
   r = m_image_ctx.md_ctx.operate(m_image_ctx.header_oid, &op);
   if (r < 0) {
@@ -567,13 +571,17 @@ bool ObjectMap::Request::invalidate() {
   // requests shouldn't be running while using snapshots
   assert(m_image_ctx.snap_id == CEPH_NOSNAP);
 
+  uint64_t flags = RBD_FLAG_OBJECT_MAP_INVALID;
+  if ((m_image_ctx.features & RBD_FEATURE_FAST_DIFF) != 0) {
+    flags |= RBD_FLAG_FAST_DIFF_INVALID;
+  }
+
   lderr(cct) << &m_image_ctx << " invalidating object map" << dendl;
   m_state = STATE_INVALIDATE;
-  m_image_ctx.flags |= RBD_FLAG_OBJECT_MAP_INVALID;
+  m_image_ctx.flags |= flags;
 
   librados::ObjectWriteOperation op;
-  cls_client::set_flags(&op, CEPH_NOSNAP, m_image_ctx.flags,
-                        RBD_FLAG_OBJECT_MAP_INVALID);
+  cls_client::set_flags(&op, CEPH_NOSNAP, flags, flags);
 
   librados::AioCompletion *rados_completion = create_callback_completion();
   int r = m_image_ctx.md_ctx.aio_operate(m_image_ctx.header_oid,
