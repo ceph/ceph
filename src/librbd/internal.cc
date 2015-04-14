@@ -186,6 +186,30 @@ int remove_object_map(ImageCtx *ictx) {
   return 0;
 }
 
+int update_all_flags(ImageCtx *ictx, uint64_t flags, uint64_t mask) {
+  assert(ictx->snap_lock.is_locked());
+  CephContext *cct = ictx->cct;
+
+  std::vector<uint64_t> snap_ids;
+  snap_ids.push_back(CEPH_NOSNAP);
+  for (std::map<snap_t, SnapInfo>::iterator it = ictx->snap_info.begin();
+       it != ictx->snap_info.end(); ++it) {
+    snap_ids.push_back(it->first);
+  }
+
+  for (size_t i=0; i<snap_ids.size(); ++i) {
+    librados::ObjectWriteOperation op;
+    cls_client::set_flags(&op, snap_ids[i], flags, mask);
+    int r = ictx->md_ctx.operate(ictx->header_oid, &op);
+    if (r < 0) {
+      lderr(cct) << "failed to update image flags: " << cpp_strerror(r)
+	         << dendl;
+      return r;
+    }
+  }
+  return 0;
+}
+
 int prepare_image_update(ImageCtx *ictx) {
   assert(ictx->owner_lock.is_locked() && !ictx->owner_lock.is_wlocked());
   if (ictx->image_watcher == NULL) {
@@ -1624,20 +1648,33 @@ reprotect_and_return_err:
       return 0;
     }
 
-    uint64_t mask = features;
+    uint64_t features_mask = features;
+    uint64_t disable_flags = 0;
     if (enabled) {
+      uint64_t enable_flags = 0;
+
       if ((features & RBD_FEATURE_OBJECT_MAP) != 0) {
         if ((new_features & RBD_FEATURE_EXCLUSIVE_LOCK) == 0) {
           lderr(cct) << "cannot enable object map" << dendl;
           return -EINVAL;
         }
-        mask |= RBD_FEATURE_EXCLUSIVE_LOCK;
-      } else if ((features & RBD_FEATURE_FAST_DIFF) != 0) {
-        if ((ictx->features & RBD_FEATURE_OBJECT_MAP) == 0) {
+        enable_flags |= RBD_FLAG_OBJECT_MAP_INVALID;
+        features_mask |= RBD_FEATURE_EXCLUSIVE_LOCK;
+      }
+      if ((features & RBD_FEATURE_FAST_DIFF) != 0) {
+        if ((new_features & RBD_FEATURE_OBJECT_MAP) == 0) {
           lderr(cct) << "cannot enable fast diff" << dendl;
           return -EINVAL;
         }
-        mask |= (RBD_FEATURE_OBJECT_MAP | RBD_FEATURE_EXCLUSIVE_LOCK);
+        enable_flags |= RBD_FLAG_FAST_DIFF_INVALID;
+        features_mask |= (RBD_FEATURE_OBJECT_MAP | RBD_FEATURE_EXCLUSIVE_LOCK);
+      }
+
+      if (enable_flags != 0) {
+        r = update_all_flags(ictx, enable_flags, enable_flags);
+        if (r < 0) {
+          return r;
+        }
       }
     } else {
       if ((features & RBD_FEATURE_EXCLUSIVE_LOCK) != 0) {
@@ -1645,27 +1682,40 @@ reprotect_and_return_err:
           lderr(cct) << "cannot disable exclusive lock" << dendl;
           return -EINVAL;
         }
-        mask |= RBD_FEATURE_OBJECT_MAP;
-      } else if ((features & RBD_FEATURE_OBJECT_MAP) != 0) {
-        if ((ictx->features & RBD_FEATURE_FAST_DIFF) != 0) {
+        features_mask |= RBD_FEATURE_OBJECT_MAP;
+      }
+      if ((features & RBD_FEATURE_OBJECT_MAP) != 0) {
+        if ((new_features & RBD_FEATURE_FAST_DIFF) != 0) {
           lderr(cct) << "cannot disable object map" << dendl;
           return -EINVAL;
         }
+
+        disable_flags = RBD_FLAG_OBJECT_MAP_INVALID;
         r = remove_object_map(ictx);
         if (r < 0) {
           lderr(cct) << "failed to remove object map" << dendl;
           return r;
         }
       }
+      if ((features & RBD_FEATURE_FAST_DIFF) != 0) {
+        disable_flags = RBD_FLAG_FAST_DIFF_INVALID;
+      }
     }
 
     ldout(cct, 10) << "update_features: features=" << new_features << ", mask="
-                   << mask << dendl;
+                   << features_mask << dendl;
     r = librbd::cls_client::set_features(&ictx->md_ctx, ictx->header_oid,
-                                         new_features, mask);
+                                         new_features, features_mask);
     if (r < 0) {
       lderr(cct) << "failed to update features: " << cpp_strerror(r)
                  << dendl;
+    }
+
+    if (disable_flags != 0) {
+      r = update_all_flags(ictx, 0, disable_flags);
+      if (r < 0) {
+        return r;
+      }
     }
 
     notify_change(ictx->md_ctx, ictx->header_oid, ictx);
