@@ -652,9 +652,11 @@ protected:
 
     dump_item(qi, reweight, kb, kb_used, kb_avail, util, var, f);
 
-    if (!qi.is_bucket()) {
-      if (min_var < 0 || var < min_var) min_var = var;
-      if (max_var < 0 || var > max_var) max_var = var;
+    if (!qi.is_bucket() && reweight > 0) {
+      if (min_var < 0 || var < min_var)
+	min_var = var;
+      if (max_var < 0 || var > max_var)
+	max_var = var;
 
       double dev = util - average_util;
       dev *= dev;
