@@ -2887,13 +2887,27 @@ TEST_F(TestLibRBD, UpdateFeatures)
   ASSERT_EQ(0, image.update_features(RBD_FEATURE_OBJECT_MAP |
                                        RBD_FEATURE_FAST_DIFF, true));
 
+  uint64_t expected_flags = RBD_FLAG_OBJECT_MAP_INVALID |
+                            RBD_FLAG_FAST_DIFF_INVALID;
+  uint64_t flags;
+  ASSERT_EQ(0, image.get_flags(&flags));
+  ASSERT_EQ(expected_flags, flags);
+
   // cannot disable object map w/ fast diff
   ASSERT_EQ(-EINVAL, image.update_features(RBD_FEATURE_OBJECT_MAP, false));
   ASSERT_EQ(0, image.update_features(RBD_FEATURE_FAST_DIFF, false));
 
+  expected_flags = RBD_FLAG_OBJECT_MAP_INVALID;
+  ASSERT_EQ(0, image.get_flags(&flags));
+  ASSERT_EQ(expected_flags, flags);
+
   // cannot disable exclusive lock w/ object map
   ASSERT_EQ(-EINVAL, image.update_features(RBD_FEATURE_EXCLUSIVE_LOCK, false));
   ASSERT_EQ(0, image.update_features(RBD_FEATURE_OBJECT_MAP, false));
+
+  ASSERT_EQ(0, image.get_flags(&flags));
+  ASSERT_EQ(0U, flags);
+
   ASSERT_EQ(0, image.update_features(RBD_FEATURE_EXCLUSIVE_LOCK, false));
 }
 
