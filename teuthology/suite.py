@@ -675,7 +675,8 @@ def combine_path(left, right):
     return left
 
 
-def build_matrix(path):
+def build_matrix(path, _isfile=os.path.isfile, _isdir=os.path.isdir,
+                 _listdir=os.listdir):
     """
     Return a list of items describe by path
 
@@ -698,19 +699,27 @@ def build_matrix(path):
     like a relative path.  If there was a % product, that path
     component will appear as a file with braces listing the selection
     of chosen subitems.
+
+    :param path:        The path to search for yaml fragments
+    :param _isfile:     Custom os.path.isfile(); for testing only
+    :param _isdir:      Custom os.path.isdir(); for testing only
+    :param _listdir:	Custom os.listdir(); for testing only
     """
-    if os.path.isfile(path):
+    if _isfile(path):
         if path.endswith('.yaml'):
             return [(None, [path])]
         return []
-    if os.path.isdir(path):
-        files = sorted(os.listdir(path))
+    if _isdir(path):
+        files = sorted(_listdir(path))
         if '+' in files:
             # concatenate items
             files.remove('+')
             raw = []
             for fn in files:
-                raw.extend(build_matrix(os.path.join(path, fn)))
+                raw.extend(
+                    build_matrix(os.path.join(path, fn),
+                                 _isfile, _isdir, _listdir)
+                )
             out = [(
                 '{' + ' '.join(files) + '}',
                 [a[1][0] for a in raw]
@@ -721,7 +730,8 @@ def build_matrix(path):
             files.remove('%')
             sublists = []
             for fn in files:
-                raw = build_matrix(os.path.join(path, fn))
+                raw = build_matrix(os.path.join(path, fn),
+                                   _isfile, _isdir, _listdir)
                 if raw:
                     sublists.append([(combine_path(fn, item[0]), item[1])
                                      for item in raw])
@@ -738,7 +748,8 @@ def build_matrix(path):
             # list items
             out = []
             for fn in files:
-                raw = build_matrix(os.path.join(path, fn))
+                raw = build_matrix(os.path.join(path, fn),
+                                   _isfile, _isdir, _listdir)
                 out.extend([(combine_path(fn, item[0]), item[1])
                            for item in raw])
             return out
