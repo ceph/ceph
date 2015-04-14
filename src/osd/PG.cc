@@ -3744,15 +3744,20 @@ void PG::repair_object(
     assert(waiting_for_unreadable_object.empty());
 
     pg_log.missing_add(soid, oi.version, eversion_t());
-    missing_loc.add_missing(soid, oi.version, eversion_t());
-    list<pair<ScrubMap::object, pg_shard_t> >::iterator i;
-    for (i = ok_peers->begin();
-	 i != ok_peers->end();
-	 ++i)
-      missing_loc.add_location(soid, i->second);
 
     pg_log.set_last_requested(0);
     dout(10) << __func__ << ": primary = " << primary << dendl;
+  }
+
+  if (is_ec_pg() || bad_peer == primary) {
+    // we'd better collect all shard for EC pg, and prepare good peers as the
+    // source of pull in the case of replicated pg.
+    missing_loc.add_missing(soid, oi.version, eversion_t());
+    list<pair<ScrubMap::object, pg_shard_t> >::iterator i;
+    for (i = ok_peers->begin();
+	i != ok_peers->end();
+	++i)
+      missing_loc.add_location(soid, i->second);
   }
 }
 
