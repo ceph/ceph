@@ -2383,18 +2383,15 @@ void Locker::adjust_cap_wanted(Capability *cap, int wanted, int issue_seq)
 
 
 
-void Locker::_do_null_snapflush(CInode *head_in, client_t client, snapid_t follows)
+void Locker::_do_null_snapflush(CInode *head_in, client_t client)
 {
-  dout(10) << "_do_null_snapflish client." << client << " follows " << follows << " on " << *head_in << dendl;
+  dout(10) << "_do_null_snapflush client." << client << " on " << *head_in << dendl;
   compact_map<snapid_t, set<client_t> >::iterator p = head_in->client_need_snapflush.begin();
   while (p != head_in->client_need_snapflush.end()) {
     snapid_t snapid = p->first;
     set<client_t>& clients = p->second;
     ++p;  // be careful, q loop below depends on this
 
-    // snapid is the snap inode's ->last
-    if (follows > snapid)
-      break;
     if (clients.count(client)) {
       dout(10) << " doing async NULL snapflush on " << snapid << " from client." << client << dendl;
       CInode *sin = mdcache->get_inode(head_in->ino(), snapid);
@@ -2588,7 +2585,7 @@ void Locker::handle_client_caps(MClientCaps *m)
     //  update/release).
     if (!head_in->client_need_snapflush.empty()) {
       if ((cap->issued() & CEPH_CAP_ANY_FILE_WR) == 0) {
-	_do_null_snapflush(head_in, client, follows);
+	_do_null_snapflush(head_in, client);
       } else {
 	dout(10) << " revocation in progress, not making any conclusions about null snapflushes" << dendl;
       }
@@ -3232,7 +3229,7 @@ void Locker::remove_client_cap(CInode *in, client_t client)
 {
   // clean out any pending snapflush state
   if (!in->client_need_snapflush.empty())
-    _do_null_snapflush(in, client, 0);
+    _do_null_snapflush(in, client);
 
   in->remove_client_cap(client);
 
