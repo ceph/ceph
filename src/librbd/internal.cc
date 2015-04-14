@@ -104,7 +104,7 @@ int diff_object_map(ImageCtx* ictx, uint64_t from_snap_id, uint64_t to_snap_id,
       lderr(cct) << "diff_object_map: failed to retrieve image flags" << dendl;
       return r;
     }
-    if ((flags & RBD_FLAG_OBJECT_MAP_INVALID) != 0) {
+    if ((flags & RBD_FLAG_FAST_DIFF_INVALID) != 0) {
       ldout(cct, 1) << "diff_object_map: cannot perform fast diff on invalid "
                     << "object map" << dendl;
       return -EINVAL;
@@ -2303,6 +2303,9 @@ reprotect_and_return_err:
 				   << "disabling object map optimizations"
 				   << dendl;
 	      ictx->flags = RBD_FLAG_OBJECT_MAP_INVALID;
+              if ((ictx->features & RBD_FEATURE_FAST_DIFF) != 0) {
+                ictx->flags |= RBD_FLAG_FAST_DIFF_INVALID;
+              }
 
 	      vector<uint64_t> default_flags(new_snapc.snaps.size(), ictx->flags);
 	      snap_flags.swap(default_flags);

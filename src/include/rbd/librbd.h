@@ -48,6 +48,7 @@ extern "C" {
 #endif
 
 #define RBD_FLAG_OBJECT_MAP_INVALID   (1<<0)
+#define RBD_FLAG_FAST_DIFF_INVALID    (1<<1)
 
 typedef void *rbd_snap_t;
 typedef void *rbd_image_t;
