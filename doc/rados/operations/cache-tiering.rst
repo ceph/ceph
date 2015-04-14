@@ -139,7 +139,7 @@ For example::
 
 	ceph osd tier cache-mode hot-storage writeback
 
-Writeback cache tiers overlay the backing storage tier, so they require one
+The cache tiers overlay the backing storage tier, so they require one
 additional step: you must direct all client traffic from the storage pool to 
 the cache pool. To direct client traffic directly to the cache pool, execute 
 the following:: 
