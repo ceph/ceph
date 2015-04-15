@@ -248,6 +248,17 @@ private:
   void scrub_finish();
   void scrub_reset();
 
+  struct C_Scrub : public Context {
+    Monitor *mon;
+    C_Scrub(Monitor *m) : mon(m) { }
+    void finish(int r) {
+      mon->scrub();
+    }
+  };
+  Context *scrub_event;
+  void scrub_event_start();
+  void scrub_event_cancel();
+
   /**
    * @defgroup Monitor_h_sync Synchronization
    * @{

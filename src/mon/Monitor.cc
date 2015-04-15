@@ -165,7 +165,9 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
   required_features(0),
   leader(0),
   quorum_features(0),
+  // scrub
   scrub_version(0),
+  scrub_event(NULL),
 
   // sync state
   sync_provider_count(0),
@@ -993,6 +995,7 @@ void Monitor::_reset()
   cancel_probe_timeout();
   timecheck_finish();
   health_events_cleanup();
+  scrub_event_cancel();
 
   leader_since = utime_t();
   if (!quorum.empty()) {
@@ -1856,6 +1859,7 @@ void Monitor::win_election(epoch_t epoch, set<int>& active, uint64_t features,
     timecheck_start();
     health_tick_start();
     do_health_to_clog_interval();
+    scrub_event_start();
   }
 }
 
@@ -4305,6 +4309,7 @@ void Monitor::scrub_finish()
     clog->info() << "scrub ok on " << quorum << ": " << mine << "\n";
 
   scrub_reset();
+  scrub_event_start();
 }
 
 void Monitor::scrub_reset()
@@ -4315,6 +4320,25 @@ void Monitor::scrub_reset()
 }
 
 
+void Monitor::scrub_event_start()
+{
+  dout(10) << __func__ << dendl;
+
+  if (scrub_event)
+    scrub_event_cancel();
+
+  scrub_event = new C_Scrub(this);
+  timer.add_event_after(cct->_conf->mon_scrub_interval, scrub_event);
+}
+
+void Monitor::scrub_event_cancel()
+{
+  dout(10) << __func__ << dendl;
+  if (scrub_event) {
+    timer.cancel_event(scrub_event);
+    scrub_event = NULL;
+  }
+}
 
 /************ TICK ***************/
 
