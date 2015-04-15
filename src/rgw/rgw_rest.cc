@@ -161,7 +161,8 @@ string camelcase_dash_http_attr(const string& orig)
   return string(buf);
 }
 
-static list<string> hostnames_list;
+/* avoid duplicate hostnames in hostnames list */
+static set<string> hostnames_set;
 
 void rgw_rest_init(CephContext *cct, RGWRegion& region)
 {
@@ -193,18 +194,19 @@ void rgw_rest_init(CephContext *cct, RGWRegion& region)
     http_status_names[h->code] = h->name;
   }
 
-  /* avoid duplicate hostnames in hostnames list */
-  map<string, bool> hostnames_map;
   if (!cct->_conf->rgw_dns_name.empty()) {
-    hostnames_map[cct->_conf->rgw_dns_name] = true;
+    hostnames_set.insert(cct->_conf->rgw_dns_name);
   }
-  for (list<string>::iterator iter = region.hostnames.begin(); iter != region.hostnames.end(); ++iter) {
-    hostnames_map[*iter] = true;
-  }
-
-  for (map<string, bool>::iterator iter = hostnames_map.begin(); iter != hostnames_map.end(); ++iter) {
-    hostnames_list.push_back(iter->first);
-  }
+  hostnames_set.insert(region.hostnames.begin(),  region.hostnames.end());
+  /* TODO: We should have a sanity check that no hostname matches the end of
+   * any other hostname, otherwise we will get ambigious results from
+   * rgw_find_host_in_domains.
+   * Eg: 
+   * Hostnames: [A, B.A]
+   * Inputs: [Z.A, X.B.A]
+   * Z.A clearly splits to subdomain=Z, domain=Z
+   * X.B.A ambigously splits to both {X, B.A} and {X.B, A}
+   */
 }
 
 static bool str_ends_with(const string& s, const string& suffix, size_t *pos)
@@ -224,8 +226,8 @@ static bool str_ends_with(const string& s, const string& suffix, size_t *pos)
 
 static bool rgw_find_host_in_domains(const string& host, string *domain, string *subdomain)
 {
-  list<string>::iterator iter;
-  for (iter = hostnames_list.begin(); iter != hostnames_list.end(); ++iter) {
+  set<string>::iterator iter;
+  for (iter = hostnames_set.begin(); iter != hostnames_set.end(); ++iter) {
     size_t pos;
     if (!str_ends_with(host, *iter, &pos))
       continue;
