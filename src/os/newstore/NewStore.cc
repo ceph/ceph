@@ -1656,7 +1656,7 @@ int NewStore::OmapIteratorImpl::lower_bound(const string& to)
 bool NewStore::OmapIteratorImpl::valid()
 {
   RWLock::RLocker l(c->lock);
-  if (it->valid() && it->raw_key().second <= tail) {
+  if (o->onode.omap_head && it->valid() && it->raw_key().second <= tail) {
     return true;
   } else {
     return false;
@@ -1666,8 +1666,12 @@ bool NewStore::OmapIteratorImpl::valid()
 int NewStore::OmapIteratorImpl::next()
 {
   RWLock::RLocker l(c->lock);
-  it->next();
-  return 0;
+  if (o->onode.omap_head) {
+    it->next();
+    return 0;
+  } else {
+    return -1;
+  }
 }
 
 string NewStore::OmapIteratorImpl::key()
