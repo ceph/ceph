@@ -2126,6 +2126,9 @@ void OSD::create_logger()
   osd_plb.add_u64_counter(l_osd_object_ctx_cache_total, "object_ctx_cache_total", "Object context cache lookups");
 
   osd_plb.add_u64_counter(l_osd_op_cache_hit, "op_cache_hit");
+  osd_plb.add_time_avg(l_osd_tier_flush_lat, "osd_tier_flush_lat", "Object flush latency");
+  osd_plb.add_time_avg(l_osd_tier_promote_lat, "osd_tier_promote_lat", "Object promote latency");
+  osd_plb.add_time_avg(l_osd_tier_r_lat, "osd_tier_r_lat", "Object proxy read latency");
 
   logger = osd_plb.create_perf_counters();
   cct->get_perfcounters_collection()->add(logger);
