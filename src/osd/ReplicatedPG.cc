@@ -1991,10 +1991,11 @@ struct C_ProxyRead : public Context {
   epoch_t last_peering_reset;
   ceph_tid_t tid;
   ReplicatedPG::ProxyReadOpRef prdop;
+  utime_t start;
   C_ProxyRead(ReplicatedPG *p, hobject_t o, epoch_t lpr,
 	     const ReplicatedPG::ProxyReadOpRef& prd)
     : pg(p), oid(o), last_peering_reset(lpr),
-      tid(0), prdop(prd)
+      tid(0), prdop(prd), start(ceph_clock_now(NULL))
   {}
   void finish(int r) {
     if (prdop->canceled)
@@ -2006,6 +2007,7 @@ struct C_ProxyRead : public Context {
     }
     if (last_peering_reset == pg->get_last_peering_reset()) {
       pg->finish_proxy_read(oid, tid, r);
+      pg->osd->logger->tinc(l_osd_tier_r_lat, ceph_clock_now(NULL) - start);
     }
     pg->unlock();
   }
@@ -2147,15 +2149,18 @@ void ReplicatedPG::cancel_proxy_read_ops(bool requeue)
 class PromoteCallback: public ReplicatedPG::CopyCallback {
   ObjectContextRef obc;
   ReplicatedPG *pg;
+  utime_t start;
 public:
   PromoteCallback(ObjectContextRef obc_, ReplicatedPG *pg_)
     : obc(obc_),
-      pg(pg_) {}
+      pg(pg_),
+      start(ceph_clock_now(NULL)) {}
 
   virtual void finish(ReplicatedPG::CopyCallbackResults results) {
     ReplicatedPG::CopyResults *results_data = results.get<1>();
     int r = results.get<0>();
     pg->finish_promote(r, results_data, obc);
+    pg->osd->logger->tinc(l_osd_tier_promote_lat, ceph_clock_now(NULL) - start);
   }
 };
 
@@ -6762,9 +6767,10 @@ struct C_Flush : public Context {
   hobject_t oid;
   epoch_t last_peering_reset;
   ceph_tid_t tid;
+  utime_t start;
   C_Flush(ReplicatedPG *p, hobject_t o, epoch_t lpr)
     : pg(p), oid(o), last_peering_reset(lpr),
-      tid(0)
+      tid(0), start(ceph_clock_now(NULL))
   {}
   void finish(int r) {
     if (r == -ECANCELED)
@@ -6772,6 +6778,7 @@ struct C_Flush : public Context {
     pg->lock();
     if (last_peering_reset == pg->get_last_peering_reset()) {
       pg->finish_flush(oid, tid, r);
+      pg->osd->logger->tinc(l_osd_tier_flush_lat, ceph_clock_now(NULL) - start);
     }
     pg->unlock();
   }
