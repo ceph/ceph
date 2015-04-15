@@ -43,7 +43,6 @@
       - HashIndex::list_by_hash
   * use work queue for wal fsyncs and kv record removals
   * avoid mtime updates when doing open-by-handle
-  * abstract out fs specifics
   * fid xattr backpointer
   * kill collection_list_range
   * inline first fsync_item in TransContext to void allocation?
