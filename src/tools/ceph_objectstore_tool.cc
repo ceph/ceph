@@ -3258,16 +3258,15 @@ int main(int argc, char **argv)
       if (ret > 0)
           goto out;
 
+      formatter->open_object_section("op_log");
       formatter->open_object_section("pg_log_t");
       log.dump(formatter);
       formatter->close_section();
       formatter->flush(cout);
-      cout << std::endl;
       formatter->open_object_section("pg_missing_t");
       missing.dump(formatter);
       formatter->close_section();
       formatter->flush(cout);
-      cout << std::endl;
       formatter->open_object_section("map");
       formatter->open_array_section("divergent_priors");
       for (map<eversion_t, hobject_t>::iterator it = divergent_priors.begin();
@@ -3279,8 +3278,8 @@ int main(int argc, char **argv)
       }
       formatter->close_section();
       formatter->close_section();
+      formatter->close_section();
       formatter->flush(cout);
-      cout << std::endl;
     } else if (op == "rm-past-intervals") {
       ObjectStore::Transaction tran;
       ObjectStore::Transaction *t = &tran;
