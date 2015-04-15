@@ -4152,6 +4152,11 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  result = 0;
 	  break;
 	}
+	if (oi.is_cache_pinned()) {
+	  dout(10) << "cache-try-flush on a pinned object, consider unpin this object first" << dendl;
+	  result = -EPERM;
+	  break;
+	}
 	if (oi.is_dirty()) {
 	  result = start_flush(ctx->op, ctx->obc, false, NULL, NULL);
 	  if (result == -EINPROGRESS)
@@ -4177,6 +4182,11 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	}
 	if (!obs.exists) {
 	  result = 0;
+	  break;
+	}
+	if (oi.is_cache_pinned()) {
+	  dout(10) << "cache-flush on a pinned object, consider unpin this object first" << dendl;
+	  result = -EPERM;
 	  break;
 	}
 	hobject_t missing;
@@ -4208,6 +4218,11 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	}
 	if (!obs.exists) {
 	  result = 0;
+	  break;
+	}
+	if (oi.is_cache_pinned()) {
+	  dout(10) << "cache-evict on a pinned object, consider unpin this object first" << dendl;
+	  result = -EPERM;
 	  break;
 	}
 	if (oi.is_dirty()) {
