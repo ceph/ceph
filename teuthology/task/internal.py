@@ -280,8 +280,9 @@ def connect(ctx, config):
                 key = None
         except (AttributeError, KeyError):
             pass
-        remotes.append(
-            remote.Remote(name=t, host_key=key, keep_alive=True, console=None))
+        rem = remote.Remote(name=t, host_key=key, keep_alive=True)
+        rem.connect()
+        remotes.append(rem)
     ctx.cluster = cluster.Cluster()
     if 'roles' in ctx.config:
         for rem, roles in zip(remotes, ctx.config['roles']):

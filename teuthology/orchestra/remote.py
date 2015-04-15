@@ -51,7 +51,7 @@ class Remote(object):
         self._host_key = host_key
         self.keep_alive = keep_alive
         self.console = console
-        self.ssh = ssh or self.connect()
+        self.ssh = ssh
 
     def connect(self):
         self.ssh = connection.connect(user_at_host=self.name,
