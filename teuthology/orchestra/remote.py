@@ -326,6 +326,10 @@ class Remote(object):
         node['up'] = True
         return node
 
+    def __del__(self):
+        if self.ssh is not None:
+            self.ssh.close()
+
 
 def getShortName(name):
     """
