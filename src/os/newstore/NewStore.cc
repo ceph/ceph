@@ -2352,7 +2352,7 @@ int NewStore::_do_wal_transaction(wal_transaction_t& wt)
   for (vector<int>::iterator p = sync_fds.begin();
        p != sync_fds.end();
        ++p) {
-    int r = ::fsync(*p);
+    int r = ::fdatasync(*p);
     assert(r == 0);
     VOID_TEMP_FAILURE_RETRY(::close(*p));
   }
@@ -2446,7 +2446,7 @@ int NewStore::queue_transactions(
     for (list<fsync_item>::iterator p = txc->fds.begin();
 	 p != txc->fds.end(); ++p) {
       dout(30) << __func__ << " fsync " << p->fd << dendl;
-      int r = ::fsync(p->fd);
+      int r = ::fdatasync(p->fd);
       if (r < 0) {
 	r = -errno;
 	derr << __func__ << " fsync: " << cpp_strerror(r) << dendl;
