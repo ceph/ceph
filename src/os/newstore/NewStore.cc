@@ -807,7 +807,7 @@ int NewStore::_open_db()
   db->init();
   stringstream err;
   if (db->create_and_open(err)) {
-    derr << __func__ << " erroring opening db: " << err << dendl;
+    derr << __func__ << " erroring opening db: " << err.str() << dendl;
     delete db;
     db = NULL;
     return -EIO;
