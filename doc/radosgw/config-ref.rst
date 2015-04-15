@@ -407,6 +407,7 @@ required settings:
 #. ``hostnames``: A list of all the hostnames in the region. For example, 
    you may use multiple domain names to refer to the same region. Optional.
    The ``rgw dns name`` setting will automatically be included in this list.
+   You should restart the ``radosgw`` daemon(s) after changing this setting.
 
 #. ``master_zone``: The master zone for the region. Optional. Uses the default
    zone if not specified. **note:** You can only have one master zone per 
