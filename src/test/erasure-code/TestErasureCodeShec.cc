@@ -1093,7 +1093,7 @@ TEST(ErasureCodeShec, minimum_to_decode_3)
   int r = shec->minimum_to_decode(want_to_decode, available_chunks,
 				  &minimum_chunks);
   EXPECT_EQ(-EINVAL, r);
-  EXPECT_EQ(0, minimum_chunks.size());
+  EXPECT_EQ(0u, minimum_chunks.size());
 
   delete shec;
   delete parameters;
