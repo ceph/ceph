@@ -59,13 +59,29 @@ class Remote(object):
                                       keep_alive=self.keep_alive)
         return self.ssh
 
-    def reconnect(self):
+    def reconnect(self, timeout=None):
         """
         Attempts to re-establish connection. Returns True for success; False
         for failure.
         """
         if self.ssh is not None:
             self.ssh.close()
+        if not timeout:
+            return self._reconnect()
+        start_time = time.time()
+        elapsed_time = lambda: time.time() - start_time
+        while elapsed_time() < timeout:
+            success = self._reconnect()
+            if success:
+                break
+            default_sleep_val = 30
+            # Don't let time_remaining be < 0
+            time_remaining = max(0, timeout - elapsed_time())
+            sleep_val = min(time_remaining, default_sleep_val)
+            time.sleep(sleep_val)
+        return success
+
+    def _reconnect(self):
         try:
             self.connect()
             return self.is_online
