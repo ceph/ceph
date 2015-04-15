@@ -93,12 +93,15 @@ static int sysfs_write_rbd_remove(const string& buf)
   return sysfs_write_rbd("remove", buf);
 }
 
-static int should_match_minor(void)
+static int have_minor_attr(void)
 {
   /*
    * 'minor' attribute was added as part of single_major merge, which
    * exposed the 'single_major' parameter.  'minor' is always present,
    * regardless of whether single-major scheme is turned on or not.
+   *
+   * (Something like ver >= KERNEL_VERSION(3, 14, 0) is a no-go because
+   * this has to work with rbd.ko backported to various kernels.)
    */
   return access("/sys/module/rbd/parameters/single_major", F_OK) == 0;
 }
@@ -217,7 +220,7 @@ static int wait_for_udev_add(struct udev_monitor *mon, const char *pool,
         const char *this_major = udev_device_get_property_value(dev, "MAJOR");
         const char *this_minor = udev_device_get_property_value(dev, "MINOR");
 
-        assert(!minor ^ should_match_minor());
+        assert(!minor ^ have_minor_attr());
 
         if (strcmp(this_major, major) == 0 &&
             (!minor || strcmp(this_minor, minor) == 0)) {
@@ -338,7 +341,7 @@ static int devno_to_krbd_id(struct udev *udev, dev_t devno, string *pid)
   if (r < 0)
     goto out_enm;
 
-  if (should_match_minor()) {
+  if (have_minor_attr()) {
     r = udev_enumerate_add_match_sysattr(enm, "minor",
                                          stringify(minor(devno)).c_str());
     if (r < 0)
