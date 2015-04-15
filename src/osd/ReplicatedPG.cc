@@ -10657,7 +10657,7 @@ bool ReplicatedPG::agent_work(int start_max)
 
     // be careful flushing omap to an EC pool.
     if (!base_pool->supports_omap() &&
-	obc->obs.oi.test_flag(object_info_t::FLAG_OMAP)) {
+	obc->obs.oi.is_omap()) {
       dout(20) << __func__ << " skip (omap to EC) " << obc->obs.oi << dendl;
       osd->logger->inc(l_osd_agent_skip);
       continue;
