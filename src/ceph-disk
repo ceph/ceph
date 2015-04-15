@@ -2773,7 +2773,6 @@ def parse_args():
     parser.set_defaults(
         # we want to hold on to this, for later
         prog=parser.prog,
-        cluster='ceph',
         )
 
     subparsers = parser.add_subparsers(
@@ -2786,6 +2785,7 @@ def parse_args():
     prepare_parser.add_argument(
         '--cluster',
         metavar='NAME',
+        default='ceph',
         help='cluster name to assign this disk to',
         )
     prepare_parser.add_argument(
