@@ -198,6 +198,15 @@ void rgw_rest_init(CephContext *cct, RGWRegion& region)
     hostnames_set.insert(cct->_conf->rgw_dns_name);
   }
   hostnames_set.insert(region.hostnames.begin(),  region.hostnames.end());
+  /* TODO: We should have a sanity check that no hostname matches the end of
+   * any other hostname, otherwise we will get ambigious results from
+   * rgw_find_host_in_domains.
+   * Eg: 
+   * Hostnames: [A, B.A]
+   * Inputs: [Z.A, X.B.A]
+   * Z.A clearly splits to subdomain=Z, domain=Z
+   * X.B.A ambigously splits to both {X, B.A} and {X.B, A}
+   */
 }
 
 static bool str_ends_with(const string& s, const string& suffix, size_t *pos)
