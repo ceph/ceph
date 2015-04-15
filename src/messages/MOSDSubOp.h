@@ -25,7 +25,7 @@
 
 class MOSDSubOp : public Message {
 
-  static const int HEAD_VERSION = 11;
+  static const int HEAD_VERSION = 12;
   static const int COMPAT_VERSION = 7;
 
 public:
@@ -91,6 +91,8 @@ public:
 
   /// non-empty if this transaction involves a hit_set history update
   boost::optional<pg_hit_set_history_t> updated_hit_set_history;
+
+  utime_t pg_last_scrub_stamp; ///< PG's last scrub timestamp
 
   int get_cost() const {
     if (ops.size() == 1 && ops[0].op.op == CEPH_OSD_OP_PULL)
@@ -170,6 +172,11 @@ public:
     } else {
       pg_trim_rollback_to = pg_trim_to;
     }
+    if (header.version >= 12) {
+      ::decode(pg_last_scrub_stamp, p);
+    } else {
+      pg_last_scrub_stamp = utime_t();
+    }
   }
 
   virtual void encode_payload(uint64_t features) {
@@ -221,6 +228,7 @@ public:
     ::encode(pgid.shard, payload);
     ::encode(updated_hit_set_history, payload);
     ::encode(pg_trim_rollback_to, payload);
+    ::encode(pg_last_scrub_stamp, payload);
   }
 
   MOSDSubOp()
