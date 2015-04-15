@@ -82,7 +82,8 @@ static std::map<uint64_t, std::string> feature_mapping =
     RBD_FEATURE_STRIPINGV2, "striping")(
     RBD_FEATURE_EXCLUSIVE_LOCK, "exclusive-lock")(
     RBD_FEATURE_OBJECT_MAP, "object-map")(
-    RBD_FEATURE_FAST_DIFF, "fast-diff");
+    RBD_FEATURE_FAST_DIFF, "fast-diff")(
+    RBD_FEATURE_DEEP_FLATTEN, "deep-flatten");
 
 void usage()
 {
