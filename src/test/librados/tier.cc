@@ -786,10 +786,10 @@ TEST_F(LibRadosTwoPoolsPP, Evict) {
     op.cache_evict();
     librados::AioCompletion *completion = cluster.aio_create_completion();
     ASSERT_EQ(0, cache_ioctx.aio_operate(
-      "fooberdoodle", completion, &op,
+      "foo", completion, &op,
       librados::OPERATION_IGNORE_CACHE, NULL));
     completion->wait_for_safe();
-    ASSERT_EQ(-ENOENT, completion->get_return_value());
+    ASSERT_EQ(0, completion->get_return_value());
     completion->release();
   }
   {
@@ -2988,10 +2988,10 @@ TEST_F(LibRadosTwoPoolsECPP, Evict) {
     op.cache_evict();
     librados::AioCompletion *completion = cluster.aio_create_completion();
     ASSERT_EQ(0, cache_ioctx.aio_operate(
-      "fooberdoodle", completion, &op,
+      "foo", completion, &op,
       librados::OPERATION_IGNORE_CACHE, NULL));
     completion->wait_for_safe();
-    ASSERT_EQ(-ENOENT, completion->get_return_value());
+    ASSERT_EQ(0, completion->get_return_value());
     completion->release();
   }
   {
