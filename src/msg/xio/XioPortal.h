@@ -67,7 +67,7 @@ private:
 
     inline Lane* get_lane(XioConnection *xcon)
       {
-	return &qlane[((uint64_t) xcon) % nlanes];
+	return &qlane[(((uint64_t) xcon) / 16) % nlanes];
       }
 
     void enq(XioConnection *xcon, XioSubmit* xs)
