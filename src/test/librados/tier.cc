@@ -769,6 +769,65 @@ TEST_F(LibRadosTwoPoolsPP, Evict) {
     ASSERT_TRUE(it == cache_ioctx.nobjects_end());
   }
 
+  // pin
+  {
+    ObjectWriteOperation op;
+    op.cache_pin();
+    librados::AioCompletion *completion = cluster.aio_create_completion();
+    ASSERT_EQ(0, cache_ioctx.aio_operate("foo", completion, &op));
+    completion->wait_for_safe();
+    ASSERT_EQ(0, completion->get_return_value());
+    completion->release();
+  }
+
+  // evict the pinned object with -EPERM
+  {
+    ObjectReadOperation op;
+    op.cache_evict();
+    librados::AioCompletion *completion = cluster.aio_create_completion();
+    ASSERT_EQ(0, cache_ioctx.aio_operate("foo", completion, &op,
+					 librados::OPERATION_IGNORE_CACHE,
+					 NULL));
+    completion->wait_for_safe();
+    ASSERT_EQ(-EPERM, completion->get_return_value());
+    completion->release();
+  }
+
+  // unpin
+  {
+    ObjectWriteOperation op;
+    op.cache_unpin();
+    librados::AioCompletion *completion = cluster.aio_create_completion();
+    ASSERT_EQ(0, cache_ioctx.aio_operate("foo", completion, &op));
+    completion->wait_for_safe();
+    ASSERT_EQ(0, completion->get_return_value());
+    completion->release();
+  }
+
+  // flush
+  {
+    ObjectReadOperation op;
+    op.cache_flush();
+    librados::AioCompletion *completion = cluster.aio_create_completion();
+    ASSERT_EQ(0, cache_ioctx.aio_operate(
+      "foo", completion, &op,
+      librados::OPERATION_IGNORE_OVERLAY, NULL));
+    completion->wait_for_safe();
+    ASSERT_EQ(0, completion->get_return_value());
+    completion->release();
+  }
+
+  // verify clean
+  {
+    bool dirty = false;
+    int r = -1;
+    ObjectReadOperation op;
+    op.is_dirty(&dirty, &r);
+    ASSERT_EQ(0, cache_ioctx.operate("foo", &op, NULL));
+    ASSERT_FALSE(dirty);
+    ASSERT_EQ(0, r);
+  }
+
   // evict
   {
     ObjectReadOperation op;
@@ -1174,6 +1233,42 @@ TEST_F(LibRadosTwoPoolsPP, TryFlush) {
     ASSERT_EQ(0, r);
   }
 
+  // pin
+  {
+    ObjectWriteOperation op;
+    op.cache_pin();
+    librados::AioCompletion *completion = cluster.aio_create_completion();
+    ASSERT_EQ(0, cache_ioctx.aio_operate("foo", completion, &op));
+    completion->wait_for_safe();
+    ASSERT_EQ(0, completion->get_return_value());
+    completion->release();
+  }
+
+  // flush the pinned object with -EPERM
+  {
+    ObjectReadOperation op;
+    op.cache_try_flush();
+    librados::AioCompletion *completion = cluster.aio_create_completion();
+    ASSERT_EQ(0, cache_ioctx.aio_operate(
+      "foo", completion, &op,
+      librados::OPERATION_IGNORE_OVERLAY |
+      librados::OPERATION_SKIPRWLOCKS, NULL));
+    completion->wait_for_safe();
+    ASSERT_EQ(-EPERM, completion->get_return_value());
+    completion->release();
+  }
+
+  // unpin
+  {
+    ObjectWriteOperation op;
+    op.cache_unpin();
+    librados::AioCompletion *completion = cluster.aio_create_completion();
+    ASSERT_EQ(0, cache_ioctx.aio_operate("foo", completion, &op));
+    completion->wait_for_safe();
+    ASSERT_EQ(0, completion->get_return_value());
+    completion->release();
+  }
+
   // flush
   {
     ObjectReadOperation op;
@@ -1283,6 +1378,42 @@ TEST_F(LibRadosTwoPoolsPP, Flush) {
     ASSERT_TRUE(dirty);
     ASSERT_EQ(0, r);
     user_version = cache_ioctx.get_last_version();
+  }
+
+  // pin
+  {
+    ObjectWriteOperation op;
+    op.cache_pin();
+    librados::AioCompletion *completion = cluster.aio_create_completion();
+    ASSERT_EQ(0, cache_ioctx.aio_operate("foo", completion, &op));
+    completion->wait_for_safe();
+    ASSERT_EQ(0, completion->get_return_value());
+    completion->release();
+  }
+
+  // flush the pinned object with -EPERM
+  {
+    ObjectReadOperation op;
+    op.cache_try_flush();
+    librados::AioCompletion *completion = cluster.aio_create_completion();
+    ASSERT_EQ(0, cache_ioctx.aio_operate(
+      "foo", completion, &op,
+      librados::OPERATION_IGNORE_OVERLAY |
+      librados::OPERATION_SKIPRWLOCKS, NULL));
+    completion->wait_for_safe();
+    ASSERT_EQ(-EPERM, completion->get_return_value());
+    completion->release();
+  }
+
+  // unpin
+  {
+    ObjectWriteOperation op;
+    op.cache_unpin();
+    librados::AioCompletion *completion = cluster.aio_create_completion();
+    ASSERT_EQ(0, cache_ioctx.aio_operate("foo", completion, &op));
+    completion->wait_for_safe();
+    ASSERT_EQ(0, completion->get_return_value());
+    completion->release();
   }
 
   // flush
@@ -2993,6 +3124,65 @@ TEST_F(LibRadosTwoPoolsECPP, Evict) {
     ASSERT_TRUE(it == cache_ioctx.nobjects_end());
   }
 
+  // pin
+  {
+    ObjectWriteOperation op;
+    op.cache_pin();
+    librados::AioCompletion *completion = cluster.aio_create_completion();
+    ASSERT_EQ(0, cache_ioctx.aio_operate("foo", completion, &op));
+    completion->wait_for_safe();
+    ASSERT_EQ(0, completion->get_return_value());
+    completion->release();
+  }
+
+  // evict the pinned object with -EPERM
+  {
+    ObjectReadOperation op;
+    op.cache_evict();
+    librados::AioCompletion *completion = cluster.aio_create_completion();
+    ASSERT_EQ(0, cache_ioctx.aio_operate("foo", completion, &op,
+					 librados::OPERATION_IGNORE_CACHE,
+					 NULL));
+    completion->wait_for_safe();
+    ASSERT_EQ(-EPERM, completion->get_return_value());
+    completion->release();
+  }
+
+  // unpin
+  {
+    ObjectWriteOperation op;
+    op.cache_unpin();
+    librados::AioCompletion *completion = cluster.aio_create_completion();
+    ASSERT_EQ(0, cache_ioctx.aio_operate("foo", completion, &op));
+    completion->wait_for_safe();
+    ASSERT_EQ(0, completion->get_return_value());
+    completion->release();
+  }
+
+  // flush
+  {
+    ObjectReadOperation op;
+    op.cache_flush();
+    librados::AioCompletion *completion = cluster.aio_create_completion();
+    ASSERT_EQ(0, cache_ioctx.aio_operate(
+      "foo", completion, &op,
+      librados::OPERATION_IGNORE_OVERLAY, NULL));
+    completion->wait_for_safe();
+    ASSERT_EQ(0, completion->get_return_value());
+    completion->release();
+  }
+
+  // verify clean
+  {
+    bool dirty = false;
+    int r = -1;
+    ObjectReadOperation op;
+    op.is_dirty(&dirty, &r);
+    ASSERT_EQ(0, cache_ioctx.operate("foo", &op, NULL));
+    ASSERT_FALSE(dirty);
+    ASSERT_EQ(0, r);
+  }
+
   // evict
   {
     ObjectReadOperation op;
@@ -3322,6 +3512,42 @@ TEST_F(LibRadosTwoPoolsECPP, TryFlush) {
     ASSERT_EQ(0, r);
   }
 
+  // pin
+  {
+    ObjectWriteOperation op;
+    op.cache_pin();
+    librados::AioCompletion *completion = cluster.aio_create_completion();
+    ASSERT_EQ(0, cache_ioctx.aio_operate("foo", completion, &op));
+    completion->wait_for_safe();
+    ASSERT_EQ(0, completion->get_return_value());
+    completion->release();
+  }
+
+  // flush the pinned object with -EPERM
+  {
+    ObjectReadOperation op;
+    op.cache_try_flush();
+    librados::AioCompletion *completion = cluster.aio_create_completion();
+    ASSERT_EQ(0, cache_ioctx.aio_operate(
+      "foo", completion, &op,
+      librados::OPERATION_IGNORE_OVERLAY |
+      librados::OPERATION_SKIPRWLOCKS, NULL));
+    completion->wait_for_safe();
+    ASSERT_EQ(-EPERM, completion->get_return_value());
+    completion->release();
+  }
+
+  // unpin
+  {
+    ObjectWriteOperation op;
+    op.cache_unpin();
+    librados::AioCompletion *completion = cluster.aio_create_completion();
+    ASSERT_EQ(0, cache_ioctx.aio_operate("foo", completion, &op));
+    completion->wait_for_safe();
+    ASSERT_EQ(0, completion->get_return_value());
+    completion->release();
+  }
+
   // flush
   {
     ObjectReadOperation op;
@@ -3431,6 +3657,42 @@ TEST_F(LibRadosTwoPoolsECPP, Flush) {
     ASSERT_TRUE(dirty);
     ASSERT_EQ(0, r);
     user_version = cache_ioctx.get_last_version();
+  }
+
+  // pin
+  {
+    ObjectWriteOperation op;
+    op.cache_pin();
+    librados::AioCompletion *completion = cluster.aio_create_completion();
+    ASSERT_EQ(0, cache_ioctx.aio_operate("foo", completion, &op));
+    completion->wait_for_safe();
+    ASSERT_EQ(0, completion->get_return_value());
+    completion->release();
+  }
+
+  // flush the pinned object with -EPERM
+  {
+    ObjectReadOperation op;
+    op.cache_try_flush();
+    librados::AioCompletion *completion = cluster.aio_create_completion();
+    ASSERT_EQ(0, cache_ioctx.aio_operate(
+      "foo", completion, &op,
+      librados::OPERATION_IGNORE_OVERLAY |
+      librados::OPERATION_SKIPRWLOCKS, NULL));
+    completion->wait_for_safe();
+    ASSERT_EQ(-EPERM, completion->get_return_value());
+    completion->release();
+  }
+
+  // unpin
+  {
+    ObjectWriteOperation op;
+    op.cache_unpin();
+    librados::AioCompletion *completion = cluster.aio_create_completion();
+    ASSERT_EQ(0, cache_ioctx.aio_operate("foo", completion, &op));
+    completion->wait_for_safe();
+    ASSERT_EQ(0, completion->get_return_value());
+    completion->release();
   }
 
   // flush
