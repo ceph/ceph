@@ -165,6 +165,20 @@ struct wal_transaction_t {
   uint64_t seq;
   list<wal_op_t> ops;
 
+  int64_t _bytes;  ///< cached byte count
+
+  wal_transaction_t() : _bytes(-1) {}
+
+  uint64_t get_bytes() {
+    if (_bytes < 0) {
+      _bytes = 0;
+      for (list<wal_op_t>::iterator p = ops.begin(); p != ops.end(); ++p) {
+	_bytes += p->length;
+      }
+    }
+    return _bytes;
+  }
+
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& p);
   void dump(Formatter *f) const;
