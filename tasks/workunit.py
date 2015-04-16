@@ -295,7 +295,7 @@ def _run_tests(ctx, refspec, role, tests, env, subdir=None, timeout=None):
             run.Raw('&&'),
             'git',
             'archive',
-            '--remote=git://ceph.com/git/ceph.git',
+            '--remote=git://git.ceph.com/ceph.git',
             '%s:qa/workunits' % refspec,
             run.Raw('|'),
             'tar',
