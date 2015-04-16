@@ -21,7 +21,7 @@ def task(ctx, config):
 #                '-q',
                 '-O-',
 #                'https://raw.github.com/ceph/ceph-qa-chef/master/solo/solo-from-scratch',
-                'http://ceph.com/git/?p=ceph-qa-chef.git;a=blob_plain;f=solo/solo-from-scratch;hb=HEAD',
+                'http://git.ceph.com/?p=ceph-qa-chef.git;a=blob_plain;f=solo/solo-from-scratch;hb=HEAD',
                 run.Raw('|'),
                 'sh',
                 '-x',
