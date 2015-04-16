@@ -63,6 +63,7 @@ namespace librbd {
     State m_state;
     ceph::bufferlist m_copyup_data;
     vector<AioRequest *> m_pending_requests;
+    atomic_t m_pending_copyups;
 
     AsyncOperation m_async_op;
 

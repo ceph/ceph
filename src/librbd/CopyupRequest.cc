@@ -52,26 +52,10 @@ namespace librbd {
   }
 
   bool CopyupRequest::send_copyup() {
-    m_ictx->snap_lock.get_read();
-    ::SnapContext snapc = m_ictx->snapc;
-    m_ictx->snap_lock.put_read();
-
-    std::vector<librados::snap_t> snaps;
-    snaps.insert(snaps.end(), snapc.snaps.begin(), snapc.snaps.end());
-
-    librados::ObjectWriteOperation copyup_op;
-    if (!m_copyup_data.is_zero()) {
-      copyup_op.exec("rbd", "copyup", m_copyup_data);
-    }
-
-    // merge all pending write ops into this single RADOS op
-    for (size_t i=0; i<m_pending_requests.size(); ++i) {
-      AioRequest *req = m_pending_requests[i];
-      ldout(m_ictx->cct, 20) << __func__ << " add_copyup_ops " << req << dendl;
-      req->add_copyup_ops(&copyup_op);
-    }
-
-    if (copyup_op.size() == 0) {
+    bool add_copyup_op = !m_copyup_data.is_zero();
+    bool copy_on_read = m_pending_requests.empty();
+    if (!add_copyup_op && copy_on_read) {
+      // no copyup data and CoR operation
       return true;
     }
 
@@ -79,13 +63,65 @@ namespace librbd {
 			   << ": oid " << m_oid << dendl;
     m_state = STATE_COPYUP;
 
-    librados::AioCompletion *comp =
-      librados::Rados::aio_create_completion(create_callback_context(), NULL,
-                                             rados_ctx_cb);
-    int r = m_ictx->md_ctx.aio_operate(m_oid, comp, &copyup_op, snapc.seq.val,
-                                       snaps);
-    assert(r == 0);
-    comp->release();
+    m_ictx->snap_lock.get_read();
+    ::SnapContext snapc = m_ictx->snapc;
+    m_ictx->snap_lock.put_read();
+
+    std::vector<librados::snap_t> snaps;
+
+    if (!copy_on_read) {
+      m_pending_copyups.inc();
+    }
+
+    int r;
+    if (copy_on_read || (!snapc.snaps.empty() && add_copyup_op)) {
+      assert(add_copyup_op);
+      add_copyup_op = false;
+
+      librados::ObjectWriteOperation copyup_op;
+      copyup_op.exec("rbd", "copyup", m_copyup_data);
+
+      // send only the copyup request with a blank snapshot context so that
+      // all snapshots are detected from the parent for this object.  If
+      // this is a CoW request, a second request will be created for the
+      // actual modification.
+      m_pending_copyups.inc();
+
+      ldout(m_ictx->cct, 20) << __func__ << " " << this << " copyup with "
+                             << "empty snapshot context" << dendl;
+      librados::AioCompletion *comp =
+        librados::Rados::aio_create_completion(create_callback_context(), NULL,
+                                               rados_ctx_cb);
+      r = m_ictx->md_ctx.aio_operate(m_oid, comp, &copyup_op, 0, snaps);
+      assert(r == 0);
+      comp->release();
+    }
+
+    if (!copy_on_read) {
+      librados::ObjectWriteOperation write_op;
+      if (add_copyup_op) {
+        // CoW did not need to handle existing snapshots
+        write_op.exec("rbd", "copyup", m_copyup_data);
+      }
+
+      // merge all pending write ops into this single RADOS op
+      for (size_t i=0; i<m_pending_requests.size(); ++i) {
+        AioRequest *req = m_pending_requests[i];
+        ldout(m_ictx->cct, 20) << __func__ << " add_copyup_ops " << req
+                               << dendl;
+        req->add_copyup_ops(&write_op);
+      }
+      assert(write_op.size() != 0);
+
+      snaps.insert(snaps.end(), snapc.snaps.begin(), snapc.snaps.end());
+      librados::AioCompletion *comp =
+        librados::Rados::aio_create_completion(create_callback_context(), NULL,
+                                               rados_ctx_cb);
+      r = m_ictx->md_ctx.aio_operate(m_oid, comp, &write_op, snapc.seq.val,
+                                     snaps);
+      assert(r == 0);
+      comp->release();
+    }
     return false;
   }
 
@@ -138,6 +174,7 @@ namespace librbd {
 		   << ", extents " << m_image_extents
 		   << ", r " << r << dendl;
 
+    uint64_t pending_copyups;
     switch (m_state) {
     case STATE_READ_FROM_PARENT:
       ldout(cct, 20) << "READ_FROM_PARENT" << dendl;
@@ -157,9 +194,15 @@ namespace librbd {
       break;
 
     case STATE_COPYUP:
-      ldout(cct, 20) << "COPYUP" << dendl;
-      complete_requests(r);
-      return true;
+      // invoked via a finisher in librados, so thread safe
+      pending_copyups = m_pending_copyups.dec();
+      ldout(cct, 20) << "COPYUP (" << pending_copyups << " pending)"
+                     << dendl;
+      if (pending_copyups == 0 || r < 0) {
+        complete_requests(r);
+        return (pending_copyups == 0);
+      }
+      break;
 
     default:
       lderr(cct) << "invalid state: " << m_state << dendl;
