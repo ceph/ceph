@@ -580,6 +580,14 @@ NewStore::NewStore(CephContext *cct, const string& path)
     nid_max(0),
     wal_lock("NewStore::wal_lock"),
     wal_seq(0),
+    wal_tp(cct,
+	   "NewStore::wal_tp",
+	   cct->_conf->newstore_wal_threads,
+	   "newstore_wal_threads"),
+    wal_wq(this,
+	     cct->_conf->newstore_wal_thread_timeout,
+	     cct->_conf->newstore_wal_thread_suicide_timeout,
+	     &wal_tp),
     finisher(cct),
     fsync_tp(cct,
 	     "NewStore::fsync_tp",
@@ -953,6 +961,7 @@ int NewStore::mount()
 
   finisher.start();
   fsync_tp.start();
+  wal_tp.start();
   kv_sync_thread.create();
 
   mounted = true;
@@ -981,6 +990,10 @@ int NewStore::umount()
   fsync_tp.stop();
   dout(20) << __func__ << " stopping kv thread" << dendl;
   _kv_stop();
+  dout(20) << __func__ << " draining wal_wq" << dendl;
+  wal_wq.drain();
+  dout(20) << __func__ << " stopping wal_tp" << dendl;
+  wal_tp.stop();
   dout(20) << __func__ << " draining finisher" << dendl;
   finisher.wait_for_empty();
   dout(20) << __func__ << " stopping finisher" << dendl;
@@ -2088,15 +2101,6 @@ void NewStore::_txc_submit_kv(TransContext *txc)
   kv_cond.SignalOne();
 }
 
-struct C_ApplyWAL : public Context {
-  NewStore *store;
-  NewStore::TransContext *txc;
-  C_ApplyWAL(NewStore *s, NewStore::TransContext *t) : store(s), txc(t) {}
-  void finish(int r) {
-    store->_apply_wal_transaction(txc);
-  }
-};
-
 void NewStore::_txc_finish_kv(TransContext *txc)
 {
   dout(20) << __func__ << " txc " << txc << dendl;
@@ -2125,7 +2129,7 @@ void NewStore::_txc_finish_kv(TransContext *txc)
     dout(20) << __func__ << " starting wal apply" << dendl;
     txc->state = TransContext::STATE_WAL_QUEUED;
     txc->osr->qlock.Unlock();
-    finisher.queue(new C_ApplyWAL(this, txc));
+    wal_wq.queue(txc);
   } else {
     txc->state = TransContext::STATE_FINISHING;
     txc->osr->qlock.Unlock();
