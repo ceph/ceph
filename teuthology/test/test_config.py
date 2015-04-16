@@ -84,8 +84,8 @@ class TestTeuthologyConfig(TestYamlConfig):
     def test_set_ceph_git_base_via_private(self):
         conf_obj = self.test_class()
         conf_obj._conf['ceph_git_base_url'] = \
-            "git://ceph.com/"
-        assert conf_obj.ceph_git_base_url == "git://ceph.com/"
+            "git://git.ceph.com/"
+        assert conf_obj.ceph_git_base_url == "git://git.ceph.com/"
 
     def test_set_nonstandard(self):
         conf_obj = self.test_class()

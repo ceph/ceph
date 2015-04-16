@@ -289,7 +289,7 @@ def _update_deb_package_list_and_install(ctx, remote, debs, config):
         remote.run(
             args=[
                 'wget', '-q', '-O-',
-                'https://ceph.com/git/?p=ceph.git;a=blob_plain;f=keys/autobuild.asc',
+                'http://git.ceph.com/?p=ceph.git;a=blob_plain;f=keys/autobuild.asc',
                 run.Raw('|'),
                 'sudo', 'apt-key', 'add', '-',
             ],
@@ -865,7 +865,7 @@ def _upgrade_deb_packages(ctx, config, remote, debs):
         remote.run(
             args=[
                 'wget', '-q', '-O-',
-                'https://ceph.com/git/?p=ceph.git;a=blob_plain;f=keys/autobuild.asc',
+                'http://git.ceph.com/?p=ceph.git;a=blob_plain;f=keys/autobuild.asc',
                 run.Raw('|'),
                 'sudo', 'apt-key', 'add', '-',
             ],
