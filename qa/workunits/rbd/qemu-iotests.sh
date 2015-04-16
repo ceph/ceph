@@ -31,7 +31,7 @@ then
     cd ..
     testlist=$testlist' 032 033 055 077'
 else
-    git clone git://ceph.com/git/qemu-iotests.git
+    git clone git://git.ceph.com/qemu-iotests.git
 fi
 
 cd "$iotests"
