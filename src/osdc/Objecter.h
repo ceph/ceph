@@ -956,11 +956,13 @@ struct ObjectOperation {
   }
 
   void copy_from(object_t src, snapid_t snapid, object_locator_t src_oloc,
-		 version_t src_version, unsigned flags) {
+		 version_t src_version, unsigned flags,
+		 unsigned src_fadvise_flags) {
     OSDOp& osd_op = add_op(CEPH_OSD_OP_COPY_FROM);
     osd_op.op.copy_from.snapid = snapid;
     osd_op.op.copy_from.src_version = src_version;
     osd_op.op.copy_from.flags = flags;
+    osd_op.op.copy_from.src_fadvise_flags = src_fadvise_flags;
     ::encode(src, osd_op.indata);
     ::encode(src_oloc, osd_op.indata);
   }
