@@ -76,7 +76,7 @@ struct ceph_file_layout {
 } __attribute__ ((packed));
 
 
-typedef struct _inodeno_t {
+typedef struct inodeno_t {
   uint64_t val;
 } inodeno_t;
 
@@ -90,15 +90,17 @@ typedef struct vinodeno_t {
 } vinodeno_t;
 
 typedef struct Fh Fh;
+#else /* _cplusplus */
+
+struct inodeno_t;
+struct vinodeno_t;
+typedef struct vinodeno_t vinodeno;
 
 #endif /* ! __cplusplus */
 
-struct inodeno_t;
 struct Inode;
 typedef struct Inode Inode;
 
-struct vinodeno_t;
-typedef struct vinodeno_t vinodeno;
 struct ceph_mount_info;
 struct ceph_dir_result;
 struct CephContext;

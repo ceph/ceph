@@ -87,7 +87,7 @@ using ceph::crypto::SHA1;
 #undef dout_prefix
 #define dout_prefix *_dout << "filestore(" << basedir << ") "
 
-#define COMMIT_SNAP_ITEM "snap_%lld"
+#define COMMIT_SNAP_ITEM "snap_%llu"
 #define CLUSTER_SNAP_ITEM "clustersnap_%s"
 
 #define REPLAY_GUARD_XATTR "user.cephos.seq"
