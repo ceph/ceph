@@ -962,7 +962,11 @@ int NewStore::mount()
   finisher.start();
   fsync_tp.start();
   kv_sync_thread.create();
-  aio_thread.create();
+#ifdef HAVE_LIBAIO
+  if (g_conf->newstore_aio) {
+    aio_thread.create();
+  }
+#endif
 
   mounted = true;
   return 0;
