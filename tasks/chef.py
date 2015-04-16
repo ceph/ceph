@@ -25,7 +25,7 @@ def task(ctx, config):
         config = {}
 
     assert isinstance(config, dict), "chef - need config"
-    chef_script = config.get('script_url', 'http://ceph.com/git/?p=ceph-qa-chef.git;a=blob_plain;f=solo/solo-from-scratch;hb=HEAD')
+    chef_script = config.get('script_url', 'http://git.ceph.com/?p=ceph-qa-chef.git;a=blob_plain;f=solo/solo-from-scratch;hb=HEAD')
     chef_repo = config.get('chef_repo', "")
     chef_branch = config.get('chef_branch', "")
     run.wait(
