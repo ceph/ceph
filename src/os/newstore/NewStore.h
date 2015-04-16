@@ -600,7 +600,7 @@ private:
 	     CollectionRef& c,
 	     const ghobject_t& oid,
 	     uint64_t offset, size_t len,
-	     const bufferlist& bl,
+	     bufferlist& bl,
 	     uint32_t fadvise_flags);
   int _do_overlay_clear(TransContext *txc,
 			OnodeRef o);
@@ -618,7 +618,7 @@ private:
   int _do_write(TransContext *txc,
 		OnodeRef o,
 		uint64_t offset, uint64_t length,
-		const bufferlist& bl,
+		bufferlist& bl,
 		uint32_t fadvise_flags);
   int _touch(TransContext *txc,
 	     CollectionRef& c,

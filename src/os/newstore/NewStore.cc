@@ -2290,6 +2290,11 @@ int NewStore::_do_wal_transaction(wal_transaction_t& wt)
 	    (p->length & ~CEPH_PAGE_MASK) == 0) {
 	  dout(20) << __func__ << " page-aligned, using O_DIRECT" << dendl;
 	  flags |= O_DIRECT;
+	  if (!p->data.is_page_aligned()) {
+	    dout(20) << __func__ << " rebuilding buffer to be page-aligned"
+		     << dendl;
+	    p->data.rebuild();
+	  }
 	}
 	int fd = _open_fid(p->fid, flags);
 	if (fd < 0)
@@ -2982,11 +2987,12 @@ int NewStore::_do_write_all_overlays(TransContext *txc,
 int NewStore::_do_write(TransContext *txc,
 			OnodeRef o,
 			uint64_t offset, uint64_t length,
-			const bufferlist& bl,
+			bufferlist& bl,
 			uint32_t fadvise_flags)
 {
   int fd = -1;
   int r = 0;
+  unsigned flags;
 
   dout(20) << __func__ << " have " << o->onode.size
 	   << " bytes in " << o->onode.data_map.size()
@@ -3025,17 +3031,22 @@ int NewStore::_do_write(TransContext *txc,
     goto out;
   }
 
+  flags = O_RDWR;
+  if (g_conf->newstore_o_direct &&
+      (offset & ~CEPH_PAGE_MASK) == 0 &&
+      (length & ~CEPH_PAGE_MASK) == 0) {
+    dout(20) << __func__ << " page-aligned, can use O_DIRECT" << dendl;
+    flags |= O_DIRECT;
+    if (!bl.is_page_aligned()) {
+      dout(20) << __func__ << " rebuilding buffer to be page-aligned" << dendl;
+      bl.rebuild();
+    }
+  }
+
   if (o->onode.size <= offset ||
       o->onode.size == 0 ||
       o->onode.data_map.empty()) {
     _do_overlay_clear(txc, o);
-    unsigned flags = O_RDWR;
-    if (g_conf->newstore_o_direct &&
-	(offset & ~CEPH_PAGE_MASK) == 0 &&
-	(length & ~CEPH_PAGE_MASK) == 0) {
-      dout(20) << __func__ << " page-aligned, using O_DIRECT" << dendl;
-      flags |= O_DIRECT;
-    }
     if (o->onode.data_map.empty()) {
       // create
       fragment_t &f = o->onode.data_map[0];
@@ -3180,7 +3191,7 @@ int NewStore::_write(TransContext *txc,
 		     CollectionRef& c,
 		     const ghobject_t& oid,
 		     uint64_t offset, size_t length,
-		     const bufferlist& bl,
+		     bufferlist& bl,
 		     uint32_t fadvise_flags)
 {
   dout(15) << __func__ << " " << c->cid << " " << oid
