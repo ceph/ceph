@@ -798,9 +798,11 @@ OPTION(newstore_sync_queue_transaction, OPT_BOOL, false)  // perform write synch
 OPTION(newstore_fsync_threads, OPT_INT, 16)  // num threads calling fsync
 OPTION(newstore_fsync_thread_timeout, OPT_INT, 30) // thread timeout value
 OPTION(newstore_fsync_thread_suicide_timeout, OPT_INT, 120) // suicide timeout value
-OPTION(newstore_wal_threads, OPT_INT, 2)
+OPTION(newstore_wal_threads, OPT_INT, 4)
 OPTION(newstore_wal_thread_timeout, OPT_INT, 30)
 OPTION(newstore_wal_thread_suicide_timeout, OPT_INT, 120)
+OPTION(newstore_wal_max_ops, OPT_U64, 64)
+OPTION(newstore_wal_max_bytes, OPT_U64, 64*1024*1024)
 OPTION(newstore_fid_prealloc, OPT_INT, 1024)
 OPTION(newstore_nid_prealloc, OPT_INT, 1024)
 OPTION(newstore_overlay_max_length, OPT_INT, 65536)
