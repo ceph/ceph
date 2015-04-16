@@ -48,10 +48,10 @@ def task(ctx, config):
                 'cd', dir,
                 run.Raw('&&'),
                 'wget','-q', '-Orun_seed_to.sh',
-                'http://ceph.com/git/?p=ceph.git;a=blob_plain;f=src/test/objectstore/run_seed_to.sh;hb=HEAD',
+                'http://git.ceph.com/?p=ceph.git;a=blob_plain;f=src/test/objectstore/run_seed_to.sh;hb=HEAD',
                 run.Raw('&&'),
                 'wget','-q', '-Orun_seed_to_range.sh',
-                'http://ceph.com/git/?p=ceph.git;a=blob_plain;f=src/test/objectstore/run_seed_to_range.sh;hb=HEAD',
+                'http://git.ceph.com/?p=ceph.git;a=blob_plain;f=src/test/objectstore/run_seed_to_range.sh;hb=HEAD',
                 run.Raw('&&'),
                 'chmod', '+x', 'run_seed_to.sh', 'run_seed_to_range.sh',
                 ]);
