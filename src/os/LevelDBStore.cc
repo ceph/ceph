@@ -74,12 +74,6 @@ int LevelDBStore::do_open(ostream &out, bool create_if_missing)
     return -EINVAL;
   }
 
-  if (g_conf->leveldb_compact_on_mount) {
-    derr << "Compacting leveldb store..." << dendl;
-    compact();
-    derr << "Finished compacting leveldb store" << dendl;
-  }
-
   PerfCountersBuilder plb(g_ceph_context, "leveldb", l_leveldb_first, l_leveldb_last);
   plb.add_u64_counter(l_leveldb_gets, "leveldb_get");
   plb.add_u64_counter(l_leveldb_txns, "leveldb_transaction");
@@ -89,6 +83,12 @@ int LevelDBStore::do_open(ostream &out, bool create_if_missing)
   plb.add_u64(l_leveldb_compact_queue_len, "leveldb_compact_queue_len");
   logger = plb.create_perf_counters();
   cct->get_perfcounters_collection()->add(logger);
+
+  if (g_conf->leveldb_compact_on_mount) {
+    derr << "Compacting leveldb store..." << dendl;
+    compact();
+    derr << "Finished compacting leveldb store" << dendl;
+  }
   return 0;
 }
 
