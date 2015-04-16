@@ -589,6 +589,8 @@ NewStore::NewStore(CephContext *cct, const string& path)
 	     cct->_conf->newstore_fsync_thread_timeout,
 	     cct->_conf->newstore_fsync_thread_suicide_timeout,
 	     &fsync_tp),
+    aio_thread(this),
+    aio_stop(false),
     kv_sync_thread(this),
     kv_lock("NewStore::kv_lock"),
     kv_stop(false),
@@ -954,6 +956,7 @@ int NewStore::mount()
   finisher.start();
   fsync_tp.start();
   kv_sync_thread.create();
+  aio_thread.create();
 
   mounted = true;
   return 0;
@@ -979,6 +982,8 @@ int NewStore::umount()
 
   dout(20) << __func__ << " stopping fsync_wq" << dendl;
   fsync_tp.stop();
+  dout(20) << __func__ << " stopping aio thread" << dendl;
+  _aio_stop();
   dout(20) << __func__ << " stopping kv thread" << dendl;
   _kv_stop();
   dout(20) << __func__ << " draining finisher" << dendl;
@@ -2303,6 +2308,34 @@ void NewStore::_osr_reap_done(OpSequencer *osr)
   }
 }
 
+void NewStore::_aio_thread()
+{
+  dout(10) << __func__ << " start" << dendl;
+  while (!aio_stop) {
+    dout(30) << __func__ << " polling" << dendl;
+    FS::aio_t *aio;
+    int r = aio_queue.get_next_completed(g_conf->newstore_aio_poll_ms, &aio);
+    if (r < 0) {
+      derr << __func__ << " got " << cpp_strerror(r) << dendl;
+    }
+    if (r == 1) {
+      TransContext *txc = static_cast<TransContext*>(aio->priv);
+      int left = txc->num_aio.dec();
+      dout(10) << __func__ << " finished aio on " << txc << ", "
+	       << left << " left" << dendl;
+      if (left == 0) {
+	txc->state = TransContext::STATE_AIO_DONE;
+	if (!txc->fds.empty()) {
+	  _txc_queue_fsync(txc);
+	} else {
+	  _txc_finish_fsync(txc);
+	}
+      }
+    }
+  }
+  dout(10) << __func__ << " end" << dendl;
+}
+
 void NewStore::_kv_sync_thread()
 {
   dout(10) << __func__ << " start" << dendl;
@@ -2576,7 +2609,16 @@ int NewStore::queue_transactions(
     _txc_finish_kv(txc);
   } else {
     // async path
-    if (!txc->fds.empty()) {
+    if (!txc->aios.empty()) {
+      txc->state = TransContext::STATE_AIO_QUEUED;
+      dout(20) << __func__ << " submitting " << txc->num_aio.read() << " aios"
+	       << dendl;
+      for (list<FS::aio_t>::iterator p = txc->aios.begin();
+	   p != txc->aios.end();
+	   ++p) {
+	aio_queue.submit(*p);
+      }
+    } else if (!txc->fds.empty()) {
       _txc_queue_fsync(txc);
     } else {
       _txc_finish_fsync(txc);
@@ -3151,6 +3193,7 @@ int NewStore::_do_write(TransContext *txc,
       dout(20) << __func__ << " page-aligned, using O_DIRECT" << dendl;
       flags |= O_DIRECT;
     }
+    uint64_t x_offset;
     if (o->onode.data_map.empty()) {
       // create
       fragment_t &f = o->onode.data_map[0];
@@ -3161,7 +3204,7 @@ int NewStore::_do_write(TransContext *txc,
 	r = fd;
 	goto out;
       }
-      ::lseek64(fd, offset, SEEK_SET);
+      x_offset = offset;
       dout(20) << __func__ << " create " << f.fid << " writing "
 	       << offset << "~" << length << dendl;
     } else {
@@ -3175,17 +3218,30 @@ int NewStore::_do_write(TransContext *txc,
       }
       ::ftruncate(fd, f.length);  // in case there is trailing crap
       f.length = (offset + length) - f.offset;
-      ::lseek64(fd, offset - f.offset, SEEK_SET);
+      x_offset = offset - f.offset;
       dout(20) << __func__ << " append " << f.fid << " writing "
 	       << (offset - f.offset) << "~" << length << dendl;
     }
     if (offset + length > o->onode.size) {
       o->onode.size = offset + length;
     }
-    r = bl.write_fd(fd);
-    if (r < 0) {
-      derr << __func__ << " bl.write_fd error: " << cpp_strerror(r) << dendl;
-      goto out;
+#ifdef HAVE_LIBAIO
+    if (g_conf->newstore_aio) {
+      txc->aios.push_back(FS::aio_t(txc, fd));
+      txc->num_aio.inc();
+      FS::aio_t& aio = txc->aios.back();
+      bl.prepare_iov(&aio.iov);
+      txc->aio_bl.append(bl);
+      aio.pwritev(x_offset);
+    } else
+#endif
+    {
+      ::lseek64(fd, x_offset, SEEK_SET);
+      r = bl.write_fd(fd);
+      if (r < 0) {
+	derr << __func__ << " bl.write_fd error: " << cpp_strerror(r) << dendl;
+	goto out;
+      }
     }
     txc->sync_fd(fd);
     r = 0;
@@ -3216,10 +3272,23 @@ int NewStore::_do_write(TransContext *txc,
     dout(20) << __func__ << " replace old fid " << op->fid
 	     << " with new fid " << f.fid
 	     << ", writing " << offset << "~" << length << dendl;
-    r = bl.write_fd(fd);
-    if (r < 0) {
-      derr << __func__ << " bl.write_fd error: " << cpp_strerror(r) << dendl;
-      goto out;
+
+#ifdef HAVE_LIBAIO
+    if (g_conf->newstore_aio) {
+      txc->aios.push_back(FS::aio_t(txc, fd));
+      txc->num_aio.inc();
+      FS::aio_t& aio = txc->aios.back();
+      bl.prepare_iov(&aio.iov);
+      txc->aio_bl.append(bl);
+      aio.pwritev(0);
+    } else
+#endif
+    {
+      r = bl.write_fd(fd);
+      if (r < 0) {
+	derr << __func__ << " bl.write_fd error: " << cpp_strerror(r) << dendl;
+	goto out;
+      }
     }
     txc->sync_fd(fd);
     r = 0;
