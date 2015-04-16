@@ -7799,8 +7799,10 @@ int Client::_do_filelock(Inode *in, Fh *fh, int lock_type, int op, int sleep,
 	if (!in->flock_locks)
 	  in->flock_locks = new ceph_lock_state_t(cct);
 	lock_state = in->flock_locks;
-      } else
+      } else {
 	assert(0);
+	return -EINVAL;
+      }
       _update_lock_state(fl, owner, lock_state);
 
       if (fh) {
@@ -7830,8 +7832,10 @@ int Client::_interrupt_filelock(MetaRequest *req)
     lock_type = CEPH_LOCK_FLOCK_INTR;
   else if (req->head.args.filelock_change.rule == CEPH_LOCK_FCNTL)
     lock_type = CEPH_LOCK_FCNTL_INTR;
-  else
+  else {
     assert(0);
+    return -EINVAL;
+  }
 
   MetaRequest *intr_req = new MetaRequest(CEPH_MDS_OP_SETFILELOCK);
   filepath path;

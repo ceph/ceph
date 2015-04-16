@@ -184,7 +184,7 @@ TEST_P(ParameterTest, parameter_all)
 
   result = shec->encode(want_to_encode, in, &encoded);
   EXPECT_EQ(0, result);
-  EXPECT_EQ(i_k+i_m, encoded.size());
+  EXPECT_EQ(i_k+i_m, (int)encoded.size());
   EXPECT_EQ(c_size, encoded[0].length());
 
   //decode
@@ -248,10 +248,10 @@ TEST_P(ParameterTest, parameter_all)
   EXPECT_STREQ("myrule", crush->rule_name_map[0].c_str());
 
   //get_chunk_count
-  EXPECT_EQ(i_k+i_m, shec->get_chunk_count());
+  EXPECT_EQ(i_k+i_m, (int)shec->get_chunk_count());
 
   //get_data_chunk_count
-  EXPECT_EQ(i_k, shec->get_data_chunk_count());
+  EXPECT_EQ(i_k, (int)shec->get_data_chunk_count());
 
   //get_chunk_size
   EXPECT_EQ(c_size, shec->get_chunk_size(192));

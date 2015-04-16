@@ -2004,7 +2004,7 @@ public:
 
  private:
   // Prevent copying
-  PG(const PG& rhs);
+  explicit PG(const PG& rhs);
   PG& operator=(const PG& rhs);
   const spg_t pg_id;
   uint64_t peer_features;

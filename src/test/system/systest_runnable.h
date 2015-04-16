@@ -70,7 +70,7 @@ protected:
   const char **m_argv;
 
 private:
-  SysTestRunnable(const SysTestRunnable &rhs);
+  explicit SysTestRunnable(const SysTestRunnable &rhs);
   SysTestRunnable& operator=(const SysTestRunnable &rhs);
   void update_id_str(bool started);
   void set_argv(int argc, const char **argv);

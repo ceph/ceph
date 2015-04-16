@@ -1939,12 +1939,12 @@ TEST_F(PGLogTest, filter_log_1) {
 
     // Some should be removed
     log.filter_log(pgid, *osdmap, hit_set_namespace);
-    EXPECT_LE(log.log.size(), total);
+    EXPECT_LE(log.log.size(), (size_t)total);
 
     // If we filter a second time, there should be the same total
     total = log.log.size();
     log.filter_log(pgid, *osdmap, hit_set_namespace);
-    EXPECT_EQ(log.log.size(), total);
+    EXPECT_EQ(log.log.size(), (size_t)total);
 
     // Increase pg_num as if there would be a split
     int new_pg_num = pg_num * 16;
@@ -1961,7 +1961,7 @@ TEST_F(PGLogTest, filter_log_1) {
 
     // We should have fewer entries after a filter
     log.filter_log(pgid, *osdmap, hit_set_namespace);
-    EXPECT_LE(log.log.size(), total);
+    EXPECT_LE(log.log.size(), (size_t)total);
 
     // Make sure all internal entries are retained
     int count = 0;
