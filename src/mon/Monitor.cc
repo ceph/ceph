@@ -4271,11 +4271,17 @@ void Monitor::_scrub(ScrubResult *r)
 
   dout(10) << __func__ << " prefixes " << prefixes << dendl;
 
-  pair<string,string> start;
-  MonitorDBStore::Synchronizer synchronizer = store->get_synchronizer(start, prefixes);
+  if (scrub_state) {
+    dout(10) << __func__ << " scrub already in progress" << dendl;
+    return;
+  }
 
-  while (synchronizer->has_next_chunk()) {
-    pair<string,string> k = synchronizer->get_next_key();
+  scrub_state.reset(new ScrubState);
+  MonitorDBStore::Synchronizer it =
+    store->get_synchronizer(scrub_state->last_key, prefixes);
+
+  while (it->has_next_chunk()) {
+    pair<string,string> k = it->get_next_key();
     bufferlist bl;
     store->get(k.first, k.second, bl);
     dout(30) << __func__ << " " << k << " bl " << bl.length() << " bytes crc " << bl.crc32c(0) << dendl;
@@ -4284,6 +4290,9 @@ void Monitor::_scrub(ScrubResult *r)
       r->prefix_crc[k.first] = 0;
     r->prefix_crc[k.first] = bl.crc32c(r->prefix_crc[k.first]);
   }
+  scrub_state->last_key = it->get_last_key();
+
+  scrub_state.reset();
 }
 
 void Monitor::scrub_finish()
@@ -4317,6 +4326,7 @@ void Monitor::scrub_reset()
   dout(10) << __func__ << dendl;
   scrub_version = 0;
   scrub_result.clear();
+  scrub_state.reset();
 }
 
 

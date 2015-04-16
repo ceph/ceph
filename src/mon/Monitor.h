@@ -255,9 +255,17 @@ private:
       mon->scrub();
     }
   };
-  Context *scrub_event;
+  Context *scrub_event;       ///< periodic event to trigger scrub (leader)
   void scrub_event_start();
   void scrub_event_cancel();
+
+  struct ScrubState {
+    pair<string,string> last_key; ///< last scrubbed key
+
+    ScrubState() { }
+    virtual ~ScrubState() { }
+  };
+  ceph::shared_ptr<ScrubState> scrub_state; ///< keeps track of current scrub
 
   /**
    * @defgroup Monitor_h_sync Synchronization
