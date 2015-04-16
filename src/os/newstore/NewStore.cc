@@ -2292,7 +2292,8 @@ int NewStore::_do_wal_transaction(wal_transaction_t& wt)
 	if (g_conf->newstore_o_direct &&
 	    (p->offset & ~CEPH_PAGE_MASK) == 0 &&
 	    (p->length & ~CEPH_PAGE_MASK) == 0) {
-	  dout(20) << __func__ << " page-aligned, using O_DIRECT" << dendl;
+	  dout(20) << __func__ << " page-aligned io, using O_DIRECT, "
+		   << p->data.buffers().size() << " buffers" << dendl;
 	  flags |= O_DIRECT;
 	  if (!p->data.is_page_aligned()) {
 	    dout(20) << __func__ << " rebuilding buffer to be page-aligned"
@@ -3039,7 +3040,8 @@ int NewStore::_do_write(TransContext *txc,
   if (g_conf->newstore_o_direct &&
       (offset & ~CEPH_PAGE_MASK) == 0 &&
       (length & ~CEPH_PAGE_MASK) == 0) {
-    dout(20) << __func__ << " page-aligned, can use O_DIRECT" << dendl;
+    dout(20) << __func__ << " page-aligned, can use O_DIRECT, "
+	     << bl.buffers().size() << " buffers" << dendl;
     flags |= O_DIRECT;
     if (!bl.is_page_aligned()) {
       dout(20) << __func__ << " rebuilding buffer to be page-aligned" << dendl;
