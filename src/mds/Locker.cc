@@ -2525,7 +2525,8 @@ void Locker::handle_client_caps(MClientCaps *m)
 	      << " client." << client << " on " << *in << dendl;
 
       // this cap now follows a later snap (i.e. the one initiating this flush, or later)
-      cap->client_follows = MAX(snap, (snapid_t)(in->first + 1));
+      if (in == head_in)
+	cap->client_follows = snap < CEPH_NOSNAP ? snap : realm->get_newest_seq();
    
       // we can prepare the ack now, since this FLUSHEDSNAP is independent of any
       // other cap ops.  (except possibly duplicate FLUSHSNAP requests, but worst
