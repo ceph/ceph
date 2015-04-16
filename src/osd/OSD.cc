@@ -5910,25 +5910,27 @@ void OSD::sched_scrub()
   pair<utime_t, spg_t> pos;
   if (service.first_scrub_stamp(&pos)) {
     do {
-      utime_t t = pos.first;
       spg_t pgid = pos.second;
-      dout(30) << "sched_scrub examine " << pgid << " at " << t << dendl;
-
-      utime_t diff = now - t;
-      if ((double)diff < cct->_conf->osd_scrub_min_interval) {
-	dout(10) << "sched_scrub " << pgid << " at " << t
-		 << ": " << (double)diff << " < min (" << cct->_conf->osd_scrub_min_interval << " seconds)" << dendl;
-	break;
-      }
-      if ((double)diff < cct->_conf->osd_scrub_max_interval && !load_is_low) {
-	// save ourselves some effort
-	dout(10) << "sched_scrub " << pgid << " high load at " << t
-		 << ": " << (double)diff << " < max (" << cct->_conf->osd_scrub_max_interval << " seconds)" << dendl;
-	break;
-      }
-
       PG *pg = _lookup_lock_pg(pgid);
       if (pg) {
+        utime_t t = (pos.first == utime_t() ? utime_t() : pg->info.history.last_scrub_stamp);
+        dout(30) << "sched_scrub examine " << pgid << " at " << t << dendl;
+  
+        utime_t diff = now - t;
+        if ((double)diff < cct->_conf->osd_scrub_min_interval) {
+  	  dout(10) << "sched_scrub " << pgid << " at " << t
+  		 << ": " << (double)diff << " < min (" << cct->_conf->osd_scrub_min_interval << " seconds)" << dendl;
+	  pg->unlock();
+  	  break;
+        }
+        if ((double)diff < cct->_conf->osd_scrub_max_interval && !load_is_low) {
+  	// save ourselves some effort
+  	  dout(10) << "sched_scrub " << pgid << " high load at " << t
+  		 << ": " << (double)diff << " < max (" << cct->_conf->osd_scrub_max_interval << " seconds)" << dendl;
+	  pg->unlock();
+  	  break;
+        }
+
 	if (pg->get_pgbackend()->scrub_supported() && pg->is_active() &&
 	    (load_is_low ||
 	     (double)diff >= cct->_conf->osd_scrub_max_interval ||
