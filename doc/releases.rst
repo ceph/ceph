@@ -27,6 +27,32 @@ Supporting a release means:
 * The `stable releases and backport team <http://tracker.ceph.com/projects/ceph-releases>`_
   publishes ``point releases`` including fixes that have been backported to the release.
 
+In the following, the life time of a LTS is calculated to be 18 months
+after the month of the first release. For instance, Dumpling is
+published August 2013 and 18 months starting September 2013 is
+February 2015, therefore by March 2015 Dumpling should be End of
+Life. The lifetime of a release may be extended a few months. For
+instance although Dumpling theoritical End of Life was March 2015, it
+was extended to May 2015.
+
+There is no estimated End of Life for a stable release that is not a
+LTS because it is set by the release date of the next stable release
+instead of a fixed duration.
+
++----------------------------+-----------+-----------+-----------+-----------+-----------+
+|                            |`Dumpling`_|`Emperor`_ |`Firefly`_ |`Giant`_   |`Hammer`_  |
+|                            |LTS        |Stable     |LTS        |Stable     |LTS        |
++----------------------------+-----------+-----------+-----------+-----------+-----------+
+|     First release          | August    | November  | May       | October   | April     |
+|                            | 2013      | 2013      | 2014      | 2014      | 2015      |
++----------------------------+-----------+-----------+-----------+-----------+-----------+
+| Estimated End of Life      | March     |           | January   |           | November  |
+|                            | 2015      |           | 2016      |           | 2016      |
++----------------------------+-----------+-----------+-----------+-----------+-----------+
+|   Actual End of Life       | May       | May       |           | April     |           |
+|                            | 2015      | 2014      |           | 2015      |           |
++----------------------------+-----------+-----------+-----------+-----------+-----------+
+
 +----------------+-----------+-----------+-----------+-----------+-----------+-----------+
 |                |Development|`Dumpling`_|`Emperor`_ |`Firefly`_ |`Giant`_   |`Hammer`_  |
 |                |Testing    |LTS        |Stable     |LTS        |Stable     |LTS        |
