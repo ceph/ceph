@@ -2103,6 +2103,14 @@ TEST_P(StoreTest, OMapIterator) {
     std::cout << "upper bound, bound key is " << bound_key << " >= iter key is " << iter->key() << std::endl;
   }
   ASSERT_EQ(correct, true);
+
+  {
+    ObjectStore::Transaction t;
+    t.remove(cid, hoid);
+    t.remove_collection(cid);
+    r = store->apply_transaction(t);
+    ASSERT_EQ(r, 0);
+  }
 }
 
 TEST_P(StoreTest, XattrTest) {
