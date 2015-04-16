@@ -190,6 +190,7 @@ public:
     list<Context*> oncommits;  ///< more commit completions
     list<CollectionRef> removed_collections; ///< colls we removed
 
+    boost::intrusive::list_member_hook<> wal_queue_item;
     wal_transaction_t *wal_txn; ///< wal transaction (if any)
     unsigned num_fsyncs_completed;
 
@@ -237,7 +238,6 @@ public:
     }
   };
 
-
   class OpSequencer : public Sequencer_impl {
   public:
     Mutex qlock;
@@ -250,11 +250,24 @@ public:
 	&TransContext::sequencer_item> > q_list_t;
     q_list_t q;  ///< transactions
 
+    typedef boost::intrusive::list<
+      TransContext,
+      boost::intrusive::member_hook<
+	TransContext,
+	boost::intrusive::list_member_hook<>,
+	&TransContext::wal_queue_item> > wal_queue_t;
+    wal_queue_t wal_q; ///< transactions
+
+    boost::intrusive::list_member_hook<> wal_osr_queue_item;
+
     Sequencer *parent;
+
+    Mutex wal_apply_lock;
 
     OpSequencer()
       : qlock("NewStore::OpSequencer::qlock", false, false),
-	parent(NULL) {
+	parent(NULL),
+	wal_apply_lock("NewStore::OpSequencer::wal_apply_lock") {
     }
     ~OpSequencer() {
       assert(q.empty());
@@ -336,6 +349,75 @@ public:
     }
   };
 
+  class WALWQ : public ThreadPool::WorkQueue<TransContext> {
+    // We need to order WAL items within each Sequencer.  To do that,
+    // queue each txc under osr, and queue the osr's here.  When we
+    // dequeue an txc, requeue the osr if there are more pending, and
+    // do it at the end of the list so that the next thread does not
+    // get a conflicted txc.  Hold an osr mutex while doing the wal to
+    // preserve the ordering.
+  public:
+    typedef boost::intrusive::list<
+      OpSequencer,
+      boost::intrusive::member_hook<
+	OpSequencer,
+	boost::intrusive::list_member_hook<>,
+	&OpSequencer::wal_osr_queue_item> > wal_osr_queue_t;
+
+  private:
+    NewStore *store;
+    wal_osr_queue_t wal_queue;
+
+  public:
+    WALWQ(NewStore *s, time_t ti, time_t sti, ThreadPool *tp)
+      : ThreadPool::WorkQueue<TransContext>("NewStore::WALWQ", ti, sti, tp),
+	store(s) {
+    }
+    bool _empty() {
+      return wal_queue.empty();
+    }
+    bool _enqueue(TransContext *i) {
+      if (i->osr->wal_q.empty()) {
+	wal_queue.push_back(*i->osr);
+      }
+      i->osr->wal_q.push_back(*i);
+      return true;
+    }
+    void _dequeue(TransContext *p) {
+      assert(0 == "not needed, not implemented");
+    }
+    TransContext *_dequeue() {
+      if (wal_queue.empty())
+	return NULL;
+      OpSequencer *osr = &wal_queue.front();
+      TransContext *i = &osr->wal_q.front();
+      osr->wal_q.pop_front();
+      wal_queue.pop_front();
+      if (!osr->wal_q.empty()) {
+	// requeue at the end to minimize contention
+	wal_queue.push_back(*i->osr);
+      }
+      return i;
+    }
+    void _process(TransContext *i, ThreadPool::TPHandle &handle) {
+      // preserve wal ordering for this sequencer
+      Mutex::Locker l(i->osr->wal_apply_lock);
+      store->_apply_wal_transaction(i);
+    }
+    void _clear() {
+      assert(wal_queue.empty());
+    }
+
+    void flush() {
+      lock();
+      while (!wal_queue.empty()) {
+	_wait();
+      }
+      unlock();
+      drain();
+    }
+  };
+
   struct KVSyncThread : public Thread {
     NewStore *store;
     KVSyncThread(NewStore *s) : store(s) {}
@@ -371,6 +453,8 @@ private:
 
   Mutex wal_lock;
   atomic64_t wal_seq;
+  ThreadPool wal_tp;
+  WALWQ wal_wq;
 
   Finisher finisher;
   ThreadPool fsync_tp;
