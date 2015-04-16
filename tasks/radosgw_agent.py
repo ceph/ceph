@@ -45,7 +45,7 @@ def run_radosgw_agent(ctx, config):
                 'git', 'clone',
                 '-b', branch,
 #                'https://github.com/ceph/radosgw-agent.git',
-                'git://ceph.com/git/radosgw-agent.git',
+                'git://git.ceph.com/radosgw-agent.git',
                 'radosgw-agent.{client}'.format(client=client),
                 ]
             )
