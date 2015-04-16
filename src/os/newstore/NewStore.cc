@@ -2534,6 +2534,10 @@ int NewStore::queue_transactions(
     tls, &onreadable, &ondisk, &onreadable_sync);
   int r;
 
+  // throttle wal work
+  wal_wq.throttle(g_conf->newstore_wal_max_ops,
+		  g_conf->newstore_wal_max_bytes);
+
   // set up the sequencer
   OpSequencer *osr;
   if (!posr)

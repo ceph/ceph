@@ -367,6 +367,8 @@ public:
   private:
     NewStore *store;
     wal_osr_queue_t wal_queue;
+    uint64_t ops, bytes;
+    Cond throttle_cond;
 
   public:
     WALWQ(NewStore *s, time_t ti, time_t sti, ThreadPool *tp)
@@ -381,6 +383,8 @@ public:
 	wal_queue.push_back(*i->osr);
       }
       i->osr->wal_q.push_back(*i);
+      ++ops;
+      bytes += i->wal_txn->get_bytes();
       return true;
     }
     void _dequeue(TransContext *p) {
@@ -397,12 +401,18 @@ public:
 	// requeue at the end to minimize contention
 	wal_queue.push_back(*i->osr);
       }
+      --ops;
+      bytes -= i->wal_txn->get_bytes();
+      throttle_cond.Signal();
+
+      // preserve wal ordering for this sequencer by taking the lock
+      // while still holding the queue lock
+      i->osr->wal_apply_lock.Lock();
       return i;
     }
     void _process(TransContext *i, ThreadPool::TPHandle &handle) {
-      // preserve wal ordering for this sequencer
-      Mutex::Locker l(i->osr->wal_apply_lock);
       store->_apply_wal_transaction(i);
+      i->osr->wal_apply_lock.Unlock();
     }
     void _clear() {
       assert(wal_queue.empty());
@@ -415,6 +425,14 @@ public:
       }
       unlock();
       drain();
+    }
+
+    void throttle(uint64_t max_ops, uint64_t max_bytes) {
+      Mutex& lock = get_lock();
+      Mutex::Locker l(lock);
+      while (ops > max_ops || bytes > max_bytes) {
+	throttle_cond.Wait(lock);
+      }
     }
   };
 
