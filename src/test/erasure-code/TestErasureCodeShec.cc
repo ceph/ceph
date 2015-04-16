@@ -59,10 +59,10 @@ TEST(ErasureCodeShec, init_1)
   int r = shec->init(*parameters);
 
   //check parameters
-  EXPECT_EQ(6u, shec->k);
-  EXPECT_EQ(4u, shec->m);
-  EXPECT_EQ(3u, shec->c);
-  EXPECT_EQ(8u, shec->w);
+  EXPECT_EQ(6, shec->k);
+  EXPECT_EQ(4, shec->m);
+  EXPECT_EQ(3, shec->c);
+  EXPECT_EQ(8, shec->w);
   EXPECT_EQ(ErasureCodeShec::MULTIPLE, shec->technique);
   EXPECT_STREQ("default", shec->ruleset_root.c_str());
   EXPECT_STREQ("osd", shec->ruleset_failure_domain.c_str());
@@ -94,10 +94,10 @@ TEST(ErasureCodeShec, init_2)
   int r = shec->init(*parameters);
 
   //check parameters
-  EXPECT_EQ(6u, shec->k);
-  EXPECT_EQ(4u, shec->m);
-  EXPECT_EQ(3u, shec->c);
-  EXPECT_EQ(8u, shec->w);
+  EXPECT_EQ(6, shec->k);
+  EXPECT_EQ(4, shec->m);
+  EXPECT_EQ(3, shec->c);
+  EXPECT_EQ(8, shec->w);
   EXPECT_EQ(ErasureCodeShec::MULTIPLE, shec->technique);
   EXPECT_STREQ("test", shec->ruleset_root.c_str());
   EXPECT_STREQ("host", shec->ruleset_failure_domain.c_str());
@@ -128,10 +128,10 @@ TEST(ErasureCodeShec, init_3)
   int r = shec->init(*parameters);
 
   //check parameters
-  EXPECT_EQ(6u, shec->k);
-  EXPECT_EQ(4u, shec->m);
-  EXPECT_EQ(3u, shec->c);
-  EXPECT_EQ(16u, shec->w);
+  EXPECT_EQ(6, shec->k);
+  EXPECT_EQ(4, shec->m);
+  EXPECT_EQ(3, shec->c);
+  EXPECT_EQ(16, shec->w);
   EXPECT_EQ(ErasureCodeShec::MULTIPLE, shec->technique);
   EXPECT_STREQ("default", shec->ruleset_root.c_str());
   EXPECT_STREQ("osd", shec->ruleset_failure_domain.c_str());
@@ -162,10 +162,10 @@ TEST(ErasureCodeShec, init_4)
   int r = shec->init(*parameters);
 
   //check parameters
-  EXPECT_EQ(6u, shec->k);
-  EXPECT_EQ(4u, shec->m);
-  EXPECT_EQ(3u, shec->c);
-  EXPECT_EQ(32u, shec->w);
+  EXPECT_EQ(6, shec->k);
+  EXPECT_EQ(4, shec->m);
+  EXPECT_EQ(3, shec->c);
+  EXPECT_EQ(32, shec->w);
   EXPECT_EQ(ErasureCodeShec::MULTIPLE, shec->technique);
   EXPECT_STREQ("default", shec->ruleset_root.c_str());
   EXPECT_STREQ("osd", shec->ruleset_failure_domain.c_str());
@@ -642,10 +642,10 @@ TEST(ErasureCodeShec, init_24)
 
   EXPECT_TRUE(shec->matrix != NULL);
   EXPECT_EQ(0, r);
-  EXPECT_EQ(6u, shec->k);
-  EXPECT_EQ(4u, shec->m);
-  EXPECT_EQ(3u, shec->c);
-  EXPECT_EQ(8u, shec->w);
+  EXPECT_EQ(6, shec->k);
+  EXPECT_EQ(4, shec->m);
+  EXPECT_EQ(3, shec->c);
+  EXPECT_EQ(8, shec->w);
   //w is default value
 
   delete shec;
@@ -672,10 +672,10 @@ TEST(ErasureCodeShec, init_25)
 
   EXPECT_TRUE(shec->matrix != NULL);
   EXPECT_EQ(0, r);
-  EXPECT_EQ(6u, shec->k);
-  EXPECT_EQ(4u, shec->m);
-  EXPECT_EQ(3u, shec->c);
-  EXPECT_EQ(8u, shec->w);
+  EXPECT_EQ(6, shec->k);
+  EXPECT_EQ(4, shec->m);
+  EXPECT_EQ(3, shec->c);
+  EXPECT_EQ(8, shec->w);
   //w is default value
 
   delete shec;
@@ -702,10 +702,10 @@ TEST(ErasureCodeShec, init_26)
 
   EXPECT_TRUE(shec->matrix != NULL);
   EXPECT_EQ(0, r);
-  EXPECT_EQ(6u, shec->k);
-  EXPECT_EQ(4u, shec->m);
-  EXPECT_EQ(3u, shec->c);
-  EXPECT_EQ(8u, shec->w);
+  EXPECT_EQ(6, shec->k);
+  EXPECT_EQ(4, shec->m);
+  EXPECT_EQ(3, shec->c);
+  EXPECT_EQ(8, shec->w);
   //w is default value
 
   delete shec;
@@ -732,10 +732,10 @@ TEST(ErasureCodeShec, init_27)
 
   EXPECT_TRUE(shec->matrix != NULL);
   EXPECT_EQ(0, r);
-  EXPECT_EQ(6u, shec->k);
-  EXPECT_EQ(4u, shec->m);
-  EXPECT_EQ(3u, shec->c);
-  EXPECT_EQ(8u, shec->w);
+  EXPECT_EQ(6, shec->k);
+  EXPECT_EQ(4, shec->m);
+  EXPECT_EQ(3, shec->c);
+  EXPECT_EQ(8, shec->w);
   //w is default value
 
   delete shec;
@@ -785,9 +785,9 @@ TEST(ErasureCodeShec, init_29)
   EXPECT_TRUE(shec->matrix != NULL);
   EXPECT_EQ(0, r);
   //k,m,c are default values
-  EXPECT_EQ(4u, shec->k);
-  EXPECT_EQ(3u, shec->m);
-  EXPECT_EQ(2u, shec->c);
+  EXPECT_EQ(4, shec->k);
+  EXPECT_EQ(3, shec->m);
+  EXPECT_EQ(2, shec->c);
 
   delete shec;
   delete parameters;
@@ -812,9 +812,9 @@ TEST(ErasureCodeShec, init_30)
 
   EXPECT_TRUE(shec->matrix != NULL);
   EXPECT_EQ(0, r);
-  EXPECT_EQ(12u, shec->k);
-  EXPECT_EQ(8u, shec->m);
-  EXPECT_EQ(8u, shec->c);
+  EXPECT_EQ(12, shec->k);
+  EXPECT_EQ(8, shec->m);
+  EXPECT_EQ(8, shec->c);
 
   delete shec;
   delete parameters;
@@ -931,10 +931,10 @@ TEST(ErasureCodeShec, init2_4)
   int r = shec->init(*parameters);	//init executed twice
 
   //check parameters
-  EXPECT_EQ(6u, shec->k);
-  EXPECT_EQ(4u, shec->m);
-  EXPECT_EQ(3u, shec->c);
-  EXPECT_EQ(8u, shec->w);
+  EXPECT_EQ(6, shec->k);
+  EXPECT_EQ(4, shec->m);
+  EXPECT_EQ(3, shec->c);
+  EXPECT_EQ(8, shec->w);
   EXPECT_EQ(ErasureCodeShec::MULTIPLE, shec->technique);
   EXPECT_STREQ("default", shec->ruleset_root.c_str());
   EXPECT_STREQ("osd", shec->ruleset_failure_domain.c_str());
@@ -975,10 +975,10 @@ TEST(ErasureCodeShec, init2_5)
   (*parameters2)["c"] = "3";
   shec->init(*parameters2);
 
-  EXPECT_EQ(6u, shec->k);
-  EXPECT_EQ(4u, shec->m);
-  EXPECT_EQ(3u, shec->c);
-  EXPECT_EQ(8u, shec->w);
+  EXPECT_EQ(6, shec->k);
+  EXPECT_EQ(4, shec->m);
+  EXPECT_EQ(3, shec->c);
+  EXPECT_EQ(8, shec->w);
   EXPECT_EQ(ErasureCodeShec::MULTIPLE, shec->technique);
   EXPECT_STREQ("default", shec->ruleset_root.c_str());
   EXPECT_STREQ("osd", shec->ruleset_failure_domain.c_str());
@@ -1093,7 +1093,7 @@ TEST(ErasureCodeShec, minimum_to_decode_3)
   int r = shec->minimum_to_decode(want_to_decode, available_chunks,
 				  &minimum_chunks);
   EXPECT_EQ(-EINVAL, r);
-  EXPECT_EQ(0, minimum_chunks.size());
+  EXPECT_EQ(0u, minimum_chunks.size());
 
   delete shec;
   delete parameters;

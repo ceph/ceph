@@ -2256,11 +2256,10 @@ int metadata_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   map<string, bufferlist> data;
   string last_read = metadata_key_for_name(start_after);
   int max_read = max_return ? MIN(RBD_MAX_KEYS_READ, max_return) : RBD_MAX_KEYS_READ;
-  int r;
 
   do {
     map<string, bufferlist> raw_data;
-    r = cls_cxx_map_get_vals(hctx, last_read, RBD_METADATA_KEY_PREFIX,
+    int r = cls_cxx_map_get_vals(hctx, last_read, RBD_METADATA_KEY_PREFIX,
                              max_read, &raw_data);
     if (r < 0) {
       CLS_ERR("failed to read the vals off of disk: %s", cpp_strerror(r).c_str());

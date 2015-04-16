@@ -139,6 +139,7 @@ void* echoclient(void *arg)
 {
   intptr_t port = (intptr_t)arg;
   struct sockaddr_in sa;
+  memset(&sa, 0, sizeof(sa));
   sa.sin_family = AF_INET;
   sa.sin_port = htons(port);
   char addr[] = "127.0.0.1";

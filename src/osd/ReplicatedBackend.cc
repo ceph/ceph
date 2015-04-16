@@ -1267,7 +1267,7 @@ void ReplicatedBackend::sub_op_modify_commit(RepModifyRef rm)
   get_parent()->update_last_complete_ondisk(rm->last_complete);
 
   Message *m = rm->op->get_req();
-  Message *commit;
+  Message *commit = NULL;
   if (m->get_type() == MSG_OSD_SUBOP) {
     // doesn't have CLIENT SUBOP feature ,use Subop
     MOSDSubOpReply  *reply = new MOSDSubOpReply(
