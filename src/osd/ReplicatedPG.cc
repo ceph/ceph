@@ -1539,10 +1539,13 @@ void ReplicatedPG::do_op(OpRequestRef& op)
       if (missing_oid != hobject_t() && hit_set->contains(missing_oid))
         in_hit_set = true;
     }
-    hit_set->insert(oid);
-    if (hit_set->is_full() ||
-	hit_set_start_stamp + pool.info.hit_set_period <= m->get_recv_stamp()) {
-      hit_set_persist();
+    if (!op->hitset_inserted) {
+      hit_set->insert(oid);
+      op->hitset_inserted = true;
+      if (hit_set->is_full() ||
+          hit_set_start_stamp + pool.info.hit_set_period <= m->get_recv_stamp()) {
+        hit_set_persist();
+      }
     }
   }
 
