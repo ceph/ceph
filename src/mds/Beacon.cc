@@ -343,6 +343,8 @@ void Beacon::notify_health(MDS const *mds)
 
   // Detect clients failing to generate cap releases from CEPH_SESSION_RECALL_STATE
   // messages. May be due to buggy client or resource-hogging application.
+  //
+  // Detect clients failing to advance their old_client_tid
   {
     set<Session*> sessions;
     mds->sessionmap.get_client_session_set(sessions);
@@ -350,6 +352,7 @@ void Beacon::notify_health(MDS const *mds)
     cutoff -= g_conf->mds_recall_state_timeout;
 
     std::list<MDSHealthMetric> late_recall_metrics;
+    std::list<MDSHealthMetric> large_completed_requests_metrics;
     for (set<Session*>::iterator i = sessions.begin(); i != sessions.end(); ++i) {
       Session *session = *i;
       if (!session->recalled_at.is_zero()) {
@@ -359,13 +362,21 @@ void Beacon::notify_health(MDS const *mds)
         if (session->recalled_at < cutoff) {
           dout(20) << "  exceeded timeout " << session->recalled_at << " vs. " << cutoff << dendl;
           std::ostringstream oss;
-        oss << "Client " << session->get_human_name() << " failing to respond to cache pressure";
+	  oss << "Client " << session->get_human_name() << " failing to respond to cache pressure";
           MDSHealthMetric m(MDS_HEALTH_CLIENT_RECALL, HEALTH_WARN, oss.str());
           m.metadata["client_id"] = session->info.inst.name.num();
           late_recall_metrics.push_back(m);
         } else {
           dout(20) << "  within timeout " << session->recalled_at << " vs. " << cutoff << dendl;
         }
+      }
+      if (session->get_num_trim_requests_warnings() > 0 &&
+	  session->get_num_completed_requests() >= g_conf->mds_max_completed_requests) {
+	std::ostringstream oss;
+	oss << "Client " << session->get_human_name() << " failing to advance its oldest_client_tid";
+	MDSHealthMetric m(MDS_HEALTH_CLIENT_OLDEST_TID, HEALTH_WARN, oss.str());
+	m.metadata["client_id"] = session->info.inst.name.num();
+	large_completed_requests_metrics.push_back(m);
       }
     }
 
@@ -379,6 +390,18 @@ void Beacon::notify_health(MDS const *mds)
       m.metadata["client_count"] = late_recall_metrics.size();
       health.metrics.push_back(m);
       late_recall_metrics.clear();
+    }
+
+    if (large_completed_requests_metrics.size() <= (size_t)g_conf->mds_health_summarize_threshold) {
+      health.metrics.splice(health.metrics.end(), large_completed_requests_metrics);
+    } else {
+      std::ostringstream oss;
+      oss << "Many clients (" << large_completed_requests_metrics.size()
+	<< ") failing to advance their oldest_client_tid";
+      MDSHealthMetric m(MDS_HEALTH_CLIENT_OLDEST_TID_MANY, HEALTH_WARN, oss.str());
+      m.metadata["client_count"] = large_completed_requests_metrics.size();
+      health.metrics.push_back(m);
+      large_completed_requests_metrics.clear();
     }
   }
 }
