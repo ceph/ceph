@@ -1356,6 +1356,22 @@ void Server::handle_client_request(MClientRequest *req)
       // Sessions 'completed_requests' was dirtied, mark it to be
       // potentially flushed at segment expiry.
       mdlog->get_current_segment()->touched_sessions.insert(session->info.inst.name);
+
+      if (session->get_num_trim_requests_warnings() > 0 &&
+	  session->get_num_completed_requests() * 2 < g_conf->mds_max_completed_requests)
+	session->reset_num_trim_requests_warnings();
+    } else {
+      if (session->get_num_completed_requests() >=
+	  (g_conf->mds_max_completed_requests << session->get_num_trim_requests_warnings())) {
+	session->inc_num_trim_requests_warnings();
+	stringstream ss;
+	ss << "client." << session->get_client() << " does not advance its oldest_client_tid ("
+	   << req->get_oldest_client_tid() << "), "
+	   << session->get_num_completed_requests()
+	   << " completed requests recorded in session\n";
+	mds->clog->warn() << ss.str();
+	dout(20) << __func__ << " " << ss.str() << dendl;
+      }
     }
   }
 
