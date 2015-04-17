@@ -1697,6 +1697,19 @@ void ReplicatedPG::promote_object(OpRequestRef op, ObjectContextRef obc,
     obc = get_object_context(missing_oid, true);
   }
   dout(10) << __func__ << " " << obc->obs.oi.soid << dendl;
+  if (scrubber.write_blocked_by_scrub(obc->obs.oi.soid)) {
+    dout(10) << __func__ << " " << obc->obs.oi.soid
+	     << " blocked by scrub" << dendl;
+    if (op) {
+      waiting_for_active.push_back(op);
+      dout(10) << __func__ << " " << obc->obs.oi.soid
+	       << " placing op in waiting_for_active" << dendl;
+    } else {
+      dout(10) << __func__ << " " << obc->obs.oi.soid
+	       << " no op, dropping on the floor" << dendl;
+    }
+    return;
+  }
 
   PromoteCallback *cb = new PromoteCallback(op, obc, this);
   object_locator_t oloc(m->get_object_locator());
@@ -10253,7 +10266,8 @@ int ReplicatedPG::recover_backfill(
   for (set<pg_shard_t>::iterator i = backfill_targets.begin();
        i != backfill_targets.end();
        ++i) {
-    peer_backfill_info[*i].trim_to(last_backfill_started);
+    peer_backfill_info[*i].trim_to(
+      MAX(peer_info[*i].last_backfill, last_backfill_started));
   }
   backfill_info.trim_to(last_backfill_started);
 

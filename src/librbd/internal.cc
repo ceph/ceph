@@ -531,8 +531,11 @@ namespace librbd {
 	  (scan_for_parents(ictx, our_pspec, snap_id) == -ENOENT)) {
 	  r = cls_client::remove_child(&ictx->md_ctx, RBD_CHILDREN,
 				       our_pspec, ictx->id);
-	  if (r < 0)
+	  if (r < 0 && r != -ENOENT) {
+            lderr(ictx->cct) << "snap_remove: failed to deregister from parent "
+                                "image" << dendl;
 	    return r;
+          }
       }
     }
 
@@ -1286,11 +1289,13 @@ reprotect_and_return_err:
       return r;
     }
 
+    ictx->parent->cache_lock.Lock();
     ictx->parent->snap_lock.get_write();
     r = ictx->parent->get_snap_name(parent_snap_id, &ictx->parent->snap_name);
     if (r < 0) {
       lderr(ictx->cct) << "parent snapshot does not exist" << dendl;
       ictx->parent->snap_lock.put_write();
+      ictx->parent->cache_lock.Unlock();
       close_image(ictx->parent);
       ictx->parent = NULL;
       return r;
@@ -1304,12 +1309,14 @@ reprotect_and_return_err:
 		       << ictx->parent->snap_name << dendl;
       ictx->parent->parent_lock.put_write();
       ictx->parent->snap_lock.put_write();
+      ictx->parent->cache_lock.Unlock();
       close_image(ictx->parent);
       ictx->parent = NULL;
       return r;
     }
     ictx->parent->parent_lock.put_write();
     ictx->parent->snap_lock.put_write();
+    ictx->parent->cache_lock.Unlock();
 
     return 0;
   }
@@ -1323,6 +1330,9 @@ reprotect_and_return_err:
 
     RWLock::RLocker l(ictx->snap_lock);
     RWLock::RLocker l2(ictx->parent_lock);
+    if (ictx->parent == NULL) {
+      return -ENOENT;
+    }
 
     parent_spec parent_spec;
 
@@ -1707,10 +1717,11 @@ reprotect_and_return_err:
     vector<parent_info> snap_parents;
     vector<uint8_t> snap_protection;
     {
-      RWLock::WLocker l(ictx->snap_lock);
+      Mutex::Locker cache_locker(ictx->cache_lock);
+      RWLock::WLocker snap_locker(ictx->snap_lock);
       {
-        int r;
-	RWLock::WLocker l2(ictx->parent_lock);
+	int r;
+	RWLock::WLocker parent_locker(ictx->parent_lock);
 	ictx->lockers.clear();
 	if (ictx->old_format) {
 	  r = read_header(ictx->md_ctx, ictx->header_oid, &ictx->header, NULL);
@@ -1836,7 +1847,7 @@ reprotect_and_return_err:
       }
 
       ictx->data_ctx.selfmanaged_snap_set_write_ctx(ictx->snapc.seq, ictx->snaps);
-    } // release snap_lock
+    } // release snap_lock and cache_lock
 
     if (new_snap) {
       _flush(ictx);
@@ -2068,8 +2079,9 @@ reprotect_and_return_err:
 
   int _snap_set(ImageCtx *ictx, const char *snap_name)
   {
-    RWLock::WLocker l1(ictx->snap_lock);
-    RWLock::WLocker l2(ictx->parent_lock);
+    Mutex::Locker cache_locker(ictx->cache_lock);
+    RWLock::WLocker snap_locker(ictx->snap_lock);
+    RWLock::WLocker parent_locker(ictx->parent_lock);
     int r;
     if ((snap_name != NULL) && (strlen(snap_name) != 0)) {
       r = ictx->snap_set(snap_name);
