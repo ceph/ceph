@@ -146,228 +146,228 @@ UNITTEST_LDADD = \
 unittest_addrs_SOURCES = test/test_addrs.cc
 unittest_addrs_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 unittest_addrs_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
-check_PROGRAMS += unittest_addrs
+check_TESTPROGRAMS += unittest_addrs
 
 unittest_blkdev_SOURCES = test/common/test_blkdev.cc
 unittest_blkdev_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 unittest_blkdev_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
-check_PROGRAMS += unittest_blkdev
+check_TESTPROGRAMS += unittest_blkdev
 
 unittest_bloom_filter_SOURCES = test/common/test_bloom_filter.cc
 unittest_bloom_filter_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 unittest_bloom_filter_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
-check_PROGRAMS += unittest_bloom_filter
+check_TESTPROGRAMS += unittest_bloom_filter
 
 unittest_histogram_SOURCES = test/common/histogram.cc
 unittest_histogram_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 unittest_histogram_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
-check_PROGRAMS += unittest_histogram
+check_TESTPROGRAMS += unittest_histogram
 
 unittest_prioritized_queue_SOURCES = test/common/test_prioritized_queue.cc
 unittest_prioritized_queue_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 unittest_prioritized_queue_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
-check_PROGRAMS += unittest_prioritized_queue
+check_TESTPROGRAMS += unittest_prioritized_queue
 
 
 unittest_str_map_SOURCES = test/common/test_str_map.cc
 unittest_str_map_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 unittest_str_map_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
-check_PROGRAMS += unittest_str_map
+check_TESTPROGRAMS += unittest_str_map
 
 unittest_sharedptr_registry_SOURCES = test/common/test_sharedptr_registry.cc
 unittest_sharedptr_registry_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 unittest_sharedptr_registry_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
-check_PROGRAMS += unittest_sharedptr_registry
+check_TESTPROGRAMS += unittest_sharedptr_registry
 
 unittest_shared_cache_SOURCES = test/common/test_shared_cache.cc
 unittest_shared_cache_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 unittest_shared_cache_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
-check_PROGRAMS += unittest_shared_cache
+check_TESTPROGRAMS += unittest_shared_cache
 
 unittest_sloppy_crc_map_SOURCES = test/common/test_sloppy_crc_map.cc
 unittest_sloppy_crc_map_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 unittest_sloppy_crc_map_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
-check_PROGRAMS += unittest_sloppy_crc_map
+check_TESTPROGRAMS += unittest_sloppy_crc_map
 
 unittest_util_SOURCES = test/common/test_util.cc
 unittest_util_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 unittest_util_LDADD = $(LIBCOMMON) -lm $(UNITTEST_LDADD) $(CRYPTO_LIBS) $(EXTRALIBS)
-check_PROGRAMS += unittest_util
+check_TESTPROGRAMS += unittest_util
 
 unittest_crush_wrapper_SOURCES = test/crush/CrushWrapper.cc
 unittest_crush_wrapper_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL) $(LIBCRUSH)
 unittest_crush_wrapper_CXXFLAGS = $(UNITTEST_CXXFLAGS) -O2
-check_PROGRAMS += unittest_crush_wrapper
+check_TESTPROGRAMS += unittest_crush_wrapper
 
 unittest_crush_SOURCES = test/crush/crush.cc
 unittest_crush_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 unittest_crush_LDADD = $(LIBCOMMON) -lm $(UNITTEST_LDADD) $(CEPH_CRUSH) $(EXTRALIBS) $(CEPH_GLOBAL)
-check_PROGRAMS += unittest_crush
+check_TESTPROGRAMS += unittest_crush
 
 unittest_osdmap_SOURCES = test/osd/TestOSDMap.cc
 unittest_osdmap_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 unittest_osdmap_LDADD = $(UNITTEST_LDADD) $(LIBCOMMON) $(CEPH_GLOBAL)
-check_PROGRAMS += unittest_osdmap
+check_TESTPROGRAMS += unittest_osdmap
 
 unittest_workqueue_SOURCES = test/test_workqueue.cc
 unittest_workqueue_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 unittest_workqueue_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
-check_PROGRAMS += unittest_workqueue
+check_TESTPROGRAMS += unittest_workqueue
 
 unittest_striper_SOURCES = test/test_striper.cc
 unittest_striper_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 unittest_striper_LDADD = $(LIBOSDC) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
-check_PROGRAMS += unittest_striper
+check_TESTPROGRAMS += unittest_striper
 
 unittest_prebufferedstreambuf_SOURCES = test/test_prebufferedstreambuf.cc
 unittest_prebufferedstreambuf_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 unittest_prebufferedstreambuf_LDADD = $(LIBCOMMON) $(UNITTEST_LDADD) $(EXTRALIBS)
-check_PROGRAMS += unittest_prebufferedstreambuf
+check_TESTPROGRAMS += unittest_prebufferedstreambuf
 
 unittest_str_list_SOURCES = test/test_str_list.cc
 unittest_str_list_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 unittest_str_list_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
-check_PROGRAMS += unittest_str_list
+check_TESTPROGRAMS += unittest_str_list
 
 unittest_log_SOURCES = log/test.cc
 unittest_log_LDADD = $(LIBCOMMON) $(UNITTEST_LDADD)
 unittest_log_CXXFLAGS = $(UNITTEST_CXXFLAGS) -O2
-check_PROGRAMS += unittest_log
+check_TESTPROGRAMS += unittest_log
 
 unittest_throttle_SOURCES = test/common/Throttle.cc
 unittest_throttle_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 unittest_throttle_CXXFLAGS = $(UNITTEST_CXXFLAGS) -O2
-check_PROGRAMS += unittest_throttle
+check_TESTPROGRAMS += unittest_throttle
 
 unittest_ceph_argparse_SOURCES = test/ceph_argparse.cc
 unittest_ceph_argparse_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 unittest_ceph_argparse_CXXFLAGS = $(UNITTEST_CXXFLAGS)
-check_PROGRAMS += unittest_ceph_argparse
+check_TESTPROGRAMS += unittest_ceph_argparse
 
 unittest_ceph_compatset_SOURCES = test/ceph_compatset.cc
 unittest_ceph_compatset_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 unittest_ceph_compatset_CXXFLAGS = $(UNITTEST_CXXFLAGS)
-check_PROGRAMS += unittest_ceph_compatset
+check_TESTPROGRAMS += unittest_ceph_compatset
 
 unittest_mds_types_SOURCES = test/fs/mds_types.cc
 unittest_mds_types_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 unittest_mds_types_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
-check_PROGRAMS += unittest_mds_types
+check_TESTPROGRAMS += unittest_mds_types
 
 unittest_osd_types_SOURCES = test/osd/types.cc
 unittest_osd_types_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 unittest_osd_types_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
-check_PROGRAMS += unittest_osd_types
+check_TESTPROGRAMS += unittest_osd_types
 
 unittest_lru_SOURCES = test/common/test_lru.cc
 unittest_lru_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 unittest_lru_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
-check_PROGRAMS += unittest_lru
+check_TESTPROGRAMS += unittest_lru
 
 unittest_io_priority_SOURCES = test/common/test_io_priority.cc
 unittest_io_priority_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 unittest_io_priority_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
-check_PROGRAMS += unittest_io_priority
+check_TESTPROGRAMS += unittest_io_priority
 
 unittest_gather_SOURCES = test/gather.cc
 unittest_gather_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 unittest_gather_CXXFLAGS = $(UNITTEST_CXXFLAGS)
-check_PROGRAMS += unittest_gather
+check_TESTPROGRAMS += unittest_gather
 
 unittest_signals_SOURCES = test/signals.cc
 unittest_signals_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 unittest_signals_CXXFLAGS = $(UNITTEST_CXXFLAGS)
-check_PROGRAMS += unittest_signals
+check_TESTPROGRAMS += unittest_signals
 
 unittest_bufferlist_SOURCES = test/bufferlist.cc
 unittest_bufferlist_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 unittest_bufferlist_CXXFLAGS = $(UNITTEST_CXXFLAGS)
-check_PROGRAMS += unittest_bufferlist
+check_TESTPROGRAMS += unittest_bufferlist
 
 unittest_xlist_SOURCES = test/test_xlist.cc
 unittest_xlist_LDADD = $(UNITTEST_LDADD) $(LIBCOMMON)
 unittest_xlist_CXXFLAGS = $(UNITTEST_CXXFLAGS)
-check_PROGRAMS += unittest_xlist
+check_TESTPROGRAMS += unittest_xlist
 
 unittest_crc32c_SOURCES = test/common/test_crc32c.cc
 unittest_crc32c_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 unittest_crc32c_CXXFLAGS = $(UNITTEST_CXXFLAGS)
-check_PROGRAMS += unittest_crc32c
+check_TESTPROGRAMS += unittest_crc32c
 
 unittest_arch_SOURCES = test/test_arch.cc
 unittest_arch_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 unittest_arch_CXXFLAGS = $(UNITTEST_CXXFLAGS)
-check_PROGRAMS += unittest_arch
+check_TESTPROGRAMS += unittest_arch
 
 unittest_crypto_SOURCES = test/crypto.cc
 unittest_crypto_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 unittest_crypto_CXXFLAGS = $(UNITTEST_CXXFLAGS)
-check_PROGRAMS += unittest_crypto
+check_TESTPROGRAMS += unittest_crypto
 
 unittest_crypto_init_SOURCES = test/crypto_init.cc
 unittest_crypto_init_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 unittest_crypto_init_CXXFLAGS = $(UNITTEST_CXXFLAGS)
-check_PROGRAMS += unittest_crypto_init
+check_TESTPROGRAMS += unittest_crypto_init
 
 unittest_perf_counters_SOURCES = test/perf_counters.cc
 unittest_perf_counters_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 unittest_perf_counters_CXXFLAGS = $(UNITTEST_CXXFLAGS)
-check_PROGRAMS += unittest_perf_counters
+check_TESTPROGRAMS += unittest_perf_counters
 
 unittest_admin_socket_SOURCES = test/admin_socket.cc
 unittest_admin_socket_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 unittest_admin_socket_CXXFLAGS = $(UNITTEST_CXXFLAGS)
-check_PROGRAMS += unittest_admin_socket
+check_TESTPROGRAMS += unittest_admin_socket
 
 unittest_ceph_crypto_SOURCES = test/ceph_crypto.cc
 unittest_ceph_crypto_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 unittest_ceph_crypto_CXXFLAGS = $(UNITTEST_CXXFLAGS)
-check_PROGRAMS += unittest_ceph_crypto
+check_TESTPROGRAMS += unittest_ceph_crypto
 
 unittest_utf8_SOURCES = test/utf8.cc
 unittest_utf8_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 unittest_utf8_CXXFLAGS = $(UNITTEST_CXXFLAGS)
-check_PROGRAMS += unittest_utf8
+check_TESTPROGRAMS += unittest_utf8
 
 unittest_mime_SOURCES = test/mime.cc
 unittest_mime_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 unittest_mime_CXXFLAGS = $(UNITTEST_CXXFLAGS)
-check_PROGRAMS += unittest_mime
+check_TESTPROGRAMS += unittest_mime
 
 unittest_escape_SOURCES = test/escape.cc
 unittest_escape_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 unittest_escape_CXXFLAGS = $(UNITTEST_CXXFLAGS)
-check_PROGRAMS += unittest_escape
+check_TESTPROGRAMS += unittest_escape
 
 unittest_strtol_SOURCES = test/strtol.cc
 unittest_strtol_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 unittest_strtol_CXXFLAGS = $(UNITTEST_CXXFLAGS)
-check_PROGRAMS += unittest_strtol
+check_TESTPROGRAMS += unittest_strtol
 
 unittest_confutils_SOURCES = test/confutils.cc
 unittest_confutils_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 unittest_confutils_CXXFLAGS = $(UNITTEST_CXXFLAGS)
-check_PROGRAMS += unittest_confutils
+check_TESTPROGRAMS += unittest_confutils
 
 unittest_config_SOURCES = test/common/test_config.cc
 unittest_config_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 unittest_config_CXXFLAGS = $(UNITTEST_CXXFLAGS)
-check_PROGRAMS += unittest_config
+check_TESTPROGRAMS += unittest_config
 
 unittest_context_SOURCES = test/common/test_context.cc
 unittest_context_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 unittest_context_CXXFLAGS = $(UNITTEST_CXXFLAGS)
-check_PROGRAMS += unittest_context
+check_TESTPROGRAMS += unittest_context
 
 unittest_safe_io_SOURCES = test/common/test_safe_io.cc
 unittest_safe_io_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 unittest_safe_io_CXXFLAGS = $(UNITTEST_CXXFLAGS)
-check_PROGRAMS += unittest_safe_io
+check_TESTPROGRAMS += unittest_safe_io
 
 unittest_heartbeatmap_SOURCES = test/heartbeat_map.cc
 unittest_heartbeatmap_LDADD = $(LIBCOMMON) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 unittest_heartbeatmap_CXXFLAGS = $(UNITTEST_CXXFLAGS)
-check_PROGRAMS += unittest_heartbeatmap
+check_TESTPROGRAMS += unittest_heartbeatmap
 
 # why does this include rgw/rgw_formats.cc...?
 unittest_formatter_SOURCES = \
@@ -375,41 +375,41 @@ unittest_formatter_SOURCES = \
 	rgw/rgw_formats.cc
 unittest_formatter_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 unittest_formatter_CXXFLAGS = $(UNITTEST_CXXFLAGS)
-check_PROGRAMS += unittest_formatter
+check_TESTPROGRAMS += unittest_formatter
 
 unittest_daemon_config_SOURCES = test/daemon_config.cc
 unittest_daemon_config_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 unittest_daemon_config_CXXFLAGS = $(UNITTEST_CXXFLAGS)
-check_PROGRAMS += unittest_daemon_config
+check_TESTPROGRAMS += unittest_daemon_config
 
 unittest_ipaddr_SOURCES = test/test_ipaddr.cc
 unittest_ipaddr_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 unittest_ipaddr_CXXFLAGS = $(UNITTEST_CXXFLAGS)
-check_PROGRAMS += unittest_ipaddr
+check_TESTPROGRAMS += unittest_ipaddr
 
 unittest_texttable_SOURCES = test/test_texttable.cc
 unittest_texttable_LDADD = $(LIBCOMMON) $(UNITTEST_LDADD)
 unittest_texttable_CXXFLAGS = $(UNITTEST_CXXFLAGS)
-check_PROGRAMS += unittest_texttable
+check_TESTPROGRAMS += unittest_texttable
 
 unittest_on_exit_SOURCES = test/on_exit.cc
 unittest_on_exit_LDADD = $(PTHREAD_LIBS)
-check_PROGRAMS += unittest_on_exit
+check_TESTPROGRAMS += unittest_on_exit
 
 unittest_readahead_SOURCES = test/common/Readahead.cc
 unittest_readahead_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 unittest_readahead_CXXFLAGS = $(UNITTEST_CXXFLAGS) -O2
-check_PROGRAMS += unittest_readahead
+check_TESTPROGRAMS += unittest_readahead
 
 unittest_tableformatter_SOURCES = test/common/test_tableformatter.cc
 unittest_tableformatter_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 unittest_tableformatter_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
-check_PROGRAMS += unittest_tableformatter
+check_TESTPROGRAMS += unittest_tableformatter
 
 unittest_bit_vector_SOURCES = test/common/test_bit_vector.cc
 unittest_bit_vector_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 unittest_bit_vector_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
-check_PROGRAMS += unittest_bit_vector
+check_TESTPROGRAMS += unittest_bit_vector
 
 check_SCRIPTS += test/pybind/test_ceph_argparse.py
 check_SCRIPTS += test/pybind/test_ceph_daemon.py

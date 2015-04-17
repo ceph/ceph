@@ -121,14 +121,14 @@ unittest_erasure_code_plugin_LDADD = $(LIBOSD) $(LIBCOMMON) $(UNITTEST_LDADD) $(
 if LINUX
 unittest_erasure_code_plugin_LDADD += -ldl
 endif
-check_PROGRAMS += unittest_erasure_code_plugin
+check_TESTPROGRAMS += unittest_erasure_code_plugin
 
 unittest_erasure_code_SOURCES = \
 	erasure-code/ErasureCode.cc \
 	test/erasure-code/TestErasureCode.cc
 unittest_erasure_code_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 unittest_erasure_code_LDADD = $(LIBOSD) $(LIBCOMMON) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
-check_PROGRAMS += unittest_erasure_code
+check_TESTPROGRAMS += unittest_erasure_code
 
 unittest_erasure_code_jerasure_SOURCES = \
 	test/erasure-code/TestErasureCodeJerasure.cc \
@@ -143,7 +143,7 @@ unittest_erasure_code_jerasure_LDADD = $(LIBOSD) $(LIBCOMMON) $(UNITTEST_LDADD) 
 if LINUX
 unittest_erasure_code_jerasure_LDADD += -ldl
 endif
-check_PROGRAMS += unittest_erasure_code_jerasure
+check_TESTPROGRAMS += unittest_erasure_code_jerasure
 
 unittest_erasure_code_plugin_jerasure_SOURCES = \
 	test/erasure-code/TestErasureCodePluginJerasure.cc
@@ -152,7 +152,7 @@ unittest_erasure_code_plugin_jerasure_LDADD = $(LIBOSD) $(LIBCOMMON) $(UNITTEST_
 if LINUX
 unittest_erasure_code_plugin_jerasure_LDADD += -ldl
 endif
-check_PROGRAMS += unittest_erasure_code_plugin_jerasure
+check_TESTPROGRAMS += unittest_erasure_code_plugin_jerasure
 
 if WITH_BETTER_YASM_ELF64
 unittest_erasure_code_isa_SOURCES = \
@@ -163,7 +163,7 @@ unittest_erasure_code_isa_LDADD = $(LIBOSD) $(LIBCOMMON) $(UNITTEST_LDADD) $(CEP
 if LINUX
 unittest_erasure_code_isa_LDADD += -ldl
 endif
-check_PROGRAMS += unittest_erasure_code_isa
+check_TESTPROGRAMS += unittest_erasure_code_isa
 
 unittest_erasure_code_plugin_isa_SOURCES = \
 	erasure-code/ErasureCode.cc \
@@ -173,7 +173,7 @@ unittest_erasure_code_plugin_isa_LDADD = $(LIBOSD) $(LIBCOMMON) $(UNITTEST_LDADD
 if LINUX
 unittest_erasure_code_plugin_isa_LDADD += -ldl
 endif
-check_PROGRAMS += unittest_erasure_code_plugin_isa
+check_TESTPROGRAMS += unittest_erasure_code_plugin_isa
 endif
 
 unittest_erasure_code_lrc_SOURCES = \
@@ -184,7 +184,7 @@ unittest_erasure_code_lrc_LDADD = $(LIBOSD) $(LIBCOMMON) $(UNITTEST_LDADD) $(CEP
 if LINUX
 unittest_erasure_code_lrc_LDADD += -ldl
 endif
-check_PROGRAMS += unittest_erasure_code_lrc
+check_TESTPROGRAMS += unittest_erasure_code_lrc
 
 unittest_erasure_code_plugin_lrc_SOURCES = \
 	test/erasure-code/TestErasureCodePluginLrc.cc
@@ -193,7 +193,7 @@ unittest_erasure_code_plugin_lrc_LDADD = $(LIBOSD) $(LIBCOMMON) $(UNITTEST_LDADD
 if LINUX
 unittest_erasure_code_plugin_lrc_LDADD += -ldl
 endif
-check_PROGRAMS += unittest_erasure_code_plugin_lrc
+check_TESTPROGRAMS += unittest_erasure_code_plugin_lrc
 
 unittest_erasure_code_shec_SOURCES = \
 	test/erasure-code/TestErasureCodeShec.cc \
@@ -204,7 +204,7 @@ unittest_erasure_code_shec_LDADD = $(LIBOSD) $(LIBCOMMON) $(UNITTEST_LDADD) $(CE
 if LINUX
 unittest_erasure_code_shec_LDADD += -ldl
 endif
-check_PROGRAMS += unittest_erasure_code_shec
+check_TESTPROGRAMS += unittest_erasure_code_shec
 
 unittest_erasure_code_shec_all_SOURCES = \
 	test/erasure-code/TestErasureCodeShec_all.cc \
@@ -215,7 +215,7 @@ unittest_erasure_code_shec_all_LDADD = $(LIBOSD) $(LIBCOMMON) $(UNITTEST_LDADD) 
 if LINUX
 unittest_erasure_code_shec_all_LDADD += -ldl
 endif
-check_PROGRAMS += unittest_erasure_code_shec_all
+check_TESTPROGRAMS += unittest_erasure_code_shec_all
 
 unittest_erasure_code_shec_thread_SOURCES = \
 	test/erasure-code/TestErasureCodeShec_thread.cc \
@@ -226,7 +226,7 @@ unittest_erasure_code_shec_thread_LDADD = $(LIBOSD) $(LIBCOMMON) $(UNITTEST_LDAD
 if LINUX
 unittest_erasure_code_shec_thread_LDADD += -ldl
 endif
-check_PROGRAMS += unittest_erasure_code_shec_thread
+check_TESTPROGRAMS += unittest_erasure_code_shec_thread
 
 unittest_erasure_code_example_SOURCES = \
 	erasure-code/ErasureCode.cc \
@@ -234,7 +234,7 @@ unittest_erasure_code_example_SOURCES = \
 noinst_HEADERS += test/erasure-code/ErasureCodeExample.h
 unittest_erasure_code_example_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 unittest_erasure_code_example_LDADD = $(LIBOSD) $(LIBCOMMON) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
-check_PROGRAMS += unittest_erasure_code_example
+check_TESTPROGRAMS += unittest_erasure_code_example
 
 endif # WITH_OSD
 endif # ENABLE_SERVER
