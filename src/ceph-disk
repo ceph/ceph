@@ -2435,7 +2435,10 @@ def get_partition_type(part):
     if 'blkid' not in warned_about:
         LOG.warning('Old blkid does not support ID_PART_ENTRY_* fields, trying sgdisk; may not correctly identify ceph volumes with dmcrypt')
         warned_about['blkid'] = True
-    (base, partnum) = re.match('(\D+)(\d+)', part).group(1, 2)
+    if 'nvme' in part:
+        (base, partnum) = re.match('(.*\d+)p(\d+)', part).group(1, 2)
+    else:
+        (base, partnum) = re.match('(\D+)(\d+)', part).group(1, 2)
     sgdisk, _ = command(
         [
             'sgdisk',
@@ -2461,7 +2464,7 @@ def get_partition_type(part):
 
 
 def get_partition_uuid(dev):
-    if 'loop' in dev or 'cciss' in dev:
+    if 'loop' in dev or 'cciss' in dev or 'nvme' in dev:
         (base, partnum) = re.match('(.*\d+)p(\d+)', dev).group(1, 2)
     else:
         (base, partnum) = re.match('(\D+)(\d+)', dev).group(1, 2)
