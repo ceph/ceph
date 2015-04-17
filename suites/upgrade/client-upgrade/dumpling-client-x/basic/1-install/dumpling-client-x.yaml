@@ -1,0 +1,9 @@
+tasks:
+- install:
+   branch: dumpling
+- print: "**** done install dumpling"
+- install.upgrade:
+   client.0:
+- print: "**** done install.upgrade client.0"
+- ceph:
+- print: "**** done ceph"
