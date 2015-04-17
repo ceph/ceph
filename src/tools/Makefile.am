@@ -54,4 +54,7 @@ noinst_HEADERS += \
 	tools/cephfs/Dumper.h \
 	tools/cephfs/TableTool.h \
 	tools/cephfs/MDSUtility.h \
-	tools/rados/rados_sync.h
+	tools/rados/rados_sync.h \
+	tools/RadosDump.h \
+	tools/RadosImport.h\
+	tools/ceph_objectstore_tool.h
