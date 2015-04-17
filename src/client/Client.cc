@@ -2624,6 +2624,31 @@ void Client::unlink(Dentry *dn, bool keepdir, bool keepdentry)
   }
 }
 
+/**
+ * For asynchronous flushes, check for errors from the IO and
+ * update the inode if necessary
+ */
+class C_Client_FlushComplete : public Context {
+private:
+  Client *client;
+  Inode *inode;
+public:
+  C_Client_FlushComplete(Client *c, Inode *in) : client(c), inode(in) {
+    inode->get();
+  }
+  void finish(int r) {
+    assert(client->client_lock.is_locked_by_me());
+    if (r != 0) {
+      client_t const whoami = client->whoami;  // For the benefit of ldout prefix
+      ldout(client->cct, 1) << "I/O error from flush on inode " << inode
+        << " 0x" << std::hex << inode->ino << std::dec
+        << ": " << r << "(" << cpp_strerror(r) << ")" << dendl;
+      inode->async_err = r;
+    }
+    client->put_inode(inode);
+  }
+};
+
 
 /****
  * caps
@@ -2693,22 +2718,46 @@ int Client::get_caps(Inode *in, int need, int want, int *phave, loff_t endoff)
     if (!in->is_any_caps())
       return -ESTALE;
 
-    if (endoff > 0 &&
-	(endoff >= (loff_t)in->max_size ||
-	 endoff > (loff_t)(in->size << 1)) &&
-	endoff > (loff_t)in->wanted_max_size) {
-      ldout(cct, 10) << "wanted_max_size " << in->wanted_max_size << " -> " << endoff << dendl;
-      in->wanted_max_size = endoff;
-      check_caps(in, false);
+    int implemented;
+    int have = in->caps_issued(&implemented);
+
+    bool waitfor_caps = false;
+    bool waitfor_commit = false;
+
+    if (have & need & CEPH_CAP_FILE_WR) {
+      if (endoff > 0 &&
+	  (endoff >= (loff_t)in->max_size ||
+	   endoff > (loff_t)(in->size << 1)) &&
+	  endoff > (loff_t)in->wanted_max_size) {
+	ldout(cct, 10) << "wanted_max_size " << in->wanted_max_size << " -> " << endoff << dendl;
+	in->wanted_max_size = endoff;
+	check_caps(in, false);
+      }
+
+      if (endoff >= 0 && endoff > (loff_t)in->max_size) {
+	ldout(cct, 10) << "waiting on max_size, endoff " << endoff << " max_size " << in->max_size << " on " << *in << dendl;
+	waitfor_caps = true;
+      }
+      if (!in->cap_snaps.empty()) {
+	if (in->cap_snaps.rbegin()->second->writing) {
+	  ldout(cct, 10) << "waiting on cap_snap write to complete" << dendl;
+	  waitfor_caps = true;
+	}
+	for (map<snapid_t,CapSnap*>::iterator p = in->cap_snaps.begin();
+	    p != in->cap_snaps.end();
+	    ++p)
+	  if (p->second->dirty_data) {
+	    waitfor_commit = true;
+	    break;
+	  }
+	if (waitfor_commit) {
+	  _flush(in, new C_Client_FlushComplete(this, in));
+	  ldout(cct, 10) << "waiting for WRBUFFER to get dropped" << dendl;
+	}
+      }
     }
 
-    if (endoff >= 0 && endoff > (loff_t)in->max_size) {
-      ldout(cct, 10) << "waiting on max_size, endoff " << endoff << " max_size " << in->max_size << " on " << *in << dendl;
-    } else if (!in->cap_snaps.empty() && in->cap_snaps.rbegin()->second->writing) {
-      ldout(cct, 10) << "waiting on cap_snap write to complete" << dendl;
-    } else {
-      int implemented;
-      int have = in->caps_issued(&implemented);
+    if (!waitfor_caps && !waitfor_commit) {
       if ((have & need) == need) {
 	int butnot = want & ~(have & need);
 	int revoking = implemented & ~have;
@@ -2723,13 +2772,17 @@ int Client::get_caps(Inode *in, int need, int want, int *phave, loff_t endoff)
 	}
       }
       ldout(cct, 10) << "waiting for caps need " << ccap_string(need) << " want " << ccap_string(want) << dendl;
+      waitfor_caps = true;
     }
 
     if ((need & CEPH_CAP_FILE_WR) && in->auth_cap &&
 	in->auth_cap->session->readonly)
       return -EROFS;
-    
-    wait_on_list(in->waitfor_caps);
+
+    if (waitfor_caps)
+      wait_on_list(in->waitfor_caps);
+    else if (waitfor_commit)
+      wait_on_list(in->waitfor_commit);
   }
 }
 
@@ -4257,34 +4310,6 @@ void Client::_try_to_trim_inode(Inode *in)
     unlink(dn, true, true);
   }
 }
-
-/**
- * For asynchronous flushes, check for errors from the IO and
- * update the inode if necessary
- */
-class C_Client_FlushComplete : public Context {
-  private:
-  Client *client;
-  Inode *inode;
-
-  public:
-  C_Client_FlushComplete(Client *c, Inode *in) : client(c), inode(in)
-  {
-    inode->get();
-  }
-
-  void finish(int r) {
-    assert(client->client_lock.is_locked_by_me());
-    if (r != 0) {
-      client_t const whoami = client->whoami;  // For the benefit of ldout prefix
-      ldout(client->cct, 1) << "I/O error from flush on inode " << inode
-        << " 0x" << std::hex << inode->ino << std::dec
-        << ": " << r << "(" << cpp_strerror(r) << ")" << dendl;
-      inode->async_err = r;
-    }
-    client->put_inode(inode);
-  }
-};
 
 void Client::handle_cap_grant(MetaSession *session, Inode *in, Cap *cap, MClientCaps *m)
 {
