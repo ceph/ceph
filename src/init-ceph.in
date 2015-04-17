@@ -227,7 +227,7 @@ for name in $what; do
 
     get_conf run_dir "/var/run/ceph" "run dir"
 
-    get_conf pid_file "$run_dir/$type.$id.pid" "pid file"
+    get_conf pid_file "$run_dir/$cluster-$type.$id.pid" "pid file"
 
     if [ "$command" = "start" ]; then
 	if [ -n "$pid_file" ]; then
