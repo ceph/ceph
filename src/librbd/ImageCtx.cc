@@ -603,9 +603,7 @@ namespace librbd {
   void ImageCtx::clear_nonexistence_cache() {
     if (!object_cacher)
       return;
-    cache_lock.Lock();
     object_cacher->clear_nonexistence(object_set);
-    cache_lock.Unlock();
   }
 
   int ImageCtx::register_watch() {
