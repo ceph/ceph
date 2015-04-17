@@ -112,12 +112,12 @@ endif # LINUX
 unittest_librados_SOURCES = test/librados/librados.cc
 unittest_librados_LDADD = $(LIBRADOS) $(CEPH_GLOBAL) $(UNITTEST_LDADD)
 unittest_librados_CXXFLAGS = $(UNITTEST_CXXFLAGS)
-check_PROGRAMS += unittest_librados
+check_TESTPROGRAMS += unittest_librados
 
 unittest_librados_config_SOURCES = test/librados/librados_config.cc
 unittest_librados_config_LDADD = $(LIBRADOS) $(CEPH_GLOBAL) $(UNITTEST_LDADD)
 unittest_librados_config_CXXFLAGS = $(UNITTEST_CXXFLAGS)
-check_PROGRAMS += unittest_librados_config
+check_TESTPROGRAMS += unittest_librados_config
 
 ceph_multi_stress_watch_SOURCES = test/multi_stress_watch.cc
 ceph_multi_stress_watch_LDADD = $(LIBRADOS) $(CEPH_GLOBAL) $(RADOS_TEST_LDADD)
@@ -296,7 +296,7 @@ unittest_rbd_replay_LDADD = $(LIBRBD) \
 	librbd_replay_ios.la \
 	$(UNITTEST_LDADD)
 unittest_rbd_replay_CXXFLAGS = $(UNITTEST_CXXFLAGS)
-check_PROGRAMS += unittest_rbd_replay
+check_TESTPROGRAMS += unittest_rbd_replay
 
 librbd_test_la_SOURCES = \
 	test/librbd/test_fixture.cc \
@@ -315,7 +315,7 @@ unittest_librbd_LDADD = \
 	librados_test_stub.la librados_internal.la \
 	$(LIBOSDC) $(UNITTEST_LDADD) \
 	$(CEPH_GLOBAL) $(RADOS_TEST_LDADD)
-noinst_PROGRAMS += unittest_librbd
+check_PROGRAMS += unittest_librbd
 check_SCRIPTS += test/run-rbd-unit-tests.sh
 
 ceph_test_librbd_SOURCES =
@@ -390,27 +390,27 @@ endif # WITH_BUILD_TESTS
 
 unittest_encoding_LDADD = $(LIBCEPHFS) $(LIBRADOS) $(CEPH_GLOBAL) -lm $(UNITTEST_LDADD)
 unittest_encoding_CXXFLAGS = $(UNITTEST_CXXFLAGS) -fno-strict-aliasing
-check_PROGRAMS += unittest_encoding
+check_TESTPROGRAMS += unittest_encoding
 
 unittest_base64_SOURCES = test/base64.cc
 unittest_base64_LDADD = $(LIBCEPHFS) $(CEPH_GLOBAL) -lm $(UNITTEST_LDADD)
 unittest_base64_CXXFLAGS = $(UNITTEST_CXXFLAGS)
-check_PROGRAMS += unittest_base64
+check_TESTPROGRAMS += unittest_base64
 
 unittest_run_cmd_SOURCES = test/run_cmd.cc
 unittest_run_cmd_LDADD = $(LIBCEPHFS) $(CEPH_GLOBAL) $(UNITTEST_LDADD)
 unittest_run_cmd_CXXFLAGS = $(UNITTEST_CXXFLAGS)
-check_PROGRAMS += unittest_run_cmd
+check_TESTPROGRAMS += unittest_run_cmd
 
 unittest_simple_spin_SOURCES = test/simple_spin.cc
 unittest_simple_spin_LDADD = $(LIBCEPHFS) $(CEPH_GLOBAL) $(UNITTEST_LDADD)
 unittest_simple_spin_CXXFLAGS = $(UNITTEST_CXXFLAGS)
-check_PROGRAMS += unittest_simple_spin
+check_TESTPROGRAMS += unittest_simple_spin
 
 unittest_libcephfs_config_SOURCES = test/libcephfs_config.cc
 unittest_libcephfs_config_LDADD = $(LIBCEPHFS) $(CEPH_GLOBAL) $(UNITTEST_LDADD)
 unittest_libcephfs_config_CXXFLAGS = $(UNITTEST_CXXFLAGS)
-check_PROGRAMS += unittest_libcephfs_config
+check_TESTPROGRAMS += unittest_libcephfs_config
 
 ceph_test_libcephfs_SOURCES = \
 	test/libcephfs/test.cc \
@@ -470,13 +470,13 @@ endif # WITH_BUILD_TESTS
 #unittest_librgw_link_LDFLAGS = $(PTHREAD_CFLAGS) ${AM_LDFLAGS}
 #unittest_librgw_link_LDADD = $(LIBRGW) ${UNITTEST_LDADD}
 #unittest_librgw_link_CXXFLAGS = ${CRYPTO_CFLAGS} ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
-#check_PROGRAMS += unittest_librgw_link
+#check_TESTPROGRAMS += unittest_librgw_link
 
 #unittest_librgw_SOURCES = test/librgw.cc
 #unittest_librgw_LDFLAGS = -lrt $(PTHREAD_CFLAGS) -lcurl ${AM_LDFLAGS}
 #unittest_librgw_LDADD =  librgw.la $(LIBRADOS) ${UNITTEST_LDADD} -lexpat $(CEPH_GLOBAL)
 #unittest_librgw_CXXFLAGS = ${CRYPTO_CFLAGS} ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
-#check_PROGRAMS += unittest_librgw
+#check_TESTPROGRAMS += unittest_librgw
 
 ceph_test_cors_SOURCES = test/test_cors.cc
 ceph_test_cors_LDADD = \
