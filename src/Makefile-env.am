@@ -29,8 +29,9 @@ ceph_sbindir = $(sbindir)
 # certain things go straight into /sbin, though!
 su_sbindir = /sbin
 
-# C/C++ tests to build will be appended to this
-check_PROGRAMS =
+# C/C++ tests to build and executed will be appended to this
+check_TESTPROGRAMS =
+check_PROGRAMS = $(check_TESTPROGRAMS)
 
 # tests scripts will be appended to this
 check_SCRIPTS =

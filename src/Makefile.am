@@ -148,7 +148,7 @@ ceph_libexec_SCRIPTS = ceph-osd-prestart.sh
 # target by target
 
 TESTS = \
-	$(check_PROGRAMS) \
+	$(check_TESTPROGRAMS) \
 	$(check_SCRIPTS)
 
 check-local:
