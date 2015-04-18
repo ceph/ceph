@@ -620,18 +620,11 @@ public:
     osdmap(osdmap_),
     pgm(pgm_),
     tree(tree_),
-    average_util(0),
+    average_util(average_utilization()),
     min_var(-1),
     max_var(-1),
     stddev(0),
     sum(0) {
-    // FIXME: average_util should be calculated from the same set of
-    // nodes that dump_item considers when calculating the stddev.  we
-    // probably need to make two tree traversals for that to work,
-    // maybe with a callback like precalc_item() that's looks similar
-    // to dump_item()?
-    if (pgm->osd_sum.kb)
-      average_util = 100.0 * (double)pgm->osd_sum.kb_used / (double)pgm->osd_sum.kb;
   }
 
 protected:
@@ -649,7 +642,7 @@ protected:
     float reweight = qi.is_bucket() ? -1 : osdmap->get_weightf(qi.id);
     int64_t kb = 0, kb_used = 0, kb_avail = 0;
     double util = 0;
-    if (get_bucket_utilization(qi.id, kb, kb_used, kb_avail) && kb > 0)
+    if (get_bucket_utilization(qi.id, &kb, &kb_used, &kb_avail))
       util = 100.0 * (double)kb_used / (double)kb;
     double var = 1.0;
     if (average_util)
@@ -678,34 +671,49 @@ protected:
     return sum > 0 ? sqrt(stddev / sum) : 0;
   }
 
-  bool get_bucket_utilization(int id, int64_t& kb, int64_t& kb_used,
-			      int64_t& kb_avail) const {
-    if (id >= 0) {
-      typedef ceph::unordered_map<int32_t,osd_stat_t> OsdStat;
-
-      OsdStat::const_iterator p = pgm->osd_stat.find(id);
-
-      if (p == pgm->osd_stat.end())
-	return false;
-
-      kb = p->second.kb;
-      kb_used = p->second.kb_used;
-      kb_avail = p->second.kb_avail;
-      return kb > 0;
+  double average_utilization() {
+    int64_t kb = 0, kb_used = 0;
+    for (int i = 0; i <= osdmap->get_max_osd(); i++) {
+      if (!osdmap->exists(i) || osdmap->get_weight(i) == 0)
+	continue;
+      int64_t kb_i, kb_used_i, kb_avail_i;
+      if (get_osd_utilization(i, &kb_i, &kb_used_i, &kb_avail_i)) {
+	kb += kb_i;
+	kb_used += kb_used_i;
+      }
     }
+    return kb > 0 ? 100.0 * (double)kb_used / (double)kb : 0;
+  }
 
-    kb = 0;
-    kb_used = 0;
-    kb_avail = 0;
+  bool get_osd_utilization(int id, int64_t* kb, int64_t* kb_used,
+			   int64_t* kb_avail) const {
+    typedef ceph::unordered_map<int32_t,osd_stat_t> OsdStat;
+    OsdStat::const_iterator p = pgm->osd_stat.find(id);
+    if (p == pgm->osd_stat.end())
+      return false;
+    *kb = p->second.kb;
+    *kb_used = p->second.kb_used;
+    *kb_avail = p->second.kb_avail;
+    return *kb > 0;
+  }
+
+  bool get_bucket_utilization(int id, int64_t* kb, int64_t* kb_used,
+			      int64_t* kb_avail) const {
+    if (id >= 0)
+      return get_osd_utilization(id, kb, kb_used, kb_avail);
+
+    *kb = 0;
+    *kb_used = 0;
+    *kb_avail = 0;
 
     for (int k = osdmap->crush->get_bucket_size(id) - 1; k >= 0; k--) {
       int item = osdmap->crush->get_bucket_item(id, k);
       int64_t kb_i = 0, kb_used_i = 0, kb_avail_i;
-      if (!get_bucket_utilization(item, kb_i, kb_used_i, kb_avail_i))
+      if (!get_bucket_utilization(item, &kb_i, &kb_used_i, &kb_avail_i))
 	return false;
-      kb += kb_i;
-      kb_used += kb_used_i;
-      kb_avail += kb_avail_i;
+      *kb += kb_i;
+      *kb_used += kb_used_i;
+      *kb_avail += kb_avail_i;
     }
     return kb > 0;
   }
