@@ -1,0 +1,38 @@
+if WITH_SLIBLMDB
+  SUBDIRS += mdb/libraries/liblmdb
+else
+  EXTRA_DIST += \
+	mdb/libraries/liblmdb/.gitignore \
+	mdb/libraries/liblmdb/Makefile.am \
+	mdb/libraries/liblmdb/configure.ac \
+	mdb/libraries/liblmdb/CHANGES \
+	mdb/libraries/liblmdb/COPYRIGHT \
+	mdb/libraries/liblmdb/LICENSE \
+	mdb/libraries/liblmdb/Doxyfile \
+	mdb/libraries/liblmdb/tooltag \
+	mdb/libraries/liblmdb/midl.h \
+	mdb/libraries/liblmdb/midl.c \
+	mdb/libraries/liblmdb/lmdb.h \
+	mdb/libraries/liblmdb/mdb.c \
+	mdb/libraries/liblmdb/sample-mdb.txt \
+	mdb/libraries/liblmdb/sample-bdb.txt \
+	mdb/libraries/liblmdb/mdb_copy.c \
+	mdb/libraries/liblmdb/mdb_copy.1 \
+	mdb/libraries/liblmdb/mdb_dump.c \
+	mdb/libraries/liblmdb/mdb_dump.1 \
+	mdb/libraries/liblmdb/mdb_load.c \
+	mdb/libraries/liblmdb/mdb_load.1 \
+	mdb/libraries/liblmdb/mdb_stat.c \
+	mdb/libraries/liblmdb/mdb_stat.1 \
+	mdb/libraries/liblmdb/mtest.c \
+	mdb/libraries/liblmdb/mtest2.c \
+	mdb/libraries/liblmdb/mtest3.c \
+	mdb/libraries/liblmdb/mtest4.c \
+	mdb/libraries/liblmdb/mtest5.c \
+	mdb/libraries/liblmdb/mtest6.c \
+	mdb/libraries/liblmdb/m4/libtool.m4 \
+	mdb/libraries/liblmdb/m4/lt~obsolete.m4 \
+	mdb/libraries/liblmdb/m4/ltoptions.m4 \
+	mdb/libraries/liblmdb/m4/ltsugar.m4 \
+	mdb/libraries/liblmdb/m4/ltversion.m4
+endif #WITH_SLIBLMDB

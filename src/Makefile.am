@@ -3,10 +3,6 @@ include Makefile-env.am
 SUBDIRS += ocf java tracing
 DIST_SUBDIRS += gmock ocf libs3 java tracing
 
-if WITH_SLIBLMDB
-  SUBDIRS += mdb/libraries/liblmdb
-endif
-
 if NO_GIT_VERSION
 export NO_VERSION="yes"
 endif
@@ -43,6 +39,7 @@ include rbd_replay/Makefile.am
 include test/Makefile.am
 include tools/Makefile.am
 include Makefile-rocksdb.am
+include Makefile-lmdb.am
 
 
 # shell scripts
