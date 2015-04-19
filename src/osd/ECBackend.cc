@@ -366,7 +366,7 @@ void ECBackend::handle_recovery_read_complete(
     op.xattrs.swap(*attrs);
 
     if (!op.obc) {
-      op.obc = get_parent()->get_obc(hoid, op.xattrs);
+      op.obc = get_parent()->get_obc(hoid, op.xattrs, false);
       op.recovery_info.size = op.obc->obs.oi.size;
       op.recovery_info.oi = op.obc->obs.oi;
     }

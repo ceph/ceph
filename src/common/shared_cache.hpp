@@ -56,16 +56,18 @@ private:
     contents.erase(i);
   }
 
-  void lru_add(const K& key, const VPtr& val, list<VPtr> *to_release) {
+  void lru_add(const K& key, const VPtr& val, list<VPtr> *to_release, bool do_cache = true) {
     typename map<K, typename list<pair<K, VPtr> >::iterator>::iterator i =
       contents.find(key);
     if (i != contents.end()) {
       lru.splice(lru.begin(), lru, i->second);
     } else {
-      ++size;
-      lru.push_front(make_pair(key, val));
-      contents[key] = lru.begin();
-      trim_cache(to_release);
+      if (do_cache) {
+        ++size;
+        lru.push_front(make_pair(key, val));
+        contents[key] = lru.begin();
+        trim_cache(to_release);
+      }
     }
   }
 
@@ -237,7 +239,11 @@ public:
     return found;
   }
 
-  VPtr lookup(const K& key) {
+  VPtr cache_key(const K& key) {
+    return lookup(key); 
+  }
+
+  VPtr lookup(const K& key, bool do_cache = true) {
     VPtr val;
     list<VPtr> to_release;
     {
@@ -250,7 +256,7 @@ public:
 	if (i != weak_refs.end()) {
 	  val = i->second.first.lock();
 	  if (val) {
-	    lru_add(key, val, &to_release);
+	    lru_add(key, val, &to_release, do_cache);
 	  } else {
 	    retry = true;
 	  }
@@ -262,7 +268,7 @@ public:
     }
     return val;
   }
-  VPtr lookup_or_create(const K &key) {
+  VPtr lookup_or_create(const K &key, bool do_cache = true) {
     VPtr val;
     list<VPtr> to_release;
     {
@@ -274,7 +280,7 @@ public:
 	if (i != weak_refs.end()) {
 	  val = i->second.first.lock();
 	  if (val) {
-	    lru_add(key, val, &to_release);
+	    lru_add(key, val, &to_release, do_cache);
 	    return val;
 	  } else {
 	    retry = true;
@@ -287,7 +293,8 @@ public:
       V *new_value = new V();
       VPtr new_val(new_value, Cleanup(this, key));
       weak_refs.insert(make_pair(key, make_pair(new_val, new_value)));
-      lru_add(key, new_val, &to_release);
+      if (do_cache)
+        lru_add(key, new_val, &to_release);
       return new_val;
     }
   }
