@@ -2477,7 +2477,7 @@ int NewStore::_do_wal_transaction(wal_transaction_t& wt)
 	    (p->length & ~CEPH_PAGE_MASK) == 0) {
 	  dout(20) << __func__ << " page-aligned io, using O_DIRECT, "
 		   << p->data.buffers().size() << " buffers" << dendl;
-	  flags |= O_DIRECT;
+	  flags |= O_DIRECT | O_DSYNC;
 	  if (!p->data.is_page_aligned()) {
 	    dout(20) << __func__ << " rebuilding buffer to be page-aligned"
 		     << dendl;
@@ -2500,7 +2500,9 @@ int NewStore::_do_wal_transaction(wal_transaction_t& wt)
 	       << cpp_strerror(r) << dendl;
 	  return r;
 	}
-	sync_fds.push_back(fd);
+	if (!(flags & O_DSYNC)) {
+	  sync_fds.push_back(fd);
+	}
       }
       break;
     case wal_op_t::OP_ZERO:
@@ -3254,7 +3256,7 @@ int NewStore::_do_write(TransContext *txc,
       (length & ~CEPH_PAGE_MASK) == 0) {
     dout(20) << __func__ << " page-aligned, can use O_DIRECT, "
 	     << bl.buffers().size() << " buffers" << dendl;
-    flags |= O_DIRECT;
+    flags |= O_DIRECT | O_DSYNC;
     if (!bl.is_page_aligned()) {
       dout(20) << __func__ << " rebuilding buffer to be page-aligned" << dendl;
       bl.rebuild();
@@ -3317,7 +3319,9 @@ int NewStore::_do_write(TransContext *txc,
 	goto out;
       }
     }
-    txc->sync_fd(fd);
+    if (!(flags & O_DSYNC)) {
+      txc->sync_fd(fd);
+    }
     r = 0;
     goto out;
   }
