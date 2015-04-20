@@ -23,7 +23,7 @@ int RadosDump::read_super()
   bytes = ebl.read_fd(file_fd, super_header::FIXED_LENGTH);
   if ((size_t)bytes != super_header::FIXED_LENGTH) {
     cerr << "Unexpected EOF" << std::endl;
-    return EFAULT;
+    return -EFAULT;
   }
 
   sh.decode(ebliter);
@@ -43,7 +43,7 @@ int RadosDump::get_header(header *h)
   bytes = ebl.read_fd(file_fd, sh.header_size);
   if ((size_t)bytes != sh.header_size) {
     cerr << "Unexpected EOF" << std::endl;
-    return EFAULT;
+    return -EFAULT;
   }
 
   h->decode(ebliter);
@@ -69,7 +69,7 @@ int RadosDump::get_footer(footer *f)
 
   if (f->magic != endmagic) {
     cerr << "Bad footer magic" << std::endl;
-    return EFAULT;
+    return -EFAULT;
   }
 
   return 0;
@@ -90,7 +90,7 @@ int RadosDump::read_section(sectiontype_t *type, bufferlist *bl)
   bytes = bl->read_fd(file_fd, hdr.size);
   if (bytes != hdr.size) {
     cerr << "Unexpected EOF" << std::endl;
-    return EFAULT;
+    return -EFAULT;
   }
 
   if (hdr.size > 0) {
@@ -133,7 +133,8 @@ int RadosDump::skip_object(bufferlist &bl)
       done = true;
       break;
     default:
-      return EFAULT;
+      cerr << "Can't skip unknown type: " << type << std::endl;
+      return -EFAULT;
     }
   }
   return 0;
