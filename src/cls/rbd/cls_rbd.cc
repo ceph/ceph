@@ -296,11 +296,11 @@ int create(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
  */
 int get_features(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
+  uint64_t snap_id;
   bool read_only = false;
 
   bufferlist::iterator iter = in->begin();
   try {
-    uint64_t snap_id;
     ::decode(snap_id, iter);
     if (!iter.end()) {
       ::decode(read_only, iter);
@@ -309,7 +309,21 @@ int get_features(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
     return -EINVAL;
   }
 
-  CLS_LOG(20, "get_features read_only=%d", read_only);
+  CLS_LOG(20, "get_features snap_id=%" PRIu64 ", read_only=%d",
+          snap_id, read_only);
+
+  // NOTE: keep this deprecated snapshot logic to support negative
+  // test cases in older (pre-Infernalis) releases. Remove once older
+  // releases are no longer supported.
+  if (snap_id != CEPH_NOSNAP) {
+    cls_rbd_snap snap;
+    string snapshot_key;
+    key_from_snap_id(snap_id, &snapshot_key);
+    int r = read_key(hctx, snapshot_key, &snap);
+    if (r < 0) {
+      return r;
+    }
+  }
 
   uint64_t features;
   int r = read_key(hctx, "features", &features);
