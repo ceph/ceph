@@ -88,11 +88,12 @@ void TestIoCtxImpl::aio_flush_async(AioCompletionImpl *c) {
 int TestIoCtxImpl::aio_operate(const std::string& oid, TestObjectOperationImpl &ops,
                                AioCompletionImpl *c, SnapContext *snap_context,
                                int flags) {
-  // TODO ignoring snap_context and flags for now
+  // TODO flags for now
   ops.get();
   m_client->add_aio_operation(oid, true, boost::bind(
     &TestIoCtxImpl::execute_aio_operations, this, oid, &ops,
-    reinterpret_cast<bufferlist*>(NULL)), c);
+    reinterpret_cast<bufferlist*>(NULL),
+    snap_context != NULL ? *snap_context : m_snapc), c);
   return 0;
 }
 
@@ -103,20 +104,21 @@ int TestIoCtxImpl::aio_operate_read(const std::string& oid,
   // TODO ignoring flags for now
   ops.get();
   m_client->add_aio_operation(oid, true, boost::bind(
-    &TestIoCtxImpl::execute_aio_operations, this, oid, &ops, pbl), c);
+    &TestIoCtxImpl::execute_aio_operations, this, oid, &ops, pbl, m_snapc), c);
   return 0;
 }
 
 int TestIoCtxImpl::exec(const std::string& oid, TestClassHandler &handler,
                         const char *cls, const char *method,
-                        bufferlist& inbl, bufferlist* outbl) {
+                        bufferlist& inbl, bufferlist* outbl,
+                        const SnapContext &snapc) {
   cls_method_cxx_call_t call = handler.get_method(cls, method);
   if (call == NULL) {
     return -ENOSYS;
   }
 
   return (*call)(reinterpret_cast<cls_method_context_t>(
-    handler.get_method_context(this, oid).get()), &inbl, outbl);
+    handler.get_method_context(this, oid, snapc).get()), &inbl, outbl);
 }
 
 int TestIoCtxImpl::list_watchers(const std::string& o,
@@ -141,7 +143,7 @@ int TestIoCtxImpl::operate(const std::string& oid, TestObjectOperationImpl &ops)
   ops.get();
   m_client->add_aio_operation(oid, false, boost::bind(
     &TestIoCtxImpl::execute_aio_operations, this, oid, &ops,
-    reinterpret_cast<bufferlist*>(NULL)), comp);
+    reinterpret_cast<bufferlist*>(NULL), m_snapc), comp);
 
   comp->wait_for_safe();
   int ret = comp->get_return_value();
@@ -155,7 +157,8 @@ int TestIoCtxImpl::operate_read(const std::string& oid, TestObjectOperationImpl 
 
   ops.get();
   m_client->add_aio_operation(oid, false, boost::bind(
-    &TestIoCtxImpl::execute_aio_operations, this, oid, &ops, pbl), comp);
+    &TestIoCtxImpl::execute_aio_operations, this, oid, &ops, pbl,
+    m_snapc), comp);
 
   comp->wait_for_complete();
   int ret = comp->get_return_value();
@@ -229,7 +232,7 @@ int TestIoCtxImpl::tmap_update(const std::string& oid, bufferlist& cmdbl) {
   bufferlist out;
   ::encode(tmap_header, out);
   ::encode(tmap, out);
-  r = write_full(oid, out);
+  r = write_full(oid, out, m_snapc);
   return r;
 }
 
@@ -244,10 +247,12 @@ int TestIoCtxImpl::watch(const std::string& o, uint64_t *handle,
 
 int TestIoCtxImpl::execute_aio_operations(const std::string& oid,
                                           TestObjectOperationImpl *ops,
-                                          bufferlist *pbl) {
+                                          bufferlist *pbl,
+                                          const SnapContext &snapc) {
   int ret = 0;
-  for (ObjectOperations::iterator it = ops->ops.begin(); it != ops->ops.end(); ++it) {
-    ret = (*it)(this, oid, pbl);
+  for (ObjectOperations::iterator it = ops->ops.begin();
+       it != ops->ops.end(); ++it) {
+    ret = (*it)(this, oid, pbl, snapc);
     if (ret < 0) {
       break;
     }
