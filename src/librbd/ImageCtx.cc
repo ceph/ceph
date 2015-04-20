@@ -108,6 +108,8 @@ namespace librbd {
       pname += snap_name;
     }
 
+    perf_start(pname);
+
     if (id.length()) {
       old_format = false;
     } else {
@@ -189,7 +191,6 @@ namespace librbd {
     readahead.set_trigger_requests(readahead_trigger_requests);
     readahead.set_max_readahead_size(readahead_max_bytes);
 
-    perf_start(pname);
     return 0;
   }
 
