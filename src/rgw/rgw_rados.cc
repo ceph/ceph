@@ -3457,6 +3457,7 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
                rgw_obj& src_obj,
                RGWBucketInfo& dest_bucket_info,
                RGWBucketInfo& src_bucket_info,
+               time_t *src_mtime,
                time_t *mtime,
                const time_t *mod_ptr,
                const time_t *unmod_ptr,
@@ -3484,8 +3485,9 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
                                       dest_bucket_info, dest_obj.bucket, dest_obj.get_object(),
                                       cct->_conf->rgw_obj_stripe_size, tag, dest_bucket_info.versioning_enabled());
   int ret = processor.prepare(this, NULL);
-  if (ret < 0)
+  if (ret < 0) {
     return ret;
+  }
 
   RGWRESTConn *conn;
   if (source_zone.empty()) {
@@ -3524,12 +3526,14 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
   time_t set_mtime;
  
   ret = conn->get_obj(user_id, info, src_obj, true, &cb, &in_stream_req);
-  if (ret < 0)
+  if (ret < 0) {
     goto set_err_state;
+  }
 
   ret = conn->complete_request(in_stream_req, etag, &set_mtime, req_headers);
-  if (ret < 0)
+  if (ret < 0) {
     goto set_err_state;
+  }
 
   { /* opening scope so that we can do goto, sorry */
     bufferlist& extra_data_bl = processor.get_extra_data();
@@ -3546,6 +3550,10 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
     }
   }
 
+  if (src_mtime) {
+    *src_mtime = set_mtime;
+  }
+
   if (petag) {
     map<string, bufferlist>::iterator iter = src_attrs.find(RGW_ATTR_ETAG);
     if (iter != src_attrs.end()) {
@@ -3559,8 +3567,9 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
   }
 
   ret = cb.complete(etag, mtime, set_mtime, src_attrs);
-  if (ret < 0)
+  if (ret < 0) {
     goto set_err_state;
+  }
 
   ret = opstate.set_state(RGWOpState::OPSTATE_COMPLETE);
   if (ret < 0) {
@@ -3628,6 +3637,7 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
                rgw_obj& src_obj,
                RGWBucketInfo& dest_bucket_info,
                RGWBucketInfo& src_bucket_info,
+               time_t *src_mtime,
                time_t *mtime,
                const time_t *mod_ptr,
                const time_t *unmod_ptr,
@@ -3646,7 +3656,6 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
 {
   int ret;
   uint64_t total_len, obj_size;
-  time_t lastmod;
   rgw_obj shadow_obj = dest_obj;
   string shadow_oid;
 
@@ -3668,7 +3677,7 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
 
   if (remote_src || !source_zone.empty()) {
     return fetch_remote_obj(obj_ctx, user_id, client_id, op_id, info, source_zone,
-               dest_obj, src_obj, dest_bucket_info, src_bucket_info, mtime, mod_ptr,
+               dest_obj, src_obj, dest_bucket_info, src_bucket_info, src_mtime, mtime, mod_ptr,
                unmod_ptr, if_match, if_nomatch, attrs_mod, attrs, category,
                olh_epoch, version_id, ptag, petag, err, progress_cb, progress_data);
   }
@@ -3684,7 +3693,7 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
   read_op.conds.if_match = if_match;
   read_op.conds.if_nomatch = if_nomatch;
   read_op.params.attrs = &src_attrs;
-  read_op.params.lastmod = &lastmod;
+  read_op.params.lastmod = src_mtime;
   read_op.params.read_size = &total_len;
   read_op.params.obj_size = &obj_size;
   read_op.params.perr = err;
@@ -3700,8 +3709,9 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
   RGWObjManifest manifest;
   RGWObjState *astate = NULL;
   ret = get_obj_state(&obj_ctx, src_obj, &astate, NULL);
-  if (ret < 0)
+  if (ret < 0) {
     return ret;
+  }
 
   vector<rgw_obj> ref_objs;
 
@@ -3726,10 +3736,11 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
       uint64_t head_size = astate->manifest.get_head_size();
 
       if (head_size > 0) {
-	if (head_size > max_chunk_size)
-	  copy_data = true;
-	else
+        if (head_size > max_chunk_size) {
+          copy_data = true;
+        } else {
           copy_first = true;
+        }
       }
     }
   }
@@ -3750,8 +3761,9 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
 
   RGWObjManifest::obj_iterator miter = astate->manifest.obj_begin();
 
-  if (copy_first) // we need to copy first chunk, not increase refcount
+  if (copy_first) { // we need to copy first chunk, not increase refcount
     ++miter;
+  }
 
   rgw_rados_ref ref;
   rgw_bucket bucket;
@@ -3780,8 +3792,9 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
 
   string tag;
 
-  if (ptag)
+  if (ptag) {
     tag = *ptag;
+  }
 
   if (tag.empty()) {
     append_rand_alpha(cct, tag, tag, 32);
@@ -3802,8 +3815,9 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
       ref.ioctx.locator_set_key(key);
 
       ret = ref.ioctx.operate(oid, &op);
-      if (ret < 0)
+      if (ret < 0) {
         goto done_ret;
+      }
 
       ref_objs.push_back(loc);
     }
@@ -3817,8 +3831,9 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
 
   if (copy_first) {
     ret = read_op.read(0, max_chunk_size, first_chunk);
-    if (ret < 0)
+    if (ret < 0) {
       goto done_ret;
+    }
 
     pmanifest->set_head(dest_obj);
     pmanifest->set_head_size(first_chunk.length());
@@ -3834,8 +3849,9 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
   write_op.meta.olh_epoch = olh_epoch;
 
   ret = write_op.write_meta(end + 1, attrs);
-  if (ret < 0)
+  if (ret < 0) {
     goto done_ret;
+  }
 
   return 0;
 

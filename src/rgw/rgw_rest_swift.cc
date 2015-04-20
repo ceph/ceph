@@ -560,6 +560,41 @@ void RGWDeleteObj_ObjStore_SWIFT::send_response()
   rgw_flush_formatter_and_reset(s, s->formatter);
 }
 
+static void get_contype_from_attrs(map<string, bufferlist>& attrs,
+                                   string& content_type)
+{
+  map<string, bufferlist>::iterator iter = attrs.find(RGW_ATTR_CONTENT_TYPE);
+  if (iter != attrs.end()) {
+    content_type = iter->second.c_str();
+  }
+}
+
+static void dump_object_metadata(struct req_state * const s,
+                                 map<string, bufferlist> attrs)
+{
+  map<string, string> response_attrs;
+  map<string, string>::const_iterator riter;
+  map<string, bufferlist>::iterator iter;
+
+  for (iter = attrs.begin(); iter != attrs.end(); ++iter) {
+    const char *name = iter->first.c_str();
+    map<string, string>::const_iterator aiter = rgw_to_http_attrs.find(name);
+
+    if (aiter != rgw_to_http_attrs.end() &&
+        aiter->first.compare(RGW_ATTR_CONTENT_TYPE) != 0) {
+      /* Filter out Content-Type. It must be treated separately. */
+      response_attrs[aiter->second] = iter->second.c_str();
+    } else if (strncmp(name, RGW_ATTR_META_PREFIX, sizeof(RGW_ATTR_META_PREFIX)-1) == 0) {
+      name += sizeof(RGW_ATTR_META_PREFIX) - 1;
+      s->cio->print("X-Object-Meta-%s: %s\r\n", name, iter->second.c_str());
+    }
+  }
+
+  for (riter = response_attrs.begin(); riter != response_attrs.end(); ++riter) {
+    s->cio->print("%s: %s\r\n", riter->first.c_str(), riter->second.c_str());
+  }
+}
+
 int RGWCopyObj_ObjStore_SWIFT::init_dest_policy()
 {
   dest_policy.create_default(s->user.user_id, s->user.display_name);
@@ -611,14 +646,37 @@ void RGWCopyObj_ObjStore_SWIFT::send_partial_response(off_t ofs)
   rgw_flush_formatter(s, s->formatter);
 }
 
+void RGWCopyObj_ObjStore_SWIFT::dump_copy_info()
+{
+  /* Dump X-Copied-From */
+  string objname, bucketname;
+  url_encode(src_object.name, objname);
+  url_encode(src_bucket.name, bucketname);
+  s->cio->print("X-Copied-From: %s/%s\r\n", bucketname.c_str(), objname.c_str());
+
+  /* Dump X-Copied-From-Account */
+  string account_name;
+  url_encode(s->user.user_id, account_name);
+  s->cio->print("X-Copied-From-Account: %s\r\n", account_name.c_str());
+
+  /* Dump X-Copied-From-Last-Modified. */
+  dump_time_header(s, "X-Copied-From-Last-Modified", src_mtime);
+}
+
 void RGWCopyObj_ObjStore_SWIFT::send_response()
 {
   if (!sent_header) {
-   if (!ret)
+    string content_type;
+    if (!ret)
       ret = STATUS_CREATED;
     set_req_state_err(s, ret);
     dump_errno(s);
-    end_header(s, this);
+    dump_etag(s, etag.c_str());
+    dump_last_modified(s, mtime);
+    dump_copy_info();
+    get_contype_from_attrs(attrs, content_type);
+    dump_object_metadata(s, attrs);
+    end_header(s, this, !content_type.empty() ? content_type.c_str() : "binary/octet-stream");
   } else {
     s->formatter->close_section();
     rgw_flush_formatter(s, s->formatter);
@@ -627,9 +685,7 @@ void RGWCopyObj_ObjStore_SWIFT::send_response()
 
 int RGWGetObj_ObjStore_SWIFT::send_response_data(bufferlist& bl, off_t bl_ofs, off_t bl_len)
 {
-  const char *content_type = NULL;
-  map<string, string> response_attrs;
-  map<string, string>::iterator riter;
+  string content_type;
 
   if (sent_header)
     goto send_data;
@@ -651,34 +707,13 @@ int RGWGetObj_ObjStore_SWIFT::send_response_data(bufferlist& bl, off_t bl_ofs, o
       }
     }
 
-    for (iter = attrs.begin(); iter != attrs.end(); ++iter) {
-      const char *name = iter->first.c_str();
-      map<string, string>::iterator aiter = rgw_to_http_attrs.find(name);
-      if (aiter != rgw_to_http_attrs.end()) {
-        if (aiter->first.compare(RGW_ATTR_CONTENT_TYPE) == 0) { // special handling for content_type
-          content_type = iter->second.c_str();
-          continue;
-        }
-        response_attrs[aiter->second] = iter->second.c_str();
-      } else {
-        if (strncmp(name, RGW_ATTR_META_PREFIX, sizeof(RGW_ATTR_META_PREFIX)-1) == 0) {
-          name += sizeof(RGW_ATTR_META_PREFIX) - 1;
-          s->cio->print("X-Object-Meta-%s: %s\r\n", name, iter->second.c_str());
-        }
-      }
-    }
+    get_contype_from_attrs(attrs, content_type);
+    dump_object_metadata(s, attrs);
   }
 
   set_req_state_err(s, (partial_content && !ret) ? STATUS_PARTIAL_CONTENT : ret);
   dump_errno(s);
-
-  for (riter = response_attrs.begin(); riter != response_attrs.end(); ++riter) {
-    s->cio->print("%s: %s\r\n", riter->first.c_str(), riter->second.c_str());
-  }
-
-  if (!content_type)
-    content_type = "binary/octet-stream";
-  end_header(s, this, content_type);
+  end_header(s, this, !content_type.empty() ? content_type.c_str() : "binary/octet-stream");
 
   sent_header = true;
 
