@@ -9421,9 +9421,15 @@ int Client::_rename(Inode *fromdir, const char *fromname, Inode *todir, const ch
   ldout(cct, 3) << "_rename(" << fromdir->ino << " " << fromname << " to " << todir->ino << " " << toname
 	  << " uid " << uid << " gid " << gid << ")" << dendl;
 
-  if (fromdir->snapid != CEPH_NOSNAP ||
-      todir->snapid != CEPH_NOSNAP) {
-    return -EROFS;
+  if (fromdir->snapid != todir->snapid)
+    return -EXDEV;
+
+  int op = CEPH_MDS_OP_RENAME;
+  if (fromdir->snapid != CEPH_NOSNAP) {
+    if (fromdir == todir && fromdir->snapid == CEPH_SNAPDIR)
+      op = CEPH_MDS_OP_RENAMESNAP;
+    else
+      return -EROFS;
   }
   if (cct->_conf->client_quota &&
       fromdir != todir &&
@@ -9433,7 +9439,7 @@ int Client::_rename(Inode *fromdir, const char *fromname, Inode *todir, const ch
     return -EXDEV;
   }
 
-  MetaRequest *req = new MetaRequest(CEPH_MDS_OP_RENAME);
+  MetaRequest *req = new MetaRequest(op);
 
   filepath from;
   fromdir->make_nosnap_relative_path(from);
@@ -9448,35 +9454,43 @@ int Client::_rename(Inode *fromdir, const char *fromname, Inode *todir, const ch
   int res = get_or_create(fromdir, fromname, &oldde);
   if (res < 0)
     goto fail;
-  req->set_old_dentry(oldde);
-  req->old_dentry_drop = CEPH_CAP_FILE_SHARED;
-  req->old_dentry_unless = CEPH_CAP_FILE_EXCL;
-
   Dentry *de;
   res = get_or_create(todir, toname, &de);
   if (res < 0)
     goto fail;
-  req->set_dentry(de);
-  req->dentry_drop = CEPH_CAP_FILE_SHARED;
-  req->dentry_unless = CEPH_CAP_FILE_EXCL;
 
-  Inode *oldin;
-  res = _lookup(fromdir, fromname, &oldin);
-  if (res < 0)
-    goto fail;
-  req->set_old_inode(oldin);
-  req->old_inode_drop = CEPH_CAP_LINK_SHARED;
+  if (op == CEPH_MDS_OP_RENAME) {
+    req->set_old_dentry(oldde);
+    req->old_dentry_drop = CEPH_CAP_FILE_SHARED;
+    req->old_dentry_unless = CEPH_CAP_FILE_EXCL;
 
-  Inode *otherin;
-  res = _lookup(todir, toname, &otherin);
-  if (res != 0 && res != -ENOENT) {
-    goto fail;
-  } else if (res == 0) {
-    req->set_other_inode(otherin);
-    req->other_inode_drop = CEPH_CAP_LINK_SHARED | CEPH_CAP_LINK_EXCL;
+    req->set_dentry(de);
+    req->dentry_drop = CEPH_CAP_FILE_SHARED;
+    req->dentry_unless = CEPH_CAP_FILE_EXCL;
+
+    Inode *oldin;
+    res = _lookup(fromdir, fromname, &oldin);
+    if (res < 0)
+      goto fail;
+    req->set_old_inode(oldin);
+    req->old_inode_drop = CEPH_CAP_LINK_SHARED;
+
+    Inode *otherin;
+    res = _lookup(todir, toname, &otherin);
+    if (res != 0 && res != -ENOENT) {
+      goto fail;
+    } else if (res == 0) {
+      req->set_other_inode(otherin);
+      req->other_inode_drop = CEPH_CAP_LINK_SHARED | CEPH_CAP_LINK_EXCL;
+    }
+
+    req->set_inode(todir);
+  } else {
+    // renamesnap reply contains no tracedn, so we need to invalidate
+    // dentry manually
+    unlink(oldde, true, true);
+    unlink(de, true, true);
   }
-
-  req->set_inode(todir);
 
   Inode *target;
   res = make_request(req, uid, gid, &target);
