@@ -4439,6 +4439,57 @@ TEST_F(LibRadosTwoPoolsECPP, ProxyRead) {
   cluster.wait_for_latest_osdmap();
 }
 
+//Make ecpool as cache pool; no-ecpool as data pool
+//Judge promote object which has omap from no-ecpool into ecpool.
+TEST_F(LibRadosTwoPoolsECPP, OmapOperation) {
+  // create object
+  {
+    bufferlist bl;
+    bl.append("hi there");
+    ASSERT_EQ(0, cache_ioctx.omap_set_header("foo", bl));
+  }
+
+  // configure cache.
+  bufferlist inbl;
+  ASSERT_EQ(0, cluster.mon_command(
+    "{\"prefix\": \"osd tier add\", \"pool\": \"" + cache_pool_name +
+    "\", \"tierpool\": \"" + pool_name +
+    "\", \"force_nonempty\": \"--force-nonempty\" }",
+    inbl, NULL, NULL));
+  ASSERT_EQ(0, cluster.mon_command(
+    "{\"prefix\": \"osd tier set-overlay\", \"pool\": \"" + cache_pool_name +
+    "\", \"overlaypool\": \"" + pool_name + "\"}",
+    inbl, NULL, NULL));
+  ASSERT_EQ(0, cluster.mon_command(
+    "{\"prefix\": \"osd tier cache-mode\", \"pool\": \"" + pool_name +
+    "\", \"mode\": \"writeback\"}",
+    inbl, NULL, NULL));
+
+
+  // wait for maps to settle
+  cluster.wait_for_latest_osdmap();
+
+  {
+    bufferlist got;
+    ObjectReadOperation o;
+    o.omap_get_header(&got, NULL);
+    ASSERT_EQ(-EOPNOTSUPP, ioctx.operate("foo", &o, NULL));
+
+  }
+  // tear down tiers
+  ASSERT_EQ(0, cluster.mon_command(
+    "{\"prefix\": \"osd tier remove-overlay\", \"pool\": \"" + cache_pool_name +
+    "\"}",
+    inbl, NULL, NULL));
+  ASSERT_EQ(0, cluster.mon_command(
+    "{\"prefix\": \"osd tier remove\", \"pool\": \"" + cache_pool_name +
+    "\", \"tierpool\": \"" + pool_name + "\"}",
+    inbl, NULL, NULL));
+
+  // wait for maps to settle before next test
+  cluster.wait_for_latest_osdmap();
+}
+
 int main(int argc, char **argv)
 {
   ::testing::InitGoogleTest(&argc, argv);
