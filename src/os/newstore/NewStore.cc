@@ -2420,13 +2420,19 @@ int NewStore::_do_wal_transaction(wal_transaction_t& wt)
 	       << cpp_strerror(r) << dendl;
 	  return r;
 	}
-	//sync_fds.push_back(fd);  // do we care?
+	// note: we are not syncing this truncate.  instead, we are
+	// careful about only reading as much of the fragment as we
+	// know is valid, and truncating to expected size before
+	// extending the file.
       }
       break;
 
     case wal_op_t::OP_REMOVE:
       dout(20) << __func__ << " remove " << p->fid << dendl;
       _remove_fid(p->fid);
+      // note: we do not fsync the directory.  instead, we tolerate
+      // leaked fragments in a crash.  in practice, this will be
+      // exceedingly rare.
       break;
 
     default:
