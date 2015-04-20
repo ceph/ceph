@@ -12,10 +12,13 @@ else
         [ -z $OBJCLASS_PATH ] && OBJCLASS_PATH=$CEPH_LIB/rados-classes
 fi
 
+if [ -z "${CEPH_VSTART_WRAPPER}" ]; then
+    PATH=$(pwd):$PATH
+fi
+
 export PYTHONPATH=./pybind
 export LD_LIBRARY_PATH=$CEPH_LIB
 export DYLD_LIBRARY_PATH=$LD_LIBRARY_PATH
-
 
 # abort on failure
 set -e
