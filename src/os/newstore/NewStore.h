@@ -155,6 +155,7 @@ public:
       STATE_KV_DONE,
       STATE_WAL_QUEUED,
       STATE_WAL_APPLYING,
+      STATE_WAL_AIO_WAIT,
       STATE_WAL_CLEANUP,   // remove wal kv record
       STATE_WAL_DONE,
       STATE_FINISHING,
@@ -176,6 +177,7 @@ public:
       case STATE_KV_DONE: return "kv_done";
       case STATE_WAL_QUEUED: return "wal_queued";
       case STATE_WAL_APPLYING: return "wal_applying";
+      case STATE_WAL_AIO_WAIT: return "wal_aio_wait";
       case STATE_WAL_CLEANUP: return "wal_cleanup";
       case STATE_WAL_DONE: return "wal_done";
       case STATE_FINISHING: return "finishing";
@@ -424,7 +426,7 @@ public:
       return i;
     }
     void _process(TransContext *i, ThreadPool::TPHandle &handle) {
-      store->_apply_wal_transaction(i);
+      store->_wal_apply(i);
       i->osr->wal_apply_lock.Unlock();
     }
     void _clear() {
@@ -557,6 +559,7 @@ private:
 
   TransContext *_txc_create(OpSequencer *osr);
   int _txc_finalize(OpSequencer *osr, TransContext *txc);
+  void _txc_aio_submit(TransContext *txc);
   void _txc_queue_fsync(TransContext *txc);
   void _txc_process_fsync(fsync_item *i);
   void _txc_finish_fsync(TransContext *txc);
@@ -582,8 +585,9 @@ private:
   }
 
   wal_op_t *_get_wal_op(TransContext *txc);
-  int _apply_wal_transaction(TransContext *txc);
-  int _do_wal_transaction(wal_transaction_t& wt);
+  int _wal_apply(TransContext *txc);
+  int _wal_finish(TransContext *txc);
+  int _do_wal_transaction(wal_transaction_t& wt, TransContext *txc);
   void _wait_object_wal(OnodeRef onode);
   int _replay_wal();
   friend class C_ApplyWAL;
