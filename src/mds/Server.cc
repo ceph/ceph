@@ -1081,6 +1081,9 @@ void Server::reply_client_request(MDRequestRef& mdr, MClientReply *reply)
   if (req->may_write() && mdr->session && reply->get_result() == 0) {
     inodeno_t created = mdr->alloc_ino ? mdr->alloc_ino : mdr->used_prealloc_ino;
     mdr->session->add_completed_request(mdr->reqid.tid, created);
+    if (mdr->ls) {
+      mdr->ls->touched_sessions.insert(mdr->session->info.inst.name);
+    }
   }
 
   // give any preallocated inos to the session
@@ -1349,7 +1352,11 @@ void Server::handle_client_request(MClientRequest *req)
   if (req->get_oldest_client_tid() > 0) {
     dout(15) << " oldest_client_tid=" << req->get_oldest_client_tid() << dendl;
     assert(session);
-    session->trim_completed_requests(req->get_oldest_client_tid());
+    if (session->trim_completed_requests(req->get_oldest_client_tid())) {
+      // Sessions 'completed_requests' was dirtied, mark it to be
+      // potentially flushed at segment expiry.
+      mdlog->get_current_segment()->touched_sessions.insert(session->info.inst.name);
+    }
   }
 
   // register + dispatch
