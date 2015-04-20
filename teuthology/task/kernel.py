@@ -889,6 +889,7 @@ def get_latest_image_version_rpm(remote):
     log.debug("get_latest_image_version_rpm: %s", version)
     return version
 
+
 def get_latest_image_version_deb(remote, ostype):
     """
     Get kernel image version of the newest kernel deb package.
@@ -897,40 +898,44 @@ def get_latest_image_version_deb(remote, ostype):
     Round-about way to get the newest kernel uname -r compliant version string
     from the virtual package which is the newest kenel for debian/ubuntu.
     """
-    output, err_mess = StringIO(), StringIO()
-    newest=''
-    #Depend of virtual package has uname -r output in package name. Grab that.
+    output = StringIO()
+    newest = ''
+    # Depend of virtual package has uname -r output in package name. Grab that.
     if 'debian' in ostype:
-        remote.run(args=['sudo', 'apt-get', '-y', 'install', 'linux-image-amd64' ], stdout=output, stderr=err_mess )
-        remote.run(args=['dpkg', '-s', 'linux-image-amd64' ], stdout=output, stderr=err_mess )
+        remote.run(args=['sudo', 'apt-get', '-y', 'install',
+                         'linux-image-amd64'], stdout=output)
+        remote.run(args=['dpkg', '-s', 'linux-image-amd64'], stdout=output)
         for line in output.getvalue().split('\n'):
             if 'Depends:' in line:
                 newest = line.split('linux-image-')[1]
                 output.close()
-                err_mess.close()
                 return newest
-     #Ubuntu is a depend in a depend.
+    # Ubuntu is a depend in a depend.
     if 'ubuntu' in ostype:
         try:
-            remote.run(args=['sudo', 'apt-get', '-y', 'install', 'linux-image-current-generic' ], stdout=output, stderr=err_mess )
-            remote.run(args=['dpkg', '-s', 'linux-image-current-generic' ], stdout=output, stderr=err_mess )
+            remote.run(args=['sudo', 'apt-get', '-y', 'install',
+                             'linux-image-current-generic'], stdout=output)
+            remote.run(args=['dpkg', '-s', 'linux-image-current-generic'],
+                       stdout=output)
             for line in output.getvalue().split('\n'):
                 if 'Depends:' in line:
                     depends = line.split('Depends: ')[1]
-            remote.run(args=['dpkg', '-s', depends ], stdout=output, stderr=err_mess )
+            remote.run(args=['dpkg', '-s', depends], stdout=output)
         except run.CommandFailedError:
             # Non precise ubuntu machines (like trusty) don't have
             # linux-image-current-generic so use linux-image-generic instead.
-            remote.run(args=['sudo', 'apt-get', '-y', 'install', 'linux-image-generic' ], stdout=output, stderr=err_mess )
-            remote.run(args=['dpkg', '-s', 'linux-image-generic' ], stdout=output, stderr=err_mess )
+            remote.run(args=['sudo', 'apt-get', '-y', 'install',
+                             'linux-image-generic'], stdout=output)
+            remote.run(args=['dpkg', '-s', 'linux-image-generic'],
+                       stdout=output)
         for line in output.getvalue().split('\n'):
             if 'Depends:' in line:
                 newest = line.split('linux-image-')[1]
                 if ',' in newest:
                     newest = newest.split(',')[0]
     output.close()
-    err_mess.close()
     return newest
+
 
 def get_sha1_from_pkg_name(path):
     """
