@@ -99,12 +99,14 @@ EventCenter::~EventCenter()
 {
   delete driver;
 
+  if (notify_receive_fd >= 0) {
+    delete_file_event(notify_receive_fd, EVENT_READABLE);
+    ::close(notify_receive_fd);
+  }
+  if (notify_send_fd >= 0)
+    ::close(notify_send_fd);
   if (file_events)
     free(file_events);
-  if (notify_receive_fd > 0)
-    ::close(notify_receive_fd);
-  if (notify_send_fd > 0)
-    ::close(notify_send_fd);
 }
 
 int EventCenter::create_file_event(int fd, int mask, EventCallbackRef ctxt)
