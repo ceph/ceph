@@ -40,11 +40,14 @@ ostream& EventCenter::_event_prefix(std::ostream *_dout)
 }
 
 class C_handle_notify : public EventCallback {
+  EventCenter *center;
+
  public:
-  C_handle_notify() {}
+  C_handle_notify(EventCenter *c): center(c) {}
   void do_request(int fd_or_id) {
-    char c[100];
-    int r = read(fd_or_id, c, 100);
+    char c[256];
+    center->already_wakeup.set(0);
+    int r = read(fd_or_id, c, sizeof(c));
     assert(r > 0);
   }
 };
@@ -86,12 +89,16 @@ int EventCenter::init(int n)
   if (r < 0) {
     return -1;
   }
+  r = net.set_nonblock(notify_send_fd);
+  if (r < 0) {
+    return -1;
+  }
 
   file_events = static_cast<FileEvent *>(malloc(sizeof(FileEvent)*n));
   memset(file_events, 0, sizeof(FileEvent)*n);
 
   nevent = n;
-  create_file_event(notify_receive_fd, EVENT_READABLE, EventCallbackRef(new C_handle_notify()));
+  create_file_event(notify_receive_fd, EVENT_READABLE, EventCallbackRef(new C_handle_notify(this)));
   return 0;
 }
 
@@ -239,13 +246,16 @@ void EventCenter::delete_time_event(uint64_t id)
 
 void EventCenter::wakeup()
 {
-  ldout(cct, 1) << __func__ << dendl;
-  char buf[1];
-  buf[0] = 'c';
-  // wake up "event_wait"
-  int n = write(notify_send_fd, buf, 1);
-  // FIXME ?
-  assert(n == 1);
+  if (!already_wakeup.read()) {
+    ldout(cct, 1) << __func__ << dendl;
+    char buf[1];
+    buf[0] = 'c';
+    // wake up "event_wait"
+    int n = write(notify_send_fd, buf, 1);
+    // FIXME ?
+    assert(n == 1);
+    already_wakeup.set(1);
+  }
 }
 
 int EventCenter::process_time_events()
