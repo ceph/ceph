@@ -4,6 +4,7 @@
 #include "librbd/AioCompletion.h"
 #include "librbd/ImageWatcher.h"
 #include "librbd/internal.h"
+#include "librbd/ObjectMap.h"
 #include <boost/scope_exit.hpp>
 #include <boost/assign/list_of.hpp>
 #include <utility>
@@ -476,6 +477,17 @@ TEST_F(TestInternal, SnapshotCopyup)
       ASSERT_TRUE(bl.contents_equal(read_bl));
     } else {
       ASSERT_TRUE(read_bl.is_zero());
+    }
+
+    // verify the object map was properly updated
+    if ((ictx2->features & RBD_FEATURE_OBJECT_MAP) != 0) {
+      uint8_t state = OBJECT_EXISTS;
+      if ((ictx2->features & RBD_FEATURE_DEEP_FLATTEN) != 0 &&
+          it != snaps.begin() && snap_name != NULL) {
+        state = OBJECT_EXISTS_CLEAN;
+      }
+      RWLock::WLocker object_map_locker(ictx2->object_map_lock);
+      ASSERT_EQ(state, ictx2->object_map[0]);
     }
   }
 }
