@@ -3040,7 +3040,7 @@ void Client::queue_cap_snap(Inode *in, snapid_t seq)
     in->cap_snaps[seq] = capsnap;
     capsnap->context = in->snaprealm->get_snap_context();
     capsnap->issued = in->caps_issued();
-    capsnap->dirty = in->caps_dirty();  // a bit conservative?
+    capsnap->dirty = in->caps_dirty();
     
     capsnap->dirty_data = (used & CEPH_CAP_FILE_BUFFER);
     
@@ -3069,6 +3069,13 @@ void Client::finish_cap_snap(Inode *in, CapSnap *capsnap, int used)
   capsnap->atime = in->atime;
   capsnap->ctime = in->ctime;
   capsnap->time_warp_seq = in->time_warp_seq;
+
+  capsnap->dirty |= in->caps_dirty();
+
+  if (capsnap->dirty & CEPH_CAP_FILE_WR) {
+    capsnap->inline_data = in->inline_data;
+    capsnap->inline_version = in->inline_version;
+  }
 
   if (used & CEPH_CAP_FILE_BUFFER) {
     ldout(cct, 10) << "finish_cap_snap " << *in << " cap_snap " << capsnap << " used " << used
@@ -3145,6 +3152,11 @@ void Client::flush_snaps(Inode *in, bool all_again, CapSnap *again)
     capsnap->mtime.encode_timeval(&m->head.mtime);
     capsnap->atime.encode_timeval(&m->head.atime);
     m->head.time_warp_seq = capsnap->time_warp_seq;
+
+    if (capsnap->dirty & CEPH_CAP_FILE_WR) {
+      m->inline_version = in->inline_version;
+      m->inline_data = in->inline_data;
+    }
 
     session->con->send_message(m);
   }
