@@ -242,11 +242,13 @@ private:
    *
    * Verify all mons are storing identical content
    */
+  int scrub_start();
   int scrub();
   void handle_scrub(MMonScrub *m);
   bool _scrub(ScrubResult *r,
-              pair<string,string> &start,
-              int num_keys);
+              pair<string,string> *start,
+              int *num_keys);
+  void scrub_check_results();
   void scrub_finish();
   void scrub_reset();
 
@@ -254,7 +256,7 @@ private:
     Monitor *mon;
     C_Scrub(Monitor *m) : mon(m) { }
     void finish(int r) {
-      mon->scrub();
+      mon->scrub_start();
     }
   };
   Context *scrub_event;       ///< periodic event to trigger scrub (leader)
@@ -263,8 +265,9 @@ private:
 
   struct ScrubState {
     pair<string,string> last_key; ///< last scrubbed key
+    bool finished;
 
-    ScrubState() { }
+    ScrubState() : finished(false) { }
     virtual ~ScrubState() { }
   };
   ceph::shared_ptr<ScrubState> scrub_state; ///< keeps track of current scrub

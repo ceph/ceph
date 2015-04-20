@@ -244,7 +244,7 @@ OPTION(mon_data_avail_crit, OPT_INT, 5)
 OPTION(mon_data_avail_warn, OPT_INT, 30)
 OPTION(mon_data_size_warn, OPT_U64, 15*1024*1024*1024) // issue a warning when the monitor's data store goes over 15GB (in bytes)
 OPTION(mon_scrub_interval, OPT_INT, 3600*24) // once a day
-OPTION(mon_scrub_max_keys, OPT_INT, -1) // max number of keys to scrub each time
+OPTION(mon_scrub_max_keys, OPT_INT, 100) // max number of keys to scrub each time
 OPTION(mon_config_key_max_entry_size, OPT_INT, 4096) // max num bytes per config-key entry
 OPTION(mon_sync_timeout, OPT_DOUBLE, 60.0)
 OPTION(mon_sync_max_payload_size, OPT_U32, 1048576) // max size for a sync chunk payload (say, 1MB)
