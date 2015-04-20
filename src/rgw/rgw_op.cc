@@ -2968,24 +2968,24 @@ void RGWCompleteMultipart::execute()
     return;
   }
 
-  if (!data) {
-    ret = -EINVAL;
+  if (!data || !len) {
+    ret = -ERR_MALFORMED_XML;
     return;
   }
 
   if (!parser.init()) {
-    ret = -EINVAL;
+    ret = -EIO;
     return;
   }
 
   if (!parser.parse(data, len, 1)) {
-    ret = -EINVAL;
+    ret = -ERR_MALFORMED_XML;
     return;
   }
 
   parts = static_cast<RGWMultiCompleteUpload *>(parser.find_first("CompleteMultipartUpload"));
-  if (!parts) {
-    ret = -EINVAL;
+  if (!parts || parts->parts.size() == 0) {
+    ret = -ERR_MALFORMED_XML;
     return;
   }
 
