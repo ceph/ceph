@@ -58,7 +58,8 @@ void RGWListBuckets_ObjStore_SWIFT::send_response_begin(bool has_buckets)
 
   if (!ret) {
     dump_start(s);
-    s->formatter->open_array_section("account");
+    s->formatter->open_array_section_with_attrs("account",
+            FormatterAttrs("name", s->user.display_name.c_str(), NULL));
 
     sent_data = true;
   }
