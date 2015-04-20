@@ -331,7 +331,7 @@ class TestJournalRepair(CephFSTestCase):
                             "pending_noop": [],
                             "snaps": [],
                             "need_to_purge": {},
-                            "pending_create": [],
+                            "pending_update": [],
                             "pending_destroy": []},
              "result": 0}
         )
@@ -371,7 +371,7 @@ class TestJournalRepair(CephFSTestCase):
                             "pending_noop": [],
                             "snaps": [],
                             "need_to_purge": {},
-                            "pending_create": [],
+                            "pending_update": [],
                             "pending_destroy": []},
              "result": 0}
         )
