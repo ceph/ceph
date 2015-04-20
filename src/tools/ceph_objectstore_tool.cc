@@ -1077,6 +1077,7 @@ int ObjectStoreTool::do_import(ObjectStore *store, OSDSuperblock& sb, bool force
   if (ret)
     return ret;
   if (type != TYPE_PG_BEGIN) {
+    cerr << "Invalid first section type " << type << std::endl;
     return -EFAULT;
   }
 
@@ -2231,7 +2232,7 @@ int main(int argc, char **argv)
       cerr << "do_import threw exception error " << e.what() << std::endl;
       ret = -EFAULT;
     }
-    if (ret == EFAULT) {
+    if (ret == -EFAULT) {
       cerr << "Corrupt input for import" << std::endl;
     }
     if (ret == 0)
