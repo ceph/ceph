@@ -586,7 +586,6 @@ bool PG::needs_recovery() const
   assert(!actingbackfill.empty());
   set<pg_shard_t>::const_iterator end = actingbackfill.end();
   set<pg_shard_t>::const_iterator a = actingbackfill.begin();
-  assert(a != end);
   for (; a != end; ++a) {
     if (*a == get_primary()) continue;
     pg_shard_t peer = *a;
