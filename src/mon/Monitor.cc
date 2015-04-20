@@ -4339,6 +4339,12 @@ bool Monitor::_scrub(ScrubResult *r,
       r->prefix_crc[k.first] = 0;
     r->prefix_crc[k.first] = bl.crc32c(r->prefix_crc[k.first]);
 
+    if (cct->_conf->mon_scrub_inject_crc_mismatch > 0.0 &&
+        (rand() % 10000 < cct->_conf->mon_scrub_inject_crc_mismatch*10000.0)) {
+      dout(10) << __func__ << " inject failure at (" << k << ")" << dendl;
+      r->prefix_crc[k.first] += 1;
+    }
+
     ++scrubbed_keys;
     last_key = k;
   }
