@@ -166,7 +166,8 @@ bool AsyncFlattenRequest::send_update_children() {
       // (if snapshots remain, they have their own parent info, and the child
       // will be removed when the last snap goes away)
       RWLock::RLocker l2(m_image_ctx.snap_lock);
-      if (!m_image_ctx.snaps.empty()) {
+      if ((m_image_ctx.features & RBD_FEATURE_DEEP_FLATTEN) == 0 &&
+          !m_image_ctx.snaps.empty()) {
         return true;
       }
 
@@ -180,7 +181,7 @@ bool AsyncFlattenRequest::send_update_children() {
       assert(r == 0);
       rados_completion->release();
     }
-  }  
+  }
 
   if (lost_exclusive_lock) {
     complete(-ERESTART);
