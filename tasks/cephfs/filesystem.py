@@ -38,7 +38,7 @@ class Filesystem(object):
      * Assume a single filesystem+cluster
      * Assume a single MDS
     """
-    def __init__(self, ctx):
+    def __init__(self, ctx, admin_remote=None):
         self._ctx = ctx
 
         self.mds_ids = list(misc.all_roles_of_type(ctx.cluster, 'mds'))
@@ -46,9 +46,14 @@ class Filesystem(object):
             raise RuntimeError("This task requires at least one MDS")
 
         first_mon = misc.get_first_mon(ctx, None)
-        (self.mon_remote,) = ctx.cluster.only(first_mon).remotes.iterkeys()
-        self.mon_manager = ceph_manager.CephManager(self.mon_remote, ctx=ctx, logger=log.getChild('ceph_manager'))
-        self.mds_daemons = dict([(mds_id, self._ctx.daemons.get_daemon('mds', mds_id)) for mds_id in self.mds_ids])
+        if admin_remote is None:
+            (self.admin_remote,) = ctx.cluster.only(first_mon).remotes.iterkeys()
+        else:
+            self.admin_remote = admin_remote
+        self.mon_manager = ceph_manager.CephManager(self.admin_remote, ctx=ctx, logger=log.getChild('ceph_manager'))
+        if hasattr(self._ctx, "daemons"):
+            # Presence of 'daemons' attribute implies ceph task rather than ceph_deploy task
+            self.mds_daemons = dict([(mds_id, self._ctx.daemons.get_daemon('mds', mds_id)) for mds_id in self.mds_ids])
 
         client_list = list(misc.all_roles_of_type(self._ctx.cluster, 'client'))
         self.client_id = client_list[0]
@@ -59,16 +64,36 @@ class Filesystem(object):
         osd_count = len(list(misc.all_roles_of_type(self._ctx.cluster, 'osd')))
         pgs_per_fs_pool = pg_warn_min_per_osd * osd_count
 
-        self.mon_remote.run(args=['sudo', 'ceph', 'osd', 'pool', 'create', 'metadata', pgs_per_fs_pool.__str__()])
-        self.mon_remote.run(args=['sudo', 'ceph', 'osd', 'pool', 'create', 'data', pgs_per_fs_pool.__str__()])
-        self.mon_remote.run(args=['sudo', 'ceph', 'fs', 'new', 'default', 'metadata', 'data'])
+        self.admin_remote.run(args=['sudo', 'ceph', 'osd', 'pool', 'create', 'metadata', pgs_per_fs_pool.__str__()])
+        self.admin_remote.run(args=['sudo', 'ceph', 'osd', 'pool', 'create', 'data', pgs_per_fs_pool.__str__()])
+        self.admin_remote.run(args=['sudo', 'ceph', 'fs', 'new', 'default', 'metadata', 'data'])
 
     def delete(self):
-        self.mon_remote.run(args=['sudo', 'ceph', 'fs', 'rm', 'default', '--yes-i-really-mean-it'])
-        self.mon_remote.run(args=['sudo', 'ceph', 'osd', 'pool', 'delete',
+        self.admin_remote.run(args=['sudo', 'ceph', 'fs', 'rm', 'default', '--yes-i-really-mean-it'])
+        self.admin_remote.run(args=['sudo', 'ceph', 'osd', 'pool', 'delete',
                                   'metadata', 'metadata', '--yes-i-really-really-mean-it'])
-        self.mon_remote.run(args=['sudo', 'ceph', 'osd', 'pool', 'delete',
+        self.admin_remote.run(args=['sudo', 'ceph', 'osd', 'pool', 'delete',
                                   'data', 'data', '--yes-i-really-really-mean-it'])
+
+    def legacy_configured(self):
+        """
+        Check if a legacy (i.e. pre "fs new") filesystem configuration is present.  If this is
+        the case, the caller should avoid using Filesystem.create
+        """
+        try:
+            proc = self.admin_remote.run(args=['sudo', 'ceph', '--format=json-pretty', 'osd', 'lspools'],
+                                       stdout=StringIO())
+            pools = json.loads(proc.stdout.getvalue())
+            metadata_pool_exists = 'metadata' in [p['poolname'] for p in pools]
+        except CommandFailedError as e:
+            # For use in upgrade tests, Ceph cuttlefish and earlier don't support
+            # structured output (--format) from the CLI.
+            if e.exitstatus == 22:
+                metadata_pool_exists = True
+            else:
+                raise
+
+        return metadata_pool_exists
 
     def _df(self):
         return json.loads(self.mon_manager.raw_cluster_cmd("df", "--format=json-pretty"))
@@ -140,16 +165,22 @@ class Filesystem(object):
 
     def are_daemons_healthy(self):
         """
-        Return true if all daemons are in one of active, standby, standby-replay
+        Return true if all daemons are in one of active, standby, standby-replay, and
+        at least max_mds daemons are in 'active'.
+
         :return:
         """
+
+        active_count = 0
         status = self.mon_manager.get_mds_status_all()
         for mds_id, mds_status in status['info'].items():
             if mds_status['state'] not in ["up:active", "up:standby", "up:standby-replay"]:
                 log.warning("Unhealthy mds state {0}:{1}".format(mds_id, mds_status['state']))
                 return False
+            elif mds_status['state'] == 'up:active':
+                active_count += 1
 
-        return True
+        return active_count >= status['max_mds']
 
     def get_active_names(self):
         """
@@ -165,6 +196,22 @@ class Filesystem(object):
                 result.append(mds_status['name'])
 
         return result
+
+    def get_rank_names(self):
+        """
+        Return MDS daemon names of those daemons holding a rank,
+        sorted by rank.  This includes e.g. up:replay/reconnect
+        as well as active, but does not include standby or
+        standby-replay.
+        """
+        status = self.mon_manager.get_mds_status_all()
+        result = []
+        for mds_status in sorted(status['info'].values(), lambda a, b: cmp(a['rank'], b['rank'])):
+            if mds_status['rank'] != -1 and mds_status['state'] != 'up:standby-replay':
+                result.append(mds_status['name'])
+
+        return result
+
 
     def wait_for_daemons(self, timeout=None):
         """
@@ -187,8 +234,17 @@ class Filesystem(object):
                 raise RuntimeError("Timed out waiting for MDS daemons to become healthy")
 
     def get_lone_mds_id(self):
+        """
+        Get a single MDS ID: the only one if there is only one
+        configured, else the only one currently holding a rank,
+        else raise an error.
+        """
         if len(self.mds_ids) != 1:
-            raise ValueError("Explicit MDS argument required when multiple MDSs in use")
+            alive = self.get_rank_names()
+            if len(alive) == 1:
+                return alive[0]
+            else:
+                raise ValueError("Explicit MDS argument required when multiple MDSs in use")
         else:
             return self.mds_ids[0]
 
@@ -371,20 +427,34 @@ class Filesystem(object):
         Block until the MDS reaches a particular state, or a failure condition
         is met.
 
+        When there are multiple MDSs, succeed when exaclty one MDS is in the
+        goal state, or fail when any MDS is in the reject state.
+
         :param goal_state: Return once the MDS is in this state
         :param reject: Fail if the MDS enters this state before the goal state
         :param timeout: Fail if this many seconds pass before reaching goal
         :return: number of seconds waited, rounded down to integer
         """
 
-        if mds_id is None:
-            mds_id = self.get_lone_mds_id()
-
         elapsed = 0
         while True:
-            # mds_info is None if no daemon currently claims this rank
-            mds_info = self.mon_manager.get_mds_status(mds_id)
-            current_state = mds_info['state'] if mds_info else None
+
+            if mds_id is not None:
+                # mds_info is None if no daemon with this ID exists in the map
+                mds_info = self.mon_manager.get_mds_status(mds_id)
+                current_state = mds_info['state'] if mds_info else None
+                log.info("Looked up MDS state for {0}: {1}".format(mds_id, current_state))
+            else:
+                # In general, look for a single MDS
+                mds_status = self.mon_manager.get_mds_status_all()
+                states = [m['state'] for m in mds_status['info'].values()]
+                if [s for s in states if s == goal_state] == [goal_state]:
+                    current_state = goal_state
+                elif reject in states:
+                    current_state = reject
+                else:
+                    current_state = None
+                log.info("mapped states {0} to {1}".format(states, current_state))
 
             if current_state == goal_state:
                 log.info("reached state '{0}' in {1}s".format(current_state, elapsed))
@@ -392,6 +462,7 @@ class Filesystem(object):
             elif reject is not None and current_state == reject:
                 raise RuntimeError("MDS in reject state {0}".format(current_state))
             elif timeout is not None and elapsed > timeout:
+                log.error("MDS status at timeout: {0}".format(self.mon_manager.get_mds_status_all()))
                 raise RuntimeError(
                     "Reached timeout after {0} seconds waiting for state {1}, while in state {2}".format(
                         elapsed, goal_state, current_state
@@ -444,6 +515,56 @@ class Filesystem(object):
         )
 
         return json.loads(p.stdout.getvalue().strip())
+
+    def _enumerate_data_objects(self, ino, size):
+        """
+        Get the list of expected data objects for a range, and the list of objects
+        that really exist.
+
+        :return a tuple of two lists of strings (expected, actual)
+        """
+        stripe_size = 1024 * 1024 * 4
+
+        size = max(stripe_size, size)
+
+        want_objects = [
+            "{0:x}.{1:08x}".format(ino, n)
+            for n in range(0, ((size - 1) / stripe_size) + 1)
+        ]
+
+        exist_objects = self.rados(["ls"], pool=self.get_data_pool_name()).split("\n")
+
+        return want_objects, exist_objects
+
+    def data_objects_present(self, ino, size):
+        """
+        Check that *all* the expected data objects for an inode are present in the data pool
+        """
+
+        want_objects, exist_objects = self._enumerate_data_objects(ino, size)
+        missing = set(want_objects) - set(exist_objects)
+
+        if missing:
+            log.info("Objects missing (ino {0}, size {1}): {2}".format(
+                ino, size, missing
+            ))
+            return False
+        else:
+            log.info("All objects for ino {0} size {1} found".format(ino, size))
+            return True
+
+    def data_objects_absent(self, ino, size):
+        want_objects, exist_objects = self._enumerate_data_objects(ino, size)
+        present = set(want_objects) & set(exist_objects)
+
+        if present:
+            log.info("Objects not absent (ino {0}, size {1}): {2}".format(
+                ino, size, present
+            ))
+            return False
+        else:
+            log.info("All objects for ino {0} size {1} are absent".format(ino, size))
+            return True
 
     def rados(self, args, pool=None):
         """
