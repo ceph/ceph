@@ -244,7 +244,9 @@ private:
    */
   int scrub();
   void handle_scrub(MMonScrub *m);
-  void _scrub(ScrubResult *r);
+  bool _scrub(ScrubResult *r,
+              pair<string,string> &start,
+              int num_keys);
   void scrub_finish();
   void scrub_reset();
 
