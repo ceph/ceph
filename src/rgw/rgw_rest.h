@@ -357,10 +357,15 @@ public:
   }
 };
 
+static const int64_t NO_CONTENT_LENGTH = -1;
+
 extern void set_req_state_err(struct req_state *s, int err_no);
 extern void dump_errno(struct req_state *s);
 extern void dump_errno(struct req_state *s, int ret);
-extern void end_header(struct req_state *s, RGWOp *op = NULL, const char *content_type = NULL);
+extern void end_header(struct req_state *s,
+                       RGWOp *op = NULL,
+                       const char *content_type = NULL,
+                       const int64_t proposed_content_length = NO_CONTENT_LENGTH);
 extern void dump_start(struct req_state *s);
 extern void list_all_buckets_start(struct req_state *s);
 extern void dump_owner(struct req_state *s, string& id, string& name, const char *section = NULL);
