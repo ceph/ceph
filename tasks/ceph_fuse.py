@@ -109,6 +109,8 @@ def task(ctx, config):
         if client_config.get('mounted', True):
             mounted_by_me[id_] = all_mounts[id_]
 
+    ctx.mounts = all_mounts
+
     # Mount any clients we have been asked to (default to mount all)
     for mount in mounted_by_me.values():
         mount.mount()
@@ -122,7 +124,6 @@ def task(ctx, config):
         if mount.is_mounted():
             mount.umount_wait()
 
-    ctx.mounts = all_mounts
     try:
         yield all_mounts
     finally:

@@ -3,14 +3,11 @@
 Exercise the MDS's auto repair functions
 """
 
-import contextlib
 import logging
 import time
 
 from teuthology.orchestra.run import CommandFailedError
-
-from tasks.cephfs.filesystem import Filesystem
-from tasks.cephfs.cephfs_test_case import CephFSTestCase, run_tests
+from tasks.cephfs.cephfs_test_case import CephFSTestCase
 
 
 log = logging.getLogger(__name__)
@@ -30,7 +27,7 @@ class TestMDSAutoRepair(CephFSTestCase):
         # trim log segment as fast as possible
         self.set_conf('mds', 'mds cache size', 100)
         self.set_conf('mds', 'mds verify backtrace', 1)
-        self.fs.mds_restart()
+        self.fs.mds_fail_restart()
         self.fs.wait_for_daemons()
 
         create_script = "mkdir {0}; for i in `seq 0 500`; do touch {0}/file$i; done"
@@ -98,25 +95,5 @@ class TestMDSAutoRepair(CephFSTestCase):
         self.assertTrue(writer.finished)
 
         # restart mds to make it writable
-        self.fs.mds_restart()
+        self.fs.mds_fail_restart()
         self.fs.wait_for_daemons()
-
-
-@contextlib.contextmanager
-def task(ctx, config):
-    fs = Filesystem(ctx)
-    mount_a = ctx.mounts.values()[0]
-
-    # Stash references on ctx so that we can easily debug in interactive mode
-    # =======================================================================
-    ctx.filesystem = fs
-    ctx.mount_a = mount_a
-
-    run_tests(ctx, config, TestMDSAutoRepair, {
-        'fs': fs,
-        'mount_a': mount_a,
-    })
-
-    # Continue to any downstream tasks
-    # ================================
-    yield
