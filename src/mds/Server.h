@@ -243,6 +243,9 @@ public:
   void _mksnap_finish(MDRequestRef& mdr, CInode *diri, SnapInfo &info);
   void handle_client_rmsnap(MDRequestRef& mdr);
   void _rmsnap_finish(MDRequestRef& mdr, CInode *diri, snapid_t snapid);
+  void handle_client_renamesnap(MDRequestRef& mdr);
+  void _renamesnap_finish(MDRequestRef& mdr, CInode *diri, snapid_t snapid);
+
 
   // helpers
   bool _rename_prepare_witness(MDRequestRef& mdr, mds_rank_t who, set<mds_rank_t> &witnesse,
