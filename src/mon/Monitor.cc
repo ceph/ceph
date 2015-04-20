@@ -4221,8 +4221,14 @@ int Monitor::scrub()
     messenger->send_message(r, monmap->get_inst(*p));
   }
 
+  scrub_state.reset(new ScrubState);
+
   // scrub my keys
-  _scrub(&scrub_result[rank]);
+  pair<string,string> start;
+  bool r = _scrub(&scrub_result[rank], start, cct->_conf->mon_scrub_max_keys);
+  assert(!r);
+
+  scrub_state.reset();
 
   if (scrub_result.size() == quorum.size())
     scrub_finish();
@@ -4241,7 +4247,8 @@ void Monitor::handle_scrub(MMonScrub *m)
       if (m->version != paxos->get_version())
 	break;
       MMonScrub *reply = new MMonScrub(MMonScrub::OP_RESULT, m->version);
-      _scrub(&reply->result);
+      pair<string,string> start;
+      _scrub(&reply->result, start, cct->_conf->mon_scrub_max_keys);
       m->get_connection()->send_message(reply);
     }
     break;
@@ -4264,23 +4271,24 @@ void Monitor::handle_scrub(MMonScrub *m)
   m->put();
 }
 
-void Monitor::_scrub(ScrubResult *r)
+bool Monitor::_scrub(ScrubResult *r,
+                     pair<string,string> &start,
+                     int num_keys)
 {
   set<string> prefixes = get_sync_targets_names();
   prefixes.erase("paxos");  // exclude paxos, as this one may have extra states for proposals, etc.
 
   dout(10) << __func__ << " prefixes " << prefixes << dendl;
 
-  if (scrub_state) {
-    dout(10) << __func__ << " scrub already in progress" << dendl;
-    return;
-  }
+  MonitorDBStore::Synchronizer it = store->get_synchronizer(start, prefixes);
 
-  scrub_state.reset(new ScrubState);
-  MonitorDBStore::Synchronizer it =
-    store->get_synchronizer(scrub_state->last_key, prefixes);
+  int scrubbed_keys = 0;
 
   while (it->has_next_chunk()) {
+
+    if (num_keys > 0 && scrubbed_keys == num_keys)
+      break;
+
     pair<string,string> k = it->get_next_key();
     bufferlist bl;
     store->get(k.first, k.second, bl);
@@ -4290,9 +4298,11 @@ void Monitor::_scrub(ScrubResult *r)
       r->prefix_crc[k.first] = 0;
     r->prefix_crc[k.first] = bl.crc32c(r->prefix_crc[k.first]);
   }
-  scrub_state->last_key = it->get_last_key();
 
-  scrub_state.reset();
+  if (scrub_state) // leader
+    scrub_state->last_key = it->get_last_key();
+
+  return it->has_next_chunk();
 }
 
 void Monitor::scrub_finish()
