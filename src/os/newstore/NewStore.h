@@ -15,6 +15,8 @@
 #ifndef CEPH_OSD_NEWSTORE_H
 #define CEPH_OSD_NEWSTORE_H
 
+#include "acconfig.h"
+
 #include <unistd.h>
 
 #include "include/assert.h"
@@ -143,6 +145,8 @@ public:
   struct TransContext {
     typedef enum {
       STATE_PREPARE,
+      STATE_AIO_QUEUED,
+      STATE_AIO_DONE,
       STATE_FSYNC_QUEUED,
       STATE_FSYNC_FSYNCING,
       STATE_FSYNC_DONE,
@@ -165,6 +169,8 @@ public:
       case STATE_FSYNC_QUEUED: return "fsync_queued";
       case STATE_FSYNC_FSYNCING: return "fsync_fsyncing";
       case STATE_FSYNC_DONE: return "fsync_done";
+      case STATE_AIO_QUEUED: return "aio_queued";
+      case STATE_AIO_DONE: return "aio_done";
       case STATE_KV_QUEUED: return "kv_queued";
       case STATE_KV_COMMITTING: return "kv_committing";
       case STATE_KV_DONE: return "kv_done";
@@ -194,6 +200,10 @@ public:
     wal_transaction_t *wal_txn; ///< wal transaction (if any)
     unsigned num_fsyncs_completed;
 
+    list<FS::aio_t> aios;
+    bufferlist aio_bl;  // just a pile of refs
+    atomic_t num_aio;
+
     Mutex lock;
     Cond cond;
 
@@ -207,6 +217,7 @@ public:
 	onreadable_sync(NULL),
 	wal_txn(NULL),
 	num_fsyncs_completed(0),
+	num_aio(0),
 	lock("NewStore::TransContext::lock") {
       //cout << "txc new " << this << std::endl;
     }
@@ -373,7 +384,9 @@ public:
   public:
     WALWQ(NewStore *s, time_t ti, time_t sti, ThreadPool *tp)
       : ThreadPool::WorkQueue<TransContext>("NewStore::WALWQ", ti, sti, tp),
-	store(s) {
+	store(s),
+	ops(0),
+	bytes(0) {
     }
     bool _empty() {
       return wal_queue.empty();
@@ -445,6 +458,15 @@ public:
     }
   };
 
+  struct AioCompletionThread : public Thread {
+    NewStore *store;
+    AioCompletionThread(NewStore *s) : store(s) {}
+    void *entry() {
+      store->_aio_thread();
+      return NULL;
+    }
+  };
+
   // --------------------------------------------------------
   // members
 private:
@@ -478,6 +500,10 @@ private:
   Finisher finisher;
   ThreadPool fsync_tp;
   FsyncWQ fsync_wq;
+
+  AioCompletionThread aio_thread;
+  bool aio_stop;
+  FS::aio_queue_t aio_queue;
 
   KVSyncThread kv_sync_thread;
   Mutex kv_lock;
@@ -539,6 +565,10 @@ private:
   void _txc_finish_apply(TransContext *txc);
 
   void _osr_reap_done(OpSequencer *osr);
+
+  void _aio_thread();
+  int _aio_start();
+  void _aio_stop();
 
   void _kv_sync_thread();
   void _kv_stop() {
