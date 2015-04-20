@@ -511,6 +511,54 @@ static void dump_one_image(Formatter *f, TextTable *tbl,
   }
 }
 
+extern "C" int krbd_get_block_device(struct krbd_ctx *krbd, const char *imgname,void *devices)
+{
+  struct udev_enumerate *enm;
+  struct udev_list_entry *l;
+  char * devname;
+  vector<char *> *dev_names = (vector<char *> *)devices;
+  struct udev *udev = krbd->udev;
+  int r = EXIT_SUCCESS;
+
+  enm = udev_enumerate_new(udev);
+  if (!enm)
+    return -ENOMEM;
+
+  r = udev_enumerate_add_match_subsystem(enm, "rbd");
+  if (r < 0)
+    goto out_enm;
+
+  r = udev_enumerate_scan_devices(enm);
+  if (r < 0)
+    goto out_enm;
+
+  udev_list_entry_foreach(l, udev_enumerate_get_list_entry(enm)) {
+    struct udev_device *dev;
+
+    dev = udev_device_new_from_syspath(udev, udev_list_entry_get_name(l));
+    if (!dev) {
+      r = EXIT_FAILURE;
+      goto out_enm;
+    }
+    
+    if (strcmp(udev_device_get_sysattr_value(dev, "name"), imgname) == 0) {
+      const char * id = udev_device_get_sysname(dev);
+      devname = new char(strlen("/dev/rbd") + strlen(id) + 1);
+      sprintf(devname, "/dev/rbd%s", id);
+      dev_names->push_back(devname);
+    }
+
+
+    udev_device_unref(dev);
+  }
+
+out_enm:
+  udev_enumerate_unref(enm);
+  return r;
+}
+
+
+
 static int do_dump(struct udev *udev, Formatter *f, TextTable *tbl)
 {
   struct udev_enumerate *enm;

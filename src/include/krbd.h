@@ -28,6 +28,8 @@ int krbd_map(struct krbd_ctx *ctx, const char *pool, const char *image,
 
 int krbd_unmap(struct krbd_ctx *ctx, const char *devnode);
 
+int krbd_get_block_device(struct krbd_ctx *ctx, const char *imgname,void *devnames);
+
 #ifdef __cplusplus
 }
 #endif

@@ -137,7 +137,7 @@ void usage()
 "  status <image-name>                         show the status of this image\n"
 "  map <image-name>                            map image to a block device\n"
 "                                              using the kernel\n"
-"  unmap <device>                              unmap a rbd device that was\n"
+"  unmap <device> | <image-name>               unmap a rbd device that was\n"
 "                                              mapped by the kernel\n"
 "  showmapped                                  show the rbd images mapped\n"
 "                                              by the kernel\n"
@@ -2429,15 +2429,40 @@ static int do_kernel_unmap(const char *dev)
 {
   struct krbd_ctx *krbd;
   int r;
+  vector <char *>dev_names;
+  int ret_code = EXIT_SUCCESS;
 
   r = krbd_create_from_context(g_ceph_context, &krbd);
   if (r < 0)
     return r;
 
-  r = krbd_unmap(krbd, dev);
+  if (strncmp(dev,"/dev/",5) != 0) {
+    //Get block device name(s) from image name
+    krbd_get_block_device(krbd, dev,(void *)&dev_names);
+    if (dev_names.size() == 0) {
+      cerr << "rbd: Image '" << dev << "' ";
+      cerr << "is not mapped to any rbd devices" << std::endl;
+      ret_code = EXIT_FAILURE;
+    }
+    // Do unmap of each matched device
+    for (vector<char *>::iterator it = dev_names.begin(); it != dev_names.end();it++) {
+      r = krbd_unmap(krbd, (*it));
+      if (r != EXIT_SUCCESS) {
+        if (r < 0) {
+          ret_code = -r;
+        } else {
+            ret_code = r;
+          } 
+      }
+      delete (*it); 
+    }
+      
+  } else {
+    ret_code = krbd_unmap(krbd, dev);
+    }
 
   krbd_destroy(krbd);
-  return r;
+  return ret_code;
 }
 
 static string map_option_uuid_cb(const char *value_char)
@@ -3248,7 +3273,7 @@ if (!set_conf_param(v, p1, p2, p3)) { \
     return EXIT_FAILURE;
   }
 
-  int r;
+  int r = EXIT_SUCCESS;
   if (talk_to_cluster && opt_cmd != OPT_IMPORT) {
     r = rados.ioctx_create(poolname, io_ctx);
     if (r < 0) {
@@ -3734,5 +3759,5 @@ if (!set_conf_param(v, p1, p2, p3)) { \
     }
     break;
   }
-  return 0;
+  return r;
 }
