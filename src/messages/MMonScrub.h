@@ -18,7 +18,7 @@
 
 class MMonScrub : public Message
 {
-  static const int HEAD_VERSION = 1;
+  static const int HEAD_VERSION = 2;
   static const int COMPAT_VERSION = 1;
 
 public:
@@ -38,14 +38,17 @@ public:
   op_type_t op;
   version_t version;
   ScrubResult result;
+  int32_t num_keys;
+  pair<string,string> key;
 
   MMonScrub()
-    : Message(MSG_MON_SCRUB, HEAD_VERSION, COMPAT_VERSION)
+    : Message(MSG_MON_SCRUB, HEAD_VERSION, COMPAT_VERSION),
+      num_keys(-1)
   { }
 
-  MMonScrub(op_type_t op, version_t v)
+  MMonScrub(op_type_t op, version_t v, int32_t num_keys)
     : Message(MSG_MON_SCRUB, HEAD_VERSION, COMPAT_VERSION),
-      op(op), version(v)
+      op(op), version(v), num_keys(num_keys)
   { }
 
   const char *get_type_name() const { return "mon_scrub"; }
@@ -55,6 +58,8 @@ public:
     out << " v " << version;
     if (op == OP_RESULT)
       out << " " << result;
+    out << " num_keys " << num_keys;
+    out << " key (" << key << ")";
     out << ")";
   }
 
@@ -63,6 +68,8 @@ public:
     ::encode(o, payload);
     ::encode(version, payload);
     ::encode(result, payload);
+    ::encode(num_keys, payload);
+    ::encode(key, payload);
   }
 
   void decode_payload() {
@@ -72,6 +79,10 @@ public:
     op = (op_type_t)o;
     ::decode(version, p);
     ::decode(result, p);
+    if (header.version >= 2) {
+      ::decode(num_keys, p);
+      ::decode(key, p);
+    }
   }
 };
 
