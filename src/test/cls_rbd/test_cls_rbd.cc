@@ -368,8 +368,13 @@ TEST_F(TestClsRbd, get_features)
   ASSERT_EQ(0, get_features(&ioctx, oid, CEPH_NOSNAP, &features));
   ASSERT_EQ(0u, features);
 
-  ASSERT_EQ(0, get_features(&ioctx, oid, 1, &features));
-  ASSERT_EQ(0u, features);
+  int r = get_features(&ioctx, oid, 1, &features);
+  if (r == 0) {
+    ASSERT_EQ(0u, features);
+  } else {
+    // deprecated snapshot handling
+    ASSERT_EQ(-ENOENT, r);
+  }
 
   ioctx.close();
 }
