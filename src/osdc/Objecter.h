@@ -705,6 +705,7 @@ struct ObjectOperation {
 
   void copy_get(object_copy_cursor_t *cursor,
 		uint64_t max,
+		uint32_t copyget_flags,
 		uint64_t *out_size,
 		utime_t *out_mtime,
 		std::map<std::string,bufferlist> *out_attrs,
@@ -722,6 +723,7 @@ struct ObjectOperation {
 		int *prval) {
     OSDOp& osd_op = add_op(CEPH_OSD_OP_COPY_GET);
     osd_op.op.copy_get.max = max;
+    osd_op.op.copy_get.flags = copyget_flags;
     ::encode(*cursor, osd_op.indata);
     ::encode(max, osd_op.indata);
     unsigned p = ops.size() - 1;
