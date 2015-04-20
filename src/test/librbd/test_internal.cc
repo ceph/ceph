@@ -409,3 +409,74 @@ TEST_F(TestInternal, MetadatConfig) {
   ASSERT_FALSE(is_continue);
   ASSERT_TRUE(res.size() == 3U);
 }
+
+TEST_F(TestInternal, SnapshotCopyup)
+{
+  REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
+
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  bufferlist bl;
+  bl.append(std::string(256, '1'));
+  ASSERT_EQ(256, librbd::write(ictx, 0, bl.length(), bl.c_str(), 0));
+
+  ASSERT_EQ(0, librbd::snap_create(ictx, "snap1"));
+  ASSERT_EQ(0, librbd::snap_protect(ictx, "snap1"));
+
+  uint64_t features;
+  ASSERT_EQ(0, librbd::get_features(ictx, &features));
+
+  std::string clone_name = get_temp_image_name();
+  int order = ictx->order;
+  ASSERT_EQ(0, librbd::clone(m_ioctx, m_image_name.c_str(), "snap1", m_ioctx,
+			     clone_name.c_str(), features, &order, 0, 0));
+
+  librbd::ImageCtx *ictx2;
+  ASSERT_EQ(0, open_image(clone_name, &ictx2));
+
+  ASSERT_EQ(0, librbd::snap_create(ictx2, "snap1"));
+  ASSERT_EQ(0, librbd::snap_create(ictx2, "snap2"));
+
+  ASSERT_EQ(256, librbd::write(ictx2, 256, bl.length(), bl.c_str(), 0));
+
+  librados::IoCtx snap_ctx;
+  snap_ctx.dup(m_ioctx);
+  snap_ctx.snap_set_read(CEPH_SNAPDIR);
+
+  librados::snap_set_t snap_set;
+  ASSERT_EQ(0, snap_ctx.list_snaps(ictx2->get_object_name(0), &snap_set));
+
+  std::vector< std::pair<uint64_t,uint64_t> > expected_overlap =
+    boost::assign::list_of(
+      std::make_pair(0, 256))(
+      std::make_pair(512, 2096640));
+  ASSERT_EQ(2U, snap_set.clones.size());
+  ASSERT_NE(CEPH_NOSNAP, snap_set.clones[0].cloneid);
+  ASSERT_EQ(2U, snap_set.clones[0].snaps.size());
+  ASSERT_EQ(expected_overlap, snap_set.clones[0].overlap);
+  ASSERT_EQ(CEPH_NOSNAP, snap_set.clones[1].cloneid);
+
+  bufferptr read_ptr(256);
+  bufferlist read_bl;
+  read_bl.push_back(read_ptr);
+
+  std::list<std::string> snaps = boost::assign::list_of(
+    "snap1")("snap2")("");
+  for (std::list<std::string>::iterator it = snaps.begin();
+       it != snaps.end(); ++it) {
+    const char *snap_name = it->empty() ? NULL : it->c_str();
+    ASSERT_EQ(0, librbd::snap_set(ictx2, snap_name));
+
+    ASSERT_EQ(256, librbd::read(ictx2, 0, 256, read_bl.c_str(), 0));
+    ASSERT_TRUE(bl.contents_equal(read_bl));
+
+    ASSERT_EQ(256, librbd::read(ictx2, 256, 256, read_bl.c_str(), 0));
+    if (snap_name == NULL) {
+      ASSERT_TRUE(bl.contents_equal(read_bl));
+    } else {
+      ASSERT_TRUE(read_bl.is_zero());
+    }
+  }
+}
+
