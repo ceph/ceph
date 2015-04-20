@@ -74,8 +74,8 @@ using namespace std;
 #define dout_subsys ceph_subsys_client
 
 #include "include/lru.h"
-
 #include "include/compat.h"
+#include "include/stringify.h"
 
 #include "Client.h"
 #include "Inode.h"
@@ -6896,7 +6896,7 @@ int Client::uninline_data(Inode *in, Context *onfinish)
                         inline_version_bl);
   bufferlist inline_data = in->inline_data;
   uninline_ops.write(0, inline_data, in->truncate_size, in->truncate_seq);
-  uninline_ops.setxattr("inline_version", inline_version_bl);
+  uninline_ops.setxattr("inline_version", stringify(in->inline_version));
 
   objecter->mutate(oid,
                    OSDMap::file_to_object_locator(in->layout),
