@@ -1431,18 +1431,58 @@ function test_mon_crushmap_validation()
 {
   local map=$TMPDIR/map
   ceph osd getcrushmap -o $map
-  # crushtool validation timesout and is ignored
-  cat > $TMPDIR/crushtool <<EOF
-#!/bin/sh
-sleep 1000
-exit 0 # success
-EOF
-  chmod +x $TMPDIR/crushtool
-  ceph tell mon.* injectargs --crushtool $TMPDIR/crushtool
-  ceph osd setcrushmap -i $map 2>&1 | grep 'took too long'
-  ceph tell mon.* injectargs --crushtool crushtool
-  # crushtool validation succeeds
+
+  local crushtool_path="${TMPDIR}/crushtool"
+  touch "${crushtool_path}"
+  chmod +x "${crushtool_path}"
+  local crushtool_path_old=`ceph-conf --show-config-value crushtool`
+  ceph tell mon.* injectargs --crushtool "${crushtool_path}"
+
+  printf "%s\n" \
+      "#!/bin/sh
+       cat > /dev/null
+       exit 0" > "${crushtool_path}"
+
   ceph osd setcrushmap -i $map
+
+  printf "%s\n" \
+      "#!/bin/sh
+       cat > /dev/null
+       exit 1" > "${crushtool_path}"
+
+  expect_false ceph osd setcrushmap -i $map
+
+  printf "%s\n" \
+      "#!/bin/sh
+       cat > /dev/null
+       echo 'TEST FAIL' >&2
+       exit 1" > "${crushtool_path}"
+
+  expect_false ceph osd setcrushmap -i $map 2> $TMPFILE
+  check_response "Error EINVAL: Failed to parse crushmap: TEST FAIL"
+
+  local mon_lease=`ceph-conf --show-config-value mon_lease`
+
+  test "${mon_lease}" -gt 0
+
+  printf "%s\n" \
+      "#!/bin/sh
+       cat > /dev/null
+       sleep $((mon_lease - 1))" > "${crushtool_path}"
+
+  ceph osd setcrushmap -i $map
+
+  printf "%s\n" \
+      "#!/bin/sh
+       cat > /dev/null
+       sleep $((mon_lease + 1))" > "${crushtool_path}"
+
+  expect_false ceph osd setcrushmap -i $map 2> $TMPFILE
+  check_response "Error EINVAL: Failed to parse crushmap: ${crushtool_path}: timed out (${mon_lease} sec)"
+
+  ceph tell mon.* injectargs --crushtool "${crushtool_path_old}"
+
+  rm -f "${crushtool_path}"
 }
 
 function test_mon_ping()
