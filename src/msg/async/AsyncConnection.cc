@@ -1590,7 +1590,7 @@ int AsyncConnection::handle_connect_msg(ceph_msg_connect &connect, bufferlist &a
   if (existing) {
     // There is no possible that existing connection will acquire this
     // connection's lock
-    existing->lock.Lock();
+    existing->lock.Lock(true);  // skip lockdep check (we are locking a second AsyncConnection here)
 
     if (existing->replacing || existing->state == STATE_CLOSED) {
       ldout(async_msgr->cct, 1) << __func__ << " existing racing replace or mark_down happened while replacing."
