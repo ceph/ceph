@@ -18,6 +18,8 @@
 #include "osd/PGLog.h"
 #include "RadosImport.h"
 
+#define dout_subsys ceph_subsys_rados
+
 int RadosImport::import(std::string pool, bool no_overwrite)
 {
   bufferlist ebl;
@@ -45,23 +47,27 @@ int RadosImport::import(std::string pool, bool no_overwrite)
   ret = read_section(&type, &ebl);
   if (ret)
     return ret;
-  if (type != TYPE_PG_BEGIN) {
-    cerr << "Invalid first section type " << type << std::endl;
+
+  bool pool_mode = false;
+  if (type == TYPE_POOL_BEGIN) {
+    pool_mode = true;
+    cout << "Importing pool" << std::endl;
+  } else if (type == TYPE_PG_BEGIN) {
+    bufferlist::iterator ebliter = ebl.begin();
+    pg_begin pgb;
+    pgb.decode(ebliter);
+    spg_t pgid = pgb.pgid;;
+    if (!pgid.is_no_shard()) {
+      cerr << "Importing Erasure Coded shard is not supported" << std::endl;
+      return -EOPNOTSUPP;
+    }
+    if (debug) {
+      cerr << "Exported features: " << pgb.superblock.compat_features << std::endl;
+    }
+    cout << "Importing from pgid " << pgid << std::endl;
+  } else {
+    cerr << "Invalid initial section code " << type << std::endl;
     return -EFAULT;
-  }
-
-  bufferlist::iterator ebliter = ebl.begin();
-  pg_begin pgb;
-  pgb.decode(ebliter);
-  spg_t pgid = pgb.pgid;
-
-  if (!pgid.is_no_shard()) {
-    cerr << "Importing Erasure Coded shard is not supported" << std::endl;
-    return -EOPNOTSUPP;
-  }
-
-  if (debug) {
-    cerr << "Exported features: " << pgb.superblock.compat_features << std::endl;
   }
 
   // XXX: How to check export features?
@@ -101,11 +107,8 @@ int RadosImport::import(std::string pool, bool no_overwrite)
     return ret;
   }
 
-  cout << "Importing from pgid " << pgid << std::endl;
-
   bool done = false;
   bool found_metadata = false;
-  metadata_section ms;
   while(!done) {
     ret = read_section(&type, &ebl);
     if (ret)
@@ -119,7 +122,10 @@ int RadosImport::import(std::string pool, bool no_overwrite)
     switch(type) {
     case TYPE_OBJECT_BEGIN:
       ret = get_object_rados(ioctx, ebl, no_overwrite);
-      if (ret) return ret;
+      if (ret) {
+        cerr << "Error inserting object: " << ret << std::endl;
+        return ret;
+      }
       break;
     case TYPE_PG_METADATA:
       if (debug)
@@ -129,13 +135,16 @@ int RadosImport::import(std::string pool, bool no_overwrite)
     case TYPE_PG_END:
       done = true;
       break;
+    case TYPE_POOL_END:
+      done = true;
+      break;
     default:
       return -EFAULT;
     }
   }
 
-  if (!found_metadata) {
-    cerr << "Missing metadata section, ignored" << std::endl;
+  if (!(pool_mode || found_metadata)) {
+    cerr << "Missing metadata section!" << std::endl;
   }
 
   return 0;
@@ -236,8 +245,10 @@ int RadosImport::get_object_rados(librados::IoCtx &ioctx, bufferlist &bl, bool n
   while(!done) {
     sectiontype_t type;
     int ret = read_section(&type, &ebl);
-    if (ret)
+    if (ret) {
+      cerr << "Error reading section: " << ret << std::endl;
       return ret;
+    }
 
     ebliter = ebl.begin();
     //cout << "\tdo_object: Section type " << hex << type << dec << std::endl;
@@ -343,12 +354,13 @@ int RadosImport::get_object_rados(librados::IoCtx &ioctx, bufferlist &bl, bool n
           break;
         ret = ioctx.write(ob.hoid.hobj.oid.name, databl, databl.length(), out_offset);
         if (ret) {
-           cerr << "write failed: " << cpp_strerror(ret) << std::endl;
+          cerr << "write failed: " << cpp_strerror(ret) << std::endl;
           return ret;
         }
       }
       break;
     default:
+      cerr << "Unexpected section type " << type << std::endl;
       return -EFAULT;
     }
   }
