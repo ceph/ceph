@@ -1063,6 +1063,58 @@ int remove_parent(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   if (r < 0)
     return r;
 
+  uint64_t features;
+  r = read_key(hctx, "features", &features);
+  if (r < 0) {
+    return r;
+  }
+
+  // remove the parent from all snapshots
+  if ((features & RBD_FEATURE_DEEP_FLATTEN) != 0) {
+    int max_read = RBD_MAX_KEYS_READ;
+    vector<snapid_t> snap_ids;
+    string last_read = RBD_SNAP_KEY_PREFIX;
+
+    do {
+      set<string> keys;
+      r = cls_cxx_map_get_keys(hctx, last_read, max_read, &keys);
+      if (r < 0) {
+        return r;
+      }
+
+      for (std::set<string>::const_iterator it = keys.begin();
+           it != keys.end(); ++it) {
+        if ((*it).find(RBD_SNAP_KEY_PREFIX) != 0) {
+	  break;
+        }
+
+        uint64_t snap_id = snap_id_from_key(*it);
+        cls_rbd_snap snap_meta;
+        r = read_key(hctx, *it, &snap_meta);
+        if (r < 0) {
+          CLS_ERR("Could not read snapshot: snap_id=%" PRIu64 ": %s",
+                  snap_id, cpp_strerror(r).c_str());
+          return r;
+        }
+
+        snap_meta.parent = cls_rbd_parent();
+
+        bufferlist bl;
+        ::encode(snap_meta, bl);
+        r = cls_cxx_map_set_val(hctx, *it, &bl);
+        if (r < 0) {
+          CLS_ERR("Could not update snapshot: snap_id=%" PRIu64 ": %s",
+                  snap_id, cpp_strerror(r).c_str());
+          return r;
+        }
+      }
+
+      if (!keys.empty()) {
+        last_read = *(keys.rbegin());
+      }
+    } while (r == max_read);
+  }
+
   cls_rbd_parent parent;
   r = read_key(hctx, "parent", &parent);
   if (r < 0)
@@ -1073,7 +1125,6 @@ int remove_parent(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
     CLS_ERR("error removing parent: %d", r);
     return r;
   }
-
   return 0;
 }
 
