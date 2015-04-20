@@ -74,6 +74,11 @@ protected:
 
   bool stopping;
 
+  // Log position which is persistent *and* for which
+  // submit_entry wait_for_safe callbacks have already
+  // been called.
+  uint64_t safe_pos;
+
   inodeno_t ino;
   Journaler *journaler;
 
@@ -184,6 +189,7 @@ public:
 		  unflushed(0),
 		  capped(false),
 		  stopping(false),
+		  safe_pos(0),
 		  journaler(0),
 		  logger(0),
 		  replay_thread(this),
@@ -290,6 +296,7 @@ private:
   void _trim_expired_segments();
 
   friend class C_MaybeExpiredSegment;
+  friend class C_MDL_Flushed;
 
 public:
   void trim_expired_segments();
