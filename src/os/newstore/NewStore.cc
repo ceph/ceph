@@ -569,6 +569,7 @@ NewStore::NewStore(CephContext *cct, const string& path)
     cct(cct),
     db(NULL),
     fs(NULL),
+    db_path(cct->_conf->newstore_db_path),
     path_fd(-1),
     fsid_fd(-1),
     frag_fd(-1),
@@ -895,6 +896,11 @@ int NewStore::mkfs()
   if (r < 0)
     goto out_close_fsid;
 
+  if (db_path != "") {
+    r = symlinkat(db_path.c_str(), path_fd, "db");
+    if (r < 0)
+      goto out_close_frag;
+  }
   r = _open_db();
   if (r < 0)
     goto out_close_frag;
