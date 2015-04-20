@@ -1524,6 +1524,7 @@ int get_object(ObjectStore *store, coll_t coll, bufferlist &bl, OSDMap &curmap)
       done = true;
       break;
     default:
+      cerr << "Unknown section type " << type << std::endl;
       return -EFAULT;
     }
   }
@@ -1649,6 +1650,7 @@ int do_import_rados(string pool)
   if (ret)
     return ret;
   if (type != TYPE_PG_BEGIN) {
+    cerr << "Invalid first section type " << type << std::endl;
     return -EFAULT;
   }
 
@@ -1910,6 +1912,7 @@ int do_import(ObjectStore *store, OSDSuperblock& sb, bool force)
       done = true;
       break;
     default:
+      cerr << "Unknown section type " << type << std::endl;
       return -EFAULT;
     }
   }
