@@ -18,7 +18,6 @@ from teuthology import misc as teuthology
 from teuthology import contextutil
 from teuthology.orchestra import run
 import ceph_client as cclient
-from teuthology.orchestra.run import CommandFailedError
 from teuthology.orchestra.daemon import DaemonGroup
 
 
@@ -202,24 +201,8 @@ def cephfs_setup(ctx, config):
     if mdss.remotes:
         log.info('Setting up CephFS filesystem...')
 
-        try:
-            proc = mon_remote.run(args=['sudo', 'ceph', '--format=json-pretty', 'osd', 'lspools'],
-                                  stdout=StringIO())
-            pools = json.loads(proc.stdout.getvalue())
-            metadata_pool_exists = 'metadata' in [p['poolname'] for p in pools]
-        except CommandFailedError as e:
-            # For use in upgrade tests, Ceph cuttlefish and earlier don't support
-            # structured output (--format) from the CLI.
-            if e.exitstatus == 22:
-                metadata_pool_exists = True
-            else:
-                raise
-
-        # In case we are using an older Ceph which creates FS by default
-        if metadata_pool_exists:
-            log.info("Metadata pool already exists, skipping")
-        else:
-            ceph_fs = Filesystem(ctx)
+        ceph_fs = Filesystem(ctx)
+        if not ceph_fs.legacy_configured():
             ceph_fs.create()
 
         is_active_mds = lambda role: role.startswith('mds.') and not role.endswith('-s') and role.find('-s-') == -1
