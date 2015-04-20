@@ -5,6 +5,7 @@
 #define CEPH_TEST_CLASS_HANDLER_H
 
 #include "objclass/objclass.h"
+#include "common/snap_types.h"
 #include <boost/shared_ptr.hpp>
 #include <list>
 #include <map>
@@ -24,6 +25,7 @@ public:
   struct MethodContext {
     TestIoCtxImpl *io_ctx_impl;
     std::string oid;
+    SnapContext snapc;
   };
   typedef boost::shared_ptr<MethodContext> SharedMethodContext;
 
@@ -47,7 +49,8 @@ public:
   cls_method_cxx_call_t get_method(const std::string &cls,
                                    const std::string &method);
   SharedMethodContext get_method_context(TestIoCtxImpl *io_ctx_impl,
-                                         const std::string &oid);
+                                         const std::string &oid,
+                                         const SnapContext &snapc);
 
 private:
 

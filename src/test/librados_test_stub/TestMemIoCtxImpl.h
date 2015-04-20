@@ -45,8 +45,9 @@ public:
   virtual int stat(const std::string& oid, uint64_t *psize, time_t *pmtime);
   virtual int truncate(const std::string& oid, uint64_t size);
   virtual int write(const std::string& oid, bufferlist& bl, size_t len,
-                    uint64_t off);
-  virtual int write_full(const std::string& oid, bufferlist& bl);
+                    uint64_t off, const SnapContext &snapc);
+  virtual int write_full(const std::string& oid, bufferlist& bl,
+                         const SnapContext &snapc);
   virtual int xattr_get(const std::string& oid,
                         std::map<std::string, bufferlist>* attrset);
   virtual int xattr_set(const std::string& oid, const std::string &name,
@@ -63,7 +64,8 @@ private:
   size_t clip_io(size_t off, size_t len, size_t bl_len);
   void ensure_minimum_length(size_t len, bufferlist *bl);
 
-  TestMemRadosClient::SharedFile get_file(const std::string &oid, bool write);
+  TestMemRadosClient::SharedFile get_file(const std::string &oid, bool write,
+                                          const SnapContext &snapc);
 
 };
 
