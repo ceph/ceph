@@ -3,24 +3,22 @@
 Test our tools for recovering the content of damaged journals
 """
 
-import contextlib
 import json
 import logging
-import os
 from textwrap import dedent
 import time
-from StringIO import StringIO
-import re
+
 from teuthology.orchestra.run import CommandFailedError
-from tasks.cephfs.filesystem import Filesystem, ObjectNotFound, ROOT_INO
-from tasks.cephfs.cephfs_test_case import CephFSTestCase, run_tests
-from teuthology.orchestra import run
+from tasks.cephfs.filesystem import ObjectNotFound, ROOT_INO
+from tasks.cephfs.cephfs_test_case import CephFSTestCase
 
 
 log = logging.getLogger(__name__)
 
 
 class TestJournalRepair(CephFSTestCase):
+    MDSS_REQUIRED = 2
+
     def test_inject_to_empty(self):
         """
         That when some dentries in the journal but nothing is in
@@ -85,7 +83,7 @@ class TestJournalRepair(CephFSTestCase):
         # Now check the MDS can read what we wrote: truncate the journal
         # and start the mds.
         self.fs.journal_tool(['journal', 'reset'])
-        self.fs.mds_restart()
+        self.fs.mds_fail_restart()
         self.fs.wait_for_daemons()
 
         # List files
@@ -98,6 +96,9 @@ class TestJournalRepair(CephFSTestCase):
         # will be invisible in readdir).
         # FIXME: hook in forward scrub here to regenerate backtraces
         proc = self.mount_a.run_shell(['ls', '-R'])
+        self.mount_a.umount_wait()  # remount to clear client cache before our second ls
+        self.mount_a.mount()
+        self.mount_a.wait_until_mounted()
 
         proc = self.mount_a.run_shell(['ls', '-R'])
         self.assertEqual(proc.stdout.getvalue().strip(),
@@ -217,55 +218,22 @@ class TestJournalRepair(CephFSTestCase):
 
         # See that the second MDS will crash when it starts and tries to
         # acquire rank 1
-        crasher_id = active_mds_names[1]
-        self.fs.mds_restart(crasher_id)
-        try:
-            self.fs.mds_daemons[crasher_id].proc.wait()
-        except CommandFailedError as e:
-            log.info("MDS '{0}' crashed with status {1} as expected".format(crasher_id, e.exitstatus))
-            self.fs.mds_daemons[crasher_id].proc = None
+        damaged_id = active_mds_names[1]
+        self.fs.mds_restart(damaged_id)
 
-            # Go remove the coredump from the crash, otherwise teuthology.internal.coredump will
-            # catch it later and treat it as a failure.
-            p = self.fs.mds_daemons[crasher_id].remote.run(args=[
-                "sudo", "sysctl", "-n", "kernel.core_pattern"], stdout=StringIO())
-            core_pattern = p.stdout.getvalue().strip()
-            if os.path.dirname(core_pattern):  # Non-default core_pattern with a directory in it
-                # We have seen a core_pattern that looks like it's from teuthology's coredump
-                # task, so proceed to clear out the core file
-                log.info("Clearing core from pattern: {0}".format(core_pattern))
+        # The daemon taking the damaged rank should start starting, then
+        # restart back into standby after asking the mon to mark the rank
+        # damaged.
+        def is_marked_damaged():
+            mds_map = self.fs.get_mds_map()
+            return 1 in mds_map['damaged']
 
-                # Determine the PID of the crashed MDS by inspecting the MDSMap, it had
-                # to talk to the mons to get assigned a rank to reach the point of crashing
-                addr = self.fs.mon_manager.get_mds_status(crasher_id)['addr']
-                pid_str = addr.split("/")[1]
-                log.info("Determined crasher PID was {0}".format(pid_str))
+        self.wait_until_true(is_marked_damaged, 60)
 
-                # Substitute PID into core_pattern to get a glob
-                core_glob = core_pattern.replace("%p", pid_str)
-                core_glob = re.sub("%[a-z]", "*", core_glob)  # Match all for all other % tokens
+        self.fs.wait_for_state("up:standby", timeout=60, mds_id=damaged_id)
 
-                # Verify that we see the expected single coredump matching the expected pattern
-                ls_proc = self.fs.mds_daemons[crasher_id].remote.run(args=[
-                    "sudo", "ls", run.Raw(core_glob)
-                ], stdout=StringIO())
-                cores = [f for f in ls_proc.stdout.getvalue().strip().split("\n") if f]
-                log.info("Enumerated cores: {0}".format(cores))
-                self.assertEqual(len(cores), 1)
-
-                log.info("Found core file {0}, deleting it".format(cores[0]))
-
-                self.fs.mds_daemons[crasher_id].remote.run(args=[
-                    "sudo", "rm", "-f", cores[0]
-                ])
-            else:
-                log.info("No core_pattern directory set, nothing to clear (internal.coredump not enabled?)")
-
-        else:
-            raise RuntimeError("MDS daemon '{0}' did not crash as expected".format(crasher_id))
-
-        # Now it's crashed, let the MDSMonitor know that it's not coming back
-        self.fs.mds_fail(active_mds_names[1])
+        self.fs.mds_stop(damaged_id)
+        self.fs.mds_fail(damaged_id)
 
         # Now give up and go through a disaster recovery procedure
         self.fs.mds_stop(active_mds_names[0])
@@ -280,7 +248,7 @@ class TestJournalRepair(CephFSTestCase):
 
         # Bring an MDS back online, mount a client, and see that we can walk the full
         # filesystem tree again
-        self.fs.mds_restart(active_mds_names[0])
+        self.fs.mds_fail_restart(active_mds_names[0])
         self.wait_until_equal(lambda: self.fs.get_active_names(), [active_mds_names[0]], 30,
                               reject_fn=lambda v: len(v) > 1)
         self.mount_a.mount()
@@ -375,28 +343,3 @@ class TestJournalRepair(CephFSTestCase):
                             "pending_destroy": []},
              "result": 0}
         )
-
-
-@contextlib.contextmanager
-def task(ctx, config):
-    fs = Filesystem(ctx)
-
-    # Pick out the clients we will use from the configuration
-    # =======================================================
-    if len(ctx.mounts) < 1:
-        raise RuntimeError("Need at least one clients")
-    mount_a = ctx.mounts.values()[0]
-
-    # Stash references on ctx so that we can easily debug in interactive mode
-    # =======================================================================
-    ctx.filesystem = fs
-    ctx.mount_a = mount_a
-
-    run_tests(ctx, config, TestJournalRepair, {
-        'fs': fs,
-        'mount_a': mount_a
-    })
-
-    # Continue to any downstream tasks
-    # ================================
-    yield
