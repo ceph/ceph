@@ -810,6 +810,9 @@ OPTION(newstore_overlay_max, OPT_INT, 32)
 OPTION(newstore_open_by_handle, OPT_BOOL, true)
 OPTION(newstore_o_direct, OPT_BOOL, true)
 OPTION(newstore_db_path, OPT_STR, "")
+OPTION(newstore_aio, OPT_BOOL, true)
+OPTION(newstore_aio_poll_ms, OPT_INT, 250)  // milliseconds
+OPTION(newstore_aio_max_queue_depth, OPT_INT, 64)
 
 OPTION(filestore_omap_backend, OPT_STR, "leveldb")
 
