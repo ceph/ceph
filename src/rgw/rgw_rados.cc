@@ -2347,7 +2347,9 @@ int RGWRados::Bucket::List::list_objects(int max, vector<RGWObjEnt> *result,
   end_marker_obj.set_ns(params.ns);
   end_marker_obj.set_obj(params.end_marker.name);
   rgw_obj_key cur_end_marker;
-  end_marker_obj.get_index_key(&cur_end_marker);
+  if (params.ns.empty()) { /* no support for end marker for namespaced objects */
+    end_marker_obj.get_index_key(&cur_end_marker);
+  }
   const bool cur_end_marker_valid = !cur_end_marker.empty();
 
   prefix_obj.set_ns(params.ns);
