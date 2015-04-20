@@ -969,6 +969,18 @@ def task(ctx, config):
         kernel:
           sha1: 275dd19ea4e84c34f985ba097f9cddb539f54a50
 
+    To install from a koji build_id::
+
+        kernel:
+          koji: 416058
+
+    When installing from koji you also need to set the urls for koji hub
+    and the koji root in your teuthology.yaml config file. These are shown
+    below with their default values::
+
+        kojihub_url: http://koji.fedoraproject.org/kojihub
+        kojiroot_url: http://kojipkgs.fedoraproject.org/packages
+
     To install local rpm (target should be an rpm system)::
 
         kernel:
