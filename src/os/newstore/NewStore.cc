@@ -991,7 +991,7 @@ int NewStore::mount()
   if (r < 0)
     goto out_db;
 
-  r = _replay_wal();
+  r = _wal_replay();
   if (r < 0)
     goto out_aio;
 
@@ -2151,6 +2151,73 @@ NewStore::TransContext *NewStore::_txc_create(OpSequencer *osr)
   return txc;
 }
 
+void NewStore::_txc_state_proc(TransContext *txc)
+{
+  dout(10) << __func__ << " txc " << txc
+	   << " " << txc->get_state_name() << dendl;
+  switch (txc->state) {
+  case TransContext::STATE_PREPARE:
+    if (!txc->aios.empty()) {
+      txc->state = TransContext::STATE_AIO_WAIT;
+      _txc_aio_submit(txc);
+      break;
+    }
+    // ** fall-thru **
+
+  case TransContext::STATE_AIO_WAIT:
+    if (!txc->fds.empty()) {
+      if (g_conf->newstore_sync_io) {
+	_txc_do_sync_fsync(txc);
+      } else {
+	_txc_queue_fsync(txc);
+	break;
+      }
+    }
+    _txc_finish_io(txc);  // may trigger blocked txc's too
+    break;
+
+  case TransContext::STATE_IO_DONE:
+    if (!g_conf->newstore_sync_transaction) {
+      _txc_submit_kv(txc);
+      break;
+    }
+    db->submit_transaction_sync(txc->t);
+    // ** fall-thru **
+
+  case TransContext::STATE_KV_QUEUED:
+    _txc_finish_kv(txc);
+    break;
+
+  case TransContext::STATE_WAL_APPLYING:
+    if (!txc->aios.empty()) {
+      _txc_aio_submit(txc);
+      txc->state = TransContext::STATE_WAL_AIO_WAIT;
+      break;
+    }
+    // ** fall-thru **
+
+  case TransContext::STATE_WAL_AIO_WAIT:
+    _wal_finish(txc);
+    break;
+
+  case TransContext::STATE_WAL_CLEANUP:
+    txc->osr->qlock.Lock();
+    txc->state = TransContext::STATE_FINISHING;
+    txc->osr->qlock.Unlock();
+    // ** fall-thru **
+
+  case TransContext::TransContext::STATE_FINISHING:
+    _txc_finish_apply(txc);
+    break;
+
+  default:
+    derr << __func__ << " unexpected txc " << txc
+	 << " state " << txc->get_state_name() << dendl;
+    assert(0 == "unexpected txc state");
+    break;
+  }
+}
+
 void NewStore::_txc_process_fsync(fsync_item *i)
 {
   dout(20) << __func__ << " txc " << i->txc << dendl;
@@ -2164,12 +2231,12 @@ void NewStore::_txc_process_fsync(fsync_item *i)
   }
   VOID_TEMP_FAILURE_RETRY(::close(i->fd));
   if (i->txc->finish_fsync()) {
-    _txc_finish_fsync(i->txc);
+    _txc_finish_io(i->txc);
   }
   dout(20) << __func__ << " txc " << i->txc << " done" << dendl;
 }
 
-void NewStore::_txc_finish_fsync(TransContext *txc)
+void NewStore::_txc_finish_io(TransContext *txc)
 {
   dout(20) << __func__ << " " << txc << dendl;
 
@@ -2180,25 +2247,25 @@ void NewStore::_txc_finish_fsync(TransContext *txc)
 
   OpSequencer *osr = txc->osr.get();
   Mutex::Locker l(osr->qlock);
-  txc->state = TransContext::STATE_FSYNC_DONE;
+  txc->state = TransContext::STATE_IO_DONE;
 
   OpSequencer::q_list_t::iterator p = osr->q.iterator_to(*txc);
   while (p != osr->q.begin()) {
     --p;
-    if (p->state < TransContext::STATE_FSYNC_DONE) {
+    if (p->state < TransContext::STATE_IO_DONE) {
       dout(20) << __func__ << " " << txc << " blocked by " << &*p << " "
 	       << p->get_state_name() << dendl;
       return;
     }
-    if (p->state > TransContext::STATE_FSYNC_DONE) {
+    if (p->state > TransContext::STATE_IO_DONE) {
       ++p;
       break;
     }
   }
   do {
-    _txc_submit_kv(&*p++);
+    _txc_state_proc(&*p++);
   } while (p != osr->q.end() &&
-	   p->state == TransContext::STATE_FSYNC_DONE);
+	   p->state == TransContext::STATE_IO_DONE);
 }
 
 int NewStore::_txc_finalize(OpSequencer *osr, TransContext *txc)
@@ -2245,6 +2312,22 @@ void NewStore::_txc_queue_fsync(TransContext *txc)
   fsync_wq.unlock();
 }
 
+void NewStore::_txc_do_sync_fsync(TransContext *txc)
+{
+  dout(20) << __func__ << " txc " << txc << dendl;
+  for (list<fsync_item>::iterator p = txc->fds.begin();
+       p != txc->fds.end(); ++p) {
+    dout(30) << __func__ << " fsync " << p->fd << dendl;
+    int r = ::fdatasync(p->fd);
+    if (r < 0) {
+      r = -errno;
+      derr << __func__ << " fsync: " << cpp_strerror(r) << dendl;
+      assert(0 == "fsync error");
+    }
+    VOID_TEMP_FAILURE_RETRY(::close(p->fd));
+  }
+}
+
 void NewStore::_txc_submit_kv(TransContext *txc)
 {
   dout(20) << __func__ << " txc " << txc << dendl;
@@ -2288,7 +2371,7 @@ void NewStore::_txc_finish_kv(TransContext *txc)
   } else {
     txc->state = TransContext::STATE_FINISHING;
     txc->osr->qlock.Unlock();
-    _txc_finish_apply(txc);
+    _txc_state_proc(txc);
   }
 }
 
@@ -2365,23 +2448,7 @@ void NewStore::_aio_thread()
 	       << left << " aios left" << dendl;
       VOID_TEMP_FAILURE_RETRY(::close(aio->fd));
       if (left == 0) {
-	switch (txc->state) {
-	case TransContext::STATE_AIO_QUEUED:
-	  txc->state = TransContext::STATE_AIO_DONE;
-	  if (!txc->fds.empty()) {
-	    _txc_queue_fsync(txc);
-	  } else {
-	    _txc_finish_fsync(txc);
-	  }
-	  break;
-
-	case TransContext::STATE_WAL_AIO_WAIT:
-	  _wal_finish(txc);
-	  break;
-
-	default:
-	  assert(0 == "unexpected txc state on aio completion");
-	}
+	_txc_state_proc(txc);
       }
     }
   }
@@ -2413,18 +2480,7 @@ void NewStore::_kv_sync_thread()
 	       << " in " << dur << dendl;
       while (!kv_committing.empty()) {
 	TransContext *txc = kv_committing.front();
-	if (txc->state == TransContext::STATE_WAL_CLEANUP) {
-	  txc->osr->qlock.Lock();
-	  txc->state = TransContext::STATE_FINISHING;
-	  txc->osr->qlock.Unlock();
-	  _txc_finish_apply(txc);
-	} else if (txc->state == TransContext::STATE_KV_QUEUED) {
-	  _txc_finish_kv(txc);
-	} else {
-	  derr << __func__ << " unexpected txc state " << txc->get_state_name()
-	       << dendl;
-	  assert(0);
-	}
+	_txc_state_proc(txc);
 	kv_committing.pop_front();
       }
 
@@ -2458,13 +2514,8 @@ int NewStore::_wal_apply(TransContext *txc)
   if (r < 0)
     return r;
 
-  if (!txc->aios.empty()) {
-    _txc_aio_submit(txc);
-    txc->state = TransContext::STATE_WAL_AIO_WAIT;
-    return 0;
-  } else {
-    return _wal_finish(txc);
-  }
+  _txc_state_proc(txc);
+  return 0;
 }
 
 int NewStore::_wal_finish(TransContext *txc)
@@ -2605,7 +2656,7 @@ int NewStore::_do_wal_transaction(wal_transaction_t& wt,
   return 0;
 }
 
-int NewStore::_replay_wal()
+int NewStore::_wal_replay()
 {
   dout(10) << __func__ << " start" << dendl;
   KeyValueDB::Iterator it = db->get_iterator(PREFIX_WAL);
@@ -2654,7 +2705,7 @@ int NewStore::queue_transactions(
     tls, &onreadable, &ondisk, &onreadable_sync);
   int r;
 
-  // throttle wal work
+  // throttle on wal work
   wal_wq.throttle(g_conf->newstore_wal_max_ops,
 		  g_conf->newstore_wal_max_bytes);
 
@@ -2672,54 +2723,22 @@ int NewStore::queue_transactions(
     dout(5) << __func__ << " new " << *osr << "/" << osr->parent << dendl;
   }
 
+  // prepare
   TransContext *txc = _txc_create(osr);
-
-  // XXX do it sync for now; this is not crash safe
-  for (list<Transaction*>::iterator p = tls.begin(); p != tls.end(); ++p) {
-    (*p)->set_osr(osr);
-    _do_transaction(*p, txc, handle);
-  }
-
   txc->onreadable = onreadable;
   txc->onreadable_sync = onreadable_sync;
   txc->oncommit = ondisk;
 
+  for (list<Transaction*>::iterator p = tls.begin(); p != tls.end(); ++p) {
+    (*p)->set_osr(osr);
+    _txc_add_transaction(txc, *p);
+  }
+
   r = _txc_finalize(osr, txc);
   assert(r == 0);
 
-  if (g_conf->newstore_sync_queue_transaction) {
-    // do it syncrhonously.  for example, if we have a *very* fast backend.
-
-    // sync
-    txc->state = TransContext::STATE_FSYNC_FSYNCING;
-    for (list<fsync_item>::iterator p = txc->fds.begin();
-	 p != txc->fds.end(); ++p) {
-      dout(30) << __func__ << " fsync " << p->fd << dendl;
-      int r = ::fdatasync(p->fd);
-      if (r < 0) {
-	r = -errno;
-	derr << __func__ << " fsync: " << cpp_strerror(r) << dendl;
-	return r;
-      }
-      VOID_TEMP_FAILURE_RETRY(::close(p->fd));
-    }
-
-    txc->state = TransContext::STATE_KV_COMMITTING;
-    db->submit_transaction_sync(txc->t);
-
-    _txc_finish_kv(txc);
-  } else {
-    // async path
-    if (!txc->aios.empty()) {
-      _txc_aio_submit(txc);
-      txc->state = TransContext::STATE_AIO_QUEUED;
-    } else if (!txc->fds.empty()) {
-      _txc_queue_fsync(txc);
-    } else {
-      _txc_finish_fsync(txc);
-    }
-  }
-
+  // execute (start)
+  _txc_state_proc(txc);
   return 0;
 }
 
@@ -2732,7 +2751,7 @@ void NewStore::_txc_aio_submit(TransContext *txc)
        p != txc->aios.end();
        ++p) {
     FS::aio_t& aio = *p;
-    dout(20) << __func__ << " submitting aio " << &aio << dendl;
+    dout(20) << __func__ << " aio " << &aio << " fd " << aio.fd << dendl;
     for (vector<iovec>::iterator q = aio.iov.begin(); q != aio.iov.end(); ++q)
       dout(30) << __func__ << "  iov " << (void*)q->iov_base
 	       << " len " << q->iov_len << dendl;
@@ -2746,9 +2765,7 @@ void NewStore::_txc_aio_submit(TransContext *txc)
   }
 }
 
-int NewStore::_do_transaction(Transaction *t,
-			      TransContext *txc,
-			      ThreadPool::TPHandle *handle)
+int NewStore::_txc_add_transaction(TransContext *txc, Transaction *t)
 {
   Transaction::iterator i = t->begin();
   int pos = 0;
