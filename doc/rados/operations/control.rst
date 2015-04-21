@@ -168,13 +168,6 @@ Query the current max_osd parameter in the OSD map. ::
 
 	ceph osd getmaxosd
 
-Import the given OSD map. Note that this can be a bit dangerous,
-since the OSD map includes dynamic state about which OSDs are current
-on or offline; only do this if you've just modified a (very) recent
-copy of the map. ::
-
-	ceph osd setmap -i file
-
 Import the given crush map. ::
 
 	ceph osd setcrushmap -i file
