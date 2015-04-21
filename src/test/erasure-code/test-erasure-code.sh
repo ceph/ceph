@@ -16,6 +16,7 @@
 # GNU Library Public License for more details.
 #
 
+source test/ceph-helpers.sh
 source test/mon/mon-test-helpers.sh
 source test/osd/osd-test-helpers.sh
 
@@ -36,6 +37,7 @@ function run() {
     for id in $(seq 0 10) ; do
         run_osd $dir $id || return 1
     done
+    wait_for_clean || return 1
     # check that erasure code plugins are preloaded
     CEPH_ARGS='' ./ceph --admin-daemon $dir/ceph-osd.0.asok log flush || return 1
     grep 'load: jerasure.*lrc' $dir/osd-0.log || return 1
@@ -58,6 +60,7 @@ function create_erasure_coded_pool() {
         ruleset-failure-domain=osd || return 1
     ./ceph osd pool create $poolname 12 12 erasure myprofile \
         || return 1
+    wait_for_clean || return 1
 }
 
 function delete_pool() {
@@ -294,10 +297,10 @@ function TEST_chunk_mapping() {
     ./ceph osd erasure-code-profile rm remap-profile
 }
 
-# this test case is aimd to reproduce the original OSD crashing when hitting EIO
-# see https://github.com/ceph/ceph/pull/2952
-# but the original crashing behavior seems changed from latest giant, so this
-# test case is also modified
+#
+# This test case tries to validate the following behavior:
+#  For object on EC pool, if there is one shard having read error (
+#  either primary or replica), it will trigger OSD crash.
 #
 function TEST_rados_get_dataeio_no_subreadall_jerasure() {
     local dir=$1
@@ -333,25 +336,28 @@ function TEST_rados_get_dataeio_no_subreadall_jerasure() {
         local -a initial_osds=($(get_osds $poolname $objname))
         local last=$((${#initial_osds[@]} - 1))
 
-    	  CEPH_ARGS='' ./ceph --admin-daemon $dir/ceph-osd.${initial_osds[$shardid]}.asok config set \
+    	CEPH_ARGS='' ./ceph --admin-daemon $dir/ceph-osd.${initial_osds[$shardid]}.asok config set \
             filestore_debug_inject_read_err true || return 1
-    	  CEPH_ARGS='' ./ceph --admin-daemon $dir/ceph-osd.${initial_osds[$shardid]}.asok injectdataerr \
+    	CEPH_ARGS='' ./ceph --admin-daemon $dir/ceph-osd.${initial_osds[$shardid]}.asok injectdataerr \
             $poolname $objname $shardid || return 1
-    	  rados_put_get $dir $poolname $objname || return 1
-    	  check_osd_status ${initial_osds[$shardid]} "down" || return 1
+    	CEPH_ARGS='' ./ceph --admin-daemon $dir/ceph-osd.${initial_osds[$shardid]}.asok config set \
+            filestore_fail_eio false || return 1
+    	rados_put_get $dir $poolname $objname || return 1
+    	check_osd_status ${initial_osds[$shardid]} "down" || return 1
 
-    	  # recreate crashed OSD with the same id since I don't know how to restart it :(
-    	  if (( $subread == 0 )); then
-            #if (( $shardid != 0 )); then
-            #    run_osd $dir ${initial_osds[0]} "--osd_pool_erasure_code_subread_all=false" || return 1
-            #fi
-            run_osd $dir ${initial_osds[$shardid]} "--osd_pool_erasure_code_subread_all=false" || return 1
-    	  else
-            #if (( $shardid != 0 )); then
-            #    run_osd $dir ${initial_osds[0]} || return 1
-            #fi
-            run_osd $dir ${initial_osds[$shardid]} || return 1
-    	  fi
+        # restart the crashed OSDs, note it could crash multiple OSDs,
+        # since after the primary's crash, the second replica could be
+        # promoted as primary and crash again due to read error
+    	if (( $subread == 0 )); then
+            for s in "${initial_osds[@]}"; do
+                activate_osd $dir $s --osd_pool_erasure_code_subread_all=false || return 1
+            done
+    	else
+            for s in "${initial_osds[@]}"; do
+               activate_osd $dir $s || return 1
+            done
+    	fi
+        wait_for_clean
     done
 
     delete_pool $poolname
