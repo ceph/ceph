@@ -2486,6 +2486,14 @@ reprotect_and_return_err:
     }
 
     {
+      RWLock::RLocker parent_locker(ictx->parent_lock);
+      if (ictx->parent_md.spec.pool_id == -1) {
+	lderr(cct) << "image has no parent" << dendl;
+	return -EINVAL;
+      }
+    }
+
+    {
       RWLock::RLocker snap_locker(ictx->snap_lock);
       if (ictx->read_only || ictx->snap_id != CEPH_NOSNAP) {
         return -EROFS;
@@ -2525,9 +2533,13 @@ reprotect_and_return_err:
       }
     } while (r == -ERESTART);
 
+    if (r < 0 && r != -EINVAL) {
+      return r;
+    }
+
     notify_change(ictx->md_ctx, ictx->header_oid, ictx);
     ldout(cct, 20) << "flatten finished" << dendl;
-    return r;
+    return 0;
   }
 
   int async_flatten(ImageCtx *ictx, Context *ctx, ProgressContext &prog_ctx)
