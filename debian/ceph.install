@@ -23,6 +23,7 @@ usr/libexec/ceph/ceph-osd-prestart.sh
 usr/share/doc/ceph/sample.ceph.conf
 usr/share/doc/ceph/sample.fetch_config
 usr/share/man/man8/ceph-clsinfo.8
+usr/share/man/man8/ceph-create-keys.8
 usr/share/man/man8/ceph-debugpack.8
 usr/share/man/man8/ceph-deploy.8
 usr/share/man/man8/ceph-disk.8
