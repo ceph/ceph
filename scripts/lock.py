@@ -158,5 +158,17 @@ def parse_args():
         default=None,
         help='OS (distro) version such as "12.10"',
     )
+    parser.add_argument(
+        '--json-query',
+        default=None,
+        help=textwrap.dedent('''\
+            JSON fragment, explicitly given, or a file containing
+            JSON, containing a query for --list or --brief.
+            Example: teuthology-lock --list --all --json-query
+            '{"vm_host":{"name":"mira003.front.sepia.ceph.com"}'
+            will list all machines who have a vm_host entry
+            with a dictionary that contains at least the name key
+            with value mira003.front.sepia.ceph.com.'''),
+    )
 
     return parser.parse_args()
