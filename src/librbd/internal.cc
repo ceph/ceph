@@ -2628,6 +2628,14 @@ reprotect_and_return_err:
       return r;
     }
 
+    {
+      RWLock::RLocker parent_locker(ictx->parent_lock);
+      if (ictx->parent_md.spec.pool_id == -1) {
+	lderr(cct) << "image has no parent" << dendl;
+	return -EINVAL;
+      }
+    }
+
     uint64_t request_id = ictx->async_request_seq.inc();
     r = invoke_async_request(ictx, "flatten",
                              boost::bind(&async_flatten, ictx, _1,
@@ -2636,9 +2644,13 @@ reprotect_and_return_err:
                                          ictx->image_watcher, request_id,
                                          boost::ref(prog_ctx)));
 
+    if (r < 0 && r != -EINVAL) {
+      return r;
+    }
+
     notify_change(ictx->md_ctx, ictx->header_oid, ictx);
     ldout(cct, 20) << "flatten finished" << dendl;
-    return r;
+    return 0;
   }
 
   int async_flatten(ImageCtx *ictx, Context *ctx, ProgressContext &prog_ctx)
