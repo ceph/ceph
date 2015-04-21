@@ -36,13 +36,16 @@ namespace librbd {
      * <start>
      *    |
      *    v
-     * STATE_READ_FROM_PARENT ----> STATE_OBJECT_MAP . . .
-     *    .               .            |                 .
-     *    .               .            v                 .
-     *    .               . . . . > STATE_COPYUP         .
-     *    .                            |                 .
-     *    .                            v                 .
-     *    . . . . . . . . . . . . > <finish> < . . . . . .
+     *  STATE_READ_FROM_PARENT
+     *    .   .        |
+     *    .   .        v
+     *    .   .     STATE_OBJECT_MAP . .
+     *    .   .        |               .
+     *    .   .        v               .
+     *    .   . . > STATE_COPYUP       .
+     *    .            |               .
+     *    .            v               .
+     *    . . . . > <finish> < . . . . .
      *
      * @endverbatim
      *
@@ -66,6 +69,8 @@ namespace librbd {
     atomic_t m_pending_copyups;
 
     AsyncOperation m_async_op;
+
+    std::vector<uint64_t> m_snap_ids;
 
     void complete_requests(int r);
 
