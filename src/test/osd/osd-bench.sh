@@ -52,24 +52,24 @@ function TEST_bench() {
     #
     # block size too high
     #
-    ! ./ceph tell osd.0 bench 1024 $((osd_bench_max_block_size + 1)) 2> $dir/out || return 1
-    grep osd_bench_max_block_size $dir/out || return 1
+    expect_failure $dir osd_bench_max_block_size \
+        ./ceph tell osd.0 bench 1024 $((osd_bench_max_block_size + 1)) || return 1
 
     #
     # count too high for small (< 1MB) block sizes
     #
     local bsize=1024
     local max_count=$(($bsize * $osd_bench_duration * $osd_bench_small_size_max_iops))
-    ! ./ceph tell osd.0 bench $(($max_count + 1)) $bsize 2> $dir/out || return 1
-    grep osd_bench_small_size_max_iops $dir/out || return 1
+    expect_failure $dir bench_small_size_max_iops \
+        ./ceph tell osd.0 bench $(($max_count + 1)) $bsize || return 1
 
     #
     # count too high for large (>= 1MB) block sizes
     #
     local bsize=$((1024 * 1024 + 1))
     local max_count=$(($osd_bench_large_size_max_throughput * $osd_bench_duration))
-    ! ./ceph tell osd.0 bench $(($max_count + 1)) $bsize 2> $dir/out || return 1
-    grep osd_bench_large_size_max_throughput $dir/out || return 1
+    expect_failure $dir osd_bench_large_size_max_throughput \
+        ./ceph tell osd.0 bench $(($max_count + 1)) $bsize || return 1
 
     #
     # default values should work
