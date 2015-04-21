@@ -290,6 +290,7 @@ bool MDS::asok_command(string command, cmdmap_t& cmdmap, string format,
 	
 	f->dump_string("state", s->get_state_name());
 	f->dump_int("replay_requests", is_clientreplay() ? s->get_request_count() : 0);
+	f->dump_unsigned("completed_requests", s->get_num_completed_requests());
 	f->dump_bool("reconnecting", server->waiting_for_reconnect(p->first.num()));
 	f->dump_stream("inst") << s->info.inst;
 	f->open_object_section("client_metadata");
