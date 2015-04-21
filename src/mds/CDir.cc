@@ -822,8 +822,14 @@ void CDir::steal_dentry(CDentry *dn)
       else
 	fnode.fragstat.nfiles++;
     }
-  } else
-      num_snap_items++;
+  } else {
+    num_snap_items++;
+    if (dn->get_linkage()->is_primary()) {
+      CInode *in = dn->get_linkage()->get_inode();
+      if (in->is_dirty_rstat())
+	dirty_rstat_inodes.push_back(&in->dirty_rstat_item);
+    }
+  }
 
   if (dn->auth_pins || dn->nested_auth_pins) {
     // use the helpers here to maintain the auth_pin invariants on the dir inode
@@ -1346,9 +1352,11 @@ struct C_Dir_Dirty : public CDirContext {
   C_Dir_Dirty(CDir *d, version_t p, LogSegment *l) : CDirContext(d), pv(p), ls(l) {}
   void finish(int r) {
     dir->mark_dirty(pv, ls);
+    dir->auth_unpin(dir);
   }
 };
 
+// caller should hold auth pin of this
 void CDir::log_mark_dirty()
 {
   MDLog *mdlog = inode->mdcache->mds->mdlog;
@@ -1818,8 +1826,8 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
   // dirty myself to remove stale snap dentries
   if (force_dirty && !is_dirty() && !inode->mdcache->is_readonly())
     log_mark_dirty();
-
-  auth_unpin(this);
+  else
+    auth_unpin(this);
 
   // kick waiters
   finish_waiting(WAIT_COMPLETE, 0);

@@ -222,13 +222,14 @@ public:
     }
   }
   void mark_dirty(version_t pv, LogSegment *ls);
-  void log_mark_dirty();
   void mark_clean();
 
   bool is_new() { return item_new.is_on_list(); }
   void mark_new(LogSegment *ls);
 
   bool is_bad() { return state_test(STATE_BADFRAG); }
+private:
+  void log_mark_dirty();
 
 public:
   typedef std::map<dentry_key_t, CDentry*> map_t;
