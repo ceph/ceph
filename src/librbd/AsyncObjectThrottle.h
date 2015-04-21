@@ -43,7 +43,7 @@ public:
   typedef boost::function<C_AsyncObjectThrottle*(AsyncObjectThrottle&,
       					   uint64_t)> ContextFactory;
 
-  AsyncObjectThrottle(const AsyncRequest &async_request,
+  AsyncObjectThrottle(const AsyncRequest *async_request,
                       const ContextFactory& context_factory, Context *ctx,
 		      ProgressContext *prog_ctx, uint64_t object_no,
 		      uint64_t end_object_no);
@@ -53,7 +53,7 @@ public:
 
 private:
   Mutex m_lock;
-  const AsyncRequest &m_async_request;
+  const AsyncRequest *m_async_request;
   ContextFactory m_context_factory;
   Context *m_ctx;
   ProgressContext *m_prog_ctx;
