@@ -650,6 +650,7 @@ int main(int argc, char **argv) {
       int r = out_store.create_and_open(ss);
       if (r < 0) {
         std::cerr << ss.str() << std::endl;
+	out_store.close();
         goto done;
       }
     }
@@ -687,6 +688,7 @@ int main(int argc, char **argv) {
 
     } while (it->valid());
 
+    out_store.close();
     std::cout << "summary: copied " << total_keys << " keys, using "
               << total_tx << " transactions, totalling "
               << stringify(si_t(total_size)) << std::endl;
