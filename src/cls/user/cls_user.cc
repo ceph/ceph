@@ -293,7 +293,7 @@ static int cls_user_list_buckets(cls_method_context_t hctx, bufferlist *in, buff
 
 #define MAX_ENTRIES 1000
   size_t max_entries = op.max_entries;
-  if (!max_entries || max_entries > MAX_ENTRIES)
+  if (max_entries > MAX_ENTRIES)
     max_entries = MAX_ENTRIES;
 
   string match_prefix;
