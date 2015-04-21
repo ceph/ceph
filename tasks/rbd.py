@@ -297,8 +297,10 @@ def run_xfstests_one_client(ctx, role, properties):
         test_script = 'run_xfstests_krbd.sh'
         test_path = os.path.join(test_root, test_script)
 
-        git_branch = properties.get('xfstests_branch', 'master')
-        xfstests_url = properties.get('xfstests_url', 'https://raw.github.com/ceph/ceph/{branch}/qa'.format(branch=git_branch))
+        xfstests_url = properties.get('xfstests_url')
+        assert xfstests_url is not None, \
+            "task run_xfstests requires xfstests_url to be defined"
+
         xfstests_krbd_url = xfstests_url + '/' + test_script
 
         log.info('Fetching {script} for {role} from {url}'.format(
@@ -423,6 +425,11 @@ def xfstests(ctx, config):
             image_format=scratch_fmt,
             )
 
+        xfstests_branch = properties.get('xfstests_branch', 'master')
+        assert 'xfstests_url' in properties or 'xfstests_branch' in properties, \
+            "xfstests_url or xfstests_branch must be specified"
+        xfstests_url = properties.get('xfstests_url', 'https://raw.github.com/ceph/ceph/{branch}/qa'.format(branch=xfstests_branch))
+
         xfstests_config[role] = dict(
             count=properties.get('count', 1),
             test_dev='/dev/rbd/rbd/{image}'.format(image=test_image),
@@ -430,8 +437,7 @@ def xfstests(ctx, config):
             fs_type=properties.get('fs_type', 'xfs'),
             randomize=properties.get('randomize', False),
             tests=properties.get('tests'),
-            xfstests_url=properties.get('xfstests_url'),
-            xfstests_branch=properties.get('xfstests_branch')
+            xfstests_url=xfstests_url),
             )
 
         log.info('Setting up xfstests using RBD images:')
