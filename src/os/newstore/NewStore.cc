@@ -2206,8 +2206,8 @@ void NewStore::_txc_state_proc(TransContext *txc)
 
     case TransContext::STATE_WAL_APPLYING:
       if (!txc->aios.empty()) {
-	_txc_aio_submit(txc);
 	txc->state = TransContext::STATE_WAL_AIO_WAIT;
+	_txc_aio_submit(txc);
 	return;
       }
       // ** fall-thru **
