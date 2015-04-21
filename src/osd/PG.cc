@@ -3322,6 +3322,11 @@ void PG::sub_op_scrub_map(OpRequestRef op)
     return;
   }
 
+  if (!scrubber.is_chunky_scrub_active()) {
+    dout(10) << "sub_op_scrub_map scrub isn't active" << dendl;
+    return;
+  }
+
   op->mark_started();
 
   dout(10) << " got " << m->from << " scrub map" << dendl;
