@@ -145,7 +145,7 @@ public:
   struct TransContext {
     typedef enum {
       STATE_PREPARE,
-      STATE_FSYNC_QUEUED,
+      STATE_FSYNC_WAIT,
       STATE_AIO_WAIT,
       STATE_IO_DONE,
       STATE_KV_QUEUED,
@@ -165,7 +165,7 @@ public:
     const char *get_state_name() {
       switch (state) {
       case STATE_PREPARE: return "prepare";
-      case STATE_FSYNC_QUEUED: return "fsync_queued";
+      case STATE_FSYNC_WAIT: return "fsync_wait";
       case STATE_AIO_WAIT: return "aio_wait";
       case STATE_IO_DONE: return "io_done";
       case STATE_KV_QUEUED: return "kv_queued";
@@ -562,9 +562,8 @@ private:
   void _txc_queue_fsync(TransContext *txc);
   void _txc_process_fsync(fsync_item *i);
   void _txc_finish_io(TransContext *txc);
-  void _txc_submit_kv(TransContext *txc);
   void _txc_finish_kv(TransContext *txc);
-  void _txc_finish_apply(TransContext *txc);
+  void _txc_finish(TransContext *txc);
 
   void _osr_reap_done(OpSequencer *osr);
 
