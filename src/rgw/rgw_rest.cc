@@ -502,7 +502,8 @@ void dump_trans_id(req_state *s)
   }
 }
 
-void end_header(struct req_state *s, RGWOp *op, const char *content_type, const int64_t proposed_content_length)
+void end_header(struct req_state *s, RGWOp *op, const char *content_type, const int64_t proposed_content_length,
+		bool force_content_type)
 {
   string ctype;
 
@@ -514,7 +515,7 @@ void end_header(struct req_state *s, RGWOp *op, const char *content_type, const 
 
   /* do not send content type if content length is zero
      and the content type was not set by the user */
-  if ((s->formatter->get_len()  != 0 && !content_type) || s->err.is_err()){
+  if (force_content_type || (!content_type &&  s->formatter->get_len()  != 0) || s->err.is_err()){
     switch (s->format) {
     case RGW_FORMAT_XML:
       ctype = "application/xml";
