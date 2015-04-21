@@ -72,7 +72,7 @@ def ssh_keys_user_line_test(line_to_test, username ):
     else:
         return True
 
-def cleanup_added_key(ctx):
+def cleanup_added_key(ctx, orig_path, path):
     """
     Delete the keys and removes ~/.ssh/authorized_keys entries we added
     """
@@ -86,14 +86,7 @@ def cleanup_added_key(ctx):
             log.info('  cleaning up keys for user {user} on {host}'.format(host=hostname, user=username))
             misc.delete_file(remote, '/home/{user}/.ssh/id_rsa'.format(user=username))
             misc.delete_file(remote, '/home/{user}/.ssh/id_rsa.pub'.format(user=username))
-            auth_keys_file = '/home/{user}/.ssh/authorized_keys'.format(
-                user=username)
-            backup_file(remote, auth_keys_file)
-            args = [
-                'sed', '-i', '/#TEUTHOLOGY_START/,/#TEUTHOLOGY_END/d',
-                auth_keys_file,
-            ]
-            remote.run(args=args)
+            misc.move_file(remote, orig_path, path)
 
 @contextlib.contextmanager
 def tweak_ssh_config(ctx, config):
@@ -171,9 +164,8 @@ def push_keys_to_host(ctx, config, public_key, private_key):
             # add appropriate entries to the authorized_keys file for this host
             auth_keys_file = '/home/{user}/.ssh/authorized_keys'.format(
                 user=username)
-            backup_file(remote, auth_keys_file)
-            lines = '#TEUTHOLOGY_START\n' + auth_keys_data + '\n#TEUTHOLOGY_END\n'
-            misc.append_lines_to_file(remote, auth_keys_file, lines)
+            orig_auth_keys_file = backup_file(remote, auth_keys_file)
+            misc.append_lines_to_file(remote, auth_keys_file, auth_keys_data)
 
     try:
         yield
@@ -181,7 +173,7 @@ def push_keys_to_host(ctx, config, public_key, private_key):
     finally:
         # cleanup the keys
         log.info("Cleaning up SSH keys")
-        cleanup_added_key(ctx)
+        cleanup_added_key(ctx, orig_auth_keys_file, auth_keys_file)
 
 
 @contextlib.contextmanager
