@@ -3431,9 +3431,13 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
      * ObjectContext which mean in the past shorttime none access this object.
      * In this case, we transform NOCACHE into DONTNEED.
      * Although this method isn't exactly. But at some case it can work and don't affect others.
+     * Avoid DONTNEED on a freshly peered PG where we may not have a warm obc cache and may get false positives.
+     * We record the end-time of last peer event.
      */
     if (!(ctx->obc->found_in_cache) && (op.flags & CEPH_OSD_OP_FLAG_FADVISE_NOCACHE) &&
-	g_conf->osd_munge_nocache_wontneed_on_first_access)
+	g_conf->osd_munge_nocache_wontneed_on_first_access &&
+	(last_peer_endtime != utime_t() &&
+	 (last_peer_endtime < ceph_clock_now(NULL) + cct->_conf->osd_warmup_obc_time, 0)))
       op.flags = op.flags | CEPH_OSD_OP_FLAG_FADVISE_DONTNEED;
 
     switch (op.op) {
@@ -8926,6 +8930,7 @@ void ReplicatedPG::on_change(ObjectStore::Transaction *t)
   // NOTE: we actually assert that all currently live references are dead
   // by the time the flush for the next interval completes.
   object_contexts.clear();
+  last_peer_endtime = utime_t();
 }
 
 void ReplicatedPG::on_role_change()
