@@ -1471,10 +1471,15 @@ int Client::make_request(MetaRequest *request,
   request->set_caller_uid(uid);
   request->set_caller_gid(gid);
 
-  if (!mds_requests.empty()) 
-    request->set_oldest_client_tid(mds_requests.begin()->first);
-  else
-    request->set_oldest_client_tid(tid); // this one is the oldest.
+  if (cct->_conf->client_inject_fixed_oldest_tid) {
+    ldout(cct, 20) << __func__ << " injecting fixed oldest_client_tid(1)" << dendl;
+    request->set_oldest_client_tid(1);
+  } else {
+    if (!mds_requests.empty())
+      request->set_oldest_client_tid(mds_requests.begin()->first);
+    else
+      request->set_oldest_client_tid(tid); // this one is the oldest.
+  }
 
   // hack target mds?
   if (use_mds >= 0)
