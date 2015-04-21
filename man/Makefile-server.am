@@ -3,6 +3,7 @@ dist_man_MANS += \
 	crushtool.8 \
 	ceph-run.8 \
 	mount.ceph.8 \
+	ceph-create-keys.8 \
 	ceph-rest-api.8 \
 	ceph-debugpack.8
 
