@@ -145,11 +145,9 @@ public:
   struct TransContext {
     typedef enum {
       STATE_PREPARE,
-      STATE_AIO_QUEUED,
-      STATE_AIO_DONE,
-      STATE_FSYNC_QUEUED,
-      STATE_FSYNC_FSYNCING,
-      STATE_FSYNC_DONE,
+      STATE_FSYNC_WAIT,
+      STATE_AIO_WAIT,
+      STATE_IO_DONE,
       STATE_KV_QUEUED,
       STATE_KV_COMMITTING,
       STATE_KV_DONE,
@@ -167,11 +165,9 @@ public:
     const char *get_state_name() {
       switch (state) {
       case STATE_PREPARE: return "prepare";
-      case STATE_FSYNC_QUEUED: return "fsync_queued";
-      case STATE_FSYNC_FSYNCING: return "fsync_fsyncing";
-      case STATE_FSYNC_DONE: return "fsync_done";
-      case STATE_AIO_QUEUED: return "aio_queued";
-      case STATE_AIO_DONE: return "aio_done";
+      case STATE_FSYNC_WAIT: return "fsync_wait";
+      case STATE_AIO_WAIT: return "aio_wait";
+      case STATE_IO_DONE: return "io_done";
       case STATE_KV_QUEUED: return "kv_queued";
       case STATE_KV_COMMITTING: return "kv_committing";
       case STATE_KV_DONE: return "kv_done";
@@ -558,14 +554,16 @@ private:
   int _clean_fid_tail(TransContext *txc, const fragment_t& f);
 
   TransContext *_txc_create(OpSequencer *osr);
+  int _txc_add_transaction(TransContext *txc, Transaction *t);
   int _txc_finalize(OpSequencer *osr, TransContext *txc);
+  void _txc_state_proc(TransContext *txc);
   void _txc_aio_submit(TransContext *txc);
+  void _txc_do_sync_fsync(TransContext *txc);
   void _txc_queue_fsync(TransContext *txc);
   void _txc_process_fsync(fsync_item *i);
-  void _txc_finish_fsync(TransContext *txc);
-  void _txc_submit_kv(TransContext *txc);
+  void _txc_finish_io(TransContext *txc);
   void _txc_finish_kv(TransContext *txc);
-  void _txc_finish_apply(TransContext *txc);
+  void _txc_finish(TransContext *txc);
 
   void _osr_reap_done(OpSequencer *osr);
 
@@ -588,9 +586,7 @@ private:
   int _wal_apply(TransContext *txc);
   int _wal_finish(TransContext *txc);
   int _do_wal_transaction(wal_transaction_t& wt, TransContext *txc);
-  void _wait_object_wal(OnodeRef onode);
-  int _replay_wal();
-  friend class C_ApplyWAL;
+  int _wal_replay();
 
 public:
   NewStore(CephContext *cct, const string& path);

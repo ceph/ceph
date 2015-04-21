@@ -794,7 +794,8 @@ OPTION(newstore_max_dir_size, OPT_U32, 1000000)
 OPTION(newstore_onode_map_size, OPT_U32, 1024)   // onodes per collection
 OPTION(newstore_backend, OPT_STR, "rocksdb")
 OPTION(newstore_fail_eio, OPT_BOOL, true)
-OPTION(newstore_sync_queue_transaction, OPT_BOOL, false)  // perform write synchronously from queue_transaction
+OPTION(newstore_sync_io, OPT_BOOL, false)  // perform initial io synchronously
+OPTION(newstore_sync_transaction, OPT_BOOL, false)  // perform kv txn synchronously
 OPTION(newstore_fsync_threads, OPT_INT, 16)  // num threads calling fsync
 OPTION(newstore_fsync_thread_timeout, OPT_INT, 30) // thread timeout value
 OPTION(newstore_fsync_thread_suicide_timeout, OPT_INT, 120) // suicide timeout value
