@@ -149,7 +149,7 @@ void AsyncTrimRequest::send_remove_objects() {
     boost::lambda::bind(boost::lambda::new_ptr<AsyncTrimObjectContext>(),
       boost::lambda::_1, &m_image_ctx, boost::lambda::_2));
   AsyncObjectThrottle *throttle = new AsyncObjectThrottle(
-    *this, context_factory, ctx, m_prog_ctx, m_delete_start, m_num_objects);
+    *this, context_factory, ctx, &m_prog_ctx, m_delete_start, m_num_objects);
   throttle->start_ops(m_image_ctx.concurrent_management_ops);
 }
 
