@@ -227,6 +227,7 @@ def task(ctx, config):
                         'lsof',
                         backend,
                         ],
+                    check_status=False
                     )
                 remote.run(
                     args=[
@@ -235,6 +236,7 @@ def task(ctx, config):
                         '-M',
                         backend,
                         ],
+                    check_status=False
                     )
             except Exception:
                 log.exception("Saw exception")
