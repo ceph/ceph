@@ -143,3 +143,29 @@ class TestClientLimits(CephFSTestCase):
         # Client B should complete
         self.fs.mds_asok(['session', 'evict', "%s" % mount_a_client_id])
         rproc.wait()
+
+    def test_client_oldest_tid(self):
+        """
+        When a client does not advance its oldest tid, the MDS should notice that
+        and generate health warnings.
+        """
+
+        # num of requests client issues
+        max_requests = 5000
+
+        # The debug hook to inject the failure only exists in the fuse client
+        if not isinstance(self.mount_a, FuseMount):
+            raise SkipTest("Require FUSE client to inject client release failure")
+
+        self.set_conf('client', 'client inject fixed oldest tid', 'true')
+        self.mount_a.teardown()
+        self.mount_a.mount()
+        self.mount_a.wait_until_mounted()
+
+        self.fs.mds_asok(['config', 'set', 'mds_max_completed_requests', '{0}'.format(max_requests)])
+
+        # Create lots of files in background
+        self.mount_a.open_n_background("testdir/file", max_requests * 2)
+
+        # Wait for the health warnings. Assume mds can handle 10 request per second at least
+        self.wait_for_health("failing to advance its oldest_client_tid", max_requests / 10)
