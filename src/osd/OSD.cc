@@ -2789,7 +2789,28 @@ void OSD::load_pgs()
     bufferlist bl;
     epoch_t map_epoch = PG::peek_map_epoch(store, pgid, &bl);
 
-    PG *pg = _open_lock_pg(map_epoch == 0 ? osdmap : service.get_map(map_epoch), pgid);
+    PG *pg = NULL;
+    if (map_epoch > 0) {
+      OSDMapRef pgosdmap = service.try_get_map(map_epoch);
+      if (!pgosdmap) {
+	if (!osdmap->have_pg_pool(pgid.pool())) {
+	  derr << __func__ << ": could not find map for epoch " << map_epoch
+	       << " on pg " << pgid << ", but the pool is not present in the "
+	       << "current map, so this is probably a result of bug 10617.  "
+	       << "Skipping the pg for now, you can use ceph_objectstore_tool "
+	       << "to clean it up later." << dendl;
+	  continue;
+	} else {
+	  derr << __func__ << ": have pgid " << pgid << " at epoch "
+	       << map_epoch << ", but missing map.  Crashing."
+	       << dendl;
+	  assert(0 == "Missing map in load_pgs");
+	}
+      }
+      pg = _open_lock_pg(pgosdmap, pgid);
+    } else {
+      pg = _open_lock_pg(osdmap, pgid);
+    }
     // there can be no waiters here, so we don't call wake_pg_waiters
 
     // read pg state, log
