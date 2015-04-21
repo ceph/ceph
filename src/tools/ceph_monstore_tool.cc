@@ -686,7 +686,7 @@ int main(int argc, char **argv) {
                 << stringify(si_t(total_size)) << ")" << std::endl;
 
     } while (it->valid());
-
+    out_store.close();
     std::cout << "summary: copied " << total_keys << " keys, using "
               << total_tx << " transactions, totalling "
               << stringify(si_t(total_size)) << std::endl;
