@@ -2803,8 +2803,12 @@ static int get_multipart_info(RGWRados *store, struct req_state *s, string& meta
   obj.set_in_extra_data(true);
 
   int ret = get_obj_attrs(store, s, obj, attrs);
-  if (ret < 0)
+  if (ret < 0) {
+    if (ret == -ENOENT) {
+      return -ERR_NO_SUCH_UPLOAD;
+    }
     return ret;
+  }
 
   if (policy) {
     for (iter = attrs.begin(); iter != attrs.end(); ++iter) {
