@@ -437,7 +437,7 @@ def xfstests(ctx, config):
             fs_type=properties.get('fs_type', 'xfs'),
             randomize=properties.get('randomize', False),
             tests=properties.get('tests'),
-            xfstests_url=xfstests_url),
+            xfstests_url=xfstests_url,
             )
 
         log.info('Setting up xfstests using RBD images:')
