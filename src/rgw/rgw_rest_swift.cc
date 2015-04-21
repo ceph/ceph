@@ -80,7 +80,7 @@ void RGWListBuckets_ObjStore_SWIFT::send_response_begin(bool has_buckets)
   /* Adding account stats in the header to keep align with Swift API */
   dump_account_metadata(s, buckets_count, buckets_objcount, buckets_size, buckets_size_rounded);
   dump_errno(s);
-  end_header(s, NULL);
+  end_header(s, NULL, NULL, true);
 
   if (!ret) {
     dump_start(s);
@@ -307,7 +307,8 @@ void RGWStatAccount_ObjStore_SWIFT::send_response()
   set_req_state_err(s, ret);
   dump_errno(s);
 
-  end_header(s, NULL, NULL, 0);
+  end_header(s, NULL, NULL, 0,  true);
+
   dump_start(s);
 }
 
