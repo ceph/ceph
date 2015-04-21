@@ -131,20 +131,11 @@ int RocksDBStore::do_open(ostream &out, bool create_if_missing)
 
   //apply env setting
   ldoptions.env = env;
-  //rocksdb::DB *_db;
   rocksdb::Status status = rocksdb::DB::Open(ldoptions, path, &db);
   if (!status.ok()) {
     out << status.ToString() << std::endl;
     return -EINVAL;
   }
-  //db.reset(_db);
-
-  if (g_conf->rocksdb_compact_on_mount) {
-    derr << "Compacting rocksdb store..." << dendl;
-    compact();
-    derr << "Finished compacting rocksdb store" << dendl;
-  }
-
 
   PerfCountersBuilder plb(g_ceph_context, "rocksdb", l_rocksdb_first, l_rocksdb_last);
   plb.add_u64_counter(l_rocksdb_gets, "rocksdb_get", "Gets");
@@ -155,6 +146,12 @@ int RocksDBStore::do_open(ostream &out, bool create_if_missing)
   plb.add_u64(l_rocksdb_compact_queue_len, "rocksdb_compact_queue_len", "Length of compaction queue");
   logger = plb.create_perf_counters();
   cct->get_perfcounters_collection()->add(logger);
+
+  if (g_conf->rocksdb_compact_on_mount) {
+    derr << "Compacting rocksdb store..." << dendl;
+    compact();
+    derr << "Finished compacting rocksdb store" << dendl;
+  }
   return 0;
 }
 
