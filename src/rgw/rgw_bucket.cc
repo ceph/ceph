@@ -42,8 +42,13 @@ void rgw_get_buckets_obj(const string& user_id, string& buckets_obj_id)
  * Get all the buckets owned by a user and fill up an RGWUserBuckets with them.
  * Returns: 0 on success, -ERR# on failure.
  */
-int rgw_read_user_buckets(RGWRados *store, string user_id, RGWUserBuckets& buckets,
-                          const string& marker, uint64_t max, bool need_stats)
+int rgw_read_user_buckets(RGWRados * store,
+                          string user_id,
+                          RGWUserBuckets& buckets,
+                          const string& marker,
+                          uint64_t max,
+                          bool need_stats,
+                          uint64_t default_amount)
 {
   int ret;
   buckets.clear();
@@ -58,6 +63,10 @@ int rgw_read_user_buckets(RGWRados *store, string user_id, RGWUserBuckets& bucke
   string m = marker;
 
   uint64_t total = 0;
+
+  if (!max) {
+    max = default_amount;
+  }
 
   do {
     ret = store->cls_user_list_buckets(obj, m, max - total, entries, &m, &truncated);
