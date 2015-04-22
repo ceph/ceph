@@ -1224,6 +1224,15 @@ public:
 
   void reset_loc() {
     loc.clear();
+    /*
+     * For backward compatibility. Older versions used to have object locator on all objects,
+     * however, the orig_obj was the effective object locator. This had the same effect as not
+     * having object locator at all for most objects but the ones that started with underscore as
+     * these were escaped.
+     */
+    if (orig_obj[0] == '_') {
+      loc = orig_obj;
+    }
   }
 
   bool have_null_instance() {
@@ -1261,6 +1270,7 @@ public:
       object.append("_");
       object.append(o);
     }
+    reset_loc();
   }
 
   /*
