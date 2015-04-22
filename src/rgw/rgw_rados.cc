@@ -2966,7 +2966,7 @@ int RGWRados::get_obj_ref(const rgw_obj& obj, rgw_rados_ref *ref, rgw_bucket *bu
  * fixes an issue where head objects were supposed to have a locator created, but ended
  * up without one
  */
-int RGWRados::fix_head_obj_locator(rgw_bucket& bucket, rgw_obj_key& key)
+int RGWRados::fix_head_obj_locator(rgw_bucket& bucket, bool copy_obj, bool remove_bad, rgw_obj_key& key)
 {
   string oid;
   string locator;
@@ -3016,19 +3016,31 @@ int RGWRados::fix_head_obj_locator(rgw_bucket& bucket, rgw_obj_key& key)
     return -EIO;
   }
 
-  librados::ObjectWriteOperation wop;
+  if (copy_obj) {
+    librados::ObjectWriteOperation wop;
 
-  wop.mtime(&mtime);
+    wop.mtime(&mtime);
 
-  map<string, bufferlist>::iterator iter;
-  for (iter = attrs.begin(); iter != attrs.end(); ++iter) {
-    wop.setxattr(iter->first.c_str(), iter->second);
+    map<string, bufferlist>::iterator iter;
+    for (iter = attrs.begin(); iter != attrs.end(); ++iter) {
+      wop.setxattr(iter->first.c_str(), iter->second);
+    }
+
+    wop.write(0, data);
+
+    ioctx.locator_set_key(locator);
+    ioctx.operate(oid, &wop);
   }
 
-  wop.write(0, data);
+  if (remove_bad) {
+    ioctx.locator_set_key(string());
 
-  ioctx.locator_set_key(locator);
-  ioctx.operate(oid, &wop);
+    ret = ioctx.remove(oid);
+    if (ret < 0) {
+      lderr(cct) << "ERROR: failed to remove original bad object" << dendl;
+      return ret;
+    }
+  }
 
   return 0;
 }
