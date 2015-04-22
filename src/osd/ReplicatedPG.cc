@@ -1400,6 +1400,11 @@ void ReplicatedPG::do_op(OpRequestRef& op)
 		 CEPH_NOSNAP, m->get_pg().ps(),
 		 info.pgid.pool(), m->get_object_locator().nspace);
 
+  if (missing_loc.is_unfound(head)) {
+    dout(10) << "do_op " << head << " is unfound, can't do anything" << dendl;
+    osd->reply_op_error(op, -EIO);
+    return;
+  }
 
   if (write_ordered && scrubber.write_blocked_by_scrub(head)) {
     dout(20) << __func__ << ": waiting for scrub" << dendl;
@@ -1424,6 +1429,11 @@ void ReplicatedPG::do_op(OpRequestRef& op)
   hobject_t snapdir(m->get_oid(), m->get_object_locator().key,
 		    CEPH_SNAPDIR, m->get_pg().ps(), info.pgid.pool(),
 		    m->get_object_locator().nspace);
+  if (missing_loc.is_unfound(snapdir)) {
+    dout(10) << "do_op " << snapdir << " is unfound, can't do anything" << dendl;
+    osd->reply_op_error(op, -EIO);
+    return;
+  }
   if (is_unreadable_object(snapdir)) {
     wait_for_unreadable_object(snapdir, op);
     return;
@@ -8514,9 +8524,9 @@ void ReplicatedPG::mark_all_unfound_lost(int what)
   info.last_update.epoch = get_osdmap()->get_epoch();
   const pg_missing_t &missing = pg_log.get_missing();
   map<hobject_t, pg_missing_t::item>::const_iterator m =
-    missing_loc.get_all_missing().begin();
+    missing_loc.get_needs_recovery().begin();
   map<hobject_t, pg_missing_t::item>::const_iterator mend =
-    missing_loc.get_all_missing().end();
+    missing_loc.get_needs_recovery().end();
   while (m != mend) {
     const hobject_t &oid(m->first);
     if (!missing_loc.is_unfound(oid)) {
