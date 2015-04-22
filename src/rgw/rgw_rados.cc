@@ -2953,6 +2953,77 @@ int RGWRados::get_obj_ref(const rgw_obj& obj, rgw_rados_ref *ref, rgw_bucket *bu
   return 0;
 }
 
+/*
+ * fixes an issue where head objects were supposed to have a locator created, but ended
+ * up without one
+ */
+int RGWRados::fix_head_obj_locator(rgw_bucket& bucket, rgw_obj_key& key)
+{
+  string oid;
+  string locator;
+
+  rgw_obj obj(bucket, key);
+
+  get_obj_bucket_and_oid_loc(obj, bucket, oid, locator);
+
+  if (locator.empty()) {
+    ldout(cct, 20) << "object does not have a locator, nothing to fix" << dendl;
+    return 0;
+  }
+
+  librados::IoCtx ioctx;
+
+  int ret = get_obj_ioctx(obj, &ioctx);
+  if (ret < 0) {
+    cerr << "ERROR: get_obj_ioctx() returned ret=" << ret << std::endl;
+    return ret;
+  }
+  ioctx.locator_set_key(string()); /* override locator for this object, use empty locator */
+
+  uint64_t size;
+  time_t mtime;
+  bufferlist data;
+
+  map<string, bufferlist> attrs;
+  librados::ObjectReadOperation op;
+  op.getxattrs(&attrs, NULL);
+  op.stat(&size, &mtime, NULL);
+#define HEAD_SIZE 512 * 1024
+  op.read(0, HEAD_SIZE, &data, NULL);
+
+  ret = ioctx.operate(oid, &op, NULL);
+  if (ret < 0) {
+    lderr(cct) << "ERROR: ioctx.operate(oid=" << oid << ") returned ret=" << ret << dendl;
+    return ret;
+  }
+
+  if (size > HEAD_SIZE) {
+    lderr(cct) << "ERROR: returned object size (" << size << ") > HEAD_SIZE (" << HEAD_SIZE << ")" << dendl;
+    return -EIO;
+  }
+
+  if (size != data.length()) {
+    lderr(cct) << "ERROR: returned object size (" << size << ") != data.length() (" << data.length() << ")" << dendl;
+    return -EIO;
+  }
+
+  librados::ObjectWriteOperation wop;
+
+  wop.mtime(&mtime);
+
+  map<string, bufferlist>::iterator iter;
+  for (iter = attrs.begin(); iter != attrs.end(); ++iter) {
+    wop.setxattr(iter->first.c_str(), iter->second);
+  }
+
+  wop.write(0, data);
+
+  ioctx.locator_set_key(locator);
+  ioctx.operate(oid, &wop);
+
+  return 0;
+}
+
 int RGWRados::BucketShard::init(rgw_bucket& _bucket, rgw_obj& obj)
 {
   bucket = _bucket;
