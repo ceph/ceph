@@ -89,6 +89,7 @@ Suite: stable
 Components: main
 Architectures: i386 amd64 source
 EOF
+ln -s $codename/conf conf
 reprepro --basedir $(pwd) include $codename WORKDIR/*.changes
 #
 # teuthology needs the version in the version file
