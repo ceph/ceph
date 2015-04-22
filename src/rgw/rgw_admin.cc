@@ -907,6 +907,118 @@ int check_min_obj_stripe_size(RGWRados *store, RGWBucketInfo& bucket_info, rgw_o
   return 0;
 }
 
+
+int check_obj_locator_underscore(RGWBucketInfo& bucket_info, rgw_obj& obj, rgw_obj_key& key, bool fix, Formatter *f) {
+  f->open_object_section("object");
+  f->open_object_section("key");
+  f->dump_string("name", key.name);
+  f->dump_string("instance", key.instance);
+  f->close_section();
+
+  string oid;
+  string locator;
+
+  get_obj_bucket_and_oid_loc(obj, obj.bucket, oid, locator);
+
+  f->dump_string("oid", oid);
+  f->dump_string("locator", locator);
+
+  
+  RGWObjectCtx obj_ctx(store);
+
+  RGWRados::Object op_target(store, bucket_info, obj_ctx, obj);
+  RGWRados::Object::Read read_op(&op_target);
+
+  int ret = read_op.prepare(NULL, NULL);
+  bool needs_fixing = (ret == -ENOENT);
+
+  f->dump_bool("needs_fixing", needs_fixing);
+
+  string status = (needs_fixing ? "needs_fixing" : "ok");
+
+  if (needs_fixing && fix) {
+    ret = store->fix_head_obj_locator(obj.bucket, key);
+    if (ret < 0) {
+      cerr << "ERROR: fix_head_object_locator() returned ret=" << ret << std::endl;
+      goto done;
+    }
+    status = "fixed";
+  }
+
+done:
+  f->dump_string("status", status);
+
+  f->close_section();
+
+  return 0;
+}
+
+int do_check_object_locator(const string& bucket_name, bool fix, Formatter *f)
+{
+  RGWBucketInfo bucket_info;
+  rgw_bucket bucket;
+  string bucket_id;
+
+  f->open_object_section("bucket");
+  f->dump_string("bucket", bucket_name);
+  int ret = init_bucket(bucket_name, bucket_id, bucket_info, bucket);
+  if (ret < 0) {
+    cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
+    return ret;
+  }
+  bool truncated;
+  int count = 0;
+
+  int max_entries = 1000;
+
+  string prefix;
+  string delim;
+  vector<RGWObjEnt> result;
+  map<string, bool> common_prefixes;
+  string ns;
+
+  RGWRados::Bucket target(store, bucket);
+  RGWRados::Bucket::List list_op(&target);
+
+  string marker;
+
+  list_op.params.prefix = prefix;
+  list_op.params.delim = delim;
+  list_op.params.marker = rgw_obj_key(marker);
+  list_op.params.ns = ns;
+  list_op.params.enforce_ns = false;
+  list_op.params.list_versions = true;
+  
+  f->open_array_section("check_objects");
+  do {
+    ret = list_op.list_objects(max_entries - count, &result, &common_prefixes, &truncated);
+    if (ret < 0) {
+      cerr << "ERROR: store->list_objects(): " << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
+
+    count += result.size();
+
+    list<rgw_obj> objs;
+    for (vector<RGWObjEnt>::iterator iter = result.begin(); iter != result.end(); ++iter) {
+      rgw_obj_key key = iter->key;
+      rgw_obj obj(bucket, key);
+
+      if (key.name[0] == '_') {
+        ret = check_obj_locator_underscore(bucket_info, obj, key, fix, f);
+        /* ignore return code, move to the next one */
+      }
+    }
+    f->flush(cout);
+  } while (truncated && count < max_entries);
+  f->close_section();
+  f->close_section();
+
+  f->flush(cout);
+
+  return 0;
+}
+
 int main(int argc, char **argv) 
 {
   vector<const char*> args;
@@ -944,6 +1056,7 @@ int main(int argc, char **argv)
   int yes_i_really_mean_it = false;
   int delete_child_objects = false;
   int fix = false;
+  int check_head_obj_locator = false;
   int max_buckets = -1;
   map<string, bool> categories;
   string caps;
@@ -1127,6 +1240,8 @@ int main(int argc, char **argv)
     } else if (ceph_argparse_binary_flag(args, i, &yes_i_really_mean_it, NULL, "--yes-i-really-mean-it", (char*)NULL)) {
       // do nothing
     } else if (ceph_argparse_binary_flag(args, i, &fix, NULL, "--fix", (char*)NULL)) {
+      // do nothing
+    } else if (ceph_argparse_binary_flag(args, i, &check_head_obj_locator, NULL, "--check-head-obj-locator", (char*)NULL)) {
       // do nothing
     } else if (ceph_argparse_binary_flag(args, i, &check_objects, NULL, "--check-objects", (char*)NULL)) {
      // do nothing
@@ -2348,7 +2463,15 @@ next:
   }
 
   if (opt_cmd == OPT_BUCKET_CHECK) {
-    RGWBucketAdminOp::check_index(store, bucket_op, f);
+    if (check_head_obj_locator) {
+      if (bucket_name.empty()) {
+        cerr << "ERROR: need to specify bucket name" << std::endl;
+        return EINVAL;
+      }
+      do_check_object_locator(bucket_name, fix, formatter);
+    } else {
+      RGWBucketAdminOp::check_index(store, bucket_op, f);
+    }
   }
 
   if (opt_cmd == OPT_BUCKET_RM) {
