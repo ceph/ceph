@@ -541,8 +541,10 @@ fi
 #set pg ref debugging?
 AC_ARG_ENABLE([pgrefdebugging],
 	    [AS_HELP_STRING([--enable-pgrefdebugging], [enable pg ref debugging])],
-			[AC_DEFINE([PG_DEBUG_REFS], [1], [Defined if you want pg ref debugging])],
-			[])
+			[], [enable_pgrefdebugging=no])
+AS_IF([test "x$enable_pgrefdebugging" = "xyes"],
+	  [AC_DEFINE([PG_DEBUG_REFS], [1], [Defined if you want pg ref debugging])],
+	  [])
 
 #
 # Java is painful
