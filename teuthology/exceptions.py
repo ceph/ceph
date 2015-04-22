@@ -42,9 +42,10 @@ class CommandFailedError(Exception):
     def __str__(self):
         prefix = "Command failed"
         if self.label:
-            prefix = "Command failed ({label})".format(label=self.label)
-        return "{prefix} on {node} with status {status}: {cmd!r}".format(
-            node=self.node,
+            prefix += " ({label})".format(label=self.label)
+        if self.node:
+            prefix += " on {node}".format(node=self.node)
+        return "{prefix} with status {status}: {cmd!r}".format(
             status=self.exitstatus,
             cmd=self.command,
             prefix=prefix,
