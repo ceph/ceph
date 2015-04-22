@@ -37,7 +37,7 @@ PREFIX='client.radosgw.'
 
 # user to run radosgw as (it not specified in ceph.conf)
 #DEFAULT_USER='www-data'
-DEFAULT_USER='apache'
+DEFAULT_USER='root'
 
 RADOSGW=`which radosgw`
 if [ ! -x "$RADOSGW" ]; then
