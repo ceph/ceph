@@ -572,21 +572,17 @@ bool PG::needs_recovery() const
 {
   assert(is_primary());
 
-  bool ret = false;
-
   const pg_missing_t &missing = pg_log.get_missing();
 
   if (missing.num_missing()) {
     dout(10) << __func__ << " primary has " << missing.num_missing()
       << " missing" << dendl;
-
-    ret = true;
+    return true;
   }
 
   assert(!actingbackfill.empty());
   set<pg_shard_t>::const_iterator end = actingbackfill.end();
   set<pg_shard_t>::const_iterator a = actingbackfill.begin();
-  assert(a != end);
   for (; a != end; ++a) {
     if (*a == get_primary()) continue;
     pg_shard_t peer = *a;
@@ -594,19 +590,17 @@ bool PG::needs_recovery() const
     if (pm == peer_missing.end()) {
       dout(10) << __func__ << " osd." << peer << " doesn't have missing set"
         << dendl;
-      ret = true;
       continue;
     }
     if (pm->second.num_missing()) {
       dout(10) << __func__ << " osd." << peer << " has "
         << pm->second.num_missing() << " missing" << dendl;
-      ret = true;
+      return true;
     }
   }
 
-  if (!ret)
-    dout(10) << __func__ << " is recovered" << dendl;
-  return ret;
+  dout(10) << __func__ << " is recovered" << dendl;
+  return false;
 }
 
 bool PG::needs_backfill() const
