@@ -130,6 +130,52 @@ function TEST_corrupt_and_repair_erasure_coded() {
     teardown $dir || return 1
 }
 
+function TEST_unreocvery_erasure_coded() {
+    local dir=$1
+    local poolname=ecpool
+    local payload=ABCDEF
+
+    setup $dir || return 1
+    run_mon $dir a || return 1
+    run_osd $dir 0 || return 1
+    run_osd $dir 1 || return 1
+    run_osd $dir 2 || return 1
+    run_osd $dir 3 || return 1
+    wait_for_clean || return 1
+
+    ceph osd erasure-code-profile set myprofile \
+      k=2 m=2 ruleset-failure-domain=osd || return 1
+    ceph osd pool create $poolname 1 1 erasure myprofile \
+      || return 1
+
+    add_something $dir $poolname
+
+    local primary=$(get_primary $poolname SOMETHING)
+    local -a osds=($(get_osds $poolname SOMETHING | sed -e "s/$primary//"))
+    local not_primary_first=${osds[0]}
+    local not_primary_second=${osds[1]}
+    local not_primary_third=${osds[2]}
+
+    #
+    # 1) remove the corresponding file from the OSDs
+    #
+    objectstore_tool $dir $not_primary_first SOMETHING remove || return 1
+    objectstore_tool $dir $not_primary_second SOMETHING remove || return 1
+    objectstore_tool $dir $not_primary_third SOMETHING remove || return 1
+    #
+    # 2) repair the PG
+    #
+    local pg=$(get_pg $poolname SOMETHING)
+    repair $pg
+    #
+    # 3) check pg state
+    #
+    ceph -s|grep "4 osds: 4 up, 4 in" || return 1
+    ceph -s|grep "1/1 unfound" || return 1
+
+    teardown $dir || return 1
+}
+
 function corrupt_and_repair_two() {
     local dir=$1
     local poolname=$2
