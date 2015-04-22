@@ -695,7 +695,7 @@ void Server::reconnect_clients()
 void Server::handle_client_reconnect(MClientReconnect *m)
 {
   dout(7) << "handle_client_reconnect " << m->get_source() << dendl;
-  int from = m->get_source().num();
+  client_t from = m->get_source().num();
   Session *session = get_session(m);
   assert(session);
 
