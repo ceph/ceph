@@ -908,7 +908,7 @@ int check_min_obj_stripe_size(RGWRados *store, RGWBucketInfo& bucket_info, rgw_o
 }
 
 
-int check_obj_locator_underscore(RGWBucketInfo& bucket_info, rgw_obj& obj, rgw_obj_key& key, bool fix, Formatter *f) {
+int check_obj_locator_underscore(RGWBucketInfo& bucket_info, rgw_obj& obj, rgw_obj_key& key, bool fix, bool remove_bad, Formatter *f) {
   f->open_object_section("object");
   f->open_object_section("key");
   f->dump_string("name", key.name);
@@ -936,8 +936,8 @@ int check_obj_locator_underscore(RGWBucketInfo& bucket_info, rgw_obj& obj, rgw_o
 
   string status = (needs_fixing ? "needs_fixing" : "ok");
 
-  if (needs_fixing && fix) {
-    ret = store->fix_head_obj_locator(obj.bucket, key);
+  if ((needs_fixing || remove_bad) && fix) {
+    ret = store->fix_head_obj_locator(obj.bucket, needs_fixing, remove_bad, key);
     if (ret < 0) {
       cerr << "ERROR: fix_head_object_locator() returned ret=" << ret << std::endl;
       goto done;
@@ -953,8 +953,13 @@ done:
   return 0;
 }
 
-int do_check_object_locator(const string& bucket_name, bool fix, Formatter *f)
+int do_check_object_locator(const string& bucket_name, bool fix, bool remove_bad, Formatter *f)
 {
+  if (remove_bad && !fix) {
+    cerr << "ERROR: can't have remove_bad specified without fix" << std::endl;
+    return -EINVAL;
+  }
+
   RGWBucketInfo bucket_info;
   rgw_bucket bucket;
   string bucket_id;
@@ -1005,7 +1010,7 @@ int do_check_object_locator(const string& bucket_name, bool fix, Formatter *f)
       rgw_obj obj(bucket, key);
 
       if (key.name[0] == '_') {
-        ret = check_obj_locator_underscore(bucket_info, obj, key, fix, f);
+        ret = check_obj_locator_underscore(bucket_info, obj, key, fix, remove_bad, f);
         /* ignore return code, move to the next one */
       }
     }
@@ -1056,6 +1061,7 @@ int main(int argc, char **argv)
   int yes_i_really_mean_it = false;
   int delete_child_objects = false;
   int fix = false;
+  int remove_bad = false;
   int check_head_obj_locator = false;
   int max_buckets = -1;
   map<string, bool> categories;
@@ -1240,6 +1246,8 @@ int main(int argc, char **argv)
     } else if (ceph_argparse_binary_flag(args, i, &yes_i_really_mean_it, NULL, "--yes-i-really-mean-it", (char*)NULL)) {
       // do nothing
     } else if (ceph_argparse_binary_flag(args, i, &fix, NULL, "--fix", (char*)NULL)) {
+      // do nothing
+    } else if (ceph_argparse_binary_flag(args, i, &remove_bad, NULL, "--remove-bad", (char*)NULL)) {
       // do nothing
     } else if (ceph_argparse_binary_flag(args, i, &check_head_obj_locator, NULL, "--check-head-obj-locator", (char*)NULL)) {
       // do nothing
@@ -2460,7 +2468,7 @@ next:
         cerr << "ERROR: need to specify bucket name" << std::endl;
         return EINVAL;
       }
-      do_check_object_locator(bucket_name, fix, formatter);
+      do_check_object_locator(bucket_name, fix, remove_bad, formatter);
     } else {
       RGWBucketAdminOp::check_index(store, bucket_op, f);
     }
