@@ -3175,6 +3175,20 @@ int NewStore::_do_write_all_overlays(TransContext *txc,
   if (o->onode.overlay_map.empty())
     return 0;
 
+  // overwrite to new fid
+  if (o->onode.data_map.empty()) {
+    // create
+    fragment_t &f = o->onode.data_map[0];
+    f.offset = 0;
+    f.length = o->onode.size;
+    int fd = _create_fid(txc, &f.fid, O_RDWR);
+    if (fd < 0) {
+      return fd;
+    }
+    VOID_TEMP_FAILURE_RETRY(::close(fd));
+    dout(20) << __func__ << " create " << f.fid << dendl;
+  }
+
   assert(o->onode.data_map.size() == 1);
   fragment_t& f = o->onode.data_map.begin()->second;
   assert(f.offset == 0);
