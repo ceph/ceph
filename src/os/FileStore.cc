@@ -4903,23 +4903,32 @@ int FileStore::omap_get_values(coll_t c, const ghobject_t &hoid,
   tracepoint(objectstore, omap_get_values_enter, c.c_str());
   dout(15) << __func__ << " " << c << "/" << hoid << dendl;
   Index index;
+  const char *where = 0;
   int r = get_index(c, &index);
-  if (r < 0)
-    return r;
+  if (r < 0) {
+    where = " (get_index)";
+    goto out;
+  }
   {
     assert(NULL != index.index);
     RWLock::RLocker l((index.index)->access_lock);
     r = lfn_find(hoid, index);
-    if (r < 0)
-      return r;
+    if (r < 0) {
+      where = " (lfn_find)";
+      goto out;
+    }
   }
   r = object_map->get_values(hoid, keys, out);
   if (r < 0 && r != -ENOENT) {
     assert(!m_filestore_fail_eio || r != -EIO);
-    return r;
+    goto out;
   }
-  tracepoint(objectstore, omap_get_values_exit, 0);
-  return 0;
+  r = 0;
+ out:
+  tracepoint(objectstore, omap_get_values_exit, r);
+  dout(15) << __func__ << " " << c << "/" << hoid << " = " << r
+	   << where << dendl;
+  return r;
 }
 
 int FileStore::omap_check_keys(coll_t c, const ghobject_t &hoid,
