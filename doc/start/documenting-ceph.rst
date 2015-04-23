@@ -239,6 +239,7 @@ the following packages are required:
 - python-pip
 - python-virtualenv
 - python-sphinx
+- python-nose
 - libxml2-dev
 - libxslt1-dev
 - doxygen
@@ -258,6 +259,7 @@ the following packages are required:
 - python-jinja2
 - python-pygments
 - python-sphinx
+- python-nose
 - libxml2-devel
 - libxslt1-devel
 - doxygen
@@ -277,6 +279,7 @@ the following packages are required:
 - python-jinja2
 - python-pygments
 - python-sphinx
+- python-nose
 - libxml2-dev
 - libxslt1-dev
 - doxygen
@@ -292,13 +295,13 @@ Install each dependency that isn't installed on your host. For Debian/Ubuntu
 distributions, execute the following::
 
 	sudo apt-get install gcc python-dev python-pip python-virtualenv libxml2-dev libxslt-dev doxygen graphviz ant ditaa
-	sudo apt-get install python-sphinx
+	sudo apt-get install python-sphinx python-nose
 
 For Fedora distributions, execute the following::
 
    sudo yum install gcc python-devel python-pip python-virtualenv libxml2-devel libxslt-devel doxygen graphviz ant
    sudo pip install html2text
-   sudo yum install python-jinja2 python-pygments python-docutils python-sphinx
+   sudo yum install python-jinja2 python-pygments python-docutils python-sphinx python-nose
    sudo yum install jericho-html ditaa
 
 For CentOS/RHEL distributions, it is recommended to have ``epel`` (Extra
