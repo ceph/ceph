@@ -412,9 +412,6 @@ public:
 	// requeue at the end to minimize contention
 	wal_queue.push_back(*i->osr);
       }
-      --ops;
-      bytes -= i->wal_txn->get_bytes();
-      throttle_cond.Signal();
 
       // preserve wal ordering for this sequencer by taking the lock
       // while still holding the queue lock
@@ -444,6 +441,14 @@ public:
       while (ops > max_ops || bytes > max_bytes) {
 	throttle_cond.Wait(lock);
       }
+    }
+
+    void release_throttle(TransContext *txc) {
+      lock();
+      --ops;
+      bytes -= txc->wal_txn->get_bytes();
+      throttle_cond.Signal();
+      unlock();
     }
   };
 
