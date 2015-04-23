@@ -263,25 +263,22 @@ def timer(ctx, config):
         ctx.summary['duration'] = duration
 
 
-def connect(ctx, config):
+def add_remotes(ctx, config):
     """
-    Open a connection to a remote host.
+    Create a ctx.cluster object populated with remotes mapped to roles
     """
-    log.info('Opening connections...')
     remotes = []
     machs = []
     for name in ctx.config['targets'].iterkeys():
         machs.append(name)
     for t, key in ctx.config['targets'].iteritems():
         t = misc.canonicalize_hostname(t)
-        log.debug('connecting to %s', t)
         try:
             if ctx.config['sshkeys'] == 'ignore':
                 key = None
         except (AttributeError, KeyError):
             pass
         rem = remote.Remote(name=t, host_key=key, keep_alive=True)
-        rem.connect()
         remotes.append(rem)
     ctx.cluster = cluster.Cluster()
     if 'roles' in ctx.config:
@@ -293,6 +290,16 @@ def connect(ctx, config):
     else:
         for rem in remotes:
             ctx.cluster.add(rem, rem.name)
+
+
+def connect(ctx, config):
+    """
+    Connect to all remotes in ctx.cluster
+    """
+    log.info('Opening connections...')
+    for rem in ctx.cluster.remotes.iterkeys():
+        log.debug('connecting to %s', rem.name)
+        rem.connect()
 
 
 def push_inventory(ctx, config):
