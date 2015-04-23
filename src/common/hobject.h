@@ -43,6 +43,7 @@ private:
   uint32_t hash;
   bool max;
   filestore_hobject_key_t filestore_key_cache;
+  uint32_t hash_reverse_bits;
   static const int64_t POOL_META = -1;
   static const int64_t POOL_TEMP_START = -2; // and then negative
   friend class spg_t;  // for POOL_TEMP_START
@@ -69,7 +70,7 @@ public:
   }
   void set_hash(uint32_t value) { 
     hash = value;
-    build_filestore_key_cache();
+    build_hash_cache();
   }
 
   static bool match_hash(uint32_t to_check, uint32_t bits, uint32_t match) {
@@ -87,7 +88,7 @@ public:
   }
 
   hobject_t() : snap(0), hash(0), max(false), pool(INT64_MIN) {
-    build_filestore_key_cache();
+    build_hash_cache();
   }
 
   hobject_t(object_t oid, const string& key, snapid_t snap, uint64_t hash,
@@ -95,7 +96,7 @@ public:
     : oid(oid), snap(snap), hash(hash), max(false),
       pool(pool), nspace(nspace),
       key(oid.name == key ? string() : key) {
-    build_filestore_key_cache();
+    build_hash_cache();
   }
 
   hobject_t(const sobject_t &soid, const string &key, uint32_t hash,
@@ -103,7 +104,7 @@ public:
     : oid(soid.oid), snap(soid.snap), hash(hash), max(false),
       pool(pool), nspace(nspace),
       key(soid.oid.name == key ? string() : key) {
-    build_filestore_key_cache();
+    build_hash_cache();
   }
 
   /// @return min hobject_t ret s.t. ret.hash == this->hash
@@ -173,6 +174,20 @@ public:
 	   pool == INT64_MIN;
   }
 
+  static uint32_t _reverse_bits(uint32_t v) {
+    // reverse bits
+    // swap odd and even bits
+    v = ((v >> 1) & 0x55555555) | ((v & 0x55555555) << 1);
+    // swap consecutive pairs
+    v = ((v >> 2) & 0x33333333) | ((v & 0x33333333) << 2);
+    // swap nibbles ...
+    v = ((v >> 4) & 0x0F0F0F0F) | ((v & 0x0F0F0F0F) << 4);
+    // swap bytes
+    v = ((v >> 8) & 0x00FF00FF) | ((v & 0x00FF00FF) << 8);
+    // swap 2-byte long pairs
+    v = ( v >> 16             ) | ( v               << 16);
+    return v;
+  }
   static uint32_t _reverse_nibbles(uint32_t retval) {
     // reverse nibbles
     retval = ((retval & 0x0f0f0f0f) << 4) | ((retval & 0xf0f0f0f0) >> 4);
@@ -193,15 +208,31 @@ public:
     uint32_t mask,
     int64_t pool);
 
+  // filestore nibble-based key
   filestore_hobject_key_t get_filestore_key_u32() const {
     assert(!max);
-    return _reverse_nibbles(hash);
+    return filestore_key_cache;
   }
   filestore_hobject_key_t get_filestore_key() const {
     return max ? 0x100000000ull : filestore_key_cache;
   }
-  void build_filestore_key_cache() {    
+
+  // newer bit-reversed key
+  uint64_t get_bitreverse_key_u32() const {
+    assert(!max);
+    return hash_reverse_bits;
+  }
+  uint64_t get_bitreverse_key() const {
+    return max ? 0x100000000ull : hash_reverse_bits;
+  }
+
+  void build_hash_cache() {
     filestore_key_cache = _reverse_nibbles(hash);
+    hash_reverse_bits = _reverse_bits(hash);
+  }
+  void set_filestore_key_u32(uint32_t value) {
+    hash = _reverse_nibbles(value);
+    build_hash_cache();
   }
 
   const string& get_effective_key() const {
@@ -225,13 +256,23 @@ public:
   void decode(json_spirit::Value& v);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<hobject_t*>& o);
-  friend bool operator<(const hobject_t&, const hobject_t&);
-  friend bool operator>(const hobject_t&, const hobject_t&);
-  friend bool operator<=(const hobject_t&, const hobject_t&);
-  friend bool operator>=(const hobject_t&, const hobject_t&);
+  friend int cmp_nibblewise(const hobject_t& l, const hobject_t& r);
+  friend int cmp_bitwise(const hobject_t& l, const hobject_t& r);
   friend bool operator==(const hobject_t&, const hobject_t&);
   friend bool operator!=(const hobject_t&, const hobject_t&);
   friend struct ghobject_t;
+
+  struct NibblewiseComparator {
+    bool operator()(const hobject_t& l, const hobject_t& r) const {
+      return cmp_nibblewise(l, r) < 0;
+    }
+  };
+
+  struct BitwiseComparator {
+    bool operator()(const hobject_t& l, const hobject_t& r) const {
+      return cmp_bitwise(l, r) < 0;
+    }
+  };
 };
 WRITE_CLASS_ENCODER(hobject_t)
 
@@ -248,14 +289,15 @@ CEPH_HASH_NAMESPACE_END
 ostream& operator<<(ostream& out, const hobject_t& o);
 
 WRITE_EQ_OPERATORS_7(hobject_t, hash, oid, get_key(), snap, pool, max, nspace)
-WRITE_CMP_OPERATORS_7(hobject_t,
-		      max,
-		      pool,
-		      get_filestore_key(),
-		      nspace,
-		      get_effective_key(),
-		      oid,
-		      snap)
+
+extern int cmp_nibblewise(const hobject_t& l, const hobject_t& r);
+extern int cmp_bitwise(const hobject_t& l, const hobject_t& r);
+static inline int cmp(const hobject_t& l, const hobject_t& r, bool sort_bitwise) {
+  if (sort_bitwise)
+    return cmp_bitwise(l, r);
+  else
+    return cmp_nibblewise(l, r);
+}
 
 typedef version_t gen_t;
 
@@ -355,12 +397,22 @@ public:
   void decode(json_spirit::Value& v);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<ghobject_t*>& o);
-  friend bool operator<(const ghobject_t&, const ghobject_t&);
-  friend bool operator>(const ghobject_t&, const ghobject_t&);
-  friend bool operator<=(const ghobject_t&, const ghobject_t&);
-  friend bool operator>=(const ghobject_t&, const ghobject_t&);
+  friend int cmp_nibblewise(const ghobject_t& l, const ghobject_t& r);
+  friend int cmp_bitwise(const ghobject_t& l, const ghobject_t& r);
   friend bool operator==(const ghobject_t&, const ghobject_t&);
   friend bool operator!=(const ghobject_t&, const ghobject_t&);
+
+  struct NibblewiseComparator {
+    bool operator()(const ghobject_t& l, const ghobject_t& r) const {
+      return cmp_nibblewise(l, r) < 0;
+    }
+  };
+
+  struct BitwiseComparator {
+    bool operator()(const ghobject_t& l, const ghobject_t& r) const {
+      return cmp_bitwise(l, r) < 0;
+    }
+  };
 };
 WRITE_CLASS_ENCODER(ghobject_t)
 
@@ -378,9 +430,14 @@ ostream& operator<<(ostream& out, const ghobject_t& o);
 
 WRITE_EQ_OPERATORS_4(ghobject_t, max, shard_id, hobj, generation)
 
-WRITE_CMP_OPERATORS_4(ghobject_t,
-		      max,
-		      shard_id,
-		      hobj,
-		      generation)
+extern int cmp_nibblewise(const ghobject_t& l, const ghobject_t& r);
+extern int cmp_bitwise(const ghobject_t& l, const ghobject_t& r);
+static inline int cmp(const ghobject_t& l, const ghobject_t& r,
+		      bool sort_bitwise) {
+  if (sort_bitwise)
+    return cmp_bitwise(l, r);
+  else
+    return cmp_nibblewise(l, r);
+}
+
 #endif
