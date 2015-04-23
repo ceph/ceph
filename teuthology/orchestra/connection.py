@@ -37,7 +37,7 @@ def create_key(keytype, key):
         raise ValueError('keytype must be ssh-rsa or ssh-dsa')
 
 
-def connect(user_at_host, host_key=None, keep_alive=False,
+def connect(user_at_host, host_key=None, keep_alive=False, timeout=60,
             _SSHClient=None, _create_key=None):
     """
     ssh connection routine.
@@ -45,6 +45,7 @@ def connect(user_at_host, host_key=None, keep_alive=False,
     :param user_at_host: user@host
     :param host_key: ssh key
     :param keep_alive: keep_alive indicator
+    :param timeout:    timeout in seconds
     :param _SSHClient: client, default is paramiko ssh client
     :param _create_key: routine to create a key (defaults to local reate_key)
     :return: ssh connection.
@@ -73,7 +74,7 @@ def connect(user_at_host, host_key=None, keep_alive=False,
     connect_args = dict(
         hostname=host,
         username=user,
-        timeout=60
+        timeout=timeout
     )
 
     ssh_config_path = os.path.expanduser("~/.ssh/config")
