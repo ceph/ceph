@@ -584,6 +584,14 @@ NewStore::NewStore(CephContext *cct, const string& path)
     fid_lock("NewStore::fid_lock"),
     nid_lock("NewStore::nid_lock"),
     nid_max(0),
+    throttle_ops(cct, "newstore_max_ops", cct->_conf->newstore_max_ops),
+    throttle_bytes(cct, "newstore_max_bytes", cct->_conf->newstore_max_bytes),
+    throttle_wal_ops(cct, "newstore_wal_max_ops",
+		     cct->_conf->newstore_max_ops +
+		     cct->_conf->newstore_wal_max_ops),
+    throttle_wal_bytes(cct, "newstore_wal_max_bytes",
+		       cct->_conf->newstore_max_bytes +
+		       cct->_conf->newstore_wal_max_bytes),
     wal_lock("NewStore::wal_lock"),
     wal_seq(0),
     wal_tp(cct,
@@ -2088,7 +2096,11 @@ void NewStore::_txc_state_proc(TransContext *txc)
     case TransContext::STATE_KV_DONE:
       if (txc->wal_txn) {
 	txc->state = TransContext::STATE_WAL_QUEUED;
-	wal_wq.queue(txc);
+	if (g_conf->newstore_sync_wal_apply) {
+	  _wal_apply(txc);
+	} else {
+	  wal_wq.queue(txc);
+	}
 	return;
       }
       txc->state = TransContext::STATE_FINISHING;
@@ -2253,6 +2265,9 @@ void NewStore::_txc_finish_kv(TransContext *txc)
     finisher.queue(txc->oncommits.front());
     txc->oncommits.pop_front();
   }
+
+  throttle_ops.put(txc->ops);
+  throttle_bytes.put(txc->bytes);
 }
 
 void NewStore::_txc_finish(TransContext *txc)
@@ -2279,6 +2294,9 @@ void NewStore::_txc_finish(TransContext *txc)
     _queue_reap_collection(txc->removed_collections.front());
     txc->removed_collections.pop_front();
   }
+
+  throttle_wal_ops.put(txc->ops);
+  throttle_wal_bytes.put(txc->bytes);
 
   OpSequencerRef osr = txc->osr;
   osr->qlock.Lock();
@@ -2401,8 +2419,6 @@ int NewStore::_wal_finish(TransContext *txc)
 {
   wal_transaction_t& wt = *txc->wal_txn;
   dout(20) << __func__ << " txc " << " seq " << wt.seq << txc << dendl;
-
-  wal_wq.release_throttle(txc);
 
   string key;
   get_wal_key(wt.seq, &key);
@@ -2584,10 +2600,6 @@ int NewStore::queue_transactions(
     tls, &onreadable, &ondisk, &onreadable_sync);
   int r;
 
-  // throttle on wal work
-  wal_wq.throttle(g_conf->newstore_wal_max_ops,
-		  g_conf->newstore_wal_max_bytes);
-
   // set up the sequencer
   OpSequencer *osr;
   if (!posr)
@@ -2610,11 +2622,18 @@ int NewStore::queue_transactions(
 
   for (list<Transaction*>::iterator p = tls.begin(); p != tls.end(); ++p) {
     (*p)->set_osr(osr);
+    txc->ops += (*p)->get_num_ops();
+    txc->bytes += (*p)->get_num_bytes();
     _txc_add_transaction(txc, *p);
   }
 
   r = _txc_finalize(osr, txc);
   assert(r == 0);
+
+  throttle_ops.get(txc->ops);
+  throttle_bytes.get(txc->bytes);
+  throttle_wal_ops.get(txc->ops);
+  throttle_wal_bytes.get(txc->bytes);
 
   // execute (start)
   _txc_state_proc(txc);
