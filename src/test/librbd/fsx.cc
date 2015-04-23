@@ -657,6 +657,20 @@ krbd_discard(struct rbd_ctx *ctx, uint64_t off, uint64_t len)
 	int ret;
 
 	/*
+	 * BLKDISCARD doesn't affect dirty pages.  This means we can't
+	 * rely on discarded sectors to match good_buf (i.e. contain
+	 * zeros) without a preceding cache flush:
+	 *
+	 *   write 0..3M
+	 *   discard 1..2M
+	 *
+	 * results in "data data data" rather than "data 0000 data".
+	 */
+	ret = __krbd_flush(ctx);
+	if (ret < 0)
+		return ret;
+
+	/*
 	 * off and len must be 512-byte aligned, otherwise BLKDISCARD
 	 * will fail with -EINVAL.  This means that -K (enable krbd
 	 * mode) requires -h 512 or similar.
@@ -694,11 +708,18 @@ krbd_resize(struct rbd_ctx *ctx, uint64_t size)
 	assert(size % truncbdy == 0);
 
 	/*
-	 * This is essential: when krbd detects a size change, it calls
-	 * revalidate_disk(), which ends up calling invalidate_bdev(),
-	 * which invalidates only clean buffers.  The cache flush makes
-	 * it invalidate everything, which is what we need if we are
-	 * shrinking.
+	 * When krbd detects a size change, it calls revalidate_disk(),
+	 * which ends up calling invalidate_bdev(), which invalidates
+	 * clean pages and does nothing about dirty pages beyond the
+	 * new size.  The preceding cache flush makes sure those pages
+	 * are invalidated, which is what we need on shrink:
+	 *
+	 *  write 0..1M
+	 *  resize 0
+	 *  resize 2M
+	 *  write 1..2M
+	 *
+	 * results in "data data" rather than "0000 data".
 	 */
 	ret = __krbd_flush(ctx);
 	if (ret < 0)
