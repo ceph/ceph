@@ -433,6 +433,13 @@ function test_auth()
   diff authfile authfile2
   rm authfile authfile2
   ceph auth del client.xx
+  expect_false ceph auth get client.xx
+
+  # (almost) interactive mode
+  echo -e 'auth add client.xx mon allow osd "allow *"\n' | ceph
+  ceph auth get client.xx
+  ceph auth del client.xx
+
   #
   # get / set auid
   #

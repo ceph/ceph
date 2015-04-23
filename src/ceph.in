@@ -62,6 +62,7 @@ import argparse
 import errno
 import json
 import rados
+import shlex
 import signal
 import socket
 import string
@@ -424,7 +425,7 @@ def new_style_command(parsed_args, cmdargs, target, sigdict, inbuf, verbose):
                 interactive_input = raw_input(prompt)
                 if interactive_input in ['q', 'quit', 'Q']:
                     return 0, '', ''
-                cmdargs = parse_cmdargs(interactive_input.split())[2]
+                cmdargs = parse_cmdargs(shlex.split(interactive_input))[2]
                 try:
                     target = find_cmd_target(cmdargs)
                 except Exception as e:
