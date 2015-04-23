@@ -275,6 +275,12 @@ if test x"$linux" = x"yes" -a x"$with_rbd" = x"yes"; then
     AC_MSG_ERROR([libudev.h not found (libudev-dev, libudev-devel)]))
   AC_CHECK_LIB([udev], [udev_monitor_receive_device], [true],
     AC_MSG_FAILURE([libudev not found]))
+
+  # libexpat
+  AC_CHECK_HEADER([expat.h], [],
+    AC_MSG_ERROR([expat.h not found (libexpat-devel)]))
+  AC_CHECK_LIB([expat], [XML_Parse], [true],
+    AC_MSG_FAILURE([libexpat not found]))
 fi
 
 #
