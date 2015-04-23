@@ -51,23 +51,42 @@ class Remote(object):
         self._host_key = host_key
         self.keep_alive = keep_alive
         self.console = console
-        self.ssh = ssh or self.connect()
+        self.ssh = ssh
 
-    def connect(self):
-        self.ssh = connection.connect(user_at_host=self.name,
-                                      host_key=self._host_key,
-                                      keep_alive=self.keep_alive)
+    def connect(self, timeout=None):
+        args = dict(user_at_host=self.name, host_key=self._host_key,
+                    keep_alive=self.keep_alive)
+        if timeout:
+            args['timeout'] = timeout
+
+        self.ssh = connection.connect(**args)
         return self.ssh
 
-    def reconnect(self):
+    def reconnect(self, timeout=None):
         """
         Attempts to re-establish connection. Returns True for success; False
         for failure.
         """
         if self.ssh is not None:
             self.ssh.close()
+        if not timeout:
+            return self._reconnect(timeout=timeout)
+        start_time = time.time()
+        elapsed_time = lambda: time.time() - start_time
+        while elapsed_time() < timeout:
+            success = self._reconnect()
+            if success:
+                break
+            default_sleep_val = 30
+            # Don't let time_remaining be < 0
+            time_remaining = max(0, timeout - elapsed_time())
+            sleep_val = min(time_remaining, default_sleep_val)
+            time.sleep(sleep_val)
+        return success
+
+    def _reconnect(self, timeout=None):
         try:
-            self.connect()
+            self.connect(timeout=timeout)
             return self.is_online
         except Exception as e:
             log.debug(e)
@@ -325,6 +344,10 @@ class Remote(object):
         node['ssh_pub_key'] = self.host_key
         node['up'] = True
         return node
+
+    def __del__(self):
+        if self.ssh is not None:
+            self.ssh.close()
 
 
 def getShortName(name):
