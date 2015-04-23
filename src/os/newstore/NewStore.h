@@ -185,6 +185,8 @@ public:
     OpSequencerRef osr;
     boost::intrusive::list_member_hook<> sequencer_item;
 
+    uint64_t ops, bytes;
+
     list<fsync_item> fds;     ///< these fds need to be synced
     set<OnodeRef> onodes;     ///< these onodes need to be updated/written
     KeyValueDB::Transaction t; ///< then we will commit this
@@ -210,6 +212,8 @@ public:
     TransContext(OpSequencer *o)
       : state(STATE_PREPARE),
 	osr(o),
+	ops(0),
+	bytes(0),
 	oncommit(NULL),
 	onreadable(NULL),
 	onreadable_sync(NULL),
@@ -376,15 +380,11 @@ public:
   private:
     NewStore *store;
     wal_osr_queue_t wal_queue;
-    uint64_t ops, bytes;
-    Cond throttle_cond;
 
   public:
     WALWQ(NewStore *s, time_t ti, time_t sti, ThreadPool *tp)
       : ThreadPool::WorkQueue<TransContext>("NewStore::WALWQ", ti, sti, tp),
-	store(s),
-	ops(0),
-	bytes(0) {
+	store(s) {
     }
     bool _empty() {
       return wal_queue.empty();
@@ -394,8 +394,6 @@ public:
 	wal_queue.push_back(*i->osr);
       }
       i->osr->wal_q.push_back(*i);
-      ++ops;
-      bytes += i->wal_txn->get_bytes();
       return true;
     }
     void _dequeue(TransContext *p) {
@@ -433,22 +431,6 @@ public:
       }
       unlock();
       drain();
-    }
-
-    void throttle(uint64_t max_ops, uint64_t max_bytes) {
-      Mutex& lock = get_lock();
-      Mutex::Locker l(lock);
-      while (ops > max_ops || bytes > max_bytes) {
-	throttle_cond.Wait(lock);
-      }
-    }
-
-    void release_throttle(TransContext *txc) {
-      lock();
-      --ops;
-      bytes -= txc->wal_txn->get_bytes();
-      throttle_cond.Signal();
-      unlock();
     }
   };
 
@@ -494,6 +476,9 @@ private:
   Mutex nid_lock;
   uint64_t nid_last;
   uint64_t nid_max;
+
+  Throttle throttle_ops, throttle_bytes;          ///< submit to commit
+  Throttle throttle_wal_ops, throttle_wal_bytes;  ///< submit to wal complete
 
   Mutex wal_lock;
   atomic64_t wal_seq;
