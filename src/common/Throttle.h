@@ -22,20 +22,20 @@ class PerfCounters;
  */
 class Throttle {
   CephContext *cct;
-  std::string name;
+  const std::string name;
   PerfCounters *logger;
   ceph::atomic_t count, max;
   Mutex lock;
   list<Cond*> cond;
-  bool use_perf;
-  
+  const bool use_perf;
+
 public:
-  Throttle(CephContext *cct, std::string n, int64_t m = 0, bool _use_perf = true);
+  Throttle(CephContext *cct, const std::string& n, int64_t m = 0, bool _use_perf = true);
   ~Throttle();
 
 private:
   void _reset_max(int64_t m);
-  bool _should_wait(int64_t c) {
+  bool _should_wait(int64_t c) const {
     int64_t m = max.read();
     int64_t cur = count.read();
     return
@@ -51,7 +51,7 @@ public:
    * gets the number of currently taken slots
    * @returns the number of taken slots
    */
-  int64_t get_current() {
+  int64_t get_current() const {
     return count.read();
   }
 
@@ -59,7 +59,7 @@ public:
    * get the max number of slots
    * @returns the max number of slots
    */
-  int64_t get_max() { return max.read(); }
+  int64_t get_max() const { return max.read(); }
 
   /**
    * set the new max number, and wait until the number of taken slots drains
