@@ -26,6 +26,12 @@ if test x"$SPHINX_BUILD" = x"no"; then
   AC_MSG_ERROR([sphinx-build not found (python-sphinx)])
 fi
 
+# check for /usr/bin/nosetests needed for make check 
+AC_CHECK_PROG(NOSETESTS_CHECK, nosetests, yes)
+if test x"$NOSETESTS_CHECK" != x"yes"; then
+    AC_MSG_ERROR([nosetests not found (python-nose)])
+fi
+
 AC_CONFIG_MACRO_DIR([m4])
 
 AC_CONFIG_SUBDIRS([src/gmock])
