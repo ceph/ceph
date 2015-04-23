@@ -3150,6 +3150,7 @@ int NewStore::_do_write_all_overlays(TransContext *txc,
   }
 
   o->onode.overlay_map.clear();
+  o->onode.shared_overlays.clear();
   txc->write_onode(o);
   return 0;
 }
