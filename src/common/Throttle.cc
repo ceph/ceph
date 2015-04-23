@@ -80,6 +80,8 @@ Throttle::~Throttle()
 void Throttle::_reset_max(int64_t m)
 {
   assert(lock.is_locked());
+  if ((int64_t)max.read() == m)
+    return;
   if (!cond.empty())
     cond.front()->SignalOne();
   if (logger)
@@ -124,7 +126,7 @@ bool Throttle::_wait(int64_t c)
 
 bool Throttle::wait(int64_t m)
 {
-  if (0 == max.read()) {
+  if (0 == max.read() && 0 == m) {
     return false;
   }
 
@@ -158,7 +160,7 @@ int64_t Throttle::take(int64_t c)
 
 bool Throttle::get(int64_t c, int64_t m)
 {
-  if (0 == max.read()) {
+  if (0 == max.read() && 0 == m) {
     return false;
   }
 
