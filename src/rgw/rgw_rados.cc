@@ -4171,7 +4171,7 @@ void RGWRados::update_gc_chain(rgw_obj& head_obj, RGWObjManifest& manifest, cls_
     string oid, loc;
     rgw_bucket bucket;
     get_obj_bucket_and_oid_loc(mobj, bucket, oid, loc);
-    cls_rgw_obj_key key(head_obj.get_index_key_name(), head_obj.get_instance());
+    cls_rgw_obj_key key(oid);
     chain->push_obj(bucket.data_pool, key, loc);
   }
 }
