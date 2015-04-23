@@ -3217,7 +3217,6 @@ int NewStore::_do_write(TransContext *txc,
   if (o->onode.size <= offset ||
       o->onode.size == 0 ||
       o->onode.data_map.empty()) {
-    _do_overlay_clear(txc, o);
     uint64_t x_offset;
     if (o->onode.data_map.empty()) {
       // create
