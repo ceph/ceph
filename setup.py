@@ -19,7 +19,10 @@ setup(
     name='teuthology',
     version=metadata['version'],
     packages=find_packages(),
-
+    package_data={
+     'teuthology.task': ['valgrind.supp', 'adjust-ulimits', 'edit_sudoers.sh', 'daemon-helper'],
+     'teuthology': ['ceph.conf.template'],
+    },
     author='Inktank Storage, Inc.',
     author_email='ceph-qa@ceph.com',
     description='Ceph test framework',
