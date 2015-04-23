@@ -127,7 +127,7 @@ int PGBackend::objects_list_partial(
     for (vector<ghobject_t>::iterator i = objects.begin();
 	 i != objects.end();
 	 ++i) {
-      if (i->is_pgmeta()) {
+      if (i->is_pgmeta() || i->hobj.is_temp()) {
 	continue;
       }
       if (i->is_no_gen()) {
@@ -159,7 +159,7 @@ int PGBackend::objects_list_range(
   for (vector<ghobject_t>::iterator i = objects.begin();
        i != objects.end();
        ++i) {
-    if (i->is_pgmeta()) {
+    if (i->is_pgmeta() || i->hobj.is_temp()) {
       continue;
     }
     if (i->is_no_gen()) {
