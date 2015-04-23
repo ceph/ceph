@@ -1,6 +1,0 @@
-tasks:
-- install:
-   branch: dumpling
-- install.upgrade:
-   client.0:
-- ceph:
