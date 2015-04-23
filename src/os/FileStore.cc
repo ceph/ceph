@@ -4956,14 +4956,20 @@ ObjectMap::ObjectMapIterator FileStore::get_omap_iterator(coll_t c,
   dout(15) << __func__ << " " << c << "/" << hoid << dendl;
   Index index;
   int r = get_index(c, &index);
-  if (r < 0)
+  if (r < 0) {
+    dout(10) << __func__ << " " << c << "/" << hoid << " = 0 "
+	     << "(get_index failed with " << cpp_strerror(r) << ")" << dendl;
     return ObjectMap::ObjectMapIterator(); 
+  }
   {
     assert(NULL != index.index);
     RWLock::RLocker l((index.index)->access_lock);
     r = lfn_find(hoid, index);
-    if (r < 0)
+    if (r < 0) {
+      dout(10) << __func__ << " " << c << "/" << hoid << " = 0 "
+	       << "(lfn_find failed with " << cpp_strerror(r) << ")" << dendl;
       return ObjectMap::ObjectMapIterator();
+    }
   }
   return object_map->get_iterator(hoid);
 }
