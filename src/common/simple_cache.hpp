@@ -15,7 +15,6 @@
 #ifndef CEPH_SIMPLECACHE_H
 #define CEPH_SIMPLECACHE_H
 
-#include <map>
 #include <list>
 #include <memory>
 #include "common/Mutex.h"
@@ -25,9 +24,9 @@ template <class K, class V>
 class SimpleLRU {
   Mutex lock;
   size_t max_size;
-  map<K, typename list<pair<K, V> >::iterator> contents;
+  ceph::unordered_map<K, typename list<pair<K, V> >::iterator> contents;
   list<pair<K, V> > lru;
-  map<K, V> pinned;
+  ceph::unordered_map<K, V> pinned;
 
   void trim_cache() {
     while (lru.size() > max_size) {
@@ -52,7 +51,7 @@ public:
 
   void clear_pinned(K e) {
     Mutex::Locker l(lock);
-    for (typename map<K, V>::iterator i = pinned.begin();
+    for (typename ceph::unordered_map<K, V>::iterator i = pinned.begin();
 	 i != pinned.end() && i->first <= e;
 	 pinned.erase(i++)) {
       if (!contents.count(i->first))
@@ -64,7 +63,7 @@ public:
 
   void clear(K key) {
     Mutex::Locker l(lock);
-    typename map<K, typename list<pair<K, V> >::iterator>::iterator i =
+    typename ceph::unordered_map<K, typename list<pair<K, V> >::iterator>::iterator i =
       contents.find(key);
     if (i == contents.end())
       return;
