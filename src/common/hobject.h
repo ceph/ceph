@@ -289,6 +289,18 @@ CEPH_HASH_NAMESPACE_END
 ostream& operator<<(ostream& out, const hobject_t& o);
 
 WRITE_EQ_OPERATORS_7(hobject_t, hash, oid, get_key(), snap, pool, max, nspace)
+static inline bool operator<(const hobject_t& l, const hobject_t& r) {
+  return cmp_bitwise(l, r) < 0;
+}
+static inline bool operator<=(const hobject_t& l, const hobject_t& r) {
+  return cmp_bitwise(l, r) <= 0;
+}
+static inline bool operator>(const hobject_t& l, const hobject_t& r) {
+  return cmp_bitwise(l, r) > 0;
+}
+static inline bool operator>=(const hobject_t& l, const hobject_t& r) {
+  return cmp_bitwise(l, r) >= 0;
+}
 
 extern int cmp_nibblewise(const hobject_t& l, const hobject_t& r);
 extern int cmp_bitwise(const hobject_t& l, const hobject_t& r);
@@ -429,6 +441,19 @@ CEPH_HASH_NAMESPACE_END
 ostream& operator<<(ostream& out, const ghobject_t& o);
 
 WRITE_EQ_OPERATORS_4(ghobject_t, max, shard_id, hobj, generation)
+
+static inline bool operator<(const ghobject_t& l, const ghobject_t& r) {
+  return cmp_bitwise(l, r) < 0;
+}
+static inline bool operator<=(const ghobject_t& l, const ghobject_t& r) {
+  return cmp_bitwise(l, r) <= 0;
+}
+static inline bool operator>(const ghobject_t& l, const ghobject_t& r) {
+  return cmp_bitwise(l, r) > 0;
+}
+static inline bool operator>=(const ghobject_t& l, const ghobject_t& r) {
+  return cmp_bitwise(l, r) >= 0;
+}
 
 extern int cmp_nibblewise(const ghobject_t& l, const ghobject_t& r);
 extern int cmp_bitwise(const ghobject_t& l, const ghobject_t& r);
