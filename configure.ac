@@ -787,6 +787,12 @@ AC_ARG_WITH([rest-bench],
 	    [with_rest_bench=no])
 AM_CONDITIONAL(WITH_REST_BENCH, [ test "$with_rest_bench" = "yes" ])
 
+# needs libcurl and libxml2
+if test "x$with_rest_bench" = xyes && test "x$with_system_libs3" = xno; then
+   AC_CHECK_LIB([curl], [curl_easy_init], [], AC_MSG_ERROR([libcurl not found]))
+   AC_CHECK_LIB([xml2], [xmlParseChunk], [], AC_MSG_ERROR([libxml2 not found]))
+fi
+
 # use libaio?
 AC_ARG_WITH([libaio],
             [AS_HELP_STRING([--without-libaio], [disable libaio use by journal])],
