@@ -72,7 +72,7 @@ def ssh_keys_user_line_test(line_to_test, username ):
     else:
         return True
 
-def cleanup_added_key(ctx, orig_path, path):
+def cleanup_added_key(ctx, key_backup_files, path):
     """
     Delete the keys and removes ~/.ssh/authorized_keys entries we added
     """
@@ -86,7 +86,7 @@ def cleanup_added_key(ctx, orig_path, path):
             log.info('  cleaning up keys for user {user} on {host}'.format(host=hostname, user=username))
             misc.delete_file(remote, '/home/{user}/.ssh/id_rsa'.format(user=username))
             misc.delete_file(remote, '/home/{user}/.ssh/id_rsa.pub'.format(user=username))
-            misc.move_file(remote, orig_path, path)
+            misc.move_file(remote, key_backup_files[remote], path)
 
 @contextlib.contextmanager
 def tweak_ssh_config(ctx, config):
@@ -140,6 +140,7 @@ def push_keys_to_host(ctx, config, public_key, private_key):
         fake_hostname = '{user}@{host}'.format(user=ssh_keys_user, host=str(inner_hostname))
         auth_keys_data += '\nssh-rsa {pub_key} {user_host}\n'.format(pub_key=public_key, user_host=fake_hostname)
 
+    key_backup_files = dict()
     # for each host in ctx, add keys for all other hosts
     for remote in ctx.cluster.remotes:
         username, hostname = str(remote).split('@')
@@ -164,7 +165,7 @@ def push_keys_to_host(ctx, config, public_key, private_key):
             # add appropriate entries to the authorized_keys file for this host
             auth_keys_file = '/home/{user}/.ssh/authorized_keys'.format(
                 user=username)
-            orig_auth_keys_file = backup_file(remote, auth_keys_file)
+            key_backup_files[remote] = backup_file(remote, auth_keys_file)
             misc.append_lines_to_file(remote, auth_keys_file, auth_keys_data)
 
     try:
@@ -173,7 +174,7 @@ def push_keys_to_host(ctx, config, public_key, private_key):
     finally:
         # cleanup the keys
         log.info("Cleaning up SSH keys")
-        cleanup_added_key(ctx, orig_auth_keys_file, auth_keys_file)
+        cleanup_added_key(ctx, key_backup_files, auth_keys_file)
 
 
 @contextlib.contextmanager
