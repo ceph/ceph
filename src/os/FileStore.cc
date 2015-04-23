@@ -1457,9 +1457,10 @@ int FileStore::mount()
   }
 
   if (!(generic_flags & SKIP_MOUNT_OMAP)) {
+    //set disableDataSync to true since we rely on syncfs
     KeyValueDB * omap_store = KeyValueDB::create(g_ceph_context,
 						 superblock.omap_backend,
-						 omap_dir);
+						 omap_dir, true);
     if (omap_store == NULL)
     {
       derr << "Error creating " << superblock.omap_backend << dendl;
