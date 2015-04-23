@@ -80,6 +80,8 @@ Throttle::~Throttle()
 void Throttle::_reset_max(int64_t m)
 {
   assert(lock.is_locked());
+  if ((int64_t)max.read() == m)
+    return;
   if (!cond.empty())
     cond.front()->SignalOne();
   if (logger)
