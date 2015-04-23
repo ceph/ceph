@@ -2402,6 +2402,8 @@ int NewStore::_wal_finish(TransContext *txc)
   wal_transaction_t& wt = *txc->wal_txn;
   dout(20) << __func__ << " txc " << " seq " << wt.seq << txc << dendl;
 
+  wal_wq.release_throttle(txc);
+
   string key;
   get_wal_key(wt.seq, &key);
   KeyValueDB::Transaction cleanup = db->get_transaction();
