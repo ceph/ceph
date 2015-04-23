@@ -53,10 +53,13 @@ class Remote(object):
         self.console = console
         self.ssh = ssh
 
-    def connect(self):
-        self.ssh = connection.connect(user_at_host=self.name,
-                                      host_key=self._host_key,
-                                      keep_alive=self.keep_alive)
+    def connect(self, timeout=None):
+        args = dict(user_at_host=self.name, host_key=self._host_key,
+                    keep_alive=self.keep_alive)
+        if timeout:
+            args['timeout'] = timeout
+
+        self.ssh = connection.connect(**args)
         return self.ssh
 
     def reconnect(self, timeout=None):
@@ -67,7 +70,7 @@ class Remote(object):
         if self.ssh is not None:
             self.ssh.close()
         if not timeout:
-            return self._reconnect()
+            return self._reconnect(timeout=timeout)
         start_time = time.time()
         elapsed_time = lambda: time.time() - start_time
         while elapsed_time() < timeout:
@@ -81,9 +84,9 @@ class Remote(object):
             time.sleep(sleep_val)
         return success
 
-    def _reconnect(self):
+    def _reconnect(self, timeout=None):
         try:
-            self.connect()
+            self.connect(timeout=timeout)
             return self.is_online
         except Exception as e:
             log.debug(e)
