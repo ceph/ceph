@@ -176,6 +176,203 @@ function TEST_unreocvery_erasure_coded() {
     teardown $dir || return 1
 }
 
+#######################################################################
+
+##
+# Return num of objects for **pgid**,
+#
+# @param pgid the id of the PG
+# @param STDOUT the date and num of objects
+# @return 0 on success, 1 on error
+#
+function get_pg_objects_num() {
+    local pgid=$1
+    ceph --format xml pg dump pgs 2>/dev/null | \
+        $XMLSTARLET sel -t -m "//pg_stat[pgid='$pgid']/stat_sum/num_objects" -v .
+}
+
+#######################################################################
+
+##
+# Return state for **pgid**,
+#
+# @param pgid the id of the PG
+# @param state of objects
+# @return 0 on success, 1 on error
+#
+function get_pg_state() {
+    local pgid=$1
+    ceph --format xml pg dump pgs 2>/dev/null | \
+        $XMLSTARLET sel -t -m "//pg_stat[pgid='$pgid']/state" -v .
+}
+#######################################################################
+
+##
+# Run stop_scrub on **pgid** and wait until it completes.
+# The stop_scrub return success whenever the
+# pg enter scrubbing state and end up with **get_last_scrub_stamp** function
+# reports a timestamp the same with
+# the one stored before starting the stop_scrub.
+#
+# @param pgid the id of the PG
+# @return 0 on success, 1 on error
+#
+function stop_scrub() {
+    local dir=$1
+    local pgid=$2
+    local last_scrub=$(get_last_scrub_stamp $pgid)
+    local tmpfile="$dir/XXXXX"
+
+    echo "XXXXX" > "$tmpfile"
+    for i in `seq 0 1000`; do
+       ## put objects to rbd pool
+       rados put "$i" "$tmpfile" -p rbd
+       pg_objects=$(get_pg_objects_num $pgid)
+       if [ $pg_objects -ge 4 ] ; then
+           break
+       fi
+    done
+
+    ceph pg scrub $pgid
+    scrubbing="NO"
+    for ((i=0; i < $TIMEOUT; i++)); do
+        # check pg is scrubbing or not
+        state=$(get_pg_state $pgid)
+        if echo "$state" | grep "scrubbing" ; then
+            scrubbing="YES"
+            break
+        fi
+        sleep 1
+    done
+
+    if test "$scrubbing" != "YES" ; then
+      return 1
+    fi
+
+    ceph pg stop-scrub $pgid
+    for ((i=0; i < $TIMEOUT; i++)); do
+        state=$(get_pg_state $pgid)
+        if echo "$state" | grep "scrubbing" ; then
+            sleep 1
+            continue
+        fi
+        if test "$last_scrub" == "$(get_last_scrub_stamp $pgid)" ; then
+            return 0
+        else
+            return 1
+        fi
+    done
+    return 1
+}
+
+function TEST_stop_scrub() {
+    local dir=$1
+
+    setup $dir || return 1
+    run_mon $dir a --osd_pool_default_size=1 || return 1
+    run_osd $dir 0 --osd_scrub_sleep=10 --osd_scrub_chunk_min=1 --osd_scrub_chunk_max=1 || return 1
+    wait_for_clean || return 1
+    ceph osd set noscrub
+    stop_scrub $dir 1.0 || return 1
+    kill_daemons $dir KILL osd || return 1
+    teardown $dir || return 1
+}
+
+#######################################################################
+
+##
+# The ceph osd set noscrub return success whenever the
+# pg enter scrubbing state and end up with **get_last_scrub_stamp** function
+# reports a timestamp the same with
+# the one stored before starting the noscrub.
+#
+# @return 0 on success, 1 on error
+#
+function no_scrub() {
+    local dir=$1
+    pgs=$(ceph --format xml pg ls 2>/dev/null | xmlstarlet sel -t -m "//pg_stat/pgid" -v . -o ' ')
+    local tmpfile="$dir/XXXXX"
+
+    echo "XXXXX" > "$tmpfile"
+    for i in `seq 0 1000`; do
+        ## put objects to rbd pool
+        rados put "$i" "$tmpfile" -p rbd
+        all_pg_num_enought="YES"
+        for pg in $pgs; do # number of every pg is equal or more than 4
+            pg_objects=$(get_pg_objects_num $pg)
+            if [ $pg_objects -lt 4 ]; then
+              all_pg_num_enought="NO"
+              break
+            fi
+        done
+        if test "$all_pg_num_enought" == "YES" ; then
+            break
+        fi
+    done
+
+    ## schedule pg scrubbing right now
+    ceph osd unset noscrub
+    ceph tell osd.* injectargs "--osd_scrub_min_interval 0 --osd_scrub_max_interval 0"
+
+    scrubbing="NO"
+    local pgid=""
+    local last_scrub=""
+    for ((i=0; i < $TIMEOUT; i++)); do
+        # check pg is scrubbing or not
+        for pg in $pgs; do
+            state=$(get_pg_state $pg)
+            if echo "$state" | grep -v "deep" | grep "scrubbing"; then # doing scrub
+                scrubbing="YES"
+                pgid=$pg
+                last_scrub=$(get_last_scrub_stamp $pgid)
+                break
+            fi
+        done
+        if [ -z "$pgid" ]; then
+            sleep 1
+        else
+            break
+        fi
+    done
+
+    if test "$scrubbing" != "YES" ; then
+        return 1
+    fi
+
+    if [ -z "$pgid"] ; then
+        return 1
+    fi
+
+    ## disable scheduled scrubbing on all OSDs **stops running scheduled scrubs
+    ceph osd set noscrub
+
+    for ((i=0; i < $TIMEOUT; i++)); do
+        state=$(get_pg_state $pgid)
+        if echo "$state" | grep "scrubbing" ; then ## wait for finish scrub
+            sleep 1
+            continue
+        fi
+        if test "$last_scrub" == "$(get_last_scrub_stamp $pgid)" ; then
+            return 0
+        else
+            return 1
+        fi
+    done
+    return 1
+}
+function TEST_no_scrub() {
+    local dir=$1
+
+    setup $dir || return 1
+    run_mon $dir a --osd_pool_default_size=1 || return 1
+    ceph osd set noscrub
+    run_osd $dir 0 --osd_scrub_sleep=10 --osd_scrub_chunk_min=1 --osd_scrub_chunk_max=1 || return 1
+    wait_for_clean || return 1
+    no_scrub $dir || return 1
+    kill_daemons $dir KILL osd || return 1
+    teardown $dir || return 1
+}
+
 function corrupt_and_repair_two() {
     local dir=$1
     local poolname=$2
