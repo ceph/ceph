@@ -199,7 +199,7 @@ def create_initial_config(suite, suite_branch, ceph_branch, teuthology_branch,
         if not get_branch_info('teuthology', teuthology_branch):
             exc = BranchNotFoundError(teuthology_branch, 'teuthology.git')
             schedule_fail(message=str(exc), name=name)
-    else:
+    elif not teuthology_branch:
         # Decide what branch of teuthology to use
         if get_branch_info('teuthology', ceph_branch):
             teuthology_branch = ceph_branch
@@ -213,7 +213,7 @@ def create_initial_config(suite, suite_branch, ceph_branch, teuthology_branch,
         if not get_branch_info('ceph-qa-suite', suite_branch):
             exc = BranchNotFoundError(suite_branch, 'ceph-qa-suite.git')
             schedule_fail(message=str(exc), name=name)
-    else:
+    elif not suite_branch:
         # Decide what branch of ceph-qa-suite to use
         if get_branch_info('ceph-qa-suite', ceph_branch):
             suite_branch = ceph_branch
