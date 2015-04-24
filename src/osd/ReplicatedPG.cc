@@ -1817,6 +1817,8 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op,
   // older versions do not proxy the feature bits.
   bool can_proxy_read = get_osdmap()->get_up_osd_features() &
     CEPH_FEATURE_OSD_PROXY_FEATURES;
+  bool can_proxy_write = get_osdmap()->get_up_osd_features() &
+    CEPH_FEATURE_OSD_PROXY_WRITE_FEATURES;
   OpRequestRef promote_op;
 
   switch (pool.info.cache_mode) {
@@ -1842,7 +1844,13 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op,
       promote_object(obc, missing_oid, oloc, op);
       return true;
     } else if (op->may_write() || op->may_cache()) {
-      do_proxy_write(op, missing_oid);
+      if (can_proxy_write) {
+        do_proxy_write(op, missing_oid);
+      } else {
+	// promote if can't proxy the write
+	promote_object(obc, missing_oid, oloc, op);
+	return true;
+      }
 
       // Promote too?
       maybe_promote(obc, missing_oid, oloc, in_hit_set,
