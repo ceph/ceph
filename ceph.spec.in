@@ -687,7 +687,6 @@ fi
 %{_datadir}/ceph/id_dsa_drop.ceph.com
 %{_datadir}/ceph/id_dsa_drop.ceph.com.pub
 %dir %{_sysconfdir}/ceph/
-%dir %{_localstatedir}/log/ceph/
 %config %{_sysconfdir}/bash_completion.d/rados
 %config %{_sysconfdir}/bash_completion.d/rbd
 %config(noreplace) %{_sysconfdir}/ceph/rbdmap
@@ -699,6 +698,8 @@ fi
 %else
 /lib/udev/rules.d/50-rbd.rules
 %endif
+%attr(770,ceph,ceph) %dir %{_localstatedir}/lib/ceph/
+%attr(2750,ceph,ceph) %dir %{_localstatedir}/log/ceph/
 
 %postun -n ceph-common
 # Package removal cleanup
