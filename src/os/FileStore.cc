@@ -4715,16 +4715,6 @@ int FileStore::collection_list_impl(coll_t c, ghobject_t start, ghobject_t end, 
 
   return 0;
 }
-int FileStore::collection_list_range(coll_t c, ghobject_t start, ghobject_t end,
-                                     snapid_t seq, vector<ghobject_t> *ls)
-{
-  tracepoint(objectstore, collection_list_range_enter, c.c_str());
-
-  ghobject_t next;
-  int r = collection_list_impl(c, start, end, -1, seq, ls, &next);
-  tracepoint(objectstore, collection_list_range_exit, 0);
-  return r;
-}
 
 int FileStore::collection_list_partial(coll_t c, ghobject_t start,
 				       int min, int max, snapid_t seq,
