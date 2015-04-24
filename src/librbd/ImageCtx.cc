@@ -226,10 +226,9 @@ namespace librbd {
     if (object_cacher) {
       uint64_t obj = cache_max_dirty_object;
       if (!obj) {
-        obj = cache_size / (1ull << order);
-        obj = obj * 4 + 10;
+        obj = MIN(2000, MAX(10, cache_size / 100 / sizeof(ObjectCacher::Object)));
       }
-      ldout(cct, 10) << " cache bytes " << cache_size << " order " << (int)order
+      ldout(cct, 10) << " cache bytes " << cache_size
 		     << " -> about " << obj << " objects" << dendl;
       object_cacher->set_max_objects(obj);
     }
