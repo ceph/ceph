@@ -29,6 +29,8 @@ OPTION(admin_socket, OPT_STR, "$run_dir/$cluster-$name.asok") // default changed
 OPTION(crushtool, OPT_STR, "crushtool") // crushtool utility path
 
 OPTION(daemonize, OPT_BOOL, false) // default changed by common_preinit()
+OPTION(setuser, OPT_STR, "")        // uid or user name
+OPTION(setgroup, OPT_STR, "")        // gid or group name
 OPTION(pid_file, OPT_STR, "") // default changed by common_preinit()
 OPTION(chdir, OPT_STR, "/")
 OPTION(max_open_files, OPT_LONGLONG, 0)
