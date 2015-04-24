@@ -7,8 +7,8 @@ PartOf=ceph.target
 [Service]
 EnvironmentFile=-/etc/sysconfig/ceph
 Environment=CLUSTER=ceph
-ExecStart=/usr/bin/ceph-osd -f --cluster ${CLUSTER} --id %i
-ExecStartPre=@systemd_libexec_dir@/ceph-osd-prestart.sh --cluster ${CLUSTER} --id %i
+ExecStart=/usr/bin/ceph-osd -f --cluster ${CLUSTER} --id %i --setuser ceph --setgroup ceph
+ExecStartPre=/usr/libexec/ceph/ceph-osd-prestart.sh --cluster ${CLUSTER} --setuser ceph --setgroup ceph --id %i
 LimitNOFILE=131072
 ExecReload=/bin/kill -HUP $MAINPID
 
