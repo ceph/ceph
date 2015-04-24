@@ -187,8 +187,8 @@ AsyncConnection::AsyncConnection(CephContext *cct, AsyncMessenger *m, EventCente
   reset_handler.reset(new C_handle_reset(async_msgr, this));
   remote_reset_handler.reset(new C_handle_remote_reset(async_msgr, this));
   connect_handler.reset(new C_deliver_connect(async_msgr, this));
-  accept_handler.reset(new C_deliver_accept(async_msgr, this));
   local_deliver_handler.reset(new C_local_deliver(this));
+  wakeup_handler.reset(new C_time_wakeup(this));
   memset(msgvec, 0, sizeof(msgvec));
   // double recv_max_prefetch see "read_until"
   recv_buf = new char[2*recv_max_prefetch];
@@ -622,7 +622,10 @@ void AsyncConnection::process()
               ldout(async_msgr->cct, 1) << __func__ << " wants 1 message from policy throttle "
                                         << policy.throttler_messages->get_current() << "/"
                                         << policy.throttler_messages->get_max() << " failed, just wait." << dendl;
-              center->dispatch_event_external(read_handler);
+              // following thread pool deal with th full message queue isn't a
+              // short time, so we can wait a ms.
+              if (register_time_events.empty())
+                register_time_events.insert(center->create_time_event(1000, wakeup_handler));
               break;
             }
           }
@@ -643,7 +646,10 @@ void AsyncConnection::process()
                 ldout(async_msgr->cct, 10) << __func__ << " wants " << message_size << " bytes from policy throttler "
                                            << policy.throttler_bytes->get_current() << "/"
                                            << policy.throttler_bytes->get_max() << " failed, just wait." << dendl;
-                center->dispatch_event_external(read_handler);
+                // following thread pool deal with th full message queue isn't a
+                // short time, so we can wait a ms.
+                if (register_time_events.empty())
+                  register_time_events.insert(center->create_time_event(1000, wakeup_handler));
                 break;
               }
             }
@@ -1590,7 +1596,7 @@ int AsyncConnection::handle_connect_msg(ceph_msg_connect &connect, bufferlist &a
   if (existing) {
     // There is no possible that existing connection will acquire this
     // connection's lock
-    existing->lock.Lock();
+    existing->lock.Lock(true);  // skip lockdep check (we are locking a second AsyncConnection here)
 
     if (existing->replacing || existing->state == STATE_CLOSED) {
       ldout(async_msgr->cct, 1) << __func__ << " existing racing replace or mark_down happened while replacing."
@@ -1844,7 +1850,7 @@ int AsyncConnection::handle_connect_msg(ceph_msg_connect &connect, bufferlist &a
     goto fail_registered;
 
   // notify
-  center->dispatch_event_external(accept_handler);
+  center->dispatch_event_external(EventCallbackRef(new C_deliver_accept(async_msgr, this)));
   async_msgr->ms_deliver_handle_fast_accept(this);
   once_ready = true;
 
@@ -2078,7 +2084,7 @@ void AsyncConnection::fault()
 
   // woke up again;
   register_time_events.insert(center->create_time_event(
-          backoff.to_nsec()/1000, EventCallbackRef(new C_time_wakeup(this))));
+          backoff.to_nsec()/1000, wakeup_handler));
 }
 
 void AsyncConnection::was_session_reset()
