@@ -2189,6 +2189,7 @@ void OSD::create_logger()
   osd_plb.add_u64_counter(l_osd_tier_clean, "tier_clean", "Dirty tier flag cleaned");
   osd_plb.add_u64_counter(l_osd_tier_delay, "tier_delay", "Tier delays (agent waiting)");
   osd_plb.add_u64_counter(l_osd_tier_proxy_read, "tier_proxy_read", "Tier proxy reads");
+  osd_plb.add_u64_counter(l_osd_tier_proxy_write, "tier_proxy_write", "Tier proxy writes");
 
   osd_plb.add_u64_counter(l_osd_agent_wake, "agent_wake", "Tiering agent wake up");
   osd_plb.add_u64_counter(l_osd_agent_skip, "agent_skip", "Objects skipped by agent");

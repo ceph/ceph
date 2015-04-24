@@ -2288,6 +2288,8 @@ void ReplicatedPG::finish_proxy_write(hobject_t oid, ceph_tid_t tid, int r)
     in_progress_proxy_ops.erase(oid);
   }
 
+  osd->logger->inc(l_osd_tier_proxy_write);
+
   MOSDOp *m = static_cast<MOSDOp*>(pwop->op->get_req());
   assert(m != NULL);
 
