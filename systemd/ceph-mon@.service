@@ -13,6 +13,8 @@ PartOf=ceph.target
 [Service]
 EnvironmentFile=-/etc/sysconfig/ceph
 Environment=CLUSTER=ceph
+User=ceph
+Group=ceph
 ExecStart=/usr/bin/ceph-mon -f --cluster ${CLUSTER} --id %i
 ExecReload=/bin/kill -HUP $MAINPID
 
