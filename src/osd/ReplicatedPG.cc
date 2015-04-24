@@ -2271,9 +2271,11 @@ void ReplicatedPG::finish_proxy_write(hobject_t oid, ceph_tid_t tid, int r)
   }
   list<OpRequestRef>& in_progress_op = q->second;
   assert(in_progress_op.size());
-  OpRequestRef op = in_progress_op.front();
-  assert(op == pwop->op);
-  in_progress_op.pop_front();
+  list<OpRequestRef>::iterator it = std::find(in_progress_op.begin(),
+                                              in_progress_op.end(),
+					      pwop->op);
+  assert(it != in_progress_op.end());
+  in_progress_op.erase(it);
   if (in_progress_op.size() == 0) {
     in_progress_proxy_ops.erase(oid);
   }
