@@ -74,7 +74,7 @@ public:
   /// @see CollectionIndex
   int collection_list_partial(
     const ghobject_t &start,
-    int min_count,
+    const ghobject_t end,
     int max_count,
     snapid_t seq,
     vector<ghobject_t> *ls,
