@@ -436,12 +436,10 @@ int MemStore::collection_list(coll_t cid, vector<ghobject_t>& o)
   return 0;
 }
 
-int MemStore::collection_list_partial(coll_t cid, ghobject_t start,
-				      int min, int max, snapid_t snap, 
+int MemStore::collection_list_impl(coll_t cid, ghobject_t start, ghobject_t end,
+				      int max, snapid_t snap,
 				      vector<ghobject_t> *ls, ghobject_t *next)
 {
-  dout(10) << __func__ << " " << cid << " " << start << " " << min << "-"
-	   << max << " " << snap << dendl;
   CollectionRef c = get_collection(cid);
   if (!c)
     return -ENOENT;
@@ -449,16 +447,31 @@ int MemStore::collection_list_partial(coll_t cid, ghobject_t start,
 
   map<ghobject_t,ObjectRef>::iterator p = c->object_map.lower_bound(start);
   while (p != c->object_map.end() &&
-	 ls->size() < (unsigned)max) {
+	 (max == -1 || ls->size() < (unsigned)max) &&
+	  p->first < end) {
     ls->push_back(p->first);
     ++p;
   }
-  if (p == c->object_map.end())
-    *next = ghobject_t::get_max();
-  else
-    *next = p->first;
+  if (next != NULL) {
+    if (p == c->object_map.end())
+      *next = ghobject_t::get_max();
+    else
+      *next = p->first;
+  }
   return 0;
 }
+
+int MemStore::collection_list_partial(coll_t cid, ghobject_t start,
+				      int min, int max, snapid_t snap,
+				      vector<ghobject_t> *ls, ghobject_t *next)
+{
+  dout(10) << __func__ << " " << cid << " " << start << " " << min << "-"
+	   << max << " " << snap << dendl;
+
+  collection_list_impl(cid, start, ghobject_t::get_max(), max, snap, ls, next);
+  return 0;
+}
+
 
 int MemStore::collection_list_range(coll_t cid,
 				    ghobject_t start, ghobject_t end,
@@ -466,17 +479,8 @@ int MemStore::collection_list_range(coll_t cid,
 {
   dout(10) << __func__ << " " << cid << " " << start << " " << end
 	   << " " << seq << dendl;
-  CollectionRef c = get_collection(cid);
-  if (!c)
-    return -ENOENT;
-  RWLock::RLocker l(c->lock);
 
-  map<ghobject_t,ObjectRef>::iterator p = c->object_map.lower_bound(start);
-  while (p != c->object_map.end() &&
-	 p->first < end) {
-    ls->push_back(p->first);
-    ++p;
-  }
+  collection_list_impl(cid, start, end, -1, seq, ls, NULL);
   return 0;
 }
 
