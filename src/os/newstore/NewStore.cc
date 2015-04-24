@@ -2056,7 +2056,7 @@ void NewStore::_txc_state_proc(TransContext *txc)
 	     << " " << txc->get_state_name() << dendl;
     switch (txc->state) {
     case TransContext::STATE_PREPARE:
-      if (!txc->aios.empty()) {
+      if (!txc->pending_aios.empty()) {
 	txc->state = TransContext::STATE_AIO_WAIT;
 	_txc_aio_submit(txc);
 	return;
@@ -2107,7 +2107,7 @@ void NewStore::_txc_state_proc(TransContext *txc)
       break;
 
     case TransContext::STATE_WAL_APPLYING:
-      if (!txc->aios.empty()) {
+      if (!txc->pending_aios.empty()) {
 	txc->state = TransContext::STATE_WAL_AIO_WAIT;
 	_txc_aio_submit(txc);
 	return;
@@ -2407,7 +2407,7 @@ int NewStore::_wal_apply(TransContext *txc)
   dout(20) << __func__ << " txc " << txc << " seq " << wt.seq << dendl;
   txc->state = TransContext::STATE_WAL_APPLYING;
 
-  txc->aios.clear();
+  assert(txc->pending_aios.empty());
   int r = _do_wal_transaction(wt, txc);
   assert(r == 0);
 
@@ -2464,8 +2464,8 @@ int NewStore::_do_wal_transaction(wal_transaction_t& wt,
 	  return fd;
 #ifdef HAVE_LIBAIO
 	if (g_conf->newstore_aio && txc && (flags & O_DIRECT)) {
-	  txc->aios.push_back(FS::aio_t(txc, fd));
-	  FS::aio_t& aio = txc->aios.back();
+	  txc->pending_aios.push_back(FS::aio_t(txc, fd));
+	  FS::aio_t& aio = txc->pending_aios.back();
 	  p->data.prepare_iov(&aio.iov);
 	  aio.pwritev(p->offset);
 	  dout(2) << __func__ << " prepared aio " << &aio << dendl;
@@ -2642,13 +2642,19 @@ int NewStore::queue_transactions(
 
 void NewStore::_txc_aio_submit(TransContext *txc)
 {
-  int num = txc->aios.size();
+  int num = txc->pending_aios.size();
   dout(10) << __func__ << " txc " << txc << " submitting " << num << dendl;
   assert(num > 0);
   txc->num_aio.set(num);
-  for (list<FS::aio_t>::iterator p = txc->aios.begin();
-       p != txc->aios.end();
-       ++p) {
+
+  // move these aside, and get our end iterator position now, as the
+  // aios might complete as soon as they are submitted and queue more
+  // wal aio's.
+  list<FS::aio_t>::iterator e = txc->submitted_aios.begin();
+  txc->submitted_aios.splice(e, txc->pending_aios);
+  list<FS::aio_t>::iterator p = txc->submitted_aios.begin();
+  assert(p != e);
+  for (; p != e; ++p) {
     FS::aio_t& aio = *p;
     dout(20) << __func__ << " aio " << &aio << " fd " << aio.fd << dendl;
     for (vector<iovec>::iterator q = aio.iov.begin(); q != aio.iov.end(); ++q)
@@ -3257,8 +3263,8 @@ int NewStore::_do_write(TransContext *txc,
     }
 #ifdef HAVE_LIBAIO
     if (g_conf->newstore_aio && (flags & O_DIRECT)) {
-      txc->aios.push_back(FS::aio_t(txc, fd));
-      FS::aio_t& aio = txc->aios.back();
+      txc->pending_aios.push_back(FS::aio_t(txc, fd));
+      FS::aio_t& aio = txc->pending_aios.back();
       bl.prepare_iov(&aio.iov);
       txc->aio_bl.append(bl);
       aio.pwritev(x_offset);
@@ -3305,8 +3311,8 @@ int NewStore::_do_write(TransContext *txc,
 
 #ifdef HAVE_LIBAIO
     if (g_conf->newstore_aio && (flags & O_DIRECT)) {
-      txc->aios.push_back(FS::aio_t(txc, fd));
-      FS::aio_t& aio = txc->aios.back();
+      txc->pending_aios.push_back(FS::aio_t(txc, fd));
+      FS::aio_t& aio = txc->pending_aios.back();
       bl.prepare_iov(&aio.iov);
       txc->aio_bl.append(bl);
       aio.pwritev(0);
