@@ -12,12 +12,14 @@ namespace librados {
 TestWatchNotify::TestWatchNotify(CephContext *cct)
   : m_cct(cct), m_finisher(new Finisher(cct)), m_handle(), m_notify_id(),
     m_file_watcher_lock("librados::TestWatchNotify::m_file_watcher_lock") {
+  m_cct->get();
   m_finisher->start();
 }
 
 TestWatchNotify::~TestWatchNotify() {
   m_finisher->stop();
   delete m_finisher;
+  m_cct->put();
 }
 
 TestWatchNotify::NotifyHandle::NotifyHandle()
