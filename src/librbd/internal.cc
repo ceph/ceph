@@ -3961,7 +3961,7 @@ reprotect_and_return_err:
       AbstractWrite *req;
       c->add_request();
 
-      if (p->offset == 0 && p->length == ictx->layout.fl_object_size) {
+      if (p->length == ictx->layout.fl_object_size) {
 	req = new AioRemove(ictx, p->oid.name, p->objectno, snapc, req_comp);
       } else if (p->offset + p->length == ictx->layout.fl_object_size) {
 	req = new AioTruncate(ictx, p->oid.name, p->objectno, p->offset, snapc,
