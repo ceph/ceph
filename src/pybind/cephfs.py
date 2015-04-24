@@ -360,6 +360,14 @@ class LibCephFS(object):
         if ret < 0:
             raise make_ex(ret, "error in mkdirs '%s'" % path)
 
+    def rmdir(self, path):
+        self.require_state("mounted")
+        if not isinstance(path, str):
+            raise TypeError('path must be a string')
+        ret = self.libcephfs.ceph_rmdir(self.cluster, c_char_p(path))
+        if ret < 0:
+            raise make_ex(ret, "error in rmdir '%s'" % path)
+
     def open(self, path, flags, mode):
         self.require_state("mounted")
         if not isinstance(path, str):
@@ -378,6 +386,20 @@ class LibCephFS(object):
         ret = self.libcephfs.ceph_close(self.cluster, c_int(fd))
         if ret < 0:
             raise make_ex(ret, "error in close")
+
+    def getxattr(self, path, name):
+        if not isinstance(path, str):
+            raise TypeError('path must be a string')
+        if not isinstance(name, str):
+            raise TypeError('name must be a string')
+
+        l = 255
+        buf = create_string_buffer(l)
+        actual_l = self.libcephfs.ceph_getxattr(self.cluster, path, name, buf, c_int(l))
+        if actual_l > l:
+            buf = create_string_buffer(actual_)
+            self.libcephfs.ceph_getxattr(path, name, new_buf, actual_l)
+        return buf.value
 
     def setxattr(self, path, name, value, flags):
         if not isinstance(path, str):
@@ -423,6 +445,14 @@ class LibCephFS(object):
             c_char_p(path))
         if ret < 0:
             raise make_ex(ret, "error in unlink: %s" % path)
+
+    def rename(self, src, dst):
+        self.require_state("mounted")
+        if not isinstance(src, str) or not isinstance(dst, str):
+            raise TypeError('source and destination must be a string')
+        ret = self.libcephfs.ceph_rename(self.cluster, c_char_p(src), c_char_p(dst))
+        if ret < 0:
+            raise make_ex(ret, "error in rename '%s' to '%s'" % (src, dst))
 
     def mds_command(self, mds_spec, args, input_data):
         """
