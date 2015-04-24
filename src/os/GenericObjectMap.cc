@@ -1056,7 +1056,7 @@ void GenericObjectMap::set_header(const coll_t &cid, const ghobject_t &oid,
   t->set(GHOBJECT_TO_SEQ_PREFIX, to_set);
 }
 
-int GenericObjectMap::list_objects(const coll_t &cid, ghobject_t start, int max,
+int GenericObjectMap::list_objects(const coll_t &cid, ghobject_t start, ghobject_t end, int max,
                                    vector<ghobject_t> *out, ghobject_t *next)
 {
   // FIXME
@@ -1108,7 +1108,14 @@ int GenericObjectMap::list_objects(const coll_t &cid, ghobject_t start, int max,
       break;
     }
 
+    if (header.oid >= end) {
+      if (next)
+	*next = ghobject_t::get_max();
+      break;
+    }
+
     assert(start <= header.oid);
+    assert(header.oid < end);
 
 
     size++;
