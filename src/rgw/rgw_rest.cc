@@ -1202,6 +1202,22 @@ RGWRESTMgr::~RGWRESTMgr()
   delete default_mgr;
 }
 
+static int64_t parse_content_length(const char *content_length)
+{
+  int64_t len = -1;
+
+  if (*content_length == '\0') {
+    len = 0;
+  } else {
+    string err;
+    len = strict_strtoll(content_length, 10, &err);
+    if (!err.empty()) {
+      len = -1;
+    }
+  }
+
+  return len;
+}
 int RGWREST::preprocess(struct req_state *s, RGWClientIO *cio)
 {
   req_info& info = s->info;
@@ -1254,58 +1270,39 @@ int RGWREST::preprocess(struct req_state *s, RGWClientIO *cio)
    * nginx/lighttpd/apache setting BOTH headers. As a result, we have to check
    * both headers and can't always simply pick A or B.
    */
-  const char* s_contentlength = info.env->get("CONTENT_LENGTH");
-  const char* s_httpcontentlength = info.env->get("HTTP_CONTENT_LENGTH");
-  if(s_httpcontentlength && !s_contentlength) {
-    /* Easy case #1: CONTENT_LENGTH is missing or empty */
-    s_contentlength = s_httpcontentlength;
-    s_httpcontentlength = NULL;
-  } else if (s->cct->_conf->rgw_content_length_compat && s_contentlength && s_httpcontentlength) {
+  const char* content_length = info.env->get("CONTENT_LENGTH");
+  const char* http_content_length = info.env->get("HTTP_CONTENT_LENGTH");
+  if (!http_content_length != !content_length) {
+    /* Easy case: one or the other is missing */
+    s->length = (content_length ? content_length : http_content_length);
+  } else if (s->cct->_conf->rgw_content_length_compat && content_length && http_content_length) {
     /* Hard case: Both are set, we have to disambiguate */
-    int64_t i_contentlength = -1, i_httpcontentlength = -1;
-    // Test CONTENT_LENGTH
-    if(*s_contentlength == '\0') {
-      i_contentlength = 0;
-    } else {
-      string err;
-      i_contentlength = strict_strtoll(s->length, 10, &err);
-      if (!err.empty()) {
-	i_contentlength = -1; // Set an error to allow fallthrough
-      }
-    }
-    // Test HTTP_CONTENT_LENGTH
-    if(*s_httpcontentlength == '\0') {
-      i_httpcontentlength = 0;
-    } else {
-      string err;
-      i_httpcontentlength = strict_strtoll(s->length, 10, &err);
-      if (!err.empty()) {
-	i_httpcontentlength = -1; // Set an error to allow fallthrough
-      }
-    }
+    int64_t content_length_i, http_content_length_i;
+
+    content_length_i = parse_content_length(content_length);
+    http_content_length_i = parse_content_length(http_content_length);
+
     // Now check them:
-    if(i_httpcontentlength == -1) {
+    if (http_content_length_i < 0) {
       // HTTP_CONTENT_LENGTH is invalid, ignore it
-    } else if(i_contentlength == -1) {
+    } else if (content_length_i < 0) {
       // CONTENT_LENGTH is invalid, and HTTP_CONTENT_LENGTH is valid
       // Swap entries
-      s_contentlength = s_httpcontentlength;
-      s_httpcontentlength = NULL;
+      content_length = http_content_length;
     } else {
       // both CONTENT_LENGTH and HTTP_CONTENT_LENGTH are valid
       // Let's pick the larger size
-      if(i_contentlength >= i_httpcontentlength) {
-	// No need to swap
-      } else {
-	s_contentlength = s_httpcontentlength;
-	s_httpcontentlength = NULL;
+      if (content_length_i < http_content_length_i) {
+	// prefer the larger value
+	content_length = http_content_length;
       }
     }
-    // End of: else if (s->cct->_conf->rgw_content_length_compat && s_contentlength && s_httpcontentlength) {
+    s->length = content_length;
+    // End of: else if (s->cct->_conf->rgw_content_length_compat && content_length &&
+    // http_content_length)
   } else {
-    // By implication, httpcontentlength is NULL here
-    /* Easy case #2: HTTP_CONTENT_LENGTH is not set */
-    s->length = s_contentlength;
+    /* no content length was defined */
+    s->length = NULL;
   }
 
 
