@@ -617,6 +617,9 @@ class KeyValueStore : public ObjectStore,
   bool collection_exists(coll_t c);
   bool collection_empty(coll_t c);
   int collection_list(coll_t c, vector<ghobject_t>& oid);
+  int collection_list_impl(coll_t c, ghobject_t start, ghobject_t end,
+                              int max, snapid_t snap,
+                              vector<ghobject_t> *ls, ghobject_t *next);
   int collection_list_partial(coll_t c, ghobject_t start,
                               int min, int max, snapid_t snap,
                               vector<ghobject_t> *ls, ghobject_t *next);
