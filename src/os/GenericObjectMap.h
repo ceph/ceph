@@ -117,7 +117,7 @@ class GenericObjectMap {
   bool check(std::ostream &out);
 
   /// Util, list all objects, there must be no other concurrent access
-  int list_objects(const coll_t &cid, ghobject_t start, int max,
+  int list_objects(const coll_t &cid, ghobject_t start, ghobject_t end, int max,
                    vector<ghobject_t> *objs, ///< [out] objects
                    ghobject_t *next);
 
