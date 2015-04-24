@@ -472,18 +472,6 @@ int MemStore::collection_list_partial(coll_t cid, ghobject_t start,
   return 0;
 }
 
-
-int MemStore::collection_list_range(coll_t cid,
-				    ghobject_t start, ghobject_t end,
-				    snapid_t seq, vector<ghobject_t> *ls)
-{
-  dout(10) << __func__ << " " << cid << " " << start << " " << end
-	   << " " << seq << dendl;
-
-  collection_list_impl(cid, start, end, -1, seq, ls, NULL);
-  return 0;
-}
-
 int MemStore::omap_get(
     coll_t cid,                ///< [in] Collection containing oid
     const ghobject_t &oid,   ///< [in] Object containing omap
