@@ -145,10 +145,12 @@ public:
     _unique_pool_names.clear();
     _image_number = 0;
     ASSERT_EQ("", connect_cluster(&_cluster));
+    ASSERT_EQ("", connect_cluster_pp(_rados));
   }
 
   static void TearDownTestCase() {
     rados_shutdown(_cluster);
+    _rados.wait_for_latest_osdmap();
     _pool_names.insert(_pool_names.end(), _unique_pool_names.begin(),
 		       _unique_pool_names.end());
     for (size_t i = 1; i < _pool_names.size(); ++i) {
@@ -181,16 +183,17 @@ public:
   }
 
   std::string create_pool(bool unique = false) {
+    librados::Rados rados;
     std::string pool_name;
     if (unique) {
       pool_name = get_temp_pool_name();
-      EXPECT_EQ("", create_one_pool_pp(pool_name, _rados));
+      EXPECT_EQ("", create_one_pool_pp(pool_name, rados));
       _unique_pool_names.push_back(pool_name);
     } else if (m_pool_number < _pool_names.size()) {
       pool_name = _pool_names[m_pool_number];
     } else {
       pool_name = get_temp_pool_name();
-      EXPECT_EQ("", create_one_pool_pp(pool_name, _rados));
+      EXPECT_EQ("", create_one_pool_pp(pool_name, rados));
       _pool_names.push_back(pool_name);
     }
     ++m_pool_number;
@@ -837,6 +840,7 @@ TEST_F(TestLibRBD, TestIO)
   rbd_aio_create_completion(NULL, (rbd_callback_t) simple_read_cb, &comp);
   ASSERT_EQ(-EINVAL, rbd_aio_write(image, info.size, 1, test_data, comp));
   ASSERT_EQ(-EINVAL, rbd_aio_read(image, info.size, 1, test_data, comp));
+  rbd_aio_release(comp);
 
   ASSERT_PASSED(validate_object_map, image);
   ASSERT_EQ(0, rbd_close(image));
@@ -914,6 +918,7 @@ TEST_F(TestLibRBD, TestIOWithIOHint)
   ASSERT_EQ(-EINVAL, rbd_aio_write(image, info.size, 1, test_data, comp));
   ASSERT_EQ(-EINVAL, rbd_aio_read2(image, info.size, 1, test_data, comp,
 				    LIBRADOS_OP_FLAG_FADVISE_DONTNEED));
+  rbd_aio_release(comp);
 
   ASSERT_PASSED(validate_object_map, image);
   ASSERT_EQ(0, rbd_close(image));
@@ -1121,6 +1126,7 @@ TEST_F(TestLibRBD, TestIOPPWithIOHint)
     ASSERT_EQ(0, rbd.open(ioctx, image, name.c_str(), NULL));
 
     char test_data[TEST_IO_SIZE + 1];
+    test_data[TEST_IO_SIZE] = '\0';
     int i;
 
     for (i = 0; i < TEST_IO_SIZE; ++i) {
@@ -1954,14 +1960,15 @@ TEST_F(TestLibRBD, FlushAioPP)
     for (i = 0; i < TEST_IO_SIZE; ++i) {
       test_data[i] = (char) (rand() % (126 - 33) + 33);
     }
+    test_data[TEST_IO_SIZE] = '\0';
 
     librbd::RBD::AioCompletion *write_comps[num_aios];
+    ceph::bufferlist bls[num_aios];
     for (i = 0; i < num_aios; ++i) {
-      ceph::bufferlist bl;
-      bl.append(test_data, strlen(test_data));
+      bls[i].append(test_data, strlen(test_data));
       write_comps[i] = new librbd::RBD::AioCompletion(NULL, NULL);
       uint64_t offset = rand() % (size - TEST_IO_SIZE);
-      ASSERT_EQ(0, image.aio_write(offset, TEST_IO_SIZE, bl,
+      ASSERT_EQ(0, image.aio_write(offset, TEST_IO_SIZE, bls[i],
 				   write_comps[i]));
     }
 
