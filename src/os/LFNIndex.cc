@@ -155,13 +155,13 @@ int LFNIndex::pre_hash_collection(uint32_t pg_num, uint64_t expected_num_objs)
 
 
 int LFNIndex::collection_list_partial(const ghobject_t &start,
-				      int min_count,
+				      const ghobject_t end,
 				      int max_count,
 				      snapid_t seq,
 				      vector<ghobject_t> *ls,
 				      ghobject_t *next)
 {
-  return _collection_list_partial(start, min_count, max_count, seq, ls, next);
+  return _collection_list_partial(start, end, max_count, seq, ls, next);
 }
 
 /* Derived class utility methods */

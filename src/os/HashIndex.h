@@ -193,7 +193,7 @@ protected:
 
   int _collection_list_partial(
     const ghobject_t &start,
-    int min_count,
+    ghobject_t end,
     int max_count,
     snapid_t seq,
     vector<ghobject_t> *ls,
@@ -366,7 +366,7 @@ private:
   /// List objects in collection in ghobject_t order
   int list_by_hash(
     const vector<string> &path, /// [in] Path to list
-    int min_count,              /// [in] List at least min_count
+    ghobject_t end,             /// [in] List only objects < end
     int max_count,              /// [in] List at most max_count
     snapid_t seq,               /// [in] list only objects where snap >= seq
     ghobject_t *next,            /// [in,out] List objects >= *next
