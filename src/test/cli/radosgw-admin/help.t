@@ -135,6 +135,8 @@
     --id/-i ID        set ID portion of my name
     --name/-n TYPE.ID set name
     --cluster NAME    set cluster name (default: ceph)
+    --setuser USER    set uid to user or uid (and gid to user's gid)
+    --setgroup GROUP  set gid to group or gid
     --version         show version and quit
   
   [1]
