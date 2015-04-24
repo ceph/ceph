@@ -39,6 +39,7 @@
 
 #include <pthread.h>
 
+#include "include/atomic.h"
 #include "include/Context.h"
 #include "include/unordered_map.h"
 #include "common/WorkQueue.h"
@@ -124,6 +125,8 @@ class EventCenter {
   }
 
  public:
+  atomic_t already_wakeup;
+
   EventCenter(CephContext *c):
     cct(c), nevent(0),
     external_lock("AsyncMessenger::external_lock"),
@@ -131,7 +134,7 @@ class EventCenter {
     time_lock("AsyncMessenger::time_lock"),
     file_events(NULL),
     driver(NULL), time_event_next_id(0),
-    notify_receive_fd(-1), notify_send_fd(-1), net(c), owner(0) {
+    notify_receive_fd(-1), notify_send_fd(-1), net(c), owner(0), already_wakeup(0) {
     last_time = time(NULL);
   }
   ~EventCenter();
