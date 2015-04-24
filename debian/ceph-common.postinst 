@@ -71,6 +71,13 @@ case "$1" in
            fi
        fi
 
+       # 5. adjust file and directory permissions
+       if ! dpkg-statoverride --list $SERVER_HOME >/dev/null
+       then
+           chown $SERVER_USER:$SERVER_GROUP $SERVER_HOME
+           chmod u=rwx,g=rx,o= $SERVER_HOME
+       fi
+
     ;;
     abort-upgrade|abort-remove|abort-deconfigure)
 	:
