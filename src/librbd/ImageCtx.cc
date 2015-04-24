@@ -254,15 +254,6 @@ namespace librbd {
     plb.add_u64_counter(l_librbd_discard_bytes, "discard_bytes", "Discarded data");
     plb.add_time_avg(l_librbd_discard_latency, "discard_latency", "Discard latency");
     plb.add_u64_counter(l_librbd_flush, "flush", "Flushes");
-    plb.add_u64_counter(l_librbd_aio_rd, "aio_rd", "Async reads");
-    plb.add_u64_counter(l_librbd_aio_rd_bytes, "aio_rd_bytes", "Data size in async reads");
-    plb.add_time_avg(l_librbd_aio_rd_latency, "aio_rd_latency", "Latency of async reads");
-    plb.add_u64_counter(l_librbd_aio_wr, "aio_wr", "Async writes");
-    plb.add_u64_counter(l_librbd_aio_wr_bytes, "aio_wr_bytes", "Data size in async writes");
-    plb.add_time_avg(l_librbd_aio_wr_latency, "aio_wr_latency", "Latency of async writes");
-    plb.add_u64_counter(l_librbd_aio_discard, "aio_discard", "Async discards");
-    plb.add_u64_counter(l_librbd_aio_discard_bytes, "aio_discard_bytes", "Data size in async discards");
-    plb.add_time_avg(l_librbd_aio_discard_latency, "aio_discard_latency", "Latency of async discards");
     plb.add_u64_counter(l_librbd_aio_flush, "aio_flush", "Async flushes");
     plb.add_time_avg(l_librbd_aio_flush_latency, "aio_flush_latency", "Latency of async flushes");
     plb.add_u64_counter(l_librbd_snap_create, "snap_create", "Snap creations");
