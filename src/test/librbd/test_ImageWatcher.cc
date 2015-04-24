@@ -180,7 +180,7 @@ public:
       }
 
       m_aio_completions.erase(aio_completion);
-      delete aio_completion;
+      aio_completion->release();
     }
 
     m_callback_cond.Signal();
