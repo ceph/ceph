@@ -2,7 +2,8 @@
 This module is a thin wrapper around libcephfs.
 """
 from ctypes import CDLL, c_char_p, c_size_t, c_void_p, c_int, c_long, c_uint, c_ulong, \
-    create_string_buffer, byref, Structure, pointer, c_char
+    c_ushort, create_string_buffer, byref, Structure, pointer, c_char, POINTER, \
+    c_uint8
 from ctypes.util import find_library
 import errno
 
@@ -82,6 +83,12 @@ class cephfs_statvfs(Structure):
                 ("f_flag", c_uint),
                 ("f_namemax", c_uint)]
 
+class cephfs_dirent(Structure):
+    _fields_ = [("d_ino", c_long),
+                ("d_off", c_ulong),
+                ("d_reclen", c_ushort),
+                ("d_type", c_uint8),
+                ("d_name", c_char*256)]
 
 # struct timespec {
 #   long int tv_sec;
@@ -298,6 +305,41 @@ class LibCephFS(object):
         ret = self.libcephfs.ceph_chdir(self.cluster, c_char_p(path))
         if ret < 0:
             raise make_ex(ret, "chdir failed")
+
+    def isdir(self, dirent):
+        return dirent['d_type'] == 0x4
+
+    def opendir(self, path):
+        self.require_state("mounted")
+        if not isinstance(path, str):
+            raise TypeError('path must be a string')
+        dir_handler = c_void_p()
+        ret = self.libcephfs.ceph_opendir(self.cluster, c_char_p(path),
+                                          pointer(dir_handler));
+        if ret < 0:
+            raise make_ex(ret, "opendir failed")
+        return dir_handler
+
+    def readdir(self, dir_handler):
+        self.require_state("mounted")
+        self.libcephfs.ceph_readdir.restype = POINTER(cephfs_dirent)
+        while True:
+            dirent = self.libcephfs.ceph_readdir(self.cluster, dir_handler)
+            if not dirent:
+                return None
+
+            if dirent.contents.d_name != '.' and dirent.contents.d_name != '..':
+                return {'d_ino': dirent.contents.d_ino,
+                        'd_off': dirent.contents.d_off,
+                        'd_reclen': dirent.contents.d_reclen,
+                        'd_type': dirent.contents.d_type,
+                        'd_name': dirent.contents.d_name}
+
+    def closedir(self, dir_handler):
+        self.require_state("mounted")
+        ret = self.libcephfs.ceph_closedir(self.cluster, dir_handler)
+        if ret < 0:
+            raise make_ex(ret, "closedir failed")
 
     def mkdir(self, path, mode):
         self.require_state("mounted")
