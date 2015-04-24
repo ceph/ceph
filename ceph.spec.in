@@ -847,6 +847,8 @@ mkdir -p %{_localstatedir}/run/ceph/
 %{python_sitelib}/ceph_argparse.py*
 %{python_sitelib}/ceph_daemon.py*
 %{_udevrulesdir}/50-rbd.rules
+%attr(770,ceph,ceph) %dir %{_localstatedir}/lib/ceph/
+%attr(2750,ceph,ceph) %dir %{_localstatedir}/log/ceph/
 
 %postun -n ceph-common
 # Package removal cleanup
