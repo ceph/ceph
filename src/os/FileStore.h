@@ -615,6 +615,8 @@ public:
 				   const SequencerPosition &spos);
 
   // collections
+  int collection_list_impl(coll_t c, ghobject_t start, ghobject_t end, int max,
+                                     snapid_t seq, vector<ghobject_t> *ls, ghobject_t *next);
   int list_collections(vector<coll_t>& ls);
   int list_collections(vector<coll_t>& ls, bool include_temp);
   int collection_version_current(coll_t c, uint32_t *version);
