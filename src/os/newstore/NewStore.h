@@ -200,7 +200,8 @@ public:
     wal_transaction_t *wal_txn; ///< wal transaction (if any)
     unsigned num_fsyncs_completed;
 
-    list<FS::aio_t> aios;
+    list<FS::aio_t> pending_aios;    ///< not yet submitted
+    list<FS::aio_t> submitted_aios;  ///< submitting or submitted
     bufferlist aio_bl;  // just a pile of refs
     atomic_t num_aio;
 
