@@ -2458,15 +2458,6 @@ int KeyValueStore::collection_list_impl(coll_t c, ghobject_t start,
   return r;
 }
 
-int KeyValueStore::collection_list_range(coll_t c, ghobject_t start,
-                                         ghobject_t end, snapid_t seq,
-                                         vector<ghobject_t> *ls)
-{
-  ghobject_t next;
-  int r = collection_list_impl(c, start, end, -1, seq, ls, &next);
-  return r;
-}
-
 int KeyValueStore::collection_list_partial(coll_t c, ghobject_t start,
                                            int min, int max, snapid_t seq,
                                            vector<ghobject_t> *ls,

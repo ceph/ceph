@@ -149,12 +149,14 @@ int PGBackend::objects_list_range(
 {
   assert(ls);
   vector<ghobject_t> objects;
-  int r = store->collection_list_range(
+  int r = store->collection_list_impl(
     coll,
     ghobject_t(start, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
     ghobject_t(end, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
+    INT_MAX,
     seq,
-    &objects);
+    &objects,
+    NULL);
   ls->reserve(objects.size());
   for (vector<ghobject_t>::iterator i = objects.begin();
        i != objects.end();
