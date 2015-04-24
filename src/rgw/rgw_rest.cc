@@ -1260,7 +1260,7 @@ int RGWREST::preprocess(struct req_state *s, RGWClientIO *cio)
     /* Easy case #1: CONTENT_LENGTH is missing or empty */
     s_contentlength = s_httpcontentlength;
     s_httpcontentlength = NULL;
-  } else if (s_contentlength && s_httpcontentlength) {
+  } else if (s->cct->_conf->rgw_content_length_compat && s_contentlength && s_httpcontentlength) {
     /* Hard case: Both are set, we have to disambiguate */
     int64_t i_contentlength = -1, i_httpcontentlength = -1;
     // Test CONTENT_LENGTH
@@ -1301,7 +1301,7 @@ int RGWREST::preprocess(struct req_state *s, RGWClientIO *cio)
 	s_httpcontentlength = NULL;
       }
     }
-
+    // End of: else if (s->cct->_conf->rgw_content_length_compat && s_contentlength && s_httpcontentlength) {
   } else {
     // By implication, httpcontentlength is NULL here
     /* Easy case #2: HTTP_CONTENT_LENGTH is not set */
