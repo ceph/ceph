@@ -48,3 +48,7 @@ if [ -L "$journal" -a ! -e "$journal" ]; then
         exit 0
     fi
 fi
+
+
+# correct for ceph uid drift across hosts or distributions
+# WRITE ME
