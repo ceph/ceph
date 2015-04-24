@@ -4631,7 +4631,7 @@ bool FileStore::collection_empty(coll_t c)
 
   vector<ghobject_t> ls;
   collection_list_handle_t handle;
-  r = index->collection_list_partial(ghobject_t(), 1, 1, 0, &ls, NULL);
+  r = index->collection_list_partial(ghobject_t(), ghobject_t::get_max(), 1, 0, &ls, NULL);
   if (r < 0) {
     assert(!m_filestore_fail_eio || r != -EIO);
     return false;
@@ -4640,59 +4640,9 @@ bool FileStore::collection_empty(coll_t c)
   tracepoint(objectstore, collection_empty_exit, ret);
   return ret;
 }
-
-int FileStore::collection_list_range(coll_t c, ghobject_t start, ghobject_t end,
-                                     snapid_t seq, vector<ghobject_t> *ls)
+int FileStore::collection_list_impl(coll_t c, ghobject_t start, ghobject_t end, int max,
+                                     snapid_t seq, vector<ghobject_t> *ls, ghobject_t *next)
 {
-  tracepoint(objectstore, collection_list_range_enter, c.c_str());
-  bool done = false;
-  ghobject_t next = start;
-
-  if (!c.is_temp() && !c.is_meta() && next.hobj.pool < -1) {
-    coll_t temp = c.get_temp();
-    int r = collection_list_range(temp, start, end, seq, ls);
-    if (r < 0)
-      return r;
-    // ... always continue on to non-temp ...
-  }
-
-  while (!done) {
-    vector<ghobject_t> next_objects;
-    int r = collection_list_partial(c, next,
-                                get_ideal_list_min(), get_ideal_list_max(),
-                                seq, &next_objects, &next);
-    if (r < 0)
-      return r;
-
-    ls->insert(ls->end(), next_objects.begin(), next_objects.end());
-
-    // special case for empty collection
-    if (ls->empty()) {
-      break;
-    }
-
-    while (!ls->empty() && ls->back() >= end) {
-      ls->pop_back();
-      done = true;
-    }
-
-    if (next >= end) {
-      done = true;
-    }
-  }
-
-  tracepoint(objectstore, collection_list_range_exit, 0);
-  return 0;
-}
-
-int FileStore::collection_list_partial(coll_t c, ghobject_t start,
-				       int min, int max, snapid_t seq,
-				       vector<ghobject_t> *ls, ghobject_t *next)
-{
-  tracepoint(objectstore, collection_list_partial_enter, c.c_str());
-  dout(10) << "collection_list_partial: " << c << " start " << start << dendl;
-  assert(next);
-
   if (start.is_max())
     return 0;
 
@@ -4720,7 +4670,6 @@ int FileStore::collection_list_partial(coll_t c, ghobject_t start,
     dout(20) << __func__ << " pool is " << pool << " shard is " << shard
 	     << " pgid " << pgid << dendl;
   }
-
   ghobject_t sep;
   sep.hobj.pool = -1;
   sep.set_shard(shard);
@@ -4728,7 +4677,7 @@ int FileStore::collection_list_partial(coll_t c, ghobject_t start,
     if (start < sep) {
       dout(10) << __func__ << " first checking temp pool" << dendl;
       coll_t temp = c.get_temp();
-      int r = collection_list_partial(temp, start, min, max, seq, ls, next);
+      int r = collection_list_impl(temp, start, end, max, seq, ls, next);
       if (r < 0)
 	return r;
       if (*next != ghobject_t::get_max())
@@ -4749,25 +4698,45 @@ int FileStore::collection_list_partial(coll_t c, ghobject_t start,
   assert(NULL != index.index);
   RWLock::RLocker l((index.index)->access_lock);
 
-  r = index->collection_list_partial(start,
-				     min, max, seq,
-				     ls, next);
+  r = index->collection_list_partial(start, end, max, seq, ls, next);
+
   if (r < 0) {
     assert(!m_filestore_fail_eio || r != -EIO);
     return r;
   }
-  if (ls)
-    dout(20) << "objects: " << *ls << dendl;
+  dout(20) << "objects: " << ls << dendl;
 
   // HashIndex doesn't know the pool when constructing a 'next' value
-  if (!next->is_max()) {
+  if (next && !next->is_max()) {
     next->hobj.pool = pool;
     next->set_shard(shard);
+    dout(20) << "  next " << *next << dendl;
   }
-  dout(20) << "  next " << *next << dendl;
 
-  tracepoint(objectstore, collection_list_partial_exit, 0);
   return 0;
+}
+int FileStore::collection_list_range(coll_t c, ghobject_t start, ghobject_t end,
+                                     snapid_t seq, vector<ghobject_t> *ls)
+{
+  tracepoint(objectstore, collection_list_range_enter, c.c_str());
+
+  ghobject_t next;
+  int r = collection_list_impl(c, start, end, -1, seq, ls, &next);
+  tracepoint(objectstore, collection_list_range_exit, 0);
+  return r;
+}
+
+int FileStore::collection_list_partial(coll_t c, ghobject_t start,
+				       int min, int max, snapid_t seq,
+				       vector<ghobject_t> *ls, ghobject_t *next)
+{
+  tracepoint(objectstore, collection_list_partial_enter, c.c_str());
+  dout(10) << "collection_list_partial: " << c << " start " << start << dendl;
+
+  assert(next);
+  int r = collection_list_impl(c, start, ghobject_t::get_max(), max, seq, ls, next);
+  tracepoint(objectstore, collection_list_partial_exit, 0);
+  return r;
 }
 
 int FileStore::collection_list(coll_t c, vector<ghobject_t>& ls)
