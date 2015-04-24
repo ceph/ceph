@@ -298,6 +298,7 @@ class LibCephFS(object):
 
     def getcwd(self):
         self.require_state("mounted")
+        self.libcephfs.ceph_getcwd.restype = c_char_p
         return self.libcephfs.ceph_getcwd(self.cluster)
 
     def chdir(self, path):
