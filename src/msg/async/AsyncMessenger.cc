@@ -339,8 +339,10 @@ WorkerPool::WorkerPool(CephContext *c): cct(c), seq(0), started(false),
 WorkerPool::~WorkerPool()
 {
   for (uint64_t i = 0; i < workers.size(); ++i) {
-    workers[i]->stop();
-    workers[i]->join();
+    if (workers[i]->is_started()) {
+      workers[i]->stop();
+      workers[i]->join();
+    }
     delete workers[i];
   }
 }
