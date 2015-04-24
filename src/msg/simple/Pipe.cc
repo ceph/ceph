@@ -1350,7 +1350,11 @@ void Pipe::fault(bool onread)
   if (policy.lossy && state != STATE_CONNECTING) {
     ldout(msgr->cct,10) << "fault on lossy channel, failing" << dendl;
 
+    // disconnect from Connection, and mark it failed.  future messages
+    // will be dropped.
+    assert(connection_state);
     stop();
+    bool cleared = connection_state->clear_pipe(this);
 
     // crib locks, blech.  note that Pipe is now STATE_CLOSED and the
     // rank_pipe entry is ignored by others.
@@ -1372,11 +1376,7 @@ void Pipe::fault(bool onread)
       delay_thread->discard();
     in_q->discard_queue(conn_id);
     discard_out_queue();
-
-    // disconnect from Connection, and mark it failed.  future messages
-    // will be dropped.
-    assert(connection_state);
-    if (connection_state->clear_pipe(this))
+    if (cleared)
       msgr->dispatch_queue.queue_reset(connection_state.get());
     return;
   }
