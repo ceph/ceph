@@ -1264,6 +1264,8 @@ public:
                rest_master_conn(NULL),
                meta_mgr(NULL), data_log(NULL) {}
 
+  librados::Rados *get_rados() { return rados; }
+
   uint64_t get_new_req_id() {
     return max_req_id.inc();
   }
@@ -1287,6 +1289,8 @@ public:
   RGWRESTConn *rest_master_conn;
   map<string, RGWRESTConn *> zone_conn_map;
   map<string, RGWRESTConn *> region_conn_map;
+
+  RGWZoneParams& get_zone_params() { return zone; }
 
   RGWMetadataManager *meta_mgr;
 
