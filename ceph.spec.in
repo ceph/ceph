@@ -37,6 +37,21 @@ restorecon -R /var/log/ceph > /dev/null 2>&1;
 %global _with_systemd 1
 %endif
 
+CEPH_GROUP_ID=""
+CEPH_USER_ID=""
+%if 0%{?rhel} || 0%{?centos} || 0%{?fedora}
+CEPH_GROUP_ID="-g 167"
+CEPH_USER_ID="-u 167"
+%endif
+# %if 0%{?suse_version}
+# CEPH_GROUP_ID="-g "
+# CEPH_USER_ID="-u "
+# %endif
+
+
+#################################################################################
+# common
+#################################################################################
 Name:		ceph
 Version:	@VERSION@
 Release:	@RPM_RELEASE@%{?dist}
@@ -644,6 +659,11 @@ mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/lib/ceph/bootstrap-osd
 mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/lib/ceph/bootstrap-mds
 mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/lib/ceph/bootstrap-rgw
 mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/log/radosgw
+
+%pre
+%{_sbindir}/groupadd $CEPH_GROUP_ID -o -r ceph 2>/dev/null || :
+%{_sbindir}/useradd -r -o -g ceph $CEPH_USER_ID -s /bin/false -c "Ceph daemons" -d %{_localstatedir}/lib/ceph ceph 2> /dev/null || :
+%{_sbindir}/usermod -g ceph ceph 2>/dev/null || :
 
 %clean
 rm -rf $RPM_BUILD_ROOT
