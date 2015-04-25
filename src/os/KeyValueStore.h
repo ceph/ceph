@@ -620,9 +620,6 @@ class KeyValueStore : public ObjectStore,
   int collection_list_impl(coll_t c, ghobject_t start, ghobject_t end,
                               int max, snapid_t snap,
                               vector<ghobject_t> *ls, ghobject_t *next);
-  int collection_list_partial(coll_t c, ghobject_t start,
-                              int min, int max, snapid_t snap,
-                              vector<ghobject_t> *ls, ghobject_t *next);
   int collection_version_current(coll_t c, uint32_t *version);
 
   // omap (see ObjectStore.h for documentation)

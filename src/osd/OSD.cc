@@ -4224,10 +4224,10 @@ bool remove_dir(
   ObjectStore::Transaction *t = new ObjectStore::Transaction;
   ghobject_t next;
   handle.reset_tp_timeout();
-  store->collection_list_partial(
+  store->collection_list_impl(
     coll,
     next,
-    store->get_ideal_list_min(),
+    ghobject_t::get_max(),
     store->get_ideal_list_max(),
     0,
     &olist,

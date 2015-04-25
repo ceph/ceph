@@ -624,9 +624,6 @@ public:
   bool collection_exists(coll_t c);
   bool collection_empty(coll_t c);
   int collection_list(coll_t c, vector<ghobject_t>& oid);
-  int collection_list_partial(coll_t c, ghobject_t start,
-			      int min, int max, snapid_t snap,
-			      vector<ghobject_t> *ls, ghobject_t *next);
 
   // omap (see ObjectStore.h for documentation)
   int omap_get(coll_t c, const ghobject_t &oid, bufferlist *header,
