@@ -421,21 +421,6 @@ bool MemStore::collection_empty(coll_t cid)
   return c->object_map.empty();
 }
 
-int MemStore::collection_list(coll_t cid, vector<ghobject_t>& o)
-{
-  dout(10) << __func__ << " " << cid << dendl;
-  CollectionRef c = get_collection(cid);
-  if (!c)
-    return -ENOENT;
-  RWLock::RLocker l(c->lock);
-
-  for (map<ghobject_t,ObjectRef>::iterator p = c->object_map.begin();
-       p != c->object_map.end();
-       ++p)
-    o.push_back(p->first);
-  return 0;
-}
-
 int MemStore::collection_list_impl(coll_t cid, ghobject_t start, ghobject_t end,
 				      int max, snapid_t snap,
 				      vector<ghobject_t> *ls, ghobject_t *next)
@@ -447,7 +432,7 @@ int MemStore::collection_list_impl(coll_t cid, ghobject_t start, ghobject_t end,
 
   map<ghobject_t,ObjectRef>::iterator p = c->object_map.lower_bound(start);
   while (p != c->object_map.end() &&
-	 (max == -1 || ls->size() < (unsigned)max) &&
+	  ls->size() < (unsigned)max &&
 	  p->first < end) {
     ls->push_back(p->first);
     ++p;
