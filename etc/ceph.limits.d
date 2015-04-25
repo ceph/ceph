@@ -1,4 +1,4 @@
-# /etc/security/limit.d/ceph
+# /etc/security/limits.d/ceph
 #
 #<domain>        <type>  <item>  <value>
 #
