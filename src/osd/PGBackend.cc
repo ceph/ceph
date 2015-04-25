@@ -114,10 +114,10 @@ int PGBackend::objects_list_partial(
   int r = 0;
   while (!_next.is_max() && ls->size() < (unsigned)min) {
     vector<ghobject_t> objects;
-    int r = store->collection_list_partial(
+    int r = store->collection_list_impl(
       coll,
       _next,
-      min - ls->size(),
+      ghobject_t::get_max(),
       max - ls->size(),
       seq,
       &objects,

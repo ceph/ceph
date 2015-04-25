@@ -4079,10 +4079,10 @@ bool remove_dir(
   ghobject_t next;
   while (!next.is_max()) {
     handle.reset_tp_timeout();
-    store->collection_list_partial(
+    store->collection_list_impl(
       coll,
       next,
-      store->get_ideal_list_min(),
+      ghobject_t::get_max(),
       store->get_ideal_list_max(),
       0,
       &olist,
