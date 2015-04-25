@@ -2029,15 +2029,6 @@ public:
   virtual bool collection_empty(coll_t c) = 0;
 
   /**
-   * collection_list - get all objects of a collection in sorted order
-   *
-   * @param c collection name
-   * @param o [out] list of objects
-   * @returns 0 on success, negative error code on failure
-   */
-  virtual int collection_list(coll_t c, vector<ghobject_t>& o) = 0;
-
-  /**
    * list contents of a collection that fall in the range [start, end) and no more than a specified many result
    *
    * @param c collection

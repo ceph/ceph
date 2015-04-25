@@ -4651,6 +4651,9 @@ int FileStore::collection_list_impl(coll_t c, ghobject_t start, ghobject_t end, 
   if (start.is_max())
     return 0;
 
+  ghobject_t temp_next;
+  if (!next)
+    next = &temp_next;
   // figure out the pool id.  we need this in order to generate a
   // meaningful 'next' value.
   int64_t pool = -1;
@@ -4719,31 +4722,6 @@ int FileStore::collection_list_impl(coll_t c, ghobject_t start, ghobject_t end, 
   }
 
   return 0;
-}
-
-int FileStore::collection_list(coll_t c, vector<ghobject_t>& ls)
-{  
-  tracepoint(objectstore, collection_list_enter, c.c_str());
-
-  if (!c.is_temp() && !c.is_meta()) {
-    coll_t temp = c.get_temp();
-    int r = collection_list(temp, ls);
-    if (r < 0)
-      return r;
-  }
-
-  Index index;
-  int r = get_index(c, &index);
-  if (r < 0)
-    return r;
-
-  assert(NULL != index.index);
-  RWLock::RLocker l((index.index)->access_lock);
-
-  r = index->collection_list(&ls);
-  assert(!m_filestore_fail_eio || r != -EIO);
-  tracepoint(objectstore, collection_list_exit, r);
-  return r;
 }
 
 int FileStore::omap_get(coll_t c, const ghobject_t &hoid,

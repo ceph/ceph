@@ -623,7 +623,6 @@ public:
   int collection_stat(coll_t c, struct stat *st);
   bool collection_exists(coll_t c);
   bool collection_empty(coll_t c);
-  int collection_list(coll_t c, vector<ghobject_t>& oid);
 
   // omap (see ObjectStore.h for documentation)
   int omap_get(coll_t c, const ghobject_t &oid, bufferlist *header,
