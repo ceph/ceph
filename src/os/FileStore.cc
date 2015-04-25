@@ -4484,7 +4484,7 @@ int FileStore::_collection_remove_recursive(const coll_t &cid,
   vector<ghobject_t> objects;
   ghobject_t max;
   while (!max.is_max()) {
-    r = collection_list_partial(cid, max, 200, 300, 0, &objects, &max);
+    r = collection_list_impl(cid, max, ghobject_t::get_max(), 300, 0, &objects, &max);
     if (r < 0)
       return r;
     for (vector<ghobject_t>::iterator i = objects.begin();
@@ -4714,19 +4714,6 @@ int FileStore::collection_list_impl(coll_t c, ghobject_t start, ghobject_t end, 
   }
 
   return 0;
-}
-
-int FileStore::collection_list_partial(coll_t c, ghobject_t start,
-				       int min, int max, snapid_t seq,
-				       vector<ghobject_t> *ls, ghobject_t *next)
-{
-  tracepoint(objectstore, collection_list_partial_enter, c.c_str());
-  dout(10) << "collection_list_partial: " << c << " start " << start << dendl;
-
-  assert(next);
-  int r = collection_list_impl(c, start, ghobject_t::get_max(), max, seq, ls, next);
-  tracepoint(objectstore, collection_list_partial_exit, 0);
-  return r;
 }
 
 int FileStore::collection_list(coll_t c, vector<ghobject_t>& ls)
@@ -5334,10 +5321,10 @@ int FileStore::_split_collection(coll_t cid,
     vector<ghobject_t> objects;
     ghobject_t next;
     while (1) {
-      collection_list_partial(
+      collection_list_impl(
 	cid,
-	next,
-	get_ideal_list_min(), get_ideal_list_max(), 0,
+	next, ghobject_t::get_max(),
+	get_ideal_list_max(), 0,
 	&objects,
 	&next);
       if (objects.empty())
@@ -5353,10 +5340,10 @@ int FileStore::_split_collection(coll_t cid,
     }
     next = ghobject_t();
     while (1) {
-      collection_list_partial(
+      collection_list_impl(
 	dest,
-	next,
-	get_ideal_list_min(), get_ideal_list_max(), 0,
+	next, ghobject_t::get_max(),
+	get_ideal_list_max(), 0,
 	&objects,
 	&next);
       if (objects.empty())

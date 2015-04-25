@@ -310,9 +310,6 @@ public:
   int collection_list_impl(coll_t cid, ghobject_t start, ghobject_t end,
 			      int max, snapid_t snap,
 			      vector<ghobject_t> *ls, ghobject_t *next);
-  int collection_list_partial(coll_t cid, ghobject_t start,
-			      int min, int max, snapid_t snap, 
-			      vector<ghobject_t> *ls, ghobject_t *next);
 
   int omap_get(
     coll_t cid,                ///< [in] Collection containing oid

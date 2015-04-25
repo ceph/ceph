@@ -461,17 +461,6 @@ int MemStore::collection_list_impl(coll_t cid, ghobject_t start, ghobject_t end,
   return 0;
 }
 
-int MemStore::collection_list_partial(coll_t cid, ghobject_t start,
-				      int min, int max, snapid_t snap,
-				      vector<ghobject_t> *ls, ghobject_t *next)
-{
-  dout(10) << __func__ << " " << cid << " " << start << " " << min << "-"
-	   << max << " " << snap << dendl;
-
-  collection_list_impl(cid, start, ghobject_t::get_max(), max, snap, ls, next);
-  return 0;
-}
-
 int MemStore::omap_get(
     coll_t cid,                ///< [in] Collection containing oid
     const ghobject_t &oid,   ///< [in] Object containing omap
