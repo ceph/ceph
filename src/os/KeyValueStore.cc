@@ -2458,11 +2458,6 @@ int KeyValueStore::collection_list_impl(coll_t c, ghobject_t start,
   return r;
 }
 
-int KeyValueStore::collection_list(coll_t c, vector<ghobject_t>& ls)
-{
-  return collection_list_impl(c, ghobject_t(), ghobject_t::get_max(), 0, 0, &ls, 0);
-}
-
 int KeyValueStore::collection_version_current(coll_t c, uint32_t *version)
 {
   *version = COLLECTION_VERSION;

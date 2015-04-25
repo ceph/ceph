@@ -51,7 +51,7 @@ TEST(FlatIndex, collection) {
   const std::string object_name(10, 'A');
   ghobject_t hoid(hobject_t(object_t(object_name), key, CEPH_NOSNAP, hash, pool, ""));
   vector<ghobject_t> ls;
-  ASSERT_THROW(index.collection_list_partial(hoid, 0, 0, 0, &ls, &hoid), FailedAssertion);
+  ASSERT_THROW(index.collection_list_partial(hoid, ghobject_t::get_max(), 0, 0, &ls, &hoid), FailedAssertion);
 }
 
 TEST(FlatIndex, created_unlink) {
