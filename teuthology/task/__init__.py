@@ -49,6 +49,9 @@ class Task(object):
         """
         if not hasattr(self.ctx, 'cluster'):
             return
+        elif 'hosts' not in self.config:
+            self.cluster = self.ctx.cluster
+            return self.cluster
         host_specs = self.config.get('hosts', list())
         cluster = Cluster()
         for host_spec in host_specs:

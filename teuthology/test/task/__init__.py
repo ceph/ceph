@@ -26,6 +26,17 @@ class TestTask(object):
             assert task.config['key_1'] == 'overridden'
             assert task.config['key_2'] == 'default'
 
+    def test_hosts_no_filter(self):
+        self.ctx.cluster = Cluster()
+        self.ctx.cluster.add(Remote('remote1'), ['role1'])
+        self.ctx.cluster.add(Remote('remote2'), ['role2'])
+        task_config = dict()
+        with Task(self.ctx, task_config) as task:
+            task_hosts = task.cluster.remotes.keys()
+            assert len(task_hosts) == 2
+            assert task_hosts[0].name == 'remote1'
+            assert task_hosts[1].name == 'remote2'
+
     def test_hosts_no_results(self):
         self.ctx.cluster = Cluster()
         self.ctx.cluster.add(Remote('remote1'), ['role1'])
