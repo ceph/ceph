@@ -662,6 +662,33 @@ int get_log(ObjectStore *fs, __u8 struct_ver,
   return 0;
 }
 
+void dump_log(Formatter *formatter, ostream &out, pg_log_t &log,
+      pg_missing_t &missing, map<eversion_t, hobject_t> &divergent_priors)
+{
+  formatter->open_object_section("op_log");
+  formatter->open_object_section("pg_log_t");
+  log.dump(formatter);
+  formatter->close_section();
+  formatter->flush(out);
+  formatter->open_object_section("pg_missing_t");
+  missing.dump(formatter);
+  formatter->close_section();
+  formatter->flush(out);
+  formatter->open_object_section("map");
+  formatter->open_array_section("divergent_priors");
+  for (map<eversion_t, hobject_t>::iterator it = divergent_priors.begin();
+       it != divergent_priors.end(); ++ it) {
+      formatter->open_object_section("item");
+      formatter->dump_stream("eversion") << it->first;
+      formatter->dump_stream("hobject") << it->second;
+      formatter->close_section();
+  }
+  formatter->close_section();
+  formatter->close_section();
+  formatter->close_section();
+  formatter->flush(out);
+}
+
 //Based on RemoveWQ::_process()
 void remove_coll(ObjectStore *store, const coll_t &coll)
 {
@@ -1091,6 +1118,12 @@ int do_export(ObjectStore *fs, coll_t coll, spg_t pgid, pg_info_t &info,
   if (ret > 0)
       return ret;
 
+  if (debug) {
+    Formatter *formatter = Formatter::create("json-pretty");
+    assert(formatter);
+    dump_log(formatter, cerr, log, missing, divergent_priors);
+    delete formatter;
+  }
   write_super();
 
   pg_begin pgb(pgid, superblock);
@@ -2006,6 +2039,13 @@ int do_import(ObjectStore *store, OSDSuperblock& sb, bool force)
       for (divergent_priors_t::iterator i = rejectdp.begin();
            i != rejectdp.end(); ++i)
         cerr << "Skipping divergent_prior " << *i << std::endl;
+    }
+
+    if (debug) {
+      pg_missing_t missing;
+      Formatter *formatter = Formatter::create("json-pretty");
+      dump_log(formatter, cerr, newlog, missing, ms.divergent_priors);
+      delete formatter;
     }
 
     ret = write_pg(t, ms.map_epoch, ms.info, newlog, ms.past_intervals, ms.divergent_priors);
@@ -3337,28 +3377,7 @@ int main(int argc, char **argv)
       if (ret < 0)
           goto out;
 
-      formatter->open_object_section("op_log");
-      formatter->open_object_section("pg_log_t");
-      log.dump(formatter);
-      formatter->close_section();
-      formatter->flush(cout);
-      formatter->open_object_section("pg_missing_t");
-      missing.dump(formatter);
-      formatter->close_section();
-      formatter->flush(cout);
-      formatter->open_object_section("map");
-      formatter->open_array_section("divergent_priors");
-      for (map<eversion_t, hobject_t>::iterator it = divergent_priors.begin();
-           it != divergent_priors.end(); ++ it) {
-          formatter->open_object_section("item");
-          formatter->dump_stream("eversion") << it->first;
-          formatter->dump_stream("hobject") << it->second;
-          formatter->close_section();
-      }
-      formatter->close_section();
-      formatter->close_section();
-      formatter->close_section();
-      formatter->flush(cout);
+      dump_log(formatter, cout, log, missing, divergent_priors);
     } else if (op == "rm-past-intervals") {
       ObjectStore::Transaction tran;
       ObjectStore::Transaction *t = &tran;
