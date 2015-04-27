@@ -3140,8 +3140,7 @@ int NewStore::_do_write_all_overlays(TransContext *txc,
   assert(f.length == o->onode.size);
 
   for (map<uint64_t,overlay_t>::iterator p = o->onode.overlay_map.begin();
-       p != o->onode.overlay_map.end();
-       ++p) {
+       p != o->onode.overlay_map.end(); ) {
     dout(10) << __func__ << " overlay " << p->first
 	     << "~" << p->second << dendl;
     string key;
@@ -3157,6 +3156,31 @@ int NewStore::_do_write_all_overlays(TransContext *txc,
     op->data.substr_of(bl, p->second.value_offset, p->second.length);
 
     txc->t->rmkey(PREFIX_OVERLAY, key);
+
+    // Combine with later overlays if contiguous
+    map<uint64_t,overlay_t>::iterator prev = p, next = p;
+    ++next;
+    while (next != o->onode.overlay_map.end()) {
+      if (prev->first + prev->second.length == next->first) {
+        dout(10) << __func__ << " combining overlay " << next->first
+                 << "~" << next->second << dendl;
+        string key_next;
+        get_overlay_key(o->onode.nid, next->second.key, &key_next);
+        bufferlist bl_next, bl_next_data;
+        db->get(PREFIX_OVERLAY, key_next, &bl_next);
+
+        bl_next_data.substr_of(bl_next, next->second.value_offset,
+                               next->second.length);
+        bl.claim_append(bl_next_data);
+        txc->t->rmkey(PREFIX_OVERLAY, key_next);
+
+	++prev;
+	++next;
+      } else {
+	break;
+      }
+    }
+    p = next;
   }
 
   // this may double delete something we did above, but that's less
