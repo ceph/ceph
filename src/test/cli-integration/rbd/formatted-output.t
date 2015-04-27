@@ -11,10 +11,10 @@ ls on empty pool never containing images
 
 create
 =======
-  $ rbd create -s 1024 foo
+  $ rbd create -s 1024 --image-format 1 foo
   $ rbd create -s 512 --image-format 2 bar
   $ rbd create -s 2048 --image-format 2 baz
-  $ rbd create -s 1 quux
+  $ rbd create -s 1 --image-format 1 quux
 
 snapshot
 ========
