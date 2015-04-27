@@ -111,6 +111,7 @@ int prepare_image_update(ImageCtx *ictx) {
 }
 
 int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
+                         bool permit_snapshot,
                          const boost::function<int(Context*)>& local_request,
                          const boost::function<int()>& remote_request) {
   int r;
@@ -120,7 +121,8 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
       RWLock::RLocker l(ictx->owner_lock);
       {
         RWLock::RLocker snap_locker(ictx->snap_lock);
-        if (ictx->read_only || ictx->snap_id != CEPH_NOSNAP) {
+        if (ictx->read_only ||
+            (!permit_snapshot && ictx->snap_id != CEPH_NOSNAP)) {
           return -EROFS;
         }
       }
@@ -565,7 +567,7 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
       }
     }
 
-    r = invoke_async_request(ictx, "snap_create",
+    r = invoke_async_request(ictx, "snap_create", true,
                              boost::bind(&snap_create_helper, ictx, _1,
                                          snap_name),
                              boost::bind(&ImageWatcher::notify_snap_create,
@@ -1809,7 +1811,7 @@ reprotect_and_return_err:
     }
 
     uint64_t request_id = ictx->async_request_seq.inc();
-    r = invoke_async_request(ictx, "resize",
+    r = invoke_async_request(ictx, "resize", false,
                              boost::bind(&async_resize, ictx, _1, size,
                                          boost::ref(prog_ctx)),
                              boost::bind(&ImageWatcher::notify_resize,
@@ -2637,7 +2639,7 @@ reprotect_and_return_err:
     }
 
     uint64_t request_id = ictx->async_request_seq.inc();
-    r = invoke_async_request(ictx, "flatten",
+    r = invoke_async_request(ictx, "flatten", false,
                              boost::bind(&async_flatten, ictx, _1,
                                          boost::ref(prog_ctx)),
                              boost::bind(&ImageWatcher::notify_flatten,
@@ -2718,30 +2720,13 @@ reprotect_and_return_err:
       return r;
     }
 
-    uint64_t snap_id;
-    {
-      RWLock::RLocker snap_locker(ictx->snap_lock);
-      snap_id = ictx->snap_id;
-    }
-
-    if (snap_id == CEPH_NOSNAP) {
-      uint64_t request_id = ictx->async_request_seq.inc();
-      r = invoke_async_request(ictx, "rebuild object map",
-                               boost::bind(&async_rebuild_object_map, ictx, _1,
-                                           boost::ref(prog_ctx)),
-                               boost::bind(&ImageWatcher::notify_rebuild_object_map,
-                                           ictx->image_watcher, request_id,
-                                           boost::ref(prog_ctx)));
-    } else {
-      C_SaferCond ctx;
-      {
-        RWLock::RLocker owner_locker(ictx->owner_lock);
-        r = async_rebuild_object_map(ictx, &ctx, prog_ctx);
-      }
-      if (r == 0) {
-        r = ctx.wait();
-      }
-    }
+    uint64_t request_id = ictx->async_request_seq.inc();
+    r = invoke_async_request(ictx, "rebuild object map", true,
+                             boost::bind(&async_rebuild_object_map, ictx, _1,
+                                         boost::ref(prog_ctx)),
+                             boost::bind(&ImageWatcher::notify_rebuild_object_map,
+                                         ictx->image_watcher, request_id,
+                                         boost::ref(prog_ctx)));
 
     ldout(cct, 10) << "rebuild object map finished" << dendl;
     if (r < 0) {
