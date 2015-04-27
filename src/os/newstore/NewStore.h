@@ -499,6 +499,7 @@ private:
   Cond kv_cond, kv_sync_cond;
   bool kv_stop;
   deque<TransContext*> kv_queue, kv_committing;
+  deque<TransContext*> wal_cleanup_queue, wal_cleaning;
 
   Logger *logger;
 
