@@ -597,31 +597,34 @@ def wait_for_reboot(ctx, need_install, timeout, distro=False):
 
 def need_to_install_distro(ctx, role):
     """
-    Installing kernels on rpm won't setup grub/boot into them.
-    This installs the newest kernel package and checks its version
-    and compares against current (uname -r) and returns true if newest != current.
-    Similar check for deb.
+    Installing kernels on rpm won't setup grub/boot into them.  This installs
+    the newest kernel package and checks its version and compares against
+    current (uname -r) and returns true if newest != current.  Similar check
+    for deb.
     """
     (role_remote,) = ctx.cluster.only(role).remotes.keys()
     system_type = teuthology.get_system_type(role_remote)
     output, err_mess = StringIO(), StringIO()
-    role_remote.run(args=['uname', '-r' ], stdout=output, stderr=err_mess )
+    role_remote.run(args=['uname', '-r'], stdout=output)
     current = output.getvalue().strip()
     if system_type == 'rpm':
-        role_remote.run(args=['sudo', 'yum', 'install', '-y', 'kernel'], stdout=output, stderr=err_mess )
+        role_remote.run(args=['sudo', 'yum', 'install', '-y', 'kernel'],
+                        stdout=output)
         if 'Nothing to do' in output.getvalue():
-            output.truncate(0), err_mess.truncate(0)
-            role_remote.run(args=['echo', 'no', run.Raw('|'), 'sudo', 'yum', 'reinstall', 'kernel', run.Raw('||'), 'true'], stdout=output, stderr=err_mess )
+            err_mess.truncate(0)
+            role_remote.run(args=['echo', 'no', run.Raw('|'), 'sudo', 'yum',
+                                  'reinstall', 'kernel', run.Raw('||'),
+                                  'true'], stderr=err_mess)
             if 'Skipping the running kernel' in err_mess.getvalue():
                 # Current running kernel is already newest and updated
                 log.info('Newest distro kernel already installed/running')
                 return False
             else:
-                output.truncate(0), err_mess.truncate(0)
-                role_remote.run(args=['sudo', 'yum', 'reinstall', '-y', 'kernel', run.Raw('||'), 'true'], stdout=output, stderr=err_mess )
-        #reset stringIO output.
-        output.truncate(0), err_mess.truncate(0)
-        role_remote.run(args=['rpm', '-q', 'kernel', '--last' ], stdout=output, stderr=err_mess )
+                role_remote.run(args=['sudo', 'yum', 'reinstall', '-y',
+                                      'kernel', run.Raw('||'), 'true'])
+        # reset stringIO output.
+        output.truncate(0)
+        role_remote.run(args=['rpm', '-q', 'kernel', '--last'], stdout=output)
         for kernel in output.getvalue().split():
             if kernel.startswith('kernel'):
                 if 'ceph' not in kernel:
@@ -636,8 +639,10 @@ def need_to_install_distro(ctx, role):
     err_mess.close()
     if current in newest:
         return False
-    log.info('Not newest distro kernel. Curent: {cur} Expected: {new}'.format(cur=current, new=newest))
+    log.info('Not newest distro kernel. Curent: {cur} Expected:
+             {new}'.format(cur=current, new=newest))
     return True
+
 
 def maybe_generate_initrd_rpm(remote, path, version):
     """
