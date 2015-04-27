@@ -605,29 +605,26 @@ def need_to_install_distro(ctx, role):
     (role_remote,) = ctx.cluster.only(role).remotes.keys()
     system_type = teuthology.get_system_type(role_remote)
     output, err_mess = StringIO(), StringIO()
-    role_remote.run(args=['uname', '-r'], stdout=output, stderr=err_mess)
+    role_remote.run(args=['uname', '-r'], stdout=output)
     current = output.getvalue().strip()
     if system_type == 'rpm':
         role_remote.run(args=['sudo', 'yum', 'install', '-y', 'kernel'],
-                        stdout=output, stderr=err_mess)
+                        stdout=output)
         if 'Nothing to do' in output.getvalue():
-            output.truncate(0), err_mess.truncate(0)
+            err_mess.truncate(0)
             role_remote.run(args=['echo', 'no', run.Raw('|'), 'sudo', 'yum',
                                   'reinstall', 'kernel', run.Raw('||'),
-                                  'true'], stdout=output, stderr=err_mess)
+                                  'true'], stderr=err_mess)
             if 'Skipping the running kernel' in err_mess.getvalue():
                 # Current running kernel is already newest and updated
                 log.info('Newest distro kernel already installed/running')
                 return False
             else:
-                output.truncate(0), err_mess.truncate(0)
                 role_remote.run(args=['sudo', 'yum', 'reinstall', '-y',
-                                      'kernel', run.Raw('||'), 'true'],
-                                stdout=output, stderr=err_mess)
+                                      'kernel', run.Raw('||'), 'true'])
         # reset stringIO output.
-        output.truncate(0), err_mess.truncate(0)
-        role_remote.run(args=['rpm', '-q', 'kernel', '--last'], stdout=output,
-                        stderr=err_mess)
+        output.truncate(0)
+        role_remote.run(args=['rpm', '-q', 'kernel', '--last'], stdout=output)
         for kernel in output.getvalue().split():
             if kernel.startswith('kernel'):
                 if 'ceph' not in kernel:
