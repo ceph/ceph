@@ -3058,7 +3058,7 @@ int NewStore::_do_overlay_trim(TransContext *txc,
 	       << dendl;
       break;
     }
-    if (p->first + p->second.length < offset) {
+    if (p->first + p->second.length <= offset) {
       dout(20) << __func__ << " skip " << p->first << " " << p->second
 	       << dendl;
       ++p;
