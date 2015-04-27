@@ -842,35 +842,43 @@ namespace librbd {
 
     string start = METADATA_CONF_PREFIX;
     int r = 0, j = 0;
-    bool is_continue;
     md_config_t local_config_t;
-    do {
+
+    bool retrieve_metadata = !old_format;
+    while (retrieve_metadata) {
       map<string, bufferlist> pairs, res;
-      r = cls_client::metadata_list(&md_ctx, header_oid, start, max_conf_items, &pairs);
+      r = cls_client::metadata_list(&md_ctx, header_oid, start, max_conf_items,
+                                    &pairs);
       if (r < 0) {
-        lderr(cct) << __func__ << " couldn't list conf metadatas: " << r << dendl;
+        lderr(cct) << __func__ << " couldn't list conf metadatas: " << r
+                   << dendl;
         break;
       }
-      if (pairs.empty())
+      if (pairs.empty()) {
         break;
-      
-      is_continue = _filter_metadata_confs(METADATA_CONF_PREFIX, configs, pairs, &res);
-      for (map<string, bufferlist>::iterator it = res.begin(); it != res.end(); ++it) {
+      }
+
+      retrieve_metadata = _filter_metadata_confs(METADATA_CONF_PREFIX, configs,
+                                                 pairs, &res);
+      for (map<string, bufferlist>::iterator it = res.begin();
+           it != res.end(); ++it) {
         j = local_config_t.set_val(it->first.c_str(), it->second.c_str());
-        if (j < 0)
-          lderr(cct) << __func__ << " failed to set config " << it->first << " with value "
-                     << it->second.c_str() << ": " << j << dendl;
+        if (j < 0) {
+          lderr(cct) << __func__ << " failed to set config " << it->first
+                     << " with value " << it->second.c_str() << ": " << j
+                     << dendl;
+        }
         break;
       }
       start = pairs.rbegin()->first;
-    } while (is_continue);
+    }
 
-#define ASSIGN_OPTION(config)                                                      \
-    do {                                                                           \
-      if (configs[#config])                                                        \
-        config = local_config_t.rbd_##config;                                      \
-      else                                                                         \
-        config = cct->_conf->rbd_##config;                                         \
+#define ASSIGN_OPTION(config)                                                  \
+    do {                                                                       \
+      if (configs[#config])                                                    \
+        config = local_config_t.rbd_##config;                                  \
+      else                                                                     \
+        config = cct->_conf->rbd_##config;                                     \
     } while (0);
 
     ASSIGN_OPTION(cache);
