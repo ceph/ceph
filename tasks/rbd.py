@@ -426,8 +426,6 @@ def xfstests(ctx, config):
             )
 
         xfstests_branch = properties.get('xfstests_branch', 'master')
-        assert 'xfstests_url' in properties or 'xfstests_branch' in properties, \
-            "xfstests_url or xfstests_branch must be specified"
         xfstests_url = properties.get('xfstests_url', 'https://raw.github.com/ceph/ceph/{branch}/qa'.format(branch=xfstests_branch))
 
         xfstests_config[role] = dict(
