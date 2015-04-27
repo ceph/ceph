@@ -87,6 +87,7 @@ int prepare_image_update(ImageCtx *ictx) {
 }
 
 int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
+                         bool permit_snapshot,
                          const boost::function<int(Context*)>& local_request,
                          const boost::function<int()>& remote_request) {
   int r;
@@ -96,7 +97,8 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
       RWLock::RLocker l(ictx->owner_lock);
       {
         RWLock::RLocker snap_locker(ictx->snap_lock);
-        if (ictx->read_only || ictx->snap_id != CEPH_NOSNAP) {
+        if (ictx->read_only ||
+            (!permit_snapshot && ictx->snap_id != CEPH_NOSNAP)) {
           return -EROFS;
         }
       }
@@ -541,7 +543,7 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
       }
     }
 
-    r = invoke_async_request(ictx, "snap_create",
+    r = invoke_async_request(ictx, "snap_create", true,
                              boost::bind(&snap_create_helper, ictx, _1,
                                          snap_name),
                              boost::bind(&ImageWatcher::notify_snap_create,
@@ -1705,7 +1707,7 @@ reprotect_and_return_err:
     }
 
     uint64_t request_id = ictx->async_request_seq.inc();
-    r = invoke_async_request(ictx, "resize",
+    r = invoke_async_request(ictx, "resize", false,
                              boost::bind(&async_resize, ictx, _1, size,
                                          boost::ref(prog_ctx)),
                              boost::bind(&ImageWatcher::notify_resize,
@@ -2525,7 +2527,7 @@ reprotect_and_return_err:
     }
 
     uint64_t request_id = ictx->async_request_seq.inc();
-    r = invoke_async_request(ictx, "flatten",
+    r = invoke_async_request(ictx, "flatten", false,
                              boost::bind(&async_flatten, ictx, _1,
                                          boost::ref(prog_ctx)),
                              boost::bind(&ImageWatcher::notify_flatten,
