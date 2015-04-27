@@ -24,6 +24,7 @@
 #include <xfs/xfs.h>
 
 #include "common/errno.h"
+#include "common/linux_version.h"
 #include "include/assert.h"
 #include "include/compat.h"
 
@@ -116,24 +117,15 @@ int XfsFileStoreBackend::detect_features()
     //   aff3a9edb7080f69f07fe76a8bd089b3dfa4cb5d
     // for this set_extsize bug
     //   http://oss.sgi.com/bugzilla/show_bug.cgi?id=874
-    struct utsname u;
-    int r = uname(&u);
-    assert(r == 0);
-    int major = 0, minor = 0, patch = 0;
-    r = sscanf(u.release, "%d.%d.%d", &major, &minor, &patch);
-    if (r != 3) {
-      ret = 0;
-      dout(0) << __func__ << ": failed to parse kernel version "
-	      << u.release << " to verify extsize not buggy, disabling extsize"
-	      << dendl;
+    int ver = get_linux_version();
+    if (ver == 0) {
+      dout(0) << __func__ << ": couldn't verify extsize not buggy, disabling extsize" << dendl;
       m_has_extsize = false;
-    } else if (major < 3 || (major == 3 && minor < 5)) {
-      dout(0) << __func__ << ": disabling extsize, kernel " << u.release
-	      << " is older than 3.5 and has buggy extsize ioctl" << dendl;
+    } else if (ver < KERNEL_VERSION(3, 5, 0)) {
+      dout(0) << __func__ << ": disabling extsize, your kernel < 3.5 and has buggy extsize ioctl" << dendl;
       m_has_extsize = false;
     } else {
-      dout(0) << "detect_feature: extsize is supported and kernel "
-	      << u.release << " >= 3.5" << dendl;
+      dout(0) << __func__ << ": extsize is supported and your kernel >= 3.5" << dendl;
       m_has_extsize = true;
     }
   } else {
