@@ -2666,7 +2666,8 @@ void NewStore::_txc_aio_submit(TransContext *txc)
   txc->submitted_aios.splice(e, txc->pending_aios);
   list<FS::aio_t>::iterator p = txc->submitted_aios.begin();
   assert(p != e);
-  for (; p != e; ++p) {
+  bool done = false;
+  while (!done) {
     FS::aio_t& aio = *p;
     dout(20) << __func__ << " aio " << &aio << " fd " << aio.fd << dendl;
     for (vector<iovec>::iterator q = aio.iov.begin(); q != aio.iov.end(); ++q)
@@ -2674,6 +2675,16 @@ void NewStore::_txc_aio_submit(TransContext *txc)
 	       << " len " << q->iov_len << dendl;
     dout(30) << " fd " << aio.fd << " offset " << lseek64(aio.fd, 0, SEEK_CUR)
 	     << dendl;
+
+    // be careful: as soon as we submit aio we race with completion.
+    // since we are holding a ref take care not to dereference txc at
+    // all after that point.
+    list<FS::aio_t>::iterator next = p;
+    ++next;
+    done = (next == e);
+
+    // do not dereference txc (or it's contents) after we submit (if
+    // done == true and we don't loop)
     int retries = 0;
     int r = aio_queue.submit(*p, &retries);
     if (retries)
