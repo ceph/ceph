@@ -2630,6 +2630,10 @@ reprotect_and_return_err:
       return r;
     }
 
+    if (ictx->read_only) {
+      return -EROFS;
+    }
+
     {
       RWLock::RLocker parent_locker(ictx->parent_lock);
       if (ictx->parent_md.spec.pool_id == -1) {
