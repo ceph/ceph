@@ -24,7 +24,7 @@
 #define dout_subsys ceph_subsys_rgw
 
 #define RGW_ORPHAN_INDEX_OID "orphan.index"
-#define RGW_ORPHAN_LOG_PREFIX "orphan.scan"
+#define RGW_ORPHAN_INDEX_PREFIX "orphan.scan"
 
 
 enum OrphanSearchState {
@@ -32,7 +32,8 @@ enum OrphanSearchState {
   ORPHAN_SEARCH_INIT = 1,
   ORPHAN_SEARCH_LSPOOL = 2,
   ORPHAN_SEARCH_LSBUCKETS = 3,
-  ORPHAN_SEARCH_DONE = 4,
+  ORPHAN_SEARCH_ITERATE_BI = 4,
+  ORPHAN_SEARCH_DONE = 5,
 };
 
 
@@ -119,9 +120,10 @@ class RGWOrphanSearch {
   RGWOrphanSearchInfo search_info;
   OrphanSearchState search_state;
 
-  map<int, string> orphan_objs_log;
+  map<int, string> all_objs_index;
+  map<int, string> buckets_instance_index;
 
-  string log_objs_prefix;
+  string index_objs_prefix;
 
   struct log_iter_info {
     string oid;
@@ -129,7 +131,7 @@ class RGWOrphanSearch {
     list<string>::iterator end;
   };
 
-  int log_oids(map<int, list<string> >& oids);
+  int log_oids(map<int, string>& log_shards, map<int, list<string> >& oids);
 
 #define RGW_ORPHANSEARCH_HASH_PRIME 7877
   int orphan_shard(const string& str) {
@@ -151,6 +153,8 @@ public:
   int create(const string& job_name, int num_shards);
 
   int build_all_oids_index();
+  int build_buckets_instance_index();
+
   int run();
 };
 
