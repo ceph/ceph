@@ -1,3 +1,9 @@
+ceph (0.94.1.1-1) stable; urgency=low
+
+  * New upstream release
+
+ -- Ken Dreyer <kdreyer@redhat.com>  Mon, 27 Apr 2015 17:48:14 -0700
+
 ceph (0.94.1-1) stable; urgency=low
 
   * New upstream release
