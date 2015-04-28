@@ -402,6 +402,45 @@ TEST_P(StoreTest, SimpleObjectTest) {
   }
 }
 
+TEST_P(StoreTest, ManySmallWrite) {
+  int r;
+  coll_t cid;
+  ghobject_t a(hobject_t(sobject_t("Object 1", CEPH_NOSNAP)));
+  ghobject_t b(hobject_t(sobject_t("Object 2", CEPH_NOSNAP)));
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    cerr << "Creating collection " << cid << std::endl;
+    r = store->apply_transaction(t);
+    ASSERT_EQ(r, 0);
+  }
+  bufferlist bl;
+  bufferptr bp(4096);
+  bp.zero();
+  bl.append(bp);
+  for (int i=0; i<100; ++i) {
+    ObjectStore::Transaction t;
+    t.write(cid, a, i*4096, 4096, bl, 0);
+    r = store->apply_transaction(t);
+    ASSERT_EQ(r, 0);
+  }
+  for (int i=0; i<100; ++i) {
+    ObjectStore::Transaction t;
+    t.write(cid, b, (rand() % 1024)*4096, 4096, bl, 0);
+    r = store->apply_transaction(t);
+    ASSERT_EQ(r, 0);
+  }
+  {
+    ObjectStore::Transaction t;
+    t.remove(cid, a);
+    t.remove(cid, b);
+    t.remove_collection(cid);
+    cerr << "Cleaning" << std::endl;
+    r = store->apply_transaction(t);
+    ASSERT_EQ(r, 0);
+  }
+}
+
 TEST_P(StoreTest, SimpleAttrTest) {
   int r;
   coll_t cid;
