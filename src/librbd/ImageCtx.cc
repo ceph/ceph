@@ -178,6 +178,16 @@ namespace librbd {
 				       cache_target_dirty,
 				       cache_max_dirty_age,
 				       cache_block_writes_upfront);
+
+      // size object cache appropriately
+      uint64_t obj = cache_max_dirty_object;
+      if (!obj) {
+	obj = MIN(2000, MAX(10, cache_size / 100 / sizeof(ObjectCacher::Object)));
+      }
+      ldout(cct, 10) << " cache bytes " << cache_size
+	<< " -> about " << obj << " objects" << dendl;
+      object_cacher->set_max_objects(obj);
+
       object_set = new ObjectCacher::ObjectSet(NULL, data_ctx.get_id(), 0);
       object_set->return_enoent = true;
       object_cacher->start();
@@ -220,17 +230,6 @@ namespace librbd {
       snprintf(format_string, len, "%s.%%012llx", object_prefix.c_str());
     } else {
       snprintf(format_string, len, "%s.%%016llx", object_prefix.c_str());
-    }
-
-    // size object cache appropriately
-    if (object_cacher) {
-      uint64_t obj = cache_max_dirty_object;
-      if (!obj) {
-        obj = MIN(2000, MAX(10, cache_size / 100 / sizeof(ObjectCacher::Object)));
-      }
-      ldout(cct, 10) << " cache bytes " << cache_size
-		     << " -> about " << obj << " objects" << dendl;
-      object_cacher->set_max_objects(obj);
     }
 
     ldout(cct, 10) << "init_layout stripe_unit " << stripe_unit
