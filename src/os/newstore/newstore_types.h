@@ -151,6 +151,8 @@ struct wal_op_t {
   fid_t fid;
   uint64_t offset, length;
   bufferlist data;
+  uint64_t nid;
+  vector<overlay_t> overlays;
 
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& p);
@@ -164,6 +166,7 @@ WRITE_CLASS_ENCODER(wal_op_t)
 struct wal_transaction_t {
   uint64_t seq;
   list<wal_op_t> ops;
+  vector<string> shared_overlay_keys;
 
   int64_t _bytes;  ///< cached byte count
 
