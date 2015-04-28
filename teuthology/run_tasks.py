@@ -52,8 +52,8 @@ def run_tasks(tasks, ctx):
             log.info('Running task %s...', taskname)
             manager = run_one_task(taskname, ctx=ctx, config=config)
             if hasattr(manager, '__enter__'):
-                manager.__enter__()
                 stack.append((taskname, manager))
+                manager.__enter__()
     except BaseException as e:
         if isinstance(e, ConnectionLostError):
             # Prevent connection issues being flagged as failures
