@@ -166,10 +166,12 @@ void PGPool::update(OSDMapRef map)
 	<< dendl;
     }
 
+    // trust pool's set
+    cached_removed_snaps = newly_removed_snaps;
+
     // subtract off cached value (if it intersects!)
     newly_removed_snaps.subtract(intersection);
 
-    cached_removed_snaps.union_of(newly_removed_snaps);
     snapc = pi->get_snap_context();
   } else {
     newly_removed_snaps.clear();
