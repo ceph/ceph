@@ -1627,14 +1627,18 @@ int NewStore::collection_list_range(
     }
     it->upper_bound(k);
   }
-  get_object_key(end, &end_str);
-  if (end.hobj.is_temp()) {
-    if (temp)
-      pend = end_str.c_str();
-    else
-      goto out;
+  if (end.hobj.is_max()) {
+    pend = temp ? temp_end_key.c_str() : end_key.c_str();
   } else {
-    pend = temp ? temp_end_key.c_str() : end_str.c_str();
+    get_object_key(end, &end_str);
+    if (end.hobj.is_temp()) {
+      if (temp)
+	pend = end_str.c_str();
+      else
+	goto out;
+    } else {
+      pend = temp ? temp_end_key.c_str() : end_str.c_str();
+    }
   }
   while (true) {
     if (!it->valid() || strcmp(it->key().c_str(), pend) > 0) {
@@ -2611,8 +2615,10 @@ int NewStore::_do_wal_transaction(wal_transaction_t& wt,
 		 << cpp_strerror(r) << dendl;
 	    return r;
 	  }
-	  if (!(flags & O_DIRECT)) 
+	  if (!(flags & O_DIRECT))
 	    sync_fds.push_back(fd);
+	  else
+	    VOID_TEMP_FAILURE_RETRY(::close(fd));
 	}
       }
       break;
