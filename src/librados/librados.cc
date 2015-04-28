@@ -695,23 +695,31 @@ librados::NObjectIterator& librados::NObjectIterator::operator=(const librados::
 
 bool librados::NObjectIterator::operator==(const librados::NObjectIterator& rhs) const 
 {
-  return *impl == *(rhs.impl);
+  if (impl && rhs.impl) {
+    return *impl == *(rhs.impl);
+  } else {
+    return impl == rhs.impl;
+  }
 }
 
-bool librados::NObjectIterator::operator!=(const librados::NObjectIterator& rhs) const {
-  return !(*impl == *(rhs.impl));
+bool librados::NObjectIterator::operator!=(const librados::NObjectIterator& rhs) const
+{
+  return !(*this == rhs);
 }
 
 const librados::ListObject& librados::NObjectIterator::operator*() const {
+  assert(impl);
   return *(impl->get_listobjectp());
 }
 
 const librados::ListObject* librados::NObjectIterator::operator->() const {
+  assert(impl);
   return impl->get_listobjectp();
 }
 
 librados::NObjectIterator& librados::NObjectIterator::operator++()
 {
+  assert(impl);
   impl->get_next();
   return *this;
 }
@@ -725,16 +733,19 @@ librados::NObjectIterator librados::NObjectIterator::operator++(int)
 
 uint32_t librados::NObjectIterator::seek(uint32_t pos)
 {
+  assert(impl);
   return impl->seek(pos);
 }
 
 void librados::NObjectIterator::get_next()
 {
+  assert(impl);
   impl->get_next();
 }
 
 uint32_t librados::NObjectIterator::get_pg_hash_position() const
 {
+  assert(impl);
   return impl->get_pg_hash_position();
 }
 
