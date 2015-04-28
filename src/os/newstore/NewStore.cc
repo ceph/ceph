@@ -2345,8 +2345,8 @@ void NewStore::_aio_thread()
     if (r == 1) {
       TransContext *txc = static_cast<TransContext*>(aio->priv);
       int left = txc->num_aio.dec();
-      dout(10) << __func__ << " finished aio on " << txc << " state "
-	       << txc->get_state_name() << ", "
+      dout(10) << __func__ << " finished aio " << aio << " txc " << txc
+	       << " state " << txc->get_state_name() << ", "
 	       << left << " aios left" << dendl;
       VOID_TEMP_FAILURE_RETRY(::close(aio->fd));
       if (left == 0) {
@@ -2685,14 +2685,14 @@ void NewStore::_txc_aio_submit(TransContext *txc)
     // be careful: as soon as we submit aio we race with completion.
     // since we are holding a ref take care not to dereference txc at
     // all after that point.
-    list<FS::aio_t>::iterator next = p;
-    ++next;
-    done = (next == e);
+    list<FS::aio_t>::iterator cur = p;
+    ++p;
+    done = (p == e);
 
     // do not dereference txc (or it's contents) after we submit (if
     // done == true and we don't loop)
     int retries = 0;
-    int r = aio_queue.submit(*p, &retries);
+    int r = aio_queue.submit(*cur, &retries);
     if (retries)
       derr << __func__ << " retries " << retries << dendl;
     if (r) {
