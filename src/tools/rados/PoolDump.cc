@@ -43,9 +43,9 @@ int PoolDump::dump(IoCtx *io_ctx, unsigned n, unsigned m)
 
   librados::NObjectIterator i;
   if (m) {
-    i == io_ctx->nobjects_begin(n, m);
+    i = io_ctx->nobjects_begin(n, m);
   } else {
-    i == io_ctx->nobjects_begin();
+    i = io_ctx->nobjects_begin();
   }
 
   librados::NObjectIterator i_end = io_ctx->nobjects_end();

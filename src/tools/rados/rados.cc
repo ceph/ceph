@@ -129,10 +129,11 @@ void usage(ostream& out)
 "       --workers                    Number of worker threads to spawn \n"
 "                                    (default " STR(DEFAULT_NUM_RADOS_WORKER_THREADS) ")\n"
 "\n"
-"   dump\n"
-"       Stream pool contents to standard out\n"
-"   undump\n"
-"       Load pool contents from standard in\n"
+"   dump [filename] [<n> <m>]\n"
+"       Serialize pool contents to a file or standard out.  Optionally\n"
+"       divide pool into m shard and dump the nth shard.\n"
+"   undump [filename]\n"
+"       Load pool contents from a file or standard in\n"
 "\n"
 "ADVISORY LOCKS\n"
 "   lock list <obj-name>\n"
@@ -1137,22 +1138,6 @@ static int do_cache_flush_evict_all(IoCtx& io_ctx, bool blocking)
   }
   return errors ? -1 : 0;
 }
-
-
-static int do_dump(IoCtx &io_ctx)
-{
-  int file_fd = STDOUT_FILENO;
-  int r = PoolDump(file_fd).dump(&io_ctx);
-  return r;
-}
-
-
-static int do_undump(IoCtx &io_ctx)
-{
-  int file_fd = STDIN_FILENO;
-  return RadosImport(file_fd, 0).import(io_ctx);
-}
-
 
 /**********************************************
 
@@ -2641,20 +2626,73 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       goto out;
     }
   } else if (strcmp(nargs[0], "dump") == 0) {
-    if (!pool_name) {
+    // dump [filename] [<n> <m>]
+    if (!pool_name || nargs.size() > 4) {
       usage_exit();
     }
-    ret = do_dump(io_ctx);
+
+    int file_fd;
+    if (nargs.size() < 2 || std::string(nargs[1]) == "-") {
+      file_fd = STDOUT_FILENO;
+    } else {
+      file_fd = open(nargs[1], O_WRONLY|O_CREAT|O_TRUNC, 0666);
+      if (file_fd < 0) {
+        cerr << "Error opening '" << nargs[1] << "': "
+          << cpp_strerror(file_fd) << std::endl;
+        ret = file_fd;
+        goto out;
+      }
+    }
+
+    if (nargs.size() == 3) {
+      cerr << "May not specify worker without worker count" << std::endl;
+      ret = -EINVAL;
+      goto out;
+    }
+
+    int n = 0;
+    int m = 1;
+    if (nargs.size() == 4) {
+      std::string interr;
+      n = strict_strtoll(nargs[2], 10, &interr);
+      if (!interr.empty()) {
+        cerr << "Invalid worker number: " << interr << std::endl;
+        ret = -EINVAL;
+        goto out;
+      }
+      m = strict_strtoll(nargs[3], 10, &interr);
+      if (!interr.empty()) {
+        cerr << "Invalid worker number: " << interr << std::endl;
+        ret = -EINVAL;
+        goto out;
+      }
+    }
+    ret = PoolDump(file_fd).dump(&io_ctx, n, m);
     if (ret < 0) {
       cerr << "error from dump: "
 	   << cpp_strerror(ret) << std::endl;
       goto out;
     }
   } else if (strcmp(nargs[0], "undump") == 0) {
-    if (!pool_name) {
+    // undump [filename]
+    if (!pool_name || nargs.size() > 2) {
       usage_exit();
     }
-    ret = do_undump(io_ctx);
+
+    int file_fd;
+    if (nargs.size() < 2 || std::string(nargs[1]) == "-") {
+      file_fd = STDIN_FILENO;
+    } else {
+      file_fd = open(nargs[1], O_RDONLY);
+      if (file_fd < 0) {
+        cerr << "Error opening '" << nargs[1] << "': "
+          << cpp_strerror(file_fd) << std::endl;
+        ret = file_fd;
+        goto out;
+      }
+    }
+
+    ret = RadosImport(file_fd, 0, false).import(io_ctx, false);
     if (ret < 0) {
       cerr << "error from undump: "
 	   << cpp_strerror(ret) << std::endl;
