@@ -111,19 +111,22 @@ int RGWOrphanSearch::init(const string& job_name, RGWOrphanSearchInfo *info) {
     search_state = state.state;
   }
 
-  log_objs_prefix = RGW_ORPHAN_LOG_PREFIX + string(".");
-  log_objs_prefix += job_name;
+  index_objs_prefix = RGW_ORPHAN_INDEX_PREFIX + string(".");
+  index_objs_prefix += job_name;
 
   for (int i = 0; i < search_info.num_shards; i++) {
     char buf[128];
 
-    snprintf(buf, sizeof(buf), "%s.%d", log_objs_prefix.c_str(), i);
-    orphan_objs_log[i] = buf;
+    snprintf(buf, sizeof(buf), "%s.rados.%d", index_objs_prefix.c_str(), i);
+    all_objs_index[i] = buf;
+
+    snprintf(buf, sizeof(buf), "%s.buckets.%d", index_objs_prefix.c_str(), i);
+    buckets_instance_index[i] = buf;
   }
   return 0;
 }
 
-int RGWOrphanSearch::log_oids(map<int, list<string> >& oids)
+int RGWOrphanSearch::log_oids(map<int, string>& log_shards, map<int, list<string> >& oids)
 {
   map<int, list<string> >::iterator miter = oids.begin();
 
@@ -131,7 +134,7 @@ int RGWOrphanSearch::log_oids(map<int, list<string> >& oids)
 
   for (; miter != oids.end(); ++miter) {
     log_iter_info info;
-    info.oid = orphan_objs_log[miter->first];
+    info.oid = log_shards[miter->first];
     info.cur = miter->second.begin();
     info.end = miter->second.end();
     liters.push_back(info);
@@ -210,7 +213,7 @@ int RGWOrphanSearch::build_all_oids_index()
 
 #define COUNT_BEFORE_FLUSH 1000
     if (++count >= COUNT_BEFORE_FLUSH) {
-      ret = log_oids(oids);
+      ret = log_oids(all_objs_index, oids);
       if (ret < 0) {
         cerr << __func__ << ": ERROR: log_oids() returned ret=" << ret << std::endl;
         return ret;
@@ -219,12 +222,63 @@ int RGWOrphanSearch::build_all_oids_index()
       oids.clear();
     }
   }
-  ret = log_oids(oids);
+  ret = log_oids(all_objs_index, oids);
   if (ret < 0) {
     cerr << __func__ << ": ERROR: log_oids() returned ret=" << ret << std::endl;
     return ret;
   }
   
+  return 0;
+}
+
+int RGWOrphanSearch::build_buckets_instance_index()
+{
+  void *handle;
+  int max = 1000;
+  string section = "bucket.instance";
+  int ret = store->meta_mgr->list_keys_init(section, &handle);
+  if (ret < 0) {
+    cerr << "ERROR: can't get key: " << cpp_strerror(-ret) << std::endl;
+    return -ret;
+  }
+
+  map<int, list<string> > instances;
+
+  bool truncated;
+
+  RGWObjectCtx obj_ctx(store);
+
+  int count = 0;
+
+  do {
+    list<string> keys;
+    ret = store->meta_mgr->list_keys_next(handle, max, keys, &truncated);
+    if (ret < 0) {
+      cerr << "ERROR: lists_keys_next(): " << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
+
+    for (list<string>::iterator iter = keys.begin(); iter != keys.end(); ++iter) {
+      // ssize_t pos = iter->find(':');
+      // string bucket_id = iter->substr(pos + 1);
+
+      int shard = orphan_shard(*iter);
+      instances[shard].push_back(*iter);
+
+      if (++count >= COUNT_BEFORE_FLUSH) {
+        ret = log_oids(buckets_instance_index, instances);
+        if (ret < 0) {
+          cerr << __func__ << ": ERROR: log_oids() returned ret=" << ret << std::endl;
+          return ret;
+        }
+        count = 0;
+        instances.clear();
+      }
+    }
+  } while (truncated);
+
+  store->meta_mgr->list_keys_complete(handle);
+
   return 0;
 }
 
@@ -244,7 +298,7 @@ int RGWOrphanSearch::run()
       }
       // fall through
     case ORPHAN_SEARCH_LSPOOL:
-      ldout(store->ctx(), 0) << __func__ << "(): listing all objects in pool" << dendl;
+      ldout(store->ctx(), 0) << __func__ << "(): building index of all objects in pool" << dendl;
       r = build_all_oids_index();
       if (r < 0) {
         lderr(store->ctx()) << __func__ << ": ERROR: build_all_objs_index returnr ret=" << r << dendl;
@@ -260,6 +314,23 @@ int RGWOrphanSearch::run()
       // fall through
 
     case ORPHAN_SEARCH_LSBUCKETS:
+      ldout(store->ctx(), 0) << __func__ << "(): building index of all bucket indexes" << dendl;
+      r = build_buckets_instance_index();
+      if (r < 0) {
+        lderr(store->ctx()) << __func__ << ": ERROR: build_all_objs_index returnr ret=" << r << dendl;
+        return r;
+      }
+
+      search_state = ORPHAN_SEARCH_ITERATE_BI;
+      r = save_state();
+      if (r < 0) {
+        lderr(store->ctx()) << __func__ << ": ERROR: failed to save state, ret=" << r << dendl;
+        return r;
+      }
+      // fall through
+
+
+    case ORPHAN_SEARCH_ITERATE_BI:
     case ORPHAN_SEARCH_DONE:
       break;
 
