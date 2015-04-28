@@ -21,7 +21,15 @@ using namespace librados;
 
 #define dout_subsys ceph_subsys_rados
 
-int PoolDump::dump(IoCtx *io_ctx)
+/**
+ * Export RADOS objects from a live cluster
+ * to a serialized format via a file descriptor.
+ *
+ * @param n which n of m workers is this?
+ * @param m split the object space m-ways
+ * @returns 0 on success, else error code
+ */
+int PoolDump::dump(IoCtx *io_ctx, unsigned n, unsigned m)
 {
   assert(io_ctx != NULL);
 
@@ -33,7 +41,13 @@ int PoolDump::dump(IoCtx *io_ctx)
     return r;
   }
 
-  librados::NObjectIterator i = io_ctx->nobjects_begin();
+  librados::NObjectIterator i;
+  if (m) {
+    i == io_ctx->nobjects_begin(n, m);
+  } else {
+    i == io_ctx->nobjects_begin();
+  }
+
   librados::NObjectIterator i_end = io_ctx->nobjects_end();
   for (; i != i_end; ++i) {
     const std::string oid = i->get_oid();
