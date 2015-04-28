@@ -317,7 +317,10 @@ unittest_librbd_LDADD = \
 	$(CEPH_GLOBAL) $(RADOS_TEST_LDADD)
 check_PROGRAMS += unittest_librbd
 check_SCRIPTS += test/run-rbd-unit-tests.sh
+
+if VALGRIND_ENABLED
 check_SCRIPTS += test/run-rbd-valgrind-unit-tests.sh
+endif
 
 ceph_test_librbd_SOURCES =
 nodist_EXTRA_ceph_test_librbd_SOURCES = dummy.cc
