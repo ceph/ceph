@@ -209,8 +209,13 @@ public:
       _revokes.pop_front();
       changed = true;
     }
-    if (changed)
+    if (changed) {
       _calc_issued();
+      if (_issued == _pending) {
+	item_revoking_caps.remove_myself();
+	item_client_revoking_caps.remove_myself();
+      }
+    }
   }
 
 
