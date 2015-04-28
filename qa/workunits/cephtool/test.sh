@@ -467,7 +467,9 @@ function test_mon_osd()
 
   ceph osd dump | grep 'osd.0 up'
   ceph osd find 1
+  ceph --format plain osd find 1 # falls back to json-pretty
   ceph osd metadata 1 | grep 'distro'
+  ceph --format plain osd metadata 1 | grep 'distro' # falls back to json-pretty
   ceph osd out 0
   ceph osd dump | grep 'osd.0.*out'
   ceph osd in 0
