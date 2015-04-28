@@ -1400,11 +1400,6 @@ void ReplicatedPG::do_op(OpRequestRef& op)
 		 CEPH_NOSNAP, m->get_pg().ps(),
 		 info.pgid.pool(), m->get_object_locator().nspace);
 
-  if (missing_loc.is_unfound(head)) {
-    dout(10) << "do_op " << head << " is unfound, can't do anything" << dendl;
-    osd->reply_op_error(op, -EIO);
-    return;
-  }
 
   if (write_ordered && scrubber.write_blocked_by_scrub(head)) {
     dout(20) << __func__ << ": waiting for scrub" << dendl;
@@ -1429,11 +1424,6 @@ void ReplicatedPG::do_op(OpRequestRef& op)
   hobject_t snapdir(m->get_oid(), m->get_object_locator().key,
 		    CEPH_SNAPDIR, m->get_pg().ps(), info.pgid.pool(),
 		    m->get_object_locator().nspace);
-  if (missing_loc.is_unfound(snapdir)) {
-    dout(10) << "do_op " << snapdir << " is unfound, can't do anything" << dendl;
-    osd->reply_op_error(op, -EIO);
-    return;
-  }
   if (is_unreadable_object(snapdir)) {
     wait_for_unreadable_object(snapdir, op);
     return;
