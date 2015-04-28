@@ -77,6 +77,9 @@ int LevelDBStore::do_open(ostream &out, bool create_if_missing)
   PerfCountersBuilder plb(g_ceph_context, "leveldb", l_leveldb_first, l_leveldb_last);
   plb.add_u64_counter(l_leveldb_gets, "leveldb_get", "Gets");
   plb.add_u64_counter(l_leveldb_txns, "leveldb_transaction", "Transactions");
+  plb.add_time_avg(l_leveldb_get_latency, "leveldb_get_latency", "Get Latency");
+  plb.add_time_avg(l_leveldb_submit_latency, "leveldb_submit_latency", "Submit Latency");
+  plb.add_time_avg(l_leveldb_submit_sync_latency, "leveldb_submit_sync_latency", "Submit Sync Latency");
   plb.add_u64_counter(l_leveldb_compact, "leveldb_compact", "Compactions");
   plb.add_u64_counter(l_leveldb_compact_range, "leveldb_compact_range", "Compactions by range");
   plb.add_u64_counter(l_leveldb_compact_queue_merge, "leveldb_compact_queue_merge", "Mergings of ranges in compaction queue");
@@ -130,21 +133,27 @@ void LevelDBStore::close()
 
 int LevelDBStore::submit_transaction(KeyValueDB::Transaction t)
 {
+  utime_t start = ceph_clock_now(g_ceph_context);
   LevelDBTransactionImpl * _t =
     static_cast<LevelDBTransactionImpl *>(t.get());
   leveldb::Status s = db->Write(leveldb::WriteOptions(), &(_t->bat));
+  utime_t lat = ceph_clock_now(g_ceph_context) - start;
   logger->inc(l_leveldb_txns);
+  logger->tinc(l_leveldb_submit_latency, lat);
   return s.ok() ? 0 : -1;
 }
 
 int LevelDBStore::submit_transaction_sync(KeyValueDB::Transaction t)
 {
+  utime_t start = ceph_clock_now(g_ceph_context);
   LevelDBTransactionImpl * _t =
     static_cast<LevelDBTransactionImpl *>(t.get());
   leveldb::WriteOptions options;
   options.sync = true;
   leveldb::Status s = db->Write(options, &(_t->bat));
+  utime_t lat = ceph_clock_now(g_ceph_context) - start;
   logger->inc(l_leveldb_txns);
+  logger->tinc(l_leveldb_submit_sync_latency, lat);
   return s.ok() ? 0 : -1;
 }
 
@@ -187,6 +196,7 @@ int LevelDBStore::get(
     const std::set<string> &keys,
     std::map<string, bufferlist> *out)
 {
+  utime_t start = ceph_clock_now(g_ceph_context);
   KeyValueDB::Iterator it = get_iterator(prefix);
   for (std::set<string>::const_iterator i = keys.begin();
        i != keys.end();
@@ -197,7 +207,9 @@ int LevelDBStore::get(
     } else if (!it->valid())
       break;
   }
+  utime_t lat = ceph_clock_now(g_ceph_context) - start;
   logger->inc(l_leveldb_gets);
+  logger->tinc(l_leveldb_get_latency, lat);
   return 0;
 }
 
