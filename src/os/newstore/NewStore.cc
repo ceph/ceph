@@ -3188,6 +3188,7 @@ int NewStore::_do_write_all_overlays(TransContext *txc,
         bl_next_data.substr_of(bl_next, next->second.value_offset,
                                next->second.length);
         bl.claim_append(bl_next_data);
+        op->length += next->second.length;
         txc->t->rmkey(PREFIX_OVERLAY, key_next);
 
 	++prev;
