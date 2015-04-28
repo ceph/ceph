@@ -140,6 +140,9 @@ int RocksDBStore::do_open(ostream &out, bool create_if_missing)
   PerfCountersBuilder plb(g_ceph_context, "rocksdb", l_rocksdb_first, l_rocksdb_last);
   plb.add_u64_counter(l_rocksdb_gets, "rocksdb_get", "Gets");
   plb.add_u64_counter(l_rocksdb_txns, "rocksdb_transaction", "Transactions");
+  plb.add_time_avg(l_rocksdb_get_latency, "rocksdb_get_latency", "Get latency");
+  plb.add_time_avg(l_rocksdb_submit_latency, "rocksdb_submit_latency", "Submit Latency");
+  plb.add_time_avg(l_rocksdb_submit_sync_latency, "rocksdb_submit_sync_latency", "Submit Sync Latency");
   plb.add_u64_counter(l_rocksdb_compact, "rocksdb_compact", "Compactions");
   plb.add_u64_counter(l_rocksdb_compact_range, "rocksdb_compact_range", "Compactions by range");
   plb.add_u64_counter(l_rocksdb_compact_queue_merge, "rocksdb_compact_queue_merge", "Mergings of ranges in compaction queue");
@@ -194,24 +197,30 @@ void RocksDBStore::close()
 
 int RocksDBStore::submit_transaction(KeyValueDB::Transaction t)
 {
+  utime_t start = ceph_clock_now(g_ceph_context);
   RocksDBTransactionImpl * _t =
     static_cast<RocksDBTransactionImpl *>(t.get());
   rocksdb::WriteOptions woptions;
   woptions.disableWAL = options.disableWAL;
   rocksdb::Status s = db->Write(woptions, _t->bat);
+  utime_t lat = ceph_clock_now(g_ceph_context) - start;
   logger->inc(l_rocksdb_txns);
+  logger->tinc(l_rocksdb_submit_latency, lat);
   return s.ok() ? 0 : -1;
 }
 
 int RocksDBStore::submit_transaction_sync(KeyValueDB::Transaction t)
 {
+  utime_t start = ceph_clock_now(g_ceph_context);
   RocksDBTransactionImpl * _t =
     static_cast<RocksDBTransactionImpl *>(t.get());
   rocksdb::WriteOptions woptions;
   woptions.sync = true;
   woptions.disableWAL = options.disableWAL;
   rocksdb::Status s = db->Write(woptions, _t->bat);
+  utime_t lat = ceph_clock_now(g_ceph_context) - start;
   logger->inc(l_rocksdb_txns);
+  logger->tinc(l_rocksdb_submit_sync_latency, lat);
   return s.ok() ? 0 : -1;
 }
 int RocksDBStore::get_info_log_level(string info_log_level)
@@ -279,6 +288,7 @@ int RocksDBStore::get(
     const std::set<string> &keys,
     std::map<string, bufferlist> *out)
 {
+  utime_t start = ceph_clock_now(g_ceph_context);
   KeyValueDB::Iterator it = get_iterator(prefix);
   for (std::set<string>::const_iterator i = keys.begin();
        i != keys.end();
@@ -289,7 +299,9 @@ int RocksDBStore::get(
     } else if (!it->valid())
       break;
   }
+  utime_t lat = ceph_clock_now(g_ceph_context) - start;
   logger->inc(l_rocksdb_gets);
+  logger->tinc(l_rocksdb_get_latency, lat);
   return 0;
 }
 
