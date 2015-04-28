@@ -1149,9 +1149,8 @@ static int do_dump(IoCtx &io_ctx)
 
 static int do_undump(IoCtx &io_ctx)
 {
-  // FIXME: refactor RadosImport to take the pre-constructed ioctx
   int file_fd = STDIN_FILENO;
-  return RadosImport(file_fd, 0).import(io_ctx.get_pool_name());
+  return RadosImport(file_fd, 0).import(io_ctx);
 }
 
 
