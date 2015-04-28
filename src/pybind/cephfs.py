@@ -329,12 +329,11 @@ class LibCephFS(object):
             if not dirent:
                 return None
 
-            if dirent.contents.d_name != '.' and dirent.contents.d_name != '..':
-                return {'d_ino': dirent.contents.d_ino,
-                        'd_off': dirent.contents.d_off,
-                        'd_reclen': dirent.contents.d_reclen,
-                        'd_type': dirent.contents.d_type,
-                        'd_name': dirent.contents.d_name}
+            return {'d_ino': dirent.contents.d_ino,
+                    'd_off': dirent.contents.d_off,
+                    'd_reclen': dirent.contents.d_reclen,
+                    'd_type': dirent.contents.d_type,
+                    'd_name': dirent.contents.d_name}
 
     def closedir(self, dir_handler):
         self.require_state("mounted")
