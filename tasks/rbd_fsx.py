@@ -52,7 +52,18 @@ def _run_one_client(ctx, config, role):
     args.extend([
         'adjust-ulimits',
         'ceph-coverage',
-        '{tdir}/archive/coverage'.format(tdir=testdir),
+        '{tdir}/archive/coverage'.format(tdir=testdir)
+    ])
+
+    if config.get('valgrind'):
+        args = teuthology.get_valgrind_args(
+            testdir,
+            'fsx_{id}'.format(id=role),
+            args,
+            config.get('valgrind')
+        )
+
+    args.extend([
         'ceph_test_librbd_fsx',
         '-d', # debug output for all operations
         '-W', '-R', # mmap doesn't work with rbd
