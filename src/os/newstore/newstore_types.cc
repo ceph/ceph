@@ -229,7 +229,11 @@ void wal_op_t::encode(bufferlist& bl) const
   ::encode(fid, bl);
   ::encode(offset, bl);
   ::encode(length, bl);
-  ::encode(data, bl);
+  ::encode(nid, bl);
+  ::encode(overlays, bl);
+  if (!overlays.size()) {
+    ::encode(data, bl);
+  }
   ENCODE_FINISH(bl);
 }
 
@@ -240,7 +244,11 @@ void wal_op_t::decode(bufferlist::iterator& p)
   ::decode(fid, p);
   ::decode(offset, p);
   ::decode(length, p);
-  ::decode(data, p);
+  ::decode(nid, p);
+  ::decode(overlays, p);
+  if (!overlays.size()) {
+    ::decode(data, p);
+  }
   DECODE_FINISH(p);
 }
 
@@ -250,6 +258,15 @@ void wal_op_t::dump(Formatter *f) const
   f->dump_object("fid", fid);
   f->dump_unsigned("offset", offset);
   f->dump_unsigned("length", length);
+  if (overlays.size()) {
+    f->dump_unsigned("nid", nid);
+    f->open_array_section("overlays");
+    for (vector<overlay_t>::const_iterator p = overlays.begin();
+         p != overlays.end(); ++p) {
+      f->dump_object("overlay", *p);
+    }
+    f->close_section();
+  }
 }
 
 void wal_transaction_t::encode(bufferlist& bl) const
@@ -257,6 +274,7 @@ void wal_transaction_t::encode(bufferlist& bl) const
   ENCODE_START(1, 1, bl);
   ::encode(seq, bl);
   ::encode(ops, bl);
+  ::encode(shared_overlay_keys, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -265,6 +283,7 @@ void wal_transaction_t::decode(bufferlist::iterator& p)
   DECODE_START(1, p);
   ::decode(seq, p);
   ::decode(ops, p);
+  ::decode(shared_overlay_keys, p);
   DECODE_FINISH(p);
 }
 
@@ -274,6 +293,12 @@ void wal_transaction_t::dump(Formatter *f) const
   f->open_array_section("ops");
   for (list<wal_op_t>::const_iterator p = ops.begin(); p != ops.end(); ++p) {
     f->dump_object("op", *p);
+  }
+  f->close_section();
+  f->open_array_section("shared_overlay_keys");
+  for (vector<string>::const_iterator p = shared_overlay_keys.begin();
+       p != shared_overlay_keys.end(); ++p) {
+    f->dump_string("shared_overlay_key", *p);
   }
   f->close_section();
 }
