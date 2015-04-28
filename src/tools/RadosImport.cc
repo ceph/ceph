@@ -22,6 +22,39 @@
 
 int RadosImport::import(std::string pool, bool no_overwrite)
 {
+  librados::IoCtx ioctx;
+  librados::Rados cluster;
+
+  char *id = getenv("CEPH_CLIENT_ID");
+  if (id) cerr << "Client id is: " << id << std::endl;
+  int ret = cluster.init(id);
+  if (ret) {
+    cerr << "Error " << ret << " in cluster.init" << std::endl;
+    return ret;
+  }
+  ret = cluster.conf_read_file(NULL);
+  if (ret) {
+    cerr << "Error " << ret << " in cluster.conf_read_file" << std::endl;
+    return ret;
+  }
+  ret = cluster.conf_parse_env(NULL);
+  if (ret) {
+    cerr << "Error " << ret << " in cluster.conf_read_env" << std::endl;
+    return ret;
+  }
+  cluster.connect();
+
+  ret = cluster.ioctx_create(pool.c_str(), ioctx);
+  if (ret < 0) {
+    cerr << "ioctx_create " << pool << " failed with " << ret << std::endl;
+    return ret;
+  }
+
+  return import(ioctx, no_overwrite);
+}
+
+int RadosImport::import(librados::IoCtx &io_ctx, bool no_overwrite)
+{
   bufferlist ebl;
   pg_info_t info;
   PGLog::IndexedLog log;
@@ -77,34 +110,6 @@ int RadosImport::import(std::string pool, bool no_overwrite)
   }
 #endif
 
-  librados::IoCtx ioctx;
-  librados::Rados cluster;
-
-  char *id = getenv("CEPH_CLIENT_ID");
-  if (id) cerr << "Client id is: " << id << std::endl;
-  ret = cluster.init(id);
-  if (ret) {
-    cerr << "Error " << ret << " in cluster.init" << std::endl;
-    return ret;
-  }
-  ret = cluster.conf_read_file(NULL);
-  if (ret) {
-    cerr << "Error " << ret << " in cluster.conf_read_file" << std::endl;
-    return ret;
-  }
-  ret = cluster.conf_parse_env(NULL);
-  if (ret) {
-    cerr << "Error " << ret << " in cluster.conf_read_env" << std::endl;
-    return ret;
-  }
-  cluster.connect();
-
-  ret = cluster.ioctx_create(pool.c_str(), ioctx);
-  if (ret < 0) {
-    cerr << "ioctx_create " << pool << " failed with " << ret << std::endl;
-    return ret;
-  }
-
   bool done = false;
   bool found_metadata = false;
   while(!done) {
@@ -119,7 +124,7 @@ int RadosImport::import(std::string pool, bool no_overwrite)
     }
     switch(type) {
     case TYPE_OBJECT_BEGIN:
-      ret = get_object_rados(ioctx, ebl, no_overwrite);
+      ret = get_object_rados(io_ctx, ebl, no_overwrite);
       if (ret) {
         cerr << "Error inserting object: " << ret << std::endl;
         return ret;
