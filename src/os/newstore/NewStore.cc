@@ -2615,8 +2615,10 @@ int NewStore::_do_wal_transaction(wal_transaction_t& wt,
 		 << cpp_strerror(r) << dendl;
 	    return r;
 	  }
-	  if (!(flags & O_DIRECT)) 
+	  if (!(flags & O_DIRECT))
 	    sync_fds.push_back(fd);
+	  else
+	    VOID_TEMP_FAILURE_RETRY(::close(fd));
 	}
       }
       break;
