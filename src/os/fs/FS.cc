@@ -95,7 +95,7 @@ int FS::get_handle(int fd, std::string *h)
   return -EOPNOTSUPP;
 }
 
-int FS::open_handle(int mount_fd, const std::string& h)
+int FS::open_handle(int mount_fd, const std::string& h, int flags)
 {
   return -EOPNOTSUPP;
 }
