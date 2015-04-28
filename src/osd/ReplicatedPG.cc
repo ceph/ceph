@@ -7868,7 +7868,7 @@ int ReplicatedPG::find_object_context(const hobject_t& oid,
     ObjectContextRef obc = get_object_context(oid, can_create);
     if (!obc) {
       if (pmissing)
-  *pmissing = oid;
+        *pmissing = oid;
       return -ENOENT;
     }
     dout(10) << "find_object_context " << oid
