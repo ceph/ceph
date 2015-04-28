@@ -34,6 +34,7 @@
 #include "common/TextTable.h"
 #include "include/assert.h"
 #include "include/stringify.h"
+#include "include/krbd.h"
 #include "mon/MonMap.h"
 
 #include <blkid/blkid.h>
@@ -582,12 +583,12 @@ int dump_images(struct krbd_ctx *ctx, Formatter *f)
   return r;
 }
 
-extern "C" int krbd_create_from_context(struct CephContext *cct,
+extern "C" int krbd_create_from_context(rados_config_t cct,
                                         struct krbd_ctx **pctx)
 {
   struct krbd_ctx *ctx = new struct krbd_ctx();
 
-  ctx->cct = cct;
+  ctx->cct = reinterpret_cast<CephContext *>(cct);
   ctx->udev = udev_new();
   if (!ctx->udev) {
     delete ctx;

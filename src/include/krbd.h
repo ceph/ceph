@@ -13,14 +13,15 @@
 #ifndef CEPH_KRBD_H
 #define CEPH_KRBD_H
 
+#include "rados/librados.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 struct krbd_ctx;
-struct CephContext;
 
-int krbd_create_from_context(struct CephContext *cct, struct krbd_ctx **pctx);
+int krbd_create_from_context(rados_config_t cct, struct krbd_ctx **pctx);
 void krbd_destroy(struct krbd_ctx *ctx);
 
 int krbd_map(struct krbd_ctx *ctx, const char *pool, const char *image,
@@ -38,7 +39,7 @@ namespace ceph {
   class Formatter;
 }
 
-int krbd_showmapped(struct krbd_ctx *ctx, Formatter *f);
+int krbd_showmapped(struct krbd_ctx *ctx, ceph::Formatter *f);
 
 #endif /* __cplusplus */
 
