@@ -639,8 +639,9 @@ def need_to_install_distro(ctx, role):
     err_mess.close()
     if current in newest:
         return False
-    log.info('Not newest distro kernel. Curent: {cur} Expected:
-             {new}'.format(cur=current, new=newest))
+    log.info(
+        'Not newest distro kernel. Curent: {cur} Expected: {new}'.format(
+            cur=current, new=newest))
     return True
 
 
