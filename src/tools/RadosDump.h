@@ -347,12 +347,11 @@ class RadosDump
   protected:
     int file_fd;
     super_header sh;
-    bool debug;  // FIXME set this somewhere
     bool dry_run;
 
   public:
     RadosDump(int file_fd_, bool dry_run_)
-      : file_fd(file_fd_), debug(true), dry_run(dry_run_)
+      : file_fd(file_fd_), dry_run(dry_run_)
     {}
 
     int read_super();
