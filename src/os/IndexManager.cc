@@ -28,7 +28,6 @@
 #include "include/buffer.h"
 
 #include "IndexManager.h"
-#include "FlatIndex.h"
 #include "HashIndex.h"
 #include "CollectionIndex.h"
 
@@ -95,10 +94,7 @@ int IndexManager::build_index(coll_t c, const char *path, CollectionIndex **inde
       return r;
 
     switch (version) {
-    case CollectionIndex::FLAT_INDEX_TAG: {
-      *index = new FlatIndex(c, path);
-      return 0;
-    }
+    case CollectionIndex::FLAT_INDEX_TAG:
     case CollectionIndex::HASH_INDEX_TAG: // fall through
     case CollectionIndex::HASH_INDEX_TAG_2: // fall through
     case CollectionIndex::HOBJECT_WITH_POOL: {
