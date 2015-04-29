@@ -803,6 +803,7 @@ OPTION(newstore_fsync_thread_suicide_timeout, OPT_INT, 120) // suicide timeout v
 OPTION(newstore_wal_threads, OPT_INT, 4)
 OPTION(newstore_wal_thread_timeout, OPT_INT, 30)
 OPTION(newstore_wal_thread_suicide_timeout, OPT_INT, 120)
+OPTION(newstore_sync_append_min, OPT_INT, 65536)  // only do sync append for large ios
 OPTION(newstore_max_ops, OPT_U64, 512)
 OPTION(newstore_max_bytes, OPT_U64, 64*1024*1024)
 OPTION(newstore_wal_max_ops, OPT_U64, 512)
