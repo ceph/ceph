@@ -41,6 +41,7 @@
 #include "common/errno.h"
 #include "objclass/objclass.h"
 #include "include/rbd_types.h"
+#include "include/rbd/object_map_types.h"
 
 #include "cls/rbd/cls_rbd.h"
 
@@ -98,6 +99,8 @@ cls_method_handle_t h_object_map_load;
 cls_method_handle_t h_object_map_save;
 cls_method_handle_t h_object_map_resize;
 cls_method_handle_t h_object_map_update;
+cls_method_handle_t h_object_map_snap_add;
+cls_method_handle_t h_object_map_snap_remove;
 cls_method_handle_t h_metadata_set;
 cls_method_handle_t h_metadata_remove;
 cls_method_handle_t h_metadata_list;
@@ -2233,6 +2236,84 @@ int object_map_update(cls_method_context_t hctx, bufferlist *in, bufferlist *out
   return r;
 }
 
+/**
+ * Mark all _EXISTS objects as _EXISTS_CLEAN so future writes to the
+ * image HEAD can be tracked.
+ *
+ * Input:
+ * none
+ *
+ * Output:
+ * @returns 0 on success, negative error code on failure
+ */
+int object_map_snap_add(cls_method_context_t hctx, bufferlist *in,
+                        bufferlist *out)
+{
+  BitVector<2> object_map;
+  int r = object_map_read(hctx, object_map);
+  if (r < 0) {
+    return r;
+  }
+
+  bool updated = false;
+  for (uint64_t i = 0; i < object_map.size(); ++i) {
+    if (object_map[i] == OBJECT_EXISTS) {
+      object_map[i] = OBJECT_EXISTS_CLEAN;
+      updated = true;
+    }
+  }
+
+  if (updated) {
+    bufferlist bl;
+    ::encode(object_map, bl);
+    r = cls_cxx_write_full(hctx, &bl);
+  }
+  return r;
+}
+
+/**
+ * Mark all _EXISTS_CLEAN objects as _EXISTS in the current object map
+ * if the provided snapshot object map object is marked as _EXISTS.
+ *
+ * Input:
+ * @param snapshot object map bit vector
+ *
+ * Output:
+ * @returns 0 on success, negative error code on failure
+ */
+int object_map_snap_remove(cls_method_context_t hctx, bufferlist *in,
+                           bufferlist *out)
+{
+  BitVector<2> src_object_map;
+  try {
+    bufferlist::iterator iter = in->begin();
+    ::decode(src_object_map, iter);
+  } catch (const buffer::error &err) {
+    return -EINVAL;
+  }
+
+  BitVector<2> dst_object_map;
+  int r = object_map_read(hctx, dst_object_map);
+  if (r < 0) {
+    return r;
+  }
+
+  bool updated = false;
+  for (uint64_t i = 0; i < dst_object_map.size(); ++i) {
+    if (dst_object_map[i] == OBJECT_EXISTS_CLEAN &&
+        (i >= src_object_map.size() || src_object_map[i] == OBJECT_EXISTS)) {
+      dst_object_map[i] = OBJECT_EXISTS;
+      updated = true;
+    }
+  }
+
+  if (updated) {
+    bufferlist bl;
+    ::encode(dst_object_map, bl);
+    r = cls_cxx_write_full(hctx, &bl);
+  }
+  return r;
+}
 
 static const string metadata_key_for_name(const string &name)
 {
@@ -2721,6 +2802,12 @@ void __cls_init()
   cls_register_cxx_method(h_class, "object_map_update",
                           CLS_METHOD_RD | CLS_METHOD_WR,
 			  object_map_update, &h_object_map_update);
+  cls_register_cxx_method(h_class, "object_map_snap_add",
+                          CLS_METHOD_RD | CLS_METHOD_WR,
+			  object_map_snap_add, &h_object_map_snap_add);
+  cls_register_cxx_method(h_class, "object_map_snap_remove",
+                          CLS_METHOD_RD | CLS_METHOD_WR,
+			  object_map_snap_remove, &h_object_map_snap_remove);
 
  /* methods for the old format */
   cls_register_cxx_method(h_class, "snap_list",

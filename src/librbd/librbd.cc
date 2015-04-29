@@ -673,8 +673,25 @@ namespace librbd {
 			  void *arg)
   {
     ImageCtx *ictx = (ImageCtx *)ctx;
-    tracepoint(librbd, diff_iterate_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only, fromsnapname, ofs, len);
-    int r = librbd::diff_iterate(ictx, fromsnapname, ofs, len, cb, arg);
+    tracepoint(librbd, diff_iterate_enter, ictx, ictx->name.c_str(),
+               ictx->snap_name.c_str(), ictx->read_only, fromsnapname, ofs, len,
+               true, true);
+    int r = librbd::diff_iterate(ictx, fromsnapname, ofs, len, true, false, cb,
+                                 arg);
+    tracepoint(librbd, diff_iterate_exit, r);
+    return r;
+  }
+
+  int Image::diff_iterate2(const char *fromsnapname, uint64_t ofs, uint64_t len,
+                           bool include_parent, bool whole_object,
+                           int (*cb)(uint64_t, size_t, int, void *), void *arg)
+  {
+    ImageCtx *ictx = (ImageCtx *)ctx;
+    tracepoint(librbd, diff_iterate_enter, ictx, ictx->name.c_str(),
+              ictx->snap_name.c_str(), ictx->read_only, fromsnapname, ofs, len,
+              include_parent, whole_object);
+    int r = librbd::diff_iterate(ictx, fromsnapname, ofs, len, include_parent,
+                                whole_object, cb, arg);
     tracepoint(librbd, diff_iterate_exit, r);
     return r;
   }
@@ -1638,8 +1655,27 @@ extern "C" int rbd_diff_iterate(rbd_image_t image,
 				void *arg)
 {
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
-  tracepoint(librbd, diff_iterate_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only, fromsnapname, ofs, len);
-  int r = librbd::diff_iterate(ictx, fromsnapname, ofs, len, cb, arg);
+  tracepoint(librbd, diff_iterate_enter, ictx, ictx->name.c_str(),
+             ictx->snap_name.c_str(), ictx->read_only, fromsnapname, ofs, len,
+             true, true);
+  int r = librbd::diff_iterate(ictx, fromsnapname, ofs, len, true, false, cb,
+                               arg);
+  tracepoint(librbd, diff_iterate_exit, r);
+  return r;
+}
+
+extern "C" int rbd_diff_iterate2(rbd_image_t image, const char *fromsnapname,
+                                uint64_t ofs, uint64_t len,
+                                uint8_t include_parent, uint8_t whole_object,
+                                int (*cb)(uint64_t, size_t, int, void *),
+                                void *arg)
+{
+  librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
+  tracepoint(librbd, diff_iterate_enter, ictx, ictx->name.c_str(),
+            ictx->snap_name.c_str(), ictx->read_only, fromsnapname, ofs, len,
+            include_parent != 0, whole_object != 0);
+  int r = librbd::diff_iterate(ictx, fromsnapname, ofs, len, include_parent,
+                              whole_object, cb, arg);
   tracepoint(librbd, diff_iterate_exit, r);
   return r;
 }

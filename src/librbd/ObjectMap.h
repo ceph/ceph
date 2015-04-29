@@ -5,6 +5,7 @@
 
 #include "include/int_types.h"
 #include "include/rados/librados.hpp"
+#include "include/rbd/object_map_types.h"
 #include "common/bit_vector.hpp"
 #include "librbd/AsyncRequest.h"
 #include <boost/optional.hpp>
@@ -12,10 +13,6 @@
 class Context;
 
 namespace librbd {
-
-static const uint8_t OBJECT_NONEXISTENT = 0;
-static const uint8_t OBJECT_EXISTS = 1;
-static const uint8_t OBJECT_PENDING = 2;
 
 class ImageCtx;
 
@@ -51,7 +48,8 @@ public:
 
   void refresh(uint64_t snap_id);
   void rollback(uint64_t snap_id);
-  void snapshot(uint64_t snap_id);
+  void snapshot_add(uint64_t snap_id);
+  int snapshot_remove(uint64_t snap_id);
 
   bool enabled() const;
 

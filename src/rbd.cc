@@ -81,7 +81,8 @@ static std::map<uint64_t, std::string> feature_mapping =
     RBD_FEATURE_LAYERING, "layering")(
     RBD_FEATURE_STRIPINGV2, "striping")(
     RBD_FEATURE_EXCLUSIVE_LOCK, "exclusive-lock")(
-    RBD_FEATURE_OBJECT_MAP, "object-map");
+    RBD_FEATURE_OBJECT_MAP, "object-map")(
+    RBD_FEATURE_FAST_DIFF, "fast-diff");
 
 void usage()
 {
@@ -108,9 +109,10 @@ void usage()
 "         <path> <image-name>                  import image from file (dest\n"
 "                                              defaults as the filename part\n"
 "                                              of file). \"-\" for stdin\n"
-"  diff <image-name> [--from-snap <snap-name>] print extents that differ since\n"
+"  diff [--from-snap <snap-name>] [--object-extents] <image-name>\n"
+"                                              print extents that differ since\n"
 "                                              a previous snap, or image creation\n"
-"  export-diff <image-name> [--from-snap <snap-name>] <path>\n"
+"  export-diff [--from-snap <snap-name>] [--object-extents] <image-name> <path>\n"
 "                                              export an incremental diff to\n"
 "                                              path, or \"-\" for stdout\n"
 "  merge-diff <diff1> <diff2> <path>           merge <diff1> and <diff2> into\n"
@@ -247,7 +249,8 @@ static void format_features(Formatter *f, uint64_t features)
 static void format_flags(Formatter *f, uint64_t flags)
 {
   std::map<uint64_t, std::string> mapping = boost::assign::map_list_of(
-    RBD_FLAG_OBJECT_MAP_INVALID, "object map invalid");
+    RBD_FLAG_OBJECT_MAP_INVALID, "object map invalid")(
+    RBD_FLAG_FAST_DIFF_INVALID, "fast diff invalid");
   format_bitmask(f, "flag", mapping, flags);
 }
 
@@ -1244,7 +1247,7 @@ static int export_diff_cb(uint64_t ofs, size_t _len, int exists, void *arg)
 }
 
 static int do_export_diff(librbd::Image& image, const char *fromsnapname,
-			  const char *endsnapname,
+			  const char *endsnapname, bool object_extents,
 			  const char *path)
 {
   int r;
@@ -1295,7 +1298,8 @@ static int do_export_diff(librbd::Image& image, const char *fromsnapname,
   }
 
   ExportContext ec(&image, fd, info.size);
-  r = image.diff_iterate(fromsnapname, 0, info.size, export_diff_cb, (void *)&ec);
+  r = image.diff_iterate2(fromsnapname, 0, info.size, true, object_extents,
+                          export_diff_cb, (void *)&ec);
   if (r < 0)
     goto out;
 
@@ -1340,7 +1344,7 @@ static int diff_cb(uint64_t ofs, size_t len, int exists, void *arg)
 }
 
 static int do_diff(librbd::Image& image, const char *fromsnapname,
-		   Formatter *f)
+                   bool object_extents, Formatter *f)
 {
   int r;
   librbd::image_info_t info;
@@ -1360,7 +1364,8 @@ static int do_diff(librbd::Image& image, const char *fromsnapname,
     om.t->define_column("Type", TextTable::LEFT, TextTable::LEFT);
   }
 
-  r = image.diff_iterate(fromsnapname, 0, info.size, diff_cb, &om);
+  r = image.diff_iterate2(fromsnapname, 0, info.size, true, object_extents,
+                          diff_cb, &om);
   if (f) {
     f->close_section();
     f->flush(cout);
@@ -2766,6 +2771,7 @@ int main(int argc, const char **argv)
   long long stripe_unit = 0, stripe_count = 0;
   long long bench_io_size = 4096, bench_io_threads = 16, bench_bytes = 1 << 30;
   string bench_pattern = "seq";
+  bool diff_object_extents = false;
 
   std::string val, parse_err;
   std::ostringstream err;
@@ -2889,6 +2895,8 @@ int main(int argc, const char **argv)
 	output_format = strdup(val.c_str());
 	output_format_specified = true;
       }
+    } else if (ceph_argparse_flag(args, i, "--object-extents", (char *)NULL)) {
+      diff_object_extents = true;
     } else if (ceph_argparse_binary_flag(args, i, &pretty_format, NULL, "--pretty-format", (char*)NULL)) {
     } else {
       ++i;
@@ -3554,7 +3562,7 @@ if (!set_conf_param(v, p1, p2, p3)) { \
     break;
 
   case OPT_DIFF:
-    r = do_diff(image, fromsnapname, formatter.get());
+    r = do_diff(image, fromsnapname, diff_object_extents, formatter.get());
     if (r < 0) {
       cerr << "rbd: diff error: " << cpp_strerror(-r) << std::endl;
       return -r;
@@ -3566,7 +3574,7 @@ if (!set_conf_param(v, p1, p2, p3)) { \
       cerr << "rbd: export-diff requires pathname" << std::endl;
       return EINVAL;
     }
-    r = do_export_diff(image, fromsnapname, snapname, path);
+    r = do_export_diff(image, fromsnapname, snapname, diff_object_extents, path);
     if (r < 0) {
       cerr << "rbd: export-diff error: " << cpp_strerror(-r) << std::endl;
       return -r;
