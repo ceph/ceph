@@ -11,7 +11,6 @@ libos_la_SOURCES = \
 	os/GenericObjectMap.cc \
 	os/FileJournal.cc \
 	os/FileStore.cc \
-	os/FlatIndex.cc \
 	os/GenericFileStoreBackend.cc \
 	os/HashIndex.cc \
 	os/IndexManager.cc \
@@ -55,7 +54,6 @@ noinst_HEADERS += \
 	os/GenericObjectMap.h \
 	os/FileJournal.h \
 	os/FileStore.h \
-	os/FlatIndex.h \
 	os/FDCache.h \
 	os/GenericFileStoreBackend.h \
 	os/HashIndex.h \
