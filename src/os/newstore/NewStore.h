@@ -279,7 +279,8 @@ public:
     Mutex wal_apply_lock;
 
     OpSequencer()
-      : qlock("NewStore::OpSequencer::qlock", false, false),
+	//set the qlock to to PTHREAD_MUTEX_RECURSIVE mode
+      : qlock("NewStore::OpSequencer::qlock", true, false),
 	parent(NULL),
 	wal_apply_lock("NewStore::OpSequencer::wal_apply_lock") {
     }
