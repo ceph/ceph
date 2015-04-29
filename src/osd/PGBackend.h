@@ -511,7 +511,6 @@
      const hobject_t &begin,
      int min,
      int max,
-     snapid_t seq,
      vector<hobject_t> *ls,
      hobject_t *next);
 
