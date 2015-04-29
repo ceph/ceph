@@ -247,7 +247,7 @@ public:
       version_t version = 1;
       ::encode(version, new_bl);
     }
-    table_inst.encode(new_bl);
+    table_inst.encode_state(new_bl);
 
     // Write out new table
     int r = io->write_full(object_name, new_bl);
