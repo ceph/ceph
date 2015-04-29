@@ -894,12 +894,22 @@ int md_config_t::set_val_raw(const char *val, const config_option *opt)
     case OPT_STR:
       *(std::string*)opt->conf_ptr(this) = val ? val : "";
       return 0;
-    case OPT_FLOAT:
-      *(float*)opt->conf_ptr(this) = atof(val);
+    case OPT_FLOAT: {
+      std::string err;
+      float f = strict_strtof(val, &err);
+      if (!err.empty())
+	return -EINVAL;
+      *(float*)opt->conf_ptr(this) = f;
       return 0;
-    case OPT_DOUBLE:
-      *(double*)opt->conf_ptr(this) = atof(val);
+    }
+    case OPT_DOUBLE: {
+      std::string err;
+      double f = strict_strtod(val, &err);
+      if (!err.empty())
+	return -EINVAL;
+      *(double*)opt->conf_ptr(this) = f;
       return 0;
+    }
     case OPT_BOOL:
       if (strcasecmp(val, "false") == 0)
 	*(bool*)opt->conf_ptr(this) = false;

@@ -360,6 +360,25 @@ TEST(DaemonConfig, InvalidIntegers) {
   }
 }
 
+TEST(DaemonConfig, InvalidFloats) {
+  {
+    double bad_value = 2 * (double)std::numeric_limits<float>::max();
+    string str = boost::lexical_cast<string>(-bad_value);
+    int ret = g_ceph_context->_conf->set_val("log_stop_at_utilization", str);
+    ASSERT_EQ(ret, -EINVAL);
+  }
+  {
+    double bad_value = 2 * (double)std::numeric_limits<float>::max();
+    string str = boost::lexical_cast<string>(bad_value);
+    int ret = g_ceph_context->_conf->set_val("log_stop_at_utilization", str);
+    ASSERT_EQ(ret, -EINVAL);
+  }
+  {
+    int ret = g_ceph_context->_conf->set_val("log_stop_at_utilization", "not a float");
+    ASSERT_EQ(ret, -EINVAL);
+  }
+}
+
 /*
  * Local Variables:
  * compile-command: "cd .. ; make unittest_daemon_config && ./unittest_daemon_config"
