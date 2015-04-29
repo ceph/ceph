@@ -14,6 +14,7 @@
 
 #include "include/rados/librados.hpp"
 #include "common/errno.h"
+#include "include/util.h"
 
 #include "PoolDump.h"
 
@@ -48,9 +49,17 @@ int PoolDump::dump(IoCtx *io_ctx, unsigned n, unsigned m)
     i = io_ctx->nobjects_begin();
   }
 
+  float progress = 0.0;
   librados::NObjectIterator i_end = io_ctx->nobjects_end();
   for (; i != i_end; ++i) {
     const std::string oid = i->get_oid();
+    if (i.get_progress() != progress) {
+      if (int(i.get_progress() * 100) / 5 != int(progress * 100) / 5) {
+        std::cerr << percentify(i.get_progress()) << "%" << std::endl;
+      }
+      progress = i.get_progress();
+    }
+
     dout(10) << "OID '" << oid << "'" << dendl;
 
     // Compose OBJECT_BEGIN
