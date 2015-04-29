@@ -168,7 +168,6 @@ protected:
     const ghobject_t &start, ///< [in] object at which to start
     const ghobject_t end,    ///< [in] list only objects < end
     int max_count,          ///< [in] return at most max_count objects
-    snapid_t seq,           ///< [in] list only objects with snap >= seq
     vector<ghobject_t> *ls,  ///< [out] Listed objects
     ghobject_t *next         ///< [out] Next object to list
     ) = 0;

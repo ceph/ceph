@@ -189,7 +189,6 @@ public:
     const ghobject_t &start,
     const ghobject_t end,
     int max_count,
-    snapid_t seq,
     vector<ghobject_t> *ls,
     ghobject_t *next
     );
@@ -250,7 +249,6 @@ protected:
     const ghobject_t &start,
     const ghobject_t end,
     int max_count,
-    snapid_t seq,
     vector<ghobject_t> *ls,
     ghobject_t *next
     ) = 0;

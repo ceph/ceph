@@ -323,7 +323,6 @@ int HashIndex::_lookup(const ghobject_t &oid,
 int HashIndex::_collection_list_partial(const ghobject_t &start,
 					const ghobject_t end,
 					int max_count,
-					snapid_t seq,
 					vector<ghobject_t> *ls,
 					ghobject_t *next) {
   vector<string> path;
@@ -331,8 +330,8 @@ int HashIndex::_collection_list_partial(const ghobject_t &start,
   if (!next)
     next = &_next;
   *next = start;
-  dout(20) << "_collection_list_partial start:" << start << " end:" << end << "-" << max_count << " ls.size " << ls->size() << dendl;
-  return list_by_hash(path, end, max_count, seq, next, ls);
+  dout(20) << __func__ << " start:" << start << " end:" << end << "-" << max_count << " ls.size " << ls->size() << dendl;
+  return list_by_hash(path, end, max_count, next, ls);
 }
 
 int HashIndex::prep_delete() {
@@ -764,7 +763,6 @@ uint32_t HashIndex::hash_prefix_to_hash(string prefix) {
 int HashIndex::get_path_contents_by_hash(const vector<string> &path,
 					 const string *lower_bound,
 					 const ghobject_t *next_object,
-					 const snapid_t *seq,
 					 set<string> *hash_prefixes,
 					 set<pair<string, ghobject_t> > *objects) {
   set<string> subdirs;
@@ -786,8 +784,6 @@ int HashIndex::get_path_contents_by_hash(const vector<string> &path,
     if (lower_bound && hash_prefix < *lower_bound)
       continue;
     if (next_object && i->second < *next_object)
-      continue;
-    if (seq && i->second.hobj.snap < *seq)
       continue;
     hash_prefixes->insert(hash_prefix);
     objects->insert(pair<string, ghobject_t>(hash_prefix, i->second));
@@ -813,7 +809,6 @@ int HashIndex::get_path_contents_by_hash(const vector<string> &path,
 int HashIndex::list_by_hash(const vector<string> &path,
 			    ghobject_t end,
 			    int max_count,
-			    snapid_t seq,
 			    ghobject_t *next,
 			    vector<ghobject_t> *out) {
   assert(out);
@@ -824,7 +819,6 @@ int HashIndex::list_by_hash(const vector<string> &path,
   int r = get_path_contents_by_hash(path,
 				    NULL,
 				    next,
-				    &seq,
 				    &hash_prefixes,
 				    &objects);
   if (r < 0)
@@ -843,7 +837,6 @@ int HashIndex::list_by_hash(const vector<string> &path,
       r = list_by_hash(next_path,
 		       end,
 		       max_count,
-		       seq,
 		       &next_recurse,
 		       out);
 

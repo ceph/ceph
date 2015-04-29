@@ -2435,7 +2435,7 @@ int KeyValueStore::_collection_remove_recursive(const coll_t &cid,
   vector<ghobject_t> objects;
   ghobject_t max;
   while (!max.is_max()) {
-    r = collection_list(cid, max, ghobject_t::get_max(), 300, 0, &objects, &max);
+    r = collection_list(cid, max, ghobject_t::get_max(), 300, &objects, &max);
     if (r < 0)
       goto out;
 
@@ -2487,7 +2487,7 @@ bool KeyValueStore::collection_empty(coll_t c)
 }
 
 int KeyValueStore::collection_list(coll_t c, ghobject_t start,
-				   ghobject_t end, int max, snapid_t seq,
+				   ghobject_t end, int max,
 				   vector<ghobject_t> *ls, ghobject_t *next)
 {
   if ( max < 0)
@@ -2781,7 +2781,7 @@ int KeyValueStore::_split_collection(coll_t cid, uint32_t bits, uint32_t rem,
     int move_size = 0;
     while (1) {
       collection_list(cid, current, ghobject_t::get_max(),
-		      get_ideal_list_max(), 0, &objects, &next);
+		      get_ideal_list_max(), &objects, &next);
 
       dout(20) << __func__ << cid << "objects size: " << objects.size()
               << dendl;
@@ -2812,7 +2812,7 @@ int KeyValueStore::_split_collection(coll_t cid, uint32_t bits, uint32_t rem,
     ghobject_t next;
     while (1) {
       collection_list(cid, next, ghobject_t::get_max(),
-		      get_ideal_list_max(), 0, &objects, &next);
+		      get_ideal_list_max(), &objects, &next);
       if (objects.empty())
         break;
 
@@ -2828,7 +2828,7 @@ int KeyValueStore::_split_collection(coll_t cid, uint32_t bits, uint32_t rem,
     next = ghobject_t();
     while (1) {
       collection_list(dest, next, ghobject_t::get_max(),
-		      get_ideal_list_max(), 0, &objects, &next);
+		      get_ideal_list_max(), &objects, &next);
       if (objects.empty())
         break;
 

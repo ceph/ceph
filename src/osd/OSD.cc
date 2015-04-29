@@ -2508,7 +2508,7 @@ void OSD::clear_temp_objects()
       vector<ghobject_t> objects;
       store->collection_list(*p, next, ghobject_t::get_max(),
 			     store->get_ideal_list_max(),
-			     0, &objects, &next);
+			     &objects, &next);
       if (objects.empty())
 	break;
       vector<ghobject_t>::iterator q;
@@ -2546,7 +2546,7 @@ void OSD::recursive_remove_collection(ObjectStore *store, spg_t pgid, coll_t tmp
   SnapMapper mapper(&driver, 0, 0, 0, pgid.shard);
 
   vector<ghobject_t> objects;
-  store->collection_list(tmp, ghobject_t(), ghobject_t::get_max(), INT_MAX, 0, &objects, 0);
+  store->collection_list(tmp, ghobject_t(), ghobject_t::get_max(), INT_MAX, &objects, 0);
 
   // delete them.
   unsigned removed = 0;
@@ -4228,7 +4228,6 @@ bool remove_dir(
     next,
     ghobject_t::get_max(),
     store->get_ideal_list_max(),
-    0,
     &olist,
     &next);
   for (vector<ghobject_t>::iterator i = olist.begin();
