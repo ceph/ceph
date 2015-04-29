@@ -184,7 +184,7 @@ def save_config(ctx, config):
         with file(os.path.join(ctx.archive, 'config.yaml'), 'w') as f:
             yaml.safe_dump(ctx.config, f, default_flow_style=False)
 
-def check_lock(ctx, config):
+def check_lock(ctx, config, check_up=True):
     """
     Check lock status of remote machines.
     """
@@ -197,7 +197,10 @@ def check_lock(ctx, config):
         log.debug('machine status is %s', repr(status))
         assert status is not None, \
             'could not read lock status for {name}'.format(name=machine)
-        assert status['up'], 'machine {name} is marked down'.format(name=machine)
+        if check_up:
+            assert status['up'], 'machine {name} is marked down'.format(
+                name=machine
+            )
         assert status['locked'], \
             'machine {name} is not locked'.format(name=machine)
         assert status['locked_by'] == ctx.owner, \
