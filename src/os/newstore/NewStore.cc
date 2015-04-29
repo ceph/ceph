@@ -3320,9 +3320,8 @@ int NewStore::_do_write(TransContext *txc,
     }
   }
 
-  if (((o->onode.size <= offset || o->onode.size == 0) &&
-       length >= g_conf->newstore_sync_append_min) ||
-
+  if (o->onode.size <= offset ||
+      o->onode.size == 0 ||
       o->onode.data_map.empty()) {
     uint64_t x_offset;
     if (o->onode.data_map.empty()) {
