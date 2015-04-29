@@ -100,7 +100,6 @@ int PGBackend::objects_list_partial(
   const hobject_t &begin,
   int min,
   int max,
-  snapid_t seq,
   vector<hobject_t> *ls,
   hobject_t *next)
 {
@@ -118,7 +117,6 @@ int PGBackend::objects_list_partial(
       _next,
       ghobject_t::get_max(),
       max - ls->size(),
-      seq,
       &objects,
       &_next);
     if (r != 0)
@@ -153,7 +151,6 @@ int PGBackend::objects_list_range(
     ghobject_t(start, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
     ghobject_t(end, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
     INT_MAX,
-    seq,
     &objects,
     NULL);
   ls->reserve(objects.size());
