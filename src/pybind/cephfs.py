@@ -165,7 +165,7 @@ class LibCephFS(object):
         self.libcephfs = load_libcephfs()
         self.cluster = c_void_p()
 
-        if conffile is not None and not isinstance(conffile, str):
+        if conffile is not None and not isinstance(conffile, basestring):
             raise TypeError('conffile must be a string or None')
         ret = self.libcephfs.ceph_create(byref(self.cluster), c_char_p(0))
         if ret != 0:
@@ -181,7 +181,7 @@ class LibCephFS(object):
                 self.conf_set(key, value)
 
     def conf_read_file(self, conffile=None):
-        if conffile is not None and not isinstance(conffile, str):
+        if conffile is not None and not isinstance(conffile, basestring):
             raise TypeError('conffile param must be a string')
         ret = self.libcephfs.ceph_conf_read_file(self.cluster, c_char_p(conffile))
         if ret != 0:
@@ -229,7 +229,7 @@ class LibCephFS(object):
 
     def conf_get(self, option):
         self.require_state("configuring", "initialized", "mounted")
-        if not isinstance(option, str):
+        if not isinstance(option, basestring):
             raise TypeError('option must be a string')
         length = 20
         while True:
@@ -247,9 +247,9 @@ class LibCephFS(object):
 
     def conf_set(self, option, val):
         self.require_state("configuring", "initialized", "mounted")
-        if not isinstance(option, str):
+        if not isinstance(option, basestring):
             raise TypeError('option must be a string')
-        if not isinstance(val, str):
+        if not isinstance(val, basestring):
             raise TypeError('val must be a string')
         ret = self.libcephfs.ceph_conf_set(self.cluster, c_char_p(option),
                                            c_char_p(val))
@@ -312,7 +312,7 @@ class LibCephFS(object):
 
     def opendir(self, path):
         self.require_state("mounted")
-        if not isinstance(path, str):
+        if not isinstance(path, basestring):
             raise TypeError('path must be a string')
         dir_handler = c_void_p()
         ret = self.libcephfs.ceph_opendir(self.cluster, c_char_p(path),
@@ -343,7 +343,7 @@ class LibCephFS(object):
 
     def mkdir(self, path, mode):
         self.require_state("mounted")
-        if not isinstance(path, str):
+        if not isinstance(path, basestring):
             raise TypeError('path must be a string')
         ret = self.libcephfs.ceph_mkdir(self.cluster, c_char_p(path), c_int(mode))
         if ret < 0:
@@ -351,9 +351,9 @@ class LibCephFS(object):
 
     def mkdirs(self, path, mode):
         self.require_state("mounted")
-        if not isinstance(path, str):
+        if not isinstance(path, basestring):
             raise TypeError('path must be a string')
-        if not isinstance(mode, int):
+        if not isinstance(mode, basestring):
             raise TypeError('mode must be an int')
         ret = self.libcephfs.ceph_mkdir(self.cluster, c_char_p(path), c_int(mode))
         if ret < 0:
@@ -361,7 +361,7 @@ class LibCephFS(object):
 
     def rmdir(self, path):
         self.require_state("mounted")
-        if not isinstance(path, str):
+        if not isinstance(path, basestring):
             raise TypeError('path must be a string')
         ret = self.libcephfs.ceph_rmdir(self.cluster, c_char_p(path))
         if ret < 0:
@@ -369,9 +369,9 @@ class LibCephFS(object):
 
     def open(self, path, flags, mode):
         self.require_state("mounted")
-        if not isinstance(path, str):
+        if not isinstance(path, basestring):
             raise TypeError('path must be a string')
-        if not isinstance(mode, int):
+        if not isinstance(mode, basestring):
             raise TypeError('mode must be an int')
         if not isinstance(flags, int):
             raise TypeError('flags must be an int')
@@ -387,9 +387,9 @@ class LibCephFS(object):
             raise make_ex(ret, "error in close")
 
     def getxattr(self, path, name):
-        if not isinstance(path, str):
+        if not isinstance(path, basestring):
             raise TypeError('path must be a string')
-        if not isinstance(name, str):
+        if not isinstance(name, basestring):
             raise TypeError('name must be a string')
 
         l = 255
@@ -401,11 +401,11 @@ class LibCephFS(object):
         return buf.value
 
     def setxattr(self, path, name, value, flags):
-        if not isinstance(path, str):
+        if not isinstance(path, basestring):
             raise TypeError('path must be a string')
-        if not isinstance(name, str):
+        if not isinstance(name, basestring):
             raise TypeError('name must be a string')
-        if not isinstance(value, str):
+        if not isinstance(value, basestring):
             raise TypeError('value must be a string')
         self.require_state("mounted")
         ret = self.libcephfs.ceph_setxattr(self.cluster, c_char_p(path),
@@ -416,7 +416,7 @@ class LibCephFS(object):
 
     def stat(self, path):
         self.require_state("mounted")
-        if not isinstance(path, str):
+        if not isinstance(path, basestring):
             raise TypeError('path must be a string')
         statbuf = cephfs_stat()
         ret = self.libcephfs.ceph_stat(self.cluster, c_char_p(path),
@@ -447,7 +447,7 @@ class LibCephFS(object):
 
     def rename(self, src, dst):
         self.require_state("mounted")
-        if not isinstance(src, str) or not isinstance(dst, str):
+        if not isinstance(src, basestring) or not isinstance(dst, basestring):
             raise TypeError('source and destination must be a string')
         ret = self.libcephfs.ceph_rename(self.cluster, c_char_p(src), c_char_p(dst))
         if ret < 0:
