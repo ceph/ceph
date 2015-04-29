@@ -36,6 +36,10 @@ class NoSpace(Error):
     pass
 
 
+class InvalidValue(Error):
+    pass
+
+
 class IncompleteWriteError(Error):
     pass
 
@@ -61,7 +65,8 @@ def make_ex(ret, msg):
         errno.EIO       : IOError,
         errno.ENOSPC    : NoSpace,
         errno.EEXIST    : ObjectExists,
-        errno.ENODATA   : NoData
+        errno.ENODATA   : NoData,
+        errno.EINVAL    : InvalidValue,
         }
     ret = abs(ret)
     if ret in errors:
