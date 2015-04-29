@@ -23,6 +23,9 @@
 #include <string>
 #include <string.h>
 
+#include <boost/lexical_cast.hpp>
+
+
 using std::string;
 
 TEST(DaemonConfig, SimpleSet) {
@@ -333,6 +336,30 @@ TEST(DaemonConfig, ThreadSafety1) {
 				       "false"));
   ASSERT_EQ(ret, 0);
 }
+
+TEST(DaemonConfig, InvalidIntegers) {
+  {
+    int ret = g_ceph_context->_conf->set_val("num_client", "-1");
+    ASSERT_EQ(ret, -EINVAL);
+  }
+  {
+    int ret = g_ceph_context->_conf->set_val("num_client", "-1K");
+    ASSERT_EQ(ret, -EINVAL);
+  }
+  {
+    long long bad_value = (long long)std::numeric_limits<int>::max() + 1;
+    string str = boost::lexical_cast<string>(bad_value);
+    int ret = g_ceph_context->_conf->set_val("num_client", str);
+    ASSERT_EQ(ret, -EINVAL);
+  }
+  {
+    // 4G must be greater than INT_MAX
+    ASSERT_GT(4LL * 1024 * 1024 * 1024, (long long)std::numeric_limits<int>::max());
+    int ret = g_ceph_context->_conf->set_val("num_client", "4G");
+    ASSERT_EQ(ret, -EINVAL);
+  }
+}
+
 /*
  * Local Variables:
  * compile-command: "cd .. ; make unittest_daemon_config && ./unittest_daemon_config"

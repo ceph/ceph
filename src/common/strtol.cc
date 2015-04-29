@@ -12,14 +12,12 @@
  *
  */
 
+#include "strtol.h"
+
 #include <errno.h>
 #include <limits.h>
 #include <sstream>
 #include <stdlib.h>
-#include <string>
-extern "C" {
-#include <stdint.h>
-}
 
 using std::ostringstream;
 
@@ -131,10 +129,8 @@ float strict_strtof(const char *str, std::string *err)
 uint64_t strict_sistrtoll(const char *str, std::string *err)
 {
   std::string s(str);
-  if (s.size() == 0) {
-    ostringstream oss;
-    oss << "strict_sistrtoll: value not specified";
-    *err = oss.str();
+  if (s.empty()) {
+    *err = "strict_sistrtoll: value not specified";
     return 0;
   }
   const char &u = s.at(s.size()-1); //str[std::strlen(str)-1];
@@ -161,9 +157,25 @@ uint64_t strict_sistrtoll(const char *str, std::string *err)
     s = std::string(str, s.size()-1);
   v = s.c_str();
 
-  uint64_t r = strict_strtoll(v, 10, err);
+  long long r_ll = strict_strtoll(v, 10, err);
+
+  if (r_ll < 0) {
+    *err = "strict_sistrtoll: value should not be negative";
+    return 0;
+  }
+
+  uint64_t r = r_ll;
   if (err->empty() && m > 0) {
-    r = (r << m);
+    if (r > (std::numeric_limits<uint64_t>::max() >> m)) {
+      *err = "strict_sistrtoll: value seems to be too large";
+      return 0;
+    }
+    r <<= m;
   }
   return r;
+}
+
+template <>
+uint64_t strict_si_cast(const char *str, std::string *err) {
+  return strict_sistrtoll(str, err);
 }
