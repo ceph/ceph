@@ -909,6 +909,15 @@ CEPH_RADOS_API int rados_nobjects_list_open_range(rados_ioctx_t io,
  */
 CEPH_RADOS_API uint32_t rados_nobjects_list_get_pg_hash_position(rados_list_ctx_t ctx);
 
+
+/**
+ * Evaluate the progress through the listed range
+ *
+ * @param ctx iterator marking where you are in the listing
+ * @returns a real number between 0.0 and 1.0
+ */
+CEPH_RADOS_API float rados_nobjects_list_get_progress(rados_list_ctx_t ctx);
+
 /**
  * Reposition object iterator to a different hash position
  *

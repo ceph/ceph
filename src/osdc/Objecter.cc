@@ -3142,38 +3142,35 @@ void Objecter::list_nobjects(NListContext *list_context, Context *onfinish)
   if (list_context->starting_pg_num == 0) {     // there can't be zero pgs!
     list_context->starting_pg_num = pg_num;
     ldout(cct, 20) << pg_num << " placement groups" << dendl;
-  }
 
-  // Range of PGs to list over
-  uint32_t pg_min = 0;  // (inclusive)
-  uint32_t pg_max = list_context->starting_pg_num;  // (exclusive)
-  if (list_context->is_sharded()) {
-    // Work out PG range addressed by this worker
-    // (divide hash space into pg_num*worker_m chunks, and assign pg_num
-    // of them to each worker)
-    pg_min = (list_context->worker_n * pg_num) / list_context->worker_m;
-    if (list_context->worker_n == list_context->worker_m - 1) {
-      // Extend PG max to encompass any remainder
-      pg_max = list_context->starting_pg_num;
+    // Calculate range of PGs to list over
+    if (list_context->is_sharded()) {
+      // Work out PG range addressed by this worker
+      // (divide hash space into pg_num*worker_m chunks, and assign pg_num
+      // of them to each worker)
+      list_context->pg_min = (list_context->worker_n * pg_num) / list_context->worker_m;
+      if (list_context->worker_n == list_context->worker_m - 1) {
+        // Extend PG max to encompass any remainder
+        list_context->pg_max = list_context->starting_pg_num;
+      } else {
+        list_context->pg_max = (list_context->worker_n * pg_num + pg_num) / list_context->worker_m;
+      }
+
+      // Initialize current_pg
+      list_context->current_pg = list_context->pg_min;
     } else {
-      pg_max = (list_context->worker_n * pg_num + pg_num) / list_context->worker_m;
+      list_context->pg_min = 0;
+      list_context->pg_max = list_context->starting_pg_num;
     }
 
-
-
-    // No PGs assigned to this worker?
-    if (pg_min == pg_max) {
-      ldout(cct, 10) << "Worker " << list_context->worker_n << " of "
-                     << list_context->worker_m << " assigned no PGs" << dendl;
-      put_nlist_context_budget(list_context);
-      onfinish->complete(0);
-      return;
+    if (list_context->pg_min == list_context->pg_max) {
+      // No PGs assigned to this worker?  Finish immediately.
+      list_context->at_end_of_pg = true;
     }
-  }
 
-  // Initialize current_pg
-  if (list_context->current_pg == 0xffffffff) {
-    list_context->current_pg = pg_min;
+    ldout(cct, 4) << __func__ << " pg min,max,cur = " <<
+      list_context->pg_min << "," << list_context->pg_max
+      << "," << list_context->current_pg << dendl;
   }
 
   // Advance to next PG if necessary
@@ -3184,7 +3181,7 @@ void Objecter::list_nobjects(NListContext *list_context, Context *onfinish)
     list_context->cookie = collection_list_handle_t();
     
     // Always list from upper
-    if (list_context->current_pg >= pg_max) {
+    if (list_context->current_pg >= list_context->pg_max) {
       list_context->at_end_of_pool = true;
       ldout(cct, 20) << " no more pgs; reached end of pool" << dendl;
     } else {
@@ -3203,7 +3200,7 @@ void Objecter::list_nobjects(NListContext *list_context, Context *onfinish)
   if (list_context->starting_pg_num != pg_num) {
     // start reading from the beginning; the pgs have changed
     ldout(cct, 10) << " pg_num changed; restarting with " << pg_num << dendl;
-    list_context->current_pg = pg_min;
+    list_context->current_pg = list_context->pg_min;
     list_context->cookie = collection_list_handle_t();
     list_context->current_pg_epoch = 0;
     list_context->starting_pg_num = pg_num;
@@ -4615,3 +4612,9 @@ void Objecter::set_epoch_barrier(epoch_t epoch)
   }
 }
 
+float Objecter::NListContext::get_progress() const
+{
+  const uint32_t pgs = (pg_max - pg_min);
+
+  return float(current_pg - pg_min) / pgs;
+}

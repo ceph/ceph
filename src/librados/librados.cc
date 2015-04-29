@@ -658,6 +658,15 @@ uint32_t librados::NObjectIteratorImpl::get_pg_hash_position() const
     return ctx->lc->get_pg_hash_position();
 }
 
+float librados::NObjectIteratorImpl::get_progress() const
+{
+  if (ctx->new_request) {
+    return ctx->nlc->get_progress();
+  } else {
+    return 0.0;
+  }
+}
+
 ///////////////////////////// NObjectIterator /////////////////////////////
 librados::NObjectIterator::NObjectIterator(ObjListCtx *ctx_)
 {
@@ -749,6 +758,12 @@ uint32_t librados::NObjectIterator::get_pg_hash_position() const
 {
   assert(impl);
   return impl->get_pg_hash_position();
+}
+
+float librados::NObjectIterator::get_progress() const
+{
+  assert(impl);
+  return impl->get_progress();
 }
 
 const librados::NObjectIterator librados::NObjectIterator::__EndObjectIterator(NULL);
@@ -3538,6 +3553,13 @@ extern "C" uint32_t rados_nobjects_list_get_pg_hash_position(
   uint32_t retval = lh->nlc->get_pg_hash_position();
   tracepoint(librados, rados_nobjects_list_get_pg_hash_position_exit, retval);
   return retval;
+}
+
+extern "C" float rados_nobjects_list_get_progress(
+    rados_list_ctx_t listctx)
+{
+  librados::ObjListCtx *lh = (librados::ObjListCtx *)listctx;
+  return lh->nlc->get_progress();
 }
 
 // Deprecated, but using it for compatibility with older OSDs

@@ -109,6 +109,8 @@ namespace librados
     /// move the iterator to a given hash position.  this may (will!) be rounded to the nearest pg.
     uint32_t seek(uint32_t pos);
 
+    float get_progress() const;
+
   private:
     NObjectIterator(ObjListCtx *ctx_);
     void get_next();
