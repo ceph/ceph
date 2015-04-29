@@ -1603,6 +1603,38 @@ public:
 
       int delete_obj();
     };
+
+    struct Stat {
+      RGWRados::Object *source;
+
+      struct Result {
+        rgw_obj obj;
+        RGWObjManifest manifest;
+        bool has_manifest;
+        uint64_t size;
+        time_t mtime;
+        map<string, bufferlist> attrs;
+
+        Result() : has_manifest(false), size(0), mtime(0) {}
+      } result;
+
+      struct State {
+        librados::IoCtx io_ctx;
+        librados::AioCompletion *completion;
+        int ret;
+
+        State() : completion(NULL), ret(0) {}
+      } state;
+
+
+      Stat(RGWRados::Object *_source) : source(_source) {}
+
+      int stat_async();
+      int wait();
+      int stat();
+    private:
+      int finish();
+    };
   };
 
   class Bucket {
