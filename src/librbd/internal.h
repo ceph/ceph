@@ -117,12 +117,13 @@ namespace librbd {
   int snap_rollback(ImageCtx *ictx, const char *snap_name,
 		    ProgressContext& prog_ctx);
   int snap_remove(ImageCtx *ictx, const char *snap_name);
+  int snap_remove_helper(ImageCtx *ictx, Context* ctx, const char *snap_name);
   int snap_protect(ImageCtx *ictx, const char *snap_name);
   int snap_unprotect(ImageCtx *ictx, const char *snap_name);
   int snap_is_protected(ImageCtx *ictx, const char *snap_name,
 			bool *is_protected);
   int add_snap(ImageCtx *ictx, const char *snap_name);
-  int rm_snap(ImageCtx *ictx, const char *snap_name);
+  int rm_snap(ImageCtx *ictx, const char *snap_name, uint64_t snap_id);
   int refresh_parent(ImageCtx *ictx);
   int ictx_check(ImageCtx *ictx);
   int ictx_refresh(ImageCtx *ictx);
@@ -184,8 +185,8 @@ namespace librbd {
   int64_t read_iterate(ImageCtx *ictx, uint64_t off, uint64_t len,
 		       int (*cb)(uint64_t, size_t, const char *, void *),
 		       void *arg);
-  int diff_iterate(ImageCtx *ictx, const char *fromsnapname,
-		   uint64_t off, uint64_t len,
+  int diff_iterate(ImageCtx *ictx, const char *fromsnapname, uint64_t off,
+                   uint64_t len, bool include_parent, bool whole_object,
 		   int (*cb)(uint64_t, size_t, int, void *),
 		   void *arg);
   ssize_t read(ImageCtx *ictx, uint64_t off, size_t len, char *buf, int op_flags);

@@ -187,6 +187,8 @@ public:
    * @param fromsnapname start snapshot name, or NULL
    * @param ofs start offset
    * @param len len in bytes of region to report on
+   * @param include_parent true if full history diff should include parent
+   * @param whole_object 1 if diff extents should cover whole object
    * @param cb callback to call for each allocated region
    * @param arg argument to pass to the callback
    * @returns 0 on success, or negative error code on error
@@ -194,6 +196,11 @@ public:
   int diff_iterate(const char *fromsnapname,
 		   uint64_t ofs, uint64_t len,
 		   int (*cb)(uint64_t, size_t, int, void *), void *arg);
+  int diff_iterate2(const char *fromsnapname,
+		    uint64_t ofs, uint64_t len,
+                    bool include_parent, bool whole_object,
+		    int (*cb)(uint64_t, size_t, int, void *), void *arg);
+
   ssize_t write(uint64_t ofs, size_t len, ceph::bufferlist& bl);
   /* @parmam op_flags see librados.h constants beginning with LIBRADOS_OP_FLAG */
   ssize_t write2(uint64_t ofs, size_t len, ceph::bufferlist& bl, int op_flags);

@@ -764,6 +764,23 @@ namespace librbd {
       rados_op->exec("rbd", "object_map_update", in);
     }
 
+    void object_map_snap_add(librados::ObjectWriteOperation *rados_op)
+    {
+      bufferlist in;
+      rados_op->exec("rbd", "object_map_snap_add", in);
+    }
+
+    void object_map_snap_remove(librados::ObjectWriteOperation *rados_op,
+                                const ceph::BitVector<2> &object_map)
+    {
+      ceph::BitVector<2> object_map_copy(object_map);
+      object_map_copy.set_crc_enabled(false);
+
+      bufferlist in;
+      ::encode(object_map_copy, in);
+      rados_op->exec("rbd", "object_map_snap_remove", in);
+    }
+
     int metadata_set(librados::IoCtx *ioctx, const std::string &oid,
                      const map<string, bufferlist> &data)
     {

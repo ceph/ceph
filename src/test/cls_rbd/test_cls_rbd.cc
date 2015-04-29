@@ -5,6 +5,7 @@
 #include "include/encoding.h"
 #include "include/types.h"
 #include "include/rados/librados.h"
+#include "include/rbd/object_map_types.h"
 #include "include/stringify.h"
 #include "cls/rbd/cls_rbd.h"
 #include "cls/rbd/cls_rbd_client.h"
@@ -54,6 +55,8 @@ using ::librbd::cls_client::object_map_load;
 using ::librbd::cls_client::object_map_save;
 using ::librbd::cls_client::object_map_resize;
 using ::librbd::cls_client::object_map_update;
+using ::librbd::cls_client::object_map_snap_add;
+using ::librbd::cls_client::object_map_snap_remove;
 using ::librbd::cls_client::get_flags;
 using ::librbd::cls_client::set_flags;
 using ::librbd::cls_client::metadata_set;
@@ -1037,6 +1040,98 @@ TEST_F(TestClsRbd, object_map_load_enoent)
   ASSERT_EQ(-ENOENT, object_map_load(&ioctx, oid, &osd_bit_vector));
 
   ioctx.close();
+}
+
+TEST_F(TestClsRbd, object_map_snap_add)
+{
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
+
+  string oid = get_temp_image_name();
+  BitVector<2> ref_bit_vector;
+  ref_bit_vector.resize(16);
+  for (uint64_t i = 0; i < ref_bit_vector.size(); ++i) {
+    if (i < 4) {
+      ref_bit_vector[i] = OBJECT_NONEXISTENT;
+    } else {
+      ref_bit_vector[i] = OBJECT_EXISTS;
+    }
+  }
+
+  BitVector<2> osd_bit_vector;
+
+  librados::ObjectWriteOperation op1;
+  object_map_resize(&op1, ref_bit_vector.size(), OBJECT_EXISTS);
+  ASSERT_EQ(0, ioctx.operate(oid, &op1));
+
+  librados::ObjectWriteOperation op2;
+  object_map_update(&op2, 0, 4, OBJECT_NONEXISTENT, boost::optional<uint8_t>());
+  ASSERT_EQ(0, ioctx.operate(oid, &op2));
+
+  ASSERT_EQ(0, object_map_load(&ioctx, oid, &osd_bit_vector));
+  ASSERT_EQ(ref_bit_vector, osd_bit_vector);
+
+  librados::ObjectWriteOperation op3;
+  object_map_snap_add(&op3);
+  ASSERT_EQ(0, ioctx.operate(oid, &op3));
+
+  for (uint64_t i = 0; i < ref_bit_vector.size(); ++i) {
+    if (ref_bit_vector[i] == OBJECT_EXISTS) {
+      ref_bit_vector[i] = OBJECT_EXISTS_CLEAN;
+    }
+  }
+
+  ASSERT_EQ(0, object_map_load(&ioctx, oid, &osd_bit_vector));
+  ASSERT_EQ(ref_bit_vector, osd_bit_vector);
+}
+
+TEST_F(TestClsRbd, object_map_snap_remove)
+{
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
+
+  string oid = get_temp_image_name();
+  BitVector<2> ref_bit_vector;
+  ref_bit_vector.resize(16);
+  for (uint64_t i = 0; i < ref_bit_vector.size(); ++i) {
+    if (i < 4) {
+      ref_bit_vector[i] = OBJECT_EXISTS_CLEAN;
+    } else {
+      ref_bit_vector[i] = OBJECT_EXISTS;
+    }
+  }
+
+  BitVector<2> osd_bit_vector;
+
+  librados::ObjectWriteOperation op1;
+  object_map_resize(&op1, ref_bit_vector.size(), OBJECT_EXISTS);
+  ASSERT_EQ(0, ioctx.operate(oid, &op1));
+
+  librados::ObjectWriteOperation op2;
+  object_map_update(&op2, 0, 4, OBJECT_EXISTS_CLEAN, boost::optional<uint8_t>());
+  ASSERT_EQ(0, ioctx.operate(oid, &op2));
+
+  ASSERT_EQ(0, object_map_load(&ioctx, oid, &osd_bit_vector));
+  ASSERT_EQ(ref_bit_vector, osd_bit_vector);
+
+  BitVector<2> snap_bit_vector;
+  snap_bit_vector.resize(4);
+  for (uint64_t i = 0; i < snap_bit_vector.size(); ++i) {
+    if (i == 1 || i == 2) {
+      snap_bit_vector[i] = OBJECT_EXISTS;
+    } else {
+      snap_bit_vector[i] = OBJECT_NONEXISTENT;
+    }
+  }
+
+  librados::ObjectWriteOperation op3;
+  object_map_snap_remove(&op3, snap_bit_vector);
+  ASSERT_EQ(0, ioctx.operate(oid, &op3));
+
+  ref_bit_vector[1] = OBJECT_EXISTS;
+  ref_bit_vector[2] = OBJECT_EXISTS;
+  ASSERT_EQ(0, object_map_load(&ioctx, oid, &osd_bit_vector));
+  ASSERT_EQ(ref_bit_vector, osd_bit_vector);
 }
 
 TEST_F(TestClsRbd, flags)

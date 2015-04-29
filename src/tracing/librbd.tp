@@ -1287,7 +1287,9 @@ TRACEPOINT_EVENT(librbd, diff_iterate_enter,
         char, read_only,
         const char*, from_snap_name,
         uint64_t, offset,
-        uint64_t, length),
+        uint64_t, length,
+        char, include_parent,
+        char, whole_object),
     TP_FIELDS(
         ctf_integer_hex(void*, imagectx, imagectx)
         ctf_string(name, name)
@@ -1296,6 +1298,8 @@ TRACEPOINT_EVENT(librbd, diff_iterate_enter,
         ctf_string(from_snap_name, from_snap_name)
         ctf_integer(uint64_t, offset, offset)
         ctf_integer(uint64_t, length, length)
+        ctf_integer(char, include_parent, include_parent)
+        ctf_integer(char, whole_object, whole_object)
     )
 )
 

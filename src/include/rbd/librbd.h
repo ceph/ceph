@@ -48,6 +48,7 @@ extern "C" {
 #endif
 
 #define RBD_FLAG_OBJECT_MAP_INVALID   (1<<0)
+#define RBD_FLAG_FAST_DIFF_INVALID    (1<<1)
 
 typedef void *rbd_snap_t;
 typedef void *rbd_image_t;
@@ -389,6 +390,8 @@ CEPH_RBD_API int rbd_read_iterate2(rbd_image_t image, uint64_t ofs, uint64_t len
  * @param fromsnapname start snapshot name, or NULL
  * @param ofs start offset
  * @param len len in bytes of region to report on
+ * @param include_parent 1 if full history diff should include parent
+ * @param whole_object 1 if diff extents should cover whole object
  * @param cb callback to call for each allocated region
  * @param arg argument to pass to the callback
  * @returns 0 on success, or negative error code on error
@@ -398,6 +401,12 @@ CEPH_RBD_API int rbd_diff_iterate(rbd_image_t image,
 		                  uint64_t ofs, uint64_t len,
 		                  int (*cb)(uint64_t, size_t, int, void *),
                                   void *arg);
+CEPH_RBD_API int rbd_diff_iterate2(rbd_image_t image,
+		                   const char *fromsnapname,
+		                   uint64_t ofs, uint64_t len,
+                                   uint8_t include_parent, uint8_t whole_object,
+		                   int (*cb)(uint64_t, size_t, int, void *),
+                                   void *arg);
 CEPH_RBD_API ssize_t rbd_write(rbd_image_t image, uint64_t ofs, size_t len,
                                const char *buf);
 /*
