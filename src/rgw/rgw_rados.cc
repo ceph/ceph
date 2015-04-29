@@ -5002,6 +5002,83 @@ int RGWRados::Object::Read::get_attr(const char *name, bufferlist& dest)
   return 0;
 }
 
+
+int RGWRados::Object::Stat::stat_async()
+{
+  RGWObjectCtx& ctx = source->get_ctx();
+  rgw_obj& obj = source->get_obj();
+  RGWRados *store = source->get_store();
+
+  RGWObjState *s = ctx.get_state(obj); /* calling this one directly because otherwise a sync request will be sent */
+  if (s->has_attrs) {
+    state.ret = 0;
+    result.size = s->size;
+    result.mtime = s->mtime;
+    result.attrs = s->attrset;
+    result.has_manifest = s->has_manifest;
+    result.manifest = s->manifest;
+    return 0;
+  }
+
+  string oid;
+  string loc;
+  rgw_bucket bucket;
+  get_obj_bucket_and_oid_loc(obj, bucket, oid, loc);
+
+  int r = store->get_obj_ioctx(obj, &state.io_ctx);
+  if (r < 0) {
+    return r;
+  }
+
+  librados::ObjectReadOperation op;
+  op.stat(&result.size, &result.mtime, NULL);
+  op.getxattrs(&result.attrs, NULL);
+  state.completion = librados::Rados::aio_create_completion(NULL, NULL, NULL);
+  r = state.io_ctx.aio_operate(oid, state.completion, &op, NULL);
+  if (r < 0) {
+    ldout(store->ctx(), 5) << __func__ << ": ERROR: aio_operate() returned ret=" << r << dendl;
+    return r;
+  }
+
+  return 0;
+}
+
+
+int RGWRados::Object::Stat::wait()
+{
+  if (!state.completion) {
+    return state.ret;
+  }
+
+  state.completion->wait_for_complete();
+  state.ret = state.completion->get_return_value();
+  state.completion->release();
+
+  if (state.ret != 0) {
+    return state.ret;
+  }
+
+  return finish();
+}
+
+int RGWRados::Object::Stat::finish()
+{
+  map<string, bufferlist>::iterator iter = result.attrs.find(RGW_ATTR_MANIFEST);
+  if (iter != result.attrs.end()) {
+    bufferlist& bl = iter->second;
+    bufferlist::iterator biter = bl.begin();
+    try {
+      ::decode(result.manifest, biter);
+    } catch (buffer::error& err) {
+      RGWRados *store = source->get_store();
+      ldout(store->ctx(), 0) << "ERROR: " << __func__ << ": failed to decode manifest"  << dendl;
+      return -EIO;
+    }
+  }
+
+  return 0;
+}
+
 /**
  * Get the attributes for an object.
  * bucket: name of the bucket holding the object.
