@@ -5468,8 +5468,6 @@ void ReplicatedPG::make_writeable(OpContext *ctx)
     snap_oi->prior_version = ctx->obs->oi.version;
     snap_oi->copy_user_bits(ctx->obs->oi);
     snap_oi->snaps = snaps;
-    if (was_dirty)
-      snap_oi->set_flag(object_info_t::FLAG_DIRTY);
 
     // prepend transaction to op_t
     PGBackend::PGTransaction *t = pgbackend->get_transaction();
