@@ -104,14 +104,14 @@ int EventCenter::init(int n)
 
 EventCenter::~EventCenter()
 {
-  delete driver;
-
   if (notify_receive_fd >= 0) {
     delete_file_event(notify_receive_fd, EVENT_READABLE);
     ::close(notify_receive_fd);
   }
   if (notify_send_fd >= 0)
     ::close(notify_send_fd);
+    
+  delete driver;
   if (file_events)
     free(file_events);
 }
