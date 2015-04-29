@@ -178,11 +178,6 @@ public:
     int *exist
     );
 
-  /// @see CollectionIndex
-  int collection_list(
-    vector<ghobject_t> *ls
-    );
-
   /// @see CollectionIndex;
   int pre_hash_collection(
       uint32_t pg_num,
@@ -241,21 +236,6 @@ protected:
     vector<string> *path, ///< [out] Path to the object.
     string *mangled_name, ///< [out] Mangled filename.
     int *exists		  ///< [out] True if the object exists.
-    ) = 0;
-
-  /**
-   * List contents of the collection, must be implemented by derived class.
-   *
-   * @param [out] seq Snapid to list.
-   * @param [in] max_count Max number to list (0 for no limit).
-   * @param [out] ls Container for listed objects.
-   * @param [in,out] last List handle.  0 for beginning.  Passing the same
-   * cookie location will cause the next max_count to be listed.
-   * @return Error code.  0 on success.
-   */
-  /// List contents of collection.
-  virtual int _collection_list(
-    vector<ghobject_t> *ls ///< [out] Listed objects.
     ) = 0;
 
   /// Pre-hash the collection with the given pg number and
