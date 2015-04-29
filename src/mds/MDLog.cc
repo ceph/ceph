@@ -870,10 +870,17 @@ void MDLog::_recovery_thread(MDSInternalContextBase *completion)
     C_SaferCond recover_wait;
     back.recover(&recover_wait);
     int recovery_result = recover_wait.wait();
+    if (recovery_result != 0) {
+      // Journaler.recover succeeds if no journal objects are present: an error
+      // means something worse like a corrupt header, which we can't handle here.
+      mds->clog->error() << "Error recovering journal " << jp.front << ": "
+        << cpp_strerror(recovery_result);
+      mds->mds_lock.Lock();
+      mds->damaged();
+      mds->mds_lock.Unlock();
+      assert(recovery_result == 0); // Unreachable because damaged() calls respawn()
+    }
 
-    // Journaler.recover succeeds if no journal objects are present: an error
-    // means something worse like a corrupt header, which we can't handle here.
-    assert(recovery_result == 0);
     // We could read journal, so we can erase it.
     back.erase(&erase_waiter);
     int erase_result = erase_waiter.wait();
@@ -901,11 +908,12 @@ void MDLog::_recovery_thread(MDSInternalContextBase *completion)
   dout(4) << "Journal " << jp.front << " recovered." << dendl;
 
   if (recovery_result != 0) {
-    derr << "Error recovering journal " << jp.front << ": " << cpp_strerror(recovery_result) << dendl;
+    mds->clog->error() << "Error recovering journal " << jp.front << ": "
+      << cpp_strerror(recovery_result);
     mds->mds_lock.Lock();
-    completion->complete(recovery_result);
+    mds->damaged();
     mds->mds_lock.Unlock();
-    return;
+    assert(recovery_result == 0); // Unreachable because damaged() calls respawn()
   }
 
   /* Check whether the front journal format is acceptable or needs re-write */
