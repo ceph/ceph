@@ -6463,6 +6463,11 @@ done:
       err = -ENOTEMPTY;
       goto reply;
     }
+    if (!tp->removed_snaps.empty() || !tp->snaps.empty()) {
+      ss << "tier pool '" << tierpoolstr << "' has snapshot state; it cannot be added as a tier without breaking the pool";
+      err = -ENOTEMPTY;
+      goto reply;
+    }
     // go
     pg_pool_t *np = pending_inc.get_new_pool(pool_id, p);
     pg_pool_t *ntp = pending_inc.get_new_pool(tierpool_id, tp);
