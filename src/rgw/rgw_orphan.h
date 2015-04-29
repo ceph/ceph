@@ -107,7 +107,8 @@ public:
   int write_job(const string& job_name, const RGWOrphanSearchState& state);
 
 
-  int store_entries(const string& oid, map<string, bufferlist> entries);
+  int store_entries(const string& oid, const map<string, bufferlist>& entries);
+  int read_entries(const string& oid, const string& marker, map<string, bufferlist> *entries, bool *truncated);
 };
 
 
@@ -122,8 +123,11 @@ class RGWOrphanSearch {
 
   map<int, string> all_objs_index;
   map<int, string> buckets_instance_index;
+  map<int, string> linked_objs_index;
 
   string index_objs_prefix;
+
+  uint16_t max_concurrent_ios;
 
   struct log_iter_info {
     string oid;
@@ -139,7 +143,7 @@ class RGWOrphanSearch {
   }
 
 public:
-  RGWOrphanSearch(RGWRados *_store) : store(_store), orphan_store(store) {}
+  RGWOrphanSearch(RGWRados *_store, int _max_ios) : store(_store), orphan_store(store), max_concurrent_ios(_max_ios) {}
 
   int save_state() {
     RGWOrphanSearchState state;
@@ -154,6 +158,8 @@ public:
 
   int build_all_oids_index();
   int build_buckets_instance_index();
+  int build_linked_oids_for_bucket(const string& bucket_instance_id);
+  int build_linked_oids_index();
 
   int run();
 };

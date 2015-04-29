@@ -1150,6 +1150,7 @@ int main(int argc, char **argv)
   string job_id;
   int init_search = false;
   int num_shards = 0;
+  int max_concurrent_ios = 32;
 
   std::string val;
   std::ostringstream errs;
@@ -1253,6 +1254,8 @@ int main(int argc, char **argv)
       end_date = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--num-shards", (char*)NULL)) {
       num_shards = atoi(val.c_str());
+    } else if (ceph_argparse_witharg(args, i, &val, "--max-concurrent-ios", (char*)NULL)) {
+      max_concurrent_ios = atoi(val.c_str());
     } else if (ceph_argparse_witharg(args, i, &val, "--shard-id", (char*)NULL)) {
       shard_id = atoi(val.c_str());
       specified_shard_id = true;
@@ -2575,7 +2578,7 @@ next:
   }
 
   if (opt_cmd == OPT_ORPHANS_FIND) {
-    RGWOrphanSearch search(store);
+    RGWOrphanSearch search(store, max_concurrent_ios);
 
     if (job_id.empty()) {
       cerr << "ERROR: --job-id not specified" << std::endl;
