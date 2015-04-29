@@ -173,11 +173,6 @@ protected:
     ghobject_t *next         ///< [out] Next object to list
     ) = 0;
 
-  /// List contents of collection.
-  virtual int collection_list(
-    vector<ghobject_t> *ls ///< [out] Listed Objects
-    ) = 0;
-
   /// Call prior to removing directory
   virtual int prep_delete() { return 0; }
 

@@ -178,9 +178,6 @@ protected:
     string *mangled_name,
     int *exists
     );
-  int _collection_list(
-    vector<ghobject_t> *ls
-    );
 
   /**
    * Pre-hash the collection to create folders according to the expected number
