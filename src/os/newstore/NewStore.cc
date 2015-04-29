@@ -3220,12 +3220,12 @@ int NewStore::_do_write_all_overlays(TransContext *txc,
 
         bl_next_data.substr_of(bl_next, next->second.value_offset,
                                next->second.length);
-        bl.claim_append(bl_next_data);
+        op->data.claim_append(bl_next_data);
         op->length += next->second.length;
-	op->overlays.push_back(next->second);
+        op->overlays.push_back(next->second);
 
-	++prev;
-	++next;
+        ++prev;
+        ++next;
       } else {
 	break;
       }
