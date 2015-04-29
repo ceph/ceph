@@ -188,10 +188,7 @@ def build_ceph_cluster(ctx, config):
         if config.get('branch') is not None:
             cbranch = config.get('branch')
             for var, val in cbranch.iteritems():
-                if var == 'testing':
-                    ceph_branch = '--{var}'.format(var=var)
                 ceph_branch = '--{var}={val}'.format(var=var, val=val)
-        node_dev_list = []
         all_nodes = get_all_nodes(ctx, config)
         mds_nodes = get_nodes_using_role(ctx, 'mds')
         mds_nodes = " ".join(mds_nodes)
@@ -199,8 +196,6 @@ def build_ceph_cluster(ctx, config):
         mon_nodes = " ".join(mon_node)
         new_mon = './ceph-deploy new'+" "+mon_nodes
         install_nodes = './ceph-deploy install ' + (ceph_branch if ceph_branch else "--dev=master") + " " + all_nodes
-        purge_nodes = './ceph-deploy purge'+" "+all_nodes
-        purgedata_nodes = './ceph-deploy purgedata'+" "+all_nodes
         mon_hostname = mon_nodes.split(' ')[0]
         mon_hostname = str(mon_hostname)
         gather_keys = './ceph-deploy gatherkeys'+" "+mon_hostname
@@ -218,7 +213,6 @@ def build_ceph_cluster(ctx, config):
         testdir = teuthology.get_testdir(ctx)
         conf_path = '{tdir}/ceph-deploy/ceph.conf'.format(tdir=testdir)
 
-        lines = None
         if config.get('conf') is not None:
             confp = config.get('conf')
             for section, keys in confp.iteritems():
@@ -276,7 +270,6 @@ def build_ceph_cluster(ctx, config):
                 log.info('successfully created osd')
                 no_of_osds += 1
             else:
-                disks = []
                 disks = d.split(':')
                 dev_disk = disks[0]+":"+disks[1]
                 j_disk = disks[0]+":"+disks[2]
