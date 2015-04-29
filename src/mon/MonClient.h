@@ -200,6 +200,13 @@ public:
 
   int authenticate(double timeout=0.0);
 
+  /**
+   * Try to flush as many log messages as we can in a single
+   * message.  Use this before shutting down to transmit your
+   * last message.
+   */
+  void flush_log();
+
   // mon subscriptions
 private:
   map<string,ceph_mon_subscribe_item> sub_have;  // my subs, and current versions
