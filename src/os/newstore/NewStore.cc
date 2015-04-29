@@ -2472,6 +2472,9 @@ int NewStore::_do_wal_transaction(wal_transaction_t& wt,
   vector<int> sync_fds;
   sync_fds.reserve(wt.ops.size());
 
+  // read all the overlay data first for apply
+  _do_read_all_overlays(wt);
+
   for (list<wal_op_t>::iterator p = wt.ops.begin(); p != wt.ops.end(); ++p) {
     switch (p->op) {
     case wal_op_t::OP_WRITE:
@@ -2605,17 +2608,7 @@ int NewStore::_wal_replay()
     }
 
     // Get the overlay data of the WAL for replay
-    for (list<wal_op_t>::iterator q = wt.ops.begin(); q != wt.ops.end(); ++q) {
-      for (vector<overlay_t>::iterator oit = q->overlays.begin();
-           oit != q->overlays.end(); ++oit) {
-        string key;
-        get_overlay_key(q->nid, oit->key, &key);
-        bufferlist bl, bl_data;
-        db->get(PREFIX_OVERLAY, key, &bl);
-        bl_data.substr_of(bl, oit->value_offset, oit->length);
-        q->data.claim_append(bl_data);
-      }
-    }
+    _do_read_all_overlays(wt);
     dout(20) << __func__ << " replay " << it->key() << dendl;
     int r = _do_wal_transaction(wt, NULL);  // don't bother with aio here
     if (r < 0)
@@ -3191,10 +3184,6 @@ int NewStore::_do_write_all_overlays(TransContext *txc,
        p != o->onode.overlay_map.end(); ) {
     dout(10) << __func__ << " overlay " << p->first
 	     << "~" << p->second << dendl;
-    string key;
-    get_overlay_key(o->onode.nid, p->second.key, &key);
-    bufferlist bl;
-    db->get(PREFIX_OVERLAY, key, &bl);
 
     wal_op_t *op = _get_wal_op(txc);
     op->op = wal_op_t::OP_WRITE;
@@ -3204,7 +3193,6 @@ int NewStore::_do_write_all_overlays(TransContext *txc,
     // The overlays will be removed from the db after applying the WAL
     op->nid = o->onode.nid;
     op->overlays.push_back(p->second);
-    op->data.substr_of(bl, p->second.value_offset, p->second.length);
 
     // Combine with later overlays if contiguous
     map<uint64_t,overlay_t>::iterator prev = p, next = p;
@@ -3213,14 +3201,6 @@ int NewStore::_do_write_all_overlays(TransContext *txc,
       if (prev->first + prev->second.length == next->first) {
         dout(10) << __func__ << " combining overlay " << next->first
                  << "~" << next->second << dendl;
-        string key_next;
-        get_overlay_key(o->onode.nid, next->second.key, &key_next);
-        bufferlist bl_next, bl_next_data;
-        db->get(PREFIX_OVERLAY, key_next, &bl_next);
-
-        bl_next_data.substr_of(bl_next, next->second.value_offset,
-                               next->second.length);
-        op->data.claim_append(bl_next_data);
         op->length += next->second.length;
         op->overlays.push_back(next->second);
 
@@ -3248,6 +3228,22 @@ int NewStore::_do_write_all_overlays(TransContext *txc,
   o->onode.shared_overlays.clear();
   txc->write_onode(o);
   return 0;
+}
+
+void NewStore::_do_read_all_overlays(wal_transaction_t& wt)
+{
+  for (list<wal_op_t>::iterator p = wt.ops.begin(); p != wt.ops.end(); ++p) {
+    for (vector<overlay_t>::iterator q = p->overlays.begin();
+         q != p->overlays.end(); ++q) {
+      string key;
+      get_overlay_key(p->nid, q->key, &key);
+      bufferlist bl, bl_data;
+      db->get(PREFIX_OVERLAY, key, &bl);
+      bl_data.substr_of(bl, q->value_offset, q->length);
+      p->data.claim_append(bl_data);
+    }
+  }
+  return;
 }
 
 int NewStore::_do_write(TransContext *txc,
