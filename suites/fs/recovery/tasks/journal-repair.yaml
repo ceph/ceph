@@ -1,4 +1,9 @@
 
+overrides:
+  ceph:
+    log-whitelist:
+      - bad backtrace on dir ino
+
 tasks:
   - cephfs_test_runner:
       modules:
