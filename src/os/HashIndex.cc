@@ -320,11 +320,6 @@ int HashIndex::_lookup(const ghobject_t &oid,
   return get_mangled_name(*path, oid, mangled_name, exists_out);
 }
 
-int HashIndex::_collection_list(vector<ghobject_t> *ls) {
-  vector<string> path;
-  return list_by_hash(path, ghobject_t::get_max(), 0, 0, 0, ls);
-}
-
 int HashIndex::_collection_list_partial(const ghobject_t &start,
 					const ghobject_t end,
 					int max_count,
