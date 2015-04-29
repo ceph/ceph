@@ -135,12 +135,22 @@ Parameters
    striping: striping v2 support
    exclusive-lock: exclusive locking support
    object-map: object map support (requires exclusive-lock)
+   fast-diff: fast diff calculations (requires object-map)
 
 .. option:: --image-shared
 
    Specifies that the image will be used concurrently by multiple clients.
    This will disable features that are dependent upon exclusive ownership
    of the image.
+
+.. option:: --object-extents
+
+   Specifies that the diff should be limited to the extents of a full object
+   instead of showing intra-object deltas. When the object map feature is
+   enabled on an image, limiting the diff to the object extents will
+   dramatically improve performance since the differences can be computed
+   by examining the in-memory object map instead of querying RADOS for each
+   object within the image.
 
 Commands
 ========
@@ -204,7 +214,7 @@ Commands
   The --stripe-unit and --stripe-count arguments are optional, but must be
   used together.
 
-:command:`export-diff` [*image-name*] [*dest-path*] [--from-snap *snapname*]
+:command:`export-diff` [*image-name*] [*dest-path*] [--from-snap *snapname*] [--object-extents]
   Exports an incremental diff for an image to dest path (use - for stdout).  If
   an initial snapshot is specified, only changes since that snapshot are included; otherwise,
   any regions of the image that contain data are included.  The end snapshot is specified
@@ -226,7 +236,7 @@ Commands
   continuing.  If there was an end snapshot we verify it does not already exist before
   applying the changes, and create the snapshot when we are done.
 
-:command:`diff` [*image-name*] [--from-snap *snapname*]
+:command:`diff` [*image-name*] [--from-snap *snapname*] [--object-extents]
   Dump a list of byte extents in the image that have changed since the specified start
   snapshot, or since the image was created.  Each output line includes the starting offset
   (in bytes), the length of the region (in bytes), and either 'zero' or 'data' to indicate
