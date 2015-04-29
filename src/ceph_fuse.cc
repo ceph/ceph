@@ -143,7 +143,20 @@ int main(int argc, const char **argv, const char *envp[]) {
 	  char buf[5050];
 	  string mountpoint = cfuse->get_mount_point();
 	  snprintf(buf, 5049, "fusermount -u -z %s", mountpoint.c_str());
-	  system(buf);
+	  int umount_r = system(buf);
+	  if (umount_r) {
+	    if (umount_r != -1) {
+	      if (WIFEXITED(umount_r)) {
+		umount_r = WEXITSTATUS(umount_r);
+		cerr << "got error " << umount_r
+		     << " when unmounting Ceph on failed remount test!" << std::endl;
+	      } else {
+		cerr << "attempt to umount on failed remount test failed (on a signal?)" << std::endl;
+	      }
+	    } else {
+	      cerr << "system() invocation failed during remount test" << std::endl;
+	    }
+	  }
 	}
 	return reinterpret_cast<void*>(tr);
       }
