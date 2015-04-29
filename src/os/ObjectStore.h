@@ -2040,8 +2040,8 @@ public:
    * @param next [out] next item sorts >= this value
    * @return zero on success, or negative error
    */
-  virtual int collection_list_impl(coll_t c, ghobject_t start, ghobject_t end, int max,
-	                            snapid_t seq, vector<ghobject_t> *ls, ghobject_t *next) = 0;
+  virtual int collection_list(coll_t c, ghobject_t start, ghobject_t end, int max,
+			      snapid_t seq, vector<ghobject_t> *ls, ghobject_t *next) = 0;
 
   /// OMAP
   /// Get omap contents
