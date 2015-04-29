@@ -304,10 +304,10 @@ public:
 	return true;
       }
       TransContext *txc = &q.back();
-      if (txc->state > TransContext::STATE_KV_DONE) {
+      if (txc->state >= TransContext::STATE_KV_DONE) {
 	return true;
       }
-      assert(txc->state <= TransContext::STATE_KV_DONE);
+      assert(txc->state < TransContext::STATE_KV_DONE);
       txc->oncommits.push_back(c);
       return false;
     }
