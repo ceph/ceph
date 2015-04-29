@@ -741,6 +741,7 @@ private:
 			const bufferlist& bl);
   int _do_write_all_overlays(TransContext *txc,
 			     OnodeRef o);
+  void _do_read_all_overlays(wal_transaction_t& wt);
   int _do_write(TransContext *txc,
 		OnodeRef o,
 		uint64_t offset, uint64_t length,
