@@ -5481,10 +5481,6 @@ void ReplicatedPG::make_writeable(OpContext *ctx)
     ctx->delta_stats.num_objects++;
     if (snap_oi->is_dirty())
       ctx->delta_stats.num_objects_dirty++;
-    if (snap_oi->is_whiteout()) {
-      dout(20) << __func__ << " cloning whiteout on " << soid << " to " << coid << dendl;
-      ctx->delta_stats.num_whiteouts++;
-    }
     if (snap_oi->is_omap())
       ctx->delta_stats.num_objects_omap++;
     ctx->delta_stats.num_object_clones++;
