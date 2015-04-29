@@ -3346,7 +3346,10 @@ int NewStore::_do_write(TransContext *txc,
 	r = fd;
 	goto out;
       }
-      ::ftruncate(fd, f.length);  // in case there is trailing crap
+      r = _clean_fid_tail_fd(f, fd); // in case there is trailing crap
+      if (r < 0) {
+	goto out;
+      }
       f.length = (offset + length) - f.offset;
       x_offset = offset - f.offset;
       dout(20) << __func__ << " append " << f.fid << " writing "
@@ -3458,12 +3461,8 @@ int NewStore::_do_write(TransContext *txc,
   return r;
 }
 
-int NewStore::_clean_fid_tail(TransContext *txc, const fragment_t& f)
+int NewStore::_clean_fid_tail_fd(const fragment_t& f, int fd)
 {
-  int fd = _open_fid(f.fid, O_RDWR);
-  if (fd < 0) {
-    return fd;
-  }
   struct stat st;
   int r = ::fstat(fd, &st);
   if (r < 0) {
@@ -3481,6 +3480,22 @@ int NewStore::_clean_fid_tail(TransContext *txc, const fragment_t& f)
 	   << cpp_strerror(r) << dendl;
       return r;
     }
+    return 1;
+  }
+  return 0;
+}
+
+int NewStore::_clean_fid_tail(TransContext *txc, const fragment_t& f)
+{
+  int fd = _open_fid(f.fid, O_RDWR);
+  if (fd < 0) {
+    return fd;
+  }
+  int r = _clean_fid_tail_fd(f, fd);
+  if (r < 0) {
+    return r;
+  }
+  if (r > 0) {
     txc->sync_fd(fd);
   } else {
     // all good!
