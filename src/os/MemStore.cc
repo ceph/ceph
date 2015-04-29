@@ -421,9 +421,9 @@ bool MemStore::collection_empty(coll_t cid)
   return c->object_map.empty();
 }
 
-int MemStore::collection_list_impl(coll_t cid, ghobject_t start, ghobject_t end,
-				      int max, snapid_t snap,
-				      vector<ghobject_t> *ls, ghobject_t *next)
+int MemStore::collection_list(coll_t cid, ghobject_t start, ghobject_t end,
+			      int max, snapid_t snap,
+			      vector<ghobject_t> *ls, ghobject_t *next)
 {
   CollectionRef c = get_collection(cid);
   if (!c)
