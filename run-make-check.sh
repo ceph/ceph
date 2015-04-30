@@ -43,7 +43,7 @@ function get_processors() {
 
 function run() {
     sudo $(which apt-get yum zypper 2>/dev/null) install -y ccache jq
-    sudo modprobe rbd
+    sudo /sbin/modprobe rbd
 
     if test -f ./install-deps.sh ; then
 	$DRY_RUN ./install-deps.sh || return 1
