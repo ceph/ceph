@@ -2043,6 +2043,7 @@ void AsyncConnection::fault()
   recv_start = recv_end = 0;
   state_offset = 0;
   replacing = false;
+  is_reset_from_peer = false;
   outcoming_bl.clear();
   if (!once_ready && !is_queued() &&
       state >=STATE_ACCEPTING && state <= STATE_ACCEPTING_WAIT_CONNECT_MSG_AUTH) {
