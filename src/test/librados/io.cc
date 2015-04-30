@@ -231,6 +231,13 @@ TEST_F(LibRadosIo, RoundTrip) {
   memset(buf2, 0, sizeof(buf2));
   ASSERT_EQ((int)sizeof(buf2), rados_read(ioctx, "foo", buf2, sizeof(buf2), 0));
   ASSERT_EQ(0, memcmp(buf, buf2, sizeof(buf)));
+
+  uint64_t off = 19;
+  memset(buf, 0xcc, sizeof(buf));
+  ASSERT_EQ(0, rados_write(ioctx, "bar", buf, sizeof(buf), off));
+  memset(buf2, 0, sizeof(buf2));
+  ASSERT_EQ((int)sizeof(buf2), rados_read(ioctx, "bar", buf2, sizeof(buf2), off));
+  ASSERT_EQ(0, memcmp(buf, buf2, sizeof(buf)));
 }
 
 TEST_F(LibRadosIoPP, RoundTripPP) {
@@ -697,6 +704,9 @@ TEST_F(LibRadosIoEC, RoundTrip) {
   memset(buf2, 0, sizeof(buf2));
   ASSERT_EQ((int)sizeof(buf2), rados_read(ioctx, "foo", buf2, sizeof(buf2), 0));
   ASSERT_EQ(0, memcmp(buf, buf2, sizeof(buf)));
+
+  uint64_t off = 19;
+  ASSERT_EQ(-EOPNOTSUPP, rados_write(ioctx, "bar", buf, sizeof(buf), off));
 }
 
 TEST_F(LibRadosIoECPP, RoundTripPP) {
