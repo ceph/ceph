@@ -177,32 +177,32 @@ namespace librbd {
   }
 
   bool CopyupRequest::send_object_map() {
-    bool copyup = false;
+    bool copyup = true;
     {
-      RWLock::RLocker l(m_ictx->owner_lock);
-      if (!m_ictx->object_map.enabled()) {
-	copyup = true;
-      } else if (!m_ictx->image_watcher->is_lock_owner()) {
-	ldout(m_ictx->cct, 20) << "exclusive lock not held for copyup request"
-			       << dendl;
-        assert(m_pending_requests.empty());
-        return true;
-      } else {
+      RWLock::RLocker owner_locker(m_ictx->owner_lock);
+      RWLock::RLocker snap_locker(m_ictx->snap_lock);
+      if (m_ictx->object_map.enabled()) {
+        if (!m_ictx->image_watcher->is_lock_owner()) {
+         ldout(m_ictx->cct, 20) << "exclusive lock not held for copyup request"
+                                << dendl;
+          assert(m_pending_requests.empty());
+          return true;
+        }
+
         RWLock::WLocker object_map_locker(m_ictx->object_map_lock);
         if (m_ictx->object_map[m_object_no] != OBJECT_EXISTS) {
           ldout(m_ictx->cct, 20) << __func__ << " " << this
 			         << ": oid " << m_oid
                                  << ", extents " << m_image_extents
                                  << dendl;
-  	  m_state = STATE_OBJECT_MAP;
+          m_state = STATE_OBJECT_MAP;
 
           Context *ctx = create_callback_context();
           bool sent = m_ictx->object_map.aio_update(m_object_no, OBJECT_EXISTS,
                                                     boost::optional<uint8_t>(),
                                                     ctx);
           assert(sent);
-        } else {
-          copyup = true;
+          copyup = false;
         }
       }
     }
