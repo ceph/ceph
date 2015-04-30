@@ -18,6 +18,10 @@ Here is a sample configuration with many of the options set and documented::
     # only used by teuthology-suite.
     default_machine_type: awesomebox
 
+    # Control how many machines need to be free in the cluster. 0 means
+    # Teuthology can use the entire cluster.
+    reserve_machines: 5
+
     # The host and port to use for the beanstalkd queue. This is required 
     # for scheduled jobs.
     queue_host: localhost
