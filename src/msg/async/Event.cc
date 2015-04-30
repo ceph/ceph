@@ -246,7 +246,7 @@ void EventCenter::delete_time_event(uint64_t id)
 
 void EventCenter::wakeup()
 {
-  if (!already_wakeup.read()) {
+  if (already_wakeup.cas(0, 1)) {
     ldout(cct, 1) << __func__ << dendl;
     char buf[1];
     buf[0] = 'c';
@@ -254,7 +254,6 @@ void EventCenter::wakeup()
     int n = write(notify_send_fd, buf, 1);
     // FIXME ?
     assert(n == 1);
-    already_wakeup.set(1);
   }
 }
 
