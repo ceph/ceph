@@ -422,6 +422,7 @@ void ObjectMap::aio_save(Context *on_finish)
 
   int r = m_image_ctx.md_ctx.aio_operate(oid, comp, &op);
   assert(r == 0);
+  comp->release();
 }
 
 void ObjectMap::aio_resize(uint64_t new_size, uint8_t default_object_state,
