@@ -3,6 +3,7 @@
 #include "librbd/ImageWatcher.h"
 #include "librbd/AioCompletion.h"
 #include "librbd/ImageCtx.h"
+#include "librbd/internal.h"
 #include "librbd/ObjectMap.h"
 #include "librbd/TaskFinisher.h"
 #include "cls/lock/cls_lock_client.h"
@@ -300,9 +301,10 @@ int ImageWatcher::lock() {
   ldout(m_image_ctx.cct, 10) << "acquired exclusive lock" << dendl;
   m_lock_owner_state = LOCK_OWNER_STATE_LOCKED;
 
+  ClientId owner_client_id = get_client_id();
   {
     Mutex::Locker l(m_owner_client_id_lock);
-    m_owner_client_id = get_client_id();
+    m_owner_client_id = owner_client_id;
   }
 
   if (m_image_ctx.object_map.enabled()) {

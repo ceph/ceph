@@ -237,20 +237,23 @@ namespace librbd {
 
   void AioRead::send_copyup()
   {
-    RWLock::RLocker snap_locker(m_ictx->snap_lock);
-    RWLock::RLocker parent_locker(m_ictx->parent_lock);
+    {
+      RWLock::RLocker snap_locker(m_ictx->snap_lock);
+      RWLock::RLocker parent_locker(m_ictx->parent_lock);
+      if (!compute_parent_extents()) {
+        return;
+      }
+    }
+
     Mutex::Locker copyup_locker(m_ictx->copyup_list_lock);
     map<uint64_t, CopyupRequest*>::iterator it =
       m_ictx->copyup_list.find(m_object_no);
     if (it == m_ictx->copyup_list.end()) {
-      if (compute_parent_extents()) {
-        // create and kick off a CopyupRequest
-        CopyupRequest *new_req = new CopyupRequest(m_ictx, m_oid,
-                                                   m_object_no,
-    					           m_parent_extents);
-        m_ictx->copyup_list[m_object_no] = new_req;
-        new_req->queue_send();
-      }
+      // create and kick off a CopyupRequest
+      CopyupRequest *new_req = new CopyupRequest(m_ictx, m_oid, m_object_no,
+    					         m_parent_extents);
+      m_ictx->copyup_list[m_object_no] = new_req;
+      new_req->queue_send();
     }
   }
 
@@ -321,11 +324,15 @@ namespace librbd {
       ldout(m_ictx->cct, 20) << "WRITE_CHECK_GUARD" << dendl;
 
       if (r == -ENOENT) {
-	RWLock::RLocker l(m_ictx->snap_lock);
-	RWLock::RLocker l2(m_ictx->parent_lock);
+        bool has_parent;
+        {
+	  RWLock::RLocker snap_locker(m_ictx->snap_lock);
+	  RWLock::RLocker parent_locker(m_ictx->parent_lock);
+          has_parent = compute_parent_extents();
+        }
 
 	// If parent still exists, overlap might also have changed.
-	if (compute_parent_extents()) {
+	if (has_parent) {
           send_copyup();
 	} else {
           // parent may have disappeared -- send original write again
