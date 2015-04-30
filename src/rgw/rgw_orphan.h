@@ -142,6 +142,9 @@ class RGWOrphanSearch {
     return ceph_str_hash_linux(str.c_str(), str.size()) % RGW_ORPHANSEARCH_HASH_PRIME % search_info.num_shards;
   }
 
+  int handle_stat_result(map<int, list<string> >& oids, RGWRados::Object::Stat::Result& result);
+  int pop_and_handle_stat_op(map<int, list<string> >& oids, std::deque<RGWRados::Object::Stat>& ops);
+
 public:
   RGWOrphanSearch(RGWRados *_store, int _max_ios) : store(_store), orphan_store(store), max_concurrent_ios(_max_ios) {}
 
