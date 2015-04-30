@@ -31,14 +31,14 @@ static const double	RETRY_DELAY_SECONDS = 1.0;
 
 ImageWatcher::ImageWatcher(ImageCtx &image_ctx)
   : m_image_ctx(image_ctx),
-    m_watch_lock("librbd::ImageWatcher::m_watch_lock"),
+    m_watch_lock(unique_lock_name("librbd::ImageWatcher::m_watch_lock", this)),
     m_watch_ctx(*this), m_watch_handle(0),
     m_watch_state(WATCH_STATE_UNREGISTERED),
     m_lock_owner_state(LOCK_OWNER_STATE_NOT_LOCKED),
     m_task_finisher(new TaskFinisher<Task>(*m_image_ctx.cct)),
-    m_async_request_lock("librbd::ImageWatcher::m_async_request_lock"),
-    m_aio_request_lock("librbd::ImageWatcher::m_aio_request_lock"),
-    m_owner_client_id_lock("librbd::ImageWatcher::m_owner_client_id_lock")
+    m_async_request_lock(unique_lock_name("librbd::ImageWatcher::m_async_request_lock", this)),
+    m_aio_request_lock(unique_lock_name("librbd::ImageWatcher::m_aio_request_lock", this)),
+    m_owner_client_id_lock(unique_lock_name("librbd::ImageWatcher::m_owner_client_id_lock", this))
 {
 }
 
