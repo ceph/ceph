@@ -37,14 +37,14 @@ def test_directory():
     assert_raise(cephfs.ObjectNotFound, cephfs.chdir("/temp-directory"))
 
 def test_walk_dir():
-    dirs = ["/dir-1", "/dir-2", "dir-3"]
+    dirs = ["dir-1", "dir-2", "dir-3"]
     for i in dirs:
         cephfs.mkdir(i, 0755)
     handler = cephfs.opendir("/")
     d = cephfs.readdir(handler)
     while d:
-        assert(d['d_name'] in dirs)
-        dirs.remove(d['d_name'])
+        assert(d.d_name in dirs)
+        dirs.remove(d.d_name)
         d = cephfs.readdir(handler)
     assert(len(dirs) == 0)
     cephfs.closedir(handler)
@@ -59,3 +59,14 @@ def test_rename():
     cephfs.mkdir("/a/b", 0755)
     cephfs.rename("/a", "/b")
     cephfs.stat("/a/b")
+
+def test_open():
+    assert_raise(ObjectExists, cephfs.open, 'file-1', 'r')
+    fd = cephfs.open('file-1', 'w')
+    cephfs.close(fd)
+    fd = cephfs.open('file-1', 'r')
+    cephfs.close(fd)
+    fd = cephfs.open('file-2', 'a')
+    cephfs.close(fd)
+    cephfs.unlink('file-1')
+    cephfs.unlink('file-2')
