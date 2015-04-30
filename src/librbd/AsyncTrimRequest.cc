@@ -28,8 +28,7 @@ class AsyncTrimObjectContext : public C_AsyncObjectThrottle {
 public:
   AsyncTrimObjectContext(AsyncObjectThrottle &throttle, ImageCtx *image_ctx,
 			 uint64_t object_no)
-    : C_AsyncObjectThrottle(throttle), m_image_ctx(*image_ctx),
-      m_object_no(object_no)
+    : C_AsyncObjectThrottle(throttle, *image_ctx), m_object_no(object_no)
   {
   }
 
@@ -56,7 +55,6 @@ public:
   }
 
 private:
-  ImageCtx &m_image_ctx;
   uint64_t m_object_no;
 };
 
@@ -149,7 +147,8 @@ void AsyncTrimRequest::send_remove_objects() {
     boost::lambda::bind(boost::lambda::new_ptr<AsyncTrimObjectContext>(),
       boost::lambda::_1, &m_image_ctx, boost::lambda::_2));
   AsyncObjectThrottle *throttle = new AsyncObjectThrottle(
-    this, context_factory, ctx, &m_prog_ctx, m_delete_start, m_num_objects);
+    this, m_image_ctx, context_factory, ctx, &m_prog_ctx, m_delete_start,
+    m_num_objects);
   throttle->start_ops(m_image_ctx.concurrent_management_ops);
 }
 
