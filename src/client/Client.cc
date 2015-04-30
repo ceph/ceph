@@ -7138,6 +7138,8 @@ int Client::_read_async(Fh *f, uint64_t off, uint64_t len, bufferlist *bl)
   // trim read based on file size?
   if (off >= in->size)
     return 0;
+  if (len == 0)
+    return 0;
   if (off + len > in->size) {
     len = in->size - off;    
   }
