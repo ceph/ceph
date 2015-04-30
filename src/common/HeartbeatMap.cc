@@ -121,14 +121,15 @@ bool HeartbeatMap::is_healthy()
   if (now < m_inject_unhealthy_until) {
     ldout(m_cct, 0) << "is_healthy = false, injected failure for next " << (m_inject_unhealthy_until - now) << " seconds" << dendl;
     healthy = false;
-  }
-
-  for (list<heartbeat_handle_d*>::iterator p = m_workers.begin();
-       p != m_workers.end();
-       ++p) {
-    heartbeat_handle_d *h = *p;
-    if (!_check(h, "is_healthy", now)) {
-      healthy = false;
+  } else {
+    for (list<heartbeat_handle_d*>::iterator p = m_workers.begin();
+         p != m_workers.end();
+         ++p) {
+      heartbeat_handle_d *h = *p;
+      if (!_check(h, "is_healthy", now)) {
+        healthy = false;
+        break;
+      }
     }
   }
   m_rwlock.put_read();
