@@ -1773,8 +1773,14 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
 	}
       }
     } else {
-      dout(1) << "corrupt directory, i got tag char '" << type << "' pos " << pos << dendl;
-      assert(0);
+      dout(1) << "corrupt directory, i got tag char '" << type << "' pos "
+        << pos << dendl;
+      cache->mds->clog->error() << "Corrupt directory entry '" << p->first
+        << "' in dirfrag " << *this;
+      // TODO: add a mechanism for selectively marking a path
+      // damaged, rather than marking the whole rank damaged.
+      cache->mds->damaged();
+      assert(0);  // Unreachable: damaged() respawns us
     }
     
     if (dn && want_dn.length() && want_dn == dname) {
