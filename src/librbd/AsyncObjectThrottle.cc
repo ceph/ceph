@@ -3,6 +3,7 @@
 #include "librbd/AsyncObjectThrottle.h"
 #include "include/rbd/librbd.hpp"
 #include "librbd/AsyncRequest.h"
+#include "librbd/internal.h"
 
 namespace librbd
 {
@@ -12,7 +13,7 @@ AsyncObjectThrottle::AsyncObjectThrottle(const AsyncRequest* async_request,
 				 	 Context *ctx, ProgressContext *prog_ctx,
 					 uint64_t object_no,
 					 uint64_t end_object_no)
-  : m_lock("librbd::AsyncThrottle::m_lock"),
+  : m_lock(unique_lock_name("librbd::AsyncThrottle::m_lock", this)),
     m_async_request(async_request), m_context_factory(context_factory),
     m_ctx(ctx), m_prog_ctx(prog_ctx), m_object_no(object_no),
     m_end_object_no(end_object_no), m_current_ops(0), m_ret(0)
