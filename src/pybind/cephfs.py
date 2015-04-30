@@ -156,6 +156,10 @@ class DirEntry(namedtuple('DirEntry',
     def is_file(self):
         return self.d_type == DT_REG
 
+StatResult = namedtuple('StatResult',
+                        ["st_dev", "st_ino", "st_mode", "st_nlink", "st_uid",
+                         "st_gid", "st_rdev", "st_size", "st_blksize",
+                         "st_blocks", "st_atime", "st_mtime", "st_ctime"])
 
 def load_libcephfs():
     """
@@ -444,19 +448,14 @@ class LibCephFS(object):
                                        byref(statbuf))
         if ret < 0:
             raise make_ex(ret, "error in stat: %s" % path)
-        return {'st_dev': statbuf.st_dev,
-                'st_ino': statbuf.st_ino,
-                'st_mode': statbuf.st_mode,
-                'st_nlink': statbuf.st_nlink,
-                'st_uid': statbuf.st_uid,
-                'st_gid': statbuf.st_gid,
-                'st_rdev': statbuf.st_rdev,
-                'st_size': statbuf.st_size,
-                'st_blksize': statbuf.st_blksize,
-                'st_blocks': statbuf.st_blocks,
-                'st_atime': statbuf.st_atime,
-                'st_mtime': statbuf.st_mtime,
-                'st_ctime': statbuf.st_ctime}
+        return StatResult(st_dev=statbuf.st_dev, st_ino=statbuf.st_ino,
+                          st_mode=statbuf.st_mode, st_nlink=statbuf.st_nlink,
+                          st_uid=statbuf.st_uid, st_gid=statbuf.st_gid,
+                          st_rdev=statbuf.st_rdev, st_size=statbuf.st_size,
+                          st_blksize=statbuf.st_blksize,
+                          st_blocks=statbuf.st_blocks,
+                          st_atime=statbuf.st_atime, st_mtime=statbuf.st_mtime,
+                          st_ctime=statbuf.st_ctime)
 
     def unlink(self, path):
         self.require_state("mounted")
