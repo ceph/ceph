@@ -33,8 +33,6 @@ int RGWListBuckets_ObjStore_SWIFT::get_params()
     limit = (uint64_t)l;
   }
 
-  need_stats = (s->format != RGW_FORMAT_PLAIN);
-
   if (need_stats) {
     bool stats, exists;
     int r = s->info.args.get_bool("stats", &stats, &exists);
