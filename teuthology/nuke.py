@@ -497,7 +497,9 @@ def nuke_helper(ctx, should_unlock):
             log.info('console ready on %s' % cname)
 
     if ctx.check_locks:
-        check_lock(ctx, None)
+        # does not check to ensure if the node is 'up'
+        # we want to be able to nuke a downed node
+        check_lock(ctx, None, check_up=False)
     add_remotes(ctx, None)
     connect(ctx, None)
 
