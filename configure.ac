@@ -1117,6 +1117,19 @@ AM_COND_IF([WITH_BABELTRACE], [
     AC_MSG_ERROR([babeltrace/ctf/events.h not found (libbabeltrace-ctf-dev, libbabeltrace-devel)]))
 ])
 
+dnl check for valgrind
+AC_ARG_ENABLE([valgrind],
+              [AS_HELP_STRING([--enable-valgrind], [enable valgrind unit tests])],
+              [enable_valgrind=$enableval], [enable_valgrind=])
+AC_CHECK_PROG(HAVE_VALGRIND, valgrind, yes)
+AS_IF(
+  [test "x$HAVE_VALGRIND" = "x"], AS_IF([test "x$enable_valgrind" = "xyes"], [AC_MSG_ERROR([valgrind not found])]),
+  [test "x$enable_valgrind" = "x"], [enable_valgrind=yes])
+
+AM_CONDITIONAL([VALGRIND_ENABLED], [test "x$enable_valgrind" = "xyes"])
+if test "x$enable_valgrind" = "xyes"; then
+  AC_CHECK_HEADERS([valgrind/helgrind.h])
+fi
 
 
 # Checks for typedefs, structures, and compiler characteristics.
