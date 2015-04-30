@@ -6,7 +6,7 @@ cephfs = None
 
 def setup_module():
     global cephfs
-    cephfs = cephfs.LibCephfs(conffile='')
+    cephfs = cephfs.LibCephFS(conffile='')
     cephfs.mount()
 
 def teardown_module():
@@ -14,9 +14,9 @@ def teardown_module():
     cephfs.shutdown()
 
 def test_mount():
-    cephfs.mount()
     cephfs.shutdown()
     assert_raise(cephfs.LibCephFSStateError, cephfs.statfs)
+    cephfs.mount()
 
 def test_version():
     cephfs.version()
@@ -50,7 +50,7 @@ def test_walk_dir():
     cephfs.closedir(handler)
 
 def test_xattr():
-    assert_raise(InvalidValue, cephfs.setxattr, "/", "key", "value", 0)
+    assert_raise(cephfs.InvalidValue, cephfs.setxattr, "/", "key", "value", 0)
     cephfs.setxattr("/", "user.key", "value", 0)
     assert_equal("value", cephfs.getxattr("/", "user.key"))
 
@@ -61,7 +61,8 @@ def test_rename():
     cephfs.stat("/a/b")
 
 def test_open():
-    assert_raise(ObjectExists, cephfs.open, 'file-1', 'r')
+    assert_raise(cephfs.ObjectNotFound, cephfs.open, 'file-1', 'r')
+    assert_raise(cephfs.ObjectNotFound, cephfs.open, 'file-1', 'r+')
     fd = cephfs.open('file-1', 'w')
     cephfs.close(fd)
     fd = cephfs.open('file-1', 'r')
