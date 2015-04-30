@@ -135,6 +135,9 @@ int RGWOrphanSearch::init(const string& job_name, RGWOrphanSearchInfo *info) {
 
     snprintf(buf, sizeof(buf), "%s.buckets.%d", index_objs_prefix.c_str(), i);
     buckets_instance_index[i] = buf;
+
+    snprintf(buf, sizeof(buf), "%s.linked.%d", index_objs_prefix.c_str(), i);
+    linked_objs_index[i] = buf;
   }
   return 0;
 }
@@ -221,7 +224,22 @@ int RGWOrphanSearch::build_all_oids_index()
     }
     string obj_marker = oid.substr(0, pos);
 
-    int shard = orphan_shard(oid);
+    string obj_name;
+    string obj_instance;
+    string obj_ns;
+
+    rgw_obj::parse_raw_oid(oid.substr(pos + 1), &obj_name, &obj_instance, &obj_ns);
+
+    string hash_oid;
+    if (obj_ns.empty()) {
+      hash_oid = oid;
+    } else {
+      hash_oid = oid.substr(0, oid.size() - 10);
+    }
+
+    ldout(store->ctx(), 20) << "hash_oid=" << hash_oid << dendl;
+
+    int shard = orphan_shard(hash_oid);
     oids[shard].push_back(oid);
 
 #define COUNT_BEFORE_FLUSH 1000
@@ -287,13 +305,77 @@ int RGWOrphanSearch::build_buckets_instance_index()
     }
   } while (truncated);
 
+  ret = log_oids(buckets_instance_index, instances);
+  if (ret < 0) {
+    lderr(store->ctx()) << __func__ << ": ERROR: log_oids() returned ret=" << ret << dendl;
+    return ret;
+  }
   store->meta_mgr->list_keys_complete(handle);
 
   return 0;
 }
 
+int RGWOrphanSearch::handle_stat_result(map<int, list<string> >& oids, RGWRados::Object::Stat::Result& result)
+{
+  set<string> obj_oids;
+  rgw_bucket& bucket = result.obj.bucket;
+  if (!result.has_manifest) {
+    obj_oids.insert(bucket.bucket_id + "_" + result.obj.get_object());
+  } else {
+    RGWObjManifest& manifest = result.manifest;
+
+    RGWObjManifest::obj_iterator miter;
+    for (miter = manifest.obj_begin(); miter != manifest.obj_end(); ++miter) {
+      const rgw_obj& loc = miter.get_location();
+
+      string s = bucket.bucket_id + "_" + loc.get_object();
+
+      if (loc.ns.empty()) {
+        obj_oids.insert(s);
+      } else {
+        /*
+         * it's within a namespace, we can store only part of the name, so that any other tail or
+         * part objects of the same logical object will not be duplicated. When we do the search
+         * we'll only search for this substring
+         */
+        obj_oids.insert(s.substr(0, s.size() - 10));
+      }
+    }
+  }
+
+  for (set<string>::iterator iter = obj_oids.begin(); iter != obj_oids.end(); ++iter) {
+    ldout(store->ctx(), 20) << __func__ << ": oid for obj=" << result.obj << ": " << *iter << dendl;
+
+    int shard = orphan_shard(*iter);
+    oids[shard].push_back(*iter);
+  }
+
+  return 0;
+}
+
+int RGWOrphanSearch::pop_and_handle_stat_op(map<int, list<string> >& oids, std::deque<RGWRados::Object::Stat>& ops)
+{
+  RGWRados::Object::Stat& front_op = ops.front();
+
+  int ret = front_op.wait();
+  if (ret < 0) {
+    if (ret != -ENOENT) {
+      lderr(store->ctx()) << "ERROR: stat_async() returned error: " << cpp_strerror(-ret) << dendl;
+    }
+    goto done;
+  }
+  ret = handle_stat_result(oids, front_op.result);
+  if (ret < 0) {
+    lderr(store->ctx()) << "ERROR: handle_stat_response() returned error: " << cpp_strerror(-ret) << dendl;
+  }
+done:
+  ops.pop_front();
+  return ret;
+}
+
 int RGWOrphanSearch::build_linked_oids_for_bucket(const string& bucket_instance_id)
 {
+  ldout(store->ctx(), 10) << "building linked oids for bucket instance: " << bucket_instance_id << dendl;
   RGWBucketInfo bucket_info;
   RGWObjectCtx obj_ctx(store);
   int ret = store->get_bucket_instance_info(obj_ctx, bucket_instance_id, bucket_info, NULL, NULL);
@@ -316,6 +398,9 @@ int RGWOrphanSearch::build_linked_oids_for_bucket(const string& bucket_instance_
   bool truncated;
 
   deque<RGWRados::Object::Stat> stat_ops;
+  map<int, list<string> > oids;
+
+  int count = 0;
 
   do {
     vector<RGWObjEnt> result;
@@ -349,27 +434,38 @@ int RGWOrphanSearch::build_linked_oids_for_bucket(const string& bucket_instance_
         return ret;
       }
       if (stat_ops.size() >= max_concurrent_ios) {
-        RGWRados::Object::Stat& front_op = stat_ops.front();
-
-        ret = front_op.wait();
+        ret = pop_and_handle_stat_op(oids, stat_ops);
         if (ret < 0) {
-          lderr(store->ctx()) << "ERROR: stat_async() returned error: " << cpp_strerror(-ret) << dendl;
+          if (ret != -ENOENT) {
+            lderr(store->ctx()) << "ERROR: stat_async() returned error: " << cpp_strerror(-ret) << dendl;
+          }
         }
-
-        stat_ops.pop_front();
+      }
+      if (++count >= COUNT_BEFORE_FLUSH) {
+        ret = log_oids(linked_objs_index, oids);
+        if (ret < 0) {
+          cerr << __func__ << ": ERROR: log_oids() returned ret=" << ret << std::endl;
+          return ret;
+        }
+        count = 0;
+        oids.clear();
       }
     }
   } while (truncated);
 
   while (!stat_ops.empty()) {
-    RGWRados::Object::Stat& front_op = stat_ops.front();
-
-    ret = front_op.wait();
+    ret = pop_and_handle_stat_op(oids, stat_ops);
     if (ret < 0) {
-      lderr(store->ctx()) << "ERROR: stat_async() returned error: " << cpp_strerror(-ret) << dendl;
+      if (ret != -ENOENT) {
+        lderr(store->ctx()) << "ERROR: stat_async() returned error: " << cpp_strerror(-ret) << dendl;
+      }
     }
+  }
 
-    stat_ops.pop_front();
+  ret = log_oids(linked_objs_index, oids);
+  if (ret < 0) {
+    cerr << __func__ << ": ERROR: log_oids() returned ret=" << ret << std::endl;
+    return ret;
   }
 
   return 0;
