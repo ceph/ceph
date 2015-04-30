@@ -1344,6 +1344,34 @@ public:
     return true;
   }
 
+  static bool parse_raw_oid(const string& oid, string *obj_name, string *obj_instance, string *obj_ns) {
+    obj_name->clear();
+    obj_instance->clear();
+    obj_ns->clear();
+    if (oid[0] != '_') {
+      *obj_name = oid;
+      return true;
+    }
+
+    if (oid.size() >= 2 && oid[1] == '_') {
+      *obj_name = oid.substr(1);
+      return true;
+    }
+
+    if (oid[0] != '_' || oid.size() < 3) // for namespace, min size would be 3: _x_
+      return false;
+
+    int pos = oid.find('_', 1);
+    if (pos <= 1) // if it starts with __, it's not in our namespace
+      return false;
+
+    *obj_ns = oid.substr(1, pos - 1);
+    parse_ns_field(*obj_ns, *obj_instance);
+
+    *obj_name = oid.substr(pos + 1);
+    return true;
+  }
+
   /**
    * Given a mangled object name and an empty namespace string, this
    * function extracts the namespace into the string and sets the object
