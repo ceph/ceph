@@ -263,16 +263,16 @@ private:
 
   bool CopyupRequest::send_object_map() {
     {
-      RWLock::RLocker l(m_ictx->owner_lock);
+      RWLock::RLocker owner_locker(m_ictx->owner_lock);
+      RWLock::RLocker snap_locker(m_ictx->snap_lock);
       if (m_ictx->object_map.enabled()) {
         if (!m_ictx->image_watcher->is_lock_owner()) {
-	  ldout(m_ictx->cct, 20) << "exclusive lock not held for copyup request"
-	 		         << dendl;
+         ldout(m_ictx->cct, 20) << "exclusive lock not held for copyup request"
+                                << dendl;
           assert(m_pending_requests.empty());
           return true;
         }
 
-        RWLock::RLocker snap_locker(m_ictx->snap_lock);
         RWLock::WLocker object_map_locker(m_ictx->object_map_lock);
         if (m_ictx->object_map[m_object_no] != OBJECT_EXISTS ||
             !m_ictx->snaps.empty()) {
