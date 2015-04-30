@@ -116,6 +116,7 @@ int TestMemRadosClient::pool_reverse_lookup(int64_t id, std::string *name) {
 }
 
 int TestMemRadosClient::watch_flush() {
+  get_watch_notify().flush();
   return 0;
 }
 
