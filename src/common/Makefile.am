@@ -233,7 +233,8 @@ noinst_HEADERS += \
 	common/Initialize.h \
 	common/ContextCompletion.h \
 	common/bit_vector.hpp \
-	common/SubProcess.h
+	common/SubProcess.h \
+	common/valgrind.h
 
 if ENABLE_XIO
 noinst_HEADERS += \
