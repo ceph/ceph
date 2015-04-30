@@ -171,6 +171,17 @@ namespace librbd {
     m_completion->complete_request(m_cct, r);
   }
 
+  void C_CacheRead::complete(int r) {
+    if (!m_enqueued) {
+      // cache_lock creates a lock ordering issue -- so re-execute this context
+      // outside the cache_lock
+      m_enqueued = true;
+      m_image_ctx.op_work_queue->queue(this, r);
+      return;
+    }
+    Context::complete(r);
+  }
+
   void C_CacheRead::finish(int r)
   {
     m_req->complete(r);

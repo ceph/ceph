@@ -183,11 +183,15 @@ namespace librbd {
 
   class C_CacheRead : public Context {
   public:
-    explicit C_CacheRead(AioRead *req) : m_req(req) {}
-    virtual ~C_CacheRead() {}
+    explicit C_CacheRead(ImageCtx *ictx, AioRead *req)
+      : m_image_ctx(*ictx), m_req(req), m_enqueued(false) {}
+    virtual void complete(int r);
+  protected:
     virtual void finish(int r);
   private:
+    ImageCtx &m_image_ctx;
     AioRead *m_req;
+    bool m_enqueued;
   };
 }
 
