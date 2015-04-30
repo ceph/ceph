@@ -63,9 +63,7 @@ bool ImageWatcher::is_lock_supported() const {
 bool ImageWatcher::is_lock_supported(const RWLock &) const {
   assert(m_image_ctx.owner_lock.is_locked());
   assert(m_image_ctx.snap_lock.is_locked());
-  uint64_t snap_features;
-  m_image_ctx.get_features(m_image_ctx.snap_id, &snap_features);
-  return ((snap_features & RBD_FEATURE_EXCLUSIVE_LOCK) != 0 &&
+  return ((m_image_ctx.features & RBD_FEATURE_EXCLUSIVE_LOCK) != 0 &&
 	  !m_image_ctx.read_only && m_image_ctx.snap_id == CEPH_NOSNAP);
 }
 
