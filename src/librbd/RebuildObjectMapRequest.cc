@@ -86,6 +86,7 @@ private:
 
     int r = m_io_ctx.aio_operate(m_oid, comp, &op, NULL);
     assert(r == 0);
+    comp->release();
   }
 
   uint8_t get_object_state() {
@@ -372,9 +373,10 @@ bool RebuildObjectMapRequest::send_update_header() {
       }
       cls_client::set_flags(&op, m_image_ctx.snap_id, 0, flags);
 
-      int r = m_image_ctx.md_ctx.aio_operate(m_image_ctx.header_oid,
-                                             create_callback_completion(), &op);
+      librados::AioCompletion *comp = create_callback_completion();
+      int r = m_image_ctx.md_ctx.aio_operate(m_image_ctx.header_oid, comp, &op);
       assert(r == 0);
+      comp->release();
 
       RWLock::WLocker snap_locker(m_image_ctx.snap_lock);
       m_image_ctx.update_flags(m_image_ctx.snap_id, flags, false);

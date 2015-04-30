@@ -1157,6 +1157,7 @@ int ObjectCacher::_readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
            ++bh_it) {
 	uint64_t rx_bytes = static_cast<uint64_t>(
 	  stat_rx + bh_it->second->length());
+        bytes_not_in_cache += bh_it->second->length();
 	if (!waitfor_read.empty() || rx_bytes > max_size) {
 	  // cache is full with concurrent reads -- wait for rx's to complete
 	  // to constrain memory growth (especially during copy-ups)
@@ -1175,7 +1176,6 @@ int ObjectCacher::_readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
 	  if ((success && onfinish) || last != missing.end())
 	    last = bh_it;
 	}
-        bytes_not_in_cache += bh_it->second->length();
 	success = false;
       }
 
