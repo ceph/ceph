@@ -64,7 +64,7 @@ namespace librbd {
 
     AsyncOperation async_op;
 
-    AioCompletion() : lock("AioCompletion::lock", true),
+    AioCompletion() : lock(unique_lock_name("AioCompletion::lock", this), true),
 		      done(false), rval(0), complete_cb(NULL),
 		      complete_arg(NULL), rbd_comp(NULL),
 		      pending_count(0), blockers(1),
