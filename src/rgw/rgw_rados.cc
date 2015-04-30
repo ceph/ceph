@@ -5010,6 +5010,7 @@ int RGWRados::Object::Stat::stat_async()
   RGWRados *store = source->get_store();
 
   RGWObjState *s = ctx.get_state(obj); /* calling this one directly because otherwise a sync request will be sent */
+  result.obj = obj;
   if (s->has_attrs) {
     state.ret = 0;
     result.size = s->size;
@@ -5074,6 +5075,7 @@ int RGWRados::Object::Stat::finish()
       ldout(store->ctx(), 0) << "ERROR: " << __func__ << ": failed to decode manifest"  << dendl;
       return -EIO;
     }
+    result.has_manifest = true;
   }
 
   return 0;
