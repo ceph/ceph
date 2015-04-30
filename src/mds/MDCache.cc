@@ -671,15 +671,6 @@ void MDCache::populate_mydir()
     }
   }
 
-  // open or create journal file
-  string jname("journal");
-  CDentry *jdn = mydir->lookup(jname);
-  if (!jdn || !jdn->get_linkage()->get_inode()) {
-    _create_system_file(mydir, jname.c_str(), create_system_inode(MDS_INO_LOG_OFFSET + mds->whoami, S_IFREG),
-			new C_MDS_RetryOpenRoot(this));
-    return;
-  }
-
   // okay!
   dout(10) << "populate_mydir done" << dendl;
   assert(!open);    
