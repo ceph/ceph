@@ -186,7 +186,7 @@ namespace librbd {
     }
 
   private:
-    bool send_pre();
+    void send_pre();
     bool send_post();
     void send_write();
     void send_copyup();
