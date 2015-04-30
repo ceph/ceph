@@ -1939,7 +1939,14 @@ void MDS::boot_start(BootStep step, int r)
       dout(0) << "boot_start encountered an error EAGAIN"
               << ", respawning since we fell behind journal" << dendl;
       respawn();
+    } else if (r == -EINVAL || r == -ENOENT) {
+      // Invalid or absent data, indicates damaged on-disk structures
+      clog->error() << "Error loading MDS rank " << whoami << ": "
+        << cpp_strerror(r);
+      damaged();
+      assert(r == 0);  // Unreachable, damaged() calls respawn()
     } else {
+      // Completely unexpected error, give up and die
       dout(0) << "boot_start encountered an error, failing" << dendl;
       suicide();
       return;
