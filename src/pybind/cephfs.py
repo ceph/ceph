@@ -5,6 +5,7 @@ from ctypes import CDLL, c_char_p, c_size_t, c_void_p, c_int, c_long, c_uint, c_
     c_ushort, create_string_buffer, byref, Structure, pointer, c_char, POINTER, \
     c_uint8
 from ctypes.util import find_library
+from collections import namedtuple
 import errno
 
 
@@ -139,6 +140,21 @@ class cephfs_stat(Structure):
                 ('__unused1', c_long),
                 ('__unused2', c_long),
                 ('__unused3', c_long)]
+
+
+class DirEntry(namedtuple('DirEntry',
+               ['d_info', 'd_off', 'd_reclen', 'd_type', 'd_name'])):
+    DT_DIR = 0x4
+    DT_REG = 0xA
+    DT_LNK = 0xC
+    def is_dir(self):
+        return self.d_type == DT_DIR
+
+    def is_symbol_file(self):
+        return self.d_type == DT_LNK
+
+    def is_file(self):
+        return self.d_type == DT_REG
 
 
 def load_libcephfs():
@@ -334,11 +350,11 @@ class LibCephFS(object):
             if not dirent:
                 return None
 
-            return {'d_ino': dirent.contents.d_ino,
-                    'd_off': dirent.contents.d_off,
-                    'd_reclen': dirent.contents.d_reclen,
-                    'd_type': dirent.contents.d_type,
-                    'd_name': dirent.contents.d_name}
+            return DirEntry(d_ino=dirent.contents.d_ino,
+                            d_off=dirent.contents.d_off,
+                            d_reclen=dirent.contents.d_reclen,
+                            d_type=dirent.contents.d_type,
+                            d_name=dirent.contents.d_name)
 
     def closedir(self, dir_handler):
         self.require_state("mounted")
