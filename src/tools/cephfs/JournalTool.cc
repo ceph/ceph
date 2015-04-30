@@ -41,7 +41,12 @@
 void JournalTool::usage()
 {
   std::cout << "Usage: \n"
-    << "  cephfs-journal-tool [options] journal [inspect|import|export|reset]\n"
+    << "  cephfs-journal-tool [options] journal <command>\n"
+    << "    <command>:\n"
+    << "      inspect\n"
+    << "      import <path>\n"
+    << "      export <path>\n"
+    << "      reset [--force]\n"
     << "  cephfs-journal-tool [options] header <get|set <field> <value>\n"
     << "  cephfs-journal-tool [options] event <effect> <selector> <output>\n"
     << "    <selector>:\n"
@@ -155,7 +160,21 @@ int JournalTool::main_journal(std::vector<const char*> &argv)
       return -EINVAL;
     }
   } else if (command == "reset") {
-      return journal_reset();
+    bool force = false;
+    if (argv.size() == 2) {
+      if (std::string(argv[1]) == "--force") {
+        force = true;
+      } else {
+        std::cerr << "Unknown argument " << argv[1] << std::endl;
+        usage();
+        return -EINVAL;
+      }
+    } else if (argv.size() > 2) {
+      std::cerr << "Too many arguments!" << std::endl;
+      usage();
+      return -EINVAL;
+    }
+    return journal_reset(force);
   } else {
     derr << "Bad journal command '" << command << "'" << dendl;
     return -EINVAL;
@@ -529,7 +548,7 @@ int JournalTool::journal_export(std::string const &path, bool import)
 /**
  * Truncate journal and insert EResetJournal
  */
-int JournalTool::journal_reset()
+int JournalTool::journal_reset(bool hard)
 {
   int r = 0;
   Resetter resetter;
@@ -538,7 +557,17 @@ int JournalTool::journal_reset()
     derr << "resetter::init failed: " << cpp_strerror(r) << dendl;
     return r;
   }
-  resetter.reset(rank);
+
+  if (mdsmap->is_dne(mds_rank_t(rank))) {
+    std::cerr << "MDS rank " << rank << " does not exist" << std::endl;
+    return -ENOENT;
+  }
+
+  if (hard) {
+    resetter.reset_hard(rank);
+  } else {
+    resetter.reset(rank);
+  }
   resetter.shutdown();
 
   return r;
