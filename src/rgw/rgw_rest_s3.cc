@@ -1737,7 +1737,7 @@ void RGWListMultipart_ObjStore_S3::send_response()
 
   if (ret == 0) { 
     dump_start(s);
-    s->formatter->open_object_section_in_ns("ListMultipartUploadResult",
+    s->formatter->open_object_section_in_ns("ListPartsResult",
 		    "http://s3.amazonaws.com/doc/2006-03-01/");
     map<uint32_t, RGWUploadPartInfo>::iterator iter;
     map<uint32_t, RGWUploadPartInfo>::reverse_iterator test_iter;
