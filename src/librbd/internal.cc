@@ -784,7 +784,7 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
     }
 
     if (fast_diff_enabled) {
-      r = invoke_async_request(ictx, "snap_remove",
+      r = invoke_async_request(ictx, "snap_remove", true,
                                boost::bind(&snap_remove_helper, ictx, _1,
                                            snap_name),
                                boost::bind(&ImageWatcher::notify_snap_remove,
