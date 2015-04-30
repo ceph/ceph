@@ -13,6 +13,7 @@ namespace librbd
 {
 class AsyncRequest;
 class ProgressContext;
+struct ImageCtx;
 
 class AsyncObjectThrottleFinisher {
 public:
@@ -22,17 +23,18 @@ public:
 
 class C_AsyncObjectThrottle : public Context {
 public:
-  C_AsyncObjectThrottle(AsyncObjectThrottleFinisher &finisher)
-    : m_finisher(finisher)
+  C_AsyncObjectThrottle(AsyncObjectThrottleFinisher &finisher,
+                        ImageCtx &image_ctx)
+    : m_image_ctx(image_ctx), m_finisher(finisher)
   {
-  }
-
-  virtual void finish(int r)
-  {
-    m_finisher.finish_op(r);
   }
 
   virtual int send() = 0;
+
+protected:
+  ImageCtx &m_image_ctx;
+
+  virtual void finish(int r);
 
 private:
   AsyncObjectThrottleFinisher &m_finisher;
@@ -43,7 +45,7 @@ public:
   typedef boost::function<C_AsyncObjectThrottle*(AsyncObjectThrottle&,
       					   uint64_t)> ContextFactory;
 
-  AsyncObjectThrottle(const AsyncRequest *async_request,
+  AsyncObjectThrottle(const AsyncRequest *async_request, ImageCtx &image_ctx,
                       const ContextFactory& context_factory, Context *ctx,
 		      ProgressContext *prog_ctx, uint64_t object_no,
 		      uint64_t end_object_no);
@@ -54,6 +56,7 @@ public:
 private:
   Mutex m_lock;
   const AsyncRequest *m_async_request;
+  ImageCtx &m_image_ctx;
   ContextFactory m_context_factory;
   Context *m_ctx;
   ProgressContext *m_prog_ctx;
