@@ -11,7 +11,8 @@ namespace librados {
 
 TestWatchNotify::TestWatchNotify(CephContext *cct)
   : m_cct(cct), m_finisher(new Finisher(cct)), m_handle(), m_notify_id(),
-    m_file_watcher_lock("librados::TestWatchNotify::m_file_watcher_lock") {
+    m_file_watcher_lock("librados::TestWatchNotify::m_file_watcher_lock"),
+    m_pending_notifies(0) {
   m_cct->get();
   m_finisher->start();
 }
@@ -29,6 +30,13 @@ TestWatchNotify::NotifyHandle::NotifyHandle()
 
 TestWatchNotify::Watcher::Watcher()
   : lock("TestWatchNotify::Watcher::lock") {
+}
+
+void TestWatchNotify::flush() {
+  Mutex::Locker file_watcher_locker(m_file_watcher_lock);
+  while (m_pending_notifies > 0) {
+    m_file_watcher_cond.Wait(m_file_watcher_lock);
+  }
 }
 
 int TestWatchNotify::list_watchers(const std::string& o,
@@ -61,6 +69,7 @@ int TestWatchNotify::notify(const std::string& oid, bufferlist& bl,
     RWLock::WLocker l(watcher->lock);
     {
       Mutex::Locker l2(m_file_watcher_lock);
+      ++m_pending_notifies;
       uint64_t notify_id = ++m_notify_id;
 
       SharedNotifyHandle notify_handle(new NotifyHandle());
@@ -203,6 +212,13 @@ void TestWatchNotify::execute_notify(const std::string &oid,
   Mutex::Locker l3(*lock);
   *done = true;
   cond->Signal();
+
+  {
+    Mutex::Locker file_watcher_locker(m_file_watcher_lock);
+    if (--m_pending_notifies == 0) {
+      m_file_watcher_cond.Signal();
+    }
+  }
 }
 
 } // namespace librados
