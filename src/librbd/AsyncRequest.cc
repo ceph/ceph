@@ -21,6 +21,10 @@ AsyncRequest::~AsyncRequest() {
   m_image_ctx.async_requests_cond.Signal();
 }
 
+void AsyncRequest::async_complete(int r) {
+  m_image_ctx.op_work_queue->queue(create_callback_context(), r);
+}
+
 librados::AioCompletion *AsyncRequest::create_callback_completion() {
   return librados::Rados::aio_create_completion(create_callback_context(),
 						NULL, rados_ctx_cb);
