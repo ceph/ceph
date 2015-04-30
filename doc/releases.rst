@@ -57,7 +57,8 @@ instead of a fixed duration.
 |                |Development|`Dumpling`_|`Emperor`_ |`Firefly`_ |`Giant`_   |`Hammer`_  |
 |                |Testing    |LTS        |Stable     |LTS        |Stable     |LTS        |
 +----------------+-----------+-----------+-----------+-----------+-----------+-----------+
-| April     2015 |           |           |           |           |           |`0.94.1`_  |
+| April     2015 |           |           |           |           |`0.87.2`_  |`0.94.1`_  |
+|                +-----------+-----------+-----------+-----------+-----------+-----------+
 |                |           |           |           |           |           |`0.94`_    |
 +----------------+-----------+-----------+-----------+-----------+-----------+-----------+
 | March     2015 |           |           |           |`0.80.9`_  |           |           |
@@ -144,6 +145,7 @@ instead of a fixed duration.
 .. _0.89: ../release-notes#v0-89
 .. _0.88: ../release-notes#v0-88
 
+.. _0.87.2: ../release-notes#v0-87-2-giant
 .. _0.87.1: ../release-notes#v0-87-1-giant
 .. _0.87: ../release-notes#v0-87-giant
 .. _Giant: release-notes#v0-87-giant
