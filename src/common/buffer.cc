@@ -1483,9 +1483,24 @@ void buffer::list::rebuild_page_aligned()
     }
 
     if (off + len > curbuf->length()) {
-      // FIXME we'll just rebuild the whole list for now.
-      rebuild();
-      return c_str() + orig_off;
+      bufferlist tmp;
+      unsigned l = off + len;
+
+      do {
+	if (l >= curbuf->length())
+	  l -= curbuf->length();
+	else
+	  l = 0;
+	tmp.append(*curbuf);
+	curbuf = _buffers.erase(curbuf);
+
+      } while (curbuf != _buffers.end() && l > 0);
+
+      assert(l == 0);
+
+      tmp.rebuild();
+      _buffers.insert(curbuf, tmp._buffers.front());
+      return tmp.c_str() + off;
     }
 
     return curbuf->c_str() + off;
