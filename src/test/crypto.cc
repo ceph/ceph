@@ -3,7 +3,10 @@
 
 #include "include/types.h"
 #include "auth/Crypto.h"
+#include "common/Clock.h"
 #include "common/ceph_crypto.h"
+#include "common/ceph_context.h"
+#include "global/global_context.h"
 
 #include "test/unit.h"
 
@@ -52,7 +55,9 @@ TEST(AES, Encrypt) {
 
   bufferlist cipher;
   std::string error;
-  h->encrypt(secret, plaintext, cipher, error);
+  CryptoKeyHandler *kh = h->get_key_handler(secret, error);
+  int r = kh->encrypt(plaintext, cipher, &error);
+  ASSERT_EQ(r, 0);
   ASSERT_EQ(error, "");
 
   unsigned char want_cipher[] = {
@@ -96,7 +101,9 @@ TEST(AES, Decrypt) {
 
   std::string error;
   bufferlist plaintext;
-  h->decrypt(secret, cipher, plaintext, error);
+  CryptoKeyHandler *kh = h->get_key_handler(secret, error);
+  int r = kh->decrypt(cipher, plaintext, &error);
+  ASSERT_EQ(r, 0);
   ASSERT_EQ(error, "");
 
   ASSERT_EQ(sizeof(plaintext_s), plaintext.length());
@@ -128,7 +135,9 @@ TEST(AES, Loop) {
       CryptoHandler *h = g_ceph_context->get_crypto_handler(CEPH_CRYPTO_AES);
 
       std::string error;
-      h->encrypt(secret, plaintext, cipher, error);
+      CryptoKeyHandler *kh = h->get_key_handler(secret, error);
+      int r = kh->encrypt(plaintext, cipher, &error);
+      ASSERT_EQ(r, 0);
       ASSERT_EQ(error, "");
     }
     plaintext.clear();
@@ -136,7 +145,9 @@ TEST(AES, Loop) {
     {
       CryptoHandler *h = g_ceph_context->get_crypto_handler(CEPH_CRYPTO_AES);
       std::string error;
-      h->decrypt(secret, cipher, plaintext, error);
+      CryptoKeyHandler *ckh = h->get_key_handler(secret, error);
+      int r = ckh->decrypt(cipher, plaintext, &error);
+      ASSERT_EQ(r, 0);
       ASSERT_EQ(error, "");
     }
   }
@@ -145,4 +156,29 @@ TEST(AES, Loop) {
   plaintext.copy(0, sizeof(plaintext_s), &plaintext_s[0]);
   err = memcmp(plaintext_s, orig_plaintext_s, sizeof(orig_plaintext_s));
   ASSERT_EQ(0, err);
+}
+
+TEST(AES, LoopKey) {
+  bufferptr k(16);
+  get_random_bytes(k.c_str(), k.length());
+  CryptoKey key(CEPH_CRYPTO_AES, ceph_clock_now(NULL), k);
+
+  bufferlist data;
+  bufferptr r(128);
+  get_random_bytes(r.c_str(), r.length());
+  data.append(r);
+
+  utime_t start = ceph_clock_now(NULL);
+  int n = 100000;
+
+  for (int i=0; i<n; ++i) {
+    bufferlist encoded;
+    string error;
+    int r = key.encrypt(g_ceph_context, data, encoded, &error);
+    ASSERT_EQ(r, 0);
+  }
+
+  utime_t end = ceph_clock_now(NULL);
+  utime_t dur = end - start;
+  cout << n << " encoded in " << dur << std::endl;
 }
