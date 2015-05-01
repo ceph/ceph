@@ -196,3 +196,30 @@ TEST(EncodingRoundTrip, MultimapConstructorCounter) {
   EXPECT_EQ(my_val_t::get_copy_ctor(), 10);
   EXPECT_EQ(my_val_t::get_assigns(), 0);
 }
+
+const char* expected_what[] = {
+  "buffer::malformed_input: void lame_decoder(int) unknown encoding version > 100",
+  "buffer::malformed_input: void lame_decoder(int) no longer understand old encoding version < 100",
+  "buffer::malformed_input: void lame_decoder(int) decode past end of struct encoding",
+};
+
+void lame_decoder(int which) {
+  switch (which) {
+  case 0:
+    throw buffer::malformed_input(DECODE_ERR_VERSION(__PRETTY_FUNCTION__, 100));
+  case 1:
+    throw buffer::malformed_input(DECODE_ERR_OLDVERSION(__PRETTY_FUNCTION__, 100));
+  case 2:
+    throw buffer::malformed_input(DECODE_ERR_PAST(__PRETTY_FUNCTION__));
+  }
+}
+
+TEST(EncodingException, Macros) {
+  for (unsigned i = 0; i < sizeof(expected_what)/sizeof(expected_what[0]); i++) {
+    try {
+      lame_decoder(i);
+    } catch (const exception& e) {
+      ASSERT_EQ(string(expected_what[i]), string(e.what()));
+    }
+  }
+}
