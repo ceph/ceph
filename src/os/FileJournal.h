@@ -414,7 +414,7 @@ private:
     return full_state != FULL_NOTFULL && !write_stop;
   }
 
-  void write_header();
+  void write_header_sync();
 
   void set_wait_on_full(bool b) { wait_on_full = b; }
 
