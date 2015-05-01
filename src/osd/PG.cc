@@ -457,6 +457,18 @@ bool PG::MissingLoc::readable_with_acting(
   return (*is_readable)(have_acting);
 }
 
+void PG::MissingLoc::add_batch_sources_info(
+  const set<pg_shard_t> &sources)
+{
+  dout(10) << __func__ << ": adding sources in batch " << sources.size() << dendl;
+  for (map<hobject_t, pg_missing_t::item>::const_iterator i = needs_recovery_map.begin(); 
+      i != needs_recovery_map.end();
+      ++i) {
+    missing_loc[i->first].insert(sources.begin(), sources.end());
+    missing_loc_sources.insert(sources.begin(), sources.end());
+    }
+}
+
 bool PG::MissingLoc::add_source_info(
   pg_shard_t fromosd,
   const pg_info_t &oinfo,
@@ -1662,14 +1674,19 @@ void PG::activate(ObjectStore::Transaction& t,
     }
 
     // Set up missing_loc
+    set<pg_shard_t> complete_shards;
     for (set<pg_shard_t>::iterator i = actingbackfill.begin();
 	 i != actingbackfill.end();
 	 ++i) {
       if (*i == get_primary()) {
-	missing_loc.add_active_missing(pg_log.get_missing());
+	missing_loc.add_active_missing(missing);
+        if (!missing.have_missing())
+          complete_shards.insert(*i);
       } else {
 	assert(peer_missing.count(*i));
 	missing_loc.add_active_missing(peer_missing[*i]);
+        if (!peer_missing[*i].have_missing() && peer_info[*i].last_backfill == hobject_t::get_max())
+          complete_shards.insert(*i);
       }
     }
     // If necessary, create might_have_unfound to help us find our unfound objects.
@@ -1677,19 +1694,27 @@ void PG::activate(ObjectStore::Transaction& t,
     // past intervals.
     might_have_unfound.clear();
     if (needs_recovery()) {
-      missing_loc.add_source_info(pg_whoami, info, pg_log.get_missing(), ctx->handle);
-      for (set<pg_shard_t>::iterator i = actingbackfill.begin();
-	   i != actingbackfill.end();
-	   ++i) {
-	if (*i == pg_whoami) continue;
-	dout(10) << __func__ << ": adding " << *i << " as a source" << dendl;
-	assert(peer_missing.count(*i));
-	assert(peer_info.count(*i));
-	missing_loc.add_source_info(
-	  *i,
-	  peer_info[*i],
-	  peer_missing[*i],
-          ctx->handle);
+      // If only one shard has missing, we do a trick to add all others as recovery
+      // source, this is considered safe since the PGLogs have been merged locally,
+      // and covers vast majority of the use cases, like one OSD/host is down for
+      // a while for hardware repairing
+      if (complete_shards.size() + 1 == actingbackfill.size()) {
+        missing_loc.add_batch_sources_info(complete_shards);
+      } else {
+        missing_loc.add_source_info(pg_whoami, info, pg_log.get_missing(), ctx->handle);
+        for (set<pg_shard_t>::iterator i = actingbackfill.begin();
+	     i != actingbackfill.end();
+	     ++i) {
+	  if (*i == pg_whoami) continue;
+	  dout(10) << __func__ << ": adding " << *i << " as a source" << dendl;
+	  assert(peer_missing.count(*i));
+	  assert(peer_info.count(*i));
+	  missing_loc.add_source_info(
+	    *i,
+	    peer_info[*i],
+	    peer_missing[*i],
+            ctx->handle);
+        }
       }
       for (map<pg_shard_t, pg_missing_t>::iterator i = peer_missing.begin();
 	   i != peer_missing.end();

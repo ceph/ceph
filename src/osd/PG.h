@@ -400,6 +400,11 @@ public:
       ThreadPool::TPHandle* handle  ///< [in] ThreadPool handle
       ); ///< @return whether a new object location was discovered
 
+    /// Adds recovery sources in batch
+    void add_batch_sources_info(
+      const set<pg_shard_t> &sources  ///< [in] a set of resources which can be used for all objects
+      );
+
     /// Uses osdmap to update structures for now down sources
     void check_recovery_sources(const OSDMapRef osdmap);
 
