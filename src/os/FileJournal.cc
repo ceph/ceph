@@ -649,9 +649,8 @@ void FileJournal::stop_writer()
   }
   write_thread.join();
  
-  // write jouranl header right now, so that
-  // committed_up_to in journal header is newer enough.
-  write_header();
+  // write journal header now so that we have less to replay on remount
+  write_header_sync();
 
 #ifdef HAVE_LIBAIO
   // stop aio completeion thread *after* writer thread has stopped
@@ -737,7 +736,7 @@ bufferptr FileJournal::prepare_header()
   return bp;
 }
 
-void FileJournal::write_header()
+void FileJournal::write_header_sync()
 {
   Mutex::Locker locker(write_lock);
   must_write_header = true;
