@@ -70,11 +70,11 @@ namespace ceph {
       ceph_spin_unlock(&lock);
       return ret;
     }
-    int cas(T o, T n) {
-      int success = 0;
+    bool compare_and_swap(T o, T n) {
+      bool success = false;
       ceph_spin_lock(&lock);
       if (val == o) {
-        success = 1;
+        success = true;
         val = n;
       }
       ceph_spin_unlock(&lock);
@@ -124,7 +124,7 @@ namespace ceph {
       // at some point.  this hack can go away someday...
       return AO_load_full((AO_t *)&val);
     }
-    int cas(AO_t o, AO_t n) {
+    bool compare_and_swap(AO_t o, AO_t n) {
       return AO_compare_and_swap(&val, o, n);
     }
 
