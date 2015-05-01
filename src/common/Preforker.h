@@ -7,10 +7,12 @@
 #include <sys/socket.h>
 #include <sys/wait.h>
 #include <errno.h>
+#include <stdlib.h>
 #include <unistd.h>
 #ifdef WITH_LTTNG
 #include <lttng/ust.h>
 #endif
+#include "include/assert.h"
 #include "common/safe_io.h"
 #include "common/errno.h"
 
@@ -82,7 +84,7 @@ public:
       cerr << "[" << getpid() << "]: " << cpp_strerror(err) << std::endl;
     } else {
       // wait for child to exit
-      waitpid(childpid, NULL, 0);
+      r = waitpid(childpid, NULL, 0);
     }
     return r;
   }
