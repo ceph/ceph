@@ -246,7 +246,7 @@ void EventCenter::delete_time_event(uint64_t id)
 
 void EventCenter::wakeup()
 {
-  if (already_wakeup.cas(0, 1)) {
+  if (already_wakeup.compare_and_swap(0, 1)) {
     ldout(cct, 1) << __func__ << dendl;
     char buf[1];
     buf[0] = 'c';
