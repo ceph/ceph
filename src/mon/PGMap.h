@@ -121,6 +121,7 @@ public:
   osd_stat_t osd_sum;
   mutable epoch_t min_last_epoch_clean;
   ceph::unordered_map<int,int> blocked_by_sum;
+  ceph::unordered_map<int,set<pg_t> > pg_by_osd;
 
   utime_t stamp;
 
@@ -249,8 +250,11 @@ public:
   void redo_full_sets();
   void register_nearfull_status(int osd, const osd_stat_t& s);
   void calc_stats();
-  void stat_pg_add(const pg_t &pgid, const pg_stat_t &s, bool sumonly=false);
-  void stat_pg_sub(const pg_t &pgid, const pg_stat_t &s, bool sumonly=false);
+  void stat_pg_add(const pg_t &pgid, const pg_stat_t &s, bool sumonly=false,
+		   bool sameosds=false);
+  void stat_pg_sub(const pg_t &pgid, const pg_stat_t &s, bool sumonly=false,
+		   bool sameosds=false);
+  void stat_pg_update(const pg_t pgid, pg_stat_t &prev, bufferlist::iterator& blp);
   void stat_osd_add(const osd_stat_t &s);
   void stat_osd_sub(const osd_stat_t &s);
   
