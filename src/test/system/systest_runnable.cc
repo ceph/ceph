@@ -80,27 +80,29 @@ start()
   if (m_started) {
     return -EDOM;
   }
+  int ret;
   bool use_threads = SysTestSettings::inst().use_threads();
   if (use_threads) {
-    int ret = pthread_create(&m_pthread, NULL, systest_runnable_pthread_helper,
+    ret = pthread_create(&m_pthread, NULL, systest_runnable_pthread_helper,
 			     static_cast<void*>(this));
     if (ret)
       return ret;
     m_started = true;
-    return 0;
-  }
-  else {
-    prefork.prefork();
+  } else {
+    std::string err_msg;
+    ret = preforker.prefork(err_msg);
+    if (ret < 0)
+      preforker.exit(ret);
 
-    if (prefork.is_child()) {
+    if (preforker.is_child()) {
       m_started = true;
       void *retptr = systest_runnable_pthread_helper(static_cast<void*>(this));
-      prefork.exit((int)(uintptr_t)retptr);
+      preforker.exit((int)(uintptr_t)retptr);
     } else {
       m_started = true;
-      return 0;
     }
   }
+  return 0;
 }
 
 std::string SysTestRunnable::
@@ -127,14 +129,9 @@ join()
     }
     return "";
   } else {
-    ret = preforker.parent_wait();
-    if (ret < 0) {
-      ostringstream oss;
-      oss << get_id_str() << " waitpid error: " << cpp_strerror(err);
-      return oss.str();
-    } else {
-      return "";
-    }
+    std::string err_msg;
+    ret = preforker.parent_wait(err_msg);
+    return err_msg;
   }
 }
 
