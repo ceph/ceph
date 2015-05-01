@@ -58,7 +58,6 @@ SysTestRunnable(int argc, const char **argv)
   m_started = false;
   m_id = m_highest_id.inc();
   memset(&m_pthread, 0, sizeof(m_pthread));
-  m_pid = 0;
   update_id_str(false);
   set_argv(argc, argv);
 }
@@ -91,20 +90,14 @@ start()
     return 0;
   }
   else {
-    pid_t pid = fork();
-    if (pid == -1) {
-      int err = errno;
-      return -err;
-    }
-    else if (pid == 0) {
+    prefork.prefork();
+
+    if (prefork.is_child()) {
       m_started = true;
-      m_pid = getpid();
       void *retptr = systest_runnable_pthread_helper(static_cast<void*>(this));
-      exit((int)(uintptr_t)retptr);
-    }
-    else {
+      prefork.exit((int)(uintptr_t)retptr);
+    } else {
       m_started = true;
-      m_pid = pid;
       return 0;
     }
   }
@@ -116,10 +109,11 @@ join()
   if (!m_started) {
     return "SysTestRunnable was never started.";
   }
+  int ret;
   bool use_threads = SysTestSettings::inst().use_threads();
   if (use_threads) {
     void *ptrretval;
-    int ret = pthread_join(m_pthread, &ptrretval);
+    ret = pthread_join(m_pthread, &ptrretval);
     if (ret) {
       ostringstream oss;
       oss << "pthread_join failed with error " << ret;
@@ -132,34 +126,13 @@ join()
       return oss.str();
     }
     return "";
-  }
-  else {
-    int status;
-    printf("waitpid(%d)\n", m_pid);
-    pid_t pid = waitpid(m_pid, &status, 0);
-    if (pid == -1) {
-      int err = errno;
+  } else {
+    ret = preforker.parent_wait();
+    if (ret < 0) {
       ostringstream oss;
       oss << get_id_str() << " waitpid error: " << cpp_strerror(err);
       return oss.str();
-    }
-    else if (WIFSIGNALED(status)) {
-      ostringstream oss;
-      oss << get_id_str() << " exited with a signal";
-      return oss.str();
-    }
-    else if (!WIFEXITED(status)) {
-      ostringstream oss;
-      oss << get_id_str() << " did not exit normally";
-      return oss.str();
-    }
-    else {
-      int exit_status = WEXITSTATUS(status);
-      if (exit_status != 0) {
-	ostringstream oss;
-	oss << get_id_str() << " returned exit_status " << exit_status;
-	return oss.str();
-      }
+    } else {
       return "";
     }
   }
