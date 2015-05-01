@@ -19,8 +19,16 @@ source test/test_btrfs_common.sh
 
 PS4='${FUNCNAME[0]}: $LINENO: '
 
-export PATH=:$PATH # make sure program from sources are prefered
+export PATH=.:$PATH # make sure program from sources are prefered
 DIR=test-ceph-disk
+virtualenv virtualenv-$DIR
+. virtualenv-$DIR/bin/activate
+(
+    if test -d ceph-detect-init/wheelhouse ; then
+        wheelhouse="--no-index --use-wheel --find-links=ceph-detect-init/wheelhouse"
+    fi
+    pip install $wheelhouse --editable ceph-detect-init
+)
 OSD_DATA=$DIR/osd
 MON_ID=a
 MONA=127.0.0.1:7451
@@ -170,6 +178,46 @@ function test_path() {
 
 function test_no_path() {
     ( unset PATH ; test_activate_dir ) || return 1
+}
+
+function test_mark_init() {
+    run_mon
+
+    local osd_data=$(pwd)/$DIR/dir
+    $mkdir -p $osd_data
+
+    local osd_uuid=$($uuidgen)
+
+    $mkdir -p $OSD_DATA
+
+    ./ceph-disk $CEPH_DISK_ARGS \
+        prepare --osd-uuid $osd_uuid $osd_data || return 1
+
+    $timeout $TIMEOUT ./ceph-disk $CEPH_DISK_ARGS \
+        --verbose \
+        activate \
+        --mark-init=auto \
+        --no-start-daemon \
+        $osd_data || return 1
+
+    test -f $osd_data/$(ceph-detect-init) || return 1
+
+    if test systemd = $(ceph-detect-init) ; then
+        expected=sysvinit
+    else
+        expected=systemd
+    fi
+    $timeout $TIMEOUT ./ceph-disk $CEPH_DISK_ARGS \
+        --verbose \
+        activate \
+        --mark-init=$expected \
+        --no-start-daemon \
+        $osd_data || return 1
+
+    ! test -f $osd_data/$(ceph-detect-init) || return 1
+    test -f $osd_data/$expected || return 1
+
+    $rm -fr $osd_data
 }
 
 # ceph-disk prepare returns immediately on success if the magic file
@@ -562,7 +610,9 @@ function run() {
     default_actions+="test_activate_dir_magic "
     default_actions+="test_activate_dir "
     default_actions+="test_keyring_path "
+    default_actions+="test_mark_init "
     local actions=${@:-$default_actions}
+    local status
     for action in $actions  ; do
         setup
         set -x
@@ -571,9 +621,11 @@ function run() {
         set +x
         teardown
         if test $status != 0 ; then
-            return $status
+            break
         fi
     done
+    rm -fr virtualenv-$DIR
+    return $status
 }
 
 run $@
