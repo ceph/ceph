@@ -127,6 +127,8 @@ public:
     oid = RGW_ORPHAN_INDEX_OID;
   }
 
+  librados::IoCtx& get_ioctx() { return ioctx; }
+
   int init();
 
   int read_job(const string& job_name, RGWOrphanSearchState& state);
@@ -171,6 +173,7 @@ class RGWOrphanSearch {
   int handle_stat_result(map<int, list<string> >& oids, RGWRados::Object::Stat::Result& result);
   int pop_and_handle_stat_op(map<int, list<string> >& oids, std::deque<RGWRados::Object::Stat>& ops);
 
+  void get_obj_fingerprint(const string& oid, string *fp);
 public:
   RGWOrphanSearch(RGWRados *_store, int _max_ios) : store(_store), orphan_store(store), max_concurrent_ios(_max_ios) {}
 
@@ -189,6 +192,7 @@ public:
   int build_buckets_instance_index();
   int build_linked_oids_for_bucket(const string& bucket_instance_id, map<int, list<string> >& oids);
   int build_linked_oids_index();
+  int compare_oid_indexes();
 
   int run();
 };
