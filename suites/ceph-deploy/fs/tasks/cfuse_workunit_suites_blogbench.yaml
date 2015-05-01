@@ -13,8 +13,6 @@ roles:
   - osd.0
 - - osd.1
   - mon.b
-- - mon.c
-  - osd.2
   - client.0
 tasks:
 - install:
