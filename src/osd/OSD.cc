@@ -4079,50 +4079,48 @@ bool remove_dir(
   OSDriver *osdriver,
   ObjectStore::Sequencer *osr,
   coll_t coll, DeletingStateRef dstate,
+  bool *finished,
   ThreadPool::TPHandle &handle)
 {
   vector<ghobject_t> olist;
   int64_t num = 0;
   ObjectStore::Transaction *t = new ObjectStore::Transaction;
   ghobject_t next;
-  while (!next.is_max()) {
-    handle.reset_tp_timeout();
-    store->collection_list_partial(
-      coll,
-      next,
-      store->get_ideal_list_min(),
-      store->get_ideal_list_max(),
-      0,
-      &olist,
-      &next);
-    for (vector<ghobject_t>::iterator i = olist.begin();
-	 i != olist.end();
-	 ++i, ++num) {
-      if (i->is_pgmeta())
-	continue;
-      OSDriver::OSTransaction _t(osdriver->get_transaction(t));
-      int r = mapper->remove_oid(i->hobj, &_t);
-      if (r != 0 && r != -ENOENT) {
-	assert(0);
-      }
-      t->remove(coll, *i);
-      if (num >= cct->_conf->osd_target_transaction_size) {
-	C_SaferCond waiter;
-	store->queue_transaction(osr, t, &waiter);
-	bool cont = dstate->pause_clearing();
-	handle.suspend_tp_timeout();
-	waiter.wait();
-	handle.reset_tp_timeout();
-	if (cont)
-	  cont = dstate->resume_clearing();
-	delete t;
-	if (!cont)
-	  return false;
-	t = new ObjectStore::Transaction;
-	num = 0;
-      }
+  handle.reset_tp_timeout();
+  store->collection_list_partial(
+    coll,
+    next,
+    store->get_ideal_list_min(),
+    store->get_ideal_list_max(),
+    0,
+    &olist,
+    &next);
+  for (vector<ghobject_t>::iterator i = olist.begin();
+       i != olist.end();
+       ++i, ++num) {
+    if (i->is_pgmeta())
+      continue;
+    OSDriver::OSTransaction _t(osdriver->get_transaction(t));
+    int r = mapper->remove_oid(i->hobj, &_t);
+    if (r != 0 && r != -ENOENT) {
+      assert(0);
     }
-    olist.clear();
+    t->remove(coll, *i);
+    if (num >= cct->_conf->osd_target_transaction_size) {
+      C_SaferCond waiter;
+      store->queue_transaction(osr, t, &waiter);
+      bool cont = dstate->pause_clearing();
+      handle.suspend_tp_timeout();
+      waiter.wait();
+      handle.reset_tp_timeout();
+      if (cont)
+        cont = dstate->resume_clearing();
+      delete t;
+      if (!cont)
+	return false;
+      t = new ObjectStore::Transaction;
+      num = 0;
+    }
   }
 
   C_SaferCond waiter;
@@ -4134,6 +4132,8 @@ bool remove_dir(
   if (cont)
     cont = dstate->resume_clearing();
   delete t;
+  // whether there are more objects to remove in the collection
+  *finished = next.is_max();
   return cont;
 }
 
@@ -4146,20 +4146,26 @@ void OSD::RemoveWQ::_process(
   OSDriver &driver = pg->osdriver;
   coll_t coll = coll_t(pg->info.pgid);
   pg->osr->flush();
+  bool finished = false;
 
-  if (!item.second->start_clearing())
+  if (!item.second->start_or_resume_clearing())
     return;
 
-  list<coll_t> colls_to_remove;
-  pg->get_colls(&colls_to_remove);
-  for (list<coll_t>::iterator i = colls_to_remove.begin();
-       i != colls_to_remove.end();
-       ++i) {
+  list<coll_t>& remaining_colls = item.second->colls_to_remove;
+  for (list<coll_t>::iterator i = remaining_colls.begin();
+       i != remaining_colls.end();) {
     bool cont = remove_dir(
       pg->cct, store, &mapper, &driver, pg->osr.get(), *i, item.second,
-      handle);
+      &finished, handle);
     if (!cont)
       return;
+    if (finished) {
+      i = remaining_colls.erase(i);
+    } else {
+      if (item.second->pause_clearing())
+        queue_front(item);
+      return;
+    }
   }
 
   if (!item.second->start_deleting())
@@ -4168,6 +4174,9 @@ void OSD::RemoveWQ::_process(
   ObjectStore::Transaction *t = new ObjectStore::Transaction;
   PGLog::clear_info_log(pg->info.pgid, t);
 
+  // remove the collections themselves
+  list<coll_t> colls_to_remove;
+  pg->get_colls(&colls_to_remove);
   for (list<coll_t>::iterator i = colls_to_remove.begin();
        i != colls_to_remove.end();
        ++i) {
