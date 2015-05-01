@@ -2372,6 +2372,7 @@ void MDS::handle_signal(int signum)
 void MDS::damaged()
 {
   set_want_state(MDSMap::STATE_DAMAGED);
+  monc->flush_log();  // Flush any clog error from before we were called
   beacon.notify_health(this);  // Include latest status in our swan song
   beacon.send_and_wait(g_conf->mds_mon_shutdown_timeout);
 

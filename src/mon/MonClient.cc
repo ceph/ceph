@@ -314,6 +314,12 @@ void MonClient::send_log()
   }
 }
 
+void MonClient::flush_log()
+{
+  Mutex::Locker l(monc_lock);
+  send_log();
+}
+
 void MonClient::handle_monmap(MMonMap *m)
 {
   ldout(cct, 10) << "handle_monmap " << *m << dendl;
