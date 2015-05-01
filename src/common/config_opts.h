@@ -731,7 +731,6 @@ OPTION(rocksdb_paranoid, OPT_BOOL, false) // RocksDB will aggressively check con
 OPTION(rocksdb_log, OPT_STR, "/dev/null")  // enable rocksdb log file
 OPTION(rocksdb_info_log_level, OPT_STR, "info")  // info log level : debug , info , warn, error, fatal
 OPTION(rocksdb_wal_dir, OPT_STR, "")  //  rocksdb write ahead log file, put it to fast device will benifit wrtie performance
-OPTION(rocksdb_disableDataSync, OPT_BOOL, false) // if true, data files are not synced to stable storage
 OPTION(rocksdb_disableWAL, OPT_BOOL, false)  // if true, writes will not first go to the write ahead log
 
 

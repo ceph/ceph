@@ -51,7 +51,6 @@ int RocksDBStore::init()
   options.log_file = g_conf->rocksdb_log;
   options.info_log_level = g_conf->rocksdb_info_log_level;
   options.wal_dir = g_conf->rocksdb_wal_dir;
-  options.disableDataSync = g_conf->rocksdb_disableDataSync;
   options.disableWAL = g_conf->rocksdb_disableWAL;
   return 0;
 }
@@ -102,10 +101,7 @@ int RocksDBStore::do_open(ostream &out, bool create_if_missing)
   else
     ldoptions.compression = rocksdb::kNoCompression;
 
-  if(options.disableDataSync) {
-    derr << "Warning: DataSync is disabled, may lose data on node failure" << dendl;
-    ldoptions.disableDataSync = options.disableDataSync;
-  }
+  ldoptions.disableDataSync = disableDataSync; 
 
   if(options.disableWAL) {
     derr << "Warning: Write Ahead Log is disabled, may lose data on failure" << dendl;

@@ -66,7 +66,7 @@ public:
 
   /// create a new instance
   static KeyValueDB *create(CephContext *cct, const string& type,
-			    const string& dir);
+			    const string& dir, bool disableDataSync = false);
 
   /// test whether we can successfully initialize; may have side effects (e.g., create)
   static int test_init(const string& type, const string& dir);

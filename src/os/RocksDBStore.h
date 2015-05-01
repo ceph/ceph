@@ -55,6 +55,7 @@ class RocksDBStore : public KeyValueDB {
   string path;
   const rocksdb::FilterPolicy *filterpolicy;
   rocksdb::DB *db;
+  bool disableDataSync;
 
   int do_open(ostream &out, bool create_if_missing);
 
@@ -140,7 +141,6 @@ public:
     string log_file;
     string wal_dir;
     string info_log_level;
-    bool disableDataSync;
     bool disableWAL;
 
     int block_restart_interval;
@@ -170,7 +170,6 @@ public:
       compression_type("none"),
       paranoid_checks(false), //< set to true if you want paranoid checks
       info_log_level("info"),
-      disableDataSync(false),
       disableWAL(false),
 
       block_restart_interval(0), //< 0 means default
@@ -178,14 +177,15 @@ public:
     {}
   } options;
 
-  RocksDBStore(CephContext *c, const string &path) :
+  RocksDBStore(CephContext *c, const string &path, bool _disable_datasync) :
     cct(c),
     logger(NULL),
     path(path),
     compact_queue_lock("RocksDBStore::compact_thread_lock"),
     compact_queue_stop(false),
     compact_thread(this),
-    options()
+    options(),
+    disableDataSync(_disable_datasync)
   {}
 
   ~RocksDBStore();
