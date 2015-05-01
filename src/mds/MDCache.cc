@@ -626,6 +626,14 @@ void MDCache::populate_mydir()
 
   dout(10) << "populate_mydir " << *mydir << dendl;
 
+  if (mydir->get_version() == 0) {
+    // A fresh dirfrag, we must dirty it before dirtying
+    // any of the strays we create within it.
+    LogSegment *ls = mds->mdlog->get_current_segment();
+    mydir->mark_complete();
+    mydir->mark_dirty(mydir->pre_dirty(), ls);
+  }
+
   if (!mydir->is_complete()) {
     mydir->fetch(new C_MDS_RetryOpenRoot(this));
     return;
