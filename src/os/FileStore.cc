@@ -1886,6 +1886,9 @@ int FileStore::queue_transactions(Sequencer *posr, list<Transaction*> &tls,
     Op *o = build_op(tls, onreadable, onreadable_sync, osd_op);
     op_queue_reserve_throttle(o, handle);
     journal->throttle();
+    //prepare and encode transactions data out of lock
+    bufferlist tbl;
+    int data_align = _op_journal_transactions_prepare(o->tls, tbl);
     uint64_t op_num = submit_manager.op_submit_start();
     o->op = op_num;
 
@@ -1895,7 +1898,7 @@ int FileStore::queue_transactions(Sequencer *posr, list<Transaction*> &tls,
     if (m_filestore_journal_parallel) {
       dout(5) << "queue_transactions (parallel) " << o->op << " " << o->tls << dendl;
       
-      _op_journal_transactions(o->tls, o->op, ondisk, osd_op);
+      _op_journal_transactions(tbl, data_align, o->op, ondisk, osd_op);
       
       // queue inside submit_manager op submission lock
       queue_op(osr, o);
@@ -1904,7 +1907,7 @@ int FileStore::queue_transactions(Sequencer *posr, list<Transaction*> &tls,
       
       osr->queue_journal(o->op);
 
-      _op_journal_transactions(o->tls, o->op,
+      _op_journal_transactions(tbl, data_align, o->op,
 			       new C_JournaledAhead(this, osr, o, ondisk),
 			       osd_op);
     } else {
@@ -1934,6 +1937,10 @@ int FileStore::queue_transactions(Sequencer *posr, list<Transaction*> &tls,
     return 0;
   }
 
+
+  //prepare and encode transactions data out of lock
+  bufferlist tbl;
+  int data_align = _op_journal_transactions_prepare(tls, tbl);
   uint64_t op = submit_manager.op_submit_start();
   dout(5) << "queue_transactions (trailing journal) " << op << " " << tls << dendl;
 
@@ -1944,7 +1951,7 @@ int FileStore::queue_transactions(Sequencer *posr, list<Transaction*> &tls,
   int r = do_transactions(tls, op);
     
   if (r >= 0) {
-    _op_journal_transactions(tls, op, ondisk, osd_op);
+    _op_journal_transactions(tbl, data_align, op, ondisk, osd_op);
   } else {
     delete ondisk;
   }
