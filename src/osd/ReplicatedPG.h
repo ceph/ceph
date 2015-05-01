@@ -1170,11 +1170,6 @@ protected:
 		      const object_locator_t& oloc,    ///< locator for obc|oid
 		      OpRequestRef op);                ///< [optional] client op
 
-  /**
-   * Check if the op is such that we can skip promote (e.g., DELETE)
-   */
-  bool can_skip_promote(OpRequestRef op);
-
   int prepare_transaction(OpContext *ctx);
   list<pair<OpRequestRef, OpContext*> > in_progress_async_reads;
   void complete_read_ctx(int result, OpContext *ctx);
