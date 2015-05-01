@@ -219,6 +219,11 @@ namespace librbd {
     ImageCtx *ictx = new ImageCtx(name, "", snap_name, io_ctx, false);
     tracepoint(librbd, open_image_enter, ictx, ictx->name.c_str(), ictx->id.c_str(), ictx->snap_name.c_str(), ictx->read_only);
 
+    if (image.ctx != NULL) {
+      close_image(reinterpret_cast<ImageCtx*>(image.ctx));
+      image.ctx = NULL;
+    }
+
     int r = librbd::open_image(ictx);
     if (r < 0) {
       tracepoint(librbd, open_image_exit, r);
@@ -235,6 +240,11 @@ namespace librbd {
   {
     ImageCtx *ictx = new ImageCtx(name, "", snap_name, io_ctx, true);
     tracepoint(librbd, open_image_enter, ictx, ictx->name.c_str(), ictx->id.c_str(), ictx->snap_name.c_str(), ictx->read_only);
+
+    if (image.ctx != NULL) {
+      close_image(reinterpret_cast<ImageCtx*>(image.ctx));
+      image.ctx = NULL;
+    }
 
     int r = librbd::open_image(ictx);
     if (r < 0) {
