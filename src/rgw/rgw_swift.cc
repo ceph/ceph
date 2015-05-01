@@ -269,6 +269,7 @@ int	RGWSwift::get_keystone_admin_token(std::string& token)
     std::stringstream ss;
     jf.flush(ss);
     token_req.set_post_data(ss.str());
+    token_req.set_send_length(ss.str().length());
     int ret = token_req.process("POST", token_url.c_str());
     if (ret < 0)
       return ret;
@@ -296,6 +297,7 @@ int RGWSwift::check_revoked()
     return -EINVAL;
   url.append("v2.0/tokens/revoked");
   req.append_header("X-Auth-Token", token);
+  req.set_send_length(0);
   int ret = req.process(url.c_str());
   if (ret < 0)
     return ret;
