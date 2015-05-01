@@ -1646,3 +1646,20 @@ class CephManager:
         Return path to osd data with {id} needing to be replaced
         """
         return "/var/lib/ceph/osd/ceph-{id}"
+
+def utility_task(name):
+    def task(ctx, config):
+        if config is None:
+            config = {}
+        args = config.get('args', [])
+        kwargs = config.get('kwargs', {})
+        fn = getattr(ctx.manager, name)
+        fn(*args, **kwargs)
+    return task
+
+revive_osd = utility_task("revive_osd")
+kill_osd = utility_task("kill_osd")
+create_pool = utility_task("create_pool")
+remove_pool = utility_task("remove_pool")
+wait_for_clean = utility_task("wait_for_clean")
+set_pool_property = utility_task("set_pool_property")
