@@ -167,7 +167,7 @@ class CephFSMount(object):
         raise RuntimeError("Timed out after {0}s waiting for {1} to become visible from {2}".format(
             i, basename, self.client_id))
 
-    def lock_background(self, basename="background_file"):
+    def lock_background(self, basename="background_file", do_flock=True):
         """
         Open and lock a files for writing, hold the lock in a background process
         """
@@ -175,36 +175,40 @@ class CephFSMount(object):
 
         path = os.path.join(self.mountpoint, basename)
 
-        pyscript = dedent("""
+        script_builder = """
             import time
             import fcntl
-            import struct
-
+            import struct"""
+        if do_flock:
+            script_builder += """
             f1 = open("{path}-1", 'w')
-            fcntl.flock(f1, fcntl.LOCK_EX | fcntl.LOCK_NB)
-
+            fcntl.flock(f1, fcntl.LOCK_EX | fcntl.LOCK_NB)"""
+        script_builder += """
             f2 = open("{path}-2", 'w')
             lockdata = struct.pack('hhllhh', fcntl.F_WRLCK, 0, 0, 0, 0, 0)
             fcntl.fcntl(f2, fcntl.F_SETLK, lockdata)
             while True:
                 time.sleep(1)
-            """).format(path=path)
+            """
+
+        pyscript = dedent(script_builder).format(path=path)
 
         log.info("lock file {0}".format(basename))
         rproc = self._run_python(pyscript)
         self.background_procs.append(rproc)
         return rproc
 
-    def check_filelock(self, basename="background_file"):
+    def check_filelock(self, basename="background_file", do_flock=True):
         assert(self.is_mounted())
 
         path = os.path.join(self.mountpoint, basename)
 
-        pyscript = dedent("""
+        script_builder = """
             import fcntl
             import errno
-            import struct
-
+            import struct"""
+        if do_flock:
+            script_builder += """
             f1 = open("{path}-1", 'r')
             try:
                 fcntl.flock(f1, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -212,8 +216,8 @@ class CephFSMount(object):
                 if e.errno == errno.EAGAIN:
                     pass
             else:
-                raise RuntimeError("flock on file {path}-1 not found")
-
+                raise RuntimeError("flock on file {path}-1 not found")"""
+        script_builder += """
             f2 = open("{path}-2", 'r')
             try:
                 lockdata = struct.pack('hhllhh', fcntl.F_WRLCK, 0, 0, 0, 0, 0)
@@ -223,7 +227,8 @@ class CephFSMount(object):
                     pass
             else:
                 raise RuntimeError("posix lock on file {path}-2 not found")
-            """).format(path=path)
+            """
+        pyscript = dedent(script_builder).format(path=path)
 
         log.info("check lock on file {0}".format(basename))
         self.client_remote.run(args=[
