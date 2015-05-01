@@ -20,6 +20,8 @@
 #include <string>
 #include <vector>
 
+#include "common/Preforker.h"
+
 #define RETURN1_IF_NOT_VAL(expected, expr) \
   do {\
     int _rinv_ret = expr;\
@@ -77,11 +79,11 @@ private:
 
   friend void* systest_runnable_pthread_helper(void *arg);
 
+  Preforker preforker;
   const char **m_argv_orig;
   bool m_started;
   int m_id;
   pthread_t m_pthread;
-  int m_pid;
   char m_id_str[ID_STR_SZ];
 };
 
