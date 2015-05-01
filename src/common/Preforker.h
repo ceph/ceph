@@ -45,8 +45,8 @@ public:
   int prefork(std::string &err) {
     assert(!forked);
     int r = socketpair(AF_UNIX, SOCK_STREAM, 0, fd);
+    std::ostringstream oss;
     if (r < 0) {
-      std::ostringstream oss;
       oss << "[" << getpid() << "]: unable to create socketpair: " << cpp_strerror(errno);
       err = oss.str();
       return r;
@@ -81,7 +81,7 @@ public:
     return childpid != 0;
   }
 
-  int parent_wait(std::string &err) {
+  int parent_wait(std::string &err_msg) {
     assert(forked);
 
     int r = -1;
@@ -111,7 +111,7 @@ public:
          oss << "[" << getpid() << "]" << " returned exit_status " << cpp_strerror(err);
       }
     }
-    err = oss.str();
+    err_msg = oss.str();
     return err;
   }
 
