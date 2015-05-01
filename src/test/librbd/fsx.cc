@@ -2,7 +2,7 @@
 /*
  *	Copyright (C) 1991, NeXT Computer, Inc.  All Rights Reserverd.
  *
- *	File:	fsx.c
+ *	File:	fsx.cc
  *	Author:	Avadis Tevanian, Jr.
  *
  *	File system exerciser. 
