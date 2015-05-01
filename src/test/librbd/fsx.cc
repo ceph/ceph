@@ -2002,7 +2002,7 @@ main(int argc, char **argv)
 		case 'b':
 			simulatedopcount = getnum(optarg, &endp);
 			if (!quiet)
-				fprintf(stdout, "Will begin at operation %ld\n",
+				fprintf(stdout, "Will begin at operation %lu\n",
 					simulatedopcount);
 			if (simulatedopcount == 0)
 				usage();
