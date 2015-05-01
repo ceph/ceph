@@ -145,6 +145,9 @@ enum {
   l_osd_object_ctx_cache_total,
 
   l_osd_op_cache_hit,
+  l_osd_tier_flush_lat,
+  l_osd_tier_promote_lat,
+  l_osd_tier_r_lat,
 
   l_osd_last,
 };
