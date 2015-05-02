@@ -2337,20 +2337,25 @@ void NewStore::_aio_thread()
   dout(10) << __func__ << " start" << dendl;
   while (!aio_stop) {
     dout(40) << __func__ << " polling" << dendl;
-    FS::aio_t *aio;
-    int r = aio_queue.get_next_completed(g_conf->newstore_aio_poll_ms, &aio);
+    int max = 16;
+    FS::aio_t *aio[max];
+    int r = aio_queue.get_next_completed(g_conf->newstore_aio_poll_ms,
+					 aio, max);
     if (r < 0) {
       derr << __func__ << " got " << cpp_strerror(r) << dendl;
     }
-    if (r == 1) {
-      TransContext *txc = static_cast<TransContext*>(aio->priv);
-      int left = txc->num_aio.dec();
-      dout(10) << __func__ << " finished aio " << aio << " txc " << txc
-	       << " state " << txc->get_state_name() << ", "
-	       << left << " aios left" << dendl;
-      VOID_TEMP_FAILURE_RETRY(::close(aio->fd));
-      if (left == 0) {
-	_txc_state_proc(txc);
+    if (r > 0) {
+      dout(30) << __func__ << " got " << r << " completed aios" << dendl;
+      for (int i = 0; i < r; ++i) {
+	TransContext *txc = static_cast<TransContext*>(aio[i]->priv);
+	int left = txc->num_aio.dec();
+	dout(10) << __func__ << " finished aio " << aio[i] << " txc " << txc
+		 << " state " << txc->get_state_name() << ", "
+		 << left << " aios left" << dendl;
+	VOID_TEMP_FAILURE_RETRY(::close(aio[i]->fd));
+	if (left == 0) {
+	  _txc_state_proc(txc);
+	}
       }
     }
   }

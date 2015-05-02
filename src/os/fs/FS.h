@@ -109,8 +109,8 @@ public:
       return 0;
     }
 
-    int get_next_completed(int timeout_ms, aio_t **paio) {
-      io_event event[1];
+    int get_next_completed(int timeout_ms, aio_t **paio, int max) {
+      io_event event[max];
       struct timespec t = {
 	timeout_ms / 1000,
 	(timeout_ms % 1000) * 1000 * 1000
@@ -119,8 +119,10 @@ public:
       if (r <= 0) {
 	return r;
       }
-      *paio = (aio_t *)event[0].obj;
-      return 1;
+      for (int i=0; i<r; ++i) {
+	paio[i] = (aio_t *)event[i].obj;
+      }
+      return r;
     }
   };
 
