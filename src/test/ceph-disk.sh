@@ -565,10 +565,14 @@ function run() {
     local actions=${@:-$default_actions}
     for action in $actions  ; do
         setup
+        set -x
         $action
         status=$?
+        set +x
         teardown
-        test $status != 0 || return $status
+        if test $status != 0 ; then
+            return $status
+        fi
     done
 }
 
