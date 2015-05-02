@@ -447,21 +447,9 @@ int RGWOrphanSearch::build_linked_oids_for_bucket(const string& bucket_instance_
         ldout(store->ctx(), 20) << "obj entry: " << entry.key.name << " [" << entry.key.instance << "]" << dendl;
       }
 
-      /*
-       * this is a bit confusing, but the list operation isn't going to return the namespace, for
-       * the object, but it will return the instance. So we need to decode the namespace out of the
-       * object key. The problem is that the list_op is mainly used to list objects in a specific
-       * namespace, but we want to list all, that's why we have the special handling.
-       */
-      string obj_name;
-      string obj_instance;
-      string obj_ns;
-      rgw_obj::parse_raw_oid(entry.key.name, &obj_name, &obj_instance, &obj_ns);
       ldout(store->ctx(), 20) << __func__ << ": entry.key.name=" << entry.key.name << " entry.key.instance=" << entry.key.instance << " entry.ns=" << entry.ns << dendl;
-      ldout(store->ctx(), 20) << __func__ << ": obj_name=" << obj_name << " obj_instance=" << obj_instance << " obj_ns=" << obj_ns << dendl;
-      rgw_obj_key key(obj_name, entry.key.instance);
-      rgw_obj obj(bucket_info.bucket, key);
-      obj.set_ns(obj_ns);
+      rgw_obj obj(bucket_info.bucket, entry.key);
+      obj.set_ns(entry.ns);
 
       RGWRados::Object op_target(store, bucket_info, obj_ctx, obj);
 
