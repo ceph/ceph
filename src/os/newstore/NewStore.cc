@@ -2084,7 +2084,6 @@ void NewStore::_txc_state_proc(TransContext *txc)
       txc->state = TransContext::STATE_KV_QUEUED;
       if (!g_conf->newstore_sync_transaction) {
 	Mutex::Locker l(kv_lock);
-	db->submit_transaction(txc->t);
 	kv_queue.push_back(txc);
 	kv_cond.SignalOne();
 	return;
@@ -2383,6 +2382,12 @@ void NewStore::_kv_sync_thread()
       wal_cleaning.swap(wal_cleanup_queue);
       utime_t start = ceph_clock_now(NULL);
       kv_lock.Unlock();
+
+      for (std::deque<TransContext *>::iterator it = kv_committing.begin();
+	    it != kv_committing.end();
+	    it++) {
+	db->submit_transaction((*it)->t);
+      }
 
       // one transaction to force a sync.  clean up wal keys while we
       // are at it.
