@@ -15,6 +15,47 @@ using namespace std;
 
 #define DEFAULT_NUM_SHARDS 1000
 
+static string obj_fingerprint(const string& oid, const char *force_ns = NULL)
+{
+  ssize_t pos = oid.find('_');
+  if (pos < 0) {
+    cerr << "ERROR: object does not have a bucket marker: " << oid << std::endl;
+  }
+
+  string obj_marker = oid.substr(0, pos);
+
+  string obj_name;
+  string obj_instance;
+  string obj_ns;
+
+  rgw_obj::parse_raw_oid(oid.substr(pos + 1), &obj_name, &obj_instance, &obj_ns);
+
+  if (obj_ns.empty()) {
+    return oid;
+  }
+
+  string s = oid;
+
+  if (force_ns) {
+    rgw_bucket b;
+    rgw_obj new_obj(b, obj_name);
+    new_obj.set_ns(force_ns);
+    new_obj.set_instance(obj_instance);
+    s = obj_marker + "_" + new_obj.get_object();
+  }
+
+  /* cut out suffix */
+  size_t i = s.size() - 1;
+  for (; i >= s.size() - 10; --i) {
+    char c = s[i];
+    if (!isdigit(c) && c != '.' && c != '_') {
+      break;
+    }
+  }
+
+  return s.substr(0, i + 1);
+}
+
 int RGWOrphanStore::read_job(const string& job_name, RGWOrphanSearchState & state)
 {
   set<string> keys;
@@ -187,28 +228,6 @@ int RGWOrphanSearch::log_oids(map<int, string>& log_shards, map<int, list<string
   return 0;
 }
 
-void RGWOrphanSearch::get_obj_fingerprint(const string& oid, string *fp)
-{
-  ssize_t pos = oid.find('_');
-  if (pos < 0) {
-    cerr << "ERROR: object does not have a bucket marker: " << oid << std::endl;
-  }
-
-  string obj_marker = oid.substr(0, pos);
-
-  string obj_name;
-  string obj_instance;
-  string obj_ns;
-
-  rgw_obj::parse_raw_oid(oid.substr(pos + 1), &obj_name, &obj_instance, &obj_ns);
-
-  if (obj_ns.empty()) {
-    *fp = oid;
-  } else {
-    *fp = oid.substr(0, oid.size() - 10);
-  }
-}
-
 int RGWOrphanSearch::build_all_oids_index()
 {
   librados::Rados *rados = store->get_rados();
@@ -241,9 +260,7 @@ int RGWOrphanSearch::build_all_oids_index()
     if (locator.size())
       name += " (@" + locator + ")";  
 
-    string oid_fp;
-    get_obj_fingerprint(oid, &oid_fp);
-
+    string oid_fp = obj_fingerprint(oid);
 
     ldout(store->ctx(), 20) << "oid_fp=" << oid_fp << dendl;
 
@@ -333,24 +350,23 @@ int RGWOrphanSearch::handle_stat_result(map<int, list<string> >& oids, RGWRados:
 {
   set<string> obj_oids;
   rgw_bucket& bucket = result.obj.bucket;
-  if (!result.has_manifest) {
-    obj_oids.insert(bucket.bucket_id + "_" + result.obj.get_object());
+  if (!result.has_manifest) { /* a very very old object, or part of a multipart upload during upload */
+    const string loc = bucket.bucket_id + "_" + result.obj.get_object();
+    obj_oids.insert(obj_fingerprint(loc));
+
+    /*
+     * multipart parts don't have manifest on them, it's in the meta object. Instead of reading the
+     * meta object, just add a "shadow" object to the mix
+     */
+    obj_oids.insert(obj_fingerprint(loc, "shadow"));
   } else {
     RGWObjManifest& manifest = result.manifest;
 
     RGWObjManifest::obj_iterator miter;
     for (miter = manifest.obj_begin(); miter != manifest.obj_end(); ++miter) {
       const rgw_obj& loc = miter.get_location();
-
       string s = bucket.bucket_id + "_" + loc.get_object();
-      /*
-       * if it's within a namespace, we can store only part of the name, so that any other tail or
-       * part objects of the same logical object will not be duplicated. When we do the search
-       * we'll only search for this substring
-       */
-      string fp = (loc.ns.empty() ? s : s.substr(0, s.size() - 10));
-
-      obj_oids.insert(fp);
+      obj_oids.insert(obj_fingerprint(s));
     }
   }
 
@@ -405,6 +421,7 @@ int RGWOrphanSearch::build_linked_oids_for_bucket(const string& bucket_instance_
   string marker;
   list_op.params.marker = rgw_obj_key(marker);
   list_op.params.list_versions = true;
+  list_op.params.enforce_ns = false;
 
   bool truncated;
 
@@ -430,7 +447,21 @@ int RGWOrphanSearch::build_linked_oids_for_bucket(const string& bucket_instance_
         ldout(store->ctx(), 20) << "obj entry: " << entry.key.name << " [" << entry.key.instance << "]" << dendl;
       }
 
-      rgw_obj obj(bucket_info.bucket, entry.key);
+      /*
+       * this is a bit confusing, but the list operation isn't going to return the namespace, for
+       * the object, but it will return the instance. So we need to decode the namespace out of the
+       * object key. The problem is that the list_op is mainly used to list objects in a specific
+       * namespace, but we want to list all, that's why we have the special handling.
+       */
+      string obj_name;
+      string obj_instance;
+      string obj_ns;
+      rgw_obj::parse_raw_oid(entry.key.name, &obj_name, &obj_instance, &obj_ns);
+      ldout(store->ctx(), 20) << __func__ << ": entry.key.name=" << entry.key.name << " entry.key.instance=" << entry.key.instance << " entry.ns=" << entry.ns << dendl;
+      ldout(store->ctx(), 20) << __func__ << ": obj_name=" << obj_name << " obj_instance=" << obj_instance << " obj_ns=" << obj_ns << dendl;
+      rgw_obj_key key(obj_name, entry.key.instance);
+      rgw_obj obj(bucket_info.bucket, key);
+      obj.set_ns(obj_ns);
 
       RGWRados::Object op_target(store, bucket_info, obj_ctx, obj);
 
@@ -604,8 +635,7 @@ int RGWOrphanSearch::compare_oid_indexes()
         break;
       }
 
-      string key_fp;
-      get_obj_fingerprint(key, &key_fp);
+      string key_fp = obj_fingerprint(key);
 
       while (cur_linked < key_fp && !linked_done) {
         r = linked_entries.get_next(&cur_linked, NULL, &linked_done);
