@@ -594,6 +594,7 @@ fi
 %{_bindir}/ceph-mon
 %{_bindir}/ceph-mds
 %{_bindir}/ceph-osd
+%{_bindir}/ceph-detect-init
 %{_bindir}/librados-config
 %{_bindir}/ceph-client-debug
 %{_bindir}/cephfs-journal-tool
@@ -645,7 +646,9 @@ fi
 %config %{_sysconfdir}/sysconfig/SuSEfirewall2.d/services/ceph-mon
 %config %{_sysconfdir}/sysconfig/SuSEfirewall2.d/services/ceph-osd-mds
 %endif
+%{python_sitelib}/ceph_detect_init*
 %{_mandir}/man8/ceph-deploy.8*
+%{_mandir}/man8/ceph-detect-init.8*
 %{_mandir}/man8/ceph-disk.8*
 %{_mandir}/man8/ceph-mon.8*
 %{_mandir}/man8/ceph-mds.8*
