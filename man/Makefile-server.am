@@ -15,6 +15,7 @@ endif
 if WITH_OSD
 dist_man_MANS += \
 	ceph-clsinfo.8 \
+	ceph-detect-init.8 \
 	ceph-disk.8 \
 	ceph-osd.8 \
 	osdmaptool.8
