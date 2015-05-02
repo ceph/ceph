@@ -2466,8 +2466,14 @@ int RGWRados::Bucket::List::list_objects(int max, vector<RGWObjEnt> *result,
       RGWObjEnt& entry = eiter->second;
       rgw_obj_key key = obj;
       string instance;
+      string ns;
 
-      bool check_ns = rgw_obj::translate_raw_obj_to_obj_in_ns(obj.name, instance, params.ns);
+      bool valid = rgw_obj::parse_raw_oid(obj.name, &obj.name, &instance, &ns);
+      if (!valid) {
+        ldout(cct, 0) << "ERROR: could not parse object name: " << obj.name << dendl;
+        continue;
+      }
+      bool check_ns = (ns == params.ns);
       if (!params.list_versions && !entry.is_visible()) {
         continue;
       }
@@ -2528,7 +2534,7 @@ int RGWRados::Bucket::List::list_objects(int max, vector<RGWObjEnt> *result,
 
       RGWObjEnt ent = eiter->second;
       ent.key = obj;
-      ent.ns = params.ns;
+      ent.ns = ns;
       result->push_back(ent);
       count++;
     }
