@@ -628,6 +628,19 @@ def write_one_line(parent, name, text):
     os.rename(tmp, path)
 
 
+def init_get():
+    """
+    Get a init system using 'ceph-detect-init'
+    """
+    init = _check_output(
+        args=[
+            'ceph-detect-init'
+            ],
+        )
+    init = must_be_one_line(init)
+    return init
+
+
 def check_osd_magic(path):
     """
     Check that this path has the Ceph OSD magic.
@@ -2153,11 +2166,7 @@ def activate(
             if conf_val is not None:
                 init = conf_val
             else:
-                (distro, release, codename) = platform.dist()
-                if distro == 'Ubuntu':
-                    init = 'upstart'
-                else:
-                    init = 'sysvinit'
+                init = init_get()
 
         LOG.debug('Marking with init system %s', init)
         with file(os.path.join(path, init), 'w'):

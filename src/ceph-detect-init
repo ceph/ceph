@@ -1,0 +1,287 @@
+#!/usr/bin/env python
+#
+# Copyright (C) 2015 SUSE LINUX GmbH
+#
+# Author: Owen Synge <osynge@suse.com>
+#
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU Library Public License as published by
+# the Free Software Foundation; either version 2, or (at your option)
+# any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Library Public License for more details.
+#
+
+import logging
+import argparse
+import os
+import platform
+import sys
+
+###### exceptions ########
+
+
+class Error(Exception):
+    """
+    Error
+    """
+
+    def __str__(self):
+        doc = self.__doc__.strip()
+        return ': '.join([doc] + [str(a) for a in self.args])
+
+
+
+def which(executable):
+    """find the location of an executable"""
+    # Taken from ceph-disk unfortunate duplication
+    if 'PATH' in os.environ:
+        envpath = os.environ['PATH']
+    else:
+        envpath = os.defpath
+    PATH = envpath.split(os.pathsep)
+
+    locations = PATH + [
+        '/usr/local/bin',
+        '/bin',
+        '/usr/bin',
+        '/usr/local/sbin',
+        '/usr/sbin',
+        '/sbin',
+    ]
+
+    for location in locations:
+        executable_path = os.path.join(location, executable)
+        if os.path.exists(executable_path):
+            return executable_path
+
+def platform_information():
+    # Taken from ceph-disk unfortunate duplication
+    distro, release, codename = platform.linux_distribution()
+    if not codename and 'debian' in distro.lower():  # this could be an empty string in Debian
+        debian_codenames = {
+            '8': 'jessie',
+            '7': 'wheezy',
+            '6': 'squeeze',
+        }
+        major_version = release.split('.')[0]
+        codename = debian_codenames.get(major_version, '')
+
+        # In order to support newer jessie/sid or wheezy/sid strings we test this
+        # if sid is buried in the minor, we should use sid anyway.
+        if not codename and '/' in release:
+            major, minor = release.split('/')
+            if minor == 'sid':
+                codename = minor
+            else:
+                codename = major
+
+    return (
+        str(distro).strip(),
+        str(release).strip(),
+        str(codename).strip()
+    )
+
+
+def init_database():
+    # Helper function for init_get()
+    # Note only return the init system when its known.
+    # - raises Error when init system is unknown
+    # Testing notes:
+    # - works on SLE12
+    # - works on openSUSE 13.1
+    # - works on Scientific 6.4
+    # - fails on debian
+    #   + This is intentional as debian suports multiple init systems
+
+    distro, release, codename = platform_information()
+    if distro.startswith(('SUSE')):
+        # tested on SLE12
+        major_version = int(release.split('.')[0])
+        if major_version >= 12:
+            return "systemd"
+        if major_version < 12:
+            return "sysvinit"
+    if distro.startswith(('openSUSE')):
+        # tested on openSUSE 13.1
+        major_version = int(release.split('.')[0])
+        if major_version >= 13:
+            return "systemd"
+        else:
+            return "sysvinit"
+    if distro.startswith(('Scientific')):
+        # Only tested on Scientific 6,4
+        major_version = int(release.split('.')[0])
+        if major_version > 6:
+            return "systemd"
+        if major_version == 6:
+            return "upstart"
+        if major_version < 6:
+            return "sysvinit"
+    if distro.startswith(('debian')):
+        # older versions of debian suport multiple init systems
+        raise Error("debian suport multiple init systems")
+    if distro.startswith(('Ubuntu')):
+        # This was the previous code asssumption
+        # With Ubuntu moving to systemd this will need chnaging
+        # when details are known.
+        return 'upstart'
+    raise Error("No init system found in database for this operating system.")
+
+def init_detect_tools():
+    # Helper function for init_get()
+    # Note only return the init system when its known.
+    # - raises Error when init system is unknown
+    # Testing notes:
+    # - works on SLE12
+    # - works on openSUSE 13.1
+    # - works on Scientific 6.4
+    # - works on debian 7.7 (wheezy)
+    # - works on debian 8 (jessie)
+    scr = {
+        "upstart" : 0,
+        "sysvinit" : 0,
+        "systemd" : 0}
+    # Detect init management tools
+    if None != which("initctl"):
+        scr["upstart"]     =+ 2
+    else:
+        scr["upstart"]     =- 2
+    if None != which("systemctl"):
+        scr["systemd"]     =+ 2
+    else:
+        scr["systemd"]     =- 2
+    # Only add 1 as 'service' maybe provided for compatability
+    if None != which("service"):
+        scr["sysvinit"]    =+ 1
+    else:
+        scr["sysvinit"]    =- 1
+    # find the minum score and keep removing"
+    maxvalue = max(scr, key=scr.get)
+    minvalue = min(scr, key=scr.get)
+    while scr[minvalue] != scr[maxvalue]:
+        del scr[minvalue]
+        maxvalue = max(scr, key=scr.get)
+        minvalue = min(scr, key=scr.get)
+    # Now scr only includes the higest scoring init systems.
+    if len(scr) == 1:
+        return  max(scr, key=scr.get)
+    if len(scr) == 0:
+        raise Error("No init system found")
+    if len(scr) > 1:
+        raise Error("Detect more than one init system, choices:%s" % (",".join(scr)))
+
+def init_get():
+    # use this function rather than directly using helper fuinctions:
+    # - init_detect_tools
+    # - init_database
+    # Testing notes:
+    # - works on SLE12
+    # - works on openSUSE 13.1
+    # - works on Scientific 6.4
+    # - works on debian 7.7 (wheezy)
+    # - works on debian 8 (jessie)
+    log = logging.getLogger("init_get")
+    init_results = set()
+    try:
+        init_results.add(init_detect_tools())
+    except Error, e:
+        log.info(e)
+        log.info("Failed to detect init system")
+    try:
+        init_results.add(init_database())
+    except Error, e:
+        log.info(e)
+        log.info("Failed to lookup init system")
+    if len(init_results) == 1:
+        return init_results.pop()
+    if len(init_results) > 1:
+        raise Error("Failed to find init system detection and DB agreed on : %s" % (",".join(init_results)))
+    raise Error("Failed to find an init system for this platform")
+
+def parse_args():
+    parser = argparse.ArgumentParser(
+        'ceph-disk',
+        )
+    parser.add_argument(
+        "-v",
+        "--verbose",
+        action="count",
+        default=0
+        )
+    parser.add_argument(
+        "-q",
+        "--quiet",
+        action="count",
+        default=0
+        )
+    parser.add_argument(
+        '--log-config',
+        action ='store',
+        help='Logfile configuration file, (overrides command line).',
+        metavar='LOG_CONFIG'
+        )
+    args = parser.parse_args()
+    return args
+
+def main():
+
+    #setup defaults
+    LoggingLevelCounter = 2
+    LoggingLevel = logging.WARNING
+    logFile = None
+
+    # Read enviroment
+    if 'LOG_CONFIG' in os.environ:
+        logFile = os.environ['LOG_CONFIG']
+
+    args = parse_args()
+
+    # Set up logging
+    if args.verbose:
+        LoggingLevelCounter = LoggingLevelCounter - args.verbose
+    if args.quiet:
+        LoggingLevelCounter = LoggingLevelCounter + args.quiet
+    if LoggingLevelCounter <= 0:
+        LoggingLevel = logging.DEBUG
+    if LoggingLevelCounter == 1:
+        LoggingLevel = logging.INFO
+    if LoggingLevelCounter == 2:
+        LoggingLevel = logging.WARNING
+    if LoggingLevelCounter == 3:
+        LoggingLevel = logging.ERROR
+    if LoggingLevelCounter == 4:
+        LoggingLevel = logging.FATAL
+    if LoggingLevelCounter >= 5:
+        LoggingLevel = logging.CRITICAL
+    if args.log_config:
+        logFile = str(args.log_config)
+    if logFile != None:
+        if os.path.isfile(logFile):
+            logging.config.fileConfig(logFile)
+        else:
+            logging.basicConfig(level=LoggingLevel)
+            log = logging.getLogger("main")
+            log.error("Logfile configuration file '%s' was not found." % (args.log_config))
+            sys.exit(1)
+    else:
+        logging.basicConfig(level=LoggingLevel)
+    log = logging.getLogger("main")
+
+
+    # Establish init system
+    try:
+        init_system = init_get()
+    except Error, e:
+        log.error(e)
+        return 1
+
+    print init_system
+    return 0
+
+if __name__ == '__main__':
+    rc = main()
+    sys.exit(rc)
