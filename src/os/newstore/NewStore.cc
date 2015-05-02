@@ -2068,7 +2068,7 @@ void NewStore::_txc_state_proc(TransContext *txc)
       // ** fall-thru **
 
     case TransContext::STATE_AIO_WAIT:
-      if (!txc->fds.empty()) {
+      if (!txc->sync_items.empty()) {
 	txc->state = TransContext::STATE_FSYNC_WAIT;
 	if (!g_conf->newstore_sync_io) {
 	  _txc_queue_fsync(txc);
@@ -2222,8 +2222,8 @@ void NewStore::_txc_queue_fsync(TransContext *txc)
 {
   dout(20) << __func__ << " txc " << txc << dendl;
   fsync_wq.lock();
-  for (list<fsync_item>::iterator p = txc->fds.begin();
-       p != txc->fds.end();
+  for (list<fsync_item>::iterator p = txc->sync_items.begin();
+       p != txc->sync_items.end();
        ++p) {
     fsync_wq._enqueue(&*p);
     fsync_wq._wake();
@@ -2234,8 +2234,8 @@ void NewStore::_txc_queue_fsync(TransContext *txc)
 void NewStore::_txc_do_sync_fsync(TransContext *txc)
 {
   dout(20) << __func__ << " txc " << txc << dendl;
-  for (list<fsync_item>::iterator p = txc->fds.begin();
-       p != txc->fds.end(); ++p) {
+  for (list<fsync_item>::iterator p = txc->sync_items.begin();
+       p != txc->sync_items.end(); ++p) {
     dout(30) << __func__ << " fsync " << p->fd << dendl;
     int r = ::fdatasync(p->fd);
     if (r < 0) {
