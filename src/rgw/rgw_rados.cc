@@ -5041,6 +5041,7 @@ int RGWRados::Object::Stat::stat_async()
   op.stat(&result.size, &result.mtime, NULL);
   op.getxattrs(&result.attrs, NULL);
   state.completion = librados::Rados::aio_create_completion(NULL, NULL, NULL);
+  state.io_ctx.locator_set_key(loc);
   r = state.io_ctx.aio_operate(oid, state.completion, &op, NULL);
   if (r < 0) {
     ldout(store->ctx(), 5) << __func__ << ": ERROR: aio_operate() returned ret=" << r << dendl;
