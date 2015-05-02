@@ -3,6 +3,7 @@
 #ifndef CEPH_COMMON_PREFORKER_H
 #define CEPH_COMMON_PREFORKER_H
 
+#include "acconfig.h"
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/wait.h>
