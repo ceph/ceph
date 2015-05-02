@@ -187,7 +187,7 @@ public:
 
     uint64_t ops, bytes;
 
-    list<fsync_item> fds;     ///< these fds need to be synced
+    list<fsync_item> sync_items; ///< these fds need to be synced
     set<OnodeRef> onodes;     ///< these onodes need to be updated/written
     KeyValueDB::Transaction t; ///< then we will commit this
     Context *oncommit;         ///< signal on commit
@@ -230,7 +230,7 @@ public:
     }
 
     void sync_fd(int f) {
-      fds.push_back(fsync_item(f, this));
+      sync_items.push_back(fsync_item(f, this));
     }
     void write_onode(OnodeRef &o) {
       onodes.insert(o);
@@ -239,7 +239,7 @@ public:
     bool finish_fsync() {
       Mutex::Locker l(lock);
       ++num_fsyncs_completed;
-      if (num_fsyncs_completed == fds.size()) {
+      if (num_fsyncs_completed == sync_items.size()) {
 	cond.Signal();
 	return true;
       }
@@ -247,7 +247,7 @@ public:
     }
     void wait_fsync() {
       Mutex::Locker l(lock);
-      while (num_fsyncs_completed < fds.size())
+      while (num_fsyncs_completed < sync_items.size())
 	cond.Wait(lock);
     }
   };
