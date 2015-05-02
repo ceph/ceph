@@ -1860,9 +1860,8 @@ def start_daemon(
     path = (STATEDIR + '/osd/{cluster}-{osd_id}').format(
         cluster=cluster, osd_id=osd_id)
 
-    # upstart?
     try:
-        if os.path.exists(os.path.join(path,'upstart')):
+        if os.path.exists(os.path.join(path, 'upstart')):
             command_check_call(
                 [
                     '/sbin/initctl',
