@@ -497,9 +497,17 @@ int main(int argc, const char **argv)
   Preforker prefork;
   if (!(flags & CINIT_FLAG_NO_DAEMON_ACTIONS)) {
     if (global_init_prefork(g_ceph_context, 0) >= 0) {
-      prefork.prefork();
+      string err_msg;
+      err = prefork.prefork(err_msg);
+      if (err < 0) {
+        cerr << err_msg << std::endl;
+        prefork.exit(err);
+      }
       if (prefork.is_parent()) {
-	return prefork.parent_wait();
+        err = prefork.parent_wait(err_msg);
+        if (err < 0)
+          cerr << err_msg << std::endl;
+        prefork.exit(err);
       }
       global_init_postfork_start(g_ceph_context);
     }
