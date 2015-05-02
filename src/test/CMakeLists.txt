@@ -1134,7 +1134,7 @@ target_link_libraries(test_librbd
   )
 
 add_executable(test_librbd_fsx
-  librbd/fsx.c
+  librbd/fsx.cc
   $<TARGET_OBJECTS:heap_profiler_objs>
   ${CMAKE_SOURCE_DIR}/src/common/TextTable.cc
   ${CMAKE_SOURCE_DIR}/src/common/secret.c
