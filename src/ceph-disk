@@ -2216,7 +2216,7 @@ def main_activate(args):
         else:
             raise Error('%s is not a directory or block device' % args.path)
 
-        if args.mark_init == 'none':
+        if (not args.no_start_daemon and args.mark_init == 'none'):
             command_check_call(
                 [
                     'ceph-osd',
@@ -2227,7 +2227,8 @@ def main_activate(args):
                 ],
             )
 
-        if args.mark_init not in (None, 'none' ):
+        if (not args.no_start_daemon and
+            args.mark_init not in (None, 'none' )):
 
             start_daemon(
                 cluster=cluster,
@@ -2883,6 +2884,11 @@ def parse_args():
         help='init system to manage this dir',
         default='auto',
         choices=INIT_SYSTEMS,
+        )
+    activate_parser.add_argument(
+        '--no-start-daemon',
+        action='store_true', default=None,
+        help='do not start the daemon',
         )
     activate_parser.add_argument(
         'path',
