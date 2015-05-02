@@ -5,6 +5,7 @@ usr/sbin/ceph-create-keys
 usr/sbin/ceph-disk
 usr/sbin/ceph-disk-activate
 usr/sbin/ceph-disk-prepare
+usr/bin/ceph-detect-init
 usr/bin/ceph-clsinfo
 usr/bin/ceph-debugpack
 usr/bin/ceph-mon
@@ -12,6 +13,7 @@ usr/bin/ceph-osd
 usr/bin/ceph-run
 usr/bin/ceph-rest-api
 usr/lib/python*/dist-packages/ceph_rest_api.py
+usr/lib/python*/dist-packages/ceph_detect_init*
 usr/bin/crushtool
 usr/bin/monmaptool
 usr/bin/osdmaptool
@@ -24,6 +26,7 @@ usr/share/doc/ceph/sample.fetch_config
 usr/share/man/man8/ceph-clsinfo.8
 usr/share/man/man8/ceph-debugpack.8
 usr/share/man/man8/ceph-deploy.8
+usr/share/man/man8/ceph-detect-init.8
 usr/share/man/man8/ceph-disk.8
 usr/share/man/man8/ceph-mon.8
 usr/share/man/man8/ceph-osd.8
