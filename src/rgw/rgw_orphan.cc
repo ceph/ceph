@@ -106,8 +106,6 @@ int RGWOrphanStore::init()
     return r;
   }
 
-
-
   return 0;
 }
 
@@ -148,6 +146,13 @@ int RGWOrphanSearch::init(const string& job_name, RGWOrphanSearchInfo *info) {
     search_info.job_name = job_name;
     search_info.num_shards = (info->num_shards ? info->num_shards : DEFAULT_NUM_SHARDS);
     search_stage = RGWOrphanSearchStage(ORPHAN_SEARCH_STAGE_INIT);
+
+    RGWOrphanSearchState state;
+    r = orphan_store.read_job(job_name, state);
+    if (r >= 0) {
+      lderr(store->ctx()) << "ERROR: job already exists" << dendl;
+      return -EEXIST;
+    }
     r = save_state();
     if (r < 0) {
       lderr(store->ctx()) << "ERROR: failed to write state ret=" << r << dendl;
@@ -634,7 +639,6 @@ int RGWOrphanSearch::compare_oid_indexes()
 
       if (cur_linked == key_fp) {
         ldout(store->ctx(), 20) << "linked: " << key << dendl;
-        cout << "good: " << key << std::endl;
         continue;
       }
 
