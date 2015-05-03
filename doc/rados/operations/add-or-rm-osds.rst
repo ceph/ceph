@@ -238,7 +238,7 @@ completes. (Control-c to exit.)
 
 .. note:: Sometimes, typically in a "small" cluster with few hosts (for
    instance with a small testing cluster), the fact to take ``out`` the
-   OSD can spawn some CRUSH corner where some PGs remain stuck in the
+   OSD can spawn a CRUSH corner case where some PGs remain stuck in the
    ``active+remapped`` state. If you are in this case, you should mark
    the OSD ``in`` with:
 
