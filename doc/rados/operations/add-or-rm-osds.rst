@@ -213,23 +213,22 @@ that your cluster is not at its ``near full`` ratio.
    or exceed its ``full ratio``.
    
 
+Take the OSD ``out`` of the Cluster
+-----------------------------------
 
-Reweight the OSD to 0
----------------------
+Before you remove an OSD, it is usually ``up`` and ``in``.  You need to take it
+out of the cluster so that Ceph can begin rebalancing and copying its data to
+other OSDs. :: 
 
-Before you remove an OSD, it is usually ``up`` and ``in``. The safest
-way to remove it is to first trigger the rebalancing of its data through
-a setting of its weight to 0. ::
-
-    ceph osd crush reweight osd.{osd-num} 0
+	ceph osd out {osd-num}
 
 
 Observe the Data Migration
 --------------------------
 
-Once you have set the weight of your OSD to 0, Ceph will begin rebalancing
-the cluster by migrating placement groups out of the OSD you are removing.
-You can observe this process with  the `ceph`_ tool. ::
+Once you have taken your OSD ``out`` of the cluster, Ceph  will begin
+rebalancing the cluster by migrating placement groups out of the OSD you
+removed. You can observe  this process with  the `ceph`_ tool. :: 
 
 	ceph -w
 
@@ -237,21 +236,34 @@ You should see the placement group states change from ``active+clean`` to
 ``active, some degraded objects``, and finally ``active+clean`` when migration
 completes. (Control-c to exit.)
 
+.. note:: Sometimes, typically in a "small" cluster with few hosts (for
+   instance with a small testing cluster), the fact to take ``out`` the
+   OSD can spawn some CRUSH corner where some PGs remain stuck in the
+   ``active+remapped`` state. If you are in this case, you should mark
+   the OSD ``in`` with:
 
-Take the OSD ``out`` of the Cluster
------------------------------------
+       ``ceph osd in {osd-num}``
 
-Now, you need to take it out of the cluster. ::
+   to come back to the initial state and then, instead of marking ``out``
+   the OSD, set its weight to 0 with:
 
-	ceph osd out {osd-num}
+       ``ceph osd crush reweight osd.{osd-num} 0``
+
+   After that, you can observe the data migration which should come to its
+   end. The difference between marking ``out`` the OSD and reweighting it
+   to 0 is that in the first case the weight of the bucket which contains
+   the OSD isn't changed whereas in the second case the weight of the bucket
+   is updated (and decreased of the OSD weight). The reweight command could
+   be sometimes favoured in the case of a "small" cluster.
+
 
 
 Stopping the OSD
 ----------------
 
-After you take an OSD out of the cluster, it may still be running.
-That is, the OSD may be ``up`` and ``out``. You must stop
-your OSD before you remove it from the configuration. ::
+After you take an OSD out of the cluster, it may still be running. 
+That is, the OSD may be ``up`` and ``out``. You must stop 
+your OSD before you remove it from the configuration. :: 
 
 	ssh {osd-host}
 	sudo /etc/init.d/ceph stop osd.{osd-num}
