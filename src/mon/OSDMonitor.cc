@@ -4211,6 +4211,7 @@ int OSDMonitor::prepare_pool_crush_ruleset(const unsigned pool_type,
 	case -EALREADY:
 	  dout(20) << "prepare_pool_crush_ruleset: ruleset "
 		   << ruleset_name << " try again" << dendl;
+	  // fall through
 	case 0:
 	  // need to wait for the crush rule to be proposed before proceeding
 	  err = -EAGAIN;
