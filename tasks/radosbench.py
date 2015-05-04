@@ -64,7 +64,7 @@ def task(ctx, config):
         if config.get('create_pool', True):
             if config.get('pool'):
                 pool = config.get('pool')
-                if pool is not 'data':
+                if pool != 'data':
                     ctx.manager.create_pool(pool, erasure_code_profile_name=profile_name)
             else:
                 pool = ctx.manager.create_pool_with_unique_name(erasure_code_profile_name=profile_name)
