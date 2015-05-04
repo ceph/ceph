@@ -168,8 +168,8 @@ void usage()
 "  --order <bits>                     the object size in bits; object size will be\n"
 "                                     (1 << order) bytes. Default is 22 (4 MB).\n"
 "  --image-format <format-number>     format to use when creating an image\n"
-"                                     format 1 is the original format (default)\n"
-"                                     format 2 supports cloning\n"
+"                                     format 1 is the original format\n"
+"                                     format 2 supports cloning (default)\n"
 "  --image-feature <feature>          optional format 2 feature to enable.\n"
 "                                     use multiple times to enable multiple features\n"
 "  --image-shared                     image will be used concurrently (disables\n"
@@ -2753,7 +2753,7 @@ int main(int argc, const char **argv)
   int order = 0;
   bool format_specified = false,
     output_format_specified = false;
-  int format = 1;
+  int format = 2;
 
   uint64_t features = 0;
   bool shared = false;

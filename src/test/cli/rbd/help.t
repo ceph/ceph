@@ -80,8 +80,8 @@
     --order <bits>                     the object size in bits; object size will be
                                        (1 << order) bytes. Default is 22 (4 MB).
     --image-format <format-number>     format to use when creating an image
-                                       format 1 is the original format (default)
-                                       format 2 supports cloning
+                                       format 1 is the original format
+                                       format 2 supports cloning (default)
     --image-feature <feature>          optional format 2 feature to enable.
                                        use multiple times to enable multiple features
     --image-shared                     image will be used concurrently (disables
