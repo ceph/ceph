@@ -133,6 +133,7 @@ public:
 
   int read_job(const string& job_name, RGWOrphanSearchState& state);
   int write_job(const string& job_name, const RGWOrphanSearchState& state);
+  int remove_job(const string& job_name);
 
 
   int store_entries(const string& oid, const map<string, bufferlist>& entries);
@@ -142,7 +143,6 @@ public:
 
 class RGWOrphanSearch {
   RGWRados *store;
-  librados::IoCtx log_ioctx;
 
   RGWOrphanStore orphan_store;
 
@@ -173,6 +173,8 @@ class RGWOrphanSearch {
   int handle_stat_result(map<int, list<string> >& oids, RGWRados::Object::Stat::Result& result);
   int pop_and_handle_stat_op(map<int, list<string> >& oids, std::deque<RGWRados::Object::Stat>& ops);
 
+
+  int remove_index(map<int, string>& index);
 public:
   RGWOrphanSearch(RGWRados *_store, int _max_ios) : store(_store), orphan_store(store), max_concurrent_ios(_max_ios) {}
 
@@ -194,6 +196,7 @@ public:
   int compare_oid_indexes();
 
   int run();
+  int finish();
 };
 
 
