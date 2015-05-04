@@ -342,9 +342,6 @@ class LibCephFS(object):
         if ret < 0:
             raise make_ex(ret, "chdir failed")
 
-    def isdir(self, dirent):
-        return dirent['d_type'] == 0x4
-
     def opendir(self, path):
         self.require_state("mounted")
         if not isinstance(path, basestring):
@@ -419,10 +416,11 @@ class LibCephFS(object):
                     cephfs_flags |= os.O_RDONLY
                 elif c == 'w':
                     cephfs_flags |= os.O_WRONLY | os.O_TRUNC | os.O_CREAT
-                elif c == 'a':
-                    cephfs_flags |= os.O_APPEND | os.O_CREAT
                 elif c == '+':
                     cephfs_flags |= os.O_RDWR
+                else:
+                    raise OperationNotSupported(
+                        "open flags doesn't support %s" % c)
 
         ret = self.libcephfs.ceph_open(self.cluster, c_char_p(path),
                                        c_int(cephfs_flags), c_int(mode))
