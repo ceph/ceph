@@ -237,7 +237,7 @@ public:
 
     // modifiers
     void set_offset(unsigned o) {
-      assert(_len >= o);
+      assert(raw_length() >= o);
       _off = o;
     }
     void set_length(unsigned l) {
