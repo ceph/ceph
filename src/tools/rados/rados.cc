@@ -2206,6 +2206,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       localtime_r(&t, &bdt);
       cout << *i << "\t" << s << "\t";
 
+      std::ios_base::fmtflags original_flags = cout.flags();
       cout.setf(std::ios::right);
       cout.fill('0');
       cout << std::setw(4) << (bdt.tm_year+1900)
@@ -2216,7 +2217,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
 	   << ':' << std::setw(2) << bdt.tm_min
 	   << ':' << std::setw(2) << bdt.tm_sec
 	   << std::endl;
-      cout.unsetf(std::ios::right);
+      cout.flags(original_flags);
     }
     cout << snaps.size() << " snaps" << std::endl;
   }
