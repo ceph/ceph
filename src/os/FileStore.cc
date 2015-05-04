@@ -270,11 +270,7 @@ int FileStore::lfn_open(coll_t cid,
 
   IndexedPath path2;
   IndexedPath *path = &path2;
-  if (r < 0) {
-    derr << "error getting collection index for " << cid
-      << ": " << cpp_strerror(-r) << dendl;
-    goto fail;
-  }
+
   r = (*index)->lookup(oid, path, &exist);
   if (r < 0) {
     derr << "could not find " << oid << " in index: "
