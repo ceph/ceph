@@ -637,23 +637,29 @@ void StrayManager::eval_remote_stray(CDentry *stray_dn, CDentry *remote_dn)
 {
   assert(stray_dn != NULL);
   assert(stray_dn->get_dir()->get_inode()->is_stray());
+  CDentry::linkage_t *stray_dnl = stray_dn->get_projected_linkage();
+  assert(stray_dnl->is_primary());
+  CInode *stray_in = stray_dnl->get_inode();
+  assert(stray_in->inode.nlink >= 1);
+  assert(stray_in->last == CEPH_NOSNAP);
 
   /* If no remote_dn hinted, pick one arbitrarily */
   if (remote_dn == NULL) {
-    CDentry::linkage_t *stray_dnl = stray_dn->get_projected_linkage();
-    assert(stray_dnl->is_primary());
-    CInode *stray_in = stray_dnl->get_inode();
-    assert(stray_in != NULL);
-    assert(stray_in->inode.nlink >= 1);
-
     if (!stray_in->remote_parents.empty()) {
-      remote_dn = *stray_in->remote_parents.begin();
-    } else {
-      dout(20) << __func__
-        << ": not reintegrating (no remote parents in cache)" << dendl;
+      for (compact_set<CDentry*>::iterator p = stray_in->remote_parents.begin();
+	   p != stray_in->remote_parents.end();
+	   ++p)
+	if ((*p)->last == CEPH_NOSNAP) {
+	  remote_dn = *p;
+	  break;
+	}
+    }
+    if (!remote_dn) {
+      dout(20) << __func__ << ": not reintegrating (no remote parents in cache)" << dendl;
       return;
     }
   }
+  assert(remote_dn->last == CEPH_NOSNAP);
     // NOTE: we repeat this check in _rename(), since our submission path is racey.
     if (!remote_dn->is_projected()) {
       if (remote_dn->is_auth() && remote_dn->dir->can_auth_pin()) {
