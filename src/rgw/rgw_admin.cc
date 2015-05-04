@@ -1151,7 +1151,6 @@ int main(int argc, char **argv)
   BIIndexType bi_index_type = PlainIdx;
 
   string job_id;
-  int init_search = false;
   int num_shards = 0;
   int max_concurrent_ios = 32;
   uint64_t orphan_stale_secs = (24 * 3600);
@@ -1315,8 +1314,6 @@ int main(int argc, char **argv)
     } else if (ceph_argparse_binary_flag(args, i, &sync_stats, NULL, "--sync-stats", (char*)NULL)) {
      // do nothing
     } else if (ceph_argparse_binary_flag(args, i, &include_all, NULL, "--include-all", (char*)NULL)) {
-     // do nothing
-    } else if (ceph_argparse_binary_flag(args, i, &init_search, NULL, "--init-search", (char*)NULL)) {
      // do nothing
     } else if (ceph_argparse_witharg(args, i, &val, "--caps", (char*)NULL)) {
       caps = val;
@@ -2590,19 +2587,18 @@ next:
       cerr << "ERROR: --job-id not specified" << std::endl;
       return EINVAL;
     }
-    RGWOrphanSearchInfo info, *pinfo = NULL;
-    if (init_search) {
-      if (pool_name.empty()) {
-        cerr << "ERROR: --pool not specified" << std::endl;
-        return EINVAL;
-      }
-      info.pool = pool_name;
-      info.job_name = job_id;
-      info.num_shards = num_shards;
-      pinfo = &info;
+    if (pool_name.empty()) {
+      cerr << "ERROR: --pool not specified" << std::endl;
+      return EINVAL;
     }
 
-    int ret = search.init(job_id, pinfo);
+    RGWOrphanSearchInfo info;
+
+    info.pool = pool_name;
+    info.job_name = job_id;
+    info.num_shards = num_shards;
+
+    int ret = search.init(job_id, &info);
     if (ret < 0) {
       if (ret == -EEXIST) {
         cerr << "cannot init new search, job already exists" << std::endl;
