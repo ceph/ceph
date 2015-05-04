@@ -20,8 +20,10 @@ def task(ctx, config):
         clients: [client list]
         time: <seconds to run>
         pool: <pool to use>
+        size: write size to use
         unique_pool: use a unique pool, defaults to False
         ec_pool: create an ec pool, defaults to False
+        create_pool: create pool, defaults to False
         erasure_code_profile:
           name: teuthologyprofile
           k: 2
@@ -59,12 +61,13 @@ def task(ctx, config):
             profile_name = None
 
         pool = 'data'
-        if config.get('pool'):
-            pool = config.get('pool')
-            if pool is not 'data':
-                ctx.manager.create_pool(pool, erasure_code_profile_name=profile_name)
-        else:
-            pool = ctx.manager.create_pool_with_unique_name(erasure_code_profile_name=profile_name)
+        if config.get('create_pool', True):
+            if config.get('pool'):
+                pool = config.get('pool')
+                if pool != 'data':
+                    ctx.manager.create_pool(pool, erasure_code_profile_name=profile_name)
+            else:
+                pool = ctx.manager.create_pool_with_unique_name(erasure_code_profile_name=profile_name)
 
         proc = remote.run(
             args=[
@@ -75,6 +78,7 @@ def task(ctx, config):
                           'rados',
 			  '--no-log-to-stderr',
                           '--name', role,
+                          '-b', str(config.get('size', 4<<20)),
                           '-p' , pool,
                           'bench', str(config.get('time', 360)), 'write',
                           ]).format(tdir=testdir),
