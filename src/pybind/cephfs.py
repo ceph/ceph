@@ -7,6 +7,7 @@ from ctypes import CDLL, c_char_p, c_size_t, c_void_p, c_int, c_long, c_uint, c_
 from ctypes.util import find_library
 from collections import namedtuple
 import errno
+import os
 
 
 class Error(Exception):
@@ -143,7 +144,7 @@ class cephfs_stat(Structure):
 
 
 class DirEntry(namedtuple('DirEntry',
-               ['d_info', 'd_off', 'd_reclen', 'd_type', 'd_name'])):
+               ['d_ino', 'd_off', 'd_reclen', 'd_type', 'd_name'])):
     DT_DIR = 0x4
     DT_REG = 0xA
     DT_LNK = 0xC
@@ -392,15 +393,30 @@ class LibCephFS(object):
         if ret < 0:
             raise make_ex(ret, "error in rmdir '%s'" % path)
 
-    def open(self, path, flags, mode):
+    def open(self, path, flags, mode=0):
         self.require_state("mounted")
         if not isinstance(path, basestring):
             raise TypeError('path must be a string')
-        if not isinstance(mode, basestring):
+        if not isinstance(flags, basestring):
+            raise TypeError('flags must be a string')
+        if not isinstance(mode, int):
             raise TypeError('mode must be an int')
-        if not isinstance(flags, int):
-            raise TypeError('flags must be an int')
-        ret = self.libcephfs.ceph_open(self.cluster, c_char_p(path), c_int(flags), c_int(mode))
+        cephfs_flags = 0
+        if flags == '':
+            cephfs_flags = os.O_RDONLY
+        else:
+            for c in flags:
+                if c == 'r':
+                    cephfs_flags |= os.O_RDONLY
+                elif c == 'w':
+                    cephfs_flags |= os.O_WRONLY | os.O_TRUNC | os.CREAT
+                elif c == 'a':
+                    cephfs_flags |= os.O_APPEND | os.CREAT
+                elif c == '+':
+                    cephfs_flags |= os.O_RDWR
+
+        ret = self.libcephfs.ceph_open(self.cluster, c_char_p(path),
+                                       c_int(cephfs_flags), c_int(mode))
         if ret < 0:
             raise make_ex(ret, "error in open '%s'" % path)
         return ret
