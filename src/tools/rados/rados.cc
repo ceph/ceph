@@ -743,8 +743,10 @@ int LoadGen::run()
     if (now - stamp_time >= utime_t(1, 0)) {
       double rate = (double)cur_completed_rate() / (1024 * 1024);
       ++total_sec;
+      std::streamsize original_precision = cout.precision();
       cout.precision(3);
       cout << setw(5) << total_sec << ": throughput=" << rate  << "MB/sec" << " pending data=" << sent - completed << std::endl;
+      cout.precision(original_precision);
       stamp_time = now; 
     }
 
