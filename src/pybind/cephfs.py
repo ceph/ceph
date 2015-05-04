@@ -42,6 +42,10 @@ class InvalidValue(Error):
     pass
 
 
+class OperationNotSupported(Error):
+    pass
+
+
 class IncompleteWriteError(Error):
     pass
 
@@ -69,6 +73,7 @@ def make_ex(ret, msg):
         errno.EEXIST    : ObjectExists,
         errno.ENODATA   : NoData,
         errno.EINVAL    : InvalidValue,
+        errno.EOPNOTSUPP: OperationNotSupported,
         }
     ret = abs(ret)
     if ret in errors:
@@ -78,17 +83,19 @@ def make_ex(ret, msg):
 
 
 class cephfs_statvfs(Structure):
-    _fields_ = [("f_bsize", c_uint),
-                ("f_frsize", c_uint),
-                ("f_blocks", c_uint),
-                ("f_bfree", c_uint),
-                ("f_bavail", c_uint),
-                ("f_files", c_uint),
-                ("f_ffree", c_uint),
-                ("f_favail", c_uint),
-                ("f_fsid", c_uint),
-                ("f_flag", c_uint),
-                ("f_namemax", c_uint)]
+    _fields_ = [("f_bsize", c_ulong),
+                ("f_frsize", c_ulong),
+                ("f_blocks", c_ulong),
+                ("f_bfree", c_ulong),
+                ("f_bavail", c_ulong),
+                ("f_files", c_ulong),
+                ("f_ffree", c_ulong),
+                ("f_favail", c_ulong),
+                ("f_fsid", c_ulong),
+                ("f_flag", c_ulong),
+                ("f_namemax", c_ulong),
+                ("f_padding", c_ulong*32)]
+
 
 class cephfs_dirent(Structure):
     _fields_ = [("d_ino", c_long),
@@ -411,9 +418,9 @@ class LibCephFS(object):
                 if c == 'r':
                     cephfs_flags |= os.O_RDONLY
                 elif c == 'w':
-                    cephfs_flags |= os.O_WRONLY | os.O_TRUNC | os.CREAT
+                    cephfs_flags |= os.O_WRONLY | os.O_TRUNC | os.O_CREAT
                 elif c == 'a':
-                    cephfs_flags |= os.O_APPEND | os.CREAT
+                    cephfs_flags |= os.O_APPEND | os.O_CREAT
                 elif c == '+':
                     cephfs_flags |= os.O_RDWR
 
