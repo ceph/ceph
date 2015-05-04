@@ -52,10 +52,12 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
     if (buffer_track_alloc)
       buffer_total_alloc.add(len);
   }
+
   void buffer::dec_total_alloc(unsigned len) {
     if (buffer_track_alloc)
       buffer_total_alloc.sub(len);
   }
+
   int buffer::get_total_alloc() {
     return buffer_total_alloc.read();
   }
@@ -67,9 +69,11 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
   void buffer::track_cached_crc(bool b) {
     buffer_track_crc = b;
   }
+
   int buffer::get_cached_crc() {
     return buffer_cached_crc.read();
   }
+
   int buffer::get_cached_crc_adjusted() {
     return buffer_cached_crc_adjusted.read();
   }
@@ -80,6 +84,7 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
   void buffer::track_c_str(bool b) {
     buffer_track_c_str = b;
   }
+
   int buffer::get_c_str_accesses() {
     return buffer_c_str_accesses.read();
   }
@@ -134,10 +139,12 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
       : data(NULL), len(l), nref(0),
 	crc_lock("buffer::raw::crc_lock", false, false)
     { }
+
     raw(char *c, unsigned l)
       : data(c), len(l), nref(0),
 	crc_lock("buffer::raw::crc_lock", false, false)
     { }
+
     virtual ~raw() {}
 
     // no copying.
@@ -147,30 +154,38 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
     virtual char *get_data() {
       return data;
     }
+
     virtual raw* clone_empty() = 0;
+
     raw *clone() {
       raw *c = clone_empty();
       memcpy(c->data, data, len);
       return c;
     }
+
     virtual bool can_zero_copy() const {
       return false;
     }
+
     virtual int zero_copy_to_fd(int fd, loff_t *offset) {
       return -ENOTSUP;
     }
+
     virtual bool is_page_aligned() {
       return ((long)data & ~CEPH_PAGE_MASK) == 0;
     }
+
     bool is_n_page_sized() {
       return (len & ~CEPH_PAGE_MASK) == 0;
     }
+
     virtual bool is_shareable() {
       // true if safe to reference/share the existing buffer copy
       // false if it is not safe to share the buffer, e.g., due to special
       // and/or registered memory that is scarce
       return true;
     }
+
     bool get_crc(const pair<size_t, size_t> &fromto,
 		 pair<uint32_t, uint32_t> *crc) const {
       Mutex::Locker l(crc_lock);
@@ -181,11 +196,13 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
       *crc = i->second;
       return true;
     }
+
     void set_crc(const pair<size_t, size_t> &fromto,
 		 const pair<uint32_t, uint32_t> &crc) {
       Mutex::Locker l(crc_lock);
       crc_map[fromto] = crc;
     }
+
     void invalidate_crc() {
       Mutex::Locker l(crc_lock);
       crc_map.clear();
@@ -205,15 +222,18 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
       inc_total_alloc(len);
       bdout << "raw_malloc " << this << " alloc " << (void *)data << " " << l << " " << buffer::get_total_alloc() << bendl;
     }
+
     raw_malloc(unsigned l, char *b) : raw(b, l) {
       inc_total_alloc(len);
       bdout << "raw_malloc " << this << " alloc " << (void *)data << " " << l << " " << buffer::get_total_alloc() << bendl;
     }
+
     ~raw_malloc() {
       free(data);
       dec_total_alloc(len);
       bdout << "raw_malloc " << this << " free " << (void *)data << " " << buffer::get_total_alloc() << bendl;
     }
+
     raw* clone_empty() {
       return new raw_malloc(len);
     }
@@ -229,11 +249,13 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
       inc_total_alloc(len);
       bdout << "raw_mmap " << this << " alloc " << (void *)data << " " << l << " " << buffer::get_total_alloc() << bendl;
     }
+
     ~raw_mmap_pages() {
       ::munmap(data, len);
       dec_total_alloc(len);
       bdout << "raw_mmap " << this << " free " << (void *)data << " " << buffer::get_total_alloc() << bendl;
     }
+
     raw* clone_empty() {
       return new raw_mmap_pages(len);
     }
@@ -258,11 +280,13 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
       inc_total_alloc(len);
       bdout << "raw_posix_aligned " << this << " alloc " << (void *)data << " l=" << l << ", align=" << align << " total_alloc=" << buffer::get_total_alloc() << bendl;
     }
+
     ~raw_posix_aligned() {
       ::free((void*)data);
       dec_total_alloc(len);
       bdout << "raw_posix_aligned " << this << " free " << (void *)data << " " << buffer::get_total_alloc() << bendl;
     }
+
     raw* clone_empty() {
       return new raw_posix_aligned(len, align);
     }
@@ -288,10 +312,12 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
       //<< " off " << off << std::endl;
       assert(((unsigned)data & (align-1)) == 0);
     }
+
     ~raw_hack_aligned() {
       delete[] realdata;
       dec_total_alloc(len+align-1);
     }
+
     raw* clone_empty() {
       return new raw_hack_aligned(len, align);
     }
@@ -418,6 +444,7 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
       if (fds[1] >= 0)
 	VOID_TEMP_FAILURE_RETRY(::close(fds[1]));
     }
+
     char *copy_pipe(int *fds) {
       /* preserve original pipe contents by copying into a temporary
        * pipe before reading.
@@ -470,6 +497,7 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
       close_pipe(tmpfd);
       return data;
     }
+
     bool source_consumed;
     int pipefds[2];
   };
@@ -488,15 +516,18 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
       inc_total_alloc(len);
       bdout << "raw_char " << this << " alloc " << (void *)data << " " << l << " " << buffer::get_total_alloc() << bendl;
     }
+
     raw_char(unsigned l, char *b) : raw(b, l) {
       inc_total_alloc(len);
       bdout << "raw_char " << this << " alloc " << (void *)data << " " << l << " " << buffer::get_total_alloc() << bendl;
     }
+
     ~raw_char() {
       delete[] data;
       dec_total_alloc(len);
       bdout << "raw_char " << this << " free " << (void *)data << " " << buffer::get_total_alloc() << bendl;
     }
+
     raw* clone_empty() {
       return new raw_char(len);
     }
@@ -510,14 +541,18 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
       else
 	data = 0;
     }
+
     raw_unshareable(unsigned l, char *b) : raw(b, l) {
     }
+
     raw* clone_empty() {
       return new raw_char(len);
     }
+
     bool is_shareable() {
       return false; // !shareable, will force make_shareable()
     }
+
     ~raw_unshareable() {
       delete[] data;
     }
@@ -526,7 +561,9 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
   class buffer::raw_static : public buffer::raw {
   public:
     raw_static(const char *d, unsigned l) : raw((char*)d, l) { }
+
     ~raw_static() {}
+
     raw* clone_empty() {
       return new buffer::raw_char(len);
     }
@@ -542,6 +579,7 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
       raw((char*)d, l), m_hook(_m_hook->get()) {}
 
     bool is_shareable() { return false; }
+
     static void operator delete(void *p)
     {
       xio_msg_buffer *buf = static_cast<xio_msg_buffer*>(p);
@@ -549,6 +587,7 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
       // to do this in our dtor, because this fires after that
       buf->m_hook->put();
     }
+
     raw* clone_empty() {
       return new buffer::raw_char(len);
     }
@@ -557,10 +596,13 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
   class buffer::xio_mempool : public buffer::raw {
   public:
     struct xio_mempool_obj *mp;
+
     xio_mempool(struct xio_mempool_obj *_mp, unsigned l) :
       raw((char*)mp->addr, l), mp(_mp)
     { }
+
     ~xio_mempool() {}
+
     raw* clone_empty() {
       return new buffer::raw_char(len);
     }
@@ -590,21 +632,27 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
     memcpy(r->data, c, len);
     return r;
   }
+
   buffer::raw* buffer::create(unsigned len) {
     return new raw_char(len);
   }
+
   buffer::raw* buffer::claim_char(unsigned len, char *buf) {
     return new raw_char(len, buf);
   }
+
   buffer::raw* buffer::create_malloc(unsigned len) {
     return new raw_malloc(len);
   }
+
   buffer::raw* buffer::claim_malloc(unsigned len, char *buf) {
     return new raw_malloc(len, buf);
   }
+
   buffer::raw* buffer::create_static(unsigned len, char *buf) {
     return new raw_static(buf, len);
   }
+
   buffer::raw* buffer::create_aligned(unsigned len, unsigned align) {
 #ifndef __CYGWIN__
     //return new raw_mmap_pages(len);
@@ -613,6 +661,7 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
     return new raw_hack_aligned(len, align);
 #endif
   }
+
   buffer::raw* buffer::create_page_aligned(unsigned len) {
     return create_aligned(len, CEPH_PAGE_SIZE);
   }
@@ -640,18 +689,21 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
     r->nref.inc();
     bdout << "ptr " << this << " get " << _raw << bendl;
   }
+
   buffer::ptr::ptr(unsigned l) : _off(0), _len(l)
   {
     _raw = create(l);
     _raw->nref.inc();
     bdout << "ptr " << this << " get " << _raw << bendl;
   }
+
   buffer::ptr::ptr(const char *d, unsigned l) : _off(0), _len(l)    // ditto.
   {
     _raw = copy(d, l);
     _raw->nref.inc();
     bdout << "ptr " << this << " get " << _raw << bendl;
   }
+
   buffer::ptr::ptr(const ptr& p) : _raw(p._raw), _off(p._off), _len(p._len)
   {
     if (_raw) {
@@ -659,6 +711,7 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
       bdout << "ptr " << this << " get " << _raw << bendl;
     }
   }
+
   buffer::ptr::ptr(const ptr& p, unsigned o, unsigned l)
     : _raw(p._raw), _off(p._off + o), _len(l)
   {
@@ -667,6 +720,7 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
     _raw->nref.inc();
     bdout << "ptr " << this << " get " << _raw << bendl;
   }
+
   buffer::ptr& buffer::ptr::operator= (const ptr& p)
   {
     if (p._raw) {
@@ -735,6 +789,7 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
       buffer_c_str_accesses.inc();
     return _raw->get_data() + _off;
   }
+
   char *buffer::ptr::c_str() {
     assert(_raw);
     if (buffer_track_c_str)
@@ -749,12 +804,14 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
     else
       return 0;
   }
+
   const char& buffer::ptr::operator[](unsigned n) const
   {
     assert(_raw);
     assert(n < _len);
     return _raw->get_data()[_off + n];
   }
+
   char& buffer::ptr::operator[](unsigned n)
   {
     assert(_raw);
@@ -763,7 +820,9 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
   }
 
   const char *buffer::ptr::raw_c_str() const { assert(_raw); return _raw->data; }
+
   unsigned buffer::ptr::raw_length() const { assert(_raw); return _raw->len; }
+
   int buffer::ptr::raw_nref() const { assert(_raw); return _raw->nref.read(); }
 
   unsigned buffer::ptr::wasted()
