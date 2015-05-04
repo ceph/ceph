@@ -234,6 +234,7 @@ enum {
   OPT_GC_LIST,
   OPT_GC_PROCESS,
   OPT_ORPHANS_FIND,
+  OPT_ORPHANS_FINISH,
   OPT_REGION_GET,
   OPT_REGION_LIST,
   OPT_REGION_SET,
@@ -447,6 +448,8 @@ static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
   } else if (strcmp(prev_cmd, "orphans") == 0) {
     if (strcmp(cmd, "find") == 0)
       return OPT_ORPHANS_FIND;
+    if (strcmp(cmd, "finish") == 0)
+      return OPT_ORPHANS_FINISH;
   } else if (strcmp(prev_cmd, "metadata") == 0) {
     if (strcmp(cmd, "get") == 0)
       return OPT_METADATA_GET;
@@ -2587,7 +2590,7 @@ next:
     RGWOrphanSearchInfo info, *pinfo = NULL;
     if (init_search) {
       if (pool_name.empty()) {
-        cerr << "ERROR: --pool-name not specified" << std::endl;
+        cerr << "ERROR: --pool not specified" << std::endl;
         return EINVAL;
       }
       info.pool = pool_name;
@@ -2607,6 +2610,26 @@ next:
       return -ret;
     }
     ret = search.run();
+    if (ret < 0) {
+      return -ret;
+    }
+  }
+
+  if (opt_cmd == OPT_ORPHANS_FINISH) {
+    RGWOrphanSearch search(store, max_concurrent_ios);
+
+    if (job_id.empty()) {
+      cerr << "ERROR: --job-id not specified" << std::endl;
+      return EINVAL;
+    }
+    int ret = search.init(job_id, NULL);
+    if (ret < 0) {
+      if (ret == -ENOENT) {
+        cerr << "job not found" << std::endl;
+      }
+      return -ret;
+    }
+    ret = search.finish();
     if (ret < 0) {
       return -ret;
     }
