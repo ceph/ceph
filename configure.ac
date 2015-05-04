@@ -21,6 +21,9 @@ if test -d ".git" ; then
 fi
 AC_MSG_NOTICE([RPM_RELEASE='$RPM_RELEASE'])
 
+AC_CHECK_PROGS(SPHINX_BUILD, sphinx-1.0-build sphinx-build, no)
+AM_CONDITIONAL(HAS_SPHINX_BUILD, test x"$SPHINX_BUILD" != "xno")
+
 AC_CONFIG_MACRO_DIR([m4])
 
 AC_CONFIG_SUBDIRS([src/gmock])
@@ -1166,5 +1169,6 @@ AC_CONFIG_FILES([Makefile
 	src/java/Makefile
 	src/tracing/Makefile
 	man/Makefile
+	doc/Makefile
 	ceph.spec])
 AC_OUTPUT
