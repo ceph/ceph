@@ -6397,7 +6397,7 @@ bool MDCache::trim_dentry(CDentry *dn, map<mds_rank_t, MCacheExpire*>& expiremap
   }
 
   // remove dentry
-  if (dir->is_auth())
+  if (dn->last == CEPH_NOSNAP && dir->is_auth())
     dir->add_to_bloom(dn);
   dir->remove_dentry(dn);
 
@@ -7786,8 +7786,10 @@ int MDCache::path_traverse(MDRequestRef& mdr, Message *req, MDSInternalContextBa
 
     if (curdir->is_auth()) {
       // dentry is mine.
-      if (curdir->is_complete() || (curdir->has_bloom() &&
-          !curdir->is_in_bloom(path[depth]))){
+      if (curdir->is_complete() ||
+	  (snapid == CEPH_NOSNAP &&
+	   curdir->has_bloom() &&
+	   !curdir->is_in_bloom(path[depth]))){
         // file not found
 	if (pdnvec) {
 	  // instantiate a null dn?

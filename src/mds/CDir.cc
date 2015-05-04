@@ -629,6 +629,7 @@ void CDir::unlink_inode_work( CDentry *dn )
 
 void CDir::add_to_bloom(CDentry *dn)
 {
+  assert(dn->last == CEPH_NOSNAP);
   if (!bloom) {
     /* not create bloom filter for incomplete dir that was added by log replay */
     if (!is_complete())
