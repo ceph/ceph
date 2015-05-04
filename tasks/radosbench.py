@@ -52,7 +52,7 @@ def task(ctx, config):
         if config.get('create_pool', True):
             if config.get('pool'):
                 pool = config.get('pool')
-                if pool is not 'data':
+                if pool != 'data':
                     ctx.manager.create_pool(pool, ec_pool=config.get('ec_pool', False))
             else:
                 pool = ctx.manager.create_pool_with_unique_name(ec_pool=config.get('ec_pool', False))
