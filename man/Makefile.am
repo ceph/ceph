@@ -4,7 +4,7 @@ EXTRA_DIST = conf.py
 
 dist_man_MANS = 
 
-if HAS_SPHINX_BUILD
+if WITH_MAN_PAGES
 if ENABLE_CLIENT
 include Makefile-client.am
 endif
