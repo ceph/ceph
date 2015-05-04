@@ -1,0 +1,105 @@
+overrides:
+  ceph:
+    conf:
+      mon:
+        debug mon: 20
+        debug ms: 1
+        debug paxos: 20
+        mon warn on legacy crush tunables: false
+        mon min osdmap epochs: 3
+      osd:
+        osd map cache size: 2
+        osd map max advance: 1
+        debug filestore: 20
+        debug journal: 20
+        debug ms: 1
+        debug osd: 20
+    log-whitelist:
+    - osd_map_cache_size
+    - slow request
+    - scrub mismatch
+    - ScrubResult
+roles:
+- - mon.a
+  - mds.a
+  - osd.0
+  - osd.1
+  - mon.b
+  - mon.c
+  - osd.2
+  - client.0
+tasks:
+- install:
+    branch: v0.80.8
+- print: '**** done installing firefly'
+- ceph:
+    fs: xfs
+- print: '**** done ceph'
+- full_sequential:
+  - ceph_manager.create_pool:
+      args: ['toremove']
+      kwargs:
+        pg_num: 4096
+  - sleep:
+      duration: 30
+  - ceph_manager.wait_for_clean: null
+  - radosbench:
+      clients: [client.0]
+      time: 120
+      size: 1
+      pool: toremove
+      create_pool: false
+  - ceph_manager.remove_pool:
+      args: ['toremove']
+  - sleep:
+      duration: 10
+  - ceph.restart:
+      daemons:
+        - osd.0
+        - osd.1
+        - osd.2
+  - sleep:
+      duration: 30
+  - ceph_manager.wait_for_clean: null
+  - radosbench:
+      clients: [client.0]
+      time: 60
+      size: 1
+  - ceph_manager.create_pool:
+      args: ['newpool']
+  - loop:
+      count: 100
+      body:
+        - ceph_manager.set_pool_property:
+            args: ['newpool', 'min_size', 2]
+        - ceph_manager.set_pool_property:
+            args: ['newpool', 'min_size', 1]
+  - sleep:
+      duration: 30
+  - ceph_manager.wait_for_clean: null
+  - loop:
+      count: 100
+      body:
+        - ceph_manager.set_pool_property:
+            args: ['newpool', 'min_size', 2]
+        - ceph_manager.set_pool_property:
+            args: ['newpool', 'min_size', 1]
+  - sleep:
+      duration: 30
+  - ceph_manager.wait_for_clean: null
+  - sleep:
+      duration: 30
+  - install.upgrade:
+      mon.a: null
+  - ceph.restart:
+      daemons:
+        - osd.0
+        - osd.1
+        - osd.2
+  - sleep:
+      duration: 30
+  - radosbench:
+      clients: [client.0]
+      time: 30
+      size: 1
+  - ceph_manager.wait_for_clean: null
