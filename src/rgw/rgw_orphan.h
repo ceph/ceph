@@ -72,11 +72,14 @@ struct RGWOrphanSearchInfo {
   string job_name;
   string pool;
   uint16_t num_shards;
+  utime_t start_time;
+
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
     ::encode(job_name, bl);
     ::encode(pool, bl);
     ::encode(num_shards, bl);
+    ::encode(start_time, bl);
     ENCODE_FINISH(bl);
   }
 
@@ -85,6 +88,7 @@ struct RGWOrphanSearchInfo {
     ::decode(job_name, bl);
     ::decode(pool, bl);
     ::decode(num_shards, bl);
+    ::decode(start_time, bl);
     DECODE_FINISH(bl);
   }
 
@@ -156,6 +160,7 @@ class RGWOrphanSearch {
   string index_objs_prefix;
 
   uint16_t max_concurrent_ios;
+  uint64_t stale_secs;
 
   struct log_iter_info {
     string oid;
@@ -176,7 +181,7 @@ class RGWOrphanSearch {
 
   int remove_index(map<int, string>& index);
 public:
-  RGWOrphanSearch(RGWRados *_store, int _max_ios) : store(_store), orphan_store(store), max_concurrent_ios(_max_ios) {}
+  RGWOrphanSearch(RGWRados *_store, int _max_ios, uint64_t _stale_secs) : store(_store), orphan_store(store), max_concurrent_ios(_max_ios), stale_secs(_stale_secs) {}
 
   int save_state() {
     RGWOrphanSearchState state;
