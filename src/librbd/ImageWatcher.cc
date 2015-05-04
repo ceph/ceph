@@ -389,11 +389,6 @@ bool ImageWatcher::release_lock()
   return true;
 }
 
-void ImageWatcher::finalize_header_update() {
-  librbd::notify_change(m_image_ctx.md_ctx, m_image_ctx.header_oid,
-			&m_image_ctx);
-}
-
 void ImageWatcher::assert_header_locked(librados::ObjectWriteOperation *op) {
   rados::cls::lock::assert_locked(op, RBD_LOCK_NAME, LOCK_EXCLUSIVE,
                                   encode_lock_cookie(), WATCHER_LOCK_TAG);
@@ -903,16 +898,6 @@ void ImageWatcher::handle_payload(const SnapCreatePayload &payload,
     int r = librbd::snap_create(&m_image_ctx, payload.snap_name.c_str(), false);
 
     ::encode(ResponseMessage(r), *out);
-    if (r == 0) {
-      // increment now to avoid race due to the delayed notification
-      Mutex::Locker lictx(m_image_ctx.refresh_lock);
-      ++m_image_ctx.refresh_seq;
-
-      // cannot notify within a notificiation
-      FunctionContext *ctx = new FunctionContext(
-	boost::bind(&ImageWatcher::finalize_header_update, this));
-      m_task_finisher->queue(TASK_CODE_HEADER_UPDATE, ctx);
-    }
   }
 }
 

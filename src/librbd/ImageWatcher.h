@@ -74,7 +74,6 @@ namespace librbd {
       TASK_CODE_RELEASED_LOCK,
       TASK_CODE_RETRY_AIO_REQUESTS,
       TASK_CODE_CANCEL_ASYNC_REQUESTS,
-      TASK_CODE_HEADER_UPDATE,
       TASK_CODE_REREGISTER_WATCH,
       TASK_CODE_ASYNC_REQUEST,
       TASK_CODE_ASYNC_PROGRESS
@@ -212,7 +211,6 @@ namespace librbd {
     int lock();
     bool release_lock();
     bool try_request_lock();
-    void finalize_header_update();
 
     void schedule_retry_aio_requests(bool use_timer);
     void retry_aio_requests();
