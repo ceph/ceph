@@ -9123,7 +9123,7 @@ void MDCache::scan_stray_dir(dirfrag_t next)
 void MDCache::eval_remote(CDentry *remote_dn)
 {
   assert(remote_dn);
-  dout(10) << "eval_remote " << *remote_dn << dendl;
+  dout(10) << __func__ << " " << *remote_dn << dendl;
 
   CDentry::linkage_t *dnl = remote_dn->get_projected_linkage();
   assert(dnl->is_remote());
@@ -9131,6 +9131,11 @@ void MDCache::eval_remote(CDentry *remote_dn)
 
   if (!in) {
     dout(20) << __func__ << ": no inode, cannot evaluate" << dendl;
+    return;
+  }
+
+  if (remote_dn->last != CEPH_NOSNAP) {
+    dout(20) << __func__ << ": snap dentry, cannot evaluate" << dendl;
     return;
   }
 
