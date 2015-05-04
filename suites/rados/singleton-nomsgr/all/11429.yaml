@@ -40,8 +40,8 @@ tasks:
       args: ['toremove']
       kwargs:
         pg_num: 4096
-  - utility.sleep:
-      to_sleep: 30
+  - sleep:
+      duration: 30
   - ceph_manager.wait_for_clean: null
   - radosbench:
       clients: [client.0]
@@ -51,15 +51,15 @@ tasks:
       create_pool: false
   - ceph_manager.remove_pool:
       args: ['toremove']
-  - utility.sleep:
-      to_sleep: 10
+  - sleep:
+      duration: 10
   - ceph.restart:
       daemons:
         - osd.0
         - osd.1
         - osd.2
-  - utility.sleep:
-      to_sleep: 30
+  - sleep:
+      duration: 30
   - ceph_manager.wait_for_clean: null
   - radosbench:
       clients: [client.0]
@@ -74,8 +74,8 @@ tasks:
             args: ['newpool', 'min_size', 2]
         - ceph_manager.set_pool_property:
             args: ['newpool', 'min_size', 1]
-  - utility.sleep:
-      to_sleep: 30
+  - sleep:
+      duration: 30
   - ceph_manager.wait_for_clean: null
   - loop:
       count: 100
@@ -84,11 +84,11 @@ tasks:
             args: ['newpool', 'min_size', 2]
         - ceph_manager.set_pool_property:
             args: ['newpool', 'min_size', 1]
-  - utility.sleep:
-      to_sleep: 30
+  - sleep:
+      duration: 30
   - ceph_manager.wait_for_clean: null
-  - utility.sleep:
-      to_sleep: 30
+  - sleep:
+      duration: 30
   - install.upgrade:
       mon.a: null
   - ceph.restart:
@@ -96,8 +96,8 @@ tasks:
         - osd.0
         - osd.1
         - osd.2
-  - utility.sleep:
-      to_sleep: 30
+  - sleep:
+      duration: 30
   - radosbench:
       clients: [client.0]
       time: 30
