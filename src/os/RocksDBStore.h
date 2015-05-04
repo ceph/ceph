@@ -136,6 +136,7 @@ public:
 
     uint64_t max_open_files;
     string compression_type; /// whether to use libsnappy compression or not
+    string compression_per_level;
     bool paranoid_checks;
     string log_file;
     string wal_dir;
@@ -168,6 +169,7 @@ public:
 
       max_open_files(0),
       compression_type("none"),
+      compression_per_level(""),
       paranoid_checks(false), //< set to true if you want paranoid checks
       info_log_level("info"),
       disableDataSync(false),

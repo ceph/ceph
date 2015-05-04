@@ -47,6 +47,7 @@ int RocksDBStore::init()
 
   options.max_open_files = g_conf->rocksdb_max_open_files;
   options.compression_type = g_conf->rocksdb_compression;
+  options.compression_per_level = g_conf->rocksdb_compression_per_level;
   options.paranoid_checks = g_conf->rocksdb_paranoid;
   options.log_file = g_conf->rocksdb_log;
   options.info_log_level = g_conf->rocksdb_info_log_level;
@@ -54,6 +55,41 @@ int RocksDBStore::init()
   options.disableDataSync = g_conf->rocksdb_disableDataSync;
   options.disableWAL = g_conf->rocksdb_disableWAL;
   return 0;
+}
+
+rocksdb::CompressionType string_to_rocksdb_compression_type(const string& type)
+{
+  if (type.empty())
+    return rocksdb::kNoCompression;
+  else if(type == "snappy")
+    return rocksdb::kSnappyCompression;
+  else if(type == "zlib")
+    return rocksdb::kZlibCompression;
+  else if(type == "bzip2")
+    return rocksdb::kBZip2Compression;
+  else if(type == "lz4")
+    return rocksdb::kLZ4Compression;
+  else if(type == "lz4hc")
+    return rocksdb::kLZ4HCCompression;
+  else
+    return rocksdb::kNoCompression;
+}
+
+std::vector<rocksdb::CompressionType> string_to_rocksdb_compression_per_level(string& levels)
+{
+  std::vector<rocksdb::CompressionType> per_level;
+  std::string::size_type pos1, pos2;
+  pos2 = levels.find(",");
+  pos1 = 0;
+  while (std::string::npos != pos2)
+  {
+    per_level.push_back(string_to_rocksdb_compression_type(levels.substr(pos1, pos2 - pos1)));
+    pos1 = pos2 + 1;
+    pos2 = levels.find(",", pos1);
+  }
+  if (pos1 != levels.length())
+    per_level.push_back(string_to_rocksdb_compression_type(levels.substr(pos1)));
+  return per_level;
 }
 
 int RocksDBStore::do_open(ostream &out, bool create_if_missing)
@@ -89,18 +125,17 @@ int RocksDBStore::do_open(ostream &out, bool create_if_missing)
   env->SetBackgroundThreads(options.flusher_threads, rocksdb::Env::Priority::HIGH);
   //Low priority threadpool is used for compaction
   env->SetBackgroundThreads(options.compaction_threads, rocksdb::Env::Priority::LOW);
+  
+  ldoptions.compression = string_to_rocksdb_compression_type(options.compression_type);
 
+  if (!options.compression_per_level.empty()) {
+    std::vector<rocksdb::CompressionType> per_level =
+       string_to_rocksdb_compression_per_level(options.compression_per_level);
+    if (per_level.size() && per_level.size() == ldoptions.num_levels) {
+      ldoptions.compression_per_level = per_level;
+    }
+  }
   ldoptions.max_open_files = options.max_open_files;
-  if (options.compression_type.length() == 0)
-    ldoptions.compression = rocksdb::kNoCompression;
-  else if(options.compression_type == "snappy")
-    ldoptions.compression = rocksdb::kSnappyCompression;
-  else if(options.compression_type == "zlib")
-    ldoptions.compression = rocksdb::kZlibCompression;
-  else if(options.compression_type == "bzip2")
-    ldoptions.compression = rocksdb::kBZip2Compression;
-  else
-    ldoptions.compression = rocksdb::kNoCompression;
 
   if(options.disableDataSync) {
     derr << "Warning: DataSync is disabled, may lose data on node failure" << dendl;
