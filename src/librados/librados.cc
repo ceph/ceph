@@ -420,11 +420,12 @@ void librados::ObjectWriteOperation::omap_rm_keys(
 
 void librados::ObjectWriteOperation::copy_from(const std::string& src,
 					       const IoCtx& src_ioctx,
-					       uint64_t src_version)
+					       uint64_t src_version,
+					       uint32_t src_fadvise_flags)
 {
   ::ObjectOperation *o = (::ObjectOperation *)impl;
   o->copy_from(object_t(src), src_ioctx.io_ctx_impl->snap_seq,
-	       src_ioctx.io_ctx_impl->oloc, src_version, 0, 0);
+	       src_ioctx.io_ctx_impl->oloc, src_version, 0, src_fadvise_flags);
 }
 
 void librados::ObjectWriteOperation::undirty()
