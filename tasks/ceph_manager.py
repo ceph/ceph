@@ -1648,6 +1648,10 @@ class CephManager:
         return "/var/lib/ceph/osd/ceph-{id}"
 
 def utility_task(name):
+    """
+    Generate ceph_manager subtask corresponding to ceph_manager
+    method name
+    """
     def task(ctx, config):
         if config is None:
             config = {}
