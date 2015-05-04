@@ -154,34 +154,32 @@ int RGWOrphanSearch::init(const string& job_name, RGWOrphanSearchInfo *info) {
     return r;
   }
 
-  if (info) {
+  RGWOrphanSearchState state;
+  r = orphan_store.read_job(job_name, state);
+  if (r < 0 && r != -ENOENT) {
+    lderr(store->ctx()) << "ERROR: failed to read state ret=" << r << dendl;
+    return r;
+  }
+
+  if (r == 0) {
+    if (info->num_shards != state.info.num_shards) {
+      lderr(store->ctx()) << "ERROR: cannot specify different number of shards for existing job" << dendl;
+      return -EINVAL;
+    }
+    search_info = state.info;
+    search_stage = state.stage;
+  } else { /* r == -ENOENT */
     search_info = *info;
     search_info.job_name = job_name;
     search_info.num_shards = (info->num_shards ? info->num_shards : DEFAULT_NUM_SHARDS);
     search_info.start_time = ceph_clock_now(store->ctx());
     search_stage = RGWOrphanSearchStage(ORPHAN_SEARCH_STAGE_INIT);
 
-    RGWOrphanSearchState state;
-    r = orphan_store.read_job(job_name, state);
-    if (r >= 0) {
-      lderr(store->ctx()) << "ERROR: job already exists" << dendl;
-      return -EEXIST;
-    }
     r = save_state();
     if (r < 0) {
       lderr(store->ctx()) << "ERROR: failed to write state ret=" << r << dendl;
       return r;
     }
-  } else {
-    RGWOrphanSearchState state;
-    r = orphan_store.read_job(job_name, state);
-    if (r < 0) {
-      lderr(store->ctx()) << "ERROR: failed to read state ret=" << r << dendl;
-      return r;
-    }
-
-    search_info = state.info;
-    search_stage = state.stage;
   }
 
   index_objs_prefix = RGW_ORPHAN_INDEX_PREFIX + string(".");
