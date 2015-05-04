@@ -178,6 +178,16 @@ namespace librbd {
 				       cache_target_dirty,
 				       cache_max_dirty_age,
 				       cache_block_writes_upfront);
+
+      // size object cache appropriately
+      uint64_t obj = cache_max_dirty_object;
+      if (!obj) {
+	obj = MIN(2000, MAX(10, cache_size / 100 / sizeof(ObjectCacher::Object)));
+      }
+      ldout(cct, 10) << " cache bytes " << cache_size
+	<< " -> about " << obj << " objects" << dendl;
+      object_cacher->set_max_objects(obj);
+
       object_set = new ObjectCacher::ObjectSet(NULL, data_ctx.get_id(), 0);
       object_set->return_enoent = true;
       object_cacher->start();
@@ -222,17 +232,6 @@ namespace librbd {
       snprintf(format_string, len, "%s.%%016llx", object_prefix.c_str());
     }
 
-    // size object cache appropriately
-    if (object_cacher) {
-      uint64_t obj = cache_max_dirty_object;
-      if (!obj) {
-        obj = MIN(2000, MAX(10, cache_size / 100 / sizeof(ObjectCacher::Object)));
-      }
-      ldout(cct, 10) << " cache bytes " << cache_size
-		     << " -> about " << obj << " objects" << dendl;
-      object_cacher->set_max_objects(obj);
-    }
-
     ldout(cct, 10) << "init_layout stripe_unit " << stripe_unit
 		   << " stripe_count " << stripe_count
 		   << " object_size " << layout.fl_object_size
@@ -254,15 +253,6 @@ namespace librbd {
     plb.add_u64_counter(l_librbd_discard_bytes, "discard_bytes", "Discarded data");
     plb.add_time_avg(l_librbd_discard_latency, "discard_latency", "Discard latency");
     plb.add_u64_counter(l_librbd_flush, "flush", "Flushes");
-    plb.add_u64_counter(l_librbd_aio_rd, "aio_rd", "Async reads");
-    plb.add_u64_counter(l_librbd_aio_rd_bytes, "aio_rd_bytes", "Data size in async reads");
-    plb.add_time_avg(l_librbd_aio_rd_latency, "aio_rd_latency", "Latency of async reads");
-    plb.add_u64_counter(l_librbd_aio_wr, "aio_wr", "Async writes");
-    plb.add_u64_counter(l_librbd_aio_wr_bytes, "aio_wr_bytes", "Data size in async writes");
-    plb.add_time_avg(l_librbd_aio_wr_latency, "aio_wr_latency", "Latency of async writes");
-    plb.add_u64_counter(l_librbd_aio_discard, "aio_discard", "Async discards");
-    plb.add_u64_counter(l_librbd_aio_discard_bytes, "aio_discard_bytes", "Data size in async discards");
-    plb.add_time_avg(l_librbd_aio_discard_latency, "aio_discard_latency", "Latency of async discards");
     plb.add_u64_counter(l_librbd_aio_flush, "aio_flush", "Async flushes");
     plb.add_time_avg(l_librbd_aio_flush_latency, "aio_flush_latency", "Latency of async flushes");
     plb.add_u64_counter(l_librbd_snap_create, "snap_create", "Snap creations");

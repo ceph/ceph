@@ -1264,7 +1264,7 @@ reprotect_and_return_err:
     if (!*order)
       *order = RBD_DEFAULT_OBJ_ORDER;
 
-    if (*order && (*order > 64 || *order < 12)) {
+    if (*order > 64 || *order < 12) {
       lderr(cct) << "order must be in the range [12, 64]" << dendl;
       return -EDOM;
     }
@@ -3444,11 +3444,9 @@ reprotect_and_return_err:
 
   ssize_t read(ImageCtx *ictx, uint64_t ofs, size_t len, char *buf, int op_flags)
   {
-    utime_t start_time, elapsed;
     ssize_t ret;
     ldout(ictx->cct, 20) << "read " << ictx << " off = " << ofs << " len = "
 			 << len << dendl;
-    start_time = ceph_clock_now(ictx->cct);
 
     vector<pair<uint64_t,uint64_t> > extents;
     extents.push_back(make_pair(ofs, len));
@@ -3456,10 +3454,6 @@ reprotect_and_return_err:
     if (ret < 0)
       return ret;
 
-    elapsed = ceph_clock_now(ictx->cct) - start_time;
-    ictx->perfcounter->tinc(l_librbd_rd_latency, elapsed);
-    ictx->perfcounter->inc(l_librbd_rd);
-    ictx->perfcounter->inc(l_librbd_rd_bytes, ret);
     return ret;
   }
 
@@ -3490,11 +3484,9 @@ reprotect_and_return_err:
 
   ssize_t write(ImageCtx *ictx, uint64_t off, size_t len, const char *buf, int op_flags)
   {
-    utime_t start_time, elapsed;
     ldout(ictx->cct, 20) << "write " << ictx << " off = " << off << " len = "
 			 << len << dendl;
 
-    start_time = ceph_clock_now(ictx->cct);
     Mutex mylock("librbd::write::mylock");
     Cond cond;
     bool done;
@@ -3526,20 +3518,14 @@ reprotect_and_return_err:
       return ret;
     }
 
-    elapsed = ceph_clock_now(ictx->cct) - start_time;
-    ictx->perfcounter->tinc(l_librbd_wr_latency, elapsed);
-    ictx->perfcounter->inc(l_librbd_wr);
-    ictx->perfcounter->inc(l_librbd_wr_bytes, mylen);
     return mylen;
   }
 
   int discard(ImageCtx *ictx, uint64_t off, uint64_t len)
   {
-    utime_t start_time, elapsed;
     ldout(ictx->cct, 20) << "discard " << ictx << " off = " << off << " len = "
 			 << len << dendl;
 
-    start_time = ceph_clock_now(ictx->cct);
     Mutex mylock("librbd::discard::mylock");
     Cond cond;
     bool done;
@@ -3571,10 +3557,6 @@ reprotect_and_return_err:
       return ret;
     }
 
-    elapsed = ceph_clock_now(ictx->cct) - start_time;
-    ictx->perfcounter->inc(l_librbd_discard_latency, elapsed);
-    ictx->perfcounter->inc(l_librbd_discard);
-    ictx->perfcounter->inc(l_librbd_discard_bytes, mylen);
     return mylen;
   }
 
@@ -3845,8 +3827,8 @@ reprotect_and_return_err:
     c->finish_adding_requests(ictx->cct);
     c->put();
 
-    ictx->perfcounter->inc(l_librbd_aio_wr);
-    ictx->perfcounter->inc(l_librbd_aio_wr_bytes, clip_len);
+    ictx->perfcounter->inc(l_librbd_wr);
+    ictx->perfcounter->inc(l_librbd_wr_bytes, clip_len);
     return r;
   }
 
@@ -3961,7 +3943,7 @@ reprotect_and_return_err:
       AbstractWrite *req;
       c->add_request();
 
-      if (p->offset == 0 && p->length == ictx->layout.fl_object_size) {
+      if (p->length == ictx->layout.fl_object_size) {
 	req = new AioRemove(ictx, p->oid.name, p->objectno, snapc, req_comp);
       } else if (p->offset + p->length == ictx->layout.fl_object_size) {
 	req = new AioTruncate(ictx, p->oid.name, p->objectno, p->offset, snapc,
@@ -3990,8 +3972,6 @@ reprotect_and_return_err:
     c->finish_adding_requests(ictx->cct);
     c->put();
 
-    ictx->perfcounter->inc(l_librbd_aio_discard);
-    ictx->perfcounter->inc(l_librbd_aio_discard_bytes, clip_len);
     return r;
   }
 
@@ -4157,8 +4137,8 @@ reprotect_and_return_err:
     c->finish_adding_requests(ictx->cct);
     c->put();
 
-    ictx->perfcounter->inc(l_librbd_aio_rd);
-    ictx->perfcounter->inc(l_librbd_aio_rd_bytes, buffer_ofs);
+    ictx->perfcounter->inc(l_librbd_rd);
+    ictx->perfcounter->inc(l_librbd_rd_bytes, buffer_ofs);
 
     return ret;
   }
