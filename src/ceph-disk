@@ -964,6 +964,9 @@ def unmount(
 
 ###########################################
 
+def extract_parted_partition_numbers(partitions):
+    numbers_as_strings = re.findall('^\d+', partitions, re.MULTILINE)
+    return map(int, numbers_as_strings)
 
 def get_free_partition_index(dev):
     """
@@ -988,31 +991,19 @@ def get_free_partition_index(dev):
 
     if not lines:
         raise Error('parted failed to output anything')
-    lines = str(lines).splitlines(True)
-
-    # work around buggy libreadline(?) library in rhel/centos.
-    idiot_prefix = '\x1b\x5b\x3f\x31\x30\x33\x34\x68'
-    if lines[0].startswith(idiot_prefix):
-        lines[0] = lines[0][8:]
-
-    if lines[0] not in ['CHS;\n', 'CYL;\n', 'BYT;\n']:
-        raise Error('weird parted units', lines[0])
-    del lines[0]
-
-    if not lines[0].startswith('/dev/'):
-        raise Error('weird parted disk entry', lines[0])
-    del lines[0]
-
-    seen = set()
-    for line in lines:
-        idx, _ = line.split(':', 1)
-        idx = int(idx)
-        seen.add(idx)
-
-    num = 1
-    while num in seen:
-        num += 1
-    return num
+    if ('CHS;' not in lines and
+        'CYL;' not in lines and
+        'BYT;' not in lines):
+        raise Error('parted output expected to contain one of ' +
+                    'CHH; CYL; or BYT; : ' + lines)
+    if dev not in lines:
+        raise Error('parted output expected to contain ' + dev + ': ' + lines)
+    _, partitions = lines.split(dev)
+    partition_numbers = extract_parted_partition_numbers(partitions)
+    if partition_numbers:
+        return max(partition_numbers) + 1
+    else:
+        return 1
 
 
 def update_partition(action, dev, description):
