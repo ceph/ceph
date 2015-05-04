@@ -796,6 +796,7 @@ OPTION(newstore_backend, OPT_STR, "rocksdb")
 OPTION(newstore_fail_eio, OPT_BOOL, true)
 OPTION(newstore_sync_io, OPT_BOOL, false)  // perform initial io synchronously
 OPTION(newstore_sync_transaction, OPT_BOOL, false)  // perform kv txn synchronously
+OPTION(newstore_sync_submit_transaction, OPT_BOOL, false)
 OPTION(newstore_sync_wal_apply, OPT_BOOL, true)     // perform initial wal work synchronously (possibly in combination with aio so we only *queue* ios)
 OPTION(newstore_fsync_threads, OPT_INT, 16)  // num threads calling fsync
 OPTION(newstore_fsync_thread_timeout, OPT_INT, 30) // thread timeout value
