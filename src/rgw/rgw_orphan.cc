@@ -96,6 +96,19 @@ int RGWOrphanStore::write_job(const string& job_name, const RGWOrphanSearchState
   return 0;
 }
 
+int RGWOrphanStore::remove_job(const string& job_name)
+{
+  set<string> keys;
+  keys.insert(job_name);
+
+  int r = ioctx.omap_rm_keys(oid, keys);
+  if (r < 0) {
+    return r;
+  }
+
+  return 0;
+}
+
 int RGWOrphanStore::init()
 {
   const char *log_pool = store->get_zone_params().log_pool.name.c_str();
@@ -731,3 +744,40 @@ int RGWOrphanSearch::run()
 }
 
 
+int RGWOrphanSearch::remove_index(map<int, string>& index)
+{
+  librados::IoCtx& ioctx = orphan_store.get_ioctx();
+
+  for (map<int, string>::iterator iter = index.begin(); iter != index.end(); ++iter) {
+    int r = ioctx.remove(iter->second);
+    if (r < 0) {
+      if (r != -ENOENT) {
+        ldout(store->ctx(), 0) << "ERROR: couldn't remove " << iter->second << ": ret=" << r << dendl;
+      }
+    }
+  }
+  return 0;
+}
+
+int RGWOrphanSearch::finish()
+{
+  int r = remove_index(all_objs_index);
+  if (r < 0) {
+    ldout(store->ctx(), 0) << "ERROR: remove_index(" << all_objs_index << ") returned ret=" << r << dendl;
+  }
+  r = remove_index(buckets_instance_index);
+  if (r < 0) {
+    ldout(store->ctx(), 0) << "ERROR: remove_index(" << buckets_instance_index << ") returned ret=" << r << dendl;
+  }
+  r = remove_index(linked_objs_index);
+  if (r < 0) {
+    ldout(store->ctx(), 0) << "ERROR: remove_index(" << linked_objs_index << ") returned ret=" << r << dendl;
+  }
+
+  r = orphan_store.remove_job(search_info.job_name);
+  if (r < 0) {
+    ldout(store->ctx(), 0) << "ERROR: could not remove job name (" << search_info.job_name << ") ret=" << r << dendl;
+  }
+
+  return r;
+}
