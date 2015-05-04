@@ -158,6 +158,7 @@ int RGWOrphanSearch::init(const string& job_name, RGWOrphanSearchInfo *info) {
     search_info = *info;
     search_info.job_name = job_name;
     search_info.num_shards = (info->num_shards ? info->num_shards : DEFAULT_NUM_SHARDS);
+    search_info.start_time = ceph_clock_now(store->ctx());
     search_stage = RGWOrphanSearchStage(ORPHAN_SEARCH_STAGE_INIT);
 
     RGWOrphanSearchState state;
@@ -618,6 +619,18 @@ int RGWOrphanSearch::compare_oid_indexes()
 
   librados::IoCtx& ioctx = orphan_store.get_ioctx();
 
+  librados::IoCtx data_ioctx;
+
+  librados::Rados *rados = store->get_rados();
+
+  int ret = rados->ioctx_create(search_info.pool.c_str(), data_ioctx);
+  if (ret < 0) {
+    lderr(store->ctx()) << __func__ << ": ioctx_create() returned ret=" << ret << dendl;
+    return ret;
+  }
+
+  uint64_t time_threshold = search_info.start_time.sec() - stale_secs;
+
   map<int, string>::iterator liter = linked_objs_index.begin();
   map<int, string>::iterator aiter = all_objs_index.begin();
 
@@ -655,6 +668,18 @@ int RGWOrphanSearch::compare_oid_indexes()
         continue;
       }
 
+      time_t mtime;
+      r = data_ioctx.stat(key, NULL, &mtime);
+      if (r < 0) {
+        if (r != -ENOENT) {
+          lderr(store->ctx()) << "ERROR: ioctx.stat(" << key << ") returned ret=" << r << dendl;
+        }
+        continue;
+      }
+      if (stale_secs && (uint64_t)mtime >= time_threshold) {
+        ldout(store->ctx(), 20) << "skipping: " << key << " (mtime=" << mtime << " threshold=" << time_threshold << ")" << dendl;
+        continue;
+      }
       ldout(store->ctx(), 20) << "leaked: " << key << dendl;
       cout << "leaked: " << key << std::endl;
     } while (!done);
