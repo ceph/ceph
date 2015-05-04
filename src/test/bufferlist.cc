@@ -1865,6 +1865,18 @@ TEST(BufferList, splice) {
   bl.splice(4, 4);
   EXPECT_EQ((unsigned)4, bl.length());
   EXPECT_EQ(0, ::memcmp("ABCD", bl.c_str(), bl.length()));
+
+  {
+    bl.clear();
+    bufferptr ptr1("0123456789", 10);
+    bl.push_back(ptr1);
+    bufferptr ptr2("abcdefghij", 10);
+    bl.append(ptr2, 5, 5);
+    other.clear();
+    bl.splice(10, 4, &other);
+    EXPECT_EQ((unsigned)11, bl.length());
+    EXPECT_EQ(0, ::memcmp("fghi", other.c_str(), other.length()));
+  }
 }
 
 TEST(BufferList, write) {
