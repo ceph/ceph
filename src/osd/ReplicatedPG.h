@@ -912,8 +912,9 @@ protected:
 
   void agent_setup();       ///< initialize agent state
   bool agent_work(int max); ///< entry point to do some agent work
-  bool agent_maybe_flush(ObjectContextRef& obc);  ///< maybe flush
-  bool agent_maybe_evict(ObjectContextRef& obc);  ///< maybe evict
+  bool obccache_suggests_hot(hobject_t& o);
+  bool agent_maybe_flush(ObjectContextRef& obc, bool hot_object);  ///< maybe flush
+  bool agent_maybe_evict(ObjectContextRef& obc, bool hot_object);  ///< maybe evict
 
   void agent_load_hit_sets();  ///< load HitSets, if needed
 

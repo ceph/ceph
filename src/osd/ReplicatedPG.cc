@@ -10523,6 +10523,24 @@ void ReplicatedPG::agent_clear()
   agent_state.reset(NULL);
 }
 
+bool ReplicatedPG::obccache_suggests_hot(hobject_t& o)
+{
+  if (!object_contexts.lookup(o)) {
+    return false;
+  }
+  uint64_t divisor = pool.info.get_pg_num_divisor(info.pgid.pgid);
+  assert(divisor > 0);
+  uint64_t max_dirty_objects = pool.info.cache_target_dirty_ratio_micro *
+    pool.info.target_max_objects / 1000000;
+  max_dirty_objects = max_dirty_objects / divisor;
+  dout(20) << __func__ << " max_dirty_objects " << max_dirty_objects
+           << " object_contexts size " << object_contexts.size() << dendl;
+  if (max_dirty_objects > object_contexts.size() * 2) {
+    return true;
+  }
+  return false;
+}
+
 // Return false if no objects operated on since start of object hash space
 bool ReplicatedPG::agent_work(int start_max)
 {
@@ -10591,6 +10609,7 @@ bool ReplicatedPG::agent_work(int start_max)
       osd->logger->inc(l_osd_agent_skip);
       continue;
     }
+    bool hot_object = obccache_suggests_hot(*p);
     ObjectContextRef obc = get_object_context(*p, false, false, NULL);
     if (!obc) {
       // we didn't flush; we may miss something here.
@@ -10628,13 +10647,11 @@ bool ReplicatedPG::agent_work(int start_max)
     }
 
     if (agent_state->flush_mode != TierAgentState::FLUSH_MODE_IDLE &&
-	agent_maybe_flush(obc)) {
-      // this obc would be reused right now in copy-from, cache it
-      object_contexts.cache_key(*p);
+	agent_maybe_flush(obc, hot_object)) {
       ++started;
     }
     if (agent_state->evict_mode != TierAgentState::EVICT_MODE_IDLE &&
-	agent_maybe_evict(obc))
+	agent_maybe_evict(obc, hot_object))
       ++started;
     if (started >= start_max) {
       // If finishing early, set "next" to the next object
@@ -10756,7 +10773,7 @@ struct C_AgentFlushStartStop : public Context {
   }
 };
 
-bool ReplicatedPG::agent_maybe_flush(ObjectContextRef& obc)
+bool ReplicatedPG::agent_maybe_flush(ObjectContextRef& obc, bool hot_object)
 {
   if (!obc->obs.oi.is_dirty()) {
     dout(20) << __func__ << " skip (clean) " << obc->obs.oi << dendl;
@@ -10775,7 +10792,7 @@ bool ReplicatedPG::agent_maybe_flush(ObjectContextRef& obc)
     (agent_state->evict_mode == TierAgentState::EVICT_MODE_FULL);
   if (!evict_mode_full &&
       obc->obs.oi.soid.snap == CEPH_NOSNAP &&  // snaps immutable; don't delay
-      (ob_local_mtime + utime_t(pool.info.cache_min_flush_age, 0) > now)) {
+      ((ob_local_mtime + utime_t(pool.info.cache_min_flush_age, 0) > now) || hot_object)) {
     dout(20) << __func__ << " skip (too young) " << obc->obs.oi << dendl;
     osd->logger->inc(l_osd_agent_skip);
     return false;
@@ -10808,7 +10825,7 @@ bool ReplicatedPG::agent_maybe_flush(ObjectContextRef& obc)
   return true;
 }
 
-bool ReplicatedPG::agent_maybe_evict(ObjectContextRef& obc)
+bool ReplicatedPG::agent_maybe_evict(ObjectContextRef& obc, bool hot_object)
 {
   const hobject_t& soid = obc->obs.oi.soid;
   if (obc->obs.oi.is_dirty()) {
@@ -10834,6 +10851,10 @@ bool ReplicatedPG::agent_maybe_evict(ObjectContextRef& obc)
 
   if (agent_state->evict_mode != TierAgentState::EVICT_MODE_FULL) {
     // is this object old and/or cold enough?
+    if (hot_object) {
+      dout(20) << __func__ << " skip (hot object) " << obc->obs.oi << dendl;
+      return false;
+    }
     int atime = -1, temp = 0;
     if (hit_set)
       agent_estimate_atime_temp(soid, &atime, NULL /*FIXME &temp*/);
