@@ -459,8 +459,10 @@ bool ObjectMap::aio_update(uint64_t start_object_no, uint64_t end_object_no,
 
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << &m_image_ctx << " aio_update: start=" << start_object_no
-		 << ", end=" << end_object_no << ", new_state="
-		 << static_cast<uint32_t>(new_state) << dendl;
+		 << ", end=" << end_object_no << ", "
+                 << (current_state ?
+                       stringify(static_cast<uint32_t>(*current_state)) : "")
+		 << "->" << static_cast<uint32_t>(new_state) << dendl;
   if (end_object_no > m_object_map.size()) {
     ldout(cct, 20) << "skipping update of invalid object map" << dendl;
     return false;
@@ -468,8 +470,10 @@ bool ObjectMap::aio_update(uint64_t start_object_no, uint64_t end_object_no,
 
   for (uint64_t object_no = start_object_no; object_no < end_object_no;
        ++object_no) {
-    if ((!current_state || m_object_map[object_no] == *current_state) &&
-        m_object_map[object_no] != new_state) {
+    uint8_t state = m_object_map[object_no];
+    if ((!current_state || state == *current_state ||
+          (*current_state == OBJECT_EXISTS && state == OBJECT_EXISTS_CLEAN)) &&
+        state != new_state) {
       UpdateRequest *req = new UpdateRequest(m_image_ctx, m_snap_id,
                                              start_object_no, end_object_no,
                                              new_state, current_state,
@@ -638,8 +642,9 @@ void ObjectMap::UpdateRequest::send() {
   for (uint64_t object_no = m_start_object_no;
        object_no < MIN(m_end_object_no, object_map.m_object_map.size());
        ++object_no) {
-    if (!m_current_state ||
-	object_map.m_object_map[object_no] == *m_current_state) {
+    uint8_t state = object_map.m_object_map[object_no];
+    if (!m_current_state || state == *m_current_state ||
+          (*m_current_state == OBJECT_EXISTS && state == OBJECT_EXISTS_CLEAN)) {
       object_map.m_object_map[object_no] = m_new_state;
     }
   }
