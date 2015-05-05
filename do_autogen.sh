@@ -19,6 +19,7 @@ do_autogen.sh: make a ceph build by running autogen, etc.
 -j                               with java
 -r                               with rocksdb
 -J				 --with-jemalloc
+-L				 --without-lttng
 
 EOF
 }
@@ -131,6 +132,6 @@ export CXXFLAGS
 
 ./configure \
 --prefix=/usr --sbindir=/sbin --localstatedir=/var --sysconfdir=/etc \
---with-debug $with_profiler --with-nss --with-radosgw \
+--with-debug $with_profiler --with-nss --without-cryptopp --with-radosgw \
 $CONFIGURE_FLAGS \
 || die "configure failed"

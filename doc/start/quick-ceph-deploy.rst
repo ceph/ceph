@@ -90,28 +90,9 @@ configuration details, perform the following steps using ``ceph-deploy``.
    to re-install Ceph.
 
 
-#. Add the initial monitor(s) and gather the keys (new in
-   ``ceph-deploy`` v1.1.3). ::
+#. Add the initial monitor(s) and gather the keys::
 
 	ceph-deploy mon create-initial
-
-   **Note:** In earlier versions of ``ceph-deploy``, you must create the
-   initial monitor(s) and gather keys in two discrete steps. First, create
-   the monitor. ::
-
-	ceph-deploy mon create {ceph-node}
-
-   For example::
-
-	ceph-deploy mon create node1
-
-   Then, gather the keys. ::
-
-	ceph-deploy gatherkeys {ceph-node}
-
-   For example::
-
-	ceph-deploy gatherkeys node1
 
    Once you complete the process, your local directory should have the following
    keyrings:
@@ -119,6 +100,10 @@ configuration details, perform the following steps using ``ceph-deploy``.
    - ``{cluster-name}.client.admin.keyring``
    - ``{cluster-name}.bootstrap-osd.keyring``
    - ``{cluster-name}.bootstrap-mds.keyring``
+   - ``{cluster-name}.bootstrap-rgw.keyring``
+
+.. note:: The bootstrap-rgw keyring is only created during installation of clusters
+   running Hammer or newer
 
 
 #. Add two OSDs. For fast setup, this quick start uses a directory rather
@@ -287,6 +272,38 @@ For example::
 .. note:: Currently Ceph runs in production with one metadata server only. You
    may use more, but there is currently no commercial support for a cluster
    with multiple metadata servers.
+
+
+Add an RGW Instance
+-------------------
+
+To use the :term:`Ceph Object Gateway` component of Ceph, you must deploy an
+instance of :term:`RGW`.  Execute the following to create an new instance of
+RGW::
+
+    ceph-deploy rgw create {gateway-node}
+
+For example::
+
+    ceph-deploy rgw create node1
+
+.. note:: This functionality is new with the **Hammer** release, and also with
+   ``ceph-deploy`` v1.5.23.
+
+By default, the :term:`RGW` instance will listen on port 7480. This can be
+changed by editing ceph.conf on the node running the :term:`RGW` as follows:
+
+.. code-block:: ini
+
+    [client]
+    rgw frontends = civetweb port=80
+
+To use an IPv6 address, use:
+
+.. code-block:: ini
+
+    [client]
+    rgw frontends = civetweb port=[::]:80
 
 
 Adding Monitors

@@ -29,9 +29,9 @@ enum {
   l_throttle_last,
 };
 
-Throttle::Throttle(CephContext *cct, std::string n, int64_t m, bool _use_perf)
+Throttle::Throttle(CephContext *cct, const std::string& n, int64_t m, bool _use_perf)
   : cct(cct), name(n), logger(NULL),
-		max(m),
+    max(m),
     lock("Throttle::lock"),
     use_perf(_use_perf)
 {
@@ -42,17 +42,17 @@ Throttle::Throttle(CephContext *cct, std::string n, int64_t m, bool _use_perf)
 
   if (cct->_conf->throttler_perf_counter) {
     PerfCountersBuilder b(cct, string("throttle-") + name, l_throttle_first, l_throttle_last);
-    b.add_u64_counter(l_throttle_val, "val");
-    b.add_u64_counter(l_throttle_max, "max");
-    b.add_u64_counter(l_throttle_get, "get");
-    b.add_u64_counter(l_throttle_get_sum, "get_sum");
-    b.add_u64_counter(l_throttle_get_or_fail_fail, "get_or_fail_fail");
-    b.add_u64_counter(l_throttle_get_or_fail_success, "get_or_fail_success");
-    b.add_u64_counter(l_throttle_take, "take");
-    b.add_u64_counter(l_throttle_take_sum, "take_sum");
-    b.add_u64_counter(l_throttle_put, "put");
-    b.add_u64_counter(l_throttle_put_sum, "put_sum");
-    b.add_time_avg(l_throttle_wait, "wait");
+    b.add_u64_counter(l_throttle_val, "val", "Currently available throttle");
+    b.add_u64_counter(l_throttle_max, "max", "Max value for throttle");
+    b.add_u64_counter(l_throttle_get, "get", "Gets");
+    b.add_u64_counter(l_throttle_get_sum, "get_sum", "Got data");
+    b.add_u64_counter(l_throttle_get_or_fail_fail, "get_or_fail_fail", "Get blocked during get_or_fail");
+    b.add_u64_counter(l_throttle_get_or_fail_success, "get_or_fail_success", "Successful get during get_or_fail");
+    b.add_u64_counter(l_throttle_take, "take", "Takes");
+    b.add_u64_counter(l_throttle_take_sum, "take_sum", "Taken data");
+    b.add_u64_counter(l_throttle_put, "put", "Puts");
+    b.add_u64_counter(l_throttle_put_sum, "put_sum", "Put data");
+    b.add_time_avg(l_throttle_wait, "wait", "Waiting latency");
 
     logger = b.create_perf_counters();
     cct->get_perfcounters_collection()->add(logger);
@@ -80,6 +80,8 @@ Throttle::~Throttle()
 void Throttle::_reset_max(int64_t m)
 {
   assert(lock.is_locked());
+  if ((int64_t)max.read() == m)
+    return;
   if (!cond.empty())
     cond.front()->SignalOne();
   if (logger)
@@ -124,7 +126,7 @@ bool Throttle::_wait(int64_t c)
 
 bool Throttle::wait(int64_t m)
 {
-  if (0 == max.read()) {
+  if (0 == max.read() && 0 == m) {
     return false;
   }
 
@@ -158,7 +160,7 @@ int64_t Throttle::take(int64_t c)
 
 bool Throttle::get(int64_t c, int64_t m)
 {
-  if (0 == max.read()) {
+  if (0 == max.read() && 0 == m) {
     return false;
   }
 

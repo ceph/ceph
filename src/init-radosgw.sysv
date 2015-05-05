@@ -37,7 +37,7 @@ PREFIX='client.radosgw.'
 
 # user to run radosgw as (it not specified in ceph.conf)
 #DEFAULT_USER='www-data'
-DEFAULT_USER='apache'
+DEFAULT_USER='root'
 
 RADOSGW=`which radosgw`
 if [ ! -x "$RADOSGW" ]; then
@@ -56,12 +56,6 @@ case "$1" in
         do
             auto_start=`ceph-conf -n $name 'auto start'`
             if [ "$auto_start" = "no" ] || [ "$auto_start" = "false" ] || [ "$auto_start" = "0" ]; then
-                continue
-            fi
-
-            # is the socket defined?  if it's not, this instance shouldn't run as a daemon.
-            rgw_socket=`$RADOSGW -n $name --show-config-value rgw_socket_path`
-            if [ -z "$rgw_socket" ]; then
                 continue
             fi
 
@@ -107,8 +101,19 @@ case "$1" in
         ;;
     stop)
         #start-stop-daemon --stop -x $RADOSGW --oknodo
+        timeout=0
+        for name in `ceph-conf --list-sections $PREFIX`;
+        do
+          t=`$RADOSGW -n $name --show-config-value rgw_exit_timeout_secs`
+          if [ $t -gt $timeout ]; then timeout=$t; fi
+        done
+
         killproc $RADOSGW
         echo "Stopping radosgw instance(s)..."
+        while pidof $RADOSGW >/dev/null && [ $timeout -gt 0 ] ; do
+          sleep 1
+          timeout=$(($timeout - 1))
+        done
         ;;
     status)
         daemon_is_running $RADOSGW

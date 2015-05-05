@@ -33,7 +33,6 @@ libcommon_internal_la_SOURCES = \
 	common/str_map.cc \
 	common/errno.cc \
 	common/RefCountedObj.cc \
-	common/blkdev.cc \
 	common/common_init.cc \
 	common/pipe.c \
 	common/ceph_argparse.cc \
@@ -76,6 +75,9 @@ libcommon_internal_la_SOURCES = \
 	common/Cycles.cc \
 	common/ContextCompletion.cc
 
+libcommon_internal_la_SOURCES += \
+	common/blkdev.cc
+
 if ENABLE_XIO
 libcommon_internal_la_SOURCES += \
 	common/address_helper.cc
@@ -111,11 +113,19 @@ endif
 LIBCOMMON_DEPS += libcommon_crc.la
 noinst_LTLIBRARIES += libcommon_crc.la
 
+if HAVE_ARMV8_CRC
+libcommon_crc_aarch64_la_SOURCES = common/crc32c_aarch64.c
+libcommon_crc_aarch64_la_CFLAGS = $(AM_CFLAGS) $(ARM_CRC_FLAGS)
+LIBCOMMON_DEPS += libcommon_crc_aarch64.la
+noinst_LTLIBRARIES += libcommon_crc_aarch64.la
+endif
+
 noinst_HEADERS += \
 	common/bloom_filter.hpp \
 	common/sctp_crc32.h \
 	common/crc32c_intel_baseline.h \
-	common/crc32c_intel_fast.h
+	common/crc32c_intel_fast.h \
+	common/crc32c_aarch64.h
 
 
 # important; libmsg before libauth!
@@ -222,7 +232,8 @@ noinst_HEADERS += \
 	common/Cycles.h \
 	common/Initialize.h \
 	common/ContextCompletion.h \
-	common/bit_vector.hpp
+	common/bit_vector.hpp \
+	common/SubProcess.h
 
 if ENABLE_XIO
 noinst_HEADERS += \

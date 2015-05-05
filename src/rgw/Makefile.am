@@ -1,4 +1,16 @@
+if ENABLE_CLIENT
+
+# inject rgw stuff in the decoder testcase
+DENCODER_SOURCES += \
+	rgw/rgw_dencoder.cc \
+	rgw/rgw_acl.cc \
+	rgw/rgw_common.cc \
+	rgw/rgw_env.cc \
+	rgw/rgw_json_enc.cc
+
+if WITH_RADOS
 if WITH_RADOSGW
+
 librgw_la_SOURCES =  \
 	rgw/librgw.cc \
 	rgw/rgw_acl.cc \
@@ -104,17 +116,6 @@ ceph_rgw_jsonparser_SOURCES = \
 ceph_rgw_jsonparser_LDADD = $(LIBRGW) $(LIBRGW_DEPS) $(CEPH_GLOBAL)
 bin_DEBUGPROGRAMS += ceph_rgw_jsonparser
 
-# inject rgw stuff in the decoder testcase
-DENCODER_SOURCES += \
-	rgw/rgw_dencoder.cc \
-	rgw/rgw_acl.cc \
-	rgw/rgw_common.cc \
-	rgw/rgw_env.cc \
-	rgw/rgw_json_enc.cc
-
-
-endif # WITH_RADOSGW
-
 
 noinst_HEADERS += \
 	rgw/logrotate.conf \
@@ -173,3 +174,7 @@ noinst_HEADERS += \
 	civetweb/include/civetweb.h \
 	civetweb/include/civetweb_conf.h \
 	civetweb/src/md5.h
+
+endif # WITH_RADOSGW
+endif # WITH_RADOS
+endif # ENABLE_CLIENT

@@ -71,16 +71,7 @@ ostream& operator<<(ostream& out, const CDentry& dn)
   if (dn.get_linkage()->is_null()) out << " NULL";
   if (dn.get_linkage()->is_remote()) {
     out << " REMOTE(";
-    switch (DTTOIF(dn.get_linkage()->get_remote_d_type())) {
-    case S_IFSOCK: out << "sock"; break;
-    case S_IFLNK: out << "lnk"; break;
-    case S_IFREG: out << "reg"; break;
-    case S_IFBLK: out << "blk"; break;
-    case S_IFDIR: out << "dir"; break;
-    case S_IFCHR: out << "chr"; break;
-    case S_IFIFO: out << "fifo"; break;
-    default: assert(0);
-    }
+    out << dn.get_linkage()->get_remote_d_type_string();
     out << ")";
   }
 
@@ -559,3 +550,75 @@ void CDentry::_put()
     }
   }
 }
+
+void CDentry::dump(Formatter *f) const
+{
+  assert(f != NULL);
+
+  filepath path;
+  make_path(path);
+
+  f->dump_string("path", path.get_path());
+  f->dump_int("snap_first", first);
+  f->dump_int("snap_last", last);
+
+  f->dump_bool("is_null", get_linkage()->is_null());
+  f->dump_bool("is_remote", get_linkage()->is_remote());
+  f->dump_bool("is_new", is_new());
+  if (get_linkage()->get_inode()) {
+    f->dump_int("inode", get_linkage()->get_inode()->ino());
+  } else {
+    f->dump_int("inode", 0);
+  }
+
+  if (linkage.is_remote()) {
+    f->dump_string("remote_type", linkage.get_remote_d_type_string());
+  } else {
+    f->dump_string("remote_type", "");
+  }
+
+  f->dump_int("version", get_version());
+  f->dump_int("projected_version", get_projected_version());
+
+  f->dump_int("auth_pins", auth_pins);
+  f->dump_int("nested_auth_pins", nested_auth_pins);
+
+  MDSCacheObject::dump(f);
+
+  f->open_object_section("lock");
+  lock.dump(f);
+  f->close_section();
+
+  f->open_object_section("versionlock");
+  versionlock.dump(f);
+  f->close_section();
+
+  f->open_array_section("states");
+  MDSCacheObject::dump_states(f);
+  if (state_test(STATE_NEW))
+    f->dump_string("state", "new");
+  if (state_test(STATE_FRAGMENTING))
+    f->dump_string("state", "fragmenting");
+  if (state_test(STATE_PURGING))
+    f->dump_string("state", "purging");
+  if (state_test(STATE_BADREMOTEINO))
+    f->dump_string("state", "badremoteino");
+  if (state_test(STATE_STRAY))
+    f->dump_string("state", "stray");
+  f->close_section();
+}
+
+std::string CDentry::linkage_t::get_remote_d_type_string() const
+{
+  switch (DTTOIF(remote_d_type)) {
+    case S_IFSOCK: return "sock";
+    case S_IFLNK: return "lnk";
+    case S_IFREG: return "reg";
+    case S_IFBLK: return "blk";
+    case S_IFDIR: return "dir";
+    case S_IFCHR: return "chr";
+    case S_IFIFO: return "fifo";
+    default: assert(0); return "";
+  }
+}
+

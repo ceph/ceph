@@ -268,7 +268,7 @@ struct rgw_bucket_dir_entry {
   std::string locator;
   bool exists;
   struct rgw_bucket_dir_entry_meta meta;
-  map<string, struct rgw_bucket_pending_info> pending_map;
+  multimap<string, struct rgw_bucket_pending_info> pending_map;
   uint64_t index_ver;
   string tag;
   uint16_t flags;

@@ -1281,7 +1281,9 @@ class MDSCacheObject {
   MDSCacheObject() :
     state(0), 
     ref(0),
-    replica_nonce(0) {}
+    auth_pins(0), nested_auth_pins(0),
+    replica_nonce(0)
+  {}
   virtual ~MDSCacheObject() {}
 
   // printing
@@ -1396,6 +1398,20 @@ protected:
 #endif
   }
 
+  protected:
+  int auth_pins;
+  int nested_auth_pins;
+#ifdef MDS_AUTHPIN_SET
+  multiset<void*> auth_pin_set;
+#endif
+
+  public:
+  bool is_auth_pinned() const { return auth_pins || nested_auth_pins; }
+  int get_num_auth_pins() const { return auth_pins; }
+  int get_num_nested_auth_pins() const { return nested_auth_pins; }
+
+  void dump_states(Formatter *f) const;
+  void dump(Formatter *f) const;
 
   // --------------------------------------------
   // auth pins

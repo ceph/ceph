@@ -32,10 +32,10 @@
 
 
 Beacon::Beacon(CephContext *cct_, MonClient *monc_, std::string name_) :
-  Dispatcher(cct_), lock("Beacon"), monc(monc_), timer(g_ceph_context, lock), name(name_)
+  Dispatcher(cct_), lock("Beacon"), monc(monc_), timer(g_ceph_context, lock),
+  name(name_), awaiting_seq(-1)
 {
   want_state = MDSMap::STATE_NULL;
-  last_send = 0;
   last_seq = 0;
   sender = NULL;
   was_laggy = false;
@@ -132,6 +132,11 @@ void Beacon::handle_mds_beacon(MMDSBeacon *m)
     while (!seq_stamp.empty() &&
 	   seq_stamp.begin()->first <= seq)
       seq_stamp.erase(seq_stamp.begin());
+
+    // Wake a waiter up if present
+    if (awaiting_seq == seq) {
+      waiting_cond.Signal();
+    }
   } else {
     dout(10) << "handle_mds_beacon " << ceph_mds_state_name(m->get_state())
 	     << " seq " << m->get_seq() << " dne" << dendl;
@@ -143,6 +148,25 @@ void Beacon::send()
 {
   Mutex::Locker l(lock);
   _send();
+}
+
+
+void Beacon::send_and_wait(const double duration)
+{
+  Mutex::Locker l(lock);
+  _send();
+  awaiting_seq = last_seq;
+  dout(20) << __func__ << ": awaiting " << awaiting_seq
+           << " for up to " << duration << "s" << dendl;
+
+  utime_t timeout;
+  timeout.set_from_double(ceph_clock_now(cct) + duration);
+  while ((!seq_stamp.empty() && seq_stamp.begin()->first <= awaiting_seq)
+         && ceph_clock_now(cct) < timeout) {
+    waiting_cond.WaitUntil(lock, timeout);
+  }
+
+  awaiting_seq = -1;
 }
 
 
@@ -319,6 +343,8 @@ void Beacon::notify_health(MDS const *mds)
 
   // Detect clients failing to generate cap releases from CEPH_SESSION_RECALL_STATE
   // messages. May be due to buggy client or resource-hogging application.
+  //
+  // Detect clients failing to advance their old_client_tid
   {
     set<Session*> sessions;
     mds->sessionmap.get_client_session_set(sessions);
@@ -326,6 +352,7 @@ void Beacon::notify_health(MDS const *mds)
     cutoff -= g_conf->mds_recall_state_timeout;
 
     std::list<MDSHealthMetric> late_recall_metrics;
+    std::list<MDSHealthMetric> large_completed_requests_metrics;
     for (set<Session*>::iterator i = sessions.begin(); i != sessions.end(); ++i) {
       Session *session = *i;
       if (!session->recalled_at.is_zero()) {
@@ -335,13 +362,21 @@ void Beacon::notify_health(MDS const *mds)
         if (session->recalled_at < cutoff) {
           dout(20) << "  exceeded timeout " << session->recalled_at << " vs. " << cutoff << dendl;
           std::ostringstream oss;
-        oss << "Client " << session->get_human_name() << " failing to respond to cache pressure";
+	  oss << "Client " << session->get_human_name() << " failing to respond to cache pressure";
           MDSHealthMetric m(MDS_HEALTH_CLIENT_RECALL, HEALTH_WARN, oss.str());
           m.metadata["client_id"] = session->info.inst.name.num();
           late_recall_metrics.push_back(m);
         } else {
           dout(20) << "  within timeout " << session->recalled_at << " vs. " << cutoff << dendl;
         }
+      }
+      if (session->get_num_trim_requests_warnings() > 0 &&
+	  session->get_num_completed_requests() >= g_conf->mds_max_completed_requests) {
+	std::ostringstream oss;
+	oss << "Client " << session->get_human_name() << " failing to advance its oldest_client_tid";
+	MDSHealthMetric m(MDS_HEALTH_CLIENT_OLDEST_TID, HEALTH_WARN, oss.str());
+	m.metadata["client_id"] = session->info.inst.name.num();
+	large_completed_requests_metrics.push_back(m);
       }
     }
 
@@ -355,6 +390,18 @@ void Beacon::notify_health(MDS const *mds)
       m.metadata["client_count"] = late_recall_metrics.size();
       health.metrics.push_back(m);
       late_recall_metrics.clear();
+    }
+
+    if (large_completed_requests_metrics.size() <= (size_t)g_conf->mds_health_summarize_threshold) {
+      health.metrics.splice(health.metrics.end(), large_completed_requests_metrics);
+    } else {
+      std::ostringstream oss;
+      oss << "Many clients (" << large_completed_requests_metrics.size()
+	<< ") failing to advance their oldest_client_tid";
+      MDSHealthMetric m(MDS_HEALTH_CLIENT_OLDEST_TID_MANY, HEALTH_WARN, oss.str());
+      m.metadata["client_count"] = large_completed_requests_metrics.size();
+      health.metrics.push_back(m);
+      large_completed_requests_metrics.clear();
     }
   }
 }

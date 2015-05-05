@@ -30,6 +30,7 @@ using namespace std;
 
 #include "common/Timer.h"
 #include "common/ceph_argparse.h"
+#include "common/linux_version.h"
 #include "global/global_init.h"
 #include "common/safe_io.h"
        
@@ -121,20 +122,11 @@ int main(int argc, const char **argv, const char *envp[]) {
       }
       virtual ~RemountTest() {}
       virtual void *entry() {
-	struct utsname os_info;
-	int tr = uname(&os_info);
-	assert(tr == 0);
-	assert(memcmp(os_info.sysname, "Linux", 5) == 0);
-	int major, minor;	
-	char *end_num;
-	major = strtol(os_info.release, &end_num, 10);
-	assert(major > 0);
-	++end_num;
-	minor = strtol(end_num, NULL, 10);
+	int ver = get_linux_version();
+	assert(ver != 0);
 	bool can_invalidate_dentries = g_conf->client_try_dentry_invalidate &&
-	  (major < 3 ||
-	   (major == 3 && minor < 18));
-	tr = client->test_dentry_handling(can_invalidate_dentries);
+				       ver < KERNEL_VERSION(3, 18, 0);
+	int tr = client->test_dentry_handling(can_invalidate_dentries);
 	if (tr != 0) {
 	  cerr << "ceph-fuse[" << getpid()
 	       << "]: fuse failed dentry invalidate/remount test with error "
@@ -143,7 +135,20 @@ int main(int argc, const char **argv, const char *envp[]) {
 	  char buf[5050];
 	  string mountpoint = cfuse->get_mount_point();
 	  snprintf(buf, 5049, "fusermount -u -z %s", mountpoint.c_str());
-	  system(buf);
+	  int umount_r = system(buf);
+	  if (umount_r) {
+	    if (umount_r != -1) {
+	      if (WIFEXITED(umount_r)) {
+		umount_r = WEXITSTATUS(umount_r);
+		cerr << "got error " << umount_r
+		     << " when unmounting Ceph on failed remount test!" << std::endl;
+	      } else {
+		cerr << "attempt to umount on failed remount test failed (on a signal?)" << std::endl;
+	      }
+	    } else {
+	      cerr << "system() invocation failed during remount test" << std::endl;
+	    }
+	  }
 	}
 	return reinterpret_cast<void*>(tr);
       }

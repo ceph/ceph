@@ -15,6 +15,7 @@
 #include "test/librados_test_stub/TestMemRadosClient.h"
 #include "objclass/objclass.h"
 #include <boost/bind.hpp>
+#include <boost/shared_ptr.hpp>
 #include <deque>
 #include <list>
 #include <vector>
@@ -22,29 +23,39 @@
 
 #define dout_subsys ceph_subsys_rados
 
+namespace {
+
+static void DeallocateRadosClient(librados::TestRadosClient* client)
+{
+  client->put();
+}
+
+} // anonymous namespace
+
+
 static librados::TestClassHandler *get_class_handler() {
-  static librados::TestClassHandler *s_class_handler = NULL;
-  if (s_class_handler == NULL) {
-    s_class_handler = new librados::TestClassHandler();
+  static boost::shared_ptr<librados::TestClassHandler> s_class_handler;
+  if (!s_class_handler) {
+    s_class_handler.reset(new librados::TestClassHandler());
     s_class_handler->open_all_classes();
   }
-  return s_class_handler;
+  return s_class_handler.get();
 }
 
 static librados::TestRadosClient *get_rados_client() {
   // TODO: use factory to allow tests to swap out impl
-  static librados::TestRadosClient *s_rados_client = NULL;
-  if (s_rados_client == NULL) {
+  static boost::shared_ptr<librados::TestRadosClient> s_rados_client;
+  if (!s_rados_client) {
     CephInitParameters iparams(CEPH_ENTITY_TYPE_CLIENT);
     CephContext *cct = common_preinit(iparams, CODE_ENVIRONMENT_LIBRARY, 0);
     cct->_conf->parse_env();
     cct->_conf->apply_changes(NULL);
-    g_ceph_context = cct;
-    s_rados_client = new librados::TestMemRadosClient(cct);
+    s_rados_client.reset(new librados::TestMemRadosClient(cct),
+                         &DeallocateRadosClient);
     cct->put();
   }
   s_rados_client->get();
-  return s_rados_client;
+  return s_rados_client.get();
 }
 
 static void do_out_buffer(bufferlist& outbl, char **outbuf, size_t *outbuflen) {
@@ -141,6 +152,13 @@ extern "C" int rados_connect(rados_t cluster) {
 extern "C" int rados_create(rados_t *cluster, const char * const id) {
   *cluster = get_rados_client();
   return 0;
+}
+
+extern "C" rados_config_t rados_ioctx_cct(rados_ioctx_t ioctx)
+{
+  librados::TestIoCtxImpl *ctx =
+    reinterpret_cast<librados::TestIoCtxImpl*>(ioctx);
+  return reinterpret_cast<rados_config_t>(ctx->get_rados_client()->cct());
 }
 
 extern "C" int rados_ioctx_create(rados_t cluster, const char *pool_name,
@@ -308,6 +326,11 @@ int IoCtx::aio_flush_async(AioCompletion *c) {
   TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
   ctx->aio_flush_async(c->pc);
   return 0;
+}
+
+int IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
+                       ObjectReadOperation *op, bufferlist *pbl) {
+  return aio_operate(oid, c, op, 0, pbl);
 }
 
 int IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
@@ -573,6 +596,18 @@ void ObjectOperation::set_op_flags2(int flags) {
 size_t ObjectOperation::size() {
   TestObjectOperationImpl *o = reinterpret_cast<TestObjectOperationImpl*>(impl);
   return o->ops.size();
+}
+
+void ObjectReadOperation::list_snaps(snap_set_t *out_snaps, int *prval) {
+  TestObjectOperationImpl *o = reinterpret_cast<TestObjectOperationImpl*>(impl);
+
+  ObjectOperationTestImpl op = boost::bind(&TestIoCtxImpl::list_snaps, _1, _2,
+                                           out_snaps);
+  if (prval != NULL) {
+    op = boost::bind(save_operation_result,
+                     boost::bind(op, _1, _2, _3), prval);
+  }
+  o->ops.push_back(op);
 }
 
 void ObjectReadOperation::read(size_t off, uint64_t len, bufferlist *pbl,

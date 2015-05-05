@@ -138,26 +138,30 @@ TEST_P(EventDriverTest, PipeTest) {
 void* echoclient(void *arg)
 {
   intptr_t port = (intptr_t)arg;
-  int connect_sd = ::socket(AF_INET, SOCK_STREAM, 0);
   struct sockaddr_in sa;
+  memset(&sa, 0, sizeof(sa));
   sa.sin_family = AF_INET;
   sa.sin_port = htons(port);
   char addr[] = "127.0.0.1";
   int r = inet_aton(addr, &sa.sin_addr);
-  r = connect(connect_sd, (struct sockaddr*)&sa, sizeof(sa));
-  int t = 0;
 
-  do {
-    char c[] = "banner";
-    r = write(connect_sd, c, sizeof(c));
-    char d[100];
-    r = read(connect_sd, d, sizeof(d));
-    if (r == 0)
-      break;
-    if (t++ == 30)
-      break;
-  } while (1);
-  ::close(connect_sd);
+  int connect_sd = ::socket(AF_INET, SOCK_STREAM, 0);
+  if (connect_sd >= 0) {
+    r = connect(connect_sd, (struct sockaddr*)&sa, sizeof(sa));
+    int t = 0;
+  
+    do {
+      char c[] = "banner";
+      r = write(connect_sd, c, sizeof(c));
+      char d[100];
+      r = read(connect_sd, d, sizeof(d));
+      if (r == 0)
+        break;
+      if (t++ == 30)
+        break;
+    } while (1);
+    ::close(connect_sd);
+  }
   return 0;
 }
 
@@ -250,10 +254,10 @@ TEST(EventCenterTest, FileEventExpansion) {
   EventCenter center(g_ceph_context);
   center.init(100);
   EventCallbackRef e(new FakeEvent());
-  for (int i = 0; i < 10000; i++) {
+  for (int i = 0; i < 300; i++) {
     int sd = ::socket(AF_INET, SOCK_STREAM, 0);
     center.create_file_event(sd, EVENT_READABLE, e);
-    sds.push_back(::socket(AF_INET, SOCK_STREAM, 0));
+    sds.push_back(sd);
   }
 
   for (vector<int>::iterator it = sds.begin(); it != sds.end(); ++it)

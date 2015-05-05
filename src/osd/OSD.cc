@@ -48,8 +48,6 @@
 
 #include "ReplicatedPG.h"
 
-#include "Ager.h"
-
 
 #include "msg/Messenger.h"
 #include "msg/Message.h"
@@ -147,6 +145,8 @@ static coll_t META_COLL("meta");
 #define dout_subsys ceph_subsys_osd
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, whoami, get_osdmap_epoch())
+
+const double OSD::OSD_TICK_INTERVAL = 1.0;
 
 static ostream& _prefix(std::ostream* _dout, int whoami, epoch_t epoch) {
   return *_dout << "osd." << whoami << " " << epoch << " ";
@@ -1309,19 +1309,6 @@ int OSD::mkfs(CephContext *cct, ObjectStore *store, const string &dev,
       goto free_store;
     }
 
-    // age?
-    if (cct->_conf->osd_age_time != 0) {
-      if (cct->_conf->osd_age_time >= 0) {
-        dout(0) << "aging..." << dendl;
-        Ager ager(cct, store);
-        ager.age(cct->_conf->osd_age_time,
-          cct->_conf->osd_age,
-          cct->_conf->osd_age - .05,
-          50000,
-          cct->_conf->osd_age - .05);
-      }
-    }
-
     OSDSuperblock sb;
     bufferlist sbbl;
     ret = store->read(META_COLL, OSD_SUPERBLOCK_POBJECT, 0, 0, sbbl);
@@ -1349,37 +1336,6 @@ int OSD::mkfs(CephContext *cct, ObjectStore *store, const string &dev,
       sb.osd_fsid = store->get_fsid();
       sb.whoami = whoami;
       sb.compat_features = get_osd_initial_compat_set();
-
-      // benchmark?
-      if (cct->_conf->osd_auto_weight) {
-	bufferlist bl;
-	bufferptr bp(1048576);
-	bp.zero();
-	bl.push_back(bp);
-	dout(0) << "testing disk bandwidth..." << dendl;
-	utime_t start = ceph_clock_now(cct);
-	object_t oid("disk_bw_test");
-	for (int i=0; i<1000; i++) {
-	  ObjectStore::Transaction *t = new ObjectStore::Transaction;
-	  t->write(META_COLL, hobject_t(sobject_t(oid, 0)), i*bl.length(), bl.length(), bl);
-	  store->queue_transaction_and_cleanup(NULL, t);
-	}
-	store->sync();
-	utime_t end = ceph_clock_now(cct);
-	end -= start;
-	dout(0) << "measured " << (1000.0 / (double)end) << " mb/sec" << dendl;
-	ObjectStore::Transaction tr;
-	tr.remove(META_COLL, hobject_t(sobject_t(oid, 0)));
-	ret = store->apply_transaction(tr);
-	if (ret) {
-	  derr << "OSD::mkfs: error while benchmarking: apply_transaction returned "
-	       << ret << dendl;
-	  goto umount_store;
-	}
-	
-	// set osd weight
-	sb.weight = (1000.0 / (double)end);
-      }
 
       bufferlist bl;
       ::encode(sb, bl);
@@ -1500,6 +1456,8 @@ OSD::OSD(CephContext *cct_, ObjectStore *store_,
   Dispatcher(cct_),
   osd_lock("OSD::osd_lock"),
   tick_timer(cct, osd_lock),
+  tick_timer_lock("OSD::tick_timer_lock"),
+  tick_timer_without_osd_lock(cct, tick_timer_lock),
   authorize_handler_cluster_registry(new AuthAuthorizeHandlerRegistry(cct,
 								      cct->_conf->auth_supported.empty() ?
 								      cct->_conf->auth_cluster_required :
@@ -1758,6 +1716,7 @@ int OSD::init()
     return 0;
 
   tick_timer.init();
+  tick_timer_without_osd_lock.init();
   service.backfill_request_timer.init();
 
   // mount.
@@ -1896,6 +1855,10 @@ int OSD::init()
 
   // tick
   tick_timer.add_event_after(cct->_conf->osd_heartbeat_interval, new C_Tick(this));
+  {
+    Mutex::Locker l(tick_timer_lock);
+    tick_timer_without_osd_lock.add_event_after(cct->_conf->osd_heartbeat_interval, new C_Tick_WithoutOSDLock(this));
+  }
 
   service.init();
   service.publish_map(osdmap);
@@ -2041,7 +2004,8 @@ void OSD::final_init()
     "injectdataerr",
     "injectdataerr " \
     "name=pool,type=CephString " \
-    "name=objname,type=CephObjectname",
+    "name=objname,type=CephObjectname " \
+    "name=shardid,type=CephInt,req=false,range=0|255",
     test_ops_hook,
     "inject data error into omap");
   assert(r == 0);
@@ -2050,7 +2014,8 @@ void OSD::final_init()
     "injectmdataerr",
     "injectmdataerr " \
     "name=pool,type=CephString " \
-    "name=objname,type=CephObjectname",
+    "name=objname,type=CephObjectname " \
+    "name=shardid,type=CephInt,req=false,range=0|255",
     test_ops_hook,
     "inject metadata error");
   assert(r == 0);
@@ -2106,18 +2071,18 @@ void OSD::create_logger()
   osd_plb.add_time_avg(l_osd_op_rw_process_lat, "op_rw_process_latency", 
       "Latency of read-modify-write operation (excluding queue time)");   // client rmw process latency
 
-  osd_plb.add_u64_counter(l_osd_sop,       "subop");         // subops
-  osd_plb.add_u64_counter(l_osd_sop_inb,   "subop_in_bytes");     // subop in bytes
-  osd_plb.add_time_avg(l_osd_sop_lat,   "subop_latency");     // subop latency
+  osd_plb.add_u64_counter(l_osd_sop,       "subop", "Suboperations");         // subops
+  osd_plb.add_u64_counter(l_osd_sop_inb,   "subop_in_bytes", "Suboperations total size");     // subop in bytes
+  osd_plb.add_time_avg(l_osd_sop_lat,   "subop_latency", "Suboperations latency");     // subop latency
 
-  osd_plb.add_u64_counter(l_osd_sop_w,     "subop_w");          // replicated (client) writes
-  osd_plb.add_u64_counter(l_osd_sop_w_inb, "subop_w_in_bytes");      // replicated write in bytes
-  osd_plb.add_time_avg(l_osd_sop_w_lat, "subop_w_latency");      // replicated write latency
-  osd_plb.add_u64_counter(l_osd_sop_pull,     "subop_pull");       // pull request
-  osd_plb.add_time_avg(l_osd_sop_pull_lat, "subop_pull_latency");
-  osd_plb.add_u64_counter(l_osd_sop_push,     "subop_push");       // push (write)
-  osd_plb.add_u64_counter(l_osd_sop_push_inb, "subop_push_in_bytes");
-  osd_plb.add_time_avg(l_osd_sop_push_lat, "subop_push_latency");
+  osd_plb.add_u64_counter(l_osd_sop_w,     "subop_w", "Replicated writes");          // replicated (client) writes
+  osd_plb.add_u64_counter(l_osd_sop_w_inb, "subop_w_in_bytes", "Replicated written data size");      // replicated write in bytes
+  osd_plb.add_time_avg(l_osd_sop_w_lat, "subop_w_latency", "Replicated writes latency");      // replicated write latency
+  osd_plb.add_u64_counter(l_osd_sop_pull,     "subop_pull", "Suboperations pull requests");       // pull request
+  osd_plb.add_time_avg(l_osd_sop_pull_lat, "subop_pull_latency", "Suboperations pull latency");
+  osd_plb.add_u64_counter(l_osd_sop_push,     "subop_push", "Suboperations push messages");       // push (write)
+  osd_plb.add_u64_counter(l_osd_sop_push_inb, "subop_push_in_bytes", "Suboperations pushed size");
+  osd_plb.add_time_avg(l_osd_sop_push_lat, "subop_push_latency", "Suboperations push latency");
 
   osd_plb.add_u64_counter(l_osd_pull,      "pull", "Pull requests sent");       // pull requests sent
   osd_plb.add_u64_counter(l_osd_push,      "push", "Push messages sent");       // push messages
@@ -2138,37 +2103,41 @@ void OSD::create_logger()
   osd_plb.add_u64(l_osd_pg_stray, "numpg_stray", "Placement groups ready to be deleted from this osd");   // num stray pgs
   osd_plb.add_u64(l_osd_hb_to, "heartbeat_to_peers", "Heartbeat (ping) peers we send to");     // heartbeat peers we send to
   osd_plb.add_u64(l_osd_hb_from, "heartbeat_from_peers", "Heartbeat (ping) peers we recv from"); // heartbeat peers we recv from
-  osd_plb.add_u64_counter(l_osd_map, "map_messages");           // osdmap messages
-  osd_plb.add_u64_counter(l_osd_mape, "map_message_epochs");         // osdmap epochs
-  osd_plb.add_u64_counter(l_osd_mape_dup, "map_message_epoch_dups"); // dup osdmap epochs
-  osd_plb.add_u64_counter(l_osd_waiting_for_map,
-			  "messages_delayed_for_map"); // dup osdmap epochs
+  osd_plb.add_u64_counter(l_osd_map, "map_messages", "OSD map messages");           // osdmap messages
+  osd_plb.add_u64_counter(l_osd_mape, "map_message_epochs", "OSD map epochs");         // osdmap epochs
+  osd_plb.add_u64_counter(l_osd_mape_dup, "map_message_epoch_dups", "OSD map duplicates"); // dup osdmap epochs
+  osd_plb.add_u64_counter(l_osd_waiting_for_map, "messages_delayed_for_map", "Operations waiting for OSD map"); // dup osdmap epochs
 
-  osd_plb.add_u64(l_osd_stat_bytes, "stat_bytes");
-  osd_plb.add_u64(l_osd_stat_bytes_used, "stat_bytes_used");
-  osd_plb.add_u64(l_osd_stat_bytes_avail, "stat_bytes_avail");
+  osd_plb.add_u64(l_osd_stat_bytes, "stat_bytes", "OSD size");
+  osd_plb.add_u64(l_osd_stat_bytes_used, "stat_bytes_used", "Used space");
+  osd_plb.add_u64(l_osd_stat_bytes_avail, "stat_bytes_avail", "Available space");
 
-  osd_plb.add_u64_counter(l_osd_copyfrom, "copyfrom");
+  osd_plb.add_u64_counter(l_osd_copyfrom, "copyfrom", "Rados \"copy-from\" operations");
 
-  osd_plb.add_u64_counter(l_osd_tier_promote, "tier_promote");
-  osd_plb.add_u64_counter(l_osd_tier_flush, "tier_flush");
-  osd_plb.add_u64_counter(l_osd_tier_flush_fail, "tier_flush_fail");
-  osd_plb.add_u64_counter(l_osd_tier_try_flush, "tier_try_flush");
-  osd_plb.add_u64_counter(l_osd_tier_try_flush_fail, "tier_try_flush_fail");
-  osd_plb.add_u64_counter(l_osd_tier_evict, "tier_evict");
-  osd_plb.add_u64_counter(l_osd_tier_whiteout, "tier_whiteout");
-  osd_plb.add_u64_counter(l_osd_tier_dirty, "tier_dirty");
-  osd_plb.add_u64_counter(l_osd_tier_clean, "tier_clean");
-  osd_plb.add_u64_counter(l_osd_tier_delay, "tier_delay");
-  osd_plb.add_u64_counter(l_osd_tier_proxy_read, "tier_proxy_read");
+  osd_plb.add_u64_counter(l_osd_tier_promote, "tier_promote", "Tier promotions");
+  osd_plb.add_u64_counter(l_osd_tier_flush, "tier_flush", "Tier flushes");
+  osd_plb.add_u64_counter(l_osd_tier_flush_fail, "tier_flush_fail", "Failed tier flushes");
+  osd_plb.add_u64_counter(l_osd_tier_try_flush, "tier_try_flush", "Tier flush attempts");
+  osd_plb.add_u64_counter(l_osd_tier_try_flush_fail, "tier_try_flush_fail", "Failed tier flush attempts");
+  osd_plb.add_u64_counter(l_osd_tier_evict, "tier_evict", "Tier evictions");
+  osd_plb.add_u64_counter(l_osd_tier_whiteout, "tier_whiteout", "Tier whiteouts");
+  osd_plb.add_u64_counter(l_osd_tier_dirty, "tier_dirty", "Dirty tier flag set");
+  osd_plb.add_u64_counter(l_osd_tier_clean, "tier_clean", "Dirty tier flag cleaned");
+  osd_plb.add_u64_counter(l_osd_tier_delay, "tier_delay", "Tier delays (agent waiting)");
+  osd_plb.add_u64_counter(l_osd_tier_proxy_read, "tier_proxy_read", "Tier proxy reads");
 
-  osd_plb.add_u64_counter(l_osd_agent_wake, "agent_wake");
-  osd_plb.add_u64_counter(l_osd_agent_skip, "agent_skip");
-  osd_plb.add_u64_counter(l_osd_agent_flush, "agent_flush");
-  osd_plb.add_u64_counter(l_osd_agent_evict, "agent_evict");
+  osd_plb.add_u64_counter(l_osd_agent_wake, "agent_wake", "Tiering agent wake up");
+  osd_plb.add_u64_counter(l_osd_agent_skip, "agent_skip", "Objects skipped by agent");
+  osd_plb.add_u64_counter(l_osd_agent_flush, "agent_flush", "Tiering agent flushes");
+  osd_plb.add_u64_counter(l_osd_agent_evict, "agent_evict", "Tiering agent evictions");
 
-  osd_plb.add_u64_counter(l_osd_object_ctx_cache_hit, "object_ctx_cache_hit");
-  osd_plb.add_u64_counter(l_osd_object_ctx_cache_total, "object_ctx_cache_total");
+  osd_plb.add_u64_counter(l_osd_object_ctx_cache_hit, "object_ctx_cache_hit", "Object context cache hits");
+  osd_plb.add_u64_counter(l_osd_object_ctx_cache_total, "object_ctx_cache_total", "Object context cache lookups");
+
+  osd_plb.add_u64_counter(l_osd_op_cache_hit, "op_cache_hit");
+  osd_plb.add_time_avg(l_osd_tier_flush_lat, "osd_tier_flush_lat", "Object flush latency");
+  osd_plb.add_time_avg(l_osd_tier_promote_lat, "osd_tier_promote_lat", "Object promote latency");
+  osd_plb.add_time_avg(l_osd_tier_r_lat, "osd_tier_r_lat", "Object proxy read latency");
 
   logger = osd_plb.create_perf_counters();
   cct->get_perfcounters_collection()->add(logger);
@@ -2180,35 +2149,35 @@ void OSD::create_recoverystate_perf()
 
   PerfCountersBuilder rs_perf(cct, "recoverystate_perf", rs_first, rs_last);
 
-  rs_perf.add_time_avg(rs_initial_latency, "initial_latency");
-  rs_perf.add_time_avg(rs_started_latency, "started_latency");
-  rs_perf.add_time_avg(rs_reset_latency, "reset_latency");
-  rs_perf.add_time_avg(rs_start_latency, "start_latency");
-  rs_perf.add_time_avg(rs_primary_latency, "primary_latency");
-  rs_perf.add_time_avg(rs_peering_latency, "peering_latency");
-  rs_perf.add_time_avg(rs_backfilling_latency, "backfilling_latency");
-  rs_perf.add_time_avg(rs_waitremotebackfillreserved_latency, "waitremotebackfillreserved_latency");
-  rs_perf.add_time_avg(rs_waitlocalbackfillreserved_latency, "waitlocalbackfillreserved_latency");
-  rs_perf.add_time_avg(rs_notbackfilling_latency, "notbackfilling_latency");
-  rs_perf.add_time_avg(rs_repnotrecovering_latency, "repnotrecovering_latency");
-  rs_perf.add_time_avg(rs_repwaitrecoveryreserved_latency, "repwaitrecoveryreserved_latency");
-  rs_perf.add_time_avg(rs_repwaitbackfillreserved_latency, "repwaitbackfillreserved_latency");
-  rs_perf.add_time_avg(rs_RepRecovering_latency, "RepRecovering_latency");
-  rs_perf.add_time_avg(rs_activating_latency, "activating_latency");
-  rs_perf.add_time_avg(rs_waitlocalrecoveryreserved_latency, "waitlocalrecoveryreserved_latency");
-  rs_perf.add_time_avg(rs_waitremoterecoveryreserved_latency, "waitremoterecoveryreserved_latency");
-  rs_perf.add_time_avg(rs_recovering_latency, "recovering_latency");
-  rs_perf.add_time_avg(rs_recovered_latency, "recovered_latency");
-  rs_perf.add_time_avg(rs_clean_latency, "clean_latency");
-  rs_perf.add_time_avg(rs_active_latency, "active_latency");
-  rs_perf.add_time_avg(rs_replicaactive_latency, "replicaactive_latency");
-  rs_perf.add_time_avg(rs_stray_latency, "stray_latency");
-  rs_perf.add_time_avg(rs_getinfo_latency, "getinfo_latency");
-  rs_perf.add_time_avg(rs_getlog_latency, "getlog_latency");
-  rs_perf.add_time_avg(rs_waitactingchange_latency, "waitactingchange_latency");
-  rs_perf.add_time_avg(rs_incomplete_latency, "incomplete_latency");
-  rs_perf.add_time_avg(rs_getmissing_latency, "getmissing_latency");
-  rs_perf.add_time_avg(rs_waitupthru_latency, "waitupthru_latency");
+  rs_perf.add_time_avg(rs_initial_latency, "initial_latency", "Initial recovery state latency");
+  rs_perf.add_time_avg(rs_started_latency, "started_latency", "Started recovery state latency");
+  rs_perf.add_time_avg(rs_reset_latency, "reset_latency", "Reset recovery state latency");
+  rs_perf.add_time_avg(rs_start_latency, "start_latency", "Start recovery state latency");
+  rs_perf.add_time_avg(rs_primary_latency, "primary_latency", "Primary recovery state latency");
+  rs_perf.add_time_avg(rs_peering_latency, "peering_latency", "Peering recovery state latency");
+  rs_perf.add_time_avg(rs_backfilling_latency, "backfilling_latency", "Backfilling recovery state latency");
+  rs_perf.add_time_avg(rs_waitremotebackfillreserved_latency, "waitremotebackfillreserved_latency", "Wait remote backfill reserved recovery state latency");
+  rs_perf.add_time_avg(rs_waitlocalbackfillreserved_latency, "waitlocalbackfillreserved_latency", "Wait local backfill reserved recovery state latency");
+  rs_perf.add_time_avg(rs_notbackfilling_latency, "notbackfilling_latency", "Notbackfilling recovery state latency");
+  rs_perf.add_time_avg(rs_repnotrecovering_latency, "repnotrecovering_latency", "Repnotrecovering recovery state latency");
+  rs_perf.add_time_avg(rs_repwaitrecoveryreserved_latency, "repwaitrecoveryreserved_latency", "Rep wait recovery reserved recovery state latency");
+  rs_perf.add_time_avg(rs_repwaitbackfillreserved_latency, "repwaitbackfillreserved_latency", "Rep wait backfill reserved recovery state latency");
+  rs_perf.add_time_avg(rs_RepRecovering_latency, "RepRecovering_latency", "RepRecovering recovery state latency");
+  rs_perf.add_time_avg(rs_activating_latency, "activating_latency", "Activating recovery state latency");
+  rs_perf.add_time_avg(rs_waitlocalrecoveryreserved_latency, "waitlocalrecoveryreserved_latency", "Wait local recovery reserved recovery state latency");
+  rs_perf.add_time_avg(rs_waitremoterecoveryreserved_latency, "waitremoterecoveryreserved_latency", "Wait remote recovery reserved recovery state latency");
+  rs_perf.add_time_avg(rs_recovering_latency, "recovering_latency", "Recovering recovery state latency");
+  rs_perf.add_time_avg(rs_recovered_latency, "recovered_latency", "Recovered recovery state latency");
+  rs_perf.add_time_avg(rs_clean_latency, "clean_latency", "Clean recovery state latency");
+  rs_perf.add_time_avg(rs_active_latency, "active_latency", "Active recovery state latency");
+  rs_perf.add_time_avg(rs_replicaactive_latency, "replicaactive_latency", "Replicaactive recovery state latency");
+  rs_perf.add_time_avg(rs_stray_latency, "stray_latency", "Stray recovery state latency");
+  rs_perf.add_time_avg(rs_getinfo_latency, "getinfo_latency", "Getinfo recovery state latency");
+  rs_perf.add_time_avg(rs_getlog_latency, "getlog_latency", "Getlog recovery state latency");
+  rs_perf.add_time_avg(rs_waitactingchange_latency, "waitactingchange_latency", "Waitactingchange recovery state latency");
+  rs_perf.add_time_avg(rs_incomplete_latency, "incomplete_latency", "Incomplete recovery state latency");
+  rs_perf.add_time_avg(rs_getmissing_latency, "getmissing_latency", "Getmissing recovery state latency");
+  rs_perf.add_time_avg(rs_waitupthru_latency, "waitupthru_latency", "Waitupthru recovery state latency");
 
   recoverystate_perf = rs_perf.create_perf_counters();
   cct->get_perfcounters_collection()->add(recoverystate_perf);
@@ -2348,6 +2317,11 @@ int OSD::shutdown()
 
   tick_timer.shutdown();
 
+  {
+    Mutex::Locker l(tick_timer_lock);
+    tick_timer_without_osd_lock.shutdown();
+  }
+
   // note unmount epoch
   dout(10) << "noting clean unmount in epoch " << osdmap->get_epoch() << dendl;
   superblock.mounted = service.get_boot_epoch();
@@ -2427,8 +2401,7 @@ void OSD::write_superblock(ObjectStore::Transaction& t)
   dout(10) << "write_superblock " << superblock << dendl;
 
   //hack: at minimum it's using the baseline feature set
-  if (!superblock.compat_features.incompat.mask |
-      CEPH_OSD_FEATURE_INCOMPAT_BASE.id)
+  if (!superblock.compat_features.incompat.contains(CEPH_OSD_FEATURE_INCOMPAT_BASE))
     superblock.compat_features.incompat.insert(CEPH_OSD_FEATURE_INCOMPAT_BASE);
 
   bufferlist bl;
@@ -2707,14 +2680,12 @@ PG *OSD::get_pg_or_queue_for_pg(const spg_t& pgid, OpRequestRef& op)
 
 bool OSD::_have_pg(spg_t pgid)
 {
-  assert(osd_lock.is_locked());
   RWLock::RLocker l(pg_map_lock);
   return pg_map.count(pgid);
 }
 
 PG *OSD::_lookup_lock_pg(spg_t pgid)
 {
-  assert(osd_lock.is_locked());
   RWLock::RLocker l(pg_map_lock);
   if (!pg_map.count(pgid))
     return NULL;
@@ -2726,7 +2697,6 @@ PG *OSD::_lookup_lock_pg(spg_t pgid)
 
 PG *OSD::_lookup_pg(spg_t pgid)
 {
-  assert(osd_lock.is_locked());
   RWLock::RLocker l(pg_map_lock);
   if (!pg_map.count(pgid))
     return NULL;
@@ -2736,7 +2706,6 @@ PG *OSD::_lookup_pg(spg_t pgid)
 
 PG *OSD::_lookup_lock_pg_with_map_lock_held(spg_t pgid)
 {
-  assert(osd_lock.is_locked());
   assert(pg_map.count(pgid));
   PG *pg = pg_map[pgid];
   pg->lock();
@@ -2813,7 +2782,28 @@ void OSD::load_pgs()
     bufferlist bl;
     epoch_t map_epoch = PG::peek_map_epoch(store, pgid, &bl);
 
-    PG *pg = _open_lock_pg(map_epoch == 0 ? osdmap : service.get_map(map_epoch), pgid);
+    PG *pg = NULL;
+    if (map_epoch > 0) {
+      OSDMapRef pgosdmap = service.try_get_map(map_epoch);
+      if (!pgosdmap) {
+	if (!osdmap->have_pg_pool(pgid.pool())) {
+	  derr << __func__ << ": could not find map for epoch " << map_epoch
+	       << " on pg " << pgid << ", but the pool is not present in the "
+	       << "current map, so this is probably a result of bug 10617.  "
+	       << "Skipping the pg for now, you can use ceph_objectstore_tool "
+	       << "to clean it up later." << dendl;
+	  continue;
+	} else {
+	  derr << __func__ << ": have pgid " << pgid << " at epoch "
+	       << map_epoch << ", but missing map.  Crashing."
+	       << dendl;
+	  assert(0 == "Missing map in load_pgs");
+	}
+      }
+      pg = _open_lock_pg(pgosdmap, pgid);
+    } else {
+      pg = _open_lock_pg(osdmap, pgid);
+    }
     // there can be no waiters here, so we don't call wake_pg_waiters
 
     // read pg state, log
@@ -3923,10 +3913,6 @@ void OSD::tick()
     // periodically kick recovery work queue
     recovery_tp.wake();
 
-    if (!scrub_random_backoff()) {
-      sched_scrub();
-    }
-
     check_replay_queue();
   }
 
@@ -3942,7 +3928,18 @@ void OSD::tick()
 
   check_ops_in_flight();
 
-  tick_timer.add_event_after(1.0, new C_Tick(this));
+  tick_timer.add_event_after(OSD_TICK_INTERVAL, new C_Tick(this));
+}
+
+void OSD::tick_without_osd_lock()
+{
+  assert(tick_timer_lock.is_locked());
+  dout(5) << "tick_without_osd_lock" << dendl;
+
+  if (!scrub_random_backoff()) {
+    sched_scrub();
+  }
+  tick_timer_without_osd_lock.add_event_after(OSD_TICK_INTERVAL, new C_Tick_WithoutOSDLock(this));
 }
 
 void OSD::check_ops_in_flight()
@@ -3964,8 +3961,8 @@ void OSD::check_ops_in_flight()
 //   setomapheader <pool-id> [namespace/]<obj-name> <header>
 //   getomap <pool> [namespace/]<obj-name>
 //   truncobj <pool-id> [namespace/]<obj-name> <newlen>
-//   injectmdataerr [namespace/]<obj-name>
-//   injectdataerr [namespace/]<obj-name>
+//   injectmdataerr [namespace/]<obj-name> [shardid]
+//   injectdataerr [namespace/]<obj-name> [shardid]
 void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
      std::string command, cmdmap_t& cmdmap, ostream &ss)
 {
@@ -4008,13 +4005,19 @@ void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
       ss << "Invalid namespace/objname";
       return;
     }
-    if (curmap->pg_is_ec(rawpg)) {
-      ss << "Must not call on ec pool";
-      return;
-    }
-    spg_t pgid = spg_t(curmap->raw_pg_to_pg(rawpg), shard_id_t::NO_SHARD);
 
+    int64_t shardid;
+    cmd_getval(service->cct, cmdmap, "shardid", shardid, int64_t(shard_id_t::NO_SHARD));
     hobject_t obj(object_t(objname), string(""), CEPH_NOSNAP, rawpg.ps(), pool, nspace);
+    ghobject_t gobj(obj, ghobject_t::NO_GEN, shard_id_t(uint8_t(shardid)));
+    spg_t pgid(curmap->raw_pg_to_pg(rawpg), shard_id_t(shardid));
+    if (curmap->pg_is_ec(rawpg)) {
+        if ((command != "injectdataerr") && (command != "injectmdataerr")) {
+            ss << "Must not call on ec pool, except injectdataerr or injectmdataerr";
+            return;
+        }
+    }
+
     ObjectStore::Transaction t;
 
     if (command == "setomapval") {
@@ -4080,10 +4083,10 @@ void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
       else
 	ss << "ok";
     } else if (command == "injectdataerr") {
-      store->inject_data_error(obj);
+      store->inject_data_error(gobj);
       ss << "ok";
     } else if (command == "injectmdataerr") {
-      store->inject_mdata_error(obj);
+      store->inject_mdata_error(gobj);
       ss << "ok";
     }
     return;
@@ -4099,50 +4102,48 @@ bool remove_dir(
   OSDriver *osdriver,
   ObjectStore::Sequencer *osr,
   coll_t coll, DeletingStateRef dstate,
+  bool *finished,
   ThreadPool::TPHandle &handle)
 {
   vector<ghobject_t> olist;
   int64_t num = 0;
   ObjectStore::Transaction *t = new ObjectStore::Transaction;
   ghobject_t next;
-  while (!next.is_max()) {
-    handle.reset_tp_timeout();
-    store->collection_list_partial(
-      coll,
-      next,
-      store->get_ideal_list_min(),
-      store->get_ideal_list_max(),
-      0,
-      &olist,
-      &next);
-    for (vector<ghobject_t>::iterator i = olist.begin();
-	 i != olist.end();
-	 ++i, ++num) {
-      if (i->is_pgmeta())
-	continue;
-      OSDriver::OSTransaction _t(osdriver->get_transaction(t));
-      int r = mapper->remove_oid(i->hobj, &_t);
-      if (r != 0 && r != -ENOENT) {
-	assert(0);
-      }
-      t->remove(coll, *i);
-      if (num >= cct->_conf->osd_target_transaction_size) {
-	C_SaferCond waiter;
-	store->queue_transaction(osr, t, &waiter);
-	bool cont = dstate->pause_clearing();
-	handle.suspend_tp_timeout();
-	waiter.wait();
-	handle.reset_tp_timeout();
-	if (cont)
-	  cont = dstate->resume_clearing();
-	delete t;
-	if (!cont)
-	  return false;
-	t = new ObjectStore::Transaction;
-	num = 0;
-      }
+  handle.reset_tp_timeout();
+  store->collection_list_partial(
+    coll,
+    next,
+    store->get_ideal_list_min(),
+    store->get_ideal_list_max(),
+    0,
+    &olist,
+    &next);
+  for (vector<ghobject_t>::iterator i = olist.begin();
+       i != olist.end();
+       ++i, ++num) {
+    if (i->is_pgmeta())
+      continue;
+    OSDriver::OSTransaction _t(osdriver->get_transaction(t));
+    int r = mapper->remove_oid(i->hobj, &_t);
+    if (r != 0 && r != -ENOENT) {
+      assert(0);
     }
-    olist.clear();
+    t->remove(coll, *i);
+    if (num >= cct->_conf->osd_target_transaction_size) {
+      C_SaferCond waiter;
+      store->queue_transaction(osr, t, &waiter);
+      bool cont = dstate->pause_clearing();
+      handle.suspend_tp_timeout();
+      waiter.wait();
+      handle.reset_tp_timeout();
+      if (cont)
+        cont = dstate->resume_clearing();
+      delete t;
+      if (!cont)
+	return false;
+      t = new ObjectStore::Transaction;
+      num = 0;
+    }
   }
 
   C_SaferCond waiter;
@@ -4154,6 +4155,8 @@ bool remove_dir(
   if (cont)
     cont = dstate->resume_clearing();
   delete t;
+  // whether there are more objects to remove in the collection
+  *finished = next.is_max();
   return cont;
 }
 
@@ -4166,20 +4169,26 @@ void OSD::RemoveWQ::_process(
   OSDriver &driver = pg->osdriver;
   coll_t coll = coll_t(pg->info.pgid);
   pg->osr->flush();
+  bool finished = false;
 
-  if (!item.second->start_clearing())
+  if (!item.second->start_or_resume_clearing())
     return;
 
-  list<coll_t> colls_to_remove;
-  pg->get_colls(&colls_to_remove);
-  for (list<coll_t>::iterator i = colls_to_remove.begin();
-       i != colls_to_remove.end();
-       ++i) {
+  list<coll_t>& remaining_colls = item.second->colls_to_remove;
+  for (list<coll_t>::iterator i = remaining_colls.begin();
+       i != remaining_colls.end();) {
     bool cont = remove_dir(
       pg->cct, store, &mapper, &driver, pg->osr.get(), *i, item.second,
-      handle);
+      &finished, handle);
     if (!cont)
       return;
+    if (finished) {
+      i = remaining_colls.erase(i);
+    } else {
+      if (item.second->pause_clearing())
+        queue_front(item);
+      return;
+    }
   }
 
   if (!item.second->start_deleting())
@@ -4188,6 +4197,9 @@ void OSD::RemoveWQ::_process(
   ObjectStore::Transaction *t = new ObjectStore::Transaction;
   PGLog::clear_info_log(pg->info.pgid, t);
 
+  // remove the collections themselves
+  list<coll_t> colls_to_remove;
+  pg->get_colls(&colls_to_remove);
   for (list<coll_t>::iterator i = colls_to_remove.begin();
        i != colls_to_remove.end();
        ++i) {
@@ -4867,7 +4879,7 @@ COMMAND("heap " \
 	"name=heapcmd,type=CephChoices,strings=dump|start_profiler|stop_profiler|release|stats", \
 	"show heap usage info (available only if compiled with tcmalloc)", \
 	"osd", "rw", "cli,rest")
-COMMAND("debug_dump_missing " \
+COMMAND("debug dump_missing " \
 	"name=filename,type=CephFilepath",
 	"dump missing objects to a named file", "osd", "r", "cli,rest")
 COMMAND("debug kick_recovery_wq " \
@@ -5934,8 +5946,6 @@ bool OSD::scrub_should_schedule()
 
 void OSD::sched_scrub()
 {
-  assert(osd_lock.is_locked());
-
   bool load_is_low = scrub_should_schedule();
 
   dout(20) << "sched_scrub load_is_low=" << (int)load_is_low << dendl;
@@ -7841,6 +7851,13 @@ bool OSD::_recover_now()
 
 void OSD::do_recovery(PG *pg, ThreadPool::TPHandle &handle)
 {
+  if (g_conf->osd_recovery_sleep > 0) {
+    utime_t t;
+    t.set_from_double(g_conf->osd_recovery_sleep);
+    t.sleep();
+    dout(20) << __func__ << " slept for " << t << dendl;
+  }
+
   // see how many we should try to start.  note that this is a bit racy.
   recovery_wq.lock();
   int max = MIN(cct->_conf->osd_recovery_max_active - recovery_ops_active,
@@ -8695,6 +8712,24 @@ int OSD::init_op_flags(OpRequestRef& op)
       {
         op->set_promote();
         break;
+      }
+
+    case CEPH_OSD_OP_DELETE:
+      // if we get a delete with FAILOK we can skip promote.  without
+      // FAILOK we still need to promote (or do something smarter) to
+      // determine whether to return ENOENT or 0.
+      if (iter == m->ops.begin() &&
+	  iter->op.flags == CEPH_OSD_OP_FLAG_FAILOK) {
+	op->set_skip_promote();
+      }
+      break;
+
+    case CEPH_OSD_OP_CACHE_TRY_FLUSH:
+    case CEPH_OSD_OP_CACHE_FLUSH:
+    case CEPH_OSD_OP_CACHE_EVICT:
+      // If try_flush/flush/evict is the only op, no need to promote.
+      if (m->ops.size() == 1) {
+	op->set_skip_promote();
       }
 
     default:

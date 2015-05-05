@@ -830,13 +830,16 @@ int write_info(ObjectStore::Transaction &t, epoch_t epoch, pg_info_t &info,
   //Empty for this
   coll_t coll(info.pgid);
   ghobject_t pgmeta_oid(info.pgid.make_pgmeta_oid());
-  int ret = PG::_write_info(t, epoch,
+  map<string,bufferlist> km;
+  int ret = PG::_prepare_write_info(
+    &km, epoch,
     info, coll,
     past_intervals,
     pgmeta_oid,
     true);
   if (ret < 0) ret = -ret;
   if (ret) cerr << "Failed to write info" << std::endl;
+  t.omap_setkeys(coll, pgmeta_oid, km);
   return ret;
 }
 
@@ -848,7 +851,9 @@ int write_pg(ObjectStore::Transaction &t, epoch_t epoch, pg_info_t &info,
     return ret;
   map<eversion_t, hobject_t> divergent_priors;
   coll_t coll(info.pgid);
-  PGLog::write_log(t, log, coll, info.pgid.make_pgmeta_oid(), divergent_priors);
+  map<string,bufferlist> km;
+  PGLog::write_log(t, &km, log, coll, info.pgid.make_pgmeta_oid(), divergent_priors);
+  t.omap_setkeys(coll, info.pgid.make_pgmeta_oid(), km);
   return 0;
 }
 
@@ -1232,8 +1237,9 @@ int skip_object(bufferlist &bl)
     case TYPE_ATTRS:
     case TYPE_OMAP_HDR:
     case TYPE_OMAP:
-      if (debug)
-        cerr << "Skip type " << (int)type << std::endl;
+#ifdef DIAGNOSTIC
+      cerr << "Skip type " << (int)type << std::endl;
+#endif
       break;
     case TYPE_OBJECT_END:
       done = true;
@@ -1442,8 +1448,6 @@ int get_object(ObjectStore *store, coll_t coll, bufferlist &bl, OSDMap &curmap)
   if (ob.hoid.hobj.nspace != g_ceph_context->_conf->osd_hit_set_namespace) {
     object_t oid = ob.hoid.hobj.oid;
     object_locator_t loc(ob.hoid.hobj);
-    // XXX: Do we need to set the hash?
-    // loc.hash = ob.hoid.hash;
     pg_t raw_pgid = curmap.object_locator_to_pg(oid, loc);
     pg_t pgid = curmap.raw_pg_to_pg(raw_pgid);
   
@@ -1775,7 +1779,7 @@ int do_import(ObjectStore *store, OSDSuperblock& sb)
       cerr << std::endl;
       cerr << "If you wish to import, first do 'ceph-objectstore-tool...--op set-allow-sharded-objects'" << std::endl;
     }
-    return 1;
+    return 11;  // Assume no +EAGAIN gets to end of main() until we clean up error code handling
   }
 
   // Don't import if pool no longer exists
@@ -1789,7 +1793,7 @@ int do_import(ObjectStore *store, OSDSuperblock& sb)
   if (!curmap.have_pg_pool(pgid.pgid.m_pool)) {
     cerr << "Pool " << pgid.pgid.m_pool << " no longer exists" << std::endl;
     // Special exit code for this error, used by test code
-    return 10;
+    return 10;  // Assume no +ECHILD gets to end of main() until we clean up error code handling
   }
 
   ghobject_t pgmeta_oid = pgid.make_pgmeta_oid();
@@ -1853,12 +1857,25 @@ int do_import(ObjectStore *store, OSDSuperblock& sb)
     return EFAULT;
   }
 
+  pg_log_t newlog, reject;
+  pg_log_t::filter_log(pgid, curmap, g_ceph_context->_conf->osd_hit_set_namespace,
+    ms.log, newlog, reject);
+  if (debug) {
+    for (list<pg_log_entry_t>::iterator i = newlog.log.begin();
+         i != newlog.log.end(); ++i)
+      cerr << "Keeping log entry " << *i << std::endl;
+    for (list<pg_log_entry_t>::iterator i = reject.log.begin();
+         i != reject.log.end(); ++i)
+      cerr << "Skipping log entry " << *i << std::endl;
+  }
+
   t = new ObjectStore::Transaction;
-  ret = write_pg(*t, ms.map_epoch, ms.info, ms.log, ms.past_intervals);
+  ret = write_pg(*t, ms.map_epoch, ms.info, newlog, ms.past_intervals);
   if (ret) return ret;
 
   // done, clear removal flag
-  cout << "done, clearing removal flag flag" << std::endl;
+  if (debug)
+    cerr << "done, clearing removal flag" << std::endl;
   set<string> remove;
   remove.insert("_remove");
   t->omap_rmkeys(coll, pgid.make_pgmeta_oid(), remove);
@@ -2557,8 +2574,9 @@ int main(int argc, char **argv)
     cerr << "On-disk features: " << superblock.compat_features << std::endl;
   }
   if (supported.compare(superblock.compat_features) == -1) {
+    CompatSet unsupported = supported.unsupported(superblock.compat_features);
     cerr << "On-disk OSD incompatible features set "
-      << superblock.compat_features << std::endl;
+      << unsupported << std::endl;
     ret = EINVAL;
     goto out;
   }
@@ -3131,5 +3149,8 @@ out:
     return 1;
   }
 
+  // Check for -errno accidentally getting here
+  if (ret < 0)
+    ret = 1;
   return ret;
 }

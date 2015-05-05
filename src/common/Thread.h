@@ -24,11 +24,12 @@ class Thread {
   pthread_t thread_id;
   pid_t pid;
   int ioprio_class, ioprio_priority;
+  int cpuid;
 
   void *entry_wrapper();
 
  public:
-  Thread(const Thread& other);
+  explicit Thread(const Thread& other);
   const Thread& operator=(const Thread& other);
 
   Thread();
@@ -51,6 +52,7 @@ class Thread {
   int join(void **prval = 0);
   int detach();
   int set_ioprio(int cls, int prio);
+  int set_affinity(int cpuid);
 };
 
 #endif

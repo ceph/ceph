@@ -2,7 +2,7 @@
   rbd: image name was not specified
   [1]
   $ rbd unmap
-  rbd: device path was not specified
+  rbd: unmap requires either image name or device path
   [1]
   $ rbd clone foo@snap bar@snap
   rbd: cannot clone to a snapshot

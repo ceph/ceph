@@ -99,6 +99,11 @@ namespace librbd {
     ImageCtx *ictx = new ImageCtx(name, "", snap_name, io_ctx, false);
     tracepoint(librbd, open_image_enter, ictx, ictx->name.c_str(), ictx->id.c_str(), ictx->snap_name.c_str(), ictx->read_only);
 
+    if (image.ctx != NULL) {
+      close_image(reinterpret_cast<ImageCtx*>(image.ctx));
+      image.ctx = NULL;
+    }
+
     int r = librbd::open_image(ictx);
     if (r < 0) {
       tracepoint(librbd, open_image_exit, r);
@@ -115,6 +120,11 @@ namespace librbd {
   {
     ImageCtx *ictx = new ImageCtx(name, "", snap_name, io_ctx, true);
     tracepoint(librbd, open_image_enter, ictx, ictx->name.c_str(), ictx->id.c_str(), ictx->snap_name.c_str(), ictx->read_only);
+
+    if (image.ctx != NULL) {
+      close_image(reinterpret_cast<ImageCtx*>(image.ctx));
+      image.ctx = NULL;
+    }
 
     int r = librbd::open_image(ictx);
     if (r < 0) {
@@ -322,6 +332,15 @@ namespace librbd {
     return r;
   }
 
+  int Image::update_features(uint64_t features, bool enabled)
+  {
+    ImageCtx *ictx = reinterpret_cast<ImageCtx *>(ctx);
+    tracepoint(librbd, update_features_enter, ictx, features, enabled);
+    int r = librbd::update_features(ictx, features, enabled);
+    tracepoint(librbd, update_features_exit, r);
+    return r;
+  }
+
   uint64_t Image::get_stripe_unit() const
   {
     ImageCtx *ictx = (ImageCtx *)ctx;
@@ -376,6 +395,12 @@ namespace librbd {
     int r = librbd::is_exclusive_lock_owner(ictx, is_owner);
     tracepoint(librbd, is_exclusive_lock_owner_exit, ictx, r, *is_owner);
     return r;
+  }
+
+  int Image::rebuild_object_map(ProgressContext &prog_ctx)
+  {
+    ImageCtx *ictx = reinterpret_cast<ImageCtx*>(ctx);
+    return librbd::rebuild_object_map(ictx, prog_ctx);
   }
 
   int Image::copy(IoCtx& dest_io_ctx, const char *destname)
@@ -509,8 +534,7 @@ namespace librbd {
   {
     ImageCtx *ictx = (ImageCtx *)ctx;
     tracepoint(librbd, snap_create_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only, snap_name);
-    RWLock::RLocker owner_locker(ictx->owner_lock);
-    int r = librbd::snap_create(ictx, snap_name, true);
+    int r = librbd::snap_create(ictx, snap_name);
     tracepoint(librbd, snap_create_exit, r);
     return r;
   }
@@ -659,8 +683,25 @@ namespace librbd {
 			  void *arg)
   {
     ImageCtx *ictx = (ImageCtx *)ctx;
-    tracepoint(librbd, diff_iterate_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only, fromsnapname, ofs, len);
-    int r = librbd::diff_iterate(ictx, fromsnapname, ofs, len, cb, arg);
+    tracepoint(librbd, diff_iterate_enter, ictx, ictx->name.c_str(),
+               ictx->snap_name.c_str(), ictx->read_only, fromsnapname, ofs, len,
+               true, true);
+    int r = librbd::diff_iterate(ictx, fromsnapname, ofs, len, true, false, cb,
+                                 arg);
+    tracepoint(librbd, diff_iterate_exit, r);
+    return r;
+  }
+
+  int Image::diff_iterate2(const char *fromsnapname, uint64_t ofs, uint64_t len,
+                           bool include_parent, bool whole_object,
+                           int (*cb)(uint64_t, size_t, int, void *), void *arg)
+  {
+    ImageCtx *ictx = (ImageCtx *)ctx;
+    tracepoint(librbd, diff_iterate_enter, ictx, ictx->name.c_str(),
+              ictx->snap_name.c_str(), ictx->read_only, fromsnapname, ofs, len,
+              include_parent, whole_object);
+    int r = librbd::diff_iterate(ictx, fromsnapname, ofs, len, include_parent,
+                                whole_object, cb, arg);
     tracepoint(librbd, diff_iterate_exit, r);
     return r;
   }
@@ -1159,6 +1200,17 @@ extern "C" int rbd_get_features(rbd_image_t image, uint64_t *features)
   return r;
 }
 
+extern "C" int rbd_update_features(rbd_image_t image, uint64_t features,
+                                  uint8_t enabled)
+{
+  librbd::ImageCtx *ictx = reinterpret_cast<librbd::ImageCtx *>(image);
+  bool features_enabled = enabled != 0;
+  tracepoint(librbd, update_features_enter, ictx, features, features_enabled);
+  int r = librbd::update_features(ictx, features, features_enabled);
+  tracepoint(librbd, update_features_exit, r);
+  return r;
+}
+
 extern "C" int rbd_get_stripe_unit(rbd_image_t image, uint64_t *stripe_unit)
 {
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
@@ -1249,13 +1301,20 @@ extern "C" int rbd_is_exclusive_lock_owner(rbd_image_t image, int *is_owner)
   return r;
 }
 
+extern "C" int rbd_rebuild_object_map(rbd_image_t image,
+                                      librbd_progress_fn_t cb, void *cbdata)
+{
+  librbd::ImageCtx *ictx = reinterpret_cast<librbd::ImageCtx*>(image);
+  librbd::CProgressContext prog_ctx(cb, cbdata);
+  return librbd::rebuild_object_map(ictx, prog_ctx);
+}
+
 /* snapshots */
 extern "C" int rbd_snap_create(rbd_image_t image, const char *snap_name)
 {
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
   tracepoint(librbd, snap_create_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only, snap_name);
-  RWLock::RLocker owner_locker(ictx->owner_lock);
-  int r = librbd::snap_create(ictx, snap_name, true);
+  int r = librbd::snap_create(ictx, snap_name);
   tracepoint(librbd, snap_create_exit, r);
   return r;
 }
@@ -1606,8 +1665,27 @@ extern "C" int rbd_diff_iterate(rbd_image_t image,
 				void *arg)
 {
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
-  tracepoint(librbd, diff_iterate_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only, fromsnapname, ofs, len);
-  int r = librbd::diff_iterate(ictx, fromsnapname, ofs, len, cb, arg);
+  tracepoint(librbd, diff_iterate_enter, ictx, ictx->name.c_str(),
+             ictx->snap_name.c_str(), ictx->read_only, fromsnapname, ofs, len,
+             true, true);
+  int r = librbd::diff_iterate(ictx, fromsnapname, ofs, len, true, false, cb,
+                               arg);
+  tracepoint(librbd, diff_iterate_exit, r);
+  return r;
+}
+
+extern "C" int rbd_diff_iterate2(rbd_image_t image, const char *fromsnapname,
+                                uint64_t ofs, uint64_t len,
+                                uint8_t include_parent, uint8_t whole_object,
+                                int (*cb)(uint64_t, size_t, int, void *),
+                                void *arg)
+{
+  librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
+  tracepoint(librbd, diff_iterate_enter, ictx, ictx->name.c_str(),
+            ictx->snap_name.c_str(), ictx->read_only, fromsnapname, ofs, len,
+            include_parent != 0, whole_object != 0);
+  int r = librbd::diff_iterate(ictx, fromsnapname, ofs, len, include_parent,
+                              whole_object, cb, arg);
   tracepoint(librbd, diff_iterate_exit, r);
   return r;
 }

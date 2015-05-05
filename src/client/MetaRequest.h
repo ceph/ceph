@@ -54,6 +54,7 @@ public:
   MClientReply *reply;         // the reply
   bool kick;
   bool aborted;
+  bool success;
   
   // readdir result
   frag_t readdir_frag;
@@ -91,7 +92,7 @@ public:
     mds(-1), resend_mds(-1), send_to_auth(false), sent_on_mseq(0),
     num_fwd(0), retry_attempt(0),
     ref(1), reply(0), 
-    kick(false), aborted(false),
+    kick(false), aborted(false), success(false),
     readdir_offset(0), readdir_end(false), readdir_num(0),
     got_unsafe(false), item(this), unsafe_item(this),
     lock("MetaRequest lock"),

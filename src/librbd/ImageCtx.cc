@@ -1,6 +1,8 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 #include <errno.h>
+#include <boost/assign/list_of.hpp>
+#include <stddef.h>
 
 #include "common/ceph_context.h"
 #include "common/dout.h"
@@ -32,6 +34,8 @@ using librados::snap_t;
 using librados::IoCtx;
 
 namespace librbd {
+  const string ImageCtx::METADATA_CONF_PREFIX = "conf_";
+
   ImageCtx::ImageCtx(const string &image_name, const string &image_id,
 		     const char *snap, IoCtx& p, bool ro)
     : cct((CephContext*)p.cct()),
@@ -67,52 +71,11 @@ namespace librbd {
   {
     md_ctx.dup(p);
     data_ctx.dup(p);
+    if (snap)
+      snap_name = snap;
 
     memset(&header, 0, sizeof(header));
     memset(&layout, 0, sizeof(layout));
-
-    string pname = string("librbd-") + id + string("-") +
-      data_ctx.get_pool_name() + string("/") + name;
-    if (snap) {
-      snap_name = snap;
-      pname += "@";
-      pname += snap_name;
-    }
-    perf_start(pname);
-
-    if (cct->_conf->rbd_cache) {
-      Mutex::Locker l(cache_lock);
-      ldout(cct, 20) << "enabling caching..." << dendl;
-      writeback_handler = new LibrbdWriteback(this, cache_lock);
-
-      uint64_t init_max_dirty = cct->_conf->rbd_cache_max_dirty;
-      if (cct->_conf->rbd_cache_writethrough_until_flush)
-	init_max_dirty = 0;
-      ldout(cct, 20) << "Initial cache settings:"
-		     << " size=" << cct->_conf->rbd_cache_size
-		     << " num_objects=" << 10
-		     << " max_dirty=" << init_max_dirty
-		     << " target_dirty=" << cct->_conf->rbd_cache_target_dirty
-		     << " max_dirty_age="
-		     << cct->_conf->rbd_cache_max_dirty_age << dendl;
-
-      object_cacher = new ObjectCacher(cct, pname, *writeback_handler, cache_lock,
-				       NULL, NULL,
-				       cct->_conf->rbd_cache_size,
-				       10,  /* reset this in init */
-				       init_max_dirty,
-				       cct->_conf->rbd_cache_target_dirty,
-				       cct->_conf->rbd_cache_max_dirty_age,
-				       cct->_conf->rbd_cache_block_writes_upfront);
-      object_set = new ObjectCacher::ObjectSet(NULL, data_ctx.get_id(), 0);
-      object_set->return_enoent = true;
-      object_cacher->start();
-    }
-
-    if (cct->_conf->rbd_clone_copy_on_read) {
-      copyup_finisher = new Finisher(cct);
-      copyup_finisher->start();
-    }
   }
 
   ImageCtx::~ImageCtx() {
@@ -138,6 +101,15 @@ namespace librbd {
 
   int ImageCtx::init() {
     int r;
+    string pname = string("librbd-") + id + string("-") +
+      data_ctx.get_pool_name() + string("/") + name;
+    if (!snap_name.empty()) {
+      pname += "@";
+      pname += snap_name;
+    }
+
+    perf_start(pname);
+
     if (id.length()) {
       old_format = false;
     } else {
@@ -159,6 +131,7 @@ namespace librbd {
       }
 
       header_oid = header_name(id);
+      apply_metadata_confs();
       r = cls_client::get_immutable_metadata(&md_ctx, header_oid,
 					     &object_prefix, &order);
       if (r < 0) {
@@ -177,12 +150,57 @@ namespace librbd {
 
       init_layout();
     } else {
+      apply_metadata_confs();
       header_oid = old_header_name(name);
     }
 
-    md_config_t *conf = cct->_conf;
-    readahead.set_trigger_requests(conf->rbd_readahead_trigger_requests);
-    readahead.set_max_readahead_size(conf->rbd_readahead_max_bytes);
+    if (cache) {
+      Mutex::Locker l(cache_lock);
+      ldout(cct, 20) << "enabling caching..." << dendl;
+      writeback_handler = new LibrbdWriteback(this, cache_lock);
+
+      uint64_t init_max_dirty = cache_max_dirty;
+      if (cache_writethrough_until_flush)
+	init_max_dirty = 0;
+      ldout(cct, 20) << "Initial cache settings:"
+		     << " size=" << cache_size
+		     << " num_objects=" << 10
+		     << " max_dirty=" << init_max_dirty
+		     << " target_dirty=" << cache_target_dirty
+		     << " max_dirty_age="
+		     << cache_max_dirty_age << dendl;
+
+      object_cacher = new ObjectCacher(cct, pname, *writeback_handler, cache_lock,
+				       NULL, NULL,
+				       cache_size,
+				       10,  /* reset this in init */
+				       init_max_dirty,
+				       cache_target_dirty,
+				       cache_max_dirty_age,
+				       cache_block_writes_upfront);
+
+      // size object cache appropriately
+      uint64_t obj = cache_max_dirty_object;
+      if (!obj) {
+	obj = MIN(2000, MAX(10, cache_size / 100 / sizeof(ObjectCacher::Object)));
+      }
+      ldout(cct, 10) << " cache bytes " << cache_size
+	<< " -> about " << obj << " objects" << dendl;
+      object_cacher->set_max_objects(obj);
+
+      object_set = new ObjectCacher::ObjectSet(NULL, data_ctx.get_id(), 0);
+      object_set->return_enoent = true;
+      object_cacher->start();
+    }
+
+    if (clone_copy_on_read) {
+      copyup_finisher = new Finisher(cct);
+      copyup_finisher->start();
+    }
+
+    readahead.set_trigger_requests(readahead_trigger_requests);
+    readahead.set_max_readahead_size(readahead_max_bytes);
+
     return 0;
   }
 
@@ -214,18 +232,6 @@ namespace librbd {
       snprintf(format_string, len, "%s.%%016llx", object_prefix.c_str());
     }
 
-    // size object cache appropriately
-    if (object_cacher) {
-      uint64_t obj = cct->_conf->rbd_cache_max_dirty_object;
-      if (!obj) {
-        obj = cct->_conf->rbd_cache_size / (1ull << order);
-        obj = obj * 4 + 10;
-      }
-      ldout(cct, 10) << " cache bytes " << cct->_conf->rbd_cache_size << " order " << (int)order
-		     << " -> about " << obj << " objects" << dendl;
-      object_cacher->set_max_objects(obj);
-    }
-
     ldout(cct, 10) << "init_layout stripe_unit " << stripe_unit
 		   << " stripe_count " << stripe_count
 		   << " object_size " << layout.fl_object_size
@@ -237,34 +243,25 @@ namespace librbd {
   void ImageCtx::perf_start(string name) {
     PerfCountersBuilder plb(cct, name, l_librbd_first, l_librbd_last);
 
-    plb.add_u64_counter(l_librbd_rd, "rd");
-    plb.add_u64_counter(l_librbd_rd_bytes, "rd_bytes");
-    plb.add_time_avg(l_librbd_rd_latency, "rd_latency");
-    plb.add_u64_counter(l_librbd_wr, "wr");
-    plb.add_u64_counter(l_librbd_wr_bytes, "wr_bytes");
-    plb.add_time_avg(l_librbd_wr_latency, "wr_latency");
-    plb.add_u64_counter(l_librbd_discard, "discard");
-    plb.add_u64_counter(l_librbd_discard_bytes, "discard_bytes");
-    plb.add_time_avg(l_librbd_discard_latency, "discard_latency");
-    plb.add_u64_counter(l_librbd_flush, "flush");
-    plb.add_u64_counter(l_librbd_aio_rd, "aio_rd");
-    plb.add_u64_counter(l_librbd_aio_rd_bytes, "aio_rd_bytes");
-    plb.add_time_avg(l_librbd_aio_rd_latency, "aio_rd_latency");
-    plb.add_u64_counter(l_librbd_aio_wr, "aio_wr");
-    plb.add_u64_counter(l_librbd_aio_wr_bytes, "aio_wr_bytes");
-    plb.add_time_avg(l_librbd_aio_wr_latency, "aio_wr_latency");
-    plb.add_u64_counter(l_librbd_aio_discard, "aio_discard");
-    plb.add_u64_counter(l_librbd_aio_discard_bytes, "aio_discard_bytes");
-    plb.add_time_avg(l_librbd_aio_discard_latency, "aio_discard_latency");
-    plb.add_u64_counter(l_librbd_aio_flush, "aio_flush");
-    plb.add_time_avg(l_librbd_aio_flush_latency, "aio_flush_latency");
-    plb.add_u64_counter(l_librbd_snap_create, "snap_create");
-    plb.add_u64_counter(l_librbd_snap_remove, "snap_remove");
-    plb.add_u64_counter(l_librbd_snap_rollback, "snap_rollback");
-    plb.add_u64_counter(l_librbd_notify, "notify");
-    plb.add_u64_counter(l_librbd_resize, "resize");
-    plb.add_u64_counter(l_librbd_readahead, "readahead");
-    plb.add_u64_counter(l_librbd_readahead_bytes, "readahead_bytes");
+    plb.add_u64_counter(l_librbd_rd, "rd", "Reads");
+    plb.add_u64_counter(l_librbd_rd_bytes, "rd_bytes", "Data size in reads");
+    plb.add_time_avg(l_librbd_rd_latency, "rd_latency", "Latency of reads");
+    plb.add_u64_counter(l_librbd_wr, "wr", "Writes");
+    plb.add_u64_counter(l_librbd_wr_bytes, "wr_bytes", "Written data");
+    plb.add_time_avg(l_librbd_wr_latency, "wr_latency", "Write latency");
+    plb.add_u64_counter(l_librbd_discard, "discard", "Discards");
+    plb.add_u64_counter(l_librbd_discard_bytes, "discard_bytes", "Discarded data");
+    plb.add_time_avg(l_librbd_discard_latency, "discard_latency", "Discard latency");
+    plb.add_u64_counter(l_librbd_flush, "flush", "Flushes");
+    plb.add_u64_counter(l_librbd_aio_flush, "aio_flush", "Async flushes");
+    plb.add_time_avg(l_librbd_aio_flush_latency, "aio_flush_latency", "Latency of async flushes");
+    plb.add_u64_counter(l_librbd_snap_create, "snap_create", "Snap creations");
+    plb.add_u64_counter(l_librbd_snap_remove, "snap_remove", "Snap removals");
+    plb.add_u64_counter(l_librbd_snap_rollback, "snap_rollback", "Snap rollbacks");
+    plb.add_u64_counter(l_librbd_notify, "notify", "Updated header notifications");
+    plb.add_u64_counter(l_librbd_resize, "resize", "Resizes");
+    plb.add_u64_counter(l_librbd_readahead, "readahead", "Read ahead");
+    plb.add_u64_counter(l_librbd_readahead_bytes, "readahead_bytes", "Data size in read ahead");
 
     perfcounter = plb.create_perf_counters();
     cct->get_perfcounters_collection()->add(perfcounter);
@@ -285,9 +282,9 @@ namespace librbd {
     if (snap_id == LIBRADOS_SNAP_HEAD)
       return flags;
 
-    if (cct->_conf->rbd_balance_snap_reads)
+    if (balance_snap_reads)
       flags |= librados::OPERATION_BALANCE_READS;
-    else if (cct->_conf->rbd_localize_snap_reads)
+    else if (localize_snap_reads)
       flags |= librados::OPERATION_LOCALIZE_READS;
     return flags;
   }
@@ -419,15 +416,22 @@ namespace librbd {
   }
 
   void ImageCtx::add_snap(string in_snap_name, snap_t id, uint64_t in_size,
-			  uint64_t features, parent_info parent,
-			  uint8_t protection_status, uint64_t flags)
+			  parent_info parent, uint8_t protection_status,
+                          uint64_t flags)
   {
     assert(snap_lock.is_wlocked());
     snaps.push_back(id);
-    SnapInfo info(in_snap_name, in_size, features, parent, protection_status,
-		  flags);
+    SnapInfo info(in_snap_name, in_size, parent, protection_status, flags);
     snap_info.insert(pair<snap_t, SnapInfo>(id, info));
     snap_ids.insert(pair<string, snap_t>(in_snap_name, id));
+  }
+
+  void ImageCtx::rm_snap(string in_snap_name, snap_t id)
+  {
+    assert(snap_lock.is_wlocked());
+    snaps.erase(std::remove(snaps.begin(), snaps.end(), id), snaps.end());
+    snap_info.erase(id);
+    snap_ids.erase(in_snap_name);
   }
 
   uint64_t ImageCtx::get_image_size(snap_t in_snap_id) const
@@ -448,27 +452,10 @@ namespace librbd {
     return 0;
   }
 
-  int ImageCtx::get_features(snap_t in_snap_id, uint64_t *out_features) const
-  {
-    assert(snap_lock.is_locked());
-    if (in_snap_id == CEPH_NOSNAP) {
-      *out_features = features;
-      return 0;
-    }
-    const SnapInfo *info = get_snap_info(in_snap_id);
-    if (info) {
-      *out_features = info->features;
-      return 0;
-    }
-    return -ENOENT;
-  }
-
   bool ImageCtx::test_features(uint64_t test_features) const
   {
     RWLock::RLocker l(snap_lock);
-    uint64_t snap_features = 0;
-    get_features(snap_id, &snap_features);
-    return ((snap_features & test_features) == test_features);
+    return ((features & test_features) == test_features);
   }
 
   int ImageCtx::get_flags(librados::snap_t _snap_id, uint64_t *_flags) const
@@ -607,12 +594,12 @@ namespace librbd {
   }
 
   void ImageCtx::user_flushed() {
-    if (object_cacher && cct->_conf->rbd_cache_writethrough_until_flush) {
+    if (object_cacher && cache_writethrough_until_flush) {
       md_lock.get_read();
       bool flushed_before = flush_encountered;
       md_lock.put_read();
 
-      uint64_t max_dirty = cct->_conf->rbd_cache_max_dirty;
+      uint64_t max_dirty = cache_max_dirty;
       if (!flushed_before && max_dirty > 0) {
 	md_lock.get_write();
 	flush_encountered = true;
@@ -802,5 +789,115 @@ namespace librbd {
     while (!async_requests.empty()) {
       async_requests_cond.Wait(async_ops_lock);
     }
+  }
+
+  bool ImageCtx::_filter_metadata_confs(const string &prefix, map<string, bool> &configs,
+                                        map<string, bufferlist> &pairs, map<string, bufferlist> *res) {
+    size_t conf_prefix_len = prefix.size();
+
+    string start = prefix;
+    for (map<string, bufferlist>::iterator it = pairs.begin(); it != pairs.end(); ++it) {
+      if (it->first.size() <= conf_prefix_len || it->first.compare(0, conf_prefix_len, prefix))
+        return false;
+
+      string key = it->first.substr(conf_prefix_len, it->first.size() - conf_prefix_len);
+      for (map<string, bool>::iterator cit = configs.begin();
+           cit != configs.end(); ++cit) {
+        if (!key.compare(cit->first)) {
+          cit->second = true;
+          res->insert(make_pair(key, it->second));
+          break;
+        }
+      }
+    }
+    return true;
+  }
+
+  void ImageCtx::apply_metadata_confs() {
+    ldout(cct, 20) << __func__ << dendl;
+    static uint64_t max_conf_items = 128;
+    std::map<string, bool> configs = boost::assign::map_list_of(
+        "rbd_cache", false)(
+        "rbd_cache_writethrough_until_flush", false)(
+        "rbd_cache_size", false)(
+        "rbd_cache_max_dirty", false)(
+        "rbd_cache_target_dirty", false)(
+        "rbd_cache_max_dirty_age", false)(
+        "rbd_cache_max_dirty_object", false)(
+        "rbd_cache_block_writes_upfront", false)(
+        "rbd_concurrent_management_ops", false)(
+        "rbd_balance_snap_reads", false)(
+        "rbd_localize_snap_reads", false)(
+        "rbd_balance_parent_reads", false)(
+        "rbd_localize_parent_reads", false)(
+        "rbd_readahead_trigger_requests", false)(
+        "rbd_readahead_max_bytes", false)(
+        "rbd_readahead_disable_after_bytes", false)(
+        "rbd_clone_copy_on_read", false)(
+        "rbd_blacklist_on_break_lock", false)(
+        "rbd_blacklist_expire_seconds", false)(
+        "rbd_request_timed_out_seconds", false);
+
+    string start = METADATA_CONF_PREFIX;
+    int r = 0, j = 0;
+    md_config_t local_config_t;
+
+    bool retrieve_metadata = !old_format;
+    while (retrieve_metadata) {
+      map<string, bufferlist> pairs, res;
+      r = cls_client::metadata_list(&md_ctx, header_oid, start, max_conf_items,
+                                    &pairs);
+      if (r < 0) {
+        lderr(cct) << __func__ << " couldn't list conf metadatas: " << r
+                   << dendl;
+        break;
+      }
+      if (pairs.empty()) {
+        break;
+      }
+
+      retrieve_metadata = _filter_metadata_confs(METADATA_CONF_PREFIX, configs,
+                                                 pairs, &res);
+      for (map<string, bufferlist>::iterator it = res.begin();
+           it != res.end(); ++it) {
+        j = local_config_t.set_val(it->first.c_str(), it->second.c_str());
+        if (j < 0) {
+          lderr(cct) << __func__ << " failed to set config " << it->first
+                     << " with value " << it->second.c_str() << ": " << j
+                     << dendl;
+        }
+        break;
+      }
+      start = pairs.rbegin()->first;
+    }
+
+#define ASSIGN_OPTION(config)                                                  \
+    do {                                                                       \
+      if (configs[#config])                                                    \
+        config = local_config_t.rbd_##config;                                  \
+      else                                                                     \
+        config = cct->_conf->rbd_##config;                                     \
+    } while (0);
+
+    ASSIGN_OPTION(cache);
+    ASSIGN_OPTION(cache_writethrough_until_flush);
+    ASSIGN_OPTION(cache_size);
+    ASSIGN_OPTION(cache_max_dirty);
+    ASSIGN_OPTION(cache_target_dirty);
+    ASSIGN_OPTION(cache_max_dirty_age);
+    ASSIGN_OPTION(cache_max_dirty_object);
+    ASSIGN_OPTION(cache_block_writes_upfront);
+    ASSIGN_OPTION(concurrent_management_ops);
+    ASSIGN_OPTION(balance_snap_reads);
+    ASSIGN_OPTION(localize_snap_reads);
+    ASSIGN_OPTION(balance_parent_reads);
+    ASSIGN_OPTION(localize_parent_reads);
+    ASSIGN_OPTION(readahead_trigger_requests);
+    ASSIGN_OPTION(readahead_max_bytes);
+    ASSIGN_OPTION(readahead_disable_after_bytes);
+    ASSIGN_OPTION(clone_copy_on_read);
+    ASSIGN_OPTION(blacklist_on_break_lock);
+    ASSIGN_OPTION(blacklist_expire_seconds);
+    ASSIGN_OPTION(request_timed_out_seconds);
   }
 }

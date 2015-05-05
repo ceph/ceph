@@ -21,9 +21,10 @@
            <path> <image-name>                  import image from file (dest
                                                 defaults as the filename part
                                                 of file). "-" for stdin
-    diff <image-name> [--from-snap <snap-name>] print extents that differ since
+    diff [--from-snap <snap-name>] [--object-extents] <image-name>
+                                                print extents that differ since
                                                 a previous snap, or image creation
-    export-diff <image-name> [--from-snap <snap-name>] <path>
+    export-diff [--from-snap <snap-name>] [--object-extents] <image-name> <path>
                                                 export an incremental diff to
                                                 path, or "-" for stdout
     merge-diff <diff1> <diff2> <path>           merge <diff1> and <diff2> into
@@ -38,6 +39,7 @@
     image-meta get <image-name> <key>           image metadata get the value associated with the key
     image-meta set <image-name> <key> <value>   image metadata set key with value
     image-meta remove <image-name> <key>        image metadata remove the key and value associated
+    object-map rebuild <image-name>             rebuild an invalid object map
     snap ls <image-name>                        dump list of image snapshots
     snap create <snap-name>                     create a snapshot
     snap rollback <snap-name>                   rollback image to snapshot
@@ -49,10 +51,12 @@
     status <image-name>                         show the status of this image
     map <image-name>                            map image to a block device
                                                 using the kernel
-    unmap <device>                              unmap a rbd device that was
+    unmap <image-name> | <device>               unmap a rbd device that was
                                                 mapped by the kernel
     showmapped                                  show the rbd images mapped
                                                 by the kernel
+    feature disable <image-name> <feature>      disable the specified image feature
+    feature enable <image-name> <feature>       enable the specified image feature
     lock list <image-name>                      show locks held on an image
     lock add <image-name> <id> [--shared <tag>] take a lock called id on an image
     lock remove <image-name> <id> <locker>      release a lock on an image
@@ -76,11 +80,10 @@
     --order <bits>                     the object size in bits; object size will be
                                        (1 << order) bytes. Default is 22 (4 MB).
     --image-format <format-number>     format to use when creating an image
-                                       format 1 is the original format (default)
-                                       format 2 supports cloning
-    --image-features <features>        optional format 2 features to enable
-                                       +1 layering support, +2 striping v2,
-                                       +4 exclusive lock, +8 object map
+                                       format 1 is the original format
+                                       format 2 supports cloning (default)
+    --image-feature <feature>          optional format 2 feature to enable.
+                                       use multiple times to enable multiple features
     --image-shared                     image will be used concurrently (disables
                                        RBD exclusive lock and dependent features)
     --stripe-unit <size-in-bytes>      size (in bytes) of a block of data
@@ -95,3 +98,9 @@
     -o, --options <map-options>        options to use when mapping an image
     --read-only                        set device readonly when mapping image
     --allow-shrink                     allow shrinking of an image when resizing
+  
+  Supported image features:
+    layering (+), striping (+), exclusive-lock (*), object-map (*), fast-diff (*)
+  
+    (*) supports enabling/disabling on existing images
+    (+) enabled by default for new images if features are not specified

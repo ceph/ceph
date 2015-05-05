@@ -1161,7 +1161,7 @@ bool Locker::_rdlock_kick(SimpleLock *lock, bool as_anon)
 	CInode *in = static_cast<CInode*>(lock->get_parent());
 	if (lock->get_state() == LOCK_EXCL &&
 	    in->get_target_loner() >= 0 &&
-	    !as_anon)   // as_anon => caller wants SYNC, not XSYN
+	    !in->is_dir() && !as_anon)   // as_anon => caller wants SYNC, not XSYN
 	  file_xsyn(lock);
 	else
 	  simple_sync(lock);
@@ -1519,8 +1519,9 @@ bool Locker::xlock_start(SimpleLock *lock, MDRequestRef& mut)
 	}
       }
 
-      if (!lock->is_stable() && !(lock->get_state() == LOCK_XLOCKDONE &&
-				  lock->get_xlock_by_client() == client))
+      if (!lock->is_stable() && (lock->get_state() != LOCK_XLOCKDONE ||
+				 lock->get_xlock_by_client() != client ||
+				 lock->is_waiter_for(SimpleLock::WAIT_STABLE)))
 	break;
 
       if (lock->get_state() == LOCK_LOCK || lock->get_state() == LOCK_XLOCKDONE) {
@@ -2382,18 +2383,15 @@ void Locker::adjust_cap_wanted(Capability *cap, int wanted, int issue_seq)
 
 
 
-void Locker::_do_null_snapflush(CInode *head_in, client_t client, snapid_t follows)
+void Locker::_do_null_snapflush(CInode *head_in, client_t client)
 {
-  dout(10) << "_do_null_snapflish client." << client << " follows " << follows << " on " << *head_in << dendl;
+  dout(10) << "_do_null_snapflush client." << client << " on " << *head_in << dendl;
   compact_map<snapid_t, set<client_t> >::iterator p = head_in->client_need_snapflush.begin();
   while (p != head_in->client_need_snapflush.end()) {
     snapid_t snapid = p->first;
     set<client_t>& clients = p->second;
     ++p;  // be careful, q loop below depends on this
 
-    // snapid is the snap inode's ->last
-    if (follows > snapid)
-      break;
     if (clients.count(client)) {
       dout(10) << " doing async NULL snapflush on " << snapid << " from client." << client << dendl;
       CInode *sin = mdcache->get_inode(head_in->ino(), snapid);
@@ -2527,7 +2525,8 @@ void Locker::handle_client_caps(MClientCaps *m)
 	      << " client." << client << " on " << *in << dendl;
 
       // this cap now follows a later snap (i.e. the one initiating this flush, or later)
-      cap->client_follows = MAX(snap, (snapid_t)(in->first + 1));
+      if (in == head_in)
+	cap->client_follows = snap < CEPH_NOSNAP ? snap : realm->get_newest_seq();
    
       // we can prepare the ack now, since this FLUSHEDSNAP is independent of any
       // other cap ops.  (except possibly duplicate FLUSHSNAP requests, but worst
@@ -2587,7 +2586,7 @@ void Locker::handle_client_caps(MClientCaps *m)
     //  update/release).
     if (!head_in->client_need_snapflush.empty()) {
       if ((cap->issued() & CEPH_CAP_ANY_FILE_WR) == 0) {
-	_do_null_snapflush(head_in, client, follows);
+	_do_null_snapflush(head_in, client);
       } else {
 	dout(10) << " revocation in progress, not making any conclusions about null snapflushes" << dendl;
       }
@@ -2721,6 +2720,12 @@ void Locker::process_request_cap_release(MDRequestRef& mdr, client_t client, con
     caps &= cap->issued();
   }
   cap->confirm_receipt(seq, caps);
+
+  if (!in->client_need_snapflush.empty() &&
+      (cap->issued() & CEPH_CAP_ANY_FILE_WR) == 0) {
+    _do_null_snapflush(in, client);
+  }
+
   adjust_cap_wanted(cap, wanted, issue_seq);
   
   if (mdr)
@@ -3225,7 +3230,7 @@ void Locker::remove_client_cap(CInode *in, client_t client)
 {
   // clean out any pending snapflush state
   if (!in->client_need_snapflush.empty())
-    _do_null_snapflush(in, client, 0);
+    _do_null_snapflush(in, client);
 
   in->remove_client_cap(client);
 

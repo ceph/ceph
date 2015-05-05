@@ -670,6 +670,51 @@ TEST_F(LibRadosTwoPoolsPP, Whiteout) {
   }
 }
 
+TEST_F(LibRadosTwoPoolsPP, WhiteoutDeleteCreate) {
+  // configure cache
+  bufferlist inbl;
+  ASSERT_EQ(0, cluster.mon_command(
+    "{\"prefix\": \"osd tier add\", \"pool\": \"" + pool_name +
+    "\", \"tierpool\": \"" + cache_pool_name +
+    "\", \"force_nonempty\": \"--force-nonempty\" }",
+    inbl, NULL, NULL));
+  ASSERT_EQ(0, cluster.mon_command(
+    "{\"prefix\": \"osd tier set-overlay\", \"pool\": \"" + pool_name +
+    "\", \"overlaypool\": \"" + cache_pool_name + "\"}",
+    inbl, NULL, NULL));
+  ASSERT_EQ(0, cluster.mon_command(
+    "{\"prefix\": \"osd tier cache-mode\", \"pool\": \"" + cache_pool_name +
+    "\", \"mode\": \"writeback\"}",
+    inbl, NULL, NULL));
+
+  // wait for maps to settle
+  cluster.wait_for_latest_osdmap();
+
+  // create an object
+  {
+    bufferlist bl;
+    bl.append("foo");
+    ASSERT_EQ(0, ioctx.write_full("foo", bl));
+  }
+
+  // do delete + create operation
+  {
+    ObjectWriteOperation op;
+    op.remove();
+    bufferlist bl;
+    bl.append("bar");
+    op.write_full(bl);
+    ASSERT_EQ(0, ioctx.operate("foo", &op));
+  }
+
+  // verify it still "exists" (w/ new content)
+  {
+    bufferlist bl;
+    ASSERT_EQ(1, ioctx.read("foo", bl, 1, 0));
+    ASSERT_EQ('b', bl[0]);
+  }
+}
+
 TEST_F(LibRadosTwoPoolsPP, Evict) {
   // create object
   {
@@ -741,10 +786,10 @@ TEST_F(LibRadosTwoPoolsPP, Evict) {
     op.cache_evict();
     librados::AioCompletion *completion = cluster.aio_create_completion();
     ASSERT_EQ(0, cache_ioctx.aio_operate(
-      "fooberdoodle", completion, &op,
+      "foo", completion, &op,
       librados::OPERATION_IGNORE_CACHE, NULL));
     completion->wait_for_safe();
-    ASSERT_EQ(-ENOENT, completion->get_return_value());
+    ASSERT_EQ(0, completion->get_return_value());
     completion->release();
   }
   {
@@ -2943,10 +2988,10 @@ TEST_F(LibRadosTwoPoolsECPP, Evict) {
     op.cache_evict();
     librados::AioCompletion *completion = cluster.aio_create_completion();
     ASSERT_EQ(0, cache_ioctx.aio_operate(
-      "fooberdoodle", completion, &op,
+      "foo", completion, &op,
       librados::OPERATION_IGNORE_CACHE, NULL));
     completion->wait_for_safe();
-    ASSERT_EQ(-ENOENT, completion->get_return_value());
+    ASSERT_EQ(0, completion->get_return_value());
     completion->release();
   }
   {
@@ -4388,6 +4433,57 @@ TEST_F(LibRadosTwoPoolsECPP, ProxyRead) {
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier remove\", \"pool\": \"" + pool_name +
     "\", \"tierpool\": \"" + cache_pool_name + "\"}",
+    inbl, NULL, NULL));
+
+  // wait for maps to settle before next test
+  cluster.wait_for_latest_osdmap();
+}
+
+//Make ecpool as cache pool; no-ecpool as data pool
+//Judge promote object which has omap from no-ecpool into ecpool.
+TEST_F(LibRadosTwoPoolsECPP, OmapOperation) {
+  // create object
+  {
+    bufferlist bl;
+    bl.append("hi there");
+    ASSERT_EQ(0, cache_ioctx.omap_set_header("foo", bl));
+  }
+
+  // configure cache.
+  bufferlist inbl;
+  ASSERT_EQ(0, cluster.mon_command(
+    "{\"prefix\": \"osd tier add\", \"pool\": \"" + cache_pool_name +
+    "\", \"tierpool\": \"" + pool_name +
+    "\", \"force_nonempty\": \"--force-nonempty\" }",
+    inbl, NULL, NULL));
+  ASSERT_EQ(0, cluster.mon_command(
+    "{\"prefix\": \"osd tier set-overlay\", \"pool\": \"" + cache_pool_name +
+    "\", \"overlaypool\": \"" + pool_name + "\"}",
+    inbl, NULL, NULL));
+  ASSERT_EQ(0, cluster.mon_command(
+    "{\"prefix\": \"osd tier cache-mode\", \"pool\": \"" + pool_name +
+    "\", \"mode\": \"writeback\"}",
+    inbl, NULL, NULL));
+
+
+  // wait for maps to settle
+  cluster.wait_for_latest_osdmap();
+
+  {
+    bufferlist got;
+    ObjectReadOperation o;
+    o.omap_get_header(&got, NULL);
+    ASSERT_EQ(-EOPNOTSUPP, ioctx.operate("foo", &o, NULL));
+
+  }
+  // tear down tiers
+  ASSERT_EQ(0, cluster.mon_command(
+    "{\"prefix\": \"osd tier remove-overlay\", \"pool\": \"" + cache_pool_name +
+    "\"}",
+    inbl, NULL, NULL));
+  ASSERT_EQ(0, cluster.mon_command(
+    "{\"prefix\": \"osd tier remove\", \"pool\": \"" + cache_pool_name +
+    "\", \"tierpool\": \"" + pool_name + "\"}",
     inbl, NULL, NULL));
 
   // wait for maps to settle before next test

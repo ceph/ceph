@@ -999,18 +999,14 @@ void RGWListBuckets::execute()
   do {
     RGWUserBuckets buckets;
     uint64_t read_count;
-    if (limit > 0)
+    if (limit >= 0) {
       read_count = min(limit - total_count, (uint64_t)max_buckets);
-    else
+    } else {
       read_count = max_buckets;
+    }
 
     ret = rgw_read_user_buckets(store, s->user.user_id, buckets,
-                                marker, read_count, should_get_stats());
-
-    if (!started) {
-      send_response_begin(buckets.count() > 0);
-      started = true;
-    }
+                                marker, read_count, should_get_stats(), 0);
 
     if (ret < 0) {
       /* hmm.. something wrong here.. the user was authenticated, so it
@@ -1029,10 +1025,14 @@ void RGWListBuckets::execute()
       marker = iter->first;
     }
     buckets_count += m.size();
-
     total_count += m.size();
 
-    done = (m.size() < read_count || (limit > 0 && total_count == limit));
+    done = (m.size() < read_count || (limit >= 0 && total_count >= (uint64_t)limit));
+
+    if (!started) {
+      send_response_begin(buckets.count() > 0);
+      started = true;
+    }
 
     if (!m.empty()) {
       send_response_data(buckets);
@@ -1218,7 +1218,7 @@ void RGWListBucket::execute()
     ret = store->update_containers_stats(m);
     if (ret > 0) {
       bucket = m.begin()->second;
-    } 
+    }
   }
 
   RGWRados::Bucket target(store, s->bucket);
@@ -1227,6 +1227,7 @@ void RGWListBucket::execute()
   list_op.params.prefix = prefix;
   list_op.params.delim = delimiter;
   list_op.params.marker = marker;
+  list_op.params.end_marker = end_marker;
   list_op.params.list_versions = list_versions;
 
   ret = list_op.list_objects(max, &objs, &common_prefixes, &is_truncated);
@@ -1409,10 +1410,11 @@ void RGWCreateBucket::execute()
     /* bucket already existed, might have raced with another bucket creation, or
      * might be partial bucket creation that never completed. Read existing bucket
      * info, verify that the reported bucket owner is the current user.
-     * If all is ok then update the user's list of buckets
+     * If all is ok then update the user's list of buckets.
+     * Otherwise inform client about a name conflict.
      */
     if (info.owner.compare(s->user.user_id) != 0) {
-      ret = -ERR_BUCKET_EXISTS;
+      ret = -EEXIST;
       return;
     }
     s->bucket = info.bucket;
@@ -1424,10 +1426,9 @@ void RGWCreateBucket::execute()
     if (ret < 0) {
       ldout(s->cct, 0) << "WARNING: failed to unlink bucket: ret=" << ret << dendl;
     }
-  }
-
-  if (ret == -EEXIST)
+  } else if (ret == -EEXIST || (ret == 0 && existed)) {
     ret = -ERR_BUCKET_EXISTS;
+  }
 }
 
 int RGWDeleteBucket::verify_permission()
@@ -1968,6 +1969,12 @@ void RGWPostObj::execute()
     goto done;
   }
 
+  ret = store->check_quota(s->bucket_owner.get_id(), s->bucket,
+                           user_quota, bucket_quota, s->content_length);
+  if (ret < 0) {
+    goto done;
+  }
+
   processor = select_processor(*static_cast<RGWObjectCtx *>(s->obj_ctx));
 
   ret = processor->prepare(store, NULL);
@@ -2002,6 +2009,12 @@ void RGWPostObj::execute()
   }
 
   s->obj_size = ofs;
+
+  ret = store->check_quota(s->bucket_owner.get_id(), s->bucket,
+                           user_quota, bucket_quota, s->obj_size);
+  if (ret < 0) {
+    goto done;
+  }
 
   hash.Final(m);
   buf_to_hex(m, CEPH_CRYPTO_MD5_DIGESTSIZE, calc_md5);
@@ -2402,12 +2415,13 @@ void RGWCopyObj::execute()
                         src_obj,
                         dest_bucket_info,
                         src_bucket_info,
+                        &src_mtime,
                         &mtime,
                         mod_ptr,
                         unmod_ptr,
                         if_match,
                         if_nomatch,
-                        replace_attrs,
+                        attrs_mod,
                         attrs, RGW_OBJ_CATEGORY_MAIN,
                         olh_epoch,
                         (version_id.empty() ? NULL : &version_id),
@@ -2792,8 +2806,12 @@ static int get_multipart_info(RGWRados *store, struct req_state *s, string& meta
   obj.set_in_extra_data(true);
 
   int ret = get_obj_attrs(store, s, obj, attrs);
-  if (ret < 0)
+  if (ret < 0) {
+    if (ret == -ENOENT) {
+      return -ERR_NO_SUCH_UPLOAD;
+    }
     return ret;
+  }
 
   if (policy) {
     for (iter = attrs.begin(); iter != attrs.end(); ++iter) {
@@ -2835,7 +2853,7 @@ static int list_multipart_parts(RGWRados *store, struct req_state *s,
   int ret;
 
   parts.clear();
-  
+
   if (sorted_omap) {
     string p;
     p = "part.";
@@ -2954,24 +2972,24 @@ void RGWCompleteMultipart::execute()
     return;
   }
 
-  if (!data) {
-    ret = -EINVAL;
+  if (!data || !len) {
+    ret = -ERR_MALFORMED_XML;
     return;
   }
 
   if (!parser.init()) {
-    ret = -EINVAL;
+    ret = -EIO;
     return;
   }
 
   if (!parser.parse(data, len, 1)) {
-    ret = -EINVAL;
+    ret = -ERR_MALFORMED_XML;
     return;
   }
 
   parts = static_cast<RGWMultiCompleteUpload *>(parser.find_first("CompleteMultipartUpload"));
-  if (!parts) {
-    ret = -EINVAL;
+  if (!parts || parts->parts.size() == 0) {
+    ret = -ERR_MALFORMED_XML;
     return;
   }
 

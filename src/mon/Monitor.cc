@@ -24,7 +24,6 @@
 
 #include "osd/OSDMap.h"
 
-#include "MonitorStore.h"
 #include "MonitorDBStore.h"
 
 #include "msg/Messenger.h"
@@ -2253,26 +2252,6 @@ health_status_t Monitor::get_health(list<string>& status,
 
   health_monitor->get_health(f, summary, (detailbl ? &detail : NULL));
 
-  if (f)
-    f->open_array_section("summary");
-  health_status_t overall = HEALTH_OK;
-  if (!summary.empty()) {
-    while (!summary.empty()) {
-      if (overall > summary.front().first)
-	overall = summary.front().first;
-      status.push_back(summary.front().second);
-      if (f) {
-        f->open_object_section("item");
-        f->dump_stream("severity") <<  summary.front().first;
-        f->dump_string("summary", summary.front().second);
-        f->close_section();
-      }
-      summary.pop_front();
-    }
-  }
-  if (f)
-    f->close_section();
-
   if (f) {
     f->open_object_section("timechecks");
     f->dump_unsigned("epoch", get_epoch());
@@ -2281,6 +2260,7 @@ health_status_t Monitor::get_health(list<string>& status,
       << ((timecheck_round%2) ? "on-going" : "finished");
   }
 
+  health_status_t overall = HEALTH_OK;
   if (!timecheck_skews.empty()) {
     list<string> warns;
     if (f)
@@ -2327,9 +2307,29 @@ health_status_t Monitor::get_health(list<string>& status,
           ss << ",";
       }
       status.push_back(ss.str());
+      summary.push_back(make_pair(HEALTH_WARN, "Monitor clock skew detected "));
     }
     if (f)
       f->close_section();
+  }
+  if (f)
+    f->close_section();
+
+  if (f)
+    f->open_array_section("summary");
+  if (!summary.empty()) {
+    while (!summary.empty()) {
+      if (overall > summary.front().first)
+	overall = summary.front().first;
+      status.push_back(summary.front().second);
+      if (f) {
+        f->open_object_section("item");
+        f->dump_stream("severity") <<  summary.front().first;
+        f->dump_string("summary", summary.front().second);
+        f->close_section();
+      }
+      summary.pop_front();
+    }
   }
   if (f)
     f->close_section();
@@ -4498,8 +4498,11 @@ int Monitor::mkfs(bufferlist& osdmapbl)
   if (is_keyring_required()) {
     KeyRing keyring;
     string keyring_filename;
-    if (!ceph_resolve_file_search(g_conf->keyring, keyring_filename)) {
-      derr << "unable to find a keyring file on " << g_conf->keyring << dendl;
+
+    r = ceph_resolve_file_search(g_conf->keyring, keyring_filename);
+    if (r) {
+      derr << "unable to find a keyring file on " << g_conf->keyring
+	   << ": " << cpp_strerror(r) << dendl;
       if (g_conf->key != "") {
 	string keyring_plaintext = "[mon.]\n\tkey = " + g_conf->key +
 	  "\n\tcaps mon = \"allow *\"\n";

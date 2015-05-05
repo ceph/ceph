@@ -96,8 +96,8 @@ void Server::create_logger()
       "Slave requests", "hsr");
   plb.add_u64_counter(l_mdss_handle_client_session, "handle_client_session",
       "Client session messages", "hcs");
-  plb.add_u64_counter(l_mdss_dispatch_client_request, "dispatch_client_request");
-  plb.add_u64_counter(l_mdss_dispatch_slave_request, "dispatch_server_request");
+  plb.add_u64_counter(l_mdss_dispatch_client_request, "dispatch_client_request", "Client requests dispatched");
+  plb.add_u64_counter(l_mdss_dispatch_slave_request, "dispatch_server_request", "Server requests dispatched");
   logger = plb.create_perf_counters();
   g_ceph_context->get_perfcounters_collection()->add(logger);
 }
@@ -118,6 +118,12 @@ void Server::dispatch(Message *m)
     if (m->get_type() == CEPH_MSG_CLIENT_REQUEST &&
 	(mds->is_reconnect() || mds->get_want_state() == CEPH_MDS_STATE_RECONNECT)) {
       MClientRequest *req = static_cast<MClientRequest*>(m);
+      Session *session = get_session(req);
+      if (!session || session->is_closed()) {
+	dout(5) << "session is closed, dropping " << req->get_reqid() << dendl;
+	req->put();
+	return;
+      }
       bool queue_replay = false;
       if (req->is_replay()) {
 	dout(3) << "queuing replayed op" << dendl;
@@ -126,8 +132,7 @@ void Server::dispatch(Message *m)
 	// process completed request in clientreplay stage. The completed request
 	// might have created new file/directorie. This guarantees MDS sends a reply
 	// to client before other request modifies the new file/directorie.
-	Session *session = get_session(req);
-	if (session && session->have_completed_request(req->get_reqid().tid, NULL)) {
+	if (session->have_completed_request(req->get_reqid().tid, NULL)) {
 	  dout(3) << "queuing completed op" << dendl;
 	  queue_replay = true;
 	}
@@ -690,7 +695,7 @@ void Server::reconnect_clients()
 void Server::handle_client_reconnect(MClientReconnect *m)
 {
   dout(7) << "handle_client_reconnect " << m->get_source() << dendl;
-  int from = m->get_source().num();
+  client_t from = m->get_source().num();
   Session *session = get_session(m);
   assert(session);
 
@@ -1076,6 +1081,9 @@ void Server::reply_client_request(MDRequestRef& mdr, MClientReply *reply)
   if (req->may_write() && mdr->session && reply->get_result() == 0) {
     inodeno_t created = mdr->alloc_ino ? mdr->alloc_ino : mdr->used_prealloc_ino;
     mdr->session->add_completed_request(mdr->reqid.tid, created);
+    if (mdr->ls) {
+      mdr->ls->touched_sessions.insert(mdr->session->info.inst.name);
+    }
   }
 
   // give any preallocated inos to the session
@@ -1146,9 +1154,10 @@ void Server::reply_client_request(MDRequestRef& mdr, MClientReply *reply)
 
   // take a closer look at tracei, if it happens to be a remote link
   if (tracei && 
-      tracei->get_parent_dn() &&
-      tracei->get_parent_dn()->get_projected_linkage()->is_remote())
-    mdcache->eval_remote(tracei->get_parent_dn());
+      tracedn &&
+      tracedn->get_projected_linkage()->is_remote()) {
+    mdcache->eval_remote(tracedn);
+  }
 }
 
 
@@ -1343,7 +1352,27 @@ void Server::handle_client_request(MClientRequest *req)
   if (req->get_oldest_client_tid() > 0) {
     dout(15) << " oldest_client_tid=" << req->get_oldest_client_tid() << dendl;
     assert(session);
-    session->trim_completed_requests(req->get_oldest_client_tid());
+    if (session->trim_completed_requests(req->get_oldest_client_tid())) {
+      // Sessions 'completed_requests' was dirtied, mark it to be
+      // potentially flushed at segment expiry.
+      mdlog->get_current_segment()->touched_sessions.insert(session->info.inst.name);
+
+      if (session->get_num_trim_requests_warnings() > 0 &&
+	  session->get_num_completed_requests() * 2 < g_conf->mds_max_completed_requests)
+	session->reset_num_trim_requests_warnings();
+    } else {
+      if (session->get_num_completed_requests() >=
+	  (g_conf->mds_max_completed_requests << session->get_num_trim_requests_warnings())) {
+	session->inc_num_trim_requests_warnings();
+	stringstream ss;
+	ss << "client." << session->get_client() << " does not advance its oldest_client_tid ("
+	   << req->get_oldest_client_tid() << "), "
+	   << session->get_num_completed_requests()
+	   << " completed requests recorded in session\n";
+	mds->clog->warn() << ss.str();
+	dout(20) << __func__ << " " << ss.str() << dendl;
+      }
+    }
   }
 
   // register + dispatch
@@ -1525,7 +1554,9 @@ void Server::dispatch_client_request(MDRequestRef& mdr)
   case CEPH_MDS_OP_RMSNAP:
     handle_client_rmsnap(mdr);
     break;
-
+  case CEPH_MDS_OP_RENAMESNAP:
+    handle_client_renamesnap(mdr);
+    break;
 
   default:
     dout(1) << " unknown client op " << req->get_op() << dendl;
@@ -2271,8 +2302,10 @@ void Server::apply_allocated_inos(MDRequestRef& mdr)
   }
   if (mdr->prealloc_inos.size()) {
     assert(session);
-    session->pending_prealloc_inos.subtract(mdr->prealloc_inos);
-    session->info.prealloc_inos.insert(mdr->prealloc_inos);
+    if (!mdr->killed) {
+      session->pending_prealloc_inos.subtract(mdr->prealloc_inos);
+      session->info.prealloc_inos.insert(mdr->prealloc_inos);
+    }
     mds->sessionmap.mark_dirty(session);
     mds->inotable->apply_alloc_ids(mdr->prealloc_inos);
   }
@@ -5347,8 +5380,11 @@ void Server::_unlink_local_finish(MDRequestRef& mdr,
   dn->get_dir()->try_remove_unlinked_dn(dn);
 
   // clean up?
-  if (straydn)
-    mdcache->eval_stray(straydn);
+  if (straydn) {
+    // Tip off the MDCache that this dentry is a stray that
+    // might be elegible for purge.
+    mdcache->notify_stray(straydn);
+  }
 }
 
 bool Server::_rmdir_prepare_witness(MDRequestRef& mdr, mds_rank_t who, CDentry *dn, CDentry *straydn)
@@ -6182,8 +6218,9 @@ void Server::_rename_finish(MDRequestRef& mdr, CDentry *srcdn, CDentry *destdn, 
     mds->locker->eval(in, CEPH_CAP_LOCKS, true);
 
   // clean up?
-  if (straydn) 
-    mdcache->eval_stray(straydn);
+  if (straydn) {
+    mdcache->notify_stray(straydn);
+  }
 }
 
 
@@ -6691,6 +6728,20 @@ void Server::_rename_apply(MDRequestRef& mdr, CDentry *srcdn, CDentry *destdn, C
     } else {
       // FIXME: fix up snaprealm!
     }
+  }
+
+  if (srcdn->get_dir()->inode->is_stray() &&
+      srcdn->get_dir()->inode->get_stray_owner() == mds->whoami) {
+    // A reintegration event or a migration away from me
+    dout(20) << __func__ << ": src dentry was a stray, updating stats" << dendl;
+    mdcache->notify_stray_removed();
+  }
+
+  if (destdn->get_dir()->inode->is_stray() &&
+      destdn->get_dir()->inode->get_stray_owner() == mds->whoami) {
+    // A stray migration (to me)
+    dout(20) << __func__ << ": dst dentry was a stray, updating stats" << dendl;
+    mdcache->notify_stray_created();
   }
 
   // src
@@ -7893,6 +7944,141 @@ void Server::_rmsnap_finish(MDRequestRef& mdr, CInode *diri, snapid_t snapid)
     diri->purge_stale_snap_data(diri->snaprealm->get_snaps());
 }
 
+struct C_MDS_renamesnap_finish : public MDSInternalContext {
+  MDRequestRef mdr;
+  CInode *diri;
+  snapid_t snapid;
+  C_MDS_renamesnap_finish(MDS *m, MDRequestRef& r, CInode *di, snapid_t sn) :
+    MDSInternalContext(m), mdr(r), diri(di), snapid(sn) {}
+  void finish(int r) {
+    mds->server->_renamesnap_finish(mdr, diri, snapid);
+  }
+};
+
+/* This function takes responsibility for the passed mdr*/
+void Server::handle_client_renamesnap(MDRequestRef& mdr)
+{
+  MClientRequest *req = mdr->client_request;
+  if (req->get_filepath().get_ino() != req->get_filepath2().get_ino()) {
+    respond_to_request(mdr, -EINVAL);
+    return;
+  }
+
+  CInode *diri = mdcache->get_inode(req->get_filepath().get_ino());
+  if (!diri || diri->state_test(CInode::STATE_PURGING)) {
+    respond_to_request(mdr, -ESTALE);
+    return;
+  }
+
+  if (!diri->is_auth()) {    // fw to auth?
+    mdcache->request_forward(mdr, diri->authority().first);
+    return;
+  }
+
+  if (!diri->is_dir()) { // dir only
+    respond_to_request(mdr, -ENOTDIR);
+    return;
+  }
+
+  if (mdr->client_request->get_caller_uid() < g_conf->mds_snap_min_uid ||
+      mdr->client_request->get_caller_uid() > g_conf->mds_snap_max_uid) {
+    respond_to_request(mdr, -EPERM);
+    return;
+  }
+
+  const string &dstname = req->get_filepath().last_dentry();
+  const string &srcname = req->get_filepath2().last_dentry();
+  dout(10) << "renamesnap " << srcname << "->" << dstname << " on " << *diri << dendl;
+
+  if (srcname.length() == 0 || srcname[0] == '_') {
+    respond_to_request(mdr, -EINVAL);   // can't rename a parent snap.
+    return;
+  }
+  if (!diri->snaprealm || !diri->snaprealm->exists(srcname)) {
+    respond_to_request(mdr, -ENOENT);
+    return;
+  }
+  if (dstname.length() == 0 || dstname[0] == '_') {
+    respond_to_request(mdr, -EINVAL);
+    return;
+  }
+  if (diri->snaprealm->exists(dstname)) {
+    respond_to_request(mdr, -EEXIST);
+    return;
+  }
+
+  snapid_t snapid = diri->snaprealm->resolve_snapname(srcname, diri->ino());
+  dout(10) << " snapname " << srcname << " is " << snapid << dendl;
+
+  // lock snap
+  set<SimpleLock*> rdlocks, wrlocks, xlocks;
+
+  mds->locker->include_snap_rdlocks(rdlocks, diri);
+  rdlocks.erase(&diri->snaplock);
+  xlocks.insert(&diri->snaplock);
+
+  if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
+    return;
+
+    // prepare
+  if (!mdr->more()->stid) {
+    mds->snapclient->prepare_update(diri->ino(), snapid, dstname, utime_t(),
+				    &mdr->more()->stid, &mdr->more()->snapidbl,
+				    new C_MDS_RetryRequest(mds->mdcache, mdr));
+    return;
+  }
+
+  version_t stid = mdr->more()->stid;
+  bufferlist::iterator p = mdr->more()->snapidbl.begin();
+  snapid_t seq;
+  ::decode(seq, p);
+  dout(10) << " stid is " << stid << ", seq is " << seq << dendl;
+
+  // journal
+  inode_t *pi = diri->project_inode();
+  pi->ctime = mdr->get_op_stamp();
+  pi->version = diri->pre_dirty();
+
+  // project the snaprealm
+  sr_t *newsnap = diri->project_snaprealm();
+  assert(newsnap->snaps.count(snapid));
+  newsnap->snaps[snapid].name = dstname;
+
+  // journal the inode changes
+  mdr->ls = mdlog->get_current_segment();
+  EUpdate *le = new EUpdate(mdlog, "renamesnap");
+  mdlog->start_entry(le);
+
+  le->metablob.add_client_req(req->get_reqid(), req->get_oldest_client_tid());
+  le->metablob.add_table_transaction(TABLE_SNAP, stid);
+  mdcache->predirty_journal_parents(mdr, &le->metablob, diri, 0, PREDIRTY_PRIMARY, false);
+  mdcache->journal_dirty_inode(mdr.get(), &le->metablob, diri);
+
+  // journal the snaprealm changes
+  submit_mdlog_entry(le, new C_MDS_renamesnap_finish(mds, mdr, diri, snapid),
+                     mdr, __func__);
+  mdlog->flush();
+}
+
+void Server::_renamesnap_finish(MDRequestRef& mdr, CInode *diri, snapid_t snapid)
+{
+  dout(10) << "_renamesnap_finish " << *mdr << " " << snapid << dendl;
+
+  diri->pop_and_dirty_projected_inode(mdr->ls);
+  mdr->apply();
+
+  mds->snapclient->commit(mdr->more()->stid, mdr->ls);
+
+  dout(10) << "snaprealm now " << *diri->snaprealm << dendl;
+
+  mdcache->do_realm_invalidate_and_update_notify(diri, CEPH_SNAP_OP_CREATE, true);
+
+  // yay
+  mdr->in[0] = diri;
+  mdr->tracei = diri;
+  mdr->snapid = snapid;
+  respond_to_request(mdr, 0);
+}
 
 /**
  * Return true if server is in state RECONNECT and this

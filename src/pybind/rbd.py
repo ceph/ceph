@@ -488,9 +488,12 @@ class Image(object):
             pool = create_string_buffer(size)
             name = create_string_buffer(size)
             snapname = create_string_buffer(size)
-            ret = self.librbd.rbd_get_parent_info(self.image, pool, len(pool),
-                                                  name, len(name), snapname,
-                                                  len(snapname))
+            ret = self.librbd.rbd_get_parent_info(self.image, byref(pool),
+                                                  c_size_t(size),
+                                                  byref(name),
+                                                  c_size_t(size),
+                                                  byref(snapname),
+                                                  c_size_t(size))
             if ret == -errno.ERANGE:
                 size *= 2
 
@@ -534,6 +537,24 @@ class Image(object):
         if ret != 0:
             raise make_ex(ret, 'error getting features for image' % (self.name))
         return features.value
+
+    def update_features(self, features, enabled):
+        """
+        Updates the features bitmask of the image by enabling/disabling
+        a single feature.  The feature must support the ability to be
+        dynamically enabled/disabled.
+
+        :param features: feature bitmask to enable/disable
+        :type features: int
+        :param enabled: whether to enable/disable the feature
+        :type enabled: bool
+        :raises: :class:`InvalidArgument`
+        """
+        ret = self.librbd.rbd_update_features(self.image, c_uint64(features),
+                                              c_uint8(enabled));
+        if ret != 0:
+            raise make_ex(ret, 'error updating features for image %s' %
+                               (self.name))
 
     def overlap(self):
         """
@@ -732,7 +753,8 @@ class Image(object):
 
         return ctypes.string_at(ret_buf, ret)
 
-    def diff_iterate(self, offset, length, from_snapshot, iterate_cb):
+    def diff_iterate(self, offset, length, from_snapshot, iterate_cb,
+                     include_parent = True, whole_object = False):
         """
         Iterate over the changed extents of an image.
 
@@ -765,6 +787,10 @@ class Image(object):
         :param iterate_cb: function to call for each extent
         :type iterate_cb: function acception arguments for offset,
                            length, and exists
+        :param include_parent: True if full history diff should include parent
+        :type include_parent: bool
+        :param whole_object: True if diff extents should cover whole object
+        :type whole_object: bool
         :raises: :class:`InvalidArgument`, :class:`IOError`,
                  :class:`ImageNotFound`
         """
@@ -774,12 +800,14 @@ class Image(object):
         RBD_DIFF_CB = CFUNCTYPE(c_int, c_uint64, c_size_t, c_int, c_void_p)
         cb_holder = DiffIterateCB(iterate_cb)
         cb = RBD_DIFF_CB(cb_holder.callback)
-        ret = self.librbd.rbd_diff_iterate(self.image,
-                                           c_char_p(from_snapshot),
-                                           c_uint64(offset),
-                                           c_uint64(length),
-                                           cb,
-                                           c_void_p(None))
+        ret = self.librbd.rbd_diff_iterate2(self.image,
+                                            c_char_p(from_snapshot),
+                                            c_uint64(offset),
+                                            c_uint64(length),
+                                            c_uint8(include_parent),
+                                            c_uint8(whole_object),
+                                            cb,
+                                            c_void_p(None))
         if ret < 0:
             msg = 'error generating diff from snapshot %s' % from_snapshot
             raise make_ex(ret, msg)

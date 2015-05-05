@@ -98,24 +98,26 @@ struct config_option config_optionsp[] = {
 
 const int NUM_CONFIG_OPTIONS = sizeof(config_optionsp) / sizeof(config_option);
 
-bool ceph_resolve_file_search(const std::string& filename_list,
-			      std::string& result)
+int ceph_resolve_file_search(const std::string& filename_list,
+			     std::string& result)
 {
   list<string> ls;
   get_str_list(filename_list, ls);
 
+  int ret = -ENOENT;
   list<string>::iterator iter;
   for (iter = ls.begin(); iter != ls.end(); ++iter) {
     int fd = ::open(iter->c_str(), O_RDONLY);
-    if (fd < 0)
+    if (fd < 0) {
+      ret = -errno;
       continue;
-
+    }
     close(fd);
     result = *iter;
-    return true;
+    return 0;
   }
 
-  return false;
+  return ret;
 }
 
 md_config_t::md_config_t()
@@ -484,6 +486,7 @@ int md_config_t::parse_option(std::vector<const char*>& args,
   }
 
   for (o = 0; o < NUM_CONFIG_OPTIONS; ++o) {
+    ostringstream err;
     const config_option *opt = config_optionsp + o;
     std::string as_option("--");
     as_option += opt->name;
@@ -507,8 +510,13 @@ int md_config_t::parse_option(std::vector<const char*>& args,
 	}
       }
     }
-    else if (ceph_argparse_witharg(args, i, &val,
+    else if (ceph_argparse_witharg(args, i, &val, err,
 				   as_option.c_str(), (char*)NULL)) {
+      if (!err.str().empty()) {
+	*oss << err.str();
+	ret = -EINVAL;
+	break;
+      }
       if (oss && (
 		  ((opt->type == OPT_STR) || (opt->type == OPT_ADDR) ||
 		   (opt->type == OPT_UUID)) &&

@@ -3,11 +3,20 @@
 #ifndef CEPH_COMMON_PREFORKER_H
 #define CEPH_COMMON_PREFORKER_H
 
+#include "acconfig.h"
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/wait.h>
 #include <errno.h>
+#include <stdlib.h>
 #include <unistd.h>
+#ifdef WITH_LTTNG
+#include <lttng/ust.h>
+#endif
+#include <sstream>
+#include <string>
+
+#include "include/assert.h"
 #include "common/safe_io.h"
 #include "common/errno.h"
 
@@ -24,6 +33,9 @@ class Preforker {
   pid_t childpid;
   bool forked;
   int fd[2];  // parent's, child's
+#ifdef WITH_LTTNG
+    sigset_t sigset;
+#endif
 
 public:
   Preforker()
@@ -31,22 +43,35 @@ public:
       forked(false)
   {}
 
-  void prefork() {
+  int prefork(std::string &err) {
     assert(!forked);
     int r = socketpair(AF_UNIX, SOCK_STREAM, 0, fd);
+    std::ostringstream oss;
     if (r < 0) {
-      cerr << "[" << getpid() << "]: unable to create socketpair: " << cpp_strerror(errno) << std::endl;
-      exit(errno);
+      oss << "[" << getpid() << "]: unable to create socketpair: " << cpp_strerror(errno);
+      err = oss.str();
+      return r;
     }
+
+#ifdef WITH_LTTNG
+    ust_before_fork(&sigset);
+#endif
 
     forked = true;
 
     childpid = fork();
-    if (childpid == 0) {
-      ::close(fd[0]);
-    } else {
-      ::close(fd[1]);
+    if (childpid < 0) {
+      r = -errno;
+      oss << "[" << getpid() << "]: unable to fork: " << cpp_strerror(errno);
+      err = oss.str();
+      return r;
     }
+    if (childpid == 0) {
+      child_after_fork();
+    } else {
+      parent_after_fork();
+    }
+    return 0;
   }
 
   bool is_child() {
@@ -57,10 +82,11 @@ public:
     return childpid != 0;
   }
 
-  int parent_wait() {
+  int parent_wait(std::string &err_msg) {
     assert(forked);
 
     int r = -1;
+    std::ostringstream oss;
     int err = safe_read_exact(fd[0], &r, sizeof(r));
     if (err == 0 && r == -1) {
       // daemonize
@@ -69,12 +95,25 @@ public:
       ::close(2);
       r = 0;
     } else if (err) {
-      cerr << "[" << getpid() << "]: " << cpp_strerror(err) << std::endl;
+      oss << "[" << getpid() << "]: " << cpp_strerror(err);
     } else {
       // wait for child to exit
-      waitpid(childpid, NULL, 0);
+      int status;
+      err = waitpid(childpid, &status, 0);
+      if (err < 0) {
+        oss << "[" << getpid() << "]" << " waitpid error: " << cpp_strerror(err);
+      } else if (WIFSIGNALED(status)) {
+        oss << "[" << getpid() << "]" << " exited with a signal";
+      } else if (!WIFEXITED(status)) {
+        oss << "[" << getpid() << "]" << " did not exit normally";
+      } else {
+        err = WEXITSTATUS(status);
+        if (err != 0)
+         oss << "[" << getpid() << "]" << " returned exit_status " << cpp_strerror(err);
+      }
     }
-    return r;
+    err_msg = oss.str();
+    return err;
   }
 
   int signal_exit(int r) {
@@ -99,6 +138,20 @@ public:
     r += r2;  // make the compiler shut up about the unused return code from ::write(2).
   }
   
+private:
+  void child_after_fork() {
+#ifdef WITH_LTTNG
+    ust_after_fork_child(&sigset);
+#endif
+    ::close(fd[0]);
+  }
+
+  void parent_after_fork() {
+#ifdef WITH_LTTNG
+    ust_after_fork_parent(&sigset);
+#endif
+    ::close(fd[1]);
+  }
 };
 
 #endif

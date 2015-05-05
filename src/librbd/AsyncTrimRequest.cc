@@ -139,7 +139,6 @@ void AsyncTrimRequest::send() {
 }
 
 void AsyncTrimRequest::send_remove_objects() {
-  CephContext *cct = m_image_ctx.cct;
   ldout(m_image_ctx.cct, 5) << this << " send_remove_objects: "
 			    << " delete_start=" << m_delete_start
 			    << " num_objects=" << m_num_objects << dendl;
@@ -151,7 +150,7 @@ void AsyncTrimRequest::send_remove_objects() {
       boost::lambda::_1, &m_image_ctx, boost::lambda::_2));
   AsyncObjectThrottle *throttle = new AsyncObjectThrottle(
     *this, context_factory, ctx, m_prog_ctx, m_delete_start, m_num_objects);
-  throttle->start_ops(cct->_conf->rbd_concurrent_management_ops);
+  throttle->start_ops(m_image_ctx.concurrent_management_ops);
 }
 
 void AsyncTrimRequest::send_pre_remove() {
@@ -173,6 +172,7 @@ void AsyncTrimRequest::send_pre_remove() {
       } else {
         // flag the objects as pending deletion
         Context *ctx = create_callback_context();
+        RWLock::WLocker object_map_locker(m_image_ctx.object_map_lock);
         if (!m_image_ctx.object_map.aio_update(m_delete_start, m_num_objects,
 					       OBJECT_PENDING, OBJECT_EXISTS,
                                                ctx)) {
@@ -210,6 +210,7 @@ bool AsyncTrimRequest::send_post_remove() {
       } else {
         // flag the pending objects as removed
         Context *ctx = create_callback_context();
+        RWLock::WLocker object_map_locker(m_image_ctx.object_map_lock);
         if (!m_image_ctx.object_map.aio_update(m_delete_start, m_num_objects,
 					       OBJECT_NONEXISTENT,
 					       OBJECT_PENDING, ctx)) {
@@ -251,14 +252,9 @@ bool AsyncTrimRequest::send_clean_boundary() {
       lost_exclusive_lock = true;
     } else {
       ::SnapContext snapc;
-      uint64_t parent_overlap;
       {
         RWLock::RLocker l2(m_image_ctx.snap_lock);
         snapc = m_image_ctx.snapc;
-
-        RWLock::RLocker l3(m_image_ctx.parent_lock);
-        int r = m_image_ctx.get_parent_overlap(CEPH_NOSNAP, &parent_overlap);
-        assert(r == 0);
       }
 
       // discard the weird boundary, if any
@@ -273,21 +269,13 @@ bool AsyncTrimRequest::send_clean_boundary() {
         ldout(cct, 20) << " ex " << *p << dendl;
         Context *req_comp = new C_ContextCompletion(*completion);
 
-        // reverse map this object extent onto the parent
-        vector<pair<uint64_t,uint64_t> > objectx;
-        Striper::extent_to_file(cct, &m_image_ctx.layout, p->objectno, 0,
-				m_image_ctx.layout.fl_object_size, objectx);
-        uint64_t object_overlap =
-	  m_image_ctx.prune_parent_extents(objectx, parent_overlap);
-
         AbstractWrite *req;
         if (p->offset == 0) {
-          req = new AioRemove(&m_image_ctx, p->oid.name, p->objectno, objectx,
-                              object_overlap, snapc, CEPH_NOSNAP, req_comp);
+          req = new AioRemove(&m_image_ctx, p->oid.name, p->objectno, snapc,
+                              req_comp);
         } else {
-          req = new AioTruncate(&m_image_ctx, p->oid.name, p->objectno, p->offset,
-                                objectx, object_overlap, snapc, CEPH_NOSNAP,
-                                req_comp);
+          req = new AioTruncate(&m_image_ctx, p->oid.name, p->objectno,
+                                p->offset, snapc, req_comp);
         }
         int r = req->send();
         if (r < 0) {

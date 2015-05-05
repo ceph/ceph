@@ -213,9 +213,10 @@ public:
     while (q_iter != send_q.end()) {
       XioSubmit *xs = &(*q_iter);
       // skip retires and anything for other connections
-      if ((xs->type != XioSubmit::OUTGOING_MSG) ||
-	  (xs->xcon != xcon))
+      if (xs->xcon != xcon) {
+	q_iter++;
 	continue;
+      }
       xmsg = static_cast<XioMsg*>(xs);
       q_iter = send_q.erase(q_iter);
       requeue_q.push_back(*xmsg);
@@ -283,8 +284,19 @@ public:
 		  print_ceph_msg(msgr->cct, "xio_send_msg", xmsg->m);
 		}
 		/* get the right Accelio's errno code */
-		if (unlikely(code))
-		  code = xio_errno();
+		if (unlikely(code)) {
+		  if ((code == -1) && (xio_errno() == -1)) {
+		    /* In case XIO does not have any credits to send,
+		     * it would still queue up the message(s) for transmission,
+		     * but would return -1 and errno would also be set to -1.
+		     * This needs to be treated as a success.
+		     */
+		    code = 0;
+		  }
+		  else {
+		    code = xio_errno();
+		  }
+		}
 	      } /* !ENOTCONN */
 	      if (unlikely(code)) {
 		switch (code) {

@@ -292,6 +292,8 @@ struct PGLog {
       set<eversion_t> *trimmed);
 
     ostream& print(ostream& out) const;
+
+    void filter_log(spg_t pgid, const OSDMap &map, const string &hit_set_namespace);
   };
 
 
@@ -360,17 +362,8 @@ protected:
 	 i != log_keys_debug->end() && *i < ub;
 	 log_keys_debug->erase(i++));
   }
-  void check() {
-    if (!pg_log_debug)
-      return;
-    assert(log.log.size() == log_keys_debug.size());
-    for (list<pg_log_entry_t>::iterator i = log.log.begin();
-	 i != log.log.end();
-	 ++i) {
-      assert(log_keys_debug.count(i->get_key_name()));
-    }
-  }
 
+  void check();
   void undirty() {
     dirty_to = eversion_t();
     dirty_from = eversion_t::max();
@@ -647,15 +640,22 @@ public:
 		 pg_info_t &info, LogEntryHandler *rollbacker,
 		 bool &dirty_info, bool &dirty_big_info);
 
-  void write_log(ObjectStore::Transaction& t, const coll_t& coll,
+  void write_log(ObjectStore::Transaction& t,
+		 map<string,bufferlist> *km,
+		 const coll_t& coll,
 		 const ghobject_t &log_oid);
 
-  static void write_log(ObjectStore::Transaction& t, pg_log_t &log,
+  static void write_log(
+    ObjectStore::Transaction& t,
+    map<string,bufferlist>* km,
+    pg_log_t &log,
     const coll_t& coll,
     const ghobject_t &log_oid, map<eversion_t, hobject_t> &divergent_priors);
 
   static void _write_log(
-    ObjectStore::Transaction& t, pg_log_t &log,
+    ObjectStore::Transaction& t,
+    map<string,bufferlist>* km,
+    pg_log_t &log,
     const coll_t& coll, const ghobject_t &log_oid,
     map<eversion_t, hobject_t> &divergent_priors,
     eversion_t dirty_to,

@@ -535,10 +535,10 @@ bool LogMonitor::_create_sub_summary(MLog *mlog, int level)
 }
 
 /**
- * Create an incremental log message from version @sv to @summary.version
+ * Create an incremental log message from version \p sv to \p summary.version
  *
  * @param mlog	Log message we'll send to the client with the messages received
- *		since version @sv, inclusive.
+ *		since version \p sv, inclusive.
  * @param level	The max log level of the messages the client is interested in.
  * @param sv	The version the client is looking for.
  */
@@ -596,7 +596,7 @@ void LogMonitor::update_log_channels()
 
   int r = get_conf_str_map_helper(g_conf->mon_cluster_log_to_syslog,
                                   oss, &channels.log_to_syslog,
-                                  CLOG_CHANNEL_DEFAULT);
+                                  CLOG_CONFIG_DEFAULT_KEY);
   if (r < 0) {
     derr << __func__ << " error parsing 'mon_cluster_log_to_syslog'" << dendl;
     return;
@@ -604,7 +604,7 @@ void LogMonitor::update_log_channels()
 
   r = get_conf_str_map_helper(g_conf->mon_cluster_log_to_syslog_level,
                               oss, &channels.syslog_level,
-                              CLOG_CHANNEL_DEFAULT);
+                              CLOG_CONFIG_DEFAULT_KEY);
   if (r < 0) {
     derr << __func__ << " error parsing 'mon_cluster_log_to_syslog_level'"
          << dendl;
@@ -613,7 +613,7 @@ void LogMonitor::update_log_channels()
 
   r = get_conf_str_map_helper(g_conf->mon_cluster_log_to_syslog_facility,
                               oss, &channels.syslog_facility,
-                              CLOG_CHANNEL_DEFAULT);
+                              CLOG_CONFIG_DEFAULT_KEY);
   if (r < 0) {
     derr << __func__ << " error parsing 'mon_cluster_log_to_syslog_facility'"
          << dendl;
@@ -622,7 +622,7 @@ void LogMonitor::update_log_channels()
 
   r = get_conf_str_map_helper(g_conf->mon_cluster_log_file, oss,
                               &channels.log_file,
-                              CLOG_CHANNEL_DEFAULT);
+                              CLOG_CONFIG_DEFAULT_KEY);
   if (r < 0) {
     derr << __func__ << " error parsing 'mon_cluster_log_file'" << dendl;
     return;
@@ -630,7 +630,7 @@ void LogMonitor::update_log_channels()
 
   r = get_conf_str_map_helper(g_conf->mon_cluster_log_file_level, oss,
                               &channels.log_file_level,
-                              CLOG_CHANNEL_DEFAULT);
+                              CLOG_CONFIG_DEFAULT_KEY);
   if (r < 0) {
     derr << __func__ << " error parsing 'mon_cluster_log_file_level'"
          << dendl;

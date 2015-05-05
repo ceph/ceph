@@ -200,6 +200,13 @@ public:
 
   int authenticate(double timeout=0.0);
 
+  /**
+   * Try to flush as many log messages as we can in a single
+   * message.  Use this before shutting down to transmit your
+   * last message.
+   */
+  void flush_log();
+
   // mon subscriptions
 private:
   map<string,ceph_mon_subscribe_item> sub_have;  // my subs, and current versions
@@ -288,7 +295,7 @@ public:
    * reply in @p result_reply.
    *
    * @param[in]  mon_id Target monitor's ID
-   * @param[out] Resulting reply from mon.ID, if param != NULL
+   * @param[out] result_reply reply from mon.ID, if param != NULL
    * @returns    0 in case of success; < 0 in case of error,
    *             -ETIMEDOUT if monitor didn't reply before timeout
    *             expired (default: conf->client_mount_timeout).

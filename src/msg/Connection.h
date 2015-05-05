@@ -113,7 +113,6 @@ public:
    *
    * @param m The Message to send. The Messenger consumes a single reference
    * when you pass it in.
-   * @param con The Connection to send the Message out on.
    *
    * @return 0 on success, or -errno on failure.
    */

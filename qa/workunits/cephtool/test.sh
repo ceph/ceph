@@ -204,6 +204,8 @@ function test_mon_injectargs()
   check_response "osd_debug_op_order = 'true'"
   ceph tell osd.0 injectargs -- '--osd_debug_op_order --osd_failsafe_full_ratio .98' >& $TMPFILE || return 1
   check_response "osd_debug_op_order = 'true' osd_failsafe_full_ratio = '0.98'" 
+  ceph tell osd.0 injectargs -- '--osd_failsafe_full_ratio' >& $TMPFILE || return 1
+  check_response "Option --osd_failsafe_full_ratio requires an argument"
 }
 
 function test_mon_injectargs_SI()
@@ -335,8 +337,7 @@ function test_tiering()
   ceph osd pool create cachepool 2
   ceph osd tier add-cache datapool cachepool 1024000
   ceph osd tier cache-mode cachepool writeback
-  dd if=/dev/zero of=/tmp/add-cache bs=4K count=1
-  rados -p datapool put object /tmp/add-cache
+  rados -p datapool put object /etc/passwd
   rados -p cachepool stat object
   rados -p cachepool cache-flush object
   rados -p datapool stat object
@@ -344,7 +345,6 @@ function test_tiering()
   ceph osd tier remove datapool cachepool
   ceph osd pool delete cachepool cachepool --yes-i-really-really-mean-it
   ceph osd pool delete datapool datapool --yes-i-really-really-mean-it
-  rm -rf /tmp/add-cache
 
   # protection against pool removal when used as tiers
   ceph osd pool create datapool 2
@@ -359,25 +359,33 @@ function test_tiering()
   ceph osd pool delete cachepool cachepool --yes-i-really-really-mean-it
   ceph osd pool delete datapool datapool --yes-i-really-really-mean-it
 
-  # check health check
-  ceph osd pool create datapool 2
-  ceph osd pool create cache4 2
-  ceph osd tier add datapool cache4
-  ceph osd pool set cache4 target_max_objects 5
-  ceph osd pool set cache4 target_max_bytes 1000
-  for f in `seq 1 5` ; do
-    rados -p cache4 put foo$f /etc/passwd
-  done
-  while ! ceph df | grep cache4 | grep ' 5 ' ; do
-    echo waiting for pg stats to flush
-    sleep 2
-  done
-  ceph health | grep WARN | grep cache4
-  ceph health detail | grep cache4 | grep 'target max' | grep objects
-  ceph health detail | grep cache4 | grep 'target max' | grep 'B'
-  ceph osd tier remove datapool cache4
-  ceph osd pool delete cache4 cache4 --yes-i-really-really-mean-it
-  ceph osd pool delete datapool datapool --yes-i-really-really-mean-it
+  # commented out pending http://tracker.ceph.com/issues/11359
+  ## check health check
+  # ceph osd pool create datapool 2
+  # ceph osd pool create cache4 2
+  # ceph osd tier add-cache datapool cache4 1024000
+  # ceph osd tier cache-mode cache4 writeback
+  # tmpfile=$(mktemp|grep tmp)
+  # dd if=/dev/zero of=$tmpfile  bs=4K count=1
+  # ceph osd pool set cache4 target_max_objects 5
+  # #4096 * 5 = 20480, 20480 near/at 21000,
+  # ceph osd pool set cache4 target_max_bytes 21000
+  # for f in `seq 1 5` ; do
+  #   rados -p cache4 put foo$f $tmpfile
+  # done
+  # rm -f $tmpfile
+  # while ! ceph df | grep cache4 | grep ' 5 ' ; do
+  #   echo waiting for pg stats to flush
+  #   sleep 2
+  # done
+  # ceph health | grep WARN | grep cache4
+  # ceph health detail | grep cache4 | grep 'target max' | grep objects
+  # ceph health detail | grep cache4 | grep 'target max' | grep 'B'
+  # ceph osd tier remove-overlay datapool
+  # ceph osd tier remove datapool cache4
+  # ceph osd pool delete cache4 cache4 --yes-i-really-really-mean-it
+  # ceph osd pool delete datapool datapool --yes-i-really-really-mean-it
+
 
   # make sure 'tier remove' behaves as we expect
   # i.e., removing a tier from a pool that's not its base pool only
@@ -981,6 +989,7 @@ function test_mon_osd()
   ceph osd pool create data 10
   ceph osd lspools | grep data
   ceph osd map data foo | grep 'pool.*data.*object.*foo.*pg.*up.*acting'
+  ceph osd map data foo namespace| grep 'pool.*data.*object.*namespace/foo.*pg.*up.*acting'
   ceph osd pool delete data data --yes-i-really-really-mean-it
 
   ceph osd pause
@@ -1422,18 +1431,67 @@ function test_mon_crushmap_validation()
 {
   local map=$TMPDIR/map
   ceph osd getcrushmap -o $map
-  # crushtool validation timesout and is ignored
-  cat > $TMPDIR/crushtool <<EOF
-#!/bin/sh
-sleep 1000
-exit 0 # success
-EOF
-  chmod +x $TMPDIR/crushtool
-  ceph tell mon.* injectargs --crushtool $TMPDIR/crushtool
-  ceph osd setcrushmap -i $map 2>&1 | grep 'took too long'
-  ceph tell mon.* injectargs --crushtool crushtool
-  # crushtool validation succeeds
+
+  local crushtool_path="${TMPDIR}/crushtool"
+  touch "${crushtool_path}"
+  chmod +x "${crushtool_path}"
+  local crushtool_path_old=`ceph-conf --show-config-value crushtool`
+  ceph tell mon.* injectargs --crushtool "${crushtool_path}"
+
+  printf "%s\n" \
+      "#!/bin/sh
+       cat > /dev/null
+       exit 0" > "${crushtool_path}"
+
   ceph osd setcrushmap -i $map
+
+  printf "%s\n" \
+      "#!/bin/sh
+       cat > /dev/null
+       exit 1" > "${crushtool_path}"
+
+  expect_false ceph osd setcrushmap -i $map
+
+  printf "%s\n" \
+      "#!/bin/sh
+       cat > /dev/null
+       echo 'TEST FAIL' >&2
+       exit 1" > "${crushtool_path}"
+
+  expect_false ceph osd setcrushmap -i $map 2> $TMPFILE
+  check_response "Error EINVAL: Failed to parse crushmap: TEST FAIL"
+
+  local mon_lease=`ceph-conf --show-config-value mon_lease`
+
+  test "${mon_lease}" -gt 0
+
+  printf "%s\n" \
+      "#!/bin/sh
+       cat > /dev/null
+       sleep $((mon_lease - 1))" > "${crushtool_path}"
+
+  ceph osd setcrushmap -i $map
+
+  printf "%s\n" \
+      "#!/bin/sh
+       cat > /dev/null
+       sleep $((mon_lease + 1))" > "${crushtool_path}"
+
+  expect_false ceph osd setcrushmap -i $map 2> $TMPFILE
+  check_response "Error EINVAL: Failed to parse crushmap: ${crushtool_path}: timed out (${mon_lease} sec)"
+
+  ceph tell mon.* injectargs --crushtool "${crushtool_path_old}"
+
+  rm -f "${crushtool_path}"
+}
+
+function test_mon_ping()
+{
+  ceph ping mon.a
+  ceph ping mon.b
+  expect_false ceph ping mon.foo
+
+  ceph ping mon.*
 }
 
 #
@@ -1471,6 +1529,7 @@ MON_TESTS+=" mon_osd_misc"
 MON_TESTS+=" mon_heap_profiler"
 MON_TESTS+=" mon_tell"
 MON_TESTS+=" mon_crushmap_validation"
+MON_TESTS+=" mon_ping"
 
 OSD_TESTS+=" osd_bench"
 

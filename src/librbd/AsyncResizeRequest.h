@@ -38,6 +38,8 @@ private:
    * Resize goes through the following state machine to resize the image
    * and update the object map:
    *
+   * @verbatim
+   *
    * <start> -------------> STATE_FINISHED -----------------------------\
    *  |  .    (no change)                                               |
    *  |  .                                                              |
@@ -59,6 +61,8 @@ private:
    *                                             |                   .  |
    *                                             v                   v  v
    *                                  STATE_SHRINK_OBJECT_MAP ---> <finish>
+   *
+   * @endverbatim
    *
    * The _OBJECT_MAP states are skipped if the object map isn't enabled.
    * The state machine will immediately transition to _FINISHED if there
@@ -93,7 +97,6 @@ private:
   void send_update_header();
 
   void compute_parent_overlap();
-  void increment_refresh_seq();
   void update_size_and_overlap();
 
 };

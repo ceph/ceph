@@ -33,7 +33,8 @@ function rebuild()
   rbd create $gen --size 100 --order $1 --stripe_unit $2 --stripe_count $3 --image-format $4
   rbd create $out --size 1 --order 19
   mkdir -p mnt diffs
-  rbd-fuse -p $pool mnt
+  # lttng has atexit handlers that need to be fork/clone aware
+  LD_PRELOAD=liblttng-ust-fork.so.0 rbd-fuse -p $pool mnt
 }
 
 function write()

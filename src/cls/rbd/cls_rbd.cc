@@ -41,6 +41,7 @@
 #include "common/errno.h"
 #include "objclass/objclass.h"
 #include "include/rbd_types.h"
+#include "include/rbd/object_map_types.h"
 
 #include "cls/rbd/cls_rbd.h"
 
@@ -64,6 +65,7 @@ CLS_NAME(rbd)
 cls_handle_t h_class;
 cls_method_handle_t h_create;
 cls_method_handle_t h_get_features;
+cls_method_handle_t h_set_features;
 cls_method_handle_t h_get_size;
 cls_method_handle_t h_set_size;
 cls_method_handle_t h_get_parent;
@@ -94,8 +96,11 @@ cls_method_handle_t h_dir_add_image;
 cls_method_handle_t h_dir_remove_image;
 cls_method_handle_t h_dir_rename_image;
 cls_method_handle_t h_object_map_load;
+cls_method_handle_t h_object_map_save;
 cls_method_handle_t h_object_map_resize;
 cls_method_handle_t h_object_map_update;
+cls_method_handle_t h_object_map_snap_add;
+cls_method_handle_t h_object_map_snap_remove;
 cls_method_handle_t h_metadata_set;
 cls_method_handle_t h_metadata_remove;
 cls_method_handle_t h_metadata_list;
@@ -284,15 +289,17 @@ int create(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 
 /**
  * Input:
- * @param snap_id which snapshot to query, or CEPH_NOSNAP (uint64_t)
+ * @param snap_id which snapshot to query, or CEPH_NOSNAP (uint64_t) (deprecated)
+ * @param read_only true if the image will be used read-only (bool)
  *
  * Output:
  * @param features list of enabled features for the given snapshot (uint64_t)
+ * @param incompatible incompatible feature bits
  * @returns 0 on success, negative error code on failure
  */
 int get_features(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
-  uint64_t features, snap_id;
+  uint64_t snap_id;
   bool read_only = false;
 
   bufferlist::iterator iter = in->begin();
@@ -305,30 +312,87 @@ int get_features(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
     return -EINVAL;
   }
 
-  CLS_LOG(20, "get_features snap_id=%llu", (unsigned long long)snap_id);
+  CLS_LOG(20, "get_features snap_id=%" PRIu64 ", read_only=%d",
+          snap_id, read_only);
 
-  if (snap_id == CEPH_NOSNAP) {
-    int r = read_key(hctx, "features", &features);
-    if (r < 0) {
-      CLS_ERR("failed to read features off disk: %s", cpp_strerror(r).c_str());
-      return r;
-    }
-  } else {
+  // NOTE: keep this deprecated snapshot logic to support negative
+  // test cases in older (pre-Infernalis) releases. Remove once older
+  // releases are no longer supported.
+  if (snap_id != CEPH_NOSNAP) {
     cls_rbd_snap snap;
     string snapshot_key;
     key_from_snap_id(snap_id, &snapshot_key);
     int r = read_key(hctx, snapshot_key, &snap);
-    if (r < 0)
+    if (r < 0) {
       return r;
+    }
+  }
 
-    features = snap.features;
+  uint64_t features;
+  int r = read_key(hctx, "features", &features);
+  if (r < 0) {
+    CLS_ERR("failed to read features off disk: %s", cpp_strerror(r).c_str());
+    return r;
   }
 
   uint64_t incompatible = (read_only ? features & RBD_FEATURES_INCOMPATIBLE :
 				       features & RBD_FEATURES_RW_INCOMPATIBLE);
   ::encode(features, *out);
   ::encode(incompatible, *out);
+  return 0;
+}
 
+/**
+ * set the image features
+ *
+ * Input:
+ * @params features image features
+ * @params mask image feature mask
+ *
+ * Output:
+ * none
+ *
+ * @returns 0 on success, negative error code upon failure
+ */
+int set_features(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  uint64_t features;
+  uint64_t mask;
+  bufferlist::iterator iter = in->begin();
+  try {
+    ::decode(features, iter);
+    ::decode(mask, iter);
+  } catch (const buffer::error &err) {
+    return -EINVAL;
+  }
+
+  if ((mask & RBD_FEATURES_MUTABLE) != mask) {
+    CLS_ERR("Attempting to set immutable feature: %" PRIu64,
+            mask & ~RBD_FEATURES_MUTABLE);
+    return -EINVAL;
+  }
+
+  // check that features exists to make sure this is a header object
+  // that was created correctly
+  uint64_t orig_features = 0;
+  int r = read_key(hctx, "features", &orig_features);
+  if (r < 0 && r != -ENOENT) {
+    CLS_ERR("Could not read image's features off disk: %s",
+            cpp_strerror(r).c_str());
+    return r;
+  }
+
+  features = (orig_features & ~mask) | (features & mask);
+  CLS_LOG(10, "set_features features=%" PRIu64 " orig_features=%" PRIu64,
+          features, orig_features);
+
+  bufferlist bl;
+  ::encode(features, bl);
+  r = cls_cxx_map_set_val(hctx, "features", &bl);
+  if (r < 0) {
+    CLS_ERR("error updating features: %s", cpp_strerror(r).c_str());
+    return r;
+  }
   return 0;
 }
 
@@ -1939,6 +2003,9 @@ int object_map_read(cls_method_context_t hctx, BitVector<2> &object_map)
   if (r < 0) {
     return r;
   }
+  if (size == 0) {
+    return -ENOENT;
+  }
 
   bufferlist bl;
   r = cls_cxx_read(hctx, 0, size, &bl);
@@ -1977,6 +2044,32 @@ int object_map_load(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   object_map.set_crc_enabled(false);
   ::encode(object_map, *out);
   return 0;
+}
+
+/**
+ * Save an rbd image's object map
+ *
+ * Input:
+ * @param object map bit vector
+ *
+ * Output:
+ * @returns 0 on success, negative error code on failure
+ */
+int object_map_save(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  BitVector<2> object_map;
+  try {
+    bufferlist::iterator iter = in->begin();
+    ::decode(object_map, iter);
+  } catch (const buffer::error &err) {
+    return -EINVAL;
+  }
+
+  bufferlist bl;
+  ::encode(object_map, bl);
+  CLS_LOG(20, "object_map_save: object size=%" PRIu64 ", byte size=%u",
+	  object_map.size(), bl.length());
+  return cls_cxx_write_full(hctx, &bl);
 }
 
 /**
@@ -2143,6 +2236,84 @@ int object_map_update(cls_method_context_t hctx, bufferlist *in, bufferlist *out
   return r;
 }
 
+/**
+ * Mark all _EXISTS objects as _EXISTS_CLEAN so future writes to the
+ * image HEAD can be tracked.
+ *
+ * Input:
+ * none
+ *
+ * Output:
+ * @returns 0 on success, negative error code on failure
+ */
+int object_map_snap_add(cls_method_context_t hctx, bufferlist *in,
+                        bufferlist *out)
+{
+  BitVector<2> object_map;
+  int r = object_map_read(hctx, object_map);
+  if (r < 0) {
+    return r;
+  }
+
+  bool updated = false;
+  for (uint64_t i = 0; i < object_map.size(); ++i) {
+    if (object_map[i] == OBJECT_EXISTS) {
+      object_map[i] = OBJECT_EXISTS_CLEAN;
+      updated = true;
+    }
+  }
+
+  if (updated) {
+    bufferlist bl;
+    ::encode(object_map, bl);
+    r = cls_cxx_write_full(hctx, &bl);
+  }
+  return r;
+}
+
+/**
+ * Mark all _EXISTS_CLEAN objects as _EXISTS in the current object map
+ * if the provided snapshot object map object is marked as _EXISTS.
+ *
+ * Input:
+ * @param snapshot object map bit vector
+ *
+ * Output:
+ * @returns 0 on success, negative error code on failure
+ */
+int object_map_snap_remove(cls_method_context_t hctx, bufferlist *in,
+                           bufferlist *out)
+{
+  BitVector<2> src_object_map;
+  try {
+    bufferlist::iterator iter = in->begin();
+    ::decode(src_object_map, iter);
+  } catch (const buffer::error &err) {
+    return -EINVAL;
+  }
+
+  BitVector<2> dst_object_map;
+  int r = object_map_read(hctx, dst_object_map);
+  if (r < 0) {
+    return r;
+  }
+
+  bool updated = false;
+  for (uint64_t i = 0; i < dst_object_map.size(); ++i) {
+    if (dst_object_map[i] == OBJECT_EXISTS_CLEAN &&
+        (i >= src_object_map.size() || src_object_map[i] == OBJECT_EXISTS)) {
+      dst_object_map[i] = OBJECT_EXISTS;
+      updated = true;
+    }
+  }
+
+  if (updated) {
+    bufferlist bl;
+    ::encode(dst_object_map, bl);
+    r = cls_cxx_write_full(hctx, &bl);
+  }
+  return r;
+}
 
 static const string metadata_key_for_name(const string &name)
 {
@@ -2180,11 +2351,10 @@ int metadata_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   map<string, bufferlist> data;
   string last_read = metadata_key_for_name(start_after);
   int max_read = max_return ? MIN(RBD_MAX_KEYS_READ, max_return) : RBD_MAX_KEYS_READ;
-  int r;
 
   do {
     map<string, bufferlist> raw_data;
-    r = cls_cxx_map_get_vals(hctx, last_read, RBD_METADATA_KEY_PREFIX,
+    int r = cls_cxx_map_get_vals(hctx, last_read, RBD_METADATA_KEY_PREFIX,
                              max_read, &raw_data);
     if (r < 0) {
       CLS_ERR("failed to read the vals off of disk: %s", cpp_strerror(r).c_str());
@@ -2228,7 +2398,8 @@ int metadata_set(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 
   for (map<string, bufferlist>::iterator it = data.begin();
        it != data.end(); ++it) {
-    CLS_LOG(20, "metdata_set key=%s value=%s", it->first.c_str(), it->second.c_str());
+    CLS_LOG(20, "metdata_set key=%s value=%.*s", it->first.c_str(),
+	    it->second.length(), it->second.c_str());
     raw_data[metadata_key_for_name(it->first)].swap(it->second);
   }
   int r = cls_cxx_map_set_vals(hctx, &raw_data);
@@ -2509,6 +2680,9 @@ void __cls_init()
   cls_register_cxx_method(h_class, "get_features",
 			  CLS_METHOD_RD,
 			  get_features, &h_get_features);
+  cls_register_cxx_method(h_class, "set_features",
+			  CLS_METHOD_RD | CLS_METHOD_WR,
+			  set_features, &h_set_features);
   cls_register_cxx_method(h_class, "get_size",
 			  CLS_METHOD_RD,
 			  get_size, &h_get_size);
@@ -2619,12 +2793,21 @@ void __cls_init()
   cls_register_cxx_method(h_class, "object_map_load",
                           CLS_METHOD_RD,
 			  object_map_load, &h_object_map_load);
+  cls_register_cxx_method(h_class, "object_map_save",
+                          CLS_METHOD_RD | CLS_METHOD_WR,
+			  object_map_save, &h_object_map_save);
   cls_register_cxx_method(h_class, "object_map_resize",
                           CLS_METHOD_RD | CLS_METHOD_WR,
 			  object_map_resize, &h_object_map_resize);
   cls_register_cxx_method(h_class, "object_map_update",
                           CLS_METHOD_RD | CLS_METHOD_WR,
 			  object_map_update, &h_object_map_update);
+  cls_register_cxx_method(h_class, "object_map_snap_add",
+                          CLS_METHOD_RD | CLS_METHOD_WR,
+			  object_map_snap_add, &h_object_map_snap_add);
+  cls_register_cxx_method(h_class, "object_map_snap_remove",
+                          CLS_METHOD_RD | CLS_METHOD_WR,
+			  object_map_snap_remove, &h_object_map_snap_remove);
 
  /* methods for the old format */
   cls_register_cxx_method(h_class, "snap_list",

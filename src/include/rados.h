@@ -449,6 +449,10 @@ enum {
 };
 
 enum {
+	CEPH_OSD_COPY_GET_FLAG_NOTSUPP_OMAP = 1, /* mean dest pool don't support omap*/
+};
+
+enum {
 	CEPH_OSD_TMAP2OMAP_NULLOK = 1,
 };
 
@@ -515,11 +519,17 @@ struct ceph_osd_op {
 		} __attribute__ ((packed)) clonerange;
 		struct {
 			__le64 max;     /* max data in reply */
+			__le32 flags;
 		} __attribute__ ((packed)) copy_get;
 		struct {
 			__le64 snapid;
 			__le64 src_version;
 			__u8 flags;
+			/*
+			 * __le32 flags: CEPH_OSD_OP_FLAG_FADVISE_: mean the fadvise flags for dest object
+			 * src_fadvise_flags mean the fadvise flags for src object
+			 */
+			__le32 src_fadvise_flags;
 		} __attribute__ ((packed)) copy_from;
 		struct {
 			struct ceph_timespec stamp;

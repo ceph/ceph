@@ -64,7 +64,6 @@ extern "C" {
  * Flags that can be set on a per-op basis via
  * rados_read_op_set_flags() and rados_write_op_set_flags().
  */
-/** @cond TODO_enums_not_yet_in_asphyxiate */
 enum {
   // fail a create operation if the object already exists
   LIBRADOS_OP_FLAG_EXCL               =  0x1,
@@ -96,7 +95,6 @@ enum {
  *
  * @{
  */
-/** @cond TODO_enums_not_yet_in_asphyxiate */
 enum {
 	LIBRADOS_CMPXATTR_OP_EQ  = 1,
 	LIBRADOS_CMPXATTR_OP_NE  = 2,
@@ -105,7 +103,6 @@ enum {
 	LIBRADOS_CMPXATTR_OP_LT  = 5,
 	LIBRADOS_CMPXATTR_OP_LTE = 6
 };
-/** @endcond */
 /** @} */
 
 /**
@@ -115,7 +112,6 @@ enum {
  * See librados.hpp for details.
  * @{
  */
-/** @cond TODO_enums_not_yet_in_asphyxiate */
 enum {
   LIBRADOS_OPERATION_NOFLAG             = 0,
   LIBRADOS_OPERATION_BALANCE_READS      = 1,
@@ -125,7 +121,6 @@ enum {
   LIBRADOS_OPERATION_SKIPRWLOCKS        = 16,
   LIBRADOS_OPERATION_IGNORE_OVERLAY     = 32,
 };
-/** @endcond */
 /** @} */
 
 /*
@@ -624,7 +619,6 @@ CEPH_RADOS_API uint64_t rados_get_instance_id(rados_t cluster);
  *
  * @param cluster which cluster the pool is in
  * @param pool_name name of the pool
- * @param pool_id unique id of the pool
  * @param ioctx where to store the io context
  * @returns 0 on success, negative error code on failure
  */

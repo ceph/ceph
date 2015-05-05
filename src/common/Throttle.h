@@ -12,22 +12,30 @@
 class CephContext;
 class PerfCounters;
 
+/**
+ * @class Throttle
+ * Throttles the maximum number of active requests.
+ *
+ * This class defines the maximum number of slots currently taken away. The
+ * excessive requests for more of them are delayed, until some slots are put
+ * back, so @p get_current() drops below the limit after fulfills the requests.
+ */
 class Throttle {
   CephContext *cct;
-  std::string name;
+  const std::string name;
   PerfCounters *logger;
-	ceph::atomic_t count, max;
+  ceph::atomic_t count, max;
   Mutex lock;
   list<Cond*> cond;
-  bool use_perf;
-  
+  const bool use_perf;
+
 public:
-  Throttle(CephContext *cct, std::string n, int64_t m = 0, bool _use_perf = true);
+  Throttle(CephContext *cct, const std::string& n, int64_t m = 0, bool _use_perf = true);
   ~Throttle();
 
 private:
   void _reset_max(int64_t m);
-  bool _should_wait(int64_t c) {
+  bool _should_wait(int64_t c) const {
     int64_t m = max.read();
     int64_t cur = count.read();
     return
@@ -39,22 +47,58 @@ private:
   bool _wait(int64_t c);
 
 public:
-  int64_t get_current() {
+  /**
+   * gets the number of currently taken slots
+   * @returns the number of taken slots
+   */
+  int64_t get_current() const {
     return count.read();
   }
 
-  int64_t get_max() { return max.read(); }
+  /**
+   * get the max number of slots
+   * @returns the max number of slots
+   */
+  int64_t get_max() const { return max.read(); }
 
+  /**
+   * set the new max number, and wait until the number of taken slots drains
+   * and drops below this limit.
+   *
+   * @param m the new max number
+   * @returns true if this method is blocked, false it it returns immediately
+   */
   bool wait(int64_t m = 0);
 
+  /**
+   * take the specified number of slots from the stock regardless the throttling
+   * @param c number of slots to take
+   * @returns the total number of taken slots
+   */
   int64_t take(int64_t c = 1);
+
+  /**
+   * get the specified amount of slots from the stock, but will wait if the
+   * total number taken by consumer would exceed the maximum number.
+   * @param c number of slots to get
+   * @param m new maximum number to set, ignored if it is 0
+   * @returns true if this request is blocked due to the throttling, false 
+   * otherwise
+   */
   bool get(int64_t c = 1, int64_t m = 0);
 
   /**
-   * Returns true if it successfully got the requested amount,
+   * the unblocked version of @p get()
+   * @returns true if it successfully got the requested amount,
    * or false if it would block.
    */
   bool get_or_fail(int64_t c = 1);
+
+  /**
+   * put slots back to the stock
+   * @param c number of slots to return
+   * @returns number of requests being hold after this
+   */
   int64_t put(int64_t c = 1);
 };
 

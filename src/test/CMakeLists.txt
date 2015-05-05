@@ -944,6 +944,20 @@ target_link_libraries(unittest_on_exit
 set_target_properties(unittest_on_exit PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 
+# unittest_subprocess
+set(unittest_subprocess_srcs test_subprocess.cc)
+add_executable(unittest_subprocess
+  ${unittest_subprocess_srcs}
+  $<TARGET_OBJECTS:heap_profiler_objs>
+  )
+target_link_libraries(unittest_subprocess
+  global
+  ${CMAKE_DL_LIBS}
+  ${TCMALLOC_LIBS}
+  ${UNITTEST_LIBS})
+set_target_properties(unittest_subprocess PROPERTIES COMPILE_FLAGS
+  ${UNITTEST_CXX_FLAGS})
+
 if(${WITH_RADOSGW})
   # test_cors
   set(test_cors_srcs test_cors.cc)
@@ -1120,7 +1134,7 @@ target_link_libraries(test_librbd
   )
 
 add_executable(test_librbd_fsx
-  librbd/fsx.c
+  librbd/fsx.cc
   $<TARGET_OBJECTS:heap_profiler_objs>
   ${CMAKE_SOURCE_DIR}/src/common/TextTable.cc
   ${CMAKE_SOURCE_DIR}/src/common/secret.c

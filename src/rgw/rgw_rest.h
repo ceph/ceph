@@ -357,10 +357,16 @@ public:
   }
 };
 
+static const int64_t NO_CONTENT_LENGTH = -1;
+
 extern void set_req_state_err(struct req_state *s, int err_no);
 extern void dump_errno(struct req_state *s);
 extern void dump_errno(struct req_state *s, int ret);
-extern void end_header(struct req_state *s, RGWOp *op = NULL, const char *content_type = NULL);
+extern void end_header(struct req_state *s,
+                       RGWOp *op = NULL,
+                       const char *content_type = NULL,
+                       const int64_t proposed_content_length = NO_CONTENT_LENGTH,
+		       bool force_content_type = false);
 extern void dump_start(struct req_state *s);
 extern void list_all_buckets_start(struct req_state *s);
 extern void dump_owner(struct req_state *s, string& id, string& name, const char *section = NULL);
@@ -368,6 +374,7 @@ extern void dump_string_header(struct req_state *s, const char *name, const char
 extern void dump_content_length(struct req_state *s, uint64_t len);
 extern void dump_etag(struct req_state *s, const char *etag);
 extern void dump_epoch_header(struct req_state *s, const char *name, time_t t);
+extern void dump_time_header(struct req_state *s, const char *name, time_t t);
 extern void dump_last_modified(struct req_state *s, time_t t);
 extern void abort_early(struct req_state *s, RGWOp *op, int err);
 extern void dump_range(struct req_state *s, uint64_t ofs, uint64_t end, uint64_t total_size);

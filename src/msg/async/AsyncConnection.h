@@ -224,8 +224,8 @@ class AsyncConnection : public Connection {
   EventCallbackRef reset_handler;
   EventCallbackRef remote_reset_handler;
   EventCallbackRef connect_handler;
-  EventCallbackRef accept_handler;
   EventCallbackRef local_deliver_handler;
+  EventCallbackRef wakeup_handler;
   bool keepalive;
   struct iovec msgvec[IOV_MAX];
   char *recv_buf;
@@ -287,8 +287,8 @@ class AsyncConnection : public Connection {
     reset_handler.reset();
     remote_reset_handler.reset();
     connect_handler.reset();
-    accept_handler.reset();
     local_deliver_handler.reset();
+    wakeup_handler.reset();
   }
 }; /* AsyncConnection */
 

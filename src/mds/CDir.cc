@@ -221,8 +221,6 @@ CDir::CDir(CInode *in, frag_t fg, MDCache *mdcache, bool auth) :
   if (auth) 
     state |= STATE_AUTH;
  
-  auth_pins = 0;
-  nested_auth_pins = 0;
   dir_auth_pins = 0;
   request_pins = 0;
 
@@ -672,8 +670,13 @@ void CDir::remove_null_dentries() {
   assert(get_num_any() == items.size());
 }
 
-// remove dirty null dentries for deleted directory. the dirfrag will be
-// deleted soon, so it's safe to not commit dirty dentries.
+/** remove dirty null dentries for deleted directory. the dirfrag will be
+ *  deleted soon, so it's safe to not commit dirty dentries.
+ *
+ *  This is called when a directory is being deleted, a prerequisite
+ *  of which is that its children have been unlinked: we expect to only see
+ *  null, unprojected dentries here.
+ */
 void CDir::try_remove_dentries_for_stray()
 {
   dout(10) << __func__ << dendl;
@@ -687,8 +690,8 @@ void CDir::try_remove_dentries_for_stray()
     CDentry *dn = p->second;
     ++p;
     if (dn->last == CEPH_NOSNAP) {
-      if (!dn->get_linkage()->is_null() || dn->is_projected())
-	continue; // shouldn't happen
+      assert(!dn->is_projected());
+      assert(dn->get_linkage()->is_null());
       if (clear_dirty && dn->is_dirty())
 	dn->mark_clean();
       // It's OK to remove lease prematurely because we will never link
@@ -698,8 +701,7 @@ void CDir::try_remove_dentries_for_stray()
       if (dn->get_num_ref() == 0)
 	remove_dentry(dn);
     } else {
-      if (dn->is_projected())
-	continue; // shouldn't happen
+      assert(!dn->is_projected());
       CDentry::linkage_t *dnl= dn->get_linkage();
       CInode *in = NULL;
       if (dnl->is_primary()) {
@@ -820,8 +822,14 @@ void CDir::steal_dentry(CDentry *dn)
       else
 	fnode.fragstat.nfiles++;
     }
-  } else
-      num_snap_items++;
+  } else {
+    num_snap_items++;
+    if (dn->get_linkage()->is_primary()) {
+      CInode *in = dn->get_linkage()->get_inode();
+      if (in->is_dirty_rstat())
+	dirty_rstat_inodes.push_back(&in->dirty_rstat_item);
+    }
+  }
 
   if (dn->auth_pins || dn->nested_auth_pins) {
     // use the helpers here to maintain the auth_pin invariants on the dir inode
@@ -1344,9 +1352,11 @@ struct C_Dir_Dirty : public CDirContext {
   C_Dir_Dirty(CDir *d, version_t p, LogSegment *l) : CDirContext(d), pv(p), ls(l) {}
   void finish(int r) {
     dir->mark_dirty(pv, ls);
+    dir->auth_unpin(dir);
   }
 };
 
+// caller should hold auth pin of this
 void CDir::log_mark_dirty()
 {
   MDLog *mdlog = inode->mdcache->mds->mdlog;
@@ -1816,8 +1826,8 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
   // dirty myself to remove stale snap dentries
   if (force_dirty && !is_dirty() && !inode->mdcache->is_readonly())
     log_mark_dirty();
-
-  auth_unpin(this);
+  else
+    auth_unpin(this);
 
   // kick waiters
   finish_waiting(WAIT_COMPLETE, 0);
@@ -2760,40 +2770,16 @@ void CDir::dump(Formatter *f) const
 
   string path;
   get_inode()->make_path_string_projected(path);
+  f->dump_stream("path") << path;
 
   f->dump_stream("dirfrag") << dirfrag();
-  f->dump_stream("path") << path;
   f->dump_int("snapid_first", first);
-  f->dump_bool("auth", is_auth());
 
-  // Fields only meaningful for auth
-  f->open_object_section("auth_state");
-  {
-    f->open_object_section("replica_map");
-    for (compact_map<mds_rank_t, unsigned>::const_iterator i = replica_map.begin();
-	 i != replica_map.end();
-	 ++i) {
-      std::ostringstream rank_str;
-      rank_str << i->first;
-      f->dump_int(rank_str.str().c_str(), i->second);
-    }
-    f->close_section();
-    f->dump_stream("projected_version") << get_projected_version();
-    f->dump_stream("version") << get_version();
-    f->dump_stream("comitting_version") << get_committing_version();
-    f->dump_stream("comitted_version") << get_committed_version();
-  }
-  f->close_section();
+  f->dump_stream("projected_version") << get_projected_version();
+  f->dump_stream("version") << get_version();
+  f->dump_stream("committing_version") << get_committing_version();
+  f->dump_stream("committed_version") << get_committed_version();
 
-  // Fields only meaningful for replica
-  f->open_object_section("replica_state");
-  {
-    f->dump_stream("authority_first") << authority().first;
-    f->dump_stream("authority_second") << authority().second;
-    f->dump_stream("replica_nonce") << get_replica_nonce();
-  }
-  f->close_section();
-  
   f->dump_bool("is_rep", is_rep());
 
   if (get_dir_auth() != CDIR_AUTH_DEFAULT) {
@@ -2807,6 +2793,7 @@ void CDir::dump(Formatter *f) const
   }
 
   f->open_array_section("states");
+  MDSCacheObject::dump_states(f);
   if (state_test(CDir::STATE_COMPLETE)) f->dump_string("state", "complete");
   if (state_test(CDir::STATE_FREEZINGTREE)) f->dump_string("state", "freezingtree");
   if (state_test(CDir::STATE_FROZENTREE)) f->dump_string("state", "frozentree");
@@ -2816,5 +2803,7 @@ void CDir::dump(Formatter *f) const
   if (state_test(CDir::STATE_IMPORTBOUND)) f->dump_string("state", "importbound");
   if (state_test(CDir::STATE_BADFRAG)) f->dump_string("state", "badfrag");
   f->close_section();
+
+  MDSCacheObject::dump(f);
 }
 

@@ -374,7 +374,6 @@ set(lib_mon_srcs
   mon/LogMonitor.cc
   mon/AuthMonitor.cc
   mon/Elector.cc
-  mon/MonitorStore.cc  
   mon/HealthMonitor.cc
   ${os_mon_files}
   mon/DataHealthService.cc
@@ -384,13 +383,10 @@ set(lib_mon_srcs
 
 set(common_util_src
   common/util.cc)
-set(monitorstore_src
-  mon/MonitorStore.cc)
 add_library(common_util_obj OBJECT ${common_util_src})
-add_library(monitorstore_obj OBJECT ${monitorstore_src})
 add_library(mon STATIC ${lib_mon_srcs} $<TARGET_OBJECTS:mon_common_objs>
   $<TARGET_OBJECTS:os_mon_objs> $<TARGET_OBJECTS:osd_mon_objs>
-  $<TARGET_OBJECTS:common_util_obj> $<TARGET_OBJECTS:monitorstore_obj>)
+  $<TARGET_OBJECTS:common_util_obj>)
 
 set(ceph_mon_srcs
   ceph_mon.cc
@@ -451,7 +447,6 @@ set(osd_srcs
   osd/ECBackend.cc
   osd/ECTransaction.cc
   osd/PGBackend.cc
-  osd/Ager.cc
   osd/OSD.cc
   osd/OSDCap.cc
   osd/Watch.cc

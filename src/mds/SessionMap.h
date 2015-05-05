@@ -193,6 +193,7 @@ public:
 private:
   version_t cap_push_seq;        // cap push seq #
   map<version_t, list<MDSInternalContextBase*> > waitfor_flush; // flush session messages
+
 public:
   xlist<Capability*> caps;     // inodes with caps; front=most recently used
   xlist<ClientLease*> leases;  // metadata leases to clients
@@ -227,17 +228,29 @@ public:
 
   // -- completed requests --
 private:
+  // Has completed_requests been modified since the last time we
+  // wrote this session out?
+  bool completed_requests_dirty;
 
-
+  unsigned num_trim_requests_warnings;
 public:
   void add_completed_request(ceph_tid_t t, inodeno_t created) {
     info.completed_requests[t] = created;
+    completed_requests_dirty = true;
   }
-  void trim_completed_requests(ceph_tid_t mintid) {
+  bool trim_completed_requests(ceph_tid_t mintid) {
     // trim
+    bool erased_any = false;
     while (!info.completed_requests.empty() && 
-	   (mintid == 0 || info.completed_requests.begin()->first < mintid))
+	   (mintid == 0 || info.completed_requests.begin()->first < mintid)) {
       info.completed_requests.erase(info.completed_requests.begin());
+      erased_any = true;
+    }
+
+    if (erased_any) {
+      completed_requests_dirty = true;
+    }
+    return erased_any;
   }
   bool have_completed_request(ceph_tid_t tid, inodeno_t *pcreated) const {
     map<ceph_tid_t,inodeno_t>::const_iterator p = info.completed_requests.find(tid);
@@ -248,6 +261,21 @@ public:
     return true;
   }
 
+  unsigned get_num_completed_requests() const { return info.completed_requests.size(); }
+  unsigned get_num_trim_requests_warnings() { return num_trim_requests_warnings; }
+  void inc_num_trim_requests_warnings() { ++num_trim_requests_warnings; }
+  void reset_num_trim_requests_warnings() { num_trim_requests_warnings = 0; }
+
+  bool has_dirty_completed_requests() const
+  {
+    return completed_requests_dirty;
+  }
+
+  void clear_dirty_completed_requests()
+  {
+    completed_requests_dirty = false;
+  }
+
 
   Session() : 
     state(STATE_CLOSED), state_seq(0), importing_count(0),
@@ -255,7 +283,9 @@ public:
     connection(NULL), item_session_list(this),
     requests(0),  // member_offset passed to front() manually
     cap_push_seq(0),
-    lease_seq(0) { }
+    lease_seq(0),
+    completed_requests_dirty(false),
+    num_trim_requests_warnings(0) { }
   ~Session() {
     assert(!item_session_list.is_on_list());
     while (!preopen_out_queue.empty()) {
@@ -534,6 +564,15 @@ public:
    * and `projected` to account for that.
    */
   void replay_advance_version();
+
+  /**
+   * For these session IDs, if a session exists with this ID, and it has
+   * dirty completed_requests, then persist it immediately
+   * (ahead of usual project/dirty versioned writes
+   *  of the map).
+   */
+  void save_if_dirty(const std::set<entity_name_t> &tgt_sessions,
+                     MDSGatherBuilder *gather_bld);
 };
 
 

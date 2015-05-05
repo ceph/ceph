@@ -241,7 +241,8 @@ enum {
   CEPH_OSD_RMW_FLAG_CLASS_WRITE = (1 << 4),
   CEPH_OSD_RMW_FLAG_PGOP        = (1 << 5),
   CEPH_OSD_RMW_FLAG_CACHE       = (1 << 6),
-  CEPH_OSD_RMW_FLAG_PROMOTE     = (1 << 7),
+  CEPH_OSD_RMW_FLAG_FORCE_PROMOTE   = (1 << 7),
+  CEPH_OSD_RMW_FLAG_SKIP_PROMOTE    = (1 << 8),
 };
 
 
@@ -2286,6 +2287,10 @@ struct pg_log_t {
       return p;
     }      
   }
+
+  static void filter_log(spg_t import_pgid, const OSDMap &curmap,
+    const string &hit_set_namespace, const pg_log_t &in,
+    pg_log_t &out, pg_log_t &reject);
 
   /**
    * copy entries from the tail of another pg_log_t

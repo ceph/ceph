@@ -16,6 +16,7 @@
 #ifndef CEPH_SIMPLELOCK_H
 #define CEPH_SIMPLELOCK_H
 
+#include "mdstypes.h"
 #include "MDSContext.h"
 
 // -- lock types --
@@ -668,6 +669,12 @@ public:
       out << " unstable";
     */
   }
+
+  /**
+   * Write bare values (caller must be in an object section)
+   * to formatter, or nothing if is_sync_and_unlocked.
+   */
+  void dump(Formatter *f) const;
 
   virtual void print(ostream& out) const {
     out << "(";

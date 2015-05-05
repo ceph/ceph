@@ -84,8 +84,8 @@ test_rename() {
     echo "testing rename..."
     remove_images
 
-    rbd create -s 1 foo
-    rbd create --new-format -s 1 bar
+    rbd create --image-format 1 -s 1 foo
+    rbd create --image-format 2 -s 1 bar
     rbd rename foo foo2
     rbd rename foo2 bar 2>&1 | grep exists
     rbd rename bar bar2
@@ -131,7 +131,7 @@ test_ls() {
     rbd rm test1
     rbd rm test2
 
-    rbd create --new-format -s 1 test1
+    rbd create --image-format 2 -s 1 test1
     rbd create --image-format 1 -s 1 test2
     rbd ls | grep test1
     rbd ls | grep test2
@@ -164,11 +164,11 @@ test_remove() {
     echo "testing remove..."
     remove_images
 
-    rbd create -s 1 test1
+    rbd create --image-format 1 -s 1 test1
     rbd rm test1
     rbd ls | wc -l | grep "^0$"
 
-    rbd create --new-format -s 1 test2
+    rbd create --image-format 2 -s 1 test2
     rbd rm test2
     rbd ls | wc -l | grep "^0$"
 
@@ -184,14 +184,14 @@ test_remove() {
 
     if [ $tiered -eq 0 ]; then
         # remove with header missing
-	rbd create --new-format -s 1 test2
+	rbd create --image-format 2 -s 1 test2
 	HEADER=$(rados -p rbd ls | grep '^rbd_header')
 	rados -p rbd rm $HEADER
 	rbd rm test2
 	rbd ls | wc -l | grep "^0$"
 
         # remove with header and id missing
-	rbd create --new-format -s 1 test2
+	rbd create --image-format 2 -s 1 test2
 	HEADER=$(rados -p rbd ls | grep '^rbd_header')
 	rados -p rbd rm $HEADER
 	rados -p rbd rm rbd_id.test2
@@ -201,7 +201,7 @@ test_remove() {
 
     # remove with rbd_children object missing (and, by extension,
     # with child not mentioned in rbd_children)
-    rbd create --new-format -s 1 test2
+    rbd create --image-format 2 -s 1 test2
     rbd snap create test2@snap
     rbd snap protect test2@snap
     rbd clone test2@snap clone

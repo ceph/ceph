@@ -1188,6 +1188,7 @@ class RGWRados
 
   void get_bucket_instance_ids(RGWBucketInfo& bucket_info, int shard_id, map<int, string> *result);
 
+  atomic64_t max_req_id;
   Mutex lock;
   Mutex watchers_lock;
   SafeTimer *timer;
@@ -1249,7 +1250,7 @@ protected:
   Finisher *finisher;
 
 public:
-  RGWRados() : lock("rados_timer_lock"), watchers_lock("watchers_lock"), timer(NULL),
+  RGWRados() : max_req_id(0), lock("rados_timer_lock"), watchers_lock("watchers_lock"), timer(NULL),
                gc(NULL), use_gc_thread(false), quota_threads(false),
                num_watchers(0), watchers(NULL),
                watch_initialized(false),
@@ -1262,6 +1263,10 @@ public:
                finisher(NULL),
                rest_master_conn(NULL),
                meta_mgr(NULL), data_log(NULL) {}
+
+  uint64_t get_new_req_id() {
+    return max_req_id.inc();
+  }
 
   void set_context(CephContext *_cct) {
     cct = _cct;
@@ -1641,6 +1646,7 @@ public:
         string prefix;
         string delim;
         rgw_obj_key marker;
+        rgw_obj_key end_marker;
         string ns;
         bool enforce_ns;
         RGWAccessListFilter *filter;
@@ -1685,6 +1691,12 @@ public:
   virtual int aio_wait(void *handle);
   virtual bool aio_completed(void *handle);
 
+  enum AttrsMod {
+    ATTRSMOD_NONE    = 0,
+    ATTRSMOD_REPLACE = 1,
+    ATTRSMOD_MERGE   = 2
+  };
+
   int rewrite_obj(RGWBucketInfo& dest_bucket_info, rgw_obj& obj);
   int fetch_remote_obj(RGWObjectCtx& obj_ctx,
                        const string& user_id,
@@ -1696,12 +1708,13 @@ public:
                        rgw_obj& src_obj,
                        RGWBucketInfo& dest_bucket_info,
                        RGWBucketInfo& src_bucket_info,
+                       time_t *src_mtime,
                        time_t *mtime,
                        const time_t *mod_ptr,
                        const time_t *unmod_ptr,
                        const char *if_match,
                        const char *if_nomatch,
-                       bool replace_attrs,
+                       AttrsMod attrs_mod,
                        map<string, bufferlist>& attrs,
                        RGWObjCategory category,
                        uint64_t olh_epoch,
@@ -1721,7 +1734,14 @@ public:
    * Copy an object.
    * dest_obj: the object to copy into
    * src_obj: the object to copy from
-   * attrs: if replace_attrs is set then these are placed on the new object
+   * attrs: usage depends on attrs_mod parameter
+   * attrs_mod: the modification mode of the attrs, may have the following values:
+   *            ATTRSMOD_NONE - the attributes of the source object will be
+   *                            copied without modifications, attrs parameter is ignored;
+   *            ATTRSMOD_REPLACE - new object will have the attributes provided by attrs
+   *                               parameter, source object attributes are not copied;
+   *            ATTRSMOD_MERGE - any conflicting meta keys on the source object's attributes
+   *                             are overwritten by values contained in attrs parameter.
    * err: stores any errors resulting from the get of the original object
    * Returns: 0 on success, -ERR# otherwise.
    */
@@ -1735,12 +1755,13 @@ public:
                rgw_obj& src_obj,
                RGWBucketInfo& dest_bucket_info,
                RGWBucketInfo& src_bucket_info,
+               time_t *src_mtime,
                time_t *mtime,
                const time_t *mod_ptr,
                const time_t *unmod_ptr,
                const char *if_match,
                const char *if_nomatch,
-               bool replace_attrs,
+               AttrsMod attrs_mod,
                map<std::string, bufferlist>& attrs,
                RGWObjCategory category,
                uint64_t olh_epoch,
@@ -1774,6 +1795,11 @@ public:
    */
   virtual int delete_bucket(rgw_bucket& bucket, RGWObjVersionTracker& objv_tracker);
 
+  /**
+   * Check to see if the bucket metadata is synced
+   */
+  bool is_syncing_bucket_meta(rgw_bucket& bucket);
+  
   int set_bucket_owner(rgw_bucket& bucket, ACLOwner& owner);
   int set_buckets_enabled(std::vector<rgw_bucket>& buckets, bool enabled);
   int bucket_suspended(rgw_bucket& bucket, bool *suspended);
@@ -2006,6 +2032,7 @@ public:
                          map<RGWObjCategory, RGWStorageStats> *calculated_stats);
   int bucket_rebuild_index(rgw_bucket& bucket);
   int remove_objs_from_index(rgw_bucket& bucket, list<rgw_obj_key>& oid_list);
+  int fix_head_obj_locator(rgw_bucket& bucket, bool copy_obj, bool remove_bad, rgw_obj_key& key);
 
   int cls_user_get_header(const string& user_id, cls_user_header *header);
   int cls_user_get_header_async(const string& user_id, RGWGetUserHeader_CB *ctx);

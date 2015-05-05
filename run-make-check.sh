@@ -42,8 +42,17 @@ function get_processors() {
 }
 
 function run() {
-    sudo $(which apt-get yum zypper 2>/dev/null) install -y ccache jq
-    sudo modprobe rbd
+    # Same logic as install-deps.sh for finding package installer
+    local install_cmd
+    test -f /etc/redhat-release && install_cmd="yum install -y"
+    type apt-get > /dev/null 2>&1 && install_cmd="apt-get install -y"
+    type zypper > /dev/null 2>&1 && install_cmd="zypper --gpg-auto-import-keys --non-interactive install"
+    if [ -n "$install_cmd" ]; then
+        sudo $install_cmd ccache jq
+    else
+        echo "WARNING: Don't know how to install packages" >&2
+    fi
+    sudo /sbin/modprobe rbd
 
     if test -f ./install-deps.sh ; then
 	$DRY_RUN ./install-deps.sh || return 1

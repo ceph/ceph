@@ -33,6 +33,13 @@ typedef off_t off64_t;
 extern "C" {
 #endif
 
+#define LIBCEPHFS_VER_MAJOR 0
+#define LIBCEPHFS_VER_MINOR 94
+#define LIBCEPHFS_VER_EXTRA 0
+
+#define LIBCEPHFS_VERSION(maj, min, extra) ((maj << 16) + (min << 8) + extra)
+#define LIBCEPHFS_VERSION_CODE LIBCEPHFS_VERSION(LIBCEPHFS_VER_MAJOR, LIBCEPHFS_VER_MINOR, LIBCEPHFS_VER_EXTRA)
+
 /*
  * On FreeBSD and Apple the offset is 64 bit, but libc doesn't announce it in
  * the way glibc does.
@@ -69,7 +76,7 @@ struct ceph_file_layout {
 } __attribute__ ((packed));
 
 
-typedef struct _inodeno_t {
+typedef struct inodeno_t {
   uint64_t val;
 } inodeno_t;
 
@@ -83,15 +90,17 @@ typedef struct vinodeno_t {
 } vinodeno_t;
 
 typedef struct Fh Fh;
+#else /* _cplusplus */
+
+struct inodeno_t;
+struct vinodeno_t;
+typedef struct vinodeno_t vinodeno;
 
 #endif /* ! __cplusplus */
 
-struct inodeno_t;
 struct Inode;
 typedef struct Inode Inode;
 
-struct vinodeno_t;
-typedef struct vinodeno_t vinodeno;
 struct ceph_mount_info;
 struct ceph_dir_result;
 struct CephContext;
@@ -877,6 +886,19 @@ int ceph_getxattr(struct ceph_mount_info *cmount, const char *path, const char *
 	void *value, size_t size);
 
 /**
+ * Get an extended attribute.
+ *
+ * @param cmount the ceph mount handle to use for performing the getxattr.
+ * @param fd the open file descriptor referring to the file to get extended attribute from.
+ * @param name the name of the extended attribute to get
+ * @param value a pre-allocated buffer to hold the xattr's value
+ * @param size the size of the pre-allocated buffer
+ * @returns the size of the value or a negative error code on failure.
+ */
+int ceph_fgetxattr(struct ceph_mount_info *cmount, int fd, const char *name,
+	void *value, size_t size);
+
+/**
  * Get an extended attribute wihtout following symbolic links.  This function is
  * identical to ceph_getxattr, but if the path refers to a symbolic link,
  * we get the extended attributes of the symlink rather than the attributes
@@ -904,6 +926,17 @@ int ceph_lgetxattr(struct ceph_mount_info *cmount, const char *path, const char 
 int ceph_listxattr(struct ceph_mount_info *cmount, const char *path, char *list, size_t size);
 
 /**
+ * List the extended attribute keys on a file.
+ *
+ * @param cmount the ceph mount handle to use for performing the listxattr.
+ * @param fd the open file descriptor referring to the file to list extended attributes on.
+ * @param list a buffer to be filled in with the list of extended attributes keys.
+ * @param size the size of the list buffer.
+ * @returns the size of the resulting list filled in.
+ */
+int ceph_flistxattr(struct ceph_mount_info *cmount, int fd, char *list, size_t size);
+
+/**
  * Get the list of extended attribute keys on a file, but do not follow symbolic links.
  *
  * @param cmount the ceph mount handle to use for performing the llistxattr.
@@ -923,6 +956,16 @@ int ceph_llistxattr(struct ceph_mount_info *cmount, const char *path, char *list
  * @returns 0 on success or a negative error code on failure.
  */
 int ceph_removexattr(struct ceph_mount_info *cmount, const char *path, const char *name);
+
+/**
+ * Remove an extended attribute from a file.
+ *
+ * @param cmount the ceph mount handle to use for performing the removexattr.
+ * @param fd the open file descriptor referring to the file to remove extended attribute from.
+ * @param name the name of the extended attribute to remove.
+ * @returns 0 on success or a negative error code on failure.
+ */
+int ceph_fremovexattr(struct ceph_mount_info *cmount, int fd, const char *name);
 
 /**
  * Remove the extended attribute from a file, do not follow symbolic links.
@@ -948,6 +991,22 @@ int ceph_lremovexattr(struct ceph_mount_info *cmount, const char *path, const ch
  * @returns 0 on success or a negative error code on failure.
  */
 int ceph_setxattr(struct ceph_mount_info *cmount, const char *path, const char *name, 
+	const void *value, size_t size, int flags);
+
+/**
+ * Set an extended attribute on a file.
+ *
+ * @param cmount the ceph mount handle to use for performing the setxattr.
+ * @param fd the open file descriptor referring to the file to set extended attribute on.
+ * @param name the name of the extended attribute to set.
+ * @param value the bytes of the extended attribute value
+ * @param size the size of the extended attribute value
+ * @param flags the flags can be:
+ *	CEPH_XATTR_CREATE: create the extended attribute.  Must not exist.
+ *      CEPH_XATTR_REPLACE: replace the extended attribute, Must already exist.
+ * @returns 0 on success or a negative error code on failure.
+ */
+int ceph_fsetxattr(struct ceph_mount_info *cmount, int fd, const char *name,
 	const void *value, size_t size, int flags);
 
 /**

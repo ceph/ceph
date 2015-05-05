@@ -180,7 +180,7 @@ public:
       }
 
       m_aio_completions.erase(aio_completion);
-      delete aio_completion;
+      aio_completion->release();
     }
 
     m_callback_cond.Signal();
@@ -226,6 +226,13 @@ public:
     case NOTIFY_OP_RESIZE:
       {
         ResizePayload payload;
+        payload.decode(2, iter);
+        *id = payload.async_request_id;
+      }
+      return true;
+    case NOTIFY_OP_REBUILD_OBJECT_MAP:
+      {
+        RebuildObjectMapPayload payload;
         payload.decode(2, iter);
         *id = payload.async_request_id;
       }
@@ -326,6 +333,20 @@ struct ResizeTask {
   void operator()() {
     RWLock::RLocker l(ictx->owner_lock);
     result = ictx->image_watcher->notify_resize(0, 0, *progress_context);
+  }
+};
+
+struct RebuildObjectMapTask {
+  librbd::ImageCtx *ictx;
+  ProgressContext *progress_context;
+  int result;
+
+  RebuildObjectMapTask(librbd::ImageCtx *ictx_, ProgressContext *ctx)
+    : ictx(ictx_), progress_context(ctx), result(0) {}
+
+  void operator()() {
+    RWLock::RLocker l(ictx->owner_lock);
+    result = ictx->image_watcher->notify_rebuild_object_map(0, *progress_context);
   }
 };
 
@@ -781,6 +802,42 @@ TEST_F(TestImageWatcher, NotifyResize) {
   ASSERT_EQ(0, resize_task.result);
 }
 
+TEST_F(TestImageWatcher, NotifyRebuildObjectMap) {
+  REQUIRE_FEATURE(RBD_FEATURE_EXCLUSIVE_LOCK);
+
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  ASSERT_EQ(0, register_image_watch(*ictx));
+  ASSERT_EQ(0, lock_image(*ictx, LOCK_EXCLUSIVE,
+        "auto " + stringify(m_watch_ctx->get_handle())));
+
+  m_notify_acks = boost::assign::list_of(
+    std::make_pair(NOTIFY_OP_REBUILD_OBJECT_MAP, create_response_message(0)));
+
+  ProgressContext progress_context;
+  RebuildObjectMapTask rebuild_task(ictx, &progress_context);
+  boost::thread thread(boost::ref(rebuild_task));
+
+  ASSERT_TRUE(wait_for_notifies(*ictx));
+
+  NotifyOps expected_notify_ops;
+  expected_notify_ops += NOTIFY_OP_REBUILD_OBJECT_MAP;
+  ASSERT_EQ(expected_notify_ops, m_notifies);
+
+  AsyncRequestId async_request_id;
+  ASSERT_TRUE(extract_async_request_id(NOTIFY_OP_REBUILD_OBJECT_MAP,
+                                       &async_request_id));
+
+  ASSERT_EQ(0, notify_async_progress(ictx, async_request_id, 10, 20));
+  ASSERT_TRUE(progress_context.wait(ictx, 10, 20));
+
+  ASSERT_EQ(0, notify_async_complete(ictx, async_request_id, 0));
+
+  ASSERT_TRUE(thread.timed_join(boost::posix_time::seconds(10)));
+  ASSERT_EQ(0, rebuild_task.result);
+}
+
 TEST_F(TestImageWatcher, NotifySnapCreate) {
   REQUIRE_FEATURE(RBD_FEATURE_EXCLUSIVE_LOCK);
 
@@ -820,6 +877,27 @@ TEST_F(TestImageWatcher, NotifySnapCreateError) {
 
   NotifyOps expected_notify_ops;
   expected_notify_ops += NOTIFY_OP_SNAP_CREATE;
+  ASSERT_EQ(expected_notify_ops, m_notifies);
+}
+
+TEST_F(TestImageWatcher, NotifySnapRemove) {
+  REQUIRE_FEATURE(RBD_FEATURE_EXCLUSIVE_LOCK);
+
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  ASSERT_EQ(0, register_image_watch(*ictx));
+  ASSERT_EQ(0, lock_image(*ictx, LOCK_EXCLUSIVE,
+        "auto " + stringify(m_watch_ctx->get_handle())));
+
+  m_notify_acks = boost::assign::list_of(
+    std::make_pair(NOTIFY_OP_SNAP_REMOVE, create_response_message(0)));
+
+  RWLock::RLocker l(ictx->owner_lock);
+  ASSERT_EQ(0, ictx->image_watcher->notify_snap_remove("snap"));
+
+  NotifyOps expected_notify_ops;
+  expected_notify_ops += NOTIFY_OP_SNAP_REMOVE;
   ASSERT_EQ(expected_notify_ops, m_notifies);
 }
 
@@ -903,14 +981,7 @@ TEST_F(TestImageWatcher, NotifyAsyncRequestTimedOut) {
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
-  md_config_t *conf = ictx->cct->_conf;
-  int timed_out_seconds = conf->rbd_request_timed_out_seconds;
-  conf->set_val("rbd_request_timed_out_seconds", "0");
-  BOOST_SCOPE_EXIT( (timed_out_seconds)(conf) ) {
-    conf->set_val("rbd_request_timed_out_seconds",
-                  stringify(timed_out_seconds).c_str());
-  } BOOST_SCOPE_EXIT_END;
-  ASSERT_EQ(0, conf->rbd_request_timed_out_seconds);
+  ictx->request_timed_out_seconds = 0;
 
   ASSERT_EQ(0, register_image_watch(*ictx));
   ASSERT_EQ(0, lock_image(*ictx, LOCK_EXCLUSIVE,

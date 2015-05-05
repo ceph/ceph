@@ -80,8 +80,6 @@ enum {
   l_c_first = 20000,
   l_c_reply,
   l_c_lat,
-  l_c_owrlat,
-  l_c_ordlat,
   l_c_wrlat,
   l_c_last,
 };
@@ -480,6 +478,10 @@ protected:
   bool is_quota_bytes_exceeded(Inode *in, int64_t new_bytes);
   bool is_quota_bytes_approaching(Inode *in);
 
+  std::map<int64_t, int> pool_perms;
+  list<Cond*> waiting_for_pool_perm;
+  int check_pool_perm(Inode *in, int need);
+
  public:
   void set_filer_flags(int flags);
   void clear_filer_flags(int flags);
@@ -841,12 +843,16 @@ public:
   // full path xattr ops
   int getxattr(const char *path, const char *name, void *value, size_t size);
   int lgetxattr(const char *path, const char *name, void *value, size_t size);
+  int fgetxattr(int fd, const char *name, void *value, size_t size);
   int listxattr(const char *path, char *list, size_t size);
   int llistxattr(const char *path, char *list, size_t size);
+  int flistxattr(int fd, char *list, size_t size);
   int removexattr(const char *path, const char *name);
   int lremovexattr(const char *path, const char *name);
+  int fremovexattr(int fd, const char *name);
   int setxattr(const char *path, const char *name, const void *value, size_t size, int flags);
   int lsetxattr(const char *path, const char *name, const void *value, size_t size, int flags);
+  int fsetxattr(int fd, const char *name, const void *value, size_t size, int flags);
 
   int sync_fs();
   int64_t drop_caches();
