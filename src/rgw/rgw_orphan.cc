@@ -127,9 +127,13 @@ int RGWOrphanStore::store_entries(const string& oid, const map<string, bufferlis
   librados::ObjectWriteOperation op;
   op.omap_set(entries);
   cout << "storing " << entries.size() << " entries at " << oid << std::endl;
+  ldout(store->ctx(), 20) << "storing " << entries.size() << " entries at " << oid << ": " << dendl;
+  for (map<string, bufferlist>::const_iterator iter = entries.begin(); iter != entries.end(); ++iter) {
+    ldout(store->ctx(), 20) << " > " << iter->first << dendl;
+  }
   int ret = ioctx.operate(oid, &op);
   if (ret < 0) {
-    cerr << "ERROR: " << __func__ << "(" << oid << ") returned ret=" << ret << std::endl;
+    lderr(store->ctx()) << "ERROR: " << __func__ << "(" << oid << ") returned ret=" << ret << dendl;
   }
   
   return 0;
@@ -143,7 +147,7 @@ int RGWOrphanStore::read_entries(const string& oid, const string& marker, map<st
     cerr << "ERROR: " << __func__ << "(" << oid << ") returned ret=" << ret << std::endl;
   }
 
-  *truncated = (entries->size() < MAX_OMAP_GET);
+  *truncated = (entries->size() == MAX_OMAP_GET);
 
   return 0;
 }
