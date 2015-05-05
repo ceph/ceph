@@ -2211,8 +2211,10 @@ int object_map_update(cls_method_context_t hctx, bufferlist *in, bufferlist *out
   bool updated = false;
   for (uint64_t object_no = start_object_no; object_no < end_object_no;
        ++object_no) {
-    if ((!current_object_state || object_map[object_no] == *current_object_state) &&
-	object_map[object_no] != new_object_state) {
+    uint8_t state = object_map[object_no];
+    if ((!current_object_state || state == *current_object_state ||
+        (*current_object_state == OBJECT_EXISTS &&
+         state == OBJECT_EXISTS_CLEAN)) && state != new_object_state) {
       object_map[object_no] = new_object_state;
       updated = true;
     }
