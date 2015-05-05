@@ -2126,7 +2126,8 @@ main(int argc, char **argv)
 				prt("file name to long\n");
 				exit(1);
 			}
-			strncpy(logfile, dirpath, sizeof(logfile));
+			strncpy(logfile, dirpath, sizeof(logfile)-1);
+			logfile[sizeof(logfile)-1] = '\0';
 			if (strlen(logfile) < sizeof(logfile)-2) {
 				strcat(logfile, "/");
 			} else {
