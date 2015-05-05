@@ -10,14 +10,19 @@ from util.rados import rados
 
 log = logging.getLogger(__name__)
 
+
 def task(ctx, config):
     """
     Test handling of divergent entries with prior_version
     prior to log_tail
 
-    config: none
+    overrides:
+      ceph:
+        conf:
+          osd:
+            debug osd: 5
 
-    Requires 3 osds.
+    Requires 3 osds on a single test node.
     """
     if config is None:
         config = {}
@@ -44,19 +49,21 @@ def task(ctx, config):
 
     osds = [0, 1, 2]
     for i in osds:
-        ctx.manager.set_config(i, osd_min_pg_log_entries=1)
+        ctx.manager.set_config(i, osd_min_pg_log_entries=10)
+        ctx.manager.set_config(i, osd_max_pg_log_entries=10)
+        ctx.manager.set_config(i, osd_pg_log_trim_min=5)
 
     # determine primary
     divergent = ctx.manager.get_pg_primary('foo', 0)
     log.info("primary and soon to be divergent is %d", divergent)
-    non_divergent = [0,1,2]
+    non_divergent = list(osds)
     non_divergent.remove(divergent)
 
     log.info('writing initial objects')
     first_mon = teuthology.get_first_mon(ctx, config)
     (mon,) = ctx.cluster.only(first_mon).remotes.iterkeys()
-    # write 1000 objects
-    for i in range(1000):
+    # write 100 objects
+    for i in range(100):
         rados(ctx, mon, ['-p', 'foo', 'put', 'existing_%d' % i, dummyfile])
 
     ctx.manager.wait_for_clean()
@@ -64,26 +71,33 @@ def task(ctx, config):
     # blackhole non_divergent
     log.info("blackholing osds %s", str(non_divergent))
     for i in non_divergent:
-        ctx.manager.set_config(i, filestore_blackhole='')
+        ctx.manager.set_config(i, filestore_blackhole=1)
 
-    # write 1 (divergent) object
-    log.info('writing divergent object existing_0')
-    rados(
-        ctx, mon, ['-p', 'foo', 'put', 'existing_0', dummyfile2],
-        wait=False)
+    DIVERGENT_WRITE = 5
+    DIVERGENT_REMOVE = 5
+    # Write some soon to be divergent
+    log.info('writing divergent objects')
+    for i in range(DIVERGENT_WRITE):
+        rados(ctx, mon, ['-p', 'foo', 'put', 'existing_%d' % i,
+                         dummyfile2], wait=False)
+    # Remove some soon to be divergent
+    log.info('remove divergent objects')
+    for i in range(DIVERGENT_REMOVE):
+        rados(ctx, mon, ['-p', 'foo', 'rm',
+                         'existing_%d' % (i + DIVERGENT_WRITE)], wait=False)
     time.sleep(10)
     mon.run(
         args=['killall', '-9', 'rados'],
         wait=True,
         check_status=False)
 
-    # kill all the osds
+    # kill all the osds but leave divergent in
     log.info('killing all the osds')
     for i in osds:
         ctx.manager.kill_osd(i)
     for i in osds:
         ctx.manager.mark_down_osd(i)
-    for i in osds:
+    for i in non_divergent:
         ctx.manager.mark_out_osd(i)
 
     # bring up non-divergent
@@ -93,35 +107,36 @@ def task(ctx, config):
     for i in non_divergent:
         ctx.manager.mark_in_osd(i)
 
-    log.info('making log long to prevent backfill')
-    for i in non_divergent:
-        ctx.manager.set_config(i, osd_min_pg_log_entries=100000)
-
     # write 1 non-divergent object (ensure that old divergent one is divergent)
-    log.info('writing non-divergent object existing_1')
-    rados(ctx, mon, ['-p', 'foo', 'put', 'existing_1', dummyfile2])
+    objname = "existing_%d" % (DIVERGENT_WRITE + DIVERGENT_REMOVE)
+    log.info('writing non-divergent object ' + objname)
+    rados(ctx, mon, ['-p', 'foo', 'put', objname, dummyfile2])
 
     ctx.manager.wait_for_recovery()
 
-    # ensure no recovery
+    # ensure no recovery of up osds first
     log.info('delay recovery')
     for i in non_divergent:
-        ctx.manager.set_config(i, osd_recovery_delay_start=100000)
+        ctx.manager.wait_run_admin_socket(
+            'osd', i, ['set_recovery_delay', '100000'])
 
     # bring in our divergent friend
     log.info("revive divergent %d", divergent)
+    ctx.manager.raw_cluster_cmd('osd', 'set', 'noup')
     ctx.manager.revive_osd(divergent)
 
+    log.info('delay recovery divergent')
+    ctx.manager.wait_run_admin_socket(
+        'osd', divergent, ['set_recovery_delay', '100000'])
+
+    ctx.manager.raw_cluster_cmd('osd', 'unset', 'noup')
     while len(ctx.manager.get_osd_status()['up']) < 3:
         time.sleep(10)
 
-    log.info('delay recovery divergent')
-    ctx.manager.set_config(divergent, osd_recovery_delay_start=100000)
-    log.info('mark divergent in')
-    ctx.manager.mark_in_osd(divergent)
-
     log.info('wait for peering')
     rados(ctx, mon, ['-p', 'foo', 'put', 'foo', dummyfile])
+
+    # At this point the divergent_priors should have been detected
 
     log.info("killing divergent %d", divergent)
     ctx.manager.kill_osd(divergent)
@@ -129,12 +144,24 @@ def task(ctx, config):
     ctx.manager.revive_osd(divergent)
 
     log.info('allowing recovery')
-    for i in non_divergent:
-        ctx.manager.set_config(i, osd_recovery_delay_start=0)
+    # Set osd_recovery_delay_start back to 0 and kick the queue
+    for i in osds:
+        ctx.manager.raw_cluster_cmd('tell', 'osd.%d' % i, 'debug',
+                                    'kick_recovery_wq', ' 0')
 
-    log.info('reading existing_0')
-    exit_status = rados(ctx, mon,
-                        ['-p', 'foo', 'get', 'existing_0',
-                         '-o', '/tmp/existing'])
-    assert exit_status is 0
+    log.info('reading divergent objects')
+    for i in range(DIVERGENT_WRITE + DIVERGENT_REMOVE):
+        exit_status = rados(ctx, mon, ['-p', 'foo', 'get', 'existing_%d' % i,
+                            '-o', '/tmp/existing'])
+        assert exit_status is 0
+
+    (remote,) = ctx.\
+        cluster.only('osd.{o}'.format(o=divergent)).remotes.iterkeys()
+    msg = "dirty_divergent_priors: true, divergent_priors: %d" \
+          % (DIVERGENT_WRITE + DIVERGENT_REMOVE)
+    cmd = 'grep "{msg}" /var/log/ceph/ceph-osd.{osd}.log'\
+          .format(msg=msg, osd=divergent)
+    proc = remote.run(args=cmd, wait=True, check_status=False)
+    assert proc.exitstatus == 0
+
     log.info("success")
