@@ -278,7 +278,10 @@ class AsyncConnection : public Connection {
   void wakeup_from(uint64_t id);
   void local_deliver();
   void stop() {
-    center->dispatch_event_external(reset_handler);
+    lock.Lock();
+    if (state != STATE_CLOSED)
+      center->dispatch_event_external(reset_handler);
+    lock.Unlock();
     mark_down();
   }
   void cleanup_handler() {

@@ -363,8 +363,8 @@ void WorkerPool::barrier()
   pthread_t cur = pthread_self();
   for (vector<Worker*>::iterator it = workers.begin(); it != workers.end(); ++it) {
     assert(cur != (*it)->center.get_owner());
-    (*it)->center.dispatch_event_external(EventCallbackRef(new C_barrier(this)));
     barrier_count.inc();
+    (*it)->center.dispatch_event_external(EventCallbackRef(new C_barrier(this)));
   }
   ldout(cct, 10) << __func__ << " wait for " << barrier_count.read() << " barrier" << dendl;
   Mutex::Locker l(barrier_lock);
