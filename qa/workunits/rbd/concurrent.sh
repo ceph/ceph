@@ -283,7 +283,7 @@ function rbd_write_image() {
 	# Offset and size here are meant to ensure beginning and end
 	# cross both (4K or 64K) page and (4MB) rbd object boundaries.
 	# It assumes the SOURCE_DATA file has size 66 * 2048 bytes
-	dd "${SOURCE_DATA}" of="/dev/rbd${id}" bs=2048 seek=2015 \
+	dd if="${SOURCE_DATA}" of="/dev/rbd${id}" bs=2048 seek=2015 \
 		> /dev/null 2>&1
 }
 
@@ -323,7 +323,7 @@ function rbd_read_image() {
 	# zero-fills unwritten data when the target object doesn't
 	# exist.
 	dd if="/dev/rbd${id}" of=/dev/null bs=2048 count=34 skip=4098 \
-		/dev/null 2>&1
+		> /dev/null 2>&1
 }
 
 function rbd_unmap_image() {

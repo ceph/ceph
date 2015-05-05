@@ -106,7 +106,7 @@ XioConnection::XioConnection(XioMessenger *m, XioConnection::type _type,
 
   if (policy.throttler_messages) {
     max_msgs = policy.throttler_messages->get_max();
-    ldout(m->cct,0) << "XioMessenger throttle_msgs: " << max_msgs << dendl;
+    ldout(m->cct,4) << "XioMessenger throttle_msgs: " << max_msgs << dendl;
   }
 
   xopt = m->cct->_conf->xio_queue_depth;
@@ -125,7 +125,7 @@ XioConnection::XioConnection(XioMessenger *m, XioConnection::type _type,
 
   if (policy.throttler_bytes) {
     max_bytes = policy.throttler_bytes->get_max();
-    ldout(m->cct,0) << "XioMessenger throttle_bytes: " << max_bytes << dendl;
+    ldout(m->cct,4) << "XioMessenger throttle_bytes: " << max_bytes << dendl;
   }
 
   bytes_opt = (2 << 28); /* default: 512 MB */
@@ -138,7 +138,7 @@ XioConnection::XioConnection(XioMessenger *m, XioConnection::type _type,
   xio_set_opt(NULL, XIO_OPTLEVEL_ACCELIO, XIO_OPTNAME_RCV_QUEUE_DEPTH_BYTES,
              &bytes_opt, sizeof(bytes_opt));
 
-  ldout(m->cct,0) << "Peer type: " << peer.name.type_str() <<
+  ldout(m->cct,4) << "Peer type: " << peer.name.type_str() <<
         " throttle_msgs: " << xopt << " throttle_bytes: " << bytes_opt << dendl;
 
   /* XXXX fake features, aieee! */
