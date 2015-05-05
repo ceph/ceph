@@ -425,6 +425,7 @@ noinst_HEADERS += \
 	test/librados/TestCase.h \
 	test/libradosstriper/TestCase.h \
 	test/librbd/test_fixture.h \
+	test/librbd/test_support.h \
 	test/ObjectMap/KeyValueDBMemory.h \
 	test/omap_bench.h \
 	test/osdc/FakeWriteback.h \
