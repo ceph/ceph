@@ -43,6 +43,11 @@ private:
   uint32_t special_handling;
   Mutex sh_mtx;
   Cond sh_cond;
+  bool need_addr;
+  bool did_bind;
+
+  /// approximately unique ID set by the Constructor for use in entity_addr_t
+  uint64_t nonce;
 
   friend class XioConnection;
 
@@ -131,6 +136,15 @@ public:
 
   void ds_dispatch(Message *m)
     { dispatch_strategy->ds_dispatch(m); }
+
+  /**
+   * Tell the XioMessenger its full IP address.
+   *
+   * This is used by clients when connecting to other endpoints, and
+   * probably shouldn't be called by anybody else.
+   */
+  void learned_addr(const entity_addr_t& peer_addr_for_me);
+
 
 protected:
   virtual void ready()
