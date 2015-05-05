@@ -115,7 +115,7 @@ int RGWOrphanStore::init()
   librados::Rados *rados = store->get_rados();
   int r = rados->ioctx_create(log_pool, ioctx);
   if (r < 0) {
-    cerr << "ERROR: failed to open log pool ret=" << r << std::endl;
+    cerr << "ERROR: failed to open log pool (" << store->get_zone_params().log_pool.name << " ret=" << r << std::endl;
     return r;
   }
 
