@@ -4,6 +4,7 @@ EXTRA_DIST = conf.py
 
 dist_man_MANS = 
 
+if HAS_SPHINX_BUILD
 if ENABLE_CLIENT
 include Makefile-client.am
 endif
@@ -27,3 +28,4 @@ clean-local:
 	@rm -rf doctrees
 
 MAINTAINERCLEANFILES = $(dist_man_MANS)
+endif
