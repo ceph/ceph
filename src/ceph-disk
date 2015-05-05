@@ -1879,16 +1879,14 @@ def start_daemon(
                 [
                     'systemctl',
                     'enable',
-                    'ceph-{cname}osd@{osd_id}'.format(osd_id=osd_id,
-                        cname=cname),
+                    'ceph-osd@{osd_id}'.format(osd_id=osd_id),
                     ],
                 )
             command_check_call(
                 [
                     'systemctl',
                     'start',
-                    'ceph-{cname}osd@{osd_id}'.format(osd_id=osd_id,
-                        cname=cname),
+                    'ceph-osd@{osd_id}'.format(osd_id=osd_id),
                     ],
                 )
         else:
