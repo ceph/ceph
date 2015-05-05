@@ -2516,6 +2516,23 @@ void NewStore::_kv_sync_thread()
 	    it != wal_cleaning.end();
 	    it++) {
 	wal_transaction_t& wt =*(*it)->wal_txn; 
+	// cleanup the data in overlays
+	for (list<wal_op_t>::iterator p = wt.ops.begin(); p != wt.ops.end(); ++p) {
+	  for (vector<overlay_t>::iterator q = p->overlays.begin();
+               q != p->overlays.end(); ++q) {
+            string key;
+            get_overlay_key(p->nid, q->key, &key);
+	    txc_cleanup_sync->rmkey(PREFIX_OVERLAY, key);
+	  }
+	}
+	// cleanup the shared overlays. this may double delete something we
+	// did above, but that's less work than doing careful ref counting
+	// of the overlay key/value pairs.
+	for (vector<string>::iterator p = wt.shared_overlay_keys.begin();
+             p != wt.shared_overlay_keys.end(); ++p) {
+	  txc_cleanup_sync->rmkey(PREFIX_OVERLAY, *p);
+	}
+	// cleanup the wal
 	string key;
 	get_wal_key(wt.seq, &key);
 	txc_cleanup_sync->rmkey(PREFIX_WAL, key);	
@@ -2587,6 +2604,9 @@ int NewStore::_do_wal_transaction(wal_transaction_t& wt,
 {
   vector<int> sync_fds;
   sync_fds.reserve(wt.ops.size());
+
+  // read all the overlay data first for apply
+  _do_read_all_overlays(wt);
 
   for (list<wal_op_t>::iterator p = wt.ops.begin(); p != wt.ops.end(); ++p) {
     switch (p->op) {
@@ -2719,6 +2739,9 @@ int NewStore::_wal_replay()
       derr << __func__ << " failed to decode wal txn " << it->key() << dendl;
       return -EIO;
     }
+
+    // Get the overlay data of the WAL for replay
+    _do_read_all_overlays(wt);
     dout(20) << __func__ << " replay " << it->key() << dendl;
     int r = _do_wal_transaction(wt, NULL);  // don't bother with aio here
     if (r < 0)
@@ -3308,19 +3331,15 @@ int NewStore::_do_write_all_overlays(TransContext *txc,
        p != o->onode.overlay_map.end(); ) {
     dout(10) << __func__ << " overlay " << p->first
 	     << "~" << p->second << dendl;
-    string key;
-    get_overlay_key(o->onode.nid, p->second.key, &key);
-    bufferlist bl;
-    db->get(PREFIX_OVERLAY, key, &bl);
 
     wal_op_t *op = _get_wal_op(txc);
     op->op = wal_op_t::OP_WRITE;
     op->offset = p->first;
     op->length = p->second.length;
     op->fid = f.fid;
-    op->data.substr_of(bl, p->second.value_offset, p->second.length);
-
-    txc->t->rmkey(PREFIX_OVERLAY, key);
+    // The overlays will be removed from the db after applying the WAL
+    op->nid = o->onode.nid;
+    op->overlays.push_back(p->second);
 
     // Combine with later overlays if contiguous
     map<uint64_t,overlay_t>::iterator prev = p, next = p;
@@ -3329,19 +3348,11 @@ int NewStore::_do_write_all_overlays(TransContext *txc,
       if (prev->first + prev->second.length == next->first) {
         dout(10) << __func__ << " combining overlay " << next->first
                  << "~" << next->second << dendl;
-        string key_next;
-        get_overlay_key(o->onode.nid, next->second.key, &key_next);
-        bufferlist bl_next, bl_next_data;
-        db->get(PREFIX_OVERLAY, key_next, &bl_next);
-
-        bl_next_data.substr_of(bl_next, next->second.value_offset,
-                               next->second.length);
-        bl.claim_append(bl_next_data);
         op->length += next->second.length;
-        txc->t->rmkey(PREFIX_OVERLAY, key_next);
+        op->overlays.push_back(next->second);
 
-	++prev;
-	++next;
+        ++prev;
+        ++next;
       } else {
 	break;
       }
@@ -3349,22 +3360,37 @@ int NewStore::_do_write_all_overlays(TransContext *txc,
     p = next;
   }
 
-  // this may double delete something we did above, but that's less
-  // work than doing careful ref counting of the overlay key/value
-  // pairs.
+  // put the shared overlay keys into the WAL transaction, so that we
+  // can cleanup them later after applying the WAL
   for (set<uint64_t>::iterator p = o->onode.shared_overlays.begin();
        p != o->onode.shared_overlays.end();
        ++p) {
     dout(10) << __func__ << " shared overlay " << *p << dendl;
     string key;
     get_overlay_key(o->onode.nid, *p, &key);
-    txc->t->rmkey(PREFIX_OVERLAY, key);
+    txc->wal_txn->shared_overlay_keys.push_back(key);
   }
 
   o->onode.overlay_map.clear();
   o->onode.shared_overlays.clear();
   txc->write_onode(o);
   return 0;
+}
+
+void NewStore::_do_read_all_overlays(wal_transaction_t& wt)
+{
+  for (list<wal_op_t>::iterator p = wt.ops.begin(); p != wt.ops.end(); ++p) {
+    for (vector<overlay_t>::iterator q = p->overlays.begin();
+         q != p->overlays.end(); ++q) {
+      string key;
+      get_overlay_key(p->nid, q->key, &key);
+      bufferlist bl, bl_data;
+      db->get(PREFIX_OVERLAY, key, &bl);
+      bl_data.substr_of(bl, q->value_offset, q->length);
+      p->data.claim_append(bl_data);
+    }
+  }
+  return;
 }
 
 int NewStore::_do_write(TransContext *txc,
