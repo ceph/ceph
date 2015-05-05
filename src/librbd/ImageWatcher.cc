@@ -185,6 +185,8 @@ int ImageWatcher::request_lock(
     bool request_pending = !m_aio_requests.empty();
     ldout(m_image_ctx.cct, 15) << "queuing aio request: " << c
 			       << dendl;
+
+    c->get();
     m_aio_requests.push_back(std::make_pair(restart_op, c));
     if (request_pending) {
       return 0;
@@ -556,6 +558,7 @@ void ImageWatcher::retry_aio_requests() {
     ldout(m_image_ctx.cct, 20) << "retrying aio request: " << iter->second
 			       << dendl;
     iter->first(iter->second);
+    iter->second->put();
   }
 }
 
