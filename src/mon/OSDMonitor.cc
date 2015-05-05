@@ -754,7 +754,7 @@ public:
     dump_stray(tbl);
 
     *tbl << "" << "" << "TOTAL"
-	 << si_t(pgm->osd_sum.kb)
+	 << si_t(pgm->osd_sum.kb << 10)
 	 << si_t(pgm->osd_sum.kb_used << 10)
 	 << si_t(pgm->osd_sum.kb_avail << 10)
 	 << lowprecision_t(average_util)
