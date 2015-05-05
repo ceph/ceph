@@ -2600,12 +2600,7 @@ next:
 
     int ret = search.init(job_id, &info);
     if (ret < 0) {
-      if (ret == -EEXIST) {
-        cerr << "cannot init new search, job already exists" << std::endl;
-      }
-      if (ret == -ENOENT) {
-        cerr << "job not found" << std::endl;
-      }
+      cerr << "could not init search, ret=" << ret << std::endl;
       return -ret;
     }
     ret = search.run();
