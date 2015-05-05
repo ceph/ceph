@@ -2165,7 +2165,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     if (ret >= 0) {
       cout << "successfully deleted pool " << nargs[1] << std::endl;
     } else { //error
-      cerr << "pool " << nargs[1] << " does not exist" << std::endl;
+      cerr << "pool " << nargs[1] << " could not be removed" << std::endl;
     }
   }
   else if (strcmp(nargs[0], "lssnap") == 0) {
