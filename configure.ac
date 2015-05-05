@@ -8,7 +8,7 @@ AC_PREREQ(2.59)
 # VERSION define is not used by the code.  It gets a version string
 # from 'git describe'; see src/ceph_ver.[ch]
 
-AC_INIT([ceph], [0.94], [ceph-devel@vger.kernel.org])
+AC_INIT([ceph], [9.0.0], [ceph-devel@vger.kernel.org])
 
 # Create release string.  Used with VERSION for RPMs.
 RPM_RELEASE=0
@@ -22,9 +22,7 @@ fi
 AC_MSG_NOTICE([RPM_RELEASE='$RPM_RELEASE'])
 
 AC_CHECK_PROGS(SPHINX_BUILD, sphinx-1.0-build sphinx-build, no)
-if test x"$SPHINX_BUILD" = x"no"; then
-  AC_MSG_ERROR([sphinx-build not found (python-sphinx)])
-fi
+AM_CONDITIONAL(HAS_SPHINX_BUILD, test x"$SPHINX_BUILD" != "xno")
 
 AC_CONFIG_MACRO_DIR([m4])
 
@@ -1215,5 +1213,6 @@ AC_CONFIG_FILES([Makefile
 	src/java/Makefile
 	src/tracing/Makefile
 	man/Makefile
+	doc/Makefile
 	ceph.spec])
 AC_OUTPUT

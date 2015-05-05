@@ -72,7 +72,7 @@ bool CrushWrapper::has_v4_buckets() const
     crush_bucket *b = crush->buckets[i];
     if (!b)
       continue;
-    if (b->type == CRUSH_BUCKET_STRAW2)
+    if (b->alg == CRUSH_BUCKET_STRAW2)
       return true;
   }
   return false;
@@ -1438,6 +1438,7 @@ void CrushWrapper::dump_tunables(Formatter *f) const
   f->dump_int("require_feature_tunables3", (int)has_nondefault_tunables3());
   f->dump_int("has_v2_rules", (int)has_v2_rules());
   f->dump_int("has_v3_rules", (int)has_v3_rules());
+  f->dump_int("has_v4_buckets", (int)has_v4_buckets());
 }
 
 void CrushWrapper::dump_rules(Formatter *f) const
