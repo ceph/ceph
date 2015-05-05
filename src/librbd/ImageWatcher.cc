@@ -427,8 +427,10 @@ int ImageWatcher::notify_async_complete(const AsyncRequestId &request,
   bufferlist bl;
   ::encode(NotifyMessage(AsyncCompletePayload(request, r)), bl);
 
-  librbd::notify_change(m_image_ctx.md_ctx, m_image_ctx.header_oid,
-			&m_image_ctx);
+  if (r >= 0) {
+    librbd::notify_change(m_image_ctx.md_ctx, m_image_ctx.header_oid,
+			  &m_image_ctx);
+  }
   int ret = m_image_ctx.md_ctx.notify2(m_image_ctx.header_oid, bl,
 				       NOTIFY_TIMEOUT, NULL);
   if (ret < 0) {
