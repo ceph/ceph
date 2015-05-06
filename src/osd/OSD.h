@@ -1147,9 +1147,9 @@ private:
     map<PG*, list<OpRequestRef> > pg_for_processing;
     OSD *osd;
     PrioritizedQueue<pair<PGRef, OpRequestRef>, entity_inst_t > pqueue;
-    OpWQ(OSD *o, time_t ti, ThreadPool *tp)
+    OpWQ(OSD *o, time_t ti, time_t si, ThreadPool *tp)
       : ThreadPool::WorkQueueVal<pair<PGRef, OpRequestRef>, PGRef >(
-	"OSD::OpWQ", ti, ti*10, tp),
+	"OSD::OpWQ", ti, si, tp),
 	qlock("OpWQ::qlock"),
 	osd(o),
 	pqueue(o->cct->_conf->osd_op_pq_max_tokens_per_priority,
@@ -1211,9 +1211,9 @@ private:
     list<PG*> peering_queue;
     OSD *osd;
     set<PG*> in_use;
-    PeeringWQ(OSD *o, time_t ti, ThreadPool *tp)
+    PeeringWQ(OSD *o, time_t ti, time_t si, ThreadPool *tp)
       : ThreadPool::BatchWorkQueue<PG>(
-	"OSD::PeeringWQ", ti, ti*10, tp), osd(o) {}
+	"OSD::PeeringWQ", ti, si, tp), osd(o) {}
 
     void _dequeue(PG *pg) {
       for (list<PG*>::iterator i = peering_queue.begin();
