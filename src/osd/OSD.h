@@ -2127,8 +2127,8 @@ protected:
 
   struct ScrubWQ : public ThreadPool::WorkQueue<PG> {
     OSD *osd;
-    ScrubWQ(OSD *o, time_t ti, ThreadPool *tp)
-      : ThreadPool::WorkQueue<PG>("OSD::ScrubWQ", ti, 0, tp), osd(o) {}
+    ScrubWQ(OSD *o, time_t ti, time_t si, ThreadPool *tp)
+      : ThreadPool::WorkQueue<PG>("OSD::ScrubWQ", ti, si, tp), osd(o) {}
 
     bool _empty() {
       return osd->scrub_queue.empty();
@@ -2174,8 +2174,8 @@ protected:
     list<MOSDRepScrub*> rep_scrub_queue;
 
   public:
-    RepScrubWQ(OSD *o, time_t ti, ThreadPool *tp)
-      : ThreadPool::WorkQueue<MOSDRepScrub>("OSD::RepScrubWQ", ti, 0, tp), osd(o) {}
+    RepScrubWQ(OSD *o, time_t ti, time_t si, ThreadPool *tp)
+      : ThreadPool::WorkQueue<MOSDRepScrub>("OSD::RepScrubWQ", ti, si, tp), osd(o) {}
 
     bool _empty() {
       return rep_scrub_queue.empty();
