@@ -30,9 +30,10 @@ ceph_perf_objectstore_LDADD = $(LIBOS) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 ceph_perf_objectstore_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_perf_objectstore
 
-ceph_perf_SOURCES = test/perf.cc test/perf_helper.cc
-ceph_perf_LDADD = $(LIBOS) $(CEPH_GLOBAL)
-bin_DEBUGPROGRAMS += ceph_perf
+ceph_perf_local_SOURCES = test/perf_local.cc test/perf_helper.cc
+ceph_perf_local_LDADD = $(LIBOS) $(CEPH_GLOBAL)
+noinst_HEADERS += test/perf_helper.h
+bin_DEBUGPROGRAMS += ceph_perf_local
 
 if LINUX
 ceph_test_objectstore_SOURCES = test/objectstore/store_test.cc
