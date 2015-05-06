@@ -48,6 +48,17 @@ endif
 ##################################
 ## automake environment
 
+HARDEN_CFLAGS = \
+	-fpie \
+	-fstack-protector-strong \
+	-fexceptions \
+	-Wp,-D_FORTIFY_SOURCE=2 \
+	--param=ssp-buffer-size=4 \
+	-grecord-gcc-switches
+
+HARDEN_LDFLAGS = \
+	-Wl,-z,relro
+
 AM_COMMON_CPPFLAGS = \
 	-D__CEPH__ \
 	-D_FILE_OFFSET_BITS=64 \
@@ -57,7 +68,8 @@ AM_COMMON_CPPFLAGS = \
 	-D_GNU_SOURCE \
 	-DCEPH_LIBDIR=\"${libdir}\" \
 	-DCEPH_PKGLIBDIR=\"${pkglibdir}\" \
-	-DGTEST_HAS_TR1_TUPLE=0
+	-DGTEST_HAS_TR1_TUPLE=0 \
+	${HARDEN_CFLAGS}
 
 AM_COMMON_CFLAGS = \
 	-Wall \
@@ -67,7 +79,9 @@ AM_COMMON_CFLAGS = \
 	-Wpointer-arith \
 	${WARN_ERROR_FORMAT_SECURITY} \
 	-fno-strict-aliasing \
-	-fsigned-char
+	-fsigned-char \
+	${HARDEN_CFLAGS}
+
 if !CLANG
 	AM_COMMON_CFLAGS += -rdynamic
 endif
@@ -79,7 +93,8 @@ AM_CXXFLAGS = \
 	$(AM_COMMON_CFLAGS) \
 	-ftemplate-depth-1024 \
 	-Wnon-virtual-dtor \
-	-Wno-invalid-offsetof
+	-Wno-invalid-offsetof \
+	${HARDEN_CFLAGS}
 if !CLANG
 	AM_CXXFLAGS += -Wstrict-null-sentinel
 endif
@@ -92,7 +107,7 @@ endif
 # http://www.gentoo.org/proj/en/qa/asneeded.xml
 # http://gcc.gnu.org/ml/gcc-help/2010-12/msg00338.html
 # http://sigquit.wordpress.com/2011/02/16/why-asneeded-doesnt-work-as-expected-for-your-libraries-on-your-autotools-project/
-AM_LDFLAGS =
+AM_LDFLAGS = ${HARDEN_LDFLAGS}
 if LINUX
 AM_LDFLAGS += -Wl,--as-needed
 endif
