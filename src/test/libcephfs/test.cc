@@ -897,7 +897,7 @@ TEST(LibCephFS, BadArgument) {
   ASSERT_GT(fd, 0);
   char buf[100];
   ASSERT_EQ(ceph_write(cmount, fd, buf, sizeof(buf), 0), (int)sizeof(buf));
-  ASSERT_EQ(ceph_read(cmount, fd, buf, 5, 0), 0);
+  ASSERT_EQ(ceph_read(cmount, fd, buf, 0, 5), 0);
   ceph_close(cmount, fd);
   ASSERT_EQ(ceph_unlink(cmount, "test_file"), 0);
 
