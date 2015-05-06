@@ -311,12 +311,14 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
     if (old_format)
       *old_format = true;
     int r = io_ctx.stat(old_header_name(name), size, NULL);
-    if (r < 0) {
+    if (r == -ENOENT) {
       if (old_format)
 	*old_format = false;
       r = io_ctx.stat(id_obj_name(name), size, NULL);
       if (r < 0)
 	return r;
+    } else if (r < 0) {
+      return r;
     }
 
     ldout(cct, 20) << "detect format of " << name << " : "
