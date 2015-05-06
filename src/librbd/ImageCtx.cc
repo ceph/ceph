@@ -847,8 +847,11 @@ namespace librbd {
       map<string, bufferlist> pairs, res;
       r = cls_client::metadata_list(&md_ctx, header_oid, start, max_conf_items,
                                     &pairs);
-      if (r < 0) {
-        lderr(cct) << __func__ << " couldn't list conf metadatas: " << r
+      if (r == -EOPNOTSUPP || r == -EIO) {
+        ldout(cct, 10) << "config metadata not supported by OSD" << dendl;
+        break;
+      } else if (r < 0) {
+        lderr(cct) << __func__ << " couldn't list config metadata: " << r
                    << dendl;
         break;
       }
