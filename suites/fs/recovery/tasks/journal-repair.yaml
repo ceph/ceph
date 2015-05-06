@@ -3,6 +3,7 @@ overrides:
   ceph:
     log-whitelist:
       - bad backtrace on dir ino
+      - error reading table object
 
 tasks:
   - cephfs_test_runner:
