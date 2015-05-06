@@ -370,8 +370,11 @@ static int rgw_build_bucket_policies(RGWRados *store, struct req_state *s)
   if (!s->src_bucket_name.empty()) {
     RGWBucketInfo source_info;
 
-    ret = store->get_bucket_info(obj_ctx,
-        s->src_tenant_name, s->src_bucket_name, source_info, NULL);
+    if (s->bucket_instance_id.empty()) {
+      ret = store->get_bucket_info(obj_ctx, s->src_tenant_name, s->src_bucket_name, source_info, NULL);
+    } else {
+      ret = store->get_bucket_instance_info(obj_ctx, s->bucket_instance_id, source_info, NULL, NULL);
+    }
     if (ret == 0) {
       string& zonegroup = source_info.zonegroup;
       s->local_source = store->zonegroup.equals(zonegroup);
@@ -2996,8 +2999,12 @@ int RGWCopyObj::verify_permission()
 
   RGWObjectCtx& obj_ctx = *static_cast<RGWObjectCtx *>(s->obj_ctx);
 
-  op_ret = store->get_bucket_info(obj_ctx, src_tenant_name, src_bucket_name,
-				  src_bucket_info, NULL, &src_attrs);
+  if (s->bucket_instance_id.empty()) {
+    op_ret = store->get_bucket_info(obj_ctx, src_tenant_name, src_bucket_name, src_bucket_info, NULL, &src_attrs);
+  } else {
+    /* will only happen in intra region sync where the source and dest bucket is the same */
+    op_ret = store->get_bucket_instance_info(obj_ctx, s->bucket_instance_id, src_bucket_info, NULL, &src_attrs);
+  }
   if (op_ret < 0)
     return op_ret;
 
@@ -3023,7 +3030,8 @@ int RGWCopyObj::verify_permission()
   RGWAccessControlPolicy dest_bucket_policy(s->cct);
   map<string, bufferlist> dest_attrs;
 
-  if (src_bucket_name.compare(dest_bucket_name) == 0) { /* will only happen if s->local_source */
+  if (src_bucket_name.compare(dest_bucket_name) == 0) { /* will only happen if s->local_source
+                                                           or intra region sync */
     dest_bucket_info = src_bucket_info;
     dest_attrs = src_attrs;
   } else {
