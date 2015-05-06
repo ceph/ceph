@@ -158,7 +158,7 @@ void usage(ostream& out)
 "   --target-pool=pool\n"
 "        select target pool by name\n"
 "   -b op_size\n"
-"        set the size of write ops for put or benchmarking\n"
+"        set the block size for put/get ops and for write benchmarking\n"
 "   -s name\n"
 "   --snap name\n"
 "        select given snap name for (read) IO\n"
@@ -1142,6 +1142,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   string oloc, target_oloc, nspace, target_nspace;
   int concurrent_ios = 16;
   unsigned op_size = default_op_size;
+  bool block_size_specified = false;
   bool cleanup = true;
   const char *snapname = NULL;
   snap_t snapid = CEPH_NOSNAP;
@@ -1213,6 +1214,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     if (rados_sistrtoll(i, &op_size)) {
       return -EINVAL;
     }
+    block_size_specified = true;
   }
   i = opts.find("snap");
   if (i != opts.end()) {
@@ -2260,6 +2262,12 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       operation = OP_RAND_READ;
     else
       usage_exit();
+    if (block_size_specified && (operation != OP_WRITE)){
+      cerr << "-b|--block_size option can be used only with `write' bench test"
+           << std::endl;
+      ret = -EINVAL;
+      goto out;
+    }
     RadosBencher bencher(g_ceph_context, rados, io_ctx);
     bencher.set_show_time(show_time);
     ret = bencher.aio_bench(operation, seconds, num_objs,
