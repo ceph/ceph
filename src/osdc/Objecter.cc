@@ -1439,7 +1439,7 @@ int64_t Objecter::get_object_pg_hash_position(int64_t pool, const string& key,
   return p->raw_hash_to_pg(p->hash_key(key, ns));
 }
 
-int Objecter::calc_target(op_target_t *t, bool any_change)
+int Objecter::calc_target(op_target_t *t, epoch_t *last_force_resend, bool any_change)
 {
   bool is_read = t->flags & CEPH_OSD_FLAG_READ;
   bool is_write = t->flags & CEPH_OSD_FLAG_WRITE;
@@ -1447,9 +1447,15 @@ int Objecter::calc_target(op_target_t *t, bool any_change)
   const pg_pool_t *pi = osdmap->get_pg_pool(t->base_oloc.pool);
   bool force_resend = false;
   bool need_check_tiering = false;
+
   if (pi && osdmap->get_epoch() == pi->last_force_op_resend) {
-    force_resend = true;
+    if (last_force_resend && *last_force_resend < pi->last_force_op_resend) {
+	*last_force_resend = pi->last_force_op_resend;
+        force_resend = true;
+    } else if (last_force_resend == 0)
+      force_resend = true;
   }
+
   if (t->target_oid.name.empty() || force_resend) {
     t->target_oid = t->base_oid;
     need_check_tiering = true;
@@ -1555,7 +1561,7 @@ int Objecter::calc_target(op_target_t *t, bool any_change)
 
 int Objecter::recalc_op_target(Op *op)
 {
-  int r = calc_target(&op->target);
+  int r = calc_target(&op->target, &op->last_force_resend);
   if (r == RECALC_OP_TARGET_NEED_RESEND) {
     OSDSession *s = NULL;
     if (op->target.osd >= 0)
@@ -1576,7 +1582,7 @@ int Objecter::recalc_op_target(Op *op)
 
 bool Objecter::recalc_linger_op_target(LingerOp *linger_op)
 {
-  int r = calc_target(&linger_op->target, true);
+  int r = calc_target(&linger_op->target, &linger_op->last_force_resend, true);
   if (r == RECALC_OP_TARGET_NEED_RESEND) {
     ldout(cct, 10) << "recalc_linger_op_target tid " << linger_op->linger_id
 		   << " pgid " << linger_op->target.pgid
