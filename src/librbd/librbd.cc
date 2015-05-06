@@ -839,10 +839,11 @@ namespace librbd {
     ImageCtx *ictx = (ImageCtx *)ctx;
     tracepoint(librbd, metadata_get_enter, ictx, key.c_str());
     int r = librbd::metadata_get(ictx, key, value);
-    if (r < 0)
+    if (r < 0) {
       tracepoint(librbd, metadata_get_exit, r, key.c_str(), NULL);
-    else
+    } else {
       tracepoint(librbd, metadata_get_exit, r, key.c_str(), value->c_str());
+    }
     return r;
   }
 
