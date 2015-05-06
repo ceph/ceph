@@ -1452,8 +1452,8 @@ private:
     uint32_t num_shards;
 
     public:
-      ShardedOpWQ(uint32_t pnum_shards, OSD *o, time_t ti, ShardedThreadPool* tp):
-        ShardedThreadPool::ShardedWQ < pair <PGRef, OpRequestRef> >(ti, ti*10, tp),
+      ShardedOpWQ(uint32_t pnum_shards, OSD *o, time_t ti, time_t si, ShardedThreadPool* tp):
+        ShardedThreadPool::ShardedWQ < pair <PGRef, OpRequestRef> >(ti, si, tp),
         osd(o), num_shards(pnum_shards) {
         for(uint32_t i = 0; i < num_shards; i++) {
           char lock_name[32] = {0};
@@ -1563,9 +1563,9 @@ private:
     list<PG*> peering_queue;
     OSD *osd;
     set<PG*> in_use;
-    PeeringWQ(OSD *o, time_t ti, ThreadPool *tp)
+    PeeringWQ(OSD *o, time_t ti, time_t si, ThreadPool *tp)
       : ThreadPool::BatchWorkQueue<PG>(
-	"OSD::PeeringWQ", ti, ti*10, tp), osd(o) {}
+	"OSD::PeeringWQ", ti, si, tp), osd(o) {}
 
     void _dequeue(PG *pg) {
       for (list<PG*>::iterator i = peering_queue.begin();
