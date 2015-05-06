@@ -72,7 +72,7 @@ int diff_object_map(ImageCtx* ictx, uint64_t from_snap_id, uint64_t to_snap_id,
   bool diff_from_start = (from_snap_id == 0);
   if (from_snap_id == 0) {
     if (!ictx->snaps.empty()) {
-      from_snap_id = ictx->snaps.front();
+      from_snap_id = ictx->snaps.back();
     } else {
       from_snap_id = CEPH_NOSNAP;
     }
