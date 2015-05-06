@@ -725,7 +725,12 @@ OPTION(rocksdb_max_background_flushes, OPT_INT, 1) // number for background flus
 OPTION(rocksdb_flusher_threads, OPT_INT, 1) // number for background compaction jobs
 //Other
 OPTION(rocksdb_max_open_files, OPT_INT, 5000) // rocksdb max open files
-OPTION(rocksdb_compression, OPT_STR, "snappy") // rocksdb uses compression : none, snappy, zlib, bzip2
+OPTION(rocksdb_compression, OPT_STR, "snappy") // rocksdb uses compression : none, snappy, zlib, bzip2, lz4, lz4hc
+//Different levels can have different compression policies
+//If rocksdb_compression_per_level is "none,none,snappy,snapyy,snapyy,snappy,zlib",
+//it means level 0-1 use no compression, level 2-5 use snappy, level 6 use zlib.
+//Please make sure the number of items in rocksdb_compression_per_level is equals with rocksdb_num_levels
+OPTION(rocksdb_compression_per_level, OPT_STR, "")
 OPTION(rocksdb_compact_on_mount, OPT_BOOL, false)
 OPTION(rocksdb_paranoid, OPT_BOOL, false) // RocksDB will aggressively check consistency of the data.
 OPTION(rocksdb_log, OPT_STR, "/dev/null")  // enable rocksdb log file
