@@ -1565,7 +1565,11 @@ OSD::OSD(CephContext *cct_, ObjectStore *store_,
   pg_stat_queue_lock("OSD::pg_stat_queue_lock"),
   osd_stat_updated(false),
   pg_stat_tid(0), pg_stat_tid_flushed(0),
-  command_wq(this, cct->_conf->osd_command_thread_timeout, &command_tp),
+  command_wq(
+    this,
+    cct->_conf->osd_command_thread_timeout,
+    cct->_conf->osd_command_thread_suicide_timeout,
+    &command_tp),
   recovery_ops_active(0),
   recovery_wq(
     this,

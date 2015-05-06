@@ -1944,8 +1944,8 @@ protected:
   list<Command*> command_queue;
   struct CommandWQ : public ThreadPool::WorkQueue<Command> {
     OSD *osd;
-    CommandWQ(OSD *o, time_t ti, ThreadPool *tp)
-      : ThreadPool::WorkQueue<Command>("OSD::CommandWQ", ti, 0, tp), osd(o) {}
+    CommandWQ(OSD *o, time_t ti, time_t si, ThreadPool *tp)
+      : ThreadPool::WorkQueue<Command>("OSD::CommandWQ", ti, si, tp), osd(o) {}
 
     bool _empty() {
       return osd->command_queue.empty();
