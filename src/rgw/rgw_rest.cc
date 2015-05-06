@@ -492,7 +492,7 @@ void dump_start(struct req_state *s)
   }
 }
 
-void end_header(struct req_state *s, RGWOp *op, const char *content_type)
+void end_header(struct req_state *s, RGWOp *op, const char *content_type, const int64_t proposed_content_length)
 {
   string ctype;
 
@@ -525,6 +525,10 @@ void end_header(struct req_state *s, RGWOp *op, const char *content_type)
       s->formatter->dump_string("Message", s->err.message);
     s->formatter->close_section();
     dump_content_length(s, s->formatter->get_len());
+  } else {
+    if (proposed_content_length != NO_CONTENT_LENGTH) {
+      dump_content_length(s, proposed_content_length);
+    }
   }
   int r = s->cio->print("Content-type: %s\r\n", content_type);
   if (r < 0) {
