@@ -973,7 +973,11 @@ OSD::OSD(CephContext *cct_, ObjectStore *store_,
   scrub_wq(this, cct->_conf->osd_scrub_thread_timeout, &disk_tp),
   scrub_finalize_wq(cct->_conf->osd_scrub_finalize_thread_timeout, &op_tp),
   rep_scrub_wq(this, cct->_conf->osd_scrub_thread_timeout, &disk_tp),
-  remove_wq(store, cct->_conf->osd_remove_thread_timeout, &disk_tp),
+  remove_wq(
+    store,
+    cct->_conf->osd_remove_thread_timeout,
+    cct->_conf->osd_remove_thread_suicide_timeout,
+    &disk_tp),
   next_removal_seq(0),
   service(this)
 {
