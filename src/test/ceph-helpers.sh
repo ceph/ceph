@@ -149,7 +149,7 @@ function test_teardown() {
 ##
 # Kill all daemons for which a .pid file exists in **dir**.  Each
 # daemon is sent a **signal** and kill_daemons waits for it to exit
-# during a few seconds. By default all daemons are killed. If a
+# during a few minutes. By default all daemons are killed. If a
 # **name_prefix** is provided, only the daemons matching it are
 # killed.
 #
@@ -158,28 +158,63 @@ function test_teardown() {
 # Send TERM to all osds : kill_daemons $dir TERM osd
 #
 # If a daemon is sent the TERM signal and does not terminate
-# within a few seconds, it will still be running even after
-# kill_daemons returns.
+# within a few minutes, it will still be running even after
+# kill_daemons returns. 
+#
+# If all daemons are kill successfully the function returns 0
+# if at least one daemon remains, this is treated as an 
+# error and the function return 1.
+#
+# After the daemon is sent **signal**, its actual termination
+# will be verified by sending it signal 0. If the daemon is
+# still alive, kill_daemons will pause for a few seconds and
+# try again. This will repeat for a fixed number of times
+# before kill_daemons returns on failure. The list of
+# sleep intervals can be specified as **delays** and defaults
+# to:
+#
+#  0 1 1 1 2 3 5 5 5 10 10 20 60
+#
+# This sequence is designed to not require a sleep time (0) if the
+# machine is fast enough and the daemon terminates in a fraction of a
+# second. The increasing sleep numbers should give plenty of time for
+# the daemon to die even on the slowest running machine. If a daemon
+# takes more than two minutes to stop (the sum of all sleep times),
+# there probably is no point in waiting more and a number of things
+# are likely to go wrong anyway: better give up and return on error.
 #
 # @param dir path name of the environment
 # @param signal name of the first signal (defaults to KILL)
 # @param name_prefix only kill match daemons (defaults to all)
+# @params delays sequence of sleep times before failure
 # @return 0 on success, 1 on error
 #
 function kill_daemons() {
     local dir=$1
     local signal=${2:-KILL}
     local name_prefix=$3 # optional, osd, mon, osd.1
+    local delays=${4:-0 1 1 1 2 3 5 5 5 10 10 20 60}
 
+    local status=0
     for pidfile in $(find $dir | grep $name_prefix'[^/]*\.pid') ; do
         pid=$(cat $pidfile)
         local send_signal=$signal
-        for try in 0 1 1 1 2 3 ; do
-            kill -$send_signal $pid 2> /dev/null || break
+        local kill_complete=false
+        for try in $delays ; do
+            if kill -$send_signal $pid 2> /dev/null ; then
+                kill_complete=false
+            else
+                kill_complete=true
+                break
+            fi
             send_signal=0
             sleep $try
         done
+        if ! $kill_complete ; then
+            status=1
+        fi
     done
+    return $status
 }
 
 function test_kill_daemons() {
@@ -188,9 +223,14 @@ function test_kill_daemons() {
     run_mon $dir a --osd_pool_default_size=1 || return 1
     run_osd $dir 0 || return 1
     ceph osd dump | grep "osd.0 up" || return 1
-    kill_daemons $dir TERM osd
+    # sending signal 0 won't kill the daemon
+    # waiting just for one second instead of the default schedule
+    # allows us to quickly verify what happens when kill fails 
+    # to stop the daemon (i.e. it must return false)
+    ! kill_daemons $dir 0 osd 1 || return 1
+    kill_daemons $dir TERM osd || return 1
     ceph osd dump | grep "osd.0 down" || return 1
-    kill_daemons $dir TERM
+    kill_daemons $dir TERM || return 1
     ! ceph --connect-timeout 1 status || return 1
     teardown $dir || return 1
 }
@@ -289,20 +329,20 @@ function test_run_mon() {
     ! CEPH_ARGS='' ceph status || return 1
     CEPH_ARGS='' ceph --conf $dir/ceph.conf status || return 1
 
-    kill_daemons $dir
+    kill_daemons $dir || return 1
 
     run_mon $dir a --osd_pool_default_size=1 || return 1
     local size=$(CEPH_ARGS='' ceph --format=json daemon $dir/ceph-mon.a.asok \
         config get osd_pool_default_size)
     test "$size" = '{"osd_pool_default_size":"1"}' || return 1
-    kill_daemons $dir
+    kill_daemons $dir || return 1
 
     CEPH_ARGS="$CEPH_ARGS --osd_pool_default_size=2" \
         run_mon $dir a || return 1
     local size=$(CEPH_ARGS='' ceph --format=json daemon $dir/ceph-mon.a.asok \
         config get osd_pool_default_size)
     test "$size" = '{"osd_pool_default_size":"2"}' || return 1
-    kill_daemons $dir
+    kill_daemons $dir || return 1
 
     teardown $dir || return 1
 }
@@ -484,7 +524,7 @@ function test_activate_osd() {
         config get osd_max_backfills)
     test "$backfills" = '{"osd_max_backfills":"10"}' || return 1
 
-    kill_daemons $dir TERM osd
+    kill_daemons $dir TERM osd || return 1
 
     activate_osd $dir 0 --osd-max-backfills 20 || return 1
     local backfills=$(CEPH_ARGS='' ceph --format=json daemon $dir//ceph-osd.0.asok \
