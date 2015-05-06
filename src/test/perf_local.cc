@@ -50,7 +50,7 @@
 #include "msg/async/Event.h"
 #include "global/global_init.h"
 
-#include "perf_helper.h"
+#include "test/perf_helper.h"
 
 using namespace ceph;
 
