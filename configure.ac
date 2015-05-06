@@ -21,8 +21,16 @@ if test -d ".git" ; then
 fi
 AC_MSG_NOTICE([RPM_RELEASE='$RPM_RELEASE'])
 
-AC_CHECK_PROGS(SPHINX_BUILD, sphinx-1.0-build sphinx-build, no)
-AM_CONDITIONAL(HAS_SPHINX_BUILD, test x"$SPHINX_BUILD" != "xno")
+AC_ARG_WITH([man-pages],
+    [AS_HELP_STRING([--with-man-pages], [build man pages])],
+    [],
+    [with_man_pages=check])
+AS_IF([test "x$with_man_pages" != "xno"],
+  [AC_CHECK_PROGS(SPHINX_BUILD, sphinx-1.0-build sphinx-build)
+   AS_IF([test -z "$SPHINX_BUILD" && \
+          test "x$with_man_pages" = "xyes"],
+     [AC_MSG_ERROR([sphinx-build not found (python-sphinx)])])])
+AM_CONDITIONAL(WITH_MAN_PAGES, test -n "$SPHINX_BUILD")
 
 AC_CONFIG_MACRO_DIR([m4])
 
@@ -1012,7 +1020,7 @@ AC_MSG_RESULT([no])
 ])
 
 AC_MSG_CHECKING([for sched.h])
-+AC_LANG_PUSH([C++])
+AC_LANG_PUSH([C++])
 AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
 #define _GNU_SOURCE
 #include <sched.h>
@@ -1029,7 +1037,7 @@ AC_DEFINE([HAVE_SCHED], 1, [Define to 1 if you have sched.h.])
 ], [
 AC_MSG_RESULT([no])
 ])
-+AC_LANG_POP([C++])
+AC_LANG_POP([C++])
 
 
 #
