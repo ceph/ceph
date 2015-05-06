@@ -69,6 +69,7 @@ int diff_object_map(ImageCtx* ictx, uint64_t from_snap_id, uint64_t to_snap_id,
   assert(ictx->snap_lock.is_locked());
   CephContext* cct = ictx->cct;
 
+  bool diff_from_start = (from_snap_id == 0);
   if (from_snap_id == 0) {
     if (!ictx->snaps.empty()) {
       from_snap_id = ictx->snaps.front();
@@ -82,6 +83,7 @@ int diff_object_map(ImageCtx* ictx, uint64_t from_snap_id, uint64_t to_snap_id,
   uint64_t current_snap_id = from_snap_id;
   uint64_t next_snap_id = to_snap_id;
   BitVector<2> prev_object_map;
+  bool prev_object_map_valid = false;
   while (true) {
     uint64_t current_size = ictx->size;
     if (current_snap_id != CEPH_NOSNAP) {
@@ -130,6 +132,9 @@ int diff_object_map(ImageCtx* ictx, uint64_t from_snap_id, uint64_t to_snap_id,
 
     uint64_t overlap = MIN(object_map.size(), prev_object_map.size());
     for (uint64_t i = 0; i < overlap; ++i) {
+      ldout(cct, 20) << __func__ << ": object state: " << i << " "
+                     << static_cast<uint32_t>(prev_object_map[i])
+                     << "->" << static_cast<uint32_t>(object_map[i]) << dendl;
       if (object_map[i] == OBJECT_NONEXISTENT) {
         if (prev_object_map[i] != OBJECT_NONEXISTENT) {
           (*object_diff_state)[i] = OBJECT_DIFF_STATE_HOLE;
@@ -143,8 +148,11 @@ int diff_object_map(ImageCtx* ictx, uint64_t from_snap_id, uint64_t to_snap_id,
     ldout(cct, 20) << "diff_object_map: computed overlap diffs" << dendl;
 
     object_diff_state->resize(object_map.size());
-    if (object_map.size() > prev_object_map.size()) {
+    if (object_map.size() > prev_object_map.size() &&
+        (diff_from_start || prev_object_map_valid)) {
       for (uint64_t i = overlap; i < object_diff_state->size(); ++i) {
+        ldout(cct, 20) << __func__ << ": object state: " << i << " "
+                       << "->" << static_cast<uint32_t>(object_map[i]) << dendl;
         if (object_map[i] == OBJECT_NONEXISTENT) {
           (*object_diff_state)[i] = OBJECT_DIFF_STATE_NONE;
         } else {
@@ -159,6 +167,7 @@ int diff_object_map(ImageCtx* ictx, uint64_t from_snap_id, uint64_t to_snap_id,
     }
     current_snap_id = next_snap_id;
     prev_object_map = object_map;
+    prev_object_map_valid = true;
   }
   return 0;
 }
