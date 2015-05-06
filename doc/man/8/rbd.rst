@@ -163,6 +163,13 @@ Commands
   -l, also show snapshots, and use longer-format output including
   size, parent (if clone), format, etc.
 
+:command:`du` [--image *image-name*] [*pool-name*]
+  Will calculate the provisioned and actual disk usage of all images and
+  associated snapshots within the specified pool. It can also be used against
+  individual images.
+
+  If the RBD fast-diff feature isn't enabled on images, this operation will
+  require querying the OSDs for every potential object within the image.
 :command:`info` [*image-name*]
   Will dump information (such as size and order) about a specific rbd image.
   If image is a clone, information about its parent is also displayed.
