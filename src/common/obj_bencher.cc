@@ -103,7 +103,7 @@ void *ObjBencher::status_printer(void *_bencher) {
     }
     if (cycleSinceChange)
       bandwidth = (double)(data.finished - previous_writes)
-        * (data.trans_size)
+        * (data.object_size)
         / (1024*1024)
         / cycleSinceChange;
     else
@@ -133,7 +133,7 @@ void *ObjBencher::status_printer(void *_bencher) {
       data.history.iops.push_back(iops);
     }
 
-    double avg_bandwidth = (double) (data.trans_size) * (data.finished)
+    double avg_bandwidth = (double) (data.object_size) * (data.finished)
       / (double)(cur_time - data.start_time) / (1024*1024);
     if (previous_writes != data.finished) {
       previous_writes = data.finished;
@@ -170,12 +170,11 @@ void *ObjBencher::status_printer(void *_bencher) {
 int ObjBencher::aio_bench(
   int operation, int secondsToRun,
   int maxObjectsToCreate,
-  int concurrentios, int op_size, bool cleanup, const char* run_name) {
+  int concurrentios, int object_size, bool cleanup, const char* run_name) {
 
   if (concurrentios <= 0) 
     return -EINVAL;
 
-  int object_size = op_size;
   int num_objects = 0;
   int r = 0;
   int prevPid = 0;
@@ -191,15 +190,12 @@ int ObjBencher::aio_bench(
         cerr << "Must write data before running a read benchmark!" << std::endl;
       return r;
     }
-  } else {
-    object_size = op_size;
   }
 
   char* contentsChars = new char[object_size];
   lock.Lock();
   data.done = false;
   data.object_size = object_size;
-  data.trans_size = op_size;
   data.in_flight = 0;
   data.started = 0;
   data.finished = num_objects;
