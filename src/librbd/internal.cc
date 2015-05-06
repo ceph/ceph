@@ -1415,14 +1415,15 @@ reprotect_and_return_err:
     }
 
     r = cls_client::metadata_list(&p_ioctx, p_imctx->header_oid, "", 0, &pairs);
-    if (r < 0) {
+    if (r < 0 && r != -EOPNOTSUPP && r != -EIO) {
       lderr(cct) << "couldn't list metadata: " << r << dendl;
       goto err_close_child;
-    }
-    r = cls_client::metadata_set(&c_ioctx, c_imctx->header_oid, pairs);
-    if (r < 0) {
-      lderr(cct) << "couldn't set metadata: " << r << dendl;
-      goto err_close_child;
+    } else if (r == 0 && !pairs.empty()) {
+      r = cls_client::metadata_set(&c_ioctx, c_imctx->header_oid, pairs);
+      if (r < 0) {
+        lderr(cct) << "couldn't set metadata: " << r << dendl;
+        goto err_close_child;
+      }
     }
 
     p_imctx->md_lock.get_write();
@@ -2656,14 +2657,15 @@ reprotect_and_return_err:
     map<string, bufferlist> pairs;
 
     r = cls_client::metadata_list(&src->md_ctx, src->header_oid, "", 0, &pairs);
-    if (r < 0) {
+    if (r < 0 && r != -EOPNOTSUPP && r != -EIO) {
       lderr(cct) << "couldn't list metadata: " << r << dendl;
       return r;
-    }
-    r = cls_client::metadata_set(&dest->md_ctx, dest->header_oid, pairs);
-    if (r < 0) {
-      lderr(cct) << "couldn't set metadata: " << r << dendl;
-      return r;
+    } else if (r == 0 && !pairs.empty()) {
+      r = cls_client::metadata_set(&dest->md_ctx, dest->header_oid, pairs);
+      if (r < 0) {
+        lderr(cct) << "couldn't set metadata: " << r << dendl;
+        return r;
+      }
     }
 
     SimpleThrottle throttle(src->concurrent_management_ops, false);
