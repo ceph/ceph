@@ -34,6 +34,19 @@ else (NSS_LIBRARIES AND NSS_INCLUDE_DIRS)
       /sw/include
     PATH_SUFFIXES
       nss3
+      )
+    
+  find_path(NSPR_INCLUDE_DIR
+    NAMES
+      prtypes.h
+    PATHS
+      ${_NSPR_INCLUDEDIR}
+      /usr/include
+      /usr/local/include
+      /opt/local/include
+      /sw/include
+    PATH_SUFFIXES
+      nspr
   )
 
   find_library(SSL3_LIBRARY
@@ -83,6 +96,7 @@ else (NSS_LIBRARIES AND NSS_INCLUDE_DIRS)
 
   set(NSS_INCLUDE_DIRS
     ${NSS_INCLUDE_DIR}
+    ${NSPR_INCLUDE_DIR}
   )
 
   if (SSL3_LIBRARY)
