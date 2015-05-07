@@ -46,10 +46,10 @@ instead of a fixed duration.
 |     First release          | August    | November  | May       | October   | April     |
 |                            | 2013      | 2013      | 2014      | 2014      | 2015      |
 +----------------------------+-----------+-----------+-----------+-----------+-----------+
-| Estimated End of Life      | March     |           | January   |           | November  |
+|  Estimated retirement      | March     |           | January   |           | November  |
 |                            | 2015      |           | 2016      |           | 2016      |
 +----------------------------+-----------+-----------+-----------+-----------+-----------+
-|   Actual End of Life       | May       | May       |           | April     |           |
+|    Actual retirement       | May       | May       |           | April     |           |
 |                            | 2015      | 2014      |           | 2015      |           |
 +----------------------------+-----------+-----------+-----------+-----------+-----------+
 
