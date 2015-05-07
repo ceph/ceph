@@ -1,0 +1,14 @@
+workload:
+   sequential:
+   - workunit:
+       clients:
+         client.0:
+           - rbd/import_export.sh
+       env:
+         RBD_CREATE_ARGS: --new-format
+   - print: "**** done rbd/import_export.sh 2-workload"
+   - workunit:
+       clients:
+         client.0:
+           - cls/test_cls_rbd.sh
+   - print: "**** done cls/test_cls_rbd.sh 2-workload"
