@@ -87,6 +87,17 @@ class TestTeuthologyConfig(TestYamlConfig):
             "git://git.ceph.com/"
         assert conf_obj.ceph_git_base_url == "git://git.ceph.com/"
 
+    def test_get_reserve_machines_default(self):
+        conf_obj = self.test_class()
+        conf_obj.yaml_path = ''
+        conf_obj.load()
+        assert conf_obj.reserve_machines == 5
+
+    def test_set_reserve_machines_via_private(self):
+        conf_obj = self.test_class()
+        conf_obj._conf['reserve_machines'] = 2
+        assert conf_obj.reserve_machines == 2
+
     def test_set_nonstandard(self):
         conf_obj = self.test_class()
         conf_obj.something = 'something else'
