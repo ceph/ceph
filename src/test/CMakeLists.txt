@@ -1747,6 +1747,7 @@ add_executable(test_get_blkdev_size
   )
 target_link_libraries(test_get_blkdev_size
   common
+  pthread
   ${EXTRALIBS}
   ${TCMALLOC_LIBS}
   ${CMAKE_DL_LIBS}
