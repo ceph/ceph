@@ -2,17 +2,36 @@
 Release timeline
 ================
 
-There are approximately three stable releases a year. Every other
-release is a LTS (Long Term Support). A LTS release is supported for 18
-months. A stable release that is not LTS is supported until the next
-stable release is published. A development / testing release is not
-supported.
+The development release cycle is two to four weeks long.  Each cycle
+freezes the master development branch and applies `integration and
+upgrade tests <https://github.com/ceph/ceph-qa-suite>`_ for the
+duration of one cycle before it is released and the next release's
+code is frozen for testing.  Once released, there is no effort to
+backport fixes; developer focus in on the next development release
+which is usually only a few weeks away.
 
-* Long Term Support release : 18 months
+There are three to four stable releases a year.  Each stable release
+will receive a name (e.g., `Firefly') and bug fix backports at least
+until the next stable release is out.
+
+Every other stable releases is a LTS (Long Term Stable) and will
+receive updates until two LTS are published. For instance Dumpling is
+retired when Hammer is published, Firefly is retired when Jewel is
+published etc. The rationale is that backports to a LTS (Dumpling for
+instance) are expected to happen until the next LTS is published
+(Firefly is the LTS following Dumpling), to fix bugs and possibly
+backport important features. After the next LTS is published, there
+backports are still expected to fix bugs with a focus on whatever can
+prevent upgrades to the next LTS (in our example, fixes to Dumpling
+were published after Firefly was released and until Hammer was
+published, primarily to ensure Dumpling cluster can smoothly migrate
+to Firefly).
+
+* LTS : until the next two LTS are published
 * Stable release : until the next stable release is published
-* Development / testing release : not supported
+* Development / testing release : no backports
 
-Supporting a release means:
+For each stable release:
 
 * `Integration and upgrade tests
   <https://github.com/ceph/ceph-qa-suite>`_ are run on a regular basis
@@ -23,21 +42,18 @@ Supporting a release means:
   release.
 * When an issue found in the release is `reported
   <http://tracker.ceph.com/projects/ceph/issues/new>`_ it will be
-  handled by Ceph developers.
+  triaged by Ceph developers.
 * The `stable releases and backport team <http://tracker.ceph.com/projects/ceph-releases>`_
   publishes ``point releases`` including fixes that have been backported to the release.
 
-In the following, the life time of a LTS is calculated to be 18 months
-after the month of the first release. For instance, Dumpling is
-published August 2013 and 18 months starting September 2013 is
-February 2015, therefore by March 2015 Dumpling should be End of
-Life. The lifetime of a release may be extended a few months. For
-instance although Dumpling theoritical End of Life was March 2015, it
-was extended to May 2015.
-
-There is no estimated End of Life for a stable release that is not a
-LTS because it is set by the release date of the next stable release
-instead of a fixed duration.
+In the following, the life time of a LTS is calculated to be
+approximately 18 months after the month of the first release. For
+instance, Dumpling is published August 2013 and 18 months starting
+September 2013 is February 2015, therefore by March 2015 Dumpling
+should be retired. The lifetime of a release may vary because it
+depend on how quickly the stable releases are published. For instance
+although Dumpling theoritical retirement was March 2015, it was
+extended to May 2015.
 
 +----------------------------+-----------+-----------+-----------+-----------+-----------+
 |                            |`Dumpling`_|`Emperor`_ |`Firefly`_ |`Giant`_   |`Hammer`_  |
@@ -46,16 +62,18 @@ instead of a fixed duration.
 |     First release          | August    | November  | May       | October   | April     |
 |                            | 2013      | 2013      | 2014      | 2014      | 2015      |
 +----------------------------+-----------+-----------+-----------+-----------+-----------+
-| Estimated End of Life      | March     |           | January   |           | November  |
+|  Estimated retirement      | March     |           | January   |           | November  |
 |                            | 2015      |           | 2016      |           | 2016      |
 +----------------------------+-----------+-----------+-----------+-----------+-----------+
-|   Actual End of Life       | May       | May       |           | April     |           |
+|    Actual retirement       | May       | May       |           | April     |           |
 |                            | 2015      | 2014      |           | 2015      |           |
 +----------------------------+-----------+-----------+-----------+-----------+-----------+
 
 +----------------+-----------+-----------+-----------+-----------+-----------+-----------+
 |                |Development|`Dumpling`_|`Emperor`_ |`Firefly`_ |`Giant`_   |`Hammer`_  |
 |                |Testing    |LTS        |Stable     |LTS        |Stable     |LTS        |
++----------------+-----------+-----------+-----------+-----------+-----------+-----------+
+| May       2015 |`9.0.0`_   |           |           |           |           |           |
 +----------------+-----------+-----------+-----------+-----------+-----------+-----------+
 | April     2015 |           |           |           |           |`0.87.2`_  |`0.94.1`_  |
 |                +-----------+-----------+-----------+-----------+-----------+-----------+
@@ -134,9 +152,11 @@ instead of a fixed duration.
 |                |           |`0.67`_    |           |           |           |           |
 +----------------+-----------+-----------+-----------+-----------+-----------+-----------+
 
+.. _9.0.0: ../release-notes#v9-0-0
+
 .. _0.94.1: ../release-notes#v0-94-1-hammer
 .. _0.94: ../release-notes#v0-94-hammer
-.. _Hammer: release-notes#v0-94-hammer
+.. _Hammer: ../release-notes#v0-94-hammer
 
 .. _0.93: ../release-notes#v0-93
 .. _0.92: ../release-notes#v0-92
@@ -148,7 +168,7 @@ instead of a fixed duration.
 .. _0.87.2: ../release-notes#v0-87-2-giant
 .. _0.87.1: ../release-notes#v0-87-1-giant
 .. _0.87: ../release-notes#v0-87-giant
-.. _Giant: release-notes#v0-87-giant
+.. _Giant: ../release-notes#v0-87-giant
 
 .. _0.86: ../release-notes#v0-86
 .. _0.85: ../release-notes#v0-85
