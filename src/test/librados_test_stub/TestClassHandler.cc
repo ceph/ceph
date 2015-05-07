@@ -100,10 +100,12 @@ cls_method_cxx_call_t TestClassHandler::get_method(const std::string &cls,
 }
 
 TestClassHandler::SharedMethodContext TestClassHandler::get_method_context(
-    TestIoCtxImpl *io_ctx_impl, const std::string &oid) {
+    TestIoCtxImpl *io_ctx_impl, const std::string &oid,
+    const SnapContext &snapc) {
   SharedMethodContext ctx(new MethodContext());
   ctx->io_ctx_impl = io_ctx_impl;
   ctx->oid = oid;
+  ctx->snapc = snapc;
   return ctx;
 }
 
