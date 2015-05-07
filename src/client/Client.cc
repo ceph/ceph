@@ -10802,12 +10802,14 @@ int Client::check_pool_perm(Inode *in, int need)
     int wr_ret = wr_cond.wait();
     client_lock.Lock();
 
+    bool errored = false;
+
     if (rd_ret == 0 || rd_ret == -ENOENT)
       have |= POOL_READ;
     else if (rd_ret != -EPERM) {
       ldout(cct, 10) << "check_pool_perm on pool " << pool
 		     << " rd_err = " << rd_ret << " wr_err = " << wr_ret << dendl;
-      return rd_ret;
+      errored = true;
     }
 
     if (wr_ret == 0 || wr_ret == -EEXIST)
@@ -10815,7 +10817,16 @@ int Client::check_pool_perm(Inode *in, int need)
     else if (wr_ret != -EPERM) {
       ldout(cct, 10) << "check_pool_perm on pool " << pool
 		     << " rd_err = " << rd_ret << " wr_err = " << wr_ret << dendl;
-      return wr_ret;
+      errored = true;
+    }
+
+    if (errored) {
+      // Indeterminate: erase CHECKING state so that subsequent calls re-check.
+      // Raise EIO because actual error code might be misleading for
+      // userspace filesystem user.
+      pool_perms.erase(pool);
+      signal_cond_list(waiting_for_pool_perm);
+      return -EIO;
     }
 
     pool_perms[pool] = have | POOL_CHECKED;
