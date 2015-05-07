@@ -377,19 +377,19 @@ bool ImageWatcher::release_lock()
     return false;
   }
   prepare_unlock();
-
   m_image_ctx.owner_lock.put_write();
   m_image_ctx.cancel_async_requests();
   m_image_ctx.flush_async_operations();
-  m_image_ctx.owner_lock.get_write();
-
-  if (!is_lock_owner()) {
-    return false;
-  }
 
   {
-    RWLock::WLocker l2(m_image_ctx.md_lock);
+    RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
+    RWLock::WLocker md_locker(m_image_ctx.md_lock);
     librbd::_flush(&m_image_ctx);
+  }
+
+  m_image_ctx.owner_lock.get_write();
+  if (!is_lock_owner()) {
+    return false;
   }
 
   unlock();
