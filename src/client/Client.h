@@ -546,7 +546,7 @@ protected:
   void put_cap_ref(Inode *in, int cap);
   void flush_snaps(Inode *in, bool all_again=false, CapSnap *again=0);
   void wait_sync_caps(uint64_t want);
-  void queue_cap_snap(Inode *in, snapid_t seq=0);
+  void queue_cap_snap(Inode *in, SnapContext &old_snapc);
   void finish_cap_snap(Inode *in, CapSnap *capsnap, int used);
   void _flushed_cap_snap(Inode *in, snapid_t seq);
 
