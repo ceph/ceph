@@ -6511,7 +6511,7 @@ done:
     const pg_pool_t *tp = osdmap.get_pg_pool(tierpool_id);
     assert(tp);
 
-    if (!_check_remove_tier(pool_id, p, &err, &ss)) {
+    if (!_check_remove_tier(pool_id, p, tp, &err, &ss)) {
       goto reply;
     }
 
@@ -6620,7 +6620,7 @@ done:
       goto reply;
     }
 
-    if (!_check_remove_tier(pool_id, p, &err, &ss)) {
+    if (!_check_remove_tier(pool_id, p, NULL, &err, &ss)) {
       goto reply;
     }
 
@@ -7293,17 +7293,29 @@ bool OSDMonitor::_check_become_tier(
  */
 bool OSDMonitor::_check_remove_tier(
     const int64_t base_pool_id, const pg_pool_t *base_pool,
+    const pg_pool_t *tier_pool,
     int *err, ostream *ss) const
 {
   const std::string &base_pool_name = osdmap.get_pool_name(base_pool_id);
 
-  // If the pool is in use by CephFS, then refuse to remove its
-  // tier
+  // Apply CephFS-specific checks
   const MDSMap &pending_mdsmap = mon->mdsmon()->pending_mdsmap;
   if (pending_mdsmap.pool_in_use(base_pool_id)) {
-    *ss << "pool '" << base_pool_name << "' is in use by CephFS via its tier";
-    *err = -EBUSY;
-    return false;
+    if (base_pool->type != pg_pool_t::TYPE_REPLICATED) {
+      // If the underlying pool is erasure coded, we can't permit the
+      // removal of the replicated tier that CephFS relies on to access it
+      *ss << "pool '" << base_pool_name << "' is in use by CephFS via its tier";
+      *err = -EBUSY;
+      return false;
+    }
+
+    if (tier_pool && tier_pool->cache_mode == pg_pool_t::CACHEMODE_WRITEBACK) {
+      *ss << "pool '" << base_pool_name << "' is in use by CephFS, and this "
+             "tier is still in use as a writeback cache.  Change the cache "
+             "mode and flush the cache before removing it";
+      *err = -EBUSY;
+      return false;
+    }
   }
 
   *err = 0;
