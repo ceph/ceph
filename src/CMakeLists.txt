@@ -291,7 +291,9 @@ if(${WITH_PROFILER})
   target_link_libraries(common profiler)
 endif(${WITH_PROFILER})
 
-target_link_libraries( common json_spirit erasure_code rt uuid ${CRYPTO_LIBS} ${Boost_LIBRARIES})
+add_library(common_utf8 STATIC common/utf8.c)
+
+target_link_libraries( common json_spirit common_utf8 erasure_code rt uuid ${CRYPTO_LIBS} ${Boost_LIBRARIES})
 
 set(libglobal_srcs
   global/global_init.cc
