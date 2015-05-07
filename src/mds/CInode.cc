@@ -13,6 +13,7 @@
  */
 
 #include "include/int_types.h"
+#include "common/errno.h"
 
 #include <string>
 #include <stdio.h>
@@ -1023,6 +1024,7 @@ struct C_IO_Inode_Fetched : public CInodeIOContext {
   Context *fin;
   C_IO_Inode_Fetched(CInode *i, Context *f) : CInodeIOContext(i), fin(f) {}
   void finish(int r) {
+    // Ignore 'r', because we fetch from two places, so r is usually ENOENT
     in->_fetched(bl, bl2, fin);
   }
 };
@@ -1037,12 +1039,12 @@ void CInode::fetch(MDSInternalContextBase *fin)
   object_t oid = CInode::get_object_name(ino(), frag_t(), "");
   object_locator_t oloc(mdcache->mds->mdsmap->get_metadata_pool());
 
+  // Old on-disk format: inode stored in xattr of a dirfrag
   ObjectOperation rd;
   rd.getxattr("inode", &c->bl, NULL);
-
   mdcache->mds->objecter->read(oid, oloc, rd, CEPH_NOSNAP, (bufferlist*)NULL, 0, gather.new_sub());
 
-  // read from separate object too
+  // Current on-disk format: inode stored in a .inode object
   object_t oid2 = CInode::get_object_name(ino(), frag_t(), ".inode");
   mdcache->mds->objecter->read(oid2, oloc, 0, 0, CEPH_NOSNAP, &c->bl2, 0, gather.new_sub());
 
@@ -1053,10 +1055,16 @@ void CInode::_fetched(bufferlist& bl, bufferlist& bl2, Context *fin)
 {
   dout(10) << "_fetched got " << bl.length() << " and " << bl2.length() << dendl;
   bufferlist::iterator p;
-  if (bl2.length())
+  if (bl2.length()) {
     p = bl2.begin();
-  else
+  } else if (bl.length()) {
     p = bl.begin();
+  } else {
+    derr << "No data while reading inode 0x" << std::hex << ino()
+      << std::dec << dendl;
+    fin->complete(-ENOENT);
+    return;
+  }
   string magic;
   ::decode(magic, p);
   dout(10) << " magic is '" << magic << "' (expecting '" << CEPH_FS_ONDISK_MAGIC << "')" << dendl;
@@ -1065,7 +1073,14 @@ void CInode::_fetched(bufferlist& bl, bufferlist& bl2, Context *fin)
 	    << "'" << dendl;
     fin->complete(-EINVAL);
   } else {
-    decode_store(p);
+    try {
+      decode_store(p);
+    } catch (buffer::error &err) {
+      derr << "Corrupt inode 0x" << std::hex << ino() << std::dec
+        << ": " << err << dendl;
+      fin->complete(-EINVAL);
+      return;
+    }
     dout(10) << "_fetched " << *this << dendl;
     fin->complete(0);
   }
