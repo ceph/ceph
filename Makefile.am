@@ -43,7 +43,7 @@ check-local:: all
 #	exercise cli tools
 	u=`ulimit -u` ; \
 	p=`expr $(shell nproc) / 2` ; \
-	n=`expr $$p \* 100024` ; \
+	n=`expr $$p \* 1024` ; \
 	if ${CHECK_ULIMIT} && echo ${MAKEFLAGS} | grep --quiet -e -j && test $$u -lt $$n ; then \
 		echo "ulimit -u is $$u which is lower than $$n = $$p / 2 * 1024" ; \
 		echo "If running make -j$$p check you will likely exceed this limit" ; \
