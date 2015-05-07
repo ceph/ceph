@@ -2,7 +2,7 @@
 #
 # Ceph distributed storage system
 #
-# Copyright (C) 2014 Red Hat <contact@redhat.com>
+# Copyright (C) 2014, 2015 Red Hat <contact@redhat.com>
 #
 # Author: Loic Dachary <loic@dachary.org>
 #
@@ -83,3 +83,26 @@ CentOS|Fedora|RedHatEnterpriseServer)
         echo "$(lsb_release -si) is unknown, dependencies will have to be installed manually."
         ;;
 esac
+
+#
+# preload python modules so that tox can run without network access
+#
+for interpreter in python2.7 python3 ; do
+    type $interpreter > /dev/null 2>&1 || continue
+    rm -fr install-deps
+    virtualenv --python $interpreter install-deps
+    . install-deps/bin/activate
+    pip install wheel
+    find . -name tox.ini | while read ini ; do
+        (
+            cd $(dirname $ini)
+            require=$(ls *requirements.txt 2>/dev/null | sed -e 's/^/-r /')
+            if test "$require" ; then
+                # although pip comes with virtualenv, having a recent version
+                # of pip matters when it comes to using wheel packages
+                pip wheel $require 'distribute >= 0.7' 'pip >= 6.1'
+            fi
+        )
+    done
+done
+rm -fr install-deps
