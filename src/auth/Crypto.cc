@@ -17,7 +17,7 @@
 # include <cryptopp/modes.h>
 # include <cryptopp/aes.h>
 # include <cryptopp/filters.h>
-#elif USE_NSS
+#elif defined(USE_NSS)
 # include <nspr.h>
 # include <nss.h>
 # include <pk11pub.h>
@@ -197,7 +197,7 @@ public:
   }
 };
 
-#elif USE_NSS
+#elif defined(USE_NSS)
 // when we say AES, we mean AES-128
 # define AES_KEY_LEN	16
 # define AES_BLOCK_LEN   16
