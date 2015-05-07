@@ -12,6 +12,7 @@ endif
 include arch/Makefile.am
 include auth/Makefile.am
 include brag/Makefile.am
+include ceph-detect-init/Makefile.am
 include crush/Makefile.am
 include mon/Makefile.am
 include mds/Makefile.am
@@ -151,7 +152,7 @@ TESTS = \
 	$(check_TESTPROGRAMS) \
 	$(check_SCRIPTS)
 
-check-local:
+check-local::
 	$(top_srcdir)/qa/workunits/erasure-code/encode-decode-non-regression.sh 
 	$(srcdir)/test/encoding/readable.sh ../ceph-object-corpus
 
@@ -205,7 +206,7 @@ CLEANFILES += ceph_ver.h sample.fetch_config
 
 # cleaning
 
-clean-local:
+clean-local::
 	rm -f *.so 
 	find . -name '*.gcno' -o -name '*.gcda' -o -name '*.lcov' -o -name "*.o" -o -name "*.lo" | xargs rm -f
 	rm -f ceph java/java/com/ceph/crush/Bucket.class
@@ -255,12 +256,12 @@ if ENABLE_COVERAGE
 	-test/coverage.sh -d $(srcdir) -o check-coverage make check
 endif
 
-install-data-local: install-coverage
+install-data-local:: install-coverage
 	-mkdir -p $(DESTDIR)$(sysconfdir)/ceph
 	-mkdir -p $(DESTDIR)$(localstatedir)/log/ceph
 	-mkdir -p $(DESTDIR)$(localstatedir)/lib/ceph/tmp
 
-uninstall-local: uninstall-coverage
+uninstall-local:: uninstall-coverage
 	-rmdir -p $(DESTDIR)$(sysconfdir)/ceph/
 	-rmdir -p $(DESTDIR)$(localstatedir)/log/ceph
 	-rmdir -p $(DESTDIR)$(localstatedir)/lib/ceph/tmp

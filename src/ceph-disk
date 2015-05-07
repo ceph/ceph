@@ -262,7 +262,10 @@ def which(executable):
 
     for location in locations:
         executable_path = os.path.join(location, executable)
-        if os.path.exists(executable_path):
+        LOG.debug('does ' + executable_path + ' exists ?')
+        if (os.path.isfile(executable_path) and
+            os.access(executable_path, os.X_OK)):
+            LOG.debug('yes, ' + executable_path + ' exists')
             return executable_path
 
 
@@ -626,6 +629,20 @@ def write_one_line(parent, name, text):
         tmp_file.write(text + '\n')
         os.fsync(tmp_file.fileno())
     os.rename(tmp, path)
+
+
+def init_get():
+    """
+    Get a init system using 'ceph-detect-init'
+    """
+    init = _check_output(
+        args=[
+            'ceph-detect-init',
+            '--default', 'sysvinit',
+            ],
+        )
+    init = must_be_one_line(init)
+    return init
 
 
 def check_osd_magic(path):
@@ -1860,9 +1877,8 @@ def start_daemon(
     path = (STATEDIR + '/osd/{cluster}-{osd_id}').format(
         cluster=cluster, osd_id=osd_id)
 
-    # upstart?
     try:
-        if os.path.exists(os.path.join(path,'upstart')):
+        if os.path.exists(os.path.join(path, 'upstart')):
             command_check_call(
                 [
                     '/sbin/initctl',
@@ -2153,11 +2169,7 @@ def activate(
             if conf_val is not None:
                 init = conf_val
             else:
-                (distro, release, codename) = platform.dist()
-                if distro == 'Ubuntu':
-                    init = 'upstart'
-                else:
-                    init = 'sysvinit'
+                init = init_get()
 
         LOG.debug('Marking with init system %s', init)
         with file(os.path.join(path, init), 'w'):
@@ -2217,7 +2229,7 @@ def main_activate(args):
         else:
             raise Error('%s is not a directory or block device' % args.path)
 
-        if args.mark_init == 'none':
+        if (not args.no_start_daemon and args.mark_init == 'none'):
             command_check_call(
                 [
                     'ceph-osd',
@@ -2228,7 +2240,8 @@ def main_activate(args):
                 ],
             )
 
-        if args.mark_init not in (None, 'none' ):
+        if (not args.no_start_daemon and
+            args.mark_init not in (None, 'none' )):
 
             start_daemon(
                 cluster=cluster,
@@ -2884,6 +2897,11 @@ def parse_args():
         help='init system to manage this dir',
         default='auto',
         choices=INIT_SYSTEMS,
+        )
+    activate_parser.add_argument(
+        '--no-start-daemon',
+        action='store_true', default=None,
+        help='do not start the daemon',
         )
     activate_parser.add_argument(
         'path',

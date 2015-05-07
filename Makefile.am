@@ -19,13 +19,13 @@ EXTRA_DIST += \
 	share/id_dsa_drop.ceph.com.pub
 
 # why is it so hard to make autotools to this?
-install-data-local:
+install-data-local::
 	-mkdir -p $(DESTDIR)$(datadir)/ceph
 	-install -m 644 share/known_hosts_drop.ceph.com $(DESTDIR)$(datadir)/ceph/known_hosts_drop.ceph.com
 	-install -m 644 share/id_dsa_drop.ceph.com $(DESTDIR)$(datadir)/ceph/id_dsa_drop.ceph.com
 	-install -m 644 share/id_dsa_drop.ceph.com.pub $(DESTDIR)$(datadir)/ceph/id_dsa_drop.ceph.com.pub
 
-all-local:
+all-local::
 if WITH_DEBUG
 #	We need gtest to build the rados-api tests. We only build those in
 #	a debug build, though.
@@ -33,7 +33,7 @@ if WITH_DEBUG
 	@cd src/gmock && $(MAKE) $(AM_MAKEFLAGS) lib/libgmock.la lib/libgmock_main.la
 endif
 
-check-local: all
+check-local:: all
 #	We build gtest this way, instead of using SUBDIRS, because with that,
 #	gtest's own tests would be run and that would slow us down.
 	@cd src/gmock/gtest && $(MAKE) $(AM_MAKEFLAGS) lib/libgtest.la lib/libgtest_main.la

@@ -80,7 +80,11 @@ fi
 # b) do not sign the packages
 # c) use half of the available processors
 #
-PATH=/usr/lib/ccache:$PATH dpkg-buildpackage -j$(($(nproc) / 2)) -uc -us
+: ${NPROC:=$(($(nproc) / 2))}
+if test $NPROC -gt 1 ; then
+    j=-j${NPROC}
+fi
+PATH=/usr/lib/ccache:$PATH dpkg-buildpackage $j -uc -us
 cd ../..
 mkdir -p $codename/conf
 cat > $codename/conf/distributions <<EOF
