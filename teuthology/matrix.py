@@ -164,7 +164,7 @@ class Concat(Matrix):
         for submat in self.submats:
             for i in range(submat.size()):
                 out = out | frozenset([submat.index(i)])
-        return out
+        return (self.item, out)
 
 class Sum(Matrix):
     """
