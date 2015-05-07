@@ -63,7 +63,7 @@ def ceph_log(ctx, config):
         ctx.cluster.run(
             args=[
                 'sudo',
-                'install', '-d', '-m0755', '--',
+                'install', '-d', '-m0777', '--',
                 '/var/log/ceph/valgrind',
                 '/var/log/ceph/profiling-logger',
                 ],
