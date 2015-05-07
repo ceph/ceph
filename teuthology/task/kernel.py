@@ -27,6 +27,10 @@ from ..packaging import (
 
 log = logging.getLogger(__name__)
 
+CONFIG_DEFAULT = {'branch': 'master'}
+TIMEOUT_DEFAULT = 300
+
+VERSION_KEYS = ['branch', 'tag', 'sha1', 'deb', 'rpm', 'koji', 'koji_task']
 
 def normalize_config(ctx, config):
     """
@@ -68,13 +72,11 @@ def normalize_config(ctx, config):
     :param config: Configuration
     """
     if config is None or \
-            len(filter(lambda x: x in ['tag', 'branch', 'sha1', 'kdb',
-                                       'deb', 'rpm', 'koji', 'koji_task',
-                                       'flavor'],
+            len(filter(lambda x: x in VERSION_KEYS + ['kdb', 'flavor'],
                        config.keys())) == len(config.keys()):
         new_config = {}
         if config is None:
-            config = {'branch': 'master'}
+            config = CONFIG_DEFAULT
         for _, roles_for_host in ctx.cluster.remotes.iteritems():
             new_config[roles_for_host[0]] = config
         return new_config
@@ -82,7 +84,7 @@ def normalize_config(ctx, config):
     new_config = {}
     for role, role_config in config.iteritems():
         if role_config is None:
-            role_config = {'branch': 'master'}
+            role_config = CONFIG_DEFAULT
         if '.' in role:
             new_config[role] = role_config
         else:
@@ -1102,7 +1104,7 @@ def task(ctx, config):
     assert config is None or isinstance(config, dict), \
         "task kernel only supports a dictionary for configuration"
 
-    timeout = 300
+    timeout = TIMEOUT_DEFAULT
     if config is not None and 'timeout' in config:
         timeout = config.pop('timeout')
 
