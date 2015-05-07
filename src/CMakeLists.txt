@@ -1,5 +1,6 @@
 include(GetGitRevisionDescription)
 
+enable_language(C ASM)
 set(bindir ${CMAKE_INSTALL_PREFIX}/bin)
 set(sbindir ${CMAKE_INSTALL_PREFIX}/sbin)
 set(libdir ${CMAKE_INSTALL_PREFIX}/lib)
@@ -10,6 +11,10 @@ set(prefix ${CMAKE_INSTALL_PREFIX})
 add_definitions("-DCEPH_LIBDIR=\"${libdir}\"")
 add_definitions("-DCEPH_PKGLIBDIR=\"${libdir}\"")
 add_definitions("-DHAVE_CONFIG_H -D__CEPH__ -D_FILE_OFFSET_BITS=64 -D_REENTRANT -D_THREAD_SAFE -D__STDC_FORMAT_MACROS -D_GNU_SOURCE")
+
+set(CMAKE_ASM_COMPILER  ${PROJECT_SOURCE_DIR}/src/yasm-wrapper)
+message(status " ams compiler ${CMAKE_ASM_COMPILER}")
+set(CMAKE_ASM_FLAGS "-f elf64")
 
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -rdynamic -Wall -Wtype-limits -Wignored-qualifiers -Winit-self -Wpointer-arith -Werror=format-security -fno-strict-aliasing -fsigned-char -fPIC")
 
@@ -166,6 +171,8 @@ set(libcommon_files
   common/crc32c.cc
   common/crc32c_intel_baseline.c
   common/crc32c_intel_fast.c
+  common/crc32c_intel_fast_asm.S
+  common/crc32c_intel_fast_zero_asm.S
   common/assert.cc
   common/run_cmd.cc
   common/WorkQueue.cc
