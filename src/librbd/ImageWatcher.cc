@@ -602,6 +602,13 @@ void ImageWatcher::notify_request_lock() {
     lderr(m_image_ctx.cct) << "error requesting lock: " << cpp_strerror(r)
 			   << dendl;
     schedule_retry_aio_requests(true);
+  } else {
+    // lock owner acked -- but resend if we don't see them release the lock
+    int retry_timeout = m_image_ctx.cct->_conf->client_notify_timeout;
+    FunctionContext *ctx = new FunctionContext(
+      boost::bind(&ImageWatcher::notify_request_lock, this));
+    m_task_finisher->add_event_after(TASK_CODE_REQUEST_LOCK,
+                                     retry_timeout, ctx);
   }
 }
 
@@ -728,6 +735,7 @@ void ImageWatcher::handle_payload(const HeaderUpdatePayload &payload,
 void ImageWatcher::handle_payload(const AcquiredLockPayload &payload,
                                   bufferlist *out) {
   ldout(m_image_ctx.cct, 10) << "image exclusively locked announcement" << dendl;
+  m_task_finisher->cancel(TASK_CODE_REQUEST_LOCK);
   if (payload.client_id.is_valid()) {
     Mutex::Locker l(m_owner_client_id_lock);
     if (payload.client_id == m_owner_client_id) {
@@ -747,6 +755,7 @@ void ImageWatcher::handle_payload(const AcquiredLockPayload &payload,
 void ImageWatcher::handle_payload(const ReleasedLockPayload &payload,
                                   bufferlist *out) {
   ldout(m_image_ctx.cct, 10) << "exclusive lock released" << dendl;
+  m_task_finisher->cancel(TASK_CODE_REQUEST_LOCK);
   if (payload.client_id.is_valid()) {
     Mutex::Locker l(m_owner_client_id_lock);
     if (payload.client_id != m_owner_client_id) {
