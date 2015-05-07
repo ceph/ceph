@@ -33,12 +33,25 @@ if WITH_DEBUG
 	@cd src/gmock && $(MAKE) $(AM_MAKEFLAGS) lib/libgmock.la lib/libgmock_main.la
 endif
 
+CHECK_ULIMIT := true
+
 check-local:: all
 #	We build gtest this way, instead of using SUBDIRS, because with that,
 #	gtest's own tests would be run and that would slow us down.
 	@cd src/gmock/gtest && $(MAKE) $(AM_MAKEFLAGS) lib/libgtest.la lib/libgtest_main.la
 	@cd src/gmock && $(MAKE) $(AM_MAKEFLAGS) lib/libgmock.la lib/libgmock_main.la
 #	exercise cli tools
+	u=`ulimit -u` ; \
+	p=`expr $(shell nproc) / 2` ; \
+	n=`expr $$p \* 100024` ; \
+	if ${CHECK_ULIMIT} && echo ${MAKEFLAGS} | grep --quiet -e -j && test $$u -lt $$n ; then \
+		echo "ulimit -u is $$u which is lower than $$n = $$p / 2 * 1024" ; \
+		echo "If running make -j$$p check you will likely exceed this limit" ; \
+		echo "and the tests will fail in mysterious ways." ; \
+		echo "Update /etc/security/limits.conf to increase the limit" ; \
+		echo "or run make CHECK_ULIMIT=false -j4 check to override this safeguard." ; \
+		exit 1 ; \
+	fi
 	$(srcdir)/src/test/run-cli-tests '$(top_builddir)/src/test'
 
 # "make distclean" both runs this and recurses into src/gtest, if
