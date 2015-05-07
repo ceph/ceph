@@ -102,6 +102,45 @@ def remove_package(package, remote):
     return remote.run(args=pkgcmd)
 
 
+def get_koji_task_result(task_id, remote, ctx):
+    """
+    Queries kojihub and retrieves information about
+    the given task_id. The package, koji, must be installed
+    on the remote for this command to work.
+
+    We need a remote here because koji can only be installed
+    on rpm based machines and teuthology runs on Ubuntu.
+
+    The results of the given task are returned. For example:
+
+    {
+      'brootid': 3303567,
+      'srpms': [],
+      'rpms': [
+          'tasks/6745/9666745/kernel-4.1.0-0.rc2.git2.1.fc23.x86_64.rpm',
+          'tasks/6745/9666745/kernel-modules-4.1.0-0.rc2.git2.1.fc23.x86_64.rpm',
+       ],
+      'logs': []
+    }
+
+    :param task_id:   The koji task_id we want to retrieve results for.
+    :param remote:    The remote to run the koji command on.
+    :param ctx:       The ctx from the current run, used to provide a
+                      failure_reason and status if the koji command fails.
+    :returns:         A python dict containing info about the task results.
+    """
+    py_cmd = ('import koji; '
+              'hub = koji.ClientSession("{kojihub_url}"); '
+              'print hub.getTaskResult({task_id})')
+    py_cmd = py_cmd.format(
+        task_id=task_id,
+        kojihub_url=config.kojihub_url
+    )
+    log.info("Querying kojihub for the result of task {0}".format(task_id))
+    task_result = _run_python_command(py_cmd, remote, ctx)
+    return task_result
+
+
 def get_koji_build_info(build_id, remote, ctx):
     """
     Queries kojihub and retrieves information about
@@ -122,7 +161,7 @@ def get_koji_build_info(build_id, remote, ctx):
      'package_id': 34590, 'id': 412677, 'volume_id': 0, 'owner_id': 2826
     }
 
-    :param build_id:  The brew build_id we want to retrieve info on.
+    :param build_id:  The koji build_id we want to retrieve info on.
     :param remote:    The remote to run the koji command on.
     :param ctx:       The ctx from the current run, used to provide a
                       failure_reason and status if the koji command fails.
@@ -135,6 +174,17 @@ def get_koji_build_info(build_id, remote, ctx):
         build_id=build_id,
         kojihub_url=config.kojihub_url
     )
+    log.info('Querying kojihub for info on build {0}'.format(build_id))
+    build_info = _run_python_command(py_cmd, remote, ctx)
+    return build_info
+
+
+def _run_python_command(py_cmd, remote, ctx):
+    """
+    Runs the given python code on the remote
+    and returns the stdout from the code as
+    a python object.
+    """
     proc = remote.run(
         args=[
             'python', '-c', py_cmd
@@ -145,9 +195,9 @@ def get_koji_build_info(build_id, remote, ctx):
         # returns the __repr__ of a python dict
         stdout = proc.stdout.getvalue().strip()
         # take the __repr__ and makes it a python dict again
-        build_info = ast.literal_eval(stdout)
+        result = ast.literal_eval(stdout)
     else:
-        msg = "Failed to query koji for build {0}".format(build_id)
+        msg = "Error running the following on {0}: {1}".format(remote, py_cmd)
         log.error(msg)
         log.error("stdout: {0}".format(proc.stdout.getvalue().strip()))
         log.error("stderr: {0}".format(proc.stderr.getvalue().strip()))
@@ -155,7 +205,7 @@ def get_koji_build_info(build_id, remote, ctx):
         ctx.summary["status"] = "dead"
         raise RuntimeError(msg)
 
-    return build_info
+    return result
 
 
 def get_kojiroot_base_url(build_info, arch="x86_64"):

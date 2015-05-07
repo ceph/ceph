@@ -146,6 +146,38 @@ class TestPackaging(object):
         with pytest.raises(RuntimeError):
             packaging.get_koji_build_info(1, m_remote, m_ctx)
 
+    @patch("teuthology.packaging.config")
+    def test_get_koji_task_result_success(self, m_config):
+        m_config.kojihub_url = "http://kojihub.com"
+        m_proc = Mock()
+        expected = dict(foo="bar")
+        m_proc.exitstatus = 0
+        m_proc.stdout.getvalue.return_value = str(expected)
+        m_remote = Mock()
+        m_remote.run.return_value = m_proc
+        result = packaging.get_koji_task_result(1, m_remote, dict())
+        assert result == expected
+        args, kwargs = m_remote.run.call_args
+        expected_args = [
+            'python', '-c',
+            'import koji; '
+            'hub = koji.ClientSession("http://kojihub.com"); '
+            'print hub.getTaskResult(1)',
+        ]
+        assert expected_args == kwargs['args']
+
+    @patch("teuthology.packaging.config")
+    def test_get_koji_task_result_fail(self, m_config):
+        m_config.kojihub_url = "http://kojihub.com"
+        m_proc = Mock()
+        m_proc.exitstatus = 1
+        m_remote = Mock()
+        m_remote.run.return_value = m_proc
+        m_ctx = Mock()
+        m_ctx.summary = dict()
+        with pytest.raises(RuntimeError):
+            packaging.get_koji_task_result(1, m_remote, m_ctx)
+
     def test_get_package_version_deb_found(self):
         remote = Mock()
         remote.os.package_type = "deb"
