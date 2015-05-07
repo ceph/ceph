@@ -11,7 +11,17 @@
 
 PATH=/sbin:/bin:/usr/bin
 
-. /lib/lsb/init-functions
+if [ -x /sbin/start-stop-daemon ]; then
+    DEBIAN=1
+    . /lib/lsb/init-functions
+else
+    . /etc/rc.d/init.d/functions
+    DEBIAN=0
+
+    # detect systemd, also check whether the systemd-run binary exists
+    SYSTEMD_RUN=$(which systemd-run 2>/dev/null)
+    grep -qs systemd /proc/1/comm || SYSTEMD_RUN=""
+fi
 
 daemon_is_running() {
     daemon=$1
@@ -89,20 +99,34 @@ case "$1" in
             fi
 
             echo "Starting $name..."
-            start-stop-daemon --start -u $user -x $RADOSGW -- -n $name
+	    if [ $DEBIAN -eq 1 ]; then
+		start-stop-daemon --start -u $user -x $RADOSGW -- -n $name
+	    elif [ -n "$SYSTEMD_RUN" ]; then
+                $SYSTEMD_RUN -r sudo -u "$user" bash -c "ulimit -n 32768; $RADOSGW -n $name"
+            else
+		ulimit -n 32768
+                daemon --user="$user" "$RADOSGW -n $name"
+            fi
         done
-        daemon_is_running $RADOSGW
         ;;
     reload)
         echo "Reloading $name..."
-        start-stop-daemon --stop --signal HUP -x $RADOSGW --oknodo
-        ;;
+	if [ $DEBIAN -eq 1 ]; then
+            start-stop-daemon --stop --signal HUP -x $RADOSGW --oknodo
+	else
+            killproc $RADOSGW -SIGHUP
+	fi
+	;;
     restart|force-reload)
         $0 stop
         $0 start
         ;;
     stop)
-        start-stop-daemon --stop -x $RADOSGW --oknodo
+	if [ $DEBIAN -eq 1 ]; then
+            start-stop-daemon --stop -x $RADOSGW --oknodo
+	else
+	    killproc $RADOSGW
+	fi
         ;;
     status)
         daemon_is_running $RADOSGW
