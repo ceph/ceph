@@ -37,6 +37,9 @@ class WritebackHandler {
 			  int op, int flags, Context *onack, Context *oncommit) {
     assert(0 == "this WritebackHandler does not support the lock operation");
   }
+
+  virtual void get_client_lock() {}
+  virtual void put_client_lock() {}
 };
 
 #endif
