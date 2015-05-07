@@ -70,7 +70,6 @@ EXTRA_DIST += \
 	$(srcdir)/ceph-osd-prestart.sh \
 	$(srcdir)/ceph_common.sh \
 	$(srcdir)/init-radosgw \
-	$(srcdir)/init-radosgw.sysv \
 	$(srcdir)/init-rbdmap \
 	$(srcdir)/ceph-clsinfo \
 	$(srcdir)/make_version \
