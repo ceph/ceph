@@ -3202,7 +3202,7 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
       e.cap.wanted = cap->wanted();
       e.cap.cap_id = cap->get_cap_id();
       e.cap.seq = cap->get_last_seq();
-      dout(10) << "encode_inodestat issueing " << ccap_string(issue) << " seq " << cap->get_last_seq() << dendl;
+      dout(10) << "encode_inodestat issuing " << ccap_string(issue) << " seq " << cap->get_last_seq() << dendl;
       e.cap.mseq = cap->get_mseq();
       e.cap.realm = realm->inode->ino();
     } else {
