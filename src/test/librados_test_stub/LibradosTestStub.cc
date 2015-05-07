@@ -395,7 +395,8 @@ void IoCtx::dup(const IoCtx& rhs) {
 int IoCtx::exec(const std::string& oid, const char *cls, const char *method,
                 bufferlist& inbl, bufferlist& outbl) {
   TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
-  return ctx->exec(oid, *get_class_handler(), cls, method, inbl, &outbl);
+  return ctx->exec(oid, *get_class_handler(), cls, method, inbl, &outbl,
+                   ctx->get_snap_context());
 }
 
 void IoCtx::from_rados_ioctx_t(rados_ioctx_t p, IoCtx &io) {
@@ -548,12 +549,12 @@ int IoCtx::watch2(const std::string& o, uint64_t *handle,
 int IoCtx::write(const std::string& oid, bufferlist& bl, size_t len,
                  uint64_t off) {
   TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
-  return ctx->write(oid, bl, len, off);
+  return ctx->write(oid, bl, len, off, ctx->get_snap_context());
 }
 
 int IoCtx::write_full(const std::string& oid, bufferlist& bl) {
   TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
-  return ctx->write_full(oid, bl);
+  return ctx->write_full(oid, bl, ctx->get_snap_context());
 }
 
 static int save_operation_result(int result, int *pval) {
@@ -587,7 +588,7 @@ void ObjectOperation::exec(const char *cls, const char *method,
   TestObjectOperationImpl *o = reinterpret_cast<TestObjectOperationImpl*>(impl);
   o->ops.push_back(boost::bind(&TestIoCtxImpl::exec, _1, _2,
 			       boost::ref(*get_class_handler()),
-			       cls, method, inbl, _3));
+			       cls, method, inbl, _3, _4));
 }
 
 void ObjectOperation::set_op_flags2(int flags) {
@@ -605,7 +606,7 @@ void ObjectReadOperation::list_snaps(snap_set_t *out_snaps, int *prval) {
                                            out_snaps);
   if (prval != NULL) {
     op = boost::bind(save_operation_result,
-                     boost::bind(op, _1, _2, _3), prval);
+                     boost::bind(op, _1, _2, _3, _4), prval);
   }
   o->ops.push_back(op);
 }
@@ -623,7 +624,7 @@ void ObjectReadOperation::read(size_t off, uint64_t len, bufferlist *pbl,
 
   if (prval != NULL) {
     op = boost::bind(save_operation_result,
-                     boost::bind(op, _1, _2, _3), prval);
+                     boost::bind(op, _1, _2, _3, _4), prval);
   }
   o->ops.push_back(op);
 }
@@ -642,7 +643,7 @@ void ObjectReadOperation::sparse_read(uint64_t off, uint64_t len,
 
   if (prval != NULL) {
     op = boost::bind(save_operation_result,
-                     boost::bind(op, _1, _2, _3), prval);
+                     boost::bind(op, _1, _2, _3, _4), prval);
   }
   o->ops.push_back(op);
 }
@@ -683,12 +684,12 @@ void ObjectWriteOperation::truncate(uint64_t off) {
 void ObjectWriteOperation::write(uint64_t off, const bufferlist& bl) {
   TestObjectOperationImpl *o = reinterpret_cast<TestObjectOperationImpl*>(impl);
   o->ops.push_back(boost::bind(&TestIoCtxImpl::write, _1, _2, bl, bl.length(),
-			       off));
+			       off, _4));
 }
 
 void ObjectWriteOperation::write_full(const bufferlist& bl) {
   TestObjectOperationImpl *o = reinterpret_cast<TestObjectOperationImpl*>(impl);
-  o->ops.push_back(boost::bind(&TestIoCtxImpl::write_full, _1, _2, bl));
+  o->ops.push_back(boost::bind(&TestIoCtxImpl::write_full, _1, _2, bl, _4));
 }
 
 void ObjectWriteOperation::zero(uint64_t off, uint64_t len) {
@@ -990,13 +991,13 @@ int cls_cxx_write(cls_method_context_t hctx, int ofs, int len,
                   bufferlist *inbl) {
   librados::TestClassHandler::MethodContext *ctx =
     reinterpret_cast<librados::TestClassHandler::MethodContext*>(hctx);
-  return ctx->io_ctx_impl->write(ctx->oid, *inbl, len, ofs);
+  return ctx->io_ctx_impl->write(ctx->oid, *inbl, len, ofs, ctx->snapc);
 }
 
 int cls_cxx_write_full(cls_method_context_t hctx, bufferlist *inbl) {
   librados::TestClassHandler::MethodContext *ctx =
     reinterpret_cast<librados::TestClassHandler::MethodContext*>(hctx);
-  return ctx->io_ctx_impl->write_full(ctx->oid, *inbl);
+  return ctx->io_ctx_impl->write_full(ctx->oid, *inbl, ctx->snapc);
 }
 
 int cls_log(int level, const char *format, ...) {
