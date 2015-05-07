@@ -43,22 +43,37 @@ if [ ! -x "$RADOSGW" ]; then
     exit 1
 fi
 
+# list daemons, old-style and new-style
+# NOTE: no support for cluster names that aren't "ceph"
+dlist=`ceph-conf --list-sections $PREFIX`
+if [ -d "/var/lib/ceph/radosgw" ]; then
+    for d in `ls /var/lib/ceph/radosgw | grep ^ceph-`; do
+	if [ -e "/var/lib/ceph/radosgw/$d/sysvinit" ]; then
+	    id=`echo $d | cut -c 6-`
+	    dlist="client.$id $dlist"
+	fi
+    done
+fi
+
 case "$1" in
     start)
-        for name in `ceph-conf --list-sections $PREFIX`;
+        for name in $dlist
         do
             auto_start=`ceph-conf -n $name 'auto start'`
             if [ "$auto_start" = "no" ] || [ "$auto_start" = "false" ] || [ "$auto_start" = "0" ]; then
                 continue
             fi
 
-            # mapped to this host?
-            host=`ceph-conf -n $name host`
-            hostname=`hostname -s`
-            if [ "$host" != "$hostname" ]; then
-                [ $VERBOSE -eq 1 ] && echo "hostname $hostname could not be found in ceph.conf:[$name], not starting."
-                continue
-            fi
+	    shortname=`echo $name | cut -c 8-`
+	    if [ ! -e "/var/lib/ceph/radosgw/ceph-$shortname/sysvinit" ]; then
+                # mapped to this host?
+		host=`ceph-conf -n $name host`
+		hostname=`hostname -s`
+		if [ "$host" != "$hostname" ]; then
+                    [ $VERBOSE -eq 1 ] && echo "hostname $hostname could not be found in ceph.conf:[$name], not starting."
+                    continue
+		fi
+	    fi
 
             user=`ceph-conf -n $name user`
             if [ -z "$user" ]; then
