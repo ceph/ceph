@@ -136,7 +136,7 @@ instead of a fixed duration.
 
 .. _0.94.1: ../release-notes#v0-94-1-hammer
 .. _0.94: ../release-notes#v0-94-hammer
-.. _Hammer: release-notes#v0-94-hammer
+.. _Hammer: ../release-notes#v0-94-hammer
 
 .. _0.93: ../release-notes#v0-93
 .. _0.92: ../release-notes#v0-92
@@ -148,7 +148,7 @@ instead of a fixed duration.
 .. _0.87.2: ../release-notes#v0-87-2-giant
 .. _0.87.1: ../release-notes#v0-87-1-giant
 .. _0.87: ../release-notes#v0-87-giant
-.. _Giant: release-notes#v0-87-giant
+.. _Giant: ../release-notes#v0-87-giant
 
 .. _0.86: ../release-notes#v0-86
 .. _0.85: ../release-notes#v0-85
