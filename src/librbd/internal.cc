@@ -139,9 +139,10 @@ int diff_object_map(ImageCtx* ictx, uint64_t from_snap_id, uint64_t to_snap_id,
         if (prev_object_map[i] != OBJECT_NONEXISTENT) {
           (*object_diff_state)[i] = OBJECT_DIFF_STATE_HOLE;
         }
-      } else if (prev_object_map[i] != object_map[i] &&
-                 !(prev_object_map[i] == OBJECT_EXISTS &&
-                   object_map[i] == OBJECT_EXISTS_CLEAN)) {
+      } else if (object_map[i] == OBJECT_EXISTS ||
+                 (prev_object_map[i] != object_map[i] &&
+                  !(prev_object_map[i] == OBJECT_EXISTS &&
+                    object_map[i] == OBJECT_EXISTS_CLEAN))) {
         (*object_diff_state)[i] = OBJECT_DIFF_STATE_UPDATED;
       }
     }
