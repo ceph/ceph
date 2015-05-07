@@ -1071,12 +1071,24 @@ int AsyncConnection::_process_connection()
         }
 
         ldout(async_msgr->cct, 20) << __func__ << " connect peer addr for me is " << peer_addr_for_me << dendl;
-        // TODO: it's tricky that exit loop if exist AsyncMessenger waiting for
-        // mark_down. Otherwise, it will be deadlock while
-        // AsyncMessenger::mark_down_all already hold lock.
-        if (stopping.read())
-          break;
+        lock.Unlock();
         async_msgr->learned_addr(peer_addr_for_me);
+        if (async_msgr->cct->_conf->ms_inject_internal_delays) {
+          ldout(msgr->cct, 10) << __func__ << " sleep for "
+                              << async_msgr->cct->_conf->ms_inject_internal_delays << dendl;
+          utime_t t;
+          t.set_from_double(async_msgr->cct->_conf->ms_inject_internal_delays);
+          t.sleep();
+        }
+
+        lock.Lock();
+        if (state != STATE_ACCEPTING_WAIT_CONNECT_MSG_AUTH) {
+          ldout(async_msgr->cct, 1) << __func__ << " state changed while learned_addr, mark_down must be called just now"
+                                    << dendl;
+          assert(state == STATE_CLOSED);
+          goto fail;
+        }
+
         ::encode(async_msgr->get_myaddr(), myaddrbl);
         r = _try_send(myaddrbl);
         if (r == 0) {
@@ -1886,7 +1898,6 @@ void AsyncConnection::_connect()
   ldout(async_msgr->cct, 10) << __func__ << " csq=" << connect_seq << dendl;
 
   state = STATE_CONNECTING;
-  stopping.set(0);
   // rescheduler connection in order to avoid lock dep
   // may called by external thread(send_message)
   center->dispatch_event_external(read_handler);
@@ -2281,7 +2292,6 @@ void AsyncConnection::send_keepalive()
 void AsyncConnection::mark_down()
 {
   ldout(async_msgr->cct, 10) << __func__ << " started." << dendl;
-  stopping.set(1);
   Mutex::Locker l(lock);
   _stop();
 }
