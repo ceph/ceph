@@ -260,7 +260,6 @@ class AsyncConnection : public Connection {
                      // presentation
   bool is_reset_from_peer;
   bool once_ready;
-  atomic_t stopping;
 
   // used only for local state, it will be overwrite when state transition
   char *state_buffer;
@@ -278,7 +277,10 @@ class AsyncConnection : public Connection {
   void wakeup_from(uint64_t id);
   void local_deliver();
   void stop() {
-    center->dispatch_event_external(reset_handler);
+    lock.Lock();
+    if (state != STATE_CLOSED)
+      center->dispatch_event_external(reset_handler);
+    lock.Unlock();
     mark_down();
   }
   void cleanup_handler() {
