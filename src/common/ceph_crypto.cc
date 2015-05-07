@@ -35,7 +35,7 @@ ceph::crypto::HMACSHA1::~HMACSHA1()
 {
 }
 
-#elif USE_NSS
+#elif defined(USE_NSS)
 
 // for SECMOD_RestartModules()
 #include <secmod.h>
