@@ -1360,7 +1360,6 @@ int NewStore::_do_read(
   return r;
 }
 
-
 int NewStore::fiemap(
   coll_t cid,
   const ghobject_t& oid,
@@ -1368,7 +1367,102 @@ int NewStore::fiemap(
   size_t len,
   bufferlist& bl)
 {
-  assert(0);
+  map<uint64_t, uint64_t> m;
+  CollectionRef c = _get_collection(cid);
+  if (!c)
+    return -ENOENT;
+  RWLock::RLocker l(c->lock);
+
+  OnodeRef o = c->get_onode(oid, false);
+  if (!o || !o->exists) {
+    return -ENOENT;
+  }
+
+  if (offset == len && offset == 0)
+    len = o->onode.size;
+
+  if (offset > o->onode.size)
+    return 0;
+
+  if (offset + len > o->onode.size) {
+    len = o->onode.size - offset;
+  }
+
+  dout(20) << __func__ << " " << offset << "~" << len << " size "
+	   << o->onode.size << dendl;
+
+  map<uint64_t,fragment_t>::iterator fp, fend;
+  map<uint64_t,overlay_t>::iterator op, oend;
+
+  // loop over overlays and data fragments.  overlays take precedence.
+  fend = o->onode.data_map.end();
+  fp = o->onode.data_map.lower_bound(offset);
+  if (fp != o->onode.data_map.begin()) {
+    --fp;
+  }
+  oend = o->onode.overlay_map.end();
+  op = o->onode.overlay_map.lower_bound(offset);
+  if (op != o->onode.overlay_map.begin()) {
+    --op;
+  }
+  uint64_t start = offset;
+  while (len > 0) {
+    if (op != oend && op->first + op->second.length < offset) {
+      ++op;
+      continue;
+    }
+    if (fp != fend && fp->first + fp->second.length <= offset) {
+      ++fp;
+      continue;
+    }
+
+    // overlay?
+    if (op != oend && op->first <= offset) {
+      uint64_t x_len = MIN(op->first + op->second.length - offset, len);
+      //m[offset] = x_len;
+      dout(30) << __func__ << " get overlay, off =  " << offset << " len=" << x_len << dendl;
+      len -= x_len;
+      offset += x_len;
+      ++op;
+      continue;
+    }
+
+    unsigned x_len = len;
+    if (op != oend &&
+	op->first > offset &&
+	op->first - offset < x_len) {
+      x_len = op->first - offset;
+    }
+
+    // frag?
+    if (fp != fend && fp->first <= offset) {
+      uint64_t x_off = offset - fp->first - fp->second.offset;
+      x_len = MIN(x_len, fp->second.length - x_off);
+      //m[offset] = x_len;
+      dout(30) << __func__ << " get frag, off =  " << offset << " len=" << x_len << dendl;
+      len -= x_len;
+      offset += x_len;
+      if (x_off + x_len == fp->second.length)
+	++fp;
+      continue;
+    }
+    // we are seeing a hole, time to add an entry to fiemap.
+    m[start] = offset - start;
+    dout(20) << __func__ << " get fiemap entry, off =  " << start << " len=" << m[start] << dendl;
+    offset += x_len;
+    start = offset;
+    len -= x_len;
+    continue;
+  }
+  //add tailing
+  if (offset - start != 0) {
+    m[start] = offset - start;
+    dout(20) << __func__ << " get fiemap entry, off =  " << start << " len=" << m[start] << dendl;
+  }
+
+  ::encode(m, bl);
+  dout(20) << __func__ << " " << offset << "~" << len << " size = 0 (" << m << ")" << dendl;
+  return 0;
 }
 
 int NewStore::getattr(
