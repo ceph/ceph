@@ -400,8 +400,8 @@ add_executable(unittest_str_map
   ${unittest_str_map_srcs}
   $<TARGET_OBJECTS:heap_profiler_objs>
   )
-target_link_libraries(unittest_str_map global
-  ${CMAKE_DL_LIBS} ${TCMALLOC_LIBS} ${UNITTEST_LIBS})
+target_link_libraries(unittest_str_map common global
+  ${CMAKE_DL_LIBS} ${TCMALLOC_LIBS} ${UNITTEST_LIBS} common)
 set_target_properties(unittest_str_map
   PROPERTIES COMPILE_FLAGS ${UNITTEST_CXX_FLAGS})
 
