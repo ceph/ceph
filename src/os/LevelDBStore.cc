@@ -10,7 +10,7 @@
 using std::string;
 #include "common/perf_counters.h"
 
-int LevelDBStore::init()
+int LevelDBStore::init(string option_str)
 {
   // init defaults.  caller can override these if they want
   // prior to calling open.

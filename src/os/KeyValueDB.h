@@ -70,7 +70,7 @@ public:
 
   /// test whether we can successfully initialize; may have side effects (e.g., create)
   static int test_init(const string& type, const string& dir);
-  virtual int init() = 0;
+  virtual int init(string option_str="") = 0;
   virtual int open(ostream &out) = 0;
   virtual int create_and_open(ostream &out) = 0;
 
