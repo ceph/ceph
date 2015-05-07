@@ -1939,7 +1939,14 @@ void MDS::boot_start(BootStep step, int r)
       dout(0) << "boot_start encountered an error EAGAIN"
               << ", respawning since we fell behind journal" << dendl;
       respawn();
+    } else if (r == -EINVAL || r == -ENOENT) {
+      // Invalid or absent data, indicates damaged on-disk structures
+      clog->error() << "Error loading MDS rank " << whoami << ": "
+        << cpp_strerror(r);
+      damaged();
+      assert(r == 0);  // Unreachable, damaged() calls respawn()
     } else {
+      // Completely unexpected error, give up and die
       dout(0) << "boot_start encountered an error, failing" << dendl;
       suicide();
       return;
@@ -2249,8 +2256,15 @@ void MDS::rejoin_done()
 
   // funny case: is our cache empty?  no subtrees?
   if (!mdcache->is_subtrees()) {
-    dout(1) << " empty cache, no subtrees, leaving cluster" << dendl;
-    request_state(MDSMap::STATE_STOPPED);
+    if (whoami == 0) {
+      // The root should always have a subtree!
+      clog->error() << "No subtrees found for root MDS rank!";
+      damaged();
+      assert(mdcache->is_subtrees());
+    } else {
+      dout(1) << " empty cache, no subtrees, leaving cluster" << dendl;
+      request_state(MDSMap::STATE_STOPPED);
+    }
     return;
   }
 
