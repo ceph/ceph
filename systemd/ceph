@@ -33,14 +33,14 @@ prefix="${cluster}-"
 
 case $action in start | stop | status | enable | disable | mask | unmask | restart | is-active | is-failed | show | kill | reset-failed  )
     n=0
-    if test -n ${lmon} ; then
+    if test -n "${lmon}" ; then
         for s in ${lmon#=${prefix}} ; do
             systemctl "${action}" ceph-mon@${s#$prefix}.service
             rc_check
             ((++n))
         done
     fi
-    if test -n ${losd} ; then
+    if test -n "${losd}" ; then
         for s in ${losd#=${prefix}} ; do
             systemctl "${action}" ceph-osd@${s#$prefix}.service
             rc_check
