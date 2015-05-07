@@ -360,7 +360,7 @@ OSDs with the long form procedure, execute the following on ``node2`` and
    OSD starts up. The following command will output the OSD number, which you 
    will need for subsequent steps. ::
 	
-	ceph osd create [{uuid}]
+	ceph osd create [{uuid} [{id}]]
 
 
 #. Create the default directory on your new OSD. :: 

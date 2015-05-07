@@ -536,11 +536,11 @@ Usage::
 
 	ceph osd blocked-by
 
-Subcommand ``create`` creates new osd (with optional UUID).
+Subcommand ``create`` creates new osd (with optional UUID and ID).
 
 Usage::
 
-	ceph osd create {<uuid>}
+	ceph osd create {<uuid>} {<id>}
 
 Subcommand ``crush`` is used for CRUSH management. It uses some additional
 subcommands.
