@@ -7,9 +7,9 @@
 namespace librbd
 {
 
-AsyncObjectThrottle::AsyncObjectThrottle(const AsyncRequest& async_request,
+AsyncObjectThrottle::AsyncObjectThrottle(const AsyncRequest* async_request,
                                          const ContextFactory& context_factory,
-				 	 Context *ctx, ProgressContext &prog_ctx,
+				 	 Context *ctx, ProgressContext *prog_ctx,
 					 uint64_t object_no,
 					 uint64_t end_object_no)
   : m_lock("librbd::AsyncThrottle::m_lock"),
@@ -58,7 +58,8 @@ void AsyncObjectThrottle::finish_op(int r) {
 void AsyncObjectThrottle::start_next_op() {
   bool done = false;
   while (!done) {
-    if (m_async_request.is_canceled() && m_ret == 0) {
+    if (m_async_request != NULL && m_async_request->is_canceled() &&
+        m_ret == 0) {
       // allow in-flight ops to complete, but don't start new ops
       m_ret = -ERESTART;
       return;
@@ -81,7 +82,9 @@ void AsyncObjectThrottle::start_next_op() {
       ++m_current_ops;
       done = true;
     }
-    m_prog_ctx.update_progress(ono, m_end_object_no);
+    if (m_prog_ctx != NULL) {
+      m_prog_ctx->update_progress(ono, m_end_object_no);
+    }
   }
 }
 

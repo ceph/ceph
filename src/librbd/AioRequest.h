@@ -31,7 +31,9 @@ namespace librbd {
                uint64_t objectno, uint64_t off, uint64_t len,
                librados::snap_t snap_id,
                Context *completion, bool hide_enoent);
-    virtual ~AioRequest();
+    virtual ~AioRequest() {}
+
+    virtual void add_copyup_ops(librados::ObjectWriteOperation *wr) {};
 
     void complete(int r);
 
@@ -44,8 +46,6 @@ namespace librbd {
 
   protected:
     bool compute_parent_extents();
-    void read_from_parent(const vector<pair<uint64_t,uint64_t> >& image_extents,
-                          bool block_completion);
 
     ImageCtx *m_ictx;
     std::string m_oid;
@@ -53,8 +53,6 @@ namespace librbd {
     librados::snap_t m_snap_id;
     Context *m_completion;
     std::vector<std::pair<uint64_t,uint64_t> > m_parent_extents;
-    AioCompletion *m_parent_completion;
-    ceph::bufferlist m_read_data;
     bool m_hide_enoent;
   };
 
@@ -65,7 +63,8 @@ namespace librbd {
 	    vector<pair<uint64_t,uint64_t> >& be,
 	    librados::snap_t snap_id, bool sparse,
 	    Context *completion, int op_flags);
-    virtual ~AioRead() {}
+    virtual ~AioRead();
+
     virtual bool should_complete(int r);
     virtual int send();
     void guard_read();
@@ -83,6 +82,8 @@ namespace librbd {
     bool m_tried_parent;
     bool m_sparse;
     int m_op_flags;
+    ceph::bufferlist m_read_data;
+    AioCompletion *m_parent_completion;
 
     /**
      * Reads go through the following state machine to deal with
@@ -107,6 +108,9 @@ namespace librbd {
     };
 
     read_state_d m_state;
+
+    void send_copyup();
+    void read_from_parent(const vector<pair<uint64_t,uint64_t> >& image_extents);
   };
 
   class AbstractWrite : public AioRequest {
@@ -115,6 +119,11 @@ namespace librbd {
                   uint64_t object_off, uint64_t len, const ::SnapContext &snapc,
 		  Context *completion, bool hide_enoent);
     virtual ~AbstractWrite() {}
+
+    virtual void add_copyup_ops(librados::ObjectWriteOperation *wr)
+    {
+      add_write_ops(wr);
+    }
 
     virtual bool should_complete(int r);
     virtual int send();
@@ -136,20 +145,23 @@ namespace librbd {
      *      .       |                                               |      .
      *      v       v         need copyup                           |      .
      * LIBRBD_AIO_WRITE_GUARD -----------> LIBRBD_AIO_WRITE_COPYUP  |      .
-     *  .       |   ^                           |                   |      .
-     *  .       |   |                           |                   |      .
-     *  .       |   \---------------------------/                   |      .
-     *  .       |                                                   |      .
-     *  .       \-------------------\           /-------------------/      .
-     *  .                           |           |                          .
-     *  .                       LIBRBD_AIO_WRITE_POST                      .
-     *  .                                |                                 .
-     *  .                                v                                 .
+     *  .       |                               |        .          |      .
+     *  .       |                               |        .          |      .
+     *  .       |                         /-----/        .          |      .
+     *  .       |                         |              .          |      .
+     *  .       \-------------------\     |     /-------------------/      .
+     *  .                           |     |     |        .                 .
+     *  .                           v     v     v        .                 .
+     *  .                       LIBRBD_AIO_WRITE_POST    .                 .
+     *  .                               |                .                 .
+     *  .                               |  . . . . . . . .                 .
+     *  .                               |  .                               .
+     *  .                               v  v                               .
      *  . . . . . . . . . . . . . . > <finish> < . . . . . . . . . . . . . .
      *
-     * The _PRE_REMOVE/_POST_REMOVE states are skipped if the object map
-     * is disabled.  The write starts in _WRITE_GUARD or _FLAT depending on
-     * whether or not there is a parent overlap.
+     * The _PRE/_POST states are skipped if the object map is disabled.
+     * The write starts in _WRITE_GUARD or _FLAT depending on whether or not
+     * there is a parent overlap.
      */
     enum write_state_d {
       LIBRBD_AIO_WRITE_GUARD,
@@ -165,7 +177,6 @@ namespace librbd {
     librados::ObjectWriteOperation m_write;
     uint64_t m_snap_seq;
     std::vector<librados::snap_t> m_snaps;
-    ceph::bufferlist *m_entire_object;
 
     virtual void add_write_ops(librados::ObjectWriteOperation *wr) = 0;
     virtual void guard_write();

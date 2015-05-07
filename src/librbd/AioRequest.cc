@@ -31,7 +31,7 @@ namespace librbd {
 			 bool hide_enoent)
     : m_ictx(ictx), m_oid(oid), m_object_no(objectno), m_object_off(off),
       m_object_len(len), m_snap_id(snap_id), m_completion(completion),
-      m_parent_completion(NULL), m_hide_enoent(hide_enoent) {
+      m_hide_enoent(hide_enoent) {
 
     Striper::extent_to_file(m_ictx->cct, &m_ictx->layout, m_object_no,
                             0, m_ictx->layout.fl_object_size, m_parent_extents);
@@ -39,13 +39,6 @@ namespace librbd {
     RWLock::RLocker snap_locker(m_ictx->snap_lock);
     RWLock::RLocker parent_locker(m_ictx->parent_lock);
     compute_parent_extents();
-  }
-
-  AioRequest::~AioRequest() {
-    if (m_parent_completion) {
-      m_parent_completion->release();
-      m_parent_completion = NULL;
-    }
   }
 
   void AioRequest::complete(int r)
@@ -87,33 +80,6 @@ namespace librbd {
     return false;
   }
 
-  void AioRequest::read_from_parent(const vector<pair<uint64_t,uint64_t> >& parent_extents,
-                                    bool block_completion)
-  {
-    assert(!m_parent_completion);
-    m_parent_completion = aio_create_completion_internal(this, rbd_req_cb);
-    if (block_completion) {
-      // prevent the parent image from being deleted while this
-      // request is still in-progress
-      m_parent_completion->get();
-      m_parent_completion->block();
-    }
-
-    ldout(m_ictx->cct, 20) << "read_from_parent this = " << this
-			   << " parent completion " << m_parent_completion
-			   << " extents " << parent_extents
-			   << dendl;
-    int r = aio_read(m_ictx->parent, parent_extents, NULL, &m_read_data,
-	             m_parent_completion, 0);
-    if (r < 0) {
-      lderr(m_ictx->cct) << "read_from_parent " << this
-                         << ": error reading from parent: "
-                         << cpp_strerror(r) << dendl;
-      m_parent_completion->release();
-      complete(r);
-    }
-  }
-
   static inline bool is_copy_on_read(ImageCtx *ictx, librados::snap_t snap_id) {
     assert(ictx->snap_lock.is_locked());
     return (ictx->clone_copy_on_read) &&
@@ -129,9 +95,18 @@ namespace librbd {
                    Context *completion, int op_flags)
     : AioRequest(ictx, oid, objectno, offset, len, snap_id, completion, false),
       m_buffer_extents(be), m_tried_parent(false), m_sparse(sparse),
-      m_op_flags(op_flags), m_state(LIBRBD_AIO_READ_FLAT) {
+      m_op_flags(op_flags), m_parent_completion(NULL),
+      m_state(LIBRBD_AIO_READ_FLAT) {
 
     guard_read();
+  }
+
+  AioRead::~AioRead()
+  {
+    if (m_parent_completion) {
+      m_parent_completion->release();
+      m_parent_completion = NULL;
+    }
   }
 
   void AioRead::guard_read()
@@ -189,7 +164,7 @@ namespace librbd {
               m_state = LIBRBD_AIO_READ_COPYUP;
 	    }
 
-            read_from_parent(parent_extents, true);
+            read_from_parent(parent_extents);
             finished = false;
           }
         }
@@ -215,21 +190,7 @@ namespace librbd {
         // If read entire object from parent success and CoR is possible, kick
         // off a asynchronous copyup. This approach minimizes the latency
         // impact.
-        Mutex::Locker copyup_locker(m_ictx->copyup_list_lock);
-        map<uint64_t, CopyupRequest*>::iterator it =
-          m_ictx->copyup_list.find(m_object_no);
-        if (it == m_ictx->copyup_list.end()) {
-          RWLock::RLocker snap_locker(m_ictx->snap_lock);
-          RWLock::RLocker parent_locker(m_ictx->parent_lock);
-          if (compute_parent_extents()) {
-            // create and kick off a CopyupRequest
-            CopyupRequest *new_req = new CopyupRequest(m_ictx, m_oid,
-                                                       m_object_no,
-						       m_parent_extents);
-            m_ictx->copyup_list[m_object_no] = new_req;
-            new_req->queue_send();
-          }
-        }
+        send_copyup();
       }
       break;
     case LIBRBD_AIO_READ_FLAT:
@@ -273,6 +234,50 @@ namespace librbd {
     return r;
   }
 
+  void AioRead::send_copyup()
+  {
+    RWLock::RLocker snap_locker(m_ictx->snap_lock);
+    RWLock::RLocker parent_locker(m_ictx->parent_lock);
+    Mutex::Locker copyup_locker(m_ictx->copyup_list_lock);
+    map<uint64_t, CopyupRequest*>::iterator it =
+      m_ictx->copyup_list.find(m_object_no);
+    if (it == m_ictx->copyup_list.end()) {
+      if (compute_parent_extents()) {
+        // create and kick off a CopyupRequest
+        CopyupRequest *new_req = new CopyupRequest(m_ictx, m_oid,
+                                                   m_object_no,
+    					           m_parent_extents);
+        m_ictx->copyup_list[m_object_no] = new_req;
+        new_req->queue_send();
+      }
+    }
+  }
+
+  void AioRead::read_from_parent(const vector<pair<uint64_t,uint64_t> >& parent_extents)
+  {
+    assert(!m_parent_completion);
+    m_parent_completion = aio_create_completion_internal(this, rbd_req_cb);
+
+    // prevent the parent image from being deleted while this
+    // request is still in-progress
+    m_parent_completion->get();
+    m_parent_completion->block();
+
+    ldout(m_ictx->cct, 20) << "read_from_parent this = " << this
+			   << " parent completion " << m_parent_completion
+			   << " extents " << parent_extents
+			   << dendl;
+    int r = aio_read(m_ictx->parent, parent_extents, NULL, &m_read_data,
+	             m_parent_completion, 0);
+    if (r < 0) {
+      lderr(m_ictx->cct) << "read_from_parent " << this
+                         << ": error reading from parent: "
+                         << cpp_strerror(r) << dendl;
+      m_parent_completion->release();
+      complete(r);
+    }
+  }
+
   /** write **/
 
   AbstractWrite::AbstractWrite(ImageCtx *ictx, const std::string &oid,
@@ -281,8 +286,7 @@ namespace librbd {
                                Context *completion, bool hide_enoent)
     : AioRequest(ictx, oid, object_no, object_off, len, CEPH_NOSNAP, completion,
                  hide_enoent),
-      m_state(LIBRBD_AIO_WRITE_FLAT), m_snap_seq(snapc.seq.val),
-      m_entire_object(NULL)
+      m_state(LIBRBD_AIO_WRITE_FLAT), m_snap_seq(snapc.seq.val)
   {
     m_snaps.insert(m_snaps.end(), snapc.snaps.begin(), snapc.snaps.end());
   }
@@ -302,7 +306,6 @@ namespace librbd {
                            << m_object_off << "~" << m_object_len
 			   << " should_complete: r = " << r << dendl;
 
-    map<uint64_t, CopyupRequest*>::iterator it;
     bool finished = true;
     switch (m_state) {
     case LIBRBD_AIO_WRITE_PRE:
@@ -329,44 +332,12 @@ namespace librbd {
 
 	// If parent still exists, overlap might also have changed.
 	if (compute_parent_extents()) {
-	  m_state = LIBRBD_AIO_WRITE_COPYUP;
-
-          if (is_copy_on_read(m_ictx, CEPH_NOSNAP)) {
-            m_ictx->copyup_list_lock.Lock();
-            it = m_ictx->copyup_list.find(m_object_no);
-            if (it == m_ictx->copyup_list.end()) {
-              // If it is not in the list, create a CopyupRequest and wait
-              CopyupRequest *new_req = new CopyupRequest(m_ictx, m_oid,
-                                                         m_object_no,
-							 m_parent_extents);
-              // make sure to wait on this CopyupRequest
-              new_req->append_request(this);
-              m_ictx->copyup_list[m_object_no] = new_req;
-
-              m_entire_object = &(new_req->get_copyup_data());
-              m_ictx->copyup_list_lock.Unlock();
-              new_req->send();
-            } else {
-              it->second->append_request(this);
-              m_entire_object = &it->second->get_copyup_data();
-              m_ictx->copyup_list_lock.Unlock();
-            }
-          } else {
-            read_from_parent(m_parent_extents, false);
-          }
+          send_copyup();
 	} else {
-	  /*
-	   * Parent may have disappeared; if so, recover by using
-	   * send_copyup() to send the original write req (the copyup
-	   * operation itself will be a no-op, since someone must have
-	   * populated the child object while we weren't looking).
-	   * Move to WRITE_FLAT state as we'll be done with the
-	   * operation once the null copyup completes.
-	   */
+          // parent may have disappeared -- send original write again
 	  ldout(m_ictx->cct, 20) << "should_complete(" << this
 				 << "): parent overlap now 0" << dendl;
-	  m_state = LIBRBD_AIO_WRITE_FLAT;
-	  send_copyup();
+          send_write();
 	}
 	finished = false;
 	break;
@@ -388,15 +359,7 @@ namespace librbd {
 	return should_complete(r);
       }
 
-      // Read data from waiting list safely. If this AioWrite created a
-      // CopyupRequest, m_read_data should be empty.
-      if (m_entire_object != NULL) {
-	assert(m_read_data.length() == 0);
-	m_read_data.append(*m_entire_object);
-      }
-
-      send_copyup();
-      finished = false;
+      finished = send_post();
       break;
 
     case LIBRBD_AIO_WRITE_FLAT:
@@ -515,21 +478,30 @@ namespace librbd {
     rados_completion->release();
   }
 
-  void AbstractWrite::send_copyup() {
+  void AbstractWrite::send_copyup()
+  {
     ldout(m_ictx->cct, 20) << "send_copyup " << this << " " << m_oid << " "
                            << m_object_off << "~" << m_object_len << dendl;
-    librados::ObjectWriteOperation op;
-    if (!m_read_data.is_zero()) {
-      op.exec("rbd", "copyup", m_read_data);
-    }
-    add_write_ops(&op);
-    assert(op.size() != 0);
+    m_state = LIBRBD_AIO_WRITE_COPYUP;
 
-    librados::AioCompletion *rados_completion =
-      librados::Rados::aio_create_completion(this, NULL, rados_req_cb);
-    m_ictx->md_ctx.aio_operate(m_oid, rados_completion, &op,
-			       m_snap_seq, m_snaps);
-    rados_completion->release();
+    m_ictx->copyup_list_lock.Lock();
+    map<uint64_t, CopyupRequest*>::iterator it =
+      m_ictx->copyup_list.find(m_object_no);
+    if (it == m_ictx->copyup_list.end()) {
+      CopyupRequest *new_req = new CopyupRequest(m_ictx, m_oid,
+                                                 m_object_no,
+                                                 m_parent_extents);
+
+      // make sure to wait on this CopyupRequest
+      new_req->append_request(this);
+      m_ictx->copyup_list[m_object_no] = new_req;
+
+      m_ictx->copyup_list_lock.Unlock();
+      new_req->send();
+    } else {
+      it->second->append_request(this);
+      m_ictx->copyup_list_lock.Unlock();
+    }
   }
 
   void AioWrite::add_write_ops(librados::ObjectWriteOperation *wr) {

@@ -676,6 +676,22 @@ TEST_F(TestClsRbd, parents)
   ASSERT_EQ(pspec.snap_id, snapid_t(3));
   ASSERT_EQ(size, 2ull<<20);
 
+  ASSERT_EQ(0, ioctx.remove(oid));
+  ASSERT_EQ(0, create_image(&ioctx, oid, 33<<20, 22,
+                            RBD_FEATURE_LAYERING | RBD_FEATURE_DEEP_FLATTEN,
+                            "foo."));
+  ASSERT_EQ(0, set_parent(&ioctx, oid, parent_spec(1, "parent", 3), 100<<20));
+  ASSERT_EQ(0, snapshot_add(&ioctx, oid, 1, "snap1"));
+  ASSERT_EQ(0, snapshot_add(&ioctx, oid, 2, "snap2"));
+  ASSERT_EQ(0, remove_parent(&ioctx, oid));
+
+  ASSERT_EQ(0, get_parent(&ioctx, oid, 1, &pspec, &size));
+  ASSERT_EQ(-1, pspec.pool_id);
+  ASSERT_EQ(0, get_parent(&ioctx, oid, 2, &pspec, &size));
+  ASSERT_EQ(-1, pspec.pool_id);
+  ASSERT_EQ(0, get_parent(&ioctx, oid, CEPH_NOSNAP, &pspec, &size));
+  ASSERT_EQ(-1, pspec.pool_id);
+
   ioctx.close();
 }
 
