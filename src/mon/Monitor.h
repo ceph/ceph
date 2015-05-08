@@ -948,6 +948,7 @@ struct MonCommand {
   // MonCommand flags
   static const uint64_t FLAG_NONE       = 0;
   static const uint64_t FLAG_NOFORWARD  = 1 << 0;
+  static const uint64_t FLAG_OBSOLETE   = 1 << 1;
   
   bool has_flag(uint64_t flag) const { return (flags & flag) != 0; }
   void set_flag(uint64_t flag) { flags |= flag; }
@@ -978,6 +979,9 @@ struct MonCommand {
 	availability == o->availability;
   }
 
+  bool is_obsolete() const {
+    return has_flag(MonCommand::FLAG_OBSOLETE);
+  }
   static void encode_array(const MonCommand *cmds, int size, bufferlist &bl) {
     ENCODE_START(2, 1, bl);
     uint16_t s = size;
