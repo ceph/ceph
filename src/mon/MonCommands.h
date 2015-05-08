@@ -225,7 +225,9 @@ COMMAND("auth del " \
  */
 COMMAND_WITH_FLAG("compact", "cause compaction of monitor's leveldb storage", \
 	     "mon", "rw", "cli,rest", FLAG(NOFORWARD))
-COMMAND("scrub", "scrub the monitor stores", "mon", "rw", "cli,rest")
+COMMAND_WITH_FLAG("scrub", "scrub the monitor stores (DEPRECATED)", \
+             "mon", "rw", "cli,rest", \
+             FLAG(DEPRECATED))
 COMMAND("fsid", "show cluster FSID/UUID", "mon", "r", "cli,rest")
 COMMAND("log name=logtext,type=CephString,n=N", \
 	"log supplied text to the monitor log", "mon", "rw", "cli,rest")
