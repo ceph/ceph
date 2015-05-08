@@ -31,6 +31,7 @@ namespace librbd {
     ~ImageWatcher();
 
     bool is_lock_supported() const;
+    bool is_lock_supported(const RWLock &snap_lock) const;
     bool is_lock_owner() const;
 
     int register_watch();

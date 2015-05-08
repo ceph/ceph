@@ -40,6 +40,7 @@ public:
     uint64_t snap_id = m_snap_ids[m_snap_id_idx];
     if (snap_id == CEPH_NOSNAP) {
       RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
+      RWLock::RLocker snap_locker(m_image_ctx.snap_lock);
       RWLock::WLocker object_map_locker(m_image_ctx.object_map_lock);
       assert(m_image_ctx.image_watcher->is_lock_owner());
       bool sent = m_image_ctx.object_map.aio_update(m_object_no, OBJECT_EXISTS,
@@ -49,7 +50,7 @@ public:
     }
 
     uint8_t state = OBJECT_EXISTS;
-    if (m_image_ctx.test_features(RBD_FEATURE_DEEP_FLATTEN) &&
+    if (m_image_ctx.test_features(RBD_FEATURE_FAST_DIFF) &&
         m_snap_id_idx + 1 < m_snap_ids.size()) {
       state = OBJECT_EXISTS_CLEAN;
     }
