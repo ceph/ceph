@@ -39,7 +39,6 @@ enum {
 namespace rocksdb{
   class DB;
   class Cache;
-  class FilterPolicy;
   class Snapshot;
   class Slice;
   class WriteBatch;
@@ -53,7 +52,6 @@ class RocksDBStore : public KeyValueDB {
   CephContext *cct;
   PerfCounters *logger;
   string path;
-  const rocksdb::FilterPolicy *filterpolicy;
   rocksdb::DB *db;
 
   int do_open(ostream &out, bool create_if_missing);
