@@ -10781,39 +10781,35 @@ int Client::check_pool_perm(Inode *in, int need)
     snprintf(oid_buf, sizeof(oid_buf), "%llx.00000000", (unsigned long long)in->ino);
     object_t oid = oid_buf;
 
-    Mutex lock("Client::check_pool_perm::lock");
-    Cond cond;
-    bool done[2] = {false, false};
-    int rd_ret;
-    int wr_ret;
-
+    C_SaferCond rd_cond;
     ObjectOperation rd_op;
     rd_op.stat(NULL, (utime_t*)NULL, NULL);
 
     objecter->mutate(oid, OSDMap::file_to_object_locator(in->layout), rd_op,
 		     in->snaprealm->get_snap_context(), ceph_clock_now(cct), 0,
-		     new C_SafeCond(&lock, &cond, &done[0], &rd_ret), NULL);
+		     &rd_cond, NULL);
 
+    C_SaferCond wr_cond;
     ObjectOperation wr_op;
     wr_op.create(true);
 
     objecter->mutate(oid, OSDMap::file_to_object_locator(in->layout), wr_op,
 		     in->snaprealm->get_snap_context(), ceph_clock_now(cct), 0,
-		     new C_SafeCond(&lock, &cond, &done[1], &wr_ret), NULL);
+		     &wr_cond, NULL);
 
     client_lock.Unlock();
-    lock.Lock();
-    while (!done[0] || !done[1])
-      cond.Wait(lock);
-    lock.Unlock();
+    int rd_ret = rd_cond.wait();
+    int wr_ret = wr_cond.wait();
     client_lock.Lock();
+
+    bool errored = false;
 
     if (rd_ret == 0 || rd_ret == -ENOENT)
       have |= POOL_READ;
     else if (rd_ret != -EPERM) {
       ldout(cct, 10) << "check_pool_perm on pool " << pool
 		     << " rd_err = " << rd_ret << " wr_err = " << wr_ret << dendl;
-      return rd_ret;
+      errored = true;
     }
 
     if (wr_ret == 0 || wr_ret == -EEXIST)
@@ -10821,7 +10817,16 @@ int Client::check_pool_perm(Inode *in, int need)
     else if (wr_ret != -EPERM) {
       ldout(cct, 10) << "check_pool_perm on pool " << pool
 		     << " rd_err = " << rd_ret << " wr_err = " << wr_ret << dendl;
-      return wr_ret;
+      errored = true;
+    }
+
+    if (errored) {
+      // Indeterminate: erase CHECKING state so that subsequent calls re-check.
+      // Raise EIO because actual error code might be misleading for
+      // userspace filesystem user.
+      pool_perms.erase(pool);
+      signal_cond_list(waiting_for_pool_perm);
+      return -EIO;
     }
 
     pool_perms[pool] = have | POOL_CHECKED;
