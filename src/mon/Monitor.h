@@ -979,6 +979,10 @@ struct MonCommand {
 	availability == o->availability;
   }
 
+  bool is_noforward() const {
+    return has_flag(MonCommand::FLAG_NOFORWARD);
+  }
+
   bool is_obsolete() const {
     return has_flag(MonCommand::FLAG_OBSOLETE);
   }

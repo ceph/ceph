@@ -2609,7 +2609,7 @@ void Monitor::handle_command(MMonCommand *m)
                                               ARRAY_SIZE(mon_commands));
   if (!is_leader()) {
     if (!mon_cmd) {
-      if (leader_cmd->has_flag(MonCommand::FLAG_NOFORWARD)) {
+      if (leader_cmd->is_noforward()) {
 	reply_command(m, -EINVAL,
 		      "command not locally supported and not allowed to forward",
 		      0);
@@ -2620,7 +2620,7 @@ void Monitor::handle_command(MMonCommand *m)
       forward_request_leader(m);
       return;
     } else if (!mon_cmd->is_compat(leader_cmd)) {
-      if (mon_cmd->has_flag(MonCommand::FLAG_NOFORWARD)) {
+      if (mon_cmd->is_noforward()) {
 	reply_command(m, -EINVAL,
 		      "command not compatible with leader and not allowed to forward",
 		      0);
@@ -2640,7 +2640,7 @@ void Monitor::handle_command(MMonCommand *m)
     return;
   }
 
-  if (session->proxy_con && mon_cmd->has_flag(MonCommand::FLAG_NOFORWARD)) {
+  if (session->proxy_con && mon_cmd->is_noforward()) {
     dout(10) << "Got forward for noforward command " << m << dendl;
     reply_command(m, -EINVAL, "forward for noforward command", rdata, 0);
     return;
