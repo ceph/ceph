@@ -746,22 +746,6 @@ public:
     image_watcher = NULL;
   }
 
-  size_t ImageCtx::parent_io_len(uint64_t offset, size_t length,
-				 snap_t in_snap_id)
-  {
-    uint64_t overlap = 0;
-    get_parent_overlap(in_snap_id, &overlap);
-
-    size_t parent_len = 0;
-    if (get_parent_pool_id(in_snap_id) != -1 && offset <= overlap)
-      parent_len = min(overlap, offset + length) - offset;
-
-    ldout(cct, 20) << __func__ << " off = " << offset << " len = " << length
-		   << " overlap = " << overlap << " parent_io_len = "
-		   << parent_len << dendl;
-    return parent_len;
-  }
-
   uint64_t ImageCtx::prune_parent_extents(vector<pair<uint64_t,uint64_t> >& objectx,
 					  uint64_t overlap)
   {
