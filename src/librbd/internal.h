@@ -109,7 +109,8 @@ namespace librbd {
   int remove(librados::IoCtx& io_ctx, const char *imgname,
 	     ProgressContext& prog_ctx);
   int resize(ImageCtx *ictx, uint64_t size, ProgressContext& prog_ctx);
-  int snap_create(ImageCtx *ictx, const char *snap_name, bool notify);
+  int snap_create(ImageCtx *ictx, const char *snap_name);
+  int snap_create_helper(ImageCtx *ictx, Context* ctx, const char *snap_name);
   int snap_list(ImageCtx *ictx, std::vector<snap_info_t>& snaps);
   bool snap_exists(ImageCtx *ictx, const char *snap_name);
   int snap_rollback(ImageCtx *ictx, const char *snap_name,
@@ -119,7 +120,7 @@ namespace librbd {
   int snap_unprotect(ImageCtx *ictx, const char *snap_name);
   int snap_is_protected(ImageCtx *ictx, const char *snap_name,
 			bool *is_protected);
-  int add_snap(ImageCtx *ictx, const char *snap_name, bool lock_owner);
+  int add_snap(ImageCtx *ictx, const char *snap_name);
   int rm_snap(ImageCtx *ictx, const char *snap_name);
   int refresh_parent(ImageCtx *ictx);
   int ictx_check(ImageCtx *ictx);
