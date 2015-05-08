@@ -946,10 +946,8 @@ struct MonCommand {
   uint64_t flags;
 
   // MonCommand flags
-  enum {
-    FLAG_NOFORWARD = (1 << 0),
-  };
-
+  static const uint64_t FLAG_NOFORWARD  = 1 << 0;
+  
   bool has_flag(uint64_t flag) const { return (flags & flag) != 0; }
   void set_flag(uint64_t flag) { flags |= flag; }
   void unset_flag(uint64_t flag) { flags &= ~flag; }
