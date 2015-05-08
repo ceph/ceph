@@ -482,7 +482,7 @@ TEST_F(TestInternal, SnapshotCopyup)
     // verify the object map was properly updated
     if ((ictx2->features & RBD_FEATURE_OBJECT_MAP) != 0) {
       uint8_t state = OBJECT_EXISTS;
-      if ((ictx2->features & RBD_FEATURE_DEEP_FLATTEN) != 0 &&
+      if ((ictx2->features & RBD_FEATURE_FAST_DIFF) != 0 &&
           it != snaps.begin() && snap_name != NULL) {
         state = OBJECT_EXISTS_CLEAN;
       }
