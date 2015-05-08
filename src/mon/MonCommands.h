@@ -104,7 +104,8 @@
  * type, so the monitor is expected to know the type of each argument.
  * See cmdparse.cc/h for more details.
  *
- * The flag parameter for COMMAND_WITH_FLAGS macro may be:
+ * The flag parameter for COMMAND_WITH_FLAGS macro must be passed using
+ * FLAG(f), where 'f' may be one of the following:
  *
  *  NOFORWARD - command may not be forwarded
  */
@@ -216,7 +217,7 @@ COMMAND("auth del " \
  * Monitor commands (Monitor.cc)
  */
 COMMAND_WITH_FLAG("compact", "cause compaction of monitor's leveldb storage", \
-	     "mon", "rw", "cli,rest", NOFORWARD)
+	     "mon", "rw", "cli,rest", FLAG(NOFORWARD))
 COMMAND("scrub", "scrub the monitor stores", "mon", "rw", "cli,rest")
 COMMAND("fsid", "show cluster FSID/UUID", "mon", "r", "cli,rest")
 COMMAND("log name=logtext,type=CephString,n=N", \
@@ -224,7 +225,7 @@ COMMAND("log name=logtext,type=CephString,n=N", \
 COMMAND_WITH_FLAG("injectargs " \
 	     "name=injected_args,type=CephString,n=N",			\
 	     "inject config arguments into monitor", "mon", "rw", "cli,rest",
-	     NOFORWARD)
+	     FLAG(NOFORWARD))
 COMMAND("status", "show cluster status", "mon", "r", "cli,rest")
 COMMAND("health name=detail,type=CephChoices,strings=detail,req=false", \
 	"show cluster health", "mon", "r", "cli,rest")
@@ -240,7 +241,7 @@ COMMAND("mon_metadata name=id,type=CephString",
 	"mon", "r", "cli,rest")
 
 COMMAND_WITH_FLAG("mon_status", "report status of monitors", "mon", "r", "cli,rest",
-	     NOFORWARD)
+	     FLAG(NOFORWARD))
 COMMAND("sync force " \
 	"name=validate1,type=CephChoices,strings=--yes-i-really-mean-it,req=false " \
 	"name=validate2,type=CephChoices,strings=--i-know-what-i-am-doing,req=false", \
@@ -248,7 +249,7 @@ COMMAND("sync force " \
 COMMAND_WITH_FLAG("heap " \
 	     "name=heapcmd,type=CephChoices,strings=dump|start_profiler|stop_profiler|release|stats", \
 	     "show heap usage info (available only if compiled with tcmalloc)", \
-	     "mon", "rw", "cli,rest", NOFORWARD)
+	     "mon", "rw", "cli,rest", FLAG(NOFORWARD))
 COMMAND("quorum name=quorumcmd,type=CephChoices,strings=enter|exit,n=1", \
 	"enter or exit quorum", "mon", "rw", "cli,rest")
 COMMAND("tell " \
@@ -256,7 +257,8 @@ COMMAND("tell " \
 	"name=args,type=CephString,n=N", \
 	"send a command to a specific daemon", "mon", "rw", "cli,rest")
 COMMAND_WITH_FLAG("version", "show mon daemon version", "mon", "r", "cli,rest",
-	     NOFORWARD)
+                  FLAG(NOFORWARD))
+
 COMMAND("node ls " \
 	"name=type,type=CephChoices,strings=all|osd|mon|mds,req=false",
 	"list all nodes in cluster [type]", "mon", "r", "cli,rest")
