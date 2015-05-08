@@ -973,7 +973,7 @@ struct MonCommand {
     ::decode(availability, bl);
   }
   bool is_compat(const MonCommand* o) const {
-    return cmdstring == o->cmdstring && helpstring == o->helpstring &&
+    return cmdstring == o->cmdstring &&
 	module == o->module && req_perms == o->req_perms &&
 	availability == o->availability;
   }
