@@ -92,7 +92,7 @@ for interpreter in python2.7 python3 ; do
     rm -fr install-deps
     virtualenv --python $interpreter install-deps
     . install-deps/bin/activate
-    pip install wheel
+    pip --log install-deps/log.txt install wheel
     find . -name tox.ini | while read ini ; do
         (
             cd $(dirname $ini)
@@ -100,7 +100,7 @@ for interpreter in python2.7 python3 ; do
             if test "$require" ; then
                 # although pip comes with virtualenv, having a recent version
                 # of pip matters when it comes to using wheel packages
-                pip wheel $require 'distribute >= 0.7' 'pip >= 6.1'
+                pip --log install-deps/log.txt wheel $require 'distribute >= 0.7' 'pip >= 6.1'
             fi
         )
     done
