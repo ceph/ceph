@@ -243,10 +243,11 @@ COMMAND("mon_metadata name=id,type=CephString",
 
 COMMAND_WITH_FLAG("mon_status", "report status of monitors", "mon", "r", "cli,rest",
 	     FLAG(NOFORWARD))
-COMMAND("sync force " \
+COMMAND_WITH_FLAG("sync force " \
 	"name=validate1,type=CephChoices,strings=--yes-i-really-mean-it,req=false " \
 	"name=validate2,type=CephChoices,strings=--i-know-what-i-am-doing,req=false", \
-	"force sync of and clear monitor store", "mon", "rw", "cli,rest")
+	"force sync of and clear monitor store", "mon", "rw", "cli,rest", \
+        FLAG(NOFORWARD))
 COMMAND_WITH_FLAG("heap " \
 	     "name=heapcmd,type=CephChoices,strings=dump|start_profiler|stop_profiler|release|stats", \
 	     "show heap usage info (available only if compiled with tcmalloc)", \
