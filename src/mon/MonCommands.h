@@ -255,8 +255,9 @@ COMMAND_WITH_FLAG("mon_status", "report status of monitors", "mon", "r", "cli,re
 COMMAND_WITH_FLAG("sync force " \
 	"name=validate1,type=CephChoices,strings=--yes-i-really-mean-it,req=false " \
 	"name=validate2,type=CephChoices,strings=--i-know-what-i-am-doing,req=false", \
-	"force sync of and clear monitor store", "mon", "rw", "cli,rest", \
-        FLAG(NOFORWARD))
+	"force sync of and clear monitor store (DEPRECATED)", \
+        "mon", "rw", "cli,rest", \
+        FLAG(NOFORWARD)|FLAG(DEPRECATED))
 COMMAND_WITH_FLAG("heap " \
 	     "name=heapcmd,type=CephChoices,strings=dump|start_profiler|stop_profiler|release|stats", \
 	     "show heap usage info (available only if compiled with tcmalloc)", \
