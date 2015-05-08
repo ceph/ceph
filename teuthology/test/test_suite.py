@@ -426,6 +426,36 @@ class TestBuildMatrix(object):
         assert len(result) == 8
         assert self.fragment_occurences(result, 'd1_2_2.yaml') == 0.25
 
+    def test_convolve_with_concat(self):
+        fake_fs = {
+            'd0_0': {
+                '%': None,
+                'd1_0': {
+                    'd1_0_0.yaml': None,
+                },
+                'd1_1': {
+                    'd1_1_0.yaml': None,
+                    'd1_1_1.yaml': None,
+                },
+                'd1_2': {
+                    '+': None,
+                    'd1_2_0.yaml': None,
+                    'd1_2_1.yaml': None,
+                    'd1_2_2.yaml': None,
+                    'd1_2_3.yaml': None,
+                },
+            },
+        }
+        fake_listdir = make_fake_listdir(fake_fs)
+        result = suite.build_matrix('d0_0', fake_isfile, fake_isdir,
+                                    fake_listdir)
+        assert len(result) == 2
+        for i in result:
+            assert 'd0_0/d1_2/d1_2_0.yaml' in i[1]
+            assert 'd0_0/d1_2/d1_2_1.yaml' in i[1]
+            assert 'd0_0/d1_2/d1_2_2.yaml' in i[1]
+            assert 'd0_0/d1_2/d1_2_3.yaml' in i[1]
+
     def test_emulate_teuthology_noceph(self):
         fake_fs = {
             'teuthology': {

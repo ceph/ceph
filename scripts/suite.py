@@ -59,6 +59,12 @@ Scheduler arguments:
                               [default: 1]
   -l <jobs>, --limit <jobs>   Queue at most this many jobs
                               [default: 0]
+  --subset <index/outof>      Instead of scheduling the entire suite, break the
+                              set of jobs into <outof> pieces (each of which will
+                              contain each facet at least once) and schedule
+                              piece <index>.  Scheduling 0/<outof>, 1/<outof>,
+                              2/<outof> ... <outof>-1/<outof> will schedule all
+                              jobs in the suite (many more than once).
   -p <priority>, --priority <priority>
                               Job priority (lower is sooner)
                               [default: 1000]
