@@ -1,7 +1,0 @@
-tasks:
-- install:
-- ceph:
-- kclient:
-- workunit:
-    clients:
-      all: [kclient]
