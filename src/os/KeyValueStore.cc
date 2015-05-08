@@ -907,7 +907,10 @@ int KeyValueStore::mount()
 
     }
 
-    store->init();
+    if (superblock.backend == "rocksdb")
+      store->init(g_conf->keyvaluestore_rocksdb_options);
+    else
+      store->init();
     stringstream err;
     if (store->open(err)) {
       derr << "KeyValueStore::mount Error initializing keyvaluestore backend "
