@@ -4202,7 +4202,23 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	result = check_offset_and_length(op.extent.offset, op.extent.length, cct->_conf->osd_max_object_size);
 	if (result < 0)
 	  break;
-	if (pool.info.require_rollback()) {
+    if (pool.info.require_rollback()) {
+       //to fix bug of ec bad order stash and append
+       if (pool.info.ec_pool()) { 
+         ECBackend *pECBackend = static_cast<ECBackend*>(get_pgbackend());
+         ECUtil::HashInfoRef hinfo = pECBackend->get_hash_info(soid);
+         
+         /* 
+            If the object is been stashed with an offset greater than 0
+            we should ignore this append and return error code to client to avoid assertion failure.
+         */
+         if ((0 == hinfo->get_total_chunk_size()) && (0 < op.extent.offset))
+         {   
+	       dout(0) << " Bad offset " << op.extent.offset << ", should be zero" << dendl;
+           result = -EOPNOTSUPP;
+           break;
+         }
+      }
 	  t->append(soid, op.extent.offset, op.extent.length, osd_op.indata, op.flags);
 	} else {
 	  t->write(soid, op.extent.offset, op.extent.length, osd_op.indata, op.flags);
@@ -4242,6 +4258,21 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	    }
 	  }
 	  ctx->mod_desc.create();
+
+      //I'm not sure whether a WRITEFULL is dangerous, Actually I never see such a conditon
+      //But I would rather add it here just in case it happened.
+      if (pool.info.ec_pool()) {
+        ECBackend *pECBackend2 = static_cast<ECBackend*>(get_pgbackend());
+        ECUtil::HashInfoRef hinfo2 = pECBackend2->get_hash_info(soid);
+
+        if ((0 == hinfo2->get_total_chunk_size()) && (0 < op.extent.offset))
+        {
+	      dout(0) << " Bad offset " << op.extent.offset << ", should be zero" << dendl;
+          result = -EOPNOTSUPP;
+          break;
+        }
+      }
+
 	  t->append(soid, op.extent.offset, op.extent.length, osd_op.indata, op.flags);
 	  if (obs.exists) {
 	    map<string, bufferlist> to_set = ctx->obc->attr_cache;
