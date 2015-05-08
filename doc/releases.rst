@@ -1,59 +1,9 @@
-================
-Release timeline
-================
+=============
+Ceph Releases
+=============
 
-The development release cycle is two to four weeks long.  Each cycle
-freezes the master development branch and applies `integration and
-upgrade tests <https://github.com/ceph/ceph-qa-suite>`_ for the
-duration of one cycle before it is released and the next release's
-code is frozen for testing.  Once released, there is no effort to
-backport fixes; developer focus in on the next development release
-which is usually only a few weeks away.
-
-There are three to four stable releases a year.  Each stable release
-will receive a name (e.g., `Firefly') and bug fix backports at least
-until the next stable release is out.
-
-Every other stable releases is a LTS (Long Term Stable) and will
-receive updates until two LTS are published. For instance Dumpling is
-retired when Hammer is published, Firefly is retired when Jewel is
-published etc. The rationale is that backports to a LTS (Dumpling for
-instance) are expected to happen until the next LTS is published
-(Firefly is the LTS following Dumpling), to fix bugs and possibly
-backport important features. After the next LTS is published, there
-backports are still expected to fix bugs with a focus on whatever can
-prevent upgrades to the next LTS (in our example, fixes to Dumpling
-were published after Firefly was released and until Hammer was
-published, primarily to ensure Dumpling cluster can smoothly migrate
-to Firefly).
-
-* LTS : until the next two LTS are published
-* Stable release : until the next stable release is published
-* Development / testing release : no backports
-
-For each stable release:
-
-* `Integration and upgrade tests
-  <https://github.com/ceph/ceph-qa-suite>`_ are run on a regular basis
-  and `their results <http://pulpito.ceph.com/>`_ analyzed by Ceph
-  developers.
-* `Issues <http://tracker.ceph.com/projects/ceph/issues?query_id=27>`_
-  fixed in the development branch is scheduled to be backported to the
-  release.
-* When an issue found in the release is `reported
-  <http://tracker.ceph.com/projects/ceph/issues/new>`_ it will be
-  triaged by Ceph developers.
-* The `stable releases and backport team <http://tracker.ceph.com/projects/ceph-releases>`_
-  publishes ``point releases`` including fixes that have been backported to the release.
-
-In the following, the life time of a LTS is calculated to be
-approximately 18 months after the month of the first release. For
-instance, Dumpling is published August 2013 and 18 months starting
-September 2013 is February 2015, therefore by March 2015 Dumpling
-should be retired. The lifetime of a release may vary because it
-depend on how quickly the stable releases are published. For instance
-although Dumpling theoritical retirement was March 2015, it was
-extended to May 2015.
+Timeline
+--------
 
 +----------------------------+-----------+-----------+-----------+-----------+-----------+
 |                            |`Dumpling`_|`Emperor`_ |`Firefly`_ |`Giant`_   |`Hammer`_  |
@@ -220,3 +170,81 @@ extended to May 2015.
 .. _0.67.1: ../release-notes#v0-67-1-dumpling
 .. _0.67: ../release-notes#v0-67-dumpling
 .. _Dumpling:  ../release-notes#v0-67-dumpling
+
+Understanding the release cycle
+-------------------------------
+
+The development release cycle is two to four weeks long.  Each cycle
+freezes the master development branch and applies `integration and
+upgrade tests <https://github.com/ceph/ceph-qa-suite>`_ for the
+duration of one cycle before it is released and the next release's
+code is frozen for testing.  Once released, there is no effort to
+backport fixes; developer focus in on the next development release
+which is usually only a few weeks away.
+
+There are three to four stable releases a year.  Each stable release
+will receive a name (e.g., `Firefly') and bug fix backports at least
+until the next stable release is out.
+
+Every other stable releases is a LTS (Long Term Stable) and will
+receive updates until two LTS are published. For instance Dumpling is
+retired when Hammer is published, Firefly is retired when Jewel is
+published etc. The rationale is that backports to a LTS (Dumpling for
+instance) are expected to happen until the next LTS is published
+(Firefly is the LTS following Dumpling), to fix bugs and possibly
+backport important features. After the next LTS is published, there
+backports are still expected to fix bugs with a focus on whatever can
+prevent upgrades to the next LTS (in our example, fixes to Dumpling
+were published after Firefly was released and until Hammer was
+published, primarily to ensure Dumpling cluster can smoothly migrate
+to Firefly).
+
+* LTS : until the next two LTS are published
+* Stable release : until the next stable release is published
+* Development / testing release : no backports
+
+For each stable release:
+
+* `Integration and upgrade tests
+  <https://github.com/ceph/ceph-qa-suite>`_ are run on a regular basis
+  and `their results <http://pulpito.ceph.com/>`_ analyzed by Ceph
+  developers.
+* `Issues <http://tracker.ceph.com/projects/ceph/issues?query_id=27>`_
+  fixed in the development branch is scheduled to be backported to the
+  release.
+* When an issue found in the release is `reported
+  <http://tracker.ceph.com/projects/ceph/issues/new>`_ it will be
+  triaged by Ceph developers.
+* The `stable releases and backport team <http://tracker.ceph.com/projects/ceph-releases>`_
+  publishes ``point releases`` including fixes that have been backported to the release.
+
+In the timeline, the life time of a LTS is calculated to be
+approximately 18 months after the month of the first release. For
+instance, Dumpling is published August 2013 and 18 months starting
+September 2013 is February 2015, therefore by March 2015 Dumpling
+should be retired. The lifetime of a release may vary because it
+depend on how quickly the stable releases are published. For instance
+although Dumpling theoritical retirement was March 2015, it was
+extended to May 2015.
+
+Release numbers conventions
+---------------------------
+
+The first Ceph release back in Jan of 2008 was 0.1.  That made sense at
+the time.  The versioning scheme did not change until April 2015,
+when 0.94.1 (the first Hammer point release) was published.  To avoid reaching
+0.99 (and 0.100 or 1.00?) we have a new strategy.
+
+* x.0.z - development releases (for early testers and the brave at heart)
+* x.1.z - release candidates (for test clusters, brave users)
+* x.2.z - stable/bugfix releases (for users)
+
+``x`` will start at 9 for Infernalis (``I`` is the 9th letter), making
+our first development release of the 9th release cycle 9.0.0.
+Subsequent development releases will be 9.0.1, 9.0.2, etc.
+
+After a couple months we'll have a 9.1.0 (and maybe 9.1.1) release candidate.
+
+A few weeks after that we'll have the Infernalis release 9.2.0, followed
+by stable bug fix updates 9.2.1, 9.2.2, etc., and then begin work on the
+Jewel (10.y.z) release.
