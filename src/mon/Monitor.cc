@@ -2633,7 +2633,9 @@ void Monitor::handle_command(MMonCommand *m)
     }
   }
 
-  if (mon_cmd->is_obsolete()) {
+  if (mon_cmd->is_obsolete() ||
+      (cct->_conf->mon_debug_deprecated_as_obsolete
+       && mon_cmd->is_deprecated())) {
     reply_command(m, -ENOTSUP,
                   "command is obsolete; please check usage and/or man page",
                   0);
