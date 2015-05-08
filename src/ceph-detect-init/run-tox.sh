@@ -24,10 +24,10 @@ virtualenv make-check
 . make-check/bin/activate
 # older versions of pip will not install wrap_console scripts
 # when using wheel packages
-pip install --upgrade 'pip >= 6.1'
+pip --log make-check/log.txt install --upgrade 'pip >= 6.1'
 if test -d wheelhouse ; then
     export NO_INDEX=--no-index
 fi
-pip install $NO_INDEX --use-wheel --find-links=file://$(pwd)/wheelhouse --upgrade distribute
-pip install $NO_INDEX --use-wheel --find-links=file://$(pwd)/wheelhouse 'tox >=1.9' 
+pip --log make-check/log.txt install $NO_INDEX --use-wheel --find-links=file://$(pwd)/wheelhouse --upgrade distribute
+pip --log make-check/log.txt install $NO_INDEX --use-wheel --find-links=file://$(pwd)/wheelhouse 'tox >=1.9' 
 tox 2>&1 | grep -v InterpreterNotFound

@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/bash -e
 #
 # Ceph distributed storage system
 #
@@ -52,7 +52,7 @@ Ubuntu|Debian|Devuan)
                 ;;
         esac
         packages=$(echo $packages) # change newlines into spaces
-        $SUDO bash -c "DEBIAN_FRONTEND=noninteractive apt-get install $backports -y $packages"
+        $SUDO bash -c "DEBIAN_FRONTEND=noninteractive apt-get install $backports -y $packages" || exit 1
         ;;
 CentOS|Fedora|RedHatEnterpriseServer)
         case $(lsb_release -si) in
@@ -73,11 +73,11 @@ CentOS|Fedora|RedHatEnterpriseServer)
                 ;;
         esac
         sed -e 's/@//g' < ceph.spec.in > $DIR/ceph.spec
-        $SUDO yum-builddep -y $DIR/ceph.spec
+        $SUDO yum-builddep -y $DIR/ceph.spec || exit 1
         ;;
 *SUSE*)
         sed -e 's/@//g' < ceph.spec.in > $DIR/ceph.spec
-        $SUDO zypper --non-interactive install $(rpmspec -q --buildrequires $DIR/ceph.spec)
+        $SUDO zypper --non-interactive install $(rpmspec -q --buildrequires $DIR/ceph.spec) || exit 1
         ;;
 *)
         echo "$(lsb_release -si) is unknown, dependencies will have to be installed manually."
@@ -92,7 +92,7 @@ for interpreter in python2.7 python3 ; do
     rm -fr install-deps
     virtualenv --python $interpreter install-deps
     . install-deps/bin/activate
-    pip install wheel
+    pip --log install-deps/log.txt install wheel || exit 1
     find . -name tox.ini | while read ini ; do
         (
             cd $(dirname $ini)
@@ -100,7 +100,7 @@ for interpreter in python2.7 python3 ; do
             if test "$require" ; then
                 # although pip comes with virtualenv, having a recent version
                 # of pip matters when it comes to using wheel packages
-                pip wheel $require 'distribute >= 0.7' 'pip >= 6.1'
+                pip --log install-deps/log.txt wheel $require 'distribute >= 0.7' 'pip >= 6.1' || exit 1
             fi
         )
     done
