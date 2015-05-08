@@ -1,2 +1,3 @@
 var/log/radosgw
 var/lib/ceph/radosgw
+var/lib/ceph/bootstrap-rgw
