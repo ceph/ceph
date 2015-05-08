@@ -275,6 +275,15 @@ COMMAND("node ls " \
 	"name=type,type=CephChoices,strings=all|osd|mon|mds,req=false",
 	"list all nodes in cluster [type]", "mon", "r", "cli,rest")
 /*
+ * Monitor-specific commands under module 'mon'
+ */
+COMMAND_WITH_FLAG("mon compact", \
+    "cause compaction of monitor's leveldb storage", \
+    "mon", "rw", "cli,rest", \
+    FLAG(NOFORWARD))
+
+
+/*
  * MDS commands (MDSMonitor.cc)
  */
 
