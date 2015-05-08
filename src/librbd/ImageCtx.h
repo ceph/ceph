@@ -225,8 +225,6 @@ namespace librbd {
     void clear_nonexistence_cache();
     int register_watch();
     void unregister_watch();
-    size_t parent_io_len(uint64_t offset, size_t length,
-			 librados::snap_t in_snap_id);
     uint64_t prune_parent_extents(vector<pair<uint64_t,uint64_t> >& objectx,
 				  uint64_t overlap);
 
