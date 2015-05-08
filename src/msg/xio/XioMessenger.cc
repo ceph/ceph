@@ -948,6 +948,7 @@ int XioMessenger::shutdown()
   }
   portals.shutdown();
   dispatch_strategy->shutdown();
+  did_bind = false;
   started = false;
   return 0;
 } /* shutdown */
