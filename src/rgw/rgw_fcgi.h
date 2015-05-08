@@ -4,8 +4,13 @@
 #ifndef CEPH_RGW_FCGI_H
 #define CEPH_RGW_FCGI_H
 
-#include "rgw_client_io.h"
+#ifdef FASTCGI_INCLUDE_DIR
+# include "fastcgi/fcgiapp.h"
+#else
+# include "fcgiapp.h"
+#endif
 
+#include "rgw_client_io.h"
 
 struct FCGX_Request;
 
