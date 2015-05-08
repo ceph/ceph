@@ -226,3 +226,25 @@ should be retired. The lifetime of a release may vary because it
 depend on how quickly the stable releases are published. For instance
 although Dumpling theoritical retirement was March 2015, it was
 extended to May 2015.
+
+Release numbers conventions
+---------------------------
+
+The first Ceph release back in Jan of 2008 was 0.1.  That made sense at
+the time.  The versioning scheme did not change until April 2015,
+when 0.94.1 (the first Hammer point release) was published.  To avoid reaching
+0.99 (and 0.100 or 1.00?) we have a new strategy.
+
+* x.0.z - development releases (for early testers and the brave at heart)
+* x.1.z - release candidates (for test clusters, brave users)
+* x.2.z - stable/bugfix releases (for users)
+
+``x`` will start at 9 for Infernalis (``I`` is the 9th letter), making
+our first development release of the 9th release cycle 9.0.0.
+Subsequent development releases will be 9.0.1, 9.0.2, etc.
+
+After a couple months we'll have a 9.1.0 (and maybe 9.1.1) release candidate.
+
+A few weeks after that we'll have the Infernalis release 9.2.0, followed
+by stable bug fix updates 9.2.1, 9.2.2, etc., and then begin work on the
+Jewel (10.y.z) release.
