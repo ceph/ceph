@@ -79,7 +79,7 @@ namespace json_spirit
     template<>
     std::string unicode_str_to_utf8( std::string::const_iterator & begin )
     {
-        typedef typename std::string::value_type Char_type;
+        typedef std::string::value_type Char_type;
 
         const Char_type c1( *( ++begin ) );
         const Char_type c2( *( ++begin ) );
