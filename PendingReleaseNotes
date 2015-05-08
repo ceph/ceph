@@ -4,3 +4,7 @@ v9.0.4
 * The return code for librbd's rbd_aio_read and Image::aio_read API methods no
   longer returns the number of bytes read upon success.  Instead, it returns 0
   upon success and a negative value upon failure.
+
+* 'ceph scrub', 'ceph compact' and 'ceph sync force are now DEPRECATED.  Users
+  should instead use 'ceph mon scrub', 'ceph mon compact' and
+  'ceph mon sync force'.
