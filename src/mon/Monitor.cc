@@ -102,7 +102,7 @@ const string Monitor::MONITOR_STORE_PREFIX = "monitor_store";
 MonCommand mon_commands[] = {
 #define FLAG(f) (MonCommand::FLAG_##f)
 #define COMMAND(parsesig, helptext, modulename, req_perms, avail)	\
-  {parsesig, helptext, modulename, req_perms, avail, 0},
+  {parsesig, helptext, modulename, req_perms, avail, FLAG(NONE)},
 #define COMMAND_WITH_FLAG(parsesig, helptext, modulename, req_perms, avail, flags) \
   {parsesig, helptext, modulename, req_perms, avail, flags},
 #include <mon/MonCommands.h>

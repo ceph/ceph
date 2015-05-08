@@ -107,6 +107,7 @@
  * The flag parameter for COMMAND_WITH_FLAGS macro must be passed using
  * FLAG(f), where 'f' may be one of the following:
  *
+ *  NONE      - no flag assigned
  *  NOFORWARD - command may not be forwarded
  */
 
