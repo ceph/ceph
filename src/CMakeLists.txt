@@ -1,5 +1,6 @@
 include(GetGitRevisionDescription)
 
+enable_language(C ASM)
 set(bindir ${CMAKE_INSTALL_PREFIX}/bin)
 set(sbindir ${CMAKE_INSTALL_PREFIX}/sbin)
 set(libdir ${CMAKE_INSTALL_PREFIX}/lib)
@@ -11,6 +12,9 @@ add_definitions("-DCEPH_LIBDIR=\"${libdir}\"")
 add_definitions("-DCEPH_PKGLIBDIR=\"${libdir}\"")
 add_definitions("-DHAVE_CONFIG_H -D__CEPH__ -D_FILE_OFFSET_BITS=64 -D_REENTRANT -D_THREAD_SAFE -D__STDC_FORMAT_MACROS -D_GNU_SOURCE")
 
+set(CMAKE_ASM_COMPILER  ${PROJECT_SOURCE_DIR}/src/yasm-wrapper)
+message(status " ams compiler ${CMAKE_ASM_COMPILER}")
+set(CMAKE_ASM_FLAGS "-f elf64")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -rdynamic -Wall -Wtype-limits -Wignored-qualifiers -Winit-self -Wpointer-arith -Werror=format-security -fno-strict-aliasing -fsigned-char -fPIC")
 
 set(CMAKE_CXX_FLAGS "${CMAKE_C_FLAGS} -ftemplate-depth-1024 -Wno-invalid-offsetof -Wnon-virtual-dtor -Wno-invalid-offsetof -Wstrict-null-sentinel -Woverloaded-virtual")
@@ -166,6 +170,8 @@ set(libcommon_files
   common/crc32c.cc
   common/crc32c_intel_baseline.c
   common/crc32c_intel_fast.c
+  common/crc32c_intel_fast_asm.S
+  common/crc32c_intel_fast_zero_asm.S
   common/assert.cc
   common/run_cmd.cc
   common/WorkQueue.cc
@@ -285,7 +291,9 @@ if(${WITH_PROFILER})
   target_link_libraries(common profiler)
 endif(${WITH_PROFILER})
 
-target_link_libraries(common json_spirit erasure_code rt uuid ${CRYPTO_LIBS} ${Boost_LIBRARIES})
+add_library(common_utf8 STATIC common/utf8.c)
+
+target_link_libraries( common json_spirit common_utf8 erasure_code rt uuid ${CRYPTO_LIBS} ${Boost_LIBRARIES})
 
 set(libglobal_srcs
   global/global_init.cc
@@ -510,6 +518,8 @@ if(${WITH_MDS})
     mds/MDSAuthCaps.cc
     mds/MDLog.cc
     mds/JournalPointer.cc
+    mds/StrayManager.cc
+    mds/SimpleLock.cc
     ${CMAKE_SOURCE_DIR}/src/osdc/Journaler.cc)
   add_library(mds ${mds_srcs})
   set(ceph_mds_srcs
@@ -663,7 +673,8 @@ if(${WITH_RBD})
     librbd/internal.cc
     librbd/librbd.cc
     librbd/LibrbdWriteback.cc
-    librbd/ObjectMap.cc)
+    librbd/ObjectMap.cc
+    librbd/RebuildObjectMapRequest.cc)
   add_library(librbd ${CEPH_SHARED} ${librbd_srcs}
     $<TARGET_OBJECTS:osdc_rbd_objs>
     $<TARGET_OBJECTS:common_util_obj>)
