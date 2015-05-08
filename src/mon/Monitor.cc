@@ -2633,6 +2633,13 @@ void Monitor::handle_command(MMonCommand *m)
     }
   }
 
+  if (mon_cmd->is_obsolete()) {
+    reply_command(m, -ENOTSUP,
+                  "command is obsolete; please check usage and/or man page",
+                  0);
+    return;
+  }
+
   if (session->proxy_con && mon_cmd->has_flag(MonCommand::FLAG_NOFORWARD)) {
     dout(10) << "Got forward for noforward command " << m << dendl;
     reply_command(m, -EINVAL, "forward for noforward command", rdata, 0);

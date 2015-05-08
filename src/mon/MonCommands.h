@@ -109,6 +109,7 @@
  *
  *  NONE      - no flag assigned
  *  NOFORWARD - command may not be forwarded
+ *  OBSOLETE  - command is considered obsolete
  */
 
 /*
