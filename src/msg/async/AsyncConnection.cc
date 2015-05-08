@@ -1082,7 +1082,7 @@ int AsyncConnection::_process_connection()
         }
 
         lock.Lock();
-        if (state != STATE_ACCEPTING_WAIT_CONNECT_MSG_AUTH) {
+        if (state != STATE_CONNECTING_WAIT_IDENTIFY_PEER) {
           ldout(async_msgr->cct, 1) << __func__ << " state changed while learned_addr, mark_down must be called just now"
                                     << dendl;
           assert(state == STATE_CLOSED);
