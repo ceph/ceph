@@ -27,7 +27,7 @@ virtualenv virtualenv-$DIR
     if test -d ceph-detect-init/wheelhouse ; then
         wheelhouse="--no-index --use-wheel --find-links=ceph-detect-init/wheelhouse"
     fi
-    pip install $wheelhouse --editable ceph-detect-init
+    pip --log virtualenv-$DIR/log.txt install $wheelhouse --editable ceph-detect-init
 )
 OSD_DATA=$DIR/osd
 MON_ID=a
