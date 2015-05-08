@@ -2694,9 +2694,11 @@ void Monitor::handle_command(MMonCommand *m)
       /* Let the Monitor class handle the following commands:
        *  'mon compact'
        *  'mon scrub'
+       *  'mon sync force'
        */
       prefix != "mon compact" &&
-      prefix != "mon scrub") {
+      prefix != "mon scrub" &&
+      prefix != "mon sync force") {
     monmon()->dispatch(m);
     return;
   }
@@ -2918,7 +2920,8 @@ void Monitor::handle_command(MMonCommand *m)
     rdata.append(ds);
     rs = "";
     r = 0;
-  } else if (prefix == "sync force") {
+  } else if (prefix == "sync force" ||
+             prefix == "mon sync force") {
     string validate1, validate2;
     cmd_getval(g_ceph_context, cmdmap, "validate1", validate1);
     cmd_getval(g_ceph_context, cmdmap, "validate2", validate2);

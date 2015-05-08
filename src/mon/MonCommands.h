@@ -285,6 +285,12 @@ COMMAND_WITH_FLAG("mon scrub",
     "scrub the monitor stores", \
     "mon", "rw", "cli,rest", \
     FLAG(NONE))
+COMMAND_WITH_FLAG("mon sync force " \
+    "name=validate1,type=CephChoices,strings=--yes-i-really-mean-it,req=false " \
+    "name=validate2,type=CephChoices,strings=--i-know-what-i-am-doing,req=false", \
+    "force sync of and clear monitor store", \
+    "mon", "rw", "cli,rest", \
+    FLAG(NOFORWARD))
 
 
 /*
