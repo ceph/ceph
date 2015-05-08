@@ -64,11 +64,11 @@ int RocksDBStore::do_open(ostream &out, bool create_if_missing)
   logger = plb.create_perf_counters();
   cct->get_perfcounters_collection()->add(logger);
 
-  if (g_conf->rocksdb_compact_on_mount) {
-    derr << "Compacting rocksdb store..." << dendl;
-    compact();
-    derr << "Finished compacting rocksdb store" << dendl;
-  }
+ // if (g_conf->rocksdb_compact_on_mount) {
+   // derr << "Compacting rocksdb store..." << dendl;
+    //compact();
+    //derr << "Finished compacting rocksdb store" << dendl;
+ // }
   return 0;
 }
 
