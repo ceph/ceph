@@ -299,8 +299,8 @@ namespace librbd {
 
   bool AbstractWrite::should_complete(int r)
   {
-    ldout(m_ictx->cct, 20) << "write " << this << " " << m_oid << " "
-                           << m_object_off << "~" << m_object_len
+    ldout(m_ictx->cct, 20) << get_write_type() << " " << this << " " << m_oid
+                           << " " << m_object_off << "~" << m_object_len
 			   << " should_complete: r = " << r << dendl;
 
     bool finished = true;
@@ -385,8 +385,9 @@ namespace librbd {
 
   void AbstractWrite::send() {
     assert(m_ictx->owner_lock.is_locked());
-    ldout(m_ictx->cct, 20) << "send " << this << " " << m_oid << " "
-			   << m_object_off << "~" << m_object_len << dendl;
+    ldout(m_ictx->cct, 20) << "send " << get_write_type() << " " << this <<" "
+                           << m_oid << " " << m_object_off << "~"
+                           << m_object_len << dendl;
     send_pre();
   }
 
