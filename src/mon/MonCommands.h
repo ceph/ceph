@@ -110,6 +110,11 @@
  *  NONE      - no flag assigned
  *  NOFORWARD - command may not be forwarded
  *  OBSOLETE  - command is considered obsolete
+ *  DEPRECATED - command is considered deprecated
+ *
+ * A command should always be first considered DEPRECATED before being
+ * considered OBSOLETE, giving due consideration to users and conforming
+ * to any guidelines regarding deprecating commands.
  */
 
 /*
