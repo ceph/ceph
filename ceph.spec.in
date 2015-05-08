@@ -533,8 +533,10 @@ mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/lib/ceph/tmp
 mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/lib/ceph/mon
 mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/lib/ceph/osd
 mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/lib/ceph/mds
+mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/lib/ceph/radosgw
 mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/lib/ceph/bootstrap-osd
 mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/lib/ceph/bootstrap-mds
+mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/lib/ceph/bootstrap-rgw
 mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/log/radosgw
 
 %clean
@@ -650,6 +652,7 @@ fi
 %dir %{_localstatedir}/lib/ceph/bootstrap-osd
 %dir %{_localstatedir}/lib/ceph/bootstrap-mds
 %ghost %dir %{_localstatedir}/run/ceph/
+%dir %{_localstatedir}/lib/ceph/bootstrap-rgw
 
 #################################################################################
 %files -n ceph-common
@@ -724,6 +727,7 @@ fi
 %config(noreplace) %{_sysconfdir}/logrotate.d/radosgw
 %config %{_sysconfdir}/bash_completion.d/radosgw-admin
 %dir %{_localstatedir}/log/radosgw/
+%dir %{_localstatedir}/lib/ceph/radosgw
 
 %post radosgw
 /sbin/ldconfig
