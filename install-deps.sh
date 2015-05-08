@@ -89,20 +89,26 @@ esac
 #
 for interpreter in python2.7 python3 ; do
     type $interpreter > /dev/null 2>&1 || continue
-    rm -fr install-deps
-    virtualenv --python $interpreter install-deps
-    . install-deps/bin/activate
-    pip --timeout 600 --log install-deps/log.txt install wheel || exit 1
-    find . -name tox.ini | while read ini ; do
-        (
-            cd $(dirname $ini)
-            require=$(ls *requirements.txt 2>/dev/null | sed -e 's/^/-r /')
-            if test "$require" ; then
+    if ! test -d install-deps-$interpreter ; then
+        virtualenv --python $interpreter install-deps-$interpreter
+        . install-deps-$interpreter/bin/activate
+        pip --timeout 300 install wheel || exit 1
+    fi
+done
+
+find . -name tox.ini | while read ini ; do
+    top_srcdir=$(pwd)
+    (
+        cd $(dirname $ini)
+        require=$(ls *requirements.txt 2>/dev/null | sed -e 's/^/-r /')
+        if test "$require" && ! test -d wheelhouse ; then
+            for interpreter in python2.7 python3 ; do
+                type $interpreter > /dev/null 2>&1 || continue
+                . $top_srcdir/install-deps-$interpreter/bin/activate
                 # although pip comes with virtualenv, having a recent version
                 # of pip matters when it comes to using wheel packages
-                pip --timeout 600 --log install-deps/log.txt wheel $require 'distribute >= 0.7' 'pip >= 6.1' || exit 1
-            fi
-        )
-    done
+                pip --timeout 300 wheel $require 'setuptools >= 0.7' 'pip >= 6.1' || exit 1
+            done
+        fi
+    )
 done
-rm -fr install-deps
