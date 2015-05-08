@@ -588,7 +588,10 @@ def main(argv):
     tmpfd.close()
     os.unlink(TMPFILE)
 
-    ERRORS += check_journal(jsondict)
+    journal_errors = check_journal(jsondict)
+    if journal_errors is not 0:
+        logging.error(jsondict)
+    ERRORS += journal_errors
 
     # Test --op list and generate json for all objects
     print "Test --op list variants"
