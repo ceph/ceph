@@ -281,6 +281,10 @@ COMMAND_WITH_FLAG("mon compact", \
     "cause compaction of monitor's leveldb storage", \
     "mon", "rw", "cli,rest", \
     FLAG(NOFORWARD))
+COMMAND_WITH_FLAG("mon scrub",
+    "scrub the monitor stores", \
+    "mon", "rw", "cli,rest", \
+    FLAG(NONE))
 
 
 /*

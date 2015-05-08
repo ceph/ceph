@@ -2691,8 +2691,12 @@ void Monitor::handle_command(MMonCommand *m)
     return;
   }
   if (module == "mon" &&
-      /* 'mon compact' will be handled by the Monitor class */
-      prefix != "mon compact") {
+      /* Let the Monitor class handle the following commands:
+       *  'mon compact'
+       *  'mon scrub'
+       */
+      prefix != "mon compact" &&
+      prefix != "mon scrub") {
     monmon()->dispatch(m);
     return;
   }
@@ -2724,7 +2728,7 @@ void Monitor::handle_command(MMonCommand *m)
     return;
   }
 
-  if (prefix == "scrub") {
+  if (prefix == "scrub" || prefix == "mon scrub") {
     wait_for_paxos_write();
     if (is_leader()) {
       int r = scrub();
