@@ -50,7 +50,7 @@ public:
     }
 
     uint8_t state = OBJECT_EXISTS;
-    if (m_image_ctx.test_features(RBD_FEATURE_DEEP_FLATTEN) &&
+    if (m_image_ctx.test_features(RBD_FEATURE_FAST_DIFF) &&
         m_snap_id_idx + 1 < m_snap_ids.size()) {
       state = OBJECT_EXISTS_CLEAN;
     }
