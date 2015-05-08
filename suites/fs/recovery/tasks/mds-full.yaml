@@ -6,6 +6,7 @@ overrides:
       - OSD near full
     conf:
       osd:
+        osd mon report interval max: 5
         osd objectstore: memstore
         memstore device bytes: 100000000
 
