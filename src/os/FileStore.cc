@@ -1467,7 +1467,10 @@ int FileStore::mount()
       goto close_current_fd;
     }
 
-    omap_store->init();
+    if (superblock.omap_backend == "rocksdb")
+      omap_store->init(g_conf->omap_rocksdb_options);
+    else
+      omap_store->init();
 
     stringstream err;
     if (omap_store->create_and_open(err)) {
