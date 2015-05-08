@@ -223,8 +223,9 @@ COMMAND("auth del " \
 /*
  * Monitor commands (Monitor.cc)
  */
-COMMAND_WITH_FLAG("compact", "cause compaction of monitor's leveldb storage", \
-	     "mon", "rw", "cli,rest", FLAG(NOFORWARD))
+COMMAND_WITH_FLAG("compact", "cause compaction of monitor's leveldb storage (DEPRECATED)", \
+	     "mon", "rw", "cli,rest", \
+             FLAG(NOFORWARD)|FLAG(DEPRECATED))
 COMMAND_WITH_FLAG("scrub", "scrub the monitor stores (DEPRECATED)", \
              "mon", "rw", "cli,rest", \
              FLAG(DEPRECATED))
