@@ -179,6 +179,7 @@ namespace librbd {
     std::vector<librados::snap_t> m_snaps;
 
     virtual void add_write_ops(librados::ObjectWriteOperation *wr) = 0;
+    virtual const char* get_write_type() const = 0;
     virtual void guard_write();
     virtual void pre_object_map_update(uint8_t *new_state) = 0;
     virtual bool post_object_map_update() {
@@ -208,6 +209,11 @@ namespace librbd {
     }
   protected:
     virtual void add_write_ops(librados::ObjectWriteOperation *wr);
+
+    virtual const char* get_write_type() const {
+      return "write";
+    }
+
     virtual void pre_object_map_update(uint8_t *new_state) {
       *new_state = OBJECT_EXISTS;
     }
@@ -235,6 +241,12 @@ namespace librbd {
       }
     }
 
+    virtual const char* get_write_type() const {
+      if (has_parent()) {
+        return "remove (trunc)";
+      }
+      return "remove";
+    }
     virtual void pre_object_map_update(uint8_t *new_state) {
       if (has_parent()) {
 	m_object_state = OBJECT_EXISTS;
@@ -274,6 +286,10 @@ namespace librbd {
       wr->truncate(m_object_off);
     }
 
+    virtual const char* get_write_type() const {
+      return "truncate";
+    }
+
     virtual void pre_object_map_update(uint8_t *new_state) {
       *new_state = OBJECT_EXISTS;
     }
@@ -292,6 +308,10 @@ namespace librbd {
   protected:
     virtual void add_write_ops(librados::ObjectWriteOperation *wr) {
       wr->zero(m_object_off, m_object_len);
+    }
+
+    virtual const char* get_write_type() const {
+      return "zero";
     }
 
     virtual void pre_object_map_update(uint8_t *new_state) {
