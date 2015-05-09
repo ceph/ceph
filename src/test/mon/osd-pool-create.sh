@@ -16,6 +16,12 @@
 #
 source test/mon/mon-test-helpers.sh
 
+function expect_false()
+{
+    set -x
+    if "$@"; then return 1; else return 0; fi
+}
+
 function run() {
     local dir=$1
 
@@ -228,6 +234,31 @@ function TEST_replicated_pool() {
         grep 'cannot change to type erasure' || return 1
 }
 
+function TEST_no_pool_delete() {
+    local dir=$1
+    run_mon $dir a --public-addr $CEPH_MON
+    ./ceph osd pool create foo 1
+    ./ceph tell mon.a injectargs -- --no-mon-allow-pool-delete
+    expect_false ./ceph osd pool delete foo foo --yes-i-really-really-mean-it
+    ./ceph tell mon.a injectargs -- --mon-allow-pool-delete
+    ./ceph osd pool delete foo foo --yes-i-really-really-mean-it
+}
+
+function TEST_utf8_cli() {
+    local dir=$1
+    run_mon $dir a --public-addr $CEPH_MON
+    # Hopefully it's safe to include literal UTF-8 characters to test
+    # the fix for http://tracker.ceph.com/issues/7387.  If it turns out
+    # to not be OK (when is the default encoding *not* UTF-8?), maybe
+    # the character '黄' can be replaced with the escape $'\xe9\xbb\x84'
+    ./ceph osd pool create 黄 1024 2>&1 | \
+        grep "pool '黄' created" || return 1
+    ./ceph osd lspools 2>&1 | \
+        grep "黄" || return 1
+    ./ceph -f json-pretty osd dump | \
+        python -c "import json; import sys; json.load(sys.stdin)" || return 1
+    ./ceph osd pool delete 黄 黄 --yes-i-really-really-mean-it
+}
 
 main osd-pool-create
 
