@@ -35,7 +35,7 @@ done
 # prefix for radosgw instances in ceph.conf
 PREFIX='client.radosgw.'
 
-# user to run radosgw as (it not specified in ceph.conf)
+# user to run radosgw as (if not specified in ceph.conf)
 #DEFAULT_USER='www-data'
 DEFAULT_USER='root'
 
