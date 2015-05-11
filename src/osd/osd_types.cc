@@ -793,7 +793,9 @@ int pg_string_state(std::string state)
     type = PG_STATE_INCONSISTENT;
   else if (state == "peering")
     type = PG_STATE_PEERING;
-  else if (state == "recoverying")
+  else if (state == "repair")
+    type = PG_STATE_REPAIR;
+  else if (state == "recovering")
     type = PG_STATE_RECOVERING;
   else if (state == "backfill_wait")
     type = PG_STATE_BACKFILL_WAIT;
