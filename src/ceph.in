@@ -62,6 +62,7 @@ import argparse
 import errno
 import json
 import rados
+import shlex
 import signal
 import socket
 import string
@@ -332,6 +333,25 @@ def ceph_conf(parsed_args, field, name):
 
 PROMPT = 'ceph> '
 
+if sys.stdin.isatty():
+    def read_input():
+        while True:
+            line = raw_input(PROMPT).rstrip()
+            if line in ['q', 'quit', 'Q']:
+                return None
+            if line:
+                return line
+else:
+    def read_input():
+        while True:
+            line = sys.stdin.readline()
+            if not line:
+                return None
+            line = line.rstrip()
+            if line:
+                return line
+
+
 def new_style_command(parsed_args, cmdargs, target, sigdict, inbuf, verbose):
     """
     Do new-style command dance.
@@ -359,26 +379,22 @@ def new_style_command(parsed_args, cmdargs, target, sigdict, inbuf, verbose):
             else:
                 return -errno.EINVAL, '', 'invalid command'
         else:
-            # do the command-interpreter looping
-            # for raw_input to do readline cmd editing
-            import readline
-
             if sys.stdin.isatty():
-                prompt = PROMPT
-            else:
-                prompt = ''
+                # do the command-interpreter looping
+                # for raw_input to do readline cmd editing
+                import readline
 
             while True:
-                interactive_input = raw_input(prompt)
-                if interactive_input in ['q', 'quit', 'Q']:
+                interactive_input = read_input()
+                if interactive_input is None:
                     return 0, '', ''
-                cmdargs = parse_cmdargs(interactive_input.split())[2]
+                cmdargs = parse_cmdargs(shlex.split(interactive_input))[2]
                 try:
                     target = find_cmd_target(cmdargs)
                 except Exception as e:
                     print >> sys.stderr, \
                             'error handling command target: {0}'.format(e)
-                    return 1
+                    return 1, '', ''
                 valid_dict = validate_command(sigdict, cmdargs, verbose)
                 if valid_dict:
                     if parsed_args.output_format:
