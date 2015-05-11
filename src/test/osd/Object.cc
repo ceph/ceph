@@ -4,6 +4,7 @@
 #include <list>
 #include <map>
 #include <set>
+#include <iostream>
 
 #include "Object.h"
 

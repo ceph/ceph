@@ -140,6 +140,15 @@ bool ACLOwner_S3::xml_end(const char *el) {
   return true;
 }
 
+void  ACLOwner_S3::to_xml(ostream& out) {
+  if (id.empty())
+    return;
+  out << "<Owner>" << "<ID>" << id << "</ID>";
+  if (!display_name.empty())
+    out << "<DisplayName>" << display_name << "</DisplayName>";
+  out << "</Owner>";
+}
+
 bool ACLGrant_S3::xml_end(const char *el) {
   ACLGrantee_S3 *acl_grantee;
   ACLID_S3 *acl_id;
@@ -255,6 +264,16 @@ bool RGWAccessControlList_S3::xml_end(const char *el) {
     grant = static_cast<ACLGrant_S3 *>(iter.get_next());
   }
   return true;
+}
+
+void  RGWAccessControlList_S3::to_xml(ostream& out) {
+  multimap<string, ACLGrant>::iterator iter;
+  out << "<AccessControlList>";
+  for (iter = grant_map.begin(); iter != grant_map.end(); ++iter) {
+    ACLGrant_S3& grant = static_cast<ACLGrant_S3 &>(iter->second);
+    grant.to_xml(cct, out);
+  }
+  out << "</AccessControlList>";
 }
 
 struct s3_acl_header {
@@ -410,6 +429,15 @@ bool RGWAccessControlPolicy_S3::xml_end(const char *el) {
     return false;
   owner = *owner_p;
   return true;
+}
+
+void  RGWAccessControlPolicy_S3::to_xml(ostream& out) {
+  out << "<AccessControlPolicy xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\">";
+  ACLOwner_S3& _owner = static_cast<ACLOwner_S3 &>(owner);
+  RGWAccessControlList_S3& _acl = static_cast<RGWAccessControlList_S3 &>(acl);
+  _owner.to_xml(out);
+  _acl.to_xml(out);
+  out << "</AccessControlPolicy>";
 }
 
 static const s3_acl_header acl_header_perms[] = {

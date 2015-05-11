@@ -9,7 +9,7 @@
 #include <set>
 #include <string>
 
-#include <iostream> //for testing, remove
+#include <iosfwd>
 
 #include "include/types.h"
 

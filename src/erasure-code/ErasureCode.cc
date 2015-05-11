@@ -18,6 +18,7 @@
 #include <errno.h>
 #include <vector>
 #include <algorithm>
+#include <ostream>
 
 #include "common/strtol.h"
 #include "ErasureCode.h"

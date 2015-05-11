@@ -10,6 +10,7 @@
 #include <string>
 #include <time.h>
 #include <unistd.h>
+#include <iostream>
 
 using namespace librados;
 

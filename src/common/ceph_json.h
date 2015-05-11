@@ -1,7 +1,7 @@
 #ifndef CEPH_JSON_H
 #define CEPH_JSON_H
 
-#include <iostream>
+#include <iosfwd>
 #include <include/types.h>
 #include <list>
 
