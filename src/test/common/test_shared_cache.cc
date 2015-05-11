@@ -164,7 +164,61 @@ TEST_F(SharedLRU_all, lookup_or_create) {
   ASSERT_TRUE(cache.lookup(1));
   ASSERT_TRUE(cache.lookup(2));
 }
-
+TEST_F(SharedLRU_all, lookup_or_create_nocache) {
+  SharedLRUTest cache;
+  {
+    int value = 2;
+    unsigned int key = 1;
+    ASSERT_TRUE(cache.add(key, new int(value)));
+    shared_ptr<int> ptr = cache.lookup_or_create(key, false);
+    ASSERT_EQ(value, *cache.lookup(key));
+  }
+  {
+    unsigned int key = 2;
+    shared_ptr<int> ptr = cache.lookup_or_create(key, false);
+    ASSERT_TRUE(ptr);
+    ASSERT_EQ(0, *cache.lookup(key));
+    *ptr = 3;
+  }
+  {
+    unsigned int key = 3;
+    shared_ptr<int> ptr = cache.lookup_or_create(key, false);
+    ASSERT_TRUE(ptr);
+    ASSERT_EQ(0, *cache.lookup(key, false));
+  }
+  {
+    unsigned int key = 4;
+    shared_ptr<int> ptr = cache.lookup_or_create(key, false);
+  }
+  {
+    unsigned int key = 5;
+    ASSERT_TRUE(cache.lookup_or_create(key, false));
+    ASSERT_TRUE(cache.lookup_or_create(key));
+  }
+  {
+    unsigned int key = 6;
+    shared_ptr<int> ptr = cache.lookup_or_create(key, false);
+    ASSERT_TRUE(ptr);
+    cache.cache_key(key);
+  }
+  ASSERT_TRUE(cache.lookup(1));
+  ASSERT_TRUE(cache.lookup(2));
+  ASSERT_FALSE(cache.lookup(3));
+  ASSERT_FALSE(cache.lookup(4));
+  ASSERT_TRUE(cache.lookup(5));
+  ASSERT_TRUE(cache.lookup(6));
+  ASSERT_FALSE(cache.lookup(7, false));
+  {
+    shared_ptr<int> gptr;
+    {
+      unsigned int key = 8;
+      gptr = cache.lookup_or_create(key, false);
+      ASSERT_TRUE(gptr);
+      ASSERT_EQ(0, *cache.lookup(key, false));
+    }
+  }
+  ASSERT_FALSE(cache.lookup(8));
+}
 TEST_F(SharedLRU_all, wait_lookup) {
   SharedLRUTest cache;
   unsigned int key = 1;

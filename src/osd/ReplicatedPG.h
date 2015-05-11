@@ -383,8 +383,9 @@ public:
   }
   ObjectContextRef get_obc(
     const hobject_t &hoid,
-    map<string, bufferlist> &attrs) {
-    return get_object_context(hoid, true, &attrs);
+    map<string, bufferlist> &attrs,
+    bool do_cache) {
+    return get_object_context(hoid, true, do_cache, &attrs);
   }
   void log_operation(
     const vector<pg_log_entry_t> &logv,
@@ -911,8 +912,9 @@ protected:
 
   void agent_setup();       ///< initialize agent state
   bool agent_work(int max); ///< entry point to do some agent work
-  bool agent_maybe_flush(ObjectContextRef& obc);  ///< maybe flush
-  bool agent_maybe_evict(ObjectContextRef& obc);  ///< maybe evict
+  bool obccache_suggests_hot(hobject_t& o);
+  bool agent_maybe_flush(ObjectContextRef& obc, bool hot_object);  ///< maybe flush
+  bool agent_maybe_evict(ObjectContextRef& obc, bool hot_object);  ///< maybe evict
 
   void agent_load_hit_sets();  ///< load HitSets, if needed
 
@@ -984,10 +986,11 @@ public:
   void handle_watch_timeout(WatchRef watch);
 protected:
 
-  ObjectContextRef create_object_context(const object_info_t& oi, SnapSetContext *ssc);
+  ObjectContextRef create_object_context(const object_info_t& oi, SnapSetContext *ssc, bool do_cache);
   ObjectContextRef get_object_context(
     const hobject_t& soid,
     bool can_create,
+    bool do_cache,
     map<string, bufferlist> *attrs = 0
     );
 
@@ -1006,6 +1009,7 @@ protected:
   int find_object_context(const hobject_t& oid,
 			  ObjectContextRef *pobc,
 			  bool can_create,
+			  bool do_cache,
 			  bool map_snapid_to_clone=false,
 			  hobject_t *missing_oid=NULL);
 

@@ -1808,7 +1808,7 @@ bool ReplicatedBackend::handle_pull_response(
 
   bool first = pi.recovery_progress.first;
   if (first) {
-    pi.obc = get_parent()->get_obc(pi.recovery_info.soid, pop.attrset);
+    pi.obc = get_parent()->get_obc(pi.recovery_info.soid, pop.attrset, false);
     pi.recovery_info.oi = pi.obc->obs.oi;
     pi.recovery_info = recalc_subsets(pi.recovery_info, pi.obc->ssc);
   }

@@ -30,7 +30,7 @@ class SharedLRU {
   Mutex lock;
   size_t max_size;
   Cond cond;
-  unsigned size;
+  unsigned _size;
 public:
   int waiting;
 private:
@@ -40,7 +40,7 @@ private:
   map<K, pair<WeakVPtr, V*> > weak_refs;
 
   void trim_cache(list<VPtr> *to_release) {
-    while (size > max_size) {
+    while (_size > max_size) {
       to_release->push_back(lru.back().second);
       lru_remove(lru.back().first);
     }
@@ -52,20 +52,22 @@ private:
     if (i == contents.end())
       return;
     lru.erase(i->second);
-    --size;
+    --_size;
     contents.erase(i);
   }
 
-  void lru_add(const K& key, const VPtr& val, list<VPtr> *to_release) {
+  void lru_add(const K& key, const VPtr& val, list<VPtr> *to_release, bool do_cache = true) {
     typename map<K, typename list<pair<K, VPtr> >::iterator>::iterator i =
       contents.find(key);
     if (i != contents.end()) {
       lru.splice(lru.begin(), lru, i->second);
     } else {
-      ++size;
-      lru.push_front(make_pair(key, val));
-      contents[key] = lru.begin();
-      trim_cache(to_release);
+      if (do_cache) {
+        ++_size;
+        lru.push_front(make_pair(key, val));
+        contents[key] = lru.begin();
+        trim_cache(to_release);
+      }
     }
   }
 
@@ -92,7 +94,7 @@ private:
 public:
   SharedLRU(CephContext *cct = NULL, size_t max_size = 20)
     : cct(cct), lock("SharedLRU::lock"), max_size(max_size), 
-      size(0), waiting(0) {}
+      _size(0), waiting(0) {}
   
   ~SharedLRU() {
     contents.clear();
@@ -131,7 +133,7 @@ public:
     while (true) {
       VPtr val; // release any ref we have after we drop the lock
       Mutex::Locker l(lock);
-      if (size == 0)
+      if (_size == 0)
         break;
 
       val = lru.back().second;
@@ -237,7 +239,11 @@ public:
     return found;
   }
 
-  VPtr lookup(const K& key) {
+  VPtr cache_key(const K& key) {
+    return lookup(key); 
+  }
+
+  VPtr lookup(const K& key, bool do_cache = true) {
     VPtr val;
     list<VPtr> to_release;
     {
@@ -250,7 +256,7 @@ public:
 	if (i != weak_refs.end()) {
 	  val = i->second.first.lock();
 	  if (val) {
-	    lru_add(key, val, &to_release);
+	    lru_add(key, val, &to_release, do_cache);
 	  } else {
 	    retry = true;
 	  }
@@ -262,7 +268,7 @@ public:
     }
     return val;
   }
-  VPtr lookup_or_create(const K &key) {
+  VPtr lookup_or_create(const K &key, bool do_cache = true) {
     VPtr val;
     list<VPtr> to_release;
     {
@@ -274,7 +280,7 @@ public:
 	if (i != weak_refs.end()) {
 	  val = i->second.first.lock();
 	  if (val) {
-	    lru_add(key, val, &to_release);
+	    lru_add(key, val, &to_release, do_cache);
 	    return val;
 	  } else {
 	    retry = true;
@@ -287,9 +293,21 @@ public:
       V *new_value = new V();
       VPtr new_val(new_value, Cleanup(this, key));
       weak_refs.insert(make_pair(key, make_pair(new_val, new_value)));
-      lru_add(key, new_val, &to_release);
+      if (do_cache)
+        lru_add(key, new_val, &to_release);
       return new_val;
     }
+  }
+
+  /**
+   * size()
+   *
+   * Returns the number of live references left to anything that has been
+   * in the cache.
+   */
+  unsigned size() {
+    Mutex::Locker l(lock);
+    return _size;
   }
 
   /**

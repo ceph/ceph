@@ -245,7 +245,7 @@ protected:
 
 public:
   bool deleting;  // true while in removing or OSD is shutting down
-
+  utime_t last_peer_endtime;
 
   void lock_suspend_timeout(ThreadPool::TPHandle &handle);
   void lock(bool no_lockdep = false) const;
