@@ -5453,8 +5453,6 @@ void ReplicatedPG::make_writeable(OpContext *ctx)
     snap_oi->prior_version = ctx->obs->oi.version;
     snap_oi->copy_user_bits(ctx->obs->oi);
     snap_oi->snaps = snaps;
-    if (was_dirty)
-      snap_oi->set_flag(object_info_t::FLAG_DIRTY);
 
     // prepend transaction to op_t
     PGBackend::PGTransaction *t = pgbackend->get_transaction();
@@ -5464,11 +5462,9 @@ void ReplicatedPG::make_writeable(OpContext *ctx)
     ctx->op_t = t;
     
     ctx->delta_stats.num_objects++;
-    if (snap_oi->is_dirty())
+    if (snap_oi->is_dirty()) {
       ctx->delta_stats.num_objects_dirty++;
-    if (snap_oi->is_whiteout()) {
-      dout(20) << __func__ << " cloning whiteout on " << soid << " to " << coid << dendl;
-      ctx->delta_stats.num_whiteouts++;
+      osd->logger->inc(l_osd_tier_dirty);
     }
     if (snap_oi->is_omap())
       ctx->delta_stats.num_objects_omap++;
