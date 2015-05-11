@@ -199,7 +199,7 @@ def fetch_qa_suite(branch, lock=True):
     :param branch: The branch to fetch
     :returns:      The destination path
     """
-    url = config.ceph_git_base_url + 'teuthology.git'
+    url = config.ceph_git_base_url + 'ceph-qa-suite.git'
     return fetch_repo(url, branch, lock=lock)
 
 
