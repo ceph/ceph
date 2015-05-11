@@ -18,7 +18,7 @@
 #include <stdint.h>
 #include <stdio.h>
 
-#include <iostream>
+#include <iosfwd>
 #include <iomanip>
 using namespace std;
 
