@@ -801,10 +801,10 @@ int pg_string_state(std::string state)
     type = PG_STATE_BACKFILL_WAIT;
   else if (state == "incomplete")
     type = PG_STATE_INCOMPLETE;
-  else if (state == "remapped")
-    type = PG_STATE_REMAPPED;
   else if (state == "stale")
     type = PG_STATE_STALE;
+  else if (state == "remapped")
+    type = PG_STATE_REMAPPED;
   else if (state == "deep_scrub")
     type = PG_STATE_DEEP_SCRUB;
   else if (state == "backfill")
