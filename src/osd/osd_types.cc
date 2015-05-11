@@ -770,7 +770,7 @@ std::string pg_state_string(int state)
   return ret;
 }
 
-int pg_string_state(std::string state)
+int pg_string_state(const std::string& state)
 {
   int type;
   if (state == "active")
