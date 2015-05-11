@@ -394,7 +394,7 @@ void dump_redirect(struct req_state *s, const string& redirect)
   s->cio->print("Location: %s\r\n", redirect.c_str());
 }
 
-static void dump_time_header(struct req_state *s, const char *name, time_t t)
+void dump_time_header(struct req_state *s, const char *name, time_t t)
 {
 
   char timestr[TIME_BUF_SIZE];
