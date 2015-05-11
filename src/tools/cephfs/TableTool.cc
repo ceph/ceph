@@ -353,6 +353,7 @@ public:
     // Compose a transaction to clear and write header
     librados::ObjectWriteOperation op;
     op.omap_clear();
+    op.set_op_flags(librados::OP_FAILOK);
     op.omap_set_header(header_bl);
     
     return io->operate(object_name, &op);
