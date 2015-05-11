@@ -2677,6 +2677,10 @@ void Client::put_cap_ref(Inode *in, int cap)
 
 int Client::get_caps(Inode *in, int need, int want, int *phave, loff_t endoff)
 {
+  int r = check_pool_perm(in, need);
+  if (r < 0)
+    return r;
+
   while (1) {
     if (!in->is_any_caps())
       return -ESTALE;
@@ -10606,6 +10610,107 @@ bool Client::is_quota_bytes_approaching(Inode *in)
     in = get_quota_root(in);
   }
   return false;
+}
+
+enum {
+  POOL_CHECKED = 1,
+  POOL_CHECKING = 2,
+  POOL_READ = 4,
+  POOL_WRITE = 8,
+};
+
+int Client::check_pool_perm(Inode *in, int need)
+{
+  if (!cct->_conf->client_check_pool_perm)
+    return 0;
+
+  int64_t pool = in->layout.fl_pg_pool;
+  int have = 0;
+  while (true) {
+    std::map<int64_t, int>::iterator it = pool_perms.find(pool);
+    if (it == pool_perms.end())
+      break;
+    if (it->second == POOL_CHECKING) {
+      // avoid concurrent checkings
+      wait_on_list(waiting_for_pool_perm);
+    } else {
+      have = it->second;
+      assert(have & POOL_CHECKED);
+      break;
+    }
+  }
+
+  if (!have) {
+    pool_perms[pool] = POOL_CHECKING;
+
+    char oid_buf[32];
+    snprintf(oid_buf, sizeof(oid_buf), "%llx.00000000", (unsigned long long)in->ino);
+    object_t oid = oid_buf;
+
+    C_SaferCond rd_cond;
+    ObjectOperation rd_op;
+    rd_op.stat(NULL, (utime_t*)NULL, NULL);
+
+    objecter->mutate(oid, OSDMap::file_to_object_locator(in->layout), rd_op,
+		     in->snaprealm->get_snap_context(), ceph_clock_now(cct), 0,
+		     &rd_cond, NULL);
+
+    C_SaferCond wr_cond;
+    ObjectOperation wr_op;
+    wr_op.create(true);
+
+    objecter->mutate(oid, OSDMap::file_to_object_locator(in->layout), wr_op,
+		     in->snaprealm->get_snap_context(), ceph_clock_now(cct), 0,
+		     &wr_cond, NULL);
+
+    client_lock.Unlock();
+    int rd_ret = rd_cond.wait();
+    int wr_ret = wr_cond.wait();
+    client_lock.Lock();
+
+    bool errored = false;
+
+    if (rd_ret == 0 || rd_ret == -ENOENT)
+      have |= POOL_READ;
+    else if (rd_ret != -EPERM) {
+      ldout(cct, 10) << "check_pool_perm on pool " << pool
+		     << " rd_err = " << rd_ret << " wr_err = " << wr_ret << dendl;
+      errored = true;
+    }
+
+    if (wr_ret == 0 || wr_ret == -EEXIST)
+      have |= POOL_WRITE;
+    else if (wr_ret != -EPERM) {
+      ldout(cct, 10) << "check_pool_perm on pool " << pool
+		     << " rd_err = " << rd_ret << " wr_err = " << wr_ret << dendl;
+      errored = true;
+    }
+
+    if (errored) {
+      // Indeterminate: erase CHECKING state so that subsequent calls re-check.
+      // Raise EIO because actual error code might be misleading for
+      // userspace filesystem user.
+      pool_perms.erase(pool);
+      signal_cond_list(waiting_for_pool_perm);
+      return -EIO;
+    }
+
+    pool_perms[pool] = have | POOL_CHECKED;
+    signal_cond_list(waiting_for_pool_perm);
+  }
+
+  if ((need & CEPH_CAP_FILE_RD) && !(have & POOL_READ)) {
+    ldout(cct, 10) << "check_pool_perm on pool " << pool
+		   << " need " << ccap_string(need) << ", but no read perm" << dendl;
+    return -EPERM;
+  }
+  if ((need & CEPH_CAP_FILE_WR) && !(have & POOL_WRITE)) {
+    ldout(cct, 10) << "check_pool_perm on pool " << pool
+		   << " need " << ccap_string(need) << ", but no write perm" << dendl;
+    return -EPERM;
+  }
+
+  return 0;
 }
 
 void Client::set_filer_flags(int flags)
