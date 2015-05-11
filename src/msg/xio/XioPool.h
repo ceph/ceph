@@ -20,7 +20,6 @@ extern "C" {
 #include <stdint.h>
 #include "libxio.h"
 }
-#include <iostream>
 #include <vector>
 #include "include/atomic.h"
 #include "common/likely.h"
