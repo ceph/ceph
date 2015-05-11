@@ -502,7 +502,7 @@ int ObjBencher::write_bench(int secondsToRun, int maxObjectsToCreate,
   lock.Unlock();
   pthread_join(print_thread, NULL);
   delete newContents;
-  return -5;
+  return r;
 }
 
 int ObjBencher::seq_read_bench(int seconds_to_run, int num_objects, int concurrentios, int pid) {
@@ -691,7 +691,7 @@ int ObjBencher::seq_read_bench(int seconds_to_run, int num_objects, int concurre
   data.done = 1;
   lock.Unlock();
   pthread_join(print_thread, NULL);
-  return -5;
+  return r;
 }
 
 int ObjBencher::rand_read_bench(int seconds_to_run, int num_objects, int concurrentios, int pid)
@@ -884,7 +884,7 @@ int ObjBencher::rand_read_bench(int seconds_to_run, int num_objects, int concurr
   data.done = 1;
   lock.Unlock();
   pthread_join(print_thread, NULL);
-  return -5;
+  return r;
 }
 
 int ObjBencher::clean_up(const char* prefix, int concurrentios, const char* run_name) {
@@ -1041,7 +1041,7 @@ int ObjBencher::clean_up(int num_objects, int prevPid, int concurrentios) {
   lock.Lock();
   data.done = 1;
   lock.Unlock();
-  return -5;
+  return r;
 }
 
 /**
