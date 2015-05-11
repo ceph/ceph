@@ -606,6 +606,7 @@
    void be_compare_scrubmaps(
      const map<pg_shard_t,ScrubMap*> &maps,
      bool okseed,   ///< true if scrub digests have same seed our oi digests
+     bool repair,
      map<hobject_t, set<pg_shard_t> > &missing,
      map<hobject_t, set<pg_shard_t> > &inconsistent,
      map<hobject_t, list<pg_shard_t> > &authoritative,
