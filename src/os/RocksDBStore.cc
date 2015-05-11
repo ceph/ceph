@@ -17,18 +17,88 @@
 #include "rocksdb/utilities/convenience.h"
 using std::string;
 #include "common/perf_counters.h"
+#include "include/str_map.h"
 #include "KeyValueDB.h"
 #include "RocksDBStore.h"
 
+int string2bool(string val, bool &b_val)
+{
+  if (strcasecmp(val.c_str(), "false") == 0) {
+    b_val = false;
+    return 0;
+  } else if (strcasecmp(val.c_str(), "true") == 0) {
+    b_val = true;
+    return 0;
+  } else {
+    std::string err;
+    int b = strict_strtol(val.c_str(), 10, &err);
+    if (!err.empty())
+      return -EINVAL;
+    b_val = !!b;
+    return 0;
+  }
+}
+  
+int RocksDBStore::tryInterpret(const string key, const string val, rocksdb::Options &opt)
+{
+  if (key == "compaction_threads") {
+    std::string err;
+    int f = strict_sistrtoll(val.c_str(), &err);
+    if (!err.empty())
+      return -EINVAL;
+    //Low priority threadpool is used for compaction
+    opt.env->SetBackgroundThreads(f, rocksdb::Env::Priority::LOW);
+  } else if (key == "flusher_threads") {
+    std::string err;
+    int f = strict_sistrtoll(val.c_str(), &err);
+    if (!err.empty())
+      return -EINVAL;
+    //High priority threadpool is used for flusher
+    opt.env->SetBackgroundThreads(f, rocksdb::Env::Priority::HIGH);
+  } else if (key == "compact_on_mount") {
+    int ret = string2bool(val, compact_on_mount);
+    if (ret != 0)
+      return ret;
+  } else if (key == "disableWAL") {
+    int ret = string2bool(val, disableWAL);
+    if (ret != 0)
+      return ret;
+  } else {
+    //unrecognize config options.
+    return -EINVAL;
+  }
+  return 0;
+}
+
+int RocksDBStore::ParseOptionsFromString(const string opt_str, rocksdb::Options &opt)
+{
+  map<string, string> str_map;
+  int r = get_str_map(opt_str, "\n;", &str_map);
+  if (r < 0)
+    return r;
+  map<string, string>::iterator it;
+  for(it = str_map.begin(); it != str_map.end(); it++) {
+    string this_opt = it->first + "=" + it->second;
+    rocksdb::Status status = rocksdb::GetOptionsFromString(opt, this_opt , &opt); 
+    if (!status.ok()) {
+      //unrecognized by rocksdb, try to interpret by ourselves.
+      r = tryInterpret(it->first, it->second, opt);
+      if (r < 0) {
+	derr << status.ToString() << dendl;
+	return -EINVAL;
+      }
+    }
+  }
+  return 0;
+}
 
 int RocksDBStore::init(string _options_str)
 {
   options_str = _options_str;
-  //try parse options
   rocksdb::Options opt;
-  rocksdb::Status status = rocksdb::GetOptionsFromString(opt, options_str, &opt); 
-  if (!status.ok()) {
-    derr << status.ToString() << dendl;
+  //try parse options
+  int r = ParseOptionsFromString(options_str, opt); 
+  if (r != 0) {
     return -EINVAL;
   }
   return 0;
@@ -38,9 +108,9 @@ int RocksDBStore::do_open(ostream &out, bool create_if_missing)
 {
   rocksdb::Options opt;
   rocksdb::Status status;
-  status = rocksdb::GetOptionsFromString(opt, options_str, &opt); 
-  if (!status.ok()) {
-    derr << status.ToString() << dendl;
+
+  int r = ParseOptionsFromString(options_str, opt); 
+  if (r != 0) {
     return -EINVAL;
   }
   opt.create_if_missing = create_if_missing;
@@ -64,11 +134,11 @@ int RocksDBStore::do_open(ostream &out, bool create_if_missing)
   logger = plb.create_perf_counters();
   cct->get_perfcounters_collection()->add(logger);
 
- // if (g_conf->rocksdb_compact_on_mount) {
-   // derr << "Compacting rocksdb store..." << dendl;
-    //compact();
-    //derr << "Finished compacting rocksdb store" << dendl;
- // }
+  if (compact_on_mount) {
+    derr << "Compacting rocksdb store..." << dendl;
+    compact();
+    derr << "Finished compacting rocksdb store" << dendl;
+  }
   return 0;
 }
 
@@ -114,7 +184,7 @@ int RocksDBStore::submit_transaction(KeyValueDB::Transaction t)
   RocksDBTransactionImpl * _t =
     static_cast<RocksDBTransactionImpl *>(t.get());
   rocksdb::WriteOptions woptions;
-  //woptions.disableWAL = options.disableWAL;
+  woptions.disableWAL = disableWAL;
   rocksdb::Status s = db->Write(woptions, _t->bat);
   utime_t lat = ceph_clock_now(g_ceph_context) - start;
   logger->inc(l_rocksdb_txns);
@@ -129,7 +199,7 @@ int RocksDBStore::submit_transaction_sync(KeyValueDB::Transaction t)
     static_cast<RocksDBTransactionImpl *>(t.get());
   rocksdb::WriteOptions woptions;
   woptions.sync = true;
-  //woptions.disableWAL = options.disableWAL;
+  woptions.disableWAL = disableWAL;
   rocksdb::Status s = db->Write(woptions, _t->bat);
   utime_t lat = ceph_clock_now(g_ceph_context) - start;
   logger->inc(l_rocksdb_txns);
