@@ -43,9 +43,10 @@ class Task(object):
     def filter_hosts(self):
         """
         Look for a 'hosts' list in self.config. Each item in the list may
-        either be a role or a hostname. The task will then be run against only
-        those hosts which match one (or more) of the roles or hostnames
-        specified.
+        either be a role or a hostname. Builds a new Cluster object containing
+        only those hosts which match one (or more) of the roles or hostnames
+        specified. The filtered Cluster object is stored as self.cluster so
+        that the task may only run against those hosts.
         """
         if not hasattr(self.ctx, 'cluster'):
             return

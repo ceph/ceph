@@ -102,7 +102,7 @@ def fetch_branch(repo_path, branch):
     """
     Call "git fetch -p origin <branch>"
 
-    :param repo_path: The full path to the repository
+    :param repo_path: The full path to the repository on-disk
     :param branch:    The branch.
     :raises:          BranchNotFoundError if the branch is not found;
                       GitError for other errors
@@ -157,6 +157,41 @@ def validate_branch(branch):
         raise ValueError("Illegal branch name: '%s'" % branch)
 
 
+def fetch_repo(url, branch, bootstrap=None, lock=True):
+    """
+    Make sure we have a given project's repo checked out and up-to-date with
+    the current branch requested
+
+    :param url:        The URL to the repo
+    :param bootstrap:  An optional callback function to execute. Gets passed a
+                       dest_dir argument: the path to the repo on-disk.
+    :param branch:     The branch we want
+    :returns:          The destination path
+    """
+    # 'url/to/project.git' -> 'project'
+    name = url.split('/')[-1].split('.git')[0]
+    src_base_path = config.src_base_path
+    if not os.path.exists(src_base_path):
+        os.mkdir(src_base_path)
+    dest_path = os.path.join(src_base_path, '%s_%s' % (name, branch))
+    # only let one worker create/update the checkout at a time
+    lock_path = dest_path.rstrip('/') + '.lock'
+    with FileLock(lock_path, noop=not lock):
+        with safe_while(sleep=10, tries=60) as proceed:
+            while proceed():
+                try:
+                    enforce_repo_state(url, dest_path,
+                                       branch)
+                    if bootstrap:
+                        bootstrap(dest_path)
+                    break
+                except GitError:
+                    log.exception("Git error encountered; retrying")
+                except BootstrapError:
+                    log.exception("Bootstrap error encountered; retrying")
+    return dest_path
+
+
 def fetch_qa_suite(branch, lock=True):
     """
     Make sure ceph-qa-suite is checked out.
@@ -164,22 +199,8 @@ def fetch_qa_suite(branch, lock=True):
     :param branch: The branch to fetch
     :returns:      The destination path
     """
-    src_base_path = config.src_base_path
-    if not os.path.exists(src_base_path):
-        os.mkdir(src_base_path)
-    dest_path = os.path.join(src_base_path, 'ceph-qa-suite_' + branch)
-    qa_suite_url = os.path.join(config.ceph_git_base_url, 'ceph-qa-suite')
-    # only let one worker create/update the checkout at a time
-    lock_path = dest_path.rstrip('/') + '.lock'
-    with FileLock(lock_path, noop=not lock):
-        with safe_while(sleep=10, tries=60) as proceed:
-            while proceed():
-                try:
-                    enforce_repo_state(qa_suite_url, dest_path, branch)
-                    break
-                except GitError:
-                    log.exception("Git error encountered; retrying")
-    return dest_path
+    url = config.ceph_git_base_url + 'teuthology.git'
+    return fetch_repo(url, branch, lock=lock)
 
 
 def fetch_teuthology(branch, lock=True):
@@ -189,27 +210,8 @@ def fetch_teuthology(branch, lock=True):
     :param branch: The branch we want
     :returns:      The destination path
     """
-    src_base_path = config.src_base_path
-    if not os.path.exists(src_base_path):
-        os.mkdir(src_base_path)
-    dest_path = os.path.join(src_base_path, 'teuthology_' + branch)
-    # only let one worker create/update the checkout at a time
-    lock_path = dest_path.rstrip('/') + '.lock'
-    teuthology_git_upstream = config.ceph_git_base_url + \
-        'teuthology.git'
-    with FileLock(lock_path, noop=not lock):
-        with safe_while(sleep=10, tries=60) as proceed:
-            while proceed():
-                try:
-                    enforce_repo_state(teuthology_git_upstream, dest_path,
-                                       branch)
-                    bootstrap_teuthology(dest_path)
-                    break
-                except GitError:
-                    log.exception("Git error encountered; retrying")
-                except BootstrapError:
-                    log.exception("Bootstrap error encountered; retrying")
-    return dest_path
+    url = config.ceph_git_base_url + 'teuthology.git'
+    return fetch_repo(url, branch, bootstrap_teuthology, lock)
 
 
 def bootstrap_teuthology(dest_path):
