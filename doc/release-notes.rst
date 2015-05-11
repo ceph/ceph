@@ -140,6 +140,29 @@ Notable Changes
 * rpm: loosen ceph-test dependencies (Ken Dreyer)
 
 
+0.94.2 Hammer (draft)
+======================
+
+Notable changes
+---------------
+* librbd notification race condition on snap_create (#11342, Jason Dillaman)
+* Objectcacher setting max object counts too low (#7385, Jason Dillaman)
+* ImageWatcher should cancel in-flight ops on watch error (#11363, Jason Dillaman)
+* librbd: deadlock in image refresh (#5488, Jason Dillaman)
+* rgw - improve performance for large object  (multiple chunks) GET (#11322, Guang Yang)
+* Improve rgw HEAD request by avoiding read the body of the first chunk (#11001, Guang Yang)
+* rgw : make quota/gc thread configurable for starting (#11047, Guang Yang)
+* ceph-dencoder links to libtcmalloc, and shouldn't (#10691, Boris Ranto)
+* use a new disk as journal disk,ceph-disk prepare fail (#10983, Loic Dachary)
+* compilation error: No high-precision counter available  (armhf, powerpc..) (#11432, James Page)
+* rgw: civetweb should use unique request id (#10295, Orit Wasserman)
+* rgw: critical fixes for hammer (#11447, #11442, Yehuda Sadeh)
+* osd/ReplicatedPG: don't check order in finish_proxy_read (#11211, Zhiqiang Wang)
+* messenger: double clear of pipe in reaper (#11381, Haomai Wang)
+* rgw: init-radosgw: run RGW as root (#11453, Ken Dreyer)
+* tests: TestFlatIndex.cc races with TestLFNIndex.cc (#11217, Xinze Chi)
+
+
 
 v0.94.1 Hammer
 ==============
