@@ -174,7 +174,8 @@ TEST(SIStrToLL, WithUnits) {
 
   for (std::map<char,int>::iterator p = units.begin();
        p != units.end(); ++p) {
-    test_strict_sistrtoll_units("1024", p->first, p->second);
+    // the upper bound of uint64_t is 2^64 = 4E
+    test_strict_sistrtoll_units("4", p->first, p->second);
     test_strict_sistrtoll_units("1", p->first, p->second);
     test_strict_sistrtoll_units("0", p->first, p->second);
   }
@@ -208,4 +209,14 @@ TEST(SIStrToLL, Error) {
   test_strict_sistrtoll_err("BM");
   test_strict_sistrtoll_err("B0wef");
   test_strict_sistrtoll_err("0m");
+  test_strict_sistrtoll_err("-1"); // it returns uint64_t
+  test_strict_sistrtoll_err("-1K");
+  // the upper bound of uint64_t is 2^64 = 4E, so 1024E overflows
+  test_strict_sistrtoll_err("1024E"); // overflows after adding the suffix
 }
+
+/*
+ * Local Variables:
+ * compile-command: "cd .. ; make unittest_strtol && ./unittest_strtol"
+ * End:
+ */
