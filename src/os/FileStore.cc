@@ -1468,7 +1468,7 @@ int FileStore::mount()
     }
 
     if (superblock.omap_backend == "rocksdb")
-      omap_store->init(g_conf->omap_rocksdb_options);
+      omap_store->init(g_conf->filestore_rocksdb_options);
     else
       omap_store->init();
 

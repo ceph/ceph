@@ -710,7 +710,7 @@ OPTION(kinetic_use_ssl, OPT_BOOL, false) // whether to secure kinetic traffic wi
 // rocksdb options that will be used for keyvaluestore(if backend is rocksdb)
 OPTION(keyvaluestore_rocksdb_options, OPT_STR, "")
 // rocksdb options that will be used for omap(if omap_backend is rocksdb)
-OPTION(omap_rocksdb_options, OPT_STR, "")
+OPTION(filestore_rocksdb_options, OPT_STR, "")
 // rocksdb options that will be used in monstore
 OPTION(mon_rocksdb_options, OPT_STR, "")
 
