@@ -43,6 +43,7 @@ namespace rocksdb{
   class Slice;
   class WriteBatch;
   class Iterator;
+  struct Options;
 }
 /**
  * Uses RocksDB to implement the KeyValueDB interface
@@ -51,9 +52,8 @@ class RocksDBStore : public KeyValueDB {
   CephContext *cct;
   PerfCounters *logger;
   string path;
-  string options_str;
   rocksdb::DB *db;
-
+  string options_str;
   int do_open(ostream &out, bool create_if_missing);
 
   // manage async compactions
@@ -79,8 +79,12 @@ class RocksDBStore : public KeyValueDB {
 
 public:
   /// compact the underlying rocksdb store
+  bool compact_on_mount;
+  bool disableWAL;
   void compact();
 
+  int tryInterpret(const string key, const string val, rocksdb::Options &opt);
+  int ParseOptionsFromString(const string opt_str, rocksdb::Options &opt);
   static int _test_init(const string& dir);
   int init(string options_str);
   /// compact rocksdb for all keys with a given prefix
@@ -105,7 +109,9 @@ public:
     path(path),
     compact_queue_lock("RocksDBStore::compact_thread_lock"),
     compact_queue_stop(false),
-    compact_thread(this)
+    compact_thread(this),
+    compact_on_mount(false),
+    disableWAL(false)
   {}
 
   ~RocksDBStore();
