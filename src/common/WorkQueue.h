@@ -330,7 +330,7 @@ private:
 
 public:
   ThreadPool(CephContext *cct_, string nm, int n, const char *option = NULL);
-  ~ThreadPool();
+  virtual ~ThreadPool();
 
   /// return number of threads currently running
   int get_num_threads() {
