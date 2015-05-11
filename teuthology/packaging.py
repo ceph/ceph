@@ -141,6 +141,88 @@ def get_koji_task_result(task_id, remote, ctx):
     return task_result
 
 
+def get_koji_task_rpm_info(package, task_rpms):
+    """
+    Extracts information about a given package from the provided
+    rpm results of a koji task.
+
+    For example, if trying to retrieve the package 'kernel' from
+    the results of a task, the output would look like this:
+
+    {
+      'base_url': 'https://kojipkgs.fedoraproject.org/work/tasks/6745/9666745/',
+      'rpm_name': 'kernel-4.1.0-0.rc2.git2.1.fc23.x86_64.rpm',
+      'package_name': 'kernel',
+      'version': '4.1.0-0.rc2.git2.1.fc23.x86_64',
+    }
+
+    :param task_rpms:    A list of rpms from a tasks reusults.
+    :param package:      The name of the package to retrieve.
+    :returns:            A python dict containing info about the package.
+    """
+    result = dict()
+    result['package_name'] = package
+    found_pkg = _find_koji_task_result(package, task_rpms)
+    if not found_pkg:
+        raise RuntimeError("The package {pkg} was not found in: {rpms}".format(
+            pkg=package,
+            rpms=task_rpms,
+        ))
+
+    path, rpm_name = found_pkg.rsplit("/", 1)
+    result['rpm_name'] = rpm_name
+    result['base_url'] = "{koji_task_url}/{path}/".format(
+        koji_task_url=config.koji_task_url,
+        path=path,
+    )
+    # removes the package name from the beginning of rpm_name
+    version = rpm_name.split("{0}-".format(package), 1)[1]
+    # removes .rpm from the rpm_name
+    version = version.split(".rpm")[0]
+    result['version'] = version
+    return result
+
+
+def _find_koji_task_result(package, rpm_list):
+    """
+    Looks in the list of rpms from koji task results to see if
+    the package we are looking for is present.
+
+    Returns the full list item, including the path, if found.
+
+    If not found, returns None.
+    """
+    for rpm in rpm_list:
+        if package == _get_koji_task_result_package_name(rpm):
+            return rpm
+    return None
+
+
+def _get_koji_task_result_package_name(path):
+    """
+    Strips the package name from a koji rpm result.
+
+    This makes the assumption that rpm names are in the following
+    format: <package_name>-<version>.<release>.<arch>.rpm
+
+    For example, given a koji rpm result might look like:
+
+    tasks/6745/9666745/kernel-4.1.0-0.rc2.git2.1.fc23.x86_64.rpm
+
+    This method would return "kernel".
+    """
+    filename = path.split('/')[-1]
+    trimmed = []
+    for part in filename.split('-'):
+        # assumes that when the next part is not a digit
+        # we're past the name and at the version
+        if part[0].isdigit():
+            return '-'.join(trimmed)
+        trimmed.append(part)
+
+    return '-'.join(trimmed)
+
+
 def get_koji_build_info(build_id, remote, ctx):
     """
     Queries kojihub and retrieves information about

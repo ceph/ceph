@@ -141,6 +141,7 @@ class TeuthologyConfig(YamlConfig):
         'watchdog_interval': 120,
         'kojihub_url': 'http://koji.fedoraproject.org/kojihub',
         'kojiroot_url': 'http://kojipkgs.fedoraproject.org/packages',
+        'koji_task_url': 'https://kojipkgs.fedoraproject.org/work/',
     }
 
     def __init__(self, yaml_path=None):
