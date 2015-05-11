@@ -145,6 +145,29 @@ Notable Changes
 
 Notable changes
 ---------------
+* rgw: fix swift COPY headers (#10662, #10663, #11087, #10645, Radoslaw Zarzynski)
+* Hammer uclient checking (#11510, John Spray)
+* RGW Swift API: response for GET/HEAD on container does not contain the X-Timestamp header (#10938, Radoslaw Zarzynski)
+* civetweb is hitting a limit (number of threads 1024) (#10243, Yehuda Sadeh)
+* rgw: keystone token cache does not work correctly (#11125, Yehuda Sadeh)
+* rgw: shouldn't need to disable rgw_socket_path if frontend is configured (#11160, Yehuda Sadeh)
+* rgw: make swift responses of RGW return last-modified, content-length, x-trans-id headers.(#10650, Radoslaw Zarzynski)
+* RGW swift API: Response header of POST request for object does not contain content-length and x-trans-id headers (#10661, Radoslaw Zarzynski)
+* RGW Swift API: response for PUT on /container does not contain the mandatory Content-Length header when FCGI is used (#11036, #10971, Radoslaw Zarzynski)
+* RGW Swift API: wrong handling of empty metadata on Swift container (#11088, Radoslaw Zarzynski)
+* rgw: quota not respected in POST object (#11323, Sergey Arkhipov)
+* Queued AIO reference counters not properly updated (#11478, Jason Dillaman)
+* Periodic failure of TestLibRBD.DiffIterateStress (#11369, Jason Dillaman)
+* A retransmit of proxied flatten request can result in -EINVAL (Jason Dillaman)
+* tests: ceph-helpers kill_daemons fails when kill fails (#11398, Loic Dachary)
+* objecter: can get stuck in redirect loop if osdmap epoch == last_force_op_resend (#11026, Jianpeng Ma)
+* ceph-objectstore-tool should be in the ceph server package (#11376, Ken Dreyer)
+* src/ceph-disk : disk zap sgdisk invocation (#11143, Owen Synge)
+* object creation by write cannot use an offset on an erasure coded pool (#11507, Jianpeng Ma)
+* OSD::load_pgs: we need to handle the case where an upgrade from earlier versions which ignored non-existent pgs resurrects a pg with a prehistoric osdmap (#11429, Samuel Just)
+* mon: Total size of OSDs is a maginitude less than it is supposed to be. (#11534, Zhe Zhang)
+* RGW swift API: Response header of GET request for container does not contain X-Container-Object-Count, X-Container-Bytes-Used and x-trans-id headers (#10666, Dmytro Iurchenko)
+* mds: remove caps from revoking list when caps are voluntarily released (#11482, Yan, Zheng)
 * librbd notification race condition on snap_create (#11342, Jason Dillaman)
 * Objectcacher setting max object counts too low (#7385, Jason Dillaman)
 * ImageWatcher should cancel in-flight ops on watch error (#11363, Jason Dillaman)
@@ -161,7 +184,6 @@ Notable changes
 * messenger: double clear of pipe in reaper (#11381, Haomai Wang)
 * rgw: init-radosgw: run RGW as root (#11453, Ken Dreyer)
 * tests: TestFlatIndex.cc races with TestLFNIndex.cc (#11217, Xinze Chi)
-
 
 
 v0.94.1 Hammer
