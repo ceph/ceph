@@ -1074,19 +1074,20 @@ int AsyncConnection::_process_connection()
         lock.Unlock();
         async_msgr->learned_addr(peer_addr_for_me);
         if (async_msgr->cct->_conf->ms_inject_internal_delays) {
-          ldout(msgr->cct, 10) << __func__ << " sleep for "
-                              << async_msgr->cct->_conf->ms_inject_internal_delays << dendl;
-          utime_t t;
-          t.set_from_double(async_msgr->cct->_conf->ms_inject_internal_delays);
-          t.sleep();
+          if (rand() % async_msgr->cct->_conf->ms_inject_socket_failures == 0) {
+            ldout(msgr->cct, 10) << __func__ << " sleep for "
+                                 << async_msgr->cct->_conf->ms_inject_internal_delays << dendl;
+            utime_t t;
+            t.set_from_double(async_msgr->cct->_conf->ms_inject_internal_delays);
+            t.sleep();
+          }
         }
 
         lock.Lock();
         if (state != STATE_CONNECTING_WAIT_IDENTIFY_PEER) {
-          ldout(async_msgr->cct, 1) << __func__ << " state changed while learned_addr, mark_down must be called just now"
-                                    << dendl;
-          assert(state == STATE_CLOSED);
-          goto fail;
+          ldout(async_msgr->cct, 1) << __func__ << " state changed while learned_addr, mark_down or "
+                                    << " replacing must be happened just now" << dendl;
+          return 0;
         }
 
         ::encode(async_msgr->get_myaddr(), myaddrbl);
