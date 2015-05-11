@@ -288,6 +288,8 @@ void Objecter::init()
   timer.init();
   timer_lock.Unlock();
 
+  cct->_conf->add_observer(this);
+
   initialized.set(1);
 }
 
