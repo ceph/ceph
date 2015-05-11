@@ -772,7 +772,7 @@ inline ostream& operator<<(ostream& out, const osd_stat_t& s) {
 
 std::string pg_state_string(int state);
 std::string pg_vector_string(const vector<int32_t> &a);
-int pg_string_state(std::string state);
+int pg_string_state(const std::string& state);
 
 
 /*
