@@ -36,6 +36,7 @@
 #include "messages/MGenericMessage.h"
 #include "messages/MMonCommand.h"
 #include "messages/MMonCommandAck.h"
+#include "messages/MMonMetadata.h"
 #include "messages/MMonSync.h"
 #include "messages/MMonScrub.h"
 #include "messages/MMonProbe.h"
@@ -287,10 +288,9 @@ void Monitor::do_admin_command(string command, cmdmap_t& cmdmap, string format,
   }
   args = "[" + args + "]";
  
-  bool read_only = false;
-  if (command == "mon_status" || command == "quorum_status") {
-    read_only = true;
-  }
+  bool read_only = (command == "mon_status" ||
+		    command == "mon_metadata" ||
+		    command == "quorum_status");
 
   (read_only ? audit_clog->debug() : audit_clog->info())
     << "from='admin socket' entity='admin socket' "
@@ -737,6 +737,7 @@ int Monitor::init()
 
   // i'm ready!
   messenger->add_dispatcher_tail(this);
+
 
   bootstrap();
 
@@ -1857,6 +1858,7 @@ void Monitor::win_election(epoch_t epoch, set<int>& active, uint64_t features,
     health_tick_start();
     do_health_to_clog_interval();
   }
+  collect_sys_info(&metadata[rank], g_ceph_context);
 }
 
 void Monitor::lose_election(epoch_t epoch, set<int> &q, int l, uint64_t features) 
@@ -1878,6 +1880,11 @@ void Monitor::lose_election(epoch_t epoch, set<int> &q, int l, uint64_t features
   logger->inc(l_mon_election_lose);
 
   finish_election();
+
+  Metadata sys_info;
+  collect_sys_info(&sys_info, g_ceph_context);
+  messenger->send_message(new MMonMetadata(sys_info),
+			  monmap->get_inst(get_leader()));
 }
 
 void Monitor::finish_election()
@@ -2837,6 +2844,45 @@ void Monitor::handle_command(MMonCommand *m)
     ss2 << "report " << rdata.crc32c(6789);
     rs = ss2.str();
     r = 0;
+  } else if (prefix == "node ls") {
+    string node_type("all");
+    cmd_getval(g_ceph_context, cmdmap, "type", node_type);
+    if (!f)
+      f.reset(Formatter::create("json-pretty"));
+    if (node_type == "all") {
+      f->open_object_section("nodes");
+      print_nodes(f.get(), ds);
+      osdmon()->print_nodes(f.get());
+      mdsmon()->print_nodes(f.get());
+      f->close_section();
+    } else if (node_type == "mon") {
+      print_nodes(f.get(), ds);
+    } else if (node_type == "osd") {
+      osdmon()->print_nodes(f.get());
+    } else if (node_type == "mds") {
+      mdsmon()->print_nodes(f.get());
+    }
+    f->flush(ds);
+    rdata.append(ds);
+    rs = "";
+    r = 0;
+  } else if (prefix == "mon_metadata") {
+    string name;
+    cmd_getval(g_ceph_context, cmdmap, "id", name);
+    int mon = monmap->get_rank(name);
+    if (mon < 0) {
+      rs = "requested mon not found";
+      r = -ENOENT;
+      goto out;
+    }
+    if (!f)
+      f.reset(Formatter::create("json-pretty"));
+    f->open_object_section("mon_metadata");
+    r = get_mon_metadata(mon, f.get(), ds);
+    f->close_section();
+    f->flush(ds);
+    rdata.append(ds);
+    rs = "";
   } else if (prefix == "quorum_status") {
     // make sure our map is readable and up to date
     if (!is_leader() && !is_peon()) {
@@ -3410,6 +3456,9 @@ void Monitor::dispatch(MonSession *s, Message *m, const bool src_is_mon)
     case CEPH_MSG_MON_GET_MAP:
       handle_mon_get_map(static_cast<MMonGetMap*>(m));
       break;
+
+    case CEPH_MSG_MON_METADATA:
+      return handle_mon_metadata(static_cast<MMonMetadata*>(m));
 
     default:
       dealt_with = false;
@@ -4185,7 +4234,88 @@ void Monitor::handle_mon_get_map(MMonGetMap *m)
   m->put();
 }
 
+void Monitor::handle_mon_metadata(MMonMetadata *m)
+{
+  if (is_leader()) {
+    dout(10) << __func__ << dendl;
+    update_mon_metadata(m->get_source().num(), m->data);
+  }
+  m->put();
+}
 
+void Monitor::update_mon_metadata(int from, const Metadata& m)
+{
+  metadata[from] = m;
+
+  bufferlist bl;
+  int err = store->get(MONITOR_STORE_PREFIX, "last_metadata", bl);
+  map<int, Metadata> last_metadata;
+  if (!err) {
+    bufferlist::iterator iter = bl.begin();
+    ::decode(last_metadata, iter);
+    metadata.insert(last_metadata.begin(), last_metadata.end());
+  }
+
+  MonitorDBStore::TransactionRef t = paxos->get_pending_transaction();
+  bl.clear();
+  ::encode(metadata, bl);
+  t->put(MONITOR_STORE_PREFIX, "last_metadata", bl);
+  paxos->trigger_propose();
+}
+
+int Monitor::load_metadata(map<int, Metadata>& metadata)
+{
+  bufferlist bl;
+  int r = store->get(MONITOR_STORE_PREFIX, "last_metadata", bl);
+  if (r)
+    return r;
+  bufferlist::iterator it = bl.begin();
+  ::decode(metadata, it);
+  return 0;
+}
+
+int Monitor::get_mon_metadata(int mon, Formatter *f, ostream& err)
+{
+  assert(f);
+  map<int, Metadata> last_metadata;
+  if (int r = load_metadata(last_metadata)) {
+    err << "Unable to load metadata";
+    return r;
+  }
+  if (!last_metadata.count(mon)) {
+    err << "mon." << mon << " not found";
+    return -EINVAL;
+  }
+  const Metadata& m = last_metadata[mon];
+  for (Metadata::const_iterator p = m.begin(); p != m.end(); ++p) {
+    f->dump_string(p->first.c_str(), p->second);
+  }
+  return 0;
+}
+
+int Monitor::print_nodes(Formatter *f, ostream& err)
+{
+  map<int, Metadata> metadata;
+  if (int r = load_metadata(metadata)) {
+    err << "Unable to load metadata.\n";
+    return r;
+  }
+
+  map<string, list<int> > mons;	// hostname => mon
+  for (map<int, Metadata>::iterator it = metadata.begin();
+       it != metadata.end(); ++it) {
+    const Metadata& m = it->second;
+    Metadata::const_iterator hostname = m.find("hostname");
+    if (hostname == m.end()) {
+      // not likely though
+      continue;
+    }
+    mons[hostname->second].push_back(it->first);
+  }
+
+  dump_services(f, mons, "mon");
+  return 0;
+}
 
 // ----------------------------------------------
 // scrub

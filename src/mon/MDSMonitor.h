@@ -130,16 +130,23 @@ public:
   void tick();     // check state, take actions
 
   void dump_info(Formatter *f);
+  int dump_metadata(const string& who, Formatter *f, ostream& err);
+  int print_nodes(Formatter *f);
 
   void check_subs();
   void check_sub(Subscription *sub);
 
 private:
+  void update_metadata(mds_gid_t gid, const Metadata& metadata);
+  void remove_from_metadata(MonitorDBStore::TransactionRef t);
+  int load_metadata(map<mds_gid_t, Metadata>& m);
+
   // MDS daemon GID to latest health state from that GID
   std::map<uint64_t, MDSHealth> pending_daemon_health;
   std::set<uint64_t> pending_daemon_health_rm;
 
   int _check_pool(const int64_t pool_id, std::stringstream *ss) const;
+  mds_gid_t gid_from_arg(const std::string& arg, std::ostream& err);
 };
 
 #endif

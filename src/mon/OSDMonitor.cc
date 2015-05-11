@@ -1124,13 +1124,12 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   pending_metadata_rm.clear();
 }
 
-int OSDMonitor::dump_osd_metadata(int osd, Formatter *f, ostream *err)
+int OSDMonitor::load_metadata(int osd, map<string, string>& m, ostream *err)
 {
   bufferlist bl;
   int r = mon->store->get(OSD_METADATA_PREFIX, stringify(osd), bl);
   if (r < 0)
     return r;
-  map<string,string> m;
   try {
     bufferlist::iterator p = bl.begin();
     ::decode(m, p);
@@ -1140,9 +1139,37 @@ int OSDMonitor::dump_osd_metadata(int osd, Formatter *f, ostream *err)
       *err << "osd." << osd << " metadata is corrupt";
     return -EIO;
   }
+  return 0;
+}
+
+int OSDMonitor::dump_osd_metadata(int osd, Formatter *f, ostream *err)
+{
+  map<string,string> m;
+  if (int r = load_metadata(osd, m, err))
+    return r;
   for (map<string,string>::iterator p = m.begin(); p != m.end(); ++p)
     f->dump_string(p->first.c_str(), p->second);
   return 0;
+}
+
+void OSDMonitor::print_nodes(Formatter *f)
+{
+  // group OSDs by their hosts
+  map<string, list<int> > osds; // hostname => osd
+  for (int osd = 0; osd <= osdmap.get_max_osd(); osd++) {
+    map<string, string> m;
+    if (load_metadata(osd, m, NULL)) {
+      continue;
+    }
+    map<string, string>::iterator hostname = m.find("hostname");
+    if (hostname == m.end()) {
+      // not likely though
+      continue;
+    }
+    osds[hostname->second].push_back(osd);
+  }
+
+  dump_services(f, osds, "osd");
 }
 
 void OSDMonitor::share_map_with_random_osd()

@@ -559,10 +559,17 @@ function test_mon_misc()
   ceph health --format json-pretty
   ceph health detail --format xml-pretty
 
+  ceph node ls
+  for t in mon osd mds ; do
+      ceph node ls $t
+  done
+
   ceph_watch_start
   mymsg="this is a test log message $$.$(date)"
   ceph log "$mymsg"
   ceph_watch_wait "$mymsg"
+
+  ceph mon_metadata a
 }
 
 function check_mds_active()
@@ -690,6 +697,9 @@ function test_mon_mds()
   ceph mds compat show
   expect_false ceph mds deactivate 2
   ceph mds dump
+  for mds_gid in $(get_mds_gids) ; do
+      ceph mds metadata $mds_id
+  done
   # XXX mds fail, but how do you undo it?
   mdsmapfile=$TMPDIR/mdsmap.$$
   current_epoch=$(ceph mds getmap -o $mdsmapfile --no-log-to-stderr 2>&1 | grep epoch | sed 's/.*epoch //')
