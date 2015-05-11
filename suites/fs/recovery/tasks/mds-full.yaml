@@ -4,6 +4,7 @@ overrides:
     log-whitelist:
       - OSD full dropping all updates
       - OSD near full
+      - is full \(reached quota
     conf:
       osd:
         osd mon report interval max: 5
