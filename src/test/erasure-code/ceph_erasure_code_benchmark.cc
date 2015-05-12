@@ -52,6 +52,8 @@ int ErasureCodeBench::setup(int argc, char** argv) {
      "run either encode or decode")
     ("erasures,e", po::value<int>()->default_value(1),
      "number of erasures when decoding")
+    ("erased", po::value<vector<int> >(),
+     "erased chunk (repeat if more than one chunk is erased)")
     ("erasures-generation,E", po::value<string>()->default_value("random"),
      "If set to 'random', pick the number of chunks to recover (as specified by "
      " --erasures) at random. If set to 'exhaustive' try all combinations of erasures "
@@ -119,6 +121,8 @@ int ErasureCodeBench::setup(int argc, char** argv) {
     exhaustive_erasures = true;
   else
     exhaustive_erasures = false;
+  if (vm.count("erased") > 0)
+    erased = vm["erased"].as<vector<int> >();
 
   k = atoi(parameters["k"].c_str());
   m = atoi(parameters["m"].c_str());
@@ -282,10 +286,23 @@ int ErasureCodeBench::decode()
 
   set<int> want_to_read = want_to_encode;
 
+  if (erased.size() > 0) {
+    for (vector<int>::const_iterator i = erased.begin();
+	 i != erased.end();
+	 i++)
+      encoded.erase(*i);
+    display_chunks(encoded, erasure_code->get_chunk_count());
+  }
+
   utime_t begin_time = ceph_clock_now(g_ceph_context);
   for (int i = 0; i < max_iterations; i++) {
     if (exhaustive_erasures) {
       code = decode_erasures(encoded, encoded, 0, erasures, erasure_code);
+      if (code)
+	return code;
+    } else if (erased.size() > 0) {
+      map<int,bufferlist> decoded;
+      code = erasure_code->decode(want_to_read, encoded, &decoded);
       if (code)
 	return code;
     } else {
