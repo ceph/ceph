@@ -1781,6 +1781,12 @@ void RGWPutObj::execute()
      */
     bool need_to_wait = (ofs == 0) && multipart;
 
+    bufferlist orig_data;
+
+    if (need_to_wait) {
+      orig_data = data;
+    }
+
     ret = put_data_and_throttle(processor, data, ofs, (need_calc_md5 ? &hash : NULL), need_to_wait);
     if (ret < 0) {
       if (!need_to_wait || ret != -EEXIST) {
@@ -1789,6 +1795,9 @@ void RGWPutObj::execute()
       }
 
       ldout(s->cct, 5) << "NOTICE: processor->throttle_data() returned -EEXIST, need to restart write" << dendl;
+
+      /* restore original data */
+      data.swap(orig_data);
 
       /* restart processing with different oid suffix */
 
