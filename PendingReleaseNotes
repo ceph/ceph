@@ -8,3 +8,7 @@ v9.0.4
 * 'ceph scrub', 'ceph compact' and 'ceph sync force are now DEPRECATED.  Users
   should instead use 'ceph mon scrub', 'ceph mon compact' and
   'ceph mon sync force'.
+
+* 'ceph mon_metadata' should now be used as 'ceph mon metadata'. There is no
+  need to deprecate this command (same major release since it was first
+  introduced).
