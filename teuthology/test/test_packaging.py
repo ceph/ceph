@@ -4,6 +4,27 @@ from mock import patch, Mock
 
 from teuthology import packaging
 
+KOJI_TASK_RPMS_MATRIX = [
+    ('tasks/6745/9666745/kernel-4.1.0-0.rc2.git2.1.fc23.x86_64.rpm', 'kernel'),
+    ('tasks/6745/9666745/kernel-modules-4.1.0-0.rc2.git2.1.fc23.x86_64.rpm', 'kernel-modules'),
+    ('tasks/6745/9666745/kernel-tools-4.1.0-0.rc2.git2.1.fc23.x86_64.rpm', 'kernel-tools'),
+    ('tasks/6745/9666745/kernel-tools-libs-devel-4.1.0-0.rc2.git2.1.fc23.x86_64.rpm', 'kernel-tools-libs-devel'),
+    ('tasks/6745/9666745/kernel-headers-4.1.0-0.rc2.git2.1.fc23.x86_64.rpm', 'kernel-headers'),
+    ('tasks/6745/9666745/kernel-tools-debuginfo-4.1.0-0.rc2.git2.1.fc23.x86_64.rpm', 'kernel-tools-debuginfo'),
+    ('tasks/6745/9666745/kernel-debuginfo-common-x86_64-4.1.0-0.rc2.git2.1.fc23.x86_64.rpm', 'kernel-debuginfo-common-x86_64'),
+    ('tasks/6745/9666745/perf-debuginfo-4.1.0-0.rc2.git2.1.fc23.x86_64.rpm', 'perf-debuginfo'),
+    ('tasks/6745/9666745/kernel-modules-extra-4.1.0-0.rc2.git2.1.fc23.x86_64.rpm', 'kernel-modules-extra'),
+    ('tasks/6745/9666745/kernel-tools-libs-4.1.0-0.rc2.git2.1.fc23.x86_64.rpm', 'kernel-tools-libs'),
+    ('tasks/6745/9666745/kernel-core-4.1.0-0.rc2.git2.1.fc23.x86_64.rpm', 'kernel-core'),
+    ('tasks/6745/9666745/kernel-debuginfo-4.1.0-0.rc2.git2.1.fc23.x86_64.rpm', 'kernel-debuginfo'),
+    ('tasks/6745/9666745/python-perf-4.1.0-0.rc2.git2.1.fc23.x86_64.rpm', 'python-perf'),
+    ('tasks/6745/9666745/kernel-devel-4.1.0-0.rc2.git2.1.fc23.x86_64.rpm', 'kernel-devel'),
+    ('tasks/6745/9666745/python-perf-debuginfo-4.1.0-0.rc2.git2.1.fc23.x86_64.rpm', 'python-perf-debuginfo'),
+    ('tasks/6745/9666745/perf-4.1.0-0.rc2.git2.1.fc23.x86_64.rpm', 'perf'),
+]
+
+KOJI_TASK_RPMS = [rpm[0] for rpm in KOJI_TASK_RPMS_MATRIX]
+
 
 class TestPackaging(object):
 
@@ -146,6 +167,56 @@ class TestPackaging(object):
         with pytest.raises(RuntimeError):
             packaging.get_koji_build_info(1, m_remote, m_ctx)
 
+    @patch("teuthology.packaging.config")
+    def test_get_koji_task_result_success(self, m_config):
+        m_config.kojihub_url = "http://kojihub.com"
+        m_proc = Mock()
+        expected = dict(foo="bar")
+        m_proc.exitstatus = 0
+        m_proc.stdout.getvalue.return_value = str(expected)
+        m_remote = Mock()
+        m_remote.run.return_value = m_proc
+        result = packaging.get_koji_task_result(1, m_remote, dict())
+        assert result == expected
+        args, kwargs = m_remote.run.call_args
+        expected_args = [
+            'python', '-c',
+            'import koji; '
+            'hub = koji.ClientSession("http://kojihub.com"); '
+            'print hub.getTaskResult(1)',
+        ]
+        assert expected_args == kwargs['args']
+
+    @patch("teuthology.packaging.config")
+    def test_get_koji_task_result_fail(self, m_config):
+        m_config.kojihub_url = "http://kojihub.com"
+        m_proc = Mock()
+        m_proc.exitstatus = 1
+        m_remote = Mock()
+        m_remote.run.return_value = m_proc
+        m_ctx = Mock()
+        m_ctx.summary = dict()
+        with pytest.raises(RuntimeError):
+            packaging.get_koji_task_result(1, m_remote, m_ctx)
+
+    @patch("teuthology.packaging.config")
+    def test_get_koji_task_rpm_info_success(self, m_config):
+        m_config.koji_task_url = "http://kojihub.com/work"
+        expected = dict(
+            base_url="http://kojihub.com/work/tasks/6745/9666745/",
+            version="4.1.0-0.rc2.git2.1.fc23.x86_64",
+            rpm_name="kernel-4.1.0-0.rc2.git2.1.fc23.x86_64.rpm",
+            package_name="kernel",
+        )
+        result = packaging.get_koji_task_rpm_info('kernel', KOJI_TASK_RPMS)
+        assert expected == result
+
+    @patch("teuthology.packaging.config")
+    def test_get_koji_task_rpm_info_fail(self, m_config):
+        m_config.koji_task_url = "http://kojihub.com/work"
+        with pytest.raises(RuntimeError):
+            packaging.get_koji_task_rpm_info('ceph', KOJI_TASK_RPMS)
+
     def test_get_package_version_deb_found(self):
         remote = Mock()
         remote.os.package_type = "deb"
@@ -204,3 +275,7 @@ class TestPackaging(object):
         remote.run.return_value = proc
         result = packaging.get_package_version(remote, "httpd")
         assert result is None
+
+    @pytest.mark.parametrize("input, expected", KOJI_TASK_RPMS_MATRIX)
+    def test_get_koji_task_result_package_name(self, input, expected):
+        assert packaging._get_koji_task_result_package_name(input) == expected

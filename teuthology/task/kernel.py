@@ -21,6 +21,8 @@ from ..packaging import (
     get_koji_build_info,
     get_kojiroot_base_url,
     get_koji_package_name,
+    get_koji_task_rpm_info,
+    get_koji_task_result,
 )
 
 log = logging.getLogger(__name__)
@@ -67,7 +69,7 @@ def normalize_config(ctx, config):
     """
     if config is None or \
             len(filter(lambda x: x in ['tag', 'branch', 'sha1', 'kdb',
-                                       'deb', 'rpm', 'koji'],
+                                       'deb', 'rpm', 'koji', 'koji_task'],
                        config.keys())) == len(config.keys()):
         new_config = {}
         if config is None:
@@ -192,7 +194,10 @@ def install_firmware(ctx, config):
         (role_remote,) = ctx.cluster.only(role).remotes.keys()
         package_type = teuthology.get_system_type(role_remote)
         if package_type == 'rpm':
-            return
+            role_remote.run(args=[
+                'sudo', 'yum', 'upgrade', '-y', 'linux-firmware',
+            ])
+            continue
         log.info('Installing linux-firmware on {role}...'.format(role=role))
         role_remote.run(
             args=[
@@ -272,14 +277,25 @@ def download_kernel(ctx, config):
         if isinstance(src, dict):
             # we're downloading a kernel from koji, the src dict here
             # is the build_info retrieved from koji using get_koji_build_info
-            build_id = src["id"]
-            log.info("Downloading kernel with build_id {build_id} on {role}...".format(
-                build_id=build_id,
-                role=role
-            ))
-            needs_download = True
-            baseurl = get_kojiroot_base_url(src)
-            pkg_name = get_koji_package_name("kernel", src)
+            if src.get("id"):
+                build_id = src["id"]
+                log.info("Downloading kernel with build_id {build_id} on {role}...".format(
+                    build_id=build_id,
+                    role=role
+                ))
+                needs_download = True
+                baseurl = get_kojiroot_base_url(src)
+                pkg_name = get_koji_package_name("kernel", src)
+            elif src.get("task_id"):
+                needs_download = True
+                log.info("Downloading kernel with task_id {task_id} on {role}...".format(
+                    task_id=src["task_id"],
+                    role=role
+                ))
+                baseurl = src["base_url"]
+                # this var is also poorly named as it's not the package name,
+                # but the full name of the rpm file to download.
+                pkg_name = src["rpm_name"]
         elif src.find('/') >= 0:
             # local package - src is path
             log.info('Copying kernel package {path} to {role}...'.format(
@@ -985,12 +1001,22 @@ def task(ctx, config):
         kernel:
           koji: 416058
 
+    To install from a koji task_id::
+
+        kernel:
+          koji_task: 9678206
+
     When installing from koji you also need to set the urls for koji hub
     and the koji root in your teuthology.yaml config file. These are shown
     below with their default values::
 
         kojihub_url: http://koji.fedoraproject.org/kojihub
         kojiroot_url: http://kojipkgs.fedoraproject.org/packages
+
+    When installing from a koji task_id you also need to set koji_task_url,
+    which is the base url used to download rpms from koji task results::
+
+        koji_task_url: https://kojipkgs.fedoraproject.org/work/
 
     To install local rpm (target should be an rpm system)::
 
@@ -1074,9 +1100,10 @@ def task(ctx, config):
             if need_to_install_distro(ctx, role):
                 need_install[role] = 'distro'
                 need_version[role] = 'distro'
-        elif role_config.get("koji", None):
+        elif role_config.get("koji") or role_config.get('koji_task'):
             # installing a kernel from koji
             build_id = role_config.get("koji")
+            task_id = role_config.get("koji_task")
             if role_remote.os.package_type != "rpm":
                 msg = (
                     "Installing a kernel from koji is only supported "
@@ -1092,12 +1119,27 @@ def task(ctx, config):
             # but I'm not sure where, so we'll leave it here for now.
             install_package('koji', role_remote)
 
-            # get information about this build from koji
-            build_info = get_koji_build_info(build_id, role_remote, ctx)
-            version = "{ver}-{rel}.x86_64".format(
-                ver=build_info["version"],
-                rel=build_info["release"]
-            )
+            if build_id:
+                # get information about this build from koji
+                build_info = get_koji_build_info(build_id, role_remote, ctx)
+                version = "{ver}-{rel}.x86_64".format(
+                    ver=build_info["version"],
+                    rel=build_info["release"]
+                )
+            elif task_id:
+                # get information about results of this task from koji
+                task_result = get_koji_task_result(task_id, role_remote, ctx)
+                # this is not really 'build_info', it's a dict of information
+                # about the kernel rpm from the task results, but for the sake
+                # of reusing the code below I'll still call it that.
+                build_info = get_koji_task_rpm_info(
+                    'kernel',
+                    task_result['rpms']
+                )
+                # add task_id so we can know later that we're installing
+                # from a task and not a build.
+                build_info["task_id"] = task_id
+                version = build_info["version"]
 
             if need_to_install(ctx, role, version):
                 need_install[role] = build_info
