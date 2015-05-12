@@ -578,7 +578,7 @@ function test_mon_misc()
   ceph log "$mymsg"
   ceph_watch_wait "$mymsg"
 
-  ceph mon_metadata a
+  ceph mon metadata a
   ceph node ls
 }
 
