@@ -82,7 +82,7 @@ extern int rgw_store_user_attrs(RGWRados *store,
  * returns: 0 on success, -ERR# on failure (including nonexistence)
  */
 extern int rgw_get_user_info_by_uid(RGWRados *store,
-                                    rgw_user& user_id,
+                                    const rgw_user& user_id,
                                     RGWUserInfo& info,
                                     RGWObjVersionTracker *objv_tracker = NULL,
                                     time_t *pmtime                     = NULL,
