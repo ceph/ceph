@@ -47,6 +47,7 @@ Prepare:
  - triggered by administrator or ceph-deploy, e.g.  'ceph-disk <data disk> [journal disk]
 
 Activate:
+ - if encrypted, map the dmcrypt volume
  - mount the volume in a temp location
  - allocate an osd id (if needed)
  - remount in the correct location /var/lib/ceph/osd/$cluster-$id
@@ -2113,7 +2114,20 @@ def mount_activate(
     dev,
     activate_key_template,
     init,
+    dmcrypt,
+    dmcrypt_key_dir,
     ):
+
+    if dmcrypt:
+            # dev corresponds to a dmcrypt cyphertext device - map it before
+            # proceeding.
+            rawdev = dev
+            ptype = get_partition_type(rawdev)
+            if ptype not in [DMCRYPT_OSD_UUID]:
+                raise Error('activate --dmcrypt called for invalid dev %s' % (dev))
+            part_uuid = get_partition_uuid(rawdev)
+            dmcrypt_key_path = os.path.join(dmcrypt_key_dir, part_uuid)
+            dev = dmcrypt_map(rawdev, dmcrypt_key_path, part_uuid)
 
     try:
         fstype = detect_fstype(dev=dev)
@@ -2372,6 +2386,8 @@ def main_activate(args):
                 dev=args.path,
                 activate_key_template=args.activate_key_template,
                 init=args.mark_init,
+                dmcrypt=args.dmcrypt,
+                dmcrypt_key_dir=args.dmcrypt_key_dir,
                 )
             osd_data = get_mount_point(cluster, osd_id)
 
@@ -2446,15 +2462,34 @@ def main_activate_journal(args):
     cluster = None
     osd_id = None
     osd_uuid = None
+    dev = None
     activate_lock.acquire()  # noqa
     try:
-        osd_uuid = get_journal_osd_uuid(args.dev)
+        if args.dmcrypt:
+            # journal dev corresponds to a dmcrypt cyphertext device - map
+            # it before proceeding.
+            rawdev = args.dev
+            ptype = get_partition_type(rawdev)
+            if ptype not in [DMCRYPT_JOURNAL_UUID]:
+                raise Error('activate-journal --dmcrypt called for invalid dev %s' % (rawdev))
+            part_uuid = get_partition_uuid(rawdev)
+            dmcrypt_key_path = os.path.join(args.dmcrypt_key_dir, part_uuid)
+            dev = dmcrypt_map(rawdev, dmcrypt_key_path, partd_uuid)
+        else:
+            dev = args.dev
+
+        # FIXME: For an encrypted journal dev, does this return the cyphertext
+        # or plaintext dev uuid!? Also, if the journal is encrypted, is the data
+        # partition also always encrypted, or are mixed pairs supported!?
+        osd_uuid = get_journal_osd_uuid(dev)
         path = os.path.join('/dev/disk/by-partuuid/', osd_uuid.lower())
 
         (cluster, osd_id) = mount_activate(
             dev=path,
             activate_key_template=args.activate_key_template,
             init=args.mark_init,
+            dmcrypt=args.dmcrypt,
+            dmcrypt_key_dir=args.dmcrypt_key_dir,
             )
 
         start_daemon(
@@ -2490,10 +2525,13 @@ def main_activate_all(args):
             LOG.info('Activating %s', path)
             activate_lock.acquire()  # noqa
             try:
+                # never map dmcrypt cyphertext devices
                 (cluster, osd_id) = mount_activate(
                     dev=path,
                     activate_key_template=args.activate_key_template,
                     init=args.mark_init,
+                    dmcrypt=False,
+                    dmcrypt_key_dir='',
                     )
                 start_daemon(
                     cluster=cluster,
@@ -3061,6 +3099,17 @@ def parse_args():
         nargs='?',
         help='path to block device or directory',
         )
+    activate_parser.add_argument(
+        '--dmcrypt',
+        action='store_true', default=None,
+        help='map DATA and/or JOURNAL devices with dm-crypt',
+        )
+    activate_parser.add_argument(
+        '--dmcrypt-key-dir',
+        metavar='KEYDIR',
+        default='/etc/ceph/dmcrypt-keys',
+        help='directory where dm-crypt keys are stored',
+        )
     activate_parser.set_defaults(
         activate_key_template='{statedir}/bootstrap-osd/{cluster}.keyring',
         func=main_activate,
@@ -3084,6 +3133,17 @@ def parse_args():
         help='init system to manage this dir',
         default='auto',
         choices=INIT_SYSTEMS,
+        )
+    activate_journal_parser.add_argument(
+        '--dmcrypt',
+        action='store_true', default=None,
+        help='map DATA and/or JOURNAL devices with dm-crypt',
+        )
+    activate_journal_parser.add_argument(
+        '--dmcrypt-key-dir',
+        metavar='KEYDIR',
+        default='/etc/ceph/dmcrypt-keys',
+        help='directory where dm-crypt keys are stored',
         )
     activate_journal_parser.set_defaults(
         activate_key_template='{statedir}/bootstrap-osd/{cluster}.keyring',
