@@ -1402,9 +1402,17 @@ void CDir::fetch(MDSInternalContextBase *c, const string& want_dn, bool ignore_a
   // unlinked directory inode shouldn't have any entry
   if (inode->inode.nlink == 0 && !inode->snaprealm) {
     dout(7) << "fetch dirfrag for unlinked directory, mark complete" << dendl;
-    if (get_version() == 0)
+    if (get_version() == 0) {
       set_version(1);
+
+      if (state_test(STATE_REJOINUNDEF)) {
+	assert(cache->mds->is_rejoin());
+	state_clear(STATE_REJOINUNDEF);
+	cache->opened_undef_dirfrag(this);
+      }
+    }
     mark_complete();
+
     if (c)
       cache->mds->queue_waiter(c);
     return;
