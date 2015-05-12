@@ -29,6 +29,7 @@
 #include "RecoveryQueue.h"
 #include "StrayManager.h"
 #include "MDSContext.h"
+#include "MDSMap.h"
 
 #include "messages/MClientRequest.h"
 #include "messages/MMDSSlaveRequest.h"
@@ -162,6 +163,9 @@ public:
   int num_caps;
 
   unsigned max_dir_commit_size;
+
+  static ceph_file_layout gen_default_file_layout(const MDSMap &mdsmap);
+  static ceph_file_layout gen_default_log_layout(const MDSMap &mdsmap);
 
   ceph_file_layout default_file_layout;
   ceph_file_layout default_log_layout;

@@ -247,7 +247,7 @@ public:
       version_t version = 1;
       ::encode(version, new_bl);
     }
-    table_inst.encode(new_bl);
+    table_inst.encode_state(new_bl);
 
     // Write out new table
     int r = io->write_full(object_name, new_bl);
@@ -353,6 +353,7 @@ public:
     // Compose a transaction to clear and write header
     librados::ObjectWriteOperation op;
     op.omap_clear();
+    op.set_op_flags(librados::OP_FAILOK);
     op.omap_set_header(header_bl);
     
     return io->operate(object_name, &op);
