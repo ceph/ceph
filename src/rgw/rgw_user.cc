@@ -279,7 +279,7 @@ int rgw_get_user_info_from_index(RGWRados *store, string& key, rgw_bucket& bucke
  * returns: 0 on success, -ERR# on failure (including nonexistence)
  */
 int rgw_get_user_info_by_uid(RGWRados *store,
-                             rgw_user& uid,
+                             const rgw_user& uid,
                              RGWUserInfo& info,
                              RGWObjVersionTracker *objv_tracker,
                              time_t *pmtime,

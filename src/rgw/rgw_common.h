@@ -1107,6 +1107,8 @@ struct req_state {
 
    req_info info;
 
+   bool librgw_user_command;
+
    req_state(CephContext *_cct, class RGWEnv *e);
    ~req_state();
 };
