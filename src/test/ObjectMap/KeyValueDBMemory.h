@@ -19,7 +19,7 @@ public:
   KeyValueDBMemory(KeyValueDBMemory *db) : db(db->db) { }
   virtual ~KeyValueDBMemory() { }
 
-  virtual int init() {
+  virtual int init(string _opt) {
     return 0;
   }
   virtual int open(ostream &out) {
