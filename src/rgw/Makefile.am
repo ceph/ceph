@@ -105,6 +105,7 @@ radosgw_SOURCES = \
 	rgw/rgw_swift.cc \
 	rgw/rgw_swift_auth.cc \
 	rgw/rgw_loadgen.cc \
+	rgw/rgw_rest_lib.cc \
 	rgw/rgw_main.cc
 radosgw_CFLAGS = -I$(srcdir)/civetweb/include
 radosgw_LDADD = $(LIBRGW) $(LIBCIVETWEB) $(LIBRGW_DEPS) $(RESOLV_LIBS) $(CEPH_GLOBAL)
