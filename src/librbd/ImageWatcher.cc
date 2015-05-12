@@ -380,6 +380,7 @@ bool ImageWatcher::release_lock()
 
   m_image_ctx.owner_lock.put_write();
   m_image_ctx.cancel_async_requests();
+  m_image_ctx.flush_async_operations();
   m_image_ctx.owner_lock.get_write();
 
   if (!is_lock_owner()) {
