@@ -513,10 +513,6 @@ int XioMessenger::session_event(struct xio_session *session,
   }
   break;
   case XIO_SESSION_CONNECTION_ERROR_EVENT:
-    ldout(cct,2) << xio_session_event_types[event_data->event]
-      << " user_context " << event_data->conn_user_context << dendl;
-    /* informational (Eyal)*/
-    break;
   case XIO_SESSION_CONNECTION_CLOSED_EVENT: /* orderly discon */
   case XIO_SESSION_CONNECTION_DISCONNECTED_EVENT: /* unexpected discon */
   case XIO_SESSION_CONNECTION_REFUSED_EVENT:
