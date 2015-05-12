@@ -42,6 +42,7 @@ cat > "${EXPUNGE}" <<-!
 	generic/099	# not for Linux
 	generic/204	# stripe size throws off test's math for when to
 			#  expect ENOSPC
+	generic/231 # broken for disk and rbd by xfs kernel commit 4162bb
 
 	shared/272	# not for xfs
 	shared/289	# not for xfs
