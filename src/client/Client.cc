@@ -1210,9 +1210,15 @@ Inode* Client::insert_trace(MetaRequest *request, MetaSession *session)
     }
   }
 
-  if (in && (reply->head.op == CEPH_MDS_OP_READDIR ||
-	     reply->head.op == CEPH_MDS_OP_LSSNAP)) {
-    insert_readdir_results(request, session, in);
+  if (in) {
+    if (reply->head.op == CEPH_MDS_OP_READDIR ||
+	reply->head.op == CEPH_MDS_OP_LSSNAP)
+      insert_readdir_results(request, session, in);
+
+    if (request->dentry() == NULL && in != request->inode()) {
+      // pin the target inode if its parent dentry is not pinned
+      request->set_other_inode(in);
+    }
   }
 
   request->target = in;
