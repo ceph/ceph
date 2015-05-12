@@ -111,6 +111,10 @@ int main(int argc, char **argv) {
 }
 
 TEST(TestFileJournal, Create) {
+  g_ceph_context->_conf->set_val("journal_ignore_corruption", "false");
+  g_ceph_context->_conf->set_val("journal_write_header_frequency", "0");
+  g_ceph_context->_conf->apply_changes(NULL);
+
   for (unsigned i = 0 ; i < 3; ++i) {
     SCOPED_TRACE(subtests[i].description);
     fsid.generate_random();
@@ -121,6 +125,10 @@ TEST(TestFileJournal, Create) {
 }
 
 TEST(TestFileJournal, WriteSmall) {
+  g_ceph_context->_conf->set_val("journal_ignore_corruption", "false");
+  g_ceph_context->_conf->set_val("journal_write_header_frequency", "0");
+  g_ceph_context->_conf->apply_changes(NULL);
+
   for (unsigned i = 0 ; i < 3; ++i) {
     SCOPED_TRACE(subtests[i].description);
     fsid.generate_random();
@@ -139,6 +147,10 @@ TEST(TestFileJournal, WriteSmall) {
 }
 
 TEST(TestFileJournal, WriteBig) {
+  g_ceph_context->_conf->set_val("journal_ignore_corruption", "false");
+  g_ceph_context->_conf->set_val("journal_write_header_frequency", "0");
+  g_ceph_context->_conf->apply_changes(NULL);
+
   for (unsigned i = 0 ; i < 3; ++i) {
     SCOPED_TRACE(subtests[i].description);
     fsid.generate_random();
@@ -161,6 +173,10 @@ TEST(TestFileJournal, WriteBig) {
 }
 
 TEST(TestFileJournal, WriteMany) {
+  g_ceph_context->_conf->set_val("journal_ignore_corruption", "false");
+  g_ceph_context->_conf->set_val("journal_write_header_frequency", "0");
+  g_ceph_context->_conf->apply_changes(NULL);
+
   for (unsigned i = 0 ; i < 3; ++i) {
     SCOPED_TRACE(subtests[i].description);
     fsid.generate_random();
@@ -188,6 +204,10 @@ TEST(TestFileJournal, WriteMany) {
 }
 
 TEST(TestFileJournal, WriteManyVecs) {
+  g_ceph_context->_conf->set_val("journal_ignore_corruption", "false");
+  g_ceph_context->_conf->set_val("journal_write_header_frequency", "0");
+  g_ceph_context->_conf->apply_changes(NULL);
+
   for (unsigned i = 0 ; i < 3; ++i) {
     SCOPED_TRACE(subtests[i].description);
     fsid.generate_random();
@@ -229,6 +249,10 @@ TEST(TestFileJournal, WriteManyVecs) {
 }
 
 TEST(TestFileJournal, ReplaySmall) {
+  g_ceph_context->_conf->set_val("journal_ignore_corruption", "false");
+  g_ceph_context->_conf->set_val("journal_write_header_frequency", "0");
+  g_ceph_context->_conf->apply_changes(NULL);
+
   for (unsigned i = 0 ; i < 3; ++i) {
     SCOPED_TRACE(subtests[i].description);
     fsid.generate_random();
@@ -278,6 +302,10 @@ TEST(TestFileJournal, ReplaySmall) {
 }
 
 TEST(TestFileJournal, ReplayCorrupt) {
+  g_ceph_context->_conf->set_val("journal_ignore_corruption", "true");
+  g_ceph_context->_conf->set_val("journal_write_header_frequency", "0");
+  g_ceph_context->_conf->apply_changes(NULL);
+
   for (unsigned i = 0 ; i < 3; ++i) {
     SCOPED_TRACE(subtests[i].description);
     fsid.generate_random();
@@ -341,7 +369,9 @@ TEST(TestFileJournal, ReplayCorrupt) {
     ASSERT_EQ(needle, v);
     inbl.clear();
     v.clear();
-    ASSERT_TRUE(!j.read_entry(inbl, seq));
+    bool corrupt;
+    ASSERT_FALSE(j.read_entry(inbl, seq, &corrupt));
+    ASSERT_TRUE(corrupt);
 
     j.make_writeable();
     j.close();
@@ -349,6 +379,10 @@ TEST(TestFileJournal, ReplayCorrupt) {
 }
 
 TEST(TestFileJournal, WriteTrim) {
+  g_ceph_context->_conf->set_val("journal_ignore_corruption", "false");
+  g_ceph_context->_conf->set_val("journal_write_header_frequency", "0");
+  g_ceph_context->_conf->apply_changes(NULL);
+
   for (unsigned i = 0 ; i < 3; ++i) {
     SCOPED_TRACE(subtests[i].description);
     fsid.generate_random();
@@ -393,6 +427,10 @@ TEST(TestFileJournal, WriteTrim) {
 }
 
 TEST(TestFileJournal, WriteTrimSmall) {
+  g_ceph_context->_conf->set_val("journal_ignore_corruption", "false");
+  g_ceph_context->_conf->set_val("journal_write_header_frequency", "0");
+  g_ceph_context->_conf->apply_changes(NULL);
+
   for (unsigned i = 0 ; i < 3; ++i) {
     SCOPED_TRACE(subtests[i].description);
     fsid.generate_random();
