@@ -185,6 +185,20 @@ int ErasureCodeBench::encode()
   return 0;
 }
 
+static void display_chunks(const map<int,bufferlist> &chunks,
+			   unsigned int chunk_count) {
+  cout << "chunks ";
+  for (unsigned int chunk = 0; chunk < chunk_count; chunk++) {
+    if (chunks.count(chunk) == 0) {
+      cout << "(" << chunk << ")";
+    } else {
+      cout << " " << chunk << " ";
+    }
+    cout << " ";
+  }
+  cout << "(X) is an erased chunk" << endl;
+}
+
 int ErasureCodeBench::decode_erasures(const map<int,bufferlist> &all_chunks,
 				      const map<int,bufferlist> &chunks,
 				      unsigned i,
@@ -195,22 +209,11 @@ int ErasureCodeBench::decode_erasures(const map<int,bufferlist> &all_chunks,
 
   if (want_erasures == 0) {
     if (verbose)
-      cout << "chunks ";
+      display_chunks(chunks, erasure_code->get_chunk_count());
     set<int> want_to_read;
-    for (unsigned int chunk = 0; chunk < erasure_code->get_chunk_count(); chunk++) {
-      if (chunks.count(chunk) == 0) {
-	if (verbose)
-	  cout << "(" << chunk << ")";
+    for (unsigned int chunk = 0; chunk < erasure_code->get_chunk_count(); chunk++)
+      if (chunks.count(chunk) == 0)
 	want_to_read.insert(chunk);
-      } else {
-	if (verbose)
-	  cout << " " << chunk << " ";
-      }
-      if (verbose)
-	cout << " ";
-    }
-    if (verbose)
-      cout << "(X) is an erased chunk" << endl;
 
     map<int,bufferlist> decoded;
     code = erasure_code->decode(want_to_read, chunks, &decoded);
