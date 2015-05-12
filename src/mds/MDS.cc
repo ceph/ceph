@@ -1073,7 +1073,7 @@ int MDS::init(MDSMap::DaemonState wanted_state)
     standby_for_rank = MDSMap::MDS_MATCHED_ACTIVE;
 
   beacon.init(mdsmap, want_state, standby_for_rank, standby_for_name);
-  whoami = -1;
+  whoami = MDS_RANK_NONE;
   messenger->set_myname(entity_name_t::MDS(whoami));
   
   // schedule tick
@@ -1627,6 +1627,9 @@ void MDS::handle_mds_map(MMDSMap *m)
 	      dout(1) << "handle_mds_map i (" << addr
 		      << ") dne in the mdsmap, new instance has larger gid " << i.global_id
 		      << ", suicide" << dendl;
+              // Call suicide() rather than respawn() because if someone else
+              // has taken our ID, we don't want to keep restarting and
+              // fighting them for the ID.
 	      suicide();
 	      goto out;
 	    }
@@ -2385,6 +2388,8 @@ void MDS::handle_signal(int signum)
 
 void MDS::damaged()
 {
+  assert(whoami != MDS_RANK_NONE);
+
   set_want_state(MDSMap::STATE_DAMAGED);
   monc->flush_log();  // Flush any clog error from before we were called
   beacon.notify_health(this);  // Include latest status in our swan song
@@ -2397,10 +2402,17 @@ void MDS::damaged()
   respawn();  // Respawn into standby in case mon has other work for us
 }
 
-void MDS::suicide()
+void MDS::suicide(bool fast)
 {
   assert(mds_lock.is_locked());
   set_want_state(MDSMap::STATE_DNE); // whatever.
+
+  if (!fast && !mdsmap->is_dne_gid(mds_gid_t(monc->get_global_id()))) {
+    // Notify the MDSMonitor that we're dying, so that it doesn't have to
+    // wait for us to go laggy.  Only do this if we're actually in the
+    // MDSMap, because otherwise the MDSMonitor will drop our message.
+    beacon.send_and_wait(1);
+  }
 
   dout(1) << "suicide.  wanted " << ceph_mds_state_name(want_state)
 	  << ", now " << ceph_mds_state_name(state) << dendl;
@@ -2482,7 +2494,7 @@ void MDS::respawn()
 
   dout(0) << "respawn execv " << orig_argv[0]
 	  << " failed with " << cpp_strerror(errno) << dendl;
-  suicide();
+  suicide(true);
 }
 
 void MDS::handle_write_error(int err)
