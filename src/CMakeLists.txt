@@ -1170,11 +1170,15 @@ if(${WITH_RADOSGW})
     rgw/rgw_request.cc
     rgw/rgw_process.cc
     rgw/rgw_frontend.cc
+    rgw/rgw_rest_lib.cc
     rgw/rgw_object_expirer_core.cc
     rgw/rgw_website.cc
-    rgw/rgw_xml_enc.cc)
+    rgw/rgw_xml_enc.cc
+    )
 
   add_library(rgw_a STATIC ${rgw_a_srcs})
+  set_target_properties(rgw_a PROPERTIES OUTPUT_NAME rgw)
+  install(TARGETS rgw_a DESTINATION lib)
 
   include_directories("${CMAKE_SOURCE_DIR}/src/civetweb/include")
 
