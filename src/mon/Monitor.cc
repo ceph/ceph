@@ -291,7 +291,7 @@ void Monitor::do_admin_command(string command, cmdmap_t& cmdmap, string format,
   args = "[" + args + "]";
  
   bool read_only = (command == "mon_status" ||
-		    command == "mon_metadata" ||
+		    command == "mon metadata" ||
 		    command == "quorum_status");
 
   (read_only ? audit_clog->debug() : audit_clog->info())
@@ -2698,7 +2698,8 @@ void Monitor::handle_command(MMonCommand *m)
        */
       prefix != "mon compact" &&
       prefix != "mon scrub" &&
-      prefix != "mon sync force") {
+      prefix != "mon sync force" &&
+      prefix != "mon metadata") {
     monmon()->dispatch(m);
     return;
   }
@@ -2885,7 +2886,7 @@ void Monitor::handle_command(MMonCommand *m)
     rdata.append(ds);
     rs = "";
     r = 0;
-  } else if (prefix == "mon_metadata") {
+  } else if (prefix == "mon metadata") {
     string name;
     cmd_getval(g_ceph_context, cmdmap, "id", name);
     int mon = monmap->get_rank(name);

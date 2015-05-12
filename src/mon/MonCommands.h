@@ -246,9 +246,6 @@ COMMAND("report name=tags,type=CephString,n=N,req=false", \
 	"mon", "r", "cli,rest")
 COMMAND("quorum_status", "report status of monitor quorum", \
 	"mon", "r", "cli,rest")
-COMMAND("mon_metadata name=id,type=CephString",
-	"fetch metadata for mon <id>",
-	"mon", "r", "cli,rest")
 
 COMMAND_WITH_FLAG("mon_status", "report status of monitors", "mon", "r", "cli,rest",
 	     FLAG(NOFORWARD))
@@ -291,6 +288,9 @@ COMMAND_WITH_FLAG("mon sync force " \
     "force sync of and clear monitor store", \
     "mon", "rw", "cli,rest", \
     FLAG(NOFORWARD))
+COMMAND("mon metadata name=id,type=CephString",
+	"fetch metadata for mon <id>",
+	"mon", "r", "cli,rest")
 
 
 /*
