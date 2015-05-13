@@ -483,7 +483,8 @@ __librbd_clone(struct rbd_ctx *ctx, const char *src_snapname,
 	if (krbd) {
 		features &= ~(RBD_FEATURE_EXCLUSIVE_LOCK |
 		              RBD_FEATURE_OBJECT_MAP     |
-                              RBD_FEATURE_FAST_DIFF);
+                              RBD_FEATURE_FAST_DIFF      |
+                              RBD_FEATURE_DEEP_FLATTEN);
 	}
 	ret = rbd_clone2(ioctx, ctx->name, src_snapname, ioctx,
 			 dst_imagename, features, order,
