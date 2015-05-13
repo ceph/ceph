@@ -1,3 +1,5 @@
+env: HOME=/home/travis
+
 language: python
 python:
     - 2.7
