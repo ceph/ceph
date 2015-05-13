@@ -17,7 +17,11 @@ test_omap() {
     cleanup
     for i in $(seq 1 1 600)
     do
-        rados -p $POOL setomapval $OBJ $i $i
+	if [ $(($i % 2)) -eq 0 ]; then
+            rados -p $POOL setomapval $OBJ $i $i
+	else
+            echo -n "$i" | rados -p $POOL setomapval $OBJ $i
+	fi
         rados -p $POOL getomapval $OBJ $i | grep -q "\\: $i\$"
     done
     rados -p $POOL listomapvals $OBJ | grep -c value | grep 600
