@@ -115,6 +115,7 @@ public:
 
   int get_params();
   void send_response();
+  bool need_object_expiration() { return true; }
 };
 
 class RGWDeleteObj_ObjStore_SWIFT : public RGWDeleteObj_ObjStore {
