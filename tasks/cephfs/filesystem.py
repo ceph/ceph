@@ -683,3 +683,9 @@ class Filesystem(object):
         Invoke cephfs-table-tool with the passed arguments, and return its stdout
         """
         return self._run_tool("cephfs-table-tool", args, None, quiet)
+
+    def data_scan(self, args, quiet=False):
+        """
+        Invoke cephfs-data-scan with the passed arguments, and return its stdout
+        """
+        return self._run_tool("cephfs-data-scan", args, None, quiet)
