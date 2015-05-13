@@ -433,6 +433,84 @@ void Monitor::write_features(MonitorDBStore::TransactionRef t)
   t->put(MONITOR_NAME, COMPAT_SET_LOC, bl);
 }
 
+map<string,string> Monitor::get_initial_supported_plugins()
+{
+  map<string,string> plugins;
+  plugins["jerasure"] = "1.0.0";
+  plugins["isa"] = "1.0.0";
+  plugins["lrc"] = "1.0.0";
+  return plugins;
+}
+
+map<string,string> Monitor::get_supported_features()
+{
+  map<string,string> plugins;
+  // walk the plugins dirs
+  return plugins;
+}
+
+map<string,string> Monitor::get_legacy_features()
+{
+  map<string,string> plugins;
+  plugins["jerasure"] = "1.0.0";
+  plugins["isa"] = "1.0.0";
+  plugins["lrc"] = "1.0.0";
+  return plugins;
+}
+
+int Monitor::check_plugins(MonitorDBStore *store)
+{
+  map<string,string> required = get_supported_features();
+  map<string,string> ondisk;
+
+  read_plugins_off_disk(store, &ondisk);
+
+  if (!required.compatible_with(ondisk) {
+      stringstream ss;
+      required.unsupported(ondisk, &ss);
+      generic_derr << "ERROR: on disk plugins is incompatible with plugins that can be dynamically loaded : " << ss.str() << dendl;
+      return -EPERM;
+  }
+
+  return 0;
+}
+
+void Monitor::read_plugins_off_disk(MonitorDBStore *store, map<stirng,string> *plugins)
+{
+  bufferlist pluginsbl;
+  store->get(MONITOR_NAME, PLUGINS_LOC, pluginsbl);
+  if (pluginsbl.length() == 0) {
+    generic_dout(0) << "WARNING: mon fs missing plugins list.\n"
+            << "Assuming it is old-style and introducing one." << dendl;
+    *plugins = get_legacy_plugins();
+
+    bufferlist bl;
+    plugins->encode(bl);
+    MonitorDBStore::TransactionRef t(new MonitorDBStore::Transaction);
+    t->put(MONITOR_NAME, PLUGINS_LOC, bl);
+    store->apply_transaction(t);
+  } else {
+    bufferlist::iterator it = pluginsbl.begin();
+    plugins->decode(it);
+  }
+}
+
+void Monitor::read_plugins()
+{
+  read_plugins_off_disk(store, &plugins);
+  dout(10) << "plugins " << plugins << dendl;
+
+  apply_plugins_to_quorum_requirements();
+  dout(10) << "required_plugins " << required_plugins << dendl;
+}
+
+void Monitor::write_plugins(MonitorDBStore::TransactionRef t)
+{
+  bufferlist bl;
+  plugins.encode(bl);
+  t->put(MONITOR_NAME, PLUGINS_LOC, bl);
+}
+
 const char** Monitor::get_tracked_conf_keys() const
 {
   static const char* KEYS[] = {
@@ -1826,6 +1904,7 @@ void Monitor::win_election(epoch_t epoch, set<int>& active, uint64_t features,
   leader = rank;
   quorum = active;
   quorum_features = features;
+  quorum_plugins = plugins;
   outside_quorum.clear();
 
   clog->info() << "mon." << name << "@" << rank
@@ -1861,7 +1940,7 @@ void Monitor::win_election(epoch_t epoch, set<int>& active, uint64_t features,
   collect_sys_info(&metadata[rank], g_ceph_context);
 }
 
-void Monitor::lose_election(epoch_t epoch, set<int> &q, int l, uint64_t features) 
+void Monitor::lose_election(epoch_t epoch, set<int> &q, int l, uint64_t features, map<string,string> plugins) 
 {
   state = STATE_PEON;
   leader_since = utime_t();
@@ -1869,8 +1948,12 @@ void Monitor::lose_election(epoch_t epoch, set<int> &q, int l, uint64_t features
   quorum = q;
   outside_quorum.clear();
   quorum_features = features;
+  quorum_plugins = plugins;
   dout(10) << "lose_election, epoch " << epoch << " leader is mon" << leader
-	   << " quorum is " << quorum << " features are " << quorum_features << dendl;
+	   << " quorum is " << quorum
+	   << " features are " << quorum_features
+	   << " plugins are " << quorum_plugins
+	   << dendl;
 
   paxos->peon_init();
   for (vector<PaxosService*>::iterator p = paxos_service.begin(); p != paxos_service.end(); ++p)
@@ -1904,6 +1987,17 @@ void Monitor::finish_election()
     dout(10) << " renaming myself from " << cur_name << " -> " << name << dendl;
     messenger->send_message(new MMonJoin(monmap->fsid, name, messenger->get_myaddr()),
 			    monmap->get_inst(*quorum.begin()));
+  }
+}
+
+void Monitor::apply_quorum_plugins()
+{
+  if (compare quorum_plugins to plugins)
+    MonitorDBStore::TransactionRef t(new MonitorDBStore::Transaction);
+    write_plugins(t);
+    store->apply_transaction(t);
+
+    // apply_plugins_to_quorum_requirements();
   }
 }
 

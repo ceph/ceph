@@ -120,6 +120,7 @@ struct MMonHealth;
 struct MonCommand;
 
 #define COMPAT_SET_LOC "feature_set"
+#define PLUGINS_LOC "plugins"
 
 class Monitor : public Dispatcher,
                 public md_config_obs_t {
@@ -219,12 +220,14 @@ private:
 
   /// features we require of peers (based on on-disk compatset)
   uint64_t required_features;
+  map<string,string> required_plugins;
   
   int leader;            // current leader (to best of knowledge)
   set<int> quorum;       // current active set of monitors (if !starting)
   utime_t leader_since;  // when this monitor became the leader, if it is the leader
   utime_t exited_quorum; // time detected as not in quorum; 0 if in
   uint64_t quorum_features;  ///< intersection of quorum member feature bits
+  map<string,string> quorum_plugins;
   bufferlist supported_commands_bl; // encoded MonCommands we support
   bufferlist classic_commands_bl; // encoded MonCommands supported by Dumpling
   set<int> classic_mons; // set of "classic" monitors; only valid on leader
@@ -549,8 +552,14 @@ public:
   uint64_t get_quorum_features() const {
     return quorum_features;
   }
+  const map<string,string>& get_quorum_plugins() const {
+    return quorum_plugins;
+  }
   uint64_t get_required_features() const {
     return required_features;
+  }
+  const map<string,string> get_required_plugins() const {
+    return required_plugins;
   }
   void apply_quorum_to_compatset_features();
   void apply_compatset_features_to_quorum_requirements();
