@@ -284,23 +284,6 @@ public:
       iterator(list *l, unsigned o, std::list<ptr>::iterator ip, unsigned po) : 
 	bl(l), ls(&bl->_buffers), off(o), p(ip), p_off(po) { }
 
-      iterator(const iterator& other) : bl(other.bl),
-					ls(other.ls),
-					off(other.off),
-					p(other.p),
-					p_off(other.p_off) {}
-
-      iterator& operator=(const iterator& other) {
-	if (this != &other) {
-	  bl = other.bl;
-	  ls = other.ls;
-	  off = other.off;
-	  p = other.p;
-	  p_off = other.p_off;
-	}
-	return *this;
-      }
-
       /// get current iterator offset in buffer::list
       unsigned get_off() { return off; }
       
