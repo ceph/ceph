@@ -3,6 +3,8 @@
   where 'pool' is a rados pool name (default is 'rbd') and 'cmd' is one of:
     (ls | list) [-l | --long ] [pool-name] list rbd images
                                                 (-l includes snapshots/clones)
+    (du | disk-usage) [--image <name>] [pool-name]
+                                                show pool image disk usage stats
     info <image-name>                           show information about image size,
                                                 striping, etc.
     create [--order <bits>] [--image-features <features>] [--image-shared]

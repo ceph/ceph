@@ -33,6 +33,7 @@
 #include <boost/accumulators/statistics/stats.hpp>
 #include <boost/accumulators/statistics/rolling_sum.hpp>
 #include <boost/assign/list_of.hpp>
+#include <boost/bind.hpp>
 #include <boost/scope_exit.hpp>
 #include <boost/scoped_ptr.hpp>
 #include <errno.h>
@@ -92,6 +93,8 @@ void usage()
 "where 'pool' is a rados pool name (default is 'rbd') and 'cmd' is one of:\n"
 "  (ls | list) [-l | --long ] [pool-name] list rbd images\n"
 "                                              (-l includes snapshots/clones)\n"
+"  (du | disk-usage) [--image <name>] [pool-name]\n"
+"                                              show pool image disk usage stats\n"
 "  info <image-name>                           show information about image size,\n"
 "                                              striping, etc.\n"
 "  create [--order <bits>] [--image-features <features>] [--image-shared]\n"
@@ -2551,6 +2554,198 @@ static int parse_map_options(char *options)
   return 0;
 }
 
+static int disk_usage_callback(uint64_t offset, size_t len, int exists,
+                               void *arg) {
+  uint64_t *used_size = reinterpret_cast<uint64_t *>(arg);
+  if (exists) {
+    (*used_size) += len;
+  }
+  return 0;
+}
+
+static int compute_image_disk_usage(const std::string& name,
+                                    const std::string& snap_name,
+                                    const std::string& from_snap_name,
+                                    librbd::Image &image, uint64_t size,
+                                    TextTable& tbl, Formatter *f,
+                                    uint64_t *used_size) {
+  const char* from = NULL;
+  if (!from_snap_name.empty()) {
+    from = from_snap_name.c_str();
+  }
+
+  uint64_t flags;
+  int r = image.get_flags(&flags);
+  if (r < 0) {
+    cerr << "rbd: failed to retrieve image flags: " << cpp_strerror(r)
+         << std::endl;
+    return r;
+  }
+  if ((flags & RBD_FLAG_FAST_DIFF_INVALID) != 0) {
+    cerr << "warning: fast-diff map is invalid for " << name
+         << (snap_name.empty() ? "" : "@" + snap_name) << ". "
+         << "operation may be slow." << std::endl;
+  }
+
+  *used_size = 0;
+  r = image.diff_iterate2(from, 0, size, false, true,
+                          &disk_usage_callback, used_size);
+  if (r < 0) {
+    cerr << "rbd: failed to iterate diffs: " << cpp_strerror(r) << std::endl;
+    return r;
+  }
+
+  if (f) {
+    f->open_object_section("image");
+    f->dump_string("name", name);
+    if (!snap_name.empty()) {
+      f->dump_string("snapshot", snap_name);
+    }
+    f->dump_unsigned("provisioned_size", size);
+    f->dump_unsigned("used_size" , *used_size);
+    f->close_section();
+  } else {
+    std::string full_name = name;
+    if (!snap_name.empty()) {
+      full_name += "@" + snap_name;
+    }
+    tbl << full_name
+        << stringify(si_t(size))
+        << stringify(si_t(*used_size))
+        << TextTable::endrow;
+  }
+  return 0;
+}
+
+static int do_disk_usage(librbd::RBD &rbd, librados::IoCtx &io_ctx,
+                        const char *imgname, const char *snapname,
+                        Formatter *f) {
+  std::vector<string> names;
+  int r = rbd.list(io_ctx, names);
+  if (r == -ENOENT) {
+    r = 0;
+  } else if (r < 0) {
+    return r;
+  }
+
+  TextTable tbl;
+  if (f) {
+    f->open_object_section("stats");
+    f->open_array_section("images");
+  } else {
+    tbl.define_column("NAME", TextTable::LEFT, TextTable::LEFT);
+    tbl.define_column("PROVISIONED", TextTable::RIGHT, TextTable::RIGHT);
+    tbl.define_column("USED", TextTable::RIGHT, TextTable::RIGHT);
+  }
+
+  uint64_t used_size = 0;
+  uint64_t total_prov = 0;
+  uint64_t total_used = 0;
+  std::sort(names.begin(), names.end());
+  for (std::vector<string>::const_iterator name = names.begin();
+       name != names.end(); ++name) {
+    if (imgname != NULL && *name != imgname) {
+      continue;
+    }
+
+    librbd::Image image;
+    r = rbd.open_read_only(io_ctx, image, name->c_str(), NULL);
+    if (r < 0) {
+      if (r != -ENOENT) {
+        cerr << "rbd: error opening " << *name << ": " << cpp_strerror(r)
+             << std::endl;
+      }
+      continue;
+    }
+
+    uint64_t features;
+    int r = image.features(&features);
+    if (r < 0) {
+      cerr << "rbd: failed to retrieve image features: " << cpp_strerror(r)
+           << std::endl;
+      return r;
+    }
+    if ((features & RBD_FEATURE_FAST_DIFF) == 0) {
+      cerr << "warning: fast-diff map is not enabled for " << *name << ". "
+           << "operation may be slow." << std::endl;
+    }
+
+    librbd::image_info_t info;
+    if (image.stat(info, sizeof(info)) < 0) {
+      return -EINVAL;
+    }
+
+    std::vector<librbd::snap_info_t> snap_list;
+    r = image.snap_list(snap_list);
+    if (r < 0) {
+      cerr << "rbd: error opening " << *name << " snapshots: "
+           << cpp_strerror(r) << std::endl;
+      continue;
+    }
+
+    std::string last_snap_name;
+    std::sort(snap_list.begin(), snap_list.end(),
+              boost::bind(&librbd::snap_info_t::id, _1) <
+                boost::bind(&librbd::snap_info_t::id, _2));
+    for (std::vector<librbd::snap_info_t>::const_iterator snap =
+         snap_list.begin(); snap != snap_list.end(); ++snap) {
+      librbd::Image snap_image;
+      r = rbd.open_read_only(io_ctx, snap_image, name->c_str(),
+                             snap->name.c_str());
+      if (r < 0) {
+        cerr << "rbd: error opening snapshot " << *name << "@"
+             << snap->name << ": " << cpp_strerror(r) << std::endl;
+        return r;
+      }
+
+      if (imgname == NULL || (snapname != NULL && snap->name == snapname)) {
+        r = compute_image_disk_usage(*name, snap->name, last_snap_name,
+                                     snap_image, snap->size, tbl, f,
+                                     &used_size);
+        if (r < 0) {
+          return r;
+        }
+
+        if (snapname != NULL) {
+          total_prov += snap->size;
+        }
+        total_used += used_size;
+      }
+      last_snap_name = snap->name;
+    }
+
+    if (snapname == NULL) {
+      r = compute_image_disk_usage(*name, "", last_snap_name, image, info.size,
+                                   tbl, f, &used_size);
+      if (r < 0) {
+        return r;
+      }
+      total_prov += info.size;
+      total_used += used_size;
+    }
+  }
+
+  if (f) {
+    f->close_section();
+    if (imgname == NULL) {
+      f->dump_unsigned("total_provisioned_size", total_prov);
+      f->dump_unsigned("total_used_size", total_used);
+    }
+    f->close_section();
+    f->flush(cout);
+  } else {
+    if (imgname == NULL) {
+      tbl << "<TOTAL>"
+          << stringify(si_t(total_prov))
+          << stringify(si_t(total_used))
+          << TextTable::endrow;
+    }
+    cout << tbl;
+  }
+
+  return 0;
+}
+
 enum CommandType{
   COMMAND_TYPE_NONE,
   COMMAND_TYPE_SNAP,
@@ -2600,7 +2795,8 @@ enum {
   OPT_METADATA_SET,
   OPT_METADATA_GET,
   OPT_METADATA_REMOVE,
-  OPT_OBJECT_MAP_REBUILD
+  OPT_OBJECT_MAP_REBUILD,
+  OPT_DISK_USAGE
 };
 
 static int get_cmd(const char *cmd, CommandType command_type)
@@ -2611,6 +2807,9 @@ static int get_cmd(const char *cmd, CommandType command_type)
     if (strcmp(cmd, "ls") == 0 ||
         strcmp(cmd, "list") == 0)
       return OPT_LIST;
+    if (strcmp(cmd, "du") == 0 ||
+        strcmp(cmd, "disk-usage") == 0)
+      return OPT_DISK_USAGE;
     if (strcmp(cmd, "info") == 0)
       return OPT_INFO;
     if (strcmp(cmd, "create") == 0)
@@ -2965,6 +3164,7 @@ if (!set_conf_param(v, p1, p2, p3)) { \
     const char *v = *i;
     switch (opt_cmd) {
       case OPT_LIST:
+      case OPT_DISK_USAGE:
 	SET_CONF_PARAM(v, &poolname, NULL, NULL);
 	break;
       case OPT_INFO:
@@ -3069,7 +3269,8 @@ if (!set_conf_param(v, p1, p2, p3)) { \
       opt_cmd != OPT_INFO && opt_cmd != OPT_LIST &&
       opt_cmd != OPT_SNAP_LIST && opt_cmd != OPT_LOCK_LIST &&
       opt_cmd != OPT_CHILDREN && opt_cmd != OPT_DIFF &&
-      opt_cmd != OPT_METADATA_LIST && opt_cmd != OPT_STATUS) {
+      opt_cmd != OPT_METADATA_LIST && opt_cmd != OPT_STATUS &&
+      opt_cmd != OPT_DISK_USAGE) {
     cerr << "rbd: command doesn't use output formatting"
 	 << std::endl;
     return EXIT_FAILURE;
@@ -3118,7 +3319,8 @@ if (!set_conf_param(v, p1, p2, p3)) { \
       opt_cmd != OPT_IMPORT_DIFF &&
       opt_cmd != OPT_UNMAP && /* needs imgname but handled below */
       opt_cmd != OPT_SHOWMAPPED &&
-      opt_cmd != OPT_MERGE_DIFF && !imgname) {
+      opt_cmd != OPT_MERGE_DIFF &&
+      opt_cmd != OPT_DISK_USAGE && !imgname) {
     cerr << "rbd: image name was not specified" << std::endl;
     return EXIT_FAILURE;
   }
@@ -3177,7 +3379,8 @@ if (!set_conf_param(v, p1, p2, p3)) { \
       opt_cmd != OPT_DIFF && opt_cmd != OPT_COPY &&
       opt_cmd != OPT_MAP && opt_cmd != OPT_UNMAP && opt_cmd != OPT_CLONE &&
       opt_cmd != OPT_SNAP_PROTECT && opt_cmd != OPT_SNAP_UNPROTECT &&
-      opt_cmd != OPT_CHILDREN && opt_cmd != OPT_OBJECT_MAP_REBUILD) {
+      opt_cmd != OPT_CHILDREN && opt_cmd != OPT_OBJECT_MAP_REBUILD &&
+      opt_cmd != OPT_DISK_USAGE) {
     cerr << "rbd: snapname specified for a command that doesn't use it"
 	 << std::endl;
     return EXIT_FAILURE;
@@ -3291,13 +3494,13 @@ if (!set_conf_param(v, p1, p2, p3)) { \
        opt_cmd == OPT_METADATA_SET || opt_cmd == OPT_METADATA_LIST ||
        opt_cmd == OPT_METADATA_REMOVE || opt_cmd == OPT_METADATA_GET ||
        opt_cmd == OPT_FEATURE_DISABLE || opt_cmd == OPT_FEATURE_ENABLE ||
-       opt_cmd == OPT_OBJECT_MAP_REBUILD)) {
+       opt_cmd == OPT_OBJECT_MAP_REBUILD || opt_cmd == OPT_DISK_USAGE)) {
 
     if (opt_cmd == OPT_INFO || opt_cmd == OPT_SNAP_LIST ||
 	opt_cmd == OPT_EXPORT || opt_cmd == OPT_EXPORT || opt_cmd == OPT_COPY ||
 	opt_cmd == OPT_CHILDREN || opt_cmd == OPT_LOCK_LIST ||
-        opt_cmd == OPT_METADATA_LIST ||
-        opt_cmd == OPT_STATUS || opt_cmd == OPT_WATCH) {
+        opt_cmd == OPT_METADATA_LIST || opt_cmd == OPT_STATUS ||
+        opt_cmd == OPT_WATCH || opt_cmd == OPT_DISK_USAGE) {
       r = rbd.open_read_only(io_ctx, image, imgname, NULL);
     } else {
       r = rbd.open(io_ctx, image, imgname);
@@ -3316,7 +3519,8 @@ if (!set_conf_param(v, p1, p2, p3)) { \
        opt_cmd == OPT_DIFF ||
        opt_cmd == OPT_COPY ||
        opt_cmd == OPT_CHILDREN ||
-       opt_cmd == OPT_OBJECT_MAP_REBUILD)) {
+       opt_cmd == OPT_OBJECT_MAP_REBUILD ||
+       opt_cmd == OPT_DISK_USAGE)) {
     r = image.snap_set(snapname);
     if (r < 0) {
       cerr << "rbd: error setting snapshot context: " << cpp_strerror(-r)
@@ -3748,6 +3952,14 @@ if (!set_conf_param(v, p1, p2, p3)) { \
     if (r < 0) {
       cerr << "rbd: rebuilding object map failed: " << cpp_strerror(r)
            << std::endl;
+      return -r;
+    }
+    break;
+
+  case OPT_DISK_USAGE:
+    r = do_disk_usage(rbd, io_ctx, imgname, snapname, formatter.get());
+    if (r < 0) {
+      cerr << "du failed: " << cpp_strerror(-r) << std::endl;
       return -r;
     }
     break;
