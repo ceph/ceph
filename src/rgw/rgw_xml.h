@@ -6,7 +6,7 @@
 
 #include <map>
 #include <string>
-#include <iostream>
+#include <iosfwd>
 #include <include/types.h>
 
 #include <expat.h>

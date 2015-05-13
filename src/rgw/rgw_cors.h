@@ -17,7 +17,6 @@
 
 #include <map>
 #include <string>
-#include <iostream>
 #include <include/types.h>
 
 #define RGW_CORS_GET    0x1

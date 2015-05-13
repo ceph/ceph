@@ -17,7 +17,7 @@
 
 #include <map>
 #include <string>
-#include <iostream>
+#include <iosfwd>
 #include <expat.h>
 
 #include <include/types.h>
