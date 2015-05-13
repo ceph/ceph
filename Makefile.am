@@ -64,6 +64,7 @@ clean-local:
 	fi
 
 	@rm -rf src/test/virtualenv
+	@rm -rf install-deps-*
 
 
 # NOTE: This only works when enough dependencies are installed for
