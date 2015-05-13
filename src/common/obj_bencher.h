@@ -66,7 +66,7 @@ protected:
 
   int fetch_bench_metadata(const std::string& metadata_file, int* object_size, int* num_objects, int* prevPid);
 
-  int write_bench(int secondsToRun, int maxObjects, int concurrentios, const string& run_name_meta);
+  int write_bench(int secondsToRun, int concurrentios, const string& run_name_meta);
   int seq_read_bench(int secondsToRun, int num_objects, int concurrentios, int writePid);
   int rand_read_bench(int secondsToRun, int num_objects, int concurrentios, int writePid);
 
@@ -99,7 +99,7 @@ public:
   ObjBencher(CephContext *cct_) : show_time(false), cct(cct_), lock("ObjBencher::lock") {}
   virtual ~ObjBencher() {}
   int aio_bench(
-    int operation, int secondsToRun, int maxObjectsToCreate,
+    int operation, int secondsToRun,
     int concurrentios, int op_size, bool cleanup, const char* run_name);
   int clean_up(const char* prefix, int concurrentios, const char* run_name);
 
