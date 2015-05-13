@@ -478,6 +478,70 @@ class TestBuildMatrix(object):
         assert len(result) == 11
         assert self.fragment_occurences(result, 'vps.yaml') == 1 / 11.0
 
+    def test_empty_dirs(self):
+        fake_fs = {
+            'teuthology': {
+                'no-ceph': {
+                    '%': None,
+                    'clusters': {
+                        'single.yaml': None,
+                    },
+                    'distros': {
+                        'baremetal.yaml': None,
+                        'rhel7.0.yaml': None,
+                        'ubuntu12.04.yaml': None,
+                        'ubuntu14.04.yaml': None,
+                        'vps.yaml': None,
+                        'vps_centos6.5.yaml': None,
+                        'vps_debian7.yaml': None,
+                        'vps_rhel6.4.yaml': None,
+                        'vps_rhel6.5.yaml': None,
+                        'vps_rhel7.0.yaml': None,
+                        'vps_ubuntu14.04.yaml': None,
+                    },
+                    'tasks': {
+                        'teuthology.yaml': None,
+                    },
+                },
+            },
+        }
+        fake_listdir, fake_isfile, fake_isdir = make_fake_fstools(fake_fs)
+        result = suite.build_matrix('teuthology/no-ceph', fake_isfile,
+                                    fake_isdir, fake_listdir)
+        fake_fs2 = {
+            'teuthology': {
+                'no-ceph': {
+                    '%': None,
+                    'clusters': {
+                        'single.yaml': None,
+                    },
+                    'distros': {
+                        'empty': {},
+                        'baremetal.yaml': None,
+                        'rhel7.0.yaml': None,
+                        'ubuntu12.04.yaml': None,
+                        'ubuntu14.04.yaml': None,
+                        'vps.yaml': None,
+                        'vps_centos6.5.yaml': None,
+                        'vps_debian7.yaml': None,
+                        'vps_rhel6.4.yaml': None,
+                        'vps_rhel6.5.yaml': None,
+                        'vps_rhel7.0.yaml': None,
+                        'vps_ubuntu14.04.yaml': None,
+                    },
+                    'tasks': {
+                        'teuthology.yaml': None,
+                    },
+                    'empty': {},
+                },
+            },
+        }
+        fake_listdir2, fake_isfile2, fake_isdir2 = make_fake_fstools(fake_fs2)
+        result2 = suite.build_matrix('teuthology/no-ceph', fake_isfile2,
+                                     fake_isdir2, fake_listdir2)
+        assert len(result) == 11
+        assert len(result2) == len(result)
+
     def test_disable_extension(self):
         fake_fs = {
             'teuthology': {
