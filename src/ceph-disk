@@ -899,6 +899,24 @@ def get_fsid(cluster):
     return fsid.lower()
 
 
+def get_dmcrypt_key_path(
+    _uuid,
+    key_dir,
+    luks
+    ):
+    """
+    Get path to dmcrypt key file.
+
+    :return: Path to the dmcrypt key file, callers should check for existence.
+    """
+    if luks:
+        path = os.path.join(key_dir, _uuid + ".luks.key")
+    else:
+        path = os.path.join(key_dir, _uuid)
+
+    return path
+
+
 def get_or_create_dmcrypt_key(
     _uuid,
     key_dir,
@@ -906,16 +924,11 @@ def get_or_create_dmcrypt_key(
     luks
     ):
     """
-    Get path to dmcrypt key or create a new key file.
+    Get path to existing dmcrypt key or create a new key file.
 
     :return: Path to the dmcrypt key file.
     """
-    if luks:
-        path = os.path.join(key_dir, _uuid + ".luks.key")
-    else:
-        path = os.path.join(key_dir, _uuid)
-
-    # already have it?
+    path = get_dmcrypt_key_path(_uuid, key_dir, luks)
     if os.path.exists(path):
         return path
 
