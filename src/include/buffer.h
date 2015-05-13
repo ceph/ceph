@@ -285,13 +285,13 @@ public:
 	bl(l), ls(&bl->_buffers), off(o), p(ip), p_off(po) { }
 
       /// get current iterator offset in buffer::list
-      unsigned get_off() { return off; }
+      unsigned get_off() const { return off; }
       
       /// get number of bytes remaining from iterator position to the end of the buffer::list
-      unsigned get_remaining() { return bl->length() - off; }
+      unsigned get_remaining() const { return bl->length() - off; }
 
       /// true if iterator is at the end of the buffer::list
-      bool end() {
+      bool end() const {
 	return p == ls->end();
 	//return off == bl->length();
       }
