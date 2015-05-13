@@ -11,6 +11,7 @@ import logging
 import os
 import json
 import time
+import gevent
 
 from ceph_manager import CephManager, write_conf, DEFAULT_CONF_PATH
 from tasks.cephfs.filesystem import Filesystem
@@ -71,10 +72,62 @@ def ceph_log(ctx, config):
             )
         )
 
+    class Rotater:
+        stopping = False
+        def invoke_logrotate(self):
+            #1) install ceph-test.conf in /etc/logrotate.d
+            #2) continuously loop over logrotate invocation with ceph-test.conf
+            while not self.stopping:
+                time.sleep(30)
+                run.wait(
+                    ctx.cluster.run(
+                        args=['sudo', 'logrotate', '/etc/logrotate.d/ceph-test.conf'
+                          ],
+                        wait=False,
+                    )
+                )
+
+        def begin(self):
+            self.thread = gevent.spawn(self.invoke_logrotate)
+
+        def end(self):
+            self.stopping = True
+            self.thread.get()
+            
+    def write_rotate_conf(ctx):
+        testdir = teuthology.get_testdir(ctx)
+        rotate_conf_path = os.path.join(os.path.dirname(__file__), 'logrotate.conf')
+        conf = file(rotate_conf_path, 'rb').read() # does this leak an fd or anything?
+        for remote in ctx.cluster.remotes.iterkeys():
+            teuthology.write_file(remote=remote,
+                                  path='{tdir}/logrotate.mds.conf'.format(tdir=testdir),
+                                  data=conf
+                              )
+            remote.run(
+                args=[
+                    'sudo',
+                    'mv',
+                    '{tdir}/logrotate.mds.conf'.format(tdir=testdir),
+                    '/etc/logrotate.d/ceph-test.conf'
+                ]
+            )
+
+    if ctx.config.get('mds-log-rotate'):
+        log.info('Setting up mds logrotate')
+        write_rotate_conf(ctx)
+        logrotater = Rotater()
+        logrotater.begin()
     try:
         yield
 
     finally:
+        if ctx.config.get('mds-log-rotate'):
+            log.info('Shutting down mds logrotate')
+            logrotater.end()
+            ctx.cluster.run(
+                args=['sudo', 'rm', '/etc/logrotate.d/ceph-test.conf'
+                  ]
+            )
         if ctx.archive is not None and \
                 not (ctx.config.get('archive-on-error') and ctx.summary['success']):
             # and logs
