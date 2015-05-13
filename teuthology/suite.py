@@ -788,6 +788,8 @@ def _build_matrix(path, _isfile=os.path.isfile,
         if path.endswith('.disable'):
             return None
         files = sorted(_listdir(path))
+        if len(files) == 0:
+            return None
         if '+' in files:
             # concatenate items
             files.remove('+')
