@@ -884,6 +884,20 @@ void RGWGetObj::pre_exec()
   rgw_bucket_object_pre_exec(s);
 }
 
+static bool object_is_expired(map<string, bufferlist>& attrs) {
+  map<string, bufferlist>::iterator iter = attrs.find(RGW_ATTR_DELETE_AT);
+  if (iter != attrs.end()) {
+    utime_t delete_at;
+    ::decode(delete_at, iter->second);
+
+    if (delete_at <= ceph_clock_now(g_ceph_context)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 void RGWGetObj::execute()
 {
   utime_t start_time = s->time;
@@ -937,15 +951,9 @@ void RGWGetObj::execute()
 
   /* Check whether the object has expired. Swift API documentation
    * stands that we should return 404 Not Found in such case. */
-  attr_iter = attrs.find(RGW_ATTR_DELETE_AT);
-  if (need_object_expiration() && attr_iter != attrs.end()) {
-    utime_t delete_at;
-    ::decode(delete_at, attr_iter->second);
-
-    if (delete_at <= ceph_clock_now(g_ceph_context)) {
-      ret = -ENOENT;
-      goto done_err;
-    }
+  if (need_object_expiration() && object_is_expired(attrs)) {
+    ret = -ENOENT;
+    goto done_err;
   }
 
   ofs = new_ofs;
