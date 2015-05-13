@@ -246,9 +246,10 @@ class TestDistroDefaults(object):
                                                               'rpm')
 
 
-def make_fake_listdir(fake_filesystem):
+def make_fake_fstools(fake_filesystem):
     """
-    Build a fake listdir(), to be used instead of os.listir().
+    Build a fake listdir() and isfile(), to be used instead of
+    os.listir() and os.isfile()
 
     An example fake_filesystem value:
         >>> fake_fs = {
@@ -267,6 +268,8 @@ def make_fake_listdir(fake_filesystem):
         >>> fake_listdir = make_fake_listdir(fake_fs)
         >>> fake_listdir('a_directory/yet_another_directory')
         ['empty_directory']
+        >>> fake_isfile('a_directory/yet_another_directory')
+        False
 
     :param fake_filesystem: A dict representing a filesystem layout
     """
@@ -290,39 +293,25 @@ def make_fake_listdir(fake_filesystem):
                 return subdict.keys()
         return []
 
-    return fake_listdir
+    def fake_isfile(path, fsdict=False):
+        if fsdict is False:
+            fsdict = fake_filesystem
 
+        components = path.strip('/').split('/')
+        subdict = fsdict
+        for component in components:
+            if component not in subdict:
+                raise OSError(
+                    '[Errno 2] No such file or directory: %s' % component)
+            subdict = subdict.get(component)
+        if subdict is None:
+            return True
+        else:
+            return False
 
-def fake_isfile(path):
-    """
-    To be used in conjunction with make_fake_listdir()
-
-    Any path ending in '.yaml', '+', or '%' is a file. Nothing else is.
-
-    :param path: A string representing a path
-    """
-    if path.endswith('.yaml'):
-        return True
-    if path.endswith('+') or path.endswith('%'):
-        return True
-    return False
-
-
-def fake_isdir(path):
-    """
-    To be used in conjunction with make_fake_listdir()
-
-    Any path ending in '/' is a directory. Anything that is a file according to
-    fake_isfile() is not. Anything else is a directory.
-
-    :param path: A string representing a path
-    """
-    if path.endswith('/'):
-        return True
-    if fake_isfile(path):
-        return False
-    return True
-
+    def fake_isdir(path, fsdict = False):
+        return not fake_isfile(path)
+    return fake_listdir, fake_isfile, fake_isdir
 
 class TestBuildMatrix(object):
     def fragment_occurences(self, jobs, fragment):
@@ -352,7 +341,7 @@ class TestBuildMatrix(object):
                 },
             },
         }
-        fake_listdir = make_fake_listdir(fake_fs)
+        fake_listdir, fake_isfile, fake_isdir = make_fake_fstools(fake_fs)
         result = suite.build_matrix('d0_0', fake_isfile, fake_isdir,
                                     fake_listdir)
         assert len(result) == 1
@@ -371,7 +360,7 @@ class TestBuildMatrix(object):
                 },
             },
         }
-        fake_listdir = make_fake_listdir(fake_fs)
+        fake_listdir, fake_isfile, fake_isdir = make_fake_fstools(fake_fs)
         result = suite.build_matrix('d0_0', fake_isfile, fake_isdir,
                                     fake_listdir)
         assert len(result) == 4
@@ -395,7 +384,7 @@ class TestBuildMatrix(object):
                 },
             },
         }
-        fake_listdir = make_fake_listdir(fake_fs)
+        fake_listdir, fake_isfile, fake_isdir = make_fake_fstools(fake_fs)
         result = suite.build_matrix('d0_0', fake_isfile, fake_isdir,
                                     fake_listdir)
         assert len(result) == 8
@@ -420,7 +409,7 @@ class TestBuildMatrix(object):
                 },
             },
         }
-        fake_listdir = make_fake_listdir(fake_fs)
+        fake_listdir, fake_isfile, fake_isdir = make_fake_fstools(fake_fs)
         result = suite.build_matrix('d0_0', fake_isfile, fake_isdir,
                                     fake_listdir)
         assert len(result) == 8
@@ -446,7 +435,7 @@ class TestBuildMatrix(object):
                 },
             },
         }
-        fake_listdir = make_fake_listdir(fake_fs)
+        fake_listdir, fake_isfile, fake_isdir = make_fake_fstools(fake_fs)
         result = suite.build_matrix('d0_0', fake_isfile, fake_isdir,
                                     fake_listdir)
         assert len(result) == 2
@@ -483,7 +472,7 @@ class TestBuildMatrix(object):
                 },
             },
         }
-        fake_listdir = make_fake_listdir(fake_fs)
+        fake_listdir, fake_isfile, fake_isdir = make_fake_fstools(fake_fs)
         result = suite.build_matrix('teuthology/no-ceph', fake_isfile,
                                     fake_isdir, fake_listdir)
         assert len(result) == 11
@@ -505,7 +494,7 @@ class TestBuildMatrix(object):
                 'tasks': {'cfuse_workunit_suites_fsstress.yaml': None},
             },
         }
-        fake_listdir = make_fake_listdir(fake_fs)
+        fake_listdir, fake_isfile, fake_isdir = make_fake_fstools(fake_fs)
         result = suite.build_matrix('thrash', fake_isfile,
                                     fake_isdir, fake_listdir)
         assert len(result) == 1
