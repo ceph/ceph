@@ -357,6 +357,7 @@ function test_tiering()
   ceph osd pool delete datapool datapool --yes-i-really-really-mean-it
 
   ## check health check
+  ceph osd set notieragent
   ceph osd pool create datapool 2
   ceph osd pool create cache4 2
   ceph osd tier add-cache datapool cache4 1024000
@@ -381,6 +382,7 @@ function test_tiering()
   ceph osd tier remove datapool cache4
   ceph osd pool delete cache4 cache4 --yes-i-really-really-mean-it
   ceph osd pool delete datapool datapool --yes-i-really-really-mean-it
+  ceph osd unset notieragent
 
 
   # make sure 'tier remove' behaves as we expect
