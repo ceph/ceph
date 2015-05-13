@@ -61,9 +61,12 @@ clean-local::
 
 install-data-local::
 	cd ceph-detect-init ; \
-	if lsb_release -si | grep --quiet 'Ubuntu\|Debian\|Devuan' ; then \
-		options=--install-layout=deb ; \
-	else \
-		options=--prefix=/usr ; \
+	if test "$(DESTDIR)" ; then \
+		if lsb_release -si | grep --quiet 'Ubuntu\|Debian\|Devuan' ; then \
+			options=--install-layout=deb ; \
+		else \
+			options=--prefix=/usr ; \
+		fi ; \
+		root="--root=$(DESTDIR)" ; \
 	fi ; \
-	python setup.py install --root=$(DESTDIR) $$options
+	python setup.py install $$root $$options
