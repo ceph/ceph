@@ -31,6 +31,7 @@ clone
   $ rbd clone bar@snap rbd_other/child
   $ rbd snap create rbd_other/child@snap
   $ rbd flatten rbd_other/child 2> /dev/null
+  $ rbd bench-write rbd_other/child --io-pattern seq --io-total 1 > /dev/null 2>&1
 
 lock
 ====
@@ -676,6 +677,50 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
       <size>536870912</size>
     </snapshot>
   </snapshots>
+  $ rbd disk-usage rbd_other
+  warning: fast-diff map is not enabled for child. operation may be slow.
+  NAME       PROVISIONED  USED 
+  child@snap        512M     0 
+  child             512M 4096k 
+  <TOTAL>           512M 4096k 
+  $ rbd disk-usage rbd_other --format json | python -mjson.tool | sed 's/,$/, /'
+  warning: fast-diff map is not enabled for child. operation may be slow.
+  {
+      "images": [
+          {
+              "name": "child", 
+              "provisioned_size": 536870912, 
+              "snapshot": "snap", 
+              "used_size": 0
+          }, 
+          {
+              "name": "child", 
+              "provisioned_size": 536870912, 
+              "used_size": 4194304
+          }
+      ], 
+      "total_provisioned_size": 536870912, 
+      "total_used_size": 4194304
+  }
+  $ rbd disk-usage rbd_other --format xml | xml_pp 2>&1 | grep -v '^new version at /usr/bin/xml_pp'
+  warning: fast-diff map is not enabled for child. operation may be slow.
+  <stats>
+    <images>
+      <image>
+        <name>child</name>
+        <snapshot>snap</snapshot>
+        <provisioned_size>536870912</provisioned_size>
+        <used_size>0</used_size>
+      </image>
+      <image>
+        <name>child</name>
+        <provisioned_size>536870912</provisioned_size>
+        <used_size>4194304</used_size>
+      </image>
+    </images>
+    <total_provisioned_size>536870912</total_provisioned_size>
+    <total_used_size>4194304</total_used_size>
+  </stats>
 
 # cleanup
   $ rbd snap remove rbd_other/child@snap
