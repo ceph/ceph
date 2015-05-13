@@ -78,7 +78,8 @@ public:
     int max_count,
     snapid_t seq,
     vector<ghobject_t> *ls,
-    ghobject_t *next
+    ghobject_t *next,
+    snapid_t snap_seq=0
     );
 };
 

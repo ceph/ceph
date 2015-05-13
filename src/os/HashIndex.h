@@ -197,7 +197,8 @@ protected:
     int max_count,
     snapid_t seq,
     vector<ghobject_t> *ls,
-    ghobject_t *next
+    ghobject_t *next,
+    snapid_t snap_seq
     );
 private:
   /// Recursively remove path and its subdirs
@@ -360,7 +361,8 @@ private:
     const ghobject_t *next_object,          /// [in] list > *next_object
     const snapid_t *seq,                   /// [in] list >= *seq
     set<string> *hash_prefixes,            /// [out] prefixes in dir
-    set<pair<string, ghobject_t> > *objects /// [out] objects
+    set<pair<string, ghobject_t> > *objects, /// [out] objects
+    const snapid_t snap_seq                   /// [in] list >= *seq
     );
 
   /// List objects in collection in ghobject_t order
@@ -370,7 +372,8 @@ private:
     int max_count,              /// [in] List at most max_count
     snapid_t seq,               /// [in] list only objects where snap >= seq
     ghobject_t *next,            /// [in,out] List objects >= *next
-    vector<ghobject_t> *out      /// [out] Listed objects
+    vector<ghobject_t> *out,      /// [out] Listed objects
+    snapid_t snap_seq=0               /// [in] list only objects where snap >= seq
     ); ///< @return Error Code, 0 on success
 
   /// Create the given levels of sub directories from the given root.

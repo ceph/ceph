@@ -330,14 +330,15 @@ int HashIndex::_collection_list_partial(const ghobject_t &start,
 					int max_count,
 					snapid_t seq,
 					vector<ghobject_t> *ls,
-					ghobject_t *next) {
+					ghobject_t *next, 
+					snapid_t snap_seq)  {
   vector<string> path;
   ghobject_t _next;
   if (!next)
     next = &_next;
   *next = start;
   dout(20) << "_collection_list_partial " << start << " " << min_count << "-" << max_count << " ls.size " << ls->size() << dendl;
-  return list_by_hash(path, min_count, max_count, seq, next, ls);
+  return list_by_hash(path, min_count, max_count, seq, next, ls, snap_seq);
 }
 
 int HashIndex::prep_delete() {
@@ -769,9 +770,11 @@ int HashIndex::get_path_contents_by_hash(const vector<string> &path,
 					 const ghobject_t *next_object,
 					 const snapid_t *seq,
 					 set<string> *hash_prefixes,
-					 set<pair<string, ghobject_t> > *objects) {
+					 set<pair<string, ghobject_t> > *objects,
+					 const snapid_t snap_seq) {
   set<string> subdirs;
   map<string, ghobject_t> rev_objects;
+  map<string, snapid_t> rev_seqs;
   int r;
   string cur_prefix;
   for (vector<string>::const_iterator i = path.begin();
@@ -779,7 +782,7 @@ int HashIndex::get_path_contents_by_hash(const vector<string> &path,
        ++i) {
     cur_prefix.append(*i);
   }
-  r = list_objects(path, 0, 0, &rev_objects);
+  r = list_objects(path, 0, 0, &rev_objects, &rev_seqs);
   if (r < 0)
     return r;
   for (map<string, ghobject_t>::iterator i = rev_objects.begin();
@@ -791,6 +794,8 @@ int HashIndex::get_path_contents_by_hash(const vector<string> &path,
     if (next_object && i->second < *next_object)
       continue;
     if (seq && i->second.hobj.snap < *seq)
+      continue;
+    if (snap_seq && snap_seq <= rev_seqs[i->first])
       continue;
     hash_prefixes->insert(hash_prefix);
     objects->insert(pair<string, ghobject_t>(hash_prefix, i->second));
@@ -818,7 +823,8 @@ int HashIndex::list_by_hash(const vector<string> &path,
 			    int max_count,
 			    snapid_t seq,
 			    ghobject_t *next,
-			    vector<ghobject_t> *out) {
+			    vector<ghobject_t> *out,
+			    snapid_t snap_seq) {
   assert(out);
   vector<string> next_path = path;
   next_path.push_back("");
@@ -829,7 +835,8 @@ int HashIndex::list_by_hash(const vector<string> &path,
 				    next,
 				    &seq,
 				    &hash_prefixes,
-				    &objects);
+				    &objects,
+                                    snap_seq);
   if (r < 0)
     return r;
   dout(20) << " prefixes " << hash_prefixes << dendl;

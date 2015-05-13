@@ -1934,6 +1934,7 @@ private:
   void handle_osd_map(class MOSDMap *m);
   void wait_for_osd_map();
 
+  uint64_t get_pool_seq(int64_t poolid);
   int pool_snap_by_name(int64_t poolid, const char *snap_name, snapid_t *snap);
   int pool_snap_get_info(int64_t poolid, snapid_t snap, pool_snap_info_t *info);
   int pool_snap_list(int64_t poolid, vector<uint64_t> *snaps);
@@ -2067,7 +2068,7 @@ public:
     return op_submit(o);
   }
   ceph_tid_t pg_read(uint32_t hash, object_locator_t oloc,
-		ObjectOperation& op,
+		ObjectOperation& op, snapid_t seq,
 		bufferlist *pbl, int flags,
 		Context *onack,
 		epoch_t *reply_epoch,
@@ -2078,6 +2079,7 @@ public:
     o->target.precalc_pgid = true;
     o->target.base_pgid = pg_t(hash, oloc.pool);
     o->priority = op.priority;
+    o->snapc.seq = seq;
     o->snapid = CEPH_NOSNAP;
     o->outbl = pbl;
     o->out_bl.swap(op.out_bl);

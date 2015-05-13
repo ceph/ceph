@@ -159,9 +159,10 @@ int LFNIndex::collection_list_partial(const ghobject_t &start,
 				      int max_count,
 				      snapid_t seq,
 				      vector<ghobject_t> *ls,
-				      ghobject_t *next)
+				      ghobject_t *next,
+				      snapid_t snap_seq)
 {
-  return _collection_list_partial(start, min_count, max_count, seq, ls, next);
+  return _collection_list_partial(start, min_count, max_count, seq, ls, next, snap_seq);
 }
 
 /* Derived class utility methods */
@@ -394,9 +395,25 @@ static int get_hobject_from_oinfo(const char *dir, const char *file,
   return 0;
 }
 
+static int get_hobject_from_sinfo(const char *dir, const char *file, 
+				  snapid_t *create_seq)
+{
+  char path[PATH_MAX];
+  bufferptr bp(PATH_MAX);
+  snprintf(path, sizeof(path), "%s/%s", dir, file);
+  // Hack, user.ceph._ is the attribute used to store the object info
+  int r = chain_getxattr(path, "user.ceph.snapset", bp.c_str(), bp.length());
+  if (r < 0)
+    return r;
+  bufferlist bl;
+  bl.push_back(bp);
+  SnapSet s(bl);
+  *create_seq = s.seq;
+  return 0;
+}
 
 int LFNIndex::list_objects(const vector<string> &to_list, int max_objs,
-			   long *handle, map<string, ghobject_t> *out)
+			   long *handle, map<string, ghobject_t> *out, map<string, snapid_t> *out1)
 {
   string to_list_path = get_full_path_subdir(to_list);
   DIR *dir = ::opendir(to_list_path.c_str());
@@ -425,6 +442,7 @@ int LFNIndex::list_objects(const vector<string> &to_list, int max_objs,
       continue;
     string short_name(de->d_name);
     ghobject_t obj;
+    snapid_t created_seq;
     if (lfn_is_object(short_name)) {
       r = lfn_translate(to_list, short_name, &obj);
       if (r < 0) {
@@ -435,10 +453,12 @@ int LFNIndex::list_objects(const vector<string> &to_list, int max_objs,
 	if (!lfn_must_hash(long_name)) {
 	  assert(long_name == short_name);
 	}
-	if (index_version == HASH_INDEX_TAG)
+	if (index_version == HASH_INDEX_TAG) 
 	  get_hobject_from_oinfo(to_list_path.c_str(), short_name.c_str(), &obj);
+	get_hobject_from_sinfo(to_list_path.c_str(), short_name.c_str(), &created_seq);
 	  
 	out->insert(pair<string, ghobject_t>(short_name, obj));
+	out1->insert(pair<string, snapid_t>(short_name, created_seq));
 	++listed;
       } else {
 	continue;
