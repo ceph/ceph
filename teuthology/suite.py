@@ -783,23 +783,25 @@ def _build_matrix(path, _isfile=os.path.isfile,
     if _isfile(path):
         if path.endswith('.yaml'):
             return matrix.Base(item)
-        assert False, "Invalid file seen in _build_matrix"
         return None
     if _isdir(path):
+        if path.endswith('.disable'):
+            return None
         files = sorted(_listdir(path))
         if '+' in files:
             # concatenate items
             files.remove('+')
             submats = []
             for fn in sorted(files):
-                submats.append(
-                    _build_matrix(
-                        os.path.join(path, fn),
-                        _isfile,
-                        _isdir,
-                        _listdir,
-                        mincyclicity,
-                        fn))
+                submat = _build_matrix(
+                    os.path.join(path, fn),
+                    _isfile,
+                    _isdir,
+                    _listdir,
+                    mincyclicity,
+                    fn)
+                if submat is not None:
+                    submats.append(submat)
             return matrix.Concat(item, submats)
         elif '%' in files:
             # convolve items
@@ -813,7 +815,8 @@ def _build_matrix(path, _isfile=os.path.isfile,
                     _listdir,
                     mincyclicity=0,
                     item=fn)
-                submats.append(submat)
+                if submat is not None:
+                    submats.append(submat)
             return matrix.Product(item, submats)
         else:
             # list items
@@ -826,6 +829,8 @@ def _build_matrix(path, _isfile=os.path.isfile,
                     _listdir,
                     mincyclicity,
                     fn)
+                if submat is None:
+                    continue
                 if submat.cyclicity() < mincyclicity:
                     submat = matrix.Cycle(
                         int(math.ceil(
