@@ -8,7 +8,7 @@ except ImportError:
         import subprocess
         # backported from python 2.7 stdlib
         process = subprocess.Popen(
-           stdout=subprocess.PIPE, *popenargs, **kwargs)
+            stdout=subprocess.PIPE, *popenargs, **kwargs)
         output, unused_err = process.communicate()
         retcode = process.poll()
         if retcode:
@@ -34,7 +34,10 @@ logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.WARNING)
 
 def wait_for_health():
     print "Wait for health_ok...",
+    tries = 0
     while call("./ceph health 2> /dev/null | grep -v 'HEALTH_OK\|HEALTH_WARN' > /dev/null", shell=True) == 0:
+        if ++tries == 30:
+            raise Exception("Time exceeded to go to health")
         time.sleep(5)
     print "DONE"
 
@@ -51,7 +54,7 @@ def get_osd_pgs(SUBDIR, ID):
     if ID:
         endhead = re.compile("{id}.*_head$".format(id=ID))
     DIR = os.path.join(SUBDIR, "current")
-    PGS += [f for f in os.listdir(DIR) if os.path.isdir(os.path.join(DIR, f)) and (ID == None or endhead.match(f))]
+    PGS += [f for f in os.listdir(DIR) if os.path.isdir(os.path.join(DIR, f)) and (ID is None or endhead.match(f))]
     PGS = [re.sub("_head", "", p) for p in PGS if "_head" in p]
     return PGS
 
@@ -79,7 +82,7 @@ def get_objs(ALLPGS, prefix, DIR, ID):
                 continue
             FINALDIR = os.path.join(SUBDIR, PGDIR)
             # See if there are any objects there
-            if [ f for f in [ val for  _, _, fl in os.walk(FINALDIR) for val in fl ] if string.find(f, prefix) == 0 ]:
+            if any(f for f in [val for _, _, fl in os.walk(FINALDIR) for val in fl] if f.startswith(prefix)):
                 PGS += [p]
     return sorted(set(PGS))
 
@@ -124,11 +127,12 @@ def cat_file(level, filename):
     print "<EOF>"
 
 
-def vstart(new):
+def vstart(new, opt=""):
     print "vstarting....",
-    OPT = new and "-n" or ""
-    call("MON=1 OSD=4 CEPH_PORT=7400 ./vstart.sh -l {opt} -d mon osd > /dev/null 2>&1".format(opt=OPT), shell=True)
+    NEW = new and "-n" or ""
+    call("MON=1 OSD=4 CEPH_PORT=7400 ./vstart.sh -l {new} -d mon osd {opt} > /dev/null 2>&1".format(new=NEW, opt=opt), shell=True)
     print "DONE"
+
 
 def test_failure_tty(cmd, errmsg):
     try:
@@ -156,10 +160,11 @@ def test_failure_tty(cmd, errmsg):
         logging.error("Bad message to stderr \"" + line + "\"")
         return 1
 
+
 def test_failure(cmd, errmsg):
     logging.debug(cmd)
     try:
-        out = check_output(cmd, stderr=subprocess.STDOUT, shell=True)
+        check_output(cmd, stderr=subprocess.STDOUT, shell=True)
         logging.error("Should have failed, but got exit 0")
         return 1
     except subprocess.CalledProcessError, e:
@@ -169,6 +174,7 @@ def test_failure(cmd, errmsg):
         else:
             logging.error("Bad message to stderr \"" + e.output + "\"")
             return 1
+
 
 def get_nspace(num):
     if num == 0:
@@ -203,18 +209,98 @@ def verify(DATADIR, POOL, NAME_PREFIX):
             pass
     return ERRORS
 
+
+def check_journal(jsondict):
+    errors = 0
+    if 'header' not in jsondict:
+        logging.error("Key 'header' not in dump-journal")
+        errors += 1
+    elif 'max_size' not in jsondict['header']:
+        logging.error("Key 'max_size' not in dump-journal header")
+        errors += 1
+    else:
+        print "\tJournal max_size = {size}".format(size=jsondict['header']['max_size'])
+    if 'entries' not in jsondict:
+        logging.error("Key 'entries' not in dump-journal output")
+        errors += 1
+    elif len(jsondict['entries']) == 0:
+        logging.warning("No entries in journal found, probably a problem")
+        errors += 1
+    else:
+        errors += check_journal_entries(jsondict['entries'])
+    return errors
+
+
+def check_journal_entries(entries):
+    errors = 0
+    for enum in range(len(entries)):
+        if 'offset' not in entries[enum]:
+            logging.error("No 'offset' key in entry {e}".format(e=enum))
+            errors += 1
+        if 'seq' not in entries[enum]:
+            logging.error("No 'seq' key in entry {e}".format(e=enum))
+            errors += 1
+        if 'transactions' not in entries[enum]:
+            logging.error("No 'transactions' key in entry {e}".format(e=enum))
+            errors += 1
+        elif len(entries[enum]['transactions']) == 0:
+            logging.error("No transactions found in entry {e}".format(e=enum))
+            errors += 1
+        else:
+            errors += check_entry_transactions(entries[enum], enum)
+    return errors
+
+
+def check_entry_transactions(entry, enum):
+    errors = 0
+    for tnum in range(len(entry['transactions'])):
+        if 'trans_num' not in entry['transactions'][tnum]:
+            logging.error("Key 'trans_num' missing from entry {e} trans {t}".format(e=enum, t=tnum))
+            errors += 1
+        elif entry['transactions'][tnum]['trans_num'] != tnum:
+            ft = entry['transactions'][tnum]['trans_num']
+            logging.error("Bad trans_num ({ft}) entry {e} trans {t}".format(ft=ft, e=enum, t=tnum))
+            errors += 1
+        if 'ops' not in entry['transactions'][tnum]:
+            logging.error("Key 'ops' missing from entry {e} trans {t}".format(e=enum, t=tnum))
+            errors += 1
+        else:
+            errors += check_transaction_ops(entry['transactions'][tnum]['ops'], enum, tnum)
+    return errors
+
+
+def check_transaction_ops(ops, enum, tnum):
+    if len(ops) is 0:
+        logging.warning("No ops found in entry {e} trans {t}".format(e=enum, t=tnum))
+    errors = 0
+    for onum in range(len(ops)):
+        if 'op_num' not in ops[onum]:
+            logging.error("Key 'op_num' missing from entry {e} trans {t} op {o}".format(e=enum, t=tnum, o=onum))
+            errors += 1
+        elif ops[onum]['op_num'] != onum:
+            fo = ops[onum]['op_num']
+            logging.error("Bad op_num ({fo}) from entry {e} trans {t} op {o}".format(fo=fo, e=enum, t=tnum, o=onum))
+            errors += 1
+        if 'op_name' not in ops[onum]:
+            logging.error("Key 'op_name' missing from entry {e} trans {t} op {o}".format(e=enum, t=tnum, o=onum))
+            errors += 1
+    return errors
+
+
 CEPH_DIR = "ceph_objectstore_tool_dir"
 CEPH_CONF = os.path.join(CEPH_DIR, 'ceph.conf')
 
+
 def kill_daemons():
     call("./init-ceph -c {conf} stop osd mon > /dev/null 2>&1".format(conf=CEPH_CONF), shell=True)
+
 
 def main(argv):
     sys.stdout = os.fdopen(sys.stdout.fileno(), 'w', 0)
     nullfd = open(os.devnull, "w")
 
-    call("rm -fr ceph_objectstore_tool_dir ; mkdir ceph_objectstore_tool_dir", shell=True)
-    os.environ["CEPH_DIR"] = CEPH_DIR;
+    call("rm -fr {dir}; mkdir {dir}".format(dir=CEPH_DIR), shell=True)
+    os.environ["CEPH_DIR"] = CEPH_DIR
     OSDDIR = os.path.join(CEPH_DIR, "dev")
     REP_POOL = "rep_pool"
     REP_NAME = "REPobject"
@@ -306,7 +392,7 @@ def main(argv):
             logging.debug(cmd)
             ret = call(cmd, shell=True, stderr=nullfd)
             if ret != 0:
-                logging.critical("Replicated pool object creation failed with {ret}".format(ret=ret))
+                logging.critical("Rados put command failed with {ret}".format(ret=ret))
                 return 1
 
             db[nspace][NAME] = {}
@@ -474,18 +560,44 @@ def main(argv):
     cmd = "./ceph-objectstore-tool --type filestore --data-path {dir}/{osd} --op list --pgid {pg}".format(dir=OSDDIR, osd=ONEOSD, pg=ONEPG)
     ERRORS += test_failure(cmd, "Must provide --journal-path")
 
-    # Test --op list and generate json for all objects
+    cmd = (CFSD_PREFIX + "--op remove").format(osd=ONEOSD)
+    ERRORS += test_failure(cmd, "Must provide pgid")
+
+    # Don't secify a --op
+    cmd = CFSD_PREFIX.format(osd=ONEOSD)
+    ERRORS += test_failure(cmd, "Must provide --op or object command...")
+
     TMPFILE = r"/tmp/tmp.{pid}".format(pid=pid)
     ALLPGS = OBJREPPGS + OBJECPGS
-
-    print "Test --op list variants"
     OSDS = get_osds(ALLPGS[0], OSDDIR)
     osd = OSDS[0]
 
+    # Test --op dump-journal by loading json
+    print "Test --op dump-journal"
+    cmd = (CFSD_PREFIX + "--op dump-journal --format json").format(osd=osd)
+    logging.debug(cmd)
+    tmpfd = open(TMPFILE, "w")
+    ret = call(cmd, shell=True, stdout=tmpfd)
+    if ret != 0:
+        logging.error("Bad exit status {ret} from {cmd}".format(ret=ret, cmd=cmd))
+        ERRORS += 1
+    tmpfd.close()
+    tmpfd = open(TMPFILE, "r")
+    jsondict = json.load(tmpfd)
+    tmpfd.close()
+    os.unlink(TMPFILE)
+
+    journal_errors = check_journal(jsondict)
+    if journal_errors is not 0:
+        logging.error(jsondict)
+    ERRORS += journal_errors
+
+    # Test --op list and generate json for all objects
+    print "Test --op list variants"
+
     # retrieve all objects from all PGs
+    tmpfd = open(TMPFILE, "w")
     cmd = (CFSD_PREFIX + "--op list --format json").format(osd=osd)
-    logging.debug(cmd);
-    tmpfd = open(TMPFILE, "a")
     logging.debug(cmd)
     ret = call(cmd, shell=True, stdout=tmpfd)
     if ret != 0:
@@ -497,9 +609,8 @@ def main(argv):
     (pgid, jsondict) = json.loads(JSONOBJ[0])[0]
 
     # retrieve all objects in a given PG
-    cmd = (CFSD_PREFIX + "--op list --pgid {pg} --format json").format(osd=osd, pg=pgid)
-    logging.debug(cmd);
     tmpfd = open(OTHERFILE, "a")
+    cmd = (CFSD_PREFIX + "--op list --pgid {pg} --format json").format(osd=osd, pg=pgid)
     logging.debug(cmd)
     ret = call(cmd, shell=True, stdout=tmpfd)
     if ret != 0:
@@ -516,9 +627,8 @@ def main(argv):
         ERRORS += 1
 
     # retrieve all objects with a given name in a given PG
+    tmpfd = open(OTHERFILE, "w")
     cmd = (CFSD_PREFIX + "--op list --pgid {pg} {object} --format json").format(osd=osd, pg=pgid, object=jsondict['oid'])
-    logging.debug(cmd);
-    tmpfd = open(OTHERFILE, "a")
     logging.debug(cmd)
     ret = call(cmd, shell=True, stdout=tmpfd)
     if ret != 0:
@@ -538,8 +648,8 @@ def main(argv):
     for pg in ALLPGS:
         OSDS = get_osds(pg, OSDDIR)
         for osd in OSDS:
-            cmd = (CFSD_PREFIX + "--op list --pgid {pg}").format(osd=osd, pg=pg)
             tmpfd = open(TMPFILE, "a")
+            cmd = (CFSD_PREFIX + "--op list --pgid {pg}").format(osd=osd, pg=pg)
             logging.debug(cmd)
             ret = call(cmd, shell=True, stdout=tmpfd)
             if ret != 0:
@@ -566,6 +676,7 @@ def main(argv):
             GETNAME = "/tmp/getbytes.{pid}".format(pid=pid)
             TESTNAME = "/tmp/testbytes.{pid}".format(pid=pid)
             SETNAME = "/tmp/setbytes.{pid}".format(pid=pid)
+            BADNAME = "/tmp/badbytes.{pid}".format(pid=pid)
             for pg in OBJREPPGS:
                 OSDS = get_osds(pg, OSDDIR)
                 for osd in OSDS:
@@ -622,6 +733,37 @@ def main(argv):
                         logging.debug("Expected:")
                         cat_file(logging.DEBUG, SETNAME)
                         ERRORS += 1
+
+                    # Use set-bytes with --dry-run and make sure contents haven't changed
+                    fd = open(BADNAME, "w")
+                    data = "Bad data for --dry-run in {file}\n".format(file=file)
+                    fd.write(data)
+                    fd.close()
+                    cmd = (CFSD_PREFIX + "--dry-run --pgid {pg} '{json}' set-bytes {sname}").format(osd=osd, pg=pg, json=JSON, sname=BADNAME)
+                    logging.debug(cmd)
+                    ret = call(cmd, shell=True, stdout=nullfd, stderr=nullfd)
+                    if ret != 0:
+                        logging.error("Bad exit status {ret} from set-bytes --dry-run".format(ret=ret))
+                        ERRORS += 1
+                    fd = open(TESTNAME, "w")
+                    cmd = (CFSD_PREFIX + "--pgid {pg} '{json}' get-bytes -").format(osd=osd, pg=pg, json=JSON)
+                    logging.debug(cmd)
+                    ret = call(cmd, shell=True, stdout=fd)
+                    fd.close()
+                    if ret != 0:
+                        logging.error("Bad exit status {ret} from get-bytes".format(ret=ret))
+                        ERRORS += 1
+                    cmd = "diff -q {setfile} {testfile}".format(setfile=SETNAME, testfile=TESTNAME)
+                    logging.debug(cmd)
+                    ret = call(cmd, shell=True)
+                    if ret != 0:
+                        logging.error("Data after set-bytes --dry-run changed!")
+                        logging.debug("Got:")
+                        cat_file(logging.DEBUG, TESTNAME)
+                        logging.debug("Expected:")
+                        cat_file(logging.DEBUG, SETNAME)
+                        ERRORS += 1
+
                     fd = open(file, "r")
                     cmd = (CFSD_PREFIX + "--pgid {pg} '{json}' set-bytes").format(osd=osd, pg=pg, json=JSON)
                     logging.debug(cmd)
@@ -629,6 +771,7 @@ def main(argv):
                     if ret != 0:
                         logging.error("Bad exit status {ret} from set-bytes to restore object".format(ret=ret))
                         ERRORS += 1
+                    fd.close()
 
     try:
         os.unlink(GETNAME)
@@ -640,6 +783,10 @@ def main(argv):
         pass
     try:
         os.unlink(SETNAME)
+    except:
+        pass
+    try:
+        os.unlink(BADNAME)
     except:
         pass
 
@@ -776,7 +923,7 @@ def main(argv):
         cmd = (CFSD_PREFIX + "--op list-pgs").format(osd=osd)
         logging.debug(cmd)
         TEST_PGS = check_output(cmd, shell=True).split("\n")
-        TEST_PGS = sorted(TEST_PGS)[1:] # Skip extra blank line
+        TEST_PGS = sorted(TEST_PGS)[1:]  # Skip extra blank line
 
         if TEST_PGS != CHECK_PGS:
             logging.error("list-pgs got wrong result for osd.{osd}".format(osd=osd))
@@ -784,11 +931,38 @@ def main(argv):
             logging.error("Got {pgs}".format(pgs=TEST_PGS))
             ERRORS += 1
 
-    print "Test pg export"
     EXP_ERRORS = 0
+    print "Test pg export --dry-run"
+    pg = ALLREPPGS[0]
+    osd = get_osds(pg, OSDDIR)[0]
+    fname = "/tmp/fname.{pid}".format(pid=pid)
+    cmd = (CFSD_PREFIX + "--dry-run --op export --pgid {pg} --file {file}").format(osd=osd, pg=pg, file=fname)
+    logging.debug(cmd)
+    ret = call(cmd, shell=True, stdout=nullfd, stderr=nullfd)
+    if ret != 0:
+        logging.error("Exporting --dry-run failed for pg {pg} on {osd} with {ret}".format(pg=pg, osd=osd, ret=ret))
+        EXP_ERRORS += 1
+    elif os.path.exists(fname):
+        logging.error("Exporting --dry-run created file")
+        EXP_ERRORS += 1
+
+    cmd = (CFSD_PREFIX + "--dry-run --op export --pgid {pg} > {file}").format(osd=osd, pg=pg, file=fname)
+    logging.debug(cmd)
+    ret = call(cmd, shell=True, stdout=nullfd, stderr=nullfd)
+    if ret != 0:
+        logging.error("Exporting --dry-run failed for pg {pg} on {osd} with {ret}".format(pg=pg, osd=osd, ret=ret))
+        EXP_ERRORS += 1
+    else:
+        outdata = get_lines(fname)
+        if len(outdata) > 0:
+            logging.error("Exporting --dry-run to stdout not empty")
+            logging.error("Data: " + outdata)
+            EXP_ERRORS += 1
+
     os.mkdir(TESTDIR)
     for osd in [f for f in os.listdir(OSDDIR) if os.path.isdir(os.path.join(OSDDIR, f)) and string.find(f, "osd") == 0]:
         os.mkdir(os.path.join(TESTDIR, osd))
+    print "Test pg export"
     for pg in ALLREPPGS + ALLECPGS:
         for osd in get_osds(pg, OSDDIR):
             mydir = os.path.join(TESTDIR, osd)
@@ -798,7 +972,7 @@ def main(argv):
             elif pg == ALLREPPGS[1]:
                 cmd = (CFSD_PREFIX + "--op export --pgid {pg} --file - > {file}").format(osd=osd, pg=pg, file=fname)
             else:
-              cmd = (CFSD_PREFIX + "--op export --pgid {pg} --file {file}").format(osd=osd, pg=pg, file=fname)
+                cmd = (CFSD_PREFIX + "--op export --pgid {pg} --file {file}").format(osd=osd, pg=pg, file=fname)
             logging.debug(cmd)
             ret = call(cmd, shell=True, stdout=nullfd, stderr=nullfd)
             if ret != 0:
@@ -811,6 +985,13 @@ def main(argv):
     RM_ERRORS = 0
     for pg in ALLREPPGS + ALLECPGS:
         for osd in get_osds(pg, OSDDIR):
+            # This should do nothing
+            cmd = (CFSD_PREFIX + "--op remove --pgid {pg} --dry-run").format(pg=pg, osd=osd)
+            logging.debug(cmd)
+            ret = call(cmd, shell=True, stdout=nullfd)
+            if ret != 0:
+                logging.error("Removing --dry-run failed for pg {pg} on {osd} with {ret}".format(pg=pg, osd=osd, ret=ret))
+                RM_ERRORS += 1
             cmd = (CFSD_PREFIX + "--op remove --pgid {pg}").format(pg=pg, osd=osd)
             logging.debug(cmd)
             ret = call(cmd, shell=True, stdout=nullfd)
@@ -828,6 +1009,13 @@ def main(argv):
             PGS = [f for f in os.listdir(dir) if os.path.isfile(os.path.join(dir, f))]
             for pg in PGS:
                 file = os.path.join(dir, pg)
+                # This should do nothing
+                cmd = (CFSD_PREFIX + "--op import --file {file} --dry-run").format(osd=osd, file=file)
+                logging.debug(cmd)
+                ret = call(cmd, shell=True, stdout=nullfd)
+                if ret != 0:
+                    logging.error("Import failed from {file} with {ret}".format(file=file, ret=ret))
+                    IMP_ERRORS += 1
                 if pg == PGS[0]:
                     cmd = ("cat {file} |".format(file=file) + CFSD_PREFIX + "--op import").format(osd=osd)
                 elif pg == PGS[1]:
@@ -893,7 +1081,20 @@ def main(argv):
                 if string.find(pg, "{id}.".format(id=REPID)) != 0:
                     continue
                 file = os.path.join(dir, pg)
+                # This should do nothing
+                cmd = "./ceph-objectstore-tool --dry-run import-rados {pool} {file}".format(pool=NEWPOOL, file=file)
+                logging.debug(cmd)
+                ret = call(cmd, shell=True, stdout=nullfd)
+                if ret != 0:
+                    logging.error("Import-rados failed from {file} with {ret}".format(file=file, ret=ret))
+                    ERRORS += 1
                 cmd = "./ceph-objectstore-tool import-rados {pool} {file}".format(pool=NEWPOOL, file=file)
+                logging.debug(cmd)
+                ret = call(cmd, shell=True, stdout=nullfd)
+                if ret != 0:
+                    logging.error("Import-rados failed from {file} with {ret}".format(file=file, ret=ret))
+                    ERRORS += 1
+                cmd = "./ceph-objectstore-tool --no-overwrite import-rados {pool} {file}".format(pool=NEWPOOL, file=file)
                 logging.debug(cmd)
                 ret = call(cmd, shell=True, stdout=nullfd)
                 if ret != 0:
@@ -903,6 +1104,56 @@ def main(argv):
         ERRORS += verify(DATADIR, NEWPOOL, REP_NAME)
     else:
         logging.warning("SKIPPING IMPORT-RADOS TESTS DUE TO PREVIOUS FAILURES")
+
+    # Cause REP_POOL to split and test import with object/log filtering
+    cmd = "./ceph osd pool set {pool} pg_num 32".format(pool=REP_POOL)
+    logging.debug(cmd)
+    ret = call(cmd, shell=True, stdout=nullfd, stderr=nullfd)
+    time.sleep(15)
+    cmd = "./ceph osd pool set {pool} pgp_num 32".format(pool=REP_POOL)
+    logging.debug(cmd)
+    ret = call(cmd, shell=True, stdout=nullfd, stderr=nullfd)
+    wait_for_health()
+    kill_daemons()
+
+    print "Remove pgs for another import"
+    RM_ERRORS = 0
+    for pg in ALLREPPGS:
+        for osd in get_osds(pg, OSDDIR):
+            cmd = (CFSD_PREFIX + "--op remove --pgid {pg}").format(pg=pg, osd=osd)
+            logging.debug(cmd)
+            ret = call(cmd, shell=True, stdout=nullfd)
+            if ret != 0:
+                logging.error("Removing failed for pg {pg} on {osd} with {ret}".format(pg=pg, osd=osd, ret=ret))
+                RM_ERRORS += 1
+
+    ERRORS += RM_ERRORS
+
+    IMP_ERRORS = 0
+    if RM_ERRORS == 0:
+        print "Test pg import after PGs have split"
+        for osd in [f for f in os.listdir(OSDDIR) if os.path.isdir(os.path.join(OSDDIR, f)) and string.find(f, "osd") == 0]:
+            dir = os.path.join(TESTDIR, osd)
+            PGS = [f for f in os.listdir(dir) if os.path.isfile(os.path.join(dir, f))]
+            for pg in PGS:
+                if pg not in ALLREPPGS:
+                    continue
+                file = os.path.join(dir, pg)
+                cmd = (CFSD_PREFIX + "--op import --file {file}").format(osd=osd, file=file)
+                logging.debug(cmd)
+                ret = call(cmd, shell=True, stdout=nullfd)
+                if ret != 0:
+                    logging.error("Import failed from {file} with {ret}".format(file=file, ret=ret))
+                    IMP_ERRORS += 1
+    else:
+        logging.warning("SKIPPING IMPORT TESTS DUE TO PREVIOUS FAILURES")
+
+    ERRORS += IMP_ERRORS
+
+    # Start up again to make sure imports didn't corrupt anything
+    if IMP_ERRORS == 0:
+        vstart(new=False)
+        wait_for_health()
 
     call("/bin/rm -rf {dir}".format(dir=TESTDIR), shell=True)
     call("/bin/rm -rf {dir}".format(dir=DATADIR), shell=True)
@@ -920,5 +1171,5 @@ if __name__ == "__main__":
         status = main(sys.argv[1:])
     finally:
         kill_daemons()
-        call("/bin/rm -fr ceph_objectstore_tool_dir", shell=True)
+        call("/bin/rm -fr {dir}".format(dir=CEPH_DIR), shell=True)
     sys.exit(status)
