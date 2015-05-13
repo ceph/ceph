@@ -10,18 +10,6 @@
 
 using namespace ceph;
 
-bool get_features(uint64_t *features);
-bool is_feature_enabled(uint64_t feature);
-int create_image_pp(librbd::RBD &rbd, librados::IoCtx &ioctx,
-                    const std::string &name, uint64_t size);
-
-#define REQUIRE_FEATURE(feature) { 	  \
-  if (!is_feature_enabled(feature)) { 	  \
-    std::cout << "SKIPPING" << std::endl; \
-    return SUCCEED(); 			  \
-  } 					  \
-}
-
 class TestFixture : public ::testing::Test {
 public:
 

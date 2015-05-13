@@ -22,6 +22,7 @@
 #include "global/global_init.h"
 #include "common/ceph_argparse.h"
 #include "common/config.h"
+#include "common/Thread.h"
 
 #include "gtest/gtest.h"
 
@@ -39,7 +40,7 @@
 #include <vector>
 
 #include "test/librados/test.h"
-#include "test/librbd/test_fixture.h"
+#include "test/librbd/test_support.h"
 #include "common/errno.h"
 #include "include/interval_set.h"
 #include "include/stringify.h"
