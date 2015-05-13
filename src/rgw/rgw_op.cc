@@ -2362,6 +2362,13 @@ void RGWPutMetadataObject::execute()
     return;
   }
 
+  /* Check whether the object has expired. Swift API documentation
+   * stands that we should return 404 Not Found in such case. */
+  if (need_object_expiration() && object_is_expired(orig_attrs)) {
+    ret = -ENOENT;
+    return;
+  }
+
   /* Filter currently existing attributes. */
   prepare_add_del_attrs(orig_attrs, attrs, rmattrs);
   populate_with_generic_attrs(s, attrs);
