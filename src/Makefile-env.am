@@ -48,6 +48,27 @@ endif
 ##################################
 ## automake environment
 
+HARDENING_CFLAGS = \
+                   -O2 \
+                   -g \
+                   -pipe \
+                   -Wall \
+                   -Wp,-D_FORTIFY_SOURCE=2 \
+                   -fexceptions \
+                   -fstack-protector-strong \
+                   --param=ssp-buffer-size=4 \
+                   -grecord-gcc-switches \
+                   -fPIE \
+                   -fPIC
+
+HARDENING_LDFLAGS = \
+                    -Wl,-z,relro \
+                    -z now \
+                    -pie
+
+CFLAGS += $(HARDENING_CFLAGS)
+LDFLAGS += $(HARDENING_LDFLAGS)
+
 AM_COMMON_CPPFLAGS = \
 	-D__CEPH__ \
 	-D_FILE_OFFSET_BITS=64 \
