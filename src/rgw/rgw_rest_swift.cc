@@ -27,7 +27,7 @@ int RGWListBuckets_ObjStore_SWIFT::get_params()
     }
 
     if (l > (long)limit_max || l < 0) {
-      return -EINVAL;
+      return -ERR_PRECONDITION_FAILED;
     }
 
     limit = (uint64_t)l;
