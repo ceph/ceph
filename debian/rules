@@ -1,5 +1,9 @@
 #!/usr/bin/make -f
 # -*- makefile -*-
+
+DENING_CFLAGS = -O2 -g -pipe -Wl,-z,relro -Wall -Wp,-D_FORTIFY_SOURCE=2 -fexceptions -fstack-protector-strong --param=ssp-buffer-size=4 -grecord-gcc-switches -pie -fPIC
+HARDENING_LDFLAGS = -Wl,-z,relro,-pie
+
 export DH_VERBOSE=1
 export DESTDIR=$(CURDIR)/debian/tmp
 
