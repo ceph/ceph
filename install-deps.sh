@@ -79,6 +79,10 @@ CentOS|Fedora|RedHatEnterpriseServer)
         sed -e 's/@//g' < ceph.spec.in > $DIR/ceph.spec
         $SUDO zypper --non-interactive install $(rpmspec -q --buildrequires $DIR/ceph.spec) || exit 1
         ;;
+*SUSE*)
+        sed -e 's/@//g' < ceph.spec.in > $DIR/ceph.spec
+        $SUDO zypper --non-interactive install $(rpmspec -q --buildrequires $DIR/ceph.spec)
+        ;;
 *)
         echo "$(lsb_release -si) is unknown, dependencies will have to be installed manually."
         ;;
