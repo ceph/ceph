@@ -1,11 +1,18 @@
 """
-Special case divergence test
+Special regression test for tracker #11184
+
+Synopsis: osd/SnapMapper.cc: 282: FAILED assert(check(oid))
+
+This is accomplished by moving a pg that wasn't part of split and still include
+divergent priors.
 """
 import logging
 import time
+from cStringIO import StringIO
 
 from teuthology import misc as teuthology
 from util.rados import rados
+import os
 
 
 log = logging.getLogger(__name__)
@@ -13,8 +20,8 @@ log = logging.getLogger(__name__)
 
 def task(ctx, config):
     """
-    Test handling of divergent entries with prior_version
-    prior to log_tail
+    Test handling of divergent entries during export / import
+    to regression test tracker #11184
 
     overrides:
       ceph:
@@ -42,6 +49,7 @@ def task(ctx, config):
     # something that is always there
     dummyfile = '/etc/fstab'
     dummyfile2 = '/etc/resolv.conf'
+    testdir = teuthology.get_testdir(ctx)
 
     # create 1 pg pool
     log.info('creating foo')
@@ -140,8 +148,71 @@ def task(ctx, config):
 
     log.info("killing divergent %d", divergent)
     ctx.manager.kill_osd(divergent)
+
+    # Split pgs for pool foo
+    ctx.manager.raw_cluster_cmd('osd', 'pool', 'set', 'foo', 'pg_num', '2')
+    time.sleep(5)
+
+    # Export a pg
+    (exp_remote,) = ctx.\
+        cluster.only('osd.{o}'.format(o=divergent)).remotes.iterkeys()
+    FSPATH = ctx.manager.get_filepath()
+    JPATH = os.path.join(FSPATH, "journal")
+    prefix = ("sudo adjust-ulimits ceph-objectstore-tool "
+              "--data-path {fpath} --journal-path {jpath} "
+              "--log-file="
+              "/var/log/ceph/objectstore_tool.$$.log ".
+              format(fpath=FSPATH, jpath=JPATH))
+    pid = os.getpid()
+    expfile = os.path.join(testdir, "exp.{pid}.out".format(pid=pid))
+    cmd = ((prefix + "--op export --pgid 1.0 --file {file}").
+           format(id=divergent, file=expfile))
+    proc = exp_remote.run(args=cmd, wait=True,
+                          check_status=False, stdout=StringIO())
+    assert proc.exitstatus == 0
+
+    # Remove the same pg that was exported
+    cmd = ((prefix + "--op remove --pgid 1.0").
+           format(id=divergent, file=expfile))
+    proc = exp_remote.run(args=cmd, wait=True,
+                          check_status=False, stdout=StringIO())
+    assert proc.exitstatus == 0
+
+    # Kill one of non-divergent OSDs
+    log.info('killing osd.%d' % non_divergent[1])
+    ctx.manager.kill_osd(non_divergent[1])
+    ctx.manager.mark_down_osd(non_divergent[1])
+    # ctx.manager.mark_out_osd(non_divergent[1])
+
+    cmd = ((prefix + "--op import --file {file}").
+           format(id=non_divergent[1], file=expfile))
+    proc = exp_remote.run(args=cmd, wait=True,
+                          check_status=False, stdout=StringIO())
+    assert proc.exitstatus == 0
+
+    # bring in our divergent friend and other node
+    log.info("revive divergent %d", divergent)
+    ctx.manager.revive_osd(divergent)
+    ctx.manager.mark_in_osd(divergent)
+    log.info("revive %d", non_divergent[1])
+    ctx.manager.revive_osd(non_divergent[1])
+
+    while len(ctx.manager.get_osd_status()['up']) < 3:
+        time.sleep(10)
+
+    log.info('delay recovery divergent')
+    ctx.manager.set_config(divergent, osd_recovery_delay_start=100000)
+    log.info('mark divergent in')
+    ctx.manager.mark_in_osd(divergent)
+
+    log.info('wait for peering')
+    rados(ctx, mon, ['-p', 'foo', 'put', 'foo', dummyfile])
+
+    log.info("killing divergent %d", divergent)
+    ctx.manager.kill_osd(divergent)
     log.info("reviving divergent %d", divergent)
     ctx.manager.revive_osd(divergent)
+    time.sleep(3)
 
     log.info('allowing recovery')
     # Set osd_recovery_delay_start back to 0 and kick the queue
@@ -164,4 +235,6 @@ def task(ctx, config):
     proc = remote.run(args=cmd, wait=True, check_status=False)
     assert proc.exitstatus == 0
 
+    cmd = 'rm {file}'.format(file=expfile)
+    remote.run(args=cmd, wait=True)
     log.info("success")
