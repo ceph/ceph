@@ -975,6 +975,16 @@ def get_sha1_from_pkg_name(path):
     log.debug("get_sha1_from_pkg_name: %s -> %s -> %s", path, basename, sha1)
     return sha1
 
+
+def remove_old_kernels(ctx):
+    for remote in ctx.cluster.remotes.keys():
+        package_type = remote.os.package_type
+        if package_type == 'rpm':
+            log.info("Removing old kernels from %s", remote)
+            args = ['sudo', 'package-cleanup', '-y', '--oldkernels']
+            remote.run(args=args)
+
+
 def task(ctx, config):
     """
     Make sure the specified kernel is installed.
@@ -1188,6 +1198,8 @@ def task(ctx, config):
         # enable or disable kdb if specified, otherwise do not touch
         if role_config.get('kdb') is not None:
             kdb[role] = role_config.get('kdb')
+
+    remove_old_kernels(ctx)
 
     if need_install:
         install_firmware(ctx, need_install)
