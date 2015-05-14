@@ -55,13 +55,12 @@ HARDENING_CFLAGS = \
                    -O2 \
                    -g \
                    -pipe \
-                   -Wl,-z,relro \
                    -Wall \
                    -Wp,-D_FORTIFY_SOURCE=2 \
                    -fexceptions \
                    --param=ssp-buffer-size=4 \
-                   -grecord-gcc-switches \
-                   -fPIE
+                   -fPIE \
+                   -fPIC
 
 SET_STACK_PROTECTOR_STRONG = $(shell expr `gcc -dumpversion` \>= 4.9)
 
