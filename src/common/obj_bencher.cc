@@ -388,10 +388,16 @@ int ObjBencher::write_bench(int secondsToRun,
     }
     lock.Unlock();
     //create new contents and name on the heap, and fill them
-    newContents = new bufferlist();
     newName = generate_object_name(data.started);
-    snprintf(data.object_contents, data.object_size, "I'm the %16dth object!", data.started);
-    newContents->append(data.object_contents, data.object_size);
+    newContents = contents[slot];
+    if (!newContents) {
+        newContents = new bufferlist();
+        contents[slot] = newContents;
+        snprintf(data.object_contents, data.object_size, "I'm the %16dth object!", data.started);
+        newContents->append(data.object_contents, data.object_size);
+    } else {
+        snprintf(newContents->c_str(), data.object_size, "I'm the %16dth object!", data.started);
+    }
     completion_wait(slot);
     lock.Lock();
     r = completion_ret(slot);
@@ -411,8 +417,7 @@ int ObjBencher::write_bench(int secondsToRun,
     release_completion(slot);
     timePassed = ceph_clock_now(cct) - data.start_time;
 
-    //write new stuff to backend, then delete old stuff
-    //and save locations of new stuff for later deletion
+    //write new stuff to backend
     start_times[slot] = ceph_clock_now(cct);
     r = create_completion(slot, _aio_cb, &lc);
     if (r < 0)
@@ -421,10 +426,7 @@ int ObjBencher::write_bench(int secondsToRun,
     if (r < 0) {//naughty; doesn't clean up heap space.
       goto ERR;
     }
-    delete contents[slot];
     name[slot] = newName;
-    contents[slot] = newContents;
-    newContents = 0;
     lock.Lock();
     ++data.started;
     ++data.in_flight;
@@ -451,6 +453,7 @@ int ObjBencher::write_bench(int secondsToRun,
     lock.Unlock();
     release_completion(slot);
     delete contents[slot];
+	contents[slot] = 0;
   }
 
   timePassed = ceph_clock_now(cct) - data.start_time;
@@ -489,6 +492,9 @@ int ObjBencher::write_bench(int secondsToRun,
   sync_write(run_name_meta, b_write, sizeof(int)*3);
 
   completions_done();
+  for (int i = 0; i < concurrentios; i++) 
+    if (contents[i])
+      delete contents[i];
 
   return 0;
 
@@ -497,7 +503,9 @@ int ObjBencher::write_bench(int secondsToRun,
   data.done = 1;
   lock.Unlock();
   pthread_join(print_thread, NULL);
-  delete newContents;
+  for (int i = 0; i < concurrentios; i++) 
+    if (contents[i])
+      delete contents[i];
   return r;
 }
 
@@ -605,10 +613,14 @@ int ObjBencher::seq_read_bench(int seconds_to_run, int num_objects, int concurre
     lock.Unlock();
     release_completion(slot);
     cur_contents = contents[slot];
+    if (!cur_contents) {
+        contents[slot] = new bufferlist();
+        cur_contents = contents[slot];
+    } 
 
     //start new read and check data if requested
     start_times[slot] = ceph_clock_now(cct);
-    contents[slot] = new bufferlist();
+
     create_completion(slot, _aio_cb, (void *)&lc);
     r = aio_read(newName, slot, contents[slot], data.object_size);
     if (r < 0) {
@@ -624,7 +636,6 @@ int ObjBencher::seq_read_bench(int seconds_to_run, int num_objects, int concurre
       ++errors;
     }
     name[slot] = newName;
-    delete cur_contents;
   }
 
   //wait for final reads to complete
@@ -798,10 +809,13 @@ int ObjBencher::rand_read_bench(int seconds_to_run, int num_objects, int concurr
     lock.Unlock();
     release_completion(slot);
     cur_contents = contents[slot];
+    if (!cur_contents) {
+        contents[slot] = new bufferlist();
+        cur_contents = contents[slot];
+    } 
 
     //start new read and check data if requested
     start_times[slot] = ceph_clock_now(g_ceph_context);
-    contents[slot] = new bufferlist();
     create_completion(slot, _aio_cb, (void *)&lc);
     r = aio_read(newName, slot, contents[slot], data.object_size);
     if (r < 0) {
@@ -817,7 +831,6 @@ int ObjBencher::rand_read_bench(int seconds_to_run, int num_objects, int concurr
       ++errors;
     }
     name[slot] = newName;
-    delete cur_contents;
   }
 
   //wait for final reads to complete
