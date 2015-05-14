@@ -62,11 +62,12 @@ HARDENING_CFLAGS = \
 
 SET_STACK_PROTECTOR_STRONG = $(shell expr `gcc -dumpversion` \>= 4.8)
 
-ifeq "$(SET_STACK_PROTECTOR_STRONG)" "1"
-        HARDENING_CFLAGS += -fstack-protector-strong
-else
-        HARDENING_CFLAGS += -fstack-protector
-endif
+		ifeq ($(SET_STACK_PROTECTOR_STRONG),1)
+				HARDENING_CFLAGS += -fstack-protector-strong
+		else
+				HARDENING_CFLAGS += -fstack-protector
+		endif
+
 
 HARDENING_LDFLAGS =  \
                      -pie \
