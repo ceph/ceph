@@ -564,9 +564,9 @@ int JournalTool::journal_reset(bool hard)
   }
 
   if (hard) {
-    resetter.reset_hard(rank);
+    r = resetter.reset_hard(rank);
   } else {
-    resetter.reset(rank);
+    r = resetter.reset(rank);
   }
   resetter.shutdown();
 
