@@ -422,6 +422,14 @@ class Filesystem(object):
         flags = json.loads(self.mon_manager.raw_cluster_cmd("osd", "dump", "--format=json-pretty"))['flags']
         return 'full' in flags
 
+    def is_pool_full(self, pool_name):
+        pools = json.loads(self.mon_manager.raw_cluster_cmd("osd", "dump", "--format=json-pretty"))['pools']
+        for pool in pools:
+            if pool['pool_name'] == pool_name:
+                return 'full' in pool['flags_names'].split(",")
+
+        raise RuntimeError("Pool not found '{0}'".format(pool_name))
+
     def wait_for_state(self, goal_state, reject=None, timeout=None, mds_id=None):
         """
         Block until the MDS reaches a particular state, or a failure condition
