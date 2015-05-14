@@ -59,8 +59,7 @@ HARDENING_CFLAGS = \
                    -Wp,-D_FORTIFY_SOURCE=2 \
                    -fexceptions \
                    --param=ssp-buffer-size=4 \
-                   -fPIE \
-                   -fPIC
+                   -fPIE
 
 SET_STACK_PROTECTOR_STRONG = $(shell expr `gcc -dumpversion` \>= 4.9)
 
