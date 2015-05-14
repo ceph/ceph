@@ -773,15 +773,24 @@ int RGWObjManifest::append(RGWObjManifest& m)
       next_rule.part_size = m.obj_size - next_rule.start_ofs;
     }
 
-    if (override_prefix != rule.override_prefix) {
-      append_rules(m, miter, &override_prefix);
-      break;
+    string rule_prefix = prefix;
+    if (!rule.override_prefix.empty()) {
+      rule_prefix = rule.override_prefix;
+    }
+
+    string next_rule_prefix = m.prefix;
+    if (!next_rule.override_prefix.empty()) {
+      next_rule_prefix = next_rule.override_prefix;
     }
 
     if (rule.part_size != next_rule.part_size ||
         rule.stripe_max_size != next_rule.stripe_max_size ||
-        rule.override_prefix != next_rule.override_prefix) {
-      append_rules(m, miter, NULL);
+        rule_prefix != next_rule_prefix) {
+      if (next_rule_prefix != prefix) {
+        append_rules(m, miter, &next_rule_prefix);
+      } else {
+        append_rules(m, miter, NULL);
+      }
       break;
     }
 
