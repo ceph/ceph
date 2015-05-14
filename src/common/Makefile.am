@@ -135,7 +135,7 @@ LIBCOMMON_DEPS += \
 	$(LIBCRUSH) $(LIBJSON_SPIRIT) $(LIBLOG) $(LIBARCH)
 
 if LINUX
-LIBCOMMON_DEPS += -lrt
+LIBCOMMON_DEPS += -lrt -lblkid -luuid
 endif # LINUX
 
 libcommon_la_SOURCES = common/buffer.cc

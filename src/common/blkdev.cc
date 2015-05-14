@@ -11,6 +11,10 @@
 
 #ifdef __linux__
 #include <linux/fs.h>
+#include "include/uuid.h"
+#include <blkid/blkid.h>
+
+#define UUID_LEN 36
 
 static const char *sandbox_dir = "";
 
@@ -162,6 +166,36 @@ int block_device_discard(int fd, int64_t offset, int64_t len)
   return ioctl(fd, BLKDISCARD, range);
 }
 
+int get_device_by_uuid(uuid_d dev_uuid, const char* label, char* partition,
+	char* device)
+{
+  char uuid_str[UUID_LEN+1];
+  char basename[PATH_MAX];
+  const char* temp_partition_ptr = NULL;
+  blkid_cache cache = NULL;
+  blkid_dev dev = NULL;
+  int rc = 0;
+
+  uuid_unparse((const unsigned char*)&dev_uuid.uuid, uuid_str);
+
+  if (blkid_get_cache(&cache, NULL) >= 0)
+    dev = blkid_find_dev_with_tag(cache, label, (const char*)uuid_str);
+
+  if (dev) {
+    temp_partition_ptr = blkid_dev_devname(dev);
+    strncpy(partition, temp_partition_ptr, PATH_MAX);
+    rc = get_block_device_base(partition, basename,
+      sizeof(basename));
+    if (rc >= 0)
+      strncpy(device, basename, sizeof(basename));
+    else
+      return -ENODEV;
+
+    return 0;
+  }
+
+  return -EINVAL;
+}
 #elif defined(__APPLE__)
 #include <sys/disk.h>
 
@@ -189,6 +223,12 @@ int block_device_discard(int fd, int64_t offset, int64_t len)
 {
   return -EOPNOTSUPP;
 }
+
+int get_device_by_uuid(uuid_d dev_uuid, const char* label, char* partition,
+	char* device)
+{
+  return -EOPNOTSUPP;
+}
 #elif defined(__FreeBSD__)
 #include <sys/disk.h>
 
@@ -206,6 +246,12 @@ bool block_device_support_discard(const char *devname)
 }
 
 int block_device_discard(int fd, int64_t offset, int64_t len)
+{
+  return -EOPNOTSUPP;
+}
+
+int get_device_by_uuid(uuid_d dev_uuid, const char* label, char* partition,
+	char* device)
 {
   return -EOPNOTSUPP;
 }
