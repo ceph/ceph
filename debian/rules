@@ -1,5 +1,19 @@
 #!/usr/bin/make -f
 # -*- makefile -*-
+
+export DEB_BUILD_MAINT_OPTIONS = hardening=+all
+export DEB_BUILD_HARDENING=1
+DPKG_EXPORT_BUILDFLAGS = 1
+
+include /usr/share/hardening-includes/hardening.make
+CFLAGS=$(shell dpkg-buildflags --get CFLAGS)
+LDFLAGS=$(shell dpkg-buildflags --get LDFLAGS)
+CFLAGS += $(HARDENING_CFLAGS)
+LDFLAGS += $(HARDENING_LDFLAGS)
+
+%:
+	dh $@
+
 export DH_VERBOSE=1
 export DESTDIR=$(CURDIR)/debian/tmp
 
