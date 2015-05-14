@@ -48,8 +48,31 @@ endif
 ##################################
 ## automake environment
 
-HARDENING_CFLAGS = -O2 -g -pipe -Wl,-z,relro -Wall -Wp,-D_FORTIFY_SOURCE=2 -fexceptions -fstack-protector-strong --param=ssp-buffer-size=4 -grecord-gcc-switches -fPIE
-HARDENING_LDFLAGS = -pie -Wl,-z,relro -Wl,-z,now
+HARDENING_CFLAGS = \
+                   -O2 \
+                   -g \
+                   -pipe \
+                   -Wl,-z,relro \
+                   -Wall \
+                   -Wp,-D_FORTIFY_SOURCE=2 \
+                   -fexceptions \
+                   --param=ssp-buffer-size=4 \
+                   -grecord-gcc-switches \
+                   -fPIE
+
+SET_STACK_PROTECTOR_STRONG = $(shell expr `gcc -dumpversion` \>= 4.8)
+
+ifeq "$(SET_STACK_PROTECTOR_STRONG)" "1"
+        HARDENING_CFLAGS += -fstack-protector-strong
+else
+        HARDENING_CFLAGS += -fstack-protector
+endif
+
+HARDENING_LDFLAGS =  \
+                     -pie \
+                     -Wl,-z,relro \
+                     -Wl,-z,now
+
 
 AM_COMMON_CPPFLAGS = \
 	-D__CEPH__ \
