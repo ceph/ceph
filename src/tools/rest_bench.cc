@@ -789,7 +789,7 @@ int main(int argc, const char **argv)
     if (ret != 0)
       cerr << "error during cleanup: " << ret << std::endl;
   } else {
-    ret = bencher.aio_bench(operation, seconds, 0,
+    ret = bencher.aio_bench(operation, seconds,
 			    concurrent_ios, op_size, cleanup, run_name.c_str());
     if (ret != 0) {
         cerr << "error during benchmark: " << ret << std::endl;
