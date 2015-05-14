@@ -76,6 +76,7 @@ using ceph::crypto::SHA1;
 #include "include/assert.h"
 
 #include "common/config.h"
+#include "common/blkdev.h"
 
 #ifdef WITH_LTTNG
 #include "tracing/objectstore.h"
@@ -641,10 +642,32 @@ bool parse_attrname(char **name)
 
 void FileStore::collect_metadata(map<string,string> *pm)
 {
+  char partition_path[PATH_MAX];
+  char dev_node[PATH_MAX];
+  int rc = 0;
+  
   (*pm)["filestore_backend"] = backend->get_name();
   ostringstream ss;
   ss << "0x" << std::hex << m_fs_type << std::dec;
   (*pm)["filestore_f_type"] = ss.str();
+
+  rc = get_device_by_uuid(get_fsid(), "PARTUUID", partition_path,
+        dev_node);
+
+  switch (rc) {
+    case -EOPNOTSUPP:
+    case -EINVAL:
+      (*pm)["backend_filestore_partition_path"] = "unknown";
+      (*pm)["backend_filestore_dev_node"] = "unknown";
+      break;
+    case -ENODEV:
+      (*pm)["backend_filestore_partition_path"] = string(partition_path);
+      (*pm)["backend_filestore_dev_node"] = "unknown";
+      break;
+    default:
+      (*pm)["backend_filestore_partition_path"] = string(partition_path);
+      (*pm)["backend_filestore_dev_node"] = string(dev_node);
+  }
 }
 
 int FileStore::statfs(struct statfs *buf)
