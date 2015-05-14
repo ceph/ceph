@@ -192,7 +192,7 @@ def install_firmware(ctx, config):
             log.info('Skipping firmware on distro kernel');
             return
         (role_remote,) = ctx.cluster.only(role).remotes.keys()
-        package_type = teuthology.get_system_type(role_remote)
+        package_type = role_remote.os.package_type
         if package_type == 'rpm':
             role_remote.run(args=[
                 'sudo', 'yum', 'upgrade', '-y', 'linux-firmware',
@@ -318,8 +318,8 @@ def download_kernel(ctx, config):
             needs_download = True
             package_type = role_remote.os.package_type
             if package_type == 'rpm':
-                system_type, system_ver = teuthology.get_system_type(
-                    role_remote, distro=True, version=True)
+                system_type = role_remote.os.name
+                system_ver = role_remote.os.version
                 if '.' in system_ver:
                    system_ver = system_ver.split('.')[0]
                 ldist = '{system_type}{system_ver}'.format(
@@ -409,8 +409,8 @@ def install_and_reboot(ctx, config):
 
         log.info('Installing kernel {src} on {role}...'.format(src=src,
                                                                role=role))
-        system_type = teuthology.get_system_type(role_remote)
-        if system_type == 'rpm':
+        package_type = role_remote.os.package_type
+        if package_type == 'rpm':
             proc = role_remote.run(
                 args=[
                     'sudo',
@@ -619,11 +619,11 @@ def need_to_install_distro(ctx, role):
     for deb.
     """
     (role_remote,) = ctx.cluster.only(role).remotes.keys()
-    system_type = teuthology.get_system_type(role_remote)
+    package_type = role_remote.os.package_type
     output, err_mess = StringIO(), StringIO()
     role_remote.run(args=['uname', '-r'], stdout=output)
     current = output.getvalue().strip()
-    if system_type == 'rpm':
+    if package_type == 'rpm':
         role_remote.run(args=['sudo', 'yum', 'install', '-y', 'kernel'],
                         stdout=output)
         if 'Nothing to do' in output.getvalue():
@@ -647,8 +647,8 @@ def need_to_install_distro(ctx, role):
                     newest = kernel.split('kernel-')[1]
                     break
 
-    if system_type == 'deb':
-        distribution = teuthology.get_system_type(role_remote, distro=True)
+    if package_type == 'deb':
+        distribution = role_remote.os.name
         newest = get_latest_image_version_deb(role_remote, distribution)
 
     output.close()
@@ -706,8 +706,8 @@ def install_kernel(remote, path=None):
 
     :param path: package path (for local and gitbuilder cases)
     """
-    system_type = teuthology.get_system_type(remote)
-    if system_type == 'rpm':
+    package_type = remote.os.package_type
+    if package_type == 'rpm':
         if path:
             version = get_image_version(remote, path)
             # This is either a gitbuilder or a local package and both of these
@@ -720,8 +720,8 @@ def install_kernel(remote, path=None):
         remote.run( args=['sudo', 'shutdown', '-r', 'now'], wait=False )
         return
 
-    if system_type == 'deb':
-        distribution = teuthology.get_system_type(remote, distro=True)
+    if package_type == 'deb':
+        distribution = remote.os.name
         newversion = get_latest_image_version_deb(remote, distribution)
         if 'ubuntu' in distribution:
             grub2conf = teuthology.get_file(remote, '/boot/grub/grub.cfg', True)
@@ -975,6 +975,16 @@ def get_sha1_from_pkg_name(path):
     log.debug("get_sha1_from_pkg_name: %s -> %s -> %s", path, basename, sha1)
     return sha1
 
+
+def remove_old_kernels(ctx):
+    for remote in ctx.cluster.remotes.keys():
+        package_type = remote.os.package_type
+        if package_type == 'rpm':
+            log.info("Removing old kernels from %s", remote)
+            args = ['sudo', 'package-cleanup', '-y', '--oldkernels']
+            remote.run(args=args)
+
+
 def task(ctx, config):
     """
     Make sure the specified kernel is installed.
@@ -1188,6 +1198,8 @@ def task(ctx, config):
         # enable or disable kdb if specified, otherwise do not touch
         if role_config.get('kdb') is not None:
             kdb[role] = role_config.get('kdb')
+
+    remove_old_kernels(ctx)
 
     if need_install:
         install_firmware(ctx, need_install)
