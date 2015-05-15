@@ -2671,6 +2671,7 @@ int OSDMap::build_simple(CephContext *cct, epoch_t e, uuid_d &fsid,
     r = build_simple_crush_map(cct, *crush, nosd, &ss);
   else
     r = build_simple_crush_map_from_conf(cct, *crush, &ss);
+  assert(r == 0);
 
   int poolbase = get_max_osd() ? get_max_osd() : 1;
 
@@ -2701,9 +2702,6 @@ int OSDMap::build_simple(CephContext *cct, epoch_t e, uuid_d &fsid,
     name_pool[*p] = pool;
   }
 
-  if (r < 0)
-    lderr(cct) << ss.str() << dendl;
-  
   for (int i=0; i<get_max_osd(); i++) {
     set_state(i, 0);
     set_weight(i, CEPH_OSD_OUT);
