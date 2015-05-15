@@ -143,7 +143,9 @@ class TestMissingPackages(object):
     def setup(self):
         package_versions = dict(
             sha1=dict(
-                ubuntu="1.0"
+                ubuntu=dict(
+                    basic="1.0",
+                )
             )
         )
         self.pv = package_versions
@@ -152,6 +154,7 @@ class TestMissingPackages(object):
         assert self.pv == suite.get_package_versions(
             "sha1",
             "ubuntu",
+            "basic",
             package_versions=self.pv
         )
 
@@ -161,10 +164,11 @@ class TestMissingPackages(object):
         result = suite.get_package_versions(
             "sha1",
             "rhel",
+            "basic",
             package_versions=self.pv
         )
         expected = deepcopy(self.pv)
-        expected['sha1'].update(dict(rhel="1.1"))
+        expected['sha1'].update(dict(rhel=dict(basic="1.1")))
         assert result == expected
 
     @patch("teuthology.suite.package_version_for_hash")
@@ -174,6 +178,7 @@ class TestMissingPackages(object):
         result = suite.get_package_versions(
             "sha1",
             "rhel",
+            "basic",
             package_versions=self.pv
         )
         assert result == self.pv
@@ -184,6 +189,7 @@ class TestMissingPackages(object):
         result = suite.get_package_versions(
             "sha1",
             "ubuntu",
+            "basic",
         )
         expected = deepcopy(self.pv)
         assert result == expected
@@ -192,6 +198,7 @@ class TestMissingPackages(object):
         result = suite.has_packages_for_distro(
             "sha1",
             "ubuntu",
+            "basic",
             package_versions=self.pv,
         )
         assert result
@@ -200,6 +207,7 @@ class TestMissingPackages(object):
         result = suite.has_packages_for_distro(
             "sha1",
             "rhel",
+            "basic",
             package_versions=self.pv,
         )
         assert not result
@@ -210,6 +218,7 @@ class TestMissingPackages(object):
         result = suite.has_packages_for_distro(
             "sha1",
             "rhel",
+            "basic",
         )
         assert not result
 
