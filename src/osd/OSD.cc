@@ -5918,9 +5918,9 @@ OSDService::ScrubJob::ScrubJob(const spg_t& pg, const utime_t& timestamp, bool m
   // if not explicitly requested, postpone the scrub with a random delay
   if (!must) {
     sched_time += g_conf->osd_scrub_min_interval;
-    if (g_conf->osd_scrub_interval_limit > 0) {
+    if (g_conf->osd_scrub_interval_randomize_ratio > 0) {
       sched_time += rand() % (int)(g_conf->osd_scrub_min_interval *
-				   g_conf->osd_scrub_interval_limit);
+				   g_conf->osd_scrub_interval_randomize_ratio);
     }
     deadline += g_conf->osd_scrub_max_interval;
   }
