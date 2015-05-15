@@ -54,6 +54,9 @@ public:
   uint64_t logical_to_next_chunk_offset(uint64_t offset) const {
     return ((offset + stripe_width - 1)/ stripe_width) * chunk_size;
   }
+  uint64_t logical_to_chunk_offset(uint64_t offset) const {
+    return (offset / stripe_width) * chunk_size + offset % chunk_size;
+  }
   uint64_t logical_to_prev_stripe_offset(uint64_t offset) const {
     return offset - (offset % stripe_width);
   }
