@@ -121,7 +121,12 @@ Requires:	python-rados = %{epoch}:%{version}-%{release}
 Requires:	python-rbd = %{epoch}:%{version}-%{release}
 Requires:	python-cephfs = %{epoch}:%{version}-%{release}
 Requires:	python-requests
-Requires:	redhat-lsb-core
+%if 0%{defined suse_version}
+Requires:  python-argparse
+%endif
+%if 0%{?rhel} || 0%{?fedora}
+Requires:  redhat-lsb-core
+%endif
 %description -n ceph-common
 Common utilities to mount and interact with a ceph storage cluster.
 
