@@ -32,6 +32,7 @@ class ErasureCodeBench {
   string plugin;
 
   bool exhaustive_erasures;
+  vector<int> erased;
   string workload;
 
   map<string,string> parameters;
