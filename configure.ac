@@ -97,9 +97,7 @@ AC_PROG_LIBTOOL
 AC_SUBST(AM_CXXFLAGS)
 AM_CXXFLAGS="${AM_CXXFLAGS}"
 
-
-###### PATCH STARTS HERE ######
-# Find out what to build (default is all of these)
+# Find out what to build (default is most of these)
 
 # rados?
 AC_ARG_WITH([rados],
@@ -130,11 +128,21 @@ AM_CONDITIONAL(WITH_CEPHFS, test "$with_cephfs" = "yes")
 # radosgw?
 # radosgw requires rados
 AC_ARG_WITH([radosgw],
-            [AS_HELP_STRING([--with-radosgw], [build RADOS gateway])],
-            [],
-            [with_radosgw=check])
+	[AS_HELP_STRING([--with-radosgw], [build RADOS gateway])],
+	[],
+	[with_radosgw=check])
 # AM_CONDITIONAL is defined later -- we need to check whether we can enable radosgw if no option is present
 #AS_IF([test "$with_radosgw" = "yes"], [AC_DEFINE([WITH_RADOS, WITH_RADOSGW])])
+
+AC_ARG_WITH([selinux],
+	[AS_HELP_STRING([--with-selinux], [build SELinux policy])],
+	[],
+	[with_selinux=no])
+AM_CONDITIONAL(WITH_SELINUX, test "$with_selinux" = "yes")
+if test "x$with_selinux" = x"yes"; then
+	AC_CHECK_FILE([/usr/share/selinux/devel/policyhelp], [true], [AC_MSG_FAILURE([No SELinux found])])
+	AC_CHECK_FILE([/usr/share/selinux/devel/include/Makefile], [true],  [AC_MSG_FAILURE([No SELinux Makefile found])])
+fi
 
 # radosstriper?
 AC_ARG_WITH([radosstriper],
@@ -191,8 +199,6 @@ AS_IF([test "$enable_server" = "yes" -a \( "$with_osd" = "yes" -o "$with_mon" = 
 # cond-check leveldb, necessary if server, osd or mon enabled
 AS_IF([test "$enable_server" = "yes" -a \( "$with_osd" = "yes" -o "$with_mon" = "yes" \)],
 	[AC_CHECK_LIB([leveldb], [leveldb_open], [true], [AC_MSG_FAILURE([libleveldb not found])], [-lsnappy -lpthread])])
-###### PATCH ENDS HERE ######
-
 
 # Check for yasm
 AC_CHECK_PROG(YASM_CHECK, yasm, yes)
@@ -1277,6 +1283,7 @@ AC_CONFIG_FILES([Makefile
 	src/tracing/Makefile
 	man/Makefile
 	doc/Makefile
+	selinux/Makefile
 	systemd/ceph-osd@.service
 	ceph.spec])
 AC_OUTPUT
