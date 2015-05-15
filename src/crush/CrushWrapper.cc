@@ -1645,6 +1645,8 @@ int CrushWrapper::get_osd_pool_default_crush_replicated_ruleset(CephContext *cct
                                                                      false);
   if (crush_ruleset == CEPH_DEFAULT_CRUSH_REPLICATED_RULESET) {
     crush_ruleset = find_first_ruleset(pg_pool_t::TYPE_REPLICATED);
+  } else if (!ruleset_exists(crush_ruleset)) {
+    crush_ruleset = -1; // match find_first_ruleset() retval
   }
 
   return crush_ruleset;
