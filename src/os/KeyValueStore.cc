@@ -268,7 +268,7 @@ int StripObjectMap::get_keys_with_header(const StripObjectHeaderRef header,
                                          set<string> *keys)
 {
   ObjectMap::ObjectMapIterator iter = _get_iterator(header->header, prefix);
-  for (; iter->valid(); iter->next()) {
+  for (iter->seek_to_first(); iter->valid(); iter->next()) {
     if (iter->status())
       return iter->status();
     keys->insert(iter->key());
