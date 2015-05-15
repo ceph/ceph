@@ -1566,14 +1566,14 @@ void MDS::handle_mds_map(MMDSMap *m)
 
   // see who i am
   addr = messenger->get_myaddr();
+  state = mdsmap->get_state_gid(mds_gid_t(monc->get_global_id()));
+  incarnation = mdsmap->get_inc_gid(mds_gid_t(monc->get_global_id()));
   whoami = mdsmap->get_rank_gid(mds_gid_t(monc->get_global_id()));
   if (whoami == MDS_RANK_NONE && (
       state == MDSMap::STATE_STANDBY_REPLAY || state == MDSMap::STATE_ONESHOT_REPLAY)) {
     whoami = mdsmap->get_mds_info_gid(mds_gid_t(monc->get_global_id())).standby_for_rank;
   }
 
-  state = mdsmap->get_state_gid(mds_gid_t(monc->get_global_id()));
-  incarnation = mdsmap->get_inc_gid(mds_gid_t(monc->get_global_id()));
   dout(10) << "map says i am " << addr << " mds." << whoami << "." << incarnation
 	   << " state " << ceph_mds_state_name(state) << dendl;
 
