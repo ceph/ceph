@@ -159,6 +159,10 @@ def lock_machines(ctx, config):
             break
         elif not ctx.block:
             assert 0, 'not enough machines are available'
+        else:
+            how_many = how_many - len(newly_locked)
+            assert how_many > 0, "lock_machines: how_many counter went" \
+                                 "negative, this shouldn't happen"
 
         log.warn('Could not lock enough machines, waiting...')
         time.sleep(10)
