@@ -5,11 +5,13 @@ exceed the limits of how many caps/inodes they should hold.
 """
 
 import logging
+from textwrap import dedent
 from unittest import SkipTest
 from teuthology.orchestra.run import CommandFailedError
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
-
 from tasks.cephfs.fuse_mount import FuseMount
+import os
+import time
 
 
 log = logging.getLogger(__name__)
@@ -169,3 +171,37 @@ class TestClientLimits(CephFSTestCase):
 
         # Wait for the health warnings. Assume mds can handle 10 request per second at least
         self.wait_for_health("failing to advance its oldest_client_tid", max_requests / 10)
+
+    def test_client_cache_size(self):
+        """
+        check if client invalidate kernel dcache according to its cache size config
+        """
+
+        # The debug hook to inject the failure only exists in the fuse client
+        if not isinstance(self.mount_a, FuseMount):
+            raise SkipTest("Require FUSE client to inject client release failure")
+
+        dir_path = os.path.join(self.mount_a.mountpoint, "testdir")
+
+        mkdir_script = dedent("""
+            import os
+            os.mkdir("{path}")
+            for n in range(0, {num_dirs}):
+                os.mkdir("{path}/dir{{0}}".format(n))
+            """);
+
+        num_dirs = 1000
+        self.mount_a.run_python(mkdir_script.format(path=dir_path, num_dirs=num_dirs))
+        self.mount_a.run_shell(["sync"])
+
+        dentry_count, dentry_pinned_count = self.mount_a.get_dentry_count();
+        self.assertGreaterEqual(dentry_count, num_dirs);
+        self.assertGreaterEqual(dentry_pinned_count, num_dirs);
+
+        cache_size = num_dirs / 10;
+        self.mount_a.set_cache_size(cache_size);
+        time.sleep(30);
+
+        dentry_count, dentry_pinned_count =  self.mount_a.get_dentry_count();
+        self.assertLessEqual(dentry_count, cache_size);
+        self.assertLessEqual(dentry_pinned_count, cache_size);
