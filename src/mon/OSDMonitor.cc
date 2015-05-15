@@ -6121,9 +6121,7 @@ done:
       err = -ENOTSUP;
       goto reply;
     }
-    if ((!tp->removed_snaps.empty() || !tp->snaps.empty()) &&
-	((force_nonempty != "--force-nonempty") ||
-	 (!g_conf->mon_debug_unsafe_allow_tier_with_nonempty_snaps))) {
+    if (!tp->removed_snaps.empty() || !tp->snaps.empty()) {
       ss << "tier pool '" << tierpoolstr << "' has snapshot state; it cannot be added as a tier without breaking the pool";
       err = -ENOTEMPTY;
       goto reply;
