@@ -124,6 +124,8 @@ enum {
 
   l_osd_copyfrom,
 
+  l_osd_tier_total,
+  l_osd_tier_hit,
   l_osd_tier_promote,
   l_osd_tier_flush,
   l_osd_tier_flush_fail,
@@ -135,6 +137,9 @@ enum {
   l_osd_tier_clean,
   l_osd_tier_delay,
   l_osd_tier_proxy_read,
+  l_osd_tier_flush_lat,
+  l_osd_tier_promote_lat,
+  l_osd_tier_r_lat,
 
   l_osd_agent_wake,
   l_osd_agent_skip,
@@ -143,11 +148,6 @@ enum {
 
   l_osd_object_ctx_cache_hit,
   l_osd_object_ctx_cache_total,
-
-  l_osd_op_cache_hit,
-  l_osd_tier_flush_lat,
-  l_osd_tier_promote_lat,
-  l_osd_tier_r_lat,
 
   l_osd_last,
 };
