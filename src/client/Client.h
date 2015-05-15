@@ -214,7 +214,7 @@ struct dir_result_t {
   }
 };
 
-class Client : public Dispatcher {
+class Client : public Dispatcher, public md_config_obs_t {
  public:
   using Dispatcher::cct;
 
@@ -439,7 +439,7 @@ protected:
   void touch_dn(Dentry *dn);
 
   // trim cache.
-  void trim_cache();
+  void trim_cache(bool trim_kernel_dcache=false);
   void trim_cache_for_reconnect(MetaSession *s);
   void trim_dentry(Dentry *dn);
   void trim_caps(MetaSession *s, int max);
@@ -974,6 +974,10 @@ public:
 
   void ll_register_callbacks(struct client_callback_args *args);
   int test_dentry_handling(bool can_invalidate);
+
+  virtual const char** get_tracked_conf_keys() const;
+  virtual void handle_conf_change(const struct md_config_t *conf,
+	                          const std::set <std::string> &changed);
 };
 
 #endif
