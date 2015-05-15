@@ -501,6 +501,7 @@ public:
     int write_fd(int fd) const;
     int write_fd_zero_copy(int fd) const;
     uint32_t crc32c(uint32_t crc) const;
+	void invalidate_crc();
   };
 
   /*
