@@ -3266,114 +3266,32 @@ int FileStore::_do_sparse_copy_range(int from, int to, uint64_t srcoff, uint64_t
 {
   dout(20) << __func__ << " " << srcoff << "~" << len << " to " << dstoff << dendl;
   int r = 0;
-  struct fiemap *fiemap = NULL;
-
+  map<uint64_t, uint64_t> exomap;
+  int64_t written = 0;
+  
   // fiemap doesn't allow zero length
   if (len == 0)
     return 0;
-
-  r = backend->do_fiemap(from, srcoff, len, &fiemap);
-  if (r < 0) {
-    derr << "do_fiemap failed:" << srcoff << "~" << len << " = " << r << dendl;
-    return r;
+  
+  if (backend->has_seek_data_hole()) {
+    dout(15) << "seek_data/seek_hole " << from << " " << srcoff << "~" << len << dendl;
+    r = _do_seek_hole_data(from, srcoff, len, &exomap);
+  } else if (backend->has_fiemap()) {
+    dout(15) << "fiemap ioctl" << from << " " << srcoff << "~" << len << dendl;
+    r = _do_fiemap(from, srcoff, len, &exomap);
   }
-
-  // No need to copy
-  if (fiemap->fm_mapped_extents == 0)
-    return r;
-
-  int buflen = 4096*32;
-  char buf[buflen];
-  struct fiemap_extent *extent = &fiemap->fm_extents[0];
-
-  /* start where we were asked to start */
-  if (extent->fe_logical < srcoff) {
-    extent->fe_length -= srcoff - extent->fe_logical;
-    extent->fe_logical = srcoff;
+  
+  for (map<uint64_t, uint64_t>::iterator miter = exomap.begin(); miter != exomap.end(); ++miter) {
+    uint64_t it_off = miter->first - srcoff + dstoff;
+    r = _do_copy_range(from, to, miter->first, miter->second, it_off);
+    if (r < 0) {
+      r = -errno;
+      derr << "FileStore::_do_copy_range: copy error at " << miter->first << "~" << miter->second
+	     << " to " << it_off << ", " << cpp_strerror(r) << dendl;
+      break;
+    }
+    written += miter->second;
   }
-
-  int64_t written = 0;
-  uint64_t i = 0;
-
-  while (i < fiemap->fm_mapped_extents) {
-    struct fiemap_extent *next = extent + 1;
-
-    dout(10) << __func__ << " fm_mapped_extents=" << fiemap->fm_mapped_extents
-             << " fe_logical=" << extent->fe_logical << " fe_length="
-             << extent->fe_length << dendl;
-
-    /* try to merge extents */
-    while ((i < fiemap->fm_mapped_extents - 1) &&
-           (extent->fe_logical + extent->fe_length == next->fe_logical)) {
-        next->fe_length += extent->fe_length;
-        next->fe_logical = extent->fe_logical;
-        extent = next;
-        next = extent + 1;
-        i++;
-    }
-
-    if (extent->fe_logical + extent->fe_length > srcoff + len)
-      extent->fe_length = srcoff + len - extent->fe_logical;
-
-    int64_t actual;
-
-    actual = ::lseek64(from, extent->fe_logical, SEEK_SET);
-    if (actual != (int64_t)extent->fe_logical) {
-      r = errno;
-      derr << "lseek64 to " << srcoff << " got " << cpp_strerror(r) << dendl;
-      return r;
-    }
-    actual = ::lseek64(to, extent->fe_logical - srcoff + dstoff, SEEK_SET);
-    if (actual != (int64_t)(extent->fe_logical - srcoff + dstoff)) {
-      r = errno;
-      derr << "lseek64 to " << dstoff << " got " << cpp_strerror(r) << dendl;
-      return r;
-    }
-
-    loff_t pos = 0;
-    loff_t end = extent->fe_length;
-    while (pos < end) {
-      int l = MIN(end-pos, buflen);
-      r = ::read(from, buf, l);
-      dout(25) << "  read from " << pos << "~" << l << " got " << r << dendl;
-      if (r < 0) {
-        if (errno == EINTR) {
-          continue;
-        } else {
-          r = -errno;
-          derr << __func__ << ": read error at " << pos << "~" << len
-              << ", " << cpp_strerror(r) << dendl;
-          break;
-        }
-      }
-      if (r == 0) {
-        r = -ERANGE;
-        derr << __func__ << " got short read result at " << pos
-             << " of fd " << from << " len " << len << dendl;
-        break;
-      }
-      int op = 0;
-      while (op < r) {
-        int r2 = safe_write(to, buf+op, r-op);
-        dout(25) << " write to " << to << " len " << (r-op)
-                 << " got " << r2 << dendl;
-        if (r2 < 0) {
-          r = r2;
-          derr << __func__ << ": write error at " << pos << "~"
-               << r-op << ", " << cpp_strerror(r) << dendl;
-          break;
-        }
-        op += (r-op);
-      }
-      if (r < 0)
-        goto out;
-      pos += r;
-    }
-    written += end;
-    i++;
-    extent++;
-  }
-
   if (r >= 0) {
     if (m_filestore_sloppy_crc) {
       int rc = backend->_crc_update_clone_range(from, to, srcoff, len, dstoff);
@@ -3396,10 +3314,10 @@ int FileStore::_do_sparse_copy_range(int from, int to, uint64_t srcoff, uint64_t
     }
     r = written;
   }
-
- out:
-  dout(20) << __func__ << " " << srcoff << "~" << len << " to " << dstoff << " = " << r << dendl;
-  return r;
+  
+  out:
+    dout(20) << __func__ << " " << srcoff << "~" << len << " to " << dstoff << " = " << r << dendl;
+    return r;
 }
 
 int FileStore::_do_copy_range(int from, int to, uint64_t srcoff, uint64_t len, uint64_t dstoff)
