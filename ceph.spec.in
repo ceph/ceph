@@ -1,8 +1,24 @@
+# vim: set noexpandtab ts=8 sw=8 :
 %bcond_with ocf
 %bcond_without cephfs_java
 %bcond_with tests
 %bcond_without tcmalloc
 %bcond_without libs_compat
+
+%if 0%{?fedora} || 0%{?rhel}
+# get selinux policy version
+%{!?_selinux_policy_version: %global _selinux_policy_version %(sed -e 's,.*selinux-policy-\\([^/]*\\)/.*,\\1,' /usr/share/selinux/devel/policyhelp 2>/dev/null || echo 0.0.0)}
+
+%define relabel_files() \
+restorecon -R /usr/bin/ceph-mon; \
+restorecon -R /usr/bin/ceph-osd; \
+restorecon -R /usr/bin/ceph-mds; \
+restorecon -R /etc/rc\.d/init\.d/ceph; \
+restorecon -R /var/run/ceph; \
+restorecon -R /var/lib/ceph; \
+restorecon -R /var/log/ceph;
+
+%endif
 
 %if (0%{?el5} || (0%{?rhel_version} >= 500 && 0%{?rhel_version} <= 600))
 %{!?python_sitelib: %global python_sitelib %(%{__python} -c "from distutils.sysconfig import get_python_lib; print(get_python_lib())")}
@@ -92,7 +108,15 @@ BuildRequires:	snappy-devel
 #################################################################################
 # specific
 #################################################################################
-%if ! 0%{?rhel} || 0%{?fedora}
+%if 0%{?rhel} || 0%{?fedora}
+# SELinux deps
+Requires:	policycoreutils, libselinux-utils
+Requires(post):	selinux-policy >= %{_selinux_policy_version}, policycoreutils
+Requires(postun): policycoreutils
+BuildRequires:	checkpolicy
+BuildRequires:	selinux-policy-devel
+BuildRequires:	/usr/share/selinux/devel/policyhelp
+%else
 BuildRequires:	sharutils
 %endif
 
@@ -470,6 +494,14 @@ python-cephfs instead.
 %endif
 
 %build
+
+%if 0%{?fedora} || 0%{?rhel}
+# Build SELinux modules
+cd selinux
+make -f /usr/share/selinux/devel/Makefile ceph.pp
+cd -
+%endif
+
 # Find jni.h
 for i in /usr/{lib64,lib}/jvm/java/include{,/linux}; do
     [ -d $i ] && java_inc="$java_inc -I$i"
@@ -528,6 +560,17 @@ make -j$(getconf _NPROCESSORS_ONLN) check-local
 
 
 %install
+%if 0%{?fedora} || 0%{?rhel}
+# Install SELinux policy
+install -d %{buildroot}%{_datadir}/selinux/packages
+install -m 644 selinux/ceph.pp %{buildroot}%{_datadir}/selinux/packages
+install -d %{buildroot}%{_datadir}/selinux/devel/include/contrib
+install -m 644 selinux/ceph.if %{buildroot}%{_datadir}/selinux/devel/include/contrib/
+install -d %{buildroot}%{_mandir}/man8/
+install -m 644 selinux/ceph_selinux.8 %{buildroot}%{_mandir}/man8/ceph_selinux.8
+install -d %{buildroot}/etc/selinux/targeted/contexts/users/
+%endif
+
 make DESTDIR=$RPM_BUILD_ROOT install
 find $RPM_BUILD_ROOT -type f -name "*.la" -exec rm -f {} ';'
 find $RPM_BUILD_ROOT -type f -name "*.a" -exec rm -f {} ';'
@@ -600,6 +643,15 @@ rm -rf $RPM_BUILD_ROOT
 /sbin/ldconfig
 /sbin/chkconfig --add ceph
 
+%if 0%{?rhel} || 0%{?fedora}
+semodule -n -i %{_datadir}/selinux/packages/ceph.pp
+if /usr/sbin/selinuxenabled ; then
+    /usr/sbin/load_policy
+    %relabel_files
+fi
+exit 0
+%endif
+
 %preun
 %if %{defined suse_version}
 %stop_on_removal ceph
@@ -615,6 +667,17 @@ fi
 %insserv_cleanup
 %endif
 
+%if 0%{?rhel} || 0%{?fedora}
+if [ $1 -eq 0 ]; then
+    semodule -n -r ceph
+    if /usr/sbin/selinuxenabled ; then
+       /usr/sbin/load_policy
+       %relabel_files
+
+    fi;
+fi;
+exit 0
+%endif
 
 #################################################################################
 # files
@@ -717,6 +780,11 @@ fi
 %dir %{_localstatedir}/lib/ceph/bootstrap-mds
 %dir %{_localstatedir}/lib/ceph/bootstrap-rgw
 %dir %{_localstatedir}/run/ceph/
+%if 0%{?rhel} || 0%{?fedora}
+%attr(0600,root,root) %{_datadir}/selinux/packages/ceph.pp
+%{_datadir}/selinux/devel/include/contrib/ceph.if
+%{_mandir}/man8/ceph_selinux.8.*
+%endif
 
 #################################################################################
 %files -n ceph-common

@@ -16,7 +16,11 @@ EXTRA_DIST += \
 	udev/95-ceph-osd-alt.rules \
 	share/known_hosts_drop.ceph.com \
 	share/id_dsa_drop.ceph.com \
-	share/id_dsa_drop.ceph.com.pub
+	share/id_dsa_drop.ceph.com.pub \
+	selinux/ceph.te \
+	selinux/ceph.fc \
+	selinux/ceph.if \
+	selinux/ceph_selinux.8
 
 # why is it so hard to make autotools to this?
 install-data-local::
