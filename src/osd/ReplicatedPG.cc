@@ -7266,7 +7266,7 @@ void ReplicatedPG::op_applied(const eversion_t &applied_version)
   if (is_primary()) {
     if (scrubber.active) {
       if (last_update_applied == scrubber.subset_last_update) {
-        osd->scrub_wq.queue(this);
+        requeue_scrub();
       }
     } else {
       assert(scrubber.start == scrubber.end);
@@ -8130,7 +8130,7 @@ void ReplicatedPG::kick_object_context_blocked(ObjectContextRef obc)
   waiting_for_blocked_object.erase(p);
 
   if (obc->requeue_scrub_on_unblock)
-    osd->queue_for_scrub(this);
+    requeue_scrub();
 }
 
 SnapSetContext *ReplicatedPG::create_snapset_context(const hobject_t& oid)
@@ -8363,7 +8363,7 @@ void ReplicatedPG::_applied_recovered_object(ObjectContextRef obc)
   // requeue an active chunky scrub waiting on recovery ops
   if (!deleting && active_pushes == 0
       && scrubber.is_chunky_scrub_active()) {
-    osd->scrub_wq.queue(this);
+    requeue_scrub();
   }
 
   unlock();
@@ -8747,7 +8747,6 @@ void ReplicatedPG::on_shutdown()
 
   // remove from queues
   osd->recovery_wq.dequeue(this);
-  osd->scrub_wq.dequeue(this);
   osd->pg_stat_queue_dequeue(this);
   osd->dequeue_pg(this, 0);
   osd->peering_wq.dequeue(this);
@@ -11196,7 +11195,7 @@ void ReplicatedPG::_scrub_digest_updated()
 {
   dout(20) << __func__ << dendl;
   if (--scrubber.num_digest_updates_pending == 0) {
-    osd->scrub_wq.queue(this);
+    requeue_scrub();
   }
 }
 

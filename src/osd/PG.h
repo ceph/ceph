@@ -434,8 +434,9 @@ public:
 
   /* You should not use these items without taking their respective queue locks
    * (if they have one) */
-  xlist<PG*>::item recovery_item, scrub_item, stat_queue_item;
+  xlist<PG*>::item recovery_item, stat_queue_item;
   bool snap_trim_queued;
+  bool scrub_queued;
 
   int recovery_ops_active;
   set<pg_shard_t> waiting_on_backfill;
@@ -1182,7 +1183,7 @@ public:
     const hobject_t& soid, list<pair<ScrubMap::object, pg_shard_t> > *ok_peers,
     pg_shard_t bad_peer);
 
-  void scrub(ThreadPool::TPHandle &handle);
+  void scrub(epoch_t queued, ThreadPool::TPHandle &handle);
   void chunky_scrub(ThreadPool::TPHandle &handle);
   void scrub_compare_maps();
   void scrub_process_inconsistent();
@@ -2156,6 +2157,7 @@ public:
   void log_weirdness();
 
   void queue_snap_trim();
+  bool requeue_scrub();
   bool queue_scrub();
 
   /// share pg info after a pg is active

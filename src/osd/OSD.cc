@@ -160,6 +160,10 @@ void PGQueueable::RunVis::operator()(PGSnapTrim &op) {
   return pg->snap_trimmer(op.epoch_queued);
 }
 
+void PGQueueable::RunVis::operator()(PGScrub &op) {
+  return pg->scrub(op.epoch_queued, handle);
+}
+
 //Initial features in new superblock.
 //Features here are also automatically upgraded
 CompatSet OSD::get_osd_initial_compat_set() {
@@ -204,7 +208,6 @@ OSDService::OSDService(OSD *osd) :
   op_wq(osd->op_shardedwq),
   peering_wq(osd->peering_wq),
   recovery_wq(osd->recovery_wq),
-  scrub_wq(osd->scrub_wq),
   recovery_gen_wq("recovery_gen_wq", cct->_conf->osd_recovery_thread_timeout,
 		  &osd->recovery_tp),
   op_gen_wq("op_gen_wq", cct->_conf->osd_recovery_thread_timeout, &osd->osd_tp),
@@ -1544,11 +1547,6 @@ OSD::OSD(CephContext *cct_, ObjectStore *store_,
     cct->_conf->osd_recovery_thread_suicide_timeout,
     &recovery_tp),
   replay_queue_lock("OSD::replay_queue_lock"),
-  scrub_wq(
-    this,
-    cct->_conf->osd_scrub_thread_timeout,
-    cct->_conf->osd_scrub_thread_suicide_timeout,
-    &disk_tp),
   remove_wq(
     store,
     cct->_conf->osd_remove_thread_timeout,
@@ -5581,6 +5579,8 @@ epoch_t op_required_epoch(OpRequestRef op)
     return replica_op_required_epoch<MOSDECSubOpRead, MSG_OSD_EC_READ>(op);
   case MSG_OSD_EC_READ_REPLY:
     return replica_op_required_epoch<MOSDECSubOpReadReply, MSG_OSD_EC_READ_REPLY>(op);
+  case MSG_OSD_REP_SCRUB:
+    return replica_op_required_epoch<MOSDRepScrub, MSG_OSD_REP_SCRUB>(op);
   default:
     assert(0);
     return 0;
@@ -5696,6 +5696,7 @@ bool OSD::dispatch_op_fast(OpRequestRef& op, OSDMapRef& osdmap)
     break;
   case MSG_OSD_REP_SCRUB:
     handle_replica_op<MOSDRepScrub, MSG_OSD_REP_SCRUB>(op, osdmap);
+    break;
   default:
     assert(0);
   }
