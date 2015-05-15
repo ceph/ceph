@@ -6112,6 +6112,12 @@ done:
       err = -ENOTEMPTY;
       goto reply;
     }
+    if (tp->ec_pool()) {
+      ss << "tier pool '" << tierpoolstr
+	 << "' is an ec pool, which cannot be a tier";
+      err = -ENOTSUP;
+      goto reply;
+    }
     if (!tp->removed_snaps.empty() || !tp->snaps.empty()) {
       ss << "tier pool '" << tierpoolstr << "' has snapshot state; it cannot be added as a tier without breaking the pool";
       err = -ENOTEMPTY;
