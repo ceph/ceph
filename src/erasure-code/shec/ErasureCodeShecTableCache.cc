@@ -90,8 +90,3 @@ ErasureCodeShecTableCache::setEncodingTable(int technique, int k, int m, int c, 
   }
 }
 
-Mutex*
-ErasureCodeShecTableCache::getLock()
-{
-  return &codec_tables_guard;
-}

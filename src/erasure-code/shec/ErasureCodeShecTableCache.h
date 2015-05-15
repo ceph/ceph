@@ -35,7 +35,6 @@ class ErasureCodeShecTableCache {
 
  public:
 
-  typedef std::pair<std::list<std::string>::iterator, bufferptr> lru_entry_t;
   typedef std::map< int, int** > codec_table_t;
   typedef std::map< int, codec_table_t > codec_tables_t__;
   typedef std::map< int, codec_tables_t__ > codec_tables_t_;
@@ -57,9 +56,7 @@ class ErasureCodeShecTableCache {
   int* setEncodingTable(int technique, int k, int m, int c, int w, int*);
   
  private:
-  codec_technique_tables_t encoding_table; // encoding coefficients accessed via table[technique][k][m]
-  
-  Mutex* getLock();
+  codec_technique_tables_t encoding_table; // encoding table accessed via table[matrix][k][m][c][w]
   
 };
 
