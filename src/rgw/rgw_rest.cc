@@ -1310,6 +1310,22 @@ RGWRESTMgr::~RGWRESTMgr()
   delete default_mgr;
 }
 
+static int64_t parse_content_length(const char *content_length)
+{
+  int64_t len = -1;
+
+  if (*content_length == '\0') {
+    len = 0;
+  } else {
+    string err;
+    len = strict_strtoll(content_length, 10, &err);
+    if (!err.empty()) {
+      len = -1;
+    }
+  }
+
+  return len;
+}
 int RGWREST::preprocess(struct req_state *s, RGWClientIO *cio)
 {
   req_info& info = s->info;
@@ -1357,7 +1373,58 @@ int RGWREST::preprocess(struct req_state *s, RGWClientIO *cio)
   }
 
   url_decode(s->info.request_uri, s->decoded_uri);
-  s->length = info.env->get("CONTENT_LENGTH");
+
+  /* FastCGI specification, section 6.3
+   * http://www.fastcgi.com/devkit/doc/fcgi-spec.html#S6.3
+   * ===
+   * The Authorizer application receives HTTP request information from the Web
+   * server on the FCGI_PARAMS stream, in the same format as a Responder. The
+   * Web server does not send CONTENT_LENGTH, PATH_INFO, PATH_TRANSLATED, and
+   * SCRIPT_NAME headers.
+   * ===
+   * Ergo if we are in Authorizer role, we MUST look at HTTP_CONTENT_LENGTH
+   * instead of CONTENT_LENGTH for the Content-Length.
+   *
+   * There is one slight wrinkle in this, and that's older versions of 
+   * nginx/lighttpd/apache setting BOTH headers. As a result, we have to check
+   * both headers and can't always simply pick A or B.
+   */
+  const char* content_length = info.env->get("CONTENT_LENGTH");
+  const char* http_content_length = info.env->get("HTTP_CONTENT_LENGTH");
+  if (!http_content_length != !content_length) {
+    /* Easy case: one or the other is missing */
+    s->length = (content_length ? content_length : http_content_length);
+  } else if (s->cct->_conf->rgw_content_length_compat && content_length && http_content_length) {
+    /* Hard case: Both are set, we have to disambiguate */
+    int64_t content_length_i, http_content_length_i;
+
+    content_length_i = parse_content_length(content_length);
+    http_content_length_i = parse_content_length(http_content_length);
+
+    // Now check them:
+    if (http_content_length_i < 0) {
+      // HTTP_CONTENT_LENGTH is invalid, ignore it
+    } else if (content_length_i < 0) {
+      // CONTENT_LENGTH is invalid, and HTTP_CONTENT_LENGTH is valid
+      // Swap entries
+      content_length = http_content_length;
+    } else {
+      // both CONTENT_LENGTH and HTTP_CONTENT_LENGTH are valid
+      // Let's pick the larger size
+      if (content_length_i < http_content_length_i) {
+	// prefer the larger value
+	content_length = http_content_length;
+      }
+    }
+    s->length = content_length;
+    // End of: else if (s->cct->_conf->rgw_content_length_compat && content_length &&
+    // http_content_length)
+  } else {
+    /* no content length was defined */
+    s->length = NULL;
+  }
+
+
   if (s->length) {
     if (*s->length == '\0') {
       s->content_length = 0;
