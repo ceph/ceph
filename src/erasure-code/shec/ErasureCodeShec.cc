@@ -237,7 +237,6 @@ int ErasureCodeShec::decode_chunks(const set<int> &want_to_read,
       }
       avails[i] = 0;
     } else {
-      (*decoded)[i] = chunks.find(i)->second;
       avails[i] = 1;
     }
     if (i < k)
