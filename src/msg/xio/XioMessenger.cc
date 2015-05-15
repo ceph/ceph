@@ -733,6 +733,7 @@ int XioMessenger::bind(const entity_addr_t& addr)
   int r = portals.bind(&xio_msgr_ops, base_uri, shift_addr.get_port(), &port0);
   if (r == 0) {
     shift_addr.set_port(port0);
+    shift_addr.nonce = nonce;
     set_myaddr(shift_addr);
     did_bind = true;
   }
