@@ -106,7 +106,9 @@ Requires:	librbd1 = %{version}-%{release}
 Requires:	librados2 = %{version}-%{release}
 Requires:	python-ceph = %{version}-%{release}
 Requires:	python-requests
+%if 0%{?rhel} || 0%{?fedora}
 Requires:	redhat-lsb-core
+%endif
 # python-argparse is only needed in distros with Python 2.6 or lower
 %if (0%{?rhel} && 0%{?rhel} <= 6) || (0%{?suse_version} && 0%{?suse_version} <= 1110)
 Requires:	python-argparse
