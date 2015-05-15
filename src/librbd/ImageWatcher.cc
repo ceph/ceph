@@ -547,6 +547,7 @@ bool ImageWatcher::decode_lock_cookie(const std::string &tag,
 }
 
 void ImageWatcher::schedule_retry_aio_requests(bool use_timer) {
+  m_task_finisher->cancel(TASK_CODE_REQUEST_LOCK);
   Context *ctx = new FunctionContext(boost::bind(
     &ImageWatcher::retry_aio_requests, this));
   if (use_timer) {
@@ -802,7 +803,6 @@ void ImageWatcher::handle_payload(const AcquiredLockPayload &payload,
                                   bufferlist *out) {
   ldout(m_image_ctx.cct, 10) << this << " image exclusively locked announcement"
                              << dendl;
-  m_task_finisher->cancel(TASK_CODE_REQUEST_LOCK);
   if (payload.client_id.is_valid()) {
     Mutex::Locker l(m_owner_client_id_lock);
     if (payload.client_id == m_owner_client_id) {
@@ -822,7 +822,6 @@ void ImageWatcher::handle_payload(const AcquiredLockPayload &payload,
 void ImageWatcher::handle_payload(const ReleasedLockPayload &payload,
                                   bufferlist *out) {
   ldout(m_image_ctx.cct, 10) << this << " exclusive lock released" << dendl;
-  m_task_finisher->cancel(TASK_CODE_REQUEST_LOCK);
   if (payload.client_id.is_valid()) {
     Mutex::Locker l(m_owner_client_id_lock);
     if (payload.client_id != m_owner_client_id) {
