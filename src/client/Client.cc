@@ -431,6 +431,8 @@ int Client::init()
 
   client_lock.Unlock();
 
+  cct->_conf->add_observer(this);
+
   AdminSocket* admin_socket = cct->get_admin_socket();
   int ret = admin_socket->register_command("mds_requests",
 					   "mds_requests",
@@ -484,6 +486,8 @@ int Client::init()
 void Client::shutdown() 
 {
   ldout(cct, 1) << "shutdown" << dendl;
+
+  cct->_conf->remove_observer(this);
 
   AdminSocket* admin_socket = cct->get_admin_socket();
   admin_socket->unregister_command("mds_requests");
@@ -543,7 +547,7 @@ void Client::shutdown()
 // ===================
 // metadata cache stuff
 
-void Client::trim_cache()
+void Client::trim_cache(bool trim_kernel_dcache)
 {
   ldout(cct, 20) << "trim_cache size " << lru.lru_get_size() << " max " << lru.lru_get_max() << dendl;
   unsigned last = 0;
@@ -559,6 +563,9 @@ void Client::trim_cache()
     
     trim_dentry(dn);
   }
+
+  if (trim_kernel_dcache && lru.lru_get_size() > lru.lru_get_max())
+    _invalidate_kernel_dcache();
 
   // hose root?
   if (lru.lru_get_size() == 0 && root && root->get_num_ref() == 0 && inode_map.size() == 1 + root_parents.size()) {
@@ -1203,9 +1210,15 @@ Inode* Client::insert_trace(MetaRequest *request, MetaSession *session)
     }
   }
 
-  if (in && (reply->head.op == CEPH_MDS_OP_READDIR ||
-	     reply->head.op == CEPH_MDS_OP_LSSNAP)) {
-    insert_readdir_results(request, session, in);
+  if (in) {
+    if (reply->head.op == CEPH_MDS_OP_READDIR ||
+	reply->head.op == CEPH_MDS_OP_LSSNAP)
+      insert_readdir_results(request, session, in);
+
+    if (request->dentry() == NULL && in != request->inode()) {
+      // pin the target inode if its parent dentry is not pinned
+      request->set_other_inode(in);
+    }
   }
 
   request->target = in;
@@ -5018,6 +5031,7 @@ void Client::tick()
     check_caps(in, true);
   }
 
+  trim_cache(true);
 }
 
 void Client::renew_caps()
@@ -10945,5 +10959,25 @@ void Client::set_cap_epoch_barrier(epoch_t e)
 {
   ldout(cct, 5) << __func__ << " epoch = " << e << dendl;
   cap_epoch_barrier = e;
+}
+
+const char** Client::get_tracked_conf_keys() const
+{
+  static const char* keys[] = {
+    "client_cache_size",
+    "client_cache_mid",
+    NULL
+  };
+  return keys;
+}
+
+void Client::handle_conf_change(const struct md_config_t *conf,
+				const std::set <std::string> &changed)
+{
+  if (changed.count("client_cache_size") ||
+      changed.count("client_cache_mid")) {
+    lru.lru_set_max(cct->_conf->client_cache_size);
+    lru.lru_set_midpoint(cct->_conf->client_cache_mid);
+  }
 }
 
