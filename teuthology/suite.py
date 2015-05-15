@@ -64,6 +64,7 @@ def main(args):
     if args['--subset']:
         # take input string '2/3' and turn into (2, 3)
         subset = tuple(map(int, args['--subset'].split('/')))
+        log.info('Passed subset=%s/%s' % (str(subset[0]), str(subset[1])))
 
     name = make_run_name(suite, ceph_branch, kernel_branch, kernel_flavor,
                          machine_type)
