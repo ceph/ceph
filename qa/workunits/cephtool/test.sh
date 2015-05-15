@@ -356,32 +356,33 @@ function test_tiering()
   ceph osd pool delete cachepool cachepool --yes-i-really-really-mean-it
   ceph osd pool delete datapool datapool --yes-i-really-really-mean-it
 
-  # commented out pending http://tracker.ceph.com/issues/11359
   ## check health check
-  # ceph osd pool create datapool 2
-  # ceph osd pool create cache4 2
-  # ceph osd tier add-cache datapool cache4 1024000
-  # ceph osd tier cache-mode cache4 writeback
-  # tmpfile=$(mktemp|grep tmp)
-  # dd if=/dev/zero of=$tmpfile  bs=4K count=1
-  # ceph osd pool set cache4 target_max_objects 5
-  # #4096 * 5 = 20480, 20480 near/at 21000,
-  # ceph osd pool set cache4 target_max_bytes 21000
-  # for f in `seq 1 5` ; do
-  #   rados -p cache4 put foo$f $tmpfile
-  # done
-  # rm -f $tmpfile
-  # while ! ceph df | grep cache4 | grep ' 5 ' ; do
-  #   echo waiting for pg stats to flush
-  #   sleep 2
-  # done
-  # ceph health | grep WARN | grep cache4
-  # ceph health detail | grep cache4 | grep 'target max' | grep objects
-  # ceph health detail | grep cache4 | grep 'target max' | grep 'B'
-  # ceph osd tier remove-overlay datapool
-  # ceph osd tier remove datapool cache4
-  # ceph osd pool delete cache4 cache4 --yes-i-really-really-mean-it
-  # ceph osd pool delete datapool datapool --yes-i-really-really-mean-it
+  ceph osd set notieragent
+  ceph osd pool create datapool 2
+  ceph osd pool create cache4 2
+  ceph osd tier add-cache datapool cache4 1024000
+  ceph osd tier cache-mode cache4 writeback
+  tmpfile=$(mktemp|grep tmp)
+  dd if=/dev/zero of=$tmpfile  bs=4K count=1
+  ceph osd pool set cache4 target_max_objects 200
+  ceph osd pool set cache4 target_max_bytes 1000000
+  rados -p cache4 put foo1 $tmpfile
+  rados -p cache4 put foo2 $tmpfile
+  rm -f $tmpfile
+  ceph tell osd.* flush_pg_stats || true
+  ceph df | grep cache4 | grep ' 2 '
+  local max_objects=1
+  ceph osd pool set cache4 target_max_objects $max_objects
+  local max_bytes=1024
+  ceph osd pool set cache4 target_max_bytes $max_bytes
+  ceph health | grep WARN | grep cache4
+  ceph health detail | grep cache4 | grep 'target max' | grep "${max_objects} objects"
+  ceph health detail | grep cache4 | grep 'target max' | grep "${max_bytes}B"
+  ceph osd tier remove-overlay datapool
+  ceph osd tier remove datapool cache4
+  ceph osd pool delete cache4 cache4 --yes-i-really-really-mean-it
+  ceph osd pool delete datapool datapool --yes-i-really-really-mean-it
+  ceph osd unset notieragent
 
 
   # make sure 'tier remove' behaves as we expect
