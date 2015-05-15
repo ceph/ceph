@@ -199,7 +199,7 @@ for Dumpling v0.67.12, this draft release may never be published.
   branch is ready for testing
 * The ``quality engineer`` runs additional integration tests
 * If the ``quality engineer`` discovers new bugs with severity
-  ``Critical``, the relase goes back to being prepared, it was not
+  ``Critical``, the release goes back to being prepared, it was not
   ready after all
 * The ``quality engineer`` informs the ``publisher`` that the branch
   is ready for release
