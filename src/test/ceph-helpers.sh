@@ -222,7 +222,6 @@ function test_kill_daemons() {
     setup $dir || return 1
     run_mon $dir a --osd_pool_default_size=1 || return 1
     run_osd $dir 0 || return 1
-    ceph osd dump | grep "osd.0 up" || return 1
     # sending signal 0 won't kill the daemon
     # waiting just for one second instead of the default schedule
     # allows us to quickly verify what happens when kill fails 
@@ -499,17 +498,7 @@ function activate_osd() {
 
     ceph osd crush create-or-move "$id" 1 root=default host=localhost
 
-    status=1
-    for ((i=0; i < $TIMEOUT; i++)); do
-        if ! ceph osd dump | grep "osd.$id up"; then
-            sleep 1
-        else
-            status=0
-            break
-        fi
-    done
-
-    return $status
+    wait_for_osd up $id || return 1
 }
 
 function test_activate_osd() {
@@ -531,6 +520,44 @@ function test_activate_osd() {
         config get osd_max_backfills)
     test "$backfills" = '{"osd_max_backfills":"20"}' || return 1
 
+    teardown $dir || return 1
+}
+
+#######################################################################
+
+##
+# Wait until the OSD **id** is either up or down, as specified by
+# **state**. It fails after $TIMEOUT seconds.
+#
+# @param state either up or down
+# @param id osd identifier
+# @return 0 on success, 1 on error
+#
+function wait_for_osd() {
+    local state=$1
+    local id=$2
+
+    status=1
+    for ((i=0; i < $TIMEOUT; i++)); do
+        if ! ceph osd dump | grep "osd.$id $state"; then
+            sleep 1
+        else
+            status=0
+            break
+        fi
+    done
+    return $status
+}
+
+function test_wait_for_osd() {
+    local dir=$1
+    setup $dir || return 1
+    run_mon $dir a --osd_pool_default_size=1 || return 1
+    run_osd $dir 0 || return 1
+    wait_for_osd up 0 || return 1
+    kill_daemons $dir TERM osd || return 1
+    wait_for_osd down 0 || return 1
+    ( TIMEOUT=1 ; ! wait_for_osd up 0 ) || return 1
     teardown $dir || return 1
 }
 
