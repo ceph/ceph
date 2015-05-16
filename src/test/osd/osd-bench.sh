@@ -1,7 +1,7 @@
 #!/bin/bash
 #
 # Copyright (C) 2014 Cloudwatt <libre.licensing@cloudwatt.com>
-# Copyright (C) 2014 Red Hat <contact@redhat.com>
+# Copyright (C) 2014, 2015 Red Hat <contact@redhat.com>
 #
 # Author: Loic Dachary <loic@dachary.org>
 #
@@ -17,7 +17,6 @@
 #
 
 source test/ceph-helpers.sh
-source test/osd/osd-test-helpers.sh
 
 function run() {
     local dir=$1
