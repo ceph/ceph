@@ -933,8 +933,7 @@ function wait_for_clean() {
         if get_is_making_recovery_progress ; then
             timer=0
         elif (( timer >= $TIMEOUT )) ; then
-            ceph pg dump
-            ceph health detail
+            ceph report
             return 1
         fi
 
