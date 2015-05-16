@@ -102,7 +102,7 @@ public:
 			    const map<int, bufferlist> &chunks,
 			    map<int, bufferlist> *decoded);
 
-  int init(const map<std::string,std::string> &parameters);
+  int init(ErasureCodeProfile &profile);
   virtual void shec_encode(char **data,
 			   char **coding,
 			   int blocksize) = 0;
@@ -112,7 +112,7 @@ public:
 			  char **coding,
 			  int blocksize) = 0;
   virtual unsigned get_alignment() const = 0;
-  virtual int parse(const map<std::string,std::string> &parameters) = 0;
+  virtual int parse(const ErasureCodeProfile &profile) = 0;
   virtual void prepare() = 0;
 };
 
@@ -136,7 +136,7 @@ public:
 			  char **coding,
 			  int blocksize);
   virtual unsigned get_alignment() const;
-  virtual int parse(const map<std::string,std::string> &parameters);
+  virtual int parse(const ErasureCodeProfile &profile);
   virtual void prepare();
 };
 
