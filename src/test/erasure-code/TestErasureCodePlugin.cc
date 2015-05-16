@@ -30,12 +30,12 @@ protected:
   class Thread_factory : public Thread {
   public:
     virtual void *entry() {
-      map<std::string,std::string> parameters;
-      parameters["directory"] = ".libs";
+      ErasureCodeProfile profile;
+      profile["directory"] = ".libs";
       ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
       ErasureCodeInterfaceRef erasure_code;
       stringstream ss;
-      instance.factory("hangs", parameters, &erasure_code, ss);
+      instance.factory("hangs", profile, &erasure_code, ss);
       return NULL;
     }
   };
@@ -72,28 +72,28 @@ TEST_F(ErasureCodePluginRegistryTest, factory_mutex) {
 
 TEST_F(ErasureCodePluginRegistryTest, all)
 {
-  map<std::string,std::string> parameters;
+  ErasureCodeProfile profile;
   string directory(".libs");
-  parameters["directory"] = directory;
+  profile["directory"] = directory;
   ErasureCodeInterfaceRef erasure_code;
   ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
   stringstream ss;
   EXPECT_FALSE(erasure_code);
-  EXPECT_EQ(-EIO, instance.factory("invalid", parameters, &erasure_code, ss));
+  EXPECT_EQ(-EIO, instance.factory("invalid", profile, &erasure_code, ss));
   EXPECT_FALSE(erasure_code);
-  EXPECT_EQ(-EXDEV, instance.factory("missing_version", parameters,
+  EXPECT_EQ(-EXDEV, instance.factory("missing_version", profile,
 				     &erasure_code, ss));
   EXPECT_FALSE(erasure_code);
-  EXPECT_EQ(-ENOENT, instance.factory("missing_entry_point", parameters,
+  EXPECT_EQ(-ENOENT, instance.factory("missing_entry_point", profile,
 				      &erasure_code, ss));
   EXPECT_FALSE(erasure_code);
-  EXPECT_EQ(-ESRCH, instance.factory("fail_to_initialize", parameters,
+  EXPECT_EQ(-ESRCH, instance.factory("fail_to_initialize", profile,
 				     &erasure_code, ss));
   EXPECT_FALSE(erasure_code);
-  EXPECT_EQ(-EBADF, instance.factory("fail_to_register", parameters,
+  EXPECT_EQ(-EBADF, instance.factory("fail_to_register", profile,
 				     &erasure_code, ss));
   EXPECT_FALSE(erasure_code);
-  EXPECT_EQ(0, instance.factory("example", parameters, &erasure_code, ss));
+  EXPECT_EQ(0, instance.factory("example", profile, &erasure_code, ss));
   EXPECT_TRUE(erasure_code);
   ErasureCodePlugin *plugin = 0;
   {
@@ -120,7 +120,7 @@ int main(int argc, char **argv) {
  * Local Variables:
  * compile-command: "cd ../.. ; make -j4 && 
  *   make unittest_erasure_code_plugin && 
- *   valgrind  --leak-check=full --tool=memcheck \
+ *   valgrind --tool=memcheck \
  *      ./unittest_erasure_code_plugin \
  *      --gtest_filter=*.* --log-to-stderr=true --debug-osd=20"
  * End:

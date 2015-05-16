@@ -98,15 +98,15 @@ int ErasureCodeLrc::create_ruleset(const string &name,
   return ruleset;
 }
 
-int ErasureCodeLrc::layers_description(const map<string,string> &parameters,
+int ErasureCodeLrc::layers_description(const ErasureCodeProfile &profile,
 				       json_spirit::mArray *description,
 				       ostream *ss) const
 {
-  if (parameters.count("layers") == 0) {
-    *ss << "could not find 'layers' in " << parameters << std::endl;
+  if (profile.count("layers") == 0) {
+    *ss << "could not find 'layers' in " << profile << std::endl;
     return ERROR_LRC_DESCRIPTION;
   }
-  string str = parameters.find("layers")->second;
+  string str = profile.find("layers")->second;
   try {
     json_spirit::mValue json;
     json_spirit::read_or_throw(str, json);
@@ -145,7 +145,7 @@ int ErasureCodeLrc::layers_parse(string description_string,
       return ERROR_LRC_ARRAY;
     }
     json_spirit::mArray layer_json = i->get_array();
-    map<string, string> parameters;
+    ErasureCodeProfile profile;
     int index = 0;
     for (vector<json_spirit::mValue>::iterator j = layer_json.begin();
 	 j != layer_json.end();
@@ -177,7 +177,7 @@ int ErasureCodeLrc::layers_parse(string description_string,
 	  return ERROR_LRC_CONFIG_OPTIONS;
 	}
 	if (j->type() == json_spirit::str_type) {
-	  int err = get_json_str_map(j->get_str(), *ss, &layer.parameters);
+	  int err = get_json_str_map(j->get_str(), *ss, &layer.profile);
 	  if (err)
 	    return err;
 	} else if (j->type() == json_spirit::obj_type) {
@@ -186,7 +186,7 @@ int ErasureCodeLrc::layers_parse(string description_string,
 	  for (map<string, json_spirit::mValue>::iterator i = o.begin();
 	       i != o.end();
 	       ++i) {
-	    layer.parameters[i->first] = i->second.get_str();
+	    layer.profile[i->first] = i->second.get_str();
 	  }
 	}
       } else {
@@ -217,19 +217,19 @@ int ErasureCodeLrc::layers_init()
     layer.chunks = layer.data;
     layer.chunks.insert(layer.chunks.end(),
 			layer.coding.begin(), layer.coding.end());
-    if (layer.parameters.find("k") == layer.parameters.end())
-      layer.parameters["k"] = stringify(layer.data.size());
-    if (layer.parameters.find("m") == layer.parameters.end())
-      layer.parameters["m"] = stringify(layer.coding.size());
-    if (layer.parameters.find("plugin") == layer.parameters.end())
-      layer.parameters["plugin"] = "jerasure";
-    if (layer.parameters.find("technique") == layer.parameters.end())
-      layer.parameters["technique"] = "reed_sol_van";
-    if (layer.parameters.find("directory") == layer.parameters.end())
-      layer.parameters["directory"] = directory;
     stringstream ss;
-    int err = registry.factory(layer.parameters["plugin"],
-			       layer.parameters,
+    if (layer.profile.find("k") == layer.profile.end())
+      layer.profile["k"] = stringify(layer.data.size());
+    if (layer.profile.find("m") == layer.profile.end())
+      layer.profile["m"] = stringify(layer.coding.size());
+    if (layer.profile.find("plugin") == layer.profile.end())
+      layer.profile["plugin"] = "jerasure";
+    if (layer.profile.find("technique") == layer.profile.end())
+      layer.profile["technique"] = "reed_sol_van";
+    if (layer.profile.find("directory") == layer.profile.end())
+      layer.profile["directory"] = directory;
+    int err = registry.factory(layer.profile["plugin"],
+			       layer.profile,
 			       &layer.erasure_code,
 			       ss);
     if (err) {
@@ -269,28 +269,28 @@ int ErasureCodeLrc::layers_sanity_checks(string description_string,
   return 0;
 }
 
-int ErasureCodeLrc::parse(const map<string,string> &parameters,
+int ErasureCodeLrc::parse(ErasureCodeProfile &profile,
 			  ostream *ss)
 {
-  int r = ErasureCode::parse(parameters, ss);
+  int r = ErasureCode::parse(profile, ss);
   if (r)
     return r;
 
-  if (parameters.count("directory") != 0)
-    directory = parameters.find("directory")->second;
+  if (profile.count("directory") != 0)
+    directory = profile.find("directory")->second;
 
-  return parse_ruleset(parameters, ss);
+  return parse_ruleset(profile, ss);
 }
 
-int ErasureCodeLrc::parse_kml(map<string,string> &parameters,
+int ErasureCodeLrc::parse_kml(ErasureCodeProfile &profile,
 			      ostream *ss)
 {
-  int err = ErasureCode::parse(parameters, ss);
+  int err = ErasureCode::parse(profile, ss);
   const int DEFAULT = -1;
   int k, m, l;
-  err |= to_int("k", parameters, &k, DEFAULT, ss);
-  err |= to_int("m", parameters, &m, DEFAULT, ss);
-  err |= to_int("l", parameters, &l, DEFAULT, ss);
+  err |= to_int("k", profile, &k, DEFAULT, ss);
+  err |= to_int("m", profile, &m, DEFAULT, ss);
+  err |= to_int("l", profile, &l, DEFAULT, ss);
 
   if (k == DEFAULT && m == DEFAULT && l == DEFAULT)
     return 0;
@@ -298,7 +298,7 @@ int ErasureCodeLrc::parse_kml(map<string,string> &parameters,
   if ((k != DEFAULT || m != DEFAULT || l != DEFAULT) &&
       (k == DEFAULT || m == DEFAULT || l == DEFAULT)) {
     *ss << "All of k, m, l must be set or none of them in "
-	<< parameters << std::endl;
+	<< profile << std::endl;
     return ERROR_LRC_ALL_OR_NOTHING;
   }
 
@@ -307,16 +307,16 @@ int ErasureCodeLrc::parse_kml(map<string,string> &parameters,
 			      "ruleset-steps" };
 
   for (int i = 0; i < 3; i++) {
-    if (parameters.count(generated[i])) {
+    if (profile.count(generated[i])) {
       *ss << "The " << generated[i] << " parameter cannot be set "
-	  << "when k, m, l are set in " << parameters << std::endl;
+	  << "when k, m, l are set in " << profile << std::endl;
       return ERROR_LRC_GENERATED;
     }
   }
 
   if ((k + m) % l) {
     *ss << "k + m must be a multiple of l in "
-	<< parameters << std::endl;
+	<< profile << std::endl;
     return ERROR_LRC_K_M_MODULO;
   }
 
@@ -324,13 +324,13 @@ int ErasureCodeLrc::parse_kml(map<string,string> &parameters,
 
   if (k % local_group_count) {
     *ss << "k must be a multiple of (k + m) / l in "
-	<< parameters << std::endl;
+	<< profile << std::endl;
     return ERROR_LRC_K_MODULO;
   }
 
   if (m % local_group_count) {
     *ss << "m must be a multiple of (k + m) / l in "
-	<< parameters << std::endl;
+	<< profile << std::endl;
     return ERROR_LRC_M_MODULO;
   }
 
@@ -339,7 +339,7 @@ int ErasureCodeLrc::parse_kml(map<string,string> &parameters,
     mapping += string(k / local_group_count, 'D') +
       string(m / local_group_count, '_') + "_";
   }
-  parameters["mapping"] = mapping;
+  profile["mapping"] = mapping;
 
   string layers = "[ ";
 
@@ -362,16 +362,16 @@ int ErasureCodeLrc::parse_kml(map<string,string> &parameters,
     }
     layers += "\", \"\" ],";
   }
-  parameters["layers"] = layers + "]";
+  profile["layers"] = layers + "]";
 
-  map<string,string>::const_iterator parameter;
+  ErasureCodeProfile::const_iterator parameter;
   string ruleset_locality;
-  parameter = parameters.find("ruleset-locality");
-  if (parameter != parameters.end())
+  parameter = profile.find("ruleset-locality");
+  if (parameter != profile.end())
     ruleset_locality = parameter->second;
   string ruleset_failure_domain = "host";
-  parameter = parameters.find("ruleset-failure-domain");
-  if (parameter != parameters.end())
+  parameter = profile.find("ruleset-failure-domain");
+  if (parameter != profile.end())
     ruleset_failure_domain = parameter->second;
 
   if (ruleset_locality != "") {
@@ -388,17 +388,17 @@ int ErasureCodeLrc::parse_kml(map<string,string> &parameters,
   return 0;
 }
 
-int ErasureCodeLrc::parse_ruleset(const map<string,string> &parameters,
+int ErasureCodeLrc::parse_ruleset(ErasureCodeProfile &profile,
 				  ostream *ss)
 {
-  map<string,string>::const_iterator parameter;
-  parameter = parameters.find("ruleset-root");
-  if (parameter != parameters.end())
+  ErasureCodeProfile::const_iterator parameter;
+  parameter = profile.find("ruleset-root");
+  if (parameter != profile.end())
     ruleset_root = parameter->second;
 
-  if (parameters.count("ruleset-steps") != 0) {
+  if (profile.count("ruleset-steps") != 0) {
     ruleset_steps.clear();
-    string str = parameters.find("ruleset-steps")->second;
+    string str = profile.find("ruleset-steps")->second;
     json_spirit::mArray description;
     try {
       json_spirit::mValue json;
@@ -479,26 +479,25 @@ int ErasureCodeLrc::parse_ruleset_step(string description_string,
   return 0;
 }
 
-int ErasureCodeLrc::init(const map<string,string> &parameters,
+int ErasureCodeLrc::init(ErasureCodeProfile &profile,
 			 ostream *ss)
 {
   int r;
 
-  map<string,string> parameters_rw = parameters;
-  r = parse_kml(parameters_rw, ss);
+  r = parse_kml(profile, ss);
   if (r)
     return r;
 
-  r = parse(parameters_rw, ss);
+  r = parse(profile, ss);
   if (r)
     return r;
 
   json_spirit::mArray description;
-  r = layers_description(parameters_rw, &description, ss);
+  r = layers_description(profile, &description, ss);
   if (r)
     return r;
 
-  string description_string = parameters_rw.find("layers")->second;
+  string description_string = profile.find("layers")->second;
 
   dout(10) << "init(" << description_string << ")" << dendl;
 
@@ -510,11 +509,11 @@ int ErasureCodeLrc::init(const map<string,string> &parameters,
   if (r)
     return r;
 
-  if (parameters_rw.count("mapping") == 0) {
-    *ss << "the 'mapping' parameter is missing from " << parameters_rw;
+  if (profile.count("mapping") == 0) {
+    *ss << "the 'mapping' profile is missing from " << profile;
     return ERROR_LRC_MAPPING;
   }
-  string mapping = parameters_rw.find("mapping")->second;
+  string mapping = profile.find("mapping")->second;
   data_chunk_count = 0;
   for(std::string::iterator it = mapping.begin(); it != mapping.end(); ++it) {
     if (*it == 'D')

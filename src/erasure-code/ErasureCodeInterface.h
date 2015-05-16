@@ -152,6 +152,7 @@ using namespace std;
 
 namespace ceph {
 
+  typedef map<std::string,std::string> ErasureCodeProfile;
   class ErasureCodeInterface {
   public:
     virtual ~ErasureCodeInterface() {}

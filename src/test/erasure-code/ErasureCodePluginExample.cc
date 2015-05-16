@@ -23,7 +23,7 @@
 
 class ErasureCodePluginExample : public ErasureCodePlugin {
 public:
-  virtual int factory(const map<std::string,std::string> &parameters,
+  virtual int factory(ErasureCodeProfile &profile,
                       ErasureCodeInterfaceRef *erasure_code)
   {
     *erasure_code = ErasureCodeInterfaceRef(new ErasureCodeExample());

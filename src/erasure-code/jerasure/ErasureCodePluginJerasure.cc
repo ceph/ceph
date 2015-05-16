@@ -31,12 +31,12 @@ static ostream& _prefix(std::ostream* _dout)
 
 class ErasureCodePluginJerasure : public ErasureCodePlugin {
 public:
-  virtual int factory(const map<std::string,std::string> &parameters,
+  virtual int factory(ErasureCodeProfile &profile,
 		      ErasureCodeInterfaceRef *erasure_code) {
     ErasureCodeJerasure *interface;
     std::string t;
-    if (parameters.find("technique") != parameters.end())
-      t = parameters.find("technique")->second;
+    if (profile.find("technique") != profile.end())
+      t = profile.find("technique")->second;
     if (t == "reed_sol_van") {
       interface = new ErasureCodeJerasureReedSolomonVandermonde();
     } else if (t == "reed_sol_r6_op") {
@@ -59,7 +59,7 @@ public:
 	   << dendl;
       return -ENOENT;
     }
-    interface->init(parameters);
+    interface->init(profile);
     *erasure_code = ErasureCodeInterfaceRef(interface);
     return 0;
   }

@@ -34,13 +34,13 @@ static ostream& _prefix(std::ostream* _dout)
 
 class ErasureCodePluginLrc : public ErasureCodePlugin {
 public:
-  virtual int factory(const map<std::string,std::string> &parameters,
+  virtual int factory(ErasureCodeProfile &profile,
 		      ErasureCodeInterfaceRef *erasure_code) {
     ErasureCodeLrc *interface;
     interface = new ErasureCodeLrc();
     stringstream ss;
-    assert(parameters.count("directory") != 0);
-    int r = interface->init(parameters, &ss);
+    assert(profile.count("directory") != 0);
+    int r = interface->init(profile, &ss);
     if (r) {
       derr << ss.str() << dendl;
       delete interface;

@@ -37,13 +37,13 @@ class ErasureCodePluginShec : public ErasureCodePlugin {
 public:
   ErasureCodeShecTableCache tcache;
 
-  virtual int factory(const map<std::string,std::string> &parameters,
+  virtual int factory(ErasureCodeProfile &profile,
 		      ErasureCodeInterfaceRef *erasure_code) {
     ErasureCodeShec *interface;
     std::string t = "multiple";
 
-    if (parameters.find("technique") != parameters.end()){
-      t = parameters.find("technique")->second;
+    if (profile.find("technique") != profile.end()){
+      t = profile.find("technique")->second;
     }
 
     if (t == "single"){
@@ -57,9 +57,9 @@ public:
 	   << dendl;
       return -ENOENT;
     }
-    int err = interface->init(parameters);
-    if (err) {
-      return err;
+    int r = interface->init(profile);
+    if (r) {
+      return r;
     }
     *erasure_code = ErasureCodeInterfaceRef(interface);
 
