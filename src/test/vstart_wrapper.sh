@@ -1,6 +1,7 @@
 #!/bin/bash
 #
 # Copyright (C) 2013 Cloudwatt <libre.licensing@cloudwatt.com>
+# Copyright (C) 2015 Red Hat <contact@redhat.com>
 #
 # Author: Loic Dachary <loic@dachary.org>
 #
@@ -15,7 +16,7 @@
 # GNU Library Public License for more details.
 #
 
-source test/mon/mon-test-helpers.sh
+source test/ceph-helpers.sh
 
 export CEPH_VSTART_WRAPPER=1
 export CEPH_DIR="$PWD/testdir/test-$CEPH_PORT"
