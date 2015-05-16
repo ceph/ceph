@@ -3983,14 +3983,14 @@ int OSDMonitor::get_erasure_code(const string &erasure_code_profile,
 {
   if (pending_inc.has_erasure_code_profile(erasure_code_profile))
     return -EAGAIN;
-  const map<string,string> &profile =
+  ErasureCodeProfile profile =
     osdmap.get_erasure_code_profile(erasure_code_profile);
-  map<string,string>::const_iterator plugin =
+  ErasureCodeProfile::const_iterator plugin =
     profile.find("plugin");
   if (plugin == profile.end()) {
     ss << "cannot determine the erasure code plugin"
-       << " because there is no 'plugin' entry in the erasure_code_profile "
-       << profile << std::endl;
+	<< " because there is no 'plugin' entry in the erasure_code_profile "
+	<< profile << std::endl;
     return -EINVAL;
   }
   ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();

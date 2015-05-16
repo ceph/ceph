@@ -84,7 +84,7 @@ ErasureCodePlugin *ErasureCodePluginRegistry::get(const std::string &name)
 }
 
 int ErasureCodePluginRegistry::factory(const std::string &plugin_name,
-				       const map<std::string,std::string> &parameters,
+				       ErasureCodeProfile &profile,
 				       ErasureCodeInterfaceRef *erasure_code,
 				       ostream &ss)
 {
@@ -94,15 +94,15 @@ int ErasureCodePluginRegistry::factory(const std::string &plugin_name,
     plugin = get(plugin_name);
     if (plugin == 0) {
       loading = true;
-      assert(parameters.count("directory") != 0);
-      int r = load(plugin_name, parameters.find("directory")->second, &plugin, ss);
+      assert(profile.count("directory") != 0);
+      int r = load(plugin_name, profile.find("directory")->second, &plugin, ss);
       loading = false;
       if (r != 0)
 	return r;
     }
   }
 
-  return plugin->factory(parameters, erasure_code);
+  return plugin->factory(profile, erasure_code);
 }
 
 static const char *an_older_version() {
