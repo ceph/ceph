@@ -1,7 +1,7 @@
 #!/bin/bash
 #
 # Copyright (C) 2014 Cloudwatt <libre.licensing@cloudwatt.com>
-# Copyright (C) 2014 Red Hat <contact@redhat.com>
+# Copyright (C) 2014, 2015 Red Hat <contact@redhat.com>
 #
 # Author: Loic Dachary <loic@dachary.org>
 #
@@ -15,49 +15,49 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU Library Public License for more details.
 #
-source test/mon/mon-test-helpers.sh
+source test/ceph-helpers.sh
 
 function run() {
     local dir=$1
+    shift
 
     export CEPH_MON="127.0.0.1:7102"
     export CEPH_ARGS
     CEPH_ARGS+="--fsid=$(uuidgen) --auth-supported=none "
     CEPH_ARGS+="--mon-host=$CEPH_MON "
 
-    setup $dir || return 1
-    run_mon $dir a --public-addr $CEPH_MON
-    FUNCTIONS=${FUNCTIONS:-$(set | sed -n -e 's/^\(TEST_[0-9a-z_]*\) .*/\1/p')}
-    for TEST_function in $FUNCTIONS ; do
-        if ! $TEST_function $dir ; then
-            cat $dir/a/log
-            return 1
-        fi
+    local funcs=${@:-$(set | sed -n -e 's/^\(TEST_[0-9a-z_]*\) .*/\1/p')}
+    for func in $funcs ; do
+        $func $dir || return 1
     done
-    teardown $dir || return 1
 }
 
 TEST_POOL=rbd
 
 function TEST_osd_pool_get_set() {
-    local dir=$1 flag
+    local dir=$1
+
+    setup $dir || return 1
+    run_mon $dir a || return 1
+
+    local flag
     for flag in hashpspool nodelete nopgchange nosizechange; do
         if [ $flag = hashpspool ]; then
-	    ./ceph osd dump | grep 'pool 0' | grep $flag || return 1
+	    ./ceph osd dump | grep 'pool ' | grep $flag || return 1
         else
-	    ! ./ceph osd dump | grep 'pool 0' | grep $flag || return 1
+	    ! ./ceph osd dump | grep 'pool ' | grep $flag || return 1
         fi
 	./ceph osd pool set $TEST_POOL $flag 0 || return 1
-	! ./ceph osd dump | grep 'pool 0' | grep $flag || return 1
+	! ./ceph osd dump | grep 'pool ' | grep $flag || return 1
 	./ceph osd pool set $TEST_POOL $flag 1 || return 1
-	./ceph osd dump | grep 'pool 0' | grep $flag || return 1
+	./ceph osd dump | grep 'pool ' | grep $flag || return 1
 	./ceph osd pool set $TEST_POOL $flag false || return 1
-	! ./ceph osd dump | grep 'pool 0' | grep $flag || return 1
+	! ./ceph osd dump | grep 'pool ' | grep $flag || return 1
 	./ceph osd pool set $TEST_POOL $flag false || return 1
         # check that setting false twice does not toggle to true (bug)
-	! ./ceph osd dump | grep 'pool 0' | grep $flag || return 1
+	! ./ceph osd dump | grep 'pool ' | grep $flag || return 1
 	./ceph osd pool set $TEST_POOL $flag true || return 1
-	./ceph osd dump | grep 'pool 0' | grep $flag || return 1
+	./ceph osd dump | grep 'pool ' | grep $flag || return 1
 	# cleanup
 	./ceph osd pool set $TEST_POOL $flag 0 || return 1
     done
@@ -82,9 +82,10 @@ function TEST_osd_pool_get_set() {
     ! ./ceph osd pool set $ecpool min_size $(expr $k - 1) || return 1
     ! ./ceph osd pool set $ecpool min_size $(expr $size + 1) || return 1
 
+    teardown $dir || return 1
 }
 
-main misc
+main misc "$@"
 
 # Local Variables:
 # compile-command: "cd ../.. ; make -j4 && test/mon/misc.sh"
