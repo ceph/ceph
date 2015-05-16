@@ -4193,8 +4193,9 @@ int OSDMonitor::prepare_pool_crush_ruleset(const unsigned pool_type,
 	  *crush_ruleset = osdmap.crush->get_osd_pool_default_crush_replicated_ruleset(g_ceph_context);
 	  if (*crush_ruleset < 0) {
 	    // Errors may happen e.g. if no valid ruleset is available
-	    *ss << "No suitable CRUSH ruleset exists";
-	    return *crush_ruleset;
+	    *ss << "No suitable CRUSH ruleset exists, check "
+                << "'osd pool default crush *' config options";
+	    return -ENOENT;
 	  }
 	} else {
 	  return get_crush_ruleset(ruleset_name, crush_ruleset, ss);
