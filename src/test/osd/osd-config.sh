@@ -27,8 +27,12 @@ function run() {
     CEPH_ARGS+="--mon-host=$CEPH_MON "
     CEPH_ARGS+="--fsid=$(uuidgen) --auth-supported=none "
 
-    local id=a
-    call_TEST_functions $dir $id || return 1
+    FUNCTIONS=${FUNCTIONS:-$(set | sed -n -e 's/^\(TEST_[0-9a-z_]*\) .*/\1/p')}
+    for TEST_function in $FUNCTIONS ; do
+        setup $dir || return 1
+        $TEST_function $dir || return 1
+        teardown $dir || return 1
+    done
 }
 
 function TEST_config_init() {
