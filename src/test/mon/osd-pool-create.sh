@@ -1,7 +1,7 @@
 #!/bin/bash
 #
-# Copyright (C) 2013,2014 Cloudwatt <libre.licensing@cloudwatt.com>
-# Copyright (C) 2014 Red Hat <contact@redhat.com>
+# Copyright (C) 2013, 2014 Cloudwatt <libre.licensing@cloudwatt.com>
+# Copyright (C) 2014, 2015 Red Hat <contact@redhat.com>
 #
 # Author: Loic Dachary <loic@dachary.org>
 #
@@ -15,26 +15,21 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU Library Public License for more details.
 #
-source test/mon/mon-test-helpers.sh
-
-function expect_false()
-{
-    set -x
-    if "$@"; then return 1; else return 0; fi
-}
+source test/ceph-helpers.sh
 
 function run() {
     local dir=$1
+    shift
 
     export CEPH_MON="127.0.0.1:7105"
     export CEPH_ARGS
     CEPH_ARGS+="--fsid=$(uuidgen) --auth-supported=none "
     CEPH_ARGS+="--mon-host=$CEPH_MON "
 
-    FUNCTIONS=${FUNCTIONS:-$(set | sed -n -e 's/^\(TEST_[0-9a-z_]*\) .*/\1/p')}
-    for TEST_function in $FUNCTIONS ; do
+    local funcs=${@:-$(set | sed -n -e 's/^\(TEST_[0-9a-z_]*\) .*/\1/p')}
+    for func in $funcs ; do
         setup $dir || return 1
-        $TEST_function $dir || return 1
+        $func $dir || return 1
         teardown $dir || return 1
     done
 }
@@ -43,41 +38,41 @@ function TEST_default_deprectated_0() {
     local dir=$1
     # explicitly set the default crush rule
     expected=66
-    run_mon $dir a --public-addr $CEPH_MON \
-        --osd_pool_default_crush_replicated_ruleset $expected
+    run_mon $dir a \
+        --osd_pool_default_crush_replicated_ruleset $expected || return 1
     ./ceph --format json osd dump | grep '"crush_ruleset":'$expected
-    CEPH_ARGS='' ./ceph --admin-daemon $dir/a/ceph-mon.a.asok log flush || return 1
-    ! grep "osd_pool_default_crush_rule is deprecated " $dir/a/log || return 1
+    CEPH_ARGS='' ./ceph --admin-daemon $dir/ceph-mon.a.asok log flush || return 1
+    ! grep "osd_pool_default_crush_rule is deprecated " $dir/mon.a.log || return 1
 }
 
 function TEST_default_deprectated_1() {
     local dir=$1
     # explicitly set the default crush rule using deprecated option
     expected=55
-    run_mon $dir a --public-addr $CEPH_MON \
-        --osd_pool_default_crush_rule $expected
+    run_mon $dir a \
+        --osd_pool_default_crush_rule $expected || return 1
     ./ceph --format json osd dump | grep '"crush_ruleset":'$expected
-    CEPH_ARGS='' ./ceph --admin-daemon $dir/a/ceph-mon.a.asok log flush || return 1
-    grep "osd_pool_default_crush_rule is deprecated " $dir/a/log || return 1
+    CEPH_ARGS='' ./ceph --admin-daemon $dir/ceph-mon.a.asok log flush || return 1
+    grep "osd_pool_default_crush_rule is deprecated " $dir/mon.a.log || return 1
 }
 
 function TEST_default_deprectated_2() {
     local dir=$1
     expected=77
     unexpected=33
-    run_mon $dir a --public-addr $CEPH_MON \
+    run_mon $dir a \
         --osd_pool_default_crush_rule $expected \
-        --osd_pool_default_crush_replicated_ruleset $unexpected
+        --osd_pool_default_crush_replicated_ruleset $unexpected || return 1
     ./ceph --format json osd dump | grep '"crush_ruleset":'$expected
     ! ./ceph --format json osd dump | grep '"crush_ruleset":'$unexpected || return 1
-    CEPH_ARGS='' ./ceph --admin-daemon $dir/a/ceph-mon.a.asok log flush || return 1
-    grep "osd_pool_default_crush_rule is deprecated " $dir/a/log || return 1
+    CEPH_ARGS='' ./ceph --admin-daemon $dir/ceph-mon.a.asok log flush || return 1
+    grep "osd_pool_default_crush_rule is deprecated " $dir/mon.a.log || return 1
 }
 
 # Before http://tracker.ceph.com/issues/8307 the invalid profile was created
 function TEST_erasure_invalid_profile() {
     local dir=$1
-    run_mon $dir a --public-addr $CEPH_MON
+    run_mon $dir a || return 1
     local poolname=pool_erasure
     local notaprofile=not-a-valid-erasure-code-profile
     ! ./ceph osd pool create $poolname 12 12 erasure $notaprofile || return 1
@@ -86,7 +81,7 @@ function TEST_erasure_invalid_profile() {
 
 function TEST_erasure_crush_rule() {
     local dir=$1
-    run_mon $dir a --public-addr $CEPH_MON
+    run_mon $dir a || return 1
     # 
     # choose the crush ruleset used with an erasure coded pool
     #
@@ -116,7 +111,7 @@ function TEST_erasure_crush_rule() {
 
 function TEST_erasure_code_profile_default() {
     local dir=$1
-    run_mon $dir a --public-addr $CEPH_MON
+    run_mon $dir a || return 1
     ./ceph osd erasure-code-profile rm default || return 1
     ! ./ceph osd erasure-code-profile ls | grep default || return 1
     ./ceph osd pool create $poolname 12 12 erasure default
@@ -145,9 +140,9 @@ function TEST_erasure_crush_stripe_width_padded() {
     expected_chunk_size=2048
     actual_stripe_width=$(($expected_chunk_size * $k))
     desired_stripe_width=$(($actual_stripe_width - 1))
-    run_mon $dir a --public-addr $CEPH_MON \
+    run_mon $dir a \
         --osd_pool_erasure_code_stripe_width $desired_stripe_width \
-        --osd_pool_default_erasure_code_profile "$profile"
+        --osd_pool_default_erasure_code_profile "$profile" || return 1
     ./ceph osd pool create pool_erasure 12 12 erasure
     ./ceph osd dump | tee $dir/osd.json
     grep "stripe_width $actual_stripe_width" $dir/osd.json > /dev/null || return 1
@@ -155,7 +150,7 @@ function TEST_erasure_crush_stripe_width_padded() {
 
 function TEST_erasure_code_pool() {
     local dir=$1
-    run_mon $dir a --public-addr $CEPH_MON
+    run_mon $dir a || return 1
     ./ceph --format json osd dump > $dir/osd.json
     local expected='"erasure_code_profile":"default"'
     ! grep "$expected" $dir/osd.json || return 1
@@ -171,7 +166,7 @@ function TEST_erasure_code_pool() {
 
 function TEST_replicated_pool_with_ruleset() {
     local dir=$1
-    run_mon $dir a --public-addr $CEPH_MON
+    run_mon $dir a
     local ruleset=ruleset0
     local root=host1
     ./ceph osd crush add-bucket $root host
@@ -191,7 +186,7 @@ function TEST_replicated_pool_with_ruleset() {
 
 function TEST_erasure_code_pool_lrc() {
     local dir=$1
-    run_mon $dir a --public-addr $CEPH_MON
+    run_mon $dir a || return 1
 
     ./ceph osd erasure-code-profile set LRCprofile \
              plugin=lrc \
@@ -210,7 +205,7 @@ function TEST_erasure_code_pool_lrc() {
 
 function TEST_replicated_pool() {
     local dir=$1
-    run_mon $dir a --public-addr $CEPH_MON
+    run_mon $dir a || return 1
     ./ceph osd pool create replicated 12 12 replicated replicated_ruleset 2>&1 | \
         grep "pool 'replicated' created" || return 1
     ./ceph osd pool create replicated 12 12 replicated replicated_ruleset 2>&1 | \
@@ -228,17 +223,17 @@ function TEST_replicated_pool() {
 
 function TEST_no_pool_delete() {
     local dir=$1
-    run_mon $dir a --public-addr $CEPH_MON
-    ./ceph osd pool create foo 1
-    ./ceph tell mon.a injectargs -- --no-mon-allow-pool-delete
-    expect_false ./ceph osd pool delete foo foo --yes-i-really-really-mean-it
-    ./ceph tell mon.a injectargs -- --mon-allow-pool-delete
-    ./ceph osd pool delete foo foo --yes-i-really-really-mean-it
+    run_mon $dir a || return 1
+    ./ceph osd pool create foo 1 || return 1
+    ./ceph tell mon.a injectargs -- --no-mon-allow-pool-delete || return 1
+    ! ./ceph osd pool delete foo foo --yes-i-really-really-mean-it || return 1
+    ./ceph tell mon.a injectargs -- --mon-allow-pool-delete || return 1
+    ./ceph osd pool delete foo foo --yes-i-really-really-mean-it || return 1
 }
 
 function TEST_utf8_cli() {
     local dir=$1
-    run_mon $dir a --public-addr $CEPH_MON
+    run_mon $dir a || return 1
     # Hopefully it's safe to include literal UTF-8 characters to test
     # the fix for http://tracker.ceph.com/issues/7387.  If it turns out
     # to not be OK (when is the default encoding *not* UTF-8?), maybe
@@ -252,7 +247,7 @@ function TEST_utf8_cli() {
     ./ceph osd pool delete 黄 黄 --yes-i-really-really-mean-it
 }
 
-main osd-pool-create
+main osd-pool-create "$@"
 
 # Local Variables:
 # compile-command: "cd ../.. ; make -j4 && test/mon/osd-pool-create.sh"
