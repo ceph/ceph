@@ -78,7 +78,6 @@ EXTRA_DIST += \
 	$(srcdir)/make_version \
 	$(srcdir)/.git_version \
 	$(srcdir)/ceph-rbdnamer \
-	$(srcdir)/test/encoding/readable.sh \
 	$(srcdir)/upstart/ceph-all.conf \
 	$(srcdir)/upstart/ceph-mon.conf \
 	$(srcdir)/upstart/ceph-mon-all.conf \
@@ -151,9 +150,9 @@ TESTS = \
 	$(check_TESTPROGRAMS) \
 	$(check_SCRIPTS)
 
-check-local::
-	$(top_srcdir)/qa/workunits/erasure-code/encode-decode-non-regression.sh 
-	$(srcdir)/test/encoding/readable.sh ../ceph-object-corpus
+check_SCRIPTS += \
+	../qa/workunits/erasure-code/encode-decode-non-regression.sh \
+	test/encoding/readable.sh
 
 if WITH_LTTNG
 # TODO: If we're running the parallel test harness (the preferred harness), this should be AM_TESTS_ENVIRONMENT instead.
