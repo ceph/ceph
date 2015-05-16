@@ -260,8 +260,11 @@ function test_kill_daemons() {
 # run_mon $dir a # spawn a mon and bind port 7018
 # run_mon $dir a --debug-filestore=20 # spawn with filestore debugging
 #
-# The default rbd pool is deleted and replaced with a replicated pool
-# with less placement groups to speed up initialization.
+# If mon_initial_members is not set, the default rbd pool is deleted
+# and replaced with a replicated pool with less placement groups to
+# speed up initialization. If mon_initial_members is set, no attempt
+# is made to recreate the rbd pool because it would hang forever,
+# waiting for other mons to join.
 #
 # A **dir**/ceph.conf file is created but not meant to be used by any
 # function.  It is convenient for debugging a failure with:
@@ -278,7 +281,7 @@ function run_mon() {
     shift
     local id=$1
     shift
-    local data=$dir
+    local data=$dir/$id
 
     ceph-mon \
         --id $id \
@@ -300,6 +303,7 @@ function run_mon() {
         --chdir= \
         --mon-data=$data \
         --log-file=$dir/\$name.log \
+        --admin-socket=$dir/\$cluster-\$name.asok \
         --mon-cluster-log-file=$dir/log \
         --run-dir=$dir \
         --pid-file=$dir/\$name.pid \
@@ -307,12 +311,13 @@ function run_mon() {
 
     cat > $dir/ceph.conf <<EOF
 [global]
-fsid = $(get_config mon a fsid)
-mon host = $(get_config mon a mon_host)
+fsid = $(get_config mon $id fsid)
+mon host = $(get_config mon $id mon_host)
 EOF
-
-    ceph osd pool delete rbd rbd --yes-i-really-really-mean-it || return 1
-    ceph osd pool create rbd $PG_NUM || return 1
+    if test -z "$(get_config mon $id mon_initial_members)" ; then
+        ceph osd pool delete rbd rbd --yes-i-really-really-mean-it || return 1
+        ceph osd pool create rbd $PG_NUM || return 1
+    fi
 }
 
 function test_run_mon() {
@@ -320,7 +325,14 @@ function test_run_mon() {
 
     setup $dir || return 1
 
+    run_mon $dir a --mon-initial-members=a || return 1
+    # rbd has not been deleted / created, hence it has pool id 0
+    ceph osd dump | grep "pool 0 'rbd'" || return 1
+    kill_daemons $dir || return 1
+
     run_mon $dir a || return 1
+    # rbd has been deleted / created, hence it does not have pool id 0
+    ! ceph osd dump | grep "pool 0 'rbd'" || return 1
     local size=$(CEPH_ARGS='' ceph --format=json daemon $dir/ceph-mon.a.asok \
         config get osd_pool_default_size)
     test "$size" = '{"osd_pool_default_size":"3"}' || return 1
