@@ -52,7 +52,9 @@ check-local:: all
 		echo "or run make CHECK_ULIMIT=false -j4 check to override this safeguard." ; \
 		exit 1 ; \
 	fi
-	$(srcdir)/src/test/run-cli-tests '$(top_builddir)/src/test'
+
+check_SCRIPTS = \
+	src/test/run-cli-tests
 
 # "make distclean" both runs this and recurses into src/gtest, if
 # gtest is in DIST_SUBDIRS. Take extra care to not fail when
