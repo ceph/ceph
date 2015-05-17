@@ -34,7 +34,7 @@ TEST(ErasureCodePlugin, factory)
     ErasureCodeInterfaceRef erasure_code;
     EXPECT_FALSE(erasure_code);
     EXPECT_EQ(-ENOENT, instance.factory("jerasure", profile,
-                                        &erasure_code, cerr));
+                                        &erasure_code, &cerr));
     EXPECT_FALSE(erasure_code);
   }
   const char *techniques[] = {
@@ -54,7 +54,7 @@ TEST(ErasureCodePlugin, factory)
     profile["technique"] = *technique;
     EXPECT_FALSE(erasure_code);
     EXPECT_EQ(0, instance.factory("jerasure", profile,
-                                  &erasure_code, cerr));
+                                  &erasure_code, &cerr));
     EXPECT_TRUE(erasure_code);
   }
 }
@@ -92,7 +92,7 @@ TEST(ErasureCodePlugin, select)
     ErasureCodeInterfaceRef erasure_code;
     int sse4_side_effect = -444;
     EXPECT_EQ(sse4_side_effect, instance.factory("jerasure", profile,
-                                                 &erasure_code, cerr));
+                                                 &erasure_code, &cerr));
   }
   // pclmul is missing, load the SSE3 plugin
   {
@@ -107,7 +107,7 @@ TEST(ErasureCodePlugin, select)
     ErasureCodeInterfaceRef erasure_code;
     int sse3_side_effect = -333;
     EXPECT_EQ(sse3_side_effect, instance.factory("jerasure", profile,
-                                                 &erasure_code, cerr));
+                                                 &erasure_code, &cerr));
   }
   // pclmul and sse3 are missing, load the generic plugin
   {
@@ -122,7 +122,7 @@ TEST(ErasureCodePlugin, select)
     ErasureCodeInterfaceRef erasure_code;
     int generic_side_effect = -111;
     EXPECT_EQ(generic_side_effect, instance.factory("jerasure", profile,
-						    &erasure_code, cerr));
+						    &erasure_code, &cerr));
   }
   // neon is set, load the neon plugin
   {
@@ -137,7 +137,7 @@ TEST(ErasureCodePlugin, select)
     ErasureCodeInterfaceRef erasure_code;
     int generic_side_effect = -555;
     EXPECT_EQ(generic_side_effect, instance.factory("jerasure", profile,
-						    &erasure_code, cerr));
+						    &erasure_code, &cerr));
   }
 
 
@@ -200,7 +200,7 @@ TEST(ErasureCodePlugin, sse)
     ErasureCodeInterfaceRef erasure_code;
     EXPECT_FALSE(erasure_code);
     EXPECT_EQ(0, instance.factory("jerasure_" + *sse_variant, profile,
-                                  &erasure_code, cerr));
+                                  &erasure_code, &cerr));
     EXPECT_TRUE(erasure_code);
 
     //

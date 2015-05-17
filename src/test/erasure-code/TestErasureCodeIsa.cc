@@ -53,7 +53,7 @@ void IsaErasureCodeTest::encode_decode(unsigned object_size)
   ErasureCodeProfile profile;
   profile["k"] = "2";
   profile["m"] = "2";
-  Isa.init(profile);
+  Isa.init(profile, &cerr);
 
   string payload(object_size, 'X');
   bufferlist in;
@@ -193,7 +193,7 @@ TEST_F(IsaErasureCodeTest, minimum_to_decode)
   ErasureCodeProfile profile;
   profile["k"] = "2";
   profile["m"] = "2";
-  Isa.init(profile);
+  Isa.init(profile, &cerr);
 
   //
   // If trying to read nothing, the minimum is empty.
@@ -290,7 +290,7 @@ TEST_F(IsaErasureCodeTest, chunk_size)
     ErasureCodeProfile profile;
     profile["k"] = "2";
     profile["m"] = "1";
-    Isa.init(profile);
+    Isa.init(profile, &cerr);
     int k = 2;
 
     ASSERT_EQ(EC_ISA_ADDRESS_ALIGNMENT, Isa.get_chunk_size(1));
@@ -302,7 +302,7 @@ TEST_F(IsaErasureCodeTest, chunk_size)
     ErasureCodeProfile profile;
     profile["k"] = "3";
     profile["m"] = "1";
-    Isa.init(profile);
+    Isa.init(profile, &cerr);
     int k = 3;
 
     ASSERT_EQ(EC_ISA_ADDRESS_ALIGNMENT, Isa.get_chunk_size(1));
@@ -323,7 +323,7 @@ TEST_F(IsaErasureCodeTest, encode)
   ErasureCodeProfile profile;
   profile["k"] = "2";
   profile["m"] = "2";
-  Isa.init(profile);
+  Isa.init(profile, &cerr);
 
   unsigned aligned_object_size = Isa.get_alignment() * 2;
   {
@@ -394,7 +394,7 @@ TEST_F(IsaErasureCodeTest, isa_vandermonde_exhaustive)
   ErasureCodeProfile profile;
   profile["k"] = "12";
   profile["m"] = "4";
-  Isa.init(profile);
+  Isa.init(profile, &cerr);
 
   int k = 12;
   int m = 4;
@@ -521,7 +521,7 @@ TEST_F(IsaErasureCodeTest, isa_cauchy_exhaustive)
   profile["m"] = "4";
   profile["technique"] = "cauchy";
 
-  Isa.init(profile);
+  Isa.init(profile, &cerr);
 
   int k = 12;
   int m = 4;
@@ -648,7 +648,7 @@ TEST_F(IsaErasureCodeTest, isa_cauchy_cache_trash)
   profile["m"] = "4";
   profile["technique"] = "cauchy";
 
-  Isa.init(profile);
+  Isa.init(profile, &cerr);
 
   int k = 16;
   int m = 4;
@@ -774,7 +774,7 @@ TEST_F(IsaErasureCodeTest, isa_xor_codec)
   ErasureCodeProfile profile;
   profile["k"] = "4";
   profile["m"] = "1";
-  Isa.init(profile);
+  Isa.init(profile, &cerr);
 
   int k = 4;
   int m = 1;
@@ -899,7 +899,7 @@ TEST_F(IsaErasureCodeTest, create_ruleset)
     profile["k"] = "2";
     profile["m"] = "2";
     profile["w"] = "8";
-    isa.init(profile);
+    isa.init(profile, &cerr);
     int ruleset = isa.create_ruleset("myrule", *c, &ss);
     EXPECT_EQ(0, ruleset);
     EXPECT_EQ(-EEXIST, isa.create_ruleset("myrule", *c, &ss));
@@ -924,7 +924,7 @@ TEST_F(IsaErasureCodeTest, create_ruleset)
     profile["m"] = "2";
     profile["w"] = "8";
     profile["ruleset-root"] = "BAD";
-    isa.init(profile);
+    isa.init(profile, &cerr);
     EXPECT_EQ(-ENOENT, isa.create_ruleset("otherrule", *c, &ss));
     EXPECT_EQ("root item BAD does not exist", ss.str());
   }
@@ -936,7 +936,7 @@ TEST_F(IsaErasureCodeTest, create_ruleset)
     profile["m"] = "2";
     profile["w"] = "8";
     profile["ruleset-failure-domain"] = "WORSE";
-    isa.init(profile);
+    isa.init(profile, &cerr);
     EXPECT_EQ(-EINVAL, isa.create_ruleset("otherrule", *c, &ss));
     EXPECT_EQ("unknown type WORSE", ss.str());
   }

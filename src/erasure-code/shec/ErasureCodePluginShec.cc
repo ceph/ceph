@@ -38,7 +38,8 @@ public:
   ErasureCodeShecTableCache tcache;
 
   virtual int factory(ErasureCodeProfile &profile,
-		      ErasureCodeInterfaceRef *erasure_code) {
+		      ErasureCodeInterfaceRef *erasure_code,
+		      ostream *ss) {
     ErasureCodeShec *interface;
     std::string t = "multiple";
 
@@ -57,7 +58,7 @@ public:
 	   << dendl;
       return -ENOENT;
     }
-    int r = interface->init(profile);
+    int r = interface->init(profile, ss);
     if (r) {
       delete interface;
       return r;

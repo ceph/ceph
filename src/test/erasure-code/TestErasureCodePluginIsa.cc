@@ -30,7 +30,7 @@ TEST(ErasureCodePlugin, factory)
     ErasureCodeInterfaceRef erasure_code;
     EXPECT_FALSE(erasure_code);
     EXPECT_EQ(-EIO, instance.factory("no-isa", profile,
-                                        &erasure_code, cerr));
+                                        &erasure_code, &cerr));
     EXPECT_FALSE(erasure_code);
   }
   const char *techniques[] = {
@@ -42,7 +42,7 @@ TEST(ErasureCodePlugin, factory)
     profile["technique"] = *technique;
     EXPECT_FALSE(erasure_code);
     EXPECT_EQ(0, instance.factory("isa", profile,
-                                  &erasure_code, cerr));
+                                  &erasure_code, &cerr));
     EXPECT_TRUE(erasure_code);
   }
 }

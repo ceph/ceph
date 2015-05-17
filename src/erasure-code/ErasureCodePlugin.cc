@@ -86,7 +86,7 @@ ErasureCodePlugin *ErasureCodePluginRegistry::get(const std::string &name)
 int ErasureCodePluginRegistry::factory(const std::string &plugin_name,
 				       ErasureCodeProfile &profile,
 				       ErasureCodeInterfaceRef *erasure_code,
-				       ostream &ss)
+				       ostream *ss)
 {
   ErasureCodePlugin *plugin;
   {
@@ -102,7 +102,7 @@ int ErasureCodePluginRegistry::factory(const std::string &plugin_name,
     }
   }
 
-  return plugin->factory(profile, erasure_code);
+  return plugin->factory(profile, erasure_code, ss);
 }
 
 static const char *an_older_version() {
@@ -112,14 +112,14 @@ static const char *an_older_version() {
 int ErasureCodePluginRegistry::load(const std::string &plugin_name,
 				    const std::string &directory,
 				    ErasureCodePlugin **plugin,
-				    ostream &ss)
+				    ostream *ss)
 {
   assert(lock.is_locked());
   std::string fname = directory + "/" PLUGIN_PREFIX
     + plugin_name + PLUGIN_SUFFIX;
   void *library = dlopen(fname.c_str(), RTLD_NOW);
   if (!library) {
-    ss << "load dlopen(" << fname << "): " << dlerror();
+    *ss << "load dlopen(" << fname << "): " << dlerror();
     return -EIO;
   }
 
@@ -128,8 +128,8 @@ int ErasureCodePluginRegistry::load(const std::string &plugin_name,
   if (erasure_code_version == NULL)
     erasure_code_version = an_older_version;
   if (erasure_code_version() != string(CEPH_GIT_NICE_VER)) {
-    ss << "expected plugin " << fname << " version " << CEPH_GIT_NICE_VER
-       << " but it claims to be " << erasure_code_version() << " instead";
+    *ss << "expected plugin " << fname << " version " << CEPH_GIT_NICE_VER
+	<< " but it claims to be " << erasure_code_version() << " instead";
     dlclose(library);
     return -EXDEV;
   }
@@ -140,38 +140,38 @@ int ErasureCodePluginRegistry::load(const std::string &plugin_name,
     std::string name = plugin_name;
     int r = erasure_code_init(name.c_str(), directory.c_str());
     if (r != 0) {
-      ss << "erasure_code_init(" << plugin_name
-	 << "," << directory 
-	 << "): " << cpp_strerror(r);
+      *ss << "erasure_code_init(" << plugin_name
+	  << "," << directory
+	  << "): " << cpp_strerror(r);
       dlclose(library);
       return r;
     }
   } else {
-    ss << "load dlsym(" << fname
-       << ", " << PLUGIN_INIT_FUNCTION
-       << "): " << dlerror();
+    *ss << "load dlsym(" << fname
+	<< ", " << PLUGIN_INIT_FUNCTION
+	<< "): " << dlerror();
     dlclose(library);
     return -ENOENT;
   }
 
   *plugin = get(plugin_name);
   if (*plugin == 0) {
-    ss << "load " << PLUGIN_INIT_FUNCTION << "()"
-       << "did not register " << plugin_name;
+    *ss << "load " << PLUGIN_INIT_FUNCTION << "()"
+	<< "did not register " << plugin_name;
     dlclose(library);
     return -EBADF;
   }
 
   (*plugin)->library = library;
 
-  ss << __func__ << ": " << plugin_name << " ";
+  *ss << __func__ << ": " << plugin_name << " ";
 
   return 0;
 }
 
 int ErasureCodePluginRegistry::preload(const std::string &plugins,
 				       const std::string &directory,
-				       ostream &ss)
+				       ostream *ss)
 {
   Mutex::Locker l(lock);
   list<string> plugins_list;

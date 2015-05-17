@@ -27,22 +27,16 @@
 #undef dout_prefix
 #define dout_prefix _prefix(_dout)
 
-static ostream& _prefix(std::ostream* _dout)
-{
-  return *_dout << "ErasureCodePluginLrc: ";
-}
-
 class ErasureCodePluginLrc : public ErasureCodePlugin {
 public:
   virtual int factory(ErasureCodeProfile &profile,
-		      ErasureCodeInterfaceRef *erasure_code) {
+		      ErasureCodeInterfaceRef *erasure_code,
+		      ostream *ss) {
     ErasureCodeLrc *interface;
     interface = new ErasureCodeLrc();
-    stringstream ss;
     assert(profile.count("directory") != 0);
-    int r = interface->init(profile, &ss);
+    int r = interface->init(profile, ss);
     if (r) {
-      derr << ss.str() << dendl;
       delete interface;
       return r;
     }
