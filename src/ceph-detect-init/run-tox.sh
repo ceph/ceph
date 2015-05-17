@@ -30,4 +30,7 @@ if test -d wheelhouse ; then
 fi
 pip --log make-check/log.txt install $NO_INDEX --use-wheel --find-links=file://$(pwd)/wheelhouse --upgrade distribute
 pip --log make-check/log.txt install $NO_INDEX --use-wheel --find-links=file://$(pwd)/wheelhouse 'tox >=1.9' 
-tox 2>&1 | grep -v InterpreterNotFound
+tox > make-check/tox.out 2>&1 
+status=$?
+grep -v InterpreterNotFound < make-check/tox.out
+exit $status
