@@ -205,6 +205,32 @@ function TEST_format_plain() {
         grep "$expected" || return 1
 }
 
+function TEST_profile_k_sanity() {
+    local dir=$1
+    local profile=profile-sanity
+
+    run_mon $dir a || return 1
+
+    expect_failure $dir 'k must be a multiple of (k + m) / l' \
+        ./ceph osd erasure-code-profile set $profile \
+        plugin=lrc \
+        l=1 \
+        k=1 \
+        m=1 || return 1
+
+    expect_failure $dir 'k=1 must be >= 2' \
+        ./ceph osd erasure-code-profile set $profile \
+        plugin=isa \
+        k=1 \
+        m=1 || return 1
+
+    expect_failure $dir 'k=1 must be >= 2' \
+        ./ceph osd erasure-code-profile set $profile \
+        plugin=jerasure \
+        k=1 \
+        m=1 || return 1
+}
+
 main osd-erasure-code-profile "$@"
 
 # Local Variables:
