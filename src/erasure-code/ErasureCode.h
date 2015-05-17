@@ -77,14 +77,20 @@ namespace ceph {
     static int to_int(const std::string &name,
 		      ErasureCodeProfile &profile,
 		      int *value,
-		      int default_value,
+		      const std::string &default_value,
 		      ostream *ss);
 
     static int to_bool(const std::string &name,
 		       ErasureCodeProfile &profile,
 		       bool *value,
-		       bool default_value,
+		       const std::string &default_value,
 		       ostream *ss);
+
+    static int to_string(const std::string &name,
+			 ErasureCodeProfile &profile,
+			 std::string *value,
+			 const std::string &default_value,
+			 ostream *ss);
 
     virtual int decode_concat(const map<int, bufferlist> &chunks,
 			      bufferlist *decoded);
