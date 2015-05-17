@@ -15,23 +15,30 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU Library Public License for more details.
 #
-source test/mon/mon-test-helpers.sh
+source test/ceph-helpers.sh
 
 function run() {
     local dir=$1
+    shift
 
     export CEPH_MON="127.0.0.1:7108"
     export CEPH_ARGS
     CEPH_ARGS+="--fsid=$(uuidgen) --auth-supported=none "
     CEPH_ARGS+="--mon-host=$CEPH_MON "
 
-    local id=a
-    call_TEST_functions $dir $id --public-addr $CEPH_MON || return 1
+    local funcs=${@:-$(set | sed -n -e 's/^\(TEST_[0-9a-z_]*\) .*/\1/p')}
+    for func in $funcs ; do
+        setup $dir || return 1
+        $func $dir || return 1
+        teardown $dir || return 1
+    done
 }
 
-function SHARE_MON_TEST_set() {
+function TEST_set() {
     local dir=$1
     local id=$2
+
+    run_mon $dir a || return 1
 
     local profile=myprofile
     #
@@ -60,9 +67,11 @@ function SHARE_MON_TEST_set() {
     ./ceph osd erasure-code-profile rm $profile # cleanup
 }
 
-function SHARE_MON_TEST_ls() {
+function TEST_ls() {
     local dir=$1
     local id=$2
+
+    run_mon $dir a || return 1
 
     local profile=myprofile
     ! ./ceph osd erasure-code-profile ls | grep $profile || return 1
@@ -74,9 +83,11 @@ function SHARE_MON_TEST_ls() {
     ./ceph osd erasure-code-profile rm $profile # cleanup
 }
 
-function SHARE_MON_TEST_rm() {
+function TEST_rm() {
     local dir=$1
     local id=$2
+
+    run_mon $dir a || return 1
 
     local profile=myprofile
     ./ceph osd erasure-code-profile set $profile 2>&1 || return 1
@@ -96,9 +107,11 @@ function SHARE_MON_TEST_rm() {
     ./ceph osd erasure-code-profile rm $profile # cleanup
 }
 
-function SHARE_MON_TEST_get() {
+function TEST_get() {
     local dir=$1
     local id=$2
+
+    run_mon $dir a || return 1
 
     local default_profile=default
     ./ceph osd erasure-code-profile get $default_profile | \
@@ -109,9 +122,11 @@ function SHARE_MON_TEST_get() {
     grep -q "unknown erasure code profile 'WRONG'" $dir/out || return 1
 }
 
-function SHARE_MON_TEST_experimental_shec() {
+function TEST_experimental_shec() {
     local dir=$1
     local id=$2
+
+    run_mon $dir a || return 1
 
     local profile=shec-profile
 
@@ -120,10 +135,11 @@ function SHARE_MON_TEST_experimental_shec() {
     ! ./ceph osd erasure-code-profile ls | grep $profile || return 1
 }
 
-function SHARE_MON_TEST_set_idempotent() {
+function TEST_set_idempotent() {
     local dir=$1
     local id=$2
 
+    run_mon $dir a || return 1
     #
     # The default profile is set using a code path different from 
     # ceph osd erasure-code-profile set: verify that it is idempotent,
@@ -160,8 +176,8 @@ function TEST_format_invalid() {
     local profile=profile
     # osd_pool_default_erasure-code-profile is
     # valid JSON but not of the expected type
-    run_mon $dir a --public-addr $CEPH_MON \
-        --osd_pool_default_erasure-code-profile 1
+    run_mon $dir a \
+        --osd_pool_default_erasure-code-profile 1 || return 1
     ! ./ceph osd erasure-code-profile set $profile > $dir/out 2>&1 || return 1
     cat $dir/out
     grep 'must be a JSON object' $dir/out || return 1
@@ -172,8 +188,8 @@ function TEST_format_json() {
 
     # osd_pool_default_erasure-code-profile is JSON
     expected='"plugin":"example"'
-    run_mon $dir a --public-addr $CEPH_MON \
-        --osd_pool_default_erasure-code-profile "{$expected}"
+    run_mon $dir a \
+        --osd_pool_default_erasure-code-profile "{$expected}" || return 1
     ./ceph --format json osd erasure-code-profile get default | \
         grep "$expected" || return 1
 }
@@ -183,13 +199,13 @@ function TEST_format_plain() {
 
     # osd_pool_default_erasure-code-profile is plain text
     expected='"plugin":"example"'
-    run_mon $dir a --public-addr $CEPH_MON \
-        --osd_pool_default_erasure-code-profile "plugin=example"
+    run_mon $dir a \
+        --osd_pool_default_erasure-code-profile "plugin=example" || return 1
     ./ceph --format json osd erasure-code-profile get default | \
         grep "$expected" || return 1
 }
 
-main osd-erasure-code-profile
+main osd-erasure-code-profile "$@"
 
 # Local Variables:
 # compile-command: "cd ../.. ; make -j4 && test/mon/osd-erasure-code-profile.sh"

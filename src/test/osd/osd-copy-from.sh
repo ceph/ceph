@@ -1,7 +1,7 @@
 #!/bin/bash
 #
 # Copyright (C) 2014 Cloudwatt <libre.licensing@cloudwatt.com>
-# Copyright (C) 2014 Red Hat <contact@redhat.com>
+# Copyright (C) 2014, 2015 Red Hat <contact@redhat.com>
 #
 # Author: Loic Dachary <loic@dachary.org>
 # Author: Sage Weil <sage@redhat.com>
@@ -17,26 +17,29 @@
 # GNU Library Public License for more details.
 #
 
-source test/mon/mon-test-helpers.sh
-source test/osd/osd-test-helpers.sh
+source test/ceph-helpers.sh
 
 function run() {
     local dir=$1
+    shift
 
     export CEPH_MON="127.0.0.1:7111"
     export CEPH_ARGS
     CEPH_ARGS+="--fsid=$(uuidgen) --auth-supported=none "
     CEPH_ARGS+="--mon-host=$CEPH_MON "
 
-    local id=a
-    call_TEST_functions $dir $id || return 1
+    local funcs=${@:-$(set | sed -n -e 's/^\(TEST_[0-9a-z_]*\) .*/\1/p')}
+    for func in $funcs ; do
+        setup $dir || return 1
+        $func $dir || return 1
+        teardown $dir || return 1
+    done
 }
 
 function TEST_copy_from() {
     local dir=$1
 
-    run_mon $dir a --public-addr $CEPH_MON \
-        || return 1
+    run_mon $dir a || return 1
     run_osd $dir 0 || return 1
     run_osd $dir 1 || return 1
 
@@ -56,7 +59,7 @@ function TEST_copy_from() {
     ./rados -p rbd stat foo3
 }
 
-main osd-copy-from
+main osd-copy-from "$@"
 
 # Local Variables:
 # compile-command: "cd ../.. ; make -j4 && test/osd/osd-bench.sh"

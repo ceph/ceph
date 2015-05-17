@@ -222,7 +222,6 @@ function test_kill_daemons() {
     setup $dir || return 1
     run_mon $dir a --osd_pool_default_size=1 || return 1
     run_osd $dir 0 || return 1
-    ceph osd dump | grep "osd.0 up" || return 1
     # sending signal 0 won't kill the daemon
     # waiting just for one second instead of the default schedule
     # allows us to quickly verify what happens when kill fails 
@@ -261,8 +260,11 @@ function test_kill_daemons() {
 # run_mon $dir a # spawn a mon and bind port 7018
 # run_mon $dir a --debug-filestore=20 # spawn with filestore debugging
 #
-# The default rbd pool is deleted and replaced with a replicated pool
-# with less placement groups to speed up initialization.
+# If mon_initial_members is not set, the default rbd pool is deleted
+# and replaced with a replicated pool with less placement groups to
+# speed up initialization. If mon_initial_members is set, no attempt
+# is made to recreate the rbd pool because it would hang forever,
+# waiting for other mons to join.
 #
 # A **dir**/ceph.conf file is created but not meant to be used by any
 # function.  It is convenient for debugging a failure with:
@@ -279,7 +281,7 @@ function run_mon() {
     shift
     local id=$1
     shift
-    local data=$dir
+    local data=$dir/$id
 
     ceph-mon \
         --id $id \
@@ -301,6 +303,7 @@ function run_mon() {
         --chdir= \
         --mon-data=$data \
         --log-file=$dir/\$name.log \
+        --admin-socket=$dir/\$cluster-\$name.asok \
         --mon-cluster-log-file=$dir/log \
         --run-dir=$dir \
         --pid-file=$dir/\$name.pid \
@@ -308,12 +311,13 @@ function run_mon() {
 
     cat > $dir/ceph.conf <<EOF
 [global]
-fsid = $(get_config mon a fsid)
-mon host = $(get_config mon a mon_host)
+fsid = $(get_config mon $id fsid)
+mon host = $(get_config mon $id mon_host)
 EOF
-
-    ceph osd pool delete rbd rbd --yes-i-really-really-mean-it || return 1
-    ceph osd pool create rbd $PG_NUM || return 1
+    if test -z "$(get_config mon $id mon_initial_members)" ; then
+        ceph osd pool delete rbd rbd --yes-i-really-really-mean-it || return 1
+        ceph osd pool create rbd $PG_NUM || return 1
+    fi
 }
 
 function test_run_mon() {
@@ -321,7 +325,14 @@ function test_run_mon() {
 
     setup $dir || return 1
 
+    run_mon $dir a --mon-initial-members=a || return 1
+    # rbd has not been deleted / created, hence it has pool id 0
+    ceph osd dump | grep "pool 0 'rbd'" || return 1
+    kill_daemons $dir || return 1
+
     run_mon $dir a || return 1
+    # rbd has been deleted / created, hence it does not have pool id 0
+    ! ceph osd dump | grep "pool 0 'rbd'" || return 1
     local size=$(CEPH_ARGS='' ceph --format=json daemon $dir/ceph-mon.a.asok \
         config get osd_pool_default_size)
     test "$size" = '{"osd_pool_default_size":"3"}' || return 1
@@ -499,17 +510,7 @@ function activate_osd() {
 
     ceph osd crush create-or-move "$id" 1 root=default host=localhost
 
-    status=1
-    for ((i=0; i < $TIMEOUT; i++)); do
-        if ! ceph osd dump | grep "osd.$id up"; then
-            sleep 1
-        else
-            status=0
-            break
-        fi
-    done
-
-    return $status
+    wait_for_osd up $id || return 1
 }
 
 function test_activate_osd() {
@@ -531,6 +532,44 @@ function test_activate_osd() {
         config get osd_max_backfills)
     test "$backfills" = '{"osd_max_backfills":"20"}' || return 1
 
+    teardown $dir || return 1
+}
+
+#######################################################################
+
+##
+# Wait until the OSD **id** is either up or down, as specified by
+# **state**. It fails after $TIMEOUT seconds.
+#
+# @param state either up or down
+# @param id osd identifier
+# @return 0 on success, 1 on error
+#
+function wait_for_osd() {
+    local state=$1
+    local id=$2
+
+    status=1
+    for ((i=0; i < $TIMEOUT; i++)); do
+        if ! ceph osd dump | grep "osd.$id $state"; then
+            sleep 1
+        else
+            status=0
+            break
+        fi
+    done
+    return $status
+}
+
+function test_wait_for_osd() {
+    local dir=$1
+    setup $dir || return 1
+    run_mon $dir a --osd_pool_default_size=1 || return 1
+    run_osd $dir 0 || return 1
+    wait_for_osd up 0 || return 1
+    kill_daemons $dir TERM osd || return 1
+    wait_for_osd down 0 || return 1
+    ( TIMEOUT=1 ; ! wait_for_osd up 0 ) || return 1
     teardown $dir || return 1
 }
 
@@ -906,8 +945,7 @@ function wait_for_clean() {
         if get_is_making_recovery_progress ; then
             timer=0
         elif (( timer >= $TIMEOUT )) ; then
-            ceph pg dump
-            ceph health detail
+            ceph report
             return 1
         fi
 
@@ -1053,7 +1091,6 @@ function main() {
     export CEPH_CONF=/dev/null
     unset CEPH_ARGS
 
-    setup $dir || return 1
     local code
     if run $dir "$@" ; then
         code=0
