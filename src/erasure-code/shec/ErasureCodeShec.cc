@@ -58,13 +58,12 @@ int ErasureCodeShec::init(ErasureCodeProfile &profile,
 			  ostream *ss)
 {
   int err = 0;
-  map<string,string>::const_iterator parameter;
-  parameter = profile.find("ruleset-root");
-  if (parameter != profile.end())
-    ruleset_root = parameter->second;
-  parameter = profile.find("ruleset-failure-domain");
-  if (parameter != profile.end())
-    ruleset_failure_domain = parameter->second;
+  err |= to_string("ruleset-root", profile,
+		   &ruleset_root,
+		   DEFAULT_RULESET_ROOT, ss);
+  err |= to_string("ruleset-failure-domain", profile,
+		   &ruleset_failure_domain,
+		   DEFAULT_RULESET_FAILURE_DOMAIN, ss);
   err |= parse(profile);
   if (err)
     return err;
