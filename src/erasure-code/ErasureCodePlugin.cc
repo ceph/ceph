@@ -102,7 +102,15 @@ int ErasureCodePluginRegistry::factory(const std::string &plugin_name,
     }
   }
 
-  return plugin->factory(profile, erasure_code, ss);
+  int r = plugin->factory(profile, erasure_code, ss);
+  if (r)
+    return r;
+  if (profile != (*erasure_code)->get_profile()) {
+    *ss << __func__ << " profile " << profile << " != get_profile() "
+	<< (*erasure_code)->get_profile() << std::endl;
+    return -EINVAL;
+  }
+  return 0;
 }
 
 static const char *an_older_version() {
