@@ -1091,7 +1091,6 @@ function main() {
     export CEPH_CONF=/dev/null
     unset CEPH_ARGS
 
-    setup $dir || return 1
     local code
     if run $dir "$@" ; then
         code=0

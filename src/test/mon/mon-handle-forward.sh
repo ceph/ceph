@@ -20,6 +20,8 @@ source test/ceph-helpers.sh
 function run() {
     local dir=$1
 
+    setup $dir || return 1
+
     MONA=127.0.0.1:7300
     MONB=127.0.0.1:7301
     (
@@ -51,6 +53,8 @@ function run() {
     features=$(sed -n -e 's|.*127.0.0.1:0.*accept features \([0-9][0-9]*\)|\1|p' < \
         $dir/mon.b.log)
     grep ' forward(mon_command(.*"POOL2".*con_features '$features $dir/mon.a.log
+
+    teardown $dir || return 1
 }
 
 main mon-handle-forward "$@"
