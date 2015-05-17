@@ -26,6 +26,9 @@
 #include "ErasureCodeShecTableCache.h"
 #include <list>
 
+#define DEFAULT_RULESET_ROOT "default"
+#define DEFAULT_RULESET_FAILURE_DOMAIN "host"
+
 class ErasureCodeShec : public ErasureCode {
 
 public:
@@ -60,8 +63,8 @@ public:
     w(0),
     DEFAULT_W(8),
     technique(_technique),
-    ruleset_root("default"),
-    ruleset_failure_domain("host"),
+    ruleset_root(DEFAULT_RULESET_ROOT),
+    ruleset_failure_domain(DEFAULT_RULESET_FAILURE_DOMAIN),
     matrix(0)
   {}
 
