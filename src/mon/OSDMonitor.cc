@@ -3940,6 +3940,17 @@ int OSDMonitor::crush_rename_bucket(const string& srcname,
   return 0;
 }
 
+int OSDMonitor::normalize_profile(ErasureCodeProfile &profile, ostream *ss)
+{
+  ErasureCodeInterfaceRef erasure_code;
+  ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
+  ErasureCodeProfile::const_iterator plugin = profile.find("plugin");
+  int err = instance.factory(plugin->second, profile, &erasure_code, ss);
+  if (err)
+    return err;
+  return erasure_code->init(profile, ss);
+}
+
 int OSDMonitor::crush_ruleset_create_erasure(const string &name,
 					     const string &profile,
 					     int *ruleset,
@@ -5451,22 +5462,6 @@ bool OSDMonitor::prepare_command_impl(MMonCommand *m,
     }
     string plugin = profile_map["plugin"];
 
-    if (osdmap.has_erasure_code_profile(name)) {
-      if (osdmap.get_erasure_code_profile(name) == profile_map) {
-	err = 0;
-	goto reply;
-      }
-      if (!force) {
-	err = -EPERM;
-	ss << "will not override erasure code profile " << name
-	   << " because the existing profile "
-	   << osdmap.get_erasure_code_profile(name)
-	   << " is different from the proposed profile "
-	   << profile_map;
-	goto reply;
-      }
-    }
-
     if (pending_inc.has_erasure_code_profile(name)) {
       dout(20) << "erasure code profile " << name << " try again" << dendl;
       goto wait;
@@ -5483,7 +5478,34 @@ bool OSDMonitor::prepare_command_impl(MMonCommand *m,
 	  goto reply;
 	}
       }
-      dout(20) << "erasure code profile " << name << " set" << dendl;
+      err = normalize_profile(profile_map, &ss);
+      if (err)
+	goto reply;
+
+      if (osdmap.has_erasure_code_profile(name)) {
+	ErasureCodeProfile existing_profile_map =
+	  osdmap.get_erasure_code_profile(name);
+	err = normalize_profile(existing_profile_map, &ss);
+	if (err)
+	  goto reply;
+
+	if (existing_profile_map == profile_map) {
+	  err = 0;
+	  goto reply;
+	}
+	if (!force) {
+	  err = -EPERM;
+	  ss << "will not override erasure code profile " << name
+	     << " because the existing profile "
+	     << existing_profile_map
+	     << " is different from the proposed profile "
+	     << profile_map;
+	  goto reply;
+	}
+      }
+
+      dout(20) << "erasure code profile set " << name << "="
+	       << profile_map << dendl;
       pending_inc.set_erasure_code_profile(name, profile_map);
     }
 
@@ -5517,7 +5539,11 @@ bool OSDMonitor::prepare_command_impl(MMonCommand *m,
 						      &ss);
 	if (err)
 	  goto reply;
-	dout(20) << "erasure code profile " << profile << " set" << dendl;
+	err = normalize_profile(profile_map, &ss);
+	if (err)
+	  goto reply;
+	dout(20) << "erasure code profile set " << profile << "="
+		 << profile_map << dendl;
 	pending_inc.set_erasure_code_profile(profile, profile_map);
 	goto wait;
       }
