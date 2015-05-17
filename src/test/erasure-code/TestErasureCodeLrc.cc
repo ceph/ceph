@@ -411,7 +411,7 @@ TEST(ErasureCodeLrc, layers_init)
     json_spirit::mArray description;
     EXPECT_EQ(0, lrc.layers_description(profile, &description, &cerr));
     EXPECT_EQ(0, lrc.layers_parse(description_string, description, &cerr));
-    EXPECT_EQ(0, lrc.layers_init());
+    EXPECT_EQ(0, lrc.layers_init(&cerr));
     EXPECT_EQ("5", lrc.layers.front().profile["k"]);
     EXPECT_EQ("2", lrc.layers.front().profile["m"]);
     EXPECT_EQ("jerasure", lrc.layers.front().profile["plugin"]);

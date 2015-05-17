@@ -33,7 +33,7 @@ TEST(ErasureCodePlugin, factory)
   profile["layers"] = "[ [ \"DDc\", \"\" ] ]";
   ErasureCodeInterfaceRef erasure_code;
   EXPECT_FALSE(erasure_code);
-  EXPECT_EQ(0, instance.factory("lrc", profile, &erasure_code, cerr));
+  EXPECT_EQ(0, instance.factory("lrc", profile, &erasure_code, &cerr));
   EXPECT_TRUE(erasure_code);
 }
 

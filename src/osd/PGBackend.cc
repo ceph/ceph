@@ -299,7 +299,7 @@ PGBackend *PGBackend::build_pg_backend(
       profile.find("plugin")->second,
       profile,
       &ec_impl,
-      ss);
+      &ss);
     assert(ec_impl);
     return new ECBackend(
       l,

@@ -52,8 +52,9 @@ int ErasureCodeJerasure::create_ruleset(const string &name,
   }
 }
 
-void ErasureCodeJerasure::init(ErasureCodeProfile& profile)
+int ErasureCodeJerasure::init(ErasureCodeProfile& profile, ostream *ss)
 {
+  int err = 0;
   dout(10) << "technique=" << technique << dendl;
   map<string,string>::const_iterator parameter;
   parameter = profile.find("ruleset-root");
@@ -62,10 +63,11 @@ void ErasureCodeJerasure::init(ErasureCodeProfile& profile)
   parameter = profile.find("ruleset-failure-domain");
   if (parameter != profile.end())
     ruleset_failure_domain = parameter->second;
-  ostringstream ss;
-  if (parse(profile, &ss))
-    derr << ss.str() << dendl;
+  err |= parse(profile, ss);
+  if (err)
+    return err;
   prepare();
+  return err;
 }
 
 int ErasureCodeJerasure::parse(ErasureCodeProfile &profile,

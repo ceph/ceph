@@ -24,7 +24,8 @@
 class ErasureCodePluginExample : public ErasureCodePlugin {
 public:
   virtual int factory(ErasureCodeProfile &profile,
-                      ErasureCodeInterfaceRef *erasure_code)
+                      ErasureCodeInterfaceRef *erasure_code,
+		      ostream *ss)
   {
     *erasure_code = ErasureCodeInterfaceRef(new ErasureCodeExample());
     return 0;

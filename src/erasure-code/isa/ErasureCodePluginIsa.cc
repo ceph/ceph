@@ -36,7 +36,8 @@ public:
   ErasureCodeIsaTableCache tcache;
 
   virtual int factory(ErasureCodeProfile &profile,
-                      ErasureCodeInterfaceRef *erasure_code)
+                      ErasureCodeInterfaceRef *erasure_code,
+                      ostream *ss)
   {
     ErasureCodeIsa *interface;
     std::string t = "reed_sol_van";
@@ -50,15 +51,19 @@ public:
         interface = new ErasureCodeIsaDefault(tcache,
                                               ErasureCodeIsaDefault::kCauchy);
       } else {
-        derr << "technique=" << t << " is not a valid coding technique. "
+        *ss << "technique=" << t << " is not a valid coding technique. "
           << " Choose one of the following: "
           << "reed_sol_van,"
-          << "cauchy" << dendl;
+          << "cauchy" << std::endl;
         return -ENOENT;
       }
     }
 
-    interface->init(profile);
+    int r = interface->init(profile, ss);
+    if (r) {
+      delete interface;
+      return r;
+    }
     *erasure_code = ErasureCodeInterfaceRef(interface);
     return 0;
   }

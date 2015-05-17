@@ -34,8 +34,7 @@ protected:
       profile["directory"] = ".libs";
       ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
       ErasureCodeInterfaceRef erasure_code;
-      stringstream ss;
-      instance.factory("hangs", profile, &erasure_code, ss);
+      instance.factory("hangs", profile, &erasure_code, &cerr);
       return NULL;
     }
   };
@@ -77,31 +76,30 @@ TEST_F(ErasureCodePluginRegistryTest, all)
   profile["directory"] = directory;
   ErasureCodeInterfaceRef erasure_code;
   ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
-  stringstream ss;
   EXPECT_FALSE(erasure_code);
-  EXPECT_EQ(-EIO, instance.factory("invalid", profile, &erasure_code, ss));
+  EXPECT_EQ(-EIO, instance.factory("invalid", profile, &erasure_code, &cerr));
   EXPECT_FALSE(erasure_code);
   EXPECT_EQ(-EXDEV, instance.factory("missing_version", profile,
-				     &erasure_code, ss));
+				     &erasure_code, &cerr));
   EXPECT_FALSE(erasure_code);
   EXPECT_EQ(-ENOENT, instance.factory("missing_entry_point", profile,
-				      &erasure_code, ss));
+				      &erasure_code, &cerr));
   EXPECT_FALSE(erasure_code);
   EXPECT_EQ(-ESRCH, instance.factory("fail_to_initialize", profile,
-				     &erasure_code, ss));
+				     &erasure_code, &cerr));
   EXPECT_FALSE(erasure_code);
   EXPECT_EQ(-EBADF, instance.factory("fail_to_register", profile,
-				     &erasure_code, ss));
+				     &erasure_code, &cerr));
   EXPECT_FALSE(erasure_code);
-  EXPECT_EQ(0, instance.factory("example", profile, &erasure_code, ss));
+  EXPECT_EQ(0, instance.factory("example", profile, &erasure_code, &cerr));
   EXPECT_TRUE(erasure_code);
   ErasureCodePlugin *plugin = 0;
   {
     Mutex::Locker l(instance.lock);
-    EXPECT_EQ(-EEXIST, instance.load("example", directory, &plugin, ss));
+    EXPECT_EQ(-EEXIST, instance.load("example", directory, &plugin, &cerr));
     EXPECT_EQ(-ENOENT, instance.remove("does not exist"));
     EXPECT_EQ(0, instance.remove("example"));
-    EXPECT_EQ(0, instance.load("example", directory, &plugin, ss));
+    EXPECT_EQ(0, instance.load("example", directory, &plugin, &cerr));
   }
 }
 

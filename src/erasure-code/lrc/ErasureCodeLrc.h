@@ -126,7 +126,7 @@ public:
   int layers_parse(string description_string,
 		   json_spirit::mArray description,
 		   ostream *ss);
-  int layers_init();
+  int layers_init(ostream *ss);
   int layers_sanity_checks(string description_string,
 			   ostream *ss) const;
 };

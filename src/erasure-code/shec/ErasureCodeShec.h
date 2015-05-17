@@ -102,7 +102,7 @@ public:
 			    const map<int, bufferlist> &chunks,
 			    map<int, bufferlist> *decoded);
 
-  int init(ErasureCodeProfile &profile);
+  virtual int init(ErasureCodeProfile &profile, ostream *ss);
   virtual void shec_encode(char **data,
 			   char **coding,
 			   int blocksize) = 0;

@@ -145,7 +145,7 @@ int ErasureCodeCommand::display_information() {
 
   int code = instance.factory(profile["plugin"],
 			      profile,
-			      &erasure_code, cerr);
+			      &erasure_code, &cerr);
   if (code)
     return code;
 

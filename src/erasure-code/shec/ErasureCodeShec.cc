@@ -54,8 +54,10 @@ int ErasureCodeShec::create_ruleset(const string &name,
   }
 }
 
-int ErasureCodeShec::init(ErasureCodeProfile &profile)
+int ErasureCodeShec::init(ErasureCodeProfile &profile,
+			  ostream *ss)
 {
+  int err = 0;
   map<string,string>::const_iterator parameter;
   parameter = profile.find("ruleset-root");
   if (parameter != profile.end())
@@ -63,12 +65,11 @@ int ErasureCodeShec::init(ErasureCodeProfile &profile)
   parameter = profile.find("ruleset-failure-domain");
   if (parameter != profile.end())
     ruleset_failure_domain = parameter->second;
-  int err = parse(profile);
-  if (err) {
+  err |= parse(profile);
+  if (err)
     return err;
-  }
   prepare();
-  return 0;
+  return err;
 }
 
 unsigned int ErasureCodeShec::get_chunk_size(unsigned int object_size) const

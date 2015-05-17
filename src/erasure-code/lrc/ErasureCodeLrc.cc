@@ -197,7 +197,7 @@ int ErasureCodeLrc::layers_parse(string description_string,
   return 0;
 }
 
-int ErasureCodeLrc::layers_init()
+int ErasureCodeLrc::layers_init(ostream *ss)
 {
   ErasureCodePluginRegistry &registry = ErasureCodePluginRegistry::instance();
   for (unsigned int i = 0; i < layers.size(); i++) {
@@ -217,7 +217,6 @@ int ErasureCodeLrc::layers_init()
     layer.chunks = layer.data;
     layer.chunks.insert(layer.chunks.end(),
 			layer.coding.begin(), layer.coding.end());
-    stringstream ss;
     if (layer.profile.find("k") == layer.profile.end())
       layer.profile["k"] = stringify(layer.data.size());
     if (layer.profile.find("m") == layer.profile.end())
@@ -232,10 +231,8 @@ int ErasureCodeLrc::layers_init()
 			       layer.profile,
 			       &layer.erasure_code,
 			       ss);
-    if (err) {
-      derr << ss.str() << dendl;
+    if (err)
       return err;
-    }
   }
   return 0;
 }
@@ -505,7 +502,7 @@ int ErasureCodeLrc::init(ErasureCodeProfile &profile,
   if (r)
     return r;
 
-  r = layers_init();
+  r = layers_init(ss);
   if (r)
     return r;
 
