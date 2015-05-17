@@ -147,7 +147,7 @@ void* thread1(void* pParam)
     (*profile)["m"] = param->m;
     (*profile)["c"] = param->c;
     (*profile)["w"] = param->w;
-    r = shec->init(*profile);
+    r = shec->init(*profile, &cerr);
 
     int i_k = std::atoi(param->k.c_str());
     int i_m = std::atoi(param->m.c_str());

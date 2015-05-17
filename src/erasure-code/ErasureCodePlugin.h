@@ -37,7 +37,8 @@ namespace ceph {
     virtual ~ErasureCodePlugin() {}
 
     virtual int factory(ErasureCodeProfile &profile,
-                        ErasureCodeInterfaceRef *erasure_code) = 0;
+                        ErasureCodeInterfaceRef *erasure_code,
+			ostream *ss) = 0;
   };
 
   class ErasureCodePluginRegistry {
@@ -59,7 +60,7 @@ namespace ceph {
     int factory(const std::string &plugin,
 		ErasureCodeProfile &profile,
 		ErasureCodeInterfaceRef *erasure_code,
-		ostream &ss);
+		ostream *ss);
 
     int add(const std::string &name, ErasureCodePlugin *plugin);
     int remove(const std::string &name);
@@ -68,11 +69,11 @@ namespace ceph {
     int load(const std::string &plugin_name,
 	     const std::string &directory,
 	     ErasureCodePlugin **plugin,
-	     ostream &ss);
+	     ostream *ss);
 
     int preload(const std::string &plugins,
 		const std::string &directory,
-		ostream &ss);
+		ostream *ss);
   };
 }
 

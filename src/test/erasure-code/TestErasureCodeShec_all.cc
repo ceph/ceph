@@ -82,7 +82,7 @@ TEST_P(ParameterTest, parameter_all)
   (*profile)["m"] = m;
   (*profile)["c"] = c;
 
-  result = shec->init(*profile);
+  result = shec->init(*profile, &cerr);
 
   //check profile
   EXPECT_EQ(i_k, shec->k);

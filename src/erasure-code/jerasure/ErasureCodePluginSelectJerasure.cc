@@ -55,9 +55,9 @@ static string get_variant() {
 class ErasureCodePluginSelectJerasure : public ErasureCodePlugin {
 public:
   virtual int factory(ErasureCodeProfile &profile,
-		      ErasureCodeInterfaceRef *erasure_code) {
+		      ErasureCodeInterfaceRef *erasure_code,
+		      ostream *ss) {
     ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
-    stringstream ss;
     int ret;
     string name = "jerasure";
     if (profile.count("jerasure-name"))
@@ -72,8 +72,6 @@ public:
       dout(10) << variant << " plugin" << dendl;
       ret = instance.factory(name + "_" + variant, profile, erasure_code, ss);
     }
-    if (ret)
-      derr << ss.str() << dendl;
     return ret;
   }
 };
@@ -87,7 +85,7 @@ int __erasure_code_init(char *plugin_name, char *directory)
   ErasureCodePlugin *plugin;
   stringstream ss;
   int r = instance.load(plugin_name + string("_") + variant,
-			directory, &plugin, ss);
+			directory, &plugin, &ss);
   if (r) {
     derr << ss.str() << dendl;
     return r;

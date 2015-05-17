@@ -158,6 +158,22 @@ namespace ceph {
     virtual ~ErasureCodeInterface() {}
 
     /**
+     * Initialize the instance according to the content of
+     * **profile**. The **ss** stream is set with debug messages or
+     * error messages, the content of which depend on the
+     * implementation.
+     *
+     * Return 0 on success or a negative errno on error. When
+     * returning on error, the implementation is expected to
+     * provide a human readable explanation in **ss**.
+     *
+     * @param [in] profile a key/value map
+     * @param [out] ss contains informative messages when an error occurs
+     * @return 0 on success or a negative errno on error.
+     */
+    virtual int init(ErasureCodeProfile &profile, ostream *ss) = 0;
+
+    /**
      * Create a new ruleset in **crush** under the name **name**,
      * unless it already exists.
      *

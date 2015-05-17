@@ -63,9 +63,10 @@ ErasureCodeIsa::create_ruleset(const string &name,
 
 // -----------------------------------------------------------------------------
 
-void
-ErasureCodeIsa::init(ErasureCodeProfile &profile)
+int
+ErasureCodeIsa::init(ErasureCodeProfile &profile, ostream *ss)
 {
+  int err = 0;
   dout(10) << "technique=" << technique << dendl;
   map<string, string>::const_iterator parameter;
   parameter = profile.find("ruleset-root");
@@ -74,10 +75,11 @@ ErasureCodeIsa::init(ErasureCodeProfile &profile)
   parameter = profile.find("ruleset-failure-domain");
   if (parameter != profile.end())
     ruleset_failure_domain = parameter->second;
-  ostringstream ss;
-  if (parse(profile, &ss))
-    derr << ss.str() << dendl;
+  err |= parse(profile, ss);
+  if (err)
+    return err;
   prepare();
+  return err;
 }
 
 // -----------------------------------------------------------------------------

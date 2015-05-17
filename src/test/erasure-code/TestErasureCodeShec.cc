@@ -56,7 +56,7 @@ TEST(ErasureCodeShec, init_1)
   (*profile)["m"] = "4";
   (*profile)["c"] = "3";
 
-  int r = shec->init(*profile);
+  int r = shec->init(*profile, &cerr);
 
   EXPECT_EQ(6, shec->k);
   EXPECT_EQ(4, shec->m);
@@ -89,7 +89,7 @@ TEST(ErasureCodeShec, init_2)
   (*profile)["c"] = "3";
   (*profile)["w"] = "8";
 
-  int r = shec->init(*profile);
+  int r = shec->init(*profile, &cerr);
 
   //check profile
   EXPECT_EQ(6, shec->k);
@@ -122,7 +122,7 @@ TEST(ErasureCodeShec, init_3)
   (*profile)["c"] = "3";
   (*profile)["w"] = "16";
 
-  int r = shec->init(*profile);
+  int r = shec->init(*profile, &cerr);
 
   //check profile
   EXPECT_EQ(6, shec->k);
@@ -155,7 +155,7 @@ TEST(ErasureCodeShec, init_4)
   (*profile)["c"] = "3";
   (*profile)["w"] = "32";
 
-  int r = shec->init(*profile);
+  int r = shec->init(*profile, &cerr);
 
   //check profile
   EXPECT_EQ(6, shec->k);
@@ -186,7 +186,7 @@ TEST(ErasureCodeShec, init_5)
   (*profile)["m"] = "4";
   (*profile)["c"] = "3";
 
-  int r = shec->init(*profile);
+  int r = shec->init(*profile, &cerr);
 
   EXPECT_TRUE(shec->matrix != NULL);
   EXPECT_EQ(0, r);
@@ -209,7 +209,7 @@ TEST(ErasureCodeShec, init_6)
   (*profile)["m"] = "4";
   (*profile)["c"] = "3";
 
-  int r = shec->init(*profile);
+  int r = shec->init(*profile, &cerr);
 
   EXPECT_TRUE(shec->matrix != NULL);
   EXPECT_EQ(0, r);
@@ -232,7 +232,7 @@ TEST(ErasureCodeShec, init_7)
   (*profile)["m"] = "4";
   (*profile)["c"] = "3";
 
-  int r = shec->init(*profile);
+  int r = shec->init(*profile, &cerr);
 
   EXPECT_TRUE(shec->matrix != NULL);
   EXPECT_EQ(0, r);
@@ -256,7 +256,7 @@ TEST(ErasureCodeShec, init_8)
   (*profile)["m"] = "4";
   (*profile)["c"] = "3";
 
-  int r = shec->init(*profile);
+  int r = shec->init(*profile, &cerr);
 
   EXPECT_TRUE(shec->matrix != NULL);
   EXPECT_EQ(0, r);
@@ -280,7 +280,7 @@ TEST(ErasureCodeShec, init_9)
   (*profile)["m"] = "4";
   (*profile)["c"] = "3";
 
-  int r = shec->init(*profile);
+  int r = shec->init(*profile, &cerr);
 
   EXPECT_TRUE(shec->matrix != NULL);
   EXPECT_EQ(0, r);
@@ -303,7 +303,7 @@ TEST(ErasureCodeShec, init_10)
   (*profile)["m"] = "4";
   (*profile)["c"] = "3";
 
-  int r = shec->init(*profile);
+  int r = shec->init(*profile, &cerr);
 
   EXPECT_TRUE(shec->matrix != NULL);
   EXPECT_EQ(0, r);
@@ -326,7 +326,7 @@ TEST(ErasureCodeShec, init_11)
   (*profile)["m"] = "4";
   (*profile)["c"] = "3";
 
-  int r = shec->init(*profile);
+  int r = shec->init(*profile, &cerr);
 
   EXPECT_TRUE(shec->matrix != NULL);
   EXPECT_EQ(0, r);
@@ -349,7 +349,7 @@ TEST(ErasureCodeShec, init_12)
   (*profile)["m"] = "4";
   (*profile)["c"] = "3";
 
-  int r = shec->init(*profile);
+  int r = shec->init(*profile, &cerr);
 
   EXPECT_EQ(-EINVAL, r);
 
@@ -371,7 +371,7 @@ TEST(ErasureCodeShec, init_13)
   (*profile)["m"] = "4";
   (*profile)["c"] = "3";
 
-  int r = shec->init(*profile);
+  int r = shec->init(*profile, &cerr);
 
   EXPECT_EQ(-EINVAL, r);
 
@@ -393,7 +393,7 @@ TEST(ErasureCodeShec, init_14)
   (*profile)["m"] = "4";
   (*profile)["c"] = "3";
 
-  int r = shec->init(*profile);
+  int r = shec->init(*profile, &cerr);
 
   EXPECT_EQ(-EINVAL, r);
 
@@ -415,7 +415,7 @@ TEST(ErasureCodeShec, init_15)
   (*profile)["m"] = "4";
   (*profile)["c"] = "3";
 
-  int r = shec->init(*profile);
+  int r = shec->init(*profile, &cerr);
 
   EXPECT_EQ(-EINVAL, r);
 
@@ -437,7 +437,7 @@ TEST(ErasureCodeShec, init_16)
   (*profile)["m"] = "-1";		//unexpected value
   (*profile)["c"] = "3";
 
-  int r = shec->init(*profile);
+  int r = shec->init(*profile, &cerr);
 
   EXPECT_EQ(-EINVAL, r);
 
@@ -459,7 +459,7 @@ TEST(ErasureCodeShec, init_17)
   (*profile)["m"] = "0.1";		//unexpected value
   (*profile)["c"] = "3";
 
-  int r = shec->init(*profile);
+  int r = shec->init(*profile, &cerr);
 
   EXPECT_EQ(-EINVAL, r);
 
@@ -481,7 +481,7 @@ TEST(ErasureCodeShec, init_18)
   (*profile)["m"] = "a";		//unexpected value
   (*profile)["c"] = "3";
 
-  int r = shec->init(*profile);
+  int r = shec->init(*profile, &cerr);
 
   EXPECT_EQ(-EINVAL, r);
 
@@ -503,7 +503,7 @@ TEST(ErasureCodeShec, init_19)
   //m is not specified
   (*profile)["c"] = "3";
 
-  int r = shec->init(*profile);
+  int r = shec->init(*profile, &cerr);
 
   EXPECT_EQ(-EINVAL, r);
 
@@ -525,7 +525,7 @@ TEST(ErasureCodeShec, init_20)
   (*profile)["m"] = "4";
   (*profile)["c"] = "-1";		//unexpected value
 
-  int r = shec->init(*profile);
+  int r = shec->init(*profile, &cerr);
 
   EXPECT_EQ(-EINVAL, r);
 
@@ -547,7 +547,7 @@ TEST(ErasureCodeShec, init_21)
   (*profile)["m"] = "4";
   (*profile)["c"] = "0.1";		//unexpected value
 
-  int r = shec->init(*profile);
+  int r = shec->init(*profile, &cerr);
 
   EXPECT_EQ(-EINVAL, r);
 
@@ -569,7 +569,7 @@ TEST(ErasureCodeShec, init_22)
   (*profile)["m"] = "4";
   (*profile)["c"] = "a";		//unexpected value
 
-  int r = shec->init(*profile);
+  int r = shec->init(*profile, &cerr);
 
   EXPECT_EQ(-EINVAL, r);
 
@@ -591,7 +591,7 @@ TEST(ErasureCodeShec, init_23)
   (*profile)["m"] = "4";
   //c is not specified
 
-  int r = shec->init(*profile);
+  int r = shec->init(*profile, &cerr);
 
   EXPECT_EQ(-EINVAL, r);
 
@@ -614,7 +614,7 @@ TEST(ErasureCodeShec, init_24)
   (*profile)["c"] = "3";
   (*profile)["w"] = "1";		//unexpected value
 
-  int r = shec->init(*profile);
+  int r = shec->init(*profile, &cerr);
 
   EXPECT_TRUE(shec->matrix != NULL);
   EXPECT_EQ(0, r);
@@ -643,7 +643,7 @@ TEST(ErasureCodeShec, init_25)
   (*profile)["c"] = "3";
   (*profile)["w"] = "-1";		//unexpected value
 
-  int r = shec->init(*profile);
+  int r = shec->init(*profile, &cerr);
 
   EXPECT_TRUE(shec->matrix != NULL);
   EXPECT_EQ(0, r);
@@ -672,7 +672,7 @@ TEST(ErasureCodeShec, init_26)
   (*profile)["c"] = "3";
   (*profile)["w"] = "0.1";		//unexpected value
 
-  int r = shec->init(*profile);
+  int r = shec->init(*profile, &cerr);
 
   EXPECT_TRUE(shec->matrix != NULL);
   EXPECT_EQ(0, r);
@@ -701,7 +701,7 @@ TEST(ErasureCodeShec, init_27)
   (*profile)["c"] = "3";
   (*profile)["w"] = "a";		//unexpected value
 
-  int r = shec->init(*profile);
+  int r = shec->init(*profile, &cerr);
 
   EXPECT_TRUE(shec->matrix != NULL);
   EXPECT_EQ(0, r);
@@ -729,7 +729,7 @@ TEST(ErasureCodeShec, init_28)
   (*profile)["m"] = "4";
   (*profile)["c"] = "10";	//c > m
 
-  int r = shec->init(*profile);
+  int r = shec->init(*profile, &cerr);
 
   EXPECT_EQ(-EINVAL, r);
 
@@ -751,7 +751,7 @@ TEST(ErasureCodeShec, init_29)
   //m is not specified
   //c is not specified
 
-  int r = shec->init(*profile);
+  int r = shec->init(*profile, &cerr);
 
   EXPECT_TRUE(shec->matrix != NULL);
   EXPECT_EQ(0, r);
@@ -778,7 +778,7 @@ TEST(ErasureCodeShec, init_30)
   (*profile)["m"] = "8";
   (*profile)["c"] = "8";
 
-  int r = shec->init(*profile);
+  int r = shec->init(*profile, &cerr);
 
   EXPECT_TRUE(shec->matrix != NULL);
   EXPECT_EQ(0, r);
@@ -804,7 +804,7 @@ TEST(ErasureCodeShec, init_31)
   (*profile)["m"] = "7";
   (*profile)["c"] = "7";
 
-  int r = shec->init(*profile);
+  int r = shec->init(*profile, &cerr);
 
   EXPECT_EQ(-EINVAL, r);
 
@@ -826,7 +826,7 @@ TEST(ErasureCodeShec, init_32)
   (*profile)["m"] = "13";
   (*profile)["c"] = "13";
 
-  int r = shec->init(*profile);
+  int r = shec->init(*profile, &cerr);
 
   EXPECT_EQ(-EINVAL, r);
 
@@ -848,7 +848,7 @@ TEST(ErasureCodeShec, init_33)
   (*profile)["m"] = "9";
   (*profile)["c"] = "8";
 
-  int r = shec->init(*profile);
+  int r = shec->init(*profile, &cerr);
 
   EXPECT_EQ(-EINVAL, r);
 
@@ -870,7 +870,7 @@ TEST(ErasureCodeShec, init_34)
   (*profile)["m"] = "12";
   (*profile)["c"] = "12";
 
-  int r = shec->init(*profile);
+  int r = shec->init(*profile, &cerr);
 
   EXPECT_EQ(-EINVAL, r);
 
@@ -892,8 +892,8 @@ TEST(ErasureCodeShec, init2_4)
   (*profile)["k"] = "6";
   (*profile)["m"] = "4";
   (*profile)["c"] = "3";
-  shec->init(*profile);
-  int r = shec->init(*profile);	//init executed twice
+  shec->init(*profile, &cerr);
+  int r = shec->init(*profile, &cerr);	//init executed twice
 
   //check profile
   EXPECT_EQ(6, shec->k);
@@ -927,7 +927,7 @@ TEST(ErasureCodeShec, init2_5)
   (*profile)["c"] = "5";
   (*profile)["w"] = "16";
 
-  int r = shec->init(*profile);
+  int r = shec->init(*profile, &cerr);
 
   //reexecute init
   (*profile2)["plugin"] = "shec";
@@ -936,7 +936,7 @@ TEST(ErasureCodeShec, init2_5)
   (*profile2)["k"] = "6";
   (*profile2)["m"] = "4";
   (*profile2)["c"] = "3";
-  shec->init(*profile2);
+  shec->init(*profile2, &cerr);
 
   EXPECT_EQ(6, shec->k);
   EXPECT_EQ(4, shec->m);
@@ -966,7 +966,7 @@ TEST(ErasureCodeShec, minimum_to_decode_1)
   (*profile)["k"] = "6";
   (*profile)["m"] = "4";
   (*profile)["c"] = "3";
-  shec->init(*profile);
+  shec->init(*profile, &cerr);
 
   //minimum_to_decode
   set<int> want_to_decode;
@@ -1002,7 +1002,7 @@ TEST(ErasureCodeShec, minimum_to_decode_2)
   (*profile)["k"] = "6";
   (*profile)["m"] = "4";
   (*profile)["c"] = "3";
-  shec->init(*profile);
+  shec->init(*profile, &cerr);
 
   //minimum_to_decode
   set<int> want_to_decode;
@@ -1038,7 +1038,7 @@ TEST(ErasureCodeShec, minimum_to_decode_3)
   (*profile)["k"] = "6";
   (*profile)["m"] = "4";
   (*profile)["c"] = "3";
-  shec->init(*profile);
+  shec->init(*profile, &cerr);
 
   //minimum_to_decode
   set<int> want_to_decode;
@@ -1073,7 +1073,7 @@ TEST(ErasureCodeShec, minimum_to_decode_4)
   (*profile)["k"] = "6";
   (*profile)["m"] = "4";
   (*profile)["c"] = "3";
-  shec->init(*profile);
+  shec->init(*profile, &cerr);
 
   //minimum_to_decode
   set<int> want_to_decode;
@@ -1109,7 +1109,7 @@ TEST(ErasureCodeShec, minimum_to_decode_5)
   (*profile)["k"] = "6";
   (*profile)["m"] = "4";
   (*profile)["c"] = "3";
-  shec->init(*profile);
+  shec->init(*profile, &cerr);
 
   //minimum_to_decode
   set<int> want_to_decode;
@@ -1145,7 +1145,7 @@ TEST(ErasureCodeShec, minimum_to_decode_6)
   (*profile)["k"] = "6";
   (*profile)["m"] = "4";
   (*profile)["c"] = "3";
-  shec->init(*profile);
+  shec->init(*profile, &cerr);
 
   //minimum_to_decode
   set<int> want_to_decode;
@@ -1180,7 +1180,7 @@ TEST(ErasureCodeShec, minimum_to_decode_7)
   (*profile)["k"] = "6";
   (*profile)["m"] = "4";
   (*profile)["c"] = "3";
-  shec->init(*profile);
+  shec->init(*profile, &cerr);
 
   //minimum_to_decode
   set<int> want_to_decode;
@@ -1216,7 +1216,7 @@ TEST(ErasureCodeShec, minimum_to_decode_8)
   (*profile)["k"] = "6";
   (*profile)["m"] = "4";
   (*profile)["c"] = "3";
-  shec->init(*profile);
+  shec->init(*profile, &cerr);
 
   //minimum_to_decode
   set<int> want_to_decode;
@@ -1249,7 +1249,7 @@ TEST(ErasureCodeShec, minimum_to_decode_9)
   (*profile)["k"] = "6";
   (*profile)["m"] = "4";
   (*profile)["c"] = "3";
-  shec->init(*profile);
+  shec->init(*profile, &cerr);
 
   //minimum_to_decode
   set<int> want_to_decode;
@@ -1290,7 +1290,7 @@ TEST(ErasureCodeShec, minimum_to_decode2_1)
   (*profile)["k"] = "6";
   (*profile)["m"] = "4";
   (*profile)["c"] = "3";
-  shec->init(*profile);
+  shec->init(*profile, &cerr);
 
   //minimum_to_decode
   set<int> want_to_decode;
@@ -1326,7 +1326,7 @@ TEST(ErasureCodeShec, minimum_to_decode2_3)
   (*profile)["k"] = "6";
   (*profile)["m"] = "4";
   (*profile)["c"] = "3";
-  shec->init(*profile);
+  shec->init(*profile, &cerr);
 
   //minimum_to_decode
   set<int> want_to_decode;
@@ -1375,7 +1375,7 @@ TEST(ErasureCodeShec, minimum_to_decode_with_cost_1)
   (*profile)["k"] = "6";
   (*profile)["m"] = "4";
   (*profile)["c"] = "3";
-  shec->init(*profile);
+  shec->init(*profile, &cerr);
 
   //minimum_to_decode_with_cost
   set<int> want_to_decode;
@@ -1411,7 +1411,7 @@ TEST(ErasureCodeShec, minimum_to_decode_with_cost_2_3)
   (*profile)["k"] = "6";
   (*profile)["m"] = "4";
   (*profile)["c"] = "3";
-  shec->init(*profile);
+  shec->init(*profile, &cerr);
 
   //minimum_to_decode_with_cost
   set<int> want_to_decode;
@@ -1460,7 +1460,7 @@ TEST(ErasureCodeShec, encode_1)
   (*profile)["k"] = "6";
   (*profile)["m"] = "4";
   (*profile)["c"] = "3";
-  shec->init(*profile);
+  shec->init(*profile, &cerr);
 
   //encode
   bufferlist in;
@@ -1522,7 +1522,7 @@ TEST(ErasureCodeShec, encode_2)
   (*profile)["k"] = "6";
   (*profile)["m"] = "4";
   (*profile)["c"] = "3";
-  shec->init(*profile);
+  shec->init(*profile, &cerr);
 
   //encode
   bufferlist in;
@@ -1579,7 +1579,7 @@ TEST(ErasureCodeShec, encode_3)
   (*profile)["k"] = "6";
   (*profile)["m"] = "4";
   (*profile)["c"] = "3";
-  shec->init(*profile);
+  shec->init(*profile, &cerr);
 
   bufferlist in;
   in.append("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"//length = 62
@@ -1637,7 +1637,7 @@ TEST(ErasureCodeShec, encode_4)
   (*profile)["k"] = "6";
   (*profile)["m"] = "4";
   (*profile)["c"] = "3";
-  shec->init(*profile);
+  shec->init(*profile, &cerr);
 
   //encode
   bufferlist in;
@@ -1697,7 +1697,7 @@ TEST(ErasureCodeShec, encode_8)
   (*profile)["k"] = "6";
   (*profile)["m"] = "4";
   (*profile)["c"] = "3";
-  shec->init(*profile);
+  shec->init(*profile, &cerr);
 
   //encode
   bufferlist in;
@@ -1732,7 +1732,7 @@ TEST(ErasureCodeShec, encode_9)
   (*profile)["k"] = "6";
   (*profile)["m"] = "4";
   (*profile)["c"] = "3";
-  shec->init(*profile);
+  shec->init(*profile, &cerr);
 
   //encode
   bufferlist in;
@@ -1771,7 +1771,7 @@ TEST(ErasureCodeShec, encode2_1)
   (*profile)["k"] = "6";
   (*profile)["m"] = "4";
   (*profile)["c"] = "3";
-  shec->init(*profile);
+  shec->init(*profile, &cerr);
 
   //encode
   bufferlist in;
@@ -1831,7 +1831,7 @@ TEST(ErasureCodeShec, encode2_3)
   (*profile)["k"] = "6";
   (*profile)["m"] = "4";
   (*profile)["c"] = "3";
-  shec->init(*profile);
+  shec->init(*profile, &cerr);
 
   //encode
   bufferlist in;
@@ -1903,7 +1903,7 @@ TEST(ErasureCodeShec, decode_1)
   (*profile)["k"] = "6";
   (*profile)["m"] = "4";
   (*profile)["c"] = "3";
-  shec->init(*profile);
+  shec->init(*profile, &cerr);
 
   //encode
   bufferlist in;
@@ -1958,7 +1958,7 @@ TEST(ErasureCodeShec, decode_2)
   (*profile)["k"] = "6";
   (*profile)["m"] = "4";
   (*profile)["c"] = "3";
-  shec->init(*profile);
+  shec->init(*profile, &cerr);
 
   //encode
   bufferlist in;
@@ -2013,7 +2013,7 @@ TEST(ErasureCodeShec, decode_3)
   (*profile)["k"] = "6";
   (*profile)["m"] = "4";
   (*profile)["c"] = "3";
-  shec->init(*profile);
+  shec->init(*profile, &cerr);
 
   //encode
   bufferlist in;
@@ -2075,7 +2075,7 @@ TEST(ErasureCodeShec, decode_4)
   (*profile)["k"] = "6";
   (*profile)["m"] = "4";
   (*profile)["c"] = "3";
-  shec->init(*profile);
+  shec->init(*profile, &cerr);
 
   //encode
   bufferlist in;
@@ -2137,7 +2137,7 @@ TEST(ErasureCodeShec, decode_7)
   (*profile)["k"] = "6";
   (*profile)["m"] = "4";
   (*profile)["c"] = "3";
-  shec->init(*profile);
+  shec->init(*profile, &cerr);
 
   //encode
   bufferlist in;
@@ -2204,7 +2204,7 @@ TEST(ErasureCodeShec, decode_8)
   (*profile)["k"] = "6";
   (*profile)["m"] = "4";
   (*profile)["c"] = "3";
-  shec->init(*profile);
+  shec->init(*profile, &cerr);
 
   //encode
   bufferlist in;
@@ -2252,7 +2252,7 @@ TEST(ErasureCodeShec, decode_9)
   (*profile)["k"] = "6";
   (*profile)["m"] = "4";
   (*profile)["c"] = "3";
-  shec->init(*profile);
+  shec->init(*profile, &cerr);
 
   //encode
   bufferlist in;
@@ -2307,7 +2307,7 @@ TEST(ErasureCodeShec, decode2_1)
   (*profile)["k"] = "6";
   (*profile)["m"] = "4";
   (*profile)["c"] = "3";
-  shec->init(*profile);
+  shec->init(*profile, &cerr);
 
   //encode
   bufferlist in;
@@ -2363,7 +2363,7 @@ TEST(ErasureCodeShec, decode2_3)
   (*profile)["k"] = "6";
   (*profile)["m"] = "4";
   (*profile)["c"] = "3";
-  shec->init(*profile);
+  shec->init(*profile, &cerr);
 
   //encode
   bufferlist in;
@@ -2430,7 +2430,7 @@ TEST(ErasureCodeShec, decode2_4)
   (*profile)["k"] = "6";
   (*profile)["m"] = "4";
   (*profile)["c"] = "3";
-  shec->init(*profile);
+  shec->init(*profile, &cerr);
 
   //encode
   bufferlist in;
@@ -2508,7 +2508,7 @@ TEST(ErasureCodeShec, create_ruleset_1_2)
   (*profile)["k"] = "6";
   (*profile)["m"] = "4";
   (*profile)["c"] = "3";
-  shec->init(*profile);
+  shec->init(*profile, &cerr);
 
   //create_ruleset
   stringstream ss;
@@ -2566,7 +2566,7 @@ TEST(ErasureCodeShec, create_ruleset_4)
   (*profile)["k"] = "6";
   (*profile)["m"] = "4";
   (*profile)["c"] = "3";
-  shec->init(*profile);
+  shec->init(*profile, &cerr);
 
   //create_ruleset
   int r = shec->create_ruleset("myrule", *crush, NULL);	//ss = NULL
@@ -2617,7 +2617,7 @@ TEST(ErasureCodeShec, create_ruleset2_1)
   (*profile)["k"] = "6";
   (*profile)["m"] = "4";
   (*profile)["c"] = "3";
-  shec->init(*profile);
+  shec->init(*profile, &cerr);
 
   //create_ruleset
   stringstream ss;
@@ -2676,7 +2676,7 @@ TEST(ErasureCodeShec, create_ruleset2_3)
   (*profile)["k"] = "6";
   (*profile)["m"] = "4";
   (*profile)["c"] = "3";
-  shec->init(*profile);
+  shec->init(*profile, &cerr);
 
   //create_ruleset
   stringstream ss;
@@ -2714,7 +2714,7 @@ TEST(ErasureCodeShec, get_chunk_count_1)
   (*profile)["k"] = "6";
   (*profile)["m"] = "4";
   (*profile)["c"] = "3";
-  shec->init(*profile);
+  shec->init(*profile, &cerr);
 
   //get_chunk_count
   EXPECT_EQ(10u, shec->get_chunk_count());
@@ -2737,7 +2737,7 @@ TEST(ErasureCodeShec, get_data_chunk_count_1)
   (*profile)["k"] = "6";
   (*profile)["m"] = "4";
   (*profile)["c"] = "3";
-  shec->init(*profile);
+  shec->init(*profile, &cerr);
 
   //get_data_chunk_count
   EXPECT_EQ(6u, shec->get_data_chunk_count());
@@ -2761,7 +2761,7 @@ TEST(ErasureCodeShec, get_chunk_size_1_2)
   (*profile)["m"] = "4";
   (*profile)["c"] = "3";
   (*profile)["w"] = "8";
-  shec->init(*profile);
+  shec->init(*profile, &cerr);
 
   //when there is no padding(192=k*w*4)
   EXPECT_EQ(32u, shec->get_chunk_size(192));
