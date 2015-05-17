@@ -382,7 +382,7 @@ int ErasureCodeLrc::parse_kml(ErasureCodeProfile &profile,
     ruleset_steps.push_back(Step("chooseleaf", ruleset_failure_domain, 0));
   }
 
-  return 0;
+  return err;
 }
 
 int ErasureCodeLrc::parse_ruleset(ErasureCodeProfile &profile,
