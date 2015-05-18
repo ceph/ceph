@@ -8061,7 +8061,7 @@ void Server::_renamesnap_finish(MDRequestRef& mdr, CInode *diri, snapid_t snapid
 
   dout(10) << "snaprealm now " << *diri->snaprealm << dendl;
 
-  mdcache->do_realm_invalidate_and_update_notify(diri, CEPH_SNAP_OP_CREATE, true);
+  mdcache->do_realm_invalidate_and_update_notify(diri, CEPH_SNAP_OP_UPDATE, true);
 
   // yay
   mdr->in[0] = diri;

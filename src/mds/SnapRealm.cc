@@ -61,6 +61,7 @@ ostream& operator<<(ostream& out, const SnapRealm& realm)
 void SnapRealm::add_open_past_parent(SnapRealm *parent)
 {
   open_past_parents[parent->inode->ino()] = parent;
+  parent->open_past_children.insert(this);
   parent->inode->get(CInode::PIN_PASTSNAPPARENT);
 }
 
@@ -174,8 +175,10 @@ void SnapRealm::close_parents()
 {
   for (map<inodeno_t,SnapRealm*>::iterator p = open_past_parents.begin();
        p != open_past_parents.end();
-       ++p)
+       ++p) {
     p->second->inode->put(CInode::PIN_PASTSNAPPARENT);
+    p->second->open_past_children.erase(this);
+  }
   open_past_parents.clear();
 }
 
