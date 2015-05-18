@@ -180,6 +180,7 @@ public:
   virtual const string name() { return "get_obj"; }
   virtual RGWOpType get_type() { return RGW_OP_GET_OBJ; }
   virtual uint32_t op_mask() { return RGW_OP_TYPE_READ; }
+  virtual bool need_object_expiration() { return false; }
 };
 
 #define RGW_LIST_BUCKETS_LIMIT_MAX 10000
@@ -578,6 +579,7 @@ protected:
   int ret;
   RGWAccessControlPolicy policy;
   string placement_rule;
+  utime_t delete_at;
 
 public:
   RGWPutMetadataObject()

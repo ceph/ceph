@@ -962,6 +962,19 @@ void RGWGetObj::execute()
     return;
   }
 
+  /* Check whether the object has expired. Swift API documentation
+   * stands that we should return 404 Not Found in such case. */
+  attr_iter = attrs.find(RGW_ATTR_DELETE_AT);
+  if (need_object_expiration() && attr_iter != attrs.end()) {
+    utime_t delete_at;
+    ::decode(delete_at, attr_iter->second);
+
+    if (delete_at <= ceph_clock_now(g_ceph_context)) {
+      ret = -ENOENT;
+      goto done_err;
+    }
+  }
+
   ofs = new_ofs;
   end = new_end;
 
@@ -2339,6 +2352,13 @@ void RGWPutMetadataObject::execute()
   /* Filter currently existing attributes. */
   prepare_add_del_attrs(orig_attrs, attrs, rmattrs);
   populate_with_generic_attrs(s, attrs);
+
+  if (!delete_at.is_zero()) {
+    bufferlist delatbl;
+    ::encode(delete_at, delatbl);
+    attrs[RGW_ATTR_DELETE_AT] = delatbl;
+  }
+
   ret = store->set_attrs(s->obj_ctx, obj, attrs, &rmattrs, NULL);
 }
 
