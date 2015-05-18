@@ -584,18 +584,56 @@ mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/log/radosgw
 %clean
 rm -rf $RPM_BUILD_ROOT
 
+%pre
+%if 0%{?_with_systemd}
+  %if 0%{?opensuse} || 0%{?suse_version}
+    # service_add_pre and friends don't work with parameterized systemd service
+    # instances, only with single services or targets, so we always pass
+    # ceph.target to these macros
+    %service_add_pre ceph.target
+  %endif
+%endif
+
+
 %post
 /sbin/ldconfig
-/sbin/chkconfig --add ceph
+%if 0%{?_with_systemd}
+  %if 0%{?opensuse} || 0%{?suse_version}
+    %service_add_post ceph.target
+  %endif
+%else
+  /sbin/chkconfig --add ceph
+%endif
+mkdir -p %{_localstatedir}/run/ceph/
 
 %preun
-%if %{defined suse_version}
-%stop_on_removal ceph
+%if 0%{?_with_systemd}
+  %if 0%{?opensuse} || 0%{?suse_version}
+    %service_del_preun ceph.target
+  %endif
+  # Need a special case here when removing the RPM to disable specific
+  # service instance, or stale symlinks will be left lying around in
+  # /etc/systemd/system.  May as well stop them too for completeness
+  # (although strictly service_del_preun would do that anyway by dint
+  # of stopping ceph.target)
+  SERVICE_LIST=$(systemctl | grep -E '^ceph-mon@|^ceph-osd@|^ceph-mds@'  | cut -d' ' -f1)
+  if [ -n "$SERVICE_LIST" ]; then
+    for SERVICE in $SERVICE_LIST; do
+      /usr/bin/systemctl --no-reload disable $SERVICE > /dev/null 2>&1 || :
+      /usr/bin/systemctl stop $SERVICE > /dev/null 2>&1 || :
+    done
+  fi
+%else
+  %if 0%{?opensuse} || 0%{?suse_version}
+    %stop_on_removal ceph
+  %endif
+  %if 0%{?rhel} || 0%{?fedora}
+    if [ $1 = 0 ] ; then
+      /sbin/service ceph stop >/dev/null 2>&1
+      /sbin/chkconfig --del ceph
+    fi
+  %endif
 %endif
-if [ $1 = 0 ] ; then
-    /sbin/service ceph stop >/dev/null 2>&1
-    /sbin/chkconfig --del ceph
-fi
 
 %postun
 /sbin/ldconfig
@@ -783,26 +821,57 @@ fi
 
 %post radosgw
 /sbin/ldconfig
-%if %{defined suse_version}
-%fillup_and_insserv -f -y ceph-radosgw
+%if 0%{?opensuse} || 0%{?suse_version}
+  # TODO: find out what exactly this systemd-tmpfiles inovcation is for
+  systemd-tmpfiles --create /%{_tmpfilesdir}/ceph-radosgw.conf
+  # explicit systemctl daemon-reload (that's the only relevant bit of
+  # service_add_post; the rest is all sysvinit --> systemd migration which
+  # isn't applicable in this context (see above comment).
+  /usr/bin/systemctl daemon-reload >/dev/null 2>&1 || :
+%else
+  %if 0%{?suse_version} || 0%{?opensuse}
+    %fillup_and_insserv -f -y ceph-radosgw
+  %endif
 %endif
 
 %preun radosgw
-%if %{defined suse_version}
-%stop_on_removal ceph-radosgw
+%if 0%{?_with_systemd}
+  SERVICE_LIST=$(systemctl | grep -E '^ceph-radosgw@'  | cut -d' ' -f1)
+  if [ -n "$SERVICE_LIST" ]; then
+    for SERVICE in $SERVICE_LIST; do
+      /usr/bin/systemctl --no-reload disable $SERVICE > /dev/null 2>&1 || :
+      /usr/bin/systemctl stop $SERVICE > /dev/null 2>&1 || :
+    done
+  fi
+%else
+  %if 0%{?suse_version} || 0%{?opensuse}
+    %stop_on_removal ceph-radosgw
+  %endif
 %endif
 
 %postun radosgw
 /sbin/ldconfig
-%if %{defined suse_version}
-%restart_on_update ceph-radosgw
-%insserv_cleanup
+%if 0%{?_with_systemd}
+  SERVICE_LIST=$(systemctl | grep -E '^ceph-radosgw@'  | cut -d' ' -f1)
+  if [ -n "$SERVICE_LIST" ]; then
+    for SERVICE in $SERVICE_LIST; do
+      /usr/bin/systemctl --no-reload disable $SERVICE > /dev/null 2>&1 || :
+      /usr/bin/systemctl try-restart $SERVICE > /dev/null 2>&1 || :
+    done
+  fi
+%else
+  %if 0%{?suse_version} || 0%{?opensuse}
+    %restart_on_update ceph-radosgw
+  %endif
 %endif
 # Package removal cleanup
 if [ "$1" -eq "0" ] ; then
     rm -rf /var/log/radosgw
 fi
 
+%if 0%{?suse_version} || 0%{?opensuse}
+  %insserv_cleanup
+%endif
 
 #################################################################################
 %if %{with ocf}
