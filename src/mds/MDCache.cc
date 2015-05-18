@@ -9013,6 +9013,7 @@ void MDCache::do_realm_invalidate_and_update_notify(CInode *in, int snapop, bool
   bufferlist snapbl;
   in->snaprealm->build_snap_trace(snapbl);
 
+  set<SnapRealm*> past_children;
   map<client_t, MClientSnap*> updates;
   list<SnapRealm*> q;
   q.push_back(in->snaprealm);
@@ -9037,6 +9038,13 @@ void MDCache::do_realm_invalidate_and_update_notify(CInode *in, int snapop, bool
       }
     }
 
+    if (snapop == CEPH_SNAP_OP_UPDATE || snapop == CEPH_SNAP_OP_DESTROY) {
+      for (set<SnapRealm*>::iterator p = realm->open_past_children.begin();
+	   p != realm->open_past_children.end();
+	   ++p)
+	past_children.insert(*p);
+    }
+
     // notify for active children, too.
     dout(10) << " " << realm << " open_children are " << realm->open_children << dendl;
     for (set<SnapRealm*>::iterator p = realm->open_children.begin();
@@ -9047,6 +9055,43 @@ void MDCache::do_realm_invalidate_and_update_notify(CInode *in, int snapop, bool
 
   if (!nosend)
     send_snaps(updates);
+
+  // notify past children and their descendants if we update/delete old snapshots
+  for (set<SnapRealm*>::iterator p = past_children.begin();
+       p !=  past_children.end();
+       ++p)
+    q.push_back(*p);
+
+  while (!q.empty()) {
+    SnapRealm *realm = q.front();
+    q.pop_front();
+
+    realm->invalidate_cached_snaps();
+
+    for (set<SnapRealm*>::iterator p = realm->open_children.begin();
+	 p != realm->open_children.end();
+	 ++p) {
+      if (past_children.count(*p) == 0)
+	q.push_back(*p);
+    }
+
+    for (set<SnapRealm*>::iterator p = realm->open_past_children.begin();
+	 p != realm->open_past_children.end();
+	 ++p) {
+      if (past_children.count(*p) == 0) {
+	q.push_back(*p);
+	past_children.insert(*p);
+      }
+    }
+  }
+
+  if (snapop == CEPH_SNAP_OP_DESTROY) {
+    // eval stray inodes if we delete snapshot from their past ancestor snaprealm
+    for (set<SnapRealm*>::iterator p = past_children.begin();
+	p != past_children.end();
+	++p)
+      maybe_eval_stray((*p)->inode, true);
+  }
 }
 
 void MDCache::_snaprealm_create_finish(MDRequestRef& mdr, MutationRef& mut, CInode *in)
