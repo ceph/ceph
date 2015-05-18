@@ -685,11 +685,25 @@ void MDCache::populate_mydir()
     for (list<frag_t>::iterator p = ls.begin(); p != ls.end(); ++p) {
       frag_t fg = *p;
       CDir *dir = strays[i]->get_dirfrag(fg);
-      if (!dir)
+      if (!dir) {
 	dir = strays[i]->get_or_open_dirfrag(this, fg);
-      if (dir->get_version() == 0) {
-	dir->fetch(new C_MDS_RetryOpenRoot(this));
-	return;
+      }
+
+      if (dir->state_test(CDir::STATE_BADFRAG)) {
+        // Failed to load, create a fresh one.  We wouldn't do this for
+        // most parts of the hierarchy, but for strays it's the lesser of
+        // evils in order to let the rest of the system start up.
+        // If we have lost stray dentries that contained hardlinked inodes,
+        // that will be scrub/repair's job to fix up.
+        mds->clog->warn() << "fragment " << dir->dirfrag() << " was unreadable, "
+          "recreating it now";
+        LogSegment *ls = mds->mdlog->get_current_segment();
+        dir->state_clear(CDir::STATE_BADFRAG);
+        dir->mark_complete();
+        dir->mark_dirty(dir->pre_dirty(), ls);
+      } else if (dir->get_version() == 0) {
+        dir->fetch(new C_MDS_RetryOpenRoot(this));
+        return;
       }
     }
   }
