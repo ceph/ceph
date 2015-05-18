@@ -175,7 +175,8 @@ Requires:	librados2 = %{epoch}:%{version}-%{release}
 BuildRequires:	libexpat-devel
 BuildRequires:	FastCGI-devel
 Requires:	apache2-mod_fcgid
-%else
+%endif
+%if (0%{?rhel} || 0%{?centos} || 0%{?fedora})
 BuildRequires:	expat-devel
 BuildRequires:	fcgi-devel
 %endif
