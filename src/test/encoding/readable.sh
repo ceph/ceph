@@ -1,6 +1,6 @@
 #!/bin/sh -e
 
-dir=$1
+dir=../ceph-object-corpus
 
 set -e
 
