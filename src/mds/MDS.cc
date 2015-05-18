@@ -1552,6 +1552,10 @@ void MDS::handle_mds_map(MMDSMap *m)
 
   monc->sub_got("mdsmap", mdsmap->get_epoch());
 
+  // Update Beacon early, so that if any of the below code for handling
+  // state changes wants to send a beacon, it reflects the latest epoch.
+  beacon.notify_mdsmap(mdsmap);
+
   // verify compatset
   CompatSet mdsmap_compat(get_mdsmap_compat_set_all());
   dout(10) << "     my compat " << mdsmap_compat << dendl;
@@ -1863,8 +1867,6 @@ void MDS::handle_mds_map(MMDSMap *m)
   mdcache->notify_mdsmap_changed();
 
  out:
-  beacon.notify_mdsmap(mdsmap);
-
   m->put();
   delete oldmap;
 }
