@@ -573,6 +573,17 @@ bool StrayManager::eval_stray(CDentry *dn, bool delay)
           (*p)->try_remove_dentries_for_stray();
         }
       }
+
+      if (!in->remote_parents.empty()) {
+	// unlink any stale remote snap dentry.
+	for (compact_set<CDentry*>::iterator p = in->remote_parents.begin();
+	     p != in->remote_parents.end(); ) {
+	  CDentry *remote_dn = *p;
+	  ++p;
+	  assert(remote_dn->last != CEPH_NOSNAP);
+	  remote_dn->unlink_remote(remote_dn->get_linkage());
+	}
+      }
     }
     if (dn->is_replicated()) {
       dout(20) << " replicated" << dendl;
