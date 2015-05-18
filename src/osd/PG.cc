@@ -3835,6 +3835,17 @@ void PG::scrub(ThreadPool::TPHandle &handle)
   unlock();
 }
 
+struct C_Scrub_Tick : public Context {
+    OSDService *osd;
+    PG *pg;
+  public:
+    C_Scrub_Tick(OSDService *o, PG *p) : osd(o), pg(p) {}
+    void finish(int r) {
+      osd->scrub_wq.queue(pg);
+    }
+  };
+
+
 /*
  * Chunky scrub scrubs objects one chunk at a time with writes blocked for that
  * chunk.
@@ -3980,6 +3991,7 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
 
           bool boundary_found = false;
           hobject_t start = scrubber.start;
+          uint32_t scrub_objects = 0;
           while (!boundary_found) {
             vector<hobject_t> objects;
             ret = get_pgbackend()->objects_list_partial(
@@ -4009,6 +4021,7 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
                 candidate_end = end;
                 boundary_found = true;
               }
+              scrub_objects = objects.size();
             }
           }
 
@@ -4021,6 +4034,15 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
 	    break;
 	  }
 	  scrubber.end = candidate_end;
+
+          scrubber.last_scrub_stamp = ceph_clock_now(cct);
+          if (info.stats.stats.sum.num_objects) {
+            scrubber.last_scrub_num_bytes = info.stats.stats.sum.num_bytes *
+                             scrub_objects / info.stats.stats.sum.num_objects;
+          } else {
+            scrubber.last_scrub_num_bytes = 0;
+          }
+
         }
 
         // walk the log to find the latest update that affects our chunk
@@ -4128,8 +4150,24 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
 
 	if (scrubber.end < hobject_t::get_max()) {
           scrubber.state = PG::Scrubber::NEW_CHUNK;
-          osd->scrub_wq.queue(this);
           done = true;
+          if (scrubber.deep && cct->_conf->osd_deep_scrub_rate_max) {
+            double interval = 1.0 * (ceph_clock_now(cct).to_nsec() - scrubber.last_scrub_stamp.to_nsec()) / 1000000000;
+            double ratio = 1.0 * scrubber.last_scrub_num_bytes / (cct->_conf->osd_deep_scrub_rate_max * cct->_conf->osd_max_scrubs);
+            dout(20) << __func__ << " last_scrub_num_bytes " << scrubber.last_scrub_num_bytes << " osd_deep_scrub_rate_max "
+                     << cct->_conf->osd_deep_scrub_rate_max << " ratio " << ratio << " interval " << interval << dendl;
+            double wait_secs = ratio - interval;
+            if (wait_secs > 0) {
+              dout(20) << __func__ << " should wait " << wait_secs << " secs" << dendl;
+              osd->scrub_timer_lock.Lock();
+              osd->scrub_timer.add_event_after(wait_secs, new C_Scrub_Tick(osd, this));
+              osd->scrub_timer_lock.Unlock();
+            } else {
+              osd->scrub_wq.queue(this);
+            }
+          } else {
+            osd->scrub_wq.queue(this);
+          }
         } else {
           scrubber.state = PG::Scrubber::FINISH;
         }
