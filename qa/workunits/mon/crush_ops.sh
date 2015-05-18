@@ -63,6 +63,12 @@ ceph osd tree | grep -c host1 | grep -q 0
 
 expect_false ceph osd crush rm bar   # not empty
 ceph osd crush unlink host2
+
+# reference foo and bar with a rule
+ceph osd crush rule create-simple foo-rule foo host firstn
+expect_false ceph osd crush rm foo
+ceph osd crush rule rm foo-rule
+
 ceph osd crush rm bar
 ceph osd crush rm foo
 ceph osd crush rm osd.$o2 host2
