@@ -1043,6 +1043,13 @@ int DBObjectMap::sync(const ghobject_t *oid,
       header->spos = *spos;
       set_map_header(hl, *oid, *header, t);
     }
+    /* It may appear that this and the identical portion of the else
+     * block can combined below, but in this block, the transaction
+     * must be submitted under *both* the MapHeaderLock and the full
+     * header_lock.
+     *
+     * See 2b63dd25fc1c73fa42e52e9ea4ab5a45dd9422a0 and bug 9891.
+     */
     Mutex::Locker l(header_lock);
     write_state(t);
     return db->submit_transaction_sync(t);
