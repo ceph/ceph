@@ -395,7 +395,8 @@ Package: rest-bench-dbg
 Architecture: linux-any
 Section: debug
 Priority: extra
-Depends: ceph-common, curl, xml2, ${misc:Depends}, ${shlibs:Depends}
+Depends: rest-bench (= ${binary:Version}), ceph-common, curl, xml2,
+          ${misc:Depends}, ${shlibs:Depends}
 Description: debugging symbols for rest-bench
  radosgw performance.
  .
@@ -411,7 +412,8 @@ Package: ceph-test-dbg
 Architecture: linux-any
 Section: debug
 Priority: extra
-Depends: ceph-common, curl, xml2, ${misc:Depends}, ${shlibs:Depends}
+Depends: ceph-test (= ${binary:Version}), ceph-common, curl, xml2,
+         ${misc:Depends}, ${shlibs:Depends}
 Description: Ceph test and benchmarking tools
  .
  This package contains the debugging symbols for ceph-test.
