@@ -621,7 +621,7 @@ int GenericObjectMap::get_keys(const coll_t &cid, const ghobject_t &oid,
     return -ENOENT;
 
   ObjectMap::ObjectMapIterator iter = _get_iterator(header, prefix);
-  for (; iter->valid(); iter->next()) {
+  for (iter->seek_to_first(); iter->valid(); iter->next()) {
     if (iter->status())
       return iter->status();
     keys->insert(iter->key());
