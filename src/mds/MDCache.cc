@@ -638,18 +638,21 @@ void MDCache::populate_mydir()
 
   dout(10) << "populate_mydir " << *mydir << dendl;
 
-  if (mydir->get_version() == 0) {
-    // A fresh dirfrag, we must dirty it before dirtying
-    // any of the strays we create within it.
-    LogSegment *ls = mds->mdlog->get_current_segment();
-    mydir->mark_complete();
-    mydir->mark_dirty(mydir->pre_dirty(), ls);
-  }
-
   if (!mydir->is_complete()) {
     mydir->fetch(new C_MDS_RetryOpenRoot(this));
     return;
-  }    
+  }
+
+  if (mydir->get_version() == 0 && mydir->state_test(CDir::STATE_BADFRAG)) {
+    // A missing dirfrag, we will recreate it.  Before that, we must dirty
+    // it before dirtying any of the strays we create within it.
+    mds->clog->warn() << "fragment " << mydir->dirfrag() << " was unreadable, "
+      "recreating it now";
+    LogSegment *ls = mds->mdlog->get_current_segment();
+    mydir->state_clear(CDir::STATE_BADFRAG);
+    mydir->mark_complete();
+    mydir->mark_dirty(mydir->pre_dirty(), ls);
+  }
 
   // open or create stray
   for (int i = 0; i < NUM_STRAY; ++i) {
