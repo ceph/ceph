@@ -1043,14 +1043,10 @@ int DBObjectMap::sync(const ghobject_t *oid,
       header->spos = *spos;
       set_map_header(hl, *oid, *header, t);
     }
-    Mutex::Locker l(header_lock);
-    write_state(t);
-    return db->submit_transaction_sync(t);
-  } else {
-    Mutex::Locker l(header_lock);
-    write_state(t);
-    return db->submit_transaction_sync(t);
-  }
+  } 
+  Mutex::Locker l(header_lock);
+  write_state(t);
+  return db->submit_transaction_sync(t);
 }
 
 int DBObjectMap::write_state(KeyValueDB::Transaction _t) {
