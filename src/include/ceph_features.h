@@ -151,6 +151,7 @@ static inline unsigned long long ceph_sanitize_features(unsigned long long f) {
          CEPH_FEATURE_CRUSH_V4 |	     \
          CEPH_FEATURE_OSD_MIN_SIZE_RECOVERY |		 \
 	 CEPH_FEATURE_MON_METADATA |			 \
+         CEPH_FEATURE_OSD_PROXY_WRITE_FEATURES |         \
 	 0ULL)
 
 #define CEPH_FEATURES_SUPPORTED_DEFAULT  CEPH_FEATURES_ALL
