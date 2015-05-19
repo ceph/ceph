@@ -7627,6 +7627,12 @@ int MDCache::path_traverse(MDRequestRef& mdr, Message *req, MDSInternalContextBa
   if (cur->state_test(CInode::STATE_PURGING))
     return -ESTALE;
 
+  // make sure snaprealm are open...
+  if (mdr && cur->snaprealm && !cur->snaprealm->open &&
+      !cur->snaprealm->open_parents(_get_waiter(mdr, req, fin))) {
+    return 1;
+  }
+
   // start trace
   if (pdnvec)
     pdnvec->clear();
@@ -7707,13 +7713,6 @@ int MDCache::path_traverse(MDRequestRef& mdr, Message *req, MDSInternalContextBa
     }
     */
 
-    // make sure snaprealm parents are open...
-    if (cur->snaprealm && !cur->snaprealm->open && mdr &&
-	!cur->snaprealm->open_parents(_get_waiter(mdr, req, fin))) {
-      return 1;
-    }
-
-
     // dentry
     CDentry *dn = curdir->lookup(path[depth], snapid);
     CDentry::linkage_t *dnl = dn ? dn->get_projected_linkage() : 0;
@@ -7780,8 +7779,14 @@ int MDCache::path_traverse(MDRequestRef& mdr, Message *req, MDSInternalContextBa
         }        
       }
 
-      // add to trace, continue.
       cur = in;
+      // make sure snaprealm are open...
+      if (mdr && cur->snaprealm && !cur->snaprealm->open &&
+	  !cur->snaprealm->open_parents(_get_waiter(mdr, req, fin))) {
+	return 1;
+      }
+
+      // add to trace, continue.
       touch_inode(cur);
       if (pdnvec)
 	pdnvec->push_back(dn);

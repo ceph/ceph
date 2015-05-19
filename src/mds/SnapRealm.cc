@@ -225,6 +225,7 @@ void SnapRealm::build_snap_set(set<snapid_t> &s,
 
 void SnapRealm::check_cache()
 {
+  assert(open);
   if (cached_seq >= srnode.seq)
     return;
 

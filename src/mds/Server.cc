@@ -2687,6 +2687,11 @@ void Server::handle_client_lookup_ino(MDRequestRef& mdr,
     return;
   }
 
+  if (mdr && in->snaprealm &&
+      !in->snaprealm->open_parents(new C_MDS_RetryRequest(mdcache, mdr))) {
+    return;
+  }
+
   CDentry *dn = in->get_projected_parent_dn();
   CInode *diri = dn ? dn->get_dir()->inode : NULL;
   if (dn && (want_parent || want_dentry)) {
