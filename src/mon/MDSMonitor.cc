@@ -582,6 +582,21 @@ bool MDSMonitor::prepare_beacon(MMDSBeacon *m)
       // Respond to MDS, so that it knows it can continue to shut down
       mon->send_reply(m, new MMDSBeacon(mon->monmap->fsid, m->get_global_id(),
                     m->get_name(), mdsmap.get_epoch(), state, seq));
+    } else if (state == MDSMap::STATE_DNE) {
+      if (!mon->osdmon()->is_writeable()) {
+        dout(4) << __func__ << ": DNE from rank " << info.rank
+                << " waiting for osdmon writeable to blacklist it" << dendl;
+        mon->osdmon()->wait_for_writeable(new C_RetryMessage(this, m));
+        return false;
+      }
+
+      fail_mds_gid(gid);
+      assert(mon->osdmon()->is_writeable());
+      request_proposal(mon->osdmon());
+
+      // Respond to MDS, so that it knows it can continue to shut down
+      mon->send_reply(m, new MMDSBeacon(mon->monmap->fsid, m->get_global_id(),
+                    m->get_name(), mdsmap.get_epoch(), state, seq));
     } else {
       info.state = state;
       info.state_seq = seq;
@@ -940,6 +955,8 @@ void MDSMonitor::fail_mds_gid(mds_gid_t gid)
   }
 
   pending_mdsmap.mds_info.erase(gid);
+
+  last_beacon.erase(gid);
 }
 
 mds_gid_t MDSMonitor::gid_from_arg(const std::string& arg, std::ostream &ss)
