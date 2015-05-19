@@ -1222,6 +1222,31 @@ def ship_utilities(ctx, config):
         )
 
 
+def get_flavor(config):
+    """
+    Determine the flavor to use.
+
+    Flavor tells us what gitbuilder to fetch the prebuilt software
+    from. It's a combination of possible keywords, in a specific
+    order, joined by dashes. It is used as a URL path name. If a
+    match is not found, the teuthology run fails. This is ugly,
+    and should be cleaned up at some point.
+    """
+    config = config or dict()
+    flavor = config.get('flavor', 'basic')
+
+    if config.get('path'):
+        # local dir precludes any other flavors
+        flavor = 'local'
+    else:
+        if config.get('valgrind'):
+            flavor = 'notcmalloc'
+        else:
+            if config.get('coverage'):
+                flavor = 'gcov'
+    return flavor
+
+
 @contextlib.contextmanager
 def task(ctx, config):
     """
@@ -1259,26 +1284,8 @@ def task(ctx, config):
         teuthology.deep_merge(config, install_overrides.get(project, {}))
     log.debug('config %s' % config)
 
-    # Flavor tells us what gitbuilder to fetch the prebuilt software
-    # from. It's a combination of possible keywords, in a specific
-    # order, joined by dashes. It is used as a URL path name. If a
-    # match is not found, the teuthology run fails. This is ugly,
-    # and should be cleaned up at some point.
-
-    flavor = config.get('flavor', 'basic')
-
-    if config.get('path'):
-        # local dir precludes any other flavors
-        flavor = 'local'
-    else:
-        if config.get('valgrind'):
-            log.info(
-                'Using notcmalloc flavor and running some daemons under valgrind')
-            flavor = 'notcmalloc'
-        else:
-            if config.get('coverage'):
-                log.info('Recording coverage for this run.')
-                flavor = 'gcov'
+    flavor = get_flavor(config)
+    log.info("Using flavor: %s", flavor)
 
     ctx.summary['flavor'] = flavor
 
