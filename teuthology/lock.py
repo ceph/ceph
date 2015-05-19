@@ -13,7 +13,6 @@ import teuthology
 from . import misc
 from . import provision
 from .config import config
-from .contextutil import safe_while
 from .lockstatus import get_status
 
 log = logging.getLogger(__name__)
@@ -564,17 +563,6 @@ def find_stale_locks(owner=None):
 
 def update_lock(name, description=None, status=None, ssh_pub_key=None):
     name = misc.canonicalize_hostname(name, user=None)
-    # Only do VM specific things (key lookup) if we are not
-    # Just updating the status (like marking down).
-    if not status:
-        status_info = get_status(name)
-        if status_info['is_vm']:
-            with safe_while(sleep=1, tries=15, _raise=False,
-                            action='ssh-keyscan') as proceed:
-                while proceed():
-                    ssh_key = ssh_keyscan([name])
-                    if ssh_key:
-                        break
     updated = {}
     if description is not None:
         updated['description'] = description
