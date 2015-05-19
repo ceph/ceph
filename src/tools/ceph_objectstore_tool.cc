@@ -2534,9 +2534,9 @@ int main(int argc, char **argv)
     ("journal-path", po::value<string>(&jpath),
      "path to journal, mandatory for filestore type")
     ("pgid", po::value<string>(&pgidstr),
-     "PG id, mandatory except for import, fix-lost, list-pgs, set-allow-sharded-objects, dump-journal")
+     "PG id, mandatory except for import, fix-lost, list-pgs, set-allow-sharded-objects, dump-journal, dump-super")
     ("op", po::value<string>(&op),
-     "Arg is one of [info, log, remove, export, import, list, fix-lost, list-pgs, rm-past-intervals, set-allow-sharded-objects, dump-journal]")
+     "Arg is one of [info, log, remove, export, import, list, fix-lost, list-pgs, rm-past-intervals, set-allow-sharded-objects, dump-journal, dump-super]")
     ("file", po::value<string>(&file),
      "path of file to export or import")
     ("format", po::value<string>(&format)->default_value("json-pretty"),
@@ -2944,8 +2944,9 @@ int main(int argc, char **argv)
   // The dump-journal op isn't here because it is handled earlier.
   // The dump-journal-mount op is undocumented so not in the usage.
   if (op != "list" && op != "import" && op != "fix-lost"
-      && op != "list-pgs"  && op != "set-allow-sharded-objects" &&
-      op != "dump-journal-mount" && (pgidstr.length() == 0)) {
+      && op != "list-pgs"  && op != "set-allow-sharded-objects"
+      && op != "dump-journal-mount" && op != "dump-super"
+      && (pgidstr.length() == 0)) {
     cerr << "Must provide pgid" << std::endl;
     usage(desc);
     ret = 1;
@@ -3403,6 +3404,12 @@ int main(int argc, char **argv)
         fs->apply_transaction(*t);
         cout << "Removal succeeded" << std::endl;
       }
+    } else if (op == "dump-super") {
+      formatter->open_object_section("superblock");
+      superblock.dump(formatter);
+      formatter->close_section();
+      formatter->flush(cout);
+      cout << std::endl;
     } else {
       cerr << "Must provide --op (info, log, remove, export, import, list, fix-lost, list-pgs, rm-past-intervals)"
 	<< std::endl;
