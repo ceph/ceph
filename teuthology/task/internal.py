@@ -18,7 +18,7 @@ from teuthology import provision
 from teuthology.job_status import get_status, set_status
 from teuthology.config import config as teuth_config
 from teuthology.parallel import parallel
-from teuthology.suite import has_packages_for_distro
+from teuthology.suite import has_packages_for_distro, get_install_task_flavor
 from ..orchestra import cluster, remote, run
 from .. import report
 
@@ -220,18 +220,22 @@ def check_packages(ctx, config):
     If there are missing packages, fail the job.
     """
     log.info("Checking packages...")
-    os_type = ctx.config.get("os_type", None)
-    sha1 = ctx.config.get("sha1", None)
+    sha1 = ctx.config.get("sha1")
+    os_type = ctx.config.get("os_type")
+    flavor = get_install_task_flavor(ctx.config)
     # We can only do this check if there are a defined sha1 and os_type
     # in the job config.
     if os_type and sha1:
+        template = "Checking packages for os_type,'{os}' flavor '{flav}' and" \
+            " ceph hash '{ver}'"
         log.info(
-            "Checking packages for os_type '{os}' and ceph hash '{ver}'".format(
+            template.format(
                 os=os_type,
+                flav=flavor,
                 ver=sha1,
             )
         )
-        if not has_packages_for_distro(sha1, os_type):
+        if not has_packages_for_distro(sha1, os_type, flavor):
             msg = "Packages for os_type '{os}' and ceph hash '{ver}' not found"
             msg = msg.format(
                 os=os_type,
