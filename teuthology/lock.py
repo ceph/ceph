@@ -121,6 +121,31 @@ def get_statuses(machines):
     return statuses
 
 
+def json_matching_statuses(json_file_or_str, statuses):
+    """
+    Filter statuses by json dict in file or fragment; return list of
+    matching statuses.  json_file_or_str must be a file containing
+    json or json in a string.
+    """
+    try:
+        open(json_file_or_str, 'r')
+    except IOError:
+        query = json.loads(json_file_or_str)
+    else:
+        query = json.load(json_file_or_str)
+
+    if not isinstance(query, dict):
+        raise RuntimeError('--json-query must be a dict')
+
+    return_statuses = list()
+    for status in statuses:
+        for k, v in query.iteritems():
+            if misc.is_in_dict(k, v, status):
+                return_statuses.append(status)
+
+    return return_statuses
+
+
 def main(ctx):
     if ctx.verbose:
         teuthology.log.setLevel(logging.DEBUG)
@@ -207,6 +232,8 @@ def main(ctx):
                 statuses = [_status for _status in statuses
                             if _status['description'] is not None and
                             _status['description'].find(ctx.desc_pattern) >= 0]
+            if ctx.json_query:
+                statuses = json_matching_statuses(ctx.json_query, statuses)
 
             # When listing, only show the vm_host's name, not every detail
             for s in statuses:

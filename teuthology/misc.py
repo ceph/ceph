@@ -1223,3 +1223,37 @@ def get_multi_machine_types(machinetype):
     if not machinetypes:
         machinetypes.append(machinetype)
     return machinetypes
+
+
+def is_in_dict(searchkey, searchval, d):
+    """
+    Test if searchkey/searchval are in dictionary.  searchval may
+    itself be a dict, in which case, recurse.  searchval may be
+    a subset at any nesting level (that is, all subkeys in searchval
+    must be found in d at the same level/nest position, but searchval
+    is not required to fully comprise d[searchkey]).
+
+    >>> is_in_dict('a', 'foo', {'a':'foo', 'b':'bar'})
+    True
+
+    >>> is_in_dict(
+    ...     'a',
+    ...     {'sub1':'key1', 'sub2':'key2'},
+    ...     {'a':{'sub1':'key1', 'sub2':'key2', 'sub3':'key3'}}
+    ... )
+    True
+
+    >>> is_in_dict('a', 'foo', {'a':'bar', 'b':'foo'})
+    False
+
+    >>> is_in_dict('a', 'foo', {'a':{'a': 'foo'}})
+    False
+    """
+    val = d.get(searchkey, None)
+    if isinstance(val, dict) and isinstance(searchval, dict):
+        for foundkey, foundval in searchval.iteritems():
+            if not is_in_dict(foundkey, foundval, val):
+                return False
+        return True
+    else:
+        return searchval == val

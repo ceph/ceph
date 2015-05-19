@@ -150,3 +150,20 @@ class TestMergeConfigs(object):
     def test_invalid_b_deep_merge(self):
         with pytest.raises(AssertionError):
             misc.deep_merge({"a": "b"}, "invalid")
+
+
+class TestIsInDict(object):
+    def test_simple_membership(self):
+        assert misc.is_in_dict('a', 'foo', {'a':'foo', 'b':'bar'})
+
+    def test_dict_membership(self):
+        assert misc.is_in_dict(
+            'a', {'sub1':'key1', 'sub2':'key2'},
+            {'a':{'sub1':'key1', 'sub2':'key2', 'sub3':'key3'}}
+        )
+
+    def test_simple_nonmembership(self):
+        assert not misc.is_in_dict('a', 'foo', {'a':'bar', 'b':'foo'})
+
+    def test_nonmembership_with_presence_at_lower_level(self):
+        assert not misc.is_in_dict('a', 'foo', {'a':{'a': 'foo'}})
