@@ -942,6 +942,8 @@ def get_latest_image_version_deb(remote, ostype):
             for line in output.getvalue().split('\n'):
                 if 'Depends:' in line:
                     depends = line.split('Depends: ')[1]
+                    remote.run(args=['sudo', 'apt-get', '-y', 'install',
+                                     depends])
             remote.run(args=['dpkg', '-s', depends], stdout=output)
         except run.CommandFailedError:
             # Non precise ubuntu machines (like trusty) don't have
