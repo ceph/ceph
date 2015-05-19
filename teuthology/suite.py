@@ -22,7 +22,9 @@ import matrix
 from . import lock
 from .config import config, JobConfig
 from .exceptions import BranchNotFoundError, ScheduleFailError
+from .misc import deep_merge
 from .repo_utils import fetch_qa_suite, fetch_teuthology
+from .task.install import get_flavor
 
 log = logging.getLogger(__name__)
 
@@ -184,7 +186,7 @@ def create_initial_config(suite, suite_branch, ceph_branch, teuthology_branch,
         log.info("kernel sha1: {hash}".format(hash=kernel_hash))
         kernel_dict = dict(kernel=dict(kdb=True, sha1=kernel_hash))
     else:
-        kernel_dict = dict()
+        kernel_dict = dict(kernel=dict())
     kernel_dict['kernel']['flavor'] = kernel_flavor
 
     # Get the ceph hash
@@ -546,23 +548,27 @@ def schedule_suite(job_config,
         )
 
         if dry_run:
+            full_job_config = dict()
+            deep_merge(full_job_config, job_config.to_dict())
+            deep_merge(full_job_config, parsed_yaml)
+            install_task_flavor = get_install_task_flavor(full_job_config)
             sha1 = job_config.sha1
-            # Get package versions for this sha1 and os_type. If we've already
-            # retrieved them in a previous loop, they'll be present in
+            # Get package versions for this sha1, os_type and flavor. If we've
+            # already retrieved them in a previous loop, they'll be present in
             # package_versions and gitbuilder will not be asked again for them.
-            package_versions = get_package_versions(
-                sha1,
-                os_type,
-                kernel_flavor,
-                package_versions
-            )
-
-            if not has_packages_for_distro(sha1, os_type, kernel_flavor,
-                                           package_versions):
-                m = "Packages for os_type '{os}', flavor {flavor} and " + \
-                    "ceph hash '{ver}' not found"
-                log.info(m.format(os=os_type, ver=sha1))
-                jobs_missing_packages.append(job)
+            for flavor in set([kernel_flavor, install_task_flavor]):
+                package_versions = get_package_versions(
+                    sha1,
+                    os_type,
+                    flavor,
+                    package_versions
+                )
+                if not has_packages_for_distro(sha1, os_type, flavor,
+                                               package_versions):
+                    m = "Packages for os_type '{os}', flavor {flavor} and " + \
+                        "ceph hash '{ver}' not found"
+                    log.info(m.format(os=os_type, flavor=flavor, ver=sha1))
+                    jobs_missing_packages.append(job)
 
         jobs_to_schedule.append(job)
 
@@ -598,6 +604,29 @@ def schedule_suite(job_config,
         log.info('Suite %s in %s scheduled %d jobs with missing packages.' %
                  (suite_name, path, missing_count))
     return count
+
+
+def get_install_task_flavor(job_config):
+    """
+    Pokes through the install task's configuration (including its overrides) to
+    figure out which flavor it will want to install.
+
+    Only looks at the first instance of the install task in job_config.
+    """
+    project, = job_config.get('project', 'ceph'),
+    tasks = job_config.get('tasks', dict())
+    overrides = job_config.get('overrides', dict())
+    install_overrides = overrides.get('install', dict())
+    project_overrides = install_overrides.get(project, dict())
+    first_install_config = dict()
+    for task in tasks:
+        if task.keys()[0] == 'install':
+            first_install_config = task.values()[0] or dict()
+            break
+    first_install_config = copy.deepcopy(first_install_config)
+    deep_merge(first_install_config, install_overrides)
+    deep_merge(first_install_config, project_overrides)
+    return get_flavor(first_install_config)
 
 
 def get_package_versions(sha1, os_type, kernel_flavor, package_versions=None):
@@ -637,7 +666,7 @@ def get_package_versions(sha1, os_type, kernel_flavor, package_versions=None):
                              for all hashs and distros, not just for the given
                              hash and distro.
     """
-    if package_versions is None:
+    if not package_versions:
         package_versions = dict()
 
     os_type = str(os_type)
@@ -694,7 +723,7 @@ def has_packages_for_distro(sha1, os_type, kernel_flavor,
     :returns:                True, if packages are found. False otherwise.
     """
     os_type = str(os_type)
-    if package_versions is None:
+    if not package_versions:
         package_versions = get_package_versions(sha1, os_type, kernel_flavor)
 
     package_versions_for_hash = package_versions.get(sha1, dict()).get(
