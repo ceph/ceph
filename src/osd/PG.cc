@@ -3294,6 +3294,7 @@ bool PG::sched_scrub()
       dout(20) << "sched_scrub: failed, a peer declined" << dendl;
       clear_scrub_reserved();
       scrub_unreserve_replicas();
+      osd->next_pg_scrub(info.pgid);
       ret = false;
     } else if (scrubber.reserved_peers.size() == acting.size()) {
       dout(20) << "sched_scrub: success, reserved self and replicas" << dendl;

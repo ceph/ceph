@@ -515,10 +515,17 @@ public:
   int scrubs_pending;
   int scrubs_active;
   set< pair<utime_t,spg_t> > last_scrub_pg;
+  map<spg_t, utime_t> pg_reg_stamp;
+  // move on to next pg when scrub reservation is rejected,
+  // reject_scrub_pg is the pg which is rejected from the last
+  // round of scrub schedule
+  boost::optional<spg_t> reject_scrub_pg;
 
   void reg_last_pg_scrub(spg_t pgid, utime_t t) {
     Mutex::Locker l(sched_scrub_lock);
     last_scrub_pg.insert(pair<utime_t,spg_t>(t, pgid));
+    pg_reg_stamp[pgid] = t;
+    reject_scrub_pg.reset();
   }
   void unreg_last_pg_scrub(spg_t pgid, utime_t t) {
     Mutex::Locker l(sched_scrub_lock);
@@ -526,11 +533,21 @@ public:
     set<pair<utime_t,spg_t> >::iterator it = last_scrub_pg.find(p);
     assert(it != last_scrub_pg.end());
     last_scrub_pg.erase(it);
+    pg_reg_stamp.erase(pgid);
+    reject_scrub_pg.reset();
   }
   bool first_scrub_stamp(pair<utime_t, spg_t> *out) {
     Mutex::Locker l(sched_scrub_lock);
     if (last_scrub_pg.empty())
       return false;
+    if (reject_scrub_pg) {
+      spg_t pgid = *reject_scrub_pg;
+      reject_scrub_pg.reset();
+      utime_t t = pg_reg_stamp[pgid];
+      pair<utime_t, spg_t> pos(t, pgid);
+      if (next_scrub_stamp(pos, out))
+        return true;
+    }
     set< pair<utime_t, spg_t> >::iterator iter = last_scrub_pg.begin();
     *out = *iter;
     return true;
@@ -538,6 +555,10 @@ public:
   bool next_scrub_stamp(pair<utime_t, spg_t> next,
 			pair<utime_t, spg_t> *out) {
     Mutex::Locker l(sched_scrub_lock);
+    return _next_scrub_stamp(next, out);
+  }
+  bool _next_scrub_stamp(pair<utime_t, spg_t> next,
+			pair<utime_t, spg_t> *out) {
     if (last_scrub_pg.empty())
       return false;
     set< pair<utime_t, spg_t> >::iterator iter = last_scrub_pg.lower_bound(next);
@@ -548,6 +569,13 @@ public:
       return false;
     *out = *iter;
     return true;
+  }
+  void next_pg_scrub(spg_t pgid)
+  {
+    Mutex::Locker l(sched_scrub_lock);
+    if (!reject_scrub_pg) {
+      reject_scrub_pg = pgid;
+    }
   }
 
   bool inc_scrubs_pending();

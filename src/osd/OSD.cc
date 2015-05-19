@@ -209,6 +209,7 @@ OSDService::OSDService(OSD *osd) :
   peer_map_epoch_lock("OSDService::peer_map_epoch_lock"),
   sched_scrub_lock("OSDService::sched_scrub_lock"), scrubs_pending(0),
   scrubs_active(0),
+  reject_scrub_pg(boost::none),
   agent_lock("OSD::agent_lock"),
   agent_valid_iterator(false),
   agent_ops(0),
