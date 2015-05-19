@@ -2534,7 +2534,7 @@ int main(int argc, char **argv)
     ("journal-path", po::value<string>(&jpath),
      "path to journal, mandatory for filestore type")
     ("pgid", po::value<string>(&pgidstr),
-     "PG id, mandatory except for import, fix-lost, list-pgs, set-allow-sharded-objects")
+     "PG id, mandatory except for import, fix-lost, list-pgs, set-allow-sharded-objects, dump-journal")
     ("op", po::value<string>(&op),
      "Arg is one of [info, log, remove, export, import, list, fix-lost, list-pgs, rm-past-intervals, set-allow-sharded-objects, dump-journal]")
     ("file", po::value<string>(&file),
@@ -2939,6 +2939,10 @@ int main(int argc, char **argv)
     }
   }
 
+  // The ops which don't require --pgid option are checked here and
+  // mentioned in the usage for --pgid with some exceptions.
+  // The dump-journal op isn't here because it is handled earlier.
+  // The dump-journal-mount op is undocumented so not in the usage.
   if (op != "list" && op != "import" && op != "fix-lost"
       && op != "list-pgs"  && op != "set-allow-sharded-objects" &&
       op != "dump-journal-mount" && (pgidstr.length() == 0)) {
