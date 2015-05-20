@@ -40,3 +40,19 @@ class TestInstall(object):
         config = Mock()
         config.extras = True
         install.verify_package_version(Mock(), config, Mock())
+
+    def test_get_flavor_default(self):
+        config = dict()
+        assert install.get_flavor(config) == 'basic'
+
+    def test_get_flavor_simple(self):
+        config = dict(
+            flavor='notcmalloc'
+        )
+        assert install.get_flavor(config) == 'notcmalloc'
+
+    def test_get_flavor_valgrind(self):
+        config = dict(
+            valgrind=True
+        )
+        assert install.get_flavor(config) == 'notcmalloc'
