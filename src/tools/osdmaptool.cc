@@ -472,12 +472,12 @@ int main(int argc, const char **argv)
   if (tree) {
     if (tree_formatter) {
       tree_formatter->open_object_section("tree");
-      osdmap.print_tree(NULL, tree_formatter.get());
+      osdmap.print_tree(tree_formatter.get(), NULL);
       tree_formatter->close_section();
       tree_formatter->flush(cout);
       cout << std::endl;
     } else {
-      osdmap.print_tree(&cout, NULL);
+      osdmap.print_tree(NULL, &cout);
     }
   }
   if (modified) {
