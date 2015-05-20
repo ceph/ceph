@@ -574,13 +574,16 @@ class Filesystem(object):
             log.info("All objects for ino {0} size {1} are absent".format(ino, size))
             return True
 
-    def rados(self, args, pool=None):
+    def rados(self, args, pool=None, stdin_data=None):
         """
         Call into the `rados` CLI from an MDS
         """
 
         if pool is None:
             pool = self.get_metadata_pool_name()
+
+        if stdin_data is None:
+            stdin_data = StringIO()
 
         # Doesn't matter which MDS we use to run rados commands, they all
         # have access to the pools
@@ -592,6 +595,7 @@ class Filesystem(object):
         args = ["rados", "-p", pool] + args
         p = remote.run(
             args=args,
+            stdin=stdin_data,
             stdout=StringIO())
         return p.stdout.getvalue().strip()
 
