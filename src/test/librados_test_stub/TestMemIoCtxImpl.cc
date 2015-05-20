@@ -385,7 +385,8 @@ int TestMemIoCtxImpl::stat(const std::string& oid, uint64_t *psize,
   return 0;
 }
 
-int TestMemIoCtxImpl::truncate(const std::string& oid, uint64_t size) {
+int TestMemIoCtxImpl::truncate(const std::string& oid, uint64_t size,
+                               const SnapContext &snapc) {
   if (get_snap_read() != CEPH_NOSNAP) {
     return -EROFS;
   }
@@ -393,7 +394,7 @@ int TestMemIoCtxImpl::truncate(const std::string& oid, uint64_t size) {
   TestMemRadosClient::SharedFile file;
   {
     RWLock::WLocker l(m_pool->file_lock);
-    file = get_file(oid, true, get_snap_context());
+    file = get_file(oid, true, snapc);
   }
 
   RWLock::WLocker l(file->lock);
@@ -510,7 +511,7 @@ int TestMemIoCtxImpl::zero(const std::string& oid, uint64_t off, uint64_t len) {
     }
   }
   if (truncate_redirect) {
-    return truncate(oid, off);
+    return truncate(oid, off, get_snap_context());
   }
 
   bufferlist bl;
