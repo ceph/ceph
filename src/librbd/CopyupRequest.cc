@@ -166,8 +166,7 @@ private:
       librados::AioCompletion *comp =
         librados::Rados::aio_create_completion(create_callback_context(), NULL,
                                                rados_ctx_cb);
-      r = m_ictx->md_ctx.aio_operate(m_oid, comp, &write_op, snapc.seq.val,
-                                     snaps);
+      r = m_ictx->data_ctx.aio_operate(m_oid, comp, &write_op);
       assert(r == 0);
       comp->release();
     }
