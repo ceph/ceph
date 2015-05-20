@@ -959,6 +959,7 @@ public:
 class ReadOp : public TestOp {
 public:
   librados::AioCompletion *completion;
+  vector<librados::AioCompletion *> pipeline_comps;
   librados::ObjectReadOperation op;
   string oid;
   ObjectDesc old_value;
@@ -968,6 +969,9 @@ public:
 
   bufferlist result;
   int retval;
+  vector<bufferlist> pipeline_results;
+  vector<int> pipeline_retvals;
+  uint64_t waiting_on;
 
   map<string, bufferlist> attrs;
   int attrretval;
@@ -985,9 +989,13 @@ public:
 	 TestOpStat *stat = 0)
     : TestOp(n, context, stat),
       completion(NULL),
+      pipeline_comps(2),
       oid(oid),
       snap(0),
       retval(0),
+      pipeline_results(2),
+      pipeline_retvals(2),
+      waiting_on(0),
       attrretval(0)
   {}
 		
@@ -1030,6 +1038,7 @@ public:
       std::cerr << num << ":  notified, waiting" << std::endl;
       ctx->wait();
     }
+    context->state_lock.Lock();
     if (snap >= 0) {
       context->io_ctx.snap_set_read(context->snaps[snap]);
     }
@@ -1059,15 +1068,48 @@ public:
     }
     op.getxattrs(&xattrs, 0);
     assert(!context->io_ctx.aio_operate(context->prefix+oid, completion, &op, 0));
+    waiting_on++;
+ 
+    // send 2 pipelined reads on the same object/snap. This can help testing
+    // OSD's read behavior in some scenarios
+    for (uint32_t i = 0; i < 2; ++i) {
+      librados::ObjectReadOperation pipeline_op;
+
+      pipeline_op.read(0,
+                       !old_value.has_contents() ? 0 :
+                       old_value.most_recent_gen()->get_length(old_value.most_recent()),
+                       &pipeline_results[i],
+                       &pipeline_retvals[i]);
+      pipeline_comps[i] = context->rados.aio_create_completion((void *) this, &read_callback, 0);
+      assert(!context->io_ctx.aio_operate(context->prefix+oid, pipeline_comps[i], &pipeline_op, 0));
+      waiting_on++;
+    }
+
     if (snap >= 0) {
       context->io_ctx.snap_set_read(0);
     }
+    context->state_lock.Unlock();
   }
 
   void _finish(CallbackInfo *info)
   {
-    context->state_lock.Lock();
+    Mutex::Locker l(context->state_lock);
     assert(!done);
+    assert(waiting_on > 0);
+    if (--waiting_on) {
+      return;
+    }
+
+    for (vector<librados::AioCompletion *>::iterator i = pipeline_comps.begin();
+         i != pipeline_comps.end(); ++i) {
+      assert((*i)->is_complete());
+      if (int err = (*i)->get_return_value()) {
+        cerr << "Error: oid " << oid << " read returned error code "
+             << err << std::endl;
+      }
+      (*i)->release();
+    }
+
     context->oid_in_use.erase(oid);
     context->oid_not_in_use.insert(oid);
     assert(completion->is_complete());
@@ -1191,7 +1233,6 @@ public:
     completion->release();
     context->kick();
     done = true;
-    context->state_lock.Unlock();
   }
 
   bool finished()
