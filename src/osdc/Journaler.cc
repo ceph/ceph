@@ -832,7 +832,21 @@ void Journaler::_finish_read(int r, uint64_t offset, bufferlist& bl)
   ldout(cct, 10) << "_finish_read got " << offset << "~" << bl.length() << dendl;
   prefetch_buf[offset].swap(bl);
 
-  _assimilate_prefetch();
+  try {
+    _assimilate_prefetch();
+    // Check the readable-ness of the buffer: do this head because it involves
+    // decoding, and we would like to catch any decode errors here so that
+    // external is_readable() callers don't have to.
+    _is_readable();
+  } catch (const buffer::error &err) {
+    error = -EINVAL;
+    if (on_readable) {
+      C_OnFinisher *f = on_readable;
+      on_readable = 0;
+      f->complete(error);
+    }
+    return;
+  }
   _prefetch();
 }
 
@@ -965,6 +979,12 @@ bool Journaler::_is_readable()
   // anything to read?
   if (read_pos == write_pos)
     return false;
+
+  // Are we errored?  Stop here to avoid risking
+  // raising decode errors.
+  if (error != 0) {
+    return false;
+  }
 
   // Check if the retrieve bytestream has enough for an entry
   uint64_t need;
