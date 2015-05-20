@@ -22,7 +22,7 @@ import matrix
 from . import lock
 from .config import config, JobConfig
 from .exceptions import BranchNotFoundError, ScheduleFailError
-from .misc import deep_merge
+from .misc import deep_merge, get_results_url
 from .repo_utils import fetch_qa_suite, fetch_teuthology
 from .task.install import get_flavor
 
@@ -308,6 +308,9 @@ def prepare_and_schedule(job_config, suite_repo_path, base_yaml_paths, limit,
             subprocess.check_call(
                 args=arg,
             )
+        results_url = get_results_url(job_config.name)
+        if results_url:
+            log.info("Test results viewable at %s", results_url)
 
 
 def schedule_fail(message, name=''):
