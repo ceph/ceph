@@ -380,7 +380,10 @@ def get_distro_defaults(distro, machine_type):
     And ('x86_64', 'rhel7_0', 'rpm') when passed anything else
     """
     arch = 'x86_64'
-    if distro == 'ubuntu':
+    if distro in (None, 'None', 'rhel'):
+        release = 'rhel7_0'
+        pkg_type = 'rpm'
+    elif distro == 'ubuntu':
         pkg_type = 'deb'
         if machine_type == 'saya':
             release = 'saucy'
@@ -397,11 +400,16 @@ def get_distro_defaults(distro, machine_type):
         release = 'fedora20'
         pkg_type = 'rpm'
     else:
-        release = 'rhel7_0'
-        pkg_type = 'rpm'
-    log.debug(
-        "Defaults for machine_type %s: arch=%s, release=%s, pkg_type=%s)",
-        machine_type, arch, release, pkg_type)
+        raise ValueError("Invalid distro value passed: %s", distro)
+    template = "Defaults for machine_type {mtype} distro {distro}: " \
+        "arch={arch}, release={release}, pkg_type={pkg}"
+    log.debug(template.format(
+        mtype=machine_type,
+        distro=distro,
+        arch=arch,
+        release=release,
+        pkg=pkg_type)
+    )
     return (
         arch,
         release,
