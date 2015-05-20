@@ -1145,7 +1145,7 @@ void MDLog::_replay_thread()
       r = journaler->get_error();
       dout(0) << "_replay journaler got error " << r << ", aborting" << dendl;
       if (r == -ENOENT) {
-        if (journaler->is_readonly()) {
+        if (mds->is_standby_replay()) {
           // journal has been trimmed by somebody else
           r = -EAGAIN;
         } else {
