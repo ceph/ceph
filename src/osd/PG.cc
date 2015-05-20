@@ -641,7 +641,12 @@ bool PG::needs_backfill() const
 
 bool PG::_calc_past_interval_range(epoch_t *start, epoch_t *end, epoch_t oldest_map)
 {
-  *end = info.history.same_interval_since;
+  if (info.history.same_interval_since) {
+    *end = info.history.same_interval_since;
+  } else {
+    // PG must be imported, so let's calculate the whole range.
+    *end = osd->get_superblock().newest_map;
+  }
 
   // Do we already have the intervals we want?
   map<epoch_t,pg_interval_t>::const_iterator pif = past_intervals.begin();
@@ -672,6 +677,8 @@ void PG::generate_past_intervals()
   epoch_t cur_epoch, end_epoch;
   if (!_calc_past_interval_range(&cur_epoch, &end_epoch,
       osd->get_superblock().oldest_map)) {
+    if (info.history.same_interval_since == 0)
+      info.history.same_interval_since = end_epoch;
     return;
   }
 
@@ -721,6 +728,17 @@ void PG::generate_past_intervals()
       dout(10) << debug.str() << dendl;
       same_interval_since = cur_epoch;
     }
+  }
+
+  // Verify same_interval_since is correct
+  if (info.history.same_interval_since) {
+    assert(info.history.same_interval_since == same_interval_since);
+  } else {
+    assert(same_interval_since);
+    dout(10) << __func__ << " fix same_interval_since " << same_interval_since << " pg " << *this << dendl;
+    dout(10) << __func__ << " past_intervals " << past_intervals << dendl;
+    // Fix it
+    info.history.same_interval_since = same_interval_since;
   }
 
   // record our work.
@@ -4766,6 +4784,7 @@ void PG::start_peering_interval(
     info.history.same_interval_since = osdmap->get_epoch();
   } else {
     std::stringstream debug;
+    assert(info.history.same_interval_since != 0);
     bool new_interval = pg_interval_t::check_new_interval(
       old_acting_primary.osd,
       new_acting_primary,
