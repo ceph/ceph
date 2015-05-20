@@ -135,6 +135,58 @@ class TestSuiteOffline(object):
         assert result == "/path/to/left"
 
 
+class TestFlavor(object):
+    def test_get_install_task_flavor_bare(self):
+        config = dict(
+            tasks=[
+                dict(
+                    install=dict(),
+                ),
+            ],
+        )
+        assert suite.get_install_task_flavor(config) == 'basic'
+
+    def test_get_install_task_flavor_simple(self):
+        config = dict(
+            tasks=[
+                dict(
+                    install=dict(
+                        flavor='notcmalloc',
+                    ),
+                ),
+            ],
+        )
+        assert suite.get_install_task_flavor(config) == 'notcmalloc'
+
+    def test_get_install_task_flavor_override_simple(self):
+        config = dict(
+            tasks=[
+                dict(install=dict()),
+            ],
+            overrides=dict(
+                install=dict(
+                    flavor='notcmalloc',
+                ),
+            ),
+        )
+        assert suite.get_install_task_flavor(config) == 'notcmalloc'
+
+    def test_get_install_task_flavor_override_project(self):
+        config = dict(
+            tasks=[
+                dict(install=dict()),
+            ],
+            overrides=dict(
+                install=dict(
+                    ceph=dict(
+                        flavor='notcmalloc',
+                    ),
+                ),
+            ),
+        )
+        assert suite.get_install_task_flavor(config) == 'notcmalloc'
+
+
 class TestMissingPackages(object):
     """
     Tests the functionality that checks to see if a
@@ -318,9 +370,10 @@ def make_fake_fstools(fake_filesystem):
         else:
             return False
 
-    def fake_isdir(path, fsdict = False):
+    def fake_isdir(path, fsdict=False):
         return not fake_isfile(path)
     return fake_listdir, fake_isfile, fake_isdir
+
 
 class TestBuildMatrix(object):
     def fragment_occurences(self, jobs, fragment):
