@@ -154,7 +154,7 @@ void *ObjBencher::status_printer(void *_bencher) {
 int ObjBencher::aio_bench(
   int operation, int secondsToRun,
   int maxObjectsToCreate,
-  int concurrentios, int op_size, bool cleanup, const char* run_name) {
+  int concurrentios, int op_size, bool cleanup, const char* run_name, bool no_verify) {
 
   if (concurrentios <= 0) 
     return -EINVAL;
@@ -203,11 +203,11 @@ int ObjBencher::aio_bench(
     if (r != 0) goto out;
   }
   else if (OP_SEQ_READ == operation) {
-    r = seq_read_bench(secondsToRun, num_objects, concurrentios, prevPid);
+    r = seq_read_bench(secondsToRun, num_objects, concurrentios, prevPid, no_verify);
     if (r != 0) goto out;
   }
   else if (OP_RAND_READ == operation) {
-    r = rand_read_bench(secondsToRun, num_objects, concurrentios, prevPid);
+    r = rand_read_bench(secondsToRun, num_objects, concurrentios, prevPid, no_verify);
     if (r != 0) goto out;
   }
 
@@ -494,7 +494,7 @@ int ObjBencher::write_bench(int secondsToRun, int maxObjectsToCreate,
   return r;
 }
 
-int ObjBencher::seq_read_bench(int seconds_to_run, int num_objects, int concurrentios, int pid) {
+int ObjBencher::seq_read_bench(int seconds_to_run, int num_objects, int concurrentios, int pid, bool no_verify) {
   lock_cond lc(&lock);
 
   if (concurrentios <= 0) 
@@ -612,12 +612,17 @@ int ObjBencher::seq_read_bench(int seconds_to_run, int num_objects, int concurre
     lock.Lock();
     ++data.started;
     ++data.in_flight;
-    snprintf(data.object_contents, data.object_size, "I'm the %16dth object!", current_index);
-    lock.Unlock();
-    if (memcmp(data.object_contents, cur_contents->c_str(), data.object_size) != 0) {
-      cerr << name[slot] << " is not correct!" << std::endl;
-      ++errors;
+    if (!no_verify) {
+      snprintf(data.object_contents, data.object_size, "I'm the %16dth object!", current_index);
+      lock.Unlock();
+      if (memcmp(data.object_contents, cur_contents->c_str(), data.object_size) != 0) {
+        cerr << name[slot] << " is not correct!" << std::endl;
+        ++errors;
+      }
+    } else {
+      lock.Unlock();
     }
+
     name[slot] = newName;
   }
 
@@ -640,11 +645,15 @@ int ObjBencher::seq_read_bench(int seconds_to_run, int num_objects, int concurre
     data.avg_latency = total_latency / data.finished;
     --data.in_flight;
     release_completion(slot);
-    snprintf(data.object_contents, data.object_size, "I'm the %16dth object!", index[slot]);
-    lock.Unlock();
-    if (memcmp(data.object_contents, contents[slot]->c_str(), data.object_size) != 0) {
-      cerr << name[slot] << " is not correct!" << std::endl;
-      ++errors;
+    if (!no_verify) {
+      snprintf(data.object_contents, data.object_size, "I'm the %16dth object!", index[slot]);
+      lock.Unlock();
+      if (memcmp(data.object_contents, contents[slot]->c_str(), data.object_size) != 0) {
+        cerr << name[slot] << " is not correct!" << std::endl;
+        ++errors;
+      }
+    } else {
+      lock.Unlock();
     }
     delete contents[slot];
   }
@@ -682,7 +691,7 @@ int ObjBencher::seq_read_bench(int seconds_to_run, int num_objects, int concurre
   return -5;
 }
 
-int ObjBencher::rand_read_bench(int seconds_to_run, int num_objects, int concurrentios, int pid)
+int ObjBencher::rand_read_bench(int seconds_to_run, int num_objects, int concurrentios, int pid, bool no_verify)
 {
   lock_cond lc(&lock);
 
@@ -804,11 +813,15 @@ int ObjBencher::rand_read_bench(int seconds_to_run, int num_objects, int concurr
     lock.Lock();
     ++data.started;
     ++data.in_flight;
-    snprintf(data.object_contents, data.object_size, "I'm the %16dth object!", current_index);
-    lock.Unlock();
-    if (memcmp(data.object_contents, cur_contents->c_str(), data.object_size) != 0) {
-      cerr << name[slot] << " is not correct!" << std::endl;
-      ++errors;
+    if (!no_verify) {
+      snprintf(data.object_contents, data.object_size, "I'm the %16dth object!", current_index);
+      lock.Unlock();
+      if (memcmp(data.object_contents, cur_contents->c_str(), data.object_size) != 0) {
+        cerr << name[slot] << " is not correct!" << std::endl;
+        ++errors;
+      }
+    } else {
+        lock.Unlock();
     }
     name[slot] = newName;
   }
@@ -832,12 +845,18 @@ int ObjBencher::rand_read_bench(int seconds_to_run, int num_objects, int concurr
     data.avg_latency = total_latency / data.finished;
     --data.in_flight;
     release_completion(slot);
-    snprintf(data.object_contents, data.object_size, "I'm the %16dth object!", index[slot]);
-    lock.Unlock();
-    if (memcmp(data.object_contents, contents[slot]->c_str(), data.object_size) != 0) {
-      cerr << name[slot] << " is not correct!" << std::endl;
-      ++errors;
+
+    if (!no_verify) {
+      snprintf(data.object_contents, data.object_size, "I'm the %16dth object!", index[slot]);
+      lock.Unlock();
+      if (memcmp(data.object_contents, contents[slot]->c_str(), data.object_size) != 0) {
+        cerr << name[slot] << " is not correct!" << std::endl;
+        ++errors;
+      }
+    } else {
+      lock.Unlock();
     }
+
     delete contents[slot];
   }
 
