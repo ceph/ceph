@@ -271,6 +271,31 @@ namespace librbd {
     uint8_t m_object_state;
   };
 
+  class AioTrim : public AbstractWrite {
+  public:
+    AioTrim(ImageCtx *ictx, const std::string &oid, uint64_t object_no,
+            const ::SnapContext &snapc, Context *completion)
+      : AbstractWrite(ictx, oid, object_no, 0, 0, snapc, completion, true) {
+    }
+
+  protected:
+    virtual void add_write_ops(librados::ObjectWriteOperation *wr) {
+      wr->remove();
+    }
+
+    virtual const char* get_write_type() const {
+      return "remove (trim)";
+    }
+
+    virtual void pre_object_map_update(uint8_t *new_state) {
+      *new_state = OBJECT_PENDING;
+    }
+
+    virtual bool post_object_map_update() {
+      return true;
+    }
+  };
+
   class AioTruncate : public AbstractWrite {
   public:
     AioTruncate(ImageCtx *ictx, const std::string &oid, uint64_t object_no,
