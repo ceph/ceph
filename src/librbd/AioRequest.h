@@ -263,9 +263,7 @@ namespace librbd {
       return true;
     }
 
-    virtual void guard_write() {
-      // do nothing to disable write guard
-    }
+    virtual void guard_write();
 
   private:
     uint8_t m_object_state;
