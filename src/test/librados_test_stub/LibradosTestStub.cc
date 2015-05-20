@@ -678,7 +678,7 @@ void ObjectWriteOperation::set_alloc_hint(uint64_t expected_object_size,
 
 void ObjectWriteOperation::truncate(uint64_t off) {
   TestObjectOperationImpl *o = reinterpret_cast<TestObjectOperationImpl*>(impl);
-  o->ops.push_back(boost::bind(&TestIoCtxImpl::truncate, _1, _2, off));
+  o->ops.push_back(boost::bind(&TestIoCtxImpl::truncate, _1, _2, off, _4));
 }
 
 void ObjectWriteOperation::write(uint64_t off, const bufferlist& bl) {

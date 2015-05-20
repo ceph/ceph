@@ -113,7 +113,8 @@ public:
                           std::map<uint64_t,uint64_t> *m,
                           bufferlist *data_bl) = 0;
   virtual int stat(const std::string& oid, uint64_t *psize, time_t *pmtime) = 0;
-  virtual int truncate(const std::string& oid, uint64_t size) = 0;
+  virtual int truncate(const std::string& oid, uint64_t size,
+                       const SnapContext &snapc) = 0;
   virtual int tmap_update(const std::string& oid, bufferlist& cmdbl);
   virtual int unwatch(uint64_t handle);
   virtual int watch(const std::string& o, uint64_t *handle,
