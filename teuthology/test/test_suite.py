@@ -135,6 +135,58 @@ class TestSuiteOffline(object):
         assert result == "/path/to/left"
 
 
+class TestFlavor(object):
+    def test_get_install_task_flavor_bare(self):
+        config = dict(
+            tasks=[
+                dict(
+                    install=dict(),
+                ),
+            ],
+        )
+        assert suite.get_install_task_flavor(config) == 'basic'
+
+    def test_get_install_task_flavor_simple(self):
+        config = dict(
+            tasks=[
+                dict(
+                    install=dict(
+                        flavor='notcmalloc',
+                    ),
+                ),
+            ],
+        )
+        assert suite.get_install_task_flavor(config) == 'notcmalloc'
+
+    def test_get_install_task_flavor_override_simple(self):
+        config = dict(
+            tasks=[
+                dict(install=dict()),
+            ],
+            overrides=dict(
+                install=dict(
+                    flavor='notcmalloc',
+                ),
+            ),
+        )
+        assert suite.get_install_task_flavor(config) == 'notcmalloc'
+
+    def test_get_install_task_flavor_override_project(self):
+        config = dict(
+            tasks=[
+                dict(install=dict()),
+            ],
+            overrides=dict(
+                install=dict(
+                    ceph=dict(
+                        flavor='notcmalloc',
+                    ),
+                ),
+            ),
+        )
+        assert suite.get_install_task_flavor(config) == 'notcmalloc'
+
+
 class TestMissingPackages(object):
     """
     Tests the functionality that checks to see if a
@@ -143,7 +195,9 @@ class TestMissingPackages(object):
     def setup(self):
         package_versions = dict(
             sha1=dict(
-                ubuntu="1.0"
+                ubuntu=dict(
+                    basic="1.0",
+                )
             )
         )
         self.pv = package_versions
@@ -152,6 +206,7 @@ class TestMissingPackages(object):
         assert self.pv == suite.get_package_versions(
             "sha1",
             "ubuntu",
+            "basic",
             package_versions=self.pv
         )
 
@@ -161,10 +216,11 @@ class TestMissingPackages(object):
         result = suite.get_package_versions(
             "sha1",
             "rhel",
+            "basic",
             package_versions=self.pv
         )
         expected = deepcopy(self.pv)
-        expected['sha1'].update(dict(rhel="1.1"))
+        expected['sha1'].update(dict(rhel=dict(basic="1.1")))
         assert result == expected
 
     @patch("teuthology.suite.package_version_for_hash")
@@ -174,6 +230,7 @@ class TestMissingPackages(object):
         result = suite.get_package_versions(
             "sha1",
             "rhel",
+            "basic",
             package_versions=self.pv
         )
         assert result == self.pv
@@ -184,6 +241,7 @@ class TestMissingPackages(object):
         result = suite.get_package_versions(
             "sha1",
             "ubuntu",
+            "basic",
         )
         expected = deepcopy(self.pv)
         assert result == expected
@@ -192,6 +250,7 @@ class TestMissingPackages(object):
         result = suite.has_packages_for_distro(
             "sha1",
             "ubuntu",
+            "basic",
             package_versions=self.pv,
         )
         assert result
@@ -200,6 +259,7 @@ class TestMissingPackages(object):
         result = suite.has_packages_for_distro(
             "sha1",
             "rhel",
+            "basic",
             package_versions=self.pv,
         )
         assert not result
@@ -210,6 +270,7 @@ class TestMissingPackages(object):
         result = suite.has_packages_for_distro(
             "sha1",
             "rhel",
+            "basic",
         )
         assert not result
 
@@ -309,9 +370,10 @@ def make_fake_fstools(fake_filesystem):
         else:
             return False
 
-    def fake_isdir(path, fsdict = False):
+    def fake_isdir(path, fsdict=False):
         return not fake_isfile(path)
     return fake_listdir, fake_isfile, fake_isdir
+
 
 class TestBuildMatrix(object):
     def fragment_occurences(self, jobs, fragment):

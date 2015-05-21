@@ -22,7 +22,9 @@ import matrix
 from . import lock
 from .config import config, JobConfig
 from .exceptions import BranchNotFoundError, ScheduleFailError
+from .misc import deep_merge, get_results_url
 from .repo_utils import fetch_qa_suite, fetch_teuthology
+from .task.install import get_flavor
 
 log = logging.getLogger(__name__)
 
@@ -185,7 +187,8 @@ def create_initial_config(suite, suite_branch, ceph_branch, teuthology_branch,
         log.info("kernel sha1: {hash}".format(hash=kernel_hash))
         kernel_dict = dict(kernel=dict(kdb=True, sha1=kernel_hash))
     else:
-        kernel_dict = dict()
+        kernel_dict = dict(kernel=dict())
+    kernel_dict['kernel']['flavor'] = kernel_flavor
 
     # Get the ceph hash
     ceph_hash = get_hash('ceph', ceph_branch, kernel_flavor, machine_type,
@@ -306,6 +309,9 @@ def prepare_and_schedule(job_config, suite_repo_path, base_yaml_paths, limit,
             subprocess.check_call(
                 args=arg,
             )
+        results_url = get_results_url(job_config.name)
+        if results_url:
+            log.info("Test results viewable at %s", results_url)
 
 
 def schedule_fail(message, name=''):
@@ -357,6 +363,7 @@ def get_hash(project='ceph', branch='master', flavor='basic',
     (arch, release, pkg_type) = get_distro_defaults(distro, machine_type)
     base_url = get_gitbuilder_url(project, release, pkg_type, arch, flavor)
     url = os.path.join(base_url, 'ref', branch, 'sha1')
+    log.debug("Gitbuilder URL: %s", url)
     resp = requests.get(url)
     if not resp.ok:
         return None
@@ -377,7 +384,10 @@ def get_distro_defaults(distro, machine_type):
     And ('x86_64', 'rhel7_0', 'rpm') when passed anything else
     """
     arch = 'x86_64'
-    if distro == 'ubuntu':
+    if distro in (None, 'None', 'rhel'):
+        release = 'rhel7_0'
+        pkg_type = 'rpm'
+    elif distro == 'ubuntu':
         pkg_type = 'deb'
         if machine_type == 'saya':
             release = 'saucy'
@@ -394,11 +404,16 @@ def get_distro_defaults(distro, machine_type):
         release = 'fedora20'
         pkg_type = 'rpm'
     else:
-        release = 'rhel7_0'
-        pkg_type = 'rpm'
-    log.debug(
-        "Defaults for machine_type %s: arch=%s, release=%s, pkg_type=%s)",
-        machine_type, arch, release, pkg_type)
+        raise ValueError("Invalid distro value passed: %s", distro)
+    template = "Defaults for machine_type {mtype} distro {distro}: " \
+        "arch={arch}, release={release}, pkg_type={pkg}"
+    log.debug(template.format(
+        mtype=machine_type,
+        distro=distro,
+        arch=arch,
+        release=release,
+        pkg=pkg_type)
+    )
     return (
         arch,
         release,
@@ -517,6 +532,7 @@ def schedule_suite(job_config,
 
         parsed_yaml = yaml.load(raw_yaml)
         os_type = parsed_yaml.get('os_type') or job_config.os_type
+        kernel_flavor = job_config.kernel['flavor']
         exclude_arch = parsed_yaml.get('exclude_arch')
         exclude_os_type = parsed_yaml.get('exclude_os_type')
 
@@ -544,20 +560,27 @@ def schedule_suite(job_config,
         )
 
         if dry_run:
+            full_job_config = dict()
+            deep_merge(full_job_config, job_config.to_dict())
+            deep_merge(full_job_config, parsed_yaml)
+            install_task_flavor = get_install_task_flavor(full_job_config)
             sha1 = job_config.sha1
-            # Get package versions for this sha1 and os_type. If we've already
-            # retrieved them in a previous loop, they'll be present in
+            # Get package versions for this sha1, os_type and flavor. If we've
+            # already retrieved them in a previous loop, they'll be present in
             # package_versions and gitbuilder will not be asked again for them.
-            package_versions = get_package_versions(
-                sha1,
-                os_type,
-                package_versions
-            )
-
-            if not has_packages_for_distro(sha1, os_type, package_versions):
-                m = "Packages for os_type '{os}' and ceph hash '{ver}' not found"
-                log.info(m.format(os=os_type, ver=sha1))
-                jobs_missing_packages.append(job)
+            for flavor in set([kernel_flavor, install_task_flavor]):
+                package_versions = get_package_versions(
+                    sha1,
+                    os_type,
+                    flavor,
+                    package_versions
+                )
+                if not has_packages_for_distro(sha1, os_type, flavor,
+                                               package_versions):
+                    m = "Packages for os_type '{os}', flavor {flavor} and " + \
+                        "ceph hash '{ver}' not found"
+                    log.info(m.format(os=os_type, flavor=flavor, ver=sha1))
+                    jobs_missing_packages.append(job)
 
         jobs_to_schedule.append(job)
 
@@ -595,10 +618,33 @@ def schedule_suite(job_config,
     return count
 
 
-def get_package_versions(sha1, os_type, package_versions=None):
+def get_install_task_flavor(job_config):
     """
-    Will retrieve the package versions for the given sha1 and os_type
-    from gitbuilder.
+    Pokes through the install task's configuration (including its overrides) to
+    figure out which flavor it will want to install.
+
+    Only looks at the first instance of the install task in job_config.
+    """
+    project, = job_config.get('project', 'ceph'),
+    tasks = job_config.get('tasks', dict())
+    overrides = job_config.get('overrides', dict())
+    install_overrides = overrides.get('install', dict())
+    project_overrides = install_overrides.get(project, dict())
+    first_install_config = dict()
+    for task in tasks:
+        if task.keys()[0] == 'install':
+            first_install_config = task.values()[0] or dict()
+            break
+    first_install_config = copy.deepcopy(first_install_config)
+    deep_merge(first_install_config, install_overrides)
+    deep_merge(first_install_config, project_overrides)
+    return get_flavor(first_install_config)
+
+
+def get_package_versions(sha1, os_type, kernel_flavor, package_versions=None):
+    """
+    Will retrieve the package versions for the given sha1, os_type and
+    kernel_flavor from gitbuilder.
 
     Optionally, a package_versions dict can be provided
     from previous calls to this function to avoid calling gitbuilder for
@@ -608,43 +654,55 @@ def get_package_versions(sha1, os_type, package_versions=None):
 
         {
             "sha1": {
-                "ubuntu": "version",
-                "rhel": "version",
+                "ubuntu": {
+                    "basic": "version",
+                    }
+                "rhel": {
+                    "basic": "version",
+                    }
             },
             "another-sha1": {
-                "ubuntu": "version",
+                "ubuntu": {
+                    "basic": "version",
+                    }
             }
         }
 
     :param sha1:             The sha1 hash of the ceph version.
     :param os_type:          The distro we want to get packages for, given
                              the ceph sha1. Ex. 'ubuntu', 'rhel', etc.
+    :param kernel_flavor:    The kernel flavor
     :param package_versions: Use this optionally to use cached results of
                              previous calls to gitbuilder.
     :returns:                A dict of package versions. Will return versions
                              for all hashs and distros, not just for the given
                              hash and distro.
     """
-    if package_versions is None:
+    if not package_versions:
         package_versions = dict()
 
     os_type = str(os_type)
 
-    package_versions_for_hash = package_versions.get(sha1, dict())
-    if os_type not in package_versions_for_hash:
+    os_types = package_versions.get(sha1, dict())
+    package_versions_for_flavor = os_types.get(os_type, dict())
+    if kernel_flavor not in package_versions_for_flavor:
         package_version = package_version_for_hash(
             sha1,
+            kernel_flavor,
             distro=os_type
         )
-        package_versions_for_hash[os_type] = package_version
-        package_versions[sha1] = package_versions_for_hash
+        package_versions_for_flavor[kernel_flavor] = package_version
+        os_types[os_type] = package_versions_for_flavor
+        package_versions[sha1] = os_types
 
     return package_versions
 
 
-def has_packages_for_distro(sha1, os_type, package_versions=None):
+def has_packages_for_distro(sha1, os_type, kernel_flavor,
+                            package_versions=None):
     """
-    Checks to see if gitbuilder has packages for the given sha1 and os_type.
+    Checks to see if gitbuilder has packages for the given sha1, os_type and
+    kernel_flavor.
 
     Optionally, a package_versions dict can be provided
     from previous calls to this function to avoid calling gitbuilder for
@@ -654,28 +712,36 @@ def has_packages_for_distro(sha1, os_type, package_versions=None):
 
         {
             "sha1": {
-                "ubuntu": "version",
-                "rhel": "version",
+                "ubuntu": {
+                    "basic": "version",
+                    }
+                "rhel": {
+                    "basic": "version",
+                    }
             },
             "another-sha1": {
-                "ubuntu": "version",
+                "ubuntu": {
+                    "basic": "version",
+                    }
             }
         }
 
     :param sha1:             The sha1 hash of the ceph version.
     :param os_type:          The distro we want to get packages for, given
                              the ceph sha1. Ex. 'ubuntu', 'rhel', etc.
+    :param kernel_flavor:    The kernel flavor
     :param package_versions: Use this optionally to use cached results of
                              previous calls to gitbuilder.
     :returns:                True, if packages are found. False otherwise.
     """
     os_type = str(os_type)
-    if package_versions is None:
-        package_versions = get_package_versions(sha1, os_type)
+    if not package_versions:
+        package_versions = get_package_versions(sha1, os_type, kernel_flavor)
 
-    package_versions_for_hash = package_versions.get(sha1, dict())
+    package_versions_for_hash = package_versions.get(sha1, dict()).get(
+        os_type, dict())
     # we want to return a boolean here, not the actual package versions
-    return bool(package_versions_for_hash.get(os_type, None))
+    return bool(package_versions_for_hash.get(kernel_flavor, None))
 
 
 def combine_path(left, right):
