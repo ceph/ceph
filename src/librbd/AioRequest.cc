@@ -355,12 +355,13 @@ namespace librbd {
 
     case LIBRBD_AIO_WRITE_COPYUP:
       ldout(m_ictx->cct, 20) << "WRITE_COPYUP" << dendl;
-      m_state = LIBRBD_AIO_WRITE_GUARD;
       if (r < 0) {
-	return should_complete(r);
+        m_state = LIBRBD_AIO_WRITE_ERROR;
+        complete(r);
+        finished = false;
+      } else {
+        finished = send_post();
       }
-
-      finished = send_post();
       break;
 
     case LIBRBD_AIO_WRITE_FLAT:
