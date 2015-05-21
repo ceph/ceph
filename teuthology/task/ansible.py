@@ -99,7 +99,7 @@ class Ansible(Task):
         Locate the repo we're using; cloning it from a remote repo if necessary
         """
         repo = self.config.get('repo', '.')
-        if repo.startswith(('http://', 'https://', 'git@')):
+        if repo.startswith(('http://', 'https://', 'git@', 'git://')):
             repo_path = fetch_repo(
                 repo,
                 self.config.get('branch', 'master'),

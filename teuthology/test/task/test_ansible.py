@@ -67,6 +67,16 @@ class TestAnsibleTask(TestTask):
         assert task.repo_path == os.path.expanduser(task_config['repo'])
 
     @patch('teuthology.task.ansible.fetch_repo')
+    def test_find_repo_path_remote(self, m_fetch_repo):
+        task_config = dict(
+            repo='git://fake_host/repo.git',
+        )
+        m_fetch_repo.return_value = '/tmp/repo'
+        task = Ansible(self.ctx, task_config)
+        task.find_repo()
+        assert task.repo_path == os.path.expanduser('/tmp/repo')
+
+    @patch('teuthology.task.ansible.fetch_repo')
     def test_find_repo_http(self, m_fetch_repo):
         task_config = dict(
             repo='http://example.com/my/repo',
