@@ -2857,12 +2857,18 @@ int OSDMap::build_simple_crush_rulesets(CephContext *cct,
 					const string& root,
 					ostream *ss)
 {
+  int crush_ruleset =
+      crush._get_osd_pool_default_crush_replicated_ruleset(cct, true);
   string failure_domain =
     crush.get_type_name(cct->_conf->osd_crush_chooseleaf_type);
 
+  if (crush_ruleset == CEPH_DEFAULT_CRUSH_REPLICATED_RULESET)
+    crush_ruleset = -1; // create ruleset 0 by default
+
   int r;
-  r = crush.add_simple_ruleset("replicated_ruleset", root, failure_domain,
-			       "firstn", pg_pool_t::TYPE_REPLICATED, ss);
+  r = crush.add_simple_ruleset_at("replicated_ruleset", root, failure_domain,
+                                  "firstn", pg_pool_t::TYPE_REPLICATED,
+                                  crush_ruleset, ss);
   if (r < 0)
     return r;
   // do not add an erasure rule by default or else we will implicitly

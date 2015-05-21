@@ -41,6 +41,7 @@ function TEST_default_deprectated_0() {
     run_mon $dir a \
         --osd_pool_default_crush_replicated_ruleset $expected || return 1
     ./ceph osd pool get rbd crush_ruleset | grep 'ruleset: '$expected || return 1
+    ./ceph osd crush rule dump replicated_ruleset | grep '"ruleset": '$expected || return 1
     CEPH_ARGS='' ./ceph --admin-daemon $dir/ceph-mon.a.asok log flush || return 1
     ! grep "osd_pool_default_crush_rule is deprecated " $dir/mon.a.log || return 1
 }
@@ -52,6 +53,7 @@ function TEST_default_deprectated_1() {
     run_mon $dir a \
         --osd_pool_default_crush_rule $expected || return 1
     ./ceph osd pool get rbd crush_ruleset | grep 'ruleset: '$expected || return 1
+    ./ceph osd crush rule dump replicated_ruleset | grep '"ruleset": '$expected || return 1
     CEPH_ARGS='' ./ceph --admin-daemon $dir/ceph-mon.a.asok log flush || return 1
     grep "osd_pool_default_crush_rule is deprecated " $dir/mon.a.log || return 1
 }
@@ -65,6 +67,7 @@ function TEST_default_deprectated_2() {
         --osd_pool_default_crush_replicated_ruleset $unexpected || return 1
     ./ceph osd pool get rbd crush_ruleset | grep 'ruleset: '$expected || return 1
     ! ./ceph --format json osd dump | grep '"crush_ruleset":'$unexpected || return 1
+    ./ceph osd crush rule dump replicated_ruleset | grep '"ruleset": '$expected || return 1
     CEPH_ARGS='' ./ceph --admin-daemon $dir/ceph-mon.a.asok log flush || return 1
     grep "osd_pool_default_crush_rule is deprecated " $dir/mon.a.log || return 1
 }

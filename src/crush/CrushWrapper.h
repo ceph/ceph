@@ -796,6 +796,12 @@ public:
 
   int add_simple_ruleset(string name, string root_name, string failure_domain_type,
 			 string mode, int rule_type, ostream *err = 0);
+  /**
+   * @param rno ruleset id to use, -1 to pick the lowest available
+   */
+  int add_simple_ruleset_at(string name, string root_name,
+                            string failure_domain_type, string mode,
+                            int rule_type, int rno, ostream *err = 0);
 
   int remove_rule(int ruleno);
 
@@ -1055,6 +1061,8 @@ public:
   void dump_tree(ostream *out, Formatter *f) const;
   static void generate_test_instances(list<CrushWrapper*>& o);
 
+  int _get_osd_pool_default_crush_replicated_ruleset(CephContext *cct,
+                                                     bool quiet);
   int get_osd_pool_default_crush_replicated_ruleset(CephContext *cct);
 
   static bool is_valid_crush_name(const string& s);
