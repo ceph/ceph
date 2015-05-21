@@ -138,8 +138,7 @@ UNITTEST_LDADD = \
 	$(top_builddir)/src/gmock/lib/libgmock_main.la \
 	$(top_builddir)/src/gmock/lib/libgmock.la \
 	$(top_builddir)/src/gmock/gtest/lib/libgtest.la \
-	$(PTHREAD_LIBS) \
-	-luuid
+	$(PTHREAD_LIBS)
 
 if SOLARIS
 UNITTEST_LDADD += \
