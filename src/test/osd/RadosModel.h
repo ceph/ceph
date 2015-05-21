@@ -944,7 +944,15 @@ public:
     interval_set<uint64_t> ranges;
     context->state_lock.Unlock();
 
-    int r = context->io_ctx.remove(context->prefix+oid);
+    int r = 0;
+    if (rand() % 2) {
+      librados::ObjectWriteOperation op;
+      op.assert_exists();
+      op.remove();
+      r = context->io_ctx.operate(context->prefix+oid, &op);
+    } else {
+      r = context->io_ctx.remove(context->prefix+oid);
+    }
     if (r && !(r == -ENOENT && !present)) {
       cerr << "r is " << r << " while deleting " << oid << " and present is " << present << std::endl;
       assert(0);
