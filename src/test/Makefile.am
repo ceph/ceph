@@ -139,8 +139,7 @@ UNITTEST_LDADD = \
 	$(top_builddir)/src/gmock/lib/libgmock_main.la \
 	$(top_builddir)/src/gmock/lib/libgmock.la \
 	$(top_builddir)/src/gmock/gtest/lib/libgtest.la \
-	$(PTHREAD_LIBS) \
-	-luuid
+	$(PTHREAD_LIBS)
 
 unittest_addrs_SOURCES = test/test_addrs.cc
 unittest_addrs_CXXFLAGS = $(UNITTEST_CXXFLAGS)

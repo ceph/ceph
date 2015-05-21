@@ -12,17 +12,36 @@
 #include <boost/iostreams/filtering_stream.hpp>
 #include <boost/iostreams/filter/zlib.hpp>
 
-#include "Entry.h"
-#include "SubsystemMap.h"
+#include "log/Entry.h"
+#include "log/SubsystemMap.h"
+#include "common/LogEntry.h"
+#include "include/memory.h"
 
 namespace ceph {
 namespace log {
+
+// Graylog logging backend: Convert log datastructures (LogEntry, Entry) to
+// GELF (http://www.graylog2.org/resources/gelf/specification) and send it
+// to a GELF UDP receiver
 
 class Graylog
 {
  public:
 
-  Graylog(const SubsystemMap * const s);
+  /**
+   * Create Graylog with SubsystemMap. log_entry will resolve the subsystem
+   * id to string. Logging will not be ready until set_destination is called
+   * @param s SubsystemMap
+   * @param logger Value for key "_logger" in GELF
+   */
+  Graylog(const SubsystemMap * const s, std::string logger);
+
+  /**
+   * Create Graylog without SubsystemMap. Logging will not be ready
+   * until set_destination is called
+   * @param logger Value for key "_logger" in GELF
+   */
+  Graylog(std::string logger);
   virtual ~Graylog();
 
   void set_hostname(const std::string& host);
@@ -31,6 +50,7 @@ class Graylog
   void set_destination(const std::string& host, int port);
 
   void log_entry(Entry const * const e);
+  void log_log_entry(LogEntry const * const e);
 
   typedef ceph::shared_ptr<Graylog> Ref;
 
@@ -41,14 +61,18 @@ class Graylog
 
   std::string m_hostname;
   std::string m_fsid;
+  std::string m_logger;
 
   boost::asio::ip::udp::endpoint m_endpoint;
   boost::asio::io_service m_io_service;
 
   std::auto_ptr<Formatter> m_formatter;
+  std::auto_ptr<Formatter> m_formatter_section;
+  std::stringstream m_ostream_section;
   std::stringstream m_ostream_compressed;
   boost::iostreams::filtering_ostream m_ostream;
   boost::iostreams::zlib_compressor m_compressor;
+
 };
 
 }
