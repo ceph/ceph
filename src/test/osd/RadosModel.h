@@ -1188,6 +1188,7 @@ public:
 	}
       }
     }
+    completion->release();
     context->kick();
     done = true;
     context->state_lock.Unlock();
@@ -1195,7 +1196,7 @@ public:
 
   bool finished()
   {
-    return done && completion->is_complete();
+    return done;
   }
 
   string getType()
