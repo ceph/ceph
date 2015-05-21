@@ -270,17 +270,20 @@ private:
       RWLock::RLocker owner_locker(m_ictx->owner_lock);
       RWLock::RLocker snap_locker(m_ictx->snap_lock);
       if (m_ictx->object_map.enabled()) {
+        bool copy_on_read = m_pending_requests.empty();
         if (!m_ictx->image_watcher->is_lock_owner()) {
-         ldout(m_ictx->cct, 20) << "exclusive lock not held for copyup request"
-                                << dendl;
-          assert(m_pending_requests.empty());
+          ldout(m_ictx->cct, 20) << "exclusive lock not held for copyup request"
+                                 << dendl;
+          assert(copy_on_read);
           return true;
         }
 
         RWLock::WLocker object_map_locker(m_ictx->object_map_lock);
-        if (m_ictx->object_map[m_object_no] != OBJECT_EXISTS ||
-            !m_ictx->snaps.empty()) {
+        if (copy_on_read && m_ictx->object_map[m_object_no] != OBJECT_EXISTS) {
+          // CoW already updates the HEAD object map
           m_snap_ids.push_back(CEPH_NOSNAP);
+        }
+        if (!m_ictx->snaps.empty()) {
           m_snap_ids.insert(m_snap_ids.end(), m_ictx->snaps.begin(),
                             m_ictx->snaps.end());
         }
