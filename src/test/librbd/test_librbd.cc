@@ -2009,6 +2009,11 @@ int iterate_cb(uint64_t off, size_t len, int exists, void *arg)
   return 0;
 }
 
+static int iterate_error_cb(uint64_t off, size_t len, int exists, void *arg)
+{
+  return -EINVAL;
+}
+
 void scribble(librbd::Image& image, int n, int max,
               interval_set<uint64_t> *exists,
               interval_set<uint64_t> *what)
@@ -2406,6 +2411,33 @@ TYPED_TEST(DiffIterateTest, DiffIterateIgnoreParent)
   ASSERT_TRUE(two.subset_of(diff));
 }
 
+TYPED_TEST(DiffIterateTest, DiffIterateCallbackError)
+{
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, this->_rados.ioctx_create(this->m_pool_name.c_str(), ioctx));
+
+  {
+    librbd::RBD rbd;
+    librbd::Image image;
+    int order = 0;
+    std::string name = this->get_temp_image_name();
+    uint64_t size = 20 << 20;
+
+    ASSERT_EQ(0, create_image_pp(rbd, ioctx, name.c_str(), size, &order));
+    ASSERT_EQ(0, rbd.open(ioctx, image, name.c_str(), NULL));
+
+    interval_set<uint64_t> exists;
+    interval_set<uint64_t> one;
+    scribble(image, 10, 102400, &exists, &one);
+    cout << " wrote " << one << std::endl;
+
+    interval_set<uint64_t> diff;
+    ASSERT_EQ(-EINVAL, image.diff_iterate2(NULL, 0, size, true,
+                                           this->whole_object,
+                                           iterate_error_cb, NULL));
+  }
+  ioctx.close();
+}
 TEST_F(TestLibRBD, ZeroLengthWrite)
 {
   rados_ioctx_t ioctx;
