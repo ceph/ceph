@@ -21,6 +21,7 @@ from teuthology.parallel import parallel
 from teuthology.suite import has_packages_for_distro, get_install_task_flavor
 from ..orchestra import cluster, remote, run
 from .. import report
+from . import ansible
 
 log = logging.getLogger(__name__)
 
@@ -726,19 +727,20 @@ def vm_setup(ctx, config):
     Look for virtual machines and handle their initialization
     """
     all_tasks = [x.keys()[0] for x in ctx.config['tasks']]
-    need_chef = False
-    if 'chef' in all_tasks or 'kernel' in all_tasks:
-        need_chef = True
-    with parallel() as p:
-        editinfo = os.path.join(os.path.dirname(__file__),'edit_sudoers.sh')
+    need_ansible = False
+    if 'kernel' in all_tasks and 'ansible.cephlab' not in all_tasks:
+        need_ansible = True
+    ansible_hosts = set()
+    with parallel():
+        editinfo = os.path.join(os.path.dirname(__file__), 'edit_sudoers.sh')
         for rem in ctx.cluster.remotes.iterkeys():
-            mname = rem.shortname
-            if misc.is_vm(mname):
-                r = rem.run(args=['test', '-e', '/ceph-qa-ready',],
-                        stdout=StringIO(),
-                        check_status=False,)
+            if misc.is_vm(rem.shortname):
+                ansible_hosts.add(rem.shortname)
+                r = rem.run(args=['test', '-e', '/ceph-qa-ready'],
+                            stdout=StringIO(), check_status=False)
                 if r.returncode != 0:
-                    p1 = subprocess.Popen(['cat', editinfo], stdout=subprocess.PIPE)
+                    p1 = subprocess.Popen(['cat', editinfo],
+                                          stdout=subprocess.PIPE)
                     p2 = subprocess.Popen(
                         [
                             'ssh',
@@ -752,21 +754,11 @@ def vm_setup(ctx, config):
                     )
                     _, err = p2.communicate()
                     if err:
-                        log.info("Edit of /etc/sudoers failed: %s", err)
-                    if need_chef:
-                        p.spawn(_download_and_run_chef, rem)
-
-def _download_and_run_chef(remote_):
-    """
-    Run ceph_qa_chef.
-    """
-    log.info('Running ceph_qa_chef on %s', remote_)
-    remote_.run(
-        args=[
-            'wget', '-q', '-O-',
-            'http://git.ceph.com/?p=ceph-qa-chef.git;a=blob_plain;f=solo/solo-from-scratch;hb=HEAD',
-            run.Raw('|'),
-            'sh',
-        ],
-        label="run chef solo-from-scratch"
-    )
+                        log.error("Edit of /etc/sudoers failed: %s", err)
+    if need_ansible and ansible_hosts:
+        log.info("Running ansible on %s", list(ansible_hosts))
+        ansible_config = dict(
+            hosts=list(ansible_hosts),
+        )
+        with ansible.CephLab(ctx, config=ansible_config):
+            pass
