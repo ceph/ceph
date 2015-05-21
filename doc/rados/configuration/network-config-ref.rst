@@ -103,8 +103,10 @@ MDS IP Tables
 -------------
 
 A :term:`Ceph Metadata Server` listens on the first available port on the public
-network beginning at port 6800. Ensure that you open one port beginning at port
-6800 for each Ceph Metadata Server that runs on the Ceph Node. When you add the
+network beginning at port 6800. Note that this behavior is not deterministic, so
+if you are running more than one OSD or MDS on the same host, or if you restart
+the daemons within a short window of time, the daemons will bind to higher
+ports. You should open the entire 6800-7300 range by default.  When you add the
 rule using the example below, make sure you replace ``{iface}`` with the public
 network interface (e.g., ``eth0``, ``eth1``, etc.), ``{ip-address}`` with the IP
 address of the public network and ``{netmask}`` with the netmask of the public
@@ -112,16 +114,17 @@ network.
 
 For example:: 
 
-	sudo iptables -A INPUT -i {iface} -m multiport -p tcp -s {ip-address}/{netmask} --dports 6800:6810 -j ACCEPT
+	sudo iptables -A INPUT -i {iface} -m multiport -p tcp -s {ip-address}/{netmask} --dports 6800:7300 -j ACCEPT
 
 
 OSD IP Tables
 -------------
 
 By default, Ceph OSD Daemons `bind`_ to the first available ports on a Ceph Node
-beginning at port 6800. Ensure that you open at least three ports beginning at
-port 6800 for each OSD that runs on the host. Each Ceph OSD Daemon on a Ceph
-Node may use up to three ports:
+beginning at port 6800.  Note that this behavior is not deterministic, so if you
+are running more than one OSD or MDS on the same host, or if you restart the
+daemons within a short window of time, the daemons will bind to higher ports.
+Each Ceph OSD Daemon on a Ceph Node may use up to three ports:
 
 #. One for talking to clients and monitors.
 #. One for sending data to other OSDs.
@@ -144,11 +147,9 @@ Node may use up to three ports:
               | cCCC          |
               \---------------/
 
-Ports are node-specific, so you don't need to open any more ports than the
-number of ports needed by Ceph daemons running on that Ceph Node. You may
-consider opening a few additional ports in case a daemon fails and restarts
-without letting go of the port such that the restarted daemon binds to a new
-port. 
+When a daemon fails and restarts without letting go of the port, the restarted
+daemon will bind to a new port. You should open the entire 6800-7300 port range
+to handle this possibility.
 
 If you set up separate public and cluster networks, you must add rules for both
 the public network and the cluster network, because clients will connect using
@@ -158,15 +159,10 @@ network. When you add the rule using the example below, make sure you replace
 ``{ip-address}`` with the IP address and ``{netmask}`` with the netmask of the
 public or cluster network. For example:: 
 
-	sudo iptables -A INPUT -i {iface}  -m multiport -p tcp -s {ip-address}/{netmask} --dports 6800:6810 -j ACCEPT
-
-Be sure to replace the "6810" in the above example with an upper bound that
-reflects the number of daemons you will be running on this host.
+	sudo iptables -A INPUT -i {iface}  -m multiport -p tcp -s {ip-address}/{netmask} --dports 6800:7300 -j ACCEPT
 
 .. tip:: If you run Ceph Metadata Servers on the same Ceph Node as the 
    Ceph OSD Daemons, you can consolidate the public network configuration step. 
-   Ensure that you open the number of ports required for each daemon per host.
-
 
 
 Ceph Networks
