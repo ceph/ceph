@@ -104,8 +104,9 @@ private:
     bool add_copyup_op = !m_copyup_data.is_zero();
     bool copy_on_read = m_pending_requests.empty();
     if (!add_copyup_op && copy_on_read) {
-      // no copyup data and CoR operation
-      return true;
+      // copyup empty object to prevent future CoR attempts
+      m_copyup_data.clear();
+      add_copyup_op = true;
     }
 
     ldout(m_ictx->cct, 20) << __func__ << " " << this
@@ -220,10 +221,8 @@ private:
     case STATE_READ_FROM_PARENT:
       ldout(cct, 20) << "READ_FROM_PARENT" << dendl;
       remove_from_list();
-      if (r >= 0) {
+      if (r >= 0 || r == -ENOENT) {
         return send_object_map();
-      } else if (r == -ENOENT) {
-        return send_copyup();
       }
       break;
 
