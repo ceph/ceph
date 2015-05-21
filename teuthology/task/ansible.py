@@ -39,7 +39,9 @@ class Ansible(Task):
 
     Required configuration parameters:
         playbook:   Required; can either be a list of plays, or a path/URL to a
-                    playbook
+                    playbook. In the case of a path, it may be relative to the
+                    repo's on-disk location (if a repo is provided), or
+                    teuthology's working directory.
 
     Optional configuration parameters:
         repo:       A path or URL to a repo (defaults to '.'). Given a repo
@@ -122,6 +124,13 @@ class Ansible(Task):
         elif isinstance(playbook, str):
             try:
                 playbook_path = os.path.expanduser(playbook)
+                if not playbook_path.startswith('/'):
+                    # If the path is not absolute at this point, look for the
+                    # playbook in the repo dir. If it's not there, we assume
+                    # the path is relative to the working directory
+                    pb_in_repo = os.path.join(self.repo_path, playbook_path)
+                    if os.path.exists(pb_in_repo):
+                        playbook_path = pb_in_repo
                 self.playbook_file = file(playbook_path)
                 playbook_yaml = yaml.safe_load(self.playbook_file)
                 self.playbook = playbook_yaml
