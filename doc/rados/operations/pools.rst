@@ -441,6 +441,20 @@ You may set values for the following keys:
 
 .. _cache_min_flush_age:
 
+``hit_set_grade_decay_rate``
+:Description: Temperature decay rate between two successive hit_sets
+:Type: Integer
+:Valid Range: 0 - 100
+:Default: ``20``
+
+
+``hit_set_grade_search_last_n``
+:Description: Count at most N appearance in hit_sets for temperature calculation
+:Type: Integer
+:Valid Range: 0 - hit_set_count
+:Default: ``1``
+
+
 ``cache_min_flush_age``
 
 :Description: The time (in seconds) before the cache tiering agent will flush 
