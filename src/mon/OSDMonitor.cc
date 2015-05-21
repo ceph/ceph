@@ -2885,7 +2885,8 @@ namespace {
     CACHE_TARGET_FULL_RATIO,
     CACHE_MIN_FLUSH_AGE, CACHE_MIN_EVICT_AGE,
     ERASURE_CODE_PROFILE, MIN_READ_RECENCY_FOR_PROMOTE,
-    MIN_WRITE_RECENCY_FOR_PROMOTE, FAST_READ};
+    MIN_WRITE_RECENCY_FOR_PROMOTE, FAST_READ,
+    HIT_SET_GRADE_DECAY_RATE, HIT_SET_SEARCH_LAST_N};
 
   std::set<osd_pool_get_choices>
     subtract_second_from_first(const std::set<osd_pool_get_choices>& first,
@@ -3359,16 +3360,18 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
       ("erasure_code_profile", ERASURE_CODE_PROFILE)
       ("min_read_recency_for_promote", MIN_READ_RECENCY_FOR_PROMOTE)
       ("min_write_recency_for_promote", MIN_WRITE_RECENCY_FOR_PROMOTE)
-      ("fast_read", FAST_READ);
+      ("fast_read", FAST_READ)
+      ("hit_set_grade_decay_rate", HIT_SET_GRADE_DECAY_RATE)
+      ("hit_set_search_last_n", HIT_SET_SEARCH_LAST_N);
 
     typedef std::set<osd_pool_get_choices> choices_set_t;
 
     const choices_set_t ONLY_TIER_CHOICES = boost::assign::list_of
       (HIT_SET_TYPE)(HIT_SET_PERIOD)(HIT_SET_COUNT)(HIT_SET_FPP)
       (TARGET_MAX_OBJECTS)(TARGET_MAX_BYTES)(CACHE_TARGET_FULL_RATIO)
-      (CACHE_TARGET_DIRTY_RATIO)(CACHE_TARGET_DIRTY_HIGH_RATIO)(CACHE_MIN_FLUSH_AGE)
-      (CACHE_MIN_EVICT_AGE)(MIN_READ_RECENCY_FOR_PROMOTE);
-
+      (CACHE_TARGET_DIRTY_RATIO)(CACHE_TARGET_DIRTY_HIGH_RATIO)
+      (CACHE_MIN_FLUSH_AGE)(CACHE_MIN_EVICT_AGE)(MIN_READ_RECENCY_FOR_PROMOTE)
+      (HIT_SET_GRADE_DECAY_RATE)(HIT_SET_SEARCH_LAST_N);
     const choices_set_t ONLY_ERASURE_CHOICES = boost::assign::list_of
       (ERASURE_CODE_PROFILE);
 
@@ -3530,6 +3533,14 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
           case FAST_READ:
             f->dump_int("fast_read", p->fast_read);
             break;
+	  case HIT_SET_GRADE_DECAY_RATE:
+	    f->dump_int("hit_set_grade_decay_rate",
+			p->hit_set_grade_decay_rate);
+	    break;
+	  case HIT_SET_SEARCH_LAST_N:
+	    f->dump_int("hit_set_search_last_n",
+			p->hit_set_search_last_n);
+	    break;
 	}
 	f->close_section();
 	f->flush(rdata);
@@ -3619,6 +3630,14 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	  case MIN_READ_RECENCY_FOR_PROMOTE:
 	    ss << "min_read_recency_for_promote: " <<
 	      p->min_read_recency_for_promote << "\n";
+	    break;
+	  case HIT_SET_GRADE_DECAY_RATE:
+	    ss << "hit_set_grade_decay_rate: " <<
+	      p->hit_set_grade_decay_rate << "\n";
+	    break;
+	  case HIT_SET_SEARCH_LAST_N:
+	    ss << "hit_set_search_last_n: " <<
+	      p->hit_set_search_last_n << "\n";
 	    break;
 	  case HASHPSPOOL:
 	  case NODELETE:
@@ -4734,8 +4753,8 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
        var == "target_max_objects" || var == "target_max_bytes" ||
        var == "cache_target_full_ratio" || var == "cache_target_dirty_ratio" ||
        var == "cache_target_dirty_high_ratio" ||
-       var == "cache_min_flush_age" || var == "cache_min_evict_age")) {
-    ss << "pool '" << poolstr << "' is not a tier pool: variable not applicable";
+       var == "cache_min_flush_age" || var == "cache_min_evict_age" ||
+       var == "hit_set_grade_decay_rate" || var == "hit_set_search_last_n")) {
     return -EACCES;
   }
 
@@ -4921,7 +4940,6 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
     }
     p.hit_set_period = n;
   } else if (var == "hit_set_count") {
-
     if (interr.length()) {
       ss << "error parsing integer value '" << val << "': " << interr;
       return -EINVAL;
@@ -5013,6 +5031,26 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
       return -EINVAL;
     }
     p.min_read_recency_for_promote = n;
+  } else if (var == "hit_set_grade_decay_rate") {
+    if (interr.length()) {
+      ss << "error parsing integer value '" << val << "': " << interr;
+      return -EINVAL;
+    }
+    if (n > 100 || n < 0) {
+      ss << "value out of range,valid range is 0 - 100";
+      return -EINVAL;
+    }
+    p.hit_set_grade_decay_rate = n;
+  } else if (var == "hit_set_search_last_n") {
+    if (interr.length()) {
+      ss << "error parsing integer value '" << val << "': " << interr;
+      return -EINVAL;
+    }
+    if (n > p.hit_set_count || n < 0) {
+      ss << "value out of range,valid range is 0 - hit_set_count";
+      return -EINVAL;
+    }
+    p.hit_set_search_last_n = n;
   } else if (var == "min_write_recency_for_promote") {
     if (interr.length()) {
       ss << "error parsing integer value '" << val << "': " << interr;
