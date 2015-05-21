@@ -11521,7 +11521,6 @@ bool ReplicatedPG::agent_work(int start_max, int agent_flush_quota)
   if (++agent_state->hist_age > g_conf->osd_agent_hist_halflife) {
     dout(20) << __func__ << " resetting atime and temp histograms" << dendl;
     agent_state->hist_age = 0;
-    agent_state->atime_hist.decay();
     agent_state->temp_hist.decay();
   }
 
@@ -11728,42 +11727,15 @@ bool ReplicatedPG::agent_maybe_evict(ObjectContextRef& obc)
 
   if (agent_state->evict_mode != TierAgentState::EVICT_MODE_FULL) {
     // is this object old and/or cold enough?
-    int atime = -1, temp = 0;
+    int temp = 0;
+    uint64_t temp_upper = 0, temp_lower = 0;
     if (hit_set)
-      agent_estimate_atime_temp(soid, &atime, NULL /*FIXME &temp*/);
-
-    uint64_t atime_upper = 0, atime_lower = 0;
-    if (atime < 0 && obc->obs.oi.mtime != utime_t()) {
-      if (obc->obs.oi.local_mtime != utime_t()) {
-        atime = ceph_clock_now(NULL).sec() - obc->obs.oi.local_mtime;
-      } else {
-        atime = ceph_clock_now(NULL).sec() - obc->obs.oi.mtime;
-      }
-    }
-    if (atime < 0) {
-      if (hit_set) {
-        atime = pool.info.hit_set_period * pool.info.hit_set_count; // "infinite"
-      } else {
-	atime_upper = 1000000;
-      }
-    }
-    if (atime >= 0) {
-      agent_state->atime_hist.add(atime);
-      agent_state->atime_hist.get_position_micro(atime, &atime_lower,
-						 &atime_upper);
-    }
-
-    unsigned temp_upper = 0, temp_lower = 0;
-    /*
-    // FIXME: bound atime based on creation time?
-    agent_state->temp_hist.add(atime);
+      agent_estimate_temp(soid, &temp);
+    agent_state->temp_hist.add(temp);
     agent_state->temp_hist.get_position_micro(temp, &temp_lower, &temp_upper);
-    */
 
     dout(20) << __func__
-	     << " atime " << atime
-	     << " pos " << atime_lower << "-" << atime_upper
-	     << ", temp " << temp
+	     << " temp " << temp
 	     << " pos " << temp_lower << "-" << temp_upper
 	     << ", evict_effort " << agent_state->evict_effort
 	     << dendl;
@@ -11776,9 +11748,7 @@ bool ReplicatedPG::agent_maybe_evict(ObjectContextRef& obc)
     delete f;
     *_dout << dendl;
 
-    // FIXME: ignore temperature for now.
-
-    if (1000000 - atime_upper >= agent_state->evict_effort)
+    if (1000000 - temp_upper >= agent_state->evict_effort)
       return false;
   }
 
@@ -12062,32 +12032,21 @@ bool ReplicatedPG::agent_choose_mode(bool restart, OpRequestRef op)
   return requeued;
 }
 
-void ReplicatedPG::agent_estimate_atime_temp(const hobject_t& oid,
-					     int *atime, int *temp)
+void ReplicatedPG::agent_estimate_temp(const hobject_t& oid, int *temp)
 {
   assert(hit_set);
-  *atime = -1;
-  if (temp)
-    *temp = 0;
-  if (hit_set->contains(oid)) {
-    *atime = 0;
-    if (temp)
-      ++(*temp);
-    else
-      return;
-  }
-  time_t now = ceph_clock_now(NULL).sec();
+  assert(temp);
+  *temp = 0;
+  if (hit_set->contains(oid))
+    *temp = 1000000;
+  unsigned i = 0;
+  int last_n = pool.info.hit_set_search_last_n;
   for (map<time_t,HitSetRef>::reverse_iterator p =
-	 agent_state->hit_set_map.rbegin();
-       p != agent_state->hit_set_map.rend();
-       ++p) {
+       agent_state->hit_set_map.rbegin(); last_n > 0 &&
+       p != agent_state->hit_set_map.rend(); ++p, ++i) {
     if (p->second->contains(oid)) {
-      if (*atime < 0)
-	*atime = now - p->first;
-      if (temp)
-	++(*temp);
-      else
-	return;
+      *temp += pool.info.get_grade(i);
+      --last_n;
     }
   }
 }

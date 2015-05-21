@@ -941,10 +941,8 @@ protected:
   /// estimate object atime and temperature
   ///
   /// @param oid [in] object name
-  /// @param atime [out] seconds since last access (lower bound)
-  /// @param temperature [out] relative temperature (# hitset bins we appear in)
-  void agent_estimate_atime_temp(const hobject_t& oid,
-				 int *atime, int *temperature);
+  /// @param temperature [out] relative temperature (# consider both access time and frequency)
+  void agent_estimate_temp(const hobject_t& oid, int *temperature);
 
   /// stop the agent
   void agent_stop();
