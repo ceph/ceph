@@ -233,40 +233,6 @@ the ``gateway host``. To do so, execute the following on ``admin node``::
    ``gateway host``.
 
 
-Create a CGI wrapper script
-===========================
-
-The wrapper script provides the interface between the webserver and the radosgw
-process. This script needs to be in a web accessible location and should be
-executable.
-
-Execute the following steps on the ``gateway host``:
-
-#. Create the script::
-
-	sudo vi /var/www/html/s3gw.fcgi
-
-
-#. Add the following content to the script::
-
-	#!/bin/sh
-	exec /usr/bin/radosgw -c /etc/ceph/ceph.conf -n client.radosgw.gateway
-
-
-#. Provide execute permissions to the script::
-
-	sudo chmod +x /var/www/html/s3gw.fcgi
-
-
-Adjust CGI wrapper script permission
-====================================
-
-On some distros, ``apache`` should have execute permission on the ``s3gw.fcgi``
-script. To change permission on the file, execute::
-
-	sudo chown apache:apache /var/www/html/s3gw.fcgi
-
-
 Create Data Directory
 =====================
 
