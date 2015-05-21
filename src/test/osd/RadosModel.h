@@ -47,6 +47,7 @@ typename T::iterator rand_choose(T &cont) {
 enum TestOpType {
   TEST_OP_READ,
   TEST_OP_WRITE,
+  TEST_OP_WRITE_EXCL,
   TEST_OP_DELETE,
   TEST_OP_SNAP_CREATE,
   TEST_OP_SNAP_REMOVE,
@@ -61,7 +62,8 @@ enum TestOpType {
   TEST_OP_CACHE_FLUSH,
   TEST_OP_CACHE_TRY_FLUSH,
   TEST_OP_CACHE_EVICT,
-  TEST_OP_APPEND
+  TEST_OP_APPEND,
+  TEST_OP_APPEND_EXCL
 };
 
 class TestWatchContext : public librados::WatchCtx2 {
@@ -716,14 +718,17 @@ public:
   bufferlist rbuffer;
 
   bool do_append;
+  bool do_excl;
 
   WriteOp(int n,
 	  RadosTestContext *context,
 	  const string &oid,
 	  bool do_append,
+	  bool do_excl,
 	  TestOpStat *stat = 0)
     : TestOp(n, context, stat),
-      oid(oid), waiting_on(0), last_acked_tid(0), do_append(do_append)
+      oid(oid), waiting_on(0), last_acked_tid(0), do_append(do_append),
+      do_excl(do_excl)
   {}
 		
   void _begin()
@@ -795,6 +800,8 @@ public:
       } else {
 	op.write(i->first, to_write);
       }
+      if (do_excl && tid == 1)
+	op.assert_exists();
       context->io_ctx.aio_operate(
 	context->prefix+oid, completion,
 	&op);
