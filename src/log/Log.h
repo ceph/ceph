@@ -13,7 +13,7 @@
 #include "Entry.h"
 #include "EntryQueue.h"
 #include "SubsystemMap.h"
-#include "Graylog.h"
+#include "common/Graylog.h"
 
 namespace ceph {
 namespace log {

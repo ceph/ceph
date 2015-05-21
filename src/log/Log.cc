@@ -171,7 +171,7 @@ void Log::start_graylog()
 {
   pthread_mutex_lock(&m_flush_mutex);
   if (! m_graylog.get())
-    m_graylog = Graylog::Ref(new Graylog(m_subs));
+    m_graylog = Graylog::Ref(new Graylog(m_subs, "dlog"));
   pthread_mutex_unlock(&m_flush_mutex);
 }
 

@@ -64,6 +64,9 @@ OPTION(clog_to_monitors, OPT_STR, "default=true")
 OPTION(clog_to_syslog, OPT_STR, "false")
 OPTION(clog_to_syslog_level, OPT_STR, "info") // this level and above
 OPTION(clog_to_syslog_facility, OPT_STR, "default=daemon audit=local0")
+OPTION(clog_to_graylog, OPT_STR, "false")
+OPTION(clog_to_graylog_host, OPT_STR, "127.0.0.1")
+OPTION(clog_to_graylog_port, OPT_STR, "12201")
 
 OPTION(mon_cluster_log_to_syslog, OPT_STR, "default=false")
 OPTION(mon_cluster_log_to_syslog_level, OPT_STR, "info")   // this level and above
@@ -71,6 +74,9 @@ OPTION(mon_cluster_log_to_syslog_facility, OPT_STR, "daemon")
 OPTION(mon_cluster_log_file, OPT_STR,
     "default=/var/log/ceph/$cluster.$channel.log cluster=/var/log/ceph/$cluster.log")
 OPTION(mon_cluster_log_file_level, OPT_STR, "info")
+OPTION(mon_cluster_log_to_graylog, OPT_STR, "false")
+OPTION(mon_cluster_log_to_graylog_host, OPT_STR, "127.0.0.1")
+OPTION(mon_cluster_log_to_graylog_port, OPT_STR, "12201")
 
 OPTION(enable_experimental_unrecoverable_data_corrupting_features, OPT_STR, "")
 
