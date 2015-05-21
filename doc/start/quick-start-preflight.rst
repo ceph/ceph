@@ -249,12 +249,12 @@ strict. You may need to adjust your firewall settings allow inbound requests so
 that clients in your network can communicate with daemons on your Ceph nodes.
 
 For ``firewalld`` on RHEL 7, add port ``6789`` for Ceph Monitor nodes and ports
-``6800:7100`` for Ceph OSDs to the public zone and ensure that you make the
+``6800:7300`` for Ceph OSDs to the public zone and ensure that you make the
 setting permanent so that it is enabled on reboot. For example::
 
 	sudo firewall-cmd --zone=public --add-port=6789/tcp --permanent
 
-For ``iptables``, add port ``6789`` for Ceph Monitors and ports ``6800:7100`` 
+For ``iptables``, add port ``6789`` for Ceph Monitors and ports ``6800:7300``
 for Ceph OSDs. For example::
 
 	sudo iptables -A INPUT -i {iface} -p tcp -s {ip-address}/{netmask} --dport 6789 -j ACCEPT
