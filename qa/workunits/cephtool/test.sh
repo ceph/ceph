@@ -1036,17 +1036,26 @@ function test_mon_osd()
 
   ceph osd create $uuid $gap_start 2>&1 | grep 'EINVAL'
 
+  #
+  # When CEPH_CLI_TEST_DUP_COMMAND is set, osd create
+  # is repeated and consumes two osd id, not just one.
+  #
+  local next_osd
+  if test "$CEPH_CLI_TEST_DUP_COMMAND" ; then
+      next_osd=$((gap_start + 1))
+  else
+      next_osd=$gap_start
+  fi
   id=`ceph osd create`
-  [ "$id" = "$gap_start" ]
-  gap_start=$((gap_start + 1))
+  [ "$id" = "$next_osd" ]
 
+  next_osd=$((id + 1))
   id=`ceph osd create $(uuidgen)`
-  [ "$id" = "$gap_start" ]
-  gap_start=$((gap_start + 1))
+  [ "$id" = "$next_osd" ]
 
-  id=`ceph osd create $(uuidgen) $gap_start`
-  [ "$id" = "$gap_start" ]
-  gap_start=$((gap_start + 1))
+  next_osd=$((id + 1))
+  id=`ceph osd create $(uuidgen) $next_osd`
+  [ "$id" = "$next_osd" ]
 
   local new_osds=$(echo $(ceph osd ls))
   for id in $(echo $new_osds | sed -e "s/$old_osds//") ; do
