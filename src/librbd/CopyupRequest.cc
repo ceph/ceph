@@ -237,7 +237,12 @@ private:
       pending_copyups = m_pending_copyups.dec();
       ldout(cct, 20) << "COPYUP (" << pending_copyups << " pending)"
                      << dendl;
-      if (r < 0) {
+      if (r == -ENOENT) {
+        // hide the -ENOENT error if this is the last op
+        if (pending_copyups == 0) {
+          complete_requests(0);
+        }
+      } else if (r < 0) {
         complete_requests(r);
       }
       return (pending_copyups == 0);
