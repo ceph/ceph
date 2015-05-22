@@ -37,10 +37,10 @@ function run() {
 function TEST_default_deprectated_0() {
     local dir=$1
     # explicitly set the default crush rule
-    expected=66
+    local expected=66
     run_mon $dir a \
         --osd_pool_default_crush_replicated_ruleset $expected || return 1
-    ./ceph --format json osd dump | grep '"crush_ruleset":'$expected
+    ./ceph osd pool get rbd crush_ruleset | grep 'ruleset: '$expected || return 1
     CEPH_ARGS='' ./ceph --admin-daemon $dir/ceph-mon.a.asok log flush || return 1
     ! grep "osd_pool_default_crush_rule is deprecated " $dir/mon.a.log || return 1
 }
@@ -48,22 +48,22 @@ function TEST_default_deprectated_0() {
 function TEST_default_deprectated_1() {
     local dir=$1
     # explicitly set the default crush rule using deprecated option
-    expected=55
+    local expected=55
     run_mon $dir a \
         --osd_pool_default_crush_rule $expected || return 1
-    ./ceph --format json osd dump | grep '"crush_ruleset":'$expected
+    ./ceph osd pool get rbd crush_ruleset | grep 'ruleset: '$expected || return 1
     CEPH_ARGS='' ./ceph --admin-daemon $dir/ceph-mon.a.asok log flush || return 1
     grep "osd_pool_default_crush_rule is deprecated " $dir/mon.a.log || return 1
 }
 
 function TEST_default_deprectated_2() {
     local dir=$1
-    expected=77
-    unexpected=33
+    local expected=77
+    local unexpected=33
     run_mon $dir a \
         --osd_pool_default_crush_rule $expected \
         --osd_pool_default_crush_replicated_ruleset $unexpected || return 1
-    ./ceph --format json osd dump | grep '"crush_ruleset":'$expected
+    ./ceph osd pool get rbd crush_ruleset | grep 'ruleset: '$expected || return 1
     ! ./ceph --format json osd dump | grep '"crush_ruleset":'$unexpected || return 1
     CEPH_ARGS='' ./ceph --admin-daemon $dir/ceph-mon.a.asok log flush || return 1
     grep "osd_pool_default_crush_rule is deprecated " $dir/mon.a.log || return 1
@@ -210,7 +210,6 @@ function TEST_replicated_pool() {
         grep "pool 'replicated' created" || return 1
     ./ceph osd pool create replicated 12 12 replicated replicated_ruleset 2>&1 | \
         grep 'already exists' || return 1
-    ! ./ceph osd pool create replicated0 12 12 replicated INVALIDRULESET
     # default is replicated
     ./ceph osd pool create replicated1 12 12 2>&1 | \
         grep "pool 'replicated1' created" || return 1
