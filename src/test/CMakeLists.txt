@@ -1111,6 +1111,7 @@ add_executable(test_librbd
   librbd/test_fixture.cc
   librbd/test_ImageWatcher.cc
   librbd/test_internal.cc
+  librbd/test_support.cc
   librbd/test_main.cc
   $<TARGET_OBJECTS:heap_profiler_objs>
   ${CMAKE_SOURCE_DIR}/src/common/TextTable.cc
