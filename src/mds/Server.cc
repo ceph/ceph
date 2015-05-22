@@ -1078,7 +1078,13 @@ void Server::reply_client_request(MDRequestRef& mdr, MClientReply *reply)
   mdr->mark_event("replying");
 
   // note successful request in session map?
-  if (req->may_write() && mdr->session && reply->get_result() == 0) {
+  //
+  // setfilelock requests are special, they only modify states in MDS memory.
+  // The states get lost when MDS fails. If Client re-send a completed
+  // setfilelock request, it means that client did not receive corresponding
+  // setfilelock reply.  So MDS should re-execute the setfilelock request.
+  if (req->may_write() && req->get_op() != CEPH_MDS_OP_SETFILELOCK &&
+      reply->get_result() == 0 && mdr->session) {
     inodeno_t created = mdr->alloc_ino ? mdr->alloc_ino : mdr->used_prealloc_ino;
     mdr->session->add_completed_request(mdr->reqid.tid, created);
     if (mdr->ls) {
