@@ -7,6 +7,7 @@ import yaml
 from cStringIO import StringIO
 from tempfile import NamedTemporaryFile
 
+from teuthology.config import config as teuth_config
 from teuthology.exceptions import CommandFailedError
 from teuthology.repo_utils import fetch_repo
 
@@ -242,4 +243,24 @@ class Ansible(Task):
         super(Ansible, self).teardown()
 
 
+class CephLab(Ansible):
+    __doc__ = """
+    A very simple subclass of Ansible that defaults to:
+
+    - ansible:
+        repo: {git_base}ceph-cm-ansible.git
+        playbook: cephlab.yml
+    """.format(git_base=teuth_config.ceph_git_base_url)
+
+    def __init__(self, ctx, config):
+        config = config or dict()
+        if 'playbook' not in config:
+            config['playbook'] = 'cephlab.yml'
+        if 'repo' not in config:
+            config['repo'] = os.path.join(teuth_config.ceph_git_base_url,
+                                          'ceph-cm-ansible.git')
+        super(CephLab, self).__init__(ctx, config)
+
+
 task = Ansible
+cephlab = CephLab
