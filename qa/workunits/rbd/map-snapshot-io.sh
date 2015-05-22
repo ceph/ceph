@@ -10,11 +10,12 @@ sudo chown ubuntu /sys/bus/rbd/remove
 rbd create image -s 100
 rbd map image
 udevadm settle  # note: newer versions of rbd do this for you.
-dd if=/dev/zero of=/dev/rbd/rbd/image oflag=direct count=10
+#use sudo for dd since rhel ownership for /dev/rbd/rbd/img is root
+sudo dd if=/dev/zero of=/dev/rbd/rbd/image oflag=direct count=10
 rbd snap create image@s1
-dd if=/dev/zero of=/dev/rbd/rbd/image oflag=direct count=10   # used to fail
+sudo dd if=/dev/zero of=/dev/rbd/rbd/image oflag=direct count=10   # used to fail
 rbd snap rm image@s1
-dd if=/dev/zero of=/dev/rbd/rbd/image oflag=direct count=10
+sudo dd if=/dev/zero of=/dev/rbd/rbd/image oflag=direct count=10
 
 udevadm settle  # udev is does blkid on device close; yeesh!  see #4183
 
@@ -24,6 +25,10 @@ rbd rm image
 # wait a few seconds for the async kernel bits to clean themselves up
 sleep 4
 rbd rm image || :
+
+#restore original
+sudo chown root /sys/bus/rbd/add
+sudo chown root /sys/bus/rbd/remove
 
 echo OK
 
