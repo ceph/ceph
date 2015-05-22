@@ -161,7 +161,7 @@ class Ansible(Task):
         we're using an existing file.
         """
         hosts = self.cluster.remotes.keys()
-        hostnames = [remote.name.split('@')[-1] for remote in hosts]
+        hostnames = [remote.hostname for remote in hosts]
         hostnames.sort()
         hosts_str = '\n'.join(hostnames + [''])
         hosts_file = NamedTemporaryFile(prefix="teuth_ansible_hosts_",
@@ -223,7 +223,7 @@ class Ansible(Task):
         """
         Assemble the list of args to be executed
         """
-        fqdns = [r.name.split('@')[-1] for r in self.cluster.remotes.keys()]
+        fqdns = [r.hostname for r in self.cluster.remotes.keys()]
         args = [
             'ansible-playbook', '-v',
             '-i', self.inventory,
