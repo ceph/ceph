@@ -520,8 +520,7 @@ int XioConnection::discard_input_queue(uint32_t flags)
     pthread_spin_unlock(&sp);
 
   // mqueue
-  int ix, q_size =  disc_q.size();
-  for (ix = 0; ix < q_size; ++ix) {
+  while (!disc_q.empty()) {
     Message::Queue::iterator q_iter = disc_q.begin();
     Message* m = &(*q_iter);
     disc_q.erase(q_iter);
@@ -529,8 +528,7 @@ int XioConnection::discard_input_queue(uint32_t flags)
   }
 
   // requeue
-  q_size =  deferred_q.size();
-  for (ix = 0; ix < q_size; ++ix) {
+  while (!deferred_q.empty()) {
     XioSubmit::Queue::iterator q_iter = deferred_q.begin();
     XioSubmit* xs = &(*q_iter);
     XioMsg* xmsg;
@@ -539,8 +537,7 @@ int XioConnection::discard_input_queue(uint32_t flags)
 	xmsg = static_cast<XioMsg*>(xs);
 	deferred_q.erase(q_iter);
 	// release once for each chained xio_msg
-	for (ix = 0; ix < int(xmsg->hdr.msg_cnt); ++ix)
-	  xmsg->put();
+	xmsg->put(xmsg->hdr.msg_cnt);
 	break;
       case XioSubmit::INCOMING_MSG_RELEASE:
 	deferred_q.erase(q_iter);
