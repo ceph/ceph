@@ -2318,7 +2318,7 @@ void OSDMap::dump(Formatter *f) const
   }
   f->close_section(); // primary_temp
 
-  f->open_array_section("blacklist");
+  f->open_object_section("blacklist");
   for (ceph::unordered_map<entity_addr_t,utime_t>::const_iterator p = blacklist.begin();
        p != blacklist.end();
        ++p) {
