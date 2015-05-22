@@ -19,8 +19,8 @@ class TestAnsibleTask(TestTask):
     def setup(self):
         self.ctx = FakeNamespace()
         self.ctx.cluster = Cluster()
-        self.ctx.cluster.add(Remote('remote1'), ['role1'])
-        self.ctx.cluster.add(Remote('remote2'), ['role2'])
+        self.ctx.cluster.add(Remote('user@remote1'), ['role1'])
+        self.ctx.cluster.add(Remote('user@remote2'), ['role2'])
         self.ctx.config = dict()
 
     def test_setup(self):
