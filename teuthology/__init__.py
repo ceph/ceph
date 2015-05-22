@@ -4,9 +4,19 @@ from .orchestra import monkey
 monkey.patch_all()
 
 import logging
+import os
+import sys
 
 
 __version__ = '0.1.0'
+
+
+# If we are running inside a virtualenv, ensure we have its 'bin' directory in
+# our PATH. This doesn't happen automatically if scripts are called without
+# first activating the virtualenv.
+exec_dir = os.path.abspath(os.path.dirname(sys.argv[0]))
+if os.path.split(exec_dir)[-1] == 'bin' and exec_dir not in os.environ['PATH']:
+    os.environ['PATH'] = ':'.join((exec_dir, os.environ['PATH']))
 
 # We don't need to see log entries for each connection opened
 logging.getLogger('requests.packages.urllib3.connectionpool').setLevel(
