@@ -1527,7 +1527,8 @@ int get_object_rados(librados::IoCtx &ioctx, bufferlist &bl, bool no_overwrite)
   return 0;
 }
 
-int get_object(ObjectStore *store, coll_t coll, bufferlist &bl, OSDMap &curmap)
+int get_object(ObjectStore *store, coll_t coll, bufferlist &bl, OSDMap &curmap,
+               bool *skipped_objects)
 {
   ObjectStore::Transaction tran;
   ObjectStore::Transaction *t = &tran;
@@ -1563,6 +1564,7 @@ int get_object(ObjectStore *store, coll_t coll, bufferlist &bl, OSDMap &curmap)
      
     if (coll_pgid.pgid != pgid) {
       cerr << "Skipping object '" << ob.hoid << "' which no longer belongs in exported pg" << std::endl;
+      *skipped_objects = true;
       skip_object(bl);
       return 0;
     }
@@ -1871,6 +1873,7 @@ int do_import(ObjectStore *store, OSDSuperblock& sb, bool force)
   bufferlist ebl;
   pg_info_t info;
   PGLog::IndexedLog log;
+  bool skipped_objects = false;
 
   if (!dry_run)
     finish_remove_pgs(store);
@@ -1992,7 +1995,7 @@ int do_import(ObjectStore *store, OSDSuperblock& sb, bool force)
     }
     switch(type) {
     case TYPE_OBJECT_BEGIN:
-      ret = get_object(store, coll, ebl, curmap);
+      ret = get_object(store, coll, ebl, curmap, &skipped_objects);
       if (ret) return ret;
       break;
     case TYPE_PG_METADATA:
@@ -2047,6 +2050,10 @@ int do_import(ObjectStore *store, OSDSuperblock& sb, bool force)
       dump_log(formatter, cerr, newlog, missing, ms.divergent_priors);
       delete formatter;
     }
+
+    // Just like a split invalidate stats since the object count is changed
+    if (skipped_objects)
+      ms.info.stats.stats_invalid = true;
 
     ret = write_pg(t, ms.map_epoch, ms.info, newlog, ms.past_intervals, ms.divergent_priors);
     if (ret) return ret;
