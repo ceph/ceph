@@ -2,7 +2,8 @@ if ENABLE_SERVER
 if WITH_OSD
 
 check_SCRIPTS += \
-	test/erasure-code/test-erasure-code.sh
+	test/erasure-code/test-erasure-code.sh \
+	test/erasure-code/test-erasure-eio.sh
 
 noinst_HEADERS += \
 	test/erasure-code/ceph_erasure_code_benchmark.h
