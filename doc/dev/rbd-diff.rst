@@ -37,7 +37,7 @@ Size
 ----
 
 - u8: 's'
-- u64: (ending) image size
+- le64: (ending) image size
 
 Data Records
 ~~~~~~~~~~~~
