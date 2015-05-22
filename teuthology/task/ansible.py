@@ -1,3 +1,4 @@
+import json
 import logging
 import requests
 import os
@@ -224,8 +225,12 @@ class Ansible(Task):
         Assemble the list of args to be executed
         """
         fqdns = [r.hostname for r in self.cluster.remotes.keys()]
+        # Assume all remotes use the same username
+        user = self.cluster.remotes.keys()[0].user
+        extra_vars = dict(ansible_ssh_user=user)
         args = [
             'ansible-playbook', '-v',
+            "--extra-vars='%s'" % json.dumps(extra_vars),
             '-i', self.inventory,
             '--limit', ','.join(fqdns),
             self.playbook_file.name,
