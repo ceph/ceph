@@ -419,7 +419,9 @@ function reset_leftover_dev() {
     local path=$1
 
     losetup --all | sed -e 's/://' | while read dev id associated_path ; do
-        if test $associated_path = "($path)" ; then
+        # if $path has been deleted with a dev attached, then $associated_path
+        # will carry "($path (deleted))".
+        if test "$associated_path" = "($path)" ; then
             reset_dev $dev
             losetup --detach $dev
         fi
