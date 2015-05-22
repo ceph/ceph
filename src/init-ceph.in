@@ -344,6 +344,7 @@ for name in $what; do
 		[ -n "$fs_opt" ] && fs_opt="-o $fs_opt"
 		[ -n "$pre_mount" ] && do_cmd "$pre_mount"
 
+		do_root_cmd_okfail "mkdir -p $fs_path"
 		if [ "$fs_type" = "btrfs" ]; then
 		    echo Mounting Btrfs on $host:$fs_path
 		    do_root_cmd_okfail "modprobe btrfs ; btrfs device scan || btrfsctl -a ; egrep -q '^[^ ]+ $fs_path ' /proc/mounts || mount -t btrfs $fs_opt $first_dev $fs_path"
