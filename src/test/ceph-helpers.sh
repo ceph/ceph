@@ -652,7 +652,7 @@ function get_config() {
     local config=$3
 
     CEPH_ARGS='' \
-        ceph --format xml daemon $dir/ceph-mon.$id.asok \
+        ceph --format xml daemon $dir/ceph-$daemon.$id.asok \
         config get $config 2> /dev/null | \
         $XMLSTARLET sel -t -m "//$config" -v . -n
 }
@@ -660,8 +660,46 @@ function get_config() {
 function test_get_config() {
     local dir=$1
 
+    # override the default config using command line arg and check it
     setup $dir || return 1
     run_mon $dir a --osd_pool_default_size=1 || return 1
+    test $(get_config mon a osd_pool_default_size) = 1 || return 1
+    run_osd $dir 0 --osd_max_scrubs=3 || return 1
+    test $(get_config osd 0 osd_max_scrubs) = 3 || return 1
+    teardown $dir || return 1
+}
+
+##
+# Set the **config** to specified **value**, via the config set command
+# of the admin socket of **daemon**.**id**
+#
+# @param daemon mon or osd
+# @parma id mon or osd ID
+# @param config the configuration variable name as found in config_opts.h
+# @param value the config value
+# @return 0 on success, 1 on error
+#
+function set_config() {
+    local daemon=$1
+    local id=$2
+    local config=$3
+    local value=$4
+
+    CEPH_ARGS='' \
+        ceph --format xml daemon $dir/ceph-$daemon.$id.asok \
+        config set $config $value 2> /dev/null | \
+        $XMLSTARLET sel -Q -t -m "//success" -v .
+}
+
+function test_set_config() {
+    local dir=$1
+
+    setup $dir || return 1
+    run_mon $dir a --osd_pool_default_size=1 || return 1
+    test $(get_config mon a ms_crc_header) = true || return 1
+    set_config mon a ms_crc_header false || return 1
+    test $(get_config mon a ms_crc_header) = false || return 1
+    set_config mon a ms_crc_header true || return 1
     test $(get_config mon a ms_crc_header) = true || return 1
     teardown $dir || return 1
 }
