@@ -1290,6 +1290,8 @@ static int translate_flags(int flags)
     op_flags |= CEPH_OSD_FLAG_SKIPRWLOCKS;
   if (flags & librados::OPERATION_IGNORE_OVERLAY)
     op_flags |= CEPH_OSD_FLAG_IGNORE_OVERLAY;
+  if (flags & librados::OPERATION_TIER_NOCACHE)
+    op_flags |= CEPH_OSD_FLAG_TIER_NOCACHE;
 
   return op_flags;
 }

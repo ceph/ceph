@@ -410,6 +410,7 @@ enum {
 						      pool uses pool snaps */
 	CEPH_OSD_FLAG_REDIRECTED   = 0x200000,  /* op has been redirected */
 	CEPH_OSD_FLAG_KNOWN_REDIR = 0x400000,  /* redirect bit is authoritative */
+	CEPH_OSD_FLAG_TIER_NOCACHE = 0x800000,  /* DO NOT cache data in any cache-mode */
 };
 
 enum {

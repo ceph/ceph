@@ -50,6 +50,7 @@ const char *ceph_osd_flag_name(unsigned flag)
   case CEPH_OSD_FLAG_ENFORCE_SNAPC: return "enforce_snapc";
   case CEPH_OSD_FLAG_REDIRECTED: return "redirected";
   case CEPH_OSD_FLAG_KNOWN_REDIR: return "known_if_redirected";
+  case CEPH_OSD_FLAG_TIER_NOCACHE: return "tier_nocache";
   default: return "???";
   }
 }

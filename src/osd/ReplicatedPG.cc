@@ -1807,6 +1807,11 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op,
   MOSDOp *m = static_cast<MOSDOp*>(op->get_req());
   const object_locator_t& oloc = m->get_object_locator();
 
+  if (m->has_flag(CEPH_OSD_FLAG_TIER_NOCACHE)) {
+    do_cache_redirect(op);
+    return true;
+  }
+
   if (must_promote || op->need_promote()) {
     promote_object(obc, missing_oid, oloc, op);
     return true;
