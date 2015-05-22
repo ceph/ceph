@@ -4329,6 +4329,13 @@ bool Monitor::_scrub(ScrubResult *r,
     if (prefixes.count(k.first) == 0)
       continue;
 
+    if (cct->_conf->mon_scrub_inject_missing_keys > 0.0 &&
+        (rand() % 10000 < cct->_conf->mon_scrub_inject_missing_keys*10000.0)) {
+      dout(10) << __func__ << " inject missing key, skipping (" << k << ")"
+               << dendl;
+      continue;
+    }
+
     bufferlist bl;
     store->get(k.first, k.second, bl);
     uint32_t key_crc = bl.crc32c(0);
