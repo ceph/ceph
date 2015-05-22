@@ -1108,11 +1108,16 @@ struct ExportContext {
   uint64_t totalsize;
   MyProgressContext pc;
 
-  ExportContext(librbd::Image *i, int f, uint64_t t) :
+  SimpleThrottle throttle;
+  Mutex lock;
+
+  ExportContext(librbd::Image *i, int f, uint64_t t, int max_ops) :
     image(i),
     fd(f),
     totalsize(t),
-    pc("Exporting image")
+    pc("Exporting image"),
+    throttle(max_ops, true),
+    lock("ExportContext::lock")
   {}
 };
 
@@ -1243,37 +1248,95 @@ static int do_export(librbd::Image& image, const char *path)
   return r;
 }
 
-static int export_diff_cb(uint64_t ofs, size_t _len, int exists, void *arg)
-{
-  ExportContext *ec = static_cast<ExportContext *>(arg);
-  int r;
-
-  // extent
-  bufferlist bl;
-  __u8 tag = exists ? 'w' : 'z';
-  ::encode(tag, bl);
-  ::encode(ofs, bl);
-  uint64_t len = _len;
-  ::encode(len, bl);
-  r = bl.write_fd(ec->fd);
-  if (r < 0)
-    return r;
-
-  if (exists) {
-    // read block
-    bl.clear();
-    r = ec->image->read2(ofs, len, bl, LIBRADOS_OP_FLAG_FADVISE_NOCACHE);
-    if (r < 0)
-      return r;
-    r = bl.write_fd(ec->fd);
-    if (r < 0)
-      return r;
+class C_ExportDiff {
+public:
+  C_ExportDiff(ExportContext *ec, uint64_t offset, uint64_t length)
+    : m_export_context(ec), m_offset(offset), m_length(length)
+  {
   }
 
-  ec->pc.update_progress(ofs, ec->totalsize);
+  int send() {
+    if (m_export_context->throttle.pending_error()) {
+      return m_export_context->throttle.wait_for_ret();
+    }
+    m_export_context->throttle.start_op();
 
-  return 0;
-}
+    librbd::RBD::AioCompletion *aio_completion =
+      new librbd::RBD::AioCompletion(this, &C_ExportDiff::aio_callback);
+    int op_flags = LIBRADOS_OP_FLAG_FADVISE_NOCACHE;
+    int r = m_export_context->image->aio_read2(m_offset, m_length, m_read_data,
+                                               aio_completion, op_flags);
+    if (r < 0) {
+      aio_completion->release();
+      complete(r);
+    }
+    return r;
+  }
+
+  static int export_diff_cb(uint64_t offset, size_t length, int exists,
+                            void *arg) {
+    ExportContext *ec = reinterpret_cast<ExportContext *>(arg);
+
+    int r;
+    {
+      if (exists) {
+        C_ExportDiff *context = new C_ExportDiff(ec, offset, length);
+        r = context->send();
+      } else {
+        Mutex::Locker lock(ec->lock);
+        r = write_extent(ec, offset, length, false);
+      }
+    }
+    ec->pc.update_progress(offset, ec->totalsize);
+    return r;
+  }
+
+private:
+  ExportContext *m_export_context;
+  uint64_t m_offset;
+  uint64_t m_length;
+  bufferlist m_read_data;
+
+  void complete(int r) {
+    {
+      Mutex::Locker locker(m_export_context->lock);
+      if (r >= 0) {
+        r = write_extent(m_export_context, m_offset, m_length,
+                         !m_read_data.is_zero());
+        if (r == 0) {
+          // block
+          r = m_read_data.write_fd(m_export_context->fd);
+        }
+      }
+    }
+    m_export_context->throttle.end_op(r);
+    delete this;
+  }
+
+  static void aio_callback(librbd::completion_t completion, void *arg)
+  {
+    librbd::RBD::AioCompletion *aio_completion =
+      reinterpret_cast<librbd::RBD::AioCompletion*>(completion);
+    C_ExportDiff *context = reinterpret_cast<C_ExportDiff*>(arg);
+
+    context->complete(aio_completion->get_return_value());
+    aio_completion->release();
+  }
+
+  static int write_extent(ExportContext *ec, uint64_t offset, uint64_t length,
+                          bool exists) {
+    assert(ec->lock.is_locked());
+
+    // extent
+    bufferlist bl;
+    __u8 tag = exists ? 'w' : 'z';
+    ::encode(tag, bl);
+    ::encode(offset, bl);
+    ::encode(length, bl);
+    int r = bl.write_fd(ec->fd);
+    return r;
+  }
+};
 
 static int do_export_diff(librbd::Image& image, const char *fromsnapname,
 			  const char *endsnapname, bool whole_object,
@@ -1326,11 +1389,18 @@ static int do_export_diff(librbd::Image& image, const char *fromsnapname,
     }
   }
 
-  ExportContext ec(&image, fd, info.size);
+  ExportContext ec(&image, fd, info.size,
+                   g_conf->rbd_concurrent_management_ops);
   r = image.diff_iterate2(fromsnapname, 0, info.size, true, whole_object,
-                          export_diff_cb, (void *)&ec);
-  if (r < 0)
+                          &C_ExportDiff::export_diff_cb, (void *)&ec);
+  if (r < 0) {
     goto out;
+  }
+
+  r = ec.throttle.wait_for_ret();
+  if (r < 0) {
+    goto out;
+  }
 
   {
     __u8 tag = 'e';
