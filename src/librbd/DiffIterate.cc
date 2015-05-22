@@ -64,8 +64,14 @@ public:
 
       for (Diffs::const_iterator d = diffs.begin(); d != diffs.end(); ++d) {
         m_lock.Unlock();
-        m_callback(d->get<0>(), d->get<1>(), d->get<2>(), m_callback_arg);
+        int r = m_callback(d->get<0>(), d->get<1>(), d->get<2>(),
+                           m_callback_arg);
         m_lock.Lock();
+
+        if (m_return_value == 0 && r < 0) {
+          m_return_value = r;
+          return m_return_value;
+        }
       }
       ++m_waiting_request;
     }
@@ -360,7 +366,10 @@ int DiffIterate::execute() {
                             OBJECT_DIFF_STATE_UPDATED);
           for (std::vector<ObjectExtent>::iterator q = p->second.begin();
                q != p->second.end(); ++q) {
-            m_callback(off + q->offset, q->length, updated, m_callback_arg);
+            r = m_callback(off + q->offset, q->length, updated, m_callback_arg);
+            if (r < 0) {
+              return r;
+            }
           }
         }
       } else {
