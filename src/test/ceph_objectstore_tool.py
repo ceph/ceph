@@ -224,8 +224,7 @@ def check_journal(jsondict):
         logging.error("Key 'entries' not in dump-journal output")
         errors += 1
     elif len(jsondict['entries']) == 0:
-        logging.warning("No entries in journal found, probably a problem")
-        errors += 1
+        logging.info("No entries in journal found")
     else:
         errors += check_journal_entries(jsondict['entries'])
     return errors
@@ -285,6 +284,35 @@ def check_transaction_ops(ops, enum, tnum):
             logging.error("Key 'op_name' missing from entry {e} trans {t} op {o}".format(e=enum, t=tnum, o=onum))
             errors += 1
     return errors
+
+
+def test_dump_journal(CFSD_PREFIX, osds):
+    ERRORS = 0
+    pid = os.getpid()
+    TMPFILE = r"/tmp/tmp.{pid}".format(pid=pid)
+
+    for osd in osds:
+        # Test --op dump-journal by loading json
+        cmd = (CFSD_PREFIX + "--op dump-journal --format json").format(osd=osd)
+        logging.debug(cmd)
+        tmpfd = open(TMPFILE, "w")
+        ret = call(cmd, shell=True, stdout=tmpfd)
+        if ret != 0:
+            logging.error("Bad exit status {ret} from {cmd}".format(ret=ret, cmd=cmd))
+            ERRORS += 1
+            continue
+        tmpfd.close()
+        tmpfd = open(TMPFILE, "r")
+        jsondict = json.load(tmpfd)
+        tmpfd.close()
+        os.unlink(TMPFILE)
+
+        journal_errors = check_journal(jsondict)
+        if journal_errors is not 0:
+            logging.error(jsondict)
+        ERRORS += journal_errors
+
+    return ERRORS
 
 
 CEPH_DIR = "ceph_objectstore_tool_dir"
@@ -609,25 +637,9 @@ def main(argv):
     OSDS = get_osds(ALLPGS[0], OSDDIR)
     osd = OSDS[0]
 
-    # Test --op dump-journal by loading json
-    print "Test --op dump-journal"
-    cmd = (CFSD_PREFIX + "--op dump-journal --format json").format(osd=osd)
-    logging.debug(cmd)
-    tmpfd = open(TMPFILE, "w")
-    ret = call(cmd, shell=True, stdout=tmpfd)
-    if ret != 0:
-        logging.error("Bad exit status {ret} from {cmd}".format(ret=ret, cmd=cmd))
-        ERRORS += 1
-    tmpfd.close()
-    tmpfd = open(TMPFILE, "r")
-    jsondict = json.load(tmpfd)
-    tmpfd.close()
-    os.unlink(TMPFILE)
-
-    journal_errors = check_journal(jsondict)
-    if journal_errors is not 0:
-        logging.error(jsondict)
-    ERRORS += journal_errors
+    print "Test all --op dump-journal"
+    ALLOSDS = [f for f in os.listdir(OSDDIR) if os.path.isdir(os.path.join(OSDDIR, f)) and string.find(f, "osd") == 0]
+    ERRORS += test_dump_journal(CFSD_PREFIX, ALLOSDS)
 
     # Test --op list and generate json for all objects
     print "Test --op list variants"
@@ -999,6 +1011,10 @@ def main(argv):
         ERRORS += data_errors
     else:
         logging.warning("SKIPPING CHECKING IMPORT DATA DUE TO PREVIOUS FAILURES")
+
+    print "Test all --op dump-journal again"
+    ALLOSDS = [f for f in os.listdir(OSDDIR) if os.path.isdir(os.path.join(OSDDIR, f)) and string.find(f, "osd") == 0]
+    ERRORS += test_dump_journal(CFSD_PREFIX, ALLOSDS)
 
     vstart(new=False)
     wait_for_health()
