@@ -13,6 +13,7 @@
 #include "osdc/ObjectCacher.h"
 #include "include/assert.h"
 
+class Client;
 struct MetaSession;
 class Dentry;
 class Dir;
@@ -147,7 +148,7 @@ public:
 #define I_DIR_ORDERED 2
 
 struct Inode {
-  CephContext *cct;
+  Client *client;
 
   // -- the actual inode --
   inodeno_t ino;
@@ -267,19 +268,8 @@ struct Inode {
   void make_long_path(filepath& p);
   void make_nosnap_relative_path(filepath& p);
 
-  void get() {
-    _ref++;
-    lsubdout(cct, mds, 15) << "inode.get on " << this << " " <<  ino << '.' << snapid
-                           << " now " << _ref << dendl;
-  }
-  /// private method to put a reference; see Client::put_inode()
-  int _put(int n=1) {
-    _ref -= n; 
-    lsubdout(cct, mds, 15) << "inode.put on " << this << " " << ino << '.' << snapid
-                           << " now " << _ref << dendl;
-    assert(_ref >= 0);
-    return _ref;
-  }
+  void get();
+  int _put(int n=1);
 
   int get_num_ref() {
     return _ref;
@@ -297,8 +287,8 @@ struct Inode {
   ceph_lock_state_t *fcntl_locks;
   ceph_lock_state_t *flock_locks;
 
-  Inode(CephContext *cct_, vinodeno_t vino, ceph_file_layout *newlayout)
-    : cct(cct_), ino(vino.ino), snapid(vino.snapid),
+  Inode(Client *c, vinodeno_t vino, ceph_file_layout *newlayout)
+    : client(c), ino(vino.ino), snapid(vino.snapid),
       rdev(0), mode(0), uid(0), gid(0), nlink(0),
       size(0), truncate_seq(1), truncate_size(-1),
       time_warp_seq(0), max_size(0), version(0), xattr_version(0),

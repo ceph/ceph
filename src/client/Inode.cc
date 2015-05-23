@@ -1,10 +1,11 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#include "MetaSession.h"
+#include "Client.h"
 #include "Inode.h"
 #include "Dentry.h"
 #include "Dir.h"
+#include "MetaSession.h"
 #include "ClientSnapRealm.h"
 
 ostream& operator<<(ostream &out, Inode &in)
@@ -126,7 +127,7 @@ int Inode::put_cap_ref(int cap)
     if (cap & 1) {
       int c = 1 << n;
       if (cap_refs[c] <= 0) {
-	lderr(cct) << "put_cap_ref " << ccap_string(c) << " went negative on " << *this << dendl;
+	lderr(client->cct) << "put_cap_ref " << ccap_string(c) << " went negative on " << *this << dendl;
 	assert(cap_refs[c] > 0);
       }
       if (--cap_refs[c] == 0)
@@ -151,7 +152,7 @@ bool Inode::cap_is_valid(Cap* cap)
     << "cap expire  " << cap->session->cap_ttl << std::endl
     << "cur time    " << ceph_clock_now(cct) << std::endl;*/
   if ((cap->session->cap_gen <= cap->gen)
-      && (ceph_clock_now(cct) < cap->session->cap_ttl)) {
+      && (ceph_clock_now(client->cct) < cap->session->cap_ttl)) {
     return true;
   }
   return true;
@@ -268,7 +269,7 @@ Dir *Inode::open_dir()
 {
   if (!dir) {
     dir = new Dir(this);
-    lsubdout(cct, mds, 15) << "open_dir " << dir << " on " << this << dendl;
+    lsubdout(client->cct, client, 15) << "open_dir " << dir << " on " << this << dendl;
     assert(dn_set.size() < 2); // dirs can't be hard-linked
     if (!dn_set.empty())
       (*dn_set.begin())->get();      // pin dentry
@@ -305,6 +306,21 @@ bool Inode::check_mode(uid_t ruid, gid_t rgid, gid_t *sgids, int sgids_count, ui
   }
 
   return (mode & fmode) == fmode;
+}
+
+void Inode::get() {
+  _ref++;
+  lsubdout(client->cct, client, 15) << "inode.get on " << this << " " <<  ino << '.' << snapid
+				    << " now " << _ref << dendl;
+}
+
+//private method to put a reference; see Client::put_inode()
+int Inode::_put(int n) {
+  _ref -= n;
+  lsubdout(client->cct, client, 15) << "inode.put on " << this << " " << ino << '.' << snapid
+				    << " now " << _ref << dendl;
+  assert(_ref >= 0);
+  return _ref;
 }
 
 

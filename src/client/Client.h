@@ -47,11 +47,12 @@ using std::fstream;
 #include "common/Mutex.h"
 #include "common/Timer.h"
 #include "common/Finisher.h"
-
 #include "common/compiler_extensions.h"
 #include "common/cmdparse.h"
 
 #include "osdc/ObjectCacher.h"
+
+#include "InodeRef.h"
 
 class MDSMap;
 class MonClient;
@@ -119,7 +120,6 @@ struct DirEntry {
   DirEntry(const string &n, struct stat& s, int stm) : d_name(n), st(s), stmask(stm) {}
 };
 
-struct Inode;
 struct Cap;
 class Dir;
 class Dentry;
@@ -300,12 +300,12 @@ public:
 
   int make_request(MetaRequest *req, int uid, int gid,
 		   //MClientRequest *req, int uid, int gid,
-		   Inode **ptarget = 0, bool *pcreated = 0,
+		   InodeRef *ptarget = 0, bool *pcreated = 0,
 		   int use_mds=-1, bufferlist *pdirbl=0);
   void put_request(MetaRequest *request);
 
   int verify_reply_trace(int r, MetaRequest *request, MClientReply *reply,
-			 Inode **ptarget, bool *pcreated, int uid, int gid);
+			 InodeRef *ptarget, bool *pcreated, int uid, int gid);
   void encode_cap_releases(MetaRequest *request, mds_rank_t mds);
   int encode_inode_release(Inode *in, MetaRequest *req,
 			   mds_rank_t mds, int drop,
@@ -422,6 +422,7 @@ protected:
   friend class C_Client_SyncCommit; // Asserts on client_lock
   friend class C_Client_RequestInterrupt;
   friend class C_Client_Remount;
+  friend void intrusive_ptr_release(Inode *in);
 
   //int get_cache_size() { return lru.lru_get_size(); }
   //void set_cache_size(int m) { lru.lru_set_max(m); }
@@ -436,8 +437,11 @@ protected:
 
   // path traversal for high-level interface
   Inode *cwd;
-  int path_walk(const filepath& fp, Inode **end, bool followsym=true);
+  int path_walk(const filepath& fp, InodeRef *end, bool followsym=true);
   int fill_stat(Inode *in, struct stat *st, frag_info_t *dirstat=0, nest_info_t *rstat=0);
+  int fill_stat(InodeRef& in, struct stat *st, frag_info_t *dirstat=0, nest_info_t *rstat=0) {
+    return fill_stat(in.get(), st, dirstat, rstat);
+  }
   void touch_dn(Dentry *dn);
 
   // trim cache.
@@ -644,27 +648,34 @@ private:
 
   // internal interface
   //   call these with client_lock held!
-  int _do_lookup(Inode *dir, const string& name, Inode **target);
-  int _lookup(Inode *dir, const string& dname, Inode **target);
+  int _do_lookup(Inode *dir, const string& name, InodeRef *target);
+  int _lookup(Inode *dir, const string& dname, InodeRef *target);
 
-  int _link(Inode *in, Inode *dir, const char *name, int uid=-1, int gid=-1, Inode **inp = 0);
+  int _link(Inode *in, Inode *dir, const char *name, int uid=-1, int gid=-1, InodeRef *inp = 0);
   int _unlink(Inode *dir, const char *name, int uid=-1, int gid=-1);
   int _rename(Inode *olddir, const char *oname, Inode *ndir, const char *nname, int uid=-1, int gid=-1);
-  int _mkdir(Inode *dir, const char *name, mode_t mode, int uid=-1, int gid=-1, Inode **inp = 0);
+  int _mkdir(Inode *dir, const char *name, mode_t mode, int uid=-1, int gid=-1, InodeRef *inp = 0);
   int _rmdir(Inode *dir, const char *name, int uid=-1, int gid=-1);
-  int _symlink(Inode *dir, const char *name, const char *target, int uid=-1, int gid=-1, Inode **inp = 0);
-  int _mknod(Inode *dir, const char *name, mode_t mode, dev_t rdev, int uid=-1, int gid=-1, Inode **inp = 0);
-  int _setattr(Inode *in, struct stat *attr, int mask, int uid=-1, int gid=-1, Inode **inp = 0);
+  int _symlink(Inode *dir, const char *name, const char *target, int uid=-1, int gid=-1, InodeRef *inp = 0);
+  int _mknod(Inode *dir, const char *name, mode_t mode, dev_t rdev, int uid=-1, int gid=-1, InodeRef *inp = 0);
+  int _setattr(Inode *in, struct stat *attr, int mask, int uid=-1, int gid=-1, InodeRef *inp = 0);
+  int _setattr(InodeRef &in, struct stat *attr, int mask, int uid=-1, int gid=-1, InodeRef *inp = 0) {
+    return _setattr(in.get(), attr, mask, uid, gid, inp);
+  }
   int _getattr(Inode *in, int mask, int uid=-1, int gid=-1, bool force=false);
+  int _getattr(InodeRef &in, int mask, int uid=-1, int gid=-1, bool force=false) {
+    return _getattr(in.get(), mask, uid, gid, force);
+  }
   int _readlink(Inode *in, char *buf, size_t size);
   int _getxattr(Inode *in, const char *name, void *value, size_t len, int uid=-1, int gid=-1);
   int _listxattr(Inode *in, char *names, size_t len, int uid=-1, int gid=-1);
   int _setxattr(Inode *in, const char *name, const void *value, size_t len, int flags, int uid=-1, int gid=-1);
   int _removexattr(Inode *in, const char *nm, int uid=-1, int gid=-1);
   int _open(Inode *in, int flags, mode_t mode, Fh **fhp, int uid=-1, int gid=-1);
-  int _create(Inode *in, const char *name, int flags, mode_t mode, Inode **inp, Fh **fhp,
+  int _create(Inode *in, const char *name, int flags, mode_t mode, InodeRef *inp, Fh **fhp,
               int stripe_unit, int stripe_count, int object_size, const char *data_pool,
 	      bool *created = NULL, int uid=-1, int gid=-1);
+
   loff_t _lseek(Fh *fh, loff_t offset, int whence);
   int _read(Fh *fh, int64_t offset, uint64_t size, bufferlist *bl);
   int _write(Fh *fh, int64_t offset, uint64_t size, const char *buf);
