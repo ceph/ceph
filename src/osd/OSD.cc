@@ -5805,12 +5805,22 @@ void OSD::handle_scrub(MOSDScrub *m)
       PG *pg = p->second;
       pg->lock();
       if (pg->is_primary()) {
-	pg->unreg_next_scrub();
-	pg->scrubber.must_scrub = true;
-	pg->scrubber.must_deep_scrub = m->deep || m->repair;
-	pg->scrubber.must_repair = m->repair;
-	pg->reg_next_scrub();
-	dout(10) << "marking " << *pg << " for scrub" << dendl;
+        if (m->stop_scrub) {
+          if (!pg->scrubber.must_scrub || !pg->scrubber.active) {
+	    derr << *pg << " stop_scrub should stop manual scrub which is running currently" << dendl;
+          } else {
+            pg->scrubber.stop_scrub = true;
+	    dout(10) << *pg << " stop scrub"<< dendl;
+          }
+        } else {
+	  pg->unreg_next_scrub();
+	  pg->scrubber.must_scrub = true;
+	  pg->scrubber.must_deep_scrub = m->deep || m->repair;
+	  pg->scrubber.must_repair = m->repair;
+	  pg->scrubber.stop_scrub = false;
+	  pg->reg_next_scrub();
+	  dout(10) << "marking " << *pg << " for scrub" << dendl;
+        }
       }
       pg->unlock();
     }
@@ -5820,18 +5830,28 @@ void OSD::handle_scrub(MOSDScrub *m)
 	 ++p) {
       spg_t pcand;
       if (osdmap->get_primary_shard(*p, &pcand) &&
-	  pg_map.count(pcand)) {
+	  pg_map.count(pcand))  {
 	PG *pg = pg_map[pcand];
 	pg->lock();
 	if (pg->is_primary()) {
-	  pg->unreg_next_scrub();
-	  pg->scrubber.must_scrub = true;
-	  pg->scrubber.must_deep_scrub = m->deep || m->repair;
-	  pg->scrubber.must_repair = m->repair;
-	  pg->reg_next_scrub();
-	  dout(10) << "marking " << *pg << " for scrub" << dendl;
-	}
-	pg->unlock();
+          if (m->stop_scrub) {
+            if (!pg->scrubber.must_scrub || !pg->scrubber.active) {
+	      derr << *pg << " stop_scrub should stop manual scrub which is running currently" << dendl;
+            } else {
+              pg->scrubber.stop_scrub = true;
+	      dout(10) << *pg << " stop scrub" << dendl;
+            }
+          } else {
+	    pg->unreg_next_scrub();
+	    pg->scrubber.must_scrub = true;
+	    pg->scrubber.must_deep_scrub = m->deep || m->repair;
+	    pg->scrubber.must_repair = m->repair;
+	    pg->scrubber.stop_scrub = false;
+	    pg->reg_next_scrub();
+	    dout(10) << "marking " << *pg << " for scrub" << dendl;
+	  }
+        }
+        pg->unlock();
       }
     }
   }

@@ -1701,7 +1701,8 @@ bool PGMonitor::preprocess_command(MMonCommand *m)
     r = 0;
   } else if (prefix == "pg scrub" || 
 	     prefix == "pg repair" || 
-	     prefix == "pg deep-scrub") {
+	     prefix == "pg deep-scrub" ||
+             prefix == "pg stop-scrub") {
     string scrubop = prefix.substr(3, string::npos);
     pg_t pgid;
     string pgidstr;
@@ -1731,7 +1732,8 @@ bool PGMonitor::preprocess_command(MMonCommand *m)
     pgs[0] = pgid;
     mon->try_send_message(new MOSDScrub(mon->monmap->fsid, pgs,
 					scrubop == "repair",
-					scrubop == "deep-scrub"),
+					scrubop == "deep-scrub",
+                                        scrubop == "stop-scrub"),
 			  mon->osdmon()->osdmap.get_inst(osd));
     ss << "instructing pg " << pgid << " on osd." << osd << " to " << scrubop;
     r = 0;

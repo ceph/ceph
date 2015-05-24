@@ -1040,7 +1040,8 @@ public:
       num_digest_updates_pending(0),
       state(INACTIVE),
       deep(false),
-      seed(0)
+      seed(0),
+      stop_scrub(false)
     {
     }
 
@@ -1095,6 +1096,7 @@ public:
     // deep scrub
     bool deep;
     uint32_t seed;
+    bool stop_scrub;
 
     list<Context*> callbacks;
     void add_callback(Context *context) {
@@ -1163,6 +1165,7 @@ public:
       fixed = 0;
       deep = false;
       seed = 0;
+      stop_scrub = false;
       run_callbacks();
       inconsistent.clear();
       missing.clear();

@@ -24,21 +24,22 @@
 
 struct MOSDScrub : public Message {
 
-  static const int HEAD_VERSION = 2;
+  static const int HEAD_VERSION = 3;
   static const int COMPAT_VERSION = 1;
 
   uuid_d fsid;
   vector<pg_t> scrub_pgs;
   bool repair;
   bool deep;
+  bool stop_scrub;
 
   MOSDScrub() : Message(MSG_OSD_SCRUB, HEAD_VERSION, COMPAT_VERSION) {}
-  MOSDScrub(const uuid_d& f, bool r, bool d) :
+  MOSDScrub(const uuid_d& f, bool r, bool d, bool s) :
     Message(MSG_OSD_SCRUB, HEAD_VERSION, COMPAT_VERSION),
-    fsid(f), repair(r), deep(d) {}
-  MOSDScrub(const uuid_d& f, vector<pg_t>& pgs, bool r, bool d) :
+    fsid(f), repair(r), deep(d), stop_scrub(s) {}
+  MOSDScrub(const uuid_d& f, vector<pg_t>& pgs, bool r, bool d, bool s) :
     Message(MSG_OSD_SCRUB, HEAD_VERSION, COMPAT_VERSION),
-    fsid(f), scrub_pgs(pgs), repair(r), deep(d) {}
+    fsid(f), scrub_pgs(pgs), repair(r), deep(d), stop_scrub(s) {}
 private:
   ~MOSDScrub() {}
 
@@ -54,6 +55,8 @@ public:
       out << " repair";
     if (deep)
       out << " deep";
+    if (stop_scrub)
+      out << " stop-scrub";
     out << ")";
   }
 
@@ -62,6 +65,7 @@ public:
     ::encode(scrub_pgs, payload);
     ::encode(repair, payload);
     ::encode(deep, payload);
+    ::encode(stop_scrub, payload);
   }
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
@@ -72,6 +76,11 @@ public:
       ::decode(deep, p);
     } else {
       deep = false;
+    }
+    if (header.version >= 3) {
+      ::decode(stop_scrub, p);
+    } else {
+      stop_scrub = false;
     }
   }
 };

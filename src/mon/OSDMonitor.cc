@@ -3081,7 +3081,8 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
     }
   } else if ((prefix == "osd scrub" ||
 	      prefix == "osd deep-scrub" ||
-	      prefix == "osd repair")) {
+	      prefix == "osd repair" ||
+              prefix == "osd stop-scrub")) {
     string whostr;
     cmd_getval(g_ceph_context, cmdmap, "who", whostr);
     vector<string> pvec;
@@ -3095,7 +3096,8 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
 	  ss << (c++ ? "," : "") << i;
 	  mon->try_send_message(new MOSDScrub(osdmap.get_fsid(),
 					      pvec.back() == "repair",
-					      pvec.back() == "deep-scrub"),
+					      pvec.back() == "deep-scrub",
+                                              pvec.back() == "stop-scrub"),
 				osdmap.get_inst(i));
 	}
       r = 0;
@@ -3107,7 +3109,8 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
       } else if (osdmap.is_up(osd)) {
 	mon->try_send_message(new MOSDScrub(osdmap.get_fsid(),
 					    pvec.back() == "repair",
-					    pvec.back() == "deep-scrub"),
+					    pvec.back() == "deep-scrub",
+                                            pvec.back() == "stop-scrub"),
 			      osdmap.get_inst(osd));
 	ss << "osd." << osd << " instructed to " << pvec.back();
       } else {
