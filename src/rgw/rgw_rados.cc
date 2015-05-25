@@ -2333,7 +2333,7 @@ int RGWRados::time_log_trim(const string& oid, const utime_t& start_time, const 
 
 string RGWRados::objexp_hint_get_shardname(const utime_t &ts)
 {
-  const time_t roundedts = ts.sec() >> cct->_conf->rgw_objexp_time_step_exp;
+  const time_t roundedts = ts.sec() / cct->_conf->rgw_objexp_time_step;
   const unsigned int shnum = roundedts % cct->_conf->rgw_objexp_hints_num_shards;
 
   char buf[32];
@@ -2381,20 +2381,19 @@ void  RGWRados::objexp_get_shard(const utime_t& start_time,
     marker = start_time;
   }
 
-  const uint32_t time_step_exp = cct->_conf->rgw_objexp_time_step_exp;
   const uint32_t num_shards = cct->_conf->rgw_objexp_hints_num_shards;
-  const time_t time_step = 1 << time_step_exp;
+  const time_t time_step = cct->_conf->rgw_objexp_time_step;
 
-  const time_t sts = start_time.sec() >> time_step_exp;
-  const time_t ets = end_time.sec() >> time_step_exp;
-  const time_t mts = marker.sec() >> time_step_exp;
+  const time_t sts = start_time.sec() / time_step;
+  const time_t ets = end_time.sec() / time_step;
+  const time_t mts = marker.sec() / time_step;
 
-  const uint32_t periods = (ets - sts) / time_step;
-  const uint32_t iters = min(periods, num_shards);
+  const uint32_t periods = ets - sts;
+  const uint32_t iters = min(periods, num_shards - 1);
 
   shard = objexp_hint_get_shardname(marker);
 
-  if (mts % num_shards < (sts + iters) % num_shards) {
+  if (mts - sts < iters) {
     truncated = true;
     marker += utime_t(time_step, 0);
   } else {
