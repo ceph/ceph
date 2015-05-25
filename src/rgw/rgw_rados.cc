@@ -1609,6 +1609,10 @@ int RGWRados::init_complete()
   if (ret < 0)
     return ret;
 
+  ret = open_objexp_pool_ctx();
+  if (ret < 0)
+    return ret;
+
   pools_initialized = true;
 
   gc = new RGWGC();
@@ -1745,6 +1749,25 @@ int RGWRados::open_gc_pool_ctx()
       return r;
 
     r = rad->ioctx_create(gc_pool, gc_pool_ctx);
+  }
+
+  return r;
+}
+
+int RGWRados::open_objexp_pool_ctx()
+{
+  const char * const pool_name = zone.log_pool.name.c_str();
+  librados::Rados * const rad = get_rados_handle();
+  int r = rad->ioctx_create(pool_name, objexp_pool_ctx);
+  if (r == -ENOENT) {
+    r = rad->pool_create(pool_name);
+    if (r == -EEXIST) {
+      r = 0;
+    } else if (r < 0) {
+      return r;
+    }
+
+    r = rad->ioctx_create(pool_name, objexp_pool_ctx);
   }
 
   return r;
@@ -2332,24 +2355,6 @@ int RGWRados::objexp_hint_add(const utime_t& delete_at,
                               const string& bucket_id,
                               const rgw_obj_key& obj_key)
 {
-  librados::IoCtx io_ctx;
-
-  const char * const log_pool = zone.log_pool.name.c_str();
-  int r = rados->ioctx_create(log_pool, io_ctx);
-  if (r == -ENOENT) {
-    rgw_bucket pool(log_pool);
-    r = create_pool(pool);
-    if (r < 0) {
-      return r;
-    } else {
-      /* retry */
-      r = rados->ioctx_create(log_pool, io_ctx);
-    }
-  }
-  if (r < 0) {
-    return r;
-  }
-
   const string keyext = objexp_hint_get_keyext(bucket_name,
           bucket_id, obj_key);
   objexp_hint_entry he = {
@@ -2363,8 +2368,7 @@ int RGWRados::objexp_hint_add(const utime_t& delete_at,
   cls_timeindex_add(op, delete_at, keyext, hebl);
 
   string shard_name = objexp_hint_get_shardname(delete_at);
-  r = io_ctx.operate(shard_name, &op);
-  return r;
+  return objexp_pool_ctx.operate(shard_name, &op);
 }
 
 void  RGWRados::objexp_get_shard(const utime_t& start_time,
@@ -2409,26 +2413,18 @@ int RGWRados::objexp_hint_list(const string& oid,
                                string *out_marker,                 /* out */
                                bool *truncated)                    /* out */
 {
-  librados::IoCtx io_ctx;
-
-  const char * const log_pool = zone.log_pool.name.c_str();
-  int ret = rados->ioctx_create(log_pool, io_ctx);
-  if (ret < 0) {
-    return ret;
-  }
-
   librados::ObjectReadOperation op;
   cls_timeindex_list(op, start_time, end_time, marker, max_entries, entries,
 	       out_marker, truncated);
 
   bufferlist obl;
-  ret = io_ctx.operate(oid, &op, &obl);
+  int ret = objexp_pool_ctx.operate(oid, &op, &obl);
 
   if ((ret < 0 ) && (ret != -ENOENT)) {
     return ret;
   }
 
-  if (ret == -ENOENT && truncated) {
+  if ((ret == -ENOENT) && truncated) {
     *truncated = false;
   }
 
@@ -2454,15 +2450,7 @@ int RGWRados::objexp_hint_trim(const string& oid,
                                const string& from_marker,
                                const string& to_marker)
 {
-  librados::IoCtx io_ctx;
-
-  const char * const log_pool = zone.log_pool.name.c_str();
-  int ret = rados->ioctx_create(log_pool, io_ctx);
-  if (ret < 0) {
-    return ret;
-  }
-
-  ret = cls_timeindex_trim(io_ctx, oid, start_time, end_time,
+  int ret = cls_timeindex_trim(objexp_pool_ctx, oid, start_time, end_time,
           from_marker, to_marker);
   if ((ret < 0 ) && (ret != -ENOENT)) {
     return ret;

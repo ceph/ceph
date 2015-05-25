@@ -1198,6 +1198,7 @@ class RGWRados
   /** Open the pool used as root for this gateway */
   int open_root_pool_ctx();
   int open_gc_pool_ctx();
+  int open_objexp_pool_ctx();
 
   int open_bucket_pool_ctx(const string& bucket_name, const string& pool, librados::IoCtx&  io_ctx);
   int open_bucket_index_ctx(rgw_bucket& bucket, librados::IoCtx&  index_ctx);
@@ -1276,6 +1277,7 @@ protected:
   std::map<pthread_t, int> rados_map;
 
   librados::IoCtx gc_pool_ctx;        // .rgw.gc
+  librados::IoCtx objexp_pool_ctx;
 
   bool pools_initialized;
 
