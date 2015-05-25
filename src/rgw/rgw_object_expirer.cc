@@ -81,7 +81,6 @@ static int garbage_single_object(objexp_hint_entry& hint)
     return ret;
   }
 
-  /* TODO: check whether the hint is actual. */
   RGWObjectCtx rctx(store);
 
   rgw_obj_key key = hint.obj_key;
@@ -90,6 +89,7 @@ static int garbage_single_object(objexp_hint_entry& hint)
   }
 
   rgw_obj obj(bucket_info.bucket, key);
+  store->set_atomic(&rctx, obj);
   ret = store->delete_obj(rctx, bucket_info, obj,
           bucket_info.versioning_status(), 0, hint.exp_time);
 
