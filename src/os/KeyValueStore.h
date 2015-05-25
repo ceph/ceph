@@ -645,6 +645,8 @@ class KeyValueStore : public ObjectStore,
   ObjectMap::ObjectMapIterator get_omap_iterator(coll_t c,
                                                  const ghobject_t &oid);
 
+  void dump_start(const std::string file);
+  void dump_stop();
   void dump_transactions(list<ObjectStore::Transaction*>& ls, uint64_t seq,
                          OpSequencer *osr);
 
@@ -681,6 +683,9 @@ class KeyValueStore : public ObjectStore,
   int m_keyvaluestore_strip_size;
   uint64_t m_keyvaluestore_max_expected_write_size;
   int do_update;
+  bool m_keyvaluestore_do_dump;
+  std::ofstream m_keyvaluestore_dump;
+  JSONFormatter m_keyvaluestore_dump_fmt;
 
   static const string OBJECT_STRIP_PREFIX;
   static const string OBJECT_XATTR;
