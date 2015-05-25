@@ -188,6 +188,19 @@ function TEST_crush_rename_bucket() {
     ./ceph osd crush rename-bucket nonexistent something 2>&1 | grep "Error ENOENT" || return 1
 }
 
+function TEST_crush_reject_empty() {
+    local dir=$1
+    run_mon $dir a || return 1
+    # should have at least one OSD
+    run_osd $dir 0 || return 1
+
+    local empty_map=$dir/empty_map
+    :> $empty_map.txt
+    ./crushtool -c $empty_map.txt -o $empty_map.map || return 1
+    expect_failure $dir "Error EINVAL" \
+        ./ceph osd setcrushmap -i $empty_map.map || return 1
+}
+
 main osd-crush
 
 # Local Variables:
