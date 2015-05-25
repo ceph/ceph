@@ -384,12 +384,12 @@ TEST(ErasureCodeLrc, layers_sanity_checks)
     ErasureCodeProfile profile;
     profile["directory"] = ".libs";
     profile["mapping"] =
-	    "AA";
+	    "DD";
     const char *description_string =
       "[ "
-      "  [ \"AA??\", \"\" ], "
-      "  [ \"AA\", \"\" ], "
-      "  [ \"AA\", \"\" ], "
+      "  [ \"DD??\", \"\" ], "
+      "  [ \"DD\", \"\" ], "
+      "  [ \"DD\", \"\" ], "
       "]";
     profile["layers"] = description_string;
     EXPECT_EQ(ERROR_LRC_MAPPING_SIZE, lrc.init(profile, &cerr));
