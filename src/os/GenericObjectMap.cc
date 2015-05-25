@@ -734,15 +734,6 @@ int GenericObjectMap::init(bool do_upgrade)
   return 0;
 }
 
-int GenericObjectMap::sync(const Header header, KeyValueDB::Transaction t)
-{
-  write_state(t);
-  if (header) {
-    set_header(header->cid, header->oid, *header, t);
-  }
-  return 0;
-}
-
 bool GenericObjectMap::check(std::ostream &out)
 {
   bool retval = true;
