@@ -59,6 +59,7 @@ public:
     }
     int r = interface->init(profile);
     if (r) {
+      delete interface;
       return r;
     }
     *erasure_code = ErasureCodeInterfaceRef(interface);
