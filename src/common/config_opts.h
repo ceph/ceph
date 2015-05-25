@@ -1086,7 +1086,7 @@ OPTION(rgw_multipart_part_upload_limit, OPT_INT, 10000) // parts limit in multip
 OPTION(rgw_olh_pending_timeout_sec, OPT_INT, 3600) // time until we retire a pending olh change
 
 OPTION(rgw_objexp_gc_interval, OPT_U32, 60 * 10) // maximum time between round of expired objects garbage collecting
-OPTION(rgw_objexp_time_step_exp, OPT_U32, 12) // exponent value (2 is the base) for rounding the timestamps
+OPTION(rgw_objexp_time_step, OPT_U32, 4096) // number of seconds for rounding the timestamps
 OPTION(rgw_objexp_hints_num_shards, OPT_U32, 127) // maximum number of parts in which the hint index is stored in
 
 OPTION(mutex_perf_counter, OPT_BOOL, false) // enable/disable mutex perf counter
