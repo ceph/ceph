@@ -4841,7 +4841,7 @@ bool OSDMonitor::prepare_command_impl(MMonCommand *m,
     dout(10) << " testing map" << dendl;
     stringstream ess;
     CrushTester tester(crush, ess);
-    if (!tester.check_name_maps()) {
+    if (!tester.check_name_maps(osdmap.get_max_osd())) {
       err = -EINVAL;
       ss << ess.str();
       goto reply;
