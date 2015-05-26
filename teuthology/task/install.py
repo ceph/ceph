@@ -150,7 +150,7 @@ def _get_baseurlinfo_and_dist(ctx, remote, config):
             'lsb_release', '-rs'], stdout=StringIO())
     retval['relval'] = r.stdout.getvalue().strip()
     dist_name = None
-    if retval['distro'] == 'CentOS':
+    if retval['distro'] in ('CentOS', 'RedHatEnterpriseServer'):
         relval = retval['relval']
         relval = relval[0:relval.find('.')]
         distri = 'centos'
@@ -158,14 +158,6 @@ def _get_baseurlinfo_and_dist(ctx, remote, config):
         retval['dist'] = retval['distro_release']
         dist_name = 'el'
         retval['dist_release'] = '%s%s' % (dist_name, relval)
-    elif retval['distro'] == 'RedHatEnterpriseServer':
-        relval = retval['relval'].replace('.', '_')
-        distri = 'rhel'
-        retval['distro_release'] = '%s%s' % (distri, relval)
-        retval['dist'] = retval['distro_release']
-        dist_name = 'el'
-        short_relval = relval[0:relval.find('_')]
-        retval['dist_release'] = '%s%s' % (dist_name, short_relval)
     elif retval['distro'] == 'Fedora':
         distri = retval['distro']
         dist_name = 'fc'
