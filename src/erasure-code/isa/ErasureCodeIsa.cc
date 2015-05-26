@@ -63,21 +63,23 @@ ErasureCodeIsa::create_ruleset(const string &name,
 
 // -----------------------------------------------------------------------------
 
-void
-ErasureCodeIsa::init(const map<string, string> &parameters)
+int
+ErasureCodeIsa::init(ErasureCodeProfile &profile, ostream *ss)
 {
+  int err = 0;
   dout(10) << "technique=" << technique << dendl;
   map<string, string>::const_iterator parameter;
-  parameter = parameters.find("ruleset-root");
-  if (parameter != parameters.end())
+  parameter = profile.find("ruleset-root");
+  if (parameter != profile.end())
     ruleset_root = parameter->second;
-  parameter = parameters.find("ruleset-failure-domain");
-  if (parameter != parameters.end())
+  parameter = profile.find("ruleset-failure-domain");
+  if (parameter != profile.end())
     ruleset_failure_domain = parameter->second;
-  ostringstream ss;
-  if (parse(parameters, &ss))
-    derr << ss.str() << dendl;
+  err |= parse(profile, ss);
+  if (err)
+    return err;
   prepare();
+  return err;
 }
 
 // -----------------------------------------------------------------------------
@@ -340,13 +342,12 @@ ErasureCodeIsaDefault::get_alignment() const
 
 // -----------------------------------------------------------------------------
 
-int ErasureCodeIsaDefault::parse(const map<std::string,
-                                 std::string> &parameters,
+int ErasureCodeIsaDefault::parse(ErasureCodeProfile &profile,
                                  ostream *ss)
 {
-  int err = ErasureCode::parse(parameters, ss);
-  err |= to_int("k", parameters, &k, DEFAULT_K, ss);
-  err |= to_int("m", parameters, &m, DEFAULT_M, ss);
+  int err = ErasureCode::parse(profile, ss);
+  err |= to_int("k", profile, &k, DEFAULT_K, ss);
+  err |= to_int("m", profile, &m, DEFAULT_M, ss);
 
   if (matrixtype == kVandermonde) {
     // these are verified safe values evaluated using the
