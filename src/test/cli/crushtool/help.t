@@ -59,8 +59,7 @@
   Options for the display/test stage
   
      --tree                print map summary as a tree
-     --check-names [max_id]
-                           check if any item is referencing an unknown name/type
+     --check [max_id]      check if any item is referencing an unknown name/type
      -i mapfn --show-location id
                            show location for given device id
      -i mapfn --test       test a range of inputs on the map
