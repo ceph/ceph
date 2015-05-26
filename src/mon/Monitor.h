@@ -252,6 +252,7 @@ private:
   void scrub_timeout();
   void scrub_finish();
   void scrub_reset();
+  void scrub_update_interval(int secs);
 
   struct C_Scrub : public Context {
     Monitor *mon;
