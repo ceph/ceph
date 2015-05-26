@@ -3,7 +3,7 @@ Development workflows
 =====================
 
 This page explains the workflows a developer is expected to follow to
-implement the goals that are part of the Ceph lifecycle. It does not
+implement the goals that are part of the Ceph release cycle. It does not
 go into technical details and is designed to provide a high level view
 instead. Each chapter is about a given goal such as ``Merging bug
 fixes or features`` or ``Publishing point releases and backporting``.
@@ -16,13 +16,13 @@ interference. In practice it is not necessary for Ceph because:
 
 * there are few people involved
 * the frequency of backports is not too high
-* the reviewers know a release is being published are unlikely to
-  merge anything that may cause issues
+* the reviewers, who know a release is being published, are unlikely
+  to merge anything that may cause issues
 
 This ad-hoc approach implies the workflows are changed on a regular
 basis to adapt. For instance, ``quality engineers`` were not involved
-in the workflow to publish dumpling point releases. The number of
-commits being backported to firefly made it impractical for developers
+in the workflow to publish ``dumpling`` point releases. The number of
+commits being backported to ``firefly`` made it impractical for developers
 tasked to write code or fix bugs to also run and verify the full suite
 of integration tests. Inserting ``quality engineers`` makes it
 possible for someone to participate in the workflow by analyzing test
@@ -32,10 +32,10 @@ The workflows are not enforced when they impose an overhead that does
 not make sense. For instance, if the release notes for a point release
 were not written prior to checking all integration tests, they can be
 commited to the stable branch and the result sent for publication
-without going through another run of integraiton tests.
+without going through another run of integration tests.
 
-Lifecycle
-=========
+Release Cycle
+=============
 
 ::
 
@@ -44,7 +44,7 @@ Lifecycle
     Summit              |                                    |
                         |                                    |
     development         |                                    |
-    release             |  v0.88  v0.89  v0.90   ...         |  v0.95
+    release             |  v0.88  v0.89  v0.90   ...         |  v9.0.0
                    --v--^----^--v---^------^--v-     ---v----^----^---  2015       
                      |          |             |         |
     stable         giant        |             |      hammer
@@ -57,12 +57,11 @@ Lifecycle
 Four times a year, the development roadmap is discussed online during
 the `Ceph Developer Summit <http://wiki.ceph.com/Planning/CDS/>`_. A
 new stable release (argonaut, cuttlefish, dumpling, emperor, firefly,
-giant, hammer ...) is published at the same frequency. Every other
-release is a long time support (dumpling, firefly, hammer, ...) which
-means point releases are published more often. In 2014 point releases
-(i.e. dumpling 0.67.11, dumpling 0.67.12 ...) are published up to
-eighteen months after the publication of a stable release. Once or
-twice a month, a development release is published.
+giant, hammer, infernalis ...) is published at the same frequency. 
+Every other release (dumpling, firefly, hammer, ...) is a `Long Term Stable (LTS) <../../releases>`_.
+See `Understanding the release cycle
+<../../releases#understanding-the-release-cycle>`_ for more
+information.
 
 Merging bug fixes or features
 =============================
@@ -75,7 +74,7 @@ developers can be summarized as follows:
 * A reviewer is assigned the pull request
 * When the pull request looks good to the reviewer, it is merged into
   an integration branch by the tester
-* After a successfull run of integration tests, the pull request is
+* After a successful run of integration tests, the pull request is
   merged by the tester
 
 The ``developer`` is the author of a series of commits. The
@@ -84,8 +83,8 @@ a regular basis and the developer is invited to ping the reviewer if
 nothing happened after a week. After the ``reviewer`` is satisfied
 with the pull request, (s)he passes it to the ``tester``. The
 ``tester`` is responsible for running teuthology integration tests on
-the pull request. If nothing happens within a month the reviewer is
-invited to ping the tester.
+the pull request. If nothing happens within a month the ``reviewer`` is
+invited to ping the ``tester``.
 
 Resolving bug reports and implementing features
 ===============================================
@@ -116,19 +115,27 @@ status of an open issue can be:
 * ``Pending Backport``: the fix needs to be backported to the stable
   releases listed in the backport field
 
+For each ``Pending Backport`` issue, there exists at least one issue
+in the ``Backport`` tracker to record the work done to cherry pick the
+necessary commits from the master branch to the target stable branch.
+See `the backporter manual
+<http://tracker.ceph.com/projects/ceph-releases/wiki/HOWTO>`_ for more
+information.
+
 Running and interpreting teuthology integration tests
 =====================================================
 
 The :doc:`/dev/sepia` runs `teuthology
-<https://github.com/ceph/teuthology/>`_ integration tests and the
+<https://github.com/ceph/teuthology/>`_ integration tests `on a regular basis <http://tracker.ceph.com/projects/ceph-releases/wiki/HOWTO_monitor_the_automated_tests_AKA_nightlies#Automated-tests-AKA-nightlies>`_ and the
 results are posted on `pulpito <http://pulpito.ceph.com/>`_ and the
 `ceph-qa mailing list <http://ceph.com/resources/mailing-list-irc/>`_.
 
-* The quality engineer analyzes the integration job failure
+* The job failures are `analyzed by quality engineers and developers
+  <http://tracker.ceph.com/projects/ceph-releases/wiki/HOWTO_monitor_the_automated_tests_AKA_nightlies#List-of-suites-and-watchers>`_
 * If the cause is environmental (e.g. network connectivity), an issue
   is created in the `sepia lab project
   <http://tracker.ceph.com/projects/lab/issues/new>`_
-* If the bug is known a pulpito URL to failed job is added to the issue
+* If the bug is known, a pulpito URL to the failed job is added to the issue
 * If the bug is new, an issue is created
 
 The ``quality engineer`` is either a developer or a member of the QE
@@ -162,15 +169,15 @@ following differences:
 * The pull requests must target the stable branch or next instead of
   master
 * The reviewer rejects pull requests that are not bug fixes
-* The issues matching a teuthology integration test failure is set
-  with severity ``Critical`` if it must be fixed before the release
+* The ``Backport`` issues matching a teuthology test failure and set
+  with priority ``Urgent`` must be fixed before the release
 
 Cutting a new stable release
 ============================
 
 A new stable release can be cut when:
 
-* all bugs with severity ``Critical`` are fixed
+* all ``Backport`` issues with priority ``Urgent`` are fixed
 * integration and upgrade tests run successfully
 
 Publishing a new stable release implies a risk of regression or
@@ -181,16 +188,16 @@ minor bugs. For instance if only one commit has been backported to a
 stable release that is not a LTS, it is better to wait until there are
 more.
 
-When a stable release reaches its end of life, it may be safer to
-recommend an upgrade to the next long term support release instead of
+When a stable release is to be retired, it may be safer to
+recommend an upgrade to the next LTS release instead of
 proposing a new point release to fix a problem. For instance, the
-Dumpling v0.67.11 release has bugs related to backfilling which have
-been fixed in Firefly v0.80.x. A backport fixing these backfilling
-bugs has been tested in the draft point release Dumpling v0.67.12 but
-they are large enough to introduce a risk of regression. As Dumpling
-is approaching its end of life, users suffering from this bug can
-upgrade to Firefly to fix it. Unless users manifest themselves and ask
-for Dumpling v0.67.12, this draft release may never be published.
+``dumpling`` v0.67.11 release has bugs related to backfilling which have
+been fixed in ``firefly`` v0.80.x. A backport fixing these backfilling
+bugs has been tested in the draft point release ``dumpling`` v0.67.12 but
+they are large enough to introduce a risk of regression. As ``dumpling``
+is to be retired, users suffering from this bug can
+upgrade to ``firefly`` to fix it. Unless users manifest themselves and ask
+for ``dumpling`` v0.67.12, this draft release may never be published.
 
 * The ``Ceph lead`` decides a new stable release must be published
 * The ``release master`` gets approval from all leads
@@ -198,9 +205,9 @@ for Dumpling v0.67.12, this draft release may never be published.
 * The ``release master`` informs the ``quality engineer`` that the
   branch is ready for testing
 * The ``quality engineer`` runs additional integration tests
-* If the ``quality engineer`` discovers new bugs with severity
-  ``Critical``, the release goes back to being prepared, it was not
-  ready after all
+* If the ``quality engineer`` discovers new bugs that require an
+  ``Urgent Backport``, the release goes back to being prepared, it
+  was not ready after all
 * The ``quality engineer`` informs the ``publisher`` that the branch
   is ready for release
 * The ``publisher`` `creates the packages and sets the release tag
@@ -210,9 +217,9 @@ The person responsible for each role is:
 
 * Sage Weil is the ``Ceph lead``
 * Sage Weil is the ``release master`` for major stable releases
-  (Firefly 0.80, Giant 0.87 etc.)
+  (``firefly`` 0.80, ``hammer`` 0.94 etc.)
 * Loic Dachary is the ``release master`` for stable point releases
-  (Dumpling 0.68.12, Giant 0.87.1 etc.)
+  (``firefly`` 0.80.10, ``hammer`` 0.94.1 etc.)
 * Yuri Weinstein is the ``quality engineer``
 * Alfredo Deza is the ``publisher``
 
@@ -238,5 +245,11 @@ differences:
 
 * The ``backport`` field of each issue contains the code name of the
   stable release
+* There is exactly one issue in the ``Backport`` tracker for each
+  stable release to which the issue is backported
 * All commits are cherry-picked with ``git cherry-pick -x`` to
   reference the original commit
+
+See `the backporter manual
+<http://tracker.ceph.com/projects/ceph-releases/wiki/HOWTO>`_ for more
+information.
