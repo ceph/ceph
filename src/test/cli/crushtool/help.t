@@ -33,8 +33,7 @@
   
   Options for the display/test stage
   
-     --check-names max_id
-                           check if any item is referencing an unknown name/type
+     --check max_id        check if any item is referencing an unknown name/type
      -i mapfn --show-location id
                            show location for given device id
      --show-utilization    show OSD usage
