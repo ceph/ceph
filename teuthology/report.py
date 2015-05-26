@@ -349,18 +349,21 @@ class ResultsReporter(object):
         if os.path.exists(self.last_run_file):
             os.remove(self.last_run_file)
 
-    def get_jobs(self, run_name, fields=None):
+    def get_jobs(self, run_name, job_id=None, fields=None):
         """
         Query the results server for jobs in a run
 
         :param run_name: The name of the run
+        :param job_id:   Optionally get a single job instead of all
         :param fields:   Optional. A list of fields to include in the result.
                          Defaults to returning all fields.
         """
         uri = "{base}/runs/{name}/jobs/".format(base=self.base_uri,
                                                 name=run_name)
+        if job_id:
+            uri = os.path.join(uri, job_id)
         if fields:
-            if not 'job_id' in fields:
+            if 'job_id' not in fields:
                 fields.append('job_id')
             uri += "?fields=" + ','.join(fields)
         response = self.session.get(uri)
