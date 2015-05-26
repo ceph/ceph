@@ -163,21 +163,21 @@ int ErasureCode::decode_chunks(const set<int> &want_to_read,
   assert("ErasureCode::decode_chunks not implemented" == 0);
 }
 
-int ErasureCode::parse(const map<std::string,std::string> &parameters,
+int ErasureCode::parse(const ErasureCodeProfile &profile,
 		       ostream *ss)
 {
-  return to_mapping(parameters, ss);
+  return to_mapping(profile, ss);
 }
 
 const vector<int> &ErasureCode::get_chunk_mapping() const {
   return chunk_mapping;
 }
 
-int ErasureCode::to_mapping(const map<std::string,std::string> &parameters,
+int ErasureCode::to_mapping(const ErasureCodeProfile &profile,
 			    ostream *ss)
 {
-  if (parameters.find("mapping") != parameters.end()) {
-    std::string mapping = parameters.find("mapping")->second;
+  if (profile.find("mapping") != profile.end()) {
+    std::string mapping = profile.find("mapping")->second;
     int position = 0;
     vector<int> coding_chunk_mapping;
     for(std::string::iterator it = mapping.begin(); it != mapping.end(); ++it) {
@@ -195,17 +195,17 @@ int ErasureCode::to_mapping(const map<std::string,std::string> &parameters,
 }
 
 int ErasureCode::to_int(const std::string &name,
-			const map<std::string,std::string> &parameters,
+			ErasureCodeProfile &profile,
 			int *value,
 			int default_value,
 			ostream *ss)
 {
-  if (parameters.find(name) == parameters.end() ||
-      parameters.find(name)->second.size() == 0) {
+  if (profile.find(name) == profile.end() ||
+      profile.find(name)->second.size() == 0) {
     *value = default_value;
     return 0;
   }
-  std::string p = parameters.find(name)->second;
+  std::string p = profile.find(name)->second;
   std::string err;
   int r = strict_strtol(p.c_str(), 10, &err);
   if (!err.empty()) {
@@ -220,17 +220,17 @@ int ErasureCode::to_int(const std::string &name,
 }
 
 int ErasureCode::to_bool(const std::string &name,
-			 const map<std::string,std::string> &parameters,
+			 ErasureCodeProfile &profile,
 			 bool *value,
 			 bool default_value,
 			 ostream *ss)
 {
-  if (parameters.find(name) == parameters.end() ||
-      parameters.find(name)->second.size() == 0) {
+  if (profile.find(name) == profile.end() ||
+      profile.find(name)->second.size() == 0) {
     *value = default_value;
     return 0;
   }
-  const std::string p = parameters.find(name)->second;
+  const std::string p = profile.find(name)->second;
   *value = (p == "yes") || (p == "true");
   return 0;
 }

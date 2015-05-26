@@ -27,13 +27,13 @@
 TEST(ErasureCodePlugin, factory)
 {
   ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
-  map<std::string,std::string> parameters;
-  parameters["directory"] = ".libs";
-  parameters["mapping"] = "DD_";
-  parameters["layers"] = "[ [ \"DDc\", \"\" ] ]";
+  ErasureCodeProfile profile;
+  profile["directory"] = ".libs";
+  profile["mapping"] = "DD_";
+  profile["layers"] = "[ [ \"DDc\", \"\" ] ]";
   ErasureCodeInterfaceRef erasure_code;
   EXPECT_FALSE(erasure_code);
-  EXPECT_EQ(0, instance.factory("lrc", parameters, &erasure_code, cerr));
+  EXPECT_EQ(0, instance.factory("lrc", profile, &erasure_code, &cerr));
   EXPECT_TRUE(erasure_code);
 }
 

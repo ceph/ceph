@@ -91,7 +91,7 @@ public:
                             const map<int, bufferlist> &chunks,
                             map<int, bufferlist> *decoded);
 
-  void init(const map<std::string, std::string> &parameters);
+  virtual int init(ErasureCodeProfile &profile, ostream *ss);
 
   virtual void isa_encode(char **data,
                           char **coding,
@@ -105,8 +105,7 @@ public:
 
   virtual unsigned get_alignment() const = 0;
 
-  virtual int parse(const map<std::string,
-                    std::string> &parameters,
+  virtual int parse(ErasureCodeProfile &profile,
                     ostream *ss) = 0;
 
   virtual void prepare() = 0;
@@ -155,8 +154,7 @@ public:
 
   virtual unsigned get_alignment() const;
 
-  virtual int parse(const map<std::string,
-                    std::string> &parameters,
+  virtual int parse(ErasureCodeProfile &profile,
                     ostream *ss);
 
   virtual void prepare();

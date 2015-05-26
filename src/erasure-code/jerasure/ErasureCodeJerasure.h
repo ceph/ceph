@@ -48,8 +48,7 @@ public:
 
   virtual ~ErasureCodeJerasure() {}
   
-  virtual int parse(const map<std::string,std::string> &parameters,
-		    ostream *ss);
+  virtual int parse(ErasureCodeProfile &profile, ostream *ss);
 
   virtual int create_ruleset(const string &name,
 			     CrushWrapper &crush,
@@ -72,7 +71,8 @@ public:
 			    const map<int, bufferlist> &chunks,
 			    map<int, bufferlist> *decoded);
 
-  void init(const map<std::string,std::string> &parameters);
+  virtual int init(ErasureCodeProfile &profile, ostream *ss);
+
   virtual void jerasure_encode(char **data,
                                char **coding,
                                int blocksize) = 0;
@@ -110,8 +110,7 @@ public:
                                char **coding,
                                int blocksize);
   virtual unsigned get_alignment() const;
-  virtual int parse(const map<std::string,std::string> &parameters,
-		    ostream *ss);
+  virtual int parse(ErasureCodeProfile &profile, ostream *ss);
   virtual void prepare();
 };
 
@@ -139,8 +138,7 @@ public:
                                char **coding,
                                int blocksize);
   virtual unsigned get_alignment() const;
-  virtual int parse(const map<std::string,std::string> &parameters,
-		    ostream *ss);
+  virtual int parse(ErasureCodeProfile &profile, ostream *ss);
   virtual void prepare();
 };
 
@@ -175,8 +173,7 @@ public:
                                char **coding,
                                int blocksize);
   virtual unsigned get_alignment() const;
-  virtual int parse(const map<std::string,std::string> &parameters,
-		    ostream *ss);
+  virtual int parse(ErasureCodeProfile &profile, ostream *ss);
   void prepare_schedule(int *matrix);
 };
 
@@ -229,8 +226,7 @@ public:
   virtual bool check_packetsize_set(ostream *ss) const;
   virtual bool check_packetsize(ostream *ss) const;
   virtual void revert_to_default(ostream *ss);
-  virtual int parse(const map<std::string,std::string> &parameters,
-		    ostream *ss);
+  virtual int parse(ErasureCodeProfile &profile, ostream *ss);
   virtual void prepare();
 };
 
@@ -255,8 +251,7 @@ public:
     DEFAULT_W = 8;
   }
 
-  virtual int parse(const map<std::string,std::string> &parameters,
-		    ostream *ss);
+  virtual int parse(ErasureCodeProfile &profile, ostream *ss);
   virtual void prepare();
 };
 

@@ -39,6 +39,10 @@ class ErasureCodeExample : public ErasureCode {
 public:
   virtual ~ErasureCodeExample() {}
 
+  virtual int init(ErasureCodeProfile &profile, ostream *ss) {
+    return 0;
+  }
+
   virtual int create_ruleset(const string &name,
 			     CrushWrapper &crush,
 			     ostream *ss) const {

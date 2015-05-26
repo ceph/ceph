@@ -66,22 +66,22 @@ namespace ceph {
                               const map<int, bufferlist> &chunks,
                               map<int, bufferlist> *decoded);
 
-    virtual int parse(const map<std::string,std::string> &parameters,
+    virtual int parse(const ErasureCodeProfile &profile,
 		      ostream *ss);
 
     virtual const vector<int> &get_chunk_mapping() const;
 
-    int to_mapping(const map<std::string,std::string> &parameters,
+    int to_mapping(const ErasureCodeProfile &profile,
 		   ostream *ss);
 
     static int to_int(const std::string &name,
-		      const map<std::string,std::string> &parameters,
+		      ErasureCodeProfile &profile,
 		      int *value,
 		      int default_value,
 		      ostream *ss);
 
     static int to_bool(const std::string &name,
-		       const map<std::string,std::string> &parameters,
+		       ErasureCodeProfile &profile,
 		       bool *value,
 		       bool default_value,
 		       ostream *ss);

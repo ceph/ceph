@@ -292,14 +292,14 @@ PGBackend *PGBackend::build_pg_backend(
   }
   case pg_pool_t::TYPE_ERASURE: {
     ErasureCodeInterfaceRef ec_impl;
-    const map<string,string> &profile = curmap->get_erasure_code_profile(pool.erasure_code_profile);
+    ErasureCodeProfile profile = curmap->get_erasure_code_profile(pool.erasure_code_profile);
     assert(profile.count("plugin"));
     stringstream ss;
     ceph::ErasureCodePluginRegistry::instance().factory(
       profile.find("plugin")->second,
       profile,
       &ec_impl,
-      ss);
+      &ss);
     assert(ec_impl);
     return new ECBackend(
       l,

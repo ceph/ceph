@@ -3900,12 +3900,12 @@ int OSDMonitor::prepare_new_pool(MPoolOp *m)
     return prepare_new_pool(m->name, m->auid, m->crush_rule, ruleset_name,
 			    0, 0,
                             erasure_code_profile,
-			    pg_pool_t::TYPE_REPLICATED, 0, ss);
+			    pg_pool_t::TYPE_REPLICATED, 0, &ss);
   else
     return prepare_new_pool(m->name, session->auid, m->crush_rule, ruleset_name,
 			    0, 0,
                             erasure_code_profile,
-			    pg_pool_t::TYPE_REPLICATED, 0, ss);
+			    pg_pool_t::TYPE_REPLICATED, 0, &ss);
 }
 
 int OSDMonitor::crush_rename_bucket(const string& srcname,
@@ -3943,7 +3943,7 @@ int OSDMonitor::crush_rename_bucket(const string& srcname,
 int OSDMonitor::crush_ruleset_create_erasure(const string &name,
 					     const string &profile,
 					     int *ruleset,
-					     stringstream &ss)
+					     ostream *ss)
 {
   int ruleid = osdmap.crush->get_rule_id(name);
   if (ruleid != -ENOENT) {
@@ -3962,11 +3962,11 @@ int OSDMonitor::crush_ruleset_create_erasure(const string &name,
     ErasureCodeInterfaceRef erasure_code;
     int err = get_erasure_code(profile, &erasure_code, ss);
     if (err) {
-      ss << "failed to load plugin using profile " << profile << std::endl;
+      *ss << "failed to load plugin using profile " << profile << std::endl;
       return err;
     }
 
-    err = erasure_code->create_ruleset(name, newcrush, &ss);
+    err = erasure_code->create_ruleset(name, newcrush, ss);
     erasure_code.reset();
     if (err < 0)
       return err;
@@ -3979,18 +3979,18 @@ int OSDMonitor::crush_ruleset_create_erasure(const string &name,
 
 int OSDMonitor::get_erasure_code(const string &erasure_code_profile,
 				 ErasureCodeInterfaceRef *erasure_code,
-				 stringstream &ss) const
+				 ostream *ss) const
 {
   if (pending_inc.has_erasure_code_profile(erasure_code_profile))
     return -EAGAIN;
-  const map<string,string> &profile =
+  ErasureCodeProfile profile =
     osdmap.get_erasure_code_profile(erasure_code_profile);
-  map<string,string>::const_iterator plugin =
+  ErasureCodeProfile::const_iterator plugin =
     profile.find("plugin");
   if (plugin == profile.end()) {
-    ss << "cannot determine the erasure code plugin"
-       << " because there is no 'plugin' entry in the erasure_code_profile "
-       << profile << std::endl;
+    *ss << "cannot determine the erasure code plugin"
+	<< " because there is no 'plugin' entry in the erasure_code_profile "
+	<< profile << std::endl;
     return -EINVAL;
   }
   ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
@@ -4065,29 +4065,29 @@ bool OSDMonitor::validate_crush_against_features(const CrushWrapper *newcrush,
 
 bool OSDMonitor::erasure_code_profile_in_use(const map<int64_t, pg_pool_t> &pools,
 					     const string &profile,
-					     ostream &ss)
+					     ostream *ss)
 {
   bool found = false;
   for (map<int64_t, pg_pool_t>::const_iterator p = pools.begin();
        p != pools.end();
        ++p) {
     if (p->second.erasure_code_profile == profile) {
-      ss << osdmap.pool_name[p->first] << " ";
+      *ss << osdmap.pool_name[p->first] << " ";
       found = true;
     }
   }
   if (found) {
-    ss << "pool(s) are using the erasure code profile '" << profile << "'";
+    *ss << "pool(s) are using the erasure code profile '" << profile << "'";
   }
   return found;
 }
 
 int OSDMonitor::parse_erasure_code_profile(const vector<string> &erasure_code_profile,
 					   map<string,string> *erasure_code_profile_map,
-					   stringstream &ss)
+					   ostream *ss)
 {
   int r = get_json_str_map(g_conf->osd_pool_default_erasure_code_profile,
-		           ss,
+		           *ss,
 		           erasure_code_profile_map);
   if (r)
     return r;
@@ -4123,7 +4123,7 @@ int OSDMonitor::parse_erasure_code_profile(const vector<string> &erasure_code_pr
 int OSDMonitor::prepare_pool_size(const unsigned pool_type,
 				  const string &erasure_code_profile,
 				  unsigned *size, unsigned *min_size,
-				  stringstream &ss)
+				  ostream *ss)
 {
   int err = 0;
   switch (pool_type) {
@@ -4142,7 +4142,7 @@ int OSDMonitor::prepare_pool_size(const unsigned pool_type,
     }
     break;
   default:
-    ss << "prepare_pool_size: " << pool_type << " is not a known pool type";
+    *ss << "prepare_pool_size: " << pool_type << " is not a known pool type";
     err = -EINVAL;
     break;
   }
@@ -4152,7 +4152,7 @@ int OSDMonitor::prepare_pool_size(const unsigned pool_type,
 int OSDMonitor::prepare_pool_stripe_width(const unsigned pool_type,
 					  const string &erasure_code_profile,
 					  uint32_t *stripe_width,
-					  stringstream &ss)
+					  ostream *ss)
 {
   int err = 0;
   switch (pool_type) {
@@ -4170,7 +4170,7 @@ int OSDMonitor::prepare_pool_stripe_width(const unsigned pool_type,
     }
     break;
   default:
-    ss << "prepare_pool_stripe_width: "
+    *ss << "prepare_pool_stripe_width: "
        << pool_type << " is not a known pool type";
     err = -EINVAL;
     break;
@@ -4182,7 +4182,7 @@ int OSDMonitor::prepare_pool_crush_ruleset(const unsigned pool_type,
 					   const string &erasure_code_profile,
 					   const string &ruleset_name,
 					   int *crush_ruleset,
-					   stringstream &ss)
+					   ostream *ss)
 {
   if (*crush_ruleset < 0) {
     switch (pool_type) {
@@ -4193,7 +4193,7 @@ int OSDMonitor::prepare_pool_crush_ruleset(const unsigned pool_type,
 	  *crush_ruleset = osdmap.crush->get_osd_pool_default_crush_replicated_ruleset(g_ceph_context);
 	  if (*crush_ruleset < 0) {
 	    // Errors may happen e.g. if no valid ruleset is available
-	    ss << "No suitable CRUSH ruleset exists";
+	    *ss << "No suitable CRUSH ruleset exists";
 	    return *crush_ruleset;
 	  }
 	} else {
@@ -4222,14 +4222,14 @@ int OSDMonitor::prepare_pool_crush_ruleset(const unsigned pool_type,
       }
       break;
     default:
-      ss << "prepare_pool_crush_ruleset: " << pool_type
+      *ss << "prepare_pool_crush_ruleset: " << pool_type
 	 << " is not a known pool type";
       return -EINVAL;
       break;
     }
   } else {
     if (!osdmap.crush->ruleset_exists(*crush_ruleset)) {
-      ss << "CRUSH ruleset " << *crush_ruleset << " not found";
+      *ss << "CRUSH ruleset " << *crush_ruleset << " not found";
       return -ENOENT;
     }
   }
@@ -4239,7 +4239,7 @@ int OSDMonitor::prepare_pool_crush_ruleset(const unsigned pool_type,
 
 int OSDMonitor::get_crush_ruleset(const string &ruleset_name,
 				  int *crush_ruleset,
-				  stringstream &ss)
+				  ostream *ss)
 {
   int ret;
   ret = osdmap.crush->get_rule_id(ruleset_name);
@@ -4258,7 +4258,7 @@ int OSDMonitor::get_crush_ruleset(const string &ruleset_name,
       return -EAGAIN;
     } else {
       //Cannot find it , return error
-      ss << "specified ruleset " << ruleset_name << " doesn't exist";
+      *ss << "specified ruleset " << ruleset_name << " doesn't exist";
       return ret;
     }
   }
@@ -4286,7 +4286,7 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid,
 				 const string &erasure_code_profile,
                                  const unsigned pool_type,
                                  const uint64_t expected_num_objects,
-				 stringstream &ss)
+				 ostream *ss)
 {
   if (name.length() == 0)
     return -EINVAL;
@@ -4510,7 +4510,7 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
        ErasureCodeInterfaceRef erasure_code;
        int k;
        stringstream tmp;
-       int err = get_erasure_code(p.erasure_code_profile, &erasure_code, tmp);
+       int err = get_erasure_code(p.erasure_code_profile, &erasure_code, &tmp);
        if (err == 0) {
 	 k = erasure_code->get_data_chunk_count();
        } else {
@@ -5399,10 +5399,10 @@ bool OSDMonitor::prepare_command_impl(MMonCommand *m,
     string name;
     cmd_getval(g_ceph_context, cmdmap, "name", name);
 
-    if (erasure_code_profile_in_use(pending_inc.new_pools, name, ss))
+    if (erasure_code_profile_in_use(pending_inc.new_pools, name, &ss))
       goto wait;
 
-    if (erasure_code_profile_in_use(osdmap.pools, name, ss)) {
+    if (erasure_code_profile_in_use(osdmap.pools, name, &ss)) {
       err = -EBUSY;
       goto reply;
     }
@@ -5439,7 +5439,7 @@ bool OSDMonitor::prepare_command_impl(MMonCommand *m,
       force = false;
     }
     map<string,string> profile_map;
-    err = parse_erasure_code_profile(profile, &profile_map, ss);
+    err = parse_erasure_code_profile(profile, &profile_map, &ss);
     if (err)
       goto reply;
     if (profile_map.find("plugin") == profile_map.end()) {
@@ -5523,7 +5523,7 @@ bool OSDMonitor::prepare_command_impl(MMonCommand *m,
     }
 
     int ruleset;
-    err = crush_ruleset_create_erasure(name, profile, &ruleset, ss);
+    err = crush_ruleset_create_erasure(name, profile, &ruleset, &ss);
     if (err < 0) {
       switch(err) {
       case -EEXIST: // return immediately
@@ -6297,7 +6297,7 @@ done:
 
     if (!implicit_ruleset_creation && ruleset_name != "") {
       int ruleset;
-      err = get_crush_ruleset(ruleset_name, &ruleset, ss);
+      err = get_crush_ruleset(ruleset_name, &ruleset, &ss);
       if (err == -EAGAIN) {
 	wait_for_finished_proposal(new C_RetryMessage(this, m));
 	return true;
@@ -6319,7 +6319,7 @@ done:
 			   pg_num, pgp_num,
 			   erasure_code_profile, pool_type,
                            (uint64_t)expected_num_objects,
-			   ss);
+			   &ss);
     if (err < 0) {
       switch(err) {
       case -EEXIST:
