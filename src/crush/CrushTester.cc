@@ -358,9 +358,11 @@ void CrushTester::write_integer_indexed_scalar_data_string(vector<string> &dst, 
 }
 
 int CrushTester::test_with_crushtool(const string& crushtool,
+                                     int max_id,
                                      int timeout)
 {
   string timeout_string = stringify(timeout);
+  string opt_max_id = stringify(max_id);
   vector<const char *> cmd_args;
   cmd_args.push_back("timeout");
   cmd_args.push_back(timeout_string.c_str());
@@ -368,6 +370,8 @@ int CrushTester::test_with_crushtool(const string& crushtool,
   cmd_args.push_back("-i");
   cmd_args.push_back("-");
   cmd_args.push_back("--test");
+  cmd_args.push_back("--check");
+  cmd_args.push_back(opt_max_id.c_str());
   cmd_args.push_back(NULL);
 
   int pipefds[2];
