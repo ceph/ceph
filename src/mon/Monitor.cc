@@ -4210,7 +4210,6 @@ int Monitor::scrub_start()
   }
 
   scrub_result.clear();
-  scrub_version = paxos->get_version();
   scrub_state.reset(new ScrubState);
 
   scrub();
@@ -4221,6 +4220,9 @@ int Monitor::scrub()
 {
   assert(is_leader());
   assert(scrub_state);
+
+  wait_for_paxos_write();
+  scrub_version = paxos->get_version();
 
   // scrub all keys if we're the only monitor in the quorum
   int32_t num_keys =
@@ -4259,6 +4261,9 @@ void Monitor::handle_scrub(MMonScrub *m)
     {
       if (!is_peon())
 	break;
+
+      wait_for_paxos_write();
+
       if (m->version != paxos->get_version())
 	break;
 
