@@ -376,7 +376,7 @@ def get_distro_defaults(distro, machine_type):
         (arch, release, pkg_type)
 
     This is used to default to:
-        ('x86_64', 'precise', 'deb') when passed 'ubuntu' and 'plana'
+        ('x86_64', 'trusty', 'deb') when passed 'ubuntu' and 'plana'
     ('armv7l', 'saucy', 'deb') when passed 'ubuntu' and 'saya'
     ('x86_64', 'wheezy', 'deb') when passed 'debian'
     ('x86_64', 'fedora20', 'rpm') when passed 'fedora'
@@ -393,7 +393,7 @@ def get_distro_defaults(distro, machine_type):
             release = 'saucy'
             arch = 'armv7l'
         else:
-            release = 'precise'
+            release = 'trusty'
     elif distro == 'debian':
         release = 'wheezy'
         pkg_type = 'deb'

@@ -283,7 +283,7 @@ class TestDistroDefaults(object):
 
     def test_distro_defaults_plana(self):
         assert suite.get_distro_defaults('ubuntu', 'plana') == ('x86_64',
-                                                                'precise',
+                                                                'trusty',
                                                                 'deb')
 
     def test_distro_defaults_debian(self):

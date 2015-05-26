@@ -1192,12 +1192,12 @@ def get_distro_version(ctx):
     Get the verstion of the distro that we are using (release number).
     """
     default_os_version = dict(
-        ubuntu="12.04",
-        fedora="18",
-        centos="6.4",
+        ubuntu="14.04",
+        fedora="20",
+        centos="7.0",
         opensuse="12.2",
         sles="11-sp2",
-        rhel="6.4",
+        rhel="7.0",
         debian='7.0'
     )
     distro = get_distro(ctx)
