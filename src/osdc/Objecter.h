@@ -1126,6 +1126,7 @@ public:
     vector<int> acting;  ///< set of acting osds for last pg we mapped to
     int up_primary;      ///< primary for last pg we mapped to based on the up set
     int acting_primary;  ///< primary for last pg we mapped to based on the acting set
+    int size;        ///< the size of the pool when were were last mapped
     int min_size;        ///< the min size of the pool when were were last mapped
 
     bool used_replica;
@@ -1141,6 +1142,7 @@ public:
 	pg_num(0),
 	up_primary(-1),
 	acting_primary(-1),
+	size(-1),
 	min_size(-1),
 	used_replica(false),
 	paused(false),
