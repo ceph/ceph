@@ -7,7 +7,7 @@
 
 #include <algorithm>
 #include <stdlib.h>
-
+#include <boost/lexical_cast.hpp>
 #include <common/SubProcess.h>
 
 void CrushTester::set_device_weight(int dev, float f)
@@ -355,10 +355,11 @@ void CrushTester::write_integer_indexed_scalar_data_string(vector<string> &dst, 
   dst.push_back( data_buffer.str() );
 }
 
-int CrushTester::test_with_crushtool(const char *crushtool_cmd, int timeout)
+int CrushTester::test_with_crushtool(const char *crushtool_cmd, int max_id, int timeout)
 {
   SubProcessTimed crushtool(crushtool_cmd, true, false, true, timeout);
-  crushtool.add_cmd_args("-i", "-", "--test", NULL);
+  string opt_max_id = boost::lexical_cast<string>(max_id);
+  crushtool.add_cmd_args("-i", "-", "--test", "--check", opt_max_id.c_str(), NULL);
   int ret = crushtool.spawn();
   if (ret != 0) {
     err << "failed run crushtool: " << crushtool.err();
