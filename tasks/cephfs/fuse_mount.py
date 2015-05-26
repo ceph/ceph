@@ -68,10 +68,17 @@ class FuseMount(CephFSMount):
         run_cmd.extend(run_cmd_tail)
 
         def list_connections():
+            self.client_remote.run(
+                args=["sudo", "mount", "-t", "fusectl", "/sys/fs/fuse/connections", "/sys/fs/fuse/connections"],
+                check_status=False
+            )
             p = self.client_remote.run(
                 args=["ls", "/sys/fs/fuse/connections"],
-                stdout=StringIO()
+                stdout=StringIO(),
+                check_status=False
             )
+            if p.exitstatus != 0:
+                return []
 
             ls_str = p.stdout.getvalue().strip()
             if ls_str:
