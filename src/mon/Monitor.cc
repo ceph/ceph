@@ -168,6 +168,7 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
   // scrub
   scrub_version(0),
   scrub_event(NULL),
+  scrub_timeout_event(NULL),
 
   // sync state
   sync_provider_count(0),
@@ -4221,8 +4222,10 @@ int Monitor::scrub()
   assert(is_leader());
   assert(scrub_state);
 
+  scrub_cancel_timeout();
   wait_for_paxos_write();
   scrub_version = paxos->get_version();
+
 
   // scrub all keys if we're the only monitor in the quorum
   int32_t num_keys =
@@ -4245,6 +4248,12 @@ int Monitor::scrub()
                   &num_keys);
 
   scrub_state->finished = !r;
+
+  // only after we got our scrub results do we really care whether the
+  // other monitors are late on their results.  Also, this way we avoid
+  // triggering the timeout if we end up getting stuck in _scrub() for
+  // longer than the duration of the timeout.
+  scrub_reset_timeout();
 
   if (quorum.size() == 1) {
     assert(scrub_state->finished == true);
@@ -4283,6 +4292,9 @@ void Monitor::handle_scrub(MMonScrub *m)
 	break;
       if (m->version != scrub_version)
 	break;
+      // reset the timeout each time we get a result
+      scrub_reset_timeout();
+
       int from = m->get_source().num();
       assert(scrub_result.count(from) == 0);
       scrub_result[from] = m->result;
@@ -4389,6 +4401,13 @@ void Monitor::scrub_check_results()
     clog->info() << "scrub ok on " << quorum << ": " << mine << "\n";
 }
 
+inline void Monitor::scrub_timeout()
+{
+  dout(1) << __func__ << " restarting scrub" << dendl;
+  scrub_reset();
+  scrub_start();
+}
+
 void Monitor::scrub_finish()
 {
   dout(10) << __func__ << dendl;
@@ -4399,6 +4418,7 @@ void Monitor::scrub_finish()
 void Monitor::scrub_reset()
 {
   dout(10) << __func__ << dendl;
+  scrub_cancel_timeout();
   scrub_version = 0;
   scrub_result.clear();
   scrub_state.reset();
@@ -4423,6 +4443,22 @@ void Monitor::scrub_event_cancel()
     timer.cancel_event(scrub_event);
     scrub_event = NULL;
   }
+}
+
+inline void Monitor::scrub_cancel_timeout()
+{
+  if (scrub_timeout_event) {
+    timer.cancel_event(scrub_timeout_event);
+    scrub_timeout_event = NULL;
+  }
+}
+
+void Monitor::scrub_reset_timeout()
+{
+  dout(15) << __func__ << " reset timeout event" << dendl;
+  scrub_cancel_timeout();
+  scrub_timeout_event = new C_ScrubTimeout(this);
+  timer.add_event_after(g_conf->mon_scrub_timeout, scrub_timeout_event);
 }
 
 /************ TICK ***************/

@@ -249,6 +249,7 @@ private:
               pair<string,string> *start,
               int *num_keys);
   void scrub_check_results();
+  void scrub_timeout();
   void scrub_finish();
   void scrub_reset();
 
@@ -259,9 +260,19 @@ private:
       mon->scrub_start();
     }
   };
+  struct C_ScrubTimeout : public Context {
+    Monitor *mon;
+    C_ScrubTimeout(Monitor *m) : mon(m) { }
+    void finish(int r) {
+      mon->scrub_timeout();
+    }
+  };
   Context *scrub_event;       ///< periodic event to trigger scrub (leader)
+  Context *scrub_timeout_event;  ///< scrub round timeout (leader)
   void scrub_event_start();
   void scrub_event_cancel();
+  void scrub_reset_timeout();
+  void scrub_cancel_timeout();
 
   struct ScrubState {
     pair<string,string> last_key; ///< last scrubbed key
