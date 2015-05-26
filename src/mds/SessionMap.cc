@@ -584,11 +584,11 @@ void SessionMap::remove_session(Session *s)
   s->trim_completed_requests(0);
   s->item_session_list.remove_myself();
   session_map.erase(s->info.inst.name);
-  s->put();
   if (dirty_sessions.count(s->info.inst.name)) {
     dirty_sessions.erase(s->info.inst.name);
   }
   null_sessions.insert(s->info.inst.name);
+  s->put();
 }
 
 void SessionMap::touch_session(Session *session)
