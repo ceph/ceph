@@ -293,7 +293,7 @@ class TestDistroDefaults(object):
 
     def test_distro_defaults_centos(self):
         assert suite.get_distro_defaults('centos', 'magna') == ('x86_64',
-                                                                'centos6',
+                                                                'centos7',
                                                                 'rpm')
 
     def test_distro_defaults_fedora(self):
@@ -303,7 +303,7 @@ class TestDistroDefaults(object):
 
     def test_distro_defaults_default(self):
         assert suite.get_distro_defaults('rhel', 'magna') == ('x86_64',
-                                                              'rhel7_0',
+                                                              'centos7',
                                                               'rpm')
 
 

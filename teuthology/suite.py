@@ -380,12 +380,11 @@ def get_distro_defaults(distro, machine_type):
     ('armv7l', 'saucy', 'deb') when passed 'ubuntu' and 'saya'
     ('x86_64', 'wheezy', 'deb') when passed 'debian'
     ('x86_64', 'fedora20', 'rpm') when passed 'fedora'
-    ('x86_64', 'centos6', 'rpm') when passed 'centos'
-    And ('x86_64', 'rhel7_0', 'rpm') when passed anything else
+    And ('x86_64', 'centos7', 'rpm') when passed anything else
     """
     arch = 'x86_64'
-    if distro in (None, 'None', 'rhel'):
-        release = 'rhel7_0'
+    if distro in (None, 'None', 'rhel', 'centos'):
+        release = 'centos7'
         pkg_type = 'rpm'
     elif distro == 'ubuntu':
         pkg_type = 'deb'
@@ -397,9 +396,6 @@ def get_distro_defaults(distro, machine_type):
     elif distro == 'debian':
         release = 'wheezy'
         pkg_type = 'deb'
-    elif distro == 'centos':
-        release = 'centos6'
-        pkg_type = 'rpm'
     elif distro == 'fedora':
         release = 'fedora20'
         pkg_type = 'rpm'
