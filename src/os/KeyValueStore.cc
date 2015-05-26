@@ -583,6 +583,11 @@ int KeyValueStore::statfs(struct statfs *buf)
   return 0;
 }
 
+void KeyValueStore::collect_metadata(map<string,string> *pm)
+{
+  (*pm)["keyvaluestore_backend"] = superblock.backend;
+}
+
 int KeyValueStore::mkfs()
 {
   int ret = 0;
