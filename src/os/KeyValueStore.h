@@ -474,7 +474,7 @@ class KeyValueStore : public ObjectStore,
  public:
 
   KeyValueStore(const std::string &base,
-                const char *internal_name = "keyvaluestore-dev",
+                const char *internal_name = "keyvaluestore",
                 bool update_to=false);
   ~KeyValueStore();
 
@@ -523,6 +523,8 @@ class KeyValueStore : public ObjectStore,
    ** return value: true if set_allow_sharded_objects() called, otherwise false
    **/
   bool get_allow_sharded_objects() {return false;}
+
+  void collect_metadata(map<string,string> *pm);
 
   int statfs(struct statfs *buf);
 
