@@ -38,7 +38,7 @@ namespace librbd {
     void complete(int r);
 
     virtual bool should_complete(int r) = 0;
-    virtual int send() = 0;
+    virtual void send() = 0;
 
     bool has_parent() const {
       return !m_parent_extents.empty();
@@ -66,7 +66,7 @@ namespace librbd {
     virtual ~AioRead();
 
     virtual bool should_complete(int r);
-    virtual int send();
+    virtual void send();
     void guard_read();
 
     ceph::bufferlist &data() {
@@ -126,7 +126,7 @@ namespace librbd {
     }
 
     virtual bool should_complete(int r);
-    virtual int send();
+    virtual void send();
 
   private:
     /**
