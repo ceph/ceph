@@ -2428,6 +2428,7 @@ int Objecter::_calc_target(op_target_t *t, epoch_t *last_force_resend,  bool any
     }
   }
 
+  int size = pi->size;
   int min_size = pi->min_size;
   unsigned pg_num = pi->get_pg_num();
   int up_primary, acting_primary;
@@ -2443,6 +2444,8 @@ int Objecter::_calc_target(op_target_t *t, epoch_t *last_force_resend,  bool any
 	  up_primary,
 	  t->up,
 	  up,
+	  t->size,
+	  size,
 	  t->min_size,
 	  min_size,
 	  t->pg_num,
@@ -2469,6 +2472,7 @@ int Objecter::_calc_target(op_target_t *t, epoch_t *last_force_resend,  bool any
     t->acting_primary = acting_primary;
     t->up_primary = up_primary;
     t->up = up;
+    t->size = size;
     t->min_size = min_size;
     t->pg_num = pg_num;
     ldout(cct, 10) << __func__ << " "
