@@ -333,6 +333,11 @@ public:
     min_rule = max_rule = rule;
   }
 
+  /**
+   * check if any bucket/nodes is referencing an unknown name or type
+   * @return false if an dangling name/type is referenced, true otherwise
+   */
+  bool check_name_maps() const;
   int test();
   int test_with_crushtool(const string& crushtool,
 			  int timeout);
