@@ -184,6 +184,8 @@ Notable changes
 * messenger: double clear of pipe in reaper (#11381, Haomai Wang)
 * rgw: init-radosgw: run RGW as root (#11453, Ken Dreyer)
 * tests: TestFlatIndex.cc races with TestLFNIndex.cc (#11217, Xinze Chi)
+* rgw: restore buffer of multipart upload after EEXIST (#11604, Yehuda Sadeh)
+* rgw: merge manifests correctly when there's prefix override (#11622, Yehuda Sadeh)
 
 
 v0.94.1 Hammer
