@@ -1132,6 +1132,47 @@ if test "x$enable_valgrind" = "xyes"; then
 fi
 
 
+dnl systemd-libexec-dir
+AC_SUBST(systemd_libexec_dir)
+AC_ARG_WITH(
+    systemd-libexec-dir,
+    AS_HELP_STRING(
+	    [--with-systemd-libexec-dir=DIR],
+	    [systemd libexec directory @<:@SYSTEMD_LIBEXEC_DIR@:>@
+        defaults to --libexecdir=DIR]
+    ),
+    [
+	    systemd_libexec_dir="$withval"
+    ],
+    [
+        if test "x$SYSTEMD_LIBEXEC_DIR" = "x"; then
+            dnl store old values
+
+            prefix_save=$prefix
+            exec_prefix_save=$exec_prefix
+
+            dnl if no prefix given, then use /usr/local, the default prefix
+            if test "x$prefix" = "xNONE"; then
+                prefix="$ac_default_prefix"
+            fi
+            dnl if no exec_prefix given, then use prefix
+            if test "x$exec_prefix" = "xNONE"; then
+                exec_prefix=$prefix
+            fi
+
+            dnl now get the expanded default
+            systemd_libexec_dir="`eval exec_prefix=$exec_prefix prefix=$prefix echo $libexecdir`"
+
+            dnl now cleanup prefix and exec_prefix
+
+            prefix=$prefix_save
+            exec_prefix=$exec_prefix_save
+        else
+            systemd_libexec_dir="$SYSTEMD_LIBEXEC_DIR"
+        fi
+    ]
+)
+
 # Checks for typedefs, structures, and compiler characteristics.
 #AC_HEADER_STDBOOL
 #AC_C_CONST
@@ -1193,5 +1234,6 @@ AC_CONFIG_FILES([Makefile
 	src/java/Makefile
 	src/tracing/Makefile
 	man/Makefile
+	systemd/ceph-osd@.service
 	ceph.spec])
 AC_OUTPUT
