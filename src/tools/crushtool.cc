@@ -165,7 +165,8 @@ void usage()
   cout << "Options for the display/test stage\n";
   cout << "\n";
   cout << "   --tree                print map summary as a tree\n";
-  cout << "   --check-names         check if any item is referencing an unknown name/type\n";
+  cout << "   --check-names [max_id]\n";
+  cout << "                         check if any item is referencing an unknown name/type\n";
   cout << "   -i mapfn --show-location id\n";
   cout << "                         show location for given device id\n";
   cout << "   -i mapfn --test       test a range of inputs on the map\n";
@@ -228,6 +229,7 @@ int main(int argc, const char **argv)
   bool compile = false;
   bool decompile = false;
   bool check_names = false;
+  int max_id = -1;
   bool test = false;
   bool display = false;
   bool tree = false;
@@ -313,7 +315,7 @@ int main(int argc, const char **argv)
     } else if (ceph_argparse_witharg(args, i, &val, "-c", "--compile", (char*)NULL)) {
       srcfn = val;
       compile = true;
-    } else if (ceph_argparse_flag(args, i, "--check-names", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &max_id, err, "--check-names", (char*)NULL)) {
       check_names = true;
     } else if (ceph_argparse_flag(args, i, "-t", "--test", (char*)NULL)) {
       test = true;
@@ -828,7 +830,7 @@ int main(int argc, const char **argv)
   }
 
   if (check_names) {
-    if (!tester.check_name_maps()) {
+    if (!tester.check_name_maps(max_id)) {
       exit(1);
     }
   }
