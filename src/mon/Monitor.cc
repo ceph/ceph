@@ -452,6 +452,8 @@ const char** Monitor::get_tracked_conf_keys() const
     "mon_health_to_clog",
     "mon_health_to_clog_interval",
     "mon_health_to_clog_tick_interval",
+    // scrub interval
+    "mon_scrub_interval",
     NULL
   };
   return KEYS;
@@ -475,6 +477,10 @@ void Monitor::handle_conf_change(const struct md_config_t *conf,
       changed.count("mon_health_to_clog_interval") ||
       changed.count("mon_health_to_clog_tick_interval")) {
     health_to_clog_update_conf(changed);
+  }
+
+  if (changed.count("mon_scrub_interval")) {
+    scrub_update_interval(conf->mon_scrub_interval);
   }
 }
 
@@ -4210,6 +4216,7 @@ int Monitor::scrub_start()
     return -EBUSY;
   }
 
+  scrub_event_cancel();
   scrub_result.clear();
   scrub_state.reset(new ScrubState);
 
@@ -4424,6 +4431,23 @@ void Monitor::scrub_reset()
   scrub_state.reset();
 }
 
+inline void Monitor::scrub_update_interval(int secs)
+{
+  // we don't care about changes if we are not the leader.
+  // changes will be visible if we become the leader.
+  if (!is_leader())
+    return;
+
+  dout(1) << __func__ << " new interval = " << secs << dendl;
+
+  // if scrub already in progress, all changes will already be visible during
+  // the next round.  Nothing to do.
+  if (scrub_state != NULL)
+    return;
+
+  scrub_event_cancel();
+  scrub_event_start();
+}
 
 void Monitor::scrub_event_start()
 {
@@ -4431,6 +4455,13 @@ void Monitor::scrub_event_start()
 
   if (scrub_event)
     scrub_event_cancel();
+
+  if (cct->_conf->mon_scrub_interval <= 0) {
+    dout(1) << __func__ << " scrub event is disabled"
+            << " (mon_scrub_interval = " << cct->_conf->mon_scrub_interval
+            << ")" << dendl;
+    return;
+  }
 
   scrub_event = new C_Scrub(this);
   timer.add_event_after(cct->_conf->mon_scrub_interval, scrub_event);
