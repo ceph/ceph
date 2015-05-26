@@ -1490,6 +1490,7 @@ int Objecter::calc_target(op_target_t *t, epoch_t *last_force_resend, bool any_c
       return RECALC_OP_TARGET_POOL_DNE;
   }
 
+  int size = pi->size;
   int min_size = pi->min_size;
   unsigned pg_num = pi->get_pg_num();
   int up_primary, acting_primary;
@@ -1505,6 +1506,8 @@ int Objecter::calc_target(op_target_t *t, epoch_t *last_force_resend, bool any_c
 	  up_primary,
 	  t->up,
 	  up,
+	  t->size,
+	  size,
 	  t->min_size,
 	  min_size,
 	  t->pg_num,
@@ -1531,6 +1534,7 @@ int Objecter::calc_target(op_target_t *t, epoch_t *last_force_resend, bool any_c
     t->acting_primary = acting_primary;
     t->up_primary = up_primary;
     t->up = up;
+    t->size = size;
     t->min_size = min_size;
     t->pg_num = pg_num;
     ldout(cct, 10) << __func__ << " "
