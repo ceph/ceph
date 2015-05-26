@@ -445,9 +445,10 @@ namespace {
   class CrushWalker : public CrushTreeDumper::Dumper<void> {
     typedef void DumbFormatter;
     typedef CrushTreeDumper::Dumper<DumbFormatter> Parent;
+    unsigned max_id;
   public:
-    CrushWalker(const CrushWrapper *crush)
-      : Parent(crush) {}
+    CrushWalker(const CrushWrapper *crush, unsigned max_id)
+      : Parent(crush), max_id(max_id) {}
     void dump_item(const CrushTreeDumper::Item &qi, DumbFormatter *) {
       int type = -1;
       if (qi.is_bucket()) {
@@ -456,6 +457,9 @@ namespace {
 	}
 	type = crush->get_bucket_type(qi.id);
       } else {
+	if (max_id > 0 && qi.id >= (int)max_id) {
+	  throw BadCrushMap("item id too large", qi.id);
+	}
 	type = 0;
       }
       if (!crush->get_type_name(type)) {
@@ -465,9 +469,9 @@ namespace {
   };
 }
 
-bool CrushTester::check_name_maps() const
+bool CrushTester::check_name_maps(unsigned max_id) const
 {
-  CrushWalker crush_walker(&crush);
+  CrushWalker crush_walker(&crush, max_id);
   try {
     // walk through the crush, to see if its self-contained
     crush_walker.dump(NULL);
