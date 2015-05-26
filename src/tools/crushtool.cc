@@ -135,6 +135,10 @@ void usage()
   cout << "                         reweight a given item (and adjust ancestor\n"
        << "                         weights as needed)\n";
   cout << "   -i mapfn --reweight   recalculate all bucket weights\n";
+  cout << "\n";
+  cout << "Options for the display/test stage\n";
+  cout << "\n";
+  cout << "   --check-names         check if any item is referencing an unknown name/type\n";
   cout << "   -i mapfn --show-location id\n";
   cout << "                         show location for given device id\n";
   cout << "   --show-utilization    show OSD usage\n";
@@ -191,6 +195,7 @@ int main(int argc, const char **argv)
   std::string infn, srcfn, outfn, add_name, remove_name, reweight_name;
   bool compile = false;
   bool decompile = false;
+  bool check_names = false;
   bool test = false;
   bool display = false;
   bool tree = false;
@@ -276,6 +281,8 @@ int main(int argc, const char **argv)
     } else if (ceph_argparse_witharg(args, i, &val, "-c", "--compile", (char*)NULL)) {
       srcfn = val;
       compile = true;
+    } else if (ceph_argparse_flag(args, i, "--check-names", (char*)NULL)) {
+      check_names = true;
     } else if (ceph_argparse_flag(args, i, "-t", "--test", (char*)NULL)) {
       test = true;
     } else if (ceph_argparse_withint(args, i, &full_location, &err, "--show-location", (char*)NULL)) {
@@ -462,7 +469,7 @@ int main(int argc, const char **argv)
     }
   }
 
-  if (test && !display && !write_to_file) {
+  if (test && !check_name && !display && !write_to_file) {
     cerr << "WARNING: no output selected; use --output-csv or --show-X" << std::endl;
   }
 
@@ -470,7 +477,7 @@ int main(int argc, const char **argv)
     cerr << "cannot specify more than one of compile, decompile, and build" << std::endl;
     exit(EXIT_FAILURE);
   }
-  if (!compile && !decompile && !build && !test && !reweight && !adjust && !tree &&
+  if (!check_names && !compile && !decompile && !build && !test && !reweight && !adjust && !tree &&
       add_item < 0 && full_location < 0 &&
       remove_name.empty() && reweight_name.empty()) {
     cerr << "no action specified; -h for help" << std::endl;
@@ -785,7 +792,8 @@ int main(int argc, const char **argv)
     crush.set_allowed_bucket_algs(allowed_bucket_algs);
     modified = true;
   }
-  if (modified) {
+
+ if (modified) {
     crush.finalize();
 
     if (outfn.empty()) {
@@ -800,6 +808,12 @@ int main(int argc, const char **argv)
       }
       if (verbose)
 	cout << "wrote crush map to " << outfn << std::endl;
+    }
+  }
+
+  if (check_names) {
+    if (!tester.check_name_maps()) {
+      exit(1);
     }
   }
 
