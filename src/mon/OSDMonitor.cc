@@ -4530,7 +4530,7 @@ bool OSDMonitor::prepare_command_impl(MMonCommand *m,
     // then we would consistently trigger an election before the command
     // finishes, having a flapping monitor unable to hold quorum.
     CrushTester tester(crush, ess);
-    if (!tester.check_name_maps()) {
+    if (!tester.check_name_maps(osdmap.get_max_osd())) {
       err = -EINVAL;
       ss << ess.str();
       goto reply;
