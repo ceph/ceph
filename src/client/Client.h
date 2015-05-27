@@ -319,6 +319,7 @@ public:
   void kick_requests_closed(MetaSession *session);
   void handle_client_request_forward(MClientRequestForward *reply);
   void handle_client_reply(MClientReply *reply);
+  bool is_dir_operation(MetaRequest *request);
 
   bool   initialized;
   bool   authenticated;
