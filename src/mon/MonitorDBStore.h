@@ -448,11 +448,13 @@ class MonitorDBStore
 
     virtual pair<string,string> get_next_key() {
       assert(iter->valid());
-      pair<string,string> r = iter->raw_key();
-      do {
-	iter->next();
-      } while (iter->valid() && sync_prefixes.count(iter->raw_key().first) == 0);
-      return r;
+
+      for (; iter->valid(); iter->next()) {
+        pair<string,string> r = iter->raw_key();
+        if (sync_prefixes.count(r.first) > 0)
+          return r;
+      }
+      return pair<string,string>();
     }
 
     virtual bool _is_valid() {
