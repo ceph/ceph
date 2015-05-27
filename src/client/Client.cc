@@ -3758,6 +3758,23 @@ void Client::flush_caps(Inode *in, MetaSession *session)
 	   (cap->issued | cap->implemented), in->flushing_caps);
 }
 
+void Client::wait_sync_caps(Inode *in, uint16_t flush_tid[])
+{
+retry:
+  for (int i = 0; i < CEPH_CAP_BITS; ++i) {
+    if (!(in->flushing_caps & (1 << i)))
+      continue;
+    // handle uint16_t wrapping
+    if ((int16_t)(in->flushing_cap_tid[i] - flush_tid[i]) <= 0) {
+      ldout(cct, 10) << "wait_sync_caps on " << *in << " flushing "
+		     << ccap_string(1 << i) << " want " << flush_tid[i]
+		     << " last " << in->flushing_cap_tid[i] << dendl;
+      wait_on_list(in->waitfor_caps);
+      goto retry;
+    }
+  }
+}
+
 void Client::wait_sync_caps(uint64_t want)
 {
  retry:
@@ -4316,6 +4333,7 @@ void Client::handle_cap_flush_ack(MetaSession *session, Inode *in, Cap *cap, MCl
 	num_flushing_caps--;
 	sync_cond.Signal();
       }
+      signal_cond_list(in->waitfor_caps);
       if (!in->caps_dirty())
 	put_inode(in);
     }
@@ -7673,7 +7691,7 @@ int Client::_fsync(Fh *f, bool syncdataonly)
   int r = 0;
 
   Inode *in = f->inode;
-  ceph_tid_t wait_on_flush = 0;
+  uint16_t wait_on_flush[CEPH_CAP_BITS];
   bool flushed_metadata = false;
   Mutex lock("Client::_fsync::lock");
   Cond cond;
@@ -7697,8 +7715,8 @@ int Client::_fsync(Fh *f, bool syncdataonly)
         flush_caps(in, session);
       }
     }
-    wait_on_flush = in->last_flush_tid;
     flushed_metadata = true;
+    memcpy(wait_on_flush, in->flushing_cap_tid, sizeof(wait_on_flush));
   } else ldout(cct, 10) << "no metadata needs to commit" << dendl;
 
   if (object_cacher_completion) { // wait on a real reply instead of guessing
@@ -7721,9 +7739,8 @@ int Client::_fsync(Fh *f, bool syncdataonly)
   }
 
   if (!r) {
-    if (flushed_metadata) wait_sync_caps(wait_on_flush);
-    // this could wait longer than strictly necessary,
-    // but on a sync the user can put up with it
+    if (flushed_metadata)
+      wait_sync_caps(in, wait_on_flush);
 
     ldout(cct, 10) << "ino " << in->ino << " has no uncommitted writes" << dendl;
   } else {
