@@ -1100,14 +1100,19 @@ function test_expect_failure() {
 
 ##
 # Call the **run** function (which must be defined by the caller) with
-# the **dir** argument followed by the caller argument list. The
-# **setup** function is called before the **run** function and the
-# **teardown** function is called after to cleanup leftovers. The
-# environment is prepared to protect the **run** function from
-# pre-existing variables.
+# the **dir** argument followed by the caller argument list.
 #
-# The shell is required to display the function a line number whenever
-# a statement is executed to facilitate debugging.
+# **teardown** function is called when the **run** function returns
+# (on success or on error), to cleanup leftovers. The CEPH_CONF is set
+# to /dev/null and CEPH_ARGS is unset so that the tests are protected from
+# external interferences.
+#
+# It is the responsibility of the **run** function to call the
+# **setup** function to prepare the test environment (create a temporary
+# directory etc.).
+#
+# The shell is required (via PS4) to display the function and line
+# number whenever a statement is executed to help debugging.
 #
 # @param dir directory in which all data is stored
 # @param ... arguments passed transparently to **run**
