@@ -52,6 +52,7 @@ missing
 py-compile
 release
 stamp-h1
+systemd/ceph-osd@.service
 vgcore.*
 
 # specific local dir files
