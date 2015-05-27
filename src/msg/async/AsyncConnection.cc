@@ -2017,8 +2017,8 @@ void AsyncConnection::discard_requeued_up_to(uint64_t seq)
 void AsyncConnection::discard_out_queue()
 {
   ldout(async_msgr->cct, 10) << __func__ << " started" << dendl;
+  assert(write_lock.is_locked());
 
-  Mutex::Locker l(write_lock);
   for (list<pair<bufferlist, Message*> >::iterator p = sent.begin(); p != sent.end(); ++p) {
     ldout(async_msgr->cct, 20) << __func__ << " discard " << p->second << dendl;
     p->second->put();
@@ -2133,6 +2133,7 @@ void AsyncConnection::fault()
 void AsyncConnection::was_session_reset()
 {
   ldout(async_msgr->cct,10) << __func__ << " started" << dendl;
+  Mutex::Locker l(write_lock);
   discard_out_queue();
 
   center->dispatch_event_external(remote_reset_handler);
@@ -2145,6 +2146,7 @@ void AsyncConnection::was_session_reset()
   connect_seq = 0;
   in_seq_acked = 0;
   once_ready = false;
+  can_write = 0;
 }
 
 void AsyncConnection::_stop()
@@ -2154,6 +2156,7 @@ void AsyncConnection::_stop()
     return ;
 
   ldout(async_msgr->cct, 10) << __func__ << dendl;
+  Mutex::Locker l(write_lock);
   if (sd >= 0)
     center->delete_file_event(sd, EVENT_READABLE|EVENT_WRITABLE);
 
@@ -2161,7 +2164,6 @@ void AsyncConnection::_stop()
   async_msgr->unregister_conn(this);
 
   state = STATE_CLOSED;
-  Mutex::Locker l(write_lock);
   open_write = false;
   can_write = 2;
   state_offset = 0;
