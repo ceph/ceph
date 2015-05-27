@@ -1201,6 +1201,8 @@ public:
 
     epoch_t last_force_resend;
 
+    osd_reqid_t reqid; // explicitly setting reqid
+
     Op(const object_t& o, const object_locator_t& ol, vector<OSDOp>& op,
        int f, Context *ac, Context *co, version_t *ov, int *offset = NULL) :
       session(NULL), incarnation(0),
@@ -2045,19 +2047,22 @@ public:
   Op *prepare_mutate_op(const object_t& oid, const object_locator_t& oloc,
 	       ObjectOperation& op,
 	       const SnapContext& snapc, utime_t mtime, int flags,
-	       Context *onack, Context *oncommit, version_t *objver = NULL) {
+	       Context *onack, Context *oncommit, version_t *objver = NULL,
+	       osd_reqid_t reqid = osd_reqid_t()) {
     Op *o = new Op(oid, oloc, op.ops, flags | global_op_flags.read() | CEPH_OSD_FLAG_WRITE, onack, oncommit, objver);
     o->priority = op.priority;
     o->mtime = mtime;
     o->snapc = snapc;
     o->out_rval.swap(op.out_rval);
+    o->reqid = reqid;
     return o;
   }
   ceph_tid_t mutate(const object_t& oid, const object_locator_t& oloc,
 	       ObjectOperation& op,
 	       const SnapContext& snapc, utime_t mtime, int flags,
-	       Context *onack, Context *oncommit, version_t *objver = NULL) {
-    Op *o = prepare_mutate_op(oid, oloc, op, snapc, mtime, flags, onack, oncommit, objver);
+	       Context *onack, Context *oncommit, version_t *objver = NULL,
+	       osd_reqid_t reqid = osd_reqid_t()) {
+    Op *o = prepare_mutate_op(oid, oloc, op, snapc, mtime, flags, onack, oncommit, objver, reqid);
     return op_submit(o);
   }
   Op *prepare_read_op(const object_t& oid, const object_locator_t& oloc,
