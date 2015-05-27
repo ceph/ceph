@@ -207,12 +207,16 @@ class FullnessTestCase(CephFSTestCase):
 
         # Enough to trip the full flag
         osd_mon_report_interval_max = int(self.fs.get_config("osd_mon_report_interval_max", service_type='osd'))
+        mon_tick_interval = int(self.fs.get_config("mon_tick_interval", service_type="mon"))
 
         # Sufficient data to cause RADOS cluster to go 'full'
         log.info("pool capacity {0}, {1}MB should be enough to fill it".format(self.pool_capacity, self.fill_mb))
 
         # Long enough for RADOS cluster to notice it is full and set flag on mons
-        full_wait = osd_mon_report_interval_max * 1.5
+        # (report_interval for mon to learn PG stats, tick interval for it to update OSD map,
+        #  factor of 1.5 for I/O + network latency in committing OSD map and distributing it
+        #  to the OSDs)
+        full_wait = (osd_mon_report_interval_max + mon_tick_interval) * 1.5
 
         # Configs for this test should bring this setting down in order to
         # run reasonably quickly
