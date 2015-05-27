@@ -8640,6 +8640,10 @@ int OSD::init_op_flags(OpRequestRef& op)
 	  iter->op.flags == CEPH_OSD_OP_FLAG_FAILOK) {
 	op->set_skip_handle_cache();
       }
+      // skip promotion when proxying a delete op
+      if (m->ops.size() == 1) {
+	op->set_skip_promote();
+      }
       break;
 
     case CEPH_OSD_OP_CACHE_TRY_FLUSH:

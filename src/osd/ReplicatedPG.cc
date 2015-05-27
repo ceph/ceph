@@ -1853,9 +1853,11 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op,
       }
 
       // Promote too?
-      maybe_promote(obc, missing_oid, oloc, in_hit_set,
-		    pool.info.min_write_recency_for_promote,
-		    OpRequestRef());
+      if (!op->need_skip_promote()) {
+        maybe_promote(obc, missing_oid, oloc, in_hit_set,
+	              pool.info.min_write_recency_for_promote,
+		      OpRequestRef());
+      }
     } else {
       if (can_proxy_read)
         do_proxy_read(op);
