@@ -20,11 +20,14 @@ function run() {
     local dir=$1
     shift
 
-    export CEPH_MON="127.0.0.1:7112"
+    export CEPH_MON="127.0.0.1:7113"
     export CEPH_ARGS
     CEPH_ARGS+="--fsid=$(uuidgen) --auth-supported=none "
     CEPH_ARGS+="--mon-host=$CEPH_MON "
-   
+
+    # setup
+    setup $dir || return 1
+
     # create a cluster with one monitor and three osds
     run_mon $dir a || return 1
     run_osd $dir 0 || return 1
@@ -83,7 +86,10 @@ function run() {
     rados --pool rbd --striper stat toyfile >& $dir/staterror2
     grep -q 'No such file or directory' $dir/staterror2 || return 1
     rados --pool rbd stat toyfile.0000000000000000 >& $dir/staterror3
-    grep -q 'No such file or directory' $dir/staterror3 || return 1   
+    grep -q 'No such file or directory' $dir/staterror3 || return 1
+
+    # cleanup
+    teardown $dir || return 1
 }
 
 main rados-striper "$@"
