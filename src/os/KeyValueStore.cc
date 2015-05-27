@@ -376,9 +376,10 @@ void KeyValueStore::BufferTransaction::set_buffer_keys(
   store->backend->set_keys(strip_header->header, prefix, values, t);
 
   uniq_id uid = make_pair(strip_header->cid, strip_header->oid);
+  map<pair<string, string>, bufferlist> &uid_buffers = buffers[uid];
   for (map<string, bufferlist>::iterator iter = values.begin();
        iter != values.end(); ++iter) {
-    buffers[uid][make_pair(prefix, iter->first)].swap(iter->second);
+    uid_buffers[make_pair(prefix, iter->first)].swap(iter->second);
   }
 }
 
@@ -580,6 +581,11 @@ int KeyValueStore::statfs(struct statfs *buf)
     return r;
   }
   return 0;
+}
+
+void KeyValueStore::collect_metadata(map<string,string> *pm)
+{
+  (*pm)["keyvaluestore_backend"] = superblock.backend;
 }
 
 int KeyValueStore::mkfs()

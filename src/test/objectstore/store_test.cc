@@ -81,6 +81,8 @@ TEST_P(StoreTest, collect_metadata) {
   if (GetParam() == string("filestore")) {
     ASSERT_NE(pm.count("filestore_backend"), 0u);
     ASSERT_NE(pm.count("filestore_f_type"), 0u);
+  } else if (GetParam() == string("keyvaluestore")) {
+    ASSERT_NE(pm.count("keyvaluestore_backend"), 0u);
   }
 }
 
