@@ -529,11 +529,13 @@ int XioMessenger::session_event(struct xio_session *session,
 	  conns_entity_map.erase(conn_iter);
 	}
       }
-      /* now find xcon on conns_list, erase, and release sentinel ref */
-      XioConnection::ConnList::iterator citer =
-	XioConnection::ConnList::s_iterator_to(*xcon);
-      /* XXX check if citer on conn_list? */
-      conns_list.erase(citer);
+      /* check if citer on conn_list */
+      if (xcon->conns_hook.is_linked()) {
+        /* now find xcon on conns_list and erase */
+        XioConnection::ConnList::iterator citer =
+            XioConnection::ConnList::s_iterator_to(*xcon);
+        conns_list.erase(citer);
+      }
       xcon->on_disconnect_event();
     }
     break;
@@ -731,6 +733,7 @@ int XioMessenger::bind(const entity_addr_t& addr)
   int r = portals.bind(&xio_msgr_ops, base_uri, shift_addr.get_port(), &port0);
   if (r == 0) {
     shift_addr.set_port(port0);
+    shift_addr.nonce = nonce;
     set_myaddr(shift_addr);
     did_bind = true;
   }
