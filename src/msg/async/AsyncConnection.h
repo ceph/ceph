@@ -25,6 +25,7 @@ using namespace std;
 
 #include "auth/AuthSessionHandler.h"
 #include "common/Mutex.h"
+#include "common/perf_counters.h"
 #include "include/buffer.h"
 #include "msg/Connection.h"
 #include "msg/Messenger.h"
@@ -113,7 +114,7 @@ class AsyncConnection : public Connection {
   }
 
  public:
-  AsyncConnection(CephContext *cct, AsyncMessenger *m, EventCenter *c);
+  AsyncConnection(CephContext *cct, AsyncMessenger *m, EventCenter *c, PerfCounters *p);
   ~AsyncConnection();
 
   ostream& _conn_prefix(std::ostream *_dout);
@@ -215,6 +216,7 @@ class AsyncConnection : public Connection {
   }
 
   AsyncMessenger *async_msgr;
+  PerfCounters *logger;
   int global_seq;
   __u32 connect_seq, peer_global_seq;
   atomic_t out_seq;
@@ -306,6 +308,9 @@ class AsyncConnection : public Connection {
     connect_handler.reset();
     local_deliver_handler.reset();
     wakeup_handler.reset();
+  }
+  PerfCounters *get_perf_counter() {
+    return logger;
   }
 }; /* AsyncConnection */
 
