@@ -172,8 +172,8 @@ static void alloc_aligned_buffer(bufferlist& data, unsigned len, unsigned off)
   }
 }
 
-AsyncConnection::AsyncConnection(CephContext *cct, AsyncMessenger *m, EventCenter *c)
-  : Connection(cct, m), async_msgr(m), global_seq(0), connect_seq(0), peer_global_seq(0),
+AsyncConnection::AsyncConnection(CephContext *cct, AsyncMessenger *m, EventCenter *c, PerfCounters *p)
+  : Connection(cct, m), async_msgr(m), logger(p), global_seq(0), connect_seq(0), peer_global_seq(0),
     out_seq(0), in_seq(0), in_seq_acked(0), state(STATE_NONE), state_after_send(0),
     sd(-1), port(-1), write_lock("AsyncConnection::write_lock"), can_write(0),
     open_write(false), lock("AsyncConnection::lock"), keepalive(false), recv_buf(NULL),
@@ -192,6 +192,7 @@ AsyncConnection::AsyncConnection(CephContext *cct, AsyncMessenger *m, EventCente
   // double recv_max_prefetch see "read_until"
   recv_buf = new char[2*recv_max_prefetch];
   state_buffer = new char[4096];
+  logger->inc(l_msgr_created_connections);
 }
 
 AsyncConnection::~AsyncConnection()
@@ -875,6 +876,8 @@ void AsyncConnection::process()
           } else {
             center->dispatch_event_external(EventCallbackRef(new C_handle_dispatch(async_msgr, message)));
           }
+          logger->inc(l_msgr_recv_messages);
+          logger->inc(l_msgr_recv_bytes, message_size + sizeof(ceph_msg_header) + sizeof(ceph_msg_footer));
 
           break;
         }
@@ -1944,6 +1947,10 @@ int AsyncConnection::send_message(Message *m)
    return 0;
   }
 
+  // we don't want to consider local message here, it's too lightweight which
+  // may disturb users
+  logger->inc(l_msgr_send_messages);
+
   bufferlist bl;
   Mutex::Locker l(write_lock);
   m->set_seq(out_seq.inc());
@@ -2206,7 +2213,6 @@ void AsyncConnection::prepare_send_message(Message *m, bufferlist &bl)
                              << " data=" << header.data_len
                              << " off " << header.data_off << dendl;
 
-
   // Now that we have all the crcs calculated, handle the
   // digital signature for the message, if the AsyncConnection has session
   // security set up.  Some session security options do not
@@ -2266,6 +2272,7 @@ void AsyncConnection::prepare_send_message(Message *m, bufferlist &bl)
     old_footer.flags = footer.flags;
     bl.append((char*)&old_footer, sizeof(old_footer));
   }
+  logger->inc(l_msgr_send_bytes, bl.length());
 }
 
 int AsyncConnection::write_message(Message *m, bufferlist& bl)
