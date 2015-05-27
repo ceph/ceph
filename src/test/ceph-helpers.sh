@@ -17,7 +17,6 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU Library Public License for more details.
 #
-CEPH_HELPER_VERBOSE=false
 TIMEOUT=120
 PG_NUM=4
 
@@ -402,7 +401,6 @@ function run_osd() {
     ceph_disk_args+=" --statedir=$dir"
     ceph_disk_args+=" --sysconfdir=$dir"
     ceph_disk_args+=" --prepend-to-path="
-    $CEPH_HELPER_VERBOSE && ceph_disk_args+=" --verbose"
 
     mkdir -p $osd_data
     ceph-disk $ceph_disk_args \
@@ -485,7 +483,6 @@ function activate_osd() {
     ceph_disk_args+=" --statedir=$dir"
     ceph_disk_args+=" --sysconfdir=$dir"
     ceph_disk_args+=" --prepend-to-path="
-    $CEPH_HELPER_VERBOSE && ceph_disk_args+=" --verbose"
 
     local ceph_args="$CEPH_ARGS"
     ceph_args+=" --osd-backfill-full-ratio=.99"
@@ -1122,7 +1119,6 @@ function main() {
 
     set -x
     PS4='${FUNCNAME[0]}: $LINENO: '
-    #CEPH_HELPER_VERBOSE=true
 
     export PATH=:$PATH # make sure program from sources are prefered
 
