@@ -1,3 +1,4 @@
+import json
 import logging
 import unittest
 from unittest import case
@@ -95,6 +96,13 @@ class CephFSTestCase(unittest.TestCase):
         osd_mon_report_interval_max = int(self.fs.get_config("osd_mon_report_interval_max", service_type='osd'))
         self.wait_until_true(lambda: not self.fs.is_full(),
                              timeout=osd_mon_report_interval_max * 5)
+
+        # In case anything is in the OSD blacklist list, clear it out.  This is to avoid
+        # the OSD map changing in the background (due to blacklist expiry) while tests run.
+        blacklist = json.loads(self.fs.mon_manager.raw_cluster_cmd("osd", "dump", "--format=json-pretty"))['flags']
+        log.info("Removing {0} blacklist entries".format(len(blacklist)))
+        for addr, blacklisted_at in blacklist.items():
+            self.fs.mon_manager.raw_cluster_cmd("osd", "blacklist", "rm", addr)
 
         self.fs.mds_restart()
         self.fs.wait_for_daemons()
