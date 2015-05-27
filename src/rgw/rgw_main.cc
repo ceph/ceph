@@ -27,6 +27,7 @@
 #include "common/WorkQueue.h"
 #include "common/Timer.h"
 #include "common/Throttle.h"
+#include "common/QueueRing.h"
 #include "common/safe_io.h"
 #include "include/str_list.h"
 #include "rgw_common.h"
@@ -91,7 +92,7 @@ struct RGWRequest
   RGWOp *op;
   utime_t ts;
 
-  RGWRequest() : id(0), s(NULL), op(NULL) {
+  RGWRequest(uint64_t id) : id(id), s(NULL), op(NULL) {
   }
 
   virtual ~RGWRequest() {}
@@ -151,7 +152,17 @@ public:
 
 
 struct RGWFCGXRequest : public RGWRequest {
-  FCGX_Request fcgx;
+  FCGX_Request *fcgx;
+  QueueRing<FCGX_Request *> *qr;
+
+  RGWFCGXRequest(uint64_t req_id, QueueRing<FCGX_Request *> *_qr) : RGWRequest(req_id), qr(_qr) {
+    qr->dequeue(&fcgx);
+  }
+
+  ~RGWFCGXRequest() {
+    FCGX_Finish_r(fcgx);
+    qr->enqueue(fcgx);
+  }
 };
 
 struct RGWProcessEnv {
@@ -222,8 +233,6 @@ protected:
     }
   } req_wq;
 
-  uint64_t max_req_id;
-
 public:
   RGWProcess(CephContext *cct, RGWProcessEnv *pe, int num_threads, RGWFrontendConfig *_conf)
     : store(pe->store), olog(pe->olog), m_tp(cct, "RGWProcess::m_tp", num_threads),
@@ -232,8 +241,7 @@ public:
       conf(_conf),
       sock_fd(-1),
       req_wq(this, g_conf->rgw_op_thread_timeout,
-	     g_conf->rgw_op_thread_suicide_timeout, &m_tp),
-      max_req_id(0) {}
+	     g_conf->rgw_op_thread_suicide_timeout, &m_tp) {}
   virtual ~RGWProcess() {}
   virtual void run() = 0;
   virtual void handle_request(RGWRequest *req) = 0;
@@ -248,9 +256,13 @@ public:
 
 
 class RGWFCGXProcess : public RGWProcess {
+  int max_connections;
 public:
   RGWFCGXProcess(CephContext *cct, RGWProcessEnv *pe, int num_threads, RGWFrontendConfig *_conf) :
-    RGWProcess(cct, pe, num_threads, _conf) {}
+    RGWProcess(cct, pe, num_threads, _conf),
+    max_connections(num_threads + (num_threads >> 3)) /* have a bit more connections than threads so that requests
+                                                       are still accepted even if we're still processing older requests */
+    {}
   void run();
   void handle_request(RGWRequest *req);
 };
@@ -309,13 +321,20 @@ void RGWFCGXProcess::run()
 
   m_tp.start();
 
+  FCGX_Request fcgx_reqs[max_connections];
+
+  QueueRing<FCGX_Request *> qr(max_connections);
+  for (int i = 0; i < max_connections; i++) {
+    FCGX_Request *fcgx = &fcgx_reqs[i];
+    FCGX_InitRequest(fcgx, sock_fd, 0);
+    qr.enqueue(fcgx);
+  }
+
   for (;;) {
-    RGWFCGXRequest *req = new RGWFCGXRequest;
-    req->id = ++max_req_id;
+    RGWFCGXRequest *req = new RGWFCGXRequest(store->get_new_req_id(), &qr);
     dout(10) << "allocated request req=" << hex << req << dec << dendl;
-    FCGX_InitRequest(&req->fcgx, sock_fd, 0);
     req_throttle.get(1);
-    int ret = FCGX_Accept_r(&req->fcgx);
+    int ret = FCGX_Accept_r(req->fcgx);
     if (ret < 0) {
       delete req;
       dout(0) << "ERROR: FCGX_Accept_r returned " << ret << dendl;
@@ -328,6 +347,12 @@ void RGWFCGXProcess::run()
 
   m_tp.drain(&req_wq);
   m_tp.stop();
+
+  dout(20) << "cleaning up fcgx connections" << dendl;
+
+  for (int i = 0; i < max_connections; i++) {
+    FCGX_Finish_r(&fcgx_reqs[i]);
+  }
 }
 
 struct RGWLoadGenRequest : public RGWRequest {
@@ -337,8 +362,8 @@ struct RGWLoadGenRequest : public RGWRequest {
   atomic_t *fail_flag;
 
 
-  RGWLoadGenRequest(const string& _m, const  string& _r, int _cl,
-                    atomic_t *ff) : method(_m), resource(_r), content_length(_cl), fail_flag(ff) {}
+  RGWLoadGenRequest(uint64_t req_id, const string& _m, const  string& _r, int _cl,
+                    atomic_t *ff) : RGWRequest(req_id), method(_m), resource(_r), content_length(_cl), fail_flag(ff) {}
 };
 
 class RGWLoadGenProcess : public RGWProcess {
@@ -439,8 +464,8 @@ done:
 
 void RGWLoadGenProcess::gen_request(const string& method, const string& resource, int content_length, atomic_t *fail_flag)
 {
-  RGWLoadGenRequest *req = new RGWLoadGenRequest(method, resource, content_length, fail_flag);
-  req->id = ++max_req_id;
+  RGWLoadGenRequest *req = new RGWLoadGenRequest(store->get_new_req_id(), method, resource,
+						 content_length, fail_flag);
   dout(10) << "allocated request req=" << hex << req << dec << dendl;
   req_throttle.get(1);
   req_wq.queue(req);
@@ -636,7 +661,7 @@ done:
 void RGWFCGXProcess::handle_request(RGWRequest *r)
 {
   RGWFCGXRequest *req = static_cast<RGWFCGXRequest *>(r);
-  FCGX_Request *fcgx = &req->fcgx;
+  FCGX_Request *fcgx = req->fcgx;
   RGWFCGX client_io(fcgx);
 
  
@@ -694,7 +719,7 @@ static int civetweb_callback(struct mg_connection *conn) {
   RGWREST *rest = pe->rest;
   OpsLogSocket *olog = pe->olog;
 
-  RGWRequest *req = new RGWRequest;
+  RGWRequest *req = new RGWRequest(store->get_new_req_id());
   RGWMongoose client_io(conn, pe->port);
 
   client_io.init(g_ceph_context);

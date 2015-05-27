@@ -1208,6 +1208,7 @@ class RGWRados
     GetObjState() : sent_data(false) {}
   };
 
+  atomic64_t max_req_id;
   Mutex lock;
   SafeTimer *timer;
 
@@ -1296,7 +1297,7 @@ protected:
   RGWQuotaHandler *quota_handler;
 
 public:
-  RGWRados() : lock("rados_timer_lock"), timer(NULL),
+  RGWRados() : max_req_id(0), lock("rados_timer_lock"), timer(NULL),
                gc(NULL), use_gc_thread(false), quota_threads(false),
                num_watchers(0), watchers(NULL), watch_handles(NULL),
                watch_initialized(false),
@@ -1306,6 +1307,10 @@ public:
                quota_handler(NULL),
                rest_master_conn(NULL),
                meta_mgr(NULL), data_log(NULL) {}
+
+  uint64_t get_new_req_id() {
+    return max_req_id.inc();
+  }
 
   void set_context(CephContext *_cct) {
     cct = _cct;
