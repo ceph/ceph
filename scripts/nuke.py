@@ -3,10 +3,11 @@ import docopt
 import teuthology.nuke
 
 doc = """
-usage: teuthology-nuke --help
-       teuthology-nuke [-v] [--owner OWNER] [-n NAME] [-u] [-i] [-r] [-s]
-                            [-p PID] (-t CONFIG... | -a DIR)
-       teuthology-nuke [-v] [-u] [-i] [-r] [-s] --owner OWNER --stale
+usage:
+  teuthology-nuke --help
+  teuthology-nuke [-v] [--owner OWNER] [-n NAME] [-u] [-i] [-r] [-s]
+                       [-p PID] [--dry-run] (-t CONFIG... | -a DIR)
+  teuthology-nuke [-v] [-u] [-i] [-r] [-s] [--dry-run] --owner OWNER --stale
 
 Reset test machines
 
@@ -19,6 +20,8 @@ optional arguments:
                         archive path for a job to kill and nuke
   --stale               attempt to find and nuke 'stale' machines
                         (e.g. locked by jobs that are no longer running)
+  --dry-run             Don't actually nuke anything; just print the list of
+                        targets that would be nuked
   --owner OWNER         job owner
   -p PID, --pid PID     pid of the process to be killed
   -r, --reboot-all      reboot all machines

@@ -384,6 +384,10 @@ def main(args):
                 ctx.config['targets'],
                 default_flow_style=False).splitlines()))
 
+    if ctx.dry_run:
+        log.info("Not actually nuking anything since --dry-run was passed")
+        return
+
     if ctx.owner is None:
         ctx.owner = get_user()
 
