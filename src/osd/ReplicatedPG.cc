@@ -6779,8 +6779,10 @@ int ReplicatedPG::start_flush(
 	   << " " << (blocking ? "blocking" : "non-blocking/best-effort")
 	   << dendl;
 
+  // get a filtered snapset, need to remove removed snaps
+  SnapSet snapset = obc->ssc->snapset.get_filtered(pool.info);
+
   // verify there are no (older) check for dirty clones
-  SnapSet& snapset = obc->ssc->snapset;
   {
     dout(20) << " snapset " << snapset << dendl;
     vector<snapid_t>::reverse_iterator p = snapset.clones.rbegin();
