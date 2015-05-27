@@ -3952,6 +3952,9 @@ reprotect_and_return_err:
 
     c->finish_adding_requests(ictx->cct);
     c->put();
+
+    ictx->perfcounter->inc(l_librbd_discard);
+    ictx->perfcounter->inc(l_librbd_discard_bytes, clip_len);
   }
 
   void rbd_req_cb(completion_t cb, void *arg)
