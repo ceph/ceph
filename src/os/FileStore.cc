@@ -5027,33 +5027,37 @@ int FileStore::_create_collection(
 
 int FileStore::_destroy_collection(coll_t c) 
 {
+  int r = 0;
+  char fn[PATH_MAX];
+  get_cdir(c, fn, sizeof(fn));
+  dout(15) << "_destroy_collection " << fn << dendl;
   {
     Index from;
     int r = get_index(c, &from);
     if (r < 0)
-      return r;
+      goto out;
     assert(NULL != from.index);
     RWLock::WLocker l((from.index)->access_lock);
 
     r = from->prep_delete();
     if (r < 0)
-      return r;
+      goto out;
   }
-  char fn[PATH_MAX];
-  get_cdir(c, fn, sizeof(fn));
-  dout(15) << "_destroy_collection " << fn << dendl;
-  int r = ::rmdir(fn);
-  if (r < 0)
+  r = ::rmdir(fn);
+  if (r < 0) {
     r = -errno;
+    goto out;
+  }
 
   // destroy parallel temp collection, too
   if (!c.is_meta() && !c.is_temp()) {
     coll_t temp = c.get_temp();
     r = _destroy_collection(temp);
     if (r < 0)
-      return r;
+      goto out;
   }
-
+  r = 0;
+ out:
   dout(10) << "_destroy_collection " << fn << " = " << r << dendl;
   return r;
 }
