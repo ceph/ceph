@@ -8649,6 +8649,24 @@ int OSD::init_op_flags(OpRequestRef& op)
       if (m->ops.size() == 1) {
 	op->set_skip_promote();
       }
+      break;
+
+    case CEPH_OSD_OP_WRITE:
+    case CEPH_OSD_OP_ZERO:
+    case CEPH_OSD_OP_TRUNCATE:
+      // always force promotion for object overwrites on a ec base pool
+      {
+        int64_t poolid = m->get_pg().pool();
+        const pg_pool_t *pool = osdmap->get_pg_pool(poolid);
+        if (pool->is_tier()) {
+          const pg_pool_t *base_pool = osdmap->get_pg_pool(pool->tier_of);
+          assert(base_pool);
+          if (base_pool->is_erasure()) {
+            op->set_promote();
+          }
+        }
+      }
+      break;
 
     default:
       break;
