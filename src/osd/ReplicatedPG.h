@@ -253,12 +253,14 @@ public:
     bool sent_ack;
     utime_t mtime;
     bool canceled;
+    osd_reqid_t &reqid;
 
-    ProxyWriteOp(OpRequestRef _op, hobject_t oid, vector<OSDOp>& _ops)
+    ProxyWriteOp(OpRequestRef _op, hobject_t oid, vector<OSDOp>& _ops, osd_reqid_t _reqid)
       : ctx(NULL), op(_op), soid(oid),
         objecter_tid(0), ops(_ops),
 	user_version(0), sent_disk(false),
-	sent_ack(false), canceled(false) { }
+	sent_ack(false), canceled(false),
+        reqid(_reqid) { }
   };
   typedef boost::shared_ptr<ProxyWriteOp> ProxyWriteOpRef;
 

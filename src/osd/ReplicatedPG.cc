@@ -2234,7 +2234,7 @@ void ReplicatedPG::do_proxy_write(OpRequestRef op, const hobject_t& missing_oid)
   unsigned flags = CEPH_OSD_FLAG_IGNORE_CACHE | CEPH_OSD_FLAG_IGNORE_OVERLAY;
   dout(10) << __func__ << " Start proxy write for " << *m << dendl;
 
-  ProxyWriteOpRef pwop(new ProxyWriteOp(op, soid, m->ops));
+  ProxyWriteOpRef pwop(new ProxyWriteOp(op, soid, m->ops, m->get_reqid()));
   pwop->ctx = new OpContext(op, m->get_reqid(), pwop->ops, this);
   pwop->mtime = m->get_mtime();
 
@@ -2247,7 +2247,8 @@ void ReplicatedPG::do_proxy_write(OpRequestRef op, const hobject_t& missing_oid)
 				         snapc, pwop->mtime,
 					 flags, NULL,
 					 new C_OnFinisher(fin, &osd->objecter_finisher),
-				         &pwop->user_version);
+				         &pwop->user_version,
+					 pwop->reqid);
   fin->tid = tid;
   pwop->objecter_tid = tid;
   proxywrite_ops[tid] = pwop;
