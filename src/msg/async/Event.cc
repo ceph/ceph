@@ -46,9 +46,10 @@ class C_handle_notify : public EventCallback {
   C_handle_notify(EventCenter *c): center(c) {}
   void do_request(int fd_or_id) {
     char c[256];
-    center->already_wakeup.set(0);
-    int r = read(fd_or_id, c, sizeof(c));
-    assert(r > 0);
+    do {
+      center->already_wakeup.set(0);
+      read(fd_or_id, c, sizeof(c));
+    } while (center->already_wakeup.read());
   }
 };
 
