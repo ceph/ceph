@@ -2390,6 +2390,94 @@ TEST_F(LibRadosTwoPoolsPP, ProxyRead) {
   cluster.wait_for_latest_osdmap();
 }
 
+TEST_F(LibRadosTwoPoolsPP, TierNocache) {
+  // configure cache
+  bufferlist inbl;
+  ASSERT_EQ(0, cluster.mon_command(
+    "{\"prefix\": \"osd tier add\", \"pool\": \"" + pool_name +
+    "\", \"tierpool\": \"" + cache_pool_name +
+    "\", \"force_nonempty\": \"--force-nonempty\" }",
+    inbl, NULL, NULL));
+  ASSERT_EQ(0, cluster.mon_command(
+    "{\"prefix\": \"osd tier set-overlay\", \"pool\": \"" + pool_name +
+    "\", \"overlaypool\": \"" + cache_pool_name + "\"}",
+    inbl, NULL, NULL));
+
+  std::string cache_modes[] = {"writeback", "forward", "readonly", "readforward", "readproxy"};
+  int count = (int) sizeof(cache_modes)/sizeof(cache_modes[0]);
+  int i;
+  // test write/read with TierNocache in each cache-mode
+  for (i = 0; i < count; i++)
+  {
+    std::cout << "set cache-mode:" + cache_modes[i] << std::endl;
+    ASSERT_EQ(0, cluster.mon_command(
+      "{\"prefix\": \"osd tier cache-mode\", \"pool\": \"" + cache_pool_name +
+      "\", \"mode\": \"" + cache_modes[i] + "\"}",
+      inbl, NULL, NULL));
+
+    // wait for maps to settle
+    cluster.wait_for_latest_osdmap();
+
+    std::string content(cache_modes[i]);
+    std::string object(cache_modes[i]+"_obj");
+    ObjectWriteOperation wr;
+    librados::AioCompletion *completion = cluster.aio_create_completion();
+
+    //writeback: create a new object
+    bufferlist bl;
+    bl.append(content);
+    wr.write_full(bl);
+    ioctx.aio_operate(object, completion, &wr, librados::OPERATION_TIER_NOCACHE);
+    completion->wait_for_safe();
+    completion->release();
+
+    // verify the object is NOT present in the cache tier
+    {
+      NObjectIterator it = cache_ioctx.nobjects_begin();
+      ASSERT_TRUE(it == cache_ioctx.nobjects_end());
+    }
+
+    //writeback: read the object content
+    ObjectReadOperation rd;
+    uint64_t len = bl.length();
+    completion = cluster.aio_create_completion();
+    bufferlist bl2;
+    bufferlist bl3;
+    rd.read(0, len+1, &bl3, NULL);
+    ASSERT_EQ(0, ioctx.aio_operate(
+	object, completion, &rd,
+	librados::OPERATION_TIER_NOCACHE, NULL));
+    completion->wait_for_complete();
+
+    ASSERT_EQ(0, completion->get_return_value());
+    uint64_t n = 0;
+    for (n = 0; n < len; n++) {
+	bl2.append(bl3[n]);
+    }
+    ASSERT_EQ(content, bl2.c_str());
+    completion->release();
+
+    // verify the object is NOT present in the cache tier
+    {
+      NObjectIterator it = cache_ioctx.nobjects_begin();
+      ASSERT_TRUE(it == cache_ioctx.nobjects_end());
+    }
+  }
+
+  // tear down tiers
+  ASSERT_EQ(0, cluster.mon_command(
+    "{\"prefix\": \"osd tier remove-overlay\", \"pool\": \"" + pool_name +
+    "\"}",
+    inbl, NULL, NULL));
+  ASSERT_EQ(0, cluster.mon_command(
+    "{\"prefix\": \"osd tier remove\", \"pool\": \"" + pool_name +
+    "\", \"tierpool\": \"" + cache_pool_name + "\"}",
+    inbl, NULL, NULL));
+
+  // wait for maps to settle before next test
+  cluster.wait_for_latest_osdmap();
+}
+
 class LibRadosTwoPoolsECPP : public RadosTestECPP
 {
 public:
@@ -4423,6 +4511,94 @@ TEST_F(LibRadosTwoPoolsECPP, ProxyRead) {
     NObjectIterator it = cache_ioctx.nobjects_begin();
     ASSERT_TRUE(it == cache_ioctx.nobjects_end());
     sleep(1);
+  }
+
+  // tear down tiers
+  ASSERT_EQ(0, cluster.mon_command(
+    "{\"prefix\": \"osd tier remove-overlay\", \"pool\": \"" + pool_name +
+    "\"}",
+    inbl, NULL, NULL));
+  ASSERT_EQ(0, cluster.mon_command(
+    "{\"prefix\": \"osd tier remove\", \"pool\": \"" + pool_name +
+    "\", \"tierpool\": \"" + cache_pool_name + "\"}",
+    inbl, NULL, NULL));
+
+  // wait for maps to settle before next test
+  cluster.wait_for_latest_osdmap();
+}
+
+TEST_F(LibRadosTwoPoolsECPP, TierNocache) {
+  // configure cache
+  bufferlist inbl;
+  ASSERT_EQ(0, cluster.mon_command(
+    "{\"prefix\": \"osd tier add\", \"pool\": \"" + pool_name +
+    "\", \"tierpool\": \"" + cache_pool_name +
+    "\", \"force_nonempty\": \"--force-nonempty\" }",
+    inbl, NULL, NULL));
+  ASSERT_EQ(0, cluster.mon_command(
+    "{\"prefix\": \"osd tier set-overlay\", \"pool\": \"" + pool_name +
+    "\", \"overlaypool\": \"" + cache_pool_name + "\"}",
+    inbl, NULL, NULL));
+
+  std::string cache_modes[] = {"writeback", "forward", "readonly", "readforward", "readproxy"};
+  int count = (int) sizeof(cache_modes)/sizeof(cache_modes[0]);
+  int i;
+  // test write/read with TierNocache in each cache-mode
+  for (i = 0; i < count; i++)
+  {
+    std::cout << "set cache-mode:" + cache_modes[i] << std::endl;
+    ASSERT_EQ(0, cluster.mon_command(
+      "{\"prefix\": \"osd tier cache-mode\", \"pool\": \"" + cache_pool_name +
+      "\", \"mode\": \"" + cache_modes[i] + "\"}",
+      inbl, NULL, NULL));
+
+    // wait for maps to settle
+    cluster.wait_for_latest_osdmap();
+
+    std::string content(cache_modes[i]);
+    std::string object(cache_modes[i]+"_obj");
+    ObjectWriteOperation wr;
+    librados::AioCompletion *completion = cluster.aio_create_completion();
+
+    //writeback: create a new object
+    bufferlist bl;
+    bl.append(content);
+    wr.write_full(bl);
+    ioctx.aio_operate(object, completion, &wr, librados::OPERATION_TIER_NOCACHE);
+    completion->wait_for_safe();
+    completion->release();
+
+    // verify the object is NOT present in the cache tier
+    {
+      NObjectIterator it = cache_ioctx.nobjects_begin();
+      ASSERT_TRUE(it == cache_ioctx.nobjects_end());
+    }
+
+    //writeback: read the object content
+    ObjectReadOperation rd;
+    uint64_t len = bl.length();
+    completion = cluster.aio_create_completion();
+    bufferlist bl2;
+    bufferlist bl3;
+    rd.read(0, len+1, &bl3, NULL);
+    ASSERT_EQ(0, ioctx.aio_operate(
+	object, completion, &rd,
+	librados::OPERATION_TIER_NOCACHE, NULL));
+    completion->wait_for_complete();
+
+    ASSERT_EQ(0, completion->get_return_value());
+    uint64_t n = 0;
+    for (n = 0; n < len; n++) {
+	bl2.append(bl3[n]);
+    }
+    ASSERT_EQ(content, bl2.c_str());
+    completion->release();
+
+    // verify the object is NOT present in the cache tier
+    {
+      NObjectIterator it = cache_ioctx.nobjects_begin();
+      ASSERT_TRUE(it == cache_ioctx.nobjects_end());
+    }
   }
 
   // tear down tiers
