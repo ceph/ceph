@@ -269,9 +269,10 @@ int AsyncConnection::do_sendmsg(struct msghdr &msg, int len, bool more)
 
 // return the remaining bytes, it may larger than the length of ptr
 // else return < 0 means error
-int AsyncConnection::_try_send(bufferlist send_bl, bool send)
+int AsyncConnection::_try_send(bufferlist &send_bl, bool send)
 {
   assert(write_lock.is_locked());
+  ldout(async_msgr->cct, 20) << __func__ << " send bl length is " << send_bl.length() << dendl;
   if (send_bl.length()) {
     if (outcoming_bl.length())
       outcoming_bl.claim_append(send_bl);
@@ -1966,10 +1967,8 @@ int AsyncConnection::send_message(Message *m)
     m->put();
   } else {
     out_q[m->get_priority()].push_back(make_pair(bl, m));
-    if (can_write == 0) {
-      ldout(async_msgr->cct, 10) << __func__ << " write is denied, reschedule m=" << m << dendl;
-      center->dispatch_event_external(write_handler);
-    }
+    ldout(async_msgr->cct, 15) << __func__ << " inline write is denied, reschedule m=" << m << dendl;
+    center->dispatch_event_external(write_handler);
   }
   return 0;
 }
