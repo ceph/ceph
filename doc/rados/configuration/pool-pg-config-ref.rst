@@ -70,7 +70,9 @@ Ceph configuration file.
 
 :Description: The default CRUSH ruleset to use when creating a replicated pool.
 :Type: 8-bit Integer
-:Default: ``0``
+:Default: ``CEPH_DEFAULT_CRUSH_REPLICATED_RULESET``, which means "pick
+          a ruleset with the lowest numerical ID and use that".  This is to
+          make pool creation work in the absence of ruleset 0.
 
 
 ``osd pool erasure code stripe width`` 
