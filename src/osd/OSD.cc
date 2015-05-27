@@ -8635,21 +8635,21 @@ int OSD::init_op_flags(OpRequestRef& op)
       }
 
     case CEPH_OSD_OP_DELETE:
-      // if we get a delete with FAILOK we can skip promote.  without
+      // if we get a delete with FAILOK we can skip handle cache. without
       // FAILOK we still need to promote (or do something smarter) to
       // determine whether to return ENOENT or 0.
       if (iter == m->ops.begin() &&
 	  iter->op.flags == CEPH_OSD_OP_FLAG_FAILOK) {
-	op->set_skip_promote();
+	op->set_skip_handle_cache();
       }
       break;
 
     case CEPH_OSD_OP_CACHE_TRY_FLUSH:
     case CEPH_OSD_OP_CACHE_FLUSH:
     case CEPH_OSD_OP_CACHE_EVICT:
-      // If try_flush/flush/evict is the only op, no need to promote.
+      // If try_flush/flush/evict is the only op, can skip handle cache.
       if (m->ops.size() == 1) {
-	op->set_skip_promote();
+	op->set_skip_handle_cache();
       }
       break;
 

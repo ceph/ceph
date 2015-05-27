@@ -1820,7 +1820,7 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op,
     return true;
   }
 
-  if (op->need_skip_promote()) {
+  if (op->need_skip_handle_cache()) {
     return false;
   }
 
