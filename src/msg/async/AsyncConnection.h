@@ -45,13 +45,13 @@ class AsyncConnection : public Connection {
 
   int read_bulk(int fd, char *buf, int len);
   int do_sendmsg(struct msghdr &msg, int len, bool more);
-  int try_send(bufferlist bl, bool send=true) {
+  int try_send(bufferlist &bl, bool send=true) {
     Mutex::Locker l(write_lock);
     return _try_send(bl, send);
   }
   // if "send" is false, it will only append bl to send buffer
   // the main usage is avoid error happen outside messenger threads
-  int _try_send(bufferlist bl, bool send=true);
+  int _try_send(bufferlist &bl, bool send=true);
   int _send(Message *m);
   void prepare_send_message(Message *m, bufferlist &bl);
   int read_until(uint64_t needed, char *p);
