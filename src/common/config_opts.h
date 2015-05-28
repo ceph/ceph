@@ -484,6 +484,7 @@ OPTION(osd_backfill_retry_interval, OPT_DOUBLE, 10.0)
 
 // max agent flush ops
 OPTION(osd_agent_max_ops, OPT_INT, 4)
+OPTION(osd_agent_max_low_ops, OPT_INT, 2)
 OPTION(osd_agent_min_evict_effort, OPT_FLOAT, .1)
 OPTION(osd_agent_quantize_effort, OPT_FLOAT, .1)
 OPTION(osd_agent_delay_time, OPT_FLOAT, 5.0)
