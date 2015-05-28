@@ -94,35 +94,52 @@ def ceph_log(ctx, config):
             self.stopping = True
             self.thread.get()
             
-    def write_rotate_conf(ctx):
+    def write_rotate_conf(ctx, daemons):
         testdir = teuthology.get_testdir(ctx)
         rotate_conf_path = os.path.join(os.path.dirname(__file__), 'logrotate.conf')
-        conf = file(rotate_conf_path, 'rb').read() # does this leak an fd or anything?
-        for remote in ctx.cluster.remotes.iterkeys():
-            teuthology.write_file(remote=remote,
-                                  path='{tdir}/logrotate.mds.conf'.format(tdir=testdir),
-                                  data=conf
-                              )
-            remote.run(
-                args=[
-                    'sudo',
-                    'mv',
-                    '{tdir}/logrotate.mds.conf'.format(tdir=testdir),
-                    '/etc/logrotate.d/ceph-test.conf'
-                ]
-            )
+        with file(rotate_conf_path, 'rb') as f:
+            conf = ""
+            for daemon,size in daemons.iteritems():
+                log.info('writing logrotate stanza for {daemon}'.format(daemon=daemon))
+                conf += f.read().format(daemon_type=daemon,max_size=size)
+                f.seek(0, 0)
+            
+            for remote in ctx.cluster.remotes.iterkeys():
+                teuthology.write_file(remote=remote,
+                                      path='{tdir}/logrotate.ceph-test.conf'.format(tdir=testdir),
+                                      data=StringIO(conf)
+                                  )
+                remote.run(
+                    args=[
+                        'sudo',
+                        'mv',
+                        '{tdir}/logrotate.ceph-test.conf'.format(tdir=testdir),
+                        '/etc/logrotate.d/ceph-test.conf',
+                        run.Raw('&&'),
+                        'sudo',
+                        'chmod',
+                        '0644',
+                        '/etc/logrotate.d/ceph-test.conf',
+                        run.Raw('&&'),
+                        'sudo',
+                        'chown',
+                        'root.root',
+                        '/etc/logrotate.d/ceph-test.conf'
+                    ]
+                )
 
-    if ctx.config.get('mds-log-rotate'):
-        log.info('Setting up mds logrotate')
-        write_rotate_conf(ctx)
+    if ctx.config.get('log-rotate'):
+        daemons = ctx.config.get('log-rotate')
+        log.info('Setting up log rotation with ' + str(daemons))
+        write_rotate_conf(ctx, daemons)
         logrotater = Rotater()
         logrotater.begin()
     try:
         yield
 
     finally:
-        if ctx.config.get('mds-log-rotate'):
-            log.info('Shutting down mds logrotate')
+        if ctx.config.get('log-rotate'):
+            log.info('Shutting down logrotate')
             logrotater.end()
             ctx.cluster.run(
                 args=['sudo', 'rm', '/etc/logrotate.d/ceph-test.conf'
