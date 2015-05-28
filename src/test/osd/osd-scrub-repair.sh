@@ -164,6 +164,25 @@ function TEST_corrupt_and_repair_jerasure() {
     teardown $dir || return 1
 }
 
+function TEST_corrupt_and_repair_lrc() {
+    local dir=$1
+    local poolname=ecpool
+    local profile=myprofile
+
+    setup $dir || return 1
+    run_mon $dir a || return 1
+    for id in $(seq 0 9) ; do
+        run_osd $dir $id || return 1
+    done
+    wait_for_clean || return 1
+
+    ceph osd erasure-code-profile set $profile \
+        pluing=lrc \
+        k=4 m=2 l=3 \
+        ruleset-failure-domain=osd || return 1
+
+    corrupt_and_repair_erasure_coded $dir $poolname $profile || return 1
+
     teardown $dir || return 1
 }
 
