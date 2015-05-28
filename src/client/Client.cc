@@ -7728,15 +7728,11 @@ int Client::_fsync(Fh *f, bool syncdataonly)
   }
   
   if (!syncdataonly && (in->dirty_caps & ~CEPH_CAP_ANY_FILE_WR)) {
-    for (map<mds_rank_t, Cap*>::iterator iter = in->caps.begin(); iter != in->caps.end(); ++iter) {
-      if (iter->second->implemented & ~CEPH_CAP_ANY_FILE_WR) {
-	MetaSession *session = mds_sessions[iter->first];
-	assert(session);
-        flush_caps(in, session);
-      }
+    check_caps(in, true);
+    if (in->flushing_caps) {
+      flushed_metadata = true;
+      memcpy(wait_on_flush, in->flushing_cap_tid, sizeof(wait_on_flush));
     }
-    flushed_metadata = true;
-    memcpy(wait_on_flush, in->flushing_cap_tid, sizeof(wait_on_flush));
   } else ldout(cct, 10) << "no metadata needs to commit" << dendl;
 
   if (object_cacher_completion) { // wait on a real reply instead of guessing
