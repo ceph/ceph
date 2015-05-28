@@ -23,6 +23,7 @@ using std::string;
 using std::cout;
 
 const char *parse_good[] = {
+  "allow rw uid=1 gids=1",
   "allow * path=\"/foo\"",
   "allow * path=/foo",
   "allow * path=\"/foo bar/baz\"",
@@ -31,6 +32,8 @@ const char *parse_good[] = {
   "allow *",
   "allow r",
   "allow rw",
+  "allow rw uid=1 gids=1,2,3",
+  "allow rw path=/foo uid=1 gids=1,2,3",
   0
 };
 
@@ -66,6 +69,10 @@ const char *parse_bad[] = {
   "allow namespace=foo",
   "allow rwx auid 123 namespace asdf",
   "allow wwx pool ''",
+  "allow rw gids=1",
+  "allow rw gids=1,2,3",
+  "allow rw uid=123 gids=asdf",
+  "allow rw uid=123 gids=1,2,asdf",
   0
 };
 
@@ -133,12 +140,18 @@ TEST(MDSAuthCaps, OutputParsed) {
      "MDSAuthCaps[allow rw]"},
     {"allow * uid=1",
      "MDSAuthCaps[allow * uid=1]"},
+    {"allow * uid=1 gids=1",
+     "MDSAuthCaps[allow * uid=1 gids=1]"},
+    {"allow * uid=1 gids=1,2,3",
+     "MDSAuthCaps[allow * uid=1 gids=1,2,3]"},
     {"allow * path=/foo",
      "MDSAuthCaps[allow * path=\"/foo\"]"},
     {"allow * path=\"/foo\"",
      "MDSAuthCaps[allow * path=\"/foo\"]"},
     {"allow * path=\"/foo\" uid=1",
      "MDSAuthCaps[allow * path=\"/foo\" uid=1]"},
+    {"allow * path=\"/foo\" uid=1 gids=1,2,3",
+     "MDSAuthCaps[allow * path=\"/foo\" uid=1 gids=1,2,3]"},
   };
   size_t num_tests = sizeof(test_values) / sizeof(*test_values);
   for (size_t i = 0; i < num_tests; ++i) {
