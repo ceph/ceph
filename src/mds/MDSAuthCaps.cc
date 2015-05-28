@@ -88,6 +88,25 @@ struct MDSCapParser : qi::grammar<Iterator, MDSAuthCaps()>
   qi::rule<Iterator, MDSAuthCaps()> mdscaps;
 };
 
+bool MDSCapMatch::match(const std::string &target_path,
+			const int target_uid) const
+{
+  if (uid != MDS_AUTH_UID_ANY) {
+    if (uid != target_uid)
+      return false;
+  }
+  if (path.length()) {
+    if (target_path.find(path) != 0)
+      return false;
+    // if path doesn't already have a trailing /, make sure the target
+    // does so that path=/foo doesn't match target_path=/food
+    if (target_path.length() > path.length() &&
+	path[path.length()-1] != '/' &&
+	target_path[path.length()] != '/')
+      return false;
+  }
+  return true;
+}
 
 /**
  * For a given filesystem path, query whether this capability carries`
@@ -95,18 +114,18 @@ struct MDSCapParser : qi::grammar<Iterator, MDSAuthCaps()>
  *
  * This is true if any of the 'grant' clauses in the capability match the
  * requested path + op.
- *
  */
 bool MDSAuthCaps::is_capable(const std::string &path, int uid,
 			     bool may_read, bool may_write) const
 {
-  for (std::vector<MDSCapGrant>::const_iterator i = grants.begin(); i != grants.end(); ++i) {
+  for (std::vector<MDSCapGrant>::const_iterator i = grants.begin();
+       i != grants.end();
+       ++i) {
     if (i->match.match(path, uid) &&
 	i->spec.allows(may_read, may_write)) {
       return true;
     }
   }
-
   return false;
 }
 
