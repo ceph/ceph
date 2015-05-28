@@ -130,7 +130,7 @@ function TEST_corrupt_and_repair_erasure_coded() {
     teardown $dir || return 1
 }
 
-function TEST_unreocvery_erasure_coded() {
+function TEST_unfound_erasure_coded() {
     local dir=$1
     local poolname=ecpool
     local payload=ABCDEF
