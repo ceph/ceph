@@ -35,7 +35,9 @@
 // * Create a new entry for the test in the #tests table.
 #include <vector>
 #include <sched.h>
+#if defined(__x86_64__) || defined(__amd64__)
 #include <xmmintrin.h>
+#endif
 
 #include "include/atomic.h"
 #include "include/buffer.h"
@@ -606,10 +608,12 @@ double perf_cycles_to_nanoseconds()
  */
 static inline void prefetch(const void *object, uint64_t num_bytes)
 {
+#if defined(__x86_64__) || defined(__amd64__)
     uint64_t offset = reinterpret_cast<uint64_t>(object) & 0x3fUL;
     const char* p = reinterpret_cast<const char*>(object) - offset;
     for (uint64_t i = 0; i < offset + num_bytes; i += 64)
         _mm_prefetch(p + i, _MM_HINT_T0);
+#endif
 }
 
 // Measure the cost of the prefetch instruction.
