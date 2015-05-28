@@ -84,6 +84,16 @@ CentOS|Fedora|RedHatEnterpriseServer)
         ;;
 esac
 
+function get_pip_and_wheel() {
+    local install=$1
+
+    # Ubuntu-12.04 and Python 2.7.3 require this line
+    pip --timeout 300 $install 'distribute >= 0.7.3' || return 1
+    # although pip comes with virtualenv, having a recent version
+    # of pip matters when it comes to using wheel packages
+    pip --timeout 300 $install 'setuptools >= 0.8' 'pip >= 7.0' 'wheel >= 0.24' || return 1
+}
+
 #
 # preload python modules so that tox can run without network access
 #
@@ -92,7 +102,7 @@ for interpreter in python2.7 python3 ; do
     if ! test -d install-deps-$interpreter ; then
         virtualenv --python $interpreter install-deps-$interpreter
         . install-deps-$interpreter/bin/activate
-        pip --timeout 300 install wheel || exit 1
+        get_pip_and_wheel install || exit 1
     fi
 done
 
@@ -105,9 +115,8 @@ find . -name tox.ini | while read ini ; do
             for interpreter in python2.7 python3 ; do
                 type $interpreter > /dev/null 2>&1 || continue
                 . $top_srcdir/install-deps-$interpreter/bin/activate
-                # although pip comes with virtualenv, having a recent version
-                # of pip matters when it comes to using wheel packages
-                pip --timeout 300 wheel $require 'setuptools >= 0.7' 'pip >= 6.1' || exit 1
+                get_pip_and_wheel wheel || exit 1
+                pip --timeout 300 wheel $require || exit 1
             done
         fi
     )
