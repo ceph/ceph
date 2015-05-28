@@ -20,7 +20,7 @@
 #include <string>
 #include <sstream>
 
-
+// what we can do
 struct MDSCapSpec {
   bool read;
   bool write;
@@ -34,17 +34,21 @@ struct MDSCapSpec {
   }
 };
 
+// conditions before we are allowed to do it
 struct MDSCapMatch {
   static const int MDS_AUTH_UID_ANY = -1;
   static const std::string MDS_AUTH_PATH_ROOT;
 
-  int uid;  // Require UID to be equal to this, if !=MDS_AUTH_UID_ANY
+  int uid;           // Require UID to be equal to this, if !=MDS_AUTH_UID_ANY
+  std::vector<int> gids;  // Use these GIDs
   std::string path;  // Require path to be child of this (may be "/" for any)
 
   MDSCapMatch() : uid(MDS_AUTH_UID_ANY), path(MDS_AUTH_PATH_ROOT) {}
-  MDSCapMatch(int uid_) : uid(uid_), path(MDS_AUTH_PATH_ROOT) {}
+  MDSCapMatch(int uid_, std::vector<int>& gids_)
+    : uid(uid_), gids(gids_), path(MDS_AUTH_PATH_ROOT) {}
   MDSCapMatch(std::string path_) : uid(MDS_AUTH_UID_ANY), path(path_) {}
-  MDSCapMatch(std::string path_, int uid_) : uid(uid_), path(path_) {}
+  MDSCapMatch(std::string path_, int uid_, std::vector<int>& gids_)
+    : uid(uid_), gids(gids_), path(path_) {}
   
   bool is_match_all() const
   {
