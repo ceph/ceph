@@ -5,6 +5,7 @@ import copy
 import logging
 import time
 import os
+import requests
 import subprocess
 
 from teuthology.config import config as teuth_config
@@ -225,19 +226,18 @@ def _block_looking_for_package_version(remote, base_url, wait=False):
     :raises: VersionNotFoundError
     """
     while True:
-        r = remote.run(
-            args=['wget', '-q', '-O-', base_url + '/version'],
-            stdout=StringIO(),
-            check_status=False,
-        )
-        if r.exitstatus != 0:
+        resp = requests.get(base_url + '/version')
+        if not resp.ok:
             if wait:
-                log.info('Package not there yet, waiting...')
+                log.info(
+                    'Package not there yet (got HTTP code %s), waiting...',
+                    resp.status_code,
+                )
                 time.sleep(15)
                 continue
             raise VersionNotFoundError(base_url)
         break
-    version = r.stdout.getvalue().strip()
+    version = resp.text.strip()
     # FIXME: 'version' as retreived from the repo is actually the RPM version
     # PLUS *part* of the release. Example:
     # Right now, ceph master is given the following version in the repo file:
@@ -307,20 +307,18 @@ def _update_deb_package_list_and_install(ctx, remote, debs, config):
     # get package version string
     # FIXME this is a terrible hack.
     while True:
-        r = remote.run(
-            args=[
-                'wget', '-q', '-O-', base_url + '/version',
-            ],
-            stdout=StringIO(),
-            check_status=False,
-        )
-        if r.exitstatus != 0:
+        resp = requests.get(base_url + '/version')
+        if not resp.ok:
             if config.get('wait_for_package'):
                 log.info('Package not there yet, waiting...')
                 time.sleep(15)
                 continue
+            try:
+                resp.raise_for_status()
+            except Exception:
+                log.exception("Error fetching package version")
             raise VersionNotFoundError("%s/version" % base_url)
-        version = r.stdout.getvalue().strip()
+        version = resp.text.strip()
         log.info('Package version is %s', version)
         break
 
@@ -336,7 +334,8 @@ def _update_deb_package_list_and_install(ctx, remote, debs, config):
     remote.run(args=['sudo', 'apt-get', 'update'], check_status=False)
     remote.run(
         args=[
-            'sudo', 'DEBIAN_FRONTEND=noninteractive', 'apt-get', '-y', '--force-yes',
+            'sudo', 'DEBIAN_FRONTEND=noninteractive', 'apt-get', '-y',
+            '--force-yes',
             '-o', run.Raw('Dpkg::Options::="--force-confdef"'), '-o', run.Raw(
                 'Dpkg::Options::="--force-confold"'),
             'install',
@@ -903,20 +902,14 @@ def _upgrade_deb_packages(ctx, config, remote, debs):
 
     # get package version string
     while True:
-        r = remote.run(
-            args=[
-                'wget', '-q', '-O-', base_url + '/version',
-            ],
-            stdout=StringIO(),
-            check_status=False,
-        )
-        if r.exitstatus != 0:
+        resp = requests.get(base_url + '/version')
+        if not resp.ok:
             if config.get('wait_for_package'):
                 log.info('Package not there yet, waiting...')
                 time.sleep(15)
                 continue
             raise VersionNotFoundError("%s/version" % base_url)
-        version = r.stdout.getvalue().strip()
+        version = resp.text.strip()
         log.info('Package version is %s', version)
         break
     remote.run(
