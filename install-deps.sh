@@ -107,7 +107,7 @@ find . -name tox.ini | while read ini ; do
                 . $top_srcdir/install-deps-$interpreter/bin/activate
                 # although pip comes with virtualenv, having a recent version
                 # of pip matters when it comes to using wheel packages
-                pip --timeout 300 wheel $require 'setuptools >= 0.7' 'pip >= 6.1' || exit 1
+                pip --timeout 300 install wheel $require 'setuptools >= 0.7' 'pip >= 6.1' || exit 1
             done
         fi
     )
