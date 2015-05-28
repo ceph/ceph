@@ -120,22 +120,12 @@ function corrupt_and_repair_one() {
     wait_for_clean || return 1
 }
 
-function TEST_corrupt_and_repair_erasure_coded() {
+function corrupt_and_repair_erasure_coded() {
     local dir=$1
-    local poolname=ecpool
-    local payload=ABCDEF
+    local poolname=$2
+    local profile=$3
 
-    setup $dir || return 1
-    run_mon $dir a || return 1
-    run_osd $dir 0 || return 1
-    run_osd $dir 1 || return 1
-    run_osd $dir 2 || return 1
-    run_osd $dir 3 || return 1
-    wait_for_clean || return 1
-
-    ceph osd erasure-code-profile set myprofile \
-        k=2 m=2 ruleset-failure-domain=osd || return 1
-    ceph osd pool create $poolname 1 1 erasure myprofile \
+    ceph osd pool create $poolname 1 1 erasure $profile \
         || return 1
 
     add_something $dir $poolname
@@ -151,6 +141,28 @@ function TEST_corrupt_and_repair_erasure_coded() {
     corrupt_and_repair_one $dir $poolname $not_primary_first || return 1
     corrupt_and_repair_two $dir $poolname $not_primary_first $not_primary_second || return 1
     corrupt_and_repair_two $dir $poolname $primary $not_primary_first || return 1
+
+}
+
+function TEST_corrupt_and_repair_jerasure() {
+    local dir=$1
+    local poolname=ecpool
+    local profile=myprofile
+
+    setup $dir || return 1
+    run_mon $dir a || return 1
+    for id in $(seq 0 3) ; do
+        run_osd $dir $id || return 1
+    done
+    wait_for_clean || return 1
+
+    ceph osd erasure-code-profile set $profile \
+        k=2 m=2 ruleset-failure-domain=osd || return 1
+
+    corrupt_and_repair_erasure_coded $dir $poolname $profile || return 1
+
+    teardown $dir || return 1
+}
 
     teardown $dir || return 1
 }
