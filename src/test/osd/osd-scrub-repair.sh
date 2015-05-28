@@ -65,6 +65,31 @@ function TEST_corrupt_and_repair_replicated() {
     teardown $dir || return 1
 }
 
+function corrupt_and_repair_two() {
+    local dir=$1
+    local poolname=$2
+    local first=$3
+    local second=$4
+
+    #
+    # 1) remove the corresponding file from the OSDs
+    #
+    objectstore_tool $dir $first SOMETHING remove || return 1
+    objectstore_tool $dir $second SOMETHING remove || return 1
+    #
+    # 2) repair the PG
+    #
+    local pg=$(get_pg $poolname SOMETHING)
+    repair $pg
+    #
+    # 3) The files must be back
+    #
+    objectstore_tool $dir $first SOMETHING list-attrs || return 1
+    objectstore_tool $dir $second SOMETHING list-attrs || return 1
+    rados --pool $poolname get SOMETHING $dir/COPY || return 1
+    diff $dir/ORIGINAL $dir/COPY || return 1
+}
+
 #
 # 1) add an object
 # 2) remove the corresponding file from a designated OSD
@@ -174,31 +199,6 @@ function TEST_unfound_erasure_coded() {
     ceph -s|grep "1/1 unfound" || return 1
 
     teardown $dir || return 1
-}
-
-function corrupt_and_repair_two() {
-    local dir=$1
-    local poolname=$2
-    local first=$3
-    local second=$4
-
-    #
-    # 1) remove the corresponding file from the OSDs
-    #
-    objectstore_tool $dir $first SOMETHING remove || return 1
-    objectstore_tool $dir $second SOMETHING remove || return 1
-    #
-    # 2) repair the PG
-    #
-    local pg=$(get_pg $poolname SOMETHING)
-    repair $pg
-    #
-    # 3) The files must be back
-    #
-    objectstore_tool $dir $first SOMETHING list-attrs || return 1
-    objectstore_tool $dir $second SOMETHING list-attrs || return 1
-    rados --pool $poolname get SOMETHING $dir/COPY || return 1
-    diff $dir/ORIGINAL $dir/COPY || return 1
 }
 
 main osd-scrub-repair "$@"
