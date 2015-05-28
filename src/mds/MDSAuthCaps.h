@@ -32,6 +32,15 @@ struct MDSCapSpec {
   bool allow_all() const {
     return any;
   }
+  bool allows(bool r, bool w) const {
+    if (any)
+      return true;
+    if (r && !read)
+      return false;
+    if (w && !write)
+      return false;
+    return true;
+  }
 };
 
 // conditions before we are allowed to do it
