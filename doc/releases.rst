@@ -183,7 +183,7 @@ backport fixes; developer focus in on the next development release
 which is usually only a few weeks away.
 
 There are three to four stable releases a year.  Each stable release
-will receive a name (e.g., `Firefly') and bug fix backports at least
+will receive a name (e.g., 'Firefly') and bug fix backports at least
 until the next stable release is out.
 
 Every other stable releases is a LTS (Long Term Stable) and will
