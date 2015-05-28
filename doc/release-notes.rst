@@ -187,6 +187,18 @@ Notable changes
 * rgw: restore buffer of multipart upload after EEXIST (#11604, Yehuda Sadeh)
 * rgw: merge manifests correctly when there's prefix override (#11622, Yehuda Sadeh)
 
+Upgrading from previous Hammer release
+--------------------------------------
+
+Bug #11442 introduced a change that made rgw objects that start with underscore incompatible
+with previous versions. The fix to that bug reverts to the previous behavior. The fix for that
+bug reverts the encoding to the previously used encoding. In order to be able to access objects
+that start with and underscore and were created in prior Hammer releases, following the upgrade
+it is required to run (for each affected bucket)::
+
+    $ radosgw-admin bucket check --check-head-obj-locator \
+                                 --bucket=<bucket> [--fix]
+
 
 v0.94.1 Hammer
 ==============
