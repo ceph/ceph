@@ -35,12 +35,14 @@ struct TierAgentState {
 
   enum flush_mode_t {
     FLUSH_MODE_IDLE,   // nothing to flush
-    FLUSH_MODE_ACTIVE, // flush what we can to bring down dirty count
+    FLUSH_MODE_LOW, // flush dirty objects with a low speed
+    FLUSH_MODE_HIGH, //flush dirty objects with a high speed
   } flush_mode;     ///< current flush behavior
   static const char *get_flush_mode_name(flush_mode_t m) {
     switch (m) {
     case FLUSH_MODE_IDLE: return "idle";
-    case FLUSH_MODE_ACTIVE: return "active";
+    case FLUSH_MODE_LOW: return "low";
+    case FLUSH_MODE_HIGH: return "high";
     default: assert(0 == "bad flush mode");
     }
   }
