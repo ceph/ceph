@@ -121,6 +121,7 @@ TEST(MDSAuthCaps, AllowPath) {
   ASSERT_FALSE(cap.allow_all());
   ASSERT_TRUE(cap.is_capable("/sandbox/foo", 0, true, true));
   ASSERT_TRUE(cap.is_capable("/sandbox", 0, true, true));
+  ASSERT_FALSE(cap.is_capable("/sandboxed", 0, true, true));
   ASSERT_FALSE(cap.is_capable("/foo", 0, true, true));
 }
 
