@@ -55,20 +55,6 @@ class AsyncConnection : public Connection {
   int _try_send(bufferlist &bl, bool send=true);
   int _send(Message *m);
   void prepare_send_message(uint64_t features, Message *m, bufferlist &bl);
-#define HEADER_CRC_OFF (sizeof(char)+offset(ceph_msg_header, crc))
-  void inject_msg_header_crc(m, bl) {
-    if (msgr->crcflags & MSG_CRC_HEADER) {
-      if (has_feature(CEPH_FEATURE_NOSRCADDR)) {
-        __le32 *header_crc = static_cast<__le32*>(&bl[HEADER_CRC_OFF]);
-        m->calc_header_crc();
-        *header_crc = m->get_header().crc;
-      } else {
-        ceph_msg_header_old *oldheader = static_cast<ceph_msg_header_old*>(&bl[sizeof(char)]);
-        oldheader->crc = ceph_crc32c(0, (unsigned char*)oldheader,
-                                     sizeof(*oldheader) - sizeof(oldheader->crc));
-      }
-    }
-  }
   int read_until(uint64_t needed, char *p);
   int _process_connection();
   void _connect();
@@ -249,7 +235,7 @@ class AsyncConnection : public Connection {
   } can_write;
   bool open_write;
   map<int, list<pair<bufferlist, Message*> > > out_q;  // priority queue for outbound msgs
-  list<pair<bufferlist, Message*> > sent; // the first bufferlist need to inject seq
+  list<Message*> sent; // the first bufferlist need to inject seq
   list<Message*> local_messages;    // local deliver
   bufferlist outcoming_bl;
   bool keepalive;
