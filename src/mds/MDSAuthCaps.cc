@@ -52,12 +52,14 @@ struct MDSCapParser : qi::grammar<Iterator, MDSAuthCaps()>
       lexeme[lit("'") >> *(char_ - '\'') >> '\''];
     unquoted_path %= +char_("a-zA-Z0-9_.-/");
 
-    // match := [path=<path>] [uid=<uid>]
-    uid %= (spaces >> lit("uid") >> lit('=') >> int_);
+    // match := [path=<path>] [uid=<uid> [gids=<gid>[,<gid>...]]
     path %= (spaces >> lit("path") >> lit('=') >> (quoted_path | unquoted_path));
+    uid %= (spaces >> lit("uid") >> lit('=') >> int_);
+    intlist %= (int_ % lit(','));
+    gidlist %= -(spaces >> lit("gids") >> lit('=') >> intlist);
     match = -(
-             (uid)[_val = phoenix::construct<MDSCapMatch>(_1)] |
-             (path >> uid)[_val = phoenix::construct<MDSCapMatch>(_1, _2)] | 
+	     (uid >> gidlist)[_val = phoenix::construct<MDSCapMatch>(_1, _2)] |
+	     (path >> uid >> gidlist)[_val = phoenix::construct<MDSCapMatch>(_1, _2, _3)] |
              (path)[_val = phoenix::construct<MDSCapMatch>(_1)]);
 
     // capspec = * | r[w]
@@ -78,6 +80,8 @@ struct MDSCapParser : qi::grammar<Iterator, MDSAuthCaps()>
   qi::rule<Iterator, MDSCapSpec()> capspec;
   qi::rule<Iterator, string()> path;
   qi::rule<Iterator, int()> uid;
+  qi::rule<Iterator, std::vector<int>() > intlist;
+  qi::rule<Iterator, std::vector<int>() > gidlist;
   qi::rule<Iterator, MDSCapMatch()> match;
   qi::rule<Iterator, MDSCapGrant()> grant;
   qi::rule<Iterator, std::vector<MDSCapGrant>()> grants;
@@ -160,11 +164,22 @@ ostream &operator<<(ostream &out, const MDSCapMatch &match)
   if (match.path != MDSCapMatch::MDS_AUTH_PATH_ROOT) {
     out << "path=\"" << match.path << "\"";
   }
-  if (match.path != MDSCapMatch::MDS_AUTH_PATH_ROOT && match.uid != MDSCapMatch::MDS_AUTH_UID_ANY) {
+  if (match.path != MDSCapMatch::MDS_AUTH_PATH_ROOT &&
+      match.uid != MDSCapMatch::MDS_AUTH_UID_ANY) {
     out << " ";
   }
   if (match.uid != MDSCapMatch::MDS_AUTH_UID_ANY) {
     out << "uid=" << match.uid;
+    if (!match.gids.empty()) {
+      out << " gids=";
+      for (std::vector<int>::const_iterator p = match.gids.begin();
+	   p != match.gids.end();
+	   ++p) {
+	if (p != match.gids.begin())
+	  out << ',';
+	out << *p;
+      }
+    }
   }
 
   return out;
