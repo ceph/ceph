@@ -29,7 +29,9 @@ struct MDSCapSpec {
   MDSCapSpec() : read(false), write(false), any(false) {}
   MDSCapSpec(bool r_, bool w_, bool a_) : read(r_), write(w_), any(a_) {}
 
-  bool allow_all() const {return any;}
+  bool allow_all() const {
+    return any;
+  }
 };
 
 struct MDSCapMatch {
@@ -50,7 +52,9 @@ struct MDSCapMatch {
   }
 
   bool match(const std::string &target_path, const int target_uid) const {
-    return (target_path.find(path) == 0 && (target_uid == uid || uid == MDS_AUTH_UID_ANY)); 
+    return
+      (target_path.find(path) == 0 &&
+       (target_uid == uid || uid == MDS_AUTH_UID_ANY));
   }
 };
 
@@ -58,24 +62,28 @@ struct MDSCapGrant {
   MDSCapSpec spec;
   MDSCapMatch match;
 
-  MDSCapGrant(const MDSCapSpec &spec_, const MDSCapMatch &match_) : spec(spec_), match(match_) {}
+  MDSCapGrant(const MDSCapSpec &spec_, const MDSCapMatch &match_)
+    : spec(spec_), match(match_) {}
   MDSCapGrant() {}
 };
 
 class MDSAuthCaps
 {
-    protected:
-    std::vector<MDSCapGrant> grants;
+protected:
+  std::vector<MDSCapGrant> grants;
 
-    public:
-    void set_allow_all();
-    bool parse(const std::string &str, std::ostream *err);
-    MDSAuthCaps() {}
-    MDSAuthCaps(const std::vector<MDSCapGrant> &grants_) : grants(grants_) {}
+public:
+  MDSAuthCaps() {}
+  MDSAuthCaps(const std::vector<MDSCapGrant> &grants_) : grants(grants_) {}
 
-    bool allow_all() const;
-    bool is_capable(const std::string &path, int uid, bool may_read, bool may_write) const;
-    friend std::ostream &operator<<(std::ostream &out, const MDSAuthCaps &cap);
+  void set_allow_all();
+  bool parse(const std::string &str, std::ostream *err);
+
+  bool allow_all() const;
+  bool is_capable(const std::string &path, int uid,
+		  bool may_read, bool may_write) const;
+
+  friend std::ostream &operator<<(std::ostream &out, const MDSAuthCaps &cap);
 };
 
 
