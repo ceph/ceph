@@ -63,12 +63,7 @@ struct MDSCapMatch {
   {
     return uid == MDS_AUTH_UID_ANY && path == "/";
   }
-
-  bool match(const std::string &target_path, const int target_uid) const {
-    return
-      (target_path.find(path) == 0 &&
-       (target_uid == uid || uid == MDS_AUTH_UID_ANY));
-  }
+  bool match(const std::string &target_path, const int target_uid) const;
 };
 
 struct MDSCapGrant {
