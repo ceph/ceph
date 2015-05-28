@@ -175,7 +175,7 @@ static void alloc_aligned_buffer(bufferlist& data, unsigned len, unsigned off)
 AsyncConnection::AsyncConnection(CephContext *cct, AsyncMessenger *m, EventCenter *c, PerfCounters *p)
   : Connection(cct, m), async_msgr(m), logger(p), global_seq(0), connect_seq(0), peer_global_seq(0),
     out_seq(0), ack_left(0), in_seq(0), state(STATE_NONE), state_after_send(0), sd(-1), port(-1),
-    write_lock("AsyncConnection::write_lock"), can_write(0),
+    write_lock("AsyncConnection::write_lock"), can_write(NOWRITE),
     open_write(false), keepalive(false), lock("AsyncConnection::lock"), recv_buf(NULL),
     recv_max_prefetch(MIN(msgr->cct->_conf->ms_tcp_prefetch_max_size, TCP_PREFETCH_MIN_SIZE)),
     recv_start(0), recv_end(0), got_bad_auth(false), authorizer(NULL), replacing(false),
@@ -1293,7 +1293,7 @@ int AsyncConnection::_process_connection()
         // message may in queue between last _try_send and connection ready
         // write event may already notify and we need to force scheduler again
         write_lock.Lock();
-        can_write = 1;
+        can_write = CANWRITE;
         if (is_queued())
           center->dispatch_event_external(write_handler);
         write_lock.Unlock();
@@ -1455,7 +1455,7 @@ int AsyncConnection::_process_connection()
         state = STATE_OPEN;
         memset(&connect_msg, 0, sizeof(connect_msg));
         write_lock.Lock();
-        can_write = 1;
+        can_write = CANWRITE;
         write_lock.Unlock();
         break;
       }
@@ -1758,7 +1758,7 @@ int AsyncConnection::handle_connect_msg(ceph_msg_connect &connect, bufferlist &a
     existing->center->dispatch_event_external(existing->reset_handler);
     existing->_stop();
   } else {
-    assert(can_write == 0);
+    assert(can_write == NOWRITE);
     existing->write_lock.Lock(true);
     // queue a reset on the new connection, which we're dumping for the old
     center->dispatch_event_external(reset_handler);
@@ -1784,8 +1784,7 @@ int AsyncConnection::handle_connect_msg(ceph_msg_connect &connect, bufferlist &a
     existing->requeue_sent();
 
     swap(existing->sd, sd);
-    swap(existing->can_write, can_write);
-    existing->can_write = 0;
+    existing->can_write = NOWRITE;
     existing->open_write = false;
     existing->replacing = true;
     existing->state_offset = 0;
@@ -1966,7 +1965,7 @@ int AsyncConnection::send_message(Message *m)
   Mutex::Locker l(write_lock);
   m->set_req(out_seq.inc());
   // "features" changes will change the payload encoding
-  if (can_write == 0 || get_features() != f) {
+  if (can_write == NOWRITE || get_features() != f) {
     // ensure the correctness of message encoding
     bl.clear();
     ldout(async_msgr->cct, 5) << __func__ << " clear encoded buffer, can_write=" << can_write << " previous "
@@ -1974,13 +1973,13 @@ int AsyncConnection::send_message(Message *m)
   } else {
     inject_msg_header_crc(m, bl);
   }
-  if (!is_queued() && can_write == 1) {
+  if (!is_queued() && can_write == CANWRITE) {
     if (write_message(m, bl) < 0) {
       ldout(async_msgr->cct, 1) << __func__ << " send msg failed" << dendl;
       // we want to handle fault within internal thread
       center->dispatch_event_external(write_handler);
     }
-  } else if (can_write == 2) {
+  } else if (can_write == CLOSED) {
     ldout(async_msgr->cct, 10) << __func__ << " connection closed."
                                << " Drop message " << m << dendl;
     m->put();
@@ -2091,7 +2090,7 @@ void AsyncConnection::fault()
     ::close(sd);
     sd = -1;
   }
-  can_write = 0;
+  can_write = NOWRITE;
   open_write = false;
 
   // requeue sent items
@@ -2166,7 +2165,7 @@ void AsyncConnection::was_session_reset()
   // it's safe to directly set 0, double locked
   ack_left.set(0);
   once_ready = false;
-  can_write = 0;
+  can_write = NOWRITE;
 }
 
 void AsyncConnection::_stop()
@@ -2185,7 +2184,7 @@ void AsyncConnection::_stop()
 
   state = STATE_CLOSED;
   open_write = false;
-  can_write = 2;
+  can_write = CLOSED;
   state_offset = 0;
   if (sd >= 0) {
     shutdown_socket();
@@ -2288,7 +2287,7 @@ void AsyncConnection::prepare_send_message(uint64_t features, Message *m, buffer
 int AsyncConnection::write_message(Message *m, bufferlist& bl)
 {
   assert(write_lock.is_locked());
-  assert(can_write == 1);
+  assert(can_write == CANWRITE);
   if (!policy.lossy) {
     // put on sent list
     sent.push_back(make_pair(bl, m));
@@ -2330,7 +2329,7 @@ void AsyncConnection::send_keepalive()
 {
   ldout(async_msgr->cct, 10) << __func__ << " started." << dendl;
   Mutex::Locker l(write_lock);
-  if (can_write != 2) {
+  if (can_write != CLOSED) {
     keepalive = true;
     center->dispatch_event_external(write_handler);
   }
@@ -2376,7 +2375,7 @@ void AsyncConnection::handle_write()
   int r = 0;
 
   write_lock.Lock();
-  if (can_write == 1) {
+  if (can_write == CANWRITE) {
     if (keepalive) {
       _send_keepalive_or_ack();
       keepalive = false;
