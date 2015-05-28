@@ -85,6 +85,7 @@ def lock_machines(ctx, config):
     # change the status during the locking process
     report.try_push_job_info(ctx.config, dict(status='waiting'))
 
+    all_locked = dict()
     while True:
         # get a candidate list of machines
         machines = lock.list_locks(machine_type=machine_type, up=True,
@@ -116,9 +117,10 @@ def lock_machines(ctx, config):
                                       ctx.archive, os_type, os_version, arch)
         if not newly_locked and not isinstance(newly_locked, list):
             raise RuntimeError('Invalid parameters specified')
-        if len(newly_locked) == how_many:
+        all_locked.update(newly_locked)
+        if len(all_locked) == how_many:
             vmlist = []
-            for lmach in newly_locked:
+            for lmach in all_locked:
                 if misc.is_vm(lmach):
                     vmlist.append(lmach)
             if vmlist:
@@ -143,12 +145,12 @@ def lock_machines(ctx, config):
                 if lock.do_update_keys(keys_dict):
                     log.info("Error in virtual machine keys")
                 newscandict = {}
-                for dkey in newly_locked.iterkeys():
+                for dkey in all_locked.iterkeys():
                     stats = lockstatus.get_status(dkey)
                     newscandict[dkey] = stats['ssh_pub_key']
                 ctx.config['targets'] = newscandict
             else:
-                ctx.config['targets'] = newly_locked
+                ctx.config['targets'] = all_locked
             locked_targets = yaml.safe_dump(
                 ctx.config['targets'],
                 default_flow_style=False
@@ -164,6 +166,10 @@ def lock_machines(ctx, config):
             assert how_many > 0, "lock_machines: how_many counter went" \
                                  "negative, this shouldn't happen"
 
+        log.info(
+            "{total} machines locked ({new} new); need {more} more".format(
+                total=len(all_locked), new=len(newly_locked), more=how_many)
+        )
         log.warn('Could not lock enough machines, waiting...')
         time.sleep(10)
     try:
