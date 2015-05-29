@@ -339,6 +339,9 @@ public:
   void queue_transaction(ObjectStore::Transaction *t, OpRequestRef op) {
     osd->store->queue_transaction(osr.get(), t, 0, 0, 0, op);
   }
+  void queue_transactions(list<ObjectStore::Transaction*>& tls, OpRequestRef op) {
+    osd->store->queue_transactions(osr.get(), tls, 0, 0, 0, op);
+  }
   epoch_t get_epoch() const {
     return get_osdmap()->get_epoch();
   }

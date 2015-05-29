@@ -841,7 +841,6 @@ void ECBackend::handle_sub_write(
       get_parent()->whoami_shard().shard >= ec_impl->get_data_chunk_count())
     op.t.set_fadvise_flag(CEPH_OSD_OP_FLAG_FADVISE_DONTNEED);
 
-  localt->append(op.t);
   if (on_local_applied_sync) {
     dout(10) << "Queueing onreadable_sync: " << on_local_applied_sync << dendl;
     localt->register_on_applied_sync(on_local_applied_sync);
@@ -857,7 +856,13 @@ void ECBackend::handle_sub_write(
       new SubWriteApplied(this, msg, op.tid, op.at_version)));
   localt->register_on_applied(
     new ObjectStore::C_DeleteTransaction(localt));
-  get_parent()->queue_transaction(localt, msg);
+  list<ObjectStore::Transaction*> tls;
+  tls.push_back(localt);
+  tls.push_back(new ObjectStore::Transaction);
+  tls.back()->swap(op.t);
+  tls.back()->register_on_complete(
+    new ObjectStore::C_DeleteTransaction(tls.back()));
+  get_parent()->queue_transactions(tls, msg);
 }
 
 void ECBackend::handle_sub_read(
