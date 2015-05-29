@@ -564,6 +564,7 @@ public:
     return true;
   }
 
+  bool can_inc_scrubs_pending();
   bool inc_scrubs_pending();
   void inc_scrubs_active(bool reserved);
   void dec_scrubs_pending();
