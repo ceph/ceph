@@ -99,7 +99,7 @@ class CephFSTestCase(unittest.TestCase):
 
         # In case anything is in the OSD blacklist list, clear it out.  This is to avoid
         # the OSD map changing in the background (due to blacklist expiry) while tests run.
-        blacklist = json.loads(self.fs.mon_manager.raw_cluster_cmd("osd", "dump", "--format=json-pretty"))['flags']
+        blacklist = json.loads(self.fs.mon_manager.raw_cluster_cmd("osd", "dump", "--format=json-pretty"))['blacklist']
         log.info("Removing {0} blacklist entries".format(len(blacklist)))
         for addr, blacklisted_at in blacklist.items():
             self.fs.mon_manager.raw_cluster_cmd("osd", "blacklist", "rm", addr)
