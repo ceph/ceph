@@ -129,6 +129,15 @@ private:
   FS fs;
 
   void set_from_conf();
+  bool beyond_limit() const {
+    if (cur_ios < io_limits.first &&
+	pending_wbs.size() < fd_limits.first &&
+	cur_size < size_limits.first)
+      return false;
+    else
+      return true;
+  }
+
 public:
   WBThrottle(CephContext *cct);
   ~WBThrottle();
