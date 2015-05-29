@@ -1,5 +1,6 @@
 %bcond_with ocf
 %bcond_without cephfs_java
+%bcond_with tests
 
 %if (0%{?el5} || (0%{?rhel_version} >= 500 && 0%{?rhel_version} <= 600))
 %{!?python_sitelib: %global python_sitelib %(%{__python} -c "from distutils.sysconfig import get_python_lib; print(get_python_lib())")}
@@ -503,6 +504,16 @@ sed -i -e "s/-lcurses/-lncurses/g" src/java/Makefile
 %endif
 
 make -j$(getconf _NPROCESSORS_ONLN)
+
+
+%if 0%{with tests}
+%check
+# run in-tree unittests
+make -j$(getconf _NPROCESSORS_ONLN) check-local
+
+%endif
+
+
 
 %install
 make DESTDIR=$RPM_BUILD_ROOT install
