@@ -15,8 +15,6 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU Library Public License for more details.
 #
-source test/test_btrfs_common.sh
-
 PS4='${FUNCNAME[0]}: $LINENO: '
 
 export PATH=.:$PATH # make sure program from sources are prefered
@@ -69,10 +67,6 @@ function setup() {
 
 function teardown() {
     kill_daemons
-    if [ $(stat -f -c '%T' .) == "btrfs" ]; then
-        rm -fr $DIR/*/*db
-        teardown_btrfs $DIR
-    fi
     grep " $(pwd)/$DIR/" < /proc/mounts | while read mounted rest ; do
         umount $mounted
     done
