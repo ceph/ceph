@@ -45,7 +45,8 @@ librgw_la_SOURCES =  \
 	rgw/rgw_replica_log.cc \
 	rgw/rgw_keystone.cc \
 	rgw/rgw_quota.cc \
-	rgw/rgw_dencoder.cc
+	rgw/rgw_dencoder.cc \
+	rgw/rgw_object_expirer_core.cc
 librgw_la_CXXFLAGS = -Woverloaded-virtual ${AM_CXXFLAGS}
 noinst_LTLIBRARIES += librgw.la
 
