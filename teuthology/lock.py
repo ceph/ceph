@@ -78,11 +78,17 @@ def vps_version_or_type_valid(machine_type, os_type, os_version):
         return True
     valid_os_and_version = get_distro_from_downburst()
     if os_type not in valid_os_and_version:
-        log.error("os-type '%s' is invalid", os_type)
+        log.error("os-type '%s' is invalid. Try one of: %s",
+                  os_type,
+                  ', '.join(valid_os_and_version.keys()))
         return False
     if not validate_distro_version(os_version,
                                    valid_os_and_version[os_type]):
-        log.error("os-version '%s' is invalid", os_version)
+        log.error(
+            "os-version '%s' is invalid for os-type '%s'. Try one of: %s",
+            os_version,
+            os_type,
+            ', '.join(valid_os_and_version[os_type]))
         return False
     return True
 
@@ -176,9 +182,13 @@ def main(ctx):
             or ctx.update or ctx.brief, \
             'machines cannot be specified with that operation'
     else:
-        assert ctx.num_to_lock or ctx.list or ctx.list_targets or \
-            ctx.summary or ctx.brief, \
-            'machines must be specified for that operation'
+        if ctx.lock:
+            log.error("--lock requires specific machines passed as arguments")
+        else:
+            # This condition might never be hit, but it's not clear.
+            assert ctx.num_to_lock or ctx.list or ctx.list_targets or \
+                ctx.summary or ctx.brief, \
+                'machines must be specified for that operation'
     if ctx.all:
         assert ctx.list or ctx.list_targets or ctx.brief, \
             '--all can only be used with --list, --list-targets, and --brief'
