@@ -23,10 +23,10 @@ extern "C" {
 #include "libxio.h"
 }
 #else
-struct xio_mempool_obj {};
+struct xio_reg_mem {};
 #endif /* HAVE_XIO */
 
-typedef void (*mdata_hook_func)(struct xio_mempool_obj *mp);
+typedef void (*mdata_hook_func)(struct xio_reg_mem *mp);
 
 class MDataPing : public Message {
 
@@ -38,7 +38,7 @@ class MDataPing : public Message {
   std::string tag;
   uint32_t counter;
   mdata_hook_func mdata_hook;
-  struct xio_mempool_obj mp;
+  struct xio_reg_mem mp;
   bool free_data;
 
   MDataPing()
@@ -47,7 +47,7 @@ class MDataPing : public Message {
       free_data(false)
   {}
 
-  struct xio_mempool_obj *get_mp()
+  struct xio_reg_mem *get_mp()
     {
       return &mp;
     }
