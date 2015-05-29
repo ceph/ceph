@@ -69,7 +69,8 @@ def normalize_config(ctx, config):
     """
     if config is None or \
             len(filter(lambda x: x in ['tag', 'branch', 'sha1', 'kdb',
-                                       'deb', 'rpm', 'koji', 'koji_task'],
+                                       'deb', 'rpm', 'koji', 'koji_task',
+                                       'flavor'],
                        config.keys())) == len(config.keys()):
         new_config = {}
         if config is None:
