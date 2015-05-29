@@ -182,9 +182,13 @@ def main(ctx):
             or ctx.update or ctx.brief, \
             'machines cannot be specified with that operation'
     else:
-        assert ctx.num_to_lock or ctx.list or ctx.list_targets or \
-            ctx.summary or ctx.brief, \
-            'machines must be specified for that operation'
+        if ctx.lock:
+            log.error("--lock requires specific machines passed as arguments")
+        else:
+            # This condition might never be hit, but it's not clear.
+            assert ctx.num_to_lock or ctx.list or ctx.list_targets or \
+                ctx.summary or ctx.brief, \
+                'machines must be specified for that operation'
     if ctx.all:
         assert ctx.list or ctx.list_targets or ctx.brief, \
             '--all can only be used with --list, --list-targets, and --brief'
