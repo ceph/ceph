@@ -716,9 +716,6 @@ static int civetweb_callback(struct mg_connection *conn) {
   RGWRequest *req = new RGWRequest(store->get_new_req_id());
   RGWMongoose client_io(conn, pe->port);
 
-  client_io.init(g_ceph_context);
-
-
   int ret = process_request(store, rest, req, &client_io, olog);
   if (ret < 0) {
     /* we don't really care about return code */
