@@ -76,16 +76,15 @@ protected:
   static void SetUpTestCase() {
     pool_name = get_temp_pool_name();
     ASSERT_EQ("", create_one_pool_pp(pool_name, s_cluster));
-    cache_pool_name = get_temp_pool_name();
-    ASSERT_EQ(0, s_cluster.pool_create(cache_pool_name.c_str()));
   }
   static void TearDownTestCase() {
-    ASSERT_EQ(0, s_cluster.pool_delete(cache_pool_name.c_str()));
     ASSERT_EQ(0, destroy_one_pool_pp(pool_name, s_cluster));
   }
   static std::string cache_pool_name;
 
   virtual void SetUp() {
+    cache_pool_name = get_temp_pool_name();
+    ASSERT_EQ(0, s_cluster.pool_create(cache_pool_name.c_str()));
     RadosTestPP::SetUp();
     ASSERT_EQ(0, cluster.ioctx_create(cache_pool_name.c_str(), cache_ioctx));
     cache_ioctx.set_namespace(nspace);
@@ -114,6 +113,7 @@ protected:
     cleanup_namespace(cache_ioctx, nspace);
 
     cache_ioctx.close();
+    ASSERT_EQ(0, s_cluster.pool_delete(cache_pool_name.c_str()));
   }
   librados::IoCtx cache_ioctx;
 };
@@ -2399,16 +2399,15 @@ protected:
   static void SetUpTestCase() {
     pool_name = get_temp_pool_name();
     ASSERT_EQ("", create_one_ec_pool_pp(pool_name, s_cluster));
-    cache_pool_name = get_temp_pool_name();
-    ASSERT_EQ(0, s_cluster.pool_create(cache_pool_name.c_str()));
   }
   static void TearDownTestCase() {
-    ASSERT_EQ(0, s_cluster.pool_delete(cache_pool_name.c_str()));
     ASSERT_EQ(0, destroy_one_ec_pool_pp(pool_name, s_cluster));
   }
   static std::string cache_pool_name;
 
   virtual void SetUp() {
+    cache_pool_name = get_temp_pool_name();
+    ASSERT_EQ(0, s_cluster.pool_create(cache_pool_name.c_str()));
     RadosTestECPP::SetUp();
     ASSERT_EQ(0, cluster.ioctx_create(cache_pool_name.c_str(), cache_ioctx));
     cache_ioctx.set_namespace(nspace);
@@ -2437,6 +2436,7 @@ protected:
     cleanup_namespace(cache_ioctx, nspace);
 
     cache_ioctx.close();
+    ASSERT_EQ(0, s_cluster.pool_delete(cache_pool_name.c_str()));
   }
 
   librados::IoCtx cache_ioctx;
@@ -4433,57 +4433,6 @@ TEST_F(LibRadosTwoPoolsECPP, ProxyRead) {
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier remove\", \"pool\": \"" + pool_name +
     "\", \"tierpool\": \"" + cache_pool_name + "\"}",
-    inbl, NULL, NULL));
-
-  // wait for maps to settle before next test
-  cluster.wait_for_latest_osdmap();
-}
-
-//Make ecpool as cache pool; no-ecpool as data pool
-//Judge promote object which has omap from no-ecpool into ecpool.
-TEST_F(LibRadosTwoPoolsECPP, OmapOperation) {
-  // create object
-  {
-    bufferlist bl;
-    bl.append("hi there");
-    ASSERT_EQ(0, cache_ioctx.omap_set_header("foo", bl));
-  }
-
-  // configure cache.
-  bufferlist inbl;
-  ASSERT_EQ(0, cluster.mon_command(
-    "{\"prefix\": \"osd tier add\", \"pool\": \"" + cache_pool_name +
-    "\", \"tierpool\": \"" + pool_name +
-    "\", \"force_nonempty\": \"--force-nonempty\" }",
-    inbl, NULL, NULL));
-  ASSERT_EQ(0, cluster.mon_command(
-    "{\"prefix\": \"osd tier set-overlay\", \"pool\": \"" + cache_pool_name +
-    "\", \"overlaypool\": \"" + pool_name + "\"}",
-    inbl, NULL, NULL));
-  ASSERT_EQ(0, cluster.mon_command(
-    "{\"prefix\": \"osd tier cache-mode\", \"pool\": \"" + pool_name +
-    "\", \"mode\": \"writeback\"}",
-    inbl, NULL, NULL));
-
-
-  // wait for maps to settle
-  cluster.wait_for_latest_osdmap();
-
-  {
-    bufferlist got;
-    ObjectReadOperation o;
-    o.omap_get_header(&got, NULL);
-    ASSERT_EQ(-EOPNOTSUPP, ioctx.operate("foo", &o, NULL));
-
-  }
-  // tear down tiers
-  ASSERT_EQ(0, cluster.mon_command(
-    "{\"prefix\": \"osd tier remove-overlay\", \"pool\": \"" + cache_pool_name +
-    "\"}",
-    inbl, NULL, NULL));
-  ASSERT_EQ(0, cluster.mon_command(
-    "{\"prefix\": \"osd tier remove\", \"pool\": \"" + cache_pool_name +
-    "\", \"tierpool\": \"" + pool_name + "\"}",
     inbl, NULL, NULL));
 
   // wait for maps to settle before next test
