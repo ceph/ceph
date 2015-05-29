@@ -78,11 +78,17 @@ def vps_version_or_type_valid(machine_type, os_type, os_version):
         return True
     valid_os_and_version = get_distro_from_downburst()
     if os_type not in valid_os_and_version:
-        log.error("os-type '%s' is invalid", os_type)
+        log.error("os-type '%s' is invalid. Try one of: %s",
+                  os_type,
+                  ', '.join(valid_os_and_version.keys()))
         return False
     if not validate_distro_version(os_version,
                                    valid_os_and_version[os_type]):
-        log.error("os-version '%s' is invalid", os_version)
+        log.error(
+            "os-version '%s' is invalid for os-type '%s'. Try one of: %s",
+            os_version,
+            os_type,
+            ', '.join(valid_os_and_version[os_type]))
         return False
     return True
 
