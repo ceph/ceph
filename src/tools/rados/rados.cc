@@ -117,22 +117,10 @@ void usage(ostream& out)
 "                                    set allocation hint for an object\n"
 "\n"
 "IMPORT AND EXPORT\n"
-"   import [options] <local-directory> <rados-pool>\n"
-"       Upload <local-directory> to <rados-pool>\n"
-"   export [options] <rados-pool> <local-directory>\n"
-"       Download <rados-pool> to <local-directory>\n"
-"   options for import and export:\n"
-"       -f / --force                 Copy everything, even if it hasn't changed.\n"
-"       -d / --delete-after          After synchronizing, delete unreferenced\n"
-"                                    files or objects from the target bucket\n"
-"                                    or directory.\n"
-"       --workers                    Number of worker threads to spawn \n"
-"                                    (default " STR(DEFAULT_NUM_RADOS_WORKER_THREADS) ")\n"
-"\n"
-"   dump [filename] [<n> <m>]\n"
+"   export [filename] [<n> <m>]\n"
 "       Serialize pool contents to a file or standard out.  Optionally\n"
-"       divide pool into m shard and dump the nth shard.\n"
-"   undump [filename]\n"
+"       divide pool into m shards and dump the nth shard.\n"
+"   import [filename]\n"
 "       Load pool contents from a file or standard in\n"
 "\n"
 "ADVISORY LOCKS\n"
@@ -2625,8 +2613,8 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
 	   << cpp_strerror(ret) << std::endl;
       goto out;
     }
-  } else if (strcmp(nargs[0], "dump") == 0) {
-    // dump [filename] [<n> <m>]
+  } else if (strcmp(nargs[0], "export") == 0) {
+    // export [filename] [<n> <m>]
     if (!pool_name || nargs.size() > 4) {
       usage_exit();
     }
@@ -2669,12 +2657,12 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     }
     ret = PoolDump(file_fd).dump(&io_ctx, n, m);
     if (ret < 0) {
-      cerr << "error from dump: "
+      cerr << "error from export: "
 	   << cpp_strerror(ret) << std::endl;
       goto out;
     }
-  } else if (strcmp(nargs[0], "undump") == 0) {
-    // undump [filename]
+  } else if (strcmp(nargs[0], "import") == 0) {
+    // import [filename]
     if (!pool_name || nargs.size() > 2) {
       usage_exit();
     }
@@ -2694,7 +2682,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
 
     ret = RadosImport(file_fd, 0, false).import(io_ctx, false);
     if (ret < 0) {
-      cerr << "error from undump: "
+      cerr << "error from import: "
 	   << cpp_strerror(ret) << std::endl;
       goto out;
     }
@@ -2818,11 +2806,6 @@ int main(int argc, const char **argv)
     cerr << "rados: you must give an action. Try --help" << std::endl;
     return 1;
   }
-  if ((strcmp(args[0], "import") == 0) || (strcmp(args[0], "export") == 0)) {
-    cout << "The import and export operations are not available" << std::endl;
-    exit(1);
-    //return rados_tool_sync(opts, args);
-  } else {
-    return rados_tool_common(opts, args);
-  }
+
+  return rados_tool_common(opts, args);
 }
