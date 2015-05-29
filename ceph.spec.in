@@ -1,6 +1,7 @@
 %bcond_with ocf
 %bcond_without cephfs_java
 %bcond_with tests
+%bcond_without tcmalloc
 
 %if (0%{?el5} || (0%{?rhel_version} >= 500 && 0%{?rhel_version} <= 600))
 %{!?python_sitelib: %global python_sitelib %(%{__python} -c "from distutils.sysconfig import get_python_lib; print(get_python_lib())")}
@@ -101,7 +102,9 @@ BuildRequires:	net-tools
 Requires:	python-Flask
 %if 0%{?suse_version} > 1210
 Requires:	gptfdisk
+%if 0%{with tcmalloc}
 BuildRequires:	gperftools-devel
+%endif
 %else
 Requires:	scsirastools
 BuildRequires:	google-perftools-devel
@@ -121,6 +124,7 @@ Requires(preun):chkconfig
 Requires(preun):initscripts
 BuildRequires:	gperftools-devel
 Requires:	python-flask
+%endif
 %endif
 
 %description
@@ -492,6 +496,7 @@ export RPM_OPT_FLAGS=`echo $RPM_OPT_FLAGS | sed -e 's/i386/i486/'`
 %endif
 		$MY_CONF_OPT \
 		%{?_with_ocf} \
+		%{?_with_tcmalloc} \
 		CFLAGS="$RPM_OPT_FLAGS" CXXFLAGS="$RPM_OPT_FLAGS"
 
 # fix bug in specific version of libedit-devel
