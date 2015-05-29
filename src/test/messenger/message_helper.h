@@ -47,7 +47,7 @@ static inline Message* new_ping_monstyle(const char *tag, int mult)
 #if defined(HAVE_XIO)
 extern struct xio_mempool *xio_msgr_mpool;
 
-void xio_hook_func(struct xio_mempool_obj *mp)
+void xio_hook_func(struct xio_reg_mem *mp)
 {
   xio_mempool_free(mp);
 }
@@ -63,7 +63,7 @@ static inline Message* new_ping_with_data(const char *tag, uint32_t size)
   bufferlist bl;
   void *p;
 
-  struct xio_mempool_obj *mp = m->get_mp();
+  struct xio_reg_mem *mp = m->get_mp();
   int e = xio_mempool_alloc(xio_msgr_mpool, size, mp);
   assert(e == 0);
   p = mp->addr;
