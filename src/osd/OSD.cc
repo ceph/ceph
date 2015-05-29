@@ -896,6 +896,21 @@ void OSDService::share_map_peer(int peer, Connection *con, OSDMapRef map)
   }
 }
 
+bool OSDService::can_inc_scrubs_pending()
+{
+  bool can_inc = false;
+  Mutex::Locker l(sched_scrub_lock);
+
+  if (scrubs_pending + scrubs_active < cct->_conf->osd_max_scrubs) {
+    dout(20) << __func__ << scrubs_pending << " -> " << (scrubs_pending+1)
+	     << " (max " << cct->_conf->osd_max_scrubs << ", active " << scrubs_active << ")" << dendl;
+    can_inc = true;
+  } else {
+    dout(20) << __func__ << scrubs_pending << " + " << scrubs_active << " active >= max " << cct->_conf->osd_max_scrubs << dendl;
+  }
+
+  return can_inc;
+}
 
 bool OSDService::inc_scrubs_pending()
 {
@@ -5923,6 +5938,11 @@ bool OSD::scrub_load_below_threshold()
 
 void OSD::sched_scrub()
 {
+  // if not permitted, fail fast
+  if (!service.can_inc_scrubs_pending()) {
+    return;
+  }
+
   utime_t now = ceph_clock_now(cct);
   bool time_permit = scrub_time_permit(now);
   bool load_is_low = scrub_load_below_threshold();
