@@ -164,11 +164,11 @@ public:
 	f->open_object_section("layout");
 	{
 	  f->dump_unsigned("stripe_unit", layout.fl_stripe_unit);
-	  f->dump_unsigned("stripe_count", layout.fl_stripe_unit);
-	  f->dump_unsigned("object_size", layout.fl_stripe_unit);
-	  f->dump_unsigned("cas_hash", layout.fl_stripe_unit);
-	  f->dump_unsigned("object_stripe_unit", layout.fl_stripe_unit);
-	  f->dump_unsigned("pg_pool", layout.fl_stripe_unit);
+	  f->dump_unsigned("stripe_count", layout.fl_stripe_count);
+	  f->dump_unsigned("object_size", layout.fl_object_size);
+	  f->dump_unsigned("cas_hash", layout.fl_cas_hash);
+	  f->dump_unsigned("object_stripe_unit", layout.fl_object_stripe_unit);
+	  f->dump_unsigned("pg_pool", layout.fl_pg_pool);
 	}
 	f->close_section(); // layout
       }
