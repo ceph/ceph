@@ -193,7 +193,7 @@ function kill_daemons() {
     local dir=$1
     local signal=${2:-KILL}
     local name_prefix=$3 # optional, osd, mon, osd.1
-    local delays=${4:-0 1 1 1 2 3 5 5 5 10 10 20 60}
+    local delays=${4:-0 0 1 1 1 2 3 5 5 5 10 10 20 60}
 
     local status=0
     for pidfile in $(find $dir | grep $name_prefix'[^/]*\.pid') ; do
@@ -201,6 +201,7 @@ function kill_daemons() {
         local send_signal=$signal
         local kill_complete=false
         for try in $delays ; do
+            sleep $try
             if kill -$send_signal $pid 2> /dev/null ; then
                 kill_complete=false
             else
@@ -208,7 +209,6 @@ function kill_daemons() {
                 break
             fi
             send_signal=0
-            sleep $try
         done
         if ! $kill_complete ; then
             status=1
