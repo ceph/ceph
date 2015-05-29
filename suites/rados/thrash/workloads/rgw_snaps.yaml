@@ -1,0 +1,25 @@
+tasks:
+- rgw:
+    default_idle_timeout: 3600
+    client.0: null
+- thrash_pool_snaps:
+    pools:
+    - .rgw.buckets
+    - .rgw.root
+    - .rgw.control
+    - .rgw
+    - .users.uid
+    - .users.email
+    - .users
+- s3readwrite:
+    client.0:
+      rgw_server: client.0
+      readwrite:
+        bucket: rwtest
+        readers: 10
+        writers: 3
+        duration: 300
+        files:
+          num: 10
+          size: 2000
+          stddev: 500

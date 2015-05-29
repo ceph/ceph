@@ -141,9 +141,6 @@ def task(ctx, config):
     if config.get('pool_snaps', False):
         args.extend(['--pool-snaps'])
     args.extend([
-        '--op', 'read', str(op_weights.get('read', 100)),
-        '--op', 'write', str(op_weights.get('write', 100)),
-        '--op', 'delete', str(op_weights.get('delete', 10)),
         '--max-ops', str(config.get('ops', 10000)),
         '--objects', str(config.get('objects', 500)),
         '--max-in-flight', str(config.get('max_in_flight', 16)),
@@ -152,6 +149,11 @@ def task(ctx, config):
         '--max-stride-size', str(config.get('max_stride_size', object_size / 5)),
         '--max-seconds', str(config.get('max_seconds', 0))
         ])
+
+    weights = {}
+    weights['read'] = 100
+    weights['write'] = 100
+    weights['delete'] = 10
     # Parallel of the op_types in test/osd/TestRados.cc
     for field in [
         # read handled above
@@ -171,11 +173,26 @@ def task(ctx, config):
         "cache_try_flush",
         "cache_evict",
         "append",
+        "write",
+        "read",
+        "delete"
         ]:
         if field in op_weights:
-            args.extend([
-                    '--op', field, str(op_weights[field]),
-                    ])
+            weights[field] = op_weights[field]
+
+    if 'write' in weights:
+        weights['write'] = weights['write'] / 2
+        weights['write_excl'] = weights['write']
+
+    if 'append' in weights:
+        weights['append'] = weights['append'] / 2
+        weights['append_excl'] = weights['append']
+
+    for op, weight in weights.iteritems():
+        args.extend([
+            '--op', op, str(weight)
+        ])
+                
 
     def thread():
         """Thread spawned by gevent"""

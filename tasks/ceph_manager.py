@@ -1137,6 +1137,24 @@ class CephManager:
                                      pool_name, str(pg_num))
             self.pools[pool_name] = pg_num
 
+    def add_pool_snap(self, pool_name, snap_name):
+        """
+        Add pool snapshot
+        :param pool_name: name of pool to snapshot
+        :param snap_name: name of snapshot to take
+        """
+        self.raw_cluster_cmd('osd', 'pool', 'mksnap',
+                             str(pool_name), str(snap_name))
+
+    def remove_pool_snap(self, pool_name, snap_name):
+        """
+        Remove pool snapshot
+        :param pool_name: name of pool to snapshot
+        :param snap_name: name of snapshot to remove
+        """
+        self.raw_cluster_cmd('osd', 'pool', 'rmsnap',
+                             str(pool_name), str(snap_name))
+
     def remove_pool(self, pool_name):
         """
         Remove the indicated pool
