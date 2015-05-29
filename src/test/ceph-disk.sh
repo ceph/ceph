@@ -309,7 +309,7 @@ function test_activate_dmcrypt() {
         --mark-init=none \
         /dev/mapper/$uuid || return 1
 
-    test_pool_read_write $osd_uuid || return 1
+    test_pool_read_write $uuid || return 1
 }
 
 function test_activate_dir() {
