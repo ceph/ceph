@@ -42,7 +42,7 @@ Ubuntu|Debian|Devuan)
         packages=$(dpkg-checkbuilddeps --admindir=$DIR debian/control 2>&1 | \
             perl -p -e 's/.*Unmet build dependencies: *//;' \
             -e 's/build-essential:native/build-essential/;' \
-            -e 's/\|//g;' \
+            -e 's/\s*\|\s*/\|/g;' \
             -e 's/\(.*?\)//g;' \
             -e 's/ +/\n/g;' | sort)
         case $(lsb_release -sc) in
@@ -52,7 +52,7 @@ Ubuntu|Debian|Devuan)
                 ;;
         esac
         packages=$(echo $packages) # change newlines into spaces
-        $SUDO bash -c "DEBIAN_FRONTEND=noninteractive apt-get install $backports -y $packages" || exit 1
+        $SUDO env DEBIAN_FRONTEND=noninteractive apt-get install $backports -y $packages || exit 1
         ;;
 CentOS|Fedora|RedHatEnterpriseServer)
         case $(lsb_release -si) in
@@ -84,6 +84,23 @@ CentOS|Fedora|RedHatEnterpriseServer)
         ;;
 esac
 
+function get_pip_and_wheel() {
+    local install=$1
+
+    # Ubuntu-12.04 and Python 2.7.3 require this line
+    pip --timeout 300 $install 'distribute >= 0.7.3' || return 1
+    # although pip comes with virtualenv, having a recent version
+    # of pip matters when it comes to using wheel packages
+    pip --timeout 300 $install 'setuptools >= 0.8' 'pip >= 7.0' 'wheel >= 0.24' || return 1
+}
+
+# use pip cache if possible but do not store it outside of the source
+# tree
+# see https://pip.pypa.io/en/stable/reference/pip_install.html#caching
+mkdir -p install-deps-cache
+top_srcdir=$(pwd)
+export XDG_CACHE_HOME=$top_srcdir/install-deps-cache
+
 #
 # preload python modules so that tox can run without network access
 #
@@ -92,12 +109,11 @@ for interpreter in python2.7 python3 ; do
     if ! test -d install-deps-$interpreter ; then
         virtualenv --python $interpreter install-deps-$interpreter
         . install-deps-$interpreter/bin/activate
-        pip --timeout 300 install wheel || exit 1
+        get_pip_and_wheel install || exit 1
     fi
 done
 
 find . -name tox.ini | while read ini ; do
-    top_srcdir=$(pwd)
     (
         cd $(dirname $ini)
         require=$(ls *requirements.txt 2>/dev/null | sed -e 's/^/-r /')
@@ -105,9 +121,8 @@ find . -name tox.ini | while read ini ; do
             for interpreter in python2.7 python3 ; do
                 type $interpreter > /dev/null 2>&1 || continue
                 . $top_srcdir/install-deps-$interpreter/bin/activate
-                # although pip comes with virtualenv, having a recent version
-                # of pip matters when it comes to using wheel packages
-                pip --timeout 300 wheel $require 'setuptools >= 0.7' 'pip >= 6.1' || exit 1
+                get_pip_and_wheel wheel || exit 1
+                pip --timeout 300 wheel $require || exit 1
             done
         fi
     )
