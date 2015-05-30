@@ -589,8 +589,10 @@ function get_osds() {
     local poolname=$1
     local objectname=$2
 
-    ceph --format xml osd map $poolname $objectname 2>/dev/null | \
-        $XMLSTARLET sel -t -m "//acting/osd" -v . -o ' '
+    local osds=$(ceph --format xml osd map $poolname $objectname 2>/dev/null | \
+        $XMLSTARLET sel -t -m "//acting/osd" -v . -o ' ')
+    # get rid of the trailing space
+    echo $osds
 }
 
 function test_get_osds() {
@@ -601,7 +603,7 @@ function test_get_osds() {
     run_osd $dir 0 || return 1
     run_osd $dir 1 || return 1
     wait_for_clean || return 1
-    get_osds rbd GROUP | grep --quiet '[0-1] [0-1] ' || return 1
+    get_osds rbd GROUP | grep --quiet '^[0-1] [0-1]$' || return 1
     teardown $dir || return 1
 }
 
