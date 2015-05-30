@@ -63,7 +63,7 @@ function usage () {
     echo "    Prints this usage output and exits."
     echo
     echo "$PROGRAM [--format <fmt>] [--prefix <path>] [--verbose|-v] [--separate|-s]"
-    echo "         [--tree-ish|-t <tree-ish>] [output_file]"
+    echo "         [--tree-ish|-t <tree-ish>] [--ignore pattern] [output_file]"
     echo "    Creates an archive for the entire git superproject, and its submodules"
     echo "    using the passed parameters, described below."
     echo
@@ -82,6 +82,9 @@ function usage () {
     echo "    you define the tree-ish to be. Branch names, commit hash, etc. are acceptable."
     echo "    Defaults to HEAD if not specified. See git archive's documentation for more"
     echo "    information on what a tree-ish is."
+    echo
+    echo "    If '--ignore' is specified, we will filter out any submodules that"
+    echo "    match the specified pattern."
     echo
     echo "    If 'output_file' is specified, the resulting archive is created as the"
     echo "    file named. This parameter is essentially a path that must be writeable."
@@ -114,6 +117,7 @@ TARCMD=tar
 FORMAT=tar
 PREFIX=
 TREEISH=HEAD
+IGNORE=
 
 # RETURN VALUES/EXIT STATUS CODES
 readonly E_BAD_OPTION=254
@@ -144,6 +148,12 @@ while test $# -gt 0; do
             TREEISH="$1"
             shift
             ;;
+
+	--ignore )
+	    shift
+	    IGNORE="$1"
+	    shift
+	    ;;
 
         --version )
             version
@@ -207,6 +217,12 @@ find . -mindepth 2 -name '.git' -type d -print | sed -e 's/^\.\///' -e 's/\.git$
 # as of version 1.7.8, git places the submodule .git directories under the superprojects .git dir
 # the submodules get a .git file that points to their .git dir. we need to find all of these too
 find . -mindepth 2 -name '.git' -type f -print | xargs grep -l "gitdir" | sed -e 's/^\.\///' -e 's/\.git$//' >> $TOARCHIVE
+
+if [ -n "$IGNORE" ]; then
+    cat $TOARCHIVE | grep -v $IGNORE > $TOARCHIVE.new
+    mv $TOARCHIVE.new $TOARCHIVE
+fi
+
 if [ $VERBOSE -eq 1 ]; then
     echo "done"
     echo "  found:"
