@@ -2945,11 +2945,11 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
     } else if (prefix == "osd tree") {
       if (f) {
 	f->open_object_section("tree");
-	p->print_tree(NULL, f.get());
+	p->print_tree(f.get(), NULL);
 	f->close_section();
 	f->flush(ds);
       } else {
-	p->print_tree(&ds, NULL);
+	p->print_tree(NULL, &ds);
       }
       rdata.append(ds);
     } else if (prefix == "osd getmap") {
