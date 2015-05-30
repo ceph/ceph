@@ -403,6 +403,7 @@ double div32()
 // probably pick worse values.
 double div64()
 {
+#if defined(__x86_64__) || defined(__amd64__)
   int count = 1000000;
   // NB: Expect an x86 processor exception is there's overflow.
   uint64_t start = Cycles::rdtsc();
@@ -419,6 +420,9 @@ double div64()
   }
   uint64_t stop = Cycles::rdtsc();
   return Cycles::to_seconds(stop - start)/count;
+#else
+  return -1;
+#endif
 }
 
 // Measure the cost of calling a non-inlined function.
@@ -596,6 +600,7 @@ double perf_cycles_to_nanoseconds()
 }
 
 
+#if defined(__x86_64__) || defined(__amd64__)
 /**
  * Prefetch the cache lines containing [object, object + numBytes) into the
  * processor's caches.
@@ -615,10 +620,12 @@ static inline void prefetch(const void *object, uint64_t num_bytes)
         _mm_prefetch(p + i, _MM_HINT_T0);
 #endif
 }
+#endif
 
 // Measure the cost of the prefetch instruction.
 double perf_prefetch()
 {
+#if defined(__x86_64__) || defined(__amd64__)
   uint64_t total_ticks = 0;
   int count = 10;
   char buf[16 * 64];
@@ -647,6 +654,9 @@ double perf_prefetch()
     total_ticks += stop - start;
   }
   return Cycles::to_seconds(total_ticks) / count / 16;
+#else
+  return -1;
+#endif
 }
 
 /**
@@ -968,7 +978,9 @@ void run_test(TestInfo& info)
 {
   double secs = info.func();
   int width = printf("%-24s ", info.name);
-  if (secs < 1.0e-06) {
+  if (secs == -1) {
+    width += printf(" architecture nonsupport ");
+  } else if (secs < 1.0e-06) {
     width += printf("%8.2fns", 1e09*secs);
   } else if (secs < 1.0e-03) {
     width += printf("%8.2fus", 1e06*secs);
