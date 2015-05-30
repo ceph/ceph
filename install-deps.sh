@@ -94,6 +94,13 @@ function get_pip_and_wheel() {
     pip --timeout 300 $install 'setuptools >= 0.8' 'pip >= 7.0' 'wheel >= 0.24' || return 1
 }
 
+# use pip cache if possible but do not store it outside of the source
+# tree
+# see https://pip.pypa.io/en/stable/reference/pip_install.html#caching
+mkdir -p install-deps-cache
+top_srcdir=$(pwd)
+export XDG_CACHE_HOME=$top_srcdir/install-deps-cache
+
 #
 # preload python modules so that tox can run without network access
 #
@@ -107,7 +114,6 @@ for interpreter in python2.7 python3 ; do
 done
 
 find . -name tox.ini | while read ini ; do
-    top_srcdir=$(pwd)
     (
         cd $(dirname $ini)
         require=$(ls *requirements.txt 2>/dev/null | sed -e 's/^/-r /')
