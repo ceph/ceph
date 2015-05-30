@@ -4,7 +4,7 @@ source $(dirname $0)/../ceph-helpers.sh
 
 set -e
 set -o functrace
-PS4=' ${FUNCNAME[0]}: $LINENO: '
+PS4='${BASH_SOURCE[0]}:$LINENO: ${FUNCNAME[0]}:  '
 SUDO=${SUDO:-sudo}
 
 function check_no_osd_down()
