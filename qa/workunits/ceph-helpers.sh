@@ -189,13 +189,15 @@ function test_teardown() {
 # @return 0 on success, 1 on error
 #
 function kill_daemons() {
+    local trace=$(shopt -q -o xtrace && echo true || echo false)
+    $trace && shopt -u -o xtrace
     local dir=$1
     local signal=${2:-KILL}
     local name_prefix=$3 # optional, osd, mon, osd.1
     local delays=${4:-0 0 1 1 1 2 3 5 5 5 10 10 20 60}
 
     local status=0
-    for pidfile in $(find $dir | grep $name_prefix'[^/]*\.pid') ; do
+    for pidfile in $(find $dir 2>/dev/null | grep $name_prefix'[^/]*\.pid') ; do
         pid=$(cat $pidfile)
         local send_signal=$signal
         local kill_complete=false
@@ -213,6 +215,7 @@ function kill_daemons() {
             status=1
         fi
     done
+    $trace && shopt -s -o xtrace
     return $status
 }
 
