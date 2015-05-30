@@ -57,7 +57,7 @@ if [ "$1" = TEST ]
 then
     set -x
     set -o functrace
-    PS4=' ${FUNCNAME[0]}: $LINENO: '
+    PS4='${BASH_SOURCE[0]}:$LINENO: ${FUNCNAME[0]}:  '
 
     DEBUG='--log-to-stderr=true --debug-filestore=20'
 

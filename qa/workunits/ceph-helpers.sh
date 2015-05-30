@@ -1159,8 +1159,8 @@ function main() {
     local dir=testdir/$1
     shift
 
-    set -x
-    PS4='${FUNCNAME[0]}: $LINENO: '
+    shopt -s -o xtrace
+    PS4='${BASH_SOURCE[0]}:$LINENO: ${FUNCNAME[0]}:  '
 
     export PATH=:$PATH # make sure program from sources are prefered
 
@@ -1180,8 +1180,8 @@ function main() {
 #######################################################################
 
 function run_tests() {
-    set -x
-    PS4='${FUNCNAME[0]}: $LINENO: '
+    shopt -s -o xtrace
+    PS4='${BASH_SOURCE[0]}:$LINENO: ${FUNCNAME[0]}:  '
 
     export PATH=":$PATH"
     export CEPH_MON="127.0.0.1:7109"
