@@ -2561,15 +2561,16 @@ private:
   const OSDMap *osdmap;
 };
 
-void OSDMap::print_tree(ostream *out, Formatter *f) const
+void OSDMap::print_tree(Formatter *f, ostream *out) const
 {
-  if (out) {
+  if (f)
+    OSDTreeFormattingDumper(crush.get(), this).dump(f);
+  else {
+    assert(out);
     TextTable tbl;
     OSDTreePlainDumper(crush.get(), this).dump(&tbl);
     *out << tbl;
   }
-  if (f)
-    OSDTreeFormattingDumper(crush.get(), this).dump(f);
 }
 
 void OSDMap::print_summary(Formatter *f, ostream& out) const
