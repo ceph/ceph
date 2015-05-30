@@ -2692,6 +2692,9 @@ void Server::handle_client_getattr(MDRequestRef& mdr, bool is_lookup)
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return;
 
+  if (!check_access(mdr, ref, MAY_READ))
+    return;
+
   // note which caps are requested, so we return at least a snapshot
   // value for them.  (currently this matters for xattrs and inline data)
   mdr->getattr_caps = mask;
@@ -2740,6 +2743,11 @@ void Server::handle_client_lookup_ino(MDRequestRef& mdr,
     return;
   }
 
+  // check for nothing (not read or write); this still applies the
+  // path check.
+  if (!check_access(mdr, in, 0))
+    return;
+
   CDentry *dn = in->get_projected_parent_dn();
   CInode *diri = dn ? dn->get_dir()->inode : NULL;
   if (dn && (want_parent || want_dentry)) {
@@ -2747,6 +2755,10 @@ void Server::handle_client_lookup_ino(MDRequestRef& mdr,
     set<SimpleLock*> rdlocks, wrlocks, xlocks;
     rdlocks.insert(&dn->lock);
     if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
+      return;
+
+    // need read access to directory inode
+    if (!check_access(mdr, diri, MAY_READ))
       return;
   }
 
@@ -2909,6 +2921,12 @@ void Server::handle_client_open(MDRequestRef& mdr)
   }
 
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
+    return;
+
+  int mask = MAY_READ;
+  if (cmode & CEPH_FILE_MODE_WR)
+    mask |= MAY_WRITE;
+  if (!check_access(mdr, cur, mask))
     return;
 
   if (cur->is_file() || cur->is_dir()) {
@@ -3576,6 +3594,9 @@ void Server::handle_client_setattr(MDRequestRef& mdr)
     wrlocks.insert(&cur->versionlock);
 
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
+    return;
+
+  if (!check_access(mdr, cur, MAY_WRITE))
     return;
 
   // trunc from bigger -> smaller?
