@@ -30,6 +30,8 @@ $bindir/git-archive-all.sh --prefix ceph-$version/ \
 			   --verbose \
 			   --ignore corpus \
 			   $outfile.tar
-gzip -9 $outfile.tar
+echo "compressing to gz and bz2..."
+gzip -k -9 $outfile.tar
+bzip2 -9 $outfile.tar
 
 echo "done."
