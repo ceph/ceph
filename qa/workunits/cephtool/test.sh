@@ -1255,7 +1255,7 @@ function test_mon_pg()
 function test_mon_osd_pool_set()
 {
   TEST_POOL_GETSET=pool_getset
-  ceph osd pool create $TEST_POOL_GETSET 10
+  ceph osd pool create $TEST_POOL_GETSET 1
   ceph osd pool get $TEST_POOL_GETSET all
 
   for s in pg_num pgp_num size min_size crash_replay_interval crush_ruleset; do
@@ -1268,7 +1268,7 @@ function test_mon_osd_pool_set()
   ceph osd pool get $TEST_POOL_GETSET size | grep "size: $new_size"
   ceph osd pool set $TEST_POOL_GETSET size $old_size
 
-  ceph osd pool create pool_erasure 12 12 erasure
+  ceph osd pool create pool_erasure 1 1 erasure
   set +e
   ceph osd pool set pool_erasure size 4444 2>$TMPFILE
   check_response 'not change the size'
