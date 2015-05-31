@@ -1,5 +1,7 @@
 #!/bin/bash -x
 
+source $(dirname $0)/../ceph-helpers.sh
+
 set -e
 set -o functrace
 PS4=' ${FUNCNAME[0]}: $LINENO: '
@@ -21,23 +23,6 @@ function wait_no_osd_down()
     fi
   done
   check_no_osd_down
-}
-
-function get_pg()
-{
-	local pool obj map_output pg
-	pool=$1
-	obj=$2
-	declare -a map_output
-	map_output=($(ceph osd map $1 $2))
-	for (( i=0; i<${#map_output[*]}; i++ )) ; do
-		if [ "${map_output[$i]}" == "pg" ] ; then
-			pg=${map_output[((i+2))]}
-			break
-		fi
-	done
-	pg=$(echo $pg | sed 's/[()]//g')
-	echo $pg
 }
 
 function expect_false()
