@@ -280,6 +280,30 @@ TEST(CephArgParse, WithDashesAndUnderscores) {
   ASSERT_EQ(found_baz, "");
 }
 
+TEST(CephArgParse, WithFloat) {
+  const char *BAZSTUFF1[] = { "./myprog", "--foo", "50.5", "--bar", "52", NULL };
+
+  VectorContainer bazstuff1(BAZSTUFF1);
+  ostringstream err;
+  float foo;
+  int bar = -1;
+  for (std::vector<const char*>::iterator i = bazstuff1.arr.begin();
+       i != bazstuff1.arr.end(); )
+  {
+    if (ceph_argparse_double_dash(bazstuff1.arr, i)) {
+      break;
+    } else if (ceph_argparse_witharg(bazstuff1.arr, i, &foo, err, "--foo", (char*)NULL)) {
+      ASSERT_EQ(string(""), err.str());
+    } else if (ceph_argparse_witharg(bazstuff1.arr, i, &bar, err, "--bar", (char*)NULL)) {
+      ASSERT_EQ(string(""), err.str());
+    }
+    else {
+      ++i;
+    }
+  }
+  ASSERT_EQ(foo, 50.5);
+  ASSERT_EQ(bar, 52);
+}
 
 TEST(CephArgParse, WithInt) {
   const char *BAZSTUFF1[] = { "./myprog", "--foo", "50", "--bar", "52", NULL };
