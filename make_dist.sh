@@ -5,8 +5,6 @@ if [ ! -d .git ]; then
     exit 1
 fi
 
-bindir=`dirname $0`
-
 version=$1
 [ -z "$version" ] && version=`git describe | cut -c 2-`
 outfile="ceph-$version"
@@ -26,10 +24,10 @@ rm -f $outfile.tar $outfile.tar.gz
 
 # build new tarball
 echo "building tarball..."
-$bindir/git-archive-all.sh --prefix ceph-$version/ \
-			   --verbose \
-			   --ignore corpus \
-			   $outfile.tar
+bin/git-archive-all.sh --prefix ceph-$version/ \
+		       --verbose \
+		       --ignore corpus \
+		       $outfile.tar
 echo "compressing to gz and bz2..."
 gzip -k -9 $outfile.tar
 bzip2 -9 $outfile.tar
