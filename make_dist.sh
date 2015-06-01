@@ -6,8 +6,10 @@ if [ ! -d .git ]; then
 fi
 
 version=$1
-[ -z "$version" ] && version=`git describe | cut -c 2-`
+[ -z "$version" ] && version=`git describe --match 'v*' | sed 's/^v//'`
 outfile="ceph-$version"
+
+echo "version $version"
 
 # update submodules
 echo "updating submodules..."
