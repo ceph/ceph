@@ -449,8 +449,22 @@ private:
    * to load an MDS rank's data structures.  This is *not* for use with
    * errors affecting normal dirfrag/inode objects -- they should be handled
    * through cleaner scrub/repair mechanisms.
+   *
+   * Callers must already hold mds_lock.
    */
   void damaged();
+
+  /**
+   * Wrapper around `damaged` for users who are not
+   * already holding mds_lock.
+   *
+   * Callers must not already hold mds_lock.
+   */
+  void damaged_unlocked()
+  {
+    Mutex::Locker l(mds_lock);
+    damaged();
+  }
 
   /**
    * Terminate this daemon process.
