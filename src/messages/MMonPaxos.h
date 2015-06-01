@@ -92,6 +92,8 @@ public:
   void encode_payload(uint64_t features) {
     if ((features & CEPH_FEATURE_MONCLOCKCHECK) == 0)
       header.version = 0;
+    else
+      header.version = HEAD_VERSION;
     ::encode(epoch, payload);
     ::encode(op, payload);
     ::encode(first_committed, payload);
