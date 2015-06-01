@@ -196,9 +196,10 @@ def _get_baseurl(ctx, remote, config):
     :param config: the config dict
     :returns: str -- the URL
     """
+    template = teuth_config.baseurl_template
     # get distro name and arch
     baseparms = _get_baseurlinfo_and_dist(ctx, remote, config)
-    base_url = 'http://{host}/{proj}-{pkg_type}-{dist}-{arch}-{flavor}/{uri}'.format(
+    base_url = template.format(
         host=teuth_config.gitbuilder_host,
         proj=config.get('project', 'ceph'),
         pkg_type=remote.system_type,
@@ -420,11 +421,9 @@ def _update_rpm_package_list_and_install(ctx, remote, rpm, config):
     baseparms = _get_baseurlinfo_and_dist(ctx, remote, config)
     log.info("Installing packages: {pkglist} on remote rpm {arch}".format(
         pkglist=", ".join(rpm), arch=baseparms['arch']))
-    host = teuth_config.gitbuilder_host
     dist_release = baseparms['dist_release']
     project = config.get('project', 'ceph')
-    start_of_url = 'http://{host}/{proj}-rpm-{distro_release}-{arch}-{flavor}/{uri}'.format(
-        proj=project, host=host, **baseparms)
+    start_of_url = _get_baseurl(ctx, remote, config)
     proj_release = '{proj}-release-{release}.{dist_release}.noarch'.format(
         proj=project, release=RELEASE, dist_release=dist_release)
     rpm_name = "{rpm_nm}.rpm".format(rpm_nm=proj_release)

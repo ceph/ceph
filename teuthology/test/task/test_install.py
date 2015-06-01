@@ -7,6 +7,30 @@ from teuthology.task import install
 
 class TestInstall(object):
 
+    @patch("teuthology.task.install.teuth_config")
+    @patch("teuthology.task.install._get_baseurlinfo_and_dist")
+    def test_get_baseurl(self, m_get_baseurlinfo_and_dist, m_config):
+        m_config.gitbuilder_host = 'FQDN'
+        config = {'project': 'CEPH'}
+        remote = Mock()
+        remote.system_type = 'rpm'
+        m_config.baseurl_template = (
+            'OVERRIDE: {host}/{proj}-{pkg_type}-{dist}-{arch}-{flavor}/{uri}')
+        baseurlinfo_and_dist = {
+            'dist': 'centos7',
+            'arch': 'i386',
+            'flavor': 'notcmalloc',
+            'uri': 'ref/master',
+        }
+        m_get_baseurlinfo_and_dist.return_value = baseurlinfo_and_dist
+        expected = m_config.baseurl_template.format(
+            host=m_config.gitbuilder_host,
+            proj=config['project'],
+            pkg_type=remote.system_type,
+            **baseurlinfo_and_dist)
+        actual = install._get_baseurl(Mock(), remote, config)
+        assert expected == actual
+
     @patch("teuthology.task.install._get_baseurl")
     @patch("teuthology.task.install._block_looking_for_package_version")
     @patch("teuthology.task.install.packaging.get_package_version")
