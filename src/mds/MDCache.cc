@@ -7628,7 +7628,7 @@ int MDCache::path_traverse(MDRequestRef& mdr, Message *req, MDSInternalContextBa
     return -ESTALE;
 
   // make sure snaprealm are open...
-  if (mdr && cur->snaprealm && !cur->snaprealm->open &&
+  if (mdr && cur->snaprealm && !cur->snaprealm->is_open() &&
       !cur->snaprealm->open_parents(_get_waiter(mdr, req, fin))) {
     return 1;
   }
@@ -7781,7 +7781,7 @@ int MDCache::path_traverse(MDRequestRef& mdr, Message *req, MDSInternalContextBa
 
       cur = in;
       // make sure snaprealm are open...
-      if (mdr && cur->snaprealm && !cur->snaprealm->open &&
+      if (mdr && cur->snaprealm && !cur->snaprealm->is_open() &&
 	  !cur->snaprealm->open_parents(_get_waiter(mdr, req, fin))) {
 	return 1;
       }
@@ -9118,9 +9118,10 @@ void MDCache::_snaprealm_create_finish(MDRequestRef& mdr, MutationRef& mut, CIno
   ::decode(seq, p);
 
   in->open_snaprealm();
-  in->snaprealm->open = true;
   in->snaprealm->srnode.seq = seq;
   in->snaprealm->srnode.created = seq;
+  bool ok = in->snaprealm->_open_parents(NULL);
+  assert(ok);
 
   do_realm_invalidate_and_update_notify(in, CEPH_SNAP_OP_SPLIT);
 
