@@ -35,7 +35,9 @@
 // * Create a new entry for the test in the #tests table.
 #include <vector>
 #include <sched.h>
-#if defined(__x86_64__) || defined(__amd64__)
+
+#include "acconfig.h"
+#ifdef HAVE_SSE
 #include <xmmintrin.h>
 #endif
 
@@ -600,7 +602,7 @@ double perf_cycles_to_nanoseconds()
 }
 
 
-#if defined(__x86_64__) || defined(__amd64__)
+#ifdef HAVE_SSE
 /**
  * Prefetch the cache lines containing [object, object + numBytes) into the
  * processor's caches.
@@ -613,19 +615,17 @@ double perf_cycles_to_nanoseconds()
  */
 static inline void prefetch(const void *object, uint64_t num_bytes)
 {
-#if defined(__x86_64__) || defined(__amd64__)
     uint64_t offset = reinterpret_cast<uint64_t>(object) & 0x3fUL;
     const char* p = reinterpret_cast<const char*>(object) - offset;
     for (uint64_t i = 0; i < offset + num_bytes; i += 64)
         _mm_prefetch(p + i, _MM_HINT_T0);
-#endif
 }
 #endif
 
 // Measure the cost of the prefetch instruction.
 double perf_prefetch()
 {
-#if defined(__x86_64__) || defined(__amd64__)
+#ifdef HAVE_SSE
   uint64_t total_ticks = 0;
   int count = 10;
   char buf[16 * 64];
@@ -689,6 +689,7 @@ double perf_serialize() {
 // Measure the cost of an lfence instruction.
 double lfence()
 {
+#ifdef HAVE_SSE2
   int count = 1000000;
   uint64_t start = Cycles::rdtsc();
   for (int i = 0; i < count; i++) {
@@ -696,11 +697,15 @@ double lfence()
   }
   uint64_t stop = Cycles::rdtsc();
   return Cycles::to_seconds(stop - start)/count;
+#else
+  return -1;
+#endif
 }
 
 // Measure the cost of an sfence instruction.
 double sfence()
 {
+#ifdef HAVE_SSE
   int count = 1000000;
   uint64_t start = Cycles::rdtsc();
   for (int i = 0; i < count; i++) {
@@ -708,6 +713,9 @@ double sfence()
   }
   uint64_t stop = Cycles::rdtsc();
   return Cycles::to_seconds(stop - start)/count;
+#else
+  return -1;
+#endif
 }
 
 // Measure the cost of acquiring and releasing a SpinLock (assuming the
