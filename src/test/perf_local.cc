@@ -775,7 +775,7 @@ double perf_timer()
     timer.cancel_event(c[i]);
   }
   uint64_t stop = Cycles::rdtsc();
-  delete c;
+  delete[] c;
   return Cycles::to_seconds(stop - start)/count;
 }
 
