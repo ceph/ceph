@@ -534,6 +534,7 @@ int ErasureCodeLrc::init(ErasureCodeProfile &profile,
     profile.erase("mapping");
     profile.erase("layers");
   }
+  ErasureCode::init(profile, ss);
   return 0;
 }
 
