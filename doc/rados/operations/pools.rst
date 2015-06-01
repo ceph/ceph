@@ -348,6 +348,16 @@ You may set values for the following keys:
 :Default: ``.4``
 
 
+``cache_target_dirty_high_ratio``
+
+:Description: The percentage of the cache pool containing modified (dirty)
+              objects before the cache tiering agent will flush them to the
+              backing storage pool with a higher speed.
+
+:Type: Double
+:Default: ``.6``
+
+
 ``cache_target_full_ratio``
 
 :Description: The percentage of the cache pool containing unmodified (clean)
@@ -483,6 +493,15 @@ You may get values for the following keys:
               objects before the cache tiering agent will flush them to the
               backing storage pool.
               
+:Type: Double
+
+
+``cache_target_dirty_high_ratio``
+
+:Description: The percentage of the cache pool containing modified (dirty)
+              objects before the cache tiering agent will flush them to the
+              backing storage pool with a higher speed.
+
 :Type: Double
 
 
