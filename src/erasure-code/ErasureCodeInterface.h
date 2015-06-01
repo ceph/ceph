@@ -174,6 +174,14 @@ namespace ceph {
     virtual int init(ErasureCodeProfile &profile, ostream *ss) = 0;
 
     /**
+     * Return the profile that was used to initialize the instance
+     * with the **init** method.
+     *
+     * @return the profile in use by the instance
+     */
+    virtual const ErasureCodeProfile &get_profile() const = 0;
+
+    /**
      * Create a new ruleset in **crush** under the name **name**,
      * unless it already exists.
      *
