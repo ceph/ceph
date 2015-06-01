@@ -772,7 +772,7 @@ int DBObjectMap::get_keys(const ghobject_t &oid,
   if (!header)
     return -ENOENT;
   ObjectMapIterator iter = get_iterator(oid);
-  for (; iter->valid(); iter->next()) {
+  for (iter->seek_to_first(); iter->valid(); iter->next()) {
     if (iter->status())
       return iter->status();
     keys->insert(iter->key());
