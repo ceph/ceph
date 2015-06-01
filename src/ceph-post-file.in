@@ -155,7 +155,7 @@ done
 cp "$ssh_key" "$t4"
 cp "${ssh_key}.pub" "$t4.pub"
 
-sftp -i $t4 \
+sftp -o "IdentityFile=$t4" \
     -C \
     -oCheckHostIP=no \
     -oGlobalKnownHostsFile=$known_hosts \
