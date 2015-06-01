@@ -40,9 +40,10 @@ public:
                       ostream *ss)
   {
     ErasureCodeIsa *interface;
-    std::string t = "reed_sol_van";
-    if (profile.find("technique") != profile.end())
-      t = profile.find("technique")->second;
+    std::string t;
+    if (profile.find("technique") == profile.end())
+      profile["technique"] = "reed_sol_van";
+    t = profile.find("technique")->second;
     if ((t == "reed_sol_van")) {
       interface = new ErasureCodeIsaDefault(tcache,
                                             ErasureCodeIsaDefault::kVandermonde);
