@@ -1968,6 +1968,7 @@ int AsyncConnection::send_message(Message *m)
   if (can_write == NOWRITE || get_features() != f) {
     // ensure the correctness of message encoding
     bl.clear();
+    m->get_payload().clear();
     ldout(async_msgr->cct, 5) << __func__ << " clear encoded buffer, can_write=" << can_write << " previous "
                               << f << " != " << get_features() << dendl;
   }

@@ -56,6 +56,7 @@ public:
     data.clear();
     if (features & CEPH_FEATURE_MDSENC) {
       ::encode(caps, data);
+      header.version = HEAD_VERSION;
     } else if (features & CEPH_FEATURE_FLOCK) {
       // encode with old cap_reconnect_t encoding
       __u32 n = caps.size();
