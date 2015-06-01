@@ -31,6 +31,7 @@ Makefile
 /ceph_erasure_code
 /ceph_erasure_code_benchmark
 /ceph_erasure_code_non_regression
+/ceph_perf_local
 /ceph_perf_objectstore
 /ceph_psim
 /ceph_radosacl
