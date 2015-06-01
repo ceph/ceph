@@ -219,6 +219,17 @@ For example, setting the value to ``0.4`` will begin flushing modified
 
 	ceph osd pool set hot-storage cache_target_dirty_ratio 0.4
 
+When the dirty objects reaches a certain percentage of its capacity, flush dirty
+objects with a higher speed. To set the ``cache_target_dirty_high_ratio``::
+
+	ceph osd pool set {cachepool} cache_target_dirty_high_ratio {0.0..1.0}
+
+For example, setting the value to ``0.6`` will begin aggressively flush diryt objects
+when they reach 60% of the cache pool's capacity. obviously, we'd better set the value
+between dirty_ratio and full_ratio::
+
+	ceph osd pool set hot-storage cache_target_dirty_high_ratio 0.6
+
 When the cache pool reaches a certain percentage of its capacity, the cache
 tiering agent will evict objects to maintain free capacity. To set the 
 ``cache_target_full_ratio``, execute the following:: 
