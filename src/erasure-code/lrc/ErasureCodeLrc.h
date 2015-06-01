@@ -46,6 +46,8 @@
 
 class ErasureCodeLrc : public ErasureCode {
 public:
+  static const string DEFAULT_KML;
+
   struct Layer {
     Layer(string _chunks_map) : chunks_map(_chunks_map) { }
     ErasureCodeInterfaceRef erasure_code;
