@@ -806,15 +806,21 @@ function test_mon_mds()
   check_response 'erasure-code' $? 22
   set -e
 
-  # ... however if we create a cache tier in front of the EC pool, we should
-  # be permitted to use it...
+  # ... new create a cache tier in front of the EC pool...
   ceph osd pool create mds-tier 2
   ceph osd tier add mds-ec-pool mds-tier
   ceph osd tier set-overlay mds-ec-pool mds-tier
-  ceph osd tier cache-mode mds-tier writeback
   tier_poolnum=$(ceph osd dump | grep "pool.* 'mds-tier" | awk '{print $2;}')
 
+  # Use of a readonly tier should be forbidden
+  ceph osd tier cache-mode mds-tier readonly
+  set +e
+  ceph fs new cephfs fs_metadata mds-ec-pool 2>$TMPFILE
+  check_response 'has a write tier (mds-tier) that is configured to forward' $? 22
   set -e
+
+  # Use of a writeback tier should enable FS creation
+  ceph osd tier cache-mode mds-tier writeback
   ceph fs new cephfs fs_metadata mds-ec-pool
 
   # While a FS exists using the tiered pools, I should not be allowed
@@ -861,6 +867,7 @@ function test_mon_mds()
 
   fail_all_mds
   ceph fs rm cephfs --yes-i-really-mean-it
+  ceph osd pool delete mds-ec-pool mds-ec-pool --yes-i-really-really-mean-it
 
   # Create a FS and check that we can subsequently add a cache tier to it
   ceph fs new cephfs fs_metadata fs_data
@@ -870,16 +877,16 @@ function test_mon_mds()
   ceph osd tier cache-mode mds-tier writeback
   ceph osd tier set-overlay fs_metadata mds-tier
 
+  # Removing tier should be permitted because the underlying pool is
+  # replicated (#11504 case)
+  ceph osd tier cache-mode mds-tier forward
+  ceph osd tier remove-overlay fs_metadata
+  ceph osd tier remove fs_metadata mds-tier
+  ceph osd pool delete mds-tier mds-tier --yes-i-really-really-mean-it
+
   # Clean up FS
   fail_all_mds
   ceph fs rm cephfs --yes-i-really-mean-it
-
-  # Clean up overlay/tier relationship
-  ceph osd tier remove-overlay fs_metadata
-  ceph osd tier remove fs_metadata mds-tier
-
-  ceph osd pool delete mds-tier mds-tier --yes-i-really-really-mean-it
-  ceph osd pool delete mds-ec-pool mds-ec-pool --yes-i-really-really-mean-it
 
   ceph mds stat
   # ceph mds tell mds.a getmap
