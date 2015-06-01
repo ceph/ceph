@@ -32,6 +32,10 @@ bin_DEBUGPROGRAMS += ceph_perf_objectstore
 
 ceph_perf_local_SOURCES = test/perf_local.cc test/perf_helper.cc
 ceph_perf_local_LDADD = $(LIBOS) $(CEPH_GLOBAL)
+ceph_perf_local_CXXFLAGS = ${AM_CXXFLAGS} 	\
+	${INTEL_SSE_FLAGS} \
+	${INTEL_SSE2_FLAGS}
+
 noinst_HEADERS += test/perf_helper.h
 bin_DEBUGPROGRAMS += ceph_perf_local
 
