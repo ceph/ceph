@@ -444,7 +444,7 @@ void CInode::pop_projected_snaprealm(sr_t *next_snaprealm)
 	     snaprealm->srnode.past_parents.size()) {
     invalidate_cached_snaps = true;
     // re-open past parents
-    snaprealm->open = false;
+    snaprealm->_close_parents();
 
     dout(10) << " realm " << *snaprealm << " past_parents " << snaprealm->srnode.past_parents
 	     << " -> " << next_snaprealm->past_parents << dendl;
