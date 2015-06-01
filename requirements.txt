@@ -20,6 +20,7 @@ docopt
 psutil >= 2.1.0
 configparser
 pytest
+ansible==1.9.1
 
 # Test Dependencies
 # nose >=1.0.0

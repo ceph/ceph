@@ -1,3 +1,4 @@
+import json
 import logging
 import requests
 import os
@@ -7,6 +8,7 @@ import yaml
 from cStringIO import StringIO
 from tempfile import NamedTemporaryFile
 
+from teuthology.config import config as teuth_config
 from teuthology.exceptions import CommandFailedError
 from teuthology.repo_utils import fetch_repo
 
@@ -39,7 +41,9 @@ class Ansible(Task):
 
     Required configuration parameters:
         playbook:   Required; can either be a list of plays, or a path/URL to a
-                    playbook
+                    playbook. In the case of a path, it may be relative to the
+                    repo's on-disk location (if a repo is provided), or
+                    teuthology's working directory.
 
     Optional configuration parameters:
         repo:       A path or URL to a repo (defaults to '.'). Given a repo
@@ -97,7 +101,7 @@ class Ansible(Task):
         Locate the repo we're using; cloning it from a remote repo if necessary
         """
         repo = self.config.get('repo', '.')
-        if repo.startswith(('http://', 'https://', 'git@')):
+        if repo.startswith(('http://', 'https://', 'git@', 'git://')):
             repo_path = fetch_repo(
                 repo,
                 self.config.get('branch', 'master'),
@@ -122,6 +126,13 @@ class Ansible(Task):
         elif isinstance(playbook, str):
             try:
                 playbook_path = os.path.expanduser(playbook)
+                if not playbook_path.startswith('/'):
+                    # If the path is not absolute at this point, look for the
+                    # playbook in the repo dir. If it's not there, we assume
+                    # the path is relative to the working directory
+                    pb_in_repo = os.path.join(self.repo_path, playbook_path)
+                    if os.path.exists(pb_in_repo):
+                        playbook_path = pb_in_repo
                 self.playbook_file = file(playbook_path)
                 playbook_yaml = yaml.safe_load(self.playbook_file)
                 self.playbook = playbook_yaml
@@ -151,7 +162,7 @@ class Ansible(Task):
         we're using an existing file.
         """
         hosts = self.cluster.remotes.keys()
-        hostnames = [remote.name.split('@')[-1] for remote in hosts]
+        hostnames = [remote.hostname for remote in hosts]
         hostnames.sort()
         hosts_str = '\n'.join(hostnames + [''])
         hosts_file = NamedTemporaryFile(prefix="teuth_ansible_hosts_",
@@ -213,9 +224,13 @@ class Ansible(Task):
         """
         Assemble the list of args to be executed
         """
-        fqdns = [r.name.split('@')[-1] for r in self.cluster.remotes.keys()]
+        fqdns = [r.hostname for r in self.cluster.remotes.keys()]
+        # Assume all remotes use the same username
+        user = self.cluster.remotes.keys()[0].user
+        extra_vars = dict(ansible_ssh_user=user)
         args = [
             'ansible-playbook', '-v',
+            "--extra-vars='%s'" % json.dumps(extra_vars),
             '-i', self.inventory,
             '--limit', ','.join(fqdns),
             self.playbook_file.name,
@@ -233,4 +248,24 @@ class Ansible(Task):
         super(Ansible, self).teardown()
 
 
+class CephLab(Ansible):
+    __doc__ = """
+    A very simple subclass of Ansible that defaults to:
+
+    - ansible:
+        repo: {git_base}ceph-cm-ansible.git
+        playbook: cephlab.yml
+    """.format(git_base=teuth_config.ceph_git_base_url)
+
+    def __init__(self, ctx, config):
+        config = config or dict()
+        if 'playbook' not in config:
+            config['playbook'] = 'cephlab.yml'
+        if 'repo' not in config:
+            config['repo'] = os.path.join(teuth_config.ceph_git_base_url,
+                                          'ceph-cm-ansible.git')
+        super(CephLab, self).__init__(ctx, config)
+
+
 task = Ansible
+cephlab = CephLab

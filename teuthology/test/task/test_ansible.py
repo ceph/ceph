@@ -5,12 +5,12 @@ from mock import patch, DEFAULT, Mock
 from pytest import raises
 from StringIO import StringIO
 
-from teuthology.config import FakeNamespace
+from teuthology.config import config, FakeNamespace
 from teuthology.exceptions import CommandFailedError
 from teuthology.orchestra.cluster import Cluster
 from teuthology.orchestra.remote import Remote
 from teuthology.task import ansible
-from teuthology.task.ansible import Ansible
+from teuthology.task.ansible import Ansible, CephLab
 
 from . import TestTask
 
@@ -19,8 +19,8 @@ class TestAnsibleTask(TestTask):
     def setup(self):
         self.ctx = FakeNamespace()
         self.ctx.cluster = Cluster()
-        self.ctx.cluster.add(Remote('remote1'), ['role1'])
-        self.ctx.cluster.add(Remote('remote2'), ['role2'])
+        self.ctx.cluster.add(Remote('user@remote1'), ['role1'])
+        self.ctx.cluster.add(Remote('user@remote2'), ['role2'])
         self.ctx.config = dict()
 
     def test_setup(self):
@@ -65,6 +65,16 @@ class TestAnsibleTask(TestTask):
         task = Ansible(self.ctx, task_config)
         task.find_repo()
         assert task.repo_path == os.path.expanduser(task_config['repo'])
+
+    @patch('teuthology.task.ansible.fetch_repo')
+    def test_find_repo_path_remote(self, m_fetch_repo):
+        task_config = dict(
+            repo='git://fake_host/repo.git',
+        )
+        m_fetch_repo.return_value = '/tmp/repo'
+        task = Ansible(self.ctx, task_config)
+        task.find_repo()
+        assert task.repo_path == os.path.expanduser('/tmp/repo')
 
     @patch('teuthology.task.ansible.fetch_repo')
     def test_find_repo_http(self, m_fetch_repo):
@@ -298,3 +308,32 @@ class TestAnsibleTask(TestTask):
         with patch.object(ansible.os, 'remove') as m_remove:
             task.teardown()
             assert m_remove.called_once_with('fake')
+
+
+class TestCephLabTask(TestTask):
+    def setup(self):
+        self.ctx = FakeNamespace()
+        self.ctx.cluster = Cluster()
+        self.ctx.cluster.add(Remote('remote1'), ['role1'])
+        self.ctx.cluster.add(Remote('remote2'), ['role2'])
+        self.ctx.config = dict()
+
+    @patch('teuthology.task.ansible.fetch_repo')
+    def test_find_repo_http(self, m_fetch_repo):
+        repo = os.path.join(config.ceph_git_base_url,
+                            'ceph-cm-ansible.git')
+        task = CephLab(self.ctx, dict())
+        task.find_repo()
+        m_fetch_repo.assert_called_once_with(repo, 'master')
+
+    def test_playbook_file(self):
+        fake_playbook = [dict(fake_playbook=True)]
+        fake_playbook_obj = StringIO(yaml.safe_dump(fake_playbook))
+        playbook = 'cephlab.yml'
+        fake_playbook_obj.name = playbook
+        task = CephLab(self.ctx, dict())
+        task.repo_path = '/tmp/fake/repo'
+        with patch('teuthology.task.ansible.file', create=True) as m_file:
+            m_file.return_value = fake_playbook_obj
+            task.get_playbook()
+        assert task.playbook_file.name == playbook
