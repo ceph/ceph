@@ -289,7 +289,7 @@ int ErasureCodeBench::decode()
   if (erased.size() > 0) {
     for (vector<int>::const_iterator i = erased.begin();
 	 i != erased.end();
-	 i++)
+	 ++i)
       encoded.erase(*i);
     display_chunks(encoded, erasure_code->get_chunk_count());
   }
