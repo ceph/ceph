@@ -923,10 +923,15 @@ class SyntheticWorkload {
     pair<Messenger*, Messenger*> p;
     {
       boost::uniform_int<> choose(0, available_servers.size() - 1);
-      if (server->get_default_policy().server || choose(rng) % 2)
+      if (server->get_default_policy().server) {
         p = make_pair(client, server);
-      else
-        p = make_pair(server, client);
+      } else {
+        ConnectionRef conn = client->get_connection(server->get_myinst());
+        if (available_connections.count(conn) || choose(rng) % 2)
+          p = make_pair(client, server);
+        else
+          p = make_pair(server, client);
+      }
     }
     ConnectionRef conn = p.first->get_connection(p.second->get_myinst());
     available_connections[conn] = p;
