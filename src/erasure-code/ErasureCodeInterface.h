@@ -153,6 +153,20 @@ using namespace std;
 namespace ceph {
 
   typedef map<std::string,std::string> ErasureCodeProfile;
+
+  inline ostream& operator<<(ostream& out, const ErasureCodeProfile& profile) {
+    out << "{";
+    for (ErasureCodeProfile::const_iterator it = profile.begin();
+	 it != profile.end();
+	 ++it) {
+      if (it != profile.begin()) out << ",";
+      out << it->first << "=" << it->second;
+    }
+    out << "}";
+    return out;
+  }
+
+
   class ErasureCodeInterface {
   public:
     virtual ~ErasureCodeInterface() {}
