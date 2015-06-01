@@ -61,7 +61,7 @@ TEST(RocksDBOption, interpret) {
   int num_low_pri_threads = 0;
   for (vector<rocksdb::ThreadStatus>::iterator it = thread_list.begin();
 	it!= thread_list.end();
-	it++) {
+	++it) {
     if (it->thread_type == rocksdb::ThreadStatus::HIGH_PRIORITY)
       num_high_pri_threads++;
     if (it->thread_type == rocksdb::ThreadStatus::LOW_PRIORITY)
