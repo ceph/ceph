@@ -354,7 +354,7 @@ BuildRequires:	libbabeltrace-devel
 This package contains Ceph benchmarks and test tools.
 
 %package -n libcephfs_jni1
-Summary:	Java Native Interface library for CephFS Java bindings.
+Summary:	Java Native Interface library for CephFS Java bindings
 Group:		System Environment/Libraries
 License:	LGPL-2.0
 Requires:	java
@@ -365,7 +365,7 @@ This package contains the Java Native Interface library for CephFS Java
 bindings.
 
 %package -n libcephfs_jni1-devel
-Summary:	Development files for CephFS Java Native Interface library.
+Summary:	Development files for CephFS Java Native Interface library
 Group:		System Environment/Libraries
 License:	LGPL-2.0
 Requires:	java
@@ -376,7 +376,7 @@ This package contains the development files for CephFS Java Native Interface
 library.
 
 %package -n cephfs-java
-Summary:	Java libraries for the Ceph File System.
+Summary:	Java libraries for the Ceph File System
 Group:		System Environment/Libraries
 License:	LGPL-2.0
 Requires:	java
@@ -393,7 +393,7 @@ BuildRequires:  junit
 This package contains the Java libraries for the Ceph File System.
 
 %package libs-compat
-Summary:	Meta package to include ceph libraries.
+Summary:	Meta package to include ceph libraries
 Group:		System Environment/Libraries
 License:	LGPL-2.0
 Obsoletes:	ceph-libs
