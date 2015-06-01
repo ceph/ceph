@@ -847,9 +847,7 @@ void MDLog::_recovery_thread(MDSInternalContextBase *completion)
   } else if (read_result != 0) {
     mds->clog->error() << "failed to read JournalPointer: " << read_result
                        << " (" << cpp_strerror(read_result) << ")";
-    mds->mds_lock.Lock();
-    mds->damaged();
-    mds->mds_lock.Unlock();
+    mds->damaged_unlocked();
     assert(0);  // Should be unreachable because damaged() calls respawn()
   }
 
@@ -877,9 +875,7 @@ void MDLog::_recovery_thread(MDSInternalContextBase *completion)
       // means something worse like a corrupt header, which we can't handle here.
       mds->clog->error() << "Error recovering journal " << jp.front << ": "
         << cpp_strerror(recovery_result);
-      mds->mds_lock.Lock();
-      mds->damaged();
-      mds->mds_lock.Unlock();
+      mds->damaged_unlocked();
       assert(recovery_result == 0); // Unreachable because damaged() calls respawn()
     }
 
@@ -912,9 +908,7 @@ void MDLog::_recovery_thread(MDSInternalContextBase *completion)
   if (recovery_result != 0) {
     mds->clog->error() << "Error recovering journal " << jp.front << ": "
       << cpp_strerror(recovery_result);
-    mds->mds_lock.Lock();
-    mds->damaged();
-    mds->mds_lock.Unlock();
+    mds->damaged_unlocked();
     assert(recovery_result == 0); // Unreachable because damaged() calls respawn()
   }
 
@@ -1150,9 +1144,7 @@ void MDLog::_replay_thread()
           r = -EAGAIN;
         } else {
           mds->clog->error() << "missing journal object";
-          mds->mds_lock.Lock();
-          mds->damaged();
-          mds->mds_lock.Unlock();
+          mds->damaged_unlocked();
           assert(0);  // Should be unreachable because damaged() calls respawn()
         }
       } else if (r == -EINVAL) {
@@ -1163,9 +1155,7 @@ void MDLog::_replay_thread()
             r = -EAGAIN;
           } else {
             mds->clog->error() << "invalid journaler offsets";
-            mds->mds_lock.Lock();
-            mds->damaged();
-            mds->mds_lock.Unlock();
+            mds->damaged_unlocked();
             assert(0);  // Should be unreachable because damaged() calls respawn()
           }
         } else {
@@ -1188,9 +1178,7 @@ void MDLog::_replay_thread()
                         << dendl;
 
                 mds->clog->error() << "error reading journal header";
-                mds->mds_lock.Lock();
-                mds->damaged();
-                mds->mds_lock.Unlock();
+                mds->damaged_unlocked();
                 assert(0);  // Should be unreachable because damaged() calls
                             // respawn()
             }
@@ -1234,9 +1222,7 @@ void MDLog::_replay_thread()
       if (g_conf->mds_log_skip_corrupt_events) {
         continue;
       } else {
-        mds->mds_lock.Lock();
-        mds->damaged();
-        mds->mds_lock.Unlock();
+        mds->damaged_unlocked();
         assert(0);  // Should be unreachable because damaged() calls
                     // respawn()
       }

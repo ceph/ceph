@@ -2423,6 +2423,7 @@ void MDS::handle_signal(int signum)
 void MDS::damaged()
 {
   assert(whoami != MDS_RANK_NONE);
+  assert(mds_lock.is_locked_by_me());
 
   set_want_state(MDSMap::STATE_DAMAGED);
   monc->flush_log();  // Flush any clog error from before we were called
