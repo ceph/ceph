@@ -333,6 +333,7 @@ On every Compute node, edit ``/etc/nova/nova.conf`` and add::
     libvirt_images_type = rbd
     libvirt_images_rbd_pool = vms
     libvirt_images_rbd_ceph_conf = /etc/ceph/ceph.conf
+    libvirt_disk_cachemodes="network=writeback"
     rbd_user = cinder
     rbd_secret_uuid = 457eb676-33da-42ec-9a8c-9293d545c337
 
@@ -366,6 +367,7 @@ section and add::
     images_rbd_ceph_conf = /etc/ceph/ceph.conf
     rbd_user = cinder
     rbd_secret_uuid = 457eb676-33da-42ec-9a8c-9293d545c337
+    disk_cachemodes="network=writeback"
 
 
 It is also a good practice to disable file injection. While booting an
