@@ -207,5 +207,37 @@ namespace ceph {
   };
 
 
+  class KeyValuePlainFormatter : public Formatter {
+    public:
+      KeyValuePlainFormatter();
+      virtual ~KeyValuePlainFormatter();
+
+      virtual void flush(std::ostream& os);
+      virtual void reset();
+
+      virtual void open_array_section(const char *name) { } //not supported
+      virtual void open_array_section_in_ns(const char *name,
+					    const char *ns) { } //not supported
+      virtual void open_object_section(const char *name) { } //not supported
+      virtual void open_object_section_in_ns(const char *name,
+					     const char *ns) { } //not supported
+      virtual void close_section() { } //not supported
+
+      virtual void dump_unsigned(const char *name, uint64_t u);
+      virtual void dump_int(const char *name, int64_t s);
+      virtual void dump_float(const char *name, double d);
+      virtual void dump_string(const char *name, const std::string& s);
+      virtual std::ostream& dump_stream(const char *name);
+      virtual void dump_format_va(const char *name,
+				  const char *ns,
+				  bool quoted,
+				  const char *fmt,
+				  va_list ap);
+      virtual int get_len() const;
+      virtual void write_raw_data(const char *data);
+
+    private:
+      std::stringstream m_ss;
+  };
 }
 #endif
