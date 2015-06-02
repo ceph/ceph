@@ -135,6 +135,7 @@ namespace librbd {
 
     // Configuration
     static const string METADATA_CONF_PREFIX;
+    bool non_blocking_aio;
     bool cache;
     bool cache_writethrough_until_flush;
     uint64_t cache_size;
