@@ -1989,13 +1989,56 @@ int KeyValueStore::_zero(coll_t cid, const ghobject_t& oid, uint64_t offset,
                          size_t len, BufferTransaction &t)
 {
   dout(15) << __func__ << " " << cid << "/" << oid << " " << offset << "~" << len << dendl;
+  int r;
+  StripObjectMap::StripObjectHeaderRef header;
 
-  bufferptr bp(len);
-  bp.zero();
-  bufferlist bl;
-  bl.push_back(bp);
-  int r = _write(cid, oid, offset, len, bl, t);
+  r = t.lookup_cached_header(cid, oid, &header, true);
+  if (r < 0) {
+    dout(10) << __func__ << " " << cid << "/" << oid << " " << offset
+             << "~" << len << " failed to get header: r = " << r << dendl;
+    return r;
+  }
 
+  if (len + offset > header->max_size) {
+    header->max_size = len + offset;
+    header->bits.resize(header->max_size/header->strip_size+1);
+    header->updated = true;
+  }
+
+  vector<StripObjectMap::StripExtent> extents;
+  StripObjectMap::file_to_extents(offset, len, header->strip_size,
+                                  extents);
+  set<string> rm_keys;
+  map<string, bufferlist> values;
+  for (vector<StripObjectMap::StripExtent>::iterator iter = extents.begin();
+       iter != extents.end(); ++iter) {
+    set<string> lookup_keys;
+    string key = strip_object_key(iter->no);
+    if (header->bits[iter->no]) {
+      if (iter->offset == 0 && iter->len == header->strip_size) {
+        rm_keys.insert(key);
+        header->bits[iter->no] = 0;
+        header->updated = true;
+      } else {
+        lookup_keys.insert(key);
+        r = t.get_buffer_keys(header, OBJECT_STRIP_PREFIX,
+                              lookup_keys, &values);
+        if (r < 0) {
+          dout(10) << __func__ << " " << cid << "/" << oid 
+                   <<  " r = " << r << dendl;
+          return r;
+        } else if (values.size() != lookup_keys.size()) {
+          dout(0) << __func__ << " broken header or missing data in backend "
+                  << header->cid << "/" << header->oid 
+                  <<  " r = " << r << dendl;
+          return -EBADF;
+        }
+        values[key].zero(iter->offset, iter->len);
+      }
+    }    
+  }
+  t.set_buffer_keys(header, OBJECT_STRIP_PREFIX, values);
+  t.remove_buffer_keys(header, OBJECT_STRIP_PREFIX, rm_keys);
   dout(10) << __func__ << " " << cid << "/" << oid << " " << offset << "~"
            << len << " = " << r << dendl;
   return r;
