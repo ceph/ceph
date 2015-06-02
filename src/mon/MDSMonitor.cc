@@ -251,7 +251,8 @@ bool MDSMonitor::preprocess_beacon(MMDSBeacon *m)
     if (state != MDSMap::STATE_BOOT) {
       dout(7) << "mds_beacon " << *m << " is not in mdsmap" << dendl;
       mon->send_reply(m, new MMDSMap(mon->monmap->fsid, &mdsmap));
-      goto out;
+      m->put();
+      return true;
     } else {
       return false;  // not booted yet.
     }
@@ -310,9 +311,12 @@ bool MDSMonitor::preprocess_beacon(MMDSBeacon *m)
   mon->send_reply(m,
 		  new MMDSBeacon(mon->monmap->fsid, m->get_global_id(), m->get_name(),
 				 mdsmap.get_epoch(), state, seq));
-  
-  // done
+  m->put();
+  return true;
+
  out:
+  // I won't reply this beacon, drop it.
+  mon->no_reply(m);
   m->put();
   return true;
 }
