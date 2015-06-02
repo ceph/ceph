@@ -442,11 +442,11 @@ def nuke(ctx, should_unlock, sync_clocks=True, reboot_all=True, noipmi=False):
                                   default_flow_style=False).splitlines()))
 
 
-def nuke_one(ctx, targets, should_unlock, synch_clocks, reboot_all,
+def nuke_one(ctx, target, should_unlock, synch_clocks, reboot_all,
              check_locks, noipmi):
     ret = None
     ctx = argparse.Namespace(
-        config=dict(targets=targets),
+        config=dict(targets=target),
         owner=ctx.owner,
         check_locks=check_locks,
         synch_clocks=synch_clocks,
@@ -458,13 +458,12 @@ def nuke_one(ctx, targets, should_unlock, synch_clocks, reboot_all,
     try:
         nuke_helper(ctx, should_unlock)
     except Exception:
-        log.exception('Could not nuke all targets in %s' % targets)
+        log.exception('Could not nuke %s' % target)
         # not re-raising the so that parallel calls aren't killed
-        ret = targets
+        ret = target
     else:
         if should_unlock:
-            for target in targets.keys():
-                unlock_one(ctx, target, ctx.owner)
+            unlock_one(ctx, target.keys()[0], ctx.owner)
     return ret
 
 
