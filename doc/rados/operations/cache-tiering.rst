@@ -242,7 +242,7 @@ execute the following::
 
 For example, to flush or evict at 1 TB, execute the following:: 
 
-	ceph osd pool hot-storage target_max_bytes 1000000000000
+	ceph osd pool set hot-storage target_max_bytes 1000000000000
 
 
 To specify the maximum number of objects, execute the following:: 
