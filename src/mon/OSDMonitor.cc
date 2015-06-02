@@ -3032,47 +3032,48 @@ namespace {
      }
 
    } else /* !f */ {
+     boost::scoped_ptr<Formatter> kv_formatter(new KeyValuePlainFormatter);
      for(choices_set_t::const_iterator it = selected_choices.begin();
 	 it != selected_choices.end(); ++it) {
        switch(*it) {
 	 case PG_NUM:
-	   ss << "pg_num: " << p->get_pg_num() << "\n";
+	   kv_formatter->dump_int("pg_num", p->get_pg_num());
 	   break;
 	 case PGP_NUM:
-	   ss << "pgp_num: " << p->get_pgp_num() << "\n";
+	   kv_formatter->dump_int("pgp_num", p->get_pgp_num());
 	   break;
 	 case AUID:
-	   ss << "auid: " << p->get_auid() << "\n";
+	   kv_formatter->dump_int("auid", p->get_auid());
 	   break;
 	 case SIZE:
-	   ss << "size: " << p->get_size() << "\n";
+	   kv_formatter->dump_int("size", p->get_size());
 	   break;
 	 case MIN_SIZE:
-	   ss << "min_size: " << p->get_min_size() << "\n";
+	   kv_formatter->dump_int("min_size", p->get_min_size());
 	   break;
 	 case CRASH_REPLAY_INTERVAL:
-	   ss << "crash_replay_interval: " <<
-	     p->get_crash_replay_interval() << "\n";
+	   kv_formatter->dump_int("crash_replay_interval",
+		       p->get_crash_replay_interval());
 	   break;
 	 case CRUSH_RULESET:
-	   ss << "crush_ruleset: " << p->get_crush_ruleset() << "\n";
+	   kv_formatter->dump_int("crush_ruleset", p->get_crush_ruleset());
 	   break;
 	 case HIT_SET_PERIOD:
-	   ss << "hit_set_period: " << p->hit_set_period << "\n";
+	   kv_formatter->dump_int("hit_set_period", p->hit_set_period);
 	   break;
 	 case HIT_SET_COUNT:
-	   ss << "hit_set_count: " << p->hit_set_count << "\n";
+	   kv_formatter->dump_int("hit_set_count", p->hit_set_count);
 	   break;
 	 case HIT_SET_TYPE:
-	   ss << "hit_set_type: " <<
-	     HitSet::get_type_name(p->hit_set_params.get_type()) << "\n";
+	   kv_formatter->dump_string("hit_set_type",
+			  HitSet::get_type_name(p->hit_set_params.get_type()));
 	   break;
 	 case HIT_SET_FPP:
 	   {
 	     if (p->hit_set_params.get_type() == HitSet::TYPE_BLOOM) {
 	       BloomHitSet::Params *bloomp =
 		 static_cast<BloomHitSet::Params*>(p->hit_set_params.impl.get());
-	       ss << "hit_set_fpp: " << bloomp->get_fpp() << "\n";
+	       kv_formatter->dump_float("hit_set_fpp", bloomp->get_fpp());
 	     } else if(var != "all") {
 	       ss << "hit set is not of type Bloom; " <<
 		 "invalid to get a false positive rate!";
@@ -3082,44 +3083,51 @@ namespace {
 	   }
 	   break;
 	 case TARGET_MAX_OBJECTS:
-	   ss << "target_max_objects: " << p->target_max_objects << "\n";
+	   kv_formatter->dump_unsigned("target_max_objects",
+				       p->target_max_objects);
 	   break;
 	 case TARGET_MAX_BYTES:
-	   ss << "target_max_bytes: " << p->target_max_bytes << "\n";
+	   kv_formatter->dump_unsigned("target_max_bytes", p->target_max_bytes);
 	   break;
 	 case CACHE_TARGET_DIRTY_RATIO:
-	   ss << "cache_target_dirty_ratio: "
-	     << ((float)p->cache_target_dirty_ratio_micro/1000000) << "\n";
+	   kv_formatter->dump_unsigned("cache_target_dirty_ratio_micro",
+				       p->cache_target_dirty_ratio_micro);
+	   kv_formatter->dump_float("cache_target_dirty_ratio",
+			 ((float)p->cache_target_dirty_ratio_micro/1000000));
 	   break;
 	 case CACHE_TARGET_DIRTY_HIGH_RATIO:
 	   ss << "cache_target_dirty_high_ratio: "
 	     << ((float)p->cache_target_dirty_high_ratio_micro/1000000) << "\n";
 	   break;
 	 case CACHE_TARGET_FULL_RATIO:
-	   ss << "cache_target_full_ratio: "
-	     << ((float)p->cache_target_full_ratio_micro/1000000) << "\n";
+	   kv_formatter->dump_unsigned("cache_target_full_ratio_micro",
+				       p->cache_target_full_ratio_micro);
+	   kv_formatter->dump_float("cache_target_full_ratio",
+			 ((float)p->cache_target_full_ratio_micro/1000000));
 	   break;
 	 case CACHE_MIN_FLUSH_AGE:
-	   ss << "cache_min_flush_age: " << p->cache_min_flush_age << "\n";
+	   kv_formatter->dump_unsigned("cache_min_flush_age",
+				       p->cache_min_flush_age);
 	   break;
 	 case CACHE_MIN_EVICT_AGE:
-	   ss << "cache_min_evict_age: " << p->cache_min_evict_age << "\n";
+	   kv_formatter->dump_unsigned("cache_min_evict_age",
+				       p->cache_min_evict_age);
 	   break;
 	 case ERASURE_CODE_PROFILE:
-	   ss << "erasure_code_profile: " << p->erasure_code_profile << "\n";
+	   kv_formatter->dump_string("erasure_code_profile",
+				     p->erasure_code_profile);
 	   break;
 	 case MIN_READ_RECENCY_FOR_PROMOTE:
-	   ss << "min_read_recency_for_promote: " <<
-	     p->min_read_recency_for_promote << "\n";
+	   kv_formatter->dump_int("min_read_recency_for_promote",
+				  p->min_read_recency_for_promote);
 	   break;
 	 case WRITE_FADVISE_DONTNEED:
-	   ss << "write_fadvise_dontneed: " <<
-	     (p->has_flag(pg_pool_t::FLAG_WRITE_FADVISE_DONTNEED) ?
-	      "true" : "false") << "\n";
+	   kv_formatter->dump_string("write_fadvise_dontneed",
+			  p->has_flag(pg_pool_t::FLAG_WRITE_FADVISE_DONTNEED) ?
+			  "true" : "false");
 	   break;
        }
-       rdata.append(ss.str());
-       ss.str("");
+       kv_formatter->flush(rdata);
      }
    }
    r = 0;
