@@ -371,6 +371,7 @@ class interval_set {
   
   void erase(iterator &i) {
     _size -= i.get_len();
+    assert(_size >= 0);
     m.erase(i._iter);
   }
 
