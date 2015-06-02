@@ -1,3 +1,4 @@
+import json
 import os
 import yaml
 
@@ -285,6 +286,40 @@ class TestAnsibleTask(TestTask):
         args = task._build_args()
         assert args.count('--tags') == 1
         assert args[args.index('--tags') + 1] == 'user,pubkeys'
+
+    def test_build_args_no_vars(self):
+        task_config = dict(
+            playbook=[],
+        )
+        task = Ansible(self.ctx, task_config)
+        task.setup()
+        args = task._build_args()
+        assert args.count('--extra-vars') == 1
+        vars_str = args[args.index('--extra-vars') + 1].strip("'")
+        extra_vars = json.loads(vars_str)
+        assert extra_vars.keys() == ['ansible_ssh_user']
+
+    def test_build_args_vars(self):
+        extra_vars = dict(
+            string1='value1',
+            list1=['item1'],
+            dict1=dict(key='value'),
+        )
+
+        task_config = dict(
+            playbook=[],
+            vars=extra_vars,
+        )
+        task = Ansible(self.ctx, task_config)
+        task.setup()
+        args = task._build_args()
+        assert args.count('--extra-vars') == 1
+        vars_str = args[args.index('--extra-vars') + 1].strip("'")
+        got_extra_vars = json.loads(vars_str)
+        assert 'ansible_ssh_user' in got_extra_vars
+        assert got_extra_vars['string1'] == extra_vars['string1']
+        assert got_extra_vars['list1'] == extra_vars['list1']
+        assert got_extra_vars['dict1'] == extra_vars['dict1']
 
     def test_teardown_inventory(self):
         task_config = dict(

@@ -60,6 +60,8 @@ class Ansible(Task):
                     not, we generate a temporary file to use.
         tags:       A string including any (comma-separated) tags to be passed
                     directly to ansible-playbook.
+        vars:       A dict of vars to be passed to ansible-playbook via the
+                    --extra-vars flag
 
     Examples:
 
@@ -80,6 +82,12 @@ class Ansible(Task):
         inventory: /path/to/inventory
         playbook: /path/to/playbook.yml
         tags: my_tags
+        vars:
+            var1: string_value
+            var2:
+                - list_item
+            var3:
+                key: value
 
     """
     def __init__(self, ctx, config):
@@ -228,9 +236,10 @@ class Ansible(Task):
         # Assume all remotes use the same username
         user = self.cluster.remotes.keys()[0].user
         extra_vars = dict(ansible_ssh_user=user)
+        extra_vars.update(self.config.get('vars', dict()))
         args = [
             'ansible-playbook', '-v',
-            "--extra-vars='%s'" % json.dumps(extra_vars),
+            "--extra-vars", "'%s'" % json.dumps(extra_vars),
             '-i', self.inventory,
             '--limit', ','.join(fqdns),
             self.playbook_file.name,
