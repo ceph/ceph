@@ -5479,6 +5479,8 @@ int ReplicatedPG::_rollback_to(OpContext *ctx, ceph_osd_op& op)
     if (is_degraded_or_backfilling_object(rollback_to_sobject)) {
       dout(20) << "_rollback_to attempted to roll back to a degraded object "
 	       << rollback_to_sobject << " (requested snapid: ) " << snapid << dendl;
+      ctx->obc->blocked_by = rollback_to;
+      rollback_to->blocking.insert(ctx->obc);
       wait_for_degraded_object(rollback_to_sobject, ctx->op);
       ret = -EAGAIN;
     } else if (rollback_to->obs.oi.soid.snap == CEPH_NOSNAP) {
