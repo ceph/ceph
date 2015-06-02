@@ -2829,6 +2829,105 @@ namespace {
     ERASURE_CODE_PROFILE, MIN_READ_RECENCY_FOR_PROMOTE,
     WRITE_FADVISE_DONTNEED};
 
+  void osd_pool_get_formatted_output(osd_pool_get_choices choice,
+				     Formatter *const formatter,
+				     const pg_pool_t *p,
+				     const std::string &var,
+				     stringstream& ss,
+				     int &return_code) {
+       switch(choice) {
+	 case PG_NUM:
+	   formatter->dump_int("pg_num", p->get_pg_num());
+	   break;
+	 case PGP_NUM:
+	   formatter->dump_int("pgp_num", p->get_pgp_num());
+	   break;
+	 case AUID:
+	   formatter->dump_int("auid", p->get_auid());
+	   break;
+	 case SIZE:
+	   formatter->dump_int("size", p->get_size());
+	   break;
+	 case MIN_SIZE:
+	   formatter->dump_int("min_size", p->get_min_size());
+	   break;
+	 case CRASH_REPLAY_INTERVAL:
+	   formatter->dump_int("crash_replay_interval",
+			       p->get_crash_replay_interval());
+	   break;
+	 case CRUSH_RULESET:
+	   formatter->dump_int("crush_ruleset", p->get_crush_ruleset());
+	   break;
+	 case HIT_SET_PERIOD:
+	   formatter->dump_int("hit_set_period", p->hit_set_period);
+	   break;
+	 case HIT_SET_COUNT:
+	   formatter->dump_int("hit_set_count", p->hit_set_count);
+	   break;
+	 case HIT_SET_TYPE:
+	   formatter->dump_string("hit_set_type",
+				  HitSet::get_type_name(p->hit_set_params.get_type()));
+	   break;
+	 case HIT_SET_FPP:
+	   {
+	     if (p->hit_set_params.get_type() == HitSet::TYPE_BLOOM) {
+	       BloomHitSet::Params *bloomp =
+		 static_cast<BloomHitSet::Params*>(p->hit_set_params.impl.get());
+	       formatter->dump_float("hit_set_fpp", bloomp->get_fpp());
+	     } else if(var != "all") {
+	       formatter->close_section();
+	       ss << "hit set is not of type Bloom; " <<
+		 "invalid to get a false positive rate!";
+	       return_code = -EINVAL;
+	       return;
+	     }
+	   }
+	   break;
+	 case TARGET_MAX_OBJECTS:
+	   formatter->dump_unsigned("target_max_objects",
+				    p->target_max_objects);
+	   break;
+	 case TARGET_MAX_BYTES:
+	   formatter->dump_unsigned("target_max_bytes",
+				    p->target_max_bytes);
+	   break;
+	 case CACHE_TARGET_DIRTY_RATIO:
+	   formatter->dump_unsigned("cache_target_dirty_ratio_micro",
+				    p->cache_target_dirty_ratio_micro);
+	   formatter->dump_float("cache_target_dirty_ratio",
+				 ((float)p->cache_target_dirty_ratio_micro/1000000));
+	   break;
+	 case CACHE_TARGET_FULL_RATIO:
+	   formatter->dump_unsigned("cache_target_full_ratio_micro",
+				    p->cache_target_full_ratio_micro);
+	   formatter->dump_float("cache_target_full_ratio",
+				 ((float)p->cache_target_full_ratio_micro/1000000));
+	   break;
+	 case CACHE_MIN_FLUSH_AGE:
+	   formatter->dump_unsigned("cache_min_flush_age",
+				    p->cache_min_flush_age);
+	   break;
+	 case CACHE_MIN_EVICT_AGE:
+	   formatter->dump_unsigned("cache_min_evict_age",
+				    p->cache_min_evict_age);
+	   break;
+	 case ERASURE_CODE_PROFILE:
+	   formatter->dump_string("erasure_code_profile",
+				  p->erasure_code_profile);
+	   break;
+	 case MIN_READ_RECENCY_FOR_PROMOTE:
+	   formatter->dump_int("min_read_recency_for_promote",
+			       p->min_read_recency_for_promote);
+	   break;
+	 case WRITE_FADVISE_DONTNEED:
+	   formatter->dump_string("write_fadvise_dontneed",
+				  p->has_flag(pg_pool_t::FLAG_WRITE_FADVISE_DONTNEED) ?
+				  "true" : "false");
+	   break;
+       }
+
+  }
+
   std::set<osd_pool_get_choices>
     subtract_second_from_first(const std::set<osd_pool_get_choices>& first,
 				const std::set<osd_pool_get_choices>& second)
@@ -2936,97 +3035,7 @@ namespace {
        f->open_object_section("pool");
        f->dump_string("pool", poolstr);
        f->dump_int("pool_id", pool);
-       switch(*it) {
-	 case PG_NUM:
-	   f->dump_int("pg_num", p->get_pg_num());
-	   break;
-	 case PGP_NUM:
-	   f->dump_int("pgp_num", p->get_pgp_num());
-	   break;
-	 case AUID:
-	   f->dump_int("auid", p->get_auid());
-	   break;
-	 case SIZE:
-	   f->dump_int("size", p->get_size());
-	   break;
-	 case MIN_SIZE:
-	   f->dump_int("min_size", p->get_min_size());
-	   break;
-	 case CRASH_REPLAY_INTERVAL:
-	   f->dump_int("crash_replay_interval",
-		       p->get_crash_replay_interval());
-	   break;
-	 case CRUSH_RULESET:
-	   f->dump_int("crush_ruleset", p->get_crush_ruleset());
-	   break;
-	 case HIT_SET_PERIOD:
-	   f->dump_int("hit_set_period", p->hit_set_period);
-	   break;
-	 case HIT_SET_COUNT:
-	   f->dump_int("hit_set_count", p->hit_set_count);
-	   break;
-	 case HIT_SET_TYPE:
-	   f->dump_string("hit_set_type",
-			  HitSet::get_type_name(p->hit_set_params.get_type()));
-	   break;
-	 case HIT_SET_FPP:
-	   {
-	     if (p->hit_set_params.get_type() == HitSet::TYPE_BLOOM) {
-	       BloomHitSet::Params *bloomp =
-		 static_cast<BloomHitSet::Params*>(p->hit_set_params.impl.get());
-	       f->dump_float("hit_set_fpp", bloomp->get_fpp());
-	     } else if(var != "all") {
-	       f->close_section();
-	       ss << "hit set is not of type Bloom; " <<
-		 "invalid to get a false positive rate!";
-	       r = -EINVAL;
-	       return;
-	     }
-	   }
-	   break;
-	 case TARGET_MAX_OBJECTS:
-	   f->dump_unsigned("target_max_objects", p->target_max_objects);
-	   break;
-	 case TARGET_MAX_BYTES:
-	   f->dump_unsigned("target_max_bytes", p->target_max_bytes);
-	   break;
-	 case CACHE_TARGET_DIRTY_RATIO:
-	   f->dump_unsigned("cache_target_dirty_ratio_micro",
-			    p->cache_target_dirty_ratio_micro);
-	   f->dump_float("cache_target_dirty_ratio",
-			 ((float)p->cache_target_dirty_ratio_micro/1000000));
-	   break;
-	 case CACHE_TARGET_DIRTY_HIGH_RATIO:
-	   f->dump_unsigned("cache_target_dirty_high_ratio_micro",
-			    p->cache_target_dirty_high_ratio_micro);
-	   f->dump_float("cache_target_dirty_high_ratio",
-			 ((float)p->cache_target_dirty_high_ratio_micro/1000000));
-	   break;
-	 case CACHE_TARGET_FULL_RATIO:
-	   f->dump_unsigned("cache_target_full_ratio_micro",
-			    p->cache_target_full_ratio_micro);
-	   f->dump_float("cache_target_full_ratio",
-			 ((float)p->cache_target_full_ratio_micro/1000000));
-	   break;
-	 case CACHE_MIN_FLUSH_AGE:
-	   f->dump_unsigned("cache_min_flush_age", p->cache_min_flush_age);
-	   break;
-	 case CACHE_MIN_EVICT_AGE:
-	   f->dump_unsigned("cache_min_evict_age", p->cache_min_evict_age);
-	   break;
-	 case ERASURE_CODE_PROFILE:
-	   f->dump_string("erasure_code_profile", p->erasure_code_profile);
-	   break;
-	 case MIN_READ_RECENCY_FOR_PROMOTE:
-	   f->dump_int("min_read_recency_for_promote",
-		       p->min_read_recency_for_promote);
-	   break;
-	 case WRITE_FADVISE_DONTNEED:
-	   f->dump_string("write_fadvise_dontneed",
-			  p->has_flag(pg_pool_t::FLAG_WRITE_FADVISE_DONTNEED) ?
-			  "true" : "false");
-	   break;
-       }
+       osd_pool_get_formatted_output(*it, f, p, var, ss, r);
        f->close_section();
        f->flush(rdata);
      }
@@ -3035,98 +3044,7 @@ namespace {
      boost::scoped_ptr<Formatter> kv_formatter(new KeyValuePlainFormatter);
      for(choices_set_t::const_iterator it = selected_choices.begin();
 	 it != selected_choices.end(); ++it) {
-       switch(*it) {
-	 case PG_NUM:
-	   kv_formatter->dump_int("pg_num", p->get_pg_num());
-	   break;
-	 case PGP_NUM:
-	   kv_formatter->dump_int("pgp_num", p->get_pgp_num());
-	   break;
-	 case AUID:
-	   kv_formatter->dump_int("auid", p->get_auid());
-	   break;
-	 case SIZE:
-	   kv_formatter->dump_int("size", p->get_size());
-	   break;
-	 case MIN_SIZE:
-	   kv_formatter->dump_int("min_size", p->get_min_size());
-	   break;
-	 case CRASH_REPLAY_INTERVAL:
-	   kv_formatter->dump_int("crash_replay_interval",
-		       p->get_crash_replay_interval());
-	   break;
-	 case CRUSH_RULESET:
-	   kv_formatter->dump_int("crush_ruleset", p->get_crush_ruleset());
-	   break;
-	 case HIT_SET_PERIOD:
-	   kv_formatter->dump_int("hit_set_period", p->hit_set_period);
-	   break;
-	 case HIT_SET_COUNT:
-	   kv_formatter->dump_int("hit_set_count", p->hit_set_count);
-	   break;
-	 case HIT_SET_TYPE:
-	   kv_formatter->dump_string("hit_set_type",
-			  HitSet::get_type_name(p->hit_set_params.get_type()));
-	   break;
-	 case HIT_SET_FPP:
-	   {
-	     if (p->hit_set_params.get_type() == HitSet::TYPE_BLOOM) {
-	       BloomHitSet::Params *bloomp =
-		 static_cast<BloomHitSet::Params*>(p->hit_set_params.impl.get());
-	       kv_formatter->dump_float("hit_set_fpp", bloomp->get_fpp());
-	     } else if(var != "all") {
-	       ss << "hit set is not of type Bloom; " <<
-		 "invalid to get a false positive rate!";
-	       r = -EINVAL;
-	       return;
-	     }
-	   }
-	   break;
-	 case TARGET_MAX_OBJECTS:
-	   kv_formatter->dump_unsigned("target_max_objects",
-				       p->target_max_objects);
-	   break;
-	 case TARGET_MAX_BYTES:
-	   kv_formatter->dump_unsigned("target_max_bytes", p->target_max_bytes);
-	   break;
-	 case CACHE_TARGET_DIRTY_RATIO:
-	   kv_formatter->dump_unsigned("cache_target_dirty_ratio_micro",
-				       p->cache_target_dirty_ratio_micro);
-	   kv_formatter->dump_float("cache_target_dirty_ratio",
-			 ((float)p->cache_target_dirty_ratio_micro/1000000));
-	   break;
-	 case CACHE_TARGET_DIRTY_HIGH_RATIO:
-	   ss << "cache_target_dirty_high_ratio: "
-	     << ((float)p->cache_target_dirty_high_ratio_micro/1000000) << "\n";
-	   break;
-	 case CACHE_TARGET_FULL_RATIO:
-	   kv_formatter->dump_unsigned("cache_target_full_ratio_micro",
-				       p->cache_target_full_ratio_micro);
-	   kv_formatter->dump_float("cache_target_full_ratio",
-			 ((float)p->cache_target_full_ratio_micro/1000000));
-	   break;
-	 case CACHE_MIN_FLUSH_AGE:
-	   kv_formatter->dump_unsigned("cache_min_flush_age",
-				       p->cache_min_flush_age);
-	   break;
-	 case CACHE_MIN_EVICT_AGE:
-	   kv_formatter->dump_unsigned("cache_min_evict_age",
-				       p->cache_min_evict_age);
-	   break;
-	 case ERASURE_CODE_PROFILE:
-	   kv_formatter->dump_string("erasure_code_profile",
-				     p->erasure_code_profile);
-	   break;
-	 case MIN_READ_RECENCY_FOR_PROMOTE:
-	   kv_formatter->dump_int("min_read_recency_for_promote",
-				  p->min_read_recency_for_promote);
-	   break;
-	 case WRITE_FADVISE_DONTNEED:
-	   kv_formatter->dump_string("write_fadvise_dontneed",
-			  p->has_flag(pg_pool_t::FLAG_WRITE_FADVISE_DONTNEED) ?
-			  "true" : "false");
-	   break;
-       }
+       osd_pool_get_formatted_output(*it, kv_formatter.get(), p, var, ss, r);
        kv_formatter->flush(rdata);
      }
    }
