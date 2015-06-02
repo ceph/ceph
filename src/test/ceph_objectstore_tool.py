@@ -1029,7 +1029,7 @@ def main(argv):
         NEWPOOL = "import-rados-pool"
         cmd = "./rados mkpool {pool}".format(pool=NEWPOOL)
         logging.debug(cmd)
-        ret = call(cmd, shell=True, stdout=nullfd)
+        ret = call(cmd, shell=True, stdout=nullfd, stderr=nullfd)
 
         print "Test import-rados"
         for osd in [f for f in os.listdir(OSDDIR) if os.path.isdir(os.path.join(OSDDIR, f)) and string.find(f, "osd") == 0]:
