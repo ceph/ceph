@@ -843,6 +843,7 @@ public:
     ldout(cct, 20) << __func__ << dendl;
     static uint64_t max_conf_items = 128;
     std::map<string, bool> configs = boost::assign::map_list_of(
+        "rbd_non_blocking_aio", false)(
         "rbd_cache", false)(
         "rbd_cache_writethrough_until_flush", false)(
         "rbd_cache_size", false)(
@@ -908,6 +909,7 @@ public:
         config = cct->_conf->rbd_##config;                                     \
     } while (0);
 
+    ASSIGN_OPTION(non_blocking_aio);
     ASSIGN_OPTION(cache);
     ASSIGN_OPTION(cache_writethrough_until_flush);
     ASSIGN_OPTION(cache_size);
