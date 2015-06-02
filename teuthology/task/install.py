@@ -38,6 +38,7 @@ PACKAGES['ceph']['deb'] = [
     'radosgw',
     'radosgw-dbg',
     'python-ceph',
+    'python-rados',
     'libcephfs1',
     'libcephfs1-dbg',
     'libcephfs-java',
