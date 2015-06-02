@@ -5,6 +5,7 @@
 
 #include "common/ceph_context.h"
 #include "common/dout.h"
+#include "common/errno.h"
 
 #include "librbd/AioRequest.h"
 #include "librbd/internal.h"
@@ -25,7 +26,7 @@ namespace librbd {
     building = false;
     if (!pending_count) {
       finalize(cct, rval);
-      complete();
+      complete(cct);
     }
     lock.Unlock();
   }
@@ -54,6 +55,17 @@ namespace librbd {
     }
   }
 
+  void AioCompletion::fail(CephContext *cct, int r)
+  {
+    lderr(cct) << "AioCompletion::fail() " << this << ": " << cpp_strerror(r)
+               << dendl;
+    lock.Lock();
+    assert(pending_count == 0);
+    rval = r;
+    complete(cct);
+    put_unlock();
+  }
+
   void AioCompletion::complete_request(CephContext *cct, ssize_t r)
   {
     ldout(cct, 20) << "AioCompletion::complete_request() "
@@ -70,7 +82,7 @@ namespace librbd {
     int count = --pending_count;
     if (!count && !building) {
       finalize(cct, rval);
-      complete();
+      complete(cct);
     }
     put_unlock();
   }

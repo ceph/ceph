@@ -53,7 +53,11 @@ namespace librbd {
       id(image_id), parent(NULL),
       stripe_unit(0), stripe_count(0),
       object_cacher(NULL), writeback_handler(NULL), object_set(NULL),
-      pending_aio(0)
+      pending_aio(0),
+      thread_pool(cct, "librbd::thread_pool", cct->_conf->rbd_op_threads,
+                  "rbd_op_threads"),
+      aio_work_queue("librbd::aio_work_queue", cct->_conf->rbd_op_thread_timeout,
+                     &thread_pool)
   {
     md_ctx.dup(p);
     data_ctx.dup(p);
@@ -98,6 +102,8 @@ namespace librbd {
       object_set->return_enoent = true;
       object_cacher->start();
     }
+
+    thread_pool.start();
   }
 
   ImageCtx::~ImageCtx() {

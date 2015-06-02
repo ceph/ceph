@@ -14,6 +14,7 @@
 #include "common/Mutex.h"
 #include "common/RWLock.h"
 #include "common/snap_types.h"
+#include "common/WorkQueue.h"
 #include "include/buffer.h"
 #include "include/rbd/librbd.hpp"
 #include "include/rbd_types.h"
@@ -94,6 +95,9 @@ namespace librbd {
 
     Cond pending_aio_cond;
     uint64_t pending_aio;
+
+    ThreadPool thread_pool;
+    ContextWQ aio_work_queue;
 
     /**
      * Either image_name or image_id must be set.

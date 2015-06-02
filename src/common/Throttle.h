@@ -76,9 +76,10 @@ public:
   ~SimpleThrottle();
   void start_op();
   void end_op(int r);
+  bool pending_error() const;
   int wait_for_ret();
 private:
-  Mutex m_lock;
+  mutable Mutex m_lock;
   Cond m_cond;
   uint64_t m_max;
   uint64_t m_current;
