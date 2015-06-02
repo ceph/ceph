@@ -27,7 +27,7 @@ if [ "${update:-1}" = "1" -o "${update:-1}" = "true" ]; then
     fi
     location="$($hook --cluster ${cluster:-ceph} --id $id --type osd)"
     weight="$(ceph-conf --cluster=${cluster:-ceph} --name=osd.$id --lookup osd_crush_initial_weight || :)"
-    defaultweight=`df -P -k /var/lib/ceph/osd/${cluster:-ceph}-$id/ | tail -1 | awk '{ d= $2/1073741824 ; r = sprintf("%.2f", d); print r }'`
+    defaultweight=`df -P -k /var/lib/ceph/osd/${cluster:-ceph}-$id/ | tail -1 | awk '{ d= $2/1073741824 ; r = sprintf("%.4f", d); print r }'`
     ceph \
         --cluster="${cluster:-ceph}" \
         --name="osd.$id" \
