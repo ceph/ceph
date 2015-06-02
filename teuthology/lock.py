@@ -151,6 +151,32 @@ def json_matching_statuses(json_file_or_str, statuses):
     return return_statuses
 
 
+def winnow(statuses, arg, status_key, func=None):
+    """
+    Call with a list of statuses, and the ctx.<key>
+    'arg' that you may want to filter by.
+    If arg is not None, filter statuses by either:
+
+    1) func=None: filter by status[status_key] == arg
+    remove any status that fails
+
+    2) func=<filter function that takes status>: remove any
+    status for which func returns False
+
+    Return the possibly-smaller set of statuses.
+    """
+
+    if arg is not None:
+        if func:
+            statuses = [_status for _status in statuses
+                        if func(_status)]
+        else:
+            statuses = [_status for _status in statuses
+                       if _status[status_key] == arg]
+
+    return statuses
+
+
 def main(ctx):
     if ctx.verbose:
         teuthology.log.setLevel(logging.DEBUG)
@@ -220,29 +246,21 @@ def main(ctx):
             # get statuses again to refresh any updated keys
             statuses = get_statuses(machines)
         if statuses:
-            if ctx.machine_type:
-                statuses = [_status for _status in statuses
-                            if _status['machine_type'] == ctx.machine_type]
+            statuses = winnow(statuses, ctx.machine_type, 'machine_type')
             if not machines and ctx.owner is None and not ctx.all:
                 ctx.owner = misc.get_user()
-            if ctx.owner is not None:
-                statuses = [_status for _status in statuses
-                            if _status['locked_by'] == ctx.owner]
-            if ctx.status is not None:
-                statuses = [_status for _status in statuses
-                            if _status['up'] == (ctx.status == 'up')]
-            if ctx.locked is not None:
-                statuses = [_status for _status in statuses
-                            if _status['locked'] == (ctx.locked == 'true')]
-            if ctx.desc is not None:
-                statuses = [_status for _status in statuses
-                            if _status['description'] == ctx.desc]
-            if ctx.desc_pattern is not None:
-                statuses = [_status for _status in statuses
-                            if _status['description'] is not None and
-                            _status['description'].find(ctx.desc_pattern) >= 0]
+            statuses = winnow(statuses, ctx.owner, 'locked_by')
+            statuses = winnow(statuses, ctx.status, 'up',
+                                lambda s: s['up'] == (ctx.status == 'up'))
+            statuses = winnow(statuses, ctx.locked, 'locked',
+                                lambda s: s['locked'] == (ctx.locked == 'true'))
+            statuses = winnow(statuses, ctx.desc, 'description')
+            statuses = winnow(statuses, ctx.desc_pattern, 'description',
+                              lambda s: ctx.desc_pattern in s['description'])
             if ctx.json_query:
                 statuses = json_matching_statuses(ctx.json_query, statuses)
+            statuses = winnow(statuses, ctx.os_type, 'os_type')
+            statuses = winnow(statuses, ctx.os_version, 'os_version')
 
             # When listing, only show the vm_host's name, not every detail
             for s in statuses:
