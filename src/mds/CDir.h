@@ -506,6 +506,12 @@ protected:
       const std::set<snapid_t> *snaps,
       bool *force_dirty,
       list<CInode*> *undef_inodes);
+
+  /**
+   * Mark this fragment as BADFRAG
+   */
+  void go_bad();
+
   void _omap_fetched(bufferlist& hdrbl, std::map<std::string, bufferlist>& omap,
 		     const std::string& want_dn, int r);
   void _tmap_fetch(const std::string& want_dn);

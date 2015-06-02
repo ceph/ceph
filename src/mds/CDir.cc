@@ -1738,14 +1738,7 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
     dout(0) << "_fetched missing object for " << *this << dendl;
     clog->error() << "dir " << dirfrag() << " object missing on disk; some files may be lost\n";
 
-    state_set(STATE_BADFRAG);
-    // mark complete, !fetching
-    mark_complete();
-    state_clear(STATE_FETCHING);
-    auth_unpin(this);
-    
-    // kick waiters
-    finish_waiting(WAIT_COMPLETE, 0);
+    go_bad();
     return;
   }
 
@@ -1864,7 +1857,17 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
   finish_waiting(WAIT_COMPLETE, 0);
 }
 
-
+void CDir::go_bad()
+{
+  state_set(STATE_BADFRAG);
+  // mark complete, !fetching
+  mark_complete();
+  state_clear(STATE_FETCHING);
+  auth_unpin(this);
+  
+  // kick waiters
+  finish_waiting(WAIT_COMPLETE, 0);
+}
 
 // -----------------------
 // COMMIT
