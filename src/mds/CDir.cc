@@ -1714,14 +1714,9 @@ CDentry *CDir::_load_dentry(
       }
     }
   } else {
-    dout(1) << "corrupt directory, i got tag char '" << type << "' pos "
-      << pos << dendl;
-    cache->mds->clog->error() << "Corrupt directory entry '" << key
-      << "' in dirfrag " << *this;
-    // TODO: add a mechanism for selectively marking a path
-    // damaged, rather than marking the whole rank damaged.
-    cache->mds->damaged();
-    assert(0);  // Unreachable: damaged() respawns us
+    std::ostringstream oss;
+    oss << "Invalid tag char '" << type << "' pos " << pos;
+    throw buffer::malformed_input(oss.str());
   }
 
   return dn;
@@ -1828,7 +1823,16 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
       cache->mds->clog->warn() << "Corrupt dentry '" << dname << "' in "
                                   "dir frag " << dirfrag() << ": "
                                << err;
-      go_bad();
+
+      go_bad_dentry(last, dname);
+
+      // mark complete, !fetching
+      state_clear(STATE_FETCHING);
+      auth_unpin(this);
+
+      // kick waiters
+      finish_waiting(WAIT_DENTRY, -EIO);
+      finish_waiting(WAIT_COMPLETE, -EIO);
       return;
     }
 
@@ -1893,7 +1897,7 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
   finish_waiting(WAIT_COMPLETE, 0);
 }
 
-void CDir::go_bad()
+void CDir::_go_bad()
 {
   if (get_version() == 0)
     set_version(1);
@@ -1904,7 +1908,28 @@ void CDir::go_bad()
   auth_unpin(this);
 
   // kick waiters
-  finish_waiting(WAIT_COMPLETE, 0);
+  finish_waiting(WAIT_COMPLETE, -EIO);
+}
+
+void CDir::go_bad_dentry(snapid_t last, const std::string &dname)
+{
+  const bool fatal = cache->mds->damage_table.notify_dentry(
+      inode->ino(), frag, last, dname);
+  if (fatal) {
+    cache->mds->damaged();
+    assert(0);  // unreachable, damaged() respawns us
+  }
+}
+
+void CDir::go_bad()
+{
+  const bool fatal = cache->mds->damage_table.notify_dirfrag(inode->ino(), frag);
+  if (fatal) {
+    cache->mds->damaged();
+    assert(0);  // unreachable, damaged() respawns us
+  }
+
+  _go_bad();
 }
 
 // -----------------------
