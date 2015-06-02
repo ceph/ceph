@@ -200,7 +200,12 @@ function TEST_crush_reject_empty() {
         ./ceph osd setcrushmap -i $empty_map.map || return 1
 }
 
-main osd-crush
+function TEST_crush_tree() {
+    ./ceph osd crush tree --format=xml | \
+        $XMLSTARLET val -e -r test/mon/osd-crush-tree.rng - || return 1
+}
+
+main osd-crush 
 
 # Local Variables:
 # compile-command: "cd ../.. ; make -j4 && test/mon/osd-crush.sh"

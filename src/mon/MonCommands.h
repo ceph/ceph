@@ -521,6 +521,9 @@ COMMAND("osd crush rule create-erasure " \
 COMMAND("osd crush rule rm " \
 	"name=name,type=CephString,goodchars=[A-Za-z0-9-_.] ",	\
 	"remove crush rule <name>", "osd", "rw", "cli,rest")
+COMMAND("osd crush tree",
+	"dump crush buckets and items in a tree view",
+	"osd", "r", "cli,rest")
 COMMAND("osd setmaxosd " \
 	"name=newmax,type=CephInt,range=0", \
 	"set new maximum osd value", "osd", "rw", "cli,rest")
