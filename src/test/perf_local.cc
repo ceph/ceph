@@ -520,6 +520,9 @@ double memcpy_shared(size_t size)
 {
   int count = 1000000;
   char src[size], dst[size];
+
+  memset(src, 0, sizeof(src));
+
   uint64_t start = Cycles::rdtsc();
   for (int i = 0; i < count; i++) {
     memcpy(dst, src, size);
