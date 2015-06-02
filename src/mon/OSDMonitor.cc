@@ -2818,7 +2818,7 @@ void OSDMonitor::dump_info(Formatter *f)
 }
 
 namespace {
-  enum osd_pool_get_choices {
+  enum osd_pool_get_choices_t {
     SIZE, MIN_SIZE, CRASH_REPLAY_INTERVAL,
     PG_NUM, PGP_NUM, CRUSH_RULESET, HIT_SET_TYPE,
     HIT_SET_PERIOD, HIT_SET_COUNT, HIT_SET_FPP,
@@ -2829,7 +2829,7 @@ namespace {
     ERASURE_CODE_PROFILE, MIN_READ_RECENCY_FOR_PROMOTE,
     WRITE_FADVISE_DONTNEED};
 
-  void osd_pool_get_formatted_output(osd_pool_get_choices choice,
+  void osd_pool_get_formatted_output(osd_pool_get_choices_t choice,
 				     Formatter *const formatter,
 				     const pg_pool_t *p,
 				     const std::string &var,
@@ -2928,11 +2928,11 @@ namespace {
 
   }
 
-  std::set<osd_pool_get_choices>
-    subtract_second_from_first(const std::set<osd_pool_get_choices>& first,
-				const std::set<osd_pool_get_choices>& second)
+  std::set<osd_pool_get_choices_t>
+    subtract_second_from_first(const std::set<osd_pool_get_choices_t>& first,
+				const std::set<osd_pool_get_choices_t>& second)
     {
-      std::set<osd_pool_get_choices> result;
+      std::set<osd_pool_get_choices_t> result;
       std::set_difference(first.begin(), first.end(),
 			  second.begin(), second.end(),
 			  std::inserter(result, result.end()));
@@ -2959,7 +2959,7 @@ namespace {
    string var;
    cmd_getval(g_ceph_context, cmdmap, "var", var);
 
-   typedef std::map<std::string, osd_pool_get_choices> choices_map_t;
+   typedef std::map<std::string, osd_pool_get_choices_t> choices_map_t;
    const choices_map_t ALL_CHOICES = boost::assign::map_list_of
      ("size", SIZE)
      ("min_size", MIN_SIZE)
@@ -2978,7 +2978,7 @@ namespace {
      ("min_read_recency_for_promote", MIN_READ_RECENCY_FOR_PROMOTE)
      ("write_fadvise_dontneed", WRITE_FADVISE_DONTNEED);
 
-   typedef std::set<osd_pool_get_choices> choices_set_t;
+   typedef std::set<osd_pool_get_choices_t> choices_set_t;
 
    const choices_set_t ONLY_TIER_CHOICES = boost::assign::list_of
      (HIT_SET_TYPE)(HIT_SET_PERIOD)(HIT_SET_COUNT)(HIT_SET_FPP)
@@ -3007,7 +3007,7 @@ namespace {
      }
    } else /* var != "all" */  {
      choices_map_t::const_iterator found = ALL_CHOICES.find(var);
-     osd_pool_get_choices selected = found->second;
+     osd_pool_get_choices_t selected = found->second;
 
      if (!p->is_tier() &&
 	 ONLY_TIER_CHOICES.find(selected) != ONLY_TIER_CHOICES.end()) {
