@@ -689,10 +689,11 @@ void MDCache::populate_mydir()
 	dir = strays[i]->get_or_open_dirfrag(this, fg);
       }
 
-      if (dir->state_test(CDir::STATE_BADFRAG)) {
-        mds->damaged();
-        assert(0);
-      } else if (dir->get_version() == 0) {
+      // DamageTable applies special handling to strays: it will
+      // have damaged() us out if one is damaged.
+      assert(!dir->state_test(CDir::STATE_BADFRAG));
+
+      if (dir->get_version() == 0) {
         dir->fetch(new C_MDS_RetryOpenRoot(this));
         return;
       }
