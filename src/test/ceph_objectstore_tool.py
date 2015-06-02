@@ -149,6 +149,7 @@ def test_failure_tty(cmd, errmsg):
     ttyfd.close()
     tmpfd.close()
     if ret == 0:
+        logging.error(cmd)
         logging.error("Should have failed, but got exit 0")
         return 1
     lines = get_lines(TMPFILE)
@@ -165,6 +166,7 @@ def test_failure(cmd, errmsg):
     logging.debug(cmd)
     try:
         check_output(cmd, stderr=subprocess.STDOUT, shell=True)
+        logging.error(cmd)
         logging.error("Should have failed, but got exit 0")
         return 1
     except subprocess.CalledProcessError, e:
