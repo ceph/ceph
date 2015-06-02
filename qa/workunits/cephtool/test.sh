@@ -1200,7 +1200,7 @@ function test_mon_pg()
   ceph pg ls
   ceph pg ls 0
   ceph pg ls stale
-  ceph pg ls active stale
+  ceph pg ls active stale repair recovering
   ceph pg ls 0 active
   ceph pg ls 0 active stale
   ceph pg ls-by-primary osd.0
