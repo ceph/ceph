@@ -1745,10 +1745,21 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
   fnode_t got_fnode;
   {
     bufferlist::iterator p = hdrbl.begin();
-    ::decode(got_fnode, p);
+    try {
+      ::decode(got_fnode, p);
+    } catch (const buffer::error &err) {
+      derr << "Corrupt fnode in dirfrag " << dirfrag()
+        << ": " << err << dendl;
+      clog->warn() << "Corrupt fnode header in " << dirfrag() << ": "
+		  << err;
+      go_bad();
+      return;
+    }
     if (!p.end()) {
       clog->warn() << "header buffer of dir " << dirfrag() << " has "
 		  << hdrbl.length() - p.get_off() << " extra bytes\n";
+      go_bad();
+      return;
     }
   }
 
@@ -1797,9 +1808,18 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
     snapid_t last;
     dentry_key_t::decode_helper(p->first, dname, last);
 
-    CDentry *dn = _load_dentry(
-          p->first, dname, last, p->second, pos, snaps,
-          &force_dirty, &undef_inodes);
+    CDentry *dn = NULL;
+    try {
+      dn = _load_dentry(
+            p->first, dname, last, p->second, pos, snaps,
+            &force_dirty, &undef_inodes);
+    } catch (const buffer::error &err) {
+      cache->mds->clog->warn() << "Corrupt dentry '" << dname << "' in "
+                                  "dir frag " << dirfrag() << ": "
+                               << err;
+      go_bad();
+      return;
+    }
 
     if (dn && want_dn.length() && want_dn == dname) {
       dout(10) << " touching wanted dn " << *dn << dendl;
