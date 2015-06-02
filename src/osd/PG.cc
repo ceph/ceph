@@ -3823,8 +3823,8 @@ void PG::scrub(ThreadPool::TPHandle &handle)
       ConnectionRef con = osd->get_con_osd_cluster(acting[i], get_osdmap()->get_epoch());
       if (!con)
 	continue;
-      if (!con->has_feature(CEPH_FEATURE_CHUNKY_SCRUB)) {
-        dout(20) << "OSD " << acting[i]
+      if (con->is_connected() && !con->has_feature(CEPH_FEATURE_CHUNKY_SCRUB)) {
+        dout(20) << "OSD " << acting[i] << " features=" << con->get_features()
                  << " does not support chunky scrubs, falling back to classic"
                  << dendl;
         assert(0 == "Running incompatible OSD");
