@@ -1540,6 +1540,182 @@ void CDir::_omap_fetch(const string& want_dn)
 			     new C_OnFinisher(fin, &cache->mds->finisher));
 }
 
+CDentry *CDir::_load_dentry(
+    const std::string &key,
+    const std::string &dname,
+    const snapid_t last,
+    bufferlist &bl,
+    const int pos,
+    const std::set<snapid_t> *snaps,
+    bool *force_dirty,
+    list<CInode*> *undef_inodes)
+{
+  bufferlist::iterator q = bl.begin();
+
+  snapid_t first;
+  ::decode(first, q);
+
+  // marker
+  char type;
+  ::decode(type, q);
+
+  dout(20) << "_fetched pos " << pos << " marker '" << type << "' dname '" << dname
+           << " [" << first << "," << last << "]"
+           << dendl;
+
+  bool stale = false;
+  if (snaps && last != CEPH_NOSNAP) {
+    set<snapid_t>::const_iterator p = snaps->lower_bound(first);
+    if (p == snaps->end() || *p > last) {
+      dout(10) << " skipping stale dentry on [" << first << "," << last << "]" << dendl;
+      stale = true;
+    }
+  }
+  
+  /*
+   * look for existing dentry for _last_ snap, because unlink +
+   * create may leave a "hole" (epochs during which the dentry
+   * doesn't exist) but for which no explicit negative dentry is in
+   * the cache.
+   */
+  CDentry *dn;
+  if (stale)
+    dn = lookup_exact_snap(dname, last);
+  else
+    dn = lookup(dname, last);
+
+  if (type == 'L') {
+    // hard link
+    inodeno_t ino;
+    unsigned char d_type;
+    ::decode(ino, q);
+    ::decode(d_type, q);
+
+    if (stale) {
+      if (!dn) {
+        stale_items.insert(key);
+        *force_dirty = true;
+      }
+      return dn;
+    }
+
+    if (dn) {
+      if (dn->get_linkage()->get_inode() == 0) {
+        dout(12) << "_fetched  had NEG dentry " << *dn << dendl;
+      } else {
+        dout(12) << "_fetched  had dentry " << *dn << dendl;
+      }
+    } else {
+      // (remote) link
+      dn = add_remote_dentry(dname, ino, d_type, first, last);
+      
+      // link to inode?
+      CInode *in = cache->get_inode(ino);   // we may or may not have it.
+      if (in) {
+        dn->link_remote(dn->get_linkage(), in);
+        dout(12) << "_fetched  got remote link " << ino << " which we have " << *in << dendl;
+      } else {
+        dout(12) << "_fetched  got remote link " << ino << " (dont' have it)" << dendl;
+      }
+    }
+  } 
+  else if (type == 'I') {
+    // inode
+    
+    // Load inode data before looking up or constructing CInode
+    InodeStore inode_data;
+    inode_data.decode_bare(q);
+    
+    if (stale) {
+      if (!dn) {
+        stale_items.insert(key);
+        *force_dirty = true;
+      }
+      return dn;
+    }
+
+    bool undef_inode = false;
+    if (dn) {
+      CInode *in = dn->get_linkage()->get_inode();
+      if (in) {
+        dout(12) << "_fetched  had dentry " << *dn << dendl;
+        if (in->state_test(CInode::STATE_REJOINUNDEF)) {
+          undef_inodes->push_back(in);
+          undef_inode = true;
+        }
+      } else
+        dout(12) << "_fetched  had NEG dentry " << *dn << dendl;
+    }
+
+    if (!dn || undef_inode) {
+      // add inode
+      CInode *in = cache->get_inode(inode_data.inode.ino, last);
+      if (!in || undef_inode) {
+        if (undef_inode && in)
+          in->first = first;
+        else
+          in = new CInode(cache, true, first, last);
+        
+        in->inode = inode_data.inode;
+        // symlink?
+        if (in->is_symlink()) 
+          in->symlink = inode_data.symlink;
+        
+        in->dirfragtree.swap(inode_data.dirfragtree);
+        in->xattrs.swap(inode_data.xattrs);
+        in->old_inodes.swap(inode_data.old_inodes);
+        in->oldest_snap = inode_data.oldest_snap;
+        in->decode_snap_blob(inode_data.snap_blob);
+        if (snaps && !in->snaprealm)
+          in->purge_stale_snap_data(*snaps);
+
+        if (!undef_inode) {
+          cache->add_inode(in); // add
+          dn = add_primary_dentry(dname, in, first, last); // link
+        }
+        dout(12) << "_fetched  got " << *dn << " " << *in << dendl;
+
+        if (in->inode.is_dirty_rstat())
+          in->mark_dirty_rstat();
+
+        if (inode->is_stray()) {
+          dn->state_set(CDentry::STATE_STRAY);
+          if (in->inode.nlink == 0)
+            in->state_set(CInode::STATE_ORPHAN);
+        }
+
+        //in->hack_accessed = false;
+        //in->hack_load_stamp = ceph_clock_now(g_ceph_context);
+        //num_new_inodes_loaded++;
+      } else {
+        dout(0) << "_fetched  badness: got (but i already had) " << *in
+                << " mode " << in->inode.mode
+                << " mtime " << in->inode.mtime << dendl;
+        string dirpath, inopath;
+        this->inode->make_path_string(dirpath);
+        in->make_path_string(inopath);
+        cache->mds->clog->error() << "loaded dup inode " << inode_data.inode.ino
+          << " [" << first << "," << last << "] v" << inode_data.inode.version
+          << " at " << dirpath << "/" << dname
+          << ", but inode " << in->vino() << " v" << in->inode.version
+          << " already exists at " << inopath << "\n";
+        return dn;
+      }
+    }
+  } else {
+    dout(1) << "corrupt directory, i got tag char '" << type << "' pos "
+      << pos << dendl;
+    cache->mds->clog->error() << "Corrupt directory entry '" << key
+      << "' in dirfrag " << *this;
+    // TODO: add a mechanism for selectively marking a path
+    // damaged, rather than marking the whole rank damaged.
+    cache->mds->damaged();
+    assert(0);  // Unreachable: damaged() respawns us
+  }
+
+  return dn;
+}
+
 void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
 			 const string& want_dn, int r)
 {
@@ -1620,178 +1796,18 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
     }
   }
 
-  bool stray = inode->is_stray();
-
   unsigned pos = omap.size() - 1;
   for (map<string, bufferlist>::reverse_iterator p = omap.rbegin();
        p != omap.rend();
        ++p, --pos) {
-    // dname
     string dname;
-    snapid_t first, last;
+    snapid_t last;
     dentry_key_t::decode_helper(p->first, dname, last);
-    
-    bufferlist::iterator q = p->second.begin();
-    ::decode(first, q);
 
-    // marker
-    char type;
-    ::decode(type, q);
+    CDentry *dn = _load_dentry(
+          p->first, dname, last, p->second, pos, snaps,
+          &force_dirty, &undef_inodes);
 
-    dout(20) << "_fetched pos " << pos << " marker '" << type << "' dname '" << dname
-	     << " [" << first << "," << last << "]"
-	     << dendl;
-
-    bool stale = false;
-    if (snaps && last != CEPH_NOSNAP) {
-      set<snapid_t>::const_iterator p = snaps->lower_bound(first);
-      if (p == snaps->end() || *p > last) {
-	dout(10) << " skipping stale dentry on [" << first << "," << last << "]" << dendl;
-	stale = true;
-      }
-    }
-    
-    /*
-     * look for existing dentry for _last_ snap, because unlink +
-     * create may leave a "hole" (epochs during which the dentry
-     * doesn't exist) but for which no explicit negative dentry is in
-     * the cache.
-     */
-    CDentry *dn;
-    if (stale)
-      dn = lookup_exact_snap(dname, last);
-    else
-      dn = lookup(dname, last);
-
-    if (type == 'L') {
-      // hard link
-      inodeno_t ino;
-      unsigned char d_type;
-      ::decode(ino, q);
-      ::decode(d_type, q);
-
-      if (stale) {
-	if (!dn) {
-	  stale_items.insert(p->first);
-	  force_dirty = true;
-	}
-	continue;
-      }
-
-      if (dn) {
-        if (dn->get_linkage()->get_inode() == 0) {
-          dout(12) << "_fetched  had NEG dentry " << *dn << dendl;
-        } else {
-          dout(12) << "_fetched  had dentry " << *dn << dendl;
-        }
-      } else {
-	// (remote) link
-	dn = add_remote_dentry(dname, ino, d_type, first, last);
-	
-	// link to inode?
-	CInode *in = cache->get_inode(ino);   // we may or may not have it.
-	if (in) {
-	  dn->link_remote(dn->get_linkage(), in);
-	  dout(12) << "_fetched  got remote link " << ino << " which we have " << *in << dendl;
-	} else {
-	  dout(12) << "_fetched  got remote link " << ino << " (dont' have it)" << dendl;
-	}
-      }
-    } 
-    else if (type == 'I') {
-      // inode
-      
-      // Load inode data before looking up or constructing CInode
-      InodeStore inode_data;
-      inode_data.decode_bare(q);
-      
-      if (stale) {
-	if (!dn) {
-	  stale_items.insert(p->first);
-	  force_dirty = true;
-	}
-	continue;
-      }
-
-      bool undef_inode = false;
-      if (dn) {
-	CInode *in = dn->get_linkage()->get_inode();
-	if (in) {
-	  dout(12) << "_fetched  had dentry " << *dn << dendl;
-	  if (in->state_test(CInode::STATE_REJOINUNDEF)) {
-	    undef_inodes.push_back(in);
-	    undef_inode = true;
-	  }
-	} else
-	  dout(12) << "_fetched  had NEG dentry " << *dn << dendl;
-      }
-
-      if (!dn || undef_inode) {
-	// add inode
-	CInode *in = cache->get_inode(inode_data.inode.ino, last);
-	if (!in || undef_inode) {
-	  if (undef_inode && in)
-	    in->first = first;
-	  else
-	    in = new CInode(cache, true, first, last);
-	  
-	  in->inode = inode_data.inode;
-	  // symlink?
-	  if (in->is_symlink()) 
-	    in->symlink = inode_data.symlink;
-	  
-	  in->dirfragtree.swap(inode_data.dirfragtree);
-	  in->xattrs.swap(inode_data.xattrs);
-	  in->old_inodes.swap(inode_data.old_inodes);
-	  in->oldest_snap = inode_data.oldest_snap;
-	  in->decode_snap_blob(inode_data.snap_blob);
-	  if (snaps && !in->snaprealm)
-	    in->purge_stale_snap_data(*snaps);
-
-	  if (!undef_inode) {
-	    cache->add_inode(in); // add
-	    dn = add_primary_dentry(dname, in, first, last); // link
-	  }
-	  dout(12) << "_fetched  got " << *dn << " " << *in << dendl;
-
-	  if (in->inode.is_dirty_rstat())
-	    in->mark_dirty_rstat();
-
-	  if (stray) {
-	    dn->state_set(CDentry::STATE_STRAY);
-	    if (in->inode.nlink == 0)
-	      in->state_set(CInode::STATE_ORPHAN);
-	  }
-
-	  //in->hack_accessed = false;
-	  //in->hack_load_stamp = ceph_clock_now(g_ceph_context);
-	  //num_new_inodes_loaded++;
-	} else {
-	  dout(0) << "_fetched  badness: got (but i already had) " << *in
-		  << " mode " << in->inode.mode
-		  << " mtime " << in->inode.mtime << dendl;
-	  string dirpath, inopath;
-	  this->inode->make_path_string(dirpath);
-	  in->make_path_string(inopath);
-	  clog->error() << "loaded dup inode " << inode_data.inode.ino
-	    << " [" << first << "," << last << "] v" << inode_data.inode.version
-	    << " at " << dirpath << "/" << dname
-	    << ", but inode " << in->vino() << " v" << in->inode.version
-	    << " already exists at " << inopath << "\n";
-	  continue;
-	}
-      }
-    } else {
-      dout(1) << "corrupt directory, i got tag char '" << type << "' pos "
-        << pos << dendl;
-      cache->mds->clog->error() << "Corrupt directory entry '" << p->first
-        << "' in dirfrag " << *this;
-      // TODO: add a mechanism for selectively marking a path
-      // damaged, rather than marking the whole rank damaged.
-      cache->mds->damaged();
-      assert(0);  // Unreachable: damaged() respawns us
-    }
-    
     if (dn && want_dn.length() && want_dn == dname) {
       dout(10) << " touching wanted dn " << *dn << dendl;
       inode->mdcache->touch_dentry(dn);
