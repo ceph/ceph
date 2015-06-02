@@ -2023,10 +2023,12 @@ main(int argc, char **argv)
 				usage();
 			break;
 		case 'l':
-			int _num = getnum(optarg, &endp);
-			if (_num <= 0)
-				usage();
-			maxfilelen = _num;
+			{
+				int _num = getnum(optarg, &endp);
+				if (_num <= 0)
+					usage();
+				maxfilelen = _num;
+			}
 			break;
 		case 'm':
 			monitorstart = getnum(optarg, &endp);
