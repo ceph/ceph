@@ -1670,7 +1670,7 @@ void RGWPutObj::execute()
     ofs += len;
   } while (len > 0);
 
-  if (!chunked_upload && (uint64_t)ofs != s->content_length) {
+  if (!chunked_upload && ofs != s->content_length) {
     ret = -ERR_REQUEST_TIMEOUT;
     goto done;
   }
