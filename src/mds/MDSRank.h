@@ -20,6 +20,7 @@
 #include "common/Timer.h"
 
 #include "Beacon.h"
+#include "DamageTable.h"
 #include "MDSMap.h"
 #include "SessionMap.h"
 #include "MDCache.h"
@@ -153,6 +154,7 @@ class MDSRank {
     MDLog        *mdlog;
     MDBalancer   *balancer;
     ScrubStack   *scrubstack;
+    DamageTable  damage_table;
 
     InoTable     *inotable;
 
