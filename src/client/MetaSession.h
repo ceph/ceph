@@ -46,6 +46,7 @@ struct MetaSession {
   xlist<CapSnap*> flushing_capsnaps;
   xlist<MetaRequest*> requests;
   xlist<MetaRequest*> unsafe_requests;
+  std::set<ceph_tid_t> flushing_caps_tids;
 
   Cap *s_cap_iterator;
 

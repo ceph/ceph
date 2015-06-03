@@ -3483,7 +3483,7 @@ void Client::add_update_cap(Inode *in, MetaSession *mds_session, uint64_t cap_id
       if (in->auth_cap && in->flushing_cap_item.is_on_list()) {
 	ldout(cct, 10) << "add_update_cap changing auth cap: "
 		       << "add myself to new auth MDS' flushing caps list" << dendl;
-	mds_session->flushing_caps.push_back(&in->flushing_cap_item);
+	adjust_session_flushing_caps(in, in->auth_cap->session, mds_session);
       }
       in->auth_cap = cap;
     }
@@ -3591,6 +3591,7 @@ void Client::remove_session_caps(MetaSession *s)
       put_inode(in);
     }
   }
+  s->flushing_caps_tids.clear();
   sync_cond.Signal();
 }
 
@@ -3731,9 +3732,21 @@ int Client::mark_caps_flushing(Inode *in, ceph_tid_t* ptid)
  
 
   session->flushing_caps.push_back(&in->flushing_cap_item);
+  session->flushing_caps_tids.insert(flush_tid);
 
   *ptid = flush_tid;
   return flushing;
+}
+
+void Client::adjust_session_flushing_caps(Inode *in, MetaSession *old_s,  MetaSession *new_s)
+{
+  for (map<ceph_tid_t, int>::iterator it = in->flushing_cap_tids.begin();
+       it != in->flushing_cap_tids.end();
+       ++it) {
+    old_s->flushing_caps_tids.erase(it->first);
+    new_s->flushing_caps_tids.insert(it->first);
+  }
+  new_s->flushing_caps.push_back(&in->flushing_cap_item);
 }
 
 void Client::flush_caps()
@@ -4278,7 +4291,7 @@ void Client::handle_cap_export(MetaSession *session, Inode *in, MClientCaps *m)
 	  if (cap == in->auth_cap)
 	    in->auth_cap = tcap;
 	  if (in->auth_cap == tcap && in->flushing_cap_item.is_on_list())
-	    tsession->flushing_caps.push_back(&in->flushing_cap_item);
+	    adjust_session_flushing_caps(in, session, tsession);
 	}
       } else {
 	add_update_cap(in, tsession, m->peer.cap_id, cap->issued,
@@ -4325,6 +4338,7 @@ void Client::handle_cap_flush_ack(MetaSession *session, Inode *in, Cap *cap, MCl
     if (it->first == flush_ack_tid)
       cleaned = it->second;
     if (it->first <= flush_ack_tid) {
+      session->flushing_caps_tids.erase(it->first);
       in->flushing_cap_tids.erase(it++);
       ++flushed;
       continue;
