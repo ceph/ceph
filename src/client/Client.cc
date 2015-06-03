@@ -2876,7 +2876,8 @@ void Client::cap_delay_requeue(Inode *in)
 }
 
 void Client::send_cap(Inode *in, MetaSession *session, Cap *cap,
-		      int used, int want, int retain, int flush)
+		      int used, int want, int retain, int flush,
+		      ceph_tid_t flush_tid)
 {
   int held = cap->issued | cap->implemented;
   int revoking = cap->implemented & ~cap->issued;
@@ -2919,14 +2920,10 @@ void Client::send_cap(Inode *in, MetaSession *session, Cap *cap,
     cap->implemented &= cap->issued | used;
   }
 
-  uint64_t flush_tid = 0;
   snapid_t follows = 0;
 
-  if (flush) {
-    flush_tid = ++last_flush_tid;
-    in->flushing_cap_tids[flush_tid] = flush;
+  if (flush)
     follows = in->snaprealm->get_snap_context().seq;
-  }
   
   MClientCaps *m = new MClientCaps(op,
 				   in->ino,
@@ -3081,12 +3078,15 @@ void Client::check_caps(Inode *in, bool is_delayed)
 
   ack:
     int flushing;
-    if (in->auth_cap == cap && in->dirty_caps)
-      flushing = mark_caps_flushing(in);
-    else
+    ceph_tid_t flush_tid;
+    if (in->auth_cap == cap && in->dirty_caps) {
+      flushing = mark_caps_flushing(in, &flush_tid);
+    } else {
       flushing = 0;
+      flush_tid = 0;
+    }
 
-    send_cap(in, session, cap, cap_used, wanted, retain, flushing);
+    send_cap(in, session, cap, cap_used, wanted, retain, flushing, flush_tid);
   }
 }
 
@@ -3708,12 +3708,15 @@ void Client::mark_caps_dirty(Inode *in, int caps)
   in->dirty_caps |= caps;
 }
 
-int Client::mark_caps_flushing(Inode *in)
+int Client::mark_caps_flushing(Inode *in, ceph_tid_t* ptid)
 {
   MetaSession *session = in->auth_cap->session;
 
   int flushing = in->dirty_caps;
   assert(flushing);
+
+  ceph_tid_t flush_tid = ++last_flush_tid;
+  in->flushing_cap_tids[flush_tid] = flushing;
 
   if (!in->flushing_caps) {
     ldout(cct, 10) << "mark_caps_flushing " << ccap_string(flushing) << " " << *in << dendl;
@@ -3729,6 +3732,7 @@ int Client::mark_caps_flushing(Inode *in)
 
   session->flushing_caps.push_back(&in->flushing_cap_item);
 
+  *ptid = flush_tid;
   return flushing;
 }
 
@@ -3758,8 +3762,13 @@ void Client::flush_caps(Inode *in, MetaSession *session)
   Cap *cap = in->auth_cap;
   assert(cap->session == session);
 
-  send_cap(in, session, cap, get_caps_used(in), in->caps_wanted(),
-	   (cap->issued | cap->implemented), in->flushing_caps);
+  for (map<ceph_tid_t,int>::iterator p = in->flushing_cap_tids.begin();
+       p != in->flushing_cap_tids.end();
+       ++p) {
+    send_cap(in, session, cap, (get_caps_used(in) | in->caps_dirty()),
+	     in->caps_wanted(), (cap->issued | cap->implemented),
+	     p->second, p->first);
+  }
 }
 
 void Client::wait_sync_caps(Inode *in, ceph_tid_t want)

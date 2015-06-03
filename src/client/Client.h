@@ -535,7 +535,7 @@ protected:
   void remove_all_caps(Inode *in);
   void remove_session_caps(MetaSession *session);
   void mark_caps_dirty(Inode *in, int caps);
-  int mark_caps_flushing(Inode *in);
+  int mark_caps_flushing(Inode *in, ceph_tid_t *ptid);
   void flush_caps();
   void flush_caps(Inode *in, MetaSession *session);
   void kick_flushing_caps(MetaSession *session);
@@ -557,7 +557,8 @@ protected:
   void handle_cap_grant(MetaSession *session, Inode *in, Cap *cap, class MClientCaps *m);
   void cap_delay_requeue(Inode *in);
   void send_cap(Inode *in, MetaSession *session, Cap *cap,
-		int used, int want, int retain, int flush);
+		int used, int want, int retain, int flush,
+		ceph_tid_t flush_tid);
   void check_caps(Inode *in, bool is_delayed);
   void get_cap_ref(Inode *in, int cap);
   void put_cap_ref(Inode *in, int cap);
