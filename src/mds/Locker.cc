@@ -2454,15 +2454,36 @@ bool Locker::should_defer_client_cap_frozen(CInode *in)
  */
 void Locker::handle_client_caps(MClientCaps *m)
 {
+  Session *session = static_cast<Session *>(m->get_connection()->get_priv());
   client_t client = m->get_source().num();
 
   snapid_t follows = m->get_snap_follows();
   dout(7) << "handle_client_caps on " << m->get_ino()
-	  << " follows " << follows 
+	  << " tid " << m->get_client_tid() << " follows " << follows
 	  << " op " << ceph_cap_op_name(m->get_op()) << dendl;
 
   if (!mds->is_clientreplay() && !mds->is_active() && !mds->is_stopping()) {
     mds->wait_for_replay(new C_MDS_RetryMessage(mds, m));
+    return;
+  }
+
+  if (m->get_client_tid() > 0 &&
+      session->have_completed_flush(m->get_client_tid())) {
+    dout(7) << "handle_client_caps already flushed tid " << m->get_client_tid()
+	    << " for client." << client << dendl;
+    MClientCaps *ack;
+    if (m->get_op() == CEPH_CAP_OP_FLUSHSNAP) {
+      ack = new MClientCaps(CEPH_CAP_OP_FLUSHSNAP_ACK, m->get_ino(), 0, 0, 0, 0, 0,
+			    m->get_dirty(), 0, mds->get_osd_epoch_barrier());
+    } else {
+      ack = new MClientCaps(CEPH_CAP_OP_FLUSH_ACK, m->get_ino(), 0, m->get_cap_id(),
+			    m->get_seq(), m->get_caps(), 0, m->get_dirty(), 0,
+			    mds->get_osd_epoch_barrier());
+    }
+    ack->set_snap_follows(follows);
+    ack->set_client_tid(m->get_client_tid());
+    mds->send_message_client_counted(ack, m->get_connection());
+    m->put();
     return;
   }
 
