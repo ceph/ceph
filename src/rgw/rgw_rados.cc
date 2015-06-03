@@ -5172,8 +5172,6 @@ int RGWRados::Object::Read::prepare(int64_t *pofs, int64_t *pend)
         ldout(cct, 20) << "Read xattr: " << iter->first << dendl;
       }
     }
-    if (r < 0)
-      return r;
   }
 
   /* Convert all times go GMT to make them compatible */

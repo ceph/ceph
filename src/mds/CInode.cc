@@ -858,9 +858,10 @@ void CInode::name_stray_dentry(string& dname)
 
 version_t CInode::pre_dirty()
 {
-  version_t pv; 
-  if (parent || !projected_parent.empty()) {
-    pv = get_projected_parent_dn()->pre_dirty(get_projected_version());
+  version_t pv;
+  CDentry* _cdentry = get_projected_parent_dn(); 
+  if (_cdentry) {
+    pv = _cdentry->pre_dirty(get_projected_version());
     dout(10) << "pre_dirty " << pv << " (current v " << inode.version << ")" << dendl;
   } else {
     assert(is_base());
