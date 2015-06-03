@@ -127,3 +127,8 @@ find . -name tox.ini | while read ini ; do
         fi
     )
 done
+
+for interpreter in python2.7 python3 ; do
+    rm -rf $top_srcdir/install-deps-$interpreter
+done
+rm -rf $XDG_CACHE_HOME
