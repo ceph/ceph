@@ -338,12 +338,12 @@ class CephPgid(CephArgtype):
     def valid(self, s, partial=False):
         if s.find('.') == -1:
             raise ArgumentFormat('pgid has no .')
-        poolid, pgnum = s.split('.')
+        poolid, pgnum = s.split('.', 1)
         if poolid < 0:
             raise ArgumentFormat('pool {0} < 0'.format(poolid))
         try:
             pgnum = int(pgnum, 16)
-        except:
+        except ValueError:
             raise ArgumentFormat('pgnum {0} not hex integer'.format(pgnum))
         self.val = s
 
@@ -370,7 +370,7 @@ class CephName(CephArgtype):
         if s.find('.') == -1:
             raise ArgumentFormat('CephName: no . in {0}'.format(s))
         else:
-            t, i = s.split('.')
+            t, i = s.split('.', 1)
             if t not in ('osd', 'mon', 'client', 'mds'):
                 raise ArgumentValid('unknown type ' + t)
             if t == 'osd':
@@ -402,7 +402,7 @@ class CephOsdName(CephArgtype):
             self.val = s
             return
         if s.find('.') != -1:
-            t, i = s.split('.')
+            t, i = s.split('.', 1)
             if t != 'osd':
                 raise ArgumentValid('unknown type ' + t)
         else:
