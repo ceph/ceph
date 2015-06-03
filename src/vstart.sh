@@ -641,7 +641,10 @@ do_rgw()
     if [ "$debug" -ne 0 ]; then
         RGWDEBUG="--debug-rgw=20"
     fi
-    $CEPH_BIN/radosgw --log-file=${CEPH_OUT_DIR}/rgw.log ${RGWDEBUG} --debug-ms=1
+
+    RGWSUDO=
+    [ $CEPH_RGW_PORT -lt 1024 ] && RGWSUDO=sudo
+    $RGWSUDO $CEPH_BIN/radosgw --log-file=${CEPH_OUT_DIR}/rgw.log ${RGWDEBUG} --debug-ms=1
 
     # Create S3 user
     local akey='0555b35654ad1656d804'
