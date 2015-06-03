@@ -990,7 +990,7 @@ function wait_for_clean() {
             num_active_clean=$cur_active_clean
         fi
         sleep 1
-        (( timer++ ))
+        timer=$(expr $timer + 1)
     done
     return 0
 }
