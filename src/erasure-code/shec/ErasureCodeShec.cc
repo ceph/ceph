@@ -68,6 +68,7 @@ int ErasureCodeShec::init(ErasureCodeProfile &profile,
   if (err)
     return err;
   prepare();
+  ErasureCode::init(profile, ss);
   return err;
 }
 

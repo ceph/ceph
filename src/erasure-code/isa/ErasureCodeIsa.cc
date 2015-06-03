@@ -80,6 +80,7 @@ ErasureCodeIsa::init(ErasureCodeProfile &profile, ostream *ss)
   if (err)
     return err;
   prepare();
+  ErasureCode::init(profile, ss);
   return err;
 }
 
