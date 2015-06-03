@@ -2424,6 +2424,9 @@ void Client::send_reconnect(MetaSession *session)
       }	
     }
   }
+
+  early_kick_flushing_caps(session);
+
   session->con->send_message(m);
 
   mount_cond.Signal();
@@ -3839,6 +3842,36 @@ void Client::kick_flushing_caps(MetaSession *session)
     ldout(cct, 20) << " reflushing caps on " << *in << " to mds." << mds << dendl;
     if (in->flushing_caps)
       flush_caps(in, session);
+  }
+}
+
+void Client::early_kick_flushing_caps(MetaSession *session)
+{
+  for (xlist<Inode*>::iterator p = session->flushing_caps.begin(); !p.end(); ++p) {
+    Inode *in = *p;
+    if (!in->flushing_caps)
+      continue;
+    assert(in->auth_cap);
+    Cap *cap = in->auth_cap;
+
+    // if flushing caps were revoked, we re-send the cap flush in client reconnect
+    // stage. This guarantees that MDS processes the cap flush message before issuing
+    // the flushing caps to other client.
+    bool send_now = (in->flushing_caps & in->auth_cap->issued) != in->flushing_caps;
+
+    if (send_now)
+      ldout(cct, 20) << " reflushing caps (revoked) on " << *in
+		     << " to mds." << session->mds_num << dendl;
+
+    for (map<ceph_tid_t,int>::iterator q = in->flushing_cap_tids.begin();
+	 q != in->flushing_cap_tids.end();
+	 ++q) {
+      if (send_now) {
+	send_cap(in, session, cap, (get_caps_used(in) | in->caps_dirty()),
+		 in->caps_wanted(), (cap->issued | cap->implemented),
+		 q->second, q->first);
+      }
+    }
   }
 }
 

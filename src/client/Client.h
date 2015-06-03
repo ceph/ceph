@@ -292,8 +292,10 @@ public:
   // mds requests
   ceph_tid_t last_tid;
   ceph_tid_t oldest_tid; // oldest incomplete mds request, excluding setfilelock requests
-  ceph_tid_t last_flush_tid;
   map<ceph_tid_t, MetaRequest*> mds_requests;
+
+  // cap flushing
+  ceph_tid_t last_flush_tid;
 
   void dump_mds_requests(Formatter *f);
   void dump_mds_sessions(Formatter *f);
@@ -539,6 +541,7 @@ protected:
   void flush_caps();
   void flush_caps(Inode *in, MetaSession *session);
   void kick_flushing_caps(MetaSession *session);
+  void early_kick_flushing_caps(MetaSession *session);
   void kick_maxsize_requests(MetaSession *session);
   int get_caps(Inode *in, int need, int want, int *have, loff_t endoff);
   int get_caps_used(Inode *in);
