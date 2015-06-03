@@ -53,6 +53,7 @@ py-compile
 release
 stamp-h1
 systemd/ceph-osd@.service
+systemd/ceph-rgw.tmpfiles.d
 vgcore.*
 
 # specific local dir files
