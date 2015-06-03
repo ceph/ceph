@@ -7,6 +7,7 @@ import logging
 from textwrap import dedent
 
 from teuthology import misc
+from teuthology.contextutil import MaxWhileTries
 from teuthology.orchestra import run
 from teuthology.orchestra.run import CommandFailedError
 from .mount import CephFSMount
@@ -234,7 +235,12 @@ class FuseMount(CephFSMount):
 
         try:
             if self.fuse_daemon:
-                self.fuse_daemon.wait()
+                # Permit a timeout, so that we do not block forever
+                run.wait([self.fuse_daemon], 30)
+        except MaxWhileTries:
+            log.error("process failed to terminate after unmount.  This probably"
+                      "indicates a bug within ceph-fuse.")
+            raise
         except CommandFailedError:
             pass
 
