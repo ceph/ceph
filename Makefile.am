@@ -21,9 +21,9 @@ EXTRA_DIST += \
 # why is it so hard to make autotools to this?
 install-data-local::
 	-mkdir -p $(DESTDIR)$(datadir)/ceph
-	-install -m 644 share/known_hosts_drop.ceph.com $(DESTDIR)$(datadir)/ceph/known_hosts_drop.ceph.com
-	-install -m 644 share/id_dsa_drop.ceph.com $(DESTDIR)$(datadir)/ceph/id_dsa_drop.ceph.com
-	-install -m 644 share/id_dsa_drop.ceph.com.pub $(DESTDIR)$(datadir)/ceph/id_dsa_drop.ceph.com.pub
+	-install -m 600 share/known_hosts_drop.ceph.com $(DESTDIR)$(datadir)/ceph/known_hosts_drop.ceph.com
+	-install -m 600 share/id_dsa_drop.ceph.com $(DESTDIR)$(datadir)/ceph/id_dsa_drop.ceph.com
+	-install -m 600 share/id_dsa_drop.ceph.com.pub $(DESTDIR)$(datadir)/ceph/id_dsa_drop.ceph.com.pub
 
 all-local::
 if WITH_DEBUG
