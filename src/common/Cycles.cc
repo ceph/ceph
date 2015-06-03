@@ -52,6 +52,10 @@ void Cycles::init()
   if (cycles_per_sec != 0)
     return;
 
+  // Skip initialization if rtdsc is not implemented
+  if (rdtsc() == 0)
+    return;
+
   // Compute the frequency of the fine-grained CPU timer: to do this,
   // take parallel time readings using both rdtsc and gettimeofday.
   // After 10ms have elapsed, take the ratio between these readings.
