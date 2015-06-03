@@ -28,6 +28,7 @@ public:
 		      ostream *ss)
   {
     *erasure_code = ErasureCodeInterfaceRef(new ErasureCodeExample());
+    (*erasure_code)->init(profile, ss);
     return 0;
   }
 };
