@@ -33,8 +33,18 @@ namespace ceph {
     static const unsigned SIMD_ALIGN;
 
     vector<int> chunk_mapping;
+    ErasureCodeProfile _profile;
 
     virtual ~ErasureCode() {}
+
+    virtual int init(ErasureCodeProfile &profile, ostream *ss) {
+      _profile = profile;
+      return 0;
+    }
+
+    virtual const ErasureCodeProfile &get_profile() const {
+      return _profile;
+    }
 
     virtual unsigned int get_coding_chunk_count() const {
       return get_chunk_count() - get_data_chunk_count();
