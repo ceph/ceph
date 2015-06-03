@@ -1330,6 +1330,11 @@ TEST_P(StoreTest, OMapTest) {
     ASSERT_EQ(r, 0);
     ASSERT_EQ(cur_attrs.size(), size_t(1));
     ASSERT_TRUE(bl3.contents_equal(bl1));
+ 
+    set<string> keys;
+    r = store->omap_get_keys(cid, hoid, &keys);
+    ASSERT_EQ(r, 0);
+    ASSERT_EQ(keys.size(), size_t(1));
   }
 
   ObjectStore::Transaction t;
