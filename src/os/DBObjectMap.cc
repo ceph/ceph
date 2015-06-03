@@ -771,7 +771,7 @@ int DBObjectMap::get_keys(const ghobject_t &oid,
   Header header = lookup_map_header(hl, oid);
   if (!header)
     return -ENOENT;
-  ObjectMapIterator iter = get_iterator(oid);
+  ObjectMapIterator iter = _get_iterator(header);
   for (iter->seek_to_first(); iter->valid(); iter->next()) {
     if (iter->status())
       return iter->status();
