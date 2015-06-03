@@ -418,6 +418,7 @@ int HashIndex::pre_split_folder(uint32_t pg_num, uint64_t expected_num_objs)
   // the below logic is inspired by rados.h#ceph_stable_mod,
   // it basically determines how many sub-folders should we
   // create for splitting
+  assert(pg_num_bits > 0); // otherwise BAD_SHIFT
   if (((1 << (pg_num_bits - 1)) | ps) >= pg_num) {
     ++split_bits;
   }
@@ -430,6 +431,7 @@ int HashIndex::pre_split_folder(uint32_t pg_num, uint64_t expected_num_objs)
     leavies = leavies >> 4;
   }
   for (uint32_t i = 0; i < subs; ++i) {
+    assert(split_bits <= 4); // otherwise BAD_SHIFT
     int v = tmp_id | (i << ((4 - split_bits) % 4));
     paths.push_back(to_hex(v));
     ret = create_path(paths);

@@ -630,8 +630,6 @@ krbd_write(struct rbd_ctx *ctx, uint64_t off, size_t len, const char *buf)
 int
 __krbd_flush(struct rbd_ctx *ctx)
 {
-	int ret;
-
 	if (o_direct)
 		return 0;
 
@@ -641,7 +639,7 @@ __krbd_flush(struct rbd_ctx *ctx)
 	 * lifetime of the block device and write directly to it.
 	 */
 	if (fsync(ctx->krbd_fd) < 0) {
-		ret = -errno;
+		int ret = -errno;
 		prt("fsync failed\n");
 		return ret;
 	}
@@ -693,10 +691,9 @@ int
 krbd_get_size(struct rbd_ctx *ctx, uint64_t *size)
 {
 	uint64_t bytes;
-	int ret;
 
 	if (ioctl(ctx->krbd_fd, BLKGETSIZE64, &bytes) < 0) {
-		ret = -errno;
+		int ret = -errno;
 		prt("BLKGETSIZE64 failed\n");
 		return ret;
 	}
@@ -974,25 +971,22 @@ report_failure(int status)
 void
 check_buffers(char *good_buf, char *temp_buf, unsigned offset, unsigned size)
 {
-	unsigned char c, t;
-	unsigned i = 0;
-	unsigned n = 0;
-	unsigned op = 0;
-	unsigned bad = 0;
-
 	if (memcmp(good_buf + offset, temp_buf, size) != 0) {
+		unsigned i = 0;
+		unsigned n = 0;
+
 		prt("READ BAD DATA: offset = 0x%x, size = 0x%x, fname = %s\n",
 		    offset, size, iname);
 		prt("OFFSET\tGOOD\tBAD\tRANGE\n");
 		while (size > 0) {
-			c = good_buf[offset];
-			t = temp_buf[i];
+			unsigned char c = good_buf[offset];
+			unsigned char t = temp_buf[i];
 			if (c != t) {
 			        if (n < 16) {
-					bad = short_at(&temp_buf[i]);
+					unsigned bad = short_at(&temp_buf[i]);
 				        prt("0x%5x\t0x%04x\t0x%04x", offset,
 				            short_at(&good_buf[offset]), bad);
-					op = temp_buf[offset & 1 ? i+1 : i];
+					unsigned op = temp_buf[offset & 1 ? i+1 : i];
 				        prt("\t0x%5x\n", n);
 					if (op)
 						prt("operation# (mod 256) for "
@@ -2002,7 +1996,7 @@ main(int argc, char **argv)
 		case 'b':
 			simulatedopcount = getnum(optarg, &endp);
 			if (!quiet)
-				fprintf(stdout, "Will begin at operation %ld\n",
+				fprintf(stdout, "Will begin at operation %lu\n",
 					simulatedopcount);
 			if (simulatedopcount == 0)
 				usage();
@@ -2029,9 +2023,12 @@ main(int argc, char **argv)
 				usage();
 			break;
 		case 'l':
-			maxfilelen = getnum(optarg, &endp);
-			if (maxfilelen <= 0)
-				usage();
+			{
+				int _num = getnum(optarg, &endp);
+				if (_num <= 0)
+					usage();
+				maxfilelen = _num;
+			}
 			break;
 		case 'm':
 			monitorstart = getnum(optarg, &endp);
@@ -2132,7 +2129,8 @@ main(int argc, char **argv)
 				prt("file name to long\n");
 				exit(1);
 			}
-			strncpy(logfile, dirpath, sizeof(logfile));
+			strncpy(logfile, dirpath, sizeof(logfile)-1);
+			logfile[sizeof(logfile)-1] = '\0';
 			if (strlen(logfile) < sizeof(logfile)-2) {
 				strcat(logfile, "/");
 			} else {

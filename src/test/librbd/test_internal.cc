@@ -385,9 +385,9 @@ TEST_F(TestInternal, MetadatConfig) {
   librbd::Image image1;
   map<string, bufferlist> pairs, res;
   pairs[prefix+it->first].append("value1");
-  it++;
+  ++it;
   pairs[prefix+it->first].append("value2");
-  it++;
+  ++it;
   pairs[prefix+it->first].append("value3");
   pairs[prefix+"asdfsdaf"].append("value6");
   pairs[prefix+"zxvzxcv123"].append("value5");
@@ -398,10 +398,10 @@ TEST_F(TestInternal, MetadatConfig) {
   it = test_confs.begin();
   ASSERT_TRUE(res.count(it->first));
   ASSERT_TRUE(it->second);
-  it++;
+  ++it;
   ASSERT_TRUE(res.count(it->first));
   ASSERT_TRUE(it->second);
-  it++;
+  ++it;
   ASSERT_TRUE(res.count(it->first));
   ASSERT_TRUE(it->second);
   res.clear();
