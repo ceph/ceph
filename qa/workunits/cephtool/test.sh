@@ -1,5 +1,7 @@
 #!/bin/bash -x
 
+source $(dirname $0)/../ceph-helpers.sh
+
 set -e
 set -o functrace
 PS4=' ${FUNCNAME[0]}: $LINENO: '
@@ -21,23 +23,6 @@ function wait_no_osd_down()
     fi
   done
   check_no_osd_down
-}
-
-function get_pg()
-{
-	local pool obj map_output pg
-	pool=$1
-	obj=$2
-	declare -a map_output
-	map_output=($(ceph osd map $1 $2))
-	for (( i=0; i<${#map_output[*]}; i++ )) ; do
-		if [ "${map_output[$i]}" == "pg" ] ; then
-			pg=${map_output[((i+2))]}
-			break
-		fi
-	done
-	pg=$(echo $pg | sed 's/[()]//g')
-	echo $pg
 }
 
 function expect_false()
@@ -1270,7 +1255,8 @@ function test_mon_pg()
 function test_mon_osd_pool_set()
 {
   TEST_POOL_GETSET=pool_getset
-  ceph osd pool create $TEST_POOL_GETSET 10
+  ceph osd pool create $TEST_POOL_GETSET 1
+  wait_for_clean
   ceph osd pool get $TEST_POOL_GETSET all
 
   for s in pg_num pgp_num size min_size crash_replay_interval crush_ruleset; do
@@ -1283,7 +1269,8 @@ function test_mon_osd_pool_set()
   ceph osd pool get $TEST_POOL_GETSET size | grep "size: $new_size"
   ceph osd pool set $TEST_POOL_GETSET size $old_size
 
-  ceph osd pool create pool_erasure 12 12 erasure
+  ceph osd pool create pool_erasure 1 1 erasure
+  wait_for_clean
   set +e
   ceph osd pool set pool_erasure size 4444 2>$TMPFILE
   check_response 'not change the size'
@@ -1310,6 +1297,7 @@ function test_mon_osd_pool_set()
   expect_false ceph osd pool set $TEST_POOL_GETSET pgp_num 10
   ceph osd pool set $TEST_POOL_GETSET nopgchange 0
   ceph osd pool set $TEST_POOL_GETSET pg_num 10
+  wait_for_clean
   ceph osd pool set $TEST_POOL_GETSET pgp_num 10
 
   ceph osd pool set $TEST_POOL_GETSET nosizechange 1
@@ -1317,6 +1305,7 @@ function test_mon_osd_pool_set()
   expect_false ceph osd pool set $TEST_POOL_GETSET min_size 2
   ceph osd pool set $TEST_POOL_GETSET nosizechange 0
   ceph osd pool set $TEST_POOL_GETSET size 2
+  wait_for_clean
   ceph osd pool set $TEST_POOL_GETSET min_size 2
 
   ceph osd pool set $TEST_POOL_GETSET nodelete 1
@@ -1374,6 +1363,7 @@ function test_mon_osd_tiered_pool_set()
 
   # this is not a tier pool
   ceph osd pool create fake-tier 2
+  wait_for_clean
 
   expect_false ceph osd pool set fake-tier hit_set_type explicit_hash
   expect_false ceph osd pool get fake-tier hit_set_type
