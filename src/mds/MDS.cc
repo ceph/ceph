@@ -2860,24 +2860,24 @@ bool MDS::_dispatch(Message *m, bool new_msg)
 
     list<CDir*> ls;
     in->get_dirfrags(ls);
-    if (ls.empty())
-      continue;                // must be an open dir.
-    list<CDir*>::iterator p = ls.begin();
-    int n = rand() % ls.size();
-    while (n--)
-      ++p;
-    CDir *dir = *p;
-    if (!dir->get_parent_dir()) continue;    // must be linked.
-    if (!dir->is_auth()) continue;           // must be auth.
-
-    mds_rank_t dest;
-    do {
-      int k = rand() % s.size();
-      set<mds_rank_t>::iterator p = s.begin();
-      while (k--) ++p;
-      dest = *p;
-    } while (dest == whoami);
-    mdcache->migrator->export_dir_nicely(dir,dest);
+    if (!ls.empty()) {	// must be an open dir.
+      list<CDir*>::iterator p = ls.begin();
+      int n = rand() % ls.size();
+      while (n--)
+        ++p;
+      CDir *dir = *p;
+      if (!dir->get_parent_dir()) continue;    // must be linked.
+      if (!dir->is_auth()) continue;           // must be auth.
+  
+      mds_rank_t dest;
+      do {
+        int k = rand() % s.size();
+        set<mds_rank_t>::iterator p = s.begin();
+        while (k--) ++p;
+        dest = *p;
+      } while (dest == whoami);
+      mdcache->migrator->export_dir_nicely(dir,dest);
+    }
   }
   // hack: thrash fragments
   for (int i=0; i<g_conf->mds_thrash_fragments; i++) {

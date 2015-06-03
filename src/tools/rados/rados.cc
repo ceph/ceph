@@ -564,8 +564,10 @@ public:
     Mutex::Locker l(lock);
 
     double rate = (double)cur_completed_rate() / (1024 * 1024);
+    std::streamsize original_precision = cout.precision();
     cout.precision(3);
     cout << "op " << op->id << " completed, throughput=" << rate  << "MB/sec" << std::endl;
+    cout.precision(original_precision);
 
     map<int, LoadGenOp *>::iterator iter = pending_ops.find(op->id);
     if (iter != pending_ops.end())
@@ -743,8 +745,10 @@ int LoadGen::run()
     if (now - stamp_time >= utime_t(1, 0)) {
       double rate = (double)cur_completed_rate() / (1024 * 1024);
       ++total_sec;
+      std::streamsize original_precision = cout.precision();
       cout.precision(3);
       cout << setw(5) << total_sec << ": throughput=" << rate  << "MB/sec" << " pending data=" << sent - completed << std::endl;
+      cout.precision(original_precision);
       stamp_time = now; 
     }
 
@@ -2206,6 +2210,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       localtime_r(&t, &bdt);
       cout << *i << "\t" << s << "\t";
 
+      std::ios_base::fmtflags original_flags = cout.flags();
       cout.setf(std::ios::right);
       cout.fill('0');
       cout << std::setw(4) << (bdt.tm_year+1900)
@@ -2216,7 +2221,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
 	   << ':' << std::setw(2) << bdt.tm_min
 	   << ':' << std::setw(2) << bdt.tm_sec
 	   << std::endl;
-      cout.unsetf(std::ios::right);
+      cout.flags(original_flags);
     }
     cout << snaps.size() << " snaps" << std::endl;
   }
