@@ -119,7 +119,6 @@ BuildRequires:	gperftools-devel
 %else
 Requires:	scsirastools
 BuildRequires:	google-perftools-devel
-%endif
 Recommends:	logrotate
 BuildRequires:	%insserv_prereq
 BuildRequires:	mozilla-nss-devel
