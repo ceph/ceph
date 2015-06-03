@@ -261,6 +261,25 @@ public:
     return true;
   }
 
+  void add_completed_flush(ceph_tid_t tid) {
+    info.completed_flushes.insert(tid);
+  }
+  bool trim_completed_flushes(ceph_tid_t mintid) {
+    bool erased_any = false;
+    while (!info.completed_flushes.empty() &&
+	(mintid == 0 || *info.completed_flushes.begin() < mintid)) {
+      info.completed_flushes.erase(info.completed_flushes.begin());
+      erased_any = true;
+    }
+    if (erased_any) {
+      completed_requests_dirty = true;
+    }
+    return erased_any;
+  }
+  bool have_completed_flush(ceph_tid_t tid) const {
+    return info.completed_flushes.count(tid);
+  }
+
   unsigned get_num_completed_requests() const { return info.completed_requests.size(); }
   unsigned get_num_trim_requests_warnings() { return num_trim_requests_warnings; }
   void inc_num_trim_requests_warnings() { ++num_trim_requests_warnings; }
