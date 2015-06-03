@@ -3803,10 +3803,8 @@ void PG::scrub(ThreadPool::TPHandle &handle)
 
   if (!is_primary() || !is_active() || !is_clean() || !is_scrubbing()) {
     dout(10) << "scrub -- not primary or active or not clean" << dendl;
-    state_clear(PG_STATE_SCRUBBING);
-    state_clear(PG_STATE_REPAIR);
-    state_clear(PG_STATE_DEEP_SCRUB);
-    publish_stats_to_osd();
+    scrub_clear_state();
+    scrub_unreserve_replicas();
     unlock();
     return;
   }
