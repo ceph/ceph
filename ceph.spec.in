@@ -753,8 +753,6 @@ fi
 %{_datadir}/ceph/known_hosts_drop.ceph.com
 %{_datadir}/ceph/id_dsa_drop.ceph.com
 %{_datadir}/ceph/id_dsa_drop.ceph.com.pub
-%dir %{_prefix}/lib/ceph
-%dir %{_prefix}/share/ceph
 %dir %{_sysconfdir}/ceph/
 %dir %{_localstatedir}/log/ceph/
 %config %{_sysconfdir}/bash_completion.d/rados
