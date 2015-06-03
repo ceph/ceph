@@ -668,6 +668,10 @@ do_rgw()
     # Create Swift user
     echo "setting up user tester"
     $CEPH_BIN/radosgw-admin user create --subuser=tester:testing --display-name=Tester-Subuser --key-type=swift --secret=asdf > /dev/null
+
+    echo ""
+    echo "  access key  $akey"
+    echo "  secret key  $skey"
 }
 if [ "$start_rgw" -eq 1 ]; then
     do_rgw
