@@ -36,6 +36,7 @@ struct MDSCapParser : qi::grammar<Iterator, MDSAuthCaps()>
   {
     using qi::char_;
     using qi::int_;
+    using qi::uint_;
     using qi::lexeme;
     using qi::alnum;
     using qi::_val;
@@ -54,9 +55,9 @@ struct MDSCapParser : qi::grammar<Iterator, MDSAuthCaps()>
 
     // match := [path=<path>] [uid=<uid> [gids=<gid>[,<gid>...]]
     path %= (spaces >> lit("path") >> lit('=') >> (quoted_path | unquoted_path));
-    uid %= (spaces >> lit("uid") >> lit('=') >> int_);
-    intlist %= (int_ % lit(','));
-    gidlist %= -(spaces >> lit("gids") >> lit('=') >> intlist);
+    uid %= (spaces >> lit("uid") >> lit('=') >> uint_);
+    uintlist %= (uint_ % lit(','));
+    gidlist %= -(spaces >> lit("gids") >> lit('=') >> uintlist);
     match = -(
 	     (uid >> gidlist)[_val = phoenix::construct<MDSCapMatch>(_1, _2)] |
 	     (path >> uid >> gidlist)[_val = phoenix::construct<MDSCapMatch>(_1, _2, _3)] |
@@ -79,9 +80,9 @@ struct MDSCapParser : qi::grammar<Iterator, MDSAuthCaps()>
   qi::rule<Iterator, string()> quoted_path, unquoted_path;
   qi::rule<Iterator, MDSCapSpec()> capspec;
   qi::rule<Iterator, string()> path;
-  qi::rule<Iterator, int()> uid;
-  qi::rule<Iterator, std::vector<int>() > intlist;
-  qi::rule<Iterator, std::vector<int>() > gidlist;
+  qi::rule<Iterator, uint32_t()> uid;
+  qi::rule<Iterator, std::vector<uint32_t>() > uintlist;
+  qi::rule<Iterator, std::vector<uint32_t>() > gidlist;
   qi::rule<Iterator, MDSCapMatch()> match;
   qi::rule<Iterator, MDSCapGrant()> grant;
   qi::rule<Iterator, std::vector<MDSCapGrant>()> grants;
@@ -115,7 +116,7 @@ bool MDSCapMatch::match(const std::string &target_path,
  * This is true if any of the 'grant' clauses in the capability match the
  * requested path + op.
  */
-bool MDSAuthCaps::is_capable(const std::string &path, int uid, unsigned mask) const
+bool MDSAuthCaps::is_capable(const std::string &path, uid_t uid, unsigned mask) const
 {
   for (std::vector<MDSCapGrant>::const_iterator i = grants.begin();
        i != grants.end();
@@ -187,7 +188,7 @@ ostream &operator<<(ostream &out, const MDSCapMatch &match)
     out << "uid=" << match.uid;
     if (!match.gids.empty()) {
       out << " gids=";
-      for (std::vector<int>::const_iterator p = match.gids.begin();
+      for (std::vector<gid_t>::const_iterator p = match.gids.begin();
 	   p != match.gids.end();
 	   ++p) {
 	if (p != match.gids.begin())
