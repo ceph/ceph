@@ -28,4 +28,8 @@
                                          RBD_FEATURE_OBJECT_MAP     | \
                                          RBD_FEATURE_FAST_DIFF)
 
+#define RBD_FEATURES_SINGLE_CLIENT (RBD_FEATURE_EXCLUSIVE_LOCK | \
+                                    RBD_FEATURE_OBJECT_MAP     | \
+                                    RBD_FEATURE_FAST_DIFF)
+
 #endif
