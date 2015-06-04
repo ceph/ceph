@@ -105,15 +105,13 @@ function plugin_exists() {
     local plugin=$1
 
     local status
-    ./ceph osd erasure-code-profile set TESTPROFILE plugin=$plugin
-    if ./ceph osd crush rule create-erasure TESTRULE TESTPROFILE 2>&1 |
+    if ./ceph osd erasure-code-profile set TESTPROFILE plugin=$plugin 2>&1 |
         grep "$plugin.*No such file" ; then
         status=1
     else
-        ./ceph osd crush rule rm TESTRULE
         status=0
+        ./ceph osd erasure-code-profile rm TESTPROFILE
     fi
-    ./ceph osd erasure-code-profile rm TESTPROFILE 
     return $status
 }
 
