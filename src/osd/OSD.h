@@ -316,6 +316,75 @@ public:
 typedef ceph::shared_ptr<DeletingState> DeletingStateRef;
 
 class OSD;
+
+struct PGScrub {
+  epoch_t epoch_queued;
+  PGScrub(epoch_t e) : epoch_queued(e) {}
+  ostream &operator<<(ostream &rhs) {
+    return rhs << "PGScrub";
+  }
+};
+
+struct PGSnapTrim {
+  epoch_t epoch_queued;
+  PGSnapTrim(epoch_t e) : epoch_queued(e) {}
+  ostream &operator<<(ostream &rhs) {
+    return rhs << "PGSnapTrim";
+  }
+};
+
+class PGQueueable {
+  typedef boost::variant<
+    OpRequestRef,
+    PGSnapTrim,
+    PGScrub
+    > QVariant;
+  QVariant qvariant;
+  int cost; 
+  unsigned priority;
+  utime_t start_time;
+  entity_inst_t owner;
+  struct RunVis : public boost::static_visitor<> {
+    OSD *osd;
+    PGRef &pg;
+    ThreadPool::TPHandle &handle;
+    RunVis(OSD *osd, PGRef &pg, ThreadPool::TPHandle &handle)
+      : osd(osd), pg(pg), handle(handle) {}
+    void operator()(OpRequestRef &op);
+    void operator()(PGSnapTrim &op);
+    void operator()(PGScrub &op);
+  };
+public:
+  PGQueueable(OpRequestRef op)
+    : qvariant(op), cost(op->get_req()->get_cost()),
+      priority(op->get_req()->get_priority()),
+      start_time(op->get_req()->get_recv_stamp()),
+      owner(op->get_req()->get_source_inst())
+    {}
+  PGQueueable(
+    const PGSnapTrim &op, int cost, unsigned priority, utime_t start_time,
+    const entity_inst_t &owner)
+    : qvariant(op), cost(cost), priority(priority), start_time(start_time),
+      owner(owner) {}
+  PGQueueable(
+    const PGScrub &op, int cost, unsigned priority, utime_t start_time,
+    const entity_inst_t &owner)
+    : qvariant(op), cost(cost), priority(priority), start_time(start_time),
+      owner(owner) {}
+  boost::optional<OpRequestRef> maybe_get_op() {
+    OpRequestRef *op = boost::get<OpRequestRef>(&qvariant);
+    return op ? *op : boost::optional<OpRequestRef>();
+  }
+  void run(OSD *osd, PGRef &pg, ThreadPool::TPHandle &handle) {
+    RunVis v(osd, pg, handle);
+    boost::apply_visitor(v, qvariant);
+  }
+  unsigned get_priority() const { return priority; }
+  int get_cost() const { return cost; }
+  utime_t get_start_time() const { return start_time; }
+  entity_inst_t get_owner() const { return owner; }
+};
+
 class OSDService {
 public:
   OSD *osd;
@@ -334,12 +403,9 @@ public:
   PerfCounters *&logger;
   PerfCounters *&recoverystate_perf;
   MonClient   *&monc;
-  ShardedThreadPool::ShardedWQ < pair <PGRef, OpRequestRef> > &op_wq;
+  ShardedThreadPool::ShardedWQ < pair <PGRef, PGQueueable> > &op_wq;
   ThreadPool::BatchWorkQueue<PG> &peering_wq;
   ThreadPool::WorkQueue<PG> &recovery_wq;
-  ThreadPool::WorkQueue<PG> &snap_trim_wq;
-  ThreadPool::WorkQueue<PG> &scrub_wq;
-  ThreadPool::WorkQueue<MOSDRepScrub> &rep_scrub_wq;
   GenContextWQ recovery_gen_wq;
   GenContextWQ op_gen_wq;
   ClassHandler  *&class_handler;
@@ -720,11 +786,27 @@ public:
 
   void queue_for_peering(PG *pg);
   bool queue_for_recovery(PG *pg);
-  bool queue_for_snap_trim(PG *pg) {
-    return snap_trim_wq.queue(pg);
+  void queue_for_snap_trim(PG *pg) {
+    op_wq.queue(
+      make_pair(
+	pg,
+	PGQueueable(
+	  PGSnapTrim(pg->get_osdmap()->get_epoch()),
+	  cct->_conf->osd_snap_trim_cost,
+	  cct->_conf->osd_snap_trim_priority,
+	  ceph_clock_now(cct),
+	  entity_inst_t())));
   }
-  bool queue_for_scrub(PG *pg) {
-    return scrub_wq.queue(pg);
+  void queue_for_scrub(PG *pg) {
+    op_wq.queue(
+      make_pair(
+	pg,
+	PGQueueable(
+	  PGScrub(pg->get_osdmap()->get_epoch()),
+	  cct->_conf->osd_scrub_cost,
+	  cct->_conf->osd_scrub_priority,
+	  ceph_clock_now(cct),
+	  entity_inst_t())));
   }
 
   // osd map cache (past osd maps)
@@ -1471,124 +1553,139 @@ private:
 
   // -- op queue --
 
- 
-  class ShardedOpWQ: public ShardedThreadPool::ShardedWQ < pair <PGRef, OpRequestRef> > {
+  friend class PGQueueable;
+  class ShardedOpWQ: public ShardedThreadPool::ShardedWQ < pair <PGRef, PGQueueable> > {
 
     struct ShardData {
       Mutex sdata_lock;
       Cond sdata_cond;
       Mutex sdata_op_ordering_lock;
-      map<PG*, list<OpRequestRef> > pg_for_processing;
-      PrioritizedQueue< pair<PGRef, OpRequestRef>, entity_inst_t> pqueue;
-      ShardData(string lock_name, string ordering_lock, uint64_t max_tok_per_prio, uint64_t min_cost):
-          sdata_lock(lock_name.c_str()),
-          sdata_op_ordering_lock(ordering_lock.c_str()),
-          pqueue(max_tok_per_prio, min_cost) {}
+      map<PG*, list<PGQueueable> > pg_for_processing;
+      PrioritizedQueue< pair<PGRef, PGQueueable>, entity_inst_t> pqueue;
+      ShardData(
+	string lock_name, string ordering_lock,
+	uint64_t max_tok_per_prio, uint64_t min_cost)
+	: sdata_lock(lock_name.c_str()),
+	  sdata_op_ordering_lock(ordering_lock.c_str()),
+	  pqueue(max_tok_per_prio, min_cost) {}
     };
-
+    
     vector<ShardData*> shard_list;
     OSD *osd;
     uint32_t num_shards;
 
-    public:
-      ShardedOpWQ(uint32_t pnum_shards, OSD *o, time_t ti, time_t si, ShardedThreadPool* tp):
-        ShardedThreadPool::ShardedWQ < pair <PGRef, OpRequestRef> >(ti, si, tp),
-        osd(o), num_shards(pnum_shards) {
-        for(uint32_t i = 0; i < num_shards; i++) {
-          char lock_name[32] = {0};
-          snprintf(lock_name, sizeof(lock_name), "%s.%d", "OSD:ShardedOpWQ:", i);
-          char order_lock[32] = {0};
-          snprintf(order_lock, sizeof(order_lock), "%s.%d", "OSD:ShardedOpWQ:order:", i);
-          ShardData* one_shard = new ShardData(lock_name, order_lock, 
-            osd->cct->_conf->osd_op_pq_max_tokens_per_priority, 
-            osd->cct->_conf->osd_op_pq_min_cost);
-          shard_list.push_back(one_shard);
-        }
+  public:
+    ShardedOpWQ(uint32_t pnum_shards, OSD *o, time_t ti, time_t si, ShardedThreadPool* tp):
+      ShardedThreadPool::ShardedWQ < pair <PGRef, PGQueueable> >(ti, si, tp),
+      osd(o), num_shards(pnum_shards) {
+      for(uint32_t i = 0; i < num_shards; i++) {
+	char lock_name[32] = {0};
+	snprintf(lock_name, sizeof(lock_name), "%s.%d", "OSD:ShardedOpWQ:", i);
+	char order_lock[32] = {0};
+	snprintf(
+	  order_lock, sizeof(order_lock), "%s.%d",
+	  "OSD:ShardedOpWQ:order:", i);
+	ShardData* one_shard = new ShardData(
+	  lock_name, order_lock,
+	  osd->cct->_conf->osd_op_pq_max_tokens_per_priority, 
+	  osd->cct->_conf->osd_op_pq_min_cost);
+	shard_list.push_back(one_shard);
       }
-
-      ~ShardedOpWQ() {
-
-        while(!shard_list.empty()) {
-          delete shard_list.back();
-          shard_list.pop_back();
-        }
+    }
+    
+    ~ShardedOpWQ() {
+      while(!shard_list.empty()) {
+	delete shard_list.back();
+	shard_list.pop_back();
       }
+    }
 
-      void _process(uint32_t thread_index, heartbeat_handle_d *hb);
-      void _enqueue(pair <PGRef, OpRequestRef> item);
-      void _enqueue_front(pair <PGRef, OpRequestRef> item);
+    void _process(uint32_t thread_index, heartbeat_handle_d *hb);
+    void _enqueue(pair <PGRef, PGQueueable> item);
+    void _enqueue_front(pair <PGRef, PGQueueable> item);
       
-      void return_waiting_threads() {
-        for(uint32_t i = 0; i < num_shards; i++) {
-          ShardData* sdata = shard_list[i];
-          assert (NULL != sdata); 
-          sdata->sdata_lock.Lock();
-          sdata->sdata_cond.Signal();
-          sdata->sdata_lock.Unlock();
-        }
-      
+    void return_waiting_threads() {
+      for(uint32_t i = 0; i < num_shards; i++) {
+	ShardData* sdata = shard_list[i];
+	assert (NULL != sdata); 
+	sdata->sdata_lock.Lock();
+	sdata->sdata_cond.Signal();
+	sdata->sdata_lock.Unlock();
       }
+    }
 
-      void dump(Formatter *f) {
-        for(uint32_t i = 0; i < num_shards; i++) {
-          ShardData* sdata = shard_list[i];
-	  char lock_name[32] = {0};
-          snprintf(lock_name, sizeof(lock_name), "%s%d", "OSD:ShardedOpWQ:", i);
-          assert (NULL != sdata);
-          sdata->sdata_op_ordering_lock.Lock();
-	  f->open_object_section(lock_name);
-	  sdata->pqueue.dump(f);
-	  f->close_section();
-          sdata->sdata_op_ordering_lock.Unlock();
-        }
+    void dump(Formatter *f) {
+      for(uint32_t i = 0; i < num_shards; i++) {
+	ShardData* sdata = shard_list[i];
+	char lock_name[32] = {0};
+	snprintf(lock_name, sizeof(lock_name), "%s%d", "OSD:ShardedOpWQ:", i);
+	assert (NULL != sdata);
+	sdata->sdata_op_ordering_lock.Lock();
+	f->open_object_section(lock_name);
+	sdata->pqueue.dump(f);
+	f->close_section();
+	sdata->sdata_op_ordering_lock.Unlock();
       }
+    }
 
-      struct Pred {
-        PG *pg;
-        Pred(PG *pg) : pg(pg) {}
-        bool operator()(const pair<PGRef, OpRequestRef> &op) {
-          return op.first == pg;
-        }
-      };
-
-      void dequeue(PG *pg, list<OpRequestRef> *dequeued = 0) {
-        ShardData* sdata = NULL;
-        assert(pg != NULL);
-        uint32_t shard_index = pg->get_pgid().ps()% shard_list.size();
-        sdata = shard_list[shard_index];
-        assert(sdata != NULL);
-        if (!dequeued) {
-          sdata->sdata_op_ordering_lock.Lock();
-          sdata->pqueue.remove_by_filter(Pred(pg));
-          sdata->pg_for_processing.erase(pg);
-          sdata->sdata_op_ordering_lock.Unlock();
-        } else {
-          list<pair<PGRef, OpRequestRef> > _dequeued;
-          sdata->sdata_op_ordering_lock.Lock();
-          sdata->pqueue.remove_by_filter(Pred(pg), &_dequeued);
-          for (list<pair<PGRef, OpRequestRef> >::iterator i = _dequeued.begin();
-            i != _dequeued.end(); ++i) {
-            dequeued->push_back(i->second);
-          }
-	  if (sdata->pg_for_processing.count(pg)) {
-	    dequeued->splice(
-	      dequeued->begin(),
-	      sdata->pg_for_processing[pg]);
-	    sdata->pg_for_processing.erase(pg);
-	  }
-          sdata->sdata_op_ordering_lock.Unlock();          
-        }
-
+    struct Pred {
+      PG *pg;
+      Pred(PG *pg) : pg(pg) {}
+      bool operator()(const pair<PGRef, PGQueueable> &op) {
+	return op.first == pg;
       }
+    };
+
+    void dequeue(PG *pg) {
+      ShardData* sdata = NULL;
+      assert(pg != NULL);
+      uint32_t shard_index = pg->get_pgid().ps()% shard_list.size();
+      sdata = shard_list[shard_index];
+      assert(sdata != NULL);
+      sdata->sdata_op_ordering_lock.Lock();
+      sdata->pqueue.remove_by_filter(Pred(pg));
+      sdata->pg_for_processing.erase(pg);
+      sdata->sdata_op_ordering_lock.Unlock();
+    }
+
+    void dequeue_and_get_ops(PG *pg, list<OpRequestRef> *dequeued) {
+      ShardData* sdata = NULL;
+      assert(pg != NULL);
+      uint32_t shard_index = pg->get_pgid().ps()% shard_list.size();
+      sdata = shard_list[shard_index];
+      assert(sdata != NULL);
+      assert(dequeued);
+      list<pair<PGRef, PGQueueable> > _dequeued;
+      sdata->sdata_op_ordering_lock.Lock();
+      sdata->pqueue.remove_by_filter(Pred(pg), &_dequeued);
+      for (list<pair<PGRef, PGQueueable> >::iterator i = _dequeued.begin();
+	   i != _dequeued.end(); ++i) {
+	boost::optional<OpRequestRef> mop = i->second.maybe_get_op();
+	if (mop)
+	  dequeued->push_back(*mop);
+      }
+      map<PG *, list<PGQueueable> >::iterator iter =
+	sdata->pg_for_processing.find(pg);
+      if (iter != sdata->pg_for_processing.end()) {
+	for (list<PGQueueable>::reverse_iterator i = iter->second.rbegin();
+	     i != iter->second.rend();
+	     ++i) {
+	  boost::optional<OpRequestRef> mop = i->maybe_get_op();
+	  if (mop)
+	    dequeued->push_front(*mop);
+	}
+	sdata->pg_for_processing.erase(iter);
+      }
+      sdata->sdata_op_ordering_lock.Unlock();
+    }
  
-      bool is_shard_empty(uint32_t thread_index) {
-        uint32_t shard_index = thread_index % num_shards; 
-        ShardData* sdata = shard_list[shard_index];
-        assert(NULL != sdata);
-        Mutex::Locker l(sdata->sdata_op_ordering_lock);
-        return sdata->pqueue.empty();
-      }
-
+    bool is_shard_empty(uint32_t thread_index) {
+      uint32_t shard_index = thread_index % num_shards; 
+      ShardData* sdata = shard_list[shard_index];
+      assert(NULL != sdata);
+      Mutex::Locker l(sdata->sdata_op_ordering_lock);
+      return sdata->pqueue.empty();
+    }
   } op_shardedwq;
 
 
@@ -2089,152 +2186,11 @@ protected:
   
   void check_replay_queue();
 
-
-  // -- snap trimming --
-  xlist<PG*> snap_trim_queue;
-  
-  struct SnapTrimWQ : public ThreadPool::WorkQueue<PG> {
-    OSD *osd;
-    SnapTrimWQ(OSD *o, time_t ti, time_t si, ThreadPool *tp)
-      : ThreadPool::WorkQueue<PG>("OSD::SnapTrimWQ", ti, si, tp), osd(o) {}
-
-    bool _empty() {
-      return osd->snap_trim_queue.empty();
-    }
-    bool _enqueue(PG *pg) {
-      if (pg->snap_trim_item.is_on_list())
-	return false;
-      pg->get("SnapTrimWQ");
-      osd->snap_trim_queue.push_back(&pg->snap_trim_item);
-      return true;
-    }
-    void _dequeue(PG *pg) {
-      if (pg->snap_trim_item.remove_myself())
-	pg->put("SnapTrimWQ");
-    }
-    PG *_dequeue() {
-      if (osd->snap_trim_queue.empty())
-	return NULL;
-      PG *pg = osd->snap_trim_queue.front();
-      osd->snap_trim_queue.pop_front();
-      return pg;
-    }
-    void _process(PG *pg) {
-      pg->snap_trimmer();
-      pg->put("SnapTrimWQ");
-    }
-    void _clear() {
-      while (PG *pg = _dequeue()) {
-	pg->put("SnapTrimWQ");
-      }
-    }
-  } snap_trim_wq;
-
-
   // -- scrubbing --
   void sched_scrub();
   bool scrub_random_backoff();
   bool scrub_load_below_threshold();
   bool scrub_time_permit(utime_t now);
-
-  xlist<PG*> scrub_queue;
-
-  struct ScrubWQ : public ThreadPool::WorkQueue<PG> {
-    OSD *osd;
-    ScrubWQ(OSD *o, time_t ti, time_t si, ThreadPool *tp)
-      : ThreadPool::WorkQueue<PG>("OSD::ScrubWQ", ti, si, tp), osd(o) {}
-
-    bool _empty() {
-      return osd->scrub_queue.empty();
-    }
-    bool _enqueue(PG *pg) {
-      if (pg->scrub_item.is_on_list()) {
-	return false;
-      }
-      pg->get("ScrubWQ");
-      osd->scrub_queue.push_back(&pg->scrub_item);
-      return true;
-    }
-    void _dequeue(PG *pg) {
-      if (pg->scrub_item.remove_myself()) {
-	pg->put("ScrubWQ");
-      }
-    }
-    PG *_dequeue() {
-      if (osd->scrub_queue.empty())
-	return NULL;
-      PG *pg = osd->scrub_queue.front();
-      osd->scrub_queue.pop_front();
-      return pg;
-    }
-    void _process(
-      PG *pg,
-      ThreadPool::TPHandle &handle) {
-      pg->scrub(handle);
-      pg->put("ScrubWQ");
-    }
-    void _clear() {
-      while (!osd->scrub_queue.empty()) {
-	PG *pg = osd->scrub_queue.front();
-	osd->scrub_queue.pop_front();
-	pg->put("ScrubWQ");
-      }
-    }
-  } scrub_wq;
-
-  struct RepScrubWQ : public ThreadPool::WorkQueue<MOSDRepScrub> {
-  private: 
-    OSD *osd;
-    list<MOSDRepScrub*> rep_scrub_queue;
-
-  public:
-    RepScrubWQ(OSD *o, time_t ti, time_t si, ThreadPool *tp)
-      : ThreadPool::WorkQueue<MOSDRepScrub>("OSD::RepScrubWQ", ti, si, tp), osd(o) {}
-
-    bool _empty() {
-      return rep_scrub_queue.empty();
-    }
-    bool _enqueue(MOSDRepScrub *msg) {
-      rep_scrub_queue.push_back(msg);
-      return true;
-    }
-    void _dequeue(MOSDRepScrub *msg) {
-      assert(0); // Not applicable for this wq
-      return;
-    }
-    MOSDRepScrub *_dequeue() {
-      if (rep_scrub_queue.empty())
-	return NULL;
-      MOSDRepScrub *msg = rep_scrub_queue.front();
-      rep_scrub_queue.pop_front();
-      return msg;
-    }
-    void _process(
-      MOSDRepScrub *msg,
-      ThreadPool::TPHandle &handle) {
-      PG *pg = NULL;
-      {
-	Mutex::Locker lock(osd->osd_lock);
-	if (osd->is_stopping() ||
-	    !osd->_have_pg(msg->pgid)) {
-	  msg->put();
-	  return;
-	}
-	pg = osd->_lookup_lock_pg(msg->pgid);
-      }
-      assert(pg);
-      pg->replica_scrub(msg, handle);
-      msg->put();
-      pg->unlock();
-    }
-    void _clear() {
-      while (!rep_scrub_queue.empty()) {
-	MOSDRepScrub *msg = rep_scrub_queue.front();
-	rep_scrub_queue.pop_front();
-	msg->put();
-      }
-    }
-  } rep_scrub_wq;
 
   // -- removing --
   struct RemoveWQ :
@@ -2288,6 +2244,7 @@ protected:
     case MSG_OSD_EC_WRITE_REPLY:
     case MSG_OSD_EC_READ:
     case MSG_OSD_EC_READ_REPLY:
+    case MSG_OSD_REP_SCRUB:
       return true;
     default:
       return false;
@@ -2341,7 +2298,6 @@ private:
   static int write_meta(ObjectStore *store,
 			uuid_d& cluster_fsid, uuid_d& osd_fsid, int whoami);
 
-  void handle_rep_scrub(MOSDRepScrub *m);
   void handle_scrub(struct MOSDScrub *m);
   void handle_osd_ping(class MOSDPing *m);
   void handle_op(OpRequestRef& op, OSDMapRef& osdmap);
