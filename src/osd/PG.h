@@ -2017,7 +2017,7 @@ public:
   const spg_t&      get_pgid() const { return pg_id; }
   int        get_nrep() const { return acting.size(); }
 
-  void reset_peer_features() { peer_features = (uint64_t)-1; }
+  void reset_peer_features() { peer_features = CEPH_FEATURES_SUPPORTED_DEFAULT; }
   uint64_t get_min_peer_features() const { return peer_features; }
   void apply_peer_features(uint64_t f) { peer_features &= f; }
 
