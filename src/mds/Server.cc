@@ -2118,7 +2118,8 @@ bool Server::check_access(MDRequestRef& mdr, CInode *in, unsigned mask)
   string path;
 
   // FIXME: it depends on the inode!
-  if (s->auth_caps.is_capable(path, uid, mask)) {
+  if (s->auth_caps.is_capable(path, in->inode.uid, in->inode.gid, in->inode.mode,
+			      uid, mask)) {
     return true;
   }
 
