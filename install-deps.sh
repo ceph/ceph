@@ -84,7 +84,7 @@ CentOS|Fedora|RedHatEnterpriseServer)
         ;;
 esac
 
-function get_pip_and_wheel() {
+function populate_wheelhouse() {
     local install=$1
     shift
 
@@ -106,7 +106,7 @@ function activate_virtualenv() {
     if ! test -d $env_dir ; then
         virtualenv --python $interpreter $env_dir
         . $env_dir/bin/activate
-        if ! get_pip_and_wheel install ; then
+        if ! populate_wheelhouse install ; then
             rm -rf $env_dir
             return 1
         fi
@@ -133,7 +133,7 @@ find . -name tox.ini | while read ini ; do
             for interpreter in python2.7 python3 ; do
                 type $interpreter > /dev/null 2>&1 || continue
                 activate_virtualenv $top_srcdir $interpreter || exit 1
-                get_pip_and_wheel "wheel -w $wip_wheelhouse" $require || exit 1
+                populate_wheelhouse "wheel -w $wip_wheelhouse" $require || exit 1
             done
             mv $wip_wheelhouse wheelhouse
         fi
