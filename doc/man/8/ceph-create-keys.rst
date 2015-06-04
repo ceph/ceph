@@ -18,7 +18,7 @@ Description
 :program:`ceph-create-keys` is a utility to generate bootstrap keyrings using
 the given monitor when it is ready.
 
-it creates following auth entities (or users)
+It creates following auth entities (or users)
 
 ``client.admin``
 
@@ -28,7 +28,7 @@ it creates following auth entities (or users)
 
     and their keys for bootstrapping corresponding services
 
-To list all users in cluster::
+To list all users in the cluster::
 
     ceph auth list
 
