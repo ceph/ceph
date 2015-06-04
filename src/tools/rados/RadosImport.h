@@ -20,7 +20,7 @@
 #include "include/rados/librados.hpp"
 #include "include/buffer.h"
 
-#include "RadosDump.h"
+#include "tools/RadosDump.h"
 
 /**
  * Specialization of RadosDump that adds
