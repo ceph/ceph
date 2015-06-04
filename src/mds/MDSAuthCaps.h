@@ -93,7 +93,9 @@ public:
   bool parse(const std::string &str, std::ostream *err);
 
   bool allow_all() const;
-  bool is_capable(const std::string &path, uid_t uid, unsigned mask) const;
+  bool is_capable(const std::string &inode_path,
+		  uid_t inode_uid, gid_t inode_gid, unsigned inode_mode,
+		  uid_t uid, unsigned mask) const;
 
   friend std::ostream &operator<<(std::ostream &out, const MDSAuthCaps &cap);
 };

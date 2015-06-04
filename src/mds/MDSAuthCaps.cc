@@ -116,13 +116,21 @@ bool MDSCapMatch::match(const std::string &target_path,
  * This is true if any of the 'grant' clauses in the capability match the
  * requested path + op.
  */
-bool MDSAuthCaps::is_capable(const std::string &path, uid_t uid, unsigned mask) const
+bool MDSAuthCaps::is_capable(const std::string &inode_path,
+			     uid_t inode_uid, gid_t inode_gid, unsigned inode_mode,
+			     uid_t uid, unsigned mask) const
 {
   for (std::vector<MDSCapGrant>::const_iterator i = grants.begin();
        i != grants.end();
        ++i) {
-    if (i->match.match(path, uid) &&
+    if (i->match.match(inode_path, uid) &&
 	i->spec.allows(mask & (MAY_READ|MAY_EXECUTE), mask & MAY_WRITE)) {
+      // check unix permissions?
+      if (i->match.uid != MDS_AUTH_UID_ANY) {
+
+	// WRITE ME
+
+      }
       return true;
     }
   }
