@@ -103,26 +103,26 @@ TEST(MDSAuthCaps, AllowAll) {
 
   ASSERT_TRUE(cap.parse("allow *", NULL));
   ASSERT_TRUE(cap.allow_all());
-  ASSERT_TRUE(cap.is_capable("/foo/bar", 0, true, true));
+  ASSERT_TRUE(cap.is_capable("/foo/bar", 0, MAY_READ | MAY_WRITE));
 }
 
 TEST(MDSAuthCaps, AllowUid) {
   MDSAuthCaps cap;
   ASSERT_TRUE(cap.parse("allow * uid=10", NULL));
   ASSERT_FALSE(cap.allow_all());
-  ASSERT_TRUE(cap.is_capable("/foo", 10, true, true));
-  ASSERT_FALSE(cap.is_capable("/foo", -1, true, true));
-  ASSERT_FALSE(cap.is_capable("/foo", 0, true, true));
+  ASSERT_TRUE(cap.is_capable("/foo", 10, MAY_READ | MAY_WRITE));
+  ASSERT_FALSE(cap.is_capable("/foo", -1, MAY_READ | MAY_WRITE));
+  ASSERT_FALSE(cap.is_capable("/foo", 0, MAY_READ | MAY_WRITE));
 }
 
 TEST(MDSAuthCaps, AllowPath) {
   MDSAuthCaps cap;
   ASSERT_TRUE(cap.parse("allow * path=/sandbox", NULL));
   ASSERT_FALSE(cap.allow_all());
-  ASSERT_TRUE(cap.is_capable("/sandbox/foo", 0, true, true));
-  ASSERT_TRUE(cap.is_capable("/sandbox", 0, true, true));
-  ASSERT_FALSE(cap.is_capable("/sandboxed", 0, true, true));
-  ASSERT_FALSE(cap.is_capable("/foo", 0, true, true));
+  ASSERT_TRUE(cap.is_capable("/sandbox/foo", 0, MAY_READ | MAY_WRITE));
+  ASSERT_TRUE(cap.is_capable("/sandbox", 0, MAY_READ | MAY_WRITE));
+  ASSERT_FALSE(cap.is_capable("/sandboxed", 0, MAY_READ | MAY_WRITE));
+  ASSERT_FALSE(cap.is_capable("/foo", 0, MAY_READ | MAY_WRITE));
 }
 
 TEST(MDSAuthCaps, OutputParsed) {
