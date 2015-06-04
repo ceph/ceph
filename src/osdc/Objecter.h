@@ -1309,10 +1309,10 @@ public:
 
   // Pools and statistics 
   struct NListContext {
-    int current_pg;
+    uint32_t current_pg;
     collection_list_handle_t cookie;
     epoch_t current_pg_epoch;
-    int starting_pg_num;
+    uint32_t starting_pg_num;
     bool at_end_of_pool;
     bool at_end_of_pg;
 
@@ -1320,6 +1320,16 @@ public:
     int pool_snap_seq;
     int max_entries;
     string nspace;
+
+    // Worker n (from zero) of ...
+    uint32_t worker_n;
+    // ...total m workers.  Or m=0 if not using multiple workers.
+    uint32_t worker_m;
+
+    // Lowest PG we will touch (inclusive)
+    uint32_t pg_min;
+    // Upper limit of PGs we will touch (exclusive)
+    uint32_t pg_max;
 
     bufferlist bl;   // raw data read to here
     std::list<librados::ListObjectImpl> list;
@@ -1341,6 +1351,8 @@ public:
 		    pool_snap_seq(0),
                     max_entries(0),
                     nspace(),
+                    worker_n(0),
+                    worker_m(0),
                     bl(),
                     list(),
                     filter(),
@@ -1354,6 +1366,16 @@ public:
     uint32_t get_pg_hash_position() const {
       return current_pg;
     }
+
+    /**
+     * True if this context is iterating over a hash range,
+     * false if it is iterating over all objects
+     */
+    bool is_sharded() const {
+      return worker_m > 0;
+    }
+
+    float get_progress() const;
   };
 
   struct C_NList : public Context {
@@ -2462,6 +2484,12 @@ public:
 
   void list_nobjects(NListContext *p, Context *onfinish);
   uint32_t list_nobjects_seek(NListContext *p, uint32_t pos);
+  /**
+   * Approximate position in assigned object hash range,
+   * as a real number 0.0<=n<=1.0
+   */
+  float list_nobjects_progress(NListContext *list_context) const;
+
   void list_objects(ListContext *p, Context *onfinish);
   uint32_t list_objects_seek(ListContext *p, uint32_t pos);
 

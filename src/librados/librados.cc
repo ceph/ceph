@@ -658,6 +658,15 @@ uint32_t librados::NObjectIteratorImpl::get_pg_hash_position() const
     return ctx->lc->get_pg_hash_position();
 }
 
+float librados::NObjectIteratorImpl::get_progress() const
+{
+  if (ctx->new_request) {
+    return ctx->nlc->get_progress();
+  } else {
+    return 0.0;
+  }
+}
+
 ///////////////////////////// NObjectIterator /////////////////////////////
 librados::NObjectIterator::NObjectIterator(ObjListCtx *ctx_)
 {
@@ -694,23 +703,34 @@ librados::NObjectIterator& librados::NObjectIterator::operator=(const librados::
 
 bool librados::NObjectIterator::operator==(const librados::NObjectIterator& rhs) const 
 {
-  return *impl == *(rhs.impl);
+  if (impl && rhs.impl) {
+    return *impl == *(rhs.impl);
+  } else {
+    return impl == rhs.impl;
+  }
 }
 
 bool librados::NObjectIterator::operator!=(const librados::NObjectIterator& rhs) const {
-  return !(*impl == *(rhs.impl));
+  if (impl && rhs.impl) {
+    return !(*impl == *(rhs.impl));
+  } else {
+    return impl != rhs.impl;
+  }
 }
 
 const librados::ListObject& librados::NObjectIterator::operator*() const {
+  assert(impl);
   return *(impl->get_listobjectp());
 }
 
 const librados::ListObject* librados::NObjectIterator::operator->() const {
+  assert(impl);
   return impl->get_listobjectp();
 }
 
 librados::NObjectIterator& librados::NObjectIterator::operator++()
 {
+  assert(impl);
   impl->get_next();
   return *this;
 }
@@ -724,17 +744,26 @@ librados::NObjectIterator librados::NObjectIterator::operator++(int)
 
 uint32_t librados::NObjectIterator::seek(uint32_t pos)
 {
+  assert(impl);
   return impl->seek(pos);
 }
 
 void librados::NObjectIterator::get_next()
 {
+  assert(impl);
   impl->get_next();
 }
 
 uint32_t librados::NObjectIterator::get_pg_hash_position() const
 {
+  assert(impl);
   return impl->get_pg_hash_position();
+}
+
+float librados::NObjectIterator::get_progress() const
+{
+  assert(impl);
+  return impl->get_progress();
 }
 
 const librados::NObjectIterator librados::NObjectIterator::__EndObjectIterator(NULL);
@@ -1538,6 +1567,16 @@ librados::NObjectIterator librados::IoCtx::nobjects_begin(uint32_t pos)
   rados_nobjects_list_open(io_ctx_impl, &listh);
   NObjectIterator iter((ObjListCtx*)listh);
   iter.seek(pos);
+  return iter;
+}
+
+librados::NObjectIterator librados::IoCtx::nobjects_begin(uint32_t n,
+                                                          uint32_t m)
+{
+  rados_list_ctx_t listh;
+  rados_nobjects_list_open_range(io_ctx_impl, n, m, &listh);
+  NObjectIterator iter((ObjListCtx*)listh);
+  iter.get_next();
   return iter;
 }
 
@@ -3442,6 +3481,8 @@ extern "C" int rados_nobjects_list_open(rados_ioctx_t io, rados_list_ctx_t *list
 {
   librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
 
+  ldout(ctx->client->cct, 10) << __func__ << dendl;
+
   // Let's do it the old way for backward compatbility if not using ANY_NSPACES
   if (ctx->oloc.nspace != librados::all_nspaces)
     return rados_objects_list_open(io, listh);
@@ -3452,6 +3493,27 @@ extern "C" int rados_nobjects_list_open(rados_ioctx_t io, rados_list_ctx_t *list
   h->pool_id = ctx->poolid;
   h->pool_snap_seq = ctx->snap_seq;
   h->nspace = ctx->oloc.nspace;	// After dropping compatibility need nspace
+  *listh = (void *)new librados::ObjListCtx(ctx, h);
+  tracepoint(librados, rados_nobjects_list_open_exit, 0, *listh);
+  return 0;
+}
+
+extern "C" int rados_nobjects_list_open_range(
+    rados_ioctx_t io, uint32_t n, uint32_t m, rados_list_ctx_t *listh)
+{
+  librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
+
+  ldout(ctx->client->cct, 10) << __func__ << " " << n << "/" << m << dendl;
+
+  tracepoint(librados, rados_nobjects_list_open_enter, io);
+
+  Objecter::NListContext *h = new Objecter::NListContext;
+  h->pool_id = ctx->poolid;
+  h->pool_snap_seq = ctx->snap_seq;
+  h->nspace = ctx->oloc.nspace;	// After dropping compatibility need nspace
+  h->worker_n = n;
+  h->worker_m = m;
+
   *listh = (void *)new librados::ObjListCtx(ctx, h);
   tracepoint(librados, rados_nobjects_list_open_exit, 0, *listh);
   return 0;
@@ -3491,6 +3553,13 @@ extern "C" uint32_t rados_nobjects_list_get_pg_hash_position(
   uint32_t retval = lh->nlc->get_pg_hash_position();
   tracepoint(librados, rados_nobjects_list_get_pg_hash_position_exit, retval);
   return retval;
+}
+
+extern "C" float rados_nobjects_list_get_progress(
+    rados_list_ctx_t listctx)
+{
+  librados::ObjListCtx *lh = (librados::ObjListCtx *)listctx;
+  return lh->nlc->get_progress();
 }
 
 // Deprecated, but using it for compatibility with older OSDs

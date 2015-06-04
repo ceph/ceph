@@ -1240,15 +1240,6 @@ bool PGMonitor::check_down_pgs()
   return ret;
 }
 
-inline string percentify(const float& a) {
-  stringstream ss;
-  if (a < 0.01)
-    ss << "0";
-  else
-    ss << std::fixed << std::setprecision(2) << a;
-  return ss.str();
-}
-
 //void PGMonitor::dump_object_stat_sum(stringstream& ss, Formatter *f,
 void PGMonitor::dump_object_stat_sum(TextTable &tbl, Formatter *f,
 				     object_stat_sum_t &sum, uint64_t avail,
@@ -1272,7 +1263,7 @@ void PGMonitor::dump_object_stat_sum(TextTable &tbl, Formatter *f,
     float used = 0.0;
     if (pg_map.osd_sum.kb > 0)
       used = (float)kb_used / pg_map.osd_sum.kb;
-    tbl << percentify(used*100);
+    tbl << percentify(used);
     tbl << si_t(avail);
     tbl << sum.num_objects;
     if (verbose) {
@@ -1433,7 +1424,7 @@ void PGMonitor::dump_fs_stats(stringstream &ss, Formatter *f, bool verbose)
     if (pg_map.osd_sum.kb > 0) {
       used = ((float)pg_map.osd_sum.kb_used / pg_map.osd_sum.kb);
     }
-    tbl << percentify(used*100);
+    tbl << percentify(used);
     if (verbose) {
       tbl << stringify(si_t(pg_map.pg_sum.stats.sum.num_objects));
     }

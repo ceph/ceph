@@ -1,4 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
 #include "include/rados/librados.h"
 #include "include/rados/librados.hpp"
 #include "include/stringify.h"
@@ -7,6 +8,7 @@
 
 #include "include/types.h"
 #include "gtest/gtest.h"
+#include "gmock/gmock.h"
 #include <errno.h>
 #include <string>
 
@@ -687,3 +689,103 @@ TEST_F(LibRadosListECPP, ListObjectsStartPP) {
     ++p;
   }
 }
+
+TEST_F(LibRadosListPP, ListObjectsRangePP) {
+  // Create some objects
+  char buf[128];
+  memset(buf, 0xcc, sizeof(buf));
+  bufferlist bl;
+  bl.append(buf, sizeof(buf));
+
+  for (int i=0; i < 127; ++i) {
+    ASSERT_EQ(0, ioctx.write(stringify(i), bl, bl.length(), 0));
+  }
+
+  // Enumerate objects using non-sharded list
+  std::vector<std::string> all_objs;
+  {
+    librados::NObjectIterator i = ioctx.nobjects_begin();
+    librados::NObjectIterator i_end = ioctx.nobjects_end();
+    for (; i != i_end; ++i) {
+      all_objs.push_back(i->get_oid());
+    }
+  }
+
+  // Try out a range of different sharding ranges
+  for (int m = 2; m < 27; ++m) {
+    std::vector<std::string> result;
+
+    // For all the workers in the range
+    for (int n = 0; n < m; ++n) {
+      librados::NObjectIterator i;
+      if (m == 1) {
+        i = ioctx.nobjects_begin();
+      } else {
+        i = ioctx.nobjects_begin(n, m);
+      }
+
+      librados::NObjectIterator i_end = ioctx.nobjects_end();
+      for (; i != i_end; ++i) {
+        result.push_back(i->get_oid());
+      }
+    }
+
+    if (result != all_objs) {
+      std::cout << "Mismatch at m=" << m << std::endl;
+    }
+    ASSERT_THAT(result, ::testing::ElementsAreArray(all_objs));
+  }
+}
+
+TEST_F(LibRadosList, ListObjectsRange) {
+  // Create some objects
+  char buf[128];
+  memset(buf, 0xcc, sizeof(buf));
+  bufferlist bl;
+  bl.append(buf, sizeof(buf));
+
+  const uint32_t object_count = 1333;
+  for (unsigned i=0; i < object_count; ++i) {
+    ASSERT_EQ(0, rados_write(ioctx, stringify(i).c_str(), buf, sizeof(buf), 0));
+  }
+
+  // Build the expected result using non-sharded list
+  std::vector<std::string> all_objs;
+  {
+    rados_list_ctx_t ctx;
+    ASSERT_EQ(0, rados_nobjects_list_open(ioctx, &ctx));
+    const char *entry = NULL;
+    while (rados_nobjects_list_next(ctx, &entry, NULL, NULL) != -ENOENT) {
+      all_objs.push_back(entry);
+    }
+    rados_nobjects_list_close(ctx);
+  }
+  std::set<std::string> all_objs_set(all_objs.begin(), all_objs.end());
+  ASSERT_EQ(all_objs.size(), object_count);
+
+  for (int m = 2; m < 27; ++m) {
+    std::vector<std::string> result;
+    for (int n = 0; n < m; ++n) {
+      rados_list_ctx_t ctx;
+      ASSERT_EQ(0, rados_nobjects_list_open_range(ioctx, n, m, &ctx));
+      const char *entry = NULL;
+      while (rados_nobjects_list_next(ctx, &entry, NULL, NULL) != -ENOENT) {
+        result.push_back(entry);
+      }
+      rados_nobjects_list_close(ctx);
+    }
+    std::set<std::string> result_set(result.begin(), result.end());
+
+    if (result_set != all_objs_set) {
+      std::cout << "Mismatch at m=" << m << std::endl;
+      for (std::vector<std::string>::iterator i = all_objs.begin();
+           i != all_objs.end(); ++i) {
+        if (result_set.count(*i) == 0) {
+          std::cout << "Missing object:" << *i << std::endl;
+        }
+      }
+      ASSERT_THAT(result, ::testing::ElementsAreArray(all_objs));
+    }
+  }
+}
+

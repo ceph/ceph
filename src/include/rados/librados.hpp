@@ -109,6 +109,8 @@ namespace librados
     /// move the iterator to a given hash position.  this may (will!) be rounded to the nearest pg.
     uint32_t seek(uint32_t pos);
 
+    float get_progress() const;
+
   private:
     NObjectIterator(ObjListCtx *ctx_);
     void get_next();
@@ -767,6 +769,8 @@ namespace librados
     NObjectIterator nobjects_begin();
     /// Start enumerating objects for a pool starting from a hash position
     NObjectIterator nobjects_begin(uint32_t start_hash_position);
+    /// Start enumerating objects for a pool within a subset
+    NObjectIterator nobjects_begin(uint32_t n, uint32_t m);
     /// Iterator indicating the end of a pool
     const NObjectIterator& nobjects_end() const;
 

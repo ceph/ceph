@@ -253,3 +253,13 @@ void dump_services(Formatter* f, const map<string, list<int> >& services, const 
   }
   f->close_section();
 }
+
+std::string percentify(const float& a) {
+  stringstream ss;
+  if (a < 0.0001) {
+    ss << "0";
+  } else {
+    ss << std::fixed << std::setprecision(2) << a * 100;
+  }
+  return ss.str();
+}

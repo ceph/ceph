@@ -883,12 +883,40 @@ CEPH_RADOS_API int rados_nobjects_list_open(rados_ioctx_t io,
                                             rados_list_ctx_t *ctx);
 
 /**
+ * Start listing objects in a pool, within a particular subset.
+ *
+ * The subset is defined by dividing the object location hashes into m
+ * bins, where the `n` parameter defines which bin we will iterate over.
+ * This is intended for use by pools of `m` workers, who would all pass
+ * in their unique `n` to get a share of the objects.
+ *
+ * @param io the pool to list from
+ * @param n which object range we will iterate over
+ * @param m how many object ranges to divide the overall space into
+ * @param ctx the handle to store list context in
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_RADOS_API int rados_nobjects_list_open_range(rados_ioctx_t io,
+                                                  uint32_t n,
+                                                  uint32_t m,
+                                                  rados_list_ctx_t *ctx);
+
+/**
  * Return hash position of iterator, rounded to the current PG
  *
  * @param ctx iterator marking where you are in the listing
  * @returns current hash position, rounded to the current pg
  */
 CEPH_RADOS_API uint32_t rados_nobjects_list_get_pg_hash_position(rados_list_ctx_t ctx);
+
+
+/**
+ * Evaluate the progress through the listed range
+ *
+ * @param ctx iterator marking where you are in the listing
+ * @returns a real number between 0.0 and 1.0
+ */
+CEPH_RADOS_API float rados_nobjects_list_get_progress(rados_list_ctx_t ctx);
 
 /**
  * Reposition object iterator to a different hash position
