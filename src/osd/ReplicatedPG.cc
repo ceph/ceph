@@ -8864,6 +8864,7 @@ void ReplicatedPG::on_change(ObjectStore::Transaction *t)
 
   // requeues waiting_for_active
   scrub_clear_state();
+  scrub_unreserve_replicas();
 
   context_registry_on_change();
 
