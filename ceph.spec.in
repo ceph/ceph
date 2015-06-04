@@ -116,7 +116,6 @@ Requires:	gptfdisk
 %if 0%{with tcmalloc}
 BuildRequires:	gperftools-devel
 %endif
-%else
 Requires:	scsirastools
 BuildRequires:	google-perftools-devel
 Recommends:	logrotate
