@@ -587,12 +587,7 @@ OPTION(osd_op_thread_suicide_timeout, OPT_INT, 150)
 OPTION(osd_recovery_thread_timeout, OPT_INT, 30)
 OPTION(osd_recovery_thread_suicide_timeout, OPT_INT, 300)
 OPTION(osd_recovery_sleep, OPT_FLOAT, 0)         // seconds to sleep between recovery ops
-OPTION(osd_snap_trim_thread_timeout, OPT_INT, 60*60*1)
-OPTION(osd_snap_trim_thread_suicide_timeout, OPT_INT, 60*60*10)
 OPTION(osd_snap_trim_sleep, OPT_FLOAT, 0)
-OPTION(osd_scrub_thread_timeout, OPT_INT, 60)
-OPTION(osd_scrub_thread_suicide_timeout, OPT_INT, 60)
-OPTION(osd_scrub_finalize_thread_timeout, OPT_INT, 60*10)
 OPTION(osd_scrub_invalid_stats, OPT_BOOL, true)
 OPTION(osd_remove_thread_timeout, OPT_INT, 60*60)
 OPTION(osd_remove_thread_suicide_timeout, OPT_INT, 10*60*60)
@@ -716,18 +711,27 @@ OPTION(filestore_rocksdb_options, OPT_STR, "")
 OPTION(mon_rocksdb_options, OPT_STR, "")
 
 /**
- * osd_client_op_priority and osd_recovery_op_priority adjust the relative
- * priority of client io vs recovery io.
+ * osd_*_priority adjust the relative priority of client io, recovery io,
+ * snaptrim io, etc
  *
- * osd_client_op_priority/osd_recovery_op_priority determines the ratio of
- * available io between client and recovery.  Each option may be set between
+ * osd_*_priority determines the ratio of available io between client and
+ * recovery.  Each option may be set between
  * 1..63.
- *
- * osd_recovery_op_warn_multiple scales the normal warning threshhold,
- * osd_op_complaint_time, so that slow recovery ops won't cause noise
  */
 OPTION(osd_client_op_priority, OPT_U32, 63)
 OPTION(osd_recovery_op_priority, OPT_U32, 10)
+
+OPTION(osd_snap_trim_priority, OPT_U32, 5)
+OPTION(osd_snap_trim_cost, OPT_U32, 1<<20) // set default cost equal to 1MB io
+
+OPTION(osd_scrub_priority, OPT_U32, 5)
+// set default cost equal to 50MB io
+OPTION(osd_scrub_cost, OPT_U32, 50<<20) 
+
+/**
+ * osd_recovery_op_warn_multiple scales the normal warning threshhold,
+ * osd_op_complaint_time, so that slow recovery ops won't cause noise
+ */
 OPTION(osd_recovery_op_warn_multiple, OPT_U32, 16)
 
 // Max time to wait between notifying mon of shutdown and shutting down

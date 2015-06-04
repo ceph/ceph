@@ -1415,7 +1415,7 @@ public:
   void do_backfill(OpRequestRef op);
 
   RepGather *trim_object(const hobject_t &coid);
-  void snap_trimmer();
+  void snap_trimmer(epoch_t e);
   int do_osd_ops(OpContext *ctx, vector<OSDOp>& ops);
 
   int _get_tmap(OpContext *ctx, bufferlist *header, bufferlist *vals);
