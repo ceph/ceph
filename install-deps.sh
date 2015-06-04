@@ -104,6 +104,7 @@ function get_pip_and_wheel() {
 mkdir -p install-deps-cache
 top_srcdir=$(pwd)
 export XDG_CACHE_HOME=$top_srcdir/install-deps-cache
+wip_wheelhouse=wheelhouse-wip
 
 #
 # preload python modules so that tox can run without network access
@@ -125,8 +126,9 @@ find . -name tox.ini | while read ini ; do
             for interpreter in python2.7 python3 ; do
                 type $interpreter > /dev/null 2>&1 || continue
                 . $top_srcdir/install-deps-$interpreter/bin/activate
-                get_pip_and_wheel wheel $require || exit 1
+                get_pip_and_wheel "wheel -w $wip_wheelhouse" $require || exit 1
             done
+            mv $wip_wheelhouse wheelhouse
         fi
     )
 done
