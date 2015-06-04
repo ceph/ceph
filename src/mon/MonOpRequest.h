@@ -31,7 +31,6 @@ struct MonOpRequest : public TrackedOp {
 private:
   Message *request;
   utime_t dequeued_time;
-  bool src_is_mon;
   MonSession *session;
   ConnectionRef connection;
 
@@ -93,7 +92,6 @@ public:
   bool is_src_mon() {
     return (connection && connection->get_peer_type() & CEPH_ENTITY_TYPE_MON);
   }
-  void set_src_is_mon(bool s) { src_is_mon = s; }
 
   typedef ceph::shared_ptr<MonOpRequest> Ref;
 

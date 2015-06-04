@@ -3367,8 +3367,6 @@ void Monitor::dispatch(MonOpRequestRef op)
   // is going on.
   assert(connection);
 
-  //src_is_mon = (connection->get_peer_type() & CEPH_ENTITY_TYPE_MON);
-
   bool reuse_caps = false;
   dout(20) << "have connection" << dendl;
 //  s = static_cast<MonSession *>(connection->get_priv());
