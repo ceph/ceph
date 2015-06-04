@@ -20,6 +20,13 @@
 #include <string>
 #include <sstream>
 
+// unix-style capabilities
+enum {
+  MAY_READ = 1,
+  MAY_WRITE = 2,
+  MAY_EXECUTE = 4,
+};
+
 // what we can do
 struct MDSCapSpec {
   bool read;
@@ -77,7 +84,6 @@ struct MDSCapGrant {
 
 class MDSAuthCaps
 {
-protected:
   std::vector<MDSCapGrant> grants;
 
 public:
@@ -88,8 +94,7 @@ public:
   bool parse(const std::string &str, std::ostream *err);
 
   bool allow_all() const;
-  bool is_capable(const std::string &path, int uid,
-		  bool may_read, bool may_write) const;
+  bool is_capable(const std::string &path, int uid, unsigned mask) const;
 
   friend std::ostream &operator<<(std::ostream &out, const MDSAuthCaps &cap);
 };
