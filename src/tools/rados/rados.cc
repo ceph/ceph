@@ -44,7 +44,7 @@
 #include "common/hobject.h"
 
 #include "PoolDump.h"
-#include "tools/RadosImport.h"
+#include "RadosImport.h"
 
 int rados_tool_sync(const std::map < std::string, std::string > &opts,
                              std::vector<const char*> &args);

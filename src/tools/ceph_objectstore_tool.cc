@@ -35,10 +35,7 @@
 #include "json_spirit/json_spirit_value.h"
 #include "json_spirit/json_spirit_reader.h"
 
-#include "include/rados/librados.hpp"
-
 #include "ceph_objectstore_tool.h"
-#include "RadosImport.h"
 
 namespace po = boost::program_options;
 using namespace std;
@@ -1733,8 +1730,6 @@ void usage(po::options_description &desc)
     cerr << "ceph-objectstore-tool ... <object> remove" << std::endl;
     cerr << "ceph-objectstore-tool ... <object> dump-info" << std::endl;
     cerr << std::endl;
-    cerr << "ceph-objectstore-tool import-rados <pool> [file]" << std::endl;
-    cerr << std::endl;
     cerr << "<object> can be a JSON object description as displayed" << std::endl;
     cerr << "by --op list." << std::endl;
     cerr << "<object> can be an object name which will be looked up in all" << std::endl;
@@ -1770,7 +1765,7 @@ int main(int argc, char **argv)
   string dpath, jpath, pgidstr, op, file, object, objcmd, arg1, arg2, type, format;
   spg_t pgid;
   ghobject_t ghobj;
-  bool human_readable, no_overwrite;
+  bool human_readable;
   bool force;
   Formatter *formatter;
 
@@ -1796,7 +1791,6 @@ int main(int argc, char **argv)
     ("skip-journal-replay", "Disable journal replay")
     ("skip-mount-omap", "Disable mounting of omap")
     ("dry-run", "Don't modify the objectstore")
-    ("no-overwrite", "For import-rados don't overwrite existing files")
     ;
 
   po::options_description positional("Positional options");
@@ -1845,9 +1839,6 @@ int main(int argc, char **argv)
     force = true;
   }
 
-  no_overwrite = false;
-  if (vm.count("no-overwrite"))
-    no_overwrite = true;
   if (vm.count("dry-run"))
     dry_run = true;
   osflagbits_t flags = 0;
@@ -1863,45 +1854,6 @@ int main(int argc, char **argv)
        i != ceph_option_strings.end();
        ++i) {
     ceph_options.push_back(i->c_str());
-  }
-
-  // Handle completely different operation "import-rados"
-  if (object == "import-rados") {
-    if (vm.count("objcmd") == 0) {
-      cerr << "ceph-objectstore-tool import-rados <pool> [file]" << std::endl;
-      myexit(1);
-    }
-
-    string pool = objcmd;
-    // positional argument takes precendence, but accept
-    // --file option too
-    if (!vm.count("arg1")) {
-      if (!vm.count("file"))
-        arg1 = "-";
-      else
-        arg1 = file;
-    }
-    if (arg1 == "-") {
-      if (isatty(STDIN_FILENO)) {
-        cerr << "stdin is a tty and no file specified" << std::endl;
-        myexit(1);
-      }
-      file_fd = STDIN_FILENO;
-    } else {
-      file_fd = open(arg1.c_str(), O_RDONLY);
-      if (file_fd < 0) {
-        perror("open");
-	myexit(1);
-      }
-    }
-
-    global_init(NULL, ceph_options, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
-    common_init_finish(g_ceph_context);
-
-    int ret = RadosImport(file_fd, testalign, dry_run).import(pool, no_overwrite);
-    if (ret == 0)
-      cout << "Import successful" << std::endl;
-    myexit(ret != 0);
   }
 
   if (!vm.count("type")) {
