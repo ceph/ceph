@@ -3124,9 +3124,10 @@ uint32_t Objecter::list_nobjects_seek(NListContext *list_context,
   return list_context->current_pg;
 }
 
+
 void Objecter::list_nobjects(NListContext *list_context, Context *onfinish)
 {
-  ldout(cct, 10) << "list_objects" << dendl;
+  ldout(cct, 10) << __func__ << dendl;
   ldout(cct, 20) << " pool_id " << list_context->pool_id
 	   << " pool_snap_seq " << list_context->pool_snap_seq
 	   << " max_entries " << list_context->max_entries
@@ -3135,12 +3136,59 @@ void Objecter::list_nobjects(NListContext *list_context, Context *onfinish)
 	   << " list_context->current_pg " << list_context->current_pg
 	   << " list_context->cookie " << list_context->cookie << dendl;
 
+  // Read out pg_num
+  rwlock.get_read();
+  const pg_pool_t *pool = osdmap->get_pg_pool(list_context->pool_id);
+  uint32_t pg_num = pool->get_pg_num();
+  rwlock.unlock();
+
+  // Record starting_pg_num on first call
+  if (list_context->starting_pg_num == 0) {     // there can't be zero pgs!
+    list_context->starting_pg_num = pg_num;
+    ldout(cct, 20) << pg_num << " placement groups" << dendl;
+  }
+
+  // Range of PGs to list over
+  uint32_t pg_min = 0;  // (inclusive)
+  uint32_t pg_max = list_context->starting_pg_num;  // (exclusive)
+  if (list_context->is_sharded()) {
+    // Work out PG range addressed by this worker
+    // (divide hash space into pg_num*worker_m chunks, and assign pg_num
+    // of them to each worker)
+    pg_min = (list_context->worker_n * pg_num) / list_context->worker_m;
+    if (list_context->worker_n == list_context->worker_m - 1) {
+      // Extend PG max to encompass any remainder
+      pg_max = list_context->starting_pg_num;
+    } else {
+      pg_max = (list_context->worker_n * pg_num + pg_num) / list_context->worker_m;
+    }
+
+
+
+    // No PGs assigned to this worker?
+    if (pg_min == pg_max) {
+      ldout(cct, 10) << "Worker " << list_context->worker_n << " of "
+                     << list_context->worker_m << " assigned no PGs" << dendl;
+      put_nlist_context_budget(list_context);
+      onfinish->complete(0);
+      return;
+    }
+  }
+
+  // Initialize current_pg
+  if (list_context->current_pg == 0xffffffff) {
+    list_context->current_pg = pg_min;
+  }
+
+  // Advance to next PG if necessary
   if (list_context->at_end_of_pg) {
     list_context->at_end_of_pg = false;
     ++list_context->current_pg;
     list_context->current_pg_epoch = 0;
     list_context->cookie = collection_list_handle_t();
-    if (list_context->current_pg >= list_context->starting_pg_num) {
+    
+    // Always list from upper
+    if (list_context->current_pg >= pg_max) {
       list_context->at_end_of_pool = true;
       ldout(cct, 20) << " no more pgs; reached end of pool" << dendl;
     } else {
@@ -3156,19 +3204,10 @@ void Objecter::list_nobjects(NListContext *list_context, Context *onfinish)
     return;
   }
 
-  rwlock.get_read();
-  const pg_pool_t *pool = osdmap->get_pg_pool(list_context->pool_id);
-  int pg_num = pool->get_pg_num();
-  rwlock.unlock();
-
-  if (list_context->starting_pg_num == 0) {     // there can't be zero pgs!
-    list_context->starting_pg_num = pg_num;
-    ldout(cct, 20) << pg_num << " placement groups" << dendl;
-  }
   if (list_context->starting_pg_num != pg_num) {
     // start reading from the beginning; the pgs have changed
     ldout(cct, 10) << " pg_num changed; restarting with " << pg_num << dendl;
-    list_context->current_pg = 0;
+    list_context->current_pg = pg_min;
     list_context->cookie = collection_list_handle_t();
     list_context->current_pg_epoch = 0;
     list_context->starting_pg_num = pg_num;
@@ -3189,7 +3228,7 @@ void Objecter::list_nobjects(NListContext *list_context, Context *onfinish)
 void Objecter::_nlist_reply(NListContext *list_context, int r,
 			   Context *final_finish, epoch_t reply_epoch)
 {
-  ldout(cct, 10) << "_list_reply" << dendl;
+  ldout(cct, 10) << __func__ << dendl;
 
   bufferlist::iterator iter = list_context->bl.begin();
   pg_nls_response_t response;
@@ -3199,6 +3238,8 @@ void Objecter::_nlist_reply(NListContext *list_context, int r,
     ::decode(extra_info, iter);
   }
   list_context->cookie = response.handle;
+
+
   if (!list_context->current_pg_epoch) {
     // first pgls result, set epoch marker
     ldout(cct, 20) << " first pgls piece, reply_epoch is "

@@ -767,6 +767,8 @@ namespace librados
     NObjectIterator nobjects_begin();
     /// Start enumerating objects for a pool starting from a hash position
     NObjectIterator nobjects_begin(uint32_t start_hash_position);
+    /// Start enumerating objects for a pool within a subset
+    NObjectIterator nobjects_begin(uint32_t n, uint32_t m);
     /// Iterator indicating the end of a pool
     const NObjectIterator& nobjects_end() const;
 
