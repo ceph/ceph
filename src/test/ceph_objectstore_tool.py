@@ -926,6 +926,48 @@ def main(argv):
                         logging.error("Not all keys found, remaining keys:")
                         print values
 
+    print "Test --op meta-list"
+    tmpfd = open(TMPFILE, "w")
+    cmd = (CFSD_PREFIX + "--op meta-list").format(osd=ONEOSD)
+    logging.debug(cmd)
+    ret = call(cmd, shell=True, stdout=tmpfd)
+    if ret != 0:
+        logging.error("Bad exit status {ret} from --op meta-list request".format(ret=ret))
+        ERRORS += 1
+
+    print "Test get-bytes on meta"
+    tmpfd.close()
+    lines = get_lines(TMPFILE)
+    JSONOBJ = sorted(set(lines))
+    for JSON in JSONOBJ:
+        (pgid, jsondict) = json.loads(JSON)
+        if pgid != "meta":
+            logging.error("pgid incorrect for --op meta-list {pgid}".format(pgid=pgid))
+            ERRORS += 1
+        if jsondict['namespace'] != "":
+            logging.error("namespace non null --op meta-list {ns}".format(ns=jsondict['namespace']))
+            ERRORS += 1
+        logging.info(JSON)
+        try:
+            os.unlink(GETNAME)
+        except:
+            pass
+        cmd = (CFSD_PREFIX + "'{json}' get-bytes {fname}").format(osd=ONEOSD, json=JSON, fname=GETNAME)
+        logging.debug(cmd)
+        ret = call(cmd, shell=True)
+        if ret != 0:
+            logging.error("Bad exit status {ret}".format(ret=ret))
+            ERRORS += 1
+
+    try:
+        os.unlink(GETNAME)
+    except:
+        pass
+    try:
+        os.unlink(TESTNAME)
+    except:
+        pass
+
     print "Test pg info"
     for pg in ALLREPPGS + ALLECPGS:
         for osd in get_osds(pg, OSDDIR):

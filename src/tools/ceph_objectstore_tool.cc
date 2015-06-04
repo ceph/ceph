@@ -99,22 +99,24 @@ int _action_on_all_objects_in_pg(ObjectStore *store, coll_t coll, action_on_obje
 	 ++obj) {
       if (obj->is_pgmeta())
 	continue;
-      bufferlist attr;
-      r = store->getattr(coll, *obj, OI_ATTR, attr);
-      if (r < 0) {
-	cerr << "Error getting attr on : " << make_pair(coll, *obj) << ", "
-	     << cpp_strerror(r) << std::endl;
-	return r;
-      }
       object_info_t oi;
-      bufferlist::iterator bp = attr.begin();
-      try {
-	::decode(oi, bp);
-      } catch (...) {
-	r = -EINVAL;
-	cerr << "Error getting attr on : " << make_pair(coll, *obj) << ", "
-	     << cpp_strerror(r) << std::endl;
-	return r;
+      if (coll != META_COLL) {
+        bufferlist attr;
+        r = store->getattr(coll, *obj, OI_ATTR, attr);
+        if (r < 0) {
+	  cerr << "Error getting attr on : " << make_pair(coll, *obj) << ", "
+	       << cpp_strerror(r) << std::endl;
+	  return r;
+        }
+        bufferlist::iterator bp = attr.begin();
+        try {
+	  ::decode(oi, bp);
+        } catch (...) {
+	  r = -EINVAL;
+	  cerr << "Error getting attr on : " << make_pair(coll, *obj) << ", "
+	       << cpp_strerror(r) << std::endl;
+	  return r;
+        }
       }
       r = action.call(store, coll, *obj, oi);
       if (r < 0)
@@ -1382,6 +1384,18 @@ int do_list(ObjectStore *store, string pgidstr, string object, Formatter *format
   return 0;
 }
 
+int do_meta(ObjectStore *store, string object, Formatter *formatter, bool debug, bool human_readable)
+{
+  int r;
+  lookup_ghobject lookup(object);
+  r = action_on_all_objects_in_exact_pg(store, META_COLL, lookup, debug);
+  if (r)
+    return r;
+  lookup.dump(formatter, human_readable);
+  formatter->flush(cout);
+  return 0;
+}
+
 int do_remove_object(ObjectStore *store, coll_t coll, ghobject_t &ghobj)
 {
   spg_t pg;
@@ -1829,9 +1843,9 @@ int main(int argc, char **argv)
     ("journal-path", po::value<string>(&jpath),
      "path to journal, mandatory for filestore type")
     ("pgid", po::value<string>(&pgidstr),
-     "PG id, mandatory except for import, fix-lost, list-pgs, set-allow-sharded-objects, dump-journal, dump-super")
+     "PG id, mandatory except for import, fix-lost, list-pgs, set-allow-sharded-objects, dump-journal, dump-super, meta-list")
     ("op", po::value<string>(&op),
-     "Arg is one of [info, log, remove, export, import, list, fix-lost, list-pgs, rm-past-intervals, set-allow-sharded-objects, dump-journal, dump-super]")
+     "Arg is one of [info, log, remove, export, import, list, fix-lost, list-pgs, rm-past-intervals, set-allow-sharded-objects, dump-journal, dump-super, meta-list]")
     ("file", po::value<string>(&file),
      "path of file to export or import")
     ("format", po::value<string>(&format)->default_value("json-pretty"),
@@ -1987,7 +2001,7 @@ int main(int argc, char **argv)
   // Special list handling.  Treating pretty_format as human readable,
   // with one object per line and not an enclosing array.
   human_readable = ends_with(format, "-pretty");
-  if (op == "list" && human_readable) {
+  if ((op == "list" || op == "meta-list") && human_readable) {
     // Remove -pretty from end of format which we know is there
     format = format.substr(0, format.size() - strlen("-pretty"));
   }
@@ -2152,19 +2166,23 @@ int main(int argc, char **argv)
 	    throw std::runtime_error(ss.str());
 	  }
 	  string object_pgidstr = i->get_str();
-	  spg_t object_pgid;
-	  object_pgid.parse(object_pgidstr.c_str());
-	  if (pgidstr.length() > 0) {
-	    if (object_pgid != pgid) {
-	      ss << "object '" << object
-		 << "' has a pgid different from the --pgid="
-		 << pgidstr << " option";
-	      throw std::runtime_error(ss.str());
+          if (object_pgidstr != "meta") {
+	    spg_t object_pgid;
+	    object_pgid.parse(object_pgidstr.c_str());
+	    if (pgidstr.length() > 0) {
+	      if (object_pgid != pgid) {
+	        ss << "object '" << object
+		   << "' has a pgid different from the --pgid="
+		   << pgidstr << " option";
+	        throw std::runtime_error(ss.str());
+	      }
+	    } else {
+	      pgidstr = object_pgidstr;
+	      pgid = object_pgid;
 	    }
-	  } else {
-	    pgidstr = object_pgidstr;
-	    pgid = object_pgid;
-	  }
+          } else {
+            pgidstr = object_pgidstr;
+          }
 	  ++i;
 	  v = *i;
 	}
@@ -2174,7 +2192,7 @@ int main(int argc, char **argv)
 	  ss << "Decode object json error: " << e.what();
 	  throw std::runtime_error(ss.str());
 	}
-        if ((uint64_t)pgid.pgid.m_pool != (uint64_t)ghobj.hobj.pool) {
+        if (pgidstr != "meta" && (uint64_t)pgid.pgid.m_pool != (uint64_t)ghobj.hobj.pool) {
           cerr << "Object pool and pgid pool don't match" << std::endl;
           ret = 1;
           goto out;
@@ -2195,7 +2213,7 @@ int main(int argc, char **argv)
   if (op != "list" && op != "import" && op != "fix-lost"
       && op != "list-pgs"  && op != "set-allow-sharded-objects"
       && op != "dump-journal-mount" && op != "dump-super"
-      && (pgidstr.length() == 0)) {
+      && op != "meta-list" && (pgidstr.length() == 0)) {
     cerr << "Must provide pgid" << std::endl;
     usage(desc);
     ret = 1;
@@ -2353,6 +2371,14 @@ int main(int argc, char **argv)
     goto out;
   }
 
+  if (op == "meta-list") {
+    ret = do_meta(fs, object, formatter, debug, human_readable);
+    if (ret < 0) {
+      cerr << "do_meta failed: " << cpp_strerror(ret) << std::endl;
+    }
+    goto out;
+  }
+
   ret = fs->list_collections(ls);
   if (ret < 0) {
     cerr << "failed to list pgs: " << cpp_strerror(ret) << std::endl;
@@ -2366,6 +2392,13 @@ int main(int argc, char **argv)
   for (it = ls.begin(); it != ls.end(); ++it) {
     snapid_t snap;
     spg_t tmppgid;
+
+    if (pgidstr == "meta") {
+      if (it->to_str() == "meta")
+        break;
+      else
+        continue;
+    }
 
     if (!it->is_pg(tmppgid, snap)) {
       continue;
