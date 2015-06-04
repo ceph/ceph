@@ -14,9 +14,6 @@ bin_DEBUGPROGRAMS += ceph_radosacl
 
 rados_SOURCES = \
 	tools/rados/rados.cc \
-	tools/rados/rados_import.cc \
-	tools/rados/rados_export.cc \
-	tools/rados/rados_sync.cc \
 	tools/RadosDump.cc \
 	tools/RadosImport.cc \
 	tools/rados/PoolDump.cc

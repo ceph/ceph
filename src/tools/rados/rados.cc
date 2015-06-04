@@ -16,7 +16,6 @@
 
 #include "include/rados/librados.hpp"
 #include "include/rados/rados_types.hpp"
-#include "rados_sync.h"
 
 #include "common/config.h"
 #include "common/ceph_argparse.h"
