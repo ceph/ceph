@@ -27,6 +27,8 @@
 #include <sstream>
 #include <cstdio>
 
+#define DECIMAL_PRECISION 10
+
 CLS_VER(1,0)
 CLS_NAME(numops)
 
@@ -81,9 +83,7 @@ static int add(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   value += difference;
 
   std::stringstream stream;
-
-  stream.str("");
-  stream << std::setprecision(10) << value;
+  stream << std::setprecision(DECIMAL_PRECISION) << value;
 
   bufferlist new_value;
   new_value.append(stream.str());
@@ -138,9 +138,7 @@ static int mul(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   value *= difference;
 
   std::stringstream stream;
-
-  stream.str("");
-  stream << std::setprecision(10) << value;
+  stream << std::setprecision(DECIMAL_PRECISION) << value;
 
   bufferlist new_value;
   new_value.append(stream.str());
