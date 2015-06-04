@@ -4,6 +4,7 @@
  * Ceph - scalable distributed file system
  *
  * Copyright (C) 2015 Red Hat, Inc. <contact@redhat.com>
+ * Copyright (C) 2015 SUSE LINUX GmbH
  *
  * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -27,6 +28,18 @@
 
 struct MonOpRequest : public TrackedOp {
   friend class OpTracker;
+
+  int rw_flags;
+
+  void set_write();
+  void set_read();
+
+  void set_command_op();
+  void set_service_op();
+  void set_election_op();
+  void set_probe_op();
+  void set_sync_op();
+  void set_scrub_op();
 
 private:
   Message *request;
