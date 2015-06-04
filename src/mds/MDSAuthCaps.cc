@@ -27,8 +27,6 @@ namespace qi = boost::spirit::qi;
 namespace ascii = boost::spirit::ascii;
 namespace phoenix = boost::phoenix;
 
-const std::string MDSCapMatch::MDS_AUTH_PATH_ROOT = "/";
-
 template <typename Iterator>
 struct MDSCapParser : qi::grammar<Iterator, MDSAuthCaps()>
 {
@@ -89,6 +87,18 @@ struct MDSCapParser : qi::grammar<Iterator, MDSAuthCaps()>
   qi::rule<Iterator, MDSAuthCaps()> mdscaps;
 };
 
+void MDSCapMatch::normalize_path()
+{
+  // drop any leading /
+  while (path.length() && path[0] == '/') {
+    path = path.substr(1);
+  }
+
+  // drop dup //
+  // drop .
+  // drop ..
+}
+
 bool MDSCapMatch::match(const std::string &target_path,
 			const int target_uid) const
 {
@@ -126,7 +136,11 @@ bool MDSAuthCaps::is_capable(const std::string &inode_path,
     if (i->match.match(inode_path, uid) &&
 	i->spec.allows(mask & (MAY_READ|MAY_EXECUTE), mask & MAY_WRITE)) {
       // check unix permissions?
-      if (i->match.uid != MDS_AUTH_UID_ANY) {
+      if (i->match.uid != MDSCapMatch::MDS_AUTH_UID_ANY) {
+	// use fcntl.h macros for the file mode:
+	//  S_IRUSR  S_IRGRP  S_ROTH
+	//  S_IWUSR  S_IWGRP  S_WOTH
+	//  S_IXUSR  S_IXGRP  S_XOTH
 
 	// WRITE ME
 
@@ -185,12 +199,11 @@ bool MDSAuthCaps::allow_all() const
 
 ostream &operator<<(ostream &out, const MDSCapMatch &match)
 {
-  if (match.path != MDSCapMatch::MDS_AUTH_PATH_ROOT) {
-    out << "path=\"" << match.path << "\"";
-  }
-  if (match.path != MDSCapMatch::MDS_AUTH_PATH_ROOT &&
-      match.uid != MDSCapMatch::MDS_AUTH_UID_ANY) {
-    out << " ";
+  if (match.path.length()) {
+    out << "path=\"/" << match.path << "\"";
+    if (match.uid != MDSCapMatch::MDS_AUTH_UID_ANY) {
+      out << " ";
+    }
   }
   if (match.uid != MDSCapMatch::MDS_AUTH_UID_ANY) {
     out << "uid=" << match.uid;

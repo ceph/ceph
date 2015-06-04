@@ -52,18 +52,23 @@ struct MDSCapSpec {
 // conditions before we are allowed to do it
 struct MDSCapMatch {
   static const int64_t MDS_AUTH_UID_ANY = -1;
-  static const std::string MDS_AUTH_PATH_ROOT;
 
-  int64_t uid;          // Require UID to be equal to this, if !=MDS_AUTH_UID_ANY
+  int64_t uid;       // Require UID to be equal to this, if !=MDS_AUTH_UID_ANY
   std::vector<gid_t> gids;  // Use these GIDs
-  std::string path;     // Require path to be child of this (may be "/" for any)
+  std::string path;  // Require path to be child of this (may be "" or "/" for any)
 
-  MDSCapMatch() : uid(MDS_AUTH_UID_ANY), path(MDS_AUTH_PATH_ROOT) {}
-  MDSCapMatch(int64_t uid_, std::vector<gid_t>& gids_)
-    : uid(uid_), gids(gids_), path(MDS_AUTH_PATH_ROOT) {}
-  MDSCapMatch(std::string path_) : uid(MDS_AUTH_UID_ANY), path(path_) {}
+  MDSCapMatch() : uid(MDS_AUTH_UID_ANY) {}
+  MDSCapMatch(int64_t uid_, std::vector<gid_t>& gids_) : uid(uid_), gids(gids_) {}
+  MDSCapMatch(std::string path_)
+    : uid(MDS_AUTH_UID_ANY), path(path_) {
+    normalize_path();
+  }
   MDSCapMatch(std::string path_, int64_t uid_, std::vector<gid_t>& gids_)
-    : uid(uid_), gids(gids_), path(path_) {}
+    : uid(uid_), gids(gids_), path(path_) {
+    normalize_path();
+  }
+
+  void normalize_path();
   
   bool is_match_all() const
   {
