@@ -29,12 +29,10 @@ enum {
 
 // what we can do
 struct MDSCapSpec {
-  bool read;
-  bool write;
-  bool any;
+  bool read, write, any;
 
   MDSCapSpec() : read(false), write(false), any(false) {}
-  MDSCapSpec(bool r_, bool w_, bool a_) : read(r_), write(w_), any(a_) {}
+  MDSCapSpec(bool r, bool w, bool a) : read(r), write(w), any(a) {}
 
   bool allow_all() const {
     return any;
