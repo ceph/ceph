@@ -2098,6 +2098,35 @@ void Server::handle_slave_auth_pin_ack(MDRequestRef& mdr, MMDSSlaveRequest *ack)
 // HELPERS
 
 
+/**
+ * check whether we are permitted to complete a request
+ *
+ * Check whether we have permission to perform the operation specified
+ * by mask on the given inode, based on the capability in the mdr's
+ * session.
+ */
+bool Server::check_access(MDRequestRef& mdr, CInode *in, unsigned mask)
+{
+  Session *s = mdr->session;
+
+  uid_t uid = mdr->client_request->get_caller_uid();
+
+  // FIXME: generate a real path
+  // FIXME: behave with inodes in stray dir
+  // FIXME: behave with hard links
+  string path;
+
+  // FIXME: it depends on the inode!
+  if (s->auth_caps.is_capable(path, uid, mask)) {
+    return true;
+  }
+
+  // we are not allowed.
+  respond_to_request(mdr, -EACCES);
+  return false;
+}
+
+
 /** validate_dentry_dir
  *
  * verify that the dir exists and would own the dname.
