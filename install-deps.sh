@@ -98,6 +98,22 @@ function get_pip_and_wheel() {
     fi
 }
 
+function activate_virtualenv() {
+    local top_srcdir=$1
+    local interpreter=$2
+    local env_dir=$top_srcdir/install-deps-$interpreter
+
+    if ! test -d $env_dir ; then
+        virtualenv --python $interpreter $env_dir
+        . $env_dir/bin/activate
+        if ! get_pip_and_wheel install ; then
+            rm -rf $env_dir
+            return 1
+        fi
+    fi
+    . $env_dir/bin/activate
+}
+
 # use pip cache if possible but do not store it outside of the source
 # tree
 # see https://pip.pypa.io/en/stable/reference/pip_install.html#caching
@@ -109,15 +125,6 @@ wip_wheelhouse=wheelhouse-wip
 #
 # preload python modules so that tox can run without network access
 #
-for interpreter in python2.7 python3 ; do
-    type $interpreter > /dev/null 2>&1 || continue
-    if ! test -d install-deps-$interpreter ; then
-        virtualenv --python $interpreter install-deps-$interpreter
-        . install-deps-$interpreter/bin/activate
-        get_pip_and_wheel install || exit 1
-    fi
-done
-
 find . -name tox.ini | while read ini ; do
     (
         cd $(dirname $ini)
@@ -125,7 +132,7 @@ find . -name tox.ini | while read ini ; do
         if test "$require" && ! test -d wheelhouse ; then
             for interpreter in python2.7 python3 ; do
                 type $interpreter > /dev/null 2>&1 || continue
-                . $top_srcdir/install-deps-$interpreter/bin/activate
+                activate_virtualenv $top_srcdir $interpreter || exit 1
                 get_pip_and_wheel "wheel -w $wip_wheelhouse" $require || exit 1
             done
             mv $wip_wheelhouse wheelhouse
