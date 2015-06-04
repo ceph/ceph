@@ -19,6 +19,7 @@
 #include <vector>
 #include <string>
 #include <sstream>
+#include "include/types.h"
 
 // unix-style capabilities
 enum {
@@ -50,18 +51,18 @@ struct MDSCapSpec {
 
 // conditions before we are allowed to do it
 struct MDSCapMatch {
-  static const int MDS_AUTH_UID_ANY = -1;
+  static const int64_t MDS_AUTH_UID_ANY = -1;
   static const std::string MDS_AUTH_PATH_ROOT;
 
-  int uid;           // Require UID to be equal to this, if !=MDS_AUTH_UID_ANY
-  std::vector<int> gids;  // Use these GIDs
-  std::string path;  // Require path to be child of this (may be "/" for any)
+  int64_t uid;          // Require UID to be equal to this, if !=MDS_AUTH_UID_ANY
+  std::vector<gid_t> gids;  // Use these GIDs
+  std::string path;     // Require path to be child of this (may be "/" for any)
 
   MDSCapMatch() : uid(MDS_AUTH_UID_ANY), path(MDS_AUTH_PATH_ROOT) {}
-  MDSCapMatch(int uid_, std::vector<int>& gids_)
+  MDSCapMatch(int64_t uid_, std::vector<gid_t>& gids_)
     : uid(uid_), gids(gids_), path(MDS_AUTH_PATH_ROOT) {}
   MDSCapMatch(std::string path_) : uid(MDS_AUTH_UID_ANY), path(path_) {}
-  MDSCapMatch(std::string path_, int uid_, std::vector<int>& gids_)
+  MDSCapMatch(std::string path_, int64_t uid_, std::vector<gid_t>& gids_)
     : uid(uid_), gids(gids_), path(path_) {}
   
   bool is_match_all() const
@@ -92,7 +93,7 @@ public:
   bool parse(const std::string &str, std::ostream *err);
 
   bool allow_all() const;
-  bool is_capable(const std::string &path, int uid, unsigned mask) const;
+  bool is_capable(const std::string &path, uid_t uid, unsigned mask) const;
 
   friend std::ostream &operator<<(std::ostream &out, const MDSAuthCaps &cap);
 };
