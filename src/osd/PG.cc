@@ -217,7 +217,7 @@ PG::PG(OSDService *o, OSDMapRef curmap,
   active_pushes(0),
   recovery_state(this),
   pg_id(p),
-  peer_features((uint64_t)-1)
+  peer_features(CEPH_FEATURES_SUPPORTED_DEFAULT)
 {
 #ifdef PG_DEBUG_REFS
   osd->add_pgid(p, this);
