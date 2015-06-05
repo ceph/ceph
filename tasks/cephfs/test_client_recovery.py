@@ -4,9 +4,11 @@ Teuthology task for exercising CephFS client recovery
 """
 
 import logging
+from textwrap import dedent
 import time
 import distutils.version as version
 import re
+import os
 
 from teuthology.orchestra.run import CommandFailedError, ConnectionLostError
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
@@ -310,7 +312,6 @@ class TestClientRecovery(CephFSTestCase):
         self.assertLess(recovery_time, self.ms_max_backoff * 2)
         self.assert_session_state(client_id, "open")
 
-
     def test_filelock(self):
         """
         Check that file lock doesn't get lost after an MDS restart
@@ -353,3 +354,57 @@ class TestClientRecovery(CephFSTestCase):
         except (CommandFailedError, ConnectionLostError):
             # We killed it, so it raises an error
             pass
+
+    def test_fsync(self):
+        """
+        That calls to fsync guarantee visibility of metadata to another
+        client immediately after the fsyncing client dies.
+        """
+
+        # Leave this guy out until he's needed
+        self.mount_b.umount_wait()
+
+        # Create dir + child dentry on client A, and fsync the dir
+        path = os.path.join(self.mount_a.mountpoint, "subdir")
+        self.mount_a.run_python(
+            dedent("""
+                import os
+                import time
+
+                path = "{0}"
+
+                print "Starting creation..."
+                start = time.time()
+
+                os.mkdir(path)
+                f = open(os.path.join(path, "childfile"), "w")
+                f.close()
+                print "Finished creation in {0}s".format(time.time() - start)
+
+                fd = os.open(path, os.O_DIRECTORY)
+
+                print "Starting fsync..."
+                start = time.time()
+                os.fsync(fd)
+                print "Finished fsync in {0}s".format(time.time() - start)
+            """.format(path))
+        )
+
+        # Immediately kill the MDS and then client A
+        self.fs.mds_stop()
+        self.fs.mds_fail()
+        self.mount_a.kill()
+        self.mount_a.kill_cleanup()
+
+        # Restart the MDS.  Wait for it to come up, it'll have to time out in clientreplay
+        self.fs.mds_restart()
+        log.info("Waiting for reconnect...")
+        self.fs.wait_for_state("up:reconnect")
+        log.info("Waiting for active...")
+        self.fs.wait_for_state("up:active", timeout=MDS_RESTART_GRACE + self.mds_reconnect_timeout)
+        log.info("Reached active...")
+
+        # Is the child dentry visible from mount B?
+        self.mount_b.mount()
+        self.mount_b.wait_until_mounted()
+        self.mount_b.run_shell(["ls", "subdir/childfile"])
