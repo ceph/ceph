@@ -1103,37 +1103,30 @@ def main(argv):
         ERRORS += verify(DATADIR, EC_POOL, EC_NAME)
 
     if EXP_ERRORS == 0:
-        NEWPOOL = "import-rados-pool"
+        NEWPOOL = "rados-import-pool"
         cmd = "./rados mkpool {pool}".format(pool=NEWPOOL)
         logging.debug(cmd)
         ret = call(cmd, shell=True, stdout=nullfd, stderr=nullfd)
 
-        print "Test import-rados"
+        print "Test rados import"
         for osd in [f for f in os.listdir(OSDDIR) if os.path.isdir(os.path.join(OSDDIR, f)) and string.find(f, "osd") == 0]:
             dir = os.path.join(TESTDIR, osd)
             for pg in [f for f in os.listdir(dir) if os.path.isfile(os.path.join(dir, f))]:
                 if string.find(pg, "{id}.".format(id=REPID)) != 0:
                     continue
                 file = os.path.join(dir, pg)
-                # This should do nothing
-                cmd = "./ceph-objectstore-tool --dry-run import-rados {pool} {file}".format(pool=NEWPOOL, file=file)
+                cmd = "./rados import -p {pool} {file}".format(pool=NEWPOOL, file=file)
                 logging.debug(cmd)
                 ret = call(cmd, shell=True, stdout=nullfd)
                 if ret != 0:
-                    logging.error("Import-rados failed from {file} with {ret}".format(file=file, ret=ret))
+                    logging.error("Rados import failed from {file} with {ret}".format(file=file, ret=ret))
                     ERRORS += 1
-                cmd = "./ceph-objectstore-tool import-rados {pool} {file}".format(pool=NEWPOOL, file=file)
-                logging.debug(cmd)
-                ret = call(cmd, shell=True, stdout=nullfd)
-                if ret != 0:
-                    logging.error("Import-rados failed from {file} with {ret}".format(file=file, ret=ret))
-                    ERRORS += 1
-                cmd = "./ceph-objectstore-tool --no-overwrite import-rados {pool} {file}".format(pool=NEWPOOL, file=file)
-                logging.debug(cmd)
-                ret = call(cmd, shell=True, stdout=nullfd)
-                if ret != 0:
-                    logging.error("Import-rados failed from {file} with {ret}".format(file=file, ret=ret))
-                    ERRORS += 1
+                # cmd = "./rados import -p {pool} --no-overwrite {file}".format(pool=NEWPOOL, file=file)
+                # logging.debug(cmd)
+                # ret = call(cmd, shell=True, stdout=nullfd)
+                # if ret != 0:
+                #     logging.error("Import-rados failed from {file} with {ret}".format(file=file, ret=ret))
+                #     ERRORS += 1
 
         ERRORS += verify(DATADIR, NEWPOOL, REP_NAME)
     else:
