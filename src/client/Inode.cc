@@ -394,7 +394,6 @@ void Inode::dump(Formatter *f) const
   f->dump_stream("dirty_caps") << ccap_string(dirty_caps);
   if (flushing_caps) {
     f->dump_stream("flushings_caps") << ccap_string(flushing_caps);
-    f->dump_unsigned("flushing_cap_seq", flushing_cap_seq);
     f->open_object_section("flushing_cap_tid");
     for (map<ceph_tid_t, int>::const_iterator p = flushing_cap_tids.begin();
 	 p != flushing_cap_tids.end();

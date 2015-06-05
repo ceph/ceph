@@ -292,7 +292,6 @@ public:
   // mds requests
   ceph_tid_t last_tid;
   ceph_tid_t oldest_tid; // oldest incomplete mds request, excluding setfilelock requests
-  ceph_tid_t last_flush_seq;
   ceph_tid_t last_flush_tid;
   map<ceph_tid_t, MetaRequest*> mds_requests;
 
@@ -565,7 +564,7 @@ protected:
   void put_cap_ref(Inode *in, int cap);
   void flush_snaps(Inode *in, bool all_again=false, CapSnap *again=0);
   void wait_sync_caps(Inode *in, ceph_tid_t want);
-  void wait_sync_caps(uint64_t want);
+  void wait_sync_caps(ceph_tid_t want);
   void queue_cap_snap(Inode *in, SnapContext &old_snapc);
   void finish_cap_snap(Inode *in, CapSnap *capsnap, int used);
   void _flushed_cap_snap(Inode *in, snapid_t seq);
