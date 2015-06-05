@@ -4029,6 +4029,9 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 
           resp.clones.push_back(ci);
         }
+	if (result < 0) {
+	  break;
+	}	  
         if (ssc->snapset.head_exists &&
 	    !ctx->obc->obs.oi.is_whiteout()) {
           assert(obs.exists);
