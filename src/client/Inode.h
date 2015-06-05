@@ -239,7 +239,6 @@ struct Inode {
   int snap_caps, snap_cap_refs;
   utime_t hold_caps_until;
   xlist<Inode*>::item cap_item, flushing_cap_item;
-  ceph_tid_t last_flush_tid;
 
   SnapRealm *snaprealm;
   xlist<Inode*>::item snaprealm_item;
@@ -306,7 +305,7 @@ struct Inode {
       dir_hashed(false), dir_replicated(false), auth_cap(NULL),
       dirty_caps(0), flushing_caps(0), flushing_cap_seq(0), shared_gen(0), cache_gen(0),
       snap_caps(0), snap_cap_refs(0),
-      cap_item(this), flushing_cap_item(this), last_flush_tid(0),
+      cap_item(this), flushing_cap_item(this),
       snaprealm(0), snaprealm_item(this),
       oset((void *)this, newlayout->fl_pg_pool, ino),
       reported_size(0), wanted_max_size(0), requested_max_size(0),
