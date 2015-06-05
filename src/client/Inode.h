@@ -234,7 +234,7 @@ struct Inode {
   Cap *auth_cap;
   unsigned dirty_caps, flushing_caps;
   uint64_t flushing_cap_seq;
-  __u16 flushing_cap_tid[CEPH_CAP_BITS];
+  std::map<ceph_tid_t, int> flushing_cap_tids;
   int shared_gen, cache_gen;
   int snap_caps, snap_cap_refs;
   utime_t hold_caps_until;
@@ -316,7 +316,6 @@ struct Inode {
   {
     memset(&dir_layout, 0, sizeof(dir_layout));
     memset(&layout, 0, sizeof(layout));
-    memset(&flushing_cap_tid, 0, sizeof(__u16)*CEPH_CAP_BITS);
     memset(&quota, 0, sizeof(quota));
   }
   ~Inode() { }
