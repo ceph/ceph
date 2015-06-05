@@ -2971,6 +2971,10 @@ void Client::send_cap(Inode *in, MetaSession *session, Cap *cap,
     in->requested_max_size = in->wanted_max_size;
     ldout(cct, 15) << "auth cap, setting max_size = " << in->requested_max_size << dendl;
   }
+
+  if (!session->flushing_caps_tids.empty())
+    m->set_oldest_flush_tid(*session->flushing_caps_tids.begin());
+
   session->con->send_message(m);
 }
 
