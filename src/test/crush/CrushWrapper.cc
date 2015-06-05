@@ -408,6 +408,10 @@ TEST(CrushWrapper, adjust_item_weight) {
     EXPECT_EQ(true, c->bucket_exists(bucket_id));
     EXPECT_EQ(host_weight, c->get_bucket_weightf(bucket_id));
 
+    map<string,string> bloc;
+    bloc["root"] = "default";
+    EXPECT_EQ(0, c->insert_item(g_ceph_context, host0, host_weight,
+				HOST0, bloc));
   }
 
   {
@@ -426,6 +430,11 @@ TEST(CrushWrapper, adjust_item_weight) {
     bucket_id = c->get_item_id("fake");
     EXPECT_EQ(true, c->bucket_exists(bucket_id));
     EXPECT_EQ(host_weight, c->get_bucket_weightf(bucket_id));
+
+    map<string,string> bloc;
+    bloc["root"] = "default";
+    EXPECT_EQ(0, c->insert_item(g_ceph_context, hostfake, host_weight,
+				FAKE, bloc));
   }
 
   //
