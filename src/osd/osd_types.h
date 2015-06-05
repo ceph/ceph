@@ -1671,10 +1671,15 @@ WRITE_CLASS_ENCODER_FEATURES(pool_stat_t)
 struct pg_hit_set_info_t {
   utime_t begin, end;   ///< time interval
   eversion_t version;   ///< version this HitSet object was written
-
-  pg_hit_set_info_t() {}
+  // TODO: remove me in Infernalis.
+  // for upgrading from pre-Hammer and old Hammer releases,
+  // see ReplicatedPG::get_hit_set_{current,archive}_object().
+  bool using_gmt;
+  pg_hit_set_info_t()
+    : using_gmt(true) {}
   pg_hit_set_info_t(utime_t b)
-    : begin(b) {}
+    : begin(b),
+      using_gmt(true) {}
 
   void encode(bufferlist &bl) const;
   void decode(bufferlist::iterator &bl);
