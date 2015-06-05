@@ -174,6 +174,7 @@ Client::Client(Messenger *m, MonClient *mc)
     tick_event(NULL),
     monclient(mc), messenger(m), whoami(m->get_myname().num()),
     cap_epoch_barrier(0),
+    last_tid(0), oldest_tid(0), last_flush_seq(0),
     initialized(false), authenticated(false),
     mounted(false), unmounting(false),
     local_osd(-1), local_osd_epoch(0),
@@ -181,9 +182,6 @@ Client::Client(Messenger *m, MonClient *mc)
     client_lock("Client::client_lock")
 {
   monclient->set_messenger(m);
-
-  last_tid = 0;
-  last_flush_seq = 0;
 
   cwd = NULL;
 
@@ -1477,6 +1475,9 @@ int Client::make_request(MetaRequest *request,
 
   // make note
   mds_requests[tid] = request->get();
+  if (oldest_tid == 0 && request->get_op() != CEPH_MDS_OP_SETFILELOCK)\
+    oldest_tid = tid;
+
   if (uid < 0) {
     uid = geteuid();
     gid = getegid();
@@ -1488,10 +1489,7 @@ int Client::make_request(MetaRequest *request,
     ldout(cct, 20) << __func__ << " injecting fixed oldest_client_tid(1)" << dendl;
     request->set_oldest_client_tid(1);
   } else {
-    if (!mds_requests.empty())
-      request->set_oldest_client_tid(mds_requests.begin()->first);
-    else
-      request->set_oldest_client_tid(tid); // this one is the oldest.
+    request->set_oldest_client_tid(oldest_tid);
   }
 
   // hack target mds?
@@ -1564,8 +1562,7 @@ int Client::make_request(MetaRequest *request,
     assert(request->aborted);
     assert(!request->got_unsafe);
     request->item.remove_myself();
-    mds_requests.erase(tid);
-    put_request(request); // request map's
+    unregister_request(request);
     put_request(request); // ours
     return -ETIMEDOUT;
   }
@@ -1600,6 +1597,26 @@ int Client::make_request(MetaRequest *request,
 
   reply->put();
   return r;
+}
+
+void Client::unregister_request(MetaRequest *req)
+{
+  mds_requests.erase(req->tid);
+  if (req->tid == oldest_tid) {
+    map<ceph_tid_t, MetaRequest*>::iterator p = mds_requests.upper_bound(oldest_tid);
+    while (true) {
+      if (p == mds_requests.end()) {
+	oldest_tid = 0;
+	break;
+      }
+      if (p->second->get_op() != CEPH_MDS_OP_SETFILELOCK) {
+	oldest_tid = p->first;
+	break;
+      }
+      ++p;
+    }
+  }
+  put_request(req);
 }
 
 void Client::put_request(MetaRequest *request)
@@ -2097,8 +2114,7 @@ void Client::handle_client_reply(MClientReply *reply)
       request->unsafe_item.remove_myself();
     }
     request->item.remove_myself();
-    mds_requests.erase(tid);
-    put_request(request);
+    unregister_request(request);
   }
   if (unmounting)
     mount_cond.Signal();
@@ -2468,8 +2484,7 @@ void Client::kick_requests_closed(MetaSession *session)
       if (req->got_unsafe) {
 	lderr(cct) << "kick_requests_closed removing unsafe request " << req->get_tid() << dendl;
 	req->unsafe_item.remove_myself();
-	mds_requests.erase(req->get_tid());
-	put_request(req);
+	unregister_request(req);
       }
     }
   }
