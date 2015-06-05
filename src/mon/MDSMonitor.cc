@@ -320,7 +320,7 @@ bool MDSMonitor::preprocess_beacon(MMDSBeacon *m)
     goto out;
   }
   // is there a state change here?
-  if (info.state != state) {    
+  if (info.state != state) {
     // legal state change?
     if ((info.state == MDSMap::STATE_STANDBY ||
 	 info.state == MDSMap::STATE_STANDBY_REPLAY ||
@@ -639,8 +639,14 @@ void MDSMonitor::_updated(MMDSBeacon *m)
   if (m->get_state() == MDSMap::STATE_STOPPED) {
     // send the map manually (they're out of the map, so they won't get it automatic)
     mon->send_reply(m, new MMDSMap(mon->monmap->fsid, &mdsmap));
+  } else {
+    mon->send_reply(m, new MMDSBeacon(mon->monmap->fsid,
+				      m->get_global_id(),
+				      m->get_name(),
+				      mdsmap.get_epoch(),
+				      m->get_state(),
+				      m->get_seq()));
   }
-
   m->put();
 }
 
