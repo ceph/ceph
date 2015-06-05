@@ -2,24 +2,35 @@
 // vim: ts=8 sw=2 smarttab
 #include "librbd/AsyncObjectThrottle.h"
 #include "include/rbd/librbd.hpp"
+#include "common/RWLock.h"
 #include "librbd/AsyncRequest.h"
+#include "librbd/ImageCtx.h"
+#include "librbd/internal.h"
 
 namespace librbd
 {
 
+void C_AsyncObjectThrottle::finish(int r) {
+  RWLock::RLocker l(m_image_ctx.owner_lock);
+  m_finisher.finish_op(r);
+}
+
 AsyncObjectThrottle::AsyncObjectThrottle(const AsyncRequest* async_request,
+                                         ImageCtx &image_ctx,
                                          const ContextFactory& context_factory,
 				 	 Context *ctx, ProgressContext *prog_ctx,
 					 uint64_t object_no,
 					 uint64_t end_object_no)
-  : m_lock("librbd::AsyncThrottle::m_lock"),
-    m_async_request(async_request), m_context_factory(context_factory),
-    m_ctx(ctx), m_prog_ctx(prog_ctx), m_object_no(object_no),
-    m_end_object_no(end_object_no), m_current_ops(0), m_ret(0)
+  : m_lock(unique_lock_name("librbd::AsyncThrottle::m_lock", this)),
+    m_async_request(async_request), m_image_ctx(image_ctx),
+    m_context_factory(context_factory), m_ctx(ctx), m_prog_ctx(prog_ctx),
+    m_object_no(object_no), m_end_object_no(end_object_no), m_current_ops(0),
+    m_ret(0)
 {
 }
 
 void AsyncObjectThrottle::start_ops(uint64_t max_concurrent) {
+  assert(m_image_ctx.owner_lock.is_locked());
   bool complete;
   {
     Mutex::Locker l(m_lock);
@@ -38,6 +49,7 @@ void AsyncObjectThrottle::start_ops(uint64_t max_concurrent) {
 }
 
 void AsyncObjectThrottle::finish_op(int r) {
+  assert(m_image_ctx.owner_lock.is_locked());
   bool complete;
   {
     Mutex::Locker l(m_lock);

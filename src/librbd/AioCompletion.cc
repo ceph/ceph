@@ -89,7 +89,9 @@ namespace librbd {
     }
 
     if (complete_cb) {
+      lock.Unlock();
       complete_cb(rbd_comp, complete_arg);
+      lock.Lock();
     }
     done = true;
     cond.Signal();
@@ -169,6 +171,17 @@ namespace librbd {
       r = m_req->m_object_len;
     }
     m_completion->complete_request(m_cct, r);
+  }
+
+  void C_CacheRead::complete(int r) {
+    if (!m_enqueued) {
+      // cache_lock creates a lock ordering issue -- so re-execute this context
+      // outside the cache_lock
+      m_enqueued = true;
+      m_image_ctx.op_work_queue->queue(this, r);
+      return;
+    }
+    Context::complete(r);
   }
 
   void C_CacheRead::finish(int r)

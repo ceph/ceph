@@ -106,7 +106,11 @@ void Log::set_max_new(int n)
 
 void Log::set_max_recent(int n)
 {
+  pthread_mutex_lock(&m_flush_mutex);
+  m_flush_mutex_holder = pthread_self();
   m_max_recent = n;
+  m_flush_mutex_holder = 0;
+  pthread_mutex_unlock(&m_flush_mutex);
 }
 
 void Log::set_log_file(string fn)
