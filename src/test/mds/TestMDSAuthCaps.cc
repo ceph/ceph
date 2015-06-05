@@ -23,6 +23,7 @@ using std::string;
 using std::cout;
 
 const char *parse_good[] = {
+  "allow rw uid=1 gids=1",
   "allow * path=\"/foo\"",
   "allow * path=/foo",
   "allow * path=\"/foo bar/baz\"",
@@ -31,6 +32,8 @@ const char *parse_good[] = {
   "allow *",
   "allow r",
   "allow rw",
+  "allow rw uid=1 gids=1,2,3",
+  "allow rw path=/foo uid=1 gids=1,2,3",
   0
 };
 
@@ -66,6 +69,10 @@ const char *parse_bad[] = {
   "allow namespace=foo",
   "allow rwx auid 123 namespace asdf",
   "allow wwx pool ''",
+  "allow rw gids=1",
+  "allow rw gids=1,2,3",
+  "allow rw uid=123 gids=asdf",
+  "allow rw uid=123 gids=1,2,asdf",
   0
 };
 
@@ -96,25 +103,26 @@ TEST(MDSAuthCaps, AllowAll) {
 
   ASSERT_TRUE(cap.parse("allow *", NULL));
   ASSERT_TRUE(cap.allow_all());
-  ASSERT_TRUE(cap.is_capable("/foo/bar", 0, true, true));
+  ASSERT_TRUE(cap.is_capable("/foo/bar", 0, 0, 0777, 0, MAY_READ | MAY_WRITE));
 }
 
 TEST(MDSAuthCaps, AllowUid) {
   MDSAuthCaps cap;
   ASSERT_TRUE(cap.parse("allow * uid=10", NULL));
   ASSERT_FALSE(cap.allow_all());
-  ASSERT_TRUE(cap.is_capable("/foo", 10, true, true));
-  ASSERT_FALSE(cap.is_capable("/foo", -1, true, true));
-  ASSERT_FALSE(cap.is_capable("/foo", 0, true, true));
+  ASSERT_TRUE(cap.is_capable("/foo", 0, 0, 0777, 10, MAY_READ | MAY_WRITE));
+  ASSERT_FALSE(cap.is_capable("/foo", 0, 0, 0777, -1, MAY_READ | MAY_WRITE));
+  ASSERT_FALSE(cap.is_capable("/foo", 0, 0, 0777, 0, MAY_READ | MAY_WRITE));
 }
 
 TEST(MDSAuthCaps, AllowPath) {
   MDSAuthCaps cap;
   ASSERT_TRUE(cap.parse("allow * path=/sandbox", NULL));
   ASSERT_FALSE(cap.allow_all());
-  ASSERT_TRUE(cap.is_capable("/sandbox/foo", 0, true, true));
-  ASSERT_TRUE(cap.is_capable("/sandbox", 0, true, true));
-  ASSERT_FALSE(cap.is_capable("/foo", 0, true, true));
+  ASSERT_TRUE(cap.is_capable("/sandbox/foo", 0, 0, 0777, 0, MAY_READ | MAY_WRITE));
+  ASSERT_TRUE(cap.is_capable("/sandbox", 0, 0, 0777, 0, MAY_READ | MAY_WRITE));
+  ASSERT_FALSE(cap.is_capable("/sandboxed", 0, 0, 0777, 0, MAY_READ | MAY_WRITE));
+  ASSERT_FALSE(cap.is_capable("/foo", 0, 0, 0777, 0, MAY_READ | MAY_WRITE));
 }
 
 TEST(MDSAuthCaps, OutputParsed) {
@@ -133,12 +141,18 @@ TEST(MDSAuthCaps, OutputParsed) {
      "MDSAuthCaps[allow rw]"},
     {"allow * uid=1",
      "MDSAuthCaps[allow * uid=1]"},
+    {"allow * uid=1 gids=1",
+     "MDSAuthCaps[allow * uid=1 gids=1]"},
+    {"allow * uid=1 gids=1,2,3",
+     "MDSAuthCaps[allow * uid=1 gids=1,2,3]"},
     {"allow * path=/foo",
      "MDSAuthCaps[allow * path=\"/foo\"]"},
     {"allow * path=\"/foo\"",
      "MDSAuthCaps[allow * path=\"/foo\"]"},
     {"allow * path=\"/foo\" uid=1",
      "MDSAuthCaps[allow * path=\"/foo\" uid=1]"},
+    {"allow * path=\"/foo\" uid=1 gids=1,2,3",
+     "MDSAuthCaps[allow * path=\"/foo\" uid=1 gids=1,2,3]"},
   };
   size_t num_tests = sizeof(test_values) / sizeof(*test_values);
   for (size_t i = 0; i < num_tests; ++i) {

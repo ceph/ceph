@@ -2079,6 +2079,36 @@ void Server::handle_slave_auth_pin_ack(MDRequestRef& mdr, MMDSSlaveRequest *ack)
 // HELPERS
 
 
+/**
+ * check whether we are permitted to complete a request
+ *
+ * Check whether we have permission to perform the operation specified
+ * by mask on the given inode, based on the capability in the mdr's
+ * session.
+ */
+bool Server::check_access(MDRequestRef& mdr, CInode *in, unsigned mask)
+{
+  Session *s = mdr->session;
+
+  uid_t uid = mdr->client_request->get_caller_uid();
+
+  // FIXME: generate a real path
+  // FIXME: behave with inodes in stray dir
+  // FIXME: behave with hard links
+  string path;
+
+  // FIXME: it depends on the inode!
+  if (s->auth_caps.is_capable(path, in->inode.uid, in->inode.gid, in->inode.mode,
+			      uid, mask)) {
+    return true;
+  }
+
+  // we are not allowed.
+  respond_to_request(mdr, -EACCES);
+  return false;
+}
+
+
 /** validate_dentry_dir
  *
  * verify that the dir exists and would own the dname.
@@ -2644,6 +2674,9 @@ void Server::handle_client_getattr(MDRequestRef& mdr, bool is_lookup)
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return;
 
+  if (!check_access(mdr, ref, MAY_READ))
+    return;
+
   // note which caps are requested, so we return at least a snapshot
   // value for them.  (currently this matters for xattrs and inline data)
   mdr->getattr_caps = mask;
@@ -2687,6 +2720,11 @@ void Server::handle_client_lookup_ino(MDRequestRef& mdr,
     return;
   }
 
+  // check for nothing (not read or write); this still applies the
+  // path check.
+  if (!check_access(mdr, in, 0))
+    return;
+
   CDentry *dn = in->get_projected_parent_dn();
   CInode *diri = dn ? dn->get_dir()->inode : NULL;
   if (dn && (want_parent || want_dentry)) {
@@ -2694,6 +2732,10 @@ void Server::handle_client_lookup_ino(MDRequestRef& mdr,
     set<SimpleLock*> rdlocks, wrlocks, xlocks;
     rdlocks.insert(&dn->lock);
     if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
+      return;
+
+    // need read access to directory inode
+    if (!check_access(mdr, diri, MAY_READ))
       return;
   }
 
@@ -2856,6 +2898,12 @@ void Server::handle_client_open(MDRequestRef& mdr)
   }
 
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
+    return;
+
+  int mask = MAY_READ;
+  if (cmode & CEPH_FILE_MODE_WR)
+    mask |= MAY_WRITE;
+  if (!check_access(mdr, cur, mask))
     return;
 
   if (cur->is_file() || cur->is_dir()) {
@@ -3523,6 +3571,9 @@ void Server::handle_client_setattr(MDRequestRef& mdr)
     wrlocks.insert(&cur->versionlock);
 
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
+    return;
+
+  if (!check_access(mdr, cur, MAY_WRITE))
     return;
 
   // trunc from bigger -> smaller?
