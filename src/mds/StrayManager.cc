@@ -520,7 +520,7 @@ struct C_MDC_EvalStray : public StrayManagerContext {
   }
 };
 
-bool StrayManager::eval_stray(CDentry *dn, bool delay)
+bool StrayManager::__eval_stray(CDentry *dn, bool delay)
 {
   dout(10) << "eval_stray " << *dn << dendl;
   CDentry::linkage_t *dnl = dn->get_projected_linkage();
@@ -572,6 +572,17 @@ bool StrayManager::eval_stray(CDentry *dn, bool delay)
         for (list<CDir*>::iterator p = ls.begin(); p != ls.end(); ++p) {
           (*p)->try_remove_dentries_for_stray();
         }
+      }
+
+      if (!in->remote_parents.empty()) {
+	// unlink any stale remote snap dentry.
+	for (compact_set<CDentry*>::iterator p = in->remote_parents.begin();
+	     p != in->remote_parents.end(); ) {
+	  CDentry *remote_dn = *p;
+	  ++p;
+	  assert(remote_dn->last != CEPH_NOSNAP);
+	  remote_dn->unlink_remote(remote_dn->get_linkage());
+	}
       }
     }
     if (dn->is_replicated()) {
@@ -631,6 +642,18 @@ bool StrayManager::eval_stray(CDentry *dn, bool delay)
     eval_remote_stray(dn, NULL);
     return false;
   }
+}
+
+bool StrayManager::eval_stray(CDentry *dn, bool delay)
+{
+  // avoid nested eval_stray
+  if (dn->state_test(CDentry::STATE_EVALUATINGSTRAY))
+      return false;
+
+  dn->state_set(CDentry::STATE_EVALUATINGSTRAY);
+  bool ret = __eval_stray(dn, delay);
+  dn->state_clear(CDentry::STATE_EVALUATINGSTRAY);
+  return ret;
 }
 
 void StrayManager::eval_remote_stray(CDentry *stray_dn, CDentry *remote_dn)

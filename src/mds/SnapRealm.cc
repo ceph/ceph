@@ -61,7 +61,18 @@ ostream& operator<<(ostream& out, const SnapRealm& realm)
 void SnapRealm::add_open_past_parent(SnapRealm *parent)
 {
   open_past_parents[parent->inode->ino()] = parent;
+  parent->open_past_children.insert(this);
   parent->inode->get(CInode::PIN_PASTSNAPPARENT);
+}
+
+void SnapRealm::remove_open_past_parent(inodeno_t ino)
+{
+  map<inodeno_t,SnapRealm*>::iterator p = open_past_parents.find(ino);
+  assert(p != open_past_parents.end());
+  SnapRealm *parent = p->second;
+  open_past_parents.erase(p);
+  parent->open_past_children.erase(this);
+  parent->inode->put(CInode::PIN_PASTSNAPPARENT);
 }
 
 struct C_SR_RetryOpenParents : public MDSInternalContextBase {
@@ -174,8 +185,10 @@ void SnapRealm::close_parents()
 {
   for (map<inodeno_t,SnapRealm*>::iterator p = open_past_parents.begin();
        p != open_past_parents.end();
-       ++p)
+       ++p) {
     p->second->inode->put(CInode::PIN_PASTSNAPPARENT);
+    p->second->open_past_children.erase(this);
+  }
   open_past_parents.clear();
 }
 
@@ -222,6 +235,7 @@ void SnapRealm::build_snap_set(set<snapid_t> &s,
 
 void SnapRealm::check_cache()
 {
+  assert(open);
   if (cached_seq >= srnode.seq)
     return;
 
@@ -514,6 +528,7 @@ void SnapRealm::prune_past_parents()
 	*q > p->first) {
       dout(10) << "prune_past_parents pruning [" << p->second.first << "," << p->first 
 	       << "] " << p->second.ino << dendl;
+      remove_open_past_parent(p->second.ino);
       srnode.past_parents.erase(p++);
     } else {
       dout(10) << "prune_past_parents keeping [" << p->second.first << "," << p->first 

@@ -2687,6 +2687,11 @@ void Server::handle_client_lookup_ino(MDRequestRef& mdr,
     return;
   }
 
+  if (mdr && in->snaprealm && !in->snaprealm->is_open() &&
+      !in->snaprealm->open_parents(new C_MDS_RetryRequest(mdcache, mdr))) {
+    return;
+  }
+
   CDentry *dn = in->get_projected_parent_dn();
   CInode *diri = dn ? dn->get_dir()->inode : NULL;
   if (dn && (want_parent || want_dentry)) {
@@ -8061,7 +8066,7 @@ void Server::_renamesnap_finish(MDRequestRef& mdr, CInode *diri, snapid_t snapid
 
   dout(10) << "snaprealm now " << *diri->snaprealm << dendl;
 
-  mdcache->do_realm_invalidate_and_update_notify(diri, CEPH_SNAP_OP_CREATE, true);
+  mdcache->do_realm_invalidate_and_update_notify(diri, CEPH_SNAP_OP_UPDATE, true);
 
   // yay
   mdr->in[0] = diri;
