@@ -64,6 +64,7 @@
 // duplicated since it was introduced at the same time as MIN_SIZE_RECOVERY
 #define CEPH_FEATURE_OSD_PROXY_FEATURES (1ULL<<49)  /* overlap w/ above */
 #define CEPH_FEATURE_MON_METADATA (1ULL<<50)
+#define CEPH_FEATURE_OSD_HITSET_GMT (1ULL<<51) /* overlap with bitwise sort */
 /* ... */
 #define CEPH_FEATURE_HAMMER_0_94_4 (1ULL<<55)
 

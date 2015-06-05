@@ -16,6 +16,7 @@
  * 
  */
 
+#include <algorithm>
 #include <sstream>
 
 #include "OSDMonitor.h"
@@ -1565,6 +1566,9 @@ void OSDMonitor::take_all_failures(list<MOSDFailure*>& ls)
   failure_info.clear();
 }
 
+static bool uses_gmt_hitset(const std::pair<int64_t, pg_pool_t>& pool) {
+  return pool.second.use_gmt_hitset;
+}
 
 // boot --
 
@@ -1630,6 +1634,19 @@ bool OSDMonitor::preprocess_boot(MOSDBoot *m)
       mon->clog->info() << "disallowing boot of pre-hammer OSD "
 			<< m->get_orig_source_inst()
 			<< " because all up OSDs are post-hammer\n";
+      goto ignore;
+    }
+  }
+
+  if (std::find_if(osdmap.get_pools().begin(),
+		   osdmap.get_pools().end(),
+		   uses_gmt_hitset) != osdmap.get_pools().end()) {
+    assert(osdmap.get_num_up_osds() == 0 ||
+	   osdmap.get_up_osd_features() & CEPH_FEATURE_OSD_HITSET_GMT);
+    if (!(m->osd_features & CEPH_FEATURE_OSD_HITSET_GMT)) {
+      dout(0) << __func__ << " one or more pools uses GMT hitsets but osd at "
+	      << m->get_orig_source_inst()
+	      << " doesn't announce support -- ignore" << dendl;
       goto ignore;
     }
   }
@@ -4042,7 +4059,9 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid,
     pi->set_flag(pg_pool_t::FLAG_NOPGCHANGE);
   if (g_conf->osd_pool_default_flag_nosizechange)
     pi->set_flag(pg_pool_t::FLAG_NOSIZECHANGE);
-
+  if (g_conf->osd_pool_use_gmt_hitset &&
+      (osdmap.get_up_osd_features() & CEPH_FEATURE_OSD_HITSET_GMT))
+    pi->use_gmt_hitset = true;
   pi->size = size;
   pi->min_size = min_size;
   pi->crush_ruleset = crush_ruleset;
