@@ -293,6 +293,7 @@ public:
   ceph_tid_t last_tid;
   ceph_tid_t oldest_tid; // oldest incomplete mds request, excluding setfilelock requests
   ceph_tid_t last_flush_seq;
+  ceph_tid_t last_flush_tid;
   map<ceph_tid_t, MetaRequest*> mds_requests;
 
   void dump_mds_requests(Formatter *f);
