@@ -164,10 +164,10 @@ public:
 
   int handle_restart_aio(librbd::ImageCtx *ictx,
 			 librbd::AioCompletion *aio_completion) {
-    Mutex::Locker l1(m_callback_lock);
+    Mutex::Locker callback_locker(m_callback_lock);
     ++m_aio_completion_restarts;
 
-    RWLock::WLocker l2(ictx->owner_lock);
+    RWLock::RLocker owner_locker(ictx->owner_lock);
     if (!ictx->image_watcher->is_lock_owner() &&
         (m_expected_aio_restarts == 0 ||
 	 m_aio_completion_restarts < m_expected_aio_restarts)) {
@@ -176,7 +176,7 @@ public:
 	aio_completion);
     } else {
       {
-	Mutex::Locker l2(aio_completion->lock);
+	Mutex::Locker completion_locker(aio_completion->lock);
 	aio_completion->complete(ictx->cct);
       }
 

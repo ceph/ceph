@@ -26,9 +26,8 @@ class C_VerifyObject : public C_AsyncObjectThrottle {
 public:
   C_VerifyObject(AsyncObjectThrottle &throttle, ImageCtx *image_ctx,
                  uint64_t snap_id, uint64_t object_no)
-    : C_AsyncObjectThrottle(throttle), m_image_ctx(*image_ctx),
-      m_snap_id(snap_id), m_object_no(object_no),
-      m_oid(m_image_ctx.get_object_name(m_object_no))
+    : C_AsyncObjectThrottle(throttle, *image_ctx), m_snap_id(snap_id),
+      m_object_no(object_no), m_oid(m_image_ctx.get_object_name(m_object_no))
   {
     m_io_ctx.dup(m_image_ctx.md_ctx);
     m_io_ctx.snap_set_read(CEPH_SNAPDIR);
@@ -49,7 +48,6 @@ public:
   }
 
 private:
-  ImageCtx &m_image_ctx;
   librados::IoCtx m_io_ctx;
   uint64_t m_snap_id;
   uint64_t m_object_no;
@@ -75,6 +73,7 @@ private:
   }
 
   void send_list_snaps() {
+    assert(m_image_ctx.owner_lock.is_locked());
     ldout(m_image_ctx.cct, 5) << m_oid << " C_VerifyObject::send_list_snaps"
                               << dendl;
 
@@ -109,7 +108,6 @@ private:
         break;
       }
 
-      RWLock::RLocker snap_locker(m_image_ctx.snap_lock);
       if ((m_image_ctx.features & RBD_FEATURE_FAST_DIFF) != 0 &&
           from_snap_id != m_snap_id) {
         return OBJECT_EXISTS_CLEAN;
@@ -131,36 +129,26 @@ private:
   }
 
   bool update_object_map(uint8_t new_state) {
+    RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
     CephContext *cct = m_image_ctx.cct;
-    bool lost_exclusive_lock = false;
 
-    {
-      RWLock::RLocker l(m_image_ctx.owner_lock);
-      if (m_image_ctx.image_watcher->is_lock_supported() &&
-          !m_image_ctx.image_watcher->is_lock_owner()) {
-        ldout(cct, 1) << m_oid << " lost exclusive lock during verify" << dendl;
-        lost_exclusive_lock = true;
-      } else {
-        RWLock::WLocker l(m_image_ctx.object_map_lock);
-        uint8_t state = m_image_ctx.object_map[m_object_no];
-        if (state == OBJECT_EXISTS && new_state == OBJECT_NONEXISTENT &&
-            m_snap_id == CEPH_NOSNAP) {
-          // might be writing object to OSD concurrently
-          new_state = state;
-        }
+    // should have been canceled prior to releasing lock
+    assert(!m_image_ctx.image_watcher->is_lock_supported() ||
+           m_image_ctx.image_watcher->is_lock_owner());
 
-        if (new_state != state) {
-          ldout(cct, 15) << m_oid << " C_VerifyObject::update_object_map "
-                         << static_cast<uint32_t>(state) << "->"
-                         << static_cast<uint32_t>(new_state) << dendl;
-          m_image_ctx.object_map[m_object_no] = new_state;
-        }
-      }
+    RWLock::WLocker l(m_image_ctx.object_map_lock);
+    uint8_t state = m_image_ctx.object_map[m_object_no];
+    if (state == OBJECT_EXISTS && new_state == OBJECT_NONEXISTENT &&
+        m_snap_id == CEPH_NOSNAP) {
+      // might be writing object to OSD concurrently
+      new_state = state;
     }
 
-    if (lost_exclusive_lock) {
-      complete(-ERESTART);
-      return false;
+    if (new_state != state) {
+      ldout(cct, 15) << m_oid << " C_VerifyObject::update_object_map "
+                     << static_cast<uint32_t>(state) << "->"
+                     << static_cast<uint32_t>(new_state) << dendl;
+      m_image_ctx.object_map[m_object_no] = new_state;
     }
     return true;
   }
@@ -183,9 +171,11 @@ bool RebuildObjectMapRequest::should_complete(int r) {
     if (r == -ESTALE && !m_attempted_trim) {
       // objects are still flagged as in-use -- delete them
       m_attempted_trim = true;
+      RWLock::RLocker owner_lock(m_image_ctx.owner_lock);
       send_trim_image();
       return false;
     } else if (r == 0) {
+      RWLock::RLocker owner_lock(m_image_ctx.owner_lock);
       send_verify_objects();
     }
     break;
@@ -193,6 +183,7 @@ bool RebuildObjectMapRequest::should_complete(int r) {
   case STATE_TRIM_IMAGE:
     ldout(cct, 5) << "TRIM_IMAGE" << dendl;
     if (r == 0) {
+      RWLock::RLocker owner_lock(m_image_ctx.owner_lock);
       send_resize_object_map();
     }
     break;
@@ -200,14 +191,16 @@ bool RebuildObjectMapRequest::should_complete(int r) {
   case STATE_VERIFY_OBJECTS:
     ldout(cct, 5) << "VERIFY_OBJECTS" << dendl;
     if (r == 0) {
-      return send_save_object_map();
+      assert(m_image_ctx.owner_lock.is_locked());
+      send_save_object_map();
     }
     break;
 
   case STATE_SAVE_OBJECT_MAP:
     ldout(cct, 5) << "SAVE_OBJECT_MAP" << dendl;
     if (r == 0) {
-      return send_update_header();
+      RWLock::RLocker owner_lock(m_image_ctx.owner_lock);
+      send_update_header();
     }
     break;
   case STATE_UPDATE_HEADER:
@@ -231,82 +224,60 @@ bool RebuildObjectMapRequest::should_complete(int r) {
 }
 
 void RebuildObjectMapRequest::send_resize_object_map() {
+  assert(m_image_ctx.owner_lock.is_locked());
   CephContext *cct = m_image_ctx.cct;
-  bool lost_exclusive_lock = false;
-  bool skip_resize = true;
 
-  m_state = STATE_RESIZE_OBJECT_MAP;
+  uint64_t num_objects;
   {
-    RWLock::RLocker l(m_image_ctx.owner_lock);
-    if (m_image_ctx.image_watcher->is_lock_supported() &&
-        !m_image_ctx.image_watcher->is_lock_owner()) {
-      ldout(cct, 1) << "lost exclusive lock during resize" << dendl;
-      lost_exclusive_lock = true;
-    } else {
-      RWLock::RLocker l(m_image_ctx.snap_lock);
-      uint64_t size = get_image_size();
-      uint64_t num_objects = Striper::get_num_objects(m_image_ctx.layout, size);
-      if (m_image_ctx.object_map.size() != num_objects) {
-        ldout(cct, 5) << this << " send_resize_object_map" << dendl;
-
-        m_image_ctx.object_map.aio_resize(num_objects, OBJECT_NONEXISTENT,
-                                          create_callback_context());
-        skip_resize = false;
-      }
-    }
+    RWLock::RLocker l(m_image_ctx.snap_lock);
+    uint64_t size = get_image_size();
+    num_objects = Striper::get_num_objects(m_image_ctx.layout, size);
   }
 
-  if (lost_exclusive_lock) {
-    complete(-ERESTART);
-  } else if (skip_resize) {
+  if (m_image_ctx.object_map.size() == num_objects) {
     send_verify_objects();
+    return;
   }
+
+  ldout(cct, 5) << this << " send_resize_object_map" << dendl;
+  m_state = STATE_RESIZE_OBJECT_MAP;
+
+  // should have been canceled prior to releasing lock
+  assert(!m_image_ctx.image_watcher->is_lock_supported() ||
+         m_image_ctx.image_watcher->is_lock_owner());
+  m_image_ctx.object_map.aio_resize(num_objects, OBJECT_NONEXISTENT,
+                                    create_callback_context());
 }
 
 void RebuildObjectMapRequest::send_trim_image() {
   CephContext *cct = m_image_ctx.cct;
-  bool lost_exclusive_lock = false;
-  bool skip_trim = true;
 
+  RWLock::RLocker l(m_image_ctx.owner_lock);
+
+  // should have been canceled prior to releasing lock
+  assert(!m_image_ctx.image_watcher->is_lock_supported() ||
+         m_image_ctx.image_watcher->is_lock_owner());
+  ldout(cct, 5) << this << " send_trim_image" << dendl;
   m_state = STATE_TRIM_IMAGE;
+
+  uint64_t new_size;
+  uint64_t orig_size;
   {
-    RWLock::RLocker l(m_image_ctx.owner_lock);
-    if (m_image_ctx.image_watcher->is_lock_supported() &&
-        !m_image_ctx.image_watcher->is_lock_owner()) {
-      ldout(cct, 1) << "lost exclusive lock during trim" << dendl;
-      lost_exclusive_lock = true;
-    } else {
-      ldout(cct, 5) << this << " send_trim_image" << dendl;
-
-      uint64_t new_size;
-      uint64_t orig_size;
-      {
-        RWLock::RLocker l(m_image_ctx.snap_lock);
-        new_size = get_image_size();
-        orig_size = m_image_ctx.get_object_size() *
-                    m_image_ctx.object_map.size();
-      }
-      AsyncTrimRequest *req = new AsyncTrimRequest(m_image_ctx,
-                                                   create_callback_context(),
-                                                   orig_size, new_size,
-                                                   m_prog_ctx);
-      req->send();
-      skip_trim = false;
-    }
+    RWLock::RLocker l(m_image_ctx.snap_lock);
+    new_size = get_image_size();
+    orig_size = m_image_ctx.get_object_size() *
+                m_image_ctx.object_map.size();
   }
-
-  if (lost_exclusive_lock) {
-    complete(-ERESTART);
-  } else if (skip_trim) {
-    send_resize_object_map();
-  }
+  AsyncTrimRequest *req = new AsyncTrimRequest(m_image_ctx,
+                                               create_callback_context(),
+                                               orig_size, new_size,
+                                               m_prog_ctx);
+  req->send();
 }
 
 void RebuildObjectMapRequest::send_verify_objects() {
+  assert(m_image_ctx.owner_lock.is_locked());
   CephContext *cct = m_image_ctx.cct;
-
-  m_state = STATE_VERIFY_OBJECTS;
-  ldout(cct, 5) << this << " send_verify_objects" << dendl;
 
   uint64_t snap_id;
   uint64_t num_objects;
@@ -317,78 +288,61 @@ void RebuildObjectMapRequest::send_verify_objects() {
                                            m_image_ctx.get_image_size(snap_id));
   }
 
+  if (num_objects == 0) {
+    send_save_object_map();
+    return;
+  }
+
+  m_state = STATE_VERIFY_OBJECTS;
+  ldout(cct, 5) << this << " send_verify_objects" << dendl;
+
   AsyncObjectThrottle::ContextFactory context_factory(
     boost::lambda::bind(boost::lambda::new_ptr<C_VerifyObject>(),
       boost::lambda::_1, &m_image_ctx, snap_id, boost::lambda::_2));
   AsyncObjectThrottle *throttle = new AsyncObjectThrottle(
-    this, context_factory, create_callback_context(), &m_prog_ctx, 0,
-    num_objects);
+    this, m_image_ctx, context_factory, create_callback_context(), &m_prog_ctx,
+    0, num_objects);
   throttle->start_ops(cct->_conf->rbd_concurrent_management_ops);
 }
 
-bool RebuildObjectMapRequest::send_save_object_map() {
+void RebuildObjectMapRequest::send_save_object_map() {
+  assert(m_image_ctx.owner_lock.is_locked());
   CephContext *cct = m_image_ctx.cct;
-  bool lost_exclusive_lock = false;
 
+  ldout(cct, 5) << this << " send_save_object_map" << dendl;
   m_state = STATE_SAVE_OBJECT_MAP;
-  {
-    RWLock::RLocker l(m_image_ctx.owner_lock);
-    if (m_image_ctx.image_watcher->is_lock_supported() &&
-        !m_image_ctx.image_watcher->is_lock_owner()) {
-      ldout(cct, 1) << "lost exclusive lock during object map save" << dendl;
-      lost_exclusive_lock = true;
-    } else {
-      ldout(cct, 5) << this << " send_save_object_map" << dendl;
-      m_image_ctx.object_map.aio_save(create_callback_context());
-      return false;
-    }
-  }
 
-  if (lost_exclusive_lock) {
-    complete(-ERESTART);
-    return false;
-  }
-  return true;
+  // should have been canceled prior to releasing lock
+  assert(!m_image_ctx.image_watcher->is_lock_supported() ||
+         m_image_ctx.image_watcher->is_lock_owner());
+  m_image_ctx.object_map.aio_save(create_callback_context());
 }
 
-bool RebuildObjectMapRequest::send_update_header() {
-  CephContext *cct = m_image_ctx.cct;
-  bool lost_exclusive_lock = false;
+void RebuildObjectMapRequest::send_update_header() {
+  assert(m_image_ctx.owner_lock.is_locked());
 
+  // should have been canceled prior to releasing lock
+  assert(!m_image_ctx.image_watcher->is_lock_supported() ||
+         m_image_ctx.image_watcher->is_lock_owner());
+
+  ldout(m_image_ctx.cct, 5) << this << " send_update_header" << dendl;
   m_state = STATE_UPDATE_HEADER;
-  {
-    RWLock::RLocker l(m_image_ctx.owner_lock);
-    if (m_image_ctx.image_watcher->is_lock_supported() &&
-        !m_image_ctx.image_watcher->is_lock_owner()) {
-      ldout(cct, 1) << "lost exclusive lock during header update" << dendl;
-      lost_exclusive_lock = true;
-    } else {
-      ldout(cct, 5) << this << " send_update_header" << dendl;
 
-      uint64_t flags = RBD_FLAG_OBJECT_MAP_INVALID | RBD_FLAG_FAST_DIFF_INVALID;
-
-      librados::ObjectWriteOperation op;
-      if (m_image_ctx.image_watcher->is_lock_supported()) {
-        m_image_ctx.image_watcher->assert_header_locked(&op);
-      }
-      cls_client::set_flags(&op, m_image_ctx.snap_id, 0, flags);
-
-      librados::AioCompletion *comp = create_callback_completion();
-      int r = m_image_ctx.md_ctx.aio_operate(m_image_ctx.header_oid, comp, &op);
-      assert(r == 0);
-      comp->release();
-
-      RWLock::WLocker snap_locker(m_image_ctx.snap_lock);
-      m_image_ctx.update_flags(m_image_ctx.snap_id, flags, false);
-      return false;
-    }
+  librados::ObjectWriteOperation op;
+  if (m_image_ctx.image_watcher->is_lock_supported()) {
+    m_image_ctx.image_watcher->assert_header_locked(&op);
   }
 
-  if (lost_exclusive_lock) {
-    complete(-ERESTART);
-    return false;
-  }
-  return true;
+  uint64_t flags = RBD_FLAG_OBJECT_MAP_INVALID | RBD_FLAG_FAST_DIFF_INVALID;
+  cls_client::set_flags(&op, m_image_ctx.snap_id, 0, flags);
+
+  librados::AioCompletion *comp = create_callback_completion();
+  int r = m_image_ctx.md_ctx.aio_operate(m_image_ctx.header_oid, comp, &op);
+  assert(r == 0);
+  comp->release();
+
+  RWLock::WLocker snap_locker(m_image_ctx.snap_lock);
+  m_image_ctx.update_flags(m_image_ctx.snap_id, flags, false);
 }
 
 uint64_t RebuildObjectMapRequest::get_image_size() const {
