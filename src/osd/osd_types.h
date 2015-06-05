@@ -1035,6 +1035,7 @@ public:
   HitSet::Params hit_set_params; ///< The HitSet params to use on this pool
   uint32_t hit_set_period;      ///< periodicity of HitSet segments (seconds)
   uint32_t hit_set_count;       ///< number of periods to retain
+  bool use_gmt_hitset;	        ///< use gmt to name the hitset archive object
   uint32_t min_read_recency_for_promote;   ///< minimum number of HitSet to check before promote
 
   uint32_t stripe_width;        ///< erasure coded stripe size in bytes
@@ -1063,6 +1064,7 @@ public:
       hit_set_params(),
       hit_set_period(0),
       hit_set_count(0),
+      use_gmt_hitset(true),
       min_read_recency_for_promote(0),
       stripe_width(0),
       expected_num_objects(0)
@@ -1600,10 +1602,11 @@ WRITE_CLASS_ENCODER_FEATURES(pool_stat_t)
 struct pg_hit_set_info_t {
   utime_t begin, end;   ///< time interval
   eversion_t version;   ///< version this HitSet object was written
-
-  pg_hit_set_info_t() {}
-  pg_hit_set_info_t(utime_t b)
-    : begin(b) {}
+  bool using_gmt;	///< use gmt for creating the hit_set archive object name
+  pg_hit_set_info_t(bool using_gmt = true)
+    : using_gmt(using_gmt) {}
+  pg_hit_set_info_t(utime_t b, bool using_gmt)
+    : begin(b), using_gmt(using_gmt) {}
 
   void encode(bufferlist &bl) const;
   void decode(bufferlist::iterator &bl);
