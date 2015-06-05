@@ -798,6 +798,7 @@ TEST(CrushWrapper, distance) {
 int main(int argc, char **argv) {
   vector<const char*> args;
   argv_to_vec(argc, (const char **)argv, args);
+  env_to_vec(args);
 
   vector<const char*> def_args;
   def_args.push_back("--debug-crush=0");
