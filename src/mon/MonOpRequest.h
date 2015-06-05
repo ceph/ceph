@@ -175,7 +175,7 @@ public:
 
   void send_reply(Message *reply);
 
-  void _dump(utime_t now, Formatter *t) const {
+  void _dump(utime_t now, Formatter *f) const {
     Message *m = request;
     {
       f->open_array_section("events");
@@ -187,6 +187,11 @@ public:
         f->dump_string("event", i->second);
         f->close_section();
       }
+      f->close_section();
+      f->open_object_section("info");
+      f->dump_bool("forwarded", is_forwarded_msg);
+      f->dump_bool("src_is_mon", is_src_mon());
+      f->dump_string("op_type", get_op_type_name());
       f->close_section();
     }
   }
