@@ -3380,9 +3380,11 @@ void Monitor::waitlist_or_zap_client(MonOpRequestRef op)
       con->is_connected()) {
     dout(5) << "waitlisting message " << *m << dendl;
     maybe_wait_for_quorum.push_back(new C_RetryMessage(this, op));
+    op->mark_wait_for_quorum();
   } else {
     dout(5) << "discarding message " << *m << " and sending client elsewhere" << dendl;
     con->mark_down();
+    op->mark_zap();
   }
 }
 
@@ -3398,6 +3400,7 @@ void Monitor::_ms_dispatch(Message *m)
 
 void Monitor::dispatch(MonOpRequestRef op)
 {
+  op->mark_event("monitor_dispatch");
   ConnectionRef connection = op->get_connection();
   MonSession *s = NULL;
   MonCap caps;
@@ -3486,6 +3489,7 @@ void Monitor::dispatch(MonOpRequestRef op)
 
 void Monitor::dispatch_op(MonOpRequestRef op)
 {
+  op->mark_event("monitor_dispatch_op");
   /* deal with all messages that do not necessarily need caps */
   bool dealt_with = true;
   switch (op->get_req()->get_type()) {
