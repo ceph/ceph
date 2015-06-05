@@ -412,7 +412,6 @@ void Inode::dump(Formatter *f) const
   }
 
   f->dump_stream("hold_caps_until") << hold_caps_until;
-  f->dump_unsigned("last_flush_tid", last_flush_tid);
 
   if (snaprealm) {
     f->open_object_section("snaprealm");
