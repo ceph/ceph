@@ -295,8 +295,9 @@ void Monitor::do_admin_command(string command, cmdmap_t& cmdmap, string format,
   args = "[" + args + "]";
  
   bool read_only = (command == "mon_status" ||
-		    command == "mon metadata" ||
-		    command == "quorum_status");
+                    command == "mon metadata" ||
+                    command == "quorum_status" ||
+                    command == "ops");
 
   (read_only ? audit_clog->debug() : audit_clog->info())
     << "from='admin socket' entity='admin socket' "
@@ -329,6 +330,11 @@ void Monitor::do_admin_command(string command, cmdmap_t& cmdmap, string format,
     start_election();
     elector.stop_participating();
     ss << "stopped responding to quorum, initiated new election";
+  } else if (command == "ops") {
+    op_tracker.dump_ops_in_flight(f.get());
+    if (f) {
+      f->flush(ss);
+    }
   } else {
     assert(0 == "bad AdminSocket command binding");
   }
@@ -729,6 +735,11 @@ int Monitor::preinit()
                                      admin_hook,
                                      "force monitor out of the quorum");
   assert(r == 0);
+  r = admin_socket->register_command("ops",
+                                     "ops",
+                                     admin_hook,
+                                     "show the ops currently in flight");
+  assert(r == 0);
   lock.Lock();
 
   // add ourselves as a conf observer
@@ -847,6 +858,7 @@ void Monitor::shutdown()
     admin_socket->unregister_command("quorum_status");
     admin_socket->unregister_command("sync_force");
     admin_socket->unregister_command("add_bootstrap_peer_hint");
+    admin_socket->unregister_command("ops");
     delete admin_hook;
     admin_hook = NULL;
   }
