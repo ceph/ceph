@@ -432,7 +432,7 @@ AS_IF([test "$with_profiler" = "yes"],
 
 # debug crap?
 AC_ARG_WITH([debug],
-            [AS_HELP_STRING([--with-debug], [build extra debug binaries])],
+            [AS_HELP_STRING([--with-debug], [build extra debug binaries and tests])],
             [case "${withval}" in
 		  yes) with_debug=yes ;;
 		  no)  with_debug=no ;;
