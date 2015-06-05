@@ -237,20 +237,23 @@ namespace librbd {
 
   void AioRead::send_copyup()
   {
-    RWLock::RLocker snap_locker(m_ictx->snap_lock);
-    RWLock::RLocker parent_locker(m_ictx->parent_lock);
+    {
+      RWLock::RLocker snap_locker(m_ictx->snap_lock);
+      RWLock::RLocker parent_locker(m_ictx->parent_lock);
+      if (!compute_parent_extents()) {
+        return;
+      }
+    }
+
     Mutex::Locker copyup_locker(m_ictx->copyup_list_lock);
     map<uint64_t, CopyupRequest*>::iterator it =
       m_ictx->copyup_list.find(m_object_no);
     if (it == m_ictx->copyup_list.end()) {
-      if (compute_parent_extents()) {
-        // create and kick off a CopyupRequest
-        CopyupRequest *new_req = new CopyupRequest(m_ictx, m_oid,
-                                                   m_object_no,
-    					           m_parent_extents);
-        m_ictx->copyup_list[m_object_no] = new_req;
-        new_req->queue_send();
-      }
+      // create and kick off a CopyupRequest
+      CopyupRequest *new_req = new CopyupRequest(m_ictx, m_oid, m_object_no,
+    					         m_parent_extents);
+      m_ictx->copyup_list[m_object_no] = new_req;
+      new_req->queue_send();
     }
   }
 
@@ -321,11 +324,15 @@ namespace librbd {
       ldout(m_ictx->cct, 20) << "WRITE_CHECK_GUARD" << dendl;
 
       if (r == -ENOENT) {
-	RWLock::RLocker l(m_ictx->snap_lock);
-	RWLock::RLocker l2(m_ictx->parent_lock);
+        bool has_parent;
+        {
+	  RWLock::RLocker snap_locker(m_ictx->snap_lock);
+	  RWLock::RLocker parent_locker(m_ictx->parent_lock);
+          has_parent = compute_parent_extents();
+        }
 
 	// If parent still exists, overlap might also have changed.
-	if (compute_parent_extents()) {
+	if (has_parent) {
           send_copyup();
 	} else {
           // parent may have disappeared -- send original write again
@@ -377,80 +384,72 @@ namespace librbd {
   }
 
   void AbstractWrite::send() {
+    assert(m_ictx->owner_lock.is_locked());
     ldout(m_ictx->cct, 20) << "send " << this << " " << m_oid << " "
 			   << m_object_off << "~" << m_object_len << dendl;
-
-    if (!send_pre()) {
-      send_write();
-    }
+    send_pre();
   }
 
-  bool AbstractWrite::send_pre() {
-    bool lost_exclusive_lock = false;
-    {
-      RWLock::RLocker l(m_ictx->owner_lock);
-      if (!m_ictx->object_map.enabled()) {
-	return false;
-      }
-
-      if (!m_ictx->image_watcher->is_lock_owner()) {
-	ldout(m_ictx->cct, 1) << "lost exclusive lock during write" << dendl;
-	lost_exclusive_lock = true;
-      } else {
-	ldout(m_ictx->cct, 20) << "send_pre " << this << " " << m_oid << " "
-			       << m_object_off << "~" << m_object_len << dendl;
-
-        uint8_t new_state;
-        boost::optional<uint8_t> current_state;
-        pre_object_map_update(&new_state);
-
-        m_state = LIBRBD_AIO_WRITE_PRE;
-        FunctionContext *ctx = new FunctionContext(
-          boost::bind(&AioRequest::complete, this, _1));
-        RWLock::RLocker snap_locker(m_ictx->snap_lock);
-        RWLock::WLocker object_map_locker(m_ictx->object_map_lock);
-        if (!m_ictx->object_map.aio_update(m_object_no, new_state,
-					    current_state, ctx)) {
-	  // no object map update required
-	  delete ctx;
-	  return false;
-	}
-      }
+  void AbstractWrite::send_pre() {
+    assert(m_ictx->owner_lock.is_locked());
+    RWLock::RLocker snap_lock(m_ictx->snap_lock);
+    if (!m_ictx->object_map.enabled()) {
+      send_write();
+      return;
     }
 
-    if (lost_exclusive_lock) {
-      complete(-ERESTART);
+    // should have been flushed prior to releasing lock
+    assert(m_ictx->image_watcher->is_lock_owner());
+
+    ldout(m_ictx->cct, 20) << "send_pre " << this << " " << m_oid << " "
+			   << m_object_off << "~" << m_object_len << dendl;
+    m_state = LIBRBD_AIO_WRITE_PRE;
+
+    uint8_t new_state;
+    boost::optional<uint8_t> current_state;
+    pre_object_map_update(&new_state);
+
+
+    RWLock::WLocker object_map_locker(m_ictx->object_map_lock);
+    if (m_ictx->object_map[m_object_no] == new_state) {
+      send_write();
+      return;
     }
-    return true;
+
+    FunctionContext *ctx = new FunctionContext(
+      boost::bind(&AioRequest::complete, this, _1));
+    bool updated = m_ictx->object_map.aio_update(m_object_no, new_state,
+                                                 current_state, ctx);
+    assert(updated);
   }
 
   bool AbstractWrite::send_post() {
-    ldout(m_ictx->cct, 20) << "send_post " << this << " " << m_oid << " "
-			   << m_object_off << "~" << m_object_len << dendl;
-
-    RWLock::RLocker l(m_ictx->owner_lock);
+    RWLock::RLocker owner_locker(m_ictx->owner_lock);
+    RWLock::RLocker snap_locker(m_ictx->snap_lock);
     if (!m_ictx->object_map.enabled() || !post_object_map_update()) {
       return true;
     }
 
-    if (m_ictx->image_watcher->is_lock_supported() &&
-        !m_ictx->image_watcher->is_lock_owner()) {
-      // leave the object flagged as pending
-      ldout(m_ictx->cct, 1) << "lost exclusive lock during write" << dendl;
+    // should have been flushed prior to releasing lock
+    assert(m_ictx->image_watcher->is_lock_owner());
+
+    ldout(m_ictx->cct, 20) << "send_post " << this << " " << m_oid << " "
+			   << m_object_off << "~" << m_object_len << dendl;
+    m_state = LIBRBD_AIO_WRITE_POST;
+
+    RWLock::WLocker object_map_locker(m_ictx->object_map_lock);
+    uint8_t current_state = m_ictx->object_map[m_object_no];
+    if (current_state != OBJECT_PENDING ||
+        current_state == OBJECT_NONEXISTENT) {
       return true;
     }
 
-    m_state = LIBRBD_AIO_WRITE_POST;
     FunctionContext *ctx = new FunctionContext(
       boost::bind(&AioRequest::complete, this, _1));
-    RWLock::RLocker snap_locker(m_ictx->snap_lock);
-    RWLock::WLocker object_map_locker(m_ictx->object_map_lock);
-    if (!m_ictx->object_map.aio_update(m_object_no, OBJECT_NONEXISTENT,
-					OBJECT_PENDING, ctx)) {
-      // no object map update required
-      delete ctx;
-      return true;
-    }
+    bool updated = m_ictx->object_map.aio_update(m_object_no,
+                                                 OBJECT_NONEXISTENT,
+				                 OBJECT_PENDING, ctx);
+    assert(updated);
     return false;
   }
 

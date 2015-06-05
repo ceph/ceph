@@ -72,8 +72,9 @@ private:
 
   void send_remove_objects();
   void send_pre_remove();
-  bool send_post_remove();
-  bool send_clean_boundary();
+  void send_post_remove();
+  void send_clean_boundary();
+  void finish();
 };
 
 } // namespace librbd

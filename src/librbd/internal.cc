@@ -314,6 +314,10 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
     return image_name + RBD_SUFFIX;
   }
 
+  std::string unique_lock_name(const std::string &name, void *address) {
+    return name + " (" + stringify(address) + ")";
+  }
+
   int detect_format(IoCtx &io_ctx, const string &name,
 		    bool *old_format, uint64_t *size)
   {
@@ -731,7 +735,7 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
     ldout(ictx->cct, 20) << "snap_create_helper " << ictx << " " << snap_name
                          << dendl;
 
-    int r = ictx_check(ictx);
+    int r = ictx_check(ictx, true);
     if (r < 0) {
       return r;
     }
@@ -805,6 +809,7 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
         return r;
       }
     } else {
+      RWLock::RLocker owner_lock(ictx->owner_lock);
       r = snap_remove_helper(ictx, NULL, snap_name);
       if (r < 0) {
         return r;
@@ -819,10 +824,9 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
 
   int snap_remove_helper(ImageCtx *ictx, Context *ctx, const char *snap_name)
   {
+    assert(ictx->owner_lock.is_locked());
     {
-      RWLock::RLocker snap_locker(ictx->snap_lock);
       if ((ictx->features & RBD_FEATURE_FAST_DIFF) != 0) {
-        assert(ictx->owner_lock.is_locked());
         assert(!ictx->image_watcher->is_lock_supported() ||
                ictx->image_watcher->is_lock_owner());
       }
@@ -831,7 +835,7 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
     ldout(ictx->cct, 20) << "snap_remove_helper " << ictx << " " << snap_name
                          << dendl;
 
-    int r = ictx_check(ictx);
+    int r = ictx_check(ictx, true);
     if (r < 0) {
       return r;
     }
@@ -1438,10 +1442,10 @@ reprotect_and_return_err:
       }
     }
 
-    p_imctx->md_lock.get_write();
-    r = ictx_refresh(p_imctx);
-    p_imctx->md_lock.put_write();
-
+    {
+      RWLock::RLocker owner_locker(p_imctx->owner_lock);
+      r = ictx_refresh(p_imctx);
+    }
     if (r == 0) {
       p_imctx->snap_lock.get_read();
       r = p_imctx->is_snap_protected(p_imctx->snap_id, &snap_protected);
@@ -1962,9 +1966,7 @@ reprotect_and_return_err:
       }
       assert(watchers.size() == 1);
 
-      ictx->md_lock.get_read();
       trim_image(ictx, 0, prog_ctx);
-      ictx->md_lock.put_read();
 
       ictx->parent_lock.get_read();
       // struct assignment
@@ -2074,7 +2076,7 @@ reprotect_and_return_err:
 		   << size << dendl;
     ictx->snap_lock.put_read();
 
-    int r = ictx_check(ictx);
+    int r = ictx_check(ictx, true);
     if (r < 0) {
       return r;
     }
@@ -2215,7 +2217,7 @@ reprotect_and_return_err:
     return 0;
   }
 
-  int ictx_check(ImageCtx *ictx)
+  int ictx_check(ImageCtx *ictx, bool owner_locked)
   {
     CephContext *cct = ictx->cct;
     ldout(cct, 20) << "ictx_check " << ictx << dendl;
@@ -2225,9 +2227,13 @@ reprotect_and_return_err:
     ictx->refresh_lock.Unlock();
 
     if (needs_refresh) {
-      RWLock::WLocker l(ictx->md_lock);
-
-      int r = ictx_refresh(ictx);
+      int r;
+      if (owner_locked) {
+        r = ictx_refresh(ictx);
+      } else {
+        RWLock::RLocker owner_lock(ictx->owner_lock);
+        r = ictx_refresh(ictx);
+      }
       if (r < 0) {
 	lderr(cct) << "Error re-reading rbd header: " << cpp_strerror(-r)
 		   << dendl;
@@ -2275,6 +2281,9 @@ reprotect_and_return_err:
 
   int ictx_refresh(ImageCtx *ictx)
   {
+    assert(ictx->owner_lock.is_locked());
+    RWLock::WLocker md_locker(ictx->md_lock);
+
     CephContext *cct = ictx->cct;
     bufferlist bl, bl2;
 
@@ -2471,14 +2480,13 @@ reprotect_and_return_err:
     if (r < 0)
       return r;
 
-    RWLock::RLocker l(ictx->owner_lock);
+    RWLock::RLocker owner_locker(ictx->owner_lock);
     snap_t snap_id;
     uint64_t new_size;
     {
-      RWLock::WLocker l2(ictx->md_lock);
       {
 	// need to drop snap_lock before invalidating cache
-	RWLock::RLocker l3(ictx->snap_lock);
+	RWLock::RLocker snap_locker(ictx->snap_lock);
 	if (!ictx->snap_exists) {
 	  return -ENOENT;
 	}
@@ -2510,6 +2518,7 @@ reprotect_and_return_err:
       // need to flush any pending writes before resizing and rolling back -
       // writes might create new snapshots. Rolling back will replace
       // the current version, so we have to invalidate that too.
+      RWLock::WLocker md_locker(ictx->md_lock);
       ictx->flush_async_operations();
       r = ictx->invalidate_cache();
       if (r < 0) {
@@ -2788,9 +2797,10 @@ reprotect_and_return_err:
       }
     }
 
-    ictx->md_lock.get_write();
-    r = ictx_refresh(ictx);
-    ictx->md_lock.put_write();
+    {
+      RWLock::RLocker owner_locker(ictx->owner_lock);
+      r = ictx_refresh(ictx);
+    }
     if (r < 0)
       goto err_close;
 
@@ -2817,14 +2827,17 @@ reprotect_and_return_err:
     }
 
     ictx->aio_work_queue->drain();
-
     ictx->cancel_async_requests();
+    ictx->flush_async_operations();
     ictx->readahead.wait_for_pending();
+
     if (ictx->object_cacher) {
       ictx->shutdown_cache(); // implicitly flushes
     } else {
       flush(ictx);
     }
+
+    ictx->op_work_queue->drain();
 
     if (ictx->copyup_finisher != NULL) {
       ictx->copyup_finisher->wait_for_empty();
@@ -2904,7 +2917,7 @@ reprotect_and_return_err:
 
     int r;
     // ictx_check also updates parent data
-    if ((r = ictx_check(ictx)) < 0) {
+    if ((r = ictx_check(ictx, true)) < 0) {
       lderr(cct) << "ictx_check failed" << dendl;
       return r;
     }
@@ -2982,19 +2995,16 @@ reprotect_and_return_err:
     CephContext *cct = ictx->cct;
     ldout(cct, 20) << "async_rebuild_object_map " << ictx << dendl;
 
-    int r = ictx_check(ictx);
-    if (r < 0) {
-      return r;
+    if (ictx->read_only) {
+      return -EROFS;
+    }
+    if (!ictx->test_features(RBD_FEATURE_OBJECT_MAP)) {
+      return -EINVAL;
     }
 
-    {
-      RWLock::RLocker snap_locker(ictx->snap_lock);
-      if (ictx->read_only) {
-        return -EROFS;
-      }
-      if (!ictx->test_features(RBD_FEATURE_OBJECT_MAP)) {
-        return -EINVAL;
-      }
+    int r = ictx_check(ictx, true);
+    if (r < 0) {
+      return r;
     }
 
     RebuildObjectMapRequest *req = new RebuildObjectMapRequest(*ictx, ctx,
@@ -3237,7 +3247,10 @@ reprotect_and_return_err:
 			 << " len = " << len << dendl;
 
     // ensure previous writes are visible to listsnaps
-    _flush(ictx);
+    {
+      RWLock::RLocker owner_locker(ictx->owner_lock);
+      _flush(ictx);
+    }
 
     int r = ictx_check(ictx);
     if (r < 0)
@@ -3688,13 +3701,17 @@ reprotect_and_return_err:
     }
 
     ictx->user_flushed();
-    r = _flush(ictx);
+    {
+      RWLock::RLocker owner_locker(ictx->owner_lock);
+      r = _flush(ictx);
+    }
     ictx->perfcounter->inc(l_librbd_flush);
     return r;
   }
 
   int _flush(ImageCtx *ictx)
   {
+    assert(ictx->owner_lock.is_locked());
     CephContext *cct = ictx->cct;
     int r;
     // flush any outstanding writes
@@ -4099,7 +4116,7 @@ reprotect_and_return_err:
 	c->add_request();
 
 	if (ictx->object_cacher) {
-	  C_CacheRead *cache_comp = new C_CacheRead(req);
+	  C_CacheRead *cache_comp = new C_CacheRead(ictx, req);
 	  ictx->aio_read_from_cache(q->oid, q->objectno, &req->data(),
 				    q->length, q->offset,
 				    cache_comp, op_flags);

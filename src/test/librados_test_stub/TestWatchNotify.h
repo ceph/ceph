@@ -53,6 +53,7 @@ public:
   TestWatchNotify(CephContext *cct);
   ~TestWatchNotify();
 
+  void flush();
   int list_watchers(const std::string& o,
                     std::list<obj_watch_t> *out_watchers);
   int notify(const std::string& o, bufferlist& bl,
@@ -74,6 +75,9 @@ private:
   uint64_t m_notify_id;
 
   Mutex m_file_watcher_lock;
+  Cond m_file_watcher_cond;
+  uint64_t m_pending_notifies;
+
   FileWatchers	m_file_watchers;
 
   SharedWatcher get_watcher(const std::string& oid);
