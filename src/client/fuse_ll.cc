@@ -817,7 +817,7 @@ const static struct fuse_lowlevel_ops fuse_ll_oper = {
  opendir: fuse_ll_opendir,
  readdir: fuse_ll_readdir,
  releasedir: fuse_ll_releasedir,
- fsyncdir: 0,
+ fsyncdir: fuse_ll_fsync,
  statfs: fuse_ll_statfs,
  setxattr: fuse_ll_setxattr,
  getxattr: fuse_ll_getxattr,

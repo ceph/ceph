@@ -72,10 +72,12 @@ public:
 
   xlist<MetaRequest*>::item item;
   xlist<MetaRequest*>::item unsafe_item;
+  xlist<MetaRequest*>::item unsafe_dir_item;
   Mutex lock; //for get/set sync
 
   Cond  *caller_cond;          // who to take up
   Cond  *dispatch_cond;        // who to kick back
+  list<Cond*> waitfor_safe;
 
   Inode *target;
 
@@ -94,7 +96,7 @@ public:
     ref(1), reply(0), 
     kick(false), aborted(false), success(false),
     readdir_offset(0), readdir_end(false), readdir_num(0),
-    got_unsafe(false), item(this), unsafe_item(this),
+    got_unsafe(false), item(this), unsafe_item(this), unsafe_dir_item(this),
     lock("MetaRequest lock"),
     caller_cond(0), dispatch_cond(0),
     target(0) {
