@@ -39,3 +39,11 @@ void MonOpRequest::send_reply(Message *reply)
     session->con->send_message(reply);
   }
 }
+
+void MonOpRequest::set_write()
+{
+}
+
+void MonOpRequest::set_read()
+{
+}

@@ -31,15 +31,78 @@ struct MonOpRequest : public TrackedOp {
 
   int rw_flags;
 
+  typedef enum {
+    OP_TYPE_NONE,
+    OP_TYPE_COMMAND,
+    OP_TYPE_SERVICE,
+    OP_TYPE_ELECTION,
+    OP_TYPE_PROBE,
+    OP_TYPE_SYNC,
+    OP_TYPE_SCRUB,
+  } op_type_t;
+
   void set_write();
   void set_read();
 
-  void set_command_op();
-  void set_service_op();
-  void set_election_op();
-  void set_probe_op();
-  void set_sync_op();
-  void set_scrub_op();
+  op_type_t op_type;
+
+  void set_op_type(op_type_t t) {
+    op_type = t;
+  }
+
+  void set_command_op() {
+    set_op_type(OP_TYPE_COMMAND);
+  }
+  void set_service_op() {
+    set_op_type(OP_TYPE_SERVICE);
+  }
+  void set_election_op() {
+    set_op_type(OP_TYPE_ELECTION);
+  }
+  void set_probe_op() {
+    set_op_type(OP_TYPE_PROBE);
+  }
+  void set_sync_op() {
+    set_op_type(OP_TYPE_SYNC);
+  }
+  void set_scrub_op() {
+    set_op_type(OP_TYPE_SCRUB);
+  }
+
+  void mark_dispatch() {
+    mark_event("monitor_dispatch");
+  }
+  void mark_wait_for_quorum() {
+    mark_event("wait_for_quorum");
+  }
+  void mark_zap() {
+    mark_event("monitor_zap");
+  }
+
+  void set_forwarded_msg() {
+    is_forwarded_msg = true;
+  }
+
+  const string get_op_type_name() const {
+    switch (op_type) {
+      case OP_TYPE_NONE:
+        return "none";
+      case OP_TYPE_COMMAND:
+        return "command";
+      case OP_TYPE_SERVICE:
+        return "service";
+      case OP_TYPE_ELECTION:
+        return "election";
+      case OP_TYPE_PROBE:
+        return "probe";
+      case OP_TYPE_SYNC:
+        return "sync";
+      case OP_TYPE_SCRUB:
+        return "scrub";
+      default:
+        assert(0 == "unknown op type");
+    }
+  }
 
 private:
   Message *request;
@@ -47,10 +110,12 @@ private:
   MonSession *session;
   ConnectionRef connection;
 
+  bool is_forwarded_msg;
+
   MonOpRequest(Message *req, OpTracker *tracker) :
     TrackedOp(tracker, req->get_recv_stamp()),
+    op_type(OP_TYPE_NONE),
     request(req->get()),
-    src_is_mon(false),
     session(NULL),
     connection(NULL)
   {
@@ -102,7 +167,7 @@ public:
     }
   }
 
-  bool is_src_mon() {
+  bool is_src_mon() const {
     return (connection && connection->get_peer_type() & CEPH_ENTITY_TYPE_MON);
   }
 
