@@ -104,11 +104,7 @@ BuildRequires:	sharutils
 %if 0%{defined suse_version}
 BuildRequires:	python-sphinx
 BuildRequires:	net-tools
-BuildRequires:	xmlstarlet
-BuildRequires:	yasm
 BuildRequires:	libbz2-devel
-BuildRequires:	python-sphinx
-BuildRequires:	net-tools
 BuildRequires:	sharutils
 BuildRequires:	git
 %if 0%{?suse_version} > 1210
