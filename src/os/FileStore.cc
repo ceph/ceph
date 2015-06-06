@@ -5049,15 +5049,18 @@ int FileStore::_destroy_collection(coll_t c)
     goto out;
   }
 
+ out:
   // destroy parallel temp collection, too
   if (!c.is_meta() && !c.is_temp()) {
     coll_t temp = c.get_temp();
-    r = _destroy_collection(temp);
-    if (r < 0)
-      goto out;
+    int r2 = _destroy_collection(temp);
+    if (r2 < 0) {
+      r = r2;
+      goto out_final;
+    }
   }
-  r = 0;
- out:
+
+ out_final:
   dout(10) << "_destroy_collection " << fn << " = " << r << dendl;
   return r;
 }
