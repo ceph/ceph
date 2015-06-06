@@ -1534,7 +1534,7 @@ int FileStore::mount()
   // Cleanup possibly invalid collections
   {
     vector<coll_t> collections;
-    ret = list_collections(collections);
+    ret = list_collections(collections, true);
     if (ret < 0) {
       derr << "Error " << ret << " while listing collections" << dendl;
       goto close_current_fd;
