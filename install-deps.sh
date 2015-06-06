@@ -73,7 +73,8 @@ CentOS|Fedora|RedHatEnterpriseServer)
                 ;;
         esac
         sed -e 's/@//g' < ceph.spec.in > $DIR/ceph.spec
-        $SUDO yum-builddep -y $DIR/ceph.spec || exit 1
+        $SUDO yum-builddep -y $DIR/ceph.spec 2>&1 | tee $DIR/yum-builddep.out
+        ! grep -q -i error: $DIR/yum-builddep.out || exit 1
         ;;
 *SUSE*)
         sed -e 's/@//g' < ceph.spec.in > $DIR/ceph.spec
