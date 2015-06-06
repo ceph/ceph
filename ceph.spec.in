@@ -61,11 +61,6 @@ BuildRequires: sharutils
 %endif
 BuildRequires:	gcc-c++
 BuildRequires:	boost-devel
-%if 0%{defined suse_version}
-BuildRequires:  libbz2-devel
-%else
-BuildRequires:  bzip2-devel
-%endif
 BuildRequires:	cryptsetup
 BuildRequires:	gdbm
 BuildRequires:	hdparm
@@ -101,6 +96,7 @@ BuildRequires:	net-tools
 #################################################################################
 %if 0%{defined suse_version}
 Requires:	python-Flask
+BuildRequires:	libbz2-devel
 %if 0%{?suse_version} > 1210
 Requires:	gptfdisk
 %if 0%{with tcmalloc}
@@ -115,7 +111,7 @@ BuildRequires:	mozilla-nss-devel
 BuildRequires:	keyutils-devel
 BuildRequires:	libatomic-ops-devel
 %else
-Requires:	gdisk
+BuildRequires:  bzip2-devel
 BuildRequires:	nss-devel
 BuildRequires:	keyutils-libs-devel
 BuildRequires:	libatomic_ops-devel
