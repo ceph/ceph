@@ -2021,6 +2021,25 @@ RGWOp *RGWHandler_ObjStore_Service_S3::op_head()
 
 RGWOp *RGWHandler_ObjStore_Bucket_S3::get_obj_op(bool get_data)
 {
+  /* we need to make sure we read bucket info, it's not read before for this specific request */
+  RGWObjectCtx& obj_ctx = *static_cast<RGWObjectCtx *>(s->obj_ctx);
+  int ret = store->get_bucket_info(obj_ctx, s->bucket_name_str, s->bucket_info, NULL, &s->bucket_attrs);
+#warning FIXME: Do we need to catch -ENOENT seperately? What do we do then?
+  if (ret < 0)
+    return NULL;
+
+  /** If we are in website mode, then it is explicitly impossible to run GET or
+   * HEAD on the actual directory. We must convert the request to run on the
+   * suffix object instead!
+   */
+  ldout(s->cct, 20) << __func__ << ": bucket=" <<  s->bucket_info.bucket.name << " has_website=" << s->bucket_info.has_website << " get_data=" << get_data << "/" << (get_data ? "GET" : "HEAD") << dendl;
+  if(s->bucket_info.has_website && !rgw_user_is_authenticated(s->user)) {
+    RGWGetObj_ObjStore_S3 *get_obj_op = new RGWGetObj_ObjStore_S3;
+    get_obj_op->set_get_data(get_data);
+    return get_obj_op;
+  }
+
+  // Non-website mode
   if (get_data)
     return new RGWListBucket_ObjStore_S3;
   else
