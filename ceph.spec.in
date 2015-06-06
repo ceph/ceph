@@ -116,8 +116,10 @@ Requires:	gptfdisk
 %if 0%{with tcmalloc}
 BuildRequires:	gperftools-devel
 %endif
+%else
 Requires:	scsirastools
 BuildRequires:	google-perftools-devel
+%endif
 Recommends:	logrotate
 BuildRequires:	%insserv_prereq
 BuildRequires:	mozilla-nss-devel
@@ -134,7 +136,6 @@ Requires(post):	chkconfig
 Requires(preun):	chkconfig
 Requires(preun):	initscripts
 BuildRequires:	gperftools-devel
-%endif
 %endif
 
 %description
