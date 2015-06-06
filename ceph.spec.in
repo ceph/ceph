@@ -81,24 +81,20 @@ BuildRequires:	python
 BuildRequires:	python-argparse
 BuildRequires:	python-nose
 BuildRequires:	python-requests
-%if ( 0%{?rhel} > 0 && 0%{?rhel} < 7 ) || ( 0%{?centos} > 0 && 0%{?centos} < 7 )
-BuildRequires:	python-sphinx10
-%endif
 BuildRequires:	python-virtualenv
+BuildRequires:	sharutils
+BuildRequires:	snappy-devel
 BuildRequires:	util-linux
 BuildRequires:	xfsprogs
 BuildRequires:	xfsprogs-devel
 BuildRequires:	xmlstarlet
 BuildRequires:	yasm
-%if 0%{?rhel} || 0%{?fedora} || 0%{?suse_version}
-BuildRequires:	snappy-devel
-%endif
 
 #################################################################################
 # specific
 #################################################################################
-%if ! 0%{?rhel} || 0%{?fedora}
-BuildRequires:	sharutils
+%if 0%{?rhel} > 0 && 0%{?rhel} < 7
+BuildRequires:	python-sphinx10
 %endif
 
 %if 0%{defined suse_version}
@@ -109,7 +105,6 @@ BuildRequires:	yasm
 BuildRequires:	libbz2-devel
 BuildRequires:	python-sphinx
 BuildRequires:	net-tools
-BuildRequires:	sharutils
 BuildRequires:	git
 %if 0%{?suse_version} > 1210
 Requires:	gptfdisk
