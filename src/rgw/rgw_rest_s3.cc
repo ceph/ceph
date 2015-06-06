@@ -559,7 +559,6 @@ void RGWGetBucketWebsite_ObjStore_S3::send_response()
   }
 
   RGWBucketWebsiteConf& conf = s->bucket_info.website_conf;
-  list<RGWBWRoutingRule>& rules = conf.routing_rules.rules;
 
   s->formatter->open_object_section_in_ns("WebsiteConfiguration",
 					  "http://doc.s3.amazonaws.com/doc/2006-03-01/");
