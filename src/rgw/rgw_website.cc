@@ -80,5 +80,7 @@ void RGWBucketWebsiteConf::get_effective_key(const string& key, string *effectiv
     *effective_key = index_doc_suffix;
   } else if (key[key.size() - 1] == '/') {
     *effective_key = key + index_doc_suffix;
+  } else {
+    *effective_key = key;
   }
 }
