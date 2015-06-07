@@ -218,11 +218,15 @@ function TEST_profile_k_sanity() {
         k=1 \
         m=1 || return 1
 
-    expect_failure $dir 'k=1 must be >= 2' \
-        ./ceph osd erasure-code-profile set $profile \
-        plugin=isa \
-        k=1 \
-        m=1 || return 1
+    if erasure_code_plugin_exists isa ; then
+        expect_failure $dir 'k=1 must be >= 2' \
+            ./ceph osd erasure-code-profile set $profile \
+            plugin=isa \
+            k=1 \
+            m=1 || return 1
+    else
+        echo "SKIP because plugin isa has not been built"
+    fi
 
     expect_failure $dir 'k=1 must be >= 2' \
         ./ceph osd erasure-code-profile set $profile \
