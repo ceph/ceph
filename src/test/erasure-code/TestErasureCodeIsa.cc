@@ -366,6 +366,17 @@ TEST_F(IsaErasureCodeTest, encode)
   }
 }
 
+TEST_F(IsaErasureCodeTest, sanity_check_k)
+{
+  ErasureCodeIsaDefault Isa(tcache);
+  ErasureCodeProfile profile;
+  profile["k"] = "1";
+  profile["m"] = "1";
+  ostringstream errors;
+  EXPECT_EQ(-EINVAL, Isa.init(profile, &errors));
+  EXPECT_NE(std::string::npos, errors.str().find("must be >= 2"));
+}
+
 bool
 DecodeAndVerify(ErasureCodeIsaDefault& Isa, map<int, bufferlist> &degraded, set<int> want_to_decode, buffer::ptr* enc, int length)
 {
