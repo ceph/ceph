@@ -41,6 +41,18 @@ typedef ::testing::Types<
 > JerasureTypes;
 TYPED_TEST_CASE(ErasureCodeTest, JerasureTypes);
 
+TYPED_TEST(ErasureCodeTest, sanity_check_k)
+{
+  TypeParam jerasure;
+  ErasureCodeProfile profile;
+  profile["k"] = "1";
+  profile["m"] = "1";
+  profile["packetsize"] = "8";
+  ostringstream errors;
+  EXPECT_EQ(-EINVAL, jerasure.init(profile, &errors));
+  EXPECT_NE(std::string::npos, errors.str().find("must be >= 2"));
+}
+
 TYPED_TEST(ErasureCodeTest, encode_decode)
 {
   const char *per_chunk_alignments[] = { "false", "true" };
