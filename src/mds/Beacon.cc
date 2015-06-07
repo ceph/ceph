@@ -396,10 +396,12 @@ void Beacon::notify_health(MDSRank const *mds)
           dout(20) << "  within timeout " << session->recalled_at << " vs. " << cutoff << dendl;
         }
       }
-      if (session->get_num_trim_requests_warnings() > 0 &&
-	  session->get_num_completed_requests() >= g_conf->mds_max_completed_requests) {
+      if ((session->get_num_trim_requests_warnings() > 0 &&
+	   session->get_num_completed_requests() >= g_conf->mds_max_completed_requests) ||
+	  (session->get_num_trim_flushes_warnings() > 0 &&
+	   session->get_num_completed_flushes() >= g_conf->mds_max_completed_flushes)) {
 	std::ostringstream oss;
-	oss << "Client " << session->get_human_name() << " failing to advance its oldest_client_tid";
+	oss << "Client " << session->get_human_name() << " failing to advance its oldest client/flush tid";
 	MDSHealthMetric m(MDS_HEALTH_CLIENT_OLDEST_TID, HEALTH_WARN, oss.str());
 	m.metadata["client_id"] = session->info.inst.name.num();
 	large_completed_requests_metrics.push_back(m);
@@ -423,7 +425,7 @@ void Beacon::notify_health(MDSRank const *mds)
     } else {
       std::ostringstream oss;
       oss << "Many clients (" << large_completed_requests_metrics.size()
-	<< ") failing to advance their oldest_client_tid";
+	<< ") failing to advance their oldest client/flush tid";
       MDSHealthMetric m(MDS_HEALTH_CLIENT_OLDEST_TID_MANY, HEALTH_WARN, oss.str());
       m.metadata["client_count"] = large_completed_requests_metrics.size();
       health.metrics.push_back(m);

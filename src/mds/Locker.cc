@@ -2491,6 +2491,22 @@ void Locker::handle_client_caps(MClientCaps *m)
   if (m->get_oldest_flush_tid() > 0) {
     if (session->trim_completed_flushes(m->get_oldest_flush_tid())) {
       mds->mdlog->get_current_segment()->touched_sessions.insert(session->info.inst.name);
+
+      if (session->get_num_trim_flushes_warnings() > 0 &&
+	  session->get_num_completed_flushes() * 2 < g_conf->mds_max_completed_flushes)
+	session->reset_num_trim_flushes_warnings();
+    } else {
+      if (session->get_num_completed_flushes() >=
+	  (g_conf->mds_max_completed_flushes << session->get_num_trim_flushes_warnings())) {
+	session->inc_num_trim_flushes_warnings();
+	stringstream ss;
+	ss << "client." << session->get_client() << " does not advance its oldest_flush_tid ("
+	   << m->get_oldest_flush_tid() << "), "
+	   << session->get_num_completed_flushes()
+	   << " completed flushes recorded in session\n";
+	mds->clog->warn() << ss.str();
+	dout(20) << __func__ << " " << ss.str() << dendl;
+      }
     }
   }
 
