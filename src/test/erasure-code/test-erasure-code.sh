@@ -101,20 +101,6 @@ function rados_put_get() {
     rm $dir/ORIGINAL
 }
 
-function plugin_exists() {
-    local plugin=$1
-
-    local status
-    if ./ceph osd erasure-code-profile set TESTPROFILE plugin=$plugin 2>&1 |
-        grep "$plugin.*No such file" ; then
-        status=1
-    else
-        status=0
-        ./ceph osd erasure-code-profile rm TESTPROFILE
-    fi
-    return $status
-}
-
 function TEST_rados_put_get_lrc_advanced() {
     local dir=$1
     local poolname=pool-lrc-a
@@ -153,7 +139,7 @@ function TEST_rados_put_get_lrc_kml() {
 }
 
 function TEST_rados_put_get_isa() {
-    if ! plugin_exists isa ; then
+    if ! erasure_code_plugin_exists isa ; then
         echo "SKIP because plugin isa has not been built"
         return 0
     fi
