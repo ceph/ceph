@@ -837,7 +837,10 @@ void ReplicatedPG::do_pg_op(OpRequestRef op)
 	}
 
 	hobject_t next;
-	hobject_t current = response.handle;
+	hobject_t lower_bound = response.handle;
+        dout(10) << " pgnls lower_bound " << lower_bound << dendl;
+
+	hobject_t current = lower_bound;
 	osr->flush();
 	int r = pgbackend->objects_list_partial(
 	  current,
@@ -881,6 +884,9 @@ void ReplicatedPG::do_pg_op(OpRequestRef op)
 	    assert(!lcand.is_max());
 	    ++ls_iter;
 	  }
+
+          dout(10) << " pgnls candidate 0x" << std::hex << candidate.get_hash()
+            << " vs lower bound 0x" << lower_bound.get_hash() << dendl;
 
 	  if (cmp(candidate, next, get_sort_bitwise()) >= 0) {
 	    break;
@@ -933,18 +939,53 @@ void ReplicatedPG::do_pg_op(OpRequestRef op)
 	  if (filter && !pgls_filter(filter, candidate, filter_out))
 	    continue;
 
+          dout(20) << "pgnls item 0x" << std::hex
+            << candidate.get_hash()
+            << ", rev 0x" << hobject_t::_reverse_bits(candidate.get_hash())
+            << std::dec << " "
+            << candidate.oid.name << dendl;
+
 	  librados::ListObjectImpl item;
 	  item.nspace = candidate.get_namespace();
 	  item.oid = candidate.oid.name;
 	  item.locator = candidate.get_key();
 	  response.entries.push_back(item);
 	}
+
 	if (next.is_max() &&
 	    missing_iter == pg_log.get_missing().missing.end() &&
 	    ls_iter == sentries.end()) {
 	  result = 1;
-	}
-	response.handle = next;
+
+          // Set response.handle to the hash pos of the start
+          // of the next PG
+          uint32_t b = pool.info.get_pg_num();
+          uint32_t bmask = pool.info.get_pg_num_mask();
+
+          // Work out which PG follows this one in the bit-reversed hash
+          // order.  Complicated by the way we use ceph_stable_mod to
+          // assign hashes to PGs.
+          uint32_t inc = hobject_t::_reverse_bits((bmask + 1) >> 1);
+          uint32_t next_pg = info.pgid.pgid.ps();
+          int k = 0;
+          do {
+            next_pg = hobject_t::_reverse_bits(
+              hobject_t::_reverse_bits(next_pg) + inc);
+            ++k;
+            assert(k < 1000);
+          } while (next_pg == info.pgid.pgid.ps() || next_pg >= b);
+
+          dout(10) << "pgls next_pg=" << next_pg
+            << " (pg=" << info.pgid.pgid.ps() << " b=" << b
+            << " bmask=" << bmask << ")" << dendl;
+
+          uint32_t next_pg_hash = hobject_t::_reverse_bits(next_pg);
+          response.handle.set_hash(next_pg_hash);
+	} else {
+          response.handle.set_hash(next.get_hash());
+        }
+        dout(10) << "pgls handle=0x" << std::hex << response.handle.get_hash()
+                 << std::dec << dendl;
 	::encode(response, osd_op.outdata);
 	if (filter)
 	  ::encode(filter_out, osd_op.outdata);
