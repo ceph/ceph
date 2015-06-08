@@ -7793,10 +7793,21 @@ bool OSD::_recover_now()
 void OSD::do_recovery(PG *pg, ThreadPool::TPHandle &handle)
 {
   if (g_conf->osd_recovery_sleep > 0) {
-    utime_t t;
-    t.set_from_double(g_conf->osd_recovery_sleep);
-    t.sleep();
-    dout(20) << __func__ << " slept for " << t << dendl;
+    utime_t sleep_sum;
+    utime_t check_interval;
+    check_interval.set_from_double(0.1);
+    while(true) {
+      // user can change the osd_recovery_sleep based on their workload,
+      // indle time decrease it, busy time increase it
+      utime_t sleep_total;
+      sleep_total.set_from_double(g_conf->osd_recovery_sleep);
+      if (sleep_sum >= sleep_total) {
+        break;
+      }
+      check_interval.sleep();
+      sleep_sum += check_interval;
+    } 
+    dout(20) << __func__ << " slept for " << sleep_sum << dendl;
   }
 
   // see how many we should try to start.  note that this is a bit racy.
