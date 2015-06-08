@@ -68,9 +68,25 @@ following steps:
    or Fedora 20. Finally, save the contents to the 
    ``/etc/yum.repos.d/ceph.repo`` file. ::
 
+	[ceph]
+	name=Ceph 64-bit packages
+	baseurl=http://ceph.com/rpm-{ceph-release}/{distro}/x86_64
+	enabled=1
+	gpgcheck=1
+	type=rpm-md
+	gpgkey=https://ceph.com/git/?p=ceph.git;a=blob_plain;f=keys/release.asc
+
 	[ceph-noarch]
 	name=Ceph noarch packages
 	baseurl=http://ceph.com/rpm-{ceph-release}/{distro}/noarch
+	enabled=1
+	gpgcheck=1
+	type=rpm-md
+	gpgkey=https://ceph.com/git/?p=ceph.git;a=blob_plain;f=keys/release.asc
+
+	[ceph-source]
+	name=Ceph source packages
+	baseurl=http://ceph.com/rpm-{ceph-release}/{distro}/SRPMS
 	enabled=1
 	gpgcheck=1
 	type=rpm-md
