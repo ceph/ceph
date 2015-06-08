@@ -224,7 +224,7 @@ function test_zap() {
     local osd_data=$DIR/dir
     $mkdir -p $osd_data
 
-    ./ceph-disk $CEPH_DISK_ARGS zap $osd_data 2>&1 | grep 'not full block device' || return 1
+    ./ceph-disk $CEPH_DISK_ARGS zap $osd_data 2>&1 | grep -q 'not full block device' || return 1
 
     $rm -fr $osd_data
 }
