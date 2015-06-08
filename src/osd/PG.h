@@ -2031,6 +2031,11 @@ public:
   void apply_acting_features(uint64_t f) { acting_features &= f; }
   void apply_upacting_features(uint64_t f) { upacting_features &= f; }
 
+  /// true if we will sort hobjects bitwise for this pg interval
+  bool get_sort_bitwise() const {
+    return get_min_upacting_features() & CEPH_FEATURE_OSD_BITWISE_HOBJ_SORT;
+  }
+
   void init_primary_up_acting(
     const vector<int> &newup,
     const vector<int> &newacting,

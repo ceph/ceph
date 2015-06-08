@@ -449,6 +449,9 @@ public:
   uint64_t min_peer_features() const {
     return get_min_peer_features();
   }
+  bool sort_bitwise() const {
+    return get_sort_bitwise();
+  }
 
   bool transaction_use_tbl() {
     uint64_t min_features = get_min_upacting_features();
