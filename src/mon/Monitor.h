@@ -779,18 +779,18 @@ public:
 		    const vector<string>& com);
 
 public:
-  struct C_Command : public Context {
+  struct C_Command : public C_MonOp {
     Monitor *mon;
-    MonOpRequestRef op;
     int rc;
     string rs;
     bufferlist rdata;
     version_t version;
     C_Command(Monitor *_mm, MonOpRequestRef _op, int r, string s, version_t v) :
-      mon(_mm), op(_op), rc(r), rs(s), version(v){}
+      C_MonOp(_op), mon(_mm), rc(r), rs(s), version(v){}
     C_Command(Monitor *_mm, MonOpRequestRef _op, int r, string s, bufferlist rd, version_t v) :
-      mon(_mm), op(_op), rc(r), rs(s), rdata(rd), version(v){}
-    void finish(int r) {
+      C_MonOp(_op), mon(_mm), rc(r), rs(s), rdata(rd), version(v){}
+
+    virtual void _finish(int r) {
       MMonCommand *m = static_cast<MMonCommand*>(op->get_req());
       if (r >= 0) {
         ostringstream ss;
@@ -822,12 +822,13 @@ public:
   };
 
  private:
-  class C_RetryMessage : public Context {
+  class C_RetryMessage : public C_MonOp {
     Monitor *mon;
-    MonOpRequestRef op;
   public:
-    C_RetryMessage(Monitor *m, MonOpRequestRef o) : mon(m), op(o) {}
-    void finish(int r) {
+    C_RetryMessage(Monitor *m, MonOpRequestRef op) :
+      C_MonOp(op), mon(m) { }
+
+    virtual void _finish(int r) {
       if (r == -EAGAIN || r >= 0)
         mon->dispatch_op(op);
       else if (r == -ECANCELED)
