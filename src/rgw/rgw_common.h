@@ -1057,10 +1057,14 @@ struct req_state {
 
    string req_id;
 
+   string trans_id;
+
    req_info info;
 
    req_state(CephContext *_cct, class RGWEnv *e);
    ~req_state();
+
+   void gen_trans_id();
 };
 
 /** Store basic data on an object */
