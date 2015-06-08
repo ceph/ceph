@@ -71,4 +71,12 @@ libcls_cephfs_la_SOURCES = cls/cephfs/cls_cephfs.cc
 libcls_cephfs_la_LIBADD = $(PTHREAD_LIBS) $(EXTRALIBS)
 libcls_cephfs_la_LDFLAGS = ${AM_LDFLAGS} -module -avoid-version -shared -export-symbols-regex '.*__cls_.*'
 radoslib_LTLIBRARIES += libcls_cephfs.la
+
+libcls_journal_la_SOURCES = \
+	cls/journal/cls_journal.cc \
+	cls/journal/cls_journal_types.cc
+libcls_journal_la_LIBADD = $(PTHREAD_LIBS) $(EXTRALIBS)
+libcls_journal_la_LDFLAGS = ${AM_LDFLAGS} -module -avoid-version -shared -export-symbols-regex '.*__cls_.*'
+radoslib_LTLIBRARIES += libcls_journal.la
+
 endif # WITH_OSD
