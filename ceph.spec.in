@@ -39,6 +39,9 @@ Requires:	util-linux
 Requires:	hdparm
 Requires:	cryptsetup
 Requires(post):	binutils
+%if 0%{with cephfs_java}
+BuildRequires: sharutils
+%endif
 BuildRequires:	gcc-c++
 BuildRequires:	boost-devel
 %if 0%{defined suse_version}
@@ -79,10 +82,6 @@ BuildRequires:	net-tools
 #################################################################################
 # specific
 #################################################################################
-%if ! 0%{?rhel} || 0%{?fedora}
-BuildRequires:	sharutils
-%endif
-
 %if 0%{defined suse_version}
 %if 0%{?suse_version} > 1210
 Requires:	gptfdisk
