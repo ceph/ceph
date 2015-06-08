@@ -54,6 +54,7 @@ LIBRGW_DEPS += \
 	libcls_rgw_client.la \
 	libcls_log_client.a \
 	libcls_statelog_client.a \
+	libcls_timeindex_client.a \
 	libcls_user_client.a \
 	libcls_replica_log_client.a \
 	libcls_lock_client.la \
