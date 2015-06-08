@@ -258,6 +258,7 @@ OPTION(mon_mds_force_trim_to, OPT_INT, 0)   // force mon to trim mdsmaps to this
 
 // dump transactions
 OPTION(mon_debug_dump_transactions, OPT_BOOL, false)
+OPTION(mon_debug_dump_json, OPT_BOOL, false)
 OPTION(mon_debug_dump_location, OPT_STR, "/var/log/ceph/$cluster-$name.tdump")
 OPTION(mon_inject_transaction_delay_max, OPT_DOUBLE, 10.0)      // seconds
 OPTION(mon_inject_transaction_delay_probability, OPT_DOUBLE, 0) // range [0, 1]
