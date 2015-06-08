@@ -3,6 +3,7 @@ ACLOCAL_AMFLAGS = -I m4
 EXTRA_DIST = autogen.sh ceph.spec.in ceph.spec install-deps.sh
 # the "." here makes sure check-local builds gtest and gmock before they are used
 SUBDIRS = . src man doc
+rpmtopdir=@RPM_DIR@
 
 EXTRA_DIST += \
 	src/test/run-cli-tests \
@@ -86,3 +87,12 @@ dist-hook:
 	  cd $(srcdir); \
 	  git log --oneline --decorate --no-merges > $(distdir)/ChangeLog; \
 	fi
+
+rpm: dist-bzip2 @PACKAGE@.spec
+	mkdir -p $(rpmtopdir)/SOURCES \
+		$(rpmtopdir)/SPECS \
+		$(rpmtopdir)/BUILD \
+		$(rpmtopdir)/RPMS $(rpmtopdir)/SRPMS
+	cp @PACKAGE@-@VERSION@.tar.bz2 $(rpmtopdir)/SOURCES
+	cp @PACKAGE@.spec $(rpmtopdir)/SPECS
+	rpmbuild --define "_rpmtopdir $(rpmtopdir)" -ba @PACKAGE@.spec
