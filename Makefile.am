@@ -88,11 +88,13 @@ dist-hook:
 	  git log --oneline --decorate --no-merges > $(distdir)/ChangeLog; \
 	fi
 
-rpm: dist-bzip2 @PACKAGE@.spec
+srpm: dist-bzip2 @PACKAGE@.spec
 	mkdir -p $(rpmtopdir)/SOURCES \
 		$(rpmtopdir)/SPECS \
 		$(rpmtopdir)/BUILD \
 		$(rpmtopdir)/RPMS $(rpmtopdir)/SRPMS
 	cp @PACKAGE@-@VERSION@.tar.bz2 $(rpmtopdir)/SOURCES
 	cp @PACKAGE@.spec $(rpmtopdir)/SPECS
+
+rpm: srpm
 	rpmbuild --define "_rpmtopdir $(rpmtopdir)" -ba @PACKAGE@.spec
