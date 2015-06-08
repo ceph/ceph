@@ -1204,6 +1204,24 @@ AC_ARG_WITH(
     ]
 )
 
+
+dnl Set RPM topdir
+RPMD=`pwd`/RPM
+AC_MSG_CHECKING([for directory where to create rpms])
+AC_ARG_WITH(rpm-dir,[  --with-rpm-dir=<dir> Default is \$RPMD/],
+            rpm_dir="$withval", rpm_dir="$RPMD")
+if test -d "$rpm_dir" ; then
+    AC_MSG_RESULT([found $rpm_dir])
+    RPM_DIR=$rpm_dir
+else
+    AC_MSG_RESULT([no such directory $rpm_dir])
+    AC_MSG_RESULT([the directory $rpm_dir will be created for you if possible])
+    RPM_DIR=$rpm_dir
+fi
+
+AC_SUBST(RPM_DIR)
+
+
 # Checks for typedefs, structures, and compiler characteristics.
 #AC_HEADER_STDBOOL
 #AC_C_CONST
