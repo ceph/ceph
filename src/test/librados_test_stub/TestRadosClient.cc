@@ -220,6 +220,10 @@ void TestRadosClient::flush_aio_operations(AioCompletionImpl *c) {
   }
 }
 
+void TestRadosClient::finish_aio_completion(AioCompletionImpl *c, int r) {
+  librados::finish_aio_completion(c, r);
+}
+
 Finisher *TestRadosClient::get_finisher(const std::string &oid) {
   std::size_t h = m_hash(oid);
   return m_finishers[h % m_finishers.size()];

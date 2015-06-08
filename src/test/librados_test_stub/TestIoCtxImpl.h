@@ -6,6 +6,7 @@
 
 #include "include/rados/librados.hpp"
 #include "include/atomic.h"
+#include "include/Context.h"
 #include "common/snap_types.h"
 #include <boost/function.hpp>
 #include <list>
@@ -62,6 +63,8 @@ public:
 
   virtual int aio_flush();
   virtual void aio_flush_async(AioCompletionImpl *c);
+  virtual void aio_notify(const std::string& oid, AioCompletionImpl *c,
+                          bufferlist& bl, uint64_t timeout_ms, bufferlist *pbl);
   virtual int aio_operate(const std::string& oid, TestObjectOperationImpl &ops,
                           AioCompletionImpl *c, SnapContext *snap_context,
                           int flags);
@@ -70,6 +73,8 @@ public:
                                bufferlist *pbl);
   virtual int aio_remove(const std::string& oid, AioCompletionImpl *c) = 0;
 
+  virtual int append(const std::string& oid, const bufferlist &bl,
+                     const SnapContext &snapc) = 0;
   virtual int assert_exists(const std::string &oid) = 0;
 
   virtual int create(const std::string& oid, bool exclusive) = 0;
@@ -138,6 +143,16 @@ protected:
                              bufferlist *pbl, const SnapContext &snapc);
 
 private:
+  struct C_AioNotify : public Context {
+    TestIoCtxImpl *io_ctx;
+    AioCompletionImpl *aio_comp;
+    C_AioNotify(TestIoCtxImpl *_io_ctx, AioCompletionImpl *_aio_comp)
+      : io_ctx(_io_ctx), aio_comp(_aio_comp) {
+    }
+    virtual void finish(int r) {
+      io_ctx->handle_aio_notify_complete(aio_comp, r);
+    }
+  };
 
   TestRadosClient *m_client;
   int64_t m_pool_id;
@@ -145,7 +160,9 @@ private:
   snap_t m_snap_seq;
   SnapContext m_snapc;
   atomic_t m_refcount;
+  atomic_t m_pending_ops;
 
+  void handle_aio_notify_complete(AioCompletionImpl *aio_comp, int r);
 };
 
 } // namespace librados
