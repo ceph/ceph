@@ -184,6 +184,13 @@ ceph_test_cls_numops_LDADD = \
 ceph_test_cls_numops_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_test_cls_numops
 
+ceph_test_cls_journal_SOURCES = test/cls_journal/test_cls_journal.cc
+ceph_test_cls_journal_LDADD = \
+        libcls_journal_client.la $(LIBRADOS) \
+        $(LIBCOMMON) $(CRYPTO_LIBS) $(UNITTEST_LDADD) $(RADOS_TEST_LDADD) -luuid
+ceph_test_cls_journal_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+bin_DEBUGPROGRAMS += ceph_test_cls_journal
+
 ceph_test_rados_api_cmd_SOURCES = test/librados/cmd.cc
 ceph_test_rados_api_cmd_LDADD = \
 	$(LIBCOMMON) $(LIBRADOS) $(CRYPTO_LIBS) \
