@@ -932,8 +932,8 @@ struct RGWRegion {
 20:08 < yehudasa> yeah, probably
 20:08 < _robbat21irssi> s3, s3website, swift, swith_auth, swift_website
 */
-  map<string,list<string>> api_hostname_map;
-  map<string,list<string>> api_endpoints_map;
+  map<string, list<string> > api_hostname_map;
+  map<string, list<string> > api_endpoints_map;
 
   CephContext *cct;
   RGWRados *store;
