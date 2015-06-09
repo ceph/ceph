@@ -594,11 +594,11 @@ void ECBackend::continue_recovery_op(
       }
       return;
     }
-    case RecoveryOp::COMPLETE: {
-      assert(0); // should never be called once complete
-    };
-    default:
+    // should never be called once complete
+    case RecoveryOp::COMPLETE:
+    default: {
       assert(0);
+    };
     }
   }
 }
