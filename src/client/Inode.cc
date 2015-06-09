@@ -154,7 +154,7 @@ bool Inode::cap_is_valid(Cap* cap)
       && (ceph_clock_now(cct) < cap->session->cap_ttl)) {
     return true;
   }
-  return true;
+  return false;
 }
 
 int Inode::caps_issued(int *implemented)
