@@ -29,7 +29,7 @@ libradostest_la_SOURCES = \
 	test/librados/TestCase.cc
 noinst_LTLIBRARIES += libradostest.la
 libradostest_la_CXXFLAGS = $(UNITTEST_CXXFLAGS)
-RADOS_TEST_LDADD = libradostest.la
+RADOS_TEST_LDADD = libradostest.la $(LIBCOMMON) $(CRYPTO_LIBS)
 
 ceph_test_rados_SOURCES = \
 	test/osd/TestRados.cc \
