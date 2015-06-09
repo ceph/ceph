@@ -23,8 +23,8 @@ void RGWBWRoutingRule::apply_rule(const string& default_protocol, const string& 
 {
   RGWRedirectInfo& redirect = redirect_info.redirect;
 
-  string protocol = (redirect.protocol.empty() ? redirect.protocol : default_protocol);
-  string hostname = (redirect.hostname.empty() ? redirect.hostname : default_hostname);
+  string protocol = (!redirect.protocol.empty() ? redirect.protocol : default_protocol);
+  string hostname = (!redirect.hostname.empty() ? redirect.hostname : default_hostname);
 
   *new_url = protocol + "://" + hostname + "/";
 
