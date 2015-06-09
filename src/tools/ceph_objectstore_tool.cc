@@ -1528,7 +1528,8 @@ int get_object_rados(librados::IoCtx &ioctx, bufferlist &bl, bool no_overwrite)
   return 0;
 }
 
-int get_object(ObjectStore *store, coll_t coll, bufferlist &bl, OSDMap &curmap)
+int get_object(ObjectStore *store, coll_t coll, bufferlist &bl, OSDMap &curmap,
+               bool *skipped_objects)
 {
   ObjectStore::Transaction tran;
   ObjectStore::Transaction *t = &tran;
@@ -1563,7 +1564,8 @@ int get_object(ObjectStore *store, coll_t coll, bufferlist &bl, OSDMap &curmap)
     }
      
     if (coll_pgid.pgid != pgid) {
-      cerr << "Skipping object '" << ob.hoid << "' which no longer belongs in exported pg" << std::endl;
+      cerr << "Skipping object '" << ob.hoid << "' which belongs in pg " << pgid << std::endl;
+      *skipped_objects = true;
       skip_object(bl);
       return 0;
     }
@@ -1623,13 +1625,16 @@ int get_object(ObjectStore *store, coll_t coll, bufferlist &bl, OSDMap &curmap)
 }
 
 int get_pg_metadata(ObjectStore *store, bufferlist &bl, metadata_section &ms,
-    const OSDSuperblock& sb, OSDMap& curmap)
+    const OSDSuperblock& sb, OSDMap& curmap, spg_t pgid)
 {
   bufferlist::iterator ebliter = bl.begin();
   ms.decode(ebliter);
+  spg_t old_pgid = ms.info.pgid;
+  ms.info.pgid = pgid;
 
 #if DIAGNOSTIC
   Formatter *formatter = new JSONFormatter(true);
+  cout << "export pgid " << old_pgid << std::endl;
   cout << "struct_v " << (int)ms.struct_ver << std::endl;
   cout << "map epoch " << ms.map_epoch << std::endl;
 
@@ -1671,45 +1676,82 @@ int get_pg_metadata(ObjectStore *store, bufferlist &bl, metadata_section &ms,
   cout << std::endl;
 #endif
 
+  if (ms.osdmap.get_epoch() != 0 && ms.map_epoch != ms.osdmap.get_epoch()) {
+    cerr << "FATAL: Invalid OSDMap epoch in export data" << std::endl;
+    return -EFAULT;
+  }
+
   if (ms.map_epoch > sb.current_epoch) {
-    cerr << "ERROR: Export map_epoch " << ms.map_epoch << " > osd epoch " << sb.current_epoch << std::endl;
+    cerr << "ERROR: Export PG's map_epoch " << ms.map_epoch << " > OSD's epoch " << sb.current_epoch << std::endl;
+    cerr << "The OSD you are using is older than the exported PG" << std::endl;
+    cerr << "Either use another OSD or join selected OSD to cluster to update it first" << std::endl;
     return -EINVAL;
   }
 
-  // If the osdmap was present in the metadata we can check for splits.
   // Pool verified to exist for call to get_pg_num().
-  if (ms.map_epoch < sb.current_epoch) {
-    bool found_map = false;
+  unsigned new_pg_num = curmap.get_pg_num(pgid.pgid.pool());
+
+  if (pgid.pgid.ps() >= new_pg_num) {
+    cerr << "Illegal pgid, the seed is larger than current pg_num" << std::endl;
+    return -EINVAL;
+  }
+
+  // Old exports didn't include OSDMap, see if we have a copy locally
+  if (ms.osdmap.get_epoch() == 0) {
     OSDMap findmap;
     bufferlist findmap_bl;
     int ret = get_osdmap(store, ms.map_epoch, findmap, findmap_bl);
-    if (ret == 0)
-      found_map = true;
-
-    // Old export didn't include OSDMap
-    if (ms.osdmap.get_epoch() == 0) {
-      // If we found the map locally and an older export didn't have it,
-      // then we'll use the local one.
-      if (found_map) {
-        ms.osdmap = findmap;
-      } else {
-        cerr << "WARNING: No OSDMap in old export,"
-             " some objects may be ignored due to a split" << std::endl;
-      }
+    if (ret == 0) {
+      ms.osdmap = findmap;
+    } else {
+      cerr << "WARNING: No OSDMap in old export,"
+           " some objects may be ignored due to a split" << std::endl;
     }
+  }
 
-    // If OSDMap is available check for splits
-    if (ms.osdmap.get_epoch()) {
-      spg_t parent(ms.info.pgid);
-      if (parent.is_split(ms.osdmap.get_pg_num(ms.info.pgid.pgid.m_pool),
-          curmap.get_pg_num(ms.info.pgid.pgid.m_pool), NULL)) {
-        cerr << "WARNING: Split occurred, some objects may be ignored" << std::endl;
+  // Make sure old_pg_num is 0 in the unusual case that OSDMap not in export
+  // nor can we find a local copy.
+  unsigned old_pg_num = 0;
+  if (ms.osdmap.get_epoch() != 0)
+    old_pg_num = ms.osdmap.get_pg_num(pgid.pgid.pool());
+
+  if (debug) {
+    cerr << "old_pg_num " << old_pg_num << std::endl;
+    cerr << "new_pg_num " << new_pg_num << std::endl;
+    cerr << ms.osdmap << std::endl;
+    cerr << curmap << std::endl;
+  }
+
+  // If we have managed to have a good OSDMap we can do these checks
+  if (old_pg_num) {
+    if (old_pgid.pgid.ps() >= old_pg_num) {
+      cerr << "FATAL: pgid invalid for original map epoch" << std::endl;
+      return -EFAULT;
+    }
+    if (pgid.pgid.ps() >= old_pg_num) {
+      cout << "NOTICE: Post split pgid specified" << std::endl;
+    } else {
+      spg_t parent(pgid);
+      if (parent.is_split(old_pg_num, new_pg_num, NULL)) {
+            cerr << "WARNING: Split occurred, some objects may be ignored" << std::endl;
       }
     }
   }
 
+  if (debug) {
+    cerr << "Import pgid " << ms.info.pgid << std::endl;
+    cerr << "Clearing past_intervals " << ms.past_intervals << std::endl;
+    cerr << "Zero same_interval_since " << ms.info.history.same_interval_since << std::endl;
+  }
+
+  // Let osd recompute past_intervals and same_interval_since
   ms.past_intervals.clear();
-  ms.info.history.same_interval_since = ms.map_epoch = sb.current_epoch;
+  ms.info.history.same_interval_since =  0;
+
+  if (debug)
+    cerr << "Changing pg epoch " << ms.map_epoch << " to " << sb.current_epoch << std::endl;
+
+  ms.map_epoch = sb.current_epoch;
 
   return 0;
 }
@@ -1867,11 +1909,12 @@ void filter_divergent_priors(spg_t import_pgid, const OSDMap &curmap,
   }
 }
 
-int do_import(ObjectStore *store, OSDSuperblock& sb, bool force)
+int do_import(ObjectStore *store, OSDSuperblock& sb, bool force, string pgidstr)
 {
   bufferlist ebl;
   pg_info_t info;
   PGLog::IndexedLog log;
+  bool skipped_objects = false;
 
   if (!dry_run)
     finish_remove_pgs(store);
@@ -1903,6 +1946,22 @@ int do_import(ObjectStore *store, OSDSuperblock& sb, bool force)
   pg_begin pgb;
   pgb.decode(ebliter);
   spg_t pgid = pgb.pgid;
+  spg_t orig_pgid = pgid;
+
+  if (pgidstr.length()) {
+    spg_t user_pgid;
+
+    bool ok = user_pgid.parse(pgidstr.c_str());
+    // This succeeded in main() already
+    assert(ok);
+    if (pgid != user_pgid) {
+      if (pgid.pool() != user_pgid.pool()) {
+        cerr << "Can't specify a different pgid pool, must be " << pgid.pool() << std::endl;
+        return -EINVAL;
+      }
+      pgid = user_pgid;
+    }
+  }
 
   if (!pgb.superblock.cluster_fsid.is_zero()
       && pgb.superblock.cluster_fsid != sb.cluster_fsid) {
@@ -1976,7 +2035,11 @@ int do_import(ObjectStore *store, OSDSuperblock& sb, bool force)
     delete t;
   }
 
-  cout << "Importing pgid " << pgid << std::endl;
+  cout << "Importing pgid " << pgid;
+  if (orig_pgid != pgid) {
+    cout << " exported as " << orig_pgid;
+  }
+  cout << std::endl;
 
   bool done = false;
   bool found_metadata = false;
@@ -1993,11 +2056,11 @@ int do_import(ObjectStore *store, OSDSuperblock& sb, bool force)
     }
     switch(type) {
     case TYPE_OBJECT_BEGIN:
-      ret = get_object(store, coll, ebl, curmap);
+      ret = get_object(store, coll, ebl, curmap, &skipped_objects);
       if (ret) return ret;
       break;
     case TYPE_PG_METADATA:
-      ret = get_pg_metadata(store, ebl, ms, sb, curmap);
+      ret = get_pg_metadata(store, ebl, ms, sb, curmap, pgid);
       if (ret) return ret;
       found_metadata = true;
       break;
@@ -2048,6 +2111,10 @@ int do_import(ObjectStore *store, OSDSuperblock& sb, bool force)
       dump_log(formatter, cerr, newlog, missing, ms.divergent_priors);
       delete formatter;
     }
+
+    // Just like a split invalidate stats since the object count is changed
+    if (skipped_objects)
+      ms.info.stats.stats_invalid = true;
 
     ret = write_pg(t, ms.map_epoch, ms.info, newlog, ms.past_intervals, ms.divergent_priors);
     if (ret) return ret;
@@ -2535,9 +2602,9 @@ int main(int argc, char **argv)
     ("journal-path", po::value<string>(&jpath),
      "path to journal, mandatory for filestore type")
     ("pgid", po::value<string>(&pgidstr),
-     "PG id, mandatory except for import, fix-lost, list-pgs, set-allow-sharded-objects")
+     "PG id, mandatory except for import, fix-lost, list-pgs, set-allow-sharded-objects, dump-journal, dump-super")
     ("op", po::value<string>(&op),
-     "Arg is one of [info, log, remove, export, import, list, fix-lost, list-pgs, rm-past-intervals, set-allow-sharded-objects, dump-journal]")
+     "Arg is one of [info, log, remove, export, import, list, fix-lost, list-pgs, rm-past-intervals, set-allow-sharded-objects, dump-journal, dump-super]")
     ("file", po::value<string>(&file),
      "path of file to export or import")
     ("format", po::value<string>(&format)->default_value("json-pretty"),
@@ -2781,11 +2848,6 @@ int main(int argc, char **argv)
     }
   }
 
-  if (op == "import" && pgidstr.length()) {
-    cerr << "--pgid option invalid with import" << std::endl;
-    myexit(1);
-  }
-
   if (pgidstr.length() && !pgid.parse(pgidstr.c_str())) {
     cerr << "Invalid pgid '" << pgidstr << "' specified" << std::endl;
     myexit(1);
@@ -2940,9 +3002,14 @@ int main(int argc, char **argv)
     }
   }
 
+  // The ops which don't require --pgid option are checked here and
+  // mentioned in the usage for --pgid with some exceptions.
+  // The dump-journal op isn't here because it is handled earlier.
+  // The dump-journal-mount op is undocumented so not in the usage.
   if (op != "list" && op != "import" && op != "fix-lost"
-      && op != "list-pgs"  && op != "set-allow-sharded-objects" &&
-      op != "dump-journal-mount" && (pgidstr.length() == 0)) {
+      && op != "list-pgs"  && op != "set-allow-sharded-objects"
+      && op != "dump-journal-mount" && op != "dump-super"
+      && (pgidstr.length() == 0)) {
     cerr << "Must provide pgid" << std::endl;
     usage(desc);
     ret = 1;
@@ -3042,7 +3109,7 @@ int main(int argc, char **argv)
   if (op == "import") {
 
     try {
-      ret = do_import(fs, superblock, force);
+      ret = do_import(fs, superblock, force, pgidstr);
     }
     catch (const buffer::error &e) {
       cerr << "do_import threw exception error " << e.what() << std::endl;
@@ -3396,6 +3463,12 @@ int main(int argc, char **argv)
         fs->apply_transaction(*t);
         cout << "Removal succeeded" << std::endl;
       }
+    } else if (op == "dump-super") {
+      formatter->open_object_section("superblock");
+      superblock.dump(formatter);
+      formatter->close_section();
+      formatter->flush(cout);
+      cout << std::endl;
     } else {
       cerr << "Must provide --op (info, log, remove, export, import, list, fix-lost, list-pgs, rm-past-intervals)"
 	<< std::endl;
