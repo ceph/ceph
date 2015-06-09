@@ -119,7 +119,7 @@ int ErasureCodeNonRegression::setup(int argc, char** argv) {
 
   {
     stringstream path;
-    path << base << "/" << "plugin=" << plugin << " stipe-width=" << stripe_width;
+    path << base << "/" << "plugin=" << plugin << " stripe-width=" << stripe_width;
     directory = path.str();
   }
 
