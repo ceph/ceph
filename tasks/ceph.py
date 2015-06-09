@@ -72,13 +72,13 @@ def ceph_log(ctx, config):
             )
         )
 
-    class Rotater:
-        stopping = False
+    class Rotater(object):
+        stop_event = gevent.event.Event()
         def invoke_logrotate(self):
             #1) install ceph-test.conf in /etc/logrotate.d
             #2) continuously loop over logrotate invocation with ceph-test.conf
-            while not self.stopping:
-                time.sleep(30)
+            while not self.stop_event.is_set():
+                self.stop_event.wait(timeout=30)
                 run.wait(
                     ctx.cluster.run(
                         args=['sudo', 'logrotate', '/etc/logrotate.d/ceph-test.conf'
