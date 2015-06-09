@@ -38,6 +38,7 @@ PACKAGES['ceph']['deb'] = [
     'radosgw',
     'radosgw-dbg',
     'python-ceph',
+    'python-rados',
     'libcephfs1',
     'libcephfs1-dbg',
     'libcephfs-java',
@@ -607,7 +608,9 @@ def _remove_deb(ctx, config, remote, debs):
         args=[
             'dpkg', '-l',
             run.Raw('|'),
-            'grep', '^.HR',
+            # Any package that is unpacked or half-installed and also requires
+            # reinstallation
+            'grep', '^.\(U\|H\)R',
             run.Raw('|'),
             'awk', '{print $2}',
             run.Raw('|'),
