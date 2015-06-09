@@ -133,16 +133,20 @@ class Thrasher:
             manager.raw_cluster_cmd('--', 'mon', 'tell', '*', 'injectargs',
                                     '--mon-osd-down-out-interval 0')
         self.thread = gevent.spawn(self.do_thrash)
-        if self.cmd_exists_on_osds("ceph-objectstore-tool"):
+        if self.config.get('powercycle') or not self.cmd_exists_on_osds("ceph-objectstore-tool"):
+            self.ceph_objectstore_tool = False
+            self.test_rm_past_intervals = False
+            if self.config.get('powercycle'):
+                self.log("Unable to test ceph-objectstore-tool, "
+                         "powercycle testing")
+            else:
+                self.log("Unable to test ceph-objectstore-tool, "
+                         "not available on all OSD nodes")
+        else:
             self.ceph_objectstore_tool = \
                 self.config.get('ceph_objectstore_tool', True)
             self.test_rm_past_intervals = \
                 self.config.get('test_rm_past_intervals', True)
-        else:
-            self.ceph_objectstore_tool = False
-            self.test_rm_past_intervals = False
-            self.log("Unable to test ceph-objectstore-tool, "
-                     "not available on all OSD nodes")
 
     def cmd_exists_on_osds(self, cmd):
         allremotes = self.ceph_manager.ctx.cluster.only(\
