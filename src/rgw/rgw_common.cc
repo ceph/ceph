@@ -110,6 +110,21 @@ req_info::req_info(CephContext *cct, class RGWEnv *e) : env(e) {
     request_params = env->get("QUERY_STRING", "");
   }
   host = env->get("HTTP_HOST");
+
+  // strip off any trailing :port from host (added by CrossFTP and maybe others)
+  size_t colon_offset = host.find_last_of(':');
+  if (colon_offset != string::npos) {
+    bool all_digits = true;
+    for (unsigned i = colon_offset + 1; i < host.size(); ++i) {
+      if (!isdigit(host[i])) {
+	all_digits = false;
+	break;
+      }
+    }
+    if (all_digits) {
+      host.resize(colon_offset);
+    }
+  }
 }
 
 void req_info::rebuild_from(req_info& src)
