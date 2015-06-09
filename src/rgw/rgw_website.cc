@@ -63,8 +63,12 @@ bool RGWBWRoutingRules::check_error_code_condition(int error_code, RGWBWRoutingR
 bool RGWBucketWebsiteConf::should_redirect(const string& key, RGWBWRoutingRule *redirect)
 {
   RGWBWRoutingRule *rule;
-
-  if (!routing_rules.check_key_condition(key, &rule)) {
+  if(!redirect_all.hostname.empty()) {
+	RGWBWRoutingRule redirect_all_rule;
+	redirect_all_rule.redirect_info.redirect = redirect_all;
+	*redirect = redirect_all_rule;
+	return true;
+  } else if (!routing_rules.check_key_condition(key, &rule)) {
     return false;
   }
 
