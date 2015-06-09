@@ -2399,7 +2399,8 @@ reprotect_and_return_err:
     if (ictx->object_cacher) {
       // complete pending writes before we're set to a snapshot and
       // get -EROFS for writes
-      RWLock::WLocker l(ictx->md_lock);
+      RWLock::RLocker owner_locker(ictx->owner_lock);
+      RWLock::WLocker md_locker(ictx->md_lock);
       ictx->flush_cache();
     }
     int r = _snap_set(ictx, snap_name);
@@ -3224,6 +3225,7 @@ reprotect_and_return_err:
       return;
     }
 
+    RWLock::RLocker owner_locker(ictx->owner_lock);
     ictx->user_flushed();
 
     C_AioWrite *flush_ctx = new C_AioWrite(cct, c);
@@ -3296,7 +3298,8 @@ reprotect_and_return_err:
 
     ictx->flush_async_operations();
 
-    RWLock::WLocker l(ictx->md_lock);
+    RWLock::RLocker owner_locker(ictx->owner_lock);
+    RWLock::WLocker md_locker(ictx->md_lock);
     r = ictx->invalidate_cache();
     return r;
   }
