@@ -41,6 +41,18 @@ using namespace std;
 class AsyncMessenger;
 class WorkerPool;
 
+enum {
+  l_msgr_first = 94000,
+  l_msgr_recv_messages,
+  l_msgr_send_messages,
+  l_msgr_recv_bytes,
+  l_msgr_send_bytes,
+  l_msgr_created_connections,
+  l_msgr_active_connections,
+  l_msgr_last,
+};
+
+
 class Worker : public Thread {
   static const uint64_t InitEventNumber = 5000;
   static const uint64_t EventMaxWaitUs = 30000000;
@@ -48,15 +60,37 @@ class Worker : public Thread {
   WorkerPool *pool;
   bool done;
   int id;
+  PerfCounters *perf_logger;
 
  public:
   EventCenter center;
   Worker(CephContext *c, WorkerPool *p, int i)
-    : cct(c), pool(p), done(false), id(i), center(c) {
+    : cct(c), pool(p), done(false), id(i), perf_logger(NULL), center(c) {
     center.init(InitEventNumber);
+    char name[128];
+    sprintf(name, "AsyncMessenger::Worker-%d", id);
+    // initialize perf_logger
+    PerfCountersBuilder plb(cct, name, l_msgr_first, l_msgr_last);
+
+    plb.add_u64_counter(l_msgr_recv_messages, "msgr_recv_messages", "Network received messages");
+    plb.add_u64_counter(l_msgr_send_messages, "msgr_send_messages", "Network sent messages");
+    plb.add_u64_counter(l_msgr_recv_bytes, "msgr_recv_bytes", "Network received bytes");
+    plb.add_u64_counter(l_msgr_send_bytes, "msgr_send_bytes", "Network received bytes");
+    plb.add_u64_counter(l_msgr_created_connections, "msgr_active_connections", "Active connection number");
+    plb.add_u64_counter(l_msgr_active_connections, "msgr_created_connections", "Created connection number");
+
+    perf_logger = plb.create_perf_counters();
+    cct->get_perfcounters_collection()->add(perf_logger);
+  }
+  ~Worker() {
+    if (perf_logger) {
+      cct->get_perfcounters_collection()->remove(perf_logger);
+      delete perf_logger;
+    }
   }
   void *entry();
   void stop();
+  PerfCounters *get_perf_counter() { return perf_logger; }
 };
 
 /**
@@ -217,7 +251,7 @@ public:
   Connection *create_anon_connection() {
     Mutex::Locker l(lock);
     Worker *w = pool->get_worker();
-    return new AsyncConnection(cct, this, &w->center);
+    return new AsyncConnection(cct, this, &w->center, w->get_perf_counter());
   }
 
   /**
@@ -350,6 +384,7 @@ private:
     Mutex::Locker l(deleted_lock);
     if (deleted_conns.count(p->second)) {
       deleted_conns.erase(p->second);
+      p->second->get_perf_counter()->dec(l_msgr_active_connections);
       conns.erase(p);
       return NULL;
     }
@@ -396,6 +431,7 @@ public:
       }
     }
     conns[conn->peer_addr] = conn;
+    conn->get_perf_counter()->inc(l_msgr_active_connections);
     accepting_conns.erase(conn);
     return 0;
   }

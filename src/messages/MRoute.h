@@ -60,6 +60,8 @@ public:
     ::encode(session_mon_tid, payload);
     ::encode(dest, payload);
     if (features & CEPH_FEATURE_MON_NULLROUTE) {
+      header.version = HEAD_VERSION;
+      header.compat_version = COMPAT_VERSION;
       bool m = msg ? true : false;
       ::encode(m, payload);
       if (msg)

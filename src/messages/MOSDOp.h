@@ -241,6 +241,7 @@ struct ceph_osd_request_head {
       ::encode_nohead(oid.name, payload);
       ::encode_nohead(snaps, payload);
     } else {
+      header.version = HEAD_VERSION;
       ::encode(client_inc, payload);
       ::encode(osdmap_epoch, payload);
       ::encode(flags, payload);

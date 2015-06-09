@@ -194,6 +194,7 @@ public:
     }
   }
   void encode_payload(uint64_t features) {
+    header.version = HEAD_VERSION;
     head.snap_trace_len = snapbl.length();
     head.xattr_len = xattrbl.length();
 
