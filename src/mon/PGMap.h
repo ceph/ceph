@@ -233,6 +233,14 @@ public:
     stamp = s;
   }
 
+  size_t get_num_pg_by_osd(int osd) const {
+    ceph::unordered_map<int,set<pg_t> >::const_iterator p = pg_by_osd.find(osd);
+    if (p == pg_by_osd.end())
+      return 0;
+    else
+      return p->second.size();
+  }
+
   pool_stat_t get_pg_pool_sum_stat(int64_t pool) const {
     ceph::unordered_map<int,pool_stat_t>::const_iterator p =
       pg_pool_sum.find(pool);
