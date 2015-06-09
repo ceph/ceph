@@ -573,7 +573,7 @@ int cls_gen_rand_base64(char *dest, int size) /* size should be the required str
   }
   tmp_dest[ret] = '\0';
   memcpy(dest, tmp_dest, size);
-  dest[size] = '\0';
+  dest[size-1] = '\0';
 
   return 0;
 }
