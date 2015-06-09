@@ -3542,7 +3542,7 @@ void RGWListBucketMultiparts::execute()
   if (ret < 0)
     return;
 
-  if (s->prot_flags & RGW_REST_SWIFT) {
+  if (s->prot_flags & RGW_PROTO_SWIFT) {
     string path_args;
     path_args = s->info.args.get("path");
     if (!path_args.empty()) {
