@@ -12,6 +12,7 @@
 
 #include "rgw_rest.h"
 #include "rgw_rest_s3.h"
+#include "rgw_rest_s3website.h"
 #include "rgw_auth_s3.h"
 #include "rgw_acl.h"
 #include "rgw_policy_s3.h"
@@ -20,6 +21,8 @@
 #include "rgw_cors_s3.h"
 
 #include "rgw_client_io.h"
+
+#include <typeinfo> // for 'typeid'
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -2020,24 +2023,6 @@ RGWOp *RGWHandler_ObjStore_Service_S3::op_head()
 
 RGWOp *RGWHandler_ObjStore_Bucket_S3::get_obj_op(bool get_data)
 {
-  /* we need to make sure we read bucket info, it's not read before for this specific request */
-  RGWObjectCtx& obj_ctx = *static_cast<RGWObjectCtx *>(s->obj_ctx);
-  int ret = store->get_bucket_info(obj_ctx, s->bucket_name_str, s->bucket_info, NULL, &s->bucket_attrs);
-#warning FIXME: Do we need to catch -ENOENT seperately? What do we do then?
-  if (ret < 0)
-    return NULL;
-
-  /** If we are in website mode, then it is explicitly impossible to run GET or
-   * HEAD on the actual directory. We must convert the request to run on the
-   * suffix object instead!
-   */
-  ldout(s->cct, 20) << __func__ << ": bucket=" <<  s->bucket_info.bucket.name << " has_website=" << s->bucket_info.has_website << " get_data=" << get_data << "/" << (get_data ? "GET" : "HEAD") << dendl;
-  if(s->bucket_info.has_website && !rgw_user_is_authenticated(s->user)) {
-    RGWGetObj_ObjStore_S3 *get_obj_op = new RGWGetObj_ObjStore_S3;
-    get_obj_op->set_get_data(get_data);
-    return get_obj_op;
-  }
-
   // Non-website mode
   if (get_data)
     return new RGWListBucket_ObjStore_S3;
@@ -2592,17 +2577,137 @@ int RGWHandler_Auth_S3::init(RGWRados *store, struct req_state *state, RGWClient
   return RGWHandler_ObjStore::init(store, state, cio);
 }
 
+bool RGWRESTMgr_S3::is_s3website_mode(struct req_state *s)
+{
+  if(!enable_s3website)
+	  return false;
+
+  // If this is true, we already validity the hostname via the dedicated
+  // website endpoint.
+  if(s->prot_flags & RGW_PROTO_WEBSITE)
+	  return true;
+
+  /** S3Website: default_validity
+   * attempt to detect S3Website requests via:
+   * GET & HEAD only
+   * with NO authorization headers
+   * on a bucket with a website block
+   */
+  if(g_conf->rgw_s3website_mode.find("default_validity") != std::string::npos) {
+	  if(s->op != OP_GET && s->op != OP_HEAD) {
+		  return false;
+	  }
+
+	  // There was some talk of S3 implement static auth on websites, so we'd need
+	  // to differentiate that in future. We take a shortcut here by detecting
+	  // that AWS S3 always starts with 'AWS'; we might have issues in future
+	  // if something else wants to use the HTTP-standard 'Basic' start, but
+	  // not be S3Website.
+	  string auth_id = s->info.args.get("AWSAccessKeyId");
+	  bool request_has_authentication = auth_id.size() || (s->http_auth && *(s->http_auth) && strncmp(s->http_auth, "AWS", 3) == 0);
+	  if(request_has_authentication) {
+		  return false;
+	  }
+
+	  s->prot_flags |= RGW_PROTO_WEBSITE; // Actually only if the bucket is ALSO website
+	  return true;
+  }
+
+  return false;
+
+}
+
 RGWHandler *RGWRESTMgr_S3::get_handler(struct req_state *s)
 {
   int ret = RGWHandler_ObjStore_S3::init_from_header(s, RGW_FORMAT_XML, false);
   if (ret < 0)
     return NULL;
 
-  if (s->bucket_name_str.empty())
-    return new RGWHandler_ObjStore_Service_S3;
+  //ldout(s->cct, 20) << __func__ << " bucket=" << s->bucket_name_str << " object=" << s->object.name << " args=" << s->info.args.get_str() << dendl;
+  //if (s->info.args.sub_resource_exists("website"))
+  //
+  //
+  RGWHandler* handler;
 
-  if (s->object.empty())
-    return new RGWHandler_ObjStore_Bucket_S3;
+  if (s->bucket_name_str.empty()) {
+      handler = new RGWHandler_ObjStore_Service_S3;
+  } else if (is_s3website_mode(s)) {
+      handler = new RGWHandler_ObjStore_Obj_S3Website;
+  } else if (s->object.empty()) {
+      handler = new RGWHandler_ObjStore_Bucket_S3;
+  } else {
+      return new RGWHandler_ObjStore_Obj_S3;
+  }
 
-  return new RGWHandler_ObjStore_Obj_S3;
+  ldout(s->cct, 20) << __func__ << " handler=" << typeid(*handler).name() << dendl;
+  return handler;
+}
+
+int RGWHandler_ObjStore_S3Website::retarget(RGWOp *op, RGWOp **new_op) {
+  *new_op = op;
+  ldout(s->cct, 10) << __func__ << "Starting retarget" << dendl;
+
+  // s->bucket_info is not yet populated
+  RGWObjectCtx& obj_ctx = *static_cast<RGWObjectCtx *>(s->obj_ctx);
+  int ret = store->get_bucket_info(obj_ctx, s->bucket_name_str, s->bucket_info, NULL, &s->bucket_attrs);
+#warning FIXME: Do we need to catch -ENOENT seperately? What about other errors?
+  if (ret < 0) {
+      return ret; 
+  }
+
+  // If bucket does not have website enabled, bail out
+  if(!s->bucket_info.has_website) {
+      return 0;
+  }
+
+  s->prot_flags |= RGW_PROTO_WEBSITE; // FIXME: obsolete?
+
+  rgw_obj_key new_obj;
+  s->bucket_info.website_conf.get_effective_key(s->object.name, &new_obj.name);
+  ldout(s->cct, 10) << "retarget get_effective_key " << s->object << " -> " << new_obj << dendl;
+
+  RGWBWRoutingRule rrule;
+  bool should_redirect = s->bucket_info.website_conf.should_redirect(new_obj.name, &rrule);
+
+  if (should_redirect) {
+    const string& hostname = s->info.env->get("HTTP_HOST", "");
+    const string& protocol = (s->info.env->get("SERVER_PORT_SECURE") ? "https" : "http");
+    rrule.apply_rule(protocol, hostname, new_obj.name, &s->redirect);
+    ldout(s->cct, 10) << "retarget redirect proto+host:" << protocol << "://" << hostname << " -> " << s->redirect << dendl;
+    return -ERR_PERMANENT_REDIRECT;
+  }
+
+#warning FIXME
+#if 0
+  if (s->object.empty() != new_obj.empty()) {
+    op->put();
+    s->object = new_obj;
+    *new_op = get_op();
+  }
+#endif
+
+  s->object = new_obj;
+
+  return 0;
+}
+
+RGWOp *RGWHandler_ObjStore_Obj_S3Website::get_obj_op(bool get_data)
+{
+  /** If we are in website mode, then it is explicitly impossible to run GET or
+   * HEAD on the actual directory. We must convert the request to run on the
+   * suffix object instead!
+   */
+  RGWGetObj_ObjStore_S3Website *op = new RGWGetObj_ObjStore_S3Website;
+  op->set_get_data(get_data);
+  return op;
+}
+
+RGWOp *RGWHandler_ObjStore_Obj_S3Website::op_get()
+{
+  return get_obj_op(true);
+}
+
+RGWOp *RGWHandler_ObjStore_Obj_S3Website::op_head()
+{
+  return get_obj_op(false);
 }

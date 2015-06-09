@@ -313,7 +313,10 @@ public:
   virtual ~RGWHandler_ObjStore() {}
   int init_permissions();
   int read_permissions(RGWOp *op);
-  int retarget(RGWOp *op, RGWOp **new_op);
+  virtual int retarget(RGWOp *op, RGWOp **new_op) {
+    *new_op = op;
+    return 0;
+  }
 
   virtual int authorize() = 0;
 };
@@ -321,6 +324,7 @@ public:
 class RGWHandler_ObjStore_SWIFT;
 class RGWHandler_SWIFT_Auth;
 class RGWHandler_ObjStore_S3;
+
 
 class RGWRESTMgr {
   bool should_log;

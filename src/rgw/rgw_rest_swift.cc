@@ -1028,7 +1028,7 @@ int RGWHandler_ObjStore_SWIFT::init_from_header(struct req_state *s)
   string req;
   string first;
 
-  s->prot_flags |= RGW_REST_SWIFT;
+  s->prot_flags |= RGW_PROTO_SWIFT;
 
   const char *req_name = s->decoded_uri.c_str();
   const char *p;
