@@ -6609,7 +6609,7 @@ void ReplicatedPG::finish_promote(int r, CopyResults *results,
     }
   }
 
-  if (r == -ENOENT && results->started_temp_obj) {
+  if (r < 0 && results->started_temp_obj) {
     dout(10) << __func__ << " abort; will clean up partial work" << dendl;
     ObjectContextRef tempobc = get_object_context(results->temp_oid, true);
     RepGather *repop = simple_repop_create(tempobc);
