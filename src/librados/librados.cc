@@ -18,6 +18,7 @@
 #include "common/errno.h"
 #include "common/ceph_argparse.h"
 #include "common/common_init.h"
+#include "common/hobject.h"
 #include "include/rados/librados.h"
 #include "include/rados/librados.hpp"
 #include "include/types.h"
@@ -55,7 +56,7 @@ using std::runtime_error;
 #undef dout_prefix
 #define dout_prefix *_dout << "librados: "
 
-#define RADOS_LIST_MAX_ENTRIES 1024
+#define RADOS_LIST_MAX_ENTRIES 1
 
 /*
  * Structure of this file
@@ -3473,6 +3474,126 @@ extern "C" int rados_exec(rados_ioctx_t io, const char *o, const char *cls, cons
   return ret;
 }
 
+extern "C" rados_enumerate_cursor rados_enumerate_objects_begin(rados_ioctx_t io)
+{
+  librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
+
+  hobject_t *result = new hobject_t(ctx->objecter->enumerate_objects_begin());
+  return (rados_enumerate_cursor)result;
+}
+
+extern "C" rados_enumerate_cursor rados_enumerate_objects_end(rados_ioctx_t io)
+{
+  librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
+
+  hobject_t *result = new hobject_t(ctx->objecter->enumerate_objects_end());
+  return (rados_enumerate_cursor)result;
+}
+
+extern "C" int rados_enumerate_objects_is_end(
+    rados_ioctx_t io, rados_enumerate_cursor cur)
+{
+  hobject_t *hobj = (hobject_t*)cur;
+  return hobj->is_max();
+}
+
+extern "C" void rados_enumerate_cursor_free(
+    rados_ioctx_t io, rados_enumerate_cursor cur)
+{
+  hobject_t *hobj = (hobject_t*)cur;
+  delete hobj;
+}
+
+extern "C" int rados_enumerate_cursor_cmp(
+    rados_ioctx_t io,
+    rados_enumerate_cursor lhs_cur,
+    rados_enumerate_cursor rhs_cur)
+{
+  hobject_t *lhs = (hobject_t*)lhs_cur;
+  hobject_t *rhs = (hobject_t*)rhs_cur;
+
+  if (rhs->is_max() && lhs->is_max()) {
+    return 0;
+  } else if (lhs->is_max()) {
+    return 1;
+  } else if (rhs->is_max()) {
+    return -1;
+  } else if (lhs->get_hash() > rhs->get_hash()) {
+    return 1;
+  } else if (rhs->get_hash() > lhs->get_hash()) {
+    return -1;
+  } else {
+    return 0;
+  }
+}
+
+extern "C" int rados_enumerate_objects(rados_ioctx_t io,
+    const rados_enumerate_cursor start,
+    const rados_enumerate_cursor finish,
+    const size_t result_item_count,
+    rados_enumerate_item *result_items,
+    rados_enumerate_cursor *next)
+{
+  assert(next);
+
+  librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
+
+  // Zero out items so that they will be safe to free later
+  //memset(result_items, 0, sizeof(rados_enumerate_item) * result_item_count);
+
+  std::list<librados::ListObjectImpl> result;
+  hobject_t next_hash;
+
+  C_SaferCond cond;
+  ctx->objecter->enumerate_objects(
+      ctx->poolid,
+      ctx->oloc.nspace,
+      *((hobject_t*)start),
+      *((hobject_t*)finish),
+      result_item_count,
+      &result,
+      &next_hash,
+      &cond);
+
+  hobject_t *next_hobj = (hobject_t*)(*next);
+  assert(next_hobj);
+
+  int r = cond.wait();
+  if (r < 0) {
+    std::cerr << "objecter returned " << r << std::endl;
+    *next_hobj = hobject_t::get_max();
+    return r;
+  }
+
+  assert(result.size() <= result_item_count);  // Don't overflow!
+
+  int k = 0;
+  for (std::list<librados::ListObjectImpl>::iterator i = result.begin();
+       i != result.end(); ++i) {
+    rados_enumerate_item &item = result_items[k++];
+    do_out_buffer(i->oid, &item.oid, &item.oid_length);
+    do_out_buffer(i->nspace, &item.nspace, &item.nspace_length);
+    do_out_buffer(i->locator, &item.locator, &item.locator_length);
+  }
+
+  *next_hobj = next_hash;
+
+  return result.size();
+}
+
+extern "C" void rados_enumerate_objects_free(
+    const size_t result_size,
+    rados_enumerate_item *results)
+{
+  assert(results);
+
+  for (unsigned int i = 0; i < result_size; ++i) {
+    rados_buffer_free(results[i].oid);
+    rados_buffer_free(results[i].locator);
+    rados_buffer_free(results[i].nspace);
+  }
+}
+
 /* list objects */
 
 extern "C" int rados_nobjects_list_open(rados_ioctx_t io, rados_list_ctx_t *listh)
@@ -4823,3 +4944,33 @@ std::ostream& librados::operator<<(std::ostream& out, const librados::ListObject
   out << *(lop.impl);
   return out;
 }
+
+CEPH_RADOS_API void rados_enumerate_objects_split(
+    const rados_enumerate_cursor start,
+    const rados_enumerate_cursor finish,
+    const size_t n,
+    const size_t m,
+    rados_enumerate_cursor *split_start,
+    rados_enumerate_cursor *split_finish)
+{
+  assert(split_start);
+  assert(split_finish);
+  hobject_t *split_start_hobj = (hobject_t*)(*split_start);
+  hobject_t *split_finish_hobj = (hobject_t*)(*split_finish);
+  assert(split_start_hobj);
+  assert(split_finish);
+
+  hobject_t *start_hobj = (hobject_t*)(start);
+  hobject_t *finish_hobj = (hobject_t*)(finish);
+
+  uint32_t start_hash = start_hobj->get_hash();
+  uint32_t finish_hash =
+    finish_hobj->is_max() ? 0xffffffff : finish_hobj->get_hash();
+
+  split_start_hobj->set_hash(start_hash + ((finish_hash - start_hash) / m) * n);
+  split_finish_hobj->set_hash(start_hash + ((finish_hash - start_hash) / m ) * (n + 1));
+  if (n == m - 1) {
+    *split_finish_hobj = *finish_hobj;
+  }
+}
+
