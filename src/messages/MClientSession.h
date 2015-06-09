@@ -76,6 +76,7 @@ public:
       header.version = 1;
     } else {
       ::encode(client_meta, payload);
+      header.version = HEAD_VERSION;
     }
 
   }
