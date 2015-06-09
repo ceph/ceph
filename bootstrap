@@ -93,5 +93,3 @@ if [ -z "$NO_CLOBBER" ] || [ ! -e ./virtualenv ]; then
 fi
 
 ./virtualenv/bin/pip install -r requirements.txt
-
-./virtualenv/bin/python setup.py develop 

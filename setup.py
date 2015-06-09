@@ -5,16 +5,6 @@ module_file = open("teuthology/__init__.py").read()
 metadata = dict(re.findall(r"__([a-z]+)__\s*=\s*['\"]([^'\"]*)['\"]", module_file))
 long_description = open('README.rst').read()
 
-install_requires=[
-    'setuptools',
-    ]
-
-install_requires.extend(
-    [ln.strip() for ln in open('requirements.txt').readlines() if ln and '#'
-     not in ln]
-)
-
-
 setup(
     name='teuthology',
     version=metadata['version'],
@@ -41,7 +31,27 @@ setup(
         'Topic :: System :: Distributed Computing',
         'Topic :: System :: Filesystems',
     ],
-    install_requires=install_requires,
+    install_requires=['setuptools',
+                      'gevent == 0.13.6',  # 0.14 switches to libev, that means bootstrap needs to change too
+                      'MySQL-python == 1.2.3',
+                      'PyYAML',
+                      'argparse >= 1.2.1',
+                      'beanstalkc >= 0.2.0',
+                      'boto >= 2.0b4',
+                      'bunch >= 1.0.0',
+                      'configobj',
+                      'six >= 1.5.0',  # Require a new-ish six - only for configobj
+                      'httplib2',
+                      'paramiko < 1.8',
+                      'pexpect',
+                      'requests >= 2.3.0',
+                      'raven',
+                      'web.py',
+                      'docopt',
+                      'psutil >= 2.1.0',
+                      'configparser',
+                      'pytest',
+                      'ansible==1.9.1'],
     tests_require=['nose >=1.0.0', 'fudge >=1.0.3'],
 
 
