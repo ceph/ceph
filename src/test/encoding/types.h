@@ -307,6 +307,10 @@ TYPE(cls_user_get_header_op)
 TYPE(cls_user_get_header_ret)
 TYPE(cls_user_complete_stats_sync_op)
 
+#include "cls/journal/cls_journal_types.h"
+TYPE(cls::journal::Position)
+TYPE(cls::journal::Client)
+
 #include "rgw/rgw_common.h"
 TYPE(RGWAccessKey)
 TYPE(RGWSubUser)
