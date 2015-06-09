@@ -213,7 +213,7 @@ void rgw_rest_init(CephContext *cct, RGWRegion& region)
    */
 
   if(!cct->_conf->rgw_dns_s3website_name.empty()) {
-	  hostnames_s3website_set.insert(cct->_conf->rgw_dns_s3website_name);
+    hostnames_s3website_set.insert(cct->_conf->rgw_dns_s3website_name);
   }
   hostnames_s3website_set.insert(region.hostnames_s3website.begin(), region.hostnames_s3website.end());
   /* TODO: we should repeat the hostnames_set sanity check here
@@ -236,14 +236,14 @@ static bool str_ends_with(const string& s, const string& suffix, size_t *pos)
   return s.compare(p, len, suffix) == 0;
 }
 
-static bool rgw_find_host_in_domains(const string& host, string *domain, string *subdomain)
+static bool rgw_find_host_in_domains(const string& host, string *domain, string *subdomain, set<string> valid_hostnames_set)
 {
   set<string>::iterator iter;
   /** TODO, Future optimization
    * store hostnames_set elements _reversed_, and look for a prefix match,
    * which is much faster than a suffix match.
    */
-  for (iter = hostnames_set.begin(); iter != hostnames_set.end(); ++iter) {
+  for (iter = valid_hostnames_set.begin(); iter != valid_hostnames_set.end(); ++iter) {
     size_t pos;
     if (!str_ends_with(host, *iter, &pos))
       continue;
@@ -301,7 +301,7 @@ void set_req_state_err(struct req_state *s, int err_no)
   if (err_no < 0)
     err_no = -err_no;
   s->err.ret = -err_no;
-  if (s->prot_flags & RGW_REST_SWIFT) {
+  if (s->prot_flags & RGW_PROTO_SWIFT) {
     r = search_err(err_no, RGW_HTTP_SWIFT_ERRORS, ARRAY_LEN(RGW_HTTP_SWIFT_ERRORS));
     if (r) {
       s->err.http_ret = r->http_ret;
@@ -358,7 +358,7 @@ void dump_content_length(struct req_state *s, uint64_t len)
 void dump_etag(struct req_state *s, const char *etag)
 {
   int r;
-  if (s->prot_flags & RGW_REST_SWIFT)
+  if (s->prot_flags & RGW_PROTO_SWIFT)
     r = s->cio->print("etag: %s\r\n", etag);
   else
     r = s->cio->print("ETag: \"%s\"\r\n", etag);
@@ -515,7 +515,7 @@ void dump_start(struct req_state *s)
 
 void dump_trans_id(req_state *s)
 {
-  if (s->prot_flags & RGW_REST_SWIFT) {
+  if (s->prot_flags & RGW_PROTO_SWIFT) {
     s->cio->print("X-Trans-Id: %s\r\n", s->trans_id.c_str());
   }
   else {
@@ -555,7 +555,7 @@ void end_header(struct req_state *s, RGWOp *op, const char *content_type, const 
       ctype = "text/plain";
       break;
     }
-    if (s->prot_flags & RGW_REST_SWIFT)
+    if (s->prot_flags & RGW_PROTO_SWIFT)
       ctype.append("; charset=utf-8");
     content_type = ctype.c_str();
   }
@@ -1294,40 +1294,6 @@ int RGWHandler_ObjStore::read_permissions(RGWOp *op_obj)
   return do_read_permissions(op_obj, only_bucket);
 }
 
-int RGWHandler_ObjStore::retarget(RGWOp *op, RGWOp **new_op) {
-  *new_op = op;
-
-  if (!s->bucket_info.has_website) {
-    return 0;
-  }
-
-  rgw_obj_key new_obj;
-  s->bucket_info.website_conf.get_effective_key(s->object.name, &new_obj.name);
-
-  RGWBWRoutingRule rrule;
-  bool should_redirect = s->bucket_info.website_conf.should_redirect(new_obj.name, &rrule);
-
-  if (should_redirect) {
-    const string& hostname = s->info.env->get("HTTP_HOST", "");
-    const string& protocol = (s->info.env->get("SERVER_PORT_SECURE") ? "https" : "http");
-    rrule.apply_rule(protocol, hostname, new_obj.name, &s->redirect);
-    return -ERR_PERMANENT_REDIRECT;
-  }
-
-#warning FIXME
-#if 0
-  if (s->object.empty() != new_obj.empty()) {
-    op->put();
-    s->object = new_obj;
-    *new_op = get_op();
-  }
-#endif
-
-  s->object = new_obj;
-
-  return 0;
-}
-
 void RGWRESTMgr::register_resource(string resource, RGWRESTMgr *mgr)
 {
   string r = "/";
@@ -1426,25 +1392,54 @@ int RGWREST::preprocess(struct req_state *s, RGWClientIO *cio)
     ldout(s->cct, 10) << "host=" << info.host << dendl;
     string domain;
     string subdomain;
-    bool in_hosted_domain = rgw_find_host_in_domains(info.host, &domain,
-						     &subdomain);
-    ldout(s->cct, 20) << "subdomain=" << subdomain << " domain=" << domain
-		      << " in_hosted_domain=" << in_hosted_domain << dendl;
+    bool in_hosted_domain_s3website = false;
+    bool in_hosted_domain = rgw_find_host_in_domains(info.host, &domain, &subdomain, hostnames_set);
+
+    bool s3website_enabled = g_conf->rgw_enable_apis.find("s3website") != std::string::npos  && g_conf->rgw_s3website_mode.find("hostname") != std::string::npos;
+    string s3website_domain;
+    string s3website_subdomain;
+
+    if (s3website_enabled) {
+      in_hosted_domain_s3website = rgw_find_host_in_domains(info.host, &s3website_domain, &s3website_subdomain, hostnames_s3website_set);
+    }
+
+    ldout(s->cct, 20)
+      << "subdomain=" << subdomain 
+      << " domain=" << domain 
+      << " in_hosted_domain=" << in_hosted_domain 
+      << " in_hosted_domain_s3website=" << in_hosted_domain_s3website 
+      << dendl;
 
     if (g_conf->rgw_resolve_cname && !in_hosted_domain) {
       string cname;
       bool found;
       int r = rgw_resolver->resolve_cname(info.host, cname, &found);
       if (r < 0) {
-	ldout(s->cct, 0) << "WARNING: rgw_resolver->resolve_cname() returned r=" << r << dendl;
+        ldout(s->cct, 0) << "WARNING: rgw_resolver->resolve_cname() returned r=" << r << dendl;
       }
+
       if (found) {
         ldout(s->cct, 5) << "resolved host cname " << info.host << " -> "
 			 << cname << dendl;
-        in_hosted_domain = rgw_find_host_in_domains(cname, &domain, &subdomain);
-        ldout(s->cct, 20) << "subdomain=" << subdomain << " domain=" << domain
-			  << " in_hosted_domain=" << in_hosted_domain << dendl;
+        in_hosted_domain = rgw_find_host_in_domains(cname, &domain, &subdomain, hostnames_set);
+
+        if(s3website_enabled && !in_hosted_domain_s3website) {
+            in_hosted_domain_s3website = rgw_find_host_in_domains(cname, &s3website_domain, &s3website_subdomain, hostnames_s3website_set);
+        }
+
+        ldout(s->cct, 20)
+          << "subdomain=" << subdomain 
+          << " domain=" << domain 
+          << " in_hosted_domain=" << in_hosted_domain 
+          << " in_hosted_domain_s3website=" << in_hosted_domain_s3website 
+          << dendl;
       }
+    }
+
+    if(in_hosted_domain_s3website) {
+      domain = s3website_domain;
+      subdomain = s3website_subdomain;
+      s->prot_flags |= RGW_PROTO_WEBSITE;
     }
 
     if (in_hosted_domain && !subdomain.empty()) {

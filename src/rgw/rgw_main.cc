@@ -569,8 +569,20 @@ static int process_request(RGWRados *store, RGWREST *rest, RGWRequest *req, RGWC
     abort_early(s, NULL, init_error);
     goto done;
   }
+  dout(10) << "handler=" << typeid(*handler).name() << dendl;
 
   should_log = mgr->get_logging();
+
+  // Authorization must be before get_op
+  // because get_op depends on authorization data existing to choice if we are
+  // in website mode (authorization is NOT valid in website mode).
+  req->log(s, "authorizing");
+  ret = handler->authorize();
+  if (ret < 0) {
+    dout(10) << "failed to authorize request" << dendl;
+    abort_early(s, NULL, ret);
+    goto done;
+  }
 
   req->log(s, "getting op");
   op = handler->get_op(store);
@@ -579,14 +591,7 @@ static int process_request(RGWRados *store, RGWREST *rest, RGWRequest *req, RGWC
     goto done;
   }
   req->op = op;
-
-  req->log(s, "authorizing");
-  ret = handler->authorize();
-  if (ret < 0) {
-    dout(10) << "failed to authorize request" << dendl;
-    abort_early(s, op, ret);
-    goto done;
-  }
+  dout(10) << "op=" << typeid(*op).name() << dendl;
 
   if (s->user.suspended) {
     dout(10) << "user is suspended, uid=" << s->user.user_id << dendl;
@@ -605,17 +610,13 @@ static int process_request(RGWRados *store, RGWREST *rest, RGWRequest *req, RGWC
    * Only some accesses support website mode, and website mode does NOT apply
    * if you are using the REST endpoint either (ergo, no authenticated access)
    */
-  dout(20) << "retarget uid=" << s->user.user_id << dendl;
-  if (op->supports_website() && !rgw_user_is_authenticated(s->user)) {
-  //if (op->supports_website()) {
-    req->log(s, "recalculating target");
-    ret = handler->retarget(op, &op);
-    if (ret < 0) {
-      abort_early(s, op, ret);
-      goto done;
-    }
-    req->op = op;
+  req->log(s, "recalculating target");
+  ret = handler->retarget(op, &op);
+  if (ret < 0) {
+    abort_early(s, op, ret);
+    goto done;
   }
+  req->op = op;
 
   req->log(s, "reading permissions");
   ret = handler->read_permissions(op);
@@ -1129,8 +1130,10 @@ int main(int argc, const char **argv)
     apis_map[*li] = true;
   }
 
-  if (apis_map.count("s3") > 0)
-    rest.register_default_mgr(set_logging(new RGWRESTMgr_S3));
+  // S3 website mode is a specialization of S3
+  bool s3website_enabled = apis_map.count("s3website") > 0;
+  if (apis_map.count("s3") > 0 || s3website_enabled)
+    rest.register_default_mgr(set_logging(new RGWRESTMgr_S3(s3website_enabled)));
 
   if (apis_map.count("swift") > 0) {
     do_swift = true;
