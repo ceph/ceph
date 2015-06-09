@@ -601,7 +601,13 @@ static int process_request(RGWRados *store, RGWREST *rest, RGWRequest *req, RGWC
     goto done;
   }
 
-  if (op->supports_website()) {
+  /**
+   * Only some accesses support website mode, and website mode does NOT apply
+   * if you are using the REST endpoint either (ergo, no authenticated access)
+   */
+  dout(20) << "retarget uid=" << s->user.user_id << dendl;
+  if (op->supports_website() && !rgw_user_is_authenticated(s->user)) {
+  //if (op->supports_website()) {
     req->log(s, "recalculating target");
     ret = handler->retarget(op, &op);
     if (ret < 0) {
