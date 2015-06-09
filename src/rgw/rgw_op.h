@@ -66,6 +66,14 @@ enum RGWOpType {
   RGW_OP_DELETE_MULTI_OBJ,
 };
 
+enum RGWEndpointType {
+  RGW_ENDPOINT_REST,
+  RGW_ENDPOINT_REST_SWIFT,
+  RGW_ENDPOINT_REST_SWIFT_AUTH,
+  RGW_ENDPOINT_REST_S3,
+  RGW_ENDPOINT_WEBSITE,
+};
+
 /**
  * Provide the base class for all ops.
  */
