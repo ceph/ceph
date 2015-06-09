@@ -31,6 +31,7 @@ include messages/Makefile.am
 include include/Makefile.am
 include librados/Makefile.am
 include libradosstriper/Makefile.am
+include journal/Makefile.am
 include librbd/Makefile.am
 include rgw/Makefile.am
 include cls/Makefile.am
