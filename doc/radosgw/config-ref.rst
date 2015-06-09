@@ -270,6 +270,17 @@ Ceph configuration file, the default value will be set automatically.
 :Default: ``1000``
 
 
+``rgw override bucket index max shards``
+
+:Description: Represents the number of shards for the bucket index object,
+              a value of zero indicates there is no sharding. It is not
+              recommended to set a value too large (e.g. thousand) as it
+              increases the cost for bucket listing.
+
+:Type: Integer
+:Default: ``0``
+
+
 ``rgw num zone opstate shards``
 
 :Description: The maximum number of shards for keeping inter-region copy 
