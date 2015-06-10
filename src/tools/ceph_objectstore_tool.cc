@@ -434,7 +434,54 @@ int _action_on_all_objects_in_pg(ObjectStore *store, coll_t coll, action_on_obje
   return 0;
 }
 
-int action_on_all_objects_in_pg(ObjectStore *store, coll_t coll, action_on_object_t &action, bool debug)
+int action_on_all_objects_in_pg(ObjectStore *store, string pgidstr, action_on_object_t &action, bool debug)
+{
+  spg_t pgid;
+  // Scan collections in case this is an ec pool but no shard specified
+  unsigned scanned = 0;
+  int r = 0;
+  vector<coll_t> colls_to_check;
+  vector<coll_t> candidates;
+  r = store->list_collections(candidates);
+  if (r < 0) {
+    cerr << "Error listing collections: " << cpp_strerror(r) << std::endl;
+    return r;
+  }
+  pgid.parse(pgidstr.c_str());
+  for (vector<coll_t>::iterator i = candidates.begin();
+       i != candidates.end();
+       ++i) {
+    spg_t cand_pgid;
+    snapid_t snap;
+    if (!i->is_pg(cand_pgid, snap))
+      continue;
+    if (snap != CEPH_NOSNAP)
+      continue;
+
+    // If an exact match or treat no shard as any shard
+    if (cand_pgid == pgid || 
+        (pgid.is_no_shard() && pgid.pgid == cand_pgid.pgid)) {
+      colls_to_check.push_back(*i);
+    }
+  }
+
+  if (debug)
+    cerr << colls_to_check.size() << " pgs to scan" << std::endl;
+  for (vector<coll_t>::iterator i = colls_to_check.begin();
+       i != colls_to_check.end();
+       ++i, ++scanned) {
+    if (debug)
+      cerr << "Scanning " << *i << ", " << scanned << "/"
+	   << colls_to_check.size() << " completed" << std::endl;
+    r = _action_on_all_objects_in_pg(store, *i, action, debug);
+    if (r < 0)
+      break;
+  }
+  store->sync_and_flush();
+  return r;
+}
+
+int action_on_all_objects_in_exact_pg(ObjectStore *store, coll_t coll, action_on_object_t &action, bool debug)
 {
   int r = _action_on_all_objects_in_pg(store, coll, action, debug);
   store->sync_and_flush();
@@ -2125,9 +2172,7 @@ int do_list(ObjectStore *store, string pgidstr, string object, Formatter *format
   int r;
   lookup_ghobject lookup(object);
   if (pgidstr.length() > 0) {
-    spg_t pgid;
-    pgid.parse(pgidstr.c_str());
-    r = action_on_all_objects_in_pg(store, coll_t(pgid), lookup, debug);
+    r = action_on_all_objects_in_pg(store, pgidstr, lookup, debug);
   } else {
     r = action_on_all_objects(store, lookup, debug);
   }
@@ -3139,7 +3184,7 @@ int main(int argc, char **argv)
     boost::scoped_ptr<action_on_object_t> action;
     action.reset(new do_fix_lost());
     if (pgidstr.length())
-      ret = action_on_all_objects_in_pg(fs, coll_t(pgid), *action, debug);
+      ret = action_on_all_objects_in_exact_pg(fs, coll_t(pgid), *action, debug);
     else
       ret = action_on_all_objects(fs, *action, debug);
     goto out;
