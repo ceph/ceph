@@ -452,7 +452,7 @@ bool MDSMonitor::prepare_beacon(MonOpRequestRef op)
       bool failed_mds = false;
       while (mds_gid_t existing = pending_mdsmap.find_mds_gid_by_name(m->get_name())) {
         if (!mon->osdmon()->is_writeable()) {
-          mon->osdmon()->wait_for_writeable(new C_RetryMessage(this, op));
+          mon->osdmon()->wait_for_writeable(op, new C_RetryMessage(this, op));
           return false;
         }
 	fail_mds_gid(existing);
@@ -559,7 +559,7 @@ bool MDSMonitor::prepare_beacon(MonOpRequestRef op)
       if (!mon->osdmon()->is_writeable()) {
         dout(4) << __func__ << ": DAMAGED from rank " << info.rank
                 << " waiting for osdmon writeable to blacklist it" << dendl;
-        mon->osdmon()->wait_for_writeable(new C_RetryMessage(this, op));
+        mon->osdmon()->wait_for_writeable(op, new C_RetryMessage(this, op));
         return false;
       }
 
@@ -591,7 +591,7 @@ bool MDSMonitor::prepare_beacon(MonOpRequestRef op)
       if (!mon->osdmon()->is_writeable()) {
         dout(4) << __func__ << ": DNE from rank " << info.rank
                 << " waiting for osdmon writeable to blacklist it" << dendl;
-        mon->osdmon()->wait_for_writeable(new C_RetryMessage(this, m));
+        mon->osdmon()->wait_for_writeable(op, new C_RetryMessage(this, op));
         return false;
       }
 
@@ -611,7 +611,7 @@ bool MDSMonitor::prepare_beacon(MonOpRequestRef op)
   dout(7) << "prepare_beacon pending map now:" << dendl;
   print_map(pending_mdsmap);
   
-  wait_for_finished_proposal(new C_Updated(this, op));
+  wait_for_finished_proposal(op, new C_Updated(this, op));
 
   return true;
 }
@@ -1100,7 +1100,7 @@ out:
 
   if (r >= 0) {
     // success.. delay reply
-    wait_for_finished_proposal(new Monitor::C_Command(mon, op, r, rs,
+    wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, r, rs,
 					      get_last_committed() + 1));
     return true;
   } else {
@@ -1297,7 +1297,7 @@ int MDSMonitor::management_command(
       // propose.  We thus need to make sure the osdmon is writeable before
       // we do this, waiting if it's not.
       if (!mon->osdmon()->is_writeable()) {
-        mon->osdmon()->wait_for_writeable(new C_RetryMessage(this, op));
+        mon->osdmon()->wait_for_writeable(op, new C_RetryMessage(this, op));
         return -EAGAIN;
       }
 
@@ -1575,7 +1575,7 @@ int MDSMonitor::filesystem_command(
     cmd_getval(g_ceph_context, cmdmap, "who", who);
     r = fail_mds(ss, who);
     if (r < 0 && r == -EAGAIN) {
-      mon->osdmon()->wait_for_writeable(new C_RetryMessage(this, op));
+      mon->osdmon()->wait_for_writeable(op, new C_RetryMessage(this, op));
       return -EAGAIN; // don't propose yet; wait for message to be retried
     }
 

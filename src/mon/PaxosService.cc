@@ -67,7 +67,7 @@ bool PaxosService::dispatch(MonOpRequestRef op)
   // make sure our map is readable and up to date
   if (!is_readable(m->version)) {
     dout(10) << " waiting for paxos -> readable (v" << m->version << ")" << dendl;
-    wait_for_readable(new C_RetryMessage(this, op), m->version);
+    wait_for_readable(op, new C_RetryMessage(this, op), m->version);
     return true;
   }
 
@@ -84,7 +84,7 @@ bool PaxosService::dispatch(MonOpRequestRef op)
   // writeable?
   if (!is_writeable()) {
     dout(10) << " waiting for paxos -> writeable" << dendl;
-    wait_for_writeable(new C_RetryMessage(this, op));
+    wait_for_writeable(op, new C_RetryMessage(this, op));
     return true;
   }
 

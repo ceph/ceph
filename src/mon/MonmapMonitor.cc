@@ -353,7 +353,7 @@ bool MonmapMonitor::prepare_command(MonOpRequestRef op)
     pending_map.add(name, addr);
     pending_map.last_changed = ceph_clock_now(g_ceph_context);
     getline(ss, rs);
-    wait_for_finished_proposal(new Monitor::C_Command(mon, op, 0, rs,
+    wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs,
                                                      get_last_committed() + 1));
     return true;
 

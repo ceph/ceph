@@ -832,7 +832,7 @@ bool PGMonitor::prepare_pg_stats(MonOpRequestRef op)
     */
   }
   
-  wait_for_finished_proposal(new C_Stats(this, op, ack_op));
+  wait_for_finished_proposal(op, new C_Stats(this, op, ack_op));
   return true;
 }
 
@@ -1862,8 +1862,8 @@ bool PGMonitor::prepare_command(MonOpRequestRef op)
 
  update:
   getline(ss, rs);
-  wait_for_finished_proposal(new Monitor::C_Command(mon, op, r, rs,
-						    get_last_committed() + 1));
+  wait_for_finished_proposal(op, new Monitor::C_Command(
+        mon, op, r, rs, get_last_committed() + 1));
   return true;
 }
 
