@@ -679,6 +679,10 @@ mkdir -p %{_localstatedir}/run/ceph/
 %{_initrddir}/ceph
 %if 0%{?_with_systemd}
 %{_tmpfilesdir}/%{name}.conf
+%{_unitdir}/ceph-mds@.service
+%{_unitdir}/ceph-mon@.service
+%{_unitdir}/ceph-osd@.service
+%{_unitdir}/ceph.target
 %endif
 %{_sbindir}/ceph-disk
 %{_sbindir}/ceph-disk-activate
