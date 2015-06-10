@@ -648,7 +648,9 @@ protected:
     if (average_util)
       var = util / average_util;
 
-    dump_item(qi, reweight, kb, kb_used, kb_avail, util, var, f);
+    size_t num_pgs = pgm->get_num_pg_by_osd(qi.id);
+
+    dump_item(qi, reweight, kb, kb_used, kb_avail, util, var, num_pgs, f);
 
     if (!qi.is_bucket() && reweight > 0) {
       if (min_var < 0 || var < min_var)
@@ -663,9 +665,15 @@ protected:
     }
   }
 
-  virtual void dump_item(const CrushTreeDumper::Item &qi, float &reweight,
-			 int64_t kb, int64_t kb_used, int64_t kb_avail,
-			 double& util, double& var, F *f) = 0;
+  virtual void dump_item(const CrushTreeDumper::Item &qi,
+			 float &reweight,
+			 int64_t kb,
+			 int64_t kb_used,
+			 int64_t kb_avail,
+			 double& util,
+			 double& var,
+			 const size_t num_pgs,
+			 F *f) = 0;
 
   double dev() {
     return sum > 0 ? sqrt(stddev / sum) : 0;
@@ -746,6 +754,7 @@ public:
     tbl->define_column("AVAIL", TextTable::LEFT, TextTable::RIGHT);
     tbl->define_column("%USE", TextTable::LEFT, TextTable::RIGHT);
     tbl->define_column("VAR", TextTable::LEFT, TextTable::RIGHT);
+    tbl->define_column("PGS", TextTable::LEFT, TextTable::RIGHT);
     if (tree)
       tbl->define_column("TYPE NAME", TextTable::LEFT, TextTable::LEFT);
 
@@ -769,9 +778,15 @@ protected:
   };
   friend std::ostream &operator<<(ostream& out, const lowprecision_t& v);
 
-  virtual void dump_item(const CrushTreeDumper::Item &qi, float &reweight,
-			 int64_t kb, int64_t kb_used, int64_t kb_avail,
-			 double& util, double& var, TextTable *tbl) {
+  virtual void dump_item(const CrushTreeDumper::Item &qi,
+			 float &reweight,
+			 int64_t kb,
+			 int64_t kb_used,
+			 int64_t kb_avail,
+			 double& util,
+			 double& var,
+			 const size_t num_pgs,
+			 TextTable *tbl) {
     *tbl << qi.id
 	 << weightf_t(qi.weight)
 	 << weightf_t(reweight)
@@ -779,7 +794,8 @@ protected:
 	 << si_t(kb_used << 10)
 	 << si_t(kb_avail << 10)
 	 << lowprecision_t(util)
-	 << lowprecision_t(var);
+	 << lowprecision_t(var)
+	 << num_pgs;
 
     if (tree) {
       ostringstream name;
@@ -840,9 +856,15 @@ public:
   }
 
 protected:
-  virtual void dump_item(const CrushTreeDumper::Item &qi, float &reweight,
-			 int64_t kb, int64_t kb_used, int64_t kb_avail,
-			 double& util, double& var, Formatter *f) {
+  virtual void dump_item(const CrushTreeDumper::Item &qi,
+			 float &reweight,
+			 int64_t kb,
+			 int64_t kb_used,
+			 int64_t kb_avail,
+			 double& util,
+			 double& var,
+			 const size_t num_pgs,
+			 Formatter *f) {
     f->open_object_section("item");
     CrushTreeDumper::dump_item_fields(crush, qi, f);
     f->dump_float("reweight", reweight);
@@ -851,6 +873,7 @@ protected:
     f->dump_int("kb_avail", kb_avail);
     f->dump_float("utilization", util);
     f->dump_float("var", var);
+    f->dump_unsigned("pgs", num_pgs);
     CrushTreeDumper::dump_bucket_children(crush, qi, f);
     f->close_section();
   }
