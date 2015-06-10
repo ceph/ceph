@@ -36,6 +36,31 @@ struct MonOpRequest : public TrackedOp {
     mark_event("monitor_zap");
   }
 
+  void mark_svc_event(const string &service, const string &event) {
+    string s = service;
+    s.append(":").append(event);
+    mark_event(s);
+  }
+
+  void mark_logmon_event(const string &event) {
+    mark_svc_event("logmon", event);
+  }
+  void mark_osdmon_event(const string &event) {
+    mark_svc_event("osdmon", event);
+  }
+  void mark_pgmon_event(const string &event) {
+    mark_svc_event("pgmon", event);
+  }
+  void mark_mdsmon_event(const string &event) {
+    mark_svc_event("mdsmon", event);
+  }
+  void mark_authmon_event(const string &event) {
+    mark_svc_event("authmon", event);
+  }
+  void mark_paxos_event(const string &event) {
+    mark_svc_event("paxos", event);
+  }
+
 private:
   Message *request;
   utime_t dequeued_time;
