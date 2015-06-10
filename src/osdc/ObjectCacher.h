@@ -102,6 +102,7 @@ class ObjectCacher {
       loff_t start, length;   // bh extent in object
     } ex;
     bool dontneed; //indicate bh don't need by anyone
+    bool nocache; //indicate bh don't need by this caller
 
   public:
     Object *ob;
@@ -119,6 +120,7 @@ class ObjectCacher {
       state(STATE_MISSING),
       ref(0),
       dontneed(false),
+      nocache(false),
       ob(o),
       last_write_tid(0),
       last_read_tid(0),
@@ -168,6 +170,13 @@ class ObjectCacher {
     }
     bool get_dontneed() {
       return dontneed;
+    }
+
+    void set_nocache(bool v) {
+      nocache = v;
+    }
+    bool get_nocache() {
+      return nocache;
     }
   };
 
@@ -422,6 +431,7 @@ class ObjectCacher {
       bh_lru_rest.lru_touch(bh);
 
     bh->set_dontneed(false);
+    bh->set_nocache(false);
     touch_ob(bh->ob);
   }
   void touch_ob(Object *ob) {
