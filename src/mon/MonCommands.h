@@ -307,8 +307,7 @@ COMMAND("mds fail name=who,type=CephString", \
 COMMAND("mds repaired name=rank,type=CephInt", \
 	"mark a damaged MDS rank as no longer damaged", "mds", "rw", "cli,rest")
 COMMAND("mds rm " \
-	"name=gid,type=CephInt,range=0 " \
-	"name=who,type=CephName", \
+	"name=gid,type=CephInt,range=0", \
 	"remove nonactive mds", "mds", "rw", "cli,rest")
 COMMAND("mds rmfailed name=who,type=CephInt,range=0", "remove failed mds", \
 	"mds", "rw", "cli,rest")
