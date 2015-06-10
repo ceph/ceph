@@ -608,8 +608,14 @@ public:
    *
    * @param c The callback to be awaken once the proposal is finished.
    */
-  void wait_for_finished_proposal(Context *c) {
+  void wait_for_finished_proposal(MonOpRequestRef op, Context *c) {
+    if (op)
+      op->mark_event(service_name + ":wait_for_finished_proposal");
     waiting_for_finished_proposal.push_back(c);
+  }
+  void wait_for_finished_proposal(Context *c) {
+    MonOpRequestRef o;
+    wait_for_finished_proposal(o, c);
   }
 
   /**
@@ -617,12 +623,19 @@ public:
    *
    * @param c The callback to be awaken once we become active.
    */
-  void wait_for_active(Context *c) {
+  void wait_for_active(MonOpRequestRef op, Context *c) {
+    if (op)
+      op->mark_event(service_name + ":wait_for_active");
+
     if (!is_proposing()) {
-      paxos->wait_for_active(c);
+      paxos->wait_for_active(op, c);
       return;
     }
-    wait_for_finished_proposal(c);
+    wait_for_finished_proposal(op, c);
+  }
+  void wait_for_active(Context *c) {
+    MonOpRequestRef o;
+    wait_for_active(o, c);
   }
 
   /**
@@ -631,19 +644,31 @@ public:
    * @param c The callback to be awaken once we become active.
    * @param ver The version we want to wait on.
    */
-  void wait_for_readable(Context *c, version_t ver = 0) {
+  void wait_for_readable(MonOpRequestRef op, Context *c, version_t ver = 0) {
     /* This is somewhat of a hack. We only do check if a version is readable on
      * PaxosService::dispatch(), but, nonetheless, we must make sure that if that
      * is why we are not readable, then we must wait on PaxosService and not on
      * Paxos; otherwise, we may assert on Paxos::wait_for_readable() if it
      * happens to be readable at that specific point in time.
      */
+    if (op)
+      op->mark_event(service_name + ":wait_for_readable");
+
     if (is_proposing() ||
 	ver > get_last_committed() ||
 	get_last_committed() == 0)
-      wait_for_finished_proposal(c);
-    else
-      paxos->wait_for_readable(c);
+      wait_for_finished_proposal(op, c);
+    else {
+      if (op)
+        op->mark_event(service_name + ":wait_for_readable/paxos");
+
+      paxos->wait_for_readable(op, c);
+    }
+  }
+
+  void wait_for_readable(Context *c, version_t ver = 0) {
+    MonOpRequestRef o; // will initialize the shared_ptr to NULL
+    wait_for_readable(o, c, ver);
   }
 
   /**
@@ -651,15 +676,23 @@ public:
    *
    * @param c The callback to be awaken once we become writeable.
    */
-  void wait_for_writeable(Context *c) {
+  void wait_for_writeable(MonOpRequestRef op, Context *c) {
+    if (op)
+      op->mark_event(service_name + ":wait_for_writeable");
+
     if (is_proposing())
-      wait_for_finished_proposal(c);
+      wait_for_finished_proposal(op, c);
     else if (!is_write_ready())
-      wait_for_active(c);
+      wait_for_active(op, c);
     else
-      paxos->wait_for_writeable(c);
+      paxos->wait_for_writeable(op, c);
+  }
+  void wait_for_writeable(Context *c) {
+    MonOpRequestRef o;
+    wait_for_writeable(o, c);
   }
 
+  
   /**
    * @defgroup PaxosService_h_Trim Functions for trimming states
    * @{
