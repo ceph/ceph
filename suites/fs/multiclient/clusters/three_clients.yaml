@@ -3,3 +3,8 @@ roles:
 - [client.2]
 - [client.1]
 - [client.0]
+
+log-rotate:
+  ceph-mds: 10G
+  ceph-osd: 10G
+
