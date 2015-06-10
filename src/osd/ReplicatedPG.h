@@ -1354,6 +1354,8 @@ protected:
     OSDOp& op,
     ObjectContextRef& obc,
     bool classic);
+  void fill_in_copy_get_noent(OpRequestRef& op, hobject_t oid,
+                              OSDOp& osd_op, bool classic);
 
   /**
    * To copy an object, call start_copy.
