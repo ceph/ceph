@@ -448,10 +448,11 @@ fi
 %{_sbindir}/ceph-disk-udev
 %{_sbindir}/ceph-create-keys
 %{_sbindir}/rcceph
-%{_sbindir}/mkcephfs
 %if 0%{?rhel} >= 7 || 0%{?fedora}
+%{_sbindir}/mkcephfs
 %{_sbindir}/mount.ceph
 %else
+/sbin/mkcephfs
 /sbin/mount.ceph
 %endif
 %dir %{_libdir}/ceph
