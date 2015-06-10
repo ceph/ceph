@@ -23,7 +23,7 @@
 #include "common/config.h"
 #include "common/DecayCounter.h"
 
-#include <iostream>
+#include <iosfwd>
 
 #include <list>
 #include <set>

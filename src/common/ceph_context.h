@@ -15,7 +15,7 @@
 #ifndef CEPH_CEPHCONTEXT_H
 #define CEPH_CEPHCONTEXT_H
 
-#include <iostream>
+#include <iosfwd>
 #include <stdint.h>
 #include <string>
 #include <set>
