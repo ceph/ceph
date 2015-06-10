@@ -916,10 +916,24 @@ struct RGWRegion {
   map<string, RGWRegionPlacementTarget> placement_targets;
   string default_placement;
 
-  // TODO: Maybe convert hostnames to a map<string,list<string>> for
-  // endpoint_type->hostnames
   list<string> hostnames;
   list<string> hostnames_s3website;
+  // TODO: Maybe convert hostnames to a map<string,list<string>> for
+  // endpoint_type->hostnames
+/*
+20:05 < _robbat21irssi> maybe I do someting like: if (hostname_map.empty()) { populate all map keys from hostnames; };
+20:05 < _robbat21irssi> but that's a later compatability migration planning bit
+20:06 < yehudasa> more like if (!hostnames.empty()) {
+20:06 < yehudasa> for (list<string>::iterator iter = hostnames.begin(); iter != hostnames.end(); ++iter) {
+20:06 < yehudasa> hostname_map["s3"].append(iter->second);
+20:07 < yehudasa> hostname_map["s3website"].append(iter->second);
+20:07 < yehudasa> s/append/push_back/g
+20:08 < _robbat21irssi> inner loop over APIs
+20:08 < yehudasa> yeah, probably
+20:08 < _robbat21irssi> s3, s3website, swift, swith_auth, swift_website
+*/
+  map<string,list<string>> api_hostname_map;
+  map<string,list<string>> api_endpoints_map;
 
   CephContext *cct;
   RGWRados *store;
