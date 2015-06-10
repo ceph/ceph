@@ -916,7 +916,10 @@ struct RGWRegion {
   map<string, RGWRegionPlacementTarget> placement_targets;
   string default_placement;
 
+  // TODO: Maybe convert hostnames to a map<string,list<string>> for
+  // endpoint_type->hostnames
   list<string> hostnames;
+  list<string> hostnames_s3website;
 
   CephContext *cct;
   RGWRados *store;
@@ -924,7 +927,7 @@ struct RGWRegion {
   RGWRegion() : is_master(false), cct(NULL), store(NULL) {}
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(2, 1, bl);
+    ENCODE_START(3, 1, bl);
     ::encode(name, bl);
     ::encode(api_name, bl);
     ::encode(is_master, bl);
@@ -934,11 +937,12 @@ struct RGWRegion {
     ::encode(placement_targets, bl);
     ::encode(default_placement, bl);
     ::encode(hostnames, bl);
+    ::encode(hostnames_s3website, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::iterator& bl) {
-    DECODE_START(2, bl);
+    DECODE_START(3, bl);
     ::decode(name, bl);
     ::decode(api_name, bl);
     ::decode(is_master, bl);
@@ -949,6 +953,9 @@ struct RGWRegion {
     ::decode(default_placement, bl);
     if (struct_v >= 2) {
       ::decode(hostnames, bl);
+    }
+    if (struct_v >= 3) {
+      ::decode(hostnames_s3website, bl);
     }
     DECODE_FINISH(bl);
   }

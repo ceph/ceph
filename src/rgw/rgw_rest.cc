@@ -164,8 +164,9 @@ string camelcase_dash_http_attr(const string& orig)
   return string(buf);
 }
 
-/* avoid duplicate hostnames in hostnames list */
+/* avoid duplicate hostnames in hostnames lists */
 static set<string> hostnames_set;
+static set<string> hostnames_s3website_set;
 
 void rgw_rest_init(CephContext *cct, RGWRegion& region)
 {
@@ -209,6 +210,14 @@ void rgw_rest_init(CephContext *cct, RGWRegion& region)
    * Inputs: [Z.A, X.B.A]
    * Z.A clearly splits to subdomain=Z, domain=Z
    * X.B.A ambigously splits to both {X, B.A} and {X.B, A}
+   */
+
+  if(!cct->_conf->rgw_dns_s3website_name.empty()) {
+	  hostnames_s3website_set.insert(cct->_conf->rgw_dns_s3website_name);
+  }
+  hostnames_s3website_set.insert(region.hostnames_s3website.begin(), region.hostnames_s3website.end());
+  /* TODO: we should repeat the hostnames_set sanity check here
+   * and ALSO decide about overlap, if any
    */
 }
 
