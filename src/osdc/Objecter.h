@@ -654,12 +654,18 @@ struct ObjectOperation {
 	out_flags(flags), out_data_digest(dd), out_omap_digest(od),
         out_reqids(oreqids), prval(r) {}
     void finish(int r) {
-      if (r < 0)
+      // reqids are copied on ENOENT
+      if (r < 0 && r != -ENOENT)
 	return;
       try {
 	bufferlist::iterator p = bl.begin();
 	object_copy_data_t copy_reply;
 	::decode(copy_reply, p);
+	if (r == -ENOENT) {
+	  if (out_reqids)
+	    *out_reqids = copy_reply.reqids;
+	  return;
+	}
 	if (out_size)
 	  *out_size = copy_reply.size;
 	if (out_mtime)
