@@ -2,6 +2,116 @@
  Release Notes
 ===============
 
+v9.0.1
+======
+
+This development release is delayed a bit due to tooling changes in the build
+environment.  As a result the next one (v9.0.2) will have a bit more work than
+is usual.
+
+Highlights here include lots of RGW Swift fixes, RBD feature work
+surrounding the new object map feature, more CephFS snapshot fixes,
+and a few important CRUSH fixes.
+
+Notable Changes
+---------------
+
+* auth: cache/reuse crypto lib key objects, optimize msg signature check (Sage Weil)
+* build: allow tcmalloc-minimal (Thorsten Behrens)
+* build: do not build ceph-dencoder with tcmalloc (#10691 Boris Ranto)
+* build: fix pg ref disabling (William A. Kennington III)
+* build: install-deps.sh improvements (Loic Dachary)
+* build: misc fixes (Boris Ranto, Ken Dreyer, Owen Synge)
+* ceph-authtool: fix return code on error (Gerhard Muntingh)
+* ceph-disk: fix zap sgdisk invocation (Owen Synge, Thorsten Behrens)
+* ceph-disk: pass --cluster arg on prepare subcommand (Kefu Chai)
+* ceph-fuse, libcephfs: drop inode when rmdir finishes (#11339 Yan, Zheng)
+* ceph-fuse,libcephfs: fix uninline (#11356 Yan, Zheng)
+* ceph-monstore-tool: fix store-copy (Huangjun)
+* common: add perf counter descriptions (Alyona Kiseleva)
+* common: fix throttle max change (Henry Chang)
+* crush: fix crash from invalid 'take' argument (#11602 Shiva Rkreddy, Sage Weil)
+* crush: fix divide-by-2 in straw2 (#11357 Yann Dupont, Sage Weil)
+* deb: fix rest-bench-dbg and ceph-test-dbg dependendies (Ken Dreyer)
+* doc: document region hostnames (Robin H. Johnson)
+* doc: update release schedule docs (Loic Dachary)
+* init-radosgw: run radosgw as root (#11453 Ken Dreyer)
+* librados: fadvise flags per op (Jianpeng Ma)
+* librbd: allow additional metadata to be stored with the image (Haomai Wang)
+* librbd: better handling for dup flatten requests (#11370 Jason Dillaman)
+* librbd: cancel in-flight ops on watch error (#11363 Jason Dillaman)
+* librbd: default new images to format 2 (#11348 Jason Dillaman)
+* librbd: fast diff implementation that leverages object map (Jason Dillaman)
+* librbd: fix snapshot creation when other snap is active (#11475 Jason Dillaman)
+* librbd: new diff_iterate2 API (Jason Dillaman)
+* librbd: object map rebuild support (Jason Dillaman)
+* logrotate.d: prefer service over invoke-rc.d (#11330 Win Hierman, Sage Weil)
+* mds: avoid getting stuck in XLOCKDONE (#11254 Yan, Zheng)
+* mds: fix integer truncateion on large client ids (Henry Chang)
+* mds: many snapshot and stray fixes (Yan, Zheng)
+* mds: persist completed_requests reliably (#11048 John Spray)
+* mds: separate safe_pos in Journaler (#10368 John Spray)
+* mds: snapshot rename support (#3645 Yan, Zheng)
+* mds: warn when clients fail to advance oldest_client_tid (#10657 Yan, Zheng)
+* misc cleanups and fixes (Danny Al-Gaaf)
+* mon: fix average utilization calc for 'osd df' (Mykola Golub)
+* mon: fix variance calc in 'osd df' (Sage Weil)
+* mon: improve callout to crushtool (Mykola Golub)
+* mon: prevent bucket deletion when referenced by a crush rule (#11602 Sage Weil)
+* mon: prime pg_temp when CRUSH map changes (Sage Weil)
+* monclient: flush_log (John Spray)
+* msgr: async: many many fixes (Haomai Wang)
+* msgr: simple: fix clear_pipe (#11381 Haomai Wang)
+* osd: add latency perf counters for tier operations (Xinze Chi)
+* osd: avoid multiple hit set insertions (Zhiqiang Wang)
+* osd: break PG removal into multiple iterations (#10198 Guang Yang)
+* osd: check scrub state when handling map (Jianpeng Ma)
+* osd: fix endless repair when object is unrecoverable (Jianpeng Ma, Kefu Chai)
+* osd: fix pg resurrection (#11429 Samuel Just)
+* osd: ignore non-existent osds in unfound calc (#10976 Mykola Golub)
+* osd: increase default max open files (Owen Synge)
+* osd: prepopulate needs_recovery_map when only one peer has missing (#9558 Guang Yang)
+* osd: relax reply order on proxy read (#11211 Zhiqiang Wang)
+* osd: skip promotion for flush/evict op (Zhiqiang Wang)
+* osd: write journal header on clean shutdown (Xinze Chi)
+* qa: run-make-check.sh script (Loic Dachary)
+* rados bench: misc fixes (Dmitry Yatsushkevich)
+* rados: fix error message on failed pool removal (Wido den Hollander)
+* radosgw-admin: add 'bucket check' function to repair bucket index (Yehuda Sadeh)
+* rbd: allow unmapping by spec (Ilya Dryomov)
+* rbd: deprecate --new-format option (Jason Dillman)
+* rgw: do not set content-type if length is 0 (#11091 Orit Wasserman)
+* rgw: don't use end_marker for namespaced object listing (#11437 Yehuda Sadeh)
+* rgw: fail if parts not specified on multipart upload (#11435 Yehuda Sadeh)
+* rgw: fix GET on swift account when limit == 0 (#10683 Radoslaw Zarzynski)
+* rgw: fix broken stats in container listing (#11285 Radoslaw Zarzynski)
+* rgw: fix bug in domain/subdomain splitting (Robin H. Johnson)
+* rgw: fix civetweb max threads (#10243 Yehuda Sadeh)
+* rgw: fix copy metadata, support X-Copied-From for swift (#10663 Radoslaw Zarzynski)
+* rgw: fix locator for objects starting with _ (#11442 Yehuda Sadeh)
+* rgw: fix mulitipart upload in retry path (#11604 Yehuda Sadeh)
+* rgw: fix quota enforcement on POST (#11323 Sergey Arkhipov)
+* rgw: fix return code on missing upload (#11436 Yehuda Sadeh)
+* rgw: force content type header on responses with no body (#11438 Orit Wasserman)
+* rgw: generate new object tag when setting attrs (#11256 Yehuda Sadeh)
+* rgw: issue aio for first chunk before flush cached data (#11322 Guang Yang)
+* rgw: make read user buckets backward compat (#10683 Radoslaw Zarzynski)
+* rgw: merge manifests properly with prefix override (#11622 Yehuda Sadeh)
+* rgw: return 412 on bad limit when listing buckets (#11613 Yehuda Sadeh)
+* rgw: send ETag, Last-Modified for swift (#11087 Radoslaw Zarzynski)
+* rgw: set content length on container GET, PUT, DELETE, HEAD (#10971, #11036 Radoslaw Zarzynski)
+* rgw: support end marker on swift container GET (#10682 Radoslaw Zarzynski)
+* rgw: swift: fix account listing (#11501 Radoslaw Zarzynski)
+* rgw: swift: set content-length on keystone tokens (#11473 Herv Rousseau)
+* rgw: use correct oid for gc chains (#11447 Yehuda Sadeh)
+* rgw: use unique request id for civetweb (#10295 Orit Wasserman)
+* rocksdb, leveldb: fix compact_on_mount (Xiaoxi Chen)
+* rocksdb: add perf counters for get/put latency (Xinxin Shu)
+* rpm: add suse firewall files (Tim Serong)
+* rpm: misc systemd and suse fixes (Owen Synge, Nathan Cutler)
+
+
+
 v9.0.0
 ======
 
