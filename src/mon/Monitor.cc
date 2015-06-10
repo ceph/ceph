@@ -3407,12 +3407,11 @@ void Monitor::_ms_dispatch(Message *m)
     dout(20) << "ms_dispatch existing session " << s << " for " << s->inst << dendl;
   }
 
-  if (s) {
-    if (s->auth_handler) {
-      s->entity_name = s->auth_handler->get_entity_name();
-    }
-    dout(20) << " caps " << s->caps.get_str() << dendl;
+  assert(s);
+  if (s->auth_handler) {
+    s->entity_name = s->auth_handler->get_entity_name();
   }
+  dout(20) << " caps " << s->caps.get_str() << dendl;
 
   if (is_synchronizing() && !src_is_mon) {
     waitlist_or_zap_client(m);
@@ -3420,11 +3419,7 @@ void Monitor::_ms_dispatch(Message *m)
   }
 
   dispatch(s, m, src_is_mon);
-
-  if (s) {
-    s->put();
-  }
-
+  s->put();
   return;
 }
 
