@@ -1109,24 +1109,41 @@ def main(argv):
         ret = call(cmd, shell=True, stdout=nullfd, stderr=nullfd)
 
         print "Test rados import"
+        first = True
         for osd in [f for f in os.listdir(OSDDIR) if os.path.isdir(os.path.join(OSDDIR, f)) and string.find(f, "osd") == 0]:
             dir = os.path.join(TESTDIR, osd)
             for pg in [f for f in os.listdir(dir) if os.path.isfile(os.path.join(dir, f))]:
                 if string.find(pg, "{id}.".format(id=REPID)) != 0:
                     continue
                 file = os.path.join(dir, pg)
+                if first:
+                    first = False
+                    # This should do nothing
+                    cmd = "./rados import -p {pool} --dry-run {file}".format(pool=NEWPOOL, file=file)
+                    logging.debug(cmd)
+                    ret = call(cmd, shell=True, stdout=nullfd)
+                    if ret != 0:
+                        logging.error("Rados import --dry-run failed from {file} with {ret}".format(file=file, ret=ret))
+                        ERRORS += 1
+                    cmd = "./rados -p {pool} ls".format(pool=NEWPOOL)
+                    logging.debug(cmd)
+                    data = check_output(cmd, shell=True)
+                    if data:
+                        logging.error("'{data}'".format(data=data))
+                        logging.error("Found objects after dry-run")
+                        ERRORS += 1
                 cmd = "./rados import -p {pool} {file}".format(pool=NEWPOOL, file=file)
                 logging.debug(cmd)
                 ret = call(cmd, shell=True, stdout=nullfd)
                 if ret != 0:
                     logging.error("Rados import failed from {file} with {ret}".format(file=file, ret=ret))
                     ERRORS += 1
-                # cmd = "./rados import -p {pool} --no-overwrite {file}".format(pool=NEWPOOL, file=file)
-                # logging.debug(cmd)
-                # ret = call(cmd, shell=True, stdout=nullfd)
-                # if ret != 0:
-                #     logging.error("Import-rados failed from {file} with {ret}".format(file=file, ret=ret))
-                #     ERRORS += 1
+                cmd = "./rados import -p {pool} --no-overwrite {file}".format(pool=NEWPOOL, file=file)
+                logging.debug(cmd)
+                ret = call(cmd, shell=True, stdout=nullfd)
+                if ret != 0:
+                    logging.error("Rados import --no-overwrite failed from {file} with {ret}".format(file=file, ret=ret))
+                    ERRORS += 1
 
         ERRORS += verify(DATADIR, NEWPOOL, REP_NAME)
     else:
