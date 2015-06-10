@@ -298,6 +298,23 @@ noinst_HEADERS += \
 	test/librados_test_stub/TestIoCtxImpl.h
 noinst_LTLIBRARIES += librados_test_stub.la
 
+unittest_journal_SOURCES = \
+	test/journal/test_main.cc \
+        test/journal/test_Entry.cc \
+	test/journal/test_FutureImpl.cc \
+	test/journal/test_Journaler.cc \
+	test/journal/test_JournalMetadata.cc \
+	test/journal/test_JournalPlayer.cc \
+	test/journal/test_JournalRecorder.cc \
+	test/journal/test_ObjectPlayer.cc \
+	test/journal/test_ObjectRecorder.cc \
+	test/journal/RadosTestFixture.cc
+unittest_journal_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+unittest_journal_LDADD = \
+	libjournal.la libcls_journal_client.la \
+	librados_test_stub.la librados_internal.la \
+	$(UNITTEST_LDADD) $(CEPH_GLOBAL) $(RADOS_TEST_LDADD)
+check_TESTPROGRAMS += unittest_journal
 
 if WITH_RBD
 ceph_smalliobenchrbd_SOURCES = \
