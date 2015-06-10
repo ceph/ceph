@@ -20,6 +20,7 @@ void MonOpRequest::send_reply(Message *reply)
     dout(2) << "send_reply no session, dropping reply " << *reply
 	    << " to " << request << " " << *request << dendl;
     reply->put();
+    mark_event("reply: no session");
     return;
   }
 
@@ -27,6 +28,7 @@ void MonOpRequest::send_reply(Message *reply)
     dout(2) << "send_reply no connection, dropping reply " << *reply
 	    << " to " << request << " " << *request << dendl;
     reply->put();
+    mark_event("reply: no connection");
     return;
   }
 
@@ -35,7 +37,9 @@ void MonOpRequest::send_reply(Message *reply)
 	     << " via " << session->proxy_con->get_peer_addr()
 	     << " for request " << *request << dendl;
     session->proxy_con->send_message(new MRoute(session->proxy_tid, reply));
+    mark_event("reply: send routed request");
   } else {
     session->con->send_message(reply);
+    mark_event("reply: send");
   }
 }
