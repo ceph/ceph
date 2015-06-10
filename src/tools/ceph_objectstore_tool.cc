@@ -1116,7 +1116,10 @@ int ObjectStoreTool::do_import(ObjectStore *store, OSDSuperblock& sb,
   ret = read_section(&type, &ebl);
   if (ret)
     return ret;
-  if (type != TYPE_PG_BEGIN) {
+  if (type == TYPE_POOL_BEGIN) {
+    cerr << "Pool exports cannot be imported into a PG" << std::endl;
+    return -EINVAL;
+  } else if (type != TYPE_PG_BEGIN) {
     cerr << "Invalid first section type " << type << std::endl;
     return -EFAULT;
   }
