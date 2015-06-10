@@ -3368,7 +3368,7 @@ void Monitor::_ms_dispatch(Message *m)
 
 void Monitor::dispatch(MonOpRequestRef op)
 {
-  op->mark_event("monitor_dispatch");
+  op->mark_event("mon:dispatch");
   ConnectionRef connection = op->get_connection();
   MonSession *s = NULL;
   MonCap caps;
@@ -3457,7 +3457,7 @@ void Monitor::dispatch(MonOpRequestRef op)
 
 void Monitor::dispatch_op(MonOpRequestRef op)
 {
-  op->mark_event("monitor_dispatch_op");
+  op->mark_event("mon:dispatch_op");
   /* deal with all messages that do not necessarily need caps */
   bool dealt_with = true;
   switch (op->get_req()->get_type()) {
