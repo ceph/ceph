@@ -4197,7 +4197,7 @@ void Monitor::handle_get_version(MonOpRequestRef op)
 
   if (svc) {
     if (!svc->is_readable()) {
-      svc->wait_for_readable(new C_RetryMessage(this, op));
+      svc->wait_for_readable(op, new C_RetryMessage(this, op));
       goto out;
     }
 
