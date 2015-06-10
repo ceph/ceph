@@ -70,11 +70,6 @@ function main() {
         echo "make check: successful run on $(git rev-parse HEAD)"
         return 0
     else
-        find . -name '*.trs' | xargs grep -l FAIL | while read file ; do
-            log=$(dirname $file)/$(basename $file .trs).log
-            echo FAIL: $log
-            cat $log
-        done
         return 1
     fi
 }
