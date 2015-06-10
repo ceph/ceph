@@ -915,11 +915,36 @@ RGWPutObjProcessor_Aio::~RGWPutObjProcessor_Aio()
     return;
 
   list<rgw_obj>::iterator iter;
+  bool is_multipart_obj = false;
+  rgw_obj multipart_obj;
+
+  /** 
+   * We should delete the object in the "multipart" namespace to avoid race condition. 
+   * Such race condition is caused by the fact that the multipart object is the gatekeeper of a multipart 
+   * upload, when it is deleted, a second upload would start with the same suffix("2/"), therefore, objects
+   * written by the second upload may be deleted by the first upload.
+   * details is describled on #11749
+   */ 
   for (iter = written_objs.begin(); iter != written_objs.end(); ++iter) {
-    rgw_obj& obj = *iter;
+    rgw_obj &obj = *iter;
+    if (RGW_OBJ_NS_MULTIPART == obj.ns) {
+      ldout(store->ctx(), 5) << "NOTE: we should not process the multipart object (" << obj << ") here" << dendl;
+      multipart_obj = *iter;
+      is_multipart_obj = true;
+      continue;
+    }
+
     int r = store->delete_obj(obj_ctx, bucket_info, obj, 0, 0);
     if (r < 0 && r != -ENOENT) {
-      ldout(store->ctx(), 0) << "WARNING: failed to remove obj (" << obj << "), leaked" << dendl;
+      ldout(store->ctx(), 5) << "WARNING: failed to remove obj (" << obj << "), leaked" << dendl;
+    }
+  }
+
+  if (true == is_multipart_obj) {
+    ldout(store->ctx(), 5) << "NOTE: we are going to process the multipart obj (" << multipart_obj << dendl;
+    int r = store->delete_obj(obj_ctx, bucket_info, multipart_obj, 0, 0);
+    if (r < 0 && r != -ENOENT) {
+      ldout(store->ctx(), 0) << "WARNING: failed to remove obj (" << multipart_obj << "), leaked" << dendl;
     }
   }
 }
