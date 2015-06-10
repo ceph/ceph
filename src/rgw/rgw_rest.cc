@@ -230,6 +230,10 @@ static bool str_ends_with(const string& s, const string& suffix, size_t *pos)
 static bool rgw_find_host_in_domains(const string& host, string *domain, string *subdomain)
 {
   set<string>::iterator iter;
+  /** TODO, Future optimization
+   * store hostnames_set elements _reversed_, and look for a prefix match,
+   * which is much faster than a suffix match.
+   */
   for (iter = hostnames_set.begin(); iter != hostnames_set.end(); ++iter) {
     size_t pos;
     if (!str_ends_with(host, *iter, &pos))
