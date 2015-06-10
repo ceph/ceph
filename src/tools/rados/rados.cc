@@ -118,7 +118,7 @@ void usage(ostream& out)
 "IMPORT AND EXPORT\n"
 "   export [filename]\n"
 "       Serialize pool contents to a file or standard out.\n"
-"   import [filename]\n"
+"   import [--dry-run] [--no-overwrite] < filename | - >\n"
 "       Load pool contents from a file or standard in\n"
 "\n"
 "ADVISORY LOCKS\n"
@@ -2649,25 +2649,45 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       goto out;
     }
   } else if (strcmp(nargs[0], "import") == 0) {
-    // import [filename]
-    if (!pool_name || nargs.size() > 2) {
+    // import [--no-overwrite] [--dry-run] <filename | - >
+    if (!pool_name || nargs.size() > 4 || nargs.size() < 2) {
       usage_exit();
     }
 
+    // Last arg is the filename
+    std::string const filename = nargs[nargs.size() - 1];
+
+    // All other args may be flags
+    bool dry_run = false;
+    bool no_overwrite = false;
+    for (unsigned i = 1; i < nargs.size() - 1; ++i) {
+      std::string arg(nargs[i]);
+      
+      if (arg == std::string("--no-overwrite")) {
+        no_overwrite = true;
+      } else if (arg == std::string("--dry-run")) {
+        dry_run = true;
+      } else {
+        std::cerr << "Invalid argument '" << arg << "'" << std::endl;
+        ret = -EINVAL;
+        goto out;
+      }
+    }
+
     int file_fd;
-    if (nargs.size() < 2 || std::string(nargs[1]) == "-") {
+    if (filename == "-") {
       file_fd = STDIN_FILENO;
     } else {
-      file_fd = open(nargs[1], O_RDONLY);
+      file_fd = open(filename.c_str(), O_RDONLY);
       if (file_fd < 0) {
-        cerr << "Error opening '" << nargs[1] << "': "
+        cerr << "Error opening '" << filename << "': "
           << cpp_strerror(file_fd) << std::endl;
         ret = file_fd;
         goto out;
       }
     }
 
-    ret = RadosImport(file_fd, 0, false).import(io_ctx, false);
+    ret = RadosImport(file_fd, 0, dry_run).import(io_ctx, no_overwrite);
     if (ret < 0) {
       cerr << "error from import: "
 	   << cpp_strerror(ret) << std::endl;
