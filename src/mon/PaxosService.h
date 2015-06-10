@@ -102,12 +102,12 @@ protected:
    * instance of this class onto the Paxos::wait_for_readable function, and
    * we will retry the whole dispatch again once the callback is fired.
    */
-  class C_RetryMessage : public Context {
+  class C_RetryMessage : public C_MonOp {
     PaxosService *svc;
-    MonOpRequestRef op;
   public:
-    C_RetryMessage(PaxosService *s, MonOpRequestRef op_) : svc(s), op(op_) {}
-    void finish(int r) {
+    C_RetryMessage(PaxosService *s, MonOpRequestRef op_) :
+      C_MonOp(op_), svc(s) { }
+    void _finish(int r) {
       if (r == -EAGAIN || r >= 0)
 	svc->dispatch(op);
       else if (r == -ECANCELED)
