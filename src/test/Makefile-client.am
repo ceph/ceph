@@ -127,7 +127,8 @@ bin_DEBUGPROGRAMS += ceph_multi_stress_watch
 ceph_test_cls_rbd_SOURCES = test/cls_rbd/test_cls_rbd.cc
 ceph_test_cls_rbd_LDADD = \
 	$(LIBRADOS) libcls_rbd_client.la libcls_lock_client.la \
-	$(LIBCOMMON) $(UNITTEST_LDADD) $(RADOS_TEST_LDADD)
+	$(LIBCOMMON) $(UNITTEST_LDADD) $(RADOS_TEST_LDADD) $(CRYPTO_LIBS) \
+	$(EXTRALIBS)
 ceph_test_cls_rbd_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_test_cls_rbd
 

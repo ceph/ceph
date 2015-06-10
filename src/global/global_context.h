@@ -17,7 +17,6 @@
 
 #include "common/ceph_context.h"
 
-#include <iostream>
 #include <stdint.h>
 
 struct md_config_t;
