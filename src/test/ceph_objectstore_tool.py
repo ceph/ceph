@@ -588,6 +588,22 @@ def main(argv):
     cmd = (CFSD_PREFIX + "--op export --pgid {pg} --file -").format(osd=ONEOSD, pg=ONEPG)
     ERRORS += test_failure_tty(cmd, "stdout is a tty and no --file filename specified")
 
+    # Prep a valid ec export file for import failure tests
+    ONEECPG = ALLECPGS[0]
+    osds = get_osds(ONEECPG, OSDDIR)
+    ONEECOSD = osds[0]
+    OTHERFILE = "/tmp/foo.{pid}".format(pid=pid)
+    cmd = (CFSD_PREFIX + "--op export --pgid {pg} --file {file}").format(osd=ONEECOSD, pg=ONEECPG, file=OTHERFILE)
+    logging.debug(cmd)
+    call(cmd, shell=True, stdout=nullfd, stderr=nullfd)
+
+    # On import can't specify a different shard
+    BADPG = ONEECPG.split('s')[0] + "s10"
+    cmd = (CFSD_PREFIX + "--op import --pgid {pg} --file {file}").format(osd=ONEECOSD, pg=BADPG, file=OTHERFILE)
+    ERRORS += test_failure(cmd, "Can't specify a different shard, must be")
+
+    os.unlink(OTHERFILE)
+
     # Prep a valid export file for import failure tests
     OTHERFILE = "/tmp/foo.{pid}".format(pid=pid)
     cmd = (CFSD_PREFIX + "--op export --pgid {pg} --file {file}").format(osd=ONEOSD, pg=ONEPG, file=OTHERFILE)
@@ -597,6 +613,10 @@ def main(argv):
     # On import can't specify a PG with a non-existent pool
     cmd = (CFSD_PREFIX + "--op import --pgid {pg} --file {file}").format(osd=ONEOSD, pg="10.0", file=OTHERFILE)
     ERRORS += test_failure(cmd, "Can't specify a different pgid pool, must be")
+
+    # On import can't specify shard for a replicated export
+    cmd = (CFSD_PREFIX + "--op import --pgid {pg}s0 --file {file}").format(osd=ONEOSD, pg=ONEPG, file=OTHERFILE)
+    ERRORS += test_failure(cmd, "Can't specify a sharded pgid with a non-sharded export")
 
     # On import can't specify a PG with a bad seed
     TMPPG="{pool}.80".format(pool=REPID)
