@@ -234,10 +234,6 @@ struct pgid_object_list {
     for (list<pair<coll_t, ghobject_t> >::const_iterator i = _objects.begin();
 	 i != _objects.end();
 	 ++i) {
-      if (i != _objects.begin() && human_readable) {
-        f->flush(cout);
-        cout << std::endl;
-      }
       f->open_array_section("pgid_object");
       string pgid = i->first.c_str();
       std::size_t pos = pgid.find("_");
@@ -249,9 +245,16 @@ struct pgid_object_list {
       i->second.dump(f);
       f->close_section();
       f->close_section();
+      if (human_readable) {
+        f->flush(cout);
+        cout << std::endl;
+      }
     }
-    if (!human_readable)
+    if (!human_readable) {
       f->close_section();
+      f->flush(cout);
+      cout << std::endl;
+    }
   }
 };
 
@@ -1376,7 +1379,6 @@ int do_list(ObjectStore *store, string pgidstr, string object, Formatter *format
     return r;
   lookup.dump(formatter, human_readable);
   formatter->flush(cout);
-  cout << std::endl;
   return 0;
 }
 
