@@ -28,15 +28,13 @@ using namespace std;
 int main(int argc, char **argv) {
   po::options_description desc("Allowed options");
   string store_path, cmd, out_path;
-  bool paranoid = false;
   desc.add_options()
     ("help", "produce help message")
     ("omap-path", po::value<string>(&store_path),
      "path to mon directory, mandatory (current/omap usually)")
-    ("paranoid", po::value<bool>(&paranoid),
-     "use paranoid checking")
+    ("paranoid", "use paranoid checking")
     ("command", po::value<string>(&cmd),
-     "command")
+     "command arg is one of [dump-raw-keys, dump-raw-key-vals, dump-objects, dump-objects-with-keys, check], mandatory")
     ;
   po::positional_options_description p;
   p.add("command", 1);
@@ -78,10 +76,20 @@ int main(int argc, char **argv) {
     return 1;
   }
 
+  if (vm.count("omap-path") == 0) {
+    std::cerr << "Required argument --omap-path" << std::endl;
+    return 1;
+  }
+
+  if (vm.count("command") == 0) {
+    std::cerr << "Required argument --command" << std::endl;
+    return 1;
+  }
+
   LevelDBStore* store(new LevelDBStore(g_ceph_context, store_path));
-  if (paranoid) {
+  if (vm.count("paranoid")) {
     std::cerr << "Enabling paranoid checks" << std::endl;
-    store->options.paranoid_checks = paranoid;
+    store->options.paranoid_checks = true;
   }
   DBObjectMap omap(store);
   stringstream out;
