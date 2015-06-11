@@ -89,6 +89,9 @@ TestRadosClientPtr get_rados_client() {
     cct->_conf->apply_changes(NULL);
     client->reset(new librados::TestMemRadosClient(cct),
                   &librados::TestRadosClient::Deallocate);
+    if (g_ceph_context == NULL) {
+      g_ceph_context = cct;
+    }
     cct->put();
   }
   (*client)->get();
@@ -677,6 +680,11 @@ void ObjectReadOperation::sparse_read(uint64_t off, uint64_t len,
                      boost::bind(op, _1, _2, _3, _4), prval);
   }
   o->ops.push_back(op);
+}
+
+void ObjectWriteOperation::append(const bufferlist &bl) {
+  TestObjectOperationImpl *o = reinterpret_cast<TestObjectOperationImpl*>(impl);
+  o->ops.push_back(boost::bind(&TestIoCtxImpl::append, _1, _2, bl, _4));
 }
 
 void ObjectWriteOperation::create(bool exclusive) {
