@@ -154,6 +154,9 @@ int main(int argc, char **argv)
   }
 
   int think_time = atoi(args[1]);
+  cerr << " This tool won't handle connection error alike things, " << std::endl;
+  cerr << "please ensure the proper network environment to test." << std::endl;
+  cerr << " Or ctrl+c when meeting error and restart tests" << std::endl;
   cerr << " using ms-type " << g_ceph_context->_conf->ms_type << std::endl;
   cerr << "       bind ip:port " << args[0] << std::endl;
   cerr << "       thinktime(us) " << think_time << std::endl;
