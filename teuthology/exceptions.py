@@ -110,3 +110,13 @@ class UnsupportedPackageTypeError(Exception):
     def __str__(self):
         return "os.package_type {pkg_type!r} on {node}".format(
             node=self.node, pkg_type=self.node.os.package_type)
+
+
+class SELinuxError(Exception):
+    def __init__(self, node, denials):
+        self.node = node
+        self.denials = denials
+
+    def __str__(self):
+        return "SELinux denials found on {node}: {denials}".format(
+            node=self.node, denials=self.denials)
