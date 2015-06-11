@@ -158,7 +158,13 @@ void MessengerClient::ClientDispatcher::ms_fast_dispatch(Message *m) {
 
 
 void usage(const string &name) {
-  cerr << "Usage: " << name << " [server ip:port] [numjobs] [concurrency] [ios] [thinktime us] [msg lenght]" << std::endl;
+  cerr << "Usage: " << name << " [server ip:port] [numjobs] [concurrency] [ios] [thinktime us] [msg length]" << std::endl;
+  cerr << "       [server ip:port]: connect to the ip:port pair" << std::endl;
+  cerr << "       [numjobs]: how much client threads spawned and do benchmark" << std::endl;
+  cerr << "       [concurrency]: the max inflight messages(like iodepth in fio)" << std::endl;
+  cerr << "       [ios]: how much messages sent for each client" << std::endl;
+  cerr << "       [thinktime]: sleep time when do fast dispatching(match client logic)" << std::endl;
+  cerr << "       [msg length]: message data bytes" << std::endl;
 }
 
 int main(int argc, char **argv)

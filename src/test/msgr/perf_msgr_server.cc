@@ -135,6 +135,9 @@ class MessengerServer {
 
 void usage(const string &name) {
   cerr << "Usage: " << name << " [bind ip:port] [server worker threads] [thinktime us]" << std::endl;
+  cerr << "       [bind ip:port]: The ip:port pair to bind, client need to specify this pair to connect" << std::endl;
+  cerr << "       [server worker threads]: threads will process incoming messages and reply(matching pg threads)" << std::endl;
+  cerr << "       [thinktime]: sleep time when do dispatching(match fast dispatch logic in OSD.cc)" << std::endl;
 }
 
 int main(int argc, char **argv)
