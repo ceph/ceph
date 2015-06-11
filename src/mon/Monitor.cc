@@ -3361,9 +3361,11 @@ void Monitor::remove_all_sessions()
   while (!session_map.sessions.empty()) {
     MonSession *s = session_map.sessions.front();
     remove_session(s);
-    logger->inc(l_mon_session_rm);
+    if (logger)
+      logger->inc(l_mon_session_rm);
   }
-  logger->set(l_mon_num_sessions, session_map.get_size());
+  if (logger)
+    logger->set(l_mon_num_sessions, session_map.get_size());
 }
 
 void Monitor::send_command(const entity_inst_t& inst,
