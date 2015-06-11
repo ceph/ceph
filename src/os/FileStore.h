@@ -552,7 +552,7 @@ public:
 		   const SequencerPosition& spos);
   int _do_clone_range(int from, int to, uint64_t srcoff, uint64_t len, uint64_t dstoff);
   int _do_sparse_copy_range(int from, int to, uint64_t srcoff, uint64_t len, uint64_t dstoff);
-  int _do_copy_range(int from, int to, uint64_t srcoff, uint64_t len, uint64_t dstoff);
+  int _do_copy_range(int from, int to, uint64_t srcoff, uint64_t len, uint64_t dstoff, bool skip_sloppycrc=false);
   int _remove(coll_t cid, const ghobject_t& oid, const SequencerPosition &spos);
 
   int _fgetattr(int fd, const char *name, bufferptr& bp);
