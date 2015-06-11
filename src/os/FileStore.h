@@ -804,6 +804,7 @@ public:
   virtual int do_fiemap(int fd, off_t start, size_t len, struct fiemap **pfiemap) = 0;
   virtual int clone_range(int from, int to, uint64_t srcoff, uint64_t len, uint64_t dstoff) = 0;
   virtual int set_alloc_hint(int fd, uint64_t hint) = 0;
+  virtual bool has_splice() const = 0;
 
   // hooks for (sloppy) crc tracking
   virtual int _crc_update_write(int fd, loff_t off, size_t len, const bufferlist& bl) = 0;
