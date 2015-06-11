@@ -57,13 +57,14 @@ class FullnessTestCase(CephFSTestCase):
         self.mount_a.open_no_data("foo")
         self.mount_b.open_no_data("bar")
 
-        # Grab mount_a's initial OSD epoch: later we will check that
+        # Grab mounts' initial OSD epochs: later we will check that
         # it hasn't advanced beyond this point.
         mount_a_initial_epoch = self.mount_a.get_osd_epoch()[0]
+        mount_b_initial_epoch = self.mount_b.get_osd_epoch()[0]
 
         # Freshly mounted at start of test, should be up to date with OSD map
         self.assertGreaterEqual(mount_a_initial_epoch, self.initial_osd_epoch)
-        self.assertGreaterEqual(self.mount_b.get_osd_epoch()[0], self.initial_osd_epoch)
+        self.assertGreaterEqual(mount_b_initial_epoch, self.initial_osd_epoch)
 
         # Set and unset a flag to cause OSD epoch to increment
         self.fs.mon_manager.raw_cluster_cmd("osd", "set", "pause")
@@ -73,10 +74,11 @@ class FullnessTestCase(CephFSTestCase):
         new_epoch = json.loads(out)['epoch']
         self.assertNotEqual(self.initial_osd_epoch, new_epoch)
 
-        # Do a metadata operation on client A, witness that it ends up with
-        # the old OSD map from startup time (nothing has prompted it
+        # Do a metadata operation on clients, witness that they end up with
+        # the old OSD map from startup time (nothing has prompted client
         # to update its map)
         self.mount_a.open_no_data("alpha")
+        self.mount_b.open_no_data("bravo1")
 
         # Sleep long enough that if the OSD map was propagating it would
         # have done so (this is arbitrary because we are 'waiting' for something
@@ -85,14 +87,18 @@ class FullnessTestCase(CephFSTestCase):
 
         mount_a_epoch, mount_a_barrier = self.mount_a.get_osd_epoch()
         self.assertEqual(mount_a_epoch, mount_a_initial_epoch)
+        mount_b_epoch, mount_b_barrier = self.mount_b.get_osd_epoch()
+        self.assertEqual(mount_b_epoch, mount_b_initial_epoch)
 
         # Set a barrier on the MDS
         self.fs.mds_asok(["osdmap", "barrier", new_epoch.__str__()], mds_id=self.active_mds_id)
 
         # Do an operation on client B, witness that it ends up with
-        # the latest OSD map from the barrier
-        self.mount_b.run_shell(["touch", "bravo"])
-        self.mount_b.open_no_data("bravo")
+        # the latest OSD map from the barrier.  This shouldn't generate any
+        # cap revokes to A because B was already the last one to touch
+        # a file in root.
+        self.mount_b.run_shell(["touch", "bravo2"])
+        self.mount_b.open_no_data("bravo2")
 
         # Some time passes here because the metadata part of the operation
         # completes immediately, while the resulting OSD map update happens
