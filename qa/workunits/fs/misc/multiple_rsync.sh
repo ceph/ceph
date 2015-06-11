@@ -4,7 +4,7 @@
 # Populate with some arbitrary files from the local system.  Take
 # a copy to protect against false fails from system updates during test.
 export PAYLOAD=/tmp/multiple_rsync_payload.$$
-cp -r /usr/lib/ $PAYLOAD
+sudo cp -r /usr/lib/ $PAYLOAD
 
 set -e
 
