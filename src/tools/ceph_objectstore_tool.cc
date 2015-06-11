@@ -1992,6 +1992,18 @@ int do_import(ObjectStore *store, OSDSuperblock& sb, bool force, string pgidstr)
         cerr << "Can't specify a different pgid pool, must be " << pgid.pool() << std::endl;
         return -EINVAL;
       }
+      if (pgid.is_no_shard() && !user_pgid.is_no_shard()) {
+        cerr << "Can't specify a sharded pgid with a non-sharded export" << std::endl;
+        return -EINVAL;
+      }
+      // Get shard from export information if not specified
+      if (!pgid.is_no_shard() && user_pgid.is_no_shard()) {
+        user_pgid.shard = pgid.shard;
+      }
+      if (pgid.shard != user_pgid.shard) {
+        cerr << "Can't specify a different shard, must be " << pgid.shard << std::endl;
+        return -EINVAL;
+      }
       pgid = user_pgid;
     }
   }
