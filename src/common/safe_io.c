@@ -133,6 +133,8 @@ ssize_t safe_splice(int fd_in, loff_t *off_in, int fd_out, loff_t *off_out,
       }
       if (errno == EINTR)
 	continue;
+      if (errno == EAGAIN)
+	break;
       return -errno;
     }
     cnt += r;
