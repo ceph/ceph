@@ -10,17 +10,14 @@
  *
  */
 
-#include "include/int_types.h"
-
-#if defined(__linux__)
-#include <linux/types.h>
-#elif defined(__FreeBSD__)
-#include <sys/types.h>
-#endif
-
 #ifndef CEPH_CRUSH_LN_H
 #define CEPH_CRUSH_LN_H
 
+#ifdef __KERNEL__
+# include <linux/types.h>
+#else
+# include "crush_compat.h"
+#endif
 
 /*
  * RH_LH_tbl[2*k] = 2^48/(1.0+k/128.0)
