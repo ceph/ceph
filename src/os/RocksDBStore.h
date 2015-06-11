@@ -131,8 +131,6 @@ public:
   class RocksDBTransactionImpl : public KeyValueDB::TransactionImpl {
   public:
     rocksdb::WriteBatch *bat;
-    list<bufferlist> buffers;
-    list<string> keys;
     RocksDBStore *db;
 
     RocksDBTransactionImpl(RocksDBStore *_db);

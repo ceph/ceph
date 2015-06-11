@@ -237,21 +237,19 @@ void RocksDBStore::RocksDBTransactionImpl::set(
   const string &k,
   const bufferlist &to_set_bl)
 {
-  buffers.push_back(to_set_bl);
-  bufferlist &bl = *(buffers.rbegin());
   string key = combine_strings(prefix, k);
-  keys.push_back(key);
-  bat->Delete(rocksdb::Slice(*(keys.rbegin())));
-  bat->Put(rocksdb::Slice(*(keys.rbegin())),
-	  rocksdb::Slice(bl.c_str(), bl.length()));
+  //bufferlist::c_str() is non-constant, so we need to make a copy
+  bufferlist val = to_set_bl;
+  bat->Delete(rocksdb::Slice(key));
+  bat->Put(rocksdb::Slice(key),
+	  rocksdb::Slice(val.c_str(), val.length()));
 }
 
 void RocksDBStore::RocksDBTransactionImpl::rmkey(const string &prefix,
 					         const string &k)
 {
   string key = combine_strings(prefix, k);
-  keys.push_back(key);
-  bat->Delete(rocksdb::Slice(*(keys.rbegin())));
+  bat->Delete(rocksdb::Slice(k));
 }
 
 void RocksDBStore::RocksDBTransactionImpl::rmkeys_by_prefix(const string &prefix)
@@ -261,8 +259,7 @@ void RocksDBStore::RocksDBTransactionImpl::rmkeys_by_prefix(const string &prefix
        it->valid();
        it->next()) {
     string key = combine_strings(prefix, it->key());
-    keys.push_back(key);
-    bat->Delete(*(keys.rbegin()));
+    bat->Delete(key);
   }
 }
 
