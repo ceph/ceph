@@ -235,7 +235,7 @@ struct RecoveryMessages {
   map<pg_shard_t, vector<PushOp> > pushes;
   map<pg_shard_t, vector<PushReplyOp> > push_replies;
   ObjectStore::Transaction *t;
-  RecoveryMessages() : t(new ObjectStore::Transaction) {}
+  RecoveryMessages() : t(NULL) {}
   ~RecoveryMessages() { assert(!t); }
 };
 
@@ -243,6 +243,8 @@ void ECBackend::handle_recovery_push(
   PushOp &op,
   RecoveryMessages *m)
 {
+  assert(m->t);
+
   bool oneshot = op.before_progress.first && op.after_progress.data_complete;
   coll_t tcoll = oneshot ? coll : get_temp_coll(m->t);
   if (op.before_progress.first) {
@@ -442,16 +444,22 @@ void ECBackend::dispatch_recovery_messages(RecoveryMessages &m, int priority)
     msg->compute_cost(cct);
     replies.insert(make_pair(i->first.osd, msg));
   }
-  m.t->register_on_complete(
-    get_parent()->bless_context(
-      new SendPushReplies(
-	get_parent(),
-	get_parent()->get_epoch(),
-	replies)));
-  m.t->register_on_applied(
-    new ObjectStore::C_DeleteTransaction(m.t));
-  get_parent()->queue_transaction(m.t);
-  m.t = NULL;
+
+  if (!replies.empty()) {
+    m.t->register_on_complete(
+	get_parent()->bless_context(
+	  new SendPushReplies(
+	    get_parent(),
+	    get_parent()->get_epoch(),
+	    replies)));
+    m.t->register_on_applied(
+	new ObjectStore::C_DeleteTransaction(m.t));
+    get_parent()->queue_transaction(m.t);
+    m.t = NULL;
+  } else {
+    assert(!m.t);
+  }
+
   if (m.reads.empty())
     return;
   start_read_op(
@@ -687,6 +695,8 @@ bool ECBackend::handle_message(
   case MSG_OSD_PG_PUSH: {
     MOSDPGPush *op = static_cast<MOSDPGPush *>(_op->get_req());
     RecoveryMessages rm;
+    rm.t = new ObjectStore::Transaction;
+    assert(rm.t);
     for (vector<PushOp>::iterator i = op->pushes.begin();
 	 i != op->pushes.end();
 	 ++i) {
