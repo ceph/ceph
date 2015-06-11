@@ -15,25 +15,16 @@
 # include <linux/slab.h>
 # include <linux/bug.h>
 # include <linux/kernel.h>
-# ifndef dprintk
-#  define dprintk(args...)
-# endif
+# include <linux/crush/crush.h>
+# include <linux/crush/hash.h>
 #else
-# include <string.h>
-# include <stdio.h>
-# include <stdlib.h>
-# include <assert.h>
-# define BUG_ON(x) assert(!(x))
-# define dprintk(args...) /* printf(args) */
-# define kmalloc(x, f) malloc(x)
-# define kfree(x) free(x)
-/*# define DEBUG_INDEP*/
-# include "include/int_types.h"
+# include "crush_compat.h"
+# include "crush.h"
+# include "hash.h"
 #endif
-
-#include "crush.h"
-#include "hash.h"
 #include "crush_ln_table.h"
+
+#define dprintk(args...) /* printf(args) */
 
 /*
  * Implement the core CRUSH mapping algorithm.

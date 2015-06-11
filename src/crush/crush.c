@@ -1,15 +1,10 @@
-
 #ifdef __KERNEL__
 # include <linux/slab.h>
+# include <linux/crush/crush.h>
 #else
-# include <stdlib.h>
-# include <assert.h>
-# define kfree(x) do { if (x) free(x); } while (0)
-# define BUG_ON(x) assert(!(x))
-# include "include/int_types.h"
+# include "crush_compat.h"
+# include "crush.h"
 #endif
-
-#include "crush.h"
 
 const char *crush_bucket_alg_name(int alg)
 {
