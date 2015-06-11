@@ -2142,8 +2142,11 @@ int RGWHandler_ObjStore_S3::validate_bucket_name(const string& bucket, bool rela
   if (ret < 0)
     return ret;
 
-  if (bucket.size() == 0)
+  int len = bucket.size();
+  if (len == 0)
     return 0;
+  if (!relaxed_names && len > 63)
+	return -ERR_INVALID_BUCKET_NAME;
 
   // bucket names must start with a number, letter, or underscore
   if (!(isalpha(bucket[0]) || isdigit(bucket[0]))) {
@@ -2153,17 +2156,51 @@ int RGWHandler_ObjStore_S3::validate_bucket_name(const string& bucket, bool rela
       return -ERR_INVALID_BUCKET_NAME;
   } 
 
-  for (const char *s = bucket.c_str(); *s; ++s) {
-    char c = *s;
-    if (isdigit(c) || (c == '.'))
-      continue;
-    if (isalpha(c))
-      continue;
-    if ((c == '-') || (c == '_'))
-      continue;
-    // Invalid character
-    return -ERR_INVALID_BUCKET_NAME;
-  }
+  if (!relaxed_names) {
+  	if (!(isalpha(bucket[len-1]) || isdigit(bucket[len-1]))) {
+  	  return -ERR_INVALID_BUCKET_NAME;
+  	}
+    }
+
+    // in case of non US-Standard regions, a sequence of '.-' , '..' and '-.' is not allowed
+    if (!relaxed_names) {
+  	bool last_char_dot = false; // last character occurred was a '.'
+  	bool last_char_hyphen = false; // last character occurred was a '-'
+  	for (const char *s = bucket.c_str(); *s; ++s) {
+  	  char c = *s;
+  	  if (isdigit(c) || (isalpha(c) && islower(c))) {
+  		last_char_hyphen = false;
+  		last_char_dot = false;
+  		continue;
+  	  }
+  	  if (c == '.') {
+  		if (!(last_char_hyphen || last_char_dot)) {
+  		  last_char_dot = true;
+  		  continue;
+  		}
+  	  }
+  	  if (c == '-') {
+  		if (!last_char_dot) {
+  		  last_char_hyphen = true;
+  		  continue;
+  		}
+  	  }
+  	  // Invalid character
+  	  return -ERR_INVALID_BUCKET_NAME;
+  	}
+    } else {
+  	for (const char *s = bucket.c_str(); *s; ++s) {
+  	  char c = *s;
+  	  if (isdigit(c) || (c == '.'))
+  		continue;
+  	  if (isalpha(c))
+  		continue;
+  	  if ((c == '-') || (c == '_'))
+  		continue;
+  	  // Invalid character
+  	  return -ERR_INVALID_BUCKET_NAME;
+  	}
+    }
 
   if (looks_like_ip_address(bucket.c_str()))
     return -ERR_INVALID_BUCKET_NAME;
