@@ -1,5 +1,3 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
 /*
  * Ceph - scalable distributed file system
  *
@@ -154,7 +152,7 @@ static int bucket_list_choose(struct crush_bucket_list *bucket,
 	int i;
 
 	for (i = bucket->h.size-1; i >= 0; i--) {
-		__u64 w = crush_hash32_4(bucket->h.hash,x, bucket->h.items[i],
+		__u64 w = crush_hash32_4(bucket->h.hash, x, bucket->h.items[i],
 					 r, bucket->h.id);
 		w &= 0xffff;
 		dprintk("list_choose i=%d x=%d r=%d item %d weight %x "
@@ -253,43 +251,46 @@ static int bucket_straw_choose(struct crush_bucket_straw *bucket,
 	return bucket->h.items[high];
 }
 
-// compute 2^44*log2(input+1)
-uint64_t crush_ln(unsigned xin)
+/* compute 2^44*log2(input+1) */
+static __u64 crush_ln(unsigned int xin)
 {
-    unsigned x=xin, x1;
-    int iexpon, index1, index2;
-    uint64_t RH, LH, LL, xl64, result;
+	unsigned int x = xin, x1;
+	int iexpon, index1, index2;
+	__u64 RH, LH, LL, xl64, result;
 
-    x++;
+	x++;
 
-    // normalize input
-    iexpon = 15;
-    while(!(x&0x18000)) { x<<=1; iexpon--; }
+	/* normalize input */
+	iexpon = 15;
+	while (!(x & 0x18000)) {
+		x <<= 1;
+		iexpon--;
+	}
 
-    index1 = (x>>8)<<1;
-    // RH ~ 2^56/index1
-    RH = __RH_LH_tbl[index1 - 256];
-    // LH ~ 2^48 * log2(index1/256)
-    LH = __RH_LH_tbl[index1 + 1 - 256];
+	index1 = (x >> 8) << 1;
+	/* RH ~ 2^56/index1 */
+	RH = __RH_LH_tbl[index1 - 256];
+	/* LH ~ 2^48 * log2(index1/256) */
+	LH = __RH_LH_tbl[index1 + 1 - 256];
 
-    // RH*x ~ 2^48 * (2^15 + xf), xf<2^8
-    xl64 = (int64_t)x * RH;
-    xl64 >>= 48;
-    x1 = xl64;
+	/* RH*x ~ 2^48 * (2^15 + xf), xf<2^8 */
+	xl64 = (__s64)x * RH;
+	xl64 >>= 48;
+	x1 = xl64;
 
-    result = iexpon;
-    result <<= (12 + 32);
+	result = iexpon;
+	result <<= (12 + 32);
 
-    index2 = x1 & 0xff;
-    // LL ~ 2^48*log2(1.0+index2/2^15)
-    LL = __LL_tbl[index2];
+	index2 = x1 & 0xff;
+	/* LL ~ 2^48*log2(1.0+index2/2^15) */
+	LL = __LL_tbl[index2];
 
-    LH = LH + LL;
+	LH = LH + LL;
 
-    LH >>= (48-12 - 32);
-    result += LH;
+	LH >>= (48 - 12 - 32);
+	result += LH;
 
-    return result;
+	return result;
 }
 
 
@@ -305,9 +306,9 @@ uint64_t crush_ln(unsigned xin)
 static int bucket_straw2_choose(struct crush_bucket_straw2 *bucket,
 				int x, int r)
 {
-	unsigned i, high = 0;
-	unsigned u;
-	unsigned w;
+	unsigned int i, high = 0;
+	unsigned int u;
+	unsigned int w;
 	__s64 ln, draw, high_draw = 0;
 
 	for (i = 0; i < bucket->h.size; i++) {
@@ -758,9 +759,9 @@ static void crush_choose_indep(const struct crush_map *map,
 			out2[rep] = CRUSH_ITEM_NONE;
 		}
 	}
-        if (map->choose_tries && ftotal <= map->choose_total_tries)
-          map->choose_tries[ftotal]++;
 
+	if (map->choose_tries && ftotal <= map->choose_total_tries)
+		map->choose_tries[ftotal]++;
 #ifdef DEBUG_INDEP
 	if (out2) {
 		printf("%u %d a: ", ftotal, left);
@@ -933,7 +934,7 @@ int crush_do_rule(const struct crush_map *map,
 						0);
 				} else {
 					out_size = ((numrep < (result_max-osize)) ?
-                                                    numrep : (result_max-osize));
+						    numrep : (result_max-osize));
 					crush_choose_indep(
 						map,
 						map->buckets[-1-w[i]],
@@ -979,5 +980,3 @@ int crush_do_rule(const struct crush_map *map,
 	}
 	return result_len;
 }
-
-
