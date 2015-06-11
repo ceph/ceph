@@ -1365,6 +1365,13 @@ TEST(ghobject_t, cmp) {
   sep.hobj.pool = -1;
   cout << min << " < " << sep << std::endl;
   ASSERT_LT(min, sep);
+
+  sep.set_shard(shard_id_t::NO_SHARD);
+  cout << "sep shard " << sep.shard_id << std::endl;
+  ghobject_t o(hobject_t(object_t(), string(), CEPH_NOSNAP, 0x42,
+			 1, string()));
+  cout << "o " << o << std::endl;
+  ASSERT_GT(o, sep);
 }
 
 /*
