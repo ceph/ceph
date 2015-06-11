@@ -3354,64 +3354,107 @@ int FileStore::_do_copy_range(int from, int to, uint64_t srcoff, uint64_t len, u
 {
   dout(20) << "_do_copy_range " << srcoff << "~" << len << " to " << dstoff << dendl;
   int r = 0;
-  int64_t actual;
-
-  actual = ::lseek64(from, srcoff, SEEK_SET);
-  if (actual != (int64_t)srcoff) {
-    r = errno;
-    derr << "lseek64 to " << srcoff << " got " << cpp_strerror(r) << dendl;
-    return r;
-  }
-  actual = ::lseek64(to, dstoff, SEEK_SET);
-  if (actual != (int64_t)dstoff) {
-    r = errno;
-    derr << "lseek64 to " << dstoff << " got " << cpp_strerror(r) << dendl;
-    return r;
-  }
-
   loff_t pos = srcoff;
   loff_t end = srcoff + len;
-  int buflen = 4096*32;
-  char buf[buflen];
-  while (pos < end) {
-    int l = MIN(end-pos, buflen);
-    r = ::read(from, buf, l);
-    dout(25) << "  read from " << pos << "~" << l << " got " << r << dendl;
-    if (r < 0) {
-      if (errno == EINTR) {
-	continue;
-      } else {
-	r = -errno;
-	derr << "FileStore::_do_copy_range: read error at " << pos << "~" << len
-	     << ", " << cpp_strerror(r) << dendl;
-	break;
-      }
-    }
-    if (r == 0) {
-      // hrm, bad source range, wtf.
-      r = -ERANGE;
-      derr << "FileStore::_do_copy_range got short read result at " << pos
-	      << " of fd " << from << " len " << len << dendl;
-      break;
-    }
-    int op = 0;
-    while (op < r) {
-      int r2 = safe_write(to, buf+op, r-op);
-      dout(25) << " write to " << to << " len " << (r-op)
-	       << " got " << r2 << dendl;
-      if (r2 < 0) {
-	r = r2;
-	derr << "FileStore::_do_copy_range: write error at " << pos << "~"
-	     << r-op << ", " << cpp_strerror(r) << dendl;
+  int buflen = 4096 * 16; //limit by pipe max size.see fcntl
 
+#ifdef CEPH_HAVE_SPLICE
+  if (backend->has_splice()) {
+    int pipefd[2];
+    if (pipe(pipefd) < 0) {
+      r = errno;
+      derr << " pipe " << " got " << cpp_strerror(r) << dendl;
+      return r;
+    }
+
+    loff_t dstpos = dstoff;
+    while (pos < end) {
+      int l = MIN(end-pos, buflen);
+      r = safe_splice(from, &pos, pipefd[1], NULL, l, SPLICE_F_NONBLOCK);
+      dout(10) << "  safe_splice read from " << pos << "~" << l << " got " << r << dendl;
+      if (r < 0) {
+	derr << "FileStore::_do_copy_range: safe_splice read error at " << pos << "~" << len
+	  << ", " << cpp_strerror(r) << dendl;
 	break;
       }
-      op += (r-op);
+      if (r == 0) {
+	// hrm, bad source range, wtf.
+	r = -ERANGE;
+	derr << "FileStore::_do_copy_range got short read result at " << pos
+	  << " of fd " << from << " len " << len << dendl;
+	break;
+      }
+
+      r = safe_splice(pipefd[0], NULL, to, &dstpos, r, 0);
+      dout(10) << " safe_splice write to " << to << " len " << r
+	<< " got " << r << dendl;
+      if (r < 0) {
+	derr << "FileStore::_do_copy_range: write error at " << pos << "~"
+	  << r << ", " << cpp_strerror(r) << dendl;
+	break;
+      }
     }
-    if (r < 0)
-      break;
-    pos += r;
+  } else
+#endif
+  {
+    int64_t actual;
+
+    actual = ::lseek64(from, srcoff, SEEK_SET);
+    if (actual != (int64_t)srcoff) {
+      r = errno;
+      derr << "lseek64 to " << srcoff << " got " << cpp_strerror(r) << dendl;
+      return r;
+    }
+    actual = ::lseek64(to, dstoff, SEEK_SET);
+    if (actual != (int64_t)dstoff) {
+      r = errno;
+      derr << "lseek64 to " << dstoff << " got " << cpp_strerror(r) << dendl;
+      return r;
+    }
+
+    char buf[buflen];
+    while (pos < end) {
+      int l = MIN(end-pos, buflen);
+      r = ::read(from, buf, l);
+      dout(25) << "  read from " << pos << "~" << l << " got " << r << dendl;
+      if (r < 0) {
+	if (errno == EINTR) {
+	  continue;
+	} else {
+	  r = -errno;
+	  derr << "FileStore::_do_copy_range: read error at " << pos << "~" << len
+	    << ", " << cpp_strerror(r) << dendl;
+	  break;
+	}
+      }
+      if (r == 0) {
+	// hrm, bad source range, wtf.
+	r = -ERANGE;
+	derr << "FileStore::_do_copy_range got short read result at " << pos
+	  << " of fd " << from << " len " << len << dendl;
+	break;
+      }
+      int op = 0;
+      while (op < r) {
+	int r2 = safe_write(to, buf+op, r-op);
+	dout(25) << " write to " << to << " len " << (r-op)
+	  << " got " << r2 << dendl;
+	if (r2 < 0) {
+	  r = r2;
+	  derr << "FileStore::_do_copy_range: write error at " << pos << "~"
+	    << r-op << ", " << cpp_strerror(r) << dendl;
+
+	  break;
+	}
+	op += (r-op);
+      }
+      if (r < 0)
+	break;
+      pos += r;
+    }
   }
+
+  assert(pos == end);
   if (r >= 0 && !skip_sloppycrc && m_filestore_sloppy_crc) {
     int rc = backend->_crc_update_clone_range(from, to, srcoff, len, dstoff);
     assert(rc >= 0);
