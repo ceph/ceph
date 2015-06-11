@@ -3283,8 +3283,6 @@ int FileStore::_do_sparse_copy_range(int from, int to, uint64_t srcoff, uint64_t
   if (fiemap->fm_mapped_extents == 0)
     return r;
 
-  int buflen = 4096*32;
-  char buf[buflen];
   struct fiemap_extent *extent = &fiemap->fm_extents[0];
 
   /* start where we were asked to start */
@@ -3316,61 +3314,10 @@ int FileStore::_do_sparse_copy_range(int from, int to, uint64_t srcoff, uint64_t
     if (extent->fe_logical + extent->fe_length > srcoff + len)
       extent->fe_length = srcoff + len - extent->fe_logical;
 
-    int64_t actual;
-
-    actual = ::lseek64(from, extent->fe_logical, SEEK_SET);
-    if (actual != (int64_t)extent->fe_logical) {
-      r = errno;
-      derr << "lseek64 to " << srcoff << " got " << cpp_strerror(r) << dendl;
-      return r;
-    }
-    actual = ::lseek64(to, extent->fe_logical - srcoff + dstoff, SEEK_SET);
-    if (actual != (int64_t)(extent->fe_logical - srcoff + dstoff)) {
-      r = errno;
-      derr << "lseek64 to " << dstoff << " got " << cpp_strerror(r) << dendl;
-      return r;
-    }
-
-    loff_t pos = 0;
-    loff_t end = extent->fe_length;
-    while (pos < end) {
-      int l = MIN(end-pos, buflen);
-      r = ::read(from, buf, l);
-      dout(25) << "  read from " << pos << "~" << l << " got " << r << dendl;
-      if (r < 0) {
-        if (errno == EINTR) {
-          continue;
-        } else {
-          r = -errno;
-          derr << __func__ << ": read error at " << pos << "~" << len
-              << ", " << cpp_strerror(r) << dendl;
-          break;
-        }
-      }
-      if (r == 0) {
-        r = -ERANGE;
-        derr << __func__ << " got short read result at " << pos
-             << " of fd " << from << " len " << len << dendl;
-        break;
-      }
-      int op = 0;
-      while (op < r) {
-        int r2 = safe_write(to, buf+op, r-op);
-        dout(25) << " write to " << to << " len " << (r-op)
-                 << " got " << r2 << dendl;
-        if (r2 < 0) {
-          r = r2;
-          derr << __func__ << ": write error at " << pos << "~"
-               << r-op << ", " << cpp_strerror(r) << dendl;
-          break;
-        }
-        op += (r-op);
-      }
-      if (r < 0)
-        goto out;
-      pos += r;
-    }
-    written += end;
+    r = _do_copy_range(from, to, extent->fe_logical, extent->fe_length, extent->fe_logical - srcoff + dstoff, true);
+    if (r < 0)
+      goto out;
+    written += extent->fe_length;
     i++;
     extent++;
   }
@@ -3403,7 +3350,7 @@ int FileStore::_do_sparse_copy_range(int from, int to, uint64_t srcoff, uint64_t
   return r;
 }
 
-int FileStore::_do_copy_range(int from, int to, uint64_t srcoff, uint64_t len, uint64_t dstoff)
+int FileStore::_do_copy_range(int from, int to, uint64_t srcoff, uint64_t len, uint64_t dstoff, bool skip_sloppycrc)
 {
   dout(20) << "_do_copy_range " << srcoff << "~" << len << " to " << dstoff << dendl;
   int r = 0;
@@ -3465,7 +3412,7 @@ int FileStore::_do_copy_range(int from, int to, uint64_t srcoff, uint64_t len, u
       break;
     pos += r;
   }
-  if (r >= 0 && m_filestore_sloppy_crc) {
+  if (r >= 0 && !skip_sloppycrc && m_filestore_sloppy_crc) {
     int rc = backend->_crc_update_clone_range(from, to, srcoff, len, dstoff);
     assert(rc >= 0);
   }
