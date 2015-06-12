@@ -145,8 +145,10 @@ def json_matching_statuses(json_file_or_str, statuses):
     return_statuses = list()
     for status in statuses:
         for k, v in query.iteritems():
-            if misc.is_in_dict(k, v, status):
-                return_statuses.append(status)
+            if not misc.is_in_dict(k, v, status):
+                break
+        else:
+            return_statuses.append(status)
 
     return return_statuses
 
