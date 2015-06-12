@@ -16,9 +16,6 @@ from .config import config
 from .lockstatus import get_status
 
 log = logging.getLogger(__name__)
-# Don't need to see connection pool INFO messages
-logging.getLogger("requests.packages.urllib3.connectionpool").setLevel(
-    logging.WARNING)
 
 is_vpm = lambda name: 'vpm' in name
 
