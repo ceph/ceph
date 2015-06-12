@@ -624,21 +624,32 @@ def need_to_install_distro(remote):
     output, err_mess = StringIO(), StringIO()
     remote.run(args=['uname', '-r'], stdout=output)
     current = output.getvalue().strip()
+    installed_version = None
     if package_type == 'rpm':
         remote.run(args=['sudo', 'yum', 'install', '-y', 'kernel'],
-                        stdout=output)
-        if 'Nothing to do' in output.getvalue():
+                   stdout=output)
+        install_stdout = output.getvalue()
+        match = re.search(
+            "Package (.*) already installed",
+            install_stdout, flags=re.MULTILINE)
+        installed_version = match.groups()[0] if match else ''
+        if 'Nothing to do' in install_stdout:
             err_mess.truncate(0)
             remote.run(args=['echo', 'no', run.Raw('|'), 'sudo', 'yum',
-                                  'reinstall', 'kernel', run.Raw('||'),
-                                  'true'], stderr=err_mess)
-            if 'Skipping the running kernel' in err_mess.getvalue():
-                # Current running kernel is already newest and updated
-                log.info('Newest distro kernel already installed/running')
-                return False
+                             'reinstall', 'kernel', run.Raw('||'), 'true'],
+                       stderr=err_mess)
+            reinstall_stderr = err_mess.getvalue()
+            if 'Skipping the running kernel' in reinstall_stderr:
+                running_version = re.search(
+                    "Skipping the running kernel: (.*)",
+                    reinstall_stderr, flags=re.MULTILINE).groups()[0]
+                if installed_version == running_version:
+                    log.info(
+                        'Newest distro kernel already installed and running')
+                    return False
             else:
-                remote.run(args=['sudo', 'yum', 'reinstall', '-y',
-                                      'kernel', run.Raw('||'), 'true'])
+                remote.run(args=['sudo', 'yum', 'reinstall', '-y', 'kernel',
+                                 run.Raw('||'), 'true'])
         # reset stringIO output.
         output.truncate(0)
         remote.run(args=['rpm', '-q', 'kernel', '--last'], stdout=output)
