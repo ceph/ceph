@@ -622,7 +622,7 @@ int RGWMetadataManager::set_attrs(RGWMetadataHandler *handler, string& key,
   if (ret < 0)
     return ret;
 
-  ret = store->set_attrs(NULL, obj, attrs, rmattrs, objv_tracker);
+  ret = store->system_obj_set_attrs(NULL, obj, attrs, rmattrs, objv_tracker);
   /* cascading ret into post_modify() */
 
   ret = post_modify(handler, section, key, log_data, objv_tracker, ret);
