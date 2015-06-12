@@ -515,6 +515,14 @@ public:
     calc_str();
   }
 
+  // named constructors
+  static coll_t meta() {
+    return coll_t();
+  }
+  static coll_t pg(spg_t p) {
+    return coll_t(p);
+  }
+
   const std::string& to_str() const {
     return _str;
   }
