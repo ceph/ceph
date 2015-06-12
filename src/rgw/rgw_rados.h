@@ -684,8 +684,47 @@ struct RGWListRawObjsCtx {
   RGWListRawObjsCtx() : initialized(false) {}
 };
 
-struct RGWRegion;
+struct RGWDefaultSystemMetaObjInfo {
+  string default_id;
 
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(default_id, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::iterator& bl) {
+    DECODE_START(1, bl);
+    ::decode(default_id, bl);
+    DECODE_FINISH(bl);
+  }
+
+  void dump(Formatter *f) const;
+  void decode_json(JSONObj *obj);
+};
+WRITE_CLASS_ENCODER(RGWDefaultSystemMetaObjInfo)
+
+struct RGWNameToId {
+  string obj_id;
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(obj_id, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::iterator& bl) {
+    DECODE_START(1, bl);
+    ::decode(obj_id, bl);
+    DECODE_FINISH(bl);
+  }
+
+  void dump(Formatter *f) const;
+  void decode_json(JSONObj *obj);
+};
+WRITE_CLASS_ENCODER(RGWNameToId)
+
+struct RGWRegion;
 
 struct RGWZonePlacementInfo {
   string index_pool;
@@ -986,6 +1025,7 @@ struct RGWRegionMap {
   void decode_json(JSONObj *obj);
 };
 WRITE_CLASS_ENCODER(RGWRegionMap)
+
 
 class RGWDataChangesLog;
 class RGWReplicaLogger;

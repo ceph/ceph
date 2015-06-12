@@ -609,6 +609,22 @@ void rgw_obj::dump(Formatter *f) const
   encode_json("instance", instance, f);
 }
 
+void RGWDefaultSystemMetaObjInfo::dump(Formatter *f) const {
+  encode_json("default_id", default_id, f);
+}
+
+void RGWDefaultSystemMetaObjInfo::decode_json(JSONObj *obj) {
+  JSONDecoder::decode_json("default_id", default_id, obj);
+}
+
+void RGWNameToId::dump(Formatter *f) const {
+  encode_json("obj_id", obj_id, f);
+}
+
+void RGWNameToId::decode_json(JSONObj *obj) {
+  JSONDecoder::decode_json("obj_id", obj_id, obj);
+}
+
 void RGWZoneParams::dump(Formatter *f) const
 {
   encode_json("domain_root", domain_root.data_pool, f);
