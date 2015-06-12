@@ -205,6 +205,7 @@ struct crush_map {
 	 * mappings line up a bit better with previous mappings. */
 	__u8 chooseleaf_vary_r;
 
+#ifndef __KERNEL__
 	/*
 	 * version 0 (original) of straw_calc has various flaws.  version 1
 	 * fixes a few of them.
@@ -221,6 +222,7 @@ struct crush_map {
 	__u32 allowed_bucket_algs;
 
 	__u32 *choose_tries;
+#endif
 };
 
 
