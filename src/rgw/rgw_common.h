@@ -608,7 +608,6 @@ struct rgw_bucket {
     bucket_id = b.bucket_id;
   }
   rgw_bucket(const char *n) : name(n) {
-    assert(*n == '.'); // only rgw private buckets should be initialized without pool
     data_pool = index_pool = n;
     marker = "";
   }

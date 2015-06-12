@@ -574,7 +574,7 @@ int RGWBucket::link(RGWBucketAdminOpState& op_state, std::string *err_msg)
     aclbl.clear();
     policy.encode(aclbl);
 
-    r = store->set_attr(NULL, obj, RGW_ATTR_ACL, aclbl, &objv_tracker);
+    r = store->system_obj_set_attr(NULL, obj, RGW_ATTR_ACL, aclbl, &objv_tracker);
     if (r < 0)
       return r;
 

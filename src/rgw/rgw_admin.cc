@@ -2213,7 +2213,7 @@ next:
 
     RGWObjState *state;
 
-    int ret = store->get_obj_state(&rctx, obj, &state, NULL, false); /* don't follow olh */
+    int ret = store->get_obj_state(&rctx, obj, &state, false); /* don't follow olh */
     if (ret < 0) {
       return ret;
     }
