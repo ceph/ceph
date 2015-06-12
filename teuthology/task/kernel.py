@@ -654,7 +654,7 @@ def need_to_install_distro(remote):
 
     output.close()
     err_mess.close()
-    if current in newest:
+    if current in newest or current.replace('-', '_') in newest:
         return False
     log.info(
         'Not newest distro kernel. Curent: {cur} Expected: {new}'.format(
