@@ -65,7 +65,6 @@ PACKAGES['ceph']['rpm'] = [
     'rbd-fuse',
 ]
 
-
 def _get_config_value_for_remote(ctx, remote, config, key):
     """
     Look through config, and attempt to determine the "best" value to use for a
@@ -925,6 +924,122 @@ def _upgrade_deb_packages(ctx, config, remote, debs):
     )
 
 
+@contextlib.contextmanager
+def rh_install(ctx, config):
+    """
+    Installs rh ceph on all hosts in ctx.
+
+    :param ctx: the argparse.Namespace object
+    :param config: the config dict
+    """
+    version = config['rhbuild']
+    rh_versions = ['1.3.0']
+    if version in rh_versions:
+        log.info("%s is a supported version", version)
+    else:
+        raise RuntimeError("Unsupported RH Ceph version %s", version)
+
+    with parallel() as p:
+        for remote in ctx.cluster.remotes.iterkeys():
+            if remote.os.name == 'rhel':
+                log.info("Installing on RHEL node: %s", remote.shortname)
+                p.spawn(rh_install_pkgs, ctx, remote, version)
+            else:
+                log.info("Node %s is not RHEL", remote.shortname)
+                raise RuntimeError("Test requires RHEL nodes")
+    try:
+        yield
+    finally:
+        if config.get('skip_uninstall'):
+            log.info("Skipping uninstall of Ceph")
+        else:
+            rh_uninstall(ctx=ctx, config=config)
+
+
+def rh_uninstall(ctx, config):
+    """
+     Uninstalls rh ceph on all hosts.
+     It actually spawns rh_uninstall_pkgs() on the remotes for uninstall.
+
+    :param ctx: the argparse.Namespace object
+    :param config: the config dict
+    """
+    with parallel() as p:
+        for remote in ctx.cluster.remotes.iterkeys():
+            p.spawn(rh_uninstall_pkgs, ctx, remote)
+
+
+def rh_install_pkgs(ctx, remote, installed_version):
+    """
+    Installs RH build using ceph-deploy.
+
+    :param ctx: the argparse.Namespace object
+    :param remote: the teuthology.orchestra.remote.Remote object
+    """
+    pkgs = ['ceph-deploy']
+    rh_version_check = {'0.94.1': '1.3.0'}
+    for pkg in pkgs:
+        log.info("Check if ceph-deploy is already installed on node %s", remote.shortname)
+        remote.run(args=['sudo', 'yum', 'clean', 'metadata'])
+        r = remote.run(
+             args=['yum', 'list', 'installed', run.Raw(pkg)],
+             stdout=StringIO(),
+             check_status=False,
+            )
+        if r.stdout.getvalue().find(pkg) == -1:
+            log.info("Installing %s " % pkg)
+            remote.run(args=['sudo', 'yum', 'install', pkg, '-y'])
+        else:
+            log.info("Removing and reinstalling ceph-deploy on %s", remote.shortname)
+            remote.run(args=['sudo', 'yum', 'remove', pkg, '-y'])
+            remote.run(args=['sudo', 'yum', 'install', pkg, '-y'])
+
+    log.info("Check if ceph is already installed on %s", remote.shortname)
+    r = remote.run(
+          args=['yum', 'list', 'installed','ceph'],
+          stdout=StringIO(),
+          check_status=False,
+        )
+    host = r.hostname
+    if r.stdout.getvalue().find('ceph') == -1:
+        log.info("Install ceph using ceph-deploy on %s", remote.shortname)
+        remote.run(args=['sudo', 'ceph-deploy', 'install', run.Raw('--no-adjust-repos'), host])
+        remote.run(args=['sudo', 'yum', 'install', 'ceph-test', '-y'])
+    else:
+        log.info("Removing and reinstalling Ceph on %s", remote.shortname)
+        remote.run(args=['sudo', 'ceph-deploy', 'uninstall', host])
+        remote.run(args=['sudo', 'ceph-deploy', 'purgedata', host])
+        remote.run(args=['sudo', 'ceph-deploy', 'install', host])
+        remote.run(args=['sudo', 'yum', 'remove', 'ceph-test', '-y'])
+        remote.run(args=['sudo', 'yum', 'install', 'ceph-test', '-y'])
+
+    # check package version
+    version = packaging.get_package_version(remote, 'ceph')
+    log.info("Node: {n} Ceph version installed is {v}".format(n=remote.shortname,v=version))
+    if rh_version_check[version] == installed_version:
+        log.info("Installed version matches on %s", remote.shortname)
+    else:
+        raise RuntimeError("Version check failed on node %s", remote.shortname)
+
+
+def rh_uninstall_pkgs(ctx, remote):
+    """
+    Removes Ceph from all RH hosts
+
+    :param ctx: the argparse.Namespace object
+    :param remote: the teuthology.orchestra.remote.Remote object
+    """
+    log.info("uninstalling packages using ceph-deploy on node %s", remote.shortname)
+    r = remote.run(args=['date'], check_status=False)
+    host = r.hostname
+    remote.run(args=['sudo', 'ceph-deploy', 'uninstall', host])
+    time.sleep(4)
+    remote.run(args=['sudo', 'ceph-deploy', 'purgedata', host])
+    log.info("Uninstalling ceph-deploy")
+    remote.run(args=['sudo', 'yum', 'remove', 'ceph-deploy', '-y'], check_status=False)
+    remote.run(args=['sudo', 'yum', 'remove', 'ceph-test', '-y'], check_status=False)
+
+
 def _upgrade_rpm_packages(ctx, config, remote, pkgs):
     """
     Upgrade project's packages on remote RPM-based host
@@ -1246,6 +1361,8 @@ def task(ctx, config):
         project: samba
         branch: foo
         extra_packages: ['samba']
+    - install:
+        rhbuild: 1.2.3
 
     Overrides are project specific:
 
@@ -1254,6 +1371,8 @@ def task(ctx, config):
         ceph:
           sha1: ...
 
+    When passed 'rhbuild' as a key, it will attempt to install an rh ceph build using ceph-deploy
+
     :param ctx: the argparse.Namespace object
     :param config: the config dict
     """
@@ -1261,6 +1380,11 @@ def task(ctx, config):
         config = {}
     assert isinstance(config, dict), \
         "task install only supports a dictionary for configuration"
+
+    rhbuild = None
+    if config.get('rhbuild'):
+        rhbuild = config.get('rhbuild')
+        log.info("Build is %s " % rhbuild)
 
     project, = config.get('project', 'ceph'),
     log.debug('project %s' % project)
@@ -1275,17 +1399,24 @@ def task(ctx, config):
 
     ctx.summary['flavor'] = flavor
 
-    with contextutil.nested(
-        lambda: install(ctx=ctx, config=dict(
-            branch=config.get('branch'),
-            tag=config.get('tag'),
-            sha1=config.get('sha1'),
-            flavor=flavor,
-            extra_packages=config.get('extra_packages', []),
-            extras=config.get('extras', None),
-            wait_for_package=ctx.config.get('wait_for_package', False),
-            project=project,
-        )),
-        lambda: ship_utilities(ctx=ctx, config=None),
-    ):
-        yield
+    if config.get('rhbuild'):
+        with contextutil.nested(
+            lambda: rh_install(ctx=ctx, config=config),
+            lambda: ship_utilities(ctx=ctx, config=None)
+        ):
+            yield
+    else:
+        with contextutil.nested(
+            lambda: install(ctx=ctx, config=dict(
+                branch=config.get('branch'),
+                tag=config.get('tag'),
+                sha1=config.get('sha1'),
+                flavor=flavor,
+                extra_packages=config.get('extra_packages', []),
+                extras=config.get('extras', None),
+                wait_for_package=ctx.config.get('wait_for_package', False),
+                project=project,
+            )),
+            lambda: ship_utilities(ctx=ctx, config=None),
+        ):
+            yield
