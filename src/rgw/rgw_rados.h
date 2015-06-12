@@ -1318,6 +1318,7 @@ public:
 };
 WRITE_CLASS_ENCODER(RGWPeriod)
 
+
 class RGWDataChangesLog;
 class RGWReplicaLogger;
   
