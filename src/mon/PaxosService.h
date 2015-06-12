@@ -322,6 +322,7 @@ public:
   bool dispatch(PaxosServiceMessage *m);
 
   void refresh(bool *need_bootstrap);
+  void post_refresh();
 
   /**
    * @defgroup PaxosService_h_override_funcs Functions that should be
