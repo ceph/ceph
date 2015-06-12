@@ -104,7 +104,8 @@ public:
   }
 
   MOSDRepOp()
-    : Message(MSG_OSD_REPOP, HEAD_VERSION, COMPAT_VERSION) { }
+    : Message(MSG_OSD_REPOP, HEAD_VERSION, COMPAT_VERSION),
+      map_epoch(0), acks_wanted (0) {}
   MOSDRepOp(osd_reqid_t r, pg_shard_t from,
 	    spg_t p, const hobject_t& po, int aw,
 	    epoch_t mape, ceph_tid_t rtid, eversion_t v)
