@@ -212,6 +212,7 @@ MDCache::MDCache(MDS *m) :
 
   decayrate.set_halflife(g_conf->mds_decay_halflife);
 
+  memset(&default_file_layout, 0, sizeof(default_file_layout));
   memset(&default_log_layout, 0, sizeof(default_log_layout));
 
   did_shutdown_log_cap = false;
