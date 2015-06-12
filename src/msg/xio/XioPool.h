@@ -107,24 +107,7 @@ public:
     }
   }
 
-  void dump(const char* tag, uint64_t serial) {
-    std::cout
-      << tag << " #" << serial << ": "
-      << "pool objs: "
-      << "64: " << ctr_set[SLAB_64].read() << " "
-      << "256: " << ctr_set[SLAB_256].read() << " "
-      << "1024: " << ctr_set[SLAB_1024].read() << " "
-      << "page: " << ctr_set[SLAB_PAGE].read() << " "
-      << "max: " << ctr_set[SLAB_MAX].read() << " "
-      << "overflow: " << ctr_set[SLAB_OVERFLOW].read() << " "
-      << std::endl;
-    std::cout
-      << tag << " #" << serial << ": "
-      << " msg objs: "
-      << "in: " << hook_cnt.read() << " "
-      << "out: " << msg_cnt.read() << " "
-      << std::endl;
-  }
+  void dump(const char* tag, uint64_t serial);
 
   void inc(uint64_t size) {
     if (size <= 64) {
