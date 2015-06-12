@@ -597,7 +597,8 @@ def wait_for_reboot(ctx, need_install, timeout, distro=False):
             log.info('Checking client {client} for new kernel version...'.format(client=client))
             try:
                 if distro:
-                    assert not need_to_install_distro(ctx, client), \
+                    (remote,) = ctx.cluster.only(client).remotes.keys()
+                    assert not need_to_install_distro(remote), \
                             'failed to install new distro kernel version within timeout'
 
                 else:
@@ -612,24 +613,23 @@ def wait_for_reboot(ctx, need_install, timeout, distro=False):
         time.sleep(1)
 
 
-def need_to_install_distro(ctx, role):
+def need_to_install_distro(remote):
     """
     Installing kernels on rpm won't setup grub/boot into them.  This installs
     the newest kernel package and checks its version and compares against
     current (uname -r) and returns true if newest != current.  Similar check
     for deb.
     """
-    (role_remote,) = ctx.cluster.only(role).remotes.keys()
-    package_type = role_remote.os.package_type
+    package_type = remote.os.package_type
     output, err_mess = StringIO(), StringIO()
-    role_remote.run(args=['uname', '-r'], stdout=output)
+    remote.run(args=['uname', '-r'], stdout=output)
     current = output.getvalue().strip()
     if package_type == 'rpm':
-        role_remote.run(args=['sudo', 'yum', 'install', '-y', 'kernel'],
+        remote.run(args=['sudo', 'yum', 'install', '-y', 'kernel'],
                         stdout=output)
         if 'Nothing to do' in output.getvalue():
             err_mess.truncate(0)
-            role_remote.run(args=['echo', 'no', run.Raw('|'), 'sudo', 'yum',
+            remote.run(args=['echo', 'no', run.Raw('|'), 'sudo', 'yum',
                                   'reinstall', 'kernel', run.Raw('||'),
                                   'true'], stderr=err_mess)
             if 'Skipping the running kernel' in err_mess.getvalue():
@@ -637,11 +637,11 @@ def need_to_install_distro(ctx, role):
                 log.info('Newest distro kernel already installed/running')
                 return False
             else:
-                role_remote.run(args=['sudo', 'yum', 'reinstall', '-y',
+                remote.run(args=['sudo', 'yum', 'reinstall', '-y',
                                       'kernel', run.Raw('||'), 'true'])
         # reset stringIO output.
         output.truncate(0)
-        role_remote.run(args=['rpm', '-q', 'kernel', '--last'], stdout=output)
+        remote.run(args=['rpm', '-q', 'kernel', '--last'], stdout=output)
         for kernel in output.getvalue().split():
             if kernel.startswith('kernel'):
                 if 'ceph' not in kernel:
@@ -649,8 +649,8 @@ def need_to_install_distro(ctx, role):
                     break
 
     if package_type == 'deb':
-        distribution = role_remote.os.name
-        newest = get_latest_image_version_deb(role_remote, distribution)
+        distribution = remote.os.name
+        newest = get_latest_image_version_deb(remote, distribution)
 
     output.close()
     err_mess.close()
@@ -1110,7 +1110,7 @@ def task(ctx, config):
                 need_install[role] = path
                 need_version[role] = sha1
         elif role_config.get('sha1') == 'distro':
-            if need_to_install_distro(ctx, role):
+            if need_to_install_distro(role_remote):
                 need_install[role] = 'distro'
                 need_version[role] = 'distro'
         elif role_config.get("koji") or role_config.get('koji_task'):
