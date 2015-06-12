@@ -91,7 +91,7 @@ def ceph_log(ctx, config):
             self.thread = gevent.spawn(self.invoke_logrotate)
 
         def end(self):
-            self.stopping = True
+            self.stop_event.set()
             self.thread.get()
             
     def write_rotate_conf(ctx, daemons):
