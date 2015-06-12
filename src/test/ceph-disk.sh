@@ -24,6 +24,9 @@ DIR=test-ceph-disk
 virtualenv virtualenv-$DIR
 . virtualenv-$DIR/bin/activate
 (
+    # older versions of pip will not install wrap_console scripts
+    # when using wheel packages
+    pip install --upgrade 'pip >= 6.1'
     if test -d ceph-detect-init/wheelhouse ; then
         wheelhouse="--no-index --use-wheel --find-links=ceph-detect-init/wheelhouse"
     fi

@@ -333,8 +333,17 @@ public:
     min_rule = max_rule = rule;
   }
 
+  /**
+   * check if any bucket/nodes is referencing an unknown name or type
+   * @param max_id rejects any non-bucket items with id less than this number,
+   *               pass 0 to disable this check
+   * @return false if an dangling name/type is referenced or an item id is too
+   *         large, true otherwise
+   */
+  bool check_name_maps(unsigned max_id = 0) const;
   int test();
   int test_with_crushtool(const char *crushtool_cmd = "crushtool",
+			  int max_id = -1,
 			  int timeout = 0);
 };
 

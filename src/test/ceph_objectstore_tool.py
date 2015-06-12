@@ -588,6 +588,22 @@ def main(argv):
     cmd = (CFSD_PREFIX + "--op export --pgid {pg} --file -").format(osd=ONEOSD, pg=ONEPG)
     ERRORS += test_failure_tty(cmd, "stdout is a tty and no --file filename specified")
 
+    # Prep a valid ec export file for import failure tests
+    ONEECPG = ALLECPGS[0]
+    osds = get_osds(ONEECPG, OSDDIR)
+    ONEECOSD = osds[0]
+    OTHERFILE = "/tmp/foo.{pid}".format(pid=pid)
+    cmd = (CFSD_PREFIX + "--op export --pgid {pg} --file {file}").format(osd=ONEECOSD, pg=ONEECPG, file=OTHERFILE)
+    logging.debug(cmd)
+    call(cmd, shell=True, stdout=nullfd, stderr=nullfd)
+
+    # On import can't specify a different shard
+    BADPG = ONEECPG.split('s')[0] + "s10"
+    cmd = (CFSD_PREFIX + "--op import --pgid {pg} --file {file}").format(osd=ONEECOSD, pg=BADPG, file=OTHERFILE)
+    ERRORS += test_failure(cmd, "Can't specify a different shard, must be")
+
+    os.unlink(OTHERFILE)
+
     # Prep a valid export file for import failure tests
     OTHERFILE = "/tmp/foo.{pid}".format(pid=pid)
     cmd = (CFSD_PREFIX + "--op export --pgid {pg} --file {file}").format(osd=ONEOSD, pg=ONEPG, file=OTHERFILE)
@@ -597,6 +613,10 @@ def main(argv):
     # On import can't specify a PG with a non-existent pool
     cmd = (CFSD_PREFIX + "--op import --pgid {pg} --file {file}").format(osd=ONEOSD, pg="10.0", file=OTHERFILE)
     ERRORS += test_failure(cmd, "Can't specify a different pgid pool, must be")
+
+    # On import can't specify shard for a replicated export
+    cmd = (CFSD_PREFIX + "--op import --pgid {pg}s0 --file {file}").format(osd=ONEOSD, pg=ONEPG, file=OTHERFILE)
+    ERRORS += test_failure(cmd, "Can't specify a sharded pgid with a non-sharded export")
 
     # On import can't specify a PG with a bad seed
     TMPPG="{pool}.80".format(pool=REPID)
@@ -1103,36 +1123,46 @@ def main(argv):
         ERRORS += verify(DATADIR, EC_POOL, EC_NAME)
 
     if EXP_ERRORS == 0:
-        NEWPOOL = "import-rados-pool"
+        NEWPOOL = "rados-import-pool"
         cmd = "./rados mkpool {pool}".format(pool=NEWPOOL)
         logging.debug(cmd)
         ret = call(cmd, shell=True, stdout=nullfd, stderr=nullfd)
 
-        print "Test import-rados"
+        print "Test rados import"
+        first = True
         for osd in [f for f in os.listdir(OSDDIR) if os.path.isdir(os.path.join(OSDDIR, f)) and string.find(f, "osd") == 0]:
             dir = os.path.join(TESTDIR, osd)
             for pg in [f for f in os.listdir(dir) if os.path.isfile(os.path.join(dir, f))]:
                 if string.find(pg, "{id}.".format(id=REPID)) != 0:
                     continue
                 file = os.path.join(dir, pg)
-                # This should do nothing
-                cmd = "./ceph-objectstore-tool --dry-run import-rados {pool} {file}".format(pool=NEWPOOL, file=file)
+                if first:
+                    first = False
+                    # This should do nothing
+                    cmd = "./rados import -p {pool} --dry-run {file}".format(pool=NEWPOOL, file=file)
+                    logging.debug(cmd)
+                    ret = call(cmd, shell=True, stdout=nullfd)
+                    if ret != 0:
+                        logging.error("Rados import --dry-run failed from {file} with {ret}".format(file=file, ret=ret))
+                        ERRORS += 1
+                    cmd = "./rados -p {pool} ls".format(pool=NEWPOOL)
+                    logging.debug(cmd)
+                    data = check_output(cmd, shell=True)
+                    if data:
+                        logging.error("'{data}'".format(data=data))
+                        logging.error("Found objects after dry-run")
+                        ERRORS += 1
+                cmd = "./rados import -p {pool} {file}".format(pool=NEWPOOL, file=file)
                 logging.debug(cmd)
                 ret = call(cmd, shell=True, stdout=nullfd)
                 if ret != 0:
-                    logging.error("Import-rados failed from {file} with {ret}".format(file=file, ret=ret))
+                    logging.error("Rados import failed from {file} with {ret}".format(file=file, ret=ret))
                     ERRORS += 1
-                cmd = "./ceph-objectstore-tool import-rados {pool} {file}".format(pool=NEWPOOL, file=file)
+                cmd = "./rados import -p {pool} --no-overwrite {file}".format(pool=NEWPOOL, file=file)
                 logging.debug(cmd)
                 ret = call(cmd, shell=True, stdout=nullfd)
                 if ret != 0:
-                    logging.error("Import-rados failed from {file} with {ret}".format(file=file, ret=ret))
-                    ERRORS += 1
-                cmd = "./ceph-objectstore-tool --no-overwrite import-rados {pool} {file}".format(pool=NEWPOOL, file=file)
-                logging.debug(cmd)
-                ret = call(cmd, shell=True, stdout=nullfd)
-                if ret != 0:
-                    logging.error("Import-rados failed from {file} with {ret}".format(file=file, ret=ret))
+                    logging.error("Rados import --no-overwrite failed from {file} with {ret}".format(file=file, ret=ret))
                     ERRORS += 1
 
         ERRORS += verify(DATADIR, NEWPOOL, REP_NAME)
