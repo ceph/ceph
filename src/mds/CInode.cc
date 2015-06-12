@@ -468,7 +468,7 @@ void CInode::pop_projected_snaprealm(sr_t *next_snaprealm)
 
 // dirfrags
 
-__u32 CInode::hash_dentry_name(const string &dn)
+__u32 InodeStoreBase::hash_dentry_name(const string &dn)
 {
   int which = inode.dir_layout.dl_dir_hash;
   if (!which)
@@ -476,7 +476,7 @@ __u32 CInode::hash_dentry_name(const string &dn)
   return ceph_str_hash(which, dn.data(), dn.length());
 }
 
-frag_t CInode::pick_dirfrag(const string& dn)
+frag_t InodeStoreBase::pick_dirfrag(const string& dn)
 {
   if (dirfragtree.empty())
     return frag_t();          // avoid the string hash if we can.
