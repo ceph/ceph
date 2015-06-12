@@ -63,8 +63,9 @@ static string notify_oid_prefix = "notify";
 static string *notify_oids = NULL;
 static string shadow_ns = "shadow";
 static string dir_oid_prefix = ".dir.";
-static string default_storage_pool = ".rgw.buckets";
-static string default_storage_extra_pool = ".rgw.buckets.extra";
+static string default_storage_pool = "rgw.buckets.data";
+static string default_bucket_index_pool = "rgw.buckets.index";
+static string default_storage_extra_pool = "rgw.buckets.non-ec";
 static string avail_pools = ".pools.avail";
 
 static string zone_info_oid_prefix = "zone_info.";
@@ -78,8 +79,8 @@ static RGWObjCategory main_category = RGW_OBJ_CATEGORY_MAIN;
 
 #define RGW_USAGE_OBJ_PREFIX "usage."
 
-#define RGW_DEFAULT_ZONE_ROOT_POOL ".rgw.root"
-#define RGW_DEFAULT_REGION_ROOT_POOL ".rgw.root"
+#define RGW_DEFAULT_ZONE_ROOT_POOL "rgw.root"
+#define RGW_DEFAULT_REGION_ROOT_POOL "rgw.root"
 
 #define RGW_STATELOG_OBJ_PREFIX "statelog."
 
@@ -305,16 +306,16 @@ int RGWRegion::equals(const string& other_region)
 
 void RGWZoneParams::init_default(RGWRados *store)
 {
-  domain_root = ".rgw";
-  control_pool = ".rgw.control";
-  gc_pool = ".rgw.gc";
-  log_pool = ".log";
-  intent_log_pool = ".intent-log";
-  usage_log_pool = ".usage";
-  user_keys_pool = ".users";
-  user_email_pool = ".users.email";
-  user_swift_pool = ".users.swift";
-  user_uid_pool = ".users.uid";
+  domain_root = "rgw.data.root";
+  control_pool = "rgw.control";
+  gc_pool = "rgw.gc";
+  log_pool = "rgw.log";
+  intent_log_pool = "rgw.intent-log";
+  usage_log_pool = "rgw.usage";
+  user_keys_pool = "rgw.users.keys";
+  user_email_pool = "rgw.users.email";
+  user_swift_pool = "rgw.users.swift";
+  user_uid_pool = "rgw.users.uid";
 
   /* check for old pools config */
   rgw_obj obj(domain_root, avail_pools);
@@ -323,9 +324,9 @@ void RGWZoneParams::init_default(RGWRados *store)
     ldout(store->ctx(), 0) << "couldn't find old data placement pools config, setting up new ones for the zone" << dendl;
     /* a new system, let's set new placement info */
     RGWZonePlacementInfo default_placement;
-    default_placement.index_pool = ".rgw.buckets.index";
-    default_placement.data_pool = ".rgw.buckets";
-    default_placement.data_extra_pool = ".rgw.buckets.extra";
+    default_placement.index_pool = default_bucket_index_pool;
+    default_placement.data_pool = default_storage_pool;
+    default_placement.data_extra_pool = default_storage_extra_pool;
     placement_pools["default-placement"] = default_placement;
   }
 }
