@@ -68,3 +68,41 @@ Here is a sample configuration with many of the options set and documented::
     # How long a scheduled job should be allowed to run, in seconds, before 
     # it is killed by the worker process.
     max_job_time: 259200
+
+    # The template from which the URL of the repository containing packages
+    # is built.
+    #
+    # {host} is 'gitbuilder_host' from .teuthology.yaml
+    # {proj} is the value of 'project' from the job yaml file or 'ceph'
+    # {flavor} is the value of 'flavor' from the job yaml file or 'basic'
+    # {uri} is ref/tag if 'tag' is set in the job yaml file
+    #       or ref/branch if 'branch' is set in the job yaml file
+    #       or sha1/sha1 if 'sha1' is set in the job yaml file
+    #       or ref/master
+    # {pkg_type} is either 'deb' or 'rpm' depending on the host on which the
+    #            packages are to be installed
+    # {dist} If lsb_release -si is Fedora the value is:
+    #          Fedora 20 => fc20
+    #          Fedora 21 => fc21
+    #          etc.
+    #        If lsb_release -si is CentOS or RedHatEnterpriseServer it is
+    #          CentOS 6.5 => centos6
+    #          CentOS 7.0 => centos7
+    #          CentOS 7.1 => centos7
+    #          RedHatEnterpriseServer 6.4 => centos6
+    #          RedHatEnterpriseServer 7.0 => centos7
+    #          RedHatEnterpriseServer 7.1 => centos7
+    #          etc.
+    #       Everything else is whatever lsb_release -sc returns
+    #          Ubuntu 12.04 => precise
+    #          Ubuntu 14.04 => trusty
+    #          Debian GNU/Linux 7.0 => wheezy
+    #          Debian GNU/Linux 8.0 => jessie
+    #          etc.
+    # {arch} is the output of the 'arch' command on the host on which
+    #        the packages are to be installed
+    #           i386
+    #           x86_64
+    #           armv7l
+    #           etc.
+    baseurl_template: http://{host}/{proj}-{pkg_type}-{dist}-{arch}-{flavor}/{uri}
