@@ -56,8 +56,6 @@
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, this)
 
-static coll_t META_COLL;
-
 // prefix pgmeta_oid keys with _ so that PGLog::read_log() can
 // easily skip them
 const string infover_key("_infover");
@@ -2606,8 +2604,8 @@ void PG::upgrade(ObjectStore *store)
   pg_log.mark_log_for_rewrite();
   hobject_t log_oid(OSD::make_pg_log_oid(pg_id));
   hobject_t biginfo_oid(OSD::make_pg_biginfo_oid(pg_id));
-  t.remove(META_COLL, log_oid);
-  t.remove(META_COLL, biginfo_oid);
+  t.remove(coll_t::meta(), log_oid);
+  t.remove(coll_t::meta(), biginfo_oid);
   t.collection_rmattr(coll, "info");
 
   t.touch(coll, pgmeta_oid);
@@ -2778,7 +2776,7 @@ epoch_t PG::peek_map_epoch(ObjectStore *store,
     keys.clear();
     values.clear();
     keys.insert(ek);
-    store->omap_get_values(META_COLL, legacy_infos_oid, keys, &values);
+    store->omap_get_values(coll_t::meta(), legacy_infos_oid, keys, &values);
     assert(values.size() == 1);
     bufferlist::iterator p = values[ek].begin();
     ::decode(cur_epoch, p);
@@ -2966,7 +2964,7 @@ int PG::read_info(
   keys.insert(k);
   keys.insert(bk);
   values.clear();
-  store->omap_get_values(META_COLL, infos_oid, keys, &values);
+  store->omap_get_values(coll_t::meta(), infos_oid, keys, &values);
   assert(values.size() == 2);
 
   p = values[k].begin();
@@ -2989,7 +2987,7 @@ void PG::read_state(ObjectStore *store, bufferlist &bl)
   ostringstream oss;
   pg_log.read_log(store,
 		  coll,
-		  info_struct_v < 8 ? META_COLL : coll,
+		  info_struct_v < 8 ? coll_t::meta() : coll,
 		  info_struct_v < 8 ? OSD::make_pg_log_oid(pg_id) : pgmeta_oid,
 		  info, oss);
   if (oss.str().length())
