@@ -1026,7 +1026,7 @@ private:
     utime_t last_cum_auth_pins_change;
     int last_cum_auth_pins;
     int num_remote_waiters;	// number of remote authpin waiters
-    fragment_info_t() : all_frozen(false), last_cum_auth_pins(0), num_remote_waiters(0) {}
+    fragment_info_t() : bits(0), all_frozen(false), last_cum_auth_pins(0), num_remote_waiters(0) {}
     bool is_fragmenting() { return !resultfrags.empty(); }
   };
   map<dirfrag_t,fragment_info_t> fragments;
