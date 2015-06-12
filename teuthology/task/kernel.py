@@ -405,7 +405,7 @@ def install_and_reboot(ctx, config):
         (role_remote,) = ctx.cluster.only(role).remotes.keys()
         if isinstance(src, str) and src.find('distro') >= 0:
             log.info('Installing distro kernel on {role}...'.format(role=role))
-            install_kernel(role_remote)
+            install_kernel(role_remote, version=src)
             continue
 
         log.info('Installing kernel {src} on {role}...'.format(src=src,
@@ -706,7 +706,8 @@ def maybe_generate_initrd_rpm(remote, path, version):
             version,
         ])
 
-def install_kernel(remote, path=None):
+
+def install_kernel(remote, path=None, version=None):
     """
     A bit of misnomer perhaps - the actual kernel package is installed
     elsewhere, this function deals with initrd and grub.  Currently the
@@ -716,7 +717,8 @@ def install_kernel(remote, path=None):
 
     TODO: reboots should be issued from install_and_reboot()
 
-    :param path: package path (for local and gitbuilder cases)
+    :param path:    package path (for local and gitbuilder cases)
+    :param version: for RPM distro kernels, pass this to update_grub_rpm
     """
     package_type = remote.os.package_type
     if package_type == 'rpm':
@@ -726,7 +728,7 @@ def install_kernel(remote, path=None):
             # could have been built with upstream rpm targets with specs that
             # don't have a %post section at all, which means no initrd.
             maybe_generate_initrd_rpm(remote, path, version)
-        else:
+        elif not version:
             version = get_latest_image_version_rpm(remote)
         update_grub_rpm(remote, version)
         remote.run( args=['sudo', 'shutdown', '-r', 'now'], wait=False )
@@ -1124,9 +1126,10 @@ def task(ctx, config):
                 need_install[role] = path
                 need_version[role] = sha1
         elif role_config.get('sha1') == 'distro':
-            if need_to_install_distro(role_remote):
+            version = need_to_install_distro(role_remote)
+            if version:
                 need_install[role] = 'distro'
-                need_version[role] = 'distro'
+                need_version[role] = version
         elif role_config.get("koji") or role_config.get('koji_task'):
             # installing a kernel from koji
             build_id = role_config.get("koji")
