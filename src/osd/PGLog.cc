@@ -22,8 +22,6 @@
 
 #define dout_subsys ceph_subsys_osd
 
-static coll_t META_COLL;
-
 //////////////////// PGLog::IndexedLog ////////////////////
 
 void PGLog::IndexedLog::advance_rollback_info_trimmed_to(

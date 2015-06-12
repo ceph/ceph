@@ -40,8 +40,6 @@
 namespace po = boost::program_options;
 using namespace std;
 
-static coll_t META_COLL;
-
 #ifdef INTERNAL_TEST
 CompatSet get_test_compat_set() {
   CompatSet::FeatureSet ceph_osd_feature_compat;
@@ -348,7 +346,7 @@ int get_log(ObjectStore *fs, __u8 struct_ver,
     ostringstream oss;
     assert(struct_ver > 0);
     PGLog::read_log(fs, coll,
-		    struct_ver >= 8 ? coll : META_COLL,
+		    struct_ver >= 8 ? coll : coll_t::meta(),
 		    struct_ver >= 8 ? pgid.make_pgmeta_oid() : log_oid,
 		    info, divergent_priors, log, missing, oss);
     if (debug && oss.str().size())
@@ -490,10 +488,10 @@ int mark_pg_for_removal(ObjectStore *fs, spg_t pgid, ObjectStore::Transaction *t
     bufferlist one;
     one.append('1');
     t->collection_setattr(coll, "remove", one);
-    cout << "remove " << META_COLL << " " << log_oid.hobj.oid << std::endl;
-    t->remove(META_COLL, log_oid);
-    cout << "remove " << META_COLL << " " << biginfo_oid.oid << std::endl;
-    t->remove(META_COLL, biginfo_oid);
+    cout << "remove " << coll_t::meta() << " " << log_oid.hobj.oid << std::endl;
+    t->remove(coll_t::meta(), log_oid);
+    cout << "remove " << coll_t::meta() << " " << biginfo_oid.oid << std::endl;
+    t->remove(coll_t::meta(), biginfo_oid);
   } else {
     // new omap key
     cout << "setting '_remove' omap key" << std::endl;
@@ -715,7 +713,7 @@ int ObjectStoreTool::export_files(ObjectStore *store, coll_t coll)
 int get_osdmap(ObjectStore *store, epoch_t e, OSDMap &osdmap, bufferlist& bl)
 {
   bool found = store->read(
-      META_COLL, OSD::get_osdmap_pobject_name(e), 0, 0, bl) >= 0;
+      coll_t::meta(), OSD::get_osdmap_pobject_name(e), 0, 0, bl) >= 0;
   if (!found) {
     cerr << "Can't find OSDMap for pg epoch " << e << std::endl;
     return -ENOENT;
@@ -2068,7 +2066,7 @@ int main(int argc, char **argv)
   bufferlist bl;
   OSDSuperblock superblock;
   bufferlist::iterator p;
-  ret = fs->read(META_COLL, OSD_SUPERBLOCK_POBJECT, 0, 0, bl);
+  ret = fs->read(coll_t::meta(), OSD_SUPERBLOCK_POBJECT, 0, 0, bl);
   if (ret < 0) {
     cerr << "Failure to read OSD superblock: " << cpp_strerror(ret) << std::endl;
     goto out;
@@ -2254,7 +2252,7 @@ int main(int argc, char **argv)
       ObjectStore::Transaction t;
       bl.clear();
       ::encode(superblock, bl);
-      t.write(META_COLL, OSD_SUPERBLOCK_POBJECT, 0, bl.length(), bl);
+      t.write(coll_t::meta(), OSD_SUPERBLOCK_POBJECT, 0, bl.length(), bl);
       ret = fs->apply_transaction(t);
       if (ret < 0) {
         cerr << "Error writing OSD superblock: " << cpp_strerror(ret) << std::endl;

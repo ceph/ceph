@@ -56,10 +56,6 @@ public:
     hobject_t *get_obj_at(int pos, bool remove, int *key = NULL);
   };
 
-  /* kept in upper case for consistency with coll_t's */
-  static const coll_t META_COLL;
-  static const coll_t TEMP_COLL;
-
  protected:
   boost::shared_ptr<ObjectStore> m_store;
   map<int, coll_entry_t*> m_collections;
