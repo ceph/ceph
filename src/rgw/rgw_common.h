@@ -1637,9 +1637,12 @@ extern bool verify_object_permission(struct req_state *s, int perm);
 extern bool url_decode(string& src_str, string& dest_str, bool in_query = false);
 extern void url_encode(const string& src, string& dst);
 
+/* destination should be CEPH_CRYPTO_HMACSHA1_DIGESTSIZE bytes long */
 extern void calc_hmac_sha1(const char *key, int key_len,
                           const char *msg, int msg_len, char *dest);
-/* destination should be CEPH_CRYPTO_HMACSHA1_DIGESTSIZE bytes long */
+/* destination should be CEPH_CRYPTO_HMACSHA256_DIGESTSIZE bytes long */
+extern void calc_hmac_sha256(const char *key, int key_len, const char *msg, int msg_len, char *dest);
+extern void calc_hash_sha256(const string& msg, string& dest);
 
 extern int rgw_parse_op_type_list(const string& str, uint32_t *perm);
 

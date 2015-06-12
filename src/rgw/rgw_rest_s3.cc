@@ -2310,6 +2310,365 @@ static void init_anon_user(struct req_state *s)
 }
 
 /*
+ * handle v4 signatures (rados auth only)
+ */
+int RGW_Auth_S3::authorize_v4(RGWRados *store, struct req_state *s)
+{
+  string::size_type pos;
+  string algorithm;
+  string date;
+  string credential;
+  string signedheaders;
+  string signature;
+  string access_key_id;
+  string credential_scope;
+
+  /* v4 requires rados auth */
+  if (!store->ctx()->_conf->rgw_s3_auth_use_rados) {
+    return -EPERM;
+  }
+
+  if ((!s->http_auth) || !(*s->http_auth)) {
+
+    /* auth ships with req params ... */
+
+    /* look for required params */
+
+    algorithm = s->info.args.get("X-Amz-Algorithm");
+    if (algorithm.size() == 0) {
+      return -EPERM;
+    }
+    credential = s->info.args.get("X-Amz-Credential");
+    if (credential.size() == 0) {
+      return -EPERM;
+    }
+    date = s->info.args.get("X-Amz-Date");
+    if (date.size() == 0) {
+      return -EPERM;
+    }
+    signedheaders = s->info.args.get("X-Amz-SignedHeaders");
+    if (signedheaders.size() == 0) {
+      return -EPERM;
+    }
+
+    signature = s->info.args.get("X-Amz-Signature");
+    if (signature.size() == 0) {
+      return -EPERM;
+    }
+
+  } else {
+
+    /* auth ships in headers ... */
+
+    /* valid algorithm? */
+
+    if (strncmp(s->http_auth, "AWS4-HMAC-SHA256", 16)) {
+      return -EPERM;
+    }
+
+    algorithm = "AWS4-HMAC-SHA256";
+
+    /* ------------------------- handle Credential header */
+
+    credential = s->http_auth;
+
+    credential = credential.substr(17, credential.length());
+
+    pos = credential.find("Credential");
+    if (pos == std::string::npos) {
+      return -EINVAL;
+    }
+
+    credential = credential.substr(pos, credential.find(","));
+
+    credential = credential.substr(pos + 1, credential.length());
+
+    pos = credential.find("=");
+
+    credential = credential.substr(pos + 1, credential.length());
+
+    /* AKIAIVKTAZLOCF43WNQD/AAAAMMDD/region/host/aws4_request */
+    dout(10) << "v4 credential format = " << credential << dendl;
+
+    if (std::count(credential.begin(), credential.end(), '/') != 4) {
+      return -EINVAL;
+    }
+
+    /* credential must end with 'aws4_request' */
+    if (credential.find("aws4_request") == std::string::npos) {
+      return -EINVAL;
+    }
+
+    /* grab access key id */
+
+    pos = credential.find("/");
+    access_key_id = credential.substr(0, pos);
+
+    dout(10) << "access key id = " << access_key_id << dendl;
+
+    /* grab credential scope */
+
+    credential_scope = credential.substr(pos + 1, credential.length());
+
+    dout(10) << "credential scope = " << credential_scope << dendl;
+
+    /* ------------------------- handle SignedHeaders header */
+
+    signedheaders = s->http_auth;
+
+    signedheaders = signedheaders.substr(17, signedheaders.length());
+
+    pos = signedheaders.find("SignedHeaders");
+    if (pos == std::string::npos) {
+      return -EINVAL;
+    }
+
+    signedheaders = signedheaders.substr(pos, signedheaders.length());
+
+    pos = signedheaders.find(",");
+    if (pos == std::string::npos) {
+      return -EINVAL;
+    }
+
+    signedheaders = signedheaders.substr(0, pos);
+
+    pos = signedheaders.find("=");
+    if (pos == std::string::npos) {
+      return -EINVAL;
+    }
+
+    signedheaders = signedheaders.substr(pos + 1, signedheaders.length());
+
+    /* host;user-agent;x-amz-content-sha256;x-amz-date */
+    dout(10) << "v4 signedheaders format = " << signedheaders << dendl;
+
+    /* ------------------------- handle Signature header */
+
+    signature = s->http_auth;
+
+    signature = signature.substr(17, signature.length());
+
+    pos = signature.find("Signature");
+    if (pos == std::string::npos) {
+      return -EINVAL;
+    }
+
+    signature = signature.substr(pos, signature.length());
+
+    pos = signature.find("=");
+    if (pos == std::string::npos) {
+      return -EINVAL;
+    }
+
+    signature = signature.substr(pos + 1, signature.length());
+
+    /* sig hex str */
+    dout(10) << "v4 signature format = " << signature << dendl;
+
+    /* ------------------------- handle x-amz-date header */
+
+    /* grab date */
+
+    date = s->info.env->get("HTTP_X_AMZ_DATE");
+    if (date.empty()) {
+      return -EINVAL;
+    }
+
+  }
+
+  /* grab user information */
+
+  if (rgw_get_user_info_by_access_key(store, access_key_id, s->user) < 0) {
+    dout(10) << "error reading user info, uid=" << access_key_id
+              << " can't authenticate" << dendl;
+    return -ERR_INVALID_ACCESS_KEY;
+  }
+
+  /*
+   * create a canonical request
+   *
+   * http://docs.aws.amazon.com/general/latest/gr/sigv4-create-canonical-request.html
+   */
+
+  /* craft canonical uri */
+
+  /* here code should normalize via rfc3986 but S3 does **NOT** do path normalization
+   * that SigV4 typically does. this code follows the same approach that boto library
+   * see auth.py:canonical_uri(...) */
+
+  string canonical_uri = s->info.request_uri;
+
+  if (canonical_uri.empty()) {
+    canonical_uri = "/";
+  }
+
+  /* craft canonical query string */
+
+  string canonical_qs = s->info.request_params;
+
+  if (!canonical_qs.empty()) {
+
+    /* TODO: implement step 3 in
+     * http://docs.aws.amazon.com/general/latest/gr/sigv4-create-canonical-request.html */
+
+    /* handle case when query string exists */
+  }
+
+  /* craft canonical headers */
+
+  map<string, string> canonical_hdrs_map;
+  istringstream sh(signedheaders);
+  string token;
+
+  while (getline(sh, token, ';')) {
+    string token_env = "HTTP_" + token;
+    transform(token_env.begin(), token_env.end(), token_env.begin(), ::toupper);
+    replace(token_env.begin(), token_env.end(), '-', '_');
+    const char *t = s->info.env->get(token_env.c_str());
+    if (!t)
+      return -EINVAL;
+    string token_value = string(t);
+    canonical_hdrs_map[token] = rgw_trim_whitespace(token_value);
+  }
+
+  string canonical_hdrs;
+
+  for (map<string, string>::iterator it = canonical_hdrs_map.begin();
+      it != canonical_hdrs_map.end(); ++it) {
+    canonical_hdrs.append(it->first + ":" + it->second + "\n");
+  }
+
+  dout(10) << "canonical headers format = " << canonical_hdrs << dendl;
+
+  /* craft signed headers */
+
+  string signed_hdrs = signedheaders;
+
+  /* TODO: craft request payload */
+
+  /* from rfc2616 - 4.3 Message Body
+   *
+   * "The presence of a message-body in a request is signaled by the inclusion of a
+   *  Content-Length or Transfer-Encoding header field in the request's message-headers."
+   */
+
+  string request_payload;
+
+  if ((s->content_length > 0) || s->info.env->get("HTTP_TRANSFER_ENCODING")) {
+
+    /* TODO: read body in request_payload */
+
+  }
+
+  /* craft canonical request */
+
+  string canonical_req;
+  string canonical_req_hash;
+
+  rgw_create_s3_v4_canonical_request(s, canonical_uri, canonical_qs,
+      canonical_hdrs, signed_hdrs, request_payload, canonical_req,
+      canonical_req_hash);
+
+  /*
+   * create a string to sign
+   *
+   * http://docs.aws.amazon.com/general/latest/gr/sigv4-create-string-to-sign.html
+   */
+
+  string string_to_sign;
+
+  rgw_create_s3_v4_string_to_sign("AWS4-HMAC-SHA256", date, credential_scope,
+      canonical_req_hash, string_to_sign);
+
+  /*
+   * calculate the AWS signature
+   *
+   * http://docs.aws.amazon.com/general/latest/gr/sigv4-calculate-signature.html
+   */
+
+  string cs_aux = credential_scope;
+
+  string date_cs = cs_aux;
+  pos = date_cs.find("/");
+  date_cs = date_cs.substr(0, pos);
+  cs_aux = cs_aux.substr(pos + 1, cs_aux.length());
+
+  string region_cs = cs_aux;
+  pos = region_cs.find("/");
+  region_cs = region_cs.substr(0, pos);
+  cs_aux = cs_aux.substr(pos + 1, cs_aux.length());
+
+  string service_cs = cs_aux;
+  pos = service_cs.find("/");
+  service_cs = service_cs.substr(0, pos);
+
+  string new_signature;
+
+  int err = rgw_calculate_s3_v4_aws_signature(s, access_key_id, date_cs,
+      region_cs, service_cs, string_to_sign, new_signature);
+  if (err) {
+    return err;
+  }
+
+  /* verify signature */
+
+  dout(10) << "----------------------------- Verifying signatures" << dendl;
+  dout(10) << "Signature     = " << signature << dendl;
+  dout(10) << "New Signature = " << new_signature << dendl;
+  dout(10) << "-----------------------------" << dendl;
+
+  if (signature != new_signature) {
+    return -ERR_SIGNATURE_NO_MATCH;
+  }
+
+  /* authorization ok */
+
+  dout(10) << "v4 auth ok" << dendl;
+
+  map<string, RGWAccessKey>::iterator iter = s->user.access_keys.find(access_key_id);
+  if (iter == s->user.access_keys.end()) {
+    dout(0) << "ERROR: access key not encoded in user info" << dendl;
+    return -EPERM;
+  }
+
+  RGWAccessKey& k = iter->second;
+
+  if (!k.subuser.empty()) {
+    map<string, RGWSubUser>::iterator uiter = s->user.subusers.find(k.subuser);
+    if (uiter == s->user.subusers.end()) {
+      dout(0) << "NOTICE: could not find subuser: " << k.subuser << dendl;
+      return -EPERM;
+    }
+    RGWSubUser& subuser = uiter->second;
+    s->perm_mask = subuser.perm_mask;
+  } else {
+    s->perm_mask = RGW_PERM_FULL_CONTROL;
+  }
+
+  if (s->user.system) {
+    s->system_request = true;
+    dout(20) << "system request" << dendl;
+    s->info.args.set_system();
+    string effective_uid = s->info.args.get(RGW_SYS_PARAM_PREFIX "uid");
+    RGWUserInfo effective_user;
+    if (!effective_uid.empty()) {
+      int ret = rgw_get_user_info_by_uid(store, effective_uid, effective_user);
+      if (ret < 0) {
+        ldout(s->cct, 0) << "User lookup failed!" << dendl;
+        return -ENOENT;
+      }
+      s->user = effective_user;
+    }
+  }
+
+  // populate the owner info
+  s->owner.set_id(s->user.user_id);
+  s->owner.set_name(s->user.display_name);
+
+  return 0;
+}
+
+/*
  * verify that a signed request comes from the keyholder
  * by checking the signature against our locally-computed version
  */
@@ -2318,6 +2677,9 @@ int RGW_Auth_S3::authorize(RGWRados *store, struct req_state *s)
   bool qsr = false;
   string auth_id;
   string auth_sign;
+
+  if (!authorize_v4(store, s))
+	  return 0;
 
   time_t now;
   time(&now);

@@ -6,6 +6,7 @@
 #define CEPH_CRYPTO_MD5_DIGESTSIZE 16
 #define CEPH_CRYPTO_HMACSHA1_DIGESTSIZE 20
 #define CEPH_CRYPTO_SHA1_DIGESTSIZE 20
+#define CEPH_CRYPTO_HMACSHA256_DIGESTSIZE 32
 #define CEPH_CRYPTO_SHA256_DIGESTSIZE 32
 
 #ifdef USE_CRYPTOPP
@@ -35,6 +36,15 @@ namespace ceph {
 	{
 	}
       ~HMACSHA1();
+    };
+
+    class HMACSHA256: public CryptoPP::HMAC<CryptoPP::SHA256> {
+    public:
+      HMACSHA256 (const byte *key, size_t length)
+        : CryptoPP::HMAC<CryptoPP::SHA256>(key, length)
+        {
+        }
+      ~HMACSHA256();
     };
   }
 }
@@ -108,31 +118,33 @@ namespace ceph {
       SHA256 () : Digest(SEC_OID_SHA256, CEPH_CRYPTO_SHA256_DIGESTSIZE) { }
     };
 
-    class HMACSHA1 {
+    class HMAC {
     private:
       PK11SlotInfo *slot;
       PK11SymKey *symkey;
       PK11Context *ctx;
+      unsigned int digest_size;
     public:
-      HMACSHA1 (const byte *key, size_t length) {
-	slot = PK11_GetBestSlot(CKM_SHA_1_HMAC, NULL);
+      HMAC (CK_MECHANISM_TYPE cktype, unsigned int digestsize, const byte *key, size_t length) {
+        digest_size = digestsize;
+	slot = PK11_GetBestSlot(cktype, NULL);
 	assert(slot);
 	SECItem keyItem;
 	keyItem.type = siBuffer;
 	keyItem.data = (unsigned char*)key;
 	keyItem.len = length;
-	symkey = PK11_ImportSymKey(slot, CKM_SHA_1_HMAC, PK11_OriginUnwrap,
+	symkey = PK11_ImportSymKey(slot, cktype, PK11_OriginUnwrap,
 				   CKA_SIGN,  &keyItem, NULL);
 	assert(symkey);
 	SECItem param;
 	param.type = siBuffer;
 	param.data = NULL;
 	param.len = 0;
-	ctx = PK11_CreateContextBySymKey(CKM_SHA_1_HMAC, CKA_SIGN, symkey, &param);
+	ctx = PK11_CreateContextBySymKey(cktype, CKA_SIGN, symkey, &param);
 	assert(ctx);
 	Restart();
       }
-      ~HMACSHA1 ();
+      ~HMAC ();
       void Restart() {
 	SECStatus s;
 	s = PK11_DigestBegin(ctx);
@@ -146,11 +158,21 @@ namespace ceph {
       void Final (byte *digest) {
 	SECStatus s;
 	unsigned int dummy;
-	s = PK11_DigestFinal(ctx, digest, &dummy, CEPH_CRYPTO_HMACSHA1_DIGESTSIZE);
+	s = PK11_DigestFinal(ctx, digest, &dummy, digest_size);
 	assert(s == SECSuccess);
-	assert(dummy == CEPH_CRYPTO_HMACSHA1_DIGESTSIZE);
+	assert(dummy == digest_size);
 	Restart();
       }
+    };
+
+    class HMACSHA1 : public HMAC {
+    public:
+      HMACSHA1 (const byte *key, size_t length) : HMAC(CKM_SHA_1_HMAC, CEPH_CRYPTO_HMACSHA1_DIGESTSIZE, key, length) { }
+    };
+
+    class HMACSHA256 : public HMAC {
+    public:
+      HMACSHA256 (const byte *key, size_t length) : HMAC(CKM_SHA256_HMAC, CEPH_CRYPTO_HMACSHA256_DIGESTSIZE, key, length) { }
     };
   }
 }

@@ -343,6 +343,8 @@ public:
 class RGW_Auth_S3 {
 public:
   static int authorize(RGWRados *store, struct req_state *s);
+private:
+  static int authorize_v4(RGWRados *store, struct req_state *s);
 };
 
 class RGWHandler_Auth_S3 : public RGWHandler_ObjStore {

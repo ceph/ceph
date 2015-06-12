@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "common/armor.h"
+#include "common/utf8.h"
 #include "rgw_common.h"
 
 #define dout_subsys ceph_subsys_rgw
@@ -144,6 +145,11 @@ int rgw_get_s3_header_digest(const string& auth_hdr, const string& key, string& 
   return 0;
 }
 
+void rgw_hash_s3_string_sha256(const string& str, string& dest)
+{
+  calc_hash_sha256(str, dest);
+}
+
 static inline bool is_base64_for_content_md5(unsigned char c) {
   return (isalnum(c) || isspace(c) || (c == '+') || (c == '/') || (c == '='));
 }
@@ -210,4 +216,183 @@ bool rgw_create_s3_canonical_header(req_info& info, utime_t *header_time, string
                             dest);
 
   return true;
+}
+
+/*
+ * assemble canonical request for signature version 4
+ */
+void rgw_assemble_s3_v4_canonical_request(const char *method, const char *canonical_uri, const char *canonical_qs,
+                                          const char *canonical_hdrs, const char *signed_hdrs, const char *request_payload_hash,
+                                          string& dest_str)
+{
+  string dest;
+
+  if (method)
+    dest = method;
+  dest.append("\n");
+
+  if (canonical_uri) {
+    dest.append(canonical_uri);
+  }
+  dest.append("\n");
+
+  if (canonical_qs)
+    dest.append(canonical_qs);
+  dest.append("\n");
+
+  if (canonical_hdrs)
+    dest.append(canonical_hdrs);
+  dest.append("\n");
+
+  if (signed_hdrs)
+    dest.append(signed_hdrs);
+  dest.append("\n");
+
+  if (request_payload_hash)
+    dest.append(request_payload_hash);
+
+  dest_str = dest;
+}
+
+/*
+ * create canonical request for signature version 4
+ */
+void rgw_create_s3_v4_canonical_request(struct req_state *s, const string& canonical_uri, const string& canonical_qs,
+                                        const string& canonical_hdrs, const string& signed_hdrs, const string& request_payload,
+                                        string& canonical_req, string& canonical_req_hash)
+{
+  string request_payload_hash;
+
+  rgw_hash_s3_string_sha256(request_payload, request_payload_hash);
+
+  dout(10) << "payload request hash = " << request_payload_hash << dendl;
+
+  rgw_assemble_s3_v4_canonical_request(s->info.method, canonical_uri.c_str(),
+      canonical_qs.c_str(), canonical_hdrs.c_str(), signed_hdrs.c_str(),
+      request_payload_hash.c_str(), canonical_req);
+
+  rgw_hash_s3_string_sha256(canonical_req, canonical_req_hash);
+
+  dout(10) << "canonical request = " << canonical_req << dendl;
+  dout(10) << "canonical request hash = " << canonical_req_hash << dendl;
+}
+
+/*
+ * assemble string to sign for signature version 4
+ */
+void rgw_assemble_s3_v4_string_to_sign(const char *algorithm, const char *request_date,
+                                       const char *credential_scope, const char *hashed_qr, string& dest_str)
+{
+  string dest;
+
+  if (algorithm)
+    dest = algorithm;
+  dest.append("\n");
+
+  if (request_date)
+    dest.append(request_date);
+  dest.append("\n");
+
+  if (credential_scope)
+    dest.append(credential_scope);
+  dest.append("\n");
+
+  if (hashed_qr)
+    dest.append(hashed_qr);
+
+  dest_str = dest;
+}
+
+/*
+ * create string to sign for signature version 4
+ */
+void rgw_create_s3_v4_string_to_sign(const string& algorithm, const string& request_date,
+                                     const string& credential_scope, const string& hashed_qr,
+                                     string& string_to_sign) {
+
+  rgw_assemble_s3_v4_string_to_sign(algorithm.c_str(), request_date.c_str(),
+      credential_scope.c_str(), hashed_qr.c_str(), string_to_sign);
+
+  dout(10) << "string to sign = " << string_to_sign << dendl;
+}
+
+/*
+ * calculate the AWS signature version 4
+ */
+int rgw_calculate_s3_v4_aws_signature(struct req_state *s,
+    const string& access_key_id, const string &date, const string& region,
+    const string& service, const string& string_to_sign, string& signature) {
+
+  map<string, RGWAccessKey>::iterator iter = s->user.access_keys.find(access_key_id);
+  if (iter == s->user.access_keys.end()) {
+    dout(10) << "ERROR: access key not encoded in user info" << dendl;
+    return -EPERM;
+  }
+
+  RGWAccessKey& k = iter->second;
+
+  string secret_key = "AWS4" + k.key;
+
+  char secret_k[secret_key.size() * MAX_UTF8_SZ];
+
+  size_t n = 0;
+
+  for (size_t i = 0; i < secret_key.size(); i++) {
+    n += encode_utf8(secret_key[i], (unsigned char *) (secret_k + n));
+  }
+
+  string secret_key_utf8_k(secret_k, n);
+
+  /* date */
+
+  char date_k[CEPH_CRYPTO_HMACSHA256_DIGESTSIZE];
+  calc_hmac_sha256(secret_key_utf8_k.c_str(), secret_key_utf8_k.size(),
+      date.c_str(), date.size(), date_k);
+
+  char aux[CEPH_CRYPTO_HMACSHA256_DIGESTSIZE * 2 + 1];
+  buf_to_hex((unsigned char *) date_k, CEPH_CRYPTO_HMACSHA256_DIGESTSIZE, aux);
+
+  dout(10) << "date_k        = " << string(aux) << dendl;
+
+  /* region */
+
+  char region_k[CEPH_CRYPTO_HMACSHA256_DIGESTSIZE];
+  calc_hmac_sha256(date_k, CEPH_CRYPTO_HMACSHA256_DIGESTSIZE, region.c_str(), region.size(), region_k);
+
+  buf_to_hex((unsigned char *) region_k, CEPH_CRYPTO_HMACSHA256_DIGESTSIZE, aux);
+
+  dout(10) << "region_k      = " << string(aux) << dendl;
+
+  /* service */
+
+  char service_k[CEPH_CRYPTO_HMACSHA256_DIGESTSIZE];
+  calc_hmac_sha256(region_k, CEPH_CRYPTO_HMACSHA256_DIGESTSIZE, service.c_str(), service.size(), service_k);
+
+  buf_to_hex((unsigned char *) service_k, CEPH_CRYPTO_HMACSHA256_DIGESTSIZE, aux);
+
+  dout(10) << "service_k     = " << string(aux) << dendl;
+
+  /* aws4_request */
+
+  char signing_k[CEPH_CRYPTO_HMACSHA256_DIGESTSIZE];
+  calc_hmac_sha256(service_k, CEPH_CRYPTO_HMACSHA256_DIGESTSIZE, "aws4_request", 12, signing_k);
+
+  buf_to_hex((unsigned char *) signing_k, CEPH_CRYPTO_HMACSHA256_DIGESTSIZE, aux);
+
+  dout(10) << "signing_k     = " << string(aux) << dendl;
+
+  /* new signature */
+
+  char signature_k[CEPH_CRYPTO_HMACSHA256_DIGESTSIZE];
+  calc_hmac_sha256(signing_k, CEPH_CRYPTO_HMACSHA256_DIGESTSIZE, string_to_sign.c_str(), string_to_sign.size(), signature_k);
+
+  buf_to_hex((unsigned char *) signature_k, CEPH_CRYPTO_HMACSHA256_DIGESTSIZE, aux);
+
+  dout(10) << "signature_k   = " << string(aux) << dendl;
+
+  signature = string(aux);
+
+  dout(10) << "new signature = " << signature << dendl;
+
+  return 0;
 }
