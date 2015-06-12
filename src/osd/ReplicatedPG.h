@@ -254,7 +254,7 @@ public:
     Context *on_flush;          ///< callback, may be null
 
     FlushOp()
-      : objecter_tid(0), rval(0),
+      : flushed_version(0), objecter_tid(0), rval(0),
 	blocking(false), removal(false),
 	on_flush(NULL) {}
     ~FlushOp() { assert(!on_flush); }
