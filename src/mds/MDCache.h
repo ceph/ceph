@@ -894,7 +894,8 @@ protected:
     int64_t pool;
     list<MDSInternalContextBase*> waiters;
     open_ino_info_t() : checking(MDS_RANK_NONE), auth_hint(MDS_RANK_NONE),
-      check_peers(true), fetch_backtrace(true), discover(false) {}
+      check_peers(true), fetch_backtrace(true), discover(false),
+      want_replica(false), want_xlocked(false), tid(0), pool(-1) {}
   };
   ceph_tid_t open_ino_last_tid;
   map<inodeno_t,open_ino_info_t> opening_inodes;
