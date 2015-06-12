@@ -4267,10 +4267,10 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  }
 	} else {
 	  ctx->mod_desc.mark_unrollbackable();
-	  if (obs.exists) {
-	    t->truncate(soid, 0);
-	  }
 	  t->write(soid, op.extent.offset, op.extent.length, osd_op.indata, op.flags);
+	  if (obs.exists && op.extent.length < oi.size) {
+	    t->truncate(soid, op.extent.length);
+	  }
 	}
 	maybe_create_new_object(ctx);
 	obs.oi.set_data_digest(osd_op.indata.crc32c(-1));
