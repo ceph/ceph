@@ -1208,7 +1208,7 @@ class RGWRados
   int open_gc_pool_ctx();
   int open_objexp_pool_ctx();
 
-  int open_bucket_pool_ctx(const string& bucket_name, const string& pool, librados::IoCtx&  io_ctx);
+  int open_pool_ctx(const string& pool, librados::IoCtx&  io_ctx);
   int open_bucket_index_ctx(rgw_bucket& bucket, librados::IoCtx&  index_ctx);
   int open_bucket_data_ctx(rgw_bucket& bucket, librados::IoCtx&  io_ctx);
   int open_bucket_data_extra_ctx(rgw_bucket& bucket, librados::IoCtx&  io_ctx);
@@ -1262,12 +1262,14 @@ class RGWRados
   uint32_t bucket_index_max_shards;
 
   int get_obj_ioctx(const rgw_obj& obj, librados::IoCtx *ioctx);
-  int get_obj_ref(const rgw_obj& obj, rgw_rados_ref *ref, rgw_bucket *bucket, bool ref_system_obj = false);
+  int get_obj_ref(const rgw_obj& obj, rgw_rados_ref *ref, rgw_bucket *bucket);
+  int get_system_obj_ref(const rgw_obj& obj, rgw_rados_ref *ref, rgw_bucket *bucket);
   uint64_t max_bucket_id;
 
   int get_olh_target_state(RGWObjectCtx& rctx, rgw_obj& obj, RGWObjState *olh_state,
-                           RGWObjState **target_state, RGWObjVersionTracker *objv_tracker);
-  int get_obj_state_impl(RGWObjectCtx *rctx, rgw_obj& obj, RGWObjState **state, RGWObjVersionTracker *objv_tracker, bool follow_olh);
+                           RGWObjState **target_state);
+  int get_system_obj_state_impl(RGWObjectCtx *rctx, rgw_obj& obj, RGWObjState **state, RGWObjVersionTracker *objv_tracker);
+  int get_obj_state_impl(RGWObjectCtx *rctx, rgw_obj& obj, RGWObjState **state, bool follow_olh);
   int append_atomic_test(RGWObjectCtx *rctx, rgw_obj& obj,
                          librados::ObjectOperation& op, RGWObjState **state);
 
@@ -1763,6 +1765,8 @@ public:
               RGWObjVersionTracker *objv_tracker,
               time_t set_mtime /* 0 for don't set */);
 
+  virtual int put_system_obj_data(void *ctx, rgw_obj& obj, bufferlist& bl,
+              off_t ofs, bool exclusive);
   virtual int put_obj_data(void *ctx, rgw_obj& obj, const char *data,
               off_t ofs, size_t len, bool exclusive);
   virtual int aio_put_obj_data(void *ctx, rgw_obj& obj, bufferlist& bl,
@@ -1922,6 +1926,13 @@ public:
    */
   virtual int system_obj_get_attr(rgw_obj& obj, const char *name, bufferlist& dest);
 
+  int system_obj_set_attr(void *ctx, rgw_obj& obj, const char *name, bufferlist& bl,
+                          RGWObjVersionTracker *objv_tracker);
+  virtual int system_obj_set_attrs(void *ctx, rgw_obj& obj,
+                                   map<string, bufferlist>& attrs,
+                                   map<string, bufferlist>* rmattrs,
+                                   RGWObjVersionTracker *objv_tracker);
+
   /**
    * Set an attr on an object.
    * bucket: name of the bucket holding the object
@@ -1930,17 +1941,16 @@ public:
    * bl: the contents of the attr
    * Returns: 0 on success, -ERR# otherwise.
    */
-  virtual int set_attr(void *ctx, rgw_obj& obj, const char *name, bufferlist& bl,
-                       RGWObjVersionTracker *objv_tracker);
+  int set_attr(void *ctx, rgw_obj& obj, const char *name, bufferlist& bl);
 
-  virtual int set_attrs(void *ctx, rgw_obj& obj,
+  int set_attrs(void *ctx, rgw_obj& obj,
                         map<string, bufferlist>& attrs,
-                        map<string, bufferlist>* rmattrs,
-                        RGWObjVersionTracker *objv_tracker);
+                        map<string, bufferlist>* rmattrs);
 
-  int get_obj_state(RGWObjectCtx *rctx, rgw_obj& obj, RGWObjState **state, RGWObjVersionTracker *objv_tracker, bool follow_olh);
-  int get_obj_state(RGWObjectCtx *rctx, rgw_obj& obj, RGWObjState **state, RGWObjVersionTracker *objv_tracker) {
-    return get_obj_state(rctx, obj, state, objv_tracker, true);
+  int get_system_obj_state(RGWObjectCtx *rctx, rgw_obj& obj, RGWObjState **state, RGWObjVersionTracker *objv_tracker);
+  int get_obj_state(RGWObjectCtx *rctx, rgw_obj& obj, RGWObjState **state, bool follow_olh);
+  int get_obj_state(RGWObjectCtx *rctx, rgw_obj& obj, RGWObjState **state) {
+    return get_obj_state(rctx, obj, state, true);
   }
 
   virtual int stat_system_obj(RGWObjectCtx& obj_ctx,
@@ -2277,10 +2287,6 @@ public:
                        rgw_bucket_dir_entry& list_state,
                        RGWObjEnt& object,
                        bufferlist& suggested_updates);
-
-  bool bucket_is_system(rgw_bucket& bucket) {
-    return (bucket.name[0] == '.');
-  }
 
   /**
    * Init pool iteration
