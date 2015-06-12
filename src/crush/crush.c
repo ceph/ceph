@@ -130,7 +130,9 @@ void crush_destroy(struct crush_map *map)
 		kfree(map->rules);
 	}
 
+#ifndef __KERNEL__
 	kfree(map->choose_tries);
+#endif
 	kfree(map);
 }
 

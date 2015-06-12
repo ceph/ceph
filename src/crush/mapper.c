@@ -327,9 +327,9 @@ static int bucket_straw2_choose(struct crush_bucket_straw2 *bucket,
 			 * weight means a larger (less negative) value
 			 * for draw.
 			 */
-			draw = ln / w;
+			draw = div64_s64(ln, w);
 		} else {
-			draw = INT64_MIN;
+			draw = S64_MIN;
 		}
 
 		if (i == 0 || draw > high_draw) {
@@ -574,9 +574,10 @@ reject:
 		out[outpos] = item;
 		outpos++;
 		count--;
-
+#ifndef __KERNEL__
 		if (map->choose_tries && ftotal <= map->choose_total_tries)
 			map->choose_tries[ftotal]++;
+#endif
 	}
 
 	dprintk("CHOOSE returns %d\n", outpos);
@@ -622,16 +623,16 @@ static void crush_choose_indep(const struct crush_map *map,
 	for (ftotal = 0; left > 0 && ftotal < tries; ftotal++) {
 #ifdef DEBUG_INDEP
 		if (out2 && ftotal) {
-			printf("%u %d a: ", ftotal, left);
+			dprintk("%u %d a: ", ftotal, left);
 			for (rep = outpos; rep < endpos; rep++) {
-				printf(" %d", out[rep]);
+				dprintk(" %d", out[rep]);
 			}
-			printf("\n");
-			printf("%u %d b: ", ftotal, left);
+			dprintk("\n");
+			dprintk("%u %d b: ", ftotal, left);
 			for (rep = outpos; rep < endpos; rep++) {
-				printf(" %d", out2[rep]);
+				dprintk(" %d", out2[rep]);
 			}
-			printf("\n");
+			dprintk("\n");
 		}
 #endif
 		for (rep = outpos; rep < endpos; rep++) {
@@ -750,21 +751,22 @@ static void crush_choose_indep(const struct crush_map *map,
 			out2[rep] = CRUSH_ITEM_NONE;
 		}
 	}
-
+#ifndef __KERNEL__
 	if (map->choose_tries && ftotal <= map->choose_total_tries)
 		map->choose_tries[ftotal]++;
+#endif
 #ifdef DEBUG_INDEP
 	if (out2) {
-		printf("%u %d a: ", ftotal, left);
+		dprintk("%u %d a: ", ftotal, left);
 		for (rep = outpos; rep < endpos; rep++) {
-			printf(" %d", out[rep]);
+			dprintk(" %d", out[rep]);
 		}
-		printf("\n");
-		printf("%u %d b: ", ftotal, left);
+		dprintk("\n");
+		dprintk("%u %d b: ", ftotal, left);
 		for (rep = outpos; rep < endpos; rep++) {
-			printf(" %d", out2[rep]);
+			dprintk(" %d", out2[rep]);
 		}
-		printf("\n");
+		dprintk("\n");
 	}
 #endif
 }
