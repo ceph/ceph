@@ -1092,6 +1092,9 @@ def task(ctx, config):
     need_install = {}  # sha1 to dl, or path to rpm or deb
     need_version = {}  # utsrelease or sha1
     kdb = {}
+
+    remove_old_kernels(ctx)
+
     for role, role_config in config.iteritems():
         # gather information about this remote
         (role_remote,) = ctx.cluster.only(role).remotes.keys()
@@ -1201,8 +1204,6 @@ def task(ctx, config):
         # enable or disable kdb if specified, otherwise do not touch
         if role_config.get('kdb') is not None:
             kdb[role] = role_config.get('kdb')
-
-    remove_old_kernels(ctx)
 
     if need_install:
         install_firmware(ctx, need_install)
