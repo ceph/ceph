@@ -1226,8 +1226,14 @@ public:
    *
    * @param c A callback
    */
-  void wait_for_active(Context *c) {
+  void wait_for_active(MonOpRequestRef op, Context *c) {
+    if (op)
+      op->mark_event("paxos:wait_for_active");
     waiting_for_active.push_back(c);
+  }
+  void wait_for_active(Context *c) {
+    MonOpRequestRef o;
+    wait_for_active(o, c);
   }
 
   /**
@@ -1304,9 +1310,15 @@ public:
    *
    * @param onreadable A callback
    */
-  void wait_for_readable(Context *onreadable) {
+  void wait_for_readable(MonOpRequestRef op, Context *onreadable) {
     assert(!is_readable());
+    if (op)
+      op->mark_event("paxos:wait_for_readable");
     waiting_for_readable.push_back(onreadable);
+  }
+  void wait_for_readable(Context *onreadable) {
+    MonOpRequestRef o;
+    wait_for_readable(o, onreadable);
   }
   /**
    * @}
@@ -1340,9 +1352,15 @@ public:
    *
    * @param c A callback
    */
-  void wait_for_writeable(Context *c) {
+  void wait_for_writeable(MonOpRequestRef op, Context *c) {
     assert(!is_writeable());
+    if (op)
+      op->mark_event("paxos:wait_for_writeable");
     waiting_for_writeable.push_back(c);
+  }
+  void wait_for_writeable(Context *c) {
+    MonOpRequestRef o;
+    wait_for_writeable(o, c);
   }
 
   /**
