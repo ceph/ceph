@@ -2582,8 +2582,8 @@ bool RGWRESTMgr_S3::is_s3website_mode(struct req_state *s)
   if(!enable_s3website)
 	  return false;
 
-  // If this is true, we already validity the hostname via the dedicated
-  // website endpoint.
+  // If this is true, we already detected the hostname as valid via the
+  // dedicated website endpoint.
   if(s->prot_flags & RGW_PROTO_WEBSITE)
 	  return true;
 
