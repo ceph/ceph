@@ -3698,7 +3698,7 @@ void object_copy_data_t::dump(Formatter *f) const
   f->dump_int("size", size);
   f->dump_stream("mtime") << mtime;
   /* we should really print out the attrs here, but bufferlist
-     const-correctness prents that */
+     const-correctness prevents that */
   f->dump_int("attrs_size", attrs.size());
   f->dump_int("flags", flags);
   f->dump_unsigned("data_digest", data_digest);
