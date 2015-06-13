@@ -61,9 +61,9 @@ Parameters
      support for cloning and is more easily extensible to allow more
      features in the future.
 
-.. option:: --size size-in-mb
+.. option:: --size size-in-M/G/T
 
-   Specifies the size (in megabytes) of the new rbd image.
+   Specifies the size (in M/G/T) of the new rbd image.
 
 .. option:: --order bits
 

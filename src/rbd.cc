@@ -98,14 +98,14 @@ void usage()
 "  info <image-name>                           show information about image size,\n"
 "                                              striping, etc.\n"
 "  create [--order <bits>] [--image-features <features>] [--image-shared]\n"
-"         --size <MB> <name>                   create an empty image\n"
+"         --size <M/G/T> <image-name>          create an empty image\n"
 "  clone [--order <bits>] [--image-features <features>] [--image-shared]\n"
 "        <parentsnap> <clonename>              clone a snapshot into a COW\n"
 "                                              child image\n"
 "  children <snap-name>                        display children of snapshot\n"
 "  flatten <image-name>                        fill clone with parent data\n"
 "                                              (make it independent)\n"
-"  resize --size <MB> <image-name>             resize (expand or contract) image\n"
+"  resize --size <M/G/T> <image-name>          resize (expand or contract) image\n"
 "  rm <image-name>                             delete an image\n"
 "  export <image-name> <path>                  export image to file\n"
 "                                              \"-\" for stdout\n"
@@ -168,7 +168,7 @@ void usage()
 "  --snap <snap-name>                 snapshot name\n"
 "  --dest-pool <name>                 destination pool name\n"
 "  --path <path-name>                 path name for import/export\n"
-"  --size <size in MB>                size of image for create and resize\n"
+"  -s, --size <size in M/G/T>         size of image for create and resize\n"
 "  --order <bits>                     the object size in bits; object size will be\n"
 "                                     (1 << order) bytes. Default is 22 (4 MB).\n"
 "  --image-format <format-number>     format to use when creating an image\n"
@@ -2975,7 +2975,7 @@ int main(int argc, const char **argv)
 
   std::string val, parse_err;
   std::ostringstream err;
-  long long sizell = 0;
+  uint64_t sizell = 0;
   std::vector<const char*>::iterator i;
   for (i = args.begin(); i != args.end(); ) {
     if (ceph_argparse_double_dash(args, i)) {
@@ -3009,16 +3009,22 @@ int main(int argc, const char **argv)
       fromsnapname = strdup(val.c_str());
     } else if (ceph_argparse_witharg(args, i, &val, "-i", "--image", (char*)NULL)) {
       imgname = strdup(val.c_str());
-    } else if (ceph_argparse_witharg(args, i, &sizell, err, "-s", "--size", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, err, "-s", "--size", (char*)NULL)) {
       if (!err.str().empty()) {
-	cerr << "rbd: " << err.str() << std::endl;
-	return EXIT_FAILURE;
+        cerr << "rbd: " << err.str() << std::endl;
+        return EXIT_FAILURE;
       }
-      if (sizell < 0) {
-	cerr << "rbd: size must be >= 0" << std::endl;
-	return EXIT_FAILURE;
+      const char *sizeval = val.c_str();
+      size = strict_sistrtoll(sizeval, &parse_err);
+      if (!parse_err.empty()) {
+        cerr << "rbd: error parsing --size " << parse_err << std::endl;
+        return EXIT_FAILURE;
       }
-      size = sizell << 20;   // bytes to MB
+      //NOTE: We can remove below given three lines of code once all applications,
+      //which use this CLI will adopt B/K/M/G/T/P/E with size value 
+      sizell = atoll(sizeval);
+      if (size == sizell) 
+        size = size << 20;   // Default MB to Bytes
       size_set = true;
     } else if (ceph_argparse_flag(args, i, "-l", "--long", (char*)NULL)) {
       lflag = true;
@@ -3540,7 +3546,7 @@ if (!set_conf_param(v, p1, p2, p3)) { \
 
   if (opt_cmd == OPT_CREATE || opt_cmd == OPT_RESIZE) {
     if (!size_set) {
-      cerr << "rbd: must specify --size <MB>" << std::endl;
+      cerr << "rbd: must specify --size <M/G/T>" << std::endl;
       return EINVAL;
     }
   }
