@@ -855,6 +855,7 @@ OPTION(keyvaluestore_default_strip_size, OPT_INT, 4096) // Only affect new objec
 OPTION(keyvaluestore_max_expected_write_size, OPT_U64, 1ULL << 24) // bytes
 OPTION(keyvaluestore_header_cache_size, OPT_INT, 4096)    // Header cache size
 OPTION(keyvaluestore_backend, OPT_STR, "leveldb")
+OPTION(keyvaluestore_dump_file, OPT_STR, "")         // file onto which store transaction dumps
 
 // max bytes to search ahead in journal searching for corruption
 OPTION(journal_max_corrupt_search, OPT_U64, 10<<20)
