@@ -539,7 +539,9 @@ KeyValueStore::KeyValueStore(const std::string &base,
   m_keyvaluestore_queue_max_bytes(g_conf->keyvaluestore_queue_max_bytes),
   m_keyvaluestore_strip_size(g_conf->keyvaluestore_default_strip_size),
   m_keyvaluestore_max_expected_write_size(g_conf->keyvaluestore_max_expected_write_size),
-  do_update(do_update)
+  do_update(do_update),
+  m_keyvaluestore_do_dump(false),
+  m_keyvaluestore_dump_fmt(true)
 {
   ostringstream oss;
   oss << basedir << "/current";
@@ -572,6 +574,10 @@ KeyValueStore::~KeyValueStore()
   g_ceph_context->get_perfcounters_collection()->remove(perf_logger);
 
   delete perf_logger;
+  
+  if (m_keyvaluestore_do_dump) {
+    dump_stop();
+  }
 }
 
 int KeyValueStore::statfs(struct statfs *buf)
@@ -1016,6 +1022,8 @@ int KeyValueStore::queue_transactions(Sequencer *posr, list<Transaction*> &tls,
 
   Op *o = build_op(tls, ondisk, onreadable, onreadable_sync, osd_op);
   op_queue_reserve_throttle(o, handle);
+  if (m_keyvaluestore_do_dump)
+    dump_transactions(o->tls, o->op, osr);
   dout(5) << "queue_transactions (trailing journal) " << " " << tls <<dendl;
   queue_op(osr, o);
 
@@ -3068,6 +3076,7 @@ const char** KeyValueStore::get_tracked_conf_keys() const
     "keyvaluestore_queue_max_ops",
     "keyvaluestore_queue_max_bytes",
     "keyvaluestore_strip_size",
+    "keyvaluestore_dump_file",
     NULL
   };
   return KEYS;
@@ -3087,10 +3096,54 @@ void KeyValueStore::handle_conf_change(const struct md_config_t *conf,
     m_keyvaluestore_strip_size = conf->keyvaluestore_default_strip_size;
     default_strip_size = m_keyvaluestore_strip_size;
   }
+  if (changed.count("keyvaluestore_dump_file")) {
+    if (conf->keyvaluestore_dump_file.length() &&
+	conf->keyvaluestore_dump_file != "-") {
+      dump_start(conf->keyvaluestore_dump_file);
+    } else {
+      dump_stop();
+    }
+  }
 }
 
+void KeyValueStore::dump_start(const std::string file)
+{
+  dout(10) << "dump_start " << file << dendl;
+  if (m_keyvaluestore_do_dump) {
+    dump_stop();
+  }
+  m_keyvaluestore_dump_fmt.reset();
+  m_keyvaluestore_dump_fmt.open_array_section("dump");
+  m_keyvaluestore_dump.open(file.c_str());
+  m_keyvaluestore_do_dump = true;
+}
+
+void KeyValueStore::dump_stop()
+{
+  dout(10) << "dump_stop" << dendl;
+  m_keyvaluestore_do_dump = false;
+  if (m_keyvaluestore_dump.is_open()) {
+    m_keyvaluestore_dump_fmt.close_section();
+    m_keyvaluestore_dump_fmt.flush(m_keyvaluestore_dump);
+    m_keyvaluestore_dump.flush();
+    m_keyvaluestore_dump.close();
+  }
+}
 void KeyValueStore::dump_transactions(list<ObjectStore::Transaction*>& ls, uint64_t seq, OpSequencer *osr)
 {
+  m_keyvaluestore_dump_fmt.open_array_section("transactions");
+  unsigned trans_num = 0;
+  for (list<ObjectStore::Transaction*>::iterator i = ls.begin(); i != ls.end(); ++i, ++trans_num) {
+    m_keyvaluestore_dump_fmt.open_object_section("transaction");
+    m_keyvaluestore_dump_fmt.dump_string("osr", osr->get_name());
+    m_keyvaluestore_dump_fmt.dump_unsigned("seq", seq);
+    m_keyvaluestore_dump_fmt.dump_unsigned("trans_num", trans_num);
+    (*i)->dump(&m_keyvaluestore_dump_fmt);
+    m_keyvaluestore_dump_fmt.close_section();
+  }
+  m_keyvaluestore_dump_fmt.close_section();
+  m_keyvaluestore_dump_fmt.flush(m_keyvaluestore_dump);
+  m_keyvaluestore_dump.flush();
 }
 
 
