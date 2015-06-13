@@ -357,9 +357,6 @@ install(TARGETS librados DESTINATION lib)
 
 set(rados_srcs
   tools/rados/rados.cc
-  tools/rados/rados_sync.cc
-  tools/rados/rados_import.cc
-  tools/rados/rados_export.cc
   common/obj_bencher.cc)
 add_executable(rados ${rados_srcs} $<TARGET_OBJECTS:heap_profiler_objs>)
 target_link_libraries(rados librados global ${CMAKE_DL_LIBS} ${TCMALLOC_LIBS})
