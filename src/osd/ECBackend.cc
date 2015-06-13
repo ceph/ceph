@@ -442,15 +442,19 @@ void ECBackend::dispatch_recovery_messages(RecoveryMessages &m, int priority)
     msg->compute_cost(cct);
     replies.insert(make_pair(i->first.osd, msg));
   }
-  m.t->register_on_complete(
-    get_parent()->bless_context(
-      new SendPushReplies(
-	get_parent(),
-	get_parent()->get_epoch(),
-	replies)));
-  m.t->register_on_applied(
-    new ObjectStore::C_DeleteTransaction(m.t));
-  get_parent()->queue_transaction(m.t);
+  if (!replies.empty()) {
+    m.t->register_on_complete(
+      get_parent()->bless_context(
+        new SendPushReplies(
+          get_parent(),
+          get_parent()->get_epoch(),
+          replies)));
+    m.t->register_on_applied(
+      new ObjectStore::C_DeleteTransaction(m.t));
+    get_parent()->queue_transaction(m.t);
+  } else {
+    delete m.t;
+  }
   m.t = NULL;
   if (m.reads.empty())
     return;
