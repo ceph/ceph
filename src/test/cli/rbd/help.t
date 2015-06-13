@@ -8,14 +8,14 @@
     info <image-name>                           show information about image size,
                                                 striping, etc.
     create [--order <bits>] [--image-features <features>] [--image-shared]
-           --size <MB> <name>                   create an empty image
+           --size <M/G/T> <image-name>          create an empty image
     clone [--order <bits>] [--image-features <features>] [--image-shared]
           <parentsnap> <clonename>              clone a snapshot into a COW
                                                 child image
     children <snap-name>                        display children of snapshot
     flatten <image-name>                        fill clone with parent data
                                                 (make it independent)
-    resize --size <MB> <image-name>             resize (expand or contract) image
+    resize --size <M/G/T> <image-name>          resize (expand or contract) image
     rm <image-name>                             delete an image
     export <image-name> <path>                  export image to file
                                                 "-" for stdout
@@ -78,7 +78,7 @@
     --snap <snap-name>                 snapshot name
     --dest-pool <name>                 destination pool name
     --path <path-name>                 path name for import/export
-    --size <size in MB>                size of image for create and resize
+    -s, --size <size in M/G/T>         size of image for create and resize
     --order <bits>                     the object size in bits; object size will be
                                        (1 << order) bytes. Default is 22 (4 MB).
     --image-format <format-number>     format to use when creating an image

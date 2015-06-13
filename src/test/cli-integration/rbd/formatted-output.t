@@ -15,11 +15,15 @@ create
   $ rbd create -s 512 --image-format 2 bar
   $ rbd create -s 2048 --image-format 2 baz
   $ rbd create -s 1 --image-format 1 quux
+  $ rbd create -s 1G --image-format 2 quuy
 
 snapshot
 ========
   $ rbd snap create bar@snap
   $ rbd resize -s 1024 bar
+  
+  Resizing image: 100% complete...done.
+  $ rbd resize -s 2G  quuy
   
   Resizing image: 100% complete...done.
   $ rbd snap create bar@snap2
@@ -731,6 +735,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   $ rbd rm foo 2> /dev/null
   $ rbd rm bar 2> /dev/null
   $ rbd rm quux 2> /dev/null
+  $ rbd rm quuy 2> /dev/null
   $ rbd rm baz 2> /dev/null
   $ ceph osd pool delete rbd_other rbd_other --yes-i-really-really-mean-it
   pool 'rbd_other' removed
