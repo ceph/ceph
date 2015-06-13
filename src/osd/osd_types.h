@@ -961,7 +961,7 @@ public:
    */
   map<snapid_t, pool_snap_info_t> snaps;
   /*
-   * Alternatively, if we are definining non-pool snaps (e.g. via the
+   * Alternatively, if we are defining non-pool snaps (e.g. via the
    * Ceph MDS), we must track @removed_snaps (since @snaps is not
    * used).  Snaps and removed_snaps are to be used exclusive of each
    * other!
@@ -3279,7 +3279,7 @@ public:
     return blocked;
   }
 
-  // do simple synchronous mutual exclusion, for now.  now waitqueues or anything fancy.
+  // do simple synchronous mutual exclusion, for now.  no waitqueues or anything fancy.
   void ondisk_write_lock() {
     lock.Lock();
     writers_waiting++;
