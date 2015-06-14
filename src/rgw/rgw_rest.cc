@@ -1424,6 +1424,12 @@ int RGWREST::preprocess(struct req_state *s, RGWClientIO *cio)
 
     if (s3website_enabled) {
       in_hosted_domain_s3website = rgw_find_host_in_domains(info.host, &s3website_domain, &s3website_subdomain, hostnames_s3website_set);
+      if(in_hosted_domain_s3website) {
+	in_hosted_domain = true; // TODO: should hostnames be a strict superset of hostnames_s3website?
+        domain = s3website_domain;
+        subdomain = s3website_subdomain;
+        s->prot_flags |= RGW_PROTO_WEBSITE;
+      }
     }
 
     ldout(s->cct, 20)
@@ -1433,7 +1439,7 @@ int RGWREST::preprocess(struct req_state *s, RGWClientIO *cio)
       << " in_hosted_domain_s3website=" << in_hosted_domain_s3website 
       << dendl;
 
-    if (g_conf->rgw_resolve_cname && !in_hosted_domain) {
+    if (g_conf->rgw_resolve_cname && !in_hosted_domain && !in_hosted_domain_s3website) {
       string cname;
       bool found;
       int r = rgw_resolver->resolve_cname(info.host, cname, &found);
@@ -1448,6 +1454,12 @@ int RGWREST::preprocess(struct req_state *s, RGWClientIO *cio)
 
         if(s3website_enabled && !in_hosted_domain_s3website) {
             in_hosted_domain_s3website = rgw_find_host_in_domains(cname, &s3website_domain, &s3website_subdomain, hostnames_s3website_set);
+	    if(in_hosted_domain_s3website) {
+	      in_hosted_domain = true; // TODO: should hostnames be a strict superset of hostnames_s3website?
+	      domain = s3website_domain;
+	      subdomain = s3website_subdomain;
+	      s->prot_flags |= RGW_PROTO_WEBSITE;
+	    }
         }
 
         ldout(s->cct, 20)
@@ -1457,12 +1469,6 @@ int RGWREST::preprocess(struct req_state *s, RGWClientIO *cio)
           << " in_hosted_domain_s3website=" << in_hosted_domain_s3website 
           << dendl;
       }
-    }
-
-    if(in_hosted_domain_s3website) {
-      domain = s3website_domain;
-      subdomain = s3website_subdomain;
-      s->prot_flags |= RGW_PROTO_WEBSITE;
     }
 
     if (in_hosted_domain && !subdomain.empty()) {
