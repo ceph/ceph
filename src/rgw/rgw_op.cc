@@ -3003,6 +3003,11 @@ void RGWCompleteMultipart::execute()
     return;
   }
 
+  if (parts->parts.size() > s->cct->_conf->rgw_multipart_part_upload_limit) {
+    ret = -ERANGE;
+    return;
+  }
+
   mp.init(s->object.name, upload_id);
   meta_oid = mp.get_meta();
 
