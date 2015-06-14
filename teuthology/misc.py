@@ -10,6 +10,7 @@ import logging
 import configobj
 import getpass
 import socket
+import subprocess
 import sys
 import tarfile
 import time
@@ -1117,6 +1118,33 @@ def get_valgrind_args(testdir, name, preamble, v):
     ] + preamble + extra_args + v
     log.debug('running %s under valgrind with args %s', name, args)
     return args
+
+
+def ssh_keyscan(hostnames):
+    """
+    Fetch the SSH public key of one or more hosts
+    """
+    if isinstance(hostnames, basestring):
+        raise TypeError("'hostnames' must be a list")
+    hostnames = [canonicalize_hostname(name, user=None) for name in
+                 hostnames]
+    args = ['ssh-keyscan', '-T', '1', '-t', 'rsa'] + hostnames
+    p = subprocess.Popen(
+        args=args,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    p.wait()
+
+    keys_dict = dict()
+    for line in p.stderr.readlines():
+        line = line.strip()
+        if line and not line.startswith('#'):
+            log.error(line)
+    for line in p.stdout.readlines():
+        host, key = line.strip().split(' ', 1)
+        keys_dict[host] = key
+    return keys_dict
 
 
 def stop_daemons_of_type(ctx, type_):

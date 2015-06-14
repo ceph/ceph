@@ -130,7 +130,7 @@ def lock_machines(ctx, config):
                 while len(keys_dict) != len(vmlist):
                     loopcount += 1
                     time.sleep(10)
-                    keys_dict = lock.ssh_keyscan(vmlist)
+                    keys_dict = misc.ssh_keyscan(vmlist)
                     log.info('virtual machine is still unavailable')
                     if loopcount == 40:
                         loopcount = 0
