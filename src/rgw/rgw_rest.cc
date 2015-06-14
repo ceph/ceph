@@ -1412,7 +1412,7 @@ int RGWREST::preprocess(struct req_state *s, RGWClientIO *cio)
     bool in_hosted_domain_s3website = false;
     bool in_hosted_domain = rgw_find_host_in_domains(info.host, &domain, &subdomain, hostnames_set);
 
-    bool s3website_enabled = g_conf->rgw_enable_apis.find("s3website") != std::string::npos  && g_conf->rgw_s3website_mode.find("hostname") != std::string::npos;
+    bool s3website_enabled = g_conf->rgw_enable_apis.find("s3website") != std::string::npos;
     string s3website_domain;
     string s3website_subdomain;
 
