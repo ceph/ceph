@@ -2668,6 +2668,8 @@ int RGWHandler_ObjStore_S3Website::retarget(RGWOp *op, RGWOp **new_op) {
   if(!is_website_bucket(s)) {
       return 0;
   }*/
+  if(!(s->prot_flags & RGW_PROTO_WEBSITE))
+    return 0;
 
   RGWObjectCtx& obj_ctx = *static_cast<RGWObjectCtx *>(s->obj_ctx);
   int ret = store->get_bucket_info(obj_ctx, s->bucket_name_str, s->bucket_info, NULL, &s->bucket_attrs);
