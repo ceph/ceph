@@ -266,6 +266,7 @@ static bool rgw_find_host_in_domains(const string& host, string *domain, string 
 
 static void dump_status(struct req_state *s, const char *status, const char *status_name)
 {
+  s->formatter->set_status(status, status_name);
   int r = s->cio->send_status(status, status_name);
   if (r < 0) {
     ldout(s->cct, 0) << "ERROR: s->cio->send_status() returned err=" << r << dendl;
@@ -275,6 +276,7 @@ static void dump_status(struct req_state *s, const char *status, const char *sta
 void rgw_flush_formatter_and_reset(struct req_state *s, Formatter *formatter)
 {
   std::ostringstream oss;
+  formatter->output_footer();
   formatter->flush(oss);
   std::string outs(oss.str());
   if (!outs.empty() && s->op != OP_HEAD) {
@@ -507,8 +509,7 @@ void dump_access_control(req_state *s, RGWOp *op)
 void dump_start(struct req_state *s)
 {
   if (!s->content_started) {
-    if (s->format == RGW_FORMAT_XML)
-      s->formatter->write_raw_data(XMLFormatter::XML_1_DTD);
+    s->formatter->output_header();
     s->content_started = true;
   }
 }
@@ -561,12 +562,17 @@ void end_header(struct req_state *s, RGWOp *op, const char *content_type, const 
   }
   if (s->err.is_err()) {
     dump_start(s);
-    s->formatter->open_object_section("Error");
+    if(s->format != RGW_FORMAT_HTML) {
+      s->formatter->open_object_section("Error");
+    }
     if (!s->err.s3_code.empty())
       s->formatter->dump_string("Code", s->err.s3_code);
     if (!s->err.message.empty())
       s->formatter->dump_string("Message", s->err.message);
-    s->formatter->close_section();
+    if(s->format != RGW_FORMAT_HTML) {
+      s->formatter->close_section();
+    }
+    s->formatter->output_footer();
     dump_content_length(s, s->formatter->get_len());
   } else {
     if (proposed_content_length != NO_CONTENT_LENGTH) {

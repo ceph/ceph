@@ -2619,7 +2619,8 @@ bool RGWRESTMgr_S3::is_s3website_mode(struct req_state *s)
 
 RGWHandler *RGWRESTMgr_S3::get_handler(struct req_state *s)
 {
-  int ret = RGWHandler_ObjStore_S3::init_from_header(s, RGW_FORMAT_XML, false);
+  bool is_s3website = is_s3website_mode(s);
+  int ret = RGWHandler_ObjStore_S3::init_from_header(s, is_s3website ? RGW_FORMAT_HTML : RGW_FORMAT_XML, false);
   if (ret < 0)
     return NULL;
 
@@ -2631,7 +2632,7 @@ RGWHandler *RGWRESTMgr_S3::get_handler(struct req_state *s)
 
   if (s->bucket_name_str.empty()) {
       handler = new RGWHandler_ObjStore_Service_S3;
-  } else if (is_s3website_mode(s)) {
+  } else if (is_s3website) {
       handler = new RGWHandler_ObjStore_Obj_S3Website;
   } else if (s->object.empty()) {
       handler = new RGWHandler_ObjStore_Bucket_S3;
