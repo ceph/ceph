@@ -573,17 +573,6 @@ static int process_request(RGWRados *store, RGWREST *rest, RGWRequest *req, RGWC
 
   should_log = mgr->get_logging();
 
-  // Authorization must be before get_op
-  // because get_op depends on authorization data existing to choice if we are
-  // in website mode (authorization is NOT valid in website mode).
-  req->log(s, "authorizing");
-  ret = handler->authorize();
-  if (ret < 0) {
-    dout(10) << "failed to authorize request" << dendl;
-    abort_early(s, NULL, ret);
-    goto done;
-  }
-
   req->log(s, "getting op");
   op = handler->get_op(store);
   if (!op) {
@@ -592,6 +581,14 @@ static int process_request(RGWRados *store, RGWREST *rest, RGWRequest *req, RGWC
   }
   req->op = op;
   dout(10) << "op=" << typeid(*op).name() << dendl;
+
+  req->log(s, "authorizing");
+  ret = handler->authorize();
+  if (ret < 0) {
+    dout(10) << "failed to authorize request" << dendl;
+    abort_early(s, NULL, ret);
+    goto done;
+  }
 
   if (s->user.suspended) {
     dout(10) << "user is suspended, uid=" << s->user.user_id << dendl;
