@@ -180,13 +180,14 @@ def task(ctx, config):
         if field in op_weights:
             weights[field] = op_weights[field]
 
-    if 'write' in weights:
-        weights['write'] = weights['write'] / 2
-        weights['write_excl'] = weights['write']
+    if config.get('write_append_excl', True):
+        if 'write' in weights:
+            weights['write'] = weights['write'] / 2
+            weights['write_excl'] = weights['write']
 
-    if 'append' in weights:
-        weights['append'] = weights['append'] / 2
-        weights['append_excl'] = weights['append']
+        if 'append' in weights:
+            weights['append'] = weights['append'] / 2
+            weights['append_excl'] = weights['append']
 
     for op, weight in weights.iteritems():
         args.extend([
