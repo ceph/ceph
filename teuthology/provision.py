@@ -48,6 +48,7 @@ class Downburst(object):
         self.os_version = os_version
         self.status = status or get_status(self.name)
         self.config_path = None
+        self.user_path = None
         self.host = decanonicalize_hostname(self.status['vm_host']['name'])
         self.executable = downburst_executable()
 
@@ -94,11 +95,18 @@ class Downburst(object):
         """
         if not self.config_path:
             raise ValueError("I need a config_path!")
+        if not self.user_path:
+            raise ValueError("I need a user_path!")
         shortname = decanonicalize_hostname(self.name)
 
-        args = [self.executable, '-c', self.host, 'create',
-                '--meta-data=%s' % self.config_path, shortname,
-                ]
+        args = [
+            self.executable,
+            '-c', self.host,
+            'create',
+            '--meta-data=%s' % self.config_path,
+            '--user-data=%s' % self.user_path,
+            shortname,
+        ]
         log.info("Provisioning a {distro} {distroversion} vps".format(
             distro=self.os_type,
             distroversion=self.os_version
@@ -153,9 +161,19 @@ class Downburst(object):
             'arch': 'x86_64',
         }
         fqdn = self.name.split('@')[1]
-        file_out = {'downburst': file_info, 'local-hostname': fqdn}
+        file_out = {
+            'downburst': file_info,
+            'local-hostname': fqdn,
+        }
         yaml.safe_dump(file_out, config_fd)
         self.config_path = config_fd.name
+
+        user_info = {
+            'user': 'ubuntu',
+        }
+        user_fd = tempfile.NamedTemporaryFile(delete=False)
+        yaml.safe_dump(user_info, user_fd)
+        self.user_path = user_fd.name
         return True
 
     def remove_config(self):
@@ -165,6 +183,10 @@ class Downburst(object):
         if self.config_path and os.path.exists(self.config_path):
             os.remove(self.config_path)
             self.config_path = None
+            return True
+        if self.user_path and os.path.exists(self.user_path):
+            os.remove(self.user_path)
+            self.user_path = None
             return True
         return False
 
