@@ -3,6 +3,7 @@ tasks:
       clients: [client.1]
       ops: 4000
       objects: 50
+      write_append_excl: false
       op_weights:
         read: 100
         write: 100
