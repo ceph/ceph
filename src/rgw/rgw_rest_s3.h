@@ -471,6 +471,7 @@ private:
   bool enable_s3website;
 protected:
   bool is_s3website_mode(struct req_state *s);
+  bool is_website_bucket(struct req_state *s);
 public:
   RGWRESTMgr_S3(bool enable_s3website) : enable_s3website(false) { this->enable_s3website = enable_s3website; }
   virtual ~RGWRESTMgr_S3() {}
