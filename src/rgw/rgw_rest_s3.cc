@@ -2617,6 +2617,21 @@ bool RGWRESTMgr_S3::is_s3website_mode(struct req_state *s)
 
 }
 
+bool RGWRESTMgr_S3::is_website_bucket(struct req_state *s)
+{
+  /*
+  // s->bucket_info is not yet populated
+  RGWObjectCtx& obj_ctx = *static_cast<RGWObjectCtx *>(s->obj_ctx);
+  int ret = store->get_bucket_info(obj_ctx, s->bucket_name_str, s->bucket_info, NULL, &s->bucket_attrs);
+#warning FIXME: Do we need to catch -ENOENT seperately? What about other errors?
+  if (ret < 0) {
+      return false; 
+  }
+  return s->bucket_info.has_website;
+  */
+  return false;
+}
+
 RGWHandler *RGWRESTMgr_S3::get_handler(struct req_state *s)
 {
   bool is_s3website = is_s3website_mode(s);
@@ -2648,20 +2663,17 @@ int RGWHandler_ObjStore_S3Website::retarget(RGWOp *op, RGWOp **new_op) {
   *new_op = op;
   ldout(s->cct, 10) << __func__ << "Starting retarget" << dendl;
 
-  // s->bucket_info is not yet populated
+  // If bucket does not have website enabled, bail out
+  /*
+  if(!is_website_bucket(s)) {
+      return 0;
+  }*/
+
   RGWObjectCtx& obj_ctx = *static_cast<RGWObjectCtx *>(s->obj_ctx);
   int ret = store->get_bucket_info(obj_ctx, s->bucket_name_str, s->bucket_info, NULL, &s->bucket_attrs);
-#warning FIXME: Do we need to catch -ENOENT seperately? What about other errors?
-  if (ret < 0) {
-      return ret; 
+  if (ret < 0 || !s->bucket_info.has_website) {
+      return false; 
   }
-
-  // If bucket does not have website enabled, bail out
-  if(!s->bucket_info.has_website) {
-      return 0;
-  }
-
-  s->prot_flags |= RGW_PROTO_WEBSITE; // FIXME: obsolete?
 
   rgw_obj_key new_obj;
   s->bucket_info.website_conf.get_effective_key(s->object.name, &new_obj.name);
