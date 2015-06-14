@@ -3390,7 +3390,6 @@ void pg_missing_t::add_next_event(const pg_log_entry_t& e)
     bool is_missing_divergent_item = missing_it != missing.end();
     if (e.prior_version == eversion_t() || e.is_clone()) {
       // new object.
-      //assert(missing.count(e.soid) == 0);  // might already be missing divergent item.
       if (is_missing_divergent_item) {  // use iterator
         rmissing.erase((missing_it->second).need.version);
         missing_it->second = item(e.version, eversion_t());  // .have = nil
@@ -3398,7 +3397,6 @@ void pg_missing_t::add_next_event(const pg_log_entry_t& e)
         missing[e.soid] = item(e.version, eversion_t());     // .have = nil
     } else if (is_missing_divergent_item) {
       // already missing (prior).
-      //assert(missing[e.soid].need == e.prior_version);
       rmissing.erase((missing_it->second).need.version);
       (missing_it->second).need = e.version;  // leave .have unchanged.
     } else if (e.is_backlog()) {
