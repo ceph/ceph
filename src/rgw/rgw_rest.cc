@@ -1200,7 +1200,7 @@ int RGWHandler_ObjStore::allocate_formatter(struct req_state *s, int default_typ
       return -EINVAL;
 
   };
-  s->formatter->reset();
+  //s->formatter->reset(); // All formatters should reset on create already
 
   return 0;
 }
