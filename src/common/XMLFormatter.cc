@@ -87,31 +87,37 @@ void XMLFormatter::output_footer()
 
 void XMLFormatter::open_object_section(const char *name)
 {
+  output_header();
   open_section_in_ns(name, NULL, NULL);
 }
 
 void XMLFormatter::open_object_section_with_attrs(const char *name, const FormatterAttrs& attrs)
 {
+  output_header();
   open_section_in_ns(name, NULL, &attrs);
 }
 
 void XMLFormatter::open_object_section_in_ns(const char *name, const char *ns)
 {
+  output_header();
   open_section_in_ns(name, ns, NULL);
 }
 
 void XMLFormatter::open_array_section(const char *name)
 {
+  output_header();
   open_section_in_ns(name, NULL, NULL);
 }
 
 void XMLFormatter::open_array_section_with_attrs(const char *name, const FormatterAttrs& attrs)
 {
+  output_header();
   open_section_in_ns(name, NULL, &attrs);
 }
 
 void XMLFormatter::open_array_section_in_ns(const char *name, const char *ns)
 {
+  output_header();
   open_section_in_ns(name, ns, NULL);
 }
 
@@ -131,6 +137,7 @@ void XMLFormatter::close_section()
 void XMLFormatter::dump_unsigned(const char *name, uint64_t u)
 {
   std::string e(name);
+  output_header();
   print_spaces();
   m_ss << "<" << e << ">" << u << "</" << e << ">";
   if (m_pretty)
@@ -140,6 +147,7 @@ void XMLFormatter::dump_unsigned(const char *name, uint64_t u)
 void XMLFormatter::dump_int(const char *name, int64_t u)
 {
   std::string e(name);
+  output_header();
   print_spaces();
   m_ss << "<" << e << ">" << u << "</" << e << ">";
   if (m_pretty)
@@ -149,6 +157,7 @@ void XMLFormatter::dump_int(const char *name, int64_t u)
 void XMLFormatter::dump_float(const char *name, double d)
 {
   std::string e(name);
+  output_header();
   print_spaces();
   m_ss << "<" << e << ">" << d << "</" << e << ">";
   if (m_pretty)
@@ -158,6 +167,7 @@ void XMLFormatter::dump_float(const char *name, double d)
 void XMLFormatter::dump_string(const char *name, const std::string& s)
 {
   std::string e(name);
+  output_header();
   print_spaces();
   m_ss << "<" << e << ">" << escape_xml_str(s.c_str()) << "</" << e << ">";
   if (m_pretty)
@@ -169,6 +179,7 @@ void XMLFormatter::dump_string_with_attrs(const char *name, const std::string& s
   std::string e(name);
   std::string attrs_str;
   get_attrs_str(&attrs, attrs_str);
+  output_header();
   print_spaces();
   m_ss << "<" << e << attrs_str << ">" << escape_xml_str(s.c_str()) << "</" << e << ">";
   if (m_pretty)
@@ -177,6 +188,7 @@ void XMLFormatter::dump_string_with_attrs(const char *name, const std::string& s
 
 std::ostream& XMLFormatter::dump_stream(const char *name)
 {
+  output_header();
   print_spaces();
   m_pending_string_name = name;
   m_ss << "<" << m_pending_string_name << ">";
@@ -189,6 +201,7 @@ void XMLFormatter::dump_format_va(const char* name, const char *ns, bool quoted,
   vsnprintf(buf, LARGE_SIZE, fmt, ap);
 
   std::string e(name);
+  output_header();
   print_spaces();
   if (ns) {
     m_ss << "<" << e << " xmlns=\"" << ns << "\">" << buf << "</" << e << ">";
@@ -225,6 +238,7 @@ void XMLFormatter::get_attrs_str(const FormatterAttrs *attrs, std::string& attrs
 
 void XMLFormatter::open_section_in_ns(const char *name, const char *ns, const FormatterAttrs *attrs)
 {
+  output_header();
   print_spaces();
   std::string attrs_str;
 
