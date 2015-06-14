@@ -1867,6 +1867,15 @@ __u32 buffer::list::crc32c(__u32 crc) const
   return crc;
 }
 
+void buffer::list::invalidate_crc()
+{
+  for (std::list<ptr>::const_iterator p = _buffers.begin(); p != _buffers.end(); ++p) {
+    raw *r = p->get_raw();
+    if (r) {
+      r->invalidate_crc();
+    }
+  }
+}
 
 /**
  * Binary write all contents to a C++ stream
