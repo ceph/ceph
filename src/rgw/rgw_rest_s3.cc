@@ -2652,7 +2652,7 @@ RGWHandler *RGWRESTMgr_S3::get_handler(struct req_state *s)
   } else if (s->object.empty()) {
       handler = new RGWHandler_ObjStore_Bucket_S3;
   } else {
-      return new RGWHandler_ObjStore_Obj_S3;
+      handler = new RGWHandler_ObjStore_Obj_S3;
   }
 
   ldout(s->cct, 20) << __func__ << " handler=" << typeid(*handler).name() << dendl;
