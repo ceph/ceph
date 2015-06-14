@@ -1809,14 +1809,7 @@ public:
 			std::string *value);
 
   /**
-   * get ideal min value for collection_list_partial()
-   *
-   * default to some arbitrary values; the implementation will override.
-   */
-  virtual int get_ideal_list_min() { return 32; }
-
-  /**
-   * get ideal max value for collection_list_partial()
+   * get ideal max value for collection_list()
    *
    * default to some arbitrary values; the implementation will override.
    */
