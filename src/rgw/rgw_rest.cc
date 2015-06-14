@@ -1188,7 +1188,7 @@ int RGWHandler_ObjStore::allocate_formatter(struct req_state *s, int default_typ
       s->formatter = new JSONFormatter(false);
       break;
     case RGW_FORMAT_HTML:
-      s->formatter = new HTMLFormatter(false);
+      s->formatter = new HTMLFormatter(s->prot_flags & RGW_PROTO_WEBSITE);
       break;
     default:
       return -EINVAL;
