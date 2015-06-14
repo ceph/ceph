@@ -24,6 +24,8 @@
 #include "rgw_client_io.h"
 #include "rgw_resolve.h"
 
+#include <numeric>
+
 #define dout_subsys ceph_subsys_rgw
 
 
@@ -202,6 +204,8 @@ void rgw_rest_init(CephContext *cct, RGWRegion& region)
     hostnames_set.insert(cct->_conf->rgw_dns_name);
   }
   hostnames_set.insert(region.hostnames.begin(),  region.hostnames.end());
+  string s("");
+  ldout(cct, 20) << "RGW hostnames: " << std::accumulate(hostnames_set.begin(), hostnames_set.end(), s) << dendl;
   /* TODO: We should have a sanity check that no hostname matches the end of
    * any other hostname, otherwise we will get ambigious results from
    * rgw_find_host_in_domains.
@@ -216,6 +220,8 @@ void rgw_rest_init(CephContext *cct, RGWRegion& region)
     hostnames_s3website_set.insert(cct->_conf->rgw_dns_s3website_name);
   }
   hostnames_s3website_set.insert(region.hostnames_s3website.begin(), region.hostnames_s3website.end());
+  s.assign("");
+  ldout(cct, 20) << "RGW S3website hostnames: " << std::accumulate(hostnames_s3website_set.begin(), hostnames_s3website_set.end(), s) << dendl;
   /* TODO: we should repeat the hostnames_set sanity check here
    * and ALSO decide about overlap, if any
    */
