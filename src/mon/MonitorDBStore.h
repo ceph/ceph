@@ -21,8 +21,7 @@
 #include <boost/scoped_ptr.hpp>
 #include <sstream>
 #include <fstream>
-#include "os/KeyValueDB.h"
-
+#include "os/keyvaluestore/KeyValueDB.h"
 #include "include/assert.h"
 #include "common/Formatter.h"
 #include "common/Finisher.h"

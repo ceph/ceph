@@ -23,7 +23,7 @@
 
 #include "global/global_init.h"
 #include "include/stringify.h"
-#include "os/KeyValueDB.h"
+#include "os/keyvaluestore/LevelDBStore.h"
 
 using namespace std;
 

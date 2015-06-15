@@ -18,9 +18,9 @@
 #include <unistd.h>
 
 #if defined(__linux__)
-#include <sys/ioctl.h>
-#include <syscall.h>
-#include "../os/btrfs_ioctl.h"
+#  include <sys/ioctl.h>
+#  include <syscall.h>
+#  include "../os/filestore/btrfs_ioctl.h"
 #endif
 
 inline int sync_filesystem(int fd)

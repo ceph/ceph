@@ -122,7 +122,7 @@ Plugin *PluginRegistry::get(const std::string& type,
 int PluginRegistry::load(const std::string &type,
 			 const std::string &name)
 {
-  assert(lock.is_locked());
+  Mutex::Locker l(lock);
   ldout(cct, 10) << __func__ << " " << type << " " << name << dendl;
 
   std::string fname = cct->_conf->plugin_dir + "/" + type + "/" PLUGIN_PREFIX
