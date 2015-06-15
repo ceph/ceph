@@ -150,7 +150,7 @@ def need_to_install(ctx, role, version):
     cur_version = uname_fp.getvalue().rstrip('\n')
     log.debug('current kernel version is {ver}'.format(ver=cur_version))
 
-    if '.' in version:
+    if '.' in str(version):
         # version is utsrelease, yay
         if cur_version == version:
             log.debug('utsrelease strings match, do not need to install')
@@ -592,7 +592,7 @@ def wait_for_reboot(ctx, need_install, timeout, distro=False):
     while need_install:
         teuthology.reconnect(ctx, timeout)
         for client in need_install.keys():
-            if 'distro' in need_install[client]:
+            if 'distro' in str(need_install[client]):
                  distro = True
             log.info('Checking client {client} for new kernel version...'.format(client=client))
             try:
