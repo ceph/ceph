@@ -1,0 +1,2 @@
+tasks:
+- ceph_deploy.single_node_test: null
