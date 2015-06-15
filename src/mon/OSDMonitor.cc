@@ -4326,6 +4326,12 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid,
 {
   if (name.length() == 0)
     return -EINVAL;
+  if (pg_num == 0)
+    pg_num = g_conf->osd_pool_default_pg_num;
+  if (pgp_num == 0)
+    pgp_num = g_conf->osd_pool_default_pgp_num;
+  if (pgp_num > pg_num)
+    return -ERANGE;
   int r;
   r = prepare_pool_crush_ruleset(pool_type, erasure_code_profile,
 				 crush_ruleset_name, &crush_ruleset, ss);
@@ -4368,8 +4374,8 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid,
   pi->crush_ruleset = crush_ruleset;
   pi->expected_num_objects = expected_num_objects;
   pi->object_hash = CEPH_STR_HASH_RJENKINS;
-  pi->set_pg_num(pg_num ? pg_num : g_conf->osd_pool_default_pg_num);
-  pi->set_pgp_num(pgp_num ? pgp_num : g_conf->osd_pool_default_pgp_num);
+  pi->set_pg_num(pg_num);
+  pi->set_pgp_num(pgp_num);
   pi->last_change = pending_inc.epoch;
   pi->auid = auid;
   pi->erasure_code_profile = erasure_code_profile;
