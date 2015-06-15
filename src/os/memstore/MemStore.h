@@ -21,7 +21,7 @@
 #include "include/memory.h"
 #include "common/Finisher.h"
 #include "common/RWLock.h"
-#include "ObjectStore.h"
+#include "os/ObjectStore.h"
 
 class MemStore : public ObjectStore {
 public:

@@ -20,7 +20,7 @@
 #include <string>
 #include <boost/scoped_ptr.hpp>
 #include <sstream>
-#include "os/KeyValueDB.h"
+#include "os/keyvaluestore/KeyValueDB.h"
 
 #include "include/assert.h"
 #include "common/Formatter.h"

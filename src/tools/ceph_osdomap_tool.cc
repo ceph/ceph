@@ -19,8 +19,8 @@
 #include "common/errno.h"
 #include "global/global_init.h"
 
-#include "os/DBObjectMap.h"
-#include "os/LevelDBStore.h"
+#include "os/keyvaluestore/DBObjectMap.h"
+#include "os/keyvaluestore/LevelDBStore.h"
 
 namespace po = boost::program_options;
 using namespace std;

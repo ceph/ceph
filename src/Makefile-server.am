@@ -27,7 +27,7 @@ su_sbin_SCRIPTS += mount.fuse.ceph
 if WITH_MON
 
 ceph_mon_SOURCES = ceph_mon.cc
-ceph_mon_LDADD = $(LIBMON) $(LIBOS) $(CEPH_GLOBAL) $(LIBCOMMON)
+ceph_mon_LDADD = $(LIBMON) $(LIBOS) $(CEPH_GLOBAL) $(LIBCOMMON) $(LIBKVSTORE)
 bin_PROGRAMS += ceph-mon
 
 endif # WITH_MON
@@ -45,7 +45,7 @@ bin_SCRIPTS += \
 	ceph-clsinfo
 
 ceph_osd_SOURCES = ceph_osd.cc
-ceph_osd_LDADD = $(LIBOSD) $(CEPH_GLOBAL) $(LIBCOMMON)
+ceph_osd_LDADD = $(LIBOSD) $(CEPH_GLOBAL) $(LIBCOMMON) $(LIBKVSTORE) $(LIBFILESTORE) $(LIBMEMSTORE)
 bin_PROGRAMS += ceph-osd
 
 endif # WITH_OSD

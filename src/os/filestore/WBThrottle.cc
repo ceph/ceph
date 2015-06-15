@@ -3,7 +3,7 @@
 
 #include "acconfig.h"
 
-#include "os/WBThrottle.h"
+#include "WBThrottle.h"
 #include "common/perf_counters.h"
 
 WBThrottle::WBThrottle(CephContext *cct) :

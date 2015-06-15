@@ -41,7 +41,7 @@
 #include "common/sync_filesystem.h"
 
 #include "common/SloppyCRCMap.h"
-#include "os/chain_xattr.h"
+#include "chain_xattr.h"
 
 #define SLOPPY_CRC_XATTR "user.cephos.scrc"
 

@@ -21,7 +21,7 @@
 # ifndef DARWIN
 #  include <sys/ioctl.h>
 #  include <syscall.h>
-#  include "../os/btrfs_ioctl.h"
+#  include "../os/filestore/btrfs_ioctl.h"
 # endif
 #endif
 

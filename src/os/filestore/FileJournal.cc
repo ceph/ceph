@@ -19,7 +19,7 @@
 #include "FileJournal.h"
 #include "include/color.h"
 #include "common/perf_counters.h"
-#include "os/FileStore.h"
+#include "os/filestore/FileStore.h"
 
 #include "include/compat.h"
 
