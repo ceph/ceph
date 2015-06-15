@@ -7480,26 +7480,26 @@ int Client::_preadv_pwritev(int fd, const struct iovec *iov, int iovcnt, int64_t
     }
     if (write) {
         int w = _write(fh, offset, totallen, NULL, iov, iovcnt);
-        ldout(cct, 3) << "write(" << fd << ", \"...\", " << totallen << ", " << offset << ") = " << w << dendl;
+        ldout(cct, 3) << "pwritev(" << fd << ", \"...\", " << totallen << ", " << offset << ") = " << w << dendl;
         return w;
     } else {
         bufferlist bl;
         int r = _read(fh, offset, totallen, &bl);
-        ldout(cct, 3) << "read(" << fd << ", " <<  offset << ") = " << r << dendl;
+        ldout(cct, 3) << "preadv(" << fd << ", " <<  offset << ") = " << r << dendl;
         int bufoff = 0;
         uint32_t rlen = 0;
-        for (int j = 0, tmplen = r; j < iovcnt && tmplen > 0; j++) {
+        for (int j = 0, resid = r; j < iovcnt && resid > 0; j++) {
                /*
-                * This piece of code aims to handle the case that bufferlist does no have enough data 
+                * This piece of code aims to handle the case that bufferlist does not have enough data 
                 * to fill in the iov 
                 */
-               if (tmplen < iov[j].iov_len) {
-                    bl.copy(bufoff, tmplen, (char *)iov[j].iov_base);
+               if (resid < iov[j].iov_len) {
+                    bl.copy(bufoff, resid, (char *)iov[j].iov_base);
                     break;
                } else {
                     bl.copy(bufoff, iov[j].iov_len, (char *)iov[j].iov_base);
                }
-               tmplen -= iov[j].iov_len;
+               resid -= iov[j].iov_len;
                bufoff += iov[j].iov_len;
         }
         return r;  
@@ -7560,7 +7560,7 @@ int Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf,
 
   // copy into fresh buffer (since our write may be resub, async)
   bufferlist bl;
-  bufferptr *bparr;
+  bufferptr *bparr = NULL;
   if (buf) {
       bufferptr bp;
       if (size > 0) bp = buffer::copy(buf, size);
@@ -7569,7 +7569,9 @@ int Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf,
       //iov case 
       bparr = new bufferptr[iovcnt];
       for (int i = 0; i < iovcnt; i++) {
-        if (iov[i].iov_len > 0) bparr[i] = buffer::copy((char*)iov[i].iov_base, iov[i].iov_len);
+        if (iov[i].iov_len > 0) {
+            bparr[i] = buffer::copy((char*)iov[i].iov_base, iov[i].iov_len);
+        }
         bl.push_back( bparr[i] );
       }
   }
@@ -7720,9 +7722,7 @@ done:
   }
 
   put_cap_ref(in, CEPH_CAP_FILE_WR);
-  if (buf == NULL && iov != NULL) {
-    delete[] bparr; 
-  }
+  delete[] bparr; 
   return r;
 }
 
