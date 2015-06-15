@@ -383,8 +383,9 @@ public:
   }
   ObjectContextRef get_obc(
     const hobject_t &hoid,
-    map<string, bufferlist> &attrs) {
-    return get_object_context(hoid, true, &attrs);
+    map<string, bufferlist> &attrs,
+    bool do_cache) {
+    return get_object_context(hoid, true, do_cache, &attrs);
   }
   void log_operation(
     const vector<pg_log_entry_t> &logv,
@@ -984,10 +985,11 @@ public:
   void handle_watch_timeout(WatchRef watch);
 protected:
 
-  ObjectContextRef create_object_context(const object_info_t& oi, SnapSetContext *ssc);
+  ObjectContextRef create_object_context(const object_info_t& oi, SnapSetContext *ssc, bool do_cache);
   ObjectContextRef get_object_context(
     const hobject_t& soid,
     bool can_create,
+    bool do_cache,
     map<string, bufferlist> *attrs = 0
     );
 
@@ -1006,6 +1008,7 @@ protected:
   int find_object_context(const hobject_t& oid,
 			  ObjectContextRef *pobc,
 			  bool can_create,
+			  bool do_cache,
 			  bool map_snapid_to_clone=false,
 			  hobject_t *missing_oid=NULL);
 
