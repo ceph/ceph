@@ -1151,6 +1151,8 @@ private:
   void write_superblock(ObjectStore::Transaction& t);
   int read_superblock();
 
+  void clear_temp_objects();
+
   CompatSet osd_compat;
 
   // -- state --

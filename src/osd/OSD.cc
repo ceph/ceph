@@ -1843,6 +1843,8 @@ int OSD::init()
     service.set_epochs(NULL, NULL, &bind_epoch);
   }
 
+  clear_temp_objects();
+
   // load up pgs (as they previously existed)
   load_pgs();
 
@@ -2459,7 +2461,50 @@ int OSD::read_superblock()
   return 0;
 }
 
+void OSD::clear_temp_objects()
+{
+  dout(10) << __func__ << dendl;
+  vector<coll_t> ls;
+  store->list_collections(ls);
+  for (vector<coll_t>::iterator p = ls.begin(); p != ls.end(); ++p) {
+    spg_t pgid;
+    if (!p->is_pg(&pgid))
+      continue;
 
+    // list temp objects
+    dout(20) << " clearing temps in " << *p << " pgid " << pgid << dendl;
+
+    vector<ghobject_t> temps;
+    ghobject_t next;
+    while (1) {
+      vector<ghobject_t> objects;
+      store->collection_list_partial(*p, next,
+				     store->get_ideal_list_min(),
+				     store->get_ideal_list_max(),
+				     0, &objects, &next);
+      if (objects.empty())
+	break;
+      for (vector<ghobject_t>::iterator q = objects.begin(); q != objects.end();
+	   ++q) {
+	if (q->hobj.is_temp()) {
+	  temps.push_back(*q);
+	} else {
+	  break;
+	}
+      }
+      if (!objects.empty())
+	break;
+    }
+    if (!temps.empty()) {
+      ObjectStore::Transaction t;
+      for (vector<ghobject_t>::iterator q = temps.begin(); q != temps.end(); ++q) {
+	dout(20) << "  removing " << *p << " object " << *q << dendl;
+	t.remove(*p, *q);
+      }
+      store->apply_transaction(t);
+    }
+  }
+}
 
 void OSD::recursive_remove_collection(ObjectStore *store, spg_t pgid, coll_t tmp)
 {
