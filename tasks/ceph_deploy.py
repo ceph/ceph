@@ -436,6 +436,150 @@ def build_ceph_cluster(ctx, config):
         execute_ceph_deploy(purgedata_nodes)
 
 
+def execute_cdeploy(admin,cmd,path):
+    """Execute ceph-deploy commands """
+    """Either use git path or repo path """
+    if path is not None:
+       ec= admin.run(
+            args=[
+                 'cd',
+                 run.Raw('~/cdtest'),
+                 run.Raw(';'),
+                '{path}/ceph-deploy/ceph-deploy'.format(path=path),
+                 run.Raw(cmd),
+                ],
+               check_status=False,
+           ).exitstatus
+    else:
+      ec= admin.run(
+              args=[
+                  'cd',
+                   run.Raw('~/cdtest'),
+                   run.Raw(';'),
+                  'ceph-deploy',
+                  run.Raw(cmd),
+                ],
+              check_status=False,
+              ).exitstatus
+    if ec != 0:
+       raise RuntimeError ("failed during ceph-deploy cmd: {cmd} , ec={ec}".format(cmd=cmd,ec=ec)) 
+
+@contextlib.contextmanager
+def cli_test(ctx, config):
+    """
+     ceph-deploy cli to exercise most commonly use cli's and ensure
+     all commands works and also startup the init system.
+        
+    """
+    log.info('Ceph-deploy Test')
+    if config is None:
+        config = {}
+        
+    if config.get('rhbuild'):
+        path=None
+    else:
+        path = teuthology.get_testdir(ctx)  
+    mons = ctx.cluster.only(teuthology.is_type('mon'))
+    for node,role in mons.remotes.iteritems():
+        admin=node
+        admin.run( args=[ 'mkdir', '~/', 'cdtest' ],check_status=False)
+        nodename=admin.shortname
+    system_type = teuthology.get_system_type(admin)
+    if config.get('rhbuild'):
+        admin.run(args = ['sudo', 'yum', 'install', 'ceph-deploy', '-y'])
+    log.info('system type is %s', system_type)
+    osds = ctx.cluster.only(teuthology.is_type('osd'))
+   
+    for remote,roles in osds.remotes.iteritems():
+        devs = teuthology.get_scratch_devices(remote)
+        log.info("roles %s" , roles)
+        if (len(devs) < 3):
+            log.error('Test needs minimum of 3 devices, only found %s', str(devs))
+            raise RuntimeError ( "Needs minimum of 3 devices ")
+    
+    new_cmd= 'new ' + nodename
+    new_mon_install = 'install --mon ' + nodename
+    new_osd_install = 'install --osd ' + nodename
+    new_admin = 'install --cli ' + nodename
+    create_initial= '--overwrite-conf mon create-initial ' + nodename
+    execute_cdeploy(admin,new_cmd,path)
+    execute_cdeploy(admin,new_mon_install,path)
+    execute_cdeploy(admin,new_osd_install,path)
+    execute_cdeploy(admin,new_admin,path)
+    execute_cdeploy(admin,create_initial,path)
+
+    for i in range(3):
+        zap_disk = 'disk zap '  + "{n}:{d}".format(n=nodename,d=devs[i])
+        prepare= 'osd prepare ' + "{n}:{d}".format(n=nodename,d=devs[i])
+        execute_cdeploy(admin,zap_disk,path)
+        execute_cdeploy(admin,prepare,path)
+        
+    admin.run(args=['ls',run.Raw('-lt'),run.Raw('~/cdtest/')])
+    time.sleep(4)
+    remote.run(args=['sudo', 'ceph','-s'],check_status=False)
+    r = remote.run(args=['sudo', 'ceph','health'],stdout=StringIO())
+    out = r.stdout.getvalue()
+    log.info('Ceph health: %s', out.rstrip('\n'))
+    if out.split(None, 1)[0] == 'HEALTH_WARN':
+        log.info('All ceph-deploy cli tests passed')
+    else:
+       raise RuntimeError ( "Failed to reach HEALTH_WARN State")
+    
+    #test rgw cli
+    rgw_install = 'install --rgw ' + nodename
+    rgw_create =  'rgw create ' + nodename
+    execute_cdeploy(admin,rgw_install,path)
+    execute_cdeploy(admin,rgw_create,path)
+    try: 
+      yield
+    finally:
+        log.info("cleaning up")
+        if system_type == 'deb':
+            remote.run(args=['sudo', 'stop','ceph-all'],check_status=False)
+            remote.run(args=['sudo', 'service','ceph', '-a', 'stop'],check_status=False)
+        else:
+            remote.run(args=['sudo', '/etc/init.d/ceph', '-a', 'stop'],check_status=False)
+        time.sleep(4)
+        for i in range(3):
+            umount_dev = "{d}1".format(d=devs[i])
+            r = remote.run(args=['sudo', 'umount',run.Raw(umount_dev)])
+        cmd = 'purge ' + nodename
+        execute_cdeploy(admin,cmd,path)
+        cmd = 'purgedata ' + nodename
+        execute_cdeploy(admin,cmd,path)
+        admin.run(args=['rm',run.Raw('-rf'),run.Raw('~/cdtest/*')])
+        admin.run(args=['rmdir',run.Raw('~/cdtest')])
+        if config.get('rhbuild'):
+            admin.run(args = ['sudo', 'yum', 'remove', 'ceph-deploy', '-y'])
+
+@contextlib.contextmanager
+def single_node_test(ctx, config):
+    """
+    - ceph-deploy.single_node_test: null
+    
+    #rhbuild testing
+    - ceph-deploy.single_node_test: 
+        rhbuild: 1.2.3
+        
+    """
+    log.info("Testing ceph-deploy on single node")
+    if config is None:
+        config = {}
+
+    if config.get('rhbuild'):
+        log.info("RH Build, Skip Download")
+        with contextutil.nested(
+          lambda: cli_test(ctx=ctx,config=config),
+          ):
+          yield
+    else:
+        with contextutil.nested(
+             lambda: install_fn.ship_utilities(ctx=ctx, config=None),
+             lambda: download_ceph_deploy(ctx=ctx, config=config),
+             lambda: cli_test(ctx=ctx,config=config),
+            ):
+            yield
+    
 @contextlib.contextmanager
 def task(ctx, config):
     """
