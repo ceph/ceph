@@ -41,7 +41,6 @@ Requires:	python-rbd = %{epoch}:%{version}-%{release}
 Requires:	python-cephfs = %{epoch}:%{version}-%{release}
 Requires:	python
 Requires:	python-requests
-Requires:	python-flask
 Requires:	grep
 Requires:	xfsprogs
 Requires:	logrotate
@@ -98,6 +97,8 @@ BuildRequires:	net-tools
 # distro-conditional dependencies
 #################################################################################
 %if 0%{defined suse_version}
+Requires:	python-Flask
+BuildRequires:	sharutils
 %if 0%{?suse_version} > 1210
 Requires:	gptfdisk
 BuildRequires:	gperftools-devel
@@ -119,6 +120,7 @@ Requires(post):	chkconfig
 Requires(preun):chkconfig
 Requires(preun):initscripts
 BuildRequires:	gperftools-devel
+Requires:	python-flask
 %endif
 
 %description
