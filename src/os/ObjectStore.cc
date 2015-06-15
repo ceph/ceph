@@ -16,9 +16,10 @@
 #include "include/memory.h"
 #include "ObjectStore.h"
 #include "common/Formatter.h"
-#include "FileStore.h"
-#include "MemStore.h"
-#include "KeyValueStore.h"
+#include "newstore/NewStore.h"
+#include "filestore/FileStore.h"
+#include "memstore/MemStore.h"
+#include "keyvaluestore/KeyValueStore.h"
 #include "common/safe_io.h"
 
 #if defined(HAVE_LIBAIO)
@@ -31,8 +32,9 @@ ObjectStore *ObjectStore::create(CephContext *cct,
 				 const string& journal,
 			         osflagbits_t flags)
 {
-
   PluginRegistry *reg = cct->get_plugin_registry();
+
+  // assuming we have preloaded the all the supported  types
   Factory *factory = dynamic_cast<Factory*>(reg->get("objectstore", type));
   if (factory) {
     return factory->factory(cct, type, data, journal, flags);
@@ -40,6 +42,7 @@ ObjectStore *ObjectStore::create(CephContext *cct,
   return NULL;
 }
 
+#if 0
 int ObjectStore::write_meta(const std::string& key,
 			    const std::string& value)
 {
@@ -68,13 +71,11 @@ int ObjectStore::read_meta(const std::string& key,
   return 0;
 }
 
-
-
-
 ostream& operator<<(ostream& out, const ObjectStore::Sequencer& s)
 {
   return out << "osr(" << s.get_name() << " " << &s << ")";
 }
+#endif
 
 unsigned ObjectStore::apply_transactions(Sequencer *osr,
 					 list<Transaction*> &tls,

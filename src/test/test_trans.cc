@@ -15,7 +15,7 @@
 #include <iostream>
 #include "common/ceph_argparse.h"
 #include "common/debug.h"
-#include "os/FileStore.h"
+#include "os/filestore/FileStore.h"
 #include "global/global_init.h"
 #include "include/assert.h"
 
