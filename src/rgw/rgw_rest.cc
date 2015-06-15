@@ -1138,7 +1138,7 @@ int RGWHandler_ObjStore::allocate_formatter(struct req_state *s, int default_typ
 
 // This function enforces Amazon's spec for bucket names.
 // (The requirements, not the recommendations.)
-int RGWHandler_ObjStore::validate_bucket_name(const string& bucket)
+int RGWHandler_ObjStore::validate_bucket_name(const string& bucket, int strictness_option)
 {
   int len = bucket.size();
   if (len < 3) {

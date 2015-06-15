@@ -1298,6 +1298,10 @@ static int forward_request_to_master(struct req_state *s, obj_version *objv, RGW
 
 void RGWCreateBucket::pre_exec()
 {
+  //validating bucket name as per creation strictness configuration, before creation
+  if (s->cct->_conf->rgw_s3_bucket_name_create_strictness > s->cct->_conf->rgw_s3_bucket_name_access_strictness)
+	  ret = dialect_handler->validate_bucket_name(s->bucket_name_str, s->cct->_conf->rgw_s3_bucket_name_create_strictness);
+
   rgw_bucket_object_pre_exec(s);
 }
 
@@ -1310,6 +1314,9 @@ void RGWCreateBucket::execute()
   bool existed;
   rgw_obj obj(store->zone.domain_root, s->bucket_name_str);
   obj_version objv, *pobjv = NULL;
+
+  if (ret < 0)
+	  return;
 
   ret = get_params();
   if (ret < 0)
@@ -1394,6 +1401,7 @@ void RGWCreateBucket::execute()
     cors_config.encode(corsbl);
     attrs[RGW_ATTR_CORS] = corsbl;
   }
+
   s->bucket.name = s->bucket_name_str;
   ret = store->create_bucket(s->user, s->bucket, region_name, placement_rule, attrs, info, pobjv,
                              &ep_objv, creation_time, pmaster_bucket, true);
@@ -1427,7 +1435,7 @@ void RGWCreateBucket::execute()
       ldout(s->cct, 0) << "WARNING: failed to unlink bucket: ret=" << ret << dendl;
     }
   } else if (ret == -EEXIST || (ret == 0 && existed)) {
-		 ret = -ERR_BUCKET_EXISTS;
+	  ret = -ERR_BUCKET_EXISTS;
   }
 }
 

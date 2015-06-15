@@ -371,7 +371,7 @@ public:
   RGWHandler_ObjStore_S3() : RGWHandler_ObjStore() {}
   virtual ~RGWHandler_ObjStore_S3() {}
 
-  int validate_bucket_name(const string& bucket, bool relaxed_names);
+  int validate_bucket_name(const string& bucket, int name_strictness);
 
   virtual int init(RGWRados *store, struct req_state *state, RGWClientIO *cio);
   virtual int authorize() {
