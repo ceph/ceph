@@ -15,13 +15,14 @@
 #include <iostream>
 #include <sstream>
 #include <boost/scoped_ptr.hpp>
-#include "os/FileStore.h"
+#include "os/filestore/FileStore.h"
 #include "global/global_init.h"
 #include "common/ceph_argparse.h"
 #include "common/debug.h"
 #include "test/common/ObjectContents.h"
 #include "FileStoreTracker.h"
-#include "kv/KeyValueDB.h"
+#include "os/keyvaluestore/LevelDBStore.h"
+#include "os/keyvaluestore/KeyValueDB.h"
 #include "os/ObjectStore.h"
 
 void usage(const string &name) {

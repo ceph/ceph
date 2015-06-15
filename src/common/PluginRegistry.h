@@ -16,7 +16,7 @@
  */
 
 #ifndef CEPH_COMMON_PLUGINREGISTRY_H
-#define CEPH_COMMON_PLUGINREGISTERY_H
+#define CEPH_COMMON_PLUGINREGISTRY_H
 
 #include <string>
 #include <map>

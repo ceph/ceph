@@ -15,8 +15,8 @@
 #ifndef OS_KEYVALUESTORE_H
 #define OS_KEYVALUESTORE_H
 
-#include "IndexManager.h"
-#include "SequencerPosition.h"
+#include "os/filestore/IndexManager.h"
+#include "os/SequencerPosition.h"
 #include <string>
 #include <vector>
 #include "include/memory.h"

@@ -174,7 +174,7 @@ AM_CCASFLAGS = -f elf64
 #####################
 ## library definitions and dependencies
 
-EXTRALIBS = -lm
+EXTRALIBS = -luuid -lm -lleveldb
 if FREEBSD
 EXTRALIBS += -lexecinfo
 endif # FREEBSD
@@ -199,9 +199,11 @@ LIBCOMPRESSOR = libcompressor.la -lsnappy
 LIBJSON_SPIRIT = libjson_spirit.la
 LIBKV = libkv.a
 LIBLOG = liblog.la
-LIBOS = libos.a
-LIBOS_TYPES = libos_types.a
-LIBOSD = libosd.a
+LIBOS = libos.la
+LIBKVSTORE = libceph_keyvaluestore.la
+LIBMEMSTORE = libceph_memstore.la
+LIBFILESTORE = libceph_filestore.la
+LIBOSD = libosd.la
 LIBOSD_TYPES = libosd_types.la
 LIBOSDC = libosdc.la
 LIBMON = libmon.a
@@ -224,8 +226,12 @@ LIBOS += -laio
 endif # WITH_LIBAIO
 
 if WITH_LIBZFS
-LIBOS += libos_zfs.a -lzfs
+LIBFILESTORE += libceph_filestore_zfs.a -lzfs
 endif # WITH_LIBZFS
+
+if WITH_LIBROCKSDB
+LIBKVSTORE += libceph_keyvaluestore_rocksdb.la
+endif # WITH_LIBROCKSDB
 
 if WITH_TCMALLOC_MINIMAL
 LIBPERFGLUE += -ltcmalloc_minimal
@@ -259,9 +265,9 @@ LIBOSD += $(LIBOSD_TYPES) $(LIBOS_TYPES)
 
 # libkv/libos linking order is ornery
 if WITH_SLIBROCKSDB
-LIBKV += rocksdb/librocksdb.a
+LIBKVSTORE += rocksdb/librocksdb.a
 endif
-LIBKV += -lbz2 -lz -lleveldb -lsnappy
+LIBKVSTORE += -lbz2 -lz -lleveldb -lsnappy
 LIBOS += $(LIBOS_TYPES) $(LIBKV)
 
 LIBMON += $(LIBMON_TYPES)

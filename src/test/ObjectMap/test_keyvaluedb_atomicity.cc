@@ -1,7 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 #include <pthread.h>
 #include "include/buffer.h"
-#include "kv/KeyValueDB.h"
+#include "os/keyvaluestore/LevelDBStore.h"
 #include <sys/types.h>
 #include <dirent.h>
 #include <string>
@@ -12,8 +12,11 @@
 #include <sstream>
 #include "stdlib.h"
 #include "global/global_context.h"
+<<<<<<< HEAD
 
 using namespace std;
+=======
+>>>>>>> Initial changes for object store factory
 
 const string CONTROL_PREFIX = "CONTROL";
 const string PRIMARY_PREFIX = "PREFIX";

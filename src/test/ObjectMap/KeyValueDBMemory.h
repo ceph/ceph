@@ -5,7 +5,7 @@
 #include <string>
 #include "include/memory.h"
 
-#include "kv/KeyValueDB.h"
+#include "os/keyvaluestore/KeyValueDB.h"
 #include "include/buffer.h"
 #include "include/Context.h"
 
