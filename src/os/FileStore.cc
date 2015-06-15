@@ -1651,21 +1651,6 @@ void FileStore::init_temp_collections()
       continue;
     coll_t temp = p->get_temp();
     if (temps.count(temp)) {
-      // yay, it exists.  make sure it is empty.
-      vector<ghobject_t> oids;
-      r = collection_list(temp, oids);
-      assert(r == 0);
-      if (!oids.empty()) {
-	dout(10) << __func__ << " clearing " << oids.size()
-		 << " objects from " << temp << dendl;
-	Transaction t;
-	for (vector<ghobject_t>::iterator q = oids.begin();
-	     q != oids.end();
-	     ++q)
-	  t.remove(temp, *q);
-	r = _do_transaction(t, 0, 0, NULL);
-	assert(r == 0);
-      }
       temps.erase(temp);
     } else {
       dout(10) << __func__ << " creating " << temp << dendl;
