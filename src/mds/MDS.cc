@@ -359,6 +359,15 @@ bool MDS::asok_command(string command, cmdmap_t& cmdmap, string format,
       mds_lock.Lock();
       mdcache->force_readonly();
       mds_lock.Unlock();
+    } else if (command == "dirfrag split") {
+      Mutex::Locker l(mds_lock);
+      command_dirfrag_split(cmdmap, ss);
+    } else if (command == "dirfrag merge") {
+      Mutex::Locker l(mds_lock);
+      command_dirfrag_merge(cmdmap, ss);
+    } else if (command == "dirfrag ls") {
+      Mutex::Locker l(mds_lock);
+      command_dirfrag_ls(cmdmap, ss, f);
     }
   }
   f->flush(ss);
@@ -591,6 +600,150 @@ int MDS::_command_export_dir(
   return 0;
 }
 
+CDir *MDS::_command_dirfrag_get(
+    const cmdmap_t &cmdmap,
+    std::ostream &ss)
+{
+  std::string path;
+  bool got = cmd_getval(g_ceph_context, cmdmap, "path", path);
+  if (!got) {
+    ss << "missing path argument";
+    return NULL;
+  }
+
+  std::string frag_str;
+  if (!cmd_getval(g_ceph_context, cmdmap, "frag", frag_str)) {
+    ss << "missing frag argument";
+    return NULL;
+  }
+
+  CInode *in = mdcache->cache_traverse(filepath(path.c_str()));
+  if (!in) {
+    // TODO really we should load something in if it's not in cache,
+    // but the infrastructure is harder, and we might still be unable
+    // to act on it if someone else is auth.
+    ss << "directory inode not in cache";
+    return NULL;
+  }
+
+  frag_t fg;
+
+  if (!fg.parse(frag_str.c_str())) {
+    ss << "frag " << frag_str << " failed to parse";
+    return NULL;
+  }
+
+  CDir *dir = in->get_dirfrag(fg);
+  if (!dir) {
+    ss << "frag 0x" << std::hex << in->ino() << "/" << fg << " not found";
+    return NULL;
+  }
+
+  if (!dir->is_auth()) {
+    ss << "frag " << dir->dirfrag() << " not auth (auth = "
+       << dir->authority() << ")";
+    return NULL;
+  }
+
+  return dir;
+}
+
+bool MDS::command_dirfrag_split(
+    cmdmap_t cmdmap,
+    std::ostream &ss)
+{
+  int64_t by = 0;
+  if (!cmd_getval(g_ceph_context, cmdmap, "bits", by)) {
+    ss << "missing bits argument";
+    return false;
+  }
+
+  if (by <= 0) {
+    ss << "must split by >0 bits";
+    return false;
+  }
+
+  CDir *dir = _command_dirfrag_get(cmdmap, ss);
+  if (!dir) {
+    return false;
+  }
+
+  mdcache->split_dir(dir, by);
+
+  return true;
+}
+
+bool MDS::command_dirfrag_merge(
+    cmdmap_t cmdmap,
+    std::ostream &ss)
+{
+  std::string path;
+  bool got = cmd_getval(g_ceph_context, cmdmap, "path", path);
+  if (!got) {
+    ss << "missing path argument";
+    return false;
+  }
+
+  std::string frag_str;
+  if (!cmd_getval(g_ceph_context, cmdmap, "frag", frag_str)) {
+    ss << "missing frag argument";
+    return false;
+  }
+
+  CInode *in = mdcache->cache_traverse(filepath(path.c_str()));
+  if (!in) {
+    ss << "directory inode not in cache";
+    return false;
+  }
+
+  frag_t fg;
+  if (!fg.parse(frag_str.c_str())) {
+    ss << "frag " << frag_str << " failed to parse";
+    return false;
+  }
+
+  mdcache->merge_dir(in, fg);
+
+  return true;
+}
+
+bool MDS::command_dirfrag_ls(
+    cmdmap_t cmdmap,
+    std::ostream &ss,
+    Formatter *f)
+{
+  std::string path;
+  bool got = cmd_getval(g_ceph_context, cmdmap, "path", path);
+  if (!got) {
+    ss << "missing path argument";
+    return false;
+  }
+
+  CInode *in = mdcache->cache_traverse(filepath(path.c_str()));
+  if (!in) {
+    ss << "directory inode not in cache";
+    return false;
+  }
+
+  f->open_array_section("frags");
+  std::list<frag_t> frags;
+  // NB using get_leaves_under instead of get_dirfrags to give
+  // you the list of what dirfrags may exist, not which are in cache
+  in->dirfragtree.get_leaves_under(frag_t(), frags);
+  for (std::list<frag_t>::iterator i = frags.begin();
+       i != frags.end(); ++i) {
+    f->open_object_section("frag");
+    f->dump_int("value", i->value());
+    f->dump_int("bits", i->bits());
+    std::ostringstream frag_str;
+    frag_str << std::hex << i->value() << "/" << std::dec << i->bits();
+    f->dump_string("str", frag_str.str());
+    f->close_section();
+  }
+  f->close_section();
+
+  return true;
+}
 
 void MDS::set_up_admin_socket()
 {
@@ -663,6 +816,27 @@ void MDS::set_up_admin_socket()
 				     "get subtrees",
 				     asok_hook,
 				     "Return the subtree map");
+  assert(r == 0);
+  r = admin_socket->register_command("dirfrag split",
+				     "dirfrag split "
+                                     "name=path,type=CephString,req=true "
+                                     "name=frag,type=CephString,req=true "
+                                     "name=bits,type=CephInt,req=true ",
+				     asok_hook,
+				     "Fragment directory by path");
+  assert(r == 0);
+  r = admin_socket->register_command("dirfrag merge",
+				     "dirfrag merge "
+                                     "name=path,type=CephString,req=true "
+                                     "name=frag,type=CephString,req=true",
+				     asok_hook,
+				     "De-fragment directory by path");
+  assert(r == 0);
+  r = admin_socket->register_command("dirfrag ls",
+				     "dirfrag ls "
+                                     "name=path,type=CephString,req=true",
+				     asok_hook,
+				     "List fragments in directory");
   assert(r == 0);
 }
 
@@ -1257,7 +1431,7 @@ COMMAND("heap " \
 	"mds", "*", "cli,rest")
 };
 
-// FIXME: reinstate issue_caps, try_eval, fragment_dir, merge_dir
+// FIXME: reinstate issue_caps, try_eval,
 //  *if* it makes sense to do so (or should these be admin socket things?)
 
 /* This function DOES put the passed message before returning*/
