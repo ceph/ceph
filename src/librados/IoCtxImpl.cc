@@ -1299,6 +1299,7 @@ void librados::IoCtxImpl::set_notify_timeout(uint32_t timeout)
 
 librados::IoCtxImpl::C_aio_Ack::C_aio_Ack(AioCompletionImpl *_c) : c(_c)
 {
+  assert(!c->io);
   c->get();
 }
 
@@ -1331,6 +1332,7 @@ librados::IoCtxImpl::C_aio_stat_Ack::C_aio_stat_Ack(AioCompletionImpl *_c,
 						    time_t *pm)
    : c(_c), pmtime(pm)
 {
+  assert(!c->io);
   c->get();
 }
 
