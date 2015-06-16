@@ -86,6 +86,7 @@ const static struct rgw_http_status_code http_codes[] = {
   { 207, "Multi Status" },
   { 208, "Already Reported" },
   { 300, "Multiple Choices" },
+  { 301, "Moved Permanently" },
   { 302, "Found" },
   { 303, "See Other" },
   { 304, "Not Modified" },
