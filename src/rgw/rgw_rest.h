@@ -163,17 +163,25 @@ public:
   virtual int verify_params();
 };
 
-class RGWPutMetadata_ObjStore : public RGWPutMetadata
+class RGWPutMetadataAccount_ObjStore : public RGWPutMetadataAccount
 {
 public:
-  RGWPutMetadata_ObjStore() {}
-  ~RGWPutMetadata_ObjStore() {}
+  RGWPutMetadataAccount_ObjStore() {}
+  ~RGWPutMetadataAccount_ObjStore() {}
 };
 
-class RGWSetTempUrl_ObjStore : public RGWSetTempUrl {
+class RGWPutMetadataBucket_ObjStore : public RGWPutMetadataBucket
+{
 public:
-  RGWSetTempUrl_ObjStore() {}
-  ~RGWSetTempUrl_ObjStore() {}
+  RGWPutMetadataBucket_ObjStore() {}
+  ~RGWPutMetadataBucket_ObjStore() {}
+};
+
+class RGWPutMetadataObject_ObjStore : public RGWPutMetadataObject
+{
+public:
+  RGWPutMetadataObject_ObjStore() {}
+  ~RGWPutMetadataObject_ObjStore() {}
 };
 
 class RGWDeleteObj_ObjStore : public RGWDeleteObj {

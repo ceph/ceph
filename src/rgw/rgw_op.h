@@ -44,7 +44,9 @@ enum RGWOpType {
   RGW_OP_DELETE_BUCKET,
   RGW_OP_PUT_OBJ,
   RGW_OP_POST_OBJ,
-  RGW_OP_PUT_METADATA,
+  RGW_OP_PUT_METADATA_ACCOUNT,
+  RGW_OP_PUT_METADATA_BUCKET,
+  RGW_OP_PUT_METADATA_OBJECT,
   RGW_OP_SET_TEMPURL,
   RGW_OP_DELETE_OBJ,
   RGW_OP_COPY_OBJ,
@@ -191,6 +193,7 @@ protected:
   uint64_t buckets_objcount;
   uint64_t buckets_size;
   uint64_t buckets_size_rounded;
+  map<string, bufferlist> attrs;
 
 public:
   RGWListBuckets() : ret(0), sent_data(false) {
@@ -211,6 +214,7 @@ public:
   virtual void send_response() {}
 
   virtual bool should_get_stats() { return false; }
+  virtual bool supports_account_metadata() { return false; }
 
   virtual const string name() { return "list_buckets"; }
   virtual RGWOpType get_type() { return RGW_OP_LIST_BUCKETS; }
@@ -235,7 +239,7 @@ public:
   }
 
   int verify_permission();
-  void execute();
+  virtual void execute();
 
   virtual void send_response() = 0;
   virtual const string name() { return "stat_account"; }
@@ -507,7 +511,37 @@ public:
   virtual uint32_t op_mask() { return RGW_OP_TYPE_WRITE; }
 };
 
-class RGWPutMetadata : public RGWOp {
+class RGWPutMetadataAccount : public RGWOp {
+protected:
+  int ret;
+  set<string> rmattr_names;
+  RGWAccessControlPolicy policy;
+
+public:
+  RGWPutMetadataAccount()
+    : ret(0)
+  {}
+
+  virtual void init(RGWRados *store, struct req_state *s, RGWHandler *h) {
+    RGWOp::init(store, s, h);
+    policy.set_ctx(s->cct);
+  }
+  int verify_permission();
+  void pre_exec() { return; }
+  void execute();
+
+  virtual int get_params() = 0;
+  virtual void send_response() = 0;
+  virtual void filter_out_temp_url(map<string, bufferlist>& add_attrs,
+                                   const set<string>& rmattr_names,
+                                   map<int, string>& temp_url_keys);
+  virtual int handle_temp_url_update(const map<int, string>& temp_url_keys);
+  virtual const string name() { return "put_account_metadata"; }
+  virtual RGWOpType get_type() { return RGW_OP_PUT_METADATA_ACCOUNT; }
+  virtual uint32_t op_mask() { return RGW_OP_TYPE_WRITE; }
+};
+
+class RGWPutMetadataBucket : public RGWOp {
 protected:
   int ret;
   set<string> rmattr_names;
@@ -517,11 +551,35 @@ protected:
   string placement_rule;
 
 public:
-  RGWPutMetadata() {
-    has_cors = false;
-    has_policy = false;
-    ret = 0;
+  RGWPutMetadataBucket()
+    : ret(0), has_policy(false), has_cors(false)
+  {}
+
+  virtual void init(RGWRados *store, struct req_state *s, RGWHandler *h) {
+    RGWOp::init(store, s, h);
+    policy.set_ctx(s->cct);
   }
+  int verify_permission();
+  void pre_exec();
+  void execute();
+
+  virtual int get_params() = 0;
+  virtual void send_response() = 0;
+  virtual const string name() { return "put_bucket_metadata"; }
+  virtual RGWOpType get_type() { return RGW_OP_PUT_METADATA_BUCKET; }
+  virtual uint32_t op_mask() { return RGW_OP_TYPE_WRITE; }
+};
+
+class RGWPutMetadataObject : public RGWOp {
+protected:
+  int ret;
+  RGWAccessControlPolicy policy;
+  string placement_rule;
+
+public:
+  RGWPutMetadataObject()
+    : ret(0)
+  {}
 
   virtual void init(RGWRados *store, struct req_state *s, RGWHandler *h) {
     RGWOp::init(store, s, h);
@@ -534,24 +592,8 @@ public:
   virtual int get_params() = 0;
   virtual void send_response() = 0;
   virtual const string name() { return "put_obj_metadata"; }
-  virtual RGWOpType get_type() { return RGW_OP_PUT_METADATA; }
+  virtual RGWOpType get_type() { return RGW_OP_PUT_METADATA_OBJECT; }
   virtual uint32_t op_mask() { return RGW_OP_TYPE_WRITE; }
-};
-
-class RGWSetTempUrl : public RGWOp {
-protected:
-  int ret;
-  map<int, string> temp_url_keys;
-public:
-  RGWSetTempUrl() : ret(0) {}
-
-  int verify_permission();
-  void execute();
-
-  virtual int get_params() = 0;
-  virtual void send_response() = 0;
-  virtual const string name() { return "set_temp_url"; }
-  virtual RGWOpType get_type() { return RGW_OP_SET_TEMPURL; }
 };
 
 class RGWDeleteObj : public RGWOp {
