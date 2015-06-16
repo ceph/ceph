@@ -82,7 +82,7 @@ struct RGWBWRoutingRuleCondition
   void decode_xml(XMLObj *obj);
 
   bool check_key_condition(const string& key);
-  bool check_error_code_condition(int error_code) {
+  bool check_error_code_condition(const int error_code) {
     return (uint16_t)error_code == http_error_code_returned_equals;
   }
 };
@@ -118,7 +118,7 @@ struct RGWBWRoutingRule
     return condition.check_error_code_condition(error_code);
   }
 
-  void apply_rule(const string& default_protocol, const string& default_hostname, const string& key, string *redirect);
+  void apply_rule(const string& default_protocol, const string& default_hostname, const string& key, string *redirect, int *redirect_code);
 };
 WRITE_CLASS_ENCODER(RGWBWRoutingRule)
 
@@ -143,6 +143,7 @@ struct RGWBWRoutingRules
 
   bool check_key_condition(const string& key, RGWBWRoutingRule **rule);
   bool check_error_code_condition(int error_code, RGWBWRoutingRule **rule);
+  bool check_key_and_error_code_condition(const string& key, const int error_code, RGWBWRoutingRule **rule);
 };
 WRITE_CLASS_ENCODER(RGWBWRoutingRules)
 
@@ -177,7 +178,7 @@ struct RGWBucketWebsiteConf
   void decode_xml(XMLObj *obj);
   void dump_xml(Formatter *f) const;
 
-  bool should_redirect(const string& key, RGWBWRoutingRule *redirect);
+  bool should_redirect(const string& key, const int http_error_code, RGWBWRoutingRule *redirect);
   void get_effective_key(const string& key, string *effective_key);
 };
 WRITE_CLASS_ENCODER(RGWBucketWebsiteConf)
