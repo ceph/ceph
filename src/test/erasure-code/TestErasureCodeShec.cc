@@ -46,21 +46,21 @@ TEST(ErasureCodeShec, init_1)
   ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(
 				  tcache,
 				  ErasureCodeShec::MULTIPLE);
-  //check parameters
   ErasureCodeProfile *profile = new ErasureCodeProfile();
   (*profile)["plugin"] = "shec";
   (*profile)["technique"] = "";
   (*profile)["directory"] = "/usr/lib64/ceph/erasure-code";
   (*profile)["ruleset-failure-domain"] = "osd";
-  (*profile)["k"] = "6";
-  (*profile)["m"] = "4";
-  (*profile)["c"] = "3";
+  (*profile)["k"] = "4";
+  (*profile)["m"] = "3";
+  (*profile)["c"] = "2";
 
   int r = shec->init(*profile, &cerr);
 
-  EXPECT_EQ(6, shec->k);
-  EXPECT_EQ(4, shec->m);
-  EXPECT_EQ(3, shec->c);
+  //check profile
+  EXPECT_EQ(4, shec->k);
+  EXPECT_EQ(3, shec->m);
+  EXPECT_EQ(2, shec->c);
   EXPECT_EQ(8, shec->w);
   EXPECT_EQ(ErasureCodeShec::MULTIPLE, shec->technique);
   EXPECT_STREQ("default", shec->ruleset_root.c_str());
@@ -84,17 +84,17 @@ TEST(ErasureCodeShec, init_2)
   (*profile)["technique"] = "";
   (*profile)["ruleset-root"] = "test";
   (*profile)["ruleset-failure-domain"] = "host";
-  (*profile)["k"] = "6";
-  (*profile)["m"] = "4";
-  (*profile)["c"] = "3";
+  (*profile)["k"] = "4";
+  (*profile)["m"] = "3";
+  (*profile)["c"] = "2";
   (*profile)["w"] = "8";
 
   int r = shec->init(*profile, &cerr);
 
   //check profile
-  EXPECT_EQ(6, shec->k);
-  EXPECT_EQ(4, shec->m);
-  EXPECT_EQ(3, shec->c);
+  EXPECT_EQ(4, shec->k);
+  EXPECT_EQ(3, shec->m);
+  EXPECT_EQ(2, shec->c);
   EXPECT_EQ(8, shec->w);
   EXPECT_EQ(ErasureCodeShec::MULTIPLE, shec->technique);
   EXPECT_STREQ("test", shec->ruleset_root.c_str());
@@ -117,17 +117,17 @@ TEST(ErasureCodeShec, init_3)
   (*profile)["plugin"] = "shec";
   (*profile)["technique"] = "";
   (*profile)["ruleset-failure-domain"] = "osd";
-  (*profile)["k"] = "6";
-  (*profile)["m"] = "4";
-  (*profile)["c"] = "3";
+  (*profile)["k"] = "4";
+  (*profile)["m"] = "3";
+  (*profile)["c"] = "2";
   (*profile)["w"] = "16";
 
   int r = shec->init(*profile, &cerr);
 
   //check profile
-  EXPECT_EQ(6, shec->k);
-  EXPECT_EQ(4, shec->m);
-  EXPECT_EQ(3, shec->c);
+  EXPECT_EQ(4, shec->k);
+  EXPECT_EQ(3, shec->m);
+  EXPECT_EQ(2, shec->c);
   EXPECT_EQ(16, shec->w);
   EXPECT_EQ(ErasureCodeShec::MULTIPLE, shec->technique);
   EXPECT_STREQ("default", shec->ruleset_root.c_str());
@@ -150,17 +150,17 @@ TEST(ErasureCodeShec, init_4)
   (*profile)["plugin"] = "shec";
   (*profile)["technique"] = "";
   (*profile)["ruleset-failure-domain"] = "osd";
-  (*profile)["k"] = "6";
-  (*profile)["m"] = "4";
-  (*profile)["c"] = "3";
+  (*profile)["k"] = "4";
+  (*profile)["m"] = "3";
+  (*profile)["c"] = "2";
   (*profile)["w"] = "32";
 
   int r = shec->init(*profile, &cerr);
 
   //check profile
-  EXPECT_EQ(6, shec->k);
-  EXPECT_EQ(4, shec->m);
-  EXPECT_EQ(3, shec->c);
+  EXPECT_EQ(4, shec->k);
+  EXPECT_EQ(3, shec->m);
+  EXPECT_EQ(2, shec->c);
   EXPECT_EQ(32, shec->w);
   EXPECT_EQ(ErasureCodeShec::MULTIPLE, shec->technique);
   EXPECT_STREQ("default", shec->ruleset_root.c_str());
@@ -182,9 +182,9 @@ TEST(ErasureCodeShec, init_5)
   //plugin is not specified
   (*profile)["technique"] = "";
   (*profile)["ruleset-failure-domain"] = "osd";
-  (*profile)["k"] = "6";
-  (*profile)["m"] = "4";
-  (*profile)["c"] = "3";
+  (*profile)["k"] = "4";
+  (*profile)["m"] = "3";
+  (*profile)["c"] = "2";
 
   int r = shec->init(*profile, &cerr);
 
@@ -205,9 +205,9 @@ TEST(ErasureCodeShec, init_6)
   (*profile)["plugin"] = "jerasure";	//unexpected value
   (*profile)["technique"] = "";
   (*profile)["ruleset-failure-domain"] = "osd";
-  (*profile)["k"] = "6";
-  (*profile)["m"] = "4";
-  (*profile)["c"] = "3";
+  (*profile)["k"] = "4";
+  (*profile)["m"] = "3";
+  (*profile)["c"] = "2";
 
   int r = shec->init(*profile, &cerr);
 
@@ -228,9 +228,9 @@ TEST(ErasureCodeShec, init_7)
   (*profile)["plugin"] = "abc";	//unexpected value
   (*profile)["technique"] = "";
   (*profile)["ruleset-failure-domain"] = "osd";
-  (*profile)["k"] = "6";
-  (*profile)["m"] = "4";
-  (*profile)["c"] = "3";
+  (*profile)["k"] = "4";
+  (*profile)["m"] = "3";
+  (*profile)["c"] = "2";
 
   int r = shec->init(*profile, &cerr);
 
@@ -252,9 +252,9 @@ TEST(ErasureCodeShec, init_8)
   (*profile)["directory"] = "/usr/lib64/";	//unexpected value
   (*profile)["technique"] = "";
   (*profile)["ruleset-failure-domain"] = "osd";
-  (*profile)["k"] = "6";
-  (*profile)["m"] = "4";
-  (*profile)["c"] = "3";
+  (*profile)["k"] = "4";
+  (*profile)["m"] = "3";
+  (*profile)["c"] = "2";
 
   int r = shec->init(*profile, &cerr);
 
@@ -276,9 +276,9 @@ TEST(ErasureCodeShec, init_9)
   (*profile)["technique"] = "";
   (*profile)["ruleset-root"] = "abc";	//unexpected value
   (*profile)["ruleset-failure-domain"] = "osd";
-  (*profile)["k"] = "6";
-  (*profile)["m"] = "4";
-  (*profile)["c"] = "3";
+  (*profile)["k"] = "4";
+  (*profile)["m"] = "3";
+  (*profile)["c"] = "2";
 
   int r = shec->init(*profile, &cerr);
 
@@ -299,9 +299,9 @@ TEST(ErasureCodeShec, init_10)
   (*profile)["plugin"] = "shec";
   (*profile)["technique"] = "";
   (*profile)["ruleset-failure-domain"] = "abc";	//unexpected value
-  (*profile)["k"] = "6";
-  (*profile)["m"] = "4";
-  (*profile)["c"] = "3";
+  (*profile)["k"] = "4";
+  (*profile)["m"] = "3";
+  (*profile)["c"] = "2";
 
   int r = shec->init(*profile, &cerr);
 
@@ -322,9 +322,9 @@ TEST(ErasureCodeShec, init_11)
   (*profile)["plugin"] = "shec";
   (*profile)["technique"] = "abc";		//unexpected value
   (*profile)["ruleset-failure-domain"] = "osd";
-  (*profile)["k"] = "6";
-  (*profile)["m"] = "4";
-  (*profile)["c"] = "3";
+  (*profile)["k"] = "4";
+  (*profile)["m"] = "3";
+  (*profile)["c"] = "2";
 
   int r = shec->init(*profile, &cerr);
 
@@ -346,8 +346,8 @@ TEST(ErasureCodeShec, init_12)
   (*profile)["technique"] = "";
   (*profile)["ruleset-failure-domain"] = "osd";
   (*profile)["k"] = "-1";	//unexpected value
-  (*profile)["m"] = "4";
-  (*profile)["c"] = "3";
+  (*profile)["m"] = "3";
+  (*profile)["c"] = "2";
 
   int r = shec->init(*profile, &cerr);
 
@@ -368,8 +368,8 @@ TEST(ErasureCodeShec, init_13)
   (*profile)["technique"] = "";
   (*profile)["ruleset-failure-domain"] = "abc";
   (*profile)["k"] = "0.1";	//unexpected value
-  (*profile)["m"] = "4";
-  (*profile)["c"] = "3";
+  (*profile)["m"] = "3";
+  (*profile)["c"] = "2";
 
   int r = shec->init(*profile, &cerr);
 
@@ -390,8 +390,8 @@ TEST(ErasureCodeShec, init_14)
   (*profile)["technique"] = "";
   (*profile)["ruleset-failure-domain"] = "osd";
   (*profile)["k"] = "a";		//unexpected value
-  (*profile)["m"] = "4";
-  (*profile)["c"] = "3";
+  (*profile)["m"] = "3";
+  (*profile)["c"] = "2";
 
   int r = shec->init(*profile, &cerr);
 
@@ -412,8 +412,8 @@ TEST(ErasureCodeShec, init_15)
   (*profile)["technique"] = "";
   (*profile)["ruleset-failure-domain"] = "osd";
   //k is not specified
-  (*profile)["m"] = "4";
-  (*profile)["c"] = "3";
+  (*profile)["m"] = "3";
+  (*profile)["c"] = "2";
 
   int r = shec->init(*profile, &cerr);
 
@@ -433,9 +433,9 @@ TEST(ErasureCodeShec, init_16)
   (*profile)["plugin"] = "shec";
   (*profile)["technique"] = "";
   (*profile)["ruleset-failure-domain"] = "osd";
-  (*profile)["k"] = "6";
+  (*profile)["k"] = "4";
   (*profile)["m"] = "-1";		//unexpected value
-  (*profile)["c"] = "3";
+  (*profile)["c"] = "2";
 
   int r = shec->init(*profile, &cerr);
 
@@ -455,9 +455,9 @@ TEST(ErasureCodeShec, init_17)
   (*profile)["plugin"] = "shec";
   (*profile)["technique"] = "";
   (*profile)["ruleset-failure-domain"] = "osd";
-  (*profile)["k"] = "6";
+  (*profile)["k"] = "4";
   (*profile)["m"] = "0.1";		//unexpected value
-  (*profile)["c"] = "3";
+  (*profile)["c"] = "2";
 
   int r = shec->init(*profile, &cerr);
 
@@ -477,9 +477,9 @@ TEST(ErasureCodeShec, init_18)
   (*profile)["plugin"] = "shec";
   (*profile)["technique"] = "";
   (*profile)["ruleset-failure-domain"] = "osd";
-  (*profile)["k"] = "6";
+  (*profile)["k"] = "4";
   (*profile)["m"] = "a";		//unexpected value
-  (*profile)["c"] = "3";
+  (*profile)["c"] = "2";
 
   int r = shec->init(*profile, &cerr);
 
@@ -499,9 +499,9 @@ TEST(ErasureCodeShec, init_19)
   (*profile)["plugin"] = "shec";
   (*profile)["technique"] = "";
   (*profile)["ruleset-failure-domain"] = "osd";
-  (*profile)["k"] = "6";
+  (*profile)["k"] = "4";
   //m is not specified
-  (*profile)["c"] = "3";
+  (*profile)["c"] = "2";
 
   int r = shec->init(*profile, &cerr);
 
@@ -521,8 +521,8 @@ TEST(ErasureCodeShec, init_20)
   (*profile)["plugin"] = "shec";
   (*profile)["technique"] = "";
   (*profile)["ruleset-failure-domain"] = "osd";
-  (*profile)["k"] = "6";
-  (*profile)["m"] = "4";
+  (*profile)["k"] = "4";
+  (*profile)["m"] = "3";
   (*profile)["c"] = "-1";		//unexpected value
 
   int r = shec->init(*profile, &cerr);
@@ -543,8 +543,8 @@ TEST(ErasureCodeShec, init_21)
   (*profile)["plugin"] = "shec";
   (*profile)["technique"] = "";
   (*profile)["ruleset-failure-domain"] = "osd";
-  (*profile)["k"] = "6";
-  (*profile)["m"] = "4";
+  (*profile)["k"] = "4";
+  (*profile)["m"] = "3";
   (*profile)["c"] = "0.1";		//unexpected value
 
   int r = shec->init(*profile, &cerr);
@@ -565,8 +565,8 @@ TEST(ErasureCodeShec, init_22)
   (*profile)["plugin"] = "shec";
   (*profile)["technique"] = "";
   (*profile)["ruleset-failure-domain"] = "osd";
-  (*profile)["k"] = "6";
-  (*profile)["m"] = "4";
+  (*profile)["k"] = "4";
+  (*profile)["m"] = "3";
   (*profile)["c"] = "a";		//unexpected value
 
   int r = shec->init(*profile, &cerr);
@@ -587,8 +587,8 @@ TEST(ErasureCodeShec, init_23)
   (*profile)["plugin"] = "shec";
   (*profile)["technique"] = "";
   (*profile)["ruleset-failure-domain"] = "osd";
-  (*profile)["k"] = "6";
-  (*profile)["m"] = "4";
+  (*profile)["k"] = "4";
+  (*profile)["m"] = "3";
   //c is not specified
 
   int r = shec->init(*profile, &cerr);
@@ -609,18 +609,18 @@ TEST(ErasureCodeShec, init_24)
   (*profile)["plugin"] = "shec";
   (*profile)["technique"] = "";
   (*profile)["ruleset-failure-domain"] = "osd";
-  (*profile)["k"] = "6";
-  (*profile)["m"] = "4";
-  (*profile)["c"] = "3";
+  (*profile)["k"] = "4";
+  (*profile)["m"] = "3";
+  (*profile)["c"] = "2";
   (*profile)["w"] = "1";		//unexpected value
 
   int r = shec->init(*profile, &cerr);
 
   EXPECT_TRUE(shec->matrix != NULL);
   EXPECT_EQ(0, r);
-  EXPECT_EQ(6, shec->k);
-  EXPECT_EQ(4, shec->m);
-  EXPECT_EQ(3, shec->c);
+  EXPECT_EQ(4, shec->k);
+  EXPECT_EQ(3, shec->m);
+  EXPECT_EQ(2, shec->c);
   EXPECT_EQ(8, shec->w);
   //w is default value
 
@@ -638,18 +638,18 @@ TEST(ErasureCodeShec, init_25)
   (*profile)["plugin"] = "shec";
   (*profile)["technique"] = "";
   (*profile)["ruleset-failure-domain"] = "osd";
-  (*profile)["k"] = "6";
-  (*profile)["m"] = "4";
-  (*profile)["c"] = "3";
+  (*profile)["k"] = "4";
+  (*profile)["m"] = "3";
+  (*profile)["c"] = "2";
   (*profile)["w"] = "-1";		//unexpected value
 
   int r = shec->init(*profile, &cerr);
 
   EXPECT_TRUE(shec->matrix != NULL);
   EXPECT_EQ(0, r);
-  EXPECT_EQ(6, shec->k);
-  EXPECT_EQ(4, shec->m);
-  EXPECT_EQ(3, shec->c);
+  EXPECT_EQ(4, shec->k);
+  EXPECT_EQ(3, shec->m);
+  EXPECT_EQ(2, shec->c);
   EXPECT_EQ(8, shec->w);
   //w is default value
 
@@ -667,18 +667,18 @@ TEST(ErasureCodeShec, init_26)
   (*profile)["plugin"] = "shec";
   (*profile)["technique"] = "";
   (*profile)["ruleset-failure-domain"] = "osd";
-  (*profile)["k"] = "6";
-  (*profile)["m"] = "4";
-  (*profile)["c"] = "3";
+  (*profile)["k"] = "4";
+  (*profile)["m"] = "3";
+  (*profile)["c"] = "2";
   (*profile)["w"] = "0.1";		//unexpected value
 
   int r = shec->init(*profile, &cerr);
 
   EXPECT_TRUE(shec->matrix != NULL);
   EXPECT_EQ(0, r);
-  EXPECT_EQ(6, shec->k);
-  EXPECT_EQ(4, shec->m);
-  EXPECT_EQ(3, shec->c);
+  EXPECT_EQ(4, shec->k);
+  EXPECT_EQ(3, shec->m);
+  EXPECT_EQ(2, shec->c);
   EXPECT_EQ(8, shec->w);
   //w is default value
 
@@ -696,18 +696,18 @@ TEST(ErasureCodeShec, init_27)
   (*profile)["plugin"] = "shec";
   (*profile)["technique"] = "";
   (*profile)["ruleset-failure-domain"] = "osd";
-  (*profile)["k"] = "6";
-  (*profile)["m"] = "4";
-  (*profile)["c"] = "3";
+  (*profile)["k"] = "4";
+  (*profile)["m"] = "3";
+  (*profile)["c"] = "2";
   (*profile)["w"] = "a";		//unexpected value
 
   int r = shec->init(*profile, &cerr);
 
   EXPECT_TRUE(shec->matrix != NULL);
   EXPECT_EQ(0, r);
-  EXPECT_EQ(6, shec->k);
-  EXPECT_EQ(4, shec->m);
-  EXPECT_EQ(3, shec->c);
+  EXPECT_EQ(4, shec->k);
+  EXPECT_EQ(3, shec->m);
+  EXPECT_EQ(2, shec->c);
   EXPECT_EQ(8, shec->w);
   //w is default value
 
@@ -725,8 +725,8 @@ TEST(ErasureCodeShec, init_28)
   (*profile)["plugin"] = "shec";
   (*profile)["technique"] = "";
   (*profile)["ruleset-failure-domain"] = "osd";
-  (*profile)["k"] = "6";
-  (*profile)["m"] = "4";
+  (*profile)["k"] = "4";
+  (*profile)["m"] = "3";
   (*profile)["c"] = "10";	//c > m
 
   int r = shec->init(*profile, &cerr);
@@ -889,16 +889,16 @@ TEST(ErasureCodeShec, init2_4)
   (*profile)["plugin"] = "shec";
   (*profile)["technique"] = "";
   (*profile)["ruleset-failure-domain"] = "osd";
-  (*profile)["k"] = "6";
-  (*profile)["m"] = "4";
-  (*profile)["c"] = "3";
+  (*profile)["k"] = "4";
+  (*profile)["m"] = "3";
+  (*profile)["c"] = "2";
   shec->init(*profile, &cerr);
   int r = shec->init(*profile, &cerr);	//init executed twice
 
   //check profile
-  EXPECT_EQ(6, shec->k);
-  EXPECT_EQ(4, shec->m);
-  EXPECT_EQ(3, shec->c);
+  EXPECT_EQ(4, shec->k);
+  EXPECT_EQ(3, shec->m);
+  EXPECT_EQ(2, shec->c);
   EXPECT_EQ(8, shec->w);
   EXPECT_EQ(ErasureCodeShec::MULTIPLE, shec->technique);
   EXPECT_STREQ("default", shec->ruleset_root.c_str());
@@ -933,270 +933,20 @@ TEST(ErasureCodeShec, init2_5)
   (*profile2)["plugin"] = "shec";
   (*profile2)["technique"] = "";
   (*profile2)["ruleset-failure-domain"] = "osd";
-  (*profile2)["k"] = "6";
-  (*profile2)["m"] = "4";
-  (*profile2)["c"] = "3";
+  (*profile2)["k"] = "4";
+  (*profile2)["m"] = "3";
+  (*profile2)["c"] = "2";
   shec->init(*profile2, &cerr);
 
-  EXPECT_EQ(6, shec->k);
-  EXPECT_EQ(4, shec->m);
-  EXPECT_EQ(3, shec->c);
+  EXPECT_EQ(4, shec->k);
+  EXPECT_EQ(3, shec->m);
+  EXPECT_EQ(2, shec->c);
   EXPECT_EQ(8, shec->w);
   EXPECT_EQ(ErasureCodeShec::MULTIPLE, shec->technique);
   EXPECT_STREQ("default", shec->ruleset_root.c_str());
   EXPECT_STREQ("osd", shec->ruleset_failure_domain.c_str());
   EXPECT_TRUE(shec->matrix != NULL);
   EXPECT_EQ(0, r);
-
-  delete shec;
-  delete profile;
-}
-
-TEST(ErasureCodeShec, minimum_to_decode_1)
-{
-  //init
-  ErasureCodeShecTableCache tcache;
-  ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(
-				  tcache,
-				  ErasureCodeShec::MULTIPLE);
-  ErasureCodeProfile *profile = new ErasureCodeProfile();
-  (*profile)["plugin"] = "shec";
-  (*profile)["technique"] = "";
-  (*profile)["ruleset-failure-domain"] = "osd";
-  (*profile)["k"] = "6";
-  (*profile)["m"] = "4";
-  (*profile)["c"] = "3";
-  shec->init(*profile, &cerr);
-
-  //minimum_to_decode
-  set<int> want_to_decode;
-  set<int> available_chunks;
-  set<int> minimum_chunks;
-
-  want_to_decode.insert(0);
-  available_chunks.insert(0);
-  available_chunks.insert(1);
-  available_chunks.insert(2);
-
-  int r = shec->minimum_to_decode(want_to_decode, available_chunks,
-				  &minimum_chunks);
-  EXPECT_TRUE(shec->matrix != NULL);
-  EXPECT_EQ(0, r);
-  EXPECT_TRUE(minimum_chunks.size());
-
-  delete shec;
-  delete profile;
-}
-
-TEST(ErasureCodeShec, minimum_to_decode_2)
-{
-  //init
-  ErasureCodeShecTableCache tcache;
-  ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(
-				  tcache,
-				  ErasureCodeShec::MULTIPLE);
-  ErasureCodeProfile *profile = new ErasureCodeProfile();
-  (*profile)["plugin"] = "shec";
-  (*profile)["technique"] = "";
-  (*profile)["ruleset-failure-domain"] = "osd";
-  (*profile)["k"] = "6";
-  (*profile)["m"] = "4";
-  (*profile)["c"] = "3";
-  shec->init(*profile, &cerr);
-
-  //minimum_to_decode
-  set<int> want_to_decode;
-  set<int> available_chunks;
-  set<int> minimum_chunks;
-
-  for (int i = 0; i < 10; i++) {
-    want_to_decode.insert(i);
-    available_chunks.insert(i);
-  }
-
-  int r = shec->minimum_to_decode(want_to_decode, available_chunks,
-				  &minimum_chunks);
-  EXPECT_TRUE(shec->matrix != NULL);
-  EXPECT_EQ(0, r);
-  EXPECT_TRUE(minimum_chunks.size());
-
-  delete shec;
-  delete profile;
-}
-
-TEST(ErasureCodeShec, minimum_to_decode_3)
-{
-  //init
-  ErasureCodeShecTableCache tcache;
-  ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(
-				  tcache,
-				  ErasureCodeShec::MULTIPLE);
-  ErasureCodeProfile *profile = new ErasureCodeProfile();
-  (*profile)["plugin"] = "shec";
-  (*profile)["technique"] = "";
-  (*profile)["ruleset-failure-domain"] = "osd";
-  (*profile)["k"] = "6";
-  (*profile)["m"] = "4";
-  (*profile)["c"] = "3";
-  shec->init(*profile, &cerr);
-
-  //minimum_to_decode
-  set<int> want_to_decode;
-  set<int> available_chunks;
-  set<int> minimum_chunks;
-
-  for (int i = 0; i < 32; i++) {		//want_to_decode.size() > k+m
-    want_to_decode.insert(i);
-    available_chunks.insert(i);
-  }
-
-  int r = shec->minimum_to_decode(want_to_decode, available_chunks,
-				  &minimum_chunks);
-  EXPECT_EQ(-EINVAL, r);
-  EXPECT_EQ(0u, minimum_chunks.size());
-
-  delete shec;
-  delete profile;
-}
-
-TEST(ErasureCodeShec, minimum_to_decode_4)
-{
-  //init
-  ErasureCodeShecTableCache tcache;
-  ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(
-				  tcache,
-				  ErasureCodeShec::MULTIPLE);
-  ErasureCodeProfile *profile = new ErasureCodeProfile();
-  (*profile)["plugin"] = "shec";
-  (*profile)["technique"] = "";
-  (*profile)["ruleset-failure-domain"] = "osd";
-  (*profile)["k"] = "6";
-  (*profile)["m"] = "4";
-  (*profile)["c"] = "3";
-  shec->init(*profile, &cerr);
-
-  //minimum_to_decode
-  set<int> want_to_decode;
-  set<int> available_chunks;
-  set<int> minimum_chunks;
-
-  for (int i = 0; i < 9; i++) {
-    want_to_decode.insert(i);
-    available_chunks.insert(i);
-  }
-  want_to_decode.insert(100);
-  available_chunks.insert(100);
-
-  int r = shec->minimum_to_decode(want_to_decode, available_chunks,
-				  &minimum_chunks);
-  EXPECT_EQ(-EINVAL, r);
-
-  delete shec;
-  delete profile;
-}
-
-TEST(ErasureCodeShec, minimum_to_decode_5)
-{
-  //init
-  ErasureCodeShecTableCache tcache;
-  ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(
-				  tcache,
-				  ErasureCodeShec::MULTIPLE);
-  ErasureCodeProfile *profile = new ErasureCodeProfile();
-  (*profile)["plugin"] = "shec";
-  (*profile)["technique"] = "";
-  (*profile)["ruleset-failure-domain"] = "osd";
-  (*profile)["k"] = "6";
-  (*profile)["m"] = "4";
-  (*profile)["c"] = "3";
-  shec->init(*profile, &cerr);
-
-  //minimum_to_decode
-  set<int> want_to_decode;
-  set<int> available_chunks;
-  set<int> minimum_chunks;
-
-  for (int i = 0; i < 10; i++) {
-    want_to_decode.insert(i);
-  }
-  for (int i = 0; i < 32; i++) {		//available_chunks.size() > k+m
-    available_chunks.insert(i);
-  }
-
-  int r = shec->minimum_to_decode(want_to_decode, available_chunks,
-				  &minimum_chunks);
-  EXPECT_EQ(-EINVAL, r);
-
-  delete shec;
-  delete profile;
-}
-
-TEST(ErasureCodeShec, minimum_to_decode_6)
-{
-  //init
-  ErasureCodeShecTableCache tcache;
-  ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(
-				  tcache,
-				  ErasureCodeShec::MULTIPLE);
-  ErasureCodeProfile *profile = new ErasureCodeProfile();
-  (*profile)["plugin"] = "shec";
-  (*profile)["technique"] = "";
-  (*profile)["ruleset-failure-domain"] = "osd";
-  (*profile)["k"] = "6";
-  (*profile)["m"] = "4";
-  (*profile)["c"] = "3";
-  shec->init(*profile, &cerr);
-
-  //minimum_to_decode
-  set<int> want_to_decode;
-  set<int> available_chunks;
-  set<int> minimum_chunks;
-
-  for (int i = 0; i < 9; i++) {
-    want_to_decode.insert(i);
-    available_chunks.insert(i);
-  }
-  available_chunks.insert(100);
-
-  int r = shec->minimum_to_decode(want_to_decode, available_chunks,
-				  &minimum_chunks);
-  EXPECT_EQ(-EINVAL, r);
-
-  delete shec;
-  delete profile;
-}
-
-TEST(ErasureCodeShec, minimum_to_decode_7)
-{
-  //init
-  ErasureCodeShecTableCache tcache;
-  ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(
-				  tcache,
-				  ErasureCodeShec::MULTIPLE);
-  ErasureCodeProfile *profile = new ErasureCodeProfile();
-  (*profile)["plugin"] = "shec";
-  (*profile)["technique"] = "";
-  (*profile)["ruleset-failure-domain"] = "osd";
-  (*profile)["k"] = "6";
-  (*profile)["m"] = "4";
-  (*profile)["c"] = "3";
-  shec->init(*profile, &cerr);
-
-  //minimum_to_decode
-  set<int> want_to_decode;
-  set<int> available_chunks;
-  set<int> minimum_chunks;
-
-  want_to_decode.insert(1);
-  want_to_decode.insert(3);
-  want_to_decode.insert(5);
-  available_chunks.insert(1);
-  available_chunks.insert(3);
-  available_chunks.insert(6);
-
-  int r = shec->minimum_to_decode(want_to_decode, available_chunks,
-				  &minimum_chunks);
-  EXPECT_EQ(-EIO, r);
 
   delete shec;
   delete profile;
@@ -1213,22 +963,25 @@ TEST(ErasureCodeShec, minimum_to_decode_8)
   (*profile)["plugin"] = "shec";
   (*profile)["technique"] = "";
   (*profile)["ruleset-failure-domain"] = "osd";
-  (*profile)["k"] = "6";
-  (*profile)["m"] = "4";
-  (*profile)["c"] = "3";
+  (*profile)["k"] = "4";
+  (*profile)["m"] = "3";
+  (*profile)["c"] = "2";
   shec->init(*profile, &cerr);
 
   //minimum_to_decode
   set<int> want_to_decode;
   set<int> available_chunks;
-  //minimum_chunks is NULL
+  set<int> minimum_chunks;
 
-  for (int i = 0; i < 10; i++) {
+  for (int i = 0; i < 8; ++i) {
     want_to_decode.insert(i);
+  }
+  for (int i = 0; i < 5; ++i) {
     available_chunks.insert(i);
   }
 
-  int r = shec->minimum_to_decode(want_to_decode, available_chunks, NULL);
+  int r = shec->minimum_to_decode(want_to_decode, available_chunks,
+				  &minimum_chunks);
   EXPECT_EQ(-EINVAL, r);
 
   delete shec;
@@ -1246,9 +999,150 @@ TEST(ErasureCodeShec, minimum_to_decode_9)
   (*profile)["plugin"] = "shec";
   (*profile)["technique"] = "";
   (*profile)["ruleset-failure-domain"] = "osd";
-  (*profile)["k"] = "6";
-  (*profile)["m"] = "4";
-  (*profile)["c"] = "3";
+  (*profile)["k"] = "4";
+  (*profile)["m"] = "3";
+  (*profile)["c"] = "2";
+  shec->init(*profile, &cerr);
+
+  //minimum_to_decode
+  set<int> want_to_decode;
+  set<int> available_chunks;
+  set<int> minimum_chunks;
+
+  for (int i = 0; i < 4; ++i) {
+    want_to_decode.insert(i);
+  }
+  for (int i = 0; i < 8; ++i) {
+    available_chunks.insert(i);
+  }
+
+  int r = shec->minimum_to_decode(want_to_decode, available_chunks,
+				  &minimum_chunks);
+  EXPECT_EQ(-EINVAL, r);
+
+  delete shec;
+  delete profile;
+}
+
+TEST(ErasureCodeShec, minimum_to_decode_10)
+{
+  //init
+  ErasureCodeShecTableCache tcache;
+  ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(
+				  tcache,
+				  ErasureCodeShec::MULTIPLE);
+  ErasureCodeProfile *profile = new ErasureCodeProfile();
+  (*profile)["plugin"] = "shec";
+  (*profile)["technique"] = "";
+  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["k"] = "4";
+  (*profile)["m"] = "3";
+  (*profile)["c"] = "2";
+  shec->init(*profile, &cerr);
+
+  //minimum_to_decode
+  set<int> want_to_decode;
+  set<int> available_chunks;
+  set<int> minimum_chunks;
+
+  for (int i = 0; i < 7; ++i) {
+    want_to_decode.insert(i);
+  }
+  for (int i = 4; i < 7; ++i) {
+    available_chunks.insert(i);
+  }
+
+  int r = shec->minimum_to_decode(want_to_decode, available_chunks,
+				  &minimum_chunks);
+  EXPECT_EQ(-EIO, r);
+
+  delete shec;
+  delete profile;
+}
+
+TEST(ErasureCodeShec, minimum_to_decode_11)
+{
+  //init
+  ErasureCodeShecTableCache tcache;
+  ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(
+				  tcache,
+				  ErasureCodeShec::MULTIPLE);
+  ErasureCodeProfile *profile = new ErasureCodeProfile();
+  (*profile)["plugin"] = "shec";
+  (*profile)["technique"] = "";
+  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["k"] = "4";
+  (*profile)["m"] = "3";
+  (*profile)["c"] = "2";
+  shec->init(*profile, &cerr);
+
+  //minimum_to_decode
+  set<int> want_to_decode;
+  set<int> available_chunks;
+  set<int> minimum_chunks;
+
+  for (int i = 0; i < 5; ++i) {
+    want_to_decode.insert(i);
+  }
+  for (int i = 4; i < 7; ++i) {
+    available_chunks.insert(i);
+  }
+
+  int r = shec->minimum_to_decode(want_to_decode, available_chunks,
+				  &minimum_chunks);
+  EXPECT_EQ(-EIO, r);
+
+  delete shec;
+  delete profile;
+}
+
+TEST(ErasureCodeShec, minimum_to_decode_12)
+{
+  //init
+  ErasureCodeShecTableCache tcache;
+  ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(
+				  tcache,
+				  ErasureCodeShec::MULTIPLE);
+  ErasureCodeProfile *profile = new ErasureCodeProfile();
+  (*profile)["plugin"] = "shec";
+  (*profile)["technique"] = "";
+  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["k"] = "4";
+  (*profile)["m"] = "3";
+  (*profile)["c"] = "2";
+  shec->init(*profile, &cerr);
+
+  //minimum_to_decode
+  set<int> want_to_decode;
+  set<int> available_chunks;
+  //minimum_chunks is NULL
+
+  for (int i = 0; i < 7; ++i) {
+    want_to_decode.insert(i);
+    available_chunks.insert(i);
+  }
+
+  int r = shec->minimum_to_decode(want_to_decode, available_chunks, NULL);
+  EXPECT_EQ(-EINVAL, r);
+
+  delete shec;
+  delete profile;
+}
+
+TEST(ErasureCodeShec, minimum_to_decode_13)
+{
+  //init
+  ErasureCodeShecTableCache tcache;
+  ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(
+				  tcache,
+				  ErasureCodeShec::MULTIPLE);
+  ErasureCodeProfile *profile = new ErasureCodeProfile();
+  (*profile)["plugin"] = "shec";
+  (*profile)["technique"] = "";
+  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["k"] = "4";
+  (*profile)["m"] = "3";
+  (*profile)["c"] = "2";
   shec->init(*profile, &cerr);
 
   //minimum_to_decode
@@ -1256,13 +1150,13 @@ TEST(ErasureCodeShec, minimum_to_decode_9)
   set<int> available_chunks;
   set<int> minimum_chunks, minimum;
 
-  for (int i = 0; i < 10; i++) {
+  for (int i = 0; i < 7; ++i) {
     want_to_decode.insert(i);
     available_chunks.insert(i);
   }
   shec->minimum_to_decode(want_to_decode, available_chunks, &minimum_chunks);
   minimum = minimum_chunks;		//normal value
-  for (int i = 100; i < 120; i++) {
+  for (int i = 100; i < 120; ++i) {
     minimum_chunks.insert(i);	//insert extra data
   }
 
@@ -1287,9 +1181,9 @@ TEST(ErasureCodeShec, minimum_to_decode2_1)
   (*profile)["plugin"] = "shec";
   (*profile)["technique"] = "";
   (*profile)["ruleset-failure-domain"] = "osd";
-  (*profile)["k"] = "6";
-  (*profile)["m"] = "4";
-  (*profile)["c"] = "3";
+  (*profile)["k"] = "4";
+  (*profile)["m"] = "3";
+  (*profile)["c"] = "2";
   shec->init(*profile, &cerr);
 
   //minimum_to_decode
@@ -1323,9 +1217,9 @@ TEST(ErasureCodeShec, minimum_to_decode2_3)
   (*profile)["plugin"] = "shec";
   (*profile)["technique"] = "";
   (*profile)["ruleset-failure-domain"] = "osd";
-  (*profile)["k"] = "6";
-  (*profile)["m"] = "4";
-  (*profile)["c"] = "3";
+  (*profile)["k"] = "4";
+  (*profile)["m"] = "3";
+  (*profile)["c"] = "2";
   shec->init(*profile, &cerr);
 
   //minimum_to_decode
@@ -1372,9 +1266,9 @@ TEST(ErasureCodeShec, minimum_to_decode_with_cost_1)
   (*profile)["plugin"] = "shec";
   (*profile)["technique"] = "";
   (*profile)["ruleset-failure-domain"] = "osd";
-  (*profile)["k"] = "6";
-  (*profile)["m"] = "4";
-  (*profile)["c"] = "3";
+  (*profile)["k"] = "4";
+  (*profile)["m"] = "3";
+  (*profile)["c"] = "2";
   shec->init(*profile, &cerr);
 
   //minimum_to_decode_with_cost
@@ -1382,10 +1276,10 @@ TEST(ErasureCodeShec, minimum_to_decode_with_cost_1)
   map<int, int> available_chunks;
   set<int> minimum_chunks;
 
-  want_to_decode.insert(0);
-  available_chunks[0] = 0;
-  available_chunks[1] = 1;
-  available_chunks[2] = 2;
+  for (int i = 0; i < 7; ++i) {
+    want_to_decode.insert(i);
+    available_chunks.insert(make_pair(i, i));
+  }
 
   int r = shec->minimum_to_decode_with_cost(want_to_decode, available_chunks,
 					    &minimum_chunks);
@@ -1408,9 +1302,9 @@ TEST(ErasureCodeShec, minimum_to_decode_with_cost_2_3)
   (*profile)["plugin"] = "shec";
   (*profile)["technique"] = "";
   (*profile)["ruleset-failure-domain"] = "osd";
-  (*profile)["k"] = "6";
-  (*profile)["m"] = "4";
-  (*profile)["c"] = "3";
+  (*profile)["k"] = "4";
+  (*profile)["m"] = "3";
+  (*profile)["c"] = "2";
   shec->init(*profile, &cerr);
 
   //minimum_to_decode_with_cost
@@ -1457,9 +1351,9 @@ TEST(ErasureCodeShec, encode_1)
   (*profile)["plugin"] = "shec";
   (*profile)["technique"] = "";
   (*profile)["ruleset-failure-domain"] = "osd";
-  (*profile)["k"] = "6";
-  (*profile)["m"] = "4";
-  (*profile)["c"] = "3";
+  (*profile)["k"] = "4";
+  (*profile)["m"] = "3";
+  (*profile)["c"] = "2";
   shec->init(*profile, &cerr);
 
   //encode
@@ -1469,10 +1363,9 @@ TEST(ErasureCodeShec, encode_1)
 
   in.append("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"//length = 62
 	    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"//124
-	    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"//186
-	    "012345"//192
+	    "0123"//128
   );
-  for (unsigned int i = 0; i < shec->get_chunk_count(); i++) {
+  for (unsigned int i = 0; i < shec->get_chunk_count(); ++i) {
     want_to_encode.insert(i);
   }
 
@@ -1482,7 +1375,7 @@ TEST(ErasureCodeShec, encode_1)
   EXPECT_EQ(shec->get_chunk_size(in.length()), encoded[0].length());
 
   //decode
-  int want_to_decode[] = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 };
+  int want_to_decode[] = { 0, 1, 2, 3, 4, 5, 6 };
   map<int, bufferlist> decoded;
   decoded.clear();
   r = shec->decode(set<int>(want_to_decode, want_to_decode + 2),
@@ -1495,7 +1388,7 @@ TEST(ErasureCodeShec, encode_1)
 
   bufferlist out1, out2, usable;
   //out1 is "encoded"
-  for (unsigned int i = 0; i < encoded.size(); i++) {
+  for (unsigned int i = 0; i < encoded.size(); ++i) {
     out1.append(encoded[i]);
   }
   //out2 is "decoded"
@@ -1519,9 +1412,9 @@ TEST(ErasureCodeShec, encode_2)
   (*profile)["plugin"] = "shec";
   (*profile)["technique"] = "";
   (*profile)["ruleset-failure-domain"] = "osd";
-  (*profile)["k"] = "6";
-  (*profile)["m"] = "4";
-  (*profile)["c"] = "3";
+  (*profile)["k"] = "4";
+  (*profile)["m"] = "3";
+  (*profile)["c"] = "2";
   shec->init(*profile, &cerr);
 
   //encode
@@ -1531,9 +1424,8 @@ TEST(ErasureCodeShec, encode_2)
 
   in.append("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"//length = 62
 	    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"//124
-	    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"//186
   );
-  for (unsigned int i = 0; i < shec->get_chunk_count(); i++) {
+  for (unsigned int i = 0; i < shec->get_chunk_count(); ++i) {
     want_to_encode.insert(i);
   }
 
@@ -1543,7 +1435,7 @@ TEST(ErasureCodeShec, encode_2)
   EXPECT_EQ(shec->get_chunk_size(in.length()), encoded[0].length());
 
   //decode
-  int want_to_decode[] = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 };
+  int want_to_decode[] = { 0, 1, 2, 3, 4, 5, 6 };
   map<int, bufferlist> decoded;
   r = shec->decode(set<int>(want_to_decode, want_to_decode + 2), encoded,
 		   &decoded);
@@ -1554,7 +1446,7 @@ TEST(ErasureCodeShec, encode_2)
 
   bufferlist out1, out2, usable;
   //out1 is "encoded"
-  for (unsigned int i = 0; i < encoded.size(); i++)
+  for (unsigned int i = 0; i < encoded.size(); ++i)
     out1.append(encoded[i]);
   //out2 is "decoded"
   shec->decode_concat(encoded, &out2);
@@ -1576,18 +1468,17 @@ TEST(ErasureCodeShec, encode_3)
   (*profile)["plugin"] = "shec";
   (*profile)["technique"] = "";
   (*profile)["ruleset-failure-domain"] = "osd";
-  (*profile)["k"] = "6";
-  (*profile)["m"] = "4";
-  (*profile)["c"] = "3";
+  (*profile)["k"] = "4";
+  (*profile)["m"] = "3";
+  (*profile)["c"] = "2";
   shec->init(*profile, &cerr);
 
   bufferlist in;
   in.append("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"//length = 62
 	    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"//124
-	    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"//186
   );
   set<int> want_to_encode;
-  for (unsigned int i = 0; i < shec->get_chunk_count(); i++) {
+  for (unsigned int i = 0; i < shec->get_chunk_count(); ++i) {
     want_to_encode.insert(i);
   }
   want_to_encode.insert(10);
@@ -1599,7 +1490,7 @@ TEST(ErasureCodeShec, encode_3)
   EXPECT_EQ(shec->get_chunk_size(in.length()), encoded[0].length());
 
   //decode
-  int want_to_decode[] = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 };
+  int want_to_decode[] = { 0, 1, 2, 3, 4, 5, 6 };
   map<int, bufferlist> decoded;
   r = shec->decode(set<int>(want_to_decode, want_to_decode + 2), encoded,
 		   &decoded);
@@ -1610,7 +1501,7 @@ TEST(ErasureCodeShec, encode_3)
 
   bufferlist out1, out2, usable;
   //out1 is "encoded"
-  for (unsigned int i = 0; i < encoded.size(); i++) {
+  for (unsigned int i = 0; i < encoded.size(); ++i) {
     out1.append(encoded[i]);
   }
   //out2 is "decoded"
@@ -1634,9 +1525,9 @@ TEST(ErasureCodeShec, encode_4)
   (*profile)["plugin"] = "shec";
   (*profile)["technique"] = "";
   (*profile)["ruleset-failure-domain"] = "osd";
-  (*profile)["k"] = "6";
-  (*profile)["m"] = "4";
-  (*profile)["c"] = "3";
+  (*profile)["k"] = "4";
+  (*profile)["m"] = "3";
+  (*profile)["c"] = "2";
   shec->init(*profile, &cerr);
 
   //encode
@@ -1646,9 +1537,8 @@ TEST(ErasureCodeShec, encode_4)
 
   in.append("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"//length = 62
 	    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"//124
-	    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"//186
   );
-  for (unsigned int i = 0; i < shec->get_chunk_count() - 1; i++) {
+  for (unsigned int i = 0; i < shec->get_chunk_count() - 1; ++i) {
     want_to_encode.insert(i);
   }
   want_to_encode.insert(100);
@@ -1659,7 +1549,7 @@ TEST(ErasureCodeShec, encode_4)
   EXPECT_EQ(shec->get_chunk_size(in.length()), encoded[0].length());
 
   //decode
-  int want_to_decode[] = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 };
+  int want_to_decode[] = { 0, 1, 2, 3, 4, 5, 6 };
   map<int, bufferlist> decoded;
   r = shec->decode(set<int>(want_to_decode, want_to_decode + 2), encoded,
 		   &decoded);
@@ -1670,7 +1560,7 @@ TEST(ErasureCodeShec, encode_4)
 
   bufferlist out1, out2, usable;
   //out1 is "encoded"
-  for (unsigned int i = 0; i < encoded.size(); i++) {
+  for (unsigned int i = 0; i < encoded.size(); ++i) {
     out1.append(encoded[i]);
   }
   //out2 is "decoded"
@@ -1694,9 +1584,9 @@ TEST(ErasureCodeShec, encode_8)
   (*profile)["plugin"] = "shec";
   (*profile)["technique"] = "";
   (*profile)["ruleset-failure-domain"] = "osd";
-  (*profile)["k"] = "6";
-  (*profile)["m"] = "4";
-  (*profile)["c"] = "3";
+  (*profile)["k"] = "4";
+  (*profile)["m"] = "3";
+  (*profile)["c"] = "2";
   shec->init(*profile, &cerr);
 
   //encode
@@ -1705,9 +1595,8 @@ TEST(ErasureCodeShec, encode_8)
 
   in.append("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"//length = 62
 	    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"//124
-	    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"//186
   );
-  for (unsigned int i = 0; i < shec->get_chunk_count(); i++) {
+  for (unsigned int i = 0; i < shec->get_chunk_count(); ++i) {
     want_to_encode.insert(i);
   }
 
@@ -1729,9 +1618,9 @@ TEST(ErasureCodeShec, encode_9)
   (*profile)["plugin"] = "shec";
   (*profile)["technique"] = "";
   (*profile)["ruleset-failure-domain"] = "osd";
-  (*profile)["k"] = "6";
-  (*profile)["m"] = "4";
-  (*profile)["c"] = "3";
+  (*profile)["k"] = "4";
+  (*profile)["m"] = "3";
+  (*profile)["c"] = "2";
   shec->init(*profile, &cerr);
 
   //encode
@@ -1741,12 +1630,11 @@ TEST(ErasureCodeShec, encode_9)
 
   in.append("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"//length = 62
 	    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"//124
-	    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"//186
   );
-  for (unsigned int i = 0; i < shec->get_chunk_count(); i++) {
+  for (unsigned int i = 0; i < shec->get_chunk_count(); ++i) {
     want_to_encode.insert(i);
   }
-  for (int i = 0; i < 100; i++) {
+  for (int i = 0; i < 100; ++i) {
     encoded[i].append("ABCDEFGHIJKLMNOPQRSTUVWXYZ");
   }
 
@@ -1768,9 +1656,9 @@ TEST(ErasureCodeShec, encode2_1)
   (*profile)["plugin"] = "shec";
   (*profile)["technique"] = "";
   (*profile)["ruleset-failure-domain"] = "osd";
-  (*profile)["k"] = "6";
-  (*profile)["m"] = "4";
-  (*profile)["c"] = "3";
+  (*profile)["k"] = "4";
+  (*profile)["m"] = "3";
+  (*profile)["c"] = "2";
   shec->init(*profile, &cerr);
 
   //encode
@@ -1780,10 +1668,9 @@ TEST(ErasureCodeShec, encode2_1)
 
   in.append("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"//length = 62
 	    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"//124
-	    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"//186
-	    "012345"//192
+	    "0123"//128
   );
-  for (unsigned int i = 0; i < shec->get_chunk_count(); i++) {
+  for (unsigned int i = 0; i < shec->get_chunk_count(); ++i) {
     want_to_encode.insert(i);
   }
 
@@ -1793,7 +1680,7 @@ TEST(ErasureCodeShec, encode2_1)
   EXPECT_EQ(shec->get_chunk_size(in.length()), encoded[0].length());
 
   //decode
-  int want_to_decode[] = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 };
+  int want_to_decode[] = { 0, 1, 2, 3, 4, 5, 6 };
   map<int, bufferlist> decoded;
   r = shec->decode(set<int>(want_to_decode, want_to_decode + 2), encoded,
 		   &decoded);
@@ -1804,7 +1691,7 @@ TEST(ErasureCodeShec, encode2_1)
 
   bufferlist out1, out2, usable;
   //out1 is "encoded"
-  for (unsigned int i = 0; i < encoded.size(); i++) {
+  for (unsigned int i = 0; i < encoded.size(); ++i) {
     out1.append(encoded[i]);
   }
   //out2 is "decoded"
@@ -1828,9 +1715,9 @@ TEST(ErasureCodeShec, encode2_3)
   (*profile)["plugin"] = "shec";
   (*profile)["technique"] = "";
   (*profile)["ruleset-failure-domain"] = "osd";
-  (*profile)["k"] = "6";
-  (*profile)["m"] = "4";
-  (*profile)["c"] = "3";
+  (*profile)["k"] = "4";
+  (*profile)["m"] = "3";
+  (*profile)["c"] = "2";
   shec->init(*profile, &cerr);
 
   //encode
@@ -1840,10 +1727,9 @@ TEST(ErasureCodeShec, encode2_3)
 
   in.append("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"//length = 62
 	    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"//124
-	    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"//186
-	    "012345"//192
+	    "0123"//128
   );
-  for (unsigned int i = 0; i < shec->get_chunk_count(); i++) {
+  for (unsigned int i = 0; i < shec->get_chunk_count(); ++i) {
     want_to_encode.insert(i);
   }
 
@@ -1864,7 +1750,7 @@ TEST(ErasureCodeShec, encode2_3)
   pthread_join(tid, NULL);
 
   //decode
-  int want_to_decode[] = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 };
+  int want_to_decode[] = { 0, 1, 2, 3, 4, 5, 6 };
   map<int, bufferlist> decoded;
 
   r = shec->decode(set<int>(want_to_decode, want_to_decode + 2), encoded,
@@ -1876,7 +1762,7 @@ TEST(ErasureCodeShec, encode2_3)
 
   bufferlist out1, out2, usable;
   //out1 is "encoded"
-  for (unsigned int i = 0; i < encoded.size(); i++) {
+  for (unsigned int i = 0; i < encoded.size(); ++i) {
     out1.append(encoded[i]);
   }
   //out2 is "decoded"
@@ -1900,9 +1786,9 @@ TEST(ErasureCodeShec, decode_1)
   (*profile)["plugin"] = "shec";
   (*profile)["technique"] = "";
   (*profile)["ruleset-failure-domain"] = "osd";
-  (*profile)["k"] = "6";
-  (*profile)["m"] = "4";
-  (*profile)["c"] = "3";
+  (*profile)["k"] = "4";
+  (*profile)["m"] = "3";
+  (*profile)["c"] = "2";
   shec->init(*profile, &cerr);
 
   //encode
@@ -1915,7 +1801,7 @@ TEST(ErasureCodeShec, decode_1)
 	    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"//186
 	    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"//248
   );
-  for (unsigned int i = 0; i < shec->get_chunk_count(); i++) {
+  for (unsigned int i = 0; i < shec->get_chunk_count(); ++i) {
     want_to_encode.insert(i);
   }
 
@@ -1926,25 +1812,36 @@ TEST(ErasureCodeShec, decode_1)
 
   // all chunks are available
   //decode
-  int want_to_decode[] = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 };
+  int want_to_decode[] = { 0, 1, 2, 3, 4, 5, 6 };
   map<int, bufferlist> decoded;
 
-  r = shec->decode(set<int>(want_to_decode, want_to_decode + 2), encoded,
+  r = shec->decode(set<int>(want_to_decode, want_to_decode + 7), encoded,
 		   &decoded);
   EXPECT_TRUE(shec->matrix != NULL);
   EXPECT_EQ(0, r);
-  EXPECT_EQ(2u, decoded.size());
+  EXPECT_EQ(7u, decoded.size());
 
-  bufferlist out, usable;
-  shec->decode_concat(encoded, &out);
-  usable.substr_of(out, 0, in.length());
-  EXPECT_TRUE(usable == in);
+  bufferlist usable;
+  int cmp;
+  unsigned int c_size = shec->get_chunk_size(in.length());
+  for (unsigned int i = 0; i < shec->get_data_chunk_count(); ++i) {
+    usable.clear();
+    EXPECT_EQ(c_size, decoded[i].length());
+    if ( c_size * (i+1) <= in.length() ) {
+      usable.substr_of(in, c_size * i, c_size);
+      cmp = memcmp(decoded[i].c_str(), usable.c_str(), c_size);
+    } else {
+      usable.substr_of(in, c_size * i, in.length() % c_size);
+      cmp = memcmp(decoded[i].c_str(), usable.c_str(), in.length() % c_size);
+    }
+    EXPECT_EQ(0, cmp);
+  }
 
   delete shec;
   delete profile;
 }
 
-TEST(ErasureCodeShec, decode_2)
+TEST(ErasureCodeShec, decode_8)
 {
   //init
   ErasureCodeShecTableCache tcache;
@@ -1955,9 +1852,9 @@ TEST(ErasureCodeShec, decode_2)
   (*profile)["plugin"] = "shec";
   (*profile)["technique"] = "";
   (*profile)["ruleset-failure-domain"] = "osd";
-  (*profile)["k"] = "6";
-  (*profile)["m"] = "4";
-  (*profile)["c"] = "3";
+  (*profile)["k"] = "4";
+  (*profile)["m"] = "3";
+  (*profile)["c"] = "2";
   shec->init(*profile, &cerr);
 
   //encode
@@ -1968,9 +1865,9 @@ TEST(ErasureCodeShec, decode_2)
   in.append("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"//length = 62
 	    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"//124
 	    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"//186
-	    "012345"//192
+            "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"//248
   );
-  for (unsigned int i = 0; i < shec->get_chunk_count(); i++) {
+  for (unsigned int i = 0; i < shec->get_chunk_count(); ++i) {
     want_to_encode.insert(i);
   }
 
@@ -1981,87 +1878,36 @@ TEST(ErasureCodeShec, decode_2)
 
   // all chunks are available
   //decode
-  int want_to_decode[] = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 };
+  int want_to_decode[] = { 0, 1, 2, 3, 4, 5, 6, 7 }; //more than k+m
   map<int, bufferlist> decoded;
 
-  r = shec->decode(set<int>(want_to_decode, want_to_decode + 2), encoded,
+  r = shec->decode(set<int>(want_to_decode, want_to_decode + 8), encoded,
 		   &decoded);
-  EXPECT_TRUE(shec->matrix != NULL);
   EXPECT_EQ(0, r);
-  EXPECT_EQ(2u, decoded.size());
-
-  bufferlist out, usable;
-  shec->decode_concat(encoded, &out);
-  usable.substr_of(out, 0, in.length());
-  EXPECT_TRUE(usable == in);
-
-  delete shec;
-  delete profile;
-}
-
-TEST(ErasureCodeShec, decode_3)
-{
-  //init
-  ErasureCodeShecTableCache tcache;
-  ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(
-				  tcache,
-				  ErasureCodeShec::MULTIPLE);
-  ErasureCodeProfile *profile = new ErasureCodeProfile();
-  (*profile)["plugin"] = "shec";
-  (*profile)["technique"] = "";
-  (*profile)["ruleset-failure-domain"] = "osd";
-  (*profile)["k"] = "6";
-  (*profile)["m"] = "4";
-  (*profile)["c"] = "3";
-  shec->init(*profile, &cerr);
-
-  //encode
-  bufferlist in;
-  set<int> want_to_encode;
-  map<int, bufferlist> encoded;
-
-  in.append("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"//length = 62
-	    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"//124
-	    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"//186
-	    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"//248
-  );
-  for (unsigned int i = 0; i < shec->get_chunk_count(); i++) {
-    want_to_encode.insert(i);
-  }
-
-  int r = shec->encode(want_to_encode, in, &encoded);
-  EXPECT_EQ(0, r);
-  EXPECT_EQ(shec->get_chunk_count(), encoded.size());
+  EXPECT_EQ(7u, decoded.size());
   EXPECT_EQ(shec->get_chunk_size(in.length()), encoded[0].length());
 
-  // all chunks are available
-  //decode
-  int want_to_decode[] = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11 }; //more than k+m
-  map<int, bufferlist> decoded;
-
-  r = shec->decode(set<int>(want_to_decode, want_to_decode + 11), encoded,
-		   &decoded);
-  EXPECT_TRUE(shec->matrix != NULL);
-  EXPECT_EQ(0, r);
-  EXPECT_EQ(10u, decoded.size());
-  EXPECT_EQ(shec->get_chunk_size(in.length()), decoded[0].length());
-
-  bufferlist out1, out2, usable;
-  //out1 is "encoded"
-  for (unsigned int i = 0; i < encoded.size(); i++) {
-    out1.append(encoded[i]);
+  bufferlist usable;
+  int cmp;
+  unsigned int c_size = shec->get_chunk_size(in.length());
+  for (unsigned int i = 0; i < shec->get_data_chunk_count(); ++i) {
+    usable.clear();
+    EXPECT_EQ(c_size, decoded[i].length());
+    if ( c_size * (i+1) <= in.length() ) {
+      usable.substr_of(in, c_size * i, c_size);
+      cmp = memcmp(decoded[i].c_str(), usable.c_str(), c_size);
+    } else {
+      usable.substr_of(in, c_size * i, in.length() % c_size);
+      cmp = memcmp(decoded[i].c_str(), usable.c_str(), in.length() % c_size);
+    }
+    EXPECT_EQ(0, cmp);
   }
-  //out2 is "decoded"
-  shec->decode_concat(encoded, &out2);
-  usable.substr_of(out2, 0, in.length());
-  EXPECT_FALSE(out1 == in);
-  EXPECT_TRUE(usable == in);
 
   delete shec;
   delete profile;
 }
 
-TEST(ErasureCodeShec, decode_4)
+TEST(ErasureCodeShec, decode_9)
 {
   //init
   ErasureCodeShecTableCache tcache;
@@ -2072,9 +1918,9 @@ TEST(ErasureCodeShec, decode_4)
   (*profile)["plugin"] = "shec";
   (*profile)["technique"] = "";
   (*profile)["ruleset-failure-domain"] = "osd";
-  (*profile)["k"] = "6";
-  (*profile)["m"] = "4";
-  (*profile)["c"] = "3";
+  (*profile)["k"] = "4";
+  (*profile)["m"] = "3";
+  (*profile)["c"] = "2";
   shec->init(*profile, &cerr);
 
   //encode
@@ -2087,69 +1933,7 @@ TEST(ErasureCodeShec, decode_4)
 	    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"//186
 	    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"//248
   );
-  for (unsigned int i = 0; i < shec->get_chunk_count(); i++) {
-    want_to_encode.insert(i);
-  }
-
-  int r = shec->encode(want_to_encode, in, &encoded);
-  EXPECT_EQ(0, r);
-  EXPECT_EQ(shec->get_chunk_count(), encoded.size());
-  EXPECT_EQ(shec->get_chunk_size(in.length()), encoded[0].length());
-
-  // all chunks are available
-  //decode
-  int want_to_decode[] = { 0, 1, 2, 3, 4, 5, 6, 7, 100 };
-  map<int, bufferlist> decoded;
-
-  r = shec->decode(set<int>(want_to_decode, want_to_decode + 9), encoded,
-		   &decoded);
-  EXPECT_TRUE(shec->matrix != NULL);
-  EXPECT_EQ(0, r);
-  EXPECT_EQ(10u, decoded.size());
-  EXPECT_EQ(shec->get_chunk_size(in.length()), decoded[0].length());
-
-  bufferlist out1, out2, usable;
-  //out1 is "encoded"
-  for (unsigned int i = 0; i < encoded.size(); i++) {
-    out1.append(encoded[i]);
-  }
-  //out2 is "decoded"
-  shec->decode_concat(encoded, &out2);
-  usable.substr_of(out2, 0, in.length());
-  EXPECT_FALSE(out1 == in);
-  EXPECT_TRUE(usable == in);
-
-  delete shec;
-  delete profile;
-}
-
-TEST(ErasureCodeShec, decode_7)
-{
-  //init
-  ErasureCodeShecTableCache tcache;
-  ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(
-				  tcache,
-				  ErasureCodeShec::MULTIPLE);
-  ErasureCodeProfile *profile = new ErasureCodeProfile();
-  (*profile)["plugin"] = "shec";
-  (*profile)["technique"] = "";
-  (*profile)["ruleset-failure-domain"] = "osd";
-  (*profile)["k"] = "6";
-  (*profile)["m"] = "4";
-  (*profile)["c"] = "3";
-  shec->init(*profile, &cerr);
-
-  //encode
-  bufferlist in;
-  set<int> want_to_encode;
-  map<int, bufferlist> encoded;
-
-  in.append("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"//length = 62
-	    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"//124
-	    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"//186
-	    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"//248
-  );
-  for (unsigned int i = 0; i < shec->get_chunk_count(); i++) {
+  for (unsigned int i = 0; i < shec->get_chunk_count(); ++i) {
     want_to_encode.insert(i);
   }
 
@@ -2168,29 +1952,40 @@ TEST(ErasureCodeShec, decode_7)
   buf.append("abc");
   encoded[100] = buf;
 
-  r = shec->decode(set<int>(want_to_decode, want_to_decode + 2), encoded,
+  r = shec->decode(set<int>(want_to_decode, want_to_decode + 10), encoded,
 		   &decoded);
   EXPECT_TRUE(shec->matrix != NULL);
   EXPECT_EQ(0, r);
-  EXPECT_EQ(2u, decoded.size());
+  EXPECT_EQ(7u, decoded.size());
   EXPECT_EQ(shec->get_chunk_size(in.length()), decoded[0].length());
 
-  bufferlist out1, out2, usable;
+  bufferlist out1, usable;
   //out1 is "encoded"
-  for (unsigned int i = 0; i < encoded.size(); i++) {
+  for (unsigned int i = 0; i < encoded.size(); ++i) {
     out1.append(encoded[i]);
   }
-  //out2 is "decoded"
-  shec->decode_concat(encoded, &out2);
-  usable.substr_of(out2, 0, in.length());
   EXPECT_FALSE(out1 == in);
-  EXPECT_TRUE(usable == in);
+  //usable is "decoded"
+  int cmp;
+  unsigned int c_size = shec->get_chunk_size(in.length());
+  for (unsigned int i = 0; i < shec->get_data_chunk_count(); ++i) {
+    usable.clear();
+    EXPECT_EQ(c_size, decoded[i].length());
+    if ( c_size * (i+1) <= in.length() ) {
+      usable.substr_of(in, c_size * i, c_size);
+      cmp = memcmp(decoded[i].c_str(), usable.c_str(), c_size);
+    } else {
+      usable.substr_of(in, c_size * i, in.length() % c_size);
+      cmp = memcmp(decoded[i].c_str(), usable.c_str(), in.length() % c_size);
+    }
+    EXPECT_EQ(0, cmp);
+  }
 
   delete shec;
   delete profile;
 }
 
-TEST(ErasureCodeShec, decode_8)
+TEST(ErasureCodeShec, decode_10)
 {
   //init
   ErasureCodeShecTableCache tcache;
@@ -2201,9 +1996,9 @@ TEST(ErasureCodeShec, decode_8)
   (*profile)["plugin"] = "shec";
   (*profile)["technique"] = "";
   (*profile)["ruleset-failure-domain"] = "osd";
-  (*profile)["k"] = "6";
-  (*profile)["m"] = "4";
-  (*profile)["c"] = "3";
+  (*profile)["k"] = "4";
+  (*profile)["m"] = "3";
+  (*profile)["c"] = "2";
   shec->init(*profile, &cerr);
 
   //encode
@@ -2216,7 +2011,108 @@ TEST(ErasureCodeShec, decode_8)
 	    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"//186
 	    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"//248
   );
-  for (unsigned int i = 0; i < shec->get_chunk_count(); i++) {
+  for (unsigned int i = 0; i < shec->get_chunk_count(); ++i) {
+    want_to_encode.insert(i);
+  }
+
+  int r = shec->encode(want_to_encode, in, &encoded);
+  EXPECT_EQ(0, r);
+  EXPECT_EQ(shec->get_chunk_count(), encoded.size());
+  EXPECT_EQ(shec->get_chunk_size(in.length()), encoded[0].length());
+
+  //decode
+  int want_to_decode[] = { 0, 1, 2, 3, 4, 5, 6 }; //more than k+m
+  map<int, bufferlist> decoded, inchunks;
+
+  for ( unsigned int i = 0; i < 3; ++i) {
+    inchunks.insert(make_pair(i, encoded[i]));
+  }
+
+  r = shec->decode(set<int>(want_to_decode, want_to_decode + 7), inchunks,
+		   &decoded);
+  EXPECT_EQ(-1, r);
+
+  delete shec;
+  delete profile;
+}
+
+TEST(ErasureCodeShec, decode_11)
+{
+  //init
+  ErasureCodeShecTableCache tcache;
+  ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(
+				  tcache,
+				  ErasureCodeShec::MULTIPLE);
+  ErasureCodeProfile *profile = new ErasureCodeProfile();
+  (*profile)["plugin"] = "shec";
+  (*profile)["technique"] = "";
+  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["k"] = "4";
+  (*profile)["m"] = "3";
+  (*profile)["c"] = "2";
+  shec->init(*profile, &cerr);
+
+  //encode
+  bufferlist in;
+  set<int> want_to_encode;
+  map<int, bufferlist> encoded;
+
+  in.append("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"//length = 62
+	    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"//124
+	    "ABCD"//128
+  );
+  for (unsigned int i = 0; i < shec->get_chunk_count(); ++i) {
+    want_to_encode.insert(i);
+  }
+
+  int r = shec->encode(want_to_encode, in, &encoded);
+  EXPECT_EQ(0, r);
+  EXPECT_EQ(shec->get_chunk_count(), encoded.size());
+  EXPECT_EQ(shec->get_chunk_size(in.length()), encoded[0].length());
+
+  //decode
+  int want_to_decode[] = { 0, 1, 2, 3, 4 };
+  map<int, bufferlist> decoded, inchunks;
+
+  for ( unsigned int i = 4; i < 7; ++i) {
+    inchunks.insert(make_pair(i, encoded[i]));
+  }
+
+  r = shec->decode(set<int>(want_to_decode, want_to_decode + 5), inchunks,
+		   &decoded);
+  EXPECT_EQ(-1, r);
+
+  delete shec;
+  delete profile;
+}
+
+TEST(ErasureCodeShec, decode_12)
+{
+  //init
+  ErasureCodeShecTableCache tcache;
+  ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(
+				  tcache,
+				  ErasureCodeShec::MULTIPLE);
+  ErasureCodeProfile *profile = new ErasureCodeProfile();
+  (*profile)["plugin"] = "shec";
+  (*profile)["technique"] = "";
+  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["k"] = "4";
+  (*profile)["m"] = "3";
+  (*profile)["c"] = "2";
+  shec->init(*profile, &cerr);
+
+  //encode
+  bufferlist in;
+  set<int> want_to_encode;
+  map<int, bufferlist> encoded;
+
+  in.append("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"//length = 62
+	    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"//124
+	    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"//186
+	    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"//248
+  );
+  for (unsigned int i = 0; i < shec->get_chunk_count(); ++i) {
     want_to_encode.insert(i);
   }
 
@@ -2227,10 +2123,10 @@ TEST(ErasureCodeShec, decode_8)
 
   // all chunks are available
   //decode
-  int want_to_decode[] = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 };
+  int want_to_decode[] = { 0, 1, 2, 3, 4, 5, 6 };
 
   //decoded = NULL
-  r = shec->decode(set<int>(want_to_decode, want_to_decode + 2), encoded,
+  r = shec->decode(set<int>(want_to_decode, want_to_decode + 7), encoded,
 		   NULL);
   EXPECT_NE(0, r);
 
@@ -2238,7 +2134,7 @@ TEST(ErasureCodeShec, decode_8)
   delete profile;
 }
 
-TEST(ErasureCodeShec, decode_9)
+TEST(ErasureCodeShec, decode_13)
 {
   //init
   ErasureCodeShecTableCache tcache;
@@ -2249,9 +2145,9 @@ TEST(ErasureCodeShec, decode_9)
   (*profile)["plugin"] = "shec";
   (*profile)["technique"] = "";
   (*profile)["ruleset-failure-domain"] = "osd";
-  (*profile)["k"] = "6";
-  (*profile)["m"] = "4";
-  (*profile)["c"] = "3";
+  (*profile)["k"] = "4";
+  (*profile)["m"] = "3";
+  (*profile)["c"] = "2";
   shec->init(*profile, &cerr);
 
   //encode
@@ -2264,7 +2160,7 @@ TEST(ErasureCodeShec, decode_9)
 	    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"//186
 	    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"//248
   );
-  for (unsigned int i = 0; i < shec->get_chunk_count(); i++) {
+  for (unsigned int i = 0; i < shec->get_chunk_count(); ++i) {
     want_to_encode.insert(i);
   }
 
@@ -2275,17 +2171,17 @@ TEST(ErasureCodeShec, decode_9)
 
   // all chunks are available
   //decode
-  int want_to_decode[] = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 };
+  int want_to_decode[] = { 0, 1, 2, 3, 4, 5, 6 };
   map<int, bufferlist> decoded;
 
   //extra data
   bufferlist buf;
   buf.append("a");
-  for (int i = 0; i < 100; i++) {
+  for (int i = 0; i < 100; ++i) {
     decoded[i] = buf;
   }
 
-  r = shec->decode(set<int>(want_to_decode, want_to_decode + 2), encoded,
+  r = shec->decode(set<int>(want_to_decode, want_to_decode + 7), encoded,
 		   &decoded);
   EXPECT_NE(0, r);
 
@@ -2304,9 +2200,9 @@ TEST(ErasureCodeShec, decode2_1)
   (*profile)["plugin"] = "shec";
   (*profile)["technique"] = "";
   (*profile)["ruleset-failure-domain"] = "osd";
-  (*profile)["k"] = "6";
-  (*profile)["m"] = "4";
-  (*profile)["c"] = "3";
+  (*profile)["k"] = "4";
+  (*profile)["m"] = "3";
+  (*profile)["c"] = "2";
   shec->init(*profile, &cerr);
 
   //encode
@@ -2319,7 +2215,7 @@ TEST(ErasureCodeShec, decode2_1)
 	    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"//186
 	    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"//248
   );
-  for (unsigned int i = 0; i < shec->get_chunk_count(); i++) {
+  for (unsigned int i = 0; i < shec->get_chunk_count(); ++i) {
     want_to_encode.insert(i);
   }
 
@@ -2360,9 +2256,9 @@ TEST(ErasureCodeShec, decode2_3)
   (*profile)["plugin"] = "shec";
   (*profile)["technique"] = "";
   (*profile)["ruleset-failure-domain"] = "osd";
-  (*profile)["k"] = "6";
-  (*profile)["m"] = "4";
-  (*profile)["c"] = "3";
+  (*profile)["k"] = "4";
+  (*profile)["m"] = "3";
+  (*profile)["c"] = "2";
   shec->init(*profile, &cerr);
 
   //encode
@@ -2375,7 +2271,7 @@ TEST(ErasureCodeShec, decode2_3)
 	    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"//186
 	    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"//248
   );
-  for (unsigned int i = 0; i < shec->get_chunk_count(); i++) {
+  for (unsigned int i = 0; i < shec->get_chunk_count(); ++i) {
     want_to_encode.insert(i);
   }
 
@@ -2427,9 +2323,9 @@ TEST(ErasureCodeShec, decode2_4)
   (*profile)["plugin"] = "shec";
   (*profile)["technique"] = "";
   (*profile)["ruleset-failure-domain"] = "osd";
-  (*profile)["k"] = "6";
-  (*profile)["m"] = "4";
-  (*profile)["c"] = "3";
+  (*profile)["k"] = "4";
+  (*profile)["m"] = "3";
+  (*profile)["c"] = "2";
   shec->init(*profile, &cerr);
 
   //encode
@@ -2442,7 +2338,7 @@ TEST(ErasureCodeShec, decode2_4)
 	    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"//186
 	    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"//248
   );
-  for (unsigned int i = 0; i < shec->get_chunk_count(); i++) {
+  for (unsigned int i = 0; i < shec->get_chunk_count(); ++i) {
     want_to_encode.insert(i);
   }
 
@@ -2505,9 +2401,9 @@ TEST(ErasureCodeShec, create_ruleset_1_2)
   (*profile)["plugin"] = "shec";
   (*profile)["technique"] = "";
   (*profile)["ruleset-failure-domain"] = "osd";
-  (*profile)["k"] = "6";
-  (*profile)["m"] = "4";
-  (*profile)["c"] = "3";
+  (*profile)["k"] = "4";
+  (*profile)["m"] = "3";
+  (*profile)["c"] = "2";
   shec->init(*profile, &cerr);
 
   //create_ruleset
@@ -2563,9 +2459,9 @@ TEST(ErasureCodeShec, create_ruleset_4)
   (*profile)["plugin"] = "shec";
   (*profile)["technique"] = "";
   (*profile)["ruleset-failure-domain"] = "osd";
-  (*profile)["k"] = "6";
-  (*profile)["m"] = "4";
-  (*profile)["c"] = "3";
+  (*profile)["k"] = "4";
+  (*profile)["m"] = "3";
+  (*profile)["c"] = "2";
   shec->init(*profile, &cerr);
 
   //create_ruleset
@@ -2614,9 +2510,9 @@ TEST(ErasureCodeShec, create_ruleset2_1)
   (*profile)["plugin"] = "shec";
   (*profile)["technique"] = "";
   (*profile)["ruleset-failure-domain"] = "osd";
-  (*profile)["k"] = "6";
-  (*profile)["m"] = "4";
-  (*profile)["c"] = "3";
+  (*profile)["k"] = "4";
+  (*profile)["m"] = "3";
+  (*profile)["c"] = "2";
   shec->init(*profile, &cerr);
 
   //create_ruleset
@@ -2673,9 +2569,9 @@ TEST(ErasureCodeShec, create_ruleset2_3)
   (*profile)["plugin"] = "shec";
   (*profile)["technique"] = "";
   (*profile)["ruleset-failure-domain"] = "osd";
-  (*profile)["k"] = "6";
-  (*profile)["m"] = "4";
-  (*profile)["c"] = "3";
+  (*profile)["k"] = "4";
+  (*profile)["m"] = "3";
+  (*profile)["c"] = "2";
   shec->init(*profile, &cerr);
 
   //create_ruleset
@@ -2711,13 +2607,13 @@ TEST(ErasureCodeShec, get_chunk_count_1)
   (*profile)["plugin"] = "shec";
   (*profile)["technique"] = "";
   (*profile)["ruleset-failure-domain"] = "osd";
-  (*profile)["k"] = "6";
-  (*profile)["m"] = "4";
-  (*profile)["c"] = "3";
+  (*profile)["k"] = "4";
+  (*profile)["m"] = "3";
+  (*profile)["c"] = "2";
   shec->init(*profile, &cerr);
 
   //get_chunk_count
-  EXPECT_EQ(10u, shec->get_chunk_count());
+  EXPECT_EQ(7u, shec->get_chunk_count());
 
   delete shec;
   delete profile;
@@ -2734,13 +2630,13 @@ TEST(ErasureCodeShec, get_data_chunk_count_1)
   (*profile)["plugin"] = "shec";
   (*profile)["technique"] = "";
   (*profile)["ruleset-failure-domain"] = "osd";
-  (*profile)["k"] = "6";
-  (*profile)["m"] = "4";
-  (*profile)["c"] = "3";
+  (*profile)["k"] = "4";
+  (*profile)["m"] = "3";
+  (*profile)["c"] = "2";
   shec->init(*profile, &cerr);
 
   //get_data_chunk_count
-  EXPECT_EQ(6u, shec->get_data_chunk_count());
+  EXPECT_EQ(4u, shec->get_data_chunk_count());
 
   delete shec;
   delete profile;
@@ -2757,16 +2653,16 @@ TEST(ErasureCodeShec, get_chunk_size_1_2)
   (*profile)["plugin"] = "shec";
   (*profile)["technique"] = "";
   (*profile)["ruleset-failure-domain"] = "osd";
-  (*profile)["k"] = "6";
-  (*profile)["m"] = "4";
-  (*profile)["c"] = "3";
+  (*profile)["k"] = "4";
+  (*profile)["m"] = "3";
+  (*profile)["c"] = "2";
   (*profile)["w"] = "8";
   shec->init(*profile, &cerr);
 
-  //when there is no padding(192=k*w*4)
-  EXPECT_EQ(32u, shec->get_chunk_size(192));
-  //when there is padding(190=k*w*4-2)
-  EXPECT_EQ(32u, shec->get_chunk_size(190));
+  //when there is no padding(128=k*w*4)
+  EXPECT_EQ(32u, shec->get_chunk_size(128));
+  //when there is padding(126=k*w*4-2)
+  EXPECT_EQ(32u, shec->get_chunk_size(126));
 
   delete shec;
   delete profile;
@@ -2870,7 +2766,7 @@ void* thread3(void* pParam)
   while (g_flag == 1) {
     sprintf(name, "myrule%d", i);
     shec->create_ruleset(name, *crush, &ss);
-    i++;
+    ++i;
   }
   printf("*** thread loop end ***\n");
 
@@ -2888,7 +2784,7 @@ void* thread4(void* pParam)
 	    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"//248
   );
   set<int> want_to_encode;
-  for (unsigned int i = 0; i < shec->get_chunk_count(); i++) {
+  for (unsigned int i = 0; i < shec->get_chunk_count(); ++i) {
     want_to_encode.insert(i);
   }
 
@@ -2917,7 +2813,7 @@ void* thread5(void* pParam)
 	  "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"//310
   );
   set<int> want_to_encode;
-  for (unsigned int i = 0; i < shec->get_chunk_count(); i++) {
+  for (unsigned int i = 0; i < shec->get_chunk_count(); ++i) {
     want_to_encode.insert(i);
   }
   map<int, bufferlist> encoded;
