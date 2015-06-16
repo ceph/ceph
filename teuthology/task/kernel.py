@@ -617,13 +617,17 @@ def need_to_install_distro(remote):
     """
     Installing kernels on rpm won't setup grub/boot into them.  This installs
     the newest kernel package and checks its version and compares against
-    current (uname -r) and returns true if newest != current.  Similar check
-    for deb.
+    the running kernel (uname -r).  Similar check for deb.
+
+    :returns: False if running the newest distro kernel. Returns the version of
+              the newest if it is not running.
     """
     package_type = remote.os.package_type
     output, err_mess = StringIO(), StringIO()
     remote.run(args=['uname', '-r'], stdout=output)
     current = output.getvalue().strip()
+    log.info("Running kernel on {node}: {version}".format(
+        node=remote.shortname, version=current))
     installed_version = None
     if package_type == 'rpm':
         remote.run(args=['sudo', 'yum', 'install', '-y', 'kernel'],
@@ -670,7 +674,7 @@ def need_to_install_distro(remote):
     log.info(
         'Not newest distro kernel. Curent: {cur} Expected: {new}'.format(
             cur=current, new=newest))
-    return True
+    return newest
 
 
 def maybe_generate_initrd_rpm(remote, path, version):
@@ -720,6 +724,8 @@ def install_kernel(remote, path=None, version=None):
     :param path:    package path (for local and gitbuilder cases)
     :param version: for RPM distro kernels, pass this to update_grub_rpm
     """
+    templ = "install_kernel(remote={remote}, path={path}, version={version})"
+    log.debug(templ.format(remote=remote, path=path, version=version))
     package_type = remote.os.package_type
     if package_type == 'rpm':
         if path:
@@ -728,7 +734,7 @@ def install_kernel(remote, path=None, version=None):
             # could have been built with upstream rpm targets with specs that
             # don't have a %post section at all, which means no initrd.
             maybe_generate_initrd_rpm(remote, path, version)
-        elif not version:
+        elif not version or version == 'distro':
             version = get_latest_image_version_rpm(remote)
         update_grub_rpm(remote, version)
         remote.run( args=['sudo', 'shutdown', '-r', 'now'], wait=False )
@@ -796,10 +802,13 @@ def update_grub_rpm(remote, newversion):
         #Update grub menu entry to new version.
         grub2_kernel_select_generic(remote, newversion, 'rpm')
 
+
 def grub2_kernel_select_generic(remote, newversion, ostype):
     """
     Can be used on DEB and RPM. Sets which entry should be boted by entrynum.
     """
+    log.info("Updating grub on {node} to boot {version}".format(
+        node=remote.shortname, version=newversion))
     if ostype == 'rpm':
         grubset = 'grub2-set-default'
         mkconfig = 'grub2-mkconfig'
