@@ -413,7 +413,7 @@ int main(int argc, const char **argv)
 					   getpid());
   Messenger *ms_cluster = Messenger::create(g_ceph_context, g_conf->ms_type,
 					    entity_name_t::OSD(whoami), "cluster",
-					    getpid());
+					    getpid(), CEPH_FEATURES_ALL);
   Messenger *ms_hbclient = Messenger::create(g_ceph_context, g_conf->ms_type,
 					     entity_name_t::OSD(whoami), "hbclient",
 					     getpid());
