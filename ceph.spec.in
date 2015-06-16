@@ -24,7 +24,6 @@ Requires:	librados2 = %{version}-%{release}
 Requires:	libcephfs1 = %{version}-%{release}
 Requires:	ceph-common = %{version}-%{release}
 Requires:	python
-Requires:	python-argparse
 Requires:	python-ceph
 Requires:	python-requests
 Requires:	python-flask
@@ -44,7 +43,6 @@ BuildRequires:	gdbm
 BuildRequires:	pkgconfig
 BuildRequires:	python
 BuildRequires:	python-nose
-BuildRequires:	python-argparse
 BuildRequires:	libaio-devel
 BuildRequires:	libcurl-devel
 BuildRequires:	libxml2-devel
@@ -107,6 +105,11 @@ Requires:	librados2 = %{version}-%{release}
 Requires:	python-ceph = %{version}-%{release}
 Requires:	python-requests
 Requires:	redhat-lsb-core
+# python-argparse is only needed in distros with Python 2.6 or lower
+%if (0%{?rhel} && 0%{?rhel} <= 6) || (0%{?suse_version} && 0%{?suse_version} <= 1110)
+Requires:	python-argparse
+BuildRequires:	python-argparse
+%endif
 %description -n ceph-common
 common utilities to mount and interact with a ceph storage cluster
 
