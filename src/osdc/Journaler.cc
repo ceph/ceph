@@ -141,6 +141,10 @@ public:
 void Journaler::recover(Context *onread) 
 {
   Mutex::Locker l(lock);
+  if (stopping) {
+    onread->complete(-EAGAIN);
+    return;
+  }
 
   ldout(cct, 1) << "recover start" << dendl;
   assert(state != STATE_ACTIVE);
@@ -150,7 +154,7 @@ void Journaler::recover(Context *onread)
     waitfor_recover.push_back(onread);
   
   if (state != STATE_UNDEF) {
-    ldout(cct, 1) << "recover - already recoverying" << dendl;
+    ldout(cct, 1) << "recover - already recovering" << dendl;
     return;
   }
 
@@ -634,6 +638,10 @@ void Journaler::_do_flush(unsigned amount)
 void Journaler::wait_for_flush(Context *onsafe)
 {
   Mutex::Locker l(lock);
+  if (stopping) {
+    onsafe->complete(-EAGAIN);
+    return;
+  }
   _wait_for_flush(onsafe);
 }
 
@@ -1122,6 +1130,10 @@ bool Journaler::try_read_entry(bufferlist& bl)
 void Journaler::wait_for_readable(Context *onreadable)
 {
   Mutex::Locker l(lock);
+  if (stopping) {
+    onreadable->complete(-EAGAIN);
+    return;
+  }
 
   assert(on_readable == 0);
   if (!readable) {
@@ -1395,3 +1407,30 @@ C_OnFinisher *Journaler::wrap_finisher(Context *c)
     return NULL;
   }
 }
+
+void Journaler::shutdown()
+{
+  Mutex::Locker l(lock);
+
+  ldout(cct, 1) << __func__ << dendl;
+
+  readable = false;
+  stopping = true;
+
+  // Kick out anyone reading from journal
+  error = -EAGAIN;
+  if (on_readable) {
+    C_OnFinisher *f = on_readable;
+    on_readable = 0;
+    f->complete(-EAGAIN);
+  }
+
+  finish_contexts(cct, waitfor_recover, 0);
+
+  std::map<uint64_t, std::list<Context*> >::iterator i;
+  for (i = waitfor_safe.begin(); i != waitfor_safe.end(); ++i) {
+    finish_contexts(cct, i->second, -EAGAIN);
+  }
+  waitfor_safe.clear();
+}
+
