@@ -94,22 +94,35 @@ void OpTracker::dump_historic_ops(Formatter *f)
   history.dump_ops(now, f);
 }
 
+class InitiateCompare {
+public:
+  bool operator() (TrackedOp* const &l, TrackedOp* const &r) const {
+    // A TrackedOp is older than the other one if initiated_at is less
+    return l->get_initiated() < r->get_initiated();
+  }
+};
+
 void OpTracker::dump_ops_in_flight(Formatter *f)
 {
   f->open_object_section("ops_in_flight"); // overall dump
   uint64_t total_ops_in_flight = 0;
   f->open_array_section("ops"); // list of TrackedOps
   utime_t now = ceph_clock_now(cct);
+
+  multiset<TrackedOp*, InitiateCompare> all_ops;
   for (uint32_t i = 0; i < num_optracker_shards; i++) {
     ShardedTrackingData* sdata = sharded_in_flight_list[i];
     assert(NULL != sdata); 
-    Mutex::Locker locker(sdata->ops_in_flight_lock_sharded);    
-    for (xlist<TrackedOp*>::iterator p = sdata->ops_in_flight_sharded.begin(); !p.end(); ++p) {
-      f->open_object_section("op");
-      (*p)->dump(now, f);
-      f->close_section(); // this TrackedOp
-      total_ops_in_flight++;
-    }
+    Mutex::Locker locker(sdata->ops_in_flight_lock_sharded);
+    all_ops.insert(sdata->ops_in_flight_sharded.begin(),
+                   sdata->ops_in_flight_sharded.end());
+  }
+  for (multiset<TrackedOp*, InitiateCompare>::iterator it = all_ops.begin();
+       it != all_ops.end(); it++) {
+    f->open_object_section("op");
+    (*it)->dump(now, f);
+    f->close_section(); // this TrackedOp
+    total_ops_in_flight++;
   }
   f->close_section(); // list of TrackedOps
   f->dump_int("num_ops", total_ops_in_flight);
@@ -152,35 +165,29 @@ void OpTracker::unregister_inflight_op(TrackedOp *i)
 
 bool OpTracker::check_ops_in_flight(std::vector<string> &warning_vector)
 {
+  if (!tracking_enabled)
+    return false;
+
   utime_t now = ceph_clock_now(cct);
   utime_t too_old = now;
   too_old -= complaint_time;
-  utime_t oldest_op;
-  uint64_t total_ops_in_flight = 0;
-  bool got_first_op = false;
+  multiset<TrackedOp*, InitiateCompare> all_ops;
 
   for (uint32_t i = 0; i < num_optracker_shards; i++) {
     ShardedTrackingData* sdata = sharded_in_flight_list[i];
     assert(NULL != sdata);
     Mutex::Locker locker(sdata->ops_in_flight_lock_sharded);
-    if (!sdata->ops_in_flight_sharded.empty()) {
-      utime_t oldest_op_tmp = sdata->ops_in_flight_sharded.front()->get_initiated();
-      if (!got_first_op) {
-        oldest_op = oldest_op_tmp;
-        got_first_op = true;
-      } else if (oldest_op_tmp < oldest_op) {
-        oldest_op = oldest_op_tmp;
-      }
-    } 
-    total_ops_in_flight += sdata->ops_in_flight_sharded.size();
+    all_ops.insert(sdata->ops_in_flight_sharded.begin(),
+                   sdata->ops_in_flight_sharded.end());
   }
-      
-  if (0 == total_ops_in_flight)
+
+  if (all_ops.empty())
     return false;
 
+  utime_t oldest_op = (*all_ops.begin())->get_initiated();
   utime_t oldest_secs = now - oldest_op;
 
-  dout(10) << "ops_in_flight.size: " << total_ops_in_flight
+  dout(10) << "ops_in_flight.size: " << all_ops.size()
            << "; oldest is " << oldest_secs
            << " seconds old" << dendl;
 
@@ -191,39 +198,35 @@ bool OpTracker::check_ops_in_flight(std::vector<string> &warning_vector)
 
   int slow = 0;     // total slow
   int warned = 0;   // total logged
-  for (uint32_t iter = 0; iter < num_optracker_shards; iter++) {
-    ShardedTrackingData* sdata = sharded_in_flight_list[iter];
-    assert(NULL != sdata);
-    Mutex::Locker locker(sdata->ops_in_flight_lock_sharded);
-    if (sdata->ops_in_flight_sharded.empty())
-      continue;
-    xlist<TrackedOp*>::iterator i = sdata->ops_in_flight_sharded.begin();    
-    while (!i.end() && (*i)->get_initiated() < too_old) {
-      slow++;
+  for (multiset<TrackedOp*, InitiateCompare>::iterator it = all_ops.begin();
+       it != all_ops.end(); ++it) {
+    utime_t initiated_at = (*it)->get_initiated();
+    if (initiated_at >= too_old)
+      break;
+    slow++;
 
-      // exponential backoff of warning intervals
-      if (((*i)->get_initiated() +
-	 (complaint_time * (*i)->warn_interval_multiplier)) < now) {
-      // will warn
-        if (warning_vector.empty())
-          warning_vector.push_back("");
-        warned++;
-        if (warned > log_threshold)
-          break;
+    // exponential backoff of warning intervals
+    if ((initiated_at +
+        (complaint_time * (*it)->warn_interval_multiplier)) < now) {
+    // will warn
+      if (warning_vector.empty())
+        warning_vector.push_back("");
 
-        utime_t age = now - (*i)->get_initiated();
-        stringstream ss;
-        ss << "slow request " << age << " seconds old, received at "
-           << (*i)->get_initiated() << ": ";
-        (*i)->_dump_op_descriptor_unlocked(ss);
-        ss << " currently "
-	   << ((*i)->current.size() ? (*i)->current : (*i)->state_string());
-        warning_vector.push_back(ss.str());
+      utime_t age = now - initiated_at;
+      stringstream ss;
+      ss << "slow request " << age << " seconds old, received at "
+         << initiated_at << ": ";
+      (*it)->_dump_op_descriptor_unlocked(ss);
+      ss << " currently "
+         << ((*it)->current.size() ? (*it)->current : (*it)->state_string());
+      warning_vector.push_back(ss.str());
 
-        // only those that have been shown will backoff
-        (*i)->warn_interval_multiplier *= 2;
-      }
-      ++i;
+      // only those that have been shown will backoff
+      (*it)->warn_interval_multiplier *= 2;
+
+      warned++;
+      if (warned >= log_threshold)
+        break;
     }
   }
 
