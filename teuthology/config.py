@@ -144,6 +144,7 @@ class TeuthologyConfig(YamlConfig):
         'kojiroot_url': 'http://kojipkgs.fedoraproject.org/packages',
         'koji_task_url': 'https://kojipkgs.fedoraproject.org/work/',
         'baseurl_template': 'http://{host}/{proj}-{pkg_type}-{dist}-{arch}-{flavor}/{uri}',
+        'teuthology_path': None,
     }
 
     def __init__(self, yaml_path=None):

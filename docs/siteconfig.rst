@@ -57,6 +57,9 @@ Here is a sample configuration with many of the options set and documented::
     # Where teuthology and ceph-qa-suite repos should be stored locally
     src_base_path: /home/foo/src
 
+    # Where teuthology path is located: do not clone if present
+    #teuthology_path: .
+
     # Whether or not teuthology-suite, when scheduling, should update 
     # itself from git. This is disabled by default.
     automated_scheduling: false
