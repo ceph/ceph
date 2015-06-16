@@ -734,7 +734,7 @@ def install_kernel(remote, path=None, version=None):
             # could have been built with upstream rpm targets with specs that
             # don't have a %post section at all, which means no initrd.
             maybe_generate_initrd_rpm(remote, path, version)
-        elif not version:
+        elif not version or version == 'distro':
             version = get_latest_image_version_rpm(remote)
         update_grub_rpm(remote, version)
         remote.run( args=['sudo', 'shutdown', '-r', 'now'], wait=False )
