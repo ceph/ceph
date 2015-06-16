@@ -607,17 +607,43 @@ void end_header(struct req_state *s, RGWOp *op, const char *content_type, const 
   rgw_flush_formatter_and_reset(s, s->formatter);
 }
 
-void abort_early(struct req_state *s, RGWOp *op, int err_no)
+void abort_early(struct req_state *s, RGWOp *op, int err_no, RGWHandler* handler)
 {
+  string dest_uri("");
+  string error_content("");
   if (!s->formatter) {
     s->formatter = new JSONFormatter;
     s->format = RGW_FORMAT_JSON;
+  }
+  // op->error_handler is responsible for calling it's handler error_handler
+  int ret = 0;
+  if(op != NULL) {
+    int new_err_no = 0;
+    // TODO: Should this modify s->redirect instead of touching dest_uri?
+    ret = op->error_handler(err_no, &new_err_no, &dest_uri, &error_content);
+    if(ret == 0) {
+      ldout(s->cct, 20) << "op->ERRORHANDLER: ret=" << ret << " err_no=" << err_no << " new_err_no=" << new_err_no << dendl;
+      err_no = new_err_no;
+    } else {
+      ldout(s->cct, 0) << "op->ERRORHANDLER FAILED ret=" << ret << " err_no=" << err_no << " new_err_no=" << new_err_no << dendl;
+    }
+  }
+  // But we do consider that op->error_handler might just fail as well
+  if(ret != 0 && handler != NULL) {
+    int new_err_no = 0;
+    // TODO: Should this modify s->redirect instead of touching dest_uri?
+    ret = op->error_handler(err_no, &new_err_no, &dest_uri, &error_content);
+    if(ret == 0) {
+      ldout(s->cct, 20) << "handler->ERRORHANDLER: ret=" << ret << " err_no=" << err_no << " new_err_no=" << new_err_no << dendl;
+      err_no = new_err_no;
+    } else {
+      ldout(s->cct, 0) << "handler->ERRORHANDLER FAILED ret=" << ret << " err_no=" << err_no << " new_err_no=" << new_err_no << dendl;
+    }
   }
   set_req_state_err(s, err_no);
   dump_errno(s);
   dump_bucket_from_state(s);
   if (err_no == -ERR_PERMANENT_REDIRECT) {
-    string dest_uri;
     if (!s->redirect.empty()) {
       dest_uri = s->redirect;
     } else if (!s->region_endpoint.empty()) {
