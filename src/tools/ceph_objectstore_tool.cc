@@ -1909,10 +1909,10 @@ int main(int argc, char **argv)
     ("journal-path", po::value<string>(&jpath),
      "path to journal, mandatory for filestore type")
     ("pgid", po::value<string>(&pgidstr),
-     "PG id, mandatory for info, log, remove, export, rm-past-intervals")
+     "PG id, mandatory for info, log, remove, export, rm-past-intervals, mark-complete")
     ("op", po::value<string>(&op),
      "Arg is one of [info, log, remove, export, import, list, fix-lost, list-pgs, rm-past-intervals, set-allow-sharded-objects, dump-journal, dump-super, meta-list, "
-	 "get-osdmap, set-osdmap, get-inc-osdmap, set-inc-osdmap]")
+	 "get-osdmap, set-osdmap, get-inc-osdmap, set-inc-osdmap, mark-complete]")
     ("epoch", po::value<unsigned>(&epoch),
      "epoch# for get-osdmap and get-inc-osdmap, the current epoch in use if not specified")
     ("file", po::value<string>(&file),
@@ -2285,7 +2285,8 @@ int main(int argc, char **argv)
   // The ops which require --pgid option are checked here and
   // mentioned in the usage for --pgid.
   if ((op == "info" || op == "log" || op == "remove" || op == "export"
-      || op == "rm-past-intervals") && pgidstr.length() == 0) {
+      || op == "rm-past-intervals" || op == "mark-complete") &&
+      pgidstr.length() == 0) {
     cerr << "Must provide pgid" << std::endl;
     usage(desc);
     ret = 1;
@@ -2563,9 +2564,9 @@ int main(int argc, char **argv)
 
   // If not an object command nor any of the ops handled below, then output this usage
   // before complaining about a bad pgid
-  if (!vm.count("objcmd") && op != "export" && op != "info" && op != "log" && op != "rm-past-intervals") {
+  if (!vm.count("objcmd") && op != "export" && op != "info" && op != "log" && op != "rm-past-intervals" && op != "mark-complete") {
     cerr << "Must provide --op (info, log, remove, export, import, list, fix-lost, list-pgs, rm-past-intervals, set-allow-sharded-objects, dump-journal, dump-super, meta-list, "
-      "get-osdmap, set-osdmap, get-inc-osdmap, set-inc-osdmap)"
+      "get-osdmap, set-osdmap, get-inc-osdmap, set-inc-osdmap, mark-complete)"
 	 << std::endl;
     usage(desc);
     ret = 1;
@@ -2821,6 +2822,32 @@ int main(int argc, char **argv)
       if (ret == 0) {
         fs->apply_transaction(*t);
         cout << "Removal succeeded" << std::endl;
+      }
+    } else if (op == "mark-complete") {
+      ObjectStore::Transaction tran;
+      ObjectStore::Transaction *t = &tran;
+
+      if (struct_ver != PG::cur_struct_v) {
+	cerr << "Can't mark-complete, version mismatch " << (int)struct_ver
+	     << " (pg)  != " << (int)PG::cur_struct_v << " (tool)"
+	     << std::endl;
+	ret = 1;
+	goto out;
+      }
+
+      cout << "Marking complete " << std::endl;
+
+      info.last_update = eversion_t(superblock.current_epoch, info.last_update.version + 1);
+      info.last_backfill = hobject_t::get_max();
+      info.last_epoch_started = superblock.current_epoch;
+      info.history.last_epoch_started = superblock.current_epoch;
+      info.history.last_epoch_clean = superblock.current_epoch;
+      past_intervals.clear();
+
+      ret = write_info(*t, map_epoch, info, past_intervals);
+      if (ret == 0) {
+	fs->apply_transaction(*t);
+	cout << "Marking complete succeeded" << std::endl;
       }
     } else {
       assert(!"Should have already checked for valid --op");

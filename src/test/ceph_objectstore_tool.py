@@ -791,7 +791,7 @@ def main(argv):
 
     # Specify a bad --op command
     cmd = (CFSD_PREFIX + "--op oops").format(osd=ONEOSD)
-    ERRORS += test_failure(cmd, "Must provide --op (info, log, remove, export, import, list, fix-lost, list-pgs, rm-past-intervals, set-allow-sharded-objects, dump-journal, dump-super, meta-list, get-osdmap, set-osdmap, get-inc-osdmap, set-inc-osdmap)")
+    ERRORS += test_failure(cmd, "Must provide --op (info, log, remove, export, import, list, fix-lost, list-pgs, rm-past-intervals, set-allow-sharded-objects, dump-journal, dump-super, meta-list, get-osdmap, set-osdmap, get-inc-osdmap, set-inc-osdmap, mark-complete)")
 
     # Provide just the object param not a command
     cmd = (CFSD_PREFIX + "object").format(osd=ONEOSD)
