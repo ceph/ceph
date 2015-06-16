@@ -309,6 +309,7 @@ void set_req_state_err(struct req_state *s, int err_no)
   if (err_no < 0)
     err_no = -err_no;
   s->err.ret = -err_no;
+
   if (s->prot_flags & RGW_PROTO_SWIFT) {
     r = search_err(err_no, RGW_HTTP_SWIFT_ERRORS, ARRAY_LEN(RGW_HTTP_SWIFT_ERRORS));
     if (r) {
@@ -317,9 +318,14 @@ void set_req_state_err(struct req_state *s, int err_no)
       return;
     }
   }
+
   r = search_err(err_no, RGW_HTTP_ERRORS, ARRAY_LEN(RGW_HTTP_ERRORS));
   if (r) {
-    s->err.http_ret = r->http_ret;
+    if(s->prot_flags & RGW_PROTO_WEBSITE && err_no == ERR_WEBSITE_REDIRECT && s->err.http_ret != 0) {
+      // http_ret was custom set, so don't change it!
+    } else {
+      s->err.http_ret = r->http_ret;
+    }
     s->err.s3_code = r->s3_code;
     return;
   }
@@ -609,41 +615,29 @@ void end_header(struct req_state *s, RGWOp *op, const char *content_type, const 
 
 void abort_early(struct req_state *s, RGWOp *op, int err_no, RGWHandler* handler)
 {
-  string dest_uri("");
   string error_content("");
   if (!s->formatter) {
     s->formatter = new JSONFormatter;
     s->format = RGW_FORMAT_JSON;
   }
+
   // op->error_handler is responsible for calling it's handler error_handler
-  int ret = 0;
   if(op != NULL) {
-    int new_err_no = 0;
-    // TODO: Should this modify s->redirect instead of touching dest_uri?
-    ret = op->error_handler(err_no, &new_err_no, &dest_uri, &error_content);
-    if(ret == 0) {
-      ldout(s->cct, 20) << "op->ERRORHANDLER: ret=" << ret << " err_no=" << err_no << " new_err_no=" << new_err_no << dendl;
-      err_no = new_err_no;
-    } else {
-      ldout(s->cct, 0) << "op->ERRORHANDLER FAILED ret=" << ret << " err_no=" << err_no << " new_err_no=" << new_err_no << dendl;
-    }
-  }
-  // But we do consider that op->error_handler might just fail as well
-  if(ret != 0 && handler != NULL) {
-    int new_err_no = 0;
-    // TODO: Should this modify s->redirect instead of touching dest_uri?
-    ret = op->error_handler(err_no, &new_err_no, &dest_uri, &error_content);
-    if(ret == 0) {
-      ldout(s->cct, 20) << "handler->ERRORHANDLER: ret=" << ret << " err_no=" << err_no << " new_err_no=" << new_err_no << dendl;
-      err_no = new_err_no;
-    } else {
-      ldout(s->cct, 0) << "handler->ERRORHANDLER FAILED ret=" << ret << " err_no=" << err_no << " new_err_no=" << new_err_no << dendl;
-    }
+    int new_err_no;
+    new_err_no = op->error_handler(err_no, error_content);
+    ldout(s->cct, 20) << "op->ERRORHANDLER: err_no=" << err_no << " new_err_no=" << new_err_no << dendl;
+    err_no = new_err_no;
+  } else if(handler != NULL) {
+    int new_err_no;
+    new_err_no = handler->error_handler(err_no, error_content);
+    ldout(s->cct, 20) << "handler->ERRORHANDLER: err_no=" << err_no << " new_err_no=" << new_err_no << dendl;
+    err_no = new_err_no;
   }
   set_req_state_err(s, err_no);
   dump_errno(s);
   dump_bucket_from_state(s);
-  if (err_no == -ERR_PERMANENT_REDIRECT) {
+  if (err_no == -ERR_PERMANENT_REDIRECT || err_no == -ERR_WEBSITE_REDIRECT) {
+    string dest_uri;
     if (!s->redirect.empty()) {
       dest_uri = s->redirect;
     } else if (!s->region_endpoint.empty()) {
@@ -663,6 +657,10 @@ void abort_early(struct req_state *s, RGWOp *op, int err_no, RGWHandler* handler
     if (!dest_uri.empty()) {
       dump_redirect(s, dest_uri);
     }
+  }
+  if(!error_content.empty()) {
+    ldout(s->cct, 20) << "error_content is set, we need to serve it INSTEAD of firing the formatter" << dendl;
+    assert(false); 
   }
   end_header(s, op);
   rgw_flush_formatter_and_reset(s, s->formatter);

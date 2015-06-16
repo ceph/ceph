@@ -19,7 +19,7 @@ bool RGWBWRoutingRuleCondition::check_key_condition(const string& key) {
 
 
 void RGWBWRoutingRule::apply_rule(const string& default_protocol, const string& default_hostname,
-                                           const string& key, string *new_url)
+                                           const string& key, string *new_url, int *redirect_code)
 {
   RGWRedirectInfo& redirect = redirect_info.redirect;
 
@@ -36,6 +36,20 @@ void RGWBWRoutingRule::apply_rule(const string& default_protocol, const string& 
   } else {
     *new_url += key;
   }
+
+  if(redirect.http_redirect_code > 0) 
+	  *redirect_code = redirect.http_redirect_code;
+}
+
+bool RGWBWRoutingRules::check_key_and_error_code_condition(const string &key, int error_code, RGWBWRoutingRule **rule)
+{
+  for (list<RGWBWRoutingRule>::iterator iter = rules.begin(); iter != rules.end(); ++iter) {
+    if (iter->check_key_condition(key) && iter->check_error_code_condition(error_code)) {
+      *rule = &(*iter);
+      return true;
+    }
+  }
+  return false;
 }
 
 bool RGWBWRoutingRules::check_key_condition(const string& key, RGWBWRoutingRule **rule)
@@ -49,10 +63,10 @@ bool RGWBWRoutingRules::check_key_condition(const string& key, RGWBWRoutingRule 
   return false;
 }
 
-bool RGWBWRoutingRules::check_error_code_condition(int error_code, RGWBWRoutingRule **rule)
+bool RGWBWRoutingRules::check_error_code_condition(const int http_error_code, RGWBWRoutingRule **rule)
 {
   for (list<RGWBWRoutingRule>::iterator iter = rules.begin(); iter != rules.end(); ++iter) {
-    if (iter->check_error_code_condition(error_code)) {
+    if (iter->check_error_code_condition(http_error_code)) {
       *rule = &(*iter);
       return true;
     }
@@ -60,7 +74,7 @@ bool RGWBWRoutingRules::check_error_code_condition(int error_code, RGWBWRoutingR
   return false;
 }
 
-bool RGWBucketWebsiteConf::should_redirect(const string& key, RGWBWRoutingRule *redirect)
+bool RGWBucketWebsiteConf::should_redirect(const string& key, const int http_error_code, RGWBWRoutingRule *redirect)
 {
   RGWBWRoutingRule *rule;
   if(!redirect_all.hostname.empty()) {
@@ -68,7 +82,7 @@ bool RGWBucketWebsiteConf::should_redirect(const string& key, RGWBWRoutingRule *
 	redirect_all_rule.redirect_info.redirect = redirect_all;
 	*redirect = redirect_all_rule;
 	return true;
-  } else if (!routing_rules.check_key_condition(key, &rule)) {
+  } else if (!routing_rules.check_key_and_error_code_condition(key, http_error_code, &rule)) {
     return false;
   }
 
