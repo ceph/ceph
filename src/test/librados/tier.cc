@@ -789,7 +789,8 @@ TEST_F(LibRadosTwoPoolsPP, Evict) {
       "fooberdoodle", completion, &op,
       librados::OPERATION_IGNORE_CACHE, NULL));
     completion->wait_for_safe();
-    ASSERT_EQ(-ENOENT, completion->get_return_value());
+    ASSERT_TRUE((-ENOENT == completion->get_return_value()) ||
+		(0 == completion->get_return_value()));
     completion->release();
   }
   {
@@ -2991,7 +2992,8 @@ TEST_F(LibRadosTwoPoolsECPP, Evict) {
       "fooberdoodle", completion, &op,
       librados::OPERATION_IGNORE_CACHE, NULL));
     completion->wait_for_safe();
-    ASSERT_EQ(-ENOENT, completion->get_return_value());
+    ASSERT_TRUE((-ENOENT == completion->get_return_value()) ||
+		(0 == completion->get_return_value()));
     completion->release();
   }
   {
