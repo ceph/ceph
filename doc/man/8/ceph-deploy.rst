@@ -211,7 +211,8 @@ Usage::
 	ceph-deploy mon add [HOST] --address [IP]
 
 Here, [HOST] is the hostname and [IP] is the IP address of the desired monitor
-node.
+node. Please note, unlike other ``mon`` subcommands, only one node can be
+specified at a time.
 
 Subcommand ``destroy`` is used to completely remove monitors on remote hosts.
 It takes hostnames as arguments. It stops the monitor, verifies if ``ceph-mon``
@@ -222,7 +223,7 @@ cluster by running ``ceph remove...`` command.
 
 Usage::
 
-	ceph-deploy mon destroy [HOST]
+	ceph-deploy mon destroy [HOST] [HOST...]
 
 Here, [HOST] is hostname of monitor that is to be removed.
 
