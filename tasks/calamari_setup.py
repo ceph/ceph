@@ -234,13 +234,14 @@ def calamari_install(config, cal_svr):
     icesetdata = 'yes\n\n%s\nhttp\n' % client_id
     ice_in = StringIO(icesetdata)
     ice_out = StringIO()
-    args = 'sudo ice_setup'
-    if icetype == 'iso':
-        args += ' -d /mnt'
+    if icetype == 'tarball':
+        args = 'sudo python ice_setup.py'
+    else:
+        args = 'sudo ice_setup -d /mnt'
     ret = cal_svr.run(args=args, stdin=ice_in, stdout=ice_out)
     log.debug(ice_out.getvalue())
     if ret.exitstatus:
-        raise RuntimeError('ice_setup.py failed')
+        raise RuntimeError('ice_setup failed')
 
     # Run calamari-ctl initialize.
     icesetdata = '%s\n%s\n%s\n%s\n' % (
