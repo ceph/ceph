@@ -8292,9 +8292,13 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb ) 
   delete f;
   *_dout << dendl;
 
-  BLKIN_OP_TRACE_EVENT(op, pg, "dequeuing_op");
+  boost::optional<OpRequestRef> op_ref = op->maybe_get_op();
+  OpRequestRef _op_ref;
+  if (op_ref)
+    _op_ref = *op_ref;
+  BLKIN_OP_TRACE_EVENT(_op_ref, pg, "dequeuing_op");
   op->run(osd, item.first, tp_handle);
-  BLKIN_OP_TRACE_EVENT(op, pg, "dequeued_op");
+  BLKIN_OP_TRACE_EVENT(_op_ref, pg, "dequeued_op");
 
   {
 #ifdef WITH_LTTNG
