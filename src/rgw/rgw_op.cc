@@ -3757,3 +3757,14 @@ void RGWHandler::put_op(RGWOp *op)
   delete op;
 }
 
+int RGWOp::error_handler(int err_no, int *new_err_no, string *dest_uri, string *error_content) {
+  return this->dialect_handler->error_handler(err_no, new_err_no, dest_uri, error_content);
+}
+
+int RGWHandler::error_handler(int err_no, int *new_err_no, string *dest_uri, string *error_content) {
+  *new_err_no = err_no;
+  // TODO: Should this modify s->redirect instead of touching dest_uri?
+  dest_uri = NULL;
+  error_content = NULL;
+  return 0;
+}
