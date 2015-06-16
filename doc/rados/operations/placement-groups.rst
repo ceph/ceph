@@ -310,10 +310,14 @@ placement groups, execute the following::
         ceph osd pool set {pool-name} pg_num {pg_num}
 
 Once you increase the number of placement groups, you must also
-increase the number of placement groups for placement (``pgp_num``) before your
-cluster will rebalance. The ``pgp_num`` should be equal to the ``pg_num``.
-To increase the number of placement groups for placement, execute the
-following::
+increase the number of placement groups for placement (``pgp_num``)
+before your cluster will rebalance. The ``pgp_num`` will be the number of
+placement groups that will be considered for placement by the CRUSH
+algorithm. Increasing ``pg_num`` splits the placement groups but data
+will not be migrated to the newer placement groups until placement
+groups for placement, ie. ``pgp_num`` is increased. The ``pgp_num``
+should be equal to the ``pg_num``.  To increase the number of
+placement groups for placement, execute the following::
 
         ceph osd pool set {pool-name} pgp_num {pgp_num}
 
