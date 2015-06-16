@@ -19,8 +19,7 @@ wc -l /tmp/$$ | grep 4
 sudo rsync -auv $PAYLOAD payload.2 | tee /tmp/$$
 hexdump -C /tmp/$$
 wc -l /tmp/$$ | grep 4
-rm /tmp/$$
-
 echo OK
 
-rm -rf $PAYLOAD
+rm /tmp/$$
+sudo rm -rf $PAYLOAD
