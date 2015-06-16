@@ -626,6 +626,8 @@ def need_to_install_distro(remote):
     output, err_mess = StringIO(), StringIO()
     remote.run(args=['uname', '-r'], stdout=output)
     current = output.getvalue().strip()
+    log.info("Running kernel on {node}: {version}".format(
+        node=remote.shortname, version=current))
     installed_version = None
     if package_type == 'rpm':
         remote.run(args=['sudo', 'yum', 'install', '-y', 'kernel'],
@@ -722,6 +724,8 @@ def install_kernel(remote, path=None, version=None):
     :param path:    package path (for local and gitbuilder cases)
     :param version: for RPM distro kernels, pass this to update_grub_rpm
     """
+    templ = "install_kernel(remote={remote}, path={path}, version={version})"
+    log.debug(templ.format(remote=remote, path=path, version=version))
     package_type = remote.os.package_type
     if package_type == 'rpm':
         if path:
@@ -798,10 +802,13 @@ def update_grub_rpm(remote, newversion):
         #Update grub menu entry to new version.
         grub2_kernel_select_generic(remote, newversion, 'rpm')
 
+
 def grub2_kernel_select_generic(remote, newversion, ostype):
     """
     Can be used on DEB and RPM. Sets which entry should be boted by entrynum.
     """
+    log.info("Updating grub on {node} to boot {version}".format(
+        node=remote.shortname, version=newversion))
     if ostype == 'rpm':
         grubset = 'grub2-set-default'
         mkconfig = 'grub2-mkconfig'
