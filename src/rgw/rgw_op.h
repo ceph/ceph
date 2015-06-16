@@ -125,6 +125,8 @@ public:
   virtual bool supports_website() {
     return false;
   }
+
+  virtual int error_handler(int err_no, int *new_err_no, string *dest_uri, string *error_content);
 };
 
 class RGWGetObj : public RGWOp {
@@ -1170,6 +1172,7 @@ public:
   }
   virtual int read_permissions(RGWOp *op) = 0;
   virtual int authorize() = 0;
+  virtual int error_handler(int err_no, int *new_err_no, string *dest_uri, string *error_content);
 };
 
 #endif
