@@ -617,8 +617,10 @@ def need_to_install_distro(remote):
     """
     Installing kernels on rpm won't setup grub/boot into them.  This installs
     the newest kernel package and checks its version and compares against
-    current (uname -r) and returns true if newest != current.  Similar check
-    for deb.
+    the running kernel (uname -r).  Similar check for deb.
+
+    :returns: False if running the newest distro kernel. Returns the version of
+              the newest if it is not running.
     """
     package_type = remote.os.package_type
     output, err_mess = StringIO(), StringIO()
@@ -670,7 +672,7 @@ def need_to_install_distro(remote):
     log.info(
         'Not newest distro kernel. Curent: {cur} Expected: {new}'.format(
             cur=current, new=newest))
-    return True
+    return newest
 
 
 def maybe_generate_initrd_rpm(remote, path, version):
