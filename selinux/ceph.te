@@ -69,3 +69,16 @@ auth_use_nsswitch(ceph_t)
 logging_send_syslog_msg(ceph_t)
 
 sysnet_dns_name_resolve(ceph_t)
+
+# added 2015-06-17, need review
+
+allow ceph_t ceph_var_run_t:sock_file create;
+allow ceph_t self:capability sys_rawio;
+
+allow ceph_t self:tcp_socket { accept listen };
+corenet_tcp_connect_cyphesis_port(ceph_t)
+corenet_tcp_connect_generic_port(ceph_t)
+files_list_tmp(ceph_t)
+fstools_exec(ceph_t)
+nis_use_ypbind_uncond(ceph_t)
+storage_raw_rw_fixed_disk(ceph_t)
