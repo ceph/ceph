@@ -509,7 +509,7 @@ bool AuthMonitor::prep_auth(MonOpRequestRef op, bool paxos_writable)
 
 reply:
   reply = new MAuthReply(proto, &response_bl, ret, s->global_id);
-  mon->send_reply(m, reply);
+  mon->send_reply(op, reply);
 done:
   s->put();
   return true;

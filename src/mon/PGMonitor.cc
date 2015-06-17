@@ -647,7 +647,7 @@ void PGMonitor::handle_statfs(MonOpRequestRef op)
   reply->h.st.num_objects = pg_map.pg_sum.stats.sum.num_objects;
 
   // reply
-  mon->send_reply(statfs, reply);
+  mon->send_reply(op, reply);
 }
 
 bool PGMonitor::preprocess_getpoolstats(MonOpRequestRef op)
@@ -682,7 +682,7 @@ bool PGMonitor::preprocess_getpoolstats(MonOpRequestRef op)
     reply->pool_stats[*p] = pg_map.pg_pool_sum[poolid];
   }
 
-  mon->send_reply(m, reply);
+  mon->send_reply(op, reply);
 
  out:
   return true;
@@ -769,7 +769,7 @@ bool PGMonitor::prepare_pg_stats(MonOpRequestRef op)
 	 ++p) {
       ack->pg_stat[p->first] = make_pair(p->second.reported_seq, p->second.reported_epoch);
     }
-    mon->send_reply(stats, ack);
+    mon->send_reply(op, ack);
     return false;
   }
 
@@ -838,10 +838,10 @@ bool PGMonitor::prepare_pg_stats(MonOpRequestRef op)
 
 void PGMonitor::_updated_stats(MonOpRequestRef op, MonOpRequestRef ack_op)
 {
-  MPGStats *req = static_cast<MPGStats*>(op->get_req());
   MPGStats *ack = static_cast<MPGStats*>(ack_op->get_req());
-  dout(7) << "_updated_stats for " << req->get_orig_source_inst() << dendl;
-  mon->send_reply(req, ack);
+  dout(7) << "_updated_stats for "
+          << op->get_req()->get_orig_source_inst() << dendl;
+  mon->send_reply(op, ack);
 }
 
 

@@ -356,7 +356,7 @@ void LogMonitor::_updated_log(MonOpRequestRef op)
 {
   MLog *m = static_cast<MLog*>(op->get_req());
   dout(7) << "_updated_log for " << m->get_orig_source_inst() << dendl;
-  mon->send_reply(m, new MLogAck(m->fsid, m->entries.rbegin()->seq));
+  mon->send_reply(op, new MLogAck(m->fsid, m->entries.rbegin()->seq));
 }
 
 bool LogMonitor::should_propose(double& delay)
