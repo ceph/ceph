@@ -55,7 +55,7 @@ void Journaler::create(ceph_file_layout *l, stream_format_t const sf)
 
   prezeroing_pos = prezero_pos = write_pos = flush_pos = safe_pos =
     read_pos = requested_pos = received_pos =
-    expire_pos = trimming_pos = trimmed_pos = layout.fl_stripe_count * layout.fl_object_size;
+    expire_pos = trimming_pos = trimmed_pos = (uint64_t)layout.fl_stripe_count * layout.fl_object_size;
 
   ldout(cct, 1) << "created blank journal at inode 0x" << std::hex << ino << std::dec
     << ", format=" << stream_format << dendl;
