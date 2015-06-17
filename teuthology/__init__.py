@@ -21,6 +21,9 @@ if os.path.split(exec_dir)[-1] == 'bin' and exec_dir not in os.environ['PATH']:
 # We don't need to see log entries for each connection opened
 logging.getLogger('requests.packages.urllib3.connectionpool').setLevel(
     logging.WARN)
+# if requests doesn't bundle it, shut it up anyway
+logging.getLogger('urllib3.connectionpool').setLevel(
+    logging.WARN)
 
 logging.basicConfig(
     level=logging.INFO,

@@ -20,10 +20,6 @@ def init_logging():
 
     :returns: a logger
     """
-    # Don't need to see connection pool INFO messages
-    logging.getLogger("requests.packages.urllib3.connectionpool").setLevel(
-        logging.WARNING)
-
     log = logging.getLogger(__name__)
     return log
 
