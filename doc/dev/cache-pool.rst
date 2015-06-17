@@ -5,7 +5,7 @@ Purpose
 -------
 
 Use a pool of fast storage devices (probably SSDs) and use it as a
-cache for an existing larger pool.
+cache for an existing slower and larger pool.
 
 Use a replicated pool as a front-end to service most I/O, and destage
 cold data to a separate erasure coded pool that does not currently (and
