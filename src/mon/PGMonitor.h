@@ -82,22 +82,21 @@ private:
   bool prepare_pg_stats(MonOpRequestRef op);
   void _updated_stats(MonOpRequestRef op, MonOpRequestRef ack_op);
 
-  struct C_Stats : public Context {
+  struct C_Stats : public C_MonOp {
     PGMonitor *pgmon;
-    MonOpRequestRef stats_op;
     MonOpRequestRef stats_op_ack;
     entity_inst_t who;
     C_Stats(PGMonitor *p,
             MonOpRequestRef op,
             MonOpRequestRef op_ack)
-      : pgmon(p), stats_op(op), stats_op_ack(op_ack) {}
-    void finish(int r) {
+      : C_MonOp(op), pgmon(p), stats_op_ack(op_ack) {}
+    void _finish(int r) {
       if (r >= 0) {
-	pgmon->_updated_stats(stats_op, stats_op_ack);
+	pgmon->_updated_stats(op, stats_op_ack);
       } else if (r == -ECANCELED) {
         return;
       } else if (r == -EAGAIN) {
-	pgmon->dispatch(stats_op);
+	pgmon->dispatch(op);
       } else {
 	assert(0 == "bad C_Stats return value");
       }
