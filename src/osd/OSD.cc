@@ -1795,6 +1795,13 @@ int OSD::init()
     goto out;
   }
 
+  if (!superblock.compat_features.incompat.contains(CEPH_OSD_FEATURE_INCOMPAT_PGMETA)) {
+    derr << "OSD store does not have PGMETA feature." << dendl;
+    derr << "You must first upgrade to hammer." << dendl;
+    r = -EINVAL;
+    goto out;
+  }
+
   if (osd_compat.compare(superblock.compat_features) < 0) {
     derr << "The disk uses features unsupported by the executable." << dendl;
     derr << " ondisk features " << superblock.compat_features << dendl;
