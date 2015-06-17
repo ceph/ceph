@@ -378,7 +378,6 @@ bool LogMonitor::should_propose(double& delay)
 bool LogMonitor::preprocess_command(MonOpRequestRef op)
 {
   op->mark_logmon_event("preprocess_command");
-  MMonCommand *m = static_cast<MMonCommand*>(op->get_req());
   int r = -1;
   bufferlist rdata;
   stringstream ss;
@@ -386,7 +385,7 @@ bool LogMonitor::preprocess_command(MonOpRequestRef op)
   if (r != -1) {
     string rs;
     getline(ss, rs);
-    mon->reply_command(m, r, rs, rdata, get_last_committed());
+    mon->reply_command(op, r, rs, rdata, get_last_committed());
     return true;
   } else
     return false;
@@ -405,7 +404,7 @@ bool LogMonitor::prepare_command(MonOpRequestRef op)
   if (!cmdmap_from_json(m->cmd, &cmdmap, ss)) {
     // ss has reason for failure
     string rs = ss.str();
-    mon->reply_command(m, -EINVAL, rs, get_last_committed());
+    mon->reply_command(op, -EINVAL, rs, get_last_committed());
     return true;
   }
 
@@ -414,7 +413,7 @@ bool LogMonitor::prepare_command(MonOpRequestRef op)
 
   MonSession *session = m->get_session();
   if (!session) {
-    mon->reply_command(m, -EACCES, "access denied", get_last_committed());
+    mon->reply_command(op, -EACCES, "access denied", get_last_committed());
     return true;
   }
 
@@ -435,7 +434,7 @@ bool LogMonitor::prepare_command(MonOpRequestRef op)
   }
 
   getline(ss, rs);
-  mon->reply_command(m, err, rs, get_last_committed());
+  mon->reply_command(op, err, rs, get_last_committed());
   return false;
 }
 

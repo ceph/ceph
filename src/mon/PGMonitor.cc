@@ -1475,7 +1475,7 @@ bool PGMonitor::preprocess_command(MonOpRequestRef op)
   if (!cmdmap_from_json(m->cmd, &cmdmap, ss)) {
     // ss has reason for failure
     string rs = ss.str();
-    mon->reply_command(m, -EINVAL, rs, rdata, get_last_committed());
+    mon->reply_command(op, -EINVAL, rs, rdata, get_last_committed());
     return true;
   }
 
@@ -1484,7 +1484,7 @@ bool PGMonitor::preprocess_command(MonOpRequestRef op)
 
   MonSession *session = m->get_session();
   if (!session) {
-    mon->reply_command(m, -EACCES, "access denied", rdata, get_last_committed());
+    mon->reply_command(op, -EACCES, "access denied", rdata, get_last_committed());
     return true;
   }
 
@@ -1516,7 +1516,7 @@ bool PGMonitor::preprocess_command(MonOpRequestRef op)
       r = -ENOENT;
       ss << "pool " << poolstr << " does not exist";
       string rs = ss.str();
-      mon->reply_command(m, r, rs, get_last_committed());
+      mon->reply_command(op, r, rs, get_last_committed());
       return true;
     }
     cmd_putval(g_ceph_context, cmdmap, "pool", pool);
@@ -1786,7 +1786,7 @@ bool PGMonitor::preprocess_command(MonOpRequestRef op)
   string rs;
   getline(ss, rs);
   rdata.append(ds);
-  mon->reply_command(m, r, rs, rdata, get_last_committed());
+  mon->reply_command(op, r, rs, rdata, get_last_committed());
   return true;
 }
 
@@ -1804,7 +1804,7 @@ bool PGMonitor::prepare_command(MonOpRequestRef op)
   if (!cmdmap_from_json(m->cmd, &cmdmap, ss)) {
     // ss has reason for failure
     string rs = ss.str();
-    mon->reply_command(m, -EINVAL, rs, get_last_committed());
+    mon->reply_command(op, -EINVAL, rs, get_last_committed());
     return true;
   }
 
@@ -1813,7 +1813,7 @@ bool PGMonitor::prepare_command(MonOpRequestRef op)
 
   MonSession *session = m->get_session();
   if (!session) {
-    mon->reply_command(m, -EACCES, "access denied", get_last_committed());
+    mon->reply_command(op, -EACCES, "access denied", get_last_committed());
     return true;
   }
 
@@ -1867,7 +1867,7 @@ bool PGMonitor::prepare_command(MonOpRequestRef op)
   getline(ss, rs);
   if (r < 0 && rs.length() == 0)
     rs = cpp_strerror(r);
-  mon->reply_command(m, r, rs, get_last_committed());
+  mon->reply_command(op, r, rs, get_last_committed());
   return false;
 
  update:
