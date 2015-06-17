@@ -157,6 +157,7 @@ namespace librbd {
     bool blacklist_on_break_lock;
     uint32_t blacklist_expire_seconds;
     uint32_t request_timed_out_seconds;
+    bool enable_alloc_hint;
     static bool _filter_metadata_confs(const string &prefix, std::map<string, bool> &configs,
                                        map<string, bufferlist> &pairs, map<string, bufferlist> *res);
 
