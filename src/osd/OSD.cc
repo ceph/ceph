@@ -8061,6 +8061,17 @@ void OSD::handle_op(OpRequestRef& op, OSDMapRef& osdmap)
       return;
     }
 
+    // pool is full ?
+    pg_t _pgid = m->get_pg();
+    int64_t poolid = _pgid.pool();
+    const pg_pool_t *pi = osdmap->get_pg_pool(poolid);
+    if (pi->has_flag(pg_pool_t::FLAG_FULL)) {
+      derr << "handle_op msg pool " << poolid << " is full "
+	   << " on " << *m << dendl;
+      service.reply_op_error(op, -ENOSPC);
+      return;
+    }
+    
     // invalid?
     if (m->get_snapid() != CEPH_NOSNAP) {
       service.reply_op_error(op, -EINVAL);
