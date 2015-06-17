@@ -1347,8 +1347,7 @@ void buffer::list::rebuild_page_aligned()
     unsigned gap = append_buffer.unused_tail_length();
     if (!gap) {
       // make a new append_buffer!
-      unsigned alen = CEPH_PAGE_SIZE;
-      append_buffer = create_page_aligned(alen);
+      append_buffer = create_aligned(CEPH_BUFFER_APPEND_SIZE, CEPH_BUFFER_APPEND_SIZE);
       append_buffer.set_length(0);   // unused, so far.
     }
     append_buffer.append(c);
@@ -1372,8 +1371,8 @@ void buffer::list::rebuild_page_aligned()
 	break;  // done!
       
       // make a new append_buffer!
-      unsigned alen = CEPH_PAGE_SIZE * (((len-1) / CEPH_PAGE_SIZE) + 1);
-      append_buffer = create_page_aligned(alen);
+      unsigned alen = CEPH_BUFFER_APPEND_SIZE * (((len-1) / CEPH_BUFFER_APPEND_SIZE) + 1);
+      append_buffer = create_aligned(alen, CEPH_BUFFER_APPEND_SIZE);
       append_buffer.set_length(0);   // unused, so far.
     }
   }
@@ -1682,8 +1681,8 @@ ssize_t buffer::list::read_fd(int fd, size_t len)
     // available for raw_pipe until we actually inspect the data
     return 0;
   }
-  int s = ROUND_UP_TO(len, CEPH_PAGE_SIZE);
-  bufferptr bp = buffer::create_page_aligned(s);
+  int s = ROUND_UP_TO(len, CEPH_BUFFER_APPEND_SIZE);
+  bufferptr bp = buffer::create_aligned(s, CEPH_BUFFER_APPEND_SIZE);
   ssize_t ret = safe_read(fd, (void*)bp.c_str(), len);
   if (ret >= 0) {
     bp.set_length(ret);

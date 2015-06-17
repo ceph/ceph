@@ -1416,7 +1416,7 @@ TEST(BufferList, rebuild) {
     bl.append(str.c_str(), str.size());
     bl.append(str.c_str(), str.size());
     EXPECT_EQ((unsigned)2, bl.buffers().size());
-    EXPECT_TRUE(bl.is_page_aligned());
+    EXPECT_TRUE(bl.is_aligned(CEPH_BUFFER_APPEND_SIZE));
     bl.rebuild();
     EXPECT_TRUE(bl.is_page_aligned());
     EXPECT_EQ((unsigned)1, bl.buffers().size());
@@ -1650,7 +1650,7 @@ TEST(BufferList, append) {
     EXPECT_EQ((unsigned)0, bl.buffers().size());
     bl.append('A');
     EXPECT_EQ((unsigned)1, bl.buffers().size());
-    EXPECT_TRUE(bl.is_page_aligned());
+    EXPECT_TRUE(bl.is_aligned(CEPH_BUFFER_APPEND_SIZE));
   }
   //
   // void append(const char *data, unsigned len);
@@ -1904,7 +1904,7 @@ TEST(BufferList, read_fd) {
   EXPECT_EQ(-EBADF, bl.read_fd(fd, len));
   fd = ::open(FILENAME, O_RDONLY);
   EXPECT_EQ(len, (unsigned)bl.read_fd(fd, len));
-  EXPECT_EQ(CEPH_PAGE_SIZE - len, bl.buffers().front().unused_tail_length());
+  EXPECT_EQ(CEPH_BUFFER_APPEND_SIZE - len, bl.buffers().front().unused_tail_length());
   EXPECT_EQ(len, bl.length());
   ::close(fd);
   ::unlink(FILENAME);
