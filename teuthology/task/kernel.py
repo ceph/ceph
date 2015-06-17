@@ -656,12 +656,7 @@ def need_to_install_distro(remote):
                                  run.Raw('||'), 'true'])
         # reset stringIO output.
         output.truncate(0)
-        remote.run(args=['rpm', '-q', 'kernel', '--last'], stdout=output)
-        for kernel in output.getvalue().split():
-            if kernel.startswith('kernel'):
-                if 'ceph' not in kernel:
-                    newest = kernel.split('kernel-')[1]
-                    break
+        newest = get_latest_image_version_rpm(remote)
 
     if package_type == 'deb':
         distribution = remote.os.name
@@ -917,6 +912,7 @@ def get_image_version(remote, path):
     log.debug("get_image_version: %s", version)
     return version
 
+
 def get_latest_image_version_rpm(remote):
     """
     Get kernel image version of the newest kernel rpm package.
@@ -927,10 +923,12 @@ def get_latest_image_version_rpm(remote):
             'rpm',
             '-q',
             'kernel',
-            '--last', # order by install time
+            '--last',  # order by install time
         ], stdout=StringIO())
-    out = proc.stdout.getvalue()
-    version = out.split()[0].split('kernel-')[1]
+    for kernel in proc.stdout.getvalue().split():
+        if kernel.startswith('kernel'):
+            if 'ceph' not in kernel:
+                version = kernel.split('kernel-')[1]
     log.debug("get_latest_image_version_rpm: %s", version)
     return version
 
