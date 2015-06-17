@@ -286,10 +286,9 @@ public:
   // pg state
   pg_info_t        info;
   __u8 info_struct_v;
+  // v8 was pgmeta, first appeared in hammer.
   static const __u8 cur_struct_v = 8;
-  // v7 was SnapMapper addition in 86658392516d5175b2756659ef7ffaaf95b0f8ad
-  // (first appeared in cuttlefish).
-  static const __u8 compat_struct_v = 7;
+  static const __u8 compat_struct_v = 8;
   bool must_upgrade() {
     return info_struct_v < cur_struct_v;
   }
