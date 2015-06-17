@@ -811,7 +811,7 @@ public:
         ss << "cmd='" << m->cmd << "': finished";
 
         mon->audit_clog->info() << ss.str();
-	mon->reply_command(m, rc, rs, rdata, version);
+	mon->reply_command(op, rc, rs, rdata, version);
       }
       else if (r == -ECANCELED)
         return;

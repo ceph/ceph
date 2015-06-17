@@ -194,7 +194,7 @@ bool ConfigKeyService::service_dispatch(MonOpRequestRef op)
 out:
   if (!cmd->get_source().is_mon()) {
     string rs = ss.str();
-    mon->reply_command(cmd, ret, rs, rdata, 0);
+    mon->reply_command(op, ret, rs, rdata, 0);
   }
 
   return (ret == 0);
