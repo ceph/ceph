@@ -189,7 +189,7 @@ def create_initial_config(suite, suite_branch, ceph_branch, teuthology_branch,
         if kernel_hash is not 'distro':
             kernel_dict['kernel']['flavor'] = kernel_flavor
     else:
-        kernel_dict = dict(kernel=dict())
+        kernel_dict = dict()
 
     # Get the ceph hash
     ceph_hash = get_hash('ceph', ceph_branch, kernel_flavor, machine_type,
@@ -543,7 +543,6 @@ def schedule_suite(job_config,
 
         parsed_yaml = yaml.load(raw_yaml)
         os_type = parsed_yaml.get('os_type') or job_config.os_type
-        kernel_flavor = job_config.kernel.get('flavor', 'basic')
         exclude_arch = parsed_yaml.get('exclude_arch')
         exclude_os_type = parsed_yaml.get('exclude_os_type')
 
@@ -574,24 +573,23 @@ def schedule_suite(job_config,
             full_job_config = dict()
             deep_merge(full_job_config, job_config.to_dict())
             deep_merge(full_job_config, parsed_yaml)
-            install_task_flavor = get_install_task_flavor(full_job_config)
+            flavor = get_install_task_flavor(full_job_config)
             sha1 = job_config.sha1
             # Get package versions for this sha1, os_type and flavor. If we've
             # already retrieved them in a previous loop, they'll be present in
             # package_versions and gitbuilder will not be asked again for them.
-            for flavor in set([kernel_flavor, install_task_flavor]):
-                package_versions = get_package_versions(
-                    sha1,
-                    os_type,
-                    flavor,
-                    package_versions
-                )
-                if not has_packages_for_distro(sha1, os_type, flavor,
-                                               package_versions):
-                    m = "Packages for os_type '{os}', flavor {flavor} and " + \
-                        "ceph hash '{ver}' not found"
-                    log.info(m.format(os=os_type, flavor=flavor, ver=sha1))
-                    jobs_missing_packages.append(job)
+            package_versions = get_package_versions(
+                sha1,
+                os_type,
+                flavor,
+                package_versions
+            )
+            if not has_packages_for_distro(sha1, os_type, flavor,
+                                           package_versions):
+                m = "Packages for os_type '{os}', flavor {flavor} and " + \
+                    "ceph hash '{ver}' not found"
+                log.info(m.format(os=os_type, flavor=flavor, ver=sha1))
+                jobs_missing_packages.append(job)
 
         jobs_to_schedule.append(job)
 
