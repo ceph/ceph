@@ -44,7 +44,7 @@ To activate Ceph's debugging output (*i.e.*, ``dout()``) at runtime,  use the
 	
 Replace ``{daemon-type}`` with one of ``osd``, ``mon`` or ``mds``. You may apply
 the runtime setting to all daemons of a particular type with ``*``, or specify
-a specific daemon's ID (i.e., its number or letter). For example, to increase
+a specific daemon's ID. For example, to increase
 debug logging for a ``ceph-osd`` daemon named ``osd.0``, execute the following:: 
 
 	ceph tell osd.0 injectargs --debug-osd 0/5
