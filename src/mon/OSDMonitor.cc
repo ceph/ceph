@@ -1459,16 +1459,15 @@ bool OSDMonitor::preprocess_failure(MonOpRequestRef op)
   return true;
 }
 
-class C_AckMarkedDown : public Context {
+class C_AckMarkedDown : public C_MonOp {
   OSDMonitor *osdmon;
-  MonOpRequestRef op;
 public:
   C_AckMarkedDown(
     OSDMonitor *osdmon,
     MonOpRequestRef op)
-    : osdmon(osdmon), op(op) {}
+    : C_MonOp(op), osdmon(osdmon) {}
 
-  void finish(int) {
+  void _finish(int) {
     MOSDMarkMeDown *m = static_cast<MOSDMarkMeDown*>(op->get_req());
     osdmon->mon->send_reply(
       m,
