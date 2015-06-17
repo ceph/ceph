@@ -161,7 +161,14 @@ int Thread::join(void **prval)
   }
 
   int status = pthread_join(thread_id, prval);
-  assert(status == 0);
+  if (status != 0) {
+    char buf[256];
+    snprintf(buf, sizeof(buf), "Thread::join(): pthread_join "
+             "failed with error %d\n", status);
+    dout_emergency(buf);
+    assert(status == 0);
+  }
+
   thread_id = 0;
   return status;
 }
