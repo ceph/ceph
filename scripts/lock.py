@@ -165,10 +165,11 @@ def parse_args():
             JSON fragment, explicitly given, or a file containing
             JSON, containing a query for --list or --brief.
             Example: teuthology-lock --list --all --json-query
-            '{"vm_host":{"name":"mira003.front.sepia.ceph.com"}'
+            '{"vm_host":{"name":"mira003.front.sepia.ceph.com"}}'
             will list all machines who have a vm_host entry
             with a dictionary that contains at least the name key
-            with value mira003.front.sepia.ceph.com.'''),
+            with value mira003.front.sepia.ceph.com.
+            Note: be careful about quoting and the shell.'''),
     )
 
     return parser.parse_args()
