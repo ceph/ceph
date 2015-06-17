@@ -66,7 +66,7 @@ class test_cors_helper {
     unsigned resp_code;
     key_type kt;
   public:
-    test_cors_helper() : resp_data(NULL), kt(KEY_TYPE_UNDEFINED){
+    test_cors_helper() : curl_inst(NULL), resp_data(NULL), resp_code(0), kt(KEY_TYPE_UNDEFINED){
       curl_global_init(CURL_GLOBAL_ALL);
     }
     ~test_cors_helper(){
