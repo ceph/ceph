@@ -63,7 +63,7 @@ CompatSet get_mdsmap_compat_set_base() {
   feature_incompat_base.insert(MDS_FEATURE_INCOMPAT_BASE);
   CompatSet::FeatureSet feature_ro_compat_base;
 
-  return CompatSet(feature_compat_base, feature_incompat_base, feature_ro_compat_base);
+  return CompatSet(feature_compat_base, feature_ro_compat_base, feature_incompat_base);
 }
 
 void MDSMap::mds_info_t::dump(Formatter *f) const
