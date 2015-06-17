@@ -419,3 +419,12 @@ class CephFSMount(object):
         proc = self._run_python(pyscript)
         proc.wait()
         return int(proc.stdout.getvalue().strip())
+
+    def ls(self, path=None):
+        """
+        Wrap ls: return a list of strings
+        """
+        cmd = ["ls"]
+        if path:
+            cmd.append(path)
+        return self.run_shell(cmd).stdout.getvalue().strip().split("\n")
