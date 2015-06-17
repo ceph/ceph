@@ -2,7 +2,6 @@ upgrade-sequence:
    sequential:
    - install.upgrade:
       all:
-         branch: hammer
    - print: "**** done install.upgrade hammer"
    - ceph.restart: [osd.0]
    - sleep:
