@@ -254,12 +254,12 @@ data::
                   "status": "osd is down"}]},
 
 In this case, for example, the cluster knows that ``osd.1`` might have
-data, but it is ``down``.  The full range of possible states include::
+data, but it is ``down``.  The full range of possible states include:
 
- * already probed
- * querying
- * OSD is down
- * not queried (yet)
+* already probed
+* querying
+* OSD is down
+* not queried (yet)
 
 Sometimes it simply takes some time for the cluster to query possible
 locations.  
