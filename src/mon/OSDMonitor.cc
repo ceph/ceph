@@ -1255,6 +1255,7 @@ void OSDMonitor::encode_trim_extra(MonitorDBStore::TransactionRef tx,
 
 bool OSDMonitor::preprocess_query(MonOpRequestRef op)
 {
+  op->mark_osdmon_event(__func__);
   PaxosServiceMessage *m = static_cast<PaxosServiceMessage*>(op->get_req());
   dout(10) << "preprocess_query " << *m << " from " << m->get_orig_source_inst() << dendl;
 
@@ -1291,6 +1292,7 @@ bool OSDMonitor::preprocess_query(MonOpRequestRef op)
 
 bool OSDMonitor::prepare_update(MonOpRequestRef op)
 {
+  op->mark_osdmon_event(__func__);
   PaxosServiceMessage *m = static_cast<PaxosServiceMessage*>(op->get_req());
   dout(7) << "prepare_update " << *m << " from " << m->get_orig_source_inst() << dendl;
 
@@ -1351,6 +1353,7 @@ bool OSDMonitor::should_propose(double& delay)
 
 bool OSDMonitor::preprocess_get_osdmap(MonOpRequestRef op)
 {
+  op->mark_osdmon_event(__func__);
   MMonGetOSDMap *m = static_cast<MMonGetOSDMap*>(op->get_req());
   dout(10) << __func__ << " " << *m << dendl;
   MOSDMap *reply = new MOSDMap(mon->monmap->fsid);
@@ -1402,6 +1405,7 @@ bool OSDMonitor::check_source(PaxosServiceMessage *m, uuid_d fsid) {
 
 bool OSDMonitor::preprocess_failure(MonOpRequestRef op)
 {
+  op->mark_osdmon_event(__func__);
   MOSDFailure *m = static_cast<MOSDFailure*>(op->get_req());
   // who is target_osd
   int badboy = m->get_target().name.num();
@@ -1483,6 +1487,7 @@ public:
 
 bool OSDMonitor::preprocess_mark_me_down(MonOpRequestRef op)
 {
+  op->mark_osdmon_event(__func__);
   MOSDMarkMeDown *m = static_cast<MOSDMarkMeDown*>(op->get_req());
   int requesting_down = m->get_target().name.num();
   int from = m->get_orig_source().num();
@@ -1521,6 +1526,7 @@ bool OSDMonitor::preprocess_mark_me_down(MonOpRequestRef op)
 
 bool OSDMonitor::prepare_mark_me_down(MonOpRequestRef op)
 {
+  op->mark_osdmon_event(__func__);
   MOSDMarkMeDown *m = static_cast<MOSDMarkMeDown*>(op->get_req());
   int target_osd = m->get_target().name.num();
 
@@ -1683,6 +1689,7 @@ bool OSDMonitor::check_failure(utime_t now, int target_osd, failure_info_t& fi)
 
 bool OSDMonitor::prepare_failure(MonOpRequestRef op)
 {
+  op->mark_osdmon_event(__func__);
   MOSDFailure *m = static_cast<MOSDFailure*>(op->get_req());
   dout(1) << "prepare_failure " << m->get_target() << " from " << m->get_orig_source_inst()
           << " is reporting failure:" << m->if_osd_failed() << dendl;
@@ -1776,6 +1783,7 @@ void OSDMonitor::take_all_failures(list<MOSDFailure*>& ls)
 
 bool OSDMonitor::preprocess_boot(MonOpRequestRef op)
 {
+  op->mark_osdmon_event(__func__);
   MOSDBoot *m = static_cast<MOSDBoot*>(op->get_req());
   int from = m->get_orig_source_inst().name.num();
 
@@ -1864,6 +1872,7 @@ bool OSDMonitor::preprocess_boot(MonOpRequestRef op)
 
 bool OSDMonitor::prepare_boot(MonOpRequestRef op)
 {
+  op->mark_osdmon_event(__func__);
   MOSDBoot *m = static_cast<MOSDBoot*>(op->get_req());
   dout(7) << "prepare_boot from " << m->get_orig_source_inst() << " sb " << m->sb
 	  << " cluster_addr " << m->cluster_addr
@@ -2001,6 +2010,7 @@ bool OSDMonitor::prepare_boot(MonOpRequestRef op)
 
 void OSDMonitor::_booted(MonOpRequestRef op, bool logit)
 {
+  op->mark_osdmon_event(__func__);
   MOSDBoot *m = static_cast<MOSDBoot*>(op->get_req());
   dout(7) << "_booted " << m->get_orig_source_inst() 
 	  << " w " << m->sb.weight << " from " << m->sb.current_epoch << dendl;
@@ -2018,6 +2028,7 @@ void OSDMonitor::_booted(MonOpRequestRef op, bool logit)
 
 bool OSDMonitor::preprocess_alive(MonOpRequestRef op)
 {
+  op->mark_osdmon_event(__func__);
   MOSDAlive *m = static_cast<MOSDAlive*>(op->get_req());
   int from = m->get_orig_source().num();
 
@@ -2054,6 +2065,7 @@ bool OSDMonitor::preprocess_alive(MonOpRequestRef op)
 
 bool OSDMonitor::prepare_alive(MonOpRequestRef op)
 {
+  op->mark_osdmon_event(__func__);
   MOSDAlive *m = static_cast<MOSDAlive*>(op->get_req());
   int from = m->get_orig_source().num();
 
@@ -2071,6 +2083,7 @@ bool OSDMonitor::prepare_alive(MonOpRequestRef op)
 void OSDMonitor::_reply_map(MonOpRequestRef op, epoch_t e)
 {
   PaxosServiceMessage *m = static_cast<PaxosServiceMessage*>(op->get_req());
+  op->mark_osdmon_event(__func__);
   dout(7) << "_reply_map " << e
 	  << " from " << m->get_orig_source_inst()
 	  << dendl;
@@ -2153,6 +2166,7 @@ bool OSDMonitor::preprocess_pgtemp(MonOpRequestRef op)
 
 bool OSDMonitor::prepare_pgtemp(MonOpRequestRef op)
 {
+  op->mark_osdmon_event(__func__);
   MOSDPGTemp *m = static_cast<MOSDPGTemp*>(op->get_req());
   int from = m->get_orig_source().num();
   dout(7) << "prepare_pgtemp e" << m->map_epoch << " from " << m->get_orig_source_inst() << dendl;
@@ -2187,6 +2201,7 @@ bool OSDMonitor::prepare_pgtemp(MonOpRequestRef op)
 
 bool OSDMonitor::preprocess_remove_snaps(MonOpRequestRef op)
 {
+  op->mark_osdmon_event(__func__);
   MRemoveSnaps *m = static_cast<MRemoveSnaps*>(op->get_req());
   dout(7) << "preprocess_remove_snaps " << *m << dendl;
 
@@ -2223,6 +2238,7 @@ bool OSDMonitor::preprocess_remove_snaps(MonOpRequestRef op)
 
 bool OSDMonitor::prepare_remove_snaps(MonOpRequestRef op)
 {
+  op->mark_osdmon_event(__func__);
   MRemoveSnaps *m = static_cast<MRemoveSnaps*>(op->get_req());
   dout(7) << "prepare_remove_snaps " << *m << dendl;
 
@@ -2849,6 +2865,7 @@ namespace {
 
 bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 {
+  op->mark_osdmon_event(__func__);
   MMonCommand *m = static_cast<MMonCommand*>(op->get_req());
   int r = 0;
   bufferlist rdata;
@@ -3936,6 +3953,7 @@ void OSDMonitor::get_pools_health(
 
 int OSDMonitor::prepare_new_pool(MonOpRequestRef op)
 {
+  op->mark_osdmon_event(__func__);
   MPoolOp *m = static_cast<MPoolOp*>(op->get_req());
   dout(10) << "prepare_new_pool from " << m->get_connection() << dendl;
   MonSession *session = m->get_session();
@@ -4428,6 +4446,7 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid,
 
 bool OSDMonitor::prepare_set_flag(MonOpRequestRef op, int flag)
 {
+  op->mark_osdmon_event(__func__);
   ostringstream ss;
   if (pending_inc.new_flags < 0)
     pending_inc.new_flags = osdmap.get_flags();
@@ -4440,6 +4459,7 @@ bool OSDMonitor::prepare_set_flag(MonOpRequestRef op, int flag)
 
 bool OSDMonitor::prepare_unset_flag(MonOpRequestRef op, int flag)
 {
+  op->mark_osdmon_event(__func__);
   ostringstream ss;
   if (pending_inc.new_flags < 0)
     pending_inc.new_flags = osdmap.get_flags();
@@ -4833,6 +4853,7 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
 
 bool OSDMonitor::prepare_command(MonOpRequestRef op)
 {
+  op->mark_osdmon_event(__func__);
   MMonCommand *m = static_cast<MMonCommand*>(op->get_req());
   stringstream ss;
   map<string, cmd_vartype> cmdmap;
@@ -4854,6 +4875,7 @@ bool OSDMonitor::prepare_command(MonOpRequestRef op)
 bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 				      map<string,cmd_vartype> &cmdmap)
 {
+  op->mark_osdmon_event(__func__);
   MMonCommand *m = static_cast<MMonCommand*>(op->get_req());
   bool ret = false;
   stringstream ss;
@@ -7062,6 +7084,7 @@ done:
 
 bool OSDMonitor::preprocess_pool_op(MonOpRequestRef op) 
 {
+  op->mark_osdmon_event(__func__);
   MPoolOp *m = static_cast<MPoolOp*>(op->get_req());
   if (m->op == POOL_OP_CREATE)
     return preprocess_pool_op_create(op);
@@ -7133,6 +7156,7 @@ bool OSDMonitor::preprocess_pool_op(MonOpRequestRef op)
 
 bool OSDMonitor::preprocess_pool_op_create(MonOpRequestRef op)
 {
+  op->mark_osdmon_event(__func__);
   MPoolOp *m = static_cast<MPoolOp*>(op->get_req());
   MonSession *session = m->get_session();
   if (!session) {
@@ -7158,6 +7182,7 @@ bool OSDMonitor::preprocess_pool_op_create(MonOpRequestRef op)
 
 bool OSDMonitor::prepare_pool_op(MonOpRequestRef op)
 {
+  op->mark_osdmon_event(__func__);
   MPoolOp *m = static_cast<MPoolOp*>(op->get_req());
   dout(10) << "prepare_pool_op " << *m << dendl;
   if (m->op == POOL_OP_CREATE) {
@@ -7296,6 +7321,7 @@ bool OSDMonitor::prepare_pool_op(MonOpRequestRef op)
 
 bool OSDMonitor::prepare_pool_op_create(MonOpRequestRef op)
 {
+  op->mark_osdmon_event(__func__);
   int err = prepare_new_pool(op);
   wait_for_finished_proposal(op, new OSDMonitor::C_PoolOp(this, op, err, pending_inc.epoch));
   return true;
@@ -7498,6 +7524,7 @@ int OSDMonitor::_prepare_rename_pool(int64_t pool, string newname)
 
 bool OSDMonitor::prepare_pool_op_delete(MonOpRequestRef op)
 {
+  op->mark_osdmon_event(__func__);
   MPoolOp *m = static_cast<MPoolOp*>(op->get_req());
   ostringstream ss;
   int ret = _prepare_remove_pool(m->pool, &ss);
@@ -7515,6 +7542,7 @@ bool OSDMonitor::prepare_pool_op_delete(MonOpRequestRef op)
 void OSDMonitor::_pool_op_reply(MonOpRequestRef op,
                                 int ret, epoch_t epoch, bufferlist *blp)
 {
+  op->mark_osdmon_event(__func__);
   MPoolOp *m = static_cast<MPoolOp*>(op->get_req());
   dout(20) << "_pool_op_reply " << ret << dendl;
   MPoolOpReply *reply = new MPoolOpReply(m->fsid, m->get_tid(),

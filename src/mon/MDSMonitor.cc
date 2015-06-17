@@ -214,6 +214,7 @@ void MDSMonitor::update_logger()
 
 bool MDSMonitor::preprocess_query(MonOpRequestRef op)
 {
+  op->mark_mdsmon_event(__func__);
   PaxosServiceMessage *m = static_cast<PaxosServiceMessage*>(op->get_req());
   dout(10) << "preprocess_query " << *m << " from " << m->get_orig_source_inst() << dendl;
 
@@ -246,6 +247,7 @@ void MDSMonitor::_note_beacon(MMDSBeacon *m)
 
 bool MDSMonitor::preprocess_beacon(MonOpRequestRef op)
 {
+  op->mark_mdsmon_event(__func__);
   MMDSBeacon *m = static_cast<MMDSBeacon*>(op->get_req());
   MDSMap::DaemonState state = m->get_state();
   mds_gid_t gid = m->get_global_id();
@@ -374,6 +376,7 @@ bool MDSMonitor::preprocess_beacon(MonOpRequestRef op)
 
 bool MDSMonitor::preprocess_offload_targets(MonOpRequestRef op)
 {
+  op->mark_mdsmon_event(__func__);
   MMDSLoadTargets *m = static_cast<MMDSLoadTargets*>(op->get_req());
   dout(10) << "preprocess_offload_targets " << *m << " from " << m->get_orig_source() << dendl;
   mds_gid_t gid;
@@ -402,6 +405,7 @@ bool MDSMonitor::preprocess_offload_targets(MonOpRequestRef op)
 
 bool MDSMonitor::prepare_update(MonOpRequestRef op)
 {
+  op->mark_mdsmon_event(__func__);
   PaxosServiceMessage *m = static_cast<PaxosServiceMessage*>(op->get_req());
   dout(7) << "prepare_update " << *m << dendl;
 
@@ -427,6 +431,7 @@ bool MDSMonitor::prepare_update(MonOpRequestRef op)
 
 bool MDSMonitor::prepare_beacon(MonOpRequestRef op)
 {
+  op->mark_mdsmon_event(__func__);
   MMDSBeacon *m = static_cast<MMDSBeacon*>(op->get_req());
   // -- this is an update --
   dout(12) << "prepare_beacon " << *m << " from " << m->get_orig_source_inst() << dendl;
@@ -618,6 +623,7 @@ bool MDSMonitor::prepare_beacon(MonOpRequestRef op)
 
 bool MDSMonitor::prepare_offload_targets(MonOpRequestRef op)
 {
+  op->mark_mdsmon_event(__func__);
   MMDSLoadTargets *m = static_cast<MMDSLoadTargets*>(op->get_req());
   mds_gid_t gid = m->global_id;
   if (pending_mdsmap.mds_info.count(gid)) {
@@ -637,6 +643,7 @@ bool MDSMonitor::should_propose(double& delay)
 
 void MDSMonitor::_updated(MonOpRequestRef op)
 {
+  op->mark_mdsmon_event(__func__);
   MMDSBeacon *m = static_cast<MMDSBeacon*>(op->get_req());
   dout(10) << "_updated " << m->get_orig_source() << " " << *m << dendl;
   mon->clog->info() << m->get_orig_source_inst() << " "
@@ -724,6 +731,7 @@ void MDSMonitor::dump_info(Formatter *f)
 
 bool MDSMonitor::preprocess_command(MonOpRequestRef op)
 {
+  op->mark_mdsmon_event(__func__);
   MMonCommand *m = static_cast<MMonCommand*>(op->get_req());
   int r = -1;
   bufferlist rdata;
@@ -1043,6 +1051,7 @@ int MDSMonitor::fail_mds(std::ostream &ss, const std::string &arg)
 
 bool MDSMonitor::prepare_command(MonOpRequestRef op)
 {
+  op->mark_mdsmon_event(__func__);
   MMonCommand *m = static_cast<MMonCommand*>(op->get_req());
   int r = -EINVAL;
   stringstream ss;
@@ -1179,6 +1188,7 @@ int MDSMonitor::management_command(
     map<string, cmd_vartype> &cmdmap,
     std::stringstream &ss)
 {
+  op->mark_mdsmon_event(__func__);
   if (prefix == "mds newfs") {
     /* Legacy `newfs` command, takes pool numbers instead of
      * names, assumes fs name to be MDS_FS_NAME_DEFAULT, and
@@ -1420,6 +1430,7 @@ int MDSMonitor::filesystem_command(
     map<string, cmd_vartype> &cmdmap,
     std::stringstream &ss)
 {
+  op->mark_mdsmon_event(__func__);
   MMonCommand *m = static_cast<MMonCommand*>(op->get_req());
   int r = 0;
   string whostr;

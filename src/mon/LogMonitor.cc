@@ -266,6 +266,7 @@ version_t LogMonitor::get_trim_to()
 
 bool LogMonitor::preprocess_query(MonOpRequestRef op)
 {
+  op->mark_logmon_event("preprocess_query");
   PaxosServiceMessage *m = static_cast<PaxosServiceMessage*>(op->get_req());
   dout(10) << "preprocess_query " << *m << " from " << m->get_orig_source_inst() << dendl;
   switch (m->get_type()) {
@@ -283,6 +284,7 @@ bool LogMonitor::preprocess_query(MonOpRequestRef op)
 
 bool LogMonitor::prepare_update(MonOpRequestRef op)
 {
+  op->mark_logmon_event("prepare_update");
   PaxosServiceMessage *m = static_cast<PaxosServiceMessage*>(op->get_req());
   dout(10) << "prepare_update " << *m << " from " << m->get_orig_source_inst() << dendl;
   switch (m->get_type()) {
@@ -298,6 +300,7 @@ bool LogMonitor::prepare_update(MonOpRequestRef op)
 
 bool LogMonitor::preprocess_log(MonOpRequestRef op)
 {
+  op->mark_logmon_event("preprocess_log");
   MLog *m = static_cast<MLog*>(op->get_req());
   dout(10) << "preprocess_log " << *m << " from " << m->get_orig_source() << dendl;
   int num_new = 0;
@@ -330,6 +333,7 @@ bool LogMonitor::preprocess_log(MonOpRequestRef op)
 
 bool LogMonitor::prepare_log(MonOpRequestRef op) 
 {
+  op->mark_logmon_event("prepare_log");
   MLog *m = static_cast<MLog*>(op->get_req());
   dout(10) << "prepare_log " << *m << " from " << m->get_orig_source() << dendl;
 
@@ -373,6 +377,7 @@ bool LogMonitor::should_propose(double& delay)
 
 bool LogMonitor::preprocess_command(MonOpRequestRef op)
 {
+  op->mark_logmon_event("preprocess_command");
   MMonCommand *m = static_cast<MMonCommand*>(op->get_req());
   int r = -1;
   bufferlist rdata;
@@ -390,6 +395,7 @@ bool LogMonitor::preprocess_command(MonOpRequestRef op)
 
 bool LogMonitor::prepare_command(MonOpRequestRef op)
 {
+  op->mark_logmon_event("prepare_command");
   MMonCommand *m = static_cast<MMonCommand*>(op->get_req());
   stringstream ss;
   string rs;

@@ -577,6 +577,7 @@ version_t PGMonitor::get_trim_to()
 
 bool PGMonitor::preprocess_query(MonOpRequestRef op)
 {
+  op->mark_pgmon_event(__func__);
   PaxosServiceMessage *m = static_cast<PaxosServiceMessage*>(op->get_req());
   dout(10) << "preprocess_query " << *m << " from " << m->get_orig_source_inst() << dendl;
   switch (m->get_type()) {
@@ -601,6 +602,7 @@ bool PGMonitor::preprocess_query(MonOpRequestRef op)
 
 bool PGMonitor::prepare_update(MonOpRequestRef op)
 {
+  op->mark_pgmon_event(__func__);
   PaxosServiceMessage *m = static_cast<PaxosServiceMessage*>(op->get_req());
   dout(10) << "prepare_update " << *m << " from " << m->get_orig_source_inst() << dendl;
   switch (m->get_type()) {
@@ -618,6 +620,7 @@ bool PGMonitor::prepare_update(MonOpRequestRef op)
 
 void PGMonitor::handle_statfs(MonOpRequestRef op)
 {
+  op->mark_pgmon_event(__func__);
   MStatfs *statfs = static_cast<MStatfs*>(op->get_req());
   // check caps
   MonSession *session = statfs->get_session();
@@ -652,6 +655,7 @@ void PGMonitor::handle_statfs(MonOpRequestRef op)
 
 bool PGMonitor::preprocess_getpoolstats(MonOpRequestRef op)
 {
+  op->mark_pgmon_event(__func__);
   MGetPoolStats *m = static_cast<MGetPoolStats*>(op->get_req());
   MGetPoolStatsReply *reply;
 
@@ -691,6 +695,7 @@ bool PGMonitor::preprocess_getpoolstats(MonOpRequestRef op)
 
 bool PGMonitor::preprocess_pg_stats(MonOpRequestRef op)
 {
+  op->mark_pgmon_event(__func__);
   MPGStats *stats = static_cast<MPGStats*>(op->get_req());
   // check caps
   MonSession *session = stats->get_session();
@@ -742,6 +747,7 @@ bool PGMonitor::pg_stats_have_changed(int from, const MPGStats *stats) const
 
 bool PGMonitor::prepare_pg_stats(MonOpRequestRef op)
 {
+  op->mark_pgmon_event(__func__);
   MPGStats *stats = static_cast<MPGStats*>(op->get_req());
   dout(10) << "prepare_pg_stats " << *stats << " from " << stats->get_orig_source() << dendl;
   int from = stats->get_orig_source().num();
@@ -838,6 +844,8 @@ bool PGMonitor::prepare_pg_stats(MonOpRequestRef op)
 
 void PGMonitor::_updated_stats(MonOpRequestRef op, MonOpRequestRef ack_op)
 {
+  op->mark_pgmon_event(__func__);
+  ack_op->mark_pgmon_event(__func__);
   MPGStats *ack = static_cast<MPGStats*>(ack_op->get_req());
   dout(7) << "_updated_stats for "
           << op->get_req()->get_orig_source_inst() << dendl;
@@ -1456,6 +1464,7 @@ void PGMonitor::dump_info(Formatter *f)
 
 bool PGMonitor::preprocess_command(MonOpRequestRef op)
 {
+  op->mark_pgmon_event(__func__);
   MMonCommand *m = static_cast<MMonCommand*>(op->get_req());
   int r = -1;
   bufferlist rdata;
@@ -1783,6 +1792,7 @@ bool PGMonitor::preprocess_command(MonOpRequestRef op)
 
 bool PGMonitor::prepare_command(MonOpRequestRef op)
 {
+  op->mark_pgmon_event(__func__);
   MMonCommand *m = static_cast<MMonCommand*>(op->get_req());
   stringstream ss;
   pg_t pgid;

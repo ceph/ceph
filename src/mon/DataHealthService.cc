@@ -232,6 +232,7 @@ void DataHealthService::service_tick()
 
 void DataHealthService::handle_tell(MonOpRequestRef op)
 {
+  op->mark_event("datahealth:handle_tell");
   MMonHealth *m = static_cast<MMonHealth*>(op->get_req());
   dout(10) << __func__ << " " << *m << dendl;
   assert(m->get_service_op() == MMonHealth::OP_TELL);
@@ -241,6 +242,7 @@ void DataHealthService::handle_tell(MonOpRequestRef op)
 
 bool DataHealthService::service_dispatch_op(MonOpRequestRef op)
 {
+  op->mark_event("datahealth:service_dispatch_op");
   MMonHealth *m = static_cast<MMonHealth*>(op->get_req());
   dout(10) << __func__ << " " << *m << dendl;
   assert(m->get_service_type() == get_type());
