@@ -4,7 +4,7 @@
 
 Before troubleshooting your OSDs, check your monitors and network first. If
 you execute ``ceph health`` or ``ceph -s`` on the command line and Ceph returns
-a health status, the return of a status means that the monitors have a quorum.
+a health status, it means that the monitors have a quorum.
 If you don't have a monitor quorum or if there are errors with the monitor
 status, `address the monitor issues first <../troubleshooting-mon>`_. 
 Check your networks to ensure they
