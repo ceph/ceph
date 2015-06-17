@@ -79,6 +79,10 @@ BuildRequires:	python-requests
 %if ( 0%{?rhel} > 0 && 0%{?rhel} < 7 ) || ( 0%{?centos} > 0 && 0%{?centos} < 7 )
 BuildRequires:	python-sphinx10
 %endif
+%if 0%{?fedora} || 0%{defined suse_version} || 0%{?rhel} >= 7 || 0%{?centos} >= 7
+BuildRequires:	python-sphinx
+%endif
+
 BuildRequires:	python-virtualenv
 BuildRequires:	util-linux
 BuildRequires:	xfsprogs
@@ -97,7 +101,6 @@ BuildRequires:	sharutils
 %endif
 
 %if 0%{defined suse_version}
-BuildRequires:	python-sphinx
 BuildRequires:	net-tools
 BuildRequires:	libbz2-devel
 BuildRequires:	sharutils
