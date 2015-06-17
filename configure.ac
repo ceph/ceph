@@ -629,9 +629,9 @@ if test "x$enable_cephfs_java" = "xyes"; then
         # the search path.
         AS_IF([test "x$with_debug" = "xyes"], [
         	dir='/usr/share/java'
-	        junit4_jar=`find $dir -name junit4.jar | head -n 1`
+	        junit4_jar=`find $dir -name junit4.jar -o -name junit.jar | head -n 1`
 		AS_IF([test -r "$junit4_jar"], [
-		      EXTRA_CLASSPATH_JAR=`dirname $junit4_jar`/junit4.jar
+		      EXTRA_CLASSPATH_JAR=$junit4_jar
 		      AC_SUBST(EXTRA_CLASSPATH_JAR)
 		      [have_junit4=1]], [
 		      AC_MSG_NOTICE([Cannot find junit4.jar (apt-get install junit4)])
