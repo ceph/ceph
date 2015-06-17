@@ -1535,7 +1535,7 @@ public:
         map<string, bufferlist> *attrs;
         struct rgw_err *perr;
 
-        Params() : lastmod(NULL), read_size(NULL), obj_size(NULL), attrs(NULL) {}
+        Params() : lastmod(NULL), read_size(NULL), obj_size(NULL), attrs(NULL), perr(NULL) {}
       } params;
 
       Read(RGWRados::Object *_source) : source(_source) {}
