@@ -43,19 +43,19 @@ struct MonOpRequest : public TrackedOp {
   }
 
   void mark_logmon_event(const string &event) {
-    mark_svc_event("logmon", event);
+    mark_svc_event("logm", event);
   }
   void mark_osdmon_event(const string &event) {
-    mark_svc_event("osdmon", event);
+    mark_svc_event("osdmap", event);
   }
   void mark_pgmon_event(const string &event) {
-    mark_svc_event("pgmon", event);
+    mark_svc_event("pgmap", event);
   }
   void mark_mdsmon_event(const string &event) {
-    mark_svc_event("mdsmon", event);
+    mark_svc_event("mdsmap", event);
   }
   void mark_authmon_event(const string &event) {
-    mark_svc_event("authmon", event);
+    mark_svc_event("auth", event);
   }
   void mark_paxos_event(const string &event) {
     mark_svc_event("paxos", event);
