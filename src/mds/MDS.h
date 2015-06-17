@@ -451,7 +451,19 @@ private:
    * through cleaner scrub/repair mechanisms.
    */
   void damaged();
-  void suicide();
+
+  /**
+   * Terminate this daemon process.
+   *
+   * @param fast: if true, do not send a message to the mon before shutting
+   *              down
+   */
+  void suicide(bool fast = false);
+
+  /**
+   * Start a new daemon process with the same command line parameters that
+   * this process was run with, then terminate this process
+   */
   void respawn();
   void handle_write_error(int err);
 

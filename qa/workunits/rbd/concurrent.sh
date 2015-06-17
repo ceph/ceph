@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/bash -e
 
 # Copyright (C) 2013 Inktank Storage, Inc.
 #
@@ -76,10 +76,9 @@ function setup() {
 
 	[ -d /sys/bus/rbd ] || sudo modprobe rbd
 
-	# This assumes it's easier to read a file than generate
-	# random data.  Use busybox because it is a big executable.
-	dd if="/bin/busybox" of="{SOURCE_DATA}" bs=2048 count=66 \
-		>/dev/null 2>&1
+	# Use urandom to generate SOURCE_DATA
+        dd if=/dev/urandom of=${SOURCE_DATA} bs=2048 count=66 \
+               >/dev/null 2>&1
 
 	# List of rbd id's *not* created by this script
 	export INITIAL_RBD_IDS=$(ls /sys/bus/rbd/devices)
@@ -88,14 +87,8 @@ function setup() {
 
 	# Set up some environment for normal teuthology test setup.
 	# This really should not be necessary but I found it was.
-	TOP="/tmp/cephtest"
-	export CEPH_ARGS="--conf ${TOP}/ceph.conf"
-	export CEPH_ARGS="${CEPH_ARGS} --keyring ${TOP}/data/client.0.keyring"
-	export CEPH_ARGS="${CEPH_ARGS} --name client.0"
 
-	export LD_LIBRARY_PATH="${TOP}/binary/usr/local/lib:${LD_LIBRARY_PATH}"
-	export PATH="${TOP}/binary/usr/local/bin:${PATH}"
-	export PATH="${TOP}/binary/usr/local/sbin:${PATH}"
+	export CEPH_ARGS=" --name client.0"
 }
 
 function cleanup() {
@@ -116,7 +109,7 @@ function cleanup() {
 	wait
 	sync
 	rm -f "${SOURCE_DATA}"
-	[ -d "${NAMES_DIR}" ] && rmdir -f "${NAMES_DIR}"
+	[ -d "${NAMES_DIR}" ] && rmdir "${NAMES_DIR}"
 	sudo chown root /sys/bus/rbd/add /sys/bus/rbd/remove
 	echo "Max concurrent rbd image count was $(get_max "${ID_COUNT_DIR}")"
 	rm -rf "${ID_COUNT_DIR}"

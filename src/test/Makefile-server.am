@@ -30,6 +30,15 @@ ceph_perf_objectstore_LDADD = $(LIBOS) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 ceph_perf_objectstore_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_perf_objectstore
 
+ceph_perf_local_SOURCES = test/perf_local.cc test/perf_helper.cc
+ceph_perf_local_LDADD = $(LIBOS) $(CEPH_GLOBAL)
+ceph_perf_local_CXXFLAGS = ${AM_CXXFLAGS} 	\
+	${INTEL_SSE_FLAGS} \
+	${INTEL_SSE2_FLAGS}
+
+noinst_HEADERS += test/perf_helper.h
+bin_DEBUGPROGRAMS += ceph_perf_local
+
 if LINUX
 ceph_test_objectstore_SOURCES = test/objectstore/store_test.cc
 ceph_test_objectstore_LDADD = $(LIBOS) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
@@ -183,6 +192,19 @@ bin_DEBUGPROGRAMS += ceph_test_snap_mapper
 
 endif # WITH_OSD
 
+if WITH_SLIBROCKSDB
+unittest_rocksdb_option_static_SOURCES = test/objectstore/TestRocksdbOptionParse.cc
+unittest_rocksdb_option_static_LDADD = $(LIBOS) $(UNITTEST_LDADD) $(CEPH_GLOBAL) rocksdb/librocksdb.la
+unittest_rocksdb_option_static_CXXFLAGS = $(UNITTEST_CXXFLAGS) ${AM_CXXFLAGS} ${LIBROCKSDB_CFLAGS} -std=gnu++11 -I rocksdb/include
+check_TESTPROGRAMS += unittest_rocksdb_option_static
+endif
+
+if WITH_DLIBROCKSDB
+unittest_rocksdb_option_SOURCES = test/objectstore/TestRocksdbOptionParse.cc
+unittest_rocksdb_option_LDADD = $(LIBOS) $(UNITTEST_LDADD) $(CEPH_GLOBAL) -lrocksdb
+unittest_rocksdb_option_CXXFLAGS = $(UNITTEST_CXXFLAGS) ${AM_CXXFLAGS} ${LIBROCKSDB_CFLAGS} -std=gnu++11
+check_TESTPROGRAMS += unittest_rocksdb_option
+endif
 
 unittest_chain_xattr_SOURCES = test/objectstore/chain_xattr.cc
 unittest_chain_xattr_LDADD = $(LIBOS) $(UNITTEST_LDADD) $(CEPH_GLOBAL)

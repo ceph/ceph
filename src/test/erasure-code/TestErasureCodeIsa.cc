@@ -50,10 +50,10 @@ void IsaErasureCodeTest::encode_decode(unsigned object_size)
 {
   ErasureCodeIsaDefault Isa(tcache);
 
-  map<std::string, std::string> parameters;
-  parameters["k"] = "2";
-  parameters["m"] = "2";
-  Isa.init(parameters);
+  ErasureCodeProfile profile;
+  profile["k"] = "2";
+  profile["m"] = "2";
+  Isa.init(profile, &cerr);
 
   string payload(object_size, 'X');
   bufferlist in;
@@ -190,10 +190,10 @@ TEST_F(IsaErasureCodeTest, encode_decode)
 TEST_F(IsaErasureCodeTest, minimum_to_decode)
 {
   ErasureCodeIsaDefault Isa(tcache);
-  map<std::string, std::string> parameters;
-  parameters["k"] = "2";
-  parameters["m"] = "2";
-  Isa.init(parameters);
+  ErasureCodeProfile profile;
+  profile["k"] = "2";
+  profile["m"] = "2";
+  Isa.init(profile, &cerr);
 
   //
   // If trying to read nothing, the minimum is empty.
@@ -287,10 +287,10 @@ TEST_F(IsaErasureCodeTest, chunk_size)
 {
   {
     ErasureCodeIsaDefault Isa(tcache);
-    map<std::string, std::string> parameters;
-    parameters["k"] = "2";
-    parameters["m"] = "1";
-    Isa.init(parameters);
+    ErasureCodeProfile profile;
+    profile["k"] = "2";
+    profile["m"] = "1";
+    Isa.init(profile, &cerr);
     int k = 2;
 
     ASSERT_EQ(EC_ISA_ADDRESS_ALIGNMENT, Isa.get_chunk_size(1));
@@ -299,10 +299,10 @@ TEST_F(IsaErasureCodeTest, chunk_size)
   }
   {
     ErasureCodeIsaDefault Isa(tcache);
-    map<std::string, std::string> parameters;
-    parameters["k"] = "3";
-    parameters["m"] = "1";
-    Isa.init(parameters);
+    ErasureCodeProfile profile;
+    profile["k"] = "3";
+    profile["m"] = "1";
+    Isa.init(profile, &cerr);
     int k = 3;
 
     ASSERT_EQ(EC_ISA_ADDRESS_ALIGNMENT, Isa.get_chunk_size(1));
@@ -320,10 +320,10 @@ TEST_F(IsaErasureCodeTest, chunk_size)
 TEST_F(IsaErasureCodeTest, encode)
 {
   ErasureCodeIsaDefault Isa(tcache);
-  map<std::string, std::string> parameters;
-  parameters["k"] = "2";
-  parameters["m"] = "2";
-  Isa.init(parameters);
+  ErasureCodeProfile profile;
+  profile["k"] = "2";
+  profile["m"] = "2";
+  Isa.init(profile, &cerr);
 
   unsigned aligned_object_size = Isa.get_alignment() * 2;
   {
@@ -366,6 +366,17 @@ TEST_F(IsaErasureCodeTest, encode)
   }
 }
 
+TEST_F(IsaErasureCodeTest, sanity_check_k)
+{
+  ErasureCodeIsaDefault Isa(tcache);
+  ErasureCodeProfile profile;
+  profile["k"] = "1";
+  profile["m"] = "1";
+  ostringstream errors;
+  EXPECT_EQ(-EINVAL, Isa.init(profile, &errors));
+  EXPECT_NE(std::string::npos, errors.str().find("must be >= 2"));
+}
+
 bool
 DecodeAndVerify(ErasureCodeIsaDefault& Isa, map<int, bufferlist> &degraded, set<int> want_to_decode, buffer::ptr* enc, int length)
 {
@@ -391,10 +402,10 @@ TEST_F(IsaErasureCodeTest, isa_vandermonde_exhaustive)
   // a (12,4) configuration using the vandermonde matrix
 
   ErasureCodeIsaDefault Isa(tcache);
-  map<std::string, std::string> parameters;
-  parameters["k"] = "12";
-  parameters["m"] = "4";
-  Isa.init(parameters);
+  ErasureCodeProfile profile;
+  profile["k"] = "12";
+  profile["m"] = "4";
+  Isa.init(profile, &cerr);
 
   int k = 12;
   int m = 4;
@@ -516,12 +527,12 @@ TEST_F(IsaErasureCodeTest, isa_cauchy_exhaustive)
   // Test all possible failure scenarios and reconstruction cases for
   // a (12,4) configuration using the cauchy matrix
   ErasureCodeIsaDefault Isa(tcache,ErasureCodeIsaDefault::kCauchy);
-  map<std::string, std::string> parameters;
-  parameters["k"] = "12";
-  parameters["m"] = "4";
-  parameters["technique"] = "cauchy";
+  ErasureCodeProfile profile;
+  profile["k"] = "12";
+  profile["m"] = "4";
+  profile["technique"] = "cauchy";
 
-  Isa.init(parameters);
+  Isa.init(profile, &cerr);
 
   int k = 12;
   int m = 4;
@@ -643,12 +654,12 @@ TEST_F(IsaErasureCodeTest, isa_cauchy_cache_trash)
   // Test all possible failure scenarios and reconstruction cases for
   // a (12,4) configuration using the cauchy matrix
   ErasureCodeIsaDefault Isa(tcache,ErasureCodeIsaDefault::kCauchy);
-  map<std::string, std::string> parameters;
-  parameters["k"] = "16";
-  parameters["m"] = "4";
-  parameters["technique"] = "cauchy";
+  ErasureCodeProfile profile;
+  profile["k"] = "16";
+  profile["m"] = "4";
+  profile["technique"] = "cauchy";
 
-  Isa.init(parameters);
+  Isa.init(profile, &cerr);
 
   int k = 16;
   int m = 4;
@@ -771,10 +782,10 @@ TEST_F(IsaErasureCodeTest, isa_xor_codec)
   // a (4,1) RAID-5 like configuration 
 
   ErasureCodeIsaDefault Isa(tcache);
-  map<std::string, std::string> parameters;
-  parameters["k"] = "4";
-  parameters["m"] = "1";
-  Isa.init(parameters);
+  ErasureCodeProfile profile;
+  profile["k"] = "4";
+  profile["m"] = "1";
+  Isa.init(profile, &cerr);
 
   int k = 4;
   int m = 1;
@@ -895,11 +906,11 @@ TEST_F(IsaErasureCodeTest, create_ruleset)
   {
     stringstream ss;
     ErasureCodeIsaDefault isa(tcache);
-    map<std::string,std::string> parameters;
-    parameters["k"] = "2";
-    parameters["m"] = "2";
-    parameters["w"] = "8";
-    isa.init(parameters);
+    ErasureCodeProfile profile;
+    profile["k"] = "2";
+    profile["m"] = "2";
+    profile["w"] = "8";
+    isa.init(profile, &cerr);
     int ruleset = isa.create_ruleset("myrule", *c, &ss);
     EXPECT_EQ(0, ruleset);
     EXPECT_EQ(-EEXIST, isa.create_ruleset("myrule", *c, &ss));
@@ -919,24 +930,24 @@ TEST_F(IsaErasureCodeTest, create_ruleset)
   {
     stringstream ss;
     ErasureCodeIsaDefault isa(tcache);
-    map<std::string,std::string> parameters;
-    parameters["k"] = "2";
-    parameters["m"] = "2";
-    parameters["w"] = "8";
-    parameters["ruleset-root"] = "BAD";
-    isa.init(parameters);
+    ErasureCodeProfile profile;
+    profile["k"] = "2";
+    profile["m"] = "2";
+    profile["w"] = "8";
+    profile["ruleset-root"] = "BAD";
+    isa.init(profile, &cerr);
     EXPECT_EQ(-ENOENT, isa.create_ruleset("otherrule", *c, &ss));
     EXPECT_EQ("root item BAD does not exist", ss.str());
   }
   {
     stringstream ss;
     ErasureCodeIsaDefault isa(tcache);
-    map<std::string,std::string> parameters;
-    parameters["k"] = "2";
-    parameters["m"] = "2";
-    parameters["w"] = "8";
-    parameters["ruleset-failure-domain"] = "WORSE";
-    isa.init(parameters);
+    ErasureCodeProfile profile;
+    profile["k"] = "2";
+    profile["m"] = "2";
+    profile["w"] = "8";
+    profile["ruleset-failure-domain"] = "WORSE";
+    isa.init(profile, &cerr);
     EXPECT_EQ(-EINVAL, isa.create_ruleset("otherrule", *c, &ss));
     EXPECT_EQ("unknown type WORSE", ss.str());
   }
@@ -957,7 +968,7 @@ int main(int argc, char **argv)
 /*
  * Local Variables:
  * compile-command: "cd ../.. ; make -j4 unittest_erasure_code_isa &&
- *   libtool --mode=execute valgrind --tool=memcheck --leak-check=full \
+ *   libtool --mode=execute valgrind --tool=memcheck \
  *      ./unittest_erasure_code_isa \
  *      --gtest_filter=*.* --log-to-stderr=true --debug-osd=20"
  * End:

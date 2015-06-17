@@ -3,7 +3,7 @@
 /*
  * Ceph distributed storage system
  *
- * Red Hat (C) 2014 Red Hat <contact@redhat.com>
+ * Red Hat (C) 2014, 2015 Red Hat <contact@redhat.com>
  *
  * Author: Loic Dachary <loic@dachary.org>
  *
@@ -39,12 +39,14 @@ class ErasureCodeNonRegression {
   string plugin;
   bool create;
   bool check;
+  bool show_path;
   string base;
   string directory;
-  map<string,string> parameters;
+  ErasureCodeProfile profile;
 public:
   int setup(int argc, char** argv);
   int run();
+  int run_show_path();
   int run_create();
   int run_check();
   int decode_erasures(ErasureCodeInterfaceRef erasure_code,
@@ -66,7 +68,9 @@ int ErasureCodeNonRegression::setup(int argc, char** argv) {
     ("base", po::value<string>()->default_value("."),
      "prefix all paths with base")
     ("parameter,P", po::value<vector<string> >(),
-     "parameters")
+     "add a parameter to the erasure code profile")
+    ("path", po::value<string>(), "content path instead of inferring it from parameters")
+    ("show-path", "display the content path and exit")
     ("create", "create the erasure coded content in the directory")
     ("check", "check the content in the directory matches the chunks and vice versa")
     ;
@@ -106,15 +110,16 @@ int ErasureCodeNonRegression::setup(int argc, char** argv) {
   base = vm["base"].as<string>();
   check = vm.count("check") > 0;
   create = vm.count("create") > 0;
+  show_path = vm.count("show-path") > 0;
 
-  if (!check && !create) {
-    cerr << "must specifify either --check or --create" << endl;
+  if (!check && !create && !show_path) {
+    cerr << "must specifify either --check, --create or --show-path" << endl;
     return 1;
   }
 
   {
     stringstream path;
-    path << base << "/" << "plugin=" << plugin << " stipe-width=" << stripe_width;
+    path << base << "/" << "plugin=" << plugin << " stripe-width=" << stripe_width;
     directory = path.str();
   }
 
@@ -128,14 +133,18 @@ int ErasureCodeNonRegression::setup(int argc, char** argv) {
       if (strs.size() != 2) {
 	cerr << "--parameter " << *i << " ignored because it does not contain exactly one =" << endl;
       } else {
-	parameters[strs[0]] = strs[1];
+	profile[strs[0]] = strs[1];
       }
       if (strs[0] != "directory")
 	directory += " " + *i;
     }
   }
-  if (parameters.count("directory") == 0)
-    parameters["directory"] = ".libs";
+
+  if (vm.count("path"))
+    directory = vm["path"].as<string>();
+
+  if (profile.count("directory") == 0)
+    profile["directory"] = ".libs";
 
   return 0;
 }
@@ -147,7 +156,15 @@ int ErasureCodeNonRegression::run()
     return ret;
   if(check && (ret = run_check()))
     return ret;
+  if(show_path && (ret = run_show_path()))
+    return ret;
   return ret;
+}
+
+int ErasureCodeNonRegression::run_show_path()
+{
+  cout << directory << endl;
+  return 0;
 }
 
 int ErasureCodeNonRegression::run_create()
@@ -155,7 +172,7 @@ int ErasureCodeNonRegression::run_create()
   ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
   ErasureCodeInterfaceRef erasure_code;
   stringstream messages;
-  int code = instance.factory(plugin, parameters, &erasure_code, messages);
+  int code = instance.factory(plugin, profile, &erasure_code, &messages);
   if (code) {
     cerr << messages.str() << endl;
     return code;
@@ -225,7 +242,7 @@ int ErasureCodeNonRegression::run_check()
   ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
   ErasureCodeInterfaceRef erasure_code;
   stringstream messages;
-  int code = instance.factory(plugin, parameters, &erasure_code, messages);
+  int code = instance.factory(plugin, profile, &erasure_code, &messages);
   if (code) {
     cerr << messages.str() << endl;
     return code;

@@ -587,12 +587,7 @@ OPTION(osd_op_thread_suicide_timeout, OPT_INT, 150)
 OPTION(osd_recovery_thread_timeout, OPT_INT, 30)
 OPTION(osd_recovery_thread_suicide_timeout, OPT_INT, 300)
 OPTION(osd_recovery_sleep, OPT_FLOAT, 0)         // seconds to sleep between recovery ops
-OPTION(osd_snap_trim_thread_timeout, OPT_INT, 60*60*1)
-OPTION(osd_snap_trim_thread_suicide_timeout, OPT_INT, 60*60*10)
 OPTION(osd_snap_trim_sleep, OPT_FLOAT, 0)
-OPTION(osd_scrub_thread_timeout, OPT_INT, 60)
-OPTION(osd_scrub_thread_suicide_timeout, OPT_INT, 60)
-OPTION(osd_scrub_finalize_thread_timeout, OPT_INT, 60*10)
 OPTION(osd_scrub_invalid_stats, OPT_BOOL, true)
 OPTION(osd_remove_thread_timeout, OPT_INT, 60*60)
 OPTION(osd_remove_thread_suicide_timeout, OPT_INT, 10*60*60)
@@ -634,6 +629,7 @@ OPTION(osd_scrub_end_hour, OPT_INT, 24)
 OPTION(osd_scrub_load_threshold, OPT_FLOAT, 0.5)
 OPTION(osd_scrub_min_interval, OPT_FLOAT, 60*60*24)    // if load is low
 OPTION(osd_scrub_max_interval, OPT_FLOAT, 7*60*60*24)  // regardless of load
+OPTION(osd_scrub_interval_randomize_ratio, OPT_FLOAT, 0.5) // randomize the scheduled scrub in the span of [min,min*(1+randomize_radio))
 OPTION(osd_scrub_chunk_min, OPT_INT, 5)
 OPTION(osd_scrub_chunk_max, OPT_INT, 25)
 OPTION(osd_scrub_sleep, OPT_FLOAT, 0)   // sleep between [deep]scrub ops
@@ -707,53 +703,35 @@ OPTION(kinetic_hmac_key, OPT_STR, "asdfasdf") // kinetic key to authenticate wit
 OPTION(kinetic_use_ssl, OPT_BOOL, false) // whether to secure kinetic traffic with TLS
 
 
-//in memory write buffer configuration
-OPTION(rocksdb_write_buffer_size, OPT_U64, 8*1024*1024) // rocksdb write buffer size, should be larger than average write size.
-OPTION(rocksdb_write_buffer_num, OPT_INT, 2) // The maximum number of write buffers that are built up in memory.
-OPTION(rocksdb_min_write_buffer_number_to_merge, OPT_INT, 1) // The min write buffers that will be merged together before writing to storage.
-//on disk level0 configuration
-OPTION(rocksdb_level0_file_num_compaction_trigger, OPT_INT, 4) // Number of files to trigger level-0 compaction
-OPTION(rocksdb_level0_slowdown_writes_trigger, OPT_INT, -1)  // number of level-0 files at which we start slowing down write. -1 means not set.
-OPTION(rocksdb_level0_stop_writes_trigger, OPT_INT, -1)  // number of level-0 files at which we stop writes. -1 means not set.
-//on disk level1+ configuration
-OPTION(rocksdb_max_bytes_for_level_base, OPT_U64, 10*1024*1024)  // max total bytes for level 1
-OPTION(rocksdb_max_bytes_for_level_multiplier, OPT_INT, 10)  // max total bytes for level 1
-OPTION(rocksdb_target_file_size_base, OPT_U64, 2*1024*1024) // target file size for level 1
-OPTION(rocksdb_target_file_size_multiplier, OPT_INT, 1) // target file size for Level-N = (multiplier)^(N-1) * file_size_base
-OPTION(rocksdb_num_levels, OPT_INT, 7) // number of levels for this database,chang
-OPTION(rocksdb_cache_size, OPT_U64, 0) // rocksdb cache size
-OPTION(rocksdb_block_size, OPT_U64, 4*1024) // rocksdb block size
-OPTION(rocksdb_bloom_bits_per_key, OPT_INT, 10) // rocksdb bloom bits per entry
-//concurrency of compaction and flush
-OPTION(rocksdb_max_background_compactions, OPT_INT, 1) // number for background compaction jobs
-OPTION(rocksdb_compaction_threads, OPT_INT, 1) // number for background compaction jobs
-OPTION(rocksdb_max_background_flushes, OPT_INT, 1) // number for background flush jobs
-OPTION(rocksdb_flusher_threads, OPT_INT, 1) // number for background compaction jobs
-//Other
-OPTION(rocksdb_max_open_files, OPT_INT, 5000) // rocksdb max open files
-OPTION(rocksdb_compression, OPT_STR, "snappy") // rocksdb uses compression : none, snappy, zlib, bzip2
-OPTION(rocksdb_compact_on_mount, OPT_BOOL, false)
-OPTION(rocksdb_paranoid, OPT_BOOL, false) // RocksDB will aggressively check consistency of the data.
-OPTION(rocksdb_log, OPT_STR, "/dev/null")  // enable rocksdb log file
-OPTION(rocksdb_info_log_level, OPT_STR, "info")  // info log level : debug , info , warn, error, fatal
-OPTION(rocksdb_wal_dir, OPT_STR, "")  //  rocksdb write ahead log file, put it to fast device will benifit wrtie performance
-OPTION(rocksdb_disableDataSync, OPT_BOOL, false) // if true, data files are not synced to stable storage
-OPTION(rocksdb_disableWAL, OPT_BOOL, false)  // if true, writes will not first go to the write ahead log
-
+// rocksdb options that will be used for keyvaluestore(if backend is rocksdb)
+OPTION(keyvaluestore_rocksdb_options, OPT_STR, "")
+// rocksdb options that will be used for omap(if omap_backend is rocksdb)
+OPTION(filestore_rocksdb_options, OPT_STR, "")
+// rocksdb options that will be used in monstore
+OPTION(mon_rocksdb_options, OPT_STR, "")
 
 /**
- * osd_client_op_priority and osd_recovery_op_priority adjust the relative
- * priority of client io vs recovery io.
+ * osd_*_priority adjust the relative priority of client io, recovery io,
+ * snaptrim io, etc
  *
- * osd_client_op_priority/osd_recovery_op_priority determines the ratio of
- * available io between client and recovery.  Each option may be set between
+ * osd_*_priority determines the ratio of available io between client and
+ * recovery.  Each option may be set between
  * 1..63.
- *
- * osd_recovery_op_warn_multiple scales the normal warning threshhold,
- * osd_op_complaint_time, so that slow recovery ops won't cause noise
  */
 OPTION(osd_client_op_priority, OPT_U32, 63)
 OPTION(osd_recovery_op_priority, OPT_U32, 10)
+
+OPTION(osd_snap_trim_priority, OPT_U32, 5)
+OPTION(osd_snap_trim_cost, OPT_U32, 1<<20) // set default cost equal to 1MB io
+
+OPTION(osd_scrub_priority, OPT_U32, 5)
+// set default cost equal to 50MB io
+OPTION(osd_scrub_cost, OPT_U32, 50<<20) 
+
+/**
+ * osd_recovery_op_warn_multiple scales the normal warning threshhold,
+ * osd_op_complaint_time, so that slow recovery ops won't cause noise
+ */
 OPTION(osd_recovery_op_warn_multiple, OPT_U32, 16)
 
 // Max time to wait between notifying mon of shutdown and shutting down
@@ -877,6 +855,7 @@ OPTION(keyvaluestore_default_strip_size, OPT_INT, 4096) // Only affect new objec
 OPTION(keyvaluestore_max_expected_write_size, OPT_U64, 1ULL << 24) // bytes
 OPTION(keyvaluestore_header_cache_size, OPT_INT, 4096)    // Header cache size
 OPTION(keyvaluestore_backend, OPT_STR, "leveldb")
+OPTION(keyvaluestore_dump_file, OPT_STR, "")         // file onto which store transaction dumps
 
 // max bytes to search ahead in journal searching for corruption
 OPTION(journal_max_corrupt_search, OPT_U64, 10<<20)
@@ -895,6 +874,9 @@ OPTION(journal_discard, OPT_BOOL, false) //using ssd disk as journal, whether su
 OPTION(rados_mon_op_timeout, OPT_DOUBLE, 0) // how many seconds to wait for a response from the monitor before returning an error from a rados operation. 0 means on limit.
 OPTION(rados_osd_op_timeout, OPT_DOUBLE, 0) // how many seconds to wait for a response from osds before returning an error from a rados operation. 0 means no limit.
 
+OPTION(rbd_op_threads, OPT_INT, 1)
+OPTION(rbd_op_thread_timeout, OPT_INT, 60)
+OPTION(rbd_non_blocking_aio, OPT_BOOL, true) // process AIO ops from a worker thread to prevent blocking
 OPTION(rbd_cache, OPT_BOOL, true) // whether to enable caching (writeback unless rbd_cache_max_dirty is 0)
 OPTION(rbd_cache_writethrough_until_flush, OPT_BOOL, true) // whether to make writeback caching writethrough until flush is called, to be sure the user of librbd will send flushs so that writeback is safe
 OPTION(rbd_cache_size, OPT_LONGLONG, 32<<20)         // cache size in bytes
@@ -978,6 +960,7 @@ OPTION(rgw_socket_path, OPT_STR, "")   // path to unix domain socket, if not spe
 OPTION(rgw_host, OPT_STR, "")  // host for radosgw, can be an IP, default is 0.0.0.0
 OPTION(rgw_port, OPT_STR, "")  // port to listen, format as "8080" "5000", if not specified, rgw will not run external fcgi
 OPTION(rgw_dns_name, OPT_STR, "")
+OPTION(rgw_content_length_compat, OPT_BOOL, false) // Check both HTTP_CONTENT_LENGTH and CONTENT_LENGTH in fcgi env
 OPTION(rgw_script_uri, OPT_STR, "") // alternative value for SCRIPT_URI if not set in request
 OPTION(rgw_request_uri, OPT_STR,  "") // alternative value for REQUEST_URI if not set in request
 OPTION(rgw_swift_url, OPT_STR, "")             // the swift url, being published by the internal swift auth
@@ -1004,6 +987,7 @@ OPTION(rgw_op_thread_timeout, OPT_INT, 10*60)
 OPTION(rgw_op_thread_suicide_timeout, OPT_INT, 0)
 OPTION(rgw_thread_pool_size, OPT_INT, 100)
 OPTION(rgw_num_control_oids, OPT_INT, 8)
+OPTION(rgw_num_rados_handles, OPT_U32, 1)
 
 OPTION(rgw_zone, OPT_STR, "") // zone name
 OPTION(rgw_zone_root_pool, OPT_STR, ".rgw.root")    // pool where zone specific info is stored

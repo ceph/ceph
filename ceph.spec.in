@@ -1,5 +1,24 @@
 # vim: set noexpandtab ts=8 sw=8 :
 %bcond_with ocf
+%bcond_without cephfs_java
+%bcond_with tests
+%bcond_without tcmalloc
+%bcond_without libs_compat
+
+%if 0%{?fedora} || 0%{?rhel}
+# get selinux policy version
+%{!?_selinux_policy_version: %global _selinux_policy_version %(sed -e 's,.*selinux-policy-\\([^/]*\\)/.*,\\1,' /usr/share/selinux/devel/policyhelp 2>/dev/null || echo 0.0.0)}
+
+%define relabel_files() \
+restorecon -R /usr/bin/ceph-mon; \
+restorecon -R /usr/bin/ceph-osd; \
+restorecon -R /usr/bin/ceph-mds; \
+restorecon -R /etc/rc\.d/init\.d/ceph; \
+restorecon -R /var/run/ceph; \
+restorecon -R /var/lib/ceph; \
+restorecon -R /var/log/ceph;
+
+%endif
 
 %if 0%{?fedora} || 0%{?rhel}
 # get selinux policy version
@@ -21,12 +40,12 @@ restorecon -R /var/log/ceph;
 %{!?python_sitearch: %global python_sitearch %(%{__python} -c "from distutils.sysconfig import get_python_lib; print(get_python_lib(1))")}
 %endif
 
-# Use systemd files on RHEL 7 and above.
+# Use systemd files on RHEL 7 and above and in SUSE/openSUSE.
 # Note: We don't install unit files for the services yet. For now,
 # the _with_systemd variable only implies that we'll install
 # /etc/tmpfiles.d/ceph.conf in order to set up the socket directory in
 # /var/run/ceph.
-%if 0%{?fedora} || 0%{?rhel} >= 7
+%if 0%{?fedora} || 0%{?rhel} >= 7 || 0%{?suse_version}
   %global _with_systemd 1
 %endif
 
@@ -68,9 +87,6 @@ Requires: systemd
 %endif
 BuildRequires:	gcc-c++
 BuildRequires:	boost-devel
-%if ! 0%{defined suse_version}
-BuildRequires:  bzip2-devel
-%endif
 BuildRequires:	cryptsetup
 BuildRequires:	gdbm
 BuildRequires:	hdparm
@@ -93,8 +109,6 @@ BuildRequires:	python-nose
 BuildRequires:	python-requests
 %if ( 0%{?rhel} > 0 && 0%{?rhel} < 7 ) || ( 0%{?centos} > 0 && 0%{?centos} < 7 )
 BuildRequires:	python-sphinx10
-%else
-BuildRequires:	python-sphinx
 %endif
 BuildRequires:	python-virtualenv
 BuildRequires:	util-linux
@@ -102,11 +116,8 @@ BuildRequires:	xfsprogs
 BuildRequires:	xfsprogs-devel
 BuildRequires:	xmlstarlet
 BuildRequires:	yasm
-%if 0%{?rhel} || 0%{?centos} || 0%{?fedora} || 0%{?suse_version}
+%if 0%{?rhel} || 0%{?fedora} || 0%{?suse_version}
 BuildRequires:	snappy-devel
-%endif
-%if 0%{?suse_version}
-BuildRequires:	net-tools
 %endif
 
 #################################################################################
@@ -125,9 +136,16 @@ BuildRequires:	sharutils
 %endif
 
 %if 0%{defined suse_version}
+BuildRequires:	python-sphinx
+BuildRequires:	net-tools
+BuildRequires:	libbz2-devel
+BuildRequires:	sharutils
+BuildRequires:	git
 %if 0%{?suse_version} > 1210
 Requires:	gptfdisk
+%if 0%{with tcmalloc}
 BuildRequires:	gperftools-devel
+%endif
 %else
 Requires:	scsirastools
 BuildRequires:	google-perftools-devel
@@ -139,14 +157,14 @@ BuildRequires:	keyutils-devel
 BuildRequires:	libatomic-ops-devel
 BuildRequires:	fdupes
 %else
-Requires:	gdisk
+BuildRequires:  bzip2-devel
 BuildRequires:	nss-devel
 BuildRequires:	keyutils-libs-devel
 BuildRequires:	libatomic_ops-devel
 Requires:	gdisk
 Requires(post):	chkconfig
-Requires(preun):chkconfig
-Requires(preun):initscripts
+Requires(preun):	chkconfig
+Requires(preun):	initscripts
 BuildRequires:	gperftools-devel
 %endif
 
@@ -168,7 +186,15 @@ Requires:	python-rados = %{epoch}:%{version}-%{release}
 Requires:	python-rbd = %{epoch}:%{version}-%{release}
 Requires:	python-cephfs = %{epoch}:%{version}-%{release}
 Requires:	python-requests
+%if 0%{defined suse_version}
+Requires:  python-argparse
+%endif
+%if 0%{?rhel} || 0%{?fedora}
 Requires:	redhat-lsb-core
+%endif
+%if 0%{defined suse_version}
+Requires:	lsb-release
+%endif
 %description -n ceph-common
 Common utilities to mount and interact with a ceph storage cluster.
 
@@ -199,7 +225,8 @@ Requires:	librados2 = %{epoch}:%{version}-%{release}
 BuildRequires:	libexpat-devel
 BuildRequires:	FastCGI-devel
 Requires:	apache2-mod_fcgid
-%else
+%endif
+%if 0%{?rhel} || 0%{?fedora}
 BuildRequires:	expat-devel
 BuildRequires:	fcgi-devel
 %endif
@@ -225,7 +252,7 @@ managers such as Pacemaker.
 Summary:	RADOS distributed object store client library
 Group:		System Environment/Libraries
 License:	LGPL-2.0
-%if 0%{?rhel} || 0%{?centos} || 0%{?fedora}
+%if 0%{?rhel} || 0%{?fedora}
 Obsoletes:	ceph-libs < %{epoch}:%{version}-%{release}
 %endif
 %description -n librados2
@@ -283,7 +310,7 @@ Summary:	RADOS block device client library
 Group:		System Environment/Libraries
 License:	LGPL-2.0
 Requires:	librados2 = %{epoch}:%{version}-%{release}
-%if 0%{?rhel} || 0%{?centos} || 0%{?fedora}
+%if 0%{?rhel} || 0%{?fedora}
 Obsoletes:	ceph-libs < %{epoch}:%{version}-%{release}
 %endif
 %description -n librbd1
@@ -318,7 +345,7 @@ block device.
 Summary:	Ceph distributed file system client library
 Group:		System Environment/Libraries
 License:	LGPL-2.0
-%if 0%{?rhel} || 0%{?centos} || 0%{?fedora}
+%if 0%{?rhel} || 0%{?fedora}
 Obsoletes:	ceph-libs < %{epoch}:%{version}-%{release}
 Obsoletes:	ceph-libcephfs
 %endif
@@ -363,6 +390,7 @@ Summary:	Ceph benchmarks and test tools
 Group:		System Environment/Libraries
 License:	LGPL-2.0
 Requires:	ceph-common
+Requires:	xmlstarlet
 %if (0%{?fedora} >= 20 || 0%{?rhel} == 6)
 BuildRequires:	lttng-ust-devel
 BuildRequires:	libbabeltrace-devel
@@ -370,8 +398,10 @@ BuildRequires:	libbabeltrace-devel
 %description -n ceph-test
 This package contains Ceph benchmarks and test tools.
 
+%if 0%{with cephfs_java}
+
 %package -n libcephfs_jni1
-Summary:	Java Native Interface library for CephFS Java bindings.
+Summary:	Java Native Interface library for CephFS Java bindings
 Group:		System Environment/Libraries
 License:	LGPL-2.0
 Requires:	java
@@ -382,7 +412,7 @@ This package contains the Java Native Interface library for CephFS Java
 bindings.
 
 %package -n libcephfs_jni1-devel
-Summary:	Development files for CephFS Java Native Interface library.
+Summary:	Development files for CephFS Java Native Interface library
 Group:		System Environment/Libraries
 License:	LGPL-2.0
 Requires:	java
@@ -393,7 +423,7 @@ This package contains the development files for CephFS Java Native Interface
 library.
 
 %package -n cephfs-java
-Summary:	Java libraries for the Ceph File System.
+Summary:	Java libraries for the Ceph File System
 Group:		System Environment/Libraries
 License:	LGPL-2.0
 Requires:	java
@@ -409,8 +439,12 @@ BuildRequires:  junit
 %description -n cephfs-java
 This package contains the Java libraries for the Ceph File System.
 
+%endif
+
+%if 0%{with libs_compat}
+
 %package libs-compat
-Summary:	Meta package to include ceph libraries.
+Summary:	Meta package to include ceph libraries
 Group:		System Environment/Libraries
 License:	LGPL-2.0
 Obsoletes:	ceph-libs
@@ -425,6 +459,8 @@ is included for backwards compatibility with distributions that depend on the
 former ceph-libs package, which is now split up into these three subpackages.
 Packages still depending on ceph-libs should be fixed to depend on librados2,
 librbd1 or libcephfs1 instead.
+
+%endif
 
 %package devel-compat
 Summary:	Compatibility package for Ceph headers
@@ -502,10 +538,19 @@ export RPM_OPT_FLAGS=`echo $RPM_OPT_FLAGS | sed -e 's/i386/i486/'`
 		--without-cryptopp \
 		--with-rest-bench \
 		--with-debug \
+%if 0%{with cephfs_java}
 		--enable-cephfs-java \
+%endif
 		--with-librocksdb-static=check \
+%if 0%{?rhel} || 0%{?fedora}
+		--with-systemd-libexec-dir=/usr/libexec/ceph \
+%endif
+%if 0%{?opensuse} || 0%{?suse_version}
+		--with-systemd-libexec-dir=/usr/lib/ceph/ \
+%endif
 		$MY_CONF_OPT \
 		%{?_with_ocf} \
+		%{?_with_tcmalloc} \
 		CFLAGS="$RPM_OPT_FLAGS" CXXFLAGS="$RPM_OPT_FLAGS"
 
 # fix bug in specific version of libedit-devel
@@ -518,6 +563,16 @@ sed -i -e "s/-lcurses/-lncurses/g" src/java/Makefile
 %endif
 
 make -j$(getconf _NPROCESSORS_ONLN)
+
+
+%if 0%{with tests}
+%check
+# run in-tree unittests
+make -j$(getconf _NPROCESSORS_ONLN) check-local
+
+%endif
+
+
 
 %install
 %if 0%{?fedora} || 0%{?rhel}
@@ -535,7 +590,7 @@ make DESTDIR=$RPM_BUILD_ROOT install
 find $RPM_BUILD_ROOT -type f -name "*.la" -exec rm -f {} ';'
 find $RPM_BUILD_ROOT -type f -name "*.a" -exec rm -f {} ';'
 install -D src/init-ceph $RPM_BUILD_ROOT%{_initrddir}/ceph
-install -D src/init-radosgw.sysv $RPM_BUILD_ROOT%{_initrddir}/ceph-radosgw
+install -D src/init-radosgw $RPM_BUILD_ROOT%{_initrddir}/ceph-radosgw
 install -D src/init-rbdmap $RPM_BUILD_ROOT%{_initrddir}/rbdmap
 install -D src/rbdmap $RPM_BUILD_ROOT%{_sysconfdir}/ceph/rbdmap
 %if 0%{?_with_systemd}
@@ -971,6 +1026,7 @@ ln -sf %{_libdir}/librbd.so.1 /usr/lib64/qemu/librbd.so.1
 %{_bindir}/ceph_erasure_code_benchmark
 %{_bindir}/ceph_omapbench
 %{_bindir}/ceph_perf_objectstore
+%{_bindir}/ceph_perf_local
 %{_bindir}/ceph_psim
 %{_bindir}/ceph_radosacl
 %{_bindir}/ceph_rgw_jsonparser
@@ -998,9 +1054,16 @@ ln -sf %{_libdir}/librbd.so.1 /usr/lib64/qemu/librbd.so.1
 %endif
 
 #################################################################################
+%if 0%{with cephfs_java}
 %files -n libcephfs_jni1
 %defattr(-,root,root,-)
 %{_libdir}/libcephfs_jni.so.*
+
+%post -n libcephfs_jni1
+/sbin/ldconfig
+
+%postun -n libcephfs_jni1
+/sbin/ldconfig
 
 #################################################################################
 %files -n libcephfs_jni1-devel
@@ -1012,8 +1075,10 @@ ln -sf %{_libdir}/librbd.so.1 /usr/lib64/qemu/librbd.so.1
 %defattr(-,root,root,-)
 %{_javadir}/libcephfs.jar
 %{_javadir}/libcephfs-test.jar
+%endif
 
 #################################################################################
+%if 0%{with libs_compat}
 %files libs-compat
 # We need an empty %%files list for ceph-libs-compat, to tell rpmbuild to actually
 # build this meta package.
@@ -1022,6 +1087,7 @@ ln -sf %{_libdir}/librbd.so.1 /usr/lib64/qemu/librbd.so.1
 %files devel-compat
 # We need an empty %%files list for ceph-devel-compat, to tell rpmbuild to
 # actually build this meta package.
+%endif
 
 #################################################################################
 %files -n python-ceph-compat

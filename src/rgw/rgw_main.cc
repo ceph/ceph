@@ -556,6 +556,8 @@ static int process_request(RGWRados *store, RGWREST *rest, RGWRequest *req, RGWC
 
   s->req_id = store->unique_id(req->id);
 
+  s->gen_trans_id();
+
   req->log(s, "initializing");
 
   RGWOp *op = NULL;
@@ -715,9 +717,6 @@ static int civetweb_callback(struct mg_connection *conn) {
 
   RGWRequest *req = new RGWRequest(store->get_new_req_id());
   RGWMongoose client_io(conn, pe->port);
-
-  client_io.init(g_ceph_context);
-
 
   int ret = process_request(store, rest, req, &client_io, olog);
   if (ret < 0) {

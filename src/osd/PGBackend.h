@@ -109,6 +109,10 @@
        ObjectStore::Transaction *t,
        OpRequestRef op = OpRequestRef()
        ) = 0;
+     virtual void queue_transactions(
+       list<ObjectStore::Transaction*>& tls,
+       OpRequestRef op = OpRequestRef()
+       ) = 0;
      virtual epoch_t get_epoch() const = 0;
 
      virtual const set<pg_shard_t> &get_actingbackfill_shards() const = 0;

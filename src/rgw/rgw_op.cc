@@ -1807,6 +1807,12 @@ void RGWPutObj::execute()
      */
     bool need_to_wait = (ofs == 0) && multipart;
 
+    bufferlist orig_data;
+
+    if (need_to_wait) {
+      orig_data = data;
+    }
+
     ret = put_data_and_throttle(processor, data, ofs, (need_calc_md5 ? &hash : NULL), need_to_wait);
     if (ret < 0) {
       if (!need_to_wait || ret != -EEXIST) {
@@ -1815,6 +1821,9 @@ void RGWPutObj::execute()
       }
 
       ldout(s->cct, 5) << "NOTICE: processor->throttle_data() returned -EEXIST, need to restart write" << dendl;
+
+      /* restore original data */
+      data.swap(orig_data);
 
       /* restart processing with different oid suffix */
 
@@ -2305,6 +2314,7 @@ int RGWCopyObj::verify_permission()
 
   if (src_bucket_name.compare(dest_bucket_name) == 0) { /* will only happen if s->local_source */
     dest_bucket_info = src_bucket_info;
+    dest_attrs = src_attrs;
   } else {
     ret = store->get_bucket_info(obj_ctx, dest_bucket_name, dest_bucket_info, NULL, &dest_attrs);
     if (ret < 0)
@@ -2988,7 +2998,7 @@ void RGWCompleteMultipart::execute()
   }
 
   parts = static_cast<RGWMultiCompleteUpload *>(parser.find_first("CompleteMultipartUpload"));
-  if (!parts || parts->parts.size() == 0) {
+  if (!parts || parts->parts.empty()) {
     ret = -ERR_MALFORMED_XML;
     return;
   }

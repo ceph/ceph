@@ -174,6 +174,7 @@ Client::Client(Messenger *m, MonClient *mc)
     tick_event(NULL),
     monclient(mc), messenger(m), whoami(m->get_myname().num()),
     cap_epoch_barrier(0),
+    last_tid(0), oldest_tid(0), last_flush_seq(0),
     initialized(false), authenticated(false),
     mounted(false), unmounting(false),
     local_osd(-1), local_osd_epoch(0),
@@ -181,9 +182,6 @@ Client::Client(Messenger *m, MonClient *mc)
     client_lock("Client::client_lock")
 {
   monclient->set_messenger(m);
-
-  last_tid = 0;
-  last_flush_seq = 0;
 
   cwd = NULL;
 
@@ -431,6 +429,8 @@ int Client::init()
 
   client_lock.Unlock();
 
+  cct->_conf->add_observer(this);
+
   AdminSocket* admin_socket = cct->get_admin_socket();
   int ret = admin_socket->register_command("mds_requests",
 					   "mds_requests",
@@ -484,6 +484,8 @@ int Client::init()
 void Client::shutdown() 
 {
   ldout(cct, 1) << "shutdown" << dendl;
+
+  cct->_conf->remove_observer(this);
 
   AdminSocket* admin_socket = cct->get_admin_socket();
   admin_socket->unregister_command("mds_requests");
@@ -543,7 +545,7 @@ void Client::shutdown()
 // ===================
 // metadata cache stuff
 
-void Client::trim_cache()
+void Client::trim_cache(bool trim_kernel_dcache)
 {
   ldout(cct, 20) << "trim_cache size " << lru.lru_get_size() << " max " << lru.lru_get_max() << dendl;
   unsigned last = 0;
@@ -559,6 +561,9 @@ void Client::trim_cache()
     
     trim_dentry(dn);
   }
+
+  if (trim_kernel_dcache && lru.lru_get_size() > lru.lru_get_max())
+    _invalidate_kernel_dcache();
 
   // hose root?
   if (lru.lru_get_size() == 0 && root && root->get_num_ref() == 0 && inode_map.size() == 1 + root_parents.size()) {
@@ -1203,9 +1208,15 @@ Inode* Client::insert_trace(MetaRequest *request, MetaSession *session)
     }
   }
 
-  if (in && (reply->head.op == CEPH_MDS_OP_READDIR ||
-	     reply->head.op == CEPH_MDS_OP_LSSNAP)) {
-    insert_readdir_results(request, session, in);
+  if (in) {
+    if (reply->head.op == CEPH_MDS_OP_READDIR ||
+	reply->head.op == CEPH_MDS_OP_LSSNAP)
+      insert_readdir_results(request, session, in);
+
+    if (request->dentry() == NULL && in != request->inode()) {
+      // pin the target inode if its parent dentry is not pinned
+      request->set_other_inode(in);
+    }
   }
 
   request->target = in;
@@ -1464,6 +1475,9 @@ int Client::make_request(MetaRequest *request,
 
   // make note
   mds_requests[tid] = request->get();
+  if (oldest_tid == 0 && request->get_op() != CEPH_MDS_OP_SETFILELOCK)\
+    oldest_tid = tid;
+
   if (uid < 0) {
     uid = geteuid();
     gid = getegid();
@@ -1475,10 +1489,7 @@ int Client::make_request(MetaRequest *request,
     ldout(cct, 20) << __func__ << " injecting fixed oldest_client_tid(1)" << dendl;
     request->set_oldest_client_tid(1);
   } else {
-    if (!mds_requests.empty())
-      request->set_oldest_client_tid(mds_requests.begin()->first);
-    else
-      request->set_oldest_client_tid(tid); // this one is the oldest.
+    request->set_oldest_client_tid(oldest_tid);
   }
 
   // hack target mds?
@@ -1551,8 +1562,7 @@ int Client::make_request(MetaRequest *request,
     assert(request->aborted);
     assert(!request->got_unsafe);
     request->item.remove_myself();
-    mds_requests.erase(tid);
-    put_request(request); // request map's
+    unregister_request(request);
     put_request(request); // ours
     return -ETIMEDOUT;
   }
@@ -1587,6 +1597,26 @@ int Client::make_request(MetaRequest *request,
 
   reply->put();
   return r;
+}
+
+void Client::unregister_request(MetaRequest *req)
+{
+  mds_requests.erase(req->tid);
+  if (req->tid == oldest_tid) {
+    map<ceph_tid_t, MetaRequest*>::iterator p = mds_requests.upper_bound(oldest_tid);
+    while (true) {
+      if (p == mds_requests.end()) {
+	oldest_tid = 0;
+	break;
+      }
+      if (p->second->get_op() != CEPH_MDS_OP_SETFILELOCK) {
+	oldest_tid = p->first;
+	break;
+      }
+      ++p;
+    }
+  }
+  put_request(req);
 }
 
 void Client::put_request(MetaRequest *request)
@@ -1993,6 +2023,17 @@ void Client::handle_client_request_forward(MClientRequestForward *fwd)
   fwd->put();
 }
 
+bool Client::is_dir_operation(MetaRequest *req)
+{
+  int op = req->get_op();
+  if (op == CEPH_MDS_OP_MKNOD || op == CEPH_MDS_OP_LINK ||
+      op == CEPH_MDS_OP_UNLINK || op == CEPH_MDS_OP_RENAME ||
+      op == CEPH_MDS_OP_MKDIR || op == CEPH_MDS_OP_RMDIR ||
+      op == CEPH_MDS_OP_SYMLINK || op == CEPH_MDS_OP_CREATE)
+    return true;
+  return false;
+}
+
 void Client::handle_client_reply(MClientReply *reply)
 {
   mds_rank_t mds_num = mds_rank_t(reply->get_source().num());
@@ -2058,6 +2099,11 @@ void Client::handle_client_reply(MClientReply *reply)
   if (!is_safe) {
     request->got_unsafe = true;
     session->unsafe_requests.push_back(&request->unsafe_item);
+    if (is_dir_operation(request)) {
+      Inode *dir = request->inode();
+      assert(dir);
+      dir->unsafe_dir_ops.push_back(&request->unsafe_dir_item);
+    }
   }
 
   // Only signal the caller once (on the first reply):
@@ -2082,46 +2128,88 @@ void Client::handle_client_reply(MClientReply *reply)
     // we're done, clean up
     if (request->got_unsafe) {
       request->unsafe_item.remove_myself();
+      request->unsafe_dir_item.remove_myself();
+      signal_cond_list(request->waitfor_safe);
     }
     request->item.remove_myself();
-    mds_requests.erase(tid);
-    put_request(request);
+    unregister_request(request);
   }
   if (unmounting)
     mount_cond.Signal();
 }
 
+void Client::_handle_full_flag(int64_t pool)
+{
+  ldout(cct, 1) << __func__ << ": FULL: cancelling outstanding operations "
+    << "on " << pool << dendl;
+  // Cancel all outstanding ops in this pool with -ENOSPC: it is necessary
+  // to do this rather than blocking, because otherwise when we fill up we
+  // potentially lock caps forever on files with dirty pages, and we need
+  // to be able to release those caps to the MDS so that it can delete files
+  // and free up space.
+  epoch_t cancelled_epoch = objecter->op_cancel_writes(-ENOSPC, pool);
+
+  // For all inodes with layouts in this pool and a pending flush write op
+  // (i.e. one of the ones we will cancel), we've got to purge_set their data
+  // from ObjectCacher so that it doesn't re-issue the write in response to
+  // the ENOSPC error.
+  // Fortunately since we're cancelling everything in a given pool, we don't
+  // need to know which ops belong to which ObjectSet, we can just blow all
+  // the un-flushed cached data away and mark any dirty inodes' async_err
+  // field with -ENOSPC as long as we're sure all the ops we cancelled were
+  // affecting this pool, and all the objectsets we're purging were also
+  // in this pool.
+  for (unordered_map<vinodeno_t,Inode*>::iterator i = inode_map.begin();
+       i != inode_map.end(); ++i)
+  {
+    Inode *inode = i->second;
+    if (inode->oset.dirty_or_tx
+        && (pool == -1 || inode->layout.fl_pg_pool == pool)) {
+      ldout(cct, 4) << __func__ << ": FULL: inode 0x" << std::hex << i->first << std::dec
+        << " has dirty objects, purging and setting ENOSPC" << dendl;
+      objectcacher->purge_set(&inode->oset);
+      inode->async_err = -ENOSPC;
+    }
+  }
+
+  if (cancelled_epoch != (epoch_t)-1) {
+    set_cap_epoch_barrier(cancelled_epoch);
+  }
+}
+
 void Client::handle_osd_map(MOSDMap *m)
 {
   if (objecter->osdmap_full_flag()) {
-    ldout(cct, 1) << __func__ << ": FULL: cancelling outstanding operations" << dendl;
-    // Cancel all outstanding ops with -ENOSPC: it is necessary to do this rather than blocking,
-    // because otherwise when we fill up we potentially lock caps forever on files with
-    // dirty pages, and we need to be able to release those caps to the MDS so that it can
-    // delete files and free up space.
-    epoch_t cancelled_epoch = objecter->op_cancel_writes(-ENOSPC);
+    _handle_full_flag(-1);
+  } else {
+    // Accumulate local list of full pools so that I can drop
+    // the objecter lock before re-entering objecter in
+    // cancel_writes
+    std::vector<int64_t> full_pools;
 
-    // For all inodes with a pending flush write op (i.e. one of the ones we
-    // will cancel), we've got to purge_set their data from ObjectCacher
-    // so that it doesn't re-issue the write in response to the ENOSPC error.
-    // Fortunately since we're cancelling *everything*, we don't need to know
-    // which ops belong to which ObjectSet, we can just blow all the un-flushed
-    // cached data away and mark any dirty inodes' async_err field with -ENOSPC
-    // (i.e. we only need to know which inodes had outstanding ops, not the exact
-    // op-to-inode relation)
-    for (unordered_map<vinodeno_t,Inode*>::iterator i = inode_map.begin();
-         i != inode_map.end(); ++i)
-    {
-      Inode *inode = i->second;
-      if (inode->oset.dirty_or_tx) {
-        ldout(cct, 4) << __func__ << ": FULL: inode 0x" << std::hex << i->first << std::dec
-          << " has dirty objects, purging and setting ENOSPC" << dendl;
-        objectcacher->purge_set(&inode->oset);
-        inode->async_err = -ENOSPC;
+    const OSDMap *osd_map = objecter->get_osdmap_read();
+    const map<int64_t,pg_pool_t>& pools = osd_map->get_pools();
+    for (map<int64_t,pg_pool_t>::const_iterator i = pools.begin();
+         i != pools.end(); ++i) {
+      if (i->second.has_flag(pg_pool_t::FLAG_FULL)) {
+        full_pools.push_back(i->first);
       }
     }
 
-    set_cap_epoch_barrier(cancelled_epoch);
+    objecter->put_osdmap_read();
+
+    for (std::vector<int64_t>::iterator i = full_pools.begin();
+         i != full_pools.end(); ++i) {
+      _handle_full_flag(*i);
+    }
+
+    // Subscribe to subsequent maps to watch for the full flag going
+    // away.  For the global full flag objecter does this for us, but
+    // it pays no attention to the per-pool full flag so in this branch
+    // we do it ourselves.
+    if (!full_pools.empty()) {
+      objecter->maybe_request_map();
+    }
   }
 
   m->put();
@@ -2414,8 +2502,9 @@ void Client::kick_requests_closed(MetaSession *session)
       if (req->got_unsafe) {
 	lderr(cct) << "kick_requests_closed removing unsafe request " << req->get_tid() << dendl;
 	req->unsafe_item.remove_myself();
-	mds_requests.erase(req->get_tid());
-	put_request(req);
+	req->unsafe_dir_item.remove_myself();
+	signal_cond_list(req->waitfor_safe);
+	unregister_request(req);
       }
     }
   }
@@ -3300,7 +3389,7 @@ bool Client::_flush(Inode *in, Context *onfinish)
     return true;
   }
 
-  if (objecter->osdmap_full_flag()) {
+  if (objecter->osdmap_pool_full(in->layout.fl_pg_pool)) {
     ldout(cct, 1) << __func__ << ": FULL, purging for ENOSPC" << dendl;
     objectcacher->purge_set(&in->oset);
     if (onfinish) {
@@ -3657,8 +3746,9 @@ int Client::mark_caps_flushing(Inode *in)
   int flushing = in->dirty_caps;
   assert(flushing);
 
-  if (flushing && !in->flushing_caps) {
+  if (!in->flushing_caps) {
     ldout(cct, 10) << "mark_caps_flushing " << ccap_string(flushing) << " " << *in << dendl;
+    in->flushing_cap_seq = ++last_flush_seq;
     num_flushing_caps++;
   } else {
     ldout(cct, 10) << "mark_caps_flushing (more) " << ccap_string(flushing) << " " << *in << dendl;
@@ -3667,7 +3757,6 @@ int Client::mark_caps_flushing(Inode *in)
   in->flushing_caps |= flushing;
   in->dirty_caps = 0;
  
-  in->flushing_cap_seq = ++last_flush_seq;
 
   session->flushing_caps.push_back(&in->flushing_cap_item);
 
@@ -3702,6 +3791,23 @@ void Client::flush_caps(Inode *in, MetaSession *session)
 
   send_cap(in, session, cap, get_caps_used(in), in->caps_wanted(),
 	   (cap->issued | cap->implemented), in->flushing_caps);
+}
+
+void Client::wait_sync_caps(Inode *in, uint16_t flush_tid[])
+{
+retry:
+  for (int i = 0; i < CEPH_CAP_BITS; ++i) {
+    if (!(in->flushing_caps & (1 << i)))
+      continue;
+    // handle uint16_t wrapping
+    if ((int16_t)(in->flushing_cap_tid[i] - flush_tid[i]) <= 0) {
+      ldout(cct, 10) << "wait_sync_caps on " << *in << " flushing "
+		     << ccap_string(1 << i) << " want " << flush_tid[i]
+		     << " last " << in->flushing_cap_tid[i] << dendl;
+      wait_on_list(in->waitfor_caps);
+      goto retry;
+    }
+  }
 }
 
 void Client::wait_sync_caps(uint64_t want)
@@ -4262,6 +4368,7 @@ void Client::handle_cap_flush_ack(MetaSession *session, Inode *in, Cap *cap, MCl
 	num_flushing_caps--;
 	sync_cond.Signal();
       }
+      signal_cond_list(in->waitfor_caps);
       if (!in->caps_dirty())
 	put_inode(in);
     }
@@ -4977,6 +5084,7 @@ void Client::tick()
     check_caps(in, true);
   }
 
+  trim_cache(true);
 }
 
 void Client::renew_caps()
@@ -7353,12 +7461,12 @@ int Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf)
   if ((uint64_t)(offset+size) > mdsmap->get_max_filesize()) //too large!
     return -EFBIG;
 
-  if (objecter->osdmap_full_flag()) {
-    return -ENOSPC;
-  }
-
   //ldout(cct, 7) << "write fh " << fh << " size " << size << " offset " << offset << dendl;
   Inode *in = f->inode;
+
+  if (objecter->osdmap_pool_full(in->layout.fl_pg_pool)) {
+    return -ENOSPC;
+  }
 
   assert(in->snapid == CEPH_NOSNAP);
 
@@ -7618,7 +7726,7 @@ int Client::_fsync(Fh *f, bool syncdataonly)
   int r = 0;
 
   Inode *in = f->inode;
-  ceph_tid_t wait_on_flush = 0;
+  uint16_t wait_on_flush[CEPH_CAP_BITS];
   bool flushed_metadata = false;
   Mutex lock("Client::_fsync::lock");
   Cond cond;
@@ -7635,15 +7743,11 @@ int Client::_fsync(Fh *f, bool syncdataonly)
   }
   
   if (!syncdataonly && (in->dirty_caps & ~CEPH_CAP_ANY_FILE_WR)) {
-    for (map<mds_rank_t, Cap*>::iterator iter = in->caps.begin(); iter != in->caps.end(); ++iter) {
-      if (iter->second->implemented & ~CEPH_CAP_ANY_FILE_WR) {
-	MetaSession *session = mds_sessions[iter->first];
-	assert(session);
-        flush_caps(in, session);
-      }
+    check_caps(in, true);
+    if (in->flushing_caps) {
+      flushed_metadata = true;
+      memcpy(wait_on_flush, in->flushing_cap_tid, sizeof(wait_on_flush));
     }
-    wait_on_flush = in->last_flush_tid;
-    flushed_metadata = true;
   } else ldout(cct, 10) << "no metadata needs to commit" << dendl;
 
   if (object_cacher_completion) { // wait on a real reply instead of guessing
@@ -7665,10 +7769,24 @@ int Client::_fsync(Fh *f, bool syncdataonly)
     }
   }
 
+  if (!in->unsafe_dir_ops.empty()) {
+    MetaRequest *req = in->unsafe_dir_ops.back();
+    uint64_t last_tid = req->get_tid();
+    ldout(cct, 15) << "waiting on unsafe requests, last tid " << last_tid <<  dendl;
+
+    do {
+      req->get();
+      wait_on_list(req->waitfor_safe);
+      put_request(req);
+      if (in->unsafe_dir_ops.empty())
+	break;
+      req = in->unsafe_dir_ops.front();
+    } while (req->tid < last_tid);
+  }
+
   if (!r) {
-    if (flushed_metadata) wait_sync_caps(wait_on_flush);
-    // this could wait longer than strictly necessary,
-    // but on a sync the user can put up with it
+    if (flushed_metadata)
+      wait_sync_caps(in, wait_on_flush);
 
     ldout(cct, 10) << "ino " << in->ino << " has no uncommitted writes" << dendl;
   } else {
@@ -9473,6 +9591,7 @@ int Client::_rmdir(Inode *dir, const char *name, int uid, int gid)
   if (res < 0)
     goto fail;
   if (req->get_op() == CEPH_MDS_OP_RMDIR) {
+    req->set_inode(dir);
     req->set_dentry(de);
     req->set_other_inode(in);
   } else {
@@ -10125,10 +10244,12 @@ int Client::_fallocate(Fh *fh, int mode, int64_t offset, int64_t length)
   if ((mode & FALLOC_FL_PUNCH_HOLE) && !(mode & FALLOC_FL_KEEP_SIZE))
     return -EOPNOTSUPP;
 
-  if (objecter->osdmap_full_flag() && !(mode & FALLOC_FL_PUNCH_HOLE))
-    return -ENOSPC;
-
   Inode *in = fh->inode;
+
+  if (objecter->osdmap_pool_full(in->layout.fl_pg_pool)
+      && !(mode & FALLOC_FL_PUNCH_HOLE)) {
+    return -ENOSPC;
+  }
 
   if (in->snapid != CEPH_NOSNAP)
     return -EROFS;
@@ -10902,5 +11023,25 @@ void Client::set_cap_epoch_barrier(epoch_t e)
 {
   ldout(cct, 5) << __func__ << " epoch = " << e << dendl;
   cap_epoch_barrier = e;
+}
+
+const char** Client::get_tracked_conf_keys() const
+{
+  static const char* keys[] = {
+    "client_cache_size",
+    "client_cache_mid",
+    NULL
+  };
+  return keys;
+}
+
+void Client::handle_conf_change(const struct md_config_t *conf,
+				const std::set <std::string> &changed)
+{
+  if (changed.count("client_cache_size") ||
+      changed.count("client_cache_mid")) {
+    lru.lru_set_max(cct->_conf->client_cache_size);
+    lru.lru_set_midpoint(cct->_conf->client_cache_mid);
+  }
 }
 

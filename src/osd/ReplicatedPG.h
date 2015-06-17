@@ -339,6 +339,9 @@ public:
   void queue_transaction(ObjectStore::Transaction *t, OpRequestRef op) {
     osd->store->queue_transaction(osr.get(), t, 0, 0, 0, op);
   }
+  void queue_transactions(list<ObjectStore::Transaction*>& tls, OpRequestRef op) {
+    osd->store->queue_transactions(osr.get(), tls, 0, 0, 0, op);
+  }
   epoch_t get_epoch() const {
     return get_osdmap()->get_epoch();
   }
@@ -866,7 +869,20 @@ protected:
 	requeue_snaptrimmer_clone ||
 	requeue_snaptrimmer_snapset)
       queue_snap_trim();
-    requeue_ops(to_req);
+
+    if (!to_req.empty()) {
+      assert(ctx->obc);
+      // requeue at front of scrub blocking queue if we are blocked by scrub
+      if (scrubber.write_blocked_by_scrub(ctx->obc->obs.oi.soid.get_head())) {
+	waiting_for_active.splice(
+	  waiting_for_active.begin(),
+	  to_req,
+	  to_req.begin(),
+	  to_req.end());
+      } else {
+	requeue_ops(to_req);
+      }
+    }
   }
 
   // replica ops
@@ -1399,7 +1415,7 @@ public:
   void do_backfill(OpRequestRef op);
 
   RepGather *trim_object(const hobject_t &coid);
-  void snap_trimmer();
+  void snap_trimmer(epoch_t e);
   int do_osd_ops(OpContext *ctx, vector<OSDOp>& ops);
 
   int _get_tmap(OpContext *ctx, bufferlist *header, bufferlist *vals);

@@ -46,19 +46,18 @@ TEST(ErasureCodeShec, init_1)
   ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(
 				  tcache,
 				  ErasureCodeShec::MULTIPLE);
-  map < std::string, std::string > *parameters = new map<std::string,
-							 std::string>();
-  (*parameters)["plugin"] = "shec";
-  (*parameters)["technique"] = "";
-  (*parameters)["directory"] = "/usr/lib64/ceph/erasure-code";
-  (*parameters)["ruleset-failure-domain"] = "osd";
-  (*parameters)["k"] = "6";
-  (*parameters)["m"] = "4";
-  (*parameters)["c"] = "3";
-
-  int r = shec->init(*parameters);
-
   //check parameters
+  ErasureCodeProfile *profile = new ErasureCodeProfile();
+  (*profile)["plugin"] = "shec";
+  (*profile)["technique"] = "";
+  (*profile)["directory"] = "/usr/lib64/ceph/erasure-code";
+  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["k"] = "6";
+  (*profile)["m"] = "4";
+  (*profile)["c"] = "3";
+
+  int r = shec->init(*profile, &cerr);
+
   EXPECT_EQ(6, shec->k);
   EXPECT_EQ(4, shec->m);
   EXPECT_EQ(3, shec->c);
@@ -70,7 +69,7 @@ TEST(ErasureCodeShec, init_1)
   EXPECT_EQ(0, r);
 
   delete shec;
-  delete parameters;
+  delete profile;
 }
 
 TEST(ErasureCodeShec, init_2)
@@ -80,20 +79,19 @@ TEST(ErasureCodeShec, init_2)
   ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(
 				  tcache,
 				  ErasureCodeShec::MULTIPLE);
-  map < std::string, std::string > *parameters = new map<std::string,
-							 std::string>();
-  (*parameters)["plugin"] = "shec";
-  (*parameters)["technique"] = "";
-  (*parameters)["ruleset-root"] = "test";
-  (*parameters)["ruleset-failure-domain"] = "host";
-  (*parameters)["k"] = "6";
-  (*parameters)["m"] = "4";
-  (*parameters)["c"] = "3";
-  (*parameters)["w"] = "8";
+  ErasureCodeProfile *profile = new ErasureCodeProfile();
+  (*profile)["plugin"] = "shec";
+  (*profile)["technique"] = "";
+  (*profile)["ruleset-root"] = "test";
+  (*profile)["ruleset-failure-domain"] = "host";
+  (*profile)["k"] = "6";
+  (*profile)["m"] = "4";
+  (*profile)["c"] = "3";
+  (*profile)["w"] = "8";
 
-  int r = shec->init(*parameters);
+  int r = shec->init(*profile, &cerr);
 
-  //check parameters
+  //check profile
   EXPECT_EQ(6, shec->k);
   EXPECT_EQ(4, shec->m);
   EXPECT_EQ(3, shec->c);
@@ -105,7 +103,7 @@ TEST(ErasureCodeShec, init_2)
   EXPECT_EQ(0, r);
 
   delete shec;
-  delete parameters;
+  delete profile;
 }
 
 TEST(ErasureCodeShec, init_3)
@@ -115,19 +113,18 @@ TEST(ErasureCodeShec, init_3)
   ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(
 				  tcache,
 				  ErasureCodeShec::MULTIPLE);
-  map < std::string, std::string > *parameters = new map<std::string,
-							 std::string>();
-  (*parameters)["plugin"] = "shec";
-  (*parameters)["technique"] = "";
-  (*parameters)["ruleset-failure-domain"] = "osd";
-  (*parameters)["k"] = "6";
-  (*parameters)["m"] = "4";
-  (*parameters)["c"] = "3";
-  (*parameters)["w"] = "16";
+  ErasureCodeProfile *profile = new ErasureCodeProfile();
+  (*profile)["plugin"] = "shec";
+  (*profile)["technique"] = "";
+  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["k"] = "6";
+  (*profile)["m"] = "4";
+  (*profile)["c"] = "3";
+  (*profile)["w"] = "16";
 
-  int r = shec->init(*parameters);
+  int r = shec->init(*profile, &cerr);
 
-  //check parameters
+  //check profile
   EXPECT_EQ(6, shec->k);
   EXPECT_EQ(4, shec->m);
   EXPECT_EQ(3, shec->c);
@@ -139,7 +136,7 @@ TEST(ErasureCodeShec, init_3)
   EXPECT_EQ(0, r);
 
   delete shec;
-  delete parameters;
+  delete profile;
 }
 
 TEST(ErasureCodeShec, init_4)
@@ -149,19 +146,18 @@ TEST(ErasureCodeShec, init_4)
   ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(
 				  tcache,
 				  ErasureCodeShec::MULTIPLE);
-  map < std::string, std::string > *parameters = new map<std::string,
-							 std::string>();
-  (*parameters)["plugin"] = "shec";
-  (*parameters)["technique"] = "";
-  (*parameters)["ruleset-failure-domain"] = "osd";
-  (*parameters)["k"] = "6";
-  (*parameters)["m"] = "4";
-  (*parameters)["c"] = "3";
-  (*parameters)["w"] = "32";
+  ErasureCodeProfile *profile = new ErasureCodeProfile();
+  (*profile)["plugin"] = "shec";
+  (*profile)["technique"] = "";
+  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["k"] = "6";
+  (*profile)["m"] = "4";
+  (*profile)["c"] = "3";
+  (*profile)["w"] = "32";
 
-  int r = shec->init(*parameters);
+  int r = shec->init(*profile, &cerr);
 
-  //check parameters
+  //check profile
   EXPECT_EQ(6, shec->k);
   EXPECT_EQ(4, shec->m);
   EXPECT_EQ(3, shec->c);
@@ -173,7 +169,7 @@ TEST(ErasureCodeShec, init_4)
   EXPECT_EQ(0, r);
 
   delete shec;
-  delete parameters;
+  delete profile;
 }
 
 TEST(ErasureCodeShec, init_5)
@@ -182,22 +178,21 @@ TEST(ErasureCodeShec, init_5)
   ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(
 				  tcache,
 				  ErasureCodeShec::MULTIPLE);
-  map < std::string, std::string > *parameters = new map<std::string,
-							 std::string>();
+  ErasureCodeProfile *profile = new ErasureCodeProfile();
   //plugin is not specified
-  (*parameters)["technique"] = "";
-  (*parameters)["ruleset-failure-domain"] = "osd";
-  (*parameters)["k"] = "6";
-  (*parameters)["m"] = "4";
-  (*parameters)["c"] = "3";
+  (*profile)["technique"] = "";
+  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["k"] = "6";
+  (*profile)["m"] = "4";
+  (*profile)["c"] = "3";
 
-  int r = shec->init(*parameters);
+  int r = shec->init(*profile, &cerr);
 
   EXPECT_TRUE(shec->matrix != NULL);
   EXPECT_EQ(0, r);
 
   delete shec;
-  delete parameters;
+  delete profile;
 }
 
 TEST(ErasureCodeShec, init_6)
@@ -206,22 +201,21 @@ TEST(ErasureCodeShec, init_6)
   ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(
 				  tcache,
 				  ErasureCodeShec::MULTIPLE);
-  map < std::string, std::string > *parameters = new map<std::string,
-							 std::string>();
-  (*parameters)["plugin"] = "jerasure";	//unexpected value
-  (*parameters)["technique"] = "";
-  (*parameters)["ruleset-failure-domain"] = "osd";
-  (*parameters)["k"] = "6";
-  (*parameters)["m"] = "4";
-  (*parameters)["c"] = "3";
+  ErasureCodeProfile *profile = new ErasureCodeProfile();
+  (*profile)["plugin"] = "jerasure";	//unexpected value
+  (*profile)["technique"] = "";
+  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["k"] = "6";
+  (*profile)["m"] = "4";
+  (*profile)["c"] = "3";
 
-  int r = shec->init(*parameters);
+  int r = shec->init(*profile, &cerr);
 
   EXPECT_TRUE(shec->matrix != NULL);
   EXPECT_EQ(0, r);
 
   delete shec;
-  delete parameters;
+  delete profile;
 }
 
 TEST(ErasureCodeShec, init_7)
@@ -230,22 +224,21 @@ TEST(ErasureCodeShec, init_7)
   ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(
 				  tcache,
 				  ErasureCodeShec::MULTIPLE);
-  map < std::string, std::string > *parameters = new map<std::string,
-							 std::string>();
-  (*parameters)["plugin"] = "abc";	//unexpected value
-  (*parameters)["technique"] = "";
-  (*parameters)["ruleset-failure-domain"] = "osd";
-  (*parameters)["k"] = "6";
-  (*parameters)["m"] = "4";
-  (*parameters)["c"] = "3";
+  ErasureCodeProfile *profile = new ErasureCodeProfile();
+  (*profile)["plugin"] = "abc";	//unexpected value
+  (*profile)["technique"] = "";
+  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["k"] = "6";
+  (*profile)["m"] = "4";
+  (*profile)["c"] = "3";
 
-  int r = shec->init(*parameters);
+  int r = shec->init(*profile, &cerr);
 
   EXPECT_TRUE(shec->matrix != NULL);
   EXPECT_EQ(0, r);
 
   delete shec;
-  delete parameters;
+  delete profile;
 }
 
 TEST(ErasureCodeShec, init_8)
@@ -254,23 +247,22 @@ TEST(ErasureCodeShec, init_8)
   ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(
 				  tcache,
 				  ErasureCodeShec::MULTIPLE);
-  map < std::string, std::string > *parameters = new map<std::string,
-							 std::string>();
-  (*parameters)["plugin"] = "shec";
-  (*parameters)["directory"] = "/usr/lib64/";	//unexpected value
-  (*parameters)["technique"] = "";
-  (*parameters)["ruleset-failure-domain"] = "osd";
-  (*parameters)["k"] = "6";
-  (*parameters)["m"] = "4";
-  (*parameters)["c"] = "3";
+  ErasureCodeProfile *profile = new ErasureCodeProfile();
+  (*profile)["plugin"] = "shec";
+  (*profile)["directory"] = "/usr/lib64/";	//unexpected value
+  (*profile)["technique"] = "";
+  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["k"] = "6";
+  (*profile)["m"] = "4";
+  (*profile)["c"] = "3";
 
-  int r = shec->init(*parameters);
+  int r = shec->init(*profile, &cerr);
 
   EXPECT_TRUE(shec->matrix != NULL);
   EXPECT_EQ(0, r);
 
   delete shec;
-  delete parameters;
+  delete profile;
 }
 
 TEST(ErasureCodeShec, init_9)
@@ -279,23 +271,22 @@ TEST(ErasureCodeShec, init_9)
   ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(
 				  tcache,
 				  ErasureCodeShec::MULTIPLE);
-  map < std::string, std::string > *parameters = new map<std::string,
-							 std::string>();
-  (*parameters)["plugin"] = "shec";
-  (*parameters)["technique"] = "";
-  (*parameters)["ruleset-root"] = "abc";	//unexpected value
-  (*parameters)["ruleset-failure-domain"] = "osd";
-  (*parameters)["k"] = "6";
-  (*parameters)["m"] = "4";
-  (*parameters)["c"] = "3";
+  ErasureCodeProfile *profile = new ErasureCodeProfile();
+  (*profile)["plugin"] = "shec";
+  (*profile)["technique"] = "";
+  (*profile)["ruleset-root"] = "abc";	//unexpected value
+  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["k"] = "6";
+  (*profile)["m"] = "4";
+  (*profile)["c"] = "3";
 
-  int r = shec->init(*parameters);
+  int r = shec->init(*profile, &cerr);
 
   EXPECT_TRUE(shec->matrix != NULL);
   EXPECT_EQ(0, r);
 
   delete shec;
-  delete parameters;
+  delete profile;
 }
 
 TEST(ErasureCodeShec, init_10)
@@ -304,22 +295,21 @@ TEST(ErasureCodeShec, init_10)
   ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(
 				  tcache,
 				  ErasureCodeShec::MULTIPLE);
-  map < std::string, std::string > *parameters = new map<std::string,
-							 std::string>();
-  (*parameters)["plugin"] = "shec";
-  (*parameters)["technique"] = "";
-  (*parameters)["ruleset-failure-domain"] = "abc";	//unexpected value
-  (*parameters)["k"] = "6";
-  (*parameters)["m"] = "4";
-  (*parameters)["c"] = "3";
+  ErasureCodeProfile *profile = new ErasureCodeProfile();
+  (*profile)["plugin"] = "shec";
+  (*profile)["technique"] = "";
+  (*profile)["ruleset-failure-domain"] = "abc";	//unexpected value
+  (*profile)["k"] = "6";
+  (*profile)["m"] = "4";
+  (*profile)["c"] = "3";
 
-  int r = shec->init(*parameters);
+  int r = shec->init(*profile, &cerr);
 
   EXPECT_TRUE(shec->matrix != NULL);
   EXPECT_EQ(0, r);
 
   delete shec;
-  delete parameters;
+  delete profile;
 }
 
 TEST(ErasureCodeShec, init_11)
@@ -328,22 +318,21 @@ TEST(ErasureCodeShec, init_11)
   ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(
 				  tcache,
 				  ErasureCodeShec::MULTIPLE);
-  map < std::string, std::string > *parameters = new map<std::string,
-							 std::string>();
-  (*parameters)["plugin"] = "shec";
-  (*parameters)["technique"] = "abc";		//unexpected value
-  (*parameters)["ruleset-failure-domain"] = "osd";
-  (*parameters)["k"] = "6";
-  (*parameters)["m"] = "4";
-  (*parameters)["c"] = "3";
+  ErasureCodeProfile *profile = new ErasureCodeProfile();
+  (*profile)["plugin"] = "shec";
+  (*profile)["technique"] = "abc";		//unexpected value
+  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["k"] = "6";
+  (*profile)["m"] = "4";
+  (*profile)["c"] = "3";
 
-  int r = shec->init(*parameters);
+  int r = shec->init(*profile, &cerr);
 
   EXPECT_TRUE(shec->matrix != NULL);
   EXPECT_EQ(0, r);
 
   delete shec;
-  delete parameters;
+  delete profile;
 }
 
 TEST(ErasureCodeShec, init_12)
@@ -352,21 +341,20 @@ TEST(ErasureCodeShec, init_12)
   ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(
 				  tcache,
 				  ErasureCodeShec::MULTIPLE);
-  map < std::string, std::string > *parameters = new map<std::string,
-							 std::string>();
-  (*parameters)["plugin"] = "shec";
-  (*parameters)["technique"] = "";
-  (*parameters)["ruleset-failure-domain"] = "osd";
-  (*parameters)["k"] = "-1";	//unexpected value
-  (*parameters)["m"] = "4";
-  (*parameters)["c"] = "3";
+  ErasureCodeProfile *profile = new ErasureCodeProfile();
+  (*profile)["plugin"] = "shec";
+  (*profile)["technique"] = "";
+  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["k"] = "-1";	//unexpected value
+  (*profile)["m"] = "4";
+  (*profile)["c"] = "3";
 
-  int r = shec->init(*parameters);
+  int r = shec->init(*profile, &cerr);
 
   EXPECT_EQ(-EINVAL, r);
 
   delete shec;
-  delete parameters;
+  delete profile;
 }
 
 TEST(ErasureCodeShec, init_13)
@@ -375,21 +363,20 @@ TEST(ErasureCodeShec, init_13)
   ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(
 				  tcache,
 				  ErasureCodeShec::MULTIPLE);
-  map < std::string, std::string > *parameters = new map<std::string,
-							 std::string>();
-  (*parameters)["plugin"] = "shec";
-  (*parameters)["technique"] = "";
-  (*parameters)["ruleset-failure-domain"] = "abc";
-  (*parameters)["k"] = "0.1";	//unexpected value
-  (*parameters)["m"] = "4";
-  (*parameters)["c"] = "3";
+  ErasureCodeProfile *profile = new ErasureCodeProfile();
+  (*profile)["plugin"] = "shec";
+  (*profile)["technique"] = "";
+  (*profile)["ruleset-failure-domain"] = "abc";
+  (*profile)["k"] = "0.1";	//unexpected value
+  (*profile)["m"] = "4";
+  (*profile)["c"] = "3";
 
-  int r = shec->init(*parameters);
+  int r = shec->init(*profile, &cerr);
 
   EXPECT_EQ(-EINVAL, r);
 
   delete shec;
-  delete parameters;
+  delete profile;
 }
 
 TEST(ErasureCodeShec, init_14)
@@ -398,21 +385,20 @@ TEST(ErasureCodeShec, init_14)
   ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(
 				  tcache,
 				  ErasureCodeShec::MULTIPLE);
-  map < std::string, std::string > *parameters = new map<std::string,
-							 std::string>();
-  (*parameters)["plugin"] = "shec";
-  (*parameters)["technique"] = "";
-  (*parameters)["ruleset-failure-domain"] = "osd";
-  (*parameters)["k"] = "a";		//unexpected value
-  (*parameters)["m"] = "4";
-  (*parameters)["c"] = "3";
+  ErasureCodeProfile *profile = new ErasureCodeProfile();
+  (*profile)["plugin"] = "shec";
+  (*profile)["technique"] = "";
+  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["k"] = "a";		//unexpected value
+  (*profile)["m"] = "4";
+  (*profile)["c"] = "3";
 
-  int r = shec->init(*parameters);
+  int r = shec->init(*profile, &cerr);
 
   EXPECT_EQ(-EINVAL, r);
 
   delete shec;
-  delete parameters;
+  delete profile;
 }
 
 TEST(ErasureCodeShec, init_15)
@@ -421,21 +407,20 @@ TEST(ErasureCodeShec, init_15)
   ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(
 				  tcache,
 				  ErasureCodeShec::MULTIPLE);
-  map < std::string, std::string > *parameters = new map<std::string,
-							 std::string>();
-  (*parameters)["plugin"] = "shec";
-  (*parameters)["technique"] = "";
-  (*parameters)["ruleset-failure-domain"] = "osd";
+  ErasureCodeProfile *profile = new ErasureCodeProfile();
+  (*profile)["plugin"] = "shec";
+  (*profile)["technique"] = "";
+  (*profile)["ruleset-failure-domain"] = "osd";
   //k is not specified
-  (*parameters)["m"] = "4";
-  (*parameters)["c"] = "3";
+  (*profile)["m"] = "4";
+  (*profile)["c"] = "3";
 
-  int r = shec->init(*parameters);
+  int r = shec->init(*profile, &cerr);
 
   EXPECT_EQ(-EINVAL, r);
 
   delete shec;
-  delete parameters;
+  delete profile;
 }
 
 TEST(ErasureCodeShec, init_16)
@@ -444,21 +429,20 @@ TEST(ErasureCodeShec, init_16)
   ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(
 				  tcache,
 				  ErasureCodeShec::MULTIPLE);
-  map < std::string, std::string > *parameters = new map<std::string,
-							 std::string>();
-  (*parameters)["plugin"] = "shec";
-  (*parameters)["technique"] = "";
-  (*parameters)["ruleset-failure-domain"] = "osd";
-  (*parameters)["k"] = "6";
-  (*parameters)["m"] = "-1";		//unexpected value
-  (*parameters)["c"] = "3";
+  ErasureCodeProfile *profile = new ErasureCodeProfile();
+  (*profile)["plugin"] = "shec";
+  (*profile)["technique"] = "";
+  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["k"] = "6";
+  (*profile)["m"] = "-1";		//unexpected value
+  (*profile)["c"] = "3";
 
-  int r = shec->init(*parameters);
+  int r = shec->init(*profile, &cerr);
 
   EXPECT_EQ(-EINVAL, r);
 
   delete shec;
-  delete parameters;
+  delete profile;
 }
 
 TEST(ErasureCodeShec, init_17)
@@ -467,21 +451,20 @@ TEST(ErasureCodeShec, init_17)
   ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(
 				  tcache,
 				  ErasureCodeShec::MULTIPLE);
-  map < std::string, std::string > *parameters = new map<std::string,
-							 std::string>();
-  (*parameters)["plugin"] = "shec";
-  (*parameters)["technique"] = "";
-  (*parameters)["ruleset-failure-domain"] = "osd";
-  (*parameters)["k"] = "6";
-  (*parameters)["m"] = "0.1";		//unexpected value
-  (*parameters)["c"] = "3";
+  ErasureCodeProfile *profile = new ErasureCodeProfile();
+  (*profile)["plugin"] = "shec";
+  (*profile)["technique"] = "";
+  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["k"] = "6";
+  (*profile)["m"] = "0.1";		//unexpected value
+  (*profile)["c"] = "3";
 
-  int r = shec->init(*parameters);
+  int r = shec->init(*profile, &cerr);
 
   EXPECT_EQ(-EINVAL, r);
 
   delete shec;
-  delete parameters;
+  delete profile;
 }
 
 TEST(ErasureCodeShec, init_18)
@@ -490,21 +473,20 @@ TEST(ErasureCodeShec, init_18)
   ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(
 				  tcache,
 				  ErasureCodeShec::MULTIPLE);
-  map < std::string, std::string > *parameters = new map<std::string,
-							 std::string>();
-  (*parameters)["plugin"] = "shec";
-  (*parameters)["technique"] = "";
-  (*parameters)["ruleset-failure-domain"] = "osd";
-  (*parameters)["k"] = "6";
-  (*parameters)["m"] = "a";		//unexpected value
-  (*parameters)["c"] = "3";
+  ErasureCodeProfile *profile = new ErasureCodeProfile();
+  (*profile)["plugin"] = "shec";
+  (*profile)["technique"] = "";
+  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["k"] = "6";
+  (*profile)["m"] = "a";		//unexpected value
+  (*profile)["c"] = "3";
 
-  int r = shec->init(*parameters);
+  int r = shec->init(*profile, &cerr);
 
   EXPECT_EQ(-EINVAL, r);
 
   delete shec;
-  delete parameters;
+  delete profile;
 }
 
 TEST(ErasureCodeShec, init_19)
@@ -513,21 +495,20 @@ TEST(ErasureCodeShec, init_19)
   ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(
 				  tcache,
 				  ErasureCodeShec::MULTIPLE);
-  map < std::string, std::string > *parameters = new map<std::string,
-							 std::string>();
-  (*parameters)["plugin"] = "shec";
-  (*parameters)["technique"] = "";
-  (*parameters)["ruleset-failure-domain"] = "osd";
-  (*parameters)["k"] = "6";
+  ErasureCodeProfile *profile = new ErasureCodeProfile();
+  (*profile)["plugin"] = "shec";
+  (*profile)["technique"] = "";
+  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["k"] = "6";
   //m is not specified
-  (*parameters)["c"] = "3";
+  (*profile)["c"] = "3";
 
-  int r = shec->init(*parameters);
+  int r = shec->init(*profile, &cerr);
 
   EXPECT_EQ(-EINVAL, r);
 
   delete shec;
-  delete parameters;
+  delete profile;
 }
 
 TEST(ErasureCodeShec, init_20)
@@ -536,21 +517,20 @@ TEST(ErasureCodeShec, init_20)
   ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(
 				  tcache,
 				  ErasureCodeShec::MULTIPLE);
-  map < std::string, std::string > *parameters = new map<std::string,
-							 std::string>();
-  (*parameters)["plugin"] = "shec";
-  (*parameters)["technique"] = "";
-  (*parameters)["ruleset-failure-domain"] = "osd";
-  (*parameters)["k"] = "6";
-  (*parameters)["m"] = "4";
-  (*parameters)["c"] = "-1";		//unexpected value
+  ErasureCodeProfile *profile = new ErasureCodeProfile();
+  (*profile)["plugin"] = "shec";
+  (*profile)["technique"] = "";
+  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["k"] = "6";
+  (*profile)["m"] = "4";
+  (*profile)["c"] = "-1";		//unexpected value
 
-  int r = shec->init(*parameters);
+  int r = shec->init(*profile, &cerr);
 
   EXPECT_EQ(-EINVAL, r);
 
   delete shec;
-  delete parameters;
+  delete profile;
 }
 
 TEST(ErasureCodeShec, init_21)
@@ -559,21 +539,20 @@ TEST(ErasureCodeShec, init_21)
   ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(
 				  tcache,
 				  ErasureCodeShec::MULTIPLE);
-  map < std::string, std::string > *parameters = new map<std::string,
-							 std::string>();
-  (*parameters)["plugin"] = "shec";
-  (*parameters)["technique"] = "";
-  (*parameters)["ruleset-failure-domain"] = "osd";
-  (*parameters)["k"] = "6";
-  (*parameters)["m"] = "4";
-  (*parameters)["c"] = "0.1";		//unexpected value
+  ErasureCodeProfile *profile = new ErasureCodeProfile();
+  (*profile)["plugin"] = "shec";
+  (*profile)["technique"] = "";
+  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["k"] = "6";
+  (*profile)["m"] = "4";
+  (*profile)["c"] = "0.1";		//unexpected value
 
-  int r = shec->init(*parameters);
+  int r = shec->init(*profile, &cerr);
 
   EXPECT_EQ(-EINVAL, r);
 
   delete shec;
-  delete parameters;
+  delete profile;
 }
 
 TEST(ErasureCodeShec, init_22)
@@ -582,21 +561,20 @@ TEST(ErasureCodeShec, init_22)
   ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(
 				  tcache,
 				  ErasureCodeShec::MULTIPLE);
-  map < std::string, std::string > *parameters = new map<std::string,
-							 std::string>();
-  (*parameters)["plugin"] = "shec";
-  (*parameters)["technique"] = "";
-  (*parameters)["ruleset-failure-domain"] = "osd";
-  (*parameters)["k"] = "6";
-  (*parameters)["m"] = "4";
-  (*parameters)["c"] = "a";		//unexpected value
+  ErasureCodeProfile *profile = new ErasureCodeProfile();
+  (*profile)["plugin"] = "shec";
+  (*profile)["technique"] = "";
+  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["k"] = "6";
+  (*profile)["m"] = "4";
+  (*profile)["c"] = "a";		//unexpected value
 
-  int r = shec->init(*parameters);
+  int r = shec->init(*profile, &cerr);
 
   EXPECT_EQ(-EINVAL, r);
 
   delete shec;
-  delete parameters;
+  delete profile;
 }
 
 TEST(ErasureCodeShec, init_23)
@@ -605,21 +583,20 @@ TEST(ErasureCodeShec, init_23)
   ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(
 				  tcache,
 				  ErasureCodeShec::MULTIPLE);
-  map < std::string, std::string > *parameters = new map<std::string,
-							 std::string>();
-  (*parameters)["plugin"] = "shec";
-  (*parameters)["technique"] = "";
-  (*parameters)["ruleset-failure-domain"] = "osd";
-  (*parameters)["k"] = "6";
-  (*parameters)["m"] = "4";
+  ErasureCodeProfile *profile = new ErasureCodeProfile();
+  (*profile)["plugin"] = "shec";
+  (*profile)["technique"] = "";
+  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["k"] = "6";
+  (*profile)["m"] = "4";
   //c is not specified
 
-  int r = shec->init(*parameters);
+  int r = shec->init(*profile, &cerr);
 
   EXPECT_EQ(-EINVAL, r);
 
   delete shec;
-  delete parameters;
+  delete profile;
 }
 
 TEST(ErasureCodeShec, init_24)
@@ -628,17 +605,16 @@ TEST(ErasureCodeShec, init_24)
   ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(
 				  tcache,
 				  ErasureCodeShec::MULTIPLE);
-  map < std::string, std::string > *parameters = new map<std::string,
-							 std::string>();
-  (*parameters)["plugin"] = "shec";
-  (*parameters)["technique"] = "";
-  (*parameters)["ruleset-failure-domain"] = "osd";
-  (*parameters)["k"] = "6";
-  (*parameters)["m"] = "4";
-  (*parameters)["c"] = "3";
-  (*parameters)["w"] = "1";		//unexpected value
+  ErasureCodeProfile *profile = new ErasureCodeProfile();
+  (*profile)["plugin"] = "shec";
+  (*profile)["technique"] = "";
+  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["k"] = "6";
+  (*profile)["m"] = "4";
+  (*profile)["c"] = "3";
+  (*profile)["w"] = "1";		//unexpected value
 
-  int r = shec->init(*parameters);
+  int r = shec->init(*profile, &cerr);
 
   EXPECT_TRUE(shec->matrix != NULL);
   EXPECT_EQ(0, r);
@@ -649,7 +625,7 @@ TEST(ErasureCodeShec, init_24)
   //w is default value
 
   delete shec;
-  delete parameters;
+  delete profile;
 }
 
 TEST(ErasureCodeShec, init_25)
@@ -658,17 +634,16 @@ TEST(ErasureCodeShec, init_25)
   ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(
 				  tcache,
 				  ErasureCodeShec::MULTIPLE);
-  map < std::string, std::string > *parameters = new map<std::string,
-							 std::string>();
-  (*parameters)["plugin"] = "shec";
-  (*parameters)["technique"] = "";
-  (*parameters)["ruleset-failure-domain"] = "osd";
-  (*parameters)["k"] = "6";
-  (*parameters)["m"] = "4";
-  (*parameters)["c"] = "3";
-  (*parameters)["w"] = "-1";		//unexpected value
+  ErasureCodeProfile *profile = new ErasureCodeProfile();
+  (*profile)["plugin"] = "shec";
+  (*profile)["technique"] = "";
+  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["k"] = "6";
+  (*profile)["m"] = "4";
+  (*profile)["c"] = "3";
+  (*profile)["w"] = "-1";		//unexpected value
 
-  int r = shec->init(*parameters);
+  int r = shec->init(*profile, &cerr);
 
   EXPECT_TRUE(shec->matrix != NULL);
   EXPECT_EQ(0, r);
@@ -679,7 +654,7 @@ TEST(ErasureCodeShec, init_25)
   //w is default value
 
   delete shec;
-  delete parameters;
+  delete profile;
 }
 
 TEST(ErasureCodeShec, init_26)
@@ -688,17 +663,16 @@ TEST(ErasureCodeShec, init_26)
   ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(
 				  tcache,
 				  ErasureCodeShec::MULTIPLE);
-  map < std::string, std::string > *parameters = new map<std::string,
-							 std::string>();
-  (*parameters)["plugin"] = "shec";
-  (*parameters)["technique"] = "";
-  (*parameters)["ruleset-failure-domain"] = "osd";
-  (*parameters)["k"] = "6";
-  (*parameters)["m"] = "4";
-  (*parameters)["c"] = "3";
-  (*parameters)["w"] = "0.1";		//unexpected value
+  ErasureCodeProfile *profile = new ErasureCodeProfile();
+  (*profile)["plugin"] = "shec";
+  (*profile)["technique"] = "";
+  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["k"] = "6";
+  (*profile)["m"] = "4";
+  (*profile)["c"] = "3";
+  (*profile)["w"] = "0.1";		//unexpected value
 
-  int r = shec->init(*parameters);
+  int r = shec->init(*profile, &cerr);
 
   EXPECT_TRUE(shec->matrix != NULL);
   EXPECT_EQ(0, r);
@@ -709,7 +683,7 @@ TEST(ErasureCodeShec, init_26)
   //w is default value
 
   delete shec;
-  delete parameters;
+  delete profile;
 }
 
 TEST(ErasureCodeShec, init_27)
@@ -718,17 +692,16 @@ TEST(ErasureCodeShec, init_27)
   ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(
 				  tcache,
 				  ErasureCodeShec::MULTIPLE);
-  map < std::string, std::string > *parameters = new map<std::string,
-							 std::string>();
-  (*parameters)["plugin"] = "shec";
-  (*parameters)["technique"] = "";
-  (*parameters)["ruleset-failure-domain"] = "osd";
-  (*parameters)["k"] = "6";
-  (*parameters)["m"] = "4";
-  (*parameters)["c"] = "3";
-  (*parameters)["w"] = "a";		//unexpected value
+  ErasureCodeProfile *profile = new ErasureCodeProfile();
+  (*profile)["plugin"] = "shec";
+  (*profile)["technique"] = "";
+  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["k"] = "6";
+  (*profile)["m"] = "4";
+  (*profile)["c"] = "3";
+  (*profile)["w"] = "a";		//unexpected value
 
-  int r = shec->init(*parameters);
+  int r = shec->init(*profile, &cerr);
 
   EXPECT_TRUE(shec->matrix != NULL);
   EXPECT_EQ(0, r);
@@ -739,7 +712,7 @@ TEST(ErasureCodeShec, init_27)
   //w is default value
 
   delete shec;
-  delete parameters;
+  delete profile;
 }
 
 TEST(ErasureCodeShec, init_28)
@@ -748,21 +721,20 @@ TEST(ErasureCodeShec, init_28)
   ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(
 				  tcache,
 				  ErasureCodeShec::MULTIPLE);
-  map < std::string, std::string > *parameters = new map<std::string,
-							 std::string>();
-  (*parameters)["plugin"] = "shec";
-  (*parameters)["technique"] = "";
-  (*parameters)["ruleset-failure-domain"] = "osd";
-  (*parameters)["k"] = "6";
-  (*parameters)["m"] = "4";
-  (*parameters)["c"] = "10";	//c > m
+  ErasureCodeProfile *profile = new ErasureCodeProfile();
+  (*profile)["plugin"] = "shec";
+  (*profile)["technique"] = "";
+  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["k"] = "6";
+  (*profile)["m"] = "4";
+  (*profile)["c"] = "10";	//c > m
 
-  int r = shec->init(*parameters);
+  int r = shec->init(*profile, &cerr);
 
   EXPECT_EQ(-EINVAL, r);
 
   delete shec;
-  delete parameters;
+  delete profile;
 }
 
 TEST(ErasureCodeShec, init_29)
@@ -771,16 +743,15 @@ TEST(ErasureCodeShec, init_29)
   ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(
 				  tcache,
 				  ErasureCodeShec::MULTIPLE);
-  map < std::string, std::string > *parameters = new map<std::string,
-							 std::string>();
-  (*parameters)["plugin"] = "shec";
-  (*parameters)["technique"] = "";
-  (*parameters)["ruleset-failure-domain"] = "osd";
+  ErasureCodeProfile *profile = new ErasureCodeProfile();
+  (*profile)["plugin"] = "shec";
+  (*profile)["technique"] = "";
+  (*profile)["ruleset-failure-domain"] = "osd";
   //k is not specified
   //m is not specified
   //c is not specified
 
-  int r = shec->init(*parameters);
+  int r = shec->init(*profile, &cerr);
 
   EXPECT_TRUE(shec->matrix != NULL);
   EXPECT_EQ(0, r);
@@ -790,7 +761,7 @@ TEST(ErasureCodeShec, init_29)
   EXPECT_EQ(2, shec->c);
 
   delete shec;
-  delete parameters;
+  delete profile;
 }
 
 TEST(ErasureCodeShec, init_30)
@@ -799,16 +770,15 @@ TEST(ErasureCodeShec, init_30)
   ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(
 				  tcache,
 				  ErasureCodeShec::MULTIPLE);
-  map < std::string, std::string > *parameters = new map<std::string,
-							 std::string>();
-  (*parameters)["plugin"] = "shec";
-  (*parameters)["technique"] = "";
-  (*parameters)["ruleset-failure-domain"] = "osd";
-  (*parameters)["k"] = "12";
-  (*parameters)["m"] = "8";
-  (*parameters)["c"] = "8";
+  ErasureCodeProfile *profile = new ErasureCodeProfile();
+  (*profile)["plugin"] = "shec";
+  (*profile)["technique"] = "";
+  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["k"] = "12";
+  (*profile)["m"] = "8";
+  (*profile)["c"] = "8";
 
-  int r = shec->init(*parameters);
+  int r = shec->init(*profile, &cerr);
 
   EXPECT_TRUE(shec->matrix != NULL);
   EXPECT_EQ(0, r);
@@ -817,7 +787,7 @@ TEST(ErasureCodeShec, init_30)
   EXPECT_EQ(8, shec->c);
 
   delete shec;
-  delete parameters;
+  delete profile;
 }
 
 TEST(ErasureCodeShec, init_31)
@@ -826,21 +796,20 @@ TEST(ErasureCodeShec, init_31)
   ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(
 				  tcache,
 				  ErasureCodeShec::MULTIPLE);
-  map < std::string, std::string > *parameters = new map<std::string,
-							 std::string>();
-  (*parameters)["plugin"] = "shec";
-  (*parameters)["technique"] = "";
-  (*parameters)["ruleset-failure-domain"] = "osd";
-  (*parameters)["k"] = "13";
-  (*parameters)["m"] = "7";
-  (*parameters)["c"] = "7";
+  ErasureCodeProfile *profile = new ErasureCodeProfile();
+  (*profile)["plugin"] = "shec";
+  (*profile)["technique"] = "";
+  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["k"] = "13";
+  (*profile)["m"] = "7";
+  (*profile)["c"] = "7";
 
-  int r = shec->init(*parameters);
+  int r = shec->init(*profile, &cerr);
 
   EXPECT_EQ(-EINVAL, r);
 
   delete shec;
-  delete parameters;
+  delete profile;
 }
 
 TEST(ErasureCodeShec, init_32)
@@ -849,21 +818,20 @@ TEST(ErasureCodeShec, init_32)
   ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(
 				  tcache,
 				  ErasureCodeShec::MULTIPLE);
-  map < std::string, std::string > *parameters = new map<std::string,
-							 std::string>();
-  (*parameters)["plugin"] = "shec";
-  (*parameters)["technique"] = "";
-  (*parameters)["ruleset-failure-domain"] = "osd";
-  (*parameters)["k"] = "7";
-  (*parameters)["m"] = "13";
-  (*parameters)["c"] = "13";
+  ErasureCodeProfile *profile = new ErasureCodeProfile();
+  (*profile)["plugin"] = "shec";
+  (*profile)["technique"] = "";
+  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["k"] = "7";
+  (*profile)["m"] = "13";
+  (*profile)["c"] = "13";
 
-  int r = shec->init(*parameters);
+  int r = shec->init(*profile, &cerr);
 
   EXPECT_EQ(-EINVAL, r);
 
   delete shec;
-  delete parameters;
+  delete profile;
 }
 
 TEST(ErasureCodeShec, init_33)
@@ -872,21 +840,20 @@ TEST(ErasureCodeShec, init_33)
   ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(
 				  tcache,
 				  ErasureCodeShec::MULTIPLE);
-  map < std::string, std::string > *parameters = new map<std::string,
-							 std::string>();
-  (*parameters)["plugin"] = "shec";
-  (*parameters)["technique"] = "";
-  (*parameters)["ruleset-failure-domain"] = "osd";
-  (*parameters)["k"] = "12";
-  (*parameters)["m"] = "9";
-  (*parameters)["c"] = "8";
+  ErasureCodeProfile *profile = new ErasureCodeProfile();
+  (*profile)["plugin"] = "shec";
+  (*profile)["technique"] = "";
+  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["k"] = "12";
+  (*profile)["m"] = "9";
+  (*profile)["c"] = "8";
 
-  int r = shec->init(*parameters);
+  int r = shec->init(*profile, &cerr);
 
   EXPECT_EQ(-EINVAL, r);
 
   delete shec;
-  delete parameters;
+  delete profile;
 }
 
 TEST(ErasureCodeShec, init_34)
@@ -895,21 +862,20 @@ TEST(ErasureCodeShec, init_34)
   ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(
 				  tcache,
 				  ErasureCodeShec::MULTIPLE);
-  map < std::string, std::string > *parameters = new map<std::string,
-							 std::string>();
-  (*parameters)["plugin"] = "shec";
-  (*parameters)["technique"] = "";
-  (*parameters)["ruleset-failure-domain"] = "osd";
-  (*parameters)["k"] = "8";
-  (*parameters)["m"] = "12";
-  (*parameters)["c"] = "12";
+  ErasureCodeProfile *profile = new ErasureCodeProfile();
+  (*profile)["plugin"] = "shec";
+  (*profile)["technique"] = "";
+  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["k"] = "8";
+  (*profile)["m"] = "12";
+  (*profile)["c"] = "12";
 
-  int r = shec->init(*parameters);
+  int r = shec->init(*profile, &cerr);
 
   EXPECT_EQ(-EINVAL, r);
 
   delete shec;
-  delete parameters;
+  delete profile;
 }
 
 TEST(ErasureCodeShec, init2_4)
@@ -919,18 +885,17 @@ TEST(ErasureCodeShec, init2_4)
   ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(
 				  tcache,
 				  ErasureCodeShec::MULTIPLE);
-  map < std::string, std::string > *parameters = new map<std::string,
-							 std::string>();
-  (*parameters)["plugin"] = "shec";
-  (*parameters)["technique"] = "";
-  (*parameters)["ruleset-failure-domain"] = "osd";
-  (*parameters)["k"] = "6";
-  (*parameters)["m"] = "4";
-  (*parameters)["c"] = "3";
-  shec->init(*parameters);
-  int r = shec->init(*parameters);	//init executed twice
+  ErasureCodeProfile *profile = new ErasureCodeProfile();
+  (*profile)["plugin"] = "shec";
+  (*profile)["technique"] = "";
+  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["k"] = "6";
+  (*profile)["m"] = "4";
+  (*profile)["c"] = "3";
+  shec->init(*profile, &cerr);
+  int r = shec->init(*profile, &cerr);	//init executed twice
 
-  //check parameters
+  //check profile
   EXPECT_EQ(6, shec->k);
   EXPECT_EQ(4, shec->m);
   EXPECT_EQ(3, shec->c);
@@ -942,7 +907,7 @@ TEST(ErasureCodeShec, init2_4)
   EXPECT_EQ(0, r);
 
   delete shec;
-  delete parameters;
+  delete profile;
 }
 
 TEST(ErasureCodeShec, init2_5)
@@ -952,28 +917,26 @@ TEST(ErasureCodeShec, init2_5)
   ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(
 				  tcache,
 				  ErasureCodeShec::MULTIPLE);
-  map < std::string, std::string > *parameters = new map<std::string,
-							 std::string>();
-  map < std::string, std::string > *parameters2 = new map<std::string,
-      std::string>();
-  (*parameters)["plugin"] = "shec";
-  (*parameters)["technique"] = "";
-  (*parameters)["ruleset-failure-domain"] = "host";
-  (*parameters)["k"] = "10";
-  (*parameters)["m"] = "6";
-  (*parameters)["c"] = "5";
-  (*parameters)["w"] = "16";
+  ErasureCodeProfile *profile = new ErasureCodeProfile();
+  ErasureCodeProfile *profile2 = new ErasureCodeProfile();
+  (*profile)["plugin"] = "shec";
+  (*profile)["technique"] = "";
+  (*profile)["ruleset-failure-domain"] = "host";
+  (*profile)["k"] = "10";
+  (*profile)["m"] = "6";
+  (*profile)["c"] = "5";
+  (*profile)["w"] = "16";
 
-  int r = shec->init(*parameters);
+  int r = shec->init(*profile, &cerr);
 
   //reexecute init
-  (*parameters2)["plugin"] = "shec";
-  (*parameters2)["technique"] = "";
-  (*parameters2)["ruleset-failure-domain"] = "osd";
-  (*parameters2)["k"] = "6";
-  (*parameters2)["m"] = "4";
-  (*parameters2)["c"] = "3";
-  shec->init(*parameters2);
+  (*profile2)["plugin"] = "shec";
+  (*profile2)["technique"] = "";
+  (*profile2)["ruleset-failure-domain"] = "osd";
+  (*profile2)["k"] = "6";
+  (*profile2)["m"] = "4";
+  (*profile2)["c"] = "3";
+  shec->init(*profile2, &cerr);
 
   EXPECT_EQ(6, shec->k);
   EXPECT_EQ(4, shec->m);
@@ -986,7 +949,7 @@ TEST(ErasureCodeShec, init2_5)
   EXPECT_EQ(0, r);
 
   delete shec;
-  delete parameters;
+  delete profile;
 }
 
 TEST(ErasureCodeShec, minimum_to_decode_1)
@@ -996,15 +959,14 @@ TEST(ErasureCodeShec, minimum_to_decode_1)
   ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(
 				  tcache,
 				  ErasureCodeShec::MULTIPLE);
-  map < std::string, std::string > *parameters = new map<std::string,
-							 std::string>();
-  (*parameters)["plugin"] = "shec";
-  (*parameters)["technique"] = "";
-  (*parameters)["ruleset-failure-domain"] = "osd";
-  (*parameters)["k"] = "6";
-  (*parameters)["m"] = "4";
-  (*parameters)["c"] = "3";
-  shec->init(*parameters);
+  ErasureCodeProfile *profile = new ErasureCodeProfile();
+  (*profile)["plugin"] = "shec";
+  (*profile)["technique"] = "";
+  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["k"] = "6";
+  (*profile)["m"] = "4";
+  (*profile)["c"] = "3";
+  shec->init(*profile, &cerr);
 
   //minimum_to_decode
   set<int> want_to_decode;
@@ -1023,7 +985,7 @@ TEST(ErasureCodeShec, minimum_to_decode_1)
   EXPECT_TRUE(minimum_chunks.size());
 
   delete shec;
-  delete parameters;
+  delete profile;
 }
 
 TEST(ErasureCodeShec, minimum_to_decode_2)
@@ -1033,15 +995,14 @@ TEST(ErasureCodeShec, minimum_to_decode_2)
   ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(
 				  tcache,
 				  ErasureCodeShec::MULTIPLE);
-  map < std::string, std::string > *parameters = new map<std::string,
-							 std::string>();
-  (*parameters)["plugin"] = "shec";
-  (*parameters)["technique"] = "";
-  (*parameters)["ruleset-failure-domain"] = "osd";
-  (*parameters)["k"] = "6";
-  (*parameters)["m"] = "4";
-  (*parameters)["c"] = "3";
-  shec->init(*parameters);
+  ErasureCodeProfile *profile = new ErasureCodeProfile();
+  (*profile)["plugin"] = "shec";
+  (*profile)["technique"] = "";
+  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["k"] = "6";
+  (*profile)["m"] = "4";
+  (*profile)["c"] = "3";
+  shec->init(*profile, &cerr);
 
   //minimum_to_decode
   set<int> want_to_decode;
@@ -1060,7 +1021,7 @@ TEST(ErasureCodeShec, minimum_to_decode_2)
   EXPECT_TRUE(minimum_chunks.size());
 
   delete shec;
-  delete parameters;
+  delete profile;
 }
 
 TEST(ErasureCodeShec, minimum_to_decode_3)
@@ -1070,15 +1031,14 @@ TEST(ErasureCodeShec, minimum_to_decode_3)
   ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(
 				  tcache,
 				  ErasureCodeShec::MULTIPLE);
-  map < std::string, std::string > *parameters = new map<std::string,
-							 std::string>();
-  (*parameters)["plugin"] = "shec";
-  (*parameters)["technique"] = "";
-  (*parameters)["ruleset-failure-domain"] = "osd";
-  (*parameters)["k"] = "6";
-  (*parameters)["m"] = "4";
-  (*parameters)["c"] = "3";
-  shec->init(*parameters);
+  ErasureCodeProfile *profile = new ErasureCodeProfile();
+  (*profile)["plugin"] = "shec";
+  (*profile)["technique"] = "";
+  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["k"] = "6";
+  (*profile)["m"] = "4";
+  (*profile)["c"] = "3";
+  shec->init(*profile, &cerr);
 
   //minimum_to_decode
   set<int> want_to_decode;
@@ -1096,7 +1056,7 @@ TEST(ErasureCodeShec, minimum_to_decode_3)
   EXPECT_EQ(0u, minimum_chunks.size());
 
   delete shec;
-  delete parameters;
+  delete profile;
 }
 
 TEST(ErasureCodeShec, minimum_to_decode_4)
@@ -1106,15 +1066,14 @@ TEST(ErasureCodeShec, minimum_to_decode_4)
   ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(
 				  tcache,
 				  ErasureCodeShec::MULTIPLE);
-  map < std::string, std::string > *parameters = new map<std::string,
-							 std::string>();
-  (*parameters)["plugin"] = "shec";
-  (*parameters)["technique"] = "";
-  (*parameters)["ruleset-failure-domain"] = "osd";
-  (*parameters)["k"] = "6";
-  (*parameters)["m"] = "4";
-  (*parameters)["c"] = "3";
-  shec->init(*parameters);
+  ErasureCodeProfile *profile = new ErasureCodeProfile();
+  (*profile)["plugin"] = "shec";
+  (*profile)["technique"] = "";
+  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["k"] = "6";
+  (*profile)["m"] = "4";
+  (*profile)["c"] = "3";
+  shec->init(*profile, &cerr);
 
   //minimum_to_decode
   set<int> want_to_decode;
@@ -1133,7 +1092,7 @@ TEST(ErasureCodeShec, minimum_to_decode_4)
   EXPECT_EQ(-EINVAL, r);
 
   delete shec;
-  delete parameters;
+  delete profile;
 }
 
 TEST(ErasureCodeShec, minimum_to_decode_5)
@@ -1143,15 +1102,14 @@ TEST(ErasureCodeShec, minimum_to_decode_5)
   ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(
 				  tcache,
 				  ErasureCodeShec::MULTIPLE);
-  map < std::string, std::string > *parameters = new map<std::string,
-							 std::string>();
-  (*parameters)["plugin"] = "shec";
-  (*parameters)["technique"] = "";
-  (*parameters)["ruleset-failure-domain"] = "osd";
-  (*parameters)["k"] = "6";
-  (*parameters)["m"] = "4";
-  (*parameters)["c"] = "3";
-  shec->init(*parameters);
+  ErasureCodeProfile *profile = new ErasureCodeProfile();
+  (*profile)["plugin"] = "shec";
+  (*profile)["technique"] = "";
+  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["k"] = "6";
+  (*profile)["m"] = "4";
+  (*profile)["c"] = "3";
+  shec->init(*profile, &cerr);
 
   //minimum_to_decode
   set<int> want_to_decode;
@@ -1170,7 +1128,7 @@ TEST(ErasureCodeShec, minimum_to_decode_5)
   EXPECT_EQ(-EINVAL, r);
 
   delete shec;
-  delete parameters;
+  delete profile;
 }
 
 TEST(ErasureCodeShec, minimum_to_decode_6)
@@ -1180,15 +1138,14 @@ TEST(ErasureCodeShec, minimum_to_decode_6)
   ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(
 				  tcache,
 				  ErasureCodeShec::MULTIPLE);
-  map < std::string, std::string > *parameters = new map<std::string,
-							 std::string>();
-  (*parameters)["plugin"] = "shec";
-  (*parameters)["technique"] = "";
-  (*parameters)["ruleset-failure-domain"] = "osd";
-  (*parameters)["k"] = "6";
-  (*parameters)["m"] = "4";
-  (*parameters)["c"] = "3";
-  shec->init(*parameters);
+  ErasureCodeProfile *profile = new ErasureCodeProfile();
+  (*profile)["plugin"] = "shec";
+  (*profile)["technique"] = "";
+  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["k"] = "6";
+  (*profile)["m"] = "4";
+  (*profile)["c"] = "3";
+  shec->init(*profile, &cerr);
 
   //minimum_to_decode
   set<int> want_to_decode;
@@ -1206,7 +1163,7 @@ TEST(ErasureCodeShec, minimum_to_decode_6)
   EXPECT_EQ(-EINVAL, r);
 
   delete shec;
-  delete parameters;
+  delete profile;
 }
 
 TEST(ErasureCodeShec, minimum_to_decode_7)
@@ -1216,15 +1173,14 @@ TEST(ErasureCodeShec, minimum_to_decode_7)
   ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(
 				  tcache,
 				  ErasureCodeShec::MULTIPLE);
-  map < std::string, std::string > *parameters = new map<std::string,
-							 std::string>();
-  (*parameters)["plugin"] = "shec";
-  (*parameters)["technique"] = "";
-  (*parameters)["ruleset-failure-domain"] = "osd";
-  (*parameters)["k"] = "6";
-  (*parameters)["m"] = "4";
-  (*parameters)["c"] = "3";
-  shec->init(*parameters);
+  ErasureCodeProfile *profile = new ErasureCodeProfile();
+  (*profile)["plugin"] = "shec";
+  (*profile)["technique"] = "";
+  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["k"] = "6";
+  (*profile)["m"] = "4";
+  (*profile)["c"] = "3";
+  shec->init(*profile, &cerr);
 
   //minimum_to_decode
   set<int> want_to_decode;
@@ -1243,7 +1199,7 @@ TEST(ErasureCodeShec, minimum_to_decode_7)
   EXPECT_EQ(-EIO, r);
 
   delete shec;
-  delete parameters;
+  delete profile;
 }
 
 TEST(ErasureCodeShec, minimum_to_decode_8)
@@ -1253,15 +1209,14 @@ TEST(ErasureCodeShec, minimum_to_decode_8)
   ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(
 				  tcache,
 				  ErasureCodeShec::MULTIPLE);
-  map < std::string, std::string > *parameters = new map<std::string,
-							 std::string>();
-  (*parameters)["plugin"] = "shec";
-  (*parameters)["technique"] = "";
-  (*parameters)["ruleset-failure-domain"] = "osd";
-  (*parameters)["k"] = "6";
-  (*parameters)["m"] = "4";
-  (*parameters)["c"] = "3";
-  shec->init(*parameters);
+  ErasureCodeProfile *profile = new ErasureCodeProfile();
+  (*profile)["plugin"] = "shec";
+  (*profile)["technique"] = "";
+  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["k"] = "6";
+  (*profile)["m"] = "4";
+  (*profile)["c"] = "3";
+  shec->init(*profile, &cerr);
 
   //minimum_to_decode
   set<int> want_to_decode;
@@ -1277,7 +1232,7 @@ TEST(ErasureCodeShec, minimum_to_decode_8)
   EXPECT_EQ(-EINVAL, r);
 
   delete shec;
-  delete parameters;
+  delete profile;
 }
 
 TEST(ErasureCodeShec, minimum_to_decode_9)
@@ -1287,15 +1242,14 @@ TEST(ErasureCodeShec, minimum_to_decode_9)
   ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(
 				  tcache,
 				  ErasureCodeShec::MULTIPLE);
-  map < std::string, std::string > *parameters = new map<std::string,
-							 std::string>();
-  (*parameters)["plugin"] = "shec";
-  (*parameters)["technique"] = "";
-  (*parameters)["ruleset-failure-domain"] = "osd";
-  (*parameters)["k"] = "6";
-  (*parameters)["m"] = "4";
-  (*parameters)["c"] = "3";
-  shec->init(*parameters);
+  ErasureCodeProfile *profile = new ErasureCodeProfile();
+  (*profile)["plugin"] = "shec";
+  (*profile)["technique"] = "";
+  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["k"] = "6";
+  (*profile)["m"] = "4";
+  (*profile)["c"] = "3";
+  shec->init(*profile, &cerr);
 
   //minimum_to_decode
   set<int> want_to_decode;
@@ -1319,7 +1273,7 @@ TEST(ErasureCodeShec, minimum_to_decode_9)
   EXPECT_EQ(minimum, minimum_chunks);
 
   delete shec;
-  delete parameters;
+  delete profile;
 }
 
 TEST(ErasureCodeShec, minimum_to_decode2_1)
@@ -1329,15 +1283,14 @@ TEST(ErasureCodeShec, minimum_to_decode2_1)
   ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(
 				  tcache,
 				  ErasureCodeShec::MULTIPLE);
-  map < std::string, std::string > *parameters = new map<std::string,
-							 std::string>();
-  (*parameters)["plugin"] = "shec";
-  (*parameters)["technique"] = "";
-  (*parameters)["ruleset-failure-domain"] = "osd";
-  (*parameters)["k"] = "6";
-  (*parameters)["m"] = "4";
-  (*parameters)["c"] = "3";
-  shec->init(*parameters);
+  ErasureCodeProfile *profile = new ErasureCodeProfile();
+  (*profile)["plugin"] = "shec";
+  (*profile)["technique"] = "";
+  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["k"] = "6";
+  (*profile)["m"] = "4";
+  (*profile)["c"] = "3";
+  shec->init(*profile, &cerr);
 
   //minimum_to_decode
   set<int> want_to_decode;
@@ -1356,7 +1309,7 @@ TEST(ErasureCodeShec, minimum_to_decode2_1)
   EXPECT_TRUE(minimum_chunks.size());
 
   delete shec;
-  delete parameters;
+  delete profile;
 }
 
 TEST(ErasureCodeShec, minimum_to_decode2_3)
@@ -1366,15 +1319,14 @@ TEST(ErasureCodeShec, minimum_to_decode2_3)
   ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(
 				  tcache,
 				  ErasureCodeShec::MULTIPLE);
-  map < std::string, std::string > *parameters = new map<std::string,
-							 std::string>();
-  (*parameters)["plugin"] = "shec";
-  (*parameters)["technique"] = "";
-  (*parameters)["ruleset-failure-domain"] = "osd";
-  (*parameters)["k"] = "6";
-  (*parameters)["m"] = "4";
-  (*parameters)["c"] = "3";
-  shec->init(*parameters);
+  ErasureCodeProfile *profile = new ErasureCodeProfile();
+  (*profile)["plugin"] = "shec";
+  (*profile)["technique"] = "";
+  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["k"] = "6";
+  (*profile)["m"] = "4";
+  (*profile)["c"] = "3";
+  shec->init(*profile, &cerr);
 
   //minimum_to_decode
   set<int> want_to_decode;
@@ -1406,7 +1358,7 @@ TEST(ErasureCodeShec, minimum_to_decode2_3)
   pthread_join(tid, NULL);
 
   delete shec;
-  delete parameters;
+  delete profile;
 }
 
 TEST(ErasureCodeShec, minimum_to_decode_with_cost_1)
@@ -1416,15 +1368,14 @@ TEST(ErasureCodeShec, minimum_to_decode_with_cost_1)
   ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(
 				  tcache,
 				  ErasureCodeShec::MULTIPLE);
-  map < std::string, std::string > *parameters = new map<std::string,
-							 std::string>();
-  (*parameters)["plugin"] = "shec";
-  (*parameters)["technique"] = "";
-  (*parameters)["ruleset-failure-domain"] = "osd";
-  (*parameters)["k"] = "6";
-  (*parameters)["m"] = "4";
-  (*parameters)["c"] = "3";
-  shec->init(*parameters);
+  ErasureCodeProfile *profile = new ErasureCodeProfile();
+  (*profile)["plugin"] = "shec";
+  (*profile)["technique"] = "";
+  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["k"] = "6";
+  (*profile)["m"] = "4";
+  (*profile)["c"] = "3";
+  shec->init(*profile, &cerr);
 
   //minimum_to_decode_with_cost
   set<int> want_to_decode;
@@ -1443,7 +1394,7 @@ TEST(ErasureCodeShec, minimum_to_decode_with_cost_1)
   EXPECT_TRUE(minimum_chunks.size());
 
   delete shec;
-  delete parameters;
+  delete profile;
 }
 
 TEST(ErasureCodeShec, minimum_to_decode_with_cost_2_3)
@@ -1453,15 +1404,14 @@ TEST(ErasureCodeShec, minimum_to_decode_with_cost_2_3)
   ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(
 				  tcache,
 				  ErasureCodeShec::MULTIPLE);
-  map < std::string, std::string > *parameters = new map<std::string,
-							 std::string>();
-  (*parameters)["plugin"] = "shec";
-  (*parameters)["technique"] = "";
-  (*parameters)["ruleset-failure-domain"] = "osd";
-  (*parameters)["k"] = "6";
-  (*parameters)["m"] = "4";
-  (*parameters)["c"] = "3";
-  shec->init(*parameters);
+  ErasureCodeProfile *profile = new ErasureCodeProfile();
+  (*profile)["plugin"] = "shec";
+  (*profile)["technique"] = "";
+  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["k"] = "6";
+  (*profile)["m"] = "4";
+  (*profile)["c"] = "3";
+  shec->init(*profile, &cerr);
 
   //minimum_to_decode_with_cost
   set<int> want_to_decode;
@@ -1493,7 +1443,7 @@ TEST(ErasureCodeShec, minimum_to_decode_with_cost_2_3)
   pthread_join(tid, NULL);
 
   delete shec;
-  delete parameters;
+  delete profile;
 }
 
 TEST(ErasureCodeShec, encode_1)
@@ -1503,15 +1453,14 @@ TEST(ErasureCodeShec, encode_1)
   ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(
 				  tcache,
 				  ErasureCodeShec::MULTIPLE);
-  map < std::string, std::string > *parameters = new map<std::string,
-							 std::string>();
-  (*parameters)["plugin"] = "shec";
-  (*parameters)["technique"] = "";
-  (*parameters)["ruleset-failure-domain"] = "osd";
-  (*parameters)["k"] = "6";
-  (*parameters)["m"] = "4";
-  (*parameters)["c"] = "3";
-  shec->init(*parameters);
+  ErasureCodeProfile *profile = new ErasureCodeProfile();
+  (*profile)["plugin"] = "shec";
+  (*profile)["technique"] = "";
+  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["k"] = "6";
+  (*profile)["m"] = "4";
+  (*profile)["c"] = "3";
+  shec->init(*profile, &cerr);
 
   //encode
   bufferlist in;
@@ -1556,7 +1505,7 @@ TEST(ErasureCodeShec, encode_1)
   EXPECT_TRUE(usable == in);
 
   delete shec;
-  delete parameters;
+  delete profile;
 }
 
 TEST(ErasureCodeShec, encode_2)
@@ -1566,15 +1515,14 @@ TEST(ErasureCodeShec, encode_2)
   ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(
 				  tcache,
 				  ErasureCodeShec::MULTIPLE);
-  map < std::string, std::string > *parameters = new map<std::string,
-							 std::string>();
-  (*parameters)["plugin"] = "shec";
-  (*parameters)["technique"] = "";
-  (*parameters)["ruleset-failure-domain"] = "osd";
-  (*parameters)["k"] = "6";
-  (*parameters)["m"] = "4";
-  (*parameters)["c"] = "3";
-  shec->init(*parameters);
+  ErasureCodeProfile *profile = new ErasureCodeProfile();
+  (*profile)["plugin"] = "shec";
+  (*profile)["technique"] = "";
+  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["k"] = "6";
+  (*profile)["m"] = "4";
+  (*profile)["c"] = "3";
+  shec->init(*profile, &cerr);
 
   //encode
   bufferlist in;
@@ -1615,7 +1563,7 @@ TEST(ErasureCodeShec, encode_2)
   EXPECT_TRUE(usable == in);
 
   delete shec;
-  delete parameters;
+  delete profile;
 }
 
 TEST(ErasureCodeShec, encode_3)
@@ -1624,15 +1572,14 @@ TEST(ErasureCodeShec, encode_3)
   ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(
 				  tcache,
 				  ErasureCodeShec::MULTIPLE);
-  map < std::string, std::string > *parameters = new map<std::string,
-							 std::string>();
-  (*parameters)["plugin"] = "shec";
-  (*parameters)["technique"] = "";
-  (*parameters)["ruleset-failure-domain"] = "osd";
-  (*parameters)["k"] = "6";
-  (*parameters)["m"] = "4";
-  (*parameters)["c"] = "3";
-  shec->init(*parameters);
+  ErasureCodeProfile *profile = new ErasureCodeProfile();
+  (*profile)["plugin"] = "shec";
+  (*profile)["technique"] = "";
+  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["k"] = "6";
+  (*profile)["m"] = "4";
+  (*profile)["c"] = "3";
+  shec->init(*profile, &cerr);
 
   bufferlist in;
   in.append("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"//length = 62
@@ -1673,7 +1620,7 @@ TEST(ErasureCodeShec, encode_3)
   EXPECT_TRUE(usable == in);
 
   delete shec;
-  delete parameters;
+  delete profile;
 }
 
 TEST(ErasureCodeShec, encode_4)
@@ -1683,15 +1630,14 @@ TEST(ErasureCodeShec, encode_4)
   ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(
 				  tcache,
 				  ErasureCodeShec::MULTIPLE);
-  map < std::string, std::string > *parameters = new map<std::string,
-							 std::string>();
-  (*parameters)["plugin"] = "shec";
-  (*parameters)["technique"] = "";
-  (*parameters)["ruleset-failure-domain"] = "osd";
-  (*parameters)["k"] = "6";
-  (*parameters)["m"] = "4";
-  (*parameters)["c"] = "3";
-  shec->init(*parameters);
+  ErasureCodeProfile *profile = new ErasureCodeProfile();
+  (*profile)["plugin"] = "shec";
+  (*profile)["technique"] = "";
+  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["k"] = "6";
+  (*profile)["m"] = "4";
+  (*profile)["c"] = "3";
+  shec->init(*profile, &cerr);
 
   //encode
   bufferlist in;
@@ -1734,7 +1680,7 @@ TEST(ErasureCodeShec, encode_4)
   EXPECT_TRUE(usable == in);
 
   delete shec;
-  delete parameters;
+  delete profile;
 }
 
 TEST(ErasureCodeShec, encode_8)
@@ -1744,15 +1690,14 @@ TEST(ErasureCodeShec, encode_8)
   ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(
 				  tcache,
 				  ErasureCodeShec::MULTIPLE);
-  map < std::string, std::string > *parameters = new map<std::string,
-							 std::string>();
-  (*parameters)["plugin"] = "shec";
-  (*parameters)["technique"] = "";
-  (*parameters)["ruleset-failure-domain"] = "osd";
-  (*parameters)["k"] = "6";
-  (*parameters)["m"] = "4";
-  (*parameters)["c"] = "3";
-  shec->init(*parameters);
+  ErasureCodeProfile *profile = new ErasureCodeProfile();
+  (*profile)["plugin"] = "shec";
+  (*profile)["technique"] = "";
+  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["k"] = "6";
+  (*profile)["m"] = "4";
+  (*profile)["c"] = "3";
+  shec->init(*profile, &cerr);
 
   //encode
   bufferlist in;
@@ -1770,7 +1715,7 @@ TEST(ErasureCodeShec, encode_8)
   EXPECT_EQ(-EINVAL, r);
 
   delete shec;
-  delete parameters;
+  delete profile;
 }
 
 TEST(ErasureCodeShec, encode_9)
@@ -1780,15 +1725,14 @@ TEST(ErasureCodeShec, encode_9)
   ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(
 				  tcache,
 				  ErasureCodeShec::MULTIPLE);
-  map < std::string, std::string > *parameters = new map<std::string,
-							 std::string>();
-  (*parameters)["plugin"] = "shec";
-  (*parameters)["technique"] = "";
-  (*parameters)["ruleset-failure-domain"] = "osd";
-  (*parameters)["k"] = "6";
-  (*parameters)["m"] = "4";
-  (*parameters)["c"] = "3";
-  shec->init(*parameters);
+  ErasureCodeProfile *profile = new ErasureCodeProfile();
+  (*profile)["plugin"] = "shec";
+  (*profile)["technique"] = "";
+  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["k"] = "6";
+  (*profile)["m"] = "4";
+  (*profile)["c"] = "3";
+  shec->init(*profile, &cerr);
 
   //encode
   bufferlist in;
@@ -1810,7 +1754,7 @@ TEST(ErasureCodeShec, encode_9)
   EXPECT_EQ(-EINVAL, r);
 
   delete shec;
-  delete parameters;
+  delete profile;
 }
 
 TEST(ErasureCodeShec, encode2_1)
@@ -1820,15 +1764,14 @@ TEST(ErasureCodeShec, encode2_1)
   ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(
 				  tcache,
 				  ErasureCodeShec::MULTIPLE);
-  map < std::string, std::string > *parameters = new map<std::string,
-							 std::string>();
-  (*parameters)["plugin"] = "shec";
-  (*parameters)["technique"] = "";
-  (*parameters)["ruleset-failure-domain"] = "osd";
-  (*parameters)["k"] = "6";
-  (*parameters)["m"] = "4";
-  (*parameters)["c"] = "3";
-  shec->init(*parameters);
+  ErasureCodeProfile *profile = new ErasureCodeProfile();
+  (*profile)["plugin"] = "shec";
+  (*profile)["technique"] = "";
+  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["k"] = "6";
+  (*profile)["m"] = "4";
+  (*profile)["c"] = "3";
+  shec->init(*profile, &cerr);
 
   //encode
   bufferlist in;
@@ -1871,7 +1814,7 @@ TEST(ErasureCodeShec, encode2_1)
   EXPECT_TRUE(usable == in);
 
   delete shec;
-  delete parameters;
+  delete profile;
 }
 
 TEST(ErasureCodeShec, encode2_3)
@@ -1881,15 +1824,14 @@ TEST(ErasureCodeShec, encode2_3)
   ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(
 				  tcache,
 				  ErasureCodeShec::MULTIPLE);
-  map < std::string, std::string > *parameters = new map<std::string,
-							 std::string>();
-  (*parameters)["plugin"] = "shec";
-  (*parameters)["technique"] = "";
-  (*parameters)["ruleset-failure-domain"] = "osd";
-  (*parameters)["k"] = "6";
-  (*parameters)["m"] = "4";
-  (*parameters)["c"] = "3";
-  shec->init(*parameters);
+  ErasureCodeProfile *profile = new ErasureCodeProfile();
+  (*profile)["plugin"] = "shec";
+  (*profile)["technique"] = "";
+  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["k"] = "6";
+  (*profile)["m"] = "4";
+  (*profile)["c"] = "3";
+  shec->init(*profile, &cerr);
 
   //encode
   bufferlist in;
@@ -1944,7 +1886,7 @@ TEST(ErasureCodeShec, encode2_3)
   EXPECT_TRUE(usable == in);
 
   delete shec;
-  delete parameters;
+  delete profile;
 }
 
 TEST(ErasureCodeShec, decode_1)
@@ -1954,15 +1896,14 @@ TEST(ErasureCodeShec, decode_1)
   ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(
 				  tcache,
 				  ErasureCodeShec::MULTIPLE);
-  map < std::string, std::string > *parameters = new map<std::string,
-							 std::string>();
-  (*parameters)["plugin"] = "shec";
-  (*parameters)["technique"] = "";
-  (*parameters)["ruleset-failure-domain"] = "osd";
-  (*parameters)["k"] = "6";
-  (*parameters)["m"] = "4";
-  (*parameters)["c"] = "3";
-  shec->init(*parameters);
+  ErasureCodeProfile *profile = new ErasureCodeProfile();
+  (*profile)["plugin"] = "shec";
+  (*profile)["technique"] = "";
+  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["k"] = "6";
+  (*profile)["m"] = "4";
+  (*profile)["c"] = "3";
+  shec->init(*profile, &cerr);
 
   //encode
   bufferlist in;
@@ -2000,7 +1941,7 @@ TEST(ErasureCodeShec, decode_1)
   EXPECT_TRUE(usable == in);
 
   delete shec;
-  delete parameters;
+  delete profile;
 }
 
 TEST(ErasureCodeShec, decode_2)
@@ -2010,15 +1951,14 @@ TEST(ErasureCodeShec, decode_2)
   ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(
 				  tcache,
 				  ErasureCodeShec::MULTIPLE);
-  map < std::string, std::string > *parameters = new map<std::string,
-							 std::string>();
-  (*parameters)["plugin"] = "shec";
-  (*parameters)["technique"] = "";
-  (*parameters)["ruleset-failure-domain"] = "osd";
-  (*parameters)["k"] = "6";
-  (*parameters)["m"] = "4";
-  (*parameters)["c"] = "3";
-  shec->init(*parameters);
+  ErasureCodeProfile *profile = new ErasureCodeProfile();
+  (*profile)["plugin"] = "shec";
+  (*profile)["technique"] = "";
+  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["k"] = "6";
+  (*profile)["m"] = "4";
+  (*profile)["c"] = "3";
+  shec->init(*profile, &cerr);
 
   //encode
   bufferlist in;
@@ -2056,7 +1996,7 @@ TEST(ErasureCodeShec, decode_2)
   EXPECT_TRUE(usable == in);
 
   delete shec;
-  delete parameters;
+  delete profile;
 }
 
 TEST(ErasureCodeShec, decode_3)
@@ -2066,15 +2006,14 @@ TEST(ErasureCodeShec, decode_3)
   ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(
 				  tcache,
 				  ErasureCodeShec::MULTIPLE);
-  map < std::string, std::string > *parameters = new map<std::string,
-							 std::string>();
-  (*parameters)["plugin"] = "shec";
-  (*parameters)["technique"] = "";
-  (*parameters)["ruleset-failure-domain"] = "osd";
-  (*parameters)["k"] = "6";
-  (*parameters)["m"] = "4";
-  (*parameters)["c"] = "3";
-  shec->init(*parameters);
+  ErasureCodeProfile *profile = new ErasureCodeProfile();
+  (*profile)["plugin"] = "shec";
+  (*profile)["technique"] = "";
+  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["k"] = "6";
+  (*profile)["m"] = "4";
+  (*profile)["c"] = "3";
+  shec->init(*profile, &cerr);
 
   //encode
   bufferlist in;
@@ -2119,7 +2058,7 @@ TEST(ErasureCodeShec, decode_3)
   EXPECT_TRUE(usable == in);
 
   delete shec;
-  delete parameters;
+  delete profile;
 }
 
 TEST(ErasureCodeShec, decode_4)
@@ -2129,15 +2068,14 @@ TEST(ErasureCodeShec, decode_4)
   ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(
 				  tcache,
 				  ErasureCodeShec::MULTIPLE);
-  map < std::string, std::string > *parameters = new map<std::string,
-							 std::string>();
-  (*parameters)["plugin"] = "shec";
-  (*parameters)["technique"] = "";
-  (*parameters)["ruleset-failure-domain"] = "osd";
-  (*parameters)["k"] = "6";
-  (*parameters)["m"] = "4";
-  (*parameters)["c"] = "3";
-  shec->init(*parameters);
+  ErasureCodeProfile *profile = new ErasureCodeProfile();
+  (*profile)["plugin"] = "shec";
+  (*profile)["technique"] = "";
+  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["k"] = "6";
+  (*profile)["m"] = "4";
+  (*profile)["c"] = "3";
+  shec->init(*profile, &cerr);
 
   //encode
   bufferlist in;
@@ -2182,7 +2120,7 @@ TEST(ErasureCodeShec, decode_4)
   EXPECT_TRUE(usable == in);
 
   delete shec;
-  delete parameters;
+  delete profile;
 }
 
 TEST(ErasureCodeShec, decode_7)
@@ -2192,15 +2130,14 @@ TEST(ErasureCodeShec, decode_7)
   ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(
 				  tcache,
 				  ErasureCodeShec::MULTIPLE);
-  map < std::string, std::string > *parameters = new map<std::string,
-							 std::string>();
-  (*parameters)["plugin"] = "shec";
-  (*parameters)["technique"] = "";
-  (*parameters)["ruleset-failure-domain"] = "osd";
-  (*parameters)["k"] = "6";
-  (*parameters)["m"] = "4";
-  (*parameters)["c"] = "3";
-  shec->init(*parameters);
+  ErasureCodeProfile *profile = new ErasureCodeProfile();
+  (*profile)["plugin"] = "shec";
+  (*profile)["technique"] = "";
+  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["k"] = "6";
+  (*profile)["m"] = "4";
+  (*profile)["c"] = "3";
+  shec->init(*profile, &cerr);
 
   //encode
   bufferlist in;
@@ -2250,7 +2187,7 @@ TEST(ErasureCodeShec, decode_7)
   EXPECT_TRUE(usable == in);
 
   delete shec;
-  delete parameters;
+  delete profile;
 }
 
 TEST(ErasureCodeShec, decode_8)
@@ -2260,15 +2197,14 @@ TEST(ErasureCodeShec, decode_8)
   ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(
 				  tcache,
 				  ErasureCodeShec::MULTIPLE);
-  map < std::string, std::string > *parameters = new map<std::string,
-							 std::string>();
-  (*parameters)["plugin"] = "shec";
-  (*parameters)["technique"] = "";
-  (*parameters)["ruleset-failure-domain"] = "osd";
-  (*parameters)["k"] = "6";
-  (*parameters)["m"] = "4";
-  (*parameters)["c"] = "3";
-  shec->init(*parameters);
+  ErasureCodeProfile *profile = new ErasureCodeProfile();
+  (*profile)["plugin"] = "shec";
+  (*profile)["technique"] = "";
+  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["k"] = "6";
+  (*profile)["m"] = "4";
+  (*profile)["c"] = "3";
+  shec->init(*profile, &cerr);
 
   //encode
   bufferlist in;
@@ -2299,7 +2235,7 @@ TEST(ErasureCodeShec, decode_8)
   EXPECT_NE(0, r);
 
   delete shec;
-  delete parameters;
+  delete profile;
 }
 
 TEST(ErasureCodeShec, decode_9)
@@ -2309,15 +2245,14 @@ TEST(ErasureCodeShec, decode_9)
   ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(
 				  tcache,
 				  ErasureCodeShec::MULTIPLE);
-  map < std::string, std::string > *parameters = new map<std::string,
-							 std::string>();
-  (*parameters)["plugin"] = "shec";
-  (*parameters)["technique"] = "";
-  (*parameters)["ruleset-failure-domain"] = "osd";
-  (*parameters)["k"] = "6";
-  (*parameters)["m"] = "4";
-  (*parameters)["c"] = "3";
-  shec->init(*parameters);
+  ErasureCodeProfile *profile = new ErasureCodeProfile();
+  (*profile)["plugin"] = "shec";
+  (*profile)["technique"] = "";
+  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["k"] = "6";
+  (*profile)["m"] = "4";
+  (*profile)["c"] = "3";
+  shec->init(*profile, &cerr);
 
   //encode
   bufferlist in;
@@ -2355,7 +2290,7 @@ TEST(ErasureCodeShec, decode_9)
   EXPECT_NE(0, r);
 
   delete shec;
-  delete parameters;
+  delete profile;
 }
 
 TEST(ErasureCodeShec, decode2_1)
@@ -2365,15 +2300,14 @@ TEST(ErasureCodeShec, decode2_1)
   ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(
 				  tcache,
 				  ErasureCodeShec::MULTIPLE);
-  map < std::string, std::string > *parameters = new map<std::string,
-							 std::string>();
-  (*parameters)["plugin"] = "shec";
-  (*parameters)["technique"] = "";
-  (*parameters)["ruleset-failure-domain"] = "osd";
-  (*parameters)["k"] = "6";
-  (*parameters)["m"] = "4";
-  (*parameters)["c"] = "3";
-  shec->init(*parameters);
+  ErasureCodeProfile *profile = new ErasureCodeProfile();
+  (*profile)["plugin"] = "shec";
+  (*profile)["technique"] = "";
+  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["k"] = "6";
+  (*profile)["m"] = "4";
+  (*profile)["c"] = "3";
+  shec->init(*profile, &cerr);
 
   //encode
   bufferlist in;
@@ -2412,7 +2346,7 @@ TEST(ErasureCodeShec, decode2_1)
   EXPECT_TRUE(usable == in);
 
   delete shec;
-  delete parameters;
+  delete profile;
 }
 
 TEST(ErasureCodeShec, decode2_3)
@@ -2422,15 +2356,14 @@ TEST(ErasureCodeShec, decode2_3)
   ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(
 				  tcache,
 				  ErasureCodeShec::MULTIPLE);
-  map < std::string, std::string > *parameters = new map<std::string,
-							 std::string>();
-  (*parameters)["plugin"] = "shec";
-  (*parameters)["technique"] = "";
-  (*parameters)["ruleset-failure-domain"] = "osd";
-  (*parameters)["k"] = "6";
-  (*parameters)["m"] = "4";
-  (*parameters)["c"] = "3";
-  shec->init(*parameters);
+  ErasureCodeProfile *profile = new ErasureCodeProfile();
+  (*profile)["plugin"] = "shec";
+  (*profile)["technique"] = "";
+  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["k"] = "6";
+  (*profile)["m"] = "4";
+  (*profile)["c"] = "3";
+  shec->init(*profile, &cerr);
 
   //encode
   bufferlist in;
@@ -2480,7 +2413,7 @@ TEST(ErasureCodeShec, decode2_3)
   EXPECT_TRUE(usable == in);
 
   delete shec;
-  delete parameters;
+  delete profile;
 }
 
 TEST(ErasureCodeShec, decode2_4)
@@ -2490,15 +2423,14 @@ TEST(ErasureCodeShec, decode2_4)
   ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(
 				  tcache,
 				  ErasureCodeShec::MULTIPLE);
-  map < std::string, std::string > *parameters = new map<std::string,
-							 std::string>();
-  (*parameters)["plugin"] = "shec";
-  (*parameters)["technique"] = "";
-  (*parameters)["ruleset-failure-domain"] = "osd";
-  (*parameters)["k"] = "6";
-  (*parameters)["m"] = "4";
-  (*parameters)["c"] = "3";
-  shec->init(*parameters);
+  ErasureCodeProfile *profile = new ErasureCodeProfile();
+  (*profile)["plugin"] = "shec";
+  (*profile)["technique"] = "";
+  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["k"] = "6";
+  (*profile)["m"] = "4";
+  (*profile)["c"] = "3";
+  shec->init(*profile, &cerr);
 
   //encode
   bufferlist in;
@@ -2533,7 +2465,7 @@ TEST(ErasureCodeShec, decode2_4)
   EXPECT_EQ(-1, r);
 
   delete shec;
-  delete parameters;
+  delete profile;
 }
 
 TEST(ErasureCodeShec, create_ruleset_1_2)
@@ -2569,15 +2501,14 @@ TEST(ErasureCodeShec, create_ruleset_1_2)
   ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(
 				  tcache,
 				  ErasureCodeShec::MULTIPLE);
-  map < std::string, std::string > *parameters = new map<std::string,
-							 std::string>();
-  (*parameters)["plugin"] = "shec";
-  (*parameters)["technique"] = "";
-  (*parameters)["ruleset-failure-domain"] = "osd";
-  (*parameters)["k"] = "6";
-  (*parameters)["m"] = "4";
-  (*parameters)["c"] = "3";
-  shec->init(*parameters);
+  ErasureCodeProfile *profile = new ErasureCodeProfile();
+  (*profile)["plugin"] = "shec";
+  (*profile)["technique"] = "";
+  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["k"] = "6";
+  (*profile)["m"] = "4";
+  (*profile)["c"] = "3";
+  shec->init(*profile, &cerr);
 
   //create_ruleset
   stringstream ss;
@@ -2591,7 +2522,7 @@ TEST(ErasureCodeShec, create_ruleset_1_2)
   EXPECT_EQ(-EEXIST, r);
 
   delete shec;
-  delete parameters;
+  delete profile;
   delete crush;
 }
 
@@ -2628,22 +2559,21 @@ TEST(ErasureCodeShec, create_ruleset_4)
   ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(
 				  tcache,
 				  ErasureCodeShec::MULTIPLE);
-  map < std::string, std::string > *parameters = new map<std::string,
-							 std::string>();
-  (*parameters)["plugin"] = "shec";
-  (*parameters)["technique"] = "";
-  (*parameters)["ruleset-failure-domain"] = "osd";
-  (*parameters)["k"] = "6";
-  (*parameters)["m"] = "4";
-  (*parameters)["c"] = "3";
-  shec->init(*parameters);
+  ErasureCodeProfile *profile = new ErasureCodeProfile();
+  (*profile)["plugin"] = "shec";
+  (*profile)["technique"] = "";
+  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["k"] = "6";
+  (*profile)["m"] = "4";
+  (*profile)["c"] = "3";
+  shec->init(*profile, &cerr);
 
   //create_ruleset
   int r = shec->create_ruleset("myrule", *crush, NULL);	//ss = NULL
   EXPECT_EQ(0, r);
 
   delete shec;
-  delete parameters;
+  delete profile;
   delete crush;
 }
 
@@ -2680,15 +2610,14 @@ TEST(ErasureCodeShec, create_ruleset2_1)
   ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(
 				  tcache,
 				  ErasureCodeShec::MULTIPLE);
-  map < std::string, std::string > *parameters = new map<std::string,
-							 std::string>();
-  (*parameters)["plugin"] = "shec";
-  (*parameters)["technique"] = "";
-  (*parameters)["ruleset-failure-domain"] = "osd";
-  (*parameters)["k"] = "6";
-  (*parameters)["m"] = "4";
-  (*parameters)["c"] = "3";
-  shec->init(*parameters);
+  ErasureCodeProfile *profile = new ErasureCodeProfile();
+  (*profile)["plugin"] = "shec";
+  (*profile)["technique"] = "";
+  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["k"] = "6";
+  (*profile)["m"] = "4";
+  (*profile)["c"] = "3";
+  shec->init(*profile, &cerr);
 
   //create_ruleset
   stringstream ss;
@@ -2698,7 +2627,7 @@ TEST(ErasureCodeShec, create_ruleset2_1)
   EXPECT_STREQ("myrule", crush->rule_name_map[0].c_str());
 
   delete shec;
-  delete parameters;
+  delete profile;
   delete crush;
 }
 
@@ -2740,15 +2669,14 @@ TEST(ErasureCodeShec, create_ruleset2_3)
   ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(
 				  tcache,
 				  ErasureCodeShec::MULTIPLE);
-  map < std::string, std::string > *parameters = new map<std::string,
-							 std::string>();
-  (*parameters)["plugin"] = "shec";
-  (*parameters)["technique"] = "";
-  (*parameters)["ruleset-failure-domain"] = "osd";
-  (*parameters)["k"] = "6";
-  (*parameters)["m"] = "4";
-  (*parameters)["c"] = "3";
-  shec->init(*parameters);
+  ErasureCodeProfile *profile = new ErasureCodeProfile();
+  (*profile)["plugin"] = "shec";
+  (*profile)["technique"] = "";
+  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["k"] = "6";
+  (*profile)["m"] = "4";
+  (*profile)["c"] = "3";
+  shec->init(*profile, &cerr);
 
   //create_ruleset
   stringstream ss;
@@ -2768,7 +2696,7 @@ TEST(ErasureCodeShec, create_ruleset2_3)
   pthread_join(tid, NULL);
 
   delete shec;
-  delete parameters;
+  delete profile;
   delete crush;
 }
 
@@ -2779,21 +2707,20 @@ TEST(ErasureCodeShec, get_chunk_count_1)
   ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(
 				  tcache,
 				  ErasureCodeShec::MULTIPLE);
-  map < std::string, std::string > *parameters = new map<std::string,
-							 std::string>();
-  (*parameters)["plugin"] = "shec";
-  (*parameters)["technique"] = "";
-  (*parameters)["ruleset-failure-domain"] = "osd";
-  (*parameters)["k"] = "6";
-  (*parameters)["m"] = "4";
-  (*parameters)["c"] = "3";
-  shec->init(*parameters);
+  ErasureCodeProfile *profile = new ErasureCodeProfile();
+  (*profile)["plugin"] = "shec";
+  (*profile)["technique"] = "";
+  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["k"] = "6";
+  (*profile)["m"] = "4";
+  (*profile)["c"] = "3";
+  shec->init(*profile, &cerr);
 
   //get_chunk_count
   EXPECT_EQ(10u, shec->get_chunk_count());
 
   delete shec;
-  delete parameters;
+  delete profile;
 }
 
 TEST(ErasureCodeShec, get_data_chunk_count_1)
@@ -2803,21 +2730,20 @@ TEST(ErasureCodeShec, get_data_chunk_count_1)
   ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(
 				  tcache,
 				  ErasureCodeShec::MULTIPLE);
-  map < std::string, std::string > *parameters = new map<std::string,
-							 std::string>();
-  (*parameters)["plugin"] = "shec";
-  (*parameters)["technique"] = "";
-  (*parameters)["ruleset-failure-domain"] = "osd";
-  (*parameters)["k"] = "6";
-  (*parameters)["m"] = "4";
-  (*parameters)["c"] = "3";
-  shec->init(*parameters);
+  ErasureCodeProfile *profile = new ErasureCodeProfile();
+  (*profile)["plugin"] = "shec";
+  (*profile)["technique"] = "";
+  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["k"] = "6";
+  (*profile)["m"] = "4";
+  (*profile)["c"] = "3";
+  shec->init(*profile, &cerr);
 
   //get_data_chunk_count
   EXPECT_EQ(6u, shec->get_data_chunk_count());
 
   delete shec;
-  delete parameters;
+  delete profile;
 }
 
 TEST(ErasureCodeShec, get_chunk_size_1_2)
@@ -2827,16 +2753,15 @@ TEST(ErasureCodeShec, get_chunk_size_1_2)
   ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(
 				  tcache,
 				  ErasureCodeShec::MULTIPLE);
-  map < std::string, std::string > *parameters = new map<std::string,
-							 std::string>();
-  (*parameters)["plugin"] = "shec";
-  (*parameters)["technique"] = "";
-  (*parameters)["ruleset-failure-domain"] = "osd";
-  (*parameters)["k"] = "6";
-  (*parameters)["m"] = "4";
-  (*parameters)["c"] = "3";
-  (*parameters)["w"] = "8";
-  shec->init(*parameters);
+  ErasureCodeProfile *profile = new ErasureCodeProfile();
+  (*profile)["plugin"] = "shec";
+  (*profile)["technique"] = "";
+  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["k"] = "6";
+  (*profile)["m"] = "4";
+  (*profile)["c"] = "3";
+  (*profile)["w"] = "8";
+  shec->init(*profile, &cerr);
 
   //when there is no padding(192=k*w*4)
   EXPECT_EQ(32u, shec->get_chunk_size(192));
@@ -2844,7 +2769,7 @@ TEST(ErasureCodeShec, get_chunk_size_1_2)
   EXPECT_EQ(32u, shec->get_chunk_size(190));
 
   delete shec;
-  delete parameters;
+  delete profile;
 }
 
 int main(int argc, char **argv)

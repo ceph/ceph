@@ -773,7 +773,7 @@ inline ostream& operator<<(ostream& out, const osd_stat_t& s) {
 
 std::string pg_state_string(int state);
 std::string pg_vector_string(const vector<int32_t> &a);
-int pg_string_state(std::string state);
+int pg_string_state(const std::string& state);
 
 
 /*
@@ -961,7 +961,7 @@ public:
    */
   map<snapid_t, pool_snap_info_t> snaps;
   /*
-   * Alternatively, if we are definining non-pool snaps (e.g. via the
+   * Alternatively, if we are defining non-pool snaps (e.g. via the
    * Ceph MDS), we must track @removed_snaps (since @snaps is not
    * used).  Snaps and removed_snaps are to be used exclusive of each
    * other!
@@ -1846,6 +1846,8 @@ struct pg_interval_t {
     int new_up_primary,
     const vector<int> &old_up,
     const vector<int> &new_up,
+    int old_size,
+    int new_size,
     int old_min_size,
     int new_min_size,
     unsigned old_pg_num,
@@ -2767,6 +2769,9 @@ struct SnapSet {
     }
     return max;
   }
+
+  SnapSet get_filtered(const pg_pool_t &pinfo) const;
+  void filter(const pg_pool_t &pinfo);
 };
 WRITE_CLASS_ENCODER(SnapSet)
 
@@ -3274,7 +3279,7 @@ public:
     return blocked;
   }
 
-  // do simple synchronous mutual exclusion, for now.  now waitqueues or anything fancy.
+  // do simple synchronous mutual exclusion, for now.  no waitqueues or anything fancy.
   void ondisk_write_lock() {
     lock.Lock();
     writers_waiting++;

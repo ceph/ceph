@@ -1,16 +1,16 @@
 #!/bin/bash -e
 
-# if we start up as ./$0, assume we are running from a source
-# checkout.
-if [ `dirname $0` = "." ] && [ $PWD != "/usr/bin" ]; then
-    known_hosts=../share/known_hosts_drop.ceph.com
-    ssh_key=../share/id_dsa_drop.ceph.com
-else
-    known_hosts=@datadir@/known_hosts_drop.ceph.com
-    ssh_key=@datadir@/id_dsa_drop.ceph.com
+# If these files exist, assume we are a source install.
+if [[ -f ../share/known_hosts_drop.ceph.com && -f ../share/id_dsa_drop.ceph.com ]]
+    then # running from source install
+       known_hosts=../share/known_hosts_drop.ceph.com
+       ssh_key=../share/id_dsa_drop.ceph.com
+    else # running from a pkg install
+       known_hosts=@datadir@/known_hosts_drop.ceph.com
+       ssh_key=@datadir@/id_dsa_drop.ceph.com
 fi
 
-usage() {
+function usage() {
     echo "Usage: $0 [options] file1 [dir2 ...]
 
 Easily upload files or directories to ceph.com for analysis by Ceph
@@ -155,7 +155,7 @@ done
 cp "$ssh_key" "$t4"
 cp "${ssh_key}.pub" "$t4.pub"
 
-sftp -i $t4 \
+sftp -o "IdentityFile=$t4" \
     -C \
     -oCheckHostIP=no \
     -oGlobalKnownHostsFile=$known_hosts \

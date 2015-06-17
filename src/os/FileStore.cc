@@ -270,11 +270,7 @@ int FileStore::lfn_open(coll_t cid,
 
   IndexedPath path2;
   IndexedPath *path = &path2;
-  if (r < 0) {
-    derr << "error getting collection index for " << cid
-      << ": " << cpp_strerror(-r) << dendl;
-    goto fail;
-  }
+
   r = (*index)->lookup(oid, path, &exist);
   if (r < 0) {
     derr << "could not find " << oid << " in index: "
@@ -658,7 +654,7 @@ int FileStore::statfs(struct statfs *buf)
 }
 
 
-int FileStore::open_journal()
+void FileStore::new_journal()
 {
   if (journalpath.length()) {
     dout(10) << "open_journal at " << journalpath << dendl;
@@ -667,7 +663,7 @@ int FileStore::open_journal()
     if (journal)
       journal->logger = logger;
   }
-  return 0;
+  return;
 }
 
 int FileStore::dump_journal(ostream& out)
@@ -915,7 +911,7 @@ int FileStore::mkjournal()
 
   ret = 0;
 
-  open_journal();
+  new_journal();
   if (journal) {
     ret = journal->check();
     if (ret < 0) {
@@ -1467,7 +1463,10 @@ int FileStore::mount()
       goto close_current_fd;
     }
 
-    omap_store->init();
+    if (superblock.omap_backend == "rocksdb")
+      omap_store->init(g_conf->filestore_rocksdb_options);
+    else
+      omap_store->init();
 
     stringstream err;
     if (omap_store->create_and_open(err)) {
@@ -1497,7 +1496,7 @@ int FileStore::mount()
   }
 
   // journal
-  open_journal();
+  new_journal();
 
   // select journal mode?
   if (journal) {
@@ -2018,7 +2017,12 @@ void FileStore::_set_global_replay_guard(coll_t cid,
     return;
 
   // sync all previous operations on this sequencer
-  int ret = sync_filesystem(basedir_fd);
+  int ret = object_map->sync();
+  if (ret < 0) {
+    derr << __func__ << " : omap sync error " << cpp_strerror(ret) << dendl;
+    assert(0 == "_set_global_replay_guard failed");
+  }
+  ret = sync_filesystem(basedir_fd);
   if (ret < 0) {
     derr << __func__ << " :sync_filesytem error " << cpp_strerror(ret) << dendl;
     assert(0 == "_set_global_replay_guard failed");
@@ -3621,6 +3625,7 @@ void FileStore::sync_entry()
 	apply_manager.commit_started();
 	op_tp.unpause();
 
+	object_map->sync();
 	int err = backend->syncfs();
 	if (err < 0) {
 	  derr << "syncfs got " << cpp_strerror(err) << dendl;

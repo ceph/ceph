@@ -16,6 +16,7 @@
 #include "common/Readahead.h"
 #include "common/RWLock.h"
 #include "common/snap_types.h"
+#include "common/WorkQueue.h"
 #include "include/atomic.h"
 #include "include/buffer.h"
 #include "include/rbd/librbd.hpp"
@@ -130,8 +131,12 @@ namespace librbd {
 
     xlist<AsyncResizeRequest*> async_resize_reqs;
 
+    ContextWQ *aio_work_queue;
+    ContextWQ *op_work_queue;
+
     // Configuration
     static const string METADATA_CONF_PREFIX;
+    bool non_blocking_aio;
     bool cache;
     bool cache_writethrough_until_flush;
     uint64_t cache_size;

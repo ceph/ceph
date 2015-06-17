@@ -791,8 +791,8 @@ void Objecter::handle_watch_notify(MWatchNotify *m)
       }
     }
   } else if (!info->is_watch) {
-    // notify completion; we can do this inline since we know the only user
-    // (librados) is safe to call in fast-dispatch context
+    // we have CEPH_WATCH_EVENT_NOTIFY_COMPLETE; we can do this inline since
+    // we know the only user (librados) is safe to call in fast-dispatch context
     assert(info->on_notify_finish);
     info->notify_result_bl->claim(m->get_data());
     info->on_notify_finish->complete(m->return_code);
@@ -2297,14 +2297,8 @@ start:
   return ret;
 }
 
-/**
- * Any write op which is in progress at the start of this call shall no longer
- * be in progress when this call ends.  Operations started after the start
- * of this call may still be in progress when this call ends.
- *
- * @return the latest possible epoch in which a cancelled op could have existed
- */
-epoch_t Objecter::op_cancel_writes(int r)
+
+epoch_t Objecter::op_cancel_writes(int r, int64_t pool)
 {
   rwlock.get_write();
 
@@ -2314,7 +2308,8 @@ epoch_t Objecter::op_cancel_writes(int r)
     OSDSession *s = siter->second;
     s->lock.get_read();
     for (map<ceph_tid_t, Op*>::iterator op_i = s->ops.begin(); op_i != s->ops.end(); ++op_i) {
-      if (op_i->second->target.flags & CEPH_OSD_FLAG_WRITE) {
+      if (op_i->second->target.flags & CEPH_OSD_FLAG_WRITE
+        && (pool == -1 || op_i->second->target.target_oloc.pool == pool)) {
         to_cancel.push_back(op_i->first);
       }
     }
@@ -2331,7 +2326,11 @@ epoch_t Objecter::op_cancel_writes(int r)
 
   rwlock.unlock();
 
-  return epoch;
+  if (to_cancel.size()) {
+    return epoch;
+  } else {
+    return -1;
+  }
 }
 
 bool Objecter::is_pg_changed(
@@ -2370,6 +2369,23 @@ bool Objecter::osdmap_full_flag() const
   RWLock::RLocker rl(rwlock);
 
   return _osdmap_full_flag();
+}
+
+bool Objecter::osdmap_pool_full(const int64_t pool_id) const
+{
+  RWLock::RLocker rl(rwlock);
+
+  if (_osdmap_full_flag()) {
+    return true;
+  }
+
+  const pg_pool_t *pool = osdmap->get_pg_pool(pool_id);
+  if (pool == NULL) {
+    ldout(cct, 4) << __func__ << ": DNE pool " << pool_id << dendl;
+    return false;
+  }
+
+  return pool->has_flag(pg_pool_t::FLAG_FULL);
 }
 
 /**
@@ -2458,6 +2474,7 @@ int Objecter::_calc_target(op_target_t *t, epoch_t *last_force_resend,  bool any
     }
   }
 
+  int size = pi->size;
   int min_size = pi->min_size;
   unsigned pg_num = pi->get_pg_num();
   int up_primary, acting_primary;
@@ -2473,6 +2490,8 @@ int Objecter::_calc_target(op_target_t *t, epoch_t *last_force_resend,  bool any
 	  up_primary,
 	  t->up,
 	  up,
+	  t->size,
+	  size,
 	  t->min_size,
 	  min_size,
 	  t->pg_num,
@@ -2499,6 +2518,7 @@ int Objecter::_calc_target(op_target_t *t, epoch_t *last_force_resend,  bool any
     t->acting_primary = acting_primary;
     t->up_primary = up_primary;
     t->up = up;
+    t->size = size;
     t->min_size = min_size;
     t->pg_num = pg_num;
     ldout(cct, 10) << __func__ << " "

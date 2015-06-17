@@ -81,6 +81,8 @@ TEST_P(StoreTest, collect_metadata) {
   if (GetParam() == string("filestore")) {
     ASSERT_NE(pm.count("filestore_backend"), 0u);
     ASSERT_NE(pm.count("filestore_f_type"), 0u);
+  } else if (GetParam() == string("keyvaluestore")) {
+    ASSERT_NE(pm.count("keyvaluestore_backend"), 0u);
   }
 }
 
@@ -1328,6 +1330,11 @@ TEST_P(StoreTest, OMapTest) {
     ASSERT_EQ(r, 0);
     ASSERT_EQ(cur_attrs.size(), size_t(1));
     ASSERT_TRUE(bl3.contents_equal(bl1));
+ 
+    set<string> keys;
+    r = store->omap_get_keys(cid, hoid, &keys);
+    ASSERT_EQ(r, 0);
+    ASSERT_EQ(keys.size(), size_t(1));
   }
 
   ObjectStore::Transaction t;

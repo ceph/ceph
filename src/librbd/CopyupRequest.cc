@@ -31,15 +31,15 @@ public:
   UpdateObjectMap(AsyncObjectThrottle &throttle, ImageCtx *image_ctx,
                   uint64_t object_no, const std::vector<uint64_t> *snap_ids,
                   size_t snap_id_idx)
-    : C_AsyncObjectThrottle(throttle), m_image_ctx(*image_ctx),
+    : C_AsyncObjectThrottle(throttle, *image_ctx),
       m_object_no(object_no), m_snap_ids(*snap_ids), m_snap_id_idx(snap_id_idx)
   {
   }
 
   virtual int send() {
+    assert(m_image_ctx.owner_lock.is_locked());
     uint64_t snap_id = m_snap_ids[m_snap_id_idx];
     if (snap_id == CEPH_NOSNAP) {
-      RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
       RWLock::RLocker snap_locker(m_image_ctx.snap_lock);
       RWLock::WLocker object_map_locker(m_image_ctx.object_map_lock);
       assert(m_image_ctx.image_watcher->is_lock_owner());
@@ -62,7 +62,6 @@ public:
   }
 
 private:
-  ImageCtx &m_image_ctx;
   uint64_t m_object_no;
   const std::vector<uint64_t> &m_snap_ids;
   size_t m_snap_id_idx;
@@ -186,15 +185,7 @@ private:
 			   << ", oid " << m_oid
                            << ", extents " << m_image_extents
                            << dendl;
-    int r = aio_read(m_ictx->parent, m_image_extents, NULL, &m_copyup_data,
-		     comp, 0);
-    if (r < 0) {
-      lderr(m_ictx->cct) << __func__ << " " << this
-                         << ": error reading from parent: "
-                         << cpp_strerror(r) << dendl;
-      comp->release();
-      complete(r);
-    }
+    aio_read(m_ictx->parent, m_image_extents, NULL, &m_copyup_data, comp, 0);
   }
 
   void CopyupRequest::queue_send()
@@ -272,16 +263,16 @@ private:
 
   bool CopyupRequest::send_object_map() {
     {
-      RWLock::RLocker l(m_ictx->owner_lock);
+      RWLock::RLocker owner_locker(m_ictx->owner_lock);
+      RWLock::RLocker snap_locker(m_ictx->snap_lock);
       if (m_ictx->object_map.enabled()) {
         if (!m_ictx->image_watcher->is_lock_owner()) {
-	  ldout(m_ictx->cct, 20) << "exclusive lock not held for copyup request"
-	 		         << dendl;
+         ldout(m_ictx->cct, 20) << "exclusive lock not held for copyup request"
+                                << dendl;
           assert(m_pending_requests.empty());
           return true;
         }
 
-        RWLock::RLocker snap_locker(m_ictx->snap_lock);
         RWLock::WLocker object_map_locker(m_ictx->object_map_lock);
         if (m_ictx->object_map[m_object_no] != OBJECT_EXISTS ||
             !m_ictx->snaps.empty()) {
@@ -303,12 +294,13 @@ private:
                              << dendl;
       m_state = STATE_OBJECT_MAP;
 
+      RWLock::RLocker owner_locker(m_ictx->owner_lock);
       AsyncObjectThrottle::ContextFactory context_factory(
         boost::lambda::bind(boost::lambda::new_ptr<UpdateObjectMap>(),
         boost::lambda::_1, m_ictx, m_object_no, &m_snap_ids,
         boost::lambda::_2));
       AsyncObjectThrottle *throttle = new AsyncObjectThrottle(
-        NULL, context_factory, create_callback_context(), NULL, 0,
+        NULL, *m_ictx, context_factory, create_callback_context(), NULL, 0,
         m_snap_ids.size());
       throttle->start_ops(m_ictx->concurrent_management_ops);
     }

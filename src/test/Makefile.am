@@ -115,8 +115,6 @@ EXTRA_DIST += \
 	$(srcdir)/test/opensuse-13.2/Dockerfile.in \
 	$(srcdir)/test/opensuse-13.2/install-deps.sh \
 	$(srcdir)/test/opensuse-13.2/ceph.spec.in \
-	$(srcdir)/test/mon/mon-test-helpers.sh \
-	$(srcdir)/test/osd/osd-test-helpers.sh \
         $(srcdir)/test/coverage.sh \
 	$(patsubst %,$(srcdir)/%,$(check_SCRIPTS))
 

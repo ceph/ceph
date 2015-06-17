@@ -14,7 +14,7 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU Library Public License for more details.
 #
-source test/ceph-helpers.sh
+source ../qa/workunits/ceph-helpers.sh
 
 function run() {
     local dir=$1
@@ -65,6 +65,31 @@ function TEST_corrupt_and_repair_replicated() {
     teardown $dir || return 1
 }
 
+function corrupt_and_repair_two() {
+    local dir=$1
+    local poolname=$2
+    local first=$3
+    local second=$4
+
+    #
+    # 1) remove the corresponding file from the OSDs
+    #
+    objectstore_tool $dir $first SOMETHING remove || return 1
+    objectstore_tool $dir $second SOMETHING remove || return 1
+    #
+    # 2) repair the PG
+    #
+    local pg=$(get_pg $poolname SOMETHING)
+    repair $pg
+    #
+    # 3) The files must be back
+    #
+    objectstore_tool $dir $first SOMETHING list-attrs || return 1
+    objectstore_tool $dir $second SOMETHING list-attrs || return 1
+    rados --pool $poolname get SOMETHING $dir/COPY || return 1
+    diff $dir/ORIGINAL $dir/COPY || return 1
+}
+
 #
 # 1) add an object
 # 2) remove the corresponding file from a designated OSD
@@ -95,22 +120,12 @@ function corrupt_and_repair_one() {
     wait_for_clean || return 1
 }
 
-function TEST_corrupt_and_repair_erasure_coded() {
+function corrupt_and_repair_erasure_coded() {
     local dir=$1
-    local poolname=ecpool
-    local payload=ABCDEF
+    local poolname=$2
+    local profile=$3
 
-    setup $dir || return 1
-    run_mon $dir a || return 1
-    run_osd $dir 0 || return 1
-    run_osd $dir 1 || return 1
-    run_osd $dir 2 || return 1
-    run_osd $dir 3 || return 1
-    wait_for_clean || return 1
-
-    ceph osd erasure-code-profile set myprofile \
-        k=2 m=2 ruleset-failure-domain=osd || return 1
-    ceph osd pool create $poolname 1 1 erasure myprofile \
+    ceph osd pool create $poolname 1 1 erasure $profile \
         || return 1
 
     add_something $dir $poolname
@@ -127,10 +142,51 @@ function TEST_corrupt_and_repair_erasure_coded() {
     corrupt_and_repair_two $dir $poolname $not_primary_first $not_primary_second || return 1
     corrupt_and_repair_two $dir $poolname $primary $not_primary_first || return 1
 
+}
+
+function TEST_corrupt_and_repair_jerasure() {
+    local dir=$1
+    local poolname=ecpool
+    local profile=myprofile
+
+    setup $dir || return 1
+    run_mon $dir a || return 1
+    for id in $(seq 0 3) ; do
+        run_osd $dir $id || return 1
+    done
+    wait_for_clean || return 1
+
+    ceph osd erasure-code-profile set $profile \
+        k=2 m=2 ruleset-failure-domain=osd || return 1
+
+    corrupt_and_repair_erasure_coded $dir $poolname $profile || return 1
+
     teardown $dir || return 1
 }
 
-function TEST_unreocvery_erasure_coded() {
+function TEST_corrupt_and_repair_lrc() {
+    local dir=$1
+    local poolname=ecpool
+    local profile=myprofile
+
+    setup $dir || return 1
+    run_mon $dir a || return 1
+    for id in $(seq 0 9) ; do
+        run_osd $dir $id || return 1
+    done
+    wait_for_clean || return 1
+
+    ceph osd erasure-code-profile set $profile \
+        pluing=lrc \
+        k=4 m=2 l=3 \
+        ruleset-failure-domain=osd || return 1
+
+    corrupt_and_repair_erasure_coded $dir $poolname $profile || return 1
+
+    teardown $dir || return 1
+}
+
+function TEST_unfound_erasure_coded() {
     local dir=$1
     local poolname=ecpool
     local payload=ABCDEF
@@ -174,31 +230,6 @@ function TEST_unreocvery_erasure_coded() {
     ceph -s|grep "1/1 unfound" || return 1
 
     teardown $dir || return 1
-}
-
-function corrupt_and_repair_two() {
-    local dir=$1
-    local poolname=$2
-    local first=$3
-    local second=$4
-
-    #
-    # 1) remove the corresponding file from the OSDs
-    #
-    objectstore_tool $dir $first SOMETHING remove || return 1
-    objectstore_tool $dir $second SOMETHING remove || return 1
-    #
-    # 2) repair the PG
-    #
-    local pg=$(get_pg $poolname SOMETHING)
-    repair $pg
-    #
-    # 3) The files must be back
-    #
-    objectstore_tool $dir $first SOMETHING list-attrs || return 1
-    objectstore_tool $dir $second SOMETHING list-attrs || return 1
-    rados --pool $poolname get SOMETHING $dir/COPY || return 1
-    diff $dir/ORIGINAL $dir/COPY || return 1
 }
 
 main osd-scrub-repair "$@"

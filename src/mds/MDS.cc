@@ -1073,7 +1073,7 @@ int MDS::init(MDSMap::DaemonState wanted_state)
     standby_for_rank = MDSMap::MDS_MATCHED_ACTIVE;
 
   beacon.init(mdsmap, want_state, standby_for_rank, standby_for_name);
-  whoami = -1;
+  whoami = MDS_RANK_NONE;
   messenger->set_myname(entity_name_t::MDS(whoami));
   
   // schedule tick
@@ -1566,11 +1566,53 @@ void MDS::handle_mds_map(MMDSMap *m)
 
   // see who i am
   addr = messenger->get_myaddr();
-  whoami = mdsmap->get_rank_gid(mds_gid_t(monc->get_global_id()));
   state = mdsmap->get_state_gid(mds_gid_t(monc->get_global_id()));
   incarnation = mdsmap->get_inc_gid(mds_gid_t(monc->get_global_id()));
+  whoami = mdsmap->get_rank_gid(mds_gid_t(monc->get_global_id()));
+  if (whoami == MDS_RANK_NONE && (
+      state == MDSMap::STATE_STANDBY_REPLAY || state == MDSMap::STATE_ONESHOT_REPLAY)) {
+    whoami = mdsmap->get_mds_info_gid(mds_gid_t(monc->get_global_id())).standby_for_rank;
+  }
+
   dout(10) << "map says i am " << addr << " mds." << whoami << "." << incarnation
 	   << " state " << ceph_mds_state_name(state) << dendl;
+
+  // Once I hold a rank it can't be taken away without
+  // restarting this daemon
+  if (whoami != oldwhoami && oldwhoami != MDS_RANK_NONE) {
+    derr << "Invalid rank transition " << oldwhoami << "->" << whoami << dendl;
+    respawn();
+  }
+
+  // Validate state transitions while I hold a rank
+  {
+    bool state_valid = true;
+    if (whoami != MDS_RANK_NONE && state != oldstate) {
+      if (oldstate == MDSMap::STATE_REPLAY) {
+        if (state != MDSMap::STATE_RESOLVE && state != MDSMap::STATE_RECONNECT) {
+          state_valid = false;
+        }
+      } else if (oldstate == MDSMap::STATE_REJOIN) {
+        if (state != MDSMap::STATE_ACTIVE
+            && state != MDSMap::STATE_CLIENTREPLAY
+            && state != MDSMap::STATE_STOPPED) {
+          state_valid = false;
+        }
+      } else if (oldstate >= MDSMap::STATE_RECONNECT && oldstate < MDSMap::STATE_ACTIVE) {
+        // Once I have entered replay, the only allowable transitions are to
+        // the next state along in the sequence.
+        if (state != oldstate + 1) {
+          state_valid = false;
+        }
+      }
+    }
+
+    if (!state_valid) {
+      derr << "Invalid state transition " << ceph_mds_state_name(oldstate)
+        << "->" << ceph_mds_state_name(state) << dendl;
+      respawn();
+    }
+  }
 
   // mark down any failed peers
   for (map<mds_gid_t,MDSMap::mds_info_t>::const_iterator p = oldmap->get_mds_info().begin();
@@ -1603,45 +1645,38 @@ void MDS::handle_mds_map(MMDSMap *m)
     }
   }
 
-  if (whoami < 0) {
-    if (state == MDSMap::STATE_STANDBY_REPLAY ||
-        state == MDSMap::STATE_ONESHOT_REPLAY) {
-      // fill in whoami from standby-for-rank. If we let this be changed
-      // the logic used to set it here will need to be adjusted.
-      whoami = mdsmap->get_mds_info_gid(mds_gid_t(monc->get_global_id())).standby_for_rank;
-    } else {
-      if (want_state == MDSMap::STATE_STANDBY) {
-        dout(10) << "dropped out of mdsmap, try to re-add myself" << dendl;
-        state = MDSMap::STATE_BOOT;
-        set_want_state(state);
-        goto out;
-      }
-      if (want_state == MDSMap::STATE_BOOT) {
-        dout(10) << "not in map yet" << dendl;
-      } else {
-	// did i get kicked by someone else?
-	if (g_conf->mds_enforce_unique_name) {
-	  if (mds_gid_t existing = mdsmap->find_mds_gid_by_name(name)) {
-	    MDSMap::mds_info_t& i = mdsmap->get_info_gid(existing);
-	    if (i.global_id > monc->get_global_id()) {
-	      dout(1) << "handle_mds_map i (" << addr
-		      << ") dne in the mdsmap, new instance has larger gid " << i.global_id
-		      << ", suicide" << dendl;
-	      suicide();
-	      goto out;
-	    }
-	  }
-	}
-
-        dout(1) << "handle_mds_map i (" << addr
-            << ") dne in the mdsmap, respawning myself" << dendl;
-        respawn();
-      }
+  if (whoami == MDS_RANK_NONE) {
+    if (want_state == MDSMap::STATE_STANDBY) {
+      dout(10) << "dropped out of mdsmap, try to re-add myself" << dendl;
+      state = MDSMap::STATE_BOOT;
+      set_want_state(state);
       goto out;
-    }
-  }
+    } else if (want_state == MDSMap::STATE_BOOT) {
+      dout(10) << "not in map yet" << dendl;
+    } else {
+      // did i get kicked by someone else?
+      if (g_conf->mds_enforce_unique_name) {
+        if (mds_gid_t existing = mdsmap->find_mds_gid_by_name(name)) {
+          MDSMap::mds_info_t& i = mdsmap->get_info_gid(existing);
+          if (i.global_id > monc->get_global_id()) {
+            dout(1) << "handle_mds_map i (" << addr
+                    << ") dne in the mdsmap, new instance has larger gid " << i.global_id
+                    << ", suicide" << dendl;
+            // Call suicide() rather than respawn() because if someone else
+            // has taken our ID, we don't want to keep restarting and
+            // fighting them for the ID.
+            suicide();
+            goto out;
+          }
+        }
+      }
 
-  // ??
+      dout(1) << "handle_mds_map i (" << addr
+          << ") dne in the mdsmap, respawning myself" << dendl;
+      respawn();
+    }
+    goto out;
+  }
 
   if (oldwhoami != whoami || oldstate != state) {
     // update messenger.
@@ -2385,6 +2420,8 @@ void MDS::handle_signal(int signum)
 
 void MDS::damaged()
 {
+  assert(whoami != MDS_RANK_NONE);
+
   set_want_state(MDSMap::STATE_DAMAGED);
   monc->flush_log();  // Flush any clog error from before we were called
   beacon.notify_health(this);  // Include latest status in our swan song
@@ -2397,10 +2434,17 @@ void MDS::damaged()
   respawn();  // Respawn into standby in case mon has other work for us
 }
 
-void MDS::suicide()
+void MDS::suicide(bool fast)
 {
   assert(mds_lock.is_locked());
   set_want_state(MDSMap::STATE_DNE); // whatever.
+
+  if (!fast && !mdsmap->is_dne_gid(mds_gid_t(monc->get_global_id()))) {
+    // Notify the MDSMonitor that we're dying, so that it doesn't have to
+    // wait for us to go laggy.  Only do this if we're actually in the
+    // MDSMap, because otherwise the MDSMonitor will drop our message.
+    beacon.send_and_wait(1);
+  }
 
   dout(1) << "suicide.  wanted " << ceph_mds_state_name(want_state)
 	  << ", now " << ceph_mds_state_name(state) << dendl;
@@ -2482,7 +2526,7 @@ void MDS::respawn()
 
   dout(0) << "respawn execv " << orig_argv[0]
 	  << " failed with " << cpp_strerror(errno) << dendl;
-  suicide();
+  suicide(true);
 }
 
 void MDS::handle_write_error(int err)
@@ -2816,24 +2860,24 @@ bool MDS::_dispatch(Message *m, bool new_msg)
 
     list<CDir*> ls;
     in->get_dirfrags(ls);
-    if (ls.empty())
-      continue;                // must be an open dir.
-    list<CDir*>::iterator p = ls.begin();
-    int n = rand() % ls.size();
-    while (n--)
-      ++p;
-    CDir *dir = *p;
-    if (!dir->get_parent_dir()) continue;    // must be linked.
-    if (!dir->is_auth()) continue;           // must be auth.
-
-    mds_rank_t dest;
-    do {
-      int k = rand() % s.size();
-      set<mds_rank_t>::iterator p = s.begin();
-      while (k--) ++p;
-      dest = *p;
-    } while (dest == whoami);
-    mdcache->migrator->export_dir_nicely(dir,dest);
+    if (!ls.empty()) {	// must be an open dir.
+      list<CDir*>::iterator p = ls.begin();
+      int n = rand() % ls.size();
+      while (n--)
+        ++p;
+      CDir *dir = *p;
+      if (!dir->get_parent_dir()) continue;    // must be linked.
+      if (!dir->is_auth()) continue;           // must be auth.
+  
+      mds_rank_t dest;
+      do {
+        int k = rand() % s.size();
+        set<mds_rank_t>::iterator p = s.begin();
+        while (k--) ++p;
+        dest = *p;
+      } while (dest == whoami);
+      mdcache->migrator->export_dir_nicely(dir,dest);
+    }
   }
   // hack: thrash fragments
   for (int i=0; i<g_conf->mds_thrash_fragments; i++) {

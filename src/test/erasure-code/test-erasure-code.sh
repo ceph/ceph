@@ -16,12 +16,11 @@
 # GNU Library Public License for more details.
 #
 
-source test/ceph-helpers.sh
-source test/mon/mon-test-helpers.sh
-source test/osd/osd-test-helpers.sh
+source ../qa/workunits/ceph-helpers.sh
 
 function run() {
     local dir=$1
+    shift
 
     export CEPH_MON="127.0.0.1:7101"
     export CEPH_ARGS
@@ -30,25 +29,24 @@ function run() {
     CEPH_ARGS+="--mon-host=$CEPH_MON "
 
     setup $dir || return 1
-    run_mon $dir a --public-addr $CEPH_MON || return 1
+    run_mon $dir a || return 1
     # check that erasure code plugins are preloaded
-    CEPH_ARGS='' ./ceph --admin-daemon $dir/a/ceph-mon.a.asok log flush || return 1
-    grep 'load: jerasure.*lrc' $dir/a/log || return 1
+    CEPH_ARGS='' ./ceph --admin-daemon $dir/ceph-mon.a.asok log flush || return 1
+    grep 'load: jerasure.*lrc' $dir/mon.a.log || return 1
     for id in $(seq 0 10) ; do
         run_osd $dir $id || return 1
     done
     wait_for_clean || return 1
     # check that erasure code plugins are preloaded
     CEPH_ARGS='' ./ceph --admin-daemon $dir/ceph-osd.0.asok log flush || return 1
-    grep 'load: jerasure.*lrc' $dir/osd-0.log || return 1
+    grep 'load: jerasure.*lrc' $dir/osd.0.log || return 1
     create_erasure_coded_pool ecpool || return 1
-    FUNCTIONS=${FUNCTIONS:-$(set | sed -n -e 's/^\(TEST_[0-9a-z_]*\) .*/\1/p')}
-    for TEST_function in $FUNCTIONS ; do
-        if ! $TEST_function $dir ; then
-            #cat $dir/a/log
-            return 1
-        fi
+
+    local funcs=${@:-$(set | sed -n -e 's/^\(TEST_[0-9a-z_]*\) .*/\1/p')}
+    for func in $funcs ; do
+        $func $dir || return 1
     done
+
     delete_pool ecpool || return 1
     teardown $dir || return 1
 }
@@ -103,22 +101,6 @@ function rados_put_get() {
     rm $dir/ORIGINAL
 }
 
-function plugin_exists() {
-    local plugin=$1
-
-    local status
-    ./ceph osd erasure-code-profile set TESTPROFILE plugin=$plugin
-    if ./ceph osd crush rule create-erasure TESTRULE TESTPROFILE 2>&1 |
-        grep "$plugin.*No such file" ; then
-        status=1
-    else
-        ./ceph osd crush rule rm TESTRULE
-        status=0
-    fi
-    ./ceph osd erasure-code-profile rm TESTPROFILE 
-    return $status
-}
-
 function TEST_rados_put_get_lrc_advanced() {
     local dir=$1
     local poolname=pool-lrc-a
@@ -157,7 +139,7 @@ function TEST_rados_put_get_lrc_kml() {
 }
 
 function TEST_rados_put_get_isa() {
-    if ! plugin_exists isa ; then
+    if ! erasure_code_plugin_exists isa ; then
         echo "SKIP because plugin isa has not been built"
         return 0
     fi
@@ -167,7 +149,7 @@ function TEST_rados_put_get_isa() {
     ./ceph osd erasure-code-profile set profile-isa \
         plugin=isa \
         ruleset-failure-domain=osd || return 1
-    ./ceph osd pool create $poolname 12 12 erasure profile-isa \
+    ./ceph osd pool create $poolname 1 1 erasure profile-isa \
         || return 1
 
     rados_put_get $dir $poolname || return 1
@@ -297,151 +279,7 @@ function TEST_chunk_mapping() {
     ./ceph osd erasure-code-profile rm remap-profile
 }
 
-#
-# This test case tries to validate the following behavior:
-#  For object on EC pool, if there is one shard having read error (
-#  either primary or replica), it will trigger OSD crash.
-#
-function TEST_rados_get_dataeio_no_subreadall_jerasure() {
-    local dir=$1
-
-    # check if osd_pool_erasure_code_subread_all is enabled or not
-    # turn it off if it is enabled
-    #
-    local subread=1
-    CEPH_ARGS='' ./ceph --admin-daemon $dir/ceph-osd.0.asok config get \
-        "osd_pool_erasure_code_subread_all" | grep "true"
-    if (( $? == 0 )); then
-        subread=0
-        for id in $(seq 0 10) ; do
-            kill_osd_daemon $dir $id || return 1
-            run_osd $dir $id "--osd_pool_erasure_code_subread_all=false" || return 1
-        done
-    fi
-     
-    local poolname=pool-jerasure
-    local profile=profile-jerasure
-    ./ceph osd erasure-code-profile set $profile \
-        plugin=jerasure \
-        k=4 m=2 \
-        ruleset-failure-domain=osd || return 1
-    ./ceph osd pool create $poolname 12 12 erasure $profile \
-        || return 1
-
-    # inject eio on primary OSD (0), then peer OSD (1)
-    # OSD with eio injection will crash at reading object
-    #
-    for shardid in 0 1; do
-        local objname=obj-eio-$$-$shardid
-        local -a initial_osds=($(get_osds $poolname $objname))
-        local last=$((${#initial_osds[@]} - 1))
-
-    	CEPH_ARGS='' ./ceph --admin-daemon $dir/ceph-osd.${initial_osds[$shardid]}.asok config set \
-            filestore_debug_inject_read_err true || return 1
-    	CEPH_ARGS='' ./ceph --admin-daemon $dir/ceph-osd.${initial_osds[$shardid]}.asok injectdataerr \
-            $poolname $objname $shardid || return 1
-    	CEPH_ARGS='' ./ceph --admin-daemon $dir/ceph-osd.${initial_osds[$shardid]}.asok config set \
-            filestore_fail_eio false || return 1
-    	rados_put_get $dir $poolname $objname || return 1
-    	check_osd_status ${initial_osds[$shardid]} "down" || return 1
-
-        # restart the crashed OSDs, note it could crash multiple OSDs,
-        # since after the primary's crash, the second replica could be
-        # promoted as primary and crash again due to read error
-    	if (( $subread == 0 )); then
-            for s in "${initial_osds[@]}"; do
-                activate_osd $dir $s --osd_pool_erasure_code_subread_all=false || return 1
-            done
-    	else
-            for s in "${initial_osds[@]}"; do
-               activate_osd $dir $s || return 1
-            done
-    	fi
-        wait_for_clean
-    done
-
-    delete_pool $poolname
-    ./ceph osd erasure-code-profile rm $profile
-}
-
-# this test case is aimed to test the fix of https://github.com/ceph/ceph/pull/2952
-# this test case can test both client read and recovery read on EIO
-# but at this moment, above pull request ONLY resolves client read on EIO
-# so this case will fail at function *rados_put_get* when one OSD out
-# so disable this case for now until both crashes of client read and recovery read 
-# on EIO to be fixed
-#
-#function TEST_rados_get_dataeio_subreadall_jerasure() {
-#    local dir=$1
-#
-#    # check if osd_pool_erasure_code_subread_all is enabled or not
-#    # turn it on if it is disabled
-#    # skip this case if osd_pool_erasure_code_subread_all is not supported
-#    #
-#    CEPH_ARGS='' ./ceph --admin-daemon $dir/ceph-osd.0.asok config get \
-#        "osd_pool_erasure_code_subread_all" | grep "error"
-#    if (( $? == 0 )); then
-#        echo "Skip this case because osd_pool_erasure_code_subread_all is not supported"
-#        return 0
-#    fi
-#
-#    # make sure osd_pool_erasure_code_subread_all is true on every OSD
-#    #
-#    for id in $(seq 0 10) ; do
-#        CEPH_ARGS='' ./ceph --admin-daemon $dir/ceph-osd.$id.asok config get \
-#            "osd_pool_erasure_code_subread_all" | grep "true"
-#        if (( $? != 0 )); then
-#            kill_osd_daemon $dir $id || return 1
-#            run_osd $dir $id "--osd_pool_erasure_code_subread_all=true" || return 1
-#        fi
-#    done
-#     
-#    local poolname=pool-jerasure
-#    local profile=profile-jerasure
-#    ./ceph osd erasure-code-profile set $profile \
-#        plugin=jerasure \
-#        k=4 m=2 \
-#        ruleset-failure-domain=osd || return 1
-#    ./ceph osd pool create $poolname 12 12 erasure $profile \
-#        || return 1
-#
-#    # inject eio on primary OSD (0), then peer OSD (1)
-#    # primary OSD will not crash at reading object but pg will be marked as inconsistent
-#    #
-#    for shardid in 0 1; do
-#        local objname=obj-eio-$$-$shardid
-#        local -a initial_osds=($(get_osds $poolname $objname))
-#        local last=$((${#initial_osds[@]} - 1))
-#        local pg=$(get_pg $poolname $objname)
-#
-#        CEPH_ARGS='' ./ceph --admin-daemon $dir/ceph-osd.${initial_osds[$shardid]}.asok config set \
-#            filestore_debug_inject_read_err true || return 1
-#        CEPH_ARGS='' ./ceph --admin-daemon $dir/ceph-osd.${initial_osds[$shardid]}.asok injectdataerr \
-#            $poolname $objname $shardid || return 1
-#        rados_put_get $dir $poolname $objname || return 1
-#        check_osd_status ${initial_osds[0]} "up" || return 1
-#
-#        # the reason to skip this check when current shardid != 0 is that the first k chunks returned is not
-#        # always containing current shardid, so this pg may not be marked as inconsistent
-#        # However, primary OSD (when shardid == 0) is always the faster one normally, so we can check pg status
-#        if (( $shardid == 0 )); then
-#            check_pg_status $pg "inconsistent" || return 1
-#        fi
-#
-#    	  # recreate crashed OSD with the same id since I don't know how to restart it :(
-#        if (( $shardid != 0 )); then
-#            kill_osd_daemon $dir ${initial_osds[0]} || return 1
-#            run_osd $dir ${initial_osds[0]} "--osd_pool_erasure_code_subread_all=true" || return 1
-#        fi
-#        kill_osd_daemon $dir ${initial_osds[$shardid]} || return 1
-#        run_osd $dir ${initial_osds[$shardid]} "--osd_pool_erasure_code_subread_all=true" || return 1
-#    done
-#
-#    delete_pool $poolname
-#    ./ceph osd erasure-code-profile rm $profile
-#}
-
-main test-erasure-code
+main test-erasure-code "$@"
 
 # Local Variables:
 # compile-command: "cd ../.. ; make -j4 && test/erasure-code/test-erasure-code.sh"

@@ -143,6 +143,7 @@
 #include <map>
 #include <set>
 #include <vector>
+#include <iostream>
 #include "include/memory.h"
 #include "include/buffer.h"
 
@@ -152,9 +153,48 @@ using namespace std;
 
 namespace ceph {
 
+  typedef map<std::string,std::string> ErasureCodeProfile;
+
+  inline ostream& operator<<(ostream& out, const ErasureCodeProfile& profile) {
+    out << "{";
+    for (ErasureCodeProfile::const_iterator it = profile.begin();
+	 it != profile.end();
+	 ++it) {
+      if (it != profile.begin()) out << ",";
+      out << it->first << "=" << it->second;
+    }
+    out << "}";
+    return out;
+  }
+
+
   class ErasureCodeInterface {
   public:
     virtual ~ErasureCodeInterface() {}
+
+    /**
+     * Initialize the instance according to the content of
+     * **profile**. The **ss** stream is set with debug messages or
+     * error messages, the content of which depend on the
+     * implementation.
+     *
+     * Return 0 on success or a negative errno on error. When
+     * returning on error, the implementation is expected to
+     * provide a human readable explanation in **ss**.
+     *
+     * @param [in] profile a key/value map
+     * @param [out] ss contains informative messages when an error occurs
+     * @return 0 on success or a negative errno on error.
+     */
+    virtual int init(ErasureCodeProfile &profile, ostream *ss) = 0;
+
+    /**
+     * Return the profile that was used to initialize the instance
+     * with the **init** method.
+     *
+     * @return the profile in use by the instance
+     */
+    virtual const ErasureCodeProfile &get_profile() const = 0;
 
     /**
      * Create a new ruleset in **crush** under the name **name**,

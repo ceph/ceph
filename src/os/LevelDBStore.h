@@ -161,7 +161,7 @@ public:
   ~LevelDBStore();
 
   static int _test_init(const string& dir);
-  int init();
+  int init(string option_str="");
 
   /// Opens underlying db
   int open(ostream &out) {

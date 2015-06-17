@@ -378,9 +378,10 @@ like this appropriately::
 
 You may also need to add rules to IP tables on your Ceph hosts to ensure
 that clients can access the ports associated with your Ceph monitors (i.e., port
-6789 by default) and Ceph OSDs (i.e., 6800 et. seq. by default). For example::
+6789 by default) and Ceph OSDs (i.e., 6800 through 7300 by default). For
+example::
 
-	iptables -A INPUT -m multiport -p tcp -s {ip-address}/{netmask} --dports 6789,6800:6810 -j ACCEPT
+	iptables -A INPUT -m multiport -p tcp -s {ip-address}/{netmask} --dports 6789,6800:7300 -j ACCEPT
 
 
 Everything Failed! Now What?

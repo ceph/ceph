@@ -35,6 +35,7 @@ struct SnapRealm {
   SnapRealm *parent;
   set<SnapRealm*> open_children;    // active children that are currently open
   map<inodeno_t,SnapRealm*> open_past_parents;  // these are explicitly pinned.
+  set<SnapRealm*> open_past_children;  // past children who has pinned me
 
   // cache
   snapid_t cached_seq;           // max seq over self and all past+present parents.
@@ -65,6 +66,8 @@ struct SnapRealm {
     return false;
   }
 
+  bool is_open() { return open; }
+  void _close_parents() { open = false; }
   bool _open_parents(MDSInternalContextBase *retryorfinish, snapid_t first=1, snapid_t last=CEPH_NOSNAP);
   void _remove_missing_parent(snapid_t snapid, inodeno_t parent, int err);
   bool open_parents(MDSInternalContextBase *retryorfinish) {
@@ -75,6 +78,7 @@ struct SnapRealm {
   }
   bool have_past_parents_open(snapid_t first=1, snapid_t last=CEPH_NOSNAP);
   void add_open_past_parent(SnapRealm *parent);
+  void remove_open_past_parent(inodeno_t ino);
   void close_parents();
 
   void prune_past_parents();

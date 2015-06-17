@@ -244,6 +244,27 @@ You should see the placement group states change from ``active+clean`` to
 ``active, some degraded objects``, and finally ``active+clean`` when migration
 completes. (Control-c to exit.)
 
+.. note:: Sometimes, typically in a "small" cluster with few hosts (for
+   instance with a small testing cluster), the fact to take ``out`` the
+   OSD can spawn a CRUSH corner case where some PGs remain stuck in the
+   ``active+remapped`` state. If you are in this case, you should mark
+   the OSD ``in`` with:
+
+       ``ceph osd in {osd-num}``
+
+   to come back to the initial state and then, instead of marking ``out``
+   the OSD, set its weight to 0 with:
+
+       ``ceph osd crush reweight osd.{osd-num} 0``
+
+   After that, you can observe the data migration which should come to its
+   end. The difference between marking ``out`` the OSD and reweighting it
+   to 0 is that in the first case the weight of the bucket which contains
+   the OSD isn't changed whereas in the second case the weight of the bucket
+   is updated (and decreased of the OSD weight). The reweight command could
+   be sometimes favoured in the case of a "small" cluster.
+
+
 
 Stopping the OSD
 ----------------

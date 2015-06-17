@@ -70,7 +70,7 @@ public:
 
   /// test whether we can successfully initialize; may have side effects (e.g., create)
   static int test_init(const string& type, const string& dir);
-  virtual int init() = 0;
+  virtual int init(string option_str="") = 0;
   virtual int open(ostream &out) = 0;
   virtual int create_and_open(ostream &out) = 0;
 
@@ -130,7 +130,7 @@ public:
       if (!generic_iter->valid())
 	return false;
       pair<string,string> raw_key = generic_iter->raw_key();
-      return (raw_key.first == prefix);
+      return (raw_key.first.compare(0, prefix.length(), prefix) == 0);
     }
     int next() {
       if (valid())

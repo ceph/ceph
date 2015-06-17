@@ -57,10 +57,29 @@ struct ECSubWrite {
       temp_added(temp_added),
       temp_removed(temp_removed),
       updated_hit_set_history(updated_hit_set_history) {}
+  void claim(ECSubWrite &other) {
+    from = other.from;
+    tid = other.tid;
+    reqid = other.reqid;
+    soid = other.soid;
+    stats = other.stats;
+    t.swap(other.t);
+    at_version = other.at_version;
+    trim_to = other.trim_to;
+    trim_rollback_to = other.trim_rollback_to;
+    log_entries.swap(other.log_entries);
+    temp_added.swap(other.temp_added);
+    temp_removed.swap(other.temp_removed);
+    updated_hit_set_history = other.updated_hit_set_history;
+  }
   void encode(bufferlist &bl) const;
   void decode(bufferlist::iterator &bl);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<ECSubWrite*>& o);
+private:
+  // no outside copying -- slow
+  ECSubWrite(ECSubWrite& other);
+  const ECSubWrite& operator=(const ECSubWrite& other);
 };
 WRITE_CLASS_ENCODER(ECSubWrite)
 

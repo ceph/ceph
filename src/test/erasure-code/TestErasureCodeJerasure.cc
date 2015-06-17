@@ -41,6 +41,18 @@ typedef ::testing::Types<
 > JerasureTypes;
 TYPED_TEST_CASE(ErasureCodeTest, JerasureTypes);
 
+TYPED_TEST(ErasureCodeTest, sanity_check_k)
+{
+  TypeParam jerasure;
+  ErasureCodeProfile profile;
+  profile["k"] = "1";
+  profile["m"] = "1";
+  profile["packetsize"] = "8";
+  ostringstream errors;
+  EXPECT_EQ(-EINVAL, jerasure.init(profile, &errors));
+  EXPECT_NE(std::string::npos, errors.str().find("must be >= 2"));
+}
+
 TYPED_TEST(ErasureCodeTest, encode_decode)
 {
   const char *per_chunk_alignments[] = { "false", "true" };
@@ -48,13 +60,13 @@ TYPED_TEST(ErasureCodeTest, encode_decode)
        per_chunk_alignment < 2;
        per_chunk_alignment++) {
     TypeParam jerasure;
-    map<std::string,std::string> parameters;
-    parameters["k"] = "2";
-    parameters["m"] = "2";
-    parameters["packetsize"] = "8";
-    parameters["jerasure-per-chunk-alignment"] =
+    ErasureCodeProfile profile;
+    profile["k"] = "2";
+    profile["m"] = "2";
+    profile["packetsize"] = "8";
+    profile["jerasure-per-chunk-alignment"] =
       per_chunk_alignments[per_chunk_alignment];
-    jerasure.init(parameters);
+    jerasure.init(profile, &cerr);
 
 #define LARGE_ENOUGH 2048
     bufferptr in_ptr(buffer::create_page_aligned(LARGE_ENOUGH));
@@ -119,12 +131,12 @@ TYPED_TEST(ErasureCodeTest, encode_decode)
 TYPED_TEST(ErasureCodeTest, minimum_to_decode)
 {
   TypeParam jerasure;
-  map<std::string,std::string> parameters;
-  parameters["k"] = "2";
-  parameters["m"] = "2";
-  parameters["w"] = "7";
-  parameters["packetsize"] = "8";
-  jerasure.init(parameters);
+  ErasureCodeProfile profile;
+  profile["k"] = "2";
+  profile["m"] = "2";
+  profile["w"] = "7";
+  profile["packetsize"] = "8";
+  jerasure.init(profile, &cerr);
 
   //
   // If trying to read nothing, the minimum is empty.
@@ -217,11 +229,11 @@ TYPED_TEST(ErasureCodeTest, minimum_to_decode)
 TEST(ErasureCodeTest, encode)
 {
   ErasureCodeJerasureReedSolomonVandermonde jerasure;
-  map<std::string,std::string> parameters;
-  parameters["k"] = "2";
-  parameters["m"] = "2";
-  parameters["w"] = "8";
-  jerasure.init(parameters);
+  ErasureCodeProfile profile;
+  profile["k"] = "2";
+  profile["m"] = "2";
+  profile["w"] = "8";
+  jerasure.init(profile, &cerr);
 
   unsigned aligned_object_size = jerasure.get_alignment() * 2;
   {
@@ -296,11 +308,11 @@ TEST(ErasureCodeTest, create_ruleset)
   {
     stringstream ss;
     ErasureCodeJerasureReedSolomonVandermonde jerasure;
-    map<std::string,std::string> parameters;
-    parameters["k"] = "2";
-    parameters["m"] = "2";
-    parameters["w"] = "8";
-    jerasure.init(parameters);
+    ErasureCodeProfile profile;
+    profile["k"] = "2";
+    profile["m"] = "2";
+    profile["w"] = "8";
+    jerasure.init(profile, &cerr);
     int ruleset = jerasure.create_ruleset("myrule", *c, &ss);
     EXPECT_EQ(0, ruleset);
     EXPECT_EQ(-EEXIST, jerasure.create_ruleset("myrule", *c, &ss));
@@ -320,24 +332,24 @@ TEST(ErasureCodeTest, create_ruleset)
   {
     stringstream ss;
     ErasureCodeJerasureReedSolomonVandermonde jerasure;
-    map<std::string,std::string> parameters;
-    parameters["k"] = "2";
-    parameters["m"] = "2";
-    parameters["w"] = "8";
-    parameters["ruleset-root"] = "BAD";
-    jerasure.init(parameters);
+    ErasureCodeProfile profile;
+    profile["k"] = "2";
+    profile["m"] = "2";
+    profile["w"] = "8";
+    profile["ruleset-root"] = "BAD";
+    jerasure.init(profile, &cerr);
     EXPECT_EQ(-ENOENT, jerasure.create_ruleset("otherrule", *c, &ss));
     EXPECT_EQ("root item BAD does not exist", ss.str());
   }
   {
     stringstream ss;
     ErasureCodeJerasureReedSolomonVandermonde jerasure;
-    map<std::string,std::string> parameters;
-    parameters["k"] = "2";
-    parameters["m"] = "2";
-    parameters["w"] = "8";
-    parameters["ruleset-failure-domain"] = "WORSE";
-    jerasure.init(parameters);
+    ErasureCodeProfile profile;
+    profile["k"] = "2";
+    profile["m"] = "2";
+    profile["w"] = "8";
+    profile["ruleset-failure-domain"] = "WORSE";
+    jerasure.init(profile, &cerr);
     EXPECT_EQ(-EINVAL, jerasure.create_ruleset("otherrule", *c, &ss));
     EXPECT_EQ("unknown type WORSE", ss.str());
   }
@@ -359,7 +371,7 @@ int main(int argc, char **argv)
  * Local Variables:
  * compile-command: "cd ../.. ;
  *   make -j4 unittest_erasure_code_jerasure &&
- *   valgrind --tool=memcheck --leak-check=full \
+ *   valgrind --tool=memcheck \
  *      ./unittest_erasure_code_jerasure \
  *      --gtest_filter=*.* --log-to-stderr=true --debug-osd=20"
  * End:

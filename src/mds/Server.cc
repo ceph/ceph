@@ -1078,7 +1078,13 @@ void Server::reply_client_request(MDRequestRef& mdr, MClientReply *reply)
   mdr->mark_event("replying");
 
   // note successful request in session map?
-  if (req->may_write() && mdr->session && reply->get_result() == 0) {
+  //
+  // setfilelock requests are special, they only modify states in MDS memory.
+  // The states get lost when MDS fails. If Client re-send a completed
+  // setfilelock request, it means that client did not receive corresponding
+  // setfilelock reply.  So MDS should re-execute the setfilelock request.
+  if (req->may_write() && req->get_op() != CEPH_MDS_OP_SETFILELOCK &&
+      reply->get_result() == 0 && mdr->session) {
     inodeno_t created = mdr->alloc_ino ? mdr->alloc_ino : mdr->used_prealloc_ino;
     mdr->session->add_completed_request(mdr->reqid.tid, created);
     if (mdr->ls) {
@@ -2684,6 +2690,11 @@ void Server::handle_client_lookup_ino(MDRequestRef& mdr,
   }
   if (!in) {
     mdcache->open_ino(ino, (int64_t)-1, new C_MDS_LookupIno2(this, mdr), false);
+    return;
+  }
+
+  if (mdr && in->snaprealm && !in->snaprealm->is_open() &&
+      !in->snaprealm->open_parents(new C_MDS_RetryRequest(mdcache, mdr))) {
     return;
   }
 
@@ -8061,7 +8072,7 @@ void Server::_renamesnap_finish(MDRequestRef& mdr, CInode *diri, snapid_t snapid
 
   dout(10) << "snaprealm now " << *diri->snaprealm << dendl;
 
-  mdcache->do_realm_invalidate_and_update_notify(diri, CEPH_SNAP_OP_CREATE, true);
+  mdcache->do_realm_invalidate_and_update_notify(diri, CEPH_SNAP_OP_UPDATE, true);
 
   // yay
   mdr->in[0] = diri;

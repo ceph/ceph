@@ -1126,6 +1126,7 @@ public:
     vector<int> acting;  ///< set of acting osds for last pg we mapped to
     int up_primary;      ///< primary for last pg we mapped to based on the up set
     int acting_primary;  ///< primary for last pg we mapped to based on the acting set
+    int size;        ///< the size of the pool when were were last mapped
     int min_size;        ///< the min size of the pool when were were last mapped
 
     bool used_replica;
@@ -1141,6 +1142,7 @@ public:
 	pg_num(0),
 	up_primary(-1),
 	acting_primary(-1),
+	size(-1),
 	min_size(-1),
 	used_replica(false),
 	paused(false),
@@ -1694,6 +1696,14 @@ public:
 
   bool osdmap_full_flag() const;
 
+  /**
+   * Test pg_pool_t::FLAG_FULL on a pool
+   *
+   * @return true if the pool exists and has the flag set, or
+   *         the global full flag is set, else false
+   */
+  bool osdmap_pool_full(const int64_t pool_id) const;
+
  private:
   map<uint64_t, LingerOp*>  linger_ops;
   // we use this just to confirm a cookie is valid before dereferencing the ptr
@@ -1993,7 +2003,16 @@ private:
   friend class C_CancelOp;
 public:
   int op_cancel(ceph_tid_t tid, int r);
-  epoch_t op_cancel_writes(int r);
+
+  /**
+   * Any write op which is in progress at the start of this call shall no
+   * longer be in progress when this call ends.  Operations started after the
+   * start of this call may still be in progress when this call ends.
+   *
+   * @return the latest possible epoch in which a cancelled op could have
+   *         existed, or -1 if nothing was cancelled.
+   */
+  epoch_t op_cancel_writes(int r, int64_t pool=-1);
 
   // commands
   int osd_command(int osd, vector<string>& cmd,

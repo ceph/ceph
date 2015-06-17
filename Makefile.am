@@ -25,9 +25,9 @@ EXTRA_DIST += \
 # why is it so hard to make autotools to this?
 install-data-local::
 	-mkdir -p $(DESTDIR)$(datadir)/ceph
-	-install -m 644 share/known_hosts_drop.ceph.com $(DESTDIR)$(datadir)/ceph/known_hosts_drop.ceph.com
-	-install -m 644 share/id_dsa_drop.ceph.com $(DESTDIR)$(datadir)/ceph/id_dsa_drop.ceph.com
-	-install -m 644 share/id_dsa_drop.ceph.com.pub $(DESTDIR)$(datadir)/ceph/id_dsa_drop.ceph.com.pub
+	-install -m 600 share/known_hosts_drop.ceph.com $(DESTDIR)$(datadir)/ceph/known_hosts_drop.ceph.com
+	-install -m 600 share/id_dsa_drop.ceph.com $(DESTDIR)$(datadir)/ceph/id_dsa_drop.ceph.com
+	-install -m 600 share/id_dsa_drop.ceph.com.pub $(DESTDIR)$(datadir)/ceph/id_dsa_drop.ceph.com.pub
 
 all-local::
 if WITH_DEBUG
@@ -56,7 +56,9 @@ check-local:: all
 		echo "or run make CHECK_ULIMIT=false -j4 check to override this safeguard." ; \
 		exit 1 ; \
 	fi
-	$(srcdir)/src/test/run-cli-tests '$(top_builddir)/src/test'
+
+check_SCRIPTS = \
+	src/test/run-cli-tests
 
 # "make distclean" both runs this and recurses into src/gtest, if
 # gtest is in DIST_SUBDIRS. Take extra care to not fail when

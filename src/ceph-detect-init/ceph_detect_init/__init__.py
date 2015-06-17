@@ -53,6 +53,7 @@ def _get_distro(distro, use_rhceph=False):
     distributions = {
         'debian': debian,
         'ubuntu': debian,
+        'linuxmint': debian,
         'centos': centos,
         'scientific': centos,
         'redhat': centos,

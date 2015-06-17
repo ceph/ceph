@@ -34,6 +34,23 @@ using librados::snap_t;
 using librados::IoCtx;
 
 namespace librbd {
+
+namespace {
+
+class ThreadPoolSingleton : public ThreadPool {
+public:
+  ThreadPoolSingleton(CephContext *cct)
+    : ThreadPool(cct, "librbd::thread_pool", cct->_conf->rbd_op_threads,
+                 "rbd_op_threads") {
+    start();
+  }
+  virtual ~ThreadPoolSingleton() {
+    stop();
+  }
+};
+
+} // anonymous namespace
+
   const string ImageCtx::METADATA_CONF_PREFIX = "conf_";
 
   ImageCtx::ImageCtx(const string &image_name, const string &image_id,
@@ -49,15 +66,15 @@ namespace librbd {
       image_watcher(NULL),
       refresh_seq(0),
       last_refresh(0),
-      owner_lock("librbd::ImageCtx::owner_lock"),
-      md_lock("librbd::ImageCtx::md_lock"),
-      cache_lock("librbd::ImageCtx::cache_lock"),
-      snap_lock("librbd::ImageCtx::snap_lock"),
-      parent_lock("librbd::ImageCtx::parent_lock"),
-      refresh_lock("librbd::ImageCtx::refresh_lock"),
-      object_map_lock("librbd::ImageCtx::object_map_lock"),
-      async_ops_lock("librbd::ImageCtx::async_ops_lock"),
-      copyup_list_lock("librbd::ImageCtx::copyup_list_lock"),
+      owner_lock(unique_lock_name("librbd::ImageCtx::owner_lock", this)),
+      md_lock(unique_lock_name("librbd::ImageCtx::md_lock", this)),
+      cache_lock(unique_lock_name("librbd::ImageCtx::cache_lock", this)),
+      snap_lock(unique_lock_name("librbd::ImageCtx::snap_lock", this)),
+      parent_lock(unique_lock_name("librbd::ImageCtx::parent_lock", this)),
+      refresh_lock(unique_lock_name("librbd::ImageCtx::refresh_lock", this)),
+      object_map_lock(unique_lock_name("librbd::ImageCtx::object_map_lock", this)),
+      async_ops_lock(unique_lock_name("librbd::ImageCtx::async_ops_lock", this)),
+      copyup_list_lock(unique_lock_name("librbd::ImageCtx::copyup_list_lock", this)),
       extra_read_flags(0),
       old_format(true),
       order(0), size(0), features(0),
@@ -67,7 +84,7 @@ namespace librbd {
       object_cacher(NULL), writeback_handler(NULL), object_set(NULL),
       readahead(),
       total_bytes_read(0), copyup_finisher(NULL),
-      object_map(*this)
+      object_map(*this), aio_work_queue(NULL), op_work_queue(NULL)
   {
     md_ctx.dup(p);
     data_ctx.dup(p);
@@ -76,6 +93,16 @@ namespace librbd {
 
     memset(&header, 0, sizeof(header));
     memset(&layout, 0, sizeof(layout));
+
+    ThreadPoolSingleton *thread_pool_singleton;
+    cct->lookup_or_create_singleton_object<ThreadPoolSingleton>(
+      thread_pool_singleton, "librbd::thread_pool");
+    aio_work_queue = new ContextWQ("librbd::aio_work_queue",
+                                   cct->_conf->rbd_op_thread_timeout,
+                                   thread_pool_singleton);
+    op_work_queue = new ContextWQ("librbd::op_work_queue",
+                                  cct->_conf->rbd_op_thread_timeout,
+                                  thread_pool_singleton);
   }
 
   ImageCtx::~ImageCtx() {
@@ -97,6 +124,9 @@ namespace librbd {
       copyup_finisher = NULL;
     }
     delete[] format_string;
+
+    delete op_work_queue;
+    delete aio_work_queue;
   }
 
   int ImageCtx::init() {
@@ -637,6 +667,8 @@ namespace librbd {
 
   void ImageCtx::shutdown_cache() {
     flush_async_operations();
+
+    RWLock::RLocker owner_locker(owner_lock);
     invalidate_cache(true);
     object_cacher->stop();
   }
@@ -661,7 +693,7 @@ namespace librbd {
 
   void ImageCtx::invalidate_cache(Context *on_finish) {
     if (object_cacher == NULL) {
-      on_finish->complete(0);
+      op_work_queue->queue(on_finish, 0);
       return;
     }
 
@@ -690,7 +722,8 @@ namespace librbd {
                  << unclean << " bytes remain" << dendl;
       r = -EBUSY;
     }
-    on_finish->complete(r);
+
+    op_work_queue->queue(on_finish, r);
   }
 
   void ImageCtx::clear_nonexistence_cache() {
@@ -758,21 +791,15 @@ namespace librbd {
   }
 
   void ImageCtx::flush_async_operations(Context *on_finish) {
-    bool complete = false;
-    {
-      Mutex::Locker l(async_ops_lock);
-      if (async_ops.empty()) {
-        complete = true;
-      } else {
-        ldout(cct, 20) << "flush async operations: " << on_finish << " "
-                       << "count=" << async_ops.size() << dendl;
-        async_ops.front()->add_flush_context(on_finish);
-      }
+    Mutex::Locker l(async_ops_lock);
+    if (async_ops.empty()) {
+      op_work_queue->queue(on_finish, 0);
+      return;
     }
 
-    if (complete) {
-      on_finish->complete(0);
-    }
+    ldout(cct, 20) << "flush async operations: " << on_finish << " "
+                   << "count=" << async_ops.size() << dendl;
+    async_ops.front()->add_flush_context(on_finish);
   }
 
   void ImageCtx::cancel_async_requests() {
@@ -817,6 +844,7 @@ namespace librbd {
     ldout(cct, 20) << __func__ << dendl;
     static uint64_t max_conf_items = 128;
     std::map<string, bool> configs = boost::assign::map_list_of(
+        "rbd_non_blocking_aio", false)(
         "rbd_cache", false)(
         "rbd_cache_writethrough_until_flush", false)(
         "rbd_cache_size", false)(
@@ -882,6 +910,7 @@ namespace librbd {
         config = cct->_conf->rbd_##config;                                     \
     } while (0);
 
+    ASSIGN_OPTION(non_blocking_aio);
     ASSIGN_OPTION(cache);
     ASSIGN_OPTION(cache_writethrough_until_flush);
     ASSIGN_OPTION(cache_size);
