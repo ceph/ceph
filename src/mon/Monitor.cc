@@ -1881,10 +1881,12 @@ void Monitor::lose_election(epoch_t epoch, set<int> &q, int l, uint64_t features
 
   finish_election();
 
-  Metadata sys_info;
-  collect_sys_info(&sys_info, g_ceph_context);
-  messenger->send_message(new MMonMetadata(sys_info),
-			  monmap->get_inst(get_leader()));
+  if (quorum_features & CEPH_FEATURE_MON_METADATA) {
+    Metadata sys_info;
+    collect_sys_info(&sys_info, g_ceph_context);
+    messenger->send_message(new MMonMetadata(sys_info),
+			    monmap->get_inst(get_leader()));
+  }
 }
 
 void Monitor::finish_election()
