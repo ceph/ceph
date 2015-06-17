@@ -3899,7 +3899,7 @@ if (!set_conf_param(v, p1, p2, p3)) { \
     break;
 
   case OPT_LOCK_REMOVE:
-    r = do_lock_remove(image, lock_cookie, lock_client);
+    r = do_lock_remove(image, lock_client, lock_cookie);
     if (r < 0) {
       cerr << "rbd: releasing lock failed: " << cpp_strerror(r) << std::endl;
       return -r;
