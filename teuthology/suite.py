@@ -186,9 +186,10 @@ def create_initial_config(suite, suite_branch, ceph_branch, teuthology_branch,
     if kernel_hash:
         log.info("kernel sha1: {hash}".format(hash=kernel_hash))
         kernel_dict = dict(kernel=dict(kdb=True, sha1=kernel_hash))
+        if kernel_hash is not 'distro':
+            kernel_dict['kernel']['flavor'] = kernel_flavor
     else:
         kernel_dict = dict(kernel=dict())
-    kernel_dict['kernel']['flavor'] = kernel_flavor
 
     # Get the ceph hash
     ceph_hash = get_hash('ceph', ceph_branch, kernel_flavor, machine_type,
@@ -542,7 +543,7 @@ def schedule_suite(job_config,
 
         parsed_yaml = yaml.load(raw_yaml)
         os_type = parsed_yaml.get('os_type') or job_config.os_type
-        kernel_flavor = job_config.kernel['flavor']
+        kernel_flavor = job_config.kernel.get('flavor', 'basic')
         exclude_arch = parsed_yaml.get('exclude_arch')
         exclude_os_type = parsed_yaml.get('exclude_os_type')
 
