@@ -723,7 +723,7 @@ protected:
       *kb_used += kb_used_i;
       *kb_avail += kb_avail_i;
     }
-    return kb > 0;
+    return *kb > 0;
   }
 
 protected:
