@@ -3084,7 +3084,7 @@ void Monitor::handle_forward(MonOpRequestRef op)
   MForward *m = static_cast<MForward*>(op->get_req());
   dout(10) << "received forwarded message from " << m->client
 	   << " via " << m->get_source_inst() << dendl;
-  MonSession *session = static_cast<MonSession *>(m->get_connection()->get_priv());
+  MonSession *session = op->get_session();
   assert(session);
 
   if (!session->is_capable("mon", MON_CAP_X)) {
@@ -3217,7 +3217,7 @@ void Monitor::no_reply(PaxosServiceMessage *req)
 void Monitor::handle_route(MonOpRequestRef op)
 {
   MRoute *m = static_cast<MRoute*>(op->get_req());
-  MonSession *session = static_cast<MonSession *>(m->get_connection()->get_priv());
+  MonSession *session = op->get_session();
   //check privileges
   if (session && !session->is_capable("mon", MON_CAP_X)) {
     dout(0) << "MRoute received from entity without appropriate perms! "
@@ -3387,7 +3387,7 @@ void Monitor::dispatch(MonOpRequestRef op)
 
   bool reuse_caps = false;
   dout(20) << "have connection" << dendl;
-  s = static_cast<MonSession *>(connection->get_priv());
+  s = op->get_session();
   if (s && s->closed) {
     caps = s->caps;
     reuse_caps = true;
@@ -4095,7 +4095,7 @@ void Monitor::handle_subscribe(MonOpRequestRef op)
   
   bool reply = false;
 
-  MonSession *s = static_cast<MonSession *>(m->get_connection()->get_priv());
+  MonSession *s = op->get_session();
   if (!s) {
     dout(10) << " no session, dropping" << dendl;
     return;
@@ -4147,7 +4147,7 @@ void Monitor::handle_get_version(MonOpRequestRef op)
   dout(10) << "handle_get_version " << *m << dendl;
   PaxosService *svc = NULL;
 
-  MonSession *s = static_cast<MonSession *>(m->get_connection()->get_priv());
+  MonSession *s = op->get_session();
   if (!s) {
     dout(10) << " no session, dropping" << dendl;
     return;

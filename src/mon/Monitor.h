@@ -798,7 +798,7 @@ public:
         if (!op->get_req()->get_connection()) {
           ss << "connection dropped for command ";
         } else {
-          MonSession *s = m->get_session();
+          MonSession *s = op->get_session();
 
           // if client drops we may not have a session to draw information from.
           if (s) {
