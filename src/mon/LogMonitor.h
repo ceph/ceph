@@ -130,11 +130,11 @@ private:
     return true;
   }
 
-  struct C_Log : public Context {
+  struct C_Log : public C_MonOp {
     LogMonitor *logmon;
-    MonOpRequestRef op;
-    C_Log(LogMonitor *p, MonOpRequestRef o) : logmon(p), op(o) {}
-    void finish(int r) {
+    C_Log(LogMonitor *p, MonOpRequestRef o) : 
+      C_MonOp(o), logmon(p) {}
+    void _finish(int r) {
       if (r == -ECANCELED) {
 	return;
       }
