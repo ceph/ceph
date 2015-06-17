@@ -3020,6 +3020,12 @@ void Monitor::reply_command(MMonCommand *m, int rc, const string &rs, bufferlist
   send_reply(m, reply);
 }
 
+void Monitor::reply_command(MonOpRequestRef op, int rc, const string &rs, version_t version)
+{
+  bufferlist rdata;
+  reply_command(op, rc, rs, rdata, version);
+}
+
 void Monitor::reply_command(MonOpRequestRef op, int rc, const string &rs,
                             bufferlist& rdata, version_t version)
 {
