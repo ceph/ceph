@@ -526,7 +526,7 @@ bool AuthMonitor::preprocess_command(MonOpRequestRef op)
   if (!cmdmap_from_json(m->cmd, &cmdmap, ss)) {
     // ss has reason for failure
     string rs = ss.str();
-    mon->reply_command(m, -EINVAL, rs, rdata, get_last_committed());
+    mon->reply_command(op, -EINVAL, rs, rdata, get_last_committed());
     return true;
   }
 
@@ -543,7 +543,7 @@ bool AuthMonitor::preprocess_command(MonOpRequestRef op)
 
   MonSession *session = m->get_session();
   if (!session) {
-    mon->reply_command(m, -EACCES, "access denied", rdata, get_last_committed());
+    mon->reply_command(op, -EACCES, "access denied", rdata, get_last_committed());
     return true;
   }
 
@@ -553,7 +553,7 @@ bool AuthMonitor::preprocess_command(MonOpRequestRef op)
   EntityName entity;
   if (!entity_name.empty() && !entity.from_str(entity_name)) {
     ss << "invalid entity_auth " << entity_name;
-    mon->reply_command(m, -EINVAL, ss.str(), get_last_committed());
+    mon->reply_command(op, -EINVAL, ss.str(), get_last_committed());
     return true;
   }
 
@@ -639,7 +639,7 @@ bool AuthMonitor::preprocess_command(MonOpRequestRef op)
   rdata.append(ds);
   string rs;
   getline(ss, rs, '\0');
-  mon->reply_command(m, r, rs, rdata, get_last_committed());
+  mon->reply_command(op, r, rs, rdata, get_last_committed());
   return true;
 }
 
@@ -675,7 +675,7 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
   if (!cmdmap_from_json(m->cmd, &cmdmap, ss)) {
     // ss has reason for failure
     string rs = ss.str();
-    mon->reply_command(m, -EINVAL, rs, rdata, get_last_committed());
+    mon->reply_command(op, -EINVAL, rs, rdata, get_last_committed());
     return true;
   }
 
@@ -692,7 +692,7 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
 
   MonSession *session = m->get_session();
   if (!session) {
-    mon->reply_command(m, -EACCES, "access denied", rdata, get_last_committed());
+    mon->reply_command(op, -EACCES, "access denied", rdata, get_last_committed());
     return true;
   }
 
@@ -715,7 +715,7 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
     if (bl.length() == 0) {
       ss << "auth import: no data supplied";
       getline(ss, rs);
-      mon->reply_command(m, -EINVAL, rs, get_last_committed());
+      mon->reply_command(op, -EINVAL, rs, get_last_committed());
       return true;
     }
     bufferlist::iterator iter = bl.begin();
@@ -1000,7 +1000,7 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
 done:
   rdata.append(ds);
   getline(ss, rs, '\0');
-  mon->reply_command(m, err, rs, rdata, get_last_committed());
+  mon->reply_command(op, err, rs, rdata, get_last_committed());
   return false;
 }
 

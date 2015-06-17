@@ -164,7 +164,7 @@ bool MonmapMonitor::preprocess_command(MonOpRequestRef op)
   map<string, cmd_vartype> cmdmap;
   if (!cmdmap_from_json(m->cmd, &cmdmap, ss)) {
     string rs = ss.str();
-    mon->reply_command(m, -EINVAL, rs, rdata, get_last_committed());
+    mon->reply_command(op, -EINVAL, rs, rdata, get_last_committed());
     return true;
   }
 
@@ -173,7 +173,7 @@ bool MonmapMonitor::preprocess_command(MonOpRequestRef op)
 
   MonSession *session = m->get_session();
   if (!session) {
-    mon->reply_command(m, -EACCES, "access denied", get_last_committed());
+    mon->reply_command(op, -EACCES, "access denied", get_last_committed());
     return true;
   }
 
@@ -250,7 +250,7 @@ reply:
     string rs;
     getline(ss, rs);
 
-    mon->reply_command(m, r, rs, rdata, get_last_committed());
+    mon->reply_command(op, r, rs, rdata, get_last_committed());
     return true;
   } else
     return false;
@@ -284,7 +284,7 @@ bool MonmapMonitor::prepare_command(MonOpRequestRef op)
   map<string, cmd_vartype> cmdmap;
   if (!cmdmap_from_json(m->cmd, &cmdmap, ss)) {
     string rs = ss.str();
-    mon->reply_command(m, -EINVAL, rs, get_last_committed());
+    mon->reply_command(op, -EINVAL, rs, get_last_committed());
     return true;
   }
 
@@ -293,7 +293,7 @@ bool MonmapMonitor::prepare_command(MonOpRequestRef op)
 
   MonSession *session = m->get_session();
   if (!session) {
-    mon->reply_command(m, -EACCES, "access denied", get_last_committed());
+    mon->reply_command(op, -EACCES, "access denied", get_last_committed());
     return true;
   }
 
@@ -377,7 +377,7 @@ bool MonmapMonitor::prepare_command(MonOpRequestRef op)
     ss << "removed mon." << name << " at " << addr << ", there are now " << pending_map.size() << " monitors" ;
     getline(ss, rs);
     // send reply immediately in case we get removed
-    mon->reply_command(m, 0, rs, get_last_committed());
+    mon->reply_command(op, 0, rs, get_last_committed());
     return true;
   }
   else
@@ -385,7 +385,7 @@ bool MonmapMonitor::prepare_command(MonOpRequestRef op)
 
 out:
   getline(ss, rs);
-  mon->reply_command(m, err, rs, get_last_committed());
+  mon->reply_command(op, err, rs, get_last_committed());
   return false;
 }
 
