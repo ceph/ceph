@@ -5,7 +5,7 @@ ceph_test_rados_api_io
 ceph_test_rados_api_list
 ceph_test_rados_api_lock
 ceph_test_rados_api_misc
-ceph_test_rados_api_tier --gtest_filter=-LibRadosTwoPoolsPP.Evict:-LibRadosTwoPoolsPP.Evict:-LibRadosTwoPoolsECPP.Evict
+ceph_test_rados_api_tier --gtest_filter=-LibRadosTwoPoolsPP.Evict:LibRadosTwoPoolsECPP.Evict
 ceph_test_rados_api_pool
 ceph_test_rados_api_snapshots
 ceph_test_rados_api_stat
