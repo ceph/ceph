@@ -2634,46 +2634,13 @@ void PG::init(
   write_if_dirty(*t);
 }
 
-#pragma GCC diagnostic ignored "-Wpragmas"
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
-
 void PG::upgrade(ObjectStore *store)
 {
   assert(info_struct_v <= 8);
   ObjectStore::Transaction t;
 
-  assert(info_struct_v == 7);
-
-  // 7 -> 8
-  pg_log.mark_log_for_rewrite();
-  ghobject_t log_oid(OSD::make_pg_log_oid(pg_id));
-  ghobject_t biginfo_oid(OSD::make_pg_biginfo_oid(pg_id));
-  t.remove(coll_t::meta(), log_oid);
-  t.remove(coll_t::meta(), biginfo_oid);
-  t.collection_rmattr(coll, "info");
-
-  t.touch(coll, pgmeta_oid);
-  map<string,bufferlist> v;
-  __u8 ver = cur_struct_v;
-  ::encode(ver, v[infover_key]);
-  t.omap_setkeys(coll, pgmeta_oid, v);
-
-  dirty_info = true;
-  dirty_big_info = true;
-  write_if_dirty(t);
-
-  int r = store->apply_transaction(t);
-  if (r != 0) {
-    derr << __func__ << ": apply_transaction returned "
-	 << cpp_strerror(r) << dendl;
-    assert(0);
-  }
-  assert(r == 0);
+  assert(0 == "no support for pre v8");
 }
-
-#pragma GCC diagnostic pop
-#pragma GCC diagnostic warning "-Wpragmas"
 
 int PG::_prepare_write_info(map<string,bufferlist> *km,
 			    epoch_t epoch,
@@ -2744,10 +2711,6 @@ void PG::prepare_write_info(map<string,bufferlist> *km)
   dirty_big_info = false;
 }
 
-#pragma GCC diagnostic ignored "-Wpragmas"
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
-
 bool PG::_has_removal_flag(ObjectStore *store,
 			   spg_t pgid)
 {
@@ -2762,10 +2725,6 @@ bool PG::_has_removal_flag(ObjectStore *store,
       values.size() == 1)
     return true;
 
-  // try old way.  tolerate EOPNOTSUPP.
-  char val;
-  if (store->collection_getattr(coll, "remove", &val, 1) > 0)
-    return true;
   return false;
 }
 
@@ -2790,49 +2749,23 @@ epoch_t PG::peek_map_epoch(ObjectStore *store,
   keys.insert(epoch_key);
   map<string,bufferlist> values;
   int r = store->omap_get_values(coll, pgmeta_oid, keys, &values);
-  if (r == 0) {
-    assert(values.size() == 2);
-
-    // sanity check version
-    bufferlist::iterator bp = values[infover_key].begin();
-    __u8 struct_v = 0;
-    ::decode(struct_v, bp);
-    assert(struct_v >= 8);
-
-    // get epoch
-    bp = values[epoch_key].begin();
-    ::decode(cur_epoch, bp);
-  } else if (r == -ENOENT) {
-    // legacy: try v7 or older
-    r = store->collection_getattr(coll, "info", *bl);
-    assert(r > 0);
-    bufferlist::iterator bp = bl->begin();
-    __u8 struct_v = 0;
-    ::decode(struct_v, bp);
-    if (struct_v < 5)
-      return 0;
-    if (struct_v < 6) {
-      ::decode(cur_epoch, bp);
-      return cur_epoch;
-    }
-
-    // get epoch out of leveldb
-    string ek = get_epoch_key(pgid);
-    keys.clear();
-    values.clear();
-    keys.insert(ek);
-    store->omap_get_values(coll_t::meta(), legacy_infos_oid, keys, &values);
-    assert(values.size() == 1);
-    bufferlist::iterator p = values[ek].begin();
-    ::decode(cur_epoch, p);
-  } else {
+  if (r != 0) {
     assert(0 == "unable to open pg metadata");
   }
+  assert(values.size() == 2);
+
+  // sanity check version
+  bufferlist::iterator bp = values[infover_key].begin();
+  __u8 struct_v = 0;
+  ::decode(struct_v, bp);
+  assert(struct_v >= 8);
+
+  // get epoch
+  bp = values[epoch_key].begin();
+  ::decode(cur_epoch, bp);
+
   return cur_epoch;
 }
-
-#pragma GCC diagnostic pop
-#pragma GCC diagnostic warning "-Wpragmas"
 
 void PG::write_if_dirty(ObjectStore::Transaction& t)
 {
