@@ -1,4 +1,4 @@
-.TH  "ceph_selinux"  "8"  "15-05-13" "ceph" "SELinux Policy ceph"
+.TH  "ceph_selinux"  "8"  "15-06-17" "ceph" "SELinux Policy ceph"
 .SH "NAME"
 ceph_selinux \- Security Enhanced Linux Policy for the ceph processes
 .SH "DESCRIPTION"
@@ -145,22 +145,6 @@ If you want to allow confined applications to use nscd shared memory, you must t
 
 .EE
 
-.SH NSSWITCH DOMAIN
-
-.PP
-If you want to allow users to resolve user passwd entries directly from ldap rather then using a sssd server for the ceph_t, you must turn on the authlogin_nsswitch_use_ldap boolean.
-
-.EX
-.B setsebool -P authlogin_nsswitch_use_ldap 1
-.EE
-
-.PP
-If you want to allow confined applications to run with kerberos for the ceph_t, you must turn on the kerberos_enabled boolean.
-
-.EX
-.B setsebool -P kerberos_enabled 1
-.EE
-
 .SH "MANAGED FILES"
 
 The SELinux process type ceph_t can manage files labeled with the following file types.  The paths listed are the default paths for these file types.  Note the processes UID still need to have DAC permissions.
@@ -254,7 +238,7 @@ SELinux ceph policy is very flexible allowing users to setup their ceph processe
 SELinux defines the file context types for the ceph, if you wanted to
 store files with these types in a diffent paths, you need to execute the semanage command to sepecify alternate labeling and then use restorecon to put the labels on disk.
 
-.B semanage fcontext -a -t ceph_exec_t '/srv/ceph/content(/.*)?'
+.B semanage fcontext -a -t ceph_var_run_t '/srv/myceph_content(/.*)?'
 .br
 .B restorecon -R -v /srv/myceph_content
 
