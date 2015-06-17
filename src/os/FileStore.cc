@@ -1202,8 +1202,8 @@ int FileStore::upgrade()
   if (r == 1)
     return 0;
 
-  if (version < 3) {
-    derr << "ObjectStore is old at version " << version << ".  Please upgrade to firefly v0.80.x, convert your store, and then upgrade."  << dendl;
+  if (version < 4) {
+    derr << "ObjectStore is old at version " << version << ".  Please upgrade to hammer v0.94.x first."  << dendl;
     return -EINVAL;
   }
 
