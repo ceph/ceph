@@ -209,6 +209,7 @@ void Elector::victory()
 
 void Elector::handle_propose(MonOpRequestRef op)
 {
+  op->mark_event("elector:handle_propose");
   MMonElection *m = static_cast<MMonElection*>(op->get_req());
   dout(5) << "handle_propose from " << m->get_source() << dendl;
   int from = m->get_source().num();
@@ -267,6 +268,7 @@ void Elector::handle_propose(MonOpRequestRef op)
  
 void Elector::handle_ack(MonOpRequestRef op)
 {
+  op->mark_event("elector:handle_ack");
   MMonElection *m = static_cast<MMonElection*>(op->get_req());
   dout(5) << "handle_ack from " << m->get_source() << dendl;
   int from = m->get_source().num();
@@ -308,6 +310,7 @@ void Elector::handle_ack(MonOpRequestRef op)
 
 void Elector::handle_victory(MonOpRequestRef op)
 {
+  op->mark_event("elector:handle_victory");
   MMonElection *m = static_cast<MMonElection*>(op->get_req());
   dout(5) << "handle_victory from " << m->get_source() << " quorum_features " << m->quorum_features << dendl;
   int from = m->get_source().num();
@@ -350,6 +353,7 @@ void Elector::handle_victory(MonOpRequestRef op)
 
 void Elector::nak_old_peer(MonOpRequestRef op)
 {
+  op->mark_event("elector:nak_old_peer");
   MMonElection *m = static_cast<MMonElection*>(op->get_req());
   uint64_t supported_features = m->get_connection()->get_features();
 
@@ -369,6 +373,7 @@ void Elector::nak_old_peer(MonOpRequestRef op)
 
 void Elector::handle_nak(MonOpRequestRef op)
 {
+  op->mark_event("elector:handle_nak");
   MMonElection *m = static_cast<MMonElection*>(op->get_req());
   dout(1) << "handle_nak from " << m->get_source()
 	  << " quorum_features " << m->quorum_features << dendl;
@@ -387,6 +392,7 @@ void Elector::handle_nak(MonOpRequestRef op)
 
 void Elector::dispatch(MonOpRequestRef op)
 {
+  op->mark_event("elector:dispatch");
   switch (op->get_req()->get_type()) {
     
   case MSG_MON_ELECTION:
