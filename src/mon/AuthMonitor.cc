@@ -358,7 +358,7 @@ bool AuthMonitor::prep_auth(MonOpRequestRef op, bool paxos_writable)
   MAuth *m = static_cast<MAuth*>(op->get_req());
   dout(10) << "prep_auth() blob_size=" << m->get_auth_payload().length() << dendl;
 
-  MonSession *s = (MonSession *)m->get_connection()->get_priv();
+  MonSession *s = op->get_session();
   if (!s) {
     dout(10) << "no session, dropping" << dendl;
     return true;
