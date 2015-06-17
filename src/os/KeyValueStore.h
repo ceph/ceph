@@ -598,16 +598,6 @@ class KeyValueStore : public ObjectStore,
               BufferTransaction &t);
   int _rmattrs(coll_t cid, const ghobject_t& oid, BufferTransaction &t);
 
-  int collection_getattr(coll_t c, const char *name, void *value, size_t size);
-  int collection_getattr(coll_t c, const char *name, bufferlist& bl);
-  int collection_getattrs(coll_t cid, map<string,bufferptr> &aset);
-
-  int _collection_setattr(coll_t c, const char *name, const void *value,
-                          size_t size, BufferTransaction &t);
-  int _collection_rmattr(coll_t c, const char *name, BufferTransaction &t);
-  int _collection_setattrs(coll_t cid, map<string,bufferptr> &aset,
-                           BufferTransaction &t);
-
   // collections
   int _collection_hint_expected_num_objs(coll_t cid, uint32_t pg_num,
       uint64_t num_objs) const { return 0; }
