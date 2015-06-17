@@ -741,7 +741,7 @@ bool MDSMonitor::preprocess_command(MonOpRequestRef op)
   if (!cmdmap_from_json(m->cmd, &cmdmap, ss)) {
     // ss has reason for failure
     string rs = ss.str();
-    mon->reply_command(m, -EINVAL, rs, rdata, get_last_committed());
+    mon->reply_command(op, -EINVAL, rs, rdata, get_last_committed());
     return true;
   }
 
@@ -753,7 +753,7 @@ bool MDSMonitor::preprocess_command(MonOpRequestRef op)
 
   MonSession *session = m->get_session();
   if (!session) {
-    mon->reply_command(m, -EACCES, "access denied", rdata, get_last_committed());
+    mon->reply_command(op, -EACCES, "access denied", rdata, get_last_committed());
     return true;
   }
 
@@ -943,7 +943,7 @@ bool MDSMonitor::preprocess_command(MonOpRequestRef op)
     rdata.append(ds);
     string rs;
     getline(ss, rs);
-    mon->reply_command(m, r, rs, rdata, get_last_committed());
+    mon->reply_command(op, r, rs, rdata, get_last_committed());
     return true;
   } else
     return false;
@@ -1060,7 +1060,7 @@ bool MDSMonitor::prepare_command(MonOpRequestRef op)
   map<string, cmd_vartype> cmdmap;
   if (!cmdmap_from_json(m->cmd, &cmdmap, ss)) {
     string rs = ss.str();
-    mon->reply_command(m, -EINVAL, rs, rdata, get_last_committed());
+    mon->reply_command(op, -EINVAL, rs, rdata, get_last_committed());
     return true;
   }
 
@@ -1070,7 +1070,7 @@ bool MDSMonitor::prepare_command(MonOpRequestRef op)
   /* Refuse access if message not associated with a valid session */
   MonSession *session = m->get_session();
   if (!session) {
-    mon->reply_command(m, -EACCES, "access denied", rdata, get_last_committed());
+    mon->reply_command(op, -EACCES, "access denied", rdata, get_last_committed());
     return true;
   }
 
@@ -1114,7 +1114,7 @@ out:
     return true;
   } else {
     // reply immediately
-    mon->reply_command(m, r, rs, rdata, get_last_committed());
+    mon->reply_command(op, r, rs, rdata, get_last_committed());
     return false;
   }
 }
