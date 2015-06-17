@@ -321,7 +321,7 @@ void set_req_state_err(struct req_state *s, int err_no)
 
   r = search_err(err_no, RGW_HTTP_ERRORS, ARRAY_LEN(RGW_HTTP_ERRORS));
   if (r) {
-    if(s->prot_flags & RGW_PROTO_WEBSITE && err_no == ERR_WEBSITE_REDIRECT && s->err.http_ret != 0) {
+    if(s->prot_flags & RGW_PROTO_WEBSITE && err_no == ERR_WEBSITE_REDIRECT && !s->err.is_clear()) {
       // http_ret was custom set, so don't change it!
     } else {
       s->err.http_ret = r->http_ret;
