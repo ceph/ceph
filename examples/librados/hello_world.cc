@@ -132,7 +132,7 @@ int main(int argc, const char **argv)
 
     /*
      * now that we have the data to write, let's send it to an object.
-     * We'll use the asynchronous interface for simplicity.
+     * We'll use the synchronous interface for simplicity.
      */
     ret = io_ctx.write_full(object_name, bl);
     if (ret < 0) {
