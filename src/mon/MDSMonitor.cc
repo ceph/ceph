@@ -291,7 +291,7 @@ bool MDSMonitor::preprocess_beacon(MonOpRequestRef op)
   if (pending_mdsmap.is_dne_gid(gid)) {
     if (state != MDSMap::STATE_BOOT) {
       dout(7) << "mds_beacon " << *m << " is not in mdsmap" << dendl;
-      mon->send_reply(m, new MMDSMap(mon->monmap->fsid, &mdsmap));
+      mon->send_reply(op, new MMDSMap(mon->monmap->fsid, &mdsmap));
       return true;
     } else {
       return false;  // not booted yet.
@@ -356,7 +356,7 @@ bool MDSMonitor::preprocess_beacon(MonOpRequestRef op)
  reply:
   // note time and reply
   _note_beacon(m);
-  mon->send_reply(m,
+  mon->send_reply(op,
 		  new MMDSBeacon(mon->monmap->fsid, m->get_global_id(), m->get_name(),
 				 mdsmap.get_epoch(), state, seq));
   return true;
@@ -580,7 +580,7 @@ bool MDSMonitor::prepare_beacon(MonOpRequestRef op)
       pending_mdsmap.mds_info.erase(gid);
 
       // Respond to MDS, so that it knows it can continue to shut down
-      mon->send_reply(m, new MMDSBeacon(mon->monmap->fsid, m->get_global_id(),
+      mon->send_reply(op, new MMDSBeacon(mon->monmap->fsid, m->get_global_id(),
                     m->get_name(), mdsmap.get_epoch(), state, seq));
     } else if (state == MDSMap::STATE_DNE) {
       if (!mon->osdmon()->is_writeable()) {
@@ -595,7 +595,7 @@ bool MDSMonitor::prepare_beacon(MonOpRequestRef op)
       request_proposal(mon->osdmon());
 
       // Respond to MDS, so that it knows it can continue to shut down
-      mon->send_reply(m, new MMDSBeacon(mon->monmap->fsid, m->get_global_id(),
+      mon->send_reply(op, new MMDSBeacon(mon->monmap->fsid, m->get_global_id(),
                     m->get_name(), mdsmap.get_epoch(), state, seq));
     } else {
       info.state = state;
@@ -639,9 +639,9 @@ void MDSMonitor::_updated(MonOpRequestRef op)
 
   if (m->get_state() == MDSMap::STATE_STOPPED) {
     // send the map manually (they're out of the map, so they won't get it automatic)
-    mon->send_reply(m, new MMDSMap(mon->monmap->fsid, &mdsmap));
+    mon->send_reply(op, new MMDSMap(mon->monmap->fsid, &mdsmap));
   } else {
-    mon->send_reply(m, new MMDSBeacon(mon->monmap->fsid,
+    mon->send_reply(op, new MMDSBeacon(mon->monmap->fsid,
 				      m->get_global_id(),
 				      m->get_name(),
 				      mdsmap.get_epoch(),
