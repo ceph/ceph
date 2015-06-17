@@ -1,0 +1,7 @@
+#ifndef CEPH_VERSION_H
+#define CEPH_VERSION_H
+
+#define CEPH_GIT_VER @ceph_git_ver@
+#define CEPH_GIT_NICE_VER "@ceph_git_nice_ver@"
+
+#endif
