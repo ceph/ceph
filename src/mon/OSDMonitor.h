@@ -331,13 +331,12 @@ private:
   void _pool_op_reply(MonOpRequestRef op,
                       int ret, epoch_t epoch, bufferlist *blp=NULL);
 
-  struct C_Booted : public Context {
+  struct C_Booted : public C_MonOp {
     OSDMonitor *cmon;
-    MonOpRequestRef op;
     bool logit;
-    C_Booted(OSDMonitor *cm, MonOpRequestRef op_, bool l=true) : 
-      cmon(cm), op(op_), logit(l) {}
-    void finish(int r) {
+    C_Booted(OSDMonitor *cm, MonOpRequestRef op_, bool l=true) :
+      C_MonOp(op_), cmon(cm), logit(l) {}
+    void _finish(int r) {
       if (r >= 0)
 	cmon->_booted(op, logit);
       else if (r == -ECANCELED)
@@ -349,13 +348,12 @@ private:
     }
   };
 
-  struct C_ReplyMap : public Context {
+  struct C_ReplyMap : public C_MonOp {
     OSDMonitor *osdmon;
-    MonOpRequestRef op;
     epoch_t e;
     C_ReplyMap(OSDMonitor *o, MonOpRequestRef op_, epoch_t ee)
-      : osdmon(o), op(op_), e(ee) {}
-    void finish(int r) {
+      : C_MonOp(op_), osdmon(o), e(ee) {}
+    void _finish(int r) {
       if (r >= 0)
 	osdmon->_reply_map(op, e);
       else if (r == -ECANCELED)
@@ -366,18 +364,17 @@ private:
 	assert(0 == "bad C_ReplyMap return value");
     }    
   };
-  struct C_PoolOp : public Context {
+  struct C_PoolOp : public C_MonOp {
     OSDMonitor *osdmon;
-    MonOpRequestRef op;
     int replyCode;
     int epoch;
     bufferlist reply_data;
     C_PoolOp(OSDMonitor * osd, MonOpRequestRef op_, int rc, int e, bufferlist *rd=NULL) :
-      osdmon(osd), op(op_), replyCode(rc), epoch(e) {
+      C_MonOp(op_), osdmon(osd), replyCode(rc), epoch(e) {
       if (rd)
 	reply_data = *rd;
     }
-    void finish(int r) {
+    void _finish(int r) {
       if (r >= 0)
 	osdmon->_pool_op_reply(op, replyCode, epoch, &reply_data);
       else if (r == -ECANCELED)
