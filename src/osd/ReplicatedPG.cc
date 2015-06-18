@@ -5098,14 +5098,10 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       }
       ++ctx->num_write;
       {
-        if (!obs.exists) {
-	  assert(!oi.is_cache_pinned());
-          ctx->mod_desc.create();
-          t->touch(soid);
-          ctx->delta_stats.num_objects++;
-          obs.exists = true;
-	  obs.oi.new_object();
-        }
+	if (!obs.exists || oi.is_whiteout()) {
+	  result = -ENOENT;
+	  break;
+	}
 
 	if (!oi.is_cache_pinned()) {
 	  oi.set_flag(object_info_t::FLAG_CACHE_PIN);
@@ -5127,10 +5123,10 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       }
       ++ctx->num_write;
       {
-        if (!obs.exists) {
-	  result = 0;
+	if (!obs.exists || oi.is_whiteout()) {
+	  result = -ENOENT;
 	  break;
-        }
+	}
 
 	if (oi.is_cache_pinned()) {
 	  oi.clear_flag(object_info_t::FLAG_CACHE_PIN);
