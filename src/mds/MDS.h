@@ -140,7 +140,14 @@ class AuthAuthorizeHandlerRegistry;
 
 class MDS : public Dispatcher, public md_config_obs_t {
  public:
+
+  /* Global MDS lock: every time someone takes this, they must
+   * also check the `stopping` flag.  If stopping is true, you
+   * must either do nothing and immediately drop the lock, or
+   * never drop the lock again (i.e. call respawn()) */
   Mutex        mds_lock;
+  bool         stopping;
+
   SafeTimer    timer;
 
  private:
@@ -328,10 +335,9 @@ public:
 private:
   class ProgressThread : public Thread {
     MDS *mds;
-    bool stopping;
     Cond cond;
   public:
-    ProgressThread(MDS *mds_) : mds(mds_), stopping(false) {}
+    ProgressThread(MDS *mds_) : mds(mds_) {}
     void * entry(); 
     void shutdown();
     void signal() {cond.Signal();}
@@ -481,6 +487,9 @@ private:
 
   /**
    * Terminate this daemon process.
+   *
+   * This function will return, but once it does so the calling thread
+   * must do no more work as all subsystems will have been shut down.
    *
    * @param fast: if true, do not send a message to the mon before shutting
    *              down
