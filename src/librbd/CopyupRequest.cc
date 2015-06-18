@@ -104,8 +104,9 @@ private:
     bool add_copyup_op = !m_copyup_data.is_zero();
     bool copy_on_read = m_pending_requests.empty();
     if (!add_copyup_op && copy_on_read) {
-      // no copyup data and CoR operation
-      return true;
+      // copyup empty object to prevent future CoR attempts
+      m_copyup_data.clear();
+      add_copyup_op = true;
     }
 
     ldout(m_ictx->cct, 20) << __func__ << " " << this
@@ -166,8 +167,7 @@ private:
       librados::AioCompletion *comp =
         librados::Rados::aio_create_completion(create_callback_context(), NULL,
                                                rados_ctx_cb);
-      r = m_ictx->md_ctx.aio_operate(m_oid, comp, &write_op, snapc.seq.val,
-                                     snaps);
+      r = m_ictx->data_ctx.aio_operate(m_oid, comp, &write_op);
       assert(r == 0);
       comp->release();
     }
@@ -221,10 +221,8 @@ private:
     case STATE_READ_FROM_PARENT:
       ldout(cct, 20) << "READ_FROM_PARENT" << dendl;
       remove_from_list();
-      if (r >= 0) {
+      if (r >= 0 || r == -ENOENT) {
         return send_object_map();
-      } else if (r == -ENOENT) {
-        return send_copyup();
       }
       break;
 
@@ -238,7 +236,12 @@ private:
       pending_copyups = m_pending_copyups.dec();
       ldout(cct, 20) << "COPYUP (" << pending_copyups << " pending)"
                      << dendl;
-      if (r < 0) {
+      if (r == -ENOENT) {
+        // hide the -ENOENT error if this is the last op
+        if (pending_copyups == 0) {
+          complete_requests(0);
+        }
+      } else if (r < 0) {
         complete_requests(r);
       }
       return (pending_copyups == 0);
@@ -266,17 +269,20 @@ private:
       RWLock::RLocker owner_locker(m_ictx->owner_lock);
       RWLock::RLocker snap_locker(m_ictx->snap_lock);
       if (m_ictx->object_map.enabled()) {
+        bool copy_on_read = m_pending_requests.empty();
         if (!m_ictx->image_watcher->is_lock_owner()) {
-         ldout(m_ictx->cct, 20) << "exclusive lock not held for copyup request"
-                                << dendl;
-          assert(m_pending_requests.empty());
+          ldout(m_ictx->cct, 20) << "exclusive lock not held for copyup request"
+                                 << dendl;
+          assert(copy_on_read);
           return true;
         }
 
         RWLock::WLocker object_map_locker(m_ictx->object_map_lock);
-        if (m_ictx->object_map[m_object_no] != OBJECT_EXISTS ||
-            !m_ictx->snaps.empty()) {
+        if (copy_on_read && m_ictx->object_map[m_object_no] != OBJECT_EXISTS) {
+          // CoW already updates the HEAD object map
           m_snap_ids.push_back(CEPH_NOSNAP);
+        }
+        if (!m_ictx->snaps.empty()) {
           m_snap_ids.insert(m_snap_ids.end(), m_ictx->snaps.begin(),
                             m_ictx->snaps.end());
         }
