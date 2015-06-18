@@ -3511,7 +3511,9 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       {
 	// read into a buffer
 	bufferlist bl;
-	int r = osd->store->fiemap(coll, soid, op.extent.offset, op.extent.length, bl);
+	int r = osd->store->fiemap(coll, ghobject_t(soid, ghobject_t::NO_GEN,
+						    info.pgid.shard),
+				   op.extent.offset, op.extent.length, bl);
 	osd_op.outdata.claim(bl);
 	if (r < 0)
 	  result = r;
@@ -3539,7 +3541,9 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	// read into a buffer
 	bufferlist bl;
         int total_read = 0;
-	int r = osd->store->fiemap(coll, soid, op.extent.offset, op.extent.length, bl);
+	int r = osd->store->fiemap(coll, ghobject_t(soid, ghobject_t::NO_GEN,
+						    info.pgid.shard),
+				   op.extent.offset, op.extent.length, bl);
 	if (r < 0)  {
 	  result = r;
           break;
