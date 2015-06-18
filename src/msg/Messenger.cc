@@ -22,11 +22,13 @@ Messenger *Messenger::create(CephContext *cct, const string &type,
     int fd = open("/dev/cpu_dma_latency", O_WRONLY);
     lderr(cct) << __func__ << " setting latency to " << latency << "us" << dendl;
     if (fd < 0) {
-      assert(0 == "open /dev/cpu_dma_latency %m - need root permissions");
+      lderr(cct) << "open /dev/cpu_dma_latency failed: " << cpp_strerror(r) << dendl;
+      assert(0 == "open /dev/cpu_dma_latency failed")
     }
     cfd.set(fd);
     if (write(fd, &latency, sizeof(latency)) != sizeof(latency)) {
-      assert(0 == "write to /dev/cpu_dma_latency %m - need root permissions");
+      lderr(cct) << "write to /dev/cpu_dma_latency failed: " << cpp_strerror(r) << dendl;
+      assert(0 == "write to /dev/cpu_dma_latency failed");
       close(fd);
       cfd.set(0);
     }

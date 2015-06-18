@@ -168,6 +168,7 @@ OPTION(ms_async_set_affinity, OPT_BOOL, true)
 // If ms_async_affinity_cores is empty, all threads will be bind to current running
 // core
 OPTION(ms_async_affinity_cores, OPT_STR, "")
+// You can use "ceph_perf_local" to judge whether this option can help
 OPTION(ms_enable_dma_latency, OPT_BOOL, false)
 
 OPTION(inject_early_sigterm, OPT_BOOL, false)
