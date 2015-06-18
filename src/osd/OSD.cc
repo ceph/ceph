@@ -6113,7 +6113,7 @@ void OSD::handle_osd_map(MOSDMap *m)
       if (o->test_flag(CEPH_OSDMAP_FULL))
 	last_marked_full = e;
 
-      hobject_t fulloid = get_osdmap_pobject_name(e);
+      ghobject_t fulloid = get_osdmap_pobject_name(e);
       t.write(coll_t::meta(), fulloid, 0, bl.length(), bl);
       pin_map_bl(e, bl);
       pinned_maps.push_back(add_map(o));
@@ -6124,7 +6124,7 @@ void OSD::handle_osd_map(MOSDMap *m)
     if (p != m->incremental_maps.end()) {
       dout(10) << "handle_osd_map  got inc map for epoch " << e << dendl;
       bufferlist& bl = p->second;
-      hobject_t oid = get_inc_osdmap_pobject_name(e);
+      ghobject_t oid = get_inc_osdmap_pobject_name(e);
       t.write(coll_t::meta(), oid, 0, bl.length(), bl);
       pin_map_inc_bl(e, bl);
 
@@ -6170,7 +6170,7 @@ void OSD::handle_osd_map(MOSDMap *m)
       }
 
 
-      hobject_t fulloid = get_osdmap_pobject_name(e);
+      ghobject_t fulloid = get_osdmap_pobject_name(e);
       t.write(coll_t::meta(), fulloid, 0, fbl.length(), fbl);
       pin_map_bl(e, fbl);
       pinned_maps.push_back(add_map(o));
