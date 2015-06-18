@@ -29,10 +29,6 @@ public:
     return m_new_size;
   }
 
-  inline uint64_t get_parent_overlap() const {
-    return m_new_parent_overlap;
-  }
-
 private:
   /**
    * Resize goes through the following state machine to resize the image
