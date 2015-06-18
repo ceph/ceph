@@ -4,6 +4,7 @@
  * Ceph - scalable distributed file system
  *
  * Copyright (C) 2015 Red Hat <contact@redhat.com>
+ * Copyright (C) 2015 SUSE LINUX GmbH
  *
  * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -96,6 +97,27 @@ public:
   typedef ceph::shared_ptr<MonOpRequest> Ref;
 
   void send_reply(Message *reply);
+
+  void _dump(utime_t now, Formatter *f) const {
+    {
+      f->open_array_section("events");
+      Mutex::Locker l(lock);
+      for (list<pair<utime_t,string> >::const_iterator i = events.begin();
+           i != events.end(); ++i) {
+        f->open_object_section("event");
+        f->dump_stream("time") << i->first;
+        f->dump_string("event", i->second);
+        f->close_section();
+      }
+      f->close_section();
+      f->open_object_section("info");
+      f->dump_int("seq", seq);
+      f->dump_bool("src_is_mon", is_src_mon());
+      f->dump_stream("source") << request->get_source_inst();
+      f->close_section();
+    }
+  }
+
 };
 
 typedef MonOpRequest::Ref MonOpRequestRef;
