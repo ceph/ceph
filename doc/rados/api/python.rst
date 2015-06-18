@@ -158,7 +158,7 @@ pool.
 Input/Output Context
 --------------------
 
-Reading from and writing to the Ceph Storage Cluster requries an input/output
+Reading from and writing to the Ceph Storage Cluster requires an input/output
 context (ioctx). You can create an ioctx with the ``open_ioctx()`` method of the
 ``Rados`` class. The ``ioctx_name`` parameter is the name of the  pool you wish
 to use.
