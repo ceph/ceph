@@ -72,8 +72,6 @@ protected:
 
   bool capped;
 
-  bool stopping;
-
   // Log position which is persistent *and* for which
   // submit_entry wait_for_safe callbacks have already
   // been called.
@@ -188,7 +186,6 @@ public:
 		  num_events(0), 
 		  unflushed(0),
 		  capped(false),
-		  stopping(false),
 		  safe_pos(0),
 		  journaler(0),
 		  logger(0),
