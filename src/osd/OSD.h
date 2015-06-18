@@ -1082,15 +1082,15 @@ public:
   ClassHandler  *class_handler;
   int get_nodeid() { return whoami; }
   
-  static hobject_t get_osdmap_pobject_name(epoch_t epoch) { 
+  static ghobject_t get_osdmap_pobject_name(epoch_t epoch) {
     char foo[20];
     snprintf(foo, sizeof(foo), "osdmap.%d", epoch);
-    return hobject_t(sobject_t(object_t(foo), 0)); 
+    return ghobject_t(hobject_t(sobject_t(object_t(foo), 0)));
   }
-  static hobject_t get_inc_osdmap_pobject_name(epoch_t epoch) { 
+  static ghobject_t get_inc_osdmap_pobject_name(epoch_t epoch) {
     char foo[20];
     snprintf(foo, sizeof(foo), "inc_osdmap.%d", epoch);
-    return hobject_t(sobject_t(object_t(foo), 0)); 
+    return ghobject_t(hobject_t(sobject_t(object_t(foo), 0)));
   }
 
   static ghobject_t make_snapmapper_oid() {
@@ -1100,24 +1100,24 @@ public:
 	0)));
   }
 
-  static hobject_t make_pg_log_oid(spg_t pg) {
+  static ghobject_t make_pg_log_oid(spg_t pg) {
     stringstream ss;
     ss << "pglog_" << pg;
     string s;
     getline(ss, s);
-    return hobject_t(sobject_t(object_t(s.c_str()), 0));
+    return ghobject_t(hobject_t(sobject_t(object_t(s.c_str()), 0)));
   }
   
-  static hobject_t make_pg_biginfo_oid(spg_t pg) {
+  static ghobject_t make_pg_biginfo_oid(spg_t pg) {
     stringstream ss;
     ss << "pginfo_" << pg;
     string s;
     getline(ss, s);
-    return hobject_t(sobject_t(object_t(s.c_str()), 0));
+    return ghobject_t(hobject_t(sobject_t(object_t(s.c_str()), 0)));
   }
-  static hobject_t make_infos_oid() {
+  static ghobject_t make_infos_oid() {
     hobject_t oid(sobject_t("infos", CEPH_NOSNAP));
-    return oid;
+    return ghobject_t(oid);
   }
   static void recursive_remove_collection(ObjectStore *store,
 					  spg_t pgid,

@@ -2602,8 +2602,8 @@ void PG::upgrade(ObjectStore *store)
 
   // 7 -> 8
   pg_log.mark_log_for_rewrite();
-  hobject_t log_oid(OSD::make_pg_log_oid(pg_id));
-  hobject_t biginfo_oid(OSD::make_pg_biginfo_oid(pg_id));
+  ghobject_t log_oid(OSD::make_pg_log_oid(pg_id));
+  ghobject_t biginfo_oid(OSD::make_pg_biginfo_oid(pg_id));
   t.remove(coll_t::meta(), log_oid);
   t.remove(coll_t::meta(), biginfo_oid);
   t.collection_rmattr(coll, "info");
@@ -2729,7 +2729,7 @@ epoch_t PG::peek_map_epoch(ObjectStore *store,
 			   bufferlist *bl)
 {
   coll_t coll(pgid);
-  hobject_t legacy_infos_oid(OSD::make_infos_oid());
+  ghobject_t legacy_infos_oid(OSD::make_infos_oid());
   ghobject_t pgmeta_oid(pgid.make_pgmeta_oid());
   epoch_t cur_epoch = 0;
 
@@ -2952,7 +2952,7 @@ int PG::read_info(
   }
 
   // legacy (ver < 8)
-  hobject_t infos_oid(OSD::make_infos_oid());
+  ghobject_t infos_oid(OSD::make_infos_oid());
   bufferlist::iterator p = bl.begin();
   ::decode(struct_v, p);
   assert(struct_v == 7);
@@ -2964,7 +2964,7 @@ int PG::read_info(
   keys.insert(k);
   keys.insert(bk);
   values.clear();
-  store->omap_get_values(coll_t::meta(), infos_oid, keys, &values);
+  store->omap_get_values(coll_t::meta(), ghobject_t(infos_oid), keys, &values);
   assert(values.size() == 2);
 
   p = values[k].begin();
@@ -2988,7 +2988,7 @@ void PG::read_state(ObjectStore *store, bufferlist &bl)
   pg_log.read_log(store,
 		  coll,
 		  info_struct_v < 8 ? coll_t::meta() : coll,
-		  info_struct_v < 8 ? OSD::make_pg_log_oid(pg_id) : pgmeta_oid,
+		  ghobject_t(info_struct_v < 8 ? OSD::make_pg_log_oid(pg_id) : pgmeta_oid),
 		  info, oss);
   if (oss.str().length())
     osd->clog->error() << oss;
