@@ -317,11 +317,11 @@ of monitors (i.e., 1, 2:3, 3:4, 3:5, 4:6, etc.) to form a quorum.
 
 Add two Ceph Monitors to your cluster. ::
 
-	ceph-deploy mon create {ceph-node}
+	ceph-deploy mon add {ceph-node}
 
 For example::
 
-	ceph-deploy mon create node2 node3
+	ceph-deploy mon add node2 node3
 
 Once you have added your new Ceph Monitors, Ceph will begin synchronizing
 the monitors and form a quorum. You can check the quorum status by executing
