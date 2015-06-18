@@ -871,13 +871,13 @@ void PGMonitor::check_osd_map(epoch_t epoch)
 
   if (!mon->osdmon()->is_readable()) {
     dout(10) << "check_osd_map -- osdmap not readable, waiting" << dendl;
-    mon->osdmon()->wait_for_readable(new RetryCheckOSDMap(this, epoch));
+    mon->osdmon()->wait_for_readable_ctx(new RetryCheckOSDMap(this, epoch));
     return;
   }
 
   if (!is_writeable()) {
     dout(10) << "check_osd_map -- pgmap not writeable, waiting" << dendl;
-    wait_for_writeable(new RetryCheckOSDMap(this, epoch));
+    wait_for_writeable_ctx(new RetryCheckOSDMap(this, epoch));
     return;
   }
 
