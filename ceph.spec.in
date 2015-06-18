@@ -949,6 +949,8 @@ ln -sf %{_libdir}/librbd.so.1 /usr/lib64/qemu/librbd.so.1
 %{_bindir}/ceph_omapbench
 %{_bindir}/ceph_perf_objectstore
 %{_bindir}/ceph_perf_local
+%{_bindir}/ceph_perf_msgr_client
+%{_bindir}/ceph_perf_msgr_server
 %{_bindir}/ceph_psim
 %{_bindir}/ceph_radosacl
 %{_bindir}/ceph_rgw_jsonparser
