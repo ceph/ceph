@@ -4330,8 +4330,17 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid,
     pg_num = g_conf->osd_pool_default_pg_num;
   if (pgp_num == 0)
     pgp_num = g_conf->osd_pool_default_pgp_num;
-  if (pgp_num > pg_num)
+  if (pg_num > (unsigned)g_conf->mon_max_pool_pg_num) {
+    *ss << "'pg_num' must be greater than 0 and less than or equal to "
+        << g_conf->mon_max_pool_pg_num
+        << " (you may adjust 'mon max pool pg num' for higher values)";
     return -ERANGE;
+  }
+  if (pgp_num > pg_num) {
+    *ss << "'pgp_num' must be greater than 0 and lower or equal than 'pg_num'"
+        << ", which in this case is " << pg_num;
+    return -ERANGE;
+  }
   int r;
   r = prepare_pool_crush_ruleset(pool_type, erasure_code_profile,
 				 crush_ruleset_name, &crush_ruleset, ss);
@@ -6256,21 +6265,7 @@ done:
     int64_t  pg_num;
     int64_t pgp_num;
     cmd_getval(g_ceph_context, cmdmap, "pg_num", pg_num, int64_t(0));
-    if ((pg_num == 0) || (pg_num > g_conf->mon_max_pool_pg_num)) {
-      ss << "'pg_num' must be greater than 0 and less than or equal to "
-	 << g_conf->mon_max_pool_pg_num
-	 << " (you may adjust 'mon max pool pg num' for higher values)";
-      err = -ERANGE;
-      goto reply;
-    }
-
     cmd_getval(g_ceph_context, cmdmap, "pgp_num", pgp_num, pg_num);
-    if ((pgp_num == 0) || (pgp_num > pg_num)) {
-      ss << "'pgp_num' must be greater than 0 and lower or equal than 'pg_num'"
-	 << ", which in this case is " << pg_num;
-      err = -ERANGE;
-      goto reply;
-    }
 
     string pool_type_str;
     cmd_getval(g_ceph_context, cmdmap, "pool_type", pool_type_str);
@@ -6386,6 +6381,8 @@ done:
       case -EAGAIN:
 	wait_for_finished_proposal(new C_RetryMessage(this, m));
 	return true;
+      case -ERANGE:
+        goto reply;
       default:
 	goto reply;
 	break;
