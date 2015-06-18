@@ -10711,11 +10711,6 @@ void ReplicatedPG::hit_set_persist()
   hobject_t oid;
   time_t flush_time = 0;
 
-  // See what start is going to be used later
-  utime_t start = info.hit_set.current_info.begin;
-  if (!start)
-     start = hit_set_start_stamp;
-
   // If any archives are degraded we skip this persist request
   // account for the additional entry being added below
   for (list<pg_hit_set_info_t>::iterator p = info.hit_set.history.begin();
@@ -10730,10 +10725,10 @@ void ReplicatedPG::hit_set_persist()
       return;
   }
 
+  utime_t start = info.hit_set.current_info.begin;
+  if (!start)
+     start = hit_set_start_stamp;
   oid = get_hit_set_archive_object(start, now);
-  // If the current object is degraded we skip this persist request
-  if (is_degraded_or_backfilling_object(oid))
-    return;
   if (scrubber.write_blocked_by_scrub(oid, get_sort_bitwise()))
     return;
 
