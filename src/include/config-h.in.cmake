@@ -243,4 +243,7 @@
 /* res_query is thread safe */
 #cmakedefine HAVE_THREAD_SAFE_RES_QUERY
 
+/* curl_multi_wait */
+#cmakedefine HAVE_CURL_MULTI_WAIT 1
+
 #endif /* CONFIG_H */
