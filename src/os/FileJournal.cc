@@ -1579,7 +1579,7 @@ void FileJournal::submit_entry(uint64_t seq, bufferlist& e, int alignment,
 
   uint32_t uncompress_len = e.length();
   bool compressed = false;
-  if (header.flags & header_t::FLAG_COMPRESS) {
+  if ((header.flags & header_t::FLAG_COMPRESS) && (uncompress_len >= g_conf->journal_compress_min_size)) {
     bufferlist dest;
     e.compress((compression_type)header.compression_type, dest);
     e.swap(dest);
