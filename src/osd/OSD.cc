@@ -4095,7 +4095,7 @@ void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
 
       val.append(valstr);
       newattrs[key] = val;
-      t.omap_setkeys(coll_t(pgid), obj, newattrs);
+      t.omap_setkeys(coll_t(pgid), ghobject_t(obj), newattrs);
       r = store->apply_transaction(t);
       if (r < 0)
         ss << "error=" << r;
@@ -4107,7 +4107,7 @@ void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
       cmd_getval(service->cct, cmdmap, "key", key);
 
       keys.insert(key);
-      t.omap_rmkeys(coll_t(pgid), obj, keys);
+      t.omap_rmkeys(coll_t(pgid), ghobject_t(obj), keys);
       r = store->apply_transaction(t);
       if (r < 0)
         ss << "error=" << r;
@@ -4119,7 +4119,7 @@ void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
 
       cmd_getval(service->cct, cmdmap, "header", headerstr);
       newheader.append(headerstr);
-      t.omap_setheader(coll_t(pgid), obj, newheader);
+      t.omap_setheader(coll_t(pgid), ghobject_t(obj), newheader);
       r = store->apply_transaction(t);
       if (r < 0)
         ss << "error=" << r;
@@ -4129,7 +4129,7 @@ void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
       //Debug: Output entire omap
       bufferlist hdrbl;
       map<string, bufferlist> keyvals;
-      r = store->omap_get(coll_t(pgid), obj, &hdrbl, &keyvals);
+      r = store->omap_get(coll_t(pgid), ghobject_t(obj), &hdrbl, &keyvals);
       if (r >= 0) {
           ss << "header=" << string(hdrbl.c_str(), hdrbl.length());
           for (map<string, bufferlist>::iterator it = keyvals.begin();
