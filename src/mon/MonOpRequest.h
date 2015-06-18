@@ -26,6 +26,16 @@
 struct MonOpRequest : public TrackedOp {
   friend class OpTracker;
 
+  void mark_dispatch() {
+    mark_event("monitor_dispatch");
+  }
+  void mark_wait_for_quorum() {
+    mark_event("wait_for_quorum");
+  }
+  void mark_zap() {
+    mark_event("monitor_zap");
+  }
+
 private:
   Message *request;
   utime_t dequeued_time;
