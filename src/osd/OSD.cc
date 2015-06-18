@@ -5087,9 +5087,9 @@ void OSD::do_command(Connection *con, ceph_tid_t tid, vector<string>& cmd, buffe
       object_t oid(nm);
       hobject_t soid(sobject_t(oid, 0));
       ObjectStore::Transaction *t = new ObjectStore::Transaction;
-      t->write(coll_t::meta(), soid, 0, bsize, bl);
+      t->write(coll_t::meta(), ghobject_t(soid), 0, bsize, bl);
       store->queue_transaction_and_cleanup(NULL, t);
-      cleanupt->remove(coll_t::meta(), soid);
+      cleanupt->remove(coll_t::meta(), ghobject_t(soid));
     }
     store->sync_and_flush();
     utime_t end = ceph_clock_now(cct);
