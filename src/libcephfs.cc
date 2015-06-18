@@ -812,12 +812,28 @@ extern "C" int ceph_read(struct ceph_mount_info *cmount, int fd, char *buf,
   return cmount->get_client()->read(fd, buf, size, offset);
 }
 
+extern "C" int ceph_preadv(struct ceph_mount_info *cmount, int fd,
+              const struct iovec *iov, int iovcnt, int64_t offset)
+{
+  if (!cmount->is_mounted())
+      return -ENOTCONN;
+  return cmount->get_client()->preadv(fd, iov, iovcnt, offset);
+}
+
 extern "C" int ceph_write(struct ceph_mount_info *cmount, int fd, const char *buf,
 			  int64_t size, int64_t offset)
 {
   if (!cmount->is_mounted())
     return -ENOTCONN;
   return cmount->get_client()->write(fd, buf, size, offset);
+}
+
+extern "C" int ceph_pwritev(struct ceph_mount_info *cmount, int fd,
+              const struct iovec *iov, int iovcnt, int64_t offset)
+{
+  if (!cmount->is_mounted())
+    return -ENOTCONN;
+  return cmount->get_client()->pwritev(fd, iov, iovcnt, offset);
 }
 
 extern "C" int ceph_ftruncate(struct ceph_mount_info *cmount, int fd, int64_t size)
