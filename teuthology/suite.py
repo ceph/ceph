@@ -916,7 +916,7 @@ def _build_matrix(path, _isfile=os.path.isfile,
                         submat)
                 submats.append(submat)
             return matrix.Sum(item, submats)
-    assert False, "Invalid path seen in _build_matrix"
+    assert False, "Invalid path %s seen in _build_matrix" % path
     return None
 
 
