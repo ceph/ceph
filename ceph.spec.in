@@ -649,21 +649,11 @@ mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/lib/ceph/bootstrap-mds
 mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/lib/ceph/bootstrap-rgw
 mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/log/radosgw
 
-%pre
-CEPH_GROUP_ID=""
-CEPH_USER_ID=""
-# disabled for now until we have the numbers
-%if 0%{?rhel} || 0%{?centos} || 0%{?fedora}
-CEPH_GROUP_ID="-g 167"
-CEPH_USER_ID="-u 167"
+%if %{defined suse_version}
+# Fedora seems to have some problems with this macro, use it only on SUSE
+%fdupes -s $RPM_BUILD_ROOT/%{python_sitelib}
+%fdupes %buildroot
 %endif
-# %if 0%{?suse_version}
-# CEPH_GROUP_ID="-g "
-# CEPH_USER_ID="-u "
-# %endif
-
-%{_sbindir}/groupadd ceph $CEPH_GROUP_ID -o -r 2>/dev/null || :
-%{_sbindir}/useradd ceph $CEPH_USER_ID -o -r -g ceph -s /sbin/nologin -c "Ceph daemons" -d %{_localstatedir}/lib/ceph 2> /dev/null || :
 
 %clean
 rm -rf $RPM_BUILD_ROOT
@@ -868,6 +858,22 @@ mkdir -p %{_localstatedir}/run/ceph/
 %{python_sitelib}/ceph_daemon.py*
 %{_udevrulesdir}/50-rbd.rules
 %attr(2750,ceph,ceph) %dir %{_localstatedir}/log/ceph/
+
+%pre -n ceph-common
+CEPH_GROUP_ID=""
+CEPH_USER_ID=""
+# disabled for now until we have the numbers
+%if 0%{?rhel} || 0%{?centos} || 0%{?fedora}
+CEPH_GROUP_ID="-g 167"
+CEPH_USER_ID="-u 167"
+%endif
+# %if 0%{?suse_version}
+# CEPH_GROUP_ID="-g "
+# CEPH_USER_ID="-u "
+# %endif
+
+%{_sbindir}/groupadd ceph $CEPH_GROUP_ID -o -r 2>/dev/null || :
+%{_sbindir}/useradd ceph $CEPH_USER_ID -o -r -g ceph -s /sbin/nologin -c "Ceph daemons" -d %{_localstatedir}/lib/ceph 2> /dev/null || :
 
 %postun -n ceph-common
 # Package removal cleanup
