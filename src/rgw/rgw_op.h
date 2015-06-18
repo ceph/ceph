@@ -1043,6 +1043,9 @@ public:
   virtual ~RGWHandler();
   virtual int init(RGWRados *store, struct req_state *_s, RGWClientIO *cio);
 
+  virtual int validate_bucket_name(const string& bucket, int name_strictness) { return 0; }
+  virtual int validate_object_name(const string& object) { return 0; }
+
   virtual RGWOp *get_op(RGWRados *store);
   virtual void put_op(RGWOp *op);
   virtual int read_permissions(RGWOp *op) = 0;

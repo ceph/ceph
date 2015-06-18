@@ -162,7 +162,7 @@ public:
   RGWHandler_ObjStore_SWIFT() {}
   virtual ~RGWHandler_ObjStore_SWIFT() {}
 
-  int validate_bucket_name(const string& bucket);
+  int validate_bucket_name(const string& bucket, int name_strictness);
 
   int init(RGWRados *store, struct req_state *state, RGWClientIO *cio);
   int authorize();

@@ -1315,6 +1315,7 @@ void RGWCreateBucket::execute()
   rgw_obj obj(store->zone.domain_root, s->bucket_name_str);
   obj_version objv, *pobjv = NULL;
 
+  // Check if pre_exec changed it
   if (ret < 0)
 	  return;
 

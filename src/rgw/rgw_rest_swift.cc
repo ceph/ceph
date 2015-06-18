@@ -903,10 +903,9 @@ int RGWHandler_ObjStore_SWIFT::authorize()
   return 0;
 }
 
-int RGWHandler_ObjStore_SWIFT::validate_bucket_name(const string& bucket)
+int RGWHandler_ObjStore_SWIFT::validate_bucket_name(const string& bucket, int name_strictness)
 {
-  int strictness_option = s->cct->_conf->rgw_s3_bucket_name_access_strictness;
-  int ret = RGWHandler_ObjStore::validate_bucket_name(bucket, strictness_option);
+  int ret = RGWHandler_ObjStore::validate_bucket_name(bucket, name_strictness);
   if (ret < 0)
     return ret;
 
@@ -1043,7 +1042,8 @@ int RGWHandler_ObjStore_SWIFT::init(RGWRados *store, struct req_state *s, RGWCli
 {
   dout(10) << "s->object=" << (!s->object.empty() ? s->object : rgw_obj_key("<NULL>")) << " s->bucket=" << (!s->bucket_name_str.empty() ? s->bucket_name_str : "<NULL>") << dendl;
 
-  int ret = validate_bucket_name(s->bucket_name_str.c_str());
+  int name_strictness = s->cct->_conf->rgw_s3_bucket_name_access_strictness;
+  int ret = validate_bucket_name(s->bucket_name_str.c_str(), name_strictness);
   if (ret)
     return ret;
   ret = validate_object_name(s->object.name);
@@ -1072,7 +1072,7 @@ int RGWHandler_ObjStore_SWIFT::init(RGWRados *store, struct req_state *s, RGWCli
 
     string dest_object = dest_obj_key.name;
     if (dest_bucket_name != s->bucket_name_str) {
-      ret = validate_bucket_name(dest_bucket_name.c_str());
+      ret = validate_bucket_name(dest_bucket_name.c_str(), name_strictness);
       if (ret < 0)
         return ret;
     }

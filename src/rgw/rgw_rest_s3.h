@@ -351,7 +351,7 @@ public:
   RGWHandler_Auth_S3() : RGWHandler_ObjStore() {}
   virtual ~RGWHandler_Auth_S3() {}
 
-  virtual int validate_bucket_name(const string& bucket) {
+  virtual int validate_bucket_name(const string& bucket, int name_strictness) {
     return 0;
   }
 

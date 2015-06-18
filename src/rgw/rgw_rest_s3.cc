@@ -2261,6 +2261,12 @@ int RGWHandler_ObjStore_S3::init(RGWRados *store, struct req_state *s, RGWClient
       ldout(s->cct, 0) << "failed to parse copy location" << dendl;
       return -EINVAL;
     }
+    ret = validate_bucket_name(s->src_bucket_name, bucket_name_strictness_value);
+    if (ret)
+      return ret;
+    ret = validate_object_name(s->src_object.name);
+    if (ret)
+      return ret;
   }
 
   s->dialect = "s3";
