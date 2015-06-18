@@ -1464,203 +1464,219 @@ int main(int argc, char **argv)
   StoreDestructor store_destructor(store);
 
   if (raw_storage_op) {
-    if (opt_cmd == OPT_REGION_GET) {
-      RGWRegion region;
-      int ret = region.init(g_ceph_context, store);
-      if (ret < 0) {
-        cerr << "failed to init region: " << cpp_strerror(-ret) << std::endl;
-	return -ret;
-      }
+    switch (opt_cmd) {
+    case OPT_REGION_GET:
+      {
+	RGWRegion region;
+	int ret = region.init(g_ceph_context, store);
+	if (ret < 0) {
+	  cerr << "failed to init region: " << cpp_strerror(-ret) << std::endl;
+	  return -ret;
+	}
 
-      encode_json("region", region, formatter);
-      formatter->flush(cout);
-      cout << std::endl;
-    }
-    if (opt_cmd == OPT_REGION_LIST) {
-      RGWRegion region;
-      int ret = region.init(g_ceph_context, store, false);
-      if (ret < 0) {
-	cerr << "failed to init region: " << cpp_strerror(-ret) << std::endl;
-	return -ret;
+	encode_json("region", region, formatter);
+	formatter->flush(cout);
+	cout << std::endl;
       }
+      break;
+    case OPT_REGION_LIST:
+      {
+	RGWRegion region;
+	int ret = region.init(g_ceph_context, store, false);
+	if (ret < 0) {
+	  cerr << "failed to init region: " << cpp_strerror(-ret) << std::endl;
+	  return -ret;
+	}
 
-      list<string> regions;
-      ret = store->list_regions(regions);
-      if (ret < 0) {
-        cerr << "failed to list regions: " << cpp_strerror(-ret) << std::endl;
-	return -ret;
+	list<string> regions;
+	ret = store->list_regions(regions);
+	if (ret < 0) {
+	  cerr << "failed to list regions: " << cpp_strerror(-ret) << std::endl;
+	  return -ret;
+	}
+	RGWDefaultRegionInfo default_region;
+	ret = region.read_default(default_region);
+	if (ret < 0 && ret != -ENOENT) {
+	  cerr << "could not determine default region: " << cpp_strerror(-ret) << std::endl;
+	}
+	formatter->open_object_section("regions_list");
+	encode_json("default_info", default_region, formatter);
+	encode_json("regions", regions, formatter);
+	formatter->close_section();
+	formatter->flush(cout);
+	cout << std::endl;
       }
-      RGWDefaultRegionInfo default_region;
-      ret = region.read_default(default_region);
-      if (ret < 0 && ret != -ENOENT) {
-	cerr << "could not determine default region: " << cpp_strerror(-ret) << std::endl;
-      }
-      formatter->open_object_section("regions_list");
-      encode_json("default_info", default_region, formatter);
-      encode_json("regions", regions, formatter);
-      formatter->close_section();
-      formatter->flush(cout);
-      cout << std::endl;
-    }
-    if (opt_cmd == OPT_REGION_SET) {
-      RGWRegion region;
-      int ret = region.init(g_ceph_context, store, false);
-      if (ret < 0) {
-	cerr << "failed to init region: " << cpp_strerror(-ret) << std::endl;
-	return -ret;
-      }
-      ret = read_decode_json(infile, region);
-      if (ret < 0) {
-        return 1;
-      }
+      break;
+    case OPT_REGION_SET:
+      {
+	RGWRegion region;
+	int ret = region.init(g_ceph_context, store, false);
+	if (ret < 0) {
+	  cerr << "failed to init region: " << cpp_strerror(-ret) << std::endl;
+	  return -ret;
+	}
+	ret = read_decode_json(infile, region);
+	if (ret < 0) {
+	  return 1;
+	}
 
-      ret = region.store_info(false);
-      if (ret < 0) {
-        cerr << "ERROR: couldn't store zone info: " << cpp_strerror(-ret) << std::endl;
-        return 1;
+	ret = region.store_info(false);
+	if (ret < 0) {
+	  cerr << "ERROR: couldn't store zone info: " << cpp_strerror(-ret) << std::endl;
+	  return 1;
+	}
+
+	encode_json("region", region, formatter);
+	formatter->flush(cout);
       }
+      break;
+    case OPT_REGION_DEFAULT:
+      {
+	RGWRegion region;
+	int ret = region.init(g_ceph_context, store);
+	if (ret < 0) {
+	  cerr << "failed to init region: " << cpp_strerror(-ret) << std::endl;
+	  return -ret;
+	}
 
-      encode_json("region", region, formatter);
-      formatter->flush(cout);
-    }
-    if (opt_cmd == OPT_REGION_DEFAULT) {
-      RGWRegion region;
-      int ret = region.init(g_ceph_context, store);
-      if (ret < 0) {
-	cerr << "failed to init region: " << cpp_strerror(-ret) << std::endl;
-	return -ret;
+	ret = region.set_as_default();
+	if (ret < 0) {
+	  cerr << "failed to set region as default: " << cpp_strerror(-ret) << std::endl;
+	  return -ret;
+	}
       }
-
-      ret = region.set_as_default();
-      if (ret < 0) {
-	cerr << "failed to set region as default: " << cpp_strerror(-ret) << std::endl;
-	return -ret;
+      break;
+    case OPT_REGIONMAP_GET:
+      {
+	RGWRegionMap regionmap;
+	int ret = regionmap.read(g_ceph_context, store);
+	if (ret < 0) {
+	  cerr << "failed to read region map: " << cpp_strerror(-ret) << std::endl;
+	  return -ret;
+	}
+	encode_json("region-map", regionmap, formatter);
+	formatter->flush(cout);
       }
-    }
+      break;
+    case OPT_REGIONMAP_SET:
+      {
+	RGWRegionMap regionmap;
+	int ret = read_decode_json(infile, regionmap);
+	if (ret < 0) {
+	  return 1;
+	}
 
-    if (opt_cmd == OPT_REGIONMAP_GET) {
-      RGWRegionMap regionmap;
-      int ret = regionmap.read(g_ceph_context, store);
-      if (ret < 0) {
-	cerr << "failed to read region map: " << cpp_strerror(-ret) << std::endl;
-	return -ret;
+	ret = regionmap.store(g_ceph_context, store);
+	if (ret < 0) {
+	  cerr << "ERROR: couldn't store region map info: " << cpp_strerror(-ret) << std::endl;
+	  return 1;
+	}
+
+	encode_json("region-map", regionmap, formatter);
+	formatter->flush(cout);
       }
-      encode_json("region-map", regionmap, formatter);
-      formatter->flush(cout);
-    }
+      break;
+    case OPT_REGIONMAP_UPDATE:
+      {
+	RGWRegionMap regionmap;
+	int ret = regionmap.read(g_ceph_context, store);
+	if (ret < 0 && ret != -ENOENT) {
+	  cerr << "failed to read region map: " << cpp_strerror(-ret) << std::endl;
+	  return -ret;
+	}
 
-    if (opt_cmd == OPT_REGIONMAP_SET) {
-      RGWRegionMap regionmap;
-      int ret = read_decode_json(infile, regionmap);
-      if (ret < 0) {
-        return 1;
-      }
-
-      ret = regionmap.store(g_ceph_context, store);
-      if (ret < 0) {
-        cerr << "ERROR: couldn't store region map info: " << cpp_strerror(-ret) << std::endl;
-        return 1;
-      }
-
-      encode_json("region-map", regionmap, formatter);
-      formatter->flush(cout);
-    }
-
-    if (opt_cmd == OPT_REGIONMAP_UPDATE) {
-      RGWRegionMap regionmap;
-      int ret = regionmap.read(g_ceph_context, store);
-      if (ret < 0 && ret != -ENOENT) {
-	cerr << "failed to read region map: " << cpp_strerror(-ret) << std::endl;
-	return -ret;
-      }
-
-      RGWRegion region;
-      ret = region.init(g_ceph_context, store, false);
-      if (ret < 0) {
-	cerr << "failed to init region: " << cpp_strerror(-ret) << std::endl;
-	return -ret;
-      }
-
-      list<string> regions;
-      ret = store->list_regions(regions);
-      if (ret < 0) {
-        cerr << "failed to list regions: " << cpp_strerror(-ret) << std::endl;
-	return -ret;
-      }
-
-      if (reset_regions) {
-        regionmap.regions.clear();
-      }
-
-      for (list<string>::iterator iter = regions.begin(); iter != regions.end(); ++iter) {
-        ret = region.read_info(*iter);
-        if (ret < 0) {
-        cerr << "failed to read region info (name=" << *iter << "): " << cpp_strerror(-ret) << std::endl;
-	return -ret;
+        if (reset_regions) {
+          regionmap.regions.clear();
         }
-        regionmap.update(region);
-      }
 
-      ret = regionmap.store(g_ceph_context, store);
-      if (ret < 0) {
-        cerr << "ERROR: couldn't store region map info: " << cpp_strerror(-ret) << std::endl;
-        return 1;
-      }
+	RGWRegion region;
+	ret = region.init(g_ceph_context, store, false);
+	if (ret < 0) {
+	  cerr << "failed to init region: " << cpp_strerror(-ret) << std::endl;
+	  return -ret;
+	}
 
-      encode_json("region-map", regionmap, formatter);
-      formatter->flush(cout);
-    }
+	list<string> regions;
+	ret = store->list_regions(regions);
+	if (ret < 0) {
+	  cerr << "failed to list regions: " << cpp_strerror(-ret) << std::endl;
+	  return -ret;
+	}
 
-    if (opt_cmd == OPT_ZONE_GET) {
-      RGWRegion region;
-      int ret = region.init(g_ceph_context, store);
-      if (ret < 0) {
-        cerr << "WARNING: failed to initialize region" << std::endl;
-      }
-      RGWZoneParams zone;
-      ret = zone.init(g_ceph_context, store, region);
-      if (ret < 0) {
-	cerr << "unable to initialize zone: " << cpp_strerror(-ret) << std::endl;
-	return -ret;
-      }
-      encode_json("zone", zone, formatter);
-      formatter->flush(cout);
-    }
+	for (list<string>::iterator iter = regions.begin(); iter != regions.end(); ++iter) {
+	  ret = region.read_info(*iter);
+	  if (ret < 0) {
+	    cerr << "failed to read region info (name=" << *iter << "): " << cpp_strerror(-ret) << std::endl;
+	    return -ret;
+	  }
+	  regionmap.update(region);
+	}
 
-    if (opt_cmd == OPT_ZONE_SET) {
-      RGWRegion region;
-      int ret = region.init(g_ceph_context, store);
-      if (ret < 0) {
-        cerr << "WARNING: failed to initialize region" << std::endl;
-      }
-      RGWZoneParams zone;
-      zone.init_default(store);
-      ret = read_decode_json(infile, zone);
-      if (ret < 0) {
-        return 1;
-      }
+	ret = regionmap.store(g_ceph_context, store);
+	if (ret < 0) {
+	  cerr << "ERROR: couldn't store region map info: " << cpp_strerror(-ret) << std::endl;
+	  return 1;
+	}
 
-      ret = zone.store_info(g_ceph_context, store, region);
-      if (ret < 0) {
-        cerr << "ERROR: couldn't store zone info: " << cpp_strerror(-ret) << std::endl;
-        return 1;
+	encode_json("region-map", regionmap, formatter);
+	formatter->flush(cout);
       }
+      break;
+    case OPT_ZONE_GET:
+      {
+	RGWRegion region;
+	int ret = region.init(g_ceph_context, store);
+	if (ret < 0) {
+	  cerr << "WARNING: failed to initialize region" << std::endl;
+	}
+	RGWZoneParams zone;
+	ret = zone.init(g_ceph_context, store, region);
+	if (ret < 0) {
+	  cerr << "unable to initialize zone: " << cpp_strerror(-ret) << std::endl;
+	  return -ret;
+	}
+	encode_json("zone", zone, formatter);
+	formatter->flush(cout);
+      }
+      break;
+    case OPT_ZONE_SET:
+      {
+	RGWRegion region;
+	int ret = region.init(g_ceph_context, store);
+	if (ret < 0) {
+	  cerr << "WARNING: failed to initialize region" << std::endl;
+	}
+	RGWZoneParams zone;
+	zone.init_default(store);
+	ret = read_decode_json(infile, zone);
+	if (ret < 0) {
+	  return 1;
+	}
 
-      encode_json("zone", zone, formatter);
-      formatter->flush(cout);
-    }
-    if (opt_cmd == OPT_ZONE_LIST) {
-      list<string> zones;
-      int ret = store->list_zones(zones);
-      if (ret < 0) {
-        cerr << "failed to list zones: " << cpp_strerror(-ret) << std::endl;
-	return -ret;
+	ret = zone.store_info(g_ceph_context, store, region);
+	if (ret < 0) {
+	  cerr << "ERROR: couldn't store zone info: " << cpp_strerror(-ret) << std::endl;
+	  return 1;
+	}
+	encode_json("zone", zone, formatter);
+	formatter->flush(cout);
       }
-      formatter->open_object_section("zones_list");
-      encode_json("zones", zones, formatter);
-      formatter->close_section();
-      formatter->flush(cout);
-      cout << std::endl;
+      break;
+    case OPT_ZONE_LIST:
+      {
+	list<string> zones;
+	int ret = store->list_zones(zones);
+	if (ret < 0) {
+	  cerr << "failed to list zones: " << cpp_strerror(-ret) << std::endl;
+	  return -ret;
+	}
+	formatter->open_object_section("zones_list");
+	encode_json("zones", zones, formatter);
+	formatter->close_section();
+	formatter->flush(cout);
+	cout << std::endl;
+      }
+      break;
     }
     return 0;
   }
