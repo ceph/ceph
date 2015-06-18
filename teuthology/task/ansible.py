@@ -62,6 +62,10 @@ class Ansible(Task):
                     directly to ansible-playbook.
         vars:       A dict of vars to be passed to ansible-playbook via the
                     --extra-vars flag
+        cleanup:    If present, the given or generated playbook will be run
+                    again during teardown with a 'cleanup' var set to True.
+                    This will allow the playbook to clean up after itself,
+                    if the playbook supports this feature.
 
     Examples:
 
@@ -250,11 +254,30 @@ class Ansible(Task):
         return args
 
     def teardown(self):
+        self._cleanup()
         if self.generated_inventory:
             os.remove(self.inventory)
         if self.generated_playbook:
             os.remove(self.playbook_file.name)
         super(Ansible, self).teardown()
+
+    def _cleanup(self):
+        """
+        If the ``cleanup`` key exists in config the same playbook will be
+        run again during the teardown step with the var ``cleanup`` given with
+        a value of ``True``.  If supported, this will allow the playbook to
+        cleanup after itself during teardown.
+        """
+        if self.config.get("cleanup"):
+            log.info("Running ansible cleanup...")
+            extra = dict(cleanup=True)
+            if self.config.get('vars'):
+                self.config.get('vars').update(extra)
+            else:
+                self.config['vars'] = extra
+            self.execute_playbook()
+        else:
+            log.info("Skipping ansible cleanup...")
 
 
 class CephLab(Ansible):

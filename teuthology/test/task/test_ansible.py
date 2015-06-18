@@ -344,6 +344,42 @@ class TestAnsibleTask(TestTask):
             task.teardown()
             assert m_remove.called_once_with('fake')
 
+    def test_teardown_cleanup_with_vars(self):
+        task_config = dict(
+            playbook=[],
+            cleanup=True,
+            vars=dict(yum_repos="testing"),
+        )
+        task = Ansible(self.ctx, task_config)
+        task.inventory = "fake"
+        task.generated_playbook = True
+        task.playbook_file = Mock()
+        task.playbook_file.name = 'fake'
+        with patch.object(Ansible, 'execute_playbook') as m_execute:
+            with patch.object(ansible.os, 'remove'):
+                task.teardown()
+            task._build_args()
+            assert m_execute.called
+            assert 'cleanup' in task.config['vars']
+            assert 'yum_repos' in task.config['vars']
+
+    def test_teardown_cleanup_with_no_vars(self):
+        task_config = dict(
+            playbook=[],
+            cleanup=True,
+        )
+        task = Ansible(self.ctx, task_config)
+        task.inventory = "fake"
+        task.generated_playbook = True
+        task.playbook_file = Mock()
+        task.playbook_file.name = 'fake'
+        with patch.object(Ansible, 'execute_playbook') as m_execute:
+            with patch.object(ansible.os, 'remove'):
+                task.teardown()
+            task._build_args()
+            assert m_execute.called
+            assert 'cleanup' in task.config['vars']
+
 
 class TestCephLabTask(TestTask):
     def setup(self):
