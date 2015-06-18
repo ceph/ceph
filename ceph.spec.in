@@ -14,18 +14,6 @@
   %global _with_systemd 1
 %endif
 
-CEPH_GROUP_ID=""
-CEPH_USER_ID=""
-# disabled for now until we have the numbers
-# %if 0%{?rhel} || 0%{?centos} || 0%{?fedora} 
-# CEPH_GROUP_ID="-g "
-# CEPH_USER_ID="-u "
-# %endif
-# %if 0%{?suse_version}
-# CEPH_GROUP_ID="-g "
-# CEPH_USER_ID="-u "
-# %endif
-
 
 #################################################################################
 # common
@@ -508,7 +496,7 @@ install -D src/init-ceph $RPM_BUILD_ROOT%{_initrddir}/ceph
 install -D src/init-radosgw.sysv $RPM_BUILD_ROOT%{_initrddir}/ceph-radosgw
 install -D src/init-rbdmap $RPM_BUILD_ROOT%{_initrddir}/rbdmap
 install -D src/rbdmap $RPM_BUILD_ROOT%{_sysconfdir}/ceph/rbdmap
-install -D ceph.limits.d $RPM_BUILD_ROOT%{_sysconfdir}/security/limits.d/ceph.conf
+install -D etc/ceph.limits.d $RPM_BUILD_ROOT%{_sysconfdir}/security/limits.d/ceph.conf
 %if 0%{?_with_systemd}
   install -m 0644 -D systemd/ceph.tmpfiles.d $RPM_BUILD_ROOT%{_tmpfilesdir}/%{name}.conf
 %endif
@@ -560,9 +548,20 @@ mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/log/radosgw
 %endif
 
 %pre
-%{_sbindir}/groupadd $CEPH_GROUP_ID -o -r ceph 2>/dev/null || :
-%{_sbindir}/useradd -r -o -g ceph $CEPH_USER_ID -s /bin/false -c "Ceph daemons" -d %{_localstatedir}/lib/ceph ceph 2> /dev/null || :
-%{_sbindir}/usermod -g ceph ceph 2>/dev/null || :
+CEPH_GROUP_ID=""
+CEPH_USER_ID=""
+# disabled for now until we have the numbers
+%if 0%{?rhel} || 0%{?centos} || 0%{?fedora}
+CEPH_GROUP_ID="-g 167"
+CEPH_USER_ID="-u 167"
+%endif
+# %if 0%{?suse_version}
+# CEPH_GROUP_ID="-g "
+# CEPH_USER_ID="-u "
+# %endif
+
+%{_sbindir}/groupadd ceph $CEPH_GROUP_ID -o -r 2>/dev/null || :
+%{_sbindir}/useradd ceph $CEPH_USER_ID -o -r -g ceph -s /sbin/nologin -c "Ceph daemons" -d %{_localstatedir}/lib/ceph 2> /dev/null || :
 
 %clean
 rm -rf $RPM_BUILD_ROOT
