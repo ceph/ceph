@@ -8,7 +8,7 @@ In order to develop on ceph, a Ceph utility,
 Usage
 =====
 
-It allows to deploy a fake local cluster on your machine for development purpose. It starts mon, osd and/or mds, or all of them if not specified.
+It allows to deploy a fake local cluster on your machine for development purpose. It starts rgw, mon, osd and/or mds, or all of them if not specified.
 
 To start your development cluster, type the following::
 
