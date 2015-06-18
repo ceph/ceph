@@ -43,140 +43,151 @@ static RGWRados *store = NULL;
 
 void _usage() 
 {
-  cout << "usage: radosgw-admin <cmd> [options...]" << std::endl;
-  cout << "commands:\n";
-  cout << "  user create                create a new user\n" ;
-  cout << "  user modify                modify user\n";
-  cout << "  user info                  get user info\n";
-  cout << "  user rm                    remove user\n";
-  cout << "  user suspend               suspend a user\n";
-  cout << "  user enable                re-enable user after suspension\n";
-  cout << "  user check                 check user info\n";
-  cout << "  user stats                 show user stats as accounted by quota subsystem\n";
-  cout << "  caps add                   add user capabilities\n";
-  cout << "  caps rm                    remove user capabilities\n";
-  cout << "  subuser create             create a new subuser\n" ;
-  cout << "  subuser modify             modify subuser\n";
-  cout << "  subuser rm                 remove subuser\n";
-  cout << "  key create                 create access key\n";
-  cout << "  key rm                     remove access key\n";
-  cout << "  bucket list                list buckets\n";
-  cout << "  bucket link                link bucket to specified user\n";
-  cout << "  bucket unlink              unlink bucket from specified user\n";
-  cout << "  bucket stats               returns bucket statistics\n";
-  cout << "  bucket rm                  remove bucket\n";
-  cout << "  bucket check               check bucket index\n";
-  cout << "  object rm                  remove object\n";
-  cout << "  object unlink              unlink object from bucket index\n";
-  cout << "  objects expire             run expired objects cleanup\n";
-  cout << "  quota set                  set quota params\n";
-  cout << "  quota enable               enable quota\n";
-  cout << "  quota disable              disable quota\n";
-  cout << "  region get                 show region info\n";
-  cout << "  regions list               list all regions set on this cluster\n";
-  cout << "  region set                 set region info (requires infile)\n";
-  cout << "  region default             set default region\n";
-  cout << "  region-map get             show region-map\n";
-  cout << "  region-map set             set region-map (requires infile)\n";
-  cout << "  zone get                   show zone cluster params\n";
-  cout << "  zone set                   set zone cluster params (requires infile)\n";
-  cout << "  zone list                  list all zones set on this cluster\n";
-  cout << "  pool add                   add an existing pool for data placement\n";
-  cout << "  pool rm                    remove an existing pool from data placement set\n";
-  cout << "  pools list                 list placement active set\n";
-  cout << "  policy                     read bucket/object policy\n";
-  cout << "  log list                   list log objects\n";
-  cout << "  log show                   dump a log from specific object or (bucket + date\n";
-  cout << "                             + bucket-id)\n";
-  cout << "  log rm                     remove log object\n";
-  cout << "  usage show                 show usage (by user, date range)\n";
-  cout << "  usage trim                 trim usage (by user, date range)\n";
-  cout << "  temp remove                remove temporary objects that were created up to\n";
-  cout << "                             specified date (and optional time)\n";
-  cout << "  gc list                    dump expired garbage collection objects (specify\n";
-  cout << "                             --include-all to list all entries, including unexpired)\n";
-  cout << "  gc process                 manually process garbage\n";
-  cout << "  metadata get               get metadata info\n";
-  cout << "  metadata put               put metadata info\n";
-  cout << "  metadata rm                remove metadata info\n";
-  cout << "  metadata list              list metadata info\n";
-  cout << "  mdlog list                 list metadata log\n";
-  cout << "  mdlog trim                 trim metadata log\n";
-  cout << "  bilog list                 list bucket index log\n";
-  cout << "  bilog trim                 trim bucket index log (use start-marker, end-marker)\n";
-  cout << "  datalog list               list data log\n";
-  cout << "  datalog trim               trim data log\n";
-  cout << "  opstate list               list stateful operations entries (use client_id,\n";
-  cout << "                             op_id, object)\n";
-  cout << "  opstate set                set state on an entry (use client_id, op_id, object, state)\n";
-  cout << "  opstate renew              renew state on an entry (use client_id, op_id, object)\n";
-  cout << "  opstate rm                 remove entry (use client_id, op_id, object)\n";
-  cout << "  replicalog get             get replica metadata log entry\n";
-  cout << "  replicalog update          update replica metadata log entry\n";
-  cout << "  replicalog delete          delete replica metadata log entry\n";
-  cout << "options:\n";
-  cout << "   --uid=<id>                user id\n";
-  cout << "   --subuser=<name>          subuser name\n";
-  cout << "   --access-key=<key>        S3 access key\n";
-  cout << "   --email=<email>\n";
-  cout << "   --secret=<key>            specify secret key\n";
-  cout << "   --gen-access-key          generate random access key (for S3)\n";
-  cout << "   --gen-secret              generate random secret key\n";
-  cout << "   --key-type=<type>         key type, options are: swift, s3\n";
-  cout << "   --temp-url-key[-2]=<key>  temp url key\n";
-  cout << "   --access=<access>         Set access permissions for sub-user, should be one\n";
-  cout << "                             of read, write, readwrite, full\n";
-  cout << "   --display-name=<name>\n";
-  cout << "   --max_buckets             max number of buckets for a user\n";
-  cout << "   --system                  set the system flag on the user\n";
-  cout << "   --bucket=<bucket>\n";
-  cout << "   --pool=<pool>\n";
-  cout << "   --object=<object>\n";
-  cout << "   --date=<date>\n";
-  cout << "   --start-date=<date>\n";
-  cout << "   --end-date=<date>\n";
-  cout << "   --bucket-id=<bucket-id>\n";
-  cout << "   --shard-id=<shard-id>     optional for mdlog list\n";
-  cout << "                             required for: \n";
-  cout << "                               mdlog trim\n";
-  cout << "                               replica mdlog get/delete\n";
-  cout << "                               replica datalog get/delete\n";
-  cout << "   --metadata-key=<key>      key to retrieve metadata from with metadata get\n";
-  cout << "   --rgw-region=<region>     region in which radosgw is running\n";
-  cout << "   --rgw-zone=<zone>         zone in which radosgw is running\n";
-  cout << "   --fix                     besides checking bucket index, will also fix it\n";
-  cout << "   --check-objects           bucket check: rebuilds bucket index according to\n";
-  cout << "                             actual objects state\n";
-  cout << "   --format=<format>         specify output format for certain operations: xml,\n";
-  cout << "                             json\n";
-  cout << "   --purge-data              when specified, user removal will also purge all the\n";
-  cout << "                             user data\n";
-  cout << "   --purge-keys              when specified, subuser removal will also purge all the\n";
-  cout << "                             subuser keys\n";
-  cout << "   --purge-objects           remove a bucket's objects before deleting it\n";
-  cout << "                             (NOTE: required to delete a non-empty bucket)\n";
-  cout << "   --sync-stats              option to 'user stats', update user stats with current\n";
-  cout << "                             stats reported by user's buckets indexes\n";
-  cout << "   --show-log-entries=<flag> enable/disable dump of log entries on log show\n";
-  cout << "   --show-log-sum=<flag>     enable/disable dump of log summation on log show\n";
-  cout << "   --skip-zero-entries       log show only dumps entries that don't have zero value\n";
-  cout << "                             in one of the numeric field\n";
-  cout << "   --infile                  specify a file to read in when setting data\n";
-  cout << "   --state=<state string>    specify a state for the opstate set command\n";
-  cout << "   --replica-log-type        replica log type (metadata, data, bucket), required for\n";
-  cout << "                             replica log operations\n";
-  cout << "   --categories=<list>       comma separated list of categories, used in usage show\n";
-  cout << "   --caps=<caps>             list of caps (e.g., \"usage=read, write; user=read\"\n";
-  cout << "   --yes-i-really-mean-it    required for certain operations\n";
-  cout << "   --reset-regions           reset regionmap when regionmap update";
-  cout << "\n";
-  cout << "<date> := \"YYYY-MM-DD[ hh:mm:ss]\"\n";
-  cout << "\nQuota options:\n";
-  cout << "   --bucket                  specified bucket for quota command\n";
-  cout << "   --max-objects             specify max objects (negative value to disable)\n";
-  cout << "   --max-size                specify max size (in bytes, negative value to disable)\n";
-  cout << "   --quota-scope             scope of quota (bucket, user)\n";
-  cout << "\n";
+  cerr << "usage: radosgw-admin <cmd> [options...]" << std::endl;
+  cerr << "commands:\n";
+  cerr << "  user create                create a new user\n" ;
+  cerr << "  user modify                modify user\n";
+  cerr << "  user info                  get user info\n";
+  cerr << "  user rm                    remove user\n";
+  cerr << "  user suspend               suspend a user\n";
+  cerr << "  user enable                re-enable user after suspension\n";
+  cerr << "  user check                 check user info\n";
+  cerr << "  user stats                 show user stats as accounted by quota subsystem\n";
+  cerr << "  caps add                   add user capabilities\n";
+  cerr << "  caps rm                    remove user capabilities\n";
+  cerr << "  subuser create             create a new subuser\n" ;
+  cerr << "  subuser modify             modify subuser\n";
+  cerr << "  subuser rm                 remove subuser\n";
+  cerr << "  key create                 create access key\n";
+  cerr << "  key rm                     remove access key\n";
+  cerr << "  bucket list                list buckets\n";
+  cerr << "  bucket link                link bucket to specified user\n";
+  cerr << "  bucket unlink              unlink bucket from specified user\n";
+  cerr << "  bucket stats               returns bucket statistics\n";
+  cerr << "  bucket rm                  remove bucket\n";
+  cerr << "  bucket check               check bucket index\n";
+  cerr << "  object rm                  remove object\n";
+  cerr << "  object unlink              unlink object from bucket index\n";
+  cerr << "  objects expire             run expired objects cleanup\n";
+  cerr << "  quota set                  set quota params\n";
+  cerr << "  quota enable               enable quota\n";
+  cerr << "  quota disable              disable quota\n";
+  cerr << "  realm create               create a new realm\n";
+  cerr << "  realm delete               delete a realm\n";
+  cerr << "  realm get                  show realm info\n";
+  cerr << "  realm get-default          get default realm name\n";
+  cerr << "  realm list                 list realms\n";
+  cerr << "  realm remove               remove a zonegroup from the realm\n";
+  cerr << "  realm rename               rename a realm\n";
+  cerr << "  realm set-default          set realm as default\n";
+  cerr << "  region get                 show region info\n";
+  cerr << "  regions list               list all regions set on this cluster\n";
+  cerr << "  region set                 set region info (requires infile)\n";
+  cerr << "  region default             set default region\n";
+  cerr << "  region-map get             show region-map\n";
+  cerr << "  region-map set             set region-map (requires infile)\n";
+  cerr << "  zone get                   show zone cluster params\n";
+  cerr << "  zone set                   set zone cluster params (requires infile)\n";
+  cerr << "  zone list                  list all zones set on this cluster\n";
+  cerr << "  pool add                   add an existing pool for data placement\n";
+  cerr << "  pool rm                    remove an existing pool from data placement set\n";
+  cerr << "  pools list                 list placement active set\n";
+  cerr << "  policy                     read bucket/object policy\n";
+  cerr << "  log list                   list log objects\n";
+  cerr << "  log show                   dump a log from specific object or (bucket + date\n";
+  cerr << "                             + bucket-id)\n";
+  cerr << "  log rm                     remove log object\n";
+  cerr << "  usage show                 show usage (by user, date range)\n";
+  cerr << "  usage trim                 trim usage (by user, date range)\n";
+  cerr << "  temp remove                remove temporary objects that were created up to\n";
+  cerr << "                             specified date (and optional time)\n";
+  cerr << "  gc list                    dump expired garbage collection objects (specify\n";
+  cerr << "                             --include-all to list all entries, including unexpired)\n";
+  cerr << "  gc process                 manually process garbage\n";
+  cerr << "  metadata get               get metadata info\n";
+  cerr << "  metadata put               put metadata info\n";
+  cerr << "  metadata rm                remove metadata info\n";
+  cerr << "  metadata list              list metadata info\n";
+  cerr << "  mdlog list                 list metadata log\n";
+  cerr << "  mdlog trim                 trim metadata log\n";
+  cerr << "  bilog list                 list bucket index log\n";
+  cerr << "  bilog trim                 trim bucket index log (use start-marker, end-marker)\n";
+  cerr << "  datalog list               list data log\n";
+  cerr << "  datalog trim               trim data log\n";
+  cerr << "  opstate list               list stateful operations entries (use client_id,\n";
+  cerr << "                             op_id, object)\n";
+  cerr << "  opstate set                set state on an entry (use client_id, op_id, object, state)\n";
+  cerr << "  opstate renew              renew state on an entry (use client_id, op_id, object)\n";
+  cerr << "  opstate rm                 remove entry (use client_id, op_id, object)\n";
+  cerr << "  replicalog get             get replica metadata log entry\n";
+  cerr << "  replicalog update          update replica metadata log entry\n";
+  cerr << "  replicalog delete          delete replica metadata log entry\n";
+  cerr << "options:\n";
+  cerr << "   --uid=<id>                user id\n";
+  cerr << "   --subuser=<name>          subuser name\n";
+  cerr << "   --access-key=<key>        S3 access key\n";
+  cerr << "   --email=<email>\n";
+  cerr << "   --secret=<key>            specify secret key\n";
+  cerr << "   --gen-access-key          generate random access key (for S3)\n";
+  cerr << "   --gen-secret              generate random secret key\n";
+  cerr << "   --key-type=<type>         key type, options are: swift, s3\n";
+  cerr << "   --temp-url-key[-2]=<key>  temp url key\n";
+  cerr << "   --access=<access>         Set access permissions for sub-user, should be one\n";
+  cerr << "                             of read, write, readwrite, full\n";
+  cerr << "   --display-name=<name>\n";
+  cerr << "   --max_buckets             max number of buckets for a user\n";
+  cerr << "   --system                  set the system flag on the user\n";
+  cerr << "   --bucket=<bucket>\n";
+  cerr << "   --pool=<pool>\n";
+  cerr << "   --object=<object>\n";
+  cerr << "   --date=<date>\n";
+  cerr << "   --start-date=<date>\n";
+  cerr << "   --end-date=<date>\n";
+  cerr << "   --bucket-id=<bucket-id>\n";
+  cerr << "   --shard-id=<shard-id>     optional for mdlog list\n";
+  cerr << "                             required for: \n";
+  cerr << "                               mdlog trim\n";
+  cerr << "                               replica mdlog get/delete\n";
+  cerr << "                               replica datalog get/delete\n";
+  cerr << "   --metadata-key=<key>      key to retrieve metadata from with metadata get\n";
+  cerr << "   --realm=<realm>     realm name\n";
+  cerr << "   --realm-id=<realm id>     realm id\n";
+  cerr << "   --realm-new-name=<realm new name>     realm new name\n";
+  cerr << "   --rgw-region=<region>     region in which radosgw is running\n";
+  cerr << "   --rgw-zone=<zone>         zone in which radosgw is running\n";
+  cerr << "   --fix                     besides checking bucket index, will also fix it\n";
+  cerr << "   --check-objects           bucket check: rebuilds bucket index according to\n";
+  cerr << "                             actual objects state\n";
+  cerr << "   --format=<format>         specify output format for certain operations: xml,\n";
+  cerr << "                             json\n";
+  cerr << "   --purge-data              when specified, user removal will also purge all the\n";
+  cerr << "                             user data\n";
+  cerr << "   --purge-keys              when specified, subuser removal will also purge all the\n";
+  cerr << "                             subuser keys\n";
+  cerr << "   --purge-objects           remove a bucket's objects before deleting it\n";
+  cerr << "                             (NOTE: required to delete a non-empty bucket)\n";
+  cerr << "   --sync-stats              option to 'user stats', update user stats with current\n";
+  cerr << "                             stats reported by user's buckets indexes\n";
+  cerr << "   --show-log-entries=<flag> enable/disable dump of log entries on log show\n";
+  cerr << "   --show-log-sum=<flag>     enable/disable dump of log summation on log show\n";
+  cerr << "   --skip-zero-entries       log show only dumps entries that don't have zero value\n";
+  cerr << "                             in one of the numeric field\n";
+  cerr << "   --infile                  specify a file to read in when setting data\n";
+  cerr << "   --state=<state string>    specify a state for the opstate set command\n";
+  cerr << "   --replica-log-type        replica log type (metadata, data, bucket), required for\n";
+  cerr << "                             replica log operations\n";
+  cerr << "   --categories=<list>       comma separated list of categories, used in usage show\n";
+  cerr << "   --caps=<caps>             list of caps (e.g., \"usage=read, write; user=read\"\n";
+  cerr << "   --yes-i-really-mean-it    required for certain operations\n";
+  cerr << "   --reset-regions           reset regionmap when regionmap update";
+  cerr << "\n";
+  cerr << "<date> := \"YYYY-MM-DD[ hh:mm:ss]\"\n";
+  cerr << "\nQuota options:\n";
+  cerr << "   --bucket                  specified bucket for quota command\n";
+  cerr << "   --max-objects             specify max objects (negative value to disable)\n";
+  cerr << "   --max-size                specify max size (in bytes, negative value to disable)\n";
+  cerr << "   --quota-scope             scope of quota (bucket, user)\n";
+  cerr << "\n";
   generic_client_usage();
 }
 
@@ -271,6 +282,14 @@ enum {
   OPT_REPLICALOG_GET,
   OPT_REPLICALOG_UPDATE,
   OPT_REPLICALOG_DELETE,
+  OPT_REALM_CREATE,
+  OPT_REALM_DELETE,
+  OPT_REALM_GET,
+  OPT_REALM_GET_DEFAULT,
+  OPT_REALM_LIST,
+  OPT_REALM_REMOVE,
+  OPT_REALM_RENAME,
+  OPT_REALM_SET_DEFAULT,
 };
 
 static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_cmd, bool *need_more)
@@ -296,6 +315,7 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
       strcmp(cmd, "pool") == 0 ||
       strcmp(cmd, "pools") == 0 ||
       strcmp(cmd, "quota") == 0 ||
+      strcmp(cmd, "realm") == 0 ||
       strcmp(cmd, "region") == 0 ||
       strcmp(cmd, "regions") == 0 ||
       strcmp(cmd, "region-map") == 0 ||
@@ -414,6 +434,23 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
       return OPT_BI_PUT;
     if (strcmp(cmd, "list") == 0)
       return OPT_BI_LIST;
+  } else if (strcmp(prev_cmd, "realm") == 0) {
+    if (strcmp(cmd, "create") == 0)
+      return OPT_REALM_CREATE;
+    if (strcmp(cmd, "delete") == 0)
+      return OPT_REALM_DELETE;
+    if (strcmp(cmd, "get") == 0)
+	  return OPT_REALM_GET;
+    if (strcmp(cmd, "get-default") == 0)
+	  return OPT_REALM_GET_DEFAULT;
+    if (strcmp(cmd, "list") == 0)
+	  return OPT_REALM_LIST;
+    if (strcmp(cmd, "remove") == 0)
+      return OPT_REALM_REMOVE;
+    if (strcmp(cmd, "rename") == 0)
+      return OPT_REALM_RENAME;
+    if (strcmp(cmd, "set-default") == 0)
+      return OPT_REALM_SET_DEFAULT;
   } else if (strcmp(prev_cmd, "region") == 0) {
     if (strcmp(cmd, "get") == 0)
       return OPT_REGION_GET;
@@ -1103,6 +1140,7 @@ int main(int argc, char **argv)
   std::string date, subuser, access, format;
   std::string start_date, end_date;
   std::string key_type_str;
+  std::string realm_name, realm_id, realm_new_name;
   int key_type = KEY_TYPE_UNDEFINED;
   rgw_bucket bucket;
   uint32_t perm_mask = 0;
@@ -1366,6 +1404,12 @@ int main(int argc, char **argv)
         cerr << "ERROR: invalid bucket index entry type" << std::endl;
         return EINVAL;
       }
+    } else if (ceph_argparse_witharg(args, i, &val, "--realm", (char*)NULL)) {
+      realm_name = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--realm-id", (char*)NULL)) {
+      realm_id = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--realm-new-name", (char*)NULL)) {
+      realm_new_name = val;
     } else if (strncmp(*i, "-", 1) == 0) {
       cerr << "ERROR: invalid flag " << *i << std::endl;
       return EINVAL;
@@ -1445,8 +1489,10 @@ int main(int argc, char **argv)
                          opt_cmd == OPT_REGIONMAP_GET || opt_cmd == OPT_REGIONMAP_SET ||
                          opt_cmd == OPT_REGIONMAP_UPDATE ||
                          opt_cmd == OPT_ZONE_GET || opt_cmd == OPT_ZONE_SET ||
-                         opt_cmd == OPT_ZONE_LIST);
-
+                         opt_cmd == OPT_ZONE_LIST || opt_cmd == OPT_REALM_CREATE ||
+			 opt_cmd == OPT_REALM_DELETE || opt_cmd == OPT_REALM_GET ||
+			 opt_cmd == OPT_REALM_GET_DEFAULT || opt_cmd == OPT_REALM_REMOVE ||
+			 opt_cmd == OPT_REALM_RENAME || opt_cmd == OPT_REALM_SET_DEFAULT);
 
   if (raw_storage_op) {
     store = RGWStoreManager::get_raw_storage(g_ceph_context);
@@ -1465,6 +1511,133 @@ int main(int argc, char **argv)
 
   if (raw_storage_op) {
     switch (opt_cmd) {
+    case OPT_REALM_CREATE:
+      {
+	if (realm_name.empty()) {
+	  cerr << "missing realm name" << std::endl;
+	  return -EINVAL;
+	}
+
+	RGWRealm realm(realm_name, g_ceph_context, store);
+	int ret = realm.create();
+	if (ret < 0) {
+	  cerr << "ERROR: couldn't create realm " << realm_name << ": " << cpp_strerror(-ret) << std::endl;
+	  return ret;
+	}
+      }
+      break;
+    case OPT_REALM_DELETE:
+      {
+	RGWRealm realm(realm_id, realm_name);
+	if (realm_name.empty() && realm_id.empty()) {
+	  cerr << "missing realm name or id" << std::endl;
+	  return -EINVAL;
+	}
+	int ret = realm.init(g_ceph_context, store);
+	if (ret < 0) {
+	  cerr << "realm.init failed: " << cpp_strerror(-ret) << std::endl;
+	  return -ret;
+	}
+	ret = realm.delete_obj();
+	if (ret < 0) {
+	  cerr << "ERROR: couldn't : " << cpp_strerror(-ret) << std::endl;
+	  return ret;
+	}
+
+      }
+      break;
+    case OPT_REALM_GET:
+      {
+	RGWRealm realm(realm_id, realm_name);
+	if (realm_name.empty() && realm_id.empty()) {
+	  cerr << "missing realm name or id" << std::endl;
+	  return -EINVAL;
+	}
+	int ret = realm.init(g_ceph_context, store);
+	if (ret < 0) {
+	  cerr << "realm.init failed: " << cpp_strerror(-ret) << std::endl;
+	  return -ret;
+	}
+	encode_json("realm", realm, formatter);
+	formatter->flush(cout);
+	cout << std::endl;
+      }
+      break;
+    case OPT_REALM_GET_DEFAULT:
+      {
+	RGWRealm realm(g_ceph_context, store);
+	string default_id;
+	int ret = realm.read_default_id(default_id);
+	if (ret == -ENOENT) {
+	  cout << "No default realm is set" << std::endl;
+	  return ret;
+	} else if (ret < 0) {
+	  cerr << "Error reading default realm:" << cpp_strerror(-ret) << std::endl;
+	  return ret;
+	}
+	cout << "default realm: " << default_id << std::endl;
+      }
+      break;
+    case OPT_REALM_LIST:
+      {
+	RGWRealm realm(g_ceph_context, store);
+	string default_id;
+	int ret = realm.read_default_id(default_id);
+	if (ret < 0 && ret != -ENOENT) {
+	  cerr << "could not determine default realm: " << cpp_strerror(-ret) << std::endl;
+	}
+	list<string> realms;
+	ret = store->list_realms(realms);
+	if (ret < 0) {
+	  cerr << "failed to list realmss: " << cpp_strerror(-ret) << std::endl;
+	  return -ret;
+	}
+	formatter->open_object_section("realmss_list");
+	encode_json("default_info", default_id, formatter);
+	encode_json("realms", realms, formatter);
+	formatter->close_section();
+	formatter->flush(cout);
+	cout << std::endl;
+      }
+      break;
+    case OPT_REALM_RENAME:
+      {
+	RGWRealm realm(realm_id, realm_name);
+	if (realm_new_name.empty()) {
+	  cerr << "missing realm new name" << std::endl;
+	  return -EINVAL;
+	}
+	if (realm_name.empty() && realm_id.empty()) {
+	  cerr << "missing realm name or id" << std::endl;
+	  return -EINVAL;
+	}
+	int ret = realm.init(g_ceph_context, store);
+	if (ret < 0) {
+	  cerr << "realm.init failed: " << cpp_strerror(-ret) << std::endl;
+	  return -ret;
+	}
+	ret = realm.rename(realm_new_name);
+	if (ret < 0) {
+	  cerr << "realm.rename failed: " << cpp_strerror(-ret) << std::endl;
+	  return -ret;
+	}
+      }
+      break;
+    case OPT_REALM_SET_DEFAULT:
+      {
+	RGWRealm realm(realm_id, realm_name);
+	int ret = realm.init(g_ceph_context, store);
+	if (ret < 0) {
+	  cerr << "failed to init realm: " << cpp_strerror(-ret) << std::endl;
+	  return -ret;
+	}
+	ret = realm.set_as_default();
+	if (ret < 0) {
+	  cerr << "failed to set realm as default: " << cpp_strerror(-ret) << std::endl;
+	  return -ret;
+	}
+      }
+      break;
     case OPT_REGION_GET:
       {
 	RGWRegion region;

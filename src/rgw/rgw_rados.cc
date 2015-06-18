@@ -1861,6 +1861,11 @@ int RGWRados::init_complete()
 {
   int ret;
 
+  ret = realm.init(cct, this);
+  if (ret < 0 && ret != ENOENT) {
+    return ret;
+  }
+
   ret = region.init(cct, this);
   if (ret < 0)
     return ret;
@@ -2038,6 +2043,13 @@ int RGWRados::list_zones(list<string>& zones)
     return ret;
 
   return list_raw_prefixed_objs(pool_name, zone_info_oid_prefix, zones);
+}
+
+int RGWRados::list_realms(list<string>& realms)
+{
+  RGWRealm realm(cct, this);
+  string pool_name = realm.get_pool_name(cct);
+  return list_raw_prefixed_objs(pool_name, realm_names_oid_prefix, realms);
 }
 
 /**

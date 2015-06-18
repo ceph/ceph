@@ -1064,8 +1064,8 @@ OPTION(rgw_region, OPT_STR, "") // region name
 OPTION(rgw_region_root_pool, OPT_STR, ".rgw.root")  // pool where all region info is stored
 OPTION(rgw_default_region_info_oid, OPT_STR, "default.region")  // oid where default region info is stored
 OPTION(rgw_realm, OPT_STR, "") // realm name
-OPTION(rgw_realm_root_pool, OPT_STR, ".rgw.root")  // pool where all region info is stored
-OPTION(rgw_default_realm_info_oid, OPT_STR, "default.realm")  // oid where default region info is stored
+OPTION(rgw_realm_root_pool, OPT_STR, ".rgw.root")  // pool where all realm info is stored
+OPTION(rgw_default_realm_info_oid, OPT_STR, "default.realm")  // oid where default realm info is stored
 OPTION(rgw_log_nonexistent_bucket, OPT_BOOL, false)
 OPTION(rgw_log_object_name, OPT_STR, "%Y-%m-%d-%H-%i-%n")      // man date to see codes (a subset are supported)
 OPTION(rgw_log_object_name_utc, OPT_BOOL, false)

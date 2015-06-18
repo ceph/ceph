@@ -1132,7 +1132,8 @@ class RGWRealm : public RGWSystemMetaObj
   map<string, RGWRegion> zonegroups;
 
 public:
-  RGWRealm(const string& _id, const string& _name) : RGWSystemMetaObj(_id, _name) {}
+  RGWRealm() {}
+  RGWRealm(const string& _id, const string& _name) : RGWSystemMetaObj(_id, _name) {}  
   RGWRealm(CephContext *_cct, RGWRados *_store): RGWSystemMetaObj(_cct, _store) {}
   RGWRealm(const string& _name, CephContext *_cct, RGWRados *_store): RGWSystemMetaObj(_name, _cct, _store){}
 
@@ -1473,6 +1474,7 @@ public:
     zone_name = name;
   }
 
+  RGWRealm realm;
   RGWRegion region;
   RGWZoneParams zone; /* internal zone params, e.g., rados pools */
   RGWZone zone_public_config; /* external zone params, e.g., entrypoints, log flags, etc. */
@@ -1509,6 +1511,7 @@ public:
   int list_raw_prefixed_objs(string pool_name, const string& prefix, list<string>& result);
   int list_regions(list<string>& regions);
   int list_zones(list<string>& zones);
+  int list_realms(list<string>& realms);
 
   void tick();
 
