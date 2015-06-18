@@ -670,14 +670,14 @@ fi
 %{_mandir}/man8/ceph-clsinfo.8*
 %{_mandir}/man8/librados-config.8*
 #set up placeholder directories
-%dir %{_localstatedir}/lib/ceph/
-%dir %{_localstatedir}/lib/ceph/tmp
-%dir %{_localstatedir}/lib/ceph/mon
-%dir %{_localstatedir}/lib/ceph/osd
-%dir %{_localstatedir}/lib/ceph/mds
-%dir %{_localstatedir}/lib/ceph/bootstrap-osd
-%dir %{_localstatedir}/lib/ceph/bootstrap-mds
-%dir %{_localstatedir}/run/ceph/
+%attr(770,ceph,ceph) %dir %{_localstatedir}/lib/ceph/
+%attr(770,ceph,ceph) %dir %{_localstatedir}/lib/ceph/tmp
+%attr(770,ceph,ceph) %dir %{_localstatedir}/lib/ceph/mon
+%attr(770,ceph,ceph) %dir %{_localstatedir}/lib/ceph/osd
+%attr(770,ceph,ceph) %dir %{_localstatedir}/lib/ceph/mds
+%attr(770,ceph,ceph) %dir %{_localstatedir}/lib/ceph/bootstrap-osd
+%attr(770,ceph,ceph) %dir %{_localstatedir}/lib/ceph/bootstrap-mds
+%attr(770,ceph,ceph) %dir %{_localstatedir}/run/ceph/
 
 #################################################################################
 %files -n ceph-common
@@ -717,7 +717,6 @@ fi
 %else
 /lib/udev/rules.d/50-rbd.rules
 %endif
-%attr(770,ceph,ceph) %dir %{_localstatedir}/lib/ceph/
 %attr(2750,ceph,ceph) %dir %{_localstatedir}/log/ceph/
 
 %postun -n ceph-common
