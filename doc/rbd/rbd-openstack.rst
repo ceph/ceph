@@ -430,7 +430,7 @@ dashboard, you can boot from that volume by performing the following steps:
 
 #. Launch a new instance.
 #. Choose the image associated to the copy-on-write clone.
-#. Select 'boot from volume'
+#. Select 'boot from volume'.
 #. Select the volume you created.
 
 .. _qemu-img: ../qemu-rbd/#running-qemu-with-rbd
