@@ -259,7 +259,7 @@ void PaxosService::_active()
   }
   if (!is_active()) {
     dout(10) << "_active - not active" << dendl;
-    wait_for_active(new C_Active(this));
+    wait_for_active_ctx(new C_Active(this));
     return;
   }
   dout(10) << "_active" << dendl;
