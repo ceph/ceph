@@ -809,8 +809,7 @@ void RGWDataChangesLogInfo::decode_json(JSONObj *obj)
 
 void RGWRealm::dump(Formatter *f) const
 {
-  encode_json("name", name, f);
-  encode_json("id", id, f);
+  RGWSystemMetaObj::dump(f);
   encode_json("master_zonegroup", master_zonegroup, f);
   encode_json_map("zonegroups", zonegroups, f);
 }
@@ -824,8 +823,7 @@ static void decode_zonegroups(map<string, RGWRegion>& zonegroups, JSONObj *o)
 
 void RGWRealm::decode_json(JSONObj *obj)
 {
-  JSONDecoder::decode_json("name", name, obj);
-  JSONDecoder::decode_json("id", id, obj);
+  RGWSystemMetaObj::decode_json(obj);
   JSONDecoder::decode_json("master_zonegroup", master_zonegroup, obj);
   JSONDecoder::decode_json("zonegroups", zonegroups, decode_zonegroups, obj);
 }
