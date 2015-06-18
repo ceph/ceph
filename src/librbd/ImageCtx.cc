@@ -643,6 +643,7 @@ public:
   }
 
   void ImageCtx::flush_cache_aio(Context *onfinish) {
+    assert(owner_lock.is_locked());
     cache_lock.Lock();
     object_cacher->flush_set(object_set, onfinish);
     cache_lock.Unlock();
