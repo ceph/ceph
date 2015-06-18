@@ -49,6 +49,7 @@
 #include "common/ceph_argparse.h"
 #include "common/Cycles.h"
 #include "common/Cond.h"
+#include "common/errno.h"
 #include "common/Mutex.h"
 #include "common/Thread.h"
 #include "common/Timer.h"
@@ -373,6 +374,40 @@ class CondPingPong {
 double cond_ping_pong()
 {
   return CondPingPong().run();
+}
+
+static int pm_qos_fd = -1;
+
+bool start_low_latency()
+{
+  int32_t target = 0;
+  if (pm_qos_fd >= 0)
+    return true;
+  pm_qos_fd = open("/dev/cpu_dma_latency", O_RDWR);
+  if (pm_qos_fd < 0) {
+    fprintf(stderr, "Failed to open PM QOS file: %s",
+            cpp_strerror(errno));
+    return false;
+  }
+  if (write(pm_qos_fd, &target, sizeof(target)) != sizeof(target))
+    return false;
+  return true;
+}
+
+void stop_low_latency()
+{
+  if (pm_qos_fd >= 0)
+    close(pm_qos_fd);
+}
+
+// Measure the cost of coordinating between threads using a condition variable.
+double enable_dma_cond_ping_pong()
+{
+  if (!start_low_latency())
+    return -1;
+  double d = CondPingPong().run();
+  stop_low_latency();
+  return d;
 }
 
 // Measure the cost of a 32-bit divide. Divides don't take a constant
@@ -922,6 +957,8 @@ TestInfo tests[] = {
     "iterate over buffer with 5 ptrs"},
   {"cond_ping_pong", cond_ping_pong,
     "condition variable round-trip"},
+  {"enable_dma_cond_ping_pong", enable_dma_cond_ping_pong,
+    "Use PM QOS to run condition variable round-trip"},
   {"div32", div32,
     "32-bit integer division instruction"},
   {"div64", div64,
