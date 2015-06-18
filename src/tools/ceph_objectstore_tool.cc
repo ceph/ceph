@@ -272,9 +272,9 @@ struct lookup_ghobject : public action_on_object_t {
   }
 };
 
-hobject_t infos_oid = OSD::make_infos_oid();
+ghobject_t infos_oid = OSD::make_infos_oid();
 ghobject_t log_oid;
-hobject_t biginfo_oid;
+ghobject_t biginfo_oid;
 
 int file_fd = fd_none;
 bool debug = false;
@@ -488,9 +488,9 @@ int mark_pg_for_removal(ObjectStore *fs, spg_t pgid, ObjectStore::Transaction *t
     bufferlist one;
     one.append('1');
     t->collection_setattr(coll, "remove", one);
-    cout << "remove " << coll_t::meta() << " " << log_oid.hobj.oid << std::endl;
+    cout << "remove " << coll_t::meta() << " " << log_oid << std::endl;
     t->remove(coll_t::meta(), log_oid);
-    cout << "remove " << coll_t::meta() << " " << biginfo_oid.oid << std::endl;
+    cout << "remove " << coll_t::meta() << " " << biginfo_oid << std::endl;
     t->remove(coll_t::meta(), biginfo_oid);
   } else {
     // new omap key
