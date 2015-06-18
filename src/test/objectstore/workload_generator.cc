@@ -268,7 +268,7 @@ void WorkloadGenerator::do_write_object(ObjectStore::Transaction *t,
   if (m_do_stats && (stat != NULL))
     stat->written_data += bl.length();
 
-  t->write(coll, obj, 0, bl.length(), bl);
+  t->write(coll, ghobject_t(obj), 0, bl.length(), bl);
 }
 
 void WorkloadGenerator::do_setattr_object(ObjectStore::Transaction *t,
@@ -292,7 +292,7 @@ void WorkloadGenerator::do_setattr_object(ObjectStore::Transaction *t,
   if (m_do_stats && (stat != NULL))
       stat->written_data += bl.length();
 
-  t->setattr(coll, obj, "objxattr", bl);
+  t->setattr(coll, ghobject_t(obj), "objxattr", bl);
 }
 
 void WorkloadGenerator::do_pgmeta_omap_set(ObjectStore::Transaction *t, spg_t pgid,
@@ -333,7 +333,7 @@ void WorkloadGenerator::do_append_log(ObjectStore::Transaction *t,
 
   bufferlist bl;
   get_filled_byte_array(bl, size);
-  hobject_t log_obj = entry->m_meta_obj;
+  ghobject_t log_obj = entry->m_meta_obj;
 
   dout(2) << __func__ << " coll " << entry->m_coll << " "
       << coll_t::meta() << " /" << log_obj << " (" << bl.length() << ")" << dendl;

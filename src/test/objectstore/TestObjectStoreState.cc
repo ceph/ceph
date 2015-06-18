@@ -46,7 +46,7 @@ void TestObjectStoreState::init(int colls, int objs)
     int coll_id = i;
     coll_entry_t *entry = coll_create(coll_id);
     dout(5) << "init create collection " << entry->m_coll.to_str()
-        << " meta " << entry->m_meta_obj.oid.name << dendl;
+        << " meta " << entry->m_meta_obj << dendl;
 
     t = new ObjectStore::Transaction;
     t->create_collection(entry->m_coll);
@@ -61,7 +61,7 @@ void TestObjectStoreState::init(int colls, int objs)
 
     for (int i = 0; i < objs; i++) {
       hobject_t *obj = entry->touch_obj(i + baseid);
-      t->touch(entry->m_coll, *obj);
+      t->touch(entry->m_coll, ghobject_t(*obj));
       ceph_assert(i + baseid == m_num_objects);
       m_num_objects++;
     }
