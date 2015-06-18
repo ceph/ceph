@@ -2846,6 +2846,7 @@ unsigned FileStore::_do_transaction(
 bool FileStore::exists(coll_t cid, const ghobject_t& oid)
 {
   tracepoint(objectstore, exists_enter, cid.c_str());
+  _kludge_temp_object_collection(cid, oid);
   struct stat st;
   bool retval = stat(cid, oid, &st) == 0;
   tracepoint(objectstore, exists_exit, retval);
@@ -2856,6 +2857,7 @@ int FileStore::stat(
   coll_t cid, const ghobject_t& oid, struct stat *st, bool allow_eio)
 {
   tracepoint(objectstore, stat_enter, cid.c_str());
+  _kludge_temp_object_collection(cid, oid);
   int r = lfn_stat(cid, oid, st);
   assert(allow_eio || !m_filestore_fail_eio || r != -EIO);
   if (r < 0) {
@@ -2886,6 +2888,7 @@ int FileStore::read(
 {
   int got;
   tracepoint(objectstore, read_enter, cid.c_str(), offset, len);
+  _kludge_temp_object_collection(cid, oid);
 
   dout(15) << "read " << cid << "/" << oid << " " << offset << "~" << len << dendl;
 
@@ -3062,6 +3065,7 @@ int FileStore::fiemap(coll_t cid, const ghobject_t& oid,
                     bufferlist& bl)
 {
   tracepoint(objectstore, fiemap_enter, cid.c_str(), offset, len);
+  _kludge_temp_object_collection(cid, oid);
 
   if ((!backend->has_seek_data_hole() && !backend->has_fiemap()) ||
       len <= (size_t)m_filestore_fiemap_threshold) {
@@ -4011,6 +4015,7 @@ bool FileStore::debug_mdata_eio(const ghobject_t &oid) {
 int FileStore::getattr(coll_t cid, const ghobject_t& oid, const char *name, bufferptr &bp)
 {
   tracepoint(objectstore, getattr_enter, cid.c_str());
+  _kludge_temp_object_collection(cid, oid);
   dout(15) << "getattr " << cid << "/" << oid << " '" << name << "'" << dendl;
   FDRef fd;
   int r = lfn_open(cid, oid, false, &fd);
@@ -4059,6 +4064,7 @@ int FileStore::getattr(coll_t cid, const ghobject_t& oid, const char *name, buff
 int FileStore::getattrs(coll_t cid, const ghobject_t& oid, map<string,bufferptr>& aset)
 {
   tracepoint(objectstore, getattrs_enter, cid.c_str());
+  _kludge_temp_object_collection(cid, oid);
   set<string> omap_attrs;
   map<string, bufferlist> omap_aset;
   Index index;
@@ -4808,6 +4814,7 @@ int FileStore::omap_get(coll_t c, const ghobject_t &hoid,
 			map<string, bufferlist> *out)
 {
   tracepoint(objectstore, omap_get_enter, c.c_str());
+  _kludge_temp_object_collection(c, hoid);
   dout(15) << __func__ << " " << c << "/" << hoid << dendl;
   Index index;
   int r = get_index(c, &index);
@@ -4836,6 +4843,7 @@ int FileStore::omap_get_header(
   bool allow_eio)
 {
   tracepoint(objectstore, omap_get_header_enter, c.c_str());
+  _kludge_temp_object_collection(c, hoid);
   dout(15) << __func__ << " " << c << "/" << hoid << dendl;
   Index index;
   int r = get_index(c, &index);
@@ -4860,6 +4868,7 @@ int FileStore::omap_get_header(
 int FileStore::omap_get_keys(coll_t c, const ghobject_t &hoid, set<string> *keys)
 {
   tracepoint(objectstore, omap_get_keys_enter, c.c_str());
+  _kludge_temp_object_collection(c, hoid);
   dout(15) << __func__ << " " << c << "/" << hoid << dendl;
   Index index;
   int r = get_index(c, &index);
@@ -4886,6 +4895,7 @@ int FileStore::omap_get_values(coll_t c, const ghobject_t &hoid,
 			       map<string, bufferlist> *out)
 {
   tracepoint(objectstore, omap_get_values_enter, c.c_str());
+  _kludge_temp_object_collection(c, hoid);
   dout(15) << __func__ << " " << c << "/" << hoid << dendl;
   Index index;
   const char *where = 0;
@@ -4921,6 +4931,7 @@ int FileStore::omap_check_keys(coll_t c, const ghobject_t &hoid,
 			       set<string> *out)
 {
   tracepoint(objectstore, omap_check_keys_enter, c.c_str());
+  _kludge_temp_object_collection(c, hoid);
   dout(15) << __func__ << " " << c << "/" << hoid << dendl;
 
   Index index;
@@ -4947,6 +4958,7 @@ ObjectMap::ObjectMapIterator FileStore::get_omap_iterator(coll_t c,
 							  const ghobject_t &hoid)
 {
   tracepoint(objectstore, get_omap_iterator, c.c_str());
+  _kludge_temp_object_collection(c, hoid);
   dout(15) << __func__ << " " << c << "/" << hoid << dendl;
   Index index;
   int r = get_index(c, &index);

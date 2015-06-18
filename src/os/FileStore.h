@@ -140,7 +140,7 @@ private:
   int get_index(coll_t c, Index *index);
   int init_index(coll_t c);
 
-  void _kludge_temp_object_collection(coll_t& cid, ghobject_t& oid) {
+  void _kludge_temp_object_collection(coll_t& cid, const ghobject_t& oid) {
     if (oid.hobj.pool < -1 && !cid.is_temp())
       cid = cid.get_temp();
   }
