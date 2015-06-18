@@ -67,7 +67,7 @@ Usage::
 
 	ceph-deploy new [MON][MON...]
 
-Here, [MON] is initial monitor hostname (short hostname i.e, ``hostname -s``).
+Here, [MON] is the initial monitor hostname (short hostname i.e, ``hostname -s``).
 
 Other options like :option:`--no-ssh-copykey`, :option:`--fsid`,
 :option:`--cluster-network` and :option:`--public-network` can also be used with
