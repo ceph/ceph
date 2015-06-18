@@ -100,7 +100,7 @@ uint64_t do_run(ObjectStore *store, int attrsize, int numattrs,
       stringstream obj_str;
       obj_str << i;
       t.touch(coll,
-	      hobject_t(sobject_t(obj_str.str(), CEPH_NOSNAP)));
+	      ghobject_t(hobject_t(sobject_t(obj_str.str(), CEPH_NOSNAP))));
       objects.insert(obj_str.str());
     }
     collections[coll] = make_pair(objects, new ObjectStore::Sequencer(coll.to_str()));
@@ -129,7 +129,7 @@ uint64_t do_run(ObjectStore *store, int attrsize, int numattrs,
 	stringstream ss;
 	ss << i << ", " << j << ", " << *obj;
 	t->setattr(iter->first,
-		   hobject_t(sobject_t(*obj, CEPH_NOSNAP)),
+		   ghobject_t(hobject_t(sobject_t(*obj, CEPH_NOSNAP))),
 		   ss.str().c_str(),
 		   bl);
       }
