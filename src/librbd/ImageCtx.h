@@ -210,6 +210,7 @@ namespace librbd {
     uint64_t get_parent_snap_id(librados::snap_t in_snap_id) const;
     int get_parent_overlap(librados::snap_t in_snap_id,
 			   uint64_t *overlap) const;
+    uint64_t get_copyup_snap_id() const;
     void aio_read_from_cache(object_t o, uint64_t object_no, bufferlist *bl,
 			     size_t len, uint64_t off, Context *onfinish,
 			     int fadvise_flags);
@@ -225,8 +226,6 @@ namespace librbd {
     void clear_nonexistence_cache();
     int register_watch();
     void unregister_watch();
-    size_t parent_io_len(uint64_t offset, size_t length,
-			 librados::snap_t in_snap_id);
     uint64_t prune_parent_extents(vector<pair<uint64_t,uint64_t> >& objectx,
 				  uint64_t overlap);
 
