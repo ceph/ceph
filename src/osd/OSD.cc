@@ -4142,7 +4142,7 @@ void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
     } else if (command == "truncobj") {
       int64_t trunclen;
       cmd_getval(service->cct, cmdmap, "len", trunclen);
-      t.truncate(coll_t(pgid), obj, trunclen);
+      t.truncate(coll_t(pgid), ghobject_t(obj), trunclen);
       r = store->apply_transaction(t);
       if (r < 0)
 	ss << "error=" << r;
