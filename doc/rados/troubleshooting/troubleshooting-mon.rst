@@ -31,7 +31,7 @@ Initial Troubleshooting
   the server and, if that succeeds, try connecting to the monitor's port
   using you tool of choice (telnet, nc,...).
 
-**Does ``ceph -s`` run and obtain a reply from the cluster?**
+**Does ceph -s run and obtain a reply from the cluster?**
 
   If the answer is yes then your cluster is up and running.  One thing you
   can take for granted is that the monitors will only answer to a ``status``
@@ -43,7 +43,7 @@ Initial Troubleshooting
   enough to form a quorum (keep in mind that a quorum if formed by a majority
   of monitors).
 
-**What if ``ceph -s`` doesn't finish?**
+**What if ceph -s doesn't finish?**
 
   If you haven't gone through all the steps so far, please go back and do.
 
