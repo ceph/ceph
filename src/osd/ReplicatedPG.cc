@@ -1149,7 +1149,7 @@ void ReplicatedPG::do_pg_op(OpRequestRef op)
 	    wait_for_unreadable_object(oid, op);
 	    return;
 	  }
-	  result = osd->store->read(coll, oid, 0, 0, osd_op.outdata);
+	  result = osd->store->read(coll, ghobject_t(oid), 0, 0, osd_op.outdata);
 	}
       }
       break;
@@ -10770,7 +10770,7 @@ void ReplicatedPG::agent_load_hit_sets()
 	bufferlist bl;
 	{
 	  obc->ondisk_read_lock();
-	  int r = osd->store->read(coll, oid, 0, 0, bl);
+	  int r = osd->store->read(coll, ghobject_t(oid), 0, 0, bl);
 	  assert(r >= 0);
 	  obc->ondisk_read_unlock();
 	}
