@@ -155,16 +155,36 @@ class JobDeleter(JobProcessor):
         report.try_delete_jobs(job_name, job_id)
 
 
+def pause_tube(connection, tube, duration):
+    duration = int(duration)
+    if not tube:
+        tubes = sorted(connection.tubes())
+    else:
+        tubes = [tube]
+
+    prefix = 'Unpausing' if duration == 0 else "Pausing for {dur}s"
+    templ = prefix + ": {tubes}"
+    log.info(templ.format(dur=duration, tubes=tubes))
+    for tube in tubes:
+        connection.pause_tube(tube, duration)
+
+
 def main(args):
     machine_type = args['--machine_type']
     delete = args['--delete']
     runs = args['--runs']
     show_desc = args['--description']
     full = args['--full']
+    pause_duration = args['--pause']
     try:
         connection = connect()
-        watch_tube(connection, machine_type)
-        if delete:
+        if machine_type and not pause_duration:
+            # watch_tube needs to be run before we inspect individual jobs;
+            # it is not needed for pausing tubes
+            watch_tube(connection, machine_type)
+        if pause_duration:
+            pause_tube(connection, machine_type, pause_duration)
+        elif delete:
             walk_jobs(connection, machine_type,
                       JobDeleter(delete))
         elif runs:

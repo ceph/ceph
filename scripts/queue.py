@@ -8,6 +8,7 @@ usage: teuthology-queue -h
        teuthology-queue [-d|-f] -m MACHINE_TYPE
        teuthology-queue [-r] -m MACHINE_TYPE
        teuthology-queue -m MACHINE_TYPE -D PATTERN
+       teuthology-queue -p SECONDS [-m MACHINE_TYPE]
 
 List Jobs in queue.
 If -D is passed, then jobs with PATTERN in the job name are deleted from the
@@ -23,6 +24,9 @@ optional arguments:
   -d, --description     Show job descriptions
   -r, --runs            Only show run names
   -f, --full            Print the entire job config. Use with caution.
+  -p, --pause SECONDS   Pause queues for a number of seconds. A value of 0
+                        will unpause. If -m is passed, pause that queue,
+                        otherwise pause all queues.
 """.format(archive_base=teuthology.config.config.archive_base)
 
 
