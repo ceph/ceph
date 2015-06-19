@@ -237,6 +237,47 @@ function TEST_crush_tree() {
         $XMLSTARLET val -e -r test/mon/osd-crush-tree.rng - || return 1
 }
 
+# NB: disable me if i am too time consuming
+function TEST_crush_repair_faulty_crushmap() {
+    local dir=$1
+    fsid=$(uuidgen)
+    MONA=127.0.0.1:7113
+    MONB=127.0.0.1:7114
+    MONC=127.0.0.1:7115
+    CEPH_ARGS_orig=$CEPH_ARGS
+    CEPH_ARGS="--fsid=$fsid --auth-supported=none "
+    CEPH_ARGS+="--mon-initial-members=a,b,c "
+    CEPH_ARGS+="--mon-host=$MONA,$MONB,$MONC "
+    run_mon $dir a --public-addr $MONA || return 1
+    run_mon $dir b --public-addr $MONB || return 1
+    run_mon $dir c --public-addr $MONC || return 1
+
+    local empty_map=$dir/empty_map
+    :> $empty_map.txt
+    ./crushtool -c $empty_map.txt -o $empty_map.map || return 1
+
+    local crushtool_path_old=`ceph-conf --show-config-value crushtool`
+    ceph tell mon.* injectargs --crushtool "true"
+
+    ceph osd setcrushmap -i $empty_map.map || return 1
+    # should be an empty crush map without any buckets
+    ! test $(ceph osd crush dump --format=xml | \
+           $XMLSTARLET sel -t -m "//buckets/bucket" -v .) || return 1
+    # bring them down, the "ceph" commands will try to hunt for other monitor in
+    # vain, after mon.a is offline
+    kill_daemons $dir || return 1
+    # rewrite the monstore with the good crush map,
+    ./tools/ceph-monstore-update-crush.sh --rewrite $dir/a || return 1
+
+    run_mon $dir a --public-addr $MONA || return 1
+    run_mon $dir b --public-addr $MONB || return 1
+    run_mon $dir c --public-addr $MONC || return 1
+    # the buckets are back
+    test $(ceph osd crush dump --format=xml | \
+           $XMLSTARLET sel -t -m "//buckets/bucket" -v .) || return 1
+    CEPH_ARGS=$CEPH_ARGS_orig
+}
+
 main osd-crush "$@"
 
 # Local Variables:
