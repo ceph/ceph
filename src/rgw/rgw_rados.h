@@ -762,14 +762,14 @@ public:
 
   virtual ~RGWSystemMetaObj() {}
 
-  void encode(bufferlist& bl) const {
+  virtual void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
     ::encode(id, bl);
     ::encode(name, bl);
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  virtual void decode(bufferlist::iterator& bl) {
     DECODE_START(1, bl);
     ::decode(id, bl);
     ::decode(name, bl);
