@@ -732,6 +732,68 @@ struct RGWNameToId {
 };
 WRITE_CLASS_ENCODER(RGWNameToId)
 
+class RGWSystemMetaObj {
+protected:
+  string id;
+  string name;
+
+  CephContext *cct;
+  RGWRados *store;
+
+  int store_name(bool exclusive);
+  int store_info(bool exclusive);
+  int read_info(const string& obj_id);
+  int read_id(const string& obj_name, string& obj_id);
+  int read_default(RGWDefaultSystemMetaObjInfo& default_info);
+  /* read and use default id */
+  int use_default();
+
+public:
+  RGWSystemMetaObj() {}
+  RGWSystemMetaObj(const string& _name): name(_name)  {}
+  RGWSystemMetaObj(const string& _id, const string& _name) : id(_id), name(_name) {}
+  RGWSystemMetaObj(CephContext *_cct, RGWRados *_store): cct(_cct), store(_store){}
+  RGWSystemMetaObj(const string& _name, CephContext *_cct, RGWRados *_store): name(_name), cct(_cct), store(_store){}
+  const string& get_name() { return name; }
+  const string& get_id() { return id; }
+
+  virtual ~RGWSystemMetaObj() {}
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(id, bl);
+    ::encode(name, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::iterator& bl) {
+    DECODE_START(1, bl);
+    ::decode(id, bl);
+    ::decode(name, bl);
+    DECODE_FINISH(bl);
+  }
+
+  int init(CephContext *_cct, RGWRados *_store, bool setup_obj = true);
+  int read_default_id(string& default_id);
+  int set_as_default();
+  int delete_default();
+  int create();
+  int delete_obj();
+  int rename(const string& new_name);
+  int update() { return store_info(false);}
+
+
+  virtual const string& get_pool_name(CephContext *cct) = 0;
+
+  virtual const string& get_default_oid() = 0;
+  virtual const string& get_names_oid_prefix() = 0;
+  virtual const string& get_info_oid_prefix() = 0;
+
+  void dump(Formatter *f) const;
+  void decode_json(JSONObj *obj);
+};
+WRITE_CLASS_ENCODER(RGWSystemMetaObj)
+
 struct RGWRegion;
 
 struct RGWZonePlacementInfo {
@@ -1063,6 +1125,42 @@ struct objexp_hint_entry {
   }
 };
 WRITE_CLASS_ENCODER(objexp_hint_entry)
+
+class RGWRealm : public RGWSystemMetaObj
+{
+  string master_zonegroup;
+  map<string, RGWRegion> zonegroups;
+
+public:
+  RGWRealm(const string& _id, const string& _name) : RGWSystemMetaObj(_id, _name) {}
+  RGWRealm(CephContext *_cct, RGWRados *_store): RGWSystemMetaObj(_cct, _store) {}
+  RGWRealm(const string& _name, CephContext *_cct, RGWRados *_store): RGWSystemMetaObj(_name, _cct, _store){}
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    RGWSystemMetaObj::encode(bl);
+    ::encode(master_zonegroup, bl);
+    ::encode(zonegroups, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::iterator& bl) {
+    DECODE_START(1, bl);
+    RGWSystemMetaObj::decode(bl);
+    ::decode(master_zonegroup, bl);
+    ::decode(zonegroups, bl);
+    DECODE_FINISH(bl);
+  }
+
+  const string& get_pool_name(CephContext *cct);
+  const string& get_default_oid();
+  const string& get_names_oid_prefix();
+  const string& get_info_oid_prefix();
+
+  void dump(Formatter *f) const;
+  void decode_json(JSONObj *obj);
+};
+WRITE_CLASS_ENCODER(RGWRealm)
 
 class RGWDataChangesLog;
 class RGWReplicaLogger;
