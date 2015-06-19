@@ -625,6 +625,18 @@ void RGWNameToId::decode_json(JSONObj *obj) {
   JSONDecoder::decode_json("obj_id", obj_id, obj);
 }
 
+void RGWSystemMetaObj::dump(Formatter *f) const
+{
+  encode_json("id", id , f);
+  encode_json("name", name , f);
+}
+
+void RGWSystemMetaObj::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("id", id, obj);
+  JSONDecoder::decode_json("name", name, obj);
+}
+
 void RGWZoneParams::dump(Formatter *f) const
 {
   encode_json("domain_root", domain_root.data_pool, f);
@@ -793,6 +805,31 @@ void RGWDataChangesLogInfo::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("marker", marker, obj);
   JSONDecoder::decode_json("last_update", last_update, obj);
 }
+
+
+void RGWRealm::dump(Formatter *f) const
+{
+  encode_json("name", name, f);
+  encode_json("id", id, f);
+  encode_json("master_zonegroup", master_zonegroup, f);
+  encode_json_map("zonegroups", zonegroups, f);
+}
+
+static void decode_zonegroups(map<string, RGWRegion>& zonegroups, JSONObj *o)
+{
+  RGWRegion zg;
+  zg.decode_json(o);
+  zonegroups[zg.name] = zg;
+}
+
+void RGWRealm::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("name", name, obj);
+  JSONDecoder::decode_json("id", id, obj);
+  JSONDecoder::decode_json("master_zonegroup", master_zonegroup, obj);
+  JSONDecoder::decode_json("zonegroups", zonegroups, decode_zonegroups, obj);
+}
+
 
 void KeystoneToken::Metadata::decode_json(JSONObj *obj)
 {
