@@ -3771,7 +3771,9 @@ void OSD::_send_boot()
     dout(10) << " assuming hb_front_addr ip matches client_addr" << dendl;
   }
 
-  MOSDBoot *mboot = new MOSDBoot(superblock, boot_epoch, hb_back_addr, hb_front_addr, cluster_addr);
+  MOSDBoot *mboot = new MOSDBoot(superblock, boot_epoch,
+                                 hb_back_addr, hb_front_addr, cluster_addr,
+                                 CEPH_FEATURES_ALL);
   dout(10) << " client_addr " << client_messenger->get_myaddr()
 	   << ", cluster_addr " << cluster_addr
 	   << ", hb_back_addr " << hb_back_addr
