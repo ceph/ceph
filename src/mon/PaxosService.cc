@@ -78,7 +78,7 @@ bool PaxosService::dispatch(MonOpRequestRef op)
 
   // leader?
   if (!mon->is_leader()) {
-    mon->forward_request_leader(m);
+    mon->forward_request_leader(op);
     return true;
   }
   
