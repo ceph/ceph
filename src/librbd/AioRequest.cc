@@ -506,7 +506,7 @@ namespace librbd {
   }
 
   void AioWrite::add_write_ops(librados::ObjectWriteOperation *wr) {
-    if (m_ictx->enable_alloc_hint)
+    if (m_ictx->enable_alloc_hint && !m_ictx->object_map.object_may_exist(m_object_no))
       wr->set_alloc_hint(m_ictx->get_object_size(), m_ictx->get_object_size());
     wr->write(m_object_off, m_write_data);
     wr->set_op_flags2(m_op_flags);
