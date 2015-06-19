@@ -5796,14 +5796,12 @@ PG::RecoveryState::Backfilling::react(const RemoteReservationRejected &)
     ConnectionRef con = pg->osd->get_con_osd_cluster(
       it->osd, pg->get_osdmap()->get_epoch());
     if (con) {
-      if (con->has_feature(CEPH_FEATURE_BACKFILL_RESERVATION)) {
-        pg->osd->send_message_osd_cluster(
-          new MBackfillReserve(
-	    MBackfillReserve::REJECT,
-	    spg_t(pg->info.pgid.pgid, it->shard),
-	    pg->get_osdmap()->get_epoch()),
-	  con.get());
-      }
+      pg->osd->send_message_osd_cluster(
+        new MBackfillReserve(
+	  MBackfillReserve::REJECT,
+	  spg_t(pg->info.pgid.pgid, it->shard),
+	  pg->get_osdmap()->get_epoch()),
+	con.get());
     }
   }
 
@@ -5851,17 +5849,13 @@ PG::RecoveryState::WaitRemoteBackfillReserved::react(const RemoteBackfillReserve
     ConnectionRef con = pg->osd->get_con_osd_cluster(
       backfill_osd_it->osd, pg->get_osdmap()->get_epoch());
     if (con) {
-      if (con->has_feature(CEPH_FEATURE_BACKFILL_RESERVATION)) {
-        pg->osd->send_message_osd_cluster(
-          new MBackfillReserve(
-	  MBackfillReserve::REQUEST,
-	  spg_t(pg->info.pgid.pgid, backfill_osd_it->shard),
-	  pg->get_osdmap()->get_epoch(),
-	  pg->get_backfill_priority()),
-	con.get());
-      } else {
-        post_event(RemoteBackfillReserved());
-      }
+      pg->osd->send_message_osd_cluster(
+        new MBackfillReserve(
+	MBackfillReserve::REQUEST,
+	spg_t(pg->info.pgid.pgid, backfill_osd_it->shard),
+	pg->get_osdmap()->get_epoch(),
+	pg->get_backfill_priority()),
+      con.get());
     }
     ++backfill_osd_it;
   } else {
@@ -5895,14 +5889,12 @@ PG::RecoveryState::WaitRemoteBackfillReserved::react(const RemoteReservationReje
     ConnectionRef con = pg->osd->get_con_osd_cluster(
       it->osd, pg->get_osdmap()->get_epoch());
     if (con) {
-      if (con->has_feature(CEPH_FEATURE_BACKFILL_RESERVATION)) {
-        pg->osd->send_message_osd_cluster(
-          new MBackfillReserve(
-	  MBackfillReserve::REJECT,
-	  spg_t(pg->info.pgid.pgid, it->shard),
-	  pg->get_osdmap()->get_epoch()),
-	con.get());
-      }
+      pg->osd->send_message_osd_cluster(
+        new MBackfillReserve(
+	MBackfillReserve::REJECT,
+	spg_t(pg->info.pgid.pgid, it->shard),
+	pg->get_osdmap()->get_epoch()),
+      con.get());
     }
   }
 
