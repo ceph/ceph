@@ -881,7 +881,6 @@ void RGWRealm::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("current_period", current_period, obj);
 }
 
-
 void KeystoneToken::Metadata::decode_json(JSONObj *obj)
 {
   JSONDecoder::decode_json("is_admin", is_admin, obj);
