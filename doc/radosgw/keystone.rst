@@ -25,12 +25,69 @@ the Ceph Object Gateway gets the ticket, it looks at the tenant, and the user
 roles that are assigned to that ticket, and accepts/rejects the request
 according to the ``rgw keystone accepted roles`` configurable.
 
+
+Prior to Kilo
+-------------
+
 Keystone itself needs to be configured to point to the Ceph Object Gateway as an
 object-storage endpoint::
 
-	keystone service-create --name swift --type object-store
-	keystone endpoint-create --service-id <id> --publicurl http://radosgw.example.com/swift/v1 \
-		--internalurl http://radosgw.example.com/swift/v1 --adminurl http://radosgw.example.com/swift/v1
+    keystone service-create --name swift --type object-store
+    keystone endpoint-create --service-id <id> --publicurl http://radosgw.example.com/swift/v1 \
+            --internalurl http://radosgw.example.com/swift/v1 --adminurl http://radosgw.example.com/swift/v1
+
+
+As of Kilo
+----------
+
+Keystone itself needs to be configured to point to the Ceph Object Gateway as an
+object-storage endpoint::
+
+  openstack service create --name=swift \
+                           --description="Swift Service" \
+                           object-store
+  +-------------+----------------------------------+
+  | Field       | Value                            |
+  +-------------+----------------------------------+
+  | description | Swift Service                    |
+  | enabled     | True                             |
+  | id          | 37c4c0e79571404cb4644201a4a6e5ee |
+  | name        | swift                            |
+  | type        | object-store                     |
+  +-------------+----------------------------------+
+
+  openstack endpoint create --region RegionOne \
+       --publicurl   "http://radosgw.example.com:8080/swift/v1" \
+       --adminurl    "http://radosgw.example.com:8080/swift/v1" \
+       --internalurl "http://radosgw.example.com:8080/swift/v1" \
+       swift
+  +--------------+------------------------------------------+
+  | Field        | Value                                    |
+  +--------------+------------------------------------------+
+  | adminurl     | http://radosgw.example.com:8080/swift/v1 |
+  | id           | e4249d2b60e44743a67b5e5b38c18dd3         |
+  | internalurl  | http://radosgw.example.com:8080/swift/v1 |
+  | publicurl    | http://radosgw.example.com:8080/swift/v1 |
+  | region       | RegionOne                                |
+  | service_id   | 37c4c0e79571404cb4644201a4a6e5ee         |
+  | service_name | swift                                    |
+  | service_type | object-store                             |
+  +--------------+------------------------------------------+
+
+  $ openstack endpoint show object-store
+  +--------------+------------------------------------------+
+  | Field        | Value                                    |
+  +--------------+------------------------------------------+
+  | adminurl     | http://radosgw.example.com:8080/swift/v1 |
+  | enabled      | True                                     |
+  | id           | e4249d2b60e44743a67b5e5b38c18dd3         |
+  | internalurl  | http://radosgw.example.com:8080/swift/v1 |
+  | publicurl    | http://radosgw.example.com:8080/swift/v1 |
+  | region       | RegionOne                                |
+  | service_id   | 37c4c0e79571404cb4644201a4a6e5ee         |
+  | service_name | swift                                    |
+  | service_type | object-store                             |
+  +--------------+------------------------------------------+
 
 
 The keystone URL is the Keystone admin RESTful API URL. The admin token is the
