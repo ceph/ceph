@@ -6180,16 +6180,12 @@ PG::RecoveryState::WaitRemoteRecoveryReserved::react(const RemoteRecoveryReserve
     ConnectionRef con = pg->osd->get_con_osd_cluster(
       remote_recovery_reservation_it->osd, pg->get_osdmap()->get_epoch());
     if (con) {
-      if (con->has_feature(CEPH_FEATURE_RECOVERY_RESERVATION)) {
-	pg->osd->send_message_osd_cluster(
-          new MRecoveryReserve(
-	    MRecoveryReserve::REQUEST,
-	    spg_t(pg->info.pgid.pgid, remote_recovery_reservation_it->shard),
-	    pg->get_osdmap()->get_epoch()),
-	  con.get());
-      } else {
-	post_event(RemoteRecoveryReserved());
-      }
+      pg->osd->send_message_osd_cluster(
+        new MRecoveryReserve(
+	  MRecoveryReserve::REQUEST,
+	  spg_t(pg->info.pgid.pgid, remote_recovery_reservation_it->shard),
+	  pg->get_osdmap()->get_epoch()),
+	con.get());
     }
     ++remote_recovery_reservation_it;
   } else {
@@ -6233,14 +6229,12 @@ void PG::RecoveryState::Recovering::release_reservations()
     ConnectionRef con = pg->osd->get_con_osd_cluster(
       i->osd, pg->get_osdmap()->get_epoch());
     if (con) {
-      if (con->has_feature(CEPH_FEATURE_RECOVERY_RESERVATION)) {
-	pg->osd->send_message_osd_cluster(
-          new MRecoveryReserve(
-	    MRecoveryReserve::RELEASE,
-	    spg_t(pg->info.pgid.pgid, i->shard),
-	    pg->get_osdmap()->get_epoch()),
-	  con.get());
-      }
+      pg->osd->send_message_osd_cluster(
+        new MRecoveryReserve(
+	  MRecoveryReserve::RELEASE,
+	  spg_t(pg->info.pgid.pgid, i->shard),
+	  pg->get_osdmap()->get_epoch()),
+	con.get());
     }
   }
 }
