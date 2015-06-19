@@ -763,7 +763,7 @@ public:
   uint64_t routed_request_tid;
   map<uint64_t, RoutedRequest*> routed_requests;
   
-  void forward_request_leader(PaxosServiceMessage *req);
+  void forward_request_leader(MonOpRequestRef op);
   void handle_forward(MonOpRequestRef op);
   void try_send_message(Message *m, const entity_inst_t& to);
   void send_reply(PaxosServiceMessage *req, Message *reply);
