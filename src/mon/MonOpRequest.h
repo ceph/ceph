@@ -34,6 +34,10 @@ struct MonOpRequest : public TrackedOp {
   void mark_zap() {
     mark_event("monitor_zap");
   }
+  void mark_forwarded() {
+    mark_event("forwarded");
+    forwarded_to_leader = true;
+  }
 
   void mark_svc_event(const string &service, const string &event) {
     string s = service;
@@ -65,12 +69,14 @@ private:
   utime_t dequeued_time;
   MonSession *session;
   ConnectionRef con;
+  bool forwarded_to_leader;
 
   MonOpRequest(Message *req, OpTracker *tracker) :
     TrackedOp(tracker, req->get_recv_stamp()),
     request(req->get()),
     session(NULL),
-    con(NULL)
+    con(NULL),
+    forwarded_to_leader(false)
   {
     tracker->mark_event(this, "header_read", request->get_recv_stamp());
     tracker->mark_event(this, "throttled", request->get_throttle_stamp());
@@ -108,6 +114,12 @@ public:
   T *get_req() const { return static_cast<T*>(request); }
 
   Message *get_req() const { return get_req<Message>(); }
+
+  int get_req_type() const {
+    if (!request)
+      return 0;
+    return request->get_type();
+  }
 
   ConnectionRef get_connection() { return con; }
 
@@ -148,6 +160,7 @@ public:
       f->dump_int("seq", seq);
       f->dump_bool("src_is_mon", is_src_mon());
       f->dump_stream("source") << request->get_source_inst();
+      f->dump_bool("forwarded_to_leader", forwarded_to_leader);
       f->close_section();
     }
   }

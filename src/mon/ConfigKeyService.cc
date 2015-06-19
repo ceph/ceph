@@ -131,7 +131,7 @@ bool ConfigKeyService::service_dispatch(MonOpRequestRef op)
 
   } else if (prefix == "config-key put") {
     if (!mon->is_leader()) {
-      mon->forward_request_leader(cmd);
+      mon->forward_request_leader(op);
       // we forward the message; so return now.
       return true;
     }
@@ -160,7 +160,7 @@ bool ConfigKeyService::service_dispatch(MonOpRequestRef op)
 
   } else if (prefix == "config-key del") {
     if (!mon->is_leader()) {
-      mon->forward_request_leader(cmd);
+      mon->forward_request_leader(op);
       return true;
     }
 

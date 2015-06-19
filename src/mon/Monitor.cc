@@ -2636,7 +2636,7 @@ void Monitor::handle_command(MonOpRequestRef op)
       }
       dout(10) << "Command not locally supported, forwarding request "
 	       << m << dendl;
-      forward_request_leader(m);
+      forward_request_leader(op);
       return;
     } else if (!mon_cmd->is_compat(leader_cmd)) {
       if (mon_cmd->is_noforward()) {
@@ -2647,7 +2647,7 @@ void Monitor::handle_command(MonOpRequestRef op)
       }
       dout(10) << "Command not compatible with leader, forwarding request "
 	       << m << dendl;
-      forward_request_leader(m);
+      forward_request_leader(op);
       return;
     }
   }
@@ -2756,7 +2756,7 @@ void Monitor::handle_command(MonOpRequestRef op)
       int r = scrub_start();
       reply_command(op, r, "", rdata, 0);
     } else if (is_peon()) {
-      forward_request_leader(m);
+      forward_request_leader(op);
     } else {
       reply_command(op, -EAGAIN, "no quorum", rdata, 0);
     }
@@ -3032,18 +3032,18 @@ void Monitor::reply_command(MonOpRequestRef op, int rc, const string &rs,
 // back via the correct monitor and back to them.  (the monitor will not
 // initiate any connections.)
 
-void Monitor::forward_request_leader(PaxosServiceMessage *req)
+void Monitor::forward_request_leader(MonOpRequestRef op)
 {
+  op->mark_event(__func__);
+
   int mon = get_leader();
-  MonSession *session = 0;
-  if (req->get_connection())
-    session = static_cast<MonSession *>(req->get_connection()->get_priv());
+  MonSession *session = op->get_session();
+  PaxosServiceMessage *req = op->get_req<PaxosServiceMessage>();
+  
   if (req->get_source().is_mon() && req->get_source_addr() != messenger->get_myaddr()) {
     dout(10) << "forward_request won't forward (non-local) mon request " << *req << dendl;
-    req->put();
   } else if (session && session->proxy_con) {
     dout(10) << "forward_request won't double fwd request " << *req << dendl;
-    req->put();
   } else if (session && !session->closed) {
     RoutedRequest *rr = new RoutedRequest;
     rr->tid = ++routed_request_tid;
@@ -3069,9 +3069,9 @@ void Monitor::forward_request_leader(PaxosServiceMessage *req)
       forward->entity_name.set_type(CEPH_ENTITY_TYPE_MON);
     }
     messenger->send_message(forward, monmap->get_inst(mon));
+    op->mark_forwarded();
   } else {
     dout(10) << "forward_request no session for request " << *req << dendl;
-    req->put();
   }
   if (session)
     session->put();
