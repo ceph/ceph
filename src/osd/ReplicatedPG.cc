@@ -213,7 +213,8 @@ void ReplicatedPG::on_local_recover(
       recovery_info.oi.version = latest->version;
       bufferlist bl;
       ::encode(recovery_info.oi, bl);
-      t->setattr(coll, recovery_info.soid, OI_ATTR, bl);
+      assert(!pool.info.require_rollback());
+      t->setattr(coll, ghobject_t(recovery_info.soid), OI_ATTR, bl);
       if (obc)
 	obc->attr_cache[OI_ATTR] = bl;
     }
@@ -8532,7 +8533,8 @@ ObjectContextRef ReplicatedPG::mark_object_lost(ObjectStore::Transaction *t,
 
   bufferlist b2;
   obc->obs.oi.encode(b2);
-  t->setattr(coll, oid, OI_ATTR, b2);
+  assert(!pool.info.require_rollback());
+  t->setattr(coll, ghobject_t(oid), OI_ATTR, b2);
 
   return obc;
 }
@@ -9335,7 +9337,8 @@ int ReplicatedPG::recover_primary(int max, ThreadPool::TPHandle &handle)
 	      t->register_on_applied(new ObjectStore::C_DeleteTransaction(t));
 	      bufferlist b2;
 	      obc->obs.oi.encode(b2);
-	      t->setattr(coll, soid, OI_ATTR, b2);
+	      assert(!pool.info.require_rollback());
+	      t->setattr(coll, ghobject_t(soid), OI_ATTR, b2);
 
 	      recover_got(soid, latest->version);
 	      missing_loc.add_location(soid, pg_whoami);
