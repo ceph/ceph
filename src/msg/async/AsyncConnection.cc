@@ -1942,7 +1942,6 @@ int AsyncConnection::send_message(Message *m)
   prepare_send_message(f, m, bl);
 
   Mutex::Locker l(write_lock);
-  m->set_seq(out_seq.inc());
   // "features" changes will change the payload encoding
   if (can_write == NOWRITE || get_features() != f) {
     // ensure the correctness of message encoding
@@ -2245,6 +2244,7 @@ void AsyncConnection::prepare_send_message(uint64_t features, Message *m, buffer
 int AsyncConnection::write_message(Message *m, bufferlist& bl)
 {
   assert(can_write == CANWRITE);
+  m->set_seq(out_seq.inc());
 
   if (!policy.lossy) {
     // put on sent list
