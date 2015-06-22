@@ -1284,11 +1284,12 @@ void InodeStoreBase::encode_bare(bufferlist &bl, const bufferlist *snap_blob) co
     ::encode(bufferlist(), bl);
   ::encode(old_inodes, bl);
   ::encode(oldest_snap, bl);
+  ::encode(damage_flags, bl);
 }
 
 void InodeStoreBase::encode(bufferlist &bl, const bufferlist *snap_blob) const
 {
-  ENCODE_START(5, 4, bl);
+  ENCODE_START(6, 4, bl);
   encode_bare(bl, snap_blob);
   ENCODE_FINISH(bl);
 }
@@ -1319,8 +1320,18 @@ void InodeStoreBase::decode_bare(bufferlist::iterator &bl,
       ::decode(inode.layout, bl); // but we only care about the layout portion
     }
   }
-  if (struct_v >= 5 && !bl.end())
-    ::decode(oldest_snap, bl);
+
+  if (struct_v >= 5) {
+    // InodeStore is embedded in dentries without proper versioning, so
+    // we consume up to the end of the buffer
+    if (!bl.end()) {
+      ::decode(oldest_snap, bl);
+    }
+
+    if (!bl.end()) {
+      ::decode(damage_flags, bl);
+    }
+  }
 }
 
 
