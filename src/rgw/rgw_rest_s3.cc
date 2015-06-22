@@ -1202,6 +1202,21 @@ int RGWPostObj_ObjStore_S3::get_params()
 
     attrs[attr_name] = attr_bl;
   }
+  // TODO: refactor this and the above loop to share code
+  piter = parts.find(RGW_AMZ_WEBSITE_REDIRECT_LOCATION);
+  if(piter != parts.end()) {
+    string n = piter->first;
+    string attr_name = RGW_ATTR_PREFIX;
+    attr_name.append(n);
+    /* need to null terminate it */
+    bufferlist& data = piter->second.data;
+    string str = string(data.c_str(), data.length());
+
+    bufferlist attr_bl;
+    attr_bl.append(str.c_str(), str.size() + 1);
+
+    attrs[attr_name] = attr_bl;
+  }
 
   int r = get_policy();
   if (r < 0)
