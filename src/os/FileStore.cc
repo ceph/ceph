@@ -1809,14 +1809,15 @@ void FileStore::_finish_op(OpSequencer *osr)
   list<Context*> to_queue;
   Op *o = osr->dequeue(&to_queue);
   
-  dout(10) << "_finish_op " << o << " seq " << o->op << " " << *osr << "/" << osr->parent << dendl;
+  utime_t lat = ceph_clock_now(g_ceph_context);
+  lat -= o->start;
+
+  dout(10) << "_finish_op " << o << " seq " << o->op << " " << *osr << "/" << osr->parent << " lat " << lat << dendl;
   osr->apply_lock.Unlock();  // locked in _do_op
 
   // called with tp lock held
   op_queue_release_throttle(o);
 
-  utime_t lat = ceph_clock_now(g_ceph_context);
-  lat -= o->start;
   logger->tinc(l_os_apply_lat, lat);
 
   if (o->onreadable_sync) {
