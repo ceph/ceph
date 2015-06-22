@@ -251,7 +251,7 @@ static string xio_uri_from_entity(const string &type,
 /* XioMessenger */
 XioMessenger::XioMessenger(CephContext *cct, entity_name_t name,
 			   string mname, uint64_t _nonce,
-			   DispatchStrategy *ds)
+			   DispatchStrategy *ds, uint64_t features)
   : SimplePolicyMessenger(cct, name, mname, _nonce),
     nsessions(0),
     shutdown_called(false),
@@ -378,6 +378,8 @@ XioMessenger::XioMessenger(CephContext *cct, entity_name_t name,
 
   /* update class instance count */
   nInstances.inc();
+
+  loop_con.set_features(features);
 
 } /* ctor */
 
