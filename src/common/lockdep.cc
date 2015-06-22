@@ -56,6 +56,12 @@ static list<int> free_ids;
 static ceph::unordered_map<pthread_t, map<int,BackTrace*> > held;
 static BackTrace *follows[MAX_LOCKS][MAX_LOCKS];       // follows[a][b] means b taken after a
 
+static bool lockdep_force_backtrace()
+{
+  return (g_lockdep_ceph_ctx != NULL &&
+          g_lockdep_ceph_ctx->_conf->lockdep_force_backtrace);
+}
+
 /******* Functions **********/
 void lockdep_register_ceph_context(CephContext *cct)
 {
@@ -204,7 +210,7 @@ static bool does_follow(int a, int b)
   return false;
 }
 
-int lockdep_will_lock(const char *name, int id)
+int lockdep_will_lock(const char *name, int id, bool force_backtrace)
 {
   pthread_t p = pthread_self();
   if (id < 0) id = lockdep_register(name);
@@ -234,8 +240,8 @@ int lockdep_will_lock(const char *name, int id)
       // new dependency
 
       // did we just create a cycle?
-      BackTrace *bt = new BackTrace(BACKTRACE_SKIP);
       if (does_follow(id, p->first)) {
+        BackTrace *bt = new BackTrace(BACKTRACE_SKIP);
 	lockdep_dout(0) << "new dependency " << lock_names[p->first]
 		<< " (" << p->first << ") -> " << name << " (" << id << ")"
 		<< " creates a cycle at\n";
@@ -261,6 +267,10 @@ int lockdep_will_lock(const char *name, int id)
 
 	assert(0);  // actually, we should just die here.
       } else {
+        BackTrace *bt = NULL;
+        if (force_backtrace || lockdep_force_backtrace()) {
+          bt = new BackTrace(BACKTRACE_SKIP);
+        }
 	follows[p->first][id] = bt;
 	lockdep_dout(10) << lock_names[p->first] << " -> " << name << " at" << dendl;
 	//bt->print(*_dout);
@@ -280,7 +290,7 @@ int lockdep_locked(const char *name, int id, bool force_backtrace)
 
   pthread_mutex_lock(&lockdep_mutex);
   lockdep_dout(20) << "_locked " << name << dendl;
-  if (g_lockdep >= 2 || force_backtrace)
+  if (force_backtrace || lockdep_force_backtrace())
     held[p][id] = new BackTrace(BACKTRACE_SKIP);
   else
     held[p][id] = 0;
