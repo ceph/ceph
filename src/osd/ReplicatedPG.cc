@@ -1791,6 +1791,7 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op,
 	     << " in_hit_set " << (int)in_hit_set
 	     << dendl;
 
+  osd->logger->inc(l_osd_tier_total);
   // if it is write-ordered and blocked, stop now
   if (obc.get() && obc->is_blocked() && write_ordered) {
     // we're already doing something with this object
@@ -1804,7 +1805,7 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op,
   }
 
   if (obc.get() && obc->obs.exists) {
-    osd->logger->inc(l_osd_op_cache_hit);
+    osd->logger->inc(l_osd_tier_hit);
     return false;
   }
   
