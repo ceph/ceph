@@ -678,6 +678,10 @@ OPTION(osd_failsafe_full_ratio, OPT_FLOAT, .97) // what % full makes an OSD "ful
 OPTION(osd_failsafe_nearfull_ratio, OPT_FLOAT, .90) // what % full makes an OSD near full (failsafe)
 
 OPTION(osd_pg_object_context_cache_count, OPT_INT, 64)
+OPTION(osd_pg_object_context_cache_count_pool,
+       OPT_STR,
+       "" // "rbd=64 " means the size of object_context_cache for rbd pool is 64
+       ) // default the number of object_context_cache for earch pool, default value is osd_pg_object_context_cache_count
 
 // determines whether PGLog::check() compares written out log to stored log
 OPTION(osd_debug_pg_log_writeout, OPT_BOOL, false)

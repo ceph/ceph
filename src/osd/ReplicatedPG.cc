@@ -52,6 +52,7 @@
 #include "common/config.h"
 #include "include/compat.h"
 #include "common/cmdparse.h"
+#include "common/str_map.cc"
 
 #include "mon/MonClient.h"
 #include "osdc/Objecter.h"
@@ -1222,12 +1223,27 @@ ReplicatedPG::ReplicatedPG(OSDService *o, OSDMapRef curmap,
   pgbackend(
     PGBackend::build_pg_backend(
       _pool.info, curmap, this, coll_t(p), coll_t::make_temp_coll(p), o->store, cct)),
-  object_contexts(o->cct, g_conf->osd_pg_object_context_cache_count),
   snapset_contexts_lock("ReplicatedPG::snapset_contexts"),
   new_backfill(false),
   temp_seq(0),
   snap_trimmer_machine(this)
 { 
+  object_contexts.set_cct(o->cct);
+  map<string,string> obcsize_map;
+  ostringstream os;
+  int r = get_json_str_map(g_conf->osd_pg_object_context_cache_count_pool, os, &obcsize_map);
+  if (r < 0) {
+     lderr(o->cct) << os.str() << dendl;
+     assert(false);
+  }
+  if (obcsize_map.find(_pool.name) != obcsize_map.end()) {
+    int32_t obc_size  = std::atoi(obcsize_map[_pool.name].c_str());
+    object_contexts.set_size(obc_size);
+    dout(20) << "object context cache size is " << obc_size << " for " << _pool.name << dendl;
+  } else {
+    object_contexts.set_size(g_conf->osd_pg_object_context_cache_count);
+    dout(20) << "object context cache size is " << g_conf->osd_pg_object_context_cache_count << " for " << _pool.name << dendl;
+  }
   missing_loc.set_backend_predicates(
     pgbackend->get_is_readable_predicate(),
     pgbackend->get_is_recoverable_predicate());
