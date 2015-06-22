@@ -53,7 +53,7 @@ private:
     id = lockdep_register(name.c_str());
   }
   void _will_lock() { // about to lock
-    id = lockdep_will_lock(name.c_str(), id);
+    id = lockdep_will_lock(name.c_str(), id, backtrace);
   }
   void _locked() {    // just locked
     id = lockdep_locked(name.c_str(), id, backtrace);
