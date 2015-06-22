@@ -149,6 +149,7 @@ def test_failure_tty(cmd, errmsg):
     ttyfd.close()
     tmpfd.close()
     if ret == 0:
+        logging.error(cmd)
         logging.error("Should have failed, but got exit 0")
         return 1
     lines = get_lines(TMPFILE)
@@ -165,6 +166,7 @@ def test_failure(cmd, errmsg):
     logging.debug(cmd)
     try:
         check_output(cmd, stderr=subprocess.STDOUT, shell=True)
+        logging.error(cmd)
         logging.error("Should have failed, but got exit 0")
         return 1
     except subprocess.CalledProcessError, e:
@@ -224,8 +226,7 @@ def check_journal(jsondict):
         logging.error("Key 'entries' not in dump-journal output")
         errors += 1
     elif len(jsondict['entries']) == 0:
-        logging.warning("No entries in journal found, probably a problem")
-        errors += 1
+        logging.info("No entries in journal found")
     else:
         errors += check_journal_entries(jsondict['entries'])
     return errors
@@ -287,12 +288,71 @@ def check_transaction_ops(ops, enum, tnum):
     return errors
 
 
+def test_dump_journal(CFSD_PREFIX, osds):
+    ERRORS = 0
+    pid = os.getpid()
+    TMPFILE = r"/tmp/tmp.{pid}".format(pid=pid)
+
+    for osd in osds:
+        # Test --op dump-journal by loading json
+        cmd = (CFSD_PREFIX + "--op dump-journal --format json").format(osd=osd)
+        logging.debug(cmd)
+        tmpfd = open(TMPFILE, "w")
+        ret = call(cmd, shell=True, stdout=tmpfd)
+        if ret != 0:
+            logging.error("Bad exit status {ret} from {cmd}".format(ret=ret, cmd=cmd))
+            ERRORS += 1
+            continue
+        tmpfd.close()
+        tmpfd = open(TMPFILE, "r")
+        jsondict = json.load(tmpfd)
+        tmpfd.close()
+        os.unlink(TMPFILE)
+
+        journal_errors = check_journal(jsondict)
+        if journal_errors is not 0:
+            logging.error(jsondict)
+        ERRORS += journal_errors
+
+    return ERRORS
+
+
 CEPH_DIR = "ceph_objectstore_tool_dir"
 CEPH_CONF = os.path.join(CEPH_DIR, 'ceph.conf')
 
 
 def kill_daemons():
     call("./init-ceph -c {conf} stop osd mon > /dev/null 2>&1".format(conf=CEPH_CONF), shell=True)
+
+
+def check_data(DATADIR, TMPFILE, OSDDIR, SPLIT_NAME):
+    repcount = 0
+    ERRORS = 0
+    for nsfile in [f for f in os.listdir(DATADIR) if f.split('-')[1].find(SPLIT_NAME) == 0]:
+        nspace = nsfile.split("-")[0]
+        file = nsfile.split("-")[1]
+        path = os.path.join(DATADIR, nsfile)
+        tmpfd = open(TMPFILE, "w")
+        cmd = "find {dir} -name '{file}_*_{nspace}_*'".format(dir=OSDDIR, file=file, nspace=nspace)
+        logging.debug(cmd)
+        ret = call(cmd, shell=True, stdout=tmpfd)
+        if ret:
+            logging.critical("INTERNAL ERROR")
+            return 1
+        tmpfd.close()
+        obj_locs = get_lines(TMPFILE)
+        if len(obj_locs) == 0:
+            logging.error("Can't find imported object {name}".format(name=file))
+            ERRORS += 1
+        for obj_loc in obj_locs:
+            repcount += 1
+            cmd = "diff -q {src} {obj_loc}".format(src=path, obj_loc=obj_loc)
+            logging.debug(cmd)
+            ret = call(cmd, shell=True)
+            if ret != 0:
+                logging.error("{file} data not imported properly into {obj}".format(file=file, obj=obj_loc))
+                ERRORS += 1
+    return ERRORS, repcount
 
 
 def main(argv):
@@ -528,13 +588,40 @@ def main(argv):
     cmd = (CFSD_PREFIX + "--op export --pgid {pg} --file -").format(osd=ONEOSD, pg=ONEPG)
     ERRORS += test_failure_tty(cmd, "stdout is a tty and no --file filename specified")
 
+    # Prep a valid ec export file for import failure tests
+    ONEECPG = ALLECPGS[0]
+    osds = get_osds(ONEECPG, OSDDIR)
+    ONEECOSD = osds[0]
     OTHERFILE = "/tmp/foo.{pid}".format(pid=pid)
-    foofd = open(OTHERFILE, "w")
-    foofd.close()
+    cmd = (CFSD_PREFIX + "--op export --pgid {pg} --file {file}").format(osd=ONEECOSD, pg=ONEECPG, file=OTHERFILE)
+    logging.debug(cmd)
+    call(cmd, shell=True, stdout=nullfd, stderr=nullfd)
 
-    # On import can't specify a PG
-    cmd = (CFSD_PREFIX + "--op import --pgid {pg} --file {FOO}").format(osd=ONEOSD, pg=ONEPG, FOO=OTHERFILE)
-    ERRORS += test_failure(cmd, "--pgid option invalid with import")
+    # On import can't specify a different shard
+    BADPG = ONEECPG.split('s')[0] + "s10"
+    cmd = (CFSD_PREFIX + "--op import --pgid {pg} --file {file}").format(osd=ONEECOSD, pg=BADPG, file=OTHERFILE)
+    ERRORS += test_failure(cmd, "Can't specify a different shard, must be")
+
+    os.unlink(OTHERFILE)
+
+    # Prep a valid export file for import failure tests
+    OTHERFILE = "/tmp/foo.{pid}".format(pid=pid)
+    cmd = (CFSD_PREFIX + "--op export --pgid {pg} --file {file}").format(osd=ONEOSD, pg=ONEPG, file=OTHERFILE)
+    logging.debug(cmd)
+    call(cmd, shell=True, stdout=nullfd, stderr=nullfd)
+
+    # On import can't specify a PG with a non-existent pool
+    cmd = (CFSD_PREFIX + "--op import --pgid {pg} --file {file}").format(osd=ONEOSD, pg="10.0", file=OTHERFILE)
+    ERRORS += test_failure(cmd, "Can't specify a different pgid pool, must be")
+
+    # On import can't specify shard for a replicated export
+    cmd = (CFSD_PREFIX + "--op import --pgid {pg}s0 --file {file}").format(osd=ONEOSD, pg=ONEPG, file=OTHERFILE)
+    ERRORS += test_failure(cmd, "Can't specify a sharded pgid with a non-sharded export")
+
+    # On import can't specify a PG with a bad seed
+    TMPPG="{pool}.80".format(pool=REPID)
+    cmd = (CFSD_PREFIX + "--op import --pgid {pg} --file {file}").format(osd=ONEOSD, pg=TMPPG, file=OTHERFILE)
+    ERRORS += test_failure(cmd, "Illegal pgid, the seed is larger than current pg_num")
 
     os.unlink(OTHERFILE)
     cmd = (CFSD_PREFIX + "--op import --file {FOO}").format(osd=ONEOSD, FOO=OTHERFILE)
@@ -572,25 +659,9 @@ def main(argv):
     OSDS = get_osds(ALLPGS[0], OSDDIR)
     osd = OSDS[0]
 
-    # Test --op dump-journal by loading json
-    print "Test --op dump-journal"
-    cmd = (CFSD_PREFIX + "--op dump-journal --format json").format(osd=osd)
-    logging.debug(cmd)
-    tmpfd = open(TMPFILE, "w")
-    ret = call(cmd, shell=True, stdout=tmpfd)
-    if ret != 0:
-        logging.error("Bad exit status {ret} from {cmd}".format(ret=ret, cmd=cmd))
-        ERRORS += 1
-    tmpfd.close()
-    tmpfd = open(TMPFILE, "r")
-    jsondict = json.load(tmpfd)
-    tmpfd.close()
-    os.unlink(TMPFILE)
-
-    journal_errors = check_journal(jsondict)
-    if journal_errors is not 0:
-        logging.error(jsondict)
-    ERRORS += journal_errors
+    print "Test all --op dump-journal"
+    ALLOSDS = [f for f in os.listdir(OSDDIR) if os.path.isdir(os.path.join(OSDDIR, f)) and string.find(f, "osd") == 0]
+    ERRORS += test_dump_journal(CFSD_PREFIX, ALLOSDS)
 
     # Test --op list and generate json for all objects
     print "Test --op list variants"
@@ -1019,7 +1090,7 @@ def main(argv):
                 if pg == PGS[0]:
                     cmd = ("cat {file} |".format(file=file) + CFSD_PREFIX + "--op import").format(osd=osd)
                 elif pg == PGS[1]:
-                    cmd = (CFSD_PREFIX + "--op import --file - < {file}").format(osd=osd, file=file)
+                    cmd = (CFSD_PREFIX + "--op import --file - --pgid {pg} < {file}").format(osd=osd, file=file, pg=pg)
                 else:
                     cmd = (CFSD_PREFIX + "--op import --file {file}").format(osd=osd, file=file)
                 logging.debug(cmd)
@@ -1035,31 +1106,14 @@ def main(argv):
 
     if EXP_ERRORS == 0 and RM_ERRORS == 0 and IMP_ERRORS == 0:
         print "Verify replicated import data"
-        for nsfile in [f for f in os.listdir(DATADIR) if f.split('-')[1].find(REP_NAME) == 0]:
-            nspace = nsfile.split("-")[0]
-            file = nsfile.split("-")[1]
-            path = os.path.join(DATADIR, nsfile)
-            tmpfd = open(TMPFILE, "w")
-            cmd = "find {dir} -name '{file}_*_{nspace}_*'".format(dir=OSDDIR, file=file, nspace=nspace)
-            logging.debug(cmd)
-            ret = call(cmd, shell=True, stdout=tmpfd)
-            if ret:
-                logging.critical("INTERNAL ERROR")
-                return 1
-            tmpfd.close()
-            obj_locs = get_lines(TMPFILE)
-            if len(obj_locs) == 0:
-                logging.error("Can't find imported object {name}".format(name=file))
-                ERRORS += 1
-            for obj_loc in obj_locs:
-                cmd = "diff -q {src} {obj_loc}".format(src=path, obj_loc=obj_loc)
-                logging.debug(cmd)
-                ret = call(cmd, shell=True)
-                if ret != 0:
-                    logging.error("{file} data not imported properly into {obj}".format(file=file, obj=obj_loc))
-                    ERRORS += 1
+        data_errors, _ = check_data(DATADIR, TMPFILE, OSDDIR, REP_NAME)
+        ERRORS += data_errors
     else:
         logging.warning("SKIPPING CHECKING IMPORT DATA DUE TO PREVIOUS FAILURES")
+
+    print "Test all --op dump-journal again"
+    ALLOSDS = [f for f in os.listdir(OSDDIR) if os.path.isdir(os.path.join(OSDDIR, f)) and string.find(f, "osd") == 0]
+    ERRORS += test_dump_journal(CFSD_PREFIX, ALLOSDS)
 
     vstart(new=False)
     wait_for_health()
@@ -1069,91 +1123,178 @@ def main(argv):
         ERRORS += verify(DATADIR, EC_POOL, EC_NAME)
 
     if EXP_ERRORS == 0:
-        NEWPOOL = "import-rados-pool"
+        NEWPOOL = "rados-import-pool"
         cmd = "./rados mkpool {pool}".format(pool=NEWPOOL)
         logging.debug(cmd)
-        ret = call(cmd, shell=True, stdout=nullfd)
+        ret = call(cmd, shell=True, stdout=nullfd, stderr=nullfd)
 
-        print "Test import-rados"
+        print "Test rados import"
+        first = True
         for osd in [f for f in os.listdir(OSDDIR) if os.path.isdir(os.path.join(OSDDIR, f)) and string.find(f, "osd") == 0]:
             dir = os.path.join(TESTDIR, osd)
             for pg in [f for f in os.listdir(dir) if os.path.isfile(os.path.join(dir, f))]:
                 if string.find(pg, "{id}.".format(id=REPID)) != 0:
                     continue
                 file = os.path.join(dir, pg)
-                # This should do nothing
-                cmd = "./ceph-objectstore-tool --dry-run import-rados {pool} {file}".format(pool=NEWPOOL, file=file)
+                if first:
+                    first = False
+                    # This should do nothing
+                    cmd = "./rados import -p {pool} --dry-run {file}".format(pool=NEWPOOL, file=file)
+                    logging.debug(cmd)
+                    ret = call(cmd, shell=True, stdout=nullfd)
+                    if ret != 0:
+                        logging.error("Rados import --dry-run failed from {file} with {ret}".format(file=file, ret=ret))
+                        ERRORS += 1
+                    cmd = "./rados -p {pool} ls".format(pool=NEWPOOL)
+                    logging.debug(cmd)
+                    data = check_output(cmd, shell=True)
+                    if data:
+                        logging.error("'{data}'".format(data=data))
+                        logging.error("Found objects after dry-run")
+                        ERRORS += 1
+                cmd = "./rados import -p {pool} {file}".format(pool=NEWPOOL, file=file)
                 logging.debug(cmd)
                 ret = call(cmd, shell=True, stdout=nullfd)
                 if ret != 0:
-                    logging.error("Import-rados failed from {file} with {ret}".format(file=file, ret=ret))
+                    logging.error("Rados import failed from {file} with {ret}".format(file=file, ret=ret))
                     ERRORS += 1
-                cmd = "./ceph-objectstore-tool import-rados {pool} {file}".format(pool=NEWPOOL, file=file)
+                cmd = "./rados import -p {pool} --no-overwrite {file}".format(pool=NEWPOOL, file=file)
                 logging.debug(cmd)
                 ret = call(cmd, shell=True, stdout=nullfd)
                 if ret != 0:
-                    logging.error("Import-rados failed from {file} with {ret}".format(file=file, ret=ret))
-                    ERRORS += 1
-                cmd = "./ceph-objectstore-tool --no-overwrite import-rados {pool} {file}".format(pool=NEWPOOL, file=file)
-                logging.debug(cmd)
-                ret = call(cmd, shell=True, stdout=nullfd)
-                if ret != 0:
-                    logging.error("Import-rados failed from {file} with {ret}".format(file=file, ret=ret))
+                    logging.error("Rados import --no-overwrite failed from {file} with {ret}".format(file=file, ret=ret))
                     ERRORS += 1
 
         ERRORS += verify(DATADIR, NEWPOOL, REP_NAME)
     else:
         logging.warning("SKIPPING IMPORT-RADOS TESTS DUE TO PREVIOUS FAILURES")
 
-    # Cause REP_POOL to split and test import with object/log filtering
-    cmd = "./ceph osd pool set {pool} pg_num 32".format(pool=REP_POOL)
+    # Clear directories of previous portion
+    call("/bin/rm -rf {dir}".format(dir=TESTDIR), shell=True)
+    call("/bin/rm -rf {dir}".format(dir=DATADIR), shell=True)
+    os.mkdir(TESTDIR)
+    os.mkdir(DATADIR)
+
+    # Cause SPLIT_POOL to split and test import with object/log filtering
+    print "Testing import all objects after a split"
+    SPLIT_POOL = "split_pool"
+    PG_COUNT = 1
+    SPLIT_OBJ_COUNT = 5
+    SPLIT_NSPACE_COUNT = 2
+    SPLIT_NAME = "split"
+    cmd = "./ceph osd pool create {pool} {pg} {pg} replicated".format(pool=SPLIT_POOL, pg=PG_COUNT)
     logging.debug(cmd)
-    ret = call(cmd, shell=True, stdout=nullfd, stderr=nullfd)
-    time.sleep(15)
-    cmd = "./ceph osd pool set {pool} pgp_num 32".format(pool=REP_POOL)
-    logging.debug(cmd)
-    ret = call(cmd, shell=True, stdout=nullfd, stderr=nullfd)
+    call(cmd, shell=True, stdout=nullfd, stderr=nullfd)
+    SPLITID = get_pool_id(SPLIT_POOL, nullfd)
+    pool_size = int(check_output("./ceph osd pool get {pool} size".format(pool=SPLIT_POOL), shell=True, stderr=nullfd).split(" ")[1])
+    EXP_ERRORS = 0
+    RM_ERRORS = 0
+    IMP_ERRORS = 0
+
+    objects = range(1, SPLIT_OBJ_COUNT + 1)
+    nspaces = range(SPLIT_NSPACE_COUNT)
+    for n in nspaces:
+        nspace = get_nspace(n)
+
+        for i in objects:
+            NAME = SPLIT_NAME + "{num}".format(num=i)
+            LNAME = nspace + "-" + NAME
+            DDNAME = os.path.join(DATADIR, LNAME)
+
+            cmd = "rm -f " + DDNAME
+            logging.debug(cmd)
+            call(cmd, shell=True)
+
+            if i == 1:
+                dataline = range(DATALINECOUNT)
+            else:
+                dataline = range(1)
+            fd = open(DDNAME, "w")
+            data = "This is the split data for " + LNAME + "\n"
+            for _ in dataline:
+                fd.write(data)
+            fd.close()
+
+            cmd = "./rados -p {pool} -N '{nspace}' put {name} {ddname}".format(pool=SPLIT_POOL, name=NAME, ddname=DDNAME, nspace=nspace)
+            logging.debug(cmd)
+            ret = call(cmd, shell=True, stderr=nullfd)
+            if ret != 0:
+                logging.critical("Rados put command failed with {ret}".format(ret=ret))
+                return 1
+
     wait_for_health()
     kill_daemons()
 
-    print "Remove pgs for another import"
-    RM_ERRORS = 0
-    for pg in ALLREPPGS:
-        for osd in get_osds(pg, OSDDIR):
-            cmd = (CFSD_PREFIX + "--op remove --pgid {pg}").format(pg=pg, osd=osd)
-            logging.debug(cmd)
-            ret = call(cmd, shell=True, stdout=nullfd)
-            if ret != 0:
-                logging.error("Removing failed for pg {pg} on {osd} with {ret}".format(pg=pg, osd=osd, ret=ret))
-                RM_ERRORS += 1
+    for osd in [f for f in os.listdir(OSDDIR) if os.path.isdir(os.path.join(OSDDIR, f)) and string.find(f, "osd") == 0]:
+        os.mkdir(os.path.join(TESTDIR, osd))
 
-    ERRORS += RM_ERRORS
+    pg = "{pool}.0".format(pool=SPLITID)
+    EXPORT_PG = pg
 
-    IMP_ERRORS = 0
-    if RM_ERRORS == 0:
-        print "Test pg import after PGs have split"
-        for osd in [f for f in os.listdir(OSDDIR) if os.path.isdir(os.path.join(OSDDIR, f)) and string.find(f, "osd") == 0]:
-            dir = os.path.join(TESTDIR, osd)
-            PGS = [f for f in os.listdir(dir) if os.path.isfile(os.path.join(dir, f))]
-            for pg in PGS:
-                if pg not in ALLREPPGS:
-                    continue
-                file = os.path.join(dir, pg)
-                cmd = (CFSD_PREFIX + "--op import --file {file}").format(osd=osd, file=file)
+    export_osds = get_osds(pg, OSDDIR)
+    for osd in export_osds:
+        mydir = os.path.join(TESTDIR, osd)
+        fname = os.path.join(mydir, pg)
+        cmd = (CFSD_PREFIX + "--op export --pgid {pg} --file {file}").format(osd=osd, pg=pg, file=fname)
+        logging.debug(cmd)
+        ret = call(cmd, shell=True, stdout=nullfd, stderr=nullfd)
+        if ret != 0:
+            logging.error("Exporting failed for pg {pg} on {osd} with {ret}".format(pg=pg, osd=osd, ret=ret))
+            EXP_ERRORS += 1
+
+    ERRORS += EXP_ERRORS
+
+    if EXP_ERRORS == 0:
+        vstart(new=False)
+        wait_for_health()
+
+        time.sleep(20)
+
+        cmd = "./ceph osd pool set {pool} pg_num 2".format(pool=SPLIT_POOL)
+        logging.debug(cmd)
+        ret = call(cmd, shell=True, stdout=nullfd, stderr=nullfd)
+        time.sleep(5)
+        wait_for_health()
+
+        time.sleep(15)
+
+        kill_daemons()
+
+        # Now 2 PGs, poolid.0 and poolid.1
+        for seed in range(2):
+            pg = "{pool}.{seed}".format(pool=SPLITID, seed=seed)
+
+            which = 0
+            for osd in get_osds(pg, OSDDIR):
+                cmd = (CFSD_PREFIX + "--op remove --pgid {pg}").format(pg=pg, osd=osd)
+                logging.debug(cmd)
+                ret = call(cmd, shell=True, stdout=nullfd)
+
+                # This is weird.  The export files are based on only the EXPORT_PG
+                # and where that pg was before the split.  Use 'which' to use all
+                # export copies in import.
+                mydir = os.path.join(TESTDIR, export_osds[which])
+                fname = os.path.join(mydir, EXPORT_PG)
+                which += 1
+                cmd = (CFSD_PREFIX + "--op import --pgid {pg} --file {file}").format(osd=osd, pg=pg, file=fname)
                 logging.debug(cmd)
                 ret = call(cmd, shell=True, stdout=nullfd)
                 if ret != 0:
                     logging.error("Import failed from {file} with {ret}".format(file=file, ret=ret))
                     IMP_ERRORS += 1
-    else:
-        logging.warning("SKIPPING IMPORT TESTS DUE TO PREVIOUS FAILURES")
 
-    ERRORS += IMP_ERRORS
+        ERRORS += IMP_ERRORS
 
-    # Start up again to make sure imports didn't corrupt anything
-    if IMP_ERRORS == 0:
-        vstart(new=False)
-        wait_for_health()
+        # Start up again to make sure imports didn't corrupt anything
+        if IMP_ERRORS == 0:
+            print "Verify split import data"
+            data_errors, count = check_data(DATADIR, TMPFILE, OSDDIR, SPLIT_NAME)
+            ERRORS += data_errors
+            if count != (SPLIT_OBJ_COUNT * SPLIT_NSPACE_COUNT * pool_size):
+                logging.error("Incorrect number of replicas seen {count}".format(count=count))
+                ERRORS += 1
+            vstart(new=False)
+            wait_for_health()
 
     call("/bin/rm -rf {dir}".format(dir=TESTDIR), shell=True)
     call("/bin/rm -rf {dir}".format(dir=DATADIR), shell=True)

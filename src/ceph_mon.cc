@@ -193,7 +193,7 @@ int preload_erasure_code()
   stringstream ss;
   int r = ErasureCodePluginRegistry::instance().preload(plugins,
 							directory,
-							ss);
+							&ss);
   if (r)
     derr << ss.str() << dendl;
   else

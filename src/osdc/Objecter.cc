@@ -791,8 +791,8 @@ void Objecter::handle_watch_notify(MWatchNotify *m)
       }
     }
   } else if (!info->is_watch) {
-    // notify completion; we can do this inline since we know the only user
-    // (librados) is safe to call in fast-dispatch context
+    // we have CEPH_WATCH_EVENT_NOTIFY_COMPLETE; we can do this inline since
+    // we know the only user (librados) is safe to call in fast-dispatch context
     assert(info->on_notify_finish);
     info->notify_result_bl->claim(m->get_data());
     info->on_notify_finish->complete(m->return_code);
@@ -2474,6 +2474,7 @@ int Objecter::_calc_target(op_target_t *t, epoch_t *last_force_resend,  bool any
     }
   }
 
+  int size = pi->size;
   int min_size = pi->min_size;
   unsigned pg_num = pi->get_pg_num();
   int up_primary, acting_primary;
@@ -2489,6 +2490,8 @@ int Objecter::_calc_target(op_target_t *t, epoch_t *last_force_resend,  bool any
 	  up_primary,
 	  t->up,
 	  up,
+	  t->size,
+	  size,
 	  t->min_size,
 	  min_size,
 	  t->pg_num,
@@ -2515,6 +2518,7 @@ int Objecter::_calc_target(op_target_t *t, epoch_t *last_force_resend,  bool any
     t->acting_primary = acting_primary;
     t->up_primary = up_primary;
     t->up = up;
+    t->size = size;
     t->min_size = min_size;
     t->pg_num = pg_num;
     ldout(cct, 10) << __func__ << " "

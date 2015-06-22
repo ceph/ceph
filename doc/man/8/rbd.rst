@@ -61,9 +61,9 @@ Parameters
      support for cloning and is more easily extensible to allow more
      features in the future.
 
-.. option:: --size size-in-mb
+.. option:: --size size-in-M/G/T
 
-   Specifies the size (in megabytes) of the new rbd image.
+   Specifies the size (in M/G/T) of the new rbd image.
 
 .. option:: --order bits
 
@@ -421,6 +421,11 @@ the running kernel.
   default).
 
 * notcp_nodelay - Enable Nagle's algorithm on client sockets (since 4.0).
+
+* mount_timeout=x - A timeout on various steps in `rbd map` and `rbd unmap`
+  sequences (default is 60 seconds).  In particular, since 4.2 this can be used
+  to ensure that `rbd unmap` eventually times out when there is no network
+  connection to a cluster.
 
 * osdkeepalive=x - OSD keepalive timeout (default is 5 seconds).
 

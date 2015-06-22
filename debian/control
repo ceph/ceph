@@ -61,7 +61,7 @@ Standards-Version: 3.9.3
 Package: ceph
 Architecture: linux-any
 Depends: binutils,
-         ceph-common (>= 0.78-500),
+         ceph-common (>= 9.0.0-943),
          cryptsetup-bin | cryptsetup,
          gdisk,
          parted,
@@ -93,6 +93,8 @@ Architecture: linux-any
 Section: debug
 Priority: extra
 Depends: ceph (= ${binary:Version}), ${misc:Depends}
+Replaces: ceph-test-dbg (<< 0.94-1322)
+Breaks: ceph-test-dbg (<< 0.94-1322)
 Description: debugging symbols for ceph
  Ceph is a distributed storage system designed to provide excellent
  performance, reliability, and scalability.
@@ -190,10 +192,10 @@ Depends: librbd1 (= ${binary:Version}), ${misc:Depends}, ${shlibs:Depends},
 	 python-requests
 Conflicts: ceph-client-tools
 Replaces: ceph-client-tools,
-	  ceph (<< 0.78-500),
+	  ceph (<< 9.0.0-943),
 	  python-ceph (<< 0.92-1223),
 	  librbd1 (<< 0.92-1238)
-Breaks: ceph (<< 0.78-500),
+Breaks: ceph (<< 9.0.0-943),
 	python-ceph (<< 0.92-1223),
 	librbd1 (<< 0.92-1238)
 Suggests: ceph, ceph-mds
@@ -452,7 +454,8 @@ Package: rest-bench-dbg
 Architecture: linux-any
 Section: debug
 Priority: extra
-Depends: ceph-common, curl, xml2, ${misc:Depends}, ${shlibs:Depends}
+Depends: rest-bench (= ${binary:Version}), ceph-common, curl, xml2,
+          ${misc:Depends}, ${shlibs:Depends}
 Description: debugging symbols for rest-bench
  radosgw performance.
  .
@@ -460,7 +463,7 @@ Description: debugging symbols for rest-bench
 
 Package: ceph-test
 Architecture: linux-any
-Depends: ceph-common, curl, xml2, ${misc:Depends}, ${shlibs:Depends}
+Depends: ceph-common, curl, xml2, xmlstarlet, ${misc:Depends}, ${shlibs:Depends}
 Description: Ceph test and benchmarking tools
  This package contains tools for testing and benchmarking Ceph.
 
@@ -468,7 +471,8 @@ Package: ceph-test-dbg
 Architecture: linux-any
 Section: debug
 Priority: extra
-Depends: ceph-common, curl, xml2, ${misc:Depends}, ${shlibs:Depends}
+Depends: ceph-test (= ${binary:Version}), ceph-common, curl, xml2,
+         ${misc:Depends}, ${shlibs:Depends}
 Description: Ceph test and benchmarking tools
  .
  This package contains the debugging symbols for ceph-test.

@@ -1055,6 +1055,9 @@ def zap(dev):
     """
     Destroy the partition table and content of a given disk.
     """
+    dmode = os.stat(dev).st_mode
+    if not stat.S_ISBLK(dmode) or is_partition(dev):
+        raise Error('not full block device; cannot zap', dev)
     try:
         LOG.debug('Zapping partition table on %s', dev)
 
@@ -1540,10 +1543,7 @@ def main_prepare(args):
                 verify_not_in_use(args.journal, False)
 
         if args.zap_disk is not None:
-            if stat.S_ISBLK(dmode) and not is_partition(args.data):
-                zap(args.data)
-            else:
-                raise Error('not full block device; cannot zap', args.data)
+            zap(args.data)
 
         if args.cluster_uuid is None:
             args.cluster_uuid = get_fsid(cluster=args.cluster)
@@ -2406,6 +2406,13 @@ def get_dev_fs(dev):
         return None
 
 
+def split_dev_base_partnum(dev):
+    if 'loop' in dev or 'cciss' in dev or 'nvme' in dev:
+        return re.match('(.*\d+)p(\d+)', dev).group(1, 2)
+    else:
+        return re.match('(\D+)(\d+)', dev).group(1, 2)
+
+
 def get_partition_type(part):
     """
     Get the GPT partition type UUID.  If we have an old blkid and can't
@@ -2455,7 +2462,7 @@ def get_partition_type(part):
     if 'blkid' not in warned_about:
         LOG.warning('Old blkid does not support ID_PART_ENTRY_* fields, trying sgdisk; may not correctly identify ceph volumes with dmcrypt')
         warned_about['blkid'] = True
-    (base, partnum) = re.match('(\D+)(\d+)', part).group(1, 2)
+    (base, partnum) = split_dev_base_partnum(part)
     sgdisk, _ = command(
         [
             'sgdisk',
@@ -2481,10 +2488,7 @@ def get_partition_type(part):
 
 
 def get_partition_uuid(dev):
-    if 'loop' in dev or 'cciss' in dev:
-        (base, partnum) = re.match('(.*\d+)p(\d+)', dev).group(1, 2)
-    else:
-        (base, partnum) = re.match('(\D+)(\d+)', dev).group(1, 2)
+    (base, partnum) = split_dev_base_partnum(dev)
     out, _ = command(['sgdisk', '-i', partnum, base])
     for line in out.splitlines():
         m = re.match('Partition unique GUID: (\S+)', line)

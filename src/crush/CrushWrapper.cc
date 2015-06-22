@@ -192,6 +192,9 @@ bool CrushWrapper::_maybe_remove_last_instance(CephContext *cct, int item, bool 
   if (_search_item_exists(item)) {
     return false;
   }
+  if (item < 0 && _bucket_is_in_use(cct, item)) {
+    return false;
+  }
 
   if (item < 0 && !unlink_only) {
     crush_bucket *t = get_bucket(item);
@@ -218,6 +221,9 @@ int CrushWrapper::remove_item(CephContext *cct, int item, bool unlink_only)
       ldout(cct, 1) << "remove_item bucket " << item << " has " << t->size
 		    << " items, not empty" << dendl;
       return -ENOTEMPTY;
+    }
+    if (_bucket_is_in_use(cct, item)) {
+      return -EBUSY;
     }
   }
 
@@ -258,6 +264,22 @@ bool CrushWrapper::_search_item_exists(int item) const
   return false;
 }
 
+bool CrushWrapper::_bucket_is_in_use(CephContext *cct, int item)
+{
+  for (unsigned i = 0; i < crush->max_rules; ++i) {
+    crush_rule *r = crush->rules[i];
+    if (!r)
+      continue;
+    for (unsigned j = 0; j < r->len; ++j) {
+      if (r->steps[j].op == CRUSH_RULE_TAKE &&
+	  r->steps[j].arg1 == item) {
+	return true;
+      }
+    }
+  }
+  return false;
+}
+
 int CrushWrapper::_remove_item_under(CephContext *cct, int item, int ancestor, bool unlink_only)
 {
   ldout(cct, 5) << "_remove_item_under " << item << " under " << ancestor
@@ -293,6 +315,11 @@ int CrushWrapper::remove_item_under(CephContext *cct, int item, int ancestor, bo
 {
   ldout(cct, 5) << "remove_item_under " << item << " under " << ancestor
 		<< (unlink_only ? " unlink_only":"") << dendl;
+
+  if (!unlink_only && _bucket_is_in_use(cct, item)) {
+    return -EBUSY;
+  }
+
   int ret = _remove_item_under(cct, item, ancestor, unlink_only);
   if (ret < 0)
     return ret;
@@ -900,16 +927,32 @@ void CrushWrapper::reweight(CephContext *cct)
   }
 }
 
-int CrushWrapper::add_simple_ruleset(string name, string root_name,
-                                     string failure_domain_name,
-                                     string mode,
-                                     int rule_type,
-                                     ostream *err)
+int CrushWrapper::add_simple_ruleset_at(string name, string root_name,
+                                        string failure_domain_name,
+                                        string mode, int rule_type,
+                                        int rno, ostream *err)
 {
   if (rule_exists(name)) {
     if (err)
       *err << "rule " << name << " exists";
     return -EEXIST;
+  }
+  if (rno >= 0) {
+    if (rule_exists(rno)) {
+      if (err)
+        *err << "rule with ruleno " << rno << " exists";
+      return -EEXIST;
+    }
+    if (ruleset_exists(rno)) {
+      if (err)
+        *err << "ruleset " << rno << " exists";
+      return -EEXIST;
+    }
+  } else {
+    for (rno = 0; rno < get_max_rules(); rno++) {
+      if (!rule_exists(rno) && !ruleset_exists(rno))
+        break;
+    }
   }
   if (!name_exists(root_name)) {
     if (err)
@@ -932,11 +975,6 @@ int CrushWrapper::add_simple_ruleset(string name, string root_name,
     return -EINVAL;
   }
 
-  int rno = -1;
-  for (rno = 0; rno < get_max_rules(); rno++) {
-    if (!rule_exists(rno) && !ruleset_exists(rno))
-       break;
-  }
   int steps = 3;
   if (mode == "indep")
     steps = 5;
@@ -973,6 +1011,15 @@ int CrushWrapper::add_simple_ruleset(string name, string root_name,
   set_rule_name(rno, name);
   have_rmaps = false;
   return rno;
+}
+
+int CrushWrapper::add_simple_ruleset(string name, string root_name,
+                                     string failure_domain_name,
+                                     string mode, int rule_type,
+                                     ostream *err)
+{
+  return add_simple_ruleset_at(name, root_name, failure_domain_name, mode,
+                               rule_type, -1, err);
 }
 
 int CrushWrapper::get_rule_weight_osd_map(unsigned ruleno, map<int,float> *pmap)
@@ -1593,16 +1640,13 @@ void CrushWrapper::generate_test_instances(list<CrushWrapper*>& o)
   // fixme
 }
 
-/**
- * Determine the default CRUSH ruleset ID to be used with
- * newly created replicated pools.
- *
- * @returns a ruleset ID (>=0) or an error (<0)
- */
-int CrushWrapper::get_osd_pool_default_crush_replicated_ruleset(CephContext *cct)
+int CrushWrapper::_get_osd_pool_default_crush_replicated_ruleset(CephContext *cct,
+                                                                 bool quiet)
 {
-  int crush_ruleset = cct->_conf->osd_pool_default_crush_replicated_ruleset;
-  if (cct->_conf->osd_pool_default_crush_rule != -1) {
+  int crush_ruleset = cct->_conf->osd_pool_default_crush_rule;
+  if (crush_ruleset == -1) {
+    crush_ruleset = cct->_conf->osd_pool_default_crush_replicated_ruleset;
+  } else if (!quiet) {
     ldout(cct, 0) << "osd_pool_default_crush_rule is deprecated "
                   << "use osd_pool_default_crush_replicated_ruleset instead"
                   << dendl;
@@ -1611,11 +1655,25 @@ int CrushWrapper::get_osd_pool_default_crush_replicated_ruleset(CephContext *cct
                   << "osd_pool_default_crush_replicated_ruleset = "
                   << cct->_conf->osd_pool_default_crush_replicated_ruleset
                   << dendl;
-    crush_ruleset = cct->_conf->osd_pool_default_crush_rule;
   }
 
+  return crush_ruleset;
+}
+
+/**
+ * Determine the default CRUSH ruleset ID to be used with
+ * newly created replicated pools.
+ *
+ * @returns a ruleset ID (>=0) or -1 if no suitable ruleset found
+ */
+int CrushWrapper::get_osd_pool_default_crush_replicated_ruleset(CephContext *cct)
+{
+  int crush_ruleset = _get_osd_pool_default_crush_replicated_ruleset(cct,
+                                                                     false);
   if (crush_ruleset == CEPH_DEFAULT_CRUSH_REPLICATED_RULESET) {
     crush_ruleset = find_first_ruleset(pg_pool_t::TYPE_REPLICATED);
+  } else if (!ruleset_exists(crush_ruleset)) {
+    crush_ruleset = -1; // match find_first_ruleset() retval
   }
 
   return crush_ruleset;

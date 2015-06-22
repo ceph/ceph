@@ -54,22 +54,22 @@ int ErasureCodeShec::create_ruleset(const string &name,
   }
 }
 
-int ErasureCodeShec::init(const map<std::string,std::string> &parameters)
+int ErasureCodeShec::init(ErasureCodeProfile &profile,
+			  ostream *ss)
 {
-  dout(10) << "technique=" << technique << dendl;
-  map<string,string>::const_iterator parameter;
-  parameter = parameters.find("ruleset-root");
-  if (parameter != parameters.end())
-    ruleset_root = parameter->second;
-  parameter = parameters.find("ruleset-failure-domain");
-  if (parameter != parameters.end())
-    ruleset_failure_domain = parameter->second;
-  int err = parse(parameters);
-  if (err) {
+  int err = 0;
+  err |= to_string("ruleset-root", profile,
+		   &ruleset_root,
+		   DEFAULT_RULESET_ROOT, ss);
+  err |= to_string("ruleset-failure-domain", profile,
+		   &ruleset_failure_domain,
+		   DEFAULT_RULESET_FAILURE_DOMAIN, ss);
+  err |= parse(profile);
+  if (err)
     return err;
-  }
   prepare();
-  return 0;
+  ErasureCode::init(profile, ss);
+  return err;
 }
 
 unsigned int ErasureCodeShec::get_chunk_size(unsigned int object_size) const
@@ -279,26 +279,26 @@ unsigned ErasureCodeShecReedSolomonVandermonde::get_alignment() const
   return k*w*sizeof(int);
 }
 
-int ErasureCodeShecReedSolomonVandermonde::parse(const map<std::string,std::string> &parameters)
+int ErasureCodeShecReedSolomonVandermonde::parse(const ErasureCodeProfile &profile)
 {
   int err = 0;
   // k, m, c
-  if (parameters.find("k") == parameters.end() &&
-      parameters.find("m") == parameters.end() &&
-      parameters.find("c") == parameters.end()){
+  if (profile.find("k") == profile.end() &&
+      profile.find("m") == profile.end() &&
+      profile.find("c") == profile.end()){
     dout(10) << "(k, m, c) default to " << "(" << DEFAULT_K
 	     << ", " << DEFAULT_M << ", " << DEFAULT_C << ")" << dendl;
     k = DEFAULT_K; m = DEFAULT_M; c = DEFAULT_C;
-  } else if (parameters.find("k") == parameters.end() ||
-	     parameters.find("m") == parameters.end() ||
-	     parameters.find("c") == parameters.end()){
+  } else if (profile.find("k") == profile.end() ||
+	     profile.find("m") == profile.end() ||
+	     profile.find("c") == profile.end()){
     dout(10) << "(k, m, c) must be choosed" << dendl;
     err = -EINVAL;
   } else {
     std::string err_k, err_m, err_c, value_k, value_m, value_c;
-    value_k = parameters.find("k")->second;
-    value_m = parameters.find("m")->second;
-    value_c = parameters.find("c")->second;
+    value_k = profile.find("k")->second;
+    value_m = profile.find("m")->second;
+    value_c = profile.find("c")->second;
     k = strict_strtol(value_k.c_str(), 10, &err_k);
     m = strict_strtol(value_m.c_str(), 10, &err_m);
     c = strict_strtol(value_c.c_str(), 10, &err_c);
@@ -353,12 +353,12 @@ int ErasureCodeShecReedSolomonVandermonde::parse(const map<std::string,std::stri
 	   << c << ")"<< dendl;
 
   // w
-  if (parameters.find("w") == parameters.end()){
+  if (profile.find("w") == profile.end()){
     dout(10) << "w default to " << DEFAULT_W << dendl;
     w = DEFAULT_W;
   } else {
     std::string err_w, value_w;
-    value_w = parameters.find("w")->second;
+    value_w = profile.find("w")->second;
     w = strict_strtol(value_w.c_str(), 10, &err_w);
 
     if (!err_w.empty()){

@@ -138,3 +138,10 @@ Packaging:
     Copyright (C) 2004-2009 by Sage Weil <sage@newdream.net>
     Copyright (C) 2010 Canonical, Ltd.
     Licensed under LGPL-2.1
+
+Files: src/test/perf_local.cc
+Copyright:
+  (c) 2011-2014 Stanford University
+  (c) 2011 Facebook
+License:
+  The MIT License

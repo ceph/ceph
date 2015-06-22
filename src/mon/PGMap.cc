@@ -459,22 +459,21 @@ void PGMap::remove_osd(int osd)
   }
 }
 
-void PGMap::stat_pg_add(const pg_t &pgid, const pg_stat_t &s, bool sumonly,
+void PGMap::stat_pg_add(const pg_t &pgid, const pg_stat_t &s, bool nocreating,
 			bool sameosds)
 {
   pg_pool_sum[pgid.pool()].add(s);
   pg_sum.add(s);
 
-  if (sumonly)
-    return;
-
   num_pg++;
   num_pg_by_state[s.state]++;
 
-  if (s.state & PG_STATE_CREATING) {
-    creating_pgs.insert(pgid);
-    if (s.acting_primary >= 0)
-      creating_pgs_by_osd[s.acting_primary].insert(pgid);
+  if (!nocreating) {
+    if (s.state & PG_STATE_CREATING) {
+      creating_pgs.insert(pgid);
+      if (s.acting_primary >= 0)
+	creating_pgs_by_osd[s.acting_primary].insert(pgid);
+    }
   }
 
   if (sameosds)
@@ -486,21 +485,13 @@ void PGMap::stat_pg_add(const pg_t &pgid, const pg_stat_t &s, bool sumonly,
     ++blocked_by_sum[*p];
   }
 
-  for (vector<int>::const_iterator p = s.acting.begin(); p != s.acting.end(); ++p) {
-    set<pg_t>& oset = pg_by_osd[*p];
-    oset.erase(pgid);
-    if (oset.empty())
-      pg_by_osd.erase(*p);
-  }
-  for (vector<int>::const_iterator p = s.up.begin(); p != s.up.end(); ++p) {
-    set<pg_t>& oset = pg_by_osd[*p];
-    oset.erase(pgid);
-    if (oset.empty())
-      pg_by_osd.erase(*p);
-  }
+  for (vector<int>::const_iterator p = s.acting.begin(); p != s.acting.end(); ++p)
+    pg_by_osd[*p].insert(pgid);
+  for (vector<int>::const_iterator p = s.up.begin(); p != s.up.end(); ++p)
+    pg_by_osd[*p].insert(pgid);
 }
 
-void PGMap::stat_pg_sub(const pg_t &pgid, const pg_stat_t &s, bool sumonly,
+void PGMap::stat_pg_sub(const pg_t &pgid, const pg_stat_t &s, bool nocreating,
 			bool sameosds)
 {
   pool_stat_t& ps = pg_pool_sum[pgid.pool()];
@@ -509,19 +500,18 @@ void PGMap::stat_pg_sub(const pg_t &pgid, const pg_stat_t &s, bool sumonly,
     pg_pool_sum.erase(pgid.pool());
   pg_sum.sub(s);
 
-  if (sumonly)
-    return;
-
   num_pg--;
   if (--num_pg_by_state[s.state] == 0)
     num_pg_by_state.erase(s.state);
 
-  if (s.state & PG_STATE_CREATING) {
-    creating_pgs.erase(pgid);
-    if (s.acting_primary >= 0) {
-      creating_pgs_by_osd[s.acting_primary].erase(pgid);
-      if (creating_pgs_by_osd[s.acting_primary].size() == 0)
-	creating_pgs_by_osd.erase(s.acting_primary);
+  if (!nocreating) {
+    if (s.state & PG_STATE_CREATING) {
+      creating_pgs.erase(pgid);
+      if (s.acting_primary >= 0) {
+	creating_pgs_by_osd[s.acting_primary].erase(pgid);
+	if (creating_pgs_by_osd[s.acting_primary].size() == 0)
+	  creating_pgs_by_osd.erase(s.acting_primary);
+      }
     }
   }
 
@@ -538,10 +528,18 @@ void PGMap::stat_pg_sub(const pg_t &pgid, const pg_stat_t &s, bool sumonly,
       blocked_by_sum.erase(q);
   }
 
-  for (vector<int>::const_iterator p = s.acting.begin(); p != s.acting.end(); ++p)
-    pg_by_osd[*p].insert(pgid);
-  for (vector<int>::const_iterator p = s.up.begin(); p != s.up.end(); ++p)
-    pg_by_osd[*p].insert(pgid);
+  for (vector<int>::const_iterator p = s.acting.begin(); p != s.acting.end(); ++p) {
+    set<pg_t>& oset = pg_by_osd[*p];
+    oset.erase(pgid);
+    if (oset.empty())
+      pg_by_osd.erase(*p);
+  }
+  for (vector<int>::const_iterator p = s.up.begin(); p != s.up.end(); ++p) {
+    set<pg_t>& oset = pg_by_osd[*p];
+    oset.erase(pgid);
+    if (oset.empty())
+      pg_by_osd.erase(*p);
+  }
 }
 
 void PGMap::stat_pg_update(const pg_t pgid, pg_stat_t& s,
@@ -1473,7 +1471,7 @@ void PGMap::generate_test_instances(list<PGMap*>& o)
   }
 }
 
-void PGMap::get_filtered_pg_stats(string& state, int64_t poolid, int64_t osdid,
+void PGMap::get_filtered_pg_stats(const string& state, int64_t poolid, int64_t osdid,
                                   bool primary, set<pg_t>& pgs)
 {
   int type = 0;

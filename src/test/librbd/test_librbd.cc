@@ -840,8 +840,15 @@ TEST_F(TestLibRBD, TestIO)
   ASSERT_EQ(10, rbd_write(image, info.size - 10, 100, test_data));
 
   rbd_aio_create_completion(NULL, (rbd_callback_t) simple_read_cb, &comp);
-  ASSERT_EQ(-EINVAL, rbd_aio_write(image, info.size, 1, test_data, comp));
-  ASSERT_EQ(-EINVAL, rbd_aio_read(image, info.size, 1, test_data, comp));
+  ASSERT_EQ(0, rbd_aio_write(image, info.size, 1, test_data, comp));
+  ASSERT_EQ(0, rbd_aio_wait_for_complete(comp));
+  ASSERT_EQ(-EINVAL, rbd_aio_get_return_value(comp));
+  rbd_aio_release(comp);
+
+  rbd_aio_create_completion(NULL, (rbd_callback_t) simple_read_cb, &comp);
+  ASSERT_EQ(0, rbd_aio_read(image, info.size, 1, test_data, comp));
+  ASSERT_EQ(0, rbd_aio_wait_for_complete(comp));
+  ASSERT_EQ(-EINVAL, rbd_aio_get_return_value(comp));
   rbd_aio_release(comp);
 
   ASSERT_PASSED(validate_object_map, image);
@@ -917,16 +924,16 @@ TEST_F(TestLibRBD, TestIOWithIOHint)
 			    LIBRADOS_OP_FLAG_FADVISE_DONTNEED));
 
   rbd_aio_create_completion(NULL, (rbd_callback_t) simple_read_cb, &comp);
-  ASSERT_EQ(-EINVAL, rbd_aio_write(image, info.size, 1, test_data, comp));
-  ASSERT_EQ(-EINVAL, rbd_aio_read2(image, info.size, 1, test_data, comp,
-				    LIBRADOS_OP_FLAG_FADVISE_DONTNEED));
+  ASSERT_EQ(0, rbd_aio_read2(image, info.size, 1, test_data, comp,
+			     LIBRADOS_OP_FLAG_FADVISE_DONTNEED));
+  ASSERT_EQ(0, rbd_aio_wait_for_complete(comp));
+  ASSERT_EQ(-EINVAL, rbd_aio_get_return_value(comp));
   rbd_aio_release(comp);
 
   ASSERT_PASSED(validate_object_map, image);
   ASSERT_EQ(0, rbd_close(image));
 
   rados_ioctx_destroy(ioctx);
-
 }
 
 TEST_F(TestLibRBD, TestEmptyDiscard)
@@ -2986,4 +2993,114 @@ TEST_F(TestLibRBD, RebuildObjectMap)
 
   ASSERT_PASSED(validate_object_map, image1);
   ASSERT_PASSED(validate_object_map, image2);
+}
+
+TEST_F(TestLibRBD, BlockingAIO)
+{
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(m_pool_name.c_str(), ioctx));
+
+  librbd::RBD rbd;
+  std::string name = get_temp_image_name();
+  uint64_t size = 1 << 20;
+  int order = 18;
+  ASSERT_EQ(0, create_image_pp(rbd, ioctx, name.c_str(), size, &order));
+
+  CephContext *cct = reinterpret_cast<CephContext*>(ioctx.cct());
+  cct->_conf->set_val_or_die("rbd_non_blocking_aio", "0");
+
+  librbd::Image image;
+  ASSERT_EQ(0, rbd.open(ioctx, image, name.c_str(), NULL));
+
+  bufferlist bl;
+  bl.append(std::string(256, '1'));
+
+  librbd::RBD::AioCompletion *write_comp =
+    new librbd::RBD::AioCompletion(NULL, NULL);
+  ASSERT_EQ(0, image.aio_write(0, bl.length(), bl, write_comp));
+
+  librbd::RBD::AioCompletion *flush_comp =
+    new librbd::RBD::AioCompletion(NULL, NULL);
+  ASSERT_EQ(0, image.aio_flush(flush_comp));
+  ASSERT_EQ(0, flush_comp->wait_for_complete());
+  ASSERT_EQ(0, flush_comp->get_return_value());
+  flush_comp->release();
+
+  ASSERT_EQ(1, write_comp->is_complete());
+  ASSERT_EQ(0, write_comp->get_return_value());
+  write_comp->release();
+
+  librbd::RBD::AioCompletion *discard_comp =
+    new librbd::RBD::AioCompletion(NULL, NULL);
+  ASSERT_EQ(0, image.aio_discard(128, 128, discard_comp));
+  ASSERT_EQ(0, discard_comp->wait_for_complete());
+  discard_comp->release();
+
+  librbd::RBD::AioCompletion *read_comp =
+    new librbd::RBD::AioCompletion(NULL, NULL);
+  bufferlist read_bl;
+  image.aio_read(0, bl.length(), read_bl, read_comp);
+  ASSERT_EQ(0, read_comp->wait_for_complete());
+  ASSERT_EQ(bl.length(), read_comp->get_return_value());
+  read_comp->release();
+
+  bufferlist expected_bl;
+  expected_bl.append(std::string(128, '1'));
+  expected_bl.append(std::string(128, '\0'));
+  ASSERT_TRUE(expected_bl.contents_equal(read_bl));
+}
+
+TEST_F(TestLibRBD, ExclusiveLockTransition)
+{
+  REQUIRE_FEATURE(RBD_FEATURE_EXCLUSIVE_LOCK);
+
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(m_pool_name.c_str(), ioctx));
+
+  librbd::RBD rbd;
+  std::string name = get_temp_image_name();
+
+  uint64_t size = 1 << 18;
+  int order = 12;
+  ASSERT_EQ(0, create_image_pp(rbd, ioctx, name.c_str(), size, &order));
+
+  librbd::Image image1;
+  ASSERT_EQ(0, rbd.open(ioctx, image1, name.c_str(), NULL));
+
+  librbd::Image image2;
+  ASSERT_EQ(0, rbd.open(ioctx, image2, name.c_str(), NULL));
+
+  std::list<librbd::RBD::AioCompletion *> comps;
+  ceph::bufferlist bl;
+  bl.append(std::string(1 << order, '1'));
+  for (size_t object_no = 0; object_no < (size >> 12); ++object_no) {
+    librbd::RBD::AioCompletion *comp = new librbd::RBD::AioCompletion(NULL,
+                                                                      NULL);
+    comps.push_back(comp);
+    if (object_no % 2 == 0) {
+      ASSERT_EQ(0, image1.aio_write(object_no << order, bl.length(), bl, comp));
+    } else {
+      ASSERT_EQ(0, image2.aio_write(object_no << order, bl.length(), bl, comp));
+    }
+  }
+
+  while (!comps.empty()) {
+    librbd::RBD::AioCompletion *comp = comps.front();
+    comps.pop_front();
+    ASSERT_EQ(0, comp->wait_for_complete());
+    ASSERT_EQ(1, comp->is_complete());
+  }
+
+  librbd::Image image3;
+  ASSERT_EQ(0, rbd.open(ioctx, image3, name.c_str(), NULL));
+  for (size_t object_no = 0; object_no < (size >> 12); ++object_no) {
+    bufferlist read_bl;
+    ASSERT_EQ(bl.length(), image3.read(object_no << order, bl.length(),
+                                       read_bl));
+    ASSERT_TRUE(bl.contents_equal(read_bl));
+  }
+
+  ASSERT_PASSED(validate_object_map, image1);
+  ASSERT_PASSED(validate_object_map, image2);
+  ASSERT_PASSED(validate_object_map, image3);
 }

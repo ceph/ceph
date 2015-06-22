@@ -2,7 +2,8 @@ if ENABLE_SERVER
 if WITH_OSD
 
 check_SCRIPTS += \
-	test/erasure-code/test-erasure-code.sh
+	test/erasure-code/test-erasure-code.sh \
+	test/erasure-code/test-erasure-eio.sh
 
 noinst_HEADERS += \
 	test/erasure-code/ceph_erasure_code_benchmark.h
@@ -34,7 +35,9 @@ ceph_erasure_code_LDADD += -ldl
 endif
 bin_DEBUGPROGRAMS += ceph_erasure_code
 
-libec_example_la_SOURCES = test/erasure-code/ErasureCodePluginExample.cc
+libec_example_la_SOURCES = \
+	erasure-code/ErasureCode.cc \
+	test/erasure-code/ErasureCodePluginExample.cc
 test/erasure-code/ErasureCodePluginExample.cc: ./ceph_ver.h
 libec_example_la_CFLAGS = ${AM_CFLAGS}
 libec_example_la_CXXFLAGS= ${AM_CXXFLAGS}

@@ -46,6 +46,8 @@
 
 class ErasureCodeLrc : public ErasureCode {
 public:
+  static const string DEFAULT_KML;
+
   struct Layer {
     Layer(string _chunks_map) : chunks_map(_chunks_map) { }
     ErasureCodeInterfaceRef erasure_code;
@@ -54,7 +56,7 @@ public:
     vector<int> chunks;
     set<int> chunks_as_set;
     string chunks_map;
-    map<string,string> parameters;
+    ErasureCodeProfile profile;
   };
   vector<Layer> layers;
   string directory;
@@ -108,25 +110,25 @@ public:
 			    const map<int, bufferlist> &chunks,
 			    map<int, bufferlist> *decoded);
 
-  int init(const map<string,string> &parameters, ostream *ss);
+  virtual int init(ErasureCodeProfile &profile, ostream *ss);
 
-  virtual int parse(const map<string,string> &parameters, ostream *ss);
+  virtual int parse(ErasureCodeProfile &profile, ostream *ss);
 
-  int parse_kml(map<string,string> &parameters, ostream *ss);
+  int parse_kml(ErasureCodeProfile &profile, ostream *ss);
 
-  int parse_ruleset(const map<string,string> &parameters, ostream *ss);
+  int parse_ruleset(ErasureCodeProfile &profile, ostream *ss);
 
   int parse_ruleset_step(string description_string,
 			 json_spirit::mArray description,
 			 ostream *ss);
 
-  int layers_description(const map<string,string> &parameters,
+  int layers_description(const ErasureCodeProfile &profile,
 			 json_spirit::mArray *description,
 			 ostream *ss) const;
   int layers_parse(string description_string,
 		   json_spirit::mArray description,
 		   ostream *ss);
-  int layers_init();
+  int layers_init(ostream *ss);
   int layers_sanity_checks(string description_string,
 			   ostream *ss) const;
 };

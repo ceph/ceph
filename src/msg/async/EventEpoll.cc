@@ -71,12 +71,13 @@ int EpollDriver::add_event(int fd, int cur_mask, int add_mask)
   return 0;
 }
 
-void EpollDriver::del_event(int fd, int cur_mask, int delmask)
+int EpollDriver::del_event(int fd, int cur_mask, int delmask)
 {
   ldout(cct, 20) << __func__ << " del event fd=" << fd << " cur_mask=" << cur_mask
                  << " delmask=" << delmask << " to " << epfd << dendl;
   struct epoll_event ee;
   int mask = cur_mask & (~delmask);
+  int r = 0;
 
   ee.events = 0;
   if (mask & EVENT_READABLE) ee.events |= EPOLLIN;
@@ -84,18 +85,21 @@ void EpollDriver::del_event(int fd, int cur_mask, int delmask)
   ee.data.u64 = 0; /* avoid valgrind warning */
   ee.data.fd = fd;
   if (mask != EVENT_NONE) {
-    if (epoll_ctl(epfd, EPOLL_CTL_MOD, fd, &ee) < 0) {
+    if ((r = epoll_ctl(epfd, EPOLL_CTL_MOD, fd, &ee)) < 0) {
       lderr(cct) << __func__ << " epoll_ctl: modify fd=" << fd << " mask=" << mask
                  << " failed." << cpp_strerror(errno) << dendl;
+      return r;
     }
   } else {
     /* Note, Kernel < 2.6.9 requires a non null event pointer even for
      * EPOLL_CTL_DEL. */
-    if (epoll_ctl(epfd, EPOLL_CTL_DEL, fd, &ee) < 0) {
+    if ((r = epoll_ctl(epfd, EPOLL_CTL_DEL, fd, &ee)) < 0) {
       lderr(cct) << __func__ << " epoll_ctl: delete fd=" << fd
                  << " failed." << cpp_strerror(errno) << dendl;
+      return r;
     }
   }
+  return 0;
 }
 
 int EpollDriver::resize_events(int newsize)

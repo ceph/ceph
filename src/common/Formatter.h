@@ -6,10 +6,9 @@
 #include "include/int_types.h"
 
 #include <deque>
-#include <iostream>
+#include <iosfwd>
 #include <list>
 #include <vector>
-#include <ostream>
 #include <sstream>
 #include <stdarg.h>
 #include <string>

@@ -34,6 +34,7 @@ ObjectCacher::BufferHead *ObjectCacher::Object::split(BufferHead *left, loff_t o
 
   //inherit and if later access, this auto clean.
   right->set_dontneed(left->get_dontneed());
+  right->set_nocache(left->get_nocache());
 
   right->last_write_tid = left->last_write_tid;
   right->last_read_tid = left->last_read_tid;
@@ -103,6 +104,7 @@ void ObjectCacher::Object::merge_left(BufferHead *left, BufferHead *right)
   left->last_write = MAX( left->last_write, right->last_write );
 
   left->set_dontneed(right->get_dontneed() ? left->get_dontneed() : false);
+  left->set_nocache(right->get_nocache() ? left->get_nocache() : false);
 
   // waiters
   for (map<loff_t, list<Context*> >::iterator p = right->waitfor_read.begin();
@@ -918,6 +920,8 @@ void ObjectCacher::bh_write_commit(int64_t poolid, sobject_t oid, loff_t start,
       if (r >= 0) {
 	// ok!  mark bh clean and error-free
 	mark_clean(bh);
+	if (bh->get_nocache())
+	  bh_lru_rest.lru_bottouch(bh);
 	hit.push_back(bh);
 	ldout(cct, 10) << "bh_write_commit clean " << *bh << dendl;
       } else {
@@ -1068,6 +1072,7 @@ int ObjectCacher::_readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
   uint64_t total_bytes_read = 0;
   map<uint64_t, bufferlist> stripe_map;  // final buffer offset -> substring
   bool dontneed = rd->fadvise_flags & LIBRADOS_OP_FLAG_FADVISE_DONTNEED;
+  bool nocache = rd->fadvise_flags & LIBRADOS_OP_FLAG_FADVISE_NOCACHE;
 
   /*
    * WARNING: we can only meaningfully return ENOENT if the read request
@@ -1172,6 +1177,7 @@ int ObjectCacher::_readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
 	  bh_remove(o, bh_it->second);
 	  delete bh_it->second;
 	} else {
+	  bh_it->second->set_nocache(nocache);
 	  bh_read(bh_it->second, rd->fadvise_flags);
 	  if ((success && onfinish) || last != missing.end())
 	    last = bh_it;
@@ -1218,7 +1224,10 @@ int ObjectCacher::_readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
 	  error = bh->error;
         bytes_in_cache += bh->length();
 
-	touch_bh(bh);
+	if (bh->get_nocache() && bh->is_clean())
+	  bh_lru_rest.lru_bottouch(bh);
+	else
+	  touch_bh(bh);
 	//must be after touch_bh because touch_bh set dontneed false
 	if (dontneed &&
 	    ((loff_t)ex_it->offset <= bh->start() && (bh->end() <= (loff_t)(ex_it->offset + ex_it->length)))) {
@@ -1361,6 +1370,7 @@ int ObjectCacher::writex(OSDWrite *wr, ObjectSet *oset, Context *onfreespace)
   uint64_t bytes_written = 0;
   uint64_t bytes_written_in_flush = 0;
   bool dontneed = wr->fadvise_flags & LIBRADOS_OP_FLAG_FADVISE_DONTNEED;
+  bool nocache = wr->fadvise_flags & LIBRADOS_OP_FLAG_FADVISE_NOCACHE;
   
   for (vector<ObjectExtent>::iterator ex_it = wr->extents.begin();
        ex_it != wr->extents.end();
@@ -1372,6 +1382,7 @@ int ObjectCacher::writex(OSDWrite *wr, ObjectSet *oset, Context *onfreespace)
 
     // map it all into a single bufferhead.
     BufferHead *bh = o->map_write(wr);
+    bool missing = bh->is_missing();
     bh->snapc = wr->snapc;
     
     bytes_written += bh->length();
@@ -1411,6 +1422,8 @@ int ObjectCacher::writex(OSDWrite *wr, ObjectSet *oset, Context *onfreespace)
     mark_dirty(bh);
     if (dontneed)
       bh->set_dontneed(true);
+    else if (nocache && missing)
+      bh->set_nocache(true);
     else
       touch_bh(bh);
 
@@ -1520,6 +1533,7 @@ int ObjectCacher::_wait_for_write(OSDWrite *wr, uint64_t len, ObjectSet *oset, C
 void ObjectCacher::flusher_entry()
 {
   ldout(cct, 10) << "flusher start" << dendl;
+  writeback_handler.get_client_lock();
   lock.Lock();
   while (!flusher_stop) {
     loff_t all = get_stat_tx() + get_stat_rx() + get_stat_clean() + get_stat_dirty();
@@ -1556,13 +1570,21 @@ void ObjectCacher::flusher_entry()
       if (!max) {
 	// back off the lock to avoid starving other threads
 	lock.Unlock();
+        writeback_handler.put_client_lock();
+        writeback_handler.get_client_lock();
 	lock.Lock();
 	continue;
       }
     }
     if (flusher_stop)
       break;
+
+    writeback_handler.put_client_lock();
     flusher_cond.WaitInterval(cct, lock, utime_t(1,0));
+    lock.Unlock();
+
+    writeback_handler.get_client_lock();
+    lock.Lock();
   }
 
   /* Wait for reads to finish. This is only possible if handling
@@ -1578,6 +1600,7 @@ void ObjectCacher::flusher_entry()
   }
 
   lock.Unlock();
+  writeback_handler.put_client_lock();
   ldout(cct, 10) << "flusher finish" << dendl;
 }
 

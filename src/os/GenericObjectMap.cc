@@ -621,7 +621,7 @@ int GenericObjectMap::get_keys(const coll_t &cid, const ghobject_t &oid,
     return -ENOENT;
 
   ObjectMap::ObjectMapIterator iter = _get_iterator(header, prefix);
-  for (; iter->valid(); iter->next()) {
+  for (iter->seek_to_first(); iter->valid(); iter->next()) {
     if (iter->status())
       return iter->status();
     keys->insert(iter->key());
@@ -731,15 +731,6 @@ int GenericObjectMap::init(bool do_upgrade)
     state.seq = 1;
   }
   dout(20) << "(init)genericobjectmap: seq is " << state.seq << dendl;
-  return 0;
-}
-
-int GenericObjectMap::sync(const Header header, KeyValueDB::Transaction t)
-{
-  write_state(t);
-  if (header) {
-    set_header(header->cid, header->oid, *header, t);
-  }
   return 0;
 }
 

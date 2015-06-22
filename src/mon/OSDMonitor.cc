@@ -648,7 +648,9 @@ protected:
     if (average_util)
       var = util / average_util;
 
-    dump_item(qi, reweight, kb, kb_used, kb_avail, util, var, f);
+    size_t num_pgs = pgm->get_num_pg_by_osd(qi.id);
+
+    dump_item(qi, reweight, kb, kb_used, kb_avail, util, var, num_pgs, f);
 
     if (!qi.is_bucket() && reweight > 0) {
       if (min_var < 0 || var < min_var)
@@ -663,9 +665,15 @@ protected:
     }
   }
 
-  virtual void dump_item(const CrushTreeDumper::Item &qi, float &reweight,
-			 int64_t kb, int64_t kb_used, int64_t kb_avail,
-			 double& util, double& var, F *f) = 0;
+  virtual void dump_item(const CrushTreeDumper::Item &qi,
+			 float &reweight,
+			 int64_t kb,
+			 int64_t kb_used,
+			 int64_t kb_avail,
+			 double& util,
+			 double& var,
+			 const size_t num_pgs,
+			 F *f) = 0;
 
   double dev() {
     return sum > 0 ? sqrt(stddev / sum) : 0;
@@ -715,7 +723,7 @@ protected:
       *kb_used += kb_used_i;
       *kb_avail += kb_avail_i;
     }
-    return kb > 0;
+    return *kb > 0;
   }
 
 protected:
@@ -746,6 +754,7 @@ public:
     tbl->define_column("AVAIL", TextTable::LEFT, TextTable::RIGHT);
     tbl->define_column("%USE", TextTable::LEFT, TextTable::RIGHT);
     tbl->define_column("VAR", TextTable::LEFT, TextTable::RIGHT);
+    tbl->define_column("PGS", TextTable::LEFT, TextTable::RIGHT);
     if (tree)
       tbl->define_column("TYPE NAME", TextTable::LEFT, TextTable::LEFT);
 
@@ -769,9 +778,15 @@ protected:
   };
   friend std::ostream &operator<<(ostream& out, const lowprecision_t& v);
 
-  virtual void dump_item(const CrushTreeDumper::Item &qi, float &reweight,
-			 int64_t kb, int64_t kb_used, int64_t kb_avail,
-			 double& util, double& var, TextTable *tbl) {
+  virtual void dump_item(const CrushTreeDumper::Item &qi,
+			 float &reweight,
+			 int64_t kb,
+			 int64_t kb_used,
+			 int64_t kb_avail,
+			 double& util,
+			 double& var,
+			 const size_t num_pgs,
+			 TextTable *tbl) {
     *tbl << qi.id
 	 << weightf_t(qi.weight)
 	 << weightf_t(reweight)
@@ -779,7 +794,8 @@ protected:
 	 << si_t(kb_used << 10)
 	 << si_t(kb_avail << 10)
 	 << lowprecision_t(util)
-	 << lowprecision_t(var);
+	 << lowprecision_t(var)
+	 << num_pgs;
 
     if (tree) {
       ostringstream name;
@@ -840,9 +856,15 @@ public:
   }
 
 protected:
-  virtual void dump_item(const CrushTreeDumper::Item &qi, float &reweight,
-			 int64_t kb, int64_t kb_used, int64_t kb_avail,
-			 double& util, double& var, Formatter *f) {
+  virtual void dump_item(const CrushTreeDumper::Item &qi,
+			 float &reweight,
+			 int64_t kb,
+			 int64_t kb_used,
+			 int64_t kb_avail,
+			 double& util,
+			 double& var,
+			 const size_t num_pgs,
+			 Formatter *f) {
     f->open_object_section("item");
     CrushTreeDumper::dump_item_fields(crush, qi, f);
     f->dump_float("reweight", reweight);
@@ -851,6 +873,7 @@ protected:
     f->dump_int("kb_avail", kb_avail);
     f->dump_float("utilization", util);
     f->dump_float("var", var);
+    f->dump_unsigned("pgs", num_pgs);
     CrushTreeDumper::dump_bucket_children(crush, qi, f);
     f->close_section();
   }
@@ -2945,11 +2968,11 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
     } else if (prefix == "osd tree") {
       if (f) {
 	f->open_object_section("tree");
-	p->print_tree(NULL, f.get());
+	p->print_tree(f.get(), NULL);
 	f->close_section();
 	f->flush(ds);
       } else {
-	p->print_tree(&ds, NULL);
+	p->print_tree(NULL, &ds);
       }
       rdata.append(ds);
     } else if (prefix == "osd getmap") {
@@ -3900,12 +3923,12 @@ int OSDMonitor::prepare_new_pool(MPoolOp *m)
     return prepare_new_pool(m->name, m->auid, m->crush_rule, ruleset_name,
 			    0, 0,
                             erasure_code_profile,
-			    pg_pool_t::TYPE_REPLICATED, 0, ss);
+			    pg_pool_t::TYPE_REPLICATED, 0, &ss);
   else
     return prepare_new_pool(m->name, session->auid, m->crush_rule, ruleset_name,
 			    0, 0,
                             erasure_code_profile,
-			    pg_pool_t::TYPE_REPLICATED, 0, ss);
+			    pg_pool_t::TYPE_REPLICATED, 0, &ss);
 }
 
 int OSDMonitor::crush_rename_bucket(const string& srcname,
@@ -3940,10 +3963,21 @@ int OSDMonitor::crush_rename_bucket(const string& srcname,
   return 0;
 }
 
+int OSDMonitor::normalize_profile(ErasureCodeProfile &profile, ostream *ss)
+{
+  ErasureCodeInterfaceRef erasure_code;
+  ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
+  ErasureCodeProfile::const_iterator plugin = profile.find("plugin");
+  int err = instance.factory(plugin->second, profile, &erasure_code, ss);
+  if (err)
+    return err;
+  return erasure_code->init(profile, ss);
+}
+
 int OSDMonitor::crush_ruleset_create_erasure(const string &name,
 					     const string &profile,
 					     int *ruleset,
-					     stringstream &ss)
+					     ostream *ss)
 {
   int ruleid = osdmap.crush->get_rule_id(name);
   if (ruleid != -ENOENT) {
@@ -3962,11 +3996,11 @@ int OSDMonitor::crush_ruleset_create_erasure(const string &name,
     ErasureCodeInterfaceRef erasure_code;
     int err = get_erasure_code(profile, &erasure_code, ss);
     if (err) {
-      ss << "failed to load plugin using profile " << profile << std::endl;
+      *ss << "failed to load plugin using profile " << profile << std::endl;
       return err;
     }
 
-    err = erasure_code->create_ruleset(name, newcrush, &ss);
+    err = erasure_code->create_ruleset(name, newcrush, ss);
     erasure_code.reset();
     if (err < 0)
       return err;
@@ -3979,18 +4013,18 @@ int OSDMonitor::crush_ruleset_create_erasure(const string &name,
 
 int OSDMonitor::get_erasure_code(const string &erasure_code_profile,
 				 ErasureCodeInterfaceRef *erasure_code,
-				 stringstream &ss) const
+				 ostream *ss) const
 {
   if (pending_inc.has_erasure_code_profile(erasure_code_profile))
     return -EAGAIN;
-  const map<string,string> &profile =
+  ErasureCodeProfile profile =
     osdmap.get_erasure_code_profile(erasure_code_profile);
-  map<string,string>::const_iterator plugin =
+  ErasureCodeProfile::const_iterator plugin =
     profile.find("plugin");
   if (plugin == profile.end()) {
-    ss << "cannot determine the erasure code plugin"
-       << " because there is no 'plugin' entry in the erasure_code_profile "
-       << profile << std::endl;
+    *ss << "cannot determine the erasure code plugin"
+	<< " because there is no 'plugin' entry in the erasure_code_profile "
+	<< profile << std::endl;
     return -EINVAL;
   }
   ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
@@ -4065,29 +4099,29 @@ bool OSDMonitor::validate_crush_against_features(const CrushWrapper *newcrush,
 
 bool OSDMonitor::erasure_code_profile_in_use(const map<int64_t, pg_pool_t> &pools,
 					     const string &profile,
-					     ostream &ss)
+					     ostream *ss)
 {
   bool found = false;
   for (map<int64_t, pg_pool_t>::const_iterator p = pools.begin();
        p != pools.end();
        ++p) {
     if (p->second.erasure_code_profile == profile) {
-      ss << osdmap.pool_name[p->first] << " ";
+      *ss << osdmap.pool_name[p->first] << " ";
       found = true;
     }
   }
   if (found) {
-    ss << "pool(s) are using the erasure code profile '" << profile << "'";
+    *ss << "pool(s) are using the erasure code profile '" << profile << "'";
   }
   return found;
 }
 
 int OSDMonitor::parse_erasure_code_profile(const vector<string> &erasure_code_profile,
 					   map<string,string> *erasure_code_profile_map,
-					   stringstream &ss)
+					   ostream *ss)
 {
   int r = get_json_str_map(g_conf->osd_pool_default_erasure_code_profile,
-		           ss,
+		           *ss,
 		           erasure_code_profile_map);
   if (r)
     return r;
@@ -4123,7 +4157,7 @@ int OSDMonitor::parse_erasure_code_profile(const vector<string> &erasure_code_pr
 int OSDMonitor::prepare_pool_size(const unsigned pool_type,
 				  const string &erasure_code_profile,
 				  unsigned *size, unsigned *min_size,
-				  stringstream &ss)
+				  ostream *ss)
 {
   int err = 0;
   switch (pool_type) {
@@ -4142,7 +4176,7 @@ int OSDMonitor::prepare_pool_size(const unsigned pool_type,
     }
     break;
   default:
-    ss << "prepare_pool_size: " << pool_type << " is not a known pool type";
+    *ss << "prepare_pool_size: " << pool_type << " is not a known pool type";
     err = -EINVAL;
     break;
   }
@@ -4152,7 +4186,7 @@ int OSDMonitor::prepare_pool_size(const unsigned pool_type,
 int OSDMonitor::prepare_pool_stripe_width(const unsigned pool_type,
 					  const string &erasure_code_profile,
 					  uint32_t *stripe_width,
-					  stringstream &ss)
+					  ostream *ss)
 {
   int err = 0;
   switch (pool_type) {
@@ -4170,7 +4204,7 @@ int OSDMonitor::prepare_pool_stripe_width(const unsigned pool_type,
     }
     break;
   default:
-    ss << "prepare_pool_stripe_width: "
+    *ss << "prepare_pool_stripe_width: "
        << pool_type << " is not a known pool type";
     err = -EINVAL;
     break;
@@ -4182,7 +4216,7 @@ int OSDMonitor::prepare_pool_crush_ruleset(const unsigned pool_type,
 					   const string &erasure_code_profile,
 					   const string &ruleset_name,
 					   int *crush_ruleset,
-					   stringstream &ss)
+					   ostream *ss)
 {
   if (*crush_ruleset < 0) {
     switch (pool_type) {
@@ -4193,8 +4227,9 @@ int OSDMonitor::prepare_pool_crush_ruleset(const unsigned pool_type,
 	  *crush_ruleset = osdmap.crush->get_osd_pool_default_crush_replicated_ruleset(g_ceph_context);
 	  if (*crush_ruleset < 0) {
 	    // Errors may happen e.g. if no valid ruleset is available
-	    ss << "No suitable CRUSH ruleset exists";
-	    return *crush_ruleset;
+	    *ss << "No suitable CRUSH ruleset exists, check "
+                << "'osd pool default crush *' config options";
+	    return -ENOENT;
 	  }
 	} else {
 	  return get_crush_ruleset(ruleset_name, crush_ruleset, ss);
@@ -4210,6 +4245,7 @@ int OSDMonitor::prepare_pool_crush_ruleset(const unsigned pool_type,
 	case -EALREADY:
 	  dout(20) << "prepare_pool_crush_ruleset: ruleset "
 		   << ruleset_name << " try again" << dendl;
+	  // fall through
 	case 0:
 	  // need to wait for the crush rule to be proposed before proceeding
 	  err = -EAGAIN;
@@ -4222,14 +4258,14 @@ int OSDMonitor::prepare_pool_crush_ruleset(const unsigned pool_type,
       }
       break;
     default:
-      ss << "prepare_pool_crush_ruleset: " << pool_type
+      *ss << "prepare_pool_crush_ruleset: " << pool_type
 	 << " is not a known pool type";
       return -EINVAL;
       break;
     }
   } else {
     if (!osdmap.crush->ruleset_exists(*crush_ruleset)) {
-      ss << "CRUSH ruleset " << *crush_ruleset << " not found";
+      *ss << "CRUSH ruleset " << *crush_ruleset << " not found";
       return -ENOENT;
     }
   }
@@ -4239,7 +4275,7 @@ int OSDMonitor::prepare_pool_crush_ruleset(const unsigned pool_type,
 
 int OSDMonitor::get_crush_ruleset(const string &ruleset_name,
 				  int *crush_ruleset,
-				  stringstream &ss)
+				  ostream *ss)
 {
   int ret;
   ret = osdmap.crush->get_rule_id(ruleset_name);
@@ -4258,7 +4294,7 @@ int OSDMonitor::get_crush_ruleset(const string &ruleset_name,
       return -EAGAIN;
     } else {
       //Cannot find it , return error
-      ss << "specified ruleset " << ruleset_name << " doesn't exist";
+      *ss << "specified ruleset " << ruleset_name << " doesn't exist";
       return ret;
     }
   }
@@ -4286,7 +4322,7 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid,
 				 const string &erasure_code_profile,
                                  const unsigned pool_type,
                                  const uint64_t expected_num_objects,
-				 stringstream &ss)
+				 ostream *ss)
 {
   if (name.length() == 0)
     return -EINVAL;
@@ -4510,7 +4546,7 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
        ErasureCodeInterfaceRef erasure_code;
        int k;
        stringstream tmp;
-       int err = get_erasure_code(p.erasure_code_profile, &erasure_code, tmp);
+       int err = get_erasure_code(p.erasure_code_profile, &erasure_code, &tmp);
        if (err == 0) {
 	 k = erasure_code->get_data_chunk_count();
        } else {
@@ -4845,6 +4881,7 @@ bool OSDMonitor::prepare_command_impl(MMonCommand *m,
     // then we would consistently trigger an election before the command
     // finishes, having a flapping monitor unable to hold quorum.
     int r = tester.test_with_crushtool(g_conf->crushtool.c_str(),
+				       osdmap.get_max_osd(),
 				       g_conf->mon_lease);
     if (r < 0) {
       derr << "error on crush map: " << ess.str() << dendl;
@@ -5399,10 +5436,10 @@ bool OSDMonitor::prepare_command_impl(MMonCommand *m,
     string name;
     cmd_getval(g_ceph_context, cmdmap, "name", name);
 
-    if (erasure_code_profile_in_use(pending_inc.new_pools, name, ss))
+    if (erasure_code_profile_in_use(pending_inc.new_pools, name, &ss))
       goto wait;
 
-    if (erasure_code_profile_in_use(osdmap.pools, name, ss)) {
+    if (erasure_code_profile_in_use(osdmap.pools, name, &ss)) {
       err = -EBUSY;
       goto reply;
     }
@@ -5439,7 +5476,7 @@ bool OSDMonitor::prepare_command_impl(MMonCommand *m,
       force = false;
     }
     map<string,string> profile_map;
-    err = parse_erasure_code_profile(profile, &profile_map, ss);
+    err = parse_erasure_code_profile(profile, &profile_map, &ss);
     if (err)
       goto reply;
     if (profile_map.find("plugin") == profile_map.end()) {
@@ -5449,22 +5486,6 @@ bool OSDMonitor::prepare_command_impl(MMonCommand *m,
       goto reply;
     }
     string plugin = profile_map["plugin"];
-
-    if (osdmap.has_erasure_code_profile(name)) {
-      if (osdmap.get_erasure_code_profile(name) == profile_map) {
-	err = 0;
-	goto reply;
-      }
-      if (!force) {
-	err = -EPERM;
-	ss << "will not override erasure code profile " << name
-	   << " because the existing profile "
-	   << osdmap.get_erasure_code_profile(name)
-	   << " is different from the proposed profile "
-	   << profile_map;
-	goto reply;
-      }
-    }
 
     if (pending_inc.has_erasure_code_profile(name)) {
       dout(20) << "erasure code profile " << name << " try again" << dendl;
@@ -5482,7 +5503,34 @@ bool OSDMonitor::prepare_command_impl(MMonCommand *m,
 	  goto reply;
 	}
       }
-      dout(20) << "erasure code profile " << name << " set" << dendl;
+      err = normalize_profile(profile_map, &ss);
+      if (err)
+	goto reply;
+
+      if (osdmap.has_erasure_code_profile(name)) {
+	ErasureCodeProfile existing_profile_map =
+	  osdmap.get_erasure_code_profile(name);
+	err = normalize_profile(existing_profile_map, &ss);
+	if (err)
+	  goto reply;
+
+	if (existing_profile_map == profile_map) {
+	  err = 0;
+	  goto reply;
+	}
+	if (!force) {
+	  err = -EPERM;
+	  ss << "will not override erasure code profile " << name
+	     << " because the existing profile "
+	     << existing_profile_map
+	     << " is different from the proposed profile "
+	     << profile_map;
+	  goto reply;
+	}
+      }
+
+      dout(20) << "erasure code profile set " << name << "="
+	       << profile_map << dendl;
       pending_inc.set_erasure_code_profile(name, profile_map);
     }
 
@@ -5516,14 +5564,18 @@ bool OSDMonitor::prepare_command_impl(MMonCommand *m,
 						      &ss);
 	if (err)
 	  goto reply;
-	dout(20) << "erasure code profile " << profile << " set" << dendl;
+	err = normalize_profile(profile_map, &ss);
+	if (err)
+	  goto reply;
+	dout(20) << "erasure code profile set " << profile << "="
+		 << profile_map << dendl;
 	pending_inc.set_erasure_code_profile(profile, profile_map);
 	goto wait;
       }
     }
 
     int ruleset;
-    err = crush_ruleset_create_erasure(name, profile, &ruleset, ss);
+    err = crush_ruleset_create_erasure(name, profile, &ruleset, &ss);
     if (err < 0) {
       switch(err) {
       case -EEXIST: // return immediately
@@ -6297,7 +6349,7 @@ done:
 
     if (!implicit_ruleset_creation && ruleset_name != "") {
       int ruleset;
-      err = get_crush_ruleset(ruleset_name, &ruleset, ss);
+      err = get_crush_ruleset(ruleset_name, &ruleset, &ss);
       if (err == -EAGAIN) {
 	wait_for_finished_proposal(new C_RetryMessage(this, m));
 	return true;
@@ -6319,7 +6371,7 @@ done:
 			   pg_num, pgp_num,
 			   erasure_code_profile, pool_type,
                            (uint64_t)expected_num_objects,
-			   ss);
+			   &ss);
     if (err < 0) {
       switch(err) {
       case -EEXIST:
@@ -6463,6 +6515,17 @@ done:
       err = -ENOTEMPTY;
       goto reply;
     }
+    if (tp->ec_pool()) {
+      ss << "tier pool '" << tierpoolstr
+	 << "' is an ec pool, which cannot be a tier";
+      err = -ENOTSUP;
+      goto reply;
+    }
+    if (!tp->removed_snaps.empty() || !tp->snaps.empty()) {
+      ss << "tier pool '" << tierpoolstr << "' has snapshot state; it cannot be added as a tier without breaking the pool";
+      err = -ENOTEMPTY;
+      goto reply;
+    }
     // go
     pg_pool_t *np = pending_inc.get_new_pool(pool_id, p);
     pg_pool_t *ntp = pending_inc.get_new_pool(tierpool_id, tp);
@@ -6499,7 +6562,7 @@ done:
     const pg_pool_t *tp = osdmap.get_pg_pool(tierpool_id);
     assert(tp);
 
-    if (!_check_remove_tier(pool_id, p, &err, &ss)) {
+    if (!_check_remove_tier(pool_id, p, tp, &err, &ss)) {
       goto reply;
     }
 
@@ -6608,7 +6671,7 @@ done:
       goto reply;
     }
 
-    if (!_check_remove_tier(pool_id, p, &err, &ss)) {
+    if (!_check_remove_tier(pool_id, p, NULL, &err, &ss)) {
       goto reply;
     }
 
@@ -7281,17 +7344,29 @@ bool OSDMonitor::_check_become_tier(
  */
 bool OSDMonitor::_check_remove_tier(
     const int64_t base_pool_id, const pg_pool_t *base_pool,
+    const pg_pool_t *tier_pool,
     int *err, ostream *ss) const
 {
   const std::string &base_pool_name = osdmap.get_pool_name(base_pool_id);
 
-  // If the pool is in use by CephFS, then refuse to remove its
-  // tier
+  // Apply CephFS-specific checks
   const MDSMap &pending_mdsmap = mon->mdsmon()->pending_mdsmap;
   if (pending_mdsmap.pool_in_use(base_pool_id)) {
-    *ss << "pool '" << base_pool_name << "' is in use by CephFS via its tier";
-    *err = -EBUSY;
-    return false;
+    if (base_pool->type != pg_pool_t::TYPE_REPLICATED) {
+      // If the underlying pool is erasure coded, we can't permit the
+      // removal of the replicated tier that CephFS relies on to access it
+      *ss << "pool '" << base_pool_name << "' is in use by CephFS via its tier";
+      *err = -EBUSY;
+      return false;
+    }
+
+    if (tier_pool && tier_pool->cache_mode == pg_pool_t::CACHEMODE_WRITEBACK) {
+      *ss << "pool '" << base_pool_name << "' is in use by CephFS, and this "
+             "tier is still in use as a writeback cache.  Change the cache "
+             "mode and flush the cache before removing it";
+      *err = -EBUSY;
+      return false;
+    }
   }
 
   *err = 0;

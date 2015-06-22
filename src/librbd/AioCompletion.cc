@@ -5,6 +5,7 @@
 
 #include "common/ceph_context.h"
 #include "common/dout.h"
+#include "common/errno.h"
 
 #include "librbd/AioRequest.h"
 #include "librbd/internal.h"
@@ -63,11 +64,11 @@ namespace librbd {
     }
   }
 
-  void AioCompletion::complete() {
+  void AioCompletion::complete(CephContext *cct) {
     tracepoint(librbd, aio_complete_enter, this, rval);
     utime_t elapsed;
     assert(lock.is_locked());
-    elapsed = ceph_clock_now(ictx->cct) - start_time;
+    elapsed = ceph_clock_now(cct) - start_time;
     switch (aio_type) {
     case AIO_TYPE_READ:
       ictx->perfcounter->tinc(l_librbd_rd_latency, elapsed); break;
@@ -78,19 +79,34 @@ namespace librbd {
     case AIO_TYPE_FLUSH:
       ictx->perfcounter->tinc(l_librbd_aio_flush_latency, elapsed); break;
     default:
-      lderr(ictx->cct) << "completed invalid aio_type: " << aio_type << dendl;
+      lderr(cct) << "completed invalid aio_type: " << aio_type << dendl;
       break;
     }
 
     // note: possible for image to be closed after op marked finished
-    async_op.finish_op();
+    if (async_op.started()) {
+      async_op.finish_op();
+    }
 
     if (complete_cb) {
+      lock.Unlock();
       complete_cb(rbd_comp, complete_arg);
+      lock.Lock();
     }
     done = true;
     cond.Signal();
     tracepoint(librbd, aio_complete_exit);
+  }
+
+  void AioCompletion::fail(CephContext *cct, int r)
+  {
+    lderr(cct) << "AioCompletion::fail() " << this << ": " << cpp_strerror(r)
+               << dendl;
+    lock.Lock();
+    assert(pending_count == 0);
+    rval = r;
+    complete(cct);
+    put_unlock();
   }
 
   void AioCompletion::complete_request(CephContext *cct, ssize_t r)
@@ -109,7 +125,7 @@ namespace librbd {
     int count = --pending_count;
     if (!count && blockers == 0) {
       finalize(cct, rval);
-      complete();
+      complete(cct);
     }
     put_unlock();
   }
@@ -155,6 +171,17 @@ namespace librbd {
       r = m_req->m_object_len;
     }
     m_completion->complete_request(m_cct, r);
+  }
+
+  void C_CacheRead::complete(int r) {
+    if (!m_enqueued) {
+      // cache_lock creates a lock ordering issue -- so re-execute this context
+      // outside the cache_lock
+      m_enqueued = true;
+      m_image_ctx.op_work_queue->queue(this, r);
+      return;
+    }
+    Context::complete(r);
   }
 
   void C_CacheRead::finish(int r)

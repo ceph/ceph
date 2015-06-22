@@ -46,9 +46,10 @@ class C_handle_notify : public EventCallback {
   C_handle_notify(EventCenter *c): center(c) {}
   void do_request(int fd_or_id) {
     char c[256];
-    center->already_wakeup.set(0);
-    int r = read(fd_or_id, c, sizeof(c));
-    assert(r > 0);
+    do {
+      center->already_wakeup.set(0);
+      read(fd_or_id, c, sizeof(c));
+    } while (center->already_wakeup.read());
   }
 };
 
@@ -147,8 +148,13 @@ int EventCenter::create_file_event(int fd, int mask, EventCallbackRef ctxt)
     return 0;
 
   r = driver->add_event(fd, event->mask, mask);
-  if (r < 0)
+  if (r < 0) {
+    // Actually we don't allow any failed error code, caller doesn't prepare to
+    // handle error status. So now we need to assert failure here. In practice,
+    // add_event shouldn't report error, otherwise it must be a innermost bug!
+    assert(0 == "BUG!");
     return r;
+  }
 
   event->mask |= mask;
   if (mask & EVENT_READABLE) {
@@ -177,7 +183,11 @@ void EventCenter::delete_file_event(int fd, int mask)
   if (!event->mask)
     return ;
 
-  driver->del_event(fd, event->mask, mask);
+  int r = driver->del_event(fd, event->mask, mask);
+  if (r < 0) {
+    // see create_file_event
+    assert(0 == "BUG!");
+  }
 
   if (mask & EVENT_READABLE && event->read_cb) {
     event->read_cb.reset();

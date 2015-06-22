@@ -2318,7 +2318,7 @@ void OSDMap::dump(Formatter *f) const
   }
   f->close_section(); // primary_temp
 
-  f->open_array_section("blacklist");
+  f->open_object_section("blacklist");
   for (ceph::unordered_map<entity_addr_t,utime_t>::const_iterator p = blacklist.begin();
        p != blacklist.end();
        ++p) {
@@ -2561,15 +2561,16 @@ private:
   const OSDMap *osdmap;
 };
 
-void OSDMap::print_tree(ostream *out, Formatter *f) const
+void OSDMap::print_tree(Formatter *f, ostream *out) const
 {
-  if (out) {
+  if (f)
+    OSDTreeFormattingDumper(crush.get(), this).dump(f);
+  else {
+    assert(out);
     TextTable tbl;
     OSDTreePlainDumper(crush.get(), this).dump(&tbl);
     *out << tbl;
   }
-  if (f)
-    OSDTreeFormattingDumper(crush.get(), this).dump(f);
 }
 
 void OSDMap::print_summary(Formatter *f, ostream& out) const
@@ -2671,6 +2672,7 @@ int OSDMap::build_simple(CephContext *cct, epoch_t e, uuid_d &fsid,
     r = build_simple_crush_map(cct, *crush, nosd, &ss);
   else
     r = build_simple_crush_map_from_conf(cct, *crush, &ss);
+  assert(r == 0);
 
   int poolbase = get_max_osd() ? get_max_osd() : 1;
 
@@ -2701,9 +2703,6 @@ int OSDMap::build_simple(CephContext *cct, epoch_t e, uuid_d &fsid,
     name_pool[*p] = pool;
   }
 
-  if (r < 0)
-    lderr(cct) << ss.str() << dendl;
-  
   for (int i=0; i<get_max_osd(); i++) {
     set_state(i, 0);
     set_weight(i, CEPH_OSD_OUT);
@@ -2857,12 +2856,18 @@ int OSDMap::build_simple_crush_rulesets(CephContext *cct,
 					const string& root,
 					ostream *ss)
 {
+  int crush_ruleset =
+      crush._get_osd_pool_default_crush_replicated_ruleset(cct, true);
   string failure_domain =
     crush.get_type_name(cct->_conf->osd_crush_chooseleaf_type);
 
+  if (crush_ruleset == CEPH_DEFAULT_CRUSH_REPLICATED_RULESET)
+    crush_ruleset = -1; // create ruleset 0 by default
+
   int r;
-  r = crush.add_simple_ruleset("replicated_ruleset", root, failure_domain,
-			       "firstn", pg_pool_t::TYPE_REPLICATED, ss);
+  r = crush.add_simple_ruleset_at("replicated_ruleset", root, failure_domain,
+                                  "firstn", pg_pool_t::TYPE_REPLICATED,
+                                  crush_ruleset, ss);
   if (r < 0)
     return r;
   // do not add an erasure rule by default or else we will implicitly

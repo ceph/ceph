@@ -130,7 +130,7 @@ public:
       if (!generic_iter->valid())
 	return false;
       pair<string,string> raw_key = generic_iter->raw_key();
-      return (raw_key.first == prefix);
+      return (raw_key.first.compare(0, prefix.length(), prefix) == 0);
     }
     int next() {
       if (valid())

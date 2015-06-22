@@ -154,6 +154,7 @@ void vec_to_argv(const char *argv0, std::vector<const char*>& args,
 void ceph_arg_value_type(const char * nextargstr, bool *bool_option, bool *bool_numeric)
 {
   bool is_numeric = true;
+  bool is_float = false;
   bool is_option;
 
   if (nextargstr == NULL) {
@@ -173,6 +174,11 @@ void ceph_arg_value_type(const char * nextargstr, bool *bool_option, bool *bool_
 	if (nextargstr[0] == '-')
 	  continue;
       }
+      if ( (nextargstr[i] == '.') && (is_float == false) ) {
+        is_float = true;
+        continue;
+      }
+        
       is_numeric = false;
       break;
     }

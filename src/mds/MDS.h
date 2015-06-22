@@ -382,9 +382,22 @@ private:
   void command_get_subtrees(Formatter *f);
   void command_export_dir(Formatter *f,
       const std::string &path, mds_rank_t dest);
+  bool command_dirfrag_split(
+      cmdmap_t cmdmap,
+      std::ostream &ss);
+  bool command_dirfrag_merge(
+      cmdmap_t cmdmap,
+      std::ostream &ss);
+  bool command_dirfrag_ls(
+      cmdmap_t cmdmap,
+      std::ostream &ss,
+      Formatter *f);
  private:
   int _command_export_dir(const std::string &path, mds_rank_t dest);
   int _command_flush_journal(std::stringstream *ss);
+  CDir *_command_dirfrag_get(
+      const cmdmap_t &cmdmap,
+      std::ostream &ss);
  public:
     // config observer bits
   virtual const char** get_tracked_conf_keys() const;
@@ -451,7 +464,19 @@ private:
    * through cleaner scrub/repair mechanisms.
    */
   void damaged();
-  void suicide();
+
+  /**
+   * Terminate this daemon process.
+   *
+   * @param fast: if true, do not send a message to the mon before shutting
+   *              down
+   */
+  void suicide(bool fast = false);
+
+  /**
+   * Start a new daemon process with the same command line parameters that
+   * this process was run with, then terminate this process
+   */
   void respawn();
   void handle_write_error(int err);
 

@@ -7,7 +7,7 @@
 *.egg
 dist
 build
-wheelhouse
+wheelhouse*
 *.log
 *.trs
 

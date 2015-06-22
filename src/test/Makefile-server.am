@@ -30,6 +30,25 @@ ceph_perf_objectstore_LDADD = $(LIBOS) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 ceph_perf_objectstore_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_perf_objectstore
 
+ceph_perf_local_SOURCES = test/perf_local.cc test/perf_helper.cc
+ceph_perf_local_LDADD = $(LIBOS) $(CEPH_GLOBAL)
+ceph_perf_local_CXXFLAGS = ${AM_CXXFLAGS} 	\
+	${INTEL_SSE_FLAGS} \
+	${INTEL_SSE2_FLAGS}
+
+noinst_HEADERS += test/perf_helper.h
+bin_DEBUGPROGRAMS += ceph_perf_local
+
+ceph_perf_msgr_server_SOURCES = test/msgr/perf_msgr_server.cc
+ceph_perf_msgr_server_LDADD = $(LIBOS) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
+ceph_perf_msgr_server_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+bin_DEBUGPROGRAMS += ceph_perf_msgr_server
+
+ceph_perf_msgr_client_SOURCES = test/msgr/perf_msgr_client.cc
+ceph_perf_msgr_client_LDADD = $(LIBOS) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
+ceph_perf_msgr_client_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+bin_DEBUGPROGRAMS += ceph_perf_msgr_client
+
 if LINUX
 ceph_test_objectstore_SOURCES = test/objectstore/store_test.cc
 ceph_test_objectstore_LDADD = $(LIBOS) $(UNITTEST_LDADD) $(CEPH_GLOBAL)

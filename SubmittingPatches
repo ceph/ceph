@@ -242,7 +242,7 @@ email list to ensure your submission is noticed.
 
 When addressing review comments, can should either add additional patches to
 your branch or (better yet) squash those changes into the relevant commits so
-that the sequence of changes of "clean" and gets things right the first time.
+that the sequence of changes is "clean" and gets things right the first time.
 The 'git rebase -i' command is very helpful in this process.  Once you have
 updated your local branch, you can simply force-push to the existing branch
 in your public repository that is referenced by the pull request with
@@ -272,6 +272,15 @@ A: The target branch depends on the nature of your change:
    you should set "Backport: firefly" in your Redmine ticket to indicate that
    you are fixing a bug that exists on the "firefly" branch and that you
    desire that your change be cherry-picked to that branch.
+
+Q: How to include Reviewed-by: tag(s) in my pull request?
+
+   You don't. If someone reviews your pull request, they should indicate they
+   have done so by commenting on it with "+1", "looks good to me", "LGTM",
+   and/or the entire "Reviewed-by: ..." line with their name and email address.
+
+   The developer merging the pull request should note positive reviews and
+   include the appropriate Reviewed-by: lines in the merge commit.
 
 2) Patch submission via ceph-devel@vger.kernel.org
 

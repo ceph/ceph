@@ -64,7 +64,7 @@ namespace librbd {
 
     AsyncOperation async_op;
 
-    AioCompletion() : lock("AioCompletion::lock", true),
+    AioCompletion() : lock("AioCompletion::lock", true, false),
 		      done(false), rval(0), complete_cb(NULL),
 		      complete_arg(NULL), rbd_comp(NULL),
 		      pending_count(0), blockers(1),
@@ -98,7 +98,9 @@ namespace librbd {
       }
     }
 
-    void complete();
+    void fail(CephContext *cct, int r);
+
+    void complete(CephContext *cct);
 
     void set_complete_cb(void *cb_arg, callback_t cb) {
       complete_cb = cb;
@@ -145,7 +147,7 @@ namespace librbd {
       --blockers;
       if (pending_count == 0 && blockers == 0) {
         finalize(cct, rval);
-        complete();
+        complete(cct);
       }
     }
   };
@@ -181,11 +183,15 @@ namespace librbd {
 
   class C_CacheRead : public Context {
   public:
-    explicit C_CacheRead(AioRead *req) : m_req(req) {}
-    virtual ~C_CacheRead() {}
+    explicit C_CacheRead(ImageCtx *ictx, AioRead *req)
+      : m_image_ctx(*ictx), m_req(req), m_enqueued(false) {}
+    virtual void complete(int r);
+  protected:
     virtual void finish(int r);
   private:
+    ImageCtx &m_image_ctx;
     AioRead *m_req;
+    bool m_enqueued;
   };
 }
 

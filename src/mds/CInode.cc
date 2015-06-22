@@ -443,20 +443,11 @@ void CInode::pop_projected_snaprealm(sr_t *next_snaprealm)
   } else if (next_snaprealm->past_parents.size() !=
 	     snaprealm->srnode.past_parents.size()) {
     invalidate_cached_snaps = true;
+    // re-open past parents
+    snaprealm->_close_parents();
 
-    // update parent pointer
-    assert(snaprealm->open);
-    assert(snaprealm->parent);   // had a parent before
-    SnapRealm *new_parent = get_parent_inode()->find_snaprealm();
-    assert(new_parent);
-    CInode *parenti = new_parent->inode;
-    assert(parenti);
-    assert(parenti->snaprealm);
-    snaprealm->parent = new_parent;
-    snaprealm->add_open_past_parent(new_parent);
     dout(10) << " realm " << *snaprealm << " past_parents " << snaprealm->srnode.past_parents
 	     << " -> " << next_snaprealm->past_parents << dendl;
-    dout(10) << " pinning new parent " << *parenti << dendl;
   }
   snaprealm->srnode = *next_snaprealm;
   delete next_snaprealm;
@@ -858,9 +849,10 @@ void CInode::name_stray_dentry(string& dname)
 
 version_t CInode::pre_dirty()
 {
-  version_t pv; 
-  if (parent || !projected_parent.empty()) {
-    pv = get_projected_parent_dn()->pre_dirty(get_projected_version());
+  version_t pv;
+  CDentry* _cdentry = get_projected_parent_dn(); 
+  if (_cdentry) {
+    pv = _cdentry->pre_dirty(get_projected_version());
     dout(10) << "pre_dirty " << pv << " (current v " << inode.version << ")" << dendl;
   } else {
     assert(is_base());

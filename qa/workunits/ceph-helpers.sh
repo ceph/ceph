@@ -17,7 +17,6 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU Library Public License for more details.
 #
-CEPH_HELPER_VERBOSE=false
 TIMEOUT=120
 PG_NUM=4
 
@@ -193,7 +192,7 @@ function kill_daemons() {
     local dir=$1
     local signal=${2:-KILL}
     local name_prefix=$3 # optional, osd, mon, osd.1
-    local delays=${4:-0 1 1 1 2 3 5 5 5 10 10 20 60}
+    local delays=${4:-0 0 1 1 1 2 3 5 5 5 10 10 20 60}
 
     local status=0
     for pidfile in $(find $dir | grep $name_prefix'[^/]*\.pid') ; do
@@ -201,6 +200,7 @@ function kill_daemons() {
         local send_signal=$signal
         local kill_complete=false
         for try in $delays ; do
+            sleep $try
             if kill -$send_signal $pid 2> /dev/null ; then
                 kill_complete=false
             else
@@ -208,7 +208,6 @@ function kill_daemons() {
                 break
             fi
             send_signal=0
-            sleep $try
         done
         if ! $kill_complete ; then
             status=1
@@ -222,7 +221,6 @@ function test_kill_daemons() {
     setup $dir || return 1
     run_mon $dir a --osd_pool_default_size=1 || return 1
     run_osd $dir 0 || return 1
-    ceph osd dump | grep "osd.0 up" || return 1
     # sending signal 0 won't kill the daemon
     # waiting just for one second instead of the default schedule
     # allows us to quickly verify what happens when kill fails 
@@ -261,8 +259,11 @@ function test_kill_daemons() {
 # run_mon $dir a # spawn a mon and bind port 7018
 # run_mon $dir a --debug-filestore=20 # spawn with filestore debugging
 #
-# The default rbd pool is deleted and replaced with a replicated pool
-# with less placement groups to speed up initialization.
+# If mon_initial_members is not set, the default rbd pool is deleted
+# and replaced with a replicated pool with less placement groups to
+# speed up initialization. If mon_initial_members is set, no attempt
+# is made to recreate the rbd pool because it would hang forever,
+# waiting for other mons to join.
 #
 # A **dir**/ceph.conf file is created but not meant to be used by any
 # function.  It is convenient for debugging a failure with:
@@ -279,7 +280,7 @@ function run_mon() {
     shift
     local id=$1
     shift
-    local data=$dir
+    local data=$dir/$id
 
     ceph-mon \
         --id $id \
@@ -301,6 +302,7 @@ function run_mon() {
         --chdir= \
         --mon-data=$data \
         --log-file=$dir/\$name.log \
+        --admin-socket=$dir/\$cluster-\$name.asok \
         --mon-cluster-log-file=$dir/log \
         --run-dir=$dir \
         --pid-file=$dir/\$name.pid \
@@ -308,12 +310,13 @@ function run_mon() {
 
     cat > $dir/ceph.conf <<EOF
 [global]
-fsid = $(get_config mon a fsid)
-mon host = $(get_config mon a mon_host)
+fsid = $(get_config mon $id fsid)
+mon host = $(get_config mon $id mon_host)
 EOF
-
-    ceph osd pool delete rbd rbd --yes-i-really-really-mean-it || return 1
-    ceph osd pool create rbd $PG_NUM || return 1
+    if test -z "$(get_config mon $id mon_initial_members)" ; then
+        ceph osd pool delete rbd rbd --yes-i-really-really-mean-it || return 1
+        ceph osd pool create rbd $PG_NUM || return 1
+    fi
 }
 
 function test_run_mon() {
@@ -321,7 +324,14 @@ function test_run_mon() {
 
     setup $dir || return 1
 
+    run_mon $dir a --mon-initial-members=a || return 1
+    # rbd has not been deleted / created, hence it has pool id 0
+    ceph osd dump | grep "pool 0 'rbd'" || return 1
+    kill_daemons $dir || return 1
+
     run_mon $dir a || return 1
+    # rbd has been deleted / created, hence it does not have pool id 0
+    ! ceph osd dump | grep "pool 0 'rbd'" || return 1
     local size=$(CEPH_ARGS='' ceph --format=json daemon $dir/ceph-mon.a.asok \
         config get osd_pool_default_size)
     test "$size" = '{"osd_pool_default_size":"3"}' || return 1
@@ -391,7 +401,6 @@ function run_osd() {
     ceph_disk_args+=" --statedir=$dir"
     ceph_disk_args+=" --sysconfdir=$dir"
     ceph_disk_args+=" --prepend-to-path="
-    $CEPH_HELPER_VERBOSE && ceph_disk_args+=" --verbose"
 
     mkdir -p $osd_data
     ceph-disk $ceph_disk_args \
@@ -474,7 +483,6 @@ function activate_osd() {
     ceph_disk_args+=" --statedir=$dir"
     ceph_disk_args+=" --sysconfdir=$dir"
     ceph_disk_args+=" --prepend-to-path="
-    $CEPH_HELPER_VERBOSE && ceph_disk_args+=" --verbose"
 
     local ceph_args="$CEPH_ARGS"
     ceph_args+=" --osd-backfill-full-ratio=.99"
@@ -499,17 +507,7 @@ function activate_osd() {
 
     ceph osd crush create-or-move "$id" 1 root=default host=localhost
 
-    status=1
-    for ((i=0; i < $TIMEOUT; i++)); do
-        if ! ceph osd dump | grep "osd.$id up"; then
-            sleep 1
-        else
-            status=0
-            break
-        fi
-    done
-
-    return $status
+    wait_for_osd up $id || return 1
 }
 
 function test_activate_osd() {
@@ -531,6 +529,44 @@ function test_activate_osd() {
         config get osd_max_backfills)
     test "$backfills" = '{"osd_max_backfills":"20"}' || return 1
 
+    teardown $dir || return 1
+}
+
+#######################################################################
+
+##
+# Wait until the OSD **id** is either up or down, as specified by
+# **state**. It fails after $TIMEOUT seconds.
+#
+# @param state either up or down
+# @param id osd identifier
+# @return 0 on success, 1 on error
+#
+function wait_for_osd() {
+    local state=$1
+    local id=$2
+
+    status=1
+    for ((i=0; i < $TIMEOUT; i++)); do
+        if ! ceph osd dump | grep "osd.$id $state"; then
+            sleep 1
+        else
+            status=0
+            break
+        fi
+    done
+    return $status
+}
+
+function test_wait_for_osd() {
+    local dir=$1
+    setup $dir || return 1
+    run_mon $dir a --osd_pool_default_size=1 || return 1
+    run_osd $dir 0 || return 1
+    wait_for_osd up 0 || return 1
+    kill_daemons $dir TERM osd || return 1
+    wait_for_osd down 0 || return 1
+    ( TIMEOUT=1 ; ! wait_for_osd up 0 ) || return 1
     teardown $dir || return 1
 }
 
@@ -613,7 +649,7 @@ function get_config() {
     local config=$3
 
     CEPH_ARGS='' \
-        ceph --format xml daemon $dir/ceph-mon.$id.asok \
+        ceph --format xml daemon $dir/ceph-$daemon.$id.asok \
         config get $config 2> /dev/null | \
         $XMLSTARLET sel -t -m "//$config" -v . -n
 }
@@ -621,8 +657,46 @@ function get_config() {
 function test_get_config() {
     local dir=$1
 
+    # override the default config using command line arg and check it
     setup $dir || return 1
     run_mon $dir a --osd_pool_default_size=1 || return 1
+    test $(get_config mon a osd_pool_default_size) = 1 || return 1
+    run_osd $dir 0 --osd_max_scrubs=3 || return 1
+    test $(get_config osd 0 osd_max_scrubs) = 3 || return 1
+    teardown $dir || return 1
+}
+
+##
+# Set the **config** to specified **value**, via the config set command
+# of the admin socket of **daemon**.**id**
+#
+# @param daemon mon or osd
+# @parma id mon or osd ID
+# @param config the configuration variable name as found in config_opts.h
+# @param value the config value
+# @return 0 on success, 1 on error
+#
+function set_config() {
+    local daemon=$1
+    local id=$2
+    local config=$3
+    local value=$4
+
+    CEPH_ARGS='' \
+        ceph --format xml daemon $dir/ceph-$daemon.$id.asok \
+        config set $config $value 2> /dev/null | \
+        $XMLSTARLET sel -Q -t -m "//success" -v .
+}
+
+function test_set_config() {
+    local dir=$1
+
+    setup $dir || return 1
+    run_mon $dir a --osd_pool_default_size=1 || return 1
+    test $(get_config mon a ms_crc_header) = true || return 1
+    set_config mon a ms_crc_header false || return 1
+    test $(get_config mon a ms_crc_header) = false || return 1
+    set_config mon a ms_crc_header true || return 1
     test $(get_config mon a ms_crc_header) = true || return 1
     teardown $dir || return 1
 }
@@ -906,8 +980,7 @@ function wait_for_clean() {
         if get_is_making_recovery_progress ; then
             timer=0
         elif (( timer >= $TIMEOUT )) ; then
-            ceph pg dump
-            ceph health detail
+            ceph report
             return 1
         fi
 
@@ -917,7 +990,7 @@ function wait_for_clean() {
             num_active_clean=$cur_active_clean
         fi
         sleep 1
-        (( timer++ ))
+        timer=$(expr $timer + 1)
     done
     return 0
 }
@@ -1026,15 +1099,53 @@ function test_expect_failure() {
 #######################################################################
 
 ##
-# Call the **run** function (which must be defined by the caller) with
-# the **dir** argument followed by the caller argument list. The
-# **setup** function is called before the **run** function and the
-# **teardown** function is called after to cleanup leftovers. The
-# environment is prepared to protect the **run** function from
-# pre-existing variables.
+# Return 0 if the erasure code *plugin* is available, 1 otherwise.
 #
-# The shell is required to display the function a line number whenever
-# a statement is executed to facilitate debugging.
+# @param plugin erasure code plugin
+# @return 0 on success, 1 on error
+#
+
+function erasure_code_plugin_exists() {
+    local plugin=$1
+
+    local status
+    if ceph osd erasure-code-profile set TESTPROFILE plugin=$plugin 2>&1 |
+        grep "$plugin.*No such file" ; then
+        status=1
+    else
+        status=0
+        ceph osd erasure-code-profile rm TESTPROFILE
+    fi
+    return $status
+}
+
+function test_erasure_code_plugin_exists() {
+    local dir=$1
+
+    setup $dir || return 1
+    run_mon $dir a || return 1
+    erasure_code_plugin_exists jerasure || return 1
+    ! erasure_code_plugin_exists FAKE || return 1
+    teardown $dir || return 1
+}
+
+#######################################################################
+
+##
+# Call the **run** function (which must be defined by the caller) with
+# the **dir** argument followed by the caller argument list.
+#
+# **teardown** function is called when the **run** function returns
+# (on success or on error), to cleanup leftovers. The CEPH_CONF is set
+# to /dev/null and CEPH_ARGS is unset so that the tests are protected from
+# external interferences.
+#
+# It is the responsibility of the **run** function to call the
+# **setup** function to prepare the test environment (create a temporary
+# directory etc.).
+#
+# The shell is required (via PS4) to display the function and line
+# number whenever a statement is executed to help debugging.
 #
 # @param dir directory in which all data is stored
 # @param ... arguments passed transparently to **run**
@@ -1046,14 +1157,12 @@ function main() {
 
     set -x
     PS4='${FUNCNAME[0]}: $LINENO: '
-    #CEPH_HELPER_VERBOSE=true
 
     export PATH=:$PATH # make sure program from sources are prefered
 
     export CEPH_CONF=/dev/null
     unset CEPH_ARGS
 
-    setup $dir || return 1
     local code
     if run $dir "$@" ; then
         code=0
@@ -1091,5 +1200,5 @@ if test "$1" = TESTS ; then
 fi
 
 # Local Variables:
-# compile-command: "cd .. ; make -j4 && test/ceph-helpers.sh TESTS # test_get_config"
+# compile-command: "cd ../../src ; make -j4 && ../qa/workunits/ceph-helpers.sh TESTS # test_get_config"
 # End:

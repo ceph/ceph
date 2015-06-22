@@ -7,6 +7,7 @@
 #include "test/librados_test_stub/TestWatchNotify.h"
 #include "librados/AioCompletionImpl.h"
 #include "include/assert.h"
+#include "common/valgrind.h"
 #include "objclass/objclass.h"
 #include <boost/bind.hpp>
 #include <errno.h>
@@ -45,7 +46,11 @@ void TestObjectOperationImpl::get() {
 
 void TestObjectOperationImpl::put() {
   if (m_refcount.dec() == 0) {
+    ANNOTATE_HAPPENS_AFTER(&m_refcount);
+    ANNOTATE_HAPPENS_BEFORE_FORGET_ALL(&m_refcount);
     delete this;
+  } else {
+    ANNOTATE_HAPPENS_BEFORE(&m_refcount);
   }
 }
 
@@ -242,7 +247,8 @@ int TestIoCtxImpl::unwatch(uint64_t handle) {
 
 int TestIoCtxImpl::watch(const std::string& o, uint64_t *handle,
                          librados::WatchCtx *ctx, librados::WatchCtx2 *ctx2) {
-  return m_client->get_watch_notify().watch(o, handle, ctx, ctx2);
+  return m_client->get_watch_notify().watch(o, get_instance_id(), handle, ctx,
+                                            ctx2);
 }
 
 int TestIoCtxImpl::execute_aio_operations(const std::string& oid,

@@ -38,7 +38,7 @@ namespace librbd {
     void complete(int r);
 
     virtual bool should_complete(int r) = 0;
-    virtual int send() = 0;
+    virtual void send() = 0;
 
     bool has_parent() const {
       return !m_parent_extents.empty();
@@ -66,7 +66,7 @@ namespace librbd {
     virtual ~AioRead();
 
     virtual bool should_complete(int r);
-    virtual int send();
+    virtual void send();
     void guard_read();
 
     ceph::bufferlist &data() {
@@ -126,7 +126,7 @@ namespace librbd {
     }
 
     virtual bool should_complete(int r);
-    virtual int send();
+    virtual void send();
 
   private:
     /**
@@ -179,6 +179,7 @@ namespace librbd {
     std::vector<librados::snap_t> m_snaps;
 
     virtual void add_write_ops(librados::ObjectWriteOperation *wr) = 0;
+    virtual const char* get_write_type() const = 0;
     virtual void guard_write();
     virtual void pre_object_map_update(uint8_t *new_state) = 0;
     virtual bool post_object_map_update() {
@@ -186,7 +187,7 @@ namespace librbd {
     }
 
   private:
-    bool send_pre();
+    void send_pre();
     bool send_post();
     void send_write();
     void send_copyup();
@@ -208,6 +209,11 @@ namespace librbd {
     }
   protected:
     virtual void add_write_ops(librados::ObjectWriteOperation *wr);
+
+    virtual const char* get_write_type() const {
+      return "write";
+    }
+
     virtual void pre_object_map_update(uint8_t *new_state) {
       *new_state = OBJECT_EXISTS;
     }
@@ -235,6 +241,12 @@ namespace librbd {
       }
     }
 
+    virtual const char* get_write_type() const {
+      if (has_parent()) {
+        return "remove (trunc)";
+      }
+      return "remove";
+    }
     virtual void pre_object_map_update(uint8_t *new_state) {
       if (has_parent()) {
 	m_object_state = OBJECT_EXISTS;
@@ -251,12 +263,35 @@ namespace librbd {
       return true;
     }
 
-    virtual void guard_write() {
-      // do nothing to disable write guard
-    }
+    virtual void guard_write();
 
   private:
     uint8_t m_object_state;
+  };
+
+  class AioTrim : public AbstractWrite {
+  public:
+    AioTrim(ImageCtx *ictx, const std::string &oid, uint64_t object_no,
+            const ::SnapContext &snapc, Context *completion)
+      : AbstractWrite(ictx, oid, object_no, 0, 0, snapc, completion, true) {
+    }
+
+  protected:
+    virtual void add_write_ops(librados::ObjectWriteOperation *wr) {
+      wr->remove();
+    }
+
+    virtual const char* get_write_type() const {
+      return "remove (trim)";
+    }
+
+    virtual void pre_object_map_update(uint8_t *new_state) {
+      *new_state = OBJECT_PENDING;
+    }
+
+    virtual bool post_object_map_update() {
+      return true;
+    }
   };
 
   class AioTruncate : public AbstractWrite {
@@ -272,6 +307,10 @@ namespace librbd {
   protected:
     virtual void add_write_ops(librados::ObjectWriteOperation *wr) {
       wr->truncate(m_object_off);
+    }
+
+    virtual const char* get_write_type() const {
+      return "truncate";
     }
 
     virtual void pre_object_map_update(uint8_t *new_state) {
@@ -292,6 +331,10 @@ namespace librbd {
   protected:
     virtual void add_write_ops(librados::ObjectWriteOperation *wr) {
       wr->zero(m_object_off, m_object_len);
+    }
+
+    virtual const char* get_write_type() const {
+      return "zero";
     }
 
     virtual void pre_object_map_update(uint8_t *new_state) {

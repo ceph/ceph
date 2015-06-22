@@ -23,6 +23,8 @@ Timeline
 |                |Development|`Dumpling`_|`Emperor`_ |`Firefly`_ |`Giant`_   |`Hammer`_  |
 |                |Testing    |LTS        |Stable     |LTS        |Stable     |LTS        |
 +----------------+-----------+-----------+-----------+-----------+-----------+-----------+
+| June      2015 |`9.0.1`_   |           |           |           |           |`0.94.2`_  |
++----------------+-----------+-----------+-----------+-----------+-----------+-----------+
 | May       2015 |`9.0.0`_   |           |           |           |           |           |
 +----------------+-----------+-----------+-----------+-----------+-----------+-----------+
 | April     2015 |           |           |           |           |`0.87.2`_  |`0.94.1`_  |
@@ -102,8 +104,10 @@ Timeline
 |                |           |`0.67`_    |           |           |           |           |
 +----------------+-----------+-----------+-----------+-----------+-----------+-----------+
 
+.. _9.0.1: ../release-notes#v9-0-1
 .. _9.0.0: ../release-notes#v9-0-0
 
+.. _0.94.2: ../release-notes#v0-94-2-hammer
 .. _0.94.1: ../release-notes#v0-94-1-hammer
 .. _0.94: ../release-notes#v0-94-hammer
 .. _Hammer: ../release-notes#v0-94-hammer
@@ -183,7 +187,7 @@ backport fixes; developer focus in on the next development release
 which is usually only a few weeks away.
 
 There are three to four stable releases a year.  Each stable release
-will receive a name (e.g., `Firefly') and bug fix backports at least
+will receive a name (e.g., 'Firefly') and bug fix backports at least
 until the next stable release is out.
 
 Every other stable releases is a LTS (Long Term Stable) and will

@@ -337,7 +337,7 @@ if sys.stdin.isatty():
     def read_input():
         while True:
             line = raw_input(PROMPT).rstrip()
-            if line in ['q', 'quit', 'Q']:
+            if line in ['q', 'quit', 'Q', 'exit']:
                 return None
             if line:
                 return line

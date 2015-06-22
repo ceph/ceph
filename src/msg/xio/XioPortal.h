@@ -67,7 +67,7 @@ private:
 
     inline Lane* get_lane(XioConnection *xcon)
       {
-	return &qlane[((uint64_t) xcon) % nlanes];
+	return &qlane[(((uint64_t) xcon) / 16) % nlanes];
       }
 
     void enq(XioConnection *xcon, XioSubmit* xs)
@@ -159,17 +159,16 @@ public:
     struct xio_msg *msg = xrsp->dequeue();
     struct xio_msg *next_msg = NULL;
     int code;
-    while (msg) {
+    if (unlikely(!xrsp->xcon->conn || !xrsp->xcon->is_connected())) {
+      // NOTE: msg is not safe to dereference if the connection was torn down
+      xrsp->xcon->msg_release_fail(msg, ENOTCONN);
+    }
+    else while (msg) {
       next_msg = static_cast<struct xio_msg *>(msg->user_context);
-      if (unlikely(!xrsp->xcon->conn || !xrsp->xcon->is_connected()))
-        code = ENOTCONN;
-      else
-        code = xio_release_msg(msg);
-      if (unlikely(code)) {
-	/* very unlikely, so log it */
+      code = xio_release_msg(msg);
+      if (unlikely(code)) /* very unlikely, so log it */
 	xrsp->xcon->msg_release_fail(msg, code);
-      }
-      msg =  next_msg;
+      msg = next_msg;
     }
     xrsp->finalize(); /* unconditional finalize */
   }

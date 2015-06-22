@@ -263,7 +263,7 @@ private:
       int64_t base_pool_id, const pg_pool_t *base_pool,
       int *err, ostream *ss) const;
   bool _check_remove_tier(
-      int64_t base_pool_id, const pg_pool_t *base_pool,
+      int64_t base_pool_id, const pg_pool_t *base_pool, const pg_pool_t *tier_pool,
       int *err, ostream *ss) const;
 
   int _prepare_remove_pool(int64_t pool, ostream *ss);
@@ -277,35 +277,36 @@ private:
   int crush_rename_bucket(const string& srcname,
 			  const string& dstname,
 			  ostream *ss);
+  int normalize_profile(ErasureCodeProfile &profile, ostream *ss);
   int crush_ruleset_create_erasure(const string &name,
 				   const string &profile,
 				   int *ruleset,
-				   stringstream &ss);
+				   ostream *ss);
   int get_crush_ruleset(const string &ruleset_name,
 			int *crush_ruleset,
-			stringstream &ss);
+			ostream *ss);
   int get_erasure_code(const string &erasure_code_profile,
 		       ErasureCodeInterfaceRef *erasure_code,
-		       stringstream &ss) const;
+		       ostream *ss) const;
   int prepare_pool_crush_ruleset(const unsigned pool_type,
 				 const string &erasure_code_profile,
 				 const string &ruleset_name,
 				 int *crush_ruleset,
-				 stringstream &ss);
+				 ostream *ss);
   bool erasure_code_profile_in_use(const map<int64_t, pg_pool_t> &pools,
 				   const string &profile,
-				   ostream &ss);
+				   ostream *ss);
   int parse_erasure_code_profile(const vector<string> &erasure_code_profile,
 				 map<string,string> *erasure_code_profile_map,
-				 stringstream &ss);
+				 ostream *ss);
   int prepare_pool_size(const unsigned pool_type,
 			const string &erasure_code_profile,
 			unsigned *size, unsigned *min_size,
-			stringstream &ss);
+			ostream *ss);
   int prepare_pool_stripe_width(const unsigned pool_type,
 				const string &erasure_code_profile,
 				unsigned *stripe_width,
-				stringstream &ss);
+				ostream *ss);
   int prepare_new_pool(string& name, uint64_t auid,
 		       int crush_ruleset,
 		       const string &crush_ruleset_name,
@@ -313,7 +314,7 @@ private:
 		       const string &erasure_code_profile,
                        const unsigned pool_type,
                        const uint64_t expected_num_objects,
-		       stringstream &ss);
+		       ostream *ss);
   int prepare_new_pool(MPoolOp *m);
 
   void update_pool_flags(int64_t pool_id, uint64_t flags);

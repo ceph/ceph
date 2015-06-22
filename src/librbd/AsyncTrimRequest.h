@@ -31,7 +31,11 @@ protected:
    *      |   .                                           .
    *      |   . . . . . . . . . . . .                     .
    *      |                         .                     .
-   *      v                         v                     .
+   *      v                         .                     .
+   * STATE_COPYUP_OBJECTS . . .     .                     .
+   *      |                   .     .                     .
+   *      |                   .     .                     .
+   *      v                   v     v                     .
    * STATE_PRE_REMOVE ---> STATE_REMOVE_OBJECTS           .
    *                                |   .   .             .
    *        /-----------------------/   .   . . . . . .   .
@@ -44,6 +48,8 @@ protected:
    *
    * @endverbatim
    *
+   * The _COPYUP_OBJECTS state is skipped if there is no parent overlap
+   * within the new image size and the image does not have any snapshots.
    * The _PRE_REMOVE/_POST_REMOVE states are skipped if the object map
    * isn't enabled. The _REMOVE_OBJECTS state is skipped if no whole objects
    * are removed.  The _CLEAN_BOUNDARY state is skipped if no boundary
@@ -52,6 +58,7 @@ protected:
    */ 
 
   enum State {
+    STATE_COPYUP_OBJECTS,
     STATE_PRE_REMOVE,
     STATE_REMOVE_OBJECTS,
     STATE_POST_REMOVE,
@@ -70,10 +77,12 @@ private:
   uint64_t m_new_size;
   ProgressContext &m_prog_ctx;
 
+  void send_copyup_objects();
   void send_remove_objects();
   void send_pre_remove();
-  bool send_post_remove();
-  bool send_clean_boundary();
+  void send_post_remove();
+  void send_clean_boundary();
+  void finish(int r);
 };
 
 } // namespace librbd

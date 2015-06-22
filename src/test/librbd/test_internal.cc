@@ -254,7 +254,7 @@ TEST_F(TestInternal, AioWriteRequestsLock) {
   librbd::AioCompletion *c =
     librbd::aio_create_completion_internal(ctx, librbd::rbd_ctx_cb);
   c->get();
-  ASSERT_EQ(0, aio_write(ictx, 0, buffer.size(), buffer.c_str(), c, 0));
+  aio_write(ictx, 0, buffer.size(), buffer.c_str(), c, 0);
 
   bool is_owner;
   ASSERT_EQ(0, librbd::is_exclusive_lock_owner(ictx, &is_owner));
@@ -277,7 +277,7 @@ TEST_F(TestInternal, AioDiscardRequestsLock) {
   librbd::AioCompletion *c =
     librbd::aio_create_completion_internal(ctx, librbd::rbd_ctx_cb);
   c->get();
-  ASSERT_EQ(0, aio_discard(ictx, 0, 256, c));
+  aio_discard(ictx, 0, 256, c);
 
   bool is_owner;
   ASSERT_EQ(0, librbd::is_exclusive_lock_owner(ictx, &is_owner));
@@ -385,9 +385,9 @@ TEST_F(TestInternal, MetadatConfig) {
   librbd::Image image1;
   map<string, bufferlist> pairs, res;
   pairs[prefix+it->first].append("value1");
-  it++;
+  ++it;
   pairs[prefix+it->first].append("value2");
-  it++;
+  ++it;
   pairs[prefix+it->first].append("value3");
   pairs[prefix+"asdfsdaf"].append("value6");
   pairs[prefix+"zxvzxcv123"].append("value5");
@@ -398,10 +398,10 @@ TEST_F(TestInternal, MetadatConfig) {
   it = test_confs.begin();
   ASSERT_TRUE(res.count(it->first));
   ASSERT_TRUE(it->second);
-  it++;
+  ++it;
   ASSERT_TRUE(res.count(it->first));
   ASSERT_TRUE(it->second);
-  it++;
+  ++it;
   ASSERT_TRUE(res.count(it->first));
   ASSERT_TRUE(it->second);
   res.clear();
@@ -490,6 +490,117 @@ TEST_F(TestInternal, SnapshotCopyup)
       RWLock::WLocker object_map_locker(ictx2->object_map_lock);
       ASSERT_EQ(state, ictx2->object_map[0]);
     }
+  }
+}
+
+TEST_F(TestInternal, ResizeCopyup)
+{
+  REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
+
+  m_image_name = get_temp_image_name();
+  m_image_size = 1 << 14;
+
+  uint64_t features = 0;
+  get_features(&features);
+  int order = 12;
+  ASSERT_EQ(0, m_rbd.create2(m_ioctx, m_image_name.c_str(), m_image_size,
+                             features, &order));
+
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  bufferlist bl;
+  bl.append(std::string(4096, '1'));
+  for (size_t i = 0; i < m_image_size; i += bl.length()) {
+    ASSERT_EQ(bl.length(), librbd::write(ictx, i, bl.length(), bl.c_str(), 0));
+  }
+
+  ASSERT_EQ(0, librbd::snap_create(ictx, "snap1"));
+  ASSERT_EQ(0, librbd::snap_protect(ictx, "snap1"));
+
+  std::string clone_name = get_temp_image_name();
+  ASSERT_EQ(0, librbd::clone(m_ioctx, m_image_name.c_str(), "snap1", m_ioctx,
+			     clone_name.c_str(), features, &order, 0, 0));
+
+  librbd::ImageCtx *ictx2;
+  ASSERT_EQ(0, open_image(clone_name, &ictx2));
+
+  ASSERT_EQ(0, librbd::snap_create(ictx2, "snap1"));
+
+  bufferptr read_ptr(bl.length());
+  bufferlist read_bl;
+  read_bl.push_back(read_ptr);
+
+  // verify full / partial object removal properly copyup
+  librbd::NoOpProgressContext no_op;
+  ASSERT_EQ(0, librbd::resize(ictx2, m_image_size - (1 << order) - 32, no_op));
+  ASSERT_EQ(0, librbd::snap_set(ictx2, "snap1"));
+
+  {
+    // hide the parent from the snapshot
+    RWLock::WLocker snap_locker(ictx2->snap_lock);
+    ictx2->snap_info.begin()->second.parent = librbd::parent_info();
+  }
+
+  for (size_t i = 2 << order; i < m_image_size; i += bl.length()) {
+    ASSERT_EQ(bl.length(), librbd::read(ictx2, i, bl.length(), read_bl.c_str(),
+                                        0));
+    ASSERT_TRUE(bl.contents_equal(read_bl));
+  }
+}
+
+TEST_F(TestInternal, DiscardCopyup)
+{
+  REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
+
+  m_image_name = get_temp_image_name();
+  m_image_size = 1 << 14;
+
+  uint64_t features = 0;
+  get_features(&features);
+  int order = 12;
+  ASSERT_EQ(0, m_rbd.create2(m_ioctx, m_image_name.c_str(), m_image_size,
+                             features, &order));
+
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  bufferlist bl;
+  bl.append(std::string(4096, '1'));
+  for (size_t i = 0; i < m_image_size; i += bl.length()) {
+    ASSERT_EQ(bl.length(), librbd::write(ictx, i, bl.length(), bl.c_str(), 0));
+  }
+
+  ASSERT_EQ(0, librbd::snap_create(ictx, "snap1"));
+  ASSERT_EQ(0, librbd::snap_protect(ictx, "snap1"));
+
+  std::string clone_name = get_temp_image_name();
+  ASSERT_EQ(0, librbd::clone(m_ioctx, m_image_name.c_str(), "snap1", m_ioctx,
+			     clone_name.c_str(), features, &order, 0, 0));
+
+  librbd::ImageCtx *ictx2;
+  ASSERT_EQ(0, open_image(clone_name, &ictx2));
+
+  ASSERT_EQ(0, librbd::snap_create(ictx2, "snap1"));
+
+  bufferptr read_ptr(bl.length());
+  bufferlist read_bl;
+  read_bl.push_back(read_ptr);
+
+  ASSERT_EQ(static_cast<int>(m_image_size - 64),
+            librbd::discard(ictx2, 32, m_image_size - 64));
+  ASSERT_EQ(0, librbd::snap_set(ictx2, "snap1"));
+
+  {
+    // hide the parent from the snapshot
+    RWLock::WLocker snap_locker(ictx2->snap_lock);
+    ictx2->snap_info.begin()->second.parent = librbd::parent_info();
+  }
+
+  for (size_t i = 0; i < m_image_size; i += bl.length()) {
+    ASSERT_EQ(bl.length(), librbd::read(ictx2, i, bl.length(), read_bl.c_str(),
+                                        0));
+    ASSERT_TRUE(bl.contents_equal(read_bl));
   }
 }
 
