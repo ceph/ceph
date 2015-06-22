@@ -1095,7 +1095,7 @@ int export_files(ObjectStore *store, coll_t coll)
     for (vector<ghobject_t>::iterator i = objects.begin();
 	 i != objects.end();
 	 ++i) {
-      if (i->is_pgmeta()) {
+      if (i->is_pgmeta() || i->hobj.is_temp()) {
 	continue;
       }
       r = export_file(store, coll, *i);
@@ -1590,6 +1590,10 @@ int get_object(ObjectStore *store, coll_t coll, bufferlist &bl, OSDMap &curmap,
   coll.is_pg_prefix(pg);
   SnapMapper mapper(&driver, 0, 0, 0, pg.shard);
 
+  if (ob.hoid.hobj.is_temp()) {
+    cerr << "ERROR: Export contains temporary object '" << ob.hoid << "'" << std::endl;
+    return -EFAULT;
+  }
   assert(g_ceph_context);
   if (ob.hoid.hobj.nspace != g_ceph_context->_conf->osd_hit_set_namespace) {
     object_t oid = ob.hoid.hobj.oid;
