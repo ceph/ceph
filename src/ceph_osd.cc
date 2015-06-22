@@ -413,7 +413,7 @@ int main(int argc, const char **argv)
 					   getpid());
   Messenger *ms_cluster = Messenger::create(g_ceph_context, g_conf->ms_type,
 					    entity_name_t::OSD(whoami), "cluster",
-					    getpid());
+					    getpid(), CEPH_FEATURES_ALL);
   Messenger *ms_hbclient = Messenger::create(g_ceph_context, g_conf->ms_type,
 					     entity_name_t::OSD(whoami), "hbclient",
 					     getpid());
@@ -452,11 +452,17 @@ int main(int argc, const char **argv)
     CEPH_FEATURE_MSG_AUTH |
     CEPH_FEATURE_OSD_ERASURE_CODES;
 
+  // All feature bits 0 - 34 should be present from dumpling v0.67 forward
   uint64_t osd_required =
     CEPH_FEATURE_UID |
     CEPH_FEATURE_PGID64 |
     CEPH_FEATURE_OSDENC |
-    CEPH_FEATURE_OSD_SNAPMAPPER;
+    CEPH_FEATURE_OSD_SNAPMAPPER |
+    CEPH_FEATURE_INDEP_PG_MAP |
+    CEPH_FEATURE_OSD_PACKED_RECOVERY |
+    CEPH_FEATURE_RECOVERY_RESERVATION |
+    CEPH_FEATURE_BACKFILL_RESERVATION |
+    CEPH_FEATURE_CHUNKY_SCRUB;
 
   ms_public->set_default_policy(Messenger::Policy::stateless_server(supported, 0));
   ms_public->set_policy_throttlers(entity_name_t::TYPE_CLIENT,
