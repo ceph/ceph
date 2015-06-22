@@ -630,7 +630,7 @@ CDir *MDS::_command_dirfrag_get(
     // TODO really we should load something in if it's not in cache,
     // but the infrastructure is harder, and we might still be unable
     // to act on it if someone else is auth.
-    ss << "directory inode not in cache";
+    ss << "directory '" << path << "' inode not in cache";
     return NULL;
   }
 
@@ -643,7 +643,8 @@ CDir *MDS::_command_dirfrag_get(
 
   CDir *dir = in->get_dirfrag(fg);
   if (!dir) {
-    ss << "frag 0x" << std::hex << in->ino() << "/" << fg << " not found";
+    ss << "frag 0x" << std::hex << in->ino() << "/" << fg << " not in cache ("
+          "use `dirfrag ls` to see if it should exist)";
     return NULL;
   }
 
@@ -700,7 +701,7 @@ bool MDS::command_dirfrag_merge(
 
   CInode *in = mdcache->cache_traverse(filepath(path.c_str()));
   if (!in) {
-    ss << "directory inode not in cache";
+    ss << "directory '" << path << "' inode not in cache";
     return false;
   }
 
