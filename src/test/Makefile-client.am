@@ -320,10 +320,6 @@ unittest_librbd_LDADD = \
 check_PROGRAMS += unittest_librbd
 check_SCRIPTS += test/run-rbd-unit-tests.sh
 
-if VALGRIND_ENABLED
-check_SCRIPTS += test/run-rbd-valgrind-unit-tests.sh
-endif
-
 ceph_test_librbd_SOURCES = \
         test/librbd/test_main.cc
 ceph_test_librbd_CXXFLAGS = $(UNITTEST_CXXFLAGS) -DTEST_LIBRBD_INTERNALS
