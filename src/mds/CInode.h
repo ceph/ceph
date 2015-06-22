@@ -78,6 +78,7 @@ public:
   fragtree_t                 dirfragtree;  // dir frag tree, if any.  always consistent with our dirfrag map.
   compact_map<snapid_t, old_inode_t> old_inodes;   // key = last, value.first = first
   snapid_t                  oldest_snap;
+  damage_flags_t            damage_flags;
 
   InodeStoreBase() : oldest_snap(CEPH_NOSNAP) { }
 
