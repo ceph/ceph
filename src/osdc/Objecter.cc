@@ -2007,7 +2007,7 @@ ceph_tid_t Objecter::_op_submit_with_budget(Op *op, RWLock::Context& lc, int *ct
   assert(op->ops.size() == op->out_handler.size());
 
   // throttle.  before we look at any state, because
-  // take_op_budget() may drop our lock while it blocks.
+  // _take_op_budget() may drop our lock while it blocks.
   if (!op->ctx_budgeted || (ctx_budget && (*ctx_budget == -1))) {
     int op_budget = _take_op_budget(op);
     // take and pass out the budget for the first OP
