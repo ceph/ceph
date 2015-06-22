@@ -7092,37 +7092,6 @@ void OSD::dispatch_context_transaction(PG::RecoveryCtx &ctx, PG *pg,
   }
 }
 
-bool OSD::compat_must_dispatch_immediately(PG *pg)
-{
-  assert(pg->is_locked());
-  set<pg_shard_t> tmpacting;
-  if (!pg->actingbackfill.empty()) {
-    tmpacting = pg->actingbackfill;
-  } else {
-    for (unsigned i = 0; i < pg->acting.size(); ++i) {
-      if (pg->acting[i] == CRUSH_ITEM_NONE)
-	continue;
-      tmpacting.insert(
-	pg_shard_t(
-	  pg->acting[i],
-	  pg->pool.info.ec_pool() ? shard_id_t(i) : shard_id_t::NO_SHARD));
-    }
-  }
-
-  for (set<pg_shard_t>::iterator i = tmpacting.begin();
-       i != tmpacting.end();
-       ++i) {
-    if (i->osd == whoami || i->osd == CRUSH_ITEM_NONE)
-      continue;
-    ConnectionRef conn =
-      service.get_con_osd_cluster(i->osd, pg->get_osdmap()->get_epoch());
-    if (conn && !conn->has_feature(CEPH_FEATURE_INDEP_PG_MAP)) {
-      return true;
-    }
-  }
-  return false;
-}
-
 void OSD::dispatch_context(PG::RecoveryCtx &ctx, PG *pg, OSDMapRef curmap,
                            ThreadPool::TPHandle *handle)
 {
@@ -7177,26 +7146,11 @@ void OSD::do_notifies(
       continue;
     }
     service.share_map_peer(it->first, con.get(), curmap);
-    if (con->has_feature(CEPH_FEATURE_INDEP_PG_MAP)) {
-      dout(7) << __func__ << " osd " << it->first
-	      << " on " << it->second.size() << " PGs" << dendl;
-      MOSDPGNotify *m = new MOSDPGNotify(curmap->get_epoch(),
-					 it->second);
-      con->send_message(m);
-    } else {
-      dout(7) << __func__ << " osd " << it->first
-	      << " sending separate messages" << dendl;
-      for (vector<pair<pg_notify_t, pg_interval_map_t> >::iterator i =
-	     it->second.begin();
-	   i != it->second.end();
-	   ++i) {
-	vector<pair<pg_notify_t, pg_interval_map_t> > list(1);
-	list[0] = *i;
-	MOSDPGNotify *m = new MOSDPGNotify(i->first.epoch_sent,
-					   list);
-	con->send_message(m);
-      }
-    }
+    dout(7) << __func__ << " osd " << it->first
+	    << " on " << it->second.size() << " PGs" << dendl;
+    MOSDPGNotify *m = new MOSDPGNotify(curmap->get_epoch(),
+				       it->second);
+    con->send_message(m);
   }
 }
 
@@ -7222,24 +7176,10 @@ void OSD::do_queries(map<int, map<spg_t,pg_query_t> >& query_map,
       continue;
     }
     service.share_map_peer(who, con.get(), curmap);
-    if (con->has_feature(CEPH_FEATURE_INDEP_PG_MAP)) {
-      dout(7) << __func__ << " querying osd." << who
-	      << " on " << pit->second.size() << " PGs" << dendl;
-      MOSDPGQuery *m = new MOSDPGQuery(curmap->get_epoch(), pit->second);
-      con->send_message(m);
-    } else {
-      dout(7) << __func__ << " querying osd." << who
-	      << " sending seperate messages on " << pit->second.size()
-	      << " PGs" << dendl;
-      for (map<spg_t, pg_query_t>::iterator i = pit->second.begin();
-	   i != pit->second.end();
-	   ++i) {
-	map<spg_t, pg_query_t> to_send;
-	to_send.insert(*i);
-	MOSDPGQuery *m = new MOSDPGQuery(i->second.epoch_sent, to_send);
-	con->send_message(m);
-      }
-    }
+    dout(7) << __func__ << " querying osd." << who
+	    << " on " << pit->second.size() << " PGs" << dendl;
+    MOSDPGQuery *m = new MOSDPGQuery(curmap->get_epoch(), pit->second);
+    con->send_message(m);
   }
 }
 
@@ -7271,22 +7211,9 @@ void OSD::do_infos(map<int,
       continue;
     }
     service.share_map_peer(p->first, con.get(), curmap);
-    if (con->has_feature(CEPH_FEATURE_INDEP_PG_MAP)) {
-      MOSDPGInfo *m = new MOSDPGInfo(curmap->get_epoch());
-      m->pg_list = p->second;
-      con->send_message(m);
-    } else {
-      for (vector<pair<pg_notify_t, pg_interval_map_t> >::iterator i =
-	     p->second.begin();
-	   i != p->second.end();
-	   ++i) {
-	vector<pair<pg_notify_t, pg_interval_map_t> > to_send(1);
-	to_send[0] = *i;
-	MOSDPGInfo *m = new MOSDPGInfo(i->first.epoch_sent);
-	m->pg_list = to_send;
-	con->send_message(m);
-      }
-    }
+    MOSDPGInfo *m = new MOSDPGInfo(curmap->get_epoch());
+    m->pg_list = p->second;
+    con->send_message(m);
   }
   info_map.clear();
 }
@@ -8472,13 +8399,7 @@ void OSD::process_peering_events(
       rctx.on_applied->add(new C_CompleteSplits(this, split_pgs));
       split_pgs.clear();
     }
-    if (compat_must_dispatch_immediately(pg)) {
-      dispatch_context(rctx, pg, curmap, &handle);
-      rctx = create_context();
-      rctx.handle = &handle;
-    } else {
-      dispatch_context_transaction(rctx, pg, &handle);
-    }
+    dispatch_context_transaction(rctx, pg, &handle);
     pg->unlock();
     handle.reset_tp_timeout();
   }

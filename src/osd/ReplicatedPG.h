@@ -452,7 +452,7 @@ public:
   }
 
   bool transaction_use_tbl() {
-    uint64_t min_features = get_min_peer_features();
+    uint64_t min_features = get_min_upacting_features();
     return !(min_features & CEPH_FEATURE_OSD_TRANSACTION_MAY_LAYOUT);
   }
 
