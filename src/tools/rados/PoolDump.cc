@@ -39,6 +39,7 @@ int PoolDump::dump(IoCtx *io_ctx)
     return r;
   }
 
+  io_ctx->set_namespace(all_nspaces);
   librados::NObjectIterator i = io_ctx->nobjects_begin();
 
   librados::NObjectIterator i_end = io_ctx->nobjects_end();
