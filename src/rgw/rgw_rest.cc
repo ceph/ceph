@@ -436,6 +436,10 @@ void end_header(struct req_state *s, RGWOp *op, const char *content_type, const 
     dump_access_control(s, op);
   }
 
+  if (s->prot_flags & RGW_REST_SWIFT) {
+    force_content_type = true;
+  }
+
   /* do not send content type if content length is zero
      and the content type was not set by the user */
   if (force_content_type || (!content_type &&  s->formatter->get_len()  != 0) || s->err.is_err()){
