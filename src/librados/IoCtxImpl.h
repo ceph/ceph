@@ -35,7 +35,6 @@ struct librados::IoCtxImpl {
   snapid_t snap_seq;
   ::SnapContext snapc;
   uint64_t assert_ver;
-  map<object_t, uint64_t> assert_src_version;
   version_t last_objver;
   uint32_t notify_timeout;
   object_locator_t oloc;
@@ -59,7 +58,6 @@ struct librados::IoCtxImpl {
     snap_seq = rhs.snap_seq;
     snapc = rhs.snapc;
     assert_ver = rhs.assert_ver;
-    assert_src_version = rhs.assert_src_version;
     last_objver = rhs.last_objver;
     notify_timeout = rhs.notify_timeout;
     oloc = rhs.oloc;
@@ -128,8 +126,6 @@ struct librados::IoCtxImpl {
   int write_full(const object_t& oid, bufferlist& bl);
   int writesame(const object_t& oid, bufferlist& bl,
 		size_t write_len, uint64_t offset);
-  int clone_range(const object_t& dst_oid, uint64_t dst_offset,
-                  const object_t& src_oid, uint64_t src_offset, uint64_t len);
   int read(const object_t& oid, bufferlist& bl, size_t len, uint64_t off);
   int mapext(const object_t& oid, uint64_t off, size_t len,
 	     std::map<uint64_t,uint64_t>& m);
@@ -266,7 +262,6 @@ struct librados::IoCtxImpl {
 
   version_t last_version();
   void set_assert_version(uint64_t ver);
-  void set_assert_src_version(const object_t& oid, uint64_t ver);
   void set_notify_timeout(uint32_t timeout);
 
   int cache_pin(const object_t& oid);

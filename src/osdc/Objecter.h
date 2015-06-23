@@ -119,15 +119,6 @@ struct ObjectOperation {
     osd_op.op.writesame.data_length = bl.length();
     osd_op.indata.claim_append(bl);
   }
-  void add_clone_range(int op, uint64_t off, uint64_t len,
-		       const object_t& srcoid, uint64_t srcoff,
-		       snapid_t srcsnapid) {
-    OSDOp& osd_op = add_op(op);
-    osd_op.op.clonerange.offset = off;
-    osd_op.op.clonerange.length = len;
-    osd_op.op.clonerange.src_offset = srcoff;
-    osd_op.soid = sobject_t(srcoid, srcsnapid);
-  }
   void add_xattr(int op, const char *name, const bufferlist& data) {
     OSDOp& osd_op = add_op(op);
     osd_op.op.xattr.name_len = (name ? strlen(name) : 0);
@@ -374,12 +365,6 @@ struct ObjectOperation {
   void sparse_read(uint64_t off, uint64_t len) {
     bufferlist bl;
     add_data(CEPH_OSD_OP_SPARSE_READ, off, len, bl);
-  }
-
-  void clone_range(const object_t& src_oid, uint64_t src_offset, uint64_t len,
-		   uint64_t dst_offset) {
-    add_clone_range(CEPH_OSD_OP_CLONERANGE, dst_offset, len, src_oid,
-		    src_offset, CEPH_NOSNAP);
   }
 
   // object attrs
@@ -978,26 +963,11 @@ struct ObjectOperation {
     OSDOp& osd_op = add_op(CEPH_OSD_OP_ASSERT_VER);
     osd_op.op.assert_ver.ver = ver;
   }
-  void assert_src_version(const object_t& srcoid, snapid_t srcsnapid,
-			  uint64_t ver) {
-    OSDOp& osd_op = add_op(CEPH_OSD_OP_ASSERT_SRC_VERSION);
-    osd_op.op.assert_ver.ver = ver;
-    ops.rbegin()->soid = sobject_t(srcoid, srcsnapid);
-  }
 
   void cmpxattr(const char *name, const bufferlist& val,
 		int op, int mode) {
     add_xattr(CEPH_OSD_OP_CMPXATTR, name, val);
     OSDOp& o = *ops.rbegin();
-    o.op.xattr.cmp_op = op;
-    o.op.xattr.cmp_mode = mode;
-  }
-  void src_cmpxattr(const object_t& srcoid, snapid_t srcsnapid,
-		    const char *name, const bufferlist& val,
-		    int op, int mode) {
-    add_xattr(CEPH_OSD_OP_SRC_CMPXATTR, name, val);
-    OSDOp& o = *ops.rbegin();
-    o.soid = sobject_t(srcoid, srcsnapid);
     o.op.xattr.cmp_op = op;
     o.op.xattr.cmp_mode = mode;
   }
