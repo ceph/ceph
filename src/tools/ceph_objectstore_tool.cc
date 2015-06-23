@@ -3216,6 +3216,15 @@ int main(int argc, char **argv)
     goto out;
   }
 
+  if (op == "dump-super") {
+    formatter->open_object_section("superblock");
+    superblock.dump(formatter);
+    formatter->close_section();
+    formatter->flush(cout);
+    cout << std::endl;
+    goto out;
+  }
+
   ret = fs->list_collections(ls);
   if (ret < 0) {
     cerr << "failed to list pgs: " << cpp_strerror(ret) << std::endl;
@@ -3516,14 +3525,8 @@ int main(int argc, char **argv)
         fs->apply_transaction(*t);
         cout << "Removal succeeded" << std::endl;
       }
-    } else if (op == "dump-super") {
-      formatter->open_object_section("superblock");
-      superblock.dump(formatter);
-      formatter->close_section();
-      formatter->flush(cout);
-      cout << std::endl;
     } else {
-      cerr << "Must provide --op (info, log, remove, export, import, list, fix-lost, list-pgs, rm-past-intervals)"
+      cerr << "Must provide --op (info, log, remove, export, import, list, fix-lost, list-pgs, rm-past-intervals, set-allow-sharded-objects, dump-journal, dump-super)"
 	<< std::endl;
       usage(desc);
       ret = 1;
