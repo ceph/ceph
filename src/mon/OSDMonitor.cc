@@ -2823,7 +2823,8 @@ namespace {
     PG_NUM, PGP_NUM, CRUSH_RULESET, HIT_SET_TYPE,
     HIT_SET_PERIOD, HIT_SET_COUNT, HIT_SET_FPP,
     AUID, TARGET_MAX_OBJECTS, TARGET_MAX_BYTES,
-    CACHE_TARGET_DIRTY_RATIO, CACHE_TARGET_FULL_RATIO,
+    CACHE_TARGET_DIRTY_RATIO, CACHE_TARGET_DIRTY_HIGH_RATIO,
+    CACHE_TARGET_FULL_RATIO,
     CACHE_MIN_FLUSH_AGE, CACHE_MIN_EVICT_AGE,
     ERASURE_CODE_PROFILE, MIN_READ_RECENCY_FOR_PROMOTE,
     WRITE_FADVISE_DONTNEED};
@@ -3269,6 +3270,7 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
       ("auid", AUID)("target_max_objects", TARGET_MAX_OBJECTS)
       ("target_max_bytes", TARGET_MAX_BYTES)
       ("cache_target_dirty_ratio", CACHE_TARGET_DIRTY_RATIO)
+      ("cache_target_dirty_high_ratio", CACHE_TARGET_DIRTY_HIGH_RATIO)
       ("cache_target_full_ratio", CACHE_TARGET_FULL_RATIO)
       ("cache_min_flush_age", CACHE_MIN_FLUSH_AGE)
       ("cache_min_evict_age", CACHE_MIN_EVICT_AGE)
@@ -3281,8 +3283,8 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
     const choices_set_t ONLY_TIER_CHOICES = boost::assign::list_of
       (HIT_SET_TYPE)(HIT_SET_PERIOD)(HIT_SET_COUNT)(HIT_SET_FPP)
       (TARGET_MAX_OBJECTS)(TARGET_MAX_BYTES)(CACHE_TARGET_FULL_RATIO)
-      (CACHE_TARGET_DIRTY_RATIO)(CACHE_MIN_FLUSH_AGE)(CACHE_MIN_EVICT_AGE)
-      (MIN_READ_RECENCY_FOR_PROMOTE);
+      (CACHE_TARGET_DIRTY_RATIO)(CACHE_TARGET_DIRTY_HIGH_RATIO)(CACHE_MIN_FLUSH_AGE)
+      (CACHE_MIN_EVICT_AGE)(MIN_READ_RECENCY_FOR_PROMOTE);
 
     const choices_set_t ONLY_ERASURE_CHOICES = boost::assign::list_of
       (ERASURE_CODE_PROFILE);
@@ -3393,6 +3395,12 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
 	    f->dump_float("cache_target_dirty_ratio",
 			  ((float)p->cache_target_dirty_ratio_micro/1000000));
 	    break;
+	  case CACHE_TARGET_DIRTY_HIGH_RATIO:
+	    f->dump_unsigned("cache_target_dirty_high_ratio_micro",
+			     p->cache_target_dirty_high_ratio_micro);
+	    f->dump_float("cache_target_dirty_high_ratio",
+			  ((float)p->cache_target_dirty_high_ratio_micro/1000000));
+	    break;
 	  case CACHE_TARGET_FULL_RATIO:
 	    f->dump_unsigned("cache_target_full_ratio_micro",
 			     p->cache_target_full_ratio_micro);
@@ -3481,6 +3489,10 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
 	  case CACHE_TARGET_DIRTY_RATIO:
 	    ss << "cache_target_dirty_ratio: "
 	       << ((float)p->cache_target_dirty_ratio_micro/1000000) << "\n";
+	    break;
+	  case CACHE_TARGET_DIRTY_HIGH_RATIO:
+	    ss << "cache_target_dirty_high_ratio: "
+	       << ((float)p->cache_target_dirty_high_ratio_micro/1000000) << "\n";
 	    break;
 	  case CACHE_TARGET_FULL_RATIO:
 	    ss << "cache_target_full_ratio: "
@@ -4376,6 +4388,8 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid,
   pi->stripe_width = stripe_width;
   pi->cache_target_dirty_ratio_micro =
     g_conf->osd_pool_default_cache_target_dirty_ratio * 1000000;
+  pi->cache_target_dirty_high_ratio_micro =
+    g_conf->osd_pool_default_cache_target_dirty_high_ratio * 1000000;
   pi->cache_target_full_ratio_micro =
     g_conf->osd_pool_default_cache_target_full_ratio * 1000000;
   pi->cache_min_flush_age = g_conf->osd_pool_default_cache_min_flush_age;
@@ -4502,6 +4516,7 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
        var == "hit_set_count" || var == "hit_set_fpp" ||
        var == "target_max_objects" || var == "target_max_bytes" ||
        var == "cache_target_full_ratio" || var == "cache_target_dirty_ratio" ||
+       var == "cache_target_dirty_high_ratio" ||
        var == "cache_min_flush_age" || var == "cache_min_evict_age")) {
     ss << "pool '" << poolstr << "' is not a tier pool: variable not applicable";
     return -EACCES;
@@ -4731,6 +4746,16 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
       return -ERANGE;
     }
     p.cache_target_dirty_ratio_micro = uf;
+  } else if (var == "cache_target_dirty_high_ratio") {
+    if (floaterr.length()) {
+      ss << "error parsing float '" << val << "': " << floaterr;
+      return -EINVAL;
+    }
+    if (f < 0 || f > 1.0) {
+      ss << "value must be in the range 0..1";
+      return -ERANGE;
+    }
+    p.cache_target_dirty_high_ratio_micro = uf;
   } else if (var == "cache_target_full_ratio") {
     if (floaterr.length()) {
       ss << "error parsing float '" << val << "': " << floaterr;

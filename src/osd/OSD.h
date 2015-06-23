@@ -648,6 +648,7 @@ public:
   set<PGRef>::iterator agent_queue_pos;
   bool agent_valid_iterator;
   int agent_ops;
+  int flush_mode_high_count; //once have one pg with FLUSH_MODE_HIGH then flush objects with high speed
   set<hobject_t> agent_oids;
   bool agent_active;
   struct AgentThread : public Thread {
@@ -737,6 +738,16 @@ public:
   int agent_get_num_ops() {
     Mutex::Locker l(agent_lock);
     return agent_ops;
+  }
+
+  void agent_inc_high_count() {
+    Mutex::Locker l(agent_lock);
+    flush_mode_high_count ++;
+  }
+
+  void agent_dec_high_count() {
+    Mutex::Locker l(agent_lock);
+    flush_mode_high_count --;
   }
 
 

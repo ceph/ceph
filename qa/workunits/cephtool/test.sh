@@ -1354,6 +1354,11 @@ function test_mon_osd_tiered_pool_set()
     grep 'cache_target_dirty_ratio:[ \t]\+0.123'
   expect_false ceph osd pool set real-tier cache_target_dirty_ratio -.2
   expect_false ceph osd pool set real-tier cache_target_dirty_ratio 1.1
+  ceph osd pool set real-tier cache_target_dirty_high_ratio .123
+  ceph osd pool get real-tier cache_target_dirty_high_ratio | \
+    grep 'cache_target_dirty_high_ratio:[ \t]\+0.123'
+  expect_false ceph osd pool set real-tier cache_target_dirty_high_ratio -.2
+  expect_false ceph osd pool set real-tier cache_target_dirty_high_ratio 1.1
   ceph osd pool set real-tier cache_target_full_ratio .123
   ceph osd pool get real-tier cache_target_full_ratio | \
     grep 'cache_target_full_ratio:[ \t]\+0.123'
@@ -1394,6 +1399,10 @@ function test_mon_osd_tiered_pool_set()
   expect_false ceph osd pool get fake-tier cache_target_dirty_ratio
   expect_false ceph osd pool set fake-tier cache_target_dirty_ratio -.2
   expect_false ceph osd pool set fake-tier cache_target_dirty_ratio 1.1
+  expect_false ceph osd pool set fake-tier cache_target_dirty_high_ratio .123
+  expect_false ceph osd pool get fake-tier cache_target_dirty_high_ratio
+  expect_false ceph osd pool set fake-tier cache_target_dirty_high_ratio -.2
+  expect_false ceph osd pool set fake-tier cache_target_dirty_high_ratio 1.1
   expect_false ceph osd pool set fake-tier cache_target_full_ratio .123
   expect_false ceph osd pool get fake-tier cache_target_full_ratio
   expect_false ceph osd pool set fake-tier cache_target_full_ratio 1.0
