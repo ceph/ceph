@@ -307,6 +307,7 @@ int RGWRegion::equals(const string& other_region)
 void RGWZoneParams::init_default(RGWRados *store)
 {
   domain_root = "rgw.data.root";
+  metadata_heap = "rgw.meta";
   control_pool = "rgw.control";
   gc_pool = "rgw.gc";
   log_pool = "rgw.log";
