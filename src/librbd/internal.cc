@@ -2643,7 +2643,7 @@ reprotect_and_return_err:
 
       Context *ctx = new C_CopyWrite(m_throttle, m_bl);
       AioCompletion *comp = aio_create_completion_internal(ctx, rbd_ctx_cb);
-      aio_write(m_dest, m_offset, m_bl->length(), m_bl->c_str(), comp, 0);
+      aio_write(m_dest, m_offset, m_bl->length(), m_bl->c_str(), comp, LIBRADOS_OP_FLAG_FADVISE_DONTNEED);
     }
   private:
     SimpleThrottle *m_throttle;
@@ -2685,6 +2685,7 @@ reprotect_and_return_err:
 
     SimpleThrottle throttle(src->concurrent_management_ops, false);
     uint64_t period = src->get_stripe_period();
+    unsigned fadvise_flags = LIBRADOS_OP_FLAG_FADVISE_SEQUENTIAL | LIBRADOS_OP_FLAG_FADVISE_NOCACHE;
     for (uint64_t offset = 0; offset < src_size; offset += period) {
       if (throttle.pending_error()) {
         return throttle.wait_for_ret();
@@ -2694,7 +2695,7 @@ reprotect_and_return_err:
       bufferlist *bl = new bufferlist();
       Context *ctx = new C_CopyRead(&throttle, dest, offset, bl);
       AioCompletion *comp = aio_create_completion_internal(ctx, rbd_ctx_cb);
-      aio_read(src, offset, len, NULL, bl, comp, 0);
+      aio_read(src, offset, len, NULL, bl, comp, fadvise_flags);
       prog_ctx.update_progress(offset, src_size);
     }
 
