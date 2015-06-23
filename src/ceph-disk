@@ -1240,9 +1240,7 @@ def prepare_journal_dev(
             )
         LOG.warning('OSD will not be hot-swappable if journal is not the same device as the osd data')
 
-    if reusing_partition:
-        dev_size = get_dev_size(base+part)
-    elif journal == data:
+    if (reusing_partition or (journal == data)):
         dev_size = get_dev_size(journal)
     else:
         dev_size = get_free_partition_space(journal)
