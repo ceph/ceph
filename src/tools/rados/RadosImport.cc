@@ -110,6 +110,9 @@ int RadosImport::import(librados::IoCtx &io_ctx, bool no_overwrite)
   }
 #endif
 
+  if (file_fd != STDIN_FILENO)
+    posix_fadvise(file_fd, 0, 0, POSIX_FADV_SEQUENTIAL);
+
   bool done = false;
   bool found_metadata = false;
   while(!done) {
@@ -149,6 +152,8 @@ int RadosImport::import(librados::IoCtx &io_ctx, bool no_overwrite)
     cerr << "Missing metadata section!" << std::endl;
   }
 
+  if (file_fd != STDIN_FILENO)
+    posix_fadvise(file_fd, 0, 0, POSIX_FADV_DONTNEED);
   return 0;
 }
 
