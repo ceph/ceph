@@ -488,7 +488,7 @@ Upgrading
   until we find a way to avoid violating distro security policies when linking
   libust.
 
-Upgrading from v0.80.x Giant
+Upgrading from v0.87.x Giant
 ----------------------------
 
 * librbd and librados include lttng tracepoints on distros with
