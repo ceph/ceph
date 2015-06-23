@@ -9335,11 +9335,9 @@ int OSD::init_op_flags(OpRequestRef& op)
             (iter->op.op != CEPH_OSD_OP_GETXATTR) &&
             (iter->op.op != CEPH_OSD_OP_GETXATTRS) &&
             (iter->op.op != CEPH_OSD_OP_CMPXATTR) &&
-            (iter->op.op != CEPH_OSD_OP_SRC_CMPXATTR) &&
             (iter->op.op != CEPH_OSD_OP_ASSERT_VER) &&
             (iter->op.op != CEPH_OSD_OP_LIST_WATCHERS) &&
             (iter->op.op != CEPH_OSD_OP_LIST_SNAPS) &&
-            (iter->op.op != CEPH_OSD_OP_ASSERT_SRC_VERSION) &&
             (iter->op.op != CEPH_OSD_OP_SETALLOCHINT) &&
             (iter->op.op != CEPH_OSD_OP_WRITEFULL) &&
             (iter->op.op != CEPH_OSD_OP_ROLLBACK) &&

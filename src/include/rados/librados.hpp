@@ -316,10 +316,6 @@ namespace librados
 
     void cmpxattr(const char *name, uint8_t op, const bufferlist& val);
     void cmpxattr(const char *name, uint8_t op, uint64_t v);
-    void src_cmpxattr(const std::string& src_oid,
-		      const char *name, int op, const bufferlist& val);
-    void src_cmpxattr(const std::string& src_oid,
-		      const char *name, int op, uint64_t v);
     void exec(const char *cls, const char *method, bufferlist& inbl);
     void exec(const char *cls, const char *method, bufferlist& inbl, bufferlist *obl, int *prval);
     void exec(const char *cls, const char *method, bufferlist& inbl, ObjectOperationCompletion *completion);
@@ -397,9 +393,6 @@ namespace librados
     void setxattr(const char *name, const bufferlist& bl);
     void tmap_update(const bufferlist& cmdbl);
     void tmap_put(const bufferlist& bl);
-    void clone_range(uint64_t dst_off,
-                     const std::string& src_oid, uint64_t src_off,
-                     size_t len);
     void selfmanaged_snap_rollback(uint64_t snapid);
 
     /**
@@ -709,9 +702,6 @@ namespace librados
     int write_full(const std::string& oid, bufferlist& bl);
     int writesame(const std::string& oid, bufferlist& bl,
 		  size_t write_len, uint64_t off);
-    int clone_range(const std::string& dst_oid, uint64_t dst_off,
-                   const std::string& src_oid, uint64_t src_off,
-                   size_t len);
     int read(const std::string& oid, bufferlist& bl, size_t len, uint64_t off);
     int remove(const std::string& oid);
     int remove(const std::string& oid, int flags);
@@ -1127,7 +1117,6 @@ namespace librados
 
     // assert version for next sync operations
     void set_assert_version(uint64_t ver);
-    void set_assert_src_version(const std::string& o, uint64_t ver);
 
     /**
      * Pin/unpin an object in cache tier

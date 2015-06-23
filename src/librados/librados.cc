@@ -154,24 +154,6 @@ void librados::ObjectOperation::cmpxattr(const char *name, uint8_t op, uint64_t 
   o->cmpxattr(name, op, CEPH_OSD_CMPXATTR_MODE_U64, bl);
 }
 
-void librados::ObjectOperation::src_cmpxattr(const std::string& src_oid,
-					 const char *name, int op, const bufferlist& v)
-{
-  ::ObjectOperation *o = &impl->o;
-  object_t oid(src_oid);
-  o->src_cmpxattr(oid, CEPH_NOSNAP, name, v, op, CEPH_OSD_CMPXATTR_MODE_STRING);
-}
-
-void librados::ObjectOperation::src_cmpxattr(const std::string& src_oid,
-					 const char *name, int op, uint64_t val)
-{
-  ::ObjectOperation *o = &impl->o;
-  object_t oid(src_oid);
-  bufferlist bl;
-  ::encode(val, bl);
-  o->src_cmpxattr(oid, CEPH_NOSNAP, name, bl, op, CEPH_OSD_CMPXATTR_MODE_U64);
-}
-
 void librados::ObjectOperation::assert_version(uint64_t ver)
 {
   ::ObjectOperation *o = &impl->o;
@@ -525,14 +507,6 @@ void librados::ObjectWriteOperation::tmap_update(const bufferlist& cmdbl)
   ::ObjectOperation *o = &impl->o;
   bufferlist c = cmdbl;
   o->tmap_update(c);
-}
-
-void librados::ObjectWriteOperation::clone_range(uint64_t dst_off,
-                     const std::string& src_oid, uint64_t src_off,
-                     size_t len)
-{
-  ::ObjectOperation *o = &impl->o;
-  o->clone_range(src_oid, src_off, len, dst_off);
 }
 
 void librados::ObjectWriteOperation::selfmanaged_snap_rollback(snap_t snapid)
@@ -1207,13 +1181,6 @@ int librados::IoCtx::writesame(const std::string& oid, bufferlist& bl,
   return io_ctx_impl->writesame(obj, bl, write_len, off);
 }
 
-int librados::IoCtx::clone_range(const std::string& dst_oid, uint64_t dst_off,
-				 const std::string& src_oid, uint64_t src_off,
-				 size_t len)
-{
-  object_t src(src_oid), dst(dst_oid);
-  return io_ctx_impl->clone_range(dst, dst_off, src, src_off, len);
-}
 
 int librados::IoCtx::read(const std::string& oid, bufferlist& bl, size_t len, uint64_t off)
 {
@@ -2095,24 +2062,6 @@ int librados::IoCtx::set_alloc_hint2(const std::string& o,
 void librados::IoCtx::set_assert_version(uint64_t ver)
 {
   io_ctx_impl->set_assert_version(ver);
-}
-
-void librados::IoCtx::set_assert_src_version(const std::string& oid, uint64_t ver)
-{
-  object_t obj(oid);
-  io_ctx_impl->set_assert_src_version(obj, ver);
-}
-
-int librados::IoCtx::cache_pin(const string& oid)
-{
-  object_t obj(oid);
-  return io_ctx_impl->cache_pin(obj);
-}
-
-int librados::IoCtx::cache_unpin(const string& oid)
-{
-  object_t obj(oid);
-  return io_ctx_impl->cache_unpin(obj);
 }
 
 void librados::IoCtx::locator_set_key(const string& key)
@@ -3489,17 +3438,6 @@ extern "C" int rados_writesame(rados_ioctx_t io,
   bl.append(buf, data_len);
   int retval = ctx->writesame(oid, bl, write_len, off);
   tracepoint(librados, rados_writesame_exit, retval);
-  return retval;
-}
-
-extern "C" int rados_clone_range(rados_ioctx_t io, const char *dst, uint64_t dst_off,
-                                 const char *src, uint64_t src_off, size_t len)
-{
-  tracepoint(librados, rados_clone_range_enter, io, dst, dst_off, src, src_off, len);
-  librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
-  object_t dst_oid(dst), src_oid(src);
-  int retval = ctx->clone_range(dst_oid, dst_off, src_oid, src_off, len);
-  tracepoint(librados, rados_clone_range_exit, retval);
   return retval;
 }
 
