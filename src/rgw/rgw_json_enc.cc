@@ -610,6 +610,7 @@ void rgw_obj::dump(Formatter *f) const
 void RGWZoneParams::dump(Formatter *f) const
 {
   encode_json("domain_root", domain_root.data_pool, f);
+  encode_json("metadata_heap", metadata_heap.data_pool, f);
   encode_json("control_pool", control_pool.data_pool, f);
   encode_json("gc_pool", gc_pool.data_pool, f);
   encode_json("log_pool", log_pool.data_pool, f);
@@ -650,6 +651,7 @@ void RGWZonePlacementInfo::decode_json(JSONObj *obj)
 void RGWZoneParams::decode_json(JSONObj *obj)
 {
   ::decode_json("domain_root", domain_root, obj);
+  ::decode_json("metadata_heap", metadata_heap, obj);
   ::decode_json("control_pool", control_pool, obj);
   ::decode_json("gc_pool", gc_pool, obj);
   ::decode_json("log_pool", log_pool, obj);

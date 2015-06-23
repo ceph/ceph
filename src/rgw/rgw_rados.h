@@ -730,6 +730,7 @@ WRITE_CLASS_ENCODER(RGWZonePlacementInfo)
 
 struct RGWZoneParams {
   rgw_bucket domain_root;
+  rgw_bucket metadata_heap;
   rgw_bucket control_pool;
   rgw_bucket gc_pool;
   rgw_bucket log_pool;
@@ -757,7 +758,7 @@ struct RGWZoneParams {
   int store_info(CephContext *cct, RGWRados *store, RGWRegion& region);
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(4, 1, bl);
+    ENCODE_START(5, 1, bl);
     ::encode(domain_root, bl);
     ::encode(control_pool, bl);
     ::encode(gc_pool, bl);
@@ -771,11 +772,12 @@ struct RGWZoneParams {
     ::encode(name, bl);
     ::encode(system_key, bl);
     ::encode(placement_pools, bl);
+    ::encode(metadata_heap, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::iterator& bl) {
-     DECODE_START(4, bl);
+     DECODE_START(5, bl);
     ::decode(domain_root, bl);
     ::decode(control_pool, bl);
     ::decode(gc_pool, bl);
@@ -792,6 +794,8 @@ struct RGWZoneParams {
       ::decode(system_key, bl);
     if (struct_v >= 4)
       ::decode(placement_pools, bl);
+    if (struct_v >= 5)
+      ::decode(metadata_heap, bl);
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
