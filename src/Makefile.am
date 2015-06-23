@@ -78,6 +78,7 @@ EXTRA_DIST += \
 	$(srcdir)/make_version \
 	$(srcdir)/.git_version \
 	$(srcdir)/ceph-rbdnamer \
+	$(srcdir)/tools/ceph-monstore-update-crush.sh \
 	$(srcdir)/upstart/ceph-all.conf \
 	$(srcdir)/upstart/ceph-mon.conf \
 	$(srcdir)/upstart/ceph-mon-all.conf \

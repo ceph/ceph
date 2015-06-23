@@ -11,6 +11,10 @@ ceph_kvstore_tool_LDADD = $(LIBOS) $(CEPH_GLOBAL)
 ceph_kvstore_tool_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph-kvstore-tool
 
+if WITH_MON
+ceph_monstore_update_crushdir = $(libdir)/ceph
+ceph_monstore_update_crush_SCRIPTS = tools/ceph-monstore-update-crush.sh
+endif
 
 if WITH_OSD
 
