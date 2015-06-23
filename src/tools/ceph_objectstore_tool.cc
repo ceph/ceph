@@ -2436,6 +2436,15 @@ int main(int argc, char **argv)
     goto out;
   }
 
+  // If not an object command nor any of the ops handled below, then output this usage
+  // before complaining about a bad pgid
+  if (!vm.count("objcmd") && op != "export" && op != "info" && op != "log" && op != "rm-past-intervals") {
+    cerr << "Must provide --op (info, log, remove, export, import, list, fix-lost, list-pgs, rm-past-intervals, set-allow-sharded-objects, dump-journal, dump-super, meta-list)"
+	 << std::endl;
+    usage(desc);
+    ret = 1;
+    goto out;
+  }
   epoch_t map_epoch;
 // The following code for export, info, log require omap or !skip-mount-omap
   if (it != ls.end()) {
@@ -2688,10 +2697,7 @@ int main(int argc, char **argv)
         cout << "Removal succeeded" << std::endl;
       }
     } else {
-      cerr << "Must provide --op (info, log, remove, export, import, list, fix-lost, list-pgs, rm-past-intervals, set-allow-sharded-objects, dump-journal, dump-super, meta-list)"
-	<< std::endl;
-      usage(desc);
-      ret = 1;
+      assert(!"Should have already checked for valid --op");
     }
   } else {
     cerr << "PG '" << pgid << "' not found" << std::endl;
