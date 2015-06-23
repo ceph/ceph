@@ -562,8 +562,7 @@ std::ostream& operator<<(std::ostream& out, const buffer::ptr& bp);
 
 std::ostream& operator<<(std::ostream& out, const buffer::list& bl);
 
-
-std::ostream& operator<<(std::ostream& out, buffer::error& e);
+std::ostream& operator<<(std::ostream& out, const buffer::error& e);
 
 inline bufferhash& operator<<(bufferhash& l, bufferlist &r) {
   l.update(r);
