@@ -560,6 +560,56 @@ int RGWMetadataManager::post_modify(RGWMetadataHandler *handler, const string& s
   return 0;
 }
 
+string RGWMetadataManager::heap_oid(RGWMetadataHandler *handler, const string& key, const obj_version& objv)
+{
+  char buf[objv.tag.size() + 32];
+  snprintf(buf, sizeof(buf), "%s:%lld", objv.tag.c_str(), (long long)objv.ver);
+  return string(".meta:") + handler->get_type() + ":" + key + ":" + buf;
+}
+
+int RGWMetadataManager::store_in_heap(RGWMetadataHandler *handler, const string& key, bufferlist& bl,
+                                      RGWObjVersionTracker *objv_tracker, time_t mtime,
+				      map<string, bufferlist> *pattrs)
+{
+  if (!objv_tracker) {
+    return -EINVAL;
+  }
+
+  rgw_bucket heap_pool(store->zone.metadata_heap);
+
+  RGWObjVersionTracker otracker;
+  otracker.write_version = objv_tracker->write_version;
+  string oid = heap_oid(handler, key, objv_tracker->write_version);
+  int ret = rgw_put_system_obj(store, heap_pool, oid,
+                               bl.c_str(), bl.length(), false,
+                               &otracker, mtime, pattrs);
+  if (ret < 0) {
+    ldout(store->ctx(), 0) << "ERROR: rgw_put_system_obj() oid=" << oid << ") returned ret=" << ret << dendl;
+    return ret;
+  }
+
+  return 0;
+}
+
+int RGWMetadataManager::remove_from_heap(RGWMetadataHandler *handler, const string& key, RGWObjVersionTracker *objv_tracker)
+{
+  if (!objv_tracker) {
+    return -EINVAL;
+  }
+
+  rgw_bucket heap_pool(store->zone.metadata_heap);
+
+  string oid = heap_oid(handler, key, objv_tracker->write_version);
+  rgw_obj obj(heap_pool, oid);
+  int ret = store->delete_system_obj(obj);
+  if (ret < 0) {
+    ldout(store->ctx(), 0) << "ERROR: store->delete_system_obj()=" << oid << ") returned ret=" << ret << dendl;
+    return ret;
+  }
+
+  return 0;
+}
+
 int RGWMetadataManager::put_entry(RGWMetadataHandler *handler, const string& key, bufferlist& bl, bool exclusive,
                                   RGWObjVersionTracker *objv_tracker, time_t mtime, map<string, bufferlist> *pattrs)
 {
@@ -574,9 +624,22 @@ int RGWMetadataManager::put_entry(RGWMetadataHandler *handler, const string& key
 
   handler->get_pool_and_oid(store, key, bucket, oid);
 
+  ret = store_in_heap(handler, key, bl, objv_tracker, mtime, pattrs);
+  if (ret < 0) {
+    ldout(store->ctx(), 0) << "ERROR: " << __func__ << ": store_in_heap() key=" << key << " returned ret=" << ret << dendl;
+    goto done;
+  }
+
   ret = rgw_put_system_obj(store, bucket, oid,
                            bl.c_str(), bl.length(), exclusive,
                            objv_tracker, mtime, pattrs);
+  if (ret < 0) {
+    int r = remove_from_heap(handler, key, objv_tracker);
+    if (r < 0) {
+      ldout(store->ctx(), 0) << "ERROR: " << __func__ << ": remove_from_heap() key=" << key << " returned ret=" << r << dendl;
+    }
+  }
+done:
   /* cascading ret into post_modify() */
 
   ret = post_modify(handler, section, key, log_data, objv_tracker, ret);

@@ -672,8 +672,6 @@ void RGWFCGXProcess::handle_request(RGWRequest *r)
     dout(20) << "process_request() returned " << ret << dendl;
   }
 
-  FCGX_Finish_r(fcgx);
-
   delete req;
 }
 
