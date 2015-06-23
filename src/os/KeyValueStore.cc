@@ -530,10 +530,6 @@ KeyValueStore::KeyValueStore(const std::string &base,
   op_queue_len(0), op_queue_bytes(0),
   op_throttle_lock("KeyValueStore::op_throttle_lock"),
   op_finisher(g_ceph_context),
-  op_tp(g_ceph_context, "KeyValueStore::op_tp",
-        g_conf->keyvaluestore_op_threads, "keyvaluestore_op_threads"),
-  op_wq(this, g_conf->keyvaluestore_op_thread_timeout,
-        g_conf->keyvaluestore_op_thread_suicide_timeout, &op_tp),
   perf_logger(NULL),
   m_keyvaluestore_queue_max_ops(g_conf->keyvaluestore_queue_max_ops),
   m_keyvaluestore_queue_max_bytes(g_conf->keyvaluestore_queue_max_bytes),
@@ -955,7 +951,6 @@ int KeyValueStore::mount()
     backend.reset(dbomap);
   }
 
-  op_tp.start();
   op_finisher.start();
   ondisk_finisher.start();
 
@@ -976,7 +971,6 @@ int KeyValueStore::umount()
 {
   dout(5) << "umount " << basedir << dendl;
 
-  op_tp.stop();
   op_finisher.stop();
   ondisk_finisher.stop();
 
@@ -1026,6 +1020,8 @@ int KeyValueStore::queue_transactions(Sequencer *posr, list<Transaction*> &tls,
     dump_transactions(o->tls, o->op, osr);
   dout(5) << "queue_transactions (trailing journal) " << " " << tls <<dendl;
   queue_op(osr, o);
+  do_op(osr, *handle);
+  finish_op(osr);
 
   return 0;
 }
@@ -1071,7 +1067,6 @@ void KeyValueStore::queue_op(OpSequencer *osr, Op *o)
   dout(5) << "queue_op " << o << " seq " << o->op << " " << *osr << " "
           << o->bytes << " bytes" << "   (queue has " << op_queue_len
           << " ops and " << op_queue_bytes << " bytes)" << dendl;
-  op_wq.queue(osr);
 }
 
 void KeyValueStore::op_queue_reserve_throttle(Op *o, ThreadPool::TPHandle *handle)
@@ -1121,7 +1116,7 @@ void KeyValueStore::op_queue_release_throttle(Op *o)
   perf_logger->set(l_os_oq_bytes, op_queue_bytes);
 }
 
-void KeyValueStore::_do_op(OpSequencer *osr, ThreadPool::TPHandle &handle)
+void KeyValueStore::do_op(OpSequencer *osr, ThreadPool::TPHandle &handle)
 {
   // FIXME: Suppose the collection of transaction only affect objects in the
   // one PG, so this lock will ensure no other concurrent write operation
@@ -1142,7 +1137,7 @@ void KeyValueStore::_do_op(OpSequencer *osr, ThreadPool::TPHandle &handle)
   }
 }
 
-void KeyValueStore::_finish_op(OpSequencer *osr)
+void KeyValueStore::finish_op(OpSequencer *osr)
 {
   list<Context*> to_queue;
   Op *o = osr->dequeue(&to_queue);
