@@ -654,6 +654,10 @@ def main(argv):
     cmd = CFSD_PREFIX.format(osd=ONEOSD)
     ERRORS += test_failure(cmd, "Must provide --op or object command...")
 
+    # Specify a bad --op command
+    cmd = (CFSD_PREFIX + "--op oops").format(osd=ONEOSD)
+    ERRORS += test_failure(cmd, "Must provide --op (info, log, remove, export, import, list, fix-lost, list-pgs, rm-past-intervals, set-allow-sharded-objects, dump-journal, dump-super)")
+
     TMPFILE = r"/tmp/tmp.{pid}".format(pid=pid)
     ALLPGS = OBJREPPGS + OBJECPGS
     OSDS = get_osds(ALLPGS[0], OSDDIR)
