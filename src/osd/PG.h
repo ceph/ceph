@@ -2278,6 +2278,7 @@ public:
   virtual void get_watchers(std::list<obj_watch_item_t>&) = 0;
 
   virtual bool agent_work(int max) = 0;
+  virtual bool agent_work(int max, int agent_flush_quota) = 0;
   virtual void agent_stop() = 0;
   virtual void agent_delay() = 0;
   virtual void agent_clear() = 0;
