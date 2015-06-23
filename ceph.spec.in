@@ -165,6 +165,7 @@ Requires:	apache2-mod_fcgid
 %else
 BuildRequires:	expat-devel
 BuildRequires:	fcgi-devel
+Requires:	mailcap
 %endif
 %description radosgw
 This package is an S3 HTTP REST gateway for the RADOS object store. It
