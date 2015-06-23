@@ -161,8 +161,9 @@ void AsyncResizeRequest::send_flush() {
   m_state = STATE_FLUSH;
 
   // with clipping adjusted, ensure that write / copy-on-read operations won't
-  // (re-)create objects that we just removed
-  m_image_ctx.flush_async_operations(create_callback_context());
+  // (re-)create objects that we just removed. need async callback to ensure
+  // we don't have cache_lock already held
+  m_image_ctx.flush_async_operations(create_async_callback_context());
 }
 
 void AsyncResizeRequest::send_invalidate_cache() {
