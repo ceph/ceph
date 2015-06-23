@@ -336,6 +336,8 @@ private:
   uint64_t trimming_pos;      // what we've requested to trim through
   uint64_t trimmed_pos;   // what has been trimmed
 
+  bool readable;
+
   void _finish_trim(int r, uint64_t to);
   class C_Trim;
   friend class C_Trim;
@@ -385,7 +387,7 @@ public:
     read_pos(0), requested_pos(0), received_pos(0),
     fetch_len(0), temp_fetch_len(0),
     on_readable(0), on_write_error(NULL), called_write_error(false),
-    expire_pos(0), trimming_pos(0), trimmed_pos(0)
+    expire_pos(0), trimming_pos(0), trimmed_pos(0), readable(false)
   {
     memset(&layout, 0, sizeof(layout));
   }
