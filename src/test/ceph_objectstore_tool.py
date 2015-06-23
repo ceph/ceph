@@ -358,7 +358,10 @@ def check_data(DATADIR, TMPFILE, OSDDIR, SPLIT_NAME):
 
 def main(argv):
     sys.stdout = os.fdopen(sys.stdout.fileno(), 'w', 0)
-    nullfd = open(os.devnull, "w")
+    if len(argv) > 1 and argv[1] == "debug":
+        nullfd = sys.stdout
+    else:
+        nullfd = open(os.devnull, "w")
 
     call("rm -fr {dir}; mkdir {dir}".format(dir=CEPH_DIR), shell=True)
     os.environ["CEPH_DIR"] = CEPH_DIR
