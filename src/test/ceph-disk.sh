@@ -17,7 +17,7 @@
 #
 source test/test_btrfs_common.sh
 
-PS4='${FUNCNAME[0]}: $LINENO: '
+PS4="$0"'$LINENO: ${FUNCNAME[0]}: '
 
 export PATH=.:$PATH # make sure program from sources are prefered
 DIR=test-ceph-disk
@@ -32,6 +32,7 @@ virtualenv virtualenv-$DIR
     fi
     pip --log virtualenv-$DIR/log.txt install $wheelhouse --editable ceph-detect-init
 )
+eval $(./ceph-disk info --uuid)
 OSD_DATA=$DIR/osd
 MON_ID=a
 MONA=127.0.0.1:7451
@@ -62,6 +63,7 @@ diff=$(which diff)
 mkdir=$(which mkdir)
 rm=$(which rm)
 uuidgen=$(which uuidgen)
+sgdisk=$(which sgdisk)
 
 function setup() {
     teardown
@@ -464,6 +466,15 @@ function destroy_dev() {
     rm -f $path
 }
 
+function verify_typecode() {
+    local disk=$1
+    local partition=$2
+    local uuid=$3
+
+    local actual_uuid=$($sgdisk --info $partition $disk | perl -ne 'print $1 if(/Partition GUID code: (\S+)/)')
+    test ${uuid^^} = ${actual_uuid^^}
+}
+
 function activate_dev_body() {
     local disk=$1
     local journal=$2
@@ -476,10 +487,12 @@ function activate_dev_body() {
     # that does not use a journal.
     #
     ceph-disk zap $disk || return 1
+    ceph-disk zap $journal || return 1
     CEPH_ARGS="$CEPH_ARGS --osd-objectstore=memstore" \
         test_activate $disk ${disk}p1 || return 1
     kill_daemons
     umount ${disk}p1 || return 1
+    verify_typecode ${disk} 1 $OSD_UUID || return 1
     teardown
 
     setup
@@ -488,9 +501,27 @@ function activate_dev_body() {
     # Create an OSD with data on a disk, journal on another
     #
     ceph-disk zap $disk || return 1
+    ceph-disk zap $journal || return 1
     test_activate $disk ${disk}p1 $journal || return 1
     kill_daemons
     umount ${disk}p1 || return 1
+    verify_typecode ${disk} 1 $OSD_UUID || return 1
+    verify_typecode ${journal} 1 $JOURNAL_UUID || return 1
+    teardown
+
+    setup
+    run_mon
+    #
+    # Create an OSD with data on an existing partition of an existing
+    # disk from the previous run, with a different typecode
+    #
+    $sgdisk --typecode=1:99999999-F799-F799-F799-F79999999999 ${disk}
+    ceph-disk zap $journal || return 1
+    test_activate ${disk}p1 ${disk}p1 $journal || return 1
+    kill_daemons
+    umount ${disk}p1 || return 1
+#    verify_typecode ${disk} 1 $OSD_UUID || return 1
+#    verify_typecode ${journal} 1 $JOURNAL_UUID || return 1
     teardown
 
     setup
@@ -501,6 +532,7 @@ function activate_dev_body() {
     # one will remain.
     #
     ceph-disk zap $disk || return 1
+    ceph-disk zap $journal || return 1
     test_activate $disk ${disk}p1 $journal || return 1
     kill_daemons
     umount ${disk}p1 || return 1

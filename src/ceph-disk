@@ -1403,6 +1403,18 @@ def prepare_dev(
     rawdev = None
     if is_partition(data):
         LOG.debug('OSD data device %s is a partition', data)
+        command_check_call(
+            [
+                'sgdisk',
+                '--change-name=1:ceph data',
+                '--partition-guid=1:{osd_uuid}'.format(
+                    osd_uuid=osd_uuid,
+                    ),
+                '--typecode=1:%s' % ptype_tobe,
+                '--',
+                data,
+            ],
+        )
         rawdev = data
     else:
         LOG.debug('Creating osd partition on %s', data)
@@ -2737,6 +2749,19 @@ def main_zap(args):
     for dev in args.dev:
         zap(dev)
 
+def main_info(args):
+    if args.uuid:
+        for var in ('JOURNAL_UUID',
+                    'DMCRYPT_JOURNAL_UUID',
+                    'DMCRYPT_LUKS_JOURNAL_UUID',
+                    'OSD_UUID',
+                    'DMCRYPT_OSD_UUID',
+                    'DMCRYPT_LUKS_OSD_UUID',
+                    'TOBE_UUID',
+                    'DMCRYPT_TOBE_UUID',
+                    'DMCRYPT_JOURNAL_TOBE_UUID'):
+            print var + '=' + globals()[var]
+
 ###########################
 
 
@@ -2997,6 +3022,16 @@ def parse_args():
         )
     zap_parser.set_defaults(
         func=main_zap,
+        )
+
+    info_parser = subparsers.add_parser('info', help='Display information such as partitions UUID')
+    info_parser.add_argument(
+        '--uuid',
+        action='store_true', default=None,
+        help='list of UUID used as partitition types and their names',
+        )
+    info_parser.set_defaults(
+        func=main_info,
         )
 
     args = parser.parse_args()
