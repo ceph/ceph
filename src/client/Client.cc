@@ -6831,7 +6831,6 @@ Fh *Client::_create_fh(Inode *in, int flags, int cmode)
   // inode
   assert(in);
   f->inode = in;
-  f->inode->get();
 
   ldout(cct, 10) << "_create_fh " << in->ino << " mode " << cmode << dendl;
 
@@ -6865,7 +6864,7 @@ int Client::_release_fh(Fh *f)
 {
   //ldout(cct, 3) << "op: client->close(open_files[ " << fh << " ]);" << dendl;
   //ldout(cct, 3) << "op: open_files.erase( " << fh << " );" << dendl;
-  Inode *in = f->inode;
+  Inode *in = f->inode.get();
   ldout(cct, 5) << "_release_fh " << f << " mode " << f->mode << " on " << *in << dendl;
 
   if (in->snapid == CEPH_NOSNAP) {
@@ -6903,10 +6902,8 @@ int Client::_release_fh(Fh *f)
 void Client::_put_fh(Fh *f)
 {
   int left = f->put();
-  if (!left) {
-    put_inode(f->inode);
+  if (!left)
     delete f;
-  }
 }
 
 int Client::_open(Inode *in, int flags, mode_t mode, Fh **fhp, int uid, int gid)
@@ -6994,7 +6991,7 @@ loff_t Client::lseek(int fd, loff_t offset, int whence)
 
 loff_t Client::_lseek(Fh *f, loff_t offset, int whence)
 {
-  Inode *in = f->inode;
+  Inode *in = f->inode.get();
   int r;
 
   switch (whence) {
@@ -7132,7 +7129,7 @@ int Client::preadv(int fd, const struct iovec *iov, int iovcnt, loff_t offset)
 int Client::_read(Fh *f, int64_t offset, uint64_t size, bufferlist *bl)
 {
   const md_config_t *conf = cct->_conf;
-  Inode *in = f->inode;
+  Inode *in = f->inode.get();
 
   //bool lazy = f->mode == CEPH_FILE_MODE_LAZY;
 
@@ -7262,7 +7259,7 @@ Client::C_Readahead::C_Readahead(Client *c, Fh *f) :
 
 void Client::C_Readahead::finish(int r) {
   lgeneric_subdout(client->cct, client, 20) << "client." << client->get_nodeid() << " " << "C_Readahead on " << f->inode << dendl;
-  client->put_cap_ref(f->inode, CEPH_CAP_FILE_RD | CEPH_CAP_FILE_CACHE);
+  client->put_cap_ref(f->inode.get(), CEPH_CAP_FILE_RD | CEPH_CAP_FILE_CACHE);
   f->readahead.dec_pending();
   client->_put_fh(f);
 }
@@ -7270,7 +7267,7 @@ void Client::C_Readahead::finish(int r) {
 int Client::_read_async(Fh *f, uint64_t off, uint64_t len, bufferlist *bl)
 {
   const md_config_t *conf = cct->_conf;
-  Inode *in = f->inode;
+  Inode *in = f->inode.get();
 
   ldout(cct, 10) << "_read_async " << *in << " " << off << "~" << len << dendl;
 
@@ -7336,7 +7333,7 @@ int Client::_read_async(Fh *f, uint64_t off, uint64_t len, bufferlist *bl)
 int Client::_read_sync(Fh *f, uint64_t off, uint64_t len, bufferlist *bl,
 		       bool *checkeof)
 {
-  Inode *in = f->inode;
+  Inode *in = f->inode.get();
   uint64_t pos = off;
   int left = len;
   int read = 0;
@@ -7515,7 +7512,7 @@ int Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf,
     return -EFBIG;
 
   //ldout(cct, 7) << "write fh " << fh << " size " << size << " offset " << offset << dendl;
-  Inode *in = f->inode;
+  Inode *in = f->inode.get();
 
   if (objecter->osdmap_pool_full(in->layout.fl_pg_pool)) {
     return -ENOSPC;
@@ -7730,7 +7727,7 @@ done:
 
 int Client::_flush(Fh *f)
 {
-  Inode *in = f->inode;
+  Inode *in = f->inode.get();
   int err = in->async_err;
   if (err != 0) {
     ldout(cct, 1) << __func__ << ": " << f << " on inode " << *in << " caught async_err = "
@@ -7870,7 +7867,7 @@ int Client::_fsync(Inode *in, bool syncdataonly)
 int Client::_fsync(Fh *f, bool syncdataonly)
 {
   ldout(cct, 3) << "_fsync(" << f << ", " << (syncdataonly ? "dataonly)":"data+metadata)") << dendl;
-  return _fsync(f->inode, syncdataonly);
+  return _fsync(f->inode.get(), syncdataonly);
 }
 
 int Client::fstat(int fd, struct stat *stbuf) 
@@ -8159,7 +8156,7 @@ void Client::_release_filelocks(Fh *fh)
   if (!fh->fcntl_locks && !fh->flock_locks)
     return;
 
-  Inode *in = fh->inode;
+  Inode *in = fh->inode.get();
   ldout(cct, 10) << "_release_filelocks " << fh << " ino " << in->ino << dendl;
 
   list<pair<int, ceph_filelock> > to_release;
@@ -8230,7 +8227,7 @@ void Client::_update_lock_state(struct flock *fl, uint64_t owner,
 
 int Client::_getlk(Fh *fh, struct flock *fl, uint64_t owner)
 {
-  Inode *in = fh->inode;
+  Inode *in = fh->inode.get();
   ldout(cct, 10) << "_getlk " << fh << " ino " << in->ino << dendl;
   int ret = _do_filelock(in, fh, CEPH_LOCK_FCNTL, CEPH_MDS_OP_GETFILELOCK, 0, fl, owner);
   return ret;
@@ -8238,7 +8235,7 @@ int Client::_getlk(Fh *fh, struct flock *fl, uint64_t owner)
 
 int Client::_setlk(Fh *fh, struct flock *fl, uint64_t owner, int sleep, void *fuse_req)
 {
-  Inode *in = fh->inode;
+  Inode *in = fh->inode.get();
   ldout(cct, 10) << "_setlk " << fh << " ino " << in->ino << dendl;
   int ret =  _do_filelock(in, fh, CEPH_LOCK_FCNTL, CEPH_MDS_OP_SETFILELOCK, sleep, fl, owner, fuse_req);
   ldout(cct, 10) << "_setlk " << fh << " ino " << in->ino << " result=" << ret << dendl;
@@ -8247,7 +8244,7 @@ int Client::_setlk(Fh *fh, struct flock *fl, uint64_t owner, int sleep, void *fu
 
 int Client::_flock(Fh *fh, int cmd, uint64_t owner, void *fuse_req)
 {
-  Inode *in = fh->inode;
+  Inode *in = fh->inode.get();
   ldout(cct, 10) << "_flock " << fh << " ino " << in->ino << dendl;
 
   int sleep = !(cmd & LOCK_NB);
@@ -8401,7 +8398,7 @@ int Client::lazyio_synchronize(int fd, loff_t offset, size_t count)
   Fh *f = get_filehandle(fd);
   if (!f)
     return -EBADF;
-  Inode *in = f->inode;
+  Inode *in = f->inode.get();
   
   _fsync(f, true);
   _release(in);
@@ -8727,7 +8724,7 @@ int Client::fgetxattr(int fd, const char *name, void *value, size_t size)
   Fh *f = get_filehandle(fd);
   if (!f)
     return -EBADF;
-  return Client::_getxattr(f->inode, name, value, size, getuid(), getgid());
+  return Client::_getxattr(f->inode.get(), name, value, size, getuid(), getgid());
 }
 
 int Client::listxattr(const char *path, char *list, size_t size)
@@ -8756,7 +8753,7 @@ int Client::flistxattr(int fd, char *list, size_t size)
   Fh *f = get_filehandle(fd);
   if (!f)
     return -EBADF;
-  return Client::_listxattr(f->inode, list, size, getuid(), getgid());
+  return Client::_listxattr(f->inode.get(), list, size, getuid(), getgid());
 }
 
 int Client::removexattr(const char *path, const char *name)
@@ -8785,7 +8782,7 @@ int Client::fremovexattr(int fd, const char *name)
   Fh *f = get_filehandle(fd);
   if (!f)
     return -EBADF;
-  return Client::_removexattr(f->inode, name, getuid(), getgid());
+  return Client::_removexattr(f->inode.get(), name, getuid(), getgid());
 }
 
 int Client::setxattr(const char *path, const char *name, const void *value, size_t size, int flags)
@@ -8814,7 +8811,7 @@ int Client::fsetxattr(int fd, const char *name, const void *value, size_t size, 
   Fh *f = get_filehandle(fd);
   if (!f)
     return -EBADF;
-  return Client::_setxattr(f->inode, name, value, size, flags, getuid(), getgid());
+  return Client::_setxattr(f->inode.get(), name, value, size, flags, getuid(), getgid());
 }
 
 int Client::_getxattr(Inode *in, const char *name, void *value, size_t size,
@@ -9917,6 +9914,11 @@ int Client::ll_file_layout(Inode *in, ceph_file_layout *layout)
   return 0;
 }
 
+int Client::ll_file_layout(Fh *fh, ceph_file_layout *layout)
+{
+  return ll_file_layout(fh->inode.get(), layout);
+}
+
 /* Currently we cannot take advantage of redundancy in reads, since we
    would have to go through all possible placement groups (a
    potentially quite large number determined by a hash), and use CRUSH
@@ -10322,7 +10324,7 @@ int Client::_fallocate(Fh *fh, int mode, int64_t offset, int64_t length)
   if ((mode & FALLOC_FL_PUNCH_HOLE) && !(mode & FALLOC_FL_KEEP_SIZE))
     return -EOPNOTSUPP;
 
-  Inode *in = fh->inode;
+  Inode *in = fh->inode.get();
 
   if (objecter->osdmap_pool_full(in->layout.fl_pg_pool)
       && !(mode & FALLOC_FL_PUNCH_HOLE)) {
@@ -10577,7 +10579,7 @@ int Client::fdescribe_layout(int fd, ceph_file_layout *lp)
   Fh *f = get_filehandle(fd);
   if (!f)
     return -EBADF;
-  Inode *in = f->inode;
+  Inode *in = f->inode.get();
 
   *lp = in->layout;
 
@@ -10628,7 +10630,7 @@ int Client::get_file_extent_osds(int fd, loff_t off, loff_t *len, vector<int>& o
   Fh *f = get_filehandle(fd);
   if (!f)
     return -EBADF;
-  Inode *in = f->inode;
+  Inode *in = f->inode.get();
 
   vector<ObjectExtent> extents;
   Striper::file_to_extents(cct, in->ino, &in->layout, off, 1, in->truncate_size, extents);
@@ -10682,7 +10684,7 @@ int Client::get_file_stripe_address(int fd, loff_t offset, vector<entity_addr_t>
   Fh *f = get_filehandle(fd);
   if (!f)
     return -EBADF;
-  Inode *in = f->inode;
+  Inode *in = f->inode.get();
 
   // which object?
   vector<ObjectExtent> extents;
@@ -10728,7 +10730,7 @@ int Client::enumerate_layout(int fd, vector<ObjectExtent>& result,
   Fh *f = get_filehandle(fd);
   if (!f)
     return -EBADF;
-  Inode *in = f->inode;
+  Inode *in = f->inode.get();
 
   // map to a list of extents
   Striper::file_to_extents(cct, in->ino, &in->layout, offset, length, in->truncate_size, result);
