@@ -3052,6 +3052,7 @@ void Monitor::forward_request_leader(MonOpRequestRef op)
     rr->con_features = rr->con->get_features();
     encode_message(req, CEPH_FEATURES_ALL, rr->request_bl);   // for my use only; use all features
     rr->session = static_cast<MonSession *>(session->get());
+    rr->op = op;
     routed_requests[rr->tid] = rr;
     session->routed_request_tids.insert(rr->tid);
     
@@ -3070,6 +3071,7 @@ void Monitor::forward_request_leader(MonOpRequestRef op)
     }
     messenger->send_message(forward, monmap->get_inst(mon));
     op->mark_forwarded();
+    assert(op->get_req()->get_type() != 0);
   } else {
     dout(10) << "forward_request no session for request " << *req << dendl;
   }
@@ -3292,10 +3294,11 @@ void Monitor::resend_routed_requests()
     if (mon == rank) {
       dout(10) << " requeue for self tid " << rr->tid << " " << *req << dendl;
       req->set_connection(rr->con);
-      MonOpRequestRef op = op_tracker.create_request<MonOpRequest>(req);
-      retry.push_back(new C_RetryMessage(this, op));
+      rr->op->mark_event("retry routed request");
+      retry.push_back(new C_RetryMessage(this, rr->op));
       delete rr;
     } else {
+      rr->op->mark_event("resend forwarded message to leader");
       dout(10) << " resend to mon." << mon << " tid " << rr->tid << " " << *req << dendl;
       MForward *forward = new MForward(rr->tid, req, rr->con_features,
 				       rr->session->caps);
