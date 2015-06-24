@@ -431,11 +431,11 @@ void OSDMonitor::on_active()
     mon->clog->info() << "osdmap " << osdmap << "\n";
 
   if (!mon->is_leader()) {
-    list<MOSDFailure*> ls;
+    list<MonOpRequestRef> ls;
     take_all_failures(ls);
     while (!ls.empty()) {
-      MonOpRequestRef op =
-        mon->op_tracker.create_request<MonOpRequest>(ls.front());
+      MonOpRequestRef op = ls.front();
+      op->mark_osdmon_event(__func__);
       dispatch(op);
       ls.pop_front();
     }
@@ -447,10 +447,9 @@ void OSDMonitor::on_shutdown()
   dout(10) << __func__ << dendl;
 
   // discard failure info, waiters
-  list<MOSDFailure*> ls;
+  list<MonOpRequestRef> ls;
   take_all_failures(ls);
   while (!ls.empty()) {
-    ls.front()->put();
     ls.pop_front();
   }
 }
@@ -1708,10 +1707,9 @@ bool OSDMonitor::prepare_failure(MonOpRequestRef op)
     mon->clog->debug() << m->get_target() << " reported failed by "
 		      << m->get_orig_source_inst() << "\n";
     failure_info_t& fi = failure_info[target_osd];
-    MOSDFailure *old = fi.add_report(reporter, failed_since, m);
-    if (old) {
-      mon->no_reply(old);
-      old->put();
+    MonOpRequestRef old_op = fi.add_report(reporter, failed_since, op);
+    if (old_op) {
+      mon->no_reply(old_op);
     }
 
     return check_failure(now, target_osd, fi);
@@ -1721,12 +1719,12 @@ bool OSDMonitor::prepare_failure(MonOpRequestRef op)
 		      << m->get_orig_source_inst() << "\n";
     if (failure_info.count(target_osd)) {
       failure_info_t& fi = failure_info[target_osd];
-      list<MOSDFailure*> ls;
+      list<MonOpRequestRef> ls;
       fi.take_report_messages(ls);
       fi.cancel_report(reporter);
       while (!ls.empty()) {
-	mon->no_reply(ls.front());
-	ls.front()->put();
+        if (ls.front())
+          mon->no_reply(ls.front());
 	ls.pop_front();
       }
       if (fi.reporters.empty()) {
@@ -1740,7 +1738,7 @@ bool OSDMonitor::prepare_failure(MonOpRequestRef op)
     } else {
       dout(10) << " no failure_info for osd." << target_osd << dendl;
     }
-    mon->no_reply(m);
+    mon->no_reply(op);
   }
 
   return false;
@@ -1754,19 +1752,20 @@ void OSDMonitor::process_failures()
       ++p;
     } else {
       dout(10) << "process_failures osd." << p->first << dendl;
-      list<MOSDFailure*> ls;
+      list<MonOpRequestRef> ls;
       p->second.take_report_messages(ls);
       failure_info.erase(p++);
 
       while (!ls.empty()) {
-	send_latest(ls.front(), ls.front()->get_epoch());
+        MOSDFailure *m = ls.front()->get_req<MOSDFailure>();
+        send_latest(m, m->get_epoch());
 	ls.pop_front();
       }
     }
   }
 }
 
-void OSDMonitor::take_all_failures(list<MOSDFailure*>& ls)
+void OSDMonitor::take_all_failures(list<MonOpRequestRef>& ls)
 {
   dout(10) << __func__ << " on " << failure_info.size() << " osds" << dendl;
 
