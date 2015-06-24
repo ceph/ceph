@@ -39,7 +39,6 @@ class PGMap;
 #include "messages/MOSDBoot.h"
 #include "messages/MMonCommand.h"
 #include "messages/MOSDMap.h"
-#include "messages/MOSDFailure.h"
 #include "messages/MPoolOp.h"
 
 #include "erasure-code/ErasureCodeInterface.h"
@@ -53,14 +52,11 @@ class PGMap;
 struct failure_reporter_t {
   int num_reports;          ///< reports from this reporter
   utime_t failed_since;     ///< when they think it failed
-  MOSDFailure *msg;         ///< most recent failure message
+  MonOpRequestRef op;       ///< most recent failure op request
 
-  failure_reporter_t() : num_reports(0), msg(NULL) {}
-  failure_reporter_t(utime_t s) : num_reports(1), failed_since(s), msg(NULL) {}
-  ~failure_reporter_t() {
-    // caller should have taken this message before removing the entry.
-    assert(!msg);
-  }
+  failure_reporter_t() : num_reports(0) {}
+  failure_reporter_t(utime_t s) : num_reports(1), failed_since(s) {}
+  ~failure_reporter_t() { }
 };
 
 /// information about all failure reports for one osd
@@ -83,9 +79,10 @@ struct failure_info_t {
     return max_failed_since;
   }
 
-  // set the message for the latest report.  return any old message we had,
+  // set the message for the latest report.  return any old op request we had,
   // if any, so we can discard it.
-  MOSDFailure *add_report(int who, utime_t failed_since, MOSDFailure *msg) {
+  MonOpRequestRef add_report(int who, utime_t failed_since,
+                              MonOpRequestRef op) {
     map<int, failure_reporter_t>::iterator p = reporters.find(who);
     if (p == reporters.end()) {
       if (max_failed_since == utime_t())
@@ -98,18 +95,18 @@ struct failure_info_t {
     }
     num_reports++;
 
-    MOSDFailure *ret = p->second.msg;
-    p->second.msg = msg;
+    MonOpRequestRef ret = p->second.op;
+    p->second.op = op;
     return ret;
   }
 
-  void take_report_messages(list<MOSDFailure*>& ls) {
+  void take_report_messages(list<MonOpRequestRef>& ls) {
     for (map<int, failure_reporter_t>::iterator p = reporters.begin();
 	 p != reporters.end();
 	 ++p) {
-      if (p->second.msg) {
-	ls.push_back(p->second.msg);
-	p->second.msg = NULL;
+      if (p->second.op) {
+	ls.push_back(p->second.op);
+        p->second.op.reset();
       }
     }
   }
@@ -247,7 +244,7 @@ private:
   bool prepare_failure(MonOpRequestRef op);
   bool prepare_mark_me_down(MonOpRequestRef op);
   void process_failures();
-  void take_all_failures(list<MOSDFailure*>& ls);
+  void take_all_failures(list<MonOpRequestRef>& ls);
 
   bool preprocess_boot(MonOpRequestRef op);
   bool prepare_boot(MonOpRequestRef op);
