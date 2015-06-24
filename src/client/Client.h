@@ -345,7 +345,7 @@ protected:
   // cache
   ceph::unordered_map<vinodeno_t, Inode*> inode_map;
   Inode*                 root;
-  map<Inode*, Inode*>    root_parents;
+  map<Inode*, InodeRef>  root_parents;
   Inode*                 root_ancestor;
   LRU                    lru;    // lru list of Dentry's in our local metadata cache.
 
@@ -436,7 +436,7 @@ protected:
   void unlink(Dentry *dn, bool keepdir, bool keepdentry);
 
   // path traversal for high-level interface
-  Inode *cwd;
+  InodeRef cwd;
   int path_walk(const filepath& fp, InodeRef *end, bool followsym=true);
   int fill_stat(Inode *in, struct stat *st, frag_info_t *dirstat=0, nest_info_t *rstat=0);
   int fill_stat(InodeRef& in, struct stat *st, frag_info_t *dirstat=0, nest_info_t *rstat=0) {
