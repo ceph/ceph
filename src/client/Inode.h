@@ -239,7 +239,7 @@ struct Inode {
 
   SnapRealm *snaprealm;
   xlist<Inode*>::item snaprealm_item;
-  Inode *snapdir_parent;  // only if we are a snapdir inode
+  InodeRef snapdir_parent;  // only if we are a snapdir inode
   map<snapid_t,CapSnap*> cap_snaps;   // pending flush to mds
 
   //int open_by_mode[CEPH_FILE_MODE_NUM];
@@ -301,7 +301,7 @@ struct Inode {
       dirty_caps(0), flushing_caps(0), flushing_cap_seq(0), shared_gen(0), cache_gen(0),
       snap_caps(0), snap_cap_refs(0),
       cap_item(this), flushing_cap_item(this), last_flush_tid(0),
-      snaprealm(0), snaprealm_item(this), snapdir_parent(0),
+      snaprealm(0), snaprealm_item(this),
       oset((void *)this, newlayout->fl_pg_pool, ino),
       reported_size(0), wanted_max_size(0), requested_max_size(0),
       _ref(0), ll_ref(0), dir(0), dn_set(),

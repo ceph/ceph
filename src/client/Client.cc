@@ -1258,12 +1258,12 @@ mds_rank_t Client::choose_target_mds(MetaRequest *req)
       ldout(cct, 10) << "choose_target_mds " << *in << " is snapped, using nonsnap parent" << dendl;
       while (in->snapid != CEPH_NOSNAP) {
         if (in->snapid == CEPH_SNAPDIR)
-  	in = in->snapdir_parent;
+	  in = in->snapdir_parent.get();
         else if (!in->dn_set.empty())
           /* In most cases there will only be one dentry, so getting it
            * will be the correct action. If there are multiple hard links,
            * I think the MDS should be able to redirect as needed*/
-  	in = in->get_first_parent()->dir->parent_inode;
+	  in = in->get_first_parent()->dir->parent_inode;
         else {
           ldout(cct, 10) << "got unlinked inode, can't look at parent" << dendl;
           break;
@@ -2465,11 +2465,10 @@ void Client::put_inode(Inode *in, int n)
     bool unclean = objectcacher->release_set(&in->oset);
     assert(!unclean);
     put_qtree(in);
-    if (in->snapdir_parent)
-      put_inode(in->snapdir_parent);
     inode_map.erase(in->vino());
     in->cap_item.remove_myself();
     in->snaprealm_item.remove_myself();
+    in->snapdir_parent.reset();
     if (in == root) {
       root = 0;
       root_ancestor = 0;
@@ -8160,7 +8159,6 @@ Inode *Client::open_snapdir(Inode *diri)
     in->dirfragtree.clear();
     inode_map[vino] = in;
     in->snapdir_parent = diri;
-    diri->get();
     ldout(cct, 10) << "open_snapdir created snapshot inode " << *in << dendl;
   } else {
     in = inode_map[vino];
