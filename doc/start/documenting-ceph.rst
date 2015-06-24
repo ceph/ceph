@@ -370,7 +370,7 @@ Ceph documentation commits are simple, but follow a strict convention:
 - The comment summary MUST be one line only. (strict)
 - Additional comments MAY follow a blank line after the summary, 
   but should be terse.
-- A commit MAY include ``Fixes: #{bug number}``.
+- A commit MAY include ``Fixes: #{bug number}, and `URL tracker <http://tracker.ceph.com/issues/>`_{bug number}``
 - Commits MUST include ``Signed-off-by: Firstname Lastname <email>``. (strict)
 
 .. tip:: Follow the foregoing convention particularly where it says 
