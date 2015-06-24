@@ -148,7 +148,6 @@ dir_result_t::dir_result_t(Inode *in)
   : inode(in), offset(0), this_offset(2), next_offset(2),
     release_count(0), ordered_count(0), start_shared_gen(0),
     buffer(0) {
-  inode->get();
 }
 
 // cons/des
@@ -1059,8 +1058,7 @@ void Client::insert_readdir_results(MetaRequest *request, MetaSession *session, 
       dn->offset = dir_result_t::make_fpos(fg, i + readdir_offset);
 
       // add to cached result list
-      in->get();
-      request->readdir_result.push_back(pair<string,Inode*>(dname, in));
+      request->readdir_result.push_back(pair<string,InodeRef>(dname, in));
 
       ldout(cct, 15) << __func__ << "  " << hex << dn->offset << dec << ": '" << dname << "' -> " << in->ino << dendl;
     }
@@ -1376,7 +1374,7 @@ int Client::verify_reply_trace(int r,
     *pcreated = got_created_ino;
 
   if (request->target) {
-    (*ptarget) = request->target;
+    ptarget->swap(request->target);
     ldout(cct, 20) << "make_request target is " << *ptarget->get() << dendl;
   } else {
     if (got_created_ino && (p = inode_map.find(vinodeno_t(created_ino, CEPH_NOSNAP))) != inode_map.end()) {
@@ -1581,15 +1579,8 @@ int Client::make_request(MetaRequest *request,
 
 void Client::put_request(MetaRequest *request)
 {
-  if (request->_put()) {
-    if (request->inode())
-      put_inode(request->take_inode());
-    if (request->old_inode())
-      put_inode(request->take_old_inode());
-    if (request->other_inode())
-      put_inode(request->take_other_inode());
+  if (request->_put())
     delete request;
-  }
 }
 
 int Client::encode_inode_release(Inode *in, MetaRequest *req,
@@ -5816,8 +5807,7 @@ void Client::_closedir(dir_result_t *dirp)
   ldout(cct, 10) << "_closedir(" << dirp << ")" << dendl;
   if (dirp->inode) {
     ldout(cct, 10) << "_closedir detaching inode " << dirp->inode << dendl;
-    put_inode(dirp->inode);
-    dirp->inode = 0;
+    dirp->inode.reset();
   }
   _readdir_drop_dirp_buffer(dirp);
   delete dirp;
@@ -5918,8 +5908,6 @@ void Client::_readdir_drop_dirp_buffer(dir_result_t *dirp)
 {
   ldout(cct, 10) << "_readdir_drop_dirp_buffer " << dirp << dendl;
   if (dirp->buffer) {
-    for (unsigned i = 0; i < dirp->buffer->size(); i++)
-      put_inode((*dirp->buffer)[i].second);
     delete dirp->buffer;
     dirp->buffer = NULL;
   }
@@ -5941,13 +5929,13 @@ int Client::_readdir_get_frag(dir_result_t *dirp)
   if (dirp->inode && dirp->inode->snapid == CEPH_SNAPDIR)
     op = CEPH_MDS_OP_LSSNAP;
 
-  Inode *diri = dirp->inode;
+  InodeRef& diri = dirp->inode;
 
   MetaRequest *req = new MetaRequest(op);
   filepath path;
   diri->make_nosnap_relative_path(path);
   req->set_filepath(path); 
-  req->set_inode(diri);
+  req->set_inode(diri.get());
   req->head.args.readdir.frag = fg;
   if (dirp->last_name.length()) {
     req->path2.set_path(dirp->last_name.c_str());
@@ -5972,7 +5960,7 @@ int Client::_readdir_get_frag(dir_result_t *dirp)
 
     _readdir_drop_dirp_buffer(dirp);
 
-    dirp->buffer = new vector<pair<string,Inode*> >;
+    dirp->buffer = new vector<pair<string,InodeRef> >;
     dirp->buffer->swap(req->readdir_result);
 
     if (fg != req->readdir_reply_frag) {
@@ -6102,7 +6090,7 @@ int Client::readdir_r_cb(dir_result_t *d, add_dirent_cb_t cb, void *p)
   frag_t fg = dirp->frag();
   uint32_t off = dirp->fragpos();
 
-  Inode *diri = dirp->inode;
+  InodeRef& diri = dirp->inode;
 
   if (dirp->at_end())
     return 0;
@@ -6191,9 +6179,9 @@ int Client::readdir_r_cb(dir_result_t *d, add_dirent_cb_t cb, void *p)
     dirp->offset = dir_result_t::make_fpos(fg, off);
     while (off >= dirp->this_offset &&
 	   off - dirp->this_offset < dirp->buffer->size()) {
-      pair<string,Inode*>& ent = (*dirp->buffer)[off - dirp->this_offset];
+      pair<string,InodeRef>& ent = (*dirp->buffer)[off - dirp->this_offset];
 
-      int stmask = fill_stat(ent.second, &st);  
+      int stmask = fill_stat(ent.second, &st);
       fill_dirent(&de, ent.first.c_str(), st.st_mode, st.st_ino, dirp->offset + 1);
       
       client_lock.Unlock();
@@ -6578,11 +6566,12 @@ int Client::lookup_parent(Inode *ino, Inode **parent)
   req->set_filepath(path);
   req->set_inode(ino);
 
-  int r = make_request(req, -1, -1, NULL, NULL, rand() % mdsmap->get_num_in_mds());
+  InodeRef target;
+  int r = make_request(req, -1, -1, &target, NULL, rand() % mdsmap->get_num_in_mds());
   // Give caller a reference to the parent ino if they provided a pointer.
   if (parent != NULL) {
     if (r == 0) {
-      *parent = req->target;
+      *parent = target.get();
       _ll_get(*parent);
       ldout(cct, 3) << "lookup_parent found parent " << (*parent)->ino << dendl;
     } else {

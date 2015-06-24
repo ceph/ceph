@@ -169,7 +169,7 @@ struct dir_result_t {
   }
 
 
-  Inode *inode;
+  InodeRef inode;
 
   int64_t offset;        // high bits: frag_t, low bits: an offset
 
@@ -182,7 +182,7 @@ struct dir_result_t {
   int start_shared_gen;  // dir shared_gen at start of readdir
 
   frag_t buffer_frag;
-  vector<pair<string,Inode*> > *buffer;
+  vector<pair<string,InodeRef> > *buffer;
 
   string at_cache_name;  // last entry we successfully returned
 
