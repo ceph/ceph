@@ -36,6 +36,9 @@ check_PROGRAMS = $(check_TESTPROGRAMS)
 # tests scripts will be appended to this
 check_SCRIPTS =
 
+# display the output of failed check_SCRIPTS after a failed make check
+export VERBOSE = true
+
 # python unit tests need to know where the scripts are located
 export PYTHONPATH=$(top_srcdir)/src/pybind
 
