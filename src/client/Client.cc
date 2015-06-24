@@ -884,7 +884,7 @@ Dentry *Client::insert_dentry_inode(Dir *dir, const string& dname, LeaseStat *dl
   }
   
   if (!dn || !dn->inode) {
-    in->get();
+    InodeRef tmp_ref(in);
     if (old_dentry) {
       if (old_dentry->dir != dir) {
 	old_dentry->dir->ordered_count++;
@@ -902,7 +902,6 @@ Dentry *Client::insert_dentry_inode(Dir *dir, const string& dname, LeaseStat *dl
 	dir->parent_inode->flags &= ~I_DIR_ORDERED;
     }
     dn = link(dir, dname, in, dn);
-    put_inode(in);
   }
 
   update_dentry_lease(dn, dlease, from, session);
@@ -2698,11 +2697,9 @@ void Client::unlink(Dentry *dn, bool keepdir, bool keepdentry)
 class C_Client_FlushComplete : public Context {
 private:
   Client *client;
-  Inode *inode;
+  InodeRef inode;
 public:
-  C_Client_FlushComplete(Client *c, Inode *in) : client(c), inode(in) {
-    inode->get();
-  }
+  C_Client_FlushComplete(Client *c, Inode *in) : client(c), inode(in) { }
   void finish(int r) {
     assert(client->client_lock.is_locked_by_me());
     if (r != 0) {
@@ -2712,7 +2709,6 @@ public:
         << ": " << r << "(" << cpp_strerror(r) << ")" << dendl;
       inode->async_err = r;
     }
-    client->put_inode(inode);
   }
 };
 
@@ -3281,13 +3277,12 @@ void Client::wake_inode_waiters(MetaSession *s)
 class C_Client_CacheInvalidate : public Context  {
 private:
   Client *client;
-  Inode *inode;
+  InodeRef inode;
   int64_t offset, length;
   bool keep_caps;
 public:
   C_Client_CacheInvalidate(Client *c, Inode *in, int64_t off, int64_t len, bool keep) :
 			   client(c), inode(in), offset(off), length(len), keep_caps(keep) {
-    inode->get();
   }
   void finish(int r) {
     // _async_invalidate takes the lock when it needs to, call this back from outside of lock.
@@ -3296,15 +3291,15 @@ public:
   }
 };
 
-void Client::_async_invalidate(Inode *in, int64_t off, int64_t len, bool keep_caps)
+void Client::_async_invalidate(InodeRef& in, int64_t off, int64_t len, bool keep_caps)
 {
   ldout(cct, 10) << "_async_invalidate " << off << "~" << len << (keep_caps ? " keep_caps" : "") << dendl;
   ino_invalidate_cb(callback_handle, in->vino(), off, len);
 
   client_lock.Lock();
   if (!keep_caps)
-    check_caps(in, false);
-  put_inode(in);
+    check_caps(in.get(), false);
+  in.reset(); // put inode inside client_lock
   client_lock.Unlock();
   ldout(cct, 10) << "_async_invalidate " << off << "~" << len << (keep_caps ? " keep_caps" : "") << " done" << dendl;
 }
@@ -3655,7 +3650,7 @@ void Client::trim_caps(MetaSession *s, int max)
       ldout(cct, 20) << " trying to trim dentries for " << *in << dendl;
       bool all = true;
       set<Dentry*>::iterator q = in->dn_set.begin();
-      in->get();
+      InodeRef tmp_ref(in);
       while (q != in->dn_set.end()) {
 	Dentry *dn = *q++;
 	if (dn->lru_is_expireable()) {
@@ -3676,8 +3671,6 @@ void Client::trim_caps(MetaSession *s, int max)
         ldout(cct, 20) << __func__ << " counting as trimmed: " << *in << dendl;
 	trimmed++;
       }
-
-      put_inode(in);
     }
 
     ++p;
@@ -4914,10 +4907,9 @@ void Client::unmount()
 	assert(in);
       }
       if (!in->caps.empty()) {
-	in->get();
+	InodeRef tmp_ref(in);
 	_release(in);
 	_flush(in, new C_Client_FlushComplete(this, in));
-	put_inode(in);
       }
     }
   }
@@ -6237,7 +6229,7 @@ int Client::_readdir_cache_cb(dir_result_t *dirp, add_dirent_cb_t cb, void *p)
 
     struct stat st;
     struct dirent de;
-    int stmask = fill_stat(dn->inode, &st);  
+    int stmask = fill_stat(dn->inode, &st);
     fill_dirent(&de, dn->name.c_str(), st.st_mode, st.st_ino, dirp->offset + 1);
       
     uint64_t next_off = dn->offset + 1;
@@ -7386,11 +7378,9 @@ int Client::_read_sync(Fh *f, uint64_t off, uint64_t len, bufferlist *bl,
  */
 class C_Client_SyncCommit : public Context {
   Client *cl;
-  Inode *in;
+  InodeRef in;
 public:
-  C_Client_SyncCommit(Client *c, Inode *i) : cl(c), in(i) {
-    in->get();
-  }
+  C_Client_SyncCommit(Client *c, Inode *i) : cl(c), in(i) {}
   void finish(int) {
     // Called back by Filter, then Client is responsible for taking its own lock
     assert(!cl->client_lock.is_locked_by_me()); 
@@ -7398,14 +7388,14 @@ public:
   }
 };
 
-void Client::sync_write_commit(Inode *in)
+void Client::sync_write_commit(InodeRef& in)
 {
   Mutex::Locker l(client_lock);
 
   assert(unsafe_sync_write > 0);
   unsafe_sync_write--;
 
-  put_cap_ref(in, CEPH_CAP_FILE_BUFFER);
+  put_cap_ref(in.get(), CEPH_CAP_FILE_BUFFER);
 
   ldout(cct, 15) << "sync_write_commit unsafe_sync_write = " << unsafe_sync_write << dendl;
   if (unsafe_sync_write == 0 && unmounting) {
@@ -7413,7 +7403,7 @@ void Client::sync_write_commit(Inode *in)
     mount_cond.Signal();
   }
 
-  put_inode(in);
+  in.reset(); // put inode inside client_lock
 }
 
 int Client::write(int fd, const char *buf, loff_t size, loff_t offset) 
@@ -7775,12 +7765,13 @@ int Client::_fsync(Inode *in, bool syncdataonly)
   Cond cond;
   bool done = false;
   C_SafeCond *object_cacher_completion = NULL;
+  InodeRef tmp_ref;
 
   ldout(cct, 3) << "_fsync on " << *in << " " << (syncdataonly ? "(dataonly)":"(data+metadata)") << dendl;
   
   if (cct->_conf->client_oc) {
     object_cacher_completion = new C_SafeCond(&lock, &cond, &done, &r);
-    in->get(); // take a reference; C_SafeCond doesn't and _flush won't either
+    tmp_ref = in; // take a reference; C_SafeCond doesn't and _flush won't either
     _flush(in, object_cacher_completion);
     ldout(cct, 15) << "using return-valued form of _fsync" << dendl;
   }
@@ -7801,7 +7792,6 @@ int Client::_fsync(Inode *in, bool syncdataonly)
       cond.Wait(lock);
     lock.Unlock();
     client_lock.Lock();
-    put_inode(in);
     ldout(cct, 15) << "got " << r << " from flush writeback" << dendl;
   } else {
     // FIXME: this can starve

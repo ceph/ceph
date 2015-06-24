@@ -336,7 +336,7 @@ public:
 
 public:
   entity_name_t get_myname() { return messenger->get_myname(); } 
-  void sync_write_commit(Inode *in);
+  void sync_write_commit(InodeRef& in);
 
 protected:
   Filer                 *filer;     
@@ -574,7 +574,7 @@ protected:
   void _schedule_invalidate_callback(Inode *in, int64_t off, int64_t len, bool keep_caps);
   void _invalidate_inode_cache(Inode *in);
   void _invalidate_inode_cache(Inode *in, int64_t off, int64_t len);
-  void _async_invalidate(Inode *in, int64_t off, int64_t len, bool keep_caps);
+  void _async_invalidate(InodeRef& in, int64_t off, int64_t len, bool keep_caps);
   void _release(Inode *in);
   
   /**
