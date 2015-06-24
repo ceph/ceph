@@ -373,6 +373,15 @@ int FileJournal::create()
   else
     header.alignment = 16;  // at least stay word aligned on 64bit machines...
 
+  if (g_conf->journal_support_compress) {
+    if (g_conf->journal_default_compress.compare("lz4") == 0) {
+      dout(2) << "journal compress type using lz4" << dendl;
+      header.compression_type = ALG_LZ4;
+      header.flags |= header_t::FLAG_COMPRESS;
+    } else
+      dout(2) << " unsupport compress type, disable journal compress" << dendl;
+  }
+
   header.start = get_top();
   header.start_seq = 0;
 
@@ -738,6 +747,11 @@ void FileJournal::print_header(const header_t &header) const
 	   << dendl;
   dout(10) << "header: start " << header.start << dendl;
   dout(10) << " write_pos " << write_pos << dendl;
+
+  if (header.flags & header_t::FLAG_COMPRESS) {
+    if (header.compression_type == ALG_LZ4)
+      dout(10) << "support lz4 compress" << dendl;
+  }
 }
 
 int FileJournal::read_header(header_t *hdr) const
@@ -764,19 +778,6 @@ int FileJournal::read_header(header_t *hdr) const
   catch (buffer::error& e) {
     derr << "read_header error decoding journal header" << dendl;
     return -EINVAL;
-  }
-
-  
-  /*
-   * Unfortunately we weren't initializing the flags field for new
-   * journals!  Aie.  This is safe(ish) now that we have only one
-   * flag.  Probably around when we add the next flag we need to
-   * remove this or else this (eventually old) code will clobber newer
-   * code's flags.
-   */
-  if (hdr->flags > 3) {
-    derr << "read_header appears to have gibberish flags; assuming 0" << dendl;
-    hdr->flags = 0;
   }
 
   print_header(*hdr);
@@ -952,12 +953,15 @@ void FileJournal::queue_completions_thru(uint64_t seq)
   finisher_cond.Signal();
 }
 
+#define COMPRESS_MASK 0xF0000000
+
 int FileJournal::prepare_single_write(bufferlist& bl, off64_t& queue_pos, uint64_t& orig_ops, uint64_t& orig_bytes)
 {
   // grab next item
   write_item &next_write = peek_write();
   uint64_t seq = next_write.seq;
   bufferlist &ebl = next_write.bl;
+
   unsigned head_size = sizeof(entry_header_t);
   off64_t base_size = 2*head_size + ebl.length();
 
@@ -987,9 +991,14 @@ int FileJournal::prepare_single_write(bufferlist& bl, off64_t& queue_pos, uint64
   entry_header_t h;
   memset(&h, 0, sizeof(h));
   h.seq = seq;
-  h.pre_pad = pre_pad;
+  if (next_write.is_compress)
+    h.pre_pad = next_write.uncompress_len;
+  else
+    h.pre_pad = pre_pad;
   h.len = ebl.length();
   h.post_pad = post_pad;
+  if (next_write.is_compress)
+    h.post_pad |= COMPRESS_MASK;
   h.make_magic(queue_pos, header.get_fsid64());
   h.crc32c = ebl.crc32c(0);
 
@@ -1568,6 +1577,16 @@ void FileJournal::submit_entry(uint64_t seq, bufferlist& e, int alignment,
 	  << " (" << oncommit << ")" << dendl;
   assert(e.length() > 0);
 
+  uint32_t uncompress_len = e.length();
+  bool compressed = false;
+  if (header.flags & header_t::FLAG_COMPRESS) {
+    bufferlist dest;
+    e.compress((compression_type)header.compression_type, dest);
+    e.swap(dest);
+    alignment = -1; //for compress, we use entry_header_t.pre_pad record uncomress len
+    compressed = true;
+  }
+
   throttle_ops.take(1);
   throttle_bytes.take(e.length());
   if (osd_op)
@@ -1587,7 +1606,7 @@ void FileJournal::submit_entry(uint64_t seq, bufferlist& e, int alignment,
 	seq, oncommit, ceph_clock_now(g_ceph_context), osd_op));
     if (writeq.empty())
       writeq_cond.Signal();
-    writeq.push_back(write_item(seq, e, alignment, osd_op));
+    writeq.push_back(write_item(seq, e, alignment, osd_op, uncompress_len, compressed));
   }
 }
 
@@ -1889,6 +1908,16 @@ FileJournal::read_entry_result FileJournal::do_read_entry(
     return MAYBE_CORRUPT;
   }
   cur_pos = _next_pos;
+ 
+  entry_header_t tmp;
+  uint32_t uncompress_len = 0;
+  if (h->post_pad & COMPRESS_MASK) {
+    assert(header.flags & header_t::FLAG_COMPRESS);
+    tmp = *h;
+    uncompress_len = h->pre_pad;
+    h->pre_pad = 0;
+    h->post_pad = h->post_pad & (~COMPRESS_MASK);
+  }
 
   // pad + body + pad
   if (h->pre_pad)
@@ -1905,7 +1934,7 @@ FileJournal::read_entry_result FileJournal::do_read_entry(
   bufferlist fbl;
   wrap_read_bl(cur_pos, sizeof(*f), &fbl, &cur_pos);
   f = reinterpret_cast<entry_header_t *>(fbl.c_str());
-  if (memcmp(f, h, sizeof(*f))) {
+  if (memcmp(f, uncompress_len ? &tmp : h, sizeof(*f))) {
     if (ss)
       *ss << "bad footer magic, partial entry";
     if (next_pos)
@@ -1924,6 +1953,13 @@ FileJournal::read_entry_result FileJournal::do_read_entry(
 	*next_pos = cur_pos;
       return MAYBE_CORRUPT;
     }
+  }
+
+  if (uncompress_len) {
+    bufferlist dest;
+    bl->decompress((compression_type)header.compression_type, dest,  uncompress_len);
+    bl->swap(dest);
+    assert(bl->length() == uncompress_len);
   }
 
   // yay!
