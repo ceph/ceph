@@ -711,7 +711,7 @@ bool PGMonitor::preprocess_pg_stats(MPGStats *stats)
   if (stats->had_map_for > 30.0 && 
       mon->osdmon()->is_readable() &&
       stats->epoch < mon->osdmon()->osdmap.get_epoch())
-    mon->osdmon()->send_latest_now_nodelete(stats, stats->epoch+1);
+    mon->osdmon()->send_latest_now_nodelete(op, stats->epoch+1);
 
   // Always forward the PGStats to the leader, even if they are the same as
   // the old PGStats. The leader will mark as down osds that haven't sent

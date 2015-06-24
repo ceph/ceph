@@ -217,8 +217,8 @@ private:
   // ...
   MOSDMap *build_latest_full();
   MOSDMap *build_incremental(epoch_t first, epoch_t last);
-  void send_full(PaxosServiceMessage *m);
-  void send_incremental(PaxosServiceMessage *m, epoch_t first);
+  void send_full(MonOpRequestRef op);
+  void send_incremental(MonOpRequestRef op, epoch_t first);
   void send_incremental(epoch_t first, MonSession *session, bool onetime);
 
   int reweight_by_utilization(int oload, std::string& out_str, bool by_pg,
@@ -402,9 +402,10 @@ private:
 			   std::map<int,utime_t> &last_osd_report);
   void mark_all_down();
 
-  void send_latest(PaxosServiceMessage *m, epoch_t start=0);
-  void send_latest_now_nodelete(PaxosServiceMessage *m, epoch_t start=0) {
-    send_incremental(m, start);
+  void send_latest(MonOpRequestRef op, epoch_t start=0);
+  void send_latest_now_nodelete(MonOpRequestRef op, epoch_t start=0) {
+    op->mark_osdmon_event(__func__);
+    send_incremental(op, start);
   }
 
   epoch_t blacklist(const entity_addr_t& a, utime_t until);
