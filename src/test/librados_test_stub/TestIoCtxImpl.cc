@@ -90,6 +90,15 @@ void TestIoCtxImpl::aio_flush_async(AioCompletionImpl *c) {
   m_client->flush_aio_operations(c);
 }
 
+void TestIoCtxImpl::aio_notify(const std::string& oid, AioCompletionImpl *c,
+                               bufferlist& bl, uint64_t timeout_ms,
+                               bufferlist *pbl) {
+  m_pending_ops.inc();
+  c->get();
+  C_AioNotify *ctx = new C_AioNotify(this, c);
+  m_client->get_watch_notify().aio_notify(oid, bl, timeout_ms, pbl, ctx);
+}
+
 int TestIoCtxImpl::aio_operate(const std::string& oid, TestObjectOperationImpl &ops,
                                AioCompletionImpl *c, SnapContext *snap_context,
                                int flags) {
@@ -265,6 +274,12 @@ int TestIoCtxImpl::execute_aio_operations(const std::string& oid,
   }
   ops->put();
   return ret;
+}
+
+void TestIoCtxImpl::handle_aio_notify_complete(AioCompletionImpl *c, int r) {
+  m_pending_ops.dec();
+
+  m_client->finish_aio_completion(c, r);
 }
 
 } // namespace librados

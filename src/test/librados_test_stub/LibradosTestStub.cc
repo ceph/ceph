@@ -353,6 +353,13 @@ int IoCtx::aio_flush_async(AioCompletion *c) {
   return 0;
 }
 
+int IoCtx::aio_notify(const std::string& oid, AioCompletion *c, bufferlist& bl,
+                      uint64_t timeout_ms, bufferlist *pbl) {
+  TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
+  ctx->aio_notify(oid, c->pc, bl, timeout_ms, pbl);
+  return 0;
+}
+
 int IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
                        ObjectReadOperation *op, bufferlist *pbl) {
   return aio_operate(oid, c, op, 0, pbl);
