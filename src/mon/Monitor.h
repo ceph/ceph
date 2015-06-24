@@ -806,6 +806,7 @@ public:
   void send_reply(PaxosServiceMessage *req, Message *reply);
   void send_reply(MonOpRequestRef op, Message *reply);
   void no_reply(PaxosServiceMessage *req);
+  void no_reply(MonOpRequestRef op);
   void resend_routed_requests();
   void remove_session(MonSession *s);
   void remove_all_sessions();
