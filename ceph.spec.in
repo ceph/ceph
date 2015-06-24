@@ -338,7 +338,8 @@ Summary:	Ceph benchmarks and test tools
 Group:		System Environment/Libraries
 License:	LGPL-2.0
 Requires:	ceph-common
-%if (0%{?fedora} >= 20 || 0%{?rhel} == 6)
+Requires:	xmlstarlet
+%if (0%{?fedora} || 0%{?rhel} == 6)
 BuildRequires:	lttng-ust-devel
 BuildRequires:	libbabeltrace-devel
 %endif
