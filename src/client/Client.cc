@@ -3120,7 +3120,6 @@ void Client::queue_cap_snap(Inode *in, SnapContext& old_snapc)
   } else if (in->caps_dirty() ||
             (used & CEPH_CAP_FILE_WR) ||
 	     (dirty & CEPH_CAP_ANY_WR)) {
-    in->get();
     CapSnap *capsnap = new CapSnap(in);
     in->cap_snaps[old_snapc.seq] = capsnap;
     capsnap->context = old_snapc;
@@ -3824,10 +3823,10 @@ void Client::kick_flushing_caps(MetaSession *session)
 
   for (xlist<CapSnap*>::iterator p = session->flushing_capsnaps.begin(); !p.end(); ++p) {
     CapSnap *capsnap = *p;
-    Inode *in = capsnap->in;
+    InodeRef& in = capsnap->in;
     ldout(cct, 20) << " reflushing capsnap " << capsnap
 		   << " on " << *in << " to mds." << mds << dendl;
-    flush_snaps(in, false, capsnap);
+    flush_snaps(in.get(), false, capsnap);
   }
   for (xlist<Inode*>::iterator p = session->flushing_caps.begin(); !p.end(); ++p) {
     Inode *in = *p;
@@ -4378,10 +4377,9 @@ void Client::handle_cap_flushsnap_ack(MetaSession *session, Inode *in, MClientCa
     } else {
       ldout(cct, 5) << "handle_cap_flushedsnap mds." << mds << " flushed snap follows " << follows
 	      << " on " << *in << dendl;
+      in->cap_snaps.erase(follows);
       capsnap->flushing_item.remove_myself();
       delete capsnap;
-      in->cap_snaps.erase(follows);
-      put_inode(in);
     }
   } else {
     ldout(cct, 5) << "handle_cap_flushedsnap DUP(?) mds." << mds << " flushed snap follows " << follows
