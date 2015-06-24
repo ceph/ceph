@@ -3836,7 +3836,7 @@ void PG::scrub(epoch_t queued, ThreadPool::TPHandle &handle)
     lock();
     dout(20) << __func__ << " slept for " << t << dendl;
   }
-  if (deleting || pg_has_reset_since(queued)) {
+  if (pg_has_reset_since(queued)) {
     return;
   }
   assert(scrub_queued);
