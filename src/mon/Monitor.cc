@@ -3191,34 +3191,6 @@ void Monitor::send_reply(MonOpRequestRef op, Message *reply)
   session->put();
 }
 
-
-void Monitor::send_reply(PaxosServiceMessage *req, Message *reply)
-{
-  ConnectionRef connection = req->get_connection();
-  if (!connection) {
-    dout(2) << "send_reply no connection, dropping reply " << *reply
-	    << " to " << req << " " << *req << dendl;
-    reply->put();
-    return;
-  }
-  MonSession *session = static_cast<MonSession*>(connection->get_priv());
-  if (!session) {
-    dout(2) << "send_reply no session, dropping reply " << *reply
-	    << " to " << req << " " << *req << dendl;
-    reply->put();
-    return;
-  }
-  if (session->proxy_con) {
-    dout(15) << "send_reply routing reply to " << req->get_connection()->get_peer_addr()
-	     << " via " << session->proxy_con->get_peer_addr()
-	     << " for request " << *req << dendl;
-    session->proxy_con->send_message(new MRoute(session->proxy_tid, reply));
-  } else {
-    session->con->send_message(reply);
-  }
-  session->put();
-}
-
 void Monitor::no_reply(MonOpRequestRef op)
 {
   MonSession *session = op->get_session();
@@ -3248,30 +3220,6 @@ void Monitor::no_reply(MonOpRequestRef op)
     dout(10) << "no_reply to " << req->get_source_inst()
              << " " << *req << dendl;
     op->mark_event("no_reply");
-  }
-  session->put();
-}
-
-void Monitor::no_reply(PaxosServiceMessage *req)
-{
-  MonSession *session = static_cast<MonSession*>(req->get_connection()->get_priv());
-  if (!session) {
-    dout(2) << "no_reply no session, dropping non-reply to " << req << " " << *req << dendl;
-    return;
-  }
-  if (session->proxy_con) {
-    if (get_quorum_features() & CEPH_FEATURE_MON_NULLROUTE) {
-      dout(10) << "no_reply to " << req->get_source_inst()
-	       << " via " << session->proxy_con->get_peer_addr()
-	       << " for request " << *req << dendl;
-      session->proxy_con->send_message(new MRoute(session->proxy_tid, NULL));
-    } else {
-      dout(10) << "no_reply no quorum nullroute feature for " << req->get_source_inst()
-	       << " via " << session->proxy_con->get_peer_addr()
-	       << " for request " << *req << dendl;
-    }
-  } else {
-    dout(10) << "no_reply to " << req->get_source_inst() << " " << *req << dendl;
   }
   session->put();
 }
