@@ -59,7 +59,7 @@ class MDSMonitor : public PaxosService {
       if (r >= 0)
 	mm->_updated(op);   // success
       else if (r == -ECANCELED) {
-	mm->mon->no_reply(op->get_req<PaxosServiceMessage>());
+	mm->mon->no_reply(op);
       } else {
 	mm->dispatch(op);        // try again
       }

@@ -365,7 +365,7 @@ bool MDSMonitor::preprocess_beacon(MonOpRequestRef op)
 
  ignore:
   // I won't reply this beacon, drop it.
-  mon->no_reply(m);
+  mon->no_reply(op);
   return true;
 }
 
