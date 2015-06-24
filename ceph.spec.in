@@ -54,6 +54,9 @@ Requires(post):	binutils
 %if 0%{?_with_systemd}
 Requires: systemd
 %endif
+%if 0%{with cephfs_java}
+BuildRequires: sharutils
+%endif
 BuildRequires:	gcc-c++
 BuildRequires:	boost-devel
 BuildRequires:	cryptsetup
@@ -96,10 +99,6 @@ BuildRequires:	snappy-devel
 #################################################################################
 # specific
 #################################################################################
-%if ! 0%{?rhel} || 0%{?fedora}
-BuildRequires:	sharutils
-%endif
-
 %if 0%{defined suse_version}
 BuildRequires:	net-tools
 BuildRequires:	libbz2-devel
