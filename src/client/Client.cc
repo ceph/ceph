@@ -183,8 +183,6 @@ Client::Client(Messenger *m, MonClient *mc)
 {
   monclient->set_messenger(m);
 
-  cwd = NULL;
-
   //
   root = 0;
 
@@ -265,11 +263,8 @@ void Client::tear_down_cache()
     delete root;
     root = 0;
     root_ancestor = 0;
-    while (!root_parents.empty()) {
-      Inode *in = root_parents.begin()->second;
+    while (!root_parents.empty())
       root_parents.erase(root_parents.begin());
-      delete in;
-    }
     inode_map.clear();
   }
 
@@ -565,11 +560,8 @@ void Client::trim_cache(bool trim_kernel_dcache)
     delete root;
     root = 0;
     root_ancestor = 0;
-    while (!root_parents.empty()) {
-      Inode *in = root_parents.begin()->second;
+    while (!root_parents.empty())
       root_parents.erase(root_parents.begin());
-      delete in;
-    }
     inode_map.clear();
   }
 }
@@ -747,11 +739,9 @@ Inode * Client::add_update_inode(InodeStat *st, utime_t from,
       root = in;
       root_ancestor = in;
       cwd = root;
-      cwd->get();
     } else if (!mounted) {
       root_parents[root_ancestor] = in;
       root_ancestor = in;
-      in->get();
     }
 
     // immutable bits
@@ -2578,11 +2568,8 @@ void Client::put_inode(Inode *in, int n)
     if (in == root) {
       root = 0;
       root_ancestor = 0;
-      while (!root_parents.empty()) {
-        Inode *in = root_parents.begin()->second;
+      while (!root_parents.empty())
         root_parents.erase(root_parents.begin());
-        put_inode(in);
-      }
     }
 
     if (!in->oset.objects.empty()) {
@@ -4896,9 +4883,7 @@ void Client::unmount()
     timer.cancel_event(tick_event);
   tick_event = 0;
 
-  if (cwd)
-    put_inode(cwd);
-  cwd = NULL;
+  cwd.reset();
 
   // clean up any unclosed files
   while (!fd_map.empty()) {
@@ -7897,11 +7882,8 @@ int Client::chdir(const char *relpath)
   int r = path_walk(path, &in);
   if (r < 0)
     return r;
-  if (cwd != in.get()) {
-    put_inode(cwd);
-    cwd = in.get();
-    cwd->get();
-  }
+  if (cwd != in)
+    cwd.swap(in);
   ldout(cct, 3) << "chdir(" << relpath << ")  cwd now " << cwd->ino << dendl;
   return 0;
 }
@@ -7911,7 +7893,7 @@ void Client::getcwd(string& dir)
   filepath path;
   ldout(cct, 10) << "getcwd " << *cwd << dendl;
 
-  Inode *in = cwd;
+  Inode *in = cwd.get();
   while (in != root) {
     assert(in->dn_set.size() < 2); // dirs can't be hard-linked
     Dentry *dn = in->get_first_parent();
@@ -7928,7 +7910,7 @@ void Client::getcwd(string& dir)
 
       // start over
       path = filepath();
-      in = cwd;
+      in = cwd.get();
       continue;
     }
     path.push_front_dentry(dn->name);
@@ -10875,7 +10857,7 @@ Inode *Client::get_quota_root(Inode *in)
     if (!in->dn_set.empty())
       in = in->get_first_parent()->dir->parent_inode;
     else if (root_parents.count(in))
-      in = root_parents[in];
+      in = root_parents[in].get();
     else
       in = NULL;
   }
