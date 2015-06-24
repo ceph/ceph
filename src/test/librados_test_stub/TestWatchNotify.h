@@ -57,6 +57,8 @@ public:
   void flush();
   int list_watchers(const std::string& o,
                     std::list<obj_watch_t> *out_watchers);
+  void aio_notify(const std::string& oid, bufferlist& bl, uint64_t timeout_ms,
+                  bufferlist *pbl, Context *on_notify);
   int notify(const std::string& o, bufferlist& bl,
              uint64_t timeout_ms, bufferlist *pbl);
   void notify_ack(const std::string& o, uint64_t notify_id,
@@ -84,7 +86,7 @@ private:
   SharedWatcher get_watcher(const std::string& oid);
   SharedWatcher _get_watcher(const std::string& oid);
   void execute_notify(const std::string &oid, bufferlist &bl,
-                      uint64_t notify_id, Mutex *lock, Cond *cond, bool *done);
+                      uint64_t notify_id, Context *on_notify);
 
 };
 
