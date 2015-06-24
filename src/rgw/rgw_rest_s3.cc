@@ -2310,12 +2310,75 @@ static void init_anon_user(struct req_state *s)
 }
 
 /*
+ * verify that a signed request comes from the keyholder
+ * by checking the signature against our locally-computed version
+ *
+ * it tries AWS v4 before AWS v2
+ */
+int RGW_Auth_S3::authorize(RGWRados *store, struct req_state *s)
+{
+
+  /* neither keystone and rados enabled; warn and exit! */
+  if (!store->ctx()->_conf->rgw_s3_auth_use_rados
+      && !store->ctx()->_conf->rgw_s3_auth_use_keystone) {
+    dout(0) << "WARNING: no authorization backend enabled! Users will never authenticate." << dendl;
+    return -EPERM;
+  }
+
+  if (s->op == OP_OPTIONS) {
+    init_anon_user(s);
+    return 0;
+  }
+
+  if (!s->http_auth || !(*s->http_auth)) {
+
+    /* AWS4 */
+
+    string algorithm = s->info.args.get("X-Amz-Algorithm");
+    if (algorithm.size()) {
+      if (algorithm != "AWS4-HMAC-SHA256") {
+        return -EPERM;
+      }
+      return authorize_v4(store, s);
+    }
+
+    /* AWS2 */
+
+    string auth_id = s->info.args.get("AWSAccessKeyId");
+    if (auth_id.size()) {
+      return authorize_v2(store, s);
+    }
+
+    /* anonymous access */
+
+    init_anon_user(s);
+    return 0;
+
+  } else {
+
+    /* AWS4 */
+
+    if (!strncmp(s->http_auth, "AWS4-HMAC-SHA256", 16)) {
+      return authorize_v4(store, s);
+    }
+
+    /* AWS2 */
+
+    if (!strncmp(s->http_auth, "AWS ", 4)) {
+      return authorize_v2(store, s);
+    }
+
+  }
+
+  return -EPERM;
+}
+
+/*
  * handle v4 signatures (rados auth only)
  */
 int RGW_Auth_S3::authorize_v4(RGWRados *store, struct req_state *s)
 {
   string::size_type pos;
-  string algorithm;
   string date;
   string credential;
   string signedheaders;
@@ -2328,16 +2391,14 @@ int RGW_Auth_S3::authorize_v4(RGWRados *store, struct req_state *s)
     return -EPERM;
   }
 
+  string algorithm = "AWS4-HMAC-SHA256";
+
   if ((!s->http_auth) || !(*s->http_auth)) {
 
     /* auth ships with req params ... */
 
     /* look for required params */
 
-    algorithm = s->info.args.get("X-Amz-Algorithm");
-    if (algorithm.size() == 0) {
-      return -EPERM;
-    }
     credential = s->info.args.get("X-Amz-Credential");
     if (credential.size() == 0) {
       return -EPERM;
@@ -2359,14 +2420,6 @@ int RGW_Auth_S3::authorize_v4(RGWRados *store, struct req_state *s)
   } else {
 
     /* auth ships in headers ... */
-
-    /* valid algorithm? */
-
-    if (strncmp(s->http_auth, "AWS4-HMAC-SHA256", 16)) {
-      return -EPERM;
-    }
-
-    algorithm = "AWS4-HMAC-SHA256";
 
     /* ------------------------- handle Credential header */
 
@@ -2696,57 +2749,30 @@ int RGW_Auth_S3::authorize_v4(RGWRados *store, struct req_state *s)
 }
 
 /*
- * verify that a signed request comes from the keyholder
- * by checking the signature against our locally-computed version
+ * handle v2 signatures
  */
-int RGW_Auth_S3::authorize(RGWRados *store, struct req_state *s)
+int RGW_Auth_S3::authorize_v2(RGWRados *store, struct req_state *s)
 {
   bool qsr = false;
   string auth_id;
   string auth_sign;
 
-  if (!authorize_v4(store, s))
-	  return 0;
-
   time_t now;
   time(&now);
 
-  /* neither keystone and rados enabled; warn and exit! */
-  if (!store->ctx()->_conf->rgw_s3_auth_use_rados
-      && !store->ctx()->_conf->rgw_s3_auth_use_keystone) {
-    dout(0) << "WARNING: no authorization backend enabled! Users will never authenticate." << dendl;
-    return -EPERM;
-  }
-
-  if (s->op == OP_OPTIONS) {
-    init_anon_user(s);
-    return 0;
-  }
-
   if (!s->http_auth || !(*s->http_auth)) {
     auth_id = s->info.args.get("AWSAccessKeyId");
-    if (auth_id.size()) {
-      auth_sign = s->info.args.get("Signature");
-
-      string date = s->info.args.get("Expires");
-      time_t exp = atoll(date.c_str());
-      if (now >= exp)
-        return -EPERM;
-
-      qsr = true;
-    } else {
-      /* anonymous access */
-      init_anon_user(s);
-      return 0;
-    }
+    auth_sign = s->info.args.get("Signature");
+    string date = s->info.args.get("Expires");
+    time_t exp = atoll(date.c_str());
+    if (now >= exp)
+      return -EPERM;
+    qsr = true;
   } else {
-    if (strncmp(s->http_auth, "AWS ", 4))
-      return -EINVAL;
     string auth_str(s->http_auth + 4);
     int pos = auth_str.rfind(':');
     if (pos < 0)
       return -EINVAL;
-
     auth_id = auth_str.substr(0, pos);
     auth_sign = auth_str.substr(pos + 1);
   }

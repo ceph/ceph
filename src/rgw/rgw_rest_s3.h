@@ -344,6 +344,7 @@ class RGW_Auth_S3 {
 public:
   static int authorize(RGWRados *store, struct req_state *s);
 private:
+  static int authorize_v2(RGWRados *store, struct req_state *s);
   static int authorize_v4(RGWRados *store, struct req_state *s);
 };
 
