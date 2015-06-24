@@ -330,7 +330,7 @@ void Client::dump_inode(Formatter *f, Inode *in, set<Inode*>& did, bool disconne
 	f->close_section();
       }	
       if (it->second->inode)
-	dump_inode(f, it->second->inode, did, false);
+	dump_inode(f, it->second->inode.get(), did, false);
     }
   }
 }
@@ -892,7 +892,7 @@ Dentry *Client::insert_dentry_inode(Dir *dir, const string& dname, LeaseStat *dl
     }
   }
   
-  if (!dn || dn->inode == 0) {
+  if (!dn || !dn->inode) {
     in->get();
     if (old_dentry) {
       if (old_dentry->dir != dir) {
@@ -1245,7 +1245,7 @@ mds_rank_t Client::choose_target_mds(MetaRequest *req)
     }
   } else if (de) {
     if (de->inode) {
-      in = de->inode;
+      in = de->inode.get();
       ldout(cct, 20) << "choose_target_mds starting with req->dentry inode " << *in << dendl;
     } else {
       in = de->dir->parent_inode;
@@ -2545,7 +2545,6 @@ Dentry* Client::link(Dir *dir, const string& name, Inode *in, Dentry *dn)
 
   if (in) {    // link to inode
     dn->inode = in;
-    in->get();
     if (in->is_dir()) {
       if (in->dir)
 	dn->get(); // dir -> dn pin
@@ -2572,13 +2571,14 @@ Dentry* Client::link(Dir *dir, const string& name, Inode *in, Dentry *dn)
 
 void Client::unlink(Dentry *dn, bool keepdir, bool keepdentry)
 {
-  Inode *in = dn->inode;
+  InodeRef in;
+  in.swap(dn->inode);
   ldout(cct, 15) << "unlink dir " << dn->dir->parent_inode << " '" << dn->name << "' dn " << dn
 		 << " inode " << dn->inode << dendl;
 
   // unlink from inode
   if (in) {
-    invalidate_quota_tree(in);
+    invalidate_quota_tree(in.get());
     if (in->is_dir()) {
       if (in->dir)
 	dn->put(); // dir -> dn pin
@@ -2589,7 +2589,6 @@ void Client::unlink(Dentry *dn, bool keepdir, bool keepdentry)
     assert(in->dn_set.count(dn));
     in->dn_set.erase(dn);
     ldout(cct, 20) << "unlink  inode " << in << " parents now " << in->dn_set << dendl; 
-    put_inode(in);
   }
 
   if (keepdentry) {
@@ -6131,7 +6130,7 @@ int Client::readdir_r_cb(dir_result_t *d, add_dirent_cb_t cb, void *p)
   if (dirp->offset == 1) {
     ldout(cct, 15) << " including .." << dendl;
     if (!diri->dn_set.empty()) {
-      Inode* in = diri->get_first_parent()->inode;
+      InodeRef& in = diri->get_first_parent()->inode;
       fill_dirent(&de, "..", S_IFDIR, in->ino, 2);
       fill_stat(in, &st);
     } else {
