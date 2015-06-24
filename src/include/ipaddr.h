@@ -15,7 +15,9 @@ const struct sockaddr *find_ip_in_subnet(const struct ifaddrs *addrs,
 					 const struct sockaddr *net,
 					 unsigned int prefix_len);
 
-
+/*
+	Return true if is possible to parse network variable into ipv4 or ipv6 
+*/
 bool parse_network(const char *s, struct sockaddr *network, unsigned int *prefix_len);
 
 #endif
