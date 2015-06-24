@@ -2508,10 +2508,37 @@ int RGW_Auth_S3::authorize_v4(RGWRados *store, struct req_state *s)
 
   if (!canonical_qs.empty()) {
 
-    /* TODO: implement step 3 in
+    /* handle case when query string exists. Step 3 in
      * http://docs.aws.amazon.com/general/latest/gr/sigv4-create-canonical-request.html */
 
-    /* handle case when query string exists */
+    map<string, string> canonical_qs_map;
+    istringstream cqs(canonical_qs);
+    string keyval;
+
+    while (getline(cqs, keyval, '&')) {
+      string key, val;
+      istringstream kv(keyval);
+      getline(kv, key, '=');
+      getline(kv, val, '=');
+      string key_enc, val_enc;
+      url_encode(key, key_enc);
+      url_encode(val, val_enc);
+      canonical_qs_map[key_enc] = val_enc;
+    }
+
+    canonical_qs = "";
+
+    map<string, string>::iterator last = canonical_qs_map.end();
+    --last;
+
+    for (map<string, string>::iterator it = canonical_qs_map.begin();
+        it != canonical_qs_map.end(); ++it) {
+      canonical_qs.append(it->first + "=" + it->second);
+      if (it != last) {
+        canonical_qs.append("&");
+      }
+    }
+
   }
 
   /* craft canonical headers */
