@@ -13,6 +13,8 @@
 #include "osdc/ObjectCacher.h"
 #include "include/assert.h"
 
+#include "InodeRef.h"
+
 class Client;
 struct MetaSession;
 class Dentry;
@@ -43,7 +45,7 @@ struct Cap {
 
 struct CapSnap {
   //snapid_t follows;  // map key
-  Inode *in;
+  InodeRef in;
   SnapContext context;
   int issued, dirty;
 
