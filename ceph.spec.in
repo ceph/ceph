@@ -85,6 +85,7 @@ BuildRequires:	python-sphinx10
 %endif
 %if 0%{?fedora} || 0%{defined suse_version} || 0%{?rhel} >= 7 || 0%{?centos} >= 7
 BuildRequires:	python-sphinx
+BuildRequires:	git
 %endif
 
 BuildRequires:	python-virtualenv
