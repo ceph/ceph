@@ -963,6 +963,7 @@ public:
   int ll_getlk(Fh *fh, struct flock *fl, uint64_t owner);
   int ll_setlk(Fh *fh, struct flock *fl, uint64_t owner, int sleep, void *fuse_req);
   int ll_flock(Fh *fh, int cmd, uint64_t owner, void *fuse_req);
+  int ll_file_layout(Fh *fh, ceph_file_layout *layout);
   void ll_interrupt(void *d);
   int ll_get_stripe_osd(struct Inode *in, uint64_t blockno,
 			ceph_file_layout* layout);
