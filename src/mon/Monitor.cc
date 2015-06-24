@@ -3146,8 +3146,49 @@ void Monitor::try_send_message(Message *m, const entity_inst_t& to)
 
 void Monitor::send_reply(MonOpRequestRef op, Message *reply)
 {
+  op->mark_event(__func__);
+
+  MonSession *session = op->get_session();
+  Message *req = op->get_req();
+  ConnectionRef con = op->get_connection();
+
   dout(2) << __func__ << " " << op << " " << *reply << dendl;
-  op->send_reply(reply);
+
+  if (!con) {
+    dout(2) << "send_reply no connection, dropping reply " << *reply
+	    << " to " << req << " " << *req << dendl;
+    reply->put();
+    op->mark_event("reply: no connection");
+    return;
+  }
+
+  if (!session) {
+    dout(2) << "send_reply no session, dropping reply " << *reply
+	    << " to " << req << " " << *req << dendl;
+    reply->put();
+    op->mark_event("reply: no session");
+    return;
+  }
+
+  if (!session->con && !session->proxy_con) {
+    dout(2) << "send_reply no connection, dropping reply " << *reply
+	    << " to " << req << " " << *req << dendl;
+    reply->put();
+    op->mark_event("reply: no connection");
+    return;
+  }
+
+  if (session->proxy_con) {
+    dout(15) << "send_reply routing reply to " << con->get_peer_addr()
+	     << " via " << session->proxy_con->get_peer_addr()
+	     << " for request " << *req << dendl;
+    session->proxy_con->send_message(new MRoute(session->proxy_tid, reply));
+    op->mark_event("reply: send routed request");
+  } else {
+    session->con->send_message(reply);
+    op->mark_event("reply: send");
+  }
+  session->put();
 }
 
 

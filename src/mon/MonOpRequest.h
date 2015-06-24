@@ -143,8 +143,6 @@ public:
 
   typedef ceph::shared_ptr<MonOpRequest> Ref;
 
-  void send_reply(Message *reply);
-
   void _dump(utime_t now, Formatter *f) const {
     {
       f->open_array_section("events");
