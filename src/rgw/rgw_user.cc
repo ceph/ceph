@@ -201,18 +201,6 @@ int rgw_store_user_info(RGWRados *store,
   return ret;
 }
 
-int rgw_store_user_attrs(RGWRados *const store,
-                         string& user_id,
-                         map<string, bufferlist>& attrs,
-                         map<string, bufferlist>* const rmattrs,
-                         RGWObjVersionTracker * const objv_tracker)
-{
-  rgw_obj obj(store->zone.user_uid_pool, user_id);
-
-  return store->meta_mgr->set_attrs(user_meta_handler, user_id, obj,
-                                    attrs, rmattrs, objv_tracker);
-}
-
 struct user_info_entry {
   RGWUserInfo info;
   RGWObjVersionTracker objv_tracker;

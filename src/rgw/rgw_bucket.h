@@ -120,7 +120,6 @@ extern int rgw_remove_bucket(RGWRados *store, const string& bucket_owner, rgw_bu
 
 extern int rgw_bucket_set_attrs(RGWRados *store, RGWBucketInfo& bucket_info,
                                 map<string, bufferlist>& attrs,
-                                map<string, bufferlist>* rmattrs,
                                 RGWObjVersionTracker *objv_tracker);
 
 extern void check_bad_user_bucket_mapping(RGWRados *store, const string& user_id, bool fix);
