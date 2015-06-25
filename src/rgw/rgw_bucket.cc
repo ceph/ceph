@@ -273,7 +273,6 @@ int rgw_bucket_parse_bucket_instance(const string& bucket_instance, string *targ
 
 int rgw_bucket_set_attrs(RGWRados *store, RGWBucketInfo& bucket_info,
                          map<string, bufferlist>& attrs,
-                         map<string, bufferlist>* rmattrs,
                          RGWObjVersionTracker *objv_tracker)
 {
   rgw_bucket& bucket = bucket_info.bucket;
@@ -294,8 +293,11 @@ int rgw_bucket_set_attrs(RGWRados *store, RGWBucketInfo& bucket_info,
   string key;
   store->get_bucket_instance_entry(bucket, key); /* we want the bucket instance name without
 						    the oid prefix cruft */
-  return store->meta_mgr->set_attrs(bucket_instance_meta_handler, key,
-                                    obj, attrs, rmattrs, objv_tracker);
+  bufferlist bl;
+
+  ::encode(bucket_info, bl);
+
+  return rgw_bucket_instance_store_info(store, key, bl, false, &attrs, objv_tracker, 0);
 }
 
 static void dump_mulipart_index_results(list<rgw_obj_key>& objs_to_unlink,

@@ -674,23 +674,3 @@ int RGWMetadataManager::remove_entry(RGWMetadataHandler *handler, string& key, R
   return 0;
 }
 
-int RGWMetadataManager::set_attrs(RGWMetadataHandler *handler, string& key,
-                                  rgw_obj& obj, map<string, bufferlist>& attrs,
-                                  map<string, bufferlist>* rmattrs,
-                                  RGWObjVersionTracker *objv_tracker)
-{
-  string section;
-  RGWMetadataLogData log_data;
-  int ret = pre_modify(handler, section, key, log_data, objv_tracker, MDLOG_STATUS_SETATTRS);
-  if (ret < 0)
-    return ret;
-
-  ret = store->system_obj_set_attrs(NULL, obj, attrs, rmattrs, objv_tracker);
-  /* cascading ret into post_modify() */
-
-  ret = post_modify(handler, section, key, log_data, objv_tracker, ret);
-  if (ret < 0)
-    return ret;
-
-  return 0;
-}

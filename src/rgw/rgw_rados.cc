@@ -3692,6 +3692,10 @@ int RGWRados::put_system_obj_impl(rgw_obj& obj, uint64_t size, time_t *mtime,
     if (!(flags & PUT_OBJ_CREATE))
 	return -EINVAL;
     op.create(true); // exclusive create
+  } else {
+    op.remove();
+    op.set_op_flags2(LIBRADOS_OP_FLAG_FAILOK);
+    op.create(false);
   }
 
   if (objv_tracker) {
