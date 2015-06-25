@@ -245,7 +245,7 @@ public:
     }
 
     void append(char c);
-    void append(const char *p, unsigned l);
+    unsigned append(const char *p, unsigned l);
     void copy_in(unsigned o, unsigned l, const char *src);
     void zero();
     void zero(unsigned o, unsigned l);

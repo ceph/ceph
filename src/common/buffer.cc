@@ -817,12 +817,53 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
     _len++;
   }
   
-  void buffer::ptr::append(const char *p, unsigned l)
+  unsigned buffer::ptr::append(const char *p, unsigned l)
   {
     assert(_raw);
     assert(l <= unused_tail_length());
-    memcpy(c_str() + _len, p, l);
-    _len += l;
+    char* c = _raw->data + _off + _len;
+    if (l <= 32) {
+        _len += l;
+        switch (l) {
+            case 16:
+                *((uint64_t*)(c)) = *((uint64_t*)(p));
+                *((uint64_t*)(c+sizeof(uint64_t))) = *((uint64_t*)(p+sizeof(uint64_t)));
+                return _len + _off;
+            case 8:
+                *((uint64_t*)(c)) = *((uint64_t*)(p));
+                return _len + _off;
+            case 4:
+                *((uint32_t*)(c)) = *((uint32_t*)(p));
+                return _len + _off;
+            case 2:
+                *((uint16_t*)(c)) = *((uint16_t*)(p));
+                return _len + _off;
+            case 1:
+                *((uint8_t*)(c)) = *((uint8_t*)(p));
+                return _len + _off;
+        }
+        int cursor = 0;
+        while (l >= sizeof(uint64_t)) {
+            *((uint64_t*)(c + cursor)) = *((uint64_t*)(p + cursor));
+            cursor += sizeof(uint64_t);
+            l -= sizeof(uint64_t);
+        }
+        while (l >= sizeof(uint32_t)) {
+            *((uint32_t*)(c + cursor)) = *((uint32_t*)(p + cursor));
+            cursor += sizeof(uint32_t);
+            l -= sizeof(uint32_t);
+        }
+        while (l > 0) {
+            *(c+cursor) = *(p+cursor);
+            cursor++;
+            l--;
+        }
+    }
+    else {
+        memcpy(c, p, l);
+        _len += l;
+    }
+    return _len + _off;
   }
     
   void buffer::ptr::copy_in(unsigned o, unsigned l, const char *src)
@@ -1383,15 +1424,15 @@ void buffer::list::rebuild_page_aligned()
       // put what we can into the existing append_buffer.
       unsigned gap = append_buffer.unused_tail_length();
       if (gap > 0) {
-	if (gap > len) gap = len;
-	//cout << "append first char is " << data[0] << ", last char is " << data[len-1] << std::endl;
-	append_buffer.append(data, gap);
-	append(append_buffer, append_buffer.end() - gap, gap);	// add segment to the list
-	len -= gap;
-	data += gap;
+        if (gap > len) gap = len;
+    //cout << "append first char is " << data[0] << ", last char is " << data[len-1] << std::endl;
+        append_buffer.append(data, gap);
+        append(append_buffer, append_buffer.end() - gap, gap);	// add segment to the list
+        len -= gap;
+        data += gap;
       }
       if (len == 0)
-	break;  // done!
+        break;  // done!
       
       // make a new append_buffer!
       unsigned alen = CEPH_PAGE_SIZE * (((len-1) / CEPH_PAGE_SIZE) + 1);
