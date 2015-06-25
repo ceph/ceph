@@ -134,7 +134,6 @@ extern int rgw_remove_bucket(RGWRados *store, rgw_bucket& bucket, bool delete_ch
 
 extern int rgw_bucket_set_attrs(RGWRados *store, RGWBucketInfo& bucket_info,
                                 map<string, bufferlist>& attrs,
-                                map<string, bufferlist>* rmattrs,
                                 RGWObjVersionTracker *objv_tracker);
 
 extern void check_bad_user_bucket_mapping(RGWRados *store, const rgw_user& user_id, bool fix);
