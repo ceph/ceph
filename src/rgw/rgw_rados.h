@@ -782,7 +782,6 @@ public:
   int rename(const string& new_name);
   int update() { return store_info(false);}
 
-
   virtual const string& get_pool_name(CephContext *cct) = 0;
 
   virtual const string& get_default_oid() = 0;
@@ -1160,8 +1159,102 @@ public:
 
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
+
+  int get_current_period_id();
 };
 WRITE_CLASS_ENCODER(RGWRealm)
+
+struct RGWPeriodLatestEpochInfo {
+  epoch_t epoch;
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(epoch, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::iterator& bl) {
+    DECODE_START(1, bl);
+    ::decode(epoch, bl);
+    DECODE_FINISH(bl);
+  }
+
+  void dump(Formatter *f) const;
+  void decode_json(JSONObj *obj);
+};
+WRITE_CLASS_ENCODER(RGWPeriodLatestEpochInfo)
+
+class RGWPeriod
+{
+  string realm_id;
+  string id;
+  epoch_t epoch;
+  string predecessor_uuid;
+  map<int, version_t> versions;
+  string master_zonegroup;
+  map <string, RGWRegion> zonegroups;
+  string master_zone;
+
+  CephContext *cct;
+  RGWRados *store;
+
+  int store_info(bool exclusive);
+  int read_info(const string& obj_id);
+  int read_latest_epoch(RGWPeriodLatestEpochInfo& epoch_info);
+  int use_latest_epoch();
+  int set_latest_epoch(const epoch_t& epoch);
+  int use_current_period();
+
+public:
+  RGWPeriod(CephContext *_cct, RGWRados *_store,
+	    const string& period_id = "", epoch_t _epoch = 0)
+    : id(period_id), epoch(_epoch), cct(_cct), store(_store) {}
+
+  string get_id() { return id;}
+  epoch_t get_epoch() { return epoch;}
+  string get_predecessor() { return predecessor_uuid;}
+  string get_master_zonegroup() { return master_zonegroup;}
+  string get_master_zone() { return master_zone;}
+
+  const string& get_pool_name(CephContext *cct);
+  const string& get_latest_epoch_oid();
+  const string& get_info_oid_prefix();
+
+  int get_latest_epoch(epoch_t& epoch);
+  int init(const string& realm_id = "", const string &realm_name = "", bool setup_obj = true);
+
+  int create();
+  int delete_obj();
+  int update();
+  int activate() { return -ENOTSUP;}
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(id, bl);
+    ::encode(epoch, bl);
+    ::encode(predecessor_uuid, bl);
+    ::encode(versions, bl);
+    ::encode(master_zonegroup, bl);
+    ::encode(zonegroups, bl);
+    ::encode(master_zone, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::iterator& bl) {
+    DECODE_START(1, bl);
+    ::decode(id, bl);
+    ::decode(epoch, bl);
+    ::decode(predecessor_uuid, bl);
+    ::decode(versions, bl);
+    ::decode(master_zonegroup, bl);
+    ::decode(zonegroups, bl);
+    ::decode(master_zone, bl);
+    DECODE_FINISH(bl);
+  }
+  void dump(Formatter *f) const;
+  void decode_json(JSONObj *obj);
+};
+WRITE_CLASS_ENCODER(RGWPeriod)
 
 class RGWDataChangesLog;
 class RGWReplicaLogger;
