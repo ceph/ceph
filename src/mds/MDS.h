@@ -39,7 +39,7 @@
 #include "Beacon.h"
 
 
-#define CEPH_MDS_PROTOCOL    25 /* cluster internal */
+#define CEPH_MDS_PROTOCOL    26 /* cluster internal */
 
 enum {
   l_mds_first = 2000,
