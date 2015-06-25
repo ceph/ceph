@@ -637,6 +637,36 @@ void RGWSystemMetaObj::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("name", name, obj);
 }
 
+void RGWPeriodLatestEpochInfo::dump(Formatter *f) const {
+  encode_json("latest_epoch", epoch, f);
+}
+
+void RGWPeriodLatestEpochInfo::decode_json(JSONObj *obj) {
+  JSONDecoder::decode_json("latest_epoch", epoch, obj);
+}
+
+void RGWPeriod::dump(Formatter *f) const
+{
+  encode_json("id", id , f);
+  encode_json("epoch", epoch , f);
+  encode_json("predecessor_uuid", predecessor_uuid, f);
+  encode_json("versions", versions, f);
+  encode_json("master_zonegroup", master_zonegroup, f);
+  encode_json("zonegroups", zonegroups, f);
+  encode_json("master_zone", master_zone, f);
+}
+
+void RGWPeriod::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("id", id, obj);
+  JSONDecoder::decode_json("epoch", epoch, obj);
+  JSONDecoder::decode_json("predecessor_uuid", predecessor_uuid, obj);
+  JSONDecoder::decode_json("versions", versions, obj);
+  JSONDecoder::decode_json("master_zonegroup", master_zonegroup, obj);
+  JSONDecoder::decode_json("zonesgroup", zonegroups, obj);
+  JSONDecoder::decode_json("master_zone", master_zone, obj);
+}
+
 void RGWZoneParams::dump(Formatter *f) const
 {
   encode_json("domain_root", domain_root.data_pool, f);
