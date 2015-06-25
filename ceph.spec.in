@@ -18,9 +18,6 @@
   %global _with_systemd 1
 %endif
 
-#################################################################################
-# common
-#################################################################################
 Name:		ceph
 Version:	@VERSION@
 Release:	@RPM_RELEASE@%{?dist}
@@ -33,6 +30,9 @@ Source0:	http://ceph.com/download/%{name}-%{version}.tar.bz2
 %if 0%{?fedora} || 0%{?rhel}
 Patch0:		init-ceph.in-fedora.patch
 %endif
+#################################################################################
+# dependencies that apply across all distro families
+#################################################################################
 Requires:	librbd1 = %{epoch}:%{version}-%{release}
 Requires:	librados2 = %{epoch}:%{version}-%{release}
 Requires:	libcephfs1 = %{epoch}:%{version}-%{release}
@@ -98,7 +98,7 @@ BuildRequires:	snappy-devel
 %endif
 
 #################################################################################
-# specific
+# distro-conditional dependencies
 #################################################################################
 %if 0%{defined suse_version}
 BuildRequires:	net-tools
