@@ -59,10 +59,19 @@ class Filesystem(object):
         self.client_id = client_list[0]
         self.client_remote = list(misc.get_clients(ctx=ctx, roles=["client.{0}".format(self.client_id)]))[0][1]
 
-    def create(self):
+    def get_pgs_per_fs_pool(self):
+        """
+        Calculate how many PGs to use when creating a pool, in order to avoid raising any
+        health warnings about mon_pg_warn_min_per_osd
+
+        :return: an integer number of PGs
+        """
         pg_warn_min_per_osd = int(self.get_config('mon_pg_warn_min_per_osd'))
         osd_count = len(list(misc.all_roles_of_type(self._ctx.cluster, 'osd')))
-        pgs_per_fs_pool = pg_warn_min_per_osd * osd_count
+        return pg_warn_min_per_osd * osd_count
+
+    def create(self):
+        pgs_per_fs_pool = self.get_pgs_per_fs_pool()
 
         self.admin_remote.run(args=['sudo', 'ceph', 'osd', 'pool', 'create', 'metadata', pgs_per_fs_pool.__str__()])
         self.admin_remote.run(args=['sudo', 'ceph', 'osd', 'pool', 'create', 'data', pgs_per_fs_pool.__str__()])
@@ -479,7 +488,36 @@ class Filesystem(object):
                 time.sleep(1)
                 elapsed += 1
 
-    def read_backtrace(self, ino_no):
+    def _read_data_xattr(self, ino_no, xattr_name, type, pool):
+        mds_id = self.mds_ids[0]
+        remote = self.mds_daemons[mds_id].remote
+        if pool is None:
+            pool = self.get_data_pool_name()
+
+        obj_name = "{0:x}.00000000".format(ino_no)
+
+        temp_file = "/tmp/{0}_{1}".format(obj_name, datetime.datetime.now().isoformat())
+
+        args = [
+            "rados", "-p", pool, "getxattr", obj_name, xattr_name,
+            run.Raw(">"), temp_file
+        ]
+        try:
+            remote.run(
+                args=args,
+                stdout=StringIO())
+        except CommandFailedError as e:
+            log.error(e.__str__())
+            raise ObjectNotFound(obj_name)
+
+        p = remote.run(
+            args=["ceph-dencoder", "type", type, "import", temp_file, "decode", "dump_json"],
+            stdout=StringIO()
+        )
+
+        return json.loads(p.stdout.getvalue().strip())
+
+    def read_backtrace(self, ino_no, pool=None):
         """
         Read the backtrace from the data pool, return a dict in the format
         given by inode_backtrace_t::dump, which is something like:
@@ -497,32 +535,26 @@ class Filesystem(object):
               "pool": 1,
               "old_pools": []}
 
+        :param pool: name of pool to read backtrace from.  If omitted, FS must have only
+                     one data pool and that will be used.
         """
-        mds_id = self.mds_ids[0]
-        remote = self.mds_daemons[mds_id].remote
+        return self._read_data_xattr(ino_no, "parent", "inode_backtrace_t", pool)
 
-        obj_name = "{0:x}.00000000".format(ino_no)
+    def read_layout(self, ino_no, pool=None):
+        """
+        Read 'layout' xattr of an inode and parse the result, returning a dict like:
+        ::
+            {
+                "stripe_unit": 4194304,
+                "stripe_count": 1,
+                "object_size": 4194304,
+                "pg_pool": 1
+            }
 
-        temp_file = "/tmp/{0}_{1}".format(obj_name, datetime.datetime.now().isoformat())
-
-        args = [
-            "rados", "-p", self.get_data_pool_name(), "getxattr", obj_name, "parent",
-            run.Raw(">"), temp_file
-        ]
-        try:
-            remote.run(
-                args=args,
-                stdout=StringIO())
-        except CommandFailedError as e:
-            log.error(e.__str__())
-            raise ObjectNotFound(obj_name)
-
-        p = remote.run(
-            args=["ceph-dencoder", "type", "inode_backtrace_t", "import", temp_file, "decode", "dump_json"],
-            stdout=StringIO()
-        )
-
-        return json.loads(p.stdout.getvalue().strip())
+        :param pool: name of pool to read backtrace from.  If omitted, FS must have only
+                     one data pool and that will be used.
+        """
+        return self._read_data_xattr(ino_no, "layout", "ceph_file_layout_wrapper", pool)
 
     def _enumerate_data_objects(self, ino, size):
         """
