@@ -2223,15 +2223,6 @@ void OSDMap::dump_erasure_code_profiles(const map<string,map<string,string> > &p
   f->close_section();
 }
 
-void OSDMap::dump_json(ostream& out) const
-{
-  JSONFormatter jsf(true);
-  jsf.open_object_section("osdmap");
-  dump(&jsf);
-  jsf.close_section();
-  jsf.flush(out);
-}
-
 void OSDMap::dump(Formatter *f) const
 {
   f->dump_int("epoch", get_epoch());
