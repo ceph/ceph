@@ -53,7 +53,7 @@ int main(int argc, const char **argv)
 
   std::string fn;
   bool print = false;
-  bool print_json = false;
+  boost::scoped_ptr<Formatter> print_formatter;
   bool tree = false;
   boost::scoped_ptr<Formatter> tree_formatter;
   bool createsimple = false;
@@ -83,8 +83,11 @@ int main(int argc, const char **argv)
       usage();
     } else if (ceph_argparse_flag(args, i, "-p", "--print", (char*)NULL)) {
       print = true;
-    } else if (ceph_argparse_flag(args, i, "--dump-json", (char*)NULL)) {
-      print_json = true;
+    } else if (ceph_argparse_witharg(args, i, &val, err, "--dump", (char*)NULL)) {
+      print = true;
+      if (!val.empty() && val != "plain") {
+	print_formatter.reset(Formatter::create(val, "", "json"));
+      }
     } else if (ceph_argparse_witharg(args, i, &val, err, "--tree", (char*)NULL)) {
       tree = true;
       if (!val.empty() && val != "plain") {
@@ -454,7 +457,7 @@ int main(int argc, const char **argv)
     }
   }
 
-  if (!print && !print_json && !tree && !modified && 
+  if (!print && !tree && !modified &&
       export_crush.empty() && import_crush.empty() && 
       test_map_pg.empty() && test_map_object.empty() &&
       !test_map_pgs && !test_map_pgs_dump) {
@@ -465,10 +468,17 @@ int main(int argc, const char **argv)
   if (modified)
     osdmap.inc_epoch();
 
-  if (print) 
-    osdmap.print(cout);
-  if (print_json)
-    osdmap.dump_json(cout);
+  if (print) {
+    if (print_formatter) {
+      print_formatter->open_object_section("osdmap");
+      osdmap.dump(print_formatter.get());
+      print_formatter->close_section();
+      print_formatter->flush(cout);
+    } else {
+      osdmap.print(cout);
+    }
+  }
+
   if (tree) {
     if (tree_formatter) {
       tree_formatter->open_object_section("tree");
