@@ -74,6 +74,8 @@ static string region_info_oid_prefix = "region_info.";
 static string realm_names_oid_prefix = "realms_names.";
 static string realm_info_oid_prefix = "realms.";
 static string default_region_info_oid = "default.region";
+static string period_info_oid_prefix = "periods.";
+static string period_latest_epoch_info_oid = ".latest_epoch";
 static string region_map_oid = "region_map";
 static string log_lock_name = "rgw_log_lock";
 static string default_realm_info_oid = "default.realm";
@@ -85,6 +87,7 @@ static RGWObjCategory main_category = RGW_OBJ_CATEGORY_MAIN;
 #define RGW_DEFAULT_ZONE_ROOT_POOL "rgw.root"
 #define RGW_DEFAULT_REGION_ROOT_POOL "rgw.root"
 static string RGW_DEFAULT_REALM_ROOT_POOL = "rgw.root";
+static string RGW_DEFAULT_PERIOD_ROOT_POOL = "rgw.root";
 
 #define RGW_STATELOG_OBJ_PREFIX "statelog."
 
@@ -613,6 +616,192 @@ const string& RGWRealm::get_names_oid_prefix()
 const string& RGWRealm::get_info_oid_prefix()
 {
   return realm_info_oid_prefix;
+}
+
+int RGWRealm::get_current_period_id()
+{
+  return -ENOTSUP;
+}
+
+int RGWPeriod::init(const string& period_realm_id, const string& period_realm_name, bool setup_obj)
+{
+  realm_id = period_realm_id;
+
+  if (!setup_obj)
+    return 0;
+
+  RGWRealm realm(realm_id, period_realm_name);
+  int ret = realm.init(cct, store);
+  if (ret < 0) {
+    return ret;
+  }
+
+  /* update realm_id incare we used a period_name */
+  if (realm_id.empty()) {
+    realm_id = realm.get_id();
+  }
+
+  if (id.empty()) {
+    ret = realm.get_current_period_id();
+    if (ret < 0) {
+      return ret;
+    }
+  }
+
+  if (!epoch) {
+    ret = use_latest_epoch();
+    if (ret < 0) {
+      return ret;
+    }
+  }
+
+  return read_info(id);
+}
+
+const string& RGWPeriod::get_latest_epoch_oid()
+{
+  if (cct->_conf->rgw_period_latest_epoch_info_oid.empty()) {
+    return period_latest_epoch_info_oid;
+  }
+  return cct->_conf->rgw_period_latest_epoch_info_oid;
+}
+
+const string& RGWPeriod::get_info_oid_prefix()
+{
+  return period_info_oid_prefix;
+}
+
+int RGWPeriod::read_latest_epoch(RGWPeriodLatestEpochInfo& info)
+{
+  string pool_name = get_pool_name(cct);
+  string oid = get_info_oid_prefix() + id +
+    get_latest_epoch_oid();
+
+  rgw_bucket pool(pool_name.c_str());
+  bufferlist bl;
+  RGWObjectCtx obj_ctx(store);
+  int ret = rgw_get_system_obj(store, obj_ctx, pool, oid, bl, NULL, NULL);
+  if (ret < 0)
+    return ret;
+
+  try {
+    bufferlist::iterator iter = bl.begin();
+    ::decode(info, iter);
+  } catch (buffer::error& err) {
+    derr << "error decoding data from " << pool << ":" << oid << dendl;
+    return -EIO;
+  }
+
+  return 0;
+}
+
+int RGWPeriod::get_latest_epoch(epoch_t& latest_epoch)
+{
+  RGWPeriodLatestEpochInfo info;
+
+  int ret = read_latest_epoch(info);
+  if (ret < 0) {
+    return ret;
+  }
+
+  latest_epoch = info.epoch;
+
+  return 0;
+}
+
+int RGWPeriod::use_latest_epoch()
+{
+  RGWPeriodLatestEpochInfo info;
+  int ret = read_latest_epoch(info);
+  if (ret < 0)
+    return ret;
+
+  epoch = info.epoch;
+
+  return 0;
+}
+
+
+int RGWPeriod::delete_obj()
+{
+  string pool_name = get_pool_name(cct);
+  rgw_bucket pool(pool_name.c_str());
+  string oid  = get_info_oid_prefix() + id;
+
+  rgw_obj object_id(pool, oid);
+  int ret = store->delete_system_obj(object_id);
+  if (ret < 0) {
+    lderr(cct) << "Error delete object id " << id << ": " << cpp_strerror(-ret) << dendl;
+  }
+
+  return ret;
+}
+
+int RGWPeriod::read_info(const string& obj_id)
+{
+  string pool_name = get_pool_name(cct);
+
+  rgw_bucket pool(pool_name.c_str());
+  bufferlist bl;
+
+  string oid = get_info_oid_prefix()  + obj_id;
+
+  RGWObjectCtx obj_ctx(store);
+  int ret = rgw_get_system_obj(store, obj_ctx, pool, oid, bl, NULL, NULL);
+  if (ret < 0) {
+    lderr(cct) << "failed reading obj info from " << pool << ":" << oid << ": " << cpp_strerror(-ret) << dendl;
+    return ret;
+  }
+
+  try {
+    bufferlist::iterator iter = bl.begin();
+    ::decode(*this, iter);
+  } catch (buffer::error& err) {
+    ldout(cct, 0) << "ERROR: failed to decode obj from " << pool << ":" << oid << dendl;
+    return -EIO;
+  }
+
+  return 0;
+}
+
+int RGWPeriod::create()
+{
+  int ret;
+
+  /* create unique id */
+  uuid_d new_uuid;
+  char uuid_str[37];
+  new_uuid.generate_random();
+  new_uuid.print(uuid_str);
+  id = uuid_str;
+
+  ret = store_info(true);
+  if (ret < 0) {
+    ldout(cct, 0) << "ERROR:  storing info for " << id << ": " << cpp_strerror(-ret) << dendl;
+  }
+
+  return ret;
+}
+
+int RGWPeriod::store_info(bool exclusive)
+{
+  string pool_name = get_pool_name(cct);
+
+  rgw_bucket pool(pool_name.c_str());
+
+  string oid = get_info_oid_prefix() + id;
+
+  bufferlist bl;
+  ::encode(*this, bl);
+  return rgw_put_system_obj(store, pool, oid, bl.c_str(), bl.length(), exclusive, NULL, 0, NULL);
+}
+
+const string& RGWPeriod::get_pool_name(CephContext *cct)
+{
+  if (cct->_conf->rgw_period_root_pool.empty()) {
+    return RGW_DEFAULT_PERIOD_ROOT_POOL;
+  }
+  return cct->_conf->rgw_period_root_pool;
 }
 
 void RGWZoneParams::init_default(RGWRados *store)
