@@ -51,6 +51,8 @@ Requires:	parted
 Requires:	util-linux
 Requires:	hdparm
 Requires:	cryptsetup
+Requires:	findutils
+Requires:	which
 Requires(post):	binutils
 # We require this to be present for %%{_tmpfilesdir}
 %if 0%{?_with_systemd}
