@@ -125,7 +125,7 @@ public:
     int32_t new_flags;
 
     // full (rare)
-    bufferlist fullmap;  // in leiu of below.
+    bufferlist fullmap;  // in lieu of below.
     bufferlist crush;
 
     // incremental
