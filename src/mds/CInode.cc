@@ -3351,6 +3351,7 @@ void CInode::_encode_base(bufferlist& bl)
   ::encode(dirfragtree, bl);
   ::encode(xattrs, bl);
   ::encode(old_inodes, bl);
+  ::encode(damage_flags, bl);
   encode_snap(bl);
 }
 void CInode::_decode_base(bufferlist::iterator& p)
@@ -3361,6 +3362,7 @@ void CInode::_decode_base(bufferlist::iterator& p)
   ::decode(dirfragtree, p);
   ::decode(xattrs, p);
   ::decode(old_inodes, p);
+  ::decode(damage_flags, p);
   decode_snap(p);
 }
 
