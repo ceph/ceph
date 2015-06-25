@@ -45,6 +45,7 @@ Requires:	python-argparse
 Requires:	python-requests
 Requires:	python-flask
 Requires:	xfsprogs
+Requires:	logrotate
 Requires:	parted
 Requires:	util-linux
 Requires:	hdparm
@@ -113,7 +114,6 @@ BuildRequires:	gperftools-devel
 Requires:	scsirastools
 BuildRequires:	google-perftools-devel
 %endif
-Recommends:	logrotate
 BuildRequires:	%insserv_prereq
 BuildRequires:	mozilla-nss-devel
 BuildRequires:	keyutils-devel
