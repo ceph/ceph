@@ -51,7 +51,7 @@ setup(
                       'psutil >= 2.1.0',
                       'configparser',
                       'pytest',
-                      'ansible==1.9.1',
+                      'ansible==1.9.2',
                       'pyopenssl>=0.13',
                       'ndg-httpsclient',
                       'pyasn1',
