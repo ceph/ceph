@@ -692,6 +692,7 @@ void RGWOp_Quota_Info::execute()
   if (http_ret < 0)
     return;
 
+  flusher.start(0);
   if (show_all) {
     UserQuotas quotas(info);
     encode_json("quota", quotas, s->formatter);
