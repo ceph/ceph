@@ -33,6 +33,7 @@ Requires:	python-cephfs = %{epoch}:%{version}-%{release}
 Requires:	python
 Requires:	python-requests
 Requires:	python-flask
+Requires:	grep
 Requires:	xfsprogs
 Requires:	parted
 Requires:	util-linux
