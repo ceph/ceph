@@ -4,7 +4,7 @@
 %bcond_without tcmalloc
 %bcond_without libs_compat
 
-%if (0%{?el5} || (0%{?rhel_version} >= 500 && 0%{?rhel_version} <= 600))
+%if 0%{?el5} || (0%{?rhel_version} >= 500 && 0%{?rhel_version} <= 600)
 %{!?python_sitelib: %global python_sitelib %(%{__python} -c "from distutils.sysconfig import get_python_lib; print(get_python_lib())")}
 %{!?python_sitearch: %global python_sitearch %(%{__python} -c "from distutils.sysconfig import get_python_lib; print(get_python_lib(1))")}
 %endif
@@ -354,7 +354,7 @@ Group:		System Environment/Libraries
 License:	LGPL-2.0
 Requires:	ceph-common
 Requires:	xmlstarlet
-%if (0%{?fedora} >= 20 || 0%{?rhel} == 6)
+%if 0%{?fedora} >= 20 || 0%{?rhel} == 6
 BuildRequires:	lttng-ust-devel
 BuildRequires:	libbabeltrace-devel
 %endif
@@ -569,7 +569,7 @@ install -m 0644 -D udev/50-rbd.rules $RPM_BUILD_ROOT/lib/udev/rules.d/50-rbd.rul
 install -m 0644 -D udev/60-ceph-partuuid-workaround.rules $RPM_BUILD_ROOT/lib/udev/rules.d/60-ceph-partuuid-workaround.rules
 %endif
 
-%if (0%{?rhel} && 0%{?rhel} < 7)
+%if 0%{?rhel} && 0%{?rhel} < 7
 install -m 0644 -D udev/95-ceph-osd-alt.rules $RPM_BUILD_ROOT/lib/udev/rules.d/95-ceph-osd.rules
 %else
 install -m 0644 -D udev/95-ceph-osd.rules $RPM_BUILD_ROOT/lib/udev/rules.d/95-ceph-osd.rules
@@ -978,7 +978,7 @@ ln -sf %{_libdir}/librbd.so.1 /usr/lib64/qemu/librbd.so.1
 %{_mandir}/man8/rbd-replay-prep.8*
 %{_bindir}/rbd-replay
 %{_bindir}/rbd-replay-many
-%if (0%{?fedora} == 20 || 0%{?rhel} == 6)
+%if 0%{?fedora} == 20 || 0%{?rhel} == 6
 %{_bindir}/rbd-replay-prep
 %endif
 
