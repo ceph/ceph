@@ -572,7 +572,7 @@ void MDLog::trim(int m)
   stop += 2.0;
 
   map<uint64_t,LogSegment*>::iterator p = segments.begin();
-  while (p != segments.end() && 
+  while (segments.size() > 1 && p != segments.end() &&
 	 ((max_events >= 0 &&
 	   num_events - expiring_events - expired_events > max_events) ||
 	  (max_segments >= 0 &&
