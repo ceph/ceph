@@ -1964,7 +1964,6 @@ reprotect_and_return_err:
         close_image(ictx);
         return -EBUSY;
       }
-      assert(watchers.size() == 1);
 
       trim_image(ictx, 0, prog_ctx);
 
