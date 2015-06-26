@@ -254,7 +254,12 @@ void JournalingObjectStore::_op_journal_transactions(
   bufferlist& tbl, int data_align,  uint64_t op,
   Context *onjournal, TrackedOpRef osd_op)
 {
-  dout(10) << "op_journal_transactions " << op << dendl;
+  if (osd_op.get())
+    dout(10) << "op_journal_transactions " << op << " reqid_t "
+             << (static_cast<OpRequest *>(osd_op.get()))->get_reqid() << dendl;
+  else
+    dout(10) << "op_journal_transactions " << op  << dendl;
+
   if (journal && journal->is_writeable()) {
     journal->submit_entry(op, tbl, data_align, onjournal, osd_op);
   } else if (onjournal) {

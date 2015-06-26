@@ -1057,24 +1057,27 @@ void CInode::_fetched(bufferlist& bl, bufferlist& bl2, Context *fin)
     fin->complete(-ENOENT);
     return;
   }
-  string magic;
-  ::decode(magic, p);
-  dout(10) << " magic is '" << magic << "' (expecting '" << CEPH_FS_ONDISK_MAGIC << "')" << dendl;
-  if (magic != CEPH_FS_ONDISK_MAGIC) {
-    dout(0) << "on disk magic '" << magic << "' != my magic '" << CEPH_FS_ONDISK_MAGIC
-	    << "'" << dendl;
-    fin->complete(-EINVAL);
-  } else {
-    try {
-      decode_store(p);
-    } catch (buffer::error &err) {
-      derr << "Corrupt inode 0x" << std::hex << ino() << std::dec
-        << ": " << err << dendl;
+
+  // Attempt decode
+  try {
+    string magic;
+    ::decode(magic, p);
+    dout(10) << " magic is '" << magic << "' (expecting '"
+             << CEPH_FS_ONDISK_MAGIC << "')" << dendl;
+    if (magic != CEPH_FS_ONDISK_MAGIC) {
+      dout(0) << "on disk magic '" << magic << "' != my magic '" << CEPH_FS_ONDISK_MAGIC
+              << "'" << dendl;
       fin->complete(-EINVAL);
-      return;
+    } else {
+      decode_store(p);
+      dout(10) << "_fetched " << *this << dendl;
+      fin->complete(0);
     }
-    dout(10) << "_fetched " << *this << dendl;
-    fin->complete(0);
+  } catch (buffer::error &err) {
+    derr << "Corrupt inode 0x" << std::hex << ino() << std::dec
+      << ": " << err << dendl;
+    fin->complete(-EINVAL);
+    return;
   }
 }
 
@@ -2561,12 +2564,14 @@ void CInode::encode_snap(bufferlist& bl)
   bufferlist snapbl;
   encode_snap_blob(snapbl);
   ::encode(snapbl, bl);
+  ::encode(oldest_snap, bl);
 }    
 
 void CInode::decode_snap(bufferlist::iterator& p)
 {
   bufferlist snapbl;
   ::decode(snapbl, p);
+  ::decode(oldest_snap, p);
   decode_snap_blob(snapbl);
 }
 

@@ -142,7 +142,7 @@ XioConnection::XioConnection(XioMessenger *m, XioConnection::type _type,
         " throttle_msgs: " << xopt << " throttle_bytes: " << bytes_opt << dendl;
 
   /* XXXX fake features, aieee! */
-  set_features(XIO_ALL_FEATURES);
+  set_features(m->local_features);
 }
 
 int XioConnection::send_message(Message *m)
@@ -187,7 +187,7 @@ int XioConnection::passive_setup()
 static inline XioDispatchHook* pool_alloc_xio_dispatch_hook(
   XioConnection *xcon, Message *m, XioInSeq& msg_seq)
 {
-  struct xio_mempool_obj mp_mem;
+  struct xio_reg_mem mp_mem;
   int e = xpool_alloc(xio_msgr_noreg_mpool,
 		      sizeof(XioDispatchHook), &mp_mem);
   if (!!e)

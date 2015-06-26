@@ -488,7 +488,7 @@ Upgrading
   until we find a way to avoid violating distro security policies when linking
   libust.
 
-Upgrading from v0.80.x Giant
+Upgrading from v0.87.x Giant
 ----------------------------
 
 * librbd and librados include lttng tracepoints on distros with
@@ -583,7 +583,7 @@ Upgrading from v0.80.x Giant
   to interpret the quoted string and will most likely need to be fixed to take
   the unquoted number.
 
-* New ability to list all objects from all namespaces can fail or
+* New ability to list all objects from all namespaces that can fail or
   return incomplete results when not all OSDs have been upgraded.
   Features rados --all ls, rados cppool, rados export, rados
   cache-flush-evict-all and rados cache-try-flush-evict-all can also
