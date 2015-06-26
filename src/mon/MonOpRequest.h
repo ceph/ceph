@@ -64,19 +64,31 @@ struct MonOpRequest : public TrackedOp {
     mark_svc_event("paxos", event);
   }
 
+
+  enum op_type_t {
+    OP_TYPE_NONE    = 0,      ///< no type defined (default)
+    OP_TYPE_SERVICE,          ///< belongs to a Paxos Service or similar
+    OP_TYPE_MONITOR,          ///< belongs to the Monitor class
+    OP_TYPE_ELECTION,         ///< belongs to the Elector class
+    OP_TYPE_PAXOS,            ///< refers to Paxos messages
+    OP_TYPE_COMMAND,          ///< is a command
+  };
+
 private:
   Message *request;
   utime_t dequeued_time;
   MonSession *session;
   ConnectionRef con;
   bool forwarded_to_leader;
+  op_type_t op_type;
 
   MonOpRequest(Message *req, OpTracker *tracker) :
     TrackedOp(tracker, req->get_recv_stamp()),
     request(req->get()),
     session(NULL),
     con(NULL),
-    forwarded_to_leader(false)
+    forwarded_to_leader(false),
+    op_type(OP_TYPE_NONE)
   {
     tracker->mark_event(this, "header_read", request->get_recv_stamp());
     tracker->mark_event(this, "throttled", request->get_throttle_stamp());
@@ -163,6 +175,44 @@ public:
     }
   }
 
+  void set_op_type(op_type_t t) {
+    op_type = t;
+  }
+  void set_type_service() {
+    set_op_type(OP_TYPE_SERVICE);
+  }
+  void set_type_monitor() {
+    set_op_type(OP_TYPE_MONITOR);
+  }
+  void set_type_paxos() {
+    set_op_type(OP_TYPE_PAXOS);
+  }
+  void set_type_election() {
+    set_op_type(OP_TYPE_ELECTION);
+  }
+  void set_type_command() {
+    set_op_type(OP_TYPE_COMMAND);
+  }
+
+  op_type_t get_op_type() {
+    return op_type;
+  }
+
+  bool is_type_service() {
+    return (get_op_type() == OP_TYPE_SERVICE);
+  }
+  bool is_type_monitor() {
+    return (get_op_type() == OP_TYPE_MONITOR);
+  }
+  bool is_type_paxos() {
+    return (get_op_type() == OP_TYPE_PAXOS);
+  }
+  bool is_type_election() {
+    return (get_op_type() == OP_TYPE_ELECTION);
+  }
+  bool is_type_command() {
+    return (get_op_type() == OP_TYPE_COMMAND);
+  }
 };
 
 typedef MonOpRequest::Ref MonOpRequestRef;
