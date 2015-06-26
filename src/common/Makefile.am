@@ -137,12 +137,20 @@ LIBCOMMON_DEPS += \
 	$(BOOST_RANDOM_LIBS)
 
 if LINUX
-LIBCOMMON_DEPS += -lrt -lblkid
+LIBCOMMON_DEPS += -lrt -lblkid -luuid
 endif # LINUX
+LIBCOMMON_DEPS += -lrt -luuid -lcrypto++ -llttng-ust
 
 libcommon_la_SOURCES = common/buffer.cc
 libcommon_la_LIBADD = $(LIBCOMMON_DEPS)
-noinst_LTLIBRARIES += libcommon.la
+
+libcommon_la_LDFLAGS = ${AM_LDFLAGS} -version-info 1:0:0
+#if LINUX
+#libcommon_la_CXXFLAGS = -fvisibility=hidden -fvisibility-inlines-hidden
+#libcommon_la_LDFLAGS += -Xcompiler -Xlinker -Xcompiler '--exclude-libs=ALL'
+#endif
+
+lib_LTLIBRARIES += libcommon.la
 
 noinst_HEADERS += \
 	common/BackTrace.h \

@@ -13,7 +13,7 @@ libceph_os_la_SOURCES = \
 	common/TrackedOp.cc
 
 libceph_os_la_CXXFLAGS = ${AM_CXXFLAGS}
-libceph_os_la_LIBADD = $(PTHREAD_LIBS) $(EXTRALIBS)
+libceph_os_la_LIBADD = $(PTHREAD_LIBS) $(EXTRALIBS) $(LIBKVSTORE)
 
 libceph_os_la_LDFLAGS = ${AM_LDFLAGS} -version-info 1:0:0
 
