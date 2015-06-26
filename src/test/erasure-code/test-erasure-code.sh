@@ -249,6 +249,49 @@ function verify_chunk_mapping() {
     grep --quiet --recursive --text SECOND$poolname $dir/${osds[$second]} || return 1
 }
 
+function TEST_ec_readall_flag() {
+    local dir=$1
+
+    # Set flag
+    ./ceph tell osd.* injectargs "--osd-pool-erasure-code-subread-all=true" || return 1
+
+    local poolname=ecpool
+    #local poolname=pool-jerasure
+    local profile=profile-jerasure
+
+    # create a EC pool for testing
+    #./ceph osd erasure-code-profile set $profile \
+    #    plugin=jerasure \
+    #    k=2 m=1 \
+    #    ruleset-failure-domain=osd || return 1
+    #./ceph osd pool create $poolname 12 12 erasure $profile || return 1
+
+    # make sure there is one shard returning error,
+    # and the OSD owning that shard has the right flags
+    local objname=obj-eio-$$
+    local -a initial_osds=($(get_osds $poolname $objname))
+    local last=$((${#initial_osds[@]} - 1))
+    CEPH_ARGS='' ./ceph --admin-daemon $dir/ceph-osd.$last.asok config set \
+        filestore_debug_inject_read_err true || return 1
+    CEPH_ARGS='' ./ceph --admin-daemon $dir/ceph-osd.$last.asok injectdataerr \
+        $poolname $objname $(expr ${#initial_osds[@]} - 1)  || return 1
+    CEPH_ARGS='' ./ceph --admin-daemon $dir/ceph-osd.$last.asok config set \
+        filestore_fail_eio false || return 1
+
+    rados_put_get $dir $poolname $objname || return 1
+    
+    # verify there is no OSD crash
+    wait_for_clean
+
+    # Clean up
+#    delete_pool $poolname || return 1
+    CEPH_ARGS='' ./ceph --admin-daemon $dir/ceph-osd.$last.asok config set \
+        filestore_debug_inject_read_err false || return 1
+    CEPH_ARGS='' ./ceph --admin-daemon $dir/ceph-osd.${initial_osds[$shardid]}.asok config set \
+        filestore_fail_eio true || return 1
+    ./ceph tell osd.* injectargs "--osd-pool-erasure-code-subread-all=false"
+}
+
 function TEST_chunk_mapping() {
     local dir=$1
 
