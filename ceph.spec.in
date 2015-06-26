@@ -98,7 +98,6 @@ BuildRequires:	net-tools
 #################################################################################
 %if 0%{defined suse_version}
 Requires:	python-Flask
-BuildRequires:	sharutils
 %if 0%{?suse_version} > 1210
 Requires:	gptfdisk
 BuildRequires:	gperftools-devel
