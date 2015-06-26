@@ -368,7 +368,7 @@ static int get_hobject_from_oinfo(const char *dir, const char *file,
   bufferlist bl;
   bl.push_back(bp);
   object_info_t oi(bl);
-  *o = oi.soid;
+  *o = ghobject_t(oi.soid);
   return 0;
 }
 

@@ -104,7 +104,7 @@ void FileStoreTracker::write(const pair<coll_t, string> &obj,
     to_write.append(*iter);
   }
   out->t->write(coll_t(obj.first),
-		hobject_t(sobject_t(obj.second, CEPH_NOSNAP)),
+		ghobject_t(hobject_t(sobject_t(obj.second, CEPH_NOSNAP))),
 		offset,
 		len,
 		to_write);
@@ -120,7 +120,7 @@ void FileStoreTracker::remove(const pair<coll_t, string> &obj,
   if (!old_contents.exists())
     return;
   out->t->remove(coll_t(obj.first),
-		 hobject_t(sobject_t(obj.second, CEPH_NOSNAP)));
+		 ghobject_t(hobject_t(sobject_t(obj.second, CEPH_NOSNAP))));
   ObjectContents contents;
   out->in_flight->push_back(make_pair(obj, set_content(obj, contents)));
 }
@@ -148,8 +148,8 @@ void FileStoreTracker::clone_range(const pair<coll_t, string> &from,
   interval_to_clone.insert(offset, len);
   to_contents.clone_range(from_contents, interval_to_clone);
   out->t->clone_range(coll_t(from.first),
-		      hobject_t(sobject_t(from.second, CEPH_NOSNAP)),
-		      hobject_t(sobject_t(to.second, CEPH_NOSNAP)),
+		      ghobject_t(hobject_t(sobject_t(from.second, CEPH_NOSNAP))),
+		      ghobject_t(hobject_t(sobject_t(to.second, CEPH_NOSNAP))),
 		      offset,
 		      len,
 		      offset);
@@ -173,10 +173,10 @@ void FileStoreTracker::clone(const pair<coll_t, string> &from,
 
   if (to_contents.exists())
     out->t->remove(coll_t(to.first),
-		   hobject_t(sobject_t(to.second, CEPH_NOSNAP)));
+		   ghobject_t(hobject_t(sobject_t(to.second, CEPH_NOSNAP))));
   out->t->clone(coll_t(from.first),
-		hobject_t(sobject_t(from.second, CEPH_NOSNAP)),
-		hobject_t(sobject_t(to.second, CEPH_NOSNAP)));
+		ghobject_t(hobject_t(sobject_t(from.second, CEPH_NOSNAP))),
+		ghobject_t(hobject_t(sobject_t(to.second, CEPH_NOSNAP))));
   out->in_flight->push_back(make_pair(to, set_content(to, from_contents)));
 }
 
@@ -281,7 +281,7 @@ void FileStoreTracker::verify(const coll_t &coll, const string &obj,
   std::cerr << "valid_reads is " << valid_reads << std::endl;
   bufferlist contents;
   int r = store->read(coll_t(coll),
-		      hobject_t(sobject_t(obj, CEPH_NOSNAP)),
+		      ghobject_t(hobject_t(sobject_t(obj, CEPH_NOSNAP))),
 		      0,
 		      2*SIZE,
 		      contents);
