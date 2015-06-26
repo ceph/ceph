@@ -52,6 +52,12 @@ void MDSIOContextBase::complete(int r) {
   dout(10) << "MDSIOContextBase::complete: " << typeid(*this).name() << dendl;
   assert(mds != NULL);
   Mutex::Locker l(mds->mds_lock);
+  if (mds->stopping) {
+    dout(4) << "MDSIOContextBase::complete: dropping for stopping "
+            << typeid(*this).name() << dendl;
+    return;
+  }
+
   if (r == -EBLACKLISTED) {
     derr << "MDSIOContextBase: blacklisted!  Restarting..." << dendl;
     mds->respawn();
