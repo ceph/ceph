@@ -44,6 +44,7 @@ Requires:	python
 Requires:	python-argparse
 Requires:	python-requests
 Requires:	python-flask
+Requires:	grep
 Requires:	xfsprogs
 Requires:	parted
 Requires:	util-linux
