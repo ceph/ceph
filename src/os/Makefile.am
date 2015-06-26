@@ -7,16 +7,21 @@ if ENABLE_SERVER
 noinst_HEADERS += \
 	os/ObjectStore.h
 
-libos_la_SOURCES = \
+libceph_os_la_SOURCES = \
 	os/ObjectStore.cc \
 	os/Transaction.cc \
 	common/TrackedOp.cc
 
-libos_la_CXXFLAGS = ${AM_CXXFLAGS}
-#libos_la_LIBADD = $(LIBOS_TYPES)
+libceph_os_la_CXXFLAGS = ${AM_CXXFLAGS}
+libceph_os_la_LIBADD = $(PTHREAD_LIBS) $(EXTRALIBS) $(LIBKVSTORE)
 if WITH_LTTNG
-libos_la_LIBADD = $(LIBOS_TP)
+libceph_os_la_LIBADD += $(LIBOS_TP)
 endif
+EXTRALIBS += -llttng-ust
 
-noinst_LTLIBRARIES += libos.la
+libceph_os_la_LDFLAGS = ${AM_LDFLAGS} -version-info 1:0:0
+
+lib_LTLIBRARIES += libceph_os.la
+
+#noinst_LTLIBRARIES += libceph_os.la
 endif # ENABLE_SERVER
