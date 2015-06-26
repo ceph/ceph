@@ -2551,6 +2551,7 @@ bool Monitor::is_keyring_required()
 
 void Monitor::handle_command(MonOpRequestRef op)
 {
+  assert(op->is_type_command());
   MMonCommand *m = static_cast<MMonCommand*>(op->get_req());
   if (m->fsid != monmap->fsid) {
     dout(0) << "handle_command on fsid " << m->fsid << " != " << monmap->fsid << dendl;

@@ -1368,6 +1368,7 @@ void Paxos::restart()
 
 void Paxos::dispatch(MonOpRequestRef op)
 {
+  assert(op->is_type_paxos());
   op->mark_paxos_event("dispatch");
   PaxosServiceMessage *m = static_cast<PaxosServiceMessage*>(op->get_req());
   // election in progress?
