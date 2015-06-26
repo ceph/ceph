@@ -174,7 +174,8 @@ def test_failure(cmd, errmsg):
             logging.info("Correctly failed with message \"" + errmsg + "\"")
             return 0
         else:
-            logging.error("Bad message to stderr \"" + e.output + "\"")
+            errmsg = e.output.split('\n')[0]
+            logging.error("Bad message to stderr \"" + errmsg + "\"")
             return 1
 
 
@@ -650,13 +651,25 @@ def main(argv):
     cmd = (CFSD_PREFIX + "--op remove").format(osd=ONEOSD)
     ERRORS += test_failure(cmd, "Must provide pgid")
 
-    # Don't secify a --op
+    # Don't secify a --op nor object command
     cmd = CFSD_PREFIX.format(osd=ONEOSD)
     ERRORS += test_failure(cmd, "Must provide --op or object command...")
 
     # Specify a bad --op command
     cmd = (CFSD_PREFIX + "--op oops").format(osd=ONEOSD)
     ERRORS += test_failure(cmd, "Must provide --op (info, log, remove, export, import, list, fix-lost, list-pgs, rm-past-intervals, set-allow-sharded-objects, dump-journal, dump-super)")
+
+    # Provide just the object param not a command
+    cmd = (CFSD_PREFIX + "object").format(osd=ONEOSD)
+    ERRORS += test_failure(cmd, "Invalid syntax, missing command")
+
+    # Provide an object name that doesn't exist
+    cmd = (CFSD_PREFIX + "NON_OBJECT get-bytes").format(osd=ONEOSD)
+    ERRORS += test_failure(cmd, "No object id 'NON_OBJECT' found")
+
+    # Provide an invalid object command
+    cmd = (CFSD_PREFIX + "--pgid {pg} '' notacommand").format(osd=ONEOSD, pg=ONEPG)
+    ERRORS += test_failure(cmd, "Unknown object command 'notacommand'")
 
     TMPFILE = r"/tmp/tmp.{pid}".format(pid=pid)
     ALLPGS = OBJREPPGS + OBJECPGS

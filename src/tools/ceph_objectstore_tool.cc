@@ -2791,18 +2791,18 @@ int main(int argc, char **argv)
     usage(desc);
     myexit(1);
   }
-  if (op != "list" && vm.count("object") && !vm.count("objcmd")) {
-    cerr << "Invalid syntax, missing command" << std::endl;
-    usage(desc);
-    myexit(1);
-  }
-  if (!vm.count("op") && !(vm.count("object") && vm.count("objcmd"))) {
+  if (!vm.count("op") && !vm.count("object")) {
     cerr << "Must provide --op or object command..." << std::endl;
     usage(desc);
     myexit(1);
   }
   if (op != "list" && vm.count("op") && vm.count("object")) {
     cerr << "Can't specify both --op and object command syntax" << std::endl;
+    usage(desc);
+    myexit(1);
+  }
+  if (op != "list" && vm.count("object") && !vm.count("objcmd")) {
+    cerr << "Invalid syntax, missing command" << std::endl;
     usage(desc);
     myexit(1);
   }
@@ -2992,10 +2992,10 @@ int main(int argc, char **argv)
 	  if (lookup.size() != 1) {
 	    stringstream ss;
 	    if (lookup.size() == 0)
-	      ss << objcmd << ": " << cpp_strerror(ENOENT);
+	      ss << "No object id '" << object << "' found";
 	    else
-	      ss << "expected a single object named '" << object
-		 << "' but got " << lookup.size() << " instead";
+	      ss << "Found " << lookup.size() << " objects with id '" << object
+		 << "', please use a JSON spec from --op list instead";
 	    throw std::runtime_error(ss.str());
 	  }
 	  pair<coll_t, ghobject_t> found = lookup.pop();
