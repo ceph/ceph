@@ -991,7 +991,7 @@ int do_check_object_locator(const string& bucket_name, bool fix, bool remove_bad
   list_op.params.delim = delim;
   list_op.params.marker = rgw_obj_key(marker);
   list_op.params.ns = ns;
-  list_op.params.enforce_ns = false;
+  list_op.params.enforce_ns = true;
   list_op.params.list_versions = true;
   
   f->open_array_section("check_objects");
