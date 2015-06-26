@@ -92,8 +92,8 @@ Architecture: linux-any
 Section: debug
 Priority: extra
 Depends: ceph (= ${binary:Version}), ${misc:Depends}
-Replaces: ceph-test-dbg (<< 0.94-1322)
-Breaks: ceph-test-dbg (<< 0.94-1322)
+Replaces: ceph-test-dbg (<< 0.94.2)
+Breaks: ceph-test-dbg (<< 0.94.2)
 Description: debugging symbols for ceph
  Ceph is a distributed storage system designed to provide excellent
  performance, reliability, and scalability.
