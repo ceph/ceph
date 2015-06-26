@@ -4095,7 +4095,7 @@ void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
 
       val.append(valstr);
       newattrs[key] = val;
-      t.omap_setkeys(coll_t(pgid), obj, newattrs);
+      t.omap_setkeys(coll_t(pgid), ghobject_t(obj), newattrs);
       r = store->apply_transaction(t);
       if (r < 0)
         ss << "error=" << r;
@@ -4107,7 +4107,7 @@ void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
       cmd_getval(service->cct, cmdmap, "key", key);
 
       keys.insert(key);
-      t.omap_rmkeys(coll_t(pgid), obj, keys);
+      t.omap_rmkeys(coll_t(pgid), ghobject_t(obj), keys);
       r = store->apply_transaction(t);
       if (r < 0)
         ss << "error=" << r;
@@ -4119,7 +4119,7 @@ void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
 
       cmd_getval(service->cct, cmdmap, "header", headerstr);
       newheader.append(headerstr);
-      t.omap_setheader(coll_t(pgid), obj, newheader);
+      t.omap_setheader(coll_t(pgid), ghobject_t(obj), newheader);
       r = store->apply_transaction(t);
       if (r < 0)
         ss << "error=" << r;
@@ -4129,7 +4129,7 @@ void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
       //Debug: Output entire omap
       bufferlist hdrbl;
       map<string, bufferlist> keyvals;
-      r = store->omap_get(coll_t(pgid), obj, &hdrbl, &keyvals);
+      r = store->omap_get(coll_t(pgid), ghobject_t(obj), &hdrbl, &keyvals);
       if (r >= 0) {
           ss << "header=" << string(hdrbl.c_str(), hdrbl.length());
           for (map<string, bufferlist>::iterator it = keyvals.begin();
@@ -4142,7 +4142,7 @@ void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
     } else if (command == "truncobj") {
       int64_t trunclen;
       cmd_getval(service->cct, cmdmap, "len", trunclen);
-      t.truncate(coll_t(pgid), obj, trunclen);
+      t.truncate(coll_t(pgid), ghobject_t(obj), trunclen);
       r = store->apply_transaction(t);
       if (r < 0)
 	ss << "error=" << r;
@@ -5087,9 +5087,9 @@ void OSD::do_command(Connection *con, ceph_tid_t tid, vector<string>& cmd, buffe
       object_t oid(nm);
       hobject_t soid(sobject_t(oid, 0));
       ObjectStore::Transaction *t = new ObjectStore::Transaction;
-      t->write(coll_t::meta(), soid, 0, bsize, bl);
+      t->write(coll_t::meta(), ghobject_t(soid), 0, bsize, bl);
       store->queue_transaction_and_cleanup(NULL, t);
-      cleanupt->remove(coll_t::meta(), soid);
+      cleanupt->remove(coll_t::meta(), ghobject_t(soid));
     }
     store->sync_and_flush();
     utime_t end = ceph_clock_now(cct);
@@ -6113,7 +6113,7 @@ void OSD::handle_osd_map(MOSDMap *m)
       if (o->test_flag(CEPH_OSDMAP_FULL))
 	last_marked_full = e;
 
-      hobject_t fulloid = get_osdmap_pobject_name(e);
+      ghobject_t fulloid = get_osdmap_pobject_name(e);
       t.write(coll_t::meta(), fulloid, 0, bl.length(), bl);
       pin_map_bl(e, bl);
       pinned_maps.push_back(add_map(o));
@@ -6124,7 +6124,7 @@ void OSD::handle_osd_map(MOSDMap *m)
     if (p != m->incremental_maps.end()) {
       dout(10) << "handle_osd_map  got inc map for epoch " << e << dendl;
       bufferlist& bl = p->second;
-      hobject_t oid = get_inc_osdmap_pobject_name(e);
+      ghobject_t oid = get_inc_osdmap_pobject_name(e);
       t.write(coll_t::meta(), oid, 0, bl.length(), bl);
       pin_map_inc_bl(e, bl);
 
@@ -6170,7 +6170,7 @@ void OSD::handle_osd_map(MOSDMap *m)
       }
 
 
-      hobject_t fulloid = get_osdmap_pobject_name(e);
+      ghobject_t fulloid = get_osdmap_pobject_name(e);
       t.write(coll_t::meta(), fulloid, 0, fbl.length(), fbl);
       pin_map_bl(e, fbl);
       pinned_maps.push_back(add_map(o));

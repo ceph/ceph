@@ -259,7 +259,7 @@ int ReplicatedBackend::objects_read_sync(
   uint32_t op_flags,
   bufferlist *bl)
 {
-  return store->read(coll, hoid, off, len, *bl, op_flags);
+  return store->read(coll, ghobject_t(hoid), off, len, *bl, op_flags);
 }
 
 struct AsyncReadCallback : public GenContext<ThreadPool::TPHandle&> {
@@ -286,7 +286,7 @@ void ReplicatedBackend::objects_read_async(
 	   to_read.begin();
        i != to_read.end() && r >= 0;
        ++i) {
-    int _r = store->read(coll, hoid, i->first.get<0>(),
+    int _r = store->read(coll, ghobject_t(hoid), i->first.get<0>(),
 			 i->first.get<1>(), *(i->second.first),
 			 i->first.get<2>());
     if (i->second.second) {
@@ -353,38 +353,38 @@ public:
     uint32_t fadvise_flags
     ) {
     written += len;
-    t->write(get_coll_ct(hoid), hoid, off, len, bl, fadvise_flags);
+    t->write(get_coll_ct(hoid), ghobject_t(hoid), off, len, bl, fadvise_flags);
   }
   void remove(
     const hobject_t &hoid
     ) {
-    t->remove(get_coll_rm(hoid), hoid);
+    t->remove(get_coll_rm(hoid), ghobject_t(hoid));
   }
   void stash(
     const hobject_t &hoid,
     version_t former_version) {
     t->collection_move_rename(
-      coll, hoid, coll,
+      coll, ghobject_t(hoid), coll,
       ghobject_t(hoid, former_version, shard_id_t::NO_SHARD));
   }
   void setattrs(
     const hobject_t &hoid,
     map<string, bufferlist> &attrs
     ) {
-    t->setattrs(get_coll(hoid), hoid, attrs);
+    t->setattrs(get_coll(hoid), ghobject_t(hoid), attrs);
   }
   void setattr(
     const hobject_t &hoid,
     const string &attrname,
     bufferlist &bl
     ) {
-    t->setattr(get_coll(hoid), hoid, attrname, bl);
+    t->setattr(get_coll(hoid), ghobject_t(hoid), attrname, bl);
   }
   void rmattr(
     const hobject_t &hoid,
     const string &attrname
     ) {
-    t->rmattr(get_coll(hoid), hoid, attrname);
+    t->rmattr(get_coll(hoid), ghobject_t(hoid), attrname);
   }
   void omap_setkeys(
     const hobject_t &hoid,
@@ -392,25 +392,25 @@ public:
     ) {
     for (map<string, bufferlist>::iterator p = keys.begin(); p != keys.end(); ++p)
       written += p->first.length() + p->second.length();
-    return t->omap_setkeys(get_coll(hoid), hoid, keys);
+    return t->omap_setkeys(get_coll(hoid), ghobject_t(hoid), keys);
   }
   void omap_rmkeys(
     const hobject_t &hoid,
     set<string> &keys
     ) {
-    t->omap_rmkeys(get_coll(hoid), hoid, keys);
+    t->omap_rmkeys(get_coll(hoid), ghobject_t(hoid), keys);
   }
   void omap_clear(
     const hobject_t &hoid
     ) {
-    t->omap_clear(get_coll(hoid), hoid);
+    t->omap_clear(get_coll(hoid), ghobject_t(hoid));
   }
   void omap_setheader(
     const hobject_t &hoid,
     bufferlist &header
     ) {
     written += header.length();
-    t->omap_setheader(get_coll(hoid), hoid, header);
+    t->omap_setheader(get_coll(hoid), ghobject_t(hoid), header);
   }
   void clone_range(
     const hobject_t &from,
@@ -420,14 +420,14 @@ public:
     uint64_t tooff
     ) {
     assert(get_coll(from) == get_coll_ct(to)  && get_coll(from) == coll);
-    t->clone_range(coll, from, to, fromoff, len, tooff);
+    t->clone_range(coll, ghobject_t(from), ghobject_t(to), fromoff, len, tooff);
   }
   void clone(
     const hobject_t &from,
     const hobject_t &to
     ) {
     assert(get_coll(from) == get_coll_ct(to)  && get_coll(from) == coll);
-    t->clone(coll, from, to);
+    t->clone(coll, ghobject_t(from), ghobject_t(to));
   }
   void rename(
     const hobject_t &from,
@@ -435,29 +435,29 @@ public:
     ) {
     t->collection_move_rename(
       get_coll_rm(from),
-      from,
+      ghobject_t(from),
       get_coll_ct(to),
-      to);
+      ghobject_t(to));
   }
 
   void touch(
     const hobject_t &hoid
     ) {
-    t->touch(get_coll_ct(hoid), hoid);
+    t->touch(get_coll_ct(hoid), ghobject_t(hoid));
   }
 
   void truncate(
     const hobject_t &hoid,
     uint64_t off
     ) {
-    t->truncate(get_coll(hoid), hoid, off);
+    t->truncate(get_coll(hoid), ghobject_t(hoid), off);
   }
   void zero(
     const hobject_t &hoid,
     uint64_t off,
     uint64_t len
     ) {
-    t->zero(get_coll(hoid), hoid, off, len);
+    t->zero(get_coll(hoid), ghobject_t(hoid), off, len);
   }
 
   void set_alloc_hint(
@@ -465,7 +465,7 @@ public:
     uint64_t expected_object_size,
     uint64_t expected_write_size
     ) {
-    t->set_alloc_hint(get_coll(hoid), hoid, expected_object_size,
+    t->set_alloc_hint(get_coll(hoid), ghobject_t(hoid), expected_object_size,
                       expected_write_size);
   }
 
@@ -1155,7 +1155,7 @@ void ReplicatedBackend::sub_op_modify_impl(OpRequestRef op)
     if (rm->opt.empty()) {
       dout(10) << __func__ << ": removing object " << m->discard_temp_oid
 	       << " since we won't get the transaction" << dendl;
-      rm->localt.remove(coll, m->discard_temp_oid);
+      rm->localt.remove(coll, ghobject_t(m->discard_temp_oid));
     }
     clear_temp_obj(m->discard_temp_oid);
   }
@@ -1691,10 +1691,10 @@ void ReplicatedBackend::submit_push_data(
   }
 
   if (first) {
-    t->remove(coll, target_oid);
-    t->touch(coll, target_oid);
-    t->truncate(coll, target_oid, recovery_info.size);
-    t->omap_setheader(coll, target_oid, omap_header);
+    t->remove(coll, ghobject_t(target_oid));
+    t->touch(coll, ghobject_t(target_oid));
+    t->truncate(coll, ghobject_t(target_oid), recovery_info.size);
+    t->omap_setheader(coll, ghobject_t(target_oid), omap_header);
   }
   uint64_t off = 0;
   for (interval_set<uint64_t>::const_iterator p = intervals_included.begin();
@@ -1702,23 +1702,24 @@ void ReplicatedBackend::submit_push_data(
        ++p) {
     bufferlist bit;
     bit.substr_of(data_included, off, p.get_len());
-    t->write(coll, target_oid,
+    t->write(coll, ghobject_t(target_oid),
 	     p.get_start(), p.get_len(), bit);
     off += p.get_len();
   }
 
   if (!omap_entries.empty())
-    t->omap_setkeys(coll, target_oid, omap_entries);
+    t->omap_setkeys(coll, ghobject_t(target_oid), omap_entries);
   if (!attrs.empty())
-    t->setattrs(coll, target_oid, attrs);
+    t->setattrs(coll, ghobject_t(target_oid), attrs);
 
   if (complete) {
     if (!first) {
       dout(10) << __func__ << ": Removing oid "
 	       << target_oid << " from the temp collection" << dendl;
       clear_temp_obj(target_oid);
-      t->remove(coll, recovery_info.soid);
-      t->collection_move_rename(coll, target_oid, coll, recovery_info.soid);
+      t->remove(coll, ghobject_t(recovery_info.soid));
+      t->collection_move_rename(coll, ghobject_t(target_oid),
+				coll, ghobject_t(recovery_info.soid));
     }
 
     submit_push_complete(recovery_info, t);
@@ -1737,7 +1738,7 @@ void ReplicatedBackend::submit_push_complete(ObjectRecoveryInfo &recovery_info,
 	 ++q) {
       dout(15) << " clone_range " << p->first << " "
 	       << q.get_start() << "~" << q.get_len() << dendl;
-      t->clone_range(coll, p->first, recovery_info.soid,
+      t->clone_range(coll, ghobject_t(p->first), ghobject_t(recovery_info.soid),
 		     q.get_start(), q.get_len(), q.get_start());
     }
   }
@@ -1987,8 +1988,8 @@ int ReplicatedBackend::build_push_op(const ObjectRecoveryInfo &recovery_info,
           << dendl;
 
   if (progress.first) {
-    store->omap_get_header(coll, recovery_info.soid, &out_op->omap_header);
-    store->getattrs(coll, recovery_info.soid, out_op->attrset);
+    store->omap_get_header(coll, ghobject_t(recovery_info.soid), &out_op->omap_header);
+    store->getattrs(coll, ghobject_t(recovery_info.soid), out_op->attrset);
 
     // Debug
     bufferlist bv = out_op->attrset[OI_ATTR];
@@ -2010,7 +2011,7 @@ int ReplicatedBackend::build_push_op(const ObjectRecoveryInfo &recovery_info,
   if (!progress.omap_complete) {
     ObjectMap::ObjectMapIterator iter =
       store->get_omap_iterator(coll,
-			       recovery_info.soid);
+			       ghobject_t(recovery_info.soid));
     for (iter->lower_bound(progress.omap_recovered_to);
 	 iter->valid();
 	 iter->next()) {
@@ -2034,7 +2035,7 @@ int ReplicatedBackend::build_push_op(const ObjectRecoveryInfo &recovery_info,
     if (!recovery_info.copy_subset.empty()) {
       interval_set<uint64_t> copy_subset = recovery_info.copy_subset;
       bufferlist bl;
-      int r = store->fiemap(coll, recovery_info.soid, 0,
+      int r = store->fiemap(coll, ghobject_t(recovery_info.soid), 0,
                             copy_subset.range_end(), bl);
       if (r >= 0)  {
         interval_set<uint64_t> fiemap_included;
@@ -2063,7 +2064,7 @@ int ReplicatedBackend::build_push_op(const ObjectRecoveryInfo &recovery_info,
        p != out_op->data_included.end();
        ++p) {
     bufferlist bit;
-    store->read(coll, recovery_info.soid,
+    store->read(coll, ghobject_t(recovery_info.soid),
 		     p.get_start(), p.get_len(), bit);
     if (p.get_len() != bit.length()) {
       dout(10) << " extent " << p.get_start() << "~" << p.get_len()
@@ -2248,7 +2249,7 @@ void ReplicatedBackend::handle_pull(pg_shard_t peer, PullOp &op, PushOp *reply)
 {
   const hobject_t &soid = op.soid;
   struct stat st;
-  int r = store->stat(coll, soid, &st);
+  int r = store->stat(coll, ghobject_t(soid), &st);
   if (r != 0) {
     get_parent()->clog_error() << get_info().pgid << " "
 			       << peer << " tried to pull " << soid

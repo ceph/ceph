@@ -273,7 +273,7 @@ public:
       shard_id(shard_id_t::NO_SHARD),
       max(false) {}
 
-  ghobject_t(const hobject_t &obj)
+  explicit ghobject_t(const hobject_t &obj)
     : hobj(obj),
       generation(NO_GEN),
       shard_id(shard_id_t::NO_SHARD),
