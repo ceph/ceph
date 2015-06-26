@@ -393,6 +393,8 @@ void Elector::handle_nak(MonOpRequestRef op)
 void Elector::dispatch(MonOpRequestRef op)
 {
   op->mark_event("elector:dispatch");
+  assert(op->is_type_election());
+
   switch (op->get_req()->get_type()) {
     
   case MSG_MON_ELECTION:
