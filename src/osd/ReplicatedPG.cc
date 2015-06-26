@@ -213,7 +213,8 @@ void ReplicatedPG::on_local_recover(
       recovery_info.oi.version = latest->version;
       bufferlist bl;
       ::encode(recovery_info.oi, bl);
-      t->setattr(coll, recovery_info.soid, OI_ATTR, bl);
+      assert(!pool.info.require_rollback());
+      t->setattr(coll, ghobject_t(recovery_info.soid), OI_ATTR, bl);
       if (obc)
 	obc->attr_cache[OI_ATTR] = bl;
     }
@@ -1149,7 +1150,7 @@ void ReplicatedPG::do_pg_op(OpRequestRef op)
 	    wait_for_unreadable_object(oid, op);
 	    return;
 	  }
-	  result = osd->store->read(coll, oid, 0, 0, osd_op.outdata);
+	  result = osd->store->read(coll, ghobject_t(oid), 0, 0, osd_op.outdata);
 	}
       }
       break;
@@ -3511,7 +3512,9 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       {
 	// read into a buffer
 	bufferlist bl;
-	int r = osd->store->fiemap(coll, soid, op.extent.offset, op.extent.length, bl);
+	int r = osd->store->fiemap(coll, ghobject_t(soid, ghobject_t::NO_GEN,
+						    info.pgid.shard),
+				   op.extent.offset, op.extent.length, bl);
 	osd_op.outdata.claim(bl);
 	if (r < 0)
 	  result = r;
@@ -3539,7 +3542,9 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	// read into a buffer
 	bufferlist bl;
         int total_read = 0;
-	int r = osd->store->fiemap(coll, soid, op.extent.offset, op.extent.length, bl);
+	int r = osd->store->fiemap(coll, ghobject_t(soid, ghobject_t::NO_GEN,
+						    info.pgid.shard),
+				   op.extent.offset, op.extent.length, bl);
 	if (r < 0)  {
 	  result = r;
           break;
@@ -4717,7 +4722,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 
 	if (!pool.info.require_rollback()) {
 	  ObjectMap::ObjectMapIterator iter = osd->store->get_omap_iterator(
-	    coll, soid
+	    coll, ghobject_t(soid)
 	    );
 	  assert(iter);
 	  iter->upper_bound(start_after);
@@ -4754,7 +4759,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 
 	if (!pool.info.require_rollback()) {
 	  ObjectMap::ObjectMapIterator iter = osd->store->get_omap_iterator(
-	    coll, soid
+	    coll, ghobject_t(soid)
 	    );
           if (!iter) {
             result = -ENOENT;
@@ -4784,7 +4789,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       }
       ++ctx->num_read;
       {
-	osd->store->omap_get_header(coll, soid, &osd_op.outdata);
+	osd->store->omap_get_header(coll, ghobject_t(soid), &osd_op.outdata);
 	ctx->delta_stats.num_rd_kb += SHIFT_ROUND_UP(osd_op.outdata.length(), 10);
 	ctx->delta_stats.num_rd++;
       }
@@ -4805,7 +4810,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	tracepoint(osd, do_osd_op_pre_omapgetvalsbykeys, soid.oid.name.c_str(), soid.snap.val, list_entries(keys_to_get).c_str());
 	map<string, bufferlist> out;
 	if (!pool.info.require_rollback()) {
-	  osd->store->omap_get_values(coll, soid, keys_to_get, &out);
+	  osd->store->omap_get_values(coll, ghobject_t(soid), keys_to_get, &out);
 	} // else return empty omap entries
 	::encode(out, osd_op.outdata);
 	ctx->delta_stats.num_rd_kb += SHIFT_ROUND_UP(osd_op.outdata.length(), 10);
@@ -4840,7 +4845,8 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	       i != assertions.end();
 	       ++i)
 	    to_get.insert(i->first);
-	  int r = osd->store->omap_get_values(coll, soid, to_get, &out);
+	  int r = osd->store->omap_get_values(coll, ghobject_t(soid),
+					      to_get, &out);
 	  if (r < 0) {
 	    result = r;
 	    break;
@@ -6094,11 +6100,12 @@ int ReplicatedPG::fill_in_copy_get(
     if (left > 0 && !cursor.omap_complete) {
       assert(cursor.data_complete);
       if (cursor.omap_offset.empty()) {
-	osd->store->omap_get_header(coll, oi.soid, &reply_obj.omap_header);
+	osd->store->omap_get_header(coll, ghobject_t(oi.soid),
+				    &reply_obj.omap_header);
       }
       bufferlist omap_data;
       ObjectMap::ObjectMapIterator iter =
-	osd->store->get_omap_iterator(coll, oi.soid);
+	osd->store->get_omap_iterator(coll, ghobject_t(oi.soid));
       assert(iter);
       iter->upper_bound(cursor.omap_offset);
       for (; iter->valid(); iter->next()) {
@@ -8526,7 +8533,8 @@ ObjectContextRef ReplicatedPG::mark_object_lost(ObjectStore::Transaction *t,
 
   bufferlist b2;
   obc->obs.oi.encode(b2);
-  t->setattr(coll, oid, OI_ATTR, b2);
+  assert(!pool.info.require_rollback());
+  t->setattr(coll, ghobject_t(oid), OI_ATTR, b2);
 
   return obc;
 }
@@ -9329,7 +9337,8 @@ int ReplicatedPG::recover_primary(int max, ThreadPool::TPHandle &handle)
 	      t->register_on_applied(new ObjectStore::C_DeleteTransaction(t));
 	      bufferlist b2;
 	      obc->obs.oi.encode(b2);
-	      t->setattr(coll, soid, OI_ATTR, b2);
+	      assert(!pool.info.require_rollback());
+	      t->setattr(coll, ghobject_t(soid), OI_ATTR, b2);
 
 	      recover_got(soid, latest->version);
 	      missing_loc.add_location(soid, pg_whoami);
@@ -10764,7 +10773,7 @@ void ReplicatedPG::agent_load_hit_sets()
 	bufferlist bl;
 	{
 	  obc->ondisk_read_lock();
-	  int r = osd->store->read(coll, oid, 0, 0, bl);
+	  int r = osd->store->read(coll, ghobject_t(oid), 0, 0, bl);
 	  assert(r >= 0);
 	  obc->ondisk_read_unlock();
 	}

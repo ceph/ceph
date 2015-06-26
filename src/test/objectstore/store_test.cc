@@ -1758,8 +1758,8 @@ TEST_P(StoreTest, TwoHash) {
 
 TEST_P(StoreTest, MoveRename) {
   coll_t cid(spg_t(pg_t(212,0),shard_id_t::NO_SHARD));
-  hobject_t temp_oid("tmp_oid", "", CEPH_NOSNAP, 0, 0, "");
-  hobject_t oid("dest_oid", "", CEPH_NOSNAP, 0, 0, "");
+  ghobject_t temp_oid(hobject_t("tmp_oid", "", CEPH_NOSNAP, 0, 0, ""));
+  ghobject_t oid(hobject_t("dest_oid", "", CEPH_NOSNAP, 0, 0, ""));
   int r;
   {
     ObjectStore::Transaction t;
