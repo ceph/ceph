@@ -42,7 +42,6 @@ Requires:	python-rbd = %{epoch}:%{version}-%{release}
 Requires:	python-cephfs = %{epoch}:%{version}-%{release}
 Requires:	python
 Requires:	python-requests
-Requires:	python-flask
 Requires:	grep
 Requires:	xfsprogs
 Requires:	parted
@@ -100,6 +99,7 @@ BuildRequires:	snappy-devel
 # distro-conditional dependencies
 #################################################################################
 %if 0%{defined suse_version}
+Requires:	python-Flask
 BuildRequires:	net-tools
 BuildRequires:	libbz2-devel
 BuildRequires:	sharutils
@@ -128,6 +128,7 @@ Requires(post):	chkconfig
 Requires(preun):	chkconfig
 Requires(preun):	initscripts
 BuildRequires:	gperftools-devel
+Requires:	python-flask
 %endif
 
 %description
