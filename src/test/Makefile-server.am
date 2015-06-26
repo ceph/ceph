@@ -9,7 +9,7 @@ ceph_test_msgr_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_test_msgr
 
 ceph_streamtest_SOURCES = test/streamtest.cc
-ceph_streamtest_LDADD = $(LIBOS) $(CEPH_GLOBAL) $(LIBFILESTORE) $(LIBCOMMON)
+ceph_streamtest_LDADD = $(LIBOS) $(CEPH_GLOBAL) $(LIBCOMMON) $(LIBFILESTORE)
 bin_DEBUGPROGRAMS += ceph_streamtest
 
 ceph_test_trans_SOURCES = test/test_trans.cc
@@ -61,7 +61,7 @@ ceph_test_keyvaluedb_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_test_keyvaluedb
 
 ceph_test_filestore_SOURCES = test/filestore/TestFileStore.cc
-ceph_test_filestore_LDADD = $(LIBOS) $(UNITTEST_LDADD) $(CEPH_GLOBAL)  $(LIBFILESTORE) $(LIBCOMMON)
+ceph_test_filestore_LDADD = $(LIBOS) $(UNITTEST_LDADD) $(CEPH_GLOBAL) $(LIBCOMMON) $(LIBFILESTORE)
 ceph_test_filestore_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_test_filestore
 endif
