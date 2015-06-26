@@ -86,7 +86,6 @@ BuildRequires:	net-tools
 Requires:	python-Flask
 BuildRequires:	net-tools
 BuildRequires:	libbz2-devel
-BuildRequires:	sharutils
 %if 0%{?suse_version} > 1210
 Requires:	gptfdisk
 BuildRequires:	gperftools-devel
