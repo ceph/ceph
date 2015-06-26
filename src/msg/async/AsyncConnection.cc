@@ -1942,7 +1942,6 @@ int AsyncConnection::send_message(Message *m)
   prepare_send_message(f, m, bl);
 
   Mutex::Locker l(write_lock);
-  m->set_seq(out_seq.inc());
   // "features" changes will change the payload encoding
   if (can_write == NOWRITE || get_features() != f) {
     // ensure the correctness of message encoding
@@ -2239,12 +2238,12 @@ void AsyncConnection::prepare_send_message(uint64_t features, Message *m, buffer
     old_footer.flags = footer.flags;
     bl.append((char*)&old_footer, sizeof(old_footer));
   }
-  logger->inc(l_msgr_send_bytes, bl.length());
 }
 
 int AsyncConnection::write_message(Message *m, bufferlist& bl)
 {
   assert(can_write == CANWRITE);
+  m->set_seq(out_seq.inc());
 
   if (!policy.lossy) {
     // put on sent list
@@ -2276,6 +2275,7 @@ int AsyncConnection::write_message(Message *m, bufferlist& bl)
 
   complete_bl.claim_append(bl);
 
+  logger->inc(l_msgr_send_bytes, bl.length());
   ldout(async_msgr->cct, 20) << __func__ << " sending " << m->get_seq()
                              << " " << m << dendl;
   int rc = _try_send(complete_bl);
