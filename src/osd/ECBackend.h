@@ -284,6 +284,7 @@ public:
     int priority;
     ceph_tid_t tid;
     OpRequestRef op; // may be null if not on behalf of a client
+    bool is_recovery; // true if the op is for recovery, false otherwise
 
     map<hobject_t, read_request_t> to_read;
     map<hobject_t, read_result_t> complete;
@@ -306,7 +307,8 @@ public:
   void start_read_op(
     int priority,
     map<hobject_t, read_request_t> &to_read,
-    OpRequestRef op);
+    OpRequestRef op,
+    bool is_recovery);
 
 
   /**
@@ -431,6 +433,9 @@ public:
 
 
   const ECUtil::stripe_info_t sinfo;
+  // This flag indicates whether we issue subread requests to all replicas (
+  // data and parity), this can improve performance with some I/O overhead
+  bool subread_all;
   /// If modified, ensure that the ref is held until the update is applied
   SharedPtrRegistry<hobject_t, ECUtil::HashInfo> unstable_hashinfo_registry;
   ECUtil::HashInfoRef get_hash_info(const hobject_t &hoid);
