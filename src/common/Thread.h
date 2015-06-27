@@ -17,7 +17,6 @@
 #define CEPH_THREAD_H
 
 #include <pthread.h>
-#include <sys/types.h>
 
 class Thread {
  public:
