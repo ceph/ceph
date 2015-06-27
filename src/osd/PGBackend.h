@@ -250,6 +250,9 @@
     * the pending recovery operations.
     */
    struct RecoveryHandle {
+     bool cache_dont_need;
+
+     RecoveryHandle(): cache_dont_need(false) {}
      virtual ~RecoveryHandle() {}
    };
 
