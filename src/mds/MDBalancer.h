@@ -16,6 +16,8 @@
 
 #ifndef CEPH_MDBALANCER_H
 #define CEPH_MDBALANCER_H
+#define LUAARG_STRING 1
+#define LUAARG_NUMBER 2
 
 #include <list>
 #include <map>
@@ -40,6 +42,7 @@ extern "C"{
 }
 
 
+
 class MDBalancer {
  protected:
   MDS *mds;
@@ -52,7 +55,6 @@ class MDBalancer {
   utime_t last_fragment;
   utime_t last_sample;    
   utime_t rebalance_time; //ensure a consistent view of load for rebalance
-  // MSEVILLA: for the customized CPU measurements
   double cpu_load_avg;
   double cpu_work_prev;
   double cpu_total_prev;
@@ -94,6 +96,8 @@ public:
     last_epoch_under(0), last_epoch_over(0), cpu_load_avg(0), cpu_work_prev(0), cpu_total_prev(0), total_meta_load(0), nfiles(0), my_load(0.0), target_load(0.0) { }
   
   mds_load_t get_load(utime_t);
+  void extract_load_from_heartbeat();
+  void parse_decision();
 
   int proc_message(Message *m);
   
@@ -111,21 +115,31 @@ public:
   /*check if the monitor has recorded the current export targets;
     if it has then do the actual export. Otherwise send off our
     export targets message again*/
-  void subtree_loads(CDir *dir, int depth);
-  void dump_subtree_loads();
-  void pause_balancer(const char *log);
-  void custom_balancer(const char *log);
   void try_rebalance();
   void find_exports(CDir *dir, 
                     double amount, 
                     list<CDir*>& exports, 
                     double& have,
                     set<CDir*>& already_exporting);
-  void fragment_selector_luahook(multimap<double, CDir*>,
-                                 double amount, 
-                                 list<CDir*>& exports, 
-                                 double& have,
-                                 set<CDir*>& already_exporting);
+  //Mantle hooks that allow customizable metadata balancers, 
+  //specified with Lua and injected with 'ceph tell'
+  void custom_balancer();
+  string format_policy(string s);
+  double get_current_authmetaload();
+  vector<pair<int, string> > extract_metrics();
+  void push_lua_args(lua_State *L, vector<pair<int, string> >& args);
+  void dump_balancer(string s);
+  // Quickly execute many dirfrag selectors and  best one
+  //  - best quantified using the smallest net distance
+  void dirfrag_selector(multimap<double, CDir*>,
+                        double amount, 
+                        list<CDir*>& exports, 
+                        double& have,
+                        set<CDir*>& already_exporting);
+
+  //debug: print out the loads on a subset of the namespace
+  void subtree_loads(CDir *dir, int depth);
+  void dump_subtree_loads();
 
 
   void subtract_export(class CDir *ex, utime_t now);

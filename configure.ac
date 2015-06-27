@@ -127,6 +127,15 @@ AC_ARG_WITH([cephfs],
 AM_CONDITIONAL(WITH_CEPHFS, test "$with_cephfs" = "yes")
 #AS_IF([test "$with_cephfs" = "yes"], [AC_DEFINE([WITH_RADOS, WITH_CEPHFS])])
 
+AC_ARG_WITH([mantle],
+	[AS_HELP_STRING([--with-mantle], [build Mantle files])],
+	[],
+	[with_mds=yes])
+AM_CONDITIONAL(WITH_MANTLE, test "$with_mantle" = "yes")
+#AS_IF([test "$with_mantle" = "yes"], [AC_DEFINE([WITH_MANTLE])])
+
+
+
 # radosgw?
 # radosgw requires rados
 AC_ARG_WITH([radosgw],
@@ -1203,6 +1212,10 @@ AC_ARG_WITH(
         fi
     ]
 )
+
+PKG_CHECK_MODULES(LUA, luajit, [HAVE_LUA=1], [HAVE_LUA=0])
+AM_CONDITIONAL([HAVE_LUA], test "$HAVE_LUA" -eq 1)
+#AC_CHECK_LIB([lualib], [lualib], [true], AC_MSG_FAILURE([lualib not found]))
 
 # Checks for typedefs, structures, and compiler characteristics.
 #AC_HEADER_STDBOOL

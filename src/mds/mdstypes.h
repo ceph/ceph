@@ -73,7 +73,6 @@
 #define MDS_TRAVERSE_DISCOVER      2    // skips permissions checks etc.
 #define MDS_TRAVERSE_DISCOVERXLOCK 3    // succeeds on (foreign?) null, xlocked dentries.
 
-// Added by MSEVILLA
 extern "C"{
     #include <lua5.2/lualib.h>
     #include <lua5.2/lauxlib.h>

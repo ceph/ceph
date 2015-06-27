@@ -2,7 +2,12 @@ if WITH_MDS
 
 libmds_la_SOURCES = $(LIBMDS_SOURCES)
 libmds_la_LIBADD = $(LIBMDS_DEPS)
+if WITH_MANTLE
+    libmds_la_LIBADD += $(LUA_LIBS)
+endif # WITH_MANTLE
+        
 noinst_LTLIBRARIES += libmds.la
+
 
 noinst_HEADERS += \
 	mds/inode_backtrace.h \
