@@ -20,28 +20,10 @@
 #include <sys/types.h>
 
 class Thread {
- private:
-  Thread(const Thread& other);
-  Thread& operator=(const Thread& other);
-
-  pthread_t thread_id;
-  pid_t pid;
-  int ioprio_class, ioprio_priority;
-  int cpuid;
-
-  void *entry_wrapper();
  public:
-
   Thread();
   virtual ~Thread();
 
- protected:
-  virtual void *entry() = 0;
-
- private:
-  static void *_entry_func(void *arg);
-
- public:
   pthread_t get_thread_id() const;
   pid_t get_pid() const { return pid; }
   bool is_started() const;
@@ -53,6 +35,21 @@ class Thread {
   int detach();
   int set_ioprio(int cls, int prio);
   int set_affinity(int cpuid);
+
+ protected:
+  virtual void *entry() = 0;
+
+ private:
+  Thread(const Thread& other);
+  Thread& operator=(const Thread& other);
+
+  void *entry_wrapper();
+  static void *_entry_func(void *arg);
+
+  pthread_t thread_id;
+  pid_t pid;
+  int ioprio_class, ioprio_priority;
+  int cpuid;
 };
 
 #endif
