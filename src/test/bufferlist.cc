@@ -1084,6 +1084,23 @@ TEST(BufferListIterator, copy_in) {
   }
 }
 
+// iterator& buffer::list::const_iterator::operator++()
+TEST(BufferListConstIterator, operator_plus_plus) {
+  bufferlist bl;
+  {
+    bufferlist::const_iterator i(&bl);
+    EXPECT_THROW(++i, buffer::end_of_buffer);
+  }
+  bl.append("ABC", 3);
+  {
+    const bufferlist const_bl(bl);
+    bufferlist::const_iterator i(const_bl.begin());
+    ++i;
+    EXPECT_EQ('B', *i);
+  }
+
+}
+
 TEST(BufferList, constructors) {
   //
   // list()
