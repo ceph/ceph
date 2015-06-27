@@ -84,7 +84,7 @@ void *Thread::entry_wrapper()
   return entry();
 }
 
-const pthread_t &Thread::get_thread_id() const
+pthread_t Thread::get_thread_id() const
 {
   return thread_id;
 }
