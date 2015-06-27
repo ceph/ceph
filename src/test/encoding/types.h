@@ -4,6 +4,9 @@ TYPE(CompatSet)
 #include "include/filepath.h"
 TYPE(filepath)
 
+#include "include/util.h"
+TYPE(ceph_data_stats)
+
 #include "common/bit_vector.hpp"
 TYPE(BitVector<2>)
 
@@ -90,7 +93,7 @@ TYPE(PushReplyOp)
 TYPE(ECUtil::HashInfo)
 
 #include "osd/ECMsgTypes.h"
-TYPE(ECSubWrite)
+TYPE_NOCOPY(ECSubWrite)
 TYPE(ECSubWriteReply)
 TYPE_FEATUREFUL(ECSubRead)
 TYPE(ECSubReadReply)
@@ -128,6 +131,9 @@ TYPE_FEATUREFUL(MonMap)
 
 #include "mon/MonCap.h"
 TYPE(MonCap)
+
+#include "mon/mon_types.h"
+TYPE(LevelDBStoreStats)
 
 #include "os/DBObjectMap.h"
 TYPE(DBObjectMap::_Header)
@@ -179,9 +185,6 @@ TYPE(InoTable)
 
 #include "mds/SnapServer.h"
 TYPEWITHSTRAYDATA(SnapServer)
-
-#include "mds/SessionMap.h"
-TYPE(SessionMapStore)
 
 #include "mds/events/ECommitted.h"
 TYPE(ECommitted)

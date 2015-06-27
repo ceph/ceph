@@ -114,7 +114,9 @@ protected:
   void journal_write_close();
   int journal_replay(uint64_t fs_op_seq);
 
-  void _op_journal_transactions(list<ObjectStore::Transaction*>& tls, uint64_t op,
+  int _op_journal_transactions_prepare(
+    list<ObjectStore::Transaction*>& tls, bufferlist& tbl);
+  void _op_journal_transactions(bufferlist& tls, int data_align, uint64_t op,
 				Context *onjournal, TrackedOpRef osd_op);
 
   virtual int do_transactions(list<ObjectStore::Transaction*>& tls, uint64_t op_seq) = 0;

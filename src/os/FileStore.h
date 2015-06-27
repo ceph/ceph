@@ -96,7 +96,6 @@ public:
     return target_version;
   }
 
-  bool need_journal() { return true; }
   int peek_journal_fsid(uuid_d *fsid);
 
   struct FSPerfTracker {
@@ -377,7 +376,7 @@ private:
   void _journaled_ahead(OpSequencer *osr, Op *o, Context *ondisk);
   friend struct C_JournaledAhead;
 
-  int open_journal();
+  void new_journal();
 
   PerfCounters *logger;
 
@@ -423,6 +422,15 @@ public:
   }
   int mkfs();
   int mkjournal();
+  bool wants_journal() {
+    return true;
+  }
+  bool allows_journal() {
+    return true;
+  }
+  bool needs_journal() {
+    return false;
+  }
 
   int write_version_stamp();
   int version_stamp_is_valid(uint32_t *version);
@@ -526,6 +534,10 @@ public:
     bufferlist& bl,
     uint32_t op_flags = 0,
     bool allow_eio = false);
+  int _do_fiemap(int fd, uint64_t offset, size_t len,
+                 map<uint64_t, uint64_t> *m);
+  int _do_seek_hole_data(int fd, uint64_t offset, size_t len,
+                         map<uint64_t, uint64_t> *m);
   int fiemap(coll_t cid, const ghobject_t& oid, uint64_t offset, size_t len, bufferlist& bl);
 
   int _touch(coll_t cid, const ghobject_t& oid);
@@ -635,7 +647,7 @@ public:
    * @param expected_num_objs - expected number of objects in this collection
    * @param spos              - sequence position
    *
-   * @Return 0 on success, an error code otherwise
+   * @return 0 on success, an error code otherwise
    */
   int _collection_hint_expected_num_objs(coll_t c, uint32_t pg_num,
       uint64_t expected_num_objs,
@@ -788,6 +800,7 @@ public:
   virtual int destroy_checkpoint(const string& name) = 0;
   virtual int syncfs() = 0;
   virtual bool has_fiemap() = 0;
+  virtual bool has_seek_data_hole() = 0;
   virtual int do_fiemap(int fd, off_t start, size_t len, struct fiemap **pfiemap) = 0;
   virtual int clone_range(int from, int to, uint64_t srcoff, uint64_t len, uint64_t dstoff) = 0;
   virtual int set_alloc_hint(int fd, uint64_t hint) = 0;

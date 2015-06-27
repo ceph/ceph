@@ -260,7 +260,7 @@ ErasureCodeIsaTableCache::getDecodingTableFromCache(std::string &signature,
     memcpy(table, (*decode_tbls_map)[signature].second.c_str(), k * (m + k)*32);
     // find item in LRU queue and push back
     dout(12) << "[ cache size   ] = " << decode_tbls_lru->size() << dendl;
-    decode_tbls_lru->splice((*decode_tbls_map)[signature].first, *decode_tbls_lru, decode_tbls_lru->end());
+    decode_tbls_lru->splice( (decode_tbls_lru->begin()), *decode_tbls_lru, (*decode_tbls_map)[signature].first);
     found = true;
   }
 
@@ -298,26 +298,26 @@ ErasureCodeIsaTableCache::putDecodingTableToCache(std::string &signature,
   if ((int) decode_tbls_lru->size() >= ErasureCodeIsaTableCache::decoding_tables_lru_length) {
     dout(12) << "[ shrink lru   ] = " << signature << dendl;
     // reuse old buffer
-    cachetable = (*decode_tbls_map)[decode_tbls_lru->front()].second;
+    cachetable = (*decode_tbls_map)[decode_tbls_lru->back()].second;
+
     if ((int) cachetable.length() != (k * (m + k)*32)) {
       // we need to replace this with a different size buffer
       cachetable = buffer::create(k * (m + k)*32);
-      (*decode_tbls_map)[signature] = std::make_pair(decode_tbls_lru->begin(), cachetable);
     }
 
     // remove from map
-    decode_tbls_map->erase(decode_tbls_lru->front());
+    decode_tbls_map->erase(decode_tbls_lru->back());
     // remove from lru
-    decode_tbls_lru->pop_front();
+    decode_tbls_lru->pop_back();
+    // add to the head of lru
+    decode_tbls_lru->push_front(signature);
     // add the new to the map
     (*decode_tbls_map)[signature] = std::make_pair(decode_tbls_lru->begin(), cachetable);
-    // add to the end of lru
-    decode_tbls_lru->push_back(signature);
   } else {
     dout(12) << "[ store table  ] = " << signature << dendl;
     // allocate a new buffer
     cachetable = buffer::create(k * (m + k)*32);
-    decode_tbls_lru->push_back(signature);
+    decode_tbls_lru->push_front(signature);
     (*decode_tbls_map)[signature] = std::make_pair(decode_tbls_lru->begin(), cachetable);
     dout(12) << "[ cache size   ] = " << decode_tbls_lru->size() << dendl;
   }

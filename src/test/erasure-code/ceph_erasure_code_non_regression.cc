@@ -41,7 +41,7 @@ class ErasureCodeNonRegression {
   bool check;
   string base;
   string directory;
-  map<string,string> parameters;
+  ErasureCodeProfile profile;
 public:
   int setup(int argc, char** argv);
   int run();
@@ -66,7 +66,7 @@ int ErasureCodeNonRegression::setup(int argc, char** argv) {
     ("base", po::value<string>()->default_value("."),
      "prefix all paths with base")
     ("parameter,P", po::value<vector<string> >(),
-     "parameters")
+     "add a parameter to the erasure code profile")
     ("create", "create the erasure coded content in the directory")
     ("check", "check the content in the directory matches the chunks and vice versa")
     ;
@@ -128,14 +128,14 @@ int ErasureCodeNonRegression::setup(int argc, char** argv) {
       if (strs.size() != 2) {
 	cerr << "--parameter " << *i << " ignored because it does not contain exactly one =" << endl;
       } else {
-	parameters[strs[0]] = strs[1];
+	profile[strs[0]] = strs[1];
       }
       if (strs[0] != "directory")
 	directory += " " + *i;
     }
   }
-  if (parameters.count("directory") == 0)
-    parameters["directory"] = ".libs";
+  if (profile.count("directory") == 0)
+    profile["directory"] = ".libs";
 
   return 0;
 }
@@ -155,7 +155,7 @@ int ErasureCodeNonRegression::run_create()
   ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
   ErasureCodeInterfaceRef erasure_code;
   stringstream messages;
-  int code = instance.factory(plugin, parameters, &erasure_code, messages);
+  int code = instance.factory(plugin, profile, &erasure_code, &messages);
   if (code) {
     cerr << messages.str() << endl;
     return code;
@@ -225,7 +225,7 @@ int ErasureCodeNonRegression::run_check()
   ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
   ErasureCodeInterfaceRef erasure_code;
   stringstream messages;
-  int code = instance.factory(plugin, parameters, &erasure_code, messages);
+  int code = instance.factory(plugin, profile, &erasure_code, &messages);
   if (code) {
     cerr << messages.str() << endl;
     return code;

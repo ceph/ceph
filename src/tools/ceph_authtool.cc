@@ -264,6 +264,7 @@ int main(int argc, const char **argv)
         cout << key << std::endl;
       } else {
         cerr << "entity " << ename << " not found" << std::endl;
+        exit(1);
       }
     }
   
@@ -274,6 +275,7 @@ int main(int argc, const char **argv)
       r = bl.write_file(fn.c_str(), 0600);
       if (r < 0) {
         cerr << "could not write " << fn << std::endl;
+        exit(1);
       }
       //cout << "wrote " << bl.length() << " bytes to " << fn << std::endl;
     }

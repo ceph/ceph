@@ -56,6 +56,13 @@ struct LevelDBStoreStats {
   uint64_t bytes_misc;
   utime_t last_update;
 
+  LevelDBStoreStats() :
+    bytes_total(0),
+    bytes_sst(0),
+    bytes_log(0),
+    bytes_misc(0)
+  {}
+
   void dump(Formatter *f) const {
     assert(f != NULL);
     f->dump_int("bytes_total", bytes_total);
@@ -83,6 +90,16 @@ struct LevelDBStoreStats {
     ::decode(bytes_misc, p);
     ::decode(last_update, p);
     DECODE_FINISH(p);
+  }
+
+  static void generate_test_instances(list<LevelDBStoreStats*>& ls) {
+    ls.push_back(new LevelDBStoreStats);
+    ls.push_back(new LevelDBStoreStats);
+    ls.back()->bytes_total = 1024*1024;
+    ls.back()->bytes_sst = 512*1024;
+    ls.back()->bytes_log = 256*1024;
+    ls.back()->bytes_misc = 256*1024;
+    ls.back()->last_update = utime_t();
   }
 };
 WRITE_CLASS_ENCODER(LevelDBStoreStats)
@@ -185,5 +202,8 @@ WRITE_CLASS_ENCODER(ScrubResult)
 static inline ostream& operator<<(ostream& out, const ScrubResult& r) {
   return out << "ScrubResult(keys " << r.prefix_keys << " crc " << r.prefix_crc << ")";
 }
+
+/// for information like os, kernel, hostname, memory info, cpu model.
+typedef map<string, string> Metadata;
 
 #endif

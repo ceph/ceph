@@ -1,3 +1,5 @@
+:orphan:
+
 ============================================
  cephfs -- ceph file system options utility
 ============================================
@@ -58,7 +60,7 @@ Setting options:
 
 .. option:: -o --osd
 
-   Set the preferred OSD to use as the primary
+   Set the preferred OSD to use as the primary (deprecated and ignored)
 
 
 Limitations

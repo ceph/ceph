@@ -121,6 +121,7 @@ public:
   osd_stat_t osd_sum;
   mutable epoch_t min_last_epoch_clean;
   ceph::unordered_map<int,int> blocked_by_sum;
+  ceph::unordered_map<int,set<pg_t> > pg_by_osd;
 
   utime_t stamp;
 
@@ -183,14 +184,12 @@ public:
   set<pg_t> creating_pgs;   // lru: front = new additions, back = recently pinged
   map<int,set<pg_t> > creating_pgs_by_osd;
 
-  enum StuckPG {
-    STUCK_INACTIVE,
-    STUCK_UNCLEAN,
-    STUCK_UNDERSIZED,
-    STUCK_DEGRADED,
-    STUCK_STALE,
-    STUCK_NONE
-  };
+  // Bits that use to be enum StuckPG
+  static const int STUCK_INACTIVE = (1<<0);
+  static const int STUCK_UNCLEAN = (1<<1);
+  static const int STUCK_UNDERSIZED = (1<<2);
+  static const int STUCK_DEGRADED = (1<<3);
+  static const int STUCK_STALE = (1<<4);
   
   PGMap()
     : version(0),
@@ -251,8 +250,11 @@ public:
   void redo_full_sets();
   void register_nearfull_status(int osd, const osd_stat_t& s);
   void calc_stats();
-  void stat_pg_add(const pg_t &pgid, const pg_stat_t &s, bool sumonly=false);
-  void stat_pg_sub(const pg_t &pgid, const pg_stat_t &s, bool sumonly=false);
+  void stat_pg_add(const pg_t &pgid, const pg_stat_t &s, bool sumonly=false,
+		   bool sameosds=false);
+  void stat_pg_sub(const pg_t &pgid, const pg_stat_t &s, bool sumonly=false,
+		   bool sameosds=false);
+  void stat_pg_update(const pg_t pgid, pg_stat_t &prev, bufferlist::iterator& blp);
   void stat_osd_add(const osd_stat_t &s);
   void stat_osd_sub(const osd_stat_t &s);
   
@@ -272,10 +274,10 @@ public:
   void dump_pg_stats_plain(ostream& ss,
 			   const ceph::unordered_map<pg_t, pg_stat_t>& pg_stats,
 			   bool brief) const;
-  void get_stuck_stats(StuckPG type, utime_t cutoff,
+  void get_stuck_stats(int types, utime_t cutoff,
 		       ceph::unordered_map<pg_t, pg_stat_t>& stuck_pgs) const;
-  void dump_stuck(Formatter *f, StuckPG type, utime_t cutoff) const;
-  void dump_stuck_plain(ostream& ss, StuckPG type, utime_t cutoff) const;
+  void dump_stuck(Formatter *f, int types, utime_t cutoff) const;
+  void dump_stuck_plain(ostream& ss, int types, utime_t cutoff) const;
 
   void dump(ostream& ss) const;
   void dump_basic(ostream& ss) const;
@@ -292,7 +294,7 @@ public:
   void dump_osd_blocked_by_stats(Formatter *f) const;
   void print_osd_blocked_by_stats(std::ostream *ss) const;
 
-  void get_filtered_pg_stats(string& state, int64_t poolid, int64_t osdid,
+  void get_filtered_pg_stats(const string& state, int64_t poolid, int64_t osdid,
                              bool primary, set<pg_t>& pgs);
   void recovery_summary(Formatter *f, list<string> *psl,
                         const pool_stat_t& delta_sum) const;

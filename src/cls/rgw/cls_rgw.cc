@@ -657,10 +657,11 @@ int rgw_bucket_prepare_op(cls_method_context_t hctx, bufferlist *in, bufferlist 
   }
 
   // fill in proper state
-  struct rgw_bucket_pending_info& info = entry.pending_map[op.tag];
+  struct rgw_bucket_pending_info info;
   info.timestamp = ceph_clock_now(g_ceph_context);
   info.state = CLS_RGW_STATE_PENDING_MODIFY;
   info.op = op.op;
+  entry.pending_map.insert(pair<string, rgw_bucket_pending_info>(op.tag, info));
 
   struct rgw_bucket_dir_header header;
   rc = read_bucket_header(hctx, &header);

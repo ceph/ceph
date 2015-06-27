@@ -166,16 +166,30 @@ public:
 
     object_copy_cursor_t temp_cursor;
 
+    /*
+     * For CopyOp the process is:
+     * step1: read the data(attr/omap/data) from the source object
+     * step2: handle those data(w/ those data create a new object)
+     * src_obj_fadvise_flags used in step1;
+     * dest_obj_fadvise_flags used in step2
+     */
+    unsigned src_obj_fadvise_flags;
+    unsigned dest_obj_fadvise_flags;
+
     CopyOp(CopyCallback *cb_, ObjectContextRef _obc, hobject_t s,
 	   object_locator_t l,
            version_t v,
 	   unsigned f,
-	   bool ms)
+	   bool ms,
+	   unsigned src_obj_fadvise_flags,
+	   unsigned dest_obj_fadvise_flags)
       : cb(cb_), obc(_obc), src(s), oloc(l), flags(f),
 	mirror_snapset(ms),
 	objecter_tid(0),
 	objecter_tid2(0),
-	rval(-1)
+	rval(-1),
+	src_obj_fadvise_flags(src_obj_fadvise_flags),
+	dest_obj_fadvise_flags(dest_obj_fadvise_flags)
     {
       results.user_version = v;
       results.mirror_snapset = mirror_snapset;
@@ -325,6 +339,9 @@ public:
   void queue_transaction(ObjectStore::Transaction *t, OpRequestRef op) {
     osd->store->queue_transaction(osr.get(), t, 0, 0, 0, op);
   }
+  void queue_transactions(list<ObjectStore::Transaction*>& tls, OpRequestRef op) {
+    osd->store->queue_transactions(osr.get(), tls, 0, 0, 0, op);
+  }
   epoch_t get_epoch() const {
     return get_osdmap()->get_epoch();
   }
@@ -367,26 +384,6 @@ public:
   const pg_pool_t &get_pool() const {
     return pool.info;
   }
-  map<pg_shard_t, const pg_missing_t *> get_all_missing() const {
-    map<pg_shard_t, const pg_missing_t *> all_missing;
-    all_missing[pg_whoami] = &(pg_log.get_missing());
-    for (map<pg_shard_t, pg_missing_t>::const_iterator i = peer_missing.begin();
-	 i != peer_missing.end();
-	 ++i) {
-      all_missing[i->first] = &(i->second);
-    }
-    return all_missing;
-  }
-  const map<pg_shard_t, const pg_info_t *> get_all_info() const {
-    map<pg_shard_t, const pg_info_t *> all_info;
-    all_info[pg_whoami] = &info;
-    for (map<pg_shard_t, pg_info_t>::const_iterator i = peer_info.begin();
-	 i != peer_info.end();
-	 ++i) {
-      all_info[i->first] = &(i->second);
-    }
-    return all_info;
-  }
   ObjectContextRef get_obc(
     const hobject_t &hoid,
     map<string, bufferlist> &attrs) {
@@ -415,13 +412,11 @@ public:
     if (peer == get_primary())
       return true;
     assert(peer_info.count(peer));
-    bool should_send_backfill = hoid.pool != (int64_t)info.pgid.pool() ||
+    bool should_send = hoid.pool != (int64_t)info.pgid.pool() ||
       hoid <= MAX(last_backfill_started, peer_info[peer].last_backfill);
-    if (!should_send_backfill)
+    if (!should_send)
       assert(is_backfill_targets(peer));
-
-    assert(peer_missing.count(peer));
-    return should_send_backfill && !peer_missing[peer].is_missing(hoid);
+    return should_send;
   }
   
   void update_peer_last_complete_ondisk(
@@ -874,7 +869,20 @@ protected:
 	requeue_snaptrimmer_clone ||
 	requeue_snaptrimmer_snapset)
       queue_snap_trim();
-    requeue_ops(to_req);
+
+    if (!to_req.empty()) {
+      assert(ctx->obc);
+      // requeue at front of scrub blocking queue if we are blocked by scrub
+      if (scrubber.write_blocked_by_scrub(ctx->obc->obs.oi.soid.get_head())) {
+	waiting_for_active.splice(
+	  waiting_for_active.begin(),
+	  to_req,
+	  to_req.begin(),
+	  to_req.end());
+      } else {
+	requeue_ops(to_req);
+      }
+    }
   }
 
   // replica ops
@@ -887,7 +895,7 @@ protected:
   void repop_all_applied(RepGather *repop);
   void repop_all_committed(RepGather *repop);
   void eval_repop(RepGather*);
-  void issue_repop(RepGather *repop, utime_t now);
+  void issue_repop(RepGather *repop);
   RepGather *new_repop(OpContext *ctx, ObjectContextRef obc, ceph_tid_t rep_tid);
   void remove_repop(RepGather *repop);
 
@@ -939,7 +947,8 @@ protected:
   /// clear agent state
   void agent_clear();
 
-  void agent_choose_mode(bool restart = false);  ///< choose (new) agent mode(s)
+  /// choose (new) agent mode(s), returns true if op is requeued
+  bool agent_choose_mode(bool restart = false, OpRequestRef op = OpRequestRef());
   void agent_choose_mode_restart();
 
   /// true if we can send an ondisk/commit for v
@@ -972,8 +981,6 @@ protected:
     }
     return true;
   }
-
-  friend struct C_OnPushCommit;
 
   // projected object info
   SharedLRU<hobject_t, ObjectContext> object_contexts;
@@ -1169,17 +1176,15 @@ protected:
    */
   void do_cache_redirect(OpRequestRef op);
   /**
-   * This function starts up a copy from
+   * This function attempts to start a promote.  Either it succeeds,
+   * or places op on a wait list.  If op is null, failure means that
+   * this is a noop.  If a future user wants to be able to distinguish
+   * these cases, a return value should be added.
    */
   void promote_object(ObjectContextRef obc,            ///< [optional] obc
 		      const hobject_t& missing_object, ///< oid (if !obc)
 		      const object_locator_t& oloc,    ///< locator for obc|oid
 		      OpRequestRef op);                ///< [optional] client op
-
-  /**
-   * Check if the op is such that we can skip promote (e.g., DELETE)
-   */
-  bool can_skip_promote(OpRequestRef op);
 
   int prepare_transaction(OpContext *ctx);
   list<pair<OpRequestRef, OpContext*> > in_progress_async_reads;
@@ -1309,11 +1314,11 @@ protected:
    * @param src: The source object
    * @param oloc: the source object locator
    * @param version: the version of the source object to copy (0 for any)
-   * @param temp_dest_oid: the temporary object to use for large objects
    */
   void start_copy(CopyCallback *cb, ObjectContextRef obc, hobject_t src,
 		  object_locator_t oloc, version_t version, unsigned flags,
-		  bool mirror_snapset);
+		  bool mirror_snapset, unsigned src_obj_fadvise_flags,
+		  unsigned dest_obj_fadvise_flags);
   void process_copy_chunk(hobject_t oid, ceph_tid_t tid, int r);
   void _write_copy_chunk(CopyOpRef cop, PGBackend::PGTransaction *t);
   uint64_t get_copy_chunk_size() const {
@@ -1410,7 +1415,7 @@ public:
   void do_backfill(OpRequestRef op);
 
   RepGather *trim_object(const hobject_t &coid);
-  void snap_trimmer();
+  void snap_trimmer(epoch_t e);
   int do_osd_ops(OpContext *ctx, vector<OSDOp>& ops);
 
   int _get_tmap(OpContext *ctx, bufferlist *header, bufferlist *vals);
@@ -1499,6 +1504,9 @@ private:
 
   int _verify_no_head_clones(const hobject_t& soid,
 			     const SnapSet& ss);
+  // return true if we're creating a local object, false for a
+  // whiteout or no change.
+  bool maybe_create_new_object(OpContext *ctx);
   int _delete_oid(OpContext *ctx, bool no_whiteout);
   int _rollback_to(OpContext *ctx, ceph_osd_op& op);
 public:
@@ -1511,11 +1519,6 @@ public:
   void wait_for_all_missing(OpRequestRef op);
 
   bool is_degraded_or_backfilling_object(const hobject_t& oid);
-
-  /* true if the object is missing on any peer, *healthy_copies will be
-   * set to the number of complete peers not missing the object
-   */
-  bool is_degraded_object(const hobject_t &oid, int *healthy_copies);
   void wait_for_degraded_object(const hobject_t& oid, OpRequestRef op);
 
   bool maybe_await_blocked_snapset(const hobject_t &soid, OpRequestRef op);

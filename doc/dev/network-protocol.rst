@@ -17,7 +17,7 @@ Banner
 
 The first action is the server sending banner to the client.  The banner is
 defined in ``CEPH_BANNER`` from ``src/include/msgr.h``.  This is followed by
-the server's then client's address each encoded as a ``sockaddr_storage``.
+the server's then client's address each encoded as a ``entity_addr_t``.
 
 Once the client verifies that the servers banner matches its own it replies with
 its banner and its address.
@@ -161,7 +161,7 @@ CEPH_MSGR_TAG_ACK (0x08)
 	
 	struct ceph_msgr_ack {
 		u8    tag = 0x08;
-		u64le seq; // The sequence number of the message being acknoledged.
+		u64le seq; // The sequence number of the message being acknowledged.
 	}
 
 CEPH_MSGR_TAG_KEEPALIVE (0x09)

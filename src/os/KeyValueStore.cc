@@ -98,6 +98,7 @@ int StripObjectMap::save_strip_header(StripObjectHeaderRef strip_header,
     ::encode(*strip_header, strip_header->header->data);
 
     set_header(strip_header->cid, strip_header->oid, *(strip_header->header), t);
+    strip_header->updated = false;
   }
   return 0;
 }
@@ -268,7 +269,7 @@ int StripObjectMap::get_keys_with_header(const StripObjectHeaderRef header,
                                          set<string> *keys)
 {
   ObjectMap::ObjectMapIterator iter = _get_iterator(header->header, prefix);
-  for (; iter->valid(); iter->next()) {
+  for (iter->seek_to_first(); iter->valid(); iter->next()) {
     if (iter->status())
       return iter->status();
     keys->insert(iter->key());
@@ -375,9 +376,10 @@ void KeyValueStore::BufferTransaction::set_buffer_keys(
   store->backend->set_keys(strip_header->header, prefix, values, t);
 
   uniq_id uid = make_pair(strip_header->cid, strip_header->oid);
+  map<pair<string, string>, bufferlist> &uid_buffers = buffers[uid];
   for (map<string, bufferlist>::iterator iter = values.begin();
        iter != values.end(); ++iter) {
-    buffers[uid][make_pair(prefix, iter->first)].swap(iter->second);
+    uid_buffers[make_pair(prefix, iter->first)].swap(iter->second);
   }
 }
 
@@ -462,11 +464,13 @@ int KeyValueStore::BufferTransaction::submit_transaction()
     if (header->deleted)
       continue;
 
-    r = store->backend->save_strip_header(header, t);
+    if (header->updated) {
+      r = store->backend->save_strip_header(header, t);
 
-    if (r < 0) {
-      dout(10) << __func__ << " save strip header failed " << dendl;
-      goto out;
+      if (r < 0) {
+        dout(10) << __func__ << " save strip header failed " << dendl;
+        goto out;
+      }
     }
   }
 
@@ -544,15 +548,15 @@ KeyValueStore::KeyValueStore(const std::string &base,
   // initialize perf_logger
   PerfCountersBuilder plb(g_ceph_context, internal_name, l_os_commit_len, l_os_last);
 
-  plb.add_u64(l_os_oq_max_ops, "op_queue_max_ops");
-  plb.add_u64(l_os_oq_ops, "op_queue_ops");
-  plb.add_u64_counter(l_os_ops, "ops");
-  plb.add_u64(l_os_oq_max_bytes, "op_queue_max_bytes");
-  plb.add_u64(l_os_oq_bytes, "op_queue_bytes");
-  plb.add_u64_counter(l_os_bytes, "bytes");
-  plb.add_time_avg(l_os_commit_lat, "commit_latency");
-  plb.add_time_avg(l_os_apply_lat, "apply_latency");
-  plb.add_time_avg(l_os_queue_lat, "queue_transaction_latency_avg");
+  plb.add_u64(l_os_oq_max_ops, "op_queue_max_ops", "Max operations count in queue");
+  plb.add_u64(l_os_oq_ops, "op_queue_ops", "Operations count in queue");
+  plb.add_u64_counter(l_os_ops, "ops", "Operations");
+  plb.add_u64(l_os_oq_max_bytes, "op_queue_max_bytes", "Max size of queue");
+  plb.add_u64(l_os_oq_bytes, "op_queue_bytes", "Size of queue");
+  plb.add_u64_counter(l_os_bytes, "bytes", "Data written to store");
+  plb.add_time_avg(l_os_commit_lat, "commit_latency", "Commit latency");
+  plb.add_time_avg(l_os_apply_lat, "apply_latency", "Apply latency");
+  plb.add_time_avg(l_os_queue_lat, "queue_transaction_latency_avg", "Store operation queue latency");
 
   perf_logger = plb.create_perf_counters();
 
@@ -577,6 +581,11 @@ int KeyValueStore::statfs(struct statfs *buf)
     return r;
   }
   return 0;
+}
+
+void KeyValueStore::collect_metadata(map<string,string> *pm)
+{
+  (*pm)["keyvaluestore_backend"] = superblock.backend;
 }
 
 int KeyValueStore::mkfs()
@@ -907,7 +916,10 @@ int KeyValueStore::mount()
 
     }
 
-    store->init();
+    if (superblock.backend == "rocksdb")
+      store->init(g_conf->keyvaluestore_rocksdb_options);
+    else
+      store->init();
     stringstream err;
     if (store->open(err)) {
       derr << "KeyValueStore::mount Error initializing keyvaluestore backend "
@@ -1727,8 +1739,10 @@ int KeyValueStore::fiemap(coll_t cid, const ghobject_t& oid,
   map<uint64_t, uint64_t> m;
   for (vector<StripObjectMap::StripExtent>::iterator iter = extents.begin();
        iter != extents.end(); ++iter) {
-    uint64_t off = iter->no * header->strip_size + iter->offset;
-    m[off] = iter->len;
+    if (header->bits[iter->no]) {
+      uint64_t off = iter->no * header->strip_size + iter->offset;
+      m[off] = iter->len;
+    }
   }
   ::encode(m, bl);
   return 0;
@@ -1868,6 +1882,7 @@ int KeyValueStore::_generic_write(StripObjectMap::StripObjectHeaderRef header,
   if (len + offset > header->max_size) {
     header->max_size = len + offset;
     header->bits.resize(header->max_size/header->strip_size+1);
+    header->updated = true;
   }
 
   vector<StripObjectMap::StripExtent> extents;
@@ -1928,13 +1943,13 @@ int KeyValueStore::_generic_write(StripObjectMap::StripObjectHeaderRef header,
         value.append_zero(header->strip_size-value.length());
 
       header->bits[iter->no] = 1;
+      header->updated = true;
     }
     assert(value.length() == header->strip_size);
     values[key].swap(value);
   }
   assert(bl_offset == len);
 
-  header->updated = true;
   t.set_buffer_keys(header, OBJECT_STRIP_PREFIX, values);
   dout(10) << __func__ << " " << header->cid << "/" << header->oid << " "
            << offset << "~" << len << " = " << r << dendl;

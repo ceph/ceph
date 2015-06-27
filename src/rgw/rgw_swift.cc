@@ -269,6 +269,7 @@ int	RGWSwift::get_keystone_admin_token(std::string& token)
     std::stringstream ss;
     jf.flush(ss);
     token_req.set_post_data(ss.str());
+    token_req.set_send_length(ss.str().length());
     int ret = token_req.process("POST", token_url.c_str());
     if (ret < 0)
       return ret;
@@ -296,6 +297,7 @@ int RGWSwift::check_revoked()
     return -EINVAL;
   url.append("v2.0/tokens/revoked");
   req.append_header("X-Auth-Token", token);
+  req.set_send_length(0);
   int ret = req.process(url.c_str());
   if (ret < 0)
     return ret;
@@ -523,6 +525,13 @@ int RGWSwift::validate_keystone_token(RGWRados *store, const string& token, stru
   if (ret < 0)
     return ret;
 
+  if (t.expired()) {
+    ldout(cct, 0) << "got expired token: " << t.token.tenant.name << ":" << t.user.name << " expired: " << t.token.expires << dendl;
+    return -EPERM;
+  }
+
+  keystone_token_cache->add(token_id, t);
+
   ret = update_user_info(store, info, rgw_user);
   if (ret < 0)
     return ret;
@@ -550,7 +559,7 @@ int authenticate_temp_url(RGWRados *store, req_state *s)
   /* need to get user info of bucket owner */
   RGWBucketInfo bucket_info;
 
-  int ret = store->get_bucket_info(*(RGWObjectCtx *)s->obj_ctx, s->bucket_name_str, bucket_info, NULL);
+  int ret = store->get_bucket_info(*static_cast<RGWObjectCtx *>(s->obj_ctx), s->bucket_name_str, bucket_info, NULL);
   if (ret < 0)
     return -EPERM;
 

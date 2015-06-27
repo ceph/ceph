@@ -19,13 +19,15 @@
 #include "common/Formatter.h"
 
 #include "common/ceph_context.h"
-
 class PerfCounters;
 
 enum {
   l_rocksdb_first = 34300,
   l_rocksdb_gets,
   l_rocksdb_txns,
+  l_rocksdb_get_latency,
+  l_rocksdb_submit_latency,
+  l_rocksdb_submit_sync_latency,
   l_rocksdb_compact,
   l_rocksdb_compact_range,
   l_rocksdb_compact_queue_merge,
@@ -41,8 +43,8 @@ namespace rocksdb{
   class Slice;
   class WriteBatch;
   class Iterator;
+  struct Options;
 }
-
 /**
  * Uses RocksDB to implement the KeyValueDB interface
  */
@@ -50,9 +52,8 @@ class RocksDBStore : public KeyValueDB {
   CephContext *cct;
   PerfCounters *logger;
   string path;
-  const rocksdb::FilterPolicy *filterpolicy;
   rocksdb::DB *db;
-
+  string options_str;
   int do_open(ostream &out, bool create_if_missing);
 
   // manage async compactions
@@ -78,10 +79,14 @@ class RocksDBStore : public KeyValueDB {
 
 public:
   /// compact the underlying rocksdb store
+  bool compact_on_mount;
+  bool disableWAL;
   void compact();
 
+  int tryInterpret(const string key, const string val, rocksdb::Options &opt);
+  int ParseOptionsFromString(const string opt_str, rocksdb::Options &opt);
   static int _test_init(const string& dir);
-  int init();
+  int init(string options_str);
   /// compact rocksdb for all keys with a given prefix
   void compact_prefix(const string& prefix) {
     compact_range(prefix, past_prefix(prefix));
@@ -98,63 +103,6 @@ public:
   }
   int get_info_log_level(string info_log_level);
 
-  /**
-   * options_t: Holds options which are minimally interpreted
-   * on initialization and then passed through to RocksDB.
-   * We transform a couple of these into actual RocksDB
-   * structures, but the rest are simply passed through unchanged. See
-   * rocksdb/options.h for more precise details on each.
-   *
-   * Set them after constructing the RocksDBStore, but before calling
-   * open() or create_and_open().
-   */
-  struct options_t {
-    uint64_t write_buffer_size; /// in-memory write buffer size
-    uint64_t write_buffer_num; /// in-memory write buffer number
-    uint64_t target_file_size_base; /// Target file size for compaction
-    int max_background_compactions; /// Maximum number of concurrent background compaction jobs
-    int max_background_flushes; /// Maximum number of concurrent background memtable flushea jobs
-    int max_open_files; /// maximum number of files RocksDB can open at once
-    uint64_t cache_size; /// size of extra decompressed cache to use
-    uint64_t block_size; /// user data per block
-    int bloom_size; /// number of bits per entry to put in a bloom filter
-    string compression_type; /// whether to use libsnappy compression or not
-
-    // don't change these ones. No, seriously
-    int block_restart_interval;
-    bool error_if_exists;
-    bool paranoid_checks;
-    uint64_t level0_file_num_compaction_trigger;
-    uint64_t level0_slowdown_writes_trigger;
-    uint64_t level0_stop_writes_trigger;
-    bool disableDataSync;
-    bool disableWAL;
-    int num_levels;
-
-    string log_file;
-    string wal_dir;
-    string info_log_level;
-
-    options_t() :
-      write_buffer_size(0), //< 0 means default
-      max_open_files(0), //< 0 means default
-      cache_size(0), //< 0 means no cache (default)
-      block_size(0), //< 0 means default
-      bloom_size(0), //< 0 means no bloom filter (default)
-      compression_type("none"), //< set to false for no compression
-      block_restart_interval(0), //< 0 means default
-      error_if_exists(false), //< set to true if you want to check nonexistence
-      paranoid_checks(false), //< set to true if you want paranoid checks
-      level0_file_num_compaction_trigger(0),
-      level0_slowdown_writes_trigger(0),
-      level0_stop_writes_trigger(0),
-      disableDataSync(false),
-      disableWAL(false),
-      num_levels(0),
-      info_log_level("info")
-    {}
-  } options;
-
   RocksDBStore(CephContext *c, const string &path) :
     cct(c),
     logger(NULL),
@@ -162,7 +110,8 @@ public:
     compact_queue_lock("RocksDBStore::compact_thread_lock"),
     compact_queue_stop(false),
     compact_thread(this),
-    options()
+    compact_on_mount(false),
+    disableWAL(false)
   {}
 
   ~RocksDBStore();
@@ -253,7 +202,6 @@ public:
   static string combine_strings(const string &prefix, const string &value);
   static int split_key(rocksdb::Slice in, string *prefix, string *key);
   static bufferlist to_bufferlist(rocksdb::Slice in);
-  static bool in_prefix(const string &prefix, rocksdb::Slice key);
   static string past_prefix(const string &prefix);
 
   virtual uint64_t get_estimated_size(map<string,uint64_t> &extra) {

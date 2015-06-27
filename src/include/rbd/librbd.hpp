@@ -116,11 +116,15 @@ public:
   int old_format(uint8_t *old);
   int size(uint64_t *size);
   int features(uint64_t *features);
+  int update_features(uint64_t features, bool enabled);
   int overlap(uint64_t *overlap);
   int get_flags(uint64_t *flags);
 
   /* exclusive lock feature */
   int is_exclusive_lock_owner(bool *is_owner);
+
+  /* object map feature */
+  int rebuild_object_map(ProgressContext &prog_ctx);
 
   int copy(IoCtx& dest_io_ctx, const char *destname);
   int copy2(Image& dest);
@@ -183,6 +187,8 @@ public:
    * @param fromsnapname start snapshot name, or NULL
    * @param ofs start offset
    * @param len len in bytes of region to report on
+   * @param include_parent true if full history diff should include parent
+   * @param whole_object 1 if diff extents should cover whole object
    * @param cb callback to call for each allocated region
    * @param arg argument to pass to the callback
    * @returns 0 on success, or negative error code on error
@@ -190,6 +196,11 @@ public:
   int diff_iterate(const char *fromsnapname,
 		   uint64_t ofs, uint64_t len,
 		   int (*cb)(uint64_t, size_t, int, void *), void *arg);
+  int diff_iterate2(const char *fromsnapname,
+		    uint64_t ofs, uint64_t len,
+                    bool include_parent, bool whole_object,
+		    int (*cb)(uint64_t, size_t, int, void *), void *arg);
+
   ssize_t write(uint64_t ofs, size_t len, ceph::bufferlist& bl);
   /* @parmam op_flags see librados.h constants beginning with LIBRADOS_OP_FLAG */
   ssize_t write2(uint64_t ofs, size_t len, ceph::bufferlist& bl, int op_flags);
@@ -234,12 +245,19 @@ public:
   int aio_flush(RBD::AioCompletion *c);
 
   /**
-   * Drop any cached data for an image
+   * Drop any cached data for this image
    *
-   * @param image the image to invalidate cached data for
    * @returns 0 on success, negative error code on failure
    */
   int invalidate_cache();
+
+  int metadata_get(const std::string &key, std::string *value);
+  int metadata_set(const std::string &key, const std::string &value);
+  int metadata_remove(const std::string &key);
+  /**
+   * Returns a pair of key/value for this image
+   */
+  int metadata_list(const std::string &start, uint64_t max, std::map<std::string, ceph::bufferlist> *pairs);
 
 private:
   friend class RBD;

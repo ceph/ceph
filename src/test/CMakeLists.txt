@@ -106,6 +106,16 @@ if(${WITH_RADOSGW})
   )
 endif(${WITH_RADOSGW})
 add_executable(dencoder ${dencoder_srcs} $<TARGET_OBJECTS:heap_profiler_objs>)
+if(${WITH_RADOSGW})
+  set(DENCODER_EXTRALIBS
+    rgw_a
+    cls_rgw_client
+    curl
+    expat
+    fcgi
+    resolv
+  )
+endif(${WITH_RADOSGW})
 target_link_libraries(dencoder
   librados
   librbd
@@ -114,6 +124,15 @@ target_link_libraries(dencoder
   mds
   mon
   osdc
+  cls_lock_client
+  cls_refcount_client
+  cls_log_client
+  cls_statelog_client
+  cls_version_client
+  cls_replica_log_client
+  cls_kvs
+  cls_user_client
+  ${DENCODER_EXTRALIBS}
   blkid
   udev
   keyutils
@@ -121,27 +140,6 @@ target_link_libraries(dencoder
   ${TCMALLOC_LIBS}
   ${CMAKE_DL_LIBS}
   )
-if(${WITH_RADOSGW})
-  target_link_libraries(dencoder
-    ${EXTRALIBS}
-    ${TCMALLOC_LIBS}
-    ${CMAKE_DL_LIBS}
-    rgw_a
-    cls_rgw_client
-    cls_lock_client
-    cls_refcount_client
-    cls_log_client
-    cls_statelog_client
-    cls_version_client
-    cls_replica_log_client
-    cls_kvs
-    cls_user_client
-    curl
-    expat
-    fcgi
-    resolv
-  )
-endif(${WITH_RADOSGW})
 
 # get_command_descriptions
 add_executable(get_command_descriptions
@@ -402,8 +400,8 @@ add_executable(unittest_str_map
   ${unittest_str_map_srcs}
   $<TARGET_OBJECTS:heap_profiler_objs>
   )
-target_link_libraries(unittest_str_map global
-  ${CMAKE_DL_LIBS} ${TCMALLOC_LIBS} ${UNITTEST_LIBS})
+target_link_libraries(unittest_str_map common global
+  ${CMAKE_DL_LIBS} ${TCMALLOC_LIBS} ${UNITTEST_LIBS} common)
 set_target_properties(unittest_str_map
   PROPERTIES COMPILE_FLAGS ${UNITTEST_CXX_FLAGS})
 
@@ -946,6 +944,20 @@ target_link_libraries(unittest_on_exit
 set_target_properties(unittest_on_exit PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 
+# unittest_subprocess
+set(unittest_subprocess_srcs test_subprocess.cc)
+add_executable(unittest_subprocess
+  ${unittest_subprocess_srcs}
+  $<TARGET_OBJECTS:heap_profiler_objs>
+  )
+target_link_libraries(unittest_subprocess
+  global
+  ${CMAKE_DL_LIBS}
+  ${TCMALLOC_LIBS}
+  ${UNITTEST_LIBS})
+set_target_properties(unittest_subprocess PROPERTIES COMPILE_FLAGS
+  ${UNITTEST_CXX_FLAGS})
+
 if(${WITH_RADOSGW})
   # test_cors
   set(test_cors_srcs test_cors.cc)
@@ -1099,6 +1111,7 @@ add_executable(test_librbd
   librbd/test_fixture.cc
   librbd/test_ImageWatcher.cc
   librbd/test_internal.cc
+  librbd/test_support.cc
   librbd/test_main.cc
   $<TARGET_OBJECTS:heap_profiler_objs>
   ${CMAKE_SOURCE_DIR}/src/common/TextTable.cc
@@ -1122,7 +1135,7 @@ target_link_libraries(test_librbd
   )
 
 add_executable(test_librbd_fsx
-  librbd/fsx.c
+  librbd/fsx.cc
   $<TARGET_OBJECTS:heap_profiler_objs>
   ${CMAKE_SOURCE_DIR}/src/common/TextTable.cc
   ${CMAKE_SOURCE_DIR}/src/common/secret.c
@@ -1517,6 +1530,7 @@ if(${WITH_CEPHFS})
     libcephfs/readdir_r_cb.cc
     libcephfs/caps.cc
     libcephfs/multiclient.cc
+    libcephfs/flock.cc
     $<TARGET_OBJECTS:heap_profiler_objs>
   )
   set_target_properties(test_libcephfs PROPERTIES COMPILE_FLAGS
@@ -1734,6 +1748,7 @@ add_executable(test_get_blkdev_size
   )
 target_link_libraries(test_get_blkdev_size
   common
+  pthread
   ${EXTRALIBS}
   ${TCMALLOC_LIBS}
   ${CMAKE_DL_LIBS}

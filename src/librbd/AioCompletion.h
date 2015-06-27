@@ -50,7 +50,7 @@ namespace librbd {
     void *complete_arg;
     rbd_completion_t rbd_comp;
     int pending_count;   ///< number of requests
-    bool building;       ///< true if we are still building this completion
+    uint32_t blockers;
     int ref;
     bool released;
     ImageCtx *ictx;
@@ -64,10 +64,10 @@ namespace librbd {
 
     AsyncOperation async_op;
 
-    AioCompletion() : lock("AioCompletion::lock", true),
+    AioCompletion() : lock("AioCompletion::lock", true, false),
 		      done(false), rval(0), complete_cb(NULL),
 		      complete_arg(NULL), rbd_comp(NULL),
-		      pending_count(0), building(true),
+		      pending_count(0), blockers(1),
 		      ref(1), released(false), ictx(NULL),
 		      aio_type(AIO_TYPE_NONE),
 		      read_bl(NULL), read_buf(NULL), read_buf_len(0) {
@@ -98,7 +98,9 @@ namespace librbd {
       }
     }
 
-    void complete();
+    void fail(CephContext *cct, int r);
+
+    void complete(CephContext *cct);
 
     void set_complete_cb(void *cb_arg, callback_t cb) {
       complete_cb = cb;
@@ -134,6 +136,20 @@ namespace librbd {
       if (!n)
 	delete this;
     }
+
+    void block() {
+      Mutex::Locker l(lock);
+      ++blockers;
+    }
+    void unblock(CephContext *cct) {
+      Mutex::Locker l(lock);
+      assert(blockers > 0);
+      --blockers;
+      if (pending_count == 0 && blockers == 0) {
+        finalize(cct, rval);
+        complete(cct);
+      }
+    }
   };
 
   class C_AioRead : public Context {
@@ -167,11 +183,15 @@ namespace librbd {
 
   class C_CacheRead : public Context {
   public:
-    explicit C_CacheRead(AioRead *req) : m_req(req) {}
-    virtual ~C_CacheRead() {}
+    explicit C_CacheRead(ImageCtx *ictx, AioRead *req)
+      : m_image_ctx(*ictx), m_req(req), m_enqueued(false) {}
+    virtual void complete(int r);
+  protected:
     virtual void finish(int r);
   private:
+    ImageCtx &m_image_ctx;
     AioRead *m_req;
+    bool m_enqueued;
   };
 }
 

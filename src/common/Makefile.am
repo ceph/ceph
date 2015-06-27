@@ -33,7 +33,6 @@ libcommon_internal_la_SOURCES = \
 	common/str_map.cc \
 	common/errno.cc \
 	common/RefCountedObj.cc \
-	common/blkdev.cc \
 	common/common_init.cc \
 	common/pipe.c \
 	common/ceph_argparse.cc \
@@ -76,6 +75,9 @@ libcommon_internal_la_SOURCES = \
 	common/Cycles.cc \
 	common/ContextCompletion.cc
 
+libcommon_internal_la_SOURCES += \
+	common/blkdev.cc
+
 if ENABLE_XIO
 libcommon_internal_la_SOURCES += \
 	common/address_helper.cc
@@ -97,13 +99,6 @@ libcommon_internal_la_SOURCES += \
 LIBCOMMON_DEPS += libcommon_internal.la
 noinst_LTLIBRARIES += libcommon_internal.la
 
-libcommon_api_la_SOURCES = \
-	common/buffer.cc
-if LINUX
-libcommon_api_la_CXXFLAGS = -fvisibility=hidden -fvisibility-inlines-hidden
-endif # LINUX
-noinst_LTLIBRARIES += libcommon_api.la
-
 # inject crc in common
 libcommon_crc_la_SOURCES = \
 	common/sctp_crc32.c \
@@ -118,11 +113,19 @@ endif
 LIBCOMMON_DEPS += libcommon_crc.la
 noinst_LTLIBRARIES += libcommon_crc.la
 
+if HAVE_ARMV8_CRC
+libcommon_crc_aarch64_la_SOURCES = common/crc32c_aarch64.c
+libcommon_crc_aarch64_la_CFLAGS = $(AM_CFLAGS) $(ARM_CRC_FLAGS)
+LIBCOMMON_DEPS += libcommon_crc_aarch64.la
+noinst_LTLIBRARIES += libcommon_crc_aarch64.la
+endif
+
 noinst_HEADERS += \
 	common/bloom_filter.hpp \
 	common/sctp_crc32.h \
 	common/crc32c_intel_baseline.h \
-	common/crc32c_intel_fast.h
+	common/crc32c_intel_fast.h \
+	common/crc32c_aarch64.h
 
 
 # important; libmsg before libauth!
@@ -135,8 +138,8 @@ if LINUX
 LIBCOMMON_DEPS += -lrt
 endif # LINUX
 
-libcommon_la_SOURCES =
-libcommon_la_LIBADD = $(LIBCOMMON_DEPS) libcommon_api.la
+libcommon_la_SOURCES = common/buffer.cc
+libcommon_la_LIBADD = $(LIBCOMMON_DEPS)
 noinst_LTLIBRARIES += libcommon.la
 
 noinst_HEADERS += \
@@ -229,7 +232,9 @@ noinst_HEADERS += \
 	common/Cycles.h \
 	common/Initialize.h \
 	common/ContextCompletion.h \
-	common/bit_vector.hpp
+	common/bit_vector.hpp \
+	common/SubProcess.h \
+	common/valgrind.h
 
 if ENABLE_XIO
 noinst_HEADERS += \

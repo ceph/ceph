@@ -96,7 +96,7 @@ protected:
 
 class TestHASH_INDEX_TAG : public TestWrapLFNIndex, public ::testing::Test {
 public:
-  TestHASH_INDEX_TAG() : TestWrapLFNIndex(coll_t("ABC"), "PATH", CollectionIndex::HASH_INDEX_TAG) {
+  TestHASH_INDEX_TAG() : TestWrapLFNIndex(coll_t("ABC"), "PATH_1", CollectionIndex::HASH_INDEX_TAG) {
   }
 };
 
@@ -114,7 +114,7 @@ TEST_F(TestHASH_INDEX_TAG, generate_and_parse_name) {
 
 class TestHASH_INDEX_TAG_2 : public TestWrapLFNIndex, public ::testing::Test {
 public:
-  TestHASH_INDEX_TAG_2() : TestWrapLFNIndex(coll_t("ABC"), "PATH", CollectionIndex::HASH_INDEX_TAG_2) {
+  TestHASH_INDEX_TAG_2() : TestWrapLFNIndex(coll_t("ABC"), "PATH_1", CollectionIndex::HASH_INDEX_TAG_2) {
   }
 };
 
@@ -137,7 +137,7 @@ TEST_F(TestHASH_INDEX_TAG_2, generate_and_parse_name) {
 
 class TestHOBJECT_WITH_POOL : public TestWrapLFNIndex, public ::testing::Test {
 public:
-  TestHOBJECT_WITH_POOL() : TestWrapLFNIndex(coll_t("ABC"), "PATH", CollectionIndex::HOBJECT_WITH_POOL) {
+  TestHOBJECT_WITH_POOL() : TestWrapLFNIndex(coll_t("ABC"), "PATH_1", CollectionIndex::HOBJECT_WITH_POOL) {
   }
 };
 
@@ -181,17 +181,17 @@ TEST_F(TestHOBJECT_WITH_POOL, generate_and_parse_name) {
 
 class TestLFNIndex : public TestWrapLFNIndex, public ::testing::Test {
 public:
-  TestLFNIndex() : TestWrapLFNIndex(coll_t("ABC"), "PATH", CollectionIndex::HOBJECT_WITH_POOL) {
+  TestLFNIndex() : TestWrapLFNIndex(coll_t("ABC"), "PATH_1", CollectionIndex::HOBJECT_WITH_POOL) {
   }
 
   virtual void SetUp() {
-    ::chmod("PATH", 0700);
-    ASSERT_EQ(0, ::system("rm -fr PATH"));
-    ASSERT_EQ(0, ::mkdir("PATH", 0700));
+    ::chmod("PATH_1", 0700);
+    ASSERT_EQ(0, ::system("rm -fr PATH_1"));
+    ASSERT_EQ(0, ::mkdir("PATH_1", 0700));
   }
 
   virtual void TearDown() {
-    ASSERT_EQ(0, ::system("rm -fr PATH"));
+    ASSERT_EQ(0, ::system("rm -fr PATH_1"));
   }
 };
 
@@ -206,13 +206,13 @@ TEST_F(TestLFNIndex, remove_object) {
     int exists = 666;
     ghobject_t hoid(hobject_t(sobject_t("ABC", CEPH_NOSNAP)));
 
-    EXPECT_EQ(0, ::chmod("PATH", 0000));
+    EXPECT_EQ(0, ::chmod("PATH_1", 0000));
     if (getuid() != 0)
       EXPECT_EQ(-EACCES, remove_object(path, hoid));
-    EXPECT_EQ(0, ::chmod("PATH", 0700));
+    EXPECT_EQ(0, ::chmod("PATH_1", 0700));
     EXPECT_EQ(-ENOENT, remove_object(path, hoid));
     EXPECT_EQ(0, get_mangled_name(path, hoid, &mangled_name, &exists));
-    const std::string pathname("PATH/" + mangled_name);
+    const std::string pathname("PATH_1/" + mangled_name);
     EXPECT_EQ(0, ::close(::creat(pathname.c_str(), 0600)));
     EXPECT_EQ(0, remove_object(path, hoid));
     EXPECT_EQ(-1, ::access(pathname.c_str(), 0));
@@ -230,7 +230,7 @@ TEST_F(TestLFNIndex, remove_object) {
     EXPECT_EQ(0, get_mangled_name(path, hoid, &mangled_name, &exists));
     EXPECT_EQ(0, exists);
     EXPECT_NE(std::string::npos, mangled_name.find("0_long"));
-    std::string pathname("PATH/" + mangled_name);
+    std::string pathname("PATH_1/" + mangled_name);
     EXPECT_EQ(0, ::close(::creat(pathname.c_str(), 0600)));
     EXPECT_EQ(0, created(hoid, pathname.c_str()));
 
@@ -249,12 +249,12 @@ TEST_F(TestLFNIndex, remove_object) {
     ghobject_t hoid(hobject_t(sobject_t(object_name, CEPH_NOSNAP)));
 
     //
-    //   PATH/AAA..._0_long => does not match long object name
+    //   PATH_1/AAA..._0_long => does not match long object name
     //
     EXPECT_EQ(0, get_mangled_name(path, hoid, &mangled_name, &exists));
     EXPECT_EQ(0, exists);
     EXPECT_NE(std::string::npos, mangled_name.find("0_long"));
-    std::string pathname("PATH/" + mangled_name);
+    std::string pathname("PATH_1/" + mangled_name);
     EXPECT_EQ(0, ::close(::creat(pathname.c_str(), 0600)));
     EXPECT_EQ(0, created(hoid, pathname.c_str()));
     string LFN_ATTR = "user.cephos.lfn";
@@ -267,19 +267,19 @@ TEST_F(TestLFNIndex, remove_object) {
     EXPECT_EQ(object_name_1.size(), (unsigned)chain_setxattr(pathname.c_str(), LFN_ATTR.c_str(), object_name_1.c_str(), object_name_1.size()));
 
     //
-    //   PATH/AAA..._1_long => matches long object name
+    //   PATH_1/AAA..._1_long => matches long object name
     //
     std::string mangled_name_1;
     exists = 666;
     EXPECT_EQ(0, get_mangled_name(path, hoid, &mangled_name_1, &exists));
     EXPECT_NE(std::string::npos, mangled_name_1.find("1_long"));
     EXPECT_EQ(0, exists);
-    std::string pathname_1("PATH/" + mangled_name_1);
+    std::string pathname_1("PATH_1/" + mangled_name_1);
     EXPECT_EQ(0, ::close(::creat(pathname_1.c_str(), 0600)));
     EXPECT_EQ(0, created(hoid, pathname_1.c_str()));
 
     //
-    // remove_object skips PATH/AAA..._0_long and removes PATH/AAA..._1_long
+    // remove_object skips PATH_1/AAA..._0_long and removes PATH_1/AAA..._1_long
     //
     EXPECT_EQ(0, remove_object(path, hoid));
     EXPECT_EQ(0, ::access(pathname.c_str(), 0));
@@ -298,20 +298,20 @@ TEST_F(TestLFNIndex, remove_object) {
     ghobject_t hoid(hobject_t(sobject_t(object_name, CEPH_NOSNAP)));
 
     //
-    //   PATH/AAA..._0_long => matches long object name
+    //   PATH_1/AAA..._0_long => matches long object name
     //
     EXPECT_EQ(0, get_mangled_name(path, hoid, &mangled_name, &exists));
     EXPECT_EQ(0, exists);
     EXPECT_NE(std::string::npos, mangled_name.find("0_long"));
-    std::string pathname("PATH/" + mangled_name);
+    std::string pathname("PATH_1/" + mangled_name);
     EXPECT_EQ(0, ::close(::creat(pathname.c_str(), 0600)));
     EXPECT_EQ(0, created(hoid, pathname.c_str()));
     //
-    //   PATH/AAA..._1_long => matches long object name
+    //   PATH_1/AAA..._1_long => matches long object name
     //
     std::string mangled_name_1 = mangled_name;
     mangled_name_1.replace(mangled_name_1.find("0_long"), 6, "1_long");
-    const std::string pathname_1("PATH/" + mangled_name_1);
+    const std::string pathname_1("PATH_1/" + mangled_name_1);
     const std::string cmd("cp --preserve=xattr " + pathname + " " + pathname_1);
     EXPECT_EQ(0, ::system(cmd.c_str()));
     const string ATTR = "user.MARK";
@@ -320,9 +320,9 @@ TEST_F(TestLFNIndex, remove_object) {
     //
     // remove_object replaces the file to be removed with the last from the
     // collision list. In this case it replaces
-    //    PATH/AAA..._0_long 
+    //    PATH_1/AAA..._0_long
     // with
-    //    PATH/AAA..._1_long 
+    //    PATH_1/AAA..._1_long
     //
     EXPECT_EQ(0, remove_object(path, hoid));
     EXPECT_EQ(0, ::access(pathname.c_str(), 0));
@@ -349,7 +349,7 @@ TEST_F(TestLFNIndex, get_mangled_name) {
     EXPECT_NE(std::string::npos, mangled_name.find("ABC__head"));
     EXPECT_EQ(std::string::npos, mangled_name.find("0_long"));
     EXPECT_EQ(0, exists);
-    const std::string pathname("PATH/" + mangled_name);
+    const std::string pathname("PATH_1/" + mangled_name);
     EXPECT_EQ(0, ::close(::creat(pathname.c_str(), 0600)));
     EXPECT_EQ(0, get_mangled_name(path, hoid, &mangled_name, &exists));
     EXPECT_NE(std::string::npos, mangled_name.find("ABC__head"));
@@ -375,7 +375,7 @@ TEST_F(TestLFNIndex, get_mangled_name) {
     EXPECT_NE(std::string::npos, mangled_name.find("0_long"));
     EXPECT_EQ(0, exists);
 
-    const std::string pathname("PATH/" + mangled_name);
+    const std::string pathname("PATH_1/" + mangled_name);
 
     //
     // if a file by the same name exists but does not have the
@@ -398,12 +398,12 @@ TEST_F(TestLFNIndex, get_mangled_name) {
     mangled_name.clear();
     exists = 666;
     EXPECT_EQ(0, ::close(::creat(pathname.c_str(), 0600)));
-    EXPECT_EQ(0, ::chmod("PATH", 0500));
+    EXPECT_EQ(0, ::chmod("PATH_1", 0500));
     if (getuid() != 0)
       EXPECT_EQ(-EACCES, get_mangled_name(path, hoid, &mangled_name, &exists));
     EXPECT_EQ("", mangled_name);
     EXPECT_EQ(666, exists);
-    EXPECT_EQ(0, ::chmod("PATH", 0700));
+    EXPECT_EQ(0, ::chmod("PATH_1", 0700));
     EXPECT_EQ(0, ::unlink(pathname.c_str()));
 
     //

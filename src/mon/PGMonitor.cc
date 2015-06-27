@@ -1193,7 +1193,7 @@ void PGMonitor::send_pg_creates(int osd, Connection *con)
     m->mkpg[*q] = pg_create_t(pg_map.pg_stat[*q].created,
 			      pg_map.pg_stat[*q].parent,
 			      pg_map.pg_stat[*q].parent_split_bits);
-    // Need the create time from the monitor using his clock to set last_scrub_stamp
+    // Need the create time from the monitor using its clock to set last_scrub_stamp
     // upon pg creation.
     m->ctimes[*q] = pg_map.pg_stat[*q].last_scrub_stamp;
   }
@@ -1867,7 +1867,8 @@ bool PGMonitor::prepare_command(MMonCommand *m)
   return true;
 }
 
-static void note_stuck_detail(enum PGMap::StuckPG what,
+// Only called with a single bit set in "what"
+static void note_stuck_detail(int what,
 			      ceph::unordered_map<pg_t,pg_stat_t>& stuck_pgs,
 			      list<pair<health_status_t,string> > *detail)
 {
@@ -2157,7 +2158,7 @@ void PGMonitor::get_health(list<pair<health_status_t,string> >& summary,
   int sum_pg_up = MAX(pg_map.pg_sum.up, static_cast<int32_t>(pg_map.pg_stat.size()));
   if (num_in && g_conf->mon_pg_warn_min_per_osd > 0) {
     int per = sum_pg_up / num_in;
-    if (per < g_conf->mon_pg_warn_min_per_osd) {
+    if (per < g_conf->mon_pg_warn_min_per_osd && per) {
       ostringstream ss;
       ss << "too few PGs per OSD (" << per << " < min " << g_conf->mon_pg_warn_min_per_osd << ")";
       summary.push_back(make_pair(HEALTH_WARN, ss.str()));
@@ -2240,31 +2241,32 @@ int PGMonitor::dump_stuck_pg_stats(stringstream &ds,
 				   int threshold,
 				   vector<string>& args) const
 {
-  PGMap::StuckPG stuck_type;
-  string type = args[0];
+  int stuck_types = 0;
 
-  if (type == "inactive")
-    stuck_type = PGMap::STUCK_INACTIVE;
-  else if (type == "unclean")
-    stuck_type = PGMap::STUCK_UNCLEAN;
-  else if (type == "undersized")
-    stuck_type = PGMap::STUCK_UNDERSIZED;
-  else if (type == "degraded")
-    stuck_type = PGMap::STUCK_DEGRADED;
-  else if (type == "stale")
-    stuck_type = PGMap::STUCK_STALE;
-  else {
-    ds << "Unknown type: " << type << std::endl;
-    return 0;
+  for (vector<string>::iterator i = args.begin() ; i != args.end(); ++i) {
+    if (*i == "inactive")
+      stuck_types |= PGMap::STUCK_INACTIVE;
+    else if (*i == "unclean")
+      stuck_types |= PGMap::STUCK_UNCLEAN;
+    else if (*i == "undersized")
+      stuck_types |= PGMap::STUCK_UNDERSIZED;
+    else if (*i == "degraded")
+      stuck_types |= PGMap::STUCK_DEGRADED;
+    else if (*i == "stale")
+      stuck_types |= PGMap::STUCK_STALE;
+    else {
+      ds << "Unknown type: " << *i << std::endl;
+      return 0;
+    }
   }
 
   utime_t now(ceph_clock_now(g_ceph_context));
   utime_t cutoff = now - utime_t(threshold, 0);
 
   if (!f) {
-    pg_map.dump_stuck_plain(ds, stuck_type, cutoff);
+    pg_map.dump_stuck_plain(ds, stuck_types, cutoff);
   } else {
-    pg_map.dump_stuck(f, stuck_type, cutoff);
+    pg_map.dump_stuck(f, stuck_types, cutoff);
     f->flush(ds);
   }
 

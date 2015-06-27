@@ -11,10 +11,10 @@ ls on empty pool never containing images
 
 create
 =======
-  $ rbd create -s 1024 foo
+  $ rbd create -s 1024 --image-format 1 foo
   $ rbd create -s 512 --image-format 2 bar
   $ rbd create -s 2048 --image-format 2 baz
-  $ rbd create -s 1 quux
+  $ rbd create -s 1 --image-format 1 quux
 
 snapshot
 ========
@@ -31,6 +31,7 @@ clone
   $ rbd clone bar@snap rbd_other/child
   $ rbd snap create rbd_other/child@snap
   $ rbd flatten rbd_other/child 2> /dev/null
+  $ rbd bench-write rbd_other/child --io-pattern seq --io-total 1 > /dev/null 2>&1
 
 lock
 ====
@@ -110,15 +111,15 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   \torder 22 (4096 kB objects) (esc)
   [^^]+ (re)
   \tformat: 2 (esc)
-  \tfeatures: layering, exclusive (esc)
+  \tfeatures: layering (esc)
+  \tflags:  (esc)
   $ rbd info bar --format json | python -mjson.tool | sed 's/,$/, /'
   {
       "block_name_prefix": "rbd_data.*",  (glob)
       "features": [
-          "layering", 
-          "striping", 
-          "exclusive"
+          "layering"
       ], 
+      "flags": [], 
       "format": 2, 
       "name": "bar", 
       "object_size": 4194304, 
@@ -137,9 +138,8 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
     <format>2</format>
     <features>
       <feature>layering</feature>
-      <feature>striping</feature>
-      <feature>exclusive</feature>
     </features>
+    <flags></flags>
   </image>
   $ rbd info bar@snap
   rbd image 'bar':
@@ -147,16 +147,16 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   \torder 22 (4096 kB objects) (esc)
   [^^]+ (re)
   \tformat: 2 (esc)
-  \tfeatures: layering, exclusive (esc)
+  \tfeatures: layering (esc)
+  \tflags:  (esc)
   \tprotected: True (esc)
   $ rbd info bar@snap --format json | python -mjson.tool | sed 's/,$/, /'
   {
       "block_name_prefix": "rbd_data.*",  (glob)
       "features": [
-          "layering", 
-          "striping", 
-          "exclusive"
+          "layering"
       ], 
+      "flags": [], 
       "format": 2, 
       "name": "bar", 
       "object_size": 4194304, 
@@ -176,9 +176,8 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
     <format>2</format>
     <features>
       <feature>layering</feature>
-      <feature>striping</feature>
-      <feature>exclusive</feature>
     </features>
+    <flags></flags>
     <protected>true</protected>
   </image>
   $ rbd info bar@snap2
@@ -187,16 +186,16 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   \torder 22 (4096 kB objects) (esc)
   [^^]+ (re)
   \tformat: 2 (esc)
-  \tfeatures: layering, exclusive (esc)
+  \tfeatures: layering (esc)
+  \tflags:  (esc)
   \tprotected: False (esc)
   $ rbd info bar@snap2 --format json | python -mjson.tool | sed 's/,$/, /'
   {
       "block_name_prefix": "rbd_data.*",  (glob)
       "features": [
-          "layering", 
-          "striping", 
-          "exclusive"
+          "layering"
       ], 
+      "flags": [], 
       "format": 2, 
       "name": "bar", 
       "object_size": 4194304, 
@@ -216,9 +215,8 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
     <format>2</format>
     <features>
       <feature>layering</feature>
-      <feature>striping</feature>
-      <feature>exclusive</feature>
     </features>
+    <flags></flags>
     <protected>false</protected>
   </image>
   $ rbd info baz
@@ -227,15 +225,15 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   \torder 22 (4096 kB objects) (esc)
   [^^]+ (re)
   \tformat: 2 (esc)
-  \tfeatures: layering, exclusive (esc)
+  \tfeatures: layering (esc)
+  \tflags:  (esc)
   $ rbd info baz --format json | python -mjson.tool | sed 's/,$/, /'
   {
       "block_name_prefix": "rbd_data.*",  (glob)
       "features": [
-          "layering", 
-          "striping", 
-          "exclusive"
+          "layering"
       ], 
+      "flags": [], 
       "format": 2, 
       "name": "baz", 
       "object_size": 4194304, 
@@ -254,9 +252,8 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
     <format>2</format>
     <features>
       <feature>layering</feature>
-      <feature>striping</feature>
-      <feature>exclusive</feature>
     </features>
+    <flags></flags>
   </image>
   $ rbd info quux
   rbd image 'quux':
@@ -290,15 +287,15 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   \torder 22 (4096 kB objects) (esc)
   [^^]+ (re)
   \tformat: 2 (esc)
-  \tfeatures: layering, exclusive (esc)
+  \tfeatures: layering (esc)
+  \tflags:  (esc)
   $ rbd info rbd_other/child --format json | python -mjson.tool | sed 's/,$/, /'
   {
       "block_name_prefix": "rbd_data.*",  (glob)
       "features": [
-          "layering", 
-          "striping", 
-          "exclusive"
+          "layering"
       ], 
+      "flags": [], 
       "format": 2, 
       "name": "child", 
       "object_size": 4194304, 
@@ -317,9 +314,8 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
     <format>2</format>
     <features>
       <feature>layering</feature>
-      <feature>striping</feature>
-      <feature>exclusive</feature>
     </features>
+    <flags></flags>
   </image>
   $ rbd info rbd_other/child@snap
   rbd image 'child':
@@ -327,7 +323,8 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   \torder 22 (4096 kB objects) (esc)
   [^^]+ (re)
   \tformat: 2 (esc)
-  \tfeatures: layering, exclusive (esc)
+  \tfeatures: layering (esc)
+  \tflags:  (esc)
   \tprotected: False (esc)
   \tparent: rbd/bar@snap (esc)
   \toverlap: 512 MB (esc)
@@ -335,10 +332,9 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   {
       "block_name_prefix": "rbd_data.*",  (glob)
       "features": [
-          "layering", 
-          "striping", 
-          "exclusive"
+          "layering"
       ], 
+      "flags": [], 
       "format": 2, 
       "name": "child", 
       "object_size": 4194304, 
@@ -364,9 +360,8 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
     <format>2</format>
     <features>
       <feature>layering</feature>
-      <feature>striping</feature>
-      <feature>exclusive</feature>
     </features>
+    <flags></flags>
     <protected>false</protected>
     <parent>
       <pool>rbd</pool>
@@ -682,6 +677,50 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
       <size>536870912</size>
     </snapshot>
   </snapshots>
+  $ rbd disk-usage rbd_other
+  warning: fast-diff map is not enabled for child. operation may be slow.
+  NAME       PROVISIONED  USED 
+  child@snap        512M     0 
+  child             512M 4096k 
+  <TOTAL>           512M 4096k 
+  $ rbd disk-usage rbd_other --format json | python -mjson.tool | sed 's/,$/, /'
+  warning: fast-diff map is not enabled for child. operation may be slow.
+  {
+      "images": [
+          {
+              "name": "child", 
+              "provisioned_size": 536870912, 
+              "snapshot": "snap", 
+              "used_size": 0
+          }, 
+          {
+              "name": "child", 
+              "provisioned_size": 536870912, 
+              "used_size": 4194304
+          }
+      ], 
+      "total_provisioned_size": 536870912, 
+      "total_used_size": 4194304
+  }
+  $ rbd disk-usage rbd_other --format xml | xml_pp 2>&1 | grep -v '^new version at /usr/bin/xml_pp'
+  warning: fast-diff map is not enabled for child. operation may be slow.
+  <stats>
+    <images>
+      <image>
+        <name>child</name>
+        <snapshot>snap</snapshot>
+        <provisioned_size>536870912</provisioned_size>
+        <used_size>0</used_size>
+      </image>
+      <image>
+        <name>child</name>
+        <provisioned_size>536870912</provisioned_size>
+        <used_size>4194304</used_size>
+      </image>
+    </images>
+    <total_provisioned_size>536870912</total_provisioned_size>
+    <total_used_size>4194304</total_used_size>
+  </stats>
 
 # cleanup
   $ rbd snap remove rbd_other/child@snap

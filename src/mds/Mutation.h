@@ -161,6 +161,8 @@ public:
   virtual void print(ostream &out) {
     out << "mutation(" << this << ")";
   }
+
+  virtual void dump(Formatter *f) const {}
 };
 
 inline ostream& operator<<(ostream& out, MutationImpl &mut)
@@ -336,6 +338,7 @@ struct MDRequestImpl : public MutationImpl, public TrackedOp {
   void set_filepath2(const filepath& fp);
 
   void print(ostream &out);
+  void dump(Formatter *f) const;
 
   // TrackedOp stuff
   typedef ceph::shared_ptr<MDRequestImpl> Ref;

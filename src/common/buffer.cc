@@ -45,8 +45,8 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
 # define bendl std::endl; }
 #endif
 
-  atomic_t buffer_total_alloc;
-  bool buffer_track_alloc = get_env_bool("CEPH_BUFFER_TRACK");
+  static atomic_t buffer_total_alloc;
+  const bool buffer_track_alloc = get_env_bool("CEPH_BUFFER_TRACK");
 
   void buffer::inc_total_alloc(unsigned len) {
     if (buffer_track_alloc)
@@ -60,9 +60,9 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
     return buffer_total_alloc.read();
   }
 
-  atomic_t buffer_cached_crc;
-  atomic_t buffer_cached_crc_adjusted;
-  bool buffer_track_crc = get_env_bool("CEPH_BUFFER_TRACK");
+  static atomic_t buffer_cached_crc;
+  static atomic_t buffer_cached_crc_adjusted;
+  static bool buffer_track_crc = get_env_bool("CEPH_BUFFER_TRACK");
 
   void buffer::track_cached_crc(bool b) {
     buffer_track_crc = b;
@@ -74,8 +74,8 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
     return buffer_cached_crc_adjusted.read();
   }
 
-  atomic_t buffer_c_str_accesses;
-  bool buffer_track_c_str = get_env_bool("CEPH_BUFFER_TRACK");
+  static atomic_t buffer_c_str_accesses;
+  static bool buffer_track_c_str = get_env_bool("CEPH_BUFFER_TRACK");
 
   void buffer::track_c_str(bool b) {
     buffer_track_c_str = b;
@@ -84,7 +84,7 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
     return buffer_c_str_accesses.read();
   }
 
-  atomic_t buffer_max_pipe_size;
+  static atomic_t buffer_max_pipe_size;
   int update_max_pipe_size() {
 #ifdef CEPH_HAVE_SETPIPE_SZ
     char buf[32];
@@ -1483,9 +1483,24 @@ void buffer::list::rebuild_page_aligned()
     }
 
     if (off + len > curbuf->length()) {
-      // FIXME we'll just rebuild the whole list for now.
-      rebuild();
-      return c_str() + orig_off;
+      bufferlist tmp;
+      unsigned l = off + len;
+
+      do {
+	if (l >= curbuf->length())
+	  l -= curbuf->length();
+	else
+	  l = 0;
+	tmp.append(*curbuf);
+	curbuf = _buffers.erase(curbuf);
+
+      } while (curbuf != _buffers.end() && l > 0);
+
+      assert(l == 0);
+
+      tmp.rebuild();
+      _buffers.insert(curbuf, tmp._buffers.front());
+      return tmp.c_str() + off;
     }
 
     return curbuf->c_str() + off;

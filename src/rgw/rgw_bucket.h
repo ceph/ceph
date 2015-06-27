@@ -104,8 +104,13 @@ extern void rgw_bucket_init(RGWMetadataManager *mm);
  * Get all the buckets owned by a user and fill up an RGWUserBuckets with them.
  * Returns: 0 on success, -ERR# on failure.
  */
-extern int rgw_read_user_buckets(RGWRados *store, string user_id, RGWUserBuckets& buckets,
-                                 const string& marker, uint64_t max, bool need_stats);
+extern int rgw_read_user_buckets(RGWRados *store,
+                                 string user_id,
+                                 RGWUserBuckets& buckets,
+                                 const string& marker,
+                                 uint64_t max,
+                                 bool need_stats,
+                                 uint64_t default_amount = 1000);
 
 extern int rgw_link_bucket(RGWRados *store, string user_id, rgw_bucket& bucket, time_t creation_time, bool update_entrypoint = true);
 extern int rgw_unlink_bucket(RGWRados *store, string user_id, const string& bucket_name, bool update_entrypoint = true);

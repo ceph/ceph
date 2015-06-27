@@ -770,7 +770,7 @@ std::string pg_state_string(int state)
   return ret;
 }
 
-int pg_string_state(std::string state)
+int pg_string_state(const std::string& state)
 {
   int type;
   if (state == "active")
@@ -793,16 +793,18 @@ int pg_string_state(std::string state)
     type = PG_STATE_INCONSISTENT;
   else if (state == "peering")
     type = PG_STATE_PEERING;
-  else if (state == "recoverying")
+  else if (state == "repair")
+    type = PG_STATE_REPAIR;
+  else if (state == "recovering")
     type = PG_STATE_RECOVERING;
   else if (state == "backfill_wait")
     type = PG_STATE_BACKFILL_WAIT;
   else if (state == "incomplete")
     type = PG_STATE_INCOMPLETE;
-  else if (state == "remapped")
-    type = PG_STATE_REMAPPED;
   else if (state == "stale")
     type = PG_STATE_STALE;
+  else if (state == "remapped")
+    type = PG_STATE_REMAPPED;
   else if (state == "deep_scrub")
     type = PG_STATE_DEEP_SCRUB;
   else if (state == "backfill")
@@ -2545,6 +2547,8 @@ bool pg_interval_t::is_new_interval(
   int new_up_primary,
   const vector<int> &old_up,
   const vector<int> &new_up,
+  int old_size,
+  int new_size,
   int old_min_size,
   int new_min_size,
   unsigned old_pg_num,
@@ -2555,6 +2559,7 @@ bool pg_interval_t::is_new_interval(
     old_up_primary != new_up_primary ||
     new_up != old_up ||
     old_min_size != new_min_size ||
+    old_size != new_size ||
     pgid.is_split(old_pg_num, new_pg_num, 0);
 }
 
@@ -2579,6 +2584,8 @@ bool pg_interval_t::is_new_interval(
 		    new_up_primary,
 		    old_up,
 		    new_up,
+		    lastmap->get_pools().find(pgid.pool())->second.size,
+		    osdmap->get_pools().find(pgid.pool())->second.size,
 		    lastmap->get_pools().find(pgid.pool())->second.min_size,
 		    osdmap->get_pools().find(pgid.pool())->second.min_size,
 		    lastmap->get_pg_num(pgid.pool()),
@@ -3090,6 +3097,36 @@ ostream& operator<<(ostream& out, const pg_log_entry_t& e)
 
 
 // -- pg_log_t --
+
+// out: pg_log_t that only has entries that apply to import_pgid using curmap
+// reject: Entries rejected from "in" are in the reject.log.  Other fields not set.
+void pg_log_t::filter_log(spg_t import_pgid, const OSDMap &curmap,
+  const string &hit_set_namespace, const pg_log_t &in,
+  pg_log_t &out, pg_log_t &reject)
+{
+  out = in;
+  out.log.clear();
+  reject.log.clear();
+
+  for (list<pg_log_entry_t>::const_iterator i = in.log.begin();
+       i != in.log.end(); ++i) {
+
+    if (i->soid.nspace != hit_set_namespace) {
+      object_t oid = i->soid.oid;
+      object_locator_t loc(i->soid);
+      pg_t raw_pgid = curmap.object_locator_to_pg(oid, loc);
+      pg_t pgid = curmap.raw_pg_to_pg(raw_pgid);
+
+      if (import_pgid.pgid == pgid) {
+        out.log.push_back(*i);
+      } else {
+        reject.log.push_back(*i);
+      }
+    } else {
+      out.log.push_back(*i);
+    }
+  }
+}
 
 void pg_log_t::encode(bufferlist& bl) const
 {
@@ -4046,6 +4083,25 @@ uint64_t SnapSet::get_clone_bytes(snapid_t clone) const
     size -= i.get_len();
   }
   return size;
+}
+
+void SnapSet::filter(const pg_pool_t &pinfo)
+{
+  vector<snapid_t> oldsnaps;
+  oldsnaps.swap(snaps);
+  for (vector<snapid_t>::const_iterator i = oldsnaps.begin();
+       i != oldsnaps.end();
+       ++i) {
+    if (!pinfo.is_removed_snap(*i))
+      snaps.push_back(*i);
+  }
+}
+
+SnapSet SnapSet::get_filtered(const pg_pool_t &pinfo) const
+{
+  SnapSet ss = *this;
+  ss.filter(pinfo);
+  return ss;
 }
 
 // -- watch_info_t --

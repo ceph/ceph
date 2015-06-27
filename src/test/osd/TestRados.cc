@@ -55,9 +55,9 @@ public:
       cout << m_op << ": write initial oid " << oid.str() << std::endl;
       context.oid_not_flushing.insert(oid.str());
       if (m_ec_pool) {
-	return new WriteOp(m_op, &context, oid.str(), true);
+	return new WriteOp(m_op, &context, oid.str(), true, true);
       } else {
-	return new WriteOp(m_op, &context, oid.str(), false);
+	return new WriteOp(m_op, &context, oid.str(), false, true);
       }
     } else if (m_op >= m_ops) {
       return NULL;
@@ -105,7 +105,14 @@ private:
       oid = *(rand_choose(context.oid_not_in_use));
       cout << m_op << ": " << "write oid " << oid << " current snap is "
 	   << context.current_snap << std::endl;
-      return new WriteOp(m_op, &context, oid, false, m_stats);
+      return new WriteOp(m_op, &context, oid, false, false, m_stats);
+
+    case TEST_OP_WRITE_EXCL:
+      oid = *(rand_choose(context.oid_not_in_use));
+      cout << m_op << ": " << "write (excl) oid "
+	   << oid << " current snap is "
+	   << context.current_snap << std::endl;
+      return new WriteOp(m_op, &context, oid, false, true, m_stats);
 
     case TEST_OP_DELETE:
       oid = *(rand_choose(context.oid_not_in_use));
@@ -206,7 +213,13 @@ private:
       oid = *(rand_choose(context.oid_not_in_use));
       cout << "append oid " << oid << " current snap is "
 	   << context.current_snap << std::endl;
-      return new WriteOp(m_op, &context, oid, true, m_stats);
+      return new WriteOp(m_op, &context, oid, true, false, m_stats);
+
+    case TEST_OP_APPEND_EXCL:
+      oid = *(rand_choose(context.oid_not_in_use));
+      cout << "append oid (excl) " << oid << " current snap is "
+	   << context.current_snap << std::endl;
+      return new WriteOp(m_op, &context, oid, true, true, m_stats);
 
     default:
       cerr << m_op << ": Invalid op type " << type << std::endl;
@@ -244,6 +257,7 @@ int main(int argc, char **argv)
   } op_types[] = {
     { TEST_OP_READ, "read", true },
     { TEST_OP_WRITE, "write", false },
+    { TEST_OP_WRITE_EXCL, "write_excl", false },
     { TEST_OP_DELETE, "delete", true },
     { TEST_OP_SNAP_CREATE, "snap_create", true },
     { TEST_OP_SNAP_REMOVE, "snap_remove", true },
@@ -259,6 +273,7 @@ int main(int argc, char **argv)
     { TEST_OP_CACHE_TRY_FLUSH, "cache_try_flush", true },
     { TEST_OP_CACHE_EVICT, "cache_evict", true },
     { TEST_OP_APPEND, "append", true },
+    { TEST_OP_APPEND_EXCL, "append_excl", true },
     { TEST_OP_READ /* grr */, NULL },
   };
 

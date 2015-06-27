@@ -22,6 +22,7 @@
 #include "include/types.h"
 
 #include "common/config.h"
+#include "common/errno.h"
 #include "common/Finisher.h"
 
 #include "include/assert.h"
@@ -158,20 +159,31 @@ void MDSTable::load_2(int r, bufferlist& bl, Context *onfinish)
   assert(is_opening());
   state = STATE_ACTIVE;
   if (r == -EBLACKLISTED) {
-    mds->suicide();
+    mds->respawn();
     return;
   }
   if (r < 0) {
     derr << "load_2 could not read table: " << r << dendl;
-    assert(r >= 0);
+    mds->clog->error() << "error reading table object '" << get_object_name()
+                       << "' " << r << " (" << cpp_strerror(r) << ")";
+    mds->damaged();
+    assert(r >= 0);  // Should be unreachable because damaged() calls respawn()
   }
 
   dout(10) << "load_2 got " << bl.length() << " bytes" << dendl;
   bufferlist::iterator p = bl.begin();
-  ::decode(version, p);
-  projected_version = committed_version = version;
-  dout(10) << "load_2 loaded v" << version << dendl;
-  decode_state(p);
+
+  try {
+    ::decode(version, p);
+    projected_version = committed_version = version;
+    dout(10) << "load_2 loaded v" << version << dendl;
+    decode_state(p);
+  } catch (buffer::error &e) {
+    mds->clog->error() << "error decoding table object '" << get_object_name()
+                       << "': " << e.what();
+    mds->damaged();
+    assert(r >= 0);  // Should be unreachable because damaged() calls respawn()
+  }
 
   if (onfinish) {
     onfinish->complete(0);

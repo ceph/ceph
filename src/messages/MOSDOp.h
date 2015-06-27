@@ -154,6 +154,7 @@ public:
 
   // flags
   int get_flags() const { return flags; }
+  bool has_flag(__u32 flag) { return flags & flag; };
 
   bool wants_ack() const { return flags & CEPH_OSD_FLAG_ACK; }
   bool wants_ondisk() const { return flags & CEPH_OSD_FLAG_ONDISK; }

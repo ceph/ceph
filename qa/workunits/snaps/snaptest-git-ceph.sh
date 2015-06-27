@@ -4,7 +4,7 @@ set -e
 
 ceph mds set allow_new_snaps true --yes-i-really-mean-it
 
-git clone git://ceph.com/git/ceph.git
+git clone git://git.ceph.com/ceph.git
 cd ceph
 
 versions=`seq 1 21`

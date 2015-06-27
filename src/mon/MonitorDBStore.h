@@ -568,7 +568,10 @@ class MonitorDBStore
   }
 
   int open(ostream &out) {
-    db->init();
+    if (g_conf->mon_keyvaluedb == "rocksdb")
+      db->init(g_conf->mon_rocksdb_options);
+    else
+      db->init();
     int r = db->open(out);
     if (r < 0)
       return r;
@@ -578,7 +581,10 @@ class MonitorDBStore
   }
 
   int create_and_open(ostream &out) {
-    db->init();
+    if (g_conf->mon_keyvaluedb == "rocksdb")
+      db->init(g_conf->mon_rocksdb_options);
+    else
+      db->init();
     int r = db->create_and_open(out);
     if (r < 0)
       return r;

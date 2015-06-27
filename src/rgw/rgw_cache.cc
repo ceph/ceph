@@ -13,6 +13,10 @@ int ObjectCache::get(string& name, ObjectCacheInfo& info, uint32_t mask, rgw_cac
 {
   RWLock::RLocker l(lock);
 
+  if (!enabled) {
+    return -ENOENT;
+  }
+
   map<string, ObjectCacheEntry>::iterator iter = cache_map.find(name);
   if (iter == cache_map.end()) {
     ldout(cct, 10) << "cache get: name=" << name << " : miss" << dendl;
@@ -64,6 +68,10 @@ bool ObjectCache::chain_cache_entry(list<rgw_cache_entry_info *>& cache_info_ent
 {
   RWLock::WLocker l(lock);
 
+  if (!enabled) {
+    return false;
+  }
+
   list<rgw_cache_entry_info *>::iterator citer;
 
   list<ObjectCacheEntry *> cache_entry_list;
@@ -106,6 +114,10 @@ bool ObjectCache::chain_cache_entry(list<rgw_cache_entry_info *>& cache_info_ent
 void ObjectCache::put(string& name, ObjectCacheInfo& info, rgw_cache_entry_info *cache_info)
 {
   RWLock::WLocker l(lock);
+
+  if (!enabled) {
+    return;
+  }
 
   ldout(cct, 10) << "cache put: name=" << name << dendl;
   map<string, ObjectCacheEntry>::iterator iter = cache_map.find(name);
@@ -179,6 +191,10 @@ void ObjectCache::remove(string& name)
 {
   RWLock::WLocker l(lock);
 
+  if (!enabled) {
+    return;
+  }
+
   map<string, ObjectCacheEntry>::iterator iter = cache_map.find(name);
   if (iter == cache_map.end())
     return;
@@ -242,4 +258,40 @@ void ObjectCache::remove_lru(string& name, std::list<string>::iterator& lru_iter
   lru_iter = lru.end();
 }
 
+void ObjectCache::set_enabled(bool status)
+{
+  RWLock::WLocker l(lock);
+
+  enabled = status;
+
+  if (!enabled) {
+    do_invalidate_all();
+  }
+}
+
+void ObjectCache::invalidate_all()
+{
+  RWLock::WLocker l(lock);
+
+  do_invalidate_all();
+}
+
+void ObjectCache::do_invalidate_all()
+{
+  cache_map.clear();
+  lru.clear();
+
+  lru_size = 0;
+  lru_counter = 0;
+  lru_window = 0;
+
+  for (list<RGWChainedCache *>::iterator iter = chained_cache.begin(); iter != chained_cache.end(); ++iter) {
+    (*iter)->invalidate_all();
+  }
+}
+
+void ObjectCache::chain_cache(RGWChainedCache *cache) {
+  RWLock::WLocker l(lock);
+  chained_cache.push_back(cache);
+}
 

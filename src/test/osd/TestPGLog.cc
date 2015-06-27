@@ -22,6 +22,7 @@
 #include <stdio.h>
 #include <signal.h>
 #include "osd/PGLog.h"
+#include "osd/OSDMap.h"
 #include "common/ceph_argparse.h"
 #include "global/global_init.h"
 #include <gtest/gtest.h>
@@ -138,6 +139,14 @@ public:
       fullauth.index();
       fulldiv.index();
     }
+    void set_div_bounds(eversion_t head, eversion_t tail) {
+      fulldiv.tail = divinfo.log_tail = tail;
+      fulldiv.head = divinfo.last_update = head;
+    }
+    void set_auth_bounds(eversion_t head, eversion_t tail) {
+      fullauth.tail = authinfo.log_tail = tail;
+      fullauth.head = authinfo.last_update = head;
+    }
     const IndexedLog &get_fullauth() const { return fullauth; }
     const IndexedLog &get_fulldiv() const { return fulldiv; }
     const pg_info_t &get_authinfo() const { return authinfo; }
@@ -234,6 +243,8 @@ public:
 
     proc_replica_log(
        t, oinfo, olog, omissing, pg_shard_t(1, shard_id_t(0)));
+
+    assert(oinfo.last_update >= log.tail);
 
     if (!tcase.base.empty()) {
       ASSERT_EQ(tcase.base.rbegin()->version, oinfo.last_update);
@@ -1270,8 +1281,8 @@ TEST_F(PGLogTest, proc_replica_log) {
     pg_shard_t from;
 
     eversion_t last_update(1, 1);
-    oinfo.last_update = last_update;
-    eversion_t last_complete(2, 1);
+    log.head = olog.head = oinfo.last_update = last_update;
+    eversion_t last_complete(1, 1);
     oinfo.last_complete = last_complete;
 
     EXPECT_TRUE(t.empty());
@@ -1470,12 +1481,12 @@ TEST_F(PGLogTest, proc_replica_log) {
   }
 
   /*        +--------------------------+
-            |  log              olog   |
+            |  olog              log   |
             +--------+-------+---------+
             |        |object |         |
             |version | hash  | version |
             |        |       |         |
-       tail > (1,1)  |  x5   |  (1,1)  < tail
+       tail > (1,1)  |  x9   |  (1,1)  < tail
             |        |       |         |
             |        |       |         |
             | (1,2)  |  x3   |  (1,2)  |
@@ -1503,34 +1514,38 @@ TEST_F(PGLogTest, proc_replica_log) {
     pg_shard_t from;
 
     eversion_t last_update(1, 2);
+    hobject_t divergent_object;
+    divergent_object.set_hash(0x9);
 
     {
       pg_log_entry_t e;
       e.mod_desc.mark_unrollbackable();
 
       e.version = eversion_t(1, 1);
-      e.soid.set_hash(0x5);
+      e.soid = divergent_object;
       log.tail = e.version;
       log.log.push_back(e);
       e.version = last_update;
       e.soid.set_hash(0x3);
       log.log.push_back(e);
-      e.version = eversion_t(1,3);
-      e.soid.set_hash(0x9);
+      e.version = eversion_t(2, 3);
+      e.prior_version = eversion_t(1, 1);
+      e.soid = divergent_object;
       e.op = pg_log_entry_t::DELETE;
       log.log.push_back(e);
       log.head = e.version;
       log.index();
 
       e.version = eversion_t(1, 1);
-      e.soid.set_hash(0x5);
+      e.soid = divergent_object;
       olog.tail = e.version;
       olog.log.push_back(e);
       e.version = last_update;
       e.soid.set_hash(0x3);
       olog.log.push_back(e);
-      e.version = eversion_t(2, 3);
-      e.soid.set_hash(0x9);
+      e.version = eversion_t(1, 3);
+      e.prior_version = eversion_t(1, 1);
+      e.soid = divergent_object;
       e.op = pg_log_entry_t::DELETE;
       olog.log.push_back(e);
       olog.head = e.version;
@@ -1547,28 +1562,30 @@ TEST_F(PGLogTest, proc_replica_log) {
     proc_replica_log(t, oinfo, olog, omissing, from);
 
     EXPECT_TRUE(t.empty());
-    EXPECT_FALSE(omissing.have_missing());
+    EXPECT_TRUE(omissing.have_missing());
+    EXPECT_TRUE(omissing.is_missing(divergent_object));
+    EXPECT_EQ(omissing.missing[divergent_object].have, eversion_t(0, 0));
+    EXPECT_EQ(omissing.missing[divergent_object].need, eversion_t(1, 1));
     EXPECT_EQ(last_update, oinfo.last_update);
-    EXPECT_EQ(last_update, oinfo.last_complete);
   }
 
   /*        +--------------------------+
-            |  log              olog   |
+            |  olog              log   |
             +--------+-------+---------+
             |        |object |         |
             |version | hash  | version |
             |        |       |         |
-       tail > (1,1)  |  x5   |  (1,1)  < tail
+       tail > (1,1)  |  x9   |  (1,1)  < tail
             |        |       |         |
             |        |       |         |
             | (1,2)  |  x3   |  (1,2)  |
             |        |       |         |
             |        |       |         |
        head > (1,3)  |  x9   |         |
-            | DELETE |       |         |
+            | MODIFY |       |         |
             |        |       |         |
             |        |  x9   |  (2,3)  < head
-            |        |       |  MODIFY |
+            |        |       |  DELETE |
             |        |       |         |
             +--------+-------+---------+
 
@@ -1593,28 +1610,30 @@ TEST_F(PGLogTest, proc_replica_log) {
       e.mod_desc.mark_unrollbackable();
 
       e.version = eversion_t(1, 1);
-      e.soid.set_hash(0x5);
+      e.soid = divergent_object;
       log.tail = e.version;
       log.log.push_back(e);
       e.version = last_update;
       e.soid.set_hash(0x3);
       log.log.push_back(e);
-      e.version = eversion_t(1, 3);
-      e.soid.set_hash(0x9);
+      e.version = eversion_t(2, 3);
+      e.prior_version = eversion_t(1, 1);
+      e.soid = divergent_object;
       e.op = pg_log_entry_t::DELETE;
       log.log.push_back(e);
       log.head = e.version;
       log.index();
 
       e.version = eversion_t(1, 1);
-      e.soid.set_hash(0x5);
+      e.soid = divergent_object;
       olog.tail = e.version;
       olog.log.push_back(e);
       e.version = last_update;
       e.soid.set_hash(0x3);
       olog.log.push_back(e);
-      e.version = eversion_t(2, 3);
-      e.soid.set_hash(0x9);
+      e.version = eversion_t(1, 3);
+      e.prior_version = eversion_t(1, 1);
+      e.soid = divergent_object;
       divergent_object = e.soid;
       omissing.add(divergent_object, e.version, eversion_t());
       e.op = pg_log_entry_t::MODIFY;
@@ -1628,16 +1647,18 @@ TEST_F(PGLogTest, proc_replica_log) {
     EXPECT_TRUE(t.empty());
     EXPECT_TRUE(omissing.have_missing());
     EXPECT_TRUE(omissing.is_missing(divergent_object));
-    EXPECT_EQ(eversion_t(2, 3), omissing.missing[divergent_object].need);
+    EXPECT_EQ(eversion_t(1, 3), omissing.missing[divergent_object].need);
     EXPECT_EQ(olog.head, oinfo.last_update);
     EXPECT_EQ(olog.head, oinfo.last_complete);
 
     proc_replica_log(t, oinfo, olog, omissing, from);
 
     EXPECT_TRUE(t.empty());
-    EXPECT_FALSE(omissing.have_missing());
+    EXPECT_TRUE(omissing.have_missing());
+    EXPECT_TRUE(omissing.is_missing(divergent_object));
+    EXPECT_EQ(omissing.missing[divergent_object].have, eversion_t(0, 0));
+    EXPECT_EQ(omissing.missing[divergent_object].need, eversion_t(1, 1));
     EXPECT_EQ(last_update, oinfo.last_update);
-    EXPECT_EQ(last_update, oinfo.last_complete);
   }
 
   /*        +--------------------------+
@@ -1860,6 +1881,130 @@ TEST_F(PGLogTest, merge_log_prior_version_have) {
 
   t.setup();
   run_test_case(t);
+}
+
+TEST_F(PGLogTest, merge_log_split_missing_entries_at_head) {
+  TestCase t;
+  t.auth.push_back(mk_ple_mod_rb(mk_obj(1), mk_evt(10, 100), mk_evt(8, 70)));
+  t.auth.push_back(mk_ple_mod_rb(mk_obj(1), mk_evt(15, 150), mk_evt(10, 100)));
+
+  t.div.push_back(mk_ple_mod(mk_obj(1), mk_evt(8, 70), mk_evt(8, 65)));
+
+  t.setup();
+  t.set_div_bounds(mk_evt(9, 79), mk_evt(8, 69));
+  t.set_auth_bounds(mk_evt(10, 160), mk_evt(9, 77));
+  t.final.add(mk_obj(1), mk_evt(15, 150), mk_evt(8, 70));
+  run_test_case(t);
+}
+
+TEST_F(PGLogTest, filter_log_1) {
+  {
+    clear();
+
+    int osd_id = 1;
+    epoch_t epoch = 40;
+    int64_t pool_id = 0;
+    int bits = 2;
+    int max_osd = 4;
+    int pg_num = max_osd << bits;
+    int num_objects = 1000;
+    int num_internal = 10;
+
+    // Set up splitting map
+    //ceph::shared_ptr<OSDMap> osdmap(new OSDMap());
+    OSDMap *osdmap = new OSDMap;
+    uuid_d test_uuid;
+    test_uuid.generate_random();
+    osdmap->build_simple(g_ceph_context, epoch, test_uuid, max_osd, bits, bits);
+    osdmap->set_state(osd_id, CEPH_OSD_EXISTS);
+
+    const string hit_set_namespace("internal");
+
+    ObjectStore::Transaction t;
+    pg_info_t info;
+    list<hobject_t> remove_snap;
+    //bool dirty_info = false;
+    //bool dirty_big_info = false;
+
+    hobject_t divergent_object;
+    eversion_t divergent_version;
+    eversion_t prior_version;
+    eversion_t newhead;
+    {
+      pg_log_entry_t e;
+      e.mod_desc.mark_unrollbackable();
+      e.op = pg_log_entry_t::MODIFY;
+      e.soid.pool = pool_id;
+
+      uuid_d uuid_name;
+      int i;
+      for (i = 1; i <= num_objects; ++i) {
+        e.version = eversion_t(epoch, i);
+        // Use this to generate random file names
+        uuid_name.generate_random();
+        ostringstream name;
+        name << uuid_name;
+        e.soid.oid.name = name.str();
+	// First has no namespace
+        if (i != 1) {
+           // num_internal have the internal namspace
+          if (i <= num_internal + 1) {
+            e.soid.nspace = hit_set_namespace;
+          } else { // rest have different namespaces
+            ostringstream ns;
+            ns << "ns" << i;
+            e.soid.nspace = ns.str();
+          }
+        }
+        log.log.push_back(e);
+        if (i == 1)
+          log.tail = e.version;
+        //cout << "object " << e.soid << std::endl;
+      }
+      log.head = e.version;
+      log.index();
+    }
+
+    spg_t pgid(pg_t(2, pool_id), shard_id_t::NO_SHARD);
+
+    // See if we created the right number of entries
+    int total = log.log.size();
+    ASSERT_EQ(total, num_objects);
+
+    // Some should be removed
+    log.filter_log(pgid, *osdmap, hit_set_namespace);
+    EXPECT_LE(log.log.size(), (size_t)total);
+
+    // If we filter a second time, there should be the same total
+    total = log.log.size();
+    log.filter_log(pgid, *osdmap, hit_set_namespace);
+    EXPECT_EQ(log.log.size(), (size_t)total);
+
+    // Increase pg_num as if there would be a split
+    int new_pg_num = pg_num * 16;
+    OSDMap::Incremental inc(epoch + 1);
+    inc.fsid = test_uuid;
+    const pg_pool_t *pool = osdmap->get_pg_pool(pool_id);
+    pg_pool_t newpool;
+    newpool = *pool;
+    newpool.set_pg_num(new_pg_num);
+    newpool.set_pgp_num(new_pg_num);
+    inc.new_pools[pool_id] = newpool;
+    int ret = osdmap->apply_incremental(inc);
+    ASSERT_EQ(ret, 0);
+
+    // We should have fewer entries after a filter
+    log.filter_log(pgid, *osdmap, hit_set_namespace);
+    EXPECT_LE(log.log.size(), (size_t)total);
+
+    // Make sure all internal entries are retained
+    int count = 0;
+    for (list<pg_log_entry_t>::iterator i = log.log.begin();
+         i != log.log.end(); ++i) {
+      if (i->soid.nspace == hit_set_namespace) count++;
+    }
+    EXPECT_EQ(count, num_internal);
+  }
 }
 
 int main(int argc, char **argv) {

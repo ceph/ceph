@@ -13,6 +13,8 @@
 #include "json_spirit_value.h"
 #include "json_spirit_error_position.h"
 
+#include "common/utf8.h"
+
 #define BOOST_SPIRIT_THREADSAFE  // uncomment for multithreaded use, requires linking to boost.thread
 
 #include <boost/bind.hpp>
@@ -71,18 +73,30 @@ namespace json_spirit
         return ( hex_to_num( c1 ) << 4 ) + hex_to_num( c2 );
     }       
 
-    template< class Char_type, class Iter_type >
-    Char_type unicode_str_to_char( Iter_type& begin )
+    template< class String_type, class Iter_type >
+    String_type unicode_str_to_utf8( Iter_type& begin );
+
+    template<>
+    std::string unicode_str_to_utf8( std::string::const_iterator & begin )
     {
+        typedef std::string::value_type Char_type;
+
         const Char_type c1( *( ++begin ) );
         const Char_type c2( *( ++begin ) );
         const Char_type c3( *( ++begin ) );
         const Char_type c4( *( ++begin ) );
 
-        return ( hex_to_num( c1 ) << 12 ) + 
-               ( hex_to_num( c2 ) <<  8 ) + 
-               ( hex_to_num( c3 ) <<  4 ) + 
-               hex_to_num( c4 );
+        unsigned long uc = ( hex_to_num( c1 ) << 12 ) + 
+                           ( hex_to_num( c2 ) <<  8 ) + 
+                           ( hex_to_num( c3 ) <<  4 ) + 
+                           hex_to_num( c4 );
+
+        unsigned char buf[7];  // MAX_UTF8_SZ is 6 (see src/common/utf8.c)
+        int r = encode_utf8(uc, buf);
+        if (r >= 0) {
+            return std::string(reinterpret_cast<char *>(buf), r);
+        }
+        return std::string("_");
     }
 
     template< class String_type >
@@ -116,7 +130,7 @@ namespace json_spirit
             {
                 if( end - begin >= 5 )  //  expecting "uHHHH..."
                 {
-                    s += unicode_str_to_char< Char_type >( begin );  
+                    s += unicode_str_to_utf8< String_type >( begin );
                 }
                 break;
             }
@@ -178,11 +192,15 @@ namespace json_spirit
         return get_str_< std::string >( begin, end );
     }
 
+// Need this guard else it tries to instantiate unicode_str_to_utf8 with a
+// std::wstring, which isn't presently implemented
+#if defined( JSON_SPIRIT_WMVALUE_ENABLED ) && !defined( BOOST_NO_STD_WSTRING )
     inline std::wstring get_str( std::wstring::const_iterator begin, std::wstring::const_iterator end )
     {
         return get_str_< std::wstring >( begin, end );
     }
-    
+#endif
+
     template< class String_type, class Iter_type >
     String_type get_str( Iter_type begin, Iter_type end )
     {

@@ -10,7 +10,7 @@
 using std::string;
 #include "common/perf_counters.h"
 
-int LevelDBStore::init()
+int LevelDBStore::init(string option_str)
 {
   // init defaults.  caller can override these if they want
   // prior to calling open.
@@ -74,21 +74,24 @@ int LevelDBStore::do_open(ostream &out, bool create_if_missing)
     return -EINVAL;
   }
 
+  PerfCountersBuilder plb(g_ceph_context, "leveldb", l_leveldb_first, l_leveldb_last);
+  plb.add_u64_counter(l_leveldb_gets, "leveldb_get", "Gets");
+  plb.add_u64_counter(l_leveldb_txns, "leveldb_transaction", "Transactions");
+  plb.add_time_avg(l_leveldb_get_latency, "leveldb_get_latency", "Get Latency");
+  plb.add_time_avg(l_leveldb_submit_latency, "leveldb_submit_latency", "Submit Latency");
+  plb.add_time_avg(l_leveldb_submit_sync_latency, "leveldb_submit_sync_latency", "Submit Sync Latency");
+  plb.add_u64_counter(l_leveldb_compact, "leveldb_compact", "Compactions");
+  plb.add_u64_counter(l_leveldb_compact_range, "leveldb_compact_range", "Compactions by range");
+  plb.add_u64_counter(l_leveldb_compact_queue_merge, "leveldb_compact_queue_merge", "Mergings of ranges in compaction queue");
+  plb.add_u64(l_leveldb_compact_queue_len, "leveldb_compact_queue_len", "Length of compaction queue");
+  logger = plb.create_perf_counters();
+  cct->get_perfcounters_collection()->add(logger);
+
   if (g_conf->leveldb_compact_on_mount) {
     derr << "Compacting leveldb store..." << dendl;
     compact();
     derr << "Finished compacting leveldb store" << dendl;
   }
-
-  PerfCountersBuilder plb(g_ceph_context, "leveldb", l_leveldb_first, l_leveldb_last);
-  plb.add_u64_counter(l_leveldb_gets, "leveldb_get");
-  plb.add_u64_counter(l_leveldb_txns, "leveldb_transaction");
-  plb.add_u64_counter(l_leveldb_compact, "leveldb_compact");
-  plb.add_u64_counter(l_leveldb_compact_range, "leveldb_compact_range");
-  plb.add_u64_counter(l_leveldb_compact_queue_merge, "leveldb_compact_queue_merge");
-  plb.add_u64(l_leveldb_compact_queue_len, "leveldb_compact_queue_len");
-  logger = plb.create_perf_counters();
-  cct->get_perfcounters_collection()->add(logger);
   return 0;
 }
 
@@ -130,21 +133,27 @@ void LevelDBStore::close()
 
 int LevelDBStore::submit_transaction(KeyValueDB::Transaction t)
 {
+  utime_t start = ceph_clock_now(g_ceph_context);
   LevelDBTransactionImpl * _t =
     static_cast<LevelDBTransactionImpl *>(t.get());
   leveldb::Status s = db->Write(leveldb::WriteOptions(), &(_t->bat));
+  utime_t lat = ceph_clock_now(g_ceph_context) - start;
   logger->inc(l_leveldb_txns);
+  logger->tinc(l_leveldb_submit_latency, lat);
   return s.ok() ? 0 : -1;
 }
 
 int LevelDBStore::submit_transaction_sync(KeyValueDB::Transaction t)
 {
+  utime_t start = ceph_clock_now(g_ceph_context);
   LevelDBTransactionImpl * _t =
     static_cast<LevelDBTransactionImpl *>(t.get());
   leveldb::WriteOptions options;
   options.sync = true;
   leveldb::Status s = db->Write(options, &(_t->bat));
+  utime_t lat = ceph_clock_now(g_ceph_context) - start;
   logger->inc(l_leveldb_txns);
+  logger->tinc(l_leveldb_submit_sync_latency, lat);
   return s.ok() ? 0 : -1;
 }
 
@@ -187,6 +196,7 @@ int LevelDBStore::get(
     const std::set<string> &keys,
     std::map<string, bufferlist> *out)
 {
+  utime_t start = ceph_clock_now(g_ceph_context);
   KeyValueDB::Iterator it = get_iterator(prefix);
   for (std::set<string>::const_iterator i = keys.begin();
        i != keys.end();
@@ -197,7 +207,9 @@ int LevelDBStore::get(
     } else if (!it->valid())
       break;
   }
+  utime_t lat = ceph_clock_now(g_ceph_context) - start;
   logger->inc(l_leveldb_gets);
+  logger->tinc(l_leveldb_get_latency, lat);
   return 0;
 }
 

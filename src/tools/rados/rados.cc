@@ -158,7 +158,7 @@ void usage(ostream& out)
 "   --target-pool=pool\n"
 "        select target pool by name\n"
 "   -b op_size\n"
-"        set the size of write ops for put or benchmarking\n"
+"        set the block size for put/get ops and for write benchmarking\n"
 "   -s name\n"
 "   --snap name\n"
 "        select given snap name for (read) IO\n"
@@ -185,6 +185,8 @@ void usage(ostream& out)
 "        Set number of concurrent I/O operations\n"
 "   --show-time\n"
 "        prefix output with date/time\n"
+"   --no-verify\n"
+"        do not verify contents of read objects\n"
 "\n"
 "LOAD GEN OPTIONS:\n"
 "   --num-objects                    total number of objects\n"
@@ -501,7 +503,7 @@ public:
     librados::AioCompletion *completion;
 
     LoadGenOp() {}
-    LoadGenOp(LoadGen *_lg) : lg(_lg), completion(NULL) {}
+    LoadGenOp(LoadGen *_lg) : id(0), type(0), off(0), len(0), lg(_lg), completion(NULL) {}
   };
 
   int max_op;
@@ -543,6 +545,7 @@ public:
     min_op_len = 1024;
     target_throughput = 5 * 1024 * 1024; // B/sec
     max_op_len = 2 * 1024 * 1024;
+    max_ops = 0; 
     max_backlog = target_throughput * 2;
     run_length = 60;
 
@@ -561,8 +564,10 @@ public:
     Mutex::Locker l(lock);
 
     double rate = (double)cur_completed_rate() / (1024 * 1024);
+    std::streamsize original_precision = cout.precision();
     cout.precision(3);
     cout << "op " << op->id << " completed, throughput=" << rate  << "MB/sec" << std::endl;
+    cout.precision(original_precision);
 
     map<int, LoadGenOp *>::iterator iter = pending_ops.find(op->id);
     if (iter != pending_ops.end())
@@ -740,8 +745,10 @@ int LoadGen::run()
     if (now - stamp_time >= utime_t(1, 0)) {
       double rate = (double)cur_completed_rate() / (1024 * 1024);
       ++total_sec;
+      std::streamsize original_precision = cout.precision();
       cout.precision(3);
       cout << setw(5) << total_sec << ": throughput=" << rate  << "MB/sec" << " pending data=" << sent - completed << std::endl;
+      cout.precision(original_precision);
       stamp_time = now; 
     }
 
@@ -1141,7 +1148,9 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   string oloc, target_oloc, nspace, target_nspace;
   int concurrent_ios = 16;
   unsigned op_size = default_op_size;
+  bool block_size_specified = false;
   bool cleanup = true;
+  bool no_verify = false;
   const char *snapname = NULL;
   snap_t snapid = CEPH_NOSNAP;
   std::map<std::string, std::string>::const_iterator i;
@@ -1212,6 +1221,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     if (rados_sistrtoll(i, &op_size)) {
       return -EINVAL;
     }
+    block_size_specified = true;
   }
   i = opts.find("snap");
   if (i != opts.end()) {
@@ -1311,19 +1321,23 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   if (i != opts.end()) {
     nspace = i->second;
   }
+  i = opts.find("no-verify");
+  if (i != opts.end()) {
+    no_verify = true;
+  }
 
 
   // open rados
   ret = rados.init_with_context(g_ceph_context);
   if (ret) {
-     cerr << "couldn't initialize rados! error " << ret << std::endl;
+     cerr << "couldn't initialize rados: " << cpp_strerror(ret) << std::endl;
      ret = -1;
      goto out;
   }
 
   ret = rados.connect();
   if (ret) {
-     cerr << "couldn't connect to cluster! error " << ret << std::endl;
+     cerr << "couldn't connect to cluster: " << cpp_strerror(ret) << std::endl;
      ret = -1;
      goto out;
   }
@@ -1770,16 +1784,26 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       ret = 0;
     }
   } else if (strcmp(nargs[0], "setomapval") == 0) {
-    if (!pool_name || nargs.size() < 4)
+    if (!pool_name || nargs.size() < 3 || nargs.size() > 4)
       usage_exit();
 
     string oid(nargs[1]);
     string key(nargs[2]);
-    string val(nargs[3]);
+
+    bufferlist bl;
+    if (nargs.size() == 4) {
+      string val(nargs[3]);
+      bl.append(val);
+    } else {
+      do {
+	ret = bl.read_fd(STDIN_FILENO, 1024); // from stdin
+	if (ret < 0) {
+	  goto out;
+        }
+      } while (ret > 0);
+    }
 
     map<string, bufferlist> values;
-    bufferlist bl;
-    bl.append(val);
     values[key] = bl;
 
     ret = io_ctx.omap_set(oid, values);
@@ -2164,7 +2188,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     if (ret >= 0) {
       cout << "successfully deleted pool " << nargs[1] << std::endl;
     } else { //error
-      cerr << "pool " << nargs[1] << " does not exist" << std::endl;
+      cerr << "pool " << nargs[1] << " could not be removed" << std::endl;
     }
   }
   else if (strcmp(nargs[0], "lssnap") == 0) {
@@ -2186,6 +2210,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       localtime_r(&t, &bdt);
       cout << *i << "\t" << s << "\t";
 
+      std::ios_base::fmtflags original_flags = cout.flags();
       cout.setf(std::ios::right);
       cout.fill('0');
       cout << std::setw(4) << (bdt.tm_year+1900)
@@ -2196,7 +2221,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
 	   << ':' << std::setw(2) << bdt.tm_min
 	   << ':' << std::setw(2) << bdt.tm_sec
 	   << std::endl;
-      cout.unsetf(std::ios::right);
+      cout.flags(original_flags);
     }
     cout << snaps.size() << " snaps" << std::endl;
   }
@@ -2259,10 +2284,16 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       operation = OP_RAND_READ;
     else
       usage_exit();
+    if (block_size_specified && (operation != OP_WRITE)){
+      cerr << "-b|--block_size option can be used only with `write' bench test"
+           << std::endl;
+      ret = -EINVAL;
+      goto out;
+    }
     RadosBencher bencher(g_ceph_context, rados, io_ctx);
     bencher.set_show_time(show_time);
-    ret = bencher.aio_bench(operation, seconds, num_objs,
-			    concurrent_ios, op_size, cleanup, run_name);
+    ret = bencher.aio_bench(operation, seconds,
+			    concurrent_ios, op_size, cleanup, run_name, no_verify);
     if (ret != 0)
       cerr << "error during benchmark: " << ret << std::endl;
   }
@@ -2641,6 +2672,8 @@ int main(int argc, const char **argv)
       opts["show-time"] = "true";
     } else if (ceph_argparse_flag(args, i, "--no-cleanup", (char*)NULL)) {
       opts["no-cleanup"] = "true";
+    } else if (ceph_argparse_flag(args, i, "--no-verify", (char*)NULL)) {
+      opts["no-verify"] = "true";
     } else if (ceph_argparse_witharg(args, i, &val, "--run-name", (char*)NULL)) {
       opts["run-name"] = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--prefix", (char*)NULL)) {

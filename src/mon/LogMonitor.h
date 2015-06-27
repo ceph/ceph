@@ -71,17 +71,17 @@ private:
 
     bool do_log_to_syslog(const string &channel) {
       return (get_str_map_key(log_to_syslog, channel,
-                              &CLOG_CHANNEL_DEFAULT) == "true");
+                              &CLOG_CONFIG_DEFAULT_KEY) == "true");
     }
 
     string get_facility(const string &channel) {
       return get_str_map_key(syslog_facility, channel,
-                             &CLOG_CHANNEL_DEFAULT);
+                             &CLOG_CONFIG_DEFAULT_KEY);
     }
 
     string get_level(const string &channel) {
       return get_str_map_key(syslog_level, channel,
-                             &CLOG_CHANNEL_DEFAULT);
+                             &CLOG_CONFIG_DEFAULT_KEY);
     }
 
     string get_log_file(const string &channel) {
@@ -90,8 +90,7 @@ private:
 
       if (expanded_log_file.count(channel) == 0) {
         string fname = expand_channel_meta(
-            get_str_map_key(log_file, channel,
-              &CLOG_CHANNEL_DEFAULT),
+            get_str_map_key(log_file, channel, &CLOG_CONFIG_DEFAULT_KEY),
             channel);
         expanded_log_file[channel] = fname;
 
@@ -104,7 +103,7 @@ private:
 
     string get_log_file_level(const string &channel) {
       return get_str_map_key(log_file_level, channel,
-                             &CLOG_CHANNEL_DEFAULT);
+                             &CLOG_CONFIG_DEFAULT_KEY);
     }
   } channels;
 

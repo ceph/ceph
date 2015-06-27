@@ -70,6 +70,17 @@ namespace ceph {
       ceph_spin_unlock(&lock);
       return ret;
     }
+    bool compare_and_swap(T o, T n) {
+      bool success = false;
+      ceph_spin_lock(&lock);
+      if (val == o) {
+        success = true;
+        val = n;
+      }
+      ceph_spin_unlock(&lock);
+      return success;
+    }
+
   private:
     // forbid copying
     atomic_spinlock_t(const atomic_spinlock_t<T> &other);
@@ -113,6 +124,10 @@ namespace ceph {
       // at some point.  this hack can go away someday...
       return AO_load_full((AO_t *)&val);
     }
+    bool compare_and_swap(AO_t o, AO_t n) {
+      return AO_compare_and_swap(&val, o, n);
+    }
+
   private:
     // forbid copying
     atomic_t(const atomic_t &other);

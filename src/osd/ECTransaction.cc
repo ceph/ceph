@@ -28,7 +28,9 @@ struct AppendObjectsGenerator: public boost::static_visitor<void> {
   void operator()(const ECTransaction::AppendOp &op) {
     out->insert(op.oid);
   }
-  void operator()(const ECTransaction::TouchOp &op) {}
+  void operator()(const ECTransaction::TouchOp &op) {
+    out->insert(op.oid);
+  }
   void operator()(const ECTransaction::CloneOp &op) {
     out->insert(op.source);
     out->insert(op.target);
@@ -114,6 +116,20 @@ struct TransGenerator : public boost::static_visitor<void> {
       i->second.touch(
 	get_coll_ct(i->first, op.oid),
 	ghobject_t(op.oid, ghobject_t::NO_GEN, i->first));
+
+      /* No change, but write it out anyway in case the object did not
+       * previously exist. */
+      assert(hash_infos.count(op.oid));
+      ECUtil::HashInfoRef hinfo = hash_infos[op.oid];
+      bufferlist hbuf;
+      ::encode(
+	*hinfo,
+	hbuf);
+      i->second.setattr(
+	get_coll_ct(i->first, op.oid),
+	ghobject_t(op.oid, ghobject_t::NO_GEN, i->first),
+	ECUtil::get_hinfo_key(),
+	hbuf);
     }
   }
   void operator()(const ECTransaction::AppendOp &op) {

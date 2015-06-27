@@ -5,6 +5,9 @@
 #include <boost/algorithm/string/predicate.hpp>
 #include <dlfcn.h>
 #include <errno.h>
+#include "common/debug.h"
+
+#define dout_subsys ceph_subsys_rados
 
 namespace librados {
 
@@ -22,7 +25,7 @@ void TestClassHandler::open_class(const std::string& name,
                                   const std::string& path) {
   void *handle = dlopen(path.c_str(), RTLD_NOW);
   if (handle == NULL) {
-    std::cerr << "Failed to load class: " << dlerror() << std::endl;
+    derr << "Failed to load class: " << dlerror() << dendl;
     return;
   }
   m_class_handles.push_back(handle);
@@ -100,10 +103,12 @@ cls_method_cxx_call_t TestClassHandler::get_method(const std::string &cls,
 }
 
 TestClassHandler::SharedMethodContext TestClassHandler::get_method_context(
-    TestIoCtxImpl *io_ctx_impl, const std::string &oid) {
+    TestIoCtxImpl *io_ctx_impl, const std::string &oid,
+    const SnapContext &snapc) {
   SharedMethodContext ctx(new MethodContext());
   ctx->io_ctx_impl = io_ctx_impl;
   ctx->oid = oid;
+  ctx->snapc = snapc;
   return ctx;
 }
 

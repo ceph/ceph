@@ -34,9 +34,13 @@ typedef enum {
 } clog_type;
 
 static const std::string CLOG_CHANNEL_NONE    = "none";
-static const std::string CLOG_CHANNEL_DEFAULT = "default";
+static const std::string CLOG_CHANNEL_DEFAULT = "cluster";
 static const std::string CLOG_CHANNEL_CLUSTER = "cluster";
 static const std::string CLOG_CHANNEL_AUDIT   = "audit";
+
+// this is the key name used in the config options for the default, e.g.
+//   default=true foo=false bar=false
+static const std::string CLOG_CONFIG_DEFAULT_KEY = "default";
 
 /*
  * Given a clog log_type, return the equivalent syslog priority

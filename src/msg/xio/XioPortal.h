@@ -67,7 +67,7 @@ private:
 
     inline Lane* get_lane(XioConnection *xcon)
       {
-	return &qlane[((uint64_t) xcon) % nlanes];
+	return &qlane[(((uint64_t) xcon) / 16) % nlanes];
       }
 
     void enq(XioConnection *xcon, XioSubmit* xs)
@@ -159,17 +159,16 @@ public:
     struct xio_msg *msg = xrsp->dequeue();
     struct xio_msg *next_msg = NULL;
     int code;
-    while (msg) {
+    if (unlikely(!xrsp->xcon->conn || !xrsp->xcon->is_connected())) {
+      // NOTE: msg is not safe to dereference if the connection was torn down
+      xrsp->xcon->msg_release_fail(msg, ENOTCONN);
+    }
+    else while (msg) {
       next_msg = static_cast<struct xio_msg *>(msg->user_context);
-      if (unlikely(!xrsp->xcon->conn || !xrsp->xcon->is_connected()))
-        code = ENOTCONN;
-      else
-        code = xio_release_msg(msg);
-      if (unlikely(code)) {
-	/* very unlikely, so log it */
+      code = xio_release_msg(msg);
+      if (unlikely(code)) /* very unlikely, so log it */
 	xrsp->xcon->msg_release_fail(msg, code);
-      }
-      msg =  next_msg;
+      msg = next_msg;
     }
     xrsp->finalize(); /* unconditional finalize */
   }
@@ -201,23 +200,22 @@ public:
     submit_q.enq(xcon, send_q);
   }
 
-  void requeue_all_xcon(XioMsg* xmsg,
-			XioConnection* xcon,
+  void requeue_all_xcon(XioConnection* xcon,
 			XioSubmit::Queue::iterator& q_iter,
 			XioSubmit::Queue& send_q) {
     // XXX gather all already-dequeued outgoing messages for xcon
     // and push them in FIFO order to front of the input queue,
     // and mark the connection as flow-controlled
     XioSubmit::Queue requeue_q;
-    XioSubmit *xs;
-    requeue_q.push_back(*xmsg);
-    ++q_iter;
+    XioMsg *xmsg;
+
     while (q_iter != send_q.end()) {
-      xs = &(*q_iter);
+      XioSubmit *xs = &(*q_iter);
       // skip retires and anything for other connections
-      if ((xs->type != XioSubmit::OUTGOING_MSG) ||
-	  (xs->xcon != xcon))
+      if (xs->xcon != xcon) {
+	q_iter++;
 	continue;
+      }
       xmsg = static_cast<XioMsg*>(xs);
       q_iter = send_q.erase(q_iter);
       requeue_q.push_back(*xmsg);
@@ -273,7 +271,7 @@ public:
 		xio_qdepth_high = xcon->xio_qdepth_high_mark();
 		if (unlikely((xcon->send_ctr + xmsg->hdr.msg_cnt) >
 			     xio_qdepth_high)) {
-		  requeue_all_xcon(xmsg, xcon, q_iter, send_q);
+		  requeue_all_xcon(xcon, q_iter, send_q);
 		  goto restart;
 		}
 
@@ -285,14 +283,25 @@ public:
 		  print_ceph_msg(msgr->cct, "xio_send_msg", xmsg->m);
 		}
 		/* get the right Accelio's errno code */
-		if (unlikely(code))
-		  code = xio_errno();
+		if (unlikely(code)) {
+		  if ((code == -1) && (xio_errno() == -1)) {
+		    /* In case XIO does not have any credits to send,
+		     * it would still queue up the message(s) for transmission,
+		     * but would return -1 and errno would also be set to -1.
+		     * This needs to be treated as a success.
+		     */
+		    code = 0;
+		  }
+		  else {
+		    code = xio_errno();
+		  }
+		}
 	      } /* !ENOTCONN */
 	      if (unlikely(code)) {
 		switch (code) {
 		case XIO_E_TX_QUEUE_OVERFLOW:
 		{
-		  requeue_all_xcon(xmsg, xcon, q_iter, send_q);
+		  requeue_all_xcon(xcon, q_iter, send_q);
 		  goto restart;
 		}
 		  break;
@@ -425,20 +434,18 @@ public:
 
   void shutdown()
   {
-    XioPortal *portal;
     int nportals = portals.size();
     for (int p_ix = 0; p_ix < nportals; ++p_ix) {
-      portal = portals[p_ix];
+      XioPortal *portal = portals[p_ix];
       portal->shutdown();
     }
   }
 
   void join()
   {
-    XioPortal *portal;
     int nportals = portals.size();
     for (int p_ix = 0; p_ix < nportals; ++p_ix) {
-      portal = portals[p_ix];
+      XioPortal *portal = portals[p_ix];
       portal->join();
     }
   }

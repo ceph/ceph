@@ -360,6 +360,7 @@ void PGMap::calc_stats()
   pg_pool_sum.clear();
   pg_sum = pool_stat_t();
   osd_sum = osd_stat_t();
+  pg_by_osd.clear();
 
   for (ceph::unordered_map<pg_t,pg_stat_t>::iterator p = pg_stat.begin();
        p != pg_stat.end();
@@ -380,16 +381,18 @@ void PGMap::update_pg(pg_t pgid, bufferlist& bl)
 {
   bufferlist::iterator p = bl.begin();
   ceph::unordered_map<pg_t,pg_stat_t>::iterator s = pg_stat.find(pgid);
-  epoch_t old_lec = 0;
+  epoch_t old_lec = 0, lec;
   if (s != pg_stat.end()) {
     old_lec = s->second.get_effective_last_epoch_clean();
-    stat_pg_sub(pgid, s->second);
+    stat_pg_update(pgid, s->second, p);
+    lec = s->second.get_effective_last_epoch_clean();
+  } else {
+    pg_stat_t& r = pg_stat[pgid];
+    ::decode(r, p);
+    stat_pg_add(pgid, r);
+    lec = r.get_effective_last_epoch_clean();
   }
-  pg_stat_t& r = pg_stat[pgid];
-  ::decode(r, p);
-  stat_pg_add(pgid, r);
 
-  epoch_t lec = r.get_effective_last_epoch_clean();
   if (min_last_epoch_clean &&
       (lec < min_last_epoch_clean ||  // we did
        (lec > min_last_epoch_clean && // we might
@@ -456,7 +459,8 @@ void PGMap::remove_osd(int osd)
   }
 }
 
-void PGMap::stat_pg_add(const pg_t &pgid, const pg_stat_t &s, bool sumonly)
+void PGMap::stat_pg_add(const pg_t &pgid, const pg_stat_t &s, bool sumonly,
+			bool sameosds)
 {
   pg_pool_sum[pgid.pool()].add(s);
   pg_sum.add(s);
@@ -472,14 +476,32 @@ void PGMap::stat_pg_add(const pg_t &pgid, const pg_stat_t &s, bool sumonly)
     if (s.acting_primary >= 0)
       creating_pgs_by_osd[s.acting_primary].insert(pgid);
   }
+
+  if (sameosds)
+    return;
+
   for (vector<int>::const_iterator p = s.blocked_by.begin();
        p != s.blocked_by.end();
        ++p) {
     ++blocked_by_sum[*p];
   }
+
+  for (vector<int>::const_iterator p = s.acting.begin(); p != s.acting.end(); ++p) {
+    set<pg_t>& oset = pg_by_osd[*p];
+    oset.erase(pgid);
+    if (oset.empty())
+      pg_by_osd.erase(*p);
+  }
+  for (vector<int>::const_iterator p = s.up.begin(); p != s.up.end(); ++p) {
+    set<pg_t>& oset = pg_by_osd[*p];
+    oset.erase(pgid);
+    if (oset.empty())
+      pg_by_osd.erase(*p);
+  }
 }
 
-void PGMap::stat_pg_sub(const pg_t &pgid, const pg_stat_t &s, bool sumonly)
+void PGMap::stat_pg_sub(const pg_t &pgid, const pg_stat_t &s, bool sumonly,
+			bool sameosds)
 {
   pool_stat_t& ps = pg_pool_sum[pgid.pool()];
   ps.sub(s);
@@ -503,6 +525,9 @@ void PGMap::stat_pg_sub(const pg_t &pgid, const pg_stat_t &s, bool sumonly)
     }
   }
 
+  if (sameosds)
+    return;
+
   for (vector<int>::const_iterator p = s.blocked_by.begin();
        p != s.blocked_by.end();
        ++p) {
@@ -512,6 +537,27 @@ void PGMap::stat_pg_sub(const pg_t &pgid, const pg_stat_t &s, bool sumonly)
     if (q->second == 0)
       blocked_by_sum.erase(q);
   }
+
+  for (vector<int>::const_iterator p = s.acting.begin(); p != s.acting.end(); ++p)
+    pg_by_osd[*p].insert(pgid);
+  for (vector<int>::const_iterator p = s.up.begin(); p != s.up.end(); ++p)
+    pg_by_osd[*p].insert(pgid);
+}
+
+void PGMap::stat_pg_update(const pg_t pgid, pg_stat_t& s,
+			   bufferlist::iterator& blp)
+{
+  pg_stat_t n;
+  ::decode(n, blp);
+
+  bool sameosds =
+    s.acting == n.acting &&
+    s.up == n.up &&
+    s.blocked_by == n.blocked_by;
+
+  stat_pg_sub(pgid, s, false, sameosds);
+  s = n;
+  stat_pg_add(pgid, n, false, sameosds);
 }
 
 void PGMap::stat_osd_add(const osd_stat_t &s)
@@ -852,53 +898,51 @@ void PGMap::dump_osd_sum_stats(ostream& ss) const
      << std::endl;
 }
 
-void PGMap::get_stuck_stats(PGMap::StuckPG type, utime_t cutoff,
+void PGMap::get_stuck_stats(int types, utime_t cutoff,
 			    ceph::unordered_map<pg_t, pg_stat_t>& stuck_pgs) const
 {
+  assert(types != 0);
   for (ceph::unordered_map<pg_t, pg_stat_t>::const_iterator i = pg_stat.begin();
        i != pg_stat.end();
        ++i) {
-    utime_t val;
-    switch (type) {
-    case STUCK_INACTIVE:
-      if (i->second.state & PG_STATE_ACTIVE)
-	continue;
-      val = i->second.last_active;
-      break;
-    case STUCK_UNCLEAN:
-      if (i->second.state & PG_STATE_CLEAN)
-	continue;
-      val = i->second.last_clean;
-      break;
-    case STUCK_DEGRADED:
-      if ((i->second.state & PG_STATE_DEGRADED) == 0)
-	continue;
-      val = i->second.last_undegraded;
-      break;
-    case STUCK_UNDERSIZED:
-      if ((i->second.state & PG_STATE_UNDERSIZED) == 0)
-	continue;
-      val = i->second.last_fullsized;
-      break;
-    case STUCK_STALE:
-      if ((i->second.state & PG_STATE_STALE) == 0)
-	continue;
-      val = i->second.last_unstale;
-      break;
-    default:
-      assert(0 == "invalid type");
+    utime_t val = cutoff; // don't care about >= cutoff so that is infinity
+
+    if ((types & STUCK_INACTIVE) && ! (i->second.state & PG_STATE_ACTIVE)) {
+      if (i->second.last_active < val)
+        val = i->second.last_active;
     }
 
+    if ((types & STUCK_UNCLEAN) && ! (i->second.state & PG_STATE_CLEAN)) {
+      if (i->second.last_clean < val)
+        val = i->second.last_clean;
+    }
+
+    if ((types & STUCK_DEGRADED) && (i->second.state & PG_STATE_DEGRADED)) {
+      if (i->second.last_undegraded < val)
+        val = i->second.last_undegraded;
+    }
+
+    if ((types & STUCK_UNDERSIZED) && (i->second.state & PG_STATE_UNDERSIZED)) {
+      if (i->second.last_fullsized < val)
+        val = i->second.last_fullsized;
+    }
+
+    if ((types & STUCK_STALE) && (i->second.state & PG_STATE_STALE)) {
+      if (i->second.last_unstale < val)
+        val = i->second.last_unstale;
+    }
+
+    // val is now the earliest any of the requested stuck states began
     if (val < cutoff) {
       stuck_pgs[i->first] = i->second;
     }
   }
 }
 
-void PGMap::dump_stuck(Formatter *f, PGMap::StuckPG type, utime_t cutoff) const
+void PGMap::dump_stuck(Formatter *f, int types, utime_t cutoff) const
 {
   ceph::unordered_map<pg_t, pg_stat_t> stuck_pg_stats;
-  get_stuck_stats(type, cutoff, stuck_pg_stats);
+  get_stuck_stats(types, cutoff, stuck_pg_stats);
   f->open_array_section("stuck_pg_stats");
   for (ceph::unordered_map<pg_t,pg_stat_t>::const_iterator i = stuck_pg_stats.begin();
        i != stuck_pg_stats.end();
@@ -911,10 +955,10 @@ void PGMap::dump_stuck(Formatter *f, PGMap::StuckPG type, utime_t cutoff) const
   f->close_section();
 }
 
-void PGMap::dump_stuck_plain(ostream& ss, PGMap::StuckPG type, utime_t cutoff) const
+void PGMap::dump_stuck_plain(ostream& ss, int types, utime_t cutoff) const
 {
   ceph::unordered_map<pg_t, pg_stat_t> stuck_pg_stats;
-  get_stuck_stats(type, cutoff, stuck_pg_stats);
+  get_stuck_stats(types, cutoff, stuck_pg_stats);
   if (!stuck_pg_stats.empty())
     dump_pg_stats_plain(ss, stuck_pg_stats, true);
 }
@@ -984,7 +1028,7 @@ void PGMap::print_osd_blocked_by_stats(std::ostream *ss) const
 void PGMap::recovery_summary(Formatter *f, list<string> *psl,
                              const pool_stat_t& delta_sum) const
 {
-  if (delta_sum.stats.sum.num_objects_degraded) {
+  if (delta_sum.stats.sum.num_objects_degraded && delta_sum.stats.sum.num_object_copies > 0) {
     double pc = (double)delta_sum.stats.sum.num_objects_degraded /
       (double)delta_sum.stats.sum.num_object_copies * (double)100.0;
     char b[20];
@@ -1000,7 +1044,7 @@ void PGMap::recovery_summary(Formatter *f, list<string> *psl,
       psl->push_back(ss.str());
     }
   }
-  if (delta_sum.stats.sum.num_objects_misplaced) {
+  if (delta_sum.stats.sum.num_objects_misplaced && delta_sum.stats.sum.num_object_copies > 0) {
     double pc = (double)delta_sum.stats.sum.num_objects_misplaced /
       (double)delta_sum.stats.sum.num_object_copies * (double)100.0;
     char b[20];
@@ -1016,7 +1060,7 @@ void PGMap::recovery_summary(Formatter *f, list<string> *psl,
       psl->push_back(ss.str());
     }
   }
-  if (delta_sum.stats.sum.num_objects_unfound) {
+  if (delta_sum.stats.sum.num_objects_unfound && delta_sum.stats.sum.num_objects) {
     double pc = (double)delta_sum.stats.sum.num_objects_unfound /
       (double)delta_sum.stats.sum.num_objects * (double)100.0;
     char b[20];
@@ -1429,7 +1473,7 @@ void PGMap::generate_test_instances(list<PGMap*>& o)
   }
 }
 
-void PGMap::get_filtered_pg_stats(string& state, int64_t poolid, int64_t osdid,
+void PGMap::get_filtered_pg_stats(const string& state, int64_t poolid, int64_t osdid,
                                   bool primary, set<pg_t>& pgs)
 {
   int type = 0;

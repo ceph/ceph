@@ -12,10 +12,13 @@ else
         [ -z $OBJCLASS_PATH ] && OBJCLASS_PATH=$CEPH_LIB/rados-classes
 fi
 
+if [ -z "${CEPH_VSTART_WRAPPER}" ]; then
+    PATH=$(pwd):$PATH
+fi
+
 export PYTHONPATH=./pybind
 export LD_LIBRARY_PATH=$CEPH_LIB
 export DYLD_LIBRARY_PATH=$LD_LIBRARY_PATH
-
 
 # abort on failure
 set -e
@@ -361,6 +364,7 @@ if [ "$start_mon" -eq 1 ]; then
         osd pool default erasure code directory = $EC_PATH
         osd pool default erasure code profile = plugin=jerasure technique=reed_sol_van k=2 m=1 ruleset-failure-domain=osd
         rgw frontends = fastcgi, civetweb port=$CEPH_RGW_PORT
+        rgw dns name = localhost
         filestore fd cache size = 32
         run dir = $CEPH_OUT_DIR
 EOF
@@ -417,6 +421,7 @@ $extra_conf
         mon pg warn min per osd = 3
         mon osd allow primary affinity = true
         mon reweight min pgs per osd = 4
+        mon osd prime pg temp = true
 $DAEMONOPTS
 $CMONDEBUG
 $extra_conf
@@ -637,7 +642,10 @@ do_rgw()
     if [ "$debug" -ne 0 ]; then
         RGWDEBUG="--debug-rgw=20"
     fi
-    $CEPH_BIN/radosgw --log-file=${CEPH_OUT_DIR}/rgw.log ${RGWDEBUG} --debug-ms=1
+
+    RGWSUDO=
+    [ $CEPH_RGW_PORT -lt 1024 ] && RGWSUDO=sudo
+    $RGWSUDO $CEPH_BIN/radosgw --log-file=${CEPH_OUT_DIR}/rgw.log ${RGWDEBUG} --debug-ms=1
 
     # Create S3 user
     local akey='0555b35654ad1656d804'
@@ -664,6 +672,10 @@ do_rgw()
     # Create Swift user
     echo "setting up user tester"
     $CEPH_BIN/radosgw-admin user create --subuser=tester:testing --display-name=Tester-Subuser --key-type=swift --secret=asdf > /dev/null
+
+    echo ""
+    echo "  access key  $akey"
+    echo "  secret key  $skey"
 }
 if [ "$start_rgw" -eq 1 ]; then
     do_rgw

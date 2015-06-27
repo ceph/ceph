@@ -80,8 +80,6 @@ enum {
   l_c_first = 20000,
   l_c_reply,
   l_c_lat,
-  l_c_owrlat,
-  l_c_ordlat,
   l_c_wrlat,
   l_c_last,
 };
@@ -216,7 +214,7 @@ struct dir_result_t {
   }
 };
 
-class Client : public Dispatcher {
+class Client : public Dispatcher, public md_config_obs_t {
  public:
   using Dispatcher::cct;
 
@@ -292,7 +290,9 @@ public:
   void resend_unsafe_requests(MetaSession *s);
 
   // mds requests
-  ceph_tid_t last_tid, last_flush_seq;
+  ceph_tid_t last_tid;
+  ceph_tid_t oldest_tid; // oldest incomplete mds request, excluding setfilelock requests
+  ceph_tid_t last_flush_seq;
   map<ceph_tid_t, MetaRequest*> mds_requests;
 
   void dump_mds_requests(Formatter *f);
@@ -303,6 +303,7 @@ public:
 		   Inode **ptarget = 0, bool *pcreated = 0,
 		   int use_mds=-1, bufferlist *pdirbl=0);
   void put_request(MetaRequest *request);
+  void unregister_request(MetaRequest *request);
 
   int verify_reply_trace(int r, MetaRequest *request, MClientReply *reply,
 			 Inode **ptarget, bool *pcreated, int uid, int gid);
@@ -321,6 +322,7 @@ public:
   void kick_requests_closed(MetaSession *session);
   void handle_client_request_forward(MClientRequestForward *reply);
   void handle_client_reply(MClientReply *reply);
+  bool is_dir_operation(MetaRequest *request);
 
   bool   initialized;
   bool   authenticated;
@@ -421,6 +423,7 @@ protected:
   friend class C_C_Tick; // Asserts on client_lock
   friend class C_Client_SyncCommit; // Asserts on client_lock
   friend class C_Client_RequestInterrupt;
+  friend class C_Client_Remount;
 
   //int get_cache_size() { return lru.lru_get_size(); }
   //void set_cache_size(int m) { lru.lru_set_max(m); }
@@ -440,7 +443,7 @@ protected:
   void touch_dn(Dentry *dn);
 
   // trim cache.
-  void trim_cache();
+  void trim_cache(bool trim_kernel_dcache=false);
   void trim_cache_for_reconnect(MetaSession *s);
   void trim_dentry(Dentry *dn);
   void trim_caps(MetaSession *s, int max);
@@ -478,6 +481,18 @@ protected:
   bool is_quota_files_exceeded(Inode *in);
   bool is_quota_bytes_exceeded(Inode *in, int64_t new_bytes);
   bool is_quota_bytes_approaching(Inode *in);
+
+  std::map<int64_t, int> pool_perms;
+  list<Cond*> waiting_for_pool_perm;
+  int check_pool_perm(Inode *in, int need);
+
+  /**
+   * Call this when an OSDMap is seen with a full flag (global or per pool)
+   * set.
+   *
+   * @param pool the pool ID affected, or -1 if all.
+   */
+  void _handle_full_flag(int64_t pool);
 
  public:
   void set_filer_flags(int flags);
@@ -542,8 +557,9 @@ protected:
   void get_cap_ref(Inode *in, int cap);
   void put_cap_ref(Inode *in, int cap);
   void flush_snaps(Inode *in, bool all_again=false, CapSnap *again=0);
+  void wait_sync_caps(Inode *in, uint16_t flush_tid[]);
   void wait_sync_caps(uint64_t want);
-  void queue_cap_snap(Inode *in, snapid_t seq=0);
+  void queue_cap_snap(Inode *in, SnapContext &old_snapc);
   void finish_cap_snap(Inode *in, CapSnap *capsnap, int used);
   void _flushed_cap_snap(Inode *in, snapid_t seq);
 
@@ -816,6 +832,7 @@ public:
   int lchown(const char *path, int uid, int gid);
   int utime(const char *path, struct utimbuf *buf);
   int lutime(const char *path, struct utimbuf *buf);
+  int flock(int fd, int operation, uint64_t owner);
   int truncate(const char *path, loff_t size);
 
   // file ops
@@ -839,12 +856,16 @@ public:
   // full path xattr ops
   int getxattr(const char *path, const char *name, void *value, size_t size);
   int lgetxattr(const char *path, const char *name, void *value, size_t size);
+  int fgetxattr(int fd, const char *name, void *value, size_t size);
   int listxattr(const char *path, char *list, size_t size);
   int llistxattr(const char *path, char *list, size_t size);
+  int flistxattr(int fd, char *list, size_t size);
   int removexattr(const char *path, const char *name);
   int lremovexattr(const char *path, const char *name);
+  int fremovexattr(int fd, const char *name);
   int setxattr(const char *path, const char *name, const void *value, size_t size, int flags);
   int lsetxattr(const char *path, const char *name, const void *value, size_t size, int flags);
+  int fsetxattr(int fd, const char *name, const void *value, size_t size, int flags);
 
   int sync_fs();
   int64_t drop_caches();
@@ -958,6 +979,10 @@ public:
 
   void ll_register_callbacks(struct client_callback_args *args);
   int test_dentry_handling(bool can_invalidate);
+
+  virtual const char** get_tracked_conf_keys() const;
+  virtual void handle_conf_change(const struct md_config_t *conf,
+	                          const std::set <std::string> &changed);
 };
 
 #endif

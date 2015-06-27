@@ -6,10 +6,10 @@ Code Documentation
 ==================
 
 C and C++ can be documented with Doxygen_, using the subset of Doxygen
-markup supported by Asphyxiate_.
+markup supported by Breathe_.
 
 .. _Doxygen: http://www.stack.nl/~dimitri/doxygen/
-.. _Asphyxiate: https://github.com/ceph/asphyxiate
+.. _Breathe: https://github.com/michaeljones/breathe
 
 The general format for function documentation is::
 

@@ -62,6 +62,7 @@ import argparse
 import errno
 import json
 import rados
+import shlex
 import signal
 import socket
 import string
@@ -72,6 +73,8 @@ from ceph_argparse import \
     concise_sig, descsort, parse_json_funcsigs, \
     matchnum, validate_command, find_cmd_target, \
     send_command, json_command
+
+from ceph_daemon import DaemonWatcher, admin_socket
 
 # just a couple of globals
 
@@ -303,60 +306,6 @@ def format_help(cmddict, partial=None):
 
     return fullusage
 
-def admin_socket(asok_path, cmd, format=''):
-    """
-    Send a daemon (--admin-daemon) command 'cmd'.  asok_path is the
-    path to the admin socket; cmd is a list of strings; format may be
-    set to one of the formatted forms to get output in that form
-    (daemon commands don't support 'plain' output).
-    """
-
-    def do_sockio(path, cmd):
-        """ helper: do all the actual low-level stream I/O """
-        sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        sock.connect(path)
-        try:
-            sock.sendall(cmd + '\0')
-            len_str = sock.recv(4)
-            if len(len_str) < 4:
-                raise RuntimeError("no data returned from admin socket")
-            l, = struct.unpack(">I", len_str)
-            ret = ''
-
-            got = 0
-            while got < l:
-                bit = sock.recv(l - got)
-                ret += bit
-                got += len(bit)
-
-        except Exception as e:
-            raise RuntimeError('exception: ' + str(e))
-        return ret
-
-    try:
-        cmd_json = do_sockio(asok_path,
-            json.dumps({"prefix":"get_command_descriptions"}))
-    except Exception as e:
-        raise RuntimeError('exception getting command descriptions: ' + str(e))
-
-    if cmd == 'get_command_descriptions':
-        return cmd_json
-
-    sigdict = parse_json_funcsigs(cmd_json, 'cli')
-    valid_dict = validate_command(sigdict, cmd)
-    if not valid_dict:
-        raise RuntimeError('invalid command')
-
-    if format:
-        valid_dict['format'] = format
-
-    try:
-        ret = do_sockio(asok_path, json.dumps(valid_dict))
-    except Exception as e:
-        raise RuntimeError('exception: ' + str(e))
-
-    return ret
-
 
 def ceph_conf(parsed_args, field, name):
     args=['ceph-conf']
@@ -383,6 +332,25 @@ def ceph_conf(parsed_args, field, name):
     return outdata.rstrip()
 
 PROMPT = 'ceph> '
+
+if sys.stdin.isatty():
+    def read_input():
+        while True:
+            line = raw_input(PROMPT).rstrip()
+            if line in ['q', 'quit', 'Q', 'exit']:
+                return None
+            if line:
+                return line
+else:
+    def read_input():
+        while True:
+            line = sys.stdin.readline()
+            if not line:
+                return None
+            line = line.rstrip()
+            if line:
+                return line
+
 
 def new_style_command(parsed_args, cmdargs, target, sigdict, inbuf, verbose):
     """
@@ -411,26 +379,22 @@ def new_style_command(parsed_args, cmdargs, target, sigdict, inbuf, verbose):
             else:
                 return -errno.EINVAL, '', 'invalid command'
         else:
-            # do the command-interpreter looping
-            # for raw_input to do readline cmd editing
-            import readline
-
             if sys.stdin.isatty():
-                prompt = PROMPT
-            else:
-                prompt = ''
+                # do the command-interpreter looping
+                # for raw_input to do readline cmd editing
+                import readline
 
             while True:
-                interactive_input = raw_input(prompt)
-                if interactive_input in ['q', 'quit', 'Q']:
+                interactive_input = read_input()
+                if interactive_input is None:
                     return 0, '', ''
-                cmdargs = parse_cmdargs(interactive_input.split())[2]
+                cmdargs = parse_cmdargs(shlex.split(interactive_input))[2]
                 try:
                     target = find_cmd_target(cmdargs)
                 except Exception as e:
                     print >> sys.stderr, \
                             'error handling command target: {0}'.format(e)
-                    return 1
+                    return 1, '', ''
                 valid_dict = validate_command(sigdict, cmdargs, verbose)
                 if valid_dict:
                     if parsed_args.output_format:
@@ -443,7 +407,7 @@ def new_style_command(parsed_args, cmdargs, target, sigdict, inbuf, verbose):
                     if ret:
                         ret = abs(ret)
                         print >> sys.stderr, \
-                            'Error: {0} {1}'.format(ret, errno.errorcode[ret])
+                            'Error: {0} {1}'.format(ret, errno.errorcode.get(ret, 'Unknown'))
                     if outbuf:
                         print outbuf
                     if outs:
@@ -518,14 +482,20 @@ def complete(sigdict, args, target):
 ###
 # ping a monitor
 ###
-def ping_monitor(cluster_handle, name):
+def ping_monitor(cluster_handle, name, timeout):
     if 'mon.' not in name:
         print >> sys.stderr, '"ping" expects a monitor to ping; try "ping mon.<id>"'
         return 1
 
     mon_id = name[len('mon.'):]
-    s = cluster_handle.ping_monitor(mon_id)
-    print s
+    if (mon_id == '*') :
+        cluster_handle.connect(timeout=timeout)
+        for m in monids() :
+            s = cluster_handle.ping_monitor(m)
+            print "mon.{0}".format(m) + '\n' + s
+    else :
+            s = cluster_handle.ping_monitor(mon_id)
+            print s
     return 0
 
 ###
@@ -573,12 +543,16 @@ def main():
 
     format = parsed_args.output_format
 
+    daemon_perf = False
     sockpath = None
     if parsed_args.admin_socket:
         sockpath = parsed_args.admin_socket
-    elif len(childargs) > 0 and childargs[0] == "daemon":
+    elif len(childargs) > 0 and childargs[0] in ["daemon", "daemonperf"]:
+        daemon_perf = (childargs[0] == "daemonperf")
         # Treat "daemon <path>" or "daemon <name>" like --admin_daemon <path>
-        if len(childargs) > 2:
+        # Handle "daemonperf <path>" the same but requires no trailing args
+        require_args = 2 if daemon_perf else 3
+        if len(childargs) >= require_args:
             if childargs[1].find('/') >= 0:
                 sockpath = childargs[1]
             else:
@@ -593,10 +567,29 @@ def main():
             # for both:
             childargs = childargs[2:]
         else:
-            print >> sys.stderr, 'daemon requires at least 3 arguments'
+            print >> sys.stderr, '{0} requires at least {1} arguments'.format(
+                childargs[0], require_args)
             return errno.EINVAL
 
-    if sockpath:
+    if sockpath and daemon_perf:
+        interval = 1
+        count = None
+        if len(childargs) > 0:
+            try:
+                interval = float(childargs[0])
+                if interval < 0:
+                    raise ValueError
+            except ValueError:
+                print >> sys.stderr, 'daemonperf: interval should be a positive number'
+                return errno.EINVAL
+        if len(childargs) > 1:
+            if not childargs[1].isdigit():
+                print >> sys.stderr, 'daemonperf: count should be a positive integer'
+                return errno.EINVAL
+            count = int(childargs[1])
+        DaemonWatcher(sockpath).run(interval, count)
+        return 0
+    elif sockpath:
         try:
             print admin_socket(sockpath, childargs, format)
         except Exception as e:
@@ -666,6 +659,9 @@ def main():
         print >> sys.stderr, '"{0} tell" is deprecated; try "tell {0}.<id>" instead (id can be "*") '.format(childargs[0])
         return 1
 
+    if childargs in [['mon'], ['osd']]:
+        parsed_args.help = True
+
     if parsed_args.help:
         # short default timeout for -h
         if not timeout:
@@ -681,7 +677,7 @@ def main():
 
     try:
         if childargs and childargs[0] == 'ping':
-            return ping_monitor(cluster_handle, childargs[1])
+            return ping_monitor(cluster_handle, childargs[1], timeout)
         cluster_handle.connect(timeout=timeout)
     except KeyboardInterrupt:
         print >> sys.stderr, 'Cluster connection aborted'
@@ -842,11 +838,11 @@ def main():
                                                           sigdict, inbuf, verbose)
                     if ret < 0:
                         ret = -ret
-                        print >> sys.stderr, prefix + 'Second attempt of previously successful command failed with {0}: {1}'.format(errno.errorcode[ret], outs)
+                        print >> sys.stderr, prefix + 'Second attempt of previously successful command failed with {0}: {1}'.format(errno.errorcode.get(ret, 'Unknown'), outs)
 
         if ret < 0:
             ret = -ret
-            print >> sys.stderr, prefix + 'Error {0}: {1}'.format(errno.errorcode[ret], outs)
+            print >> sys.stderr, prefix + 'Error {0}: {1}'.format(errno.errorcode.get(ret, 'Unknown'), outs)
             if len(targets) > 1:
                 final_ret = ret
             else:

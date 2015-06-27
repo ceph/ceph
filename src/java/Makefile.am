@@ -22,6 +22,9 @@ JAVA_TEST_SRC = \
 
 EXTRA_DIST = $(JAVA_SRC) $(JAVA_TEST_SRC)
 
+if ENABLE_CLIENT
+if WITH_RADOS
+if WITH_CEPHFS
 if ENABLE_CEPHFS_JAVA
 
 JAVA_CLASSES = $(JAVA_SRC:java/%.java=%.class)
@@ -78,4 +81,7 @@ java_DATA += libcephfs-test.jar
 
 CLEANFILES += test/com/ceph/fs/*.class libcephfs-test.jar
 endif # HAVE_JUNIT4 (includes WITH_DEBUG)
-endif #ENABLE_CEPHFS_JAVA
+endif # ENABLE_CEPHFS_JAVA
+endif # WITH_CEPHFS
+endif # WITH_RADOS
+endif # ENABLE_CLIENT

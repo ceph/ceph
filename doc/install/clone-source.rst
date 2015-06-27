@@ -83,7 +83,7 @@ repository.
 
 If your submodules are out of date, run::
 
-	git submodule update
+	git submodule update --force --init --recursive
 
 Choose a Branch
 ===============

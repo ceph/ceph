@@ -8,131 +8,137 @@
 #include <errno.h>
 
 #include "rocksdb/db.h"
+#include "rocksdb/table.h"
 #include "rocksdb/env.h"
 #include "rocksdb/write_batch.h"
 #include "rocksdb/slice.h"
 #include "rocksdb/cache.h"
 #include "rocksdb/filter_policy.h"
-
+#include "rocksdb/utilities/convenience.h"
 using std::string;
 #include "common/perf_counters.h"
+#include "include/str_map.h"
 #include "KeyValueDB.h"
 #include "RocksDBStore.h"
 
-
-int RocksDBStore::init()
+int string2bool(string val, bool &b_val)
 {
-  options.write_buffer_size = g_conf->rocksdb_write_buffer_size;
-  options.cache_size = g_conf->rocksdb_cache_size;
-  options.block_size = g_conf->rocksdb_block_size;
-  options.bloom_size = g_conf->rocksdb_bloom_size;
-  options.compression_type = g_conf->rocksdb_compression;
-  options.paranoid_checks = g_conf->rocksdb_paranoid;
-  options.max_open_files = g_conf->rocksdb_max_open_files;
-  options.log_file = g_conf->rocksdb_log;
-  options.write_buffer_num = g_conf->rocksdb_write_buffer_num;
-  options.max_background_compactions = g_conf->rocksdb_background_compactions;
-  options.max_background_flushes = g_conf->rocksdb_background_flushes;
-  options.target_file_size_base = g_conf->rocksdb_target_file_size_base;
-  options.level0_file_num_compaction_trigger = g_conf->rocksdb_level0_file_num_compaction_trigger;
-  options.level0_slowdown_writes_trigger = g_conf->rocksdb_level0_slowdown_writes_trigger;
-  options.level0_stop_writes_trigger = g_conf->rocksdb_level0_stop_writes_trigger;
-  options.disableDataSync = g_conf->rocksdb_disableDataSync;
-  options.num_levels = g_conf->rocksdb_num_levels;
-  options.disableWAL = g_conf->rocksdb_disableWAL;
-  options.wal_dir = g_conf->rocksdb_wal_dir;
-  options.info_log_level = g_conf->rocksdb_info_log_level;
+  if (strcasecmp(val.c_str(), "false") == 0) {
+    b_val = false;
+    return 0;
+  } else if (strcasecmp(val.c_str(), "true") == 0) {
+    b_val = true;
+    return 0;
+  } else {
+    std::string err;
+    int b = strict_strtol(val.c_str(), 10, &err);
+    if (!err.empty())
+      return -EINVAL;
+    b_val = !!b;
+    return 0;
+  }
+}
+  
+int RocksDBStore::tryInterpret(const string key, const string val, rocksdb::Options &opt)
+{
+  if (key == "compaction_threads") {
+    std::string err;
+    int f = strict_sistrtoll(val.c_str(), &err);
+    if (!err.empty())
+      return -EINVAL;
+    //Low priority threadpool is used for compaction
+    opt.env->SetBackgroundThreads(f, rocksdb::Env::Priority::LOW);
+  } else if (key == "flusher_threads") {
+    std::string err;
+    int f = strict_sistrtoll(val.c_str(), &err);
+    if (!err.empty())
+      return -EINVAL;
+    //High priority threadpool is used for flusher
+    opt.env->SetBackgroundThreads(f, rocksdb::Env::Priority::HIGH);
+  } else if (key == "compact_on_mount") {
+    int ret = string2bool(val, compact_on_mount);
+    if (ret != 0)
+      return ret;
+  } else if (key == "disableWAL") {
+    int ret = string2bool(val, disableWAL);
+    if (ret != 0)
+      return ret;
+  } else {
+    //unrecognize config options.
+    return -EINVAL;
+  }
+  return 0;
+}
+
+int RocksDBStore::ParseOptionsFromString(const string opt_str, rocksdb::Options &opt)
+{
+  map<string, string> str_map;
+  int r = get_str_map(opt_str, "\n;", &str_map);
+  if (r < 0)
+    return r;
+  map<string, string>::iterator it;
+  for(it = str_map.begin(); it != str_map.end(); it++) {
+    string this_opt = it->first + "=" + it->second;
+    rocksdb::Status status = rocksdb::GetOptionsFromString(opt, this_opt , &opt); 
+    if (!status.ok()) {
+      //unrecognized by rocksdb, try to interpret by ourselves.
+      r = tryInterpret(it->first, it->second, opt);
+      if (r < 0) {
+	derr << status.ToString() << dendl;
+	return -EINVAL;
+      }
+    }
+  }
+  return 0;
+}
+
+int RocksDBStore::init(string _options_str)
+{
+  options_str = _options_str;
+  rocksdb::Options opt;
+  //try parse options
+  int r = ParseOptionsFromString(options_str, opt); 
+  if (r != 0) {
+    return -EINVAL;
+  }
   return 0;
 }
 
 int RocksDBStore::do_open(ostream &out, bool create_if_missing)
 {
-  rocksdb::Options ldoptions;
+  rocksdb::Options opt;
+  rocksdb::Status status;
 
-  if (options.write_buffer_size)
-    ldoptions.write_buffer_size = options.write_buffer_size;
-  if (options.write_buffer_num)
-    ldoptions.max_write_buffer_number = options.write_buffer_num;
-  if (options.max_background_compactions)
-    ldoptions.max_background_compactions = options.max_background_compactions;
-  if (options.max_background_flushes)
-    ldoptions.max_background_flushes = options.max_background_flushes;
-  if (options.target_file_size_base)
-    ldoptions.target_file_size_base = options.target_file_size_base;
-  if (options.max_open_files)
-    ldoptions.max_open_files = options.max_open_files;
-  if (options.cache_size) {
-    ldoptions.block_cache = rocksdb::NewLRUCache(options.cache_size);
-  }
-  if (options.block_size)
-    ldoptions.block_size = options.block_size;
-  if (options.bloom_size) {
-    const rocksdb::FilterPolicy *_filterpolicy =
-	rocksdb::NewBloomFilterPolicy(options.bloom_size);
-    ldoptions.filter_policy = _filterpolicy;
-    filterpolicy = _filterpolicy;
-  }
-  if (options.compression_type.length() == 0)
-    ldoptions.compression = rocksdb::kNoCompression;
-  else if(options.compression_type == "snappy")
-    ldoptions.compression = rocksdb::kSnappyCompression;
-  else if(options.compression_type == "zlib")
-    ldoptions.compression = rocksdb::kZlibCompression;
-  else if(options.compression_type == "bzip2")
-    ldoptions.compression = rocksdb::kBZip2Compression;
-  else
-    ldoptions.compression = rocksdb::kNoCompression;
-  if (options.block_restart_interval)
-    ldoptions.block_restart_interval = options.block_restart_interval;
-
-  ldoptions.error_if_exists = options.error_if_exists;
-  ldoptions.paranoid_checks = options.paranoid_checks;
-  ldoptions.create_if_missing = create_if_missing;
-  if (options.log_file.length()) {
-    rocksdb::Env *env = rocksdb::Env::Default();
-    env->NewLogger(options.log_file, &ldoptions.info_log);
-    ldoptions.info_log->SetInfoLogLevel((rocksdb::InfoLogLevel)get_info_log_level(options.info_log_level));
-  } else {
-    ldoptions.info_log_level = (rocksdb::InfoLogLevel)get_info_log_level(options.info_log_level);
-  }
-  if(options.disableDataSync)
-    ldoptions.disableDataSync = options.disableDataSync;
-  if(options.num_levels)
-    ldoptions.num_levels = options.num_levels;
-  if(options.level0_file_num_compaction_trigger)
-    ldoptions.level0_file_num_compaction_trigger = options.level0_file_num_compaction_trigger;
-  if(options.level0_slowdown_writes_trigger)
-    ldoptions.level0_slowdown_writes_trigger = options.level0_slowdown_writes_trigger;
-  if(options.level0_stop_writes_trigger)
-    ldoptions.level0_stop_writes_trigger = options.level0_stop_writes_trigger;
-  if(options.wal_dir.length())
-    ldoptions.wal_dir = options.wal_dir;
-
-
-  //rocksdb::DB *_db;
-  rocksdb::Status status = rocksdb::DB::Open(ldoptions, path, &db);
-  if (!status.ok()) {
-    out << status.ToString() << std::endl;
+  int r = ParseOptionsFromString(options_str, opt); 
+  if (r != 0) {
     return -EINVAL;
   }
-  //db.reset(_db);
+  opt.create_if_missing = create_if_missing;
 
-  if (g_conf->rocksdb_compact_on_mount) {
+  status = rocksdb::DB::Open(opt, path, &db);
+  if (!status.ok()) {
+    derr << status.ToString() << dendl;
+    return -EINVAL;
+  }
+
+  PerfCountersBuilder plb(g_ceph_context, "rocksdb", l_rocksdb_first, l_rocksdb_last);
+  plb.add_u64_counter(l_rocksdb_gets, "rocksdb_get", "Gets");
+  plb.add_u64_counter(l_rocksdb_txns, "rocksdb_transaction", "Transactions");
+  plb.add_time_avg(l_rocksdb_get_latency, "rocksdb_get_latency", "Get latency");
+  plb.add_time_avg(l_rocksdb_submit_latency, "rocksdb_submit_latency", "Submit Latency");
+  plb.add_time_avg(l_rocksdb_submit_sync_latency, "rocksdb_submit_sync_latency", "Submit Sync Latency");
+  plb.add_u64_counter(l_rocksdb_compact, "rocksdb_compact", "Compactions");
+  plb.add_u64_counter(l_rocksdb_compact_range, "rocksdb_compact_range", "Compactions by range");
+  plb.add_u64_counter(l_rocksdb_compact_queue_merge, "rocksdb_compact_queue_merge", "Mergings of ranges in compaction queue");
+  plb.add_u64(l_rocksdb_compact_queue_len, "rocksdb_compact_queue_len", "Length of compaction queue");
+  logger = plb.create_perf_counters();
+  cct->get_perfcounters_collection()->add(logger);
+
+  if (compact_on_mount) {
     derr << "Compacting rocksdb store..." << dendl;
     compact();
     derr << "Finished compacting rocksdb store" << dendl;
   }
-
-
-  PerfCountersBuilder plb(g_ceph_context, "rocksdb", l_rocksdb_first, l_rocksdb_last);
-  plb.add_u64_counter(l_rocksdb_gets, "rocksdb_get");
-  plb.add_u64_counter(l_rocksdb_txns, "rocksdb_transaction");
-  plb.add_u64_counter(l_rocksdb_compact, "rocksdb_compact");
-  plb.add_u64_counter(l_rocksdb_compact_range, "rocksdb_compact_range");
-  plb.add_u64_counter(l_rocksdb_compact_queue_merge, "rocksdb_compact_queue_merge");
-  plb.add_u64(l_rocksdb_compact_queue_len, "rocksdb_compact_queue_len");
-  logger = plb.create_perf_counters();
-  cct->get_perfcounters_collection()->add(logger);
   return 0;
 }
 
@@ -153,7 +159,6 @@ RocksDBStore::~RocksDBStore()
 
   // Ensure db is destroyed before dependent db_cache and filterpolicy
   delete db;
-  delete filterpolicy;
 }
 
 void RocksDBStore::close()
@@ -175,24 +180,30 @@ void RocksDBStore::close()
 
 int RocksDBStore::submit_transaction(KeyValueDB::Transaction t)
 {
+  utime_t start = ceph_clock_now(g_ceph_context);
   RocksDBTransactionImpl * _t =
     static_cast<RocksDBTransactionImpl *>(t.get());
   rocksdb::WriteOptions woptions;
-  woptions.disableWAL = options.disableWAL;
+  woptions.disableWAL = disableWAL;
   rocksdb::Status s = db->Write(woptions, _t->bat);
+  utime_t lat = ceph_clock_now(g_ceph_context) - start;
   logger->inc(l_rocksdb_txns);
+  logger->tinc(l_rocksdb_submit_latency, lat);
   return s.ok() ? 0 : -1;
 }
 
 int RocksDBStore::submit_transaction_sync(KeyValueDB::Transaction t)
 {
+  utime_t start = ceph_clock_now(g_ceph_context);
   RocksDBTransactionImpl * _t =
     static_cast<RocksDBTransactionImpl *>(t.get());
   rocksdb::WriteOptions woptions;
   woptions.sync = true;
-  woptions.disableWAL = options.disableWAL;
+  woptions.disableWAL = disableWAL;
   rocksdb::Status s = db->Write(woptions, _t->bat);
+  utime_t lat = ceph_clock_now(g_ceph_context) - start;
   logger->inc(l_rocksdb_txns);
+  logger->tinc(l_rocksdb_submit_sync_latency, lat);
   return s.ok() ? 0 : -1;
 }
 int RocksDBStore::get_info_log_level(string info_log_level)
@@ -260,6 +271,7 @@ int RocksDBStore::get(
     const std::set<string> &keys,
     std::map<string, bufferlist> *out)
 {
+  utime_t start = ceph_clock_now(g_ceph_context);
   KeyValueDB::Iterator it = get_iterator(prefix);
   for (std::set<string>::const_iterator i = keys.begin();
        i != keys.end();
@@ -270,7 +282,9 @@ int RocksDBStore::get(
     } else if (!it->valid())
       break;
   }
+  utime_t lat = ceph_clock_now(g_ceph_context) - start;
   logger->inc(l_rocksdb_gets);
+  logger->tinc(l_rocksdb_get_latency, lat);
   return 0;
 }
 
@@ -470,11 +484,6 @@ int RocksDBStore::RocksDBWholeSpaceIteratorImpl::status()
   return dbiter->status().ok() ? 0 : -1;
 }
 
-bool RocksDBStore::in_prefix(const string &prefix, rocksdb::Slice key)
-{
-  return (key.compare(rocksdb::Slice(past_prefix(prefix))) < 0) &&
-    (key.compare(rocksdb::Slice(prefix)) > 0);
-}
 string RocksDBStore::past_prefix(const string &prefix)
 {
   string limit = prefix;

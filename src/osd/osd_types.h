@@ -241,7 +241,8 @@ enum {
   CEPH_OSD_RMW_FLAG_CLASS_WRITE = (1 << 4),
   CEPH_OSD_RMW_FLAG_PGOP        = (1 << 5),
   CEPH_OSD_RMW_FLAG_CACHE       = (1 << 6),
-  CEPH_OSD_RMW_FLAG_PROMOTE     = (1 << 7),
+  CEPH_OSD_RMW_FLAG_FORCE_PROMOTE   = (1 << 7),
+  CEPH_OSD_RMW_FLAG_SKIP_PROMOTE    = (1 << 8),
 };
 
 
@@ -772,7 +773,7 @@ inline ostream& operator<<(ostream& out, const osd_stat_t& s) {
 
 std::string pg_state_string(int state);
 std::string pg_vector_string(const vector<int32_t> &a);
-int pg_string_state(std::string state);
+int pg_string_state(const std::string& state);
 
 
 /*
@@ -1845,6 +1846,8 @@ struct pg_interval_t {
     int new_up_primary,
     const vector<int> &old_up,
     const vector<int> &new_up,
+    int old_size,
+    int new_size,
     int old_min_size,
     int new_min_size,
     unsigned old_pg_num,
@@ -2286,6 +2289,10 @@ struct pg_log_t {
       return p;
     }      
   }
+
+  static void filter_log(spg_t import_pgid, const OSDMap &curmap,
+    const string &hit_set_namespace, const pg_log_t &in,
+    pg_log_t &out, pg_log_t &reject);
 
   /**
    * copy entries from the tail of another pg_log_t
@@ -2762,6 +2769,9 @@ struct SnapSet {
     }
     return max;
   }
+
+  SnapSet get_filtered(const pg_pool_t &pinfo) const;
+  void filter(const pg_pool_t &pinfo);
 };
 WRITE_CLASS_ENCODER(SnapSet)
 

@@ -189,7 +189,7 @@ The following entries describe each capability.
               bootstrapping an OSD.
 
 
-``profile bootstrap-osd``
+``profile bootstrap-mds``
 
 :Description: Gives a user permissions to bootstrap a metadata server. 
               Conferred on deployment tools such as ``ceph-deploy``, etc.
@@ -641,7 +641,7 @@ authentication issues more fully.
 
 At the moment, none of the Ceph authentication protocols provide secrecy for
 messages in transit. Thus, an eavesdropper on the wire can hear and understand
-all data sent between clients and servers in Ceph, even if he cannot create or
+all data sent between clients and servers in Ceph, even if it cannot create or
 alter them. Further, Ceph does not include options to encrypt user data in the
 object store. Users can hand-encrypt and store their own data in the Ceph
 object store, of course, but Ceph provides no features to perform object

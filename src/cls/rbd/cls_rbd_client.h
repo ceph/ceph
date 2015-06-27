@@ -35,6 +35,8 @@ namespace librbd {
 		     const std::string &object_prefix);
     int get_features(librados::IoCtx *ioctx, const std::string &oid,
 		     snapid_t snap_id, uint64_t *features);
+    int set_features(librados::IoCtx *ioctx, const std::string &oid,
+                     uint64_t features, uint64_t mask);
     int get_object_prefix(librados::IoCtx *ioctx, const std::string &oid,
 			  std::string *object_prefix);
     int get_size(librados::IoCtx *ioctx, const std::string &oid,
@@ -50,7 +52,7 @@ namespace librbd {
     int get_flags(librados::IoCtx *ioctx, const std::string &oid,
 		  uint64_t *flags, const std::vector<snapid_t> &snap_ids,
 		  vector<uint64_t> *snap_flags);
-    void set_flags(librados::ObjectWriteOperation *op,
+    void set_flags(librados::ObjectWriteOperation *op, snapid_t snap_id,
                    uint64_t flags, uint64_t mask);
     int remove_parent(librados::IoCtx *ioctx, const std::string &oid);
     void remove_parent(librados::ObjectWriteOperation *op);
@@ -74,7 +76,6 @@ namespace librbd {
 		      const std::vector<snapid_t> &ids,
 		      std::vector<string> *names,
 		      std::vector<uint64_t> *sizes,
-		      std::vector<uint64_t> *features,
 		      std::vector<parent_info> *parents,
 		      std::vector<uint8_t> *protection_statuses);
     int copyup(librados::IoCtx *ioctx, const std::string &oid,
@@ -87,6 +88,15 @@ namespace librbd {
 			      uint64_t *stripe_unit, uint64_t *stripe_count);
     int set_stripe_unit_count(librados::IoCtx *ioctx, const std::string &oid,
 			      uint64_t stripe_unit, uint64_t stripe_count);
+    int metadata_list(librados::IoCtx *ioctx, const std::string &oid,
+                      const std::string &start, uint64_t max_return,
+                      map<string, bufferlist> *pairs);
+    int metadata_set(librados::IoCtx *ioctx, const std::string &oid,
+                     const map<std::string, bufferlist> &data);
+    int metadata_remove(librados::IoCtx *ioctx, const std::string &oid,
+                        const std::string &key);
+    int metadata_get(librados::IoCtx *ioctx, const std::string &oid,
+                     const std::string &key, string *v);
 
     // operations on rbd_id objects
     int get_id(librados::IoCtx *ioctx, const std::string &oid, std::string *id);
@@ -112,12 +122,17 @@ namespace librbd {
     // operations on the rbd_object_map.$image_id object
     int object_map_load(librados::IoCtx *ioctx, const std::string &oid,
 		        ceph::BitVector<2> *object_map);
+    void object_map_save(librados::ObjectWriteOperation *rados_op,
+                         const ceph::BitVector<2> &object_map);
     void object_map_resize(librados::ObjectWriteOperation *rados_op,
 			   uint64_t object_count, uint8_t default_state);
     void object_map_update(librados::ObjectWriteOperation *rados_op,
 			   uint64_t start_object_no, uint64_t end_object_no,
 			   uint8_t new_object_state,
 			   const boost::optional<uint8_t> &current_object_state);
+    void object_map_snap_add(librados::ObjectWriteOperation *rados_op);
+    void object_map_snap_remove(librados::ObjectWriteOperation *rados_op,
+                                const ceph::BitVector<2> &object_map);
 
     // class operations on the old format, kept for
     // backwards compatability

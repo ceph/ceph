@@ -474,7 +474,7 @@ class KeyValueStore : public ObjectStore,
  public:
 
   KeyValueStore(const std::string &base,
-                const char *internal_name = "keyvaluestore-dev",
+                const char *internal_name = "keyvaluestore",
                 bool update_to=false);
   ~KeyValueStore();
 
@@ -484,7 +484,6 @@ class KeyValueStore : public ObjectStore,
   uint32_t get_target_version() {
     return target_version;
   }
-  bool need_journal() { return false; };
   int peek_journal_fsid(uuid_d *id) {
     *id = fsid;
     return 0;
@@ -501,6 +500,15 @@ class KeyValueStore : public ObjectStore,
   }
   int mkfs();
   int mkjournal() {return 0;}
+  bool wants_journal() {
+    return false;
+  }
+  bool allows_journal() {
+    return false;
+  }
+  bool needs_journal() {
+    return false;
+  }
 
   /**
    ** set_allow_sharded_objects()
@@ -515,6 +523,8 @@ class KeyValueStore : public ObjectStore,
    ** return value: true if set_allow_sharded_objects() called, otherwise false
    **/
   bool get_allow_sharded_objects() {return false;}
+
+  void collect_metadata(map<string,string> *pm);
 
   int statfs(struct statfs *buf);
 

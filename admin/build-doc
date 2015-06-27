@@ -1,7 +1,5 @@
 #!/bin/sh
 
-set -e
-
 cd "$(dirname "$0")"
 cd ..
 TOPDIR=`pwd`
@@ -47,9 +45,9 @@ else
     fi
 fi
 
-if [ ! -e build-doc/doxygen/xml ]; then
-    doxygen
-fi
+# Don't enable -e until after running all the potentially-erroring checks
+# for availability of commands
+set -e
 
 cat src/osd/PG.h src/osd/PG.cc | doc/scripts/gen_state_diagram.py > doc/dev/peering_graph.generated.dot
 

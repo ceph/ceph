@@ -30,6 +30,13 @@ struct ceph_data_stats
   uint64_t byte_avail;
   int avail_percent;
 
+  ceph_data_stats() :
+    byte_total(0),
+    byte_used(0),
+    byte_avail(0),
+    avail_percent(0)
+  { }
+
   void dump(Formatter *f) const {
     assert(f != NULL);
     f->dump_int("total", byte_total);
@@ -37,8 +44,45 @@ struct ceph_data_stats
     f->dump_int("avail", byte_avail);
     f->dump_int("avail_percent", avail_percent);
   }
+
+  void encode(bufferlist &bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(byte_total, bl);
+    ::encode(byte_used, bl);
+    ::encode(byte_avail, bl);
+    ::encode(avail_percent, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::iterator &p) {
+    DECODE_START(1, p);
+    ::decode(byte_total, p);
+    ::decode(byte_used, p);
+    ::decode(byte_avail, p);
+    ::decode(avail_percent, p);
+    DECODE_FINISH(p);
+  }
+
+  static void generate_test_instances(list<ceph_data_stats*>& ls) {
+    ls.push_back(new ceph_data_stats);
+    ls.push_back(new ceph_data_stats);
+    ls.back()->byte_total = 1024*1024;
+    ls.back()->byte_used = 512*1024;
+    ls.back()->byte_avail = 512*1024;
+    ls.back()->avail_percent = 50;
+  }
 };
 typedef struct ceph_data_stats ceph_data_stats_t;
 
 int get_fs_stats(ceph_data_stats_t &stats, const char *path);
+
+/// collect info from @p uname(2), @p /proc/meminfo and @p /proc/cpuinfo
+void collect_sys_info(map<string, string> *m, CephContext *cct);
+
+/// dump service ids grouped by their host to the specified formatter
+/// @param f formatter for the output
+/// @param services a map from hostname to a list of service id hosted by this host
+/// @param type the service type of given @p services, for example @p osd or @p mon.
+void dump_services(Formatter* f, const map<string, list<int> >& services, const char* type);
+
 #endif /* CEPH_UTIL_H */

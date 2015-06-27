@@ -91,17 +91,19 @@ private:
     SLAB_256,
     SLAB_1024,
     SLAB_PAGE,
-    SLAB_MAX
+    SLAB_MAX,
+    SLAB_OVERFLOW,
+    NUM_SLABS,
   };
 
-  atomic_t ctr_set[5];
+  atomic_t ctr_set[NUM_SLABS];
 
   atomic_t msg_cnt;  // send msgs
   atomic_t hook_cnt; // recv msgs
 
 public:
   XioPoolStats() : msg_cnt(0), hook_cnt(0) {
-    for (int ix = 0; ix < 5; ++ix) {
+    for (int ix = 0; ix < NUM_SLABS; ++ix) {
       ctr_set[ix].set(0);
     }
   }
@@ -115,6 +117,7 @@ public:
       << "1024: " << ctr_set[SLAB_1024].read() << " "
       << "page: " << ctr_set[SLAB_PAGE].read() << " "
       << "max: " << ctr_set[SLAB_MAX].read() << " "
+      << "overflow: " << ctr_set[SLAB_OVERFLOW].read() << " "
       << std::endl;
     std::cout
       << tag << " #" << serial << ": "
@@ -164,6 +167,9 @@ public:
     (ctr_set[SLAB_MAX]).dec();
   }
 
+  void inc_overflow() { ctr_set[SLAB_OVERFLOW].inc(); }
+  void dec_overflow() { ctr_set[SLAB_OVERFLOW].dec(); }
+
   void inc_msgcnt() {
     if (unlikely(XioPool::trace_msgcnt)) {
       msg_cnt.inc();
@@ -194,16 +200,33 @@ extern XioPoolStats xp_stats;
 static inline int xpool_alloc(struct xio_mempool *pool, uint64_t size,
 			      struct xio_mempool_obj* mp)
 {
+  // try to allocate from the xio pool
+  int r = xio_mempool_alloc(pool, size, mp);
+  if (r == 0) {
+    if (unlikely(XioPool::trace_mempool))
+      xp_stats.inc(size);
+    return 0;
+  }
+  // fall back to malloc on errors
+  mp->addr = malloc(size);
+  assert(mp->addr);
+  mp->length = 0;
   if (unlikely(XioPool::trace_mempool))
-    xp_stats.inc(size);
-  return xio_mempool_alloc(pool, size, mp);
+    xp_stats.inc_overflow();
+  return 0;
 }
 
 static inline void xpool_free(uint64_t size, struct xio_mempool_obj* mp)
 {
- if (unlikely(XioPool::trace_mempool))
-    xp_stats.dec(size);
-  xio_mempool_free(mp);
+  if (mp->length) {
+    if (unlikely(XioPool::trace_mempool))
+      xp_stats.dec(size);
+    xio_mempool_free(mp);
+  } else { // from malloc
+    if (unlikely(XioPool::trace_mempool))
+      xp_stats.dec_overflow();
+    free(mp->addr);
+  }
 }
 
 #define xpool_inc_msgcnt() \

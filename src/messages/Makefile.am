@@ -65,6 +65,7 @@ noinst_HEADERS += \
 	messages/MMonHealth.h \
 	messages/MMonJoin.h \
 	messages/MMonMap.h \
+	messages/MMonMetadata.h \
 	messages/MMonPaxos.h \
 	messages/MMonProbe.h \
 	messages/MMonScrub.h \

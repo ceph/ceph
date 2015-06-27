@@ -109,6 +109,10 @@
        ObjectStore::Transaction *t,
        OpRequestRef op = OpRequestRef()
        ) = 0;
+     virtual void queue_transactions(
+       list<ObjectStore::Transaction*>& tls,
+       OpRequestRef op = OpRequestRef()
+       ) = 0;
      virtual epoch_t get_epoch() const = 0;
 
      virtual const set<pg_shard_t> &get_actingbackfill_shards() const = 0;
@@ -606,6 +610,7 @@
    void be_compare_scrubmaps(
      const map<pg_shard_t,ScrubMap*> &maps,
      bool okseed,   ///< true if scrub digests have same seed our oi digests
+     bool repair,
      map<hobject_t, set<pg_shard_t> > &missing,
      map<hobject_t, set<pg_shard_t> > &inconsistent,
      map<hobject_t, list<pg_shard_t> > &authoritative,

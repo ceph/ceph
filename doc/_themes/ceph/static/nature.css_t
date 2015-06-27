@@ -146,7 +146,7 @@ a {
     color: #F05C56;
     text-decoration: none;
 }
- 
+
 a:hover {
     color: #F05C56;
     text-decoration: underline;
@@ -196,7 +196,7 @@ div.admonition p.admonition-title + p {
     display: inline;
 }
 
-div.highlight{
+div.highlight {
     background-color: white;
 }
 
@@ -278,6 +278,10 @@ div.admonition.important {
     color: #fff;
 }
 
+div.admonition.important a {
+    color: #E6E8E8;
+}
+
 div.tip tt.literal {
     background-color: #55aeba;
     color: #fff;
@@ -297,4 +301,10 @@ dl.glossary dt {
 	font-size: 1.0em;
 	padding-top:20px;	
 
+}
+
+p.breathe-sectiondef-title {
+    font-size: 1.3em;
+    font-weight: bold;
+    border-bottom: thin solid #5E6A71;
 }

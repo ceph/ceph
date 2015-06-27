@@ -129,6 +129,11 @@ enum {
   l_osdc_osd_session_open,
   l_osdc_osd_session_close,
   l_osdc_osd_laggy,
+
+  l_osdc_osdop_omap_wr,
+  l_osdc_osdop_omap_rd,
+  l_osdc_osdop_omap_del,
+
   l_osdc_last,
 };
 
@@ -182,77 +187,84 @@ void Objecter::init()
   if (!logger) {
     PerfCountersBuilder pcb(cct, "objecter", l_osdc_first, l_osdc_last);
 
-    pcb.add_u64(l_osdc_op_active, "op_active");
-    pcb.add_u64(l_osdc_op_laggy, "op_laggy");
-    pcb.add_u64_counter(l_osdc_op_send, "op_send");
-    pcb.add_u64_counter(l_osdc_op_send_bytes, "op_send_bytes");
-    pcb.add_u64_counter(l_osdc_op_resend, "op_resend");
-    pcb.add_u64_counter(l_osdc_op_ack, "op_ack");
-    pcb.add_u64_counter(l_osdc_op_commit, "op_commit");
+    pcb.add_u64(l_osdc_op_active, "op_active",
+        "Operations active", "actv");
+    pcb.add_u64(l_osdc_op_laggy, "op_laggy", "Laggy operations");
+    pcb.add_u64_counter(l_osdc_op_send, "op_send", "Sent operations");
+    pcb.add_u64_counter(l_osdc_op_send_bytes, "op_send_bytes", "Sent data");
+    pcb.add_u64_counter(l_osdc_op_resend, "op_resend", "Resent operations");
+    pcb.add_u64_counter(l_osdc_op_ack, "op_ack", "Commit callbacks");
+    pcb.add_u64_counter(l_osdc_op_commit, "op_commit", "Operation commits");
 
-    pcb.add_u64_counter(l_osdc_op, "op");
-    pcb.add_u64_counter(l_osdc_op_r, "op_r");
-    pcb.add_u64_counter(l_osdc_op_w, "op_w");
-    pcb.add_u64_counter(l_osdc_op_rmw, "op_rmw");
-    pcb.add_u64_counter(l_osdc_op_pg, "op_pg");
+    pcb.add_u64_counter(l_osdc_op, "op", "Operations");
+    pcb.add_u64_counter(l_osdc_op_r, "op_r",
+        "Read operations", "read");
+    pcb.add_u64_counter(l_osdc_op_w, "op_w",
+        "Write operations", "writ");
+    pcb.add_u64_counter(l_osdc_op_rmw, "op_rmw", "Read-modify-write operations");
+    pcb.add_u64_counter(l_osdc_op_pg, "op_pg", "PG operation");
 
-    pcb.add_u64_counter(l_osdc_osdop_stat, "osdop_stat");
-    pcb.add_u64_counter(l_osdc_osdop_create, "osdop_create");
-    pcb.add_u64_counter(l_osdc_osdop_read, "osdop_read");
-    pcb.add_u64_counter(l_osdc_osdop_write, "osdop_write");
-    pcb.add_u64_counter(l_osdc_osdop_writefull, "osdop_writefull");
-    pcb.add_u64_counter(l_osdc_osdop_append, "osdop_append");
-    pcb.add_u64_counter(l_osdc_osdop_zero, "osdop_zero");
-    pcb.add_u64_counter(l_osdc_osdop_truncate, "osdop_truncate");
-    pcb.add_u64_counter(l_osdc_osdop_delete, "osdop_delete");
-    pcb.add_u64_counter(l_osdc_osdop_mapext, "osdop_mapext");
-    pcb.add_u64_counter(l_osdc_osdop_sparse_read, "osdop_sparse_read");
-    pcb.add_u64_counter(l_osdc_osdop_clonerange, "osdop_clonerange");
-    pcb.add_u64_counter(l_osdc_osdop_getxattr, "osdop_getxattr");
-    pcb.add_u64_counter(l_osdc_osdop_setxattr, "osdop_setxattr");
-    pcb.add_u64_counter(l_osdc_osdop_cmpxattr, "osdop_cmpxattr");
-    pcb.add_u64_counter(l_osdc_osdop_rmxattr, "osdop_rmxattr");
-    pcb.add_u64_counter(l_osdc_osdop_resetxattrs, "osdop_resetxattrs");
-    pcb.add_u64_counter(l_osdc_osdop_tmap_up, "osdop_tmap_up");
-    pcb.add_u64_counter(l_osdc_osdop_tmap_put, "osdop_tmap_put");
-    pcb.add_u64_counter(l_osdc_osdop_tmap_get, "osdop_tmap_get");
-    pcb.add_u64_counter(l_osdc_osdop_call, "osdop_call");
-    pcb.add_u64_counter(l_osdc_osdop_watch, "osdop_watch");
-    pcb.add_u64_counter(l_osdc_osdop_notify, "osdop_notify");
-    pcb.add_u64_counter(l_osdc_osdop_src_cmpxattr, "osdop_src_cmpxattr");
+    pcb.add_u64_counter(l_osdc_osdop_stat, "osdop_stat", "Stat operations");
+    pcb.add_u64_counter(l_osdc_osdop_create, "osdop_create", "Create object operations");
+    pcb.add_u64_counter(l_osdc_osdop_read, "osdop_read", "Read operations");
+    pcb.add_u64_counter(l_osdc_osdop_write, "osdop_write", "Write operations");
+    pcb.add_u64_counter(l_osdc_osdop_writefull, "osdop_writefull", "Write full object operations");
+    pcb.add_u64_counter(l_osdc_osdop_append, "osdop_append", "Append operation");
+    pcb.add_u64_counter(l_osdc_osdop_zero, "osdop_zero", "Set object to zero operations");
+    pcb.add_u64_counter(l_osdc_osdop_truncate, "osdop_truncate", "Truncate object operations");
+    pcb.add_u64_counter(l_osdc_osdop_delete, "osdop_delete", "Delete object operations");
+    pcb.add_u64_counter(l_osdc_osdop_mapext, "osdop_mapext", "Map extent operations");
+    pcb.add_u64_counter(l_osdc_osdop_sparse_read, "osdop_sparse_read", "Sparse read operations");
+    pcb.add_u64_counter(l_osdc_osdop_clonerange, "osdop_clonerange", "Clone range operations");
+    pcb.add_u64_counter(l_osdc_osdop_getxattr, "osdop_getxattr", "Get xattr operations");
+    pcb.add_u64_counter(l_osdc_osdop_setxattr, "osdop_setxattr", "Set xattr operations");
+    pcb.add_u64_counter(l_osdc_osdop_cmpxattr, "osdop_cmpxattr", "Xattr comparison operations");
+    pcb.add_u64_counter(l_osdc_osdop_rmxattr, "osdop_rmxattr", "Remove xattr operations");
+    pcb.add_u64_counter(l_osdc_osdop_resetxattrs, "osdop_resetxattrs", "Reset xattr operations");
+    pcb.add_u64_counter(l_osdc_osdop_tmap_up, "osdop_tmap_up", "TMAP update operations");
+    pcb.add_u64_counter(l_osdc_osdop_tmap_put, "osdop_tmap_put", "TMAP put operations");
+    pcb.add_u64_counter(l_osdc_osdop_tmap_get, "osdop_tmap_get", "TMAP get operations");
+    pcb.add_u64_counter(l_osdc_osdop_call, "osdop_call", "Call (execute) operations");
+    pcb.add_u64_counter(l_osdc_osdop_watch, "osdop_watch", "Watch by object operations");
+    pcb.add_u64_counter(l_osdc_osdop_notify, "osdop_notify", "Notify about object operations");
+    pcb.add_u64_counter(l_osdc_osdop_src_cmpxattr, "osdop_src_cmpxattr", "Extended attribute comparison in multi operations");
     pcb.add_u64_counter(l_osdc_osdop_pgls, "osdop_pgls");
     pcb.add_u64_counter(l_osdc_osdop_pgls_filter, "osdop_pgls_filter");
-    pcb.add_u64_counter(l_osdc_osdop_other, "osdop_other");
+    pcb.add_u64_counter(l_osdc_osdop_other, "osdop_other", "Other operations");
 
-    pcb.add_u64(l_osdc_linger_active, "linger_active");
-    pcb.add_u64_counter(l_osdc_linger_send, "linger_send");
-    pcb.add_u64_counter(l_osdc_linger_resend, "linger_resend");
-    pcb.add_u64_counter(l_osdc_linger_ping, "linger_ping");
+    pcb.add_u64(l_osdc_linger_active, "linger_active", "Active lingering operations");
+    pcb.add_u64_counter(l_osdc_linger_send, "linger_send", "Sent lingering operations");
+    pcb.add_u64_counter(l_osdc_linger_resend, "linger_resend", "Resent lingering operations");
+    pcb.add_u64_counter(l_osdc_linger_ping, "linger_ping", "Sent pings to lingering operations");
 
-    pcb.add_u64(l_osdc_poolop_active, "poolop_active");
-    pcb.add_u64_counter(l_osdc_poolop_send, "poolop_send");
-    pcb.add_u64_counter(l_osdc_poolop_resend, "poolop_resend");
+    pcb.add_u64(l_osdc_poolop_active, "poolop_active", "Active pool operations");
+    pcb.add_u64_counter(l_osdc_poolop_send, "poolop_send", "Sent pool operations");
+    pcb.add_u64_counter(l_osdc_poolop_resend, "poolop_resend", "Resent pool operations");
 
-    pcb.add_u64(l_osdc_poolstat_active, "poolstat_active");
-    pcb.add_u64_counter(l_osdc_poolstat_send, "poolstat_send");
-    pcb.add_u64_counter(l_osdc_poolstat_resend, "poolstat_resend");
+    pcb.add_u64(l_osdc_poolstat_active, "poolstat_active", "Active get pool stat operations");
+    pcb.add_u64_counter(l_osdc_poolstat_send, "poolstat_send", "Pool stat operations sent");
+    pcb.add_u64_counter(l_osdc_poolstat_resend, "poolstat_resend", "Resent pool stats");
 
-    pcb.add_u64(l_osdc_statfs_active, "statfs_active");
-    pcb.add_u64_counter(l_osdc_statfs_send, "statfs_send");
-    pcb.add_u64_counter(l_osdc_statfs_resend, "statfs_resend");
+    pcb.add_u64(l_osdc_statfs_active, "statfs_active", "Statfs operations");
+    pcb.add_u64_counter(l_osdc_statfs_send, "statfs_send", "Sent FS stats");
+    pcb.add_u64_counter(l_osdc_statfs_resend, "statfs_resend", "Resent FS stats");
 
-    pcb.add_u64(l_osdc_command_active, "command_active");
-    pcb.add_u64_counter(l_osdc_command_send, "command_send");
-    pcb.add_u64_counter(l_osdc_command_resend, "command_resend");
+    pcb.add_u64(l_osdc_command_active, "command_active", "Active commands");
+    pcb.add_u64_counter(l_osdc_command_send, "command_send", "Sent commands");
+    pcb.add_u64_counter(l_osdc_command_resend, "command_resend", "Resent commands");
 
-    pcb.add_u64(l_osdc_map_epoch, "map_epoch");
-    pcb.add_u64_counter(l_osdc_map_full, "map_full");
-    pcb.add_u64_counter(l_osdc_map_inc, "map_inc");
+    pcb.add_u64(l_osdc_map_epoch, "map_epoch", "OSD map epoch");
+    pcb.add_u64_counter(l_osdc_map_full, "map_full", "Full OSD maps received");
+    pcb.add_u64_counter(l_osdc_map_inc, "map_inc", "Incremental OSD maps received");
 
-    pcb.add_u64(l_osdc_osd_sessions, "osd_sessions");  // open sessions
-    pcb.add_u64_counter(l_osdc_osd_session_open, "osd_session_open");
-    pcb.add_u64_counter(l_osdc_osd_session_close, "osd_session_close");
-    pcb.add_u64(l_osdc_osd_laggy, "osd_laggy");
+    pcb.add_u64(l_osdc_osd_sessions, "osd_sessions", "Open sessions");  // open sessions
+    pcb.add_u64_counter(l_osdc_osd_session_open, "osd_session_open", "Sessions opened");
+    pcb.add_u64_counter(l_osdc_osd_session_close, "osd_session_close", "Sessions closed");
+    pcb.add_u64(l_osdc_osd_laggy, "osd_laggy", "Laggy OSD sessions");
+
+    pcb.add_u64_counter(l_osdc_osdop_omap_wr, "omap_wr", "OSD OMAP write operations");
+    pcb.add_u64_counter(l_osdc_osdop_omap_rd, "omap_rd", "OSD OMAP read operations");
+    pcb.add_u64_counter(l_osdc_osdop_omap_del, "omap_del", "OSD OMAP delete operations");
 
     logger = pcb.create_perf_counters();
     cct->get_perfcounters_collection()->add(logger);
@@ -275,6 +287,8 @@ void Objecter::init()
   timer_lock.Lock();
   timer.init();
   timer_lock.Unlock();
+
+  cct->_conf->add_observer(this);
 
   initialized.set(1);
 }
@@ -727,7 +741,7 @@ void Objecter::_linger_submit(LingerOp *info)
 
   // Populate Op::target
   OSDSession *s = NULL;
-  _calc_target(&info->target);
+  _calc_target(&info->target, &info->last_force_resend);
 
   // Create LingerOp<->OSDSession relation
   int r = _get_session(info->target.osd, &s, lc);
@@ -777,8 +791,8 @@ void Objecter::handle_watch_notify(MWatchNotify *m)
       }
     }
   } else if (!info->is_watch) {
-    // notify completion; we can do this inline since we know the only user
-    // (librados) is safe to call in fast-dispatch context
+    // we have CEPH_WATCH_EVENT_NOTIFY_COMPLETE; we can do this inline since
+    // we know the only user (librados) is safe to call in fast-dispatch context
     assert(info->on_notify_finish);
     info->notify_result_bl->claim(m->get_data());
     info->on_notify_finish->complete(m->return_code);
@@ -919,7 +933,7 @@ void Objecter::_scan_requests(OSDSession *s,
     Op *op = p->second;
     ++p;   // check_op_pool_dne() may touch ops; prevent iterator invalidation
     ldout(cct, 10) << " checking op " << op->tid << dendl;
-    int r = _calc_target(&op->target);
+    int r = _calc_target(&op->target, &op->last_force_resend);
     switch (r) {
     case RECALC_OP_TARGET_NO_ACTION:
       if (!force_resend &&
@@ -1135,7 +1149,7 @@ void Objecter::handle_osd_map(MOSDMap *m)
        p != need_resend_linger.end(); ++p) {
     LingerOp *op = *p;
     if (!op->session) {
-      _calc_target(&op->target);
+      _calc_target(&op->target, &op->last_force_resend);
       OSDSession *s = NULL;
       int const r = _get_session(op->target.osd, &s, lc);
       assert(r == 0);
@@ -1292,6 +1306,9 @@ void Objecter::_check_op_pool_dne(Op *op, bool session_locked)
       }
       if (op->oncommit) {
 	op->oncommit->complete(-ENOENT);
+      }
+      if (op->oncommit_sync) {
+	op->oncommit_sync->complete(-ENOENT);
       }
 
       OSDSession *s = op->session;
@@ -2027,7 +2044,7 @@ void Objecter::_send_op_account(Op *op)
   } else {
     ldout(cct, 20) << " note: not requesting ack" << dendl;
   }
-  if (op->oncommit) {
+  if (op->oncommit || op->oncommit_sync) {
     num_uncommitted.inc();
   } else {
     ldout(cct, 20) << " note: not requesting commit" << dendl;
@@ -2069,6 +2086,22 @@ void Objecter::_send_op_account(Op *op)
     case CEPH_OSD_OP_TMAPUP: code = l_osdc_osdop_tmap_up; break;
     case CEPH_OSD_OP_TMAPPUT: code = l_osdc_osdop_tmap_put; break;
     case CEPH_OSD_OP_TMAPGET: code = l_osdc_osdop_tmap_get; break;
+
+    // OMAP read operations
+    case CEPH_OSD_OP_OMAPGETVALS:
+    case CEPH_OSD_OP_OMAPGETKEYS:
+    case CEPH_OSD_OP_OMAPGETHEADER:
+    case CEPH_OSD_OP_OMAPGETVALSBYKEYS:
+    case CEPH_OSD_OP_OMAP_CMP: code = l_osdc_osdop_omap_rd; break;
+
+    // OMAP write operations
+    case CEPH_OSD_OP_OMAPSETVALS:
+    case CEPH_OSD_OP_OMAPSETHEADER: code = l_osdc_osdop_omap_wr; break;
+
+    // OMAP del operations
+    case CEPH_OSD_OP_OMAPCLEAR:
+    case CEPH_OSD_OP_OMAPRMKEYS: code = l_osdc_osdop_omap_del; break;
+
     case CEPH_OSD_OP_CALL: code = l_osdc_osdop_call; break;
     case CEPH_OSD_OP_WATCH: code = l_osdc_osdop_watch; break;
     case CEPH_OSD_OP_NOTIFY: code = l_osdc_osdop_notify; break;
@@ -2089,7 +2122,7 @@ ceph_tid_t Objecter::_op_submit(Op *op, RWLock::Context& lc)
   assert(op->session == NULL);
   OSDSession *s = NULL;
 
-  bool const check_for_latest_map = _calc_target(&op->target) == RECALC_OP_TARGET_POOL_DNE;
+  bool const check_for_latest_map = _calc_target(&op->target, &op->last_force_resend) == RECALC_OP_TARGET_POOL_DNE;
 
   // Try to get a session, including a retry if we need to take write lock
   int r = _get_session(op->target.osd, &s, lc);
@@ -2197,6 +2230,10 @@ int Objecter::op_cancel(OSDSession *s, ceph_tid_t tid, int r)
     op->oncommit->complete(r);
     op->oncommit = NULL;
   }
+  if (op->oncommit_sync) {
+    op->oncommit_sync->complete(r);
+    op->oncommit_sync = NULL;
+  }
   _op_cancel_map_check(op);
   _finish_op(op);
   s->lock.unlock();
@@ -2260,14 +2297,8 @@ start:
   return ret;
 }
 
-/**
- * Any write op which is in progress at the start of this call shall no longer
- * be in progress when this call ends.  Operations started after the start
- * of this call may still be in progress when this call ends.
- *
- * @return the latest possible epoch in which a cancelled op could have existed
- */
-epoch_t Objecter::op_cancel_writes(int r)
+
+epoch_t Objecter::op_cancel_writes(int r, int64_t pool)
 {
   rwlock.get_write();
 
@@ -2277,7 +2308,8 @@ epoch_t Objecter::op_cancel_writes(int r)
     OSDSession *s = siter->second;
     s->lock.get_read();
     for (map<ceph_tid_t, Op*>::iterator op_i = s->ops.begin(); op_i != s->ops.end(); ++op_i) {
-      if (op_i->second->target.flags & CEPH_OSD_FLAG_WRITE) {
+      if (op_i->second->target.flags & CEPH_OSD_FLAG_WRITE
+        && (pool == -1 || op_i->second->target.target_oloc.pool == pool)) {
         to_cancel.push_back(op_i->first);
       }
     }
@@ -2294,7 +2326,11 @@ epoch_t Objecter::op_cancel_writes(int r)
 
   rwlock.unlock();
 
-  return epoch;
+  if (to_cancel.size()) {
+    return epoch;
+  } else {
+    return -1;
+  }
 }
 
 bool Objecter::is_pg_changed(
@@ -2335,6 +2371,23 @@ bool Objecter::osdmap_full_flag() const
   return _osdmap_full_flag();
 }
 
+bool Objecter::osdmap_pool_full(const int64_t pool_id) const
+{
+  RWLock::RLocker rl(rwlock);
+
+  if (_osdmap_full_flag()) {
+    return true;
+  }
+
+  const pg_pool_t *pool = osdmap->get_pg_pool(pool_id);
+  if (pool == NULL) {
+    ldout(cct, 4) << __func__ << ": DNE pool " << pool_id << dendl;
+    return false;
+  }
+
+  return pool->has_flag(pg_pool_t::FLAG_FULL);
+}
+
 /**
  * Wrapper around osdmap->test_flag for special handling of the FULL flag.
  */
@@ -2363,7 +2416,7 @@ int64_t Objecter::get_object_pg_hash_position(int64_t pool, const string& key,
   return p->raw_hash_to_pg(p->hash_key(key, ns));
 }
 
-int Objecter::_calc_target(op_target_t *t, bool any_change)
+int Objecter::_calc_target(op_target_t *t, epoch_t *last_force_resend,  bool any_change)
 {
   assert(rwlock.is_locked());
 
@@ -2379,7 +2432,11 @@ int Objecter::_calc_target(op_target_t *t, bool any_change)
   bool force_resend = false;
   bool need_check_tiering = false;
   if (osdmap->get_epoch() == pi->last_force_op_resend) {
-    force_resend = true;
+    if (last_force_resend && *last_force_resend < pi->last_force_op_resend) {
+      *last_force_resend = pi->last_force_op_resend;
+      force_resend = true;
+    } else if (last_force_resend == 0)
+      force_resend = true;
   }
   if (t->target_oid.name.empty() || force_resend) {
     t->target_oid = t->base_oid;
@@ -2417,6 +2474,7 @@ int Objecter::_calc_target(op_target_t *t, bool any_change)
     }
   }
 
+  int size = pi->size;
   int min_size = pi->min_size;
   unsigned pg_num = pi->get_pg_num();
   int up_primary, acting_primary;
@@ -2432,6 +2490,8 @@ int Objecter::_calc_target(op_target_t *t, bool any_change)
 	  up_primary,
 	  t->up,
 	  up,
+	  t->size,
+	  size,
 	  t->min_size,
 	  min_size,
 	  t->pg_num,
@@ -2458,6 +2518,7 @@ int Objecter::_calc_target(op_target_t *t, bool any_change)
     t->acting_primary = acting_primary;
     t->up_primary = up_primary;
     t->up = up;
+    t->size = size;
     t->min_size = min_size;
     t->pg_num = pg_num;
     ldout(cct, 10) << __func__ << " "
@@ -2623,7 +2684,7 @@ int Objecter::_recalc_linger_op_target(LingerOp *linger_op, RWLock::Context& lc)
 {
   assert(rwlock.is_wlocked());
 
-  int r = _calc_target(&linger_op->target, true);
+  int r = _calc_target(&linger_op->target, &linger_op->last_force_resend, true);
   if (r == RECALC_OP_TARGET_NEED_RESEND) {
     ldout(cct, 10) << "recalc_linger_op_target tid " << linger_op->linger_id
 		   << " pgid " << linger_op->target.pgid
@@ -2656,6 +2717,7 @@ void Objecter::_cancel_linger_op(Op *op)
   assert(!op->should_resend);
   delete op->onack;
   delete op->oncommit;
+  delete op->oncommit_sync;
 
   _finish_op(op);
 }
@@ -2906,7 +2968,7 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
     ldout(cct, 5) << " got redirect reply; redirecting" << dendl;
     if (op->onack)
       num_unacked.dec();
-    if (op->oncommit)
+    if (op->oncommit || op->oncommit_sync)
       num_uncommitted.dec();
     _session_op_remove(s, op);
     s->lock.unlock();
@@ -2997,23 +3059,28 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
     num_unacked.dec();
     logger->inc(l_osdc_op_ack);
   }
-  if (op->oncommit && (m->is_ondisk() || rc)) {
-    ldout(cct, 15) << "handle_osd_op_reply safe" << dendl;
-    oncommit = op->oncommit;
-    op->oncommit = 0;
-    num_uncommitted.dec();
-    logger->inc(l_osdc_op_commit);
-  }
-  if (op->oncommit_sync) {
-    op->oncommit_sync->complete(rc);
-    op->oncommit_sync = NULL;
+  if (m->is_ondisk() || rc) {
+    if (op->oncommit) {
+      ldout(cct, 15) << "handle_osd_op_reply safe" << dendl;
+      oncommit = op->oncommit;
+      op->oncommit = NULL;
+      num_uncommitted.dec();
+      logger->inc(l_osdc_op_commit);
+    }
+    if (op->oncommit_sync) {
+      ldout(cct, 15) << "handle_osd_op_reply safe (sync)" << dendl;
+      op->oncommit_sync->complete(rc);
+      op->oncommit_sync = NULL;
+      num_uncommitted.dec();
+      logger->inc(l_osdc_op_commit);
+    }
   }
 
   /* get it before we call _finish_op() */
   Mutex *completion_lock = (op->target.base_oid.name.size() ? s->get_lock(op->target.base_oid) : NULL);
 
   // done with this tid?
-  if (!op->onack && !op->oncommit) {
+  if (!op->onack && !op->oncommit && !op->oncommit_sync) {
     ldout(cct, 15) << "handle_osd_op_reply completed tid " << tid << dendl;
     _finish_op(op);
   }

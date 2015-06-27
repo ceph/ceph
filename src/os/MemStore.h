@@ -245,7 +245,6 @@ public:
       sharded(false) {}
   ~MemStore() { }
 
-  bool need_journal() { return false; };
   int peek_journal_fsid(uuid_d *fsid);
 
   bool test_mount_in_use() {
@@ -265,6 +264,15 @@ public:
   int mkfs();
   int mkjournal() {
     return 0;
+  }
+  bool wants_journal() {
+    return false;
+  }
+  bool allows_journal() {
+    return false;
+  }
+  bool needs_journal() {
+    return false;
   }
 
   bool sharded;

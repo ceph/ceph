@@ -64,7 +64,6 @@ extern "C" {
  * Flags that can be set on a per-op basis via
  * rados_read_op_set_flags() and rados_write_op_set_flags().
  */
-/** @cond TODO_enums_not_yet_in_asphyxiate */
 enum {
   // fail a create operation if the object already exists
   LIBRADOS_OP_FLAG_EXCL               =  0x1,
@@ -89,14 +88,13 @@ enum {
 #endif
 
 /**
- * @defgroup librados_h_xattr_comp xattr comparison operations
+ * @name xattr comparison operations
  * Operators for comparing xattrs on objects, and aborting the
  * rados_read_op or rados_write_op transaction if the comparison
  * fails.
  *
  * @{
  */
-/** @cond TODO_enums_not_yet_in_asphyxiate */
 enum {
 	LIBRADOS_CMPXATTR_OP_EQ  = 1,
 	LIBRADOS_CMPXATTR_OP_NE  = 2,
@@ -105,17 +103,15 @@ enum {
 	LIBRADOS_CMPXATTR_OP_LT  = 5,
 	LIBRADOS_CMPXATTR_OP_LTE = 6
 };
-/** @endcond */
 /** @} */
 
 /**
- * @defgroup librados_h_operation_flags Operation Flags
+ * @name Operation Flags
  * Flags for rados_read_op_opeprate(), rados_write_op_operate(),
  * rados_aio_read_op_operate(), and rados_aio_write_op_operate().
  * See librados.hpp for details.
  * @{
  */
-/** @cond TODO_enums_not_yet_in_asphyxiate */
 enum {
   LIBRADOS_OPERATION_NOFLAG             = 0,
   LIBRADOS_OPERATION_BALANCE_READS      = 1,
@@ -125,7 +121,6 @@ enum {
   LIBRADOS_OPERATION_SKIPRWLOCKS        = 16,
   LIBRADOS_OPERATION_IGNORE_OVERLAY     = 32,
 };
-/** @endcond */
 /** @} */
 
 /*
@@ -311,7 +306,7 @@ typedef void *rados_read_op_t;
 CEPH_RADOS_API void rados_version(int *major, int *minor, int *extra);
 
 /**
- * @defgroup librados_h_init Setup and Teardown
+ * @name Setup and Teardown
  * These are the first and last functions to that should be called
  * when using librados.
  *
@@ -412,7 +407,7 @@ CEPH_RADOS_API void rados_shutdown(rados_t cluster);
 /** @} init */
 
 /**
- * @defgroup librados_h_config Configuration
+ * @name Configuration
  * These functions read and update Ceph configuration for a cluster
  * handle. Any configuration changes must be done before connecting to
  * the cluster.
@@ -568,7 +563,7 @@ CEPH_RADOS_API int rados_cluster_fsid(rados_t cluster, char *buf, size_t len);
 CEPH_RADOS_API int rados_wait_for_latest_osdmap(rados_t cluster);
 
 /**
- * @defgroup librados_h_pools Pools
+ * @name Pools
  *
  * RADOS pools are separate namespaces for objects. Pools may have
  * different crush rules associated with them, so they could have
@@ -624,7 +619,6 @@ CEPH_RADOS_API uint64_t rados_get_instance_id(rados_t cluster);
  *
  * @param cluster which cluster the pool is in
  * @param pool_name name of the pool
- * @param pool_id unique id of the pool
  * @param ioctx where to store the io context
  * @returns 0 on success, negative error code on failure
  */
@@ -836,7 +830,7 @@ CEPH_RADOS_API int rados_ioctx_get_pool_name(rados_ioctx_t io, char *buf,
 /** @} pools */
 
 /**
- * @defgroup librados_h_obj_loc Object Locators
+ * @name Object Locators
  *
  * @{
  */
@@ -875,7 +869,7 @@ CEPH_RADOS_API void rados_ioctx_set_namespace(rados_ioctx_t io,
 /** @} obj_loc */
 
 /**
- * @defgroup librados_h_list_nobj New Listing Objects
+ * @name New Listing Objects
  * @{
  */
 /**
@@ -936,7 +930,7 @@ CEPH_RADOS_API void rados_nobjects_list_close(rados_list_ctx_t ctx);
 /** @} New Listing Objects */
 
 /**
- * @defgroup librados_h_list_obj Deprecated Listing Objects
+ * @name Deprecated Listing Objects
  *
  * Older listing objects interface.  Please use the new interface.
  * @{
@@ -973,7 +967,7 @@ CEPH_RADOS_API void rados_objects_list_close(rados_list_ctx_t ctx);
 /** @} Listing Objects */
 
 /**
- * @defgroup librados_h_snaps Snapshots
+ * @name Snapshots
  *
  * RADOS snapshots are based upon sequence numbers that form a
  * snapshot context. They are pool-specific. The snapshot context
@@ -1168,7 +1162,7 @@ CEPH_RADOS_API int rados_ioctx_snap_get_stamp(rados_ioctx_t io, rados_snap_t id,
 /** @} Snapshots */
 
 /**
- * @defgroup librados_h_synch_io Synchronous I/O
+ * @name Synchronous I/O
  * Writes are replicated to a number of OSDs based on the
  * configuration of the pool they are in. These write functions block
  * until data is in memory on all replicas of the object they're
@@ -1300,7 +1294,7 @@ CEPH_RADOS_API int rados_trunc(rados_ioctx_t io, const char *oid,
                                uint64_t size);
 
 /**
- * @defgroup librados_h_xattrs Xattrs
+ * @name Xattrs
  * Extended attributes are stored as extended attributes on the files
  * representing an object on the OSDs. Thus, they have the same
  * limitations as the underlying filesystem. On ext4, this means that
@@ -1556,7 +1550,7 @@ CEPH_RADOS_API int rados_exec(rados_ioctx_t io, const char *oid,
 /** @} Synchronous I/O */
 
 /**
- * @defgroup librados_h_asynch_io Asynchronous I/O
+ * @name Asynchronous I/O
  * Read and write to objects without blocking.
  *
  * @{
@@ -1872,7 +1866,7 @@ CEPH_RADOS_API int rados_aio_cancel(rados_ioctx_t io,
 /** @} Asynchronous I/O */
 
 /**
- * @defgroup librados_h_watch_notify Watch/Notify
+ * @name Watch/Notify
  *
  * Watch/notify is a protocol to help communicate among clients. It
  * can be used to sychronize client state. All that's needed is a
@@ -2139,7 +2133,7 @@ CEPH_RADOS_API int rados_watch_flush(rados_t cluster);
 /** @} Watch/Notify */
 
 /**
- * @defgroup librados_h_hints Hints
+ * @name Hints
  *
  * @{
  */
@@ -2164,7 +2158,7 @@ CEPH_RADOS_API int rados_set_alloc_hint(rados_ioctx_t io, const char *o,
 /** @} Hints */
 
 /**
- * @defgroup librados_h_obj_op Object Operations
+ * @name Object Operations
  *
  * A single rados operation can do multiple operations on one object
  * atomicly. The whole operation will suceed or fail, and no partial
@@ -2811,7 +2805,7 @@ CEPH_RADOS_API int rados_blacklist_add(rados_t cluster,
 				       uint32_t expire_seconds);
 
 /**
- * @defgroup librados_h_commands Mon/OSD/PG Commands
+ * @name Mon/OSD/PG Commands
  *
  * These interfaces send commands relating to the monitor, OSD, or PGs.
  *

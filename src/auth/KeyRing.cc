@@ -39,15 +39,17 @@ using namespace std;
 int KeyRing::from_ceph_context(CephContext *cct)
 {
   const md_config_t *conf = cct->_conf;
-
-  int ret = -ENOENT;
   string filename;
 
-  if (ceph_resolve_file_search(conf->keyring, filename)) {
+  int ret = ceph_resolve_file_search(conf->keyring, filename);
+  if (!ret) {
     ret = load(cct, filename);
     if (ret < 0)
       lderr(cct) << "failed to load " << filename
 		 << ": " << cpp_strerror(ret) << dendl;
+  } else {
+    lderr(cct) << "unable to find a keyring on " << conf->keyring
+	       << ": " << cpp_strerror(ret) << dendl;
   }
 
   if (!conf->key.empty()) {

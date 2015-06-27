@@ -34,6 +34,8 @@ using namespace std;
 #include "Session.h"
 
 class Monitor;
+class PGMap;
+
 #include "messages/MOSDBoot.h"
 #include "messages/MMonCommand.h"
 #include "messages/MOSDMap.h"
@@ -200,6 +202,11 @@ private:
 
   void share_map_with_random_osd();
 
+  void maybe_prime_pg_temp();
+  void prime_pg_temp(OSDMap& next,
+		     ceph::unordered_map<pg_t, pg_stat_t>::iterator pp);
+  int prime_pg_temp(OSDMap& next, PGMap *pg_map, int osd);
+
   void update_logger();
 
   void handle_query(PaxosServiceMessage *m);
@@ -256,7 +263,7 @@ private:
       int64_t base_pool_id, const pg_pool_t *base_pool,
       int *err, ostream *ss) const;
   bool _check_remove_tier(
-      int64_t base_pool_id, const pg_pool_t *base_pool,
+      int64_t base_pool_id, const pg_pool_t *base_pool, const pg_pool_t *tier_pool,
       int *err, ostream *ss) const;
 
   int _prepare_remove_pool(int64_t pool, ostream *ss);
@@ -270,35 +277,36 @@ private:
   int crush_rename_bucket(const string& srcname,
 			  const string& dstname,
 			  ostream *ss);
+  int normalize_profile(ErasureCodeProfile &profile, ostream *ss);
   int crush_ruleset_create_erasure(const string &name,
 				   const string &profile,
 				   int *ruleset,
-				   stringstream &ss);
+				   ostream *ss);
   int get_crush_ruleset(const string &ruleset_name,
 			int *crush_ruleset,
-			stringstream &ss);
+			ostream *ss);
   int get_erasure_code(const string &erasure_code_profile,
 		       ErasureCodeInterfaceRef *erasure_code,
-		       stringstream &ss) const;
+		       ostream *ss) const;
   int prepare_pool_crush_ruleset(const unsigned pool_type,
 				 const string &erasure_code_profile,
 				 const string &ruleset_name,
 				 int *crush_ruleset,
-				 stringstream &ss);
+				 ostream *ss);
   bool erasure_code_profile_in_use(const map<int64_t, pg_pool_t> &pools,
 				   const string &profile,
-				   ostream &ss);
+				   ostream *ss);
   int parse_erasure_code_profile(const vector<string> &erasure_code_profile,
 				 map<string,string> *erasure_code_profile_map,
-				 stringstream &ss);
+				 ostream *ss);
   int prepare_pool_size(const unsigned pool_type,
 			const string &erasure_code_profile,
 			unsigned *size, unsigned *min_size,
-			stringstream &ss);
+			ostream *ss);
   int prepare_pool_stripe_width(const unsigned pool_type,
 				const string &erasure_code_profile,
 				unsigned *stripe_width,
-				stringstream &ss);
+				ostream *ss);
   int prepare_new_pool(string& name, uint64_t auid,
 		       int crush_ruleset,
 		       const string &crush_ruleset_name,
@@ -306,7 +314,7 @@ private:
 		       const string &erasure_code_profile,
                        const unsigned pool_type,
                        const uint64_t expected_num_objects,
-		       stringstream &ss);
+		       ostream *ss);
   int prepare_new_pool(MPoolOp *m);
 
   void update_pool_flags(int64_t pool_id, uint64_t flags);
@@ -379,6 +387,8 @@ private:
   bool preprocess_remove_snaps(struct MRemoveSnaps *m);
   bool prepare_remove_snaps(struct MRemoveSnaps *m);
 
+  int load_metadata(int osd, map<string, string>& m, ostream *err);
+
  public:
   OSDMonitor(Monitor *mn, Paxos *p, string service_name)
   : PaxosService(mn, p, service_name),
@@ -411,6 +421,7 @@ private:
 
   void dump_info(Formatter *f);
   int dump_osd_metadata(int osd, Formatter *f, ostream *err);
+  void print_nodes(Formatter *f);
 
   void check_subs();
   void check_sub(Subscription *sub);

@@ -228,8 +228,6 @@ private:
     connected.set(false);
     pthread_spin_lock(&sp);
     discard_input_queue(CState::OP_FLAG_LOCKED);
-    if (!conn)
-      this->put();
     pthread_spin_unlock(&sp);
     return 0;
   }
@@ -352,6 +350,6 @@ public:
   }
 };
 
-typedef boost::intrusive_ptr<XioLoopbackConnection> LoopbackConnectionRef;
+typedef boost::intrusive_ptr<XioLoopbackConnection> XioLoopbackConnectionRef;
 
 #endif /* XIO_CONNECTION_H */

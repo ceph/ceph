@@ -1,3 +1,5 @@
+:orphan:
+
 ===================================================================
  ceph-disk -- Ceph disk preparation and activation utility for OSD
 ===================================================================
@@ -11,6 +13,8 @@ Synopsis
 	[--fs-type *xfs|ext4|btrfs*] [*data-path*] [*journal-path*]
 
 | **ceph-disk** **activate** [*data-path*] [--activate-key *path*]
+        [--mark-init *sysvinit|upstart|systemd|auto|none*]
+        [--no-start-daemon]
 
 | **ceph-disk** **activate-all**
 
@@ -74,8 +78,24 @@ Usage::
 
 	ceph-disk activate [PATH] [--activate-key PATH]
 
-Another option :option:`--mark-init` can also be used with this subcommand.
-``--mark-init`` provides init system to manage the OSD directory.
+Another option :option:`--mark-init` can also be used with this
+subcommand.  ``--mark-init`` provides init system to manage the OSD
+directory. It defaults to ``auto`` which detects the init system
+suitable for ceph (either ``sysvinit``, ``systemd`` or
+``upstart``). The argument can be used to override the init system. It
+may be convenient when an operating system supports multiple init
+systems, such as Debian GNU/Linux jessie with ``systemd`` and
+``sysvinit``. If the argument is ``none``, the OSD is not marked with
+any init system and ``ceph-disk activate`` needs to be called
+explicitely after each reboot.
+
+
+Usage::
+
+	ceph-disk activate [PATH] [--mark-init *sysvinit|upstart|systemd|auto|none*]
+
+If the option :option:`--no-start-daemon` is given, the activation
+steps are performed but the OSD daemon is not started.
 
 activate-journal
 ----------------

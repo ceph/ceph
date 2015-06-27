@@ -30,7 +30,7 @@ if [ ! -e "$CRAM_BIN" ]; then
     # patched cram to support that. See upstream ticket at
     # https://bitbucket.org/brodie/cram/issue/9/allow-read-only-directories-for-t
     # -- tv@inktank.com
-    virtualenv "$VENV" && $VENV/bin/pip install "$SRCDIR/downloads/cram-0.5.0ceph.2011-01-14.tar.gz"
+    virtualenv "$VENV" && $VENV/bin/pip --log "$VENV"/log.txt install "$SRCDIR/downloads/cram-0.5.0ceph.2011-01-14.tar.gz"
 fi
 
 SRCDIR_ABS="$(readlink -f "$SRCDIR")"

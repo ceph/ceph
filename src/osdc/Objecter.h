@@ -89,6 +89,13 @@ struct ObjectOperation {
     void finish(int r) {
       first->complete(r);
       second->complete(r);
+      first = NULL;
+      second = NULL;
+    }
+
+    virtual ~C_TwoContexts() {
+        delete first;
+        delete second;
     }
   };
 
@@ -687,6 +694,7 @@ struct ObjectOperation {
 
   void copy_get(object_copy_cursor_t *cursor,
 		uint64_t max,
+		uint32_t copyget_flags,
 		uint64_t *out_size,
 		utime_t *out_mtime,
 		std::map<std::string,bufferlist> *out_attrs,
@@ -702,6 +710,7 @@ struct ObjectOperation {
 		int *prval) {
     OSDOp& osd_op = add_op(CEPH_OSD_OP_COPY_GET);
     osd_op.op.copy_get.max = max;
+    osd_op.op.copy_get.flags = copyget_flags;
     ::encode(*cursor, osd_op.indata);
     ::encode(max, osd_op.indata);
     unsigned p = ops.size() - 1;
@@ -949,11 +958,13 @@ struct ObjectOperation {
   }
 
   void copy_from(object_t src, snapid_t snapid, object_locator_t src_oloc,
-		 version_t src_version, unsigned flags) {
+		 version_t src_version, unsigned flags,
+		 unsigned src_fadvise_flags) {
     OSDOp& osd_op = add_op(CEPH_OSD_OP_COPY_FROM);
     osd_op.op.copy_from.snapid = snapid;
     osd_op.op.copy_from.src_version = src_version;
     osd_op.op.copy_from.flags = flags;
+    osd_op.op.copy_from.src_fadvise_flags = src_fadvise_flags;
     ::encode(src, osd_op.indata);
     ::encode(src_oloc, osd_op.indata);
   }
@@ -1115,6 +1126,7 @@ public:
     vector<int> acting;  ///< set of acting osds for last pg we mapped to
     int up_primary;      ///< primary for last pg we mapped to based on the up set
     int acting_primary;  ///< primary for last pg we mapped to based on the acting set
+    int size;        ///< the size of the pool when were were last mapped
     int min_size;        ///< the min size of the pool when were were last mapped
 
     bool used_replica;
@@ -1130,6 +1142,7 @@ public:
 	pg_num(0),
 	up_primary(-1),
 	acting_primary(-1),
+	size(-1),
 	min_size(-1),
 	used_replica(false),
 	paused(false),
@@ -1186,6 +1199,8 @@ public:
 
     int *data_offset;
 
+    epoch_t last_force_resend;
+
     Op(const object_t& o, const object_locator_t& ol, vector<OSDOp>& op,
        int f, Context *ac, Context *co, version_t *ov, int *offset = NULL) :
       session(NULL), incarnation(0),
@@ -1207,7 +1222,8 @@ public:
       budgeted(false),
       should_resend(true),
       ctx_budgeted(false),
-      data_offset(offset) {
+      data_offset(offset),
+      last_force_resend(0) {
       ops.swap(op);
       
       /* initialize out_* to match op vector */
@@ -1542,6 +1558,8 @@ public:
     ceph_tid_t ping_tid;
     epoch_t map_dne_bound;
 
+    epoch_t last_force_resend;
+
     void _queued_async() {
       assert(watch_lock.is_locked());
       watch_pending_async.push_back(ceph_clock_now(NULL));
@@ -1569,7 +1587,8 @@ public:
 		 session(NULL),
 		 register_tid(0),
 		 ping_tid(0),
-		 map_dne_bound(0) {}
+		 map_dne_bound(0),
+		 last_force_resend(0) {}
 
     // no copy!
     const LingerOp &operator=(const LingerOp& r);
@@ -1677,6 +1696,14 @@ public:
 
   bool osdmap_full_flag() const;
 
+  /**
+   * Test pg_pool_t::FLAG_FULL on a pool
+   *
+   * @return true if the pool exists and has the flag set, or
+   *         the global full flag is set, else false
+   */
+  bool osdmap_pool_full(const int64_t pool_id) const;
+
  private:
   map<uint64_t, LingerOp*>  linger_ops;
   // we use this just to confirm a cookie is valid before dereferencing the ptr
@@ -1724,7 +1751,7 @@ public:
   bool _osdmap_full_flag() const;
 
   bool target_should_be_paused(op_target_t *op);
-  int _calc_target(op_target_t *t, bool any_change=false);
+  int _calc_target(op_target_t *t, epoch_t *last_force_resend=0, bool any_change=false);
   int _map_session(op_target_t *op, OSDSession **s,
 		   RWLock::Context& lc);
 
@@ -1976,7 +2003,16 @@ private:
   friend class C_CancelOp;
 public:
   int op_cancel(ceph_tid_t tid, int r);
-  epoch_t op_cancel_writes(int r);
+
+  /**
+   * Any write op which is in progress at the start of this call shall no
+   * longer be in progress when this call ends.  Operations started after the
+   * start of this call may still be in progress when this call ends.
+   *
+   * @return the latest possible epoch in which a cancelled op could have
+   *         existed, or -1 if nothing was cancelled.
+   */
+  epoch_t op_cancel_writes(int r, int64_t pool=-1);
 
   // commands
   int osd_command(int osd, vector<string>& cmd,

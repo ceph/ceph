@@ -32,24 +32,24 @@ int rgw_perf_start(CephContext *cct)
 {
   PerfCountersBuilder plb(cct, cct->_conf->name.to_str(), l_rgw_first, l_rgw_last);
 
-  plb.add_u64_counter(l_rgw_req, "req");
-  plb.add_u64_counter(l_rgw_failed_req, "failed_req");
+  plb.add_u64_counter(l_rgw_req, "req", "Requests");
+  plb.add_u64_counter(l_rgw_failed_req, "failed_req", "Aborted requests");
 
-  plb.add_u64_counter(l_rgw_get, "get");
-  plb.add_u64_counter(l_rgw_get_b, "get_b");
-  plb.add_time_avg(l_rgw_get_lat, "get_initial_lat");
-  plb.add_u64_counter(l_rgw_put, "put");
-  plb.add_u64_counter(l_rgw_put_b, "put_b");
-  plb.add_time_avg(l_rgw_put_lat, "put_initial_lat");
+  plb.add_u64_counter(l_rgw_get, "get", "Gets");
+  plb.add_u64_counter(l_rgw_get_b, "get_b", "Size of gets");
+  plb.add_time_avg(l_rgw_get_lat, "get_initial_lat", "Get latency");
+  plb.add_u64_counter(l_rgw_put, "put", "Puts");
+  plb.add_u64_counter(l_rgw_put_b, "put_b", "Size of puts");
+  plb.add_time_avg(l_rgw_put_lat, "put_initial_lat", "Put latency");
 
-  plb.add_u64(l_rgw_qlen, "qlen");
-  plb.add_u64(l_rgw_qactive, "qactive");
+  plb.add_u64(l_rgw_qlen, "qlen", "Queue length");
+  plb.add_u64(l_rgw_qactive, "qactive", "Active requests queue");
 
-  plb.add_u64_counter(l_rgw_cache_hit, "cache_hit");
-  plb.add_u64_counter(l_rgw_cache_miss, "cache_miss");
+  plb.add_u64_counter(l_rgw_cache_hit, "cache_hit", "Cache hits");
+  plb.add_u64_counter(l_rgw_cache_miss, "cache_miss", "Cache miss");
 
-  plb.add_u64_counter(l_rgw_keystone_token_cache_hit, "keystone_token_cache_hit");
-  plb.add_u64_counter(l_rgw_keystone_token_cache_miss, "keystone_token_cache_miss");
+  plb.add_u64_counter(l_rgw_keystone_token_cache_hit, "keystone_token_cache_hit", "Keystone token cache hits");
+  plb.add_u64_counter(l_rgw_keystone_token_cache_miss, "keystone_token_cache_miss", "Keystone token cache miss");
 
   perfcounter = plb.create_perf_counters();
   cct->get_perfcounters_collection()->add(perfcounter);

@@ -260,9 +260,6 @@ class GenericObjectMap {
     KeyValueDB::Transaction t
     );
 
-  /// Ensure that all previous operations are durable
-  int sync(const Header header, KeyValueDB::Transaction t);
-
   static const string GLOBAL_STATE_KEY;
   static const string PARENT_KEY;
 

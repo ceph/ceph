@@ -40,11 +40,14 @@ ostream& EventCenter::_event_prefix(std::ostream *_dout)
 }
 
 class C_handle_notify : public EventCallback {
+  EventCenter *center;
+
  public:
-  C_handle_notify() {}
+  C_handle_notify(EventCenter *c): center(c) {}
   void do_request(int fd_or_id) {
-    char c[100];
-    int r = read(fd_or_id, c, 100);
+    char c[256];
+    center->already_wakeup.set(0);
+    int r = read(fd_or_id, c, sizeof(c));
     assert(r > 0);
   }
 };
@@ -86,25 +89,31 @@ int EventCenter::init(int n)
   if (r < 0) {
     return -1;
   }
+  r = net.set_nonblock(notify_send_fd);
+  if (r < 0) {
+    return -1;
+  }
 
   file_events = static_cast<FileEvent *>(malloc(sizeof(FileEvent)*n));
   memset(file_events, 0, sizeof(FileEvent)*n);
 
   nevent = n;
-  create_file_event(notify_receive_fd, EVENT_READABLE, EventCallbackRef(new C_handle_notify()));
+  create_file_event(notify_receive_fd, EVENT_READABLE, EventCallbackRef(new C_handle_notify(this)));
   return 0;
 }
 
 EventCenter::~EventCenter()
 {
+  if (notify_receive_fd >= 0) {
+    delete_file_event(notify_receive_fd, EVENT_READABLE);
+    ::close(notify_receive_fd);
+  }
+  if (notify_send_fd >= 0)
+    ::close(notify_send_fd);
+    
   delete driver;
-
   if (file_events)
     free(file_events);
-  if (notify_receive_fd > 0)
-    ::close(notify_receive_fd);
-  if (notify_send_fd > 0)
-    ::close(notify_send_fd);
 }
 
 int EventCenter::create_file_event(int fd, int mask, EventCallbackRef ctxt)
@@ -237,13 +246,15 @@ void EventCenter::delete_time_event(uint64_t id)
 
 void EventCenter::wakeup()
 {
-  ldout(cct, 1) << __func__ << dendl;
-  char buf[1];
-  buf[0] = 'c';
-  // wake up "event_wait"
-  int n = write(notify_send_fd, buf, 1);
-  // FIXME ?
-  assert(n == 1);
+  if (already_wakeup.compare_and_swap(0, 1)) {
+    ldout(cct, 1) << __func__ << dendl;
+    char buf[1];
+    buf[0] = 'c';
+    // wake up "event_wait"
+    int n = write(notify_send_fd, buf, 1);
+    // FIXME ?
+    assert(n == 1);
+  }
 }
 
 int EventCenter::process_time_events()
@@ -364,17 +375,19 @@ int EventCenter::process_events(int timeout_microseconds)
   if (trigger_time)
     numevents += process_time_events();
 
-  {
-    external_lock.Lock();
-    while (!external_events.empty()) {
-      EventCallbackRef e = external_events.front();
-      external_events.pop_front();
-      external_lock.Unlock();
+  external_lock.Lock();
+  if (external_events.empty()) {
+    external_lock.Unlock();
+  } else {
+    deque<EventCallbackRef> cur_process;
+    cur_process.swap(external_events);
+    external_lock.Unlock();
+    while (!cur_process.empty()) {
+      EventCallbackRef e = cur_process.front();
       if (e)
         e->do_request(0);
-      external_lock.Lock();
+      cur_process.pop_front();
     }
-    external_lock.Unlock();
   }
   return numevents;
 }

@@ -157,7 +157,7 @@ public:
     ret = 0;
  }
 
-  virtual bool prefetch_data() { return true; }
+  virtual bool prefetch_data() { return get_data; }
 
   void set_get_data(bool get_data) {
     this->get_data = get_data;
@@ -185,7 +185,7 @@ protected:
   int ret;
   bool sent_data;
   string marker;
-  uint64_t limit;
+  int64_t limit;
   uint64_t limit_max;
   uint32_t buckets_count;
   uint64_t buckets_objcount;
@@ -245,9 +245,11 @@ public:
 
 class RGWListBucket : public RGWOp {
 protected:
+  RGWBucketEnt bucket;
   string prefix;
   rgw_obj_key marker; 
   rgw_obj_key next_marker; 
+  rgw_obj_key end_marker;
   string max_keys;
   string delimiter;
   bool list_versions;
@@ -273,6 +275,7 @@ public:
   virtual const string name() { return "list_bucket"; }
   virtual RGWOpType get_type() { return RGW_OP_LIST_BUCKET; }
   virtual uint32_t op_mask() { return RGW_OP_TYPE_READ; }
+  virtual bool need_container_stats() { return false; }
 };
 
 class RGWGetBucketLogging : public RGWOp {
@@ -592,8 +595,9 @@ protected:
   string dest_bucket_name;
   rgw_bucket dest_bucket;
   string dest_object;
+  time_t src_mtime;
   time_t mtime;
-  bool replace_attrs;
+  RGWRados::AttrsMod attrs_mod;
   RGWBucketInfo src_bucket_info;
   RGWBucketInfo dest_bucket_info;
   string source_zone;
@@ -623,8 +627,9 @@ public:
     mod_ptr = NULL;
     unmod_ptr = NULL;
     ret = 0;
+    src_mtime = 0;
     mtime = 0;
-    replace_attrs = false;
+    attrs_mod = RGWRados::ATTRSMOD_NONE;
     last_ofs = 0;
     olh_epoch = 0;
   }

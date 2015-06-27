@@ -24,7 +24,6 @@
 
 #include "osd/OSDMap.h"
 
-#include "MonitorStore.h"
 #include "MonitorDBStore.h"
 
 #include "msg/Messenger.h"
@@ -37,6 +36,7 @@
 #include "messages/MGenericMessage.h"
 #include "messages/MMonCommand.h"
 #include "messages/MMonCommandAck.h"
+#include "messages/MMonMetadata.h"
 #include "messages/MMonSync.h"
 #include "messages/MMonScrub.h"
 #include "messages/MMonProbe.h"
@@ -288,10 +288,9 @@ void Monitor::do_admin_command(string command, cmdmap_t& cmdmap, string format,
   }
   args = "[" + args + "]";
  
-  bool read_only = false;
-  if (command == "mon_status" || command == "quorum_status") {
-    read_only = true;
-  }
+  bool read_only = (command == "mon_status" ||
+		    command == "mon_metadata" ||
+		    command == "quorum_status");
 
   (read_only ? audit_clog->debug() : audit_clog->info())
     << "from='admin socket' entity='admin socket' "
@@ -437,6 +436,7 @@ void Monitor::write_features(MonitorDBStore::TransactionRef t)
 const char** Monitor::get_tracked_conf_keys() const
 {
   static const char* KEYS[] = {
+    "crushtool", // helpful for testing
     "mon_lease",
     "mon_lease_renew_interval",
     "mon_lease_ack_timeout",
@@ -536,14 +536,14 @@ int Monitor::preinit()
   assert(!logger);
   {
     PerfCountersBuilder pcb(g_ceph_context, "mon", l_mon_first, l_mon_last);
-    pcb.add_u64(l_mon_num_sessions, "num_sessions", "Current number of opened monitor sessions");
-    pcb.add_u64_counter(l_mon_session_add, "session_add", "Number of created monitor sessions");
-    pcb.add_u64_counter(l_mon_session_rm, "session_rm", "Number of remove_session calls in monitor");
-    pcb.add_u64_counter(l_mon_session_trim, "session_trim", "Number of trimed monitor sessions");
-    pcb.add_u64_counter(l_mon_num_elections, "num_elections", "Number of elections monitor took part in");
-    pcb.add_u64_counter(l_mon_election_call, "election_call", "Number of elections started by monitor");
-    pcb.add_u64_counter(l_mon_election_win, "election_win", "Number of elections won by monitor");
-    pcb.add_u64_counter(l_mon_election_lose, "election_lose", "Number of elections lost by monitor");
+    pcb.add_u64(l_mon_num_sessions, "num_sessions", "Open sessions", "sess");
+    pcb.add_u64_counter(l_mon_session_add, "session_add", "Created sessions", "sadd");
+    pcb.add_u64_counter(l_mon_session_rm, "session_rm", "Removed sessions", "srm");
+    pcb.add_u64_counter(l_mon_session_trim, "session_trim", "Trimmed sessions");
+    pcb.add_u64_counter(l_mon_num_elections, "num_elections", "Elections participated in");
+    pcb.add_u64_counter(l_mon_election_call, "election_call", "Elections started");
+    pcb.add_u64_counter(l_mon_election_win, "election_win", "Elections won");
+    pcb.add_u64_counter(l_mon_election_lose, "election_lose", "Elections lost");
     logger = pcb.create_perf_counters();
     cct->get_perfcounters_collection()->add(logger);
   }
@@ -551,28 +551,28 @@ int Monitor::preinit()
   assert(!cluster_logger);
   {
     PerfCountersBuilder pcb(g_ceph_context, "cluster", l_cluster_first, l_cluster_last);
-    pcb.add_u64(l_cluster_num_mon, "num_mon", "Number of monitors, registered on cluster");
-    pcb.add_u64(l_cluster_num_mon_quorum, "num_mon_quorum", "Number of monitors in quorum");
-    pcb.add_u64(l_cluster_num_osd, "num_osd", "Total number of OSD");
-    pcb.add_u64(l_cluster_num_osd_up, "num_osd_up", "Number of OSDs that are up");
-    pcb.add_u64(l_cluster_num_osd_in, "num_osd_in", "Number of OSD in state \"in\" (they are in cluster)");
+    pcb.add_u64(l_cluster_num_mon, "num_mon", "Monitors");
+    pcb.add_u64(l_cluster_num_mon_quorum, "num_mon_quorum", "Monitors in quorum");
+    pcb.add_u64(l_cluster_num_osd, "num_osd", "OSDs");
+    pcb.add_u64(l_cluster_num_osd_up, "num_osd_up", "OSDs that are up");
+    pcb.add_u64(l_cluster_num_osd_in, "num_osd_in", "OSD in state \"in\" (they are in cluster)");
     pcb.add_u64(l_cluster_osd_epoch, "osd_epoch", "Current epoch of OSD map");
-    pcb.add_u64(l_cluster_osd_bytes, "osd_bytes", "Total capacity of cluster in bytes");
-    pcb.add_u64(l_cluster_osd_bytes_used, "osd_bytes_used", "Number of used bytes on cluster");
-    pcb.add_u64(l_cluster_osd_bytes_avail, "osd_bytes_avail", "Number of available bytes on cluster");
-    pcb.add_u64(l_cluster_num_pool, "num_pool", "Number of pools");
-    pcb.add_u64(l_cluster_num_pg, "num_pg", "Total number of placement groups");
-    pcb.add_u64(l_cluster_num_pg_active_clean, "num_pg_active_clean", "Number of placement groups in active+clean state");
-    pcb.add_u64(l_cluster_num_pg_active, "num_pg_active", "Number of placement groups in active state");
-    pcb.add_u64(l_cluster_num_pg_peering, "num_pg_peering", "Number of placement groups in peering state");
-    pcb.add_u64(l_cluster_num_object, "num_object", "Total number of objects on cluster");
-    pcb.add_u64(l_cluster_num_object_degraded, "num_object_degraded", "Number of degraded (missing replicas) objects");
-    pcb.add_u64(l_cluster_num_object_misplaced, "num_object_misplaced", "Number of misplaced (wrong location in the cluster) objects");
-    pcb.add_u64(l_cluster_num_object_unfound, "num_object_unfound", "Number of unfound objects");
-    pcb.add_u64(l_cluster_num_bytes, "num_bytes", "Total number of bytes of all objects");
-    pcb.add_u64(l_cluster_num_mds_up, "num_mds_up", "Number of MDSs that are up");
-    pcb.add_u64(l_cluster_num_mds_in, "num_mds_in", "Number of MDS in state \"in\" (they are in cluster)");
-    pcb.add_u64(l_cluster_num_mds_failed, "num_mds_failed", "Number of failed MDS");
+    pcb.add_u64(l_cluster_osd_bytes, "osd_bytes", "Total capacity of cluster");
+    pcb.add_u64(l_cluster_osd_bytes_used, "osd_bytes_used", "Used space");
+    pcb.add_u64(l_cluster_osd_bytes_avail, "osd_bytes_avail", "Available space");
+    pcb.add_u64(l_cluster_num_pool, "num_pool", "Pools");
+    pcb.add_u64(l_cluster_num_pg, "num_pg", "Placement groups");
+    pcb.add_u64(l_cluster_num_pg_active_clean, "num_pg_active_clean", "Placement groups in active+clean state");
+    pcb.add_u64(l_cluster_num_pg_active, "num_pg_active", "Placement groups in active state");
+    pcb.add_u64(l_cluster_num_pg_peering, "num_pg_peering", "Placement groups in peering state");
+    pcb.add_u64(l_cluster_num_object, "num_object", "Objects");
+    pcb.add_u64(l_cluster_num_object_degraded, "num_object_degraded", "Degraded (missing replicas) objects");
+    pcb.add_u64(l_cluster_num_object_misplaced, "num_object_misplaced", "Misplaced (wrong location in the cluster) objects");
+    pcb.add_u64(l_cluster_num_object_unfound, "num_object_unfound", "Unfound objects");
+    pcb.add_u64(l_cluster_num_bytes, "num_bytes", "Size of all objects");
+    pcb.add_u64(l_cluster_num_mds_up, "num_mds_up", "MDSs that are up");
+    pcb.add_u64(l_cluster_num_mds_in, "num_mds_in", "MDS in state \"in\" (they are in cluster)");
+    pcb.add_u64(l_cluster_num_mds_failed, "num_mds_failed", "Failed MDS");
     pcb.add_u64(l_cluster_mds_epoch, "mds_epoch", "Current epoch of MDS map");
     cluster_logger = pcb.create_perf_counters();
   }
@@ -737,6 +737,7 @@ int Monitor::init()
 
   // i'm ready!
   messenger->add_dispatcher_tail(this);
+
 
   bootstrap();
 
@@ -1857,6 +1858,7 @@ void Monitor::win_election(epoch_t epoch, set<int>& active, uint64_t features,
     health_tick_start();
     do_health_to_clog_interval();
   }
+  collect_sys_info(&metadata[rank], g_ceph_context);
 }
 
 void Monitor::lose_election(epoch_t epoch, set<int> &q, int l, uint64_t features) 
@@ -1878,6 +1880,11 @@ void Monitor::lose_election(epoch_t epoch, set<int> &q, int l, uint64_t features
   logger->inc(l_mon_election_lose);
 
   finish_election();
+
+  Metadata sys_info;
+  collect_sys_info(&sys_info, g_ceph_context);
+  messenger->send_message(new MMonMetadata(sys_info),
+			  monmap->get_inst(get_leader()));
 }
 
 void Monitor::finish_election()
@@ -2252,26 +2259,6 @@ health_status_t Monitor::get_health(list<string>& status,
 
   health_monitor->get_health(f, summary, (detailbl ? &detail : NULL));
 
-  if (f)
-    f->open_array_section("summary");
-  health_status_t overall = HEALTH_OK;
-  if (!summary.empty()) {
-    while (!summary.empty()) {
-      if (overall > summary.front().first)
-	overall = summary.front().first;
-      status.push_back(summary.front().second);
-      if (f) {
-        f->open_object_section("item");
-        f->dump_stream("severity") <<  summary.front().first;
-        f->dump_string("summary", summary.front().second);
-        f->close_section();
-      }
-      summary.pop_front();
-    }
-  }
-  if (f)
-    f->close_section();
-
   if (f) {
     f->open_object_section("timechecks");
     f->dump_unsigned("epoch", get_epoch());
@@ -2280,6 +2267,7 @@ health_status_t Monitor::get_health(list<string>& status,
       << ((timecheck_round%2) ? "on-going" : "finished");
   }
 
+  health_status_t overall = HEALTH_OK;
   if (!timecheck_skews.empty()) {
     list<string> warns;
     if (f)
@@ -2326,9 +2314,29 @@ health_status_t Monitor::get_health(list<string>& status,
           ss << ",";
       }
       status.push_back(ss.str());
+      summary.push_back(make_pair(HEALTH_WARN, "Monitor clock skew detected "));
     }
     if (f)
       f->close_section();
+  }
+  if (f)
+    f->close_section();
+
+  if (f)
+    f->open_array_section("summary");
+  if (!summary.empty()) {
+    while (!summary.empty()) {
+      if (overall > summary.front().first)
+	overall = summary.front().first;
+      status.push_back(summary.front().second);
+      if (f) {
+        f->open_object_section("item");
+        f->dump_stream("severity") <<  summary.front().first;
+        f->dump_string("summary", summary.front().second);
+        f->close_section();
+      }
+      summary.pop_front();
+    }
   }
   if (f)
     f->close_section();
@@ -2836,6 +2844,45 @@ void Monitor::handle_command(MMonCommand *m)
     ss2 << "report " << rdata.crc32c(6789);
     rs = ss2.str();
     r = 0;
+  } else if (prefix == "node ls") {
+    string node_type("all");
+    cmd_getval(g_ceph_context, cmdmap, "type", node_type);
+    if (!f)
+      f.reset(Formatter::create("json-pretty"));
+    if (node_type == "all") {
+      f->open_object_section("nodes");
+      print_nodes(f.get(), ds);
+      osdmon()->print_nodes(f.get());
+      mdsmon()->print_nodes(f.get());
+      f->close_section();
+    } else if (node_type == "mon") {
+      print_nodes(f.get(), ds);
+    } else if (node_type == "osd") {
+      osdmon()->print_nodes(f.get());
+    } else if (node_type == "mds") {
+      mdsmon()->print_nodes(f.get());
+    }
+    f->flush(ds);
+    rdata.append(ds);
+    rs = "";
+    r = 0;
+  } else if (prefix == "mon_metadata") {
+    string name;
+    cmd_getval(g_ceph_context, cmdmap, "id", name);
+    int mon = monmap->get_rank(name);
+    if (mon < 0) {
+      rs = "requested mon not found";
+      r = -ENOENT;
+      goto out;
+    }
+    if (!f)
+      f.reset(Formatter::create("json-pretty"));
+    f->open_object_section("mon_metadata");
+    r = get_mon_metadata(mon, f.get(), ds);
+    f->close_section();
+    f->flush(ds);
+    rdata.append(ds);
+    rs = "";
   } else if (prefix == "quorum_status") {
     // make sure our map is readable and up to date
     if (!is_leader() && !is_peon()) {
@@ -3410,6 +3457,9 @@ void Monitor::dispatch(MonSession *s, Message *m, const bool src_is_mon)
       handle_mon_get_map(static_cast<MMonGetMap*>(m));
       break;
 
+    case CEPH_MSG_MON_METADATA:
+      return handle_mon_metadata(static_cast<MMonMetadata*>(m));
+
     default:
       dealt_with = false;
       break;
@@ -3667,7 +3717,7 @@ void Monitor::timecheck_start_round()
     dout(10) << __func__ << " there's a timecheck going on" << dendl;
     utime_t curr_time = ceph_clock_now(g_ceph_context);
     double max = g_conf->mon_timecheck_interval*3;
-    if (curr_time - timecheck_round_start > max) {
+    if (curr_time - timecheck_round_start < max) {
       dout(10) << __func__ << " keep current round going" << dendl;
       goto out;
     } else {
@@ -4184,7 +4234,88 @@ void Monitor::handle_mon_get_map(MMonGetMap *m)
   m->put();
 }
 
+void Monitor::handle_mon_metadata(MMonMetadata *m)
+{
+  if (is_leader()) {
+    dout(10) << __func__ << dendl;
+    update_mon_metadata(m->get_source().num(), m->data);
+  }
+  m->put();
+}
 
+void Monitor::update_mon_metadata(int from, const Metadata& m)
+{
+  metadata[from] = m;
+
+  bufferlist bl;
+  int err = store->get(MONITOR_STORE_PREFIX, "last_metadata", bl);
+  map<int, Metadata> last_metadata;
+  if (!err) {
+    bufferlist::iterator iter = bl.begin();
+    ::decode(last_metadata, iter);
+    metadata.insert(last_metadata.begin(), last_metadata.end());
+  }
+
+  MonitorDBStore::TransactionRef t = paxos->get_pending_transaction();
+  bl.clear();
+  ::encode(metadata, bl);
+  t->put(MONITOR_STORE_PREFIX, "last_metadata", bl);
+  paxos->trigger_propose();
+}
+
+int Monitor::load_metadata(map<int, Metadata>& metadata)
+{
+  bufferlist bl;
+  int r = store->get(MONITOR_STORE_PREFIX, "last_metadata", bl);
+  if (r)
+    return r;
+  bufferlist::iterator it = bl.begin();
+  ::decode(metadata, it);
+  return 0;
+}
+
+int Monitor::get_mon_metadata(int mon, Formatter *f, ostream& err)
+{
+  assert(f);
+  map<int, Metadata> last_metadata;
+  if (int r = load_metadata(last_metadata)) {
+    err << "Unable to load metadata";
+    return r;
+  }
+  if (!last_metadata.count(mon)) {
+    err << "mon." << mon << " not found";
+    return -EINVAL;
+  }
+  const Metadata& m = last_metadata[mon];
+  for (Metadata::const_iterator p = m.begin(); p != m.end(); ++p) {
+    f->dump_string(p->first.c_str(), p->second);
+  }
+  return 0;
+}
+
+int Monitor::print_nodes(Formatter *f, ostream& err)
+{
+  map<int, Metadata> metadata;
+  if (int r = load_metadata(metadata)) {
+    err << "Unable to load metadata.\n";
+    return r;
+  }
+
+  map<string, list<int> > mons;	// hostname => mon
+  for (map<int, Metadata>::iterator it = metadata.begin();
+       it != metadata.end(); ++it) {
+    const Metadata& m = it->second;
+    Metadata::const_iterator hostname = m.find("hostname");
+    if (hostname == m.end()) {
+      // not likely though
+      continue;
+    }
+    mons[hostname->second].push_back(it->first);
+  }
+
+  dump_services(f, mons, "mon");
+  return 0;
+}
 
 // ----------------------------------------------
 // scrub
@@ -4497,8 +4628,11 @@ int Monitor::mkfs(bufferlist& osdmapbl)
   if (is_keyring_required()) {
     KeyRing keyring;
     string keyring_filename;
-    if (!ceph_resolve_file_search(g_conf->keyring, keyring_filename)) {
-      derr << "unable to find a keyring file on " << g_conf->keyring << dendl;
+
+    r = ceph_resolve_file_search(g_conf->keyring, keyring_filename);
+    if (r) {
+      derr << "unable to find a keyring file on " << g_conf->keyring
+	   << ": " << cpp_strerror(r) << dendl;
       if (g_conf->key != "") {
 	string keyring_plaintext = "[mon.]\n\tkey = " + g_conf->key +
 	  "\n\tcaps mon = \"allow *\"\n";

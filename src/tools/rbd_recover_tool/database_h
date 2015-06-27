@@ -438,7 +438,7 @@ function discover_image_nosnap()
 }
 
 # get the offset snapid object 
-# if there is no object, choose the smallest snapid which is great than current snapid
+# if there is no object, choose the smallest snapid which is greater than current snapid
 function get_object_clone()
 {
   local func="get_object_clone"
@@ -457,7 +457,7 @@ function get_object_clone()
 
   local hex_snapid=`printf "%x" $snapid`
   pushd $snapset_output_dir >/dev/null
-  # get object with the smallest snapid great than current specify snapid
+  # get object with the smallest snapid greater than current snapid
   awk '$4 == "'"$object_offset_string"'" && $5 >= '$snapid' {print}' `echo ${snap_coll_arr[@]}` |tail -n 1
   popd >/dev/null
 }
@@ -668,7 +668,7 @@ function copy_image_nosnap_single_thread()
 # ssh copy snap_object & head_object from osd to admin node
 # copy all snapshot objects 
 # and 
-# all head objects which has the same offset with snapshot objects 
+# all head objects which have the same offset as snapshot objects 
 function collect_image_snap_objects()
 {
   local func="collect_image_snap_objects"
@@ -765,7 +765,7 @@ function collect_image_snap_objects()
   OIFS=$IFS
   IFS=$'\n'
 
-  #assume file:snap_hobjects is not very large, and can be load into memory
+  #assume file:snap_hobjects is not very large, and can be loaded into memory
   local snap_arr=(`cat $snap_hobjects`)
   local snap_tmp=/tmp/snaptmp.$$$$
 
@@ -810,7 +810,7 @@ function collect_image_snap_objects()
     head_offset=${arr2[3]}
     head_filename=$head_dir/$head_offset
 
-    # just copy object(snap/head) if it not exits
+    # just copy object(snap/head) if it does not exist
     if [ ! -e $snap_filename ];then
       ssh $ssh_option $snap_node "cat $snap_hobject" > $snap_filename 
     fi
@@ -863,7 +863,7 @@ function copy_image_snap_single_thread()
   rm -f $LOCK
 }
 
-# after all snap objects and neccessary head objects are copied,
+# after all snap objects and necessary head objects are copied,
 # just pick appropriate head objects and snap objects and write them to image
 # in order to rollback image to snapshot
 #
@@ -890,7 +890,7 @@ function copy_image_snap_single_thread()
 # improve rollback:
 # there is intersection of head objects and snapX objects, if snapX objects are not empty
 # and need to deduplicate the intersection.
-# dedunplicate steps:
+# deduplicate steps:
 # - get difference set of head objects and snapX objects
 # - write the difference set objects to image
 # - write the snapX objects to image

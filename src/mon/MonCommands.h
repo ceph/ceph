@@ -133,21 +133,21 @@ COMMAND("pg dump_stuck " \
 	"pg", "r", "cli,rest")
 COMMAND("pg ls-by-pool " \
         "name=poolstr,type=CephString " \
-	"name=states,type=CephChoices,strings=active|clean|down|replay|splitting|scrubbing|scrubq|degraded|inconsistent|peering|repair|recovery|backfill_wait|incomplete|stale|remapped|deep_scrub|backfill|backfill_toofull|recovery_wait|undersized,n=N,req=false ", \
+	"name=states,type=CephChoices,strings=active|clean|down|replay|splitting|scrubbing|scrubq|degraded|inconsistent|peering|repair|recovering|backfill_wait|incomplete|stale|remapped|deep_scrub|backfill|backfill_toofull|recovery_wait|undersized,n=N,req=false ", \
 	"list pg with pool = [poolname | poolid]", "pg", "r", "cli,rest")
 COMMAND("pg ls-by-primary " \
         "name=osd,type=CephOsdName " \
         "name=pool,type=CephInt,req=false " \
-	"name=states,type=CephChoices,strings=active|clean|down|replay|splitting|scrubbing|scrubq|degraded|inconsistent|peering|repair|recovery|backfill_wait|incomplete|stale|remapped|deep_scrub|backfill|backfill_toofull|recovery_wait|undersized,n=N,req=false ", \
+	"name=states,type=CephChoices,strings=active|clean|down|replay|splitting|scrubbing|scrubq|degraded|inconsistent|peering|repair|recovering|backfill_wait|incomplete|stale|remapped|deep_scrub|backfill|backfill_toofull|recovery_wait|undersized,n=N,req=false ", \
 	"list pg with primary = [osd]", "pg", "r", "cli,rest")
 COMMAND("pg ls-by-osd " \
         "name=osd,type=CephOsdName " \
         "name=pool,type=CephInt,req=false " \
-	"name=states,type=CephChoices,strings=active|clean|down|replay|splitting|scrubbing|scrubq|degraded|inconsistent|peering|repair|recovery|backfill_wait|incomplete|stale|remapped|deep_scrub|backfill|backfill_toofull|recovery_wait|undersized,n=N,req=false ", \
+	"name=states,type=CephChoices,strings=active|clean|down|replay|splitting|scrubbing|scrubq|degraded|inconsistent|peering|repair|recovering|backfill_wait|incomplete|stale|remapped|deep_scrub|backfill|backfill_toofull|recovery_wait|undersized,n=N,req=false ", \
 	"list pg on osd [osd]", "pg", "r", "cli,rest")
 COMMAND("pg ls " \
         "name=pool,type=CephInt,req=false " \
-	"name=states,type=CephChoices,strings=active|clean|down|replay|splitting|scrubbing|scrubq|degraded|inconsistent|peering|repair|recovery|backfill_wait|incomplete|stale|remapped|deep_scrub|backfill|backfill_toofull|recovery_wait|undersized,n=N,req=false ", \
+	"name=states,type=CephChoices,strings=active|clean|down|replay|splitting|scrubbing|scrubq|degraded|inconsistent|peering|repair|recovering|backfill_wait|incomplete|stale|remapped|deep_scrub|backfill|backfill_toofull|recovery_wait|undersized,n=N,req=false ", \
 	"list pg with specific pool, osd, state", "pg", "r", "cli,rest")
 COMMAND("pg map name=pgid,type=CephPgid", "show mapping of pg to osds", \
 	"pg", "r", "cli,rest")
@@ -235,6 +235,10 @@ COMMAND("report name=tags,type=CephString,n=N,req=false", \
 	"mon", "r", "cli,rest")
 COMMAND("quorum_status", "report status of monitor quorum", \
 	"mon", "r", "cli,rest")
+COMMAND("mon_metadata name=id,type=CephString",
+	"fetch metadata for mon <id>",
+	"mon", "r", "cli,rest")
+
 COMMAND_WITH_FLAG("mon_status", "report status of monitors", "mon", "r", "cli,rest",
 	     NOFORWARD)
 COMMAND("sync force " \
@@ -253,7 +257,9 @@ COMMAND("tell " \
 	"send a command to a specific daemon", "mon", "rw", "cli,rest")
 COMMAND_WITH_FLAG("version", "show mon daemon version", "mon", "r", "cli,rest",
 	     NOFORWARD)
-
+COMMAND("node ls " \
+	"name=type,type=CephChoices,strings=all|osd|mon|mds,req=false",
+	"list all nodes in cluster [type]", "mon", "r", "cli,rest")
 /*
  * MDS commands (MDSMonitor.cc)
  */
@@ -265,6 +271,9 @@ COMMAND("mds dump "
 COMMAND("mds getmap " \
 	"name=epoch,type=CephInt,req=false,range=0", \
 	"get MDS map, optionally from epoch", "mds", "r", "cli,rest")
+COMMAND("mds metadata name=who,type=CephString",
+	"fetch metadata for mds <who>",
+	"mds", "r", "cli,rest")
 COMMAND("mds tell " \
 	"name=who,type=CephString " \
 	"name=args,type=CephString,n=N", \
@@ -295,6 +304,8 @@ COMMAND("mds set_state " \
 	"set mds state of <gid> to <numeric-state>", "mds", "rw", "cli,rest")
 COMMAND("mds fail name=who,type=CephString", \
 	"force mds to status failed", "mds", "rw", "cli,rest")
+COMMAND("mds repaired name=rank,type=CephInt", \
+	"mark a damaged MDS rank as no longer damaged", "mds", "rw", "cli,rest")
 COMMAND("mds rm " \
 	"name=gid,type=CephInt,range=0 " \
 	"name=who,type=CephName", \
@@ -359,7 +370,6 @@ COMMAND("mon remove " \
 	"name=name,type=CephString", \
 	"remove monitor named <name>", "mon", "rw", "cli,rest")
 
-
 /*
  * OSD commands
  */
@@ -398,8 +408,9 @@ COMMAND("osd metadata " \
 	"osd", "r", "cli,rest")
 COMMAND("osd map " \
 	"name=pool,type=CephPoolname " \
-	"name=object,type=CephObjectname", \
-	"find pg for <object> in <pool>", "osd", "r", "cli,rest")
+	"name=object,type=CephObjectname " \
+	"name=nspace,type=CephString,req=false", \
+	"find pg for <object> in <pool> with [namespace]", "osd", "r", "cli,rest")
 COMMAND("osd scrub " \
 	"name=who,type=CephString", \
 	"initiate scrub on osd <who>", "osd", "rw", "cli,rest")
@@ -587,8 +598,9 @@ COMMAND("osd lost " \
 	"mark osd as permanently lost. THIS DESTROYS DATA IF NO MORE REPLICAS EXIST, BE CAREFUL", \
 	"osd", "rw", "cli,rest")
 COMMAND("osd create " \
-	"name=uuid,type=CephUUID,req=false", \
-	"create new osd (with optional UUID)", "osd", "rw", "cli,rest")
+	"name=uuid,type=CephUUID,req=false " \
+	"name=id,type=CephInt,range=0,req=false", \
+	"create new osd (with optional UUID and ID)", "osd", "rw", "cli,rest")
 COMMAND("osd blacklist " \
 	"name=blacklistop,type=CephChoices,strings=add|rm " \
 	"name=addr,type=CephEntityAddr " \
@@ -627,7 +639,7 @@ COMMAND("osd pool rename " \
 	"rename <srcpool> to <destpool>", "osd", "rw", "cli,rest")
 COMMAND("osd pool get " \
 	"name=pool,type=CephPoolname " \
-	"name=var,type=CephChoices,strings=size|min_size|crash_replay_interval|pg_num|pgp_num|crush_ruleset|hit_set_type|hit_set_period|hit_set_count|hit_set_fpp|auid|target_max_objects|target_max_bytes|cache_target_dirty_ratio|cache_target_full_ratio|cache_min_flush_age|cache_min_evict_age|erasure_code_profile|min_read_recency_for_promote|write_fadvise_dontneed", \
+	"name=var,type=CephChoices,strings=size|min_size|crash_replay_interval|pg_num|pgp_num|crush_ruleset|hit_set_type|hit_set_period|hit_set_count|hit_set_fpp|auid|target_max_objects|target_max_bytes|cache_target_dirty_ratio|cache_target_full_ratio|cache_min_flush_age|cache_min_evict_age|erasure_code_profile|min_read_recency_for_promote|write_fadvise_dontneed|all", \
 	"get pool parameter <var>", "osd", "r", "cli,rest")
 COMMAND("osd pool set " \
 	"name=pool,type=CephPoolname " \

@@ -59,6 +59,10 @@ void Striper::file_to_extents(CephContext *cct, const char *object_format,
   __u32 su = layout->fl_stripe_unit;
   __u32 stripe_count = layout->fl_stripe_count;
   assert(object_size >= su);
+  if (stripe_count == 1) {
+    ldout(cct, 20) << " sc is one, reset su to os" << dendl;
+    su = object_size;
+  }
   uint64_t stripes_per_object = object_size / su;
   ldout(cct, 20) << " su " << su << " sc " << stripe_count << " os " << object_size
 		 << " stripes_per_object " << stripes_per_object << dendl;
@@ -218,11 +222,11 @@ uint64_t Striper::get_num_objects(const ceph_file_layout& layout, uint64_t size)
   __u32 object_size = layout.fl_object_size;
   __u32 stripe_unit = layout.fl_stripe_unit;
   __u32 stripe_count = layout.fl_stripe_count;
-  uint64_t period = stripe_count * object_size;
+  uint64_t period = (uint64_t)stripe_count * object_size;
   uint64_t num_periods = (size + period - 1) / period;
   uint64_t remainder_bytes = size % period;
   uint64_t remainder_objs = 0;
-  if ((remainder_bytes > 0) && (remainder_bytes < stripe_count * stripe_unit))
+  if ((remainder_bytes > 0) && (remainder_bytes < (uint64_t)stripe_count * stripe_unit))
     remainder_objs = stripe_count - ((remainder_bytes + stripe_unit - 1) / stripe_unit);
   return num_periods * stripe_count - remainder_objs;
 }

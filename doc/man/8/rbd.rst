@@ -1,3 +1,5 @@
+:orphan:
+
 ===============================================
  rbd -- manage rados block device (RBD) images
 ===============================================
@@ -123,22 +125,33 @@ Parameters
 
    Map the image read-only.  Equivalent to -o ro.
 
-.. option:: --image-features features
+.. option:: --image-feature feature
 
-   Specifies which RBD format 2 features are to be enabled when creating
-   an image. The numbers from the desired features below should be added
-   to compute the parameter value:
+   Specifies which RBD format 2 feature should be enabled when creating
+   an image. Multiple features can be enabled by repeating this option
+   multiple times. The following features are supported:
 
-   +1: layering support
-   +2: striping v2 support
-   +4: exclusive locking support
-   +8: object map support
+   layering: layering support
+   striping: striping v2 support
+   exclusive-lock: exclusive locking support
+   object-map: object map support (requires exclusive-lock)
+   fast-diff: fast diff calculations (requires object-map)
+   deep-flatten: snapshot flatten support
 
 .. option:: --image-shared
 
    Specifies that the image will be used concurrently by multiple clients.
    This will disable features that are dependent upon exclusive ownership
    of the image.
+
+.. option:: --object-extents
+
+   Specifies that the diff should be limited to the extents of a full object
+   instead of showing intra-object deltas. When the object map feature is
+   enabled on an image, limiting the diff to the object extents will
+   dramatically improve performance since the differences can be computed
+   by examining the in-memory object map instead of querying RADOS for each
+   object within the image.
 
 Commands
 ========
@@ -150,6 +163,13 @@ Commands
   -l, also show snapshots, and use longer-format output including
   size, parent (if clone), format, etc.
 
+:command:`du` [--image *image-name*] [*pool-name*]
+  Will calculate the provisioned and actual disk usage of all images and
+  associated snapshots within the specified pool. It can also be used against
+  individual images.
+
+  If the RBD fast-diff feature isn't enabled on images, this operation will
+  require querying the OSDs for every potential object within the image.
 :command:`info` [*image-name*]
   Will dump information (such as size and order) about a specific rbd image.
   If image is a clone, information about its parent is also displayed.
@@ -162,7 +182,8 @@ Commands
 :command:`clone` [*parent-snapname*] [*image-name*]
   Will create a clone (copy-on-write child) of the parent snapshot.
   Object order will be identical to that of the parent image unless
-  specified. Size will be the same as the parent snapshot.
+  specified. Size will be the same as the parent snapshot. The --stripe-unit
+  and --stripe-count arguments are optional, but must be used together.
 
   The parent snapshot must be protected (see `rbd snap protect`).
   This requires image format 2.
@@ -198,7 +219,10 @@ Commands
   if possible.  For import from stdin, the sparsification unit is
   the data block size of the destination image (1 << order).
 
-:command:`export-diff` [*image-name*] [*dest-path*] [--from-snap *snapname*]
+  The --stripe-unit and --stripe-count arguments are optional, but must be
+  used together.
+
+:command:`export-diff` [*image-name*] [*dest-path*] [--from-snap *snapname*] [--object-extents]
   Exports an incremental diff for an image to dest path (use - for stdout).  If
   an initial snapshot is specified, only changes since that snapshot are included; otherwise,
   any regions of the image that contain data are included.  The end snapshot is specified
@@ -220,7 +244,7 @@ Commands
   continuing.  If there was an end snapshot we verify it does not already exist before
   applying the changes, and create the snapshot when we are done.
 
-:command:`diff` [*image-name*] [--from-snap *snapname*]
+:command:`diff` [*image-name*] [--from-snap *snapname*] [--object-extents]
   Dump a list of byte extents in the image that have changed since the specified start
   snapshot, or since the image was created.  Each output line includes the starting offset
   (in bytes), the length of the region (in bytes), and either 'zero' or 'data' to indicate
@@ -232,6 +256,23 @@ Commands
 
 :command:`mv` [*src-image*] [*dest-image*]
   Renames an image.  Note: rename across pools is not supported.
+
+:command:`image-meta list` [*image-name*]
+  Show metadata held on the image. The first column is the key
+  and the second column is the value.
+
+:command:`image-meta get` [*image-name*] [*key*]
+  Get metadata value with the key.
+
+:command:`image-meta set` [*image-name*] [*key*] [*value*]
+  Set metadata key with the value. They will displayed in `metadata-list`
+
+:command:`image-meta remove` [*image-name*] [*key*]
+  Remove metadata key with the value.
+
+:command:`object-map` rebuild [*image-name*]
+  Rebuilds an invalid object map for the specified image. An image snapshot can be
+  specified to rebuild an invalid object map for a snapshot.
 
 :command:`snap` ls [*image-name*]
   Dumps the list of snapshots inside a specific image.
@@ -268,7 +309,7 @@ Commands
 :command:`map` [*image-name*] [-o | --options *map-options* ] [--read-only]
   Maps the specified image to a block device via the rbd kernel module.
 
-:command:`unmap` [*device-path*]
+:command:`unmap` [*image-name*] | [*device-path*]
   Unmaps the block device that was mapped via the rbd kernel module.
 
 :command:`showmapped`
@@ -276,6 +317,14 @@ Commands
 
 :command:`status` [*image-name*]
   Show the status of the image, including which clients have it open.
+
+:command:`feature` disable [*image-name*] [*feature*]
+  Disables the specified feature on the specified image. Multiple features can
+  be specified.
+
+:command:`feature` enable [*image-name*] [*feature*]
+  Enables the specified feature on the specified image. Multiple features can
+  be specified.
 
 :command:`lock` list [*image-name*]
   Show locks held on the image. The first column is the locker
@@ -361,6 +410,22 @@ the running kernel.
 * crc - Enable CRC32C checksumming for data writes (default).
 
 * nocrc - Disable CRC32C checksumming for data writes.
+
+* cephx_require_signatures - Require cephx message signing, i.e. MSG_AUTH
+  feature bit (since 3.19, default).
+
+* nocephx_require_signatures - Don't require cephx message signing (since
+  3.19).
+
+* tcp_nodelay - Disable Nagle's algorithm on client sockets (since 4.0,
+  default).
+
+* notcp_nodelay - Enable Nagle's algorithm on client sockets (since 4.0).
+
+* mount_timeout=x - A timeout on various steps in `rbd map` and `rbd unmap`
+  sequences (default is 60 seconds).  In particular, since 4.2 this can be used
+  to ensure that `rbd unmap` eventually times out when there is no network
+  connection to a cluster.
 
 * osdkeepalive=x - OSD keepalive timeout (default is 5 seconds).
 

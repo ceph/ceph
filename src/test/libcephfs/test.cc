@@ -136,6 +136,8 @@ TEST(LibCephFS, ReleaseMounted) {
   ASSERT_EQ(0, ceph_conf_read_file(cmount, NULL));
   ASSERT_EQ(0, ceph_mount(cmount, "/"));
   ASSERT_EQ(-EISCONN, ceph_release(cmount));
+  ASSERT_EQ(0, ceph_unmount(cmount));
+  ASSERT_EQ(0, ceph_release(cmount));
 }
 
 TEST(LibCephFS, UnmountRelease) {
@@ -880,6 +882,24 @@ TEST(LibCephFS, HardlinkNoOriginal) {
   ASSERT_EQ(ceph_chdir(cmount, dir), 0);
   ASSERT_EQ(ceph_unlink(cmount, "hardl1"), 0);
   ASSERT_EQ(ceph_rmdir(cmount, dir), 0);
+
+  ceph_shutdown(cmount);
+}
+
+TEST(LibCephFS, BadArgument) {
+  struct ceph_mount_info *cmount;
+  ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
+  ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
+  ASSERT_EQ(ceph_mount(cmount, NULL), 0);
+
+  int fd = ceph_open(cmount, "test_file", O_CREAT|O_RDWR, 0666);
+  ASSERT_GT(fd, 0);
+  char buf[100];
+  ASSERT_EQ(ceph_write(cmount, fd, buf, sizeof(buf), 0), (int)sizeof(buf));
+  ASSERT_EQ(ceph_read(cmount, fd, buf, 0, 5), 0);
+  ceph_close(cmount, fd);
+  ASSERT_EQ(ceph_unlink(cmount, "test_file"), 0);
 
   ceph_shutdown(cmount);
 }

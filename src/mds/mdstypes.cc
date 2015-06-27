@@ -229,6 +229,27 @@ ostream& operator<<(ostream& out, const client_writeable_range_t& r)
   return out << r.range.first << '-' << r.range.last << "@" << r.follows;
 }
 
+/*
+ * inline_data_t
+ */
+void inline_data_t::encode(bufferlist &bl) const
+{
+  ::encode(version, bl);
+  if (blp)
+    ::encode(*blp, bl);
+  else
+    ::encode(bufferlist(), bl);
+}
+void inline_data_t::decode(bufferlist::iterator &p)
+{
+  ::decode(version, p);
+  uint32_t inline_len;
+  ::decode(inline_len, p);
+  if (inline_len > 0)
+    ::decode_nohead(inline_len, get_data(), p);
+  else
+    free_data();
+}
 
 /*
  * inode_t
@@ -274,9 +295,7 @@ void inode_t::encode(bufferlist &bl) const
   ::encode(backtrace_version, bl);
   ::encode(old_pools, bl);
   ::encode(max_size_ever, bl);
-  ::encode(inline_version, bl);
   ::encode(inline_data, bl);
-
   ::encode(quota, bl);
 
   ENCODE_FINISH(bl);
@@ -340,10 +359,9 @@ void inode_t::decode(bufferlist::iterator &p)
   if (struct_v >= 8)
     ::decode(max_size_ever, p);
   if (struct_v >= 9) {
-    ::decode(inline_version, p);
     ::decode(inline_data, p);
   } else {
-    inline_version = CEPH_INLINE_NONE;
+    inline_data.version = CEPH_INLINE_NONE;
   }
   if (struct_v < 10)
     backtrace_version = 0; // force update backtrace
@@ -372,10 +390,10 @@ void inode_t::dump(Formatter *f) const
   f->close_section();
 
   f->open_array_section("old_pools");
-  vector<int64_t>::const_iterator i = old_pools.begin();
-  while(i != old_pools.end()) {
+  for (compact_set<int64_t>::const_iterator i = old_pools.begin();
+       i != old_pools.end();
+       ++i)
     f->dump_int("pool", *i);
-  }
   f->close_section();
 
   f->dump_unsigned("size", size);
@@ -444,9 +462,7 @@ int inode_t::compare(const inode_t &other, bool *divergent) const
         mtime != other.mtime ||
         atime != other.atime ||
         time_warp_seq != other.time_warp_seq ||
-        !(*const_cast<bufferlist*>(&inline_data) ==
-            *const_cast<bufferlist*>(&other.inline_data)) ||
-        inline_version != other.inline_version ||
+        inline_data != other.inline_data ||
         client_ranges != other.client_ranges ||
         !(dirstat == other.dirstat) ||
         !(rstat == other.rstat) ||
@@ -472,7 +488,7 @@ bool inode_t::older_is_consistent(const inode_t &other) const
   if (max_size_ever < other.max_size_ever ||
       truncate_seq < other.truncate_seq ||
       time_warp_seq < other.time_warp_seq ||
-      inline_version < other.inline_version ||
+      inline_data.version < other.inline_data.version ||
       dirstat.version < other.dirstat.version ||
       rstat.version < other.rstat.version ||
       accounted_rstat.version < other.accounted_rstat.version ||
@@ -1001,4 +1017,64 @@ void cap_reconnect_t::generate_test_instances(list<cap_reconnect_t*>& ls)
   ls.push_back(new cap_reconnect_t);
   ls.back()->path = "/test/path";
   ls.back()->capinfo.cap_id = 1;
+}
+
+void MDSCacheObject::dump(Formatter *f) const
+{
+  f->dump_bool("is_auth", is_auth());
+
+  // Fields only meaningful for auth
+  f->open_object_section("auth_state");
+  {
+    f->open_object_section("replicas");
+    const compact_map<mds_rank_t,unsigned>& replicas = get_replicas();
+    for (compact_map<mds_rank_t,unsigned>::const_iterator i = replicas.begin();
+         i != replicas.end(); ++i) {
+      std::ostringstream rank_str;
+      rank_str << i->first;
+      f->dump_int(rank_str.str().c_str(), i->second);
+    }
+    f->close_section();
+  }
+  f->close_section(); // auth_state
+
+  // Fields only meaningful for replica
+  f->open_object_section("replica_state");
+  {
+    f->open_array_section("authority");
+    f->dump_int("first", authority().first);
+    f->dump_int("second", authority().second);
+    f->close_section();
+    f->dump_int("replica_nonce", get_replica_nonce());
+  }
+  f->close_section();  // replica_state
+
+  f->dump_int("auth_pins", auth_pins);
+  f->dump_int("nested_auth_pins", nested_auth_pins);
+  f->dump_bool("is_frozen", is_frozen());
+  f->dump_bool("is_freezing", is_freezing());
+
+#ifdef MDS_REF_SET
+    f->open_object_section("pins");
+    for(std::map<int, int>::const_iterator it = ref_map.begin();
+        it != ref_map.end(); ++it) {
+      f->dump_int(pin_name(it->first), it->second);
+    }
+    f->close_section();
+#endif
+    f->dump_int("nref", ref);
+}
+
+/*
+ * Use this in subclasses when printing their specialized
+ * states too.
+ */
+void MDSCacheObject::dump_states(Formatter *f) const
+{
+  if (state_test(STATE_AUTH)) f->dump_string("state", "auth");
+  if (state_test(STATE_DIRTY)) f->dump_string("state", "dirty");
+  if (state_test(STATE_NOTIFYREF)) f->dump_string("state", "notifyref");
+  if (state_test(STATE_REJOINING)) f->dump_string("state", "rejoining");
+  if (state_test(STATE_REJOINUNDEF))
+    f->dump_string("state", "rejoinundef");
 }

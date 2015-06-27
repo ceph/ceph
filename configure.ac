@@ -8,7 +8,7 @@ AC_PREREQ(2.59)
 # VERSION define is not used by the code.  It gets a version string
 # from 'git describe'; see src/ceph_ver.[ch]
 
-AC_INIT([ceph], [0.93], [ceph-devel@vger.kernel.org])
+AC_INIT([ceph], [9.0.0], [ceph-devel@vger.kernel.org])
 
 # Create release string.  Used with VERSION for RPMs.
 RPM_RELEASE=0
@@ -20,6 +20,17 @@ if test -d ".git" ; then
   fi
 fi
 AC_MSG_NOTICE([RPM_RELEASE='$RPM_RELEASE'])
+
+AC_ARG_WITH([man-pages],
+    [AS_HELP_STRING([--with-man-pages], [build man pages])],
+    [],
+    [with_man_pages=check])
+AS_IF([test "x$with_man_pages" != "xno"],
+  [AC_CHECK_PROGS(SPHINX_BUILD, sphinx-1.0-build sphinx-build)
+   AS_IF([test -z "$SPHINX_BUILD" && \
+          test "x$with_man_pages" = "xyes"],
+     [AC_MSG_ERROR([sphinx-build not found (python-sphinx)])])])
+AM_CONDITIONAL(WITH_MAN_PAGES, test -n "$SPHINX_BUILD")
 
 AC_CONFIG_MACRO_DIR([m4])
 
@@ -86,6 +97,103 @@ AC_PROG_LIBTOOL
 AC_SUBST(AM_CXXFLAGS)
 AM_CXXFLAGS="${AM_CXXFLAGS}"
 
+
+###### PATCH STARTS HERE ######
+# Find out what to build (default is all of these)
+
+# rados?
+AC_ARG_WITH([rados],
+	[AS_HELP_STRING([--with-rados], [build with librados support])],
+	[],
+	[with_rados=yes])
+AM_CONDITIONAL(WITH_RADOS, test "$with_rados" = "yes")
+#AS_IF([test "$with_rados" = "yes"], [AC_DEFINE([WITH_RADOS])])
+
+# rbd?
+# rbd requires rados
+AC_ARG_WITH([rbd],
+	[AS_HELP_STRING([--with-rbd], [build rbd files])],
+	[],
+	[with_rbd=yes])
+AM_CONDITIONAL(WITH_RBD, test "$with_rbd" = "yes")
+#AS_IF([test "$with_rbd" = "yes"], [AC_DEFINE([WITH_RADOS, WITH_RBD])])
+
+# cephfs?
+# cephfs requires rados
+AC_ARG_WITH([cephfs],
+	[AS_HELP_STRING([--with-cephfs], [build cephfs files])],
+	[],
+	[with_cephfs=yes])
+AM_CONDITIONAL(WITH_CEPHFS, test "$with_cephfs" = "yes")
+#AS_IF([test "$with_cephfs" = "yes"], [AC_DEFINE([WITH_RADOS, WITH_CEPHFS])])
+
+# radosgw?
+# radosgw requires rados
+AC_ARG_WITH([radosgw],
+            [AS_HELP_STRING([--with-radosgw], [build RADOS gateway])],
+            [],
+            [with_radosgw=check])
+# AM_CONDITIONAL is defined later -- we need to check whether we can enable radosgw if no option is present
+#AS_IF([test "$with_radosgw" = "yes"], [AC_DEFINE([WITH_RADOS, WITH_RADOSGW])])
+
+# radosstriper?
+AC_ARG_WITH([radosstriper],
+	[AS_HELP_STRING([--with-radosstriper], [build radosstriper files])],
+	[],
+	[with_radosstriper=yes])
+AM_CONDITIONAL(WITH_RADOSSTRIPER, test "$with_radosstriper" = "yes")
+#AS_IF([test "$with_radostriper" = "yes"], [AC_DEFINE([WITH_RADOS, WITH_RADOSSTRIPER])])
+
+# mon?
+AC_ARG_WITH([mon],
+	[AS_HELP_STRING([--with-mon], [build Ceph monitor software files])],
+	[],
+	[with_mon=yes])
+AM_CONDITIONAL(WITH_MON, test "$with_mon" = "yes")
+#AS_IF([test "$with_mon" = "yes"], [AC_DEFINE([WITH_MON])])
+
+# osd?
+AC_ARG_WITH([osd],
+	[AS_HELP_STRING([--with-osd], [build object store daemon files])],
+	[],
+	[with_osd=yes])
+AM_CONDITIONAL(WITH_OSD, test "$with_osd" = "yes")
+#AS_IF([test "$with_osd" = "yes"], [AC_DEFINE([WITH_OSD])])
+
+# mds?
+AC_ARG_WITH([mds],
+	[AS_HELP_STRING([--with-mds], [build mds files])],
+	[],
+	[with_mds=yes])
+AM_CONDITIONAL(WITH_MDS, test "$with_mds" = "yes")
+#AS_IF([test "$with_mds" = "yes"], [AC_DEFINE([WITH_MDS])])
+
+# client?
+AC_ARG_ENABLE([client],
+	[AS_HELP_STRING([--enable-client], [enable client-side build])],
+	[],
+	[enable_client=yes])
+AM_CONDITIONAL([ENABLE_CLIENT], test "$enable_client" = "yes")
+#AS_IF([test "$enable_client" = "yes"], [AC_DEFINE([WITH_RADOS, WITH_RBD, ENABLE_CLIENT])])
+
+# server?
+AC_ARG_ENABLE([server],
+	[AS_HELP_STRING([--enable-server], [enable server-side build ])],
+	[],
+	[enable_server=yes])
+AM_CONDITIONAL(ENABLE_SERVER, test "$enable_server" = "yes")
+#AS_IF([test "$enable_server" = "yes"], [AC_DEFINE([WITH_MON, WITH_OSD, WITH_MDS, ENABLE_SERVER])])
+
+# cond-check if snappy-devel is installed, needed by leveldb that is need by server parts of the project
+AS_IF([test "$enable_server" = "yes" -a \( "$with_osd" = "yes" -o "$with_mon" = "yes" \)],
+	[AC_CHECK_LIB([snappy], [snappy_compress], [true], [AC_MSG_FAILURE([libsnappy not found])])])
+
+# cond-check leveldb, necessary if server, osd or mon enabled
+AS_IF([test "$enable_server" = "yes" -a \( "$with_osd" = "yes" -o "$with_mon" = "yes" \)],
+	[AC_CHECK_LIB([leveldb], [leveldb_open], [true], [AC_MSG_FAILURE([libleveldb not found])], [-lsnappy -lpthread])])
+###### PATCH ENDS HERE ######
+
+
 # Check for yasm
 AC_CHECK_PROG(YASM_CHECK, yasm, yes)
 if test x"$YASM_CHECK" = x"yes"; then
@@ -145,6 +253,7 @@ AC_DEFUN([AC_CHECK_CC_FLAG],
 
 AC_CHECK_CC_FLAG([-Wtype-limits], [WARN_TYPE_LIMITS])
 AC_CHECK_CC_FLAG([-Wignored-qualifiers], [WARN_IGNORED_QUALIFIERS])
+AC_CHECK_CC_FLAG([-Werror=format-security], [WARN_ERROR_FORMAT_SECURITY])
 
 # Check for compiler VTA support
 AX_CHECK_COMPILE_FLAG([-fvar-tracking-assignments], [HAS_VTA_SUPPORT=1], [HAS_VTA_SUPPORT=0])
@@ -160,7 +269,7 @@ ACX_PTHREAD
 AC_CHECK_LIB([uuid], [uuid_parse], [true], AC_MSG_FAILURE([libuuid not found]))
 
 # rbd {map,unmap,showmapped} dependencies, Linux only
-if test x"$linux" = x"yes"; then
+if test x"$linux" = x"yes" -a x"$with_rbd" = x"yes"; then
   # libblkid
   AC_CHECK_HEADER([blkid/blkid.h], [],
     AC_MSG_ERROR([blkid/blkid.h not found (libblkid-dev, libblkid-devel)]))
@@ -172,6 +281,12 @@ if test x"$linux" = x"yes"; then
     AC_MSG_ERROR([libudev.h not found (libudev-dev, libudev-devel)]))
   AC_CHECK_LIB([udev], [udev_monitor_receive_device], [true],
     AC_MSG_FAILURE([libudev not found]))
+
+  # libexpat
+  AC_CHECK_HEADER([expat.h], [],
+    AC_MSG_ERROR([expat.h not found (libexpat-devel)]))
+  AC_CHECK_LIB([expat], [XML_Parse], [true],
+    AC_MSG_FAILURE([libexpat not found]))
 fi
 
 #
@@ -279,6 +394,12 @@ else
     AC_MSG_FAILURE([no suitable crypto library found])
 fi
 
+AC_ARG_ENABLE(gitversion,
+    [AC_HELP_STRING([--enable-gitversion], [build Ceph with git version string])],
+    [], [enable_gitversion=yes])
+
+AM_CONDITIONAL(NO_GIT_VERSION, [test "x$enable_gitversion" = "xno"])
+
 AC_ARG_ENABLE([root-make-check],
             [AS_HELP_STRING([--enable-root-make-check], [enable make check tests that require root privileges])],
             [],
@@ -311,7 +432,7 @@ AS_IF([test "$with_profiler" = "yes"],
 
 # debug crap?
 AC_ARG_WITH([debug],
-            [AS_HELP_STRING([--with-debug], [build extra debug binaries])],
+            [AS_HELP_STRING([--with-debug], [build extra debug binaries and tests])],
             [case "${withval}" in
 		  yes) with_debug=yes ;;
 		  no)  with_debug=no ;;
@@ -333,11 +454,7 @@ if test "x$enable_coverage" != xno; then
 fi
 AC_SUBST(GCOV_PREFIX_STRIP, `echo $(pwd)/src | tr -dc / | wc -c`)
 
-# radosgw?
-AC_ARG_WITH([radosgw],
-            [AS_HELP_STRING([--with-radosgw], [build RADOS gateway])],
-            [],
-            [with_radosgw=check])
+# is radosgw available?
 RADOSGW=0
 AS_IF([test "x$with_radosgw" != xno],
 	    [AC_CHECK_LIB([fcgi], [FCGX_Init],
@@ -406,6 +523,26 @@ AS_IF([test "x$with_jemalloc" = xyes],
 		  [no jemalloc found (do not use --with-jemalloc)])])])
 AM_CONDITIONAL(WITH_JEMALLOC, [test "$HAVE_LIBJEMALLOC" = "1"])
 
+# tcmalloc-minimal?
+AC_ARG_WITH([tcmalloc-minimal],
+	    [AS_HELP_STRING([--with-tcmalloc-minimal], [enable minimal tcmalloc support for memory allocations])],
+	    [],
+	    [with_tcmalloc_minimal=no])
+
+AS_IF([test "x$with_jemalloc" = "xyes"],[with_tcmalloc_minimal=no],[])
+
+TCMALLOC_MINIMAL=
+AS_IF([test "x$with_tcmalloc_minimal" != xno],
+        [AC_CHECK_LIB([tcmalloc_minimal], [malloc],
+         [AC_SUBST([LIBTCMALLOC], ["-ltcmalloc_minimal"])
+	       AC_DEFINE([HAVE_LIBTCMALLOC_MINIMAL], [1],
+	       		 [Define if you have tcmalloc])
+	       HAVE_LIBTCMALLOC_MINIMAL=1
+	     ],
+	    [AC_MSG_FAILURE(
+		  [no tcmalloc found (do not use --with-tcmalloc-minimal)])])])
+AM_CONDITIONAL(WITH_TCMALLOC_MINIMAL, [test "$HAVE_LIBTCMALLOC_MINIMAL" = "1"])
+
 # tcmalloc?
 AC_ARG_WITH([tcmalloc],
 	    [AS_HELP_STRING([--without-tcmalloc], [disable tcmalloc for memory allocations])],
@@ -413,6 +550,7 @@ AC_ARG_WITH([tcmalloc],
 	    [with_tcmalloc=yes])
 
 AS_IF([test "x$with_jemalloc" = "xyes"],[with_tcmalloc=no],[])
+AS_IF([test "x$with_tcmalloc_minimal" = "xyes"],[with_tcmalloc=no],[])
 
 TCMALLOC=
 AS_IF([test "x$with_tcmalloc" != xno],
@@ -436,8 +574,10 @@ fi
 #set pg ref debugging?
 AC_ARG_ENABLE([pgrefdebugging],
 	    [AS_HELP_STRING([--enable-pgrefdebugging], [enable pg ref debugging])],
-			[AC_DEFINE([PG_DEBUG_REFS], [1], [Defined if you want pg ref debugging])],
-			[])
+			[], [enable_pgrefdebugging=no])
+AS_IF([test "x$enable_pgrefdebugging" = "xyes"],
+	  [AC_DEFINE([PG_DEBUG_REFS], [1], [Defined if you want pg ref debugging])],
+	  [])
 
 #
 # Java is painful
@@ -552,7 +692,7 @@ fi
 #
 # FreeBSD has it in base.
 #
-if test x"$freebsd" != x"yes"; then
+if test x"$freebsd" != x"yes" -a x"$with_radosgw" = x"yes"; then
 PKG_CHECK_MODULES([LIBEDIT], [libedit >= 2.11],
                 [], AC_MSG_FAILURE([No usable version of libedit found.]))
 else
@@ -594,18 +734,21 @@ AC_ARG_WITH([ocf],
             [with_ocf=no])
 AM_CONDITIONAL(WITH_OCF, [ test "$with_ocf" = "yes" ])
 
-# check is snappy-devel is installed, needed by leveldb
-AC_CHECK_LIB([snappy], [snappy_compress], [true], [AC_MSG_FAILURE([libsnappy not found])])
-# use system leveldb
-AC_CHECK_LIB([leveldb], [leveldb_open], [true], [AC_MSG_FAILURE([libleveldb not found])], [-lsnappy -lpthread])
-# see if we can use bloom filters with leveldb
-AC_LANG_PUSH([C++])
-AC_CHECK_HEADER([leveldb/filter_policy.h], [AC_DEFINE([HAVE_LEVELDB_FILTER_POLICY], [1], [Defined if LevelDB supports bloom filters ])])
-AC_LANG_POP([C++])
+# cond-check snappy-devel and leveldb, necessary if server + osd or mon enabled
+if test "$enable_server" = "yes" -a \( "$with_osd" = "yes" -o "$with_mon" = "yes" \); then
+	AC_CHECK_LIB([snappy], [snappy_compress], [true], [AC_MSG_FAILURE([libsnappy not found])])
+	AC_CHECK_LIB([leveldb], [leveldb_open], [true], [AC_MSG_FAILURE([libleveldb not found])], [-lsnappy -lpthread])
+
+	# see if we can use bloom filters with leveldb
+	AC_LANG_PUSH([C++])
+	AC_CHECK_HEADER([leveldb/filter_policy.h], [AC_DEFINE([HAVE_LEVELDB_FILTER_POLICY], [1], [Defined if LevelDB supports bloom filters ])])
+	AC_LANG_POP([C++])
+fi
 
 # Find supported SIMD / NEON / SSE extensions supported by the compiler
 AX_ARM_FEATURES()
 AM_CONDITIONAL(HAVE_NEON, [ test "x$ax_cv_support_neon_ext" = "xyes"])
+AM_CONDITIONAL(HAVE_ARMV8_CRC, [ test "x$ax_cv_support_crc_ext" = "xyes"])
 AX_INTEL_FEATURES()
 AM_CONDITIONAL(HAVE_SSSE3, [ test "x$ax_cv_support_ssse3_ext" = "xyes"])
 AM_CONDITIONAL(HAVE_SSE4_PCLMUL, [ test "x$ax_cv_support_pclmuldq_ext" = "xyes"])
@@ -676,6 +819,12 @@ AC_ARG_WITH([rest-bench],
 	    [],
 	    [with_rest_bench=no])
 AM_CONDITIONAL(WITH_REST_BENCH, [ test "$with_rest_bench" = "yes" ])
+
+# needs libcurl and libxml2
+if test "x$with_rest_bench" = xyes && test "x$with_system_libs3" = xno; then
+   AC_CHECK_LIB([curl], [curl_easy_init], [], AC_MSG_ERROR([libcurl not found]))
+   AC_CHECK_LIB([xml2], [xmlParseChunk], [], AC_MSG_ERROR([libxml2 not found]))
+fi
 
 # use libaio?
 AC_ARG_WITH([libaio],
@@ -871,6 +1020,7 @@ AC_MSG_RESULT([no])
 ])
 
 AC_MSG_CHECKING([for sched.h])
+AC_LANG_PUSH([C++])
 AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
 #define _GNU_SOURCE
 #include <sched.h>
@@ -887,6 +1037,8 @@ AC_DEFINE([HAVE_SCHED], 1, [Define to 1 if you have sched.h.])
 ], [
 AC_MSG_RESULT([no])
 ])
+AC_LANG_POP([C++])
+
 
 #
 # Check for pthread spinlock (depends on ACX_PTHREAD)
@@ -997,7 +1149,60 @@ AM_COND_IF([WITH_BABELTRACE], [
     AC_MSG_ERROR([babeltrace/ctf/events.h not found (libbabeltrace-ctf-dev, libbabeltrace-devel)]))
 ])
 
+dnl check for valgrind
+AC_ARG_ENABLE([valgrind],
+              [AS_HELP_STRING([--enable-valgrind], [enable valgrind unit tests])],
+              [enable_valgrind=$enableval], [enable_valgrind=])
+AC_CHECK_PROG(HAVE_VALGRIND, valgrind, yes)
+AS_IF(
+  [test "x$HAVE_VALGRIND" = "x"], AS_IF([test "x$enable_valgrind" = "xyes"], [AC_MSG_ERROR([valgrind not found])]),
+  [test "x$enable_valgrind" = "x"], [enable_valgrind=yes])
 
+AM_CONDITIONAL([VALGRIND_ENABLED], [test "x$enable_valgrind" = "xyes"])
+if test "x$enable_valgrind" = "xyes"; then
+  AC_CHECK_HEADERS([valgrind/helgrind.h])
+fi
+
+dnl systemd-libexec-dir
+AC_SUBST(systemd_libexec_dir)
+AC_ARG_WITH(
+    systemd-libexec-dir,
+    AS_HELP_STRING(
+	    [--with-systemd-libexec-dir=DIR],
+	    [systemd libexec directory @<:@SYSTEMD_LIBEXEC_DIR@:>@
+        defaults to --libexecdir=DIR]
+    ),
+    [
+	    systemd_libexec_dir="$withval"
+    ],
+    [
+        if test "x$SYSTEMD_LIBEXEC_DIR" = "x"; then
+            dnl store old values
+
+            prefix_save=$prefix
+            exec_prefix_save=$exec_prefix
+
+            dnl if no prefix given, then use /usr/local, the default prefix
+            if test "x$prefix" = "xNONE"; then
+                prefix="$ac_default_prefix"
+            fi
+            dnl if no exec_prefix given, then use prefix
+            if test "x$exec_prefix" = "xNONE"; then
+                exec_prefix=$prefix
+            fi
+
+            dnl now get the expanded default
+            systemd_libexec_dir="`eval exec_prefix=$exec_prefix prefix=$prefix echo $libexecdir`"
+
+            dnl now cleanup prefix and exec_prefix
+
+            prefix=$prefix_save
+            exec_prefix=$exec_prefix_save
+        else
+            systemd_libexec_dir="$SYSTEMD_LIBEXEC_DIR"
+        fi
+    ]
+)
 
 # Checks for typedefs, structures, and compiler characteristics.
 #AC_HEADER_STDBOOL
@@ -1060,5 +1265,7 @@ AC_CONFIG_FILES([Makefile
 	src/java/Makefile
 	src/tracing/Makefile
 	man/Makefile
+	doc/Makefile
+	systemd/ceph-osd@.service
 	ceph.spec])
 AC_OUTPUT

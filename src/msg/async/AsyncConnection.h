@@ -224,8 +224,8 @@ class AsyncConnection : public Connection {
   EventCallbackRef reset_handler;
   EventCallbackRef remote_reset_handler;
   EventCallbackRef connect_handler;
-  EventCallbackRef accept_handler;
   EventCallbackRef local_deliver_handler;
+  EventCallbackRef wakeup_handler;
   bool keepalive;
   struct iovec msgvec[IOV_MAX];
   char *recv_buf;
@@ -260,7 +260,6 @@ class AsyncConnection : public Connection {
                      // presentation
   bool is_reset_from_peer;
   bool once_ready;
-  atomic_t stopping;
 
   // used only for local state, it will be overwrite when state transition
   char *state_buffer;
@@ -278,7 +277,10 @@ class AsyncConnection : public Connection {
   void wakeup_from(uint64_t id);
   void local_deliver();
   void stop() {
-    center->dispatch_event_external(reset_handler);
+    lock.Lock();
+    if (state != STATE_CLOSED)
+      center->dispatch_event_external(reset_handler);
+    lock.Unlock();
     mark_down();
   }
   void cleanup_handler() {
@@ -287,8 +289,8 @@ class AsyncConnection : public Connection {
     reset_handler.reset();
     remote_reset_handler.reset();
     connect_handler.reset();
-    accept_handler.reset();
     local_deliver_handler.reset();
+    wakeup_handler.reset();
   }
 }; /* AsyncConnection */
 

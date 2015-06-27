@@ -145,11 +145,12 @@ using ceph::crypto::MD5;
 #define ERR_QUOTA_EXCEEDED       2026
 #define ERR_SIGNATURE_NO_MATCH   2027
 #define ERR_INVALID_ACCESS_KEY   2028
+#define ERR_MALFORMED_XML        2029
 #define ERR_USER_SUSPENDED       2100
 #define ERR_INTERNAL_ERROR       2200
 
 #ifndef UINT32_MAX
-#define UINT32_MAX (4294967295)
+#define UINT32_MAX (0xffffffffu)
 #endif
 
 typedef void *RGWAccessHandle;
@@ -967,6 +968,9 @@ struct rgw_obj_key {
     }
     return (r < 0);
   }
+  bool operator<=(const rgw_obj_key& k) const {
+    return !(k < *this);
+  }
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
     ::encode(name, bl);
@@ -1224,6 +1228,15 @@ public:
 
   void reset_loc() {
     loc.clear();
+    /*
+     * For backward compatibility. Older versions used to have object locator on all objects,
+     * however, the orig_obj was the effective object locator. This had the same effect as not
+     * having object locator at all for most objects but the ones that started with underscore as
+     * these were escaped.
+     */
+    if (orig_obj[0] == '_') {
+      loc = orig_obj;
+    }
   }
 
   bool have_null_instance() {
@@ -1261,6 +1274,7 @@ public:
       object.append("_");
       object.append(o);
     }
+    reset_loc();
   }
 
   /*

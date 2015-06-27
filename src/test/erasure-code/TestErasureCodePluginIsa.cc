@@ -24,13 +24,13 @@
 TEST(ErasureCodePlugin, factory)
 {
   ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
-  map<std::string,std::string> parameters;
-  parameters["directory"] = ".libs";
+  ErasureCodeProfile profile;
+  profile["directory"] = ".libs";
   {
     ErasureCodeInterfaceRef erasure_code;
     EXPECT_FALSE(erasure_code);
-    EXPECT_EQ(-EIO, instance.factory("no-isa", parameters,
-                                        &erasure_code, cerr));
+    EXPECT_EQ(-EIO, instance.factory("no-isa", profile,
+                                        &erasure_code, &cerr));
     EXPECT_FALSE(erasure_code);
   }
   const char *techniques[] = {
@@ -39,10 +39,10 @@ TEST(ErasureCodePlugin, factory)
   };
   for(const char **technique = techniques; *technique; technique++) {
     ErasureCodeInterfaceRef erasure_code;
-    parameters["technique"] = *technique;
+    profile["technique"] = *technique;
     EXPECT_FALSE(erasure_code);
-    EXPECT_EQ(0, instance.factory("isa", parameters,
-                                  &erasure_code, cerr));
+    EXPECT_EQ(0, instance.factory("isa", profile,
+                                  &erasure_code, &cerr));
     EXPECT_TRUE(erasure_code);
   }
 }

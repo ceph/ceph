@@ -68,7 +68,7 @@ Ceph configuration file, the default value will be set automatically.
 
 ``rgw dns name``
 
-:Description: The DNS name of the served domain.
+:Description: The DNS name of the served domain. See also the ``hostnames`` setting within regions.
 :Type: String 
 :Default: None
 	
@@ -316,6 +316,12 @@ Ceph configuration file, the default value will be set automatically.
 :Default: ``admin``
 
 
+``rgw content length compat``
+
+:Description: Enable compatability handling of FCGI requests with both CONTENT_LENGTH AND HTTP_CONTENT_LENGTH set.
+:Type: Boolean
+:Default: ``false``
+
 Regions
 =======
 
@@ -373,6 +379,7 @@ The ``default`` region looks like this:
     "api_name": "",
     "is_master": "true",
     "endpoints": [],
+    "hostnames": [],
     "master_zone": "",
     "zones": [
       {"name": "default",
@@ -402,6 +409,11 @@ required settings:
    you may use multiple domain names to refer to the same region. Remember to 
    escape the forward slashes (``\/``). You may also specify a 
    port (``fqdn:port``) for each endpoint. Optional.
+
+#. ``hostnames``: A list of all the hostnames in the region. For example, 
+   you may use multiple domain names to refer to the same region. Optional.
+   The ``rgw dns name`` setting will automatically be included in this list.
+   You should restart the ``radosgw`` daemon(s) after changing this setting.
 
 #. ``master_zone``: The master zone for the region. Optional. Uses the default
    zone if not specified. **note:** You can only have one master zone per 
@@ -464,6 +476,7 @@ JSON object is an example of a default region map.
             "api_name": "",
             "is_master": "true",
             "endpoints": [],
+            "hostnames": [],
             "master_zone": "",
             "zones": [
               { "name": "default",

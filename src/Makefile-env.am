@@ -29,8 +29,9 @@ ceph_sbindir = $(sbindir)
 # certain things go straight into /sbin, though!
 su_sbindir = /sbin
 
-# C/C++ tests to build will be appended to this
-check_PROGRAMS =
+# C/C++ tests to build and executed will be appended to this
+check_TESTPROGRAMS =
+check_PROGRAMS = $(check_TESTPROGRAMS)
 
 # tests scripts will be appended to this
 check_SCRIPTS =
@@ -64,7 +65,7 @@ AM_COMMON_CFLAGS = \
 	${WARN_IGNORED_QUALIFIERS} \
 	-Winit-self \
 	-Wpointer-arith \
-	-Werror=format-security \
+	${WARN_ERROR_FORMAT_SECURITY} \
 	-fno-strict-aliasing \
 	-fsigned-char
 if !CLANG
@@ -174,6 +175,10 @@ endif # WITH_LIBZFS
 if WITH_LIBROCKSDB
 LIBOS += libos_rocksdb.la
 endif # WITH_LIBROCKSDB
+
+if WITH_TCMALLOC_MINIMAL
+LIBPERFGLUE += -ltcmalloc_minimal
+endif # WITH_TCMALLOC_MINIMAL
 
 if WITH_TCMALLOC
 LIBPERFGLUE += -ltcmalloc

@@ -81,6 +81,8 @@ TEST_P(StoreTest, collect_metadata) {
   if (GetParam() == string("filestore")) {
     ASSERT_NE(pm.count("filestore_backend"), 0u);
     ASSERT_NE(pm.count("filestore_f_type"), 0u);
+  } else if (GetParam() == string("keyvaluestore")) {
+    ASSERT_NE(pm.count("keyvaluestore_backend"), 0u);
   }
 }
 
@@ -700,14 +702,13 @@ public:
 
   void getattrs() {
     ghobject_t obj;
-    int retry;
     {
       Mutex::Locker locker(lock);
       if (!can_unlink())
         return ;
       wait_for_ready();
 
-      retry = 10;
+      int retry = 10;
       do {
         obj = get_uniform_random_object();
         if (!--retry)

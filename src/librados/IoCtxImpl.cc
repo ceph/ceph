@@ -468,6 +468,8 @@ int librados::IoCtxImpl::append(const object_t& oid, bufferlist& bl, size_t len)
 
 int librados::IoCtxImpl::write_full(const object_t& oid, bufferlist& bl)
 {
+  if (bl.length() > UINT_MAX/2)
+    return -E2BIG;
   ::ObjectOperation op;
   prepare_assert_ops(&op);
   op.write_full(bl);

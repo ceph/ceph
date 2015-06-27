@@ -9,7 +9,7 @@ A preselection of pg_num
 
 When creating a new pool with::
 
-        ceph osd pool set {pool-name} pg_num
+        ceph osd pool create {pool-name} pg_num
 
 it is mandatory to choose the value of ``pg_num`` because it cannot be
 calculated automatically. Here are a few values commonly used:

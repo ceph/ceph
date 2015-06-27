@@ -31,7 +31,7 @@ extern "C" {
 
 #define LIBRBD_VER_MAJOR 0
 #define LIBRBD_VER_MINOR 1
-#define LIBRBD_VER_EXTRA 9
+#define LIBRBD_VER_EXTRA 10
 
 #define LIBRBD_VERSION(maj, min, extra) ((maj << 16) + (min << 8) + extra)
 
@@ -48,6 +48,7 @@ extern "C" {
 #endif
 
 #define RBD_FLAG_OBJECT_MAP_INVALID   (1<<0)
+#define RBD_FLAG_FAST_DIFF_INVALID    (1<<1)
 
 typedef void *rbd_snap_t;
 typedef void *rbd_image_t;
@@ -148,6 +149,8 @@ CEPH_RBD_API int rbd_stat(rbd_image_t image, rbd_image_info_t *info,
 CEPH_RBD_API int rbd_get_old_format(rbd_image_t image, uint8_t *old);
 CEPH_RBD_API int rbd_get_size(rbd_image_t image, uint64_t *size);
 CEPH_RBD_API int rbd_get_features(rbd_image_t image, uint64_t *features);
+CEPH_RBD_API int rbd_update_features(rbd_image_t image, uint64_t features,
+                                     uint8_t enabled);
 CEPH_RBD_API int rbd_get_stripe_unit(rbd_image_t image, uint64_t *stripe_unit);
 CEPH_RBD_API int rbd_get_stripe_count(rbd_image_t image,
                                       uint64_t *stripe_count);
@@ -161,6 +164,10 @@ CEPH_RBD_API int rbd_get_flags(rbd_image_t image, uint64_t *flags);
 
 /* exclusive lock feature */
 CEPH_RBD_API int rbd_is_exclusive_lock_owner(rbd_image_t image, int *is_owner);
+
+/* object map feature */
+CEPH_RBD_API int rbd_rebuild_object_map(rbd_image_t image,
+                                        librbd_progress_fn_t cb, void *cbdata);
 
 CEPH_RBD_API int rbd_copy(rbd_image_t image, rados_ioctx_t dest_io_ctx,
                           const char *destname);
@@ -383,6 +390,8 @@ CEPH_RBD_API int rbd_read_iterate2(rbd_image_t image, uint64_t ofs, uint64_t len
  * @param fromsnapname start snapshot name, or NULL
  * @param ofs start offset
  * @param len len in bytes of region to report on
+ * @param include_parent 1 if full history diff should include parent
+ * @param whole_object 1 if diff extents should cover whole object
  * @param cb callback to call for each allocated region
  * @param arg argument to pass to the callback
  * @returns 0 on success, or negative error code on error
@@ -392,6 +401,12 @@ CEPH_RBD_API int rbd_diff_iterate(rbd_image_t image,
 		                  uint64_t ofs, uint64_t len,
 		                  int (*cb)(uint64_t, size_t, int, void *),
                                   void *arg);
+CEPH_RBD_API int rbd_diff_iterate2(rbd_image_t image,
+		                   const char *fromsnapname,
+		                   uint64_t ofs, uint64_t len,
+                                   uint8_t include_parent, uint8_t whole_object,
+		                   int (*cb)(uint64_t, size_t, int, void *),
+                                   void *arg);
 CEPH_RBD_API ssize_t rbd_write(rbd_image_t image, uint64_t ofs, size_t len,
                                const char *buf);
 /*
@@ -442,6 +457,35 @@ CEPH_RBD_API int rbd_aio_flush(rbd_image_t image, rbd_completion_t c);
  * @returns 0 on success, negative error code on failure
  */
 CEPH_RBD_API int rbd_invalidate_cache(rbd_image_t image);
+
+CEPH_RBD_API int rbd_metadata_get(rbd_image_t image, const char *key, char *value, size_t *val_len);
+CEPH_RBD_API int rbd_metadata_set(rbd_image_t image, const char *key, const char *value);
+CEPH_RBD_API int rbd_metadata_remove(rbd_image_t image, const char *key);
+/**
+ * List all metadatas associated with this image.
+ *
+ * This iterates over all metadatas, key_len and val_len are filled in
+ * with the number of bytes put into the keys and values buffers.
+ *
+ * If the provided buffers are too short, the required lengths are
+ * still filled in, but the data is not and -ERANGE is returned.
+ * Otherwise, the buffers are filled with the keys and values
+ * of the image, with a '\0' after each.
+ *
+ * @param image which image (and implicitly snapshot) to list clones of
+ * @param start_after which name to begin listing after
+ *        (use the empty string to start at the beginning)
+ * @param max the maximum number of names to lis(if 0 means no limit)
+ * @param keys buffer in which to store pool names
+ * @param keys_len number of bytes in pools buffer
+ * @param values buffer in which to store image names
+ * @param vals_len number of bytes in images buffer
+ * @returns number of children on success, negative error code on failure
+ * @returns -ERANGE if either buffer is too short
+ */
+CEPH_RBD_API int rbd_metadata_list(rbd_image_t image, const char *start, uint64_t max,
+    char *keys, size_t *key_len, char *values, size_t *vals_len);
+
 
 #ifdef __cplusplus
 }

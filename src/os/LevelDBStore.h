@@ -34,6 +34,9 @@ enum {
   l_leveldb_first = 34300,
   l_leveldb_gets,
   l_leveldb_txns,
+  l_leveldb_get_latency,
+  l_leveldb_submit_latency,
+  l_leveldb_submit_sync_latency,
   l_leveldb_compact,
   l_leveldb_compact_range,
   l_leveldb_compact_queue_merge,
@@ -158,7 +161,7 @@ public:
   ~LevelDBStore();
 
   static int _test_init(const string& dir);
-  int init();
+  int init(string option_str="");
 
   /// Opens underlying db
   int open(ostream &out) {
@@ -302,10 +305,6 @@ public:
   static string combine_strings(const string &prefix, const string &value);
   static int split_key(leveldb::Slice in, string *prefix, string *key);
   static bufferlist to_bufferlist(leveldb::Slice in);
-  static bool in_prefix(const string &prefix, leveldb::Slice key) {
-    return (key.compare(leveldb::Slice(past_prefix(prefix))) < 0) &&
-      (key.compare(leveldb::Slice(prefix)) > 0);
-  }
   static string past_prefix(const string &prefix) {
     string limit = prefix;
     limit.push_back(1);

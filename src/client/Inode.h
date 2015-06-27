@@ -19,6 +19,7 @@ class Dir;
 struct SnapRealm;
 struct Inode;
 class ceph_lock_state_t;
+class MetaRequest;
 
 struct Cap {
   MetaSession *session;
@@ -54,6 +55,9 @@ struct CapSnap {
   map<string,bufferptr> xattrs;
   version_t xattr_version;
 
+  bufferlist inline_data;
+  version_t inline_version;
+
   bool writing, dirty_data;
   uint64_t flush_tid;
   xlist<CapSnap*>::item flushing_item;
@@ -61,7 +65,7 @@ struct CapSnap {
   CapSnap(Inode *i)
     : in(i), issued(0), dirty(0),
       size(0), time_warp_seq(0), mode(0), uid(0), gid(0), xattr_version(0),
-      writing(false), dirty_data(false), flush_tid(0),
+      inline_version(0), writing(false), dirty_data(false), flush_tid(0),
       flushing_item(this)
   {}
 
@@ -296,6 +300,8 @@ struct Inode {
   // file locks
   ceph_lock_state_t *fcntl_locks;
   ceph_lock_state_t *flock_locks;
+
+  xlist<MetaRequest*> unsafe_dir_ops;
 
   Inode(CephContext *cct_, vinodeno_t vino, ceph_file_layout *newlayout)
     : cct(cct_), ino(vino.ino), snapid(vino.snapid),

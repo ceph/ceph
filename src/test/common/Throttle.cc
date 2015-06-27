@@ -74,7 +74,15 @@ TEST_F(ThrottleTest, take) {
 
 TEST_F(ThrottleTest, get) {
   int64_t throttle_max = 10;
-  Throttle throttle(g_ceph_context, "throttle", throttle_max);
+  Throttle throttle(g_ceph_context, "throttle");
+
+  // test increasing max from 0 to throttle_max
+  {
+    ASSERT_FALSE(throttle.get(throttle_max, throttle_max));
+    ASSERT_EQ(throttle.get_max(), throttle_max);
+    ASSERT_EQ(throttle.put(throttle_max), 0);
+  }
+
   ASSERT_THROW(throttle.get(-1), FailedAssertion);
   ASSERT_FALSE(throttle.get(5)); 
   ASSERT_EQ(throttle.put(5), 0); 
@@ -161,7 +169,13 @@ TEST_F(ThrottleTest, get_or_fail) {
 
 TEST_F(ThrottleTest, wait) {
   int64_t throttle_max = 10;
-  Throttle throttle(g_ceph_context, "throttle", throttle_max);
+  Throttle throttle(g_ceph_context, "throttle");
+
+  // test increasing max from 0 to throttle_max
+  {
+    ASSERT_FALSE(throttle.wait(throttle_max));
+    ASSERT_EQ(throttle.get_max(), throttle_max);
+  }
 
   useconds_t delay = 1;
 

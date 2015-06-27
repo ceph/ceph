@@ -22,7 +22,9 @@ class SloppyCRCMap;
 class GenericFileStoreBackend : public FileStoreBackend {
 private:
   bool ioctl_fiemap;
+  bool seek_data_hole;
   bool m_filestore_fiemap;
+  bool m_filestore_seek_data_hole;
   bool m_filestore_fsync_flushes_journal_data;
 public:
   GenericFileStoreBackend(FileStore *fs);
@@ -41,6 +43,7 @@ public:
   virtual int destroy_checkpoint(const string& name) { return -EOPNOTSUPP; }
   virtual int syncfs();
   virtual bool has_fiemap() { return ioctl_fiemap; }
+  virtual bool has_seek_data_hole() { return seek_data_hole; }
   virtual int do_fiemap(int fd, off_t start, size_t len, struct fiemap **pfiemap);
   virtual int clone_range(int from, int to, uint64_t srcoff, uint64_t len, uint64_t dstoff) {
     return _copy_range(from, to, srcoff, len, dstoff);

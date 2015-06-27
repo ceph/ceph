@@ -220,11 +220,13 @@ protected:
     return osdmap_ref;
   }
 
+public:
   OSDMapRef get_osdmap() const {
     assert(is_locked());
     assert(osdmap_ref);
     return osdmap_ref;
   }
+protected:
 
   /** locking and reference counting.
    * I destroy myself when the reference count hits zero.
@@ -357,10 +359,6 @@ public:
       return ret;
     }
 
-    const map<hobject_t, pg_missing_t::item> &get_all_missing() const {
-      return needs_recovery_map;
-    }
-
     void clear() {
       needs_recovery_map.clear();
       missing_loc.clear();
@@ -395,44 +393,6 @@ public:
       assert(needs_recovery(hoid));
       needs_recovery_map[hoid].need = need;
     }
-    void rebuild_object_location(
-      const hobject_t &hoid,
-      const set<pg_shard_t> &actingbackfill,
-      const map<pg_shard_t, const pg_missing_t *> &all_missing,
-      const map<pg_shard_t, const pg_info_t *> &all_info) {
-      needs_recovery_map.erase(hoid);
-      missing_loc.erase(hoid);
-      eversion_t need;
-      for (set<pg_shard_t>::const_iterator peer = actingbackfill.begin();
-	   peer != actingbackfill.end();
-	   ++peer) {
-	map<pg_shard_t, const pg_missing_t *>::const_iterator pm =
-	  all_missing.find(*peer);
-	assert(pm != all_missing.end());
-	if (pm->second->is_missing(hoid)) {
-	  need = pm->second->missing.find(hoid)->second.need;
-	  break;
-	}
-      }
-      if (need == eversion_t())
-	return;
-
-      set<pg_shard_t> have;
-      for (map<pg_shard_t, const pg_missing_t *>::const_iterator pm =
-	     all_missing.begin();
-	   pm != all_missing.end();
-	   ++pm) {
-	map<pg_shard_t, const pg_info_t *>::const_iterator pi =
-	  all_info.find(pm->first);
-	assert(pi != all_info.end());
-	if (pi->second->last_update >= need &&
-	    !pm->second->is_missing(hoid)) {
-	  have.insert(pm->first);
-	}
-      }
-      missing_loc[hoid].swap(have);
-      add_missing(hoid, need, eversion_t());
-    }
 
     /// Adds info about a possible recovery source
     bool add_source_info(
@@ -441,6 +401,11 @@ public:
       const pg_missing_t &omissing, ///< [in] (optional) missing
       ThreadPool::TPHandle* handle  ///< [in] ThreadPool handle
       ); ///< @return whether a new object location was discovered
+
+    /// Adds recovery sources in batch
+    void add_batch_sources_info(
+      const set<pg_shard_t> &sources  ///< [in] a set of resources which can be used for all objects
+      );
 
     /// Uses osdmap to update structures for now down sources
     void check_recovery_sources(const OSDMapRef osdmap);
@@ -469,7 +434,10 @@ public:
 
   /* You should not use these items without taking their respective queue locks
    * (if they have one) */
-  xlist<PG*>::item recovery_item, scrub_item, snap_trim_item, stat_queue_item;
+  xlist<PG*>::item recovery_item, stat_queue_item;
+  bool snap_trim_queued;
+  bool scrub_queued;
+
   int recovery_ops_active;
   set<pg_shard_t> waiting_on_backfill;
 #ifdef DEBUG_RECOVERY_OIDS
@@ -1072,7 +1040,6 @@ public:
       epoch_start(0),
       active(false), queue_snap_trim(false),
       waiting_on(0), shallow_errors(0), deep_errors(0), fixed(0),
-      active_rep_scrub(0),
       must_scrub(false), must_deep_scrub(false), must_repair(false),
       num_digest_updates_pending(0),
       state(INACTIVE),
@@ -1096,7 +1063,7 @@ public:
     int fixed;
     ScrubMap primary_scrubmap;
     map<pg_shard_t, ScrubMap> received_maps;
-    MOSDRepScrub *active_rep_scrub;
+    OpRequestRef active_rep_scrub;
     utime_t scrub_reg_stamp;  // stamp we registered for
 
     // flags to indicate explicitly requested scrubs (by admin)
@@ -1182,8 +1149,7 @@ public:
       waiting_on = 0;
       waiting_on_whom.clear();
       if (active_rep_scrub) {
-        active_rep_scrub->put();
-        active_rep_scrub = NULL;
+        active_rep_scrub = OpRequestRef();
       }
       received_maps.clear();
 
@@ -1217,7 +1183,7 @@ public:
     const hobject_t& soid, list<pair<ScrubMap::object, pg_shard_t> > *ok_peers,
     pg_shard_t bad_peer);
 
-  void scrub(ThreadPool::TPHandle &handle);
+  void scrub(epoch_t queued, ThreadPool::TPHandle &handle);
   void chunky_scrub(ThreadPool::TPHandle &handle);
   void scrub_compare_maps();
   void scrub_process_inconsistent();
@@ -1267,7 +1233,7 @@ public:
   void unreg_next_scrub();
 
   void replica_scrub(
-    struct MOSDRepScrub *op,
+    OpRequestRef op,
     ThreadPool::TPHandle &handle);
   void sub_op_scrub_map(OpRequestRef op);
   void sub_op_scrub_reserve(OpRequestRef op);
@@ -2042,7 +2008,7 @@ public:
 
  private:
   // Prevent copying
-  PG(const PG& rhs);
+  explicit PG(const PG& rhs);
   PG& operator=(const PG& rhs);
   const spg_t pg_id;
   uint64_t peer_features;
@@ -2145,10 +2111,11 @@ public:
 		    spg_t pgid, const pg_pool_t *pool);
 
 private:
-  void write_info(ObjectStore::Transaction& t);
+  void prepare_write_info(map<string,bufferlist> *km);
 
 public:
-  static int _write_info(ObjectStore::Transaction& t, epoch_t epoch,
+  static int _prepare_write_info(map<string,bufferlist> *km,
+    epoch_t epoch,
     pg_info_t &info, coll_t coll,
     map<epoch_t,pg_interval_t> &past_intervals,
     ghobject_t &pgmeta_oid,
@@ -2163,7 +2130,7 @@ public:
     return at_version;
   }
 
-  void add_log_entry(const pg_log_entry_t& e, bufferlist& log_bl);
+  void add_log_entry(const pg_log_entry_t& e);
   void append_log(
     const vector<pg_log_entry_t>& logv,
     eversion_t trim_to,
@@ -2190,6 +2157,7 @@ public:
   void log_weirdness();
 
   void queue_snap_trim();
+  bool requeue_scrub();
   bool queue_scrub();
 
   /// share pg info after a pg is active
@@ -2285,7 +2253,7 @@ public:
     ThreadPool::TPHandle &handle
   ) = 0;
   virtual void do_backfill(OpRequestRef op) = 0;
-  virtual void snap_trimmer() = 0;
+  virtual void snap_trimmer(epoch_t epoch_queued) = 0;
 
   virtual int do_command(cmdmap_t cmdmap, ostream& ss,
 			 bufferlist& idata, bufferlist& odata) = 0;

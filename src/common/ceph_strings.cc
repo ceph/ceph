@@ -64,6 +64,7 @@ const char *ceph_mds_state_name(int s)
 		/* down and out */
 	case CEPH_MDS_STATE_DNE:        return "down:dne";
 	case CEPH_MDS_STATE_STOPPED:    return "down:stopped";
+	case CEPH_MDS_STATE_DAMAGED:   return "down:damaged";
 		/* up and out */
 	case CEPH_MDS_STATE_BOOT:       return "up:boot";
 	case CEPH_MDS_STATE_STANDBY:    return "up:standby";
@@ -128,6 +129,7 @@ const char *ceph_mds_op_name(int op)
 	case CEPH_MDS_OP_LSSNAP: return "lssnap";
 	case CEPH_MDS_OP_MKSNAP: return "mksnap";
 	case CEPH_MDS_OP_RMSNAP: return "rmsnap";
+	case CEPH_MDS_OP_RENAMESNAP: return "renamesnap";
 	case CEPH_MDS_OP_SETFILELOCK: return "setfilelock";
 	case CEPH_MDS_OP_GETFILELOCK: return "getfilelock";
 	case CEPH_MDS_OP_FRAGMENTDIR: return "fragmentdir";

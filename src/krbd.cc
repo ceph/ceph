@@ -34,6 +34,7 @@
 #include "common/TextTable.h"
 #include "include/assert.h"
 #include "include/stringify.h"
+#include "include/krbd.h"
 #include "mon/MonMap.h"
 
 #include <blkid/blkid.h>
@@ -93,12 +94,15 @@ static int sysfs_write_rbd_remove(const string& buf)
   return sysfs_write_rbd("remove", buf);
 }
 
-static int should_match_minor(void)
+static int have_minor_attr(void)
 {
   /*
    * 'minor' attribute was added as part of single_major merge, which
    * exposed the 'single_major' parameter.  'minor' is always present,
    * regardless of whether single-major scheme is turned on or not.
+   *
+   * (Something like ver >= KERNEL_VERSION(3, 14, 0) is a no-go because
+   * this has to work with rbd.ko backported to various kernels.)
    */
   return access("/sys/module/rbd/parameters/single_major", F_OK) == 0;
 }
@@ -217,7 +221,7 @@ static int wait_for_udev_add(struct udev_monitor *mon, const char *pool,
         const char *this_major = udev_device_get_property_value(dev, "MAJOR");
         const char *this_minor = udev_device_get_property_value(dev, "MINOR");
 
-        assert(!minor ^ should_match_minor());
+        assert(!minor ^ have_minor_attr());
 
         if (strcmp(this_major, major) == 0 &&
             (!minor || strcmp(this_minor, minor) == 0)) {
@@ -338,7 +342,7 @@ static int devno_to_krbd_id(struct udev *udev, dev_t devno, string *pid)
   if (r < 0)
     goto out_enm;
 
-  if (should_match_minor()) {
+  if (have_minor_attr()) {
     r = udev_enumerate_add_match_sysattr(enm, "minor",
                                          stringify(minor(devno)).c_str());
     if (r < 0)
@@ -366,6 +370,89 @@ static int devno_to_krbd_id(struct udev *udev, dev_t devno, string *pid)
 
   *pid = udev_device_get_sysname(dev);
 
+  udev_device_unref(dev);
+out_enm:
+  udev_enumerate_unref(enm);
+  return r;
+}
+
+static int spec_to_devno_and_krbd_id(struct udev *udev, const char *pool,
+                                     const char *image, const char *snap,
+                                     dev_t *pdevno, string *pid)
+{
+  struct udev_enumerate *enm;
+  struct udev_list_entry *l;
+  struct udev_device *dev;
+  unsigned int maj, min = 0;
+  string err;
+  int r;
+
+  enm = udev_enumerate_new(udev);
+  if (!enm)
+    return -ENOMEM;
+
+  r = udev_enumerate_add_match_subsystem(enm, "rbd");
+  if (r < 0)
+    goto out_enm;
+
+  r = udev_enumerate_add_match_sysattr(enm, "pool", pool);
+  if (r < 0)
+    goto out_enm;
+
+  r = udev_enumerate_add_match_sysattr(enm, "name", image);
+  if (r < 0)
+    goto out_enm;
+
+  r = udev_enumerate_add_match_sysattr(enm, "current_snap", snap);
+  if (r < 0)
+    goto out_enm;
+
+  r = udev_enumerate_scan_devices(enm);
+  if (r < 0)
+    goto out_enm;
+
+  l = udev_enumerate_get_list_entry(enm);
+  if (!l) {
+    r = -ENOENT;
+    goto out_enm;
+  }
+
+  dev = udev_device_new_from_syspath(udev, udev_list_entry_get_name(l));
+  if (!dev) {
+    r = -ENOMEM;
+    goto out_enm;
+  }
+
+  maj = strict_strtoll(udev_device_get_sysattr_value(dev, "major"), 10, &err);
+  if (!err.empty()) {
+    cerr << "rbd: couldn't parse major: " << err << std::endl;
+    r = -EINVAL;
+    goto out_dev;
+  }
+  if (have_minor_attr()) {
+    min = strict_strtoll(udev_device_get_sysattr_value(dev, "minor"), 10, &err);
+    if (!err.empty()) {
+      cerr << "rbd: couldn't parse minor: " << err << std::endl;
+      r = -EINVAL;
+      goto out_dev;
+    }
+  }
+
+  /*
+   * If an image is mapped more than once don't bother trying to unmap
+   * all devices - let users run unmap the same number of times they
+   * ran map.
+   */
+  if (udev_list_entry_get_next(l))
+    cerr << "rbd: " << pool << "/" << image << "@" << snap
+         << ": mapped more than once, unmapping "
+         << get_kernel_rbd_name(udev_device_get_sysname(dev))
+         << " only" << std::endl;
+
+  *pdevno = makedev(maj, min);
+  *pid = udev_device_get_sysname(dev);
+
+out_dev:
   udev_device_unref(dev);
 out_enm:
   udev_enumerate_unref(enm);
@@ -491,6 +578,30 @@ static int unmap_image(struct krbd_ctx *ctx, const char *devnode)
   return do_unmap(ctx->udev, wholedevno, id);
 }
 
+static int unmap_image(struct krbd_ctx *ctx, const char *pool,
+                       const char *image, const char *snap)
+
+{
+  dev_t devno;
+  string id;
+  int r;
+
+  if (!snap)
+    snap = "-";
+
+  r = spec_to_devno_and_krbd_id(ctx->udev, pool, image, snap, &devno, &id);
+  if (r < 0) {
+    if (r == -ENOENT) {
+      cerr << "rbd: " << pool << "/" << image << "@" << snap
+           << ": not a mapped image or snapshot" << std::endl;
+      r = -EINVAL;
+    }
+    return r;
+  }
+
+  return do_unmap(ctx->udev, devno, id);
+}
+
 static void dump_one_image(Formatter *f, TextTable *tbl,
                            const char *id, const char *pool,
                            const char *image, const char *snap)
@@ -582,12 +693,12 @@ int dump_images(struct krbd_ctx *ctx, Formatter *f)
   return r;
 }
 
-extern "C" int krbd_create_from_context(struct CephContext *cct,
+extern "C" int krbd_create_from_context(rados_config_t cct,
                                         struct krbd_ctx **pctx)
 {
   struct krbd_ctx *ctx = new struct krbd_ctx();
 
-  ctx->cct = cct;
+  ctx->cct = reinterpret_cast<CephContext *>(cct);
   ctx->udev = udev_new();
   if (!ctx->udev) {
     delete ctx;
@@ -631,6 +742,12 @@ extern "C" int krbd_map(struct krbd_ctx *ctx, const char *pool,
 extern "C" int krbd_unmap(struct krbd_ctx *ctx, const char *devnode)
 {
   return unmap_image(ctx, devnode);
+}
+
+extern "C" int krbd_unmap_by_spec(struct krbd_ctx *ctx, const char *pool,
+                                  const char *image, const char *snap)
+{
+  return unmap_image(ctx, pool, image, snap);
 }
 
 int krbd_showmapped(struct krbd_ctx *ctx, Formatter *f)

@@ -805,6 +805,7 @@ void ECBackend::handle_sub_write(
 {
   if (msg)
     msg->mark_started();
+  assert(!get_parent()->get_log().get_missing().is_missing(op.soid));
   if (!get_parent()->pgb_is_primary())
     get_parent()->update_stats(op.stats);
   ObjectStore::Transaction *localt = new ObjectStore::Transaction;
@@ -840,7 +841,6 @@ void ECBackend::handle_sub_write(
       get_parent()->whoami_shard().shard >= ec_impl->get_data_chunk_count())
     op.t.set_fadvise_flag(CEPH_OSD_OP_FLAG_FADVISE_DONTNEED);
 
-  localt->append(op.t);
   if (on_local_applied_sync) {
     dout(10) << "Queueing onreadable_sync: " << on_local_applied_sync << dendl;
     localt->register_on_applied_sync(on_local_applied_sync);
@@ -856,7 +856,13 @@ void ECBackend::handle_sub_write(
       new SubWriteApplied(this, msg, op.tid, op.at_version)));
   localt->register_on_applied(
     new ObjectStore::C_DeleteTransaction(localt));
-  get_parent()->queue_transaction(localt, msg);
+  list<ObjectStore::Transaction*> tls;
+  tls.push_back(localt);
+  tls.push_back(new ObjectStore::Transaction);
+  tls.back()->swap(op.t);
+  tls.back()->register_on_complete(
+    new ObjectStore::C_DeleteTransaction(tls.back()));
+  get_parent()->queue_transactions(tls, msg);
 }
 
 void ECBackend::handle_sub_read(
@@ -1542,13 +1548,6 @@ void ECBackend::start_write(Op *op) {
       trans.find(i->shard);
     assert(iter != trans.end());
     bool should_send = get_parent()->should_send_op(*i, op->hoid);
-    if (should_send) {
-      dout(10) << __func__ << ": sending transaction for object "
-	       << op->hoid << " to shard " << *i << dendl;
-    } else {
-      dout(10) << __func__ << ": NOT sending transaction for object "
-	       << op->hoid << " to shard " << *i << dendl;
-    }
     pg_stat_t stats =
       should_send ?
       get_info().stats :

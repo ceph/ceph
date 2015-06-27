@@ -1,5 +1,6 @@
 include(GetGitRevisionDescription)
 
+enable_language(C ASM)
 set(bindir ${CMAKE_INSTALL_PREFIX}/bin)
 set(sbindir ${CMAKE_INSTALL_PREFIX}/sbin)
 set(libdir ${CMAKE_INSTALL_PREFIX}/lib)
@@ -11,6 +12,9 @@ add_definitions("-DCEPH_LIBDIR=\"${libdir}\"")
 add_definitions("-DCEPH_PKGLIBDIR=\"${libdir}\"")
 add_definitions("-DHAVE_CONFIG_H -D__CEPH__ -D_FILE_OFFSET_BITS=64 -D_REENTRANT -D_THREAD_SAFE -D__STDC_FORMAT_MACROS -D_GNU_SOURCE")
 
+set(CMAKE_ASM_COMPILER  ${PROJECT_SOURCE_DIR}/src/yasm-wrapper)
+message(status " ams compiler ${CMAKE_ASM_COMPILER}")
+set(CMAKE_ASM_FLAGS "-f elf64")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -rdynamic -Wall -Wtype-limits -Wignored-qualifiers -Winit-self -Wpointer-arith -Werror=format-security -fno-strict-aliasing -fsigned-char -fPIC")
 
 set(CMAKE_CXX_FLAGS "${CMAKE_C_FLAGS} -ftemplate-depth-1024 -Wno-invalid-offsetof -Wnon-virtual-dtor -Wno-invalid-offsetof -Wstrict-null-sentinel -Woverloaded-virtual")
@@ -25,7 +29,13 @@ if(WITH_CDS)
   list(APPEND EXTRALIBS ${CDS_LIBS})
 endif(WITH_CDS)
 
-set(CRYPTO_LIBS cryptopp)
+if(USE_NSS)
+  if(NSS_FOUND)
+    if(NSPR_FOUND)
+      set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -I${NSS_INCLUDE_DIR} -I${NSPR_INCLUDE_DIR}")
+    endif(NSPR_FOUND)
+  endif(NSS_FOUND)
+endif(USE_NSS)
 
 if(${HAVE_ATOMIC_OPS})
   set(EXTRALIBS
@@ -160,6 +170,8 @@ set(libcommon_files
   common/crc32c.cc
   common/crc32c_intel_baseline.c
   common/crc32c_intel_fast.c
+  common/crc32c_intel_fast_asm.S
+  common/crc32c_intel_fast_zero_asm.S
   common/assert.cc
   common/run_cmd.cc
   common/WorkQueue.cc
@@ -279,7 +291,9 @@ if(${WITH_PROFILER})
   target_link_libraries(common profiler)
 endif(${WITH_PROFILER})
 
-target_link_libraries(common json_spirit erasure_code rt uuid ${CRYPTO_LIBS} ${Boost_LIBRARIES})
+add_library(common_utf8 STATIC common/utf8.c)
+
+target_link_libraries( common json_spirit common_utf8 erasure_code rt uuid ${CRYPTO_LIBS} ${Boost_LIBRARIES})
 
 set(libglobal_srcs
   global/global_init.cc
@@ -322,7 +336,8 @@ set(librados_srcs
   )
 add_library(librados ${CEPH_SHARED} ${librados_srcs}
   $<TARGET_OBJECTS:cls_references_objs>
-  $<TARGET_OBJECTS:heap_profiler_objs>)
+  $<TARGET_OBJECTS:heap_profiler_objs>
+  $<TARGET_OBJECTS:common_util_obj>)
 add_dependencies(librados osdc)
 target_link_libraries(librados PRIVATE osdc osd os global common cls_lock_client
   ${CRYPTO_LIBS} ${EXTRALIBS} ${TCMALLOC_LIBS})
@@ -374,7 +389,6 @@ set(lib_mon_srcs
   mon/LogMonitor.cc
   mon/AuthMonitor.cc
   mon/Elector.cc
-  mon/MonitorStore.cc  
   mon/HealthMonitor.cc
   ${os_mon_files}
   mon/DataHealthService.cc
@@ -384,13 +398,10 @@ set(lib_mon_srcs
 
 set(common_util_src
   common/util.cc)
-set(monitorstore_src
-  mon/MonitorStore.cc)
 add_library(common_util_obj OBJECT ${common_util_src})
-add_library(monitorstore_obj OBJECT ${monitorstore_src})
 add_library(mon STATIC ${lib_mon_srcs} $<TARGET_OBJECTS:mon_common_objs>
   $<TARGET_OBJECTS:os_mon_objs> $<TARGET_OBJECTS:osd_mon_objs>
-  $<TARGET_OBJECTS:common_util_obj> $<TARGET_OBJECTS:monitorstore_obj>)
+  $<TARGET_OBJECTS:common_util_obj>)
 
 set(ceph_mon_srcs
   ceph_mon.cc
@@ -451,7 +462,6 @@ set(osd_srcs
   osd/ECBackend.cc
   osd/ECTransaction.cc
   osd/PGBackend.cc
-  osd/Ager.cc
   osd/OSD.cc
   osd/OSDCap.cc
   osd/Watch.cc
@@ -473,7 +483,9 @@ target_link_libraries(osd dl leveldb)
 set(ceph_osd_srcs
   ceph_osd.cc
   objclass/class_api.cc)
-add_executable(ceph-osd ${ceph_osd_srcs} $<TARGET_OBJECTS:heap_profiler_objs>)
+add_executable(ceph-osd ${ceph_osd_srcs}
+  $<TARGET_OBJECTS:heap_profiler_objs>
+  $<TARGET_OBJECTS:common_util_obj>)
 target_link_libraries(ceph-osd osd os global ${TCMALLOC_LIBS})
 install(TARGETS ceph-osd DESTINATION bin)
 
@@ -509,11 +521,15 @@ if(${WITH_MDS})
     mds/MDSAuthCaps.cc
     mds/MDLog.cc
     mds/JournalPointer.cc
+    mds/StrayManager.cc
+    mds/SimpleLock.cc
     ${CMAKE_SOURCE_DIR}/src/osdc/Journaler.cc)
   add_library(mds ${mds_srcs})
   set(ceph_mds_srcs
     ceph_mds.cc)
-  add_executable(ceph-mds ${ceph_mds_srcs} $<TARGET_OBJECTS:heap_profiler_objs>)
+  add_executable(ceph-mds ${ceph_mds_srcs}
+    $<TARGET_OBJECTS:heap_profiler_objs>
+    $<TARGET_OBJECTS:common_util_obj>)
   target_link_libraries(ceph-mds mds osdc ${CMAKE_DL_LIBS} global
     ${TCMALLOC_LIBS} boost_thread)
   install(TARGETS ceph-mds DESTINATION bin)
@@ -555,7 +571,7 @@ install(TARGETS osdmaptool DESTINATION bin)
 set(ceph_authtool_srcs
   tools/ceph_authtool.cc)
 add_executable(ceph-authtool ${ceph_authtool_srcs})
-target_link_libraries(ceph-authtool global ${EXTRALIBS})
+target_link_libraries(ceph-authtool global ${EXTRALIBS} ${CRYPTO_LIBS})
 install(TARGETS ceph-authtool DESTINATION bin)
 
 configure_file(${CMAKE_SOURCE_DIR}/src/ceph-coverage.in
@@ -662,7 +678,8 @@ if(${WITH_RBD})
     librbd/internal.cc
     librbd/librbd.cc
     librbd/LibrbdWriteback.cc
-    librbd/ObjectMap.cc)
+    librbd/ObjectMap.cc
+    librbd/RebuildObjectMapRequest.cc)
   add_library(librbd ${CEPH_SHARED} ${librbd_srcs}
     $<TARGET_OBJECTS:osdc_rbd_objs>
     $<TARGET_OBJECTS:common_util_obj>)

@@ -1243,6 +1243,7 @@ int MemStore::_omap_clear(coll_t cid, const ghobject_t &oid)
   if (!o)
     return -ENOENT;
   o->omap.clear();
+  o->omap_header.clear();
   return 0;
 }
 

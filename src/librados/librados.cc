@@ -424,7 +424,7 @@ void librados::ObjectWriteOperation::copy_from(const std::string& src,
 {
   ::ObjectOperation *o = (::ObjectOperation *)impl;
   o->copy_from(object_t(src), src_ioctx.io_ctx_impl->snap_seq,
-	       src_ioctx.io_ctx_impl->oloc, src_version, 0);
+	       src_ioctx.io_ctx_impl->oloc, src_version, 0, 0);
 }
 
 void librados::ObjectWriteOperation::undirty()

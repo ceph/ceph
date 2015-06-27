@@ -39,10 +39,15 @@ private:
   XioConnection::EntitySet conns_entity_map;
   XioPortals portals;
   DispatchStrategy* dispatch_strategy;
-  XioLoopbackConnection loop_con;
+  XioLoopbackConnectionRef loop_con;
   uint32_t special_handling;
   Mutex sh_mtx;
   Cond sh_cond;
+  bool need_addr;
+  bool did_bind;
+
+  /// approximately unique ID set by the Constructor for use in entity_addr_t
+  uint64_t nonce;
 
   friend class XioConnection;
 
@@ -57,7 +62,7 @@ public:
 
   virtual void set_myaddr(const entity_addr_t& a) {
     Messenger::set_myaddr(a);
-    loop_con.set_peer_addr(a);
+    loop_con->set_peer_addr(a);
   }
 
   int _send_message(Message *m, const entity_inst_t &dest);
@@ -131,6 +136,15 @@ public:
 
   void ds_dispatch(Message *m)
     { dispatch_strategy->ds_dispatch(m); }
+
+  /**
+   * Tell the XioMessenger its full IP address.
+   *
+   * This is used by clients when connecting to other endpoints, and
+   * probably shouldn't be called by anybody else.
+   */
+  void learned_addr(const entity_addr_t& peer_addr_for_me);
+
 
 protected:
   virtual void ready()

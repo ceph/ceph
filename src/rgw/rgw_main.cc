@@ -95,7 +95,7 @@ struct RGWRequest
   RGWOp *op;
   utime_t ts;
 
-  RGWRequest() : id(0), s(NULL), op(NULL) {
+  RGWRequest(uint64_t id) : id(id), s(NULL), op(NULL) {
   }
 
   virtual ~RGWRequest() {}
@@ -158,7 +158,7 @@ struct RGWFCGXRequest : public RGWRequest {
   FCGX_Request *fcgx;
   QueueRing<FCGX_Request *> *qr;
 
-  RGWFCGXRequest(QueueRing<FCGX_Request *> *_qr) : qr(_qr) {
+  RGWFCGXRequest(uint64_t req_id, QueueRing<FCGX_Request *> *_qr) : RGWRequest(req_id), qr(_qr) {
     qr->dequeue(&fcgx);
   }
 
@@ -239,8 +239,6 @@ protected:
     }
   } req_wq;
 
-  uint64_t max_req_id;
-
 public:
   RGWProcess(CephContext *cct, RGWProcessEnv *pe, int num_threads, RGWFrontendConfig *_conf)
     : store(pe->store), olog(pe->olog), m_tp(cct, "RGWProcess::m_tp", num_threads),
@@ -249,8 +247,7 @@ public:
       conf(_conf),
       sock_fd(-1),
       req_wq(this, g_conf->rgw_op_thread_timeout,
-	     g_conf->rgw_op_thread_suicide_timeout, &m_tp),
-      max_req_id(0) {}
+	     g_conf->rgw_op_thread_suicide_timeout, &m_tp) {}
   virtual ~RGWProcess() {}
   virtual void run() = 0;
   virtual void handle_request(RGWRequest *req) = 0;
@@ -282,10 +279,17 @@ void RGWFCGXProcess::run()
   string socket_port;
   string socket_host;
 
-  conf->get_val("socket_path", g_conf->rgw_socket_path, &socket_path);
+  conf->get_val("socket_path", "", &socket_path);
   conf->get_val("socket_port", g_conf->rgw_port, &socket_port);
   conf->get_val("socket_host", g_conf->rgw_host, &socket_host);
 
+  if (socket_path.empty() && socket_port.empty() && socket_host.empty()) {
+    socket_path = g_conf->rgw_socket_path;
+    if (socket_path.empty()) {
+      dout(0) << "ERROR: no socket server point defined, cannot start fcgi frontend" << dendl;
+      return;
+    }
+  }
 
   if (!socket_path.empty()) {
     string path_str = socket_path;
@@ -333,8 +337,7 @@ void RGWFCGXProcess::run()
   }
 
   for (;;) {
-    RGWFCGXRequest *req = new RGWFCGXRequest(&qr);
-    req->id = ++max_req_id;
+    RGWFCGXRequest *req = new RGWFCGXRequest(store->get_new_req_id(), &qr);
     dout(10) << "allocated request req=" << hex << req << dec << dendl;
     req_throttle.get(1);
     int ret = FCGX_Accept_r(req->fcgx);
@@ -365,8 +368,8 @@ struct RGWLoadGenRequest : public RGWRequest {
   atomic_t *fail_flag;
 
 
-  RGWLoadGenRequest(const string& _m, const  string& _r, int _cl,
-                    atomic_t *ff) : method(_m), resource(_r), content_length(_cl), fail_flag(ff) {}
+  RGWLoadGenRequest(uint64_t req_id, const string& _m, const  string& _r, int _cl,
+                    atomic_t *ff) : RGWRequest(req_id), method(_m), resource(_r), content_length(_cl), fail_flag(ff) {}
 };
 
 class RGWLoadGenProcess : public RGWProcess {
@@ -467,8 +470,8 @@ done:
 
 void RGWLoadGenProcess::gen_request(const string& method, const string& resource, int content_length, atomic_t *fail_flag)
 {
-  RGWLoadGenRequest *req = new RGWLoadGenRequest(method, resource, content_length, fail_flag);
-  req->id = ++max_req_id;
+  RGWLoadGenRequest *req = new RGWLoadGenRequest(store->get_new_req_id(), method, resource,
+						 content_length, fail_flag);
   dout(10) << "allocated request req=" << hex << req << dec << dendl;
   req_throttle.get(1);
   req_wq.queue(req);
@@ -710,11 +713,8 @@ static int civetweb_callback(struct mg_connection *conn) {
   RGWREST *rest = pe->rest;
   OpsLogSocket *olog = pe->olog;
 
-  RGWRequest *req = new RGWRequest;
+  RGWRequest *req = new RGWRequest(store->get_new_req_id());
   RGWMongoose client_io(conn, pe->port);
-
-  client_io.init(g_ceph_context);
-
 
   int ret = process_request(store, rest, req, &client_io, olog);
   if (ret < 0) {
@@ -1064,13 +1064,18 @@ int main(int argc, const char **argv)
   FCGX_Init();
 
   int r = 0;
-  RGWRados *store = RGWStoreManager::get_storage(g_ceph_context, true, true);
+  RGWRados *store = RGWStoreManager::get_storage(g_ceph_context,
+      g_conf->rgw_enable_gc_threads, g_conf->rgw_enable_quota_threads);
   if (!store) {
+    mutex.Lock();
+    init_timer.cancel_all_events();
+    init_timer.shutdown();
+    mutex.Unlock();
+
     derr << "Couldn't init storage provider (RADOS)" << dendl;
-    r = EIO;
+    return EIO;
   }
-  if (!r)
-    r = rgw_perf_start(g_ceph_context);
+  r = rgw_perf_start(g_ceph_context);
 
   rgw_rest_init(g_ceph_context, store->region);
 
@@ -1082,7 +1087,7 @@ int main(int argc, const char **argv)
   if (r) 
     return 1;
 
-  rgw_user_init(store->meta_mgr);
+  rgw_user_init(store);
   rgw_bucket_init(store->meta_mgr);
   rgw_log_usage_init(g_ceph_context, store);
 

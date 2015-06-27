@@ -154,6 +154,18 @@ namespace librbd {
       return 0;
     }
 
+    int set_features(librados::IoCtx *ioctx, const std::string &oid,
+                      uint64_t features, uint64_t mask)
+    {
+      bufferlist inbl;
+      ::encode(features, inbl);
+      ::encode(mask, inbl);
+
+      librados::ObjectWriteOperation op;
+      op.exec("rbd", "set_features", inbl);
+      return ioctx->operate(oid, &op);
+    }
+
     int get_object_prefix(librados::IoCtx *ioctx, const std::string &oid,
 			  std::string *object_prefix)
     {
@@ -280,12 +292,13 @@ namespace librbd {
       return 0;
     }
 
-    void set_flags(librados::ObjectWriteOperation *op, uint64_t flags,
-		   uint64_t mask)
+    void set_flags(librados::ObjectWriteOperation *op, snapid_t snap_id,
+                   uint64_t flags, uint64_t mask)
     {
       bufferlist inbl;
       ::encode(flags, inbl);
       ::encode(mask, inbl);
+      ::encode(snap_id, inbl);
       op->exec("rbd", "set_flags", inbl);
     }
 
@@ -405,7 +418,6 @@ namespace librbd {
 		      const std::vector<snapid_t> &ids,
 		      std::vector<string> *names,
 		      std::vector<uint64_t> *sizes,
-		      std::vector<uint64_t> *features,
 		      std::vector<parent_info> *parents,
 		      std::vector<uint8_t> *protection_statuses)
     {
@@ -413,8 +425,6 @@ namespace librbd {
       names->resize(ids.size());
       sizes->clear();
       sizes->resize(ids.size());
-      features->clear();
-      features->resize(ids.size());
       parents->clear();
       parents->resize(ids.size());
       protection_statuses->clear();
@@ -424,17 +434,15 @@ namespace librbd {
       for (vector<snapid_t>::const_iterator it = ids.begin();
 	   it != ids.end(); ++it) {
 	snapid_t snap_id = it->val;
-	bufferlist bl1, bl2, bl3, bl4, bl5;
+	bufferlist bl1, bl2, bl3, bl4;
 	::encode(snap_id, bl1);
 	op.exec("rbd", "get_snapshot_name", bl1);
 	::encode(snap_id, bl2);
 	op.exec("rbd", "get_size", bl2);
 	::encode(snap_id, bl3);
-	op.exec("rbd", "get_features", bl3);
+	op.exec("rbd", "get_parent", bl3);
 	::encode(snap_id, bl4);
-	op.exec("rbd", "get_parent", bl4);
-	::encode(snap_id, bl5);
-	op.exec("rbd", "get_protection_status", bl5);
+	op.exec("rbd", "get_protection_status", bl4);
       }
 
       bufferlist outbl;
@@ -446,15 +454,11 @@ namespace librbd {
 	bufferlist::iterator iter = outbl.begin();
 	for (size_t i = 0; i < ids.size(); ++i) {
 	  uint8_t order;
-	  uint64_t incompat_features;
 	  // get_snapshot_name
 	  ::decode((*names)[i], iter);
 	  // get_size
 	  ::decode(order, iter);
 	  ::decode((*sizes)[i], iter);
-	  // get_features
-	  ::decode((*features)[i], iter);
-	  ::decode(incompat_features, iter);
 	  // get_parent
 	  ::decode((*parents)[i].spec.pool_id, iter);
 	  ::decode((*parents)[i].spec.image_id, iter);
@@ -727,6 +731,17 @@ namespace librbd {
       return 0;
     }
 
+    void object_map_save(librados::ObjectWriteOperation *rados_op,
+                         const ceph::BitVector<2> &object_map)
+    {
+      ceph::BitVector<2> object_map_copy(object_map);
+      object_map_copy.set_crc_enabled(false);
+
+      bufferlist in;
+      ::encode(object_map_copy, in);
+      rados_op->exec("rbd", "object_map_save", in);
+    }
+
     void object_map_resize(librados::ObjectWriteOperation *rados_op,
                            uint64_t object_count, uint8_t default_state)
     {
@@ -747,6 +762,83 @@ namespace librbd {
       ::encode(new_object_state, in);
       ::encode(current_object_state, in);
       rados_op->exec("rbd", "object_map_update", in);
+    }
+
+    void object_map_snap_add(librados::ObjectWriteOperation *rados_op)
+    {
+      bufferlist in;
+      rados_op->exec("rbd", "object_map_snap_add", in);
+    }
+
+    void object_map_snap_remove(librados::ObjectWriteOperation *rados_op,
+                                const ceph::BitVector<2> &object_map)
+    {
+      ceph::BitVector<2> object_map_copy(object_map);
+      object_map_copy.set_crc_enabled(false);
+
+      bufferlist in;
+      ::encode(object_map_copy, in);
+      rados_op->exec("rbd", "object_map_snap_remove", in);
+    }
+
+    int metadata_set(librados::IoCtx *ioctx, const std::string &oid,
+                     const map<string, bufferlist> &data)
+    {
+      bufferlist in;
+      ::encode(data, in);
+      bufferlist out;
+      return ioctx->exec(oid, "rbd", "metadata_set", in, out);
+    }
+
+    int metadata_remove(librados::IoCtx *ioctx, const std::string &oid,
+                        const std::string &key)
+    {
+      bufferlist in;
+      ::encode(key, in);
+      bufferlist out;
+      return ioctx->exec(oid, "rbd", "metadata_remove", in, out);
+    }
+
+    int metadata_list(librados::IoCtx *ioctx, const std::string &oid,
+                      const std::string &start, uint64_t max_return,
+                      map<string, bufferlist> *pairs)
+    {
+      assert(pairs);
+      bufferlist in, out;
+      ::encode(start, in);
+      ::encode(max_return, in);
+      int r = ioctx->exec(oid, "rbd", "metadata_list", in, out);
+      if (r < 0)
+        return r;
+
+      bufferlist::iterator iter = out.begin();
+      try {
+        ::decode(*pairs, iter);
+      } catch (const buffer::error &err) {
+        return -EBADMSG;
+      }
+
+      return 0;
+    }
+
+    int metadata_get(librados::IoCtx *ioctx, const std::string &oid,
+                     const std::string &key, string *s)
+    {
+      assert(s);
+      bufferlist in, out;
+      ::encode(key, in);
+      int r = ioctx->exec(oid, "rbd", "metadata_get", in, out);
+      if (r < 0)
+        return r;
+
+      bufferlist::iterator iter = out.begin();
+      try {
+        ::decode(*s, iter);
+      } catch (const buffer::error &err) {
+        return -EBADMSG;
+      }
+
+      return 0;
     }
 
   } // namespace cls_client

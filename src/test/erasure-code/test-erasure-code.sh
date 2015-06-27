@@ -16,11 +16,11 @@
 # GNU Library Public License for more details.
 #
 
-source test/mon/mon-test-helpers.sh
-source test/osd/osd-test-helpers.sh
+source ../qa/workunits/ceph-helpers.sh
 
 function run() {
     local dir=$1
+    shift
 
     export CEPH_MON="127.0.0.1:7101"
     export CEPH_ARGS
@@ -29,24 +29,24 @@ function run() {
     CEPH_ARGS+="--mon-host=$CEPH_MON "
 
     setup $dir || return 1
-    run_mon $dir a --public-addr $CEPH_MON || return 1
+    run_mon $dir a || return 1
     # check that erasure code plugins are preloaded
-    CEPH_ARGS='' ./ceph --admin-daemon $dir/a/ceph-mon.a.asok log flush || return 1
-    grep 'load: jerasure.*lrc' $dir/a/log || return 1
+    CEPH_ARGS='' ./ceph --admin-daemon $dir/ceph-mon.a.asok log flush || return 1
+    grep 'load: jerasure.*lrc' $dir/mon.a.log || return 1
     for id in $(seq 0 10) ; do
         run_osd $dir $id || return 1
     done
+    wait_for_clean || return 1
     # check that erasure code plugins are preloaded
     CEPH_ARGS='' ./ceph --admin-daemon $dir/ceph-osd.0.asok log flush || return 1
-    grep 'load: jerasure.*lrc' $dir/osd-0.log || return 1
+    grep 'load: jerasure.*lrc' $dir/osd.0.log || return 1
     create_erasure_coded_pool ecpool || return 1
-    FUNCTIONS=${FUNCTIONS:-$(set | sed -n -e 's/^\(TEST_[0-9a-z_]*\) .*/\1/p')}
-    for TEST_function in $FUNCTIONS ; do
-        if ! $TEST_function $dir ; then
-            cat $dir/a/log
-            return 1
-        fi
+
+    local funcs=${@:-$(set | sed -n -e 's/^\(TEST_[0-9a-z_]*\) .*/\1/p')}
+    for func in $funcs ; do
+        $func $dir || return 1
     done
+
     delete_pool ecpool || return 1
     teardown $dir || return 1
 }
@@ -58,6 +58,7 @@ function create_erasure_coded_pool() {
         ruleset-failure-domain=osd || return 1
     ./ceph osd pool create $poolname 12 12 erasure myprofile \
         || return 1
+    wait_for_clean || return 1
 }
 
 function delete_pool() {
@@ -69,6 +70,8 @@ function delete_pool() {
 function rados_put_get() {
     local dir=$1
     local poolname=$2
+    local objname=${3:-SOMETHING}
+
 
     for marker in AAA BBB CCCC DDDD ; do
         printf "%*s" 1024 $marker
@@ -77,8 +80,8 @@ function rados_put_get() {
     #
     # get and put an object, compare they are equal
     #
-    ./rados --pool $poolname put SOMETHING $dir/ORIGINAL || return 1
-    ./rados --pool $poolname get SOMETHING $dir/COPY || return 1
+    ./rados --pool $poolname put $objname $dir/ORIGINAL || return 1
+    ./rados --pool $poolname get $objname $dir/COPY || return 1
     diff $dir/ORIGINAL $dir/COPY || return 1
     rm $dir/COPY
 
@@ -87,11 +90,11 @@ function rados_put_get() {
     # check the object can still be retrieved, which implies
     # recovery
     #
-    local -a initial_osds=($(get_osds $poolname SOMETHING))
+    local -a initial_osds=($(get_osds $poolname $objname))
     local last=$((${#initial_osds[@]} - 1))
     ./ceph osd out ${initial_osds[$last]} || return 1
-    ! get_osds $poolname SOMETHING | grep '\<'${initial_osds[$last]}'\>' || return 1
-    ./rados --pool $poolname get SOMETHING $dir/COPY || return 1
+    ! get_osds $poolname $objname | grep '\<'${initial_osds[$last]}'\>' || return 1
+    ./rados --pool $poolname get $objname $dir/COPY || return 1
     diff $dir/ORIGINAL $dir/COPY || return 1
     ./ceph osd in ${initial_osds[$last]} || return 1
 
@@ -102,15 +105,13 @@ function plugin_exists() {
     local plugin=$1
 
     local status
-    ./ceph osd erasure-code-profile set TESTPROFILE plugin=$plugin
-    if ./ceph osd crush rule create-erasure TESTRULE TESTPROFILE 2>&1 |
+    if ./ceph osd erasure-code-profile set TESTPROFILE plugin=$plugin 2>&1 |
         grep "$plugin.*No such file" ; then
         status=1
     else
-        ./ceph osd crush rule rm TESTRULE
         status=0
+        ./ceph osd erasure-code-profile rm TESTPROFILE
     fi
-    ./ceph osd erasure-code-profile rm TESTPROFILE 
     return $status
 }
 
@@ -162,7 +163,7 @@ function TEST_rados_put_get_isa() {
     ./ceph osd erasure-code-profile set profile-isa \
         plugin=isa \
         ruleset-failure-domain=osd || return 1
-    ./ceph osd pool create $poolname 12 12 erasure profile-isa \
+    ./ceph osd pool create $poolname 1 1 erasure profile-isa \
         || return 1
 
     rados_put_get $dir $poolname || return 1
@@ -292,7 +293,7 @@ function TEST_chunk_mapping() {
     ./ceph osd erasure-code-profile rm remap-profile
 }
 
-main test-erasure-code
+main test-erasure-code "$@"
 
 # Local Variables:
 # compile-command: "cd ../.. ; make -j4 && test/erasure-code/test-erasure-code.sh"

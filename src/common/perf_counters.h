@@ -115,28 +115,27 @@ private:
     perf_counter_data_any_d()
       : name(NULL),
         description(NULL),
-		type(PERFCOUNTER_NONE),
-		u64(0),
-		avgcount(0),
-		avgcount2(0)
+        nick(NULL),
+	type(PERFCOUNTER_NONE),
+	u64(0),
+	avgcount(0),
+	avgcount2(0)
     {}
     perf_counter_data_any_d(const perf_counter_data_any_d& other)
       : name(other.name),
         description(other.description),
-		type(other.type),
-		u64(other.u64.read()) {
+        nick(other.nick),
+	type(other.type),
+	u64(other.u64.read()) {
       pair<uint64_t,uint64_t> a = other.read_avg();
       u64.set(a.first);
       avgcount.set(a.second);
       avgcount2.set(a.second);
     }
 
-    // this functions are not used, for what are they?
-    void write_schema_json(char *buf, size_t buf_sz) const;
-    void  write_json(char *buf, size_t buf_sz) const;
-
     const char *name;
     const char *description;
+    const char *nick;
     enum perfcounter_type_d type;
     atomic64_t u64;
     atomic64_t avgcount;
@@ -154,6 +153,7 @@ private:
     perf_counter_data_any_d& operator=(const perf_counter_data_any_d& other) {
       name = other.name;
       description = other.description;
+      nick = other.nick;
       type = other.type;
       pair<uint64_t,uint64_t> a = other.read_avg();
       u64.set(a.first);
@@ -239,16 +239,22 @@ public:
   PerfCountersBuilder(CephContext *cct, const std::string &name,
 		    int first, int last);
   ~PerfCountersBuilder();
-  void add_u64(int key, const char *name, const char *description = NULL);
-  void add_u64_counter(int key, const char *name, const char *description = NULL);
-  void add_u64_avg(int key, const char *name, const char *description = NULL);
-  void add_time(int key, const char *name, const char *description = NULL);
-  void add_time_avg(int key, const char *name, const char *description = NULL);
+  void add_u64(int key, const char *name,
+      const char *description=NULL, const char *nick = NULL);
+  void add_u64_counter(int key, const char *name,
+      const char *description=NULL, const char *nick = NULL);
+  void add_u64_avg(int key, const char *name,
+      const char *description=NULL, const char *nick = NULL);
+  void add_time(int key, const char *name,
+      const char *description=NULL, const char *nick = NULL);
+  void add_time_avg(int key, const char *name,
+      const char *description=NULL, const char *nick = NULL);
   PerfCounters* create_perf_counters();
 private:
   PerfCountersBuilder(const PerfCountersBuilder &rhs);
   PerfCountersBuilder& operator=(const PerfCountersBuilder &rhs);
-  void add_impl(int idx, const char *name, const char *description, int ty);
+  void add_impl(int idx, const char *name,
+                const char *description, const char *nick, int ty);
 
   PerfCounters *m_perf_counters;
 };

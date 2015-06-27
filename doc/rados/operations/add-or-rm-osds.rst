@@ -73,8 +73,16 @@ weight).
    OSD starts up. The following command will output the OSD number, which you 
    will need for subsequent steps. ::
 	
-	ceph osd create [{uuid}]
+	ceph osd create [{uuid} [{id}]]
 
+   If the optional parameter {id} is given it will be used as the OSD id.
+   Note, in this case the command may fail if the number is already in use.
+
+   .. warning:: In general, explicitly specifying {id} is not recommended.
+   IDs are allocated as an array, and skipping entries consumes some extra
+   memory. This can become significant if there are large gaps and/or
+   clusters are large. If {id} is not specified, the smallest available is
+   used.
 
 #. Create the default directory on your new OSD. :: 
 
@@ -235,6 +243,27 @@ removed. You can observe  this process with  the `ceph`_ tool. ::
 You should see the placement group states change from ``active+clean`` to
 ``active, some degraded objects``, and finally ``active+clean`` when migration
 completes. (Control-c to exit.)
+
+.. note:: Sometimes, typically in a "small" cluster with few hosts (for
+   instance with a small testing cluster), the fact to take ``out`` the
+   OSD can spawn a CRUSH corner case where some PGs remain stuck in the
+   ``active+remapped`` state. If you are in this case, you should mark
+   the OSD ``in`` with:
+
+       ``ceph osd in {osd-num}``
+
+   to come back to the initial state and then, instead of marking ``out``
+   the OSD, set its weight to 0 with:
+
+       ``ceph osd crush reweight osd.{osd-num} 0``
+
+   After that, you can observe the data migration which should come to its
+   end. The difference between marking ``out`` the OSD and reweighting it
+   to 0 is that in the first case the weight of the bucket which contains
+   the OSD isn't changed whereas in the second case the weight of the bucket
+   is updated (and decreased of the OSD weight). The reweight command could
+   be sometimes favoured in the case of a "small" cluster.
+
 
 
 Stopping the OSD

@@ -252,13 +252,13 @@ namespace librados
    * for CACHE_FLUSH and CACHE_EVICT operations.
    */
   enum ObjectOperationGlobalFlags {
-    OPERATION_NOFLAG         = 0,
-    OPERATION_BALANCE_READS  = 1,
-    OPERATION_LOCALIZE_READS = 2,
-    OPERATION_ORDER_READS_WRITES = 4,
-    OPERATION_IGNORE_CACHE = 8,
-    OPERATION_SKIPRWLOCKS = 16,
-    OPERATION_IGNORE_OVERLAY = 32,
+    OPERATION_NOFLAG             = LIBRADOS_OPERATION_NOFLAG,
+    OPERATION_BALANCE_READS      = LIBRADOS_OPERATION_BALANCE_READS,
+    OPERATION_LOCALIZE_READS     = LIBRADOS_OPERATION_LOCALIZE_READS,
+    OPERATION_ORDER_READS_WRITES = LIBRADOS_OPERATION_ORDER_READS_WRITES,
+    OPERATION_IGNORE_CACHE       = LIBRADOS_OPERATION_IGNORE_CACHE,
+    OPERATION_SKIPRWLOCKS        = LIBRADOS_OPERATION_SKIPRWLOCKS,
+    OPERATION_IGNORE_OVERLAY     = LIBRADOS_OPERATION_IGNORE_OVERLAY,
   };
 
   /*
@@ -790,7 +790,7 @@ namespace librados
     /**
      * Retrieve hit set for a given hash, and time
      *
-     * @param uint32_t [in] hash position
+     * @param hash [in] hash position
      * @param c [in] completion
      * @param stamp [in] time interval that falls within the hit set's interval
      * @param pbl [out] buffer to store the result in

@@ -255,8 +255,8 @@ typedef enum {
 	OPT_ADDR, OPT_U32, OPT_U64, OPT_UUID
 } opt_type_t;
 
-bool ceph_resolve_file_search(const std::string& filename_list,
-			      std::string& result);
+int ceph_resolve_file_search(const std::string& filename_list,
+			     std::string& result);
 
 struct config_option {
   const char *name;

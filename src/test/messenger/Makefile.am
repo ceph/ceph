@@ -1,3 +1,4 @@
+if ENABLE_SERVER
 if ENABLE_XIO
 
 noinst_HEADERS += \
@@ -71,4 +72,5 @@ noinst_PROGRAMS += \
 	xio_server \
 	xio_client
 
-endif
+endif # ENABLE_XIO
+endif # ENABLE_SERVER

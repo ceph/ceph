@@ -87,7 +87,7 @@ using ceph::crypto::SHA1;
 #undef dout_prefix
 #define dout_prefix *_dout << "filestore(" << basedir << ") "
 
-#define COMMIT_SNAP_ITEM "snap_%lld"
+#define COMMIT_SNAP_ITEM "snap_%llu"
 #define CLUSTER_SNAP_ITEM "clustersnap_%s"
 
 #define REPLAY_GUARD_XATTR "user.cephos.seq"
@@ -270,11 +270,7 @@ int FileStore::lfn_open(coll_t cid,
 
   IndexedPath path2;
   IndexedPath *path = &path2;
-  if (r < 0) {
-    derr << "error getting collection index for " << cid
-      << ": " << cpp_strerror(-r) << dendl;
-    goto fail;
-  }
+
   r = (*index)->lookup(oid, path, &exist);
   if (r < 0) {
     derr << "could not find " << oid << " in index: "
@@ -579,29 +575,29 @@ FileStore::FileStore(const std::string &base, const std::string &jdev, osflagbit
   // initialize logger
   PerfCountersBuilder plb(g_ceph_context, internal_name, l_os_first, l_os_last);
 
-  plb.add_u64(l_os_jq_max_ops, "journal_queue_max_ops");
-  plb.add_u64(l_os_jq_ops, "journal_queue_ops");
-  plb.add_u64_counter(l_os_j_ops, "journal_ops");
-  plb.add_u64(l_os_jq_max_bytes, "journal_queue_max_bytes");
-  plb.add_u64(l_os_jq_bytes, "journal_queue_bytes");
-  plb.add_u64_counter(l_os_j_bytes, "journal_bytes");
-  plb.add_time_avg(l_os_j_lat, "journal_latency");
-  plb.add_u64_counter(l_os_j_wr, "journal_wr");
-  plb.add_u64_avg(l_os_j_wr_bytes, "journal_wr_bytes");
-  plb.add_u64(l_os_oq_max_ops, "op_queue_max_ops");
-  plb.add_u64(l_os_oq_ops, "op_queue_ops");
-  plb.add_u64_counter(l_os_ops, "ops");
-  plb.add_u64(l_os_oq_max_bytes, "op_queue_max_bytes");
-  plb.add_u64(l_os_oq_bytes, "op_queue_bytes");
-  plb.add_u64_counter(l_os_bytes, "bytes");
-  plb.add_time_avg(l_os_apply_lat, "apply_latency");
-  plb.add_u64(l_os_committing, "committing");
+  plb.add_u64(l_os_jq_max_ops, "journal_queue_max_ops", "Max operations in journal queue");
+  plb.add_u64(l_os_jq_ops, "journal_queue_ops", "Operations in journal queue");
+  plb.add_u64_counter(l_os_j_ops, "journal_ops", "Total journal entries written");
+  plb.add_u64(l_os_jq_max_bytes, "journal_queue_max_bytes", "Max data in journal queue");
+  plb.add_u64(l_os_jq_bytes, "journal_queue_bytes", "Size of journal queue");
+  plb.add_u64_counter(l_os_j_bytes, "journal_bytes", "Total operations size in journal");
+  plb.add_time_avg(l_os_j_lat, "journal_latency", "Average journal queue completing latency");
+  plb.add_u64_counter(l_os_j_wr, "journal_wr", "Journal write IOs");
+  plb.add_u64_avg(l_os_j_wr_bytes, "journal_wr_bytes", "Journal data written");
+  plb.add_u64(l_os_oq_max_ops, "op_queue_max_ops", "Max operations in writing to FS queue");
+  plb.add_u64(l_os_oq_ops, "op_queue_ops", "Operations in writing to FS queue");
+  plb.add_u64_counter(l_os_ops, "ops", "Operations written to store");
+  plb.add_u64(l_os_oq_max_bytes, "op_queue_max_bytes", "Max data in writing to FS queue");
+  plb.add_u64(l_os_oq_bytes, "op_queue_bytes", "Size of writing to FS queue");
+  plb.add_u64_counter(l_os_bytes, "bytes", "Data written to store");
+  plb.add_time_avg(l_os_apply_lat, "apply_latency", "Apply latency");
+  plb.add_u64(l_os_committing, "committing", "Is currently committing");
 
-  plb.add_u64_counter(l_os_commit, "commitcycle");
-  plb.add_time_avg(l_os_commit_len, "commitcycle_interval");
-  plb.add_time_avg(l_os_commit_lat, "commitcycle_latency");
-  plb.add_u64_counter(l_os_j_full, "journal_full");
-  plb.add_time_avg(l_os_queue_lat, "queue_transaction_latency_avg");
+  plb.add_u64_counter(l_os_commit, "commitcycle", "Commit cycles");
+  plb.add_time_avg(l_os_commit_len, "commitcycle_interval", "Average interval between commits");
+  plb.add_time_avg(l_os_commit_lat, "commitcycle_latency", "Average latency of commit");
+  plb.add_u64_counter(l_os_j_full, "journal_full", "Journal writes while full");
+  plb.add_time_avg(l_os_queue_lat, "queue_transaction_latency_avg", "Store operation queue latency");
 
   logger = plb.create_perf_counters();
 
@@ -658,7 +654,7 @@ int FileStore::statfs(struct statfs *buf)
 }
 
 
-int FileStore::open_journal()
+void FileStore::new_journal()
 {
   if (journalpath.length()) {
     dout(10) << "open_journal at " << journalpath << dendl;
@@ -667,7 +663,7 @@ int FileStore::open_journal()
     if (journal)
       journal->logger = logger;
   }
-  return 0;
+  return;
 }
 
 int FileStore::dump_journal(ostream& out)
@@ -915,7 +911,7 @@ int FileStore::mkjournal()
 
   ret = 0;
 
-  open_journal();
+  new_journal();
   if (journal) {
     ret = journal->check();
     if (ret < 0) {
@@ -1467,7 +1463,10 @@ int FileStore::mount()
       goto close_current_fd;
     }
 
-    omap_store->init();
+    if (superblock.omap_backend == "rocksdb")
+      omap_store->init(g_conf->filestore_rocksdb_options);
+    else
+      omap_store->init();
 
     stringstream err;
     if (omap_store->create_and_open(err)) {
@@ -1497,7 +1496,7 @@ int FileStore::mount()
   }
 
   // journal
-  open_journal();
+  new_journal();
 
   // select journal mode?
   if (journal) {
@@ -1886,6 +1885,9 @@ int FileStore::queue_transactions(Sequencer *posr, list<Transaction*> &tls,
     Op *o = build_op(tls, onreadable, onreadable_sync, osd_op);
     op_queue_reserve_throttle(o, handle);
     journal->throttle();
+    //prepare and encode transactions data out of lock
+    bufferlist tbl;
+    int data_align = _op_journal_transactions_prepare(o->tls, tbl);
     uint64_t op_num = submit_manager.op_submit_start();
     o->op = op_num;
 
@@ -1895,7 +1897,7 @@ int FileStore::queue_transactions(Sequencer *posr, list<Transaction*> &tls,
     if (m_filestore_journal_parallel) {
       dout(5) << "queue_transactions (parallel) " << o->op << " " << o->tls << dendl;
       
-      _op_journal_transactions(o->tls, o->op, ondisk, osd_op);
+      _op_journal_transactions(tbl, data_align, o->op, ondisk, osd_op);
       
       // queue inside submit_manager op submission lock
       queue_op(osr, o);
@@ -1904,7 +1906,7 @@ int FileStore::queue_transactions(Sequencer *posr, list<Transaction*> &tls,
       
       osr->queue_journal(o->op);
 
-      _op_journal_transactions(o->tls, o->op,
+      _op_journal_transactions(tbl, data_align, o->op,
 			       new C_JournaledAhead(this, osr, o, ondisk),
 			       osd_op);
     } else {
@@ -1934,6 +1936,10 @@ int FileStore::queue_transactions(Sequencer *posr, list<Transaction*> &tls,
     return 0;
   }
 
+
+  //prepare and encode transactions data out of lock
+  bufferlist tbl;
+  int data_align = _op_journal_transactions_prepare(tls, tbl);
   uint64_t op = submit_manager.op_submit_start();
   dout(5) << "queue_transactions (trailing journal) " << op << " " << tls << dendl;
 
@@ -1944,7 +1950,7 @@ int FileStore::queue_transactions(Sequencer *posr, list<Transaction*> &tls,
   int r = do_transactions(tls, op);
     
   if (r >= 0) {
-    _op_journal_transactions(tls, op, ondisk, osd_op);
+    _op_journal_transactions(tbl, data_align, op, ondisk, osd_op);
   } else {
     delete ondisk;
   }
@@ -2011,7 +2017,12 @@ void FileStore::_set_global_replay_guard(coll_t cid,
     return;
 
   // sync all previous operations on this sequencer
-  int ret = sync_filesystem(basedir_fd);
+  int ret = object_map->sync();
+  if (ret < 0) {
+    derr << __func__ << " : omap sync error " << cpp_strerror(ret) << dendl;
+    assert(0 == "_set_global_replay_guard failed");
+  }
+  ret = sync_filesystem(basedir_fd);
   if (ret < 0) {
     derr << __func__ << " :sync_filesytem error " << cpp_strerror(ret) << dendl;
     assert(0 == "_set_global_replay_guard failed");
@@ -2883,74 +2894,141 @@ int FileStore::read(
   }
 }
 
+int FileStore::_do_fiemap(int fd, uint64_t offset, size_t len,
+                          map<uint64_t, uint64_t> *m)
+{
+  struct fiemap *fiemap = NULL;
+  uint64_t i;
+  struct fiemap_extent *extent = NULL;
+  int r = 0;
+
+  r = backend->do_fiemap(fd, offset, len, &fiemap);
+  if (r < 0)
+    return r;
+
+  if (fiemap->fm_mapped_extents == 0) {
+    free(fiemap);
+    return r;
+  }
+
+  extent = &fiemap->fm_extents[0];
+
+  /* start where we were asked to start */
+  if (extent->fe_logical < offset) {
+    extent->fe_length -= offset - extent->fe_logical;
+    extent->fe_logical = offset;
+  }
+
+  i = 0;
+
+  while (i < fiemap->fm_mapped_extents) {
+    struct fiemap_extent *next = extent + 1;
+
+    dout(10) << "FileStore::fiemap() fm_mapped_extents=" << fiemap->fm_mapped_extents
+             << " fe_logical=" << extent->fe_logical << " fe_length=" << extent->fe_length << dendl;
+
+    /* try to merge extents */
+    while ((i < fiemap->fm_mapped_extents - 1) &&
+           (extent->fe_logical + extent->fe_length == next->fe_logical)) {
+        next->fe_length += extent->fe_length;
+        next->fe_logical = extent->fe_logical;
+        extent = next;
+        next = extent + 1;
+        i++;
+    }
+
+    if (extent->fe_logical + extent->fe_length > offset + len)
+      extent->fe_length = offset + len - extent->fe_logical;
+    (*m)[extent->fe_logical] = extent->fe_length;
+    i++;
+    extent++;
+  }
+  free(fiemap);
+
+  return r;
+}
+
+int FileStore::_do_seek_hole_data(int fd, uint64_t offset, size_t len,
+                                  map<uint64_t, uint64_t> *m)
+{
+#if defined(__linux__) && defined(SEEK_HOLE) && defined(SEEK_DATA)
+  off_t hole_pos, data_pos;
+  int r = 0;
+
+  // If lseek fails with errno setting to be ENXIO, this means the current
+  // file offset is beyond the end of the file.
+  off_t start = offset;
+  while(start < (off_t)(offset + len)) {
+    data_pos = lseek(fd, start, SEEK_DATA);
+    if (data_pos < 0) {
+      if (errno == ENXIO)
+        break;
+      else {
+        r = -errno;
+        dout(10) << "failed to lseek: " << cpp_strerror(r) << dendl;
+	return r;
+      }
+    } else if (data_pos > (off_t)(offset + len)) {
+      break;
+    }
+
+    hole_pos = lseek(fd, data_pos, SEEK_HOLE);
+    if (hole_pos < 0) {
+      if (errno == ENXIO) {
+        break;
+      } else {
+        r = -errno;
+        dout(10) << "failed to lseek: " << cpp_strerror(r) << dendl;
+	return r;
+      }
+    }
+
+    if (hole_pos >= (off_t)(offset + len)) {
+      (*m)[data_pos] = offset + len - data_pos;
+      break;
+    }
+    (*m)[data_pos] = hole_pos - data_pos;
+    start = hole_pos;
+  }
+
+  return r;
+#else
+  (*m)[offset] = len;
+  return 0;
+#endif
+}
+
 int FileStore::fiemap(coll_t cid, const ghobject_t& oid,
                     uint64_t offset, size_t len,
                     bufferlist& bl)
 {
   tracepoint(objectstore, fiemap_enter, cid.c_str(), offset, len);
 
-  if (!backend->has_fiemap() || len <= (size_t)m_filestore_fiemap_threshold) {
+  if ((!backend->has_seek_data_hole() && !backend->has_fiemap()) ||
+      len <= (size_t)m_filestore_fiemap_threshold) {
     map<uint64_t, uint64_t> m;
     m[offset] = len;
     ::encode(m, bl);
     return 0;
   }
 
-
-  struct fiemap *fiemap = NULL;
-  map<uint64_t, uint64_t> exomap;
-
   dout(15) << "fiemap " << cid << "/" << oid << " " << offset << "~" << len << dendl;
 
+  map<uint64_t, uint64_t> exomap;
   FDRef fd;
+
   int r = lfn_open(cid, oid, false, &fd);
   if (r < 0) {
     dout(10) << "read couldn't open " << cid << "/" << oid << ": " << cpp_strerror(r) << dendl;
-  } else {
-    uint64_t i;
-
-    r = backend->do_fiemap(**fd, offset, len, &fiemap);
-    if (r < 0)
-      goto done;
-
-    if (fiemap->fm_mapped_extents == 0) {
-      free(fiemap);
-      goto done;
-    }
-
-    struct fiemap_extent *extent = &fiemap->fm_extents[0];
-
-    /* start where we were asked to start */
-    if (extent->fe_logical < offset) {
-      extent->fe_length -= offset - extent->fe_logical;
-      extent->fe_logical = offset;
-    }
-
-    i = 0;
-
-    while (i < fiemap->fm_mapped_extents) {
-      struct fiemap_extent *next = extent + 1;
-
-      dout(10) << "FileStore::fiemap() fm_mapped_extents=" << fiemap->fm_mapped_extents
-	       << " fe_logical=" << extent->fe_logical << " fe_length=" << extent->fe_length << dendl;
-
-      /* try to merge extents */
-      while ((i < fiemap->fm_mapped_extents - 1) &&
-             (extent->fe_logical + extent->fe_length == next->fe_logical)) {
-          next->fe_length += extent->fe_length;
-          next->fe_logical = extent->fe_logical;
-          extent = next;
-          next = extent + 1;
-          i++;
-      }
-
-      if (extent->fe_logical + extent->fe_length > offset + len)
-        extent->fe_length = offset + len - extent->fe_logical;
-      exomap[extent->fe_logical] = extent->fe_length;
-      i++;
-      extent++;
-    }
-    free(fiemap);
+    goto done;
+  }
+  
+  if (backend->has_seek_data_hole()) {
+    dout(15) << "seek_data/seek_hole " << cid << "/" << oid << " " << offset << "~" << len << dendl;
+    r = _do_seek_hole_data(**fd, offset, len, &exomap);
+  } else if (backend->has_fiemap()) {
+    dout(15) << "fiemap ioctl" << cid << "/" << oid << " " << offset << "~" << len << dendl;
+    r = _do_fiemap(**fd, offset, len, &exomap);
   }
 
 done:
@@ -3547,6 +3625,7 @@ void FileStore::sync_entry()
 	apply_manager.commit_started();
 	op_tp.unpause();
 
+	object_map->sync();
 	int err = backend->syncfs();
 	if (err < 0) {
 	  derr << "syncfs got " << cpp_strerror(err) << dendl;
@@ -3745,7 +3824,7 @@ int FileStore::snapshot(const string& name)
 
 int FileStore::_fgetattr(int fd, const char *name, bufferptr& bp)
 {
-  char val[100];
+  char val[CHAIN_XATTR_MAX_BLOCK_LEN];
   int l = chain_fgetxattr(fd, name, val, sizeof(val));
   if (l >= 0) {
     bp = buffer::create(l);

@@ -76,16 +76,15 @@ protected:
   static void SetUpTestCase() {
     pool_name = get_temp_pool_name();
     ASSERT_EQ("", create_one_pool_pp(pool_name, s_cluster));
-    cache_pool_name = get_temp_pool_name();
-    ASSERT_EQ(0, s_cluster.pool_create(cache_pool_name.c_str()));
   }
   static void TearDownTestCase() {
-    ASSERT_EQ(0, s_cluster.pool_delete(cache_pool_name.c_str()));
     ASSERT_EQ(0, destroy_one_pool_pp(pool_name, s_cluster));
   }
   static std::string cache_pool_name;
 
   virtual void SetUp() {
+    cache_pool_name = get_temp_pool_name();
+    ASSERT_EQ(0, s_cluster.pool_create(cache_pool_name.c_str()));
     RadosTestPP::SetUp();
     ASSERT_EQ(0, cluster.ioctx_create(cache_pool_name.c_str(), cache_ioctx));
     cache_ioctx.set_namespace(nspace);
@@ -114,6 +113,7 @@ protected:
     cleanup_namespace(cache_ioctx, nspace);
 
     cache_ioctx.close();
+    ASSERT_EQ(0, s_cluster.pool_delete(cache_pool_name.c_str()));
   }
   librados::IoCtx cache_ioctx;
 };
@@ -670,6 +670,51 @@ TEST_F(LibRadosTwoPoolsPP, Whiteout) {
   }
 }
 
+TEST_F(LibRadosTwoPoolsPP, WhiteoutDeleteCreate) {
+  // configure cache
+  bufferlist inbl;
+  ASSERT_EQ(0, cluster.mon_command(
+    "{\"prefix\": \"osd tier add\", \"pool\": \"" + pool_name +
+    "\", \"tierpool\": \"" + cache_pool_name +
+    "\", \"force_nonempty\": \"--force-nonempty\" }",
+    inbl, NULL, NULL));
+  ASSERT_EQ(0, cluster.mon_command(
+    "{\"prefix\": \"osd tier set-overlay\", \"pool\": \"" + pool_name +
+    "\", \"overlaypool\": \"" + cache_pool_name + "\"}",
+    inbl, NULL, NULL));
+  ASSERT_EQ(0, cluster.mon_command(
+    "{\"prefix\": \"osd tier cache-mode\", \"pool\": \"" + cache_pool_name +
+    "\", \"mode\": \"writeback\"}",
+    inbl, NULL, NULL));
+
+  // wait for maps to settle
+  cluster.wait_for_latest_osdmap();
+
+  // create an object
+  {
+    bufferlist bl;
+    bl.append("foo");
+    ASSERT_EQ(0, ioctx.write_full("foo", bl));
+  }
+
+  // do delete + create operation
+  {
+    ObjectWriteOperation op;
+    op.remove();
+    bufferlist bl;
+    bl.append("bar");
+    op.write_full(bl);
+    ASSERT_EQ(0, ioctx.operate("foo", &op));
+  }
+
+  // verify it still "exists" (w/ new content)
+  {
+    bufferlist bl;
+    ASSERT_EQ(1, ioctx.read("foo", bl, 1, 0));
+    ASSERT_EQ('b', bl[0]);
+  }
+}
+
 TEST_F(LibRadosTwoPoolsPP, Evict) {
   // create object
   {
@@ -741,10 +786,10 @@ TEST_F(LibRadosTwoPoolsPP, Evict) {
     op.cache_evict();
     librados::AioCompletion *completion = cluster.aio_create_completion();
     ASSERT_EQ(0, cache_ioctx.aio_operate(
-      "fooberdoodle", completion, &op,
+      "foo", completion, &op,
       librados::OPERATION_IGNORE_CACHE, NULL));
     completion->wait_for_safe();
-    ASSERT_EQ(-ENOENT, completion->get_return_value());
+    ASSERT_EQ(0, completion->get_return_value());
     completion->release();
   }
   {
@@ -2354,16 +2399,15 @@ protected:
   static void SetUpTestCase() {
     pool_name = get_temp_pool_name();
     ASSERT_EQ("", create_one_ec_pool_pp(pool_name, s_cluster));
-    cache_pool_name = get_temp_pool_name();
-    ASSERT_EQ(0, s_cluster.pool_create(cache_pool_name.c_str()));
   }
   static void TearDownTestCase() {
-    ASSERT_EQ(0, s_cluster.pool_delete(cache_pool_name.c_str()));
     ASSERT_EQ(0, destroy_one_ec_pool_pp(pool_name, s_cluster));
   }
   static std::string cache_pool_name;
 
   virtual void SetUp() {
+    cache_pool_name = get_temp_pool_name();
+    ASSERT_EQ(0, s_cluster.pool_create(cache_pool_name.c_str()));
     RadosTestECPP::SetUp();
     ASSERT_EQ(0, cluster.ioctx_create(cache_pool_name.c_str(), cache_ioctx));
     cache_ioctx.set_namespace(nspace);
@@ -2392,6 +2436,7 @@ protected:
     cleanup_namespace(cache_ioctx, nspace);
 
     cache_ioctx.close();
+    ASSERT_EQ(0, s_cluster.pool_delete(cache_pool_name.c_str()));
   }
 
   librados::IoCtx cache_ioctx;
@@ -2943,10 +2988,10 @@ TEST_F(LibRadosTwoPoolsECPP, Evict) {
     op.cache_evict();
     librados::AioCompletion *completion = cluster.aio_create_completion();
     ASSERT_EQ(0, cache_ioctx.aio_operate(
-      "fooberdoodle", completion, &op,
+      "foo", completion, &op,
       librados::OPERATION_IGNORE_CACHE, NULL));
     completion->wait_for_safe();
-    ASSERT_EQ(-ENOENT, completion->get_return_value());
+    ASSERT_EQ(0, completion->get_return_value());
     completion->release();
   }
   {

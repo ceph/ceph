@@ -25,6 +25,8 @@ protected:
    * Trim goes through the following state machine to remove whole objects,
    * clean partially trimmed objects, and update the object map:
    *
+   * @verbatim
+   *
    *     <start> . . . . > STATE_FINISHED . . . . . . . . .
    *      |   .                                           .
    *      |   . . . . . . . . . . . .                     .
@@ -39,6 +41,8 @@ protected:
    *        .                                           ^
    *        .                                           .
    *        . . . . . . . . . . . . . . . . . . . . . . .
+   *
+   * @endverbatim
    *
    * The _PRE_REMOVE/_POST_REMOVE states are skipped if the object map
    * isn't enabled. The _REMOVE_OBJECTS state is skipped if no whole objects
@@ -68,8 +72,9 @@ private:
 
   void send_remove_objects();
   void send_pre_remove();
-  bool send_post_remove();
-  bool send_clean_boundary();
+  void send_post_remove();
+  void send_clean_boundary();
+  void finish();
 };
 
 } // namespace librbd

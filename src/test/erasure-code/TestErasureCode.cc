@@ -33,6 +33,10 @@ public:
     k(_k), m(_m), chunk_size(_chunk_size) {}
   virtual ~ErasureCodeTest() {}
 
+  virtual int init(ErasureCodeProfile &profile, ostream *ss) {
+    return 0;
+  }
+
   virtual unsigned int get_chunk_count() const { return k + m; }
   virtual unsigned int get_data_chunk_count() const { return k; }
   virtual unsigned int get_chunk_size(unsigned int object_size) const {

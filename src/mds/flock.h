@@ -215,6 +215,11 @@ public:
     client_held_lock_counts.clear();
     client_waiting_lock_counts.clear();
   }
+  bool empty() const {
+    return held_locks.empty() && waiting_locks.empty() &&
+	   client_held_lock_counts.empty() &&
+	   client_waiting_lock_counts.empty();
+  }
 };
 WRITE_CLASS_ENCODER(ceph_lock_state_t)
 

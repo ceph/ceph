@@ -31,14 +31,15 @@ namespace librbd {
     ~ImageWatcher();
 
     bool is_lock_supported() const;
+    bool is_lock_supported(const RWLock &snap_lock) const;
     bool is_lock_owner() const;
 
     int register_watch();
     int unregister_watch();
 
     int try_lock();
-    int request_lock(const boost::function<int(AioCompletion*)>& restart_op,
-		     AioCompletion* c);
+    void request_lock(const boost::function<void(AioCompletion*)>& restart_op,
+		      AioCompletion* c);
     void prepare_unlock();
     void cancel_unlock();
     int unlock();
@@ -49,6 +50,9 @@ namespace librbd {
     int notify_resize(uint64_t request_id, uint64_t size,
 		      ProgressContext &prog_ctx);
     int notify_snap_create(const std::string &snap_name);
+    int notify_snap_remove(const std::string &snap_name);
+    int notify_rebuild_object_map(uint64_t request_id,
+                                  ProgressContext &prog_ctx);
 
     static void notify_header_update(librados::IoCtx &io_ctx,
 				     const std::string &oid);
@@ -74,14 +78,13 @@ namespace librbd {
       TASK_CODE_RELEASED_LOCK,
       TASK_CODE_RETRY_AIO_REQUESTS,
       TASK_CODE_CANCEL_ASYNC_REQUESTS,
-      TASK_CODE_HEADER_UPDATE,
       TASK_CODE_REREGISTER_WATCH,
       TASK_CODE_ASYNC_REQUEST,
       TASK_CODE_ASYNC_PROGRESS
     };
 
     typedef std::pair<Context *, ProgressContext *> AsyncRequest;
-    typedef std::pair<boost::function<int(AioCompletion *)>,
+    typedef std::pair<boost::function<void(AioCompletion *)>,
 		      AioCompletion *> AioRequest;
 
     class Task {
@@ -140,7 +143,7 @@ namespace librbd {
     public:
       RemoteContext(ImageWatcher &image_watcher,
 		    const WatchNotify::AsyncRequestId &id,
-		    RemoteProgressContext *prog_ctx)
+		    ProgressContext *prog_ctx)
         : m_image_watcher(image_watcher), m_async_request_id(id),
 	  m_prog_ctx(prog_ctx)
       {
@@ -155,7 +158,7 @@ namespace librbd {
     private:
       ImageWatcher &m_image_watcher;
       WatchNotify::AsyncRequestId m_async_request_id;
-      RemoteProgressContext *m_prog_ctx;
+      ProgressContext *m_prog_ctx;
     };
 
     struct HandlePayloadVisitor : public boost::static_visitor<void> {
@@ -210,9 +213,8 @@ namespace librbd {
     int get_lock_owner_info(entity_name_t *locker, std::string *cookie,
 			    std::string *address, uint64_t *handle);
     int lock();
-    void release_lock();
+    bool release_lock();
     bool try_request_lock();
-    void finalize_header_update();
 
     void schedule_retry_aio_requests(bool use_timer);
     void retry_aio_requests();
@@ -222,6 +224,7 @@ namespace librbd {
 
     WatchNotify::ClientId get_client_id();
 
+    void notify_release_lock();
     void notify_released_lock();
     void notify_request_lock();
     int notify_lock_owner(bufferlist &bl);
@@ -241,6 +244,12 @@ namespace librbd {
     int notify_async_complete(const WatchNotify::AsyncRequestId &id,
 			      int r);
 
+    int prepare_async_request(const WatchNotify::AsyncRequestId& id,
+                              bool* new_request, Context** ctx,
+                              ProgressContext** prog_ctx);
+    void cleanup_async_request(const WatchNotify::AsyncRequestId& id,
+                               Context *ctx);
+
     void handle_payload(const WatchNotify::HeaderUpdatePayload& payload,
 		        bufferlist *out);
     void handle_payload(const WatchNotify::AcquiredLockPayload& payload,
@@ -259,6 +268,10 @@ namespace librbd {
 		        bufferlist *out);
     void handle_payload(const WatchNotify::SnapCreatePayload& payload,
 		        bufferlist *out);
+    void handle_payload(const WatchNotify::SnapRemovePayload& payload,
+		        bufferlist *out);
+    void handle_payload(const WatchNotify::RebuildObjectMapPayload& payload,
+                        bufferlist *out);
     void handle_payload(const WatchNotify::UnknownPayload& payload,
 		        bufferlist *out);
 

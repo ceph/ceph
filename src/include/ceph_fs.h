@@ -94,6 +94,7 @@ struct ceph_dir_layout {
 #define CEPH_MSG_MON_MAP                4
 #define CEPH_MSG_MON_GET_MAP            5
 #define CEPH_MSG_MON_GET_OSDMAP         6
+#define CEPH_MSG_MON_METADATA           7
 #define CEPH_MSG_STATFS                 13
 #define CEPH_MSG_STATFS_REPLY           14
 #define CEPH_MSG_MON_SUBSCRIBE          15
@@ -253,6 +254,7 @@ struct ceph_mon_subscribe_ack {
 #define CEPH_MDS_STATE_CLIENTREPLAY 12 /* up, replaying client operations */
 #define CEPH_MDS_STATE_ACTIVE       13 /* up, active */
 #define CEPH_MDS_STATE_STOPPING     14 /* up, but exporting metadata */
+#define CEPH_MDS_STATE_DAMAGED      15 /* rank not replayable, need repair */
 
 extern const char *ceph_mds_state_name(int s);
 
@@ -341,6 +343,7 @@ enum {
 	CEPH_MDS_OP_MKSNAP     = 0x01400,
 	CEPH_MDS_OP_RMSNAP     = 0x01401,
 	CEPH_MDS_OP_LSSNAP     = 0x00402,
+	CEPH_MDS_OP_RENAMESNAP = 0x01403,
 
 	// internal op
 	CEPH_MDS_OP_FRAGMENTDIR= 0x01500,

@@ -42,6 +42,8 @@ int crush_get_bucket_item_weight(const struct crush_bucket *b, int p)
 		return ((struct crush_bucket_tree *)b)->node_weights[crush_calc_tree_node(p)];
 	case CRUSH_BUCKET_STRAW:
 		return ((struct crush_bucket_straw *)b)->item_weights[p];
+	case CRUSH_BUCKET_STRAW2:
+		return ((struct crush_bucket_straw2 *)b)->item_weights[p];
 	}
 	return 0;
 }
@@ -79,6 +81,14 @@ void crush_destroy_bucket_straw(struct crush_bucket_straw *b)
 	kfree(b);
 }
 
+void crush_destroy_bucket_straw2(struct crush_bucket_straw2 *b)
+{
+	kfree(b->item_weights);
+	kfree(b->h.perm);
+	kfree(b->h.items);
+	kfree(b);
+}
+
 void crush_destroy_bucket(struct crush_bucket *b)
 {
 	switch (b->alg) {
@@ -93,6 +103,9 @@ void crush_destroy_bucket(struct crush_bucket *b)
 		break;
 	case CRUSH_BUCKET_STRAW:
 		crush_destroy_bucket_straw((struct crush_bucket_straw *)b);
+		break;
+	case CRUSH_BUCKET_STRAW2:
+		crush_destroy_bucket_straw2((struct crush_bucket_straw2 *)b);
 		break;
 	}
 }

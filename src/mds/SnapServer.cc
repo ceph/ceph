@@ -76,7 +76,8 @@ void SnapServer::_prepare(bufferlist &bl, uint64_t reqid, mds_rank_t bymds)
 	::decode(info.name, p);
 	::decode(info.stamp, p);
 	info.snapid = ++last_snap;
-	pending_create[version] = info;
+	info.long_name = "create";
+	pending_update[version] = info;
 	dout(10) << "prepare v" << version << " create " << info << dendl;
       } else {
 	pending_noop.insert(version);
@@ -106,6 +107,26 @@ void SnapServer::_prepare(bufferlist &bl, uint64_t reqid, mds_rank_t bymds)
     }
     break;
 
+  case TABLE_OP_UPDATE:
+    {
+      SnapInfo info;
+      ::decode(info.ino, p);
+      ::decode(info.snapid, p);
+      ::decode(info.name, p);
+      ::decode(info.stamp, p);
+      info.long_name = "update";
+
+      version++;
+      // bump last_snap... we use it as a version value on the snaprealm.
+      ++last_snap;
+      pending_update[version] = info;
+      dout(10) << "prepare v" << version << " update " << info << dendl;
+
+      bl.clear();
+      ::encode(last_snap, bl);
+    }
+    break;
+
   default:
     assert(0);
   }
@@ -115,17 +136,25 @@ void SnapServer::_prepare(bufferlist &bl, uint64_t reqid, mds_rank_t bymds)
 bool SnapServer::_is_prepared(version_t tid)
 {
   return 
-    pending_create.count(tid) ||
+    pending_update.count(tid) ||
     pending_destroy.count(tid);
 }
 
 bool SnapServer::_commit(version_t tid, MMDSTableRequest *req)
 {
-  if (pending_create.count(tid)) {
-    dout(7) << "commit " << tid << " create " << pending_create[tid] << dendl;
-    snaps[pending_create[tid].snapid] = pending_create[tid];
-    pending_create.erase(tid);
-  } 
+  if (pending_update.count(tid)) {
+    SnapInfo &info = pending_update[tid];
+    string opname;
+    if (info.long_name.empty())
+      opname = "create";
+    else
+      opname.swap(info.long_name);
+    if (info.stamp == utime_t() && snaps.count(info.snapid))
+      info.stamp = snaps[info.snapid].stamp;
+    dout(7) << "commit " << tid << " " << opname << " " << info << dendl;
+    snaps[info.snapid] = info;
+    pending_update.erase(tid);
+  }
 
   else if (pending_destroy.count(tid)) {
     snapid_t sn = pending_destroy[tid].first;
@@ -157,9 +186,15 @@ bool SnapServer::_commit(version_t tid, MMDSTableRequest *req)
 
 void SnapServer::_rollback(version_t tid) 
 {
-  if (pending_create.count(tid)) {
-    dout(7) << "rollback " << tid << " create " << pending_create[tid] << dendl;
-    pending_create.erase(tid);
+  if (pending_update.count(tid)) {
+    SnapInfo &info = pending_update[tid];
+    string opname;
+    if (info.long_name.empty())
+      opname = "create";
+    else
+      opname.swap(info.long_name);
+    dout(7) << "rollback " << tid << " " << opname << " " << info << dendl;
+    pending_update.erase(tid);
   } 
 
   else if (pending_destroy.count(tid)) {
@@ -287,8 +322,8 @@ void SnapServer::dump(Formatter *f) const
   }
   f->close_section();
 
-  f->open_array_section("pending_create");
-  for(map<version_t, SnapInfo>::const_iterator i = pending_create.begin(); i != pending_create.end(); ++i) {
+  f->open_array_section("pending_update");
+  for(map<version_t, SnapInfo>::const_iterator i = pending_update.begin(); i != pending_update.end(); ++i) {
     f->open_object_section("snap");
     f->dump_unsigned("version", i->first);
     f->open_object_section("snapinfo");
@@ -326,7 +361,7 @@ void SnapServer::generate_test_instances(list<SnapServer*>& ls)
   populated->last_snap = 123;
   populated->snaps[456] = populated_snapinfo;
   populated->need_to_purge[2].insert(012);
-  populated->pending_create[234] = populated_snapinfo;
+  populated->pending_update[234] = populated_snapinfo;
   populated->pending_destroy[345].first = 567;
   populated->pending_destroy[345].second = 768;
   populated->pending_noop.insert(890);
