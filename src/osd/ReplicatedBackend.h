@@ -192,6 +192,7 @@ private:
     ObjectContextRef head_ctx;
     ObjectContextRef obc;
     object_stat_sum_t stat;
+    bool cache_dont_need;
 
     void dump(Formatter *f) const {
       {
@@ -263,10 +264,12 @@ private:
 		    const ObjectRecoveryProgress &progress,
 		    ObjectRecoveryProgress *out_progress,
 		    PushOp *out_op,
-		    object_stat_sum_t *stat = 0);
+		    object_stat_sum_t *stat = 0,
+                    bool cache_dont_need = true);
   void submit_push_data(ObjectRecoveryInfo &recovery_info,
 			bool first,
 			bool complete,
+			bool cache_dont_need,
 			const interval_set<uint64_t> &intervals_included,
 			bufferlist data_included,
 			bufferlist omap_header,
@@ -292,7 +295,7 @@ private:
     RPGHandle *h);
   void prep_push_to_replica(
     ObjectContextRef obc, const hobject_t& soid, pg_shard_t peer,
-    PushOp *pop);
+    PushOp *pop, bool cache_dont_need = true);
   void prep_push(ObjectContextRef obc,
 		 const hobject_t& oid, pg_shard_t dest,
 		 PushOp *op);
@@ -301,7 +304,8 @@ private:
 		 eversion_t version,
 		 interval_set<uint64_t> &data_subset,
 		 map<hobject_t, interval_set<uint64_t> >& clone_subsets,
-		 PushOp *op);
+		 PushOp *op,
+                 bool cache = false);
   void calc_head_subsets(ObjectContextRef obc, SnapSet& snapset, const hobject_t& head,
 			 const pg_missing_t& missing,
 			 const hobject_t &last_backfill,
