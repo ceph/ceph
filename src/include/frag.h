@@ -207,10 +207,13 @@ public:
     std::list<frag_t> ls;
     get_leaves_under(x, ls);
     //generic_dout(10) << "is_leaf(" << x << ") -> " << ls << dendl;
-    if (!ls.empty() &&
+    if ((!ls.empty() &&
 	ls.front() == x &&
-	ls.size() == 1)
+	ls.size() == 1))
       return true;
+    // Added by MSEVILLA: a node without and leaves underneath it a 
+    // is definitely a leaf... it is probably a root dirfrag. :)
+    if (ls.empty()) return true;
     return false;
   }
 

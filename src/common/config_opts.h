@@ -404,6 +404,16 @@ OPTION(mds_bal_minchunk, OPT_FLOAT, .001)     // never take anything smaller tha
 OPTION(mds_bal_target_removal_min, OPT_INT, 5) // min balance iterations before old target is removed
 OPTION(mds_bal_target_removal_max, OPT_INT, 10) // max balance iterations before old target is removed
 OPTION(mds_replay_interval, OPT_FLOAT, 1.0) // time to wait before starting replay again
+OPTION(mds_bal_minoffload, OPT_INT,  10)
+OPTION(mds_bal_lua, OPT_INT,  0)
+OPTION(mds_bal_metaload, OPT_STR,  "")
+OPTION(mds_bal_mdsload, OPT_STR,  "-1")
+OPTION(mds_bal_when, OPT_STR,  "")
+OPTION(mds_bal_where, OPT_STR,  "")
+OPTION(mds_bal_howmuch, OPT_STR,  "")
+OPTION(mds_bal_print_dfs, OPT_INT,  10)
+OPTION(mds_bal_print_dfs_metaload, OPT_FLOAT, 0.0)
+OPTION(mds_bal_print_dfs_depth, OPT_INT, 4)
 OPTION(mds_shutdown_check, OPT_INT, 0)
 OPTION(mds_thrash_exports, OPT_INT, 0)
 OPTION(mds_thrash_fragments, OPT_INT, 0)

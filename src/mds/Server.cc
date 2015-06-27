@@ -2988,6 +2988,7 @@ void Server::handle_client_openc(MDRequestRef& mdr)
     
   // create inode.
   SnapRealm *realm = diri->find_snaprealm();   // use directory's realm; inode isn't attached yet.
+  mds->balancer->hit_nfiles(1);
   snapid_t follows = realm->get_newest_seq();
 
   CInode *in = prepare_new_inode(mdr, dn->get_dir(), inodeno_t(req->head.ino),
@@ -5281,6 +5282,8 @@ void Server::_unlink_local(MDRequestRef& mdr, CDentry *dn, CDentry *straydn)
   if (in->is_dir()) {
     assert(straydn);
     mds->mdcache->project_subtree_rename(in, dn->get_dir(), straydn->get_dir());
+  } else {
+    mds->balancer->hit_nfiles(-1);
   }
 
   journal_and_reply(mdr, 0, dn, le, new C_MDS_unlink_local_finish(mds, mdr, dn, straydn));
