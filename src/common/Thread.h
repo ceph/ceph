@@ -24,7 +24,7 @@ class Thread {
   virtual ~Thread();
 
   pthread_t get_thread_id() const;
-  pid_t get_pid() const { return pid; }
+  pid_t get_pid() const;
   bool is_started() const;
   bool am_self() const;
   int kill(int signal);

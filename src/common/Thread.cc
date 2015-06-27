@@ -89,6 +89,10 @@ pthread_t Thread::get_thread_id() const
   return thread_id;
 }
 
+pid_t Thread::get_pid() const {
+  return pid;
+}
+
 bool Thread::is_started() const
 {
   return thread_id != 0;
