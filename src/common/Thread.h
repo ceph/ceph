@@ -21,16 +21,16 @@
 
 class Thread {
  private:
+  Thread(const Thread& other);
+  Thread& operator=(const Thread& other);
+
   pthread_t thread_id;
   pid_t pid;
   int ioprio_class, ioprio_priority;
   int cpuid;
 
   void *entry_wrapper();
-
  public:
-  explicit Thread(const Thread& other);
-  const Thread& operator=(const Thread& other);
 
   Thread();
   virtual ~Thread();
