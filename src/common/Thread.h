@@ -42,10 +42,10 @@ class Thread {
   static void *_entry_func(void *arg);
 
  public:
-  const pthread_t &get_thread_id();
+  const pthread_t &get_thread_id() const;
   pid_t get_pid() const { return pid; }
   bool is_started() const;
-  bool am_self();
+  bool am_self() const;
   int kill(int signal);
   int try_create(size_t stacksize);
   void create(size_t stacksize = 0);
