@@ -326,6 +326,9 @@ def run_tests(ctx, config):
     """
     assert isinstance(config, dict)
     testdir = teuthology.get_testdir(ctx)
+    attrs = ["!fails_on_rgw"]
+    if not ctx.rgw.use_fastcgi:
+        attrs.append("!fails_on_mod_proxy_fcgi")
     for client, client_config in config.iteritems():
         args = [
             'S3TEST_CONF={tdir}/archive/s3-tests.{client}.conf'.format(tdir=testdir, client=client),
@@ -334,7 +337,7 @@ def run_tests(ctx, config):
             '-w',
             '{tdir}/s3-tests'.format(tdir=testdir),
             '-v',
-            '-a', '!fails_on_rgw',
+            '-a', ','.join(attrs),
             ]
         if client_config is not None and 'extra_args' in client_config:
             args.extend(client_config['extra_args'])

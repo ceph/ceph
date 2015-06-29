@@ -1,0 +1,14 @@
+# mod_proxy_fcgi config, using UDS
+
+<IfModule !proxy_module>
+  LoadModule proxy_module {mod_path}/mod_proxy.so
+</IfModule>
+<IfModule !proxy_fcgi_module>
+  LoadModule proxy_fcgi_module {mod_path}/mod_proxy_fcgi.so
+</IfModule>
+
+RewriteEngine On
+
+RewriteRule .* - [E=HTTP_AUTHORIZATION:%{{HTTP:Authorization}},L]
+
+ProxyPass / unix://{testdir}/apache/tmp.{client}/fastcgi_sock/rgw_sock|fcgi://localhost:9000/ disablereuse=On

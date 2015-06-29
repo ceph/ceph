@@ -72,6 +72,19 @@ def create_apache_dirs(ctx, config):
                 )
 
 
+def _use_uds_with_fcgi(remote):
+    """
+    Returns true if this node supports the usage of
+    unix domain sockets with mod_proxy_fcgi.
+
+    FIXME: returns False always for now until we know for
+    sure what distros will support UDS. RHEL 7.0 is the only one
+    currently I know of, but we can't install that version of apache
+    yet in the labs.
+    """
+    return False
+
+
 @contextlib.contextmanager
 def ship_apache_configs(ctx, config, role_endpoints):
     """
@@ -105,8 +118,27 @@ def ship_apache_configs(ctx, config, role_endpoints):
             apache24_modconfig = \
                 'IncludeOptional /etc/httpd/conf.modules.d/00-mpm.conf'
         host, port = role_endpoints[client]
+
+        # decide if we want to use mod_fastcgi or mod_proxy_fcgi
+        template_dir = os.path.dirname(__file__)
+        fcgi_config = os.path.join(template_dir,
+                                   'mod_proxy_fcgi.tcp.conf.template')
+        if ctx.rgw.use_fastcgi:
+            log.info("Apache is configured to use mod_fastcgi")
+            fcgi_config = os.path.join(template_dir,
+                                       'mod_fastcgi.conf.template')
+        elif _use_uds_with_fcgi(remote):
+            log.info("Apache is configured to use mod_proxy_fcgi with UDS")
+            fcgi_config = os.path.join(template_dir,
+                                       'mod_proxy_fcgi.uds.conf.template')
+        else:
+            log.info("Apache is configured to use mod_proxy_fcgi with TCP")
+
+        with file(fcgi_config, 'rb') as f:
+            fcgi_config = f.read()
         with file(src, 'rb') as f:
-            conf = f.read().format(
+            conf = f.read() + fcgi_config
+            conf = conf.format(
                 testdir=testdir,
                 mod_path=mod_path,
                 print_continue=print_continue,
@@ -125,6 +157,23 @@ def ship_apache_configs(ctx, config, role_endpoints):
                     client=client),
                 data=conf,
                 )
+        rgw_options = []
+        if ctx.rgw.use_fastcgi or _use_uds_with_fcgi(remote):
+            rgw_options = [
+                '--rgw-socket-path',
+                '{tdir}/apache/tmp.{client}/fastcgi_sock/rgw_sock'.format(
+                    tdir=testdir,
+                    client=client
+                ),
+            ]
+        else:
+            rgw_options = [
+                '--rgw-socket-path', '""',
+                '--rgw-print-continue', 'false',
+                '--rgw-frontends',
+                'fastcgi socket_port=9000 socket_host=0.0.0.0',
+            ]
+
         teuthology.write_file(
             remote=remote,
             path='{tdir}/apache/htdocs.{client}/rgw.fcgi'.format(
@@ -132,9 +181,9 @@ def ship_apache_configs(ctx, config, role_endpoints):
                 client=client),
             data="""#!/bin/sh
 ulimit -c unlimited
-exec radosgw -f -n {client} -k /etc/ceph/ceph.{client}.keyring --rgw-socket-path {tdir}/apache/tmp.{client}/fastcgi_sock/rgw_sock
+exec radosgw -f -n {client} -k /etc/ceph/ceph.{client}.keyring {rgw_options}
 
-""".format(tdir=testdir, client=client)
+""".format(tdir=testdir, client=client, rgw_options=" ".join(rgw_options))
             )
         remote.run(
             args=[
@@ -193,13 +242,25 @@ def start_rgw(ctx, config):
         rgw_cmd = ['radosgw']
 
         if ctx.rgw.frontend == 'apache':
-            rgw_cmd.extend([
-                '--rgw-socket-path',
-                '{tdir}/apache/tmp.{client}/fastcgi_sock/rgw_sock'.format(
-                    tdir=testdir,
-                    client=client,
-                    ),
-            ])
+            if ctx.rgw.use_fastcgi or _use_uds_with_fcgi(remote):
+                rgw_cmd.extend([
+                    '--rgw-socket-path',
+                    '{tdir}/apache/tmp.{client}/fastcgi_sock/rgw_sock'.format(
+                        tdir=testdir,
+                        client=client,
+                        ),
+                    '--rgw-frontends',
+                    'fastcgi socket_port=9000 socket_host=0.0.0.0',
+                ])
+            else:
+                # for mod_proxy_fcgi, using tcp
+                rgw_cmd.extend([
+                    '--rgw-socket-path', '',
+                    '--rgw-print-continue', 'false',
+                    '--rgw-frontends',
+                    'fastcgi socket_port=9000 socket_host=0.0.0.0',
+                ])
+
         elif ctx.rgw.frontend == 'civetweb':
             host, port = ctx.rgw.role_endpoints[client]
             rgw_cmd.extend([
@@ -702,6 +763,12 @@ def task(ctx, config):
                 rgw print continue: false
         - rgw: [client.0]
 
+    To use mod_proxy_fcgi instead of mod_fastcgi:
+
+        overrides:
+          rgw:
+            use_fcgi: true
+
     To run rgws for multiple regions or zones, describe the regions
     and their zones in a regions section. The endpoints will be
     generated by this task. Each client must have a region, zone,
@@ -810,6 +877,12 @@ def task(ctx, config):
     if 'frontend' in config:
         ctx.rgw.frontend = config['frontend']
         del config['frontend']
+
+    ctx.rgw.use_fastcgi = True
+    if "use_fcgi" in config:
+        ctx.rgw.use_fastcgi = False
+        log.info("Using mod_proxy_fcgi instead of mod_fastcgi...")
+        del config['use_fcgi']
 
     subtasks = [
         lambda: configure_regions_and_zones(
