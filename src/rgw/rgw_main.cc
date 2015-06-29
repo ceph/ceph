@@ -141,12 +141,13 @@ public:
       return ret;
     return 0;
   }
-  bool get_val(const string& key, const string& def_val, string *out);
-  bool get_val(const string& key, int def_val, int *out);
+  bool get_val(const string& key, const string& def_val, string *out) const;
+  bool get_val(const string& key, int def_val, int *out) const;
 
   map<string, string>& get_config_map() { return config_map; }
 
   string get_framework() { return framework; }
+
 private:
   int parse_config(const string& config, map<string, string>& config_map);
 
@@ -814,9 +815,10 @@ int RGWFrontendConfig::parse_config(const string& config,
   return return_value;
 }
 
-bool RGWFrontendConfig::get_val(const string& key, const string& def_val, string *out)
-{
- map<string, string>::iterator iter = config_map.find(key);
+bool RGWFrontendConfig::get_val(const string& key,
+				const string& def_val,
+				string *out) const {
+ map<string, string>::const_iterator iter = config_map.find(key);
  if (iter == config_map.end()) {
    *out = def_val;
    return false;
@@ -827,8 +829,9 @@ bool RGWFrontendConfig::get_val(const string& key, const string& def_val, string
 }
 
 
-bool RGWFrontendConfig::get_val(const string& key, int def_val, int *out)
-{
+bool RGWFrontendConfig::get_val(const string& key,
+				int def_val,
+				int *out) const {
   string str;
   bool found = get_val(key, "", &str);
   if (!found) {
