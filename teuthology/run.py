@@ -204,6 +204,7 @@ def get_initial_tasks(lock, config, machine_type):
         {'internal.sudo': None},
         {'internal.syslog': None},
         {'internal.timer': None},
+        {'selinux': None},
     ])
 
     return init_tasks
