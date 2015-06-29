@@ -241,6 +241,8 @@ def reset_syslog_dir(ctx):
 def dpkg_configure(ctx):
     nodes = {}
     for remote in ctx.cluster.remotes.iterkeys():
+        if remote.os.package_type != 'deb':
+            continue
         proc = remote.run(
             args=[
                 'sudo', 'dpkg', '--configure', '-a',
