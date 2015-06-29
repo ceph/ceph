@@ -261,6 +261,18 @@ def dpkg_configure(ctx):
         proc.wait()
 
 
+def remove_yum_timedhosts(ctx):
+    # Workaround for https://bugzilla.redhat.com/show_bug.cgi?id=1233329
+    log.info("Removing yum timedhosts files...")
+    for remote in ctx.cluster.remotes.iterkeys():
+        if remote.os.package_type != 'rpm':
+            continue
+        remote.run(
+            args="find /var/cache/yum -name 'timedhosts' -exec rm {} \;",
+            check_status=False,
+        )
+
+
 def remove_installed_packages(ctx):
     dpkg_configure(ctx)
     conf = {'project': 'ceph'}
@@ -548,5 +560,6 @@ def nuke_helper(ctx, should_unlock):
     log.info('Clearing filesystem of test data...')
     remove_testing_tree(ctx)
     log.info('Filesystem Cleared.')
+    remove_yum_timedhosts(ctx)
     remove_installed_packages(ctx)
     log.info('Installed packages removed.')
