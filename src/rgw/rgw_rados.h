@@ -1160,7 +1160,7 @@ public:
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
 
-  int get_current_period_id();
+  int get_current_period_id(string& id);
 };
 WRITE_CLASS_ENCODER(RGWRealm)
 
@@ -1198,7 +1198,6 @@ class RGWPeriod
   CephContext *cct;
   RGWRados *store;
 
-  int store_info(bool exclusive);
   int read_info(const string& obj_id);
   int read_latest_epoch(RGWPeriodLatestEpochInfo& epoch_info);
   int use_latest_epoch();
@@ -1222,10 +1221,11 @@ public:
 
   int get_latest_epoch(epoch_t& epoch);
   int init(const string& realm_id = "", const string &realm_name = "", bool setup_obj = true);
+  int init(const string& period_id, epoch_t epoch, bool setup_obj = true);
 
   int create();
   int delete_obj();
-  int update();
+  int store_info(bool exclusive);
   int activate() { return -ENOTSUP;}
 
   void encode(bufferlist& bl) const {
