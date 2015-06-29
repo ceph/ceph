@@ -174,7 +174,6 @@ class MDS : public Dispatcher, public md_config_obs_t {
   MonClient    *monc;
   MDSMap       *mdsmap;
   Objecter     *objecter;
-  Filer        *filer;       // for reading/writing to/from osds
   LogClient    log_client;
   LogChannelRef clog;
 

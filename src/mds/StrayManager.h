@@ -16,6 +16,7 @@
 
 #include "include/elist.h"
 #include <list>
+#include "osdc/Filer.h"
 
 class MDS;
 class PerfCounters;
@@ -55,6 +56,8 @@ class StrayManager : public md_config_obs_t
   uint64_t num_strays;
   uint64_t num_strays_purging;
   uint64_t num_strays_delayed;
+
+  Filer filer;
 
   void truncate(CDentry *dn, uint32_t op_allowance);
 
