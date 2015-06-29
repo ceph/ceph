@@ -13,6 +13,7 @@
 
 #include <curl/curl.h>
 
+#include <boost/algorithm/string/trim.hpp>
 #include "acconfig.h"
 #ifdef FASTCGI_INCLUDE_DIR
 # include "fastcgi/fcgiapp.h"
@@ -70,7 +71,6 @@
 
 #include "include/types.h"
 #include "common/BackTrace.h"
-
 #define dout_subsys ceph_subsys_rgw
 
 using namespace std;
@@ -774,43 +774,43 @@ static RGWRESTMgr *set_logging(RGWRESTMgr *mgr)
 }
 
 
-int RGWFrontendConfig::parse_config(const string& config, map<string, string>& config_map)
-{
-  list<string> config_list;
-  get_str_list(config, " ", config_list);
+int RGWFrontendConfig::parse_config(const string& config,
+				    map<string, string>& config_map) {
+  int return_value = 0;
 
-  list<string>::iterator iter;
-  for (iter = config_list.begin(); iter != config_list.end(); ++iter) {
-    string& entry = *iter;
-    string key;
-    string val;
+  std::string entry = config;
+  boost::trim(entry);
 
-    if (framework.empty()) {
-      framework = entry;
-      dout(0) << "framework: " << framework << dendl;
-      continue;
+  size_t space_pos = entry.find(' ');
+  if(space_pos == std::string::npos) {
+    framework = entry;
+    dout(0) << "framework: " << framework << dendl;
+  } else {
+    framework = entry.substr(0, space_pos);
+    dout(0) << "framework: " << framework << dendl;
+
+    std::string key_value = entry.substr(space_pos + 1);
+
+    size_t equal_sign_pos = key_value.find('=');
+    if(equal_sign_pos == std::string::npos) {
+      dout(0) << "framework conf key: " << key_value << dendl;
+      config_map[key_value] = "";
+    } else {
+      std::string key, val;
+
+      int return_value = parse_key_value(key_value, key, val);
+
+      if (return_value < 0) {
+	cerr << "ERROR: can't parse " << key_value << std::endl;
+      } else {
+	dout(0) << "framework conf key: " << key << ", val: " << val << dendl;
+	config_map[key] = val;
+      }
     }
-
-    ssize_t pos = entry.find('=');
-    if (pos < 0) {
-      dout(0) << "framework conf key: " << entry << dendl;
-      config_map[entry] = "";
-      continue;
-    }
-
-    int ret = parse_key_value(entry, key, val);
-    if (ret < 0) {
-      cerr << "ERROR: can't parse " << entry << std::endl;
-      return ret;
-    }
-
-    dout(0) << "framework conf key: " << key << ", val: " << val << dendl;
-    config_map[key] = val;
   }
 
-  return 0;
+  return return_value;
 }
-
 
 bool RGWFrontendConfig::get_val(const string& key, const string& def_val, string *out)
 {
