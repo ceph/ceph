@@ -112,7 +112,7 @@ int RGWOrphanStore::remove_job(const string& job_name)
 int RGWOrphanStore::init()
 {
   const char *log_pool = store->get_zone_params().log_pool.name.c_str();
-  librados::Rados *rados = store->get_rados();
+  librados::Rados *rados = store->get_rados_handle();
   int r = rados->ioctx_create(log_pool, ioctx);
   if (r < 0) {
     cerr << "ERROR: failed to open log pool (" << store->get_zone_params().log_pool.name << " ret=" << r << std::endl;
@@ -251,7 +251,7 @@ int RGWOrphanSearch::log_oids(map<int, string>& log_shards, map<int, list<string
 
 int RGWOrphanSearch::build_all_oids_index()
 {
-  librados::Rados *rados = store->get_rados();
+  librados::Rados *rados = store->get_rados_handle();
 
   librados::IoCtx ioctx;
 
@@ -623,7 +623,7 @@ int RGWOrphanSearch::compare_oid_indexes()
 
   librados::IoCtx data_ioctx;
 
-  librados::Rados *rados = store->get_rados();
+  librados::Rados *rados = store->get_rados_handle();
 
   int ret = rados->ioctx_create(search_info.pool.c_str(), data_ioctx);
   if (ret < 0) {
