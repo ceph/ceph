@@ -82,7 +82,8 @@ def main(ctx):
     fetch_teuthology('master')
     fetch_qa_suite('master')
 
-    while True:
+    keep_running = True
+    while keep_running:
         # Check to see if we have a teuthology-results process hanging around
         # and if so, read its return code so that it can exit.
         if result_proc is not None and result_proc.poll() is not None:
@@ -102,6 +103,9 @@ def main(ctx):
         log.info('Reserved job %d', job.jid)
         log.info('Config is: %s', job.body)
         job_config = yaml.safe_load(job.body)
+
+        if job_config.get('stop_worker'):
+            keep_running = False
 
         job_config['job_id'] = str(job.jid)
         safe_archive = safepath.munge(job_config['name'])
@@ -161,8 +165,9 @@ def main(ctx):
         else:
             log.info('Creating archive dir %s', archive_path_full)
             safepath.makedirs(ctx.archive_dir, safe_archive)
-            log.info('Running job %d', job.jid)
-            run_job(job_config, teuth_bin_path, ctx.verbose)
+            if 'roles' in job_config:
+                log.info('Running job %d', job.jid)
+                run_job(job_config, teuth_bin_path, ctx.verbose)
         job.delete()
 
 
