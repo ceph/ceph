@@ -21,6 +21,7 @@
 #include "include/filepath.h"
 #include "include/elist.h"
 
+#include "osdc/Filer.h"
 #include "CInode.h"
 #include "CDentry.h"
 #include "CDir.h"
@@ -138,6 +139,8 @@ class MDCache {
   set<CInode*> base_inodes;
 
   PerfCounters *logger;
+
+  Filer filer;
 
 public:
   void advance_stray() {
