@@ -2,6 +2,7 @@ import docopt
 
 import teuthology.misc
 import teuthology.schedule
+import sys
 
 doc = """
 usage: teuthology-schedule -h
@@ -39,6 +40,6 @@ optional arguments:
 """
 
 
-def main():
-    args = docopt.docopt(doc)
+def main(argv=sys.argv[1:]):
+    args = docopt.docopt(doc, argv=argv)
     teuthology.schedule.main(args)
