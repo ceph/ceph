@@ -133,10 +133,6 @@ struct RGWRequest
 };
 
 class RGWFrontendConfig {
-  string config;
-  map<string, string> config_map;
-  int parse_config(const string& config, map<string, string>& config_map);
-  string framework;
 public:
   RGWFrontendConfig(const string& _conf) : config(_conf) {}
   int init() {
@@ -151,6 +147,12 @@ public:
   map<string, string>& get_config_map() { return config_map; }
 
   string get_framework() { return framework; }
+private:
+  int parse_config(const string& config, map<string, string>& config_map);
+
+  string config;
+  map<string, string> config_map;
+  string framework;
 };
 
 
