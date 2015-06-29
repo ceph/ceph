@@ -86,17 +86,11 @@ class MDS : public MDSRank, public Dispatcher, public md_config_obs_t {
 
  protected:
   Beacon  beacon;
-  void set_want_state(MDSMap::DaemonState newstate);
 
   AuthAuthorizeHandlerRegistry *authorize_handler_cluster_registry;
   AuthAuthorizeHandlerRegistry *authorize_handler_service_registry;
 
   std::string name;
-
-  mds_rank_t standby_for_rank;
-  MDSMap::DaemonState standby_type;  // one of STANDBY_REPLAY, ONESHOT_REPLAY
-  string standby_for_name;
-  bool standby_replaying;  // true if current replay pass is in standby-replay mode
 
   Messenger    *messenger;
   MonClient    *monc;
@@ -104,9 +98,6 @@ class MDS : public MDSRank, public Dispatcher, public md_config_obs_t {
   Objecter     *objecter;
   LogClient    log_client;
   LogChannelRef clog;
-
-  //OpTracker    op_tracker;
-
   Finisher finisher;
 
  public:
@@ -127,7 +118,6 @@ class MDS : public MDSRank, public Dispatcher, public md_config_obs_t {
 				  const std::set <std::string> &changed);
  protected:
 
-  void request_state(MDSMap::DaemonState s);
 
   // tick and other timer fun
   class C_MDS_Tick : public MDSInternalContext {
@@ -146,7 +136,6 @@ class MDS : public MDSRank, public Dispatcher, public md_config_obs_t {
   epoch_t      last_client_mdsmap_bcast;
 
  private:
-  int dispatch_depth;
   bool ms_dispatch(Message *m);
   bool ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer, bool force_new);
   bool ms_verify_authorizer(Connection *con, int peer_type,
@@ -193,50 +182,7 @@ class MDS : public MDSRank, public Dispatcher, public md_config_obs_t {
   void update_log_config();
 
   void bcast_mds_map();  // to mounted clients
-
-  void boot_create();             // i am new mds.
-
  protected:
-  typedef enum {
-    // The MDSMap is available, configure default layouts and structures
-    MDS_BOOT_INITIAL = 0,
-    // We are ready to open some inodes
-    MDS_BOOT_OPEN_ROOT,
-    // We are ready to do a replay if needed
-    MDS_BOOT_PREPARE_LOG,
-    // Replay is complete
-    MDS_BOOT_REPLAY_DONE
-  } BootStep;
-
-  friend class C_MDS_BootStart;
-  friend class C_MDS_InternalBootStart;
-  void boot_start(BootStep step=MDS_BOOT_INITIAL, int r=0);    // starting|replay
-  void calc_recovery_set();
-
-  void replay_start();
-  void creating_done();
-  void starting_done();
-  void replay_done();
-  void standby_replay_restart();
-  void _standby_replay_restart_finish(int r, uint64_t old_read_pos);
-  class C_MDS_StandbyReplayRestart;
-  class C_MDS_StandbyReplayRestartFinish;
-
-  void reopen_log();
-
-  void resolve_start();
-  void resolve_done();
-  void reconnect_start();
-  void reconnect_done();
-  void rejoin_joint_start();
-  void rejoin_start();
-  void rejoin_done();
-  void recovery_done(int oldstate);
-  void clientreplay_start();
-  void clientreplay_done();
-  void active_start();
-  void stopping_start();
-  void stopping_done();
 
   void handle_mds_recovery(mds_rank_t who);
   void handle_mds_failure(mds_rank_t who);
@@ -284,9 +230,6 @@ public:
 
   void tick();
   
-  void inc_dispatch_depth() { ++dispatch_depth; }
-  void dec_dispatch_depth() { --dispatch_depth; }
-
   // messages
   bool _dispatch(Message *m, bool new_msg);
 
