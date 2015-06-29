@@ -19,6 +19,7 @@
 #include "common/LogClient.h"
 #include "common/Timer.h"
 
+#include "Beacon.h"
 #include "MDSMap.h"
 #include "SessionMap.h"
 #include "MDCache.h"
@@ -222,6 +223,10 @@ class MDSRank {
 
     epoch_t osd_epoch_barrier;
 
+    // Const reference to the beacon so that we can behave differently
+    // when it's laggy.
+    Beacon &beacon;
+
   public:
 
     void queue_waiter(MDSInternalContextBase *c) {
@@ -237,6 +242,7 @@ class MDSRank {
         Mutex &mds_lock_,
         LogChannelRef &clog_,
         SafeTimer &timer_,
+        Beacon &beacon_,
         MDSMap *& mdsmap_,
         Finisher *finisher_,
         MDS *mds_daemon_,
