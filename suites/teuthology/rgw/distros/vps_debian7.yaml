@@ -1,0 +1,3 @@
+machine_type: vps
+os_type: debian 
+os_version: "7.0"
