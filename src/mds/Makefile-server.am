@@ -25,6 +25,7 @@ noinst_HEADERS += \
 	mds/StrayManager.h \
 	mds/MDLog.h \
 	mds/MDS.h \
+	mds/MDSRank.h \
 	mds/Beacon.h \
 	mds/MDSContext.h \
 	mds/MDSAuthCaps.h \
