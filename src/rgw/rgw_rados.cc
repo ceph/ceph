@@ -1,3 +1,5 @@
+
+
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
@@ -618,9 +620,27 @@ const string& RGWRealm::get_info_oid_prefix()
   return realm_info_oid_prefix;
 }
 
-int RGWRealm::get_current_period_id()
+int RGWRealm::get_current_period_id(string& period_id)
 {
   return -ENOTSUP;
+}
+
+
+int RGWPeriod::init(const string& period_id, epoch_t period_epoch,  bool setup_obj)
+{
+  if (!period_id.empty()) {
+    id = period_id;
+  }
+
+  if (epoch) {
+    epoch = epoch;
+  }
+
+  if (!setup_obj) {
+    return 0;
+  }
+
+  return init();
 }
 
 int RGWPeriod::init(const string& period_realm_id, const string& period_realm_name, bool setup_obj)
@@ -642,7 +662,7 @@ int RGWPeriod::init(const string& period_realm_id, const string& period_realm_na
   }
 
   if (id.empty()) {
-    ret = realm.get_current_period_id();
+    ret = realm.get_current_period_id(realm_id);
     if (ret < 0) {
       return ret;
     }
