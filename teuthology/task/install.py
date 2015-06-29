@@ -217,8 +217,10 @@ def _block_looking_for_package_version(remote, base_url, wait=False):
     :returns: str -- the version e.g. '0.67-240-g67a95b9-1raring'
     :raises: VersionNotFoundError
     """
+    url = "{0}/version".format(base_url)
+    log.info("Looking for package version: {0}".format(url))
     while True:
-        resp = requests.get(base_url + '/version')
+        resp = requests.get(url)
         if not resp.ok:
             if wait:
                 log.info(
@@ -240,6 +242,7 @@ def _block_looking_for_package_version(remote, base_url, wait=False):
         version = version[1:]
     if '-' in version:
         version = version.split('-')[0]
+    log.info("Found version: {0}".format(version))
     return version
 
 def _get_local_dir(config, remote):
