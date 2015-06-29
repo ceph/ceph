@@ -50,7 +50,7 @@ enum {
 class Journaler;
 class JournalPointer;
 class LogEvent;
-class MDS;
+class MDSRank;
 class LogSegment;
 class ESubtreeMap;
 
@@ -64,7 +64,7 @@ using std::map;
 
 class MDLog {
 public:
-  MDS *mds;
+  MDSRank *mds;
 protected:
   int num_events; // in events
 
@@ -182,20 +182,20 @@ public:
 
 
 public:
-  MDLog(MDS *m) : mds(m),
-		  num_events(0), 
-		  unflushed(0),
-		  capped(false),
-		  safe_pos(0),
-		  journaler(0),
-		  logger(0),
-		  replay_thread(this),
-		  already_replayed(false),
-		  recovery_thread(this),
-		  event_seq(0), expiring_events(0), expired_events(0),
-		  submit_mutex("MDLog::submit_mutex"),
-		  submit_thread(this),
-		  cur_event(NULL) { }		  
+  MDLog(MDSRank *m) : mds(m),
+                      num_events(0), 
+                      unflushed(0),
+                      capped(false),
+                      safe_pos(0),
+                      journaler(0),
+                      logger(0),
+                      replay_thread(this),
+                      already_replayed(false),
+                      recovery_thread(this),
+                      event_seq(0), expiring_events(0), expired_events(0),
+                      submit_mutex("MDLog::submit_mutex"),
+                      submit_thread(this),
+                      cur_event(NULL) { }		  
   ~MDLog();
 
 

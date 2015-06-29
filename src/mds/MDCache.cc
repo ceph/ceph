@@ -107,7 +107,7 @@ extern struct ceph_file_layout g_default_file_layout;
 #define dout_subsys ceph_subsys_mds
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, mds)
-static ostream& _prefix(std::ostream *_dout, MDS *mds) {
+static ostream& _prefix(std::ostream *_dout, MDSRank *mds) {
   return *_dout << "mds." << mds->get_nodeid() << ".cache ";
 }
 
@@ -136,7 +136,7 @@ set<int> SimpleLock::empty_gather_set;
 class MDCacheContext : public virtual MDSInternalContextBase {
 protected:
   MDCache *mdcache;
-  virtual MDS *get_mds()
+  virtual MDSRank *get_mds()
   {
     assert(mdcache != NULL);
     return mdcache->mds;
@@ -156,7 +156,7 @@ public:
 class MDCacheIOContext : public virtual MDSIOContextBase {
 protected:
   MDCache *mdcache;
-  virtual MDS *get_mds()
+  virtual MDSRank *get_mds()
   {
     assert(mdcache != NULL);
     return mdcache->mds;
@@ -166,15 +166,15 @@ public:
 };
 
 
-MDCache::MDCache(MDS *m) :
+MDCache::MDCache(MDSRank *m) :
+  mds(m),
   logger(0),
-  filer(m->objecter, &m->finisher),
+  filer(m->objecter, m->finisher),
   rejoin_done(NULL),
   resolve_done(NULL),
   recovery_queue(m),
   stray_manager(m)
 {
-  mds = m;
   migrator = new Migrator(mds, this);
   root = NULL;
   myin = NULL;
@@ -6104,7 +6104,7 @@ void MDCache::_truncate_inode(CInode *in, LogSegment *ls)
 		 pi->truncate_seq, utime_t(), 0,
 		 0, new C_OnFinisher(new C_IO_MDC_TruncateFinish(this, in,
 								       ls),
-					   &mds->finisher));
+					   mds->finisher));
 }
 
 struct C_MDC_TruncateLogged : public MDCacheContext {
@@ -8106,7 +8106,7 @@ void MDCache::_open_ino_backtrace_fetched(inodeno_t ino, bufferlist& bl, int err
       C_IO_MDC_OpenInoBacktraceFetched *fin =
 	new C_IO_MDC_OpenInoBacktraceFetched(this, ino);
       fetch_backtrace(ino, info.pool, fin->bl,
-		      new C_OnFinisher(fin, &mds->finisher));
+		      new C_OnFinisher(fin, mds->finisher));
       return;
     }
   } else if (err == -ENOENT) {
@@ -8118,7 +8118,7 @@ void MDCache::_open_ino_backtrace_fetched(inodeno_t ino, bufferlist& bl, int err
       C_IO_MDC_OpenInoBacktraceFetched *fin =
 	new C_IO_MDC_OpenInoBacktraceFetched(this, ino);
       fetch_backtrace(ino, info.pool, fin->bl,
-		      new C_OnFinisher(fin, &mds->finisher));
+		      new C_OnFinisher(fin, mds->finisher));
       return;
     }
   }
@@ -8346,7 +8346,7 @@ void MDCache::do_open_ino(inodeno_t ino, open_ino_info_t& info, int err)
     C_IO_MDC_OpenInoBacktraceFetched *fin =
       new C_IO_MDC_OpenInoBacktraceFetched(this, ino);
     fetch_backtrace(ino, info.pool, fin->bl,
-		    new C_OnFinisher(fin, &mds->finisher));
+		    new C_OnFinisher(fin, mds->finisher));
   } else {
     assert(!info.ancestors.empty());
     info.checking = mds->get_nodeid();
@@ -11069,7 +11069,7 @@ void MDCache::_fragment_committed(dirfrag_t basedirfrag, list<CDir*>& resultfrag
     g_ceph_context,
     new C_OnFinisher(
       new C_IO_MDC_FragmentFinish(this, basedirfrag, resultfrags),
-      &mds->finisher));
+      mds->finisher));
 
   SnapContext nullsnapc;
   object_locator_t oloc(mds->mdsmap->get_metadata_pool());
@@ -11709,11 +11709,11 @@ void MDCache::flush_dentry(const string& path, Context *fin)
 
 class C_FinishIOMDR : public MDSInternalContextBase {
 protected:
-  MDS *mds;
+  MDSRank *mds;
   MDRequestRef mdr;
-  MDS *get_mds() { return mds; }
+  MDSRank *get_mds() { return mds; }
 public:
-  C_FinishIOMDR(MDS *mds_, MDRequestRef& mdr_) : mds(mds_), mdr(mdr_) {}
+  C_FinishIOMDR(MDSRank *mds_, MDRequestRef& mdr_) : mds(mds_), mdr(mdr_) {}
   void finish(int r) { mds->server->respond_to_request(mdr, r); }
 };
 

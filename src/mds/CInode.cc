@@ -22,7 +22,7 @@
 #include "CDir.h"
 #include "CDentry.h"
 
-#include "MDS.h"
+#include "MDSRank.h"
 #include "MDCache.h"
 #include "MDLog.h"
 #include "Locker.h"
@@ -56,7 +56,7 @@ class CInodeIOContext : public MDSIOContextBase
 {
 protected:
   CInode *in;
-  MDS *get_mds() {return in->mdcache->mds;}
+  MDSRank *get_mds() {return in->mdcache->mds;}
 public:
   CInodeIOContext(CInode *in_) : in(in_) {
     assert(in != NULL);
@@ -962,7 +962,7 @@ void CInode::store(MDSInternalContextBase *fin)
 
   Context *newfin =
     new C_OnFinisher(new C_IO_Inode_Stored(this, get_version(), fin),
-		     &mdcache->mds->finisher);
+		     mdcache->mds->finisher);
   mdcache->mds->objecter->mutate(oid, oloc, m, snapc,
 				 ceph_clock_now(g_ceph_context), 0,
 				 NULL, newfin);
@@ -1026,7 +1026,7 @@ void CInode::fetch(MDSInternalContextBase *fin)
   dout(10) << "fetch" << dendl;
 
   C_IO_Inode_Fetched *c = new C_IO_Inode_Fetched(this, fin);
-  C_GatherBuilder gather(g_ceph_context, new C_OnFinisher(c, &mdcache->mds->finisher));
+  C_GatherBuilder gather(g_ceph_context, new C_OnFinisher(c, mdcache->mds->finisher));
 
   object_t oid = CInode::get_object_name(ino(), frag_t(), "");
   object_locator_t oloc(mdcache->mds->mdsmap->get_metadata_pool());
@@ -1149,7 +1149,7 @@ void CInode::store_backtrace(MDSInternalContextBase *fin, int op_prio)
   object_locator_t oloc(pool);
   Context *fin2 = new C_OnFinisher(
     new C_IO_Inode_StoredBacktrace(this, inode.backtrace_version, fin),
-    &mdcache->mds->finisher);
+    mdcache->mds->finisher);
 
   if (!state_test(STATE_DIRTYPOOL) || inode.old_pools.empty()) {
     dout(20) << __func__ << ": no dirtypool or no old pools" << dendl;
@@ -1258,7 +1258,7 @@ void CInode::verify_diri_backtrace(bufferlist &bl, int err)
   }
 
   if (err) {
-    MDS *mds = mdcache->mds;
+    MDSRank *mds = mdcache->mds;
     mds->clog->error() << "bad backtrace on dir ino " << ino() << "\n";
     assert(!"bad backtrace" == (g_conf->mds_verify_backtrace > 1));
 
@@ -1850,7 +1850,7 @@ protected:
   CInode *in;
   CDir *dir;
   MutationRef mut;
-  MDS *get_mds() {return in->mdcache->mds;}
+  MDSRank *get_mds() {return in->mdcache->mds;}
   void finish(int r) {
     in->_finish_frag_update(dir, mut);
   }    
@@ -3667,7 +3667,7 @@ void CInode::validate_disk_state(CInode::validated_data *results,
       results->passed_validation = false; // we haven't finished it yet
 
       C_OnFinisher *conf = new C_OnFinisher(get_io_callback(BACKTRACE),
-                                            &in->mdcache->mds->finisher);
+                                            in->mdcache->mds->finisher);
 
       in->fetch_backtrace(conf, &bl);
       return false;

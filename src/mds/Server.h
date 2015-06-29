@@ -24,6 +24,9 @@ class EMetaBlob;
 class EUpdate;
 class MMDSSlaveRequest;
 struct SnapInfo;
+class MClientRequest;
+class MClientReply;
+class MDLog;
 
 struct MutationImpl;
 struct MDRequestImpl;
@@ -43,11 +46,10 @@ enum {
 class Server {
 public:
   // XXX FIXME: can probably friend enough contexts to make this not need to be public
-  MDS *mds;
+  MDSRank *mds;
 private:
   MDCache *mdcache;
   MDLog *mdlog;
-  Messenger *messenger;
   PerfCounters *logger;
 
   // OSDMap full status, used to generate ENOSPC on some operations
@@ -60,16 +62,7 @@ private:
 public:
   bool terminating_sessions;
 
-  Server(MDS *m) : 
-    mds(m), 
-    mdcache(mds->mdcache), mdlog(mds->mdlog),
-    messenger(mds->messenger),
-    logger(0),
-    is_full(false),
-    reconnect_done(NULL),
-    failed_reconnects(0),
-    terminating_sessions(false) {
-  }
+  Server(MDSRank *m);
   ~Server() {
     g_ceph_context->get_perfcounters_collection()->remove(logger);
     delete logger;

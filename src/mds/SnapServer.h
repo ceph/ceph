@@ -18,7 +18,7 @@
 #include "MDSTableServer.h"
 #include "snap.h"
 
-class MDS;
+class MDSRank;
 
 class SnapServer : public MDSTableServer {
 public:
@@ -35,7 +35,7 @@ protected:
   version_t last_checked_osdmap;
 
 public:
-  SnapServer(MDS *m) : MDSTableServer(m, TABLE_SNAP),
+  SnapServer(MDSRank *m) : MDSTableServer(m, TABLE_SNAP),
 		       last_checked_osdmap(0) { }
     
   void reset_state();

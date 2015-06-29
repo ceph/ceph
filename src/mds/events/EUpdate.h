@@ -46,7 +46,7 @@ public:
   static void generate_test_instances(list<EUpdate*>& ls);
 
   void update_segment();
-  void replay(MDS *mds);
+  void replay(MDSRank *mds);
   EMetaBlob const *get_metablob() const {return &metablob;}
 };
 

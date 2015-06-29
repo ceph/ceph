@@ -21,7 +21,7 @@
 #include "Mutation.h"
 
 #include "MDSMap.h"
-#include "MDS.h"
+#include "MDSRank.h"
 #include "MDCache.h"
 #include "Locker.h"
 #include "MDLog.h"
@@ -47,7 +47,7 @@ class CDirContext : public MDSInternalContextBase
 {
 protected:
   CDir *dir;
-  MDS* get_mds() {return dir->cache->mds;}
+  MDSRank* get_mds() {return dir->cache->mds;}
 
 public:
   CDirContext(CDir *d) : dir(d) {
@@ -60,7 +60,7 @@ class CDirIOContext : public MDSIOContextBase
 {
 protected:
   CDir *dir;
-  MDS* get_mds() {return dir->cache->mds;}
+  MDSRank* get_mds() {return dir->cache->mds;}
 
 public:
   CDirIOContext(CDir *d) : dir(d) {
@@ -1467,7 +1467,7 @@ void CDir::_tmap_fetch(const string& want_dn)
   ObjectOperation rd;
   rd.tmap_get(&fin->bl, NULL);
   cache->mds->objecter->read(oid, oloc, rd, CEPH_NOSNAP, NULL, 0,
-			     new C_OnFinisher(fin, &cache->mds->finisher));
+			     new C_OnFinisher(fin, cache->mds->finisher));
 }
 
 void CDir::_tmap_fetched(bufferlist& bl, const string& want_dn, int r)
@@ -1537,7 +1537,7 @@ void CDir::_omap_fetch(const string& want_dn)
   }
 
   cache->mds->objecter->read(oid, oloc, rd, CEPH_NOSNAP, NULL, 0,
-			     new C_OnFinisher(fin, &cache->mds->finisher));
+			     new C_OnFinisher(fin, cache->mds->finisher));
 }
 
 CDentry *CDir::_load_dentry(
@@ -1973,7 +1973,7 @@ void CDir::_omap_commit(int op_prio)
   C_GatherBuilder gather(g_ceph_context,
 			 new C_OnFinisher(new C_IO_Dir_Committed(this,
 								 get_version()),
-					  &cache->mds->finisher));
+					  cache->mds->finisher));
 
   SnapContext snapc;
   object_t oid = get_ondisk_object();

@@ -14,7 +14,7 @@
 
 #include "CInode.h"
 #include "MDCache.h"
-#include "MDS.h"
+#include "MDSRank.h"
 #include "Locker.h"
 #include "osdc/Filer.h"
 
@@ -33,7 +33,7 @@ protected:
     rq->_recovered(in, r, size, mtime);
   }
 
-  MDS *get_mds() {
+  MDSRank *get_mds() {
     return rq->mds;
   }
 
@@ -47,8 +47,8 @@ public:
 };
 
 
-RecoveryQueue::RecoveryQueue(MDS *mds_)
-  : mds(mds_), logger(NULL), filer(mds_->objecter, &mds_->finisher)
+RecoveryQueue::RecoveryQueue(MDSRank *mds_)
+  : mds(mds_), logger(NULL), filer(mds_->objecter, mds_->finisher)
 {}
 
 

@@ -27,15 +27,17 @@ using std::map;
 #include "CInode.h"
 
 
-class MDS;
+class MDSRank;
 class Message;
 class MHeartbeat;
 class CInode;
 class CDir;
+class Messenger;
 
 class MDBalancer {
  protected:
-  MDS *mds;
+  MDSRank *mds;
+  Messenger *messenger;
   int beat_epoch;
 
   int last_epoch_under;  
@@ -73,8 +75,9 @@ class MDBalancer {
   }
 
 public:
-  MDBalancer(MDS *m) : 
+  MDBalancer(MDSRank *m, Messenger *msgr) : 
     mds(m),
+    messenger(msgr),
     beat_epoch(0),
     last_epoch_under(0), last_epoch_over(0), my_load(0.0), target_load(0.0) { }
   
