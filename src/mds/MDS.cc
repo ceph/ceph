@@ -100,10 +100,33 @@ class MDSDaemonInternalContext :public MDSInternalContext {
     MDSDaemonInternalContext(MDS *m) : MDSInternalContext(m), mds_daemon(m) {}
 };
 
+/**
+ * Helper for simple callbacks that call a void fn with no args.
+ */
+class C_VoidFn : public MDSInternalContext
+{
+  typedef void (MDS::*fn_ptr)();
+  protected:
+   MDS *mds_daemon;
+   fn_ptr fn; 
+  public:
+  C_VoidFn(MDS *mds_, fn_ptr fn_)
+    : MDSInternalContext(mds_), mds_daemon(mds_), fn(fn_)
+  {
+    assert(mds_);
+    assert(fn_);
+  }
+
+  void finish(int r)
+  {
+    (mds_daemon->*fn)();
+  }
+};
+
 
 // cons/des
 MDS::MDS(const std::string &n, Messenger *m, MonClient *mc) : 
-  MDSRank(mds_lock, clog, timer, mdsmap, &finisher, this, m, mc),
+  MDSRank(mds_lock, clog, timer, beacon, mdsmap, &finisher, this, m, mc),
   Dispatcher(m->cct),
   mds_lock("MDS::mds_lock"),
   stopping(false),
@@ -1929,17 +1952,11 @@ void MDS::request_state(MDSMap::DaemonState s)
   beacon.send();
 }
 
-class C_MDS_CreateFinish : public MDSDaemonInternalContext {
-public:
-  C_MDS_CreateFinish(MDS *m) : MDSDaemonInternalContext(m) {}
-  void finish(int r) { mds_daemon->creating_done(); }
-};
-
 void MDS::boot_create()
 {
   dout(3) << "boot_create" << dendl;
 
-  MDSGatherBuilder fin(g_ceph_context, new C_MDS_CreateFinish(this));
+  MDSGatherBuilder fin(g_ceph_context, new C_VoidFn(this, &MDS::creating_done));
 
   mdcache->init_layouts();
 
@@ -2270,29 +2287,6 @@ void MDS::replay_done()
     request_state(MDSMap::STATE_RESOLVE);
   }
 }
-
-/**
- * Helper for simple callbacks that call a void fn with no args.
- */
-class C_VoidFn : public MDSInternalContext
-{
-  typedef void (MDS::*fn_ptr)();
-  protected:
-   MDS *mds_daemon;
-   fn_ptr fn; 
-  public:
-  C_VoidFn(MDS *mds_, fn_ptr fn_)
-    : MDSInternalContext(mds_), mds_daemon(mds_), fn(fn_)
-  {
-    assert(mds_);
-    assert(fn_);
-  }
-
-  void finish(int r)
-  {
-    (mds_daemon->*fn)();
-  }
-};
 
 void MDS::reopen_log()
 {

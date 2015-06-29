@@ -84,18 +84,14 @@ class MDS : public MDSRank, public Dispatcher, public md_config_obs_t {
 
   SafeTimer    timer;
 
- public:
-  // XXX fixme beacon only public for the benefit of MDSRank who wants
-  // to see if it's laggy
+ protected:
   Beacon  beacon;
- private:
   void set_want_state(MDSMap::DaemonState newstate);
- public:
 
   AuthAuthorizeHandlerRegistry *authorize_handler_cluster_registry;
   AuthAuthorizeHandlerRegistry *authorize_handler_service_registry;
 
-  string name;
+  std::string name;
 
   mds_rank_t standby_for_rank;
   MDSMap::DaemonState standby_type;  // one of STANDBY_REPLAY, ONESHOT_REPLAY
@@ -113,10 +109,24 @@ class MDS : public MDSRank, public Dispatcher, public md_config_obs_t {
 
   Finisher finisher;
 
+ public:
+  MDS(const std::string &n, Messenger *m, MonClient *mc);
+  ~MDS();
   int orig_argc;
   const char **orig_argv;
 
-public:
+  // handle a signal (e.g., SIGTERM)
+  void handle_signal(int signum);
+
+  // start up, shutdown
+  int init(MDSMap::DaemonState wanted_state=MDSMap::STATE_BOOT);
+
+  // config observer bits
+  virtual const char** get_tracked_conf_keys() const;
+  virtual void handle_conf_change(const struct md_config_t *conf,
+				  const std::set <std::string> &changed);
+ protected:
+
   void request_state(MDSMap::DaemonState s);
 
   // tick and other timer fun
@@ -147,16 +157,7 @@ public:
   bool ms_handle_reset(Connection *con);
   void ms_handle_remote_reset(Connection *con);
 
- public:
-  MDS(const std::string &n, Messenger *m, MonClient *mc);
-  ~MDS();
-
-  // handle a signal (e.g., SIGTERM)
-  void handle_signal(int signum);
-
-  // start up, shutdown
-  int init(MDSMap::DaemonState wanted_state=MDSMap::STATE_BOOT);
-
+ protected:
   // admin socket handling
   friend class MDSSocketHook;
   class MDSSocketHook *asok_hook;
@@ -187,11 +188,7 @@ public:
   CDir *_command_dirfrag_get(
       const cmdmap_t &cmdmap,
       std::ostream &ss);
- public:
-    // config observer bits
-  virtual const char** get_tracked_conf_keys() const;
-  virtual void handle_conf_change(const struct md_config_t *conf,
-				  const std::set <std::string> &changed);
+ protected:
   void create_logger();
   void update_log_config();
 
@@ -199,7 +196,7 @@ public:
 
   void boot_create();             // i am new mds.
 
- private:
+ protected:
   typedef enum {
     // The MDSMap is available, configure default layouts and structures
     MDS_BOOT_INITIAL = 0,
@@ -215,7 +212,6 @@ public:
   friend class C_MDS_InternalBootStart;
   void boot_start(BootStep step=MDS_BOOT_INITIAL, int r=0);    // starting|replay
   void calc_recovery_set();
- public:
 
   void replay_start();
   void creating_done();
@@ -228,7 +224,6 @@ public:
 
   void reopen_log();
 
- protected:
   void resolve_start();
   void resolve_done();
   void reconnect_start();
@@ -242,11 +237,11 @@ public:
   void active_start();
   void stopping_start();
   void stopping_done();
- public:
 
   void handle_mds_recovery(mds_rank_t who);
   void handle_mds_failure(mds_rank_t who);
 
+public:
   /**
    * Report state DAMAGED to the mon, and then pass on to respawn().  Call
    * this when an unrecoverable error is encountered while attempting
@@ -295,7 +290,7 @@ public:
   // messages
   bool _dispatch(Message *m, bool new_msg);
 
-  protected:
+protected:
   bool handle_core_message(Message *m);
   
   // special message types
