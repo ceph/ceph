@@ -30,9 +30,42 @@ public:
   }
 };
 
+class RGWOp_Period_Get : public RGWRESTOp {
+  RGWPeriod period;
+public:
+  RGWOp_Period_Get(): period(g_ceph_context, store) {}
+  ~RGWOp_Period_Get() {}
+
+  int verify_permission() {
+    return 0;
+  }
+  void execute();
+  virtual void send_response();
+  virtual const string name() {
+    return "get_period";
+  }
+};
+
+class RGWOp_Period_Post : public RGWRESTOp {
+  RGWPeriod period;
+public:
+  RGWOp_Period_Post(): period(g_ceph_context, store) {}
+  ~RGWOp_Period_Post() {}
+
+  int verify_permission() {
+    return 0;
+  }
+  void execute();
+  virtual void send_response();
+  virtual const string name() {
+    return "post_period";
+  }
+};
+
 class RGWHandler_Config : public RGWHandler_Auth_S3 {
 protected:
   RGWOp *op_get();
+  RGWOp *op_post();
 
   int read_permissions(RGWOp*) {
     return 0;
@@ -41,6 +74,7 @@ public:
   RGWHandler_Config() : RGWHandler_Auth_S3() {}
   virtual ~RGWHandler_Config() {}
 };
+
 
 class RGWRESTMgr_Config : public RGWRESTMgr {
 public:

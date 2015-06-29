@@ -42,6 +42,80 @@ void RGWOp_RegionMap_Get::send_response() {
   flusher.flush(); 
 }
 
+void RGWOp_Period_Get::execute() {
+  string period_id;
+  RESTArgs::get_string(s, "period_id", period_id, &period_id);
+  epoch_t epoch = 0;
+  RESTArgs::get_uint32(s, "epoch", 0, &epoch);
+
+  http_ret = period.init(period_id, epoch);
+  if (http_ret < 0) {
+    dout(5) << "failed to read period" << dendl;
+  }
+}
+
+void RGWOp_Period_Get::send_response() {
+  set_req_state_err(s, http_ret);
+  dump_errno(s);
+  end_header(s);
+
+  if (http_ret < 0)
+    return;
+
+  encode_json("period", period, s->formatter);
+  flusher.flush();
+}
+
+void RGWOp_Period_Post::execute() {
+  string period_id;
+  RESTArgs::get_string(s, "period_id", period_id, &period_id);
+  epoch_t epoch = 0;
+  RESTArgs::get_uint32(s, "epoch", 0, &epoch);
+  http_ret = period.init(period_id, epoch);
+  if (http_ret < 0) {
+    dout(5) << "failed to read period" << dendl;
+  }
+}
+
+void RGWOp_Period_Post::send_response() {
+  set_req_state_err(s, http_ret);
+  dump_errno(s);
+  end_header(s);
+
+  if (http_ret < 0)
+    return;
+
+  encode_json("period", period, s->formatter);
+  flusher.flush();
+}
+
 RGWOp* RGWHandler_Config::op_get() {
-  return new RGWOp_RegionMap_Get;
+  bool exists;
+  string type = s->info.args.get("type", &exists);
+
+  if (!exists) {
+    return NULL;
+  }
+  if (type.compare("period") == 0) {
+    return new RGWOp_Period_Get;
+  } else {
+    return new RGWOp_RegionMap_Get;
+  }
+}
+
+
+RGWOp* RGWHandler_Config::op_post() {
+  bool exists;
+  string type = s->info.args.get("type", &exists);
+
+  if (!exists) {
+    return NULL;
+  }
+
+  if (type.compare("period") == 0) {
+    return new RGWOp_Period_Post;
+  }
+
+  return NULL;
+
 }
