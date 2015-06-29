@@ -1,4 +1,5 @@
 import docopt
+import sys
 
 import teuthology.suite
 from teuthology.config import config
@@ -81,6 +82,6 @@ Scheduler arguments:
            default_results_timeout=config.results_timeout)
 
 
-def main():
-    args = docopt.docopt(doc)
+def main(argv=sys.argv[1:]):
+    args = docopt.docopt(doc, argv=argv)
     teuthology.suite.main(args)
