@@ -255,7 +255,8 @@ def main(ctx):
                                 lambda s: s['locked'] == (ctx.locked == 'true'))
             statuses = winnow(statuses, ctx.desc, 'description')
             statuses = winnow(statuses, ctx.desc_pattern, 'description',
-                              lambda s: ctx.desc_pattern in s['description'])
+                              lambda s: s['description'] and \
+                                        ctx.desc_pattern in s['description'])
             if ctx.json_query:
                 statuses = json_matching_statuses(ctx.json_query, statuses)
             statuses = winnow(statuses, ctx.os_type, 'os_type')
