@@ -12,9 +12,10 @@ namespace librados {
 class TestMemIoCtxImpl : public TestIoCtxImpl {
 public:
   TestMemIoCtxImpl();
-  explicit TestMemIoCtxImpl(TestMemRadosClient &client, int64_t m_pool_id,
-                            const std::string& pool_name,
-                            TestMemRadosClient::Pool *pool);
+  TestMemIoCtxImpl(TestMemRadosClient &client, int64_t m_pool_id,
+                   const std::string& pool_name,
+                   TestMemRadosClient::Pool *pool);
+  virtual ~TestMemIoCtxImpl();
 
   virtual TestIoCtxImpl *clone();
 
