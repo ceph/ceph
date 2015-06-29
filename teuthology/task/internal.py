@@ -102,7 +102,8 @@ def lock_machines(ctx, config):
         if len(machines) < to_reserve + how_many and ctx.owner.startswith('scheduled'):
             if ctx.block:
                 log.info(
-                    'waiting for more machines to be free (need %s + %s, have %s)...',
+                    'waiting for more %s machines to be free (need %s + %s, have %s)...',
+                    machine_type,
                     to_reserve,
                     how_many,
                     len(machines),
