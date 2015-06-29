@@ -168,6 +168,7 @@ public:
 
 MDCache::MDCache(MDS *m) :
   logger(0),
+  filer(m->objecter, &m->finisher),
   recovery_queue(m),
   stray_manager(m)
 {
@@ -6086,10 +6087,10 @@ void MDCache::_truncate_inode(CInode *in, LogSegment *ls)
     assert(in->last == CEPH_NOSNAP);
   }
   dout(10) << "_truncate_inode  snapc " << snapc << " on " << *in << dendl;
-  mds->filer->truncate(in->inode.ino, &in->inode.layout, *snapc,
-		       pi->truncate_size, pi->truncate_from-pi->truncate_size,
-		       pi->truncate_seq, utime_t(), 0,
-		       0, new C_OnFinisher(new C_IO_MDC_TruncateFinish(this, in,
+  filer.truncate(in->inode.ino, &in->inode.layout, *snapc,
+		 pi->truncate_size, pi->truncate_from-pi->truncate_size,
+		 pi->truncate_seq, utime_t(), 0,
+		 0, new C_OnFinisher(new C_IO_MDC_TruncateFinish(this, in,
 								       ls),
 					   &mds->finisher));
 }
