@@ -695,7 +695,7 @@ def _remove_sources_list_deb(remote, proj):
     """
     remote.run(
         args=[
-            'sudo', 'rm', '/etc/apt/sources.list.d/{proj}.list'.format(
+            'sudo', 'rm', '-f', '/etc/apt/sources.list.d/{proj}.list'.format(
                 proj=proj),
             run.Raw('&&'),
             'sudo', 'apt-get', 'update',
