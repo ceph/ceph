@@ -461,7 +461,7 @@ public:
   }
   void cancel_ambiguous_import(CDir *);
   void finish_ambiguous_import(dirfrag_t dirino);
-  void resolve_start();
+  void resolve_start(MDSInternalContext *resolve_done_);
   void send_resolves();
   void send_slave_resolves();
   void send_subtree_resolves();
@@ -520,8 +520,10 @@ protected:
     if (rejoins_pending)
       rejoin_send_rejoins();
   }
+  MDSInternalContext *rejoin_done;
+  MDSInternalContext *resolve_done;
 public:
-  void rejoin_start();
+  void rejoin_start(MDSInternalContext *rejoin_done_);
   void rejoin_gather_finish();
   void rejoin_send_rejoins();
   void rejoin_export_caps(inodeno_t ino, client_t client, ceph_mds_cap_reconnect& capinfo,
