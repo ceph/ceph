@@ -1316,7 +1316,6 @@ static int init_bucket_for_sync(const string& bucket_name, string& bucket_id)
   return 0;
 }
 
-
 int main(int argc, char **argv) 
 {
   vector<const char*> args;
