@@ -261,7 +261,7 @@ def calamari_install(config, cal_svr):
     finally:
         log.info('Cleaning up after Calamari installation')
         if icetype == 'iso':
-            cal_svr.run(['sudo', 'umount', mountpoint])
+            cal_svr.run(args=['sudo', 'umount', mountpoint])
         if delete_iceball:
             os.unlink(iceball_file)
 
