@@ -24,6 +24,8 @@
 #include "SessionMap.h"
 #include "MDCache.h"
 #include "Migrator.h"
+#include "MDLog.h"
+#include "osdc/Journaler.h"
 
 // Full .h import instead of forward declaration for PerfCounter, for the
 // benefit of those including this header and using MDSRank::logger
@@ -108,7 +110,17 @@ class Finisher;
 
 /**
  * The public part of this class's interface is what's exposed to all
- * the various subsystems (server, mdcache, etc)
+ * the various subsystems (server, mdcache, etc), such as pointers
+ * to the other subsystems, and message-sending calls.
+ *
+ * FIXME This isn't quite pure, because we also contain all the dispatch
+ * mechanisms that operate on the subsystems.  Perhaps we should
+ * have an MDSRank parent that contains everything for the subsystems,
+ * and an MDSRankDispatcher that contains all the dispatch logic.  That's
+ * awkward right because advance_queues etc need to know how to do dispatch
+ * on the queues, and the queues need to be exposed to the subsystems so that
+ * they can enqueue things.  Perhaps the MDSRank base should have some pure
+ * virtual functions for things like enqueuing messages for retry.
  */
 class MDSRank {
   public:
@@ -203,9 +215,14 @@ class MDSRank {
 
     list<Message*> waiting_for_nolaggy;
     list<MDSInternalContextBase*> finished_queue;
-
+    // Dispatch, retry, queues
+    int dispatch_depth;
+    void inc_dispatch_depth() { ++dispatch_depth; }
+    void dec_dispatch_depth() { --dispatch_depth; }
+    void retry_dispatch(Message *m);
     bool handle_deferrable_message(Message *m);
     void _advance_queues();
+    bool _dispatch(Message *m, bool new_msg);
 
     ceph::heartbeat_handle_d *hb;  // Heartbeat for threads using mds_lock
     void heartbeat_reset();
@@ -226,6 +243,11 @@ class MDSRank {
     // Const reference to the beacon so that we can behave differently
     // when it's laggy.
     Beacon &beacon;
+
+
+    // Call into me from MDS::ms_dispatch
+    // FIXME separate dispatchers for MDSRank vs MDSDaemon
+    bool handle_rank_message(Message *m);
 
   public:
 
@@ -250,23 +272,19 @@ class MDSRank {
         MonClient *monc_);
     ~MDSRank();
 
-    // Daemon functions: these guys break the abstraction
+    // Daemon lifetime functions: these guys break the abstraction
     // and call up into the parent MDSDaemon instance.  It's kind
     // of unavoidable: if we want any depth into our calls 
     // to be able to e.g. tear down the whole process, we have to
     // have a reference going all the way down.
-    //
-    // But for others, like dispatch, these can go away once the
-    // logical separate between MDSDaemon messages and MDSRank messages
-    // is put in place.
     // >>>
     void suicide(bool fast = false);
     void respawn();
     void damaged();
     void damaged_unlocked();
-    void dispatch(Message *m);
-    utime_t get_laggy_until() const;
     // <<<
+    
+    utime_t get_laggy_until() const;
 
     void send_message_mds(Message *m, mds_rank_t mds);
     void forward_message_mds(Message *req, mds_rank_t mds);
@@ -333,6 +351,62 @@ class MDSRank {
     MDS          *mds_daemon;
     Messenger    *messenger;
     MonClient    *monc;
+
+    // Friended to access retry_dispatch
+    friend class C_MDS_RetryMessage;
+
+    // FIXME the state machine logic should be separable from the dispatch
+    // logic that calls it.
+    // >>>
+    void calc_recovery_set();
+    void request_state(MDSMap::DaemonState s);
+    void set_want_state(MDSMap::DaemonState newstate);
+
+    mds_rank_t standby_for_rank;
+    MDSMap::DaemonState standby_type;  // one of STANDBY_REPLAY, ONESHOT_REPLAY
+    string standby_for_name;
+    bool standby_replaying;  // true if current replay pass is in standby-replay mode
+
+    typedef enum {
+      // The MDSMap is available, configure default layouts and structures
+      MDS_BOOT_INITIAL = 0,
+      // We are ready to open some inodes
+      MDS_BOOT_OPEN_ROOT,
+      // We are ready to do a replay if needed
+      MDS_BOOT_PREPARE_LOG,
+      // Replay is complete
+      MDS_BOOT_REPLAY_DONE
+    } BootStep;
+    friend class C_MDS_BootStart;
+    friend class C_MDS_InternalBootStart;
+    void boot_create();             // i am new mds.
+    void boot_start(BootStep step=MDS_BOOT_INITIAL, int r=0);    // starting|replay
+
+    void replay_start();
+    void creating_done();
+    void starting_done();
+    void replay_done();
+    void standby_replay_restart();
+    void _standby_replay_restart_finish(int r, uint64_t old_read_pos);
+    class C_MDS_StandbyReplayRestart;
+    class C_MDS_StandbyReplayRestartFinish;
+
+    void reopen_log();
+
+    void resolve_start();
+    void resolve_done();
+    void reconnect_start();
+    void reconnect_done();
+    void rejoin_joint_start();
+    void rejoin_start();
+    void rejoin_done();
+    void recovery_done(int oldstate);
+    void clientreplay_start();
+    void clientreplay_done();
+    void active_start();
+    void stopping_start();
+    void stopping_done();
+    // <<<
 };
 
 /* This expects to be given a reference which it is responsible for.
@@ -349,7 +423,7 @@ public:
     this->m = m;
   }
   virtual void finish(int r) {
-    mds->dispatch(m);
+    mds->retry_dispatch(m);
   }
 };
 
