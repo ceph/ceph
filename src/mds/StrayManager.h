@@ -18,7 +18,7 @@
 #include <list>
 #include "osdc/Filer.h"
 
-class MDS;
+class MDSRank;
 class PerfCounters;
 class CInode;
 class CDentry;
@@ -42,7 +42,7 @@ class StrayManager : public md_config_obs_t
   std::list<QueuedStray> ready_for_purge;
 
   // Global references for doing I/O
-  MDS *mds;
+  MDSRank *mds;
   PerfCounters *logger;
 
   // Throttled allowances
@@ -150,7 +150,7 @@ class StrayManager : public md_config_obs_t
 
   // My public interface is for consumption by MDCache
   public:
-  StrayManager(MDS *mds);
+  StrayManager(MDSRank *mds);
   void set_logger(PerfCounters *l) {logger = l;}
 
   bool eval_stray(CDentry *dn, bool delay=false);

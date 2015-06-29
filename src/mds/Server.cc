@@ -19,7 +19,7 @@
 #include <boost/spirit/include/qi.hpp>
 #include <boost/fusion/include/std_pair.hpp>
 
-#include "MDS.h"
+#include "MDSRank.h"
 #include "Server.h"
 #include "Locker.h"
 #include "MDCache.h"
@@ -75,7 +75,7 @@ using namespace std;
 class ServerContext : public MDSInternalContextBase {
   protected:
   Server *server;
-  MDS *get_mds()
+  MDSRank *get_mds()
   {
     return server->mds;
   }
@@ -100,6 +100,17 @@ void Server::create_logger()
   plb.add_u64_counter(l_mdss_dispatch_slave_request, "dispatch_server_request", "Server requests dispatched");
   logger = plb.create_perf_counters();
   g_ceph_context->get_perfcounters_collection()->add(logger);
+}
+
+Server::Server(MDSRank *m) : 
+  mds(m), 
+  mdcache(mds->mdcache), mdlog(mds->mdlog),
+  logger(0),
+  is_full(false),
+  reconnect_done(NULL),
+  failed_reconnects(0),
+  terminating_sessions(false)
+{
 }
 
 
@@ -204,9 +215,9 @@ class C_MDS_session_finish : public MDSInternalContext {
   version_t inotablev;
   Context *fin;
 public:
-  C_MDS_session_finish(MDS *m, Session *se, uint64_t sseq, bool s, version_t mv, Context *fin_ = NULL) :
+  C_MDS_session_finish(MDSRank *m, Session *se, uint64_t sseq, bool s, version_t mv, Context *fin_ = NULL) :
     MDSInternalContext(m), session(se), state_seq(sseq), open(s), cmapv(mv), inotablev(0), fin(fin_) { }
-  C_MDS_session_finish(MDS *m, Session *se, uint64_t sseq, bool s, version_t mv, interval_set<inodeno_t>& i, version_t iv, Context *fin_ = NULL) :
+  C_MDS_session_finish(MDSRank *m, Session *se, uint64_t sseq, bool s, version_t mv, interval_set<inodeno_t>& i, version_t iv, Context *fin_ = NULL) :
     MDSInternalContext(m), session(se), state_seq(sseq), open(s), cmapv(mv), inos(i), inotablev(iv), fin(fin_) { }
   void finish(int r) {
     assert(r == 0);
@@ -957,7 +968,7 @@ class C_MarkEvent : public MDSInternalContext
   MDRequestRef mdr;
   string event_str;
 public:
-  C_MarkEvent(MDS *mds_, Context *f, MDRequestRef& _mdr,
+  C_MarkEvent(MDSRank *mds_, Context *f, MDRequestRef& _mdr,
 		 const char *evt)
     : MDSInternalContext(mds_), true_finisher(f), mdr(_mdr),
       event_str("journal_committed: ") {
@@ -2930,7 +2941,7 @@ class C_MDS_openc_finish : public MDSInternalContext {
   CInode *newi;
   snapid_t follows;
 public:
-  C_MDS_openc_finish(MDS *m, MDRequestRef& r, CDentry *d, CInode *ni, snapid_t f) :
+  C_MDS_openc_finish(MDSRank *m, MDRequestRef& r, CDentry *d, CInode *ni, snapid_t f) :
     MDSInternalContext(m), mdr(r), dn(d), newi(ni), follows(f) {}
   void finish(int r) {
     assert(r == 0);
@@ -3334,7 +3345,7 @@ class C_MDS_inode_update_finish : public MDSInternalContext {
   CInode *in;
   bool truncating_smaller, changed_ranges;
 public:
-  C_MDS_inode_update_finish(MDS *m, MDRequestRef& r, CInode *i,
+  C_MDS_inode_update_finish(MDSRank *m, MDRequestRef& r, CInode *i,
 			    bool sm=false, bool cr=false) :
     MDSInternalContext(m), mdr(r), in(i), truncating_smaller(sm), changed_ranges(cr) { }
   void finish(int r) {
@@ -4014,7 +4025,7 @@ void Server::handle_set_vxattr(MDRequestRef& mdr, CInode *cur,
 	    // make sure we have *that*.
 	    mdr->waited_for_osdmap = true;
 	    mds->objecter->wait_for_latest_osdmap(
-	      new C_OnFinisher(new C_IO_Wrapper(mds, new C_MDS_RetryRequest(mdcache, mdr)), &mds->finisher));
+	      new C_OnFinisher(new C_IO_Wrapper(mds, new C_MDS_RetryRequest(mdcache, mdr)), mds->finisher));
 	    return;
 	  }
 	  r = -EINVAL;
@@ -4052,7 +4063,7 @@ void Server::handle_set_vxattr(MDRequestRef& mdr, CInode *cur,
 	    // make sure we have *that*.
 	    mdr->waited_for_osdmap = true;
 	    mds->objecter->wait_for_latest_osdmap(
-	      new C_OnFinisher(new C_IO_Wrapper(mds, new C_MDS_RetryRequest(mdcache, mdr)), &mds->finisher));
+	      new C_OnFinisher(new C_IO_Wrapper(mds, new C_MDS_RetryRequest(mdcache, mdr)), mds->finisher));
 	    return;
 	  }
 	  r = -EINVAL;
@@ -4165,7 +4176,7 @@ class C_MDS_inode_xattr_update_finish : public MDSInternalContext {
   CInode *in;
 public:
 
-  C_MDS_inode_xattr_update_finish(MDS *m, MDRequestRef& r, CInode *i) :
+  C_MDS_inode_xattr_update_finish(MDSRank *m, MDRequestRef& r, CInode *i) :
     MDSInternalContext(m), mdr(r), in(i) { }
   void finish(int r) {
     assert(r == 0);
@@ -4322,7 +4333,7 @@ class C_MDS_mknod_finish : public MDSInternalContext {
   CDentry *dn;
   CInode *newi;
 public:
-  C_MDS_mknod_finish(MDS *m, MDRequestRef& r, CDentry *d, CInode *ni) :
+  C_MDS_mknod_finish(MDSRank *m, MDRequestRef& r, CDentry *d, CInode *ni) :
     MDSInternalContext(m), mdr(r), dn(d), newi(ni) {}
   void finish(int r) {
     assert(r == 0);
@@ -4630,7 +4641,7 @@ class C_MDS_link_local_finish : public MDSInternalContext {
   version_t dnpv;
   version_t tipv;
 public:
-  C_MDS_link_local_finish(MDS *m, MDRequestRef& r, CDentry *d, CInode *ti,
+  C_MDS_link_local_finish(MDSRank *m, MDRequestRef& r, CDentry *d, CInode *ti,
 			  version_t dnpv_, version_t tipv_) :
     MDSInternalContext(m), mdr(r), dn(d), targeti(ti),
     dnpv(dnpv_), tipv(tipv_) { }
@@ -4707,7 +4718,7 @@ class C_MDS_link_remote_finish : public MDSInternalContext {
   CInode *targeti;
   version_t dpv;
 public:
-  C_MDS_link_remote_finish(MDS *m, MDRequestRef& r, bool i, CDentry *d, CInode *ti) :
+  C_MDS_link_remote_finish(MDSRank *m, MDRequestRef& r, bool i, CDentry *d, CInode *ti) :
     MDSInternalContext(m), mdr(r), inc(i), dn(d), targeti(ti),
     dpv(d->get_projected_version()) {}
   void finish(int r) {
@@ -5250,7 +5261,7 @@ class C_MDS_unlink_local_finish : public MDSInternalContext {
   CDentry *straydn;
   version_t dnpv;  // deleted dentry
 public:
-  C_MDS_unlink_local_finish(MDS *m, MDRequestRef& r, CDentry *d, CDentry *sd) :
+  C_MDS_unlink_local_finish(MDSRank *m, MDRequestRef& r, CDentry *d, CDentry *sd) :
     MDSInternalContext(m), mdr(r), dn(d), straydn(sd),
     dnpv(d->get_projected_version()) {}
   void finish(int r) {
@@ -5763,7 +5774,7 @@ class C_MDS_rename_finish : public MDSInternalContext {
   CDentry *destdn;
   CDentry *straydn;
 public:
-  C_MDS_rename_finish(MDS *m, MDRequestRef& r,
+  C_MDS_rename_finish(MDSRank *m, MDRequestRef& r,
 		      CDentry *sdn, CDentry *ddn, CDentry *stdn) :
     MDSInternalContext(m), mdr(r),
     srcdn(sdn), destdn(ddn), straydn(stdn) { }
@@ -7678,7 +7689,7 @@ struct C_MDS_mksnap_finish : public MDSInternalContext {
   MDRequestRef mdr;
   CInode *diri;
   SnapInfo info;
-  C_MDS_mksnap_finish(MDS *m, MDRequestRef& r, CInode *di, SnapInfo &i) :
+  C_MDS_mksnap_finish(MDSRank *m, MDRequestRef& r, CInode *di, SnapInfo &i) :
     MDSInternalContext(m), mdr(r), diri(di), info(i) {}
   void finish(int r) {
     mds->server->_mksnap_finish(mdr, diri, info);
@@ -7828,7 +7839,7 @@ struct C_MDS_rmsnap_finish : public MDSInternalContext {
   MDRequestRef mdr;
   CInode *diri;
   snapid_t snapid;
-  C_MDS_rmsnap_finish(MDS *m, MDRequestRef& r, CInode *di, snapid_t sn) :
+  C_MDS_rmsnap_finish(MDSRank *m, MDRequestRef& r, CInode *di, snapid_t sn) :
     MDSInternalContext(m), mdr(r), diri(di), snapid(sn) {}
   void finish(int r) {
     mds->server->_rmsnap_finish(mdr, diri, snapid);
@@ -7952,7 +7963,7 @@ struct C_MDS_renamesnap_finish : public MDSInternalContext {
   MDRequestRef mdr;
   CInode *diri;
   snapid_t snapid;
-  C_MDS_renamesnap_finish(MDS *m, MDRequestRef& r, CInode *di, snapid_t sn) :
+  C_MDS_renamesnap_finish(MDSRank *m, MDRequestRef& r, CInode *di, snapid_t sn) :
     MDSInternalContext(m), mdr(r), diri(di), snapid(sn) {}
   void finish(int r) {
     mds->server->_renamesnap_finish(mdr, diri, snapid);

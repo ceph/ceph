@@ -37,7 +37,7 @@
 
 class PerfCounters;
 
-class MDS;
+class MDSRank;
 class Session;
 class Migrator;
 
@@ -117,7 +117,7 @@ static const int PREDIRTY_SHALLOW = 4; // only go to immediate parent (for easie
 class MDCache {
  public:
   // my master
-  MDS *mds;
+  MDSRank *mds;
 
   // -- my cache --
   LRU lru;   // dentry lru for expiring items from cache
@@ -620,7 +620,7 @@ public:
   Migrator *migrator;
 
  public:
-  MDCache(MDS *m);
+  MDCache(MDSRank *m);
   ~MDCache();
   
   // debug

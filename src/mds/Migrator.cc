@@ -12,7 +12,7 @@
  * 
  */
 
-#include "MDS.h"
+#include "MDSRank.h"
 #include "MDCache.h"
 #include "CInode.h"
 #include "CDir.h"
@@ -86,7 +86,7 @@
 class MigratorContext : public MDSInternalContextBase {
 protected:
   Migrator *mig;
-  MDS *get_mds() {
+  MDSRank *get_mds() {
     return mig->mds;
   }
 public:
