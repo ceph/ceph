@@ -13,7 +13,7 @@
  */
 
 
-#include "MDS.h"
+#include "MDSRank.h"
 #include "MDCache.h"
 #include "Locker.h"
 #include "CInode.h"
@@ -50,7 +50,7 @@
 #undef DOUT_COND
 #define DOUT_COND(cct, l) l<=cct->_conf->debug_mds || l <= cct->_conf->debug_mds_locker
 #define dout_prefix _prefix(_dout, mds)
-static ostream& _prefix(std::ostream *_dout, MDS *mds) {
+static ostream& _prefix(std::ostream *_dout, MDSRank *mds) {
   return *_dout << "mds." << mds->get_nodeid() << ".locker ";
 }
 
@@ -58,7 +58,7 @@ static ostream& _prefix(std::ostream *_dout, MDS *mds) {
 class LockerContext : public MDSInternalContextBase {
   protected:
   Locker *locker;
-  MDS *get_mds()
+  MDSRank *get_mds()
   {
     return locker->mds;
   }

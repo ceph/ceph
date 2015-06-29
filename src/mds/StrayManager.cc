@@ -17,7 +17,7 @@
 
 #include "osdc/Objecter.h"
 #include "osdc/Filer.h"
-#include "mds/MDS.h"
+#include "mds/MDSRank.h"
 #include "mds/MDCache.h"
 #include "mds/MDLog.h"
 #include "mds/CDir.h"
@@ -30,14 +30,14 @@
 #define dout_subsys ceph_subsys_mds
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, mds)
-static ostream& _prefix(std::ostream *_dout, MDS *mds) {
+static ostream& _prefix(std::ostream *_dout, MDSRank *mds) {
   return *_dout << "mds." << mds->get_nodeid() << ".cache.strays ";
 }
 
 class StrayManagerIOContext : public virtual MDSIOContextBase {
 protected:
   StrayManager *sm;
-  virtual MDS *get_mds()
+  virtual MDSRank *get_mds()
   {
     return sm->mds;
   }
@@ -49,7 +49,7 @@ public:
 class StrayManagerContext : public virtual MDSInternalContextBase {
 protected:
   StrayManager *sm;
-  virtual MDS *get_mds()
+  virtual MDSRank *get_mds()
   {
     return sm->mds;
   }
@@ -94,7 +94,7 @@ void StrayManager::purge(CDentry *dn, uint32_t op_allowance)
   C_GatherBuilder gather(
     g_ceph_context,
     new C_OnFinisher(new C_IO_PurgeStrayPurged(
-        this, dn, false, op_allowance), &mds->finisher));
+        this, dn, false, op_allowance), mds->finisher));
 
   if (in->is_dir()) {
     object_locator_t oloc(mds->mdsmap->get_metadata_pool());
@@ -747,12 +747,12 @@ void StrayManager::migrate_stray(CDentry *dn, mds_rank_t to)
   mds->send_message_mds(req, to);
 }
 
-StrayManager::StrayManager(MDS *mds)
+StrayManager::StrayManager(MDSRank *mds)
   : delayed_eval_stray(member_offset(CDentry, item_stray)),
     mds(mds), logger(NULL),
     ops_in_flight(0), files_purging(0),
     num_strays(0), num_strays_purging(0), num_strays_delayed(0),
-    filer(mds->objecter, &mds->finisher)
+    filer(mds->objecter, mds->finisher)
 {
   assert(mds != NULL);
   update_op_limit();
@@ -794,7 +794,7 @@ void StrayManager::truncate(CDentry *dn, uint32_t op_allowance)
   C_GatherBuilder gather(
     g_ceph_context,
     new C_OnFinisher(new C_IO_PurgeStrayPurged(this, dn, true, 0),
-		     &mds->finisher));
+		     mds->finisher));
 
   SnapRealm *realm = in->find_snaprealm();
   assert(realm);
