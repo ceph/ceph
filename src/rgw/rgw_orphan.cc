@@ -165,9 +165,9 @@ int RGWOrphanSearch::init(const string& job_name, RGWOrphanSearchInfo *info) {
     return r;
   }
 
+  uint64_t num_shards = (info->num_shards ? info->num_shards : DEFAULT_NUM_SHARDS);
   if (r == 0) {
-    if (info->num_shards != state.info.num_shards) {
-      lderr(store->ctx()) << "ERROR: cannot specify different number of shards for existing job" << dendl;
+    if (num_shards != state.info.num_shards) {
       return -EINVAL;
     }
     search_info = state.info;
@@ -175,7 +175,7 @@ int RGWOrphanSearch::init(const string& job_name, RGWOrphanSearchInfo *info) {
   } else { /* r == -ENOENT */
     search_info = *info;
     search_info.job_name = job_name;
-    search_info.num_shards = (info->num_shards ? info->num_shards : DEFAULT_NUM_SHARDS);
+    search_info.num_shards = num_shards;
     search_info.start_time = ceph_clock_now(store->ctx());
     search_stage = RGWOrphanSearchStage(ORPHAN_SEARCH_STAGE_INIT);
 
