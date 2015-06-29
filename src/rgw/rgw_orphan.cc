@@ -13,7 +13,7 @@ using namespace std;
 
 #define dout_subsys ceph_subsys_rgw
 
-#define DEFAULT_NUM_SHARDS 1000
+#define DEFAULT_NUM_SHARDS 64
 
 static string obj_fingerprint(const string& oid, const char *force_ns = NULL)
 {
