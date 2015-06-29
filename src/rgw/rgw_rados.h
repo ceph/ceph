@@ -1271,8 +1271,6 @@ public:
                rest_master_conn(NULL),
                meta_mgr(NULL), data_log(NULL) {}
 
-  librados::Rados *get_rados() { return rados; }
-
   uint64_t get_new_req_id() {
     return max_req_id.inc();
   }
@@ -2124,6 +2122,8 @@ public:
     return zone_public_config.log_meta;
   }
 
+  librados::Rados* get_rados_handle();
+
  private:
   /**
    * This is a helper method, it generates a list of bucket index objects with the given
@@ -2196,8 +2196,6 @@ public:
 
   uint64_t instance_id();
   uint64_t next_bucket_id();
-
-  librados::Rados* get_rados_handle();
 };
 
 class RGWStoreManager {
