@@ -674,8 +674,9 @@ void Server::journal_close_session(Session *session, int state, Context *on_safe
   finish_flush_session(session, session->get_push_seq());
 }
 
-void Server::reconnect_clients()
+void Server::reconnect_clients(MDSInternalContext *reconnect_done_)
 {
+  reconnect_done = reconnect_done_;
   mds->sessionmap.get_client_set(client_reconnect_gather);
 
   if (client_reconnect_gather.empty()) {
@@ -810,7 +811,9 @@ void Server::handle_client_reconnect(MClientReconnect *m)
 void Server::reconnect_gather_finish()
 {
   dout(7) << "reconnect_gather_finish.  failed on " << failed_reconnects << " clients" << dendl;
-  mds->reconnect_done();
+  assert(reconnect_done);
+  reconnect_done->complete(0);
+  reconnect_done = NULL;
 }
 
 void Server::reconnect_tick()

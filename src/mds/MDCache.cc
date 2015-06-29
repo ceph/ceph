@@ -169,6 +169,8 @@ public:
 MDCache::MDCache(MDS *m) :
   logger(0),
   filer(m->objecter, &m->finisher),
+  rejoin_done(NULL),
+  resolve_done(NULL),
   recovery_queue(m),
   stray_manager(m)
 {
@@ -223,6 +225,9 @@ MDCache::~MDCache()
     delete logger;
     logger = 0;
   }
+
+  delete rejoin_done;
+  delete resolve_done;
   //delete renamer;
 }
 
@@ -2645,9 +2650,10 @@ ESubtreeMap *MDCache::create_subtree_map()
 }
 
 
-void MDCache::resolve_start()
+void MDCache::resolve_start(MDSInternalContext *resolve_done_)
 {
   dout(10) << "resolve_start" << dendl;
+  resolve_done = resolve_done_;
 
   if (mds->mdsmap->get_root() != mds->whoami) {
     // if we don't have the root dir, adjust it to UNKNOWN.  during
@@ -3267,7 +3273,8 @@ void MDCache::maybe_resolve_finish()
   if (mds->is_resolve()) {
     trim_unlinked_inodes();
     recalc_auth_bits(false);
-    mds->resolve_done();
+    resolve_done->complete(0);
+    resolve_done = NULL;
   } else {
     maybe_send_pending_rejoins();
   }
@@ -3837,9 +3844,10 @@ void MDCache::recalc_auth_bits(bool replay)
  *   after recovery.
  */
 
-void MDCache::rejoin_start()
+void MDCache::rejoin_start(MDSInternalContext *rejoin_done_)
 {
   dout(10) << "rejoin_start" << dendl;
+  rejoin_done = rejoin_done_;
 
   rejoin_gather = recovery_set;
   // need finish opening cap inodes before sending cache rejoins
@@ -5657,7 +5665,9 @@ void MDCache::open_snap_parents()
     do_delayed_cap_imports();
 
     start_files_to_recover(rejoin_recover_q, rejoin_check_q);
-    mds->rejoin_done();
+    assert(rejoin_done);
+    rejoin_done->complete(0);
+    rejoin_done = NULL;
   }
 }
 
