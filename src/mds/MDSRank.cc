@@ -41,6 +41,7 @@ MDSRank::MDSRank(
     Mutex &mds_lock_,
     LogChannelRef &clog_,
     SafeTimer &timer_,
+    Beacon &beacon_,
     MDSMap *& mdsmap_,
     Finisher *finisher_,
     MDS *mds_daemon_,
@@ -60,7 +61,7 @@ MDSRank::MDSRank(
     last_state(MDSMap::STATE_NULL), want_state(MDSMap::STATE_NULL),
     state(MDSMap::STATE_NULL),
     progress_thread(this),
-    hb(NULL), last_tid(0), osd_epoch_barrier(0),
+    hb(NULL), last_tid(0), osd_epoch_barrier(0), beacon(beacon_),
     finisher(finisher_), mds_daemon(mds_daemon_), messenger(msgr), monc(monc_)
 {
   hb = g_ceph_context->get_heartbeat_map()->add_worker("MDSRank");
@@ -142,7 +143,7 @@ void *MDSRank::ProgressThread::entry()
   while (true) {
     while (!mds->mds_daemon->stopping &&
 	   mds->finished_queue.empty() &&
-	   (mds->waiting_for_nolaggy.empty() || mds->mds_daemon->beacon.is_laggy())) {
+	   (mds->waiting_for_nolaggy.empty() || mds->beacon.is_laggy())) {
       cond.Wait(mds->mds_lock);
     }
 
@@ -273,7 +274,7 @@ void MDSRank::_advance_queues()
 
   while (!waiting_for_nolaggy.empty()) {
     // stop if we're laggy now!
-    if (mds_daemon->beacon.is_laggy())
+    if (beacon.is_laggy())
       break;
 
     Message *old = waiting_for_nolaggy.front();
@@ -480,7 +481,7 @@ void MDSRank::dispatch(Message *m)
 
 utime_t MDSRank::get_laggy_until() const
 {
-  return mds_daemon->beacon.get_laggy_until();
+  return beacon.get_laggy_until();
 }
 
 // FIXME maybe instead of exposing this to the world, we should just
