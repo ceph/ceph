@@ -11,7 +11,12 @@
 #include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
+#if defined(DARWIN) 
+#include <fuse/fuse.h>
+#include "porting.h"
+#else
 #include <fuse.h>
+#endif
 #include <pthread.h>
 #include <string.h>
 #include <sys/types.h>
@@ -597,7 +602,12 @@ struct rbdfuse_attr {
 
 int
 rbdfs_setxattr(const char *path, const char *name, const char *value,
-		 size_t size, int flags)
+	       size_t size,
+	       int flags
+#if defined(DARWIN)
+	       ,uint32_t pos
+#endif
+    )
 {
 	struct rbdfuse_attr *ap;
 	if (strcmp(path, "/") != 0)
@@ -616,7 +626,11 @@ rbdfs_setxattr(const char *path, const char *name, const char *value,
 
 int
 rbdfs_getxattr(const char *path, const char *name, char *value,
-		 size_t size)
+		 size_t size
+#if defined(DARWIN)
+	       ,uint32_t position
+#endif
+  )
 {
 	struct rbdfuse_attr *ap;
 	char buf[128];
