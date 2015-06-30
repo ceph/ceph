@@ -103,6 +103,27 @@ private:
     }
   }
 
+  void _dump(utime_t now, Formatter *f) const {
+    {
+      f->open_array_section("events");
+      Mutex::Locker l(lock);
+      for (list<pair<utime_t,string> >::const_iterator i = events.begin();
+           i != events.end(); ++i) {
+        f->open_object_section("event");
+        f->dump_stream("time") << i->first;
+        f->dump_string("event", i->second);
+        f->close_section();
+      }
+      f->close_section();
+      f->open_object_section("info");
+      f->dump_int("seq", seq);
+      f->dump_bool("src_is_mon", is_src_mon());
+      f->dump_stream("source") << request->get_source_inst();
+      f->dump_bool("forwarded_to_leader", forwarded_to_leader);
+      f->close_section();
+    }
+  }
+
 protected:
   void _dump_op_descriptor_unlocked(ostream& stream) const {
     get_req()->print(stream);
@@ -153,27 +174,6 @@ public:
   }
 
   typedef ceph::shared_ptr<MonOpRequest> Ref;
-
-  void _dump(utime_t now, Formatter *f) const {
-    {
-      f->open_array_section("events");
-      Mutex::Locker l(lock);
-      for (list<pair<utime_t,string> >::const_iterator i = events.begin();
-           i != events.end(); ++i) {
-        f->open_object_section("event");
-        f->dump_stream("time") << i->first;
-        f->dump_string("event", i->second);
-        f->close_section();
-      }
-      f->close_section();
-      f->open_object_section("info");
-      f->dump_int("seq", seq);
-      f->dump_bool("src_is_mon", is_src_mon());
-      f->dump_stream("source") << request->get_source_inst();
-      f->dump_bool("forwarded_to_leader", forwarded_to_leader);
-      f->close_section();
-    }
-  }
 
   void set_op_type(op_type_t t) {
     op_type = t;
