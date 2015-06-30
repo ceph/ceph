@@ -291,7 +291,27 @@ public:
         *nsec = (uint64_t)usec * 1000;
       }
     }
-    time_t t = timegm(&tm);
+    time_t t;
+#if ! defined(DARWIN) 
+    t = timegm(&tm);
+#else
+/* TODO weird that the other does not compile on OS X *
+ * The method should be there                         * 
+ * The work-around is not good either as it isn't     * 
+ * thread safe                                        */
+    char *tz;
+
+    tz = getenv("TZ");
+    setenv("TZ", "", 1);
+    tzset();
+    t = mktime(&tm);
+    if (tz)
+      setenv("TZ", tz, 1);
+    else
+      unsetenv("TZ");
+    tzset();
+#endif
+
     if (epoch)
       *epoch = (uint64_t)t;
 
