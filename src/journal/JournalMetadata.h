@@ -76,7 +76,8 @@ public:
     return m_active_set;
   }
 
-  void set_commit_position(const ObjectSetPosition &commit_position);
+  void set_commit_position(const ObjectSetPosition &commit_position,
+                           Context *on_safe);
   void get_commit_position(ObjectSetPosition *commit_position) const {
     Mutex::Locker locker(m_lock);
     *commit_position = m_client.commit_position;
@@ -109,6 +110,7 @@ private:
       journal_metadata->handle_watch_error(err);
     }
   };
+
   struct C_WatchReset : public Context {
     JournalMetadataPtr journal_metadata;
 
@@ -117,6 +119,23 @@ private:
 
     virtual void finish(int r) {
       journal_metadata->handle_watch_reset();
+    }
+  };
+
+  struct C_NotifyUpdate : public Context {
+    JournalMetadataPtr journal_metadata;
+    Context *on_safe;
+
+    C_NotifyUpdate(JournalMetadata *_journal_metadata, Context *_on_safe = NULL)
+      : journal_metadata(_journal_metadata), on_safe(_on_safe) {}
+
+    virtual void finish(int r) {
+      if (r == 0) {
+        journal_metadata->notify_update();
+      }
+      if (on_safe != NULL) {
+        on_safe->complete(r);
+      }
     }
   };
 

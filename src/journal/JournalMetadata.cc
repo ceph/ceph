@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "journal/JournalMetadata.h"
+#include "journal/Utils.h"
 #include "common/errno.h"
 #include "common/Timer.h"
 #include "cls/journal/cls_journal_client.h"
@@ -13,28 +14,6 @@
 namespace journal {
 
 using namespace cls::journal;
-
-namespace {
-
-struct C_NotifyUpdate : public Context {
-  JournalMetadataPtr journal_metadata;
-
-  C_NotifyUpdate(JournalMetadata *_journal_metadata)
-    : journal_metadata(_journal_metadata) {}
-
-  virtual void finish(int r) {
-    if (r == 0) {
-      journal_metadata->notify_update();
-    }
-  }
-};
-
-void rados_ctx_callback(rados_completion_t c, void *arg) {
-  Context *comp = reinterpret_cast<Context *>(arg);
-  comp->complete(rados_aio_get_return_value(c));
-}
-
-} // anonymous namespace
 
 JournalMetadata::JournalMetadata(librados::IoCtx &ioctx,
                                  const std::string &oid,
@@ -147,7 +126,8 @@ void JournalMetadata::set_minimum_set(uint64_t object_set) {
 
   C_NotifyUpdate *ctx = new C_NotifyUpdate(this);
   librados::AioCompletion *comp =
-    librados::Rados::aio_create_completion(ctx, NULL, rados_ctx_callback);
+    librados::Rados::aio_create_completion(ctx, NULL,
+                                           utils::rados_ctx_callback);
   int r = m_ioctx.aio_operate(m_oid, comp, &op);
   assert(r == 0);
   comp->release();
@@ -166,7 +146,8 @@ void JournalMetadata::set_active_set(uint64_t object_set) {
 
   C_NotifyUpdate *ctx = new C_NotifyUpdate(this);
   librados::AioCompletion *comp =
-    librados::Rados::aio_create_completion(ctx, NULL, rados_ctx_callback);
+    librados::Rados::aio_create_completion(ctx, NULL,
+                                           utils::rados_ctx_callback);
   int r = m_ioctx.aio_operate(m_oid, comp, &op);
   assert(r == 0);
   comp->release();
@@ -175,15 +156,16 @@ void JournalMetadata::set_active_set(uint64_t object_set) {
 }
 
 void JournalMetadata::set_commit_position(
-    const ObjectSetPosition &commit_position) {
+    const ObjectSetPosition &commit_position, Context *on_safe) {
   Mutex::Locker locker(m_lock);
 
   librados::ObjectWriteOperation op;
   client::client_commit(&op, m_client_id, commit_position);
 
-  C_NotifyUpdate *ctx = new C_NotifyUpdate(this);
+  C_NotifyUpdate *ctx = new C_NotifyUpdate(this, on_safe);
   librados::AioCompletion *comp =
-    librados::Rados::aio_create_completion(ctx, NULL, rados_ctx_callback);
+    librados::Rados::aio_create_completion(ctx, NULL,
+                                           utils::rados_ctx_callback);
   int r = m_ioctx.aio_operate(m_oid, comp, &op);
   assert(r == 0);
   comp->release();
