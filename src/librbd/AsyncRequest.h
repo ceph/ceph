@@ -8,6 +8,9 @@
 #include "include/rados/librados.hpp"
 #include "include/xlist.h"
 
+/* DARWIN Missing ERESTART */
+#include "porting.h"
+
 namespace librbd {
 
 class ImageCtx;
