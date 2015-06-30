@@ -180,13 +180,11 @@ class MDSRank {
 
     // The last different state I held before current
     MDSMap::DaemonState last_state;
-    // The state I am asking for in my beacons to the MDSMonitor
-    MDSMap::DaemonState want_state;
     // The state assigned to me by the MDSMap
     MDSMap::DaemonState state;
 
     MDSMap::DaemonState get_state() const { return state; } 
-    MDSMap::DaemonState get_want_state() const { return want_state; } 
+    MDSMap::DaemonState get_want_state() const { return beacon.get_want_state(); } 
 
     bool is_creating() { return state == MDSMap::STATE_CREATING; }
     bool is_starting() { return state == MDSMap::STATE_STARTING; }
@@ -381,7 +379,6 @@ class MDSRank {
     // >>>
     void calc_recovery_set();
     void request_state(MDSMap::DaemonState s);
-    void set_want_state(MDSMap::DaemonState newstate);
 
     mds_rank_t standby_for_rank;
     MDSMap::DaemonState standby_type;  // one of STANDBY_REPLAY, ONESHOT_REPLAY

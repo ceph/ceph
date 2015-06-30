@@ -270,11 +270,16 @@ utime_t Beacon::get_laggy_until() const
   return laggy_until;
 }
 
-void Beacon::notify_want_state(MDSMap::DaemonState const newstate)
+void Beacon::set_want_state(MDSMap::DaemonState const newstate)
 {
   Mutex::Locker l(lock);
 
-  want_state = newstate;
+  if (want_state != newstate) {
+    dout(10) << __func__ << ": "
+      << ceph_mds_state_name(want_state) << " -> "
+      << ceph_mds_state_name(newstate) << dendl;
+    want_state = newstate;
+  }
 }
 
 
@@ -410,5 +415,11 @@ void Beacon::notify_health(MDSRank const *mds)
       large_completed_requests_metrics.clear();
     }
   }
+}
+
+MDSMap::DaemonState Beacon::get_want_state() const
+{
+  Mutex::Locker l(lock);
+  return want_state;
 }
 
