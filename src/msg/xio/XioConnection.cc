@@ -142,7 +142,7 @@ XioConnection::XioConnection(XioMessenger *m, XioConnection::type _type,
         " throttle_msgs: " << xopt << " throttle_bytes: " << bytes_opt << dendl;
 
   /* XXXX fake features, aieee! */
-  set_features(m->local_features);
+  set_features(XIO_ALL_FEATURES);
 }
 
 int XioConnection::send_message(Message *m)
