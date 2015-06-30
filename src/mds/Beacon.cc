@@ -21,7 +21,7 @@
 #include "messages/MMDSBeacon.h"
 #include "mon/MonClient.h"
 #include "mds/MDLog.h"
-#include "mds/MDS.h"
+#include "mds/MDSRank.h"
 #include "mds/MDSMap.h"
 #include "mds/Locker.h"
 
@@ -283,7 +283,7 @@ void Beacon::notify_want_state(MDSMap::DaemonState const newstate)
  * some health metrics that we will send in the next
  * beacon.
  */
-void Beacon::notify_health(MDS const *mds)
+void Beacon::notify_health(MDSRank const *mds)
 {
   Mutex::Locker l(lock);
 

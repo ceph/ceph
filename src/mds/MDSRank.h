@@ -107,6 +107,7 @@ class Messenger;
 class Objecter;
 class MonClient;
 class Finisher;
+class MMDSMap;
 
 /**
  * The public part of this class's interface is what's exposed to all
@@ -177,12 +178,15 @@ class MDSRank {
     PerfCounters       *logger, *mlogger;
     OpTracker    op_tracker;
 
+    // The last different state I held before current
     MDSMap::DaemonState last_state;
-    MDSMap::DaemonState want_state;    // the state i want
-    MDSMap::DaemonState state;         // my confirmed state
-    MDSMap::DaemonState get_state() { return state; } 
-    MDSMap::DaemonState get_want_state() { return want_state; } 
+    // The state I am asking for in my beacons to the MDSMonitor
+    MDSMap::DaemonState want_state;
+    // The state assigned to me by the MDSMap
+    MDSMap::DaemonState state;
 
+    MDSMap::DaemonState get_state() const { return state; } 
+    MDSMap::DaemonState get_want_state() const { return want_state; } 
 
     bool is_creating() { return state == MDSMap::STATE_CREATING; }
     bool is_starting() { return state == MDSMap::STATE_STARTING; }
@@ -280,10 +284,27 @@ class MDSRank {
     // >>>
     void suicide(bool fast = false);
     void respawn();
-    void damaged();
-    void damaged_unlocked();
     // <<<
-    
+
+    /**
+     * Report state DAMAGED to the mon, and then pass on to respawn().  Call
+     * this when an unrecoverable error is encountered while attempting
+     * to load an MDS rank's data structures.  This is *not* for use with
+     * errors affecting normal dirfrag/inode objects -- they should be handled
+     * through cleaner scrub/repair mechanisms.
+     *
+     * Callers must already hold mds_lock.
+     */
+    void damaged();
+
+    /**
+     * Wrapper around `damaged` for users who are not
+     * already holding mds_lock.
+     *
+     * Callers must not already hold mds_lock.
+     */
+    void damaged_unlocked();
+
     utime_t get_laggy_until() const;
 
     void send_message_mds(Message *m, mds_rank_t mds);
@@ -406,6 +427,16 @@ class MDSRank {
     void active_start();
     void stopping_start();
     void stopping_done();
+    // <<<
+    
+    // FIXME: remove 'rank' from name once MDSRank is encapsulated
+    // in MDSDaemon instead of being a parent
+    // >>>
+    void handle_mds_map_rank(
+        MMDSMap *m, MDSMap *oldmap,
+        int oldwhoami, MDSMap::DaemonState oldstate);
+    void handle_mds_recovery(mds_rank_t who);
+    void handle_mds_failure(mds_rank_t who);
     // <<<
 };
 

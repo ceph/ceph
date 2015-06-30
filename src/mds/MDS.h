@@ -182,35 +182,7 @@ class MDS : public MDSRank, public Dispatcher, public md_config_obs_t {
   void update_log_config();
 
   void bcast_mds_map();  // to mounted clients
- protected:
-
-  void handle_mds_recovery(mds_rank_t who);
-  void handle_mds_failure(mds_rank_t who);
-
 public:
-  /**
-   * Report state DAMAGED to the mon, and then pass on to respawn().  Call
-   * this when an unrecoverable error is encountered while attempting
-   * to load an MDS rank's data structures.  This is *not* for use with
-   * errors affecting normal dirfrag/inode objects -- they should be handled
-   * through cleaner scrub/repair mechanisms.
-   *
-   * Callers must already hold mds_lock.
-   */
-  void damaged();
-
-  /**
-   * Wrapper around `damaged` for users who are not
-   * already holding mds_lock.
-   *
-   * Callers must not already hold mds_lock.
-   */
-  void damaged_unlocked()
-  {
-    Mutex::Locker l(mds_lock);
-    damaged();
-  }
-
   /**
    * Terminate this daemon process.
    *
@@ -247,6 +219,7 @@ protected:
   void handle_command(class MMonCommand *m);
   void handle_command(class MCommand *m);
   void handle_mds_map(class MMDSMap *m);
+  void _handle_mds_map(MDSMap *oldmap);
 };
 
 

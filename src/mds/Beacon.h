@@ -25,7 +25,7 @@
 class MonClient;
 class MMDSBeacon;
 class Message;
-class MDS;
+class MDSRank;
 
 
 /**
@@ -95,7 +95,7 @@ public:
 
   void notify_mdsmap(MDSMap const *mdsmap);
   void notify_want_state(MDSMap::DaemonState const newstate);
-  void notify_health(MDS const *mds);
+  void notify_health(MDSRank const *mds);
 
   void set_standby_for(mds_rank_t rank_, std::string const &name_);
 
