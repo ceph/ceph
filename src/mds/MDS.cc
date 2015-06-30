@@ -132,7 +132,7 @@ MDS::MDS(const std::string &n, Messenger *m, MonClient *mc) :
   // tick
   tick_event = 0;
 
-  last_state = want_state = state = MDSMap::STATE_BOOT;
+  last_state = state = MDSMap::STATE_BOOT;
 
   logger = 0;
   mlogger = 0;
@@ -1013,7 +1013,7 @@ int MDS::init(MDSMap::DaemonState wanted_state)
   objecter->start();
 
   mds_lock.Lock();
-  if (want_state == CEPH_MDS_STATE_DNE) {
+  if (beacon.get_want_state() == CEPH_MDS_STATE_DNE) {
     mds_lock.Unlock();
     return 0;
   }
@@ -1043,7 +1043,7 @@ int MDS::init(MDSMap::DaemonState wanted_state)
   }
 
   mds_lock.Lock();
-  if (want_state == MDSMap::STATE_DNE) {
+  if (beacon.get_want_state() == MDSMap::STATE_DNE) {
     suicide();  // we could do something more graceful here
   }
 
@@ -1054,7 +1054,6 @@ int MDS::init(MDSMap::DaemonState wanted_state)
   }
 
   // starting beacon.  this will induce an MDSMap from the monitor
-  want_state = wanted_state;
   if (wanted_state==MDSMap::STATE_STANDBY_REPLAY ||
       wanted_state==MDSMap::STATE_ONESHOT_REPLAY) {
     g_conf->set_val_or_die("mds_standby_replay", "true");
@@ -1066,7 +1065,6 @@ int MDS::init(MDSMap::DaemonState wanted_state)
       dout(0) << "Specified oneshot replay mode but not an MDS!" << dendl;
       suicide();
     }
-    want_state = MDSMap::STATE_BOOT;
     standby_type = wanted_state;
   }
 
@@ -1082,7 +1080,7 @@ int MDS::init(MDSMap::DaemonState wanted_state)
   } else if (standby_type == MDSMap::STATE_NULL && !standby_for_name.empty())
     standby_for_rank = MDSMap::MDS_MATCHED_ACTIVE;
 
-  beacon.init(mdsmap, want_state, standby_for_rank, standby_for_name);
+  beacon.init(mdsmap, wanted_state, standby_for_rank, standby_for_name);
   whoami = MDS_RANK_NONE;
   messenger->set_myname(entity_name_t::MDS(whoami));
   
@@ -1587,7 +1585,7 @@ void MDS::handle_mds_map(MMDSMap *m)
 
   if (whoami == MDS_RANK_NONE && state == MDSMap::STATE_STANDBY_REPLAY) {
     if (standby_type != MDSMap::STATE_NULL && standby_type != MDSMap::STATE_STANDBY_REPLAY) {
-      set_want_state(standby_type);
+      beacon.set_want_state(standby_type);
       beacon.send();
       state = oldstate;
       goto out;
@@ -1651,27 +1649,28 @@ out:
 
 void MDS::_handle_mds_map(MDSMap *oldmap)
 {
+  // Normal rankless case, we're marked as standby
   if (state == MDSMap::STATE_STANDBY) {
-    // Normal rankless case, we're marked as standby
-    set_want_state(state);
+    beacon.set_want_state(state);
     dout(1) << "handle_mds_map standby" << dendl;
 
     if (standby_type) {// we want to be in standby_replay or oneshot_replay!
-      request_state(standby_type);
+      beacon.set_want_state(standby_type);
+      beacon.send();
     }
     return;
   }
 
-  if (want_state == MDSMap::STATE_STANDBY) {
-    // We thought we were put into standby, but now the map is saying
-    // we're not!
+  // Case where we thought we were standby, but MDSMap disagrees
+  if (beacon.get_want_state() == MDSMap::STATE_STANDBY) {
     dout(10) << "dropped out of mdsmap, try to re-add myself" << dendl;
     state = MDSMap::STATE_BOOT;
-    set_want_state(state);
+    beacon.set_want_state(state);
     return;
-  } else if (want_state == MDSMap::STATE_BOOT) {
-    // We have sent out STATE_BOOT initial beacon, but that's not reflected
-    // in the map yet, give it time.
+  }
+  
+  // Case where we have sent a boot beacon that isn't reflected yet
+  if (beacon.get_want_state() == MDSMap::STATE_BOOT) {
     dout(10) << "not in map yet" << dendl;
   }
 }
@@ -1713,8 +1712,7 @@ void MDS::suicide(bool fast)
   assert(stopping == false);
   stopping = true;
 
-  set_want_state(MDSMap::STATE_DNE); // whatever.
-
+  beacon.set_want_state(MDSMap::STATE_DNE);
   if (!fast && !mdsmap->is_dne_gid(mds_gid_t(monc->get_global_id()))) {
     // Notify the MDSMonitor that we're dying, so that it doesn't have to
     // wait for us to go laggy.  Only do this if we're actually in the
@@ -1722,7 +1720,7 @@ void MDS::suicide(bool fast)
     beacon.send_and_wait(1);
   }
 
-  dout(1) << "suicide.  wanted " << ceph_mds_state_name(want_state)
+  dout(1) << "suicide.  wanted " << ceph_mds_state_name(beacon.get_want_state())
 	  << ", now " << ceph_mds_state_name(state) << dendl;
 
   mdlog->shutdown();
@@ -1820,7 +1818,7 @@ bool MDS::ms_dispatch(Message *m)
   heartbeat_reset();
 
   // Drop out early if shutting down
-  if (want_state == CEPH_MDS_STATE_DNE) {
+  if (beacon.get_want_state() == CEPH_MDS_STATE_DNE) {
     dout(10) << " stopping, discarding " << *m << dendl;
     m->put();
     return true;
@@ -1922,7 +1920,7 @@ bool MDS::ms_handle_reset(Connection *con)
     return false;
   }
   dout(5) << "ms_handle_reset on " << con->get_peer_addr() << dendl;
-  if (want_state == CEPH_MDS_STATE_DNE)
+  if (beacon.get_want_state() == CEPH_MDS_STATE_DNE)
     return false;
 
   Session *session = static_cast<Session *>(con->get_priv());
@@ -1951,7 +1949,7 @@ void MDS::ms_handle_remote_reset(Connection *con)
   }
 
   dout(5) << "ms_handle_remote_reset on " << con->get_peer_addr() << dendl;
-  if (want_state == CEPH_MDS_STATE_DNE)
+  if (beacon.get_want_state() == CEPH_MDS_STATE_DNE)
     return;
 
   Session *session = static_cast<Session *>(con->get_priv());
@@ -1973,7 +1971,7 @@ bool MDS::ms_verify_authorizer(Connection *con, int peer_type,
   if (stopping) {
     return false;
   }
-  if (want_state == CEPH_MDS_STATE_DNE)
+  if (beacon.get_want_state() == CEPH_MDS_STATE_DNE)
     return false;
 
   AuthAuthorizeHandler *authorize_handler = 0;

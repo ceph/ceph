@@ -59,7 +59,7 @@ MDSRank::MDSRank(
     sessionmap(this), logger(NULL), mlogger(NULL),
     op_tracker(g_ceph_context, g_conf->mds_enable_op_tracker, 
                g_conf->osd_num_op_tracker_shard),
-    last_state(MDSMap::STATE_NULL), want_state(MDSMap::STATE_NULL),
+    last_state(MDSMap::STATE_NULL),
     state(MDSMap::STATE_NULL),
     progress_thread(this), dispatch_depth(0),
     hb(NULL), last_tid(0), osd_epoch_barrier(0), beacon(beacon_),
@@ -142,7 +142,7 @@ void MDSRank::damaged()
   assert(whoami != MDS_RANK_NONE);
   assert(mds_lock.is_locked_by_me());
 
-  set_want_state(MDSMap::STATE_DAMAGED);
+  beacon.set_want_state(MDSMap::STATE_DAMAGED);
   monc->flush_log();  // Flush any clog error from before we were called
   beacon.notify_health(this);  // Include latest status in our swan song
   beacon.send_and_wait(g_conf->mds_mon_shutdown_timeout);
@@ -266,7 +266,7 @@ bool MDSRank::_dispatch(Message *m, bool new_msg)
   if (is_clientreplay() &&
       mdcache->is_open() &&
       replay_queue.empty() &&
-      want_state == MDSMap::STATE_CLIENTREPLAY) {
+      beacon.get_want_state() == MDSMap::STATE_CLIENTREPLAY) {
     int num_requests = mdcache->get_num_client_requests();
     dout(10) << " still have " << num_requests << " active replay requests" << dendl;
     if (num_requests == 0)
@@ -506,7 +506,7 @@ void MDSRank::heartbeat_reset()
   // after a call to suicide() completes, in which case MDSRank::hb
   // has been freed and we are a no-op.
   if (!hb) {
-      assert(want_state == CEPH_MDS_STATE_DNE);
+      assert(beacon.get_want_state() == CEPH_MDS_STATE_DNE);
       return;
   }
 
@@ -712,7 +712,7 @@ bool MDSRank::is_daemon_stopping() const
 void MDSRank::request_state(MDSMap::DaemonState s)
 {
   dout(3) << "request_state " << ceph_mds_state_name(s) << dendl;
-  set_want_state(s);
+  beacon.set_want_state(s);
   beacon.send();
 }
 
@@ -1203,17 +1203,6 @@ void MDSRank::stopping_done()
   request_state(MDSMap::STATE_STOPPED);
 }
 
-void MDSRank::set_want_state(MDSMap::DaemonState newstate)
-{
-  if (want_state != newstate) {
-    dout(10) << __func__ << " "
-      << ceph_mds_state_name(want_state) << " -> "
-      << ceph_mds_state_name(newstate) << dendl;
-    want_state = newstate;
-    beacon.notify_want_state(newstate);
-  }
-}
-
 // <<<<<<<<
 
 void MDSRank::handle_mds_map_rank(
@@ -1296,7 +1285,7 @@ void MDSRank::handle_mds_map_rank(
     dout(1) << "handle_mds_map state change "
 	    << ceph_mds_state_name(oldstate) << " --> "
 	    << ceph_mds_state_name(state) << dendl;
-    set_want_state(state);
+    beacon.set_want_state(state);
 
     if (oldstate == MDSMap::STATE_STANDBY_REPLAY) {
         dout(10) << "Monitor activated us! Deactivating replay loop" << dendl;
