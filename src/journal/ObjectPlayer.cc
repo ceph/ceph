@@ -12,15 +12,6 @@
 
 namespace journal {
 
-namespace {
-
-void rados_ctx_callback(rados_completion_t c, void *arg) {
-  Context *ctx = reinterpret_cast<Context *>(arg);
-  ctx->complete(rados_aio_get_return_value(c));
-}
-
-} // anonymous namespace
-
 ObjectPlayer::ObjectPlayer(librados::IoCtx &ioctx,
                            const std::string &object_oid_prefix,
                            uint64_t object_num, SafeTimer &timer,
@@ -54,7 +45,8 @@ void ObjectPlayer::fetch(Context *on_finish) {
   op.read(m_read_off, 2 << m_order, &context->read_bl, NULL);
 
   librados::AioCompletion *rados_completion =
-    librados::Rados::aio_create_completion(context, rados_ctx_callback, NULL);
+    librados::Rados::aio_create_completion(context, utils::rados_ctx_callback,
+                                           NULL);
   int r = m_ioctx.aio_operate(m_oid, rados_completion, &op, 0, NULL);
   assert(r == 0);
   rados_completion->release();
