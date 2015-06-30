@@ -15,15 +15,6 @@ using namespace cls::journal;
 
 namespace journal {
 
-namespace {
-
-void rados_ctx_callback(rados_completion_t c, void *arg) {
-  Context *ctx = reinterpret_cast<Context *>(arg);
-  ctx->complete(rados_aio_get_return_value(c));
-}
-
-} // anonymous
-
 ObjectRecorder::ObjectRecorder(librados::IoCtx &ioctx, const std::string &oid,
                                uint64_t object_number,
                                SafeTimer &timer, Mutex &timer_lock,
@@ -282,7 +273,7 @@ void ObjectRecorder::send_appends(AppendBuffers *append_buffers) {
 
   librados::AioCompletion *rados_completion =
     librados::Rados::aio_create_completion(append_flush, NULL,
-                                           rados_ctx_callback);
+                                           utils::rados_ctx_callback);
   int r = m_ioctx.aio_operate(m_oid, rados_completion, &op);
   assert(r == 0);
   rados_completion->release();
