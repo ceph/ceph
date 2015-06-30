@@ -1271,6 +1271,8 @@ public:
                rest_master_conn(NULL),
                meta_mgr(NULL), data_log(NULL) {}
 
+  librados::Rados *get_rados() { return rados; }
+
   uint64_t get_new_req_id() {
     return max_req_id.inc();
   }
@@ -1294,6 +1296,8 @@ public:
   RGWRESTConn *rest_master_conn;
   map<string, RGWRESTConn *> zone_conn_map;
   map<string, RGWRESTConn *> region_conn_map;
+
+  RGWZoneParams& get_zone_params() { return zone; }
 
   RGWMetadataManager *meta_mgr;
 
@@ -1598,6 +1602,38 @@ public:
       Delete(RGWRados::Object *_target) : target(_target) {}
 
       int delete_obj();
+    };
+
+    struct Stat {
+      RGWRados::Object *source;
+
+      struct Result {
+        rgw_obj obj;
+        RGWObjManifest manifest;
+        bool has_manifest;
+        uint64_t size;
+        time_t mtime;
+        map<string, bufferlist> attrs;
+
+        Result() : has_manifest(false), size(0), mtime(0) {}
+      } result;
+
+      struct State {
+        librados::IoCtx io_ctx;
+        librados::AioCompletion *completion;
+        int ret;
+
+        State() : completion(NULL), ret(0) {}
+      } state;
+
+
+      Stat(RGWRados::Object *_source) : source(_source) {}
+
+      int stat_async();
+      int wait();
+      int stat();
+    private:
+      int finish();
     };
   };
 

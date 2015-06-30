@@ -2475,8 +2475,14 @@ int RGWRados::Bucket::List::list_objects(int max, vector<RGWObjEnt> *result,
       RGWObjEnt& entry = eiter->second;
       rgw_obj_key key = obj;
       string instance;
+      string ns;
 
-      bool check_ns = rgw_obj::translate_raw_obj_to_obj_in_ns(obj.name, instance, params.ns);
+      bool valid = rgw_obj::parse_raw_oid(obj.name, &obj.name, &instance, &ns);
+      if (!valid) {
+        ldout(cct, 0) << "ERROR: could not parse object name: " << obj.name << dendl;
+        continue;
+      }
+      bool check_ns = (ns == params.ns);
       if (!params.list_versions && !entry.is_visible()) {
         continue;
       }
@@ -2542,7 +2548,7 @@ int RGWRados::Bucket::List::list_objects(int max, vector<RGWObjEnt> *result,
 
       RGWObjEnt ent = eiter->second;
       ent.key = obj;
-      ent.ns = params.ns;
+      ent.ns = ns;
       result->push_back(ent);
       count++;
     }
@@ -4865,6 +4871,86 @@ int RGWRados::Object::Read::get_attr(const char *name, bufferlist& dest)
     return -ENOENT;
   if (!state->get_attr(name, dest))
     return -ENODATA;
+
+  return 0;
+}
+
+
+int RGWRados::Object::Stat::stat_async()
+{
+  RGWObjectCtx& ctx = source->get_ctx();
+  rgw_obj& obj = source->get_obj();
+  RGWRados *store = source->get_store();
+
+  RGWObjState *s = ctx.get_state(obj); /* calling this one directly because otherwise a sync request will be sent */
+  result.obj = obj;
+  if (s->has_attrs) {
+    state.ret = 0;
+    result.size = s->size;
+    result.mtime = s->mtime;
+    result.attrs = s->attrset;
+    result.has_manifest = s->has_manifest;
+    result.manifest = s->manifest;
+    return 0;
+  }
+
+  string oid;
+  string loc;
+  rgw_bucket bucket;
+  get_obj_bucket_and_oid_loc(obj, bucket, oid, loc);
+
+  int r = store->get_obj_ioctx(obj, &state.io_ctx);
+  if (r < 0) {
+    return r;
+  }
+
+  librados::ObjectReadOperation op;
+  op.stat(&result.size, &result.mtime, NULL);
+  op.getxattrs(&result.attrs, NULL);
+  state.completion = librados::Rados::aio_create_completion(NULL, NULL, NULL);
+  state.io_ctx.locator_set_key(loc);
+  r = state.io_ctx.aio_operate(oid, state.completion, &op, NULL);
+  if (r < 0) {
+    ldout(store->ctx(), 5) << __func__ << ": ERROR: aio_operate() returned ret=" << r << dendl;
+    return r;
+  }
+
+  return 0;
+}
+
+
+int RGWRados::Object::Stat::wait()
+{
+  if (!state.completion) {
+    return state.ret;
+  }
+
+  state.completion->wait_for_complete();
+  state.ret = state.completion->get_return_value();
+  state.completion->release();
+
+  if (state.ret != 0) {
+    return state.ret;
+  }
+
+  return finish();
+}
+
+int RGWRados::Object::Stat::finish()
+{
+  map<string, bufferlist>::iterator iter = result.attrs.find(RGW_ATTR_MANIFEST);
+  if (iter != result.attrs.end()) {
+    bufferlist& bl = iter->second;
+    bufferlist::iterator biter = bl.begin();
+    try {
+      ::decode(result.manifest, biter);
+    } catch (buffer::error& err) {
+      RGWRados *store = source->get_store();
+      ldout(store->ctx(), 0) << "ERROR: " << __func__ << ": failed to decode manifest"  << dendl;
+      return -EIO;
+    }
+    result.has_manifest = true;
+  }
 
   return 0;
 }
