@@ -2593,171 +2593,12 @@ void PG::init(
   write_if_dirty(*t);
 }
 
-#pragma GCC diagnostic ignored "-Wpragmas"
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
-
 void PG::upgrade(ObjectStore *store, const interval_set<snapid_t> &snapcolls)
 {
   assert(info_struct_v <= 8);
   ObjectStore::Transaction t;
 
-  if (info_struct_v < 7) {
-    _upgrade_v7(store, snapcolls);
-  }
-
-  // 7 -> 8
-  pg_log.mark_log_for_rewrite();
-  hobject_t log_oid(OSD::make_pg_log_oid(pg_id));
-  hobject_t biginfo_oid(OSD::make_pg_biginfo_oid(pg_id));
-  t.remove(META_COLL, log_oid);
-  t.remove(META_COLL, biginfo_oid);
-  t.collection_rmattr(coll, "info");
-
-  t.touch(coll, pgmeta_oid);
-  map<string,bufferlist> v;
-  __u8 ver = cur_struct_v;
-  ::encode(ver, v[infover_key]);
-  t.omap_setkeys(coll, pgmeta_oid, v);
-
-  dirty_info = true;
-  dirty_big_info = true;
-  write_if_dirty(t);
-
-  int r = store->apply_transaction(t);
-  if (r != 0) {
-    derr << __func__ << ": apply_transaction returned "
-	 << cpp_strerror(r) << dendl;
-    assert(0);
-  }
-  assert(r == 0);
-}
-
-#pragma GCC diagnostic pop
-#pragma GCC diagnostic warning "-Wpragmas"
-
-void PG::_upgrade_v7(ObjectStore *store, const interval_set<snapid_t> &snapcolls)
-{
-  unsigned removed = 0;
-  for (interval_set<snapid_t>::const_iterator i = snapcolls.begin();
-       i != snapcolls.end();
-       ++i) {
-    for (snapid_t next_dir = i.get_start();
-	 next_dir != i.get_start() + i.get_len();
-	 ++next_dir) {
-      ++removed;
-      coll_t cid(info.pgid, next_dir);
-      dout(1) << "Removing collection " << cid
-	      << " (" << removed << "/" << snapcolls.size()
-	      << ")" << dendl;
-
-      hobject_t cur;
-      vector<hobject_t> objects;
-      while (1) {
-	int r = get_pgbackend()->objects_list_partial(
-	  cur,
-	  store->get_ideal_list_min(),
-	  store->get_ideal_list_max(),
-	  0,
-	  &objects,
-	  &cur);
-	if (r != 0) {
-	  derr << __func__ << ": collection_list_partial returned "
-	       << cpp_strerror(r) << dendl;
-	  assert(0);
-	}
-	if (objects.empty()) {
-	  assert(cur.is_max());
-	  break;
-	}
-	ObjectStore::Transaction t;
-	for (vector<hobject_t>::iterator j = objects.begin();
-	     j != objects.end();
-	     ++j) {
-	  t.remove(cid, *j);
-	}
-	r = store->apply_transaction(t);
-	if (r != 0) {
-	  derr << __func__ << ": apply_transaction returned "
-	       << cpp_strerror(r) << dendl;
-	  assert(0);
-	}
-	objects.clear();
-      }
-      ObjectStore::Transaction t;
-      t.remove_collection(cid);
-      int r = store->apply_transaction(t);
-      if (r != 0) {
-	derr << __func__ << ": apply_transaction returned "
-	     << cpp_strerror(r) << dendl;
-	assert(0);
-      }
-    }
-  }
-
-  hobject_t cur;
-  coll_t cid(info.pgid);
-  unsigned done = 0;
-  vector<hobject_t> objects;
-  while (1) {
-    dout(1) << "Updating snap_mapper from main collection, "
-	    << done << " objects done" << dendl;
-    int r = get_pgbackend()->objects_list_partial(
-      cur,
-      store->get_ideal_list_min(),
-      store->get_ideal_list_max(),
-      0,
-      &objects,
-      &cur);
-    if (r != 0) {
-      derr << __func__ << ": collection_list_partial returned "
-	   << cpp_strerror(r) << dendl;
-      assert(0);
-    }
-    if (objects.empty()) {
-      assert(cur.is_max());
-      break;
-    }
-    done += objects.size();
-    ObjectStore::Transaction t;
-    for (vector<hobject_t>::iterator j = objects.begin();
-	 j != objects.end();
-	 ++j) {
-      if (j->snap < CEPH_MAXSNAP) {
-	OSDriver::OSTransaction _t(osdriver.get_transaction(&t));
-	bufferlist bl;
-	r = get_pgbackend()->objects_get_attr(
-	  *j,
-	  OI_ATTR,
-	  &bl);
-	if (r < 0) {
-	  derr << __func__ << ": getattr returned "
-	       << cpp_strerror(r) << dendl;
-	  assert(0);
-	}
-	object_info_t oi(bl);
-	set<snapid_t> oi_snaps(oi.snaps.begin(), oi.snaps.end());
-	set<snapid_t> cur_snaps;
-	r = snap_mapper.get_snaps(*j, &cur_snaps);
-	if (r == 0) {
-	  assert(cur_snaps == oi_snaps);
-	} else if (r == -ENOENT) {
-	  snap_mapper.add_oid(*j, oi_snaps, &_t);
-	} else {
-	  derr << __func__ << ": get_snaps returned "
-	       << cpp_strerror(r) << dendl;
-	  assert(0);
-	}
-      }
-    }
-    r = store->apply_transaction(t);
-    if (r != 0) {
-      derr << __func__ << ": apply_transaction returned "
-	   << cpp_strerror(r) << dendl;
-      assert(0);
-    }
-    objects.clear();
-  }
+  assert(0 == "no support for pre v8");
 }
 
 int PG::_prepare_write_info(map<string,bufferlist> *km,
@@ -2829,10 +2670,6 @@ void PG::prepare_write_info(map<string,bufferlist> *km)
   dirty_big_info = false;
 }
 
-#pragma GCC diagnostic ignored "-Wpragmas"
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
-
 bool PG::_has_removal_flag(ObjectStore *store,
 			   spg_t pgid)
 {
@@ -2847,10 +2684,6 @@ bool PG::_has_removal_flag(ObjectStore *store,
       values.size() == 1)
     return true;
 
-  // try old way.  tolerate EOPNOTSUPP.
-  char val;
-  if (store->collection_getattr(coll, "remove", &val, 1) > 0)
-    return true;
   return false;
 }
 
@@ -2891,36 +2724,10 @@ epoch_t PG::peek_map_epoch(ObjectStore *store,
     bp = values[epoch_key].begin();
     ::decode(cur_epoch, bp);
   } else if (r == -ENOENT) {
-    // legacy: try v7 or older
-    r = store->collection_getattr(coll, "info", *bl);
-    assert(r > 0);
-    bufferlist::iterator bp = bl->begin();
-    __u8 struct_v = 0;
-    ::decode(struct_v, bp);
-    if (struct_v < 5)
-      return 0;
-    if (struct_v < 6) {
-      ::decode(cur_epoch, bp);
-      return cur_epoch;
-    }
-
-    // get epoch out of leveldb
-    string ek = get_epoch_key(pgid);
-    keys.clear();
-    values.clear();
-    keys.insert(ek);
-    store->omap_get_values(META_COLL, legacy_infos_oid, keys, &values);
-    assert(values.size() == 1);
-    bufferlist::iterator p = values[ek].begin();
-    ::decode(cur_epoch, p);
-  } else {
     assert(0 == "unable to open pg metadata");
   }
   return cur_epoch;
 }
-
-#pragma GCC diagnostic pop
-#pragma GCC diagnostic warning "-Wpragmas"
 
 void PG::write_if_dirty(ObjectStore::Transaction& t)
 {

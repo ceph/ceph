@@ -481,10 +481,6 @@ int finish_remove_pgs(ObjectStore *store)
   return 0;
 }
 
-#pragma GCC diagnostic ignored "-Wpragmas"
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
-
 int mark_pg_for_removal(ObjectStore *fs, spg_t pgid, ObjectStore::Transaction *t)
 {
   pg_info_t info(pgid);
@@ -500,28 +496,13 @@ int mark_pg_for_removal(ObjectStore *fs, spg_t pgid, ObjectStore::Transaction *t
     cerr << __func__ << " error on read_info " << cpp_strerror(r) << std::endl;
     return r;
   }
-  if (struct_v < 8) {
-    // old xattr
-    cout << "setting legacy 'remove' xattr flag" << std::endl;
-    bufferlist one;
-    one.append('1');
-    t->collection_setattr(coll, "remove", one);
-    cout << "remove " << META_COLL << " " << log_oid.hobj.oid << std::endl;
-    t->remove(META_COLL, log_oid);
-    cout << "remove " << META_COLL << " " << biginfo_oid.oid << std::endl;
-    t->remove(META_COLL, biginfo_oid);
-  } else {
-    // new omap key
-    cout << "setting '_remove' omap key" << std::endl;
-    map<string,bufferlist> values;
-    ::encode((char)1, values["_remove"]);
-    t->omap_setkeys(coll, pgmeta_oid, values);
-  }
+  assert(struct_v >= 8);
+  cout << "setting '_remove' omap key" << std::endl;
+  map<string,bufferlist> values;
+  ::encode((char)1, values["_remove"]);
+  t->omap_setkeys(coll, pgmeta_oid, values);
   return 0;
 }
-
-#pragma GCC diagnostic pop
-#pragma GCC diagnostic warning "-Wpragmas"
 
 int initiate_new_remove_pg(ObjectStore *store, spg_t r_pgid)
 {
@@ -2114,6 +2095,12 @@ int main(int argc, char **argv)
     cerr << "On-disk OSD incompatible features set "
       << unsupported << std::endl;
     ret = -EINVAL;
+    goto out;
+  }
+  if (!superblock.compat_features.incompat.contains(CEPH_OSD_FEATURE_INCOMPAT_PGMETA)) {
+    derr << "OSD store does not have PGMETA feature." << dendl;
+    derr << "You must first upgrade to hammer, or use an older ceph-objectstore-tool." << dendl;
+    r = -EINVAL;
     goto out;
   }
 
