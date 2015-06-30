@@ -14,6 +14,9 @@
 extern "C" {
 #endif
 
+/*
+ * returns a number which allows to know if cat is safe for the memory
+ */
 int safe_cat(char **pstr, int *plen, int pos, const char *str2);
 
 /*
