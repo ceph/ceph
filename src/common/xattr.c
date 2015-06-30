@@ -9,6 +9,7 @@
  * Foundation.  See file COPYING.
  */
 
+#include "acconfig.h"
 #if defined(__FreeBSD__)
 #include <errno.h>
 #include <stdint.h>
@@ -42,8 +43,10 @@ ceph_os_setxattr(const char *path, const char *name,
 	    size);
 	if (error > 0)
 		error = 0;
-#elif defined(__linux__) || defined(DARWIN)
+#elif defined(__linux__) 
 	error = setxattr(path, name, value, size, 0);
+#elif defined(DARWIN)
+	error = setxattr(path, name, value, size, 0 /* position */, 0);
 #endif
 
 	return (error);
@@ -56,12 +59,13 @@ ceph_os_fsetxattr(int fd, const char *name, const void *value,
 	int error = -1;
 
 #if defined(__FreeBSD__)
-	error = extattr_set_fd(fd, EXTATTR_NAMESPACE_USER, name, value,
-	    size);
+	error = extattr_set_fd(fd, EXTATTR_NAMESPACE_USER, name, value, size);
 	if (error > 0)
 		error = 0;
-#elif defined(__linux__) || defined(DARWIN)
+#elif defined(__linux__)
 	error = fsetxattr(fd, name, value, size, 0);
+#elif defined(DARWIN)
+	error = fsetxattr(fd, name, value, size, 0, 0 /* no options should be indentical to Linux */ );
 #endif
 
 	return (error);
@@ -93,7 +97,7 @@ void *value, size_t size)
 #elif defined(__linux__)
 	error = getxattr(path, name, value, size);
 #elif defined(DARWIN)
-	error = getxattr(path, name, value, size, 0);
+	error = getxattr(path, name, value, size, 0 /* position  */, 0);
 #endif
 
 	return (error);
@@ -125,7 +129,7 @@ ceph_os_fgetxattr(int fd, const char *name, void *value,
 #elif defined(__linux__)
 	error = fgetxattr(fd, name, value, size);
 #elif defined(DARWIN)
-	error = fgetxattr(fd, name, value, size, 0);
+	error = fgetxattr(fd, name, value, size, 0, 0 /* no options */);
 #endif
 
 	return (error);
