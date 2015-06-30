@@ -172,7 +172,12 @@ static void fuse_ll_setattr(fuse_req_t req, fuse_ino_t ino, struct stat *attr,
 // XATTRS
 
 static void fuse_ll_setxattr(fuse_req_t req, fuse_ino_t ino, const char *name,
-			     const char *value, size_t size, int flags)
+			     const char *value, size_t size, 
+			     int flags
+#if defined(DARWIN)
+			     ,uint32_t pos
+#endif
+  )
 {
   CephFuse::Handle *cfuse = (CephFuse::Handle *)fuse_req_userdata(req);
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
@@ -204,7 +209,11 @@ static void fuse_ll_listxattr(fuse_req_t req, fuse_ino_t ino, size_t size)
 }
 
 static void fuse_ll_getxattr(fuse_req_t req, fuse_ino_t ino, const char *name,
-			     size_t size)
+			     size_t size
+#if defined(DARWIN)
+			     ,uint32_t position
+#endif
+  )
 {
   CephFuse::Handle *cfuse = (CephFuse::Handle *)fuse_req_userdata(req);
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
