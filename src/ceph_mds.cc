@@ -236,10 +236,7 @@ int main(int argc, const char **argv)
 
   pidfile_remove();
 
-  // only delete if it was a clean shutdown (to aid memory leak
-  // detection, etc.).  don't bother if it was a suicide.
-  if (mds->is_stopped())
-    delete mds;
+  delete mds;
 
   g_ceph_context->put();
 
