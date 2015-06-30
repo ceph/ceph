@@ -603,6 +603,13 @@ def syslog(ctx, config):
     conf_fp = StringIO('\n'.join(conf_lines))
     try:
         for rem in ctx.cluster.remotes.iterkeys():
+            if rem.os.package_type == 'rpm':
+                log_context = 'system_u:object_r:var_log_t:s0'
+                for log_path in (kern_log, misc_log):
+                    rem.run(
+                        args="touch {log} && sudo chcon {con} {log}".format(
+                            log=log_path, con=log_context),
+                    )
             misc.sudo_write_file(
                 remote=rem,
                 path=CONF,
