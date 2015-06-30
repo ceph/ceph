@@ -270,7 +270,7 @@ def remove_yum_timedhosts(ctx):
         if remote.os.package_type != 'rpm':
             continue
         remote.run(
-            args="find /var/cache/yum -name 'timedhosts' -exec rm {} \;",
+            args="sudo find /var/cache/yum -name 'timedhosts' -exec rm {} \;",
             check_status=False,
         )
 
