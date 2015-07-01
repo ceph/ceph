@@ -503,6 +503,11 @@ def unlock_one(ctx, name, user, description=None):
 
 def list_locks(keyed_by_name=False, **kwargs):
     uri = os.path.join(config.lock_server, 'nodes', '')
+    for key, value in kwargs.iteritems():
+        if kwargs[key] is False:
+            kwargs[key] = '0'
+        if kwargs[key] is True:
+            kwargs[key] = '1'
     if kwargs:
         if 'machine_type' in kwargs:
             kwargs['machine_type'] = kwargs['machine_type'].replace(',','|')
