@@ -18,6 +18,15 @@
 #include <math.h>
 #include <sys/time.h>
 #include <time.h>
+
+#if defined(DARWIN)
+/* For some reason this definition is lost when compiling ceph *
+ * It works fine on a stand-alone file even with same clang    *
+ * parameters                                                  */
+
+time_t timegm(struct tm *);
+#endif
+
 #include <errno.h>
 
 #include "include/types.h"
@@ -292,26 +301,7 @@ public:
       }
     }
     time_t t;
-#if ! defined(DARWIN) 
-    t = timegm(&tm);
-#else
-/* TODO weird that the other does not compile on OS X *
- * The method should be there                         * 
- * The work-around is not good either as it isn't     * 
- * thread safe                                        */
-    char *tz;
-
-    tz = getenv("TZ");
-    setenv("TZ", "", 1);
-    tzset();
-    t = mktime(&tm);
-    if (tz)
-      setenv("TZ", tz, 1);
-    else
-      unsetenv("TZ");
-    tzset();
-#endif
-
+    t = ::timegm(&tm);
     if (epoch)
       *epoch = (uint64_t)t;
 
