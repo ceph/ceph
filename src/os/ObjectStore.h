@@ -872,7 +872,6 @@ private:
     Op* _get_next_op() {
       if (op_ptr.length() == 0 || op_ptr.offset() >= op_ptr.length()) {
         op_ptr = bufferptr(sizeof(Op) * OPS_PER_PTR);
-	op_ptr.zero();
       }
       bufferptr ptr(op_ptr, 0, sizeof(Op));
       op_bl.append(ptr);
@@ -880,6 +879,7 @@ private:
       op_ptr.set_offset(op_ptr.offset() + sizeof(Op));
 
       char* p = ptr.c_str();
+      memset(p, 0, sizeof(Op));
       return reinterpret_cast<Op*>(p);
     }
     __le32 _get_coll_id(const coll_t& coll) {
