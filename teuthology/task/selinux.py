@@ -26,12 +26,15 @@ class SELinux(Task):
 
     def filter_hosts(self):
         """
-        Exclude any non-RPM-based hosts
+        Exclude any non-RPM-based hosts, and any downburst VMs
         """
         super(SELinux, self).filter_hosts()
         new_cluster = Cluster()
         for (remote, roles) in self.cluster.remotes.iteritems():
-            if remote.os.package_type == 'rpm':
+            if remote.shortname.startswith('vpm'):
+                msg = "Excluding {host}: downburst VMs are not yet supported"
+                log.info(msg.format(host=remote.shortname))
+            elif remote.os.package_type == 'rpm':
                 new_cluster.add(remote, roles)
             else:
                 msg = "Excluding {host}: OS '{os}' does not support SELinux"
