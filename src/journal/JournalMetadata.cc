@@ -17,12 +17,15 @@ using namespace cls::journal;
 
 JournalMetadata::JournalMetadata(librados::IoCtx &ioctx,
                                  const std::string &oid,
-                                 const std::string &client_id)
-    : m_cct(NULL), m_oid(oid), m_client_id(client_id), m_order(0),
-      m_splay_width(0), m_initialized(false),  m_timer(NULL),
+                                 const std::string &client_id,
+                                 double commit_interval)
+    : m_cct(NULL), m_oid(oid), m_client_id(client_id),
+      m_commit_interval(commit_interval), m_order(0), m_splay_width(0),
+      m_initialized(false), m_timer(NULL),
       m_timer_lock("JournalMetadata::m_timer_lock"),
       m_lock("JournalMetadata::m_lock"), m_watch_ctx(this), m_watch_handle(0),
-      m_update_notifications(0) {
+      m_update_notifications(0), m_commit_position_pending(false),
+      m_commit_position_ctx(NULL) {
   m_ioctx.dup(ioctx);
   m_cct = reinterpret_cast<CephContext*>(m_ioctx.cct());
 }
@@ -74,6 +77,7 @@ int JournalMetadata::init() {
 int JournalMetadata::register_client(const std::string &description) {
   assert(!m_client_id.empty());
 
+  ldout(m_cct, 10) << __func__ << ": " << m_client_id << dendl;
   int r = client::client_register(m_ioctx, m_oid, m_client_id, description);
   if (r < 0) {
     lderr(m_cct) << "failed to register journal client '" << m_client_id
@@ -88,6 +92,7 @@ int JournalMetadata::register_client(const std::string &description) {
 int JournalMetadata::unregister_client() {
   assert(!m_client_id.empty());
 
+  ldout(m_cct, 10) << __func__ << ": " << m_client_id << dendl;
   int r = client::client_unregister(m_ioctx, m_oid, m_client_id);
   if (r < 0) {
     lderr(m_cct) << "failed to unregister journal client '" << m_client_id
@@ -117,6 +122,9 @@ void JournalMetadata::remove_listener(Listener *listener) {
 
 void JournalMetadata::set_minimum_set(uint64_t object_set) {
   Mutex::Locker locker(m_lock);
+
+  ldout(m_cct, 20) << __func__ << ": current=" << m_minimum_set
+                   << ", new=" << object_set << dendl;
   if (m_minimum_set >= object_set) {
     return;
   }
@@ -137,6 +145,9 @@ void JournalMetadata::set_minimum_set(uint64_t object_set) {
 
 void JournalMetadata::set_active_set(uint64_t object_set) {
   Mutex::Locker locker(m_lock);
+
+  ldout(m_cct, 20) << __func__ << ": current=" << m_active_set
+                   << ", new=" << object_set << dendl;
   if (m_active_set >= object_set) {
     return;
   }
@@ -157,18 +168,25 @@ void JournalMetadata::set_active_set(uint64_t object_set) {
 
 void JournalMetadata::set_commit_position(
     const ObjectSetPosition &commit_position, Context *on_safe) {
+  assert(on_safe != NULL);
+
   Mutex::Locker locker(m_lock);
+  ldout(m_cct, 20) << __func__ << ": current=" << m_client.commit_position
+                   << ", new=" << commit_position << dendl;
+  if (commit_position <= m_client.commit_position ||
+      commit_position <= m_commit_position) {
+    on_safe->complete(-ESTALE);
+    return;
+  }
 
-  librados::ObjectWriteOperation op;
-  client::client_commit(&op, m_client_id, commit_position);
+  if (m_commit_position_ctx != NULL) {
+    m_commit_position_ctx->complete(-ESTALE);
+  }
 
-  C_NotifyUpdate *ctx = new C_NotifyUpdate(this, on_safe);
-  librados::AioCompletion *comp =
-    librados::Rados::aio_create_completion(ctx, NULL,
-                                           utils::rados_ctx_callback);
-  int r = m_ioctx.aio_operate(m_oid, comp, &op);
-  assert(r == 0);
-  comp->release();
+  m_client.commit_position = commit_position;
+  m_commit_position = commit_position;
+  m_commit_position_ctx = on_safe;
+  schedule_commit_task();
 }
 
 void JournalMetadata::reserve_tid(const std::string &tag, uint64_t tid) {
@@ -235,6 +253,33 @@ void JournalMetadata::handle_refresh_complete(C_Refresh *refresh, int r) {
   }
 }
 
+void JournalMetadata::schedule_commit_task() {
+  assert(m_lock.is_locked());
+
+  Mutex::Locker timer_locker(m_timer_lock);
+  if (!m_commit_position_pending) {
+    m_commit_position_pending = true;
+    m_timer->add_event_after(m_commit_interval, new C_CommitPositionTask(this));
+  }
+}
+
+void JournalMetadata::handle_commit_position_task() {
+  Mutex::Locker locker(m_lock);
+
+  librados::ObjectWriteOperation op;
+  client::client_commit(&op, m_client_id, m_commit_position);
+
+  C_NotifyUpdate *ctx = new C_NotifyUpdate(this, m_commit_position_ctx);
+  m_commit_position_ctx = NULL;
+
+  librados::AioCompletion *comp =
+    librados::Rados::aio_create_completion(ctx, NULL,
+                                           utils::rados_ctx_callback);
+  int r = m_ioctx.aio_operate(m_oid, comp, &op);
+  assert(r == 0);
+  comp->release();
+}
+
 void JournalMetadata::schedule_watch_reset() {
   Mutex::Locker locker(m_timer_lock);
   m_timer->add_event_after(0.1, new C_WatchReset(this));
@@ -268,6 +313,13 @@ void JournalMetadata::handle_watch_error(int err) {
 
 void JournalMetadata::notify_update() {
   ldout(m_cct, 10) << "notifying journal header update" << dendl;
+
+  bufferlist bl;
+  m_ioctx.notify2(m_oid, bl, 5000, NULL);
+}
+
+void JournalMetadata::async_notify_update() {
+  ldout(m_cct, 10) << "async notifying journal header update" << dendl;
 
   librados::AioCompletion *comp =
     librados::Rados::aio_create_completion(NULL, NULL, NULL);
