@@ -10,8 +10,8 @@ libradosstriper_la_SOURCES = \
 # We need this to avoid basename conflicts with the libradosstriper build tests in test/Makefile.am
 libradosstriper_la_CXXFLAGS = ${AM_CXXFLAGS}
 
-LIBRADOSSTRIPER_DEPS = $(LIBRADOS_DEPS) librados_api.la
-libradosstriper_la_LIBADD = $(LIBRADOSSTRIPER_DEPS) $(PTHREAD_LIBS) $(CRYPTO_LIBS) $(EXTRALIBS)
+LIBRADOSSTRIPER_DEPS = librados_internal.la libcls_lock_client.la $(LIBOSDC) $(LIBCOMMON_DEPS)
+libradosstriper_la_LIBADD = $(LIBRADOSSTRIPER_DEPS) $(LIBRADOS) $(PTHREAD_LIBS) $(CRYPTO_LIBS) $(EXTRALIBS)
 libradosstriper_la_LDFLAGS = ${AM_LDFLAGS} -version-info 1:0:0
 if LINUX
 libradosstriper_la_LDFLAGS += -export-symbols-regex '^radosstriper_.*'
