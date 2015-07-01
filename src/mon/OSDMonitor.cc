@@ -7357,6 +7357,14 @@ bool OSDMonitor::_check_become_tier(
     return false;
   }
 
+  if (base_pool->is_tier()) {
+    *ss << "pool '" << base_pool_name << "' is already a tier of '"
+      << osdmap.get_pool_name(base_pool->tier_of) << "', "
+      << "multiple tiers are not yet supported.";
+    *err = -EINVAL;
+    return false;
+  }
+
   if (tier_pool->is_tier()) {
     *ss << "tier pool '" << tier_pool_name << "' is already a tier of '"
        << osdmap.get_pool_name(tier_pool->tier_of) << "'";
