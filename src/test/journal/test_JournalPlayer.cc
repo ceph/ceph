@@ -62,7 +62,7 @@ public:
 
   journal::JournalMetadataPtr create_metadata(const std::string &oid) {
     journal::JournalMetadataPtr metadata(new journal::JournalMetadata(
-      m_ioctx, oid, "client"));
+      m_ioctx, oid, "client", 0.1));
     return metadata;
   }
 

@@ -4,6 +4,7 @@
 #include "test/librados/test.h"
 #include "common/Mutex.h"
 #include "common/Timer.h"
+#include "journal/JournalMetadata.h"
 #include "cls/journal/cls_journal_types.h"
 #include "gtest/gtest.h"
 
@@ -28,6 +29,24 @@ public:
 
   bufferlist create_payload(const std::string &payload);
 
+  struct Listener : public journal::JournalMetadata::Listener {
+    RadosTestFixture *test_fixture;
+    Mutex mutex;
+    Cond cond;
+    std::map<journal::JournalMetadata*, uint32_t> updates;
+
+    Listener(RadosTestFixture *_test_fixture)
+      : test_fixture(_test_fixture), mutex("mutex") {}
+
+    virtual void handle_update(journal::JournalMetadata *metadata) {
+      Mutex::Locker locker(mutex);
+      ++updates[metadata];
+      cond.Signal();
+    }
+  };
+
+  bool wait_for_update(journal::JournalMetadataPtr metadata);
+
   static std::string _pool_name;
   static librados::Rados _rados;
   static uint64_t _oid_number;
@@ -36,4 +55,6 @@ public:
 
   Mutex m_timer_lock;
   SafeTimer *m_timer;
+
+  Listener m_listener;
 };
