@@ -92,6 +92,7 @@ public:
                 chunk_ofs(0), ofs(0) {}
   ~RGWRESTStreamReadRequest() {}
   int get_obj(RGWAccessKey& key, map<string, string>& extra_headers, rgw_obj& obj);
+  int get_resource(RGWAccessKey& key, map<string, string>& extra_headers, const string& resource);
   int complete(string& etag, time_t *mtime, map<string, string>& attrs);
 
   void set_in_cb(RGWGetDataCB *_cb) { cb = _cb; }

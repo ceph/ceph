@@ -1938,6 +1938,8 @@ public:
    */
   virtual int delete_bucket(rgw_bucket& bucket, RGWObjVersionTracker& objv_tracker);
 
+  bool is_meta_master();
+
   /**
    * Check to see if the bucket metadata is synced
    */
