@@ -3394,22 +3394,26 @@ eversion_t pg_missing_t::have_old(const hobject_t& oid) const
 void pg_missing_t::add_next_event(const pg_log_entry_t& e)
 {
   if (e.is_update()) {
+    map<hobject_t, item>::iterator missing_it;
+    missing_it = missing.find(e.soid);
+    bool is_missing_divergent_item = missing_it != missing.end();
     if (e.prior_version == eversion_t() || e.is_clone()) {
       // new object.
-      //assert(missing.count(e.soid) == 0);  // might already be missing divergent item.
-      if (missing.count(e.soid))  // already missing divergent item
-	rmissing.erase(missing[e.soid].need.version);
-      missing[e.soid] = item(e.version, eversion_t());  // .have = nil
-    } else if (missing.count(e.soid)) {
+      if (is_missing_divergent_item) {  // use iterator
+        rmissing.erase((missing_it->second).need.version);
+        missing_it->second = item(e.version, eversion_t());  // .have = nil
+      } else  // create new element in missing map
+        missing[e.soid] = item(e.version, eversion_t());     // .have = nil
+    } else if (is_missing_divergent_item) {
       // already missing (prior).
-      //assert(missing[e.soid].need == e.prior_version);
-      rmissing.erase(missing[e.soid].need.version);
-      missing[e.soid].need = e.version;  // leave .have unchanged.
+      rmissing.erase((missing_it->second).need.version);
+      (missing_it->second).need = e.version;  // leave .have unchanged.
     } else if (e.is_backlog()) {
       // May not have prior version
       assert(0 == "these don't exist anymore");
     } else {
       // not missing, we must have prior_version (if any)
+      assert(!is_missing_divergent_item);
       missing[e.soid] = item(e.version, e.prior_version);
     }
     rmissing[e.version.version] = e.soid;
