@@ -396,7 +396,7 @@ namespace {
   class CrushWalker : public CrushTreeDumper::Dumper<void> {
     typedef void DumbFormatter;
     typedef CrushTreeDumper::Dumper<DumbFormatter> Parent;
-    unsigned max_id;
+    int max_id;
   public:
     CrushWalker(const CrushWrapper *crush, unsigned max_id)
       : Parent(crush), max_id(max_id) {}

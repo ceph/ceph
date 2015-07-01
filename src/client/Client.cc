@@ -7131,6 +7131,8 @@ int Client::read(int fd, char *buf, loff_t size, loff_t offset)
 
 int Client::preadv(int fd, const struct iovec *iov, int iovcnt, loff_t offset)
 {
+  if (iovcnt < 0)
+    return EINVAL;
      return _preadv_pwritev(fd, iov, iovcnt, offset, false);
 }
 
@@ -7458,10 +7460,12 @@ int Client::write(int fd, const char *buf, loff_t size, loff_t offset)
 
 int Client::pwritev(int fd, const struct iovec *iov, int iovcnt, int64_t offset)
 {
+  if (iovcnt < 0)
+    return EINVAL;
     return _preadv_pwritev(fd, iov, iovcnt, offset, true); 
 }
 
-int Client::_preadv_pwritev(int fd, const struct iovec *iov, int iovcnt, int64_t offset, bool write)
+int Client::_preadv_pwritev(int fd, const struct iovec *iov, unsigned iovcnt, int64_t offset, bool write)
 {
     Mutex::Locker lock(client_lock);
     tout(cct) << fd << std::endl;
@@ -7475,7 +7479,7 @@ int Client::_preadv_pwritev(int fd, const struct iovec *iov, int iovcnt, int64_t
         return -EBADF;
 #endif
     loff_t totallen = 0;
-    for (int i = 0; i < iovcnt; i++) {
+    for (unsigned i = 0; i < iovcnt; i++) {
         totallen += iov[i].iov_len;
     }
     if (write) {
@@ -7487,8 +7491,7 @@ int Client::_preadv_pwritev(int fd, const struct iovec *iov, int iovcnt, int64_t
         int r = _read(fh, offset, totallen, &bl);
         ldout(cct, 3) << "preadv(" << fd << ", " <<  offset << ") = " << r << dendl;
         int bufoff = 0;
-        uint32_t rlen = 0;
-        for (int j = 0, resid = r; j < iovcnt && resid > 0; j++) {
+        for (unsigned j = 0, resid = r; j < iovcnt && resid > 0; j++) {
                /*
                 * This piece of code aims to handle the case that bufferlist does not have enough data 
                 * to fill in the iov 
