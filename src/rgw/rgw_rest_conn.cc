@@ -119,4 +119,58 @@ int RGWRESTConn::complete_request(RGWRESTStreamReadRequest *req, string& etag, t
   return ret;
 }
 
+class StreamIntoBufferlist : public RGWGetDataCB {
+  bufferlist& bl;
+public:
+  StreamIntoBufferlist(bufferlist& _bl) : bl(_bl) {}
+  int handle_data(bufferlist& inbl, off_t bl_ofs, off_t bl_len) {
+    bl.claim_append(inbl);
+    return bl_len;
+  }
+};
+
+int RGWRESTConn::get_resource(const string& resource,
+		     list<pair<string, string> > *extra_params,
+		     map<string, string> *extra_headers,
+		     bufferlist& bl)
+{
+  string url;
+  int ret = get_url(url);
+  if (ret < 0)
+    return ret;
+
+  list<pair<string, string> > params;
+
+  if (extra_params) {
+    list<pair<string, string> >::iterator iter = extra_params->begin();
+    for (; iter != extra_params->end(); ++iter) {
+      params.push_back(*iter);
+    }
+  }
+
+  params.push_back(pair<string, string>(RGW_SYS_PARAM_PREFIX "region", region));
+
+  StreamIntoBufferlist cb(bl);
+
+  RGWRESTStreamReadRequest req(cct, url, &cb, NULL, &params);
+
+  map<string, string> headers;
+  if (extra_headers) {
+    for (map<string, string>::iterator iter = extra_headers->begin();
+	 iter != extra_headers->end(); ++iter) {
+      headers[iter->first] = iter->second;
+    }
+  }
+
+  ret = req.get_resource(key, headers, resource);
+  if (ret < 0) {
+    ldout(cct, 0) << __func__ << ": get_resource() resource=" << resource << " returned ret=" << ret << dendl;
+    return ret;
+  }
+
+  string etag;
+  map<string, string> attrs;
+  return req.complete(etag, NULL, attrs);
+}
+
 

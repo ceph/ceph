@@ -4487,6 +4487,15 @@ int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
   return ret;
 }
 
+bool RGWRados::is_meta_master()
+{
+  if (!region.is_master) {
+    return false;
+  }
+
+  return (region.master_zone == zone_public_config.name);
+}
+
 /**
   * Check to see if the bucket metadata could be synced
   * bucket: the bucket to check
