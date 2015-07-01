@@ -581,23 +581,35 @@ def syslog(ctx, config):
     log.info('Starting syslog monitoring...')
 
     archive_dir = misc.get_archive_dir(ctx)
+    log_dir = '{adir}/syslog'.format(adir=archive_dir)
     run.wait(
         ctx.cluster.run(
             args=[
                 'mkdir', '-p', '-m0755', '--',
-                '{adir}/syslog'.format(adir=archive_dir),
+                log_dir,
                 ],
             wait=False,
             )
         )
 
     CONF = '/etc/rsyslog.d/80-cephtest.conf'
-    conf_fp = StringIO('''
-kern.* -{adir}/syslog/kern.log;RSYSLOG_FileFormat
-*.*;kern.none -{adir}/syslog/misc.log;RSYSLOG_FileFormat
-'''.format(adir=archive_dir))
+    kern_log = '{log_dir}/kern.log'.format(log_dir=log_dir)
+    misc_log = '{log_dir}/misc.log'.format(log_dir=log_dir)
+    conf_lines = [
+        'kern.* -{kern_log};RSYSLOG_FileFormat'.format(kern_log=kern_log),
+        '*.*;kern.none -{misc_log};RSYSLOG_FileFormat'.format(
+            misc_log=misc_log),
+    ]
+    conf_fp = StringIO('\n'.join(conf_lines))
     try:
         for rem in ctx.cluster.remotes.iterkeys():
+            if rem.os.package_type == 'rpm':
+                log_context = 'system_u:object_r:var_log_t:s0'
+                for log_path in (kern_log, misc_log):
+                    rem.run(
+                        args="touch {log} && sudo chcon {con} {log}".format(
+                            log=log_path, con=log_context),
+                    )
             misc.sudo_write_file(
                 remote=rem,
                 path=CONF,
