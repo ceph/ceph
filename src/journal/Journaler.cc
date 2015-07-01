@@ -9,6 +9,7 @@
 #include "journal/JournalMetadata.h"
 #include "journal/JournalPlayer.h"
 #include "journal/JournalRecorder.h"
+#include "journal/JournalTrimmer.h"
 #include "journal/PayloadImpl.h"
 #include "journal/ReplayHandler.h"
 #include "cls/journal/cls_journal_client.h"
@@ -31,7 +32,8 @@ using namespace cls::journal;
 
 Journaler::Journaler(librados::IoCtx &header_ioctx, librados::IoCtx &data_ioctx,
                      uint64_t journal_id, const std::string &client_id)
-  : m_client_id(client_id), m_metadata(NULL), m_player(NULL), m_recorder(NULL)
+  : m_client_id(client_id), m_metadata(NULL), m_player(NULL), m_recorder(NULL),
+    m_trimmer(NULL)
 {
   m_header_ioctx.dup(header_ioctx);
   m_data_ioctx.dup(data_ioctx);
@@ -40,8 +42,12 @@ Journaler::Journaler(librados::IoCtx &header_ioctx, librados::IoCtx &data_ioctx,
   m_header_oid = JOURNAL_HEADER_PREFIX + stringify(journal_id);
   m_object_oid_prefix = JOURNAL_OBJECT_PREFIX + stringify(journal_id) + ".";
 
-  m_metadata = new JournalMetadata(m_header_ioctx, m_header_oid, m_client_id);
+  // TODO configurable commit interval
+  m_metadata = new JournalMetadata(m_header_ioctx, m_header_oid, m_client_id,
+                                   5);
   m_metadata->get();
+
+  m_trimmer = new JournalTrimmer(m_data_ioctx, m_object_oid_prefix, m_metadata);
 }
 
 Journaler::~Journaler() {
@@ -49,6 +55,7 @@ Journaler::~Journaler() {
     m_metadata->put();
     m_metadata = NULL;
   }
+  delete m_trimmer;
   assert(m_player == NULL);
   assert(m_recorder == NULL);
 }
@@ -112,6 +119,11 @@ void Journaler::stop_replay() {
   m_player->unwatch();
   m_player->put();
   m_player = NULL;
+}
+
+void Journaler::update_commit_position(const Payload &payload) {
+  PayloadImplPtr payload_impl = payload.get_payload_impl();
+  m_trimmer->update_commit_position(payload_impl->get_object_set_position());
 }
 
 void Journaler::start_append() {
