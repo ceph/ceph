@@ -73,7 +73,7 @@ class TestWorker(object):
         m_p.returncode = 0
         m_popen.return_value = m_p
         m_t_config.results_server = True
-        worker.run_job(config, "teuth/bin/path")
+        worker.run_job(config, "teuth/bin/path", verbose=False)
         m_run_watchdog.assert_called_with(m_p, config)
         expected_args = [
             'teuth/bin/path/teuthology',
@@ -120,7 +120,7 @@ class TestWorker(object):
         m_p.returncode = 1
         m_popen.return_value = m_p
         m_t_config.results_server = False
-        worker.run_job(config, "teuth/bin/path")
+        worker.run_job(config, "teuth/bin/path", verbose=False)
         m_symlink_log.assert_called_with(config["worker_log"], config["archive_path"])
 
     @patch("teuthology.worker.report.try_push_job_info")

@@ -162,7 +162,7 @@ def main(ctx):
             log.info('Creating archive dir %s', archive_path_full)
             safepath.makedirs(ctx.archive_dir, safe_archive)
             log.info('Running job %d', job.jid)
-            run_job(job_config, teuth_bin_path)
+            run_job(job_config, teuth_bin_path, ctx.verbose)
         job.delete()
 
 
@@ -222,7 +222,7 @@ def run_with_watchdog(process, job_config):
         report.try_push_job_info(job_info, dict(status='dead'))
 
 
-def run_job(job_config, teuth_bin_path):
+def run_job(job_config, teuth_bin_path, verbose):
     suite_path = job_config['suite_path']
     arg = [
         os.path.join(teuth_bin_path, 'teuthology'),
@@ -238,7 +238,7 @@ def run_job(job_config, teuth_bin_path):
         else:
             job_config.update(inner_config)
 
-    if job_config['verbose']:
+    if verbose or job_config['verbose']:
         arg.append('-v')
 
     arg.extend([
