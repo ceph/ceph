@@ -557,8 +557,8 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
 
   class buffer::xio_mempool : public buffer::raw {
   public:
-    struct xio_mempool_obj *mp;
-    xio_mempool(struct xio_mempool_obj *_mp, unsigned l) :
+    struct xio_reg_mem *mp;
+    xio_mempool(struct xio_reg_mem *_mp, unsigned l) :
       raw((char*)mp->addr, l), mp(_mp)
     { }
     ~xio_mempool() {}
@@ -567,7 +567,7 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
     }
   };
 
-  struct xio_mempool_obj* get_xio_mp(const buffer::ptr& bp)
+  struct xio_reg_mem* get_xio_mp(const buffer::ptr& bp)
   {
     buffer::xio_mempool *mb = dynamic_cast<buffer::xio_mempool*>(bp.get_raw());
     if (mb) {
@@ -1952,7 +1952,7 @@ std::ostream& operator<<(std::ostream& out, const buffer::list& bl) {
   return out;
 }
 
-std::ostream& operator<<(std::ostream& out, buffer::error& e)
+std::ostream& operator<<(std::ostream& out, const buffer::error& e)
 {
   return out << e.what();
 }

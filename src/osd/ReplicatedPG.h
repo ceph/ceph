@@ -449,7 +449,7 @@ public:
   }
 
   bool transaction_use_tbl() {
-    uint64_t min_features = get_min_peer_features();
+    uint64_t min_features = get_min_upacting_features();
     return !(min_features & CEPH_FEATURE_OSD_TRANSACTION_MAY_LAYOUT);
   }
 
@@ -923,7 +923,11 @@ protected:
   friend struct C_HitSetFlushing;
 
   void agent_setup();       ///< initialize agent state
-  bool agent_work(int max); ///< entry point to do some agent work
+  bool agent_work(int max) ///< entry point to do some agent work
+  {
+    return agent_work(max, max);
+  }
+  bool agent_work(int max, int agent_flush_quota);
   bool agent_maybe_flush(ObjectContextRef& obc);  ///< maybe flush
   bool agent_maybe_evict(ObjectContextRef& obc);  ///< maybe evict
 

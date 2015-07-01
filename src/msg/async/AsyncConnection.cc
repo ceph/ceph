@@ -1942,7 +1942,6 @@ int AsyncConnection::send_message(Message *m)
   prepare_send_message(f, m, bl);
 
   Mutex::Locker l(write_lock);
-  m->set_seq(out_seq.inc());
   // "features" changes will change the payload encoding
   if (can_write == NOWRITE || get_features() != f) {
     // ensure the correctness of message encoding
@@ -2202,23 +2201,6 @@ void AsyncConnection::prepare_send_message(uint64_t features, Message *m, buffer
                              << " data=" << header.data_len
                              << " off " << header.data_off << dendl;
 
-  // Now that we have all the crcs calculated, handle the
-  // digital signature for the message, if the AsyncConnection has session
-  // security set up.  Some session security options do not
-  // actually calculate and check the signature, but they should
-  // handle the calls to sign_message and check_signature.  PLR
-  if (session_security.get() == NULL) {
-    ldout(async_msgr->cct, 20) << __func__ << " no session security" << dendl;
-  } else {
-    if (session_security->sign_message(m)) {
-      ldout(async_msgr->cct, 20) << __func__ << " failed to sign m="
-                                 << m << "): sig = " << footer.sig << dendl;
-    } else {
-      ldout(async_msgr->cct, 20) << __func__ << " signed m=" << m
-                                 << "): sig = " << footer.sig << dendl;
-    }
-  }
-
   bl.append(m->get_payload());
   bl.append(m->get_middle());
   bl.append(m->get_data());
@@ -2239,12 +2221,12 @@ void AsyncConnection::prepare_send_message(uint64_t features, Message *m, buffer
     old_footer.flags = footer.flags;
     bl.append((char*)&old_footer, sizeof(old_footer));
   }
-  logger->inc(l_msgr_send_bytes, bl.length());
 }
 
 int AsyncConnection::write_message(Message *m, bufferlist& bl)
 {
   assert(can_write == CANWRITE);
+  m->set_seq(out_seq.inc());
 
   if (!policy.lossy) {
     // put on sent list
@@ -2276,6 +2258,25 @@ int AsyncConnection::write_message(Message *m, bufferlist& bl)
 
   complete_bl.claim_append(bl);
 
+  // TODO: let sign_message could be reentry?
+  // Now that we have all the crcs calculated, handle the
+  // digital signature for the message, if the AsyncConnection has session
+  // security set up.  Some session security options do not
+  // actually calculate and check the signature, but they should
+  // handle the calls to sign_message and check_signature.  PLR
+  if (session_security.get() == NULL) {
+    ldout(async_msgr->cct, 20) << __func__ << " no session security" << dendl;
+  } else {
+    if (session_security->sign_message(m)) {
+      ldout(async_msgr->cct, 20) << __func__ << " failed to sign m="
+                                 << m << "): sig = " << m->get_footer().sig << dendl;
+    } else {
+      ldout(async_msgr->cct, 20) << __func__ << " signed m=" << m
+                                 << "): sig = " << m->get_footer().sig << dendl;
+    }
+  }
+
+  logger->inc(l_msgr_send_bytes, bl.length());
   ldout(async_msgr->cct, 20) << __func__ << " sending " << m->get_seq()
                              << " " << m << dendl;
   int rc = _try_send(complete_bl);

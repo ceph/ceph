@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<grammar xmlns="http://relaxng.org/ns/structure/1.0">
+  <start>
+    <ref name="crush_map_roots"/>
+  </start>
+  <define name="item">
+    <choice>
+      <ref name="bucket"/>
+      <ref name="device"/>
+    </choice>
+  </define>
+  <define name="device">
+    <element name="device">
+      <element name="id">
+        <text/>
+      </element>
+      <element name="name">
+        <text/>
+      </element>
+      <element name="type">
+        <text/>
+      </element>
+      <element name="type_id">
+        <text/>
+      </element>
+      <element name="crush_weight">
+        <text/>
+      </element>
+      <element name="depth">
+        <text/>
+      </element>
+    </element>
+  </define>
+  <define name="bucket">
+    <element name="bucket">
+      <element name="id">
+        <text/>
+      </element>
+      <element name="name">
+        <text/>
+      </element>
+      <element name="type">
+        <text/>
+      </element>
+      <element name="type_id">
+        <text/>
+      </element>
+      <element name="items">
+        <zeroOrMore>
+          <ref name="item"/>
+        </zeroOrMore>
+      </element>
+    </element>
+  </define>
+  <define name="crush_map_roots">
+    <element name="crush_map_roots">
+      <oneOrMore>
+        <ref name="bucket"/>
+      </oneOrMore>
+    </element>
+  </define>
+</grammar>

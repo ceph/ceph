@@ -2823,7 +2823,8 @@ namespace {
     PG_NUM, PGP_NUM, CRUSH_RULESET, HIT_SET_TYPE,
     HIT_SET_PERIOD, HIT_SET_COUNT, HIT_SET_FPP,
     AUID, TARGET_MAX_OBJECTS, TARGET_MAX_BYTES,
-    CACHE_TARGET_DIRTY_RATIO, CACHE_TARGET_FULL_RATIO,
+    CACHE_TARGET_DIRTY_RATIO, CACHE_TARGET_DIRTY_HIGH_RATIO,
+    CACHE_TARGET_FULL_RATIO,
     CACHE_MIN_FLUSH_AGE, CACHE_MIN_EVICT_AGE,
     ERASURE_CODE_PROFILE, MIN_READ_RECENCY_FOR_PROMOTE,
     WRITE_FADVISE_DONTNEED};
@@ -3269,6 +3270,7 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
       ("auid", AUID)("target_max_objects", TARGET_MAX_OBJECTS)
       ("target_max_bytes", TARGET_MAX_BYTES)
       ("cache_target_dirty_ratio", CACHE_TARGET_DIRTY_RATIO)
+      ("cache_target_dirty_high_ratio", CACHE_TARGET_DIRTY_HIGH_RATIO)
       ("cache_target_full_ratio", CACHE_TARGET_FULL_RATIO)
       ("cache_min_flush_age", CACHE_MIN_FLUSH_AGE)
       ("cache_min_evict_age", CACHE_MIN_EVICT_AGE)
@@ -3281,8 +3283,8 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
     const choices_set_t ONLY_TIER_CHOICES = boost::assign::list_of
       (HIT_SET_TYPE)(HIT_SET_PERIOD)(HIT_SET_COUNT)(HIT_SET_FPP)
       (TARGET_MAX_OBJECTS)(TARGET_MAX_BYTES)(CACHE_TARGET_FULL_RATIO)
-      (CACHE_TARGET_DIRTY_RATIO)(CACHE_MIN_FLUSH_AGE)(CACHE_MIN_EVICT_AGE)
-      (MIN_READ_RECENCY_FOR_PROMOTE);
+      (CACHE_TARGET_DIRTY_RATIO)(CACHE_TARGET_DIRTY_HIGH_RATIO)(CACHE_MIN_FLUSH_AGE)
+      (CACHE_MIN_EVICT_AGE)(MIN_READ_RECENCY_FOR_PROMOTE);
 
     const choices_set_t ONLY_ERASURE_CHOICES = boost::assign::list_of
       (ERASURE_CODE_PROFILE);
@@ -3393,6 +3395,12 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
 	    f->dump_float("cache_target_dirty_ratio",
 			  ((float)p->cache_target_dirty_ratio_micro/1000000));
 	    break;
+	  case CACHE_TARGET_DIRTY_HIGH_RATIO:
+	    f->dump_unsigned("cache_target_dirty_high_ratio_micro",
+			     p->cache_target_dirty_high_ratio_micro);
+	    f->dump_float("cache_target_dirty_high_ratio",
+			  ((float)p->cache_target_dirty_high_ratio_micro/1000000));
+	    break;
 	  case CACHE_TARGET_FULL_RATIO:
 	    f->dump_unsigned("cache_target_full_ratio_micro",
 			     p->cache_target_full_ratio_micro);
@@ -3481,6 +3489,10 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
 	  case CACHE_TARGET_DIRTY_RATIO:
 	    ss << "cache_target_dirty_ratio: "
 	       << ((float)p->cache_target_dirty_ratio_micro/1000000) << "\n";
+	    break;
+	  case CACHE_TARGET_DIRTY_HIGH_RATIO:
+	    ss << "cache_target_dirty_high_ratio: "
+	       << ((float)p->cache_target_dirty_high_ratio_micro/1000000) << "\n";
 	    break;
 	  case CACHE_TARGET_FULL_RATIO:
 	    ss << "cache_target_full_ratio: "
@@ -3706,6 +3718,12 @@ stats_out:
     f->flush(rs);
     rs << "\n";
     rdata.append(rs.str());
+  } else if (prefix == "osd crush tree") {
+    boost::scoped_ptr<Formatter> f(Formatter::create(format, "json-pretty", "json-pretty"));
+    f->open_array_section("crush_map_roots");
+    osdmap.crush->dump_tree(f.get());
+    f->close_section();
+    f->flush(rdata);
   } else if (prefix == "osd erasure-code-profile ls") {
     const map<string,map<string,string> > &profiles =
       osdmap.get_erasure_code_profiles();
@@ -4326,6 +4344,21 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid,
 {
   if (name.length() == 0)
     return -EINVAL;
+  if (pg_num == 0)
+    pg_num = g_conf->osd_pool_default_pg_num;
+  if (pgp_num == 0)
+    pgp_num = g_conf->osd_pool_default_pgp_num;
+  if (pg_num > (unsigned)g_conf->mon_max_pool_pg_num) {
+    *ss << "'pg_num' must be greater than 0 and less than or equal to "
+        << g_conf->mon_max_pool_pg_num
+        << " (you may adjust 'mon max pool pg num' for higher values)";
+    return -ERANGE;
+  }
+  if (pgp_num > pg_num) {
+    *ss << "'pgp_num' must be greater than 0 and lower or equal than 'pg_num'"
+        << ", which in this case is " << pg_num;
+    return -ERANGE;
+  }
   int r;
   r = prepare_pool_crush_ruleset(pool_type, erasure_code_profile,
 				 crush_ruleset_name, &crush_ruleset, ss);
@@ -4368,14 +4401,16 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid,
   pi->crush_ruleset = crush_ruleset;
   pi->expected_num_objects = expected_num_objects;
   pi->object_hash = CEPH_STR_HASH_RJENKINS;
-  pi->set_pg_num(pg_num ? pg_num : g_conf->osd_pool_default_pg_num);
-  pi->set_pgp_num(pgp_num ? pgp_num : g_conf->osd_pool_default_pgp_num);
+  pi->set_pg_num(pg_num);
+  pi->set_pgp_num(pgp_num);
   pi->last_change = pending_inc.epoch;
   pi->auid = auid;
   pi->erasure_code_profile = erasure_code_profile;
   pi->stripe_width = stripe_width;
   pi->cache_target_dirty_ratio_micro =
     g_conf->osd_pool_default_cache_target_dirty_ratio * 1000000;
+  pi->cache_target_dirty_high_ratio_micro =
+    g_conf->osd_pool_default_cache_target_dirty_high_ratio * 1000000;
   pi->cache_target_full_ratio_micro =
     g_conf->osd_pool_default_cache_target_full_ratio * 1000000;
   pi->cache_min_flush_age = g_conf->osd_pool_default_cache_min_flush_age;
@@ -4502,6 +4537,7 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
        var == "hit_set_count" || var == "hit_set_fpp" ||
        var == "target_max_objects" || var == "target_max_bytes" ||
        var == "cache_target_full_ratio" || var == "cache_target_dirty_ratio" ||
+       var == "cache_target_dirty_high_ratio" ||
        var == "cache_min_flush_age" || var == "cache_min_evict_age")) {
     ss << "pool '" << poolstr << "' is not a tier pool: variable not applicable";
     return -EACCES;
@@ -4731,6 +4767,16 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
       return -ERANGE;
     }
     p.cache_target_dirty_ratio_micro = uf;
+  } else if (var == "cache_target_dirty_high_ratio") {
+    if (floaterr.length()) {
+      ss << "error parsing float '" << val << "': " << floaterr;
+      return -EINVAL;
+    }
+    if (f < 0 || f > 1.0) {
+      ss << "value must be in the range 0..1";
+      return -ERANGE;
+    }
+    p.cache_target_dirty_high_ratio_micro = uf;
   } else if (var == "cache_target_full_ratio") {
     if (floaterr.length()) {
       ss << "error parsing float '" << val << "': " << floaterr;
@@ -6250,21 +6296,7 @@ done:
     int64_t  pg_num;
     int64_t pgp_num;
     cmd_getval(g_ceph_context, cmdmap, "pg_num", pg_num, int64_t(0));
-    if ((pg_num == 0) || (pg_num > g_conf->mon_max_pool_pg_num)) {
-      ss << "'pg_num' must be greater than 0 and less than or equal to "
-	 << g_conf->mon_max_pool_pg_num
-	 << " (you may adjust 'mon max pool pg num' for higher values)";
-      err = -ERANGE;
-      goto reply;
-    }
-
     cmd_getval(g_ceph_context, cmdmap, "pgp_num", pgp_num, pg_num);
-    if ((pgp_num == 0) || (pgp_num > pg_num)) {
-      ss << "'pgp_num' must be greater than 0 and lower or equal than 'pg_num'"
-	 << ", which in this case is " << pg_num;
-      err = -ERANGE;
-      goto reply;
-    }
 
     string pool_type_str;
     cmd_getval(g_ceph_context, cmdmap, "pool_type", pool_type_str);
@@ -6380,6 +6412,8 @@ done:
       case -EAGAIN:
 	wait_for_finished_proposal(new C_RetryMessage(this, m));
 	return true;
+      case -ERANGE:
+        goto reply;
       default:
 	goto reply;
 	break;
@@ -7320,6 +7354,14 @@ bool OSDMonitor::_check_become_tier(
     *err = 0;
     *ss << "pool '" << tier_pool_name << "' is now (or already was) a tier of '"
       << base_pool_name << "'";
+    return false;
+  }
+
+  if (base_pool->is_tier()) {
+    *ss << "pool '" << base_pool_name << "' is already a tier of '"
+      << osdmap.get_pool_name(base_pool->tier_of) << "', "
+      << "multiple tiers are not yet supported.";
+    *err = -EINVAL;
     return false;
   }
 

@@ -162,21 +162,19 @@ void LevelDBStore::LevelDBTransactionImpl::set(
   const string &k,
   const bufferlist &to_set_bl)
 {
-  buffers.push_back(to_set_bl);
-  bufferlist &bl = *(buffers.rbegin());
   string key = combine_strings(prefix, k);
-  keys.push_back(key);
-  bat.Delete(leveldb::Slice(*(keys.rbegin())));
-  bat.Put(leveldb::Slice(*(keys.rbegin())),
-	  leveldb::Slice(bl.c_str(), bl.length()));
+  //bufferlist::c_str() is non-constant, so we need to make a copy
+  bufferlist val = to_set_bl;
+  bat.Delete(leveldb::Slice(key));
+  bat.Put(leveldb::Slice(key),
+	  leveldb::Slice(val.c_str(), val.length()));
 }
 
 void LevelDBStore::LevelDBTransactionImpl::rmkey(const string &prefix,
 					         const string &k)
 {
   string key = combine_strings(prefix, k);
-  keys.push_back(key);
-  bat.Delete(leveldb::Slice(*(keys.rbegin())));
+  bat.Delete(leveldb::Slice(key));
 }
 
 void LevelDBStore::LevelDBTransactionImpl::rmkeys_by_prefix(const string &prefix)
@@ -186,8 +184,7 @@ void LevelDBStore::LevelDBTransactionImpl::rmkeys_by_prefix(const string &prefix
        it->valid();
        it->next()) {
     string key = combine_strings(prefix, it->key());
-    keys.push_back(key);
-    bat.Delete(*(keys.rbegin()));
+    bat.Delete(key);
   }
 }
 

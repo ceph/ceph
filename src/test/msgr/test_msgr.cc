@@ -737,6 +737,12 @@ class SyntheticDispatcher : public Dispatcher {
     got_remote_reset = true;
   }
   void ms_fast_dispatch(Message *m) {
+    // MSG_COMMAND is used to disorganize regular message flow
+    if (m->get_type() == MSG_COMMAND) {
+      m->put();
+      return ;
+    }
+
     Mutex::Locker l(lock);
     uint64_t i;
     bool reply;
@@ -938,15 +944,28 @@ class SyntheticWorkload {
   }
 
   void send_message() {
-    Message *m = new MPing();
-    bufferlist bl;
-    boost::uniform_int<> u(0, rand_data.size()-1);
-    uint64_t index = u(rng);
-    bl = rand_data[index];
-    m->set_data(bl);
     Mutex::Locker l(lock);
     ConnectionRef conn = _get_random_connection();
-    dispatcher.send_message_wrap(conn, m);
+    boost::uniform_int<> true_false(0, 99);
+    int val = true_false(rng);
+    if (val >= 95) {
+      uuid_d uuid;
+      uuid.generate_random();
+      MCommand *m = new MCommand(uuid);
+      vector<string> cmds;
+      cmds.push_back("command");
+      m->cmd = cmds;
+      m->set_priority(200);
+      conn->send_message(m);
+    } else {
+      Message *m = new MPing();
+      bufferlist bl;
+      boost::uniform_int<> u(0, rand_data.size()-1);
+      uint64_t index = u(rng);
+      bl = rand_data[index];
+      m->set_data(bl);
+      dispatcher.send_message_wrap(conn, m);
+    }
   }
 
   void drop_connection() {
