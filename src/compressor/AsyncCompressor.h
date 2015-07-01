@@ -22,7 +22,6 @@
 #include "Compressor.h"
 #include "common/WorkQueue.h"
 
-class AsyncCompressor;
 
 class AsyncCompressor {
  private:
@@ -76,7 +75,7 @@ class AsyncCompressor {
       while (!job_queue.empty()) {
         item = job_queue.front();
         job_queue.pop_front();
-        if (item->status.cas(WAIT, WORKING)) {
+        if (item->status.compare_and_swap(WAIT, WORKING)) {
           break;
         } else {
           Mutex::Locker (async_compressor->job_lock);
@@ -96,7 +95,7 @@ class AsyncCompressor {
         r = async_compressor->compressor->decompress(item->data, out);
       if (!r) {
         item->data.swap(out);
-        assert(item->status.cas(WORKING, DONE));
+        assert(item->status.compare_and_swap(WORKING, DONE));
       } else {
         item->status.set(ERROR);
       }
