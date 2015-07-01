@@ -746,13 +746,21 @@ int FileJournal::read_header(header_t *hdr) const
   bufferlist bl;
 
   buffer::ptr bp = buffer::create_page_aligned(block_size);
-  bp.zero();
-  int r = ::pread(fd, bp.c_str(), bp.length(), 0);
+  char* bpdata = bp.c_str();
+  int r = ::pread(fd, bpdata, bp.length(), 0);
 
   if (r < 0) {
     int err = errno;
     dout(0) << "read_header got " << cpp_strerror(err) << dendl;
     return -err;
+  }
+
+  // don't use bp.zero() here, because it also invalidates
+  // crc cache (which is not yet populated anyway)
+  if (bp.length() != (size_t)r) {
+      // r will be always less or equal than bp.length
+      bpdata += r;
+      memset(bpdata, 0, bp.length() - r);
   }
 
   bl.push_back(bp);
@@ -793,8 +801,12 @@ bufferptr FileJournal::prepare_header()
   }
   ::encode(header, bl);
   bufferptr bp = buffer::create_page_aligned(get_top());
-  bp.zero();
-  memcpy(bp.c_str(), bl.c_str(), bl.length());
+  // don't use bp.zero() here, because it also invalidates
+  // crc cache (which is not yet populated anyway)
+  char* data = bp.c_str();
+  memcpy(data, bl.c_str(), bl.length());
+  data += bl.length();
+  memset(data, 0, bp.length()-bl.length());
   return bp;
 }
 
