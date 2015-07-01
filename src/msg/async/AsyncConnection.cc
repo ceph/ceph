@@ -2201,23 +2201,6 @@ void AsyncConnection::prepare_send_message(uint64_t features, Message *m, buffer
                              << " data=" << header.data_len
                              << " off " << header.data_off << dendl;
 
-  // Now that we have all the crcs calculated, handle the
-  // digital signature for the message, if the AsyncConnection has session
-  // security set up.  Some session security options do not
-  // actually calculate and check the signature, but they should
-  // handle the calls to sign_message and check_signature.  PLR
-  if (session_security.get() == NULL) {
-    ldout(async_msgr->cct, 20) << __func__ << " no session security" << dendl;
-  } else {
-    if (session_security->sign_message(m)) {
-      ldout(async_msgr->cct, 20) << __func__ << " failed to sign m="
-                                 << m << "): sig = " << footer.sig << dendl;
-    } else {
-      ldout(async_msgr->cct, 20) << __func__ << " signed m=" << m
-                                 << "): sig = " << footer.sig << dendl;
-    }
-  }
-
   bl.append(m->get_payload());
   bl.append(m->get_middle());
   bl.append(m->get_data());
@@ -2274,6 +2257,24 @@ int AsyncConnection::write_message(Message *m, bufferlist& bl)
   }
 
   complete_bl.claim_append(bl);
+
+  // TODO: let sign_message could be reentry?
+  // Now that we have all the crcs calculated, handle the
+  // digital signature for the message, if the AsyncConnection has session
+  // security set up.  Some session security options do not
+  // actually calculate and check the signature, but they should
+  // handle the calls to sign_message and check_signature.  PLR
+  if (session_security.get() == NULL) {
+    ldout(async_msgr->cct, 20) << __func__ << " no session security" << dendl;
+  } else {
+    if (session_security->sign_message(m)) {
+      ldout(async_msgr->cct, 20) << __func__ << " failed to sign m="
+                                 << m << "): sig = " << m->get_footer().sig << dendl;
+    } else {
+      ldout(async_msgr->cct, 20) << __func__ << " signed m=" << m
+                                 << "): sig = " << m->get_footer().sig << dendl;
+    }
+  }
 
   logger->inc(l_msgr_send_bytes, bl.length());
   ldout(async_msgr->cct, 20) << __func__ << " sending " << m->get_seq()
