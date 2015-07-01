@@ -37,11 +37,12 @@ class TestMDSAutoRepair(CephFSTestCase):
         # create more files in another directory. make sure MDS trim dentries in testdir1
         self.mount_a.run_shell(["sudo", "bash", "-c", create_script.format("testdir2")])
 
+        # drop inodes caps
+        self.mount_a.umount_wait()
+
         # flush journal entries to dirfrag objects
         self.fs.mds_asok(['flush', 'journal'])
 
-        # drop inodes caps
-        self.mount_a.umount_wait()
         self.mount_a.mount()
         self.mount_a.wait_until_mounted()
 
