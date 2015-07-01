@@ -32,6 +32,11 @@ public:
 
   int get_obj(const string& uid, req_info *info /* optional */, rgw_obj& obj, bool prepend_metadata, RGWGetDataCB *cb, RGWRESTStreamReadRequest **req);
   int complete_request(RGWRESTStreamReadRequest *req, string& etag, time_t *mtime, map<string, string>& attrs);
+
+  int get_resource(const string& resource,
+                   list<pair<string, string> > *extra_params,
+                   map<string, string>* extra_headers,
+                   bufferlist& bl);
 };
 
 #endif

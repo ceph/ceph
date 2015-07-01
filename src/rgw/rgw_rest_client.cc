@@ -546,6 +546,12 @@ int RGWRESTStreamReadRequest::get_obj(RGWAccessKey& key, map<string, string>& ex
   url_encode(obj.bucket.name, urlsafe_bucket);
   url_encode(obj.get_object(), urlsafe_object);
   string resource = urlsafe_bucket + "/" + urlsafe_object;
+
+  return get_resource(key, extra_headers, resource);
+}
+
+int RGWRESTStreamReadRequest::get_resource(RGWAccessKey& key, map<string, string>& extra_headers, const string& resource)
+{
   string new_url = url;
   if (new_url[new_url.size() - 1] != '/')
     new_url.append("/");
@@ -560,7 +566,14 @@ int RGWRESTStreamReadRequest::get_obj(RGWAccessKey& key, map<string, string>& ex
   map<string, string>& args = new_info.args.get_params();
   get_params_str(args, params_str);
 
-  new_url.append(resource + params_str);
+  string new_resource;
+  if (resource[0] == '/') {
+    new_resource = resource.substr(1);
+  } else {
+    new_resource = resource;
+  }
+
+  new_url.append(new_resource + params_str);
 
   new_env.set("HTTP_DATE", date_str.c_str());
 
@@ -572,7 +585,7 @@ int RGWRESTStreamReadRequest::get_obj(RGWAccessKey& key, map<string, string>& ex
   new_info.method = "GET";
 
   new_info.script_uri = "/";
-  new_info.script_uri.append(resource);
+  new_info.script_uri.append(new_resource);
   new_info.request_uri = new_info.script_uri;
 
   new_info.init_meta_info(NULL);
