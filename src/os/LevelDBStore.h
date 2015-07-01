@@ -177,10 +177,7 @@ public:
   class LevelDBTransactionImpl : public KeyValueDB::TransactionImpl {
   public:
     leveldb::WriteBatch bat;
-    list<bufferlist> buffers;
-    list<string> keys;
     LevelDBStore *db;
-
     LevelDBTransactionImpl(LevelDBStore *db) : db(db) {}
     void set(
       const string &prefix,
