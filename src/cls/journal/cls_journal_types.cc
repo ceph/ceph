@@ -3,6 +3,7 @@
 
 #include "cls/journal/cls_journal_types.h"
 #include "common/Formatter.h"
+#include <set>
 
 namespace cls {
 namespace journal {
@@ -29,6 +30,28 @@ void EntryPosition::dump(Formatter *f) {
 void EntryPosition::generate_test_instances(std::list<EntryPosition *> &o) {
   o.push_back(new EntryPosition());
   o.push_back(new EntryPosition("id", 2));
+}
+
+bool ObjectSetPosition::operator<(const ObjectSetPosition& rhs) const {
+  if (entry_positions.size() < rhs.entry_positions.size()) {
+    return true;
+  } else if (entry_positions.size() > rhs.entry_positions.size()) {
+    return false;
+  }
+
+  std::map<std::string, uint64_t> rhs_tids;
+  for (EntryPositions::const_iterator it = rhs.entry_positions.begin();
+       it != rhs.entry_positions.end(); ++it) {
+    rhs_tids[it->tag] = it->tid;
+  }
+
+  for (size_t i=0; i<entry_positions.size(); ++i) {
+    const EntryPosition &entry_position = entry_positions[i];
+    if (entry_position.tid < rhs_tids[entry_position.tag]) {
+      return true;
+    }
+  }
+  return false;
 }
 
 void ObjectSetPosition::encode(bufferlist& bl) const {
@@ -98,6 +121,24 @@ void Client::generate_test_instances(std::list<Client *> &o) {
   entry_positions.push_back(EntryPosition("tag1", 120));
   entry_positions.push_back(EntryPosition("tag1", 121));
   o.push_back(new Client("id", "desc", ObjectSetPosition(1, entry_positions)));
+}
+
+std::ostream &operator<<(std::ostream &os,
+                         const EntryPosition &entry_position) {
+  os << "[tag=" << entry_position.tag << ", tid="
+     << entry_position.tid << "]";
+  return os;
+}
+
+std::ostream &operator<<(std::ostream &os,
+                         const ObjectSetPosition &object_set_position) {
+  os << "[object_number=" << object_set_position.object_number << ", "
+     << "positions=[";
+  for (size_t i=0; i<object_set_position.entry_positions.size(); ++i) {
+    os << object_set_position.entry_positions[i];
+  }
+  os << "]]";
+  return os;
 }
 
 } // namespace journal

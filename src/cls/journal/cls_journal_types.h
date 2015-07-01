@@ -7,6 +7,7 @@
 #include "include/int_types.h"
 #include "include/buffer.h"
 #include "include/encoding.h"
+#include <iosfwd>
 #include <string>
 #include <vector>
 
@@ -47,6 +48,10 @@ struct ObjectSetPosition {
                     const EntryPositions &_entry_positions)
     : object_number(_object_number), entry_positions(_entry_positions) {}
 
+  bool operator<(const ObjectSetPosition& rhs) const;
+  inline bool operator<=(const ObjectSetPosition& rhs) const {
+    return (*this == rhs || *this < rhs);
+  }
   inline bool operator==(const ObjectSetPosition &rhs) const {
     return (object_number == rhs.object_number &&
             entry_positions == rhs.entry_positions);
@@ -87,6 +92,11 @@ struct Client {
 WRITE_CLASS_ENCODER(EntryPosition);
 WRITE_CLASS_ENCODER(ObjectSetPosition);
 WRITE_CLASS_ENCODER(Client);
+
+std::ostream &operator<<(std::ostream &os,
+                         const EntryPosition &entry_position);
+std::ostream &operator<<(std::ostream &os,
+                         const ObjectSetPosition &object_set_position);
 
 } // namespace journal
 } // namespace cls
