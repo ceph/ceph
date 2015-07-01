@@ -249,8 +249,6 @@ def start_rgw(ctx, config):
                         tdir=testdir,
                         client=client,
                         ),
-                    '--rgw-frontends',
-                    'fastcgi socket_port=9000 socket_host=0.0.0.0',
                 ])
             else:
                 # for mod_proxy_fcgi, using tcp
