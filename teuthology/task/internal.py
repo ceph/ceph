@@ -603,7 +603,8 @@ def syslog(ctx, config):
     conf_fp = StringIO('\n'.join(conf_lines))
     try:
         for rem in ctx.cluster.remotes.iterkeys():
-            if rem.os.package_type == 'rpm':
+            # Exclude downburst VMs for now; they have SELinux disabled
+            if rem.os.package_type == 'rpm' and not misc.is_vm(rem.shortname):
                 log_context = 'system_u:object_r:var_log_t:s0'
                 for log_path in (kern_log, misc_log):
                     rem.run(
