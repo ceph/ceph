@@ -1078,3 +1078,9 @@ void MDSCacheObject::dump_states(Formatter *f) const
   if (state_test(STATE_REJOINUNDEF))
     f->dump_string("state", "rejoinundef");
 }
+
+void ceph_file_layout_wrapper::dump(Formatter *f) const
+{
+  ::dump(static_cast<const ceph_file_layout&>(*this), f);
+}
+
