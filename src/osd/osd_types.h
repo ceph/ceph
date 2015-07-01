@@ -84,6 +84,24 @@ WRITE_EQ_OPERATORS_2(pg_shard_t, osd, shard)
 WRITE_CMP_OPERATORS_2(pg_shard_t, osd, shard)
 ostream &operator<<(ostream &lhs, const pg_shard_t &rhs);
 
+class IsPGRecoverablePredicate {
+public:
+  /**
+   * have encodes the shards available
+   */
+  virtual bool operator()(const set<pg_shard_t> &have) const = 0;
+  virtual ~IsPGRecoverablePredicate() {}
+};
+
+class IsPGReadablePredicate {
+public:
+  /**
+   * have encodes the shards available
+   */
+  virtual bool operator()(const set<pg_shard_t> &have) const = 0;
+  virtual ~IsPGReadablePredicate() {}
+};
+
 inline ostream& operator<<(ostream& out, const osd_reqid_t& r) {
   return out << r.name << "." << r.inc << ":" << r.tid;
 }

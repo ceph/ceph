@@ -1293,7 +1293,7 @@ bool PG::choose_acting(pg_shard_t &auth_log_shard_id)
   }
 
   /* Check whether we have enough acting shards to later perform recovery */
-  boost::scoped_ptr<PGBackend::IsRecoverablePredicate> recoverable_predicate(
+  boost::scoped_ptr<IsPGRecoverablePredicate> recoverable_predicate(
     get_pgbackend()->get_is_recoverable_predicate());
   set<pg_shard_t> have;
   for (int i = 0; i < (int)want.size(); ++i) {
@@ -7467,7 +7467,7 @@ void PG::RecoveryState::RecoveryMachine::log_exit(const char *state_name, utime_
 #define dout_prefix (*_dout << (debug_pg ? debug_pg->gen_prefix() : string()) << " PriorSet: ")
 
 PG::PriorSet::PriorSet(bool ec_pool,
-		       PGBackend::IsRecoverablePredicate *c,
+		       IsPGRecoverablePredicate *c,
 		       const OSDMap &osdmap,
 		       const map<epoch_t, pg_interval_t> &past_intervals,
 		       const vector<int> &up,
