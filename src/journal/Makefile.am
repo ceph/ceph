@@ -9,6 +9,7 @@ libjournal_la_SOURCES = \
 	journal/JournalMetadata.cc \
 	journal/JournalPlayer.cc \
 	journal/JournalRecorder.cc \
+	journal/JournalTrimmer.cc \
 	journal/ObjectPlayer.cc \
 	journal/ObjectRecorder.cc \
 	journal/Payload.cc \
@@ -24,6 +25,7 @@ noinst_HEADERS += \
 	journal/JournalMetadata.h \
 	journal/JournalPlayer.h \
 	journal/JournalRecorder.h \
+	journal/JournalTrimmer.h \
 	journal/ObjectPlayer.h \
 	journal/ObjectRecorder.h \
 	journal/Payload.h \

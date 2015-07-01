@@ -39,7 +39,7 @@ public:
   };
 
   JournalMetadata(librados::IoCtx &ioctx, const std::string &oid,
-                  const std::string &client_id);
+                  const std::string &client_id, double commit_interval);
   ~JournalMetadata();
 
   int init();
@@ -50,6 +50,9 @@ public:
   int register_client(const std::string &description);
   int unregister_client();
 
+  inline const std::string &get_client_id() const {
+    return m_client_id;
+  }
   inline uint8_t get_order() const {
     return m_order;
   }
@@ -83,6 +86,11 @@ public:
     *commit_position = m_client.commit_position;
   }
 
+  void get_registered_clients(RegisteredClients *registered_clients) {
+    Mutex::Locker locker(m_lock);
+    *registered_clients = m_registered_clients;
+  }
+
   inline uint64_t allocate_tid(const std::string &tag) {
     Mutex::Locker locker(m_lock);
     return m_allocated_tids[tag]++;
@@ -91,6 +99,7 @@ public:
   bool get_last_allocated_tid(const std::string &tag, uint64_t *tid) const;
 
   void notify_update();
+  void async_notify_update();
 
 private:
   typedef std::map<std::string, uint64_t> AllocatedTids;
@@ -122,6 +131,17 @@ private:
     }
   };
 
+  struct C_CommitPositionTask : public Context {
+    JournalMetadataPtr journal_metadata;
+
+    C_CommitPositionTask(JournalMetadata *_journal_metadata)
+      : journal_metadata(_journal_metadata) {}
+
+    virtual void finish(int r) {
+      journal_metadata->handle_commit_position_task();
+    };
+  };
+
   struct C_NotifyUpdate : public Context {
     JournalMetadataPtr journal_metadata;
     Context *on_safe;
@@ -131,7 +151,7 @@ private:
 
     virtual void finish(int r) {
       if (r == 0) {
-        journal_metadata->notify_update();
+        journal_metadata->async_notify_update();
       }
       if (on_safe != NULL) {
         on_safe->complete(r);
@@ -159,6 +179,7 @@ private:
   CephContext *m_cct;
   std::string m_oid;
   std::string m_client_id;
+  double m_commit_interval;
 
   uint8_t m_order;
   uint8_t m_splay_width;
@@ -184,8 +205,15 @@ private:
   size_t m_update_notifications;
   Cond m_update_cond;
 
+  bool m_commit_position_pending;
+  ObjectSetPosition m_commit_position;
+  Context *m_commit_position_ctx;
+
   void refresh(Context *on_finish);
   void handle_refresh_complete(C_Refresh *refresh, int r);
+
+  void schedule_commit_task();
+  void handle_commit_position_task();
 
   void schedule_watch_reset();
   void handle_watch_reset();

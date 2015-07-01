@@ -20,6 +20,7 @@ namespace journal {
 class JournalMetadata;
 class JournalPlayer;
 class JournalRecorder;
+class JournalTrimmer;
 class ReplayHandler;
 
 class Journaler {
@@ -40,6 +41,8 @@ public:
   bool try_pop_front(Payload *payload);
   void stop_replay();
 
+  void update_commit_position(const Payload &payload);
+
   void start_append();
   Future append(const std::string &tag, const bufferlist &bl);
   void stop_append();
@@ -56,6 +59,7 @@ private:
   JournalMetadata *m_metadata;
   JournalPlayer *m_player;
   JournalRecorder *m_recorder;
+  JournalTrimmer *m_trimmer;
 
   void create_player(ReplayHandler *replay_handler);
 };
