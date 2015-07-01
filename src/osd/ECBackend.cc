@@ -196,6 +196,7 @@ struct OnRecoveryReadComplete :
     : pg(pg), hoid(hoid) {}
   void finish(pair<RecoveryMessages *, ECBackend::read_result_t &> &in) {
     ECBackend::read_result_t &res = in.second;
+    // FIXME???
     assert(res.r == 0);
     assert(res.errors.empty());
     assert(res.returned.size() == 1);
@@ -885,33 +886,59 @@ void ECBackend::handle_sub_read(
   ECSubRead &op,
   ECSubReadReply *reply)
 {
+  shard_id_t shard = get_parent()->whoami_shard().shard;
   for(map<hobject_t, list<boost::tuple<uint64_t, uint64_t, uint32_t> >, hobject_t::BitwiseComparator>::iterator i =
         op.to_read.begin();
       i != op.to_read.end();
       ++i) {
-    for (list<boost::tuple<uint64_t, uint64_t, uint32_t> >::iterator j = i->second.begin();
-	 j != i->second.end();
-	 ++j) {
+    bufferhash h(-1);
+    uint64_t total_read = 0;
+    list<boost::tuple<uint64_t, uint64_t, uint32_t> >::iterator j;
+    for (j = i->second.begin(); j != i->second.end(); ++j) {
       bufferlist bl;
       int r = store->read(
 	coll,
-	ghobject_t(
-	  i->first, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
+	ghobject_t(i->first, ghobject_t::NO_GEN, shard),
 	j->get<0>(),
 	j->get<1>(),
 	bl, j->get<2>(),
-	false);
+	true); // Allow EIO return
       if (r < 0) {
-	assert(0);
 	reply->buffers_read.erase(i->first);
 	reply->errors[i->first] = r;
 	break;
       } else {
+        dout(20) << __func__ << " read request=" << j->get<1>() << " r=" << r << " len=" << bl.length() << dendl;
+	total_read += r;
+        h << bl;
 	reply->buffers_read[i->first].push_back(
 	  make_pair(
 	    j->get<0>(),
 	    bl)
 	  );
+      }
+    }
+    // If all reads happened then lets check digest
+    if (j == i->second.end()) {
+      dout(20) << __func__ << ": Checking hash of " << i->first << dendl;
+      ECUtil::HashInfoRef hinfo = get_hash_info(i->first);
+      // This shows that we still need deep scrub because large enough files
+      // are read in sections, so the digest check here won't be done here.
+      if (!hinfo || (total_read == hinfo->get_total_chunk_size() &&
+	  h.digest() != hinfo->get_chunk_hash(shard))) {
+        if (!hinfo) {
+	  get_parent()->clog_error() << __func__ << ": No hinfo for " << i->first << "\n";
+	  dout(5) << __func__ << ": No hinfo for " << i->first << dendl;
+	} else {
+	  get_parent()->clog_error() << __func__ << ": Bad hash for " << i->first << " digest 0x"
+	          << hex << h.digest() << " expected 0x" << hinfo->get_chunk_hash(shard) << dec << "\n";
+	  dout(5) << __func__ << ": Bad hash for " << i->first << " digest 0x"
+	          << hex << h.digest() << " expected 0x" << hinfo->get_chunk_hash(shard) << dec << dendl;
+	}
+	// Do NOT check osd_read_eio_on_bad_digest here.  We need to report
+	// the state of our chunk in case other chunks could substitute.
+	reply->buffers_read.erase(i->first);
+	reply->errors[i->first] = -EIO;
       }
     }
   }
@@ -928,7 +955,6 @@ void ECBackend::handle_sub_read(
 	*i, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
       reply->attrs_read[*i]);
     if (r < 0) {
-      assert(0);
       reply->buffers_read.erase(*i);
       reply->errors[*i] = r;
     }
@@ -973,7 +999,7 @@ void ECBackend::handle_sub_read_reply(
 	 op.buffers_read.begin();
        i != op.buffers_read.end();
        ++i) {
-    assert(!op.errors.count(i->first));
+    assert(!op.errors.count(i->first));	// If attribute error we better not have sent a buffer
     if (!rop.to_read.count(i->first)) {
       // We canceled this read! @see filter_read_op
       continue;
@@ -999,7 +1025,7 @@ void ECBackend::handle_sub_read_reply(
   for (map<hobject_t, map<string, bufferlist>, hobject_t::BitwiseComparator>::iterator i = op.attrs_read.begin();
        i != op.attrs_read.end();
        ++i) {
-    assert(!op.errors.count(i->first));
+    assert(!op.errors.count(i->first));	// if read error better not have sent an attribute
     if (!rop.to_read.count(i->first)) {
       // We canceled this read! @see filter_read_op
       continue;
@@ -1019,7 +1045,7 @@ void ECBackend::handle_sub_read_reply(
   }
 
   map<pg_shard_t, set<ceph_tid_t> >::iterator siter =
-shard_to_read_map.find(from);
+					shard_to_read_map.find(from);
   assert(siter != shard_to_read_map.end());
   assert(siter->second.count(op.tid));
   siter->second.erase(op.tid);
@@ -1664,6 +1690,8 @@ struct CallClientContexts :
     : ec(ec), status(status), to_read(to_read) {}
   void finish(pair<RecoveryMessages *, ECBackend::read_result_t &> &in) {
     ECBackend::read_result_t &res = in.second;
+    if (res.r != 0)
+      goto out;
     assert(res.returned.size() == to_read.size());
     assert(res.r == 0);
     assert(res.errors.empty());
@@ -1703,12 +1731,13 @@ struct CallClientContexts :
       }
       res.returned.pop_front();
     }
+out:
     status->complete = true;
     list<ECBackend::ClientAsyncReadStatus> &ip =
       ec->in_progress_client_reads;
     while (ip.size() && ip.front().complete) {
       if (ip.front().on_complete) {
-	ip.front().on_complete->complete(0);
+	ip.front().on_complete->complete(res.r);
 	ip.front().on_complete = NULL;
       }
       ip.pop_front();

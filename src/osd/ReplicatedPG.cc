@@ -3650,12 +3650,35 @@ static int check_offset_and_length(uint64_t offset, uint64_t length, uint64_t ma
   return 0;
 }
 
-struct FillInExtent : public Context {
+struct FillInVerifyExtent : public Context {
   ceph_le64 *r;
-  FillInExtent(ceph_le64 *r) : r(r) {}
-  void finish(int _r) {
-    if (_r >= 0) {
-      *r = _r;
+  int32_t *rval;
+  bufferlist *outdatap;
+  boost::optional<uint32_t> maybe_crc;
+  uint64_t size;
+  OSDService *osd;
+  hobject_t soid;
+  __le32 flags;
+  FillInVerifyExtent(ceph_le64 *r, int32_t *rv, bufferlist *blp,
+		     boost::optional<uint32_t> mc, uint64_t size,
+		     OSDService *osd, hobject_t soid, __le32 flags) :
+    r(r), rval(rv), outdatap(blp), maybe_crc(mc),
+    size(size), osd(osd), soid(soid), flags(flags) {}
+  void finish(int len) {
+    *rval = len;
+    *r = len;
+    // whole object?  can we verify the checksum?
+    if (maybe_crc && *r == size) {
+      uint32_t crc = outdatap->crc32c(-1);
+      if (maybe_crc != crc) {
+        osd->clog->error() << std::hex << " full-object read crc 0x" << crc
+			   << " != expected 0x" << *maybe_crc
+			   << std::dec << " on " << soid << "\n";
+        if (!(flags & CEPH_OSD_OP_FLAG_FAILOK)) {
+	  *rval = -EIO;
+	  *r = 0;
+	}
+      }
     }
   }
 };
@@ -3811,15 +3834,27 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 
 	// read into a buffer
 	bufferlist bl;
+	bool async = false;
 	if (trimmed_read && op.extent.length == 0) {
 	  // read size was trimmed to zero and it is expected to do nothing
 	  // a read operation of 0 bytes does *not* do nothing, this is why
 	  // the trimmed_read boolean is needed
 	} else if (pool.info.require_rollback()) {
+	  async = true;
+	  boost::optional<uint32_t> maybe_crc;
+	  // If there is a data digest and it is possible we are reading
+	  // entire object, pass the digest.  FillInVerifyExtent will
+	  // will check the oi.size again.
+	  if (oi.is_data_digest() && op.extent.offset == 0 &&
+	      op.extent.length >= oi.size)
+	    maybe_crc = oi.data_digest;
 	  ctx->pending_async_reads.push_back(
 	    make_pair(
 	      boost::make_tuple(op.extent.offset, op.extent.length, op.flags),
-	      make_pair(&osd_op.outdata, new FillInExtent(&op.extent.length))));
+	      make_pair(&osd_op.outdata,
+			new FillInVerifyExtent(&op.extent.length, &osd_op.rval,
+				&osd_op.outdata, maybe_crc, oi.size, osd,
+				soid, op.flags))));
 	  dout(10) << " async_read noted for " << soid << dendl;
 	} else {
 	  int r = pgbackend->objects_read_sync(
@@ -3852,8 +3887,14 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  first_read = false;
 	  ctx->data_off = op.extent.offset;
 	}
+	// XXX the op.extent.length is the requested length for async read
+	// On error this length is changed to 0 after the error comes back.
 	ctx->delta_stats.num_rd_kb += SHIFT_ROUND_UP(op.extent.length, 10);
 	ctx->delta_stats.num_rd++;
+
+	// Skip checking the result and just proceed to the next operation
+	if (async)
+	  continue;
 
       }
       break;
@@ -6272,6 +6313,10 @@ void ReplicatedPG::complete_read_ctx(int result, OpContext *ctx)
   assert(ctx->async_reads_complete());
 
   for (vector<OSDOp>::iterator p = ctx->ops.begin(); p != ctx->ops.end(); ++p) {
+    if (p->rval < 0 && !(p->op.flags & CEPH_OSD_OP_FLAG_FAILOK)) {
+      result = p->rval;
+      break;
+    }
     ctx->bytes_read += p->outdata.length();
   }
   ctx->reply->claim_op_out_data(ctx->ops);
