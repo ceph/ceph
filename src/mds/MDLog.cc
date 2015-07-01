@@ -542,7 +542,7 @@ void MDLog::_journal_segment_subtree_map(MDSInternalContextBase *onsync)
 
 void MDLog::trim(int m)
 {
-  int max_segments = g_conf->mds_log_max_segments;
+  unsigned max_segments = g_conf->mds_log_max_segments;
   int max_events = g_conf->mds_log_max_events;
   if (m >= 0)
     max_events = m;
@@ -572,11 +572,10 @@ void MDLog::trim(int m)
   stop += 2.0;
 
   map<uint64_t,LogSegment*>::iterator p = segments.begin();
-  while (p != segments.end() && 
+  while (segments.size() > 1 && p != segments.end() &&
 	 ((max_events >= 0 &&
 	   num_events - expiring_events - expired_events > max_events) ||
-	  (max_segments >= 0 &&
-	   segments.size() - expiring_segments.size() - expired_segments.size() > (unsigned)max_segments))) {
+	  (segments.size() - expiring_segments.size() - expired_segments.size() > max_segments))) {
     
     if (stop < ceph_clock_now(g_ceph_context))
       break;
