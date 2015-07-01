@@ -306,6 +306,7 @@ unittest_journal_SOURCES = \
 	test/journal/test_JournalMetadata.cc \
 	test/journal/test_JournalPlayer.cc \
 	test/journal/test_JournalRecorder.cc \
+	test/journal/test_JournalTrimmer.cc \
 	test/journal/test_ObjectPlayer.cc \
 	test/journal/test_ObjectRecorder.cc \
 	test/journal/RadosTestFixture.cc

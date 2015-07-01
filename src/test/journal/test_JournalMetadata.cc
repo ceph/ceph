@@ -10,46 +10,13 @@
 
 class TestJournalMetadata : public RadosTestFixture {
 public:
-  TestJournalMetadata() : m_listener(this) {}
-
-  struct Listener : public journal::JournalMetadata::Listener {
-    TestJournalMetadata *test_fixture;
-    Mutex mutex;
-    Cond cond;
-    std::map<journal::JournalMetadata*, uint32_t> updates;
-
-    Listener(TestJournalMetadata *_test_fixture)
-      : test_fixture(_test_fixture), mutex("mutex") {}
-
-    virtual void handle_update(journal::JournalMetadata *metadata) {
-      Mutex::Locker locker(mutex);
-      ++updates[metadata];
-      cond.Signal();
-    }
-  };
-
   journal::JournalMetadataPtr create_metadata(const std::string &oid,
                                               const std::string &client_id) {
     journal::JournalMetadataPtr metadata(new journal::JournalMetadata(
-      m_ioctx, oid, client_id));
+      m_ioctx, oid, client_id, 0.1));
     metadata->add_listener(&m_listener);
     return metadata;
   }
-
-  bool wait_for_update(journal::JournalMetadataPtr metadata) {
-    Mutex::Locker locker(m_listener.mutex);
-    while (m_listener.updates[metadata.get()] == 0) {
-      if (m_listener.cond.WaitInterval(
-            reinterpret_cast<CephContext*>(m_ioctx.cct()),
-            m_listener.mutex, utime_t(10, 0)) != 0) {
-        return false;
-      }
-    }
-    --m_listener.updates[metadata.get()];
-    return true;
-  }
-
-  Listener m_listener;
 };
 
 TEST_F(TestJournalMetadata, JournalDNE) {
@@ -95,7 +62,9 @@ TEST_F(TestJournalMetadata, SetCommitPositions) {
     cls::journal::EntryPosition("tag1", 122));
   commit_position = journal::JournalMetadata::ObjectSetPosition(1, entry_positions);
 
-  metadata1->set_commit_position(commit_position);
+  C_SaferCond cond;
+  metadata1->set_commit_position(commit_position, &cond);
+  ASSERT_EQ(0, cond.wait());
   ASSERT_TRUE(wait_for_update(metadata2));
 
   metadata2->get_commit_position(&read_commit_position);

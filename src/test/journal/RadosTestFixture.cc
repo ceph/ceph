@@ -6,7 +6,7 @@
 #include "include/stringify.h"
 
 RadosTestFixture::RadosTestFixture()
-  : m_timer_lock("m_timer_lock"), m_timer(NULL) {
+  : m_timer_lock("m_timer_lock"), m_timer(NULL), m_listener(this) {
 }
 
 void RadosTestFixture::SetUpTestCase() {
@@ -67,6 +67,19 @@ bufferlist RadosTestFixture::create_payload(const std::string &payload) {
   bufferlist bl;
   bl.append(payload);
   return bl;
+}
+
+bool RadosTestFixture::wait_for_update(journal::JournalMetadataPtr metadata) {
+  Mutex::Locker locker(m_listener.mutex);
+  while (m_listener.updates[metadata.get()] == 0) {
+    if (m_listener.cond.WaitInterval(
+          reinterpret_cast<CephContext*>(m_ioctx.cct()),
+          m_listener.mutex, utime_t(10, 0)) != 0) {
+      return false;
+    }
+  }
+  --m_listener.updates[metadata.get()];
+  return true;
 }
 
 std::string RadosTestFixture::_pool_name;
