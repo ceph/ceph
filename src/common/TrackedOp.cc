@@ -108,8 +108,8 @@ void OpTracker::dump_ops_in_flight(Formatter *f)
       f->open_object_section("op");
       (*p)->dump(now, f);
       f->close_section(); // this TrackedOp
-      total_ops_in_flight++;
     }
+    total_ops_in_flight += sdata->ops_in_flight_sharded.size();
   }
   f->close_section(); // list of TrackedOps
   f->dump_int("num_ops", total_ops_in_flight);
