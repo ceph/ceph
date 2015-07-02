@@ -2061,7 +2061,7 @@ void PGMonitor::get_health(list<pair<health_status_t,string> >& summary,
   // slow requests
   if (g_conf->mon_osd_max_op_age > 0 &&
       pg_map.osd_sum.op_queue_age_hist.upper_bound() > g_conf->mon_osd_max_op_age) {
-    unsigned sum = _warn_slow_request_histogram(pg_map.osd_sum.op_queue_age_hist, "", summary, detail);
+    unsigned sum = _warn_slow_request_histogram(pg_map.osd_sum.op_queue_age_hist, "", summary, NULL);
     if (sum > 0) {
       ostringstream ss;
       ss << sum << " requests are blocked > " << g_conf->mon_osd_max_op_age << " sec";
