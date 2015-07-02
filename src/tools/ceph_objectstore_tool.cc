@@ -719,6 +719,85 @@ int ObjectStoreTool::export_files(ObjectStore *store, coll_t coll)
   return 0;
 }
 
+int set_inc_osdmap(ObjectStore *store, epoch_t e, bufferlist& bl, bool force) {
+  OSDMap::Incremental inc;
+  bufferlist::iterator it = bl.begin();
+  inc.decode(it);
+  if (e == 0) {
+    e = inc.epoch;
+  } else if (e != inc.epoch) {
+    cerr << "incremental.epoch mismatch: "
+	 << inc.epoch << " != " << e << std::endl;
+    if (force) {
+      cerr << "But will continue anyway." << std::endl;
+    } else {
+      return -EINVAL;
+    }
+  }
+  const ghobject_t inc_oid = OSD::get_inc_osdmap_pobject_name(e);
+  if (!store->exists(coll_t::meta(), inc_oid)) {
+    cerr << "inc-osdmap (" << inc_oid << ") does not exist." << std::endl;
+    if (!force) {
+      return -ENOENT;
+    }
+    cout << "Creating a new epoch." << std::endl;
+  }
+  ObjectStore::Transaction t;
+  t.write(coll_t::meta(), inc_oid, 0, bl.length(), bl);
+  t.truncate(coll_t::meta(), inc_oid, bl.length());
+  int ret = store->apply_transaction(t);
+  if (ret) {
+    cerr << "Failed to set inc-osdmap (" << inc_oid << "): " << ret << std::endl;
+  } else {
+    cout << "Wrote inc-osdmap." << inc.epoch << std::endl;
+  }
+  return ret;
+}
+
+int get_inc_osdmap(ObjectStore *store, epoch_t e, bufferlist& bl)
+{
+  if (store->read(coll_t::meta(),
+		  OSD::get_inc_osdmap_pobject_name(e),
+		  0, 0, bl) < 0) {
+    return -ENOENT;
+  }
+  return 0;
+}
+
+int set_osdmap(ObjectStore *store, epoch_t e, bufferlist& bl, bool force) {
+  OSDMap osdmap;
+  osdmap.decode(bl);
+  if (e == 0) {
+    e = osdmap.get_epoch();
+  } else if (e != osdmap.get_epoch()) {
+    cerr << "osdmap.epoch mismatch: "
+	 << e << " != " << osdmap.get_epoch() << std::endl;
+    if (force) {
+      cerr << "But will continue anyway." << std::endl;
+    } else {
+      return -EINVAL;
+    }
+  }
+  const ghobject_t full_oid = OSD::get_osdmap_pobject_name(e);
+  if (!store->exists(coll_t::meta(), full_oid)) {
+    cerr << "osdmap (" << full_oid << ") does not exist." << std::endl;
+    if (!force) {
+      return -ENOENT;
+    }
+    cout << "Creating a new epoch." << std::endl;
+  }
+  ObjectStore::Transaction t;
+  t.write(coll_t::meta(), full_oid, 0, bl.length(), bl);
+  t.truncate(coll_t::meta(), full_oid, bl.length());
+  int ret = store->apply_transaction(t);
+  if (ret) {
+    cerr << "Failed to set osdmap (" << full_oid << "): " << ret << std::endl;
+  } else {
+    cout << "Wrote osdmap." << osdmap.get_epoch() << std::endl;
+  }
+  return ret;
+}
+
 int get_osdmap(ObjectStore *store, epoch_t e, OSDMap &osdmap, bufferlist& bl)
 {
   bool found = store->read(
@@ -1969,7 +2048,7 @@ int main(int argc, char **argv)
     } else {
       file_fd = open(file.c_str(), O_WRONLY|O_CREAT|O_TRUNC, 0666);
     }
-  } else if (op == "import") {
+  } else if (op == "import" || op == "set-osdmap") {
     if (!vm.count("file") || file == "-") {
       if (isatty(STDIN_FILENO)) {
         cerr << "stdin is a tty and no --file filename specified" << std::endl;
@@ -1984,7 +2063,7 @@ int main(int argc, char **argv)
   ObjectStoreTool tool = ObjectStoreTool(file_fd, dry_run);
 
   if (vm.count("file") && file_fd == fd_none && !dry_run) {
-    cerr << "--file option only applies to import or export" << std::endl;
+    cerr << "--file option only applies to import, export or set-osdmap" << std::endl;
     myexit(1);
   }
 
@@ -2341,6 +2420,15 @@ int main(int argc, char **argv)
       }
     }
     goto out;
+  } else if (op == "set-osdmap") {
+    bufferlist bl;
+    ret = get_fd_data(file_fd, bl);
+    if (ret < 0) {
+      cerr << "Failed to read osdmap " << cpp_strerror(ret) << std::endl;
+    } else {
+      ret = set_osdmap(fs, epoch, bl, force);
+    }
+    goto out;
   }
 
   log_oid = OSD::make_pg_log_oid(pgid);
@@ -2439,7 +2527,8 @@ int main(int argc, char **argv)
   // If not an object command nor any of the ops handled below, then output this usage
   // before complaining about a bad pgid
   if (!vm.count("objcmd") && op != "export" && op != "info" && op != "log" && op != "rm-past-intervals") {
-    cerr << "Must provide --op (info, log, remove, export, import, list, fix-lost, list-pgs, rm-past-intervals, set-allow-sharded-objects, dump-journal, dump-super, meta-list)"
+    cerr << "Must provide --op (info, log, remove, export, import, list, fix-lost, list-pgs, rm-past-intervals, set-allow-sharded-objects, dump-journal, dump-super, meta-list, "
+      "set-osdmap)"
 	 << std::endl;
     usage(desc);
     ret = 1;
