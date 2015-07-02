@@ -205,7 +205,7 @@ int main(int argc, const char **argv)
   mds->orig_argc = argc;
   mds->orig_argv = argv;
 
-  if (shadow)
+  if (shadow != MDSMap::STATE_NULL)
     r = mds->init(shadow);
   else
     r = mds->init();
@@ -237,6 +237,7 @@ int main(int argc, const char **argv)
   pidfile_remove();
 
   delete mds;
+  delete msgr;
 
   g_ceph_context->put();
 

@@ -125,11 +125,12 @@ class MMDSMap;
  */
 class MDSRank {
   public:
+    // FIXME: this should be private in favour of getter
     mds_rank_t whoami;
 
-    // FIXME: incarnation is logically a daemon property, not a rank property,
-    // but used in log msgs and set on objecter (objecter *is* logically
-    // a rank thing rather than daemon thing)
+    // Incarnation as seen in MDSMap at the point where a rank is
+    // assigned.  FIXME this shoudl be a const once MDSRank
+    // is only constructed upon a rank being issued.
     int incarnation;
 
     mds_rank_t get_nodeid() const { return whoami; }
@@ -205,6 +206,10 @@ class MDSRank {
     void handle_write_error(int err);
 
   protected:
+    // Flag to indicate we entered shutdown: anyone seeing this to be true
+    // after taking mds_lock must drop out.
+    bool stopping;
+
     class ProgressThread : public Thread {
       MDSRank *mds;
       Cond cond;
@@ -246,11 +251,16 @@ class MDSRank {
     // when it's laggy.
     Beacon &beacon;
 
+    /**
+     * Emit clog warnings for any ops reported as warnings by optracker
+     */
+    void check_ops_in_flight();
 
-    // Call into me from MDS::ms_dispatch
-    // FIXME separate dispatchers for MDSRank vs MDSDaemon
-    bool handle_rank_message(Message *m);
-
+    /**
+     * Share MDSMap with clients
+     */
+    void bcast_mds_map();  // to mounted clients
+    epoch_t      last_client_mdsmap_bcast;
   public:
 
     void queue_waiter(MDSInternalContextBase *c) {
@@ -268,10 +278,11 @@ class MDSRank {
         SafeTimer &timer_,
         Beacon &beacon_,
         MDSMap *& mdsmap_,
-        Finisher *finisher_,
-        MDS *mds_daemon_,
         Messenger *msgr,
-        MonClient *monc_);
+        MonClient *monc_,
+        Objecter *objecter_,
+        Context *respawn_hook_,
+        Context *suicide_hook_);
     ~MDSRank();
 
     // Daemon lifetime functions: these guys break the abstraction
@@ -280,7 +291,7 @@ class MDSRank {
     // to be able to e.g. tear down the whole process, we have to
     // have a reference going all the way down.
     // >>>
-    void suicide(bool fast = false);
+    void suicide();
     void respawn();
     // <<<
 
@@ -365,11 +376,53 @@ class MDSRank {
 
     int get_req_rate() { return logger->get(l_mds_request); }
 
+    // FIXME: interface for MDSDaemon to call, don't really want to expose
+    // this to every subsystem that carries an MDSRank reference though
+    // >>>
+    void init(mds_rank_t rank, int incarnation);
+    void tick();
+    void shutdown();
+    void create_logger();
+    void update_log_config();
+    bool handle_asok_command(std::string command, cmdmap_t& cmdmap,
+                             Formatter *f, std::ostream& ss);
+    void handle_mds_map(MMDSMap *m, MDSMap *oldmap);
+    void handle_osd_map();
+    bool kill_session(int64_t session_id);
+
+    // Call into me from MDS::ms_dispatch
+    bool ms_dispatch(Message *m);
+
   protected:
-    // FIXME: reference cycle: MDSRank should not carry a reference up to MDSDaemon
-    MDS          *mds_daemon;
+    void command_scrub_path(Formatter *f, const string& path);
+    void command_flush_path(Formatter *f, const string& path);
+    void command_flush_journal(Formatter *f);
+    void command_get_subtrees(Formatter *f);
+    void command_export_dir(Formatter *f,
+        const std::string &path, mds_rank_t dest);
+    bool command_dirfrag_split(
+        cmdmap_t cmdmap,
+        std::ostream &ss);
+    bool command_dirfrag_merge(
+        cmdmap_t cmdmap,
+        std::ostream &ss);
+    bool command_dirfrag_ls(
+        cmdmap_t cmdmap,
+        std::ostream &ss,
+        Formatter *f);
+    int _command_export_dir(const std::string &path, mds_rank_t dest);
+    int _command_flush_journal(std::stringstream *ss);
+    CDir *_command_dirfrag_get(
+        const cmdmap_t &cmdmap,
+        std::ostream &ss);
+    // <<<
+
+  protected:
     Messenger    *messenger;
     MonClient    *monc;
+
+    Context *respawn_hook;
+    Context *suicide_hook;
 
     // Friended to access retry_dispatch
     friend class C_MDS_RetryMessage;
@@ -380,9 +433,6 @@ class MDSRank {
     void calc_recovery_set();
     void request_state(MDSMap::DaemonState s);
 
-    mds_rank_t standby_for_rank;
-    MDSMap::DaemonState standby_type;  // one of STANDBY_REPLAY, ONESHOT_REPLAY
-    string standby_for_name;
     bool standby_replaying;  // true if current replay pass is in standby-replay mode
 
     typedef enum {
@@ -426,12 +476,7 @@ class MDSRank {
     void stopping_done();
     // <<<
     
-    // FIXME: remove 'rank' from name once MDSRank is encapsulated
-    // in MDSDaemon instead of being a parent
     // >>>
-    void handle_mds_map_rank(
-        MMDSMap *m, MDSMap *oldmap,
-        int oldwhoami, MDSMap::DaemonState oldstate);
     void handle_mds_recovery(mds_rank_t who);
     void handle_mds_failure(mds_rank_t who);
     // <<<

@@ -11804,3 +11804,8 @@ void MDCache::notify_mdsmap_changed()
   stray_manager.update_op_limit();
 }
 
+void MDCache::notify_osdmap_changed()
+{
+  stray_manager.update_op_limit();
+}
+
