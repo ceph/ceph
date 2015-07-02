@@ -74,8 +74,10 @@ Requires:	hdparm
 Requires:	cryptsetup
 Requires(post):	binutils
 # We require this to be present for %%{_tmpfilesdir}
+# systemd package must be installed in build environment for systemd-tmpfiles to work
 %if 0%{?_with_systemd}
 Requires: systemd
+BuildRequires: systemd
 %endif
 %if 0%{with cephfs_java}
 BuildRequires: sharutils
