@@ -199,6 +199,10 @@ public:
   void update_snap_mapper_bits(uint32_t bits) {
     snap_mapper.update_bits(bits);
   }
+  /// get_is_recoverable_predicate: caller owns returned pointer and must delete when done
+  IsPGRecoverablePredicate *get_is_recoverable_predicate() {
+    return get_pgbackend()->get_is_recoverable_predicate();
+  }
 protected:
   // Ops waiting for map, should be queued at back
   Mutex map_lock;

@@ -664,6 +664,8 @@ void PG::generate_past_intervals()
       pgid = pgid.get_ancestor(last_map->get_pg_num(pgid.pool()));
     cur_map->pg_to_up_acting_osds(pgid, &up, &up_primary, &acting, &primary);
 
+    boost::scoped_ptr<IsPGRecoverablePredicate> recoverable(
+      get_is_recoverable_predicate());
     std::stringstream debug;
     bool new_interval = pg_interval_t::check_new_interval(
       old_primary,
@@ -680,6 +682,7 @@ void PG::generate_past_intervals()
       last_map,
       pgid.pool(),
       pgid,
+      recoverable.get(),
       &past_intervals,
       &debug);
     if (new_interval) {
@@ -4800,6 +4803,8 @@ void PG::start_peering_interval(
     dirty_big_info = true;
   } else {
     std::stringstream debug;
+    boost::scoped_ptr<IsPGRecoverablePredicate> recoverable(
+      get_is_recoverable_predicate());
     bool new_interval = pg_interval_t::check_new_interval(
       old_acting_primary.osd,
       new_acting_primary,
@@ -4813,6 +4818,7 @@ void PG::start_peering_interval(
       lastmap,
       info.pgid.pool(),
       info.pgid.pgid,
+      recoverable.get(),
       &past_intervals,
       &debug);
     dout(10) << __func__ << ": check_new_interval output: "

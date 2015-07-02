@@ -864,6 +864,9 @@ struct pg_pool_t {
     return get_flags_string(flags);
   }
 
+  /// converts the acting/up vector to a set of pg shards
+  void convert_to_pg_shards(const vector<int> &from, set<pg_shard_t>* to) const;
+
   typedef enum {
     CACHEMODE_NONE = 0,                  ///< no caching
     CACHEMODE_WRITEBACK = 1,             ///< write to cache, flush later
@@ -1824,6 +1827,7 @@ struct pg_interval_t {
     ceph::shared_ptr<const OSDMap> lastmap, ///< [in] last map
     int64_t poolid,                             ///< [in] pool for pg
     pg_t pgid,                                  ///< [in] pgid for pg
+    IsPGRecoverablePredicate *could_have_gone_active, /// [in] predicate whether the pg can be active
     map<epoch_t, pg_interval_t> *past_intervals,///< [out] intervals
     ostream *out = 0                            ///< [out] debug ostream
     );
