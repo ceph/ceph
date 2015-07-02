@@ -17,8 +17,10 @@ from . import TestTask
 
 
 class TestAnsibleTask(TestTask):
+    klass = Ansible
+    task_name = 'ansible'
+
     def setup(self):
-        self.klass = Ansible
         self.ctx = FakeNamespace()
         self.ctx.cluster = Cluster()
         self.ctx.cluster.add(Remote('user@remote1'), ['role1'])
@@ -387,6 +389,7 @@ class TestAnsibleTask(TestTask):
 
 class TestCephLabTask(TestTask):
     klass = CephLab
+    task_name = 'ansible.cephlab'
 
     def setup(self):
         self.ctx = FakeNamespace()

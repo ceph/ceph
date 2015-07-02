@@ -94,6 +94,7 @@ class Ansible(Task):
                 key: value
 
     """
+
     def __init__(self, ctx, config):
         super(Ansible, self).__init__(ctx, config)
         self.log = log
@@ -288,6 +289,10 @@ class CephLab(Ansible):
         repo: {git_base}ceph-cm-ansible.git
         playbook: cephlab.yml
     """.format(git_base=teuth_config.ceph_git_base_url)
+
+    # Set the name so that Task knows to look up overrides for
+    # 'ansible.cephlab' instead of just 'cephlab'
+    name = 'ansible.cephlab'
 
     def __init__(self, ctx, config):
         config = config or dict()

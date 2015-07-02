@@ -8,15 +8,17 @@ from teuthology.task import Task
 
 
 class TestTask(object):
+    klass = Task
+    task_name = 'task'
+
     def setup(self):
-        self.klass = Task
         self.ctx = FakeNamespace()
         self.ctx.config = dict()
         self.task_config = dict()
 
     def test_overrides(self):
         self.ctx.config['overrides'] = dict()
-        self.ctx.config['overrides'][self.klass.name] = dict(
+        self.ctx.config['overrides'][self.task_name] = dict(
             key_1='overridden',
         )
         self.task_config.update(dict(
