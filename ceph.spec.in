@@ -13,8 +13,8 @@
 # the _with_systemd variable only implies that we'll install
 # /etc/tmpfiles.d/ceph.conf in order to set up the socket directory in
 # /var/run/ceph.
-%if 0%{?fedora} || 0%{?rhel} >= 7 || 0%{?suse_version}
-  %global _with_systemd 1
+%if 0%{?fedora} || 0%{?rhel} >= 7 || 0%{?suse_version} > 1300
+%global _with_systemd 1
 %endif
 
 #################################################################################
