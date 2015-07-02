@@ -4514,7 +4514,7 @@ bool RGWRados::is_syncing_bucket_meta(rgw_bucket& bucket)
   }
 
   /* zone is not master */
-  if (region.master_zone.compare(zone_name) != 0) {
+  if (region.master_zone.compare(zone_public_config.name) != 0) {
     return false;
   }
 
