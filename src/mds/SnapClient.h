@@ -19,12 +19,12 @@
 #include "snap.h"
 
 class MDSInternalContextBase;
-class MDS;
+class MDSRank;
 class LogSegment;
 
 class SnapClient : public MDSTableClient {
 public:
-  SnapClient(MDS *m) : MDSTableClient(m, TABLE_SNAP) {}
+  SnapClient(MDSRank *m) : MDSTableClient(m, TABLE_SNAP) {}
 
   void resend_queries() {}
   void handle_query_result(MMDSTableRequest *m) {}

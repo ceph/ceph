@@ -57,7 +57,6 @@ void Beacon::init(MDSMap const *mdsmap, MDSMap::DaemonState want_state_,
   Mutex::Locker l(lock);
   assert(mdsmap != NULL);
 
-  // Initialize copies of MDS state
   want_state = want_state_;
   _notify_mdsmap(mdsmap);
   standby_for_rank = standby_rank_;
@@ -195,6 +194,8 @@ void Beacon::_send()
 	   << dendl;
 
   seq_stamp[last_seq] = ceph_clock_now(g_ceph_context);
+
+  assert(want_state != MDSMap::STATE_NULL);
   
   MMDSBeacon *beacon = new MMDSBeacon(
       monc->get_fsid(), mds_gid_t(monc->get_global_id()),
@@ -230,10 +231,13 @@ void Beacon::notify_mdsmap(MDSMap const *mdsmap)
 void Beacon::_notify_mdsmap(MDSMap const *mdsmap)
 {
   assert(mdsmap != NULL);
+  assert(mdsmap->get_epoch() >= epoch);
 
-  epoch = mdsmap->get_epoch();
-  compat = get_mdsmap_compat_set_default();
-  compat.merge(mdsmap->compat);
+  if (mdsmap->get_epoch() != epoch) {
+    epoch = mdsmap->get_epoch();
+    compat = get_mdsmap_compat_set_default();
+    compat.merge(mdsmap->compat);
+  }
 }
 
 
@@ -270,9 +274,16 @@ utime_t Beacon::get_laggy_until() const
   return laggy_until;
 }
 
-void Beacon::set_want_state(MDSMap::DaemonState const newstate)
+void Beacon::set_want_state(MDSMap const *mdsmap, MDSMap::DaemonState const newstate)
 {
   Mutex::Locker l(lock);
+
+  // Update mdsmap epoch atomically with updating want_state, so that when
+  // we send a beacon with the new want state it has the latest epoch, and
+  // once we have updated to the latest epoch, we are not sending out
+  // a stale want_state (i.e. one from before making it through MDSMap
+  // handling)
+  _notify_mdsmap(mdsmap);
 
   if (want_state != newstate) {
     dout(10) << __func__ << ": "
