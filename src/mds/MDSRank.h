@@ -261,6 +261,8 @@ class MDSRank {
      */
     void bcast_mds_map();  // to mounted clients
     epoch_t      last_client_mdsmap_bcast;
+
+    void create_logger();
   public:
 
     void queue_waiter(MDSInternalContextBase *c) {
@@ -382,13 +384,12 @@ class MDSRank {
     void init(mds_rank_t rank, int incarnation);
     void tick();
     void shutdown();
-    void create_logger();
-    void update_log_config();
     bool handle_asok_command(std::string command, cmdmap_t& cmdmap,
                              Formatter *f, std::ostream& ss);
     void handle_mds_map(MMDSMap *m, MDSMap *oldmap);
     void handle_osd_map();
     bool kill_session(int64_t session_id);
+    void update_log_config();
 
     // Call into me from MDS::ms_dispatch
     bool ms_dispatch(Message *m);
