@@ -877,6 +877,11 @@ const char** MDS::get_tracked_conf_keys() const
     "clog_to_syslog",
     "clog_to_syslog_facility",
     "clog_to_syslog_level",
+    "clog_to_graylog",
+    "clog_to_graylog_host",
+    "clog_to_graylog_port",
+    "host",
+    "fsid",
     NULL
   };
   return KEYS;
@@ -898,7 +903,12 @@ void MDS::handle_conf_change(const struct md_config_t *conf,
   if (changed.count("clog_to_monitors") ||
       changed.count("clog_to_syslog") ||
       changed.count("clog_to_syslog_level") ||
-      changed.count("clog_to_syslog_facility")) {
+      changed.count("clog_to_syslog_facility") ||
+      changed.count("clog_to_graylog") ||
+      changed.count("clog_to_graylog_host") ||
+      changed.count("clog_to_graylog_port") ||
+      changed.count("host") ||
+      changed.count("fsid")) {
     update_log_config();
   }
 }
@@ -909,10 +919,20 @@ void MDS::update_log_config()
   map<string,string> log_to_syslog;
   map<string,string> log_channel;
   map<string,string> log_prio;
+  map<string,string> log_to_graylog;
+  map<string,string> log_to_graylog_host;
+  map<string,string> log_to_graylog_port;
+  uuid_d fsid;
+  string host;
+
   if (parse_log_client_options(g_ceph_context, log_to_monitors, log_to_syslog,
-			       log_channel, log_prio) == 0)
+			       log_channel, log_prio, log_to_graylog,
+			       log_to_graylog_host, log_to_graylog_port,
+			       fsid, host) == 0)
     clog->update_config(log_to_monitors, log_to_syslog,
-			log_channel, log_prio);
+			log_channel, log_prio, log_to_graylog,
+			log_to_graylog_host, log_to_graylog_port,
+			fsid, host);
   derr << "log_to_monitors " << log_to_monitors << dendl;
 }
 

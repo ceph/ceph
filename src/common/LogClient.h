@@ -17,6 +17,8 @@
 
 #include "common/LogEntry.h"
 #include "common/Mutex.h"
+#include "include/uuid.h"
+#include "common/Graylog.h"
 
 #include <iosfwd>
 #include <sstream>
@@ -35,7 +37,12 @@ int parse_log_client_options(CephContext *cct,
 			     map<string,string> &log_to_monitors,
 			     map<string,string> &log_to_syslog,
 			     map<string,string> &log_channels,
-			     map<string,string> &log_prios);
+			     map<string,string> &log_prios,
+			     map<string,string> &log_to_graylog,
+			     map<string,string> &log_to_graylog_host,
+			     map<string,string> &log_to_graylog_port,
+			     uuid_d &fsid,
+			     string &host);
 
 class LogClientTemp
 {
@@ -137,6 +144,10 @@ public:
   }
   bool must_log_to_monitors() { return log_to_monitors; }
 
+  bool do_log_to_graylog() {
+    return graylog;
+  }
+
   typedef shared_ptr<LogChannel> Ref;
 
   /**
@@ -147,7 +158,12 @@ public:
   void update_config(map<string,string> &log_to_monitors,
 		     map<string,string> &log_to_syslog,
 		     map<string,string> &log_channels,
-		     map<string,string> &log_prios);
+		     map<string,string> &log_prios,
+		     map<string,string> &log_to_graylog,
+		     map<string,string> &log_to_graylog_host,
+		     map<string,string> &log_to_graylog_port,
+		     uuid_d &fsid,
+		     string &host);
 
   void do_log(clog_type prio, std::stringstream& ss);
   void do_log(clog_type prio, const std::string& s);
@@ -161,6 +177,7 @@ private:
   std::string syslog_facility;
   bool log_to_syslog;
   bool log_to_monitors;
+  ceph::log::Graylog::Ref graylog;
 
 
   friend class LogClientTemp;

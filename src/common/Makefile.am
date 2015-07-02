@@ -3,6 +3,7 @@ libcommon_internal_la_SOURCES = \
 	common/DecayCounter.cc \
 	common/LogClient.cc \
 	common/LogEntry.cc \
+	common/Graylog.cc \
 	common/PrebufferedStreambuf.cc \
 	common/SloppyCRCMap.cc \
 	common/BackTrace.cc \
@@ -148,6 +149,7 @@ noinst_HEADERS += \
 	common/HeartbeatMap.h \
 	common/LogClient.h \
 	common/LogEntry.h \
+	common/Graylog.h \
 	common/Preforker.h \
 	common/SloppyCRCMap.h \
 	common/WorkQueue.h \
