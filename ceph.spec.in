@@ -126,7 +126,6 @@ Requires(preun):initscripts
 BuildRequires:	gperftools-devel
 Requires:	python-flask
 %endif
-%endif
 
 %description
 Ceph is a massively scalable, open-source, distributed
