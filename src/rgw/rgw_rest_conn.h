@@ -5,10 +5,29 @@
 #define CEPH_RGW_REST_CONN_H
 
 #include "rgw_rest_client.h"
+#include "common/ceph_json.h"
+
 
 class CephContext;
 class RGWRados;
 class RGWGetObjData;
+
+template <class T>
+static int parse_decode_json(CephContext *cct, T& t, bufferlist& bl)
+{
+  JSONParser p;
+  int ret = p.parse(bl.c_str(), bl.length());
+  if (ret < 0) {
+    return ret;
+  }
+
+  try {
+    decode_json_obj(t, &p);
+  } catch (JSONDecoder::err& e) {
+    return -EINVAL;
+  }
+  return 0;
+}
 
 class RGWRESTConn
 {
@@ -17,6 +36,7 @@ class RGWRESTConn
   RGWAccessKey key;
   string region;
   atomic_t counter;
+
 public:
 
   RGWRESTConn(CephContext *_cct, RGWRados *store, list<string>& endpoints);
@@ -37,6 +57,27 @@ public:
                    list<pair<string, string> > *extra_params,
                    map<string, string>* extra_headers,
                    bufferlist& bl);
+
+  template <class T>
+  int get_json_resource(const string& resource, list<pair<string, string> > *params, T& t);
 };
+
+
+template<class T>
+int RGWRESTConn::get_json_resource(const string& resource, list<pair<string, string> > *params, T& t)
+{
+  bufferlist bl;
+  int ret = get_resource(resource, params, NULL, bl);
+  if (ret < 0) {
+    return ret;
+  }
+
+  ret = parse_decode_json(cct, t, bl);
+  if (ret < 0) {
+    return ret;
+  }
+
+  return 0;
+}
 
 #endif
