@@ -5,7 +5,18 @@
 #include <include/types.h>
 #include <list>
 
+#ifdef _ASSERT_H
+#define NEED_ASSERT_H
+#pragma push_macro("_ASSERT_H")
+#endif
+
 #include "json_spirit/json_spirit.h"
+#undef _ASSERT_H
+
+#ifdef NEED_ASSERT_H
+#pragma pop_macro("_ASSERT_H")
+#endif
+
 #include "Formatter.h"
 
 
