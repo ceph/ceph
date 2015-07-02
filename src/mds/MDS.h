@@ -72,15 +72,13 @@ class MDSTableClient;
 
 class AuthAuthorizeHandlerRegistry;
 
-class MDS : public MDSRank, public Dispatcher, public md_config_obs_t {
+class MDS : public Dispatcher, public md_config_obs_t {
  public:
-
   /* Global MDS lock: every time someone takes this, they must
    * also check the `stopping` flag.  If stopping is true, you
    * must either do nothing and immediately drop the lock, or
    * never drop the lock again (i.e. call respawn()) */
   Mutex        mds_lock;
-  bool         stopping;
 
   SafeTimer    timer;
 
@@ -98,7 +96,8 @@ class MDS : public MDSRank, public Dispatcher, public md_config_obs_t {
   Objecter     *objecter;
   LogClient    log_client;
   LogChannelRef clog;
-  Finisher finisher;
+
+  MDSRank mds_rank;
 
  public:
   MDS(const std::string &n, Messenger *m, MonClient *mc);
@@ -117,14 +116,12 @@ class MDS : public MDSRank, public Dispatcher, public md_config_obs_t {
   virtual void handle_conf_change(const struct md_config_t *conf,
 				  const std::set <std::string> &changed);
  protected:
-
-
   // tick and other timer fun
   class C_MDS_Tick : public MDSInternalContext {
     protected:
       MDS *mds_daemon;
   public:
-    C_MDS_Tick(MDS *m) : MDSInternalContext(m), mds_daemon(m) {}
+    C_MDS_Tick(MDS *m, MDSRank *rank) : MDSInternalContext(rank), mds_daemon(m) {}
     void finish(int r) {
       mds_daemon->tick_event = 0;
       mds_daemon->tick();
@@ -132,8 +129,11 @@ class MDS : public MDSRank, public Dispatcher, public md_config_obs_t {
   } *tick_event;
   void     reset_tick();
 
-  // -- client map --
-  epoch_t      last_client_mdsmap_bcast;
+  void wait_for_omap_osds();
+
+  mds_rank_t standby_for_rank;
+  string standby_for_name;
+  MDSMap::DaemonState standby_type;  // one of STANDBY_REPLAY, ONESHOT_REPLAY
 
  private:
   bool ms_dispatch(Message *m);
@@ -155,44 +155,14 @@ class MDS : public MDSRank, public Dispatcher, public md_config_obs_t {
   void set_up_admin_socket();
   void clean_up_admin_socket();
   void check_ops_in_flight(); // send off any slow ops to monitor
-  void command_scrub_path(Formatter *f, const string& path);
-  void command_flush_path(Formatter *f, const string& path);
-  void command_flush_journal(Formatter *f);
-  void command_get_subtrees(Formatter *f);
-  void command_export_dir(Formatter *f,
-      const std::string &path, mds_rank_t dest);
-  bool command_dirfrag_split(
-      cmdmap_t cmdmap,
-      std::ostream &ss);
-  bool command_dirfrag_merge(
-      cmdmap_t cmdmap,
-      std::ostream &ss);
-  bool command_dirfrag_ls(
-      cmdmap_t cmdmap,
-      std::ostream &ss,
-      Formatter *f);
- private:
-  int _command_export_dir(const std::string &path, mds_rank_t dest);
-  int _command_flush_journal(std::stringstream *ss);
-  CDir *_command_dirfrag_get(
-      const cmdmap_t &cmdmap,
-      std::ostream &ss);
- protected:
-  void create_logger();
-  void update_log_config();
 
-  void bcast_mds_map();  // to mounted clients
-public:
   /**
    * Terminate this daemon process.
    *
    * This function will return, but once it does so the calling thread
    * must do no more work as all subsystems will have been shut down.
-   *
-   * @param fast: if true, do not send a message to the mon before shutting
-   *              down
    */
-  void suicide(bool fast = false);
+  void suicide();
 
   /**
    * Start a new daemon process with the same command line parameters that
