@@ -302,6 +302,10 @@ void Beacon::set_want_state(MDSMap const *mdsmap, MDSMap::DaemonState const news
 void Beacon::notify_health(MDSRank const *mds)
 {
   Mutex::Locker l(lock);
+  if (!mds) {
+    // No MDS rank held
+    return;
+  }
 
   // I'm going to touch this MDS, so it must be locked
   assert(mds->mds_lock.is_locked_by_me());

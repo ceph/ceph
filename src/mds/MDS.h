@@ -79,6 +79,7 @@ class MDS : public Dispatcher, public md_config_obs_t {
    * must either do nothing and immediately drop the lock, or
    * never drop the lock again (i.e. call respawn()) */
   Mutex        mds_lock;
+  bool         stopping;
 
   SafeTimer    timer;
 
@@ -97,7 +98,7 @@ class MDS : public Dispatcher, public md_config_obs_t {
   LogClient    log_client;
   LogChannelRef clog;
 
-  MDSRank mds_rank;
+  MDSRank *mds_rank;
 
  public:
   MDS(const std::string &n, Messenger *m, MonClient *mc);
@@ -117,12 +118,14 @@ class MDS : public Dispatcher, public md_config_obs_t {
 				  const std::set <std::string> &changed);
  protected:
   // tick and other timer fun
-  class C_MDS_Tick : public MDSInternalContext {
+  class C_MDS_Tick : public Context {
     protected:
       MDS *mds_daemon;
   public:
-    C_MDS_Tick(MDS *m, MDSRank *rank) : MDSInternalContext(rank), mds_daemon(m) {}
+    C_MDS_Tick(MDS *m) : mds_daemon(m) {}
     void finish(int r) {
+      assert(mds_daemon->mds_lock.is_locked_by_me());
+
       mds_daemon->tick_event = 0;
       mds_daemon->tick();
     }

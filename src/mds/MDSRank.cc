@@ -132,6 +132,9 @@ MDSRank::~MDSRank()
 
 void MDSRank::init(mds_rank_t rank_, int incarnation_)
 {
+  update_log_config();
+  create_logger();
+
   incarnation = incarnation;
   whoami = rank_;
 
@@ -202,12 +205,7 @@ void MDSRank::shutdown()
   assert(stopping == false);
   stopping = true;
 
-  // FIXME this check no longer needed once MDSRank object lifetime
-  // is just while a real rank is held
-  if (whoami == MDS_RANK_NONE) {
-    beacon.shutdown();
-    return;
-  }
+  dout(1) << __func__ << ": shutting down rank " << whoami << dendl;
 
   if (!mdsmap->is_dne_gid(mds_gid_t(monc->get_global_id()))) {
     // Notify the MDSMonitor that we're dying, so that it doesn't have to
