@@ -388,12 +388,20 @@ namespace librbd {
 
   Image::~Image()
   {
+    close();
+  }
+
+  int Image::close()
+  {
+    int r = 0;
     if (ctx) {
       ImageCtx *ictx = (ImageCtx *)ctx;
       tracepoint(librbd, close_image_enter, ictx, ictx->name.c_str(), ictx->id.c_str());
-      close_image(ictx);
-      tracepoint(librbd, close_image_exit);
+      r = close_image(ictx);
+      ctx = NULL;
+      tracepoint(librbd, close_image_exit, r);
     }
+    return r;
   }
 
   int Image::resize(uint64_t size)
@@ -1256,9 +1264,9 @@ extern "C" int rbd_close(rbd_image_t image)
 {
   librbd::ImageCtx *ctx = (librbd::ImageCtx *)image;
   tracepoint(librbd, close_image_enter, ctx, ctx->name.c_str(), ctx->id.c_str());
-  librbd::close_image(ctx);
-  tracepoint(librbd, close_image_exit);
-  return 0;
+  int r = librbd::close_image(ctx);
+  tracepoint(librbd, close_image_exit, r);
+  return r;
 }
 
 extern "C" int rbd_resize(rbd_image_t image, uint64_t size)

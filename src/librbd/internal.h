@@ -125,7 +125,7 @@ namespace librbd {
 
   int open_parent(ImageCtx *ictx);
   int open_image(ImageCtx *ictx);
-  void close_image(ImageCtx *ictx);
+  int close_image(ImageCtx *ictx);
 
   int copyup_block(ImageCtx *ictx, uint64_t offset, size_t len,
 		   const char *buf);
