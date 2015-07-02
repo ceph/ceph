@@ -755,7 +755,6 @@ StrayManager::StrayManager(MDSRank *mds)
     filer(mds->objecter, mds->finisher)
 {
   assert(mds != NULL);
-  update_op_limit();
 }
 
 void StrayManager::abort_queue()
