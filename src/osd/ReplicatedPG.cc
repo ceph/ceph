@@ -4211,8 +4211,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	} else {
 	  t->write(soid, op.extent.offset, op.extent.length, osd_op.indata, op.flags);
 	}
-	write_update_size_and_usage(ctx->delta_stats, oi, ctx->modified_ranges,
-				    op.extent.offset, op.extent.length, true);
+
 	maybe_create_new_object(ctx);
 	if (op.extent.offset == 0 && op.extent.length >= oi.size)
 	  obs.oi.set_data_digest(osd_op.indata.crc32c(-1));
@@ -4220,6 +4219,9 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  obs.oi.set_data_digest(osd_op.indata.crc32c(obs.oi.data_digest));
 	else
 	  obs.oi.clear_data_digest();
+	write_update_size_and_usage(ctx->delta_stats, oi, ctx->modified_ranges,
+				    op.extent.offset, op.extent.length, true);
+
       }
       break;
       
