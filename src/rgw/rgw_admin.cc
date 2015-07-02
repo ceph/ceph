@@ -32,6 +32,7 @@ using namespace std;
 #include "rgw_usage.h"
 #include "rgw_replica_log.h"
 #include "rgw_orphan.h"
+#include "rgw_sync.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -259,6 +260,7 @@ enum {
   OPT_METADATA_LIST,
   OPT_MDLOG_LIST,
   OPT_MDLOG_TRIM,
+  OPT_MDLOG_SYNC,
   OPT_BILOG_LIST,
   OPT_BILOG_TRIM,
   OPT_DATALOG_LIST,
@@ -474,6 +476,8 @@ static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
       return OPT_MDLOG_LIST;
     if (strcmp(cmd, "trim") == 0)
       return OPT_MDLOG_TRIM;
+    if (strcmp(cmd, "sync") == 0)
+      return OPT_MDLOG_SYNC;
   } else if (strcmp(prev_cmd, "bilog") == 0) {
     if (strcmp(cmd, "list") == 0)
       return OPT_BILOG_LIST;
@@ -2863,6 +2867,17 @@ next:
     }
   }
   
+  if (opt_cmd == OPT_MDLOG_SYNC) {
+    RGWMetadataSync sync(store);
+
+    int ret = sync.init();
+    if (ret < 0) {
+      cerr << "ERROR: sync.init() returned ret=" << ret << std::endl;
+      return -ret;
+    }
+
+  }
+
   if (opt_cmd == OPT_BILOG_LIST) {
     if (bucket_name.empty()) {
       cerr << "ERROR: bucket not specified" << std::endl;
