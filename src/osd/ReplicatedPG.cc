@@ -4277,17 +4277,10 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	maybe_create_new_object(ctx);
 	obs.oi.set_data_digest(osd_op.indata.crc32c(-1));
 
-	interval_set<uint64_t> ch;
-	if (oi.size > 0)
-	  ch.insert(0, oi.size);
-	ctx->modified_ranges.union_of(ch);
-	if (op.extent.length + op.extent.offset != oi.size) {
-	  ctx->delta_stats.num_bytes -= oi.size;
-	  oi.size = op.extent.length + op.extent.offset;
-	  ctx->delta_stats.num_bytes += oi.size;
-	}
-	ctx->delta_stats.num_wr++;
-	ctx->delta_stats.num_wr_kb += SHIFT_ROUND_UP(op.extent.length, 10);
+	write_update_size_and_usage(ctx->delta_stats, oi, ctx->modified_ranges,
+	    op.extent.offset, op.extent.length, true,
+	    op.extent.offset + op.extent.length != oi.size ? true : false);
+
       }
       break;
 
@@ -5527,15 +5520,16 @@ void ReplicatedPG::make_writeable(OpContext *ctx)
 
 void ReplicatedPG::write_update_size_and_usage(object_stat_sum_t& delta_stats, object_info_t& oi,
 					       interval_set<uint64_t>& modified, uint64_t offset,
-					       uint64_t length, bool count_bytes)
+					       uint64_t length, bool count_bytes, bool force_changesize)
 {
   interval_set<uint64_t> ch;
   if (length)
     ch.insert(offset, length);
   modified.union_of(ch);
-  if (length && (offset + length > oi.size)) {
+  if (force_changesize || offset + length > oi.size) {
     uint64_t new_size = offset + length;
-    delta_stats.num_bytes += new_size - oi.size;
+    delta_stats.num_bytes -= oi.size;
+    delta_stats.num_bytes += new_size;
     oi.size = new_size;
   }
   delta_stats.num_wr++;
