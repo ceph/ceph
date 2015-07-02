@@ -41,9 +41,8 @@ Requires:	python-rados = %{epoch}:%{version}-%{release}
 Requires:	python-rbd = %{epoch}:%{version}-%{release}
 Requires:	python-cephfs = %{epoch}:%{version}-%{release}
 Requires:	python
-Requires:	python-argparse
 Requires:	python-requests
-Requires:	python-flask
+Requires:	grep
 Requires:	xfsprogs
 Requires:	parted
 Requires:	util-linux
@@ -77,7 +76,6 @@ BuildRequires:	perl
 BuildRequires:	parted
 BuildRequires:	pkgconfig
 BuildRequires:	python
-BuildRequires:	python-argparse
 BuildRequires:	python-nose
 BuildRequires:	python-requests
 %if ( 0%{?rhel} > 0 && 0%{?rhel} < 7 ) || ( 0%{?centos} > 0 && 0%{?centos} < 7 )
@@ -101,9 +99,9 @@ BuildRequires:	snappy-devel
 # distro-conditional dependencies
 #################################################################################
 %if 0%{defined suse_version}
+Requires:	python-Flask
 BuildRequires:	net-tools
 BuildRequires:	libbz2-devel
-BuildRequires:	sharutils
 %if 0%{?suse_version} > 1210
 Requires:	gptfdisk
 %if 0%{with tcmalloc}
@@ -129,6 +127,7 @@ Requires(post):	chkconfig
 Requires(preun):	chkconfig
 Requires(preun):	initscripts
 BuildRequires:	gperftools-devel
+Requires:	python-flask
 %endif
 
 %description
@@ -149,14 +148,16 @@ Requires:	python-rados = %{epoch}:%{version}-%{release}
 Requires:	python-rbd = %{epoch}:%{version}-%{release}
 Requires:	python-cephfs = %{epoch}:%{version}-%{release}
 Requires:	python-requests
-%if 0%{defined suse_version}
-Requires:  python-argparse
-%endif
 %if 0%{?rhel} || 0%{?fedora}
 Requires:	redhat-lsb-core
 %endif
 %if 0%{defined suse_version}
 Requires:	lsb-release
+%endif
+# python-argparse is only needed in distros with Python 2.6 or lower
+%if (0%{?rhel} && 0%{?rhel} <= 6) || (0%{?suse_version} && 0%{?suse_version} <= 1110)
+Requires:	python-argparse
+BuildRequires:	python-argparse
 %endif
 %description -n ceph-common
 Common utilities to mount and interact with a ceph storage cluster.
@@ -354,7 +355,7 @@ Group:		System Environment/Libraries
 License:	LGPL-2.0
 Requires:	ceph-common
 Requires:	xmlstarlet
-%if (0%{?fedora} >= 20 || 0%{?rhel} == 6)
+%if (0%{?fedora} || 0%{?rhel} == 6)
 BuildRequires:	lttng-ust-devel
 BuildRequires:	libbabeltrace-devel
 %endif
@@ -978,7 +979,7 @@ ln -sf %{_libdir}/librbd.so.1 /usr/lib64/qemu/librbd.so.1
 %{_mandir}/man8/rbd-replay-prep.8*
 %{_bindir}/rbd-replay
 %{_bindir}/rbd-replay-many
-%if (0%{?fedora} == 20 || 0%{?rhel} == 6)
+%if (0%{?fedora} || 0%{?rhel} == 6)
 %{_bindir}/rbd-replay-prep
 %endif
 
