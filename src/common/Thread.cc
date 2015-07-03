@@ -84,7 +84,7 @@ void *Thread::entry_wrapper()
   return entry();
 }
 
-const pthread_t &Thread::get_thread_id()
+const pthread_t &Thread::get_thread_id() const
 {
   return thread_id;
 }
@@ -94,7 +94,7 @@ bool Thread::is_started() const
   return thread_id != 0;
 }
 
-bool Thread::am_self()
+bool Thread::am_self() const
 {
   return (pthread_self() == thread_id);
 }
