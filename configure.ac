@@ -1256,6 +1256,10 @@ AM_CONDITIONAL(WITH_BUILD_TESTS, test "$WITH_BUILD_TESTS" = "1")
 AM_PATH_PYTHON([2.4],
 	[], [AC_MSG_FAILURE([Failed to find Python 2.4 or newer])])
 
+PKG_CHECK_VAR(bash_completiondir, [bash-completion], [completionsdir], ,
+  bash_completiondir="${sysconfdir}/bash_completion.d")
+AC_SUBST(bash_completiondir)
+
 AC_CONFIG_HEADERS([src/acconfig.h])
 AC_CONFIG_FILES([Makefile
 	src/Makefile
