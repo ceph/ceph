@@ -175,8 +175,8 @@ void MDSMonitor::encode_pending(MonitorDBStore::TransactionRef t)
       i != pending_daemon_health_rm.end(); ++i) {
     t->erase(MDS_HEALTH_PREFIX, stringify(*i));
   }
-  remove_from_metadata(t);
   pending_daemon_health_rm.clear();
+  remove_from_metadata(t);
 }
 
 version_t MDSMonitor::get_trim_to()
@@ -1785,13 +1785,18 @@ void MDSMonitor::remove_from_metadata(MonitorDBStore::TransactionRef t)
   ::decode(last_metadata, iter);
   bl.clear();
 
-  if (pending_daemon_health_rm.empty()) {
+  bool update = false;
+  for (map<mds_gid_t, Metadata>::iterator i = last_metadata.begin();
+       i != last_metadata.end(); ) {
+    if (pending_mdsmap.get_state_gid(i->first) == MDSMap::STATE_NULL) {
+      last_metadata.erase(i++);
+      update = true;
+    } else {
+      ++i;
+    }
+  }
+  if (!update)
     return;
-  }
-  for (std::set<uint64_t>::const_iterator to_remove = pending_daemon_health_rm.begin();
-       to_remove != pending_daemon_health_rm.end(); ++to_remove) {
-    last_metadata.erase(mds_gid_t(*to_remove));
-  }
   ::encode(last_metadata, bl);
   t->put(MDS_METADATA_PREFIX, "last_metadata", bl);
 }
