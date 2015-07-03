@@ -29,6 +29,11 @@ static int parse_decode_json(CephContext *cct, T& t, bufferlist& bl)
   return 0;
 }
 
+struct rgw_http_param_pair {
+  const char *key;
+  const char *val;
+};
+
 class RGWRESTConn
 {
   CephContext *cct;
@@ -60,6 +65,8 @@ public:
 
   template <class T>
   int get_json_resource(const string& resource, list<pair<string, string> > *params, T& t);
+  template <class T>
+  int get_json_resource(const string& resource, const rgw_http_param_pair *pp, T& t);
 };
 
 
@@ -78,6 +85,21 @@ int RGWRESTConn::get_json_resource(const string& resource, list<pair<string, str
   }
 
   return 0;
+}
+
+template<class T>
+int RGWRESTConn::get_json_resource(const string& resource,  const rgw_http_param_pair *pp, T& t)
+{
+  list<pair<string, string> > params;
+
+  while (pp && pp->key) {
+    string k = pp->key;
+    string v = (pp->val ? pp->val : "");
+    params.push_back(make_pair(k, v));
+    ++pp;
+  }
+
+  return get_json_resource(resource, &params, t);
 }
 
 #endif

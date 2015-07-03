@@ -3,6 +3,7 @@
 #include "rgw_common.h"
 #include "rgw_rados.h"
 #include "rgw_sync.h"
+#include "rgw_metadata.h"
 
 
 #define dout_subsys ceph_subsys_rgw
@@ -11,34 +12,47 @@ void rgw_mdlog_info::decode_json(JSONObj *obj) {
   JSONDecoder::decode_json("num_objects", num_shards, obj);
 }
 
-template <class T>
-static int parse_decode_json(T& t, bufferlist& bl)
-{
-  JSONParser p;
-  int ret = p.parse(bl.c_str(), bl.length());
-  if (ret < 0) {
-    cout << "failed to parse JSON" << std::endl;
-    return ret;
-  }
+struct rgw_mdlog_entry {
+  string id;
+  string section;
+  string name;
+  utime_t timestamp;
+  RGWMetadataLogData log_data;
 
-  try {
-    decode_json_obj(t, &p);
-  } catch (JSONDecoder::err& e) {
-    cout << "failed to decode JSON input: " << e.message << std::endl;
-    return -EINVAL;
-  }
-  return 0;
+  void decode_json(JSONObj *obj);
+};
+
+struct rgw_mdlog_shard_data {
+  string marker;
+  bool truncated;
+  vector<rgw_mdlog_entry> entries;
+
+  void decode_json(JSONObj *obj);
+};
+
+
+void rgw_mdlog_entry::decode_json(JSONObj *obj) {
+  JSONDecoder::decode_json("id", id, obj);
+  JSONDecoder::decode_json("section", section, obj);
+  JSONDecoder::decode_json("name", name, obj);
+  JSONDecoder::decode_json("timestamp", timestamp, obj);
+  JSONDecoder::decode_json("log_data", log_data, obj);
 }
 
+void rgw_mdlog_shard_data::decode_json(JSONObj *obj) {
+  JSONDecoder::decode_json("marker", marker, obj);
+  JSONDecoder::decode_json("truncated", truncated, obj);
+  JSONDecoder::decode_json("entries", entries, obj);
+};
 
 int RGWRemoteMetaLog::init()
 {
   conn = store->rest_master_conn;
 
-  list<pair<string, string> > params;
-  params.push_back(make_pair("type", "metadata"));
+  rgw_http_param_pair pairs[] = { { "type", "metadata" },
+                                  { NULL, NULL } };
 
-  int ret = conn->get_json_resource("/admin/log", &params, log_info);
+  int ret = conn->get_json_resource("/admin/log", pairs, log_info);
   if (ret < 0) {
     ldout(store->ctx(), 0) << "ERROR: failed to fetch mdlog info" << dendl;
     return ret;
@@ -46,8 +60,39 @@ int RGWRemoteMetaLog::init()
 
   ldout(store->ctx(), 20) << "remote mdlog, num_shards=" << log_info.num_shards << dendl;
 
+  for (int i = 0; i < log_info.num_shards; i++) {
+    int ret = list_shard(i);
+    if (ret < 0) {
+      ldout(store->ctx(), 10) << "failed to list shard: ret=" << ret << dendl;
+    }
+  }
+
   return 0;
 }
+
+int RGWRemoteMetaLog::list_shard(int shard_id)
+{
+  conn = store->rest_master_conn;
+
+  char buf[32];
+  snprintf(buf, sizeof(buf), "%d", shard_id);
+
+  rgw_http_param_pair pairs[] = { { "type", "metadata" },
+                                  { "id", buf },
+                                  { NULL, NULL } };
+
+  rgw_mdlog_shard_data data;
+  int ret = conn->get_json_resource("/admin/log", pairs, data);
+  if (ret < 0) {
+    ldout(store->ctx(), 0) << "ERROR: failed to fetch mdlog data" << dendl;
+    return ret;
+  }
+
+  ldout(store->ctx(), 20) << "remote mdlog, shard_id=" << shard_id << " num of shard entries: " << data.entries.size() << dendl;
+
+  return 0;
+}
+
 
 
 int RGWMetadataSync::init()
