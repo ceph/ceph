@@ -2191,36 +2191,9 @@ void AsyncConnection::prepare_send_message(uint64_t features, Message *m, buffer
   // encode and copy out of *m
   m->encode(features, msgr->crcflags);
 
-  // prepare everything
-  ceph_msg_header& header = m->get_header();
-  ceph_msg_footer& footer = m->get_footer();
-
-  ldout(async_msgr->cct, 20) << __func__ << " sending message type=" << header.type
-                             << " src " << entity_name_t(header.src)
-                             << " front=" << header.front_len
-                             << " data=" << header.data_len
-                             << " off " << header.data_off << dendl;
-
   bl.append(m->get_payload());
   bl.append(m->get_middle());
   bl.append(m->get_data());
-
-  // send footer; if receiver doesn't support signatures, use the old footer format
-  ceph_msg_footer_old old_footer;
-  if (has_feature(CEPH_FEATURE_MSG_AUTH)) {
-    bl.append((char*)&footer, sizeof(footer));
-  } else {
-    if (msgr->crcflags & MSG_CRC_HEADER) {
-      old_footer.front_crc = footer.front_crc;
-      old_footer.middle_crc = footer.middle_crc;
-      old_footer.data_crc = footer.data_crc;
-    } else {
-       old_footer.front_crc = old_footer.middle_crc = 0;
-    }
-    old_footer.data_crc = msgr->crcflags & MSG_CRC_DATA ? footer.data_crc : 0;
-    old_footer.flags = footer.flags;
-    bl.append((char*)&old_footer, sizeof(old_footer));
-  }
 }
 
 int AsyncConnection::write_message(Message *m, bufferlist& bl)
@@ -2241,6 +2214,7 @@ int AsyncConnection::write_message(Message *m, bufferlist& bl)
 
   m->calc_header_crc();
   ceph_msg_header& header = m->get_header();
+  ceph_msg_footer& footer = m->get_footer();
   if (has_feature(CEPH_FEATURE_NOSRCADDR)) {
     complete_bl.append((char*)&header, sizeof(header));
   } else {
@@ -2256,6 +2230,12 @@ int AsyncConnection::write_message(Message *m, bufferlist& bl)
     complete_bl.append((char*)&oldheader, sizeof(oldheader));
   }
 
+  ldout(async_msgr->cct, 20) << __func__ << " sending message type=" << header.type
+                             << " src " << entity_name_t(header.src)
+                             << " front=" << header.front_len
+                             << " data=" << header.data_len
+                             << " off " << header.data_off << dendl;
+
   complete_bl.claim_append(bl);
 
   // TODO: let sign_message could be reentry?
@@ -2269,14 +2249,31 @@ int AsyncConnection::write_message(Message *m, bufferlist& bl)
   } else {
     if (session_security->sign_message(m)) {
       ldout(async_msgr->cct, 20) << __func__ << " failed to sign m="
-                                 << m << "): sig = " << m->get_footer().sig << dendl;
+                                 << m << "): sig = " << footer.sig << dendl;
     } else {
       ldout(async_msgr->cct, 20) << __func__ << " signed m=" << m
-                                 << "): sig = " << m->get_footer().sig << dendl;
+                                 << "): sig = " << footer.sig << dendl;
     }
   }
 
-  logger->inc(l_msgr_send_bytes, bl.length());
+  // send footer; if receiver doesn't support signatures, use the old footer format
+  ceph_msg_footer_old old_footer;
+  if (has_feature(CEPH_FEATURE_MSG_AUTH)) {
+    complete_bl.append((char*)&footer, sizeof(footer));
+  } else {
+    if (msgr->crcflags & MSG_CRC_HEADER) {
+      old_footer.front_crc = footer.front_crc;
+      old_footer.middle_crc = footer.middle_crc;
+      old_footer.data_crc = footer.data_crc;
+    } else {
+       old_footer.front_crc = old_footer.middle_crc = 0;
+    }
+    old_footer.data_crc = msgr->crcflags & MSG_CRC_DATA ? footer.data_crc : 0;
+    old_footer.flags = footer.flags;
+    complete_bl.append((char*)&old_footer, sizeof(old_footer));
+  }
+
+  logger->inc(l_msgr_send_bytes, complete_bl.length());
   ldout(async_msgr->cct, 20) << __func__ << " sending " << m->get_seq()
                              << " " << m << dendl;
   int rc = _try_send(complete_bl);
