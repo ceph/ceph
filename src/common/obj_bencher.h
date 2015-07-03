@@ -100,8 +100,8 @@ public:
   virtual ~ObjBencher() {}
   int aio_bench(
     int operation, int secondsToRun,
-    int concurrentios, int op_size, bool cleanup, const char* run_name, bool no_verify=false);
-  int clean_up(const char* prefix, int concurrentios, const char* run_name);
+    int concurrentios, int op_size, bool cleanup, const std::string& run_name, bool no_verify=false);
+  int clean_up(const std::string& prefix, int concurrentios, const std::string& run_name);
 
   void set_show_time(bool dt) {
     show_time = dt;

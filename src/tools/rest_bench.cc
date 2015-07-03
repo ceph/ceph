@@ -785,12 +785,12 @@ int main(int argc, const char **argv)
   }
 
   if (operation == OP_CLEANUP) {
-    ret = bencher.clean_up(prefix.c_str(), concurrent_ios, run_name.c_str());
+    ret = bencher.clean_up(prefix, concurrent_ios, run_name);
     if (ret != 0)
       cerr << "error during cleanup: " << ret << std::endl;
   } else {
     ret = bencher.aio_bench(operation, seconds,
-			    concurrent_ios, op_size, cleanup, run_name.c_str());
+			    concurrent_ios, op_size, cleanup, run_name);
     if (ret != 0) {
         cerr << "error during benchmark: " << ret << std::endl;
     }
