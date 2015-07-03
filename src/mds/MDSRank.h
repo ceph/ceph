@@ -372,10 +372,6 @@ class MDSRank {
 
     MDSMap *get_mds_map() { return mdsmap; }
 
-    // Access to monc functionality needed by balancer and snapserver
-    uint64_t get_global_id() const;
-    void send_mon_message(Message *m);
-
     int get_req_rate() { return logger->get(l_mds_request); }
 
     // FIXME: interface for MDSDaemon to call, don't really want to expose

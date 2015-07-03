@@ -283,7 +283,7 @@ void SnapServer::check_osd_map(bool force)
   if (!all_purge.empty()) {
     dout(10) << "requesting removal of " << all_purge << dendl;
     MRemoveSnaps *m = new MRemoveSnaps(all_purge);
-    mds->send_mon_message(m);
+    mon_client->send_mon_message(m);
   }
 
   last_checked_osdmap = version;

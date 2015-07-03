@@ -33,11 +33,13 @@ class MHeartbeat;
 class CInode;
 class CDir;
 class Messenger;
+class MonClient;
 
 class MDBalancer {
  protected:
   MDSRank *mds;
   Messenger *messenger;
+  MonClient *mon_client;
   int beat_epoch;
 
   int last_epoch_under;  
@@ -75,9 +77,10 @@ class MDBalancer {
   }
 
 public:
-  MDBalancer(MDSRank *m, Messenger *msgr) : 
+  MDBalancer(MDSRank *m, Messenger *msgr, MonClient *monc) : 
     mds(m),
     messenger(msgr),
+    mon_client(monc),
     beat_epoch(0),
     last_epoch_under(0), last_epoch_over(0), my_load(0.0), target_load(0.0) { }
   
