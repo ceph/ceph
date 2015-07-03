@@ -805,8 +805,8 @@ bool MDBalancer::check_targets()
   dout(10) << "check_targets have " << map_targets << " need " << need_targets << " want " << want_targets << dendl;
 
   if (send) {
-    MMDSLoadTargets* m = new MMDSLoadTargets(mds_gid_t(mds->get_global_id()), want_targets);
-    mds->send_mon_message(m);
+    MMDSLoadTargets* m = new MMDSLoadTargets(mds_gid_t(mon_client->get_global_id()), want_targets);
+    mon_client->send_mon_message(m);
   }
   return ok;
 }

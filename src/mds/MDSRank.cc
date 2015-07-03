@@ -77,10 +77,10 @@ MDSRank::MDSRank(
 
   mdcache = new MDCache(this);
   mdlog = new MDLog(this);
-  balancer = new MDBalancer(this, messenger);
+  balancer = new MDBalancer(this, messenger, monc);
 
   inotable = new InoTable(this);
-  snapserver = new SnapServer(this);
+  snapserver = new SnapServer(this, monc);
   snapclient = new SnapClient(this);
 
   server = new Server(this);
@@ -860,18 +860,6 @@ void MDSRank::retry_dispatch(Message *m)
 utime_t MDSRank::get_laggy_until() const
 {
   return beacon.get_laggy_until();
-}
-
-// FIXME maybe instead of exposing this to the world, we should just
-// share a MonClient reference with the guys who need it (balancer+snapserver)
-void MDSRank::send_mon_message(Message *m)
-{
-  monc->send_mon_message(m);
-}
-
-uint64_t MDSRank::get_global_id() const
-{
-  return monc->get_global_id();
 }
 
 bool MDSRank::is_daemon_stopping() const
