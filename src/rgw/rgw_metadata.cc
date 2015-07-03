@@ -10,69 +10,78 @@
 
 #define dout_subsys ceph_subsys_rgw
 
-struct LogStatusDump {
-  RGWMDLogStatus status;
-
-  LogStatusDump(RGWMDLogStatus _status) : status(_status) {}
-  void dump(Formatter *f) const {
-    string s;
-    switch (status) {
-      case MDLOG_STATUS_WRITE:
-        s = "write";
-        break;
-      case MDLOG_STATUS_SETATTRS:
-        s = "set_attrs";
-        break;
-      case MDLOG_STATUS_REMOVE:
-        s = "remove";
-        break;
-      case MDLOG_STATUS_COMPLETE:
-        s = "complete";
-        break;
-      case MDLOG_STATUS_ABORT:
-        s = "abort";
-        break;
-      default:
-        s = "unknown";
-        break;
-    }
-    encode_json("status", s, f);
+void LogStatusDump::dump(Formatter *f) const {
+  string s;
+  switch (status) {
+    case MDLOG_STATUS_WRITE:
+      s = "write";
+      break;
+    case MDLOG_STATUS_SETATTRS:
+      s = "set_attrs";
+      break;
+    case MDLOG_STATUS_REMOVE:
+      s = "remove";
+      break;
+    case MDLOG_STATUS_COMPLETE:
+      s = "complete";
+      break;
+    case MDLOG_STATUS_ABORT:
+      s = "abort";
+      break;
+    default:
+      s = "unknown";
+      break;
   }
-};
+  encode_json("status", s, f);
+}
 
-struct RGWMetadataLogData {
-  obj_version read_version;
-  obj_version write_version;
-  RGWMDLogStatus status;
-  
-  RGWMetadataLogData() : status(MDLOG_STATUS_UNKNOWN) {}
+void RGWMetadataLogData::encode(bufferlist& bl) const {
+  ENCODE_START(1, 1, bl);
+  ::encode(read_version, bl);
+  ::encode(write_version, bl);
+  uint32_t s = (uint32_t)status;
+  ::encode(s, bl);
+  ENCODE_FINISH(bl);
+}
 
-  void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
-    ::encode(read_version, bl);
-    ::encode(write_version, bl);
-    uint32_t s = (uint32_t)status;
-    ::encode(s, bl);
-    ENCODE_FINISH(bl);
+void RGWMetadataLogData::decode(bufferlist::iterator& bl) {
+   DECODE_START(1, bl);
+   ::decode(read_version, bl);
+   ::decode(write_version, bl);
+   uint32_t s;
+   ::decode(s, bl);
+   status = (RGWMDLogStatus)s;
+   DECODE_FINISH(bl);
+}
+
+void RGWMetadataLogData::dump(Formatter *f) const {
+  encode_json("read_version", read_version, f);
+  encode_json("write_version", write_version, f);
+  encode_json("status", LogStatusDump(status), f);
+}
+
+void decode_json_obj(RGWMDLogStatus& status, JSONObj *obj) {
+  string s = obj->get_data();
+  if (s == "complete") {
+    status = MDLOG_STATUS_COMPLETE;
+  } else if (s == "write") {
+    status = MDLOG_STATUS_WRITE;
+  } else if (s == "remove") {
+    status = MDLOG_STATUS_REMOVE;
+  } else if (s == "set_attrs") {
+    status = MDLOG_STATUS_SETATTRS;
+  } else if (s == "abort") {
+    status = MDLOG_STATUS_ABORT;
+  } else {
+    status = MDLOG_STATUS_UNKNOWN;
   }
+}
 
-  void decode(bufferlist::iterator& bl) {
-     DECODE_START(1, bl);
-     ::decode(read_version, bl);
-     ::decode(write_version, bl);
-     uint32_t s;
-     ::decode(s, bl);
-     status = (RGWMDLogStatus)s;
-     DECODE_FINISH(bl);
-  }
-
-  void dump(Formatter *f) const {
-    encode_json("read_version", read_version, f);
-    encode_json("write_version", write_version, f);
-    encode_json("status", LogStatusDump(status), f);
-  }
-};
-WRITE_CLASS_ENCODER(RGWMetadataLogData)
+void RGWMetadataLogData::decode_json(JSONObj *obj) {
+  JSONDecoder::decode_json("read_version", read_version, obj);
+  JSONDecoder::decode_json("write_version", write_version, obj);
+  JSONDecoder::decode_json("status", status, obj);
+}
 
 
 int RGWMetadataLog::add_entry(RGWRados *store, RGWMetadataHandler *handler, const string& section, const string& key, bufferlist& bl) {

@@ -163,7 +163,26 @@ public:
   int unlock(int shard_id, string& zone_id, string& owner_id);
 };
 
-struct RGWMetadataLogData;
+struct LogStatusDump {
+  RGWMDLogStatus status;
+
+  LogStatusDump(RGWMDLogStatus _status) : status(_status) {}
+  void dump(Formatter *f) const;
+};
+
+struct RGWMetadataLogData {
+  obj_version read_version;
+  obj_version write_version;
+  RGWMDLogStatus status;
+  
+  RGWMetadataLogData() : status(MDLOG_STATUS_UNKNOWN) {}
+
+  void encode(bufferlist& bl) const;
+  void decode(bufferlist::iterator& bl);
+  void dump(Formatter *f) const;
+  void decode_json(JSONObj *obj);
+};
+WRITE_CLASS_ENCODER(RGWMetadataLogData)
 
 class RGWMetadataManager {
   map<string, RGWMetadataHandler *> handlers;
