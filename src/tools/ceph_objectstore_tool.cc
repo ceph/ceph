@@ -1914,6 +1914,7 @@ int main(int argc, char **argv)
 {
   string dpath, jpath, pgidstr, op, file, object, objcmd, arg1, arg2, type, format;
   spg_t pgid;
+  unsigned epoch = 0;
   ghobject_t ghobj;
   bool human_readable;
   bool force;
@@ -1931,9 +1932,12 @@ int main(int argc, char **argv)
     ("pgid", po::value<string>(&pgidstr),
      "PG id, mandatory for info, log, remove, export, rm-past-intervals")
     ("op", po::value<string>(&op),
-     "Arg is one of [info, log, remove, export, import, list, fix-lost, list-pgs, rm-past-intervals, set-allow-sharded-objects, dump-journal, dump-super, meta-list]")
+     "Arg is one of [info, log, remove, export, import, list, fix-lost, list-pgs, rm-past-intervals, set-allow-sharded-objects, dump-journal, dump-super, meta-list, "
+	 "get-osdmap, set-osdmap]")
+    ("epoch", po::value<unsigned>(&epoch),
+     "epoch# for get-osdmap, the current epoch in use if not specified")
     ("file", po::value<string>(&file),
-     "path of file to export or import")
+     "path of file to export, import, get-osdmap or set-osdmap")
     ("format", po::value<string>(&format)->default_value("json-pretty"),
      "Output format which may be json, json-pretty, xml, xml-pretty")
     ("debug", "Enable diagnostic output to stderr")
@@ -2038,7 +2042,7 @@ int main(int argc, char **argv)
   outistty = isatty(STDOUT_FILENO);
 
   file_fd = fd_none;
-  if (op == "export" && !dry_run) {
+  if ((op == "export" || op == "get-osdmap") && !dry_run) {
     if (!vm.count("file") || file == "-") {
       if (outistty) {
         cerr << "stdout is a tty and no --file filename specified" << std::endl;
@@ -2063,7 +2067,8 @@ int main(int argc, char **argv)
   ObjectStoreTool tool = ObjectStoreTool(file_fd, dry_run);
 
   if (vm.count("file") && file_fd == fd_none && !dry_run) {
-    cerr << "--file option only applies to import, export or set-osdmap" << std::endl;
+    cerr << "--file option only applies to import, export, "
+	 << "get-osdmap or set-osdmap" << std::endl;
     myexit(1);
   }
 
@@ -2420,6 +2425,25 @@ int main(int argc, char **argv)
       }
     }
     goto out;
+  } else if (op == "get-osdmap") {
+    bufferlist bl;
+    OSDMap osdmap;
+    if (epoch == 0) {
+      epoch = superblock.current_epoch;
+    }
+    ret = get_osdmap(fs, epoch, osdmap, bl);
+    if (ret) {
+      cerr << "Failed to get osdmap#" << epoch << ": "
+	   << cpp_strerror(ret) << std::endl;
+      goto out;
+    }
+    ret = bl.write_fd(file_fd);
+    if (ret) {
+      cerr << "Failed to write to " << file << ": " << cpp_strerror(ret) << std::endl;
+    } else {
+      cout << "osdmap#" << epoch << " exported." << std::endl;
+    }
+    goto out;
   } else if (op == "set-osdmap") {
     bufferlist bl;
     ret = get_fd_data(file_fd, bl);
@@ -2528,7 +2552,7 @@ int main(int argc, char **argv)
   // before complaining about a bad pgid
   if (!vm.count("objcmd") && op != "export" && op != "info" && op != "log" && op != "rm-past-intervals") {
     cerr << "Must provide --op (info, log, remove, export, import, list, fix-lost, list-pgs, rm-past-intervals, set-allow-sharded-objects, dump-journal, dump-super, meta-list, "
-      "set-osdmap)"
+      "set-osdmap, get-osdmap)"
 	 << std::endl;
     usage(desc);
     ret = 1;
