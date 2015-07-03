@@ -19,7 +19,7 @@
 #include "obj_bencher.h"
 
 #include <iostream>
-#include <fstream>
+#include <fstream> 
 
 #include <cerrno>
 
@@ -169,7 +169,7 @@ void *ObjBencher::status_printer(void *_bencher) {
 
 int ObjBencher::aio_bench(
   int operation, int secondsToRun,
-  int concurrentios, int object_size, bool cleanup, const char* run_name, bool no_verify) {
+  int concurrentios, int object_size, bool cleanup, const std::string& run_name, bool no_verify) {
 
   if (concurrentios <= 0) 
     return -EINVAL;
@@ -179,7 +179,7 @@ int ObjBencher::aio_bench(
   int prevPid = 0;
 
   // default metadata object is used if user does not specify one
-  const std::string run_name_meta = (run_name == NULL ? BENCH_LASTRUN_METADATA : std::string(run_name));
+  const std::string run_name_meta = (run_name.empty() ? BENCH_LASTRUN_METADATA : run_name);
 
   //get data from previous write run, if available
   if (operation != OP_WRITE) {
@@ -906,19 +906,19 @@ int ObjBencher::rand_read_bench(int seconds_to_run, int num_objects, int concurr
   return r;
 }
 
-int ObjBencher::clean_up(const char* prefix, int concurrentios, const char* run_name) {
+int ObjBencher::clean_up(const std::string& prefix, int concurrentios, const std::string& run_name) {
   int r = 0;
   int object_size;
   int num_objects;
   int prevPid;
 
   // default meta object if user does not specify one
-  const std::string run_name_meta = (run_name == NULL ? BENCH_LASTRUN_METADATA : std::string(run_name));
+  const std::string run_name_meta = (run_name.empty() ? BENCH_LASTRUN_METADATA : run_name);
 
   r = fetch_bench_metadata(run_name_meta, &object_size, &num_objects, &prevPid);
   if (r < 0) {
     // if the metadata file is not found we should try to do a linear search on the prefix
-    if (r == -ENOENT && prefix != NULL) {
+    if (r == -ENOENT && prefix != "") {
       return clean_up_slow(prefix, concurrentios);
     }
     else {
