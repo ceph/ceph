@@ -1483,7 +1483,6 @@ void Paxos::propose_pending()
 
   bufferlist bl;
   pending_proposal->encode(bl);
-  pending_proposal.reset();
 
   dout(10) << __func__ << " " << (last_committed + 1)
 	   << " " << bl.length() << " bytes" << dendl;
@@ -1492,6 +1491,8 @@ void Paxos::propose_pending()
   pending_proposal->dump(&f);
   f.flush(*_dout);
   *_dout << dendl;
+
+  pending_proposal.reset();
 
   committing_finishers.swap(pending_finishers);
   state = STATE_UPDATING;
