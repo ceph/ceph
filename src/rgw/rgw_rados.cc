@@ -84,7 +84,7 @@ static RGWObjCategory main_category = RGW_OBJ_CATEGORY_MAIN;
 
 #define RGW_DEFAULT_ZONE_ROOT_POOL "rgw.root"
 #define RGW_DEFAULT_REGION_ROOT_POOL "rgw.root"
-#define RGW_DEFAULT_REALM_ROOT_POOL "rgw.root"
+static string RGW_DEFAULT_REALM_ROOT_POOL = "rgw.root";
 
 #define RGW_STATELOG_OBJ_PREFIX "statelog."
 
