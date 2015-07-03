@@ -757,8 +757,6 @@ out:
 int MDS::_handle_command_legacy(std::vector<std::string> args)
 {
   dout(10) << "handle_command args: " << args << dendl;
-// FIXME: make a call about reinstating legacy mds tell or ditching it
-#if 0
   if (args[0] == "injectargs") {
     if (args.size() < 2) {
       derr << "Ignoring empty injectargs!" << dendl;
@@ -772,87 +770,12 @@ int MDS::_handle_command_legacy(std::vector<std::string> args)
       derr << oss.str() << dendl;
     }
   }
-  else if (args[0] == "dumpcache") {
-    if (args.size() > 1)
-      mdcache->dump_cache(args[1].c_str());
-    else
-      mdcache->dump_cache();
-  }
   else if (args[0] == "exit") {
     suicide();
   }
   else if (args[0] == "respawn") {
     respawn();
   }
-  else if (args[0] == "session" && args[1] == "kill") {
-    Session *session = sessionmap.get_session(entity_name_t(CEPH_ENTITY_TYPE_CLIENT,
-							    strtol(args[2].c_str(), 0, 10)));
-    if (session)
-      server->kill_session(session, NULL);
-    else
-      dout(15) << "session " << session << " not in sessionmap!" << dendl;
-  } else if (args[0] == "issue_caps") {
-    long inum = strtol(args[1].c_str(), 0, 10);
-    CInode *in = mdcache->get_inode(inodeno_t(inum));
-    if (in) {
-      bool r = locker->issue_caps(in);
-      dout(20) << "called issue_caps on inode "  << inum
-	       << " with result " << r << dendl;
-    } else dout(15) << "inode " << inum << " not in mdcache!" << dendl;
-  } else if (args[0] == "try_eval") {
-    long inum = strtol(args[1].c_str(), 0, 10);
-    int mask = strtol(args[2].c_str(), 0, 10);
-    CInode * ino = mdcache->get_inode(inodeno_t(inum));
-    if (ino) {
-      locker->try_eval(ino, mask);
-      dout(20) << "try_eval(" << inum << ", " << mask << ")" << dendl;
-    } else dout(15) << "inode " << inum << " not in mdcache!" << dendl;
-  } else if (args[0] == "fragment_dir") {
-    if (args.size() == 4) {
-      filepath fp(args[1].c_str());
-      CInode *in = mdcache->cache_traverse(fp);
-      if (in) {
-	frag_t fg;
-	if (fg.parse(args[2].c_str())) {
-	  CDir *dir = in->get_dirfrag(fg);
-	  if (dir) {
-	    if (dir->is_auth()) {
-	      int by = atoi(args[3].c_str());
-	      if (by)
-		mdcache->split_dir(dir, by);
-	      else
-		dout(0) << "need to split by >0 bits" << dendl;
-	    } else dout(0) << "dir " << dir->dirfrag() << " not auth" << dendl;
-	  } else dout(0) << "dir " << in->ino() << " " << fg << " dne" << dendl;
-	} else dout(0) << " frag " << args[2] << " does not parse" << dendl;
-      } else dout(0) << "path " << fp << " not found" << dendl;
-    } else dout(0) << "bad syntax" << dendl;
-  } else if (args[0] == "merge_dir") {
-    if (args.size() == 3) {
-      filepath fp(args[1].c_str());
-      CInode *in = mdcache->cache_traverse(fp);
-      if (in) {
-	frag_t fg;
-	if (fg.parse(args[2].c_str())) {
-	  mdcache->merge_dir(in, fg);
-	} else dout(0) << " frag " << args[2] << " does not parse" << dendl;
-      } else dout(0) << "path " << fp << " not found" << dendl;
-    } else dout(0) << "bad syntax" << dendl;
-  } else if (args[0] == "export_dir") {
-    if (args.size() == 3) {
-      filepath fp(args[1].c_str());
-      mds_rank_t target = mds_rank_t(atoi(args[2].c_str()));
-      if (target != whoami && mdsmap->is_up(target) && mdsmap->is_in(target)) {
-	CInode *in = mdcache->cache_traverse(fp);
-	if (in) {
-	  CDir *dir = in->get_dirfrag(frag_t());
-	  if (dir && dir->is_auth()) {
-	    mdcache->migrator->export_dir(dir, target);
-	  } else dout(0) << "bad export_dir path dirfrag frag_t() or dir not auth" << dendl;
-	} else dout(0) << "bad export_dir path" << dendl;
-      } else dout(0) << "bad export_dir target syntax" << dendl;
-    } else dout(0) << "bad export_dir syntax" << dendl;
-  } 
   else if (args[0] == "cpu_profiler") {
     ostringstream ss;
     cpu_profiler_handle_command(args, ss);
@@ -869,9 +792,10 @@ int MDS::_handle_command_legacy(std::vector<std::string> args)
       clog->info() << ss.str();
     }
   } else {
-    dout(0) << "unrecognized command! " << args << dendl;
+    if (!(mds_rank && mds_rank->handle_command_legacy(args))) {
+      dout(0) << "unrecognized command! " << args << dendl;
+    }
   }
-#endif
 
   return 0;
 }

@@ -390,6 +390,7 @@ class MDSRank {
     void handle_osd_map();
     bool kill_session(int64_t session_id);
     void update_log_config();
+    bool handle_command_legacy(std::vector<std::string> args);
 
     // Call into me from MDS::ms_dispatch
     bool ms_dispatch(Message *m);
