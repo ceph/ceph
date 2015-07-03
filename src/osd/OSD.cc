@@ -7959,26 +7959,6 @@ void OSD::handle_op(OpRequestRef& op, OSDMapRef& osdmap)
     return;
   }
 
-  // we don't need encoded payload anymore
-  m->clear_payload();
-
-  // object name too long?
-  unsigned max_name_len = MIN(g_conf->osd_max_object_name_len,
-			      store->get_max_object_name_length());
-  if (m->get_oid().name.size() > max_name_len) {
-    dout(4) << "handle_op '" << m->get_oid().name << "' is longer than "
-	    << max_name_len << " bytes" << dendl;
-    service.reply_op_error(op, -ENAMETOOLONG);
-    return;
-  }
-
-  // blacklisted?
-  if (osdmap->is_blacklisted(m->get_source_addr())) {
-    dout(4) << "handle_op " << m->get_source_addr() << " is blacklisted" << dendl;
-    service.reply_op_error(op, -EBLACKLISTED);
-    return;
-  }
-
   // set up a map send if the Op gets blocked for some reason
   send_map_on_destruct share_map(this, m, osdmap, m->get_map_epoch());
   Session *client_session =
@@ -7994,47 +7974,10 @@ void OSD::handle_op(OpRequestRef& op, OSDMapRef& osdmap)
     client_session->put();
   }
 
-  if (op->rmw_flags == 0) {
-    int r = init_op_flags(op);
-    if (r) {
-      service.reply_op_error(op, r);
-      return;
-    }
-  }
-
   if (cct->_conf->osd_debug_drop_op_probability > 0 &&
       !m->get_source().is_mds()) {
     if ((double)rand() / (double)RAND_MAX < cct->_conf->osd_debug_drop_op_probability) {
       dout(0) << "handle_op DEBUG artificially dropping op " << *m << dendl;
-      return;
-    }
-  }
-
-  if (op->may_write()) {
-    // full?
-    if ((service.check_failsafe_full() ||
-	 osdmap->test_flag(CEPH_OSDMAP_FULL) ||
-	 m->get_map_epoch() < superblock.last_map_marked_full) &&
-	!m->get_source().is_mds()) {  // FIXME: we'll exclude mds writes for now.
-      // Drop the request, since the client will retry when the full
-      // flag is unset.
-      return;
-    }
-
-    // invalid?
-    if (m->get_snapid() != CEPH_NOSNAP) {
-      service.reply_op_error(op, -EINVAL);
-      return;
-    }
-
-    // too big?
-    if (cct->_conf->osd_max_write_size &&
-	m->get_data_len() > cct->_conf->osd_max_write_size << 20) {
-      // journal can't hold commit!
-      derr << "handle_op msg data len " << m->get_data_len()
-	   << " > osd_max_write_size " << (cct->_conf->osd_max_write_size << 20)
-	   << " on " << *m << dendl;
-      service.reply_op_error(op, -OSD_WRITETOOBIG);
       return;
     }
   }

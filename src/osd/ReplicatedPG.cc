@@ -1245,10 +1245,6 @@ void ReplicatedPG::do_request(
   OpRequestRef& op,
   ThreadPool::TPHandle &handle)
 {
-  if (!op_has_sufficient_caps(op)) {
-    osd->reply_op_error(op, -EPERM);
-    return;
-  }
   assert(!op_must_wait_for_map(get_osdmap()->get_epoch(), op));
   if (can_discard_request(op)) {
     return;
@@ -1372,6 +1368,18 @@ void ReplicatedPG::do_op(OpRequestRef& op)
 {
   MOSDOp *m = static_cast<MOSDOp*>(op->get_req());
   assert(m->get_type() == CEPH_MSG_OSD_OP);
+
+  m->finish_decode();
+  m->clear_payload();
+
+  if (op->rmw_flags == 0) {
+    int r = osd->osd->init_op_flags(op);
+    if (r) {
+      osd->reply_op_error(op, r);
+      return;
+    }
+  }
+
   if (op->includes_pg_op()) {
     if (pg_op_must_wait(m)) {
       wait_for_all_missing(op);
@@ -1380,10 +1388,55 @@ void ReplicatedPG::do_op(OpRequestRef& op)
     return do_pg_op(op);
   }
 
+  if (!op_has_sufficient_caps(op)) {
+    osd->reply_op_error(op, -EPERM);
+    return;
+  }
+
+  // object name too long?
+  unsigned max_name_len = MIN(g_conf->osd_max_object_name_len,
+                              osd->osd->store->get_max_object_name_length());
+  if (m->get_oid().name.size() > max_name_len) {
+    dout(4) << "do_op '" << m->get_oid().name << "' is longer than "
+            << max_name_len << " bytes" << dendl;
+    osd->reply_op_error(op, -ENAMETOOLONG);
+    return;
+  }
+
+  // blacklisted?
   if (get_osdmap()->is_blacklisted(m->get_source_addr())) {
     dout(10) << "do_op " << m->get_source_addr() << " is blacklisted" << dendl;
     osd->reply_op_error(op, -EBLACKLISTED);
     return;
+  }
+
+  if (op->may_write()) {
+    // full?
+    if ((osd->check_failsafe_full() ||
+         get_osdmap()->test_flag(CEPH_OSDMAP_FULL) ||
+         m->get_map_epoch() < osd->osd->superblock.last_map_marked_full) &&
+        !m->get_source().is_mds()) {  // FIXME: we'll exclude mds writes for now.
+      // Drop the request, since the client will retry when the full
+      // flag is unset.
+      return;
+    }
+
+    // invalid?
+    if (m->get_snapid() != CEPH_NOSNAP) {
+      osd->reply_op_error(op, -EINVAL);
+      return;
+    }
+
+    // too big?
+    if (cct->_conf->osd_max_write_size &&
+        m->get_data_len() > cct->_conf->osd_max_write_size << 20) {
+      // journal can't hold commit!
+      derr << "do_op msg data len " << m->get_data_len()
+           << " > osd_max_write_size " << (cct->_conf->osd_max_write_size << 20)
+           << " on " << *m << dendl;
+      osd->reply_op_error(op, -OSD_WRITETOOBIG);
+      return;
+    }
   }
 
   // order this op as a write?
