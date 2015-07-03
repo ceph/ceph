@@ -2385,6 +2385,7 @@ int RGW_Auth_S3::authorize_v4(RGWRados *store, struct req_state *s)
   string signature;
   string access_key_id;
   string credential_scope;
+  bool using_qs;
 
   /* v4 requires rados auth */
   if (!store->ctx()->_conf->rgw_s3_auth_use_rados) {
@@ -2399,6 +2400,7 @@ int RGW_Auth_S3::authorize_v4(RGWRados *store, struct req_state *s)
 
     /* look for required params */
 
+    using_qs = true;
     credential = s->info.args.get("X-Amz-Credential");
     if (credential.size() == 0) {
       return -EPERM;
@@ -2422,7 +2424,7 @@ int RGW_Auth_S3::authorize_v4(RGWRados *store, struct req_state *s)
     /* auth ships in headers ... */
 
     /* ------------------------- handle Credential header */
-
+    using_qs = false;
     credential = s->http_auth;
 
     credential = credential.substr(17, credential.length());
@@ -2439,31 +2441,6 @@ int RGW_Auth_S3::authorize_v4(RGWRados *store, struct req_state *s)
     pos = credential.find("=");
 
     credential = credential.substr(pos + 1, credential.length());
-
-    /* AKIAIVKTAZLOCF43WNQD/AAAAMMDD/region/host/aws4_request */
-    dout(10) << "v4 credential format = " << credential << dendl;
-
-    if (std::count(credential.begin(), credential.end(), '/') != 4) {
-      return -EINVAL;
-    }
-
-    /* credential must end with 'aws4_request' */
-    if (credential.find("aws4_request") == std::string::npos) {
-      return -EINVAL;
-    }
-
-    /* grab access key id */
-
-    pos = credential.find("/");
-    access_key_id = credential.substr(0, pos);
-
-    dout(10) << "access key id = " << access_key_id << dendl;
-
-    /* grab credential scope */
-
-    credential_scope = credential.substr(pos + 1, credential.length());
-
-    dout(10) << "credential scope = " << credential_scope << dendl;
 
     /* ------------------------- handle SignedHeaders header */
 
@@ -2529,6 +2506,31 @@ int RGW_Auth_S3::authorize_v4(RGWRados *store, struct req_state *s)
 
   }
 
+  /* AKIAIVKTAZLOCF43WNQD/AAAAMMDD/region/host/aws4_request */
+  dout(10) << "v4 credential format = " << credential << dendl;
+
+  if (std::count(credential.begin(), credential.end(), '/') != 4) {
+    return -EINVAL;
+  }
+
+  /* credential must end with 'aws4_request' */
+  if (credential.find("aws4_request") == std::string::npos) {
+    return -EINVAL;
+  }
+
+  /* grab access key id */
+
+  pos = credential.find("/");
+  access_key_id = credential.substr(0, pos);
+
+  dout(10) << "access key id = " << access_key_id << dendl;
+
+  /* grab credential scope */
+
+  credential_scope = credential.substr(pos + 1, credential.length());
+
+  dout(10) << "credential scope = " << credential_scope << dendl;
+
   /* grab user information */
 
   if (rgw_get_user_info_by_access_key(store, access_key_id, s->user) < 0) {
@@ -2573,10 +2575,12 @@ int RGW_Auth_S3::authorize_v4(RGWRados *store, struct req_state *s)
       istringstream kv(keyval);
       getline(kv, key, '=');
       getline(kv, val, '=');
-      string key_enc, val_enc;
-      url_encode(key, key_enc);
-      url_encode(val, val_enc);
-      canonical_qs_map[key_enc] = val_enc;
+      if (!using_qs || key != "X-Amz-Signature") {
+	string key_enc, val_enc;
+	url_encode(key, key_enc, true);
+	url_encode(val, val_enc, true);
+	canonical_qs_map[key_enc] = val_enc;
+      }
     }
 
     canonical_qs = "";
@@ -2634,7 +2638,11 @@ int RGW_Auth_S3::authorize_v4(RGWRados *store, struct req_state *s)
 
   string request_payload;
 
-  if ((s->content_length > 0) || s->info.env->get("HTTP_TRANSFER_ENCODING")) {
+  if (using_qs) {
+    len = -1;
+  }
+
+  if (!using_qs && ((s->content_length > 0) || s->info.env->get("HTTP_TRANSFER_ENCODING"))) {
 
     /* TODO: read body in request_payload */
 

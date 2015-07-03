@@ -263,7 +263,11 @@ void rgw_create_s3_v4_canonical_request(struct req_state *s, const string& canon
 {
   string request_payload_hash;
 
-  rgw_hash_s3_string_sha256(request_payload, request_payload_hash);
+  if (len < 0) {
+    request_payload_hash = "UNSIGNED-PAYLOAD";
+  } else {
+    rgw_hash_s3_string_sha256(data, len, request_payload_hash);
+  }
 
   dout(10) << "payload request hash = " << request_payload_hash << dendl;
 
