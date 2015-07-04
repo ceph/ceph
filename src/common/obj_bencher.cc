@@ -19,7 +19,7 @@
 #include "obj_bencher.h"
 
 #include <iostream>
-#include <fstream> 
+#include <fstream>
 
 #include <cerrno>
 
