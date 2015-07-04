@@ -1191,8 +1191,8 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   bool show_time = false;
   bool wildcard = false;
 
-  const char* run_name = NULL;
-  const char* prefix = NULL;
+  std::string run_name;
+  std::string prefix;
 
   Formatter *formatter = NULL;
   bool pretty_format = false;
@@ -1233,11 +1233,11 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   }
   i = opts.find("run-name");
   if (i != opts.end()) {
-    run_name = i->second.c_str();
+    run_name = i->second;
   }
   i = opts.find("prefix");
   if (i != opts.end()) {
-    prefix = i->second.c_str();
+    prefix = i->second;
   }
   i = opts.find("block-size");
   if (i != opts.end()) {
