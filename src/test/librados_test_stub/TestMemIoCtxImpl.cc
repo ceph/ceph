@@ -241,7 +241,7 @@ int TestMemIoCtxImpl::read(const std::string& oid, size_t len, uint64_t off,
     bit.substr_of(file->data, off, len);
     append_clone(bit, bl);
   }
-  return 0;
+  return len;
 }
 
 int TestMemIoCtxImpl::remove(const std::string& oid) {
