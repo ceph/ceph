@@ -14,8 +14,6 @@
 
 #define FUSE_USE_VERSION 30
 
-#include <fuse.h>
-#include <fuse_lowlevel.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -34,6 +32,8 @@
 #include "common/config.h"
 #include "include/assert.h"
 
+#include <fuse.h>
+#include <fuse_lowlevel.h>
 #include "fuse_ll.h"
 
 #define FINO_INO(x) ((x) & ((1ull<<48)-1ull))
@@ -917,6 +917,7 @@ int CephFuse::Handle::init(int argc, const char *argv[])
     newargv[newargc++] = "-o";
     newargv[newargc++] = "default_permissions";
   }
+#if defined(__linux__)
   if (client->cct->_conf->fuse_big_writes) {
     newargv[newargc++] = "-o";
     newargv[newargc++] = "big_writes";
@@ -925,7 +926,7 @@ int CephFuse::Handle::init(int argc, const char *argv[])
     newargv[newargc++] = "-o";
     newargv[newargc++] = "atomic_o_trunc";
   }
-
+#endif
   if (client->cct->_conf->fuse_debug)
     newargv[newargc++] = "-d";
 
