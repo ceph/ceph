@@ -39,6 +39,7 @@ int PoolDump::dump(IoCtx *io_ctx)
     return r;
   }
 
+  io_ctx->set_namespace(all_nspaces);
   librados::NObjectIterator i = io_ctx->nobjects_begin();
 
   librados::NObjectIterator i_end = io_ctx->nobjects_end();
@@ -152,6 +153,8 @@ int PoolDump::dump(IoCtx *io_ctx)
   }
 
   r = write_simple(TYPE_POOL_END, file_fd);
+  if (file_fd != STDOUT_FILENO)
+    posix_fadvise(file_fd, 0, 0, POSIX_FADV_DONTNEED);
 
   return r;
 }

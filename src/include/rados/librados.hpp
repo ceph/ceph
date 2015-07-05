@@ -408,10 +408,11 @@ namespace librados
      *
      * @param src source object name
      * @param src_ioctx ioctx for the source object
-     * @param version current version of the source object
+     * @param src_version current version of the source object
+     * @param src_fadvise_flags the fadvise flags for source object
      */
     void copy_from(const std::string& src, const IoCtx& src_ioctx,
-		   uint64_t src_version);
+		   uint64_t src_version, uint32_t src_fadvise_flags);
 
     /**
      * undirty an object
