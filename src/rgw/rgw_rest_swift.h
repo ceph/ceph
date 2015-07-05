@@ -28,6 +28,7 @@ public:
   void send_response_end();
 
   bool should_get_stats() { return need_stats; }
+  bool supports_account_metadata() { return true; }
 };
 
 class RGWListBucket_ObjStore_SWIFT : public RGWListBucket_ObjStore {
@@ -44,11 +45,13 @@ public:
 };
 
 class RGWStatAccount_ObjStore_SWIFT : public RGWStatAccount_ObjStore {
+  map<string, bufferlist> attrs;
 public:
   RGWStatAccount_ObjStore_SWIFT() {
   }
   ~RGWStatAccount_ObjStore_SWIFT() {}
 
+  void execute();
   void send_response();
 };
 
@@ -86,19 +89,28 @@ public:
   void send_response();
 };
 
-class RGWPutMetadata_ObjStore_SWIFT : public RGWPutMetadata_ObjStore {
+class RGWPutMetadataAccount_ObjStore_SWIFT : public RGWPutMetadataAccount_ObjStore {
 public:
-  RGWPutMetadata_ObjStore_SWIFT() {}
-  ~RGWPutMetadata_ObjStore_SWIFT() {}
+  RGWPutMetadataAccount_ObjStore_SWIFT() {}
+  ~RGWPutMetadataAccount_ObjStore_SWIFT() {}
 
   int get_params();
   void send_response();
 };
 
-class RGWSetTempUrl_ObjStore_SWIFT : public RGWSetTempUrl_ObjStore {
+class RGWPutMetadataBucket_ObjStore_SWIFT : public RGWPutMetadataBucket_ObjStore {
 public:
-  RGWSetTempUrl_ObjStore_SWIFT() {}
-  ~RGWSetTempUrl_ObjStore_SWIFT() {}
+  RGWPutMetadataBucket_ObjStore_SWIFT() {}
+  ~RGWPutMetadataBucket_ObjStore_SWIFT() {}
+
+  int get_params();
+  void send_response();
+};
+
+class RGWPutMetadataObject_ObjStore_SWIFT : public RGWPutMetadataObject_ObjStore {
+public:
+  RGWPutMetadataObject_ObjStore_SWIFT() {}
+  ~RGWPutMetadataObject_ObjStore_SWIFT() {}
 
   int get_params();
   void send_response();

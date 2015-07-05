@@ -1057,24 +1057,27 @@ void CInode::_fetched(bufferlist& bl, bufferlist& bl2, Context *fin)
     fin->complete(-ENOENT);
     return;
   }
-  string magic;
-  ::decode(magic, p);
-  dout(10) << " magic is '" << magic << "' (expecting '" << CEPH_FS_ONDISK_MAGIC << "')" << dendl;
-  if (magic != CEPH_FS_ONDISK_MAGIC) {
-    dout(0) << "on disk magic '" << magic << "' != my magic '" << CEPH_FS_ONDISK_MAGIC
-	    << "'" << dendl;
-    fin->complete(-EINVAL);
-  } else {
-    try {
-      decode_store(p);
-    } catch (buffer::error &err) {
-      derr << "Corrupt inode 0x" << std::hex << ino() << std::dec
-        << ": " << err << dendl;
+
+  // Attempt decode
+  try {
+    string magic;
+    ::decode(magic, p);
+    dout(10) << " magic is '" << magic << "' (expecting '"
+             << CEPH_FS_ONDISK_MAGIC << "')" << dendl;
+    if (magic != CEPH_FS_ONDISK_MAGIC) {
+      dout(0) << "on disk magic '" << magic << "' != my magic '" << CEPH_FS_ONDISK_MAGIC
+              << "'" << dendl;
       fin->complete(-EINVAL);
-      return;
+    } else {
+      decode_store(p);
+      dout(10) << "_fetched " << *this << dendl;
+      fin->complete(0);
     }
-    dout(10) << "_fetched " << *this << dendl;
-    fin->complete(0);
+  } catch (buffer::error &err) {
+    derr << "Corrupt inode 0x" << std::hex << ino() << std::dec
+      << ": " << err << dendl;
+    fin->complete(-EINVAL);
+    return;
   }
 }
 
@@ -1121,20 +1124,25 @@ void CInode::store_backtrace(MDSInternalContextBase *fin, int op_prio)
   auth_pin(this);
 
   int64_t pool;
-  if (is_dir())
+  if (is_dir()) {
     pool = mdcache->mds->mdsmap->get_metadata_pool();
-  else
+  } else {
     pool = inode.layout.fl_pg_pool;
+  }
 
   inode_backtrace_t bt;
   build_backtrace(pool, bt);
-  bufferlist bl;
-  ::encode(bt, bl);
+  bufferlist parent_bl;
+  ::encode(bt, parent_bl);
 
   ObjectOperation op;
   op.priority = op_prio;
   op.create(false);
-  op.setxattr("parent", bl);
+  op.setxattr("parent", parent_bl);
+
+  bufferlist layout_bl;
+  ::encode(inode.layout, layout_bl);
+  op.setxattr("layout", layout_bl);
 
   SnapContext snapc;
   object_t oid = get_object_name(ino(), frag_t(), "");
@@ -1144,6 +1152,7 @@ void CInode::store_backtrace(MDSInternalContextBase *fin, int op_prio)
     &mdcache->mds->finisher);
 
   if (!state_test(STATE_DIRTYPOOL) || inode.old_pools.empty()) {
+    dout(20) << __func__ << ": no dirtypool or no old pools" << dendl;
     mdcache->mds->objecter->mutate(oid, oloc, op, snapc, ceph_clock_now(g_ceph_context),
 				   0, NULL, fin2);
     return;
@@ -1153,16 +1162,21 @@ void CInode::store_backtrace(MDSInternalContextBase *fin, int op_prio)
   mdcache->mds->objecter->mutate(oid, oloc, op, snapc, ceph_clock_now(g_ceph_context),
 				 0, NULL, gather.new_sub());
 
+  // In the case where DIRTYPOOL is set, we update all old pools backtraces
+  // such that anyone reading them will see the new pool ID in
+  // inode_backtrace_t::pool and go read everything else from there.
   for (compact_set<int64_t>::iterator p = inode.old_pools.begin();
        p != inode.old_pools.end();
        ++p) {
     if (*p == pool)
       continue;
 
+    dout(20) << __func__ << ": updating old pool " << *p << dendl;
+
     ObjectOperation op;
     op.priority = op_prio;
     op.create(false);
-    op.setxattr("parent", bl);
+    op.setxattr("parent", parent_bl);
 
     object_locator_t oloc(*p);
     mdcache->mds->objecter->mutate(oid, oloc, op, snapc, ceph_clock_now(g_ceph_context),
@@ -2561,12 +2575,14 @@ void CInode::encode_snap(bufferlist& bl)
   bufferlist snapbl;
   encode_snap_blob(snapbl);
   ::encode(snapbl, bl);
+  ::encode(oldest_snap, bl);
 }    
 
 void CInode::decode_snap(bufferlist::iterator& p)
 {
   bufferlist snapbl;
   ::decode(snapbl, p);
+  ::decode(oldest_snap, p);
   decode_snap_blob(snapbl);
 }
 

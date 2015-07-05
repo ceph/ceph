@@ -2,6 +2,116 @@
  Release Notes
 ===============
 
+v9.0.1
+======
+
+This development release is delayed a bit due to tooling changes in the build
+environment.  As a result the next one (v9.0.2) will have a bit more work than
+is usual.
+
+Highlights here include lots of RGW Swift fixes, RBD feature work
+surrounding the new object map feature, more CephFS snapshot fixes,
+and a few important CRUSH fixes.
+
+Notable Changes
+---------------
+
+* auth: cache/reuse crypto lib key objects, optimize msg signature check (Sage Weil)
+* build: allow tcmalloc-minimal (Thorsten Behrens)
+* build: do not build ceph-dencoder with tcmalloc (#10691 Boris Ranto)
+* build: fix pg ref disabling (William A. Kennington III)
+* build: install-deps.sh improvements (Loic Dachary)
+* build: misc fixes (Boris Ranto, Ken Dreyer, Owen Synge)
+* ceph-authtool: fix return code on error (Gerhard Muntingh)
+* ceph-disk: fix zap sgdisk invocation (Owen Synge, Thorsten Behrens)
+* ceph-disk: pass --cluster arg on prepare subcommand (Kefu Chai)
+* ceph-fuse, libcephfs: drop inode when rmdir finishes (#11339 Yan, Zheng)
+* ceph-fuse,libcephfs: fix uninline (#11356 Yan, Zheng)
+* ceph-monstore-tool: fix store-copy (Huangjun)
+* common: add perf counter descriptions (Alyona Kiseleva)
+* common: fix throttle max change (Henry Chang)
+* crush: fix crash from invalid 'take' argument (#11602 Shiva Rkreddy, Sage Weil)
+* crush: fix divide-by-2 in straw2 (#11357 Yann Dupont, Sage Weil)
+* deb: fix rest-bench-dbg and ceph-test-dbg dependendies (Ken Dreyer)
+* doc: document region hostnames (Robin H. Johnson)
+* doc: update release schedule docs (Loic Dachary)
+* init-radosgw: run radosgw as root (#11453 Ken Dreyer)
+* librados: fadvise flags per op (Jianpeng Ma)
+* librbd: allow additional metadata to be stored with the image (Haomai Wang)
+* librbd: better handling for dup flatten requests (#11370 Jason Dillaman)
+* librbd: cancel in-flight ops on watch error (#11363 Jason Dillaman)
+* librbd: default new images to format 2 (#11348 Jason Dillaman)
+* librbd: fast diff implementation that leverages object map (Jason Dillaman)
+* librbd: fix snapshot creation when other snap is active (#11475 Jason Dillaman)
+* librbd: new diff_iterate2 API (Jason Dillaman)
+* librbd: object map rebuild support (Jason Dillaman)
+* logrotate.d: prefer service over invoke-rc.d (#11330 Win Hierman, Sage Weil)
+* mds: avoid getting stuck in XLOCKDONE (#11254 Yan, Zheng)
+* mds: fix integer truncateion on large client ids (Henry Chang)
+* mds: many snapshot and stray fixes (Yan, Zheng)
+* mds: persist completed_requests reliably (#11048 John Spray)
+* mds: separate safe_pos in Journaler (#10368 John Spray)
+* mds: snapshot rename support (#3645 Yan, Zheng)
+* mds: warn when clients fail to advance oldest_client_tid (#10657 Yan, Zheng)
+* misc cleanups and fixes (Danny Al-Gaaf)
+* mon: fix average utilization calc for 'osd df' (Mykola Golub)
+* mon: fix variance calc in 'osd df' (Sage Weil)
+* mon: improve callout to crushtool (Mykola Golub)
+* mon: prevent bucket deletion when referenced by a crush rule (#11602 Sage Weil)
+* mon: prime pg_temp when CRUSH map changes (Sage Weil)
+* monclient: flush_log (John Spray)
+* msgr: async: many many fixes (Haomai Wang)
+* msgr: simple: fix clear_pipe (#11381 Haomai Wang)
+* osd: add latency perf counters for tier operations (Xinze Chi)
+* osd: avoid multiple hit set insertions (Zhiqiang Wang)
+* osd: break PG removal into multiple iterations (#10198 Guang Yang)
+* osd: check scrub state when handling map (Jianpeng Ma)
+* osd: fix endless repair when object is unrecoverable (Jianpeng Ma, Kefu Chai)
+* osd: fix pg resurrection (#11429 Samuel Just)
+* osd: ignore non-existent osds in unfound calc (#10976 Mykola Golub)
+* osd: increase default max open files (Owen Synge)
+* osd: prepopulate needs_recovery_map when only one peer has missing (#9558 Guang Yang)
+* osd: relax reply order on proxy read (#11211 Zhiqiang Wang)
+* osd: skip promotion for flush/evict op (Zhiqiang Wang)
+* osd: write journal header on clean shutdown (Xinze Chi)
+* qa: run-make-check.sh script (Loic Dachary)
+* rados bench: misc fixes (Dmitry Yatsushkevich)
+* rados: fix error message on failed pool removal (Wido den Hollander)
+* radosgw-admin: add 'bucket check' function to repair bucket index (Yehuda Sadeh)
+* rbd: allow unmapping by spec (Ilya Dryomov)
+* rbd: deprecate --new-format option (Jason Dillman)
+* rgw: do not set content-type if length is 0 (#11091 Orit Wasserman)
+* rgw: don't use end_marker for namespaced object listing (#11437 Yehuda Sadeh)
+* rgw: fail if parts not specified on multipart upload (#11435 Yehuda Sadeh)
+* rgw: fix GET on swift account when limit == 0 (#10683 Radoslaw Zarzynski)
+* rgw: fix broken stats in container listing (#11285 Radoslaw Zarzynski)
+* rgw: fix bug in domain/subdomain splitting (Robin H. Johnson)
+* rgw: fix civetweb max threads (#10243 Yehuda Sadeh)
+* rgw: fix copy metadata, support X-Copied-From for swift (#10663 Radoslaw Zarzynski)
+* rgw: fix locator for objects starting with _ (#11442 Yehuda Sadeh)
+* rgw: fix mulitipart upload in retry path (#11604 Yehuda Sadeh)
+* rgw: fix quota enforcement on POST (#11323 Sergey Arkhipov)
+* rgw: fix return code on missing upload (#11436 Yehuda Sadeh)
+* rgw: force content type header on responses with no body (#11438 Orit Wasserman)
+* rgw: generate new object tag when setting attrs (#11256 Yehuda Sadeh)
+* rgw: issue aio for first chunk before flush cached data (#11322 Guang Yang)
+* rgw: make read user buckets backward compat (#10683 Radoslaw Zarzynski)
+* rgw: merge manifests properly with prefix override (#11622 Yehuda Sadeh)
+* rgw: return 412 on bad limit when listing buckets (#11613 Yehuda Sadeh)
+* rgw: send ETag, Last-Modified for swift (#11087 Radoslaw Zarzynski)
+* rgw: set content length on container GET, PUT, DELETE, HEAD (#10971, #11036 Radoslaw Zarzynski)
+* rgw: support end marker on swift container GET (#10682 Radoslaw Zarzynski)
+* rgw: swift: fix account listing (#11501 Radoslaw Zarzynski)
+* rgw: swift: set content-length on keystone tokens (#11473 Herv Rousseau)
+* rgw: use correct oid for gc chains (#11447 Yehuda Sadeh)
+* rgw: use unique request id for civetweb (#10295 Orit Wasserman)
+* rocksdb, leveldb: fix compact_on_mount (Xiaoxi Chen)
+* rocksdb: add perf counters for get/put latency (Xinxin Shu)
+* rpm: add suse firewall files (Tim Serong)
+* rpm: misc systemd and suse fixes (Owen Synge, Nathan Cutler)
+
+
+
 v9.0.0
 ======
 
@@ -140,52 +250,16 @@ Notable Changes
 * rpm: loosen ceph-test dependencies (Ken Dreyer)
 
 
-0.94.2 Hammer (draft)
-======================
+v0.94.2 Hammer
+==============
 
-Notable changes
----------------
-* rgw: fix swift COPY headers (#10662, #10663, #11087, #10645, Radoslaw Zarzynski)
-* Hammer uclient checking (#11510, John Spray)
-* RGW Swift API: response for GET/HEAD on container does not contain the X-Timestamp header (#10938, Radoslaw Zarzynski)
-* civetweb is hitting a limit (number of threads 1024) (#10243, Yehuda Sadeh)
-* rgw: keystone token cache does not work correctly (#11125, Yehuda Sadeh)
-* rgw: shouldn't need to disable rgw_socket_path if frontend is configured (#11160, Yehuda Sadeh)
-* rgw: make swift responses of RGW return last-modified, content-length, x-trans-id headers.(#10650, Radoslaw Zarzynski)
-* RGW swift API: Response header of POST request for object does not contain content-length and x-trans-id headers (#10661, Radoslaw Zarzynski)
-* RGW Swift API: response for PUT on /container does not contain the mandatory Content-Length header when FCGI is used (#11036, #10971, Radoslaw Zarzynski)
-* RGW Swift API: wrong handling of empty metadata on Swift container (#11088, Radoslaw Zarzynski)
-* rgw: quota not respected in POST object (#11323, Sergey Arkhipov)
-* Queued AIO reference counters not properly updated (#11478, Jason Dillaman)
-* Periodic failure of TestLibRBD.DiffIterateStress (#11369, Jason Dillaman)
-* A retransmit of proxied flatten request can result in -EINVAL (Jason Dillaman)
-* tests: ceph-helpers kill_daemons fails when kill fails (#11398, Loic Dachary)
-* objecter: can get stuck in redirect loop if osdmap epoch == last_force_op_resend (#11026, Jianpeng Ma)
-* ceph-objectstore-tool should be in the ceph server package (#11376, Ken Dreyer)
-* src/ceph-disk : disk zap sgdisk invocation (#11143, Owen Synge)
-* object creation by write cannot use an offset on an erasure coded pool (#11507, Jianpeng Ma)
-* OSD::load_pgs: we need to handle the case where an upgrade from earlier versions which ignored non-existent pgs resurrects a pg with a prehistoric osdmap (#11429, Samuel Just)
-* mon: Total size of OSDs is a maginitude less than it is supposed to be. (#11534, Zhe Zhang)
-* RGW swift API: Response header of GET request for container does not contain X-Container-Object-Count, X-Container-Bytes-Used and x-trans-id headers (#10666, Dmytro Iurchenko)
-* mds: remove caps from revoking list when caps are voluntarily released (#11482, Yan, Zheng)
-* librbd notification race condition on snap_create (#11342, Jason Dillaman)
-* Objectcacher setting max object counts too low (#7385, Jason Dillaman)
-* ImageWatcher should cancel in-flight ops on watch error (#11363, Jason Dillaman)
-* librbd: deadlock in image refresh (#5488, Jason Dillaman)
-* rgw - improve performance for large object  (multiple chunks) GET (#11322, Guang Yang)
-* Improve rgw HEAD request by avoiding read the body of the first chunk (#11001, Guang Yang)
-* rgw : make quota/gc thread configurable for starting (#11047, Guang Yang)
-* ceph-dencoder links to libtcmalloc, and shouldn't (#10691, Boris Ranto)
-* use a new disk as journal disk,ceph-disk prepare fail (#10983, Loic Dachary)
-* compilation error: No high-precision counter available  (armhf, powerpc..) (#11432, James Page)
-* rgw: civetweb should use unique request id (#10295, Orit Wasserman)
-* rgw: critical fixes for hammer (#11447, #11442, Yehuda Sadeh)
-* osd/ReplicatedPG: don't check order in finish_proxy_read (#11211, Zhiqiang Wang)
-* messenger: double clear of pipe in reaper (#11381, Haomai Wang)
-* rgw: init-radosgw: run RGW as root (#11453, Ken Dreyer)
-* tests: TestFlatIndex.cc races with TestLFNIndex.cc (#11217, Xinze Chi)
-* rgw: restore buffer of multipart upload after EEXIST (#11604, Yehuda Sadeh)
-* rgw: merge manifests correctly when there's prefix override (#11622, Yehuda Sadeh)
+This Hammer point release fixes a few critical bugs in RGW that can
+prevent objects starting with underscore from behaving properly and
+that prevent garbage collection of deleted objects when using the
+Civetweb standalone mode.
+
+All v0.94.x Hammer users are strongly encouraged to upgrade, and to
+make note of the repair procedure below if RGW is in use.
 
 Upgrading from previous Hammer release
 --------------------------------------
@@ -198,6 +272,53 @@ is required to run (for each affected bucket)::
 
     $ radosgw-admin bucket check --check-head-obj-locator \
                                  --bucket=<bucket> [--fix]
+
+Notable changes
+---------------
+
+* build: compilation error: No high-precision counter available  (armhf, powerpc..) (#11432, James Page)
+* ceph-dencoder links to libtcmalloc, and shouldn't (#10691, Boris Ranto)
+* ceph-disk: disk zap sgdisk invocation (#11143, Owen Synge)
+* ceph-disk: use a new disk as journal disk,ceph-disk prepare fail (#10983, Loic Dachary)
+* ceph-objectstore-tool should be in the ceph server package (#11376, Ken Dreyer)
+* librados: can get stuck in redirect loop if osdmap epoch == last_force_op_resend (#11026, Jianpeng Ma)
+* librbd: A retransmit of proxied flatten request can result in -EINVAL (Jason Dillaman)
+* librbd: ImageWatcher should cancel in-flight ops on watch error (#11363, Jason Dillaman)
+* librbd: Objectcacher setting max object counts too low (#7385, Jason Dillaman)
+* librbd: Periodic failure of TestLibRBD.DiffIterateStress (#11369, Jason Dillaman)
+* librbd: Queued AIO reference counters not properly updated (#11478, Jason Dillaman)
+* librbd: deadlock in image refresh (#5488, Jason Dillaman)
+* librbd: notification race condition on snap_create (#11342, Jason Dillaman)
+* mds: Hammer uclient checking (#11510, John Spray)
+* mds: remove caps from revoking list when caps are voluntarily released (#11482, Yan, Zheng)
+* messenger: double clear of pipe in reaper (#11381, Haomai Wang)
+* mon: Total size of OSDs is a maginitude less than it is supposed to be. (#11534, Zhe Zhang)
+* osd: don't check order in finish_proxy_read (#11211, Zhiqiang Wang)
+* osd: handle old semi-deleted pgs after upgrade (#11429, Samuel Just)
+* osd: object creation by write cannot use an offset on an erasure coded pool (#11507, Jianpeng Ma)
+* rgw: Improve rgw HEAD request by avoiding read the body of the first chunk (#11001, Guang Yang)
+* rgw: civetweb is hitting a limit (number of threads 1024) (#10243, Yehuda Sadeh)
+* rgw: civetweb should use unique request id (#10295, Orit Wasserman)
+* rgw: critical fixes for hammer (#11447, #11442, Yehuda Sadeh)
+* rgw: fix swift COPY headers (#10662, #10663, #11087, #10645, Radoslaw Zarzynski)
+* rgw: improve performance for large object  (multiple chunks) GET (#11322, Guang Yang)
+* rgw: init-radosgw: run RGW as root (#11453, Ken Dreyer)
+* rgw: keystone token cache does not work correctly (#11125, Yehuda Sadeh)
+* rgw: make quota/gc thread configurable for starting (#11047, Guang Yang)
+* rgw: make swift responses of RGW return last-modified, content-length, x-trans-id headers.(#10650, Radoslaw Zarzynski)
+* rgw: merge manifests correctly when there's prefix override (#11622, Yehuda Sadeh)
+* rgw: quota not respected in POST object (#11323, Sergey Arkhipov)
+* rgw: restore buffer of multipart upload after EEXIST (#11604, Yehuda Sadeh)
+* rgw: shouldn't need to disable rgw_socket_path if frontend is configured (#11160, Yehuda Sadeh)
+* rgw: swift: Response header of GET request for container does not contain X-Container-Object-Count, X-Container-Bytes-Used and x-trans-id headers (#10666, Dmytro Iurchenko)
+* rgw: swift: Response header of POST request for object does not contain content-length and x-trans-id headers (#10661, Radoslaw Zarzynski)
+* rgw: swift: response for GET/HEAD on container does not contain the X-Timestamp header (#10938, Radoslaw Zarzynski)
+* rgw: swift: response for PUT on /container does not contain the mandatory Content-Length header when FCGI is used (#11036, #10971, Radoslaw Zarzynski)
+* rgw: swift: wrong handling of empty metadata on Swift container (#11088, Radoslaw Zarzynski)
+* tests: TestFlatIndex.cc races with TestLFNIndex.cc (#11217, Xinze Chi)
+* tests: ceph-helpers kill_daemons fails when kill fails (#11398, Loic Dachary)
+
+For more detailed information, see :download:`the complete changelog <changelog/v0.94.2.txt>`.
 
 
 v0.94.1 Hammer
@@ -367,7 +488,7 @@ Upgrading
   until we find a way to avoid violating distro security policies when linking
   libust.
 
-Upgrading from v0.80.x Giant
+Upgrading from v0.87.x Giant
 ----------------------------
 
 * librbd and librados include lttng tracepoints on distros with
@@ -462,7 +583,7 @@ Upgrading from v0.80.x Giant
   to interpret the quoted string and will most likely need to be fixed to take
   the unquoted number.
 
-* New ability to list all objects from all namespaces can fail or
+* New ability to list all objects from all namespaces that can fail or
   return incomplete results when not all OSDs have been upgraded.
   Features rados --all ls, rados cppool, rados export, rados
   cache-flush-evict-all and rados cache-try-flush-evict-all can also

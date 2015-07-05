@@ -678,7 +678,9 @@ private:
 	      bool *created = NULL, int uid=-1, int gid=-1);
   loff_t _lseek(Fh *fh, loff_t offset, int whence);
   int _read(Fh *fh, int64_t offset, uint64_t size, bufferlist *bl);
-  int _write(Fh *fh, int64_t offset, uint64_t size, const char *buf);
+  int _write(Fh *fh, int64_t offset, uint64_t size, const char *buf,
+          const struct iovec *iov, int iovcnt);
+  int _preadv_pwritev(int fd, const struct iovec *iov, unsigned iovcnt, int64_t offset, bool write);
   int _flush(Fh *fh);
   int _fsync(Fh *fh, bool syncdataonly);
   int _sync_fs();
@@ -846,7 +848,9 @@ public:
   int close(int fd);
   loff_t lseek(int fd, loff_t offset, int whence);
   int read(int fd, char *buf, loff_t size, loff_t offset=-1);
+  int preadv(int fd, const struct iovec *iov, int iovcnt, loff_t offset=-1);
   int write(int fd, const char *buf, loff_t size, loff_t offset=-1);
+  int pwritev(int fd, const struct iovec *iov, int iovcnt, loff_t offset=-1);
   int fake_write_size(int fd, loff_t size);
   int ftruncate(int fd, loff_t size);
   int fsync(int fd, bool syncdataonly);

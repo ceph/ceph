@@ -8,7 +8,7 @@ AC_PREREQ(2.59)
 # VERSION define is not used by the code.  It gets a version string
 # from 'git describe'; see src/ceph_ver.[ch]
 
-AC_INIT([ceph], [9.0.0], [ceph-devel@vger.kernel.org])
+AC_INIT([ceph], [9.0.1], [ceph-devel@vger.kernel.org])
 
 # Create release string.  Used with VERSION for RPMs.
 RPM_RELEASE=0
@@ -50,8 +50,8 @@ AM_PROG_LIBTOOL
 AM_PROG_AS
 
 
+AM_INIT_AUTOMAKE([foreign parallel-tests])
 # enable make V=0 (if automake >1.11)
-AM_INIT_AUTOMAKE([foreign])
 m4_ifdef([AM_SILENT_RULES], [AM_SILENT_RULES([yes])])
 
 # Platform
@@ -638,9 +638,9 @@ if test "x$enable_cephfs_java" = "xyes"; then
         # the search path.
         AS_IF([test "x$with_debug" = "xyes"], [
         	dir='/usr/share/java'
-	        junit4_jar=`find $dir -name junit4.jar | head -n 1`
+	        junit4_jar=`( find $dir -name junit4.jar;find $dir -name junit.jar ) | head -n 1`
 		AS_IF([test -r "$junit4_jar"], [
-		      EXTRA_CLASSPATH_JAR=`dirname $junit4_jar`/junit4.jar
+		      EXTRA_CLASSPATH_JAR="$junit4_jar"
 		      AC_SUBST(EXTRA_CLASSPATH_JAR)
 		      [have_junit4=1]], [
 		      AC_MSG_NOTICE([Cannot find junit4.jar (apt-get install junit4)])

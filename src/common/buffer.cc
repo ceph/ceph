@@ -34,6 +34,7 @@
 #include <sys/uio.h>
 #include <limits.h>
 
+#include <ostream>
 namespace ceph {
 
 #ifdef BUFFER_DEBUG
@@ -556,8 +557,8 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
 
   class buffer::xio_mempool : public buffer::raw {
   public:
-    struct xio_mempool_obj *mp;
-    xio_mempool(struct xio_mempool_obj *_mp, unsigned l) :
+    struct xio_reg_mem *mp;
+    xio_mempool(struct xio_reg_mem *_mp, unsigned l) :
       raw((char*)mp->addr, l), mp(_mp)
     { }
     ~xio_mempool() {}
@@ -566,7 +567,7 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
     }
   };
 
-  struct xio_mempool_obj* get_xio_mp(const buffer::ptr& bp)
+  struct xio_reg_mem* get_xio_mp(const buffer::ptr& bp)
   {
     buffer::xio_mempool *mb = dynamic_cast<buffer::xio_mempool*>(bp.get_raw());
     if (mb) {
@@ -1866,6 +1867,15 @@ __u32 buffer::list::crc32c(__u32 crc) const
   return crc;
 }
 
+void buffer::list::invalidate_crc()
+{
+  for (std::list<ptr>::const_iterator p = _buffers.begin(); p != _buffers.end(); ++p) {
+    raw *r = p->get_raw();
+    if (r) {
+      r->invalidate_crc();
+    }
+  }
+}
 
 /**
  * Binary write all contents to a C++ stream
@@ -1917,5 +1927,34 @@ std::ostream& operator<<(std::ostream& out, const buffer::raw &r) {
   return out << "buffer::raw(" << (void*)r.data << " len " << r.len << " nref " << r.nref.read() << ")";
 }
 
+std::ostream& operator<<(std::ostream& out, const buffer::ptr& bp) {
+  if (bp.have_raw())
+    out << "buffer::ptr(" << bp.offset() << "~" << bp.length()
+	<< " " << (void*)bp.c_str()
+	<< " in raw " << (void*)bp.raw_c_str()
+	<< " len " << bp.raw_length()
+	<< " nref " << bp.raw_nref() << ")";
+  else
+    out << "buffer:ptr(" << bp.offset() << "~" << bp.length() << " no raw)";
+  return out;
+}
+
+std::ostream& operator<<(std::ostream& out, const buffer::list& bl) {
+  out << "buffer::list(len=" << bl.length() << "," << std::endl;
+
+  std::list<buffer::ptr>::const_iterator it = bl.buffers().begin();
+  while (it != bl.buffers().end()) {
+    out << "\t" << *it;
+    if (++it == bl.buffers().end()) break;
+    out << "," << std::endl;
+  }
+  out << std::endl << ")";
+  return out;
+}
+
+std::ostream& operator<<(std::ostream& out, const buffer::error& e)
+{
+  return out << e.what();
+}
 
 }

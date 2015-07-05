@@ -685,11 +685,16 @@ void MDCache::populate_mydir()
     for (list<frag_t>::iterator p = ls.begin(); p != ls.end(); ++p) {
       frag_t fg = *p;
       CDir *dir = strays[i]->get_dirfrag(fg);
-      if (!dir)
+      if (!dir) {
 	dir = strays[i]->get_or_open_dirfrag(this, fg);
-      if (dir->get_version() == 0) {
-	dir->fetch(new C_MDS_RetryOpenRoot(this));
-	return;
+      }
+
+      if (dir->state_test(CDir::STATE_BADFRAG)) {
+        mds->damaged();
+        assert(0);
+      } else if (dir->get_version() == 0) {
+        dir->fetch(new C_MDS_RetryOpenRoot(this));
+        return;
       }
     }
   }

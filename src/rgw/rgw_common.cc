@@ -110,6 +110,21 @@ req_info::req_info(CephContext *cct, class RGWEnv *e) : env(e) {
     request_params = env->get("QUERY_STRING", "");
   }
   host = env->get("HTTP_HOST");
+
+  // strip off any trailing :port from host (added by CrossFTP and maybe others)
+  size_t colon_offset = host.find_last_of(':');
+  if (colon_offset != string::npos) {
+    bool all_digits = true;
+    for (unsigned i = colon_offset + 1; i < host.size(); ++i) {
+      if (!isdigit(host[i])) {
+	all_digits = false;
+	break;
+      }
+    }
+    if (all_digits) {
+      host.resize(colon_offset);
+    }
+  }
 }
 
 void req_info::rebuild_from(req_info& src)
@@ -169,6 +184,18 @@ req_state::~req_state() {
   delete object_acl;
 }
 
+void req_state::gen_trans_id()
+{
+  char buf[256];
+  timeval timetest;
+  gettimeofday(&timetest, NULL);
+  if (strftime(buf, sizeof(buf), "%Y%m%d:%H%M%S",gmtime(&(timetest.tv_sec))) ==  0)
+    return;
+
+  snprintf(buf + strlen(buf), sizeof(buf)-strlen(buf) ,":%03ld", timetest.tv_usec/1000);
+  trans_id = req_id + "-" + buf;
+}
+
 struct str_len {
   const char *str;
   int len;
@@ -182,6 +209,7 @@ struct str_len meta_prefixes[] = { STR_LEN_ENTRY("HTTP_X_AMZ"),
                                    STR_LEN_ENTRY("HTTP_X_RGW"),
                                    STR_LEN_ENTRY("HTTP_X_OBJECT"),
                                    STR_LEN_ENTRY("HTTP_X_CONTAINER"),
+                                   STR_LEN_ENTRY("HTTP_X_ACCOUNT"),
                                    {NULL, 0} };
 
 

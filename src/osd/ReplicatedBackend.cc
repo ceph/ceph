@@ -1910,38 +1910,28 @@ void ReplicatedBackend::send_pushes(int prio, map<pg_shard_t, vector<PushOp> > &
       get_osdmap()->get_epoch());
     if (!con)
       continue;
-    if (!(con->get_features() & CEPH_FEATURE_OSD_PACKED_RECOVERY)) {
-      for (vector<PushOp>::iterator j = i->second.begin();
-	   j != i->second.end();
+    vector<PushOp>::iterator j = i->second.begin();
+    while (j != i->second.end()) {
+      uint64_t cost = 0;
+      uint64_t pushes = 0;
+      MOSDPGPush *msg = new MOSDPGPush();
+      msg->from = get_parent()->whoami_shard();
+      msg->pgid = get_parent()->primary_spg_t();
+      msg->map_epoch = get_osdmap()->get_epoch();
+      msg->set_priority(prio);
+      for (;
+           (j != i->second.end() &&
+	    cost < cct->_conf->osd_max_push_cost &&
+	    pushes < cct->_conf->osd_max_push_objects) ;
 	   ++j) {
-	dout(20) << __func__ << ": sending push (legacy) " << *j
+	dout(20) << __func__ << ": sending push " << *j
 		 << " to osd." << i->first << dendl;
-	send_push_op_legacy(prio, i->first, *j);
+	cost += j->cost(cct);
+	pushes += 1;
+	msg->pushes.push_back(*j);
       }
-    } else {
-      vector<PushOp>::iterator j = i->second.begin();
-      while (j != i->second.end()) {
-	uint64_t cost = 0;
-	uint64_t pushes = 0;
-	MOSDPGPush *msg = new MOSDPGPush();
-	msg->from = get_parent()->whoami_shard();
-	msg->pgid = get_parent()->primary_spg_t();
-	msg->map_epoch = get_osdmap()->get_epoch();
-	msg->set_priority(prio);
-	for (;
-	     (j != i->second.end() &&
-	      cost < cct->_conf->osd_max_push_cost &&
-	      pushes < cct->_conf->osd_max_push_objects) ;
-	     ++j) {
-	  dout(20) << __func__ << ": sending push " << *j
-		   << " to osd." << i->first << dendl;
-	  cost += j->cost(cct);
-	  pushes += 1;
-	  msg->pushes.push_back(*j);
-	}
-	msg->compute_cost(cct);
-	get_parent()->send_message_osd_cluster(msg, con);
-      }
+      msg->compute_cost(cct);
+      get_parent()->send_message_osd_cluster(msg, con);
     }
   }
 }
@@ -1956,30 +1946,16 @@ void ReplicatedBackend::send_pulls(int prio, map<pg_shard_t, vector<PullOp> > &p
       get_osdmap()->get_epoch());
     if (!con)
       continue;
-    if (!(con->get_features() & CEPH_FEATURE_OSD_PACKED_RECOVERY)) {
-      for (vector<PullOp>::iterator j = i->second.begin();
-	   j != i->second.end();
-	   ++j) {
-	dout(20) << __func__ << ": sending pull (legacy) " << *j
-		 << " to osd." << i->first << dendl;
-	send_pull_legacy(
-	  prio,
-	  i->first,
-	  j->recovery_info,
-	  j->recovery_progress);
-      }
-    } else {
-      dout(20) << __func__ << ": sending pulls " << i->second
-	       << " to osd." << i->first << dendl;
-      MOSDPGPull *msg = new MOSDPGPull();
-      msg->from = parent->whoami_shard();
-      msg->set_priority(prio);
-      msg->pgid = get_parent()->primary_spg_t();
-      msg->map_epoch = get_osdmap()->get_epoch();
-      msg->pulls.swap(i->second);
-      msg->compute_cost(cct);
-      get_parent()->send_message_osd_cluster(msg, con);
-    }
+    dout(20) << __func__ << ": sending pulls " << i->second
+	     << " to osd." << i->first << dendl;
+    MOSDPGPull *msg = new MOSDPGPull();
+    msg->from = parent->whoami_shard();
+    msg->set_priority(prio);
+    msg->pgid = get_parent()->primary_spg_t();
+    msg->map_epoch = get_osdmap()->get_epoch();
+    msg->pulls.swap(i->second);
+    msg->compute_cost(cct);
+    get_parent()->send_message_osd_cluster(msg, con);
   }
 }
 

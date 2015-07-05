@@ -18,11 +18,22 @@
 #include <errno.h>
 #include <vector>
 #include <algorithm>
+#include <ostream>
 
 #include "common/strtol.h"
 #include "ErasureCode.h"
 
 const unsigned ErasureCode::SIMD_ALIGN = 32;
+
+int ErasureCode::sanity_check_k(int k, ostream *ss)
+{
+  if (k < 2) {
+    *ss << "k=" << k << " must be >= 2" << std::endl;
+    return -EINVAL;
+  } else {
+    return 0;
+  }
+}
 
 int ErasureCode::chunk_index(unsigned int i) const
 {

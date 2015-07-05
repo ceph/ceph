@@ -299,8 +299,8 @@ namespace librbd {
 
   bool AbstractWrite::should_complete(int r)
   {
-    ldout(m_ictx->cct, 20) << "write " << this << " " << m_oid << " "
-                           << m_object_off << "~" << m_object_len
+    ldout(m_ictx->cct, 20) << get_write_type() << " " << this << " " << m_oid
+                           << " " << m_object_off << "~" << m_object_len
 			   << " should_complete: r = " << r << dendl;
 
     bool finished = true;
@@ -355,12 +355,13 @@ namespace librbd {
 
     case LIBRBD_AIO_WRITE_COPYUP:
       ldout(m_ictx->cct, 20) << "WRITE_COPYUP" << dendl;
-      m_state = LIBRBD_AIO_WRITE_GUARD;
       if (r < 0) {
-	return should_complete(r);
+        m_state = LIBRBD_AIO_WRITE_ERROR;
+        complete(r);
+        finished = false;
+      } else {
+        finished = send_post();
       }
-
-      finished = send_post();
       break;
 
     case LIBRBD_AIO_WRITE_FLAT:
@@ -385,42 +386,50 @@ namespace librbd {
 
   void AbstractWrite::send() {
     assert(m_ictx->owner_lock.is_locked());
-    ldout(m_ictx->cct, 20) << "send " << this << " " << m_oid << " "
-			   << m_object_off << "~" << m_object_len << dendl;
+    ldout(m_ictx->cct, 20) << "send " << get_write_type() << " " << this <<" "
+                           << m_oid << " " << m_object_off << "~"
+                           << m_object_len << dendl;
     send_pre();
   }
 
   void AbstractWrite::send_pre() {
     assert(m_ictx->owner_lock.is_locked());
-    RWLock::RLocker snap_lock(m_ictx->snap_lock);
-    if (!m_ictx->object_map.enabled()) {
-      send_write();
-      return;
+
+    bool write = false;
+    {
+      RWLock::RLocker snap_lock(m_ictx->snap_lock);
+      if (!m_ictx->object_map.enabled()) {
+        write = true;
+      } else {
+        // should have been flushed prior to releasing lock
+        assert(m_ictx->image_watcher->is_lock_owner());
+
+        ldout(m_ictx->cct, 20) << "send_pre " << this << " " << m_oid << " "
+          		       << m_object_off << "~" << m_object_len << dendl;
+        m_state = LIBRBD_AIO_WRITE_PRE;
+
+        uint8_t new_state;
+        boost::optional<uint8_t> current_state;
+        pre_object_map_update(&new_state);
+
+        RWLock::WLocker object_map_locker(m_ictx->object_map_lock);
+        if (m_ictx->object_map[m_object_no] != new_state) {
+          FunctionContext *ctx = new FunctionContext(
+            boost::bind(&AioRequest::complete, this, _1));
+          bool updated = m_ictx->object_map.aio_update(m_object_no, new_state,
+                                                       current_state, ctx);
+          assert(updated);
+        } else {
+          write = true;
+        }
+      }
     }
 
-    // should have been flushed prior to releasing lock
-    assert(m_ictx->image_watcher->is_lock_owner());
-
-    ldout(m_ictx->cct, 20) << "send_pre " << this << " " << m_oid << " "
-			   << m_object_off << "~" << m_object_len << dendl;
-    m_state = LIBRBD_AIO_WRITE_PRE;
-
-    uint8_t new_state;
-    boost::optional<uint8_t> current_state;
-    pre_object_map_update(&new_state);
-
-
-    RWLock::WLocker object_map_locker(m_ictx->object_map_lock);
-    if (m_ictx->object_map[m_object_no] == new_state) {
+    // avoid possible recursive lock attempts
+    if (write) {
+      // no object map update required
       send_write();
-      return;
     }
-
-    FunctionContext *ctx = new FunctionContext(
-      boost::bind(&AioRequest::complete, this, _1));
-    bool updated = m_ictx->object_map.aio_update(m_object_no, new_state,
-                                                 current_state, ctx);
-    assert(updated);
   }
 
   bool AbstractWrite::send_post() {
@@ -497,8 +506,17 @@ namespace librbd {
   }
 
   void AioWrite::add_write_ops(librados::ObjectWriteOperation *wr) {
-    wr->set_alloc_hint(m_ictx->get_object_size(), m_ictx->get_object_size());
+    if (m_ictx->enable_alloc_hint && !m_ictx->object_map.object_may_exist(m_object_no))
+      wr->set_alloc_hint(m_ictx->get_object_size(), m_ictx->get_object_size());
     wr->write(m_object_off, m_write_data);
     wr->set_op_flags2(m_op_flags);
+  }
+
+  void AioRemove::guard_write() {
+    // do nothing to disable write guard only if deep-copyup not required
+    RWLock::RLocker snap_locker(m_ictx->snap_lock);
+    if (!m_ictx->snaps.empty()) {
+      AbstractWrite::guard_write();
+    }
   }
 }

@@ -1881,10 +1881,12 @@ void Monitor::lose_election(epoch_t epoch, set<int> &q, int l, uint64_t features
 
   finish_election();
 
-  Metadata sys_info;
-  collect_sys_info(&sys_info, g_ceph_context);
-  messenger->send_message(new MMonMetadata(sys_info),
-			  monmap->get_inst(get_leader()));
+  if (quorum_features & CEPH_FEATURE_MON_METADATA) {
+    Metadata sys_info;
+    collect_sys_info(&sys_info, g_ceph_context);
+    messenger->send_message(new MMonMetadata(sys_info),
+			    monmap->get_inst(get_leader()));
+  }
 }
 
 void Monitor::finish_election()
@@ -3407,12 +3409,11 @@ void Monitor::_ms_dispatch(Message *m)
     dout(20) << "ms_dispatch existing session " << s << " for " << s->inst << dendl;
   }
 
-  if (s) {
-    if (s->auth_handler) {
-      s->entity_name = s->auth_handler->get_entity_name();
-    }
-    dout(20) << " caps " << s->caps.get_str() << dendl;
+  assert(s);
+  if (s->auth_handler) {
+    s->entity_name = s->auth_handler->get_entity_name();
   }
+  dout(20) << " caps " << s->caps.get_str() << dendl;
 
   if (is_synchronizing() && !src_is_mon) {
     waitlist_or_zap_client(m);
@@ -3420,11 +3421,7 @@ void Monitor::_ms_dispatch(Message *m)
   }
 
   dispatch(s, m, src_is_mon);
-
-  if (s) {
-    s->put();
-  }
-
+  s->put();
   return;
 }
 

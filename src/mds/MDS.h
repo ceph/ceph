@@ -39,7 +39,7 @@
 #include "Beacon.h"
 
 
-#define CEPH_MDS_PROTOCOL    25 /* cluster internal */
+#define CEPH_MDS_PROTOCOL    26 /* cluster internal */
 
 enum {
   l_mds_first = 2000,
@@ -140,7 +140,14 @@ class AuthAuthorizeHandlerRegistry;
 
 class MDS : public Dispatcher, public md_config_obs_t {
  public:
+
+  /* Global MDS lock: every time someone takes this, they must
+   * also check the `stopping` flag.  If stopping is true, you
+   * must either do nothing and immediately drop the lock, or
+   * never drop the lock again (i.e. call respawn()) */
   Mutex        mds_lock;
+  bool         stopping;
+
   SafeTimer    timer;
 
  private:
@@ -328,10 +335,9 @@ public:
 private:
   class ProgressThread : public Thread {
     MDS *mds;
-    bool stopping;
     Cond cond;
   public:
-    ProgressThread(MDS *mds_) : mds(mds_), stopping(false) {}
+    ProgressThread(MDS *mds_) : mds(mds_) {}
     void * entry(); 
     void shutdown();
     void signal() {cond.Signal();}
@@ -382,9 +388,22 @@ private:
   void command_get_subtrees(Formatter *f);
   void command_export_dir(Formatter *f,
       const std::string &path, mds_rank_t dest);
+  bool command_dirfrag_split(
+      cmdmap_t cmdmap,
+      std::ostream &ss);
+  bool command_dirfrag_merge(
+      cmdmap_t cmdmap,
+      std::ostream &ss);
+  bool command_dirfrag_ls(
+      cmdmap_t cmdmap,
+      std::ostream &ss,
+      Formatter *f);
  private:
   int _command_export_dir(const std::string &path, mds_rank_t dest);
   int _command_flush_journal(std::stringstream *ss);
+  CDir *_command_dirfrag_get(
+      const cmdmap_t &cmdmap,
+      std::ostream &ss);
  public:
     // config observer bits
   virtual const char** get_tracked_conf_keys() const;
@@ -449,11 +468,28 @@ private:
    * to load an MDS rank's data structures.  This is *not* for use with
    * errors affecting normal dirfrag/inode objects -- they should be handled
    * through cleaner scrub/repair mechanisms.
+   *
+   * Callers must already hold mds_lock.
    */
   void damaged();
 
   /**
+   * Wrapper around `damaged` for users who are not
+   * already holding mds_lock.
+   *
+   * Callers must not already hold mds_lock.
+   */
+  void damaged_unlocked()
+  {
+    Mutex::Locker l(mds_lock);
+    damaged();
+  }
+
+  /**
    * Terminate this daemon process.
+   *
+   * This function will return, but once it does so the calling thread
+   * must do no more work as all subsystems will have been shut down.
    *
    * @param fast: if true, do not send a message to the mon before shutting
    *              down

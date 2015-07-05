@@ -36,8 +36,7 @@
 # include <sys/mman.h>
 #endif
 
-#include <iostream>
-#include <istream>
+#include <iosfwd>
 #include <iomanip>
 #include <list>
 #include <string>
@@ -59,7 +58,7 @@
 #endif
 
 #if defined(HAVE_XIO)
-struct xio_mempool_obj;
+struct xio_reg_mem;
 class XioDispatchHook;
 #endif
 
@@ -490,6 +489,7 @@ public:
     int write_fd(int fd) const;
     int write_fd_zero_copy(int fd) const;
     uint32_t crc32c(uint32_t crc) const;
+	void invalidate_crc();
   };
 
   /*
@@ -514,7 +514,7 @@ public:
 };
 
 #if defined(HAVE_XIO)
-xio_mempool_obj* get_xio_mp(const buffer::ptr& bp);
+xio_reg_mem* get_xio_mp(const buffer::ptr& bp);
 #endif
 
 typedef buffer::ptr bufferptr;
@@ -557,41 +557,17 @@ inline bool operator<=(bufferlist& l, bufferlist& r) {
 }
 
 
-inline std::ostream& operator<<(std::ostream& out, const buffer::ptr& bp) {
-  if (bp.have_raw())
-    out << "buffer::ptr(" << bp.offset() << "~" << bp.length()
-	<< " " << (void*)bp.c_str() 
-	<< " in raw " << (void*)bp.raw_c_str()
-	<< " len " << bp.raw_length()
-	<< " nref " << bp.raw_nref() << ")";
-  else
-    out << "buffer:ptr(" << bp.offset() << "~" << bp.length() << " no raw)";
-  return out;
-}
+std::ostream& operator<<(std::ostream& out, const buffer::ptr& bp);
 
-inline std::ostream& operator<<(std::ostream& out, const buffer::list& bl) {
-  out << "buffer::list(len=" << bl.length() << "," << std::endl;
 
-  std::list<buffer::ptr>::const_iterator it = bl.buffers().begin();
-  while (it != bl.buffers().end()) {
-    out << "\t" << *it;
-    if (++it == bl.buffers().end()) break;
-    out << "," << std::endl;
-  }
-  out << std::endl << ")";
-  return out;
-}
+std::ostream& operator<<(std::ostream& out, const buffer::list& bl);
 
-inline std::ostream& operator<<(std::ostream& out, buffer::error& e)
-{
-  return out << e.what();
-}
+std::ostream& operator<<(std::ostream& out, const buffer::error& e);
 
 inline bufferhash& operator<<(bufferhash& l, bufferlist &r) {
   l.update(r);
   return l;
 }
-
 }
 
 #endif

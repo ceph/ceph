@@ -122,7 +122,7 @@ void MDSMap::dump(Formatter *f) const
   f->close_section();
   f->open_object_section("up");
   for (map<mds_rank_t,mds_gid_t>::const_iterator p = up.begin(); p != up.end(); ++p) {
-    char s[10];
+    char s[14];
     sprintf(s, "mds_%d", int(p->first));
     f->dump_int(s, p->second);
   }

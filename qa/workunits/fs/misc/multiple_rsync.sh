@@ -4,7 +4,7 @@
 # Populate with some arbitrary files from the local system.  Take
 # a copy to protect against false fails from system updates during test.
 export PAYLOAD=/tmp/multiple_rsync_payload.$$
-cp -r /usr/lib/ $PAYLOAD
+sudo cp -r /usr/lib/ $PAYLOAD
 
 set -e
 
@@ -19,8 +19,7 @@ wc -l /tmp/$$ | grep 4
 sudo rsync -auv $PAYLOAD payload.2 | tee /tmp/$$
 hexdump -C /tmp/$$
 wc -l /tmp/$$ | grep 4
-rm /tmp/$$
-
 echo OK
 
-rm -rf $PAYLOAD
+rm /tmp/$$
+sudo rm -rf $PAYLOAD

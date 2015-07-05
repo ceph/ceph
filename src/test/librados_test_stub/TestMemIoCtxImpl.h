@@ -43,7 +43,8 @@ public:
   virtual int sparse_read(const std::string& oid, uint64_t off, uint64_t len,
                           std::map<uint64_t,uint64_t> *m, bufferlist *data_bl);
   virtual int stat(const std::string& oid, uint64_t *psize, time_t *pmtime);
-  virtual int truncate(const std::string& oid, uint64_t size);
+  virtual int truncate(const std::string& oid, uint64_t size,
+                       const SnapContext &snapc);
   virtual int write(const std::string& oid, bufferlist& bl, size_t len,
                     uint64_t off, const SnapContext &snapc);
   virtual int write_full(const std::string& oid, bufferlist& bl,

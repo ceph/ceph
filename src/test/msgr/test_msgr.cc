@@ -737,6 +737,12 @@ class SyntheticDispatcher : public Dispatcher {
     got_remote_reset = true;
   }
   void ms_fast_dispatch(Message *m) {
+    // MSG_COMMAND is used to disorganize regular message flow
+    if (m->get_type() == MSG_COMMAND) {
+      m->put();
+      return ;
+    }
+
     Mutex::Locker l(lock);
     uint64_t i;
     bool reply;
@@ -745,10 +751,10 @@ class SyntheticDispatcher : public Dispatcher {
     ::decode(i, blp);
     ::decode(reply, blp);
     if (reply) {
-      cerr << __func__ << " reply=" << reply << " i=" << i << std::endl;
+      //cerr << __func__ << " reply=" << reply << " i=" << i << std::endl;
       reply_message(m, i);
     } else if (sent.count(i)) {
-      cerr << __func__ << " reply=" << reply << " i=" << i << std::endl;
+      //cerr << __func__ << " reply=" << reply << " i=" << i << std::endl;
       ASSERT_EQ(conn_sent[m->get_connection()].front(), i);
       ASSERT_TRUE(m->get_data().contents_equal(sent[i]));
       conn_sent[m->get_connection()].pop_front();
@@ -776,6 +782,7 @@ class SyntheticDispatcher : public Dispatcher {
     if (m->get_middle().length())
       rm->set_middle(bl);
     m->get_connection()->send_message(rm);
+    //cerr << __func__ << " conn=" << m->get_connection() << " reply m=" << m << " i=" << i << std::endl;
   }
 
   void send_message_wrap(ConnectionRef con, Message *m) {
@@ -791,6 +798,7 @@ class SyntheticDispatcher : public Dispatcher {
         sent[i] = m->get_data();
         conn_sent[con].push_back(i);
       }
+      //cerr << __func__ << " conn=" << con.get() << " send m=" << m << " i=" << i << std::endl;
     }
     ASSERT_EQ(con->send_message(m), 0);
   }
@@ -921,25 +929,43 @@ class SyntheticWorkload {
     pair<Messenger*, Messenger*> p;
     {
       boost::uniform_int<> choose(0, available_servers.size() - 1);
-      if (server->get_default_policy().server || choose(rng) % 2)
+      if (server->get_default_policy().server) {
         p = make_pair(client, server);
-      else
-        p = make_pair(server, client);
+      } else {
+        ConnectionRef conn = client->get_connection(server->get_myinst());
+        if (available_connections.count(conn) || choose(rng) % 2)
+          p = make_pair(client, server);
+        else
+          p = make_pair(server, client);
+      }
     }
     ConnectionRef conn = p.first->get_connection(p.second->get_myinst());
     available_connections[conn] = p;
   }
 
   void send_message() {
-    Message *m = new MPing();
-    bufferlist bl;
-    boost::uniform_int<> u(0, rand_data.size()-1);
-    uint64_t index = u(rng);
-    bl = rand_data[index];
-    m->set_data(bl);
     Mutex::Locker l(lock);
     ConnectionRef conn = _get_random_connection();
-    dispatcher.send_message_wrap(conn, m);
+    boost::uniform_int<> true_false(0, 99);
+    int val = true_false(rng);
+    if (val >= 95) {
+      uuid_d uuid;
+      uuid.generate_random();
+      MCommand *m = new MCommand(uuid);
+      vector<string> cmds;
+      cmds.push_back("command");
+      m->cmd = cmds;
+      m->set_priority(200);
+      conn->send_message(m);
+    } else {
+      Message *m = new MPing();
+      bufferlist bl;
+      boost::uniform_int<> u(0, rand_data.size()-1);
+      uint64_t index = u(rng);
+      bl = rand_data[index];
+      m->set_data(bl);
+      dispatcher.send_message_wrap(conn, m);
+    }
   }
 
   void drop_connection() {

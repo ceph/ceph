@@ -993,8 +993,16 @@ void RGWListBuckets::execute()
   uint64_t max_buckets = s->cct->_conf->rgw_list_buckets_max_chunk;
 
   ret = get_params();
-  if (ret < 0)
+  if (ret < 0) {
     goto send_end;
+  }
+
+  if (supports_account_metadata()) {
+    ret = rgw_get_user_attrs_by_uid(store, s->user.user_id, attrs);
+    if (ret < 0) {
+      goto send_end;
+    }
+  }
 
   do {
     RGWUserBuckets buckets;
@@ -2048,124 +2056,68 @@ done:
 }
 
 
-int RGWPutMetadata::verify_permission()
+static void populate_with_generic_attrs(const req_state * const s,
+                                        map<string, bufferlist>& out_attrs)
 {
-  if (!s->object.empty()) {
-    if (!verify_object_permission(s, RGW_PERM_WRITE))
-      return -EACCES;
-  } else {
-    if (!verify_bucket_permission(s, RGW_PERM_WRITE))
-      return -EACCES;
-  }
+  map<string, string>::const_iterator giter;
 
-  return 0;
-}
-
-void RGWPutMetadata::pre_exec()
-{
-  rgw_bucket_object_pre_exec(s);
-}
-
-void RGWPutMetadata::execute()
-{
-  const char *meta_prefix = RGW_ATTR_META_PREFIX;
-  int meta_prefix_len = sizeof(RGW_ATTR_META_PREFIX) - 1;
-  map<string, bufferlist> attrs, orig_attrs, rmattrs;
-  map<string, bufferlist>::iterator iter;
-  bufferlist bl, cors_bl;
-
-  rgw_obj obj(s->bucket, s->object);
-
-  store->set_atomic(s->obj_ctx, obj);
-
-  ret = get_params();
-  if (ret < 0)
-    return;
-
-  RGWObjVersionTracker *ptracker = NULL;
-  bool is_object_op = (!s->object.empty());
-
-  rgw_get_request_metadata(s->cct, s->info, attrs, is_object_op);
-
-  if (is_object_op) {
-    /* check if obj exists, read orig attrs */
-    ret = get_obj_attrs(store, s, obj, orig_attrs);
-    if (ret < 0)
-      return;
-  } else {
-    ptracker = &s->bucket_info.objv_tracker;
-    orig_attrs = s->bucket_attrs;
-
-    if (!placement_rule.empty() &&
-        placement_rule != s->bucket_info.placement_rule) {
-      ret = -EEXIST;
-      return;
-    }
-  }
-
-  for (iter = orig_attrs.begin(); iter != orig_attrs.end(); ++iter) {
-    const string& name = iter->first;
-    /* check if the attr is user-defined metadata item */
-    if (name.compare(0, meta_prefix_len, meta_prefix) == 0) {
-      if (is_object_op) {
-        /* for the objects all existing meta attrs have to be removed */
-        rmattrs[name] = iter->second;
-      } else {
-        /* for the buckets all existing meta attrs are preserved,
-           except those that are listed in rmattr_names. */
-        if (rmattr_names.find(name) != rmattr_names.end()) {
-          map<string, bufferlist>::iterator aiter = attrs.find(name);
-          if (aiter != attrs.end()) {
-            attrs.erase(aiter);
-          }
-          rmattrs[name] = iter->second;
-        }
-      }
-    } else if (attrs.find(name) == attrs.end()) {
-      attrs[name] = iter->second;
-    }
-  }
-
-  map<string, string>::iterator giter;
   for (giter = s->generic_attrs.begin(); giter != s->generic_attrs.end(); ++giter) {
-    bufferlist& attrbl = attrs[giter->first];
+    bufferlist& attrbl = out_attrs[giter->first];
     const string& val = giter->second;
     attrbl.clear();
     attrbl.append(val.c_str(), val.size() + 1);
   }
+}
 
-  if (has_policy) {
-    policy.encode(bl);
-    attrs[RGW_ATTR_ACL] = bl;
-  }
-  if (has_cors) {
-    cors_config.encode(cors_bl);
-    attrs[RGW_ATTR_CORS] = cors_bl;
-  }
-  if (is_object_op) {
-    ret = store->set_attrs(s->obj_ctx, obj, attrs, &rmattrs, ptracker);
-  } else {
-    ret = rgw_bucket_set_attrs(store, s->bucket_info, attrs, &rmattrs, ptracker);
+static void prepare_add_del_attrs(const map<string, bufferlist>& orig_attrs,
+                                  map<string, bufferlist>& out_attrs,
+                                  map<string, bufferlist>& out_rmattrs)
+{
+  map<string, bufferlist>::const_iterator iter;
+
+  for (iter = orig_attrs.begin(); iter != orig_attrs.end(); ++iter) {
+    const string& name = iter->first;
+    /* check if the attr is user-defined metadata item */
+    if (name.compare(0, sizeof(RGW_ATTR_META_PREFIX) - 1, RGW_ATTR_META_PREFIX) == 0) {
+      /* for the objects all existing meta attrs have to be removed */
+      out_rmattrs[name] = iter->second;
+    } else if (out_attrs.find(name) == out_attrs.end()) {
+      out_attrs[name] = iter->second;
+    }
   }
 }
 
-int RGWSetTempUrl::verify_permission()
+static void prepare_add_del_attrs(const map<string, bufferlist>& orig_attrs,
+                                  const set<string>& rmattr_names,
+                                  map<string, bufferlist>& out_attrs,
+                                  map<string, bufferlist>& out_rmattrs)
 {
-  if (s->perm_mask != RGW_PERM_FULL_CONTROL)
-    return -EACCES;
+  map<string, bufferlist>::const_iterator iter;
 
-  return 0;
+  for (iter = orig_attrs.begin(); iter != orig_attrs.end(); ++iter) {
+    const string& name = iter->first;
+    /* check if the attr is user-defined metadata item */
+    if (name.compare(0, strlen(RGW_ATTR_META_PREFIX), RGW_ATTR_META_PREFIX) == 0) {
+      /* for the buckets all existing meta attrs are preserved,
+         except those that are listed in rmattr_names. */
+      if (rmattr_names.find(name) != rmattr_names.end()) {
+        map<string, bufferlist>::iterator aiter = out_attrs.find(name);
+        if (aiter != out_attrs.end()) {
+          out_attrs.erase(aiter);
+        }
+        out_rmattrs[name] = iter->second;
+      }
+    } else if (out_attrs.find(name) == out_attrs.end()) {
+      out_attrs[name] = iter->second;
+    }
+  }
 }
 
-void RGWSetTempUrl::execute()
-{
-  ret = get_params();
-  if (ret < 0)
-    return;
-
+int RGWPutMetadataAccount::handle_temp_url_update(const map<int, string>& temp_url_keys) {
   RGWUserAdminOpState user_op;
   user_op.set_user_id(s->user.user_id);
-  map<int, string>::iterator iter;
+
+  map<int, string>::const_iterator iter;
   for (iter = temp_url_keys.begin(); iter != temp_url_keys.end(); ++iter) {
     user_op.set_temp_url_key(iter->second, iter->first);
   }
@@ -2174,16 +2126,191 @@ void RGWSetTempUrl::execute()
   ret = user.init(store, user_op);
   if (ret < 0) {
     ldout(store->ctx(), 0) << "ERROR: could not init user ret=" << ret << dendl;
-    return;
+    return ret;
   }
+
   string err_msg;
   ret = user.modify(user_op, &err_msg);
   if (ret < 0) {
     ldout(store->ctx(), 10) << "user.modify() returned " << ret << ": " << err_msg << dendl;
-    return;
+    return ret;
+  }
+  return 0;
+}
+
+int RGWPutMetadataAccount::verify_permission()
+{
+  if (!rgw_user_is_authenticated(s->user)) {
+    return -EACCES;
+  }
+  return 0;
+}
+
+void RGWPutMetadataAccount::filter_out_temp_url(map<string, bufferlist>& add_attrs,
+                                                const set<string>& rmattr_names,
+                                                map<int, string>& temp_url_keys)
+{
+  map<string, bufferlist>::iterator iter;
+  for (iter = add_attrs.begin(); iter != add_attrs.end(); ++iter) {
+    const string name = iter->first;
+
+    if (name.compare(RGW_ATTR_TEMPURL_KEY1) == 0) {
+      temp_url_keys[0] = iter->second.c_str();
+      add_attrs.erase(name);
+    }
+    if (name.compare(RGW_ATTR_TEMPURL_KEY2) == 0) {
+      temp_url_keys[1] = iter->second.c_str();
+      add_attrs.erase(name);
+    }
+  }
+
+  set<string>::const_iterator riter;
+  for(riter = rmattr_names.begin(); riter != rmattr_names.end(); ++riter) {
+    const string& name = *riter;
+
+    if (name.compare(RGW_ATTR_TEMPURL_KEY1) == 0) {
+      temp_url_keys[0] = string();
+    }
+    if (name.compare(RGW_ATTR_TEMPURL_KEY2) == 0) {
+      temp_url_keys[1] = string();
+    }
   }
 }
 
+void RGWPutMetadataAccount::execute()
+{
+  rgw_obj obj;
+  map<string, bufferlist> attrs, orig_attrs, rmattrs;
+  RGWObjVersionTracker acct_op_tracker;
+
+  /* Get the name of raw object which stores the metadata in its xattrs. */
+  string buckets_obj_id;
+  rgw_get_buckets_obj(s->user.user_id, buckets_obj_id);
+  obj = rgw_obj(store->zone.user_uid_pool, buckets_obj_id);
+
+  ret = get_params();
+  if (ret < 0) {
+    return;
+  }
+
+  rgw_get_request_metadata(s->cct, s->info, attrs, false);
+  rgw_get_user_attrs_by_uid(store, s->user.user_id, orig_attrs, &acct_op_tracker);
+  prepare_add_del_attrs(orig_attrs, rmattr_names, attrs, rmattrs);
+  populate_with_generic_attrs(s, attrs);
+
+  /* Handle the TempURL-related stuff. */
+  map<int, string> temp_url_keys;
+  filter_out_temp_url(attrs, rmattr_names, temp_url_keys);
+  if (!temp_url_keys.empty()) {
+    if (s->perm_mask != RGW_PERM_FULL_CONTROL) {
+      ret = -EPERM;
+      return;
+    }
+  }
+
+  ret = rgw_store_user_attrs(store, s->user.user_id, attrs, &rmattrs, &acct_op_tracker);
+  if (ret < 0) {
+    return;
+  }
+
+  if (!temp_url_keys.empty()) {
+    ret = handle_temp_url_update(temp_url_keys);
+    if (ret < 0) {
+      return;
+    }
+  }
+}
+
+int RGWPutMetadataBucket::verify_permission()
+{
+  if (!verify_bucket_permission(s, RGW_PERM_WRITE)) {
+    return -EACCES;
+  }
+
+  return 0;
+}
+
+void RGWPutMetadataBucket::pre_exec()
+{
+  rgw_bucket_object_pre_exec(s);
+}
+
+void RGWPutMetadataBucket::execute()
+{
+  rgw_obj obj(s->bucket, s->object);
+  map<string, bufferlist> attrs, orig_attrs, rmattrs;
+
+  ret = get_params();
+  if (ret < 0) {
+    return;
+  }
+
+  rgw_get_request_metadata(s->cct, s->info, attrs, false);
+
+  if (!placement_rule.empty() &&
+      placement_rule != s->bucket_info.placement_rule) {
+    ret = -EEXIST;
+    return;
+  }
+
+  orig_attrs = s->bucket_attrs;
+  prepare_add_del_attrs(orig_attrs, rmattr_names, attrs, rmattrs);
+  populate_with_generic_attrs(s, attrs);
+
+  if (has_policy) {
+    bufferlist bl;
+    policy.encode(bl);
+    attrs[RGW_ATTR_ACL] = bl;
+  }
+
+  if (has_cors) {
+    bufferlist bl;
+    cors_config.encode(bl);
+    attrs[RGW_ATTR_CORS] = bl;
+  }
+
+  ret = rgw_bucket_set_attrs(store, s->bucket_info, attrs, &rmattrs,
+          &s->bucket_info.objv_tracker);
+}
+
+int RGWPutMetadataObject::verify_permission()
+{
+  if (!verify_object_permission(s, RGW_PERM_WRITE)) {
+    return -EACCES;
+  }
+
+  return 0;
+}
+
+void RGWPutMetadataObject::pre_exec()
+{
+  rgw_bucket_object_pre_exec(s);
+}
+
+void RGWPutMetadataObject::execute()
+{
+  rgw_obj obj(s->bucket, s->object);
+  map<string, bufferlist> attrs, orig_attrs, rmattrs;
+
+  store->set_atomic(s->obj_ctx, obj);
+
+  ret = get_params();
+  if (ret < 0) {
+    return;
+  }
+
+  rgw_get_request_metadata(s->cct, s->info, attrs);
+  /* check if obj exists, read orig attrs */
+  ret = get_obj_attrs(store, s, obj, orig_attrs);
+  if (ret < 0) {
+    return;
+  }
+
+  /* Filter currently existing attributes. */
+  prepare_add_del_attrs(orig_attrs, attrs, rmattrs);
+  populate_with_generic_attrs(s, attrs);
+  ret = store->set_attrs(s->obj_ctx, obj, attrs, &rmattrs, NULL);
+}
 
 int RGWDeleteObj::verify_permission()
 {
@@ -3000,6 +3127,11 @@ void RGWCompleteMultipart::execute()
   parts = static_cast<RGWMultiCompleteUpload *>(parser.find_first("CompleteMultipartUpload"));
   if (!parts || parts->parts.empty()) {
     ret = -ERR_MALFORMED_XML;
+    return;
+  }
+
+  if (parts->parts.size() > s->cct->_conf->rgw_multipart_part_upload_limit) {
+    ret = -ERANGE;
     return;
   }
 

@@ -572,18 +572,23 @@ public:
   int ImageCtx::get_parent_overlap(snap_t in_snap_id, uint64_t *overlap) const
   {
     assert(snap_lock.is_locked());
-    if (in_snap_id == CEPH_NOSNAP && !async_resize_reqs.empty() &&
-        async_resize_reqs.front()->shrinking()) {
-      *overlap = async_resize_reqs.front()->get_parent_overlap();
-      return 0;
-    }
-
     const parent_info *info = get_parent_info(in_snap_id);
     if (info) {
       *overlap = info->overlap;
       return 0;
     }
     return -ENOENT;
+  }
+
+  uint64_t ImageCtx::get_copyup_snap_id() const
+  {
+    assert(snap_lock.is_locked());
+    // copyup requires the largest possible parent overlap,
+    // which is always the oldest snapshot (if any).
+    if (!snaps.empty()) {
+      return snaps.back();
+    }
+    return CEPH_NOSNAP;
   }
 
   void ImageCtx::aio_read_from_cache(object_t o, uint64_t object_no,
@@ -643,6 +648,7 @@ public:
   }
 
   void ImageCtx::flush_cache_aio(Context *onfinish) {
+    assert(owner_lock.is_locked());
     cache_lock.Lock();
     object_cacher->flush_set(object_set, onfinish);
     cache_lock.Unlock();
@@ -744,22 +750,6 @@ public:
     image_watcher->unregister_watch();
     delete image_watcher;
     image_watcher = NULL;
-  }
-
-  size_t ImageCtx::parent_io_len(uint64_t offset, size_t length,
-				 snap_t in_snap_id)
-  {
-    uint64_t overlap = 0;
-    get_parent_overlap(in_snap_id, &overlap);
-
-    size_t parent_len = 0;
-    if (get_parent_pool_id(in_snap_id) != -1 && offset <= overlap)
-      parent_len = min(overlap, offset + length) - offset;
-
-    ldout(cct, 20) << __func__ << " off = " << offset << " len = " << length
-		   << " overlap = " << overlap << " parent_io_len = "
-		   << parent_len << dendl;
-    return parent_len;
   }
 
   uint64_t ImageCtx::prune_parent_extents(vector<pair<uint64_t,uint64_t> >& objectx,
@@ -931,5 +921,6 @@ public:
     ASSIGN_OPTION(blacklist_on_break_lock);
     ASSIGN_OPTION(blacklist_expire_seconds);
     ASSIGN_OPTION(request_timed_out_seconds);
+    ASSIGN_OPTION(enable_alloc_hint);
   }
 }

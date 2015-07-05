@@ -143,6 +143,7 @@
 #include <map>
 #include <set>
 #include <vector>
+#include <iostream>
 #include "include/memory.h"
 #include "include/buffer.h"
 

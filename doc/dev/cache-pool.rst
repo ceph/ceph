@@ -5,7 +5,7 @@ Purpose
 -------
 
 Use a pool of fast storage devices (probably SSDs) and use it as a
-cache for an existing larger pool.
+cache for an existing slower and larger pool.
 
 Use a replicated pool as a front-end to service most I/O, and destage
 cold data to a separate erasure coded pool that does not currently (and
@@ -153,6 +153,7 @@ The thresholds at which Ceph will flush or evict objects is specified
 relative to a 'target size' of the pool.  For example::
 
  ceph osd pool set foo-hot cache_target_dirty_ratio .4
+ ceph osd pool set foo-hot cache_target_dirty_high_ratio .6
  ceph osd pool set foo-hot cache_target_full_ratio .8
 
 will begin flushing dirty objects when 40% of the pool is dirty and begin

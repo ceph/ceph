@@ -46,6 +46,8 @@ namespace ceph {
       return _profile;
     }
 
+    int sanity_check_k(int k, ostream *ss);
+
     virtual unsigned int get_coding_chunk_count() const {
       return get_chunk_count() - get_data_chunk_count();
     }

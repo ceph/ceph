@@ -21,6 +21,7 @@
 #include <sys/stat.h>
 #include <dirent.h>
 #include <sys/xattr.h>
+#include <sys/uio.h>
 
 #ifdef __linux__
 #include <limits.h>
@@ -959,6 +960,44 @@ TEST(LibCephFS, ReadEmptyFile) {
 
   char buf[4096];
   ASSERT_EQ(ceph_read(cmount, fd, buf, 4096, 0), 0);
+
+  ceph_close(cmount, fd);
+  ceph_shutdown(cmount);
+}
+
+TEST(LibCephFS, PreadvPwritev) {
+  struct ceph_mount_info *cmount;
+  ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
+  ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
+  ASSERT_EQ(ceph_mount(cmount, NULL), 0);
+
+  int mypid = getpid();
+  char testf[256];
+
+  sprintf(testf, "test_preadvpwritevfile%d", mypid);
+  int fd = ceph_open(cmount, testf, O_CREAT|O_RDWR, 0666);
+  ASSERT_GT(fd, 0);
+
+  char out0[] = "hello ";
+  char out1[] = "world\n";
+  struct iovec iov_out[2] = {
+	{out0, sizeof(out0)},
+	{out1, sizeof(out1)},
+  };
+  char in0[sizeof(out0)];
+  char in1[sizeof(out1)];
+  struct iovec iov_in[2] = {
+	{in0, sizeof(in0)},
+	{in1, sizeof(in1)},
+  };
+  ssize_t nwritten = iov_out[0].iov_len + iov_out[1].iov_len; 
+  ssize_t nread = iov_in[0].iov_len + iov_in[1].iov_len; 
+
+  ASSERT_EQ(ceph_pwritev(cmount, fd, iov_out, 2, 0), nwritten);
+  ASSERT_EQ(ceph_preadv(cmount, fd, iov_in, 2, 0), nread);
+  ASSERT_EQ(0, strncmp((const char*)iov_in[0].iov_base, (const char*)iov_out[0].iov_base, iov_out[0].iov_len));
+  ASSERT_EQ(0, strncmp((const char*)iov_in[1].iov_base, (const char*)iov_out[1].iov_base, iov_out[1].iov_len));
 
   ceph_close(cmount, fd);
   ceph_shutdown(cmount);

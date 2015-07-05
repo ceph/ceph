@@ -491,6 +491,7 @@ function activate_osd() {
     ceph_args+=" --osd-data=$osd_data"
     ceph_args+=" --chdir="
     ceph_args+=" --osd-pool-default-erasure-code-directory=.libs"
+    ceph_args+=" --osd-class-dir=.libs"
     ceph_args+=" --run-dir=$dir"
     ceph_args+=" --debug-osd=20"
     ceph_args+=" --log-file=$dir/\$name.log"
@@ -1099,6 +1100,39 @@ function test_expect_failure() {
 #######################################################################
 
 ##
+# Return 0 if the erasure code *plugin* is available, 1 otherwise.
+#
+# @param plugin erasure code plugin
+# @return 0 on success, 1 on error
+#
+
+function erasure_code_plugin_exists() {
+    local plugin=$1
+
+    local status
+    if ceph osd erasure-code-profile set TESTPROFILE plugin=$plugin 2>&1 |
+        grep "$plugin.*No such file" ; then
+        status=1
+    else
+        status=0
+        ceph osd erasure-code-profile rm TESTPROFILE
+    fi
+    return $status
+}
+
+function test_erasure_code_plugin_exists() {
+    local dir=$1
+
+    setup $dir || return 1
+    run_mon $dir a || return 1
+    erasure_code_plugin_exists jerasure || return 1
+    ! erasure_code_plugin_exists FAKE || return 1
+    teardown $dir || return 1
+}
+
+#######################################################################
+
+##
 # Call the **run** function (which must be defined by the caller) with
 # the **dir** argument followed by the caller argument list.
 #
@@ -1167,5 +1201,5 @@ if test "$1" = TESTS ; then
 fi
 
 # Local Variables:
-# compile-command: "cd .. ; make -j4 && test/ceph-helpers.sh TESTS # test_get_config"
+# compile-command: "cd ../../src ; make -j4 && ../qa/workunits/ceph-helpers.sh TESTS # test_get_config"
 # End:
