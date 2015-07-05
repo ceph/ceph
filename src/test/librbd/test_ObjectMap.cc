@@ -104,7 +104,7 @@ TEST_F(TestObjectMap, InvalidateFlagInMemoryOnly) {
 
   std::string oid = librbd::ObjectMap::object_map_name(ictx->id, CEPH_NOSNAP);
   bufferlist valid_bl;
-  ASSERT_EQ(0, ictx->data_ctx.read(oid, valid_bl, 0, 0));
+  ASSERT_LT(0, ictx->data_ctx.read(oid, valid_bl, 0, 0));
 
   bufferlist corrupt_bl;
   corrupt_bl.append("corrupt");
