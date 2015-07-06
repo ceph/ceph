@@ -74,6 +74,7 @@ class MDSMonitor : public PaxosService {
   // service methods
   void create_initial();
   void update_from_paxos(bool *need_bootstrap);
+  void init();
   void create_pending(); 
   void encode_pending(MonitorDBStore::TransactionRef t);
   // we don't require full versions; don't encode any.
@@ -146,6 +147,8 @@ private:
   // MDS daemon GID to latest health state from that GID
   std::map<uint64_t, MDSHealth> pending_daemon_health;
   std::set<uint64_t> pending_daemon_health_rm;
+
+  map<mds_gid_t, Metadata> pending_metadata;
 
   int _check_pool(const int64_t pool_id, std::stringstream *ss) const;
   mds_gid_t gid_from_arg(const std::string& arg, std::ostream& err);
