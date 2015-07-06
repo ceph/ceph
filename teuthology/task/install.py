@@ -113,75 +113,78 @@ def _get_uri(tag, branch, sha1):
 
 def _get_baseurlinfo_and_dist(ctx, remote, config):
     """
-    Through various commands executed on the remote, determines the
-    distribution name and version in use, as well as the portion of the repo
-    URI to use to specify which version of the project (normally ceph) to
-    install.Example:
+    Through various commands executed on the remote, builds a dict which
+    will return the necessary information needed to build the url for
+    teuthology.config.baseurl_template. For example::
 
-        {'arch': 'x86_64',
-        'dist': 'raring',
-        'dist_release': None,
-        'distro': 'Ubuntu',
-        'distro_release': None,
-        'flavor': 'basic',
-        'relval': '13.04',
-        'uri': 'ref/master'}
+        {
+          'arch': 'x86_64',
+          'dist': 'Centos7',
+          'flavor': 'basic',
+          'uri': 'ref/master',
+          'dist_release': 'el7',
+        }
 
     :param ctx: the argparse.Namespace object
     :param remote: the teuthology.orchestra.remote.Remote object
     :param config: the config dict
     :returns: dict -- the information you want.
     """
-    retval = {}
-    relval = None
-    r = remote.run(
-        args=['arch'],
-        stdout=StringIO(),
-    )
-    retval['arch'] = r.stdout.getvalue().strip()
-    r = remote.run(
-        args=['lsb_release', '-is'],
-        stdout=StringIO(),
-    )
-    retval['distro'] = r.stdout.getvalue().strip()
-    r = remote.run(
-        args=[
-            'lsb_release', '-rs'], stdout=StringIO())
-    retval['relval'] = r.stdout.getvalue().strip()
-    dist_name = None
-    if retval['distro'] in ('CentOS', 'RedHatEnterpriseServer'):
-        relval = retval['relval']
-        relval = relval[0:relval.find('.')]
-        distri = 'centos'
-        retval['distro_release'] = '%s%s' % (distri, relval)
-        retval['dist'] = retval['distro_release']
-        dist_name = 'el'
-        retval['dist_release'] = '%s%s' % (dist_name, relval)
-    elif retval['distro'] == 'Fedora':
-        distri = retval['distro']
-        dist_name = 'fc'
-        retval['distro_release'] = '%s%s' % (dist_name, retval['relval'])
-        retval['dist'] = retval['dist_release'] = retval['distro_release']
+    result = dict()
+    result['arch'] = remote.arch
+
+    distro = remote.os.name
+    version = _get_gitbuilder_version(remote.os.version)
+    if distro in ('centos', 'rhel'):
+        distro = "centos"
+        dist_release = "el{0}".format(version)
+    elif distro == "fedora":
+        distro = "fc"
+        dist_release = "fc{0}".format(version)
     else:
-        r = remote.run(
-            args=['lsb_release', '-sc'],
-            stdout=StringIO(),
-        )
-        retval['dist'] = r.stdout.getvalue().strip()
-        retval['distro_release'] = None
-        retval['dist_release'] = None
+        distro = remote.os.codename
+        dist_release = distro
+        version = ""
+
+    result['dist'] = "{distro}{version}".format(
+        distro=distro,
+        version=version,
+    )
+    # this is used when contructing the rpm name
+    result["dist_release"] = dist_release
 
     # branch/tag/sha1 flavor
-    retval['flavor'] = config.get('flavor', 'basic')
+    result['flavor'] = config.get('flavor', 'basic')
 
     log.info('config is %s', config)
     tag = _get_config_value_for_remote(ctx, remote, config, 'tag')
     branch = _get_config_value_for_remote(ctx, remote, config, 'branch')
     sha1 = _get_config_value_for_remote(ctx, remote, config, 'sha1')
     uri = _get_uri(tag, branch, sha1)
-    retval['uri'] = uri
+    result['uri'] = uri
 
-    return retval
+    return result
+
+
+def _get_gitbuilder_version(version):
+    """
+    Parses a distro version string and returns a modified string
+    that matches the format needed for the gitbuilder url.
+
+    Minor version numbers are ignored if they end in a zero. If they do
+    not end in a zero the minor version number is included with a dash as
+    the separtor instead of a period.
+    """
+    version_tokens = version.split(".")
+    include_minor_version = (
+        len(version_tokens) > 1 and
+        version_tokens[1] != "0"
+    )
+    if include_minor_version:
+        return "-".join(version_tokens)
+
+    # return only the major version
+    return version_tokens[0]
 
 
 def _get_baseurl(ctx, remote, config):
@@ -1076,7 +1079,7 @@ def _upgrade_rpm_packages(ctx, config, remote, pkgs):
         base=base_url,
         proj=project,
         release=RELEASE,
-        dist_release=distinfo['dist_release'],
+        dist_release=distinfo['dist'],
     )
 
     # Upgrade the -release package
