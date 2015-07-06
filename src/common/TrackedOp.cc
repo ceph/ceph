@@ -155,9 +155,8 @@ bool OpTracker::check_ops_in_flight(std::vector<string> &warning_vector)
   utime_t now = ceph_clock_now(cct);
   utime_t too_old = now;
   too_old -= complaint_time;
-  utime_t oldest_op;
+  utime_t oldest_op = now;
   uint64_t total_ops_in_flight = 0;
-  bool got_first_op = false;
 
   for (uint32_t i = 0; i < num_optracker_shards; i++) {
     ShardedTrackingData* sdata = sharded_in_flight_list[i];
@@ -165,10 +164,7 @@ bool OpTracker::check_ops_in_flight(std::vector<string> &warning_vector)
     Mutex::Locker locker(sdata->ops_in_flight_lock_sharded);
     if (!sdata->ops_in_flight_sharded.empty()) {
       utime_t oldest_op_tmp = sdata->ops_in_flight_sharded.front()->get_initiated();
-      if (!got_first_op) {
-        oldest_op = oldest_op_tmp;
-        got_first_op = true;
-      } else if (oldest_op_tmp < oldest_op) {
+      if (oldest_op_tmp < oldest_op) {
         oldest_op = oldest_op_tmp;
       }
     } 
