@@ -3288,13 +3288,11 @@ reprotect_and_return_err:
     RWLock::RLocker owner_locker(ictx->owner_lock);
     ictx->user_flushed();
 
-    C_AioWrite *flush_ctx = new C_AioWrite(cct, c);
-    c->add_request();
+    C_AioRequest *flush_ctx = new C_AioRequest(cct, c);
     ictx->flush_async_operations(flush_ctx);
 
     c->init_time(ictx, AIO_TYPE_FLUSH);
-    C_AioWrite *req_comp = new C_AioWrite(cct, c);
-    c->add_request();
+    C_AioRequest *req_comp = new C_AioRequest(cct, c);
     if (ictx->object_cacher) {
       ictx->flush_cache_aio(req_comp);
     } else {
@@ -3429,14 +3427,12 @@ reprotect_and_return_err:
 	bl.append(buf + q->first, q->second);
       }
 
-      C_AioWrite *req_comp = new C_AioWrite(cct, c);
+      C_AioRequest *req_comp = new C_AioRequest(cct, c);
       if (ictx->object_cacher) {
-	c->add_request();
 	ictx->write_to_cache(p->oid, bl, p->length, p->offset, req_comp, op_flags);
       } else {
 	AioWrite *req = new AioWrite(ictx, p->oid.name, p->objectno, p->offset,
 				     bl, snapc, req_comp);
-	c->add_request();
 
 	req->set_op_flags(op_flags);
 	req->send();
@@ -3561,9 +3557,8 @@ reprotect_and_return_err:
     for (vector<ObjectExtent>::iterator p = extents.begin(); p != extents.end(); ++p) {
       ldout(cct, 20) << " oid " << p->oid << " " << p->offset << "~" << p->length
 		     << " from " << p->buffer_extents << dendl;
-      C_AioWrite *req_comp = new C_AioWrite(cct, c);
+      C_AioRequest *req_comp = new C_AioRequest(cct, c);
       AbstractWrite *req;
-      c->add_request();
 
       if (p->length == ictx->layout.fl_object_size) {
 	req = new AioRemove(ictx, p->oid.name, p->objectno, snapc, req_comp);
@@ -3735,7 +3730,6 @@ reprotect_and_return_err:
                                    q->length, q->buffer_extents, snap_id, true,
                                    req_comp, op_flags);
 	req_comp->set_req(req);
-	c->add_request();
 
 	if (ictx->object_cacher) {
 	  C_CacheRead *cache_comp = new C_CacheRead(ictx, req);

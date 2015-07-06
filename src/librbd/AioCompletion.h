@@ -152,33 +152,33 @@ namespace librbd {
     }
   };
 
-  class C_AioRead : public Context {
+  class C_AioRequest : public Context {
+  public:
+    C_AioRequest(CephContext *cct, AioCompletion *completion)
+      : m_cct(cct), m_completion(completion) {
+      m_completion->add_request();
+    }
+    virtual ~C_AioRequest() {}
+    virtual void finish(int r) {
+      m_completion->complete_request(m_cct, r);
+    }
+  protected:
+    CephContext *m_cct;
+    AioCompletion *m_completion;
+  };
+
+  class C_AioRead : public C_AioRequest {
   public:
     C_AioRead(CephContext *cct, AioCompletion *completion)
-      : m_cct(cct), m_completion(completion), m_req(NULL)
-    { }
+      : C_AioRequest(cct, completion), m_req(NULL) {
+    }
     virtual ~C_AioRead() {}
     virtual void finish(int r);
     void set_req(AioRead *req) {
       m_req = req;
     }
   private:
-    CephContext *m_cct;
-    AioCompletion *m_completion;
     AioRead *m_req;
-  };
-
-  class C_AioWrite : public Context {
-  public:
-    C_AioWrite(CephContext *cct, AioCompletion *completion)
-      : m_cct(cct), m_completion(completion) {}
-    virtual ~C_AioWrite() {}
-    virtual void finish(int r) {
-      m_completion->complete_request(m_cct, r);
-    }
-  private:
-    CephContext *m_cct;
-    AioCompletion *m_completion;
   };
 
   class C_CacheRead : public Context {
