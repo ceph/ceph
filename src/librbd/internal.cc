@@ -1575,6 +1575,13 @@ reprotect_and_return_err:
         enable_flags |= RBD_FLAG_FAST_DIFF_INVALID;
         features_mask |= (RBD_FEATURE_OBJECT_MAP | RBD_FEATURE_EXCLUSIVE_LOCK);
       }
+      if ((features & RBD_FEATURE_JOURNALING) != 0) {
+        if ((new_features & RBD_FEATURE_EXCLUSIVE_LOCK) == 0) {
+          lderr(cct) << "cannot enable journaling" << dendl;
+          return -EINVAL;
+        }
+        features_mask |= RBD_FEATURE_EXCLUSIVE_LOCK;
+      }
 
       if (enable_flags != 0) {
         r = update_all_flags(ictx, enable_flags, enable_flags);
@@ -1584,7 +1591,8 @@ reprotect_and_return_err:
       }
     } else {
       if ((features & RBD_FEATURE_EXCLUSIVE_LOCK) != 0) {
-        if ((new_features & RBD_FEATURE_OBJECT_MAP) != 0) {
+        if ((new_features & RBD_FEATURE_OBJECT_MAP) != 0 ||
+            (new_features & RBD_FEATURE_JOURNALING) != 0) {
           lderr(cct) << "cannot disable exclusive lock" << dendl;
           return -EINVAL;
         }
