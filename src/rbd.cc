@@ -2545,6 +2545,9 @@ static int parse_map_options(char *options)
         return 1;
     } else if (!strcmp(this_char, "rw") || !strcmp(this_char, "ro")) {
       put_map_option("rw", this_char);
+    } else if (!strcmp(this_char, "queue_depth")) {
+      if (put_map_option_value("queue_depth", value_char, map_option_int_cb))
+        return 1;
     } else {
       cerr << "rbd: unknown map option '" << this_char << "'" << std::endl;
       return 1;
