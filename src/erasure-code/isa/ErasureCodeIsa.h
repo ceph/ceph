@@ -108,11 +108,11 @@ public:
 
   virtual unsigned get_alignment() const = 0;
 
-  virtual int parse(ErasureCodeProfile &profile,
-                    ostream *ss) = 0;
-
   virtual void prepare() = 0;
 
+ private:
+  virtual int parse(ErasureCodeProfile &profile,
+                    ostream *ss) = 0;
 };
 
 // -----------------------------------------------------------------------------
@@ -157,12 +157,11 @@ public:
 
   virtual unsigned get_alignment() const;
 
-  virtual int parse(ErasureCodeProfile &profile,
-                    ostream *ss);
-
   virtual void prepare();
 
-
+ private:
+  virtual int parse(ErasureCodeProfile &profile,
+                    ostream *ss);
 };
 
 #endif
