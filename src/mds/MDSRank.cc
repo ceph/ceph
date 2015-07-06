@@ -130,7 +130,7 @@ MDSRank::~MDSRank()
   respawn_hook = NULL;
 }
 
-void MDSRank::init(mds_rank_t rank_, int incarnation_)
+void MDSRankDispatcher::init(mds_rank_t rank_, int incarnation_)
 {
   update_log_config();
   create_logger();
@@ -147,7 +147,7 @@ void MDSRank::init(mds_rank_t rank_, int incarnation_)
   finisher->start();
 }
 
-void MDSRank::tick()
+void MDSRankDispatcher::tick()
 {
   heartbeat_reset();
 
@@ -197,7 +197,7 @@ void MDSRank::tick()
   }
 }
 
-void MDSRank::shutdown()
+void MDSRankDispatcher::shutdown()
 {
   // It should never be possible for shutdown to get called twice, because
   // anyone picking up mds_lock checks if stopping is true and drops
@@ -391,7 +391,7 @@ void MDSRank::ProgressThread::shutdown()
   }
 }
 
-bool MDSRank::ms_dispatch(Message *m)
+bool MDSRankDispatcher::ms_dispatch(Message *m)
 {
   bool ret;
   inc_dispatch_depth();
@@ -1364,7 +1364,7 @@ void MDSRank::stopping_done()
 
 // <<<<<<<<
 
-void MDSRank::handle_mds_map(
+void MDSRankDispatcher::handle_mds_map(
     MMDSMap *m,
     MDSMap *oldmap)
 {
@@ -1628,7 +1628,7 @@ void MDSRank::handle_mds_failure(mds_rank_t who)
   snapclient->handle_mds_failure(who);
 }
 
-bool MDSRank::handle_asok_command(
+bool MDSRankDispatcher::handle_asok_command(
     std::string command, cmdmap_t& cmdmap, Formatter *f,
 		    std::ostream& ss)
 {
@@ -2145,7 +2145,7 @@ bool MDSRank::command_dirfrag_ls(
   return true;
 }
 
-void MDSRank::update_log_config()
+void MDSRankDispatcher::update_log_config()
 {
   map<string,string> log_to_monitors;
   map<string,string> log_to_syslog;
@@ -2244,7 +2244,7 @@ void MDSRank::check_ops_in_flight()
   return;
 }
 
-void MDSRank::handle_osd_map()
+void MDSRankDispatcher::handle_osd_map()
 {
   if (is_active() && snapserver) {
     snapserver->check_osd_map(true);
@@ -2260,7 +2260,7 @@ void MDSRank::handle_osd_map()
   objecter->maybe_request_map();
 }
 
-bool MDSRank::kill_session(int64_t session_id)
+bool MDSRankDispatcher::kill_session(int64_t session_id)
 {
   Session *session = sessionmap.get_session(entity_name_t(CEPH_ENTITY_TYPE_CLIENT, session_id));
 
@@ -2287,7 +2287,7 @@ void MDSRank::bcast_mds_map()
 }
 
 
-bool MDSRank::handle_command_legacy(std::vector<std::string> args)
+bool MDSRankDispatcher::handle_command_legacy(std::vector<std::string> args)
 {
   if (args[0] == "dumpcache") {
     if (args.size() > 1)
@@ -2369,4 +2369,19 @@ bool MDSRank::handle_command_legacy(std::vector<std::string> args)
 
   return true;
 }
+
+MDSRankDispatcher::MDSRankDispatcher(
+    Mutex &mds_lock_,
+    LogChannelRef &clog_,
+    SafeTimer &timer_,
+    Beacon &beacon_,
+    MDSMap *& mdsmap_,
+    Messenger *msgr,
+    MonClient *monc_,
+    Objecter *objecter_,
+    Context *respawn_hook_,
+    Context *suicide_hook_)
+  : MDSRank(mds_lock_, clog_, timer_, beacon_, mdsmap_, msgr, monc_, objecter_,
+            respawn_hook_, suicide_hook_)
+{}
 
