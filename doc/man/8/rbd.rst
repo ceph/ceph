@@ -398,6 +398,8 @@ Most of these options are useful mainly for debugging and benchmarking.  The
 default values are set in the kernel and may therefore depend on the version of
 the running kernel.
 
+libceph (per client instance) options:
+
 * fsid=aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee - FSID that should be assumed by
   the client.
 
@@ -411,8 +413,8 @@ the running kernel.
 
 * nocrc - Disable CRC32C checksumming for data writes.
 
-* cephx_require_signatures - Require cephx message signing, i.e. MSG_AUTH
-  feature bit (since 3.19, default).
+* cephx_require_signatures - Require cephx message signing (since 3.19,
+  default).
 
 * nocephx_require_signatures - Don't require cephx message signing (since
   3.19).
@@ -431,9 +433,13 @@ the running kernel.
 
 * osd_idle_ttl=x - OSD idle TTL (default is 60 seconds).
 
+Mapping (per block device) options:
+
 * rw - Map the image read-write (default).
 
 * ro - Map the image read-only.  Equivalent to --read-only.
+
+* queue_depth=x - queue depth (since 4.2, default is 128 requests).
 
 
 Examples
