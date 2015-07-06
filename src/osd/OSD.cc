@@ -2512,15 +2512,17 @@ void OSD::clear_temp_objects()
 				     0, &objects, &next);
       if (objects.empty())
 	break;
-      for (vector<ghobject_t>::iterator q = objects.begin(); q != objects.end();
-	   ++q) {
+      vector<ghobject_t>::iterator q;
+      for (q = objects.begin(); q != objects.end(); ++q) {
 	if (q->hobj.is_temp()) {
 	  temps.push_back(*q);
 	} else {
 	  break;
 	}
       }
-      if (!objects.empty())
+      // If we saw a non-temp object and hit the break above we can
+      // break out of the while loop too.
+      if (q != objects.end())
 	break;
     }
     if (!temps.empty()) {
