@@ -671,12 +671,13 @@ public:
     return r;
   }
 
-  void ImageCtx::shutdown_cache() {
+  int ImageCtx::shutdown_cache() {
     flush_async_operations();
 
     RWLock::RLocker owner_locker(owner_lock);
-    invalidate_cache(true);
+    int r = invalidate_cache(true);
     object_cacher->stop();
+    return r;
   }
 
   int ImageCtx::invalidate_cache(bool purge_on_error) {

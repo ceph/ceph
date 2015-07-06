@@ -1360,7 +1360,7 @@ reprotect_and_return_err:
     int order;
     uint64_t size;
     uint64_t p_features;
-    int remove_r;
+    int partial_r;
     librbd::NoOpProgressContext no_op;
     ImageCtx *c_imctx = NULL;
     map<string, bufferlist> pairs;
@@ -1458,24 +1458,27 @@ reprotect_and_return_err:
     }
 
     ldout(cct, 2) << "done." << dendl;
-    close_image(c_imctx);
-    close_image(p_imctx);
-    return 0;
+    r = close_image(c_imctx);
+    partial_r = close_image(p_imctx);
+    if (r == 0 && partial_r < 0) {
+      r = partial_r;
+    }
+    return r;
 
   err_remove_child:
-    remove_r = cls_client::remove_child(&c_ioctx, RBD_CHILDREN, pspec,
-					c_imctx->id);
-    if (remove_r < 0) {
+    partial_r = cls_client::remove_child(&c_ioctx, RBD_CHILDREN, pspec,
+                                         c_imctx->id);
+    if (partial_r < 0) {
      lderr(cct) << "Error removing failed clone from list of children: "
-		 << cpp_strerror(remove_r) << dendl;
+                << cpp_strerror(partial_r) << dendl;
     }
   err_close_child:
     close_image(c_imctx);
   err_remove:
-    remove_r = remove(c_ioctx, c_name, no_op);
-    if (remove_r < 0) {
+    partial_r = remove(c_ioctx, c_name, no_op);
+    if (partial_r < 0) {
       lderr(cct) << "Error removing failed clone: "
-		 << cpp_strerror(remove_r) << dendl;
+		 << cpp_strerror(partial_r) << dendl;
     }
   err_close_parent:
     close_image(p_imctx);
@@ -2600,7 +2603,10 @@ reprotect_and_return_err:
     }
 
     r = copy(src, dest, prog_ctx);
-    close_image(dest);
+    int close_r = close_image(dest);
+    if (r == 0 && close_r < 0) {
+      r = close_r;
+    }
     return r;
   }
 
@@ -2814,7 +2820,7 @@ reprotect_and_return_err:
     return r;
   }
 
-  void close_image(ImageCtx *ictx)
+  int close_image(ImageCtx *ictx)
   {
     ldout(ictx->cct, 20) << "close_image " << ictx << dendl;
 
@@ -2831,10 +2837,15 @@ reprotect_and_return_err:
     ictx->flush_async_operations();
     ictx->readahead.wait_for_pending();
 
+    int r;
     if (ictx->object_cacher) {
-      ictx->shutdown_cache(); // implicitly flushes
+      r = ictx->shutdown_cache(); // implicitly flushes
     } else {
-      flush(ictx);
+      r = flush(ictx);
+    }
+    if (r < 0) {
+      lderr(ictx->cct) << "error flushing IO: " << cpp_strerror(r)
+                       << dendl;
     }
 
     ictx->op_work_queue->drain();
@@ -2845,7 +2856,10 @@ reprotect_and_return_err:
     }
 
     if (ictx->parent) {
-      close_image(ictx->parent);
+      int close_r = close_image(ictx->parent);
+      if (r == 0 && close_r < 0) {
+        r = close_r;
+      }
       ictx->parent = NULL;
     }
 
@@ -2853,10 +2867,13 @@ reprotect_and_return_err:
       {
 	RWLock::WLocker l(ictx->owner_lock);
 	if (ictx->image_watcher->is_lock_owner()) {
-	  int r = ictx->image_watcher->unlock();
-	  if (r < 0) {
-	    lderr(ictx->cct) << "error unlocking image: " << cpp_strerror(r)
-			     << dendl;
+	  int unlock_r = ictx->image_watcher->unlock();
+	  if (unlock_r < 0) {
+	    lderr(ictx->cct) << "error unlocking image: "
+                             << cpp_strerror(unlock_r) << dendl;
+            if (r == 0) {
+              r = unlock_r;
+            }
 	  }
 	}
       }
@@ -2864,6 +2881,7 @@ reprotect_and_return_err:
     }
 
     delete ictx;
+    return r;
   }
 
   // 'flatten' child image by copying all parent's blocks

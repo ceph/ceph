@@ -219,7 +219,7 @@ namespace librbd {
     void user_flushed();
     void flush_cache_aio(Context *onfinish);
     int flush_cache();
-    void shutdown_cache();
+    int shutdown_cache();
     int invalidate_cache(bool purge_on_error=false);
     void invalidate_cache(Context *on_finish);
     void invalidate_cache_completion(int r, Context *on_finish);
