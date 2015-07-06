@@ -138,6 +138,11 @@ void MDSMonitor::update_from_paxos(bool *need_bootstrap)
   update_logger();
 }
 
+void MDSMonitor::init()
+{
+  (void)load_metadata(pending_metadata);
+}
+
 void MDSMonitor::create_pending()
 {
   pending_mdsmap = mdsmap;
@@ -1757,39 +1762,22 @@ void MDSMonitor::update_metadata(mds_gid_t gid,
   if (metadata.empty()) {
     return;
   }
-  bufferlist bl;
-  int err = mon->store->get(MDS_METADATA_PREFIX, "last_metadata", bl);
-  map<mds_gid_t, Metadata> last_metadata;
-  if (!err) {
-    bufferlist::iterator iter = bl.begin();
-    ::decode(last_metadata, iter);
-    bl.clear();
-  }
-  last_metadata[gid] = metadata;
+  pending_metadata[gid] = metadata;
 
   MonitorDBStore::TransactionRef t = paxos->get_pending_transaction();
-  ::encode(last_metadata, bl);
+  bufferlist bl;
+  ::encode(pending_metadata, bl);
   t->put(MDS_METADATA_PREFIX, "last_metadata", bl);
   paxos->trigger_propose();
 }
 
 void MDSMonitor::remove_from_metadata(MonitorDBStore::TransactionRef t)
 {
-  bufferlist bl;
-  int err = mon->store->get(MDS_METADATA_PREFIX, "last_metadata", bl);
-  map<mds_gid_t, Metadata> last_metadata;
-  if (err) {
-    return;
-  }
-  bufferlist::iterator iter = bl.begin();
-  ::decode(last_metadata, iter);
-  bl.clear();
-
   bool update = false;
-  for (map<mds_gid_t, Metadata>::iterator i = last_metadata.begin();
-       i != last_metadata.end(); ) {
+  for (map<mds_gid_t, Metadata>::iterator i = pending_metadata.begin();
+       i != pending_metadata.end(); ) {
     if (pending_mdsmap.get_state_gid(i->first) == MDSMap::STATE_NULL) {
-      last_metadata.erase(i++);
+      pending_metadata.erase(i++);
       update = true;
     } else {
       ++i;
@@ -1797,7 +1785,8 @@ void MDSMonitor::remove_from_metadata(MonitorDBStore::TransactionRef t)
   }
   if (!update)
     return;
-  ::encode(last_metadata, bl);
+  bufferlist bl;
+  ::encode(pending_metadata, bl);
   t->put(MDS_METADATA_PREFIX, "last_metadata", bl);
 }
 
@@ -1857,7 +1846,10 @@ int MDSMonitor::print_nodes(Formatter *f)
       continue;
     }
     const mds_gid_t gid = it->first;
-    assert(mdsmap.get_state_gid(gid) != MDSMap::STATE_NULL);
+    if (mdsmap.get_state_gid(gid) == MDSMap::STATE_NULL) {
+      dout(5) << __func__ << ": GID " << gid << " not existent" << dendl;
+      continue;
+    }
     const MDSMap::mds_info_t& mds_info = mdsmap.get_info_gid(gid);
     mdses[hostname->second].push_back(mds_info.rank);
   }
