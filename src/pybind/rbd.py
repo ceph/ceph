@@ -448,7 +448,10 @@ class Image(object):
         """
         if not self.closed:
             self.closed = True
-            self.librbd.rbd_close(self.image)
+            ret = self.librbd.rbd_close(self.image)
+            if ret < 0:
+                raise make_ex(ret, 'error while closing image %s' % (
+                              self.name,))
 
     def __del__(self):
         self.close()

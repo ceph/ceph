@@ -43,6 +43,7 @@ protected:
 
   librados::AioCompletion *create_callback_completion();
   Context *create_callback_context();
+  Context *create_async_callback_context();
 
   void async_complete(int r);
 

@@ -108,6 +108,8 @@ public:
   Image();
   ~Image();
 
+  int close();
+
   int resize(uint64_t size);
   int resize_with_progress(uint64_t size, ProgressContext& pctx);
   int stat(image_info_t &info, size_t infosize);

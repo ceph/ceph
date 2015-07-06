@@ -429,6 +429,7 @@ void ObjectMap::aio_resize(uint64_t new_size, uint8_t default_object_state,
 			   Context *on_finish) {
   assert(m_image_ctx.test_features(RBD_FEATURE_OBJECT_MAP));
   assert(m_image_ctx.owner_lock.is_locked());
+  assert(m_image_ctx.image_watcher != NULL);
   assert(!m_image_ctx.image_watcher->is_lock_supported() ||
          m_image_ctx.image_watcher->is_lock_owner());
 
@@ -453,6 +454,7 @@ bool ObjectMap::aio_update(uint64_t start_object_no, uint64_t end_object_no,
   assert(m_image_ctx.snap_lock.is_locked());
   assert((m_image_ctx.features & RBD_FEATURE_OBJECT_MAP) != 0);
   assert(m_image_ctx.owner_lock.is_locked());
+  assert(m_image_ctx.image_watcher != NULL);
   assert(!m_image_ctx.image_watcher->is_lock_supported(m_image_ctx.snap_lock) ||
          m_image_ctx.image_watcher->is_lock_owner());
   assert(m_image_ctx.object_map_lock.is_wlocked());
@@ -517,11 +519,24 @@ void ObjectMap::invalidate(uint64_t snap_id) {
     return;
   }
 
+  // do not update on-disk flags if not image owner
+  if (m_image_ctx.image_watcher == NULL ||
+      (m_image_ctx.image_watcher->is_lock_supported(m_image_ctx.snap_lock) &&
+       !m_image_ctx.image_watcher->is_lock_owner())) {
+    return;
+  }
+
   librados::ObjectWriteOperation op;
+  if (snap_id == CEPH_NOSNAP) {
+    m_image_ctx.image_watcher->assert_header_locked(&op);
+  }
   cls_client::set_flags(&op, snap_id, flags, flags);
 
   r = m_image_ctx.md_ctx.operate(m_image_ctx.header_oid, &op);
-  if (r < 0) {
+  if (r == -EBUSY) {
+    ldout(cct, 5) << "skipping on-disk object map invalidation: "
+                  << "image not locked by client" << dendl;
+  } else if (r < 0) {
     lderr(cct) << "failed to invalidate on-disk object map: " << cpp_strerror(r)
 	       << dendl;
   }
@@ -595,6 +610,7 @@ bool ObjectMap::Request::invalidate() {
   m_image_ctx.flags |= flags;
 
   librados::ObjectWriteOperation op;
+  m_image_ctx.image_watcher->assert_header_locked(&op);
   cls_client::set_flags(&op, CEPH_NOSNAP, flags, flags);
 
   librados::AioCompletion *rados_completion = create_callback_completion();

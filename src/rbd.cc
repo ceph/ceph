@@ -1615,7 +1615,7 @@ static int do_import(librbd::RBD &rbd, librados::IoCtx& io_ctx,
     }
   }
 
-  r = 0;
+  r = image.close();
 
  done:
   if (!from_stdin) {
@@ -3972,6 +3972,12 @@ if (!set_conf_param(v, p1, p2, p3)) { \
       return -r;
     }
     break;
+  }
+
+  r = image.close();
+  if (r < 0) {
+    cerr << "rbd: error while closing image: " << cpp_strerror(-r) << std::endl;
+    return -r;
   }
   return 0;
 }
