@@ -283,12 +283,6 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
     return num;
   }
 
-  int init_rbd_info(struct rbd_info *info)
-  {
-    memset(info, 0, sizeof(*info));
-    return 0;
-  }
-
   void trim_image(ImageCtx *ictx, uint64_t newsize, ProgressContext& prog_ctx)
   {
     assert(ictx->owner_lock.is_locked());
@@ -307,25 +301,6 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
       lderr(ictx->cct) << "warning: failed to remove some object(s): "
 		       << cpp_strerror(r) << dendl;
     }
-  }
-
-  int read_rbd_info(IoCtx& io_ctx, const string& info_oid,
-		    struct rbd_info *info)
-  {
-    int r;
-    bufferlist bl;
-    r = io_ctx.read(info_oid, bl, sizeof(*info), 0);
-    if (r < 0)
-      return r;
-    if (r == 0) {
-      return init_rbd_info(info);
-    }
-
-    if (r < (int)sizeof(*info))
-      return -EIO;
-
-    memcpy(info, bl.c_str(), r);
-    return 0;
   }
 
   int read_header_bl(IoCtx& io_ctx, const string& header_oid,
@@ -381,16 +356,6 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
     memcpy(header, header_bl.c_str(), sizeof(*header));
 
     return 0;
-  }
-
-  int write_header(IoCtx& io_ctx, const string& header_oid, bufferlist& header)
-  {
-    bufferlist bl;
-    int r = io_ctx.write(header_oid, header, header.length(), 0);
-
-    notify_change(io_ctx, header_oid, NULL);
-
-    return r;
   }
 
   int tmap_set(IoCtx& io_ctx, const string& imgname)
@@ -3168,17 +3133,6 @@ reprotect_and_return_err:
     return r;
   }
 
-  int simple_read_cb(uint64_t ofs, size_t len, const char *buf, void *arg)
-  {
-    char *dest_buf = (char *)arg;
-    if (buf)
-      memcpy(dest_buf + ofs, buf, len);
-    else
-      memset(dest_buf + ofs, 0, len);
-
-    return 0;
-  }
-
   ssize_t read(ImageCtx *ictx, uint64_t ofs, size_t len, char *buf, int op_flags)
   {
     ssize_t ret;
@@ -3280,67 +3234,6 @@ reprotect_and_return_err:
     }
 
     return mylen;
-  }
-
-  ssize_t handle_sparse_read(CephContext *cct,
-			     bufferlist data_bl,
-			     uint64_t block_ofs,
-			     const map<uint64_t, uint64_t> &data_map,
-			     uint64_t buf_ofs,   // offset into buffer
-			     size_t buf_len,     // length in buffer (not size of buffer!)
-			     char *dest_buf)
-  {
-    uint64_t bl_ofs = 0;
-    size_t buf_left = buf_len;
-
-    for (map<uint64_t, uint64_t>::const_iterator iter = data_map.begin();
-	 iter != data_map.end();
-	 ++iter) {
-      uint64_t extent_ofs = iter->first;
-      size_t extent_len = iter->second;
-
-      ldout(cct, 10) << "extent_ofs=" << extent_ofs
-		     << " extent_len=" << extent_len << dendl;
-      ldout(cct, 10) << "block_ofs=" << block_ofs << dendl;
-
-      /* a hole? */
-      if (extent_ofs > block_ofs) {
-	uint64_t gap = extent_ofs - block_ofs;
-	ldout(cct, 10) << "<1>zeroing " << buf_ofs << "~" << gap << dendl;
-	memset(dest_buf + buf_ofs, 0, gap);
-
-	buf_ofs += gap;
-	buf_left -= gap;
-	block_ofs = extent_ofs;
-      } else if (extent_ofs < block_ofs) {
-	assert(0 == "osd returned data prior to what we asked for");
-	return -EIO;
-      }
-
-      if (bl_ofs + extent_len > (buf_ofs + buf_left)) {
-	assert(0 == "osd returned more data than we asked for");
-	return -EIO;
-      }
-
-      /* data */
-      ldout(cct, 10) << "<2>copying " << buf_ofs << "~" << extent_len
-		     << " from ofs=" << bl_ofs << dendl;
-      memcpy(dest_buf + buf_ofs, data_bl.c_str() + bl_ofs, extent_len);
-
-      bl_ofs += extent_len;
-      buf_ofs += extent_len;
-      assert(buf_left >= extent_len);
-      buf_left -= extent_len;
-      block_ofs += extent_len;
-    }
-
-    /* last hole */
-    if (buf_left > 0) {
-      ldout(cct, 10) << "<3>zeroing " << buf_ofs << "~" << buf_left << dendl;
-      memset(dest_buf + buf_ofs, 0, buf_left);
-    }
-
-    return buf_len;
   }
 
   void rados_req_cb(rados_completion_t c, void *arg)

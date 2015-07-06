@@ -127,8 +127,6 @@ namespace librbd {
   int open_image(ImageCtx *ictx);
   int close_image(ImageCtx *ictx);
 
-  int copyup_block(ImageCtx *ictx, uint64_t offset, size_t len,
-		   const char *buf);
   int flatten(ImageCtx *ictx, ProgressContext &prog_ctx);
 
   int rebuild_object_map(ImageCtx *ictx, ProgressContext &prog_ctx);
@@ -147,8 +145,6 @@ namespace librbd {
 		 const std::string& cookie);
 
   void trim_image(ImageCtx *ictx, uint64_t newsize, ProgressContext& prog_ctx);
-  int read_rbd_info(librados::IoCtx& io_ctx, const std::string& info_oid,
-		    struct rbd_info *info);
 
   int read_header_bl(librados::IoCtx& io_ctx, const std::string& md_oid,
 		     ceph::bufferlist& header, uint64_t *ver);
@@ -156,8 +152,6 @@ namespace librbd {
 		    ImageCtx *ictx);
   int read_header(librados::IoCtx& io_ctx, const std::string& md_oid,
 		  struct rbd_obj_header_ondisk *header, uint64_t *ver);
-  int write_header(librados::IoCtx& io_ctx, const std::string& md_oid,
-		   ceph::bufferlist& header);
   int tmap_set(librados::IoCtx& io_ctx, const std::string& imgname);
   int tmap_rm(librados::IoCtx& io_ctx, const std::string& imgname);
   void rollback_object(ImageCtx *ictx, uint64_t snap_id, const string& oid,
@@ -165,12 +159,9 @@ namespace librbd {
   int rollback_image(ImageCtx *ictx, uint64_t snap_id,
 		     ProgressContext& prog_ctx);
   void image_info(const ImageCtx *ictx, image_info_t& info, size_t info_size);
-  std::string get_block_oid(const std::string &object_prefix, uint64_t num,
-			    bool old_format);
   uint64_t oid_to_object_no(const std::string& oid,
 			    const std::string& object_prefix);
   int clip_io(ImageCtx *ictx, uint64_t off, uint64_t *len);
-  int init_rbd_info(struct rbd_info *info);
   void init_rbd_header(struct rbd_obj_header_ondisk& ondisk,
 		       uint64_t size, int order, uint64_t bid);
 
@@ -211,21 +202,12 @@ namespace librbd {
   int metadata_set(ImageCtx *ictx, const std::string &key, const std::string &value);
   int metadata_remove(ImageCtx *ictx, const std::string &key);
 
-  ssize_t handle_sparse_read(CephContext *cct,
-			     ceph::bufferlist data_bl,
-			     uint64_t block_ofs,
-			     const std::map<uint64_t, uint64_t> &data_map,
-			     uint64_t buf_ofs,
-			     size_t buf_len,
-			     char *dest_buf);
-
   AioCompletion *aio_create_completion();
   AioCompletion *aio_create_completion(void *cb_arg, callback_t cb_complete);
   AioCompletion *aio_create_completion_internal(void *cb_arg,
 						callback_t cb_complete);
 
   // raw callbacks
-  int simple_read_cb(uint64_t ofs, size_t len, const char *buf, void *arg);
   void rados_req_cb(rados_completion_t cb, void *arg);
   void rados_ctx_cb(rados_completion_t cb, void *arg);
   void rbd_req_cb(completion_t cb, void *arg);
