@@ -161,7 +161,8 @@ protected:
     warn_interval_multiplier(1)
   {
     tracker->register_inflight_op(&xitem);
-    events.push_back(make_pair(initiated_at, "initiated"));
+    if (tracker->tracking_enabled)
+      events.push_back(make_pair(initiated_at, "initiated"));
   }
 
   /// output any type-specific data you want to get when dump() is called
