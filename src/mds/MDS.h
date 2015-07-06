@@ -98,7 +98,7 @@ class MDS : public Dispatcher, public md_config_obs_t {
   LogClient    log_client;
   LogChannelRef clog;
 
-  MDSRank *mds_rank;
+  MDSRankDispatcher *mds_rank;
 
  public:
   MDS(const std::string &n, Messenger *m, MonClient *mc);
