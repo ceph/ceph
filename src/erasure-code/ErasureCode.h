@@ -78,9 +78,6 @@ namespace ceph {
                               const map<int, bufferlist> &chunks,
                               map<int, bufferlist> *decoded);
 
-    virtual int parse(const ErasureCodeProfile &profile,
-		      ostream *ss);
-
     virtual const vector<int> &get_chunk_mapping() const;
 
     int to_mapping(const ErasureCodeProfile &profile,
@@ -106,6 +103,10 @@ namespace ceph {
 
     virtual int decode_concat(const map<int, bufferlist> &chunks,
 			      bufferlist *decoded);
+
+  protected:
+    int parse(const ErasureCodeProfile &profile,
+	      ostream *ss);
 
   private:
     int chunk_index(unsigned int i) const;

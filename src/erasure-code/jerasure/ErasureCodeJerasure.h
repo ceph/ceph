@@ -51,8 +51,6 @@ public:
 
   virtual ~ErasureCodeJerasure() {}
   
-  virtual int parse(ErasureCodeProfile &profile, ostream *ss);
-
   virtual int create_ruleset(const string &name,
 			     CrushWrapper &crush,
 			     ostream *ss) const;
@@ -86,6 +84,8 @@ public:
   virtual unsigned get_alignment() const = 0;
   virtual void prepare() = 0;
   static bool is_prime(int value);
+protected:
+  virtual int parse(ErasureCodeProfile &profile, ostream *ss);
 };
 
 class ErasureCodeJerasureReedSolomonVandermonde : public ErasureCodeJerasure {
@@ -113,8 +113,9 @@ public:
                                char **coding,
                                int blocksize);
   virtual unsigned get_alignment() const;
-  virtual int parse(ErasureCodeProfile &profile, ostream *ss);
   virtual void prepare();
+private:
+  virtual int parse(ErasureCodeProfile &profile, ostream *ss);
 };
 
 class ErasureCodeJerasureReedSolomonRAID6 : public ErasureCodeJerasure {
@@ -141,8 +142,9 @@ public:
                                char **coding,
                                int blocksize);
   virtual unsigned get_alignment() const;
-  virtual int parse(ErasureCodeProfile &profile, ostream *ss);
   virtual void prepare();
+private:
+  virtual int parse(ErasureCodeProfile &profile, ostream *ss);
 };
 
 #define DEFAULT_PACKETSIZE "2048"
@@ -177,8 +179,9 @@ public:
                                char **coding,
                                int blocksize);
   virtual unsigned get_alignment() const;
-  virtual int parse(ErasureCodeProfile &profile, ostream *ss);
   void prepare_schedule(int *matrix);
+private:
+  virtual int parse(ErasureCodeProfile &profile, ostream *ss);
 };
 
 class ErasureCodeJerasureCauchyOrig : public ErasureCodeJerasureCauchy {
@@ -230,8 +233,9 @@ public:
   virtual bool check_packetsize(ostream *ss) const;
   virtual int revert_to_default(ErasureCodeProfile &profile,
 				ostream *ss);
-  virtual int parse(ErasureCodeProfile &profile, ostream *ss);
   virtual void prepare();
+private:
+  virtual int parse(ErasureCodeProfile &profile, ostream *ss);
 };
 
 class ErasureCodeJerasureBlaumRoth : public ErasureCodeJerasureLiberation {
@@ -255,8 +259,9 @@ public:
     DEFAULT_W = "8";
   }
 
-  virtual int parse(ErasureCodeProfile &profile, ostream *ss);
   virtual void prepare();
+private:
+  virtual int parse(ErasureCodeProfile &profile, ostream *ss);
 };
 
 #endif
