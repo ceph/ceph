@@ -800,7 +800,7 @@ void MDBalancer::custom_balancer()
 
   // push metrics to Lua
   vector<pair<int, string> > args = extract_metrics();
-  push_lua_metrics(L, args);
+  push_lua_args(L, args);
   lua_setglobal(L, "arg");
 
   // execute script
@@ -1066,7 +1066,6 @@ void MDBalancer::try_rebalance()
 
     list<CDir*> exports;
 
-    // MSEVILLA: should we move this entire auth?
     // can I put myself (irrespective if I am a whole directory or dirfrag)
     multimap<double, CDir*> smaller;
     for (set<CDir*>::iterator root = candidates.begin();

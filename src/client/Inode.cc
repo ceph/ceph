@@ -197,7 +197,6 @@ bool Inode::caps_issued_mask(unsigned mask)
     touch_cap(auth_cap);
     return true;
   }
-  // MSEVILLA: 
   // It should fall in here, since this MDS should be the authority for that directory...
   // I think it isn't falling in here because it thinks its looking for a file instead of 
   // a directory - so when it checks the auth_cap->issued & mask, it fails

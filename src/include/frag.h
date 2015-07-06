@@ -211,8 +211,7 @@ public:
 	ls.front() == x &&
 	ls.size() == 1))
       return true;
-    // Added by MSEVILLA: a node without and leaves underneath it a 
-    // is definitely a leaf... it is probably a root dirfrag. :)
+    // A node without leaves underneath it is definitely a leaf... 
     if (ls.empty()) return true;
     return false;
   }

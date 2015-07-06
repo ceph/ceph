@@ -728,11 +728,8 @@ void Client::update_inode_file_bits(Inode *in,
 void Client::_fragmap_remove_non_leaves(Inode *in)
 {
   for (map<frag_t,int>::iterator p = in->fragmap.begin(); p != in->fragmap.end(); )
-    if (!in->dirfragtree.is_leaf(p->first)) {
-      // MSEVILLA
-      ldout(cct, 20) << "_fragmap_remove_non_leaves erasing cuz in=" << *in << " is not a leaf, dirfragtree=" << in->dirfragtree << dendl;
+    if (!in->dirfragtree.is_leaf(p->first))
       in->fragmap.erase(p++);
-    }
     else
       ++p;
 }
@@ -955,7 +952,6 @@ void Client::update_dir_dist(Inode *in, DirStat *dst)
   if (dst->auth >= 0) {
     in->fragmap[dst->frag] = dst->auth;
   } else {
-    ldout(cct, 20) << "erasing because dirfrag map for " << in->ino << " frag " << dst->frag << " to mds " << dst->auth << dendl;
     in->fragmap.erase(dst->frag);
   }
   if (!in->dirfragtree.is_leaf(dst->frag)) {
@@ -1287,20 +1283,12 @@ mds_rank_t Client::choose_target_mds(MetaRequest *req)
       }
       is_hash = false;
     }
- 
-    // MSEVILLA 
+  
     ldout(cct, 20) << "choose_target_mds " << *in << " is_hash=" << is_hash
-             << " hash=" << hash << " S_ISDIR(in->mode)=" << S_ISDIR(in->mode) 
-             << " !in->dirfragtree.empty()=" << !in->dirfragtree.empty() 
-             << dendl;
+             << " hash=" << hash << dendl;
   
     if (is_hash && S_ISDIR(in->mode) && !in->dirfragtree.empty()) {
       frag_t fg = in->dirfragtree[hash];
-      // MSEVILLA
-      ldout(cct, 20) << "choose_target_mds fg=" << fg 
-      << " in->fragmap.count(fg)=" << in->fragmap.count(fg)
-      << " in->fragmap=" << in->fragmap 
-      << dendl;
       if (in->fragmap.count(fg)) {
         mds = in->fragmap[fg];
         ldout(cct, 10) << "choose_target_mds from dirfragtree hash" << dendl;
@@ -1952,7 +1940,7 @@ void Client::send_request(MetaRequest *request, MetaSession *session,
 
   session->requests.push_back(&request->item);
 
-  ldout(cct, 0) << "send_request " << *r << " to mds." << mds << dendl;
+  ldout(cct, 10) << "send_request " << *r << " to mds." << mds << dendl;
   session->con->send_message(r);
 }
 
