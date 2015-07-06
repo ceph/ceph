@@ -115,8 +115,9 @@ public:
 			  char **coding,
 			  int blocksize) = 0;
   virtual unsigned get_alignment() const = 0;
-  virtual int parse(const ErasureCodeProfile &profile) = 0;
   virtual void prepare() = 0;
+private:
+  virtual int parse(const ErasureCodeProfile &profile) = 0;
 };
 
 class ErasureCodeShecReedSolomonVandermonde : public ErasureCodeShec {
@@ -139,8 +140,9 @@ public:
 			  char **coding,
 			  int blocksize);
   virtual unsigned get_alignment() const;
-  virtual int parse(const ErasureCodeProfile &profile);
   virtual void prepare();
+private:
+  virtual int parse(const ErasureCodeProfile &profile);
 };
 
 #endif
