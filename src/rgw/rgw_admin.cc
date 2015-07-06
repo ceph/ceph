@@ -911,6 +911,7 @@ int check_min_obj_stripe_size(RGWRados *store, RGWBucketInfo& bucket_info, rgw_o
 int check_obj_locator_underscore(RGWBucketInfo& bucket_info, rgw_obj& obj, rgw_obj_key& key, bool fix, bool remove_bad, Formatter *f) {
   f->open_object_section("object");
   f->open_object_section("key");
+  f->dump_string("type", "head");
   f->dump_string("name", key.name);
   f->dump_string("instance", key.instance);
   f->close_section();
@@ -946,6 +947,36 @@ int check_obj_locator_underscore(RGWBucketInfo& bucket_info, rgw_obj& obj, rgw_o
   }
 
 done:
+  f->dump_string("status", status);
+
+  f->close_section();
+
+  return 0;
+}
+
+int check_obj_tail_locator_underscore(RGWBucketInfo& bucket_info, rgw_obj& obj, rgw_obj_key& key, bool fix, Formatter *f) {
+  f->open_object_section("object");
+  f->open_object_section("key");
+  f->dump_string("type", "tail");
+  f->dump_string("name", key.name);
+  f->dump_string("instance", key.instance);
+  f->close_section();
+
+  string oid;
+  string locator;
+
+  bool needs_fixing;
+  string status;
+
+  int ret = store->fix_tail_obj_locator(obj.bucket, key, fix, &needs_fixing);
+  if (ret < 0) {
+    cerr << "ERROR: fix_tail_object_locator_underscore() returned ret=" << ret << std::endl;
+    status = "failed";
+  } else {
+    status = (needs_fixing && !fix ? "needs_fixing" : "ok");
+  }
+
+  f->dump_bool("needs_fixing", needs_fixing);
   f->dump_string("status", status);
 
   f->close_section();
@@ -991,7 +1022,7 @@ int do_check_object_locator(const string& bucket_name, bool fix, bool remove_bad
   list_op.params.delim = delim;
   list_op.params.marker = rgw_obj_key(marker);
   list_op.params.ns = ns;
-  list_op.params.enforce_ns = false;
+  list_op.params.enforce_ns = true;
   list_op.params.list_versions = true;
   
   f->open_array_section("check_objects");
@@ -1012,6 +1043,10 @@ int do_check_object_locator(const string& bucket_name, bool fix, bool remove_bad
       if (key.name[0] == '_') {
         ret = check_obj_locator_underscore(bucket_info, obj, key, fix, remove_bad, f);
         /* ignore return code, move to the next one */
+	
+	if (ret >= 0) {
+          ret = check_obj_tail_locator_underscore(bucket_info, obj, key, fix, f);
+	}
       }
     }
     f->flush(cout);
