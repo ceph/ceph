@@ -170,7 +170,7 @@ namespace librbd {
       m_completion->lock.Unlock();
       r = m_req->m_object_len;
     }
-    m_completion->complete_request(m_cct, r);
+    C_AioRequest::finish(r);
   }
 
   void C_CacheRead::complete(int r) {
