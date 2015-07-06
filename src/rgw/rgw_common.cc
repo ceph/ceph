@@ -184,6 +184,18 @@ req_state::~req_state() {
   delete object_acl;
 }
 
+void req_state::gen_trans_id()
+{
+  char buf[256];
+  timeval timetest;
+  gettimeofday(&timetest, NULL);
+  if (strftime(buf, sizeof(buf), "%Y%m%d:%H%M%S",gmtime(&(timetest.tv_sec))) ==  0)
+    return;
+
+  snprintf(buf + strlen(buf), sizeof(buf)-strlen(buf) ,":%03ld", timetest.tv_usec/1000);
+  trans_id = req_id + "-" + buf;
+}
+
 struct str_len {
   const char *str;
   int len;
@@ -197,6 +209,7 @@ struct str_len meta_prefixes[] = { STR_LEN_ENTRY("HTTP_X_AMZ"),
                                    STR_LEN_ENTRY("HTTP_X_RGW"),
                                    STR_LEN_ENTRY("HTTP_X_OBJECT"),
                                    STR_LEN_ENTRY("HTTP_X_CONTAINER"),
+                                   STR_LEN_ENTRY("HTTP_X_ACCOUNT"),
                                    {NULL, 0} };
 
 

@@ -38,7 +38,7 @@ Subcommands
 prepare
 --------
 
-Prepare a directory, disk or drive for a Ceph OSD. It creates a GPT partition,
+Prepare a directory, disk for a Ceph OSD. It creates a GPT partition,
 marks the partition with Ceph type ``uuid``, creates a file system, marks the
 file system as ready for Ceph consumption, uses entire partition and adds a new
 partition to the journal disk. It is run directly or triggered by

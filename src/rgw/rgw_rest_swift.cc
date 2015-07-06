@@ -49,8 +49,12 @@ int RGWListBuckets_ObjStore_SWIFT::get_params()
   return 0;
 }
 
-static void dump_account_metadata(struct req_state *s, uint32_t buckets_count,
-                                  uint64_t buckets_object_count, uint64_t buckets_size, uint64_t buckets_size_rounded)
+static void dump_account_metadata(struct req_state * const s,
+                                  const uint32_t buckets_count,
+                                  const uint64_t buckets_object_count,
+                                  const uint64_t buckets_size,
+                                  const uint64_t buckets_size_rounded,
+                                  map<string, bufferlist>& attrs)
 {
   char buf[32];
   utime_t now = ceph_clock_now(g_ceph_context);
@@ -65,6 +69,32 @@ static void dump_account_metadata(struct req_state *s, uint32_t buckets_count,
   s->cio->print("X-Account-Bytes-Used: %s\r\n", buf);
   snprintf(buf, sizeof(buf), "%lld", (long long)buckets_size_rounded);
   s->cio->print("X-Account-Bytes-Used-Actual: %s\r\n", buf);
+
+  /* Dump TempURL-related stuff */
+  if (s->perm_mask == RGW_PERM_FULL_CONTROL) {
+    map<int, string>::iterator iter;
+    iter = s->user.temp_url_keys.find(0);
+    if (iter != s->user.temp_url_keys.end() && !iter->second.empty()) {
+      s->cio->print("X-Account-Meta-Temp-Url-Key: %s\r\n", iter->second.c_str());
+    }
+
+    iter = s->user.temp_url_keys.find(1);
+    if (iter != s->user.temp_url_keys.end() && !iter->second.empty()) {
+      s->cio->print("X-Account-Meta-Temp-Url-Key-2: %s\r\n", iter->second.c_str());
+    }
+  }
+
+  /* Dump user-defined metadata items */
+  const size_t PREFIX_LEN = sizeof(RGW_ATTR_META_PREFIX) - 1;
+  map<string, bufferlist>::iterator iter;
+  for (iter = attrs.lower_bound(RGW_ATTR_META_PREFIX); iter != attrs.end(); ++iter) {
+    const char *name = iter->first.c_str();
+    if (strncmp(name, RGW_ATTR_META_PREFIX, PREFIX_LEN) == 0) {
+      s->cio->print("X-Account-Meta-%s: %s\r\n", name + PREFIX_LEN, iter->second.c_str());
+    } else {
+      break;
+    }
+  }
 }
 
 void RGWListBuckets_ObjStore_SWIFT::send_response_begin(bool has_buckets)
@@ -76,7 +106,7 @@ void RGWListBuckets_ObjStore_SWIFT::send_response_begin(bool has_buckets)
     set_req_state_err(s, ret);
   }
   /* Adding account stats in the header to keep align with Swift API */
-  dump_account_metadata(s, buckets_count, buckets_objcount, buckets_size, buckets_size_rounded);
+  dump_account_metadata(s, buckets_count, buckets_objcount, buckets_size, buckets_size_rounded, attrs);
   dump_errno(s);
   end_header(s, NULL, NULL, NO_CONTENT_LENGTH, true);
 
@@ -295,11 +325,18 @@ static void dump_container_metadata(struct req_state *s, RGWBucketEnt& bucket)
   }
 }
 
+void RGWStatAccount_ObjStore_SWIFT::execute()
+{
+  RGWStatAccount_ObjStore::execute();
+
+  ret = rgw_get_user_attrs_by_uid(store, s->user.user_id, attrs);
+}
+
 void RGWStatAccount_ObjStore_SWIFT::send_response()
 {
   if (ret >= 0) {
     ret = STATUS_NO_CONTENT;
-    dump_account_metadata(s, buckets_count, buckets_objcount, buckets_size, buckets_size_rounded);
+    dump_account_metadata(s, buckets_count, buckets_objcount, buckets_size, buckets_size_rounded, attrs);
   }
 
   set_req_state_err(s, ret);
@@ -320,7 +357,7 @@ void RGWStatBucket_ObjStore_SWIFT::send_response()
   set_req_state_err(s, ret);
   dump_errno(s);
 
-  end_header(s, this);
+  end_header(s, this,NULL,0, true);
   dump_start(s);
 }
 
@@ -467,87 +504,109 @@ void RGWPutObj_ObjStore_SWIFT::send_response()
   rgw_flush_formatter_and_reset(s, s->formatter);
 }
 
-#define REMOVE_ATTR_PREFIX     "HTTP_X_REMOVE_CONTAINER_META_"
-#define PUT_ATTR_PREFIX        "HTTP_X_CONTAINER_META_"
-#define REMOVE_ATTR_PREFIX_LEN sizeof(REMOVE_ATTR_PREFIX) - 1
-#define PUT_ATTR_PREFIX_LEN    sizeof(PUT_ATTR_PREFIX) - 1
+#define ACCT_REMOVE_ATTR_PREFIX     "HTTP_X_REMOVE_ACCOUNT_META_"
+#define ACCT_PUT_ATTR_PREFIX        "HTTP_X_ACCOUNT_META_"
+#define CONT_REMOVE_ATTR_PREFIX     "HTTP_X_REMOVE_CONTAINER_META_"
+#define CONT_PUT_ATTR_PREFIX        "HTTP_X_CONTAINER_META_"
 
-int RGWPutMetadata_ObjStore_SWIFT::get_params()
+static void get_rmattrs_from_headers(const req_state * const s,
+                                     const char * const put_prefix,
+                                     const char * const del_prefix,
+                                     set<string>& rmattr_names)
 {
-  if (s->has_bad_meta)
-    return -EINVAL;
+  map<string, string, ltstr_nocase>& m = s->info.env->get_map();
+  map<string, string, ltstr_nocase>::const_iterator iter;
+  const size_t put_prefix_len = strlen(put_prefix);
+  const size_t del_prefix_len = strlen(del_prefix);
 
-  if (s->object.empty()) {
-    int r = get_swift_container_settings(s, store, &policy, &has_policy, &cors_config, &has_cors);
-    if (r < 0) {
-      return r;
+  for (iter = m.begin(); iter != m.end(); ++iter) {
+    size_t prefix_len = 0;
+    const char * const p = iter->first.c_str();
+
+    if (strncasecmp(p, del_prefix, del_prefix_len) == 0) {
+      /* Explicitly requested removal. */
+      prefix_len = del_prefix_len;
+    } else if ((strncasecmp(p, put_prefix, put_prefix_len) == 0)
+        && iter->second.empty()) {
+      /* Removal requested by putting an empty value. */
+      prefix_len = put_prefix_len;
     }
-    map<string, string, ltstr_nocase>& m = s->info.env->get_map();
-    map<string, string, ltstr_nocase>::iterator iter;
-    for (iter = m.begin(); iter != m.end(); ++iter) {
-      size_t prefix_len = 0;
-      const char *p = iter->first.c_str();
-      if (strncasecmp(p, REMOVE_ATTR_PREFIX, REMOVE_ATTR_PREFIX_LEN) == 0) {
-        // Explicitly requested removal
-        prefix_len = REMOVE_ATTR_PREFIX_LEN;
-      } else if ((strncasecmp(p, PUT_ATTR_PREFIX, PUT_ATTR_PREFIX_LEN) == 0) && iter->second.empty()) {
-        // Removal requested by putting an empty value
-        prefix_len = PUT_ATTR_PREFIX_LEN;
-      }
-      if (prefix_len > 0) {
-        string name(RGW_ATTR_META_PREFIX);
-        name.append(lowercase_dash_http_attr(p + prefix_len));
-        rmattr_names.insert(name);
-      }
+
+    if (prefix_len > 0) {
+      string name(RGW_ATTR_META_PREFIX);
+      name.append(lowercase_dash_http_attr(p + prefix_len));
+      rmattr_names.insert(name);
     }
   }
-  placement_rule = s->info.env->get("HTTP_X_STORAGE_POLICY", "");
+}
 
+int RGWPutMetadataAccount_ObjStore_SWIFT::get_params()
+{
+  if (s->has_bad_meta) {
+    return -EINVAL;
+  }
+
+  get_rmattrs_from_headers(s, ACCT_PUT_ATTR_PREFIX, ACCT_REMOVE_ATTR_PREFIX, rmattr_names);
   return 0;
 }
 
-void RGWPutMetadata_ObjStore_SWIFT::send_response()
+void RGWPutMetadataAccount_ObjStore_SWIFT::send_response()
 {
   if (!ret) {
-    /* Return 204 when post metadata on a container */
-    if (s->object.empty())
-      ret = STATUS_NO_CONTENT;
-    else
-      ret = STATUS_ACCEPTED;
+    ret = STATUS_NO_CONTENT;
   }
   set_req_state_err(s, ret);
-  if (!s->err.is_err())
-    dump_content_length(s, 0);
   dump_errno(s);
   end_header(s, this);
   rgw_flush_formatter_and_reset(s, s->formatter);
 }
 
-int RGWSetTempUrl_ObjStore_SWIFT::get_params()
+int RGWPutMetadataBucket_ObjStore_SWIFT::get_params()
 {
-  const char *temp_url = s->info.env->get("HTTP_X_ACCOUNT_META_TEMP_URL_KEY");
-  if (temp_url) {
-    temp_url_keys[0] = temp_url;
-  }
-
-  temp_url = s->info.env->get("HTTP_X_ACCOUNT_META_TEMP_URL_KEY_2");
-  if (temp_url) {
-    temp_url_keys[1] = temp_url;
-  }
-
-  if (temp_url_keys.empty())
+  if (s->has_bad_meta) {
     return -EINVAL;
+  }
 
+  int r = get_swift_container_settings(s, store, &policy, &has_policy, &cors_config, &has_cors);
+  if (r < 0) {
+    return r;
+  }
+
+  get_rmattrs_from_headers(s, CONT_PUT_ATTR_PREFIX, CONT_REMOVE_ATTR_PREFIX, rmattr_names);
+  placement_rule = s->info.env->get("HTTP_X_STORAGE_POLICY", "");
   return 0;
 }
 
-void RGWSetTempUrl_ObjStore_SWIFT::send_response()
+void RGWPutMetadataBucket_ObjStore_SWIFT::send_response()
 {
-  int r = ret;
-  if (!r)
-    r = STATUS_NO_CONTENT;
+  if (!ret) {
+    ret = STATUS_NO_CONTENT;
+  }
+  set_req_state_err(s, ret);
+  dump_errno(s);
+  end_header(s, this);
+  rgw_flush_formatter_and_reset(s, s->formatter);
+}
 
-  set_req_state_err(s, r);
+int RGWPutMetadataObject_ObjStore_SWIFT::get_params()
+{
+  if (s->has_bad_meta) {
+    return -EINVAL;
+  }
+
+  placement_rule = s->info.env->get("HTTP_X_STORAGE_POLICY", "");
+  return 0;
+}
+
+void RGWPutMetadataObject_ObjStore_SWIFT::send_response()
+{
+  if (!ret) {
+    ret = STATUS_ACCEPTED;
+  }
+  set_req_state_err(s, ret);
+  if (!s->err.is_err()) {
+    dump_content_length(s, 0);
+  }
   dump_errno(s);
   end_header(s, this);
   rgw_flush_formatter_and_reset(s, s->formatter);
@@ -766,15 +825,7 @@ RGWOp *RGWHandler_ObjStore_Service_SWIFT::op_head()
 
 RGWOp *RGWHandler_ObjStore_Service_SWIFT::op_post()
 {
-  const char *temp_url = s->info.env->get("HTTP_X_ACCOUNT_META_TEMP_URL_KEY");
-  if (temp_url) {
-    return new RGWSetTempUrl_ObjStore_SWIFT;
-  }
-  temp_url = s->info.env->get("HTTP_X_ACCOUNT_META_TEMP_URL_KEY_2");
-  if (temp_url) {
-    return new RGWSetTempUrl_ObjStore_SWIFT;
-  }
-  return NULL;
+  return new RGWPutMetadataAccount_ObjStore_SWIFT;
 }
 
 RGWOp *RGWHandler_ObjStore_Bucket_SWIFT::get_obj_op(bool get_data)
@@ -820,7 +871,7 @@ RGWOp *RGWHandler_ObjStore_Bucket_SWIFT::op_delete()
 
 RGWOp *RGWHandler_ObjStore_Bucket_SWIFT::op_post()
 {
-  return new RGWPutMetadata_ObjStore_SWIFT;
+  return new RGWPutMetadataBucket_ObjStore_SWIFT;
 }
 
 RGWOp *RGWHandler_ObjStore_Bucket_SWIFT::op_options()
@@ -873,7 +924,7 @@ RGWOp *RGWHandler_ObjStore_Obj_SWIFT::op_delete()
 
 RGWOp *RGWHandler_ObjStore_Obj_SWIFT::op_post()
 {
-  return new RGWPutMetadata_ObjStore_SWIFT;
+  return new RGWPutMetadataObject_ObjStore_SWIFT;
 }
 
 RGWOp *RGWHandler_ObjStore_Obj_SWIFT::op_copy()

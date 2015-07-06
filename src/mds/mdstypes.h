@@ -73,6 +73,12 @@
 #define MDS_TRAVERSE_DISCOVER      2    // skips permissions checks etc.
 #define MDS_TRAVERSE_DISCOVERXLOCK 3    // succeeds on (foreign?) null, xlocked dentries.
 
+extern "C"{
+    #include <lua5.2/lualib.h>
+    #include <lua5.2/lauxlib.h>
+    #include <lua5.2/lua.h>
+}
+
 
 BOOST_STRONG_TYPEDEF(int32_t, mds_rank_t)
 BOOST_STRONG_TYPEDEF(uint64_t, mds_gid_t)
@@ -1024,20 +1030,108 @@ public:
       vec[i].reset(now);
   }
   double meta_load(utime_t now, const DecayRate& rate) {
-    return 
-      1*vec[META_POP_IRD].get(now, rate) + 
-      2*vec[META_POP_IWR].get(now, rate) +
-      1*vec[META_POP_READDIR].get(now, rate) +
-      2*vec[META_POP_FETCH].get(now, rate) +
-      4*vec[META_POP_STORE].get(now, rate);
+    const char *script0 =
+      "IRD = arg[1]\n"
+      "IWR = arg[2]\n"
+      "READDIR = arg[3]\n"
+      "FETCH = arg[4]\n"
+      "STORE = arg[5]\n"
+      "return ";
+    char script[100 + strlen(g_conf->mds_bal_metaload.c_str())];
+    int index = 1;
+    lua_State *L = luaL_newstate(); 
+    luaL_openlibs(L);
+    lua_newtable(L);
+    
+    // pass value to Lua
+    lua_pushnumber(L, index++);
+    lua_pushnumber(L, vec[META_POP_IRD].get(now, rate));
+    lua_settable(L, -3);
+    lua_pushnumber(L, index++);
+    lua_pushnumber(L, vec[META_POP_IWR].get(now, rate));
+    lua_settable(L, -3);
+    lua_pushnumber(L, index++);
+    lua_pushnumber(L, vec[META_POP_READDIR].get(now, rate));
+    lua_settable(L, -3);
+    lua_pushnumber(L, index++);
+    lua_pushnumber(L, vec[META_POP_FETCH].get(now, rate));
+    lua_settable(L, -3);
+    lua_pushnumber(L, index++);
+    lua_pushnumber(L, vec[META_POP_STORE].get(now, rate));
+    lua_settable(L, -3);
+
+    // call Lua
+    lua_setglobal(L, "arg"); 
+    double ret = -1;
+    string metaload = g_conf->mds_bal_metaload;
+    replace(metaload.begin(), metaload.end(), '_', ' ');
+    strcpy(script, script0);
+    strcat(script, metaload.c_str());
+
+    // don't throw up if the Lua script fails
+    if (luaL_dostring(L, script) == 0) 
+      ret = lua_tonumber(L, lua_gettop(L));
+    lua_close(L);
+    return ret;
+
+    //return 
+    //  1*vec[META_POP_IRD].get(now, rate) + 
+    //  2*vec[META_POP_IWR].get(now, rate) +
+    //  1*vec[META_POP_READDIR].get(now, rate) +
+    //  2*vec[META_POP_FETCH].get(now, rate) +
+    //  4*vec[META_POP_STORE].get(now, rate);
   }
   double meta_load() {
-    return 
-      1*vec[META_POP_IRD].get_last() + 
-      2*vec[META_POP_IWR].get_last() +
-      1*vec[META_POP_READDIR].get_last() +
-      2*vec[META_POP_FETCH].get_last() +
-      4*vec[META_POP_STORE].get_last();
+    const char *script0 =
+      "IRD = arg[1]\n"
+      "IWR = arg[2]\n"
+      "READDIR = arg[3]\n"
+      "FETCH = arg[4]\n"
+      "STORE = arg[5]\n"
+      "return ";
+    char script[100 + strlen(g_conf->mds_bal_metaload.c_str())];
+    int index = 1;
+    lua_State *L = luaL_newstate(); 
+    luaL_openlibs(L);
+    lua_newtable(L);
+    
+    // pass value to Lua
+    lua_pushnumber(L, index++);
+    lua_pushnumber(L, vec[META_POP_IRD].get_last());
+    lua_settable(L, -3);
+    lua_pushnumber(L, index++);
+    lua_pushnumber(L, vec[META_POP_IWR].get_last());
+    lua_settable(L, -3);
+    lua_pushnumber(L, index++);
+    lua_pushnumber(L, vec[META_POP_READDIR].get_last());
+    lua_settable(L, -3);
+    lua_pushnumber(L, index++);
+    lua_pushnumber(L, vec[META_POP_FETCH].get_last());
+    lua_settable(L, -3);
+    lua_pushnumber(L, index++);
+    lua_pushnumber(L, vec[META_POP_STORE].get_last());
+    lua_settable(L, -3);
+
+    // call Lua
+    lua_setglobal(L, "arg"); 
+    double ret = -1;
+    string metaload = g_conf->mds_bal_metaload;
+    replace(metaload.begin(), metaload.end(), '_', ' ');
+    strcpy(script, script0);
+    strcat(script, metaload.c_str());
+
+    // don't throw up if the Lua script fails
+    if (luaL_dostring(L, script) == 0) 
+      ret = lua_tonumber(L, lua_gettop(L));
+    lua_close(L);
+    return ret;
+
+    //return 
+    //  1*vec[META_POP_IRD].get_last() + 
+    //  2*vec[META_POP_IWR].get_last() +
+    //  1*vec[META_POP_READDIR].get_last() +
+    //  2*vec[META_POP_FETCH].get_last() +
+    //  4*vec[META_POP_STORE].get_last();
   }
 
   void add(utime_t now, DecayRate& rate, dirfrag_load_vec_t& r) {
@@ -1577,7 +1671,25 @@ inline std::ostream& operator<<(std::ostream& out, mdsco_db_line_prefix o) {
   return out;
 }
 
+class ceph_file_layout_wrapper : public ceph_file_layout
+{
+public:
+  void encode(bufferlist &bl) const
+  {
+    ::encode(static_cast<const ceph_file_layout&>(*this), bl);
+  }
 
+  void decode(bufferlist::iterator &p)
+  {
+    ::decode(static_cast<ceph_file_layout&>(*this), p);
+  }
+
+  static void generate_test_instances(std::list<ceph_file_layout_wrapper*>& ls)
+  {
+  }
+
+  void dump(Formatter *f) const;
+};
 
 
 

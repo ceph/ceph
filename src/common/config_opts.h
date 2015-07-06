@@ -23,6 +23,7 @@ OPTION(num_client, OPT_INT, 1)
 OPTION(monmap, OPT_STR, "")
 OPTION(mon_host, OPT_STR, "")
 OPTION(lockdep, OPT_BOOL, false)
+OPTION(lockdep_force_backtrace, OPT_BOOL, false) // always gather current backtrace at every lock
 OPTION(run_dir, OPT_STR, "/var/run/ceph")       // the "/var/run/ceph" dir, created on daemon startup
 OPTION(admin_socket, OPT_STR, "$run_dir/$cluster-$name.asok") // default changed by common_preinit()
 OPTION(crushtool, OPT_STR, "crushtool") // crushtool utility path
@@ -386,7 +387,7 @@ OPTION(mds_log_max_events, OPT_INT, -1)
 OPTION(mds_log_events_per_segment, OPT_INT, 1024)
 OPTION(mds_log_segment_size, OPT_INT, 0)  // segment size for mds log,
 	      // defaults to g_default_file_layout.fl_object_size (4MB)
-OPTION(mds_log_max_segments, OPT_INT, 30)
+OPTION(mds_log_max_segments, OPT_U32, 30)
 OPTION(mds_log_max_expiring, OPT_INT, 20)
 OPTION(mds_bal_sample_interval, OPT_FLOAT, 3.0)  // every 5 seconds
 OPTION(mds_bal_replicate_threshold, OPT_FLOAT, 8000)
@@ -414,6 +415,16 @@ OPTION(mds_bal_minchunk, OPT_FLOAT, .001)     // never take anything smaller tha
 OPTION(mds_bal_target_removal_min, OPT_INT, 5) // min balance iterations before old target is removed
 OPTION(mds_bal_target_removal_max, OPT_INT, 10) // max balance iterations before old target is removed
 OPTION(mds_replay_interval, OPT_FLOAT, 1.0) // time to wait before starting replay again
+OPTION(mds_bal_dir, OPT_STR,  "")             // directory with custom balancing scripts
+OPTION(mds_bal_minoffload, OPT_INT, 50)       // threshold for when the balancer stops migrating (close enough)
+OPTION(mds_bal_metaload, OPT_STR,  "1*IRD+2*IWR+1*READDIR+2*FETCH+4*STORE") // policy - calculating metadata load
+OPTION(mds_bal_mdsload, OPT_STR,  "")         // policy - calculating MDS load
+OPTION(mds_bal_when, OPT_STR,  "")            // policy - deciding when to migrate (must evaluate to boolean)
+OPTION(mds_bal_where, OPT_STR,  "")           // policy - which MDSs to send load to
+OPTION(mds_bal_howmuch, OPT_STR,  "")         // policy - which dirfrags to send
+OPTION(mds_bal_debug_dfs, OPT_INT,  10)       // how many dirfrags to print
+OPTION(mds_bal_debug_dfs_metaload, OPT_FLOAT, 0.0) // when printing dirfrags, threshold for popularity
+OPTION(mds_bal_debug_dfs_depth, OPT_INT, 4)   // how many levels of the namespace to print
 OPTION(mds_shutdown_check, OPT_INT, 0)
 OPTION(mds_thrash_exports, OPT_INT, 0)
 OPTION(mds_thrash_fragments, OPT_INT, 0)
@@ -484,6 +495,7 @@ OPTION(osd_backfill_retry_interval, OPT_DOUBLE, 10.0)
 
 // max agent flush ops
 OPTION(osd_agent_max_ops, OPT_INT, 4)
+OPTION(osd_agent_max_low_ops, OPT_INT, 2)
 OPTION(osd_agent_min_evict_effort, OPT_FLOAT, .1)
 OPTION(osd_agent_quantize_effort, OPT_FLOAT, .1)
 OPTION(osd_agent_delay_time, OPT_FLOAT, 5.0)
@@ -542,6 +554,7 @@ OPTION(osd_pool_default_flag_nopgchange, OPT_BOOL, false) // pool's pg and pgp n
 OPTION(osd_pool_default_flag_nosizechange, OPT_BOOL, false) // pool's size and min size can't be changed
 OPTION(osd_pool_default_hit_set_bloom_fpp, OPT_FLOAT, .05)
 OPTION(osd_pool_default_cache_target_dirty_ratio, OPT_FLOAT, .4)
+OPTION(osd_pool_default_cache_target_dirty_high_ratio, OPT_FLOAT, .6)
 OPTION(osd_pool_default_cache_target_full_ratio, OPT_FLOAT, .8)
 OPTION(osd_pool_default_cache_min_flush_age, OPT_INT, 0)  // seconds
 OPTION(osd_pool_default_cache_min_evict_age, OPT_INT, 0)  // seconds
@@ -855,6 +868,7 @@ OPTION(keyvaluestore_default_strip_size, OPT_INT, 4096) // Only affect new objec
 OPTION(keyvaluestore_max_expected_write_size, OPT_U64, 1ULL << 24) // bytes
 OPTION(keyvaluestore_header_cache_size, OPT_INT, 4096)    // Header cache size
 OPTION(keyvaluestore_backend, OPT_STR, "leveldb")
+OPTION(keyvaluestore_dump_file, OPT_STR, "")         // file onto which store transaction dumps
 
 // max bytes to search ahead in journal searching for corruption
 OPTION(journal_max_corrupt_search, OPT_U64, 10<<20)
@@ -897,6 +911,7 @@ OPTION(rbd_blacklist_on_break_lock, OPT_BOOL, true) // whether to blacklist clie
 OPTION(rbd_blacklist_expire_seconds, OPT_INT, 0) // number of seconds to blacklist - set to 0 for OSD default
 OPTION(rbd_request_timed_out_seconds, OPT_INT, 30) // number of seconds before maint request times out
 OPTION(rbd_skip_partial_discard, OPT_BOOL, false) // when trying to discard a range inside an object, set to true to skip zeroing the range.
+OPTION(rbd_enable_alloc_hint, OPT_BOOL, true) // when writing a object, it will issue a hint to osd backend to indicate the expected size object need
 
 /*
  * The following options change the behavior for librbd's image creation methods that
@@ -1050,6 +1065,7 @@ OPTION(rgw_user_quota_sync_idle_users, OPT_BOOL, false) // whether stats for idl
 OPTION(rgw_user_quota_sync_wait_time, OPT_INT, 3600 * 24) // min time between two full stats sync for non-idle users
 
 OPTION(rgw_multipart_min_part_size, OPT_INT, 5 * 1024 * 1024) // min size for each part (except for last one) in multipart upload
+OPTION(rgw_multipart_part_upload_limit, OPT_INT, 10000) // parts limit in multipart upload
 
 OPTION(rgw_olh_pending_timeout_sec, OPT_INT, 3600) // time until we retire a pending olh change
 

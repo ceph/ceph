@@ -151,12 +151,14 @@ public:
    * @param name entity name to register
    * @param lname logical name of the messenger in this process (e.g., "client")
    * @param nonce nonce value to uniquely identify this instance on the current host
+   * @param features bits for the local connection
    */
   static Messenger *create(CephContext *cct,
                            const string &type,
                            entity_name_t name,
 			   string lname,
-                           uint64_t nonce);
+                           uint64_t nonce,
+			   uint64_t features = 0);
 
   /**
    * @defgroup Accessors

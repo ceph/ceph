@@ -174,7 +174,7 @@ public:
    * be a value that will be repeated if the daemon restarts.
    */
   AsyncMessenger(CephContext *cct, entity_name_t name,
-                 string mname, uint64_t _nonce);
+                 string mname, uint64_t _nonce, uint64_t features);
 
   /**
    * Destroy the AsyncMessenger. Pretty simple since all the work is done
@@ -396,6 +396,7 @@ private:
     assert(lock.is_locked());
     local_connection->peer_addr = my_inst.addr;
     local_connection->peer_type = my_inst.name.type();
+    local_connection->set_features(local_features);
     ms_deliver_handle_fast_connect(local_connection.get());
   }
 
@@ -403,6 +404,7 @@ public:
 
   /// con used for sending messages to ourselves
   ConnectionRef local_connection;
+  uint64_t local_features;
 
   /**
    * @defgroup AsyncMessenger internals

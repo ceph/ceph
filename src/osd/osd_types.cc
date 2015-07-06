@@ -916,6 +916,8 @@ void pg_pool_t::dump(Formatter *f) const
   f->dump_unsigned("target_max_objects", target_max_objects);
   f->dump_unsigned("cache_target_dirty_ratio_micro",
 		   cache_target_dirty_ratio_micro);
+  f->dump_unsigned("cache_target_dirty_high_ratio_micro",
+		   cache_target_dirty_high_ratio_micro);
   f->dump_unsigned("cache_target_full_ratio_micro",
 		   cache_target_full_ratio_micro);
   f->dump_unsigned("cache_min_flush_age", cache_min_flush_age);
@@ -1228,7 +1230,7 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
     return;
   }
 
-  ENCODE_START(17, 5, bl);
+  ENCODE_START(19, 5, bl);
   ::encode(type, bl);
   ::encode(size, bl);
   ::encode(crush_ruleset, bl);
@@ -1270,12 +1272,13 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
   ::encode(last_force_op_resend, bl);
   ::encode(min_read_recency_for_promote, bl);
   ::encode(expected_num_objects, bl);
+  ::encode(cache_target_dirty_high_ratio_micro, bl);
   ENCODE_FINISH(bl);
 }
 
 void pg_pool_t::decode(bufferlist::iterator& bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(17, 5, 5, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(19, 5, 5, bl);
   ::decode(type, bl);
   ::decode(size, bl);
   ::decode(crush_ruleset, bl);
@@ -1387,6 +1390,11 @@ void pg_pool_t::decode(bufferlist::iterator& bl)
   } else {
     expected_num_objects = 0;
   }
+  if (struct_v >= 19) {
+    ::decode(cache_target_dirty_high_ratio_micro, bl);
+  } else {
+    cache_target_dirty_high_ratio_micro = cache_target_dirty_ratio_micro;
+  }
   DECODE_FINISH(bl);
   calc_pg_masks();
 }
@@ -1437,6 +1445,7 @@ void pg_pool_t::generate_test_instances(list<pg_pool_t*>& o)
   a.target_max_bytes = 1238132132;
   a.target_max_objects = 1232132;
   a.cache_target_dirty_ratio_micro = 187232;
+  a.cache_target_dirty_high_ratio_micro = 309856;
   a.cache_target_full_ratio_micro = 987222;
   a.cache_min_flush_age = 231;
   a.cache_min_evict_age = 2321;
@@ -3385,22 +3394,26 @@ eversion_t pg_missing_t::have_old(const hobject_t& oid) const
 void pg_missing_t::add_next_event(const pg_log_entry_t& e)
 {
   if (e.is_update()) {
+    map<hobject_t, item>::iterator missing_it;
+    missing_it = missing.find(e.soid);
+    bool is_missing_divergent_item = missing_it != missing.end();
     if (e.prior_version == eversion_t() || e.is_clone()) {
       // new object.
-      //assert(missing.count(e.soid) == 0);  // might already be missing divergent item.
-      if (missing.count(e.soid))  // already missing divergent item
-	rmissing.erase(missing[e.soid].need.version);
-      missing[e.soid] = item(e.version, eversion_t());  // .have = nil
-    } else if (missing.count(e.soid)) {
+      if (is_missing_divergent_item) {  // use iterator
+        rmissing.erase((missing_it->second).need.version);
+        missing_it->second = item(e.version, eversion_t());  // .have = nil
+      } else  // create new element in missing map
+        missing[e.soid] = item(e.version, eversion_t());     // .have = nil
+    } else if (is_missing_divergent_item) {
       // already missing (prior).
-      //assert(missing[e.soid].need == e.prior_version);
-      rmissing.erase(missing[e.soid].need.version);
-      missing[e.soid].need = e.version;  // leave .have unchanged.
+      rmissing.erase((missing_it->second).need.version);
+      (missing_it->second).need = e.version;  // leave .have unchanged.
     } else if (e.is_backlog()) {
       // May not have prior version
       assert(0 == "these don't exist anymore");
     } else {
       // not missing, we must have prior_version (if any)
+      assert(!is_missing_divergent_item);
       missing[e.soid] = item(e.version, e.prior_version);
     }
     rmissing[e.version.version] = e.soid;
@@ -3698,7 +3711,7 @@ void object_copy_data_t::dump(Formatter *f) const
   f->dump_int("size", size);
   f->dump_stream("mtime") << mtime;
   /* we should really print out the attrs here, but bufferlist
-     const-correctness prents that */
+     const-correctness prevents that */
   f->dump_int("attrs_size", attrs.size());
   f->dump_int("flags", flags);
   f->dump_unsigned("data_digest", data_digest);

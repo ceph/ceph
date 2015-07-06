@@ -217,7 +217,9 @@ PG::PG(OSDService *o, OSDMapRef curmap,
   active_pushes(0),
   recovery_state(this),
   pg_id(p),
-  peer_features((uint64_t)-1)
+  peer_features(CEPH_FEATURES_SUPPORTED_DEFAULT),
+  acting_features(CEPH_FEATURES_SUPPORTED_DEFAULT),
+  upacting_features(CEPH_FEATURES_SUPPORTED_DEFAULT)
 {
 #ifdef PG_DEBUG_REFS
   osd->add_pgid(p, this);
@@ -3834,7 +3836,7 @@ void PG::scrub(epoch_t queued, ThreadPool::TPHandle &handle)
     lock();
     dout(20) << __func__ << " slept for " << t << dendl;
   }
-  if (deleting || pg_has_reset_since(queued)) {
+  if (pg_has_reset_since(queued)) {
     return;
   }
   assert(scrub_queued);
@@ -3849,26 +3851,8 @@ void PG::scrub(epoch_t queued, ThreadPool::TPHandle &handle)
     return;
   }
 
-  // when we're starting a scrub, we need to determine which type of scrub to do
   if (!scrubber.active) {
-    OSDMapRef curmap = osd->get_osdmap();
     assert(backfill_targets.empty());
-    for (unsigned i=0; i<acting.size(); i++) {
-      if (acting[i] == pg_whoami.osd)
-	continue;
-      if (acting[i] == CRUSH_ITEM_NONE)
-	continue;
-      ConnectionRef con = osd->get_con_osd_cluster(acting[i], get_osdmap()->get_epoch());
-      if (!con)
-	continue;
-      if (!con->has_feature(CEPH_FEATURE_CHUNKY_SCRUB)) {
-        dout(20) << "OSD " << acting[i]
-                 << " does not support chunky scrubs, falling back to classic"
-                 << dendl;
-        assert(0 == "Running incompatible OSD");
-        break;
-      }
-    }
 
     scrubber.deep = state_test(PG_STATE_DEEP_SCRUB);
 
@@ -4000,7 +3984,7 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
 	  osd->clog->info(oss);
 	}
 
-	if (peer_features & CEPH_FEATURE_OSD_OBJECT_DIGEST)
+	if (get_min_acting_features() & CEPH_FEATURE_OSD_OBJECT_DIGEST)
 	  scrubber.seed = -1; // better, and enables oi digest checks
 	else
 	  scrubber.seed = 0;  // compat
@@ -4249,7 +4233,7 @@ void PG::scrub_compare_maps()
     }
 
     // can we relate scrub digests to oi digests?
-    bool okseed = (get_min_peer_features() & CEPH_FEATURE_OSD_OBJECT_DIGEST);
+    bool okseed = (get_min_upacting_features() & CEPH_FEATURE_OSD_OBJECT_DIGEST);
     assert(okseed == (scrubber.seed == 0xffffffff));
 
     get_pgbackend()->be_compare_scrubmaps(
@@ -5812,14 +5796,12 @@ PG::RecoveryState::Backfilling::react(const RemoteReservationRejected &)
     ConnectionRef con = pg->osd->get_con_osd_cluster(
       it->osd, pg->get_osdmap()->get_epoch());
     if (con) {
-      if (con->has_feature(CEPH_FEATURE_BACKFILL_RESERVATION)) {
-        pg->osd->send_message_osd_cluster(
-          new MBackfillReserve(
-	    MBackfillReserve::REJECT,
-	    spg_t(pg->info.pgid.pgid, it->shard),
-	    pg->get_osdmap()->get_epoch()),
-	  con.get());
-      }
+      pg->osd->send_message_osd_cluster(
+        new MBackfillReserve(
+	  MBackfillReserve::REJECT,
+	  spg_t(pg->info.pgid.pgid, it->shard),
+	  pg->get_osdmap()->get_epoch()),
+	con.get());
     }
   }
 
@@ -5867,17 +5849,13 @@ PG::RecoveryState::WaitRemoteBackfillReserved::react(const RemoteBackfillReserve
     ConnectionRef con = pg->osd->get_con_osd_cluster(
       backfill_osd_it->osd, pg->get_osdmap()->get_epoch());
     if (con) {
-      if (con->has_feature(CEPH_FEATURE_BACKFILL_RESERVATION)) {
-        pg->osd->send_message_osd_cluster(
-          new MBackfillReserve(
-	  MBackfillReserve::REQUEST,
-	  spg_t(pg->info.pgid.pgid, backfill_osd_it->shard),
-	  pg->get_osdmap()->get_epoch(),
-	  pg->get_backfill_priority()),
-	con.get());
-      } else {
-        post_event(RemoteBackfillReserved());
-      }
+      pg->osd->send_message_osd_cluster(
+        new MBackfillReserve(
+	MBackfillReserve::REQUEST,
+	spg_t(pg->info.pgid.pgid, backfill_osd_it->shard),
+	pg->get_osdmap()->get_epoch(),
+	pg->get_backfill_priority()),
+      con.get());
     }
     ++backfill_osd_it;
   } else {
@@ -5911,14 +5889,12 @@ PG::RecoveryState::WaitRemoteBackfillReserved::react(const RemoteReservationReje
     ConnectionRef con = pg->osd->get_con_osd_cluster(
       it->osd, pg->get_osdmap()->get_epoch());
     if (con) {
-      if (con->has_feature(CEPH_FEATURE_BACKFILL_RESERVATION)) {
-        pg->osd->send_message_osd_cluster(
-          new MBackfillReserve(
-	  MBackfillReserve::REJECT,
-	  spg_t(pg->info.pgid.pgid, it->shard),
-	  pg->get_osdmap()->get_epoch()),
-	con.get());
-      }
+      pg->osd->send_message_osd_cluster(
+        new MBackfillReserve(
+	MBackfillReserve::REJECT,
+	spg_t(pg->info.pgid.pgid, it->shard),
+	pg->get_osdmap()->get_epoch()),
+      con.get());
     }
   }
 
@@ -6204,16 +6180,12 @@ PG::RecoveryState::WaitRemoteRecoveryReserved::react(const RemoteRecoveryReserve
     ConnectionRef con = pg->osd->get_con_osd_cluster(
       remote_recovery_reservation_it->osd, pg->get_osdmap()->get_epoch());
     if (con) {
-      if (con->has_feature(CEPH_FEATURE_RECOVERY_RESERVATION)) {
-	pg->osd->send_message_osd_cluster(
-          new MRecoveryReserve(
-	    MRecoveryReserve::REQUEST,
-	    spg_t(pg->info.pgid.pgid, remote_recovery_reservation_it->shard),
-	    pg->get_osdmap()->get_epoch()),
-	  con.get());
-      } else {
-	post_event(RemoteRecoveryReserved());
-      }
+      pg->osd->send_message_osd_cluster(
+        new MRecoveryReserve(
+	  MRecoveryReserve::REQUEST,
+	  spg_t(pg->info.pgid.pgid, remote_recovery_reservation_it->shard),
+	  pg->get_osdmap()->get_epoch()),
+	con.get());
     }
     ++remote_recovery_reservation_it;
   } else {
@@ -6257,14 +6229,12 @@ void PG::RecoveryState::Recovering::release_reservations()
     ConnectionRef con = pg->osd->get_con_osd_cluster(
       i->osd, pg->get_osdmap()->get_epoch());
     if (con) {
-      if (con->has_feature(CEPH_FEATURE_RECOVERY_RESERVATION)) {
-	pg->osd->send_message_osd_cluster(
-          new MRecoveryReserve(
-	    MRecoveryReserve::RELEASE,
-	    spg_t(pg->info.pgid.pgid, i->shard),
-	    pg->get_osdmap()->get_epoch()),
-	  con.get());
-      }
+      pg->osd->send_message_osd_cluster(
+        new MRecoveryReserve(
+	  MRecoveryReserve::RELEASE,
+	  spg_t(pg->info.pgid.pgid, i->shard),
+	  pg->get_osdmap()->get_epoch()),
+	con.get());
     }
   }
 }
@@ -6905,7 +6875,7 @@ PG::RecoveryState::GetInfo::GetInfo(my_context ctx)
   if (!prior_set.get())
     pg->build_prior(prior_set);
 
-  pg->reset_peer_features();
+  pg->reset_all_min_features();
   get_infos();
   if (peer_info_requested.empty() && !prior_set->pg_down) {
     post_event(GotInfo());
@@ -6981,9 +6951,21 @@ boost::statechart::result PG::RecoveryState::GetInfo::react(const MNotifyRec& in
       }
       get_infos();
     }
-    dout(20) << "Adding osd: " << infoevt.from.osd << " features: "
+    dout(20) << "Adding osd: " << infoevt.from.osd << " peer features: "
       << hex << infoevt.features << dec << dendl;
     pg->apply_peer_features(infoevt.features);
+
+    if (std::find(pg->acting.begin(), pg->acting.end(), infoevt.from.osd) != pg->acting.end()) {
+      dout(20) << "Adding osd: " << infoevt.from.osd << " acting features: "
+	<< hex << infoevt.features << dec << dendl;
+      pg->apply_acting_features(infoevt.features);
+    }
+
+    if (std::find(pg->up.begin(), pg->up.end(), infoevt.from.osd) != pg->up.end()) {
+      dout(20) << "Adding osd: " << infoevt.from.osd << " upacting features: "
+	<< hex << infoevt.features << dec << dendl;
+      pg->apply_upacting_features(infoevt.features);
+    }
 
     // are we done getting everything?
     if (peer_info_requested.empty() && !prior_set->pg_down) {
@@ -7042,7 +7024,9 @@ boost::statechart::result PG::RecoveryState::GetInfo::react(const MNotifyRec& in
 	  break;
 	}
       }
-      dout(20) << "Common features: " << hex << pg->get_min_peer_features() << dec << dendl;
+      dout(20) << "Common peer features: " << hex << pg->get_min_peer_features() << dec << dendl;
+      dout(20) << "Common acting features: " << hex << pg->get_min_acting_features() << dec << dendl;
+      dout(20) << "Common upacting features: " << hex << pg->get_min_upacting_features() << dec << dendl;
       post_event(GotInfo());
     }
   }

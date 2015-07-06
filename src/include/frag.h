@@ -207,10 +207,12 @@ public:
     std::list<frag_t> ls;
     get_leaves_under(x, ls);
     //generic_dout(10) << "is_leaf(" << x << ") -> " << ls << dendl;
-    if (!ls.empty() &&
+    if ((!ls.empty() &&
 	ls.front() == x &&
-	ls.size() == 1)
+	ls.size() == 1))
       return true;
+    // A node without leaves underneath it is definitely a leaf... 
+    if (ls.empty()) return true;
     return false;
   }
 

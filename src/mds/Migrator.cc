@@ -76,7 +76,7 @@
 #include "common/config.h"
 
 
-#define dout_subsys ceph_subsys_mds
+#define dout_subsys ceph_subsys_mds_migrator
 #undef DOUT_COND
 #define DOUT_COND(cct, l) (l <= cct->_conf->debug_mds || l <= cct->_conf->debug_mds_migrator)
 #undef dout_prefix
@@ -645,6 +645,8 @@ void Migrator::audit()
 
 void Migrator::export_dir_nicely(CDir *dir, mds_rank_t dest)
 {
+  mds->balancer->hit_nfiles_dir(dir->get_inode());
+
   // enqueue
   dout(7) << "export_dir_nicely " << *dir << " to " << dest << dendl;
   export_queue.push_back(pair<dirfrag_t,mds_rank_t>(dir->dirfrag(), dest));
@@ -1042,12 +1044,12 @@ void Migrator::export_frozen(CDir *dir, uint64_t tid)
 
       start = 'f';  // start with dirfrag
     }
-    bufferlist final;
+    bufferlist final_bl;
     dirfrag_t df = cur->dirfrag();
-    ::encode(df, final);
-    ::encode(start, final);
-    final.claim_append(tracebl);
-    prep->add_trace(final);
+    ::encode(df, final_bl);
+    ::encode(start, final_bl);
+    final_bl.claim_append(tracebl);
+    prep->add_trace(final_bl);
   }
 
   // send.

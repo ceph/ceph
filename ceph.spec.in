@@ -18,9 +18,6 @@
   %global _with_systemd 1
 %endif
 
-#################################################################################
-# common
-#################################################################################
 Name:		ceph
 Version:	@VERSION@
 Release:	@RPM_RELEASE@%{?dist}
@@ -33,6 +30,9 @@ Source0:	http://ceph.com/download/%{name}-%{version}.tar.bz2
 %if 0%{?fedora} || 0%{?rhel}
 Patch0:		init-ceph.in-fedora.patch
 %endif
+#################################################################################
+# dependencies that apply across all distro families
+#################################################################################
 Requires:	librbd1 = %{epoch}:%{version}-%{release}
 Requires:	librados2 = %{epoch}:%{version}-%{release}
 Requires:	libcephfs1 = %{epoch}:%{version}-%{release}
@@ -41,9 +41,8 @@ Requires:	python-rados = %{epoch}:%{version}-%{release}
 Requires:	python-rbd = %{epoch}:%{version}-%{release}
 Requires:	python-cephfs = %{epoch}:%{version}-%{release}
 Requires:	python
-Requires:	python-argparse
 Requires:	python-requests
-Requires:	python-flask
+Requires:	grep
 Requires:	xfsprogs
 Requires:	parted
 Requires:	util-linux
@@ -54,7 +53,11 @@ Requires(post):	binutils
 %if 0%{?_with_systemd}
 Requires: systemd
 %endif
+%if 0%{with cephfs_java}
+BuildRequires: sharutils
+%endif
 BuildRequires:	gcc-c++
+BuildRequires:	git
 BuildRequires:	boost-devel
 BuildRequires:	cryptsetup
 BuildRequires:	gdbm
@@ -73,12 +76,15 @@ BuildRequires:	perl
 BuildRequires:	parted
 BuildRequires:	pkgconfig
 BuildRequires:	python
-BuildRequires:	python-argparse
 BuildRequires:	python-nose
 BuildRequires:	python-requests
 %if ( 0%{?rhel} > 0 && 0%{?rhel} < 7 ) || ( 0%{?centos} > 0 && 0%{?centos} < 7 )
 BuildRequires:	python-sphinx10
 %endif
+%if 0%{?fedora} || 0%{defined suse_version} || 0%{?rhel} >= 7 || 0%{?centos} >= 7
+BuildRequires:	python-sphinx
+%endif
+
 BuildRequires:	python-virtualenv
 BuildRequires:	util-linux
 BuildRequires:	xfsprogs
@@ -90,18 +96,12 @@ BuildRequires:	snappy-devel
 %endif
 
 #################################################################################
-# specific
+# distro-conditional dependencies
 #################################################################################
-%if ! 0%{?rhel} || 0%{?fedora}
-BuildRequires:	sharutils
-%endif
-
 %if 0%{defined suse_version}
-BuildRequires:	python-sphinx
+Requires:	python-Flask
 BuildRequires:	net-tools
 BuildRequires:	libbz2-devel
-BuildRequires:	sharutils
-BuildRequires:	git
 %if 0%{?suse_version} > 1210
 Requires:	gptfdisk
 %if 0%{with tcmalloc}
@@ -127,6 +127,7 @@ Requires(post):	chkconfig
 Requires(preun):	chkconfig
 Requires(preun):	initscripts
 BuildRequires:	gperftools-devel
+Requires:	python-flask
 %endif
 
 %description
@@ -147,14 +148,16 @@ Requires:	python-rados = %{epoch}:%{version}-%{release}
 Requires:	python-rbd = %{epoch}:%{version}-%{release}
 Requires:	python-cephfs = %{epoch}:%{version}-%{release}
 Requires:	python-requests
-%if 0%{defined suse_version}
-Requires:  python-argparse
-%endif
 %if 0%{?rhel} || 0%{?fedora}
 Requires:	redhat-lsb-core
 %endif
 %if 0%{defined suse_version}
 Requires:	lsb-release
+%endif
+# python-argparse is only needed in distros with Python 2.6 or lower
+%if (0%{?rhel} && 0%{?rhel} <= 6) || (0%{?suse_version} && 0%{?suse_version} <= 1110)
+Requires:	python-argparse
+BuildRequires:	python-argparse
 %endif
 %description -n ceph-common
 Common utilities to mount and interact with a ceph storage cluster.
@@ -352,7 +355,7 @@ Group:		System Environment/Libraries
 License:	LGPL-2.0
 Requires:	ceph-common
 Requires:	xmlstarlet
-%if (0%{?fedora} >= 20 || 0%{?rhel} == 6)
+%if (0%{?fedora} || 0%{?rhel} == 6)
 BuildRequires:	lttng-ust-devel
 BuildRequires:	libbabeltrace-devel
 %endif
@@ -433,7 +436,9 @@ Requires:	librados2-devel = %{epoch}:%{version}-%{release}
 Requires:	libradosstriper1-devel = %{epoch}:%{version}-%{release}
 Requires:	librbd1-devel = %{epoch}:%{version}-%{release}
 Requires:	libcephfs1-devel = %{epoch}:%{version}-%{release}
+%if 0%{with cephfs_java}
 Requires:	libcephfs_jni1-devel = %{epoch}:%{version}-%{release}
+%endif
 Provides:	ceph-devel
 %description devel-compat
 This is a compatibility package to accommodate ceph-devel split into
@@ -470,10 +475,12 @@ python-cephfs instead.
 %endif
 
 %build
+%if 0%{with cephfs_java}
 # Find jni.h
 for i in /usr/{lib64,lib}/jvm/java/include{,/linux}; do
     [ -d $i ] && java_inc="$java_inc -I$i"
 done
+%endif
 
 ./autogen.sh
 MY_CONF_OPT=""
@@ -487,6 +494,8 @@ export RPM_OPT_FLAGS=`echo $RPM_OPT_FLAGS | sed -e 's/i386/i486/'`
 		--localstatedir=/var \
 		--sysconfdir=/etc \
 		--docdir=%{_docdir}/ceph \
+		--with-man-pages \
+		--mandir="%_mandir" \
 		--with-nss \
 		--without-cryptopp \
 		--with-rest-bench \
@@ -746,6 +755,8 @@ fi
 %{_datadir}/ceph/id_dsa_drop.ceph.com.pub
 %dir %{_sysconfdir}/ceph/
 %dir %{_localstatedir}/log/ceph/
+%dir %{_datarootdir}/ceph/
+%dir %{_libexecdir}/ceph/
 %config %{_sysconfdir}/bash_completion.d/rados
 %config %{_sysconfdir}/bash_completion.d/rbd
 %config(noreplace) %{_sysconfdir}/ceph/rbdmap
@@ -944,6 +955,8 @@ ln -sf %{_libdir}/librbd.so.1 /usr/lib64/qemu/librbd.so.1
 %{_bindir}/ceph_omapbench
 %{_bindir}/ceph_perf_objectstore
 %{_bindir}/ceph_perf_local
+%{_bindir}/ceph_perf_msgr_client
+%{_bindir}/ceph_perf_msgr_server
 %{_bindir}/ceph_psim
 %{_bindir}/ceph_radosacl
 %{_bindir}/ceph_rgw_jsonparser
@@ -966,7 +979,7 @@ ln -sf %{_libdir}/librbd.so.1 /usr/lib64/qemu/librbd.so.1
 %{_mandir}/man8/rbd-replay-prep.8*
 %{_bindir}/rbd-replay
 %{_bindir}/rbd-replay-many
-%if (0%{?fedora} >= 20 || 0%{?rhel} == 6)
+%if (0%{?fedora} || 0%{?rhel} == 6)
 %{_bindir}/rbd-replay-prep
 %endif
 

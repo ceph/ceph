@@ -41,6 +41,23 @@ Plain create with various options specified via usual cli arguments
       "size": 1048576
   }
   $ rbd rm test --no-progress
+  $ rbd create -s 1G test --image-format 2
+  $ rbd info test --format json | python -mjson.tool | sed 's/,$/, /'
+  {
+      "block_name_prefix": "rbd_data.*",  (glob)
+      "features": [
+          "layering", 
+          "striping", 
+          "exclusive"
+      ], 
+      "format": 2, 
+      "name": "test", 
+      "object_size": 4194304, 
+      "objects": 256, 
+      "order": 22, 
+      "size": 1073741824
+  }
+  $ rbd rm test --no-progress
   $ rbd create -s 1 test --image-format 2 --order 20
   $ rbd info test --format json | python -mjson.tool | sed 's/,$/, /'
   {

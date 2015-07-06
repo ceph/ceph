@@ -53,6 +53,8 @@ Create a Pool
 Before creating pools, refer to the `Pool, PG and CRUSH Config Reference`_.
 Ideally, you should override the default value for the number of placement
 groups in your Ceph configuration file, as the default is NOT ideal.
+For details on placement group numbers refer to `setting the number of placement groups`_
+
 For example:: 
 
 	osd pool default pg num = 100
@@ -348,6 +350,16 @@ You may set values for the following keys:
 :Default: ``.4``
 
 
+``cache_target_dirty_high_ratio``
+
+:Description: The percentage of the cache pool containing modified (dirty)
+              objects before the cache tiering agent will flush them to the
+              backing storage pool with a higher speed.
+
+:Type: Double
+:Default: ``.6``
+
+
 ``cache_target_full_ratio``
 
 :Description: The percentage of the cache pool containing unmodified (clean)
@@ -486,6 +498,15 @@ You may get values for the following keys:
 :Type: Double
 
 
+``cache_target_dirty_high_ratio``
+
+:Description: The percentage of the cache pool containing modified (dirty)
+              objects before the cache tiering agent will flush them to the
+              backing storage pool with a higher speed.
+
+:Type: Double
+
+
 ``cache_target_full_ratio``
 
 :Description: The percentage of the cache pool containing unmodified (clean)
@@ -568,3 +589,4 @@ a size of 3).
 
 .. _Pool, PG and CRUSH Config Reference: ../../configuration/pool-pg-config-ref
 .. _Bloom Filter: http://en.wikipedia.org/wiki/Bloom_filter
+.. _setting the number of placement groups: ../placement-groups#set-the-number-of-placement-groups

@@ -127,6 +127,15 @@ AC_ARG_WITH([cephfs],
 AM_CONDITIONAL(WITH_CEPHFS, test "$with_cephfs" = "yes")
 #AS_IF([test "$with_cephfs" = "yes"], [AC_DEFINE([WITH_RADOS, WITH_CEPHFS])])
 
+AC_ARG_WITH([mantle],
+	[AS_HELP_STRING([--with-mantle], [build Mantle files])],
+	[],
+	[with_mds=yes])
+AM_CONDITIONAL(WITH_MANTLE, test "$with_mantle" = "yes")
+#AS_IF([test "$with_mantle" = "yes"], [AC_DEFINE([WITH_MANTLE])])
+
+
+
 # radosgw?
 # radosgw requires rados
 AC_ARG_WITH([radosgw],
@@ -629,9 +638,9 @@ if test "x$enable_cephfs_java" = "xyes"; then
         # the search path.
         AS_IF([test "x$with_debug" = "xyes"], [
         	dir='/usr/share/java'
-	        junit4_jar=`find $dir -name junit4.jar | head -n 1`
+	        junit4_jar=`( find $dir -name junit4.jar;find $dir -name junit.jar ) | head -n 1`
 		AS_IF([test -r "$junit4_jar"], [
-		      EXTRA_CLASSPATH_JAR=`dirname $junit4_jar`/junit4.jar
+		      EXTRA_CLASSPATH_JAR="$junit4_jar"
 		      AC_SUBST(EXTRA_CLASSPATH_JAR)
 		      [have_junit4=1]], [
 		      AC_MSG_NOTICE([Cannot find junit4.jar (apt-get install junit4)])
@@ -1203,6 +1212,10 @@ AC_ARG_WITH(
         fi
     ]
 )
+
+PKG_CHECK_MODULES(LUA, luajit, [HAVE_LUA=1], [HAVE_LUA=0])
+AM_CONDITIONAL([HAVE_LUA], test "$HAVE_LUA" -eq 1)
+#AC_CHECK_LIB([lualib], [lualib], [true], AC_MSG_FAILURE([lualib not found]))
 
 # Checks for typedefs, structures, and compiler characteristics.
 #AC_HEADER_STDBOOL

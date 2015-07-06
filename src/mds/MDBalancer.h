@@ -16,6 +16,8 @@
 
 #ifndef CEPH_MDBALANCER_H
 #define CEPH_MDBALANCER_H
+#define LUAARG_STRING 1
+#define LUAARG_NUMBER 2
 
 #include <list>
 #include <map>
@@ -33,6 +35,14 @@ class MHeartbeat;
 class CInode;
 class CDir;
 
+extern "C"{
+    #include <lua5.2/lualib.h>
+    #include <lua5.2/lauxlib.h>
+    #include <lua5.2/lua.h>
+}
+
+
+
 class MDBalancer {
  protected:
   MDS *mds;
@@ -45,14 +55,21 @@ class MDBalancer {
   utime_t last_fragment;
   utime_t last_sample;    
   utime_t rebalance_time; //ensure a consistent view of load for rebalance
+  double cpu_load_avg;
+  double cpu_work_prev;
+  double cpu_total_prev;
+  double total_meta_load;
+  
 
   // todo
   set<dirfrag_t>   split_queue, merge_queue;
+  vector<CDir *>   subtrees;
 
   // per-epoch scatter/gathered info
   map<mds_rank_t, mds_load_t>  mds_load;
   map<mds_rank_t, float>       mds_meta_load;
   map<mds_rank_t, map<mds_rank_t, float> > mds_import_map;
+  double nfiles;
 
   // per-epoch state
   double          my_load, target_load;
@@ -76,9 +93,11 @@ public:
   MDBalancer(MDS *m) : 
     mds(m),
     beat_epoch(0),
-    last_epoch_under(0), last_epoch_over(0), my_load(0.0), target_load(0.0) { }
+    last_epoch_under(0), last_epoch_over(0), cpu_load_avg(0), cpu_work_prev(0), cpu_total_prev(0), total_meta_load(0), nfiles(0), my_load(0.0), target_load(0.0) { }
   
   mds_load_t get_load(utime_t);
+  void extract_load_from_heartbeat();
+  void parse_decision();
 
   int proc_message(Message *m);
   
@@ -102,11 +121,32 @@ public:
                     list<CDir*>& exports, 
                     double& have,
                     set<CDir*>& already_exporting);
+  //Mantle hooks that allow customizable metadata balancers, 
+  //specified with Lua and injected with 'ceph tell'
+  void custom_balancer();
+  string format_policy(string s);
+  double get_current_authmetaload();
+  vector<pair<int, string> > extract_metrics();
+  void push_lua_args(lua_State *L, vector<pair<int, string> >& args);
+  void dump_balancer(string s);
+  // Quickly execute many dirfrag selectors and  best one
+  //  - best quantified using the smallest net distance
+  void dirfrag_selector(multimap<double, CDir*>,
+                        double amount, 
+                        list<CDir*>& exports, 
+                        double& have,
+                        set<CDir*>& already_exporting);
+
+  //debug: print out the loads on a subset of the namespace
+  void subtree_loads(CDir *dir, int depth);
+  void dump_subtree_loads();
 
 
   void subtract_export(class CDir *ex, utime_t now);
   void add_import(class CDir *im, utime_t now);
 
+  void hit_nfiles(double n);
+  void hit_nfiles_dir(CInode* in);
   void hit_inode(utime_t now, class CInode *in, int type, int who=-1);
   void hit_dir(utime_t now, class CDir *dir, int type, int who=-1, double amount=1.0);
   void hit_recursive(utime_t now, class CDir *dir, int type, double amount, double rd_adj);
