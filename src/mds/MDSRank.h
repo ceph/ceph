@@ -113,15 +113,6 @@ class MMDSMap;
  * The public part of this class's interface is what's exposed to all
  * the various subsystems (server, mdcache, etc), such as pointers
  * to the other subsystems, and message-sending calls.
- *
- * FIXME This isn't quite pure, because we also contain all the dispatch
- * mechanisms that operate on the subsystems.  Perhaps we should
- * have an MDSRank parent that contains everything for the subsystems,
- * and an MDSRankDispatcher that contains all the dispatch logic.  That's
- * awkward right because advance_queues etc need to know how to do dispatch
- * on the queues, and the queues need to be exposed to the subsystems so that
- * they can enqueue things.  Perhaps the MDSRank base should have some pure
- * virtual functions for things like enqueuing messages for retry.
  */
 class MDSRank {
   public:
@@ -374,23 +365,6 @@ class MDSRank {
 
     int get_req_rate() { return logger->get(l_mds_request); }
 
-    // FIXME: interface for MDSDaemon to call, don't really want to expose
-    // this to every subsystem that carries an MDSRank reference though
-    // >>>
-    void init(mds_rank_t rank, int incarnation);
-    void tick();
-    void shutdown();
-    bool handle_asok_command(std::string command, cmdmap_t& cmdmap,
-                             Formatter *f, std::ostream& ss);
-    void handle_mds_map(MMDSMap *m, MDSMap *oldmap);
-    void handle_osd_map();
-    bool kill_session(int64_t session_id);
-    void update_log_config();
-    bool handle_command_legacy(std::vector<std::string> args);
-
-    // Call into me from MDS::ms_dispatch
-    bool ms_dispatch(Message *m);
-
   protected:
     void command_scrub_path(Formatter *f, const string& path);
     void command_flush_path(Formatter *f, const string& path);
@@ -496,6 +470,41 @@ public:
   virtual void finish(int r) {
     mds->retry_dispatch(m);
   }
+};
+
+/**
+ * The aspect of MDSRank exposed to MDSDaemon but not subsystems: i.e.
+ * the service/dispatcher stuff like init/shutdown that subsystems should
+ * never touch.
+ */
+class MDSRankDispatcher : public MDSRank
+{
+public:
+  void init(mds_rank_t rank, int incarnation);
+  void tick();
+  void shutdown();
+  bool handle_asok_command(std::string command, cmdmap_t& cmdmap,
+                           Formatter *f, std::ostream& ss);
+  void handle_mds_map(MMDSMap *m, MDSMap *oldmap);
+  void handle_osd_map();
+  bool kill_session(int64_t session_id);
+  void update_log_config();
+  bool handle_command_legacy(std::vector<std::string> args);
+
+  // Call into me from MDS::ms_dispatch
+  bool ms_dispatch(Message *m);
+
+  MDSRankDispatcher(
+      Mutex &mds_lock_,
+      LogChannelRef &clog_,
+      SafeTimer &timer_,
+      Beacon &beacon_,
+      MDSMap *& mdsmap_,
+      Messenger *msgr,
+      MonClient *monc_,
+      Objecter *objecter_,
+      Context *respawn_hook_,
+      Context *suicide_hook_);
 };
 
 // This utility for MDS and MDSRank dispatchers.

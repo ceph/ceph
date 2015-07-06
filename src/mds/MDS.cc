@@ -914,8 +914,8 @@ void MDS::handle_mds_map(MMDSMap *m)
 
     // Did I previously not hold a rank?  Initialize!
     if (mds_rank == NULL) {
-      mds_rank = new MDSRank(mds_lock, clog, timer, beacon, mdsmap, messenger,
-          monc, objecter,
+      mds_rank = new MDSRankDispatcher(mds_lock, clog, timer, beacon, mdsmap,
+          messenger, monc, objecter,
           new C_VoidFn(this, &MDS::respawn),
           new C_VoidFn(this, &MDS::suicide));
       mds_rank->init(whoami, incarnation);
