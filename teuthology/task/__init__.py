@@ -12,10 +12,22 @@ class Task(object):
 
     Can be used as a drop-in replacement for the old-style task functions with
     @contextmanager decorators.
+
+    Note: While looking up overrides, we use the lowercase name of the class by
+          default. While this works well for the main task in a module, other
+          tasks or 'subtasks' may want to override that name using a class
+          variable called 'name' e.g.:
+
+              class MyTask(Task):
+                  pass
+              class MySubtask(MyTask):
+                  name = 'mytask.mysubtask'
     """
+
     def __init__(self, ctx=None, config=None):
+        if not hasattr(self, 'name'):
+            self.name = self.__class__.__name__.lower()
         self.log = log
-        self.name = self.__class__.__name__.lower()
         self.ctx = ctx
         self.config = config or dict()
         if not isinstance(self.config, dict):
