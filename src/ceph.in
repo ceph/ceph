@@ -64,9 +64,7 @@ import json
 import rados
 import shlex
 import signal
-import socket
 import string
-import struct
 import subprocess
 
 from ceph_argparse import \
@@ -211,7 +209,7 @@ def do_extended_help(parser, args):
 
     def help_for_target(target, partial=None):
         ret, outbuf, outs = json_command(cluster_handle, target=target,
-                                         prefix='get_command_descriptions', 
+                                         prefix='get_command_descriptions',
                                          timeout=10)
         if ret:
             print >> sys.stderr, \
@@ -382,7 +380,7 @@ def new_style_command(parsed_args, cmdargs, target, sigdict, inbuf, verbose):
             if sys.stdin.isatty():
                 # do the command-interpreter looping
                 # for raw_input to do readline cmd editing
-                import readline
+                import readline  # noqa
 
             while True:
                 interactive_input = read_input()
@@ -423,7 +421,7 @@ def new_style_command(parsed_args, cmdargs, target, sigdict, inbuf, verbose):
 def complete(sigdict, args, target):
     """
     Command completion.  Match as much of [args] as possible,
-    and print every possible match separated by newlines. 
+    and print every possible match separated by newlines.
     Return exitcode.
     """
     # XXX this looks a lot like the front of validate_command().  Refactor?
@@ -513,7 +511,7 @@ def main():
     parser, parsed_args, childargs = parse_cmdargs()
 
     if parsed_args.version:
-        print 'ceph version {0} ({1})'.format(CEPH_GIT_NICE_VER, CEPH_GIT_VER)
+        print 'ceph version {0} ({1})'.format(CEPH_GIT_NICE_VER, CEPH_GIT_VER)  # noqa
         return 0
 
     global verbose
@@ -721,7 +719,7 @@ def main():
 
         # this instance keeps the watch connection alive, but is
         # otherwise unused
-        logwatch = rados.MonitorLog(cluster_handle, level, watch_cb, 0)
+        rados.MonitorLog(cluster_handle, level, watch_cb, 0)
 
         # loop forever letting watch_cb print lines
         try:
