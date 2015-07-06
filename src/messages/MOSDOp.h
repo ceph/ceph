@@ -366,7 +366,7 @@ struct ceph_osd_request_head {
   }
 
   void finish_decode() {
-    assert(partialDecoded);
+    assert(partialDecoded); // partial decoding required
 
     if (finalDecoded)
       return; //Message is already final decoded
