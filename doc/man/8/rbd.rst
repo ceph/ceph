@@ -435,6 +435,7 @@ the running kernel.
 
 * ro - Map the image read-only.  Equivalent to --read-only.
 
+* cor - Map the image with copy-on-read turned on.
 
 Examples
 ========
