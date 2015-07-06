@@ -359,7 +359,6 @@ OPTION(mds_max_file_size, OPT_U64, 1ULL << 40) // Used when creating new CephFS.
 OPTION(mds_cache_size, OPT_INT, 100000)
 OPTION(mds_cache_mid, OPT_FLOAT, .7)
 OPTION(mds_max_file_recover, OPT_U32, 32)
-OPTION(mds_mem_max, OPT_INT, 1048576)        // KB
 OPTION(mds_dir_max_commit_size, OPT_INT, 10) // MB
 OPTION(mds_decay_halflife, OPT_FLOAT, 5)
 OPTION(mds_beacon_interval, OPT_FLOAT, 4)
