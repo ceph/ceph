@@ -185,8 +185,10 @@ TRACEPOINT_EVENT(librbd, close_image_enter,
 )
 
 TRACEPOINT_EVENT(librbd, close_image_exit,
-    TP_ARGS(),
-    TP_FIELDS()
+    TP_ARGS(
+	int, retval),
+    TP_FIELDS(
+	ctf_integer(int, retval, retval))
 )
 
 TRACEPOINT_EVENT(librbd, list_enter,
