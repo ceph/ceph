@@ -138,7 +138,7 @@ void LogMonitor::update_from_paxos(bool *need_bootstrap)
 
       if (channels.do_log_to_syslog(channel)) {
         string level = channels.get_level(channel);
-        string facility = channels.get_facility(facility);
+        string facility = channels.get_facility(channel);
         if (level.empty() || facility.empty()) {
           derr << __func__ << " unable to log to syslog -- level or facility"
                << " not defined (level: " << level << ", facility: "
