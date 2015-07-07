@@ -758,7 +758,7 @@ void MDBalancer::try_rebalance()
 bool MDBalancer::check_targets()
 {
   // get MonMap's idea of my_targets
-  const set<mds_rank_t>& map_targets = mds->mdsmap->get_mds_info(mds->whoami).export_targets;
+  const set<mds_rank_t>& map_targets = mds->mdsmap->get_mds_info(mds->get_nodeid()).export_targets;
 
   bool send = false;
   bool ok = true;

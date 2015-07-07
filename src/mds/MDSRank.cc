@@ -39,6 +39,8 @@
 #define dout_prefix *_dout << "mds." << whoami << '.' << incarnation << ' '
 
 MDSRank::MDSRank(
+    mds_rank_t whoami_,
+    int incarnation_,
     Mutex &mds_lock_,
     LogChannelRef &clog_,
     SafeTimer &timer_,
@@ -50,8 +52,8 @@ MDSRank::MDSRank(
     Context *respawn_hook_,
     Context *suicide_hook_)
   :
-    whoami(MDS_RANK_NONE),
-    incarnation(0),
+    whoami(whoami_),
+    incarnation(incarnation_),
     mds_lock(mds_lock_), clog(clog_), timer(timer_),
     mdsmap(mdsmap_),
     objecter(objecter_),
@@ -130,13 +132,10 @@ MDSRank::~MDSRank()
   respawn_hook = NULL;
 }
 
-void MDSRankDispatcher::init(mds_rank_t rank_, int incarnation_)
+void MDSRankDispatcher::init()
 {
   update_log_config();
   create_logger();
-
-  incarnation = incarnation;
-  whoami = rank_;
 
   // Expose the OSDMap (already populated during MDS::init) to anyone
   // who is interested in it.
@@ -2371,6 +2370,8 @@ bool MDSRankDispatcher::handle_command_legacy(std::vector<std::string> args)
 }
 
 MDSRankDispatcher::MDSRankDispatcher(
+    mds_rank_t whoami_,
+    int incarnation_,
     Mutex &mds_lock_,
     LogChannelRef &clog_,
     SafeTimer &timer_,
@@ -2381,7 +2382,7 @@ MDSRankDispatcher::MDSRankDispatcher(
     Objecter *objecter_,
     Context *respawn_hook_,
     Context *suicide_hook_)
-  : MDSRank(mds_lock_, clog_, timer_, beacon_, mdsmap_, msgr, monc_, objecter_,
-            respawn_hook_, suicide_hook_)
+  : MDSRank(whoami_, incarnation_, mds_lock_, clog_, timer_, beacon_, mdsmap_,
+      msgr, monc_, objecter_, respawn_hook_, suicide_hook_)
 {}
 
