@@ -135,6 +135,7 @@ public:
   RGWMetadataLog(CephContext *_cct, RGWRados *_store) : cct(_cct), store(_store), prefix(META_LOG_OBJ_PREFIX) {}
 
   int add_entry(RGWRados *store, RGWMetadataHandler *handler, const string& section, const string& key, bufferlist& bl);
+  int store_entries_in_shard(RGWRados *store, list<cls_log_entry>& entries, int shard_id);
 
   struct LogListCtx {
     int cur_shard;
@@ -211,6 +212,8 @@ public:
   int register_handler(RGWMetadataHandler *handler);
 
   RGWMetadataHandler *get_handler(const char *type);
+
+  int store_md_log_entries(list<cls_log_entry>& entries, int shard_id);
 
   int put_entry(RGWMetadataHandler *handler, const string& key, bufferlist& bl, bool exclusive,
                 RGWObjVersionTracker *objv_tracker, time_t mtime, map<string, bufferlist> *pattrs = NULL);

@@ -2816,6 +2816,12 @@ next:
       return -ret;
     }
 
+    ret = sync.clone_shards();
+    if (ret < 0) {
+      cerr << "ERROR: sync.clone_shards() returned ret=" << ret << std::endl;
+      return -ret;
+    }
+
   }
 
   if (opt_cmd == OPT_BILOG_LIST) {
