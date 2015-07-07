@@ -256,6 +256,7 @@ void WBThrottle::clear_object(const ghobject_t &hoid)
 
   pending_wbs.erase(i);
   remove_object(hoid);
+  cond.Signal();
 }
 
 void WBThrottle::throttle()
