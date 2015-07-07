@@ -8,6 +8,7 @@ if WITH_RBD
 
 librbd_internal_la_SOURCES = \
 	librbd/AioCompletion.cc \
+	librbd/AioImageRequestWQ.cc \
 	librbd/AioObjectRequest.cc \
 	librbd/AsyncFlattenRequest.cc \
 	librbd/AsyncObjectThrottle.cc \
@@ -52,6 +53,7 @@ lib_LTLIBRARIES += librbd.la
 
 noinst_HEADERS += \
 	librbd/AioCompletion.h \
+	librbd/AioImageRequestWQ.h \
 	librbd/AioObjectRequest.h \
 	librbd/AsyncFlattenRequest.h \
 	librbd/AsyncObjectThrottle.h \

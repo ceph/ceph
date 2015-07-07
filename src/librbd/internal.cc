@@ -10,6 +10,7 @@
 #include "common/errno.h"
 #include "common/ContextCompletion.h"
 #include "common/Throttle.h"
+#include "common/WorkQueue.h"
 #include "cls/lock/cls_lock_client.h"
 #include "include/stringify.h"
 
@@ -17,6 +18,7 @@
 #include "cls/rbd/cls_rbd_client.h"
 
 #include "librbd/AioCompletion.h"
+#include "librbd/AioImageRequestWQ.h"
 #include "librbd/AioObjectRequest.h"
 #include "librbd/AsyncFlattenRequest.h"
 #include "librbd/AsyncResizeRequest.h"
@@ -2163,6 +2165,7 @@ reprotect_and_return_err:
     {
       Mutex::Locker cache_locker(ictx->cache_lock);
       RWLock::WLocker snap_locker(ictx->snap_lock);
+
       {
 	int r;
 	RWLock::WLocker parent_locker(ictx->parent_lock);
@@ -2691,6 +2694,8 @@ reprotect_and_return_err:
       }
     }
 
+    assert(!ictx->aio_work_queue->writes_suspended() ||
+           ictx->aio_work_queue->writes_empty());
     ictx->aio_work_queue->drain();
     ictx->cancel_async_requests();
     ictx->flush_async_operations();

@@ -6,6 +6,7 @@
 #include "common/ceph_context.h"
 #include "common/dout.h"
 #include "common/errno.h"
+#include "common/WorkQueue.h"
 
 #include "librbd/AioObjectRequest.h"
 #include "librbd/internal.h"

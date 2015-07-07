@@ -8,7 +8,9 @@
 #include "common/dout.h"
 #include "common/errno.h"
 #include "common/perf_counters.h"
+#include "common/WorkQueue.h"
 
+#include "librbd/AioImageRequestWQ.h"
 #include "librbd/AsyncOperation.h"
 #include "librbd/AsyncRequest.h"
 #include "librbd/AsyncResizeRequest.h"
@@ -97,9 +99,9 @@ public:
     ThreadPoolSingleton *thread_pool_singleton;
     cct->lookup_or_create_singleton_object<ThreadPoolSingleton>(
       thread_pool_singleton, "librbd::thread_pool");
-    aio_work_queue = new ContextWQ("librbd::aio_work_queue",
-                                   cct->_conf->rbd_op_thread_timeout,
-                                   thread_pool_singleton);
+    aio_work_queue = new AioImageRequestWQ("librbd::aio_work_queue",
+                                           cct->_conf->rbd_op_thread_timeout,
+                                           thread_pool_singleton);
     op_work_queue = new ContextWQ("librbd::op_work_queue",
                                   cct->_conf->rbd_op_thread_timeout,
                                   thread_pool_singleton);

@@ -16,7 +16,6 @@
 #include "common/Readahead.h"
 #include "common/RWLock.h"
 #include "common/snap_types.h"
-#include "common/WorkQueue.h"
 #include "include/atomic.h"
 #include "include/buffer.h"
 #include "include/rbd/librbd.hpp"
@@ -32,11 +31,13 @@
 #include "librbd/parent_types.h"
 
 class CephContext;
+class ContextWQ;
 class Finisher;
 class PerfCounters;
 
 namespace librbd {
 
+  class AioImageRequestWQ;
   class AsyncOperation;
   class AsyncRequest;
   class AsyncResizeRequest;
@@ -131,7 +132,7 @@ namespace librbd {
 
     xlist<AsyncResizeRequest*> async_resize_reqs;
 
-    ContextWQ *aio_work_queue;
+    AioImageRequestWQ *aio_work_queue;
     ContextWQ *op_work_queue;
 
     // Configuration
