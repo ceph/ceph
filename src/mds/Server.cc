@@ -2227,7 +2227,7 @@ CInode* Server::prepare_new_inode(MDRequestRef& mdr, CDir *dir, inodeno_t useino
     dout(0) << "WARNING: client specified " << useino << " and i allocated " << in->inode.ino << dendl;
     mds->clog->error() << mdr->client_request->get_source()
        << " specified ino " << useino
-       << " but mds." << mds->whoami << " allocated " << in->inode.ino << "\n";
+       << " but mds." << mds->get_nodeid() << " allocated " << in->inode.ino << "\n";
     //assert(0); // just for now.
   }
     
@@ -6006,7 +6006,7 @@ void Server::handle_client_rename(MDRequestRef& mdr)
     rdlocks.insert(&srctrace[i]->lock);
   xlocks.insert(&srcdn->lock);
   mds_rank_t srcdirauth = srcdn->get_dir()->authority().first;
-  if (srcdirauth != mds->whoami) {
+  if (srcdirauth != mds->get_nodeid()) {
     dout(10) << " will remote_wrlock srcdir scatterlocks on mds." << srcdirauth << dendl;
     remote_wrlocks[&srcdn->get_dir()->inode->filelock] = srcdirauth;
     remote_wrlocks[&srcdn->get_dir()->inode->nestlock] = srcdirauth;
@@ -6309,7 +6309,7 @@ bool Server::_need_force_journal(CInode *diri, bool empty)
   bool force_journal = false;
   if (empty) {
     for (list<CDir*>::iterator p = ls.begin(); p != ls.end(); ++p) {
-      if ((*p)->is_subtree_root() && (*p)->get_dir_auth().first == mds->whoami) {
+      if ((*p)->is_subtree_root() && (*p)->get_dir_auth().first == mds->get_nodeid()) {
 	dout(10) << " frag " << (*p)->get_frag() << " is auth subtree dirfrag, will force journal" << dendl;
 	force_journal = true;
 	break;
@@ -6325,7 +6325,7 @@ bool Server::_need_force_journal(CInode *diri, bool empty)
       CDir *dir = *p;
       for (list<CDir*>::iterator q = subtrees.begin(); q != subtrees.end(); ++q) {
 	if (dir->contains(*q)) {
-	  if ((*q)->get_dir_auth().first == mds->whoami) {
+	  if ((*q)->get_dir_auth().first == mds->get_nodeid()) {
 	    dout(10) << " frag " << (*p)->get_frag() << " contains (maybe) auth subtree, will force journal "
 		     << **q << dendl;
 	    force_journal = true;
@@ -6746,14 +6746,14 @@ void Server::_rename_apply(MDRequestRef& mdr, CDentry *srcdn, CDentry *destdn, C
   }
 
   if (srcdn->get_dir()->inode->is_stray() &&
-      srcdn->get_dir()->inode->get_stray_owner() == mds->whoami) {
+      srcdn->get_dir()->inode->get_stray_owner() == mds->get_nodeid()) {
     // A reintegration event or a migration away from me
     dout(20) << __func__ << ": src dentry was a stray, updating stats" << dendl;
     mdcache->notify_stray_removed();
   }
 
   if (destdn->get_dir()->inode->is_stray() &&
-      destdn->get_dir()->inode->get_stray_owner() == mds->whoami) {
+      destdn->get_dir()->inode->get_stray_owner() == mds->get_nodeid()) {
     // A stray migration (to me)
     dout(20) << __func__ << ": dst dentry was a stray, updating stats" << dendl;
     mdcache->notify_stray_created();

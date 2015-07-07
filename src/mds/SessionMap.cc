@@ -64,7 +64,7 @@ void SessionMap::dump()
 object_t SessionMap::get_object_name()
 {
   char s[30];
-  snprintf(s, sizeof(s), "mds%d_sessionmap", int(mds->whoami));
+  snprintf(s, sizeof(s), "mds%d_sessionmap", int(mds->get_nodeid()));
   return object_t(s);
 }
 
