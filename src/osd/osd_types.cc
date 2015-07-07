@@ -3127,6 +3127,12 @@ void pg_log_t::filter_log(spg_t import_pgid, const OSDMap &curmap,
   for (list<pg_log_entry_t>::const_iterator i = in.log.begin();
        i != in.log.end(); ++i) {
 
+    // Reject pg log entries for temporary objects
+    if (i->soid.is_temp()) {
+      reject.log.push_back(*i);
+      continue;
+    }
+
     if (i->soid.nspace != hit_set_namespace) {
       object_t oid = i->soid.oid;
       object_locator_t loc(i->soid);

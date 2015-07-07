@@ -1928,6 +1928,12 @@ void filter_divergent_priors(spg_t import_pgid, const OSDMap &curmap,
   for (divergent_priors_t::const_iterator i = in.begin();
        i != in.end(); ++i) {
 
+    // Reject divergent priors for temporary objects
+    if (i->second.is_temp()) {
+      reject.insert(*i);
+      continue;
+    }
+
     if (i->second.nspace != hit_set_namespace) {
       object_t oid = i->second.oid;
       object_locator_t loc(i->second);
