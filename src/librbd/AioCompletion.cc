@@ -7,7 +7,7 @@
 #include "common/dout.h"
 #include "common/errno.h"
 
-#include "librbd/AioRequest.h"
+#include "librbd/AioObjectRequest.h"
 #include "librbd/internal.h"
 
 #include "librbd/AioCompletion.h"

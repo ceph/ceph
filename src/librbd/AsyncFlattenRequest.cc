@@ -2,7 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "librbd/AsyncFlattenRequest.h"
-#include "librbd/AioRequest.h"
+#include "librbd/AioObjectRequest.h"
 #include "librbd/AsyncObjectThrottle.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageWatcher.h"
@@ -40,8 +40,8 @@ public:
 
     bufferlist bl;
     string oid = m_image_ctx.get_object_name(m_object_no);
-    AioWrite *req = new AioWrite(&m_image_ctx, oid, m_object_no, 0, bl, m_snapc,
-                                 this);
+    AioObjectWrite *req = new AioObjectWrite(&m_image_ctx, oid, m_object_no, 0,
+                                             bl, m_snapc, this);
     if (!req->has_parent()) {
       // stop early if the parent went away - it just means
       // another flatten finished first or the image was resized
