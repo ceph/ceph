@@ -15,7 +15,7 @@ void AsyncOperation::start_op(ImageCtx &image_ctx) {
   assert(m_image_ctx == NULL);
   m_image_ctx = &image_ctx;
 
-  ldout(m_image_ctx->cct, 20) << this << " " << __func__ << dendl; 
+  ldout(m_image_ctx->cct, 20) << this << " " << __func__ << dendl;
   Mutex::Locker l(m_image_ctx->async_ops_lock);
   m_image_ctx->async_ops.push_front(&m_xlist_item);
 }
@@ -50,7 +50,9 @@ void AsyncOperation::finish_op() {
 
 void AsyncOperation::add_flush_context(Context *on_finish) {
   assert(m_image_ctx->async_ops_lock.is_locked());
+  ldout(m_image_ctx->cct, 20) << this << " " << __func__ << ": "
+                              << "flush=" << on_finish << dendl;
   m_flush_contexts.push_back(on_finish);
-} 
+}
 
 } // namespace librbd

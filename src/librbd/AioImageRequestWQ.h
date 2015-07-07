@@ -6,19 +6,19 @@
 
 #include "common/WorkQueue.h"
 #include "common/Mutex.h"
-#include "include/unordered_map.h"
 
 namespace librbd {
 
 class AioCompletion;
+class AioImageRequest;
 class ImageCtx;
 
-class AioImageRequestWQ : protected ThreadPool::PointerWQ<Context> {
+class AioImageRequestWQ : protected ThreadPool::PointerWQ<AioImageRequest> {
 public:
   AioImageRequestWQ(const string &name, time_t ti, ThreadPool *tp)
-    : ThreadPool::PointerWQ<Context>(name, ti, 0, tp),
+    : ThreadPool::PointerWQ<AioImageRequest>(name, ti, 0, tp),
       m_lock("AioImageRequestWQ::m_lock"), m_writes_suspended(false),
-      m_in_progress_writes(0) {
+      m_in_progress_writes(0), m_queued_writes(0) {
   }
 
   void aio_read(ImageCtx *ictx, uint64_t off, size_t len, char *buf,
@@ -29,7 +29,7 @@ public:
                    AioCompletion *c);
   void aio_flush(ImageCtx *ictx, AioCompletion *c);
 
-  using ThreadPool::PointerWQ<Context>::drain;
+  using ThreadPool::PointerWQ<AioImageRequest>::drain;
 
   bool writes_empty() const;
   inline bool writes_suspended() const {
@@ -52,30 +52,16 @@ public:
     signal();
   }
 protected:
-  virtual void _clear() {
-    ThreadPool::PointerWQ<Context>::_clear();
-    m_context_metadata.clear();
-  }
-
   virtual void *_void_dequeue();
-  virtual void process(Context *ctx);
+  virtual void process(AioImageRequest *req);
 private:
-  struct Metadata {
-    bool write_op;
-    AioCompletion *aio_comp;
-
-    Metadata() : write_op(false), aio_comp(NULL) {}
-    Metadata(bool _write_op, AioCompletion *_aio_comp)
-      : write_op(_write_op), aio_comp(_aio_comp) {}
-  };
-
   mutable Mutex m_lock;
   Cond m_cond;
   bool m_writes_suspended;
   uint32_t m_in_progress_writes;
-  ceph::unordered_map<Context *, Metadata> m_context_metadata;
+  uint32_t m_queued_writes;
 
-  void queue(Context *ctx, const Metadata &metadata);
+  void queue(AioImageRequest *req);
 };
 
 } // namespace librbd
