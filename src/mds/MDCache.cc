@@ -226,9 +226,8 @@ MDCache::~MDCache()
     logger = 0;
   }
 
-  delete rejoin_done;
-  delete resolve_done;
-  //delete renamer;
+  delete rejoin_done; rejoin_done = NULL;
+  delete resolve_done; resolve_done = NULL;
 }
 
 
@@ -2653,6 +2652,7 @@ ESubtreeMap *MDCache::create_subtree_map()
 void MDCache::resolve_start(MDSInternalContext *resolve_done_)
 {
   dout(10) << "resolve_start" << dendl;
+  assert(resolve_done == NULL);
   resolve_done = resolve_done_;
 
   if (mds->mdsmap->get_root() != mds->whoami) {
@@ -3273,6 +3273,7 @@ void MDCache::maybe_resolve_finish()
   if (mds->is_resolve()) {
     trim_unlinked_inodes();
     recalc_auth_bits(false);
+    assert(resolve_done != NULL);
     resolve_done->complete(0);
     resolve_done = NULL;
   } else {
@@ -3847,6 +3848,7 @@ void MDCache::recalc_auth_bits(bool replay)
 void MDCache::rejoin_start(MDSInternalContext *rejoin_done_)
 {
   dout(10) << "rejoin_start" << dendl;
+  assert(rejoin_done == NULL);
   rejoin_done = rejoin_done_;
 
   rejoin_gather = recovery_set;
@@ -5665,7 +5667,7 @@ void MDCache::open_snap_parents()
     do_delayed_cap_imports();
 
     start_files_to_recover(rejoin_recover_q, rejoin_check_q);
-    assert(rejoin_done);
+    assert(rejoin_done != NULL);
     rejoin_done->complete(0);
     rejoin_done = NULL;
   }
