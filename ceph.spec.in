@@ -27,6 +27,7 @@ restorecon -R /var/log/ceph > /dev/null 2>&1;
 %endif
 
 %{!?_udevrulesdir: %global _udevrulesdir /lib/udev/rules.d}
+%{!?bash_completiondir: %global bash_completiondir %(pkg-config --variable=completionsdir bash-completion || echo "/etc/bash_completion.d")}
 
 # Use systemd files on RHEL 7 and above and in SUSE/openSUSE.
 # Note: We don't install unit files for the services yet. For now,
@@ -126,6 +127,7 @@ BuildRequires:	xfsprogs
 BuildRequires:	xfsprogs-devel
 BuildRequires:	xmlstarlet
 BuildRequires:	yasm
+BuildRequires:  bash-completion
 
 #################################################################################
 # distro-conditional dependencies
@@ -780,7 +782,7 @@ mkdir -p %{_localstatedir}/run/ceph/
 %{_udevrulesdir}/60-ceph-partuuid-workaround.rules
 %{_udevrulesdir}/95-ceph-osd.rules
 %config %{_sysconfdir}/security/limits.d/ceph.conf
-%config %{_sysconfdir}/bash_completion.d/ceph
+%{bash_completiondir}/ceph
 %config(noreplace) %{_sysconfdir}/logrotate.d/ceph
 %if 0%{?suse_version}
 %config %{_sysconfdir}/sysconfig/SuSEfirewall2.d/services/ceph-mon
@@ -845,8 +847,8 @@ mkdir -p %{_localstatedir}/run/ceph/
 %dir %{_localstatedir}/log/ceph/
 %dir %{_datarootdir}/ceph/
 %dir %{_libexecdir}/ceph/
-%config %{_sysconfdir}/bash_completion.d/rados
-%config %{_sysconfdir}/bash_completion.d/rbd
+%{bash_completiondir}/rados
+%{bash_completiondir}/rbd
 %config(noreplace) %{_sysconfdir}/ceph/rbdmap
 %{_initrddir}/rbdmap
 %{python_sitelib}/ceph_argparse.py*
@@ -903,7 +905,7 @@ fi
 %{_mandir}/man8/radosgw.8*
 %{_mandir}/man8/radosgw-admin.8*
 %config(noreplace) %{_sysconfdir}/logrotate.d/radosgw
-%config %{_sysconfdir}/bash_completion.d/radosgw-admin
+%{bash_completiondir}/radosgw-admin
 %dir %{_localstatedir}/log/radosgw/
 %dir %{_localstatedir}/lib/ceph/radosgw
 %if 0%{?_with_systemd}
