@@ -1672,16 +1672,9 @@ int KeyValueStore::_generic_read(StripObjectMap::StripObjectHeaderRef header,
 
 
   int r = backend->get_values_with_header(header, OBJECT_STRIP_PREFIX, keys, &out);
-  if (r < 0) {
-    dout(10) << __func__ << " " << header->cid << "/" << header->oid << " "
-             << offset << "~" << len << " = " << r << dendl;
+  r = check_get_rc(header->cid, header->oid, r, out.size() == keys.size());
+  if (r < 0)
     return r;
-  } else if (out.size() != keys.size()) {
-    dout(0) << __func__ << " broken header or missing data in backend "
-            << header->cid << "/" << header->oid << " " << offset << "~"
-            << len << " = " << r << dendl;
-    return -EBADF;
-  }
 
   for (vector<StripObjectMap::StripExtent>::iterator iter = extents.begin();
        iter != extents.end(); ++iter) {
@@ -1816,16 +1809,9 @@ int KeyValueStore::_truncate(coll_t cid, const ghobject_t& oid, uint64_t size,
       lookup_keys.insert(key);
       r = t.get_buffer_keys(header, OBJECT_STRIP_PREFIX,
                             lookup_keys, &values);
-      if (r < 0) {
-        dout(10) << __func__ << " " << cid << "/" << oid << " "
-                 << size << " = " << r << dendl;
+      r = check_get_rc(cid, oid, r, lookup_keys.size() == values.size());
+      if (r < 0)
         return r;
-      } else if (values.size() != lookup_keys.size()) {
-        dout(0) << __func__ << " broken header or missing data in backend "
-                << header->cid << "/" << header->oid << " size " << size
-                <<  " r = " << r << dendl;
-        return -EBADF;
-      }
 
       values[key].copy(0, iter->offset, value);
       value.append_zero(header->strip_size-iter->offset);
@@ -1908,18 +1894,9 @@ int KeyValueStore::_generic_write(StripObjectMap::StripObjectHeaderRef header,
   }
 
   int r = t.get_buffer_keys(header, OBJECT_STRIP_PREFIX, keys, &out);
-  if (r < 0) {
-    dout(10) << __func__ << " failed to get value " << header->cid << "/"
-              << header->oid << " " << offset << "~" << len << " = " << r
-              << dendl;
+  r = check_get_rc(header->cid, header->oid, r, keys.size() == out.size());
+  if (r < 0) 
     return r;
-  } else if (keys.size() != out.size()) {
-    // Error on header.bits or the corresponding key/value pair is missing
-    dout(0) << __func__ << " broken header or missing data in backend "
-            << header->cid << "/" << header->oid << " " << offset << "~"
-            << len << " = " << r << dendl;
-    return -EBADF;
-  }
 
   uint64_t bl_offset = 0;
   map<string, bufferlist> values;
@@ -1990,13 +1967,55 @@ int KeyValueStore::_zero(coll_t cid, const ghobject_t& oid, uint64_t offset,
                          size_t len, BufferTransaction &t)
 {
   dout(15) << __func__ << " " << cid << "/" << oid << " " << offset << "~" << len << dendl;
+  int r;
+  StripObjectMap::StripObjectHeaderRef header;
 
-  bufferptr bp(len);
-  bp.zero();
-  bufferlist bl;
-  bl.push_back(bp);
-  int r = _write(cid, oid, offset, len, bl, t);
+  r = t.lookup_cached_header(cid, oid, &header, true);
+  if (r < 0) {
+    dout(10) << __func__ << " " << cid << "/" << oid << " " << offset
+             << "~" << len << " failed to get header: r = " << r << dendl;
+    return r;
+  }
 
+  if (len + offset > header->max_size) {
+    header->max_size = len + offset;
+    header->bits.resize(header->max_size/header->strip_size+1);
+    header->updated = true;
+  }
+
+  vector<StripObjectMap::StripExtent> extents;
+  StripObjectMap::file_to_extents(offset, len, header->strip_size,
+                                  extents);
+  set<string> rm_keys;
+  set<string> lookup_keys;
+  map<string, bufferlist> values;
+  map<string, pair<uint64_t, uint64_t> > off_len;
+  for (vector<StripObjectMap::StripExtent>::iterator iter = extents.begin();
+       iter != extents.end(); ++iter) {
+    string key = strip_object_key(iter->no);
+    if (header->bits[iter->no]) {
+      if (iter->offset == 0 && iter->len == header->strip_size) {
+        rm_keys.insert(key);
+        header->bits[iter->no] = 0;
+        header->updated = true;
+      } else {
+        lookup_keys.insert(key);
+        off_len[key] = make_pair(iter->offset, iter->len);
+      }
+    }    
+  }
+  r = t.get_buffer_keys(header, OBJECT_STRIP_PREFIX,
+                        lookup_keys, &values);
+  r = check_get_rc(header->cid, header->oid, r, lookup_keys.size() == values.size());
+  if (r < 0)
+    return r;
+  for(set<string>::iterator it = lookup_keys.begin(); it != lookup_keys.end(); it++)
+  {
+    pair<uint64_t, uint64_t> p = off_len[*it];
+    values[*it].zero(p.first, p.second);
+  }
+  t.set_buffer_keys(header, OBJECT_STRIP_PREFIX, values);
+  t.remove_buffer_keys(header, OBJECT_STRIP_PREFIX, rm_keys);
   dout(10) << __func__ << " " << cid << "/" << oid << " " << offset << "~"
            << len << " = " << r << dendl;
   return r;
@@ -3105,6 +3124,19 @@ void KeyValueStore::handle_conf_change(const struct md_config_t *conf,
       dump_stop();
     }
   }
+}
+
+int KeyValueStore::check_get_rc(const coll_t cid, const ghobject_t& oid, int r, bool is_equal_size)
+{
+  if (r < 0) {
+    dout(10) << __func__ << " " << cid << "/" << oid << " "
+             << " get rc = " <<  r << dendl;
+  } else if (!is_equal_size) {
+    dout(0) << __func__ << " broken header or missing data in backend "
+            << cid << "/" << oid << " get rc = " << r << dendl;
+    r = -EBADF;
+  }
+  return r;
 }
 
 void KeyValueStore::dump_start(const std::string file)
