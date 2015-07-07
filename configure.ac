@@ -1333,6 +1333,7 @@ AM_PATH_PYTHON([2.4],
 PKG_CHECK_VAR(bash_completiondir, [bash-completion], [completionsdir], ,
   bash_completiondir="${sysconfdir}/bash_completion.d")
 AC_SUBST(bash_completiondir)
+AM_SUBST_NOTMAKE(bash_completiondir)
 
 AC_CONFIG_HEADERS([src/acconfig.h])
 AC_CONFIG_FILES([Makefile
