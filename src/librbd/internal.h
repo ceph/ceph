@@ -172,6 +172,8 @@ namespace librbd {
                    uint64_t len, bool include_parent, bool whole_object,
 		   int (*cb)(uint64_t, size_t, int, void *),
 		   void *arg);
+  void readahead(ImageCtx *ictx,
+                 const vector<pair<uint64_t,uint64_t> >& image_extents);
   ssize_t read(ImageCtx *ictx, uint64_t off, size_t len, char *buf, int op_flags);
   ssize_t read(ImageCtx *ictx, const vector<pair<uint64_t,uint64_t> >& image_extents,
 	       char *buf, bufferlist *pbl, int op_flags);
@@ -186,14 +188,6 @@ namespace librbd {
   int async_rebuild_object_map(ImageCtx *ictx, Context *ctx,
                                ProgressContext &prog_ctx);
 
-  void aio_write(ImageCtx *ictx, uint64_t off, size_t len, const char *buf,
-		 AioCompletion *c, int op_flags);
-  void aio_discard(ImageCtx *ictx, uint64_t off, uint64_t len, AioCompletion *c);
-  void aio_read(ImageCtx *ictx, uint64_t off, size_t len,
-	        char *buf, bufferlist *pbl, AioCompletion *c, int op_flags);
-  void aio_read(ImageCtx *ictx, const vector<pair<uint64_t,uint64_t> >& image_extents,
-	        char *buf, bufferlist *pbl, AioCompletion *c, int op_flags);
-  void aio_flush(ImageCtx *ictx, AioCompletion *c);
   int flush(ImageCtx *ictx);
   int _flush(ImageCtx *ictx);
   int invalidate_cache(ImageCtx *ictx);

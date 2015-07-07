@@ -18,6 +18,7 @@
 #include "cls/rbd/cls_rbd_client.h"
 
 #include "librbd/AioCompletion.h"
+#include "librbd/AioImageRequest.h"
 #include "librbd/AioImageRequestWQ.h"
 #include "librbd/AioObjectRequest.h"
 #include "librbd/AsyncFlattenRequest.h"
@@ -2509,7 +2510,8 @@ reprotect_and_return_err:
 
       Context *ctx = new C_CopyWrite(m_throttle, m_bl);
       AioCompletion *comp = aio_create_completion_internal(ctx, rbd_ctx_cb);
-      aio_write(m_dest, m_offset, m_bl->length(), m_bl->c_str(), comp, LIBRADOS_OP_FLAG_FADVISE_DONTNEED);
+      AioImageRequest::write(m_dest, comp, m_offset, m_bl->length(),
+                             m_bl->c_str(), LIBRADOS_OP_FLAG_FADVISE_DONTNEED);
     }
   private:
     SimpleThrottle *m_throttle;
@@ -2561,7 +2563,7 @@ reprotect_and_return_err:
       bufferlist *bl = new bufferlist();
       Context *ctx = new C_CopyRead(&throttle, dest, offset, bl);
       AioCompletion *comp = aio_create_completion_internal(ctx, rbd_ctx_cb);
-      aio_read(src, offset, len, NULL, bl, comp, fadvise_flags);
+      AioImageRequest::read(src, comp, offset, len, NULL, bl, fadvise_flags);
       prog_ctx.update_progress(offset, src_size);
     }
 
@@ -3081,7 +3083,7 @@ reprotect_and_return_err:
 
       Context *ctx = new C_SafeCond(&mylock, &cond, &done, &ret);
       AioCompletion *c = aio_create_completion_internal(ctx, rbd_ctx_cb);
-      aio_read(ictx, off, read_len, NULL, &bl, c, 0);
+      AioImageRequest::read(ictx, c, off, read_len, NULL, &bl, 0);
 
       mylock.Lock();
       while (!done)
@@ -3163,7 +3165,7 @@ reprotect_and_return_err:
 
     Context *ctx = new C_SafeCond(&mylock, &cond, &done, &ret);
     AioCompletion *c = aio_create_completion_internal(ctx, rbd_ctx_cb);
-    aio_read(ictx, image_extents, buf, pbl, c, op_flags);
+    AioImageRequest::read(ictx, c, image_extents, buf, pbl, op_flags);
 
     mylock.Lock();
     while (!done)
@@ -3193,7 +3195,7 @@ reprotect_and_return_err:
 
     Context *ctx = new C_SafeCond(&mylock, &cond, &done, &ret);
     AioCompletion *c = aio_create_completion_internal(ctx, rbd_ctx_cb);
-    aio_write(ictx, off, mylen, buf, c, op_flags);
+    AioImageRequest::write(ictx, c, off, mylen, buf, op_flags);
 
     mylock.Lock();
     while (!done)
@@ -3227,7 +3229,7 @@ reprotect_and_return_err:
 
     Context *ctx = new C_SafeCond(&mylock, &cond, &done, &ret);
     AioCompletion *c = aio_create_completion_internal(ctx, rbd_ctx_cb);
-    aio_discard(ictx, off, mylen, c);
+    AioImageRequest::discard(ictx, c, off, mylen);
 
     mylock.Lock();
     while (!done)
@@ -3276,39 +3278,6 @@ reprotect_and_return_err:
       *len = (size_t)(image_size - off);
 
     return 0;
-  }
-
-  void aio_flush(ImageCtx *ictx, AioCompletion *c)
-  {
-    CephContext *cct = ictx->cct;
-    ldout(cct, 20) << "aio_flush " << ictx << " completion " << c <<  dendl;
-
-    c->get();
-    int r = ictx_check(ictx);
-    if (r < 0) {
-      c->fail(cct, r);
-      return;
-    }
-
-    RWLock::RLocker owner_locker(ictx->owner_lock);
-    ictx->user_flushed();
-
-    C_AioRequest *flush_ctx = new C_AioRequest(cct, c);
-    ictx->flush_async_operations(flush_ctx);
-
-    c->init_time(ictx, AIO_TYPE_FLUSH);
-    C_AioRequest *req_comp = new C_AioRequest(cct, c);
-    if (ictx->object_cacher) {
-      ictx->flush_cache_aio(req_comp);
-    } else {
-      librados::AioCompletion *rados_completion =
-	librados::Rados::aio_create_completion(req_comp, NULL, rados_ctx_cb);
-      ictx->data_ctx.aio_flush_async(rados_completion);
-      rados_completion->release();
-    }
-    c->finish_adding_requests(cct);
-    c->put();
-    ictx->perfcounter->inc(l_librbd_aio_flush);
   }
 
   int flush(ImageCtx *ictx)
@@ -3367,91 +3336,6 @@ reprotect_and_return_err:
     return r;
   }
 
-  void aio_write(ImageCtx *ictx, uint64_t off, size_t len, const char *buf,
-		 AioCompletion *c, int op_flags)
-  {
-    CephContext *cct = ictx->cct;
-    ldout(cct, 20) << "aio_write " << ictx << " off = " << off << " len = "
-		   << len << " buf = " << (void*)buf << dendl;
-
-    c->get();
-    int r = ictx_check(ictx);
-    if (r < 0) {
-      c->fail(cct, r);
-      return;
-    }
-
-    RWLock::RLocker owner_locker(ictx->owner_lock);
-    RWLock::RLocker md_locker(ictx->md_lock);
-
-    uint64_t clip_len = len;
-    ::SnapContext snapc;
-    {
-      // prevent image size from changing between computing clip and recording
-      // pending async operation
-      RWLock::RLocker snap_locker(ictx->snap_lock);
-      if (ictx->snap_id != CEPH_NOSNAP || ictx->read_only) {
-        c->fail(cct, -EROFS);
-        return;
-      }
-
-      r = clip_io(ictx, off, &clip_len);
-      if (r < 0) {
-        c->fail(cct, r);
-        return;
-      }
-
-      snapc = ictx->snapc;
-
-      c->init_time(ictx, AIO_TYPE_WRITE);
-    }
-
-    if (ictx->image_watcher->is_lock_supported() &&
-	!ictx->image_watcher->is_lock_owner()) {
-      c->put();
-      ictx->image_watcher->request_lock(
-	boost::bind(&librbd::aio_write, ictx, off, len, buf, _1, op_flags), c);
-      return;
-    }
-
-    // map
-    vector<ObjectExtent> extents;
-    if (len > 0) {
-      Striper::file_to_extents(ictx->cct, ictx->format_string,
-			       &ictx->layout, off, clip_len, 0, extents);
-    }
-
-    for (vector<ObjectExtent>::iterator p = extents.begin(); p != extents.end(); ++p) {
-      ldout(cct, 20) << " oid " << p->oid << " " << p->offset << "~" << p->length
-		     << " from " << p->buffer_extents << dendl;
-      // assemble extent
-      bufferlist bl;
-      for (vector<pair<uint64_t,uint64_t> >::iterator q = p->buffer_extents.begin();
-	   q != p->buffer_extents.end();
-	   ++q) {
-	bl.append(buf + q->first, q->second);
-      }
-
-      C_AioRequest *req_comp = new C_AioRequest(cct, c);
-      if (ictx->object_cacher) {
-	ictx->write_to_cache(p->oid, bl, p->length, p->offset, req_comp, op_flags);
-      } else {
-	AioObjectWrite *req = new AioObjectWrite(ictx, p->oid.name, p->objectno,
-                                                 p->offset, bl, snapc,
-                                                 req_comp);
-
-	req->set_op_flags(op_flags);
-	req->send();
-      }
-    }
-
-    c->finish_adding_requests(ictx->cct);
-    c->put();
-
-    ictx->perfcounter->inc(l_librbd_wr);
-    ictx->perfcounter->inc(l_librbd_wr_bytes, clip_len);
-  }
-
   int metadata_get(ImageCtx *ictx, const string &key, string *value)
   {
     CephContext *cct = ictx->cct;
@@ -3506,110 +3390,11 @@ reprotect_and_return_err:
     return cls_client::metadata_list(&ictx->md_ctx, ictx->header_oid, start, max, pairs);
   }
 
-  void aio_discard(ImageCtx *ictx, uint64_t off, uint64_t len, AioCompletion *c)
-  {
-    CephContext *cct = ictx->cct;
-    ldout(cct, 20) << "aio_discard " << ictx << " off = " << off << " len = "
-		   << len << dendl;
-
-    c->get();
-    int r = ictx_check(ictx);
-    if (r < 0) {
-      c->fail(cct, r);
-      return;
-    }
-
-    RWLock::RLocker owner_locker(ictx->owner_lock);
-    RWLock::RLocker md_locker(ictx->md_lock);
-
-    uint64_t clip_len = len;
-    ::SnapContext snapc;
-    {
-      // prevent image size from changing between computing clip and recording
-      // pending async operation
-      RWLock::RLocker snap_locker(ictx->snap_lock);
-      if (ictx->snap_id != CEPH_NOSNAP || ictx->read_only) {
-        c->fail(cct, -EROFS);
-        return;
-      }
-
-      r = clip_io(ictx, off, &clip_len);
-      if (r < 0) {
-        c->fail(cct, r);
-        return;
-      }
-
-      // TODO: check for snap
-      snapc = ictx->snapc;
-
-      c->init_time(ictx, AIO_TYPE_DISCARD);
-    }
-
-    if (ictx->image_watcher->is_lock_supported() &&
-	!ictx->image_watcher->is_lock_owner()) {
-      c->put();
-      ictx->image_watcher->request_lock(
-	boost::bind(&librbd::aio_discard, ictx, off, len, _1), c);
-      return;
-    }
-
-    // map
-    vector<ObjectExtent> extents;
-    if (len > 0) {
-      Striper::file_to_extents(ictx->cct, ictx->format_string,
-			       &ictx->layout, off, clip_len, 0, extents);
-    }
-
-    for (vector<ObjectExtent>::iterator p = extents.begin(); p != extents.end(); ++p) {
-      ldout(cct, 20) << " oid " << p->oid << " " << p->offset << "~" << p->length
-		     << " from " << p->buffer_extents << dendl;
-      C_AioRequest *req_comp = new C_AioRequest(cct, c);
-      AioObjectRequest *req;
-
-      if (p->length == ictx->layout.fl_object_size) {
-	req = new AioObjectRemove(ictx, p->oid.name, p->objectno, snapc,
-                                  req_comp);
-      } else if (p->offset + p->length == ictx->layout.fl_object_size) {
-	req = new AioObjectTruncate(ictx, p->oid.name, p->objectno, p->offset,
-                                    snapc, req_comp);
-      } else {
-	if(ictx->cct->_conf->rbd_skip_partial_discard) {
-	  delete req_comp;
-	  continue;
-	}
-	req = new AioObjectZero(ictx, p->oid.name, p->objectno, p->offset,
-                                p->length, snapc, req_comp);
-      }
-
-      req->send();
-    }
-
-    if (ictx->object_cacher) {
-      Mutex::Locker l(ictx->cache_lock);
-      ictx->object_cacher->discard_set(ictx->object_set, extents);
-    }
-
-    c->finish_adding_requests(ictx->cct);
-    c->put();
-
-    ictx->perfcounter->inc(l_librbd_discard);
-    ictx->perfcounter->inc(l_librbd_discard_bytes, clip_len);
-  }
-
   void rbd_req_cb(completion_t cb, void *arg)
   {
     AioObjectRequest *req = reinterpret_cast<AioObjectRequest *>(arg);
     AioCompletion *comp = reinterpret_cast<AioCompletion *>(cb);
     req->complete(comp->get_return_value());
-  }
-
-  void aio_read(ImageCtx *ictx, uint64_t off, size_t len,
-	       char *buf, bufferlist *bl,
-	       AioCompletion *c, int op_flags)
-  {
-    vector<pair<uint64_t,uint64_t> > image_extents(1);
-    image_extents[0] = make_pair(off, len);
-    aio_read(ictx, image_extents, buf, bl, c, op_flags);
   }
 
   struct C_RBD_Readahead : public Context {
@@ -3625,8 +3410,8 @@ reprotect_and_return_err:
     }
   };
 
-  static void readahead(ImageCtx *ictx,
-			const vector<pair<uint64_t,uint64_t> >& image_extents)
+  void readahead(ImageCtx *ictx,
+                 const vector<pair<uint64_t,uint64_t> >& image_extents)
   {
     uint64_t total_bytes = 0;
     for (vector<pair<uint64_t,uint64_t> >::const_iterator p = image_extents.begin();
@@ -3668,93 +3453,6 @@ reprotect_and_return_err:
       ictx->perfcounter->inc(l_librbd_readahead);
       ictx->perfcounter->inc(l_librbd_readahead_bytes, readahead_length);
     }
-  }
-
-  void aio_read(ImageCtx *ictx, const vector<pair<uint64_t,uint64_t> >& image_extents,
-	        char *buf, bufferlist *pbl, AioCompletion *c, int op_flags)
-  {
-    CephContext *cct = ictx->cct;
-    ldout(cct, 20) << "aio_read " << ictx << " completion " << c << " " << image_extents << dendl;
-
-    c->get();
-    int r = ictx_check(ictx);
-    if (r < 0) {
-      c->fail(cct, r);
-      return;
-    }
-
-    // readahead
-    if (ictx->object_cacher && ictx->readahead_max_bytes > 0 &&
-	!(op_flags & LIBRADOS_OP_FLAG_FADVISE_RANDOM)) {
-      readahead(ictx, image_extents);
-    }
-
-    snap_t snap_id;
-    map<object_t,vector<ObjectExtent> > object_extents;
-    uint64_t buffer_ofs = 0;
-    {
-      // prevent image size from changing between computing clip and recording
-      // pending async operation
-      RWLock::RLocker snap_locker(ictx->snap_lock);
-      snap_id = ictx->snap_id;
-
-      // map
-      for (vector<pair<uint64_t,uint64_t> >::const_iterator p =
-             image_extents.begin();
-	   p != image_extents.end(); ++p) {
-        uint64_t len = p->second;
-        r = clip_io(ictx, p->first, &len);
-        if (r < 0) {
-          c->fail(cct, r);
-	  return;
-        }
-        if (len == 0) {
-	  continue;
-        }
-
-        Striper::file_to_extents(cct, ictx->format_string, &ictx->layout,
-			         p->first, len, 0, object_extents, buffer_ofs);
-        buffer_ofs += len;
-      }
-
-      c->init_time(ictx, AIO_TYPE_READ);
-    }
-
-    c->read_buf = buf;
-    c->read_buf_len = buffer_ofs;
-    c->read_bl = pbl;
-
-    for (map<object_t,vector<ObjectExtent> >::iterator p = object_extents.begin();
-         p != object_extents.end(); ++p) {
-      for (vector<ObjectExtent>::iterator q = p->second.begin();
-           q != p->second.end(); ++q) {
-	ldout(ictx->cct, 20) << " oid " << q->oid << " " << q->offset << "~"
-                             << q->length << " from " << q->buffer_extents
-                             << dendl;
-
-	C_AioRead *req_comp = new C_AioRead(ictx->cct, c);
-	AioObjectRead *req = new AioObjectRead(ictx, q->oid.name, q->objectno,
-                                               q->offset, q->length,
-                                               q->buffer_extents, snap_id, true,
-                                               req_comp, op_flags);
-	req_comp->set_req(req);
-
-	if (ictx->object_cacher) {
-	  C_CacheRead *cache_comp = new C_CacheRead(ictx, req);
-	  ictx->aio_read_from_cache(q->oid, q->objectno, &req->data(),
-				    q->length, q->offset,
-				    cache_comp, op_flags);
-	} else {
-	  req->send();
-	}
-      }
-    }
-
-    c->finish_adding_requests(cct);
-    c->put();
-
-    ictx->perfcounter->inc(l_librbd_rd);
-    ictx->perfcounter->inc(l_librbd_rd_bytes, buffer_ofs);
   }
 
   AioCompletion *aio_create_completion() {

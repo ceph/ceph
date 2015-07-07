@@ -8,6 +8,7 @@
 #include "common/RWLock.h"
 
 #include "librbd/AioCompletion.h"
+#include "librbd/AioImageRequest.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageWatcher.h"
 #include "librbd/internal.h"
@@ -272,8 +273,8 @@ namespace librbd {
 			   << " parent completion " << m_parent_completion
 			   << " extents " << parent_extents
 			   << dendl;
-    aio_read(m_ictx->parent, parent_extents, NULL, &m_read_data,
-             m_parent_completion, 0);
+    AioImageRequest::read(m_ictx->parent, m_parent_completion, parent_extents,
+                          NULL, &m_read_data, 0);
   }
 
   /** write **/
