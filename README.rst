@@ -211,7 +211,7 @@ displays a page of more documentation and more concrete examples.
 
 Some of the more important / commonly used tasks include:
 
-* ``chef``: Run the chef task.
+* ``ansible``: Run the ansible task.
 * ``install``: by default, the install task goes to gitbuilder and installs the
   results of the latest build. You can, however, add additional parameters to
   the test configuration to cause it to install any branch, SHA, archive or
