@@ -12,7 +12,7 @@
 void cls_log_add_prepare_entry(cls_log_entry& entry, const utime_t& timestamp,
                  const string& section, const string& name, bufferlist& bl);
 
-void cls_log_add(librados::ObjectWriteOperation& op, list<cls_log_entry>& entry);
+void cls_log_add(librados::ObjectWriteOperation& op, list<cls_log_entry>& entries, bool monotonic_inc);
 void cls_log_add(librados::ObjectWriteOperation& op, cls_log_entry& entry);
 void cls_log_add(librados::ObjectWriteOperation& op, const utime_t& timestamp,
                  const string& section, const string& name, bufferlist& bl);
