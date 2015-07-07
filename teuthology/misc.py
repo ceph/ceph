@@ -10,6 +10,7 @@ import logging
 import configobj
 import getpass
 import socket
+import subprocess
 import sys
 import tarfile
 import time
@@ -1257,3 +1258,21 @@ def is_in_dict(searchkey, searchval, d):
         return True
     else:
         return searchval == val
+
+
+def sh(command):
+    """
+    Run the shell command and return the output in ascii (stderr and
+    stdout).  If the command fails, raise an exception. The command
+    and its output are logged, on success and on error.
+    """
+    log.debug(command)
+    output = ''
+    try:
+        output = subprocess.check_output(command, stderr=subprocess.STDOUT,
+                                         shell=True)
+    except subprocess.CalledProcessError as e:
+        log.exception(command + " error " + str(e.output))
+        raise e
+    log.debug(command + " output " + str(output))
+    return output.decode('utf-8')
