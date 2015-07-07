@@ -115,15 +115,14 @@ class MMDSMap;
  * to the other subsystems, and message-sending calls.
  */
 class MDSRank {
-  public:
-    // FIXME: this should be private in favour of getter
-    mds_rank_t whoami;
+  protected:
+    const mds_rank_t whoami;
 
     // Incarnation as seen in MDSMap at the point where a rank is
-    // assigned.  FIXME this shoudl be a const once MDSRank
-    // is only constructed upon a rank being issued.
-    int incarnation;
+    // assigned.
+    const int incarnation;
 
+  public:
     mds_rank_t get_nodeid() const { return whoami; }
     uint64_t get_metadata_pool();
 
@@ -266,6 +265,8 @@ class MDSRank {
     }
 
     MDSRank(
+        mds_rank_t whoami_,
+        int incarnation_,
         Mutex &mds_lock_,
         LogChannelRef &clog_,
         SafeTimer &timer_,
@@ -480,7 +481,7 @@ public:
 class MDSRankDispatcher : public MDSRank
 {
 public:
-  void init(mds_rank_t rank, int incarnation);
+  void init();
   void tick();
   void shutdown();
   bool handle_asok_command(std::string command, cmdmap_t& cmdmap,
@@ -495,6 +496,8 @@ public:
   bool ms_dispatch(Message *m);
 
   MDSRankDispatcher(
+      mds_rank_t whoami_,
+      int incarnation_,
       Mutex &mds_lock_,
       LogChannelRef &clog_,
       SafeTimer &timer_,

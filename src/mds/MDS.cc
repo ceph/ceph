@@ -174,7 +174,7 @@ bool MDS::asok_command(string command, cmdmap_t& cmdmap, string format,
     f->open_object_section("status");
     f->dump_stream("cluster_fsid") << monc->get_fsid();
     if (mds_rank) {
-      f->dump_unsigned("whoami", mds_rank->whoami);
+      f->dump_unsigned("whoami", mds_rank->get_nodeid());
     } else {
       f->dump_unsigned("whoami", MDS_RANK_NONE);
     }
@@ -914,11 +914,13 @@ void MDS::handle_mds_map(MMDSMap *m)
 
     // Did I previously not hold a rank?  Initialize!
     if (mds_rank == NULL) {
-      mds_rank = new MDSRankDispatcher(mds_lock, clog, timer, beacon, mdsmap,
-          messenger, monc, objecter,
+      mds_rank = new MDSRankDispatcher(whoami, incarnation, mds_lock, clog,
+          timer, beacon, mdsmap, messenger, monc, objecter,
           new C_VoidFn(this, &MDS::respawn),
           new C_VoidFn(this, &MDS::suicide));
-      mds_rank->init(whoami, incarnation);
+      dout(10) <<  __func__ << ": initializing MDS rank "
+               << mds_rank->get_nodeid() << dendl;
+      mds_rank->init();
     }
 
     // MDSRank is active: let him process the map, we have no say.

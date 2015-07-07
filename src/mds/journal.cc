@@ -2542,7 +2542,7 @@ void ESubtreeMap::replay(MDSRank *mds)
 	++errors;
 	continue;
       }
-      if (dir->get_dir_auth().first != mds->whoami) {
+      if (dir->get_dir_auth().first != mds->get_nodeid()) {
 	mds->clog->error() << " replayed ESubtreeMap at " << get_start_off()
 			  << " subtree root " << p->first
 			  << " is not mine in cache (it's " << dir->get_dir_auth() << ")";
@@ -2596,7 +2596,7 @@ void ESubtreeMap::replay(MDSRank *mds)
     mds->mdcache->list_subtrees(subs);
     for (list<CDir*>::iterator p = subs.begin(); p != subs.end(); ++p) {
       CDir *dir = *p;
-      if (dir->get_dir_auth().first != mds->whoami)
+      if (dir->get_dir_auth().first != mds->get_nodeid())
 	continue;
       if (subtrees.count(dir->dirfrag()) == 0) {
 	mds->clog->error() << " replayed ESubtreeMap at " << get_start_off()
@@ -3022,13 +3022,13 @@ void EResetJournal::replay(MDSRank *mds)
   mds->sessionmap.wipe();
   mds->inotable->replay_reset();
 
-  if (mds->mdsmap->get_root() == mds->whoami) {
+  if (mds->mdsmap->get_root() == mds->get_nodeid()) {
     CDir *rootdir = mds->mdcache->get_root()->get_or_open_dirfrag(mds->mdcache, frag_t());
-    mds->mdcache->adjust_subtree_auth(rootdir, mds->whoami);   
+    mds->mdcache->adjust_subtree_auth(rootdir, mds->get_nodeid());   
   }
 
   CDir *mydir = mds->mdcache->get_myin()->get_or_open_dirfrag(mds->mdcache, frag_t());
-  mds->mdcache->adjust_subtree_auth(mydir, mds->whoami);   
+  mds->mdcache->adjust_subtree_auth(mydir, mds->get_nodeid());   
 
   mds->mdcache->recalc_auth_bits(true);
 
