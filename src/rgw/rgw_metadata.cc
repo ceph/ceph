@@ -61,7 +61,8 @@ void RGWMetadataLogData::dump(Formatter *f) const {
 }
 
 void decode_json_obj(RGWMDLogStatus& status, JSONObj *obj) {
-  string s = obj->get_data();
+  string s;
+  JSONDecoder::decode_json("status", s, obj);
   if (s == "complete") {
     status = MDLOG_STATUS_COMPLETE;
   } else if (s == "write") {
@@ -96,6 +97,14 @@ int RGWMetadataLog::add_entry(RGWRados *store, RGWMetadataHandler *handler, cons
   store->shard_name(prefix, cct->_conf->rgw_md_log_max_shards, hash_key, oid);
   utime_t now = ceph_clock_now(cct);
   return store->time_log_add(oid, now, section, key, bl);
+}
+
+int RGWMetadataLog::store_entries_in_shard(RGWRados *store, list<cls_log_entry>& entries, int shard_id)
+{
+  string oid;
+
+  store->shard_name(prefix, shard_id, oid);
+  return store->time_log_add(oid, entries, false);
 }
 
 void RGWMetadataLog::init_list_entries(int shard_id, utime_t& from_time, utime_t& end_time, 
@@ -256,6 +265,11 @@ RGWMetadataManager::~RGWMetadataManager()
 
   handlers.clear();
   delete md_log;
+}
+
+int RGWMetadataManager::store_md_log_entries(list<cls_log_entry>& entries, int shard_id)
+{
+  return md_log->store_entries_in_shard(store, entries, shard_id);
 }
 
 int RGWMetadataManager::register_handler(RGWMetadataHandler *handler)

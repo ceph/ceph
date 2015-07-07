@@ -9,7 +9,7 @@ using namespace librados;
 
 
 
-void cls_log_add(librados::ObjectWriteOperation& op, list<cls_log_entry>& entries)
+void cls_log_add(librados::ObjectWriteOperation& op, list<cls_log_entry>& entries, bool monotonic_inc)
 {
   bufferlist in;
   cls_log_add_op call;

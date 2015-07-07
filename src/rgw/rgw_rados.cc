@@ -2227,6 +2227,14 @@ void RGWRados::shard_name(const string& prefix, unsigned max_shards, const strin
   name = prefix + buf;
 }
 
+void RGWRados::shard_name(const string& prefix, unsigned shard_id, string& name)
+{
+  char buf[16];
+  snprintf(buf, sizeof(buf), "%u", shard_id);
+  name = prefix + buf;
+
+}
+
 void RGWRados::time_log_prepare_entry(cls_log_entry& entry, const utime_t& ut, const string& section, const string& key, bufferlist& bl)
 {
   cls_log_add_prepare_entry(entry, ut, section, key, bl);
@@ -2258,7 +2266,7 @@ int RGWRados::time_log_add(const string& oid, const utime_t& ut, const string& s
   return r;
 }
 
-int RGWRados::time_log_add(const string& oid, list<cls_log_entry>& entries)
+int RGWRados::time_log_add(const string& oid, list<cls_log_entry>& entries, bool monotonic_inc)
 {
   librados::IoCtx io_ctx;
 
@@ -2278,7 +2286,7 @@ int RGWRados::time_log_add(const string& oid, list<cls_log_entry>& entries)
     return r;
 
   ObjectWriteOperation op;
-  cls_log_add(op, entries);
+  cls_log_add(op, entries, monotonic_inc);
 
   r = io_ctx.operate(oid, &op);
   return r;
