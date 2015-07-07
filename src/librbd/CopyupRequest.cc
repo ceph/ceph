@@ -7,6 +7,7 @@
 #include "common/Mutex.h"
 
 #include "librbd/AioCompletion.h"
+#include "librbd/AioImageRequest.h"
 #include "librbd/AioObjectRequest.h"
 #include "librbd/AsyncObjectThrottle.h"
 #include "librbd/CopyupRequest.h"
@@ -185,7 +186,8 @@ private:
 			   << ", oid " << m_oid
                            << ", extents " << m_image_extents
                            << dendl;
-    aio_read(m_ictx->parent, m_image_extents, NULL, &m_copyup_data, comp, 0);
+    AioImageRequest::read(m_ictx->parent, comp, m_image_extents, NULL,
+                          &m_copyup_data, 0);
   }
 
   void CopyupRequest::queue_send()
