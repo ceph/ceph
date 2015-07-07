@@ -2119,8 +2119,9 @@ public:
 
   void shard_name(const string& prefix, unsigned max_shards, const string& key, string& name);
   void shard_name(const string& prefix, unsigned max_shards, const string& section, const string& key, string& name);
+  void shard_name(const string& prefix, unsigned shard_id, string& name);
   void time_log_prepare_entry(cls_log_entry& entry, const utime_t& ut, const string& section, const string& key, bufferlist& bl);
-  int time_log_add(const string& oid, list<cls_log_entry>& entries);
+  int time_log_add(const string& oid, list<cls_log_entry>& entries, bool monotonic_inc = true);
   int time_log_add(const string& oid, const utime_t& ut, const string& section, const string& key, bufferlist& bl);
   int time_log_list(const string& oid, utime_t& start_time, utime_t& end_time,
                     int max_entries, list<cls_log_entry>& entries,
