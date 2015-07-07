@@ -3,6 +3,7 @@
 #include "test/librbd/test_fixture.h"
 #include "test/librbd/test_support.h"
 #include "librbd/AioCompletion.h"
+#include "librbd/AioImageRequest.h"
 #include "librbd/ImageWatcher.h"
 #include "librbd/internal.h"
 #include "librbd/ObjectMap.h"
@@ -254,7 +255,7 @@ TEST_F(TestInternal, AioWriteRequestsLock) {
   librbd::AioCompletion *c =
     librbd::aio_create_completion_internal(ctx, librbd::rbd_ctx_cb);
   c->get();
-  aio_write(ictx, 0, buffer.size(), buffer.c_str(), c, 0);
+  librbd::AioImageWrite(*ictx, c, 0, buffer.size(), buffer.c_str(), 0).send();
 
   bool is_owner;
   ASSERT_EQ(0, librbd::is_exclusive_lock_owner(ictx, &is_owner));
@@ -277,7 +278,7 @@ TEST_F(TestInternal, AioDiscardRequestsLock) {
   librbd::AioCompletion *c =
     librbd::aio_create_completion_internal(ctx, librbd::rbd_ctx_cb);
   c->get();
-  aio_discard(ictx, 0, 256, c);
+  librbd::AioImageDiscard(*ictx, c, 0, 256).send();
 
   bool is_owner;
   ASSERT_EQ(0, librbd::is_exclusive_lock_owner(ictx, &is_owner));
