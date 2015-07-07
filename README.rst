@@ -97,7 +97,9 @@ the nodes & use the live cluster ad hoc), might look like this::
 
 The number of entries under ``roles`` and ``targets`` must match.
 
-Note the colon after every task name in the ``tasks`` section.
+Note the colon after every task name in the ``tasks`` section. Also note the
+dashes before each task. This is the YAML syntax for an ordered list and
+specifies the order in which tasks are executed.
 
 The ``install`` task needs to precede all other tasks.
 
