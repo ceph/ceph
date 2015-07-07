@@ -8,7 +8,7 @@ if WITH_RBD
 
 librbd_internal_la_SOURCES = \
 	librbd/AioCompletion.cc \
-	librbd/AioRequest.cc \
+	librbd/AioObjectRequest.cc \
 	librbd/AsyncFlattenRequest.cc \
 	librbd/AsyncObjectThrottle.cc \
 	librbd/AsyncOperation.cc \
@@ -52,7 +52,7 @@ lib_LTLIBRARIES += librbd.la
 
 noinst_HEADERS += \
 	librbd/AioCompletion.h \
-	librbd/AioRequest.h \
+	librbd/AioObjectRequest.h \
 	librbd/AsyncFlattenRequest.h \
 	librbd/AsyncObjectThrottle.h \
 	librbd/AsyncOperation.h \

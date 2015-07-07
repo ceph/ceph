@@ -19,7 +19,7 @@
 
 namespace librbd {
 
-  class AioRead;
+  class AioObjectRead;
 
   typedef enum {
     AIO_TYPE_READ = 0,
@@ -31,7 +31,7 @@ namespace librbd {
 
   /**
    * AioCompletion is the overall completion for a single
-   * rbd I/O request. It may be composed of many AioRequests,
+   * rbd I/O request. It may be composed of many AioObjectRequests,
    * which each go to a single object.
    *
    * The retrying of individual requests is handled at a lower level,
@@ -174,23 +174,23 @@ namespace librbd {
     }
     virtual ~C_AioRead() {}
     virtual void finish(int r);
-    void set_req(AioRead *req) {
+    void set_req(AioObjectRead *req) {
       m_req = req;
     }
   private:
-    AioRead *m_req;
+    AioObjectRead *m_req;
   };
 
   class C_CacheRead : public Context {
   public:
-    explicit C_CacheRead(ImageCtx *ictx, AioRead *req)
+    explicit C_CacheRead(ImageCtx *ictx, AioObjectRead *req)
       : m_image_ctx(*ictx), m_req(req), m_enqueued(false) {}
     virtual void complete(int r);
   protected:
     virtual void finish(int r);
   private:
     ImageCtx &m_image_ctx;
-    AioRead *m_req;
+    AioObjectRead *m_req;
     bool m_enqueued;
   };
 }

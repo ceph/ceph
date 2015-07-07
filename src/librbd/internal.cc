@@ -17,7 +17,7 @@
 #include "cls/rbd/cls_rbd_client.h"
 
 #include "librbd/AioCompletion.h"
-#include "librbd/AioRequest.h"
+#include "librbd/AioObjectRequest.h"
 #include "librbd/AsyncFlattenRequest.h"
 #include "librbd/AsyncResizeRequest.h"
 #include "librbd/AsyncTrimRequest.h"
@@ -3238,7 +3238,7 @@ reprotect_and_return_err:
 
   void rados_req_cb(rados_completion_t c, void *arg)
   {
-    AioRequest *req = reinterpret_cast<AioRequest *>(arg);
+    AioObjectRequest *req = reinterpret_cast<AioObjectRequest *>(arg);
     req->complete(rados_aio_get_return_value(c));
   }
 
@@ -3431,8 +3431,9 @@ reprotect_and_return_err:
       if (ictx->object_cacher) {
 	ictx->write_to_cache(p->oid, bl, p->length, p->offset, req_comp, op_flags);
       } else {
-	AioWrite *req = new AioWrite(ictx, p->oid.name, p->objectno, p->offset,
-				     bl, snapc, req_comp);
+	AioObjectWrite *req = new AioObjectWrite(ictx, p->oid.name, p->objectno,
+                                                 p->offset, bl, snapc,
+                                                 req_comp);
 
 	req->set_op_flags(op_flags);
 	req->send();
@@ -3558,20 +3559,21 @@ reprotect_and_return_err:
       ldout(cct, 20) << " oid " << p->oid << " " << p->offset << "~" << p->length
 		     << " from " << p->buffer_extents << dendl;
       C_AioRequest *req_comp = new C_AioRequest(cct, c);
-      AbstractWrite *req;
+      AioObjectRequest *req;
 
       if (p->length == ictx->layout.fl_object_size) {
-	req = new AioRemove(ictx, p->oid.name, p->objectno, snapc, req_comp);
+	req = new AioObjectRemove(ictx, p->oid.name, p->objectno, snapc,
+                                  req_comp);
       } else if (p->offset + p->length == ictx->layout.fl_object_size) {
-	req = new AioTruncate(ictx, p->oid.name, p->objectno, p->offset, snapc,
-                              req_comp);
+	req = new AioObjectTruncate(ictx, p->oid.name, p->objectno, p->offset,
+                                    snapc, req_comp);
       } else {
 	if(ictx->cct->_conf->rbd_skip_partial_discard) {
 	  delete req_comp;
 	  continue;
 	}
-	req = new AioZero(ictx, p->oid.name, p->objectno, p->offset, p->length,
-			  snapc, req_comp);
+	req = new AioObjectZero(ictx, p->oid.name, p->objectno, p->offset,
+                                p->length, snapc, req_comp);
       }
 
       req->send();
@@ -3591,7 +3593,7 @@ reprotect_and_return_err:
 
   void rbd_req_cb(completion_t cb, void *arg)
   {
-    AioRequest *req = reinterpret_cast<AioRequest *>(arg);
+    AioObjectRequest *req = reinterpret_cast<AioObjectRequest *>(arg);
     AioCompletion *comp = reinterpret_cast<AioCompletion *>(cb);
     req->complete(comp->get_return_value());
   }
@@ -3726,9 +3728,10 @@ reprotect_and_return_err:
                              << dendl;
 
 	C_AioRead *req_comp = new C_AioRead(ictx->cct, c);
-	AioRead *req = new AioRead(ictx, q->oid.name, q->objectno, q->offset,
-                                   q->length, q->buffer_extents, snap_id, true,
-                                   req_comp, op_flags);
+	AioObjectRead *req = new AioObjectRead(ictx, q->oid.name, q->objectno,
+                                               q->offset, q->length,
+                                               q->buffer_extents, snap_id, true,
+                                               req_comp, op_flags);
 	req_comp->set_req(req);
 
 	if (ictx->object_cacher) {

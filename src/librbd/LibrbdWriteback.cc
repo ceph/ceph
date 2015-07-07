@@ -11,7 +11,7 @@
 #include "include/rados/librados.hpp"
 #include "include/rbd/librbd.hpp"
 
-#include "librbd/AioRequest.h"
+#include "librbd/AioObjectRequest.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/internal.h"
 #include "librbd/LibrbdWriteback.h"
@@ -159,13 +159,13 @@ namespace librbd {
   {
     assert(m_ictx->owner_lock.is_locked());
     uint64_t object_no = oid_to_object_no(oid.name, m_ictx->object_prefix);
-    
+
     write_result_d *result = new write_result_d(oid.name, oncommit);
     m_writes[oid.name].push(result);
     ldout(m_ictx->cct, 20) << "write will wait for result " << result << dendl;
     C_OrderedWrite *req_comp = new C_OrderedWrite(m_ictx->cct, result, this);
-    AioWrite *req = new AioWrite(m_ictx, oid.name, object_no, off, bl, snapc,
-                                 req_comp);
+    AioObjectWrite *req = new AioObjectWrite(m_ictx, oid.name, object_no, off,
+                                             bl, snapc, req_comp);
     req->send();
     return ++m_tid;
   }
