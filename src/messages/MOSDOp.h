@@ -326,34 +326,6 @@ struct ceph_osd_request_head {
 	::decode(pgid, p);
       }
 
-      ::decode(oid, p);
-
-      //::decode(ops, p);
-      __u16 num_ops;
-      ::decode(num_ops, p);
-      ops.resize(num_ops);
-      for (unsigned i = 0; i < num_ops; i++)
-	::decode(ops[i].op, p);
-
-      ::decode(snapid, p);
-      ::decode(snap_seq, p);
-      ::decode(snaps, p);
-
-      if (header.version >= 4)
-	::decode(retry_attempt, p);
-      else
-	retry_attempt = -1;
-
-      if (header.version >= 5)
-	::decode(features, p);
-      else
-	features = 0;
-
-      OSDOp::split_osd_op_vector_in_data(ops, data);
-
-      // In old versions, final decoding is done in first step
-      finalDecoded = true;
-
     } else { // Current version is 6
       // new, splitted decode to partial and final
       ::decode(pgid, p);
@@ -371,27 +343,56 @@ struct ceph_osd_request_head {
     if (finalDecoded)
       return; //Message is already final decoded
 
-    ::decode(client_inc, p);
-    ::decode(mtime, p);
-    ::decode(reassert_version, p);
-    ::decode(oloc, p);
-    ::decode(oid, p);
+    if (header.version < 6) {
+      ::decode(oid, p);
 
-    __u16 num_ops;
-    ::decode(num_ops, p);
-    ops.resize(num_ops);
-    for (unsigned i = 0; i < num_ops; i++)
-      ::decode(ops[i].op, p);
+      //::decode(ops, p);
+      __u16 num_ops;
+      ::decode(num_ops, p);
+      ops.resize(num_ops);
+      for (unsigned i = 0; i < num_ops; i++)
+        ::decode(ops[i].op, p);
 
-    ::decode(snapid, p);
-    ::decode(snap_seq, p);
-    ::decode(snaps, p);
+      ::decode(snapid, p);
+      ::decode(snap_seq, p);
+      ::decode(snaps, p);
 
-    ::decode(retry_attempt, p);
+      if (header.version >= 4)
+        ::decode(retry_attempt, p);
+      else
+        retry_attempt = -1;
 
-    ::decode(features, p);
+      if (header.version >= 5)
+        ::decode(features, p);
+      else
+        features = 0;
 
-    OSDOp::split_osd_op_vector_in_data(ops, data);
+      OSDOp::split_osd_op_vector_in_data(ops, data);
+
+    } else {
+      ::decode(client_inc, p);
+      ::decode(mtime, p);
+      ::decode(reassert_version, p);
+      ::decode(oloc, p);
+      ::decode(oid, p);
+
+      __u16 num_ops;
+      ::decode(num_ops, p);
+      ops.resize(num_ops);
+      for (unsigned i = 0; i < num_ops; i++)
+        ::decode(ops[i].op, p);
+
+      ::decode(snapid, p);
+      ::decode(snap_seq, p);
+      ::decode(snaps, p);
+
+      ::decode(retry_attempt, p);
+
+      ::decode(features, p);
+
+      OSDOp::split_osd_op_vector_in_data(ops, data);
+
+    }
 
     finalDecoded = true;
   }
