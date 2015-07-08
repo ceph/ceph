@@ -19,7 +19,13 @@
 #include <boost/spirit/include/phoenix_operator.hpp>
 #include <boost/spirit/include/phoenix.hpp>
 
+#include "common/debug.h"
 #include "MDSAuthCaps.h"
+
+#define dout_subsys ceph_subsys_mds
+
+#undef dout_prefix
+#define dout_prefix *_dout << "nish-debug "
 
 using std::ostream;
 using std::string;
@@ -157,7 +163,7 @@ void MDSAuthCaps::set_allow_all()
     grants.push_back(MDSCapGrant(MDSCapSpec(true, true, true), MDSCapMatch()));
 }
 
-bool MDSAuthCaps::parse(const std::string& str, ostream *err)
+bool MDSAuthCaps::parse(CephContext *c, const std::string& str, ostream *err)
 {
   // Special case for legacy caps
   if (str == "allow") {
@@ -171,6 +177,7 @@ bool MDSAuthCaps::parse(const std::string& str, ostream *err)
   std::string::const_iterator end = str.end();
 
   bool r = qi::phrase_parse(iter, end, g, ascii::space, *this);
+  cct = c;  // set after parser self-assignment
   if (r && iter == end) {
     return true;
   } else {
