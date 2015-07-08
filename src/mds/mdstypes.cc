@@ -551,7 +551,7 @@ void old_inode_t::generate_test_instances(list<old_inode_t*>& ls)
  */
 void fnode_t::encode(bufferlist &bl) const
 {
-  ENCODE_START(3, 2, bl);
+  ENCODE_START(3, 3, bl);
   ::encode(version, bl);
   ::encode(snap_purged_thru, bl);
   ::encode(fragstat, bl);
