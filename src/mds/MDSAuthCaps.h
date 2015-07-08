@@ -20,6 +20,7 @@
 #include <string>
 #include <sstream>
 #include "include/types.h"
+#include "common/debug.h"
 
 // unix-style capabilities
 enum {
@@ -27,6 +28,8 @@ enum {
   MAY_WRITE = 2,
   MAY_EXECUTE = 4,
 };
+
+class CephContext;
 
 // what we can do
 struct MDSCapSpec {
@@ -88,14 +91,19 @@ struct MDSCapGrant {
 
 class MDSAuthCaps
 {
+  CephContext *cct;
   std::vector<MDSCapGrant> grants;
 
 public:
-  MDSAuthCaps() {}
-  MDSAuthCaps(const std::vector<MDSCapGrant> &grants_) : grants(grants_) {}
+  MDSAuthCaps(CephContext *cct_=NULL)
+    : cct(cct_) { }
+
+  // this ctor is used by spirit/phoenix; doesn't need cct.
+  MDSAuthCaps(const std::vector<MDSCapGrant> &grants_)
+    : cct(NULL), grants(grants_) { }
 
   void set_allow_all();
-  bool parse(const std::string &str, std::ostream *err);
+  bool parse(CephContext *cct, const std::string &str, std::ostream *err);
 
   bool allow_all() const;
   bool is_capable(const std::string &inode_path,
