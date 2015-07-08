@@ -3,6 +3,7 @@
 
 #include "KeyValueDB.h"
 #include "LevelDBStore.h"
+#include "PluggableDBStore.h"
 #ifdef HAVE_LIBROCKSDB
 #include "RocksDBStore.h"
 #endif
@@ -15,6 +16,9 @@ KeyValueDB *KeyValueDB::create(CephContext *cct, const string& type,
 {
   if (type == "leveldb") {
     return new LevelDBStore(cct, dir);
+  }
+  if (type == "pluggabledb") {
+    return new PluggableDBStore(cct);
   }
 #ifdef HAVE_KINETIC
   if (type == "kinetic" &&
@@ -35,6 +39,9 @@ int KeyValueDB::test_init(const string& type, const string& dir)
 {
   if (type == "leveldb") {
     return LevelDBStore::_test_init(dir);
+  }
+  if (type == "pluggabledb") {
+    return PluggableDBStore::_test_init();
   }
 #ifdef HAVE_KINETIC
   if (type == "kinetic") {

@@ -17,13 +17,13 @@ libos_la_SOURCES = \
 	os/IndexManager.cc \
 	os/JournalingObjectStore.cc \
 	os/LevelDBStore.cc \
+	os/PluggableDBStore.cc \
 	os/LFNIndex.cc \
 	os/MemStore.cc \
 	os/KeyValueDB.cc \
 	os/KeyValueStore.cc \
 	os/ObjectStore.cc \
 	os/WBThrottle.cc \
-        os/KeyValueDB.cc \
 	common/TrackedOp.cc
 
 if LINUX
@@ -64,6 +64,9 @@ noinst_HEADERS += \
 	os/JournalingObjectStore.h \
 	os/KeyValueDB.h \
 	os/LevelDBStore.h \
+	os/PluggableDBStore.h \
+	os/PluggableDBInterfaces.h \
+	os/PluggableDBIterator.h \
 	os/LFNIndex.h \
 	os/MemStore.h \
 	os/KeyValueStore.h \

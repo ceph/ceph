@@ -858,6 +858,7 @@ OPTION(keyvaluestore_max_expected_write_size, OPT_U64, 1ULL << 24) // bytes
 OPTION(keyvaluestore_header_cache_size, OPT_INT, 4096)    // Header cache size
 OPTION(keyvaluestore_backend, OPT_STR, "leveldb")
 OPTION(keyvaluestore_dump_file, OPT_STR, "")         // file onto which store transaction dumps
+OPTION(keyvaluestore_backend_library, OPT_STR, "")
 
 // max bytes to search ahead in journal searching for corruption
 OPTION(journal_max_corrupt_search, OPT_U64, 10<<20)
