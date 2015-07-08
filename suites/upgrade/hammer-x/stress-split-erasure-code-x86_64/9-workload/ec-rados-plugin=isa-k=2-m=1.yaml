@@ -11,6 +11,7 @@ tasks:
       m: 1
       technique: reed_sol_van
       ruleset-failure-domain: osd
+    write_append_excl: false
     op_weights:
       read: 100
       write: 0
