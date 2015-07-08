@@ -178,6 +178,7 @@ int XioConnection::passive_setup()
 
   /* notify hook */
   msgr->ms_deliver_handle_accept(this);
+  msgr->ms_deliver_handle_fast_accept(this);
 
   /* try to insert in conns_entity_map */
   msgr->try_insert(this);

@@ -461,6 +461,7 @@ int XioMessenger::session_event(struct xio_session *session,
 
     /* notify hook */
     this->ms_deliver_handle_connect(xcon);
+    this->ms_deliver_handle_fast_connect(xcon);
   }
   break;
 
