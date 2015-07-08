@@ -119,14 +119,10 @@ int RGWHTTPClient::process(const char *method, const char *url)
 
 struct multi_req_data {
   CURL *easy_handle;
-  CURLM *multi_handle;
   curl_slist *h;
 
-  multi_req_data() : easy_handle(NULL), multi_handle(NULL), h(NULL) {}
+  multi_req_data() : easy_handle(NULL), h(NULL) {}
   ~multi_req_data() {
-    if (multi_handle)
-      curl_multi_cleanup(multi_handle);
-
     if (easy_handle)
       curl_easy_cleanup(easy_handle);
 
@@ -138,24 +134,14 @@ struct multi_req_data {
 int RGWHTTPClient::init_async(const char *method, const char *url, void **handle)
 {
   CURL *easy_handle;
-  CURLM *multi_handle;
   multi_req_data *req_data = new multi_req_data;
   *handle = (void *)req_data;
 
   char error_buf[CURL_ERROR_SIZE];
 
-  multi_handle = curl_multi_init();
   easy_handle = curl_easy_init();
 
-  req_data->multi_handle = multi_handle;
   req_data->easy_handle = easy_handle;
-
-  CURLMcode mstatus = curl_multi_add_handle(multi_handle, easy_handle);
-  if (mstatus) {
-    dout(0) << "ERROR: failed on curl_multi_add_handle, status=" << mstatus << dendl;
-    delete req_data;
-    return -EIO;
-  }
 
   dout(20) << "sending request to " << url << dendl;
 
@@ -181,6 +167,7 @@ int RGWHTTPClient::init_async(const char *method, const char *url, void **handle
   if (has_send_len) {
     curl_easy_setopt(easy_handle, CURLOPT_INFILESIZE, (void *)send_len); 
   }
+  curl_easy_setopt(easy_handle, CURLOPT_PRIVATE, (void *)req_data);
 
   return 0;
 }
@@ -239,21 +226,47 @@ static int do_curl_wait(CephContext *cct, CURLM *handle)
 
 #endif
 
-int RGWHTTPClient::process_request(void *handle, bool wait_for_data, bool *done)
+RGWHTTPManager::RGWHTTPManager(CephContext *_cct) : cct(_cct) {
+  multi_handle = (void *)curl_multi_init();
+}
+
+RGWHTTPManager::~RGWHTTPManager() {
+  if (multi_handle)
+    curl_multi_cleanup((CURLM *)multi_handle);
+}
+
+int RGWHTTPManager::init_async(RGWHTTPClient *client, const char *method, const char *url, void **handle)
 {
-  multi_req_data *req_data = static_cast<multi_req_data *>(handle);
+  int ret = client->init_async(method, url, handle);
+  if (ret < 0) {
+    return ret;
+  }
+
+  multi_req_data *req_data = static_cast<multi_req_data *>(*handle);
+
+  CURLMcode mstatus = curl_multi_add_handle((CURLM *)multi_handle, req_data->easy_handle);
+  if (mstatus) {
+    dout(0) << "ERROR: failed on curl_multi_add_handle, status=" << mstatus << dendl;
+    delete req_data;
+    return -EIO;
+  }
+  return 0;
+}
+
+int RGWHTTPManager::process_requests(bool wait_for_data, bool *done)
+{
   int still_running;
   int mstatus;
 
   do {
     if (wait_for_data) {
-      int ret = do_curl_wait(cct, req_data->multi_handle);
+      int ret = do_curl_wait(cct, (CURLM *)multi_handle);
       if (ret < 0) {
         return ret;
       }
     }
 
-    mstatus = curl_multi_perform(req_data->multi_handle, &still_running);
+    mstatus = curl_multi_perform((CURLM *)multi_handle, &still_running);
     dout(20) << "curl_multi_perform returned: " << mstatus << dendl;
     switch (mstatus) {
       case CURLM_OK:
@@ -264,8 +277,11 @@ int RGWHTTPClient::process_request(void *handle, bool wait_for_data, bool *done)
     }
     int msgs_left;
     CURLMsg *msg;
-    while ((msg = curl_multi_info_read(req_data->multi_handle, &msgs_left))) {
+    while ((msg = curl_multi_info_read((CURLM *)multi_handle, &msgs_left))) {
       if (msg->msg == CURLMSG_DONE) {
+	CURL *e = msg->easy_handle;
+	multi_req_data *req_data;
+	curl_easy_getinfo(e, CURLINFO_PRIVATE, (void **)&req_data);
         switch (msg->data.result) {
           case CURLE_OK:
             break;
@@ -282,15 +298,15 @@ int RGWHTTPClient::process_request(void *handle, bool wait_for_data, bool *done)
   return 0;
 }
 
-int RGWHTTPClient::complete_request(void *handle)
+int RGWHTTPManager::complete_requests()
 {
   bool done;
   int ret;
   do {
-    ret = process_request(handle, true, &done);
+    ret = process_requests(true, &done);
   } while (!done && !ret);
-  multi_req_data *req_data = static_cast<multi_req_data *>(handle);
-  delete req_data;
 
   return ret;
 }
+
+

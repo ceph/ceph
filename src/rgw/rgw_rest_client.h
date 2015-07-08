@@ -60,13 +60,14 @@ class RGWRESTStreamWriteRequest : public RGWRESTSimpleRequest {
   list<bufferlist> pending_send;
   void *handle;
   RGWGetDataCB *cb;
+  RGWHTTPManager http_manager;
 public:
   int add_output_data(bufferlist& bl);
   int send_data(void *ptr, size_t len);
 
   RGWRESTStreamWriteRequest(CephContext *_cct, string& _url, list<pair<string, string> > *_headers,
                 list<pair<string, string> > *_params) : RGWRESTSimpleRequest(_cct, _url, _headers, _params),
-                lock("RGWRESTStreamWriteRequest"), handle(NULL), cb(NULL) {}
+                lock("RGWRESTStreamWriteRequest"), handle(NULL), cb(NULL), http_manager(_cct) {}
   ~RGWRESTStreamWriteRequest();
   int put_obj_init(RGWAccessKey& key, rgw_obj& obj, uint64_t obj_size, map<string, bufferlist>& attrs);
   int complete(string& etag, time_t *mtime);
@@ -80,6 +81,7 @@ class RGWRESTStreamReadRequest : public RGWRESTSimpleRequest {
   bufferlist in_data;
   size_t chunk_ofs;
   size_t ofs;
+  RGWHTTPManager http_manager;
 protected:
   int handle_header(const string& name, const string& val);
 public:
@@ -89,7 +91,7 @@ public:
   RGWRESTStreamReadRequest(CephContext *_cct, string& _url, RGWGetDataCB *_cb, list<pair<string, string> > *_headers,
                 list<pair<string, string> > *_params) : RGWRESTSimpleRequest(_cct, _url, _headers, _params),
                 lock("RGWRESTStreamReadRequest"), cb(_cb),
-                chunk_ofs(0), ofs(0) {}
+                chunk_ofs(0), ofs(0), http_manager(_cct) {}
   ~RGWRESTStreamReadRequest() {}
   int get_obj(RGWAccessKey& key, map<string, string>& extra_headers, rgw_obj& obj);
   int get_resource(RGWAccessKey& key, map<string, string>& extra_headers, const string& resource);
