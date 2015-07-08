@@ -151,7 +151,7 @@ def get_summary(owner, description):
 
 def validate_tasks(config):
     """
-    Ensures that config tasks do not include 'kernel'.
+    Ensures that config tasks is a list and doesn't include 'kernel'.
 
     Returns the original tasks key if found.  If not, returns an
     empty list.
@@ -161,8 +161,11 @@ def validate_tasks(config):
         # return the default value for tasks
         return []
 
+    msg = "Expected list in 'tasks'; instead got: {0}".format(config['tasks'])
+    assert isinstance(config['tasks'], list), msg
+
     for task in config['tasks']:
-        msg = ('kernel installation shouldn be a base-level item, not part ' +
+        msg = ('kernel installation should be a base-level item, not part ' +
                'of the tasks list')
         assert 'kernel' not in task, msg
 
