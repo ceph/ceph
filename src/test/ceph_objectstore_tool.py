@@ -20,14 +20,21 @@ except ImportError:
             raise error
         return output
 
-import subprocess
 import os
+import subprocess
+try:
+    from subprocess import DEVNULL
+except ImportError:
+    subprocess.DEVNULL = open(os.devnull, "w")
+
+import math
 import time
 import sys
 import re
 import string
 import logging
 import json
+import tempfile
 
 logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.WARNING)
 
@@ -354,6 +361,103 @@ def check_data(DATADIR, TMPFILE, OSDDIR, SPLIT_NAME):
                 logging.error("{file} data not imported properly into {obj}".format(file=file, obj=obj_loc))
                 ERRORS += 1
     return ERRORS, repcount
+
+
+def set_osd_weight(CFSD_PREFIX, osd_ids, osd_path, weight):
+    print "Testing get-osdmap and set-osdmap"
+    # change the weight of osd.0 to math.pi in the newest osdmap of given osd
+    osdmap_file = tempfile.NamedTemporaryFile()
+    cmd = (CFSD_PREFIX + "--op get-osdmap --file {osdmap_file}").format(osd=osd_path,
+                                                                        osdmap_file=osdmap_file.name)
+    output = check_output(cmd, shell=True)
+    epoch = int(re.findall('#(\d+)', output)[0])
+    
+    new_crush_file = tempfile.NamedTemporaryFile(delete=False)
+    old_crush_file = tempfile.NamedTemporaryFile(delete=False)
+    ret = call("./osdmaptool --export-crush {crush_file} {osdmap_file}".format(osdmap_file=osdmap_file.name,
+                                                                          crush_file=old_crush_file.name),
+               stdout=subprocess.DEVNULL,
+               stderr=subprocess.DEVNULL,
+               shell=True)
+    assert(ret == 0)
+
+    for osd_id in osd_ids:
+        cmd = "./crushtool -i {crush_file} --reweight-item osd.{osd} {weight} -o {new_crush_file}".format(osd=osd_id,
+                                                                                                          crush_file=old_crush_file.name,
+                                                                                                          weight=weight,
+                                                                                                          new_crush_file=new_crush_file.name)
+        ret = call(cmd, stdout=subprocess.DEVNULL, shell=True)
+        assert(ret == 0)
+        old_crush_file, new_crush_file = new_crush_file, old_crush_file
+
+    # change them back, since we don't need to preapre for another round
+    old_crush_file, new_crush_file = new_crush_file, old_crush_file
+    old_crush_file.close()
+
+    ret = call("./osdmaptool --import-crush {crush_file} {osdmap_file}".format(osdmap_file=osdmap_file.name,
+                                                                               crush_file=new_crush_file.name),
+               stdout=subprocess.DEVNULL,
+               stderr=subprocess.DEVNULL,
+               shell=True)
+    assert(ret == 0)
+    # osdmaptool increases the epoch of the changed osdmap, so we need to force the tool
+    # to use use a different epoch than the one in osdmap
+    cmd = CFSD_PREFIX + "--op set-osdmap --file {osdmap_file} --epoch {epoch} --force"
+    cmd = cmd.format(osd=osd_path, osdmap_file=osdmap_file.name, epoch=epoch)
+    ret = call(cmd, stdout=subprocess.DEVNULL, shell=True)
+    return ret == 0
+
+def get_osd_weights(CFSD_PREFIX, osd_ids, osd_path):
+    osdmap_file = tempfile.NamedTemporaryFile()
+    cmd = (CFSD_PREFIX + "--op get-osdmap --file {osdmap_file}").format(osd=osd_path,
+                                                                        osdmap_file=osdmap_file.name)
+    ret = call(cmd, stdout=subprocess.DEVNULL, shell=True)
+    if ret != 0:
+        return None
+    # we have to read the weights from the crush map, even we can query the weights using
+    # osdmaptool, but please keep in mind, they are different:
+    #    item weights in crush map versus weight associated with each osd in osdmap
+    crush_file = tempfile.NamedTemporaryFile(delete=False)
+    ret = call("./osdmaptool --export-crush {crush_file} {osdmap_file}".format(osdmap_file=osdmap_file.name,
+                                                                               crush_file=crush_file.name),
+               stdout=subprocess.DEVNULL,
+               shell=True)
+    assert(ret == 0)
+    output = check_output("./crushtool --tree -i {crush_file} | tail -n {num_osd}".format(crush_file=crush_file.name,
+                                                                                          num_osd=len(osd_ids)),
+                          stderr=subprocess.DEVNULL,
+                          shell=True)
+    weights = []
+    for line in output.strip().split('\n'):
+        osd_id, weight, osd_name = re.split('\s+', line)
+        weights.append(float(weight))
+    return weights
+
+
+def test_get_set_osdmap(CFSD_PREFIX, osd_ids, osd_paths):
+    print "Testing get-osdmap and set-osdmap"
+    errors = 0
+    kill_daemons()
+    weight = 1 / math.e           # just some magic number in [0, 1]
+    changed = []
+    for osd_path in osd_paths:
+        if set_osd_weight(CFSD_PREFIX, osd_ids, osd_path, weight):
+            changed.append(osd_path)
+        else:
+            logging.warning("Failed to change the weights: {0}".format(osd_path))
+    # i am pissed off if none of the store gets changed
+    if not changed:
+        errors += 1
+
+    for osd_path in changed:
+        weights = get_osd_weights(CFSD_PREFIX, osd_ids, osd_path)
+        if not weights:
+            errors += 1
+            continue
+        if any(abs(w - weight) > 1e-5 for w in weights):
+            logging.warning("Weight is not changed: {0} != {1}".format(weights, weight))
+            errors += 1
+    return errors
 
 
 def main(argv):
@@ -1219,6 +1323,9 @@ def main(argv):
     call("/bin/rm -rf {dir}".format(dir=TESTDIR), shell=True)
     call("/bin/rm -rf {dir}".format(dir=DATADIR), shell=True)
 
+    # vstart() starts 4 OSDs
+    ERRORS += test_get_set_osdmap(CFSD_PREFIX, range(4), ALLOSDS)
+    
     if ERRORS == 0:
         print "TEST PASSED"
         return 0
