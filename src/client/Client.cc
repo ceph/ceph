@@ -254,8 +254,7 @@ void Client::tear_down_cache()
        ++it) {
     Fh *fh = it->second;
     ldout(cct, 1) << "tear_down_cache forcing close of fh " << it->first << " ino " << fh->inode->ino << dendl;
-    put_inode(fh->inode);
-    delete fh;
+    _release_fh(fh);
   }
   fd_map.clear();
 
@@ -6697,10 +6696,18 @@ int Client::_release_fh(Fh *f)
     ldout(cct, 10) << "_release_fh " << f << " on inode " << *in << " no async_err state" << dendl;
   }
 
-  put_inode(in);
-  delete f;
+  _put_fh(f);
 
   return err;
+}
+
+void Client::_put_fh(Fh *f)
+{
+  int left = f->put();
+  if (!left) {
+    put_inode(f->inode);
+    delete f;
+  }
 }
 
 int Client::_open(Inode *in, int flags, mode_t mode, Fh **fhp, int uid, int gid)
@@ -7042,10 +7049,16 @@ done:
   return r < 0 ? r : bl->length();
 }
 
+Client::C_Readahead::C_Readahead(Client *c, Fh *f) :
+  client(c), f(f) {
+    f->get();
+}
+
 void Client::C_Readahead::finish(int r) {
   lgeneric_subdout(client->cct, client, 20) << "client." << client->get_nodeid() << " " << "C_Readahead on " << f->inode << dendl;
   client->put_cap_ref(f->inode, CEPH_CAP_FILE_RD | CEPH_CAP_FILE_CACHE);
   f->readahead.dec_pending();
+  client->_put_fh(f);
 }
 
 int Client::_read_async(Fh *f, uint64_t off, uint64_t len, bufferlist *bl)
