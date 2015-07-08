@@ -143,7 +143,8 @@ namespace librbd {
   int rm_snap(ImageCtx *ictx, const char *snap_name, uint64_t snap_id);
   int rename_snap(ImageCtx *ictx, uint64_t src_snap_id, const char *dst_name);
   int refresh_parent(ImageCtx *ictx);
-  int ictx_check(ImageCtx *ictx, bool owner_locked=false);
+  int ictx_check(ImageCtx *ictx);
+  int ictx_check(ImageCtx *ictx, const RWLock &owner_lock);
   int ictx_refresh(ImageCtx *ictx);
   int copy(ImageCtx *ictx, IoCtx& dest_md_ctx, const char *destname,
 	   ImageOptions& opts, ProgressContext &prog_ctx);
