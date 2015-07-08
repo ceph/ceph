@@ -49,21 +49,20 @@ void AioImageRequest::flush(ImageCtx *ictx, AioCompletion *c) {
 }
 
 void AioImageRequest::send() {
+  assert(m_image_ctx.owner_lock.is_locked());
+
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << get_request_type() << ": ictx=" << &m_image_ctx << ", "
                  << "completion=" << m_aio_comp <<  dendl;
 
   m_aio_comp->get();
-  int r = ictx_check(&m_image_ctx);
+  int r = ictx_check(&m_image_ctx, m_image_ctx.owner_lock);
   if (r < 0) {
     m_aio_comp->fail(cct, r);
     return;
   }
 
-  {
-    RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
-    execute_request();
-  }
+  execute_request();
 }
 
 
