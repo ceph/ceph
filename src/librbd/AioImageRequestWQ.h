@@ -22,6 +22,10 @@ public:
       m_writes_suspended(false), m_in_progress_writes(0), m_queued_writes(0) {
   }
 
+  ssize_t read(uint64_t off, size_t len, char *buf, int op_flags);
+  ssize_t write(uint64_t off, size_t len, const char *buf, int op_flags);
+  int discard(uint64_t off, uint64_t len);
+
   void aio_read(AioCompletion *c, uint64_t off, size_t len, char *buf,
                 bufferlist *pbl, int op_flags);
   void aio_write(AioCompletion *c, uint64_t off, size_t len, const char *buf,
@@ -62,6 +66,7 @@ private:
   uint32_t m_in_progress_writes;
   uint32_t m_queued_writes;
 
+  bool is_lock_required();
   void queue(AioImageRequest *req);
 };
 
