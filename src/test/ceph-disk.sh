@@ -17,7 +17,7 @@
 #
 source test/test_btrfs_common.sh
 
-PS4='${FUNCNAME[0]}: $LINENO: '
+PS4='${BASH_SOURCE[0]}:$LINENO: ${FUNCNAME[0]}:  '
 
 export PATH=.:$PATH # make sure program from sources are prefered
 DIR=test-ceph-disk

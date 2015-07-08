@@ -189,13 +189,15 @@ function test_teardown() {
 # @return 0 on success, 1 on error
 #
 function kill_daemons() {
+    local trace=$(shopt -q -o xtrace && echo true || echo false)
+    $trace && shopt -u -o xtrace
     local dir=$1
     local signal=${2:-KILL}
     local name_prefix=$3 # optional, osd, mon, osd.1
     local delays=${4:-0 0 1 1 1 2 3 5 5 5 10 10 20 60}
 
     local status=0
-    for pidfile in $(find $dir | grep $name_prefix'[^/]*\.pid') ; do
+    for pidfile in $(find $dir 2>/dev/null | grep $name_prefix'[^/]*\.pid') ; do
         pid=$(cat $pidfile)
         local send_signal=$signal
         local kill_complete=false
@@ -213,6 +215,7 @@ function kill_daemons() {
             status=1
         fi
     done
+    $trace && shopt -s -o xtrace
     return $status
 }
 
@@ -586,8 +589,10 @@ function get_osds() {
     local poolname=$1
     local objectname=$2
 
-    ceph --format xml osd map $poolname $objectname 2>/dev/null | \
-        $XMLSTARLET sel -t -m "//acting/osd" -v . -o ' '
+    local osds=$(ceph --format xml osd map $poolname $objectname 2>/dev/null | \
+        $XMLSTARLET sel -t -m "//acting/osd" -v . -o ' ')
+    # get rid of the trailing space
+    echo $osds
 }
 
 function test_get_osds() {
@@ -598,7 +603,7 @@ function test_get_osds() {
     run_osd $dir 0 || return 1
     run_osd $dir 1 || return 1
     wait_for_clean || return 1
-    get_osds rbd GROUP | grep --quiet '[0-1] [0-1] ' || return 1
+    get_osds rbd GROUP | grep --quiet '^[0-1] [0-1]$' || return 1
     teardown $dir || return 1
 }
 
@@ -1156,8 +1161,8 @@ function main() {
     local dir=testdir/$1
     shift
 
-    set -x
-    PS4='${FUNCNAME[0]}: $LINENO: '
+    shopt -s -o xtrace
+    PS4='${BASH_SOURCE[0]}:$LINENO: ${FUNCNAME[0]}:  '
 
     export PATH=:$PATH # make sure program from sources are prefered
 
@@ -1177,8 +1182,8 @@ function main() {
 #######################################################################
 
 function run_tests() {
-    set -x
-    PS4='${FUNCNAME[0]}: $LINENO: '
+    shopt -s -o xtrace
+    PS4='${BASH_SOURCE[0]}:$LINENO: ${FUNCNAME[0]}:  '
 
     export PATH=":$PATH"
     export CEPH_MON="127.0.0.1:7109"

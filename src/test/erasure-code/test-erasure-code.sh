@@ -86,7 +86,7 @@ function rados_put_get() {
     rm $dir/COPY
 
     #
-    # take out the first OSD used to store the object and
+    # take out an OSD used to store the object and
     # check the object can still be retrieved, which implies
     # recovery
     #
@@ -98,6 +98,57 @@ function rados_put_get() {
     diff $dir/ORIGINAL $dir/COPY || return 1
     ./ceph osd in ${initial_osds[$last]} || return 1
 
+    rm $dir/ORIGINAL
+}
+
+function rados_osds_out_in() {
+    local dir=$1
+    local poolname=$2
+    local objname=${3:-SOMETHING}
+
+
+    for marker in FFFF GGGG HHHH IIII ; do
+        printf "%*s" 1024 $marker
+    done > $dir/ORIGINAL
+
+    #
+    # get and put an object, compare they are equal
+    #
+    ./rados --pool $poolname put $objname $dir/ORIGINAL || return 1
+    ./rados --pool $poolname get $objname $dir/COPY || return 1
+    diff $dir/ORIGINAL $dir/COPY || return 1
+    rm $dir/COPY
+
+    #
+    # take out two OSDs used to store the object, wait for the cluster
+    # to be clean (i.e. all PG are clean and active) again which
+    # implies the PG have been moved to use the remaining OSDs.  Check
+    # the object can still be retrieved.
+    #
+    local osds_list=$(get_osds $poolname $objname)
+    local -a osds=($osds_list)
+    for osd in 0 1 ; do
+        ./ceph osd out ${osds[$osd]} || return 1
+    done
+    wait_for_clean || return 1
+    #
+    # verify the object is no longer mapped to the osds that are out
+    #
+    for osd in 0 1 ; do
+        ! get_osds $poolname $objname | grep '\<'${osds[$osd]}'\>' || return 1
+    done
+    ./rados --pool $poolname get $objname $dir/COPY || return 1
+    diff $dir/ORIGINAL $dir/COPY || return 1
+    #
+    # bring the osds back in, , wait for the cluster
+    # to be clean (i.e. all PG are clean and active) again which
+    # implies the PG go back to using the same osds as before
+    #
+    for osd in 0 1 ; do
+        ./ceph osd in ${osds[$osd]} || return 1
+    done
+    wait_for_clean || return 1
+    test "$osds_list" = "$(get_osds $poolname $objname)" || return 1
     rm $dir/ORIGINAL
 }
 
@@ -173,6 +224,7 @@ function TEST_rados_put_get_jerasure() {
         || return 1
 
     rados_put_get $dir $poolname || return 1
+    rados_osds_out_in $dir $poolname || return 1
 
     delete_pool $poolname
     ./ceph osd erasure-code-profile rm $profile
