@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 #include "librbd/ImageWatcher.h"
 #include "librbd/AioCompletion.h"
+#include "librbd/AioImageRequestWQ.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/internal.h"
 #include "librbd/ObjectMap.h"
@@ -34,11 +35,10 @@ ImageWatcher::ImageWatcher(ImageCtx &image_ctx)
   : m_image_ctx(image_ctx),
     m_watch_lock(unique_lock_name("librbd::ImageWatcher::m_watch_lock", this)),
     m_watch_ctx(*this), m_watch_handle(0),
-    m_watch_state(WATCH_STATE_UNREGISTERED),
+    m_watch_state(WATCH_STATE_UNREGISTERED), m_aio_ops_pending(false),
     m_lock_owner_state(LOCK_OWNER_STATE_NOT_LOCKED),
     m_task_finisher(new TaskFinisher<Task>(*m_image_ctx.cct)),
     m_async_request_lock(unique_lock_name("librbd::ImageWatcher::m_async_request_lock", this)),
-    m_aio_request_lock(unique_lock_name("librbd::ImageWatcher::m_aio_request_lock", this)),
     m_owner_client_id_lock(unique_lock_name("librbd::ImageWatcher::m_owner_client_id_lock", this))
 {
 }
@@ -93,11 +93,6 @@ int ImageWatcher::register_watch() {
 int ImageWatcher::unregister_watch() {
   ldout(m_image_ctx.cct, 10) << this << " unregistering image watcher" << dendl;
 
-  {
-    Mutex::Locker l(m_aio_request_lock);
-    assert(m_aio_requests.empty());
-  }
-
   cancel_async_requests();
   m_task_finisher->cancel_all();
 
@@ -113,6 +108,16 @@ int ImageWatcher::unregister_watch() {
   librados::Rados rados(m_image_ctx.md_ctx);
   rados.watch_flush();
   return r;
+}
+
+void ImageWatcher::refresh() {
+  assert(m_image_ctx.owner_lock.is_locked());
+
+  if (is_lock_supported() && !is_lock_owner()) {
+    m_image_ctx.aio_work_queue->suspend_writes();
+  } else if (!is_lock_supported()) {
+    m_image_ctx.aio_work_queue->resume_writes();
+  }
 }
 
 int ImageWatcher::try_lock() {
@@ -182,33 +187,12 @@ int ImageWatcher::try_lock() {
   return 0;
 }
 
-void ImageWatcher::request_lock(
-    const boost::function<void(AioCompletion*)>& restart_op, AioCompletion* c) {
-  assert(m_image_ctx.owner_lock.is_locked());
-  assert(m_lock_owner_state == LOCK_OWNER_STATE_NOT_LOCKED);
-
+void ImageWatcher::request_lock() {
   {
-    Mutex::Locker l(m_aio_request_lock);
-    bool request_pending = !m_aio_requests.empty();
-    ldout(m_image_ctx.cct, 15) << this << " queuing aio request: " << c
-			       << dendl;
-
-    c->get();
-    m_aio_requests.push_back(std::make_pair(restart_op, c));
-    if (request_pending) {
-      return;
-    }
+    RWLock::WLocker watch_locker(m_watch_lock);
+    m_aio_ops_pending = true;
   }
-
-  RWLock::RLocker l(m_watch_lock);
-  if (m_watch_state == WATCH_STATE_REGISTERED) {
-    ldout(m_image_ctx.cct, 15) << this << " requesting exclusive lock" << dendl;
-
-    // run notify request in finisher to avoid blocking aio path
-    FunctionContext *ctx = new FunctionContext(
-      boost::bind(&ImageWatcher::notify_request_lock, this));
-    m_task_finisher->queue(TASK_CODE_REQUEST_LOCK, ctx);
-  }
+  schedule_request_lock(false);
 }
 
 bool ImageWatcher::try_request_lock() {
@@ -321,6 +305,8 @@ int ImageWatcher::lock() {
   bufferlist bl;
   ::encode(NotifyMessage(AcquiredLockPayload(get_client_id())), bl);
 
+  m_image_ctx.aio_work_queue->resume_writes();
+
   // send the notification when we aren't holding locks
   FunctionContext *ctx = new FunctionContext(
     boost::bind(&IoCtx::notify2, &m_image_ctx.md_ctx, m_image_ctx.header_oid,
@@ -364,6 +350,10 @@ int ImageWatcher::unlock()
     m_image_ctx.object_map.unlock();
   }
 
+  if (is_lock_supported()) {
+    m_image_ctx.aio_work_queue->suspend_writes();
+  }
+
   Mutex::Locker l(m_owner_client_id_lock);
   set_owner_client_id(ClientId());
 
@@ -383,8 +373,10 @@ bool ImageWatcher::release_lock()
   }
   prepare_unlock();
   m_image_ctx.owner_lock.put_write();
+
   m_image_ctx.cancel_async_requests();
   m_image_ctx.flush_async_operations();
+  m_image_ctx.aio_work_queue->suspend_writes();
 
   {
     RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
@@ -399,6 +391,22 @@ bool ImageWatcher::release_lock()
 
   unlock();
   return true;
+}
+
+void ImageWatcher::flag_aio_ops_pending() {
+  RWLock::WLocker watch_locker(m_watch_lock);
+  if (!m_aio_ops_pending) {
+    ldout(m_image_ctx.cct, 20) << this << " pending AIO ops" << dendl;
+    m_aio_ops_pending = true;
+  }
+}
+
+void ImageWatcher::clear_aio_ops_pending() {
+  RWLock::WLocker watch_locker(m_watch_lock);
+  if (m_aio_ops_pending) {
+    ldout(m_image_ctx.cct, 20) << this << " no pending AIO ops" << dendl;
+    m_aio_ops_pending = false;
+  }
 }
 
 void ImageWatcher::assert_header_locked(librados::ObjectWriteOperation *op) {
@@ -546,39 +554,6 @@ bool ImageWatcher::decode_lock_cookie(const std::string &tag,
   return true;
 }
 
-void ImageWatcher::schedule_retry_aio_requests(bool use_timer) {
-  m_task_finisher->cancel(TASK_CODE_REQUEST_LOCK);
-  Context *ctx = new FunctionContext(boost::bind(
-    &ImageWatcher::retry_aio_requests, this));
-  if (use_timer) {
-    m_task_finisher->add_event_after(TASK_CODE_RETRY_AIO_REQUESTS,
-                                     RETRY_DELAY_SECONDS, ctx);
-  } else {
-    m_task_finisher->queue(TASK_CODE_RETRY_AIO_REQUESTS, ctx);
-  }
-}
-
-void ImageWatcher::retry_aio_requests() {
-  m_task_finisher->cancel(TASK_CODE_RETRY_AIO_REQUESTS);
-
-  std::vector<AioRequest> lock_request_restarts;
-  {
-    Mutex::Locker l(m_aio_request_lock);
-    lock_request_restarts.swap(m_aio_requests);
-  }
-
-  ldout(m_image_ctx.cct, 15) << this << " retrying pending aio requests"
-                             << dendl;
-  RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
-  for (std::vector<AioRequest>::iterator iter = lock_request_restarts.begin();
-       iter != lock_request_restarts.end(); ++iter) {
-    ldout(m_image_ctx.cct, 20) << this << " retrying aio request: "
-                               << iter->second << dendl;
-    iter->first(iter->second);
-    iter->second->put();
-  }
-}
-
 void ImageWatcher::schedule_cancel_async_requests() {
   FunctionContext *ctx = new FunctionContext(
     boost::bind(&ImageWatcher::cancel_async_requests, this));
@@ -619,14 +594,33 @@ void ImageWatcher::notify_released_lock() {
   m_image_ctx.md_ctx.notify2(m_image_ctx.header_oid, bl, NOTIFY_TIMEOUT, NULL);
 }
 
+void ImageWatcher::schedule_request_lock(bool use_timer, int timer_delay) {
+  assert(m_image_ctx.owner_lock.is_locked());
+  assert(m_lock_owner_state == LOCK_OWNER_STATE_NOT_LOCKED);
+
+  RWLock::RLocker watch_locker(m_watch_lock);
+  if (m_watch_state == WATCH_STATE_REGISTERED && m_aio_ops_pending) {
+    ldout(m_image_ctx.cct, 15) << this << " requesting exclusive lock" << dendl;
+
+    FunctionContext *ctx = new FunctionContext(
+      boost::bind(&ImageWatcher::notify_request_lock, this));
+    if (use_timer) {
+      if (timer_delay < 0) {
+        timer_delay = RETRY_DELAY_SECONDS;
+      }
+      m_task_finisher->add_event_after(TASK_CODE_REQUEST_LOCK, timer_delay,
+                                       ctx);
+    } else {
+      m_task_finisher->queue(TASK_CODE_REQUEST_LOCK, ctx);
+    }
+  }
+}
+
 void ImageWatcher::notify_request_lock() {
   ldout(m_image_ctx.cct, 10) << this << " notify request lock" << dendl;
-  m_task_finisher->cancel(TASK_CODE_RETRY_AIO_REQUESTS);
 
-  m_image_ctx.owner_lock.get_read();
+  RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
   if (try_request_lock()) {
-    m_image_ctx.owner_lock.put_read();
-    retry_aio_requests();
     return;
   }
 
@@ -634,23 +628,20 @@ void ImageWatcher::notify_request_lock() {
   ::encode(NotifyMessage(RequestLockPayload(get_client_id())), bl);
 
   int r = notify_lock_owner(bl);
-  m_image_ctx.owner_lock.put_read();
-
   if (r == -ETIMEDOUT) {
-    ldout(m_image_ctx.cct, 5) << this << "timed out requesting lock: retrying"
+    ldout(m_image_ctx.cct, 5) << this << " timed out requesting lock: retrying"
                               << dendl;
-    retry_aio_requests();
+    schedule_request_lock(false);
   } else if (r < 0) {
     lderr(m_image_ctx.cct) << this << " error requesting lock: "
                            << cpp_strerror(r) << dendl;
-    schedule_retry_aio_requests(true);
+    schedule_request_lock(true);
   } else {
     // lock owner acked -- but resend if we don't see them release the lock
     int retry_timeout = m_image_ctx.cct->_conf->client_notify_timeout;
-    FunctionContext *ctx = new FunctionContext(
-      boost::bind(&ImageWatcher::notify_request_lock, this));
-    m_task_finisher->add_event_after(TASK_CODE_REQUEST_LOCK,
-                                     retry_timeout, ctx);
+    ldout(m_image_ctx.cct, 15) << this << " will retry in " << retry_timeout
+                               << " seconds" << dendl;
+    schedule_request_lock(true, retry_timeout);
   }
 }
 
@@ -814,10 +805,10 @@ void ImageWatcher::handle_payload(const AcquiredLockPayload &payload,
     set_owner_client_id(payload.client_id);
   }
 
-  RWLock::RLocker l(m_image_ctx.owner_lock);
+  RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
   if (m_lock_owner_state == LOCK_OWNER_STATE_NOT_LOCKED) {
     schedule_cancel_async_requests();
-    schedule_retry_aio_requests(false);
+    schedule_request_lock(false);
   }
 }
 
@@ -835,10 +826,10 @@ void ImageWatcher::handle_payload(const ReleasedLockPayload &payload,
     set_owner_client_id(ClientId());
   }
 
-  RWLock::RLocker l(m_image_ctx.owner_lock);
+  RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
   if (m_lock_owner_state == LOCK_OWNER_STATE_NOT_LOCKED) {
     schedule_cancel_async_requests();
-    schedule_retry_aio_requests(false);
+    schedule_request_lock(false);
   }
 }
 
@@ -1056,53 +1047,53 @@ void ImageWatcher::acknowledge_notify(uint64_t notify_id, uint64_t handle,
 void ImageWatcher::reregister_watch() {
   ldout(m_image_ctx.cct, 10) << this << " re-registering image watch" << dendl;
 
+  RWLock::WLocker l(m_image_ctx.owner_lock);
+  bool was_lock_owner = false;
+  if (m_lock_owner_state == LOCK_OWNER_STATE_LOCKED) {
+    // ensure all async requests are canceled and IO is flushed
+    was_lock_owner = release_lock();
+  }
+
+  int r;
   {
-    RWLock::WLocker l(m_image_ctx.owner_lock);
-    bool was_lock_owner = false;
-    if (m_lock_owner_state == LOCK_OWNER_STATE_LOCKED) {
-      // ensure all async requests are canceled and IO is flushed
-      was_lock_owner = release_lock();
+    RWLock::WLocker l(m_watch_lock);
+    if (m_watch_state != WATCH_STATE_ERROR) {
+      return;
     }
 
-    int r;
-    {
-      RWLock::WLocker l(m_watch_lock);
-      if (m_watch_state != WATCH_STATE_ERROR) {
-	return;
+    r = m_image_ctx.md_ctx.watch2(m_image_ctx.header_oid,
+                                  &m_watch_handle, &m_watch_ctx);
+    if (r < 0) {
+      lderr(m_image_ctx.cct) << this << " failed to re-register image watch: "
+                             << cpp_strerror(r) << dendl;
+      if (r != -ESHUTDOWN) {
+        FunctionContext *ctx = new FunctionContext(boost::bind(
+          &ImageWatcher::reregister_watch, this));
+        m_task_finisher->add_event_after(TASK_CODE_REREGISTER_WATCH,
+                                         RETRY_DELAY_SECONDS, ctx);
       }
-
-      r = m_image_ctx.md_ctx.watch2(m_image_ctx.header_oid,
-                                    &m_watch_handle, &m_watch_ctx);
-      if (r < 0) {
-        lderr(m_image_ctx.cct) << this << " failed to re-register image watch: "
-                               << cpp_strerror(r) << dendl;
-	if (r != -ESHUTDOWN) {
-	  FunctionContext *ctx = new FunctionContext(boost::bind(
-	    &ImageWatcher::reregister_watch, this));
-	  m_task_finisher->add_event_after(TASK_CODE_REREGISTER_WATCH,
-                                           RETRY_DELAY_SECONDS, ctx);
-	}
-        return;
-      }
-
-      m_watch_state = WATCH_STATE_REGISTERED;
+      return;
     }
-    handle_payload(HeaderUpdatePayload(), NULL);
 
-    if (was_lock_owner) {
-      r = try_lock();
-      if (r == -EBUSY) {
-        ldout(m_image_ctx.cct, 5) << this << "lost image lock while "
-                                  << "re-registering image watch" << dendl;
-      } else if (r < 0) {
-        lderr(m_image_ctx.cct) << this
-                               << "failed to lock image while re-registering "
-                               << "image watch" << cpp_strerror(r) << dendl;
-      }
+    m_watch_state = WATCH_STATE_REGISTERED;
+  }
+  handle_payload(HeaderUpdatePayload(), NULL);
+
+  if (was_lock_owner) {
+    r = try_lock();
+    if (r == -EBUSY) {
+      ldout(m_image_ctx.cct, 5) << this << "lost image lock while "
+                                << "re-registering image watch" << dendl;
+    } else if (r < 0) {
+      lderr(m_image_ctx.cct) << this
+                             << "failed to lock image while re-registering "
+                             << "image watch" << cpp_strerror(r) << dendl;
     }
   }
 
-  retry_aio_requests();
+  if (m_lock_owner_state == LOCK_OWNER_STATE_NOT_LOCKED) {
+    schedule_request_lock(false);
+  }
 }
 
 void ImageWatcher::WatchCtx::handle_notify(uint64_t notify_id,

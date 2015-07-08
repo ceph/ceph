@@ -20,7 +20,6 @@ class entity_name_t;
 
 namespace librbd {
 
-  class AioCompletion;
   class ImageCtx;
   template <typename T> class TaskFinisher;
 
@@ -37,12 +36,16 @@ namespace librbd {
     int register_watch();
     int unregister_watch();
 
+    void refresh();
+
     int try_lock();
-    void request_lock(const boost::function<void(AioCompletion*)>& restart_op,
-		      AioCompletion* c);
+    void request_lock();
     void prepare_unlock();
     void cancel_unlock();
     int unlock();
+
+    void flag_aio_ops_pending();
+    void clear_aio_ops_pending();
 
     void assert_header_locked(librados::ObjectWriteOperation *op);
 
@@ -76,7 +79,6 @@ namespace librbd {
       TASK_CODE_REQUEST_LOCK,
       TASK_CODE_RELEASING_LOCK,
       TASK_CODE_RELEASED_LOCK,
-      TASK_CODE_RETRY_AIO_REQUESTS,
       TASK_CODE_CANCEL_ASYNC_REQUESTS,
       TASK_CODE_REREGISTER_WATCH,
       TASK_CODE_ASYNC_REQUEST,
@@ -84,8 +86,6 @@ namespace librbd {
     };
 
     typedef std::pair<Context *, ProgressContext *> AsyncRequest;
-    typedef std::pair<boost::function<void(AioCompletion *)>,
-		      AioCompletion *> AioRequest;
 
     class Task {
     public:
@@ -192,6 +192,7 @@ namespace librbd {
     WatchCtx m_watch_ctx;
     uint64_t m_watch_handle;
     WatchState m_watch_state;
+    bool m_aio_ops_pending;
 
     LockOwnerState m_lock_owner_state;
 
@@ -200,9 +201,6 @@ namespace librbd {
     RWLock m_async_request_lock;
     std::map<WatchNotify::AsyncRequestId, AsyncRequest> m_async_requests;
     std::set<WatchNotify::AsyncRequestId> m_async_pending;
-
-    Mutex m_aio_request_lock;
-    std::vector<AioRequest> m_aio_requests;
 
     Mutex m_owner_client_id_lock;
     WatchNotify::ClientId m_owner_client_id;
@@ -216,9 +214,6 @@ namespace librbd {
     bool release_lock();
     bool try_request_lock();
 
-    void schedule_retry_aio_requests(bool use_timer);
-    void retry_aio_requests();
-
     void schedule_cancel_async_requests();
     void cancel_async_requests();
 
@@ -227,7 +222,10 @@ namespace librbd {
 
     void notify_release_lock();
     void notify_released_lock();
+
+    void schedule_request_lock(bool use_timer, int timer_delay = -1);
     void notify_request_lock();
+
     int notify_lock_owner(bufferlist &bl);
 
     void schedule_async_request_timed_out(const WatchNotify::AsyncRequestId &id);

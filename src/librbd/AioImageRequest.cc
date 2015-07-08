@@ -7,8 +7,6 @@
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageWatcher.h"
 #include "librbd/internal.h"
-#include <boost/bind.hpp>
-#include "include/assert.h"
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -144,6 +142,9 @@ void AioImageRead::execute_request() {
 }
 
 void AioImageWrite::execute_request() {
+  assert(!m_image_ctx.image_watcher->is_lock_supported() ||
+          m_image_ctx.image_watcher->is_lock_owner());
+
   CephContext *cct = m_image_ctx.cct;
 
   RWLock::RLocker md_locker(m_image_ctx.md_lock);
@@ -167,15 +168,6 @@ void AioImageWrite::execute_request() {
 
     snapc = m_image_ctx.snapc;
     m_aio_comp->init_time(&m_image_ctx, AIO_TYPE_WRITE);
-  }
-
-  if (m_image_ctx.image_watcher->is_lock_supported() &&
-      !m_image_ctx.image_watcher->is_lock_owner()) {
-    m_image_ctx.image_watcher->request_lock(
-      boost::bind(&AioImageRequest::write, &m_image_ctx, _1, m_off, m_len,
-                  m_buf, m_op_flags), m_aio_comp);
-    m_aio_comp->put();
-    return;
   }
 
   // map
@@ -219,6 +211,9 @@ void AioImageWrite::execute_request() {
 }
 
 void AioImageDiscard::execute_request() {
+  assert(!m_image_ctx.image_watcher->is_lock_supported() ||
+          m_image_ctx.image_watcher->is_lock_owner());
+
   CephContext *cct = m_image_ctx.cct;
 
   RWLock::RLocker md_locker(m_image_ctx.md_lock);
@@ -242,15 +237,6 @@ void AioImageDiscard::execute_request() {
 
     snapc = m_image_ctx.snapc;
     m_aio_comp->init_time(&m_image_ctx, AIO_TYPE_DISCARD);
-  }
-
-  if (m_image_ctx.image_watcher->is_lock_supported() &&
-      !m_image_ctx.image_watcher->is_lock_owner()) {
-    m_image_ctx.image_watcher->request_lock(
-      boost::bind(&AioImageRequest::discard, &m_image_ctx, _1, m_off, m_len),
-                  m_aio_comp);
-    m_aio_comp->put();
-    return;
   }
 
   // map
