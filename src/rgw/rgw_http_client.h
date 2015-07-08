@@ -8,6 +8,8 @@
 
 class RGWHTTPClient
 {
+  friend class RGWHTTPManager;
+
   bufferlist send_bl;
   bufferlist::iterator send_iter;
   size_t send_len;
@@ -16,6 +18,7 @@ protected:
   CephContext *cct;
 
   list<pair<string, string> > headers;
+  int init_async(const char *method, const char *url, void **handle);
 public:
   virtual ~RGWHTTPClient() {}
   RGWHTTPClient(CephContext *_cct): send_len (0), has_send_len(false), cct(_cct) {}
@@ -35,10 +38,18 @@ public:
 
   int process(const char *method, const char *url);
   int process(const char *url) { return process("GET", url); }
+};
 
-  int init_async(const char *method, const char *url, void **handle);
-  int process_request(void *handle, bool wait_for_data, bool *done);
-  int complete_request(void *handle);
+class RGWHTTPManager {
+  CephContext *cct;
+  void *multi_handle;
+public:
+  RGWHTTPManager(CephContext *_cct);
+  ~RGWHTTPManager();
+
+  int init_async(RGWHTTPClient *client, const char *method, const char *url, void **handle);
+  int process_requests(bool wait_for_data, bool *done);
+  int complete_requests();
 };
 
 #endif
