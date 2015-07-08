@@ -25,7 +25,7 @@
 #define dout_subsys ceph_subsys_mds
 
 #undef dout_prefix
-#define dout_prefix *_dout << "nish-debug "
+#define dout_prefix *_dout << "MDSAuthCap "
 
 using std::ostream;
 using std::string;
