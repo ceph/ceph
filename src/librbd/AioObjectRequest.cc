@@ -137,8 +137,8 @@ namespace librbd {
       // This is the step to read from parent
       if (!m_tried_parent && r == -ENOENT) {
         {
-          RWLock::RLocker l(m_ictx->snap_lock);
-          RWLock::RLocker l2(m_ictx->parent_lock);
+          RWLock::RLocker snap_locker(m_ictx->snap_lock);
+          RWLock::RLocker parent_locker(m_ictx->parent_lock);
           if (m_ictx->parent == NULL) {
 	    ldout(m_ictx->cct, 20) << "parent is gone; do nothing" << dendl;
 	    m_state = LIBRBD_AIO_READ_FLAT;
@@ -273,6 +273,7 @@ namespace librbd {
 			   << " parent completion " << m_parent_completion
 			   << " extents " << parent_extents
 			   << dendl;
+    RWLock::RLocker owner_locker(m_ictx->parent->owner_lock);
     AioImageRequest::read(m_ictx->parent, m_parent_completion, parent_extents,
                           NULL, &m_read_data, 0);
   }

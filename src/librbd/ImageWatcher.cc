@@ -560,6 +560,7 @@ void ImageWatcher::schedule_retry_aio_requests(bool use_timer) {
 
 void ImageWatcher::retry_aio_requests() {
   m_task_finisher->cancel(TASK_CODE_RETRY_AIO_REQUESTS);
+
   std::vector<AioRequest> lock_request_restarts;
   {
     Mutex::Locker l(m_aio_request_lock);
@@ -568,6 +569,7 @@ void ImageWatcher::retry_aio_requests() {
 
   ldout(m_image_ctx.cct, 15) << this << " retrying pending aio requests"
                              << dendl;
+  RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
   for (std::vector<AioRequest>::iterator iter = lock_request_restarts.begin();
        iter != lock_request_restarts.end(); ++iter) {
     ldout(m_image_ctx.cct, 20) << this << " retrying aio request: "

@@ -2424,17 +2424,6 @@ reprotect_and_return_err:
     ProgressContext &prog_ctx;
   };
 
-  int do_copy_extent(uint64_t offset, size_t len, const char *buf, void *data)
-  {
-    CopyProgressCtx *cp = reinterpret_cast<CopyProgressCtx*>(data);
-    cp->prog_ctx.update_progress(offset, cp->src_size);
-    int ret = 0;
-    if (buf) {
-      ret = write(cp->destictx, offset, len, buf, 0);
-    }
-    return ret;
-  }
-
   int copy(ImageCtx *src, IoCtx& dest_md_ctx, const char *destname,
 	   ProgressContext &prog_ctx)
   {
@@ -2508,6 +2497,7 @@ reprotect_and_return_err:
 	return;
       }
 
+      RWLock::RLocker owner_lock(m_dest->owner_lock);
       Context *ctx = new C_CopyWrite(m_throttle, m_bl);
       AioCompletion *comp = aio_create_completion_internal(ctx, rbd_ctx_cb);
       AioImageRequest::write(m_dest, comp, m_offset, m_bl->length(),
@@ -2551,6 +2541,7 @@ reprotect_and_return_err:
       }
     }
 
+    RWLock::RLocker owner_lock(src->owner_lock);
     SimpleThrottle throttle(src->concurrent_management_ops, false);
     uint64_t period = src->get_stripe_period();
     unsigned fadvise_flags = LIBRADOS_OP_FLAG_FADVISE_SEQUENTIAL | LIBRADOS_OP_FLAG_FADVISE_NOCACHE;
@@ -3069,6 +3060,7 @@ reprotect_and_return_err:
     uint64_t period = ictx->get_stripe_period();
     uint64_t left = mylen;
 
+    RWLock::RLocker owner_locker(ictx->owner_lock);
     start_time = ceph_clock_now(ictx->cct);
     while (left > 0) {
       uint64_t period_off = off - (off % period);
@@ -3138,109 +3130,6 @@ reprotect_and_return_err:
                         whole_object, cb, arg);
     r = command.execute();
     return r;
-  }
-
-  ssize_t read(ImageCtx *ictx, uint64_t ofs, size_t len, char *buf, int op_flags)
-  {
-    ssize_t ret;
-    ldout(ictx->cct, 20) << "read " << ictx << " off = " << ofs << " len = "
-			 << len << dendl;
-
-    vector<pair<uint64_t,uint64_t> > extents;
-    extents.push_back(make_pair(ofs, len));
-    ret = read(ictx, extents, buf, NULL, op_flags);
-    if (ret < 0)
-      return ret;
-
-    return ret;
-  }
-
-  ssize_t read(ImageCtx *ictx, const vector<pair<uint64_t,uint64_t> >& image_extents,
-		char *buf, bufferlist *pbl, int op_flags)
-  {
-    Mutex mylock("librbd::read::mylock");
-    Cond cond;
-    bool done;
-    int ret;
-
-    Context *ctx = new C_SafeCond(&mylock, &cond, &done, &ret);
-    AioCompletion *c = aio_create_completion_internal(ctx, rbd_ctx_cb);
-    AioImageRequest::read(ictx, c, image_extents, buf, pbl, op_flags);
-
-    mylock.Lock();
-    while (!done)
-      cond.Wait(mylock);
-    mylock.Unlock();
-
-    return ret;
-  }
-
-  ssize_t write(ImageCtx *ictx, uint64_t off, size_t len, const char *buf, int op_flags)
-  {
-    ldout(ictx->cct, 20) << "write " << ictx << " off = " << off << " len = "
-			 << len << dendl;
-
-    Mutex mylock("librbd::write::mylock");
-    Cond cond;
-    bool done;
-    int ret;
-
-    uint64_t mylen = len;
-    ictx->snap_lock.get_read();
-    int r = clip_io(ictx, off, &mylen);
-    ictx->snap_lock.put_read();
-    if (r < 0) {
-      return r;
-    }
-
-    Context *ctx = new C_SafeCond(&mylock, &cond, &done, &ret);
-    AioCompletion *c = aio_create_completion_internal(ctx, rbd_ctx_cb);
-    AioImageRequest::write(ictx, c, off, mylen, buf, op_flags);
-
-    mylock.Lock();
-    while (!done)
-      cond.Wait(mylock);
-    mylock.Unlock();
-
-    if (ret < 0) {
-      return ret;
-    }
-
-    return mylen;
-  }
-
-  int discard(ImageCtx *ictx, uint64_t off, uint64_t len)
-  {
-    ldout(ictx->cct, 20) << "discard " << ictx << " off = " << off << " len = "
-			 << len << dendl;
-
-    Mutex mylock("librbd::discard::mylock");
-    Cond cond;
-    bool done;
-    int ret;
-
-    uint64_t mylen = len;
-    ictx->snap_lock.get_read();
-    int r = clip_io(ictx, off, &mylen);
-    ictx->snap_lock.put_read();
-    if (r < 0) {
-      return r;
-    }
-
-    Context *ctx = new C_SafeCond(&mylock, &cond, &done, &ret);
-    AioCompletion *c = aio_create_completion_internal(ctx, rbd_ctx_cb);
-    AioImageRequest::discard(ictx, c, off, mylen);
-
-    mylock.Lock();
-    while (!done)
-      cond.Wait(mylock);
-    mylock.Unlock();
-
-    if (ret < 0) {
-      return ret;
-    }
-
-    return mylen;
   }
 
   void rados_req_cb(rados_completion_t c, void *arg)
