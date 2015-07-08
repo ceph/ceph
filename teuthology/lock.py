@@ -41,7 +41,7 @@ def get_distro_from_downburst():
                                  u'13.04(raring)', u'13.10(saucy)',
                                  u'14.04(trusty)', u'utopic(utopic)'],
                      u'sles': [u'11-sp2'],
-                     u'debian': [u'6.0', u'7.0']}
+                     u'debian': [u'6.0', u'7.0', u'8.0']}
     executable_cmd = provision.downburst_executable()
     if not executable_cmd:
         log.warn("Downburst not found!")
