@@ -7,8 +7,6 @@
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageWatcher.h"
 #include "librbd/internal.h"
-#include <boost/bind.hpp>
-#include "include/assert.h"
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -169,14 +167,8 @@ void AioImageWrite::execute_request() {
     m_aio_comp->start_op(&m_image_ctx, AIO_TYPE_WRITE);
   }
 
-  if (m_image_ctx.image_watcher->is_lock_supported() &&
-      !m_image_ctx.image_watcher->is_lock_owner()) {
-    m_image_ctx.image_watcher->request_lock(
-      boost::bind(&AioImageRequest::write, &m_image_ctx, _1, m_off, m_len,
-                  m_buf, m_op_flags), m_aio_comp);
-    m_aio_comp->put();
-    return;
-  }
+  assert(!m_image_ctx.image_watcher->is_lock_supported() ||
+          m_image_ctx.image_watcher->is_lock_owner());
 
   // map
   vector<ObjectExtent> extents;
@@ -244,14 +236,8 @@ void AioImageDiscard::execute_request() {
     m_aio_comp->start_op(&m_image_ctx, AIO_TYPE_DISCARD);
   }
 
-  if (m_image_ctx.image_watcher->is_lock_supported() &&
-      !m_image_ctx.image_watcher->is_lock_owner()) {
-    m_image_ctx.image_watcher->request_lock(
-      boost::bind(&AioImageRequest::discard, &m_image_ctx, _1, m_off, m_len),
-                  m_aio_comp);
-    m_aio_comp->put();
-    return;
-  }
+  assert(!m_image_ctx.image_watcher->is_lock_supported() ||
+          m_image_ctx.image_watcher->is_lock_owner());
 
   // map
   vector<ObjectExtent> extents;
