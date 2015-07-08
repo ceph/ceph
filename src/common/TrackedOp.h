@@ -180,11 +180,12 @@ public:
   const utime_t& get_initiated() const {
     return initiated_at;
   }
-  // This function maybe needs some work; assumes last event is completion time
+
   double get_duration() const {
-    return events.empty() ?
-      0.0 :
-      (events.rbegin()->first - get_initiated());
+    if (!events.empty() && events.rbegin()->second.compare("done") == 0)
+      return events.rbegin()->first - get_initiated();
+    else
+      return ceph_clock_now(NULL) - get_initiated();
   }
 
   void mark_event(const string &event);
