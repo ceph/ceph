@@ -307,7 +307,7 @@ int RGWRESTStreamWriteRequest::add_output_data(bufferlist& bl)
   lock.Unlock();
 
   bool done;
-  return process_request(handle, false, &done);
+  return http_manager.process_requests(false, &done);
 }
 
 static void grants_by_type_add_one_grant(map<int, string>& grants_by_type, int perm, ACLGrant& grant)
@@ -455,7 +455,7 @@ int RGWRESTStreamWriteRequest::put_obj_init(RGWAccessKey& key, rgw_obj& obj, uin
 
   set_send_length(obj_size);
 
-  int r = init_async(new_info.method, new_url.c_str(), &handle);
+  int r = http_manager.init_async(this, new_info.method, new_url.c_str(), &handle);
   if (r < 0)
     return r;
 
@@ -520,7 +520,7 @@ void set_str_from_headers(map<string, string>& out_headers, const string& header
 
 int RGWRESTStreamWriteRequest::complete(string& etag, time_t *mtime)
 {
-  int ret = complete_request(handle);
+  int ret = http_manager.complete_requests();
   if (ret < 0)
     return ret;
 
@@ -602,9 +602,14 @@ int RGWRESTStreamReadRequest::get_resource(RGWAccessKey& key, map<string, string
     headers.push_back(pair<string, string>(iter->first, iter->second));
   }
 
-  int r = process(new_info.method, new_url.c_str());
+  void *handle;
+  int r = http_manager.init_async(this, new_info.method, new_url.c_str(), &handle);
   if (r < 0)
     return r;
+  r = http_manager.complete_requests();
+  if (r < 0)
+    return ret;
+
 
   return 0;
 }
