@@ -3058,8 +3058,9 @@ TEST_F(TestLibRBD, BlockingAIO)
   ASSERT_EQ(0, rbd.open(ioctx, image, name.c_str(), NULL));
 
   bufferlist bl;
-  bl.append(std::string(256, '1'));
+  ASSERT_EQ(0, image.write(0, bl.length(), bl));
 
+  bl.append(std::string(256, '1'));
   librbd::RBD::AioCompletion *write_comp =
     new librbd::RBD::AioCompletion(NULL, NULL);
   ASSERT_EQ(0, image.aio_write(0, bl.length(), bl, write_comp));
