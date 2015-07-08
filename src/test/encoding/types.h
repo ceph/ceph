@@ -226,6 +226,8 @@ TYPE(ETableServer)
 #include "mds/events/EUpdate.h"
 TYPE(EUpdate)
 
+#include "librbd/JournalTypes.h"
+TYPE(librbd::journal::EventEntry)
 #include "librbd/WatchNotifyTypes.h"
 TYPE(librbd::WatchNotify::NotifyMessage)
 TYPE(librbd::WatchNotify::ResponseMessage)
