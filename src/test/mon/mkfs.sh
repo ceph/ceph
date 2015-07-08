@@ -16,7 +16,7 @@
 # GNU Library Public License for more details.
 #
 set -xe
-PS4='${FUNCNAME[0]}: $LINENO: '
+PS4='${BASH_SOURCE[0]}:$LINENO: ${FUNCNAME[0]}:  '
 
 DIR=mkfs
 export CEPH_CONF=/dev/null
