@@ -5,48 +5,47 @@
 #include "librbd/AioCompletion.h"
 #include "librbd/AioImageRequest.h"
 #include "librbd/ImageCtx.h"
+#include "librbd/ImageWatcher.h"
 #include "librbd/internal.h"
 
 namespace librbd {
 
-void AioImageRequestWQ::aio_read(ImageCtx *ictx, uint64_t off, size_t len,
-                                 char *buf, bufferlist *pbl, AioCompletion *c,
-                                 int op_flags) {
-  c->init_time(ictx, librbd::AIO_TYPE_READ);
-  if (ictx->non_blocking_aio) {
-    queue(new AioImageRead(*ictx, c, off, len, buf, pbl, op_flags));
+void AioImageRequestWQ::aio_read(AioCompletion *c, uint64_t off, size_t len,
+                                 char *buf, bufferlist *pbl, int op_flags) {
+  c->init_time(&m_image_ctx, librbd::AIO_TYPE_READ);
+  if (m_image_ctx.non_blocking_aio) {
+    queue(new AioImageRead(m_image_ctx, c, off, len, buf, pbl, op_flags));
   } else {
-    AioImageRequest::read(ictx, c, off, len, buf, pbl, op_flags);
+    AioImageRequest::read(&m_image_ctx, c, off, len, buf, pbl, op_flags);
   }
 }
 
-void AioImageRequestWQ::aio_write(ImageCtx *ictx, uint64_t off, size_t len,
-                                  const char *buf, AioCompletion *c,
-                                  int op_flags) {
-  c->init_time(ictx, librbd::AIO_TYPE_WRITE);
-  if (ictx->non_blocking_aio) {
-    queue(new AioImageWrite(*ictx, c, off, len, buf, op_flags));
+void AioImageRequestWQ::aio_write(AioCompletion *c, uint64_t off, size_t len,
+                                  const char *buf, int op_flags) {
+  c->init_time(&m_image_ctx, librbd::AIO_TYPE_WRITE);
+  if (m_image_ctx.non_blocking_aio) {
+    queue(new AioImageWrite(m_image_ctx, c, off, len, buf, op_flags));
   } else {
-    AioImageRequest::write(ictx, c, off, len, buf, op_flags);
+    AioImageRequest::write(&m_image_ctx, c, off, len, buf, op_flags);
   }
 }
 
-void AioImageRequestWQ::aio_discard(ImageCtx *ictx, uint64_t off, uint64_t len,
-                                    AioCompletion *c) {
-  c->init_time(ictx, librbd::AIO_TYPE_DISCARD);
-  if (ictx->non_blocking_aio) {
-    queue(new AioImageDiscard(*ictx, c, off, len));
+void AioImageRequestWQ::aio_discard(AioCompletion *c, uint64_t off,
+                                    uint64_t len) {
+  c->init_time(&m_image_ctx, librbd::AIO_TYPE_DISCARD);
+  if (m_image_ctx.non_blocking_aio) {
+    queue(new AioImageDiscard(m_image_ctx, c, off, len));
   } else {
-    AioImageRequest::discard(ictx, c, off, len);
+    AioImageRequest::discard(&m_image_ctx, c, off, len);
   }
 }
 
-void AioImageRequestWQ::aio_flush(ImageCtx *ictx, AioCompletion *c) {
-  c->init_time(ictx, librbd::AIO_TYPE_FLUSH);
-  if (ictx->non_blocking_aio) {
-    queue(new AioImageFlush(*ictx, c));
+void AioImageRequestWQ::aio_flush(AioCompletion *c) {
+  c->init_time(&m_image_ctx, librbd::AIO_TYPE_FLUSH);
+  if (m_image_ctx.non_blocking_aio) {
+    queue(new AioImageFlush(m_image_ctx, c));
   } else {
-    AioImageRequest::flush(ictx, c);
+    AioImageRequest::flush(&m_image_ctx, c);
   }
 }
 

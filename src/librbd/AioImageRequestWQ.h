@@ -15,19 +15,19 @@ class ImageCtx;
 
 class AioImageRequestWQ : protected ThreadPool::PointerWQ<AioImageRequest> {
 public:
-  AioImageRequestWQ(const string &name, time_t ti, ThreadPool *tp)
+  AioImageRequestWQ(ImageCtx *image_ctx, const string &name, time_t ti,
+                    ThreadPool *tp)
     : ThreadPool::PointerWQ<AioImageRequest>(name, ti, 0, tp),
-      m_lock("AioImageRequestWQ::m_lock"), m_writes_suspended(false),
-      m_in_progress_writes(0), m_queued_writes(0) {
+      m_image_ctx(*image_ctx), m_lock("AioImageRequestWQ::m_lock"),
+      m_writes_suspended(false), m_in_progress_writes(0), m_queued_writes(0) {
   }
 
-  void aio_read(ImageCtx *ictx, uint64_t off, size_t len, char *buf,
-                bufferlist *pbl, AioCompletion *c, int op_flags);
-  void aio_write(ImageCtx *ictx, uint64_t off, size_t len, const char *buf,
-                 AioCompletion *c, int op_flags);
-  void aio_discard(ImageCtx *ictx, uint64_t off, uint64_t len,
-                   AioCompletion *c);
-  void aio_flush(ImageCtx *ictx, AioCompletion *c);
+  void aio_read(AioCompletion *c, uint64_t off, size_t len, char *buf,
+                bufferlist *pbl, int op_flags);
+  void aio_write(AioCompletion *c, uint64_t off, size_t len, const char *buf,
+                 int op_flags);
+  void aio_discard(AioCompletion *c, uint64_t off, uint64_t len);
+  void aio_flush(AioCompletion *c);
 
   using ThreadPool::PointerWQ<AioImageRequest>::drain;
 
@@ -55,6 +55,7 @@ protected:
   virtual void *_void_dequeue();
   virtual void process(AioImageRequest *req);
 private:
+  ImageCtx &m_image_ctx;
   mutable Mutex m_lock;
   Cond m_cond;
   bool m_writes_suspended;
