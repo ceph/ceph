@@ -2118,7 +2118,7 @@ bool Server::check_access(MDRequestRef& mdr, CInode *in, unsigned mask)
   string path;
 
   //path calculation
-  in->make_path_string(path, false, in->get_projected_parent());
+  in->make_path_string(path, false, in->get_projected_parent_dn());
 
   // FIXME: it depends on the inode!
   if (s->auth_caps.is_capable(path, in->inode.uid, in->inode.gid, in->inode.mode,
