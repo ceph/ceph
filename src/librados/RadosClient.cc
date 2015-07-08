@@ -559,7 +559,7 @@ bool librados::RadosClient::put() {
 }
  
 int librados::RadosClient::pool_create(string& name, unsigned long long auid,
-				       __u8 crush_rule)
+				       int16_t crush_rule)
 {
   int reply;
 
@@ -584,7 +584,7 @@ int librados::RadosClient::pool_create(string& name, unsigned long long auid,
 
 int librados::RadosClient::pool_create_async(string& name, PoolAsyncCompletionImpl *c,
 					     unsigned long long auid,
-					     __u8 crush_rule)
+					     int16_t crush_rule)
 {
   Mutex::Locker l(lock);
   Context *onfinish = new C_PoolAsync_Safe(c);
