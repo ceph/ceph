@@ -42,7 +42,7 @@ TEST(MDSAuthCaps, ParseGood) {
     string str = parse_good[i];
     MDSAuthCaps cap;
     std::cout << "Testing good input: '" << str << "'" << std::endl;
-    ASSERT_TRUE(cap.parse(str, &cout));
+    ASSERT_TRUE(cap.parse(g_ceph_context, str, &cout));
   }
 }
 
@@ -81,7 +81,7 @@ TEST(MDSAuthCaps, ParseBad) {
     string str = parse_bad[i];
     MDSAuthCaps cap;
     std::cout << "Testing bad input: '" << str << "'" << std::endl;
-    ASSERT_FALSE(cap.parse(str, &cout));
+    ASSERT_FALSE(cap.parse(g_ceph_context, str, &cout));
   }
 }
 
@@ -89,26 +89,26 @@ TEST(MDSAuthCaps, AllowAll) {
   MDSAuthCaps cap;
   ASSERT_FALSE(cap.allow_all());
 
-  ASSERT_TRUE(cap.parse("allow r", NULL));
+  ASSERT_TRUE(cap.parse(g_ceph_context, "allow r", NULL));
   ASSERT_FALSE(cap.allow_all());
   cap = MDSAuthCaps();
 
-  ASSERT_TRUE(cap.parse("allow rw", NULL));
+  ASSERT_TRUE(cap.parse(g_ceph_context, "allow rw", NULL));
   ASSERT_FALSE(cap.allow_all());
   cap = MDSAuthCaps();
 
-  ASSERT_TRUE(cap.parse("allow", NULL));
+  ASSERT_TRUE(cap.parse(g_ceph_context, "allow", NULL));
   ASSERT_FALSE(cap.allow_all());
   cap = MDSAuthCaps();
 
-  ASSERT_TRUE(cap.parse("allow *", NULL));
+  ASSERT_TRUE(cap.parse(g_ceph_context, "allow *", NULL));
   ASSERT_TRUE(cap.allow_all());
   ASSERT_TRUE(cap.is_capable("/foo/bar", 0, 0, 0777, 0, MAY_READ | MAY_WRITE));
 }
 
 TEST(MDSAuthCaps, AllowUid) {
   MDSAuthCaps cap;
-  ASSERT_TRUE(cap.parse("allow * uid=10", NULL));
+  ASSERT_TRUE(cap.parse(g_ceph_context, "allow * uid=10", NULL));
   ASSERT_FALSE(cap.allow_all());
   ASSERT_TRUE(cap.is_capable("/foo", 0, 0, 0777, 10, MAY_READ | MAY_WRITE));
   ASSERT_FALSE(cap.is_capable("/foo", 0, 0, 0777, -1, MAY_READ | MAY_WRITE));
@@ -117,7 +117,7 @@ TEST(MDSAuthCaps, AllowUid) {
 
 TEST(MDSAuthCaps, AllowPath) {
   MDSAuthCaps cap;
-  ASSERT_TRUE(cap.parse("allow * path=/sandbox", NULL));
+  ASSERT_TRUE(cap.parse(g_ceph_context, "allow * path=/sandbox", NULL));
   ASSERT_FALSE(cap.allow_all());
   ASSERT_TRUE(cap.is_capable("/sandbox/foo", 0, 0, 0777, 0, MAY_READ | MAY_WRITE));
   ASSERT_TRUE(cap.is_capable("/sandbox", 0, 0, 0777, 0, MAY_READ | MAY_WRITE));
@@ -158,7 +158,7 @@ TEST(MDSAuthCaps, OutputParsed) {
   for (size_t i = 0; i < num_tests; ++i) {
     MDSAuthCaps cap;
     std::cout << "Testing input '" << test_values[i].input << "'" << std::endl;
-    ASSERT_TRUE(cap.parse(test_values[i].input, &cout));
+    ASSERT_TRUE(cap.parse(g_ceph_context, test_values[i].input, &cout));
     ASSERT_EQ(test_values[i].output, stringify(cap));
   }
 }
