@@ -84,11 +84,11 @@ public:
 
   virtual unsigned int get_chunk_size(unsigned int object_size) const;
 
-  virtual int minimum_to_decode(const set<int> &want_to_decode,
+  virtual int minimum_to_decode(const set<int> &want_to_read,
 				const set<int> &available_chunks,
 				set<int> *minimum);
 
-  virtual int minimum_to_decode_with_cost(const set<int> &want_to_decode,
+  virtual int minimum_to_decode_with_cost(const set<int> &want_to_read,
 					  const map<int, int> &available,
 					  set<int> *minimum);
 
@@ -116,8 +116,20 @@ public:
 			  int blocksize) = 0;
   virtual unsigned get_alignment() const = 0;
   virtual void prepare() = 0;
+
+  virtual int shec_matrix_decode(int *erased, int *avails,
+                                 char **data_ptrs, char **coding_ptrs, int size);
+  virtual int* shec_reedsolomon_coding_matrix(int is_single);
+
 private:
   virtual int parse(const ErasureCodeProfile &profile) = 0;
+
+  virtual double shec_calc_recovery_efficiency1(int k, int m1, int m2, int c1, int c2);
+  virtual int shec_make_decoding_matrix(bool prepare,
+                                        int *want, int *avails,
+                                        int *decoding_matrix,
+                                        int *dm_row, int *dm_column,
+                                        int *minimum);
 };
 
 class ErasureCodeShecReedSolomonVandermonde : public ErasureCodeShec {
