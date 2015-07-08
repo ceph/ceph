@@ -174,7 +174,8 @@ def test_failure(cmd, errmsg):
             logging.info("Correctly failed with message \"" + errmsg + "\"")
             return 0
         else:
-            logging.error("Bad message to stderr \"" + e.output + "\"")
+            errmsg = e.output.split('\n')[0]
+            logging.error("Bad message to stderr \"" + errmsg + "\"")
             return 1
 
 
@@ -357,7 +358,10 @@ def check_data(DATADIR, TMPFILE, OSDDIR, SPLIT_NAME):
 
 def main(argv):
     sys.stdout = os.fdopen(sys.stdout.fileno(), 'w', 0)
-    nullfd = open(os.devnull, "w")
+    if len(argv) > 1 and argv[1] == "debug":
+        nullfd = sys.stdout
+    else:
+        nullfd = open(os.devnull, "w")
 
     call("rm -fr {dir}; mkdir {dir}".format(dir=CEPH_DIR), shell=True)
     os.environ["CEPH_DIR"] = CEPH_DIR
@@ -650,9 +654,25 @@ def main(argv):
     cmd = (CFSD_PREFIX + "--op remove").format(osd=ONEOSD)
     ERRORS += test_failure(cmd, "Must provide pgid")
 
-    # Don't secify a --op
+    # Don't secify a --op nor object command
     cmd = CFSD_PREFIX.format(osd=ONEOSD)
     ERRORS += test_failure(cmd, "Must provide --op or object command...")
+
+    # Specify a bad --op command
+    cmd = (CFSD_PREFIX + "--op oops").format(osd=ONEOSD)
+    ERRORS += test_failure(cmd, "Must provide --op (info, log, remove, export, import, list, fix-lost, list-pgs, rm-past-intervals, set-allow-sharded-objects, dump-journal, dump-super, meta-list)")
+
+    # Provide just the object param not a command
+    cmd = (CFSD_PREFIX + "object").format(osd=ONEOSD)
+    ERRORS += test_failure(cmd, "Invalid syntax, missing command")
+
+    # Provide an object name that doesn't exist
+    cmd = (CFSD_PREFIX + "NON_OBJECT get-bytes").format(osd=ONEOSD)
+    ERRORS += test_failure(cmd, "No object id 'NON_OBJECT' found")
+
+    # Provide an invalid object command
+    cmd = (CFSD_PREFIX + "--pgid {pg} '' notacommand").format(osd=ONEOSD, pg=ONEPG)
+    ERRORS += test_failure(cmd, "Unknown object command 'notacommand'")
 
     TMPFILE = r"/tmp/tmp.{pid}".format(pid=pid)
     ALLPGS = OBJREPPGS + OBJECPGS
@@ -677,7 +697,7 @@ def main(argv):
     tmpfd.close()
     lines = get_lines(TMPFILE)
     JSONOBJ = sorted(set(lines))
-    (pgid, jsondict) = json.loads(JSONOBJ[0])[0]
+    (pgid, coll, jsondict) = json.loads(JSONOBJ[0])[0]
 
     # retrieve all objects in a given PG
     tmpfd = open(OTHERFILE, "a")
@@ -690,9 +710,9 @@ def main(argv):
     tmpfd.close()
     lines = get_lines(OTHERFILE)
     JSONOBJ = sorted(set(lines))
-    (other_pgid, other_jsondict) = json.loads(JSONOBJ[0])[0]
+    (other_pgid, other_coll, other_jsondict) = json.loads(JSONOBJ[0])[0]
 
-    if pgid != other_pgid or jsondict != other_jsondict:
+    if pgid != other_pgid or jsondict != other_jsondict or coll != other_coll:
         logging.error("the first line of --op list is different "
                       "from the first line of --op list --pgid {pg}".format(pg=pgid))
         ERRORS += 1
@@ -708,9 +728,9 @@ def main(argv):
     tmpfd.close()
     lines = get_lines(OTHERFILE)
     JSONOBJ = sorted(set(lines))
-    (other_pgid, other_jsondict) in json.loads(JSONOBJ[0])[0]
+    (other_pgid, other_coll, other_jsondict) in json.loads(JSONOBJ[0])[0]
 
-    if pgid != other_pgid or jsondict != other_jsondict:
+    if pgid != other_pgid or jsondict != other_jsondict or coll != other_coll:
         logging.error("the first line of --op list is different "
                       "from the first line of --op list --pgid {pg} {object}".format(pg=pgid, object=jsondict['oid']))
         ERRORS += 1
@@ -945,6 +965,48 @@ def main(argv):
                     if len(values) != 0:
                         logging.error("Not all keys found, remaining keys:")
                         print values
+
+    print "Test --op meta-list"
+    tmpfd = open(TMPFILE, "w")
+    cmd = (CFSD_PREFIX + "--op meta-list").format(osd=ONEOSD)
+    logging.debug(cmd)
+    ret = call(cmd, shell=True, stdout=tmpfd)
+    if ret != 0:
+        logging.error("Bad exit status {ret} from --op meta-list request".format(ret=ret))
+        ERRORS += 1
+
+    print "Test get-bytes on meta"
+    tmpfd.close()
+    lines = get_lines(TMPFILE)
+    JSONOBJ = sorted(set(lines))
+    for JSON in JSONOBJ:
+        (pgid, jsondict) = json.loads(JSON)
+        if pgid != "meta":
+            logging.error("pgid incorrect for --op meta-list {pgid}".format(pgid=pgid))
+            ERRORS += 1
+        if jsondict['namespace'] != "":
+            logging.error("namespace non null --op meta-list {ns}".format(ns=jsondict['namespace']))
+            ERRORS += 1
+        logging.info(JSON)
+        try:
+            os.unlink(GETNAME)
+        except:
+            pass
+        cmd = (CFSD_PREFIX + "'{json}' get-bytes {fname}").format(osd=ONEOSD, json=JSON, fname=GETNAME)
+        logging.debug(cmd)
+        ret = call(cmd, shell=True)
+        if ret != 0:
+            logging.error("Bad exit status {ret}".format(ret=ret))
+            ERRORS += 1
+
+    try:
+        os.unlink(GETNAME)
+    except:
+        pass
+    try:
+        os.unlink(TESTNAME)
+    except:
+        pass
 
     print "Test pg info"
     for pg in ALLREPPGS + ALLECPGS:
