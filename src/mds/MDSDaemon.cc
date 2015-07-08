@@ -1277,7 +1277,7 @@ bool MDSDaemon::ms_verify_authorizer(Connection *con, int peer_type,
 
       dout(10) << __func__ << ": parsing auth_cap_str='" << auth_cap_str << "'" << dendl;
       std::ostringstream errstr;
-      if (!s->auth_caps.parse(auth_cap_str, &errstr)) {
+      if (!s->auth_caps.parse(g_ceph_context, auth_cap_str, &errstr)) {
         dout(1) << __func__ << ": auth cap parse error: " << errstr.str()
           << " parsing '" << auth_cap_str << "'" << dendl;
       }
