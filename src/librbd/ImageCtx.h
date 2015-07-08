@@ -31,6 +31,7 @@
 #include "librbd/parent_types.h"
 
 class CephContext;
+class ContextWQ;
 class Finisher;
 class PerfCounters;
 
@@ -129,6 +130,8 @@ namespace librbd {
     atomic_t async_request_seq;
 
     xlist<AsyncResizeRequest*> async_resize_reqs;
+
+    ContextWQ *aio_work_queue;
 
     /**
      * Either image_name or image_id must be set.
