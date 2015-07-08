@@ -21,7 +21,7 @@
 #include "common/strtol.h"
 #include "common/likely.h"
 #include "include/atomic.h"
-#include "common/Mutex.h"
+#include "common/RWLock.h"
 #include "include/types.h"
 #include "include/compat.h"
 #if defined(HAVE_XIO)
@@ -128,16 +128,16 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
     unsigned len;
     atomic_t nref;
 
-    mutable Mutex crc_lock;
+    mutable RWLock crc_lock;
     map<pair<size_t, size_t>, pair<uint32_t, uint32_t> > crc_map;
 
     raw(unsigned l)
       : data(NULL), len(l), nref(0),
-	crc_lock("buffer::raw::crc_lock", false, false)
+	crc_lock("buffer::raw::crc_lock", false)
     { }
     raw(char *c, unsigned l)
       : data(c), len(l), nref(0),
-	crc_lock("buffer::raw::crc_lock", false, false)
+	crc_lock("buffer::raw::crc_lock", false)
     { }
     virtual ~raw() {}
 
@@ -173,23 +173,33 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
       return true;
     }
     bool get_crc(const pair<size_t, size_t> &fromto,
-		 pair<uint32_t, uint32_t> *crc) const {
-      Mutex::Locker l(crc_lock);
+         pair<uint32_t, uint32_t> *crc) const {
+      crc_lock.get_read();
       map<pair<size_t, size_t>, pair<uint32_t, uint32_t> >::const_iterator i =
-	crc_map.find(fromto);
-      if (i == crc_map.end())
-	return false;
+      crc_map.find(fromto);
+      if (i == crc_map.end()) {
+          crc_lock.unlock();
+          return false;
+      }
       *crc = i->second;
+      crc_lock.unlock();
       return true;
     }
     void set_crc(const pair<size_t, size_t> &fromto,
-		 const pair<uint32_t, uint32_t> &crc) {
-      Mutex::Locker l(crc_lock);
+         const pair<uint32_t, uint32_t> &crc) {
+      crc_lock.get_write();
       crc_map[fromto] = crc;
+      crc_lock.unlock();
     }
     void invalidate_crc() {
-      Mutex::Locker l(crc_lock);
-      crc_map.clear();
+      // don't own the write lock when map is empty
+      crc_lock.get_read();
+      if (crc_map.size() != 0) {
+        crc_lock.unlock();
+        crc_lock.get_write();
+        crc_map.clear();
+      }
+      crc_lock.unlock();
     }
   };
 
