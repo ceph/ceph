@@ -1939,7 +1939,10 @@ int AsyncConnection::send_message(Message *m)
   if (!m->get_priority())
     m->set_priority(async_msgr->get_default_send_priority());
 
-  prepare_send_message(f, m, bl);
+  // TODO: Currently not all messages supports reencode like MOSDMap, so here
+  // only let fast dispatch support messages prepare message
+  if (async_msgr->ms_can_fast_dispatch(m))
+    prepare_send_message(f, m, bl);
 
   Mutex::Locker l(write_lock);
   // "features" changes will change the payload encoding
