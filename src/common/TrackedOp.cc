@@ -38,10 +38,9 @@ void OpHistory::on_shutdown()
 
 void OpHistory::insert(utime_t now, TrackedOpRef op)
 {
+  Mutex::Locker history_lock(ops_history_lock);
   if (shutdown)
     return;
-
-  Mutex::Locker history_lock(ops_history_lock);
   duration.insert(make_pair(op->get_duration(), op));
   arrived.insert(make_pair(op->get_initiated(), op));
   cleanup(now);
