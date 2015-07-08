@@ -256,11 +256,7 @@ TEST_F(TestInternal, AioWriteRequestsLock) {
   librbd::AioCompletion *c =
     librbd::aio_create_completion_internal(ctx, librbd::rbd_ctx_cb);
   c->get();
-  {
-    RWLock::RLocker owner_lock(ictx->owner_lock);
-    librbd::AioImageRequest::write(ictx, c, 0, buffer.size(), buffer.c_str(),
-                                   0);
-  }
+  ictx->aio_work_queue->aio_write(c, 0, buffer.size(), buffer.c_str(), 0);
 
   bool is_owner;
   ASSERT_EQ(0, librbd::is_exclusive_lock_owner(ictx, &is_owner));
@@ -283,10 +279,7 @@ TEST_F(TestInternal, AioDiscardRequestsLock) {
   librbd::AioCompletion *c =
     librbd::aio_create_completion_internal(ctx, librbd::rbd_ctx_cb);
   c->get();
-  {
-    RWLock::RLocker owner_lock(ictx->owner_lock);
-    librbd::AioImageRequest::discard(ictx, c, 0, 256);
-  }
+  ictx->aio_work_queue->aio_discard(c, 0, 256);
 
   bool is_owner;
   ASSERT_EQ(0, librbd::is_exclusive_lock_owner(ictx, &is_owner));
@@ -629,7 +622,7 @@ TEST_F(TestInternal, ShrinkFlushesCache) {
   librbd::AioCompletion *c =
     librbd::aio_create_completion_internal(&cond_ctx, librbd::rbd_ctx_cb);
   c->get();
-  aio_write(ictx, 0, buffer.size(), buffer.c_str(), c, 0);
+  ictx->aio_work_queue->aio_write(c, 0, buffer.size(), buffer.c_str(), 0);
 
   librbd::NoOpProgressContext no_op;
   ASSERT_EQ(0, librbd::resize(ictx, m_image_size >> 1, no_op));
