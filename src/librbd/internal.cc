@@ -2694,6 +2694,10 @@ reprotect_and_return_err:
       ictx->data_ctx.selfmanaged_snap_set_write_ctx(ictx->snapc.seq, ictx->snaps);
     } // release snap_lock and cache_lock
 
+    if (ictx->image_watcher != NULL) {
+      ictx->image_watcher->refresh();
+    }
+
     if (new_snap) {
       _flush(ictx);
     }
@@ -3021,6 +3025,7 @@ reprotect_and_return_err:
                            << dendl;
 	}
       }
+      ictx->image_watcher->refresh();
     }
     return r;
   }
@@ -3054,6 +3059,11 @@ reprotect_and_return_err:
 
     if ((r = _snap_set(ictx, ictx->snap_name.c_str())) < 0)
       goto err_close;
+
+    if (ictx->image_watcher != NULL) {
+      RWLock::RLocker owner_locker(ictx->owner_lock);
+      ictx->image_watcher->refresh();
+    }
 
     return 0;
 
