@@ -35,29 +35,23 @@ public:
 
   using ThreadPool::PointerWQ<AioImageRequest>::drain;
 
-  bool writes_empty() const;
+  inline bool writes_empty() const {
+    Mutex::Locker locker(m_lock);
+    return (m_queued_writes == 0);
+  }
+
   inline bool writes_suspended() const {
     Mutex::Locker locker(m_lock);
     return m_writes_suspended;
   }
 
-  void suspend_writes() {
-    Mutex::Locker locker(m_lock);
-    while (m_in_progress_writes > 0) {
-      m_cond.Wait(m_lock);
-    }
-  }
+  void suspend_writes();
+  void resume_writes();
 
-  void resume_writes() {
-    {
-      Mutex::Locker locker(m_lock);
-      m_writes_suspended = false;
-    }
-    signal();
-  }
 protected:
   virtual void *_void_dequeue();
   virtual void process(AioImageRequest *req);
+
 private:
   ImageCtx &m_image_ctx;
   mutable Mutex m_lock;
@@ -67,7 +61,7 @@ private:
   uint32_t m_queued_writes;
 
   bool is_lock_required();
-  void queue(AioImageRequest *req);
+  void queue(AioImageRequest *req, bool lock_required);
 };
 
 } // namespace librbd
