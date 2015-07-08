@@ -1295,6 +1295,8 @@ public:
   map<string, RGWRESTConn *> zone_conn_map;
   map<string, RGWRESTConn *> region_conn_map;
 
+  RGWZoneParams& get_zone_params() { return zone; }
+
   RGWMetadataManager *meta_mgr;
 
   RGWDataChangesLog *data_log;
@@ -1598,6 +1600,38 @@ public:
       Delete(RGWRados::Object *_target) : target(_target) {}
 
       int delete_obj();
+    };
+
+    struct Stat {
+      RGWRados::Object *source;
+
+      struct Result {
+        rgw_obj obj;
+        RGWObjManifest manifest;
+        bool has_manifest;
+        uint64_t size;
+        time_t mtime;
+        map<string, bufferlist> attrs;
+
+        Result() : has_manifest(false), size(0), mtime(0) {}
+      } result;
+
+      struct State {
+        librados::IoCtx io_ctx;
+        librados::AioCompletion *completion;
+        int ret;
+
+        State() : completion(NULL), ret(0) {}
+      } state;
+
+
+      Stat(RGWRados::Object *_source) : source(_source) {}
+
+      int stat_async();
+      int wait();
+      int stat();
+    private:
+      int finish();
     };
   };
 
@@ -2089,6 +2123,8 @@ public:
     return zone_public_config.log_meta;
   }
 
+  librados::Rados* get_rados_handle();
+
  private:
   /**
    * This is a helper method, it generates a list of bucket index objects with the given
@@ -2161,8 +2197,6 @@ public:
 
   uint64_t instance_id();
   uint64_t next_bucket_id();
-
-  librados::Rados* get_rados_handle();
 };
 
 class RGWStoreManager {
