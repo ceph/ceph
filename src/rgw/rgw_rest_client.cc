@@ -550,7 +550,7 @@ int RGWRESTStreamReadRequest::get_obj(RGWAccessKey& key, map<string, string>& ex
   return get_resource(key, extra_headers, resource);
 }
 
-int RGWRESTStreamReadRequest::get_resource(RGWAccessKey& key, map<string, string>& extra_headers, const string& resource)
+int RGWRESTStreamReadRequest::get_resource(RGWAccessKey& key, map<string, string>& extra_headers, const string& resource, RGWHTTPManager *mgr)
 {
   string new_url = url;
   if (new_url[new_url.size() - 1] != '/')
@@ -602,13 +602,20 @@ int RGWRESTStreamReadRequest::get_resource(RGWAccessKey& key, map<string, string
     headers.push_back(pair<string, string>(iter->first, iter->second));
   }
 
-  int r = http_manager.add_request(this, new_info.method, new_url.c_str());
+  RGWHTTPManager *pmanager = &http_manager;
+  if (mgr) {
+    pmanager = mgr;
+  }
+
+  int r = pmanager->add_request(this, new_info.method, new_url.c_str());
   if (r < 0)
     return r;
-  r = http_manager.complete_requests();
-  if (r < 0)
-    return ret;
 
+  if (!mgr) {
+    r = pmanager->complete_requests();
+    if (r < 0)
+      return ret;
+  }
 
   return 0;
 }
