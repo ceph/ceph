@@ -470,10 +470,6 @@ python-rados, python-rbd and python-cephfs. Packages still depending on
 python-ceph should be fixed to depend on python-rados, python-rbd or
 python-cephfs instead.
 
-%if 0%{?opensuse} || 0%{?suse_version}
-%debug_package
-%endif
-
 #################################################################################
 # common
 #################################################################################
@@ -514,7 +510,7 @@ export RPM_OPT_FLAGS=`echo $RPM_OPT_FLAGS | sed -e 's/i386/i486/'`
 %if 0%{?rhel} || 0%{?fedora}
 		--with-systemd-libexec-dir=/usr/libexec/ceph \
 %endif
-%if 0%{?opensuse} || 0%{?suse_version}
+%if 0%{?suse_version}
 		--with-systemd-libexec-dir=/usr/lib/ceph/ \
 %endif
 		$MY_CONF_OPT \
