@@ -4,6 +4,7 @@
 #ifndef CEPH_RGW_HTTP_CLIENT_H
 #define CEPH_RGW_HTTP_CLIENT_H
 
+#include "common/RWLock.h"
 #include "rgw_common.h"
 
 class RGWHTTPClient
@@ -18,7 +19,7 @@ protected:
   CephContext *cct;
 
   list<pair<string, string> > headers;
-  int init_async(const char *method, const char *url, void **handle);
+  int init_request(const char *method, const char *url, void *handle);
 public:
   virtual ~RGWHTTPClient() {}
   RGWHTTPClient(CephContext *_cct): send_len (0), has_send_len(false), cct(_cct) {}
@@ -43,11 +44,20 @@ public:
 class RGWHTTPManager {
   CephContext *cct;
   void *multi_handle;
+
+  void register_request(void *handle);
+  void unregister_request(void *handle);
+  void finish_request(void *handle);
+
+  RWLock reqs_lock;
+  map<uint64_t, void *> reqs;
+  uint64_t num_reqs;
 public:
   RGWHTTPManager(CephContext *_cct);
   ~RGWHTTPManager();
 
-  int init_async(RGWHTTPClient *client, const char *method, const char *url, void **handle);
+  int add_request(RGWHTTPClient *client, const char *method, const char *url);
+
   int process_requests(bool wait_for_data, bool *done);
   int complete_requests();
 };
