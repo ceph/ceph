@@ -705,7 +705,7 @@ int main(int argc, const char **argv)
     } else if (ceph_argparse_witharg(args, i, &proto_str, "--protocol", (char*)NULL)) {
       if (strcasecmp(proto_str.c_str(), "http") == 0) {
         protocol = S3ProtocolHTTP;
-      } else if (strcasecmp(proto_str.c_str(), "http") == 0) {
+      } else if (strcasecmp(proto_str.c_str(), "https") == 0) {
         protocol = S3ProtocolHTTPS;
       } else {
         cerr << "bad protocol" << std::endl;
