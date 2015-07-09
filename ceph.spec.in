@@ -57,7 +57,6 @@ Requires: systemd
 BuildRequires: sharutils
 %endif
 BuildRequires:	gcc-c++
-BuildRequires:	git
 BuildRequires:	boost-devel
 BuildRequires:	cryptsetup
 BuildRequires:	gdbm
