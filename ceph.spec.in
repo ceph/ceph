@@ -617,18 +617,57 @@ mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/log/radosgw
 %clean
 rm -rf $RPM_BUILD_ROOT
 
+%pre
+%if 0%{?_with_systemd}
+  %if 0%{?suse_version}
+    # service_add_pre and friends don't work with parameterized systemd service
+    # instances, only with single services or targets, so we always pass
+    # ceph.target to these macros
+    %service_add_pre ceph.target
+  %endif
+%endif
+
 %post
+%if 0%{?_with_systemd}
+  systemd-tmpfiles --create %{_tmpfilesdir}/%{name}.conf
+  %if 0%{?suse_version}
+    %service_add_post ceph.target
+  %endif
+%else
+  /sbin/chkconfig --add ceph
+%endif
 /sbin/ldconfig
-/sbin/chkconfig --add ceph
 
 %preun
-%if %{defined suse_version}
-%stop_on_removal ceph
+%if 0%{?_with_systemd}
+  %if 0%{?suse_version}
+    %service_del_preun ceph.target
+  %endif
+  # Need a special case here when removing the RPM to disable specific
+  # service instance, or stale symlinks will be left lying around in
+  # /etc/systemd/system.  May as well stop them too for completeness
+  # (although strictly service_del_preun would do that anyway by dint
+  # of stopping ceph.target)
+  SERVICE_LIST=$(systemctl | grep -E '^ceph-mon@|^ceph-osd@|^ceph-mds@'  | cut -d' ' -f1)
+  if [ -n "$SERVICE_LIST" ]; then
+    for SERVICE in $SERVICE_LIST; do
+      echo "disable $SERVICE"
+      /usr/bin/systemctl --no-reload disable $SERVICE > /dev/null 2>&1 || :
+      echo "stop $SERVICE"
+      /usr/bin/systemctl stop $SERVICE > /dev/null 2>&1 || :
+    done
+  fi
+%else
+  %if 0%{?suse_version}
+    %stop_on_removal ceph
+  %endif
+  %if 0%{?rhel} || 0%{?fedora}
+    if [ $1 = 0 ] ; then
+      /sbin/service ceph stop >/dev/null 2>&1
+      /sbin/chkconfig --del ceph
+    fi
+  %endif
 %endif
-if [ $1 = 0 ] ; then
-    /sbin/service ceph stop >/dev/null 2>&1
-    /sbin/chkconfig --del ceph
-fi
 
 %postun
 /sbin/ldconfig
