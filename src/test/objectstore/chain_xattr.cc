@@ -202,7 +202,7 @@ TEST(chain_xattr, chunk_aligned) {
     const char *aname = "user.baz";
     char buf[CHAIN_XATTR_SHORT_BLOCK_LEN*3];
     memset(buf, 'x', sizeof(buf));
-    ASSERT_EQ(sizeof(buf), chain_setxattr(file, aname, buf, sizeof(buf)));
+    ASSERT_EQ((int)sizeof(buf), chain_setxattr(file, aname, buf, sizeof(buf)));
     ASSERT_EQ(-ERANGE, chain_getxattr(file, aname, buf,
 				      CHAIN_XATTR_SHORT_BLOCK_LEN*2));
   }
@@ -211,7 +211,7 @@ TEST(chain_xattr, chunk_aligned) {
     const char *aname = "user.biz";
     char buf[CHAIN_XATTR_SHORT_BLOCK_LEN*3];
     memset(buf, 'x', sizeof(buf));
-    ASSERT_EQ(sizeof(buf), chain_fsetxattr(fd, aname, buf, sizeof(buf)));
+    ASSERT_EQ((int)sizeof(buf), chain_fsetxattr(fd, aname, buf, sizeof(buf)));
     ASSERT_EQ(-ERANGE, chain_fgetxattr(fd, aname, buf,
 				       CHAIN_XATTR_SHORT_BLOCK_LEN*2));
   }
