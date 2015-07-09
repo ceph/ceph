@@ -12,7 +12,9 @@ check_perms() {
 	fi
 
 	perms=$2
-	if test "${perms}" != $(echo ${r} | awk '{print $1}'); then
+	if test "${perms}" != $(echo ${r} | awk '{print $1}') && \
+           test "${perms}." != $(echo ${r} | awk '{print $1}') && \
+           test "${perms}+" != $(echo ${r} | awk '{print $1}'); then
 		echo "ERROR: Permissions should be ${perms}"
 		exit 1
 	fi
