@@ -58,7 +58,6 @@ public:
 class RGWRESTStreamWriteRequest : public RGWRESTSimpleRequest {
   Mutex lock;
   list<bufferlist> pending_send;
-  void *handle;
   RGWGetDataCB *cb;
   RGWHTTPManager http_manager;
 public:
@@ -67,7 +66,7 @@ public:
 
   RGWRESTStreamWriteRequest(CephContext *_cct, string& _url, list<pair<string, string> > *_headers,
                 list<pair<string, string> > *_params) : RGWRESTSimpleRequest(_cct, _url, _headers, _params),
-                lock("RGWRESTStreamWriteRequest"), handle(NULL), cb(NULL), http_manager(_cct) {}
+                lock("RGWRESTStreamWriteRequest"), cb(NULL), http_manager(_cct) {}
   ~RGWRESTStreamWriteRequest();
   int put_obj_init(RGWAccessKey& key, rgw_obj& obj, uint64_t obj_size, map<string, bufferlist>& attrs);
   int complete(string& etag, time_t *mtime);
