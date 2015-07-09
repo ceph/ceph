@@ -5,7 +5,10 @@
 #define CEPH_RGW_HTTP_CLIENT_H
 
 #include "common/RWLock.h"
+#include "include/atomic.h"
 #include "rgw_common.h"
+
+struct rgw_http_req_data;
 
 class RGWHTTPClient
 {
@@ -19,7 +22,7 @@ protected:
   CephContext *cct;
 
   list<pair<string, string> > headers;
-  int init_request(const char *method, const char *url, void *handle);
+  int init_request(const char *method, const char *url, rgw_http_req_data *req_data);
 public:
   virtual ~RGWHTTPClient() {}
   RGWHTTPClient(CephContext *_cct): send_len (0), has_send_len(false), cct(_cct) {}
@@ -44,21 +47,45 @@ public:
 class RGWHTTPManager {
   CephContext *cct;
   void *multi_handle;
-
-  void register_request(void *handle);
-  void unregister_request(void *handle);
-  void finish_request(void *handle);
+  bool is_threaded;
+  atomic_t going_down;
 
   RWLock reqs_lock;
-  map<uint64_t, void *> reqs;
-  uint64_t num_reqs;
+  map<uint64_t, rgw_http_req_data *> reqs;
+  int64_t num_reqs;
+  int64_t max_threaded_req;
+
+  void register_request(rgw_http_req_data *req_data);
+  void unregister_request(rgw_http_req_data *req_data);
+  void finish_request(rgw_http_req_data *req_data);
+  int link_request(rgw_http_req_data *req_data);
+
+  void link_pending_requests();
+
+  class ReqsThread : public Thread {
+    RGWHTTPManager *manager;
+
+  public:
+    ReqsThread(RGWHTTPManager *_m) : manager(_m) {}
+    void *entry();
+  };
+
+  ReqsThread *reqs_thread;
+
+  void *reqs_thread_entry();
+
 public:
   RGWHTTPManager(CephContext *_cct);
   ~RGWHTTPManager();
 
+  void set_threaded();
+  void stop();
+
   int add_request(RGWHTTPClient *client, const char *method, const char *url);
 
+  /* only for non threaded case */
   int process_requests(bool wait_for_data, bool *done);
+
   int complete_requests();
 };
 
