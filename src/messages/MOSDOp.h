@@ -47,6 +47,7 @@ private:
   object_locator_t oloc;
   pg_t pgid;
   bufferlist::iterator p;
+  // decoding flags. Messages constructed in objecter are already decoded.
   bool partialDecoded;
   bool finalDecoded;
 public:
@@ -112,7 +113,7 @@ public:
     : Message(CEPH_MSG_OSD_OP, HEAD_VERSION, COMPAT_VERSION),
       client_inc(inc),
       osdmap_epoch(_osdmap_epoch), flags(_flags), retry_attempt(-1),
-      oid(_oid), oloc(_oloc), pgid(_pgid), partialDecoded(true), finalDecoded(false),
+      oid(_oid), oloc(_oloc), pgid(_pgid), partialDecoded(true), finalDecoded(true),
       features(feat) {
     set_tid(tid);
   }
