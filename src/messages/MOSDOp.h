@@ -47,7 +47,8 @@ private:
   object_locator_t oloc;
   pg_t pgid;
   bufferlist::iterator p;
-  // decoding flags. Messages constructed in objecter are already decoded.
+  // Decoding flags. Valuable only after catching message with pipe reader.
+  // For objecter constructor, both of them are set to true
   bool partialDecoded;
   bool finalDecoded;
 public:
