@@ -1279,7 +1279,9 @@ bool MDSDaemon::ms_verify_authorizer(Connection *con, int peer_type,
       std::ostringstream errstr;
       if (!s->auth_caps.parse(g_ceph_context, auth_cap_str, &errstr)) {
         dout(1) << __func__ << ": auth cap parse error: " << errstr.str()
-          << " parsing '" << auth_cap_str << "'" << dendl;
+		<< " parsing '" << auth_cap_str << "'" << dendl;
+	clog->warn() << name << " mds cap '" << auth_cap_str
+		     << "' does not parse: " << errstr.str() << "\n";
       }
     } catch (buffer::error& e) {
       // Assume legacy auth, defaults to:
