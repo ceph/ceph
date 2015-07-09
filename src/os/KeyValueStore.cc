@@ -2977,7 +2977,7 @@ int KeyValueStore::check_get_rc(const coll_t cid, const ghobject_t& oid, int r, 
   return r;
 }
 
-void KeyValueStore::dump_start(const std::string file)
+void KeyValueStore::dump_start(const std::string &file)
 {
   dout(10) << "dump_start " << file << dendl;
   if (m_keyvaluestore_do_dump) {
