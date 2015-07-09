@@ -120,8 +120,9 @@ int RGWHTTPClient::process(const char *method, const char *url)
 struct multi_req_data {
   CURL *easy_handle;
   curl_slist *h;
+  uint64_t id;
 
-  multi_req_data() : easy_handle(NULL), h(NULL) {}
+  multi_req_data() : easy_handle(NULL), h(NULL), id((uint64_t)-1) {}
   ~multi_req_data() {
     if (easy_handle)
       curl_easy_cleanup(easy_handle);
@@ -131,11 +132,10 @@ struct multi_req_data {
   }
 };
 
-int RGWHTTPClient::init_async(const char *method, const char *url, void **handle)
+int RGWHTTPClient::init_request(const char *method, const char *url, void *handle)
 {
   CURL *easy_handle;
-  multi_req_data *req_data = new multi_req_data;
-  *handle = (void *)req_data;
+  multi_req_data *req_data = static_cast<multi_req_data *>(handle);
 
   char error_buf[CURL_ERROR_SIZE];
 
@@ -226,7 +226,7 @@ static int do_curl_wait(CephContext *cct, CURLM *handle)
 
 #endif
 
-RGWHTTPManager::RGWHTTPManager(CephContext *_cct) : cct(_cct) {
+RGWHTTPManager::RGWHTTPManager(CephContext *_cct) : cct(_cct), reqs_lock("RGWHTTPManager::reqs_lock"), num_reqs(0) {
   multi_handle = (void *)curl_multi_init();
 }
 
@@ -235,14 +235,45 @@ RGWHTTPManager::~RGWHTTPManager() {
     curl_multi_cleanup((CURLM *)multi_handle);
 }
 
-int RGWHTTPManager::init_async(RGWHTTPClient *client, const char *method, const char *url, void **handle)
+void RGWHTTPManager::register_request(void *handle)
 {
-  int ret = client->init_async(method, url, handle);
+  multi_req_data *req_data = static_cast<multi_req_data *>(handle);
+
+  RWLock::WLocker rl(reqs_lock);
+  req_data->id = num_reqs;
+  reqs[num_reqs] = req_data;
+  num_reqs++;
+}
+
+void RGWHTTPManager::unregister_request(void *handle)
+{
+  multi_req_data *req_data = static_cast<multi_req_data *>(handle);
+
+  RWLock::WLocker rl(reqs_lock);
+  map<uint64_t, void *>::iterator iter = reqs.find(req_data->id);
+  if (iter == reqs.end()) {
+    return;
+  }
+  reqs.erase(iter);
+}
+
+void RGWHTTPManager::finish_request(void *handle)
+{
+  multi_req_data *req_data = static_cast<multi_req_data *>(handle);
+  unregister_request(handle);
+
+  delete req_data;
+}
+
+int RGWHTTPManager::add_request(RGWHTTPClient *client, const char *method, const char *url)
+{
+  multi_req_data *req_data = new multi_req_data;
+  void *handle = (void *)req_data;
+
+  int ret = client->init_request(method, url, handle);
   if (ret < 0) {
     return ret;
   }
-
-  multi_req_data *req_data = static_cast<multi_req_data *>(*handle);
 
   CURLMcode mstatus = curl_multi_add_handle((CURLM *)multi_handle, req_data->easy_handle);
   if (mstatus) {
@@ -250,6 +281,9 @@ int RGWHTTPManager::init_async(RGWHTTPClient *client, const char *method, const 
     delete req_data;
     return -EIO;
   }
+
+  register_request(req_data);
+
   return 0;
 }
 
@@ -282,6 +316,7 @@ int RGWHTTPManager::process_requests(bool wait_for_data, bool *done)
 	CURL *e = msg->easy_handle;
 	multi_req_data *req_data;
 	curl_easy_getinfo(e, CURLINFO_PRIVATE, (void **)&req_data);
+	finish_request(req_data);
         switch (msg->data.result) {
           case CURLE_OK:
             break;
