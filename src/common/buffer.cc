@@ -1060,12 +1060,23 @@ static uint32_t simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZE
 	 it != _buffers.end();
 	 ++it) {
       if (p + it->length() > o) {
-	if (p >= o && p+it->length() <= o+l)
-	  it->zero();                         // all
-	else if (p >= o) 
-	  it->zero(0, o+l-p);                 // head
-	else
-	  it->zero(o-p, it->length()-(o-p));  // tail
+        if (p >= o && p+it->length() <= o+l) {
+          // 'o'------------- l -----------|
+          //      'p'-- it->length() --|
+	  it->zero();
+        } else if (p >= o) {
+          // 'o'------------- l -----------|
+          //    'p'------- it->length() -------|
+	  it->zero(0, o+l-p);
+        } else if (p + it->length() <= o+l) {
+          //     'o'------------- l -----------|
+          // 'p'------- it->length() -------|
+	  it->zero(o-p, it->length()-(o-p));
+        } else {
+          //       'o'----------- l -----------|
+          // 'p'---------- it->length() ----------|
+          it->zero(o-p, l);
+        }
       }
       p += it->length();
       if (o+l <= p)
