@@ -173,10 +173,16 @@ int RGWHTTPClient::init_request(const char *method, const char *url, rgw_http_re
 
 #if HAVE_CURL_MULTI_WAIT
 
-static int do_curl_wait(CephContext *cct, CURLM *handle)
+static int do_curl_wait(CephContext *cct, CURLM *handle, int signal_fd)
 {
   int num_fds;
-  int ret = curl_multi_wait(handle, NULL, 0, cct->_conf->rgw_curl_wait_timeout_ms, &num_fds);
+  struct curl_waitfd wait_fd;
+
+  wait_fd.fd = signal_fd;
+  wait_fd.events = CURL_WAIT_POLLIN;
+  wait_fd.revents = 0;
+
+  int ret = curl_multi_wait(handle, &wait_fd, 1, cct->_conf->rgw_curl_wait_timeout_ms, &num_fds);
   if (ret) {
     dout(0) << "ERROR: curl_multi_wait() returned " << ret << dendl;
     return -EIO;
@@ -224,6 +230,7 @@ static int do_curl_wait(CephContext *cct, CURLM *handle)
 }
 
 #endif
+#warning need to fix do_curl_wait() in second case
 
 void *RGWHTTPManager::ReqsThread::entry()
 {
@@ -236,6 +243,8 @@ RGWHTTPManager::RGWHTTPManager(CephContext *_cct) : cct(_cct), is_threaded(false
                                                     reqs_thread(NULL)
 {
   multi_handle = (void *)curl_multi_init();
+  thread_pipe[0] = -1;
+  thread_pipe[1] = -1;
 }
 
 RGWHTTPManager::~RGWHTTPManager() {
@@ -247,6 +256,7 @@ void RGWHTTPManager::register_request(rgw_http_req_data *req_data)
 {
   RWLock::WLocker rl(reqs_lock);
   req_data->id = num_reqs;
+ldout(cct, 0) << __FILE__ << ":" << __LINE__ << " req_data->id=" << req_data->id << ", easy_handle=" << req_data->easy_handle << dendl;
   reqs[num_reqs] = req_data;
   num_reqs++;
 }
@@ -270,10 +280,10 @@ void RGWHTTPManager::finish_request(rgw_http_req_data *req_data)
 
 int RGWHTTPManager::link_request(rgw_http_req_data *req_data)
 {
+ldout(cct, 0) << __FILE__ << ":" << __LINE__ << " req_data->id=" << req_data->id << ", easy_handle=" << req_data->easy_handle << dendl;
   CURLMcode mstatus = curl_multi_add_handle((CURLM *)multi_handle, req_data->easy_handle);
   if (mstatus) {
     dout(0) << "ERROR: failed on curl_multi_add_handle, status=" << mstatus << dendl;
-    delete req_data;
     return -EIO;
   }
   return 0;
@@ -293,12 +303,14 @@ void RGWHTTPManager::link_pending_requests()
   map<uint64_t, rgw_http_req_data *>::iterator iter = reqs.find(max_threaded_req);
 
   for (; iter != reqs.end(); ++iter) {
-    int r = link_request(iter->second);
+    rgw_http_req_data *req_data = iter->second;
+    int r = link_request(req_data);
     if (r < 0) {
       ldout(cct, 0) << "ERROR: failed to link http request" << dendl;
 #warning FIXME: need to send back error on request
+      delete req_data;
     }
-    max_threaded_req = iter->first;
+    max_threaded_req = iter->first + 1;
   }
 }
 
@@ -315,9 +327,13 @@ int RGWHTTPManager::add_request(RGWHTTPClient *client, const char *method, const
 
   if (!is_threaded) {
     ret = link_request(req_data);
-    if (ret < 0) {
-      return ret;
-    }
+  } else {
+    ret = signal_thread();
+  }
+  if (ret < 0) {
+    delete req_data;
+#warning should drop reference here
+    return ret;
   }
 
   return 0;
@@ -325,12 +341,14 @@ int RGWHTTPManager::add_request(RGWHTTPClient *client, const char *method, const
 
 int RGWHTTPManager::process_requests(bool wait_for_data, bool *done)
 {
+  assert(!is_threaded);
+
   int still_running;
   int mstatus;
 
   do {
     if (wait_for_data) {
-      int ret = do_curl_wait(cct, (CURLM *)multi_handle);
+      int ret = do_curl_wait(cct, (CURLM *)multi_handle, -1);
       if (ret < 0) {
         return ret;
       }
@@ -380,11 +398,19 @@ int RGWHTTPManager::complete_requests()
   return ret;
 }
 
-void RGWHTTPManager::set_threaded()
+int RGWHTTPManager::set_threaded()
 {
   is_threaded = true;
   reqs_thread = new ReqsThread(this);
   reqs_thread->create();
+
+  int r = pipe(thread_pipe);
+  if (r < 0) {
+    r = -errno;
+    ldout(cct, 0) << "ERROR: pipe() returned errno=" << r << dendl;
+    return r;
+  }
+  return 0;
 }
 
 void RGWHTTPManager::stop()
@@ -396,6 +422,18 @@ void RGWHTTPManager::stop()
   }
 }
 
+int RGWHTTPManager::signal_thread()
+{
+  uint32_t buf = 0;
+  int ret = write(thread_pipe[1], (void *)&buf, sizeof(buf));
+  if (ret < 0) {
+    ret = -errno;
+    ldout(cct, 0) << "ERROR: " << __func__ << ": write() returned ret=" << ret << dendl;
+    return ret;
+  }
+  return 0;
+}
+
 void *RGWHTTPManager::reqs_thread_entry()
 {
   int still_running;
@@ -404,7 +442,7 @@ void *RGWHTTPManager::reqs_thread_entry()
   ldout(cct, 0) << __func__ << ": start" << dendl;
 
   while (!going_down.read()) {
-    int ret = do_curl_wait(cct, (CURLM *)multi_handle);
+    int ret = do_curl_wait(cct, (CURLM *)multi_handle, thread_pipe[0]);
     if (ret < 0) {
       dout(0) << "ERROR: do_curl_wait() returned: " << ret << dendl;
       return NULL;

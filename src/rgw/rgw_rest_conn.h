@@ -61,8 +61,10 @@ public:
   int get_resource(const string& resource,
                    list<pair<string, string> > *extra_params,
                    map<string, string>* extra_headers,
-                   bufferlist& bl);
+                   bufferlist& bl, RGWHTTPManager *mgr = NULL);
 
+  int send_get_resource(const string& resource, const rgw_http_param_pair *pp,
+		        bufferlist &bl, RGWHTTPManager *mgr);
   template <class T>
   int get_json_resource(const string& resource, list<pair<string, string> > *params, T& t);
   template <class T>
