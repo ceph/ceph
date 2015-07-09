@@ -635,7 +635,7 @@ public:
   loff_t release_set(ObjectSet *oset);  // returns # of bytes not released (ie non-clean)
   uint64_t release_all();
 
-  void discard_set(ObjectSet *oset, vector<ObjectExtent>& ex);
+  void discard_set(ObjectSet *oset, const vector<ObjectExtent>& ex);
 
   /**
    * Retry any in-flight reads that get -ENOENT instead of marking

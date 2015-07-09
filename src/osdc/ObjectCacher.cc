@@ -1967,7 +1967,7 @@ void ObjectCacher::clear_nonexistence(ObjectSet *oset)
 /**
  * discard object extents from an ObjectSet by removing the objects in exls from the in-memory oset.
  */
-void ObjectCacher::discard_set(ObjectSet *oset, vector<ObjectExtent>& exls)
+void ObjectCacher::discard_set(ObjectSet *oset, const vector<ObjectExtent>& exls)
 {
   assert(lock.is_locked());
   if (oset->objects.empty()) {
@@ -1979,11 +1979,11 @@ void ObjectCacher::discard_set(ObjectSet *oset, vector<ObjectExtent>& exls)
 
   bool were_dirty = oset->dirty_or_tx > 0;
 
-  for (vector<ObjectExtent>::iterator p = exls.begin();
+  for (vector<ObjectExtent>::const_iterator p = exls.begin();
        p != exls.end();
        ++p) {
     ldout(cct, 10) << "discard_set " << oset << " ex " << *p << dendl;
-    ObjectExtent &ex = *p;
+    const ObjectExtent &ex = *p;
     sobject_t soid(ex.oid, CEPH_NOSNAP);
     if (objects[oset->poolid].count(soid) == 0)
       continue;
