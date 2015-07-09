@@ -114,7 +114,7 @@ BuildRequires:	python-requests
 %if ( 0%{?rhel} > 0 && 0%{?rhel} < 7 ) || ( 0%{?centos} > 0 && 0%{?centos} < 7 )
 BuildRequires:	python-sphinx10
 %endif
-%if 0%{?fedora} || 0%{defined suse_version} || 0%{?rhel} >= 7 || 0%{?centos} >= 7
+%if 0%{?fedora} || 0%{?suse_version} || 0%{?rhel} >= 7 || 0%{?centos} >= 7
 BuildRequires:	python-sphinx
 %endif
 
@@ -129,7 +129,7 @@ BuildRequires:	yasm
 #################################################################################
 # distro-conditional dependencies
 #################################################################################
-%if 0%{defined suse_version}
+%if 0%{?suse_version}
 Requires:	python-Flask
 BuildRequires:	net-tools
 BuildRequires:	libbz2-devel
@@ -211,7 +211,7 @@ Summary:	Rados REST gateway
 Group:		Development/Libraries
 Requires:	ceph-common = %{epoch}:%{version}-%{release}
 Requires:	librados2 = %{epoch}:%{version}-%{release}
-%if 0%{defined suse_version}
+%if 0%{?suse_version}
 BuildRequires:	libexpat-devel
 BuildRequires:	FastCGI-devel
 %endif
@@ -552,7 +552,7 @@ export RPM_OPT_FLAGS=`echo $RPM_OPT_FLAGS | sed -e 's/i386/i486/'`
 		CFLAGS="$RPM_OPT_FLAGS" CXXFLAGS="$RPM_OPT_FLAGS"
 
 # fix bug in specific version of libedit-devel
-%if 0%{defined suse_version}
+%if 0%{?suse_version}
 sed -i -e "s/-lcurses/-lncurses/g" Makefile
 sed -i -e "s/-lcurses/-lncurses/g" src/Makefile
 sed -i -e "s/-lcurses/-lncurses/g" man/Makefile
@@ -640,7 +640,7 @@ mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/lib/ceph/bootstrap-mds
 mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/lib/ceph/bootstrap-rgw
 mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/log/radosgw
 
-%if %{defined suse_version}
+%if 0%{?suse_version}
 # Fedora seems to have some problems with this macro, use it only on SUSE
 %fdupes -s $RPM_BUILD_ROOT/%{python_sitelib}
 %fdupes %buildroot
