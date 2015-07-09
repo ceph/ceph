@@ -89,7 +89,7 @@ void AioImageRequestWQ::aio_read(AioCompletion *c, uint64_t off, size_t len,
     queue(new AioImageRead(m_image_ctx, c, off, len, buf, pbl, op_flags),
           false);
   } else {
-    AioImageRequest::read(&m_image_ctx, c, off, len, buf, pbl, op_flags);
+    AioImageRequest::aio_read(&m_image_ctx, c, off, len, buf, pbl, op_flags);
   }
 }
 
@@ -107,7 +107,7 @@ void AioImageRequestWQ::aio_write(AioCompletion *c, uint64_t off, size_t len,
     queue(new AioImageWrite(m_image_ctx, c, off, len, buf, op_flags),
           lock_required);
   } else {
-    AioImageRequest::write(&m_image_ctx, c, off, len, buf, op_flags);
+    AioImageRequest::aio_write(&m_image_ctx, c, off, len, buf, op_flags);
   }
 }
 
@@ -125,7 +125,7 @@ void AioImageRequestWQ::aio_discard(AioCompletion *c, uint64_t off,
     queue(new AioImageDiscard(m_image_ctx, c, off, len),
           lock_required);
   } else {
-    AioImageRequest::discard(&m_image_ctx, c, off, len);
+    AioImageRequest::aio_discard(&m_image_ctx, c, off, len);
   }
 }
 
@@ -139,7 +139,7 @@ void AioImageRequestWQ::aio_flush(AioCompletion *c) {
   if (m_image_ctx.non_blocking_aio || !writes_empty()) {
     queue(new AioImageFlush(m_image_ctx, c), false);
   } else {
-    AioImageRequest::flush(&m_image_ctx, c);
+    AioImageRequest::aio_flush(&m_image_ctx, c);
   }
 }
 
