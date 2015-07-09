@@ -75,21 +75,19 @@ public:
   void set_snap_seq(const snapid_t& s) { snap_seq = s; }
 
   // Fields decoded in partial decoding
-  const pg_t&     get_pg() const { return pgid; }
-  epoch_t  get_map_epoch() { return osdmap_epoch; }
-  int get_flags() const { return flags; }
+  const pg_t&     get_pg() const { assert(partialDecoded); return pgid; }
+  epoch_t  get_map_epoch() { assert(partialDecoded); return osdmap_epoch; }
+  int get_flags() const { assert(partialDecoded); return flags; }
 
   // Fields decoded in final decoding
-  int get_client_inc() { return client_inc; }
-  utime_t get_mtime() { return mtime; }
-  const eversion_t& get_version() { return reassert_version; }
-  const object_locator_t& get_object_locator() const {
-    return oloc;
-  }
-  object_t& get_oid() { return oid; }
-  const snapid_t& get_snapid() { return snapid; }
-  const snapid_t& get_snap_seq() const { return snap_seq; }
-  const vector<snapid_t> &get_snaps() const { return snaps; }
+  int get_client_inc() { assert(finalDecoded); return client_inc; }
+  utime_t get_mtime() { assert(finalDecoded); return mtime; }
+  const eversion_t& get_version() { assert(finalDecoded); return reassert_version; }
+  const object_locator_t& get_object_locator() const { assert(finalDecoded); return oloc; }
+  object_t& get_oid() { assert(finalDecoded); return oid; }
+  const snapid_t& get_snapid() { assert(finalDecoded); return snapid; }
+  const snapid_t& get_snap_seq() const { assert(finalDecoded); return snap_seq; }
+  const vector<snapid_t> &get_snaps() const { assert(finalDecoded); return snaps; }
   /**
    * get retry attempt
    *
@@ -114,7 +112,7 @@ public:
     : Message(CEPH_MSG_OSD_OP, HEAD_VERSION, COMPAT_VERSION),
       client_inc(inc),
       osdmap_epoch(_osdmap_epoch), flags(_flags), retry_attempt(-1),
-      oid(_oid), oloc(_oloc), pgid(_pgid), partialDecoded(false), finalDecoded(false),
+      oid(_oid), oloc(_oloc), pgid(_pgid), partialDecoded(true), finalDecoded(false),
       features(feat) {
     set_tid(tid);
   }
@@ -428,7 +426,7 @@ struct ceph_osd_request_head {
       out << " RETRY=" << get_retry_attempt();
     if (reassert_version != eversion_t())
       out << " reassert_version=" << reassert_version;
-    if (get_snap_seq())
+    if (finalDecoded)
       out << " snapc " << get_snap_seq() << "=" << snaps;
     out << " " << ceph_osd_flag_string(get_flags());
     out << " e" << osdmap_epoch;
