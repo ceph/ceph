@@ -4523,6 +4523,10 @@ void Server::handle_client_mkdir(MDRequestRef& mdr)
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return;
 
+  // mkdir check access
+  if (!check_access(mdr, diri, MAY_WRITE))
+    return;
+
   // new inode
   SnapRealm *realm = dn->get_dir()->inode->find_snaprealm();
   snapid_t follows = realm->get_newest_seq();
