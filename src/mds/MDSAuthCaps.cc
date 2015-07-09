@@ -189,7 +189,7 @@ bool MDSAuthCaps::parse(CephContext *c, const std::string& str, ostream *err)
     grants.clear();
 
     if (err)
-      *err << "osdcap parse failed, stopped at '" << std::string(iter, end)
+      *err << "MDSAuthCaps parse failed, stopped at '" << std::string(iter, end)
            << "' of '" << str << "'\n";
     return false; 
   }
