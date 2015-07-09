@@ -1988,7 +1988,7 @@ public:
    * @param size size of buffer to receive value
    * @returns 0 on success, negative error code on failure
    */
-  virtual int collection_getattr(coll_t cid, const char *name,
+  int collection_getattr(coll_t cid, const char *name,
 	                         void *value, size_t size)
     __attribute__ ((deprecated)) {
     return -EOPNOTSUPP;
@@ -2002,7 +2002,7 @@ public:
    * @param bl buffer to receive value
    * @returns 0 on success, negative error code on failure
    */
-  virtual int collection_getattr(coll_t cid, const char *name, bufferlist& bl)
+  int collection_getattr(coll_t cid, const char *name, bufferlist& bl)
     __attribute__ ((deprecated)) {
     return -EOPNOTSUPP;
   }
@@ -2014,7 +2014,7 @@ public:
    * @param aset map of keys and buffers that contain the values
    * @returns 0 on success, negative error code on failure
    */
-  virtual int collection_getattrs(coll_t cid, map<string,bufferptr> &aset)
+  int collection_getattrs(coll_t cid, map<string,bufferptr> &aset)
     __attribute__ ((deprecated)) {
     return -EOPNOTSUPP;
   }
