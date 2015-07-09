@@ -3130,7 +3130,7 @@ void RGWCompleteMultipart::execute()
     return;
   }
 
-  if (parts->parts.size() > s->cct->_conf->rgw_multipart_part_upload_limit) {
+  if ((int)parts->parts.size() > s->cct->_conf->rgw_multipart_part_upload_limit) {
     ret = -ERANGE;
     return;
   }
