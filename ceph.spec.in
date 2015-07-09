@@ -530,8 +530,8 @@ sed -i -e "s/-lcurses/-lncurses/g" src/java/Makefile
 # Set default jobs
 MAKE_JOBS=$(getconf _NPROCESSORS_ONLN)
 # suse OBS build hosts are memory-limited
-%if 0%{defined jobs}
-  MAKE_JOBS=0%{?jobs}
+%if 0%{?jobs}
+  MAKE_JOBS=%{jobs}
 %endif
 make -j${MAKE_JOBS}
 
@@ -540,8 +540,7 @@ make -j${MAKE_JOBS}
 %if 0%{with tests}
 %check
 # run in-tree unittests
-make -j$(getconf _NPROCESSORS_ONLN) check-local
-
+make -j${MAKE_JOBS} check-local
 %endif
 
 
