@@ -2504,8 +2504,9 @@ reprotect_and_return_err:
       RWLock::RLocker owner_lock(m_dest->owner_lock);
       Context *ctx = new C_CopyWrite(m_throttle, m_bl);
       AioCompletion *comp = aio_create_completion_internal(ctx, rbd_ctx_cb);
-      AioImageRequest::write(m_dest, comp, m_offset, m_bl->length(),
-                             m_bl->c_str(), LIBRADOS_OP_FLAG_FADVISE_DONTNEED);
+      AioImageRequest::aio_write(m_dest, comp, m_offset, m_bl->length(),
+                                 m_bl->c_str(),
+                                 LIBRADOS_OP_FLAG_FADVISE_DONTNEED);
     }
   private:
     SimpleThrottle *m_throttle;
@@ -2558,7 +2559,8 @@ reprotect_and_return_err:
       bufferlist *bl = new bufferlist();
       Context *ctx = new C_CopyRead(&throttle, dest, offset, bl);
       AioCompletion *comp = aio_create_completion_internal(ctx, rbd_ctx_cb);
-      AioImageRequest::read(src, comp, offset, len, NULL, bl, fadvise_flags);
+      AioImageRequest::aio_read(src, comp, offset, len, NULL, bl,
+                                fadvise_flags);
       prog_ctx.update_progress(offset, src_size);
     }
 
@@ -3085,7 +3087,7 @@ reprotect_and_return_err:
 
       Context *ctx = new C_SafeCond(&mylock, &cond, &done, &ret);
       AioCompletion *c = aio_create_completion_internal(ctx, rbd_ctx_cb);
-      AioImageRequest::read(ictx, c, off, read_len, NULL, &bl, 0);
+      AioImageRequest::aio_read(ictx, c, off, read_len, NULL, &bl, 0);
 
       mylock.Lock();
       while (!done)
