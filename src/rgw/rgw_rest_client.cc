@@ -455,7 +455,7 @@ int RGWRESTStreamWriteRequest::put_obj_init(RGWAccessKey& key, rgw_obj& obj, uin
 
   set_send_length(obj_size);
 
-  int r = http_manager.init_async(this, new_info.method, new_url.c_str(), &handle);
+  int r = http_manager.add_request(this, new_info.method, new_url.c_str());
   if (r < 0)
     return r;
 
@@ -602,8 +602,7 @@ int RGWRESTStreamReadRequest::get_resource(RGWAccessKey& key, map<string, string
     headers.push_back(pair<string, string>(iter->first, iter->second));
   }
 
-  void *handle;
-  int r = http_manager.init_async(this, new_info.method, new_url.c_str(), &handle);
+  int r = http_manager.add_request(this, new_info.method, new_url.c_str());
   if (r < 0)
     return r;
   r = http_manager.complete_requests();
