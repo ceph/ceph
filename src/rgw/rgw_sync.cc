@@ -68,6 +68,13 @@ int RGWRemoteMetaLog::init()
     ut.shard_id = i;
     ts_to_shard[ut] = i;
   }
+
+  ret = http_manager.set_threaded();
+  if (ret < 0) {
+    ldout(store->ctx(), 0) << "failed in http_manager.set_threaded() ret=" << ret << dendl;
+    return ret;
+  }
+
   return 0;
 }
 
@@ -192,12 +199,17 @@ int RGWRemoteMetaLog::clone_shard(int shard_id, const string& marker, string *ne
                                   { marker_key, marker.c_str() },
                                   { NULL, NULL } };
 
-  rgw_mdlog_shard_data data;
-  int ret = conn->get_json_resource("/admin/log", pairs, data);
+  bufferlist bl;
+  int ret = conn->send_get_resource("/admin/log", pairs, bl, &http_manager);
   if (ret < 0) {
     ldout(store->ctx(), 0) << "ERROR: failed to fetch mdlog data" << dendl;
     return ret;
   }
+
+#warning removeme
+sleep(7);
+
+  rgw_mdlog_shard_data data;
 
   ldout(store->ctx(), 20) << "remote mdlog, shard_id=" << shard_id << " num of shard entries: " << data.entries.size() << dendl;
 

@@ -54,6 +54,7 @@ class RGWHTTPManager {
   map<uint64_t, rgw_http_req_data *> reqs;
   int64_t num_reqs;
   int64_t max_threaded_req;
+  int thread_pipe[2];
 
   void register_request(rgw_http_req_data *req_data);
   void unregister_request(rgw_http_req_data *req_data);
@@ -74,11 +75,13 @@ class RGWHTTPManager {
 
   void *reqs_thread_entry();
 
+  int signal_thread();
+
 public:
   RGWHTTPManager(CephContext *_cct);
   ~RGWHTTPManager();
 
-  void set_threaded();
+  int set_threaded();
   void stop();
 
   int add_request(RGWHTTPClient *client, const char *method, const char *url);
