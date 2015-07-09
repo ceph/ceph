@@ -88,14 +88,12 @@ BuildRequires:	python-sphinx
 %endif
 
 BuildRequires:	python-virtualenv
+BuildRequires:	snappy-devel
 BuildRequires:	util-linux
 BuildRequires:	xfsprogs
 BuildRequires:	xfsprogs-devel
 BuildRequires:	xmlstarlet
 BuildRequires:	yasm
-%if 0%{?rhel} || 0%{?fedora} || 0%{?suse_version}
-BuildRequires:	snappy-devel
-%endif
 
 #################################################################################
 # distro-conditional dependencies
