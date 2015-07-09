@@ -132,7 +132,8 @@ public:
 int RGWRESTConn::get_resource(const string& resource,
 		     list<pair<string, string> > *extra_params,
 		     map<string, string> *extra_headers,
-		     bufferlist& bl)
+		     bufferlist& bl,
+		     RGWHTTPManager *mgr)
 {
   string url;
   int ret = get_url(url);
@@ -162,7 +163,7 @@ int RGWRESTConn::get_resource(const string& resource,
     }
   }
 
-  ret = req.get_resource(key, headers, resource);
+  ret = req.get_resource(key, headers, resource, mgr);
   if (ret < 0) {
     ldout(cct, 0) << __func__ << ": get_resource() resource=" << resource << " returned ret=" << ret << dendl;
     return ret;
@@ -173,4 +174,23 @@ int RGWRESTConn::get_resource(const string& resource,
   return req.complete(etag, NULL, attrs);
 }
 
+int RGWRESTConn::send_get_resource(const string& resource, const rgw_http_param_pair *pp,
+				   bufferlist &bl, RGWHTTPManager *mgr)
+{
+  list<pair<string, string> > params;
+
+  while (pp && pp->key) {
+    string k = pp->key;
+    string v = (pp->val ? pp->val : "");
+    params.push_back(make_pair(k, v));
+    ++pp;
+  }
+
+  int ret = get_resource(resource, &params, NULL, bl, mgr);
+  if (ret < 0) {
+    return ret;
+  }
+
+  return 0;
+}
 
