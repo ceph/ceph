@@ -237,7 +237,7 @@ object store.
 Summary:	RADOS striping interface
 Group:		System Environment/Libraries
 License:	LGPL-2.0
-Requires:	librados2 = %{epoch}:%{version}
+Requires:	librados2 = %{epoch}:%{version}-%{release}
 %description -n libradosstriper1
 Striping interface built on top of the rados library, allowing
 to stripe bigger objects onto several standard rados objects using
