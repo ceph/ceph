@@ -34,6 +34,13 @@ const char *parse_good[] = {
   "allow rw",
   "allow rw uid=1 gids=1,2,3",
   "allow rw path=/foo uid=1 gids=1,2,3",
+  "allow r, allow rw path=/foo",
+  "allow r, allow * uid=1",
+  "allow r ,allow * uid=1",
+  "allow r ;allow * uid=1",
+  "allow r ; allow * uid=1",
+  "allow r ; allow * uid=1",
+  "allow r uid=1 gids=1,2,3, allow * uid=2",
   0
 };
 
@@ -153,6 +160,8 @@ TEST(MDSAuthCaps, OutputParsed) {
      "MDSAuthCaps[allow * path=\"/foo\" uid=1]"},
     {"allow * path=\"/foo\" uid=1 gids=1,2,3",
      "MDSAuthCaps[allow * path=\"/foo\" uid=1 gids=1,2,3]"},
+    {"allow r uid=1 gids=1,2,3, allow * uid=2",
+     "MDSAuthCaps[allow r uid=1 gids=1,2,3, allow * uid=2]"},
   };
   size_t num_tests = sizeof(test_values) / sizeof(*test_values);
   for (size_t i = 0; i < num_tests; ++i) {
