@@ -582,7 +582,7 @@ KeyValueStore::~KeyValueStore()
 
 int KeyValueStore::statfs(struct statfs *buf)
 {
-  if (g_conf->keyvaluestore_backend != "propdb") {
+  if (g_conf->keyvaluestore_backend != "pluggabledb") {
     if (::statfs(basedir.c_str(), buf) < 0) {
       int r = -errno;
       return r;

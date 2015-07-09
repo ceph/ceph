@@ -1827,6 +1827,7 @@ def main_prepare(args):
             prepare_dir(
                 path=args.data,
                 journal=journal_symlink,
+                dbstore_symlink=None,
                 cluster_uuid=args.cluster_uuid,
                 osd_uuid=args.osd_uuid,
                 journal_uuid=journal_uuid,
