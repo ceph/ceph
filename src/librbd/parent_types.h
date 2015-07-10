@@ -3,10 +3,10 @@
 #ifndef CEPH_LIBRBD_PARENT_TYPES_H
 #define CEPH_LIBRBD_PARENT_TYPES_H
 
-// parent_spec uniquely identifies a parent in the clone relationship
-// (clone(parent) creates child, then parent_spec <-> child_imageid)
-
 namespace librbd {
+  /** @brief Unique identification of a parent in clone relationship.
+   * Cloning an image creates a child image that keeps a reference
+   * to its parent. This allows copy-on-write images. */
   struct parent_spec {
     int64_t pool_id;
     string image_id;
@@ -24,9 +24,18 @@ namespace librbd {
     }
   };
 
+  /// Full information about an image's parent.
   struct parent_info {
+    /// Identification of the parent.
     parent_spec spec;
+
+    /** @brief Where the portion of data shared with the child image ends.
+     * Since images can be resized multiple times, the portion of data shared
+     * with the child image is not necessarily min(parent size, child size).
+     * If the child image is first shrunk and then enlarged, the common portion
+     * will be shorter. */
     uint64_t overlap;
+
     parent_info() : overlap(0) {}
   };
 }
