@@ -1095,6 +1095,10 @@ public:
   bool is_replicated()   const { return get_type() == TYPE_REPLICATED; }
   bool is_erasure() const { return get_type() == TYPE_ERASURE; }
 
+  bool supports_omap() const {
+    return !(get_type() == TYPE_ERASURE || has_flag(FLAG_DEBUG_FAKE_EC_POOL));
+  }
+
   bool requires_aligned_append() const { return is_erasure(); }
   uint64_t required_alignment() const { return stripe_width; }
 
