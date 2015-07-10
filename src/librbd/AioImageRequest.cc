@@ -7,6 +7,8 @@
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageWatcher.h"
 #include "librbd/internal.h"
+#include "librbd/Journal.h"
+#include "librbd/JournalTypes.h"
 #include "include/rados/librados.hpp"
 #include "osdc/Striper.h"
 
@@ -150,7 +152,11 @@ void AbstractAioImageWrite::send_request() {
 
   RWLock::RLocker md_locker(m_image_ctx.md_lock);
 
+  bool journaling = false;
+  uint64_t journal_tid = 0;
+
   uint64_t clip_len = m_len;
+  ObjectExtents object_extents;
   ::SnapContext snapc;
   {
     // prevent image size from changing between computing clip and recording
@@ -168,17 +174,30 @@ void AbstractAioImageWrite::send_request() {
     }
 
     snapc = m_image_ctx.snapc;
-    m_aio_comp->init_time(&m_image_ctx, AIO_TYPE_WRITE); // TODO
+    m_aio_comp->init_time(&m_image_ctx, get_aio_type());
+
+    // map to object extents
+    if (clip_len > 0) {
+      Striper::file_to_extents(cct, m_image_ctx.format_string,
+                               &m_image_ctx.layout, m_off, clip_len, 0,
+                               object_extents);
+    }
+
+    journaling = (m_image_ctx.journal != NULL);
   }
 
-  // map to object extents
-  ObjectExtents extents;
-  if (clip_len > 0) {
-    Striper::file_to_extents(cct, m_image_ctx.format_string,
-                             &m_image_ctx.layout, m_off, clip_len, 0, extents);
+  AioObjectRequests requests;
+  send_object_requests(object_extents, snapc, (journaling ? &requests : NULL));
+
+  if (journaling) {
+    // in-flight ops are flushed prior to closing the journal
+    assert(m_image_ctx.journal != NULL);
+    journal_tid = append_journal_event(requests, m_synchronous);
   }
 
-  send_object_requests(extents, snapc);
+  if (m_image_ctx.object_cacher != NULL) {
+    send_cache_requests(object_extents, snapc, journal_tid);
+  }
   update_stats(clip_len);
 
   m_aio_comp->finish_adding_requests(cct);
@@ -186,86 +205,131 @@ void AbstractAioImageWrite::send_request() {
 }
 
 void AbstractAioImageWrite::send_object_requests(
-    const ObjectExtents &object_extents, const ::SnapContext &snapc) {
+    const ObjectExtents &object_extents, const ::SnapContext &snapc,
+    AioObjectRequests *aio_object_requests) {
   CephContext *cct = m_image_ctx.cct;
+
   for (ObjectExtents::const_iterator p = object_extents.begin();
        p != object_extents.end(); ++p) {
     ldout(cct, 20) << " oid " << p->oid << " " << p->offset << "~" << p->length
                    << " from " << p->buffer_extents << dendl;
-    send_object_request(*p, snapc);
+    C_AioRequest *req_comp = new C_AioRequest(cct, m_aio_comp);
+    AioObjectRequest *request = send_object_request(*p, snapc, req_comp);
+
+    // if journaling, stash the request for later; otherwise send
+    if (request != NULL) {
+      if (aio_object_requests != NULL) {
+        aio_object_requests->push_back(request);
+      } else {
+        request->send();
+      }
+    }
   }
 }
 
-void AioImageWrite::send_object_request(const ObjectExtent &object_extent,
-                                        const ::SnapContext &snapc) {
-  CephContext *cct = m_image_ctx.cct;
-
-  // assemble extent
-  bufferlist bl;
+void AioImageWrite::assemble_extent(const ObjectExtent &object_extent,
+                                    bufferlist *bl) {
   for (Extents::const_iterator q = object_extent.buffer_extents.begin();
        q != object_extent.buffer_extents.end(); ++q) {
-    bl.append(m_buf + q->first, q->second);
-  }
-
-  C_AioRequest *req_comp = new C_AioRequest(cct, m_aio_comp);
-  if (m_image_ctx.object_cacher) {
-    m_image_ctx.write_to_cache(object_extent.oid, bl, object_extent.length,
-                               object_extent.offset, req_comp, m_op_flags);
-  } else {
-    AioObjectWrite *req = new AioObjectWrite(&m_image_ctx,
-                                             object_extent.oid.name,
-                                             object_extent.objectno,
-                                             object_extent.offset, bl,
-                                             snapc, req_comp);
-
-    req->set_op_flags(m_op_flags);
-    req->send();
+    bl->append(m_buf + q->first, q->second);;
   }
 }
 
+uint64_t AioImageWrite::append_journal_event(
+    const AioObjectRequests &requests, bool synchronous) {
+  bufferlist bl;
+  bl.append(m_buf, m_len);
+
+  journal::EventEntry event_entry(journal::AioWriteEvent(m_off, m_len, bl));
+  return m_image_ctx.journal->append_event(m_aio_comp, event_entry, requests,
+                                           synchronous);
+}
+
+void AioImageWrite::send_cache_requests(const ObjectExtents &object_extents,
+                                        const ::SnapContext &snapc,
+                                        uint64_t journal_tid) {
+  CephContext *cct = m_image_ctx.cct;
+
+  for (ObjectExtents::const_iterator p = object_extents.begin();
+       p != object_extents.end(); ++p) {
+    const ObjectExtent &object_extent = *p;
+
+    bufferlist bl;
+    assemble_extent(object_extent, &bl);
+
+    // TODO pass journal_tid to object cacher
+    C_AioRequest *req_comp = new C_AioRequest(cct, m_aio_comp);
+    m_image_ctx.write_to_cache(object_extent.oid, bl, object_extent.length,
+                               object_extent.offset, req_comp, m_op_flags);
+  }
+}
+
+AioObjectRequest *AioImageWrite::send_object_request(
+    const ObjectExtent &object_extent, const ::SnapContext &snapc,
+    Context *on_finish) {
+  if (m_image_ctx.object_cacher != NULL) {
+    return NULL;
+  }
+
+  bufferlist bl;
+  assemble_extent(object_extent, &bl);
+  AioObjectWrite *req = new AioObjectWrite(&m_image_ctx,
+                                           object_extent.oid.name,
+                                           object_extent.objectno,
+                                           object_extent.offset, bl,
+                                           snapc, on_finish);
+  req->set_op_flags(m_op_flags);
+  return req;
+}
 
 void AioImageWrite::update_stats(size_t length) {
   m_image_ctx.perfcounter->inc(l_librbd_wr);
   m_image_ctx.perfcounter->inc(l_librbd_wr_bytes, length);
 }
 
-void AioImageDiscard::send_object_requests(const ObjectExtents &object_extents,
-                                           const ::SnapContext &snapc) {
-  // discard from the cache first to ensure writeback won't recreate
-  if (m_image_ctx.object_cacher != NULL) {
-    Mutex::Locker cache_locker(m_image_ctx.cache_lock);
-    m_image_ctx.object_cacher->discard_set(m_image_ctx.object_set,
-                                           object_extents);
-  }
-
-  AbstractAioImageWrite::send_object_requests(object_extents, snapc);
+uint64_t AioImageDiscard::append_journal_event(
+    const AioObjectRequests &requests, bool synchronous) {
+  journal::EventEntry event_entry(journal::AioDiscardEvent(m_off, m_len));
+  return m_image_ctx.journal->append_event(m_aio_comp, event_entry, requests,
+                                           synchronous);
 }
 
-void AioImageDiscard::send_object_request(const ObjectExtent &object_extent,
-                                          const ::SnapContext &snapc) {
-  CephContext *cct = m_image_ctx.cct;
+void AioImageDiscard::send_cache_requests(const ObjectExtents &object_extents,
+                                          const ::SnapContext &snapc,
+                                          uint64_t journal_tid) {
+  // TODO need to have cache flag pending discard for writeback or need
+  // to delay cache update until after journal commits
+  Mutex::Locker cache_locker(m_image_ctx.cache_lock);
 
-  C_AioRequest *req_comp = new C_AioRequest(cct, m_aio_comp);
+  // TODO pass journal_tid to object cacher
+  m_image_ctx.object_cacher->discard_set(m_image_ctx.object_set,
+                                         object_extents);
+}
+
+AioObjectRequest *AioImageDiscard::send_object_request(
+    const ObjectExtent &object_extent, const ::SnapContext &snapc,
+    Context *on_finish) {
+  CephContext *cct = m_image_ctx.cct;
 
   AioObjectRequest *req;
   if (object_extent.length == m_image_ctx.layout.fl_object_size) {
     req = new AioObjectRemove(&m_image_ctx, object_extent.oid.name,
-                              object_extent.objectno, snapc, req_comp);
+                              object_extent.objectno, snapc, on_finish);
   } else if (object_extent.offset + object_extent.length ==
                m_image_ctx.layout.fl_object_size) {
     req = new AioObjectTruncate(&m_image_ctx, object_extent.oid.name,
                                 object_extent.objectno, object_extent.offset,
-                                snapc, req_comp);
+                                snapc, on_finish);
   } else {
     if(cct->_conf->rbd_skip_partial_discard) {
-      delete req_comp;
-      return;
+      delete on_finish;
+      return NULL;
     }
     req = new AioObjectZero(&m_image_ctx, object_extent.oid.name,
                             object_extent.objectno, object_extent.offset,
-                            object_extent.length, snapc, req_comp);
+                            object_extent.length, snapc, on_finish);
   }
-  req->send();
+  return req;
 }
 
 void AioImageDiscard::update_stats(size_t length) {
@@ -275,6 +339,16 @@ void AioImageDiscard::update_stats(size_t length) {
 
 void AioImageFlush::send_request() {
   CephContext *cct = m_image_ctx.cct;
+
+  {
+    // journal the flush event
+    RWLock::RLocker snap_locker(m_image_ctx.snap_lock);
+    if (m_image_ctx.journal != NULL) {
+      m_image_ctx.journal->append_event(
+        m_aio_comp, journal::EventEntry(journal::AioFlushEvent()),
+        AioObjectRequests(), true);
+    }
+  }
 
   // TODO race condition between registering op and submitting to cache
   //      (might not be flushed -- backport needed)

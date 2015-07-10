@@ -5,17 +5,15 @@
 
 #include "common/Cond.h"
 #include "common/Mutex.h"
-#include "common/ceph_context.h"
-#include "common/perf_counters.h"
 #include "include/Context.h"
 #include "include/utime.h"
 #include "include/rbd/librbd.hpp"
 
 #include "librbd/AsyncOperation.h"
-#include "librbd/ImageCtx.h"
-#include "librbd/internal.h"
 
 #include "osdc/Striper.h"
+
+class CephContext;
 
 namespace librbd {
 
@@ -88,15 +86,7 @@ namespace librbd {
 
     void finish_adding_requests(CephContext *cct);
 
-    void init_time(ImageCtx *i, aio_type_t t) {
-      if (ictx == NULL) {
-        ictx = i;
-        aio_type = t;
-        start_time = ceph_clock_now(ictx->cct);
-
-	async_op.start_op(*ictx);
-      }
-    }
+    void init_time(ImageCtx *i, aio_type_t t);
 
     void fail(CephContext *cct, int r);
 

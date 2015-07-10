@@ -29,6 +29,7 @@
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageWatcher.h"
 #include "librbd/internal.h"
+#include "librbd/Journal.h"
 #include "librbd/ObjectMap.h"
 #include "librbd/parent_types.h"
 #include "librbd/RebuildObjectMapRequest.h"
@@ -1055,12 +1056,36 @@ reprotect_and_return_err:
                                     OBJECT_NONEXISTENT);
       r = io_ctx.operate(ObjectMap::object_map_name(id, CEPH_NOSNAP), &op);
       if (r < 0) {
+        lderr(cct) << "error creating initial object map: "
+                   << cpp_strerror(r) << dendl;
         goto err_remove_header;
+      }
+    }
+
+    if ((features & RBD_FEATURE_JOURNALING) != 0) {
+      if ((features & RBD_FEATURE_EXCLUSIVE_LOCK) == 0) {
+        lderr(cct) << "cannot use journaling without exclusive lock" << dendl;
+        goto err_remove_object_map;
+      }
+
+      r = Journal::create(io_ctx, id);
+      if (r < 0) {
+        lderr(cct) << "error creating journal: " << cpp_strerror(r) << dendl;
+        goto err_remove_object_map;
       }
     }
 
     ldout(cct, 2) << "done." << dendl;
     return 0;
+
+  err_remove_object_map:
+    if ((features & RBD_FEATURE_OBJECT_MAP) != 0) {
+      remove_r = ObjectMap::remove(io_ctx, id);
+      if (remove_r < 0) {
+        lderr(cct) << "error cleaning up object map after creation failed: "
+                   << cpp_strerror(remove_r) << dendl;
+      }
+    }
 
   err_remove_header:
     remove_r = io_ctx.remove(header_oid);
@@ -1504,6 +1529,13 @@ reprotect_and_return_err:
       return -EINVAL;
     }
 
+    RWLock::RLocker owner_locker(ictx->owner_lock);
+    RWLock::WLocker md_locker(ictx->md_lock);
+    r = _flush(ictx);
+    if (r < 0) {
+      return r;
+    }
+
     if ((features & RBD_FEATURES_MUTABLE) != features) {
       lderr(cct) << "cannot update immutable features" << dendl;
       return -EINVAL;
@@ -1512,13 +1544,17 @@ reprotect_and_return_err:
       return -EINVAL;
     }
 
-    RWLock::RLocker l(ictx->snap_lock);
-    uint64_t new_features = ictx->features | features;
-    if (!enabled) {
+    RWLock::WLocker snap_locker(ictx->snap_lock);
+    uint64_t new_features;
+    if (enabled) {
+      features &= ~ictx->features;
+      new_features = ictx->features | features;
+    } else {
+      features &= ictx->features;
       new_features = ictx->features & ~features;
     }
 
-    if (ictx->features == new_features) {
+    if (features == 0) {
       return 0;
     }
 
@@ -1549,6 +1585,13 @@ reprotect_and_return_err:
           return -EINVAL;
         }
         features_mask |= RBD_FEATURE_EXCLUSIVE_LOCK;
+
+        r = Journal::create(ictx->md_ctx, ictx->id);
+        if (r < 0) {
+          lderr(cct) << "error creating image journal: " << cpp_strerror(r)
+                     << dendl;
+          return r;
+        }
       }
 
       if (enable_flags != 0) {
@@ -1582,6 +1625,14 @@ reprotect_and_return_err:
       if ((features & RBD_FEATURE_FAST_DIFF) != 0) {
         disable_flags = RBD_FLAG_FAST_DIFF_INVALID;
       }
+      if ((features & RBD_FEATURE_JOURNALING) != 0) {
+        r = Journal::remove(ictx->md_ctx, ictx->id);
+        if (r < 0) {
+          lderr(cct) << "error removing image journal: " << cpp_strerror(r)
+                     << dendl;
+          return r;
+        }
+      }
     }
 
     ldout(cct, 10) << "update_features: features=" << new_features << ", mask="
@@ -1591,6 +1642,7 @@ reprotect_and_return_err:
     if (r < 0) {
       lderr(cct) << "failed to update features: " << cpp_strerror(r)
                  << dendl;
+      return r;
     }
 
     if (disable_flags != 0) {
@@ -1866,9 +1918,16 @@ reprotect_and_return_err:
       }
     }
     if (!old_format) {
-      r = io_ctx.remove(ObjectMap::object_map_name(id, CEPH_NOSNAP));
+      r = Journal::remove(io_ctx, id);
+      if (r < 0 && r != -ENOENT) {
+        lderr(cct) << "error removing image journal" << dendl;
+        return r;
+      }
+
+      r = ObjectMap::remove(io_ctx, id);
       if (r < 0 && r != -ENOENT) {
 	lderr(cct) << "error removing image object map" << dendl;
+        return r;
       }
 
       ldout(cct, 2) << "removing id object..." << dendl;
@@ -2333,6 +2392,17 @@ reprotect_and_return_err:
       ictx->object_map.refresh(ictx->snap_id);
 
       ictx->data_ctx.selfmanaged_snap_set_write_ctx(ictx->snapc.seq, ictx->snaps);
+
+      // dynamically enable/disable journaling support
+      if ((ictx->features & RBD_FEATURE_JOURNALING) != 0 &&
+          ictx->image_watcher != NULL && ictx->journal == NULL &&
+          ictx->snap_name.empty()) {
+        ictx->open_journal();
+      } else if ((ictx->features & RBD_FEATURE_JOURNALING) == 0 &&
+                 ictx->journal != NULL) {
+        // TODO journal needs to be disabled via proxied request to avoid race
+        //      between deleting journal and appending journal events
+      }
     } // release snap_lock and cache_lock
 
     if (ictx->image_watcher != NULL) {
@@ -2610,44 +2680,57 @@ reprotect_and_return_err:
     // snapshot and the user is trying to fix that
     ictx_check(ictx);
 
-    bool unlocking = false;
-    {
-      RWLock::WLocker l(ictx->owner_lock);
-      if (ictx->image_watcher != NULL && ictx->image_watcher->is_lock_owner() &&
-          snap_name != NULL && strlen(snap_name) != 0) {
-        // stop incoming requests since we will release the lock
-        ictx->image_watcher->prepare_unlock();
-        unlocking = true;
+    int r;
+    bool snapshot_mode = (snap_name != NULL && strlen(snap_name) != 0);
+    if (snapshot_mode) {
+      {
+        RWLock::WLocker owner_locker(ictx->owner_lock);
+        if (ictx->image_watcher != NULL &&
+            ictx->image_watcher->is_lock_owner()) {
+          r = ictx->image_watcher->release_lock();
+          if (r < 0) {
+            return r;
+          }
+        }
+      }
+
+      ictx->cancel_async_requests();
+      ictx->flush_async_operations();
+
+      if (ictx->object_cacher) {
+        RWLock::RLocker owner_locker(ictx->owner_lock);
+        r = _flush(ictx);
+        if (r < 0) {
+          return r;
+        }
+      }
+
+      {
+        RWLock::WLocker snap_locker(ictx->snap_lock);
+        if (ictx->journal != NULL) {
+          r = ictx->close_journal(false);
+          if (r < 0) {
+            return r;
+          }
+        }
       }
     }
 
-    ictx->cancel_async_requests();
-    ictx->flush_async_operations();
-    if (ictx->object_cacher) {
-      // complete pending writes before we're set to a snapshot and
-      // get -EROFS for writes
-      RWLock::RLocker owner_locker(ictx->owner_lock);
-      RWLock::WLocker md_locker(ictx->md_lock);
-      ictx->flush_cache();
-    }
-    int r = _snap_set(ictx, snap_name);
+    r = _snap_set(ictx, snap_name);
     if (r < 0) {
-      RWLock::WLocker l(ictx->owner_lock);
-      if (unlocking) {
-        ictx->image_watcher->cancel_unlock();
-      }
       return r;
     }
 
-    RWLock::WLocker l(ictx->owner_lock);
-    if (ictx->image_watcher != NULL) {
-      if (unlocking) {
-	r = ictx->image_watcher->unlock();
-	if (r < 0) {
-	  lderr(ictx->cct) << "error unlocking image: " << cpp_strerror(r)
-                           << dendl;
-	}
+    {
+      RWLock::WLocker snap_locker(ictx->snap_lock);
+      if ((ictx->features & RBD_FEATURE_JOURNALING) != 0 &&
+          ictx->journal == NULL && !snapshot_mode) {
+        ictx->open_journal();
       }
+    }
+
+    RWLock::RLocker owner_locker(ictx->owner_lock);
+    if (ictx->image_watcher != NULL) {
       ictx->image_watcher->refresh();
     }
     return r;
@@ -2699,30 +2782,41 @@ reprotect_and_return_err:
   {
     ldout(ictx->cct, 20) << "close_image " << ictx << dendl;
 
+    // finish all incoming IO operations
+    ictx->aio_work_queue->drain();
+
+    int r = 0;
     {
-      RWLock::WLocker l(ictx->owner_lock);
+      // release the lock (and flush all in-flight IO)
+      RWLock::WLocker owner_locker(ictx->owner_lock);
       if (ictx->image_watcher != NULL && ictx->image_watcher->is_lock_owner()) {
-        // stop incoming requests
-        ictx->image_watcher->prepare_unlock();
+        r = ictx->image_watcher->release_lock();
+        if (r < 0) {
+          lderr(ictx->cct) << "error releasing image lock: " << cpp_strerror(r)
+                           << dendl;
+        }
       }
     }
 
-    assert(!ictx->aio_work_queue->writes_suspended() ||
+    assert(!ictx->aio_work_queue->writes_blocked() ||
            ictx->aio_work_queue->writes_empty());
-    ictx->aio_work_queue->drain();
+
     ictx->cancel_async_requests();
     ictx->flush_async_operations();
     ictx->readahead.wait_for_pending();
 
-    int r;
+    int flush_r;
     if (ictx->object_cacher) {
-      r = ictx->shutdown_cache(); // implicitly flushes
+      flush_r = ictx->shutdown_cache(); // implicitly flushes
     } else {
-      r = flush(ictx);
+      flush_r = flush(ictx);
     }
-    if (r < 0) {
-      lderr(ictx->cct) << "error flushing IO: " << cpp_strerror(r)
+    if (flush_r< 0) {
+      lderr(ictx->cct) << "error flushing IO: " << cpp_strerror(flush_r)
                        << dendl;
+      if (r == 0) {
+        r = flush_r;
+      }
     }
 
     ictx->op_work_queue->drain();
@@ -2730,6 +2824,13 @@ reprotect_and_return_err:
     if (ictx->copyup_finisher != NULL) {
       ictx->copyup_finisher->wait_for_empty();
       ictx->copyup_finisher->stop();
+    }
+
+    if (ictx->journal != NULL) {
+      int close_r = ictx->close_journal(true);
+      if (close_r < 0 && r == 0) {
+        r = close_r;
+      }
     }
 
     if (ictx->parent) {
@@ -2741,19 +2842,6 @@ reprotect_and_return_err:
     }
 
     if (ictx->image_watcher) {
-      {
-	RWLock::WLocker l(ictx->owner_lock);
-	if (ictx->image_watcher->is_lock_owner()) {
-	  int unlock_r = ictx->image_watcher->unlock();
-	  if (unlock_r < 0) {
-	    lderr(ictx->cct) << "error unlocking image: "
-                             << cpp_strerror(unlock_r) << dendl;
-            if (r == 0) {
-              r = unlock_r;
-            }
-	  }
-	}
-      }
       ictx->unregister_watch();
     }
 

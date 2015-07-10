@@ -3,6 +3,7 @@
 #ifndef CEPH_LIBRBD_IMAGE_WATCHER_H
 #define CEPH_LIBRBD_IMAGE_WATCHER_H
 
+#include "common/Cond.h"
 #include "common/Mutex.h"
 #include "common/RWLock.h"
 #include "include/Context.h"
@@ -25,6 +26,13 @@ template <typename T> class TaskFinisher;
 
 class ImageWatcher {
 public:
+  struct Listener {
+    virtual ~Listener() {}
+
+    virtual bool handle_requested_lock() = 0;
+    virtual void handle_releasing_lock() = 0;
+    virtual void handle_lock_updated(bool lock_supported, bool lock_owner) = 0;
+  };
 
   ImageWatcher(ImageCtx& image_ctx);
   ~ImageWatcher();
@@ -33,19 +41,17 @@ public:
   bool is_lock_supported(const RWLock &snap_lock) const;
   bool is_lock_owner() const;
 
+  void register_listener(Listener *listener);
+  void unregister_listener(Listener *listener);
+
   int register_watch();
   int unregister_watch();
 
-  void refresh();
+  int refresh();
 
   int try_lock();
   void request_lock();
-  void prepare_unlock();
-  void cancel_unlock();
-  int unlock();
-
-  void flag_aio_ops_pending();
-  void clear_aio_ops_pending();
+  int release_lock();
 
   void assert_header_locked(librados::ObjectWriteOperation *op);
 
@@ -57,6 +63,7 @@ public:
   int notify_rebuild_object_map(uint64_t request_id,
                                 ProgressContext &prog_ctx);
 
+  void notify_lock_state();
   static void notify_header_update(librados::IoCtx &io_ctx,
                                    const std::string &oid);
 
@@ -85,6 +92,7 @@ private:
     TASK_CODE_ASYNC_PROGRESS
   };
 
+  typedef std::list<Listener *> Listeners;
   typedef std::pair<Context *, ProgressContext *> AsyncRequest;
 
   class Task {
@@ -192,9 +200,15 @@ private:
   WatchCtx m_watch_ctx;
   uint64_t m_watch_handle;
   WatchState m_watch_state;
-  bool m_aio_ops_pending;
+
+  bool m_lock_supported;
 
   LockOwnerState m_lock_owner_state;
+
+  Mutex m_listeners_lock;
+  Cond m_listeners_cond;
+  Listeners m_listeners;
+  bool m_listeners_in_use;
 
   TaskFinisher<Task> *m_task_finisher;
 
@@ -211,7 +225,7 @@ private:
   int get_lock_owner_info(entity_name_t *locker, std::string *cookie,
                           std::string *address, uint64_t *handle);
   int lock();
-  bool release_lock();
+  int unlock();
   bool try_request_lock();
 
   void schedule_cancel_async_requests();
@@ -220,6 +234,7 @@ private:
   void set_owner_client_id(const WatchNotify::ClientId &client_id);
   WatchNotify::ClientId get_client_id();
 
+  void notify_acquired_lock();
   void notify_release_lock();
   void notify_released_lock();
 
@@ -278,6 +293,9 @@ private:
                           bufferlist &out);
 
   void reregister_watch();
+
+  void notify_listeners_releasing_lock();
+  void notify_listeners_updated_lock();
 };
 
 } // namespace librbd

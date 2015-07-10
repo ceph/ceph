@@ -6,9 +6,11 @@
 #include "common/ceph_context.h"
 #include "common/dout.h"
 #include "common/errno.h"
+#include "common/perf_counters.h"
 #include "common/WorkQueue.h"
 
 #include "librbd/AioObjectRequest.h"
+#include "librbd/ImageCtx.h"
 #include "librbd/internal.h"
 
 #include "librbd/AioCompletion.h"
@@ -97,6 +99,16 @@ namespace librbd {
     done = true;
     cond.Signal();
     tracepoint(librbd, aio_complete_exit);
+  }
+
+  void AioCompletion::init_time(ImageCtx *i, aio_type_t t) {
+    if (ictx == NULL) {
+      ictx = i;
+      aio_type = t;
+      start_time = ceph_clock_now(ictx->cct);
+
+      async_op.start_op(*ictx);
+    }
   }
 
   void AioCompletion::fail(CephContext *cct, int r)

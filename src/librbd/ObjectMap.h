@@ -21,6 +21,7 @@ public:
 
   ObjectMap(ImageCtx &image_ctx);
 
+  static int remove(librados::IoCtx &io_ctx, const std::string &image_id);
   static std::string object_map_name(const std::string &image_id,
 				     uint64_t snap_id);
 

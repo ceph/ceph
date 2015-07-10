@@ -2,7 +2,6 @@
 // vim: ts=8 sw=2 smarttab
 #include "librbd/ImageWatcher.h"
 #include "librbd/AioCompletion.h"
-#include "librbd/AioImageRequestWQ.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/internal.h"
 #include "librbd/ObjectMap.h"
@@ -35,8 +34,10 @@ ImageWatcher::ImageWatcher(ImageCtx &image_ctx)
   : m_image_ctx(image_ctx),
     m_watch_lock(unique_lock_name("librbd::ImageWatcher::m_watch_lock", this)),
     m_watch_ctx(*this), m_watch_handle(0),
-    m_watch_state(WATCH_STATE_UNREGISTERED), m_aio_ops_pending(false),
+    m_watch_state(WATCH_STATE_UNREGISTERED), m_lock_supported(false),
     m_lock_owner_state(LOCK_OWNER_STATE_NOT_LOCKED),
+    m_listeners_lock(unique_lock_name("librbd::ImageWatcher::m_listeners_lock", this)),
+    m_listeners_in_use(false),
     m_task_finisher(new TaskFinisher<Task>(*m_image_ctx.cct)),
     m_async_request_lock(unique_lock_name("librbd::ImageWatcher::m_async_request_lock", this)),
     m_owner_client_id_lock(unique_lock_name("librbd::ImageWatcher::m_owner_client_id_lock", this))
@@ -72,6 +73,20 @@ bool ImageWatcher::is_lock_owner() const {
   assert(m_image_ctx.owner_lock.is_locked());
   return (m_lock_owner_state == LOCK_OWNER_STATE_LOCKED ||
           m_lock_owner_state == LOCK_OWNER_STATE_RELEASING);
+}
+
+void ImageWatcher::register_listener(Listener *listener) {
+  Mutex::Locker listeners_locker(m_listeners_lock);
+  m_listeners.push_back(listener);
+}
+
+void ImageWatcher::unregister_listener(Listener *listener) {
+  // TODO CoW listener list
+  Mutex::Locker listeners_locker(m_listeners_lock);
+  while (m_listeners_in_use) {
+    m_listeners_cond.Wait(m_listeners_lock);
+  }
+  m_listeners.remove(listener);
 }
 
 int ImageWatcher::register_watch() {
@@ -110,19 +125,41 @@ int ImageWatcher::unregister_watch() {
   return r;
 }
 
-void ImageWatcher::refresh() {
+int ImageWatcher::refresh() {
   assert(m_image_ctx.owner_lock.is_locked());
 
-  if (is_lock_supported() && !is_lock_owner()) {
-    m_image_ctx.aio_work_queue->suspend_writes();
-  } else if (!is_lock_supported()) {
-    m_image_ctx.aio_work_queue->resume_writes();
+  bool lock_support_changed = false;
+  {
+    RWLock::WLocker watch_locker(m_watch_lock);
+    if (m_lock_supported != is_lock_supported()) {
+      m_lock_supported = is_lock_supported();
+      lock_support_changed = true;
+    }
   }
+
+  int r = 0;
+  if (lock_support_changed) {
+    if (is_lock_supported() && !is_lock_owner()) {
+      // image opened, exclusive lock dynamically enabled, or now HEAD
+      notify_listeners_releasing_lock();
+    } else if (!is_lock_supported() && is_lock_owner()) {
+      // exclusive lock dynamically disabled or now snapshot
+      m_image_ctx.owner_lock.put_read();
+      {
+        RWLock::WLocker owner_locker(m_image_ctx.owner_lock);
+        r = release_lock();
+      }
+      m_image_ctx.owner_lock.get_read();
+    }
+    notify_listeners_updated_lock();
+  }
+  return r;
 }
 
 int ImageWatcher::try_lock() {
   assert(m_image_ctx.owner_lock.is_wlocked());
   assert(m_lock_owner_state == LOCK_OWNER_STATE_NOT_LOCKED);
+  assert(is_lock_supported());
 
   while (true) {
     int r = lock();
@@ -188,10 +225,6 @@ int ImageWatcher::try_lock() {
 }
 
 void ImageWatcher::request_lock() {
-  {
-    RWLock::WLocker watch_locker(m_watch_lock);
-    m_aio_ops_pending = true;
-  }
   schedule_request_lock(false);
 }
 
@@ -275,6 +308,9 @@ int ImageWatcher::get_lock_owner_info(entity_name_t *locker, std::string *cookie
 }
 
 int ImageWatcher::lock() {
+  assert(m_image_ctx.owner_lock.is_wlocked());
+  assert(m_lock_owner_state == LOCK_OWNER_STATE_NOT_LOCKED);
+
   int r = rados::cls::lock::lock(&m_image_ctx.md_ctx, m_image_ctx.header_oid,
 				 RBD_LOCK_NAME, LOCK_EXCLUSIVE,
 				 encode_lock_cookie(), WATCHER_LOCK_TAG, "",
@@ -302,39 +338,16 @@ int ImageWatcher::lock() {
     m_image_ctx.object_map.refresh(CEPH_NOSNAP);
   }
 
-  bufferlist bl;
-  ::encode(NotifyMessage(AcquiredLockPayload(get_client_id())), bl);
-
-  m_image_ctx.aio_work_queue->resume_writes();
-
   // send the notification when we aren't holding locks
   FunctionContext *ctx = new FunctionContext(
-    boost::bind(&IoCtx::notify2, &m_image_ctx.md_ctx, m_image_ctx.header_oid,
-		bl, NOTIFY_TIMEOUT, reinterpret_cast<bufferlist *>(NULL)));
+    boost::bind(&ImageWatcher::notify_acquired_lock, this));
   m_task_finisher->queue(TASK_CODE_ACQUIRED_LOCK, ctx);
   return 0;
-}
-
-void ImageWatcher::prepare_unlock() {
-  assert(m_image_ctx.owner_lock.is_wlocked());
-  if (m_lock_owner_state == LOCK_OWNER_STATE_LOCKED) {
-    m_lock_owner_state = LOCK_OWNER_STATE_RELEASING;
-  }
-}
-
-void ImageWatcher::cancel_unlock() {
-  assert(m_image_ctx.owner_lock.is_wlocked());
-  if (m_lock_owner_state == LOCK_OWNER_STATE_RELEASING) {
-    m_lock_owner_state = LOCK_OWNER_STATE_LOCKED;
-  }
 }
 
 int ImageWatcher::unlock()
 {
   assert(m_image_ctx.owner_lock.is_wlocked());
-  if (m_lock_owner_state == LOCK_OWNER_STATE_NOT_LOCKED) {
-    return 0;
-  }
 
   ldout(m_image_ctx.cct, 10) << this << " releasing exclusive lock" << dendl;
   m_lock_owner_state = LOCK_OWNER_STATE_NOT_LOCKED;
@@ -350,12 +363,10 @@ int ImageWatcher::unlock()
     m_image_ctx.object_map.unlock();
   }
 
-  if (is_lock_supported()) {
-    m_image_ctx.aio_work_queue->suspend_writes();
+  {
+    Mutex::Locker l(m_owner_client_id_lock);
+    set_owner_client_id(ClientId());
   }
-
-  Mutex::Locker l(m_owner_client_id_lock);
-  set_owner_client_id(ClientId());
 
   FunctionContext *ctx = new FunctionContext(
     boost::bind(&ImageWatcher::notify_released_lock, this));
@@ -363,50 +374,66 @@ int ImageWatcher::unlock()
   return 0;
 }
 
-bool ImageWatcher::release_lock()
+int ImageWatcher::release_lock()
 {
   assert(m_image_ctx.owner_lock.is_wlocked());
-  ldout(m_image_ctx.cct, 10) << this << " releasing exclusive lock by request"
-                             << dendl;
-  if (!is_lock_owner()) {
-    return false;
+
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 10) << this << " releasing exclusive lock by request" << dendl;
+  if (m_lock_owner_state != LOCK_OWNER_STATE_LOCKED) {
+    return 0;
   }
-  prepare_unlock();
+
+  m_lock_owner_state = LOCK_OWNER_STATE_RELEASING;
   m_image_ctx.owner_lock.put_write();
 
+  // ensure all maint operations are canceled
   m_image_ctx.cancel_async_requests();
   m_image_ctx.flush_async_operations();
-  m_image_ctx.aio_work_queue->suspend_writes();
 
+  int r;
   {
     RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
+
+    // alert listeners that all incoming IO needs to be stopped since the
+    // lock is being released
+    notify_listeners_releasing_lock();
+
     RWLock::WLocker md_locker(m_image_ctx.md_lock);
-    librbd::_flush(&m_image_ctx);
+    r = librbd::_flush(&m_image_ctx);
+    if (r < 0) {
+      lderr(cct) << this << " failed to flush: " << cpp_strerror(r) << dendl;
+      goto err_cancel_unlock;
+    }
   }
 
   m_image_ctx.owner_lock.get_write();
-  if (!is_lock_owner()) {
-    return false;
+  assert(m_lock_owner_state == LOCK_OWNER_STATE_RELEASING);
+  r = unlock();
+
+  // notify listeners of the change w/ owner read locked
+  m_image_ctx.owner_lock.put_write();
+  {
+    RWLock::RLocker owner_lock(m_image_ctx.owner_lock);
+    if (m_lock_owner_state == LOCK_OWNER_STATE_NOT_LOCKED) {
+      notify_listeners_updated_lock();
+    }
+  }
+  m_image_ctx.owner_lock.get_write();
+
+  if (r < 0) {
+    lderr(cct) << this << " failed to unlock: " << cpp_strerror(r) << dendl;
+    return r;
   }
 
-  unlock();
-  return true;
-}
+  return 0;
 
-void ImageWatcher::flag_aio_ops_pending() {
-  RWLock::WLocker watch_locker(m_watch_lock);
-  if (!m_aio_ops_pending) {
-    ldout(m_image_ctx.cct, 20) << this << " pending AIO ops" << dendl;
-    m_aio_ops_pending = true;
+err_cancel_unlock:
+  m_image_ctx.owner_lock.get_write();
+  if (m_lock_owner_state == LOCK_OWNER_STATE_RELEASING) {
+    m_lock_owner_state = LOCK_OWNER_STATE_LOCKED;
   }
-}
-
-void ImageWatcher::clear_aio_ops_pending() {
-  RWLock::WLocker watch_locker(m_watch_lock);
-  if (m_aio_ops_pending) {
-    ldout(m_image_ctx.cct, 20) << this << " no pending AIO ops" << dendl;
-    m_aio_ops_pending = false;
-  }
+  return r;
 }
 
 void ImageWatcher::assert_header_locked(librados::ObjectWriteOperation *op) {
@@ -527,6 +554,21 @@ int ImageWatcher::notify_rebuild_object_map(uint64_t request_id,
   return notify_async_request(async_request_id, bl, prog_ctx);
 }
 
+void ImageWatcher::notify_lock_state() {
+  RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
+  if (m_lock_owner_state == LOCK_OWNER_STATE_LOCKED) {
+    // re-send the acquired lock notification so that peers know they can now
+    // request the lock
+    ldout(m_image_ctx.cct, 10) << this << " notify lock state" << dendl;
+
+    bufferlist bl;
+    ::encode(NotifyMessage(AcquiredLockPayload(get_client_id())), bl);
+
+    m_image_ctx.md_ctx.notify2(m_image_ctx.header_oid, bl, NOTIFY_TIMEOUT,
+                               NULL);
+  }
+}
+
 void ImageWatcher::notify_header_update(librados::IoCtx &io_ctx,
 				        const std::string &oid)
 {
@@ -582,6 +624,17 @@ ClientId ImageWatcher::get_client_id() {
   return ClientId(m_image_ctx.md_ctx.get_instance_id(), m_watch_handle);
 }
 
+void ImageWatcher::notify_acquired_lock() {
+  ldout(m_image_ctx.cct, 10) << this << " notify acquired lock" << dendl;
+
+  RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
+  notify_listeners_updated_lock();
+
+  bufferlist bl;
+  ::encode(NotifyMessage(AcquiredLockPayload(get_client_id())), bl);
+  m_image_ctx.md_ctx.notify2(m_image_ctx.header_oid, bl, NOTIFY_TIMEOUT, NULL);
+}
+
 void ImageWatcher::notify_release_lock() {
   RWLock::WLocker owner_locker(m_image_ctx.owner_lock);
   release_lock();
@@ -599,7 +652,7 @@ void ImageWatcher::schedule_request_lock(bool use_timer, int timer_delay) {
   assert(m_lock_owner_state == LOCK_OWNER_STATE_NOT_LOCKED);
 
   RWLock::RLocker watch_locker(m_watch_lock);
-  if (m_watch_state == WATCH_STATE_REGISTERED && m_aio_ops_pending) {
+  if (m_watch_state == WATCH_STATE_REGISTERED) {
     ldout(m_image_ctx.cct, 15) << this << " requesting exclusive lock" << dendl;
 
     FunctionContext *ctx = new FunctionContext(
@@ -796,40 +849,48 @@ void ImageWatcher::handle_payload(const AcquiredLockPayload &payload,
                                   bufferlist *out) {
   ldout(m_image_ctx.cct, 10) << this << " image exclusively locked announcement"
                              << dendl;
+
+  bool cancel_async_requests = true;
   if (payload.client_id.is_valid()) {
     Mutex::Locker l(m_owner_client_id_lock);
     if (payload.client_id == m_owner_client_id) {
-      // we already know that the remote client is the owner
-      return;
+      cancel_async_requests = false;
     }
     set_owner_client_id(payload.client_id);
   }
 
   RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
   if (m_lock_owner_state == LOCK_OWNER_STATE_NOT_LOCKED) {
-    schedule_cancel_async_requests();
-    schedule_request_lock(false);
+    if (cancel_async_requests) {
+      schedule_cancel_async_requests();
+    }
+    notify_listeners_updated_lock();
   }
 }
 
 void ImageWatcher::handle_payload(const ReleasedLockPayload &payload,
                                   bufferlist *out) {
   ldout(m_image_ctx.cct, 10) << this << " exclusive lock released" << dendl;
+
+  bool cancel_async_requests = true;
   if (payload.client_id.is_valid()) {
     Mutex::Locker l(m_owner_client_id_lock);
     if (payload.client_id != m_owner_client_id) {
       ldout(m_image_ctx.cct, 10) << this << " unexpected owner: "
                                  << payload.client_id << " != "
                                  << m_owner_client_id << dendl;
-      return;
+      cancel_async_requests = false;
+    } else {
+      set_owner_client_id(ClientId());
     }
-    set_owner_client_id(ClientId());
   }
 
   RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
   if (m_lock_owner_state == LOCK_OWNER_STATE_NOT_LOCKED) {
-    schedule_cancel_async_requests();
-    schedule_request_lock(false);
+    if (cancel_async_requests) {
+      schedule_cancel_async_requests();
+    }
+    notify_listeners_updated_lock();
   }
 }
 
@@ -852,11 +913,25 @@ void ImageWatcher::handle_payload(const RequestLockPayload &payload,
       }
     }
 
-    ldout(m_image_ctx.cct, 10) << this << " queuing release of exclusive lock"
-                               << dendl;
-    FunctionContext *ctx = new FunctionContext(
-      boost::bind(&ImageWatcher::notify_release_lock, this));
-    m_task_finisher->queue(TASK_CODE_RELEASING_LOCK, ctx);
+    bool release_permitted = true;
+    {
+      Mutex::Locker listeners_locker(m_listeners_lock);
+      for (Listeners::iterator it = m_listeners.begin();
+           it != m_listeners.end(); ++it) {
+        if (!(*it)->handle_requested_lock()) {
+          release_permitted = false;
+          break;
+        }
+      }
+    }
+
+    if (release_permitted) {
+      ldout(m_image_ctx.cct, 10) << this << " queuing release of exclusive lock"
+                                 << dendl;
+      FunctionContext *ctx = new FunctionContext(
+        boost::bind(&ImageWatcher::notify_release_lock, this));
+      m_task_finisher->queue(TASK_CODE_RELEASING_LOCK, ctx);
+    }
   }
 }
 
@@ -1092,7 +1167,7 @@ void ImageWatcher::reregister_watch() {
   }
 
   if (m_lock_owner_state == LOCK_OWNER_STATE_NOT_LOCKED) {
-    schedule_request_lock(false);
+    notify_listeners_updated_lock();
   }
 }
 
@@ -1109,6 +1184,54 @@ void ImageWatcher::WatchCtx::handle_error(uint64_t handle, int err) {
 
 void ImageWatcher::RemoteContext::finish(int r) {
   m_image_watcher.schedule_async_complete(m_async_request_id, r);
+}
+
+void ImageWatcher::notify_listeners_releasing_lock() {
+  assert(m_image_ctx.owner_lock.is_locked());
+
+  Listeners listeners;
+  {
+    Mutex::Locker listeners_locker(m_listeners_lock);
+    m_listeners_in_use = true;
+    listeners = m_listeners;
+  }
+
+  for (Listeners::iterator it = listeners.begin();
+       it != listeners.end(); ++it) {
+    (*it)->handle_releasing_lock();
+  }
+
+  Mutex::Locker listeners_locker(m_listeners_lock);
+  m_listeners_in_use = false;
+  m_listeners_cond.Signal();
+}
+
+void ImageWatcher::notify_listeners_updated_lock() {
+  assert(m_image_ctx.owner_lock.is_locked());
+
+  Listeners listeners;
+  {
+    Mutex::Locker listeners_locker(m_listeners_lock);
+    m_listeners_in_use = true;
+    listeners = m_listeners;
+  }
+
+  bool lock_supported;
+  {
+    RWLock::RLocker watch_locker(m_watch_lock);
+    lock_supported = m_lock_supported;
+  }
+
+  assert(lock_supported || m_lock_owner_state == LOCK_OWNER_STATE_NOT_LOCKED);
+  for (Listeners::iterator it = listeners.begin();
+       it != listeners.end(); ++it) {
+    (*it)->handle_lock_updated(lock_supported,
+                               m_lock_owner_state == LOCK_OWNER_STATE_LOCKED);
+  }
+
+  Mutex::Locker listeners_locker(m_listeners_lock);
+  m_listeners_in_use = false;
+  m_listeners_cond.Signal();
 }
 
 }
