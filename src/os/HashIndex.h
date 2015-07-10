@@ -193,7 +193,7 @@ protected:
 
   int _collection_list_partial(
     const ghobject_t &start,
-    ghobject_t end,
+    const ghobject_t &end,
     int max_count,
     snapid_t seq,
     vector<ghobject_t> *ls,
