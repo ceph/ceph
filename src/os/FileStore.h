@@ -552,7 +552,7 @@ public:
 		   const SequencerPosition& spos);
   int _do_clone_range(int from, int to, uint64_t srcoff, uint64_t len, uint64_t dstoff);
   int _do_sparse_copy_range(int from, int to, uint64_t srcoff, uint64_t len, uint64_t dstoff);
-  int _do_copy_range(int from, int to, uint64_t srcoff, uint64_t len, uint64_t dstoff);
+  int _do_copy_range(int from, int to, uint64_t srcoff, uint64_t len, uint64_t dstoff, bool skip_sloppycrc=false);
   int _remove(coll_t cid, const ghobject_t& oid, const SequencerPosition &spos);
 
   int _fgetattr(int fd, const char *name, bufferptr& bp);
@@ -804,6 +804,7 @@ public:
   virtual int do_fiemap(int fd, off_t start, size_t len, struct fiemap **pfiemap) = 0;
   virtual int clone_range(int from, int to, uint64_t srcoff, uint64_t len, uint64_t dstoff) = 0;
   virtual int set_alloc_hint(int fd, uint64_t hint) = 0;
+  virtual bool has_splice() const = 0;
 
   // hooks for (sloppy) crc tracking
   virtual int _crc_update_write(int fd, loff_t off, size_t len, const bufferlist& bl) = 0;
