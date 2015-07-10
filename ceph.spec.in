@@ -39,7 +39,9 @@ Requires:	cryptsetup
 Requires(post):	binutils
 BuildRequires:	gcc-c++
 BuildRequires:	boost-devel
+%if ! 0%{defined suse_version}
 BuildRequires:  bzip2-devel
+%endif
 BuildRequires:	cryptsetup
 BuildRequires:	gdbm
 BuildRequires:	hdparm
@@ -66,8 +68,11 @@ BuildRequires:	xfsprogs
 BuildRequires:	xfsprogs-devel
 BuildRequires:	xmlstarlet
 BuildRequires:	yasm
-%if 0%{?rhel} || 0%{?centos} || 0%{?fedora}
+%if 0%{?rhel} || 0%{?centos} || 0%{?fedora} || 0%{?suse_version}
 BuildRequires:	snappy-devel
+%endif
+%if 0%{?suse_version}
+BuildRequires:	net-tools
 %endif
 
 #################################################################################
