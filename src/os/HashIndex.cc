@@ -326,7 +326,7 @@ int HashIndex::_collection_list(vector<ghobject_t> *ls) {
 }
 
 int HashIndex::_collection_list_partial(const ghobject_t &start,
-					const ghobject_t end,
+					const ghobject_t &end,
 					int max_count,
 					snapid_t seq,
 					vector<ghobject_t> *ls,
