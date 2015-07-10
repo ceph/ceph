@@ -1638,11 +1638,37 @@ struct CallClientContexts :
 	   ++j) {
 	to_decode[j->first.shard].claim(j->second);
       }
-      ECUtil::decode(
-	ec->sinfo,
-	ec->ec_impl,
-	to_decode,
-	&bl);
+      const vector<int> &chunk_mapping = ec->ec_impl->get_chunk_mapping();
+      if (chunk_mapping.size()) {
+        vector<bufferlist> vec(ec->ec_impl->get_data_chunk_count());
+        map<int, bufferlist*> target;
+        for (unsigned j = 0;
+             j < vec.size();
+             ++j) {
+          target[chunk_mapping[j]] = &(vec[j]);
+        }
+        ECUtil::decode(
+         ec->sinfo,
+         ec->ec_impl,
+         to_decode,
+         target);
+
+        uint64_t total_chunk_size = target.begin()->second->length();
+        for (uint64_t s = 0; s < total_chunk_size; s += ec->sinfo.get_chunk_size()) {
+          for (unsigned j = 0; j < ec->ec_impl->get_data_chunk_count(); ++j) {
+            bufferlist bll;
+            assert((*(target[chunk_mapping[j]])).length() == total_chunk_size);
+            bll.substr_of(*(target[chunk_mapping[j]]), s, ec->sinfo.get_chunk_size());
+            bl.append(bll);
+          }
+        }
+      } else {
+        ECUtil::decode(
+	  ec->sinfo,
+	  ec->ec_impl,
+	  to_decode,
+	  &bl);
+      }
       assert(i->second.second);
       assert(i->second.first);
       i->second.first->substr_of(
