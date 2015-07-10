@@ -973,7 +973,7 @@ public:
 
 class ReadOp : public TestOp {
 public:
-  librados::AioCompletion *completion;
+  vector<librados::AioCompletion *> completions;
   librados::ObjectReadOperation op;
   string oid;
   ObjectDesc old_value;
@@ -981,8 +981,9 @@ public:
 
   ceph::shared_ptr<int> in_use;
 
-  bufferlist result;
-  int retval;
+  vector<bufferlist> results;
+  vector<int> retvals;
+  uint64_t waiting_on;
 
   map<string, bufferlist> attrs;
   int attrretval;
@@ -999,10 +1000,12 @@ public:
 	 const string &oid,
 	 TestOpStat *stat = 0)
     : TestOp(n, context, stat),
-      completion(NULL),
+      completions(3),
       oid(oid),
       snap(0),
-      retval(0),
+      results(3),
+      retvals(3),
+      waiting_on(0),
       attrretval(0)
   {}
 		
@@ -1017,7 +1020,9 @@ public:
     }
     std::cout << num << ": read oid " << oid << " snap " << snap << std::endl;
     done = 0;
-    completion = context->rados.aio_create_completion((void *) this, &read_callback, 0);
+    for (uint32_t i = 0; i < 3; i++) {
+      completions[i] = context->rados.aio_create_completion((void *) this, &read_callback, 0);
+    }
 
     context->oid_in_use.insert(oid);
     context->oid_not_in_use.erase(oid);
@@ -1045,6 +1050,7 @@ public:
       std::cerr << num << ":  notified, waiting" << std::endl;
       ctx->wait();
     }
+    context->state_lock.Lock();
     if (snap >= 0) {
       context->io_ctx.snap_set_read(context->snaps[snap]);
     }
@@ -1052,8 +1058,8 @@ public:
     op.read(0,
 	    !old_value.has_contents() ? 0 :
 	    old_value.most_recent_gen()->get_length(old_value.most_recent()),
-	    &result,
-	    &retval);
+	    &results[0],
+	    &retvals[0]);
 
     for (map<string, ContDesc>::iterator i = old_value.attrs.begin();
 	 i != old_value.attrs.end();
@@ -1073,27 +1079,64 @@ public:
       op.omap_get_header(&header, 0);
     }
     op.getxattrs(&xattrs, 0);
-    assert(!context->io_ctx.aio_operate(context->prefix+oid, completion, &op, 0));
+    assert(!context->io_ctx.aio_operate(context->prefix+oid, completions[0], &op, 0));
+    waiting_on++;
+ 
+    // send 2 pipelined reads on the same object/snap. This can help testing
+    // OSD's read behavior in some scenarios
+    for (uint32_t i = 1; i < 3; ++i) {
+      librados::ObjectReadOperation pipeline_op;
+
+      pipeline_op.read(0,
+                       !old_value.has_contents() ? 0 :
+                       old_value.most_recent_gen()->get_length(old_value.most_recent()),
+                       &results[i],
+                       &retvals[i]);
+      assert(!context->io_ctx.aio_operate(context->prefix+oid, completions[i], &pipeline_op, 0));
+      waiting_on++;
+    }
+
     if (snap >= 0) {
       context->io_ctx.snap_set_read(0);
     }
+    context->state_lock.Unlock();
   }
 
   void _finish(CallbackInfo *info)
   {
-    context->state_lock.Lock();
+    Mutex::Locker l(context->state_lock);
     assert(!done);
+    assert(waiting_on > 0);
+    if (--waiting_on) {
+      return;
+    }
+
     context->oid_in_use.erase(oid);
     context->oid_not_in_use.insert(oid);
-    assert(completion->is_complete());
-    uint64_t version = completion->get_version64();
-    if (int err = completion->get_return_value()) {
-      if (!(err == -ENOENT && old_value.deleted())) {
-	cerr << num << ": Error: oid " << oid << " read returned error code "
-	     << err << std::endl;
+    int retval = completions[0]->get_return_value();
+    for (vector<librados::AioCompletion *>::iterator it = completions.begin();
+         it != completions.end(); ++it) {
+      assert((*it)->is_complete());
+      uint64_t version = (*it)->get_version64();
+      int err = (*it)->get_return_value();
+      if (err != retval) {
+        cerr << num << ": Error: oid " << oid << " read returned different error codes: "
+             << retval << " and " << err << std::endl;
 	assert(0);
       }
-    } else {
+      if (err) {
+        if (!(err == -ENOENT && old_value.deleted())) {
+          cerr << num << ": Error: oid " << oid << " read returned error code "
+               << err << std::endl;
+          assert(0);
+        }
+      } else if (version != old_value.version) {
+	cerr << num << ": oid " << oid << " version is " << version
+	     << " and expected " << old_value.version << std::endl;
+	assert(version == old_value.version);
+      }
+    }
+    if (!retval) {
       map<string, bufferlist>::iterator iter = xattrs.find("_header");
       bufferlist headerbl;
       if (iter == xattrs.end()) {
@@ -1122,9 +1165,12 @@ public:
 	       << ", expected " << old_value.most_recent() << std::endl;
 	  context->errors++;
 	}
-	if (!old_value.check(result)) {
-	  cerr << num << ": oid " << oid << " contents " << to_check << " corrupt" << std::endl;
-	  context->errors++;
+        for (vector<bufferlist>::iterator it = results.begin();
+             it != results.end(); ++it) {
+	  if (!old_value.check(*it)) {
+	    cerr << num << ": oid " << oid << " contents " << to_check << " corrupt" << std::endl;
+	    context->errors++;
+	  }
 	}
 	if (context->errors) assert(0);
       }
@@ -1152,11 +1198,6 @@ public:
 	cerr << num << ": oid " << oid << " xattrs.size() is " << xattrs.size()
 	     << " and old is " << old_value.attrs.size() << std::endl;
 	assert(xattrs.size() == old_value.attrs.size());
-      }
-      if (version != old_value.version) {
-	cerr << num << ": oid " << oid << " version is " << version
-	     << " and expected " << old_value.version << std::endl;
-	assert(version == old_value.version);
       }
       for (map<string, ContDesc>::iterator iter = old_value.attrs.begin();
 	   iter != old_value.attrs.end();
@@ -1203,14 +1244,17 @@ public:
 	}
       }
     }
+    for (vector<librados::AioCompletion *>::iterator it = completions.begin();
+         it != completions.end(); ++it) {
+      (*it)->release();
+    }
     context->kick();
     done = true;
-    context->state_lock.Unlock();
   }
 
   bool finished()
   {
-    return done && completion->is_complete();
+    return done;
   }
 
   string getType()
