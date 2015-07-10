@@ -110,8 +110,8 @@ public:
     assert(remote_wrlocks.empty());
   }
 
-  bool is_master() { return slave_to_mds == MDS_RANK_NONE; }
-  bool is_slave() { return slave_to_mds != MDS_RANK_NONE; }
+  bool is_master() const { return slave_to_mds == MDS_RANK_NONE; }
+  bool is_slave() const { return slave_to_mds != MDS_RANK_NONE; }
 
   client_t get_client() {
     if (reqid.name.is_client())
