@@ -3,6 +3,7 @@
 #define PORTING_H 
 #include "acconfig.h"
 
+/* TODO: move these into include/compat.h */
 
 #if defined(DARWIN) 
 #include <sys/socket.h>
