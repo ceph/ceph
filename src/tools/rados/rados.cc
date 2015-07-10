@@ -1442,7 +1442,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       goto out;
     }
     io_ctx.snap_set_read(snapid);
-    cout << "selected snap " << snapid << " '" << snapname << "'" << std::endl;
+    cout << "selected snap " << snapid << " '" << name << "'" << std::endl;
   }
 
   assert(!nargs.empty());
