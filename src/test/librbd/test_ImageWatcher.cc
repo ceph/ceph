@@ -45,6 +45,34 @@ public:
   {
   }
 
+  struct LockListener : public librbd::ImageWatcher::Listener {
+    Mutex lock;
+    Cond cond;
+    size_t releasing_lock_count;
+    size_t lock_updated_count;
+    bool lock_owner;
+
+    LockListener()
+      : lock("lock"), releasing_lock_count(0), lock_updated_count(0),
+        lock_owner(false) {
+    }
+
+    virtual bool handle_requested_lock() {
+      return true;
+    }
+    virtual void handle_releasing_lock() {
+      Mutex::Locker locker(lock);
+      ++releasing_lock_count;
+      cond.Signal();
+    }
+    virtual void handle_lock_updated(bool _lock_supported, bool _lock_owner) {
+      Mutex::Locker locker(lock);
+      ++lock_updated_count;
+      lock_owner = _lock_owner;
+      cond.Signal();
+    }
+  };
+
   class WatchCtx : public librados::WatchCtx2 {
   public:
     WatchCtx(TestImageWatcher &parent) : m_parent(parent), m_handle(0) {}
@@ -127,9 +155,37 @@ public:
     return 0;
   }
 
+  void register_lock_listener(librbd::ImageCtx &ictx) {
+    ictx.image_watcher->register_listener(&m_lock_listener);
+  }
+
   int register_image_watch(librbd::ImageCtx &ictx) {
     m_watch_ctx = new WatchCtx(*this);
     return m_watch_ctx->watch(ictx);
+  }
+
+  bool wait_for_releasing_lock(librbd::ImageCtx &ictx) {
+    Mutex::Locker locker(m_lock_listener.lock);
+    while (m_lock_listener.releasing_lock_count == 0) {
+      if (m_lock_listener.cond.WaitInterval(ictx.cct, m_lock_listener.lock,
+                                            utime_t(10, 0)) != 0) {
+        return false;
+      }
+    }
+    m_lock_listener.releasing_lock_count = 0;
+    return true;
+  }
+
+  bool wait_for_lock_updated(librbd::ImageCtx &ictx) {
+    Mutex::Locker locker(m_lock_listener.lock);
+    while (m_lock_listener.lock_updated_count == 0) {
+      if (m_lock_listener.cond.WaitInterval(ictx.cct, m_lock_listener.lock,
+                                            utime_t(10, 0)) != 0) {
+        return false;
+      }
+    }
+    m_lock_listener.lock_updated_count = 0;
+    return true;
   }
 
   bool wait_for_notifies(librbd::ImageCtx &ictx) {
@@ -204,6 +260,8 @@ public:
   typedef std::set<NotifyOp> NotifyOps;
 
   WatchCtx *m_watch_ctx;
+
+  LockListener m_lock_listener;
 
   NotifyOps m_notifies;
   NotifyOpPayloads m_notify_payloads;
@@ -311,14 +369,6 @@ TEST_F(TestImageWatcher, IsLockSupported) {
   ictx->snap_id = CEPH_NOSNAP;
 }
 
-TEST_F(TestImageWatcher, WritesSuspended) {
-  REQUIRE_FEATURE(RBD_FEATURE_EXCLUSIVE_LOCK);
-
-  librbd::ImageCtx *ictx;
-  ASSERT_EQ(0, open_image(m_image_name, &ictx));
-  ASSERT_TRUE(ictx->aio_work_queue->writes_suspended());
-}
-
 TEST_F(TestImageWatcher, TryLock) {
   REQUIRE_FEATURE(RBD_FEATURE_EXCLUSIVE_LOCK);
 
@@ -422,17 +472,17 @@ TEST_F(TestImageWatcher, TryLockWithUserSharedLocked) {
   ASSERT_TRUE(ictx->image_watcher->is_lock_owner());
 }
 
-TEST_F(TestImageWatcher, UnlockNotLocked) {
+TEST_F(TestImageWatcher, ReleaseLockNotLocked) {
   REQUIRE_FEATURE(RBD_FEATURE_EXCLUSIVE_LOCK);
 
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
   RWLock::WLocker l(ictx->owner_lock);
-  ASSERT_EQ(0, ictx->image_watcher->unlock());
+  ASSERT_EQ(0, ictx->image_watcher->release_lock());
 }
 
-TEST_F(TestImageWatcher, UnlockNotifyReleaseLock) {
+TEST_F(TestImageWatcher, ReleaseLockNotifies) {
   REQUIRE_FEATURE(RBD_FEATURE_EXCLUSIVE_LOCK);
 
   librbd::ImageCtx *ictx;
@@ -450,7 +500,7 @@ TEST_F(TestImageWatcher, UnlockNotifyReleaseLock) {
   m_notify_acks += std::make_pair(NOTIFY_OP_RELEASED_LOCK, bufferlist());
   {
     RWLock::WLocker l(ictx->owner_lock);
-    ASSERT_EQ(0, ictx->image_watcher->unlock());
+    ASSERT_EQ(0, ictx->image_watcher->release_lock());
   }
   ASSERT_TRUE(wait_for_notifies(*ictx));
 
@@ -459,7 +509,7 @@ TEST_F(TestImageWatcher, UnlockNotifyReleaseLock) {
   ASSERT_EQ(expected_notify_ops, m_notifies);
 }
 
-TEST_F(TestImageWatcher, UnlockBrokenLock) {
+TEST_F(TestImageWatcher, ReleaseLockBrokenLock) {
   REQUIRE_FEATURE(RBD_FEATURE_EXCLUSIVE_LOCK);
 
   librbd::ImageCtx *ictx;
@@ -480,7 +530,7 @@ TEST_F(TestImageWatcher, UnlockBrokenLock) {
 					    lockers.begin()->first.cookie,
 					    lockers.begin()->first.locker));
 
-  ASSERT_EQ(0, ictx->image_watcher->unlock());
+  ASSERT_EQ(0, ictx->image_watcher->release_lock());
 }
 
 TEST_F(TestImageWatcher, RequestLock) {
@@ -489,12 +539,39 @@ TEST_F(TestImageWatcher, RequestLock) {
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
   ASSERT_EQ(0, register_image_watch(*ictx));
+
+  register_lock_listener(*ictx);
+  m_notify_acks = boost::assign::list_of(
+    std::make_pair(NOTIFY_OP_ACQUIRED_LOCK, bufferlist()));
+
+  {
+    RWLock::RLocker owner_locker(ictx->owner_lock);
+    ictx->image_watcher->request_lock();
+  }
+
+  ASSERT_TRUE(wait_for_notifies(*ictx));
+  NotifyOps expected_notify_ops;
+  expected_notify_ops += NOTIFY_OP_ACQUIRED_LOCK;
+  ASSERT_EQ(expected_notify_ops, m_notifies);
+
+  {
+    RWLock::RLocker owner_locker(ictx->owner_lock);
+    ASSERT_TRUE(ictx->image_watcher->is_lock_owner());
+  }
+}
+
+TEST_F(TestImageWatcher, RequestLockFromPeer) {
+  REQUIRE_FEATURE(RBD_FEATURE_EXCLUSIVE_LOCK);
+
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+  ASSERT_EQ(0, register_image_watch(*ictx));
   ASSERT_EQ(0, lock_image(*ictx, LOCK_EXCLUSIVE,
 			  "auto " + stringify(m_watch_ctx->get_handle())));
 
+  register_lock_listener(*ictx);
   m_notify_acks = {{NOTIFY_OP_REQUEST_LOCK, create_response_message(0)}};
 
-  ASSERT_TRUE(ictx->aio_work_queue->writes_suspended());
   {
     RWLock::RLocker owner_locker(ictx->owner_lock);
     ictx->image_watcher->request_lock();
@@ -510,8 +587,7 @@ TEST_F(TestImageWatcher, RequestLock) {
   {
     Mutex::Locker l(m_callback_lock);
     m_notifies.clear();
-    m_notify_acks = {{NOTIFY_OP_RELEASED_LOCK,{}},
-                     {NOTIFY_OP_ACQUIRED_LOCK,{}}};
+    m_notify_acks = {{NOTIFY_OP_RELEASED_LOCK,{}}};
   }
 
   bufferlist bl;
@@ -521,13 +597,29 @@ TEST_F(TestImageWatcher, RequestLock) {
     ENCODE_FINISH(bl);
   }
   ASSERT_EQ(0, m_ioctx.notify2(ictx->header_oid, bl, 5000, NULL));
+  ASSERT_TRUE(wait_for_lock_updated(*ictx));
+
+  {
+    Mutex::Locker l(m_callback_lock);
+    m_notifies.clear();
+    m_notify_acks = boost::assign::list_of(
+      std::make_pair(NOTIFY_OP_ACQUIRED_LOCK, bufferlist()));
+  }
+
+  {
+    RWLock::RLocker owner_lock(ictx->owner_lock);
+    ictx->image_watcher->request_lock();
+  }
 
   ASSERT_TRUE(wait_for_notifies(*ictx));
   expected_notify_ops.clear();
-  expected_notify_ops += NOTIFY_OP_RELEASED_LOCK, NOTIFY_OP_ACQUIRED_LOCK;
+  expected_notify_ops += NOTIFY_OP_ACQUIRED_LOCK;
   ASSERT_EQ(expected_notify_ops, m_notifies);
 
-  ASSERT_FALSE(ictx->aio_work_queue->writes_suspended());
+  {
+    RWLock::RLocker owner_locker(ictx->owner_lock);
+    ASSERT_TRUE(ictx->image_watcher->is_lock_owner());
+  }
 }
 
 TEST_F(TestImageWatcher, RequestLockTimedOut) {
@@ -539,9 +631,9 @@ TEST_F(TestImageWatcher, RequestLockTimedOut) {
   ASSERT_EQ(0, lock_image(*ictx, LOCK_EXCLUSIVE,
 			  "auto " + stringify(m_watch_ctx->get_handle())));
 
+  register_lock_listener(*ictx);
   m_notify_acks = {{NOTIFY_OP_REQUEST_LOCK, {}}};
 
-  ASSERT_TRUE(ictx->aio_work_queue->writes_suspended());
   {
     RWLock::RLocker owner_locker(ictx->owner_lock);
     ictx->image_watcher->request_lock();
@@ -558,7 +650,6 @@ TEST_F(TestImageWatcher, RequestLockTimedOut) {
     m_notifies.clear();
   }
   ASSERT_TRUE(wait_for_notifies(*ictx));
-  ASSERT_TRUE(ictx->aio_work_queue->writes_suspended());
 
   {
     Mutex::Locker l(m_callback_lock);
@@ -569,7 +660,12 @@ TEST_F(TestImageWatcher, RequestLockTimedOut) {
   }
 
   ASSERT_TRUE(wait_for_notifies(*ictx));
-  ASSERT_FALSE(ictx->aio_work_queue->writes_suspended());
+  ASSERT_TRUE(wait_for_lock_updated(*ictx));
+
+  {
+    RWLock::RLocker owner_locker(ictx->owner_lock);
+    ASSERT_TRUE(ictx->image_watcher->is_lock_owner());
+  }
 }
 
 TEST_F(TestImageWatcher, RequestLockIgnored) {
@@ -581,6 +677,7 @@ TEST_F(TestImageWatcher, RequestLockIgnored) {
   ASSERT_EQ(0, lock_image(*ictx, LOCK_EXCLUSIVE,
 			  "auto " + stringify(m_watch_ctx->get_handle())));
 
+  register_lock_listener(*ictx);
   m_notify_acks = {{NOTIFY_OP_REQUEST_LOCK, create_response_message(0)}};
 
   int orig_notify_timeout = ictx->cct->_conf->client_notify_timeout;
@@ -590,7 +687,6 @@ TEST_F(TestImageWatcher, RequestLockIgnored) {
                               stringify(orig_notify_timeout));
   } BOOST_SCOPE_EXIT_END;
 
-  ASSERT_TRUE(ictx->aio_work_queue->writes_suspended());
   {
     RWLock::RLocker owner_locker(ictx->owner_lock);
     ictx->image_watcher->request_lock();
@@ -618,7 +714,12 @@ TEST_F(TestImageWatcher, RequestLockIgnored) {
   }
 
   ASSERT_TRUE(wait_for_notifies(*ictx));
-  ASSERT_FALSE(ictx->aio_work_queue->writes_suspended());
+  ASSERT_TRUE(wait_for_lock_updated(*ictx));
+
+  {
+    RWLock::RLocker owner_locker(ictx->owner_lock);
+    ASSERT_TRUE(ictx->image_watcher->is_lock_owner());
+  }
 }
 
 TEST_F(TestImageWatcher, RequestLockTryLockRace) {
@@ -630,11 +731,11 @@ TEST_F(TestImageWatcher, RequestLockTryLockRace) {
   ASSERT_EQ(0, lock_image(*ictx, LOCK_EXCLUSIVE,
                           "auto " + stringify(m_watch_ctx->get_handle())));
 
+  register_lock_listener(*ictx);
   m_notify_acks = {{NOTIFY_OP_REQUEST_LOCK, create_response_message(0)}};
 
   {
     RWLock::RLocker owner_locker(ictx->owner_lock);
-    ictx->image_watcher->flag_aio_ops_pending();
     ictx->image_watcher->request_lock();
   }
 
@@ -670,13 +771,31 @@ TEST_F(TestImageWatcher, RequestLockTryLockRace) {
     ASSERT_EQ(0, unlock_image());
     m_notifies.clear();
     m_notify_acks = boost::assign::list_of(
-      std::make_pair(NOTIFY_OP_RELEASED_LOCK, bufferlist()))(
-      std::make_pair(NOTIFY_OP_ACQUIRED_LOCK, bufferlist()));
+      std::make_pair(NOTIFY_OP_RELEASED_LOCK, bufferlist()));
   }
 
   ASSERT_EQ(0, m_ioctx.notify2(ictx->header_oid, bl, 5000, NULL));
+  ASSERT_TRUE(wait_for_lock_updated(*ictx));
+
+  {
+    Mutex::Locker l(m_callback_lock);
+    m_notifies.clear();
+    m_notify_acks = boost::assign::list_of(
+      std::make_pair(NOTIFY_OP_ACQUIRED_LOCK, bufferlist()));
+  }
+
+  {
+    RWLock::RLocker owner_lock(ictx->owner_lock);
+    ictx->image_watcher->request_lock();
+  }
+
+  ASSERT_TRUE(wait_for_lock_updated(*ictx));
   ASSERT_TRUE(wait_for_notifies(*ictx));
-  ASSERT_FALSE(ictx->aio_work_queue->writes_suspended());
+
+  {
+    RWLock::RLocker owner_locker(ictx->owner_lock);
+    ASSERT_TRUE(ictx->image_watcher->is_lock_owner());
+  }
 }
 
 TEST_F(TestImageWatcher, RequestLockTryLockFailed) {
@@ -687,9 +806,9 @@ TEST_F(TestImageWatcher, RequestLockTryLockFailed) {
   ASSERT_EQ(0, register_image_watch(*ictx));
   ASSERT_EQ(0, lock_image(*ictx, LOCK_SHARED, "manually 1234"));
 
+  register_lock_listener(*ictx);
   m_notify_acks = {{NOTIFY_OP_REQUEST_LOCK, {}}};
 
-  ASSERT_TRUE(ictx->aio_work_queue->writes_suspended());
   {
     RWLock::RLocker owner_locker(ictx->owner_lock);
     ictx->image_watcher->request_lock();
@@ -706,7 +825,6 @@ TEST_F(TestImageWatcher, RequestLockTryLockFailed) {
     m_notifies.clear();
   }
   ASSERT_TRUE(wait_for_notifies(*ictx));
-  ASSERT_TRUE(ictx->aio_work_queue->writes_suspended());
 
   {
     Mutex::Locker l(m_callback_lock);
@@ -717,7 +835,6 @@ TEST_F(TestImageWatcher, RequestLockTryLockFailed) {
   }
 
   ASSERT_TRUE(wait_for_notifies(*ictx));
-  ASSERT_FALSE(ictx->aio_work_queue->writes_suspended());
 }
 
 TEST_F(TestImageWatcher, NotifyHeaderUpdate) {
@@ -994,4 +1111,51 @@ TEST_F(TestImageWatcher, NotifyAsyncRequestTimedOut) {
 
   ASSERT_TRUE(thread.timed_join(boost::posix_time::seconds(10)));
   ASSERT_EQ(-ERESTART, flatten_task.result);
+}
+
+TEST_F(TestImageWatcher, PeerRequestsLock) {
+  REQUIRE_FEATURE(RBD_FEATURE_EXCLUSIVE_LOCK);
+
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+  ASSERT_EQ(0, register_image_watch(*ictx));
+
+  register_lock_listener(*ictx);
+  m_notify_acks = boost::assign::list_of(
+    std::make_pair(NOTIFY_OP_ACQUIRED_LOCK, bufferlist()));
+
+  {
+    RWLock::RLocker owner_locker(ictx->owner_lock);
+    ictx->image_watcher->request_lock();
+  }
+
+  ASSERT_TRUE(wait_for_notifies(*ictx));
+
+  {
+    RWLock::RLocker owner_locker(ictx->owner_lock);
+    ASSERT_TRUE(ictx->image_watcher->is_lock_owner());
+  }
+
+  // if journaling is enabled, ensure we wait for it to replay since
+  // it will block our peer request
+  std::string buffer(256, '1');
+  ictx->aio_work_queue->write(0, buffer.size(), buffer.c_str(), 0);
+
+  {
+    Mutex::Locker l(m_callback_lock);
+    m_notifies.clear();
+    m_notify_acks = boost::assign::list_of(
+      std::make_pair(NOTIFY_OP_RELEASED_LOCK, bufferlist()));
+  }
+
+  bufferlist bl;
+  {
+    ENCODE_START(1, 1, bl);
+    ::encode(NOTIFY_OP_REQUEST_LOCK, bl);
+    ENCODE_FINISH(bl);
+  }
+  ASSERT_EQ(0, m_ioctx.notify2(ictx->header_oid, bl, 5000, NULL));
+
+  ASSERT_TRUE(wait_for_releasing_lock(*ictx));
+  ASSERT_TRUE(wait_for_notifies(*ictx));
 }

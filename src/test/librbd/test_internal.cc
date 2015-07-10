@@ -612,12 +612,11 @@ TEST_F(TestInternal, ShrinkFlushesCache) {
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
-  {
-    RWLock::WLocker owner_locker(ictx->owner_lock);
-    ASSERT_EQ(0, ictx->image_watcher->try_lock());
-  }
-
   std::string buffer(4096, '1');
+
+  // ensure write-path is initialized
+  ictx->aio_work_queue->write(0, buffer.size(), buffer.c_str(), 0);
+
   C_SaferCond cond_ctx;
   librbd::AioCompletion *c =
     librbd::aio_create_completion_internal(&cond_ctx, librbd::rbd_ctx_cb);
