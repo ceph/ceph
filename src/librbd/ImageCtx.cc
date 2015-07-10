@@ -17,6 +17,7 @@
 #include "librbd/internal.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageWatcher.h"
+#include "librbd/Journal.h"
 #include "librbd/LibrbdAdminSocketHook.h"
 #include "librbd/ObjectMap.h"
 
@@ -67,6 +68,7 @@ public:
       exclusive_locked(false),
       name(image_name),
       image_watcher(NULL),
+      journal(NULL),
       refresh_seq(0),
       last_refresh(0),
       owner_lock(unique_lock_name("librbd::ImageCtx::owner_lock", this)),
@@ -110,6 +112,7 @@ public:
   }
 
   ImageCtx::~ImageCtx() {
+    assert(journal == NULL);
     if (perfcounter) {
       perf_stop();
     }
@@ -755,6 +758,7 @@ public:
   int ImageCtx::register_watch() {
     assert(image_watcher == NULL);
     image_watcher = new ImageWatcher(*this);
+    aio_work_queue->register_lock_listener();
     return image_watcher->register_watch();
   }
 
@@ -937,5 +941,25 @@ public:
     ASSIGN_OPTION(blacklist_expire_seconds);
     ASSIGN_OPTION(request_timed_out_seconds);
     ASSIGN_OPTION(enable_alloc_hint);
+  }
+
+  void ImageCtx::open_journal() {
+    assert(journal == NULL);
+    journal = new Journal(*this);
+  }
+
+  int ImageCtx::close_journal(bool force) {
+    assert(journal != NULL);
+    int r = journal->close();
+    if (r < 0) {
+      lderr(cct) << "failed to flush journal: " << cpp_strerror(r) << dendl;
+      if (!force) {
+        return r;
+      }
+    }
+
+    delete journal;
+    journal = NULL;
+    return r;
   }
 }

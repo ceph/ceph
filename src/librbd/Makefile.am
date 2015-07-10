@@ -23,6 +23,7 @@ librbd_internal_la_SOURCES = \
 	librbd/ImageCtx.cc \
 	librbd/ImageWatcher.cc \
 	librbd/internal.cc \
+	librbd/Journal.cc \
 	librbd/LibrbdAdminSocketHook.cc \
 	librbd/LibrbdWriteback.cc \
 	librbd/ObjectMap.cc \
@@ -36,11 +37,12 @@ noinst_LTLIBRARIES += librbd_api.la
 librbd_la_SOURCES = \
 	librbd/librbd.cc
 librbd_la_LIBADD = \
-	librbd_internal.la $(LIBRBD_TYPES) \
+	librbd_internal.la $(LIBRBD_TYPES) libjournal.la \
 	$(LIBRADOS) $(LIBCOMMON) $(LIBOSDC) \
 	librados_internal.la \
 	libcls_rbd_client.la \
 	libcls_lock_client.la \
+	libcls_journal_client.la \
 	$(PTHREAD_LIBS) $(EXTRALIBS)
 
 librbd_la_LDFLAGS = ${AM_LDFLAGS} -version-info 1:0:0
@@ -66,6 +68,7 @@ noinst_HEADERS += \
 	librbd/ImageCtx.h \
 	librbd/ImageWatcher.h \
 	librbd/internal.h \
+	librbd/Journal.h \
 	librbd/JournalTypes.h \
 	librbd/LibrbdAdminSocketHook.h \
 	librbd/LibrbdWriteback.h \
