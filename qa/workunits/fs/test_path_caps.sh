@@ -1,9 +1,9 @@
 #!/bin/sh -ex
 
-mkdir mnt.admin mnt.foo
+mkdir -p mnt.admin mnt.foo
 
 ./ceph-fuse -n client.admin mnt.admin
-mkdir mnt.admin/foo mnt.admin/bar
+mkdir -p mnt.admin/foo mnt.admin/bar
 
 ./ceph auth get-or-create client.foo mon 'allow r' mds 'allow r, allow rw path=/foo' osd 'allow rwx' >> keyring
 ./ceph-fuse -n client.foo mnt.foo
@@ -32,3 +32,5 @@ mkdir mnt.foo/foo/y
 # everything else is not
 expect_false mkdir mnt.foo/bar/x
 expect_false mkdir mnt.foo/food
+
+echo PASS
