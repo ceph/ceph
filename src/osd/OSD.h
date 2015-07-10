@@ -226,11 +226,9 @@ class DeletingState {
 public:
   const spg_t pgid;
   const PGRef old_pg_state;
-  list<coll_t> colls_to_remove;
   DeletingState(const pair<spg_t, PGRef> &in) :
     lock("DeletingState::lock"), status(QUEUED), stop_deleting(false),
     pgid(in.first), old_pg_state(in.second) {
-      old_pg_state->get_colls(&colls_to_remove);
     }
 
   /// transition status to CLEARING_WAITING
@@ -1096,44 +1094,46 @@ public:
   ClassHandler  *class_handler;
   int get_nodeid() { return whoami; }
   
-  static hobject_t get_osdmap_pobject_name(epoch_t epoch) { 
+  static ghobject_t get_osdmap_pobject_name(epoch_t epoch) {
     char foo[20];
     snprintf(foo, sizeof(foo), "osdmap.%d", epoch);
-    return hobject_t(sobject_t(object_t(foo), 0)); 
+    return ghobject_t(hobject_t(sobject_t(object_t(foo), 0)));
   }
-  static hobject_t get_inc_osdmap_pobject_name(epoch_t epoch) { 
+  static ghobject_t get_inc_osdmap_pobject_name(epoch_t epoch) {
     char foo[20];
     snprintf(foo, sizeof(foo), "inc_osdmap.%d", epoch);
-    return hobject_t(sobject_t(object_t(foo), 0)); 
+    return ghobject_t(hobject_t(sobject_t(object_t(foo), 0)));
   }
 
-  static hobject_t make_snapmapper_oid() {
-    return hobject_t(
+  static ghobject_t make_snapmapper_oid() {
+    return ghobject_t(hobject_t(
       sobject_t(
 	object_t("snapmapper"),
-	0));
+	0)));
   }
 
-  static hobject_t make_pg_log_oid(spg_t pg) {
+  static ghobject_t make_pg_log_oid(spg_t pg) {
     stringstream ss;
     ss << "pglog_" << pg;
     string s;
     getline(ss, s);
-    return hobject_t(sobject_t(object_t(s.c_str()), 0));
+    return ghobject_t(hobject_t(sobject_t(object_t(s.c_str()), 0)));
   }
   
-  static hobject_t make_pg_biginfo_oid(spg_t pg) {
+  static ghobject_t make_pg_biginfo_oid(spg_t pg) {
     stringstream ss;
     ss << "pginfo_" << pg;
     string s;
     getline(ss, s);
-    return hobject_t(sobject_t(object_t(s.c_str()), 0));
+    return ghobject_t(hobject_t(sobject_t(object_t(s.c_str()), 0)));
   }
-  static hobject_t make_infos_oid() {
+  static ghobject_t make_infos_oid() {
     hobject_t oid(sobject_t("infos", CEPH_NOSNAP));
-    return oid;
+    return ghobject_t(oid);
   }
-  static void recursive_remove_collection(ObjectStore *store, coll_t tmp);
+  static void recursive_remove_collection(ObjectStore *store,
+					  spg_t pgid,
+					  coll_t tmp);
 
   /**
    * get_osd_initial_compat_set()
@@ -1162,6 +1162,8 @@ private:
   void write_superblock();
   void write_superblock(ObjectStore::Transaction& t);
   int read_superblock();
+
+  void clear_temp_objects();
 
   CompatSet osd_compat;
 
@@ -1794,7 +1796,7 @@ private:
     PG::RecoveryCtx *rctx,
     set<boost::intrusive_ptr<PG> > *split_pgs
   );
-  void advance_map(ObjectStore::Transaction& t, C_Contexts *tfin);
+  void advance_map();
   void consume_map();
   void activate_map();
 

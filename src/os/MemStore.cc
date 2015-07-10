@@ -847,27 +847,19 @@ void MemStore::_do_transaction(Transaction& t)
 
     case Transaction::OP_COLL_SETATTR:
       {
-        coll_t cid = i.get_cid(op->cid);
-        string name = i.decode_string();
-        bufferlist bl;
-        i.decode_bl(bl);
 	assert(0 == "not implemented");
       }
       break;
 
     case Transaction::OP_COLL_RMATTR:
       {
-        coll_t cid = i.get_cid(op->cid);
-        string name = i.decode_string();
 	assert(0 == "not implemented");
       }
       break;
 
     case Transaction::OP_COLL_RENAME:
       {
-        coll_t cid = i.get_cid(op->cid);
-        ghobject_t oid = i.get_oid(op->oid);
-	r = -EOPNOTSUPP;
+	assert(0 == "not implemented");
       }
       break;
 
@@ -930,8 +922,7 @@ void MemStore::_do_transaction(Transaction& t)
 
     case Transaction::OP_SETALLOCHINT:
       {
-        coll_t cid = i.get_cid(op->cid);
-        ghobject_t oid = i.get_oid(op->oid);
+        r = 0;
       }
       break;
 

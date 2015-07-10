@@ -248,13 +248,7 @@ enum {
 
 // pg stuff
 
-// object namespaces
-#define CEPH_METADATA_NS       1
-#define CEPH_DATA_NS           2
-#define CEPH_CAS_NS            3
-#define CEPH_OSDMETADATA_NS 0xff
-
-#define OSD_SUPERBLOCK_POBJECT hobject_t(sobject_t(object_t("osd_superblock"), 0))
+#define OSD_SUPERBLOCK_POBJECT ghobject_t(hobject_t(sobject_t(object_t("osd_superblock"), 0)))
 
 // placement seed (a hash value)
 typedef uint32_t ps_t;
@@ -420,6 +414,9 @@ struct spg_t {
     return pgid.preferred();
   }
   bool parse(const char *s);
+  bool parse(const std::string& s) {
+    return parse(s.c_str());
+  }
   bool is_split(unsigned old_pg_num, unsigned new_pg_num,
 		set<spg_t> *pchildren) const {
     set<pg_t> _children;
@@ -454,6 +451,12 @@ struct spg_t {
     ::decode(shard, bl);
     DECODE_FINISH(bl);
   }
+
+  hobject_t make_temp_object(const string& name) {
+    return hobject_t(object_t(name), "", CEPH_NOSNAP,
+		     pgid.ps(),
+		     hobject_t::POOL_TEMP_START - pgid.pool(), "");
+  }
 };
 WRITE_CLASS_ENCODER(spg_t)
 WRITE_EQ_OPERATORS_2(spg_t, pgid, shard)
@@ -475,64 +478,124 @@ ostream& operator<<(ostream& out, const spg_t &pg);
 // ----------------------
 
 class coll_t {
+  enum type_t {
+    TYPE_META = 0,
+    TYPE_LEGACY_TEMP = 1,  /* no longer used */
+    TYPE_PG = 2,
+    TYPE_PG_TEMP = 3,
+    TYPE_PG_REMOVAL = 4,   /* note: deprecated, not encoded */
+  };
+  type_t type;
+  spg_t pgid;
+  uint64_t removal_seq;  // note: deprecated, not encoded
+
+  string _str;  // cached string
+
+  void calc_str();
+
+  coll_t(type_t t, spg_t p, uint64_t r)
+    : type(t), pgid(p), removal_seq(r) {
+    calc_str();
+  }
+
 public:
-  coll_t()
-    : str("meta")
-  { }
+  coll_t() : type(TYPE_META), removal_seq(0)
+  {
+    calc_str();
+  }
 
-  explicit coll_t(const std::string &str_)
-    : str(str_)
-  { }
+  coll_t(const coll_t& other)
+    : type(other.type), pgid(other.pgid), removal_seq(other.removal_seq) {
+    calc_str();
+  }
 
-  explicit coll_t(spg_t pgid, snapid_t snap = CEPH_NOSNAP)
-    : str(pg_and_snap_to_str(pgid, snap))
-  { }
+  explicit coll_t(spg_t pgid)
+    : type(TYPE_PG), pgid(pgid)
+  {
+    calc_str();
+  }
 
-  static coll_t make_temp_coll(spg_t pgid) {
-    return coll_t(pg_to_tmp_str(pgid));
+  // named constructors
+  static coll_t meta() {
+    return coll_t();
+  }
+  static coll_t pg(spg_t p) {
+    return coll_t(p);
   }
 
   const std::string& to_str() const {
-    return str;
+    return _str;
   }
-
-  const char* c_str() const {
-    return str.c_str();
+  const char *c_str() const {
+    return _str.c_str();
   }
+  bool parse(const std::string& s);
 
   int operator<(const coll_t &rhs) const {
-    return str < rhs.str;
+    return type < rhs.type ||
+		  (type == rhs.type && pgid < rhs.pgid);
   }
 
-  bool is_pg_prefix(spg_t& pgid) const;
-  bool is_pg(spg_t& pgid, snapid_t& snap) const;
-  bool is_temp(spg_t& pgid) const;
-  bool is_removal(uint64_t *seq, spg_t *pgid) const;
+  bool is_meta() const {
+    return type == TYPE_META;
+  }
+  bool is_pg_prefix(spg_t *pgid_) const {
+    if (type == TYPE_PG || type == TYPE_PG_TEMP || type == TYPE_PG_REMOVAL) {
+      *pgid_ = pgid;
+      return true;
+    }
+    return false;
+  }
+  bool is_pg() const {
+    return type == TYPE_PG;
+  }
+  bool is_pg(spg_t *pgid_) const {
+    if (type == TYPE_PG) {
+      *pgid_ = pgid;
+      return true;
+    }
+    return false;
+  }
+  bool is_temp() const {
+    return type == TYPE_PG_TEMP;
+  }
+  bool is_temp(spg_t *pgid_) const {
+    if (type == TYPE_PG_TEMP) {
+      *pgid_ = pgid;
+      return true;
+    }
+    return false;
+  }
+  bool is_removal() const {
+    return type == TYPE_PG_REMOVAL;
+  }
+  bool is_removal(spg_t *pgid_) const {
+    if (type == TYPE_PG_REMOVAL) {
+      *pgid_ = pgid;
+      return true;
+    }
+    return false;
+  }
+
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& bl);
+
   inline bool operator==(const coll_t& rhs) const {
-    return str == rhs.str;
+    return type == rhs.type && pgid == rhs.pgid;
   }
   inline bool operator!=(const coll_t& rhs) const {
-    return str != rhs.str;
+    return !(*this == rhs);
+  }
+
+  // get a TEMP collection that corresponds to the current collection,
+  // which we presume is a pg collection.
+  coll_t get_temp() const {
+    assert(type == TYPE_PG);
+    return coll_t(TYPE_PG_TEMP, pgid, 0);
   }
 
   void dump(Formatter *f) const;
   static void generate_test_instances(list<coll_t*>& o);
-
-private:
-  static std::string pg_and_snap_to_str(spg_t p, snapid_t s) {
-    std::ostringstream oss;
-    oss << p << "_" << s;
-    return oss.str();
-  }
-  static std::string pg_to_tmp_str(spg_t p) {
-    std::ostringstream oss;
-    oss << p << "_TEMP";
-    return oss.str();
-  }
-
-  std::string str;
 };
 
 WRITE_CLASS_ENCODER(coll_t)

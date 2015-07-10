@@ -548,75 +548,89 @@ ostream& operator<<(ostream& out, const pg_t &pg)
 
 // -- coll_t --
 
-bool coll_t::is_temp(spg_t& pgid) const
+void coll_t::calc_str()
 {
-  const char *cstr(str.c_str());
-  if (!pgid.parse(cstr))
-    return false;
-  const char *tmp_start = strchr(cstr, '_');
-  if (!tmp_start)
-    return false;
-  if (strncmp(tmp_start, "_TEMP", 5) == 0)
+  switch (type) {
+  case TYPE_META:
+    _str = "meta";
+    break;
+  case TYPE_PG:
+    _str = stringify(pgid) + "_head";
+    break;
+  case TYPE_PG_TEMP:
+    _str = stringify(pgid) + "_TEMP";
+    break;
+  case TYPE_PG_REMOVAL:
+    _str = string("FORREMOVAL_") +
+      stringify(removal_seq) + "_" +
+      stringify(pgid);
+    break;
+  default:
+    assert(0 == "unknown collection type");
+  }
+}
+
+bool coll_t::parse(const std::string& s)
+{
+  if (s == "meta") {
+    type = TYPE_META;
+    pgid = spg_t();
+    removal_seq = 0;
+    calc_str();
+    assert(s == _str);
     return true;
-  return false;
-}
-
-bool coll_t::is_pg(spg_t& pgid, snapid_t& snap) const
-{
-  const char *cstr(str.c_str());
-
-  if (!pgid.parse(cstr))
-    return false;
-  const char *snap_start = strchr(cstr, '_');
-  if (!snap_start)
-    return false;
-  if (strncmp(snap_start, "_head", 5) == 0) {
-    snap = CEPH_NOSNAP;
-  } else {
-    errno = 0;
-    snap = strtoull(snap_start+1, 0, 16);
-    if (errno)
+  }
+  if (s.find("_head") == s.length() - 5 &&
+      pgid.parse(s.substr(0, s.length() - 5))) {
+    type = TYPE_PG;
+    removal_seq = 0;
+    calc_str();
+    assert(s == _str);
+    return true;
+  }
+  if (s.find("_TEMP") == s.length() - 5 &&
+      pgid.parse(s.substr(0, s.length() - 5))) {
+    type = TYPE_PG_TEMP;
+    removal_seq = 0;
+    calc_str();
+    assert(s == _str);
+    return true;
+  }
+  if (s.find("FORREMOVAL_") == 0) {
+    type = TYPE_PG_REMOVAL;
+    stringstream ss(s.substr(11));
+    ss >> removal_seq;
+    char sep;
+    ss >> sep;
+    assert(sep == '_');
+    string pgid_str;
+    ss >> pgid_str;
+    if (!pgid.parse(pgid_str.c_str())) {
+      assert(0);
       return false;
+    }
+    calc_str();
+    assert(s == _str);
+    return true;
   }
-  return true;
-}
-
-bool coll_t::is_pg_prefix(spg_t& pgid) const
-{
-  const char *cstr(str.c_str());
-
-  if (!pgid.parse(cstr))
-    return false;
-  const char *snap_start = strchr(cstr, '_');
-  if (!snap_start)
-    return false;
-  return true;
-}
-
-bool coll_t::is_removal(uint64_t *seq, spg_t *pgid) const
-{
-  if (str.substr(0, 11) != string("FORREMOVAL_"))
-    return false;
-
-  stringstream ss(str.substr(11));
-  ss >> *seq;
-  char sep;
-  ss >> sep;
-  assert(sep == '_');
-  string pgid_str;
-  ss >> pgid_str;
-  if (!pgid->parse(pgid_str.c_str())) {
-    assert(0);
-    return false;
-  }
-  return true;
+  return false;
 }
 
 void coll_t::encode(bufferlist& bl) const
 {
-  __u8 struct_v = 3;
-  ::encode(struct_v, bl);
-  ::encode(str, bl);
+  if (is_removal() || is_temp()) {
+    // can't express this as v2...
+    __u8 struct_v = 3;
+    ::encode(struct_v, bl);
+    ::encode(to_str(), bl);
+  } else {
+    __u8 struct_v = 2;
+    ::encode(struct_v, bl);
+    ::encode((__u8)type, bl);
+    ::encode(pgid, bl);
+    snapid_t snap = CEPH_NOSNAP;
+    ::encode(snap, bl);
+  }
 }
 
 void coll_t::decode(bufferlist::iterator& bl)
@@ -624,72 +638,72 @@ void coll_t::decode(bufferlist::iterator& bl)
   __u8 struct_v;
   ::decode(struct_v, bl);
   switch (struct_v) {
-  case 1: {
-    spg_t pgid;
-    snapid_t snap;
+  case 1:
+    {
+      snapid_t snap;
+      ::decode(pgid, bl);
+      ::decode(snap, bl);
 
-    ::decode(pgid, bl);
-    ::decode(snap, bl);
-    // infer the type
-    if (pgid == spg_t() && snap == 0)
-      str = "meta";
-    else
-      str = pg_and_snap_to_str(pgid, snap);
-    break;
-  }
-
-  case 2: {
-    __u8 type;
-    spg_t pgid;
-    snapid_t snap;
-    
-    ::decode(type, bl);
-    ::decode(pgid, bl);
-    ::decode(snap, bl);
-    switch (type) {
-    case 0:
-      str = "meta";
-      break;
-    case 1:
-      str = "temp";
-      break;
-    case 2:
-      str = pg_and_snap_to_str(pgid, snap);
-      break;
-    default: {
-      ostringstream oss;
-      oss << "coll_t::decode(): can't understand type " << type;
-      throw std::domain_error(oss.str());
-    }
+      // infer the type
+      if (pgid == spg_t() && snap == 0) {
+	type = TYPE_META;
+      } else {
+	type = TYPE_PG;
+      }
+      removal_seq = 0;
     }
     break;
-  }
+
+  case 2:
+    {
+      __u8 _type;
+      snapid_t snap;
+      ::decode(_type, bl);
+      ::decode(pgid, bl);
+      ::decode(snap, bl);
+      type = (type_t)_type;
+      removal_seq = 0;
+    }
+    break;
 
   case 3:
-    ::decode(str, bl);
+    {
+      string str;
+      ::decode(str, bl);
+      bool ok = parse(str);
+      if (!ok)
+	throw std::domain_error(std::string("unable to parse pg ") + str);
+    }
     break;
-    
-  default: {
-    ostringstream oss;
-    oss << "coll_t::decode(): don't know how to decode version "
-	<< struct_v;
-    throw std::domain_error(oss.str());
-  }
+
+  default:
+    {
+      ostringstream oss;
+      oss << "coll_t::decode(): don't know how to decode version "
+	  << struct_v;
+      throw std::domain_error(oss.str());
+    }
   }
 }
 
 void coll_t::dump(Formatter *f) const
 {
-  f->dump_string("name", str);
+  f->dump_unsigned("type_id", (unsigned)type);
+  if (type != TYPE_META)
+    f->dump_stream("pgid") << pgid;
+  f->dump_string("name", to_str());
 }
 
 void coll_t::generate_test_instances(list<coll_t*>& o)
 {
-  o.push_back(new coll_t);
-  o.push_back(new coll_t("meta"));
-  o.push_back(new coll_t("temp"));
-  o.push_back(new coll_t("foo"));
-  o.push_back(new coll_t("bar"));
+  o.push_back(new coll_t());
+  o.push_back(new coll_t(spg_t(pg_t(1, 0), shard_id_t::NO_SHARD)));
+  o.push_back(new coll_t(o.back()->get_temp()));
+  o.push_back(new coll_t(spg_t(pg_t(3, 2), shard_id_t(12))));
+  o.push_back(new coll_t(o.back()->get_temp()));
+  o.push_back(new coll_t());
+  o.back()->parse("FORREMOVAL_0_0.1");
+  o.back()->parse("FORREMOVAL_123_2.2a3f");
 }
 
 // ---
@@ -3119,6 +3133,12 @@ void pg_log_t::filter_log(spg_t import_pgid, const OSDMap &curmap,
 
   for (list<pg_log_entry_t>::const_iterator i = in.log.begin();
        i != in.log.end(); ++i) {
+
+    // Reject pg log entries for temporary objects
+    if (i->soid.is_temp()) {
+      reject.log.push_back(*i);
+      continue;
+    }
 
     if (i->soid.nspace != hit_set_namespace) {
       object_t oid = i->soid.oid;

@@ -29,7 +29,7 @@
 #include <gtest/gtest.h>
 
 TEST(FlatIndex, FlatIndex) {
-  coll_t collection("ABC");
+  coll_t collection;
   const std::string base_path("PATH");
   FlatIndex index(collection, base_path);
   EXPECT_EQ(collection, index.coll());
@@ -42,7 +42,7 @@ TEST(FlatIndex, FlatIndex) {
 }
 
 TEST(FlatIndex, collection) {
-  coll_t collection("ABC");
+  coll_t collection;
   const std::string base_path("PATH");
   FlatIndex index(collection, base_path);
   const std::string key("KEY");
@@ -55,7 +55,7 @@ TEST(FlatIndex, collection) {
 }
 
 TEST(FlatIndex, created_unlink) {
-  coll_t collection("ABC");
+  coll_t collection;
   const std::string base_path("PATH");
   EXPECT_EQ(0, ::system("rm -fr PATH"));
   EXPECT_EQ(0, ::mkdir("PATH", 0700));
@@ -100,7 +100,7 @@ TEST(FlatIndex, created_unlink) {
 }
 
 TEST(FlatIndex, collection_list) {
-  coll_t collection("ABC");
+  coll_t collection;
   const std::string base_path("PATH");
   EXPECT_EQ(0, ::system("rm -fr PATH"));
   EXPECT_EQ(0, ::mkdir("PATH", 0700));

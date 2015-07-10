@@ -137,7 +137,7 @@ int main(int argc, char **argv) {
 	 i != objects.end();
 	 ++i) {
       std::cout << "Object: " << *i << std::endl;
-      ObjectMap::ObjectMapIterator j = omap.get_iterator(i->hobj);
+      ObjectMap::ObjectMapIterator j = omap.get_iterator(ghobject_t(i->hobj));
       for (j->seek_to_first(); j->valid(); j->next()) {
 	std::cout << j->key() << std::endl;
 	j->value().hexdump(std::cout);

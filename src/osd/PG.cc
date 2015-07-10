@@ -56,8 +56,6 @@
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, this)
 
-static coll_t META_COLL("meta");
-
 // prefix pgmeta_oid keys with _ so that PGLog::read_log() can
 // easily skip them
 const string infover_key("_infover");
@@ -2597,21 +2595,19 @@ void PG::init(
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
 
-void PG::upgrade(ObjectStore *store, const interval_set<snapid_t> &snapcolls)
+void PG::upgrade(ObjectStore *store)
 {
   assert(info_struct_v <= 8);
   ObjectStore::Transaction t;
 
-  if (info_struct_v < 7) {
-    _upgrade_v7(store, snapcolls);
-  }
+  assert(info_struct_v == 7);
 
   // 7 -> 8
   pg_log.mark_log_for_rewrite();
-  hobject_t log_oid(OSD::make_pg_log_oid(pg_id));
-  hobject_t biginfo_oid(OSD::make_pg_biginfo_oid(pg_id));
-  t.remove(META_COLL, log_oid);
-  t.remove(META_COLL, biginfo_oid);
+  ghobject_t log_oid(OSD::make_pg_log_oid(pg_id));
+  ghobject_t biginfo_oid(OSD::make_pg_biginfo_oid(pg_id));
+  t.remove(coll_t::meta(), log_oid);
+  t.remove(coll_t::meta(), biginfo_oid);
   t.collection_rmattr(coll, "info");
 
   t.touch(coll, pgmeta_oid);
@@ -2635,130 +2631,6 @@ void PG::upgrade(ObjectStore *store, const interval_set<snapid_t> &snapcolls)
 
 #pragma GCC diagnostic pop
 #pragma GCC diagnostic warning "-Wpragmas"
-
-void PG::_upgrade_v7(ObjectStore *store, const interval_set<snapid_t> &snapcolls)
-{
-  unsigned removed = 0;
-  for (interval_set<snapid_t>::const_iterator i = snapcolls.begin();
-       i != snapcolls.end();
-       ++i) {
-    for (snapid_t next_dir = i.get_start();
-	 next_dir != i.get_start() + i.get_len();
-	 ++next_dir) {
-      ++removed;
-      coll_t cid(info.pgid, next_dir);
-      dout(1) << "Removing collection " << cid
-	      << " (" << removed << "/" << snapcolls.size()
-	      << ")" << dendl;
-
-      hobject_t cur;
-      vector<hobject_t> objects;
-      while (1) {
-	int r = get_pgbackend()->objects_list_partial(
-	  cur,
-	  store->get_ideal_list_min(),
-	  store->get_ideal_list_max(),
-	  0,
-	  &objects,
-	  &cur);
-	if (r != 0) {
-	  derr << __func__ << ": collection_list_partial returned "
-	       << cpp_strerror(r) << dendl;
-	  assert(0);
-	}
-	if (objects.empty()) {
-	  assert(cur.is_max());
-	  break;
-	}
-	ObjectStore::Transaction t;
-	for (vector<hobject_t>::iterator j = objects.begin();
-	     j != objects.end();
-	     ++j) {
-	  t.remove(cid, *j);
-	}
-	r = store->apply_transaction(t);
-	if (r != 0) {
-	  derr << __func__ << ": apply_transaction returned "
-	       << cpp_strerror(r) << dendl;
-	  assert(0);
-	}
-	objects.clear();
-      }
-      ObjectStore::Transaction t;
-      t.remove_collection(cid);
-      int r = store->apply_transaction(t);
-      if (r != 0) {
-	derr << __func__ << ": apply_transaction returned "
-	     << cpp_strerror(r) << dendl;
-	assert(0);
-      }
-    }
-  }
-
-  hobject_t cur;
-  coll_t cid(info.pgid);
-  unsigned done = 0;
-  vector<hobject_t> objects;
-  while (1) {
-    dout(1) << "Updating snap_mapper from main collection, "
-	    << done << " objects done" << dendl;
-    int r = get_pgbackend()->objects_list_partial(
-      cur,
-      store->get_ideal_list_min(),
-      store->get_ideal_list_max(),
-      0,
-      &objects,
-      &cur);
-    if (r != 0) {
-      derr << __func__ << ": collection_list_partial returned "
-	   << cpp_strerror(r) << dendl;
-      assert(0);
-    }
-    if (objects.empty()) {
-      assert(cur.is_max());
-      break;
-    }
-    done += objects.size();
-    ObjectStore::Transaction t;
-    for (vector<hobject_t>::iterator j = objects.begin();
-	 j != objects.end();
-	 ++j) {
-      if (j->snap < CEPH_MAXSNAP) {
-	OSDriver::OSTransaction _t(osdriver.get_transaction(&t));
-	bufferlist bl;
-	r = get_pgbackend()->objects_get_attr(
-	  *j,
-	  OI_ATTR,
-	  &bl);
-	if (r < 0) {
-	  derr << __func__ << ": getattr returned "
-	       << cpp_strerror(r) << dendl;
-	  assert(0);
-	}
-	object_info_t oi(bl);
-	set<snapid_t> oi_snaps(oi.snaps.begin(), oi.snaps.end());
-	set<snapid_t> cur_snaps;
-	r = snap_mapper.get_snaps(*j, &cur_snaps);
-	if (r == 0) {
-	  assert(cur_snaps == oi_snaps);
-	} else if (r == -ENOENT) {
-	  snap_mapper.add_oid(*j, oi_snaps, &_t);
-	} else {
-	  derr << __func__ << ": get_snaps returned "
-	       << cpp_strerror(r) << dendl;
-	  assert(0);
-	}
-      }
-    }
-    r = store->apply_transaction(t);
-    if (r != 0) {
-      derr << __func__ << ": apply_transaction returned "
-	   << cpp_strerror(r) << dendl;
-      assert(0);
-    }
-    objects.clear();
-  }
-}
 
 int PG::_prepare_write_info(map<string,bufferlist> *km,
 			    epoch_t epoch,
@@ -2859,17 +2731,14 @@ epoch_t PG::peek_map_epoch(ObjectStore *store,
 			   bufferlist *bl)
 {
   coll_t coll(pgid);
-  hobject_t legacy_infos_oid(OSD::make_infos_oid());
+  ghobject_t legacy_infos_oid(OSD::make_infos_oid());
   ghobject_t pgmeta_oid(pgid.make_pgmeta_oid());
   epoch_t cur_epoch = 0;
 
   assert(bl);
   {
     // validate collection name
-    spg_t pgid_temp;
-    snapid_t snap;
-    bool ok = coll.is_pg(pgid_temp, snap);
-    assert(ok);
+    assert(coll.is_pg());
   }
 
   // try for v8
@@ -2909,7 +2778,7 @@ epoch_t PG::peek_map_epoch(ObjectStore *store,
     keys.clear();
     values.clear();
     keys.insert(ek);
-    store->omap_get_values(META_COLL, legacy_infos_oid, keys, &values);
+    store->omap_get_values(coll_t::meta(), legacy_infos_oid, keys, &values);
     assert(values.size() == 1);
     bufferlist::iterator p = values[ek].begin();
     ::decode(cur_epoch, p);
@@ -3085,7 +2954,7 @@ int PG::read_info(
   }
 
   // legacy (ver < 8)
-  hobject_t infos_oid(OSD::make_infos_oid());
+  ghobject_t infos_oid(OSD::make_infos_oid());
   bufferlist::iterator p = bl.begin();
   ::decode(struct_v, p);
   assert(struct_v == 7);
@@ -3097,7 +2966,7 @@ int PG::read_info(
   keys.insert(k);
   keys.insert(bk);
   values.clear();
-  store->omap_get_values(META_COLL, infos_oid, keys, &values);
+  store->omap_get_values(coll_t::meta(), ghobject_t(infos_oid), keys, &values);
   assert(values.size() == 2);
 
   p = values[k].begin();
@@ -3120,8 +2989,8 @@ void PG::read_state(ObjectStore *store, bufferlist &bl)
   ostringstream oss;
   pg_log.read_log(store,
 		  coll,
-		  info_struct_v < 8 ? META_COLL : coll,
-		  info_struct_v < 8 ? OSD::make_pg_log_oid(pg_id) : pgmeta_oid,
+		  info_struct_v < 8 ? coll_t::meta() : coll,
+		  ghobject_t(info_struct_v < 8 ? OSD::make_pg_log_oid(pg_id) : pgmeta_oid),
 		  info, oss);
   if (oss.str().length())
     osd->clog->error() << oss;

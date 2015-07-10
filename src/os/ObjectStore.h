@@ -1241,7 +1241,8 @@ public:
       }
       data.ops++;
     }
-    void collection_move(coll_t cid, coll_t oldcid, const ghobject_t& oid) {
+    void collection_move(coll_t cid, coll_t oldcid, const ghobject_t& oid)
+      __attribute__ ((deprecated)) {
       // NOTE: we encode this as a fixed combo of ADD + REMOVE.  they
       // always appear together, so this is effectively a single MOVE.
       if (use_tbl) {
@@ -2064,16 +2065,6 @@ public:
    */
   virtual int collection_list_range(coll_t c, ghobject_t start, ghobject_t end,
 	                            snapid_t seq, vector<ghobject_t> *ls) = 0;
-
-  //TODO: Remove
-  int collection_list(coll_t c, vector<hobject_t>& o);
-
-  int collection_list_partial(coll_t c, hobject_t start,
-				      int min, int max, snapid_t snap,
-				      vector<hobject_t> *ls, hobject_t *next);
-
-  int collection_list_range(coll_t c, hobject_t start, hobject_t end,
-	                            snapid_t seq, vector<hobject_t> *ls);
 
   /// OMAP
   /// Get omap contents

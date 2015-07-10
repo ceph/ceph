@@ -40,8 +40,6 @@
 namespace po = boost::program_options;
 using namespace std;
 
-static coll_t META_COLL("meta");
-
 #ifdef INTERNAL_TEST
 CompatSet get_test_compat_set() {
   CompatSet::FeatureSet ceph_osd_feature_compat;
@@ -142,10 +140,7 @@ int action_on_all_objects_in_pg(ObjectStore *store, string pgidstr, action_on_ob
        i != candidates.end();
        ++i) {
     spg_t cand_pgid;
-    snapid_t snap;
-    if (!i->is_pg(cand_pgid, snap))
-      continue;
-    if (snap != CEPH_NOSNAP)
+    if (!i->is_pg(&cand_pgid))
       continue;
 
     // If an exact match or treat no shard as any shard
@@ -192,9 +187,7 @@ int _action_on_all_objects(ObjectStore *store, action_on_object_t &action, bool 
   for (vector<coll_t>::iterator i = candidates.begin();
        i != candidates.end();
        ++i) {
-    spg_t pgid;
-    snapid_t snap;
-    if (i->is_pg(pgid, snap)) {
+    if (i->is_pg()) {
       colls_to_check.push_back(*i);
     }
   }
@@ -239,12 +232,9 @@ struct pgid_object_list {
         cout << std::endl;
       }
       f->open_array_section("pgid_object");
-      string pgid = i->first.c_str();
-      std::size_t pos = pgid.find("_");
-      if (pos == string::npos)
-        f->dump_string("pgid", pgid);
-      else
-        f->dump_string("pgid", pgid.substr(0, pos));
+      spg_t pgid;
+      if (i->first.is_pg(&pgid))
+        f->dump_string("pgid", stringify(pgid));
       f->open_object_section("ghobject");
       i->second.dump(f);
       f->close_section();
@@ -282,9 +272,9 @@ struct lookup_ghobject : public action_on_object_t {
   }
 };
 
-hobject_t infos_oid = OSD::make_infos_oid();
+ghobject_t infos_oid = OSD::make_infos_oid();
 ghobject_t log_oid;
-hobject_t biginfo_oid;
+ghobject_t biginfo_oid;
 
 int file_fd = fd_none;
 bool debug = false;
@@ -356,7 +346,7 @@ int get_log(ObjectStore *fs, __u8 struct_ver,
     ostringstream oss;
     assert(struct_ver > 0);
     PGLog::read_log(fs, coll,
-		    struct_ver >= 8 ? coll : META_COLL,
+		    struct_ver >= 8 ? coll : coll_t::meta(),
 		    struct_ver >= 8 ? pgid.make_pgmeta_oid() : log_oid,
 		    info, divergent_priors, log, missing, oss);
     if (debug && oss.str().size())
@@ -400,7 +390,7 @@ void dump_log(Formatter *formatter, ostream &out, pg_log_t &log,
 void remove_coll(ObjectStore *store, const coll_t &coll)
 {
   spg_t pg;
-  coll.is_pg_prefix(pg);
+  coll.is_pg_prefix(&pg);
   OSDriver driver(
     store,
     coll_t(),
@@ -460,19 +450,11 @@ int finish_remove_pgs(ObjectStore *store)
        ++it) {
     spg_t pgid;
 
-    if (it->is_temp(pgid)) {
-      cout << "finish_remove_pgs " << *it << " clearing temp" << std::endl;
-      OSD::recursive_remove_collection(store, *it);
-      continue;
-    }
-
-    uint64_t seq;
-    snapid_t snap;
-    if (it->is_removal(&seq, &pgid) || (it->is_pg(pgid, snap) &&
-	PG::_has_removal_flag(store, pgid))) {
-      cout << "finish_remove_pgs removing " << *it
-	   << " pgid is " << pgid << std::endl;
-      remove_coll(store, *it);
+    if (it->is_temp(&pgid) ||
+	it->is_removal(&pgid) ||
+	(it->is_pg(&pgid) && PG::_has_removal_flag(store, pgid))) {
+      cout << "finish_remove_pgs " << *it << " removing " << pgid << std::endl;
+      OSD::recursive_remove_collection(store, pgid, *it);
       continue;
     }
 
@@ -506,10 +488,10 @@ int mark_pg_for_removal(ObjectStore *fs, spg_t pgid, ObjectStore::Transaction *t
     bufferlist one;
     one.append('1');
     t->collection_setattr(coll, "remove", one);
-    cout << "remove " << META_COLL << " " << log_oid.hobj.oid << std::endl;
-    t->remove(META_COLL, log_oid);
-    cout << "remove " << META_COLL << " " << biginfo_oid.oid << std::endl;
-    t->remove(META_COLL, biginfo_oid);
+    cout << "remove " << coll_t::meta() << " " << log_oid << std::endl;
+    t->remove(coll_t::meta(), log_oid);
+    cout << "remove " << coll_t::meta() << " " << biginfo_oid << std::endl;
+    t->remove(coll_t::meta(), biginfo_oid);
   } else {
     // new omap key
     cout << "setting '_remove' omap key" << std::endl;
@@ -717,7 +699,8 @@ int ObjectStoreTool::export_files(ObjectStore *store, coll_t coll)
     for (vector<ghobject_t>::iterator i = objects.begin();
 	 i != objects.end();
 	 ++i) {
-      if (i->is_pgmeta()) {
+      assert(!i->hobj.is_meta());
+      if (i->is_pgmeta() || i->hobj.is_temp()) {
 	continue;
       }
       r = export_file(store, coll, *i);
@@ -731,7 +714,7 @@ int ObjectStoreTool::export_files(ObjectStore *store, coll_t coll)
 int get_osdmap(ObjectStore *store, epoch_t e, OSDMap &osdmap, bufferlist& bl)
 {
   bool found = store->read(
-      META_COLL, OSD::get_osdmap_pobject_name(e), 0, 0, bl) >= 0;
+      coll_t::meta(), OSD::get_osdmap_pobject_name(e), 0, 0, bl) >= 0;
   if (!found) {
     cerr << "Can't find OSDMap for pg epoch " << e << std::endl;
     return -ENOENT;
@@ -887,9 +870,13 @@ int ObjectStoreTool::get_object(ObjectStore *store, coll_t coll,
     coll_t(),
     OSD::make_snapmapper_oid());
   spg_t pg;
-  coll.is_pg_prefix(pg);
+  coll.is_pg_prefix(&pg);
   SnapMapper mapper(&driver, 0, 0, 0, pg.shard);
 
+  if (ob.hoid.hobj.is_temp()) {
+    cerr << "ERROR: Export contains temporary object '" << ob.hoid << "'" << std::endl;
+    return -EFAULT;
+  }
   assert(g_ceph_context);
   if (ob.hoid.hobj.nspace != g_ceph_context->_conf->osd_hit_set_namespace) {
     object_t oid = ob.hoid.hobj.oid;
@@ -898,8 +885,7 @@ int ObjectStoreTool::get_object(ObjectStore *store, coll_t coll,
     pg_t pgid = curmap.raw_pg_to_pg(raw_pgid);
   
     spg_t coll_pgid;
-    snapid_t coll_snap;
-    if (coll.is_pg(coll_pgid, coll_snap) == false) {
+    if (coll.is_pg(&coll_pgid) == false) {
       cerr << "INTERNAL ERROR: Bad collection during import" << std::endl;
       return -EFAULT;
     }
@@ -1115,6 +1101,12 @@ void filter_divergent_priors(spg_t import_pgid, const OSDMap &curmap,
 
   for (divergent_priors_t::const_iterator i = in.begin();
        i != in.end(); ++i) {
+
+    // Reject divergent priors for temporary objects
+    if (i->second.is_temp()) {
+      reject.insert(*i);
+      continue;
+    }
 
     if (i->second.nspace != hit_set_namespace) {
       object_t oid = i->second.oid;
@@ -1395,7 +1387,7 @@ int do_list(ObjectStore *store, string pgidstr, string object, Formatter *format
 int do_remove_object(ObjectStore *store, coll_t coll, ghobject_t &ghobj)
 {
   spg_t pg;
-  coll.is_pg_prefix(pg);
+  coll.is_pg_prefix(&pg);
   OSDriver driver(
     store,
     coll_t(),
@@ -2085,7 +2077,7 @@ int main(int argc, char **argv)
   bufferlist bl;
   OSDSuperblock superblock;
   bufferlist::iterator p;
-  ret = fs->read(META_COLL, OSD_SUPERBLOCK_POBJECT, 0, 0, bl);
+  ret = fs->read(coll_t::meta(), OSD_SUPERBLOCK_POBJECT, 0, 0, bl);
   if (ret < 0) {
     cerr << "Failure to read OSD superblock: " << cpp_strerror(ret) << std::endl;
     goto out;
@@ -2271,7 +2263,7 @@ int main(int argc, char **argv)
       ObjectStore::Transaction t;
       bl.clear();
       ::encode(superblock, bl);
-      t.write(META_COLL, OSD_SUPERBLOCK_POBJECT, 0, bl.length(), bl);
+      t.write(coll_t::meta(), OSD_SUPERBLOCK_POBJECT, 0, bl.length(), bl);
       ret = fs->apply_transaction(t);
       if (ret < 0) {
         cerr << "Error writing OSD superblock: " << cpp_strerror(ret) << std::endl;
@@ -2374,24 +2366,17 @@ int main(int argc, char **argv)
 
   // Find pg
   for (it = ls.begin(); it != ls.end(); ++it) {
-    snapid_t snap;
     spg_t tmppgid;
 
-    if (!it->is_pg(tmppgid, snap)) {
+    if (!it->is_pg(&tmppgid)) {
       continue;
     }
 
-    if (it->is_temp(tmppgid)) {
+    if (it->is_temp(&tmppgid)) {
       continue;
     }
 
     if (op != "list-pgs" && tmppgid != pgid) {
-      continue;
-    }
-    if (snap != CEPH_NOSNAP) {
-      if (debug)
-        cerr << "skipping snapped dir " << *it
-	       << " (pg " << pgid << " snap " << snap << ")" << std::endl;
       continue;
     }
 

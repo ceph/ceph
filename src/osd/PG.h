@@ -292,10 +292,7 @@ public:
   bool can_upgrade() {
     return info_struct_v >= compat_struct_v;
   }
-  void upgrade(
-    ObjectStore *store,
-    const interval_set<snapid_t> &snapcolls);
-  void _upgrade_v7(ObjectStore *store, const interval_set<snapid_t> &snapcolls);
+  void upgrade(ObjectStore *store);
 
   const coll_t coll;
   PGLog  pg_log;
@@ -784,14 +781,14 @@ public:
   }
   bool is_acting(pg_shard_t osd) const {
     if (pool.info.ec_pool()) {
-      return acting.size() > osd.shard && acting[osd.shard] == osd.osd;
+      return acting.size() > (unsigned)osd.shard && acting[osd.shard] == osd.osd;
     } else {
       return std::find(acting.begin(), acting.end(), osd.osd) != acting.end();
     }
   }
   bool is_up(pg_shard_t osd) const {
     if (pool.info.ec_pool()) {
-      return up.size() > osd.shard && up[osd.shard] == osd.osd;
+      return up.size() > (unsigned)osd.shard && up[osd.shard] == osd.osd;
     } else {
       return std::find(up.begin(), up.end(), osd.osd) != up.end();
     }
@@ -1212,7 +1209,6 @@ public:
     const std::map<hobject_t, pair<uint32_t, uint32_t> > &missing_digest) { }
   virtual void _scrub_clear_state() { }
   virtual void _scrub_finish() { }
-  virtual void get_colls(list<coll_t> *out) = 0;
   virtual void split_colls(
     spg_t child,
     int split_bits,

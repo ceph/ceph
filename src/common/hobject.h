@@ -29,6 +29,13 @@ namespace ceph {
   class Formatter;
 }
 
+#ifndef UINT64_MAX
+#define UINT64_MAX (18446744073709551615ULL)
+#endif
+#ifndef INT64_MIN
+#define INT64_MIN ((int64_t)0x8000000000000000ll)
+#endif
+
 struct hobject_t {
   object_t oid;
   snapid_t snap;
@@ -36,7 +43,9 @@ private:
   uint32_t hash;
   bool max;
   filestore_hobject_key_t filestore_key_cache;
-  static const int64_t POOL_IS_TEMP = -1;
+  static const int64_t POOL_META = -1;
+  static const int64_t POOL_TEMP_START = -2; // and then negative
+  friend class spg_t;  // for POOL_TEMP_START
 public:
   int64_t pool;
   string nspace;
@@ -70,14 +79,14 @@ public:
     return match_hash(hash, bits, match);
   }
 
-  static hobject_t make_temp(const string &name) {
-    return hobject_t(object_t(name), "", CEPH_NOSNAP, 0, POOL_IS_TEMP, "");
-  }
   bool is_temp() const {
-    return pool == POOL_IS_TEMP;
+    return pool < POOL_TEMP_START && pool != INT64_MIN;
+  }
+  bool is_meta() const {
+    return pool == POOL_META;
   }
 
-  hobject_t() : snap(0), hash(0), max(false), pool(-1) {
+  hobject_t() : snap(0), hash(0), max(false), pool(INT64_MIN) {
     build_filestore_key_cache();
   }
 
@@ -103,6 +112,7 @@ public:
       return *this;
     hobject_t ret;
     ret.set_hash(hash);
+    ret.pool = pool;
     return ret;
   }
 
@@ -142,7 +152,7 @@ public:
 
   /* Do not use when a particular hash function is needed */
   explicit hobject_t(const sobject_t &o) :
-    oid(o.oid), snap(o.snap), max(false), pool(-1) {
+    oid(o.oid), snap(o.snap), max(false), pool(POOL_META) {
     set_hash(CEPH_HASH_NAMESPACE::hash<sobject_t>()(o));
   }
 
@@ -160,7 +170,7 @@ public:
     return snap == 0 &&
 	   hash == 0 &&
 	   !max &&
-	   pool == -1;
+	   pool == INT64_MIN;
   }
 
   static uint32_t _reverse_nibbles(uint32_t retval) {
@@ -237,43 +247,50 @@ CEPH_HASH_NAMESPACE_END
 
 ostream& operator<<(ostream& out, const hobject_t& o);
 
-WRITE_EQ_OPERATORS_7(hobject_t, oid, get_key(), snap, hash, max, pool, nspace)
-// sort hobject_t's by <max, get_filestore_key(hash), key, oid, snapid>
+WRITE_EQ_OPERATORS_7(hobject_t, hash, oid, get_key(), snap, pool, max, nspace)
 WRITE_CMP_OPERATORS_7(hobject_t,
 		      max,
+		      pool,
 		      get_filestore_key(),
 		      nspace,
-		      pool,
 		      get_effective_key(),
 		      oid,
 		      snap)
 
 typedef version_t gen_t;
 
-#ifndef UINT64_MAX
-#define UINT64_MAX (18446744073709551615ULL)
-#endif
-
 struct ghobject_t {
   hobject_t hobj;
   gen_t generation;
   shard_id_t shard_id;
+  bool max;
 
 public:
   static const gen_t NO_GEN = UINT64_MAX;
 
-  ghobject_t() : generation(NO_GEN), shard_id(shard_id_t::NO_SHARD) {}
+  ghobject_t()
+    : generation(NO_GEN),
+      shard_id(shard_id_t::NO_SHARD),
+      max(false) {}
 
-  ghobject_t(const hobject_t &obj) : hobj(obj), generation(NO_GEN), shard_id(shard_id_t::NO_SHARD) {}
+  explicit ghobject_t(const hobject_t &obj)
+    : hobj(obj),
+      generation(NO_GEN),
+      shard_id(shard_id_t::NO_SHARD),
+      max(false) {}
 
-  ghobject_t(const hobject_t &obj, gen_t gen, shard_id_t shard) : hobj(obj), generation(gen), shard_id(shard) {}
+  ghobject_t(const hobject_t &obj, gen_t gen, shard_id_t shard)
+    : hobj(obj),
+      generation(gen),
+      shard_id(shard),
+      max(false) {}
 
   static ghobject_t make_pgmeta(int64_t pool, uint32_t hash, shard_id_t shard) {
     hobject_t h(object_t(), string(), CEPH_NOSNAP, hash, pool, string());
     return ghobject_t(h, NO_GEN, shard);
   }
   bool is_pgmeta() const {
-    // make sure we are distinct from hobject_t(), which has pool -1
+    // make sure we are distinct from hobject_t(), which has pool INT64_MIN
     return hobj.pool >= 0 && hobj.oid.name.empty();
   }
 
@@ -286,6 +303,8 @@ public:
       return *this;
     ghobject_t ret;
     ret.hobj.set_hash(hobj.hash);
+    ret.shard_id = shard_id;
+    ret.hobj.pool = hobj.pool;
     return ret;
   }
   filestore_hobject_key_t get_filestore_key_u32() const {
@@ -307,13 +326,22 @@ public:
     return shard_id == shard_id_t::NO_SHARD;
   }
 
+  void set_shard(shard_id_t s) {
+    shard_id = s;
+  }
+
   // maximum sorted value.
   static ghobject_t get_max() {
-    ghobject_t h(hobject_t::get_max());
+    ghobject_t h;
+    h.max = true;
+    h.hobj = hobject_t::get_max();  // so that is_max() => hobj.is_max()
     return h;
   }
   bool is_max() const {
-    return hobj.is_max();
+    return max;
+  }
+  bool is_min() const {
+    return *this == ghobject_t();
   }
 
   void swap(ghobject_t &o) {
@@ -348,14 +376,11 @@ CEPH_HASH_NAMESPACE_END
 
 ostream& operator<<(ostream& out, const ghobject_t& o);
 
-WRITE_EQ_OPERATORS_3(ghobject_t, hobj, shard_id, generation)
-// sort ghobject_t's by <hobj, shard_id, generation> 
-// 
-// Two objects which differ by generation are more related than
-// two objects of the same generation which differ by shard.
-// 
-WRITE_CMP_OPERATORS_3(ghobject_t,
-		      hobj,
+WRITE_EQ_OPERATORS_4(ghobject_t, max, shard_id, hobj, generation)
+
+WRITE_CMP_OPERATORS_4(ghobject_t,
+		      max,
 		      shard_id,
+		      hobj,
 		      generation)
 #endif
