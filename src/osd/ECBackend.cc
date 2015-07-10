@@ -170,12 +170,11 @@ void ECBackend::RecoveryOp::dump(Formatter *f) const
 ECBackend::ECBackend(
   PGBackend::Listener *pg,
   coll_t coll,
-  coll_t temp_coll,
   ObjectStore *store,
   CephContext *cct,
   ErasureCodeInterfaceRef ec_impl,
   uint64_t stripe_width)
-  : PGBackend(pg, store, coll, temp_coll),
+  : PGBackend(pg, store, coll),
     cct(cct),
     ec_impl(ec_impl),
     sinfo(ec_impl->get_data_chunk_count(), stripe_width) {
@@ -246,19 +245,25 @@ void ECBackend::handle_recovery_push(
   assert(m->t);
 
   bool oneshot = op.before_progress.first && op.after_progress.data_complete;
-  coll_t tcoll = oneshot ? coll : get_temp_coll(m->t);
+  ghobject_t tobj;
+  if (oneshot) {
+    tobj = ghobject_t(op.soid, ghobject_t::NO_GEN,
+		      get_parent()->whoami_shard().shard);
+  } else {
+    tobj = ghobject_t(get_parent()->get_temp_recovery_object(op.version,
+							     op.soid.snap),
+		      ghobject_t::NO_GEN,
+		      get_parent()->whoami_shard().shard);
+    if (op.before_progress.first) {
+      dout(10) << __func__ << ": Adding oid "
+	       << tobj.hobj << " in the temp collection" << dendl;
+      add_temp_obj(tobj.hobj);
+    }
+  }
+
   if (op.before_progress.first) {
-    get_parent()->on_local_recover_start(
-      op.soid,
-      m->t);
-    m->t->remove(
-      get_temp_coll(m->t),
-      ghobject_t(
-	op.soid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard));
-    m->t->touch(
-      tcoll,
-      ghobject_t(
-	op.soid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard));
+    m->t->remove(coll, tobj);
+    m->t->touch(coll, tobj);
   }
 
   if (!op.data_included.empty()) {
@@ -267,9 +272,8 @@ void ECBackend::handle_recovery_push(
     assert(op.data.length() == (end - start));
 
     m->t->write(
-      tcoll,
-      ghobject_t(
-	op.soid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
+      coll,
+      tobj,
       start,
       op.data.length(),
       op.data);
@@ -278,22 +282,22 @@ void ECBackend::handle_recovery_push(
   }
 
   if (op.before_progress.first) {
-    if (!oneshot)
-      add_temp_obj(op.soid);
     assert(op.attrset.count(string("_")));
     m->t->setattrs(
-      tcoll,
-      ghobject_t(
-	op.soid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
+      coll,
+      tobj,
       op.attrset);
   }
 
   if (op.after_progress.data_complete && !oneshot) {
-    clear_temp_obj(op.soid);
-    m->t->collection_move(
-      coll,
-      tcoll,
-      ghobject_t(
+    dout(10) << __func__ << ": Removing oid "
+	     << tobj.hobj << " from the temp collection" << dendl;
+    clear_temp_obj(tobj.hobj);
+    m->t->remove(coll, ghobject_t(
+	op.soid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard));
+    m->t->collection_move_rename(
+      coll, tobj,
+      coll, ghobject_t(
 	op.soid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard));
   }
   if (op.after_progress.data_complete) {
@@ -821,7 +825,6 @@ void ECBackend::handle_sub_write(
   ObjectStore::Transaction *localt = new ObjectStore::Transaction;
   localt->set_use_tbl(op.t.get_use_tbl());
   if (!op.temp_added.empty()) {
-    get_temp_coll(localt);
     add_temp_objs(op.temp_added);
   }
   if (op.t.empty()) {
@@ -831,7 +834,7 @@ void ECBackend::handle_sub_write(
       dout(10) << __func__ << ": removing object " << *i
 	       << " since we won't get the transaction" << dendl;
       localt->remove(
-	temp_coll,
+	coll,
 	ghobject_t(
 	  *i,
 	  ghobject_t::NO_GEN,
@@ -848,7 +851,7 @@ void ECBackend::handle_sub_write(
     localt);
 
   if (!(dynamic_cast<ReplicatedPG *>(get_parent())->is_undersized()) &&
-      get_parent()->whoami_shard().shard >= ec_impl->get_data_chunk_count())
+      (unsigned)get_parent()->whoami_shard().shard >= ec_impl->get_data_chunk_count())
     op.t.set_fadvise_flag(CEPH_OSD_OP_FLAG_FADVISE_DONTNEED);
 
   if (on_local_applied_sync) {
@@ -889,7 +892,7 @@ void ECBackend::handle_sub_read(
 	 ++j) {
       bufferlist bl;
       int r = store->read(
-	i->first.is_temp() ? temp_coll : coll,
+	coll,
 	ghobject_t(
 	  i->first, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
 	j->get<0>(),
@@ -918,7 +921,7 @@ void ECBackend::handle_sub_read(
     if (reply->errors.count(*i))
       continue;
     int r = store->getattrs(
-      i->is_temp() ? temp_coll : coll,
+      coll,
       ghobject_t(
 	*i, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
       reply->attrs_read[*i]);
@@ -1474,7 +1477,7 @@ ECUtil::HashInfoRef ECBackend::get_hash_info(
     dout(10) << __func__ << ": not in cache " << hoid << dendl;
     struct stat st;
     int r = store->stat(
-      hoid.is_temp() ? temp_coll : coll,
+      coll,
       ghobject_t(hoid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
       &st);
     ECUtil::HashInfo hinfo(ec_impl->get_chunk_count());
@@ -1482,7 +1485,7 @@ ECUtil::HashInfoRef ECBackend::get_hash_info(
       dout(10) << __func__ << ": found on disk, size " << st.st_size << dendl;
       bufferlist bl;
       r = store->getattr(
-	hoid.is_temp() ? temp_coll : coll,
+	coll,
 	ghobject_t(hoid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
 	ECUtil::get_hinfo_key(),
 	bl);

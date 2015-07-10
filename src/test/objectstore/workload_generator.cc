@@ -268,7 +268,7 @@ void WorkloadGenerator::do_write_object(ObjectStore::Transaction *t,
   if (m_do_stats && (stat != NULL))
     stat->written_data += bl.length();
 
-  t->write(coll, obj, 0, bl.length(), bl);
+  t->write(coll, ghobject_t(obj), 0, bl.length(), bl);
 }
 
 void WorkloadGenerator::do_setattr_object(ObjectStore::Transaction *t,
@@ -292,7 +292,7 @@ void WorkloadGenerator::do_setattr_object(ObjectStore::Transaction *t,
   if (m_do_stats && (stat != NULL))
       stat->written_data += bl.length();
 
-  t->setattr(coll, obj, "objxattr", bl);
+  t->setattr(coll, ghobject_t(obj), "objxattr", bl);
 }
 
 void WorkloadGenerator::do_pgmeta_omap_set(ObjectStore::Transaction *t, spg_t pgid,
@@ -333,16 +333,16 @@ void WorkloadGenerator::do_append_log(ObjectStore::Transaction *t,
 
   bufferlist bl;
   get_filled_byte_array(bl, size);
-  hobject_t log_obj = entry->m_meta_obj;
+  ghobject_t log_obj = entry->m_meta_obj;
 
   dout(2) << __func__ << " coll " << entry->m_coll << " "
-      << META_COLL << " /" << log_obj << " (" << bl.length() << ")" << dendl;
+      << coll_t::meta() << " /" << log_obj << " (" << bl.length() << ")" << dendl;
 
   if (m_do_stats && (stat != NULL))
       stat->written_data += bl.length();
 
   uint64_t s = pg_log_size[entry->m_coll];
-  t->write(META_COLL, log_obj, s, bl.length(), bl);
+  t->write(coll_t::meta(), log_obj, s, bl.length(), bl);
   pg_log_size[entry->m_coll] += bl.length();
 }
 
@@ -362,7 +362,7 @@ void WorkloadGenerator::do_destroy_collection(ObjectStore::Transaction *t,
   }
 
   t->remove_collection(entry->m_coll);
-  t->remove(META_COLL, entry->m_meta_obj);
+  t->remove(coll_t::meta(), entry->m_meta_obj);
 }
 
 TestObjectStoreState::coll_entry_t
@@ -379,8 +379,8 @@ TestObjectStoreState::coll_entry_t
 
   dout(2) << __func__ << " id " << entry->m_id << " coll " << entry->m_coll << dendl;
   t->create_collection(entry->m_coll);
-  dout(2) << __func__ << " meta " << META_COLL << "/" << entry->m_meta_obj << dendl;
-  t->touch(META_COLL, entry->m_meta_obj);
+  dout(2) << __func__ << " meta " << coll_t::meta() << "/" << entry->m_meta_obj << dendl;
+  t->touch(coll_t::meta(), entry->m_meta_obj);
   return entry;
 }
 

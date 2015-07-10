@@ -382,7 +382,7 @@ int HashIndex::pre_split_folder(uint32_t pg_num, uint64_t expected_num_objs)
     return 0;
 
   spg_t spgid;
-  if (!c.is_pg_prefix(spgid))
+  if (!c.is_pg_prefix(&spgid))
     return -EINVAL;
   const ps_t ps = spgid.pgid.ps();
 
@@ -879,6 +879,6 @@ int HashIndex::list_by_hash(const vector<string> &path,
     }
   }
   if (next)
-    *next = ghobject_t(hobject_t::get_max());
+    *next = ghobject_t::get_max();
   return 0;
 }

@@ -947,8 +947,8 @@ void ObjectStore::Transaction::generate_test_instances(list<ObjectStore::Transac
   o.push_back(t);
   
   t = new Transaction;
-  coll_t c("foocoll");
-  coll_t c2("foocoll2");
+  coll_t c(spg_t(pg_t(1,2), shard_id_t::NO_SHARD));
+  coll_t c2(spg_t(pg_t(4,5), shard_id_t::NO_SHARD));
   ghobject_t o1(hobject_t("obj", "", 123, 456, -1, ""));
   ghobject_t o2(hobject_t("obj2", "", 123, 456, -1, ""));
   ghobject_t o3(hobject_t("obj3", "", 123, 456, -1, ""));
@@ -975,7 +975,7 @@ void ObjectStore::Transaction::generate_test_instances(list<ObjectStore::Transac
   t->clone_range(c, o1, o2, 1, 12, 99);
 
   t->create_collection(c);
-  t->collection_move(c, c2, o3);
+  t->collection_move_rename(c, o2, c2, o3);
   t->remove_collection(c);
   t->collection_setattr(c, string("this"), bl);
   t->collection_rmattr(c, string("foo"));
