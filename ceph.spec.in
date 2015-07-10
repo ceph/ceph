@@ -370,9 +370,13 @@ Group:		System Environment/Libraries
 License:	LGPL-2.0
 Requires:	ceph-common
 Requires:	xmlstarlet
-%if (0%{?fedora} || 0%{?rhel} == 6)
+%if 0%{?fedora} || 0%{?rhel} == 6
 BuildRequires:	lttng-ust-devel
 BuildRequires:	libbabeltrace-devel
+%endif
+%if 0%(?suse_version)
+BuildRequires:	lttng-ust-devel
+BuildRequires:	babeltrace-devel
 %endif
 %description -n ceph-test
 This package contains Ceph benchmarks and test tools.
@@ -1086,7 +1090,7 @@ ln -sf %{_libdir}/librbd.so.1 /usr/lib64/qemu/librbd.so.1
 %{_mandir}/man8/rbd-replay-prep.8*
 %{_bindir}/rbd-replay
 %{_bindir}/rbd-replay-many
-%if (0%{?fedora} || 0%{?rhel} == 6)
+%if 0%{?fedora} || 0%{?rhel} == 6 || 0%{?suse_version}
 %{_bindir}/rbd-replay-prep
 %endif
 
