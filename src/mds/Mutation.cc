@@ -329,7 +329,7 @@ void MDRequestImpl::_dump(utime_t now, Formatter *f) const
       f->dump_stream("client") << client_request->get_orig_source();
       f->dump_int("tid", client_request->get_tid());
       f->close_section(); // client_info
-    } else if (slave_request && !slave_request->is_reply()) { // replies go to an existing mdr
+    } else if (is_slave() && slave_request) { // replies go to an existing mdr
       f->dump_string("op_type", "slave_request");
       f->open_object_section("master_info");
       f->dump_stream("master") << slave_request->get_orig_source();
