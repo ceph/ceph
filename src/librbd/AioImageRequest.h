@@ -8,12 +8,14 @@
 #include "include/buffer.h"
 #include "common/snap_types.h"
 #include "osd/osd_types.h"
+#include "librbd/AioCompletion.h"
+#include <list>
 #include <utility>
 #include <vector>
 
 namespace librbd {
 
-class AioCompletion;
+class AioObjectRequest;
 class ImageCtx;
 
 class AioImageRequest {
@@ -40,6 +42,8 @@ public:
   void send();
 
 protected:
+  typedef std::list<AioObjectRequest *> AioObjectRequests;
+
   ImageCtx &m_image_ctx;
   AioCompletion *m_aio_comp;
 
@@ -84,25 +88,43 @@ public:
     return true;
   }
 
+  inline void flag_synchronous() {
+    m_synchronous = true;
+  }
+
 protected:
   typedef std::vector<ObjectExtent> ObjectExtents;
 
+  const uint64_t m_off;
+  const size_t m_len;
+
   AbstractAioImageWrite(ImageCtx &image_ctx, AioCompletion *aio_comp,
                         uint64_t off, size_t len)
-    : AioImageRequest(image_ctx, aio_comp), m_off(off), m_len(len) {
+    : AioImageRequest(image_ctx, aio_comp), m_off(off), m_len(len),
+      m_synchronous(false) {
   }
+
+  virtual aio_type_t get_aio_type() const = 0;
 
   virtual void send_request();
 
-  virtual void send_object_requests(const ObjectExtents &object_extents,
-                                    const ::SnapContext &snapc);
-  virtual void send_object_request(const ObjectExtent &object_extent,
-                                   const ::SnapContext &snapc) = 0;
+  virtual void send_cache_requests(const ObjectExtents &object_extents,
+                                   const ::SnapContext &snapc,
+                                   uint64_t journal_tid) = 0;
+
+  void send_object_requests(const ObjectExtents &object_extents,
+                            const ::SnapContext &snapc,
+                            AioObjectRequests *aio_object_requests);
+  virtual AioObjectRequest *send_object_request(
+      const ObjectExtent &object_extent, const ::SnapContext &snapc,
+      Context *on_finish) = 0;
+
+  virtual uint64_t append_journal_event(const AioObjectRequests &requests,
+                                        bool synchronous) = 0;
   virtual void update_stats(size_t length) = 0;
 
 private:
-  uint64_t m_off;
-  size_t m_len;
+  bool m_synchronous;
 };
 
 class AioImageWrite : public AbstractAioImageWrite {
@@ -114,12 +136,25 @@ public:
   }
 
 protected:
+  virtual aio_type_t get_aio_type() const {
+    return AIO_TYPE_WRITE;
+  }
   virtual const char *get_request_type() const {
     return "aio_write";
   }
 
-  virtual void send_object_request(const ObjectExtent &object_extent,
-                                   const ::SnapContext &snapc);
+  void assemble_extent(const ObjectExtent &object_extent, bufferlist *bl);
+
+  virtual void send_cache_requests(const ObjectExtents &object_extents,
+                                   const ::SnapContext &snapc,
+                                   uint64_t journal_tid);
+
+  virtual AioObjectRequest *send_object_request(
+      const ObjectExtent &object_extent, const ::SnapContext &snapc,
+      Context *on_finish);
+
+  virtual uint64_t append_journal_event(const AioObjectRequests &requests,
+                                        bool synchronous);
   virtual void update_stats(size_t length);
 private:
   const char *m_buf;
@@ -134,14 +169,23 @@ public:
   }
 
 protected:
+  virtual aio_type_t get_aio_type() const {
+    return AIO_TYPE_DISCARD;
+  }
   virtual const char *get_request_type() const {
     return "aio_discard";
   }
 
-  virtual void send_object_requests(const ObjectExtents &object_extents,
-                                    const ::SnapContext &snapc);
-  virtual void send_object_request(const ObjectExtent &object_extent,
-                                   const ::SnapContext &snapc);
+  virtual void send_cache_requests(const ObjectExtents &object_extents,
+                                   const ::SnapContext &snapc,
+                                   uint64_t journal_tid);
+
+  virtual AioObjectRequest *send_object_request(
+      const ObjectExtent &object_extent, const ::SnapContext &snapc,
+      Context *on_finish);
+
+  virtual uint64_t append_journal_event(const AioObjectRequests &requests,
+                                        bool synchronous);
   virtual void update_stats(size_t length);
 };
 
