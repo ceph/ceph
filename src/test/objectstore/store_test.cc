@@ -961,6 +961,34 @@ public:
     return store->queue_transaction(osr, t, new C_SyntheticOnReadable(this, t, to_remove));
   }
 
+  int zero() {
+    Mutex::Locker locker(lock);
+    if (!can_unlink())
+      return -ENOENT;
+    wait_for_ready();
+
+    ghobject_t new_obj = get_uniform_random_object();
+    available_objects.erase(new_obj);
+    ObjectStore::Transaction *t = new ObjectStore::Transaction;
+
+    boost::uniform_int<> u1(0, max_object_len/2);
+    boost::uniform_int<> u2(0, max_object_len/10);
+    uint64_t offset = u1(*rng);
+    uint64_t len = u2(*rng);
+    if (offset > len)
+      swap(offset, len);
+
+    if (contents[new_obj].data.length() < offset + len) {
+      contents[new_obj].data.append_zero(offset+len-contents[new_obj].data.length());
+    }
+    contents[new_obj].data.zero(offset, len);
+
+    t->zero(cid, new_obj, offset, len);
+    ++in_flight;
+    in_flight_objects.insert(new_obj);
+    return store->queue_transaction(osr, t, new C_SyntheticOnReadable(this, t, new_obj));
+  }
+
   void print_internal_state() {
     Mutex::Locker locker(lock);
     cerr << "available_objects: " << available_objects.size()
@@ -991,9 +1019,11 @@ TEST_P(StoreTest, Synthetic) {
     int val = true_false(rng);
     if (val > 97) {
       test_obj.scan();
-    } else if (val > 90) {
+    } else if (val > 95) {
       test_obj.stat();
     } else if (val > 85) {
+      test_obj.zero();
+    } else if (val > 80) {
       test_obj.unlink();
     } else if (val > 55) {
       test_obj.write();
