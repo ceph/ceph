@@ -2358,6 +2358,13 @@ def get_dev_fs(dev):
         return None
 
 
+def split_dev_base_partnum(dev):
+    if 'loop' in dev or 'cciss' in dev or 'nvme' in dev:
+        return re.match('(.*\d+)p(\d+)', dev).group(1, 2)
+    else:
+        return re.match('(\D+)(\d+)', dev).group(1, 2)
+
+
 def get_partition_type(part):
     """
     Get the GPT partition type UUID.  If we have an old blkid and can't
@@ -2407,7 +2414,7 @@ def get_partition_type(part):
     if 'blkid' not in warned_about:
         LOG.warning('Old blkid does not support ID_PART_ENTRY_* fields, trying sgdisk; may not correctly identify ceph volumes with dmcrypt')
         warned_about['blkid'] = True
-    (base, partnum) = re.match('(\D+)(\d+)', part).group(1, 2)
+    (base, partnum) = split_dev_base_partnum(part)
     sgdisk, _ = command(
         [
             'sgdisk',
@@ -2433,10 +2440,7 @@ def get_partition_type(part):
 
 
 def get_partition_uuid(dev):
-    if 'loop' in dev or 'cciss' in dev:
-        (base, partnum) = re.match('(.*\d+)p(\d+)', dev).group(1, 2)
-    else:
-        (base, partnum) = re.match('(\D+)(\d+)', dev).group(1, 2)
+    (base, partnum) = split_dev_base_partnum(dev)
     out, _ = command(['sgdisk', '-i', partnum, base])
     for line in out.splitlines():
         m = re.match('Partition unique GUID: (\S+)', line)
