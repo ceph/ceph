@@ -1856,6 +1856,9 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op,
 
     // Avoid duplicate promotion
     if (obc.get() && obc->is_blocked()) {
+      if (!can_proxy_read) {
+        wait_for_blocked_object(obc->obs.oi.soid, op);
+      }
       return true;
     }
 
