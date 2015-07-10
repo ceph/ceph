@@ -55,7 +55,7 @@ the following profile can be defined::
        k=3 \
        m=2 \
        ruleset-failure-domain=rack
-    $ ceph osd pool create ecpool 12 12 erasure *myprofile*
+    $ ceph osd pool create ecpool 12 12 erasure myprofile
     $ echo ABCDEFGHI | rados --pool ecpool put NYAN -
     $ rados --pool ecpool get NYAN -
     ABCDEFGHI
