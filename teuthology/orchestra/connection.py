@@ -34,7 +34,7 @@ def create_key(keytype, key):
     elif keytype == 'ssh-dss':
         return paramiko.dsskey.DSSKey(data=base64.decodestring(key))
     else:
-        raise ValueError('keytype must be ssh-rsa or ssh-dsa')
+        raise ValueError('keytype must be ssh-rsa or ssh-dss (DSA)')
 
 
 def connect(user_at_host, host_key=None, keep_alive=False, timeout=60,
