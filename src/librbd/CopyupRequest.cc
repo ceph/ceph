@@ -13,6 +13,7 @@
 #include "librbd/CopyupRequest.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageWatcher.h"
+#include "librbd/internal.h"
 #include "librbd/ObjectMap.h"
 
 #include <boost/bind.hpp>

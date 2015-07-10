@@ -44,6 +44,7 @@ namespace librbd {
   class CopyupRequest;
   class LibrbdAdminSocketHook;
   class ImageWatcher;
+  class Journal;
 
   struct ImageCtx {
     CephContext *cct;
@@ -69,6 +70,7 @@ namespace librbd {
     std::string snap_name;
     IoCtx data_ctx, md_ctx;
     ImageWatcher *image_watcher;
+    Journal *journal;
     int refresh_seq;    ///< sequence for refresh requests
     int last_refresh;   ///< last completed refresh
 
@@ -243,6 +245,9 @@ namespace librbd {
 
     void cancel_async_requests();
     void apply_metadata_confs();
+
+    void open_journal();
+    int close_journal(bool force);
   };
 }
 
