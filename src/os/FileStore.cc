@@ -1534,7 +1534,7 @@ int FileStore::mount()
   // Cleanup possibly invalid collections
   {
     vector<coll_t> collections;
-    ret = list_collections(collections);
+    ret = list_collections(collections, true);
     if (ret < 0) {
       derr << "Error " << ret << " while listing collections" << dendl;
       goto close_current_fd;
@@ -1590,6 +1590,8 @@ int FileStore::mount()
     }
   }
 
+  init_temp_collections();
+
   journal_start();
 
   op_tp.start();
@@ -1623,6 +1625,45 @@ close_fsid_fd:
 done:
   assert(!m_filestore_fail_eio || ret != -EIO);
   return ret;
+}
+
+void FileStore::init_temp_collections()
+{
+  dout(10) << __func__ << dendl;
+  vector<coll_t> ls;
+  int r = list_collections(ls, true);
+  assert(r >= 0);
+
+  dout(20) << " ls " << ls << dendl;
+
+  SequencerPosition spos;
+
+  set<coll_t> temps;
+  for (vector<coll_t>::iterator p = ls.begin(); p != ls.end(); ++p)
+    if (p->is_temp())
+      temps.insert(*p);
+  dout(20) << " temps " << temps << dendl;
+
+  for (vector<coll_t>::iterator p = ls.begin(); p != ls.end(); ++p) {
+    if (p->is_temp())
+      continue;
+    if (p->is_meta())
+      continue;
+    coll_t temp = p->get_temp();
+    if (temps.count(temp)) {
+      temps.erase(temp);
+    } else {
+      dout(10) << __func__ << " creating " << temp << dendl;
+      r = _create_collection(temp, spos);
+      assert(r == 0);
+    }
+  }
+
+  for (set<coll_t>::iterator p = temps.begin(); p != temps.end(); ++p) {
+    dout(10) << __func__ << " removing stray " << *p << dendl;
+    r = _collection_remove_recursive(*p, spos);
+    assert(r == 0);
+  }
 }
 
 int FileStore::umount() 
@@ -2301,6 +2342,7 @@ unsigned FileStore::_do_transaction(
       {
         coll_t cid = i.get_cid(op->cid);
         ghobject_t oid = i.get_oid(op->oid);
+	_kludge_temp_object_collection(cid, oid);
         tracepoint(objectstore, touch_enter, osr_name);
         if (_check_replay_guard(cid, oid, spos) > 0)
           r = _touch(cid, oid);
@@ -2312,6 +2354,7 @@ unsigned FileStore::_do_transaction(
       {
         coll_t cid = i.get_cid(op->cid);
         ghobject_t oid = i.get_oid(op->oid);
+	_kludge_temp_object_collection(cid, oid);
         uint64_t off = op->off;
         uint64_t len = op->len;
         uint32_t fadvise_flags = i.get_fadvise_flags();
@@ -2328,6 +2371,7 @@ unsigned FileStore::_do_transaction(
       {
         coll_t cid = i.get_cid(op->cid);
         ghobject_t oid = i.get_oid(op->oid);
+	_kludge_temp_object_collection(cid, oid);
         uint64_t off = op->off;
         uint64_t len = op->len;
         tracepoint(objectstore, zero_enter, osr_name, off, len);
@@ -2347,6 +2391,7 @@ unsigned FileStore::_do_transaction(
       {
         coll_t cid = i.get_cid(op->cid);
         ghobject_t oid = i.get_oid(op->oid);
+	_kludge_temp_object_collection(cid, oid);
         uint64_t off = op->off;
         tracepoint(objectstore, truncate_enter, osr_name, off);
         if (_check_replay_guard(cid, oid, spos) > 0)
@@ -2359,6 +2404,7 @@ unsigned FileStore::_do_transaction(
       {
         coll_t cid = i.get_cid(op->cid);
         ghobject_t oid = i.get_oid(op->oid);
+	_kludge_temp_object_collection(cid, oid);
         tracepoint(objectstore, remove_enter, osr_name);
         if (_check_replay_guard(cid, oid, spos) > 0)
           r = _remove(cid, oid, spos);
@@ -2370,6 +2416,7 @@ unsigned FileStore::_do_transaction(
       {
         coll_t cid = i.get_cid(op->cid);
         ghobject_t oid = i.get_oid(op->oid);
+	_kludge_temp_object_collection(cid, oid);
         string name = i.decode_string();
         bufferlist bl;
         i.decode_bl(bl);
@@ -2390,6 +2437,7 @@ unsigned FileStore::_do_transaction(
       {
         coll_t cid = i.get_cid(op->cid);
         ghobject_t oid = i.get_oid(op->oid);
+	_kludge_temp_object_collection(cid, oid);
         map<string, bufferptr> aset;
         i.decode_attrset(aset);
         tracepoint(objectstore, setattrs_enter, osr_name);
@@ -2405,6 +2453,7 @@ unsigned FileStore::_do_transaction(
       {
         coll_t cid = i.get_cid(op->cid);
         ghobject_t oid = i.get_oid(op->oid);
+	_kludge_temp_object_collection(cid, oid);
         string name = i.decode_string();
         tracepoint(objectstore, rmattr_enter, osr_name);
         if (_check_replay_guard(cid, oid, spos) > 0)
@@ -2417,6 +2466,7 @@ unsigned FileStore::_do_transaction(
       {
         coll_t cid = i.get_cid(op->cid);
         ghobject_t oid = i.get_oid(op->oid);
+	_kludge_temp_object_collection(cid, oid);
         tracepoint(objectstore, rmattrs_enter, osr_name);
         if (_check_replay_guard(cid, oid, spos) > 0)
           r = _rmattrs(cid, oid, spos);
@@ -2428,6 +2478,7 @@ unsigned FileStore::_do_transaction(
       {
         coll_t cid = i.get_cid(op->cid);
         ghobject_t oid = i.get_oid(op->oid);
+	_kludge_temp_object_collection(cid, oid);
         ghobject_t noid = i.get_oid(op->dest_oid);
         tracepoint(objectstore, clone_enter, osr_name);
         r = _clone(cid, oid, noid, spos);
@@ -2439,7 +2490,9 @@ unsigned FileStore::_do_transaction(
       {
         coll_t cid = i.get_cid(op->cid);
         ghobject_t oid = i.get_oid(op->oid);
+	_kludge_temp_object_collection(cid, oid);
         ghobject_t noid = i.get_oid(op->dest_oid);
+	_kludge_temp_object_collection(cid, noid);
         uint64_t off = op->off;
         uint64_t len = op->len;
         tracepoint(objectstore, clone_range_enter, osr_name, len);
@@ -2452,7 +2505,9 @@ unsigned FileStore::_do_transaction(
       {
         coll_t cid = i.get_cid(op->cid);
         ghobject_t oid = i.get_oid(op->oid);
+	_kludge_temp_object_collection(cid, oid);
         ghobject_t noid = i.get_oid(op->dest_oid);
+	_kludge_temp_object_collection(cid, noid);
         uint64_t srcoff = op->off;
         uint64_t len = op->len;
         uint64_t dstoff = op->dest_off;
@@ -2510,6 +2565,8 @@ unsigned FileStore::_do_transaction(
         coll_t ncid = i.get_cid(op->dest_cid);
         ghobject_t oid = i.get_oid(op->oid);
 
+	assert(oid.hobj.pool >= -1);
+
         // always followed by OP_COLL_REMOVE
         Transaction::Op *op2 = i.decode_op();
         coll_t ocid2 = i.get_cid(op2->cid);
@@ -2552,6 +2609,8 @@ unsigned FileStore::_do_transaction(
         ghobject_t oldoid = i.get_oid(op->oid);
         coll_t newcid = i.get_cid(op->dest_cid);
         ghobject_t newoid = i.get_oid(op->dest_oid);
+	_kludge_temp_object_collection(oldcid, oldoid);
+	_kludge_temp_object_collection(newcid, newoid);
         tracepoint(objectstore, coll_move_rename_enter);
         r = _collection_move_rename(oldcid, oldoid, newcid, newoid, spos);
         tracepoint(objectstore, coll_move_rename_exit, r);
@@ -2598,6 +2657,7 @@ unsigned FileStore::_do_transaction(
       {
         coll_t cid = i.get_cid(op->cid);
         ghobject_t oid = i.get_oid(op->oid);
+	_kludge_temp_object_collection(cid, oid);
         tracepoint(objectstore, omap_clear_enter, osr_name);
         r = _omap_clear(cid, oid, spos);
         tracepoint(objectstore, omap_clear_exit, r);
@@ -2607,6 +2667,7 @@ unsigned FileStore::_do_transaction(
       {
         coll_t cid = i.get_cid(op->cid);
         ghobject_t oid = i.get_oid(op->oid);
+	_kludge_temp_object_collection(cid, oid);
         map<string, bufferlist> aset;
         i.decode_attrset(aset);
         tracepoint(objectstore, omap_setkeys_enter, osr_name);
@@ -2618,6 +2679,7 @@ unsigned FileStore::_do_transaction(
       {
         coll_t cid = i.get_cid(op->cid);
         ghobject_t oid = i.get_oid(op->oid);
+	_kludge_temp_object_collection(cid, oid);
         set<string> keys;
         i.decode_keyset(keys);
         tracepoint(objectstore, omap_rmkeys_enter, osr_name);
@@ -2629,6 +2691,7 @@ unsigned FileStore::_do_transaction(
       {
         coll_t cid = i.get_cid(op->cid);
         ghobject_t oid = i.get_oid(op->oid);
+	_kludge_temp_object_collection(cid, oid);
         string first, last;
         first = i.decode_string();
         last = i.decode_string();
@@ -2641,6 +2704,7 @@ unsigned FileStore::_do_transaction(
       {
         coll_t cid = i.get_cid(op->cid);
         ghobject_t oid = i.get_oid(op->oid);
+	_kludge_temp_object_collection(cid, oid);
         bufferlist bl;
         i.decode_bl(bl);
         tracepoint(objectstore, omap_setheader_enter, osr_name);
@@ -2650,13 +2714,7 @@ unsigned FileStore::_do_transaction(
       break;
     case Transaction::OP_SPLIT_COLLECTION:
       {
-        coll_t cid = i.get_cid(op->cid);
-        uint32_t bits = op->split_bits;
-        uint32_t rem = op->split_rem;
-        coll_t dest = i.get_cid(op->dest_cid);
-        tracepoint(objectstore, split_coll_enter, osr_name);
-        r = _split_collection_create(cid, bits, rem, dest, spos);
-        tracepoint(objectstore, split_coll_exit, r);
+	assert(0 == "not legacy journal; upgrade to firefly first");
       }
       break;
     case Transaction::OP_SPLIT_COLLECTION2:
@@ -2675,6 +2733,7 @@ unsigned FileStore::_do_transaction(
       {
         coll_t cid = i.get_cid(op->cid);
         ghobject_t oid = i.get_oid(op->oid);
+	_kludge_temp_object_collection(cid, oid);
         uint64_t expected_object_size = op->expected_object_size;
         uint64_t expected_write_size = op->expected_write_size;
         tracepoint(objectstore, setallochint_enter, osr_name);
@@ -2788,6 +2847,7 @@ unsigned FileStore::_do_transaction(
 bool FileStore::exists(coll_t cid, const ghobject_t& oid)
 {
   tracepoint(objectstore, exists_enter, cid.c_str());
+  _kludge_temp_object_collection(cid, oid);
   struct stat st;
   bool retval = stat(cid, oid, &st) == 0;
   tracepoint(objectstore, exists_exit, retval);
@@ -2798,6 +2858,7 @@ int FileStore::stat(
   coll_t cid, const ghobject_t& oid, struct stat *st, bool allow_eio)
 {
   tracepoint(objectstore, stat_enter, cid.c_str());
+  _kludge_temp_object_collection(cid, oid);
   int r = lfn_stat(cid, oid, st);
   assert(allow_eio || !m_filestore_fail_eio || r != -EIO);
   if (r < 0) {
@@ -2828,6 +2889,7 @@ int FileStore::read(
 {
   int got;
   tracepoint(objectstore, read_enter, cid.c_str(), offset, len);
+  _kludge_temp_object_collection(cid, oid);
 
   dout(15) << "read " << cid << "/" << oid << " " << offset << "~" << len << dendl;
 
@@ -3004,6 +3066,7 @@ int FileStore::fiemap(coll_t cid, const ghobject_t& oid,
                     bufferlist& bl)
 {
   tracepoint(objectstore, fiemap_enter, cid.c_str(), offset, len);
+  _kludge_temp_object_collection(cid, oid);
 
   if ((!backend->has_seek_data_hole() && !backend->has_fiemap()) ||
       len <= (size_t)m_filestore_fiemap_threshold) {
@@ -3943,6 +4006,7 @@ bool FileStore::debug_mdata_eio(const ghobject_t &oid) {
 int FileStore::getattr(coll_t cid, const ghobject_t& oid, const char *name, bufferptr &bp)
 {
   tracepoint(objectstore, getattr_enter, cid.c_str());
+  _kludge_temp_object_collection(cid, oid);
   dout(15) << "getattr " << cid << "/" << oid << " '" << name << "'" << dendl;
   FDRef fd;
   int r = lfn_open(cid, oid, false, &fd);
@@ -3991,6 +4055,7 @@ int FileStore::getattr(coll_t cid, const ghobject_t& oid, const char *name, buff
 int FileStore::getattrs(coll_t cid, const ghobject_t& oid, map<string,bufferptr>& aset)
 {
   tracepoint(objectstore, getattrs_enter, cid.c_str());
+  _kludge_temp_object_collection(cid, oid);
   set<string> omap_attrs;
   map<string, bufferlist> omap_aset;
   Index index;
@@ -4459,7 +4524,12 @@ int FileStore::collection_version_current(coll_t c, uint32_t *version)
     return 0;
 }
 
-int FileStore::list_collections(vector<coll_t>& ls) 
+int FileStore::list_collections(vector<coll_t>& ls)
+{
+  return list_collections(ls, false);
+}
+
+int FileStore::list_collections(vector<coll_t>& ls, bool include_temp)
 {
   tracepoint(objectstore, list_collections_enter);
   dout(10) << "list_collections" << dendl;
@@ -4508,7 +4578,13 @@ int FileStore::list_collections(vector<coll_t>& ls)
 	 (de->d_name[1] == '.' &&
 	  de->d_name[2] == '\0')))
       continue;
-    ls.push_back(coll_t(de->d_name));
+    coll_t cid;
+    if (!cid.parse(de->d_name)) {
+      derr << "ignoging invalid collection '" << de->d_name << "'" << dendl;
+      continue;
+    }
+    if (!cid.is_temp() || include_temp)
+      ls.push_back(cid);
   }
 
   if (r > 0) {
@@ -4577,6 +4653,14 @@ int FileStore::collection_list_range(coll_t c, ghobject_t start, ghobject_t end,
   bool done = false;
   ghobject_t next = start;
 
+  if (!c.is_temp() && !c.is_meta() && next.hobj.pool < -1) {
+    coll_t temp = c.get_temp();
+    int r = collection_list_range(temp, start, end, seq, ls);
+    if (r < 0)
+      return r;
+    // ... always continue on to non-temp ...
+  }
+
   while (!done) {
     vector<ghobject_t> next_objects;
     int r = collection_list_partial(c, next,
@@ -4611,7 +4695,57 @@ int FileStore::collection_list_partial(coll_t c, ghobject_t start,
 				       vector<ghobject_t> *ls, ghobject_t *next)
 {
   tracepoint(objectstore, collection_list_partial_enter, c.c_str());
-  dout(10) << "collection_list_partial: " << c << dendl;
+  dout(10) << "collection_list_partial: " << c << " start " << start << dendl;
+  assert(next);
+
+  if (start.is_max())
+    return 0;
+
+  // figure out the pool id.  we need this in order to generate a
+  // meaningful 'next' value.
+  int64_t pool = -1;
+  shard_id_t shard;
+  {
+    spg_t pgid;
+    if (c.is_temp(&pgid)) {
+      pool = -2 - pgid.pool();
+      shard = pgid.shard;
+    } else if (c.is_pg(&pgid)) {
+      pool = pgid.pool();
+      shard = pgid.shard;
+    } else if (c.is_meta()) {
+      pool = -1;
+      shard = shard_id_t::NO_SHARD;
+    } else {
+      // hrm, the caller is test code!  we should get kill it off.  for now,
+      // tolerate it.
+      pool = 0;
+      shard = shard_id_t::NO_SHARD;
+    }
+    dout(20) << __func__ << " pool is " << pool << " shard is " << shard
+	     << " pgid " << pgid << dendl;
+  }
+
+  ghobject_t sep;
+  sep.hobj.pool = -1;
+  sep.set_shard(shard);
+  if (!c.is_temp() && !c.is_meta()) {
+    if (start < sep) {
+      dout(10) << __func__ << " first checking temp pool" << dendl;
+      coll_t temp = c.get_temp();
+      int r = collection_list_partial(temp, start, min, max, seq, ls, next);
+      if (r < 0)
+	return r;
+      if (*next != ghobject_t::get_max())
+	return r;
+      start = sep;
+      dout(10) << __func__ << " fall through to non-temp collection, start "
+	       << start << dendl;
+    } else {
+      dout(10) << __func__ << " start " << start << " >= sep " << sep << dendl;
+    }
+  }
+
   Index index;
   int r = get_index(c, &index);
   if (r < 0)
@@ -4629,6 +4763,14 @@ int FileStore::collection_list_partial(coll_t c, ghobject_t start,
   }
   if (ls)
     dout(20) << "objects: " << *ls << dendl;
+
+  // HashIndex doesn't know the pool when constructing a 'next' value
+  if (!next->is_max()) {
+    next->hobj.pool = pool;
+    next->set_shard(shard);
+  }
+  dout(20) << "  next " << *next << dendl;
+
   tracepoint(objectstore, collection_list_partial_exit, 0);
   return 0;
 }
@@ -4636,6 +4778,14 @@ int FileStore::collection_list_partial(coll_t c, ghobject_t start,
 int FileStore::collection_list(coll_t c, vector<ghobject_t>& ls)
 {  
   tracepoint(objectstore, collection_list_enter, c.c_str());
+
+  if (!c.is_temp() && !c.is_meta()) {
+    coll_t temp = c.get_temp();
+    int r = collection_list(temp, ls);
+    if (r < 0)
+      return r;
+  }
+
   Index index;
   int r = get_index(c, &index);
   if (r < 0)
@@ -4655,6 +4805,7 @@ int FileStore::omap_get(coll_t c, const ghobject_t &hoid,
 			map<string, bufferlist> *out)
 {
   tracepoint(objectstore, omap_get_enter, c.c_str());
+  _kludge_temp_object_collection(c, hoid);
   dout(15) << __func__ << " " << c << "/" << hoid << dendl;
   Index index;
   int r = get_index(c, &index);
@@ -4683,6 +4834,7 @@ int FileStore::omap_get_header(
   bool allow_eio)
 {
   tracepoint(objectstore, omap_get_header_enter, c.c_str());
+  _kludge_temp_object_collection(c, hoid);
   dout(15) << __func__ << " " << c << "/" << hoid << dendl;
   Index index;
   int r = get_index(c, &index);
@@ -4707,6 +4859,7 @@ int FileStore::omap_get_header(
 int FileStore::omap_get_keys(coll_t c, const ghobject_t &hoid, set<string> *keys)
 {
   tracepoint(objectstore, omap_get_keys_enter, c.c_str());
+  _kludge_temp_object_collection(c, hoid);
   dout(15) << __func__ << " " << c << "/" << hoid << dendl;
   Index index;
   int r = get_index(c, &index);
@@ -4733,25 +4886,35 @@ int FileStore::omap_get_values(coll_t c, const ghobject_t &hoid,
 			       map<string, bufferlist> *out)
 {
   tracepoint(objectstore, omap_get_values_enter, c.c_str());
+  _kludge_temp_object_collection(c, hoid);
   dout(15) << __func__ << " " << c << "/" << hoid << dendl;
   Index index;
+  const char *where = 0;
   int r = get_index(c, &index);
-  if (r < 0)
-    return r;
+  if (r < 0) {
+    where = " (get_index)";
+    goto out;
+  }
   {
     assert(NULL != index.index);
     RWLock::RLocker l((index.index)->access_lock);
     r = lfn_find(hoid, index);
-    if (r < 0)
-      return r;
+    if (r < 0) {
+      where = " (lfn_find)";
+      goto out;
+    }
   }
   r = object_map->get_values(hoid, keys, out);
   if (r < 0 && r != -ENOENT) {
     assert(!m_filestore_fail_eio || r != -EIO);
-    return r;
+    goto out;
   }
-  tracepoint(objectstore, omap_get_values_exit, 0);
-  return 0;
+  r = 0;
+ out:
+  tracepoint(objectstore, omap_get_values_exit, r);
+  dout(15) << __func__ << " " << c << "/" << hoid << " = " << r
+	   << where << dendl;
+  return r;
 }
 
 int FileStore::omap_check_keys(coll_t c, const ghobject_t &hoid,
@@ -4759,6 +4922,7 @@ int FileStore::omap_check_keys(coll_t c, const ghobject_t &hoid,
 			       set<string> *out)
 {
   tracepoint(objectstore, omap_check_keys_enter, c.c_str());
+  _kludge_temp_object_collection(c, hoid);
   dout(15) << __func__ << " " << c << "/" << hoid << dendl;
 
   Index index;
@@ -4785,17 +4949,24 @@ ObjectMap::ObjectMapIterator FileStore::get_omap_iterator(coll_t c,
 							  const ghobject_t &hoid)
 {
   tracepoint(objectstore, get_omap_iterator, c.c_str());
+  _kludge_temp_object_collection(c, hoid);
   dout(15) << __func__ << " " << c << "/" << hoid << dendl;
   Index index;
   int r = get_index(c, &index);
-  if (r < 0)
+  if (r < 0) {
+    dout(10) << __func__ << " " << c << "/" << hoid << " = 0 "
+	     << "(get_index failed with " << cpp_strerror(r) << ")" << dendl;
     return ObjectMap::ObjectMapIterator(); 
+  }
   {
     assert(NULL != index.index);
     RWLock::RLocker l((index.index)->access_lock);
     r = lfn_find(hoid, index);
-    if (r < 0)
+    if (r < 0) {
+      dout(10) << __func__ << " " << c << "/" << hoid << " = 0 "
+	       << "(lfn_find failed with " << cpp_strerror(r) << ")" << dendl;
       return ObjectMap::ObjectMapIterator();
+    }
   }
   return object_map->get_iterator(hoid);
 }
@@ -4847,46 +5018,55 @@ int FileStore::_create_collection(
   r = init_index(c);
   if (r < 0)
     return r;
+
+  // create parallel temp collection, too
+  if (!c.is_meta() && !c.is_temp()) {
+    coll_t temp = c.get_temp();
+    r = _create_collection(temp, spos);
+    if (r < 0)
+      return r;
+  }
+
   _set_replay_guard(c, spos);
   return 0;
 }
 
-// DEPRECATED -- remove with _split_collection_create
-int FileStore::_create_collection(coll_t c) 
-{
-  char fn[PATH_MAX];
-  get_cdir(c, fn, sizeof(fn));
-  dout(15) << "create_collection " << fn << dendl;
-  int r = ::mkdir(fn, 0755);
-  if (r < 0)
-    r = -errno;
-  dout(10) << "create_collection " << fn << " = " << r << dendl;
-
-  if (r < 0)
-    return r;
-  return init_index(c);
-}
-
 int FileStore::_destroy_collection(coll_t c) 
 {
+  int r = 0;
+  char fn[PATH_MAX];
+  get_cdir(c, fn, sizeof(fn));
+  dout(15) << "_destroy_collection " << fn << dendl;
   {
     Index from;
     int r = get_index(c, &from);
     if (r < 0)
-      return r;
+      goto out;
     assert(NULL != from.index);
     RWLock::WLocker l((from.index)->access_lock);
 
     r = from->prep_delete();
     if (r < 0)
-      return r;
+      goto out;
   }
-  char fn[PATH_MAX];
-  get_cdir(c, fn, sizeof(fn));
-  dout(15) << "_destroy_collection " << fn << dendl;
-  int r = ::rmdir(fn);
-  if (r < 0)
+  r = ::rmdir(fn);
+  if (r < 0) {
     r = -errno;
+    goto out;
+  }
+
+ out:
+  // destroy parallel temp collection, too
+  if (!c.is_meta() && !c.is_temp()) {
+    coll_t temp = c.get_temp();
+    int r2 = _destroy_collection(temp);
+    if (r2 < 0) {
+      r = r2;
+      goto out_final;
+    }
+  }
+
+ out_final:
   dout(10) << "_destroy_collection " << fn << " = " << r << dendl;
   return r;
 }
@@ -5237,52 +5417,6 @@ int FileStore::_split_collection(coll_t cid,
       objects.clear();
     }
   }
-  return r;
-}
-
-// DEPRECATED: remove once we are sure there won't be any such transactions
-// replayed
-int FileStore::_split_collection_create(coll_t cid,
-					uint32_t bits,
-					uint32_t rem,
-					coll_t dest,
-					const SequencerPosition &spos)
-{
-  dout(15) << __func__ << " " << cid << " bits: " << bits << dendl;
-  int r = _create_collection(dest);
-  if (r < 0 && !(r == -EEXIST && replaying))
-    return r;
-
-  int dstcmp = _check_replay_guard(cid, spos);
-  if (dstcmp < 0)
-    return 0;
-
-  int srccmp = _check_replay_guard(dest, spos);
-  if (srccmp < 0)
-    return 0;
-
-  _set_replay_guard(cid, spos, true);
-  _set_replay_guard(dest, spos, true);
-
-  Index from;
-  r = get_index(cid, &from);
-
-  Index to;
-  if (!r) 
-    r = get_index(dest, &to);
-
-  if (!r) {
-    assert(NULL != from.index);
-    RWLock::WLocker l1((from.index)->access_lock);
-
-    assert(NULL != to.index);
-    RWLock::WLocker l2((to.index)->access_lock);
- 
-    r = from->split(rem, bits, to.index);
-  }
-
-  _close_replay_guard(cid, spos);
-  _close_replay_guard(dest, spos);
   return r;
 }
 
