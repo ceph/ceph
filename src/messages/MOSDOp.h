@@ -47,10 +47,10 @@ private:
   object_locator_t oloc;
   pg_t pgid;
   bufferlist::iterator p;
-  // Decoding flags. Valuable only after catching message with pipe reader.
-  // For objecter constructor, both of them are set to true
-  bool partialDecoded;
-  bool finalDecoded;
+  // Decoding flags. Decoding is only needed for messages catched by pipe reader.
+  bool partialDecodeNeeded;
+  bool finalDecodeNeeded;
+  //
 public:
   vector<OSDOp> ops;
 private:
@@ -77,19 +77,19 @@ public:
   void set_snap_seq(const snapid_t& s) { snap_seq = s; }
 
   // Fields decoded in partial decoding
-  const pg_t&     get_pg() const { assert(partialDecoded); return pgid; }
-  epoch_t  get_map_epoch() { assert(partialDecoded); return osdmap_epoch; }
-  int get_flags() const { assert(partialDecoded); return flags; }
+  const pg_t&     get_pg() const { assert(!partialDecodeNeeded); return pgid; }
+  epoch_t  get_map_epoch() { assert(!partialDecodeNeeded); return osdmap_epoch; }
+  int get_flags() const { assert(!partialDecodeNeeded); return flags; }
 
   // Fields decoded in final decoding
-  int get_client_inc() { assert(finalDecoded); return client_inc; }
-  utime_t get_mtime() { assert(finalDecoded); return mtime; }
-  const eversion_t& get_version() { assert(finalDecoded); return reassert_version; }
-  const object_locator_t& get_object_locator() const { assert(finalDecoded); return oloc; }
-  object_t& get_oid() { assert(finalDecoded); return oid; }
-  const snapid_t& get_snapid() { assert(finalDecoded); return snapid; }
-  const snapid_t& get_snap_seq() const { assert(finalDecoded); return snap_seq; }
-  const vector<snapid_t> &get_snaps() const { assert(finalDecoded); return snaps; }
+  int get_client_inc() { assert(!finalDecodeNeeded); return client_inc; }
+  utime_t get_mtime() { assert(!finalDecodeNeeded); return mtime; }
+  const eversion_t& get_version() { assert(!finalDecodeNeeded); return reassert_version; }
+  const object_locator_t& get_object_locator() const { assert(!finalDecodeNeeded); return oloc; }
+  object_t& get_oid() { assert(!finalDecodeNeeded); return oid; }
+  const snapid_t& get_snapid() { assert(!finalDecodeNeeded); return snapid; }
+  const snapid_t& get_snap_seq() const { assert(!finalDecodeNeeded); return snap_seq; }
+  const vector<snapid_t> &get_snaps() const { assert(!finalDecodeNeeded); return snaps; }
   /**
    * get retry attempt
    *
@@ -107,14 +107,14 @@ public:
   }
 
   MOSDOp()
-    : Message(CEPH_MSG_OSD_OP, HEAD_VERSION, COMPAT_VERSION), partialDecoded(false), finalDecoded(false) { }
+    : Message(CEPH_MSG_OSD_OP, HEAD_VERSION, COMPAT_VERSION), partialDecodeNeeded(true), finalDecodeNeeded(true) { }
   MOSDOp(int inc, long tid,
          object_t& _oid, object_locator_t& _oloc, pg_t& _pgid, epoch_t _osdmap_epoch,
 	 int _flags, uint64_t feat)
     : Message(CEPH_MSG_OSD_OP, HEAD_VERSION, COMPAT_VERSION),
       client_inc(inc),
       osdmap_epoch(_osdmap_epoch), flags(_flags), retry_attempt(-1),
-      oid(_oid), oloc(_oloc), pgid(_pgid), partialDecoded(true), finalDecoded(true),
+      oid(_oid), oloc(_oloc), pgid(_pgid), partialDecodeNeeded(false), finalDecodeNeeded(false),
       features(feat) {
     set_tid(tid);
   }
@@ -261,6 +261,8 @@ struct ceph_osd_request_head {
   }
 
   virtual void decode_payload() {
+
+    std::cout << "Kaczka - wersja: " << header.version << std::endl;
     p = payload.begin();
 
     if (header.version < 2) {
@@ -307,7 +309,7 @@ struct ceph_osd_request_head {
       OSDOp::split_osd_op_vector_in_data(ops, data);
 
       // In old versions, final decoding is done in first step
-      finalDecoded = true;
+      finalDecodeNeeded = false;
     } else if (header.version < 6) {
       // new decode 
       ::decode(client_inc, p);
@@ -333,14 +335,14 @@ struct ceph_osd_request_head {
       ::decode(flags, p);
     }
 
-    partialDecoded = true;
+    partialDecodeNeeded = false;
 
   }
 
   void finish_decode() {
-    assert(partialDecoded); // partial decoding required
+    assert(!partialDecodeNeeded); // partial decoding required
 
-    if (finalDecoded)
+    if (!finalDecodeNeeded)
       return; //Message is already final decoded
 
     if (header.version < 6) {
@@ -394,7 +396,7 @@ struct ceph_osd_request_head {
 
     }
 
-    finalDecoded = true;
+    finalDecodeNeeded = false;
   }
 
   void clear_buffers() {
@@ -428,7 +430,7 @@ struct ceph_osd_request_head {
       out << " RETRY=" << get_retry_attempt();
     if (reassert_version != eversion_t())
       out << " reassert_version=" << reassert_version;
-    if (finalDecoded)
+    if (!finalDecodeNeeded)
       out << " snapc " << get_snap_seq() << "=" << snaps;
     out << " " << ceph_osd_flag_string(get_flags());
     out << " e" << osdmap_epoch;
