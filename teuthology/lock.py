@@ -17,9 +17,7 @@ from .lockstatus import get_status
 
 log = logging.getLogger(__name__)
 
-
-def is_vm(name):
-    return get_status(name)['is_vm']
+is_vpm = lambda name: 'vpm' in name
 
 
 def get_distro_from_downburst():
@@ -316,7 +314,7 @@ def main(ctx):
         if ctx.owner is None and user is None:
             user = misc.get_user()
         # If none of them are vpm, do them all in one shot
-        if not filter(is_vm, machines):
+        if not filter(is_vpm, machines):
             res = unlock_many(machines, user)
             return 0 if res else 1
         for machine in machines:
