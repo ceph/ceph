@@ -16,6 +16,7 @@
 # GNU Library Public License for more details.
 #
 source test/mon/mon-test-helpers.sh
+source test/ceph-helpers.sh
 
 function run() {
     local dir=$1
@@ -190,7 +191,6 @@ function TEST_crush_rename_bucket() {
 
 function TEST_crush_reject_empty() {
     local dir=$1
-    run_mon $dir a || return 1
     # should have at least one OSD
     run_osd $dir 0 || return 1
 
