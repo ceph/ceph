@@ -329,8 +329,7 @@ void MDRequestImpl::_dump(utime_t now, Formatter *f) const
       f->dump_stream("client") << client_request->get_orig_source();
       f->dump_int("tid", client_request->get_tid());
       f->close_section(); // client_info
-    } else if (slave_request) {
-      assert(!slave_request->is_reply()); // replies go to an existing mdr
+    } else if (is_slave() && slave_request) { // replies go to an existing mdr
       f->dump_string("op_type", "slave_request");
       f->open_object_section("master_info");
       f->dump_stream("master") << slave_request->get_orig_source();
@@ -353,11 +352,13 @@ void MDRequestImpl::_dump(utime_t now, Formatter *f) const
       f->dump_stream("op_stamp") << slave_request->op_stamp;
       f->close_section(); // request_info
     }
-    else { // internal request
-      assert(internal_op != -1);
+    else if (internal_op != -1) { // internal request
       f->dump_string("op_type", "internal_op");
       f->dump_int("internal_op", internal_op);
       f->dump_string("op_name", ceph_mds_op_name(internal_op));
+    }
+    else {
+      f->dump_string("op_type", "no_available_op_found");
     }
   }
   {
