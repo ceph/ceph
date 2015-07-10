@@ -97,22 +97,24 @@ int _action_on_all_objects_in_pg(ObjectStore *store, coll_t coll, action_on_obje
 	 ++obj) {
       if (obj->is_pgmeta())
 	continue;
-      bufferlist attr;
-      r = store->getattr(coll, *obj, OI_ATTR, attr);
-      if (r < 0) {
-	cerr << "Error getting attr on : " << make_pair(coll, *obj) << ", "
-	     << cpp_strerror(r) << std::endl;
-	return r;
-      }
       object_info_t oi;
-      bufferlist::iterator bp = attr.begin();
-      try {
-	::decode(oi, bp);
-      } catch (...) {
-	r = -EINVAL;
-	cerr << "Error getting attr on : " << make_pair(coll, *obj) << ", "
-	     << cpp_strerror(r) << std::endl;
-	return r;
+      if (coll != coll_t::meta()) {
+        bufferlist attr;
+        r = store->getattr(coll, *obj, OI_ATTR, attr);
+        if (r < 0) {
+	  cerr << "Error getting attr on : " << make_pair(coll, *obj) << ", "
+	       << cpp_strerror(r) << std::endl;
+	  return r;
+        }
+        bufferlist::iterator bp = attr.begin();
+        try {
+	  ::decode(oi, bp);
+        } catch (...) {
+	  r = -EINVAL;
+	  cerr << "Error getting attr on : " << make_pair(coll, *obj) << ", "
+	       << cpp_strerror(r) << std::endl;
+	  return r;
+        }
       }
       r = action.call(store, coll, *obj, oi);
       if (r < 0)
@@ -227,21 +229,27 @@ struct pgid_object_list {
     for (list<pair<coll_t, ghobject_t> >::const_iterator i = _objects.begin();
 	 i != _objects.end();
 	 ++i) {
-      if (i != _objects.begin() && human_readable) {
-        f->flush(cout);
-        cout << std::endl;
-      }
       f->open_array_section("pgid_object");
       spg_t pgid;
-      if (i->first.is_pg(&pgid))
+      bool is_pg = i->first.is_pg(&pgid);
+      if (is_pg)
         f->dump_string("pgid", stringify(pgid));
+      if (!is_pg || !human_readable)
+        f->dump_string("coll", i->first.to_str());
       f->open_object_section("ghobject");
       i->second.dump(f);
       f->close_section();
       f->close_section();
+      if (human_readable) {
+        f->flush(cout);
+        cout << std::endl;
+      }
     }
-    if (!human_readable)
+    if (!human_readable) {
       f->close_section();
+      f->flush(cout);
+      cout << std::endl;
+    }
   }
 };
 
@@ -1380,7 +1388,18 @@ int do_list(ObjectStore *store, string pgidstr, string object, Formatter *format
     return r;
   lookup.dump(formatter, human_readable);
   formatter->flush(cout);
-  cout << std::endl;
+  return 0;
+}
+
+int do_meta(ObjectStore *store, string object, Formatter *formatter, bool debug, bool human_readable)
+{
+  int r;
+  lookup_ghobject lookup(object);
+  r = action_on_all_objects_in_exact_pg(store, coll_t::meta(), lookup, debug);
+  if (r)
+    return r;
+  lookup.dump(formatter, human_readable);
+  formatter->flush(cout);
   return 0;
 }
 
@@ -1831,9 +1850,9 @@ int main(int argc, char **argv)
     ("journal-path", po::value<string>(&jpath),
      "path to journal, mandatory for filestore type")
     ("pgid", po::value<string>(&pgidstr),
-     "PG id, mandatory except for import, fix-lost, list-pgs, set-allow-sharded-objects, dump-journal, dump-super")
+     "PG id, mandatory for info, log, remove, export, rm-past-intervals")
     ("op", po::value<string>(&op),
-     "Arg is one of [info, log, remove, export, import, list, fix-lost, list-pgs, rm-past-intervals, set-allow-sharded-objects, dump-journal, dump-super]")
+     "Arg is one of [info, log, remove, export, import, list, fix-lost, list-pgs, rm-past-intervals, set-allow-sharded-objects, dump-journal, dump-super, meta-list]")
     ("file", po::value<string>(&file),
      "path of file to export or import")
     ("format", po::value<string>(&format)->default_value("json-pretty"),
@@ -1922,18 +1941,18 @@ int main(int argc, char **argv)
     usage(desc);
     myexit(1);
   }
-  if (op != "list" && vm.count("object") && !vm.count("objcmd")) {
-    cerr << "Invalid syntax, missing command" << std::endl;
-    usage(desc);
-    myexit(1);
-  }
-  if (!vm.count("op") && !(vm.count("object") && vm.count("objcmd"))) {
+  if (!vm.count("op") && !vm.count("object")) {
     cerr << "Must provide --op or object command..." << std::endl;
     usage(desc);
     myexit(1);
   }
   if (op != "list" && vm.count("op") && vm.count("object")) {
     cerr << "Can't specify both --op and object command syntax" << std::endl;
+    usage(desc);
+    myexit(1);
+  }
+  if (op != "list" && vm.count("object") && !vm.count("objcmd")) {
+    cerr << "Invalid syntax, missing command" << std::endl;
     usage(desc);
     myexit(1);
   }
@@ -1989,7 +2008,7 @@ int main(int argc, char **argv)
   // Special list handling.  Treating pretty_format as human readable,
   // with one object per line and not an enclosing array.
   human_readable = ends_with(format, "-pretty");
-  if (op == "list" && human_readable) {
+  if ((op == "list" || op == "meta-list") && human_readable) {
     // Remove -pretty from end of format which we know is there
     format = format.substr(0, format.size() - strlen("-pretty"));
   }
@@ -2125,10 +2144,10 @@ int main(int argc, char **argv)
 	  if (lookup.size() != 1) {
 	    stringstream ss;
 	    if (lookup.size() == 0)
-	      ss << objcmd << ": " << cpp_strerror(ENOENT);
+	      ss << "No object id '" << object << "' found";
 	    else
-	      ss << "expected a single object named '" << object
-		 << "' but got " << lookup.size() << " instead";
+	      ss << "Found " << lookup.size() << " objects with id '" << object
+		 << "', please use a JSON spec from --op list instead";
 	    throw std::runtime_error(ss.str());
 	  }
 	  pair<coll_t, ghobject_t> found = lookup.pop();
@@ -2154,19 +2173,23 @@ int main(int argc, char **argv)
 	    throw std::runtime_error(ss.str());
 	  }
 	  string object_pgidstr = i->get_str();
-	  spg_t object_pgid;
-	  object_pgid.parse(object_pgidstr.c_str());
-	  if (pgidstr.length() > 0) {
-	    if (object_pgid != pgid) {
-	      ss << "object '" << object
-		 << "' has a pgid different from the --pgid="
-		 << pgidstr << " option";
-	      throw std::runtime_error(ss.str());
+          if (object_pgidstr != "meta") {
+	    spg_t object_pgid;
+	    object_pgid.parse(object_pgidstr.c_str());
+	    if (pgidstr.length() > 0) {
+	      if (object_pgid != pgid) {
+	        ss << "object '" << object
+		   << "' has a pgid different from the --pgid="
+		   << pgidstr << " option";
+	        throw std::runtime_error(ss.str());
+	      }
+	    } else {
+	      pgidstr = object_pgidstr;
+	      pgid = object_pgid;
 	    }
-	  } else {
-	    pgidstr = object_pgidstr;
-	    pgid = object_pgid;
-	  }
+          } else {
+            pgidstr = object_pgidstr;
+          }
 	  ++i;
 	  v = *i;
 	}
@@ -2176,7 +2199,7 @@ int main(int argc, char **argv)
 	  ss << "Decode object json error: " << e.what();
 	  throw std::runtime_error(ss.str());
 	}
-        if ((uint64_t)pgid.pgid.m_pool != (uint64_t)ghobj.hobj.pool) {
+        if (pgidstr != "meta" && (uint64_t)pgid.pgid.m_pool != (uint64_t)ghobj.hobj.pool) {
           cerr << "Object pool and pgid pool don't match" << std::endl;
           ret = 1;
           goto out;
@@ -2190,14 +2213,10 @@ int main(int argc, char **argv)
     }
   }
 
-  // The ops which don't require --pgid option are checked here and
-  // mentioned in the usage for --pgid with some exceptions.
-  // The dump-journal op isn't here because it is handled earlier.
-  // The dump-journal-mount op is undocumented so not in the usage.
-  if (op != "list" && op != "import" && op != "fix-lost"
-      && op != "list-pgs"  && op != "set-allow-sharded-objects"
-      && op != "dump-journal-mount" && op != "dump-super"
-      && (pgidstr.length() == 0)) {
+  // The ops which require --pgid option are checked here and
+  // mentioned in the usage for --pgid.
+  if ((op == "info" || op == "log" || op == "remove" || op == "export"
+      || op == "rm-past-intervals") && pgidstr.length() == 0) {
     cerr << "Must provide pgid" << std::endl;
     usage(desc);
     ret = 1;
@@ -2355,6 +2374,23 @@ int main(int argc, char **argv)
     goto out;
   }
 
+  if (op == "dump-super") {
+    formatter->open_object_section("superblock");
+    superblock.dump(formatter);
+    formatter->close_section();
+    formatter->flush(cout);
+    cout << std::endl;
+    goto out;
+  }
+
+  if (op == "meta-list") {
+    ret = do_meta(fs, object, formatter, debug, human_readable);
+    if (ret < 0) {
+      cerr << "do_meta failed: " << cpp_strerror(ret) << std::endl;
+    }
+    goto out;
+  }
+
   ret = fs->list_collections(ls);
   if (ret < 0) {
     cerr << "failed to list pgs: " << cpp_strerror(ret) << std::endl;
@@ -2367,6 +2403,13 @@ int main(int argc, char **argv)
   // Find pg
   for (it = ls.begin(); it != ls.end(); ++it) {
     spg_t tmppgid;
+
+    if (pgidstr == "meta") {
+      if (it->to_str() == "meta")
+        break;
+      else
+        continue;
+    }
 
     if (!it->is_pg(&tmppgid)) {
       continue;
@@ -2393,6 +2436,15 @@ int main(int argc, char **argv)
     goto out;
   }
 
+  // If not an object command nor any of the ops handled below, then output this usage
+  // before complaining about a bad pgid
+  if (!vm.count("objcmd") && op != "export" && op != "info" && op != "log" && op != "rm-past-intervals") {
+    cerr << "Must provide --op (info, log, remove, export, import, list, fix-lost, list-pgs, rm-past-intervals, set-allow-sharded-objects, dump-journal, dump-super, meta-list)"
+	 << std::endl;
+    usage(desc);
+    ret = 1;
+    goto out;
+  }
   epoch_t map_epoch;
 // The following code for export, info, log require omap or !skip-mount-omap
   if (it != ls.end()) {
@@ -2644,17 +2696,8 @@ int main(int argc, char **argv)
         fs->apply_transaction(*t);
         cout << "Removal succeeded" << std::endl;
       }
-    } else if (op == "dump-super") {
-      formatter->open_object_section("superblock");
-      superblock.dump(formatter);
-      formatter->close_section();
-      formatter->flush(cout);
-      cout << std::endl;
     } else {
-      cerr << "Must provide --op (info, log, remove, export, import, list, fix-lost, list-pgs, rm-past-intervals)"
-	<< std::endl;
-      usage(desc);
-      ret = 1;
+      assert(!"Should have already checked for valid --op");
     }
   } else {
     cerr << "PG '" << pgid << "' not found" << std::endl;
