@@ -321,7 +321,7 @@ int HashIndex::_lookup(const ghobject_t &oid,
 }
 
 int HashIndex::_collection_list_partial(const ghobject_t &start,
-					const ghobject_t end,
+					const ghobject_t &end,
 					int max_count,
 					vector<ghobject_t> *ls,
 					ghobject_t *next) {
