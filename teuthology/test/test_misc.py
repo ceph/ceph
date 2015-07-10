@@ -94,35 +94,6 @@ class TestHostnames(object):
         assert result == 'box1'
 
 
-    def test_canonicalize_hostname_otheruser(self):
-        host_base = 'foo@box1'
-        result = misc.canonicalize_hostname(host_base)
-        assert result == 'foo@box1.front.sepia.ceph.com'
-
-    def test_canonicalize_hostname_nolab(self):
-        config.lab_domain = ''
-        host_base = 'foo@192.168.0.1'
-        result = misc.canonicalize_hostname(host_base)
-        assert result == 'foo@192.168.0.1'
-        host_base = 'foo@full.domain.org'
-        result = misc.canonicalize_hostname(host_base)
-        assert result == 'foo@full.domain.org'
-
-    def test_decanonicalize_hostname_nolab(self):
-        config.lab_domain = ''
-        host_base = 'foo@192.168.0.1'
-        result = misc.decanonicalize_hostname(host_base)
-        assert result == '192.168.0.1'
-        host_base = 'foo@full.domain.org'
-        result = misc.decanonicalize_hostname(host_base)
-        assert result == 'full.domain.org'
-
-    def test_canonicalize_hostname_repeateddomain(self):
-        config.lab_domain = 'ceph.com'
-        host_base = 'foo@bar.ceph.com'
-        result = misc.canonicalize_hostname(host_base)
-        assert result == 'foo@bar.ceph.com'
-
 class TestMergeConfigs(object):
     """ Tests merge_config and deep_merge in teuthology.misc """
 

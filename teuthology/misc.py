@@ -38,33 +38,41 @@ is_vm = lambda x: x.startswith('vpm') or x.startswith('ubuntu@vpm')
 is_arm = lambda x: x.startswith('tala') or x.startswith(
     'ubuntu@tala') or x.startswith('saya') or x.startswith('ubuntu@saya')
 
+hostname_expr_templ = '(?P<user>.*@)?(?P<shortname>.*)\.{lab_domain}'
+
 
 def canonicalize_hostname(hostname, user='ubuntu'):
-    userhost = hostname.split('@')
+    hostname_expr = hostname_expr_templ.format(
+        lab_domain=config.lab_domain.replace('.', '\.'))
+    match = re.match(hostname_expr, hostname)
+    if match:
+        match_d = match.groupdict()
+        shortname = match_d['shortname']
+        if user is None:
+            user_ = user
+        else:
+            user_ = match_d.get('user') or user
+    else:
+        shortname = hostname.split('.')[0]
+        user_ = user
 
-    both_given = len(userhost) == 2
+    user_at = user_.strip('@') + '@' if user_ else ''
 
-    usr = userhost[0] if both_given else (user if user is not None else '')
-    hst = userhost[1] if both_given else userhost[0]
-    lab = config.lab_domain
-
-    user_at = (usr + "@") if usr else ''
-    domain = hst if lab in hst else (hst + '.' + lab) if lab else hst
-
-    return user_at + domain
+    ret = '{user_at}{short}.{lab_domain}'.format(
+        user_at=user_at,
+        short=shortname,
+        lab_domain=config.lab_domain,
+    )
+    return ret
 
 
 def decanonicalize_hostname(hostname):
-    userhost = hostname.split('@')
-
-    both_given = len(userhost) == 2
-
-    host = userhost[1] if both_given else userhost[0]
-
-    if config.lab_domain:
-        return host.split('.')[0]
-    else:
-        return host
+    hostname_expr = hostname_expr_templ.format(
+        lab_domain=config.lab_domain.replace('.', '\.'))
+    match = re.match(hostname_expr, hostname)
+    if match:
+        hostname = match.groupdict()['shortname']
+    return hostname
 
 
 def config_file(string):
