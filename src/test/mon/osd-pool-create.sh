@@ -236,6 +236,21 @@ function TEST_no_pool_delete() {
     ./ceph osd pool delete foo foo --yes-i-really-really-mean-it
 }
 
+function TEST_utf8_cli() {
+    local dir=$1
+    run_mon $dir a --public-addr $CEPH_MON
+    # Hopefully it's safe to include literal UTF-8 characters to test
+    # the fix for http://tracker.ceph.com/issues/7387.  If it turns out
+    # to not be OK (when is the default encoding *not* UTF-8?), maybe
+    # the character '黄' can be replaced with the escape $'\xe9\xbb\x84'
+    ./ceph osd pool create 黄 1024 2>&1 | \
+        grep "pool '黄' created" || return 1
+    ./ceph osd lspools 2>&1 | \
+        grep "黄" || return 1
+    ./ceph -f json-pretty osd dump | \
+        python -c "import json; import sys; json.load(sys.stdin)" || return 1
+    ./ceph osd pool delete 黄 黄 --yes-i-really-really-mean-it
+}
 
 main osd-pool-create
 
