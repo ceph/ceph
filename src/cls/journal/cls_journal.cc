@@ -459,7 +459,9 @@ int journal_client_list(cls_method_context_t hctx, bufferlist *in,
   }
 
   std::string last_read;
-  key_from_client_id(start_after, &last_read);
+  if (!start_after.empty()) {
+    key_from_client_id(start_after, &last_read);
+  }
 
   std::map<std::string, bufferlist> vals;
   int r = cls_cxx_map_get_vals(hctx, last_read, HEADER_KEY_CLIENT_PREFIX,
