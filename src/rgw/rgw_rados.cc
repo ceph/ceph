@@ -19,6 +19,7 @@
 #include "rgw_acl_s3.h" /* for dumping s3policy in debug log */
 #include "rgw_metadata.h"
 #include "rgw_bucket.h"
+#include "rgw_rest_conn.h"
 
 #include "cls/rgw/cls_rgw_ops.h"
 #include "cls/rgw/cls_rgw_types.h"
