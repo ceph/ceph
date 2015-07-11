@@ -1772,14 +1772,6 @@ int main(int argc, char **argv)
       return -ret;
     }
 
-    ret = user.info(info, &err_msg);
-    if (ret < 0) {
-      cerr << "could not fetch user info: " << err_msg << std::endl;
-      return -ret;
-    }
-
-    show_user_info(info, formatter);
-
     break;
   case OPT_SUBUSER_RM:
     ret = user.subusers.remove(user_op, &err_msg);
