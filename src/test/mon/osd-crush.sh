@@ -15,7 +15,7 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU Library Public License for more details.
 #
-source test/mon/mon-test-helpers.sh
+source test/ceph-helpers.sh
 
 function run() {
     local dir=$1
@@ -30,7 +30,7 @@ function run() {
 	setup $dir || return 1
 	run_mon $dir a --public-addr $CEPH_MON
 	if ! $TEST_function $dir ; then
-	  cat $dir/a/log
+	  cat $dir/mon.a.log
 	  return 1
 	fi
 	teardown $dir || return 1
@@ -103,8 +103,8 @@ function TEST_crush_rule_create_erasure() {
     ./ceph osd erasure-code-profile rm default || return 1
     ! ./ceph osd erasure-code-profile ls | grep default || return 1
     ./ceph osd crush rule create-erasure $ruleset || return 1
-    CEPH_ARGS='' ./ceph --admin-daemon $dir/a/ceph-mon.a.asok log flush || return 1
-    grep 'profile default set' $dir/a/log || return 1
+    CEPH_ARGS='' ./ceph --admin-daemon $dir/ceph-mon.a.asok log flush || return 1
+    grep 'profile default set' $dir/mon.a.log || return 1
     ./ceph osd erasure-code-profile ls | grep default || return 1
     ./ceph osd crush rule rm $ruleset || return 1
     ! ./ceph osd crush rule ls | grep $ruleset || return 1
@@ -190,7 +190,6 @@ function TEST_crush_rename_bucket() {
 
 function TEST_crush_reject_empty() {
     local dir=$1
-    run_mon $dir a || return 1
     # should have at least one OSD
     run_osd $dir 0 || return 1
 
