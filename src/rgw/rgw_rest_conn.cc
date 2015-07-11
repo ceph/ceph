@@ -30,6 +30,20 @@ int RGWRESTConn::get_url(string& endpoint)
   return 0;
 }
 
+string RGWRESTConn::get_url()
+{
+  string endpoint;
+  if (endpoints.empty()) {
+    ldout(cct, 0) << "WARNING: endpoints not configured for upstream zone" << dendl; /* we'll catch this later */
+    return endpoint;
+  }
+
+  int i = counter.inc();
+  endpoint = endpoints[i % endpoints.size()];
+
+  return endpoint;
+}
+
 int RGWRESTConn::forward(const string& uid, req_info& info, obj_version *objv, size_t max_response, bufferlist *inbl, bufferlist *outbl)
 {
   string url;
@@ -119,16 +133,6 @@ int RGWRESTConn::complete_request(RGWRESTStreamReadRequest *req, string& etag, t
   return ret;
 }
 
-class StreamIntoBufferlist : public RGWGetDataCB {
-  bufferlist& bl;
-public:
-  StreamIntoBufferlist(bufferlist& _bl) : bl(_bl) {}
-  int handle_data(bufferlist& inbl, off_t bl_ofs, off_t bl_len) {
-    bl.claim_append(inbl);
-    return bl_len;
-  }
-};
-
 int RGWRESTConn::get_resource(const string& resource,
 		     list<pair<string, string> > *extra_params,
 		     map<string, string> *extra_headers,
@@ -151,7 +155,7 @@ int RGWRESTConn::get_resource(const string& resource,
 
   params.push_back(pair<string, string>(RGW_SYS_PARAM_PREFIX "region", region));
 
-  StreamIntoBufferlist cb(bl);
+  RGWStreamIntoBufferlist cb(bl);
 
   RGWRESTStreamReadRequest req(cct, url, &cb, NULL, &params);
 
@@ -174,11 +178,12 @@ int RGWRESTConn::get_resource(const string& resource,
   return req.complete(etag, NULL, attrs);
 }
 
-int RGWRESTConn::send_get_resource(const string& resource, const rgw_http_param_pair *pp,
-				   bufferlist &bl, RGWHTTPManager *mgr)
-{
-  list<pair<string, string> > params;
-
+RGWRESTReadResource::RGWRESTReadResource(RGWRESTConn *_conn,
+                                         const string& _resource,
+		                         const rgw_http_param_pair *pp,
+                                         list<pair<string, string> > *extra_headers,
+                                         RGWHTTPManager *_mgr) : cct(_conn->get_ctx()), conn(_conn), resource(_resource), cb(bl),
+                                                                 mgr(_mgr), req(cct, conn->get_url(), &cb, NULL, NULL) {
   while (pp && pp->key) {
     string k = pp->key;
     string v = (pp->val ? pp->val : "");
@@ -186,8 +191,36 @@ int RGWRESTConn::send_get_resource(const string& resource, const rgw_http_param_
     ++pp;
   }
 
-  int ret = get_resource(resource, &params, NULL, bl, mgr);
+  params.push_back(pair<string, string>(RGW_SYS_PARAM_PREFIX "region", conn->get_region()));
+
+  if (extra_headers) {
+    for (list<pair<string, string> >::iterator iter = extra_headers->begin();
+      iter != extra_headers->end(); ++iter) {
+      headers[iter->first] = iter->second;
+    }
+  }
+
+  req.set_params(&params);
+}
+
+int RGWRESTReadResource::read()
+{
+  int ret = req.get_resource(conn->get_key(), headers, resource, mgr);
   if (ret < 0) {
+    ldout(cct, 0) << __func__ << ": get_resource() resource=" << resource << " returned ret=" << ret << dendl;
+    return ret;
+  }
+
+  string etag;
+  map<string, string> attrs;
+  return req.complete(etag, NULL, attrs);
+}
+
+int RGWRESTReadResource::aio_read()
+{
+  int ret = req.get_resource(conn->get_key(), headers, resource, mgr);
+  if (ret < 0) {
+    ldout(cct, 0) << __func__ << ": get_resource() resource=" << resource << " returned ret=" << ret << dendl;
     return ret;
   }
 

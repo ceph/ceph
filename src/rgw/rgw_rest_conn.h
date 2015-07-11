@@ -4,6 +4,7 @@
 #ifndef CEPH_RGW_REST_CONN_H
 #define CEPH_RGW_REST_CONN_H
 
+#include "rgw_rados.h"
 #include "rgw_rest_client.h"
 #include "common/ceph_json.h"
 
@@ -46,6 +47,17 @@ public:
 
   RGWRESTConn(CephContext *_cct, RGWRados *store, list<string>& endpoints);
   int get_url(string& endpoint);
+  string get_url();
+  const string& get_region() {
+    return region;
+  }
+  RGWAccessKey& get_key() {
+    return key;
+  }
+
+  CephContext *get_ctx() {
+    return cct;
+  }
 
   /* sync request */
   int forward(const string& uid, req_info& info, obj_version *objv, size_t max_response, bufferlist *inbl, bufferlist *outbl);
@@ -63,8 +75,6 @@ public:
                    map<string, string>* extra_headers,
                    bufferlist& bl, RGWHTTPManager *mgr = NULL);
 
-  int send_get_resource(const string& resource, const rgw_http_param_pair *pp,
-		        bufferlist &bl, RGWHTTPManager *mgr);
   template <class T>
   int get_json_resource(const string& resource, list<pair<string, string> > *params, T& t);
   template <class T>
@@ -104,4 +114,87 @@ int RGWRESTConn::get_json_resource(const string& resource,  const rgw_http_param
   return get_json_resource(resource, &params, t);
 }
 
+class RGWStreamIntoBufferlist : public RGWGetDataCB {
+  bufferlist& bl;
+public:
+  RGWStreamIntoBufferlist(bufferlist& _bl) : bl(_bl) {}
+  int handle_data(bufferlist& inbl, off_t bl_ofs, off_t bl_len) {
+    bl.claim_append(inbl);
+    return bl_len;
+  }
+};
+
+class RGWRESTReadResource {
+  CephContext *cct;
+  RGWRESTConn *conn;
+  string resource;
+  list<pair<string, string> > params;
+  map<string, string> headers;
+  bufferlist bl;
+  RGWStreamIntoBufferlist cb;
+
+  RGWHTTPManager *mgr;
+  RGWRESTStreamReadRequest req;
+
+public:
+  RGWRESTReadResource(RGWRESTConn *_conn,
+		      const string& _resource,
+		      const rgw_http_param_pair *pp,
+		      list<pair<string, string> > *extra_headers,
+		      RGWHTTPManager *_mgr);
+
+  template <class T>
+  int decode_resource(T *dest);
+
+  int read();
+
+  int aio_read();
+
+  template <class T>
+  int wait(T *dest);
+
+  template <class T>
+  int get(T *dest);
+};
+
+
+template <class T>
+int RGWRESTReadResource::decode_resource(T *dest)
+{
+  int ret = parse_decode_json(cct, *dest, bl);
+  if (ret < 0) {
+    return ret;
+  }
+  return 0;
+}
+
+template <class T>
+int RGWRESTReadResource::get(T *dest)
+{
+  int ret = read();
+  if (ret < 0) {
+    return ret;
+  }
+
+  ret = decode_resource(dest);
+  if (ret < 0) {
+    return ret;
+  }
+  return 0;
+}
+
+template <class T>
+int RGWRESTReadResource::wait(T *dest)
+{
+  int ret = req.wait();
+  if (ret < 0) {
+    return ret;
+  }
+
+  ret = decode_resource(dest);
+  if (ret < 0) {
+    return ret;
+  }
+  return 0;
+}
 #endif

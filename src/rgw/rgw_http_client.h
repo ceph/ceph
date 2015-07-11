@@ -18,14 +18,17 @@ class RGWHTTPClient
   bufferlist::iterator send_iter;
   size_t send_len;
   bool has_send_len;
+
+  rgw_http_req_data *req_data;
+
 protected:
   CephContext *cct;
 
   list<pair<string, string> > headers;
   int init_request(const char *method, const char *url, rgw_http_req_data *req_data);
 public:
-  virtual ~RGWHTTPClient() {}
-  RGWHTTPClient(CephContext *_cct): send_len (0), has_send_len(false), cct(_cct) {}
+  virtual ~RGWHTTPClient();
+  RGWHTTPClient(CephContext *_cct): send_len (0), has_send_len(false), req_data(NULL), cct(_cct) {}
 
   void append_header(const string& name, const string& val) {
     headers.push_back(pair<string, string>(name, val));
@@ -42,6 +45,9 @@ public:
 
   int process(const char *method, const char *url);
   int process(const char *url) { return process("GET", url); }
+
+  int wait();
+  rgw_http_req_data *get_req_data() { return req_data; }
 };
 
 class RGWHTTPManager {
@@ -52,13 +58,16 @@ class RGWHTTPManager {
 
   RWLock reqs_lock;
   map<uint64_t, rgw_http_req_data *> reqs;
+  map<uint64_t, rgw_http_req_data *> complete_reqs;
   int64_t num_reqs;
   int64_t max_threaded_req;
   int thread_pipe[2];
 
   void register_request(rgw_http_req_data *req_data);
-  void unregister_request(rgw_http_req_data *req_data);
-  void finish_request(rgw_http_req_data *req_data);
+  void complete_request(rgw_http_req_data *req_data);
+  void _complete_request(rgw_http_req_data *req_data);
+  void finish_request(rgw_http_req_data *req_data, int r);
+  void _finish_request(rgw_http_req_data *req_data, int r);
   int link_request(rgw_http_req_data *req_data);
 
   void link_pending_requests();
@@ -85,6 +94,7 @@ public:
   void stop();
 
   int add_request(RGWHTTPClient *client, const char *method, const char *url);
+  void remove_request(uint64_t id);
 
   /* only for non threaded case */
   int process_requests(bool wait_for_data, bool *done);

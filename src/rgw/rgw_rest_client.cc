@@ -694,3 +694,78 @@ int RGWRESTStreamReadRequest::send_data(void *ptr, size_t len)
   return 0;
 }
 
+class StreamIntoBufferlist : public RGWGetDataCB {
+  bufferlist& bl;
+public:
+  StreamIntoBufferlist(bufferlist& _bl) : bl(_bl) {}
+  int handle_data(bufferlist& inbl, off_t bl_ofs, off_t bl_len) {
+    bl.claim_append(inbl);
+    return bl_len;
+  }
+};
+
+#if 0
+struct RGWRESTRequestParams {
+  string resource;
+  list<pair<string, string> > *params;
+  map<string, string> *headers;
+
+  RGWRESTRequestParams() : params(NULL), headers(NULL) {}
+};
+
+
+class RGWRESTBufferReadRequest {
+  RGWRESTConn *conn;
+  RGWRESTRequestParams *params;
+  bufferlist bl;
+  StreamIntoBufferlist cb;
+  RGWRESTStreamReadRequest req;
+
+  list<pair<string, string> > http_params;
+  map<string, string> http_headers;
+public:
+  RGWRESTBufferReadRequest(RGWRESTConn *_conn,
+			   RGWRESTRequestParams *_params,
+			   RGWHTTPManager *mgr = NULL) : conn(_conn), params(_params), cb(bl) {
+    if (params->params) {
+      list<pair<string, string> >::iterator iter = params->params->begin();
+      for (; iter != params->params->end(); ++iter) {
+        http_params.push_back(*iter);
+      }
+    }
+    http_params.push_back(pair<string, string>(RGW_SYS_PARAM_PREFIX "region", conn->get_region()));
+
+    if (params->headers) {
+      for (map<string, string>::iterator iter = params->headers->begin();
+	   iter != params->headers->end(); ++iter) {
+        http_headers[iter->first] = iter->second;
+      }
+    }
+  }
+
+
+  int get();
+};
+
+int RGWRESTBufferReadRequest::get()
+{
+  string url;
+  int ret = conn->get_url(url);
+  if (ret < 0)
+    return ret;
+
+  req.init(cct, url, &cb, NULL, &http_params);
+
+  ret = req.get_resource(key, http_headers, resource, mgr);
+  if (ret < 0) {
+    ldout(cct, 0) << __func__ << ": get() resource=" << resource << " returned ret=" << ret << dendl;
+    return ret;
+  }
+
+  string etag;
+  map<string, string> attrs;
+  return req.complete(etag, NULL, attrs);
+}
+
+
+#endif
