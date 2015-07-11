@@ -16,13 +16,13 @@
 #include "cls/timeindex/cls_timeindex_types.h"
 #include "rgw_log.h"
 #include "rgw_metadata.h"
-#include "rgw_rest_conn.h"
 
 class RGWWatcher;
 class SafeTimer;
 class ACLOwner;
 class RGWGC;
 class RGWObjectExpirer;
+class RGWRESTConn;
 
 /* flags for put_obj_meta() */
 #define PUT_OBJ_CREATE      0x01

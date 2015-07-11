@@ -10,6 +10,7 @@
 #include "rgw_acl_s3.h"
 #include "rgw_policy_s3.h"
 #include "rgw_keystone.h"
+#include "rgw_rest_conn.h"
 
 #define RGW_AUTH_GRACE_MINS 15
 
