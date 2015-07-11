@@ -2740,11 +2740,11 @@ int main(int argc, char **argv)
      "PG id, mandatory for info, log, remove, export, rm-past-intervals")
     ("op", po::value<string>(&op),
      "Arg is one of [info, log, remove, export, import, list, fix-lost, list-pgs, rm-past-intervals, set-allow-sharded-objects, dump-journal, dump-super, "
-	 "get-osdmap, set-osdmap]")
+	 "get-osdmap, set-osdmap, set-inc-osdmap]")
     ("epoch", po::value<unsigned>(&epoch),
      "epoch# for get-osdmap, the current epoch in use if not specified")
     ("file", po::value<string>(&file),
-     "path of file to export, import, get-osdmap or set-osdmap")
+     "path of file to export, import, get-osdmap, set-osdmap or set-inc-osdmap")
     ("format", po::value<string>(&format)->default_value("json-pretty"),
      "Output format which may be json, json-pretty, xml, xml-pretty")
     ("debug", "Enable diagnostic output to stderr")
@@ -2902,7 +2902,7 @@ int main(int argc, char **argv)
     } else {
       file_fd = open(file.c_str(), O_WRONLY|O_CREAT|O_TRUNC, 0666);
     }
-  } else if (op == "import" || op == "set-osdmap") {
+  } else if (op == "import" || op == "set-osdmap" || op == "set-inc-osdmap") {
     if (!vm.count("file") || file == "-") {
       if (isatty(STDIN_FILENO)) {
         cerr << "stdin is a tty and no --file filename specified" << std::endl;
@@ -2916,7 +2916,7 @@ int main(int argc, char **argv)
 
   if (vm.count("file") && file_fd == fd_none && !dry_run) {
     cerr << "--file option only applies to import, export, "
-	 << "get-osdmap or set-osdmap" << std::endl;
+	 << "get-osdmap, set-osdmap or set-inc-osdmap" << std::endl;
     myexit(1);
   }
 
@@ -3297,6 +3297,16 @@ int main(int argc, char **argv)
       ret = set_osdmap(fs, epoch, bl, force);
     }
     goto out;
+  } else if (op == "set-inc-osdmap") {
+    bufferlist bl;
+    ret = get_fd_data(file_fd, bl);
+    if (ret < 0) {
+      cerr << "Failed to read incremental osdmap  " << cpp_strerror(ret) << std::endl;
+      goto out;
+    } else {
+      ret = set_inc_osdmap(fs, epoch, bl, force);
+    }
+    goto out;
   }
 
   log_oid = OSD::make_pg_log_oid(pgid);
@@ -3388,7 +3398,7 @@ int main(int argc, char **argv)
   // before complaining about a bad pgid
   if (!vm.count("objcmd") && op != "export" && op != "info" && op != "log" && op != "rm-past-intervals") {
     cerr << "Must provide --op (info, log, remove, export, import, list, fix-lost, list-pgs, rm-past-intervals, set-allow-sharded-objects, dump-journal, dump-super, "
-      "set-osdmap, get-osdmap)"
+      "get-osdmap, set-osdmap, set-inc-osdmap)"
 	 << std::endl;
     usage(desc);
     ret = 1;
