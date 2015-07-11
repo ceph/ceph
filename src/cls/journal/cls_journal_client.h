@@ -20,8 +20,9 @@ namespace client {
 int create(librados::IoCtx &ioctx, const std::string &oid, uint8_t order,
            uint8_t splay);
 
-int get_immutable_metadata(librados::IoCtx &ioctx, const std::string &oid,
-                           uint8_t *order, uint8_t *splay_width);
+void get_immutable_metadata(librados::IoCtx &ioctx, const std::string &oid,
+                            uint8_t *order, uint8_t *splay_width,
+                            Context *on_finish);
 void get_mutable_metadata(librados::IoCtx &ioctx, const std::string &oid,
                           uint64_t *minimum_set, uint64_t *active_set,
                           std::set<cls::journal::Client> *clients,
