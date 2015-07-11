@@ -77,6 +77,7 @@ class RGWHTTPManager {
 
   RWLock reqs_lock;
   map<uint64_t, rgw_http_req_data *> reqs;
+  map<uint64_t, rgw_http_req_data *> complete_reqs;
   int64_t num_reqs;
   int64_t max_threaded_req;
   int thread_pipe[2];
