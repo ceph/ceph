@@ -15,12 +15,12 @@
 #include "cls/statelog/cls_statelog_types.h"
 #include "rgw_log.h"
 #include "rgw_metadata.h"
-#include "rgw_rest_conn.h"
 
 class RGWWatcher;
 class SafeTimer;
 class ACLOwner;
 class RGWGC;
+class RGWRESTConn;
 
 /* flags for put_obj_meta() */
 #define PUT_OBJ_CREATE      0x01

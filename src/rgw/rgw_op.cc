@@ -24,6 +24,7 @@
 #include "rgw_multi_del.h"
 #include "rgw_cors.h"
 #include "rgw_cors_s3.h"
+#include "rgw_rest_conn.h"
 
 #include "rgw_client_io.h"
 
