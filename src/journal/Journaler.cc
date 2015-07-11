@@ -31,7 +31,8 @@ static const std::string JOURNAL_OBJECT_PREFIX = "journal_data.";
 using namespace cls::journal;
 
 Journaler::Journaler(librados::IoCtx &header_ioctx, librados::IoCtx &data_ioctx,
-                     uint64_t journal_id, const std::string &client_id)
+                     const std::string &journal_id,
+                     const std::string &client_id)
   : m_client_id(client_id), m_metadata(NULL), m_player(NULL), m_recorder(NULL),
     m_trimmer(NULL)
 {
@@ -39,8 +40,8 @@ Journaler::Journaler(librados::IoCtx &header_ioctx, librados::IoCtx &data_ioctx,
   m_data_ioctx.dup(data_ioctx);
   m_cct = reinterpret_cast<CephContext *>(m_header_ioctx.cct());
 
-  m_header_oid = JOURNAL_HEADER_PREFIX + stringify(journal_id);
-  m_object_oid_prefix = JOURNAL_OBJECT_PREFIX + stringify(journal_id) + ".";
+  m_header_oid = JOURNAL_HEADER_PREFIX + journal_id;
+  m_object_oid_prefix = JOURNAL_OBJECT_PREFIX + journal_id + ".";
 
   // TODO configurable commit interval
   m_metadata = new JournalMetadata(m_header_ioctx, m_header_oid, m_client_id,
@@ -60,8 +61,8 @@ Journaler::~Journaler() {
   assert(m_recorder == NULL);
 }
 
-int Journaler::init() {
-  return m_metadata->init();
+void Journaler::init(Context *on_init) {
+  m_metadata->init(on_init);
 }
 
 int Journaler::create(uint8_t order, uint8_t splay_width) {
@@ -136,15 +137,28 @@ void Journaler::start_append() {
                                    m_metadata, 0, 0, 0);
 }
 
-void Journaler::stop_append() {
+int Journaler::stop_append() {
   assert(m_recorder != NULL);
-  m_recorder->flush();
+
+  C_SaferCond cond;
+  flush(&cond);
+  int r = cond.wait();
+  if (r < 0) {
+    return r;
+  }
+
   delete m_recorder;
   m_recorder = NULL;
+  return 0;
 }
 
 Future Journaler::append(const std::string &tag, const bufferlist &payload_bl) {
   return m_recorder->append(tag, payload_bl);
+}
+
+void Journaler::flush(Context *on_safe) {
+  // TODO pass ctx
+  m_recorder->flush();
 }
 
 void Journaler::create_player(ReplayHandler *replay_handler) {

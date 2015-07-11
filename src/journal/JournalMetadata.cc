@@ -43,40 +43,27 @@ JournalMetadata::~JournalMetadata() {
   rados.watch_flush();
 }
 
-int JournalMetadata::init() {
+void JournalMetadata::init(Context *on_init) {
   assert(!m_initialized);
   m_initialized = true;
-
-  int r = client::get_immutable_metadata(m_ioctx, m_oid, &m_order,
-                                         &m_splay_width);
-  if (r < 0) {
-    lderr(m_cct) << __func__ << ": failed to retrieve journal metadata: "
-                 << cpp_strerror(r) << dendl;
-    return r;
-  }
 
   m_timer = new SafeTimer(m_cct, m_timer_lock, false);
   m_timer->init();
 
-  r = m_ioctx.watch2(m_oid, &m_watch_handle, &m_watch_ctx);
+  int r = m_ioctx.watch2(m_oid, &m_watch_handle, &m_watch_ctx);
   if (r < 0) {
     lderr(m_cct) << __func__ << ": failed to watch journal"
                  << cpp_strerror(r) << dendl;
-    return r;
+    on_init->complete(r);
+    return;
   }
 
-  C_SaferCond cond;
-  refresh(&cond);
-  r = cond.wait();
-  if (r < 0) {
-    return r;
-  }
-  return 0;
+  C_ImmutableMetadata *ctx = new C_ImmutableMetadata(this, on_init);
+  client::get_immutable_metadata(m_ioctx, m_oid, &m_order, &m_splay_width,
+                                 ctx);
 }
 
 int JournalMetadata::register_client(const std::string &description) {
-  assert(!m_client_id.empty());
-
   ldout(m_cct, 10) << __func__ << ": " << m_client_id << dendl;
   int r = client::client_register(m_ioctx, m_oid, m_client_id, description);
   if (r < 0) {
@@ -211,8 +198,20 @@ bool JournalMetadata::get_last_allocated_tid(const std::string &tag,
   return true;
 }
 
+void JournalMetadata::handle_immutable_metadata(int r, Context *on_init) {
+  if (r < 0) {
+    lderr(m_cct) << "failed to initialize immutable metadata: "
+                 << cpp_strerror(r) << dendl;
+    on_init->complete(r);
+    return;
+  }
+
+  ldout(m_cct, 10) << "initialized immutable metadata" << dendl;
+  refresh(on_init);
+}
+
 void JournalMetadata::refresh(Context *on_complete) {
-  ldout(m_cct, 10) << "refreshing journal metadata" << dendl;
+  ldout(m_cct, 10) << "refreshing mutable metadata" << dendl;
   C_Refresh *refresh = new C_Refresh(this, on_complete);
   client::get_mutable_metadata(m_ioctx, m_oid, &refresh->minimum_set,
                                &refresh->active_set,
@@ -220,7 +219,7 @@ void JournalMetadata::refresh(Context *on_complete) {
 }
 
 void JournalMetadata::handle_refresh_complete(C_Refresh *refresh, int r) {
-  ldout(m_cct, 10) << "refreshed journal metadata: r=" << r << dendl;
+  ldout(m_cct, 10) << "refreshed mutable metadata: r=" << r << dendl;
   if (r == 0) {
     Mutex::Locker locker(m_lock);
 

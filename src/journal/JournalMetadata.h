@@ -42,7 +42,7 @@ public:
                   const std::string &client_id, double commit_interval);
   ~JournalMetadata();
 
-  int init();
+  void init(Context *on_init);
 
   void add_listener(Listener *listener);
   void remove_listener(Listener *listener);
@@ -159,6 +159,19 @@ private:
     }
   };
 
+  struct C_ImmutableMetadata : public Context {
+    JournalMetadataPtr journal_metadata;
+    Context *on_finish;
+
+    C_ImmutableMetadata(JournalMetadata *_journal_metadata, Context *_on_finish)
+      : journal_metadata(_journal_metadata), on_finish(_on_finish) {
+    }
+
+    virtual void finish(int r) {
+      journal_metadata->handle_immutable_metadata(r, on_finish);
+    }
+
+  };
   struct C_Refresh : public Context {
     JournalMetadataPtr journal_metadata;
     uint64_t minimum_set;
@@ -208,6 +221,8 @@ private:
   bool m_commit_position_pending;
   ObjectSetPosition m_commit_position;
   Context *m_commit_position_ctx;
+
+  void handle_immutable_metadata(int r, Context *on_init);
 
   void refresh(Context *on_finish);
   void handle_refresh_complete(C_Refresh *refresh, int r);
