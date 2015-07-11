@@ -31,13 +31,20 @@ protected:
 
   int sign_request(RGWAccessKey& key, RGWEnv& env, req_info& info);
 public:
-  RGWRESTSimpleRequest(CephContext *_cct, string& _url, list<pair<string, string> > *_headers,
+  RGWRESTSimpleRequest(CephContext *_cct, const string& _url, list<pair<string, string> > *_headers,
                 list<pair<string, string> > *_params) : RGWHTTPClient(_cct), http_status(0), status(0),
                 url(_url), send_iter(NULL),
                 max_response(0) {
+    set_headers(_headers);
+    set_params(_params);
+  }
+
+  void set_headers(list<pair<string, string> > *_headers) {
     if (_headers)
       headers = *_headers;
+  }
 
+  void set_params(list<pair<string, string> > *_params) {
     if (_params)
       params = *_params;
   }
@@ -64,7 +71,7 @@ public:
   int add_output_data(bufferlist& bl);
   int send_data(void *ptr, size_t len);
 
-  RGWRESTStreamWriteRequest(CephContext *_cct, string& _url, list<pair<string, string> > *_headers,
+  RGWRESTStreamWriteRequest(CephContext *_cct, const string& _url, list<pair<string, string> > *_headers,
                 list<pair<string, string> > *_params) : RGWRESTSimpleRequest(_cct, _url, _headers, _params),
                 lock("RGWRESTStreamWriteRequest"), cb(NULL), http_manager(_cct) {}
   ~RGWRESTStreamWriteRequest();
@@ -87,7 +94,7 @@ public:
   int send_data(void *ptr, size_t len);
   int receive_data(void *ptr, size_t len);
 
-  RGWRESTStreamReadRequest(CephContext *_cct, string& _url, RGWGetDataCB *_cb, list<pair<string, string> > *_headers,
+  RGWRESTStreamReadRequest(CephContext *_cct, const string& _url, RGWGetDataCB *_cb, list<pair<string, string> > *_headers,
                 list<pair<string, string> > *_params) : RGWRESTSimpleRequest(_cct, _url, _headers, _params),
                 lock("RGWRESTStreamReadRequest"), cb(_cb),
                 chunk_ofs(0), ofs(0), http_manager(_cct) {}

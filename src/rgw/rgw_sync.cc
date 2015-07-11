@@ -5,6 +5,7 @@
 #include "rgw_rados.h"
 #include "rgw_sync.h"
 #include "rgw_metadata.h"
+#include "rgw_rest_conn.h"
 
 
 #define dout_subsys ceph_subsys_rgw
@@ -199,17 +200,21 @@ int RGWRemoteMetaLog::clone_shard(int shard_id, const string& marker, string *ne
                                   { marker_key, marker.c_str() },
                                   { NULL, NULL } };
 
-  bufferlist bl;
-  int ret = conn->send_get_resource("/admin/log", pairs, bl, &http_manager);
+  RGWRESTReadResource http_op(conn, "/admin/log", pairs, NULL, &http_manager);
+
+  rgw_mdlog_shard_data data;
+
+  int ret = http_op.aio_read();
   if (ret < 0) {
     ldout(store->ctx(), 0) << "ERROR: failed to fetch mdlog data" << dendl;
     return ret;
   }
 
-#warning removeme
-sleep(7);
-
-  rgw_mdlog_shard_data data;
+  ret = http_op.wait(&data);
+  if (ret < 0) {
+    ldout(store->ctx(), 0) << "ERROR: failed to wait for op, ret=" << ret << dendl;
+    return ret;
+  }
 
   ldout(store->ctx(), 20) << "remote mdlog, shard_id=" << shard_id << " num of shard entries: " << data.entries.size() << dendl;
 
