@@ -13,6 +13,7 @@
 #include <map>
 #include "include/assert.h"
 
+class Context;
 class SafeTimer;
 
 namespace journal {
@@ -26,12 +27,12 @@ class ReplayHandler;
 class Journaler {
 public:
   Journaler(librados::IoCtx &header_ioctx, librados::IoCtx &data_ioctx,
-            uint64_t journal_id, const std::string &client_id);
+            const std::string &journal_id, const std::string &client_id);
   ~Journaler();
 
-  int init();
-
   int create(uint8_t order, uint8_t splay_width);
+
+  void init(Context *on_init);
 
   int register_client(const std::string &description);
   int unregister_client();
@@ -45,7 +46,8 @@ public:
 
   void start_append();
   Future append(const std::string &tag, const bufferlist &bl);
-  void stop_append();
+  void flush(Context *on_safe);
+  int stop_append();
 
 private:
   librados::IoCtx m_header_ioctx;
