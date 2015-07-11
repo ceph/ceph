@@ -89,6 +89,46 @@ struct C_ClientList : public C_AioExec {
   }
 };
 
+struct C_ImmutableMetadata : public C_AioExec {
+  uint8_t *order;
+  uint8_t *splay_width;
+  Context *on_finish;
+  bufferlist outbl;
+
+  C_ImmutableMetadata(librados::IoCtx &_ioctx, const std::string &_oid,
+                      uint8_t *_order, uint8_t *_splay_width,
+                      Context *_on_finish)
+    : C_AioExec(_ioctx, _oid), order(_order), splay_width(_splay_width),
+      on_finish(_on_finish) {
+  }
+
+  void send() {
+    librados::ObjectReadOperation op;
+    bufferlist inbl;
+    op.exec("journal", "get_order", inbl);
+    op.exec("journal", "get_splay_width", inbl);
+
+    librados::AioCompletion *rados_completion =
+      librados::Rados::aio_create_completion(this, rados_callback, NULL);
+    int r = ioctx.aio_operate(oid, rados_completion, &op, &outbl);
+    assert(r == 0);
+    rados_completion->release();
+  }
+
+  virtual void finish(int r) {
+    if (r == 0) {
+      try {
+        bufferlist::iterator iter = outbl.begin();
+        ::decode(*order, iter);
+        ::decode(*splay_width, iter);
+      } catch (const buffer::error &err) {
+        r = -EBADMSG;
+      }
+    }
+    on_finish->complete(r);
+  }
+};
+
 struct C_MutableMetadata : public C_AioExec {
   uint64_t *minimum_set;
   uint64_t *active_set;
@@ -148,27 +188,13 @@ int create(librados::IoCtx &ioctx, const std::string &oid, uint8_t order,
   return 0;
 }
 
-int get_immutable_metadata(librados::IoCtx &ioctx, const std::string &oid,
-                           uint8_t *order, uint8_t *splay_width) {
-  librados::ObjectReadOperation op;
-  bufferlist inbl;
-  op.exec("journal", "get_order", inbl);
-  op.exec("journal", "get_splay_width", inbl);
-
-  bufferlist outbl;
-  int r = ioctx.operate(oid, &op, &outbl);
-  if (r < 0) {
-    return r;
-  }
-
-  try {
-    bufferlist::iterator iter = outbl.begin();
-    ::decode(*order, iter);
-    ::decode(*splay_width, iter);
-  } catch (const buffer::error &err) {
-    return -EBADMSG;
-  }
-  return 0;
+void get_immutable_metadata(librados::IoCtx &ioctx, const std::string &oid,
+                            uint8_t *order, uint8_t *splay_width,
+                            Context *on_finish) {
+  C_ImmutableMetadata *metadata = new C_ImmutableMetadata(ioctx, oid, order,
+                                                          splay_width,
+                                                          on_finish);
+  metadata->send();
 }
 
 void get_mutable_metadata(librados::IoCtx &ioctx, const std::string &oid,
