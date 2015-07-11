@@ -435,7 +435,7 @@ int CrushTester::test_with_crushtool(const string& crushtool,
   // something else entirely happened
   // log it and consider an invalid crush map
   err << "error running crushmap through crushtool: " << cpp_strerror(r);
-  return -r;
+  return -EINVAL;
 }
 
 namespace {
