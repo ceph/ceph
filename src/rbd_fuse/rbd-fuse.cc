@@ -12,7 +12,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #if defined(DARWIN) 
-#include <fuse/fuse.h>
+#include <fuse.h>
 #include "porting.h"
 #else
 #include <fuse.h>
