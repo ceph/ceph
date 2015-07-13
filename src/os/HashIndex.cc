@@ -25,6 +25,69 @@
 const string HashIndex::SUBDIR_ATTR = "contents";
 const string HashIndex::IN_PROGRESS_OP_TAG = "in_progress_op";
 
+/// hex digit to integer value
+int hex_to_int(char c)
+{
+  if (c >= '0' && c <= '9')
+    return c - '0';
+  if (c >= 'A' && c <= 'F')
+    return c - 'A' + 10;
+  assert(0);
+}
+
+/// int value to hex digit
+char int_to_hex(int v)
+{
+  assert(v < 16);
+  if (v < 10)
+    return '0' + v;
+  return 'A' + v - 10;
+}
+
+/// reverse bits in a nibble (0..15)
+int reverse_nibble_bits(int in)
+{
+  assert(in < 16);
+  return
+    ((in & 8) >> 3) |
+    ((in & 4) >> 1) |
+    ((in & 2) << 1) |
+    ((in & 1) << 3);
+}
+
+/// reverse nibble bits in a hex digit
+char reverse_hexdigit_bits(char c)
+{
+  return int_to_hex(reverse_nibble_bits(hex_to_int(c)));
+}
+
+/// reverse nibble bits in a hex string
+string reverse_hexdigit_bits_string(string s)
+{
+  for (unsigned i=0; i<s.size(); ++i)
+    s[i] = reverse_hexdigit_bits(s[i]);
+  return s;
+}
+
+/// compare hex digit (as length 1 string) bitwise
+bool cmp_hexdigit_bitwise(const string& l, const string& r)
+{
+  assert(l.length() == 1 && r.length() == 1);
+  int lv = hex_to_int(l[0]);
+  int rv = hex_to_int(r[0]);
+  assert(lv < 16);
+  assert(rv < 16);
+  return reverse_nibble_bits(lv) < reverse_nibble_bits(rv);
+}
+
+/// compare hex digit string bitwise
+bool cmp_hexdigit_string_bitwise(const string& l, const string& r)
+{
+  string ll = reverse_hexdigit_bits_string(l);
+  string rr = reverse_hexdigit_bits_string(r);
+  return ll < rr;
+}
+
 int HashIndex::cleanup() {
   bufferlist bl;
   int r = get_attr_path(vector<string>(), IN_PROGRESS_OP_TAG, bl);
@@ -763,6 +826,64 @@ uint32_t HashIndex::hash_prefix_to_hash(string prefix) {
   return hash;
 }
 
+int HashIndex::get_path_contents_by_hash_bitwise(
+  const vector<string> &path,
+  const ghobject_t *next_object,
+  set<string, CmpHexdigitStringBitwise> *hash_prefixes,
+  set<pair<string, ghobject_t> > *objects)
+{
+  map<string, ghobject_t> rev_objects;
+  int r;
+  r = list_objects(path, 0, 0, &rev_objects);
+  if (r < 0)
+    return r;
+  // bitwise sort
+  for (map<string, ghobject_t>::iterator i = rev_objects.begin();
+       i != rev_objects.end();
+       ++i) {
+    if (next_object && cmp_bitwise(i->second, *next_object) < 0)
+      continue;
+    string hash_prefix = get_path_str(i->second);
+    hash_prefixes->insert(hash_prefix);
+    objects->insert(pair<string, ghobject_t>(hash_prefix, i->second));
+  }
+  vector<string> subdirs;
+  r = list_subdirs(path, &subdirs);
+  if (r < 0)
+    return r;
+
+  // sort subdirs bitwise (by reversing hex digit nibbles)
+  std::sort(subdirs.begin(), subdirs.end(), cmp_hexdigit_bitwise);
+
+  // Local to this function, we will convert the prefix strings
+  // (previously simply the reversed hex digits) to also have each
+  // digit's nibbles reversed.  This will make the strings sort
+  // bitwise.
+  string cur_prefix;
+  for (vector<string>::const_iterator i = path.begin();
+       i != path.end();
+       ++i) {
+    cur_prefix.append(reverse_hexdigit_bits_string(*i));
+  }
+  string next_object_string;
+  if (next_object)
+    next_object_string = reverse_hexdigit_bits_string(get_path_str(*next_object));
+  for (vector<string>::iterator i = subdirs.begin();
+       i != subdirs.end();
+       ++i) {
+    string candidate = cur_prefix + reverse_hexdigit_bits_string(*i);
+    if (next_object) {
+      if (next_object->is_max())
+	continue;
+      if (candidate < next_object_string.substr(0, candidate.size()))
+	continue;
+    }
+    // re-reverse the hex digit nibbles for the caller
+    hash_prefixes->insert(reverse_hexdigit_bits_string(candidate));
+  }
+  return 0;
+}
+
 int HashIndex::get_path_contents_by_hash_nibblewise(
   const vector<string> &path,
   const ghobject_t *next_object,
@@ -826,8 +947,76 @@ int HashIndex::list_by_hash(const vector<string> &path,
 			    vector<ghobject_t> *out)
 {
   assert(out);
-  assert(!sort_bitwise);
-  return list_by_hash_nibblewise(path, end, max_count, next, out);
+  if (sort_bitwise)
+    return list_by_hash_bitwise(path, end, max_count, next, out);
+  else
+    return list_by_hash_nibblewise(path, end, max_count, next, out);
+}
+
+int HashIndex::list_by_hash_bitwise(
+  const vector<string> &path,
+  const ghobject_t& end,
+  int max_count,
+  ghobject_t *next,
+  vector<ghobject_t> *out)
+{
+  vector<string> next_path = path;
+  next_path.push_back("");
+  set<string, CmpHexdigitStringBitwise> hash_prefixes;
+  set<pair<string, ghobject_t> > objects;
+  int r = get_path_contents_by_hash_bitwise(path,
+					    next,
+					    &hash_prefixes,
+					    &objects);
+  if (r < 0)
+    return r;
+  for (set<string, CmpHexdigitStringBitwise>::iterator i = hash_prefixes.begin();
+       i != hash_prefixes.end();
+       ++i) {
+    dout(20) << __func__ << " prefix " << *i << dendl;
+    set<pair<string, ghobject_t> >::iterator j = objects.lower_bound(
+      make_pair(*i, ghobject_t()));
+    if (j == objects.end() || j->first != *i) {
+      *(next_path.rbegin()) = *(i->rbegin());
+      ghobject_t next_recurse;
+      if (next)
+	next_recurse = *next;
+      r = list_by_hash_bitwise(next_path,
+			       end,
+			       max_count,
+			       &next_recurse,
+			       out);
+
+      if (r < 0)
+	return r;
+      if (!next_recurse.is_max()) {
+	if (next)
+	  *next = next_recurse;
+	return 0;
+      }
+    } else {
+      while (j != objects.end() && j->first == *i) {
+	if (max_count > 0 && out->size() == (unsigned)max_count) {
+	  if (next)
+	    *next = j->second;
+	  return 0;
+	}
+	if (cmp_bitwise(j->second, end) >= 0) {
+	  if (next)
+	    *next = ghobject_t::get_max();
+	  return 0;
+	}
+	if (!next || cmp_bitwise(j->second, *next) >= 0) {
+	  dout(20) << __func__ << " prefix " << *i << " ob " << j->second << dendl;
+	  out->push_back(j->second);
+	}
+	++j;
+      }
+    }
+  }
+  if (next)
+    *next = ghobject_t::get_max();
+  return 0;
 }
 
 int HashIndex::list_by_hash_nibblewise(
