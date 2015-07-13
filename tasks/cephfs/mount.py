@@ -1,4 +1,5 @@
 from contextlib import contextmanager
+import json
 import logging
 import datetime
 import time
@@ -370,6 +371,41 @@ class CephFSMount(object):
 
     def get_osd_epoch(self):
         raise NotImplementedError()
+
+    def stat(self, fs_path):
+        """
+        stat a file, and return the result as a dictionary like this:
+        {
+          "st_ctime": 1414161137.0,
+          "st_mtime": 1414161137.0,
+          "st_nlink": 33,
+          "st_gid": 0,
+          "st_dev": 16777218,
+          "st_size": 1190,
+          "st_ino": 2,
+          "st_uid": 0,
+          "st_mode": 16877,
+          "st_atime": 1431520593.0
+        }
+
+        Raises exception on absent file.
+        """
+        abs_path = os.path.join(self.mountpoint, fs_path)
+
+        pyscript = dedent("""
+            import os
+            import stat
+            import json
+
+            s = os.stat("{path}")
+            attrs = ["st_mode", "st_ino", "st_dev", "st_nlink", "st_uid", "st_gid", "st_size", "st_atime", "st_mtime", "st_ctime"]
+            print json.dumps(
+                dict([(a, getattr(s, a)) for a in attrs]),
+                indent=2)
+            """).format(path=abs_path)
+        proc = self._run_python(pyscript)
+        proc.wait()
+        return json.loads(proc.stdout.getvalue().strip())
 
     def path_to_ino(self, fs_path):
         abs_path = os.path.join(self.mountpoint, fs_path)
