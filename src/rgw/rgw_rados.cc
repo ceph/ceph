@@ -2870,7 +2870,6 @@ int RGWRados::list_regions(list<string>& regions)
   return list_raw_prefixed_objs(zonegroup.get_pool_name(cct), region_info_oid_prefix, regions);
 }
 
-
 int RGWRados::list_zonegroups(list<string>& zonegroups)
 {
   RGWZoneGroup zonegroup;
