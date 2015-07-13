@@ -52,11 +52,13 @@ public:
     bufferlist bl;
     int alignment;
     TrackedOpRef tracked_op;
-    write_item(uint64_t s, bufferlist& b, int al, TrackedOpRef opref) :
-      seq(s), alignment(al), tracked_op(opref) {
+    uint32_t uncompress_len;
+    bool is_compress;
+    write_item(uint64_t s, bufferlist& b, int al, TrackedOpRef opref, uint32_t len, bool compressed) :
+      seq(s), alignment(al), tracked_op(opref), uncompress_len(len), is_compress(compressed) {
       bl.claim(b, buffer::list::CLAIM_ALLOW_NONSHAREABLE); // potential zero-copy
     }
-    write_item() : seq(0), alignment(0) {}
+    write_item() : seq(0), alignment(0), is_compress(false) {}
   };
 
   Mutex finisher_lock;
@@ -99,7 +101,7 @@ public:
   struct header_t {
     enum {
       FLAG_CRC = (1<<0),
-      // NOTE: remove kludgey weirdness in read_header() next time a flag is added.
+      FLAG_COMPRESS = (1<<1),
     };
 
     uint64_t flags;
@@ -125,10 +127,11 @@ public:
      * a sequence >= start_seq and therefore > committed_up_thru.
      */
     uint64_t start_seq;
+    __u32    compression_type; //see enum compression_type
 
     header_t() :
       flags(0), block_size(0), alignment(0), max_size(0), start(0),
-      committed_up_to(0), start_seq(0) {}
+      committed_up_to(0), start_seq(0), compression_type(0) {}
 
     void clear() {
       start = block_size;
@@ -139,7 +142,7 @@ public:
     }
 
     void encode(bufferlist& bl) const {
-      __u32 v = 4;
+      __u32 v = 5;
       ::encode(v, bl);
       bufferlist em;
       {
@@ -151,6 +154,7 @@ public:
 	::encode(start, em);
 	::encode(committed_up_to, em);
 	::encode(start_seq, em);
+	::encode(compression_type, em);
       }
       ::encode(em, bl);
     }
@@ -171,6 +175,7 @@ public:
 	::decode(start, bl);
 	committed_up_to = 0;
 	start_seq = 0;
+	compression_type = 0;
 	return;
       }
       bufferlist em;
@@ -192,6 +197,11 @@ public:
 	::decode(start_seq, t);
       else
 	start_seq = 0;
+
+      if (v > 4)
+	::decode(compression_type, t);
+      else
+	compression_type = 0;
     }
   } header;
 
