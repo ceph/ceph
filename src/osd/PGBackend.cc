@@ -116,6 +116,7 @@ int PGBackend::objects_list_partial(
       coll,
       _next,
       ghobject_t::get_max(),
+      parent->sort_bitwise(),
       max - ls->size(),
       &objects,
       &_next);
@@ -150,6 +151,7 @@ int PGBackend::objects_list_range(
     coll,
     ghobject_t(start, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
     ghobject_t(end, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
+    parent->sort_bitwise(),
     INT_MAX,
     &objects,
     NULL);
