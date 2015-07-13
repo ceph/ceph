@@ -157,8 +157,7 @@ Future Journaler::append(const std::string &tag, const bufferlist &payload_bl) {
 }
 
 void Journaler::flush(Context *on_safe) {
-  // TODO pass ctx
-  m_recorder->flush();
+  m_recorder->flush(on_safe);
 }
 
 void Journaler::create_player(ReplayHandler *replay_handler) {
