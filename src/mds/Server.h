@@ -44,10 +44,8 @@ enum {
 };
 
 class Server {
-public:
-  // XXX FIXME: can probably friend enough contexts to make this not need to be public
-  MDSRank *mds;
 private:
+  MDSRank *mds;
   MDCache *mdcache;
   MDLog *mdlog;
   PerfCounters *logger;
@@ -58,6 +56,9 @@ private:
   // State for while in reconnect
   MDSInternalContext *reconnect_done;
   int failed_reconnects;
+
+  friend class MDSContinuation;
+  friend class ServerContext;
 
 public:
   bool terminating_sessions;
