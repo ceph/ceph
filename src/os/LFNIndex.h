@@ -363,7 +363,7 @@ protected:
   /// Lists subdirectories.
   int list_subdirs(
     const vector<string> &to_list, ///< [in] Directory to list.
-    set<string> *out		   ///< [out] Subdirectories listed. 
+    vector<string> *out		   ///< [out] Subdirectories listed.
     );
 
   /// Create subdirectory.

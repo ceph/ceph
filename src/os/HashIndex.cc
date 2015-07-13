@@ -71,7 +71,7 @@ int HashIndex::reset_attr(
   if (!exists)
     return 0;
   map<string, ghobject_t> objects;
-  set<string> subdirs;
+  vector<string> subdirs;
   r = list_objects(path, 0, 0, &objects);
   if (r < 0)
     return r;
@@ -98,7 +98,7 @@ int HashIndex::col_split_level(
    * bits of the hash represented by the subdir path with inbits, match passed
    * in.
    */
-  set<string> subdirs;
+  vector<string> subdirs;
   int r = from.list_subdirs(path, &subdirs);
   if (r < 0)
     return r;
@@ -108,7 +108,7 @@ int HashIndex::col_split_level(
     return r;
 
   set<string> to_move;
-  for (set<string>::iterator i = subdirs.begin();
+  for (vector<string>::iterator i = subdirs.begin();
        i != subdirs.end();
        ++i) {
     uint32_t bits = 0;
@@ -442,7 +442,7 @@ int HashIndex::pre_split_folder(uint32_t pg_num, uint64_t expected_num_objs)
 int HashIndex::init_split_folder(vector<string> &path, uint32_t hash_level)
 {
   // Get the number of sub directories for the current path
-  set<string> subdirs;
+  vector<string> subdirs;
   int ret = list_subdirs(path, &subdirs);
   if (ret < 0)
     return ret;
@@ -457,7 +457,7 @@ int HashIndex::init_split_folder(vector<string> &path, uint32_t hash_level)
     return ret;
 
   // Do the same for subdirs
-  set<string>::const_iterator iter;
+  vector<string>::const_iterator iter;
   for (iter = subdirs.begin(); iter != subdirs.end(); ++iter) {
     path.push_back(*iter);
     ret = init_split_folder(path, hash_level + 1);
@@ -486,7 +486,7 @@ int HashIndex::recursive_create_path(vector<string>& path, int level)
 }
 
 int HashIndex::recursive_remove(const vector<string> &path) {
-  set<string> subdirs;
+  vector<string> subdirs;
   int r = list_subdirs(path, &subdirs);
   if (r < 0)
     return r;
@@ -497,7 +497,7 @@ int HashIndex::recursive_remove(const vector<string> &path) {
   if (!objects.empty())
     return -ENOTEMPTY;
   vector<string> subdir(path);
-  for (set<string>::iterator i = subdirs.begin();
+  for (vector<string>::iterator i = subdirs.begin();
        i != subdirs.end();
        ++i) {
     subdir.push_back(*i);
@@ -628,10 +628,12 @@ int HashIndex::complete_split(const vector<string> &path, subdir_info_s info) {
   r = list_objects(path, 0, 0, &objects);
   if (r < 0)
     return r;
-  set<string> subdirs;
-  r = list_subdirs(path, &subdirs);
+  vector<string> subdirs_vec;
+  r = list_subdirs(path, &subdirs_vec);
   if (r < 0)
     return r;
+  set<string> subdirs;
+  subdirs.insert(subdirs_vec.begin(), subdirs_vec.end());
   map<string, map<string, ghobject_t> > mapped;
   map<string, ghobject_t> moved;
   int num_moved = 0;
@@ -764,7 +766,7 @@ int HashIndex::get_path_contents_by_hash(const vector<string> &path,
 					 const ghobject_t *next_object,
 					 set<string> *hash_prefixes,
 					 set<pair<string, ghobject_t> > *objects) {
-  set<string> subdirs;
+  vector<string> subdirs_vec;
   map<string, ghobject_t> rev_objects;
   int r;
   string cur_prefix;
@@ -785,9 +787,11 @@ int HashIndex::get_path_contents_by_hash(const vector<string> &path,
     hash_prefixes->insert(hash_prefix);
     objects->insert(pair<string, ghobject_t>(hash_prefix, i->second));
   }
-  r = list_subdirs(path, &subdirs);
+  r = list_subdirs(path, &subdirs_vec);
   if (r < 0)
     return r;
+  set<string> subdirs;
+  subdirs.insert(subdirs_vec.begin(), subdirs_vec.end());
   for (set<string>::iterator i = subdirs.begin();
        i != subdirs.end();
        ++i) {
