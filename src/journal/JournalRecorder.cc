@@ -48,7 +48,8 @@ Future JournalRecorder::append(const std::string &tag,
   uint8_t splay_offset = tid % splay_width;
 
   ObjectRecorderPtr object_ptr = get_object(splay_offset);
-  FutureImplPtr future(new FutureImpl(tag, tid));
+  FutureImplPtr future(new FutureImpl(m_journal_metadata->get_finisher(),
+                                      tag, tid));
   future->init(m_prev_future);
   m_prev_future = future;
 
