@@ -451,7 +451,7 @@ int LFNIndex::list_objects(const vector<string> &to_list, int max_objs,
 }
 
 int LFNIndex::list_subdirs(const vector<string> &to_list,
-				  set<string> *out)
+			   vector<string> *out)
 {
   string to_list_path = get_full_path_subdir(to_list);
   DIR *dir = ::opendir(to_list_path.c_str());
@@ -468,7 +468,7 @@ int LFNIndex::list_subdirs(const vector<string> &to_list,
     string demangled_name;
     ghobject_t obj;
     if (lfn_is_subdir(short_name, &demangled_name)) {
-      out->insert(demangled_name);
+      out->push_back(demangled_name);
     }
   }
 
