@@ -70,11 +70,13 @@ Future JournalRecorder::append(const std::string &tag,
   return Future(future);
 }
 
-void JournalRecorder::flush() {
+void JournalRecorder::flush(Context *on_safe) {
   Mutex::Locker locker(m_lock);
+
+  C_Flush *ctx = new C_Flush(on_safe, m_object_ptrs.size());
   for (ObjectRecorderPtrs::iterator it = m_object_ptrs.begin();
        it != m_object_ptrs.end(); ++it) {
-    it->second->flush();
+    it->second->flush(ctx);
   }
 }
 
