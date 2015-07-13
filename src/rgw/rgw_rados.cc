@@ -73,12 +73,15 @@ static string avail_pools = ".pools.avail";
 
 static string zone_info_oid_prefix = "zone_info.";
 static string region_info_oid_prefix = "region_info.";
+static string zone_group_info_oid_prefix = "zonegroup_info.";
 static string realm_names_oid_prefix = "realms_names.";
 static string realm_info_oid_prefix = "realms.";
 static string default_region_info_oid = "default.region";
+static string default_zone_group_info_oid = "default.zonegroup";
 static string period_info_oid_prefix = "periods.";
 static string period_latest_epoch_info_oid = ".latest_epoch";
 static string region_map_oid = "region_map";
+static string zonegroup_map_oid = "zonegroup_map";
 static string log_lock_name = "rgw_log_lock";
 static string default_realm_info_oid = "default.realm";
 
@@ -125,6 +128,30 @@ int RGWZoneGroup::get_pool_name(CephContext *cct, string *pool_name)
   return 0;
 }
 
+const string& RGWZoneGroup::get_default_oid()
+{
+  if (old_region) {
+    if (cct->_conf->rgw_default_region_info_oid.empty()) {
+      return default_region_info_oid;
+    }
+    return cct->_conf->rgw_default_region_info_oid;
+  }
+
+  if (cct->_conf->rgw_default_zonegroup_info_oid.empty()) {
+    return default_zone_group_info_oid;
+  }
+
+  return cct->_conf->rgw_default_zonegroup_info_oid;
+}
+
+const string& RGWZoneGroup::get_info_oid_prefix()
+{
+  if (old_region) {
+    return region_info_oid_prefix;
+  }
+  return zone_group_info_oid_prefix;
+}
+
 int RGWZoneGroup::read_default(RGWDefaultZoneGroupInfo& default_info)
 {
   string pool_name;
@@ -134,11 +161,7 @@ int RGWZoneGroup::read_default(RGWDefaultZoneGroupInfo& default_info)
     return ret;
   }
 
-  string oid = cct->_conf->rgw_default_region_info_oid;
-  if (oid.empty()) {
-    oid = default_region_info_oid;
-  }
-
+  string oid = get_default_oid();
   rgw_bucket pool(pool_name.c_str());
   bufferlist bl;
   RGWObjectCtx obj_ctx(store);
@@ -166,10 +189,7 @@ int RGWZoneGroup::set_as_default()
   if (ret < 0)
     return ret;
 
-  string oid = cct->_conf->rgw_default_region_info_oid;
-  if (oid.empty()) {
-    oid = default_region_info_oid;
-  }
+  string oid = get_default_oid();
 
   rgw_bucket pool(pool_name.c_str());
   bufferlist bl;
@@ -194,7 +214,11 @@ int RGWZoneGroup::init(CephContext *_cct, RGWRados *_store, bool setup_zonegroup
   if (!setup_zonegroup)
     return 0;
 
-  string zonegroup_name = cct->_conf->rgw_region;
+  string zonegroup_name = cct->_conf->rgw_zonegroup;;
+  if (zonegroup_name.empty() && !cct->_conf->rgw_region.empty()) {
+    old_region = true;
+    zonegroup_name = cct->_conf->rgw_region;
+  }
 
   if (zonegroup_name.empty()) {
     RGWDefaultZoneGroupInfo default_info;
@@ -238,7 +262,7 @@ int RGWZoneGroup::read_info(const string& zonegroup_name)
 
   name = zonegroup_name;
 
-  string oid = region_info_oid_prefix + name;
+  string oid = get_info_oid_prefix() + name;
 
   RGWObjectCtx obj_ctx(store);
   ret = rgw_get_system_obj(store, obj_ctx, pool, oid, bl, NULL, NULL);
@@ -301,7 +325,7 @@ int RGWZoneGroup::store_info(bool exclusive)
 
   rgw_bucket pool(pool_name.c_str());
 
-  string oid = region_info_oid_prefix + name;
+  string oid = get_info_oid_prefix() + name;
 
   bufferlist bl;
   ::encode(*this, bl);
