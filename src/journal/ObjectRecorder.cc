@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "journal/ObjectRecorder.h"
+#include "journal/Future.h"
 #include "journal/Utils.h"
 #include "include/assert.h"
 #include "common/Timer.h"
@@ -59,13 +60,32 @@ bool ObjectRecorder::append(const AppendBuffers &append_buffers) {
   return (m_size + m_pending_bytes >= m_soft_max_size);
 }
 
-void ObjectRecorder::flush() {
+void ObjectRecorder::flush(Context *on_safe) {
   ldout(m_cct, 20) << __func__ << ": " << m_oid << dendl;
 
-  Mutex::Locker locker(m_lock);
-  if (flush_appends(true)) {
-    cancel_append_task();
+  Future future;
+  {
+    Mutex::Locker locker(m_lock);
+
+    // attach the flush to the most recent append
+    if (!m_append_buffers.empty()) {
+      future = Future(m_append_buffers.rbegin()->first);
+
+      flush_appends(true);
+      cancel_append_task();
+    } else if (!m_in_flight_appends.empty()) {
+      AppendBuffers &append_buffers = m_in_flight_appends.rbegin()->second;
+      assert(!append_buffers.empty());
+      future = Future(append_buffers.rbegin()->first);
+    }
   }
+
+  if (future.is_valid()) {
+    future.flush(on_safe);
+  } else {
+    on_safe->complete(0);
+  }
+
 }
 
 void ObjectRecorder::flush(const FutureImplPtr &future) {
