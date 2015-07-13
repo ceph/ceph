@@ -671,11 +671,18 @@ do_rgw()
 
     # Create Swift user
     echo "setting up user tester"
-    $CEPH_BIN/radosgw-admin user create --subuser=tester:testing --display-name=Tester-Subuser --key-type=swift --secret=asdf > /dev/null
+    $CEPH_BIN/radosgw-admin user create --subuser=test:tester --display-name=Tester-Subuser --key-type=swift --secret=testing > /dev/null
 
     echo ""
-    echo "  access key  $akey"
-    echo "  secret key  $skey"
+    echo "S3 User Info:"
+    echo "  access key:  $akey"
+    echo "  secret key:  $skey"
+    echo ""
+    echo "Swift User Info:"
+    echo "  account   : test"
+    echo "  user      : tester"
+    echo "  password  : testing"
+    echo ""
 }
 if [ "$start_rgw" -eq 1 ]; then
     do_rgw
