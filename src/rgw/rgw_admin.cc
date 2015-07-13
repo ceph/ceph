@@ -92,6 +92,12 @@ void _usage()
   cerr << "  region default             set default region\n";
   cerr << "  region-map get             show region-map\n";
   cerr << "  region-map set             set region-map (requires infile)\n";
+  cerr << "  zonegroup get              show zone group info\n";
+  cerr << "  zonegroups list            list all zone groups set on this cluster\n";
+  cerr << "  zonegroup set              set zone group info (requires infile)\n";
+  cerr << "  zonegroup default          set default zone group\n";
+  cerr << "  zonegroup-map get          show zonegroup-map\n";
+  cerr << "  zonegroup-map set          set zonegroup-map (requires infile)\n";
   cerr << "  zone get                   show zone cluster params\n";
   cerr << "  zone set                   set zone cluster params (requires infile)\n";
   cerr << "  zone list                  list all zones set on this cluster\n";
@@ -160,8 +166,9 @@ void _usage()
   cerr << "   --period=<id>             period id\n";
   cerr << "   --realm=<realm>     realm name\n";
   cerr << "   --realm-id=<realm id>     realm id\n";
-  cerr << "   --realm-new-name=<realm new name>     realm new name\n";
+  cerr << "   --realm-new-name=<realm new name> realm new name\n";
   cerr << "   --rgw-region=<region>     region in which radosgw is running\n";
+  cerr << "   --zonegroup=<zone>        zonegroup in which radosgw is running\n";
   cerr << "   --rgw-zone=<zone>         zone in which radosgw is running\n";
   cerr << "   --fix                     besides checking bucket index, will also fix it\n";
   cerr << "   --check-objects           bucket check: rebuilds bucket index according to\n";
@@ -338,7 +345,12 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
       strcmp(cmd, "temp") == 0 ||
       strcmp(cmd, "usage") == 0 ||
       strcmp(cmd, "user") == 0 ||
-      strcmp(cmd, "zone") == 0) {
+      strcmp(cmd, "zone") == 0 ||
+      strcmp(cmd, "zonegroup") == 0 ||
+      strcmp(cmd, "zonegroups") == 0 ||
+      strcmp(cmd, "zonegroup-map") == 0 ||
+      strcmp(cmd, "zonegroupmap") == 0 )
+{
     *need_more = true;
     return 0;
   }
@@ -485,6 +497,15 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
       return OPT_ZONEGROUP_SET;
     if (strcmp(cmd, "default") == 0)
       return OPT_ZONEGROUP_DEFAULT;
+  } else if (strcmp(prev_cmd, "zonegroup") == 0) {
+    if (strcmp(cmd, "get") == 0)
+      return OPT_ZONEGROUP_GET;
+    if (strcmp(cmd, "list") == 0)
+      return OPT_ZONEGROUP_LIST;
+    if (strcmp(cmd, "set") == 0)
+      return OPT_ZONEGROUP_SET;
+    if (strcmp(cmd, "default") == 0)
+      return OPT_ZONEGROUP_DEFAULT;
   } else if (strcmp(prev_cmd, "quota") == 0) {
     if (strcmp(cmd, "set") == 0)
       return OPT_QUOTA_SET;
@@ -497,6 +518,17 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
       return OPT_ZONEGROUP_LIST;
   } else if (strcmp(prev_cmd, "region-map") == 0 ||
              strcmp(prev_cmd, "regionmap") == 0) {
+    if (strcmp(cmd, "get") == 0)
+      return OPT_ZONEGROUPMAP_GET;
+    if (strcmp(cmd, "set") == 0)
+      return OPT_ZONEGROUPMAP_SET;
+    if (strcmp(cmd, "update") == 0)
+      return OPT_ZONEGROUPMAP_UPDATE;
+  } else if (strcmp(prev_cmd, "zonegroups") == 0) {
+    if (strcmp(cmd, "list") == 0)
+      return OPT_ZONEGROUP_LIST;
+  } else if (strcmp(prev_cmd, "zonegroup-map") == 0 ||
+             strcmp(prev_cmd, "zonegroupmap") == 0) {
     if (strcmp(cmd, "get") == 0)
       return OPT_ZONEGROUPMAP_GET;
     if (strcmp(cmd, "set") == 0)
@@ -1836,7 +1868,7 @@ int main(int argc, char **argv)
 	  return -ret;
 	}
 
-	encode_json("region", zonegroup, formatter);
+	encode_json("zonegroup", zonegroup, formatter);
 	formatter->flush(cout);
 	cout << std::endl;
       }
@@ -1861,9 +1893,9 @@ int main(int argc, char **argv)
 	if (ret < 0 && ret != -ENOENT) {
 	  cerr << "could not determine default zonegroup: " << cpp_strerror(-ret) << std::endl;
 	}
-	formatter->open_object_section("regions_list");
+	formatter->open_object_section("zonegroups_list");
 	encode_json("default_info", default_zonegroup, formatter);
-	encode_json("regions", zonegroups, formatter);
+	encode_json("zonegroups", zonegroups, formatter);
 	formatter->close_section();
 	formatter->flush(cout);
 	cout << std::endl;
@@ -1888,7 +1920,7 @@ int main(int argc, char **argv)
 	  return 1;
 	}
 
-	encode_json("region", zonegroup, formatter);
+	encode_json("zonegroup", zonegroup, formatter);
 	formatter->flush(cout);
       }
       break;
@@ -1916,7 +1948,7 @@ int main(int argc, char **argv)
 	  cerr << "failed to read zonegroup map: " << cpp_strerror(-ret) << std::endl;
 	  return -ret;
 	}
-	encode_json("region-map", zonegroupmap, formatter);
+	encode_json("zonegroup-map", zonegroupmap, formatter);
 	formatter->flush(cout);
       }
       break;
@@ -1934,7 +1966,7 @@ int main(int argc, char **argv)
 	  return 1;
 	}
 
-	encode_json("region-map", zonegroupmap, formatter);
+	encode_json("zonegroup-map", zonegroupmap, formatter);
 	formatter->flush(cout);
       }
       break;
@@ -1976,7 +2008,7 @@ int main(int argc, char **argv)
 	  return 1;
 	}
 
-	encode_json("region-map", zonegroupmap, formatter);
+	encode_json("zonegroup-map", zonegroupmap, formatter);
 	formatter->flush(cout);
       }
       break;
