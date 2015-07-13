@@ -46,7 +46,7 @@ public:
   }
 
   bool append(const AppendBuffers &append_buffers);
-  void flush();
+  void flush(Context *on_safe);
   void flush(const FutureImplPtr &future);
 
   void claim_append_buffers(AppendBuffers *append_buffers);

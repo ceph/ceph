@@ -5,6 +5,8 @@
 #define CEPH_JOURNAL_JOURNAL_RECORDER_H
 
 #include "include/int_types.h"
+#include "include/atomic.h"
+#include "include/Context.h"
 #include "include/rados/librados.hpp"
 #include "common/Mutex.h"
 #include "journal/Future.h"
@@ -27,7 +29,7 @@ public:
   ~JournalRecorder();
 
   Future append(const std::string &tag, const bufferlist &bl);
-  void flush();
+  void flush(Context *on_safe);
 
   ObjectRecorderPtr get_object(uint8_t splay_offset);
 
@@ -53,6 +55,28 @@ private:
 
     virtual void overflow(ObjectRecorder *object_recorder) {
       journal_recorder->handle_overflow(object_recorder);
+    }
+  };
+
+  struct C_Flush : public Context {
+    Context *on_finish;
+    atomic_t pending_flushes;
+    int ret_val;
+
+    C_Flush(Context *_on_finish, size_t _pending_flushes)
+      : on_finish(_on_finish), pending_flushes(_pending_flushes), ret_val(0) {
+    }
+
+    virtual void complete(int r) {
+      if (r < 0 && ret_val == 0) {
+        ret_val = r;
+      }
+      if (pending_flushes.dec() == 0) {
+        on_finish->complete(ret_val);
+        delete this;
+      }
+    }
+    virtual void finish(int r) {
     }
   };
 
