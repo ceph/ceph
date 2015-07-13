@@ -352,7 +352,6 @@ private:
   /// Get path contents by hash
   int get_path_contents_by_hash(
     const vector<string> &path,            /// [in] Path to list
-    const string *lower_bound,             /// [in] list > *lower_bound
     const ghobject_t *next_object,          /// [in] list > *next_object
     set<string> *hash_prefixes,            /// [out] prefixes in dir
     set<pair<string, ghobject_t> > *objects /// [out] objects
