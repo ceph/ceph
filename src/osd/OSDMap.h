@@ -260,7 +260,6 @@ private:
 
   friend class OSDMonitor;
   friend class PGMonitor;
-  friend class MDS;
 
  public:
   OSDMap() : epoch(0), 

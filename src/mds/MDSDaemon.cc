@@ -31,7 +31,7 @@
 
 #include "MDSMap.h"
 
-#include "MDS.h"
+#include "MDSDaemon.h"
 #include "Server.h"
 #include "Locker.h"
 #include "MDCache.h"
@@ -80,12 +80,12 @@
  */
 class C_VoidFn : public Context
 {
-  typedef void (MDS::*fn_ptr)();
+  typedef void (MDSDaemon::*fn_ptr)();
   protected:
-   MDS *mds;
+   MDSDaemon *mds;
    fn_ptr fn;
   public:
-  C_VoidFn(MDS *mds_, fn_ptr fn_)
+  C_VoidFn(MDSDaemon *mds_, fn_ptr fn_)
     : mds(mds_), fn(fn_)
   {
     assert(mds_);
@@ -99,9 +99,9 @@ class C_VoidFn : public Context
 };
 
 // cons/des
-MDS::MDS(const std::string &n, Messenger *m, MonClient *mc) : 
+MDSDaemon::MDSDaemon(const std::string &n, Messenger *m, MonClient *mc) : 
   Dispatcher(m->cct),
-  mds_lock("MDS::mds_lock"),
+  mds_lock("MDSDaemon::mds_lock"),
   stopping(false),
   timer(m->cct, mds_lock),
   beacon(m->cct, mc, n),
@@ -136,7 +136,7 @@ MDS::MDS(const std::string &n, Messenger *m, MonClient *mc) :
   objecter->unset_honor_osdmap_full();
 }
 
-MDS::~MDS() {
+MDSDaemon::~MDSDaemon() {
   Mutex::Locker lock(mds_lock);
 
   if (mds_rank) {delete mds_rank ; mds_rank = NULL; }
@@ -147,9 +147,9 @@ MDS::~MDS() {
 }
 
 class MDSSocketHook : public AdminSocketHook {
-  MDS *mds;
+  MDSDaemon *mds;
 public:
-  MDSSocketHook(MDS *m) : mds(m) {}
+  MDSSocketHook(MDSDaemon *m) : mds(m) {}
   bool call(std::string command, cmdmap_t& cmdmap, std::string format,
 	    bufferlist& out) {
     stringstream ss;
@@ -159,7 +159,7 @@ public:
   }
 };
 
-bool MDS::asok_command(string command, cmdmap_t& cmdmap, string format,
+bool MDSDaemon::asok_command(string command, cmdmap_t& cmdmap, string format,
 		    ostream& ss)
 {
   dout(1) << "asok_command: " << command << " (starting...)" << dendl;
@@ -207,7 +207,7 @@ bool MDS::asok_command(string command, cmdmap_t& cmdmap, string format,
   return handled;
 }
 
-void MDS::set_up_admin_socket()
+void MDSDaemon::set_up_admin_socket()
 {
   int r;
   AdminSocket *admin_socket = g_ceph_context->get_admin_socket();
@@ -302,7 +302,7 @@ void MDS::set_up_admin_socket()
   assert(r == 0);
 }
 
-void MDS::clean_up_admin_socket()
+void MDSDaemon::clean_up_admin_socket()
 {
   AdminSocket *admin_socket = g_ceph_context->get_admin_socket();
   admin_socket->unregister_command("status");
@@ -319,7 +319,7 @@ void MDS::clean_up_admin_socket()
   asok_hook = NULL;
 }
 
-const char** MDS::get_tracked_conf_keys() const
+const char** MDSDaemon::get_tracked_conf_keys() const
 {
   static const char* KEYS[] = {
     "mds_op_complaint_time", "mds_op_log_threshold",
@@ -334,7 +334,7 @@ const char** MDS::get_tracked_conf_keys() const
   return KEYS;
 }
 
-void MDS::handle_conf_change(const struct md_config_t *conf,
+void MDSDaemon::handle_conf_change(const struct md_config_t *conf,
 			     const std::set <std::string> &changed)
 {
   Mutex::Locker l(mds_lock);
@@ -364,7 +364,7 @@ void MDS::handle_conf_change(const struct md_config_t *conf,
 }
 
 
-int MDS::init(MDSMap::DaemonState wanted_state)
+int MDSDaemon::init(MDSMap::DaemonState wanted_state)
 {
   dout(10) << sizeof(MDSCacheObject) << "\tMDSCacheObject" << dendl;
   dout(10) << sizeof(CInode) << "\tCInode" << dendl;
@@ -500,7 +500,7 @@ int MDS::init(MDSMap::DaemonState wanted_state)
   return 0;
 }
 
-void MDS::reset_tick()
+void MDSDaemon::reset_tick()
 {
   // cancel old
   if (tick_event) timer.cancel_event(tick_event);
@@ -510,7 +510,7 @@ void MDS::reset_tick()
   timer.add_event_after(g_conf->mds_tick_interval, tick_event);
 }
 
-void MDS::tick()
+void MDSDaemon::tick()
 {
   tick_event = 0;
 
@@ -532,7 +532,7 @@ void MDS::tick()
 }
 
 /* This function DOES put the passed message before returning*/
-void MDS::handle_command(MCommand *m)
+void MDSDaemon::handle_command(MCommand *m)
 {
   Session *session = static_cast<Session *>(m->get_connection()->get_priv());
   assert(session != NULL);
@@ -613,14 +613,14 @@ COMMAND("heap " \
 //  *if* it makes sense to do so (or should these be admin socket things?)
 
 /* This function DOES put the passed message before returning*/
-void MDS::handle_command(MMonCommand *m)
+void MDSDaemon::handle_command(MMonCommand *m)
 {
   bufferlist outbl;
   _handle_command_legacy(m->cmd);
   m->put();
 }
 
-int MDS::_handle_command(
+int MDSDaemon::_handle_command(
     const cmdmap_t &cmdmap,
     bufferlist const &inbl,
     bufferlist *outbl,
@@ -632,10 +632,10 @@ int MDS::_handle_command(
 
   class SuicideLater : public Context
   {
-    MDS *mds;
+    MDSDaemon *mds;
 
     public:
-    SuicideLater(MDS *mds_) : mds(mds_) {}
+    SuicideLater(MDSDaemon *mds_) : mds(mds_) {}
     void finish(int r) {
       // Wait a little to improve chances of caller getting
       // our response before seeing us disappear from mdsmap
@@ -648,11 +648,11 @@ int MDS::_handle_command(
 
   class RespawnLater : public Context
   {
-    MDS *mds;
+    MDSDaemon *mds;
 
     public:
 
-    RespawnLater(MDS *mds_) : mds(mds_) {}
+    RespawnLater(MDSDaemon *mds_) : mds(mds_) {}
     void finish(int r) {
       // Wait a little to improve chances of caller getting
       // our response before seeing us disappear from mdsmap
@@ -754,7 +754,7 @@ out:
 /**
  * Legacy "mds tell", takes a simple array of args
  */
-int MDS::_handle_command_legacy(std::vector<std::string> args)
+int MDSDaemon::_handle_command_legacy(std::vector<std::string> args)
 {
   dout(10) << "handle_command args: " << args << dendl;
   if (args[0] == "injectargs") {
@@ -802,7 +802,7 @@ int MDS::_handle_command_legacy(std::vector<std::string> args)
 
 /* This function deletes the passed message before returning. */
 
-void MDS::handle_mds_map(MMDSMap *m)
+void MDSDaemon::handle_mds_map(MMDSMap *m)
 {
   version_t epoch = m->get_epoch();
   dout(5) << "handle_mds_map epoch " << epoch << " from " << m->get_source() << dendl;
@@ -916,8 +916,8 @@ void MDS::handle_mds_map(MMDSMap *m)
     if (mds_rank == NULL) {
       mds_rank = new MDSRankDispatcher(whoami, incarnation, mds_lock, clog,
           timer, beacon, mdsmap, messenger, monc, objecter,
-          new C_VoidFn(this, &MDS::respawn),
-          new C_VoidFn(this, &MDS::suicide));
+          new C_VoidFn(this, &MDSDaemon::respawn),
+          new C_VoidFn(this, &MDSDaemon::suicide));
       dout(10) <<  __func__ << ": initializing MDS rank "
                << mds_rank->get_nodeid() << dendl;
       mds_rank->init();
@@ -935,7 +935,7 @@ out:
   delete oldmap;
 }
 
-void MDS::_handle_mds_map(MDSMap *oldmap)
+void MDSDaemon::_handle_mds_map(MDSMap *oldmap)
 {
   MDSMap::DaemonState new_state = mdsmap->get_state_gid(mds_gid_t(monc->get_global_id()));
 
@@ -965,7 +965,7 @@ void MDS::_handle_mds_map(MDSMap *oldmap)
   }
 }
 
-void MDS::handle_signal(int signum)
+void MDSDaemon::handle_signal(int signum)
 {
   assert(signum == SIGINT || signum == SIGTERM);
   derr << "*** got signal " << sys_siglist[signum] << " ***" << dendl;
@@ -978,7 +978,7 @@ void MDS::handle_signal(int signum)
   }
 }
 
-void MDS::suicide()
+void MDSDaemon::suicide()
 {
   assert(mds_lock.is_locked());
 
@@ -999,7 +999,7 @@ void MDS::suicide()
   }
 }
 
-void MDS::respawn()
+void MDSDaemon::respawn()
 {
   dout(1) << "respawn" << dendl;
 
@@ -1044,7 +1044,7 @@ void MDS::respawn()
 
 
 
-bool MDS::ms_dispatch(Message *m)
+bool MDSDaemon::ms_dispatch(Message *m)
 {
   Mutex::Locker l(mds_lock);
   if (stopping) {
@@ -1072,9 +1072,9 @@ bool MDS::ms_dispatch(Message *m)
   }
 }
 
-bool MDS::ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer, bool force_new)
+bool MDSDaemon::ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer, bool force_new)
 {
-  dout(10) << "MDS::ms_get_authorizer type=" << ceph_entity_type_name(dest_type) << dendl;
+  dout(10) << "MDSDaemon::ms_get_authorizer type=" << ceph_entity_type_name(dest_type) << dendl;
 
   /* monitor authorization is being handled on different layer */
   if (dest_type == CEPH_ENTITY_TYPE_MON)
@@ -1093,7 +1093,7 @@ bool MDS::ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer, bool for
 /*
  * high priority messages we always process
  */
-bool MDS::handle_core_message(Message *m)
+bool MDSDaemon::handle_core_message(Message *m)
 {
   switch (m->get_type()) {
   case CEPH_MSG_MON_MAP:
@@ -1131,11 +1131,11 @@ bool MDS::handle_core_message(Message *m)
   return true;
 }
 
-void MDS::ms_handle_connect(Connection *con) 
+void MDSDaemon::ms_handle_connect(Connection *con) 
 {
 }
 
-bool MDS::ms_handle_reset(Connection *con) 
+bool MDSDaemon::ms_handle_reset(Connection *con) 
 {
   if (con->get_peer_type() != CEPH_ENTITY_TYPE_CLIENT)
     return false;
@@ -1163,7 +1163,7 @@ bool MDS::ms_handle_reset(Connection *con)
 }
 
 
-void MDS::ms_handle_remote_reset(Connection *con) 
+void MDSDaemon::ms_handle_remote_reset(Connection *con) 
 {
   if (con->get_peer_type() != CEPH_ENTITY_TYPE_CLIENT)
     return;
@@ -1188,7 +1188,7 @@ void MDS::ms_handle_remote_reset(Connection *con)
   }
 }
 
-bool MDS::ms_verify_authorizer(Connection *con, int peer_type,
+bool MDSDaemon::ms_verify_authorizer(Connection *con, int peer_type,
 			       int protocol, bufferlist& authorizer_data, bufferlist& authorizer_reply,
 			       bool& is_valid, CryptoKey& session_key)
 {
@@ -1292,7 +1292,7 @@ bool MDS::ms_verify_authorizer(Connection *con, int peer_type,
 }
 
 
-void MDS::ms_handle_accept(Connection *con)
+void MDSDaemon::ms_handle_accept(Connection *con)
 {
   Mutex::Locker l(mds_lock);
   if (stopping) {

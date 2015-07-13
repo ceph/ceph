@@ -72,7 +72,7 @@ class MDSTableClient;
 
 class AuthAuthorizeHandlerRegistry;
 
-class MDS : public Dispatcher, public md_config_obs_t {
+class MDSDaemon : public Dispatcher, public md_config_obs_t {
  public:
   /* Global MDS lock: every time someone takes this, they must
    * also check the `stopping` flag.  If stopping is true, you
@@ -101,8 +101,8 @@ class MDS : public Dispatcher, public md_config_obs_t {
   MDSRankDispatcher *mds_rank;
 
  public:
-  MDS(const std::string &n, Messenger *m, MonClient *mc);
-  ~MDS();
+  MDSDaemon(const std::string &n, Messenger *m, MonClient *mc);
+  ~MDSDaemon();
   int orig_argc;
   const char **orig_argv;
 
@@ -120,9 +120,9 @@ class MDS : public Dispatcher, public md_config_obs_t {
   // tick and other timer fun
   class C_MDS_Tick : public Context {
     protected:
-      MDS *mds_daemon;
+      MDSDaemon *mds_daemon;
   public:
-    C_MDS_Tick(MDS *m) : mds_daemon(m) {}
+    C_MDS_Tick(MDSDaemon *m) : mds_daemon(m) {}
     void finish(int r) {
       assert(mds_daemon->mds_lock.is_locked_by_me());
 

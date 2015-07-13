@@ -1,6 +1,6 @@
 LIBMDS_SOURCES = \
 	mds/Capability.cc \
-	mds/MDS.cc \
+	mds/MDSDaemon.cc \
 	mds/MDSRank.cc \
 	mds/Beacon.cc \
 	mds/locks.c \
