@@ -322,6 +322,7 @@ int HashIndex::_lookup(const ghobject_t &oid,
 
 int HashIndex::_collection_list_partial(const ghobject_t &start,
 					const ghobject_t &end,
+					bool sort_bitwise,
 					int max_count,
 					vector<ghobject_t> *ls,
 					ghobject_t *next) {
@@ -331,7 +332,7 @@ int HashIndex::_collection_list_partial(const ghobject_t &start,
     next = &_next;
   *next = start;
   dout(20) << __func__ << " start:" << start << " end:" << end << "-" << max_count << " ls.size " << ls->size() << dendl;
-  return list_by_hash(path, end, max_count, next, ls);
+  return list_by_hash(path, end, sort_bitwise, max_count, next, ls);
 }
 
 int HashIndex::prep_delete() {
@@ -762,81 +763,106 @@ uint32_t HashIndex::hash_prefix_to_hash(string prefix) {
   return hash;
 }
 
-int HashIndex::get_path_contents_by_hash(const vector<string> &path,
-					 const ghobject_t *next_object,
-					 set<string> *hash_prefixes,
-					 set<pair<string, ghobject_t> > *objects) {
-  vector<string> subdirs_vec;
+int HashIndex::get_path_contents_by_hash_nibblewise(
+  const vector<string> &path,
+  const ghobject_t *next_object,
+  set<string> *hash_prefixes,
+  set<pair<string, ghobject_t>, CmpPairNibblewise > *objects)
+{
   map<string, ghobject_t> rev_objects;
   int r;
+  r = list_objects(path, 0, 0, &rev_objects);
+  if (r < 0)
+    return r;
+
+  for (map<string, ghobject_t>::iterator i = rev_objects.begin();
+       i != rev_objects.end();
+       ++i) {
+    string hash_prefix = get_path_str(i->second);
+    if (next_object && cmp_nibblewise(i->second, *next_object) < 0)
+      continue;
+    hash_prefixes->insert(hash_prefix);
+    objects->insert(pair<string, ghobject_t>(hash_prefix, i->second));
+  }
+
+  vector<string> subdirs;
+  r = list_subdirs(path, &subdirs);
+  if (r < 0)
+    return r;
+
+  // sort nibblewise (string sort of (reversed) hex digits)
+  std::sort(subdirs.begin(), subdirs.end());
+
   string cur_prefix;
   for (vector<string>::const_iterator i = path.begin();
        i != path.end();
        ++i) {
     cur_prefix.append(*i);
   }
-  r = list_objects(path, 0, 0, &rev_objects);
-  if (r < 0)
-    return r;
-  for (map<string, ghobject_t>::iterator i = rev_objects.begin();
-       i != rev_objects.end();
-       ++i) {
-    string hash_prefix = get_path_str(i->second);
-    if (next_object && i->second < *next_object)
-      continue;
-    hash_prefixes->insert(hash_prefix);
-    objects->insert(pair<string, ghobject_t>(hash_prefix, i->second));
-  }
-  r = list_subdirs(path, &subdirs_vec);
-  if (r < 0)
-    return r;
-  set<string> subdirs;
-  subdirs.insert(subdirs_vec.begin(), subdirs_vec.end());
-  for (set<string>::iterator i = subdirs.begin();
+  string next_object_string;
+  if (next_object)
+    next_object_string = get_path_str(*next_object);
+
+  for (vector<string>::iterator i = subdirs.begin();
        i != subdirs.end();
        ++i) {
     string candidate = cur_prefix + *i;
-    if (next_object &&
-        (next_object->is_max() ||
-	 candidate < get_path_str(*next_object).substr(0, candidate.size())))
-      continue;
+    if (next_object) {
+      if (next_object->is_max())
+	continue;
+      if (candidate < next_object_string.substr(0, candidate.size()))
+	continue;
+    }
     hash_prefixes->insert(cur_prefix + *i);
   }
   return 0;
 }
 
 int HashIndex::list_by_hash(const vector<string> &path,
-			    ghobject_t end,
+			    const ghobject_t &end,
+			    bool sort_bitwise,
 			    int max_count,
 			    ghobject_t *next,
-			    vector<ghobject_t> *out) {
+			    vector<ghobject_t> *out)
+{
   assert(out);
+  assert(!sort_bitwise);
+  return list_by_hash_nibblewise(path, end, max_count, next, out);
+}
+
+int HashIndex::list_by_hash_nibblewise(
+  const vector<string> &path,
+  const ghobject_t& end,
+  int max_count,
+  ghobject_t *next,
+  vector<ghobject_t> *out)
+{
   vector<string> next_path = path;
   next_path.push_back("");
   set<string> hash_prefixes;
-  set<pair<string, ghobject_t> > objects;
-  int r = get_path_contents_by_hash(path,
-				    next,
-				    &hash_prefixes,
-				    &objects);
+  set<pair<string, ghobject_t>, CmpPairNibblewise > objects;
+  int r = get_path_contents_by_hash_nibblewise(path,
+					       next,
+					       &hash_prefixes,
+					       &objects);
   if (r < 0)
     return r;
-  dout(20) << " prefixes " << hash_prefixes << dendl;
   for (set<string>::iterator i = hash_prefixes.begin();
        i != hash_prefixes.end();
        ++i) {
-    set<pair<string, ghobject_t> >::iterator j = objects.lower_bound(
-      make_pair(*i, ghobject_t()));
+    dout(20) << __func__ << " prefix " << *i << dendl;
+    set<pair<string, ghobject_t>, CmpPairNibblewise >::iterator j =
+      objects.lower_bound(make_pair(*i, ghobject_t()));
     if (j == objects.end() || j->first != *i) {
       *(next_path.rbegin()) = *(i->rbegin());
       ghobject_t next_recurse;
       if (next)
 	next_recurse = *next;
-      r = list_by_hash(next_path,
-		       end,
-		       max_count,
-		       &next_recurse,
-		       out);
+      r = list_by_hash_nibblewise(next_path,
+				  end,
+				  max_count,
+				  &next_recurse,
+				  out);
 
       if (r < 0)
 	return r;
@@ -852,12 +878,12 @@ int HashIndex::list_by_hash(const vector<string> &path,
 	    *next = j->second;
 	  return 0;
 	}
-	if (j->second >= end) {
+	if (cmp_nibblewise(j->second, end) >= 0) {
 	  if (next)
 	    *next = ghobject_t::get_max();
 	  return 0;
 	}
-	if (!next || j->second >= *next) {
+	if (!next || cmp_nibblewise(j->second, *next) >= 0) {
 	  out->push_back(j->second);
 	}
 	++j;
