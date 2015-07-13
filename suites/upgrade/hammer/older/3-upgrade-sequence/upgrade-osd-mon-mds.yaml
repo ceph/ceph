@@ -2,20 +2,7 @@ upgrade-sequence:
    sequential:
    - install.upgrade:
       all:
-         branch: hammer
    - print: "**** done install.upgrade hammer"
-   - ceph.restart: [mon.a]
-   - sleep:
-       duration: 60
-   - ceph.restart: [mon.b]
-   - sleep:
-       duration: 60
-   - ceph.restart: [mon.c]
-   - sleep:
-       duration: 60
-   - ceph.restart: [mds.a]
-   - sleep:
-       duration: 60
    - ceph.restart: [osd.0]
    - sleep:
        duration: 30
@@ -33,5 +20,17 @@ upgrade-sequence:
        duration: 30
    - ceph.restart: [osd.5]
    - sleep:
-       duration: 30
+       duration: 60
+   - ceph.restart: [mon.a]
+   - sleep:
+       duration: 60
+   - ceph.restart: [mon.b]
+   - sleep:
+       duration: 60
+   - ceph.restart: [mon.c]
+   - sleep:
+       duration: 60
+   - ceph.restart: [mds.a]
+   - sleep:
+       duration: 60
    - print: "**** done ceph.restart all"
