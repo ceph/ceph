@@ -16,7 +16,12 @@ class Payload {
 public:
   typedef boost::intrusive_ptr<PayloadImpl> PayloadImplPtr;
 
+  Payload() {}
   Payload(const PayloadImplPtr &payload) : m_payload_impl(payload) {}
+
+  inline bool is_valid() const {
+    return m_payload_impl;
+  }
 
   const bufferlist &get_data() const;
 
