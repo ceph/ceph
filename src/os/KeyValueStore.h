@@ -617,7 +617,7 @@ class KeyValueStore : public ObjectStore,
   bool collection_exists(coll_t c);
   bool collection_empty(coll_t c);
   int collection_list(coll_t c, ghobject_t start, ghobject_t end,
-		      int max,
+		      bool sort_bitwise, int max,
 		      vector<ghobject_t> *ls, ghobject_t *next);
   int collection_version_current(coll_t c, uint32_t *version);
 
