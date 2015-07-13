@@ -19,7 +19,7 @@
 #include "MDSContext.h"
 #include "msg/Messenger.h"
 
-#include "MDS.h"
+#include "MDSRank.h"
 #include "MDLog.h"
 #include "LogSegment.h"
 

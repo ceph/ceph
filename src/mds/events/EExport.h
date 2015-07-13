@@ -18,7 +18,7 @@
 #include "common/config.h"
 #include "include/types.h"
 
-#include "../MDS.h"
+#include "../MDSRank.h"
 
 #include "EMetaBlob.h"
 #include "../LogEvent.h"
