@@ -47,6 +47,11 @@ public:
 };
 
 
+RecoveryQueue::RecoveryQueue(MDS *mds_)
+  : mds(mds_), logger(NULL), filer(mds_->objecter, &mds_->finisher)
+{}
+
+
 /**
  * Progress the queue.  Call this after enqueuing something or on
  * completion of something.
@@ -93,7 +98,7 @@ void RecoveryQueue::_start(CInode *in)
     file_recovering.insert(in);
 
     C_MDC_Recover *fin = new C_MDC_Recover(this, in);
-    mds->filer->probe(in->inode.ino, &in->inode.layout, in->last,
+    filer.probe(in->inode.ino, &in->inode.layout, in->last,
 		      pi->get_max_size(), &fin->size, &fin->mtime, false,
 		      0, fin);
   } else {

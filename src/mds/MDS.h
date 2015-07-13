@@ -174,7 +174,6 @@ class MDS : public Dispatcher, public md_config_obs_t {
   MonClient    *monc;
   MDSMap       *mdsmap;
   Objecter     *objecter;
-  Filer        *filer;       // for reading/writing to/from osds
   LogClient    log_client;
   LogChannelRef clog;
 
@@ -445,6 +444,7 @@ private:
 
   void reopen_log();
 
+ protected:
   void resolve_start();
   void resolve_done();
   void reconnect_start();
@@ -458,6 +458,7 @@ private:
   void active_start();
   void stopping_start();
   void stopping_done();
+ public:
 
   void handle_mds_recovery(mds_rank_t who);
   void handle_mds_failure(mds_rank_t who);
