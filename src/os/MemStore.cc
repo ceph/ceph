@@ -422,9 +422,11 @@ bool MemStore::collection_empty(coll_t cid)
 }
 
 int MemStore::collection_list(coll_t cid, ghobject_t start, ghobject_t end,
-			      int max,
+			      bool sort_bitwise, int max,
 			      vector<ghobject_t> *ls, ghobject_t *next)
 {
+  if (!sort_bitwise)
+    return -EOPNOTSUPP;
   CollectionRef c = get_collection(cid);
   if (!c)
     return -ENOENT;
