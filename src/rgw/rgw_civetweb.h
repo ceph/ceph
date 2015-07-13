@@ -24,6 +24,7 @@ class RGWMongoose : public RGWClientIO
   bool sent_header;
   bool has_content_length;
   bool explicit_keepalive;
+  bool explicit_conn_close;
 
 public:
   void init_env(CephContext *cct);
