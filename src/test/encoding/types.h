@@ -236,7 +236,7 @@ TYPE(librbd::WatchNotify::ResponseMessage)
 TYPE(RGWObjManifestPart)
 TYPE(RGWObjManifest)
 TYPE(RGWOLHInfo)
-TYPE(RGWRegion)
+TYPE(RGWZoneGroup)
 TYPE(RGWZone)
 TYPE(RGWZoneParams)     
    

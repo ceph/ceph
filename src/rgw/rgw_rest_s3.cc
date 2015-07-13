@@ -393,8 +393,8 @@ void RGWGetBucketLocation_ObjStore_S3::send_response()
   end_header(s, this);
   dump_start(s);
 
-  string location_constraint(s->bucket_info.region);
-  if (s->bucket_info.region == "default")
+  string location_constraint(s->bucket_info.zonegroup);
+  if (s->bucket_info.zonegroup == "default")
     location_constraint.clear();
 
   s->formatter->dump_format_ns("LocationConstraint",
@@ -562,7 +562,7 @@ public:
   RGWCreateBucketParser() {}
   ~RGWCreateBucketParser() {}
 
-  bool get_location_constraint(string& region) {
+  bool get_location_constraint(string& zone_group) {
     XMLObj *config = find_first("CreateBucketConfiguration");
     if (!config)
       return false;
@@ -571,7 +571,7 @@ public:
     if (!constraint)
       return false;
 
-    region = constraint->get_data();
+    zone_group = constraint->get_data();
 
     return true;
   }
@@ -1464,7 +1464,7 @@ int RGWCopyObj_ObjStore_S3::get_params()
       op_id = s->info.args.get(RGW_SYS_PARAM_PREFIX "op-id");
 
       if (client_id.empty() || op_id.empty()) {
-        ldout(s->cct, 0) << RGW_SYS_PARAM_PREFIX "client-id or " RGW_SYS_PARAM_PREFIX "op-id were not provided, required for intra-region copy" << dendl;
+        ldout(s->cct, 0) << RGW_SYS_PARAM_PREFIX "client-id or " RGW_SYS_PARAM_PREFIX "op-id were not provided, required for intra-zone_group copy" << dendl;
         return -EINVAL;
       }
     }
@@ -1477,7 +1477,7 @@ int RGWCopyObj_ObjStore_S3::get_params()
     } else if (strcasecmp(md_directive, "REPLACE") == 0) {
       attrs_mod = RGWRados::ATTRSMOD_REPLACE;
     } else if (!source_zone.empty()) {
-      attrs_mod = RGWRados::ATTRSMOD_NONE; // default for intra-region copy
+      attrs_mod = RGWRados::ATTRSMOD_NONE; // default for intra-zone_group copy
     } else {
       ldout(s->cct, 0) << "invalid metadata directive" << dendl;
       return -EINVAL;

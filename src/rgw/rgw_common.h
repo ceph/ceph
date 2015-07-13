@@ -771,7 +771,7 @@ struct RGWBucketInfo
   rgw_bucket bucket;
   string owner;
   uint32_t flags;
-  string region;
+  string zonegroup;
   time_t creation_time;
   string placement_rule;
   bool has_instance_obj;
@@ -796,7 +796,7 @@ struct RGWBucketInfo
      ::encode(bucket, bl);
      ::encode(owner, bl);
      ::encode(flags, bl);
-     ::encode(region, bl);
+     ::encode(zonegroup, bl);
      uint64_t ct = (uint64_t)creation_time;
      ::encode(ct, bl);
      ::encode(placement_rule, bl);
@@ -814,7 +814,7 @@ struct RGWBucketInfo
      if (struct_v >= 3)
        ::decode(flags, bl);
      if (struct_v >= 5)
-       ::decode(region, bl);
+       ::decode(zonegroup, bl);
      if (struct_v >= 6) {
        uint64_t ct;
        ::decode(ct, bl);
@@ -1030,7 +1030,7 @@ struct req_state {
    ACLOwner bucket_owner;
    ACLOwner owner;
 
-   string region_endpoint;
+   string zonegroup_endpoint;
    string bucket_instance_id;
 
    RGWBucketInfo bucket_info;

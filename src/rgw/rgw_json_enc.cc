@@ -545,7 +545,7 @@ void RGWBucketInfo::dump(Formatter *f) const
   encode_json("creation_time", creation_time, f);
   encode_json("owner", owner, f);
   encode_json("flags", flags, f);
-  encode_json("region", region, f);
+  encode_json("region", zonegroup, f);
   encode_json("placement_rule", placement_rule, f);
   encode_json("has_instance_obj", has_instance_obj, f);
   encode_json("quota", quota, f);
@@ -558,7 +558,7 @@ void RGWBucketInfo::decode_json(JSONObj *obj) {
   JSONDecoder::decode_json("creation_time", creation_time, obj);
   JSONDecoder::decode_json("owner", owner, obj);
   JSONDecoder::decode_json("flags", flags, obj);
-  JSONDecoder::decode_json("region", region, obj);
+  JSONDecoder::decode_json("region", zonegroup, obj);
   JSONDecoder::decode_json("placement_rule", placement_rule, obj);
   JSONDecoder::decode_json("has_instance_obj", has_instance_obj, obj);
   JSONDecoder::decode_json("quota", quota, obj);
@@ -743,19 +743,19 @@ void RGWZone::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("bucket_index_max_shards", bucket_index_max_shards, obj);
 }
 
-void RGWRegionPlacementTarget::dump(Formatter *f) const
+void RGWZoneGroupPlacementTarget::dump(Formatter *f) const
 {
   encode_json("name", name, f);
   encode_json("tags", tags, f);
 }
 
-void RGWRegionPlacementTarget::decode_json(JSONObj *obj)
+void RGWZoneGroupPlacementTarget::decode_json(JSONObj *obj)
 {
   JSONDecoder::decode_json("name", name, obj);
   JSONDecoder::decode_json("tags", tags, obj);
 }
 
-void RGWRegion::dump(Formatter *f) const
+void RGWZoneGroup::dump(Formatter *f) const
 {
   encode_json("name", name, f);
   encode_json("api_name", api_name, f);
@@ -775,15 +775,15 @@ static void decode_zones(map<string, RGWZone>& zones, JSONObj *o)
   zones[z.name] = z;
 }
 
-static void decode_placement_targets(map<string, RGWRegionPlacementTarget>& targets, JSONObj *o)
+static void decode_placement_targets(map<string, RGWZoneGroupPlacementTarget>& targets, JSONObj *o)
 {
-  RGWRegionPlacementTarget t;
+  RGWZoneGroupPlacementTarget t;
   t.decode_json(o);
   targets[t.name] = t;
 }
 
 
-void RGWRegion::decode_json(JSONObj *obj)
+void RGWZoneGroup::decode_json(JSONObj *obj)
 {
   JSONDecoder::decode_json("name", name, obj);
   JSONDecoder::decode_json("api_name", api_name, obj);
@@ -797,18 +797,18 @@ void RGWRegion::decode_json(JSONObj *obj)
 }
 
 
-void RGWRegionMap::dump(Formatter *f) const
+void RGWZoneGroupMap::dump(Formatter *f) const
 {
-  encode_json("regions", regions, f);
-  encode_json("master_region", master_region, f);
+  encode_json("regions", zonegroups, f);
+  encode_json("master_region", master_zonegroup, f);
   encode_json("bucket_quota", bucket_quota, f);
   encode_json("user_quota", user_quota, f);
 }
 
-void RGWRegionMap::decode_json(JSONObj *obj)
+void RGWZoneGroupMap::decode_json(JSONObj *obj)
 {
-  JSONDecoder::decode_json("regions", regions, obj);
-  JSONDecoder::decode_json("master_region", master_region, obj);
+  JSONDecoder::decode_json("regions", zonegroups, obj);
+  JSONDecoder::decode_json("master_region", master_zonegroup, obj);
   JSONDecoder::decode_json("user_quota", user_quota, obj);
 }
 
@@ -844,9 +844,9 @@ void RGWRealm::dump(Formatter *f) const
   encode_json_map("zonegroups", zonegroups, f);
 }
 
-static void decode_zonegroups(map<string, RGWRegion>& zonegroups, JSONObj *o)
+static void decode_zonegroups(map<string, RGWZoneGroup>& zonegroups, JSONObj *o)
 {
-  RGWRegion zg;
+  RGWZoneGroup zg;
   zg.decode_json(o);
   zonegroups[zg.name] = zg;
 }

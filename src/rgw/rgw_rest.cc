@@ -164,7 +164,7 @@ string camelcase_dash_http_attr(const string& orig)
 /* avoid duplicate hostnames in hostnames list */
 static set<string> hostnames_set;
 
-void rgw_rest_init(CephContext *cct, RGWRegion& region)
+void rgw_rest_init(CephContext *cct, RGWZoneGroup& zone_group)
 {
   for (struct rgw_http_attr *attr = rgw_to_http_attr_list; attr->rgw_attr; attr++) {
     rgw_to_http_attrs[attr->rgw_attr] = attr->http_attr;
@@ -197,7 +197,7 @@ void rgw_rest_init(CephContext *cct, RGWRegion& region)
   if (!cct->_conf->rgw_dns_name.empty()) {
     hostnames_set.insert(cct->_conf->rgw_dns_name);
   }
-  hostnames_set.insert(region.hostnames.begin(),  region.hostnames.end());
+  hostnames_set.insert(zone_group.hostnames.begin(),  zone_group.hostnames.end());
   /* TODO: We should have a sanity check that no hostname matches the end of
    * any other hostname, otherwise we will get ambigious results from
    * rgw_find_host_in_domains.
@@ -588,8 +588,8 @@ void abort_early(struct req_state *s, RGWOp *op, int err_no)
   set_req_state_err(s, err_no);
   dump_errno(s);
   dump_bucket_from_state(s);
-  if (err_no == -ERR_PERMANENT_REDIRECT && !s->region_endpoint.empty()) {
-    string dest_uri = s->region_endpoint;
+  if (err_no == -ERR_PERMANENT_REDIRECT && !s->zonegroup_endpoint.empty()) {
+    string dest_uri = s->zonegroup_endpoint;
     /*
      * reqest_uri is always start with slash, so we need to remove
      * the unnecessary slash at the end of dest_uri.

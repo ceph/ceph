@@ -41,7 +41,7 @@ class RGWRESTConn
   CephContext *cct;
   map<int, string> endpoints;
   RGWAccessKey key;
-  string region;
+  string zone_group;
   atomic_t counter;
 
 public:
@@ -49,8 +49,8 @@ public:
   RGWRESTConn(CephContext *_cct, RGWRados *store, list<string>& endpoints);
   int get_url(string& endpoint);
   string get_url();
-  const string& get_region() {
-    return region;
+  const string& get_zonegroup() {
+    return zone_group;
   }
   RGWAccessKey& get_key() {
     return key;

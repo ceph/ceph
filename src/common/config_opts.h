@@ -1061,8 +1061,10 @@ OPTION(rgw_num_rados_handles, OPT_U32, 1)
 OPTION(rgw_zone, OPT_STR, "") // zone name
 OPTION(rgw_zone_root_pool, OPT_STR, ".rgw.root")    // pool where zone specific info is stored
 OPTION(rgw_region, OPT_STR, "") // region name
-OPTION(rgw_region_root_pool, OPT_STR, ".rgw.root")  // pool where all region info is stored
 OPTION(rgw_default_region_info_oid, OPT_STR, "default.region")  // oid where default region info is stored
+OPTION(rgw_zonegroup, OPT_STR, "") // zone group name
+OPTION(rgw_zonegroup_root_pool, OPT_STR, ".rgw.root")  // pool where all zone group info is stored
+OPTION(rgw_default_zonegroup_info_oid, OPT_STR, "default.zonegroup")  // oid where default zone group info is stored
 OPTION(rgw_realm, OPT_STR, "") // realm name
 OPTION(rgw_realm_root_pool, OPT_STR, ".rgw.root")  // pool where all realm info is stored
 OPTION(rgw_default_realm_info_oid, OPT_STR, "default.realm")  // oid where default realm info is stored
