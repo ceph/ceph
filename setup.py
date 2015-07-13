@@ -56,7 +56,6 @@ setup(
                       'ndg-httpsclient',
                       'pyasn1',
                       ],
-    tests_require=['nose >=1.0.0', 'fudge >=1.0.3'],
 
 
     # to find the code associated with entry point
