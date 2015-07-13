@@ -4484,7 +4484,8 @@ int FileStore::_collection_remove_recursive(const coll_t &cid,
   vector<ghobject_t> objects;
   ghobject_t max;
   while (!max.is_max()) {
-    r = collection_list(cid, max, ghobject_t::get_max(), 300, &objects, &max);
+    r = collection_list(cid, max, ghobject_t::get_max(), true,
+			300, &objects, &max);
     if (r < 0)
       return r;
     for (vector<ghobject_t>::iterator i = objects.begin();
@@ -4631,7 +4632,8 @@ bool FileStore::collection_empty(coll_t c)
 
   vector<ghobject_t> ls;
   collection_list_handle_t handle;
-  r = index->collection_list_partial(ghobject_t(), ghobject_t::get_max(), 1, &ls, NULL);
+  r = index->collection_list_partial(ghobject_t(), ghobject_t::get_max(), true,
+				     1, &ls, NULL);
   if (r < 0) {
     assert(!m_filestore_fail_eio || r != -EIO);
     return false;
@@ -5302,6 +5304,7 @@ int FileStore::_split_collection(coll_t cid,
       collection_list(
 	cid,
 	next, ghobject_t::get_max(),
+	true,
 	get_ideal_list_max(),
 	&objects,
 	&next);
@@ -5321,6 +5324,7 @@ int FileStore::_split_collection(coll_t cid,
       collection_list(
 	dest,
 	next, ghobject_t::get_max(),
+	true,
 	get_ideal_list_max(),
 	&objects,
 	&next);
