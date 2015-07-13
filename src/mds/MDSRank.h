@@ -102,7 +102,6 @@ class SnapServer;
 class SnapClient;
 class MDSTableServer;
 class MDSTableClient;
-class MDS;
 class Messenger;
 class Objecter;
 class MonClient;

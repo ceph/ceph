@@ -19,7 +19,7 @@
 #include "messages/MMDSMap.h"
 
 #include "MDSMap.h"
-#include "MDS.h"
+//#include "MDS.h"
 #include "mds_table_types.h"
 #include "SnapClient.h"
 #include "SnapServer.h"
