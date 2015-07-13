@@ -373,8 +373,8 @@ static int rgw_build_bucket_policies(RGWRados *store, struct req_state *s)
     ret = store->get_bucket_info(obj_ctx,
         s->src_tenant_name, s->src_bucket_name, source_info, NULL);
     if (ret == 0) {
-      string& region = source_info.region;
-      s->local_source = store->region.equals(region);
+      string& zonegroup = source_info.zonegroup;
+      s->local_source = store->zonegroup.equals(zonegroup);
     }
   }
 
@@ -406,17 +406,17 @@ static int rgw_build_bucket_policies(RGWRados *store, struct req_state *s)
 
     s->bucket_owner = s->bucket_acl->get_owner();
 
-    string& region = s->bucket_info.region;
-    map<string, RGWRegion>::iterator dest_region = store->region_map.regions.find(region);
-    if (dest_region != store->region_map.regions.end() && !dest_region->second.endpoints.empty()) {
-      s->region_endpoint = dest_region->second.endpoints.front();
+    string& zonegroup = s->bucket_info.zonegroup;
+    map<string, RGWZoneGroup>::iterator dest_zonegroup = store->zonegroup_map.zonegroups.find(zonegroup);
+    if (dest_zonegroup != store->zonegroup_map.zonegroups.end() && !dest_zonegroup->second.endpoints.empty()) {
+      s->zonegroup_endpoint = dest_zonegroup->second.endpoints.front();
     }
-    if (s->bucket_exists && !store->region.equals(region)) {
-      ldout(s->cct, 0) << "NOTICE: request for data in a different region (" << region << " != " << store->region.name << ")" << dendl;
+    if (s->bucket_exists && !store->zonegroup.equals(zonegroup)) {
+      ldout(s->cct, 0) << "NOTICE: request for data in a different zonegroup (" << zonegroup << " != " << store->zonegroup.name << ")" << dendl;
       /* we now need to make sure that the operation actually requires copy source, that is
        * it's a copy operation
        */
-      if (store->region.is_master && s->op == OP_DELETE && s->system_request) {
+      if (store->zonegroup.is_master && s->op == OP_DELETE && s->system_request) {
         /*If the operation is delete and if this is the master, don't redirect*/
       } else if (!s->local_source ||
           (s->op != OP_PUT && s->op != OP_COPY) ||
@@ -529,13 +529,13 @@ int RGWOp::init_quota()
   } else if (uinfo->bucket_quota.enabled) {
     bucket_quota = uinfo->bucket_quota;
   } else {
-    bucket_quota = store->region_map.bucket_quota;
+    bucket_quota = store->zonegroup_map.bucket_quota;
   }
 
   if (uinfo->user_quota.enabled) {
     user_quota = uinfo->user_quota;
   } else {
-    user_quota = store->region_map.user_quota;
+    user_quota = store->zonegroup_map.user_quota;
   }
 
   return 0;
@@ -1675,7 +1675,7 @@ static int forward_request_to_master(struct req_state *s, obj_version *objv, RGW
     ldout(s->cct, 0) << "rest connection is invalid" << dendl;
     return -EINVAL;
   }
-  ldout(s->cct, 0) << "sending create_bucket request to master region" << dendl;
+  ldout(s->cct, 0) << "sending create_bucket request to master zonegroup" << dendl;
   bufferlist response;
   string uid_str = s->user.user_id.to_str();
 #define MAX_REST_RESPONSE (128 * 1024) // we expect a very small response
@@ -1685,7 +1685,7 @@ static int forward_request_to_master(struct req_state *s, obj_version *objv, RGW
 
   ldout(s->cct, 20) << "response: " << response.c_str() << dendl;
   if (!jp->parse(response.c_str(), response.length())) {
-    ldout(s->cct, 0) << "failed parsing response from master region" << dendl;
+    ldout(s->cct, 0) << "failed parsing response from master zonegroup" << dendl;
     return -EINVAL;
   }
 
@@ -1713,9 +1713,9 @@ void RGWCreateBucket::execute()
   if (op_ret < 0)
     return;
 
-  if (!store->region.is_master &&
-      store->region.api_name != location_constraint) {
-    ldout(s->cct, 0) << "location constraint (" << location_constraint << ") doesn't match region" << " (" << store->region.api_name << ")" << dendl;
+  if (!store->zonegroup.is_master &&
+      store->zonegroup.api_name != location_constraint) {
+    ldout(s->cct, 0) << "location constraint (" << location_constraint << ") doesn't match zonegroup" << " (" << store->zonegroup.api_name << ")" << dendl;
     op_ret = -EINVAL;
     return;
   }
@@ -1745,7 +1745,7 @@ void RGWCreateBucket::execute()
   rgw_bucket *pmaster_bucket;
   time_t creation_time;
 
-  if (!store->region.is_master) {
+  if (!store->zonegroup.is_master) {
     JSONParser jp;
     op_ret = forward_request_to_master(s, NULL, store, in_data, &jp);
     if (op_ret < 0)
@@ -1764,21 +1764,21 @@ void RGWCreateBucket::execute()
     creation_time = 0;
   }
 
-  string region_name;
+  string zonegroup_name;
 
   if (s->system_request) {
-    region_name = s->info.args.get(RGW_SYS_PARAM_PREFIX "region");
-    if (region_name.empty()) {
-      region_name = store->region.name;
+    zonegroup_name = s->info.args.get(RGW_SYS_PARAM_PREFIX "region");
+    if (zonegroup_name.empty()) {
+      zonegroup_name = store->zonegroup.name;
     }
   } else {
-    region_name = store->region.name;
+    zonegroup_name = store->zonegroup.name;
   }
 
   if (s->bucket_exists) {
     string selected_placement_rule;
     rgw_bucket bucket;
-    op_ret = store->select_bucket_placement(s->user, region_name,
+    op_ret = store->select_bucket_placement(s->user, zonegroup_name,
 					    placement_rule,
 					    s->bucket_tenant, s->bucket_name,
 					    bucket, &selected_placement_rule);
@@ -1798,7 +1798,7 @@ void RGWCreateBucket::execute()
   }
   s->bucket.tenant = s->bucket_tenant; /* ignored if bucket exists */
   s->bucket.name = s->bucket_name;
-  op_ret = store->create_bucket(s->user, s->bucket, region_name, placement_rule,
+  op_ret = store->create_bucket(s->user, s->bucket, zonegroup_name, placement_rule,
 				attrs, info, pobjv, &ep_objv, creation_time,
 				pmaster_bucket, true);
   /* continue if EEXIST and create_bucket will fail below.  this way we can recover
@@ -1893,7 +1893,7 @@ void RGWDeleteBucket::execute()
     return;
   }
 
-  if (!store->region.is_master) {
+  if (!store->zonegroup.is_master) {
     bufferlist in_data;
     JSONParser jp;
     op_ret = forward_request_to_master(s, &ot.read_version, store, in_data,
@@ -4286,7 +4286,7 @@ bool RGWBulkDelete::Deleter::delete_single(const acct_path_t& path)
       goto delop_fail;
     }
 
-    if (!store->region.is_master) {
+    if (!store->zonegroup.is_master) {
       bufferlist in_data;
       JSONParser jp;
       ret = forward_request_to_master(s, &ot.read_version, store, in_data,

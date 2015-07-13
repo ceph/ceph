@@ -14,11 +14,11 @@
 #ifndef CEPH_RGW_REST_CONFIG_H
 #define CEPH_RGW_REST_CONFIG_H
 
-class RGWOp_RegionMap_Get : public RGWRESTOp {
-  RGWRegionMap regionmap;
+class RGWOp_ZoneGroupMap_Get : public RGWRESTOp {
+  RGWZoneGroupMap zone_group_map;
 public:
-  RGWOp_RegionMap_Get() {}
-  ~RGWOp_RegionMap_Get() {}
+  RGWOp_ZoneGroupMap_Get() {}
+  ~RGWOp_ZoneGroupMap_Get() {}
 
   int verify_permission() {
     return 0; 
