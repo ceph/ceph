@@ -337,6 +337,34 @@ int rewrite_transaction(MonitorDBStore& store, int version,
 
   // add a new osdmap epoch to store, so monitors will update their current osdmap
   // in addition to the ones stored in epochs.
+  //
+  // This is needed due to the way the monitor updates from paxos and the
+  // facilities we are leveraging to push this update to the rest of the
+  // quorum.
+  //
+  // In a nutshell, we are generating a good version of the osdmap, with a
+  // proper crush, and building a transaction that will replace the bad
+  // osdmaps with good osdmaps. But this transaction needs to be applied on
+  // all nodes, so that the monitors will have good osdmaps to share with
+  // clients. We thus leverage Paxos, specifically the recovery mechanism, by
+  // creating a pending value that will be committed once the monitors form an
+  // initial quorum after being brought back to life.
+  //
+  // However, the way the monitor works has the paxos services, including the
+  // OSDMonitor, updating their state from disk *prior* to the recovery phase
+  // begins (so they have an up to date state in memory). This means the
+  // OSDMonitor will see the old, broken map, before the new paxos version is
+  // applied to disk, and the old version is cached. Even though we have the
+  // good map now, and we share the good map with clients, we will still be
+  // working on the old broken map. Instead of mucking around the monitor to
+  // make this work, we instead opt for adding the same osdmap but with a
+  // newer version, so that the OSDMonitor picks up on it when it updates from
+  // paxos after the proposal has been committed. This is not elegant, but
+  // avoids further unpleasantness that would arise from kludging around the
+  // current behavior. Also, has the added benefit of making sure the clients
+  // get an updated version of the map (because last_committed+1 >
+  // last_committed) :)
+  //
   cout << "adding a new epoch #" << last_committed+1 << std::endl;
   r = update_osdmap(store, last_committed++, true, crush, t);
   if (r)
