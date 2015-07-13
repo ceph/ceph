@@ -20,7 +20,7 @@
 #include <map>
 
 #include "MDCache.h"
-#include "MDS.h"
+#include "MDSRank.h"
 #include "Server.h"
 #include "Locker.h"
 #include "MDLog.h"
