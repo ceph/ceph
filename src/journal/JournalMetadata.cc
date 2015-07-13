@@ -4,6 +4,7 @@
 #include "journal/JournalMetadata.h"
 #include "journal/Utils.h"
 #include "common/errno.h"
+#include "common/Finisher.h"
 #include "common/Timer.h"
 #include "cls/journal/cls_journal_client.h"
 
@@ -21,7 +22,7 @@ JournalMetadata::JournalMetadata(librados::IoCtx &ioctx,
                                  double commit_interval)
     : m_cct(NULL), m_oid(oid), m_client_id(client_id),
       m_commit_interval(commit_interval), m_order(0), m_splay_width(0),
-      m_initialized(false), m_timer(NULL),
+      m_initialized(false), m_finisher(NULL), m_timer(NULL),
       m_timer_lock("JournalMetadata::m_timer_lock"),
       m_lock("JournalMetadata::m_lock"), m_watch_ctx(this), m_watch_handle(0),
       m_update_notifications(0), m_commit_position_pending(false),
@@ -37,6 +38,11 @@ JournalMetadata::~JournalMetadata() {
     delete m_timer;
     m_timer = NULL;
   }
+  if (m_finisher != NULL) {
+    m_finisher->stop();
+    delete m_finisher;
+    m_finisher = NULL;
+  }
 
   m_ioctx.unwatch2(m_watch_handle);
   librados::Rados rados(m_ioctx);
@@ -46,6 +52,9 @@ JournalMetadata::~JournalMetadata() {
 void JournalMetadata::init(Context *on_init) {
   assert(!m_initialized);
   m_initialized = true;
+
+  m_finisher = new Finisher(m_cct);
+  m_finisher->start();
 
   m_timer = new SafeTimer(m_cct, m_timer_lock, false);
   m_timer->init();

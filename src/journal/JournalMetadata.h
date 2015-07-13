@@ -17,6 +17,7 @@
 #include <string>
 #include "include/assert.h"
 
+class Finisher;
 class SafeTimer;
 
 namespace journal {
@@ -58,6 +59,10 @@ public:
   }
   inline uint8_t get_splay_width() const {
     return m_splay_width;
+  }
+
+  inline Finisher &get_finisher() {
+    return *m_finisher;
   }
 
   inline SafeTimer &get_timer() {
@@ -198,6 +203,7 @@ private:
   uint8_t m_splay_width;
   bool m_initialized;
 
+  Finisher *m_finisher;
   SafeTimer *m_timer;
   Mutex m_timer_lock;
 
