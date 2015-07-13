@@ -26,7 +26,7 @@ using namespace std;
 #include "common/strtol.h"
 
 #include "mon/MonMap.h"
-#include "mds/MDS.h"
+#include "mds/MDSDaemon.h"
 
 #include "msg/Messenger.h"
 
@@ -78,7 +78,7 @@ static int parse_rank(const char *opt_name, const std::string &val)
 
 
 
-MDS *mds = NULL;
+MDSDaemon *mds = NULL;
 
 
 static void handle_mds_signal(int signum)
@@ -199,7 +199,7 @@ int main(int argc, const char **argv)
   msgr->start();
 
   // start mds
-  mds = new MDS(g_conf->name.get_id().c_str(), msgr, &mc);
+  mds = new MDSDaemon(g_conf->name.get_id().c_str(), msgr, &mc);
 
   // in case we have to respawn...
   mds->orig_argc = argc;
