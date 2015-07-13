@@ -2027,13 +2027,15 @@ public:
    * @param c collection
    * @param start list object that sort >= this value
    * @param end list objects that sort < this value
+   * @param sort_bitwise sort bitwise (instead of legacy nibblewise)
    * @param max return no more than this many results
    * @param seq return no objects with snap < seq
    * @param ls [out] result
    * @param next [out] next item sorts >= this value
    * @return zero on success, or negative error
    */
-  virtual int collection_list(coll_t c, ghobject_t start, ghobject_t end, int max,
+  virtual int collection_list(coll_t c, ghobject_t start, ghobject_t end,
+			      bool sort_bitwise, int max,
 			      vector<ghobject_t> *ls, ghobject_t *next) = 0;
 
   /// OMAP
