@@ -132,8 +132,6 @@ MDS::MDS(const std::string &n, Messenger *m, MonClient *mc) :
   objecter = new Objecter(m->cct, messenger, monc, NULL, 0, 0);
   objecter->unset_honor_osdmap_full();
 
-  filer = new Filer(objecter, &finisher);
-
   mdcache = new MDCache(this);
   mdlog = new MDLog(this);
   balancer = new MDBalancer(this);
@@ -182,7 +180,6 @@ MDS::~MDS() {
   if (server) { delete server; server = 0; }
   if (locker) { delete locker; locker = 0; }
 
-  if (filer) { delete filer; filer = 0; }
   if (objecter) { delete objecter; objecter = 0; }
 
   if (logger) {
@@ -2421,6 +2418,29 @@ void MDS::replay_done()
   }
 }
 
+/**
+ * Helper for simple callbacks that call a void fn with no args.
+ */
+class C_VoidFn : public MDSInternalContext
+{
+  typedef void (MDS::*fn_ptr)();
+  protected:
+   MDS *mds_daemon;
+   fn_ptr fn; 
+  public:
+  C_VoidFn(MDS *mds_, fn_ptr fn_)
+    : MDSInternalContext(mds_), mds_daemon(mds_), fn(fn_)
+  {
+    assert(mds_);
+    assert(fn_);
+  }
+
+  void finish(int r)
+  {
+    (mds_daemon->*fn)();
+  }
+};
+
 void MDS::reopen_log()
 {
   dout(1) << "reopen_log" << dendl;
@@ -2434,7 +2454,7 @@ void MDS::resolve_start()
 
   reopen_log();
 
-  mdcache->resolve_start();
+  mdcache->resolve_start(new C_VoidFn(this, &MDS::resolve_done));
   finish_contexts(g_ceph_context, waiting_for_resolve);
 }
 void MDS::resolve_done()
@@ -2450,7 +2470,7 @@ void MDS::reconnect_start()
   if (last_state == MDSMap::STATE_REPLAY)
     reopen_log();
 
-  server->reconnect_clients();
+  server->reconnect_clients(new C_VoidFn(this, &MDS::reconnect_done));
   finish_contexts(g_ceph_context, waiting_for_reconnect);
 }
 void MDS::reconnect_done()
@@ -2467,7 +2487,7 @@ void MDS::rejoin_joint_start()
 void MDS::rejoin_start()
 {
   dout(1) << "rejoin_start" << dendl;
-  mdcache->rejoin_start();
+  mdcache->rejoin_start(new C_VoidFn(this, &MDS::rejoin_done));
 }
 void MDS::rejoin_done()
 {
