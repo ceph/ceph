@@ -18,7 +18,7 @@
 #include "common/config.h"
 #include "include/types.h"
 
-#include "../MDS.h"
+#include "../MDSRank.h"
 #include "../LogEvent.h"
 
 class EImportFinish : public LogEvent {

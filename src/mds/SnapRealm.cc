@@ -14,7 +14,7 @@
 
 #include "SnapRealm.h"
 #include "MDCache.h"
-#include "MDS.h"
+#include "MDSRank.h"
 
 #include "messages/MClientSnap.h"
 
