@@ -68,6 +68,7 @@ int PoolDump::dump(IoCtx *io_ctx)
     // ========================
     const uint32_t op_size = 4096 * 1024;
     uint64_t offset = 0;
+    io_ctx->set_namespace(i->get_nspace());
     while (true) {
       bufferlist outdata;
       r = io_ctx->read(oid, outdata, op_size, offset);
