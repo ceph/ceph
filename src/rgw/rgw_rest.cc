@@ -816,7 +816,7 @@ int RGWPutObj_ObjStore::verify_params()
 {
   if (s->length) {
     off_t len = atoll(s->length);
-    if (len > (off_t)RGW_MAX_PUT_SIZE) {
+    if (len > (off_t)(s->cct->_conf->rgw_max_put_size)) {
       return -ERR_TOO_LARGE;
     }
   }
@@ -855,7 +855,7 @@ int RGWPutObj_ObjStore::get_data(bufferlist& bl)
     bl.append(bp, 0, len);
   }
 
-  if ((uint64_t)ofs + len > RGW_MAX_PUT_SIZE) {
+  if ((uint64_t)ofs + len > s->cct->_conf->rgw_max_put_size) {
     return -ERR_TOO_LARGE;
   }
 
@@ -874,7 +874,7 @@ int RGWPostObj_ObjStore::verify_params()
     return -ERR_LENGTH_REQUIRED;
   }
   off_t len = atoll(s->length);
-  if (len > (off_t)RGW_MAX_PUT_SIZE) {
+  if (len > (off_t)(s->cct->_conf->rgw_max_put_size)) {
     return -ERR_TOO_LARGE;
   }
 
