@@ -1025,7 +1025,9 @@ struct RGWZoneGroup {
   CephContext *cct;
   RGWRados *store;
 
-  RGWZoneGroup() : is_master(false), cct(NULL), store(NULL) {}
+  bool old_region;
+
+  RGWZoneGroup() : is_master(false), cct(NULL), store(NULL), old_region(false) {}
 
   void encode(bufferlist& bl) const {
     ENCODE_START(2, 1, bl);
@@ -1066,6 +1068,9 @@ struct RGWZoneGroup {
   int equals(const string& other_zonegroup);
 
   static int get_pool_name(CephContext *cct, string *pool_name);
+  const string& get_default_oid();
+  const string& get_info_oid_prefix();
+  const string& get_json_perfix();
 
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
