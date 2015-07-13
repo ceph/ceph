@@ -20,7 +20,12 @@ class Future {
 public:
   typedef boost::intrusive_ptr<FutureImpl> FutureImplPtr;
 
+  Future() {}
   Future(const FutureImplPtr &future_impl) : m_future_impl(future_impl) {}
+
+  inline bool is_valid() const {
+    return m_future_impl;
+  }
 
   void flush(Context *on_safe);
   void wait(Context *on_safe);
