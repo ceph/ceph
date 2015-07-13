@@ -87,6 +87,8 @@ struct EventEntry {
 
   Event event;
 
+  EventType get_event_type() const;
+
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& it);
   void dump(Formatter *f) const;

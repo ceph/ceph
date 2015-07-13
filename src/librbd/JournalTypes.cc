@@ -11,6 +11,14 @@ namespace journal {
 
 namespace {
 
+class GetEventTypeVistor : public boost::static_visitor<EventType> {
+public:
+  template <typename Event>
+  inline EventType operator()(const Event &event) const {
+    return Event::EVENT_TYPE;
+  }
+};
+
 class EncodeEventVisitor : public boost::static_visitor<void> {
 public:
   EncodeEventVisitor(bufferlist &bl) : m_bl(bl) {
@@ -107,6 +115,10 @@ void UnknownEvent::decode(__u8 version, bufferlist::iterator& it) {
 void UnknownEvent::dump(Formatter *f) const {
 }
 
+EventType EventEntry::get_event_type() const {
+  return boost::apply_visitor(GetEventTypeVistor(), event);
+}
+
 void EventEntry::encode(bufferlist& bl) const {
   ENCODE_START(1, 1, bl);
   boost::apply_visitor(EncodeEventVisitor(bl), event);
@@ -178,4 +190,3 @@ std::ostream &operator<<(std::ostream &out,
   }
   return out;
 }
-
