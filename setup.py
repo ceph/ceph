@@ -40,7 +40,7 @@ setup(
                       'boto >= 2.0b4',
                       'bunch >= 1.0.0',
                       'configobj',
-                      'six >= 1.5.0',  # Require a new-ish six - only for configobj
+                      'six',
                       'httplib2',
                       'paramiko < 1.8',
                       'pexpect',
