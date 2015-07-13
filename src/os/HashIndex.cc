@@ -761,7 +761,6 @@ uint32_t HashIndex::hash_prefix_to_hash(string prefix) {
 }
 
 int HashIndex::get_path_contents_by_hash(const vector<string> &path,
-					 const string *lower_bound,
 					 const ghobject_t *next_object,
 					 set<string> *hash_prefixes,
 					 set<pair<string, ghobject_t> > *objects) {
@@ -781,8 +780,6 @@ int HashIndex::get_path_contents_by_hash(const vector<string> &path,
        i != rev_objects.end();
        ++i) {
     string hash_prefix = get_path_str(i->second);
-    if (lower_bound && hash_prefix < *lower_bound)
-      continue;
     if (next_object && i->second < *next_object)
       continue;
     hash_prefixes->insert(hash_prefix);
@@ -795,8 +792,6 @@ int HashIndex::get_path_contents_by_hash(const vector<string> &path,
        i != subdirs.end();
        ++i) {
     string candidate = cur_prefix + *i;
-    if (lower_bound && candidate < lower_bound->substr(0, candidate.size()))
-      continue;
     if (next_object &&
         (next_object->is_max() ||
 	 candidate < get_path_str(*next_object).substr(0, candidate.size())))
@@ -817,7 +812,6 @@ int HashIndex::list_by_hash(const vector<string> &path,
   set<string> hash_prefixes;
   set<pair<string, ghobject_t> > objects;
   int r = get_path_contents_by_hash(path,
-				    NULL,
 				    next,
 				    &hash_prefixes,
 				    &objects);
