@@ -35,7 +35,8 @@ function osdmap_get() {
     local osdmap=`mktemp`
 
     ceph-monstore-tool $store_path get osdmap -- \
-                       $epoch -o $osdmap > /dev/null
+                       $epoch -o $osdmap > /dev/null || return
+
     echo $(osdmaptool --dump xml $osdmap 2> /dev/null | \
            $XMLSTARLET sel -t -m "$query" -v .)
 
@@ -71,6 +72,12 @@ function get_crush()  {
     ceph-monstore-tool $store_path get osdmap -- \
                        -v $osdmap_epoch -o $osdmap_path
     osdmaptool --export-crush $crush $osdmap_path 2>&1 > /dev/null
+}
+
+function die() {
+    local retval=$?
+    echo "$@" >&2
+    exit $retval
 }
 
 function usage() {
@@ -127,7 +134,11 @@ function main() {
     local store_path="$1"
     test $store_path || usage "I need the path to mon-store."
 
-    local last_osdmap_epoch=$(osdmap_get $store_path "/osdmap/epoch")
+    # try accessing the store; if it fails, likely means a mon is running
+    local last_osdmap_epoch
+    local max_osd
+    last_osdmap_epoch=$(osdmap_get $store_path "/osdmap/epoch") || \
+        die "error accessing mon store at $store_path"
     # get the max_osd # in last osdmap epoch, crushtool will use it to check
     # the crush maps in previous osdmaps
     max_osd=$(osdmap_get $store_path "/osdmap/max_osd" $last_osdmap_epoch)
