@@ -639,14 +639,13 @@ private:
 
   Fh *_create_fh(Inode *in, int flags, int cmode);
   int _release_fh(Fh *fh);
+  void _put_fh(Fh *fh);
 
 
   struct C_Readahead : public Context {
     Client *client;
     Fh *f;
-    C_Readahead(Client *c, Fh *f)
-      : client(c),
-	f(f) { }
+    C_Readahead(Client *c, Fh *f);
     void finish(int r);
   };
 
