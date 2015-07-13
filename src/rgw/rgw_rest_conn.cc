@@ -14,7 +14,7 @@ RGWRESTConn::RGWRESTConn(CephContext *_cct, RGWRados *store, list<string>& remot
     endpoints[i] = *iter;
   }
   key = store->zone.system_key;
-  region = store->region.name;
+  zone_group = store->zonegroup.name;
 }
 
 int RGWRESTConn::get_url(string& endpoint)
@@ -52,7 +52,7 @@ int RGWRESTConn::forward(const string& uid, req_info& info, obj_version *objv, s
     return ret;
   list<pair<string, string> > params;
   params.push_back(pair<string, string>(RGW_SYS_PARAM_PREFIX "uid", uid));
-  params.push_back(pair<string, string>(RGW_SYS_PARAM_PREFIX "region", region));
+  params.push_back(pair<string, string>(RGW_SYS_PARAM_PREFIX "region", zone_group));
   if (objv) {
     params.push_back(pair<string, string>(RGW_SYS_PARAM_PREFIX "tag", objv->tag));
     char buf[16];
@@ -79,7 +79,7 @@ int RGWRESTConn::put_obj_init(const string& uid, rgw_obj& obj, uint64_t obj_size
 
   list<pair<string, string> > params;
   params.push_back(pair<string, string>(RGW_SYS_PARAM_PREFIX "uid", uid));
-  params.push_back(pair<string, string>(RGW_SYS_PARAM_PREFIX "region", region));
+  params.push_back(pair<string, string>(RGW_SYS_PARAM_PREFIX "region", zone_group));
   *req = new RGWRESTStreamWriteRequest(cct, url, NULL, &params);
   return (*req)->put_obj_init(key, obj, obj_size, attrs);
 }
@@ -102,9 +102,9 @@ int RGWRESTConn::get_obj(const string& uid, req_info *info /* optional */, rgw_o
 
   list<pair<string, string> > params;
   params.push_back(pair<string, string>(RGW_SYS_PARAM_PREFIX "uid", uid));
-  params.push_back(pair<string, string>(RGW_SYS_PARAM_PREFIX "region", region));
+  params.push_back(pair<string, string>(RGW_SYS_PARAM_PREFIX "region", zone_group));
   if (prepend_metadata) {
-    params.push_back(pair<string, string>(RGW_SYS_PARAM_PREFIX "prepend-metadata", region));
+    params.push_back(pair<string, string>(RGW_SYS_PARAM_PREFIX "prepend-metadata", zone_group));
   }
   *req = new RGWRESTStreamReadRequest(cct, url, cb, NULL, &params);
   map<string, string> extra_headers;
@@ -153,7 +153,7 @@ int RGWRESTConn::get_resource(const string& resource,
     }
   }
 
-  params.push_back(pair<string, string>(RGW_SYS_PARAM_PREFIX "region", region));
+  params.push_back(pair<string, string>(RGW_SYS_PARAM_PREFIX "zonegroup", zone_group));
 
   RGWStreamIntoBufferlist cb(bl);
 
@@ -191,7 +191,7 @@ RGWRESTReadResource::RGWRESTReadResource(RGWRESTConn *_conn,
     ++pp;
   }
 
-  params.push_back(pair<string, string>(RGW_SYS_PARAM_PREFIX "region", conn->get_region()));
+  params.push_back(pair<string, string>(RGW_SYS_PARAM_PREFIX "zonegroup", conn->get_zonegroup()));
 
   if (extra_headers) {
     for (list<pair<string, string> >::iterator iter = extra_headers->begin();

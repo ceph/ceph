@@ -263,13 +263,13 @@ enum {
   OPT_GC_PROCESS,
   OPT_ORPHANS_FIND,
   OPT_ORPHANS_FINISH,
-  OPT_REGION_GET,
-  OPT_REGION_LIST,
-  OPT_REGION_SET,
-  OPT_REGION_DEFAULT,
-  OPT_REGIONMAP_GET,
-  OPT_REGIONMAP_SET,
-  OPT_REGIONMAP_UPDATE,
+  OPT_ZONEGROUP_GET,
+  OPT_ZONEGROUP_LIST,
+  OPT_ZONEGROUP_SET,
+  OPT_ZONEGROUP_DEFAULT,
+  OPT_ZONEGROUPMAP_GET,
+  OPT_ZONEGROUPMAP_SET,
+  OPT_ZONEGROUPMAP_UPDATE,
   OPT_ZONE_GET,
   OPT_ZONE_SET,
   OPT_ZONE_LIST,
@@ -488,13 +488,13 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
       return OPT_REALM_SET_DEFAULT;
   } else if (strcmp(prev_cmd, "region") == 0) {
     if (strcmp(cmd, "get") == 0)
-      return OPT_REGION_GET;
+      return OPT_ZONEGROUP_GET;
     if (strcmp(cmd, "list") == 0)
-      return OPT_REGION_LIST;
+      return OPT_ZONEGROUP_LIST;
     if (strcmp(cmd, "set") == 0)
-      return OPT_REGION_SET;
+      return OPT_ZONEGROUP_SET;
     if (strcmp(cmd, "default") == 0)
-      return OPT_REGION_DEFAULT;
+      return OPT_ZONEGROUP_DEFAULT;
   } else if (strcmp(prev_cmd, "quota") == 0) {
     if (strcmp(cmd, "set") == 0)
       return OPT_QUOTA_SET;
@@ -504,15 +504,15 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
       return OPT_QUOTA_DISABLE;
   } else if (strcmp(prev_cmd, "regions") == 0) {
     if (strcmp(cmd, "list") == 0)
-      return OPT_REGION_LIST;
+      return OPT_ZONEGROUP_LIST;
   } else if (strcmp(prev_cmd, "region-map") == 0 ||
              strcmp(prev_cmd, "regionmap") == 0) {
     if (strcmp(cmd, "get") == 0)
-      return OPT_REGIONMAP_GET;
+      return OPT_ZONEGROUPMAP_GET;
     if (strcmp(cmd, "set") == 0)
-      return OPT_REGIONMAP_SET;
+      return OPT_ZONEGROUPMAP_SET;
     if (strcmp(cmd, "update") == 0)
-      return OPT_REGIONMAP_UPDATE;
+      return OPT_ZONEGROUPMAP_UPDATE;
   } else if (strcmp(prev_cmd, "zone") == 0) {
     if (strcmp(cmd, "get") == 0)
       return OPT_ZONE_GET;
@@ -1172,8 +1172,8 @@ int send_to_remote_gateway(const string& remote,req_info& info, JSONParser& p)
     }
     conn = store->rest_master_conn;
   } else {
-    map<string, RGWRESTConn *>::iterator iter = store->region_conn_map.find(remote);
-    if (iter == store->region_conn_map.end()) {
+    map<string, RGWRESTConn *>::iterator iter = store->zonegroup_conn_map.find(remote);
+    if (iter == store->zonegroup_conn_map.end()) {
       cerr << "could not find connection to: " << remote << std::endl;
       return -ENOENT;
     }
@@ -1581,10 +1581,10 @@ int main(int argc, char **argv)
 
   RGWStreamFlusher f(formatter, cout);
 
-  bool raw_storage_op = (opt_cmd == OPT_REGION_GET || opt_cmd == OPT_REGION_LIST ||
-                         opt_cmd == OPT_REGION_SET || opt_cmd == OPT_REGION_DEFAULT ||
-                         opt_cmd == OPT_REGIONMAP_GET || opt_cmd == OPT_REGIONMAP_SET ||
-                         opt_cmd == OPT_REGIONMAP_UPDATE ||
+  bool raw_storage_op = (opt_cmd == OPT_ZONEGROUP_GET || opt_cmd == OPT_ZONEGROUP_LIST ||
+                         opt_cmd == OPT_ZONEGROUP_SET || opt_cmd == OPT_ZONEGROUP_DEFAULT ||
+                         opt_cmd == OPT_ZONEGROUPMAP_GET || opt_cmd == OPT_ZONEGROUPMAP_SET ||
+                         opt_cmd == OPT_ZONEGROUPMAP_UPDATE ||
                          opt_cmd == OPT_ZONE_GET || opt_cmd == OPT_ZONE_SET ||
                          opt_cmd == OPT_ZONE_LIST || opt_cmd == OPT_REALM_CREATE ||
 			 opt_cmd == OPT_PERIOD_PREPARE || opt_cmd == OPT_PERIOD_ACTIVATE ||
@@ -1874,172 +1874,172 @@ int main(int argc, char **argv)
 	}
       }
       break;
-    case OPT_REGION_GET:
+    case OPT_ZONEGROUP_GET:
       {
-	RGWRegion region;
-	int ret = region.init(g_ceph_context, store);
+	RGWZoneGroup zonegroup;
+	int ret = zonegroup.init(g_ceph_context, store);
 	if (ret < 0) {
-	  cerr << "failed to init region: " << cpp_strerror(-ret) << std::endl;
+	  cerr << "failed to init zonegroup: " << cpp_strerror(-ret) << std::endl;
 	  return -ret;
 	}
 
-	encode_json("region", region, formatter);
+	encode_json("region", zonegroup, formatter);
 	formatter->flush(cout);
 	cout << std::endl;
       }
       break;
-    case OPT_REGION_LIST:
+    case OPT_ZONEGROUP_LIST:
       {
-	RGWRegion region;
-	int ret = region.init(g_ceph_context, store, false);
+	RGWZoneGroup zonegroup;
+	int ret = zonegroup.init(g_ceph_context, store, false);
 	if (ret < 0) {
-	  cerr << "failed to init region: " << cpp_strerror(-ret) << std::endl;
+	  cerr << "failed to init zonegroup: " << cpp_strerror(-ret) << std::endl;
 	  return -ret;
 	}
 
-	list<string> regions;
-	ret = store->list_regions(regions);
+	list<string> zonegroups;
+	ret = store->list_zonegroups(zonegroups);
 	if (ret < 0) {
-	  cerr << "failed to list regions: " << cpp_strerror(-ret) << std::endl;
+	  cerr << "failed to list zonegroups: " << cpp_strerror(-ret) << std::endl;
 	  return -ret;
 	}
-	RGWDefaultRegionInfo default_region;
-	ret = region.read_default(default_region);
+	RGWDefaultZoneGroupInfo default_zonegroup;
+	ret = zonegroup.read_default(default_zonegroup);
 	if (ret < 0 && ret != -ENOENT) {
-	  cerr << "could not determine default region: " << cpp_strerror(-ret) << std::endl;
+	  cerr << "could not determine default zonegroup: " << cpp_strerror(-ret) << std::endl;
 	}
 	formatter->open_object_section("regions_list");
-	encode_json("default_info", default_region, formatter);
-	encode_json("regions", regions, formatter);
+	encode_json("default_info", default_zonegroup, formatter);
+	encode_json("regions", zonegroups, formatter);
 	formatter->close_section();
 	formatter->flush(cout);
 	cout << std::endl;
       }
       break;
-    case OPT_REGION_SET:
+    case OPT_ZONEGROUP_SET:
       {
-	RGWRegion region;
-	int ret = region.init(g_ceph_context, store, false);
+	RGWZoneGroup zonegroup;
+	int ret = zonegroup.init(g_ceph_context, store, false);
 	if (ret < 0) {
-	  cerr << "failed to init region: " << cpp_strerror(-ret) << std::endl;
+	  cerr << "failed to init zonegroup: " << cpp_strerror(-ret) << std::endl;
 	  return -ret;
 	}
-	ret = read_decode_json(infile, region);
+	ret = read_decode_json(infile, zonegroup);
 	if (ret < 0) {
 	  return 1;
 	}
 
-	ret = region.store_info(false);
+	ret = zonegroup.store_info(false);
 	if (ret < 0) {
 	  cerr << "ERROR: couldn't store zone info: " << cpp_strerror(-ret) << std::endl;
 	  return 1;
 	}
 
-	encode_json("region", region, formatter);
+	encode_json("region", zonegroup, formatter);
 	formatter->flush(cout);
       }
       break;
-    case OPT_REGION_DEFAULT:
+    case OPT_ZONEGROUP_DEFAULT:
       {
-	RGWRegion region;
-	int ret = region.init(g_ceph_context, store);
+	RGWZoneGroup zonegroup;
+	int ret = zonegroup.init(g_ceph_context, store);
 	if (ret < 0) {
-	  cerr << "failed to init region: " << cpp_strerror(-ret) << std::endl;
+	  cerr << "failed to init zonegroup: " << cpp_strerror(-ret) << std::endl;
 	  return -ret;
 	}
 
-	ret = region.set_as_default();
+	ret = zonegroup.set_as_default();
 	if (ret < 0) {
-	  cerr << "failed to set region as default: " << cpp_strerror(-ret) << std::endl;
+	  cerr << "failed to set zonegroup as default: " << cpp_strerror(-ret) << std::endl;
 	  return -ret;
 	}
       }
       break;
-    case OPT_REGIONMAP_GET:
+    case OPT_ZONEGROUPMAP_GET:
       {
-	RGWRegionMap regionmap;
-	int ret = regionmap.read(g_ceph_context, store);
+	RGWZoneGroupMap zonegroupmap;
+	int ret = zonegroupmap.read(g_ceph_context, store);
 	if (ret < 0) {
-	  cerr << "failed to read region map: " << cpp_strerror(-ret) << std::endl;
+	  cerr << "failed to read zonegroup map: " << cpp_strerror(-ret) << std::endl;
 	  return -ret;
 	}
-	encode_json("region-map", regionmap, formatter);
+	encode_json("region-map", zonegroupmap, formatter);
 	formatter->flush(cout);
       }
       break;
-    case OPT_REGIONMAP_SET:
+    case OPT_ZONEGROUPMAP_SET:
       {
-	RGWRegionMap regionmap;
-	int ret = read_decode_json(infile, regionmap);
+	RGWZoneGroupMap zonegroupmap;
+	int ret = read_decode_json(infile, zonegroupmap);
 	if (ret < 0) {
 	  return 1;
 	}
 
-	ret = regionmap.store(g_ceph_context, store);
+	ret = zonegroupmap.store(g_ceph_context, store);
 	if (ret < 0) {
-	  cerr << "ERROR: couldn't store region map info: " << cpp_strerror(-ret) << std::endl;
+	  cerr << "ERROR: couldn't store zonegroup map info: " << cpp_strerror(-ret) << std::endl;
 	  return 1;
 	}
 
-	encode_json("region-map", regionmap, formatter);
+	encode_json("region-map", zonegroupmap, formatter);
 	formatter->flush(cout);
       }
       break;
-    case OPT_REGIONMAP_UPDATE:
+    case OPT_ZONEGROUPMAP_UPDATE:
       {
-	RGWRegionMap regionmap;
-	int ret = regionmap.read(g_ceph_context, store);
+	RGWZoneGroupMap zonegroupmap;
+	int ret = zonegroupmap.read(g_ceph_context, store);
 	if (ret < 0 && ret != -ENOENT) {
-	  cerr << "failed to read region map: " << cpp_strerror(-ret) << std::endl;
+	  cerr << "failed to read zonegroup map: " << cpp_strerror(-ret) << std::endl;
 	  return -ret;
 	}
 
         if (reset_regions) {
-          regionmap.regions.clear();
+          zonegroupmap.zonegroups.clear();
         }
 
-	RGWRegion region;
-	ret = region.init(g_ceph_context, store, false);
+	RGWZoneGroup zonegroup;
+	ret = zonegroup.init(g_ceph_context, store, false);
 	if (ret < 0) {
-	  cerr << "failed to init region: " << cpp_strerror(-ret) << std::endl;
+	  cerr << "failed to init zonegroup: " << cpp_strerror(-ret) << std::endl;
 	  return -ret;
 	}
 
-	list<string> regions;
-	ret = store->list_regions(regions);
+	list<string> zonegroups;
+	ret = store->list_zonegroups(zonegroups);
 	if (ret < 0) {
-	  cerr << "failed to list regions: " << cpp_strerror(-ret) << std::endl;
+	  cerr << "failed to list zonegroups: " << cpp_strerror(-ret) << std::endl;
 	  return -ret;
 	}
 
-	for (list<string>::iterator iter = regions.begin(); iter != regions.end(); ++iter) {
-	  ret = region.read_info(*iter);
+	for (list<string>::iterator iter = zonegroups.begin(); iter != zonegroups.end(); ++iter) {
+	  ret = zonegroup.read_info(*iter);
 	  if (ret < 0) {
-	    cerr << "failed to read region info (name=" << *iter << "): " << cpp_strerror(-ret) << std::endl;
+	    cerr << "failed to read zonegroup info (name=" << *iter << "): " << cpp_strerror(-ret) << std::endl;
 	    return -ret;
 	  }
-	  regionmap.update(region);
+	  zonegroupmap.update(zonegroup);
 	}
 
-	ret = regionmap.store(g_ceph_context, store);
+	ret = zonegroupmap.store(g_ceph_context, store);
 	if (ret < 0) {
-	  cerr << "ERROR: couldn't store region map info: " << cpp_strerror(-ret) << std::endl;
+	  cerr << "ERROR: couldn't store zonegroup map info: " << cpp_strerror(-ret) << std::endl;
 	  return 1;
 	}
 
-	encode_json("region-map", regionmap, formatter);
+	encode_json("region-map", zonegroupmap, formatter);
 	formatter->flush(cout);
       }
       break;
     case OPT_ZONE_GET:
       {
-	RGWRegion region;
-	int ret = region.init(g_ceph_context, store);
+	RGWZoneGroup zonegroup;
+	int ret = zonegroup.init(g_ceph_context, store);
 	if (ret < 0) {
-	  cerr << "WARNING: failed to initialize region" << std::endl;
+	  cerr << "WARNING: failed to initialize zonegroup" << std::endl;
 	}
 	RGWZoneParams zone;
-	ret = zone.init(g_ceph_context, store, region);
+	ret = zone.init(g_ceph_context, store, zonegroup);
 	if (ret < 0) {
 	  cerr << "unable to initialize zone: " << cpp_strerror(-ret) << std::endl;
 	  return -ret;
@@ -2050,10 +2050,10 @@ int main(int argc, char **argv)
       break;
     case OPT_ZONE_SET:
       {
-	RGWRegion region;
-	int ret = region.init(g_ceph_context, store);
+	RGWZoneGroup zonegroup;
+	int ret = zonegroup.init(g_ceph_context, store);
 	if (ret < 0) {
-	  cerr << "WARNING: failed to initialize region" << std::endl;
+	  cerr << "WARNING: failed to initialize zonegroup" << std::endl;
 	}
 	RGWZoneParams zone;
 	zone.init_default(store);
@@ -2062,7 +2062,7 @@ int main(int argc, char **argv)
 	  return 1;
 	}
 
-	ret = zone.store_info(g_ceph_context, store, region);
+	ret = zone.store_info(g_ceph_context, store, zonegroup);
 	if (ret < 0) {
 	  cerr << "ERROR: couldn't store zone info: " << cpp_strerror(-ret) << std::endl;
 	  return 1;

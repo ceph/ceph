@@ -242,7 +242,7 @@ TYPE(rbd_replay::action::ActionEntry);
 TYPE(RGWObjManifestPart)
 TYPE(RGWObjManifest)
 TYPE(RGWOLHInfo)
-TYPE(RGWRegion)
+TYPE(RGWZoneGroup)
 TYPE(RGWZone)
 TYPE(RGWZoneParams)     
    
