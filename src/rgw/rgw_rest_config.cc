@@ -23,14 +23,14 @@
 
 #define dout_subsys ceph_subsys_rgw
 
-void RGWOp_RegionMap_Get::execute() {
-  http_ret = regionmap.read(g_ceph_context, store);
+void RGWOp_ZoneGroupMap_Get::execute() {
+  http_ret = zone_group_map.read(g_ceph_context, store);
   if (http_ret < 0) {
-    dout(5) << "failed to read region map" << dendl;
+    dout(5) << "failed to read zone_group map" << dendl;
   }
 }
 
-void RGWOp_RegionMap_Get::send_response() {
+void RGWOp_ZoneGroupMap_Get::send_response() {
   set_req_state_err(s, http_ret);
   dump_errno(s);
   end_header(s);
@@ -38,7 +38,7 @@ void RGWOp_RegionMap_Get::send_response() {
   if (http_ret < 0)
     return;
   
-  encode_json("region-map", regionmap, s->formatter);
+  encode_json("region-map", zone_group_map, s->formatter);
   flusher.flush(); 
 }
 
@@ -99,7 +99,7 @@ RGWOp* RGWHandler_Config::op_get() {
   if (type.compare("period") == 0) {
     return new RGWOp_Period_Get;
   } else {
-    return new RGWOp_RegionMap_Get;
+    return new RGWOp_ZoneGroupMap_Get;
   }
 }
 

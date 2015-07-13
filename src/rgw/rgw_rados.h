@@ -792,7 +792,7 @@ public:
 };
 WRITE_CLASS_ENCODER(RGWSystemMetaObj)
 
-struct RGWRegion;
+struct RGWZoneGroup;
 
 struct RGWZonePlacementInfo {
   string index_pool;
@@ -851,10 +851,10 @@ struct RGWZoneParams {
   RGWZoneParams() : is_master(false) {}
 
   static int get_pool_name(CephContext *cct, string *pool_name);
-  void init_name(CephContext *cct, RGWRegion& region);
-  int init(CephContext *cct, RGWRados *store, RGWRegion& region);
+  void init_name(CephContext *cct, RGWZoneGroup& zonegroup);
+  int init(CephContext *cct, RGWRados *store, RGWZoneGroup& zonegroup);
   void init_default(RGWRados *store);
-  int store_info(CephContext *cct, RGWRados *store, RGWRegion& region);
+  int store_info(CephContext *cct, RGWRados *store, RGWZoneGroup& zonegroup);
 
   void encode(bufferlist& bl) const {
     ENCODE_START(5, 1, bl);
@@ -949,27 +949,27 @@ struct RGWZone {
 };
 WRITE_CLASS_ENCODER(RGWZone)
 
-struct RGWDefaultRegionInfo {
-  string default_region;
+struct RGWDefaultZoneGroupInfo {
+  string default_zonegroup;
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
-    ::encode(default_region, bl);
+    ::encode(default_zonegroup, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::iterator& bl) {
     DECODE_START(1, bl);
-    ::decode(default_region, bl);
+    ::decode(default_zonegroup, bl);
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
   //todo: implement ceph-dencoder
 };
-WRITE_CLASS_ENCODER(RGWDefaultRegionInfo)
+WRITE_CLASS_ENCODER(RGWDefaultZoneGroupInfo)
 
-struct RGWRegionPlacementTarget {
+struct RGWZoneGroupPlacementTarget {
   string name;
   list<string> tags;
 
@@ -1004,10 +1004,10 @@ struct RGWRegionPlacementTarget {
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
 };
-WRITE_CLASS_ENCODER(RGWRegionPlacementTarget)
+WRITE_CLASS_ENCODER(RGWZoneGroupPlacementTarget)
 
 
-struct RGWRegion {
+struct RGWZoneGroup {
   string name;
   string api_name;
   list<string> endpoints;
@@ -1016,7 +1016,7 @@ struct RGWRegion {
   string master_zone;
   map<string, RGWZone> zones;
 
-  map<string, RGWRegionPlacementTarget> placement_targets;
+  map<string, RGWZoneGroupPlacementTarget> placement_targets;
   string default_placement;
 
   list<string> hostnames;
@@ -1041,7 +1041,7 @@ struct RGWRegion {
   CephContext *cct;
   RGWRados *store;
 
-  RGWRegion() : is_master(false), cct(NULL), store(NULL) {}
+  RGWZoneGroup() : is_master(false), cct(NULL), store(NULL) {}
 
   void encode(bufferlist& bl) const {
     ENCODE_START(3, 1, bl);
@@ -1077,33 +1077,33 @@ struct RGWRegion {
     DECODE_FINISH(bl);
   }
 
-  int init(CephContext *_cct, RGWRados *_store, bool setup_region = true);
+  int init(CephContext *_cct, RGWRados *_store, bool setup_zonegroup = true);
   int create_default();
   int store_info(bool exclusive);
-  int read_info(const string& region_name);
-  int read_default(RGWDefaultRegionInfo& default_region);
+  int read_info(const string& zonegroup_name);
+  int read_default(RGWDefaultZoneGroupInfo& default_zonegroup);
   int set_as_default();
-  int equals(const string& other_region);
+  int equals(const string& other_zonegroup);
 
   static int get_pool_name(CephContext *cct, string *pool_name);
 
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
-  static void generate_test_instances(list<RGWRegion*>& o);
+  static void generate_test_instances(list<RGWZoneGroup*>& o);
 };
-WRITE_CLASS_ENCODER(RGWRegion)
+WRITE_CLASS_ENCODER(RGWZoneGroup)
 
-struct RGWRegionMap {
+struct RGWZoneGroupMap {
   Mutex lock;
-  map<string, RGWRegion> regions;
-  map<string, RGWRegion> regions_by_api;
+  map<string, RGWZoneGroup> zonegroups;
+  map<string, RGWZoneGroup> zonegroups_by_api;
 
-  string master_region;
+  string master_zonegroup;
 
   RGWQuotaInfo bucket_quota;
   RGWQuotaInfo user_quota;
 
-  RGWRegionMap() : lock("RGWRegionMap") {}
+  RGWZoneGroupMap() : lock("RGWZoneGroupMap") {}
 
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& bl);
@@ -1112,12 +1112,12 @@ struct RGWRegionMap {
   int read(CephContext *cct, RGWRados *store);
   int store(CephContext *cct, RGWRados *store);
 
-  int update(RGWRegion& region);
+  int update(RGWZoneGroup& zonegroup);
 
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
 };
-WRITE_CLASS_ENCODER(RGWRegionMap)
+WRITE_CLASS_ENCODER(RGWZoneGroupMap)
 
 struct objexp_hint_entry {
   string tenant;
@@ -1156,7 +1156,7 @@ WRITE_CLASS_ENCODER(objexp_hint_entry)
 class RGWRealm : public RGWSystemMetaObj
 {
   string master_zonegroup;
-  map<string, RGWRegion> zonegroups;
+  map<string, RGWZoneGroup> zonegroups;
 
 public:
   RGWRealm() {}
@@ -1220,7 +1220,7 @@ class RGWPeriod
   string predecessor_uuid;
   map<int, version_t> versions;
   string master_zonegroup;
-  map <string, RGWRegion> zonegroups;
+  map <string, RGWZoneGroup> zonegroups;
   string master_zone;
 
   CephContext *cct;
@@ -1555,7 +1555,7 @@ protected:
 
   bool pools_initialized;
 
-  string region_name;
+  string zonegroup_name;
   string zone_name;
   string trans_id_suffix;
 
@@ -1587,8 +1587,8 @@ public:
     cct = _cct;
   }
 
-  void set_region(const string& name) {
-    region_name = name;
+  void set_zonegroup(const string& name) {
+    zonegroup_name = name;
   }
 
   void set_zone(const string& name) {
@@ -1598,12 +1598,12 @@ public:
 
   /**
    * AmazonS3 errors contain a HostId string, but is an opaque base64 blob; we
-   * try to be more transparent. This has a wrapper so we can update it when region/zone are changed.
+   * try to be more transparent. This has a wrapper so we can update it when zonegroup/zone are changed.
    */
   void init_host_id() {
     /* uint64_t needs 16, two '-' separators and a trailing null */
-    char charbuf[16 + zone.name.size() + region.name.size() + 2 + 1];
-    snprintf(charbuf, sizeof(charbuf), "%llx-%s-%s", (unsigned long long)instance_id(), zone.name.c_str(), region.name.c_str());
+    char charbuf[16 + zone.name.size() + zonegroup.name.size() + 2 + 1];
+    snprintf(charbuf, sizeof(charbuf), "%llx-%s-%s", (unsigned long long)instance_id(), zone.name.c_str(), zonegroup.name.c_str());
     string s(charbuf);
     host_id = s;
   }
@@ -1611,13 +1611,13 @@ public:
   string host_id;
 
   RGWRealm realm;
-  RGWRegion region;
+  RGWZoneGroup zonegroup;
   RGWZoneParams zone; /* internal zone params, e.g., rados pools */
   RGWZone zone_public_config; /* external zone params, e.g., entrypoints, log flags, etc. */
-  RGWRegionMap region_map;
+  RGWZoneGroupMap zonegroup_map;
   RGWRESTConn *rest_master_conn;
   map<string, RGWRESTConn *> zone_conn_map;
-  map<string, RGWRESTConn *> region_conn_map;
+  map<string, RGWRESTConn *> zonegroup_conn_map;
 
   RGWZoneParams& get_zone_params() { return zone; }
 
@@ -1645,7 +1645,7 @@ public:
                        bool *is_truncated);
 
   int list_raw_prefixed_objs(string pool_name, const string& prefix, list<string>& result);
-  int list_regions(list<string>& regions);
+  int list_zonegroups(list<string>& zonegroups);
   int list_zones(list<string>& zones);
   int list_realms(list<string>& realms);
 
@@ -1699,14 +1699,14 @@ public:
    * returns 0 on success, -ERR# otherwise.
    */
   virtual int init_bucket_index(rgw_bucket& bucket, int num_shards);
-  int select_bucket_placement(RGWUserInfo& user_info, const string& region_name, const string& rule,
+  int select_bucket_placement(RGWUserInfo& user_info, const string& zonegroup_name, const string& rule,
                               const string& tenant_name, const string& bucket_name, rgw_bucket& bucket, string *pselected_rule);
   int select_legacy_bucket_placement(const string& tenant_name, const string& bucket_name, rgw_bucket& bucket);
-  int select_new_bucket_location(RGWUserInfo& user_info, const string& region_name, const string& rule,
+  int select_new_bucket_location(RGWUserInfo& user_info, const string& zonegroup_name, const string& rule,
                                  const string& tenant_name, const string& bucket_name, rgw_bucket& bucket, string *pselected_rule);
   int set_bucket_location_by_rule(const string& location_rule, const string& tenant_name, const string& bucket_name, rgw_bucket& bucket);
   virtual int create_bucket(RGWUserInfo& owner, rgw_bucket& bucket,
-                            const string& region_name,
+                            const string& zonegroup_name,
                             const string& placement_rule,
                             map<std::string,bufferlist>& attrs,
                             RGWBucketInfo& bucket_info,
