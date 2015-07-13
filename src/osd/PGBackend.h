@@ -205,6 +205,7 @@
      virtual pg_shard_t primary_shard() const = 0;
 
      virtual uint64_t min_peer_features() const = 0;
+     virtual bool sort_bitwise() const = 0;
 
      virtual bool transaction_use_tbl() = 0;
      virtual hobject_t get_temp_recovery_object(eversion_t version,
