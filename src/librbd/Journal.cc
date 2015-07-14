@@ -76,6 +76,24 @@ int Journal::remove(librados::IoCtx &io_ctx, const std::string &image_id) {
   CephContext *cct = reinterpret_cast<CephContext *>(io_ctx.cct());
   ldout(cct, 5) << __func__ << ": image=" << image_id << dendl;
 
+  ::journal::Journaler journaler(io_ctx, io_ctx, image_id, "");
+
+  C_SaferCond cond;
+  journaler.init(&cond);
+
+  int r = cond.wait();
+  if (r == -ENOENT) {
+    return 0;
+  } else if (r < 0) {
+    lderr(cct) << "failed to initialize journal: " << cpp_strerror(r) << dendl;
+    return r;
+  }
+
+  r = journaler.remove();
+  if (r < 0) {
+    lderr(cct) << "failed to remove journal: " << cpp_strerror(r) << dendl;
+    return r;
+  }
   return 0;
 }
 
