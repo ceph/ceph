@@ -1947,7 +1947,7 @@ int AsyncConnection::send_message(Message *m)
 
   Mutex::Locker l(write_lock);
   // "features" changes will change the payload encoding
-  if (can_write == NOWRITE || get_features() != f) {
+  if (can_fast_prepare && (can_write == NOWRITE || get_features() != f)) {
     // ensure the correctness of message encoding
     bl.clear();
     m->get_payload().clear();
@@ -2213,36 +2213,10 @@ int AsyncConnection::write_message(Message *m, bufferlist& bl)
     m->get();
   }
 
-  bufferlist complete_bl;
-  // send tag
-  char tag = CEPH_MSGR_TAG_MSG;
-  complete_bl.append(&tag, sizeof(tag));
-
   m->calc_header_crc();
+
   ceph_msg_header& header = m->get_header();
   ceph_msg_footer& footer = m->get_footer();
-  if (has_feature(CEPH_FEATURE_NOSRCADDR)) {
-    complete_bl.append((char*)&header, sizeof(header));
-  } else {
-    ceph_msg_header_old oldheader;
-    memcpy(&oldheader, &header, sizeof(header));
-    oldheader.src.name = header.src;
-    oldheader.src.addr = get_peer_addr();
-    oldheader.orig_src = oldheader.src;
-    oldheader.reserved = header.reserved;
-    // delay crc calculate to "inject_msg_header_crc"
-    oldheader.crc = ceph_crc32c(0, (unsigned char*)&oldheader,
-                                sizeof(oldheader) - sizeof(oldheader.crc));
-    complete_bl.append((char*)&oldheader, sizeof(oldheader));
-  }
-
-  ldout(async_msgr->cct, 20) << __func__ << " sending message type=" << header.type
-                             << " src " << entity_name_t(header.src)
-                             << " front=" << header.front_len
-                             << " data=" << header.data_len
-                             << " off " << header.data_off << dendl;
-
-  complete_bl.claim_append(bl);
 
   // TODO: let sign_message could be reentry?
   // Now that we have all the crcs calculated, handle the
@@ -2261,6 +2235,33 @@ int AsyncConnection::write_message(Message *m, bufferlist& bl)
                                  << "): sig = " << footer.sig << dendl;
     }
   }
+
+  bufferlist complete_bl;
+  // send tag
+  char tag = CEPH_MSGR_TAG_MSG;
+  complete_bl.append(&tag, sizeof(tag));
+
+  if (has_feature(CEPH_FEATURE_NOSRCADDR)) {
+    complete_bl.append((char*)&header, sizeof(header));
+  } else {
+    ceph_msg_header_old oldheader;
+    memcpy(&oldheader, &header, sizeof(header));
+    oldheader.src.name = header.src;
+    oldheader.src.addr = get_peer_addr();
+    oldheader.orig_src = oldheader.src;
+    oldheader.reserved = header.reserved;
+    oldheader.crc = ceph_crc32c(0, (unsigned char*)&oldheader,
+                                sizeof(oldheader) - sizeof(oldheader.crc));
+    complete_bl.append((char*)&oldheader, sizeof(oldheader));
+  }
+
+  ldout(async_msgr->cct, 20) << __func__ << " sending message type=" << header.type
+                             << " src " << entity_name_t(header.src)
+                             << " front=" << header.front_len
+                             << " data=" << header.data_len
+                             << " off " << header.data_off << dendl;
+
+  complete_bl.claim_append(bl);
 
   // send footer; if receiver doesn't support signatures, use the old footer format
   ceph_msg_footer_old old_footer;
