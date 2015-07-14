@@ -2740,11 +2740,11 @@ int main(int argc, char **argv)
      "PG id, mandatory for info, log, remove, export, rm-past-intervals")
     ("op", po::value<string>(&op),
      "Arg is one of [info, log, remove, export, import, list, fix-lost, list-pgs, rm-past-intervals, set-allow-sharded-objects, dump-journal, dump-super, "
-	 "get-osdmap, set-osdmap, set-inc-osdmap]")
+	 "get-osdmap, set-osdmap, get-inc-osdmap, set-inc-osdmap]")
     ("epoch", po::value<unsigned>(&epoch),
-     "epoch# for get-osdmap, the current epoch in use if not specified")
+     "epoch# for get-osdmap and get-inc-osdmap, the current epoch in use if not specified")
     ("file", po::value<string>(&file),
-     "path of file to export, import, get-osdmap, set-osdmap or set-inc-osdmap")
+     "path of file to export, import, get-osdmap, set-osdmap, get-inc-osdmap or set-inc-osdmap")
     ("format", po::value<string>(&format)->default_value("json-pretty"),
      "Output format which may be json, json-pretty, xml, xml-pretty")
     ("debug", "Enable diagnostic output to stderr")
@@ -2892,7 +2892,7 @@ int main(int argc, char **argv)
   outistty = isatty(STDOUT_FILENO);
 
   file_fd = fd_none;
-  if ((op == "export" || op == "get-osdmap") && !dry_run) {
+  if ((op == "export" || op == "get-osdmap" || op == "get-inc-osdmap") && !dry_run) {
     if (!vm.count("file") || file == "-") {
       if (outistty) {
         cerr << "stdout is a tty and no --file filename specified" << std::endl;
@@ -2916,7 +2916,7 @@ int main(int argc, char **argv)
 
   if (vm.count("file") && file_fd == fd_none && !dry_run) {
     cerr << "--file option only applies to import, export, "
-	 << "get-osdmap, set-osdmap or set-inc-osdmap" << std::endl;
+	 << "get-osdmap, set-osdmap, get-inc-osdmap or set-inc-osdmap" << std::endl;
     myexit(1);
   }
 
@@ -3297,6 +3297,24 @@ int main(int argc, char **argv)
       ret = set_osdmap(fs, epoch, bl, force);
     }
     goto out;
+  } else if (op == "get-inc-osdmap") {
+    bufferlist bl;
+    if (epoch == 0) {
+      epoch = superblock.current_epoch;
+    }
+    ret = get_inc_osdmap(fs, epoch, bl);
+    if (ret < 0) {
+      cerr << "Failed to get incremental osdmap# " << epoch << ": "
+	   << cpp_strerror(ret) << std::endl;
+      goto out;
+    }
+    ret = bl.write_fd(file_fd);
+    if (ret) {
+      cerr << "Failed to write to " << file << ": " << cpp_strerror(ret) << std::endl;
+    } else {
+      cout << "inc-osdmap#" << epoch << " exported." << std::endl;
+    }
+    goto out;
   } else if (op == "set-inc-osdmap") {
     bufferlist bl;
     ret = get_fd_data(file_fd, bl);
@@ -3398,7 +3416,7 @@ int main(int argc, char **argv)
   // before complaining about a bad pgid
   if (!vm.count("objcmd") && op != "export" && op != "info" && op != "log" && op != "rm-past-intervals") {
     cerr << "Must provide --op (info, log, remove, export, import, list, fix-lost, list-pgs, rm-past-intervals, set-allow-sharded-objects, dump-journal, dump-super, "
-      "get-osdmap, set-osdmap, set-inc-osdmap)"
+      "get-osdmap, set-osdmap, get-inc-osdmap, set-inc-osdmap)"
 	 << std::endl;
     usage(desc);
     ret = 1;
