@@ -295,22 +295,64 @@ def deploy_ceph(ctx, cal_svr):
     osd_to_name = {}
     all_machines = set()
     all_mons = set()
+    all_osds = set()
+
+    # collect which remotes are osds and which are mons
     for remote in ctx.cluster.remotes:
         all_machines.add(remote.shortname)
         roles = ctx.cluster.remotes[remote]
         for role in roles:
             daemon_type, number = role.split('.')
             if daemon_type == 'osd':
+                all_osds.add(remote.shortname)
                 osd_to_name[number] = remote.shortname
             if daemon_type == 'mon':
                 all_mons.add(remote.shortname)
-    first_cmds = [['new'] + list(all_mons), ['install'] + list(all_machines),
-                  ['mon', 'create-initial']]
-    ret = True
-    for entry in first_cmds:
-        arg_list = ['ceph-deploy'] + entry
-        log.info('Running: %s' % ' '.join(arg_list))
-        ret &= cal_svr.run(args=arg_list).exitstatus
+
+    # figure out whether we're in "1.3+" mode: prior to 1.3, there was
+    # only one Ceph repo, and it was all installed on every Ceph host.
+    # with 1.3, we've split that into MON and OSD repos (in order to
+    # be able to separately track subscriptions per-node).  This
+    # requires new switches to ceph-deploy to select which locally-served
+    # repo is connected to which cluster host.
+    #
+    # (TODO: A further issue is that the installation/setup may not have
+    # created local repos at all, but that is the subject of a future
+    # change.)
+
+    r = cal_svr.run(args='/usr/bin/test -d /mnt/MON')
+    use_install_repo = (r.returncode == 0)
+
+    # pre-1.3:
+    # ceph-deploy new <all_mons>
+    # ceph-deploy install <all_machines>
+    # ceph-deploy mon create-initial
+    #
+    # 1.3 and later:
+    # ceph-deploy new <all_mons>
+    # ceph-deploy install --repo --release=ceph-mon <all_mons>
+    # ceph-deploy install --mon <all_mons>
+    # ceph-deploy install --repo --release=ceph-osd <all_osds>
+    # ceph-deploy install --osd <all_osds>
+    # ceph-deploy mon create-initial
+
+    cmds = ['ceph-deploy new ' + ' '.join(all_mons)]
+
+    if use_install_repo:
+        cmds.append('ceph-deploy install --repo --release=ceph-mon ' +
+                    ' '.join(all_mons))
+        cmds.append('ceph-deploy install --mon ' + ' '.join(all_mons))
+        cmds.append('ceph-deploy install --repo --release=ceph-osd ' +
+                    ' '.join(all_osds))
+        cmds.append('ceph-deploy install --mon ' + ' '.join(all_osds))
+    else:
+        cmds.append('ceph-deploy install ' + ' '.join(all_machines))
+
+    cmds.append('ceph-deploy mon create-initial')
+
+    for cmd in cmds:
+        cal_svr.run(args=cmd).exitstatus
+
     disk_labels = '_dcba'
     # NEEDS WORK assumes disks start with vd (need to check this somewhere)
     for cmd_pts in [['disk', 'zap'], ['osd', 'prepare'], ['osd', 'activate']]:
@@ -325,9 +367,7 @@ def deploy_ceph(ctx, cal_svr):
             if 'activate' in cmd_pts:
                 disk_id += '1'
             arg_list.append(disk_id)
-            log.info('Running: %s' % ' '.join(arg_list))
-            ret &= cal_svr.run(args=arg_list).exitstatus
-    return ret
+            cal_svr.run(args=arg_list).exitstatus
 
 
 def undeploy_ceph(ctx, cal_svr):
