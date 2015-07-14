@@ -551,25 +551,29 @@ void old_inode_t::generate_test_instances(list<old_inode_t*>& ls)
  */
 void fnode_t::encode(bufferlist &bl) const
 {
-  ENCODE_START(2, 2, bl);
+  ENCODE_START(3, 3, bl);
   ::encode(version, bl);
   ::encode(snap_purged_thru, bl);
   ::encode(fragstat, bl);
   ::encode(accounted_fragstat, bl);
   ::encode(rstat, bl);
   ::encode(accounted_rstat, bl);
+  ::encode(damage_flags, bl);
   ENCODE_FINISH(bl);
 }
 
 void fnode_t::decode(bufferlist::iterator &bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(3, 2, 2, bl);
   ::decode(version, bl);
   ::decode(snap_purged_thru, bl);
   ::decode(fragstat, bl);
   ::decode(accounted_fragstat, bl);
   ::decode(rstat, bl);
   ::decode(accounted_rstat, bl);
+  if (struct_v >= 3) {
+    ::decode(damage_flags, bl);
+  }
   DECODE_FINISH(bl);
 }
 

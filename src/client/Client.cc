@@ -7297,7 +7297,7 @@ int Client::_read_async(Fh *f, uint64_t off, uint64_t len, bufferlist *bl)
     len = in->size - off;    
   }
 
-  ldout(cct, 10) << " max_byes=" << conf->client_readahead_max_bytes
+  ldout(cct, 10) << " max_bytes=" << conf->client_readahead_max_bytes
 		 << " max_periods=" << conf->client_readahead_max_periods << dendl;
 
   // read (and possibly block)

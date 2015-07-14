@@ -57,4 +57,9 @@ libcls_rgw_la_SOURCES = \
 libcls_rgw_la_LIBADD = libjson_spirit.la $(PTHREAD_LIBS) $(EXTRALIBS)
 libcls_rgw_la_LDFLAGS = ${AM_LDFLAGS} -module -avoid-version -shared -export-symbols-regex '.*__cls_.*'
 radoslib_LTLIBRARIES += libcls_rgw.la
+
+libcls_cephfs_la_SOURCES = cls/cephfs/cls_cephfs.cc
+libcls_cephfs_la_LIBADD = $(PTHREAD_LIBS) $(EXTRALIBS)
+libcls_cephfs_la_LDFLAGS = ${AM_LDFLAGS} -module -avoid-version -shared -export-symbols-regex '.*__cls_.*'
+radoslib_LTLIBRARIES += libcls_cephfs.la
 endif # WITH_OSD
