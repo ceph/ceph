@@ -187,6 +187,8 @@ bool OpTracker::check_ops_in_flight(std::vector<string> &warning_vector)
     return false;
 
   warning_vector.reserve(log_threshold + 1);
+  //store summary message
+  warning_vector.push_back("");
 
   int slow = 0;     // total slow
   int warned = 0;   // total logged
@@ -205,8 +207,6 @@ bool OpTracker::check_ops_in_flight(std::vector<string> &warning_vector)
       if (((*i)->get_initiated() +
 	 (complaint_time * (*i)->warn_interval_multiplier)) < now) {
       // will warn
-        if (warning_vector.empty())
-          warning_vector.push_back("");
         warned++;
         if (warned > log_threshold)
           break;
@@ -236,7 +236,7 @@ bool OpTracker::check_ops_in_flight(std::vector<string> &warning_vector)
     warning_vector[0] = ss.str();
   }
 
-  return warning_vector.size();
+  return warned;
 }
 
 void OpTracker::get_age_ms_histogram(pow2_hist_t *h)
