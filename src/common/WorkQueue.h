@@ -102,10 +102,6 @@ public:
     virtual bool _enqueue(T *) = 0;
     virtual void _dequeue(T *) = 0;
     virtual void _dequeue(list<T*> *) = 0;
-    virtual void _process(const list<T*> &) { assert(0); }
-    virtual void _process(const list<T*> &items, TPHandle &handle) {
-      _process(items);
-    }
     virtual void _process_finish(const list<T*> &) {}
 
     // virtual methods from WorkQueue_ below
@@ -125,6 +121,12 @@ public:
     void _void_process_finish(void *p) {
       _process_finish(*(list<T*>*)p);
       delete (list<T*> *)p;
+    }
+
+  protected:
+    virtual void _process(const list<T*> &) { assert(0); }
+    virtual void _process(const list<T*> &items, TPHandle &handle) {
+      _process(items);
     }
 
   public:
@@ -187,10 +189,6 @@ public:
     virtual void _enqueue_front(T) = 0;
     virtual bool _empty() = 0;
     virtual U _dequeue() = 0;
-    virtual void _process(U) { assert(0); }
-    virtual void _process(U u, TPHandle &) {
-      _process(u);
-    }
     virtual void _process_finish(U) {}
 
     void *_void_dequeue() {
@@ -257,6 +255,10 @@ public:
     void unlock() {
       pool->unlock();
     }
+    virtual void _process(U) { assert(0); }
+    virtual void _process(U u, TPHandle &) {
+      _process(u);
+    }
   };
 
   /** @brief Template by-pointer work queue.
@@ -274,11 +276,6 @@ public:
     virtual void _dequeue(T *) = 0;
     /// Dequeue a work item and return the original submitted pointer.
     virtual T *_dequeue() = 0;
-    /// Process a work item. Called from the worker threads.
-    virtual void _process(T *t) { assert(0); }
-    virtual void _process(T *t, TPHandle &) {
-      _process(t);
-    }
     virtual void _process_finish(T *) {}
 
     // implementation of virtual methods from WorkQueue_
@@ -290,6 +287,13 @@ public:
     }
     void _void_process_finish(void *p) {
       _process_finish(static_cast<T *>(p));
+    }
+
+  protected:
+    /// Process a work item. Called from the worker threads.
+    virtual void _process(T *t) { assert(0); }
+    virtual void _process(T *t, TPHandle &) {
+      _process(t);
     }
 
   public:
@@ -453,6 +457,7 @@ public:
     _queue.pop_front();
     return c;
   }
+  using WorkQueueVal<GenContext<ThreadPool::TPHandle&>*>::_process;
   void _process(GenContext<ThreadPool::TPHandle&> *c, ThreadPool::TPHandle &tp) {
     c->complete(tp);
   }
@@ -499,6 +504,7 @@ protected:
   virtual void _process(std::pair<Context *, int> item) {
     item.first->complete(item.second);
   }
+  using ThreadPool::WorkQueueVal<std::pair<Context *, int> >::_process;
 private:
   list<std::pair<Context *, int> > _queue;
 };

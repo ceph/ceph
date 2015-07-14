@@ -779,6 +779,7 @@ protected:
   };
   friend std::ostream &operator<<(ostream& out, const lowprecision_t& v);
 
+  using OSDUtilizationDumper<TextTable>::dump_item;
   virtual void dump_item(const CrushTreeDumper::Item &qi,
 			 float &reweight,
 			 int64_t kb,
@@ -857,6 +858,7 @@ public:
   }
 
 protected:
+  using OSDUtilizationDumper<Formatter>::dump_item;
   virtual void dump_item(const CrushTreeDumper::Item &qi,
 			 float &reweight,
 			 int64_t kb,
