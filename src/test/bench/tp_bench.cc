@@ -93,6 +93,7 @@ class PassAlong : public ThreadPool::WorkQueue<unsigned> {
     q.pop_front();
     return val;
   }
+  using ThreadPool::WorkQueue<unsigned>::_process;
   void _process(unsigned *item) {
     next->queue(item);
   }
