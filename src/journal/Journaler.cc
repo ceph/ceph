@@ -26,6 +26,18 @@ namespace {
 static const std::string JOURNAL_HEADER_PREFIX = "journal.";
 static const std::string JOURNAL_OBJECT_PREFIX = "journal_data.";
 
+struct C_DeleteRecorder : public Context {
+  JournalRecorder *recorder;
+  Context *on_safe;
+  C_DeleteRecorder(JournalRecorder *_recorder, Context *_on_safe)
+    : recorder(_recorder), on_safe(_on_safe) {
+  }
+  virtual void finish(int r) {
+    delete recorder;
+    on_safe->complete(r);
+  }
+};
+
 } // anonymous namespace
 
 using namespace cls::journal;
@@ -137,19 +149,11 @@ void Journaler::start_append() {
                                    m_metadata, 0, 0, 0);
 }
 
-int Journaler::stop_append() {
+void Journaler::stop_append(Context *on_safe) {
   assert(m_recorder != NULL);
 
-  C_SaferCond cond;
-  flush(&cond);
-  int r = cond.wait();
-  if (r < 0) {
-    return r;
-  }
-
-  delete m_recorder;
+  flush(new C_DeleteRecorder(m_recorder, on_safe));
   m_recorder = NULL;
-  return 0;
 }
 
 Future Journaler::append(const std::string &tag, const bufferlist &payload_bl) {
