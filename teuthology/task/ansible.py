@@ -94,6 +94,9 @@ class Ansible(Task):
                 key: value
 
     """
+    # set this in subclasses to provide a group to
+    # assign hosts to for dynamic inventory creation
+    inventory_group = None
 
     def __init__(self, ctx, config):
         super(Ansible, self).__init__(ctx, config)
@@ -177,7 +180,11 @@ class Ansible(Task):
         hosts = self.cluster.remotes.keys()
         hostnames = [remote.hostname for remote in hosts]
         hostnames.sort()
-        hosts_str = '\n'.join(hostnames + [''])
+        inventory = []
+        if self.inventory_group:
+            inventory.append('[{0}]'.format(self.inventory_group))
+        inventory.extend(hostnames + [''])
+        hosts_str = '\n'.join(inventory)
         hosts_file = NamedTemporaryFile(prefix="teuth_ansible_hosts_",
                                         delete=False)
         hosts_file.write(hosts_str)
@@ -288,11 +295,15 @@ class CephLab(Ansible):
     - ansible:
         repo: {git_base}ceph-cm-ansible.git
         playbook: cephlab.yml
+
+    If a dynamic inventory is used, all hosts will be assigned to the
+    group 'testnodes'.
     """.format(git_base=teuth_config.ceph_git_base_url)
 
     # Set the name so that Task knows to look up overrides for
     # 'ansible.cephlab' instead of just 'cephlab'
     name = 'ansible.cephlab'
+    inventory_group = 'testnodes'
 
     def __init__(self, ctx, config):
         config = config or dict()

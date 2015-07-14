@@ -208,7 +208,10 @@ class TestAnsibleTask(TestTask):
         assert task.generated_inventory is True
         assert task.inventory == hosts_file_path
         hosts_file_obj.seek(0)
-        assert hosts_file_obj.readlines() == ['remote1\n', 'remote2\n']
+        assert hosts_file_obj.readlines() == [
+            'remote1\n',
+            'remote2\n',
+        ]
 
     def test_generate_playbook(self):
         playbook = [
@@ -435,3 +438,26 @@ class TestCephLabTask(TestTask):
             m_file.return_value = fake_playbook_obj
             task.get_playbook()
         assert task.playbook_file.name == playbook
+
+
+    def test_generate_hosts_file(self):
+        self.task_config.update(dict(
+            playbook=[]
+        ))
+        task = self.klass(self.ctx, self.task_config)
+        hosts_file_path = '/my/hosts/file'
+        hosts_file_obj = StringIO()
+        hosts_file_obj.name = hosts_file_path
+        with patch.object(ansible, 'NamedTemporaryFile') as m_NTF:
+            m_NTF.return_value = hosts_file_obj
+            task.generate_hosts_file()
+            m_NTF.assert_called_once_with(prefix="teuth_ansible_hosts_",
+                                          delete=False)
+        assert task.generated_inventory is True
+        assert task.inventory == hosts_file_path
+        hosts_file_obj.seek(0)
+        assert hosts_file_obj.readlines() == [
+            '[testnodes]\n',
+            'remote1\n',
+            'remote2\n',
+        ]
