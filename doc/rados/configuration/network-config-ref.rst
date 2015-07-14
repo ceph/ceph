@@ -423,13 +423,13 @@ TCP
 Ceph disables TCP buffering by default.
 
 
-``tcp nodelay``
+``ms tcp nodelay``
 
-:Description: Ceph enables ``tcp nodelay`` so that each request is sent 
+:Description: Ceph enables ``ms tcp nodelay`` so that each request is sent 
               immediately (no buffering). Disabling `Nagle's algorithm`_
               increases network traffic, which can introduce latency. If you 
               experience large numbers of small packets, you may try 
-              disabling ``tcp nodelay``. 
+              disabling ``ms tcp nodelay``. 
 
 :Type: Boolean
 :Required: No
@@ -437,7 +437,7 @@ Ceph disables TCP buffering by default.
 
 
 
-``tcp rcvbuf``
+``ms tcp rcvbuf``
 
 :Description: The size of the socket buffer on the receiving end of a network
               connection. Disable by default.
@@ -451,7 +451,7 @@ Ceph disables TCP buffering by default.
 ``ms tcp read timeout``
 
 :Description: If a client or daemon makes a request to another Ceph daemon and
-              does not drop an unused connection, the ``tcp read timeout`` 
+              does not drop an unused connection, the ``ms tcp read timeout`` 
               defines the connection as idle after the specified number 
               of seconds.
 
