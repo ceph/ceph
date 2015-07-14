@@ -208,7 +208,7 @@ Ceph configuration file, the default value will be set automatically.
 :Default: ``false``
 
 
-``rgw object stripe size``
+``rgw obj stripe size``
 
 :Description: The size of an object stripe for Ceph Object Gateway objects.
               See `Architecture`_ for details on striping.
