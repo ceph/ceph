@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "journal/JournalPlayer.h"
+#include "common/Finisher.h"
 #include "journal/ReplayHandler.h"
 #include "journal/Utils.h"
 
@@ -10,6 +11,22 @@
 #define dout_prefix *_dout << "JournalPlayer: "
 
 namespace journal {
+
+namespace {
+
+struct C_HandleComplete: public Context {
+  ReplayHandler *replay_handler;
+
+  C_HandleComplete(ReplayHandler *_replay_handler)
+    : replay_handler(_replay_handler) {
+  }
+
+  virtual void finish(int r) {
+    replay_handler->handle_complete(r);
+  }
+};
+
+} // anonymous namespace
 
 JournalPlayer::JournalPlayer(librados::IoCtx &ioctx,
                              const std::string &object_oid_prefix,
@@ -95,9 +112,8 @@ bool JournalPlayer::try_pop_front(Entry *entry,
       object_player->watch(&m_process_state, m_watch_interval);
       m_watch_scheduled = true;
     } else if (!m_watch_enabled && !object_player->is_fetch_in_progress()) {
-      m_lock.Unlock();
-      m_replay_handler->handle_complete(0);
-      m_lock.Lock();
+      m_journal_metadata->get_finisher().queue(new C_HandleComplete(
+        m_replay_handler), 0);
     }
     return false;
   }
@@ -111,9 +127,8 @@ bool JournalPlayer::try_pop_front(Entry *entry,
     lderr(m_cct) << "missing prior journal entry: " << *entry << dendl;
 
     m_state = STATE_ERROR;
-    m_lock.Unlock();
-    m_replay_handler->handle_complete(-EINVAL);
-    m_lock.Lock();
+    m_journal_metadata->get_finisher().queue(new C_HandleComplete(
+      m_replay_handler), -EINVAL);
     return false;
   }
 
@@ -238,9 +253,8 @@ int JournalPlayer::process_prefetch() {
   } else {
     ldout(m_cct, 10) << __func__ << ": no uncommitted entries available"
                      << dendl;
-    m_lock.Unlock();
-    m_replay_handler->handle_complete(0);
-    m_lock.Lock();
+    m_journal_metadata->get_finisher().queue(new C_HandleComplete(
+      m_replay_handler), 0);
   }
   return 0;
 }
