@@ -5,7 +5,6 @@ roles:
 - [mon.b, osd.3, osd.4, osd.5, client.1]
 
 tasks:
-- chef:
 - install:
     branch: master
 - ceph:
