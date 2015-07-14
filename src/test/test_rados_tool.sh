@@ -98,6 +98,13 @@ run_expect_succ "$RADOS_TOOL" -p "$POOL" --create import "$TDIR/expa"
 # inaccessible import src should fail
 run_expect_fail "$RADOS_TOOL" -p "$POOL" import "$TDIR/dir_nonexistent"
 
+# export an empty pool to test purge
+run_expect_succ "$RADOS_TOOL" purge "$POOL" --yes-i-really-really-mean-it
+run_expect_succ "$RADOS_TOOL" -p "$POOL" export "$TDIR/empty"
+cmp -s "$TDIR/expb" "$TDIR/empty" \
+    || die "failed to export the same stuff we imported!"
+rm -f "$TDIR/empty"
+
 # import some stuff with extended attributes on it
 run_expect_succ "$RADOS_TOOL" -p "$POOL" import "$TDIR/expc"
 VAL=`"$RADOS_TOOL" -p "$POOL" getxattr foo "rados.toothbrush"`

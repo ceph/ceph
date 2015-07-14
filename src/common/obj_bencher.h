@@ -53,6 +53,9 @@ const int OP_WRITE     = 1;
 const int OP_SEQ_READ  = 2;
 const int OP_RAND_READ = 3;
 
+// Object is composed of <oid,namespace>
+typedef std::pair<std::string, std::string> Object;
+
 class ObjBencher {
   bool show_time;
 public:
@@ -71,8 +74,7 @@ protected:
   int rand_read_bench(int secondsToRun, int num_objects, int concurrentios, int writePid, bool no_verify=false);
 
   int clean_up(int num_objects, int prevPid, int concurrentios);
-  int clean_up_slow(const std::string& prefix, int concurrentios);
-  bool more_objects_matching_prefix(const std::string& prefix, std::list<std::string>* name);
+  bool more_objects_matching_prefix(const std::string& prefix, std::list<Object>* name);
 
   virtual int completions_init(int concurrentios) = 0;
   virtual void completions_done() = 0;
@@ -91,7 +93,8 @@ protected:
   virtual int sync_write(const std::string& oid, bufferlist& bl, size_t len) = 0;
   virtual int sync_remove(const std::string& oid) = 0;
 
-  virtual bool get_objects(std::list<std::string>* objects, int num) = 0;
+  virtual bool get_objects(std::list< std::pair<std::string, std::string> >* objects, int num) = 0;
+  virtual void set_namespace(const std::string&) {}
 
   ostream& out(ostream& os);
   ostream& out(ostream& os, utime_t& t);
@@ -106,6 +109,7 @@ public:
   void set_show_time(bool dt) {
     show_time = dt;
   }
+  int clean_up_slow(const std::string& prefix, int concurrentios);
 };
 
 
