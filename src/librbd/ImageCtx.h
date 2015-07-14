@@ -135,6 +135,9 @@ namespace librbd {
     AioImageRequestWQ *aio_work_queue;
     ContextWQ *op_work_queue;
 
+    Cond refresh_cond;
+    bool refresh_in_progress;
+
     // Configuration
     static const string METADATA_CONF_PREFIX;
     bool non_blocking_aio;

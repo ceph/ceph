@@ -2090,17 +2090,34 @@ reprotect_and_return_err:
     CephContext *cct = ictx->cct;
     ldout(cct, 20) << "ictx_check " << ictx << dendl;
 
-    ictx->refresh_lock.Lock();
-    bool needs_refresh = ictx->last_refresh != ictx->refresh_seq;
-    ictx->refresh_lock.Unlock();
+    bool needs_refresh = false;
+    int refresh_seq;
+    {
+      Mutex::Locker refresh_locker(ictx->refresh_lock);
+      while (ictx->refresh_in_progress) {
+        ictx->refresh_cond.Wait(ictx->refresh_lock);
+      }
+
+      if (ictx->last_refresh != ictx->refresh_seq) {
+        ictx->refresh_in_progress = true;
+        needs_refresh = true;
+        refresh_seq = ictx->refresh_seq;
+      }
+    }
 
     if (needs_refresh) {
       int r = ictx_refresh(ictx);
+
+      Mutex::Locker refresh_locker(ictx->refresh_lock);
+      ictx->refresh_in_progress = false;
+      ictx->refresh_cond.Signal();
+
       if (r < 0) {
 	lderr(cct) << "Error re-reading rbd header: " << cpp_strerror(-r)
 		   << dendl;
         return r;
       }
+      ictx->last_refresh = refresh_seq;
     }
     return 0;
   }
@@ -2151,10 +2168,6 @@ reprotect_and_return_err:
     bufferlist bl, bl2;
 
     ldout(cct, 20) << "ictx_refresh " << ictx << dendl;
-
-    ictx->refresh_lock.Lock();
-    int refresh_seq = ictx->refresh_seq;
-    ictx->refresh_lock.Unlock();
 
     ::SnapContext new_snapc;
     bool new_snap = false;
@@ -2329,11 +2342,6 @@ reprotect_and_return_err:
     if (new_snap) {
       _flush(ictx);
     }
-
-    ictx->refresh_lock.Lock();
-    ictx->last_refresh = refresh_seq;
-    ictx->refresh_lock.Unlock();
-
     return 0;
   }
 
