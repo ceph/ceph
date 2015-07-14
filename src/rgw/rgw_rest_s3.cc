@@ -2137,60 +2137,60 @@ static bool looks_like_ip_address(const char *bucket)
 }
 
 static int check_bucket_name_characters_for_relaxed(const string& bucket) {
-  	for (const char *s = bucket.c_str(); *s; ++s) {
-  	  char c = *s;
-  	  if (isdigit(c) || isalpha(c))
-  		continue;
-  	  else if ((c == '-') || (c == '_') || (c == '.'))
-  		continue;
-  	  // Invalid character
-  	  return -ERR_INVALID_BUCKET_NAME;
-  	}
-  	return 0;
+  for (const char *s = bucket.c_str(); *s; ++s) {
+    char c = *s;
+    if (isdigit(c) || isalpha(c))
+      continue;
+    else if ((c == '-') || (c == '_') || (c == '.'))
+      continue;
+    // Invalid character
+    return -ERR_INVALID_BUCKET_NAME;
+  }
+  return 0;
 }
 
 static int check_bucket_name_characters_for_DNS(const string& bucket, int len) {
-	// bucket name length cannot exceed 63 characters.
-	if (len > 63)
-		return -ERR_INVALID_BUCKET_NAME;
-	// bucket name must start with either letter or number.
-	if (!(isalpha(bucket[0]) || isdigit(bucket[0])))
-		return -ERR_INVALID_BUCKET_NAME;
-	// bucket name must end with either letter or number.
-	if (!(isalpha(bucket[len-1]) || isdigit(bucket[len-1])))
-		return -ERR_INVALID_BUCKET_NAME;
-	// bucket name cannot contain a sequence of ".-" , ".." or "-."
-	bool last_char_dot = false; // last character occurred was a '.'
-	bool last_char_hyphen = false; // last character occurred was a '-'
-	for (const char *s = bucket.c_str(); *s; ++s) {
-		char c = *s;
-		// bucket name cannot contain uppercase letters.
-		if (isdigit(c) || (isalpha(c) && islower(c))) {
-			last_char_hyphen = false;
-			last_char_dot = false;
-			continue;
-		}
-		else if (c == '.') {
-			if ((last_char_hyphen || last_char_dot))
-				return -ERR_INVALID_BUCKET_NAME;
-			else {
-				last_char_dot = true;
-				continue;
-			}
-		}
-		else if (c == '-') {
-			if (last_char_dot)
-				return -ERR_INVALID_BUCKET_NAME;
-			else {
-				last_char_hyphen = true;
-				continue;
-			}
-		}
-	  // Invalid character (cannot contain anything except alphanumeric, '.' and '-' )
-		else
-			return -ERR_INVALID_BUCKET_NAME;
-	}
-	return 0;
+  // bucket name length cannot exceed 63 characters.
+  if (len > 63)
+    return -ERR_INVALID_BUCKET_NAME;
+  // bucket name must start with either letter or number.
+  if (!(isalpha(bucket[0]) || isdigit(bucket[0])))
+    return -ERR_INVALID_BUCKET_NAME;
+  // bucket name must end with either letter or number.
+  if (!(isalpha(bucket[len-1]) || isdigit(bucket[len-1])))
+    return -ERR_INVALID_BUCKET_NAME;
+  // bucket name cannot contain a sequence of ".-" , ".." or "-."
+  bool last_char_dot = false; // last character occurred was a '.'
+  bool last_char_hyphen = false; // last character occurred was a '-'
+  for (const char *s = bucket.c_str(); *s; ++s) {
+    char c = *s;
+    // bucket name cannot contain uppercase letters.
+    if (isdigit(c) || (isalpha(c) && islower(c))) {
+      last_char_hyphen = false;
+      last_char_dot = false;
+      continue;
+    }
+    else if (c == '.') {
+      if ((last_char_hyphen || last_char_dot))
+        return -ERR_INVALID_BUCKET_NAME;
+      else {
+        last_char_dot = true;
+        continue;
+      }
+    }
+    else if (c == '-') {
+      if (last_char_dot)
+        return -ERR_INVALID_BUCKET_NAME;
+      else {
+        last_char_hyphen = true;
+        continue;
+      }
+    }
+    // Invalid character (cannot contain anything except alphanumeric, '.' and '-' )
+    else
+      return -ERR_INVALID_BUCKET_NAME;
+  }
+  return 0;
 }
 
 int RGWHandler_ObjStore_S3::validate_bucket_name(const string& bucket, int name_strictness)
@@ -2204,31 +2204,31 @@ int RGWHandler_ObjStore_S3::validate_bucket_name(const string& bucket, int name_
     return 0;
 
   switch(name_strictness) {
-  	  case 0:
-  		  // bucket name cannot contain anything except alphanumeric, '.', '-' and '_'.
-  		  ret = check_bucket_name_characters_for_relaxed(bucket);
-  		  break;
+    case 0:
+      // bucket name cannot contain anything except alphanumeric, '.', '-' and '_'.
+      ret = check_bucket_name_characters_for_relaxed(bucket);
+      break;
 
-  	  case 1:
-  		  // bucket names must start with a number or letter
-  		  if (!(isalpha(bucket[0]) || isdigit(bucket[0])))
-  			  return -ERR_INVALID_BUCKET_NAME;
-  		  // bucket name cannot contain anything except alphanumeric, '.', '-' and '_'.
-  		  ret = check_bucket_name_characters_for_relaxed(bucket);
-  		  break;
+    case 1:
+      // bucket names must start with a number or letter
+      if (!(isalpha(bucket[0]) || isdigit(bucket[0])))
+        return -ERR_INVALID_BUCKET_NAME;
+      // bucket name cannot contain anything except alphanumeric, '.', '-' and '_'.
+      ret = check_bucket_name_characters_for_relaxed(bucket);
+      break;
 
-  	  case 2:
-  		  // check other conditions so as to confirm DNS compliance.
-  		  ret = check_bucket_name_characters_for_DNS(bucket, len);
-  		  break;
+    case 2:
+      // check other conditions so as to confirm DNS compliance.
+      ret = check_bucket_name_characters_for_DNS(bucket, len);
+      break;
 
-  	  default: // default is case 1.
-  		  if (!(isalpha(bucket[0]) || isdigit(bucket[0])))
-  			  return -ERR_INVALID_BUCKET_NAME;
-  		  ret = check_bucket_name_characters_for_relaxed(bucket);
+    default: // default is case 1.
+      if (!(isalpha(bucket[0]) || isdigit(bucket[0])))
+        return -ERR_INVALID_BUCKET_NAME;
+      ret = check_bucket_name_characters_for_relaxed(bucket);
   }
   if (ret < 0)
-	  return ret;
+    return ret;
 
   if (looks_like_ip_address(bucket.c_str()))
     return -ERR_INVALID_BUCKET_NAME;
