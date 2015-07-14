@@ -20,10 +20,11 @@ ceph_release_notes -r tags/v0.87..giant /path/to/ceph/repo
 """
 
 from __future__ import print_function
-import re
-import os
 import argparse
 import github
+import os
+import re
+import sys
 
 from git import Repo
 
@@ -36,12 +37,14 @@ signed_off_re = re.compile("Signed-off-by: (.+) <")
 
 def make_release_notes(gh, repo, ref):
 
+    issue2prs = {}
+
     for commit in repo.iter_commits(ref):
         merge = merge_re.match(commit.summary)
         if merge:
-            pr = {}
             issue = ''
-            pr = gh.repos("ceph")("ceph").pulls(merge.group(1)).get()
+            number = merge.group(1)
+            pr = gh.repos("ceph")("ceph").pulls(number).get()
             # We are not handling multiple issues here yet
             if pr['body']:
                 fixes = fixes_re.findall(pr['body'])
@@ -51,17 +54,28 @@ def make_release_notes(gh, repo, ref):
                 elif fixes:
                     issue = ','.join(fixes)
 
+            if not issue:
+                print ("ERROR: http://github.com/ceph/ceph/pull/" + str(number) + " has no associated issue")
+                continue    
+
             title = pr['title']
 
+            title_re = '^(common|mon|osd|fs|librbd|rbd|fs|mds|objecter|rgw|build/ops|tests|tools|doc|crush|librados):'
+            if not re.match(title_re, title):
+                print ("ERROR: http://github.com/ceph/ceph/pull/" + str(number) + " title " + title + " does not match " + title_re)
             # Big assumption, do a sanity check in the end, we are
             # getting the author of final merge commit
             author = commit.parents[-1].author.name
-            if issue:
-                print ("{0} (#{1}, {2})".format(title, issue, author))
-            elif author:
-                print ("{0} ({1})".format(title, author))
-            else:
-                print (title)
+            issue2prs.setdefault(issue, []).append((author, title, number))
+            sys.stdout.write('.')
+
+    print (" done collecting merges.")
+
+    for (issue, prs) in issue2prs.iteritems():
+        if len(prs) > 1:
+            print (">>>>>>> " + str(len(prs)) + " pr for issue " + issue)
+        for (author, title, number) in prs:
+            print ("* {title} (`issue#{issue} <http://tracker.ceph.com/issues/{issue}>`_, `pr#{number} <http://github.com/ceph/ceph/pull/{number}>`_, {author})".format(title=title, issue=issue, author=author, number=number))
 
 
 if __name__ == "__main__":
