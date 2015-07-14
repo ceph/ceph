@@ -95,6 +95,23 @@ int Journaler::create(uint8_t order, uint8_t splay_width) {
   return 0;
 }
 
+int Journaler::remove() {
+  int r = m_trimmer->remove_objects();
+  if (r < 0) {
+    lderr(m_cct) << "failed to remove journal objects: " << cpp_strerror(r)
+                 << dendl;
+    return r;
+  }
+
+  r = m_header_ioctx.remove(m_header_oid);
+  if (r < 0) {
+    lderr(m_cct) << "failed to remove journal header: " << cpp_strerror(r)
+                 << dendl;
+    return r;
+  }
+  return 0;
+}
+
 int Journaler::register_client(const std::string &description) {
   return m_metadata->register_client(description);
 }
