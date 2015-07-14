@@ -3465,6 +3465,7 @@ void Monitor::dispatch(MonOpRequestRef op)
 
     dout(10) << "do not have session, making new one" << dendl;
     s = session_map.new_session(m->get_source_inst(), m->get_connection().get());
+    assert(s);
     m->get_connection()->set_priv(s->get());
     dout(10) << "ms_dispatch new session " << s << " for " << s->inst << dendl;
     op->set_session(s);
