@@ -37,7 +37,7 @@ public:
    * out from scratch.
    */
   int reset_hard(int rank);
-  void reset(int rank);
+  int reset(int rank);
 };
 
 #endif /* JOURNAL_RESETTER_H_ */

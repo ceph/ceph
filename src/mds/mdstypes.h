@@ -405,6 +405,13 @@ public:
 };
 WRITE_CLASS_ENCODER(inline_data_t)
 
+enum {
+  DAMAGE_STATS,     // statistics (dirstat, size, etc)
+  DAMAGE_RSTATS,    // recursive statistics (rstat, accounted_rstat)
+  DAMAGE_FRAGTREE   // fragtree -- repair by searching
+};
+typedef uint32_t damage_flags_t;
+
 /*
  * inode_t
  */
@@ -599,6 +606,7 @@ struct fnode_t {
   snapid_t snap_purged_thru;   // the max_last_destroy snapid we've been purged thru
   frag_info_t fragstat, accounted_fragstat;
   nest_info_t rstat, accounted_rstat;
+  damage_flags_t damage_flags;
 
   void encode(bufferlist &bl) const;
   void decode(bufferlist::iterator& bl);

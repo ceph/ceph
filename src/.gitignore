@@ -13,6 +13,7 @@ Makefile
 /ceph-client-debug
 /cephfs-journal-tool
 /cephfs-table-tool
+/cephfs-data-scan
 /ceph-conf
 /ceph-coverage
 /ceph-crush-location

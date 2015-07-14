@@ -78,6 +78,7 @@ public:
   fragtree_t                 dirfragtree;  // dir frag tree, if any.  always consistent with our dirfrag map.
   compact_map<snapid_t, old_inode_t> old_inodes;   // key = last, value.first = first
   snapid_t                  oldest_snap;
+  damage_flags_t            damage_flags;
 
   InodeStoreBase() : oldest_snap(CEPH_NOSNAP) { }
 
@@ -97,6 +98,10 @@ public:
 
   /* For test/debug output */
   void dump(Formatter *f) const;
+
+  /* For use by offline tools */
+  __u32 hash_dentry_name(const std::string &dn);
+  frag_t pick_dirfrag(const std::string &dn);
 };
 
 class InodeStore : public InodeStoreBase {
@@ -398,8 +403,6 @@ private:
   int stickydir_ref;
 
 public:
-  __u32 hash_dentry_name(const std::string &dn);
-  frag_t pick_dirfrag(const std::string &dn);
   bool has_dirfrags() { return !dirfrags.empty(); }
   CDir* get_dirfrag(frag_t fg) {
     if (dirfrags.count(fg)) {
