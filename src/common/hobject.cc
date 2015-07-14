@@ -201,7 +201,13 @@ ostream& operator<<(ostream& out, const hobject_t& o)
   if (o.is_max())
     return out << "MAX";
   out << o.pool << '/';
-  out << std::hex << o.get_hash() << std::dec;
+  out << std::hex;
+  out.width(8);
+  out.fill('0');
+  out << o.get_hash();
+  out.width(0);
+  out.fill(' ');
+  out << std::dec;
   if (o.nspace.length())
     out << ":" << o.nspace;
   if (o.get_key().length())
