@@ -1075,8 +1075,8 @@ int ObjBencher::clean_up(int num_objects, int prevPid, int concurrentios) {
  * @returns true if there are any objects in the store which match
  * the prefix, false if there are no more
  */
-bool ObjBencher::more_objects_matching_prefix(const std::string& prefix, std::list<std::string>* objects) {
-  std::list<std::string> unfiltered_objects;
+bool ObjBencher::more_objects_matching_prefix(const std::string& prefix, std::list<Object>* objects) {
+  std::list<Object> unfiltered_objects;
 
   objects->clear();
 
@@ -1085,12 +1085,10 @@ bool ObjBencher::more_objects_matching_prefix(const std::string& prefix, std::li
     if (!objects_remain)
       return false;
 
-    std::list<std::string>::const_iterator i = unfiltered_objects.begin();
+    std::list<Object>::const_iterator i = unfiltered_objects.begin();
     for ( ; i != unfiltered_objects.end(); ++i) {
-      const std::string& next = *i;
-
-      if (next.substr(0, prefix.length()) == prefix) {
-        objects->push_back(next);
+      if (i->first.substr(0, prefix.length()) == prefix) {
+        objects->push_back(*i);
       }
     }
   }
@@ -1104,12 +1102,12 @@ int ObjBencher::clean_up_slow(const std::string& prefix, int concurrentios) {
   if (concurrentios <= 0) 
     return -EINVAL;
 
-  std::vector<string> name(concurrentios);
-  std::string newName;
+  std::vector<Object> name(concurrentios);
+  Object newName;
   int r = 0;
   utime_t runtime;
   int slot = 0;
-  std::list<std::string> objects;
+  std::list<Object> objects;
   bool objects_remain = true;
 
   lock.Lock();
@@ -1144,7 +1142,8 @@ int ObjBencher::clean_up_slow(const std::string& prefix, int concurrentios) {
   //start initial removes
   for (int i = 0; i < concurrentios; ++i) {
     create_completion(i, _aio_cb, (void *)&lc);
-    r = aio_remove(name[i], i);
+    set_namespace(name[i].second);
+    r = aio_remove(name[i].first, i);
     if (r < 0) { //naughty, doesn't clean up heap
       cerr << "r = " << r << std::endl;
       goto ERR;
@@ -1206,7 +1205,8 @@ int ObjBencher::clean_up_slow(const std::string& prefix, int concurrentios) {
 
     //start new remove and check data if requested
     create_completion(slot, _aio_cb, (void *)&lc);
-    r = aio_remove(newName, slot);
+    set_namespace(newName.second);
+    r = aio_remove(newName.first, slot);
     if (r < 0) {
       goto ERR;
     }

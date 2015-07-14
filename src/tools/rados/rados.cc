@@ -68,6 +68,8 @@ void usage(ostream& out)
 "   cppool <pool-name> <dest-pool>   copy content of a pool\n"
 "   rmpool <pool-name> [<pool-name> --yes-i-really-really-mean-it]\n"
 "                                    remove pool <pool-name>'\n"
+"   purge <pool-name> --yes-i-really-really-mean-it\n"
+"                                    remove all objects from pool <pool-name> without removing it\n"
 "   df                               show per-pool and total usage\n"
 "   ls                               list objects in pool\n\n"
 "   chown 123                        change the pool owner to auid 123\n"
@@ -882,7 +884,7 @@ protected:
     return completions[slot]->get_return_value();
   }
 
-  bool get_objects(std::list<std::string>* objects, int num) {
+  bool get_objects(std::list<Object>* objects, int num) {
     int count = 0;
 
     if (!iterator_valid) {
@@ -899,11 +901,16 @@ protected:
 
     objects->clear();
     for ( ; oi != ei && count < num; ++oi) {
-      objects->push_back(oi->get_oid());
+      Object obj(oi->get_oid(), oi->get_nspace());
+      objects->push_back(obj);
       ++count;
     }
 
     return true;
+  }
+
+  void set_namespace( const std::string& ns) {
+    io_ctx.set_namespace(ns);
   }
 
 public:
@@ -2271,6 +2278,32 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       cout << "successfully deleted pool " << nargs[1] << std::endl;
     } else { //error
       cerr << "pool " << nargs[1] << " could not be removed" << std::endl;
+    }
+  }
+  else if (strcmp(nargs[0], "purge") == 0) {
+    if (nargs.size() < 2)
+      usage_exit();
+    if (nargs.size() < 3 ||
+	strcmp(nargs[2], "--yes-i-really-really-mean-it") != 0) {
+      cerr << "WARNING:\n"
+	   << "  This will PERMANENTLY DESTROY all objects from a pool with no way back.\n"
+	   << "  To confirm, follow pool with --yes-i-really-really-mean-it" << std::endl;
+      ret = -1;
+      goto out;
+    }
+    ret = rados.ioctx_create(nargs[1], io_ctx);
+    if (ret < 0) {
+      cerr << "error pool " << nargs[1] << ": "
+	   << cpp_strerror(ret) << std::endl;
+      goto out;
+    }
+    io_ctx.set_namespace(all_nspaces);
+    RadosBencher bencher(g_ceph_context, rados, io_ctx);
+    ret = bencher.clean_up_slow("", concurrent_ios);
+    if (ret >= 0) {
+      cout << "successfully purged pool " << nargs[1] << std::endl;
+    } else { //error
+      cerr << "pool " << nargs[1] << " could not be purged" << std::endl;
     }
   }
   else if (strcmp(nargs[0], "lssnap") == 0) {

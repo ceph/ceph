@@ -90,7 +90,7 @@ struct req_context : public RefCountedObject {
   uint64_t off;
   uint64_t len;
   const char *list_start;
-  std::list<std::string>* list_objects;
+  std::list<Object>* list_objects;
   int list_count;
   string oid;
   Mutex lock;
@@ -201,7 +201,8 @@ static S3Status list_bucket_callback(int is_truncated, const char *next_marker,
   ctx->list_start = next_marker;
 
   for (int i = 0; i < count; ++i) {
-    ctx->list_objects->push_back(objects[i].key);
+    // RGW doesn't support namespaces yet
+    ctx->list_objects->push_back(Object(objects[i].key, ""));
   }
 
   return S3StatusOK;
@@ -532,7 +533,7 @@ protected:
     return ret;
   }
 
-  bool get_objects(std::list<std::string>* objects, int num) {
+  bool get_objects(std::list<Object>* objects, int num) {
     if (bucket_list_done) {
       bucket_list_done = false;
       return false;
