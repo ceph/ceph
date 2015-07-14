@@ -28,9 +28,13 @@ expect_false()
 # things in /foo/ are allowed
 mkdir mnt.foo/foo/x
 mkdir mnt.foo/foo/y
+ln -s symlink mnt.foo/foo/x
+ln -s symlink mnt.foo/foo/y
 
 # everything else is not
 expect_false mkdir mnt.foo/bar/x
 expect_false mkdir mnt.foo/food
+expect_false ln -s symlink mnt.foo/x
+expect_false ln -s symlink mnt.foo/foo
 
 echo PASS
