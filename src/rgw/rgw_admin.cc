@@ -88,12 +88,6 @@ void _usage()
   cerr << "  realm remove               remove a zonegroup from the realm\n";
   cerr << "  realm rename               rename a realm\n";
   cerr << "  realm set-default          set realm as default\n";
-  cerr << "  region get                 show region info\n";
-  cerr << "  regions list               list all regions set on this cluster\n";
-  cerr << "  region set                 set region info (requires infile)\n";
-  cerr << "  region default             set default region\n";
-  cerr << "  region-map get             show region-map\n";
-  cerr << "  region-map set             set region-map (requires infile)\n";
   cerr << "  zonegroup get              show zone group info\n";
   cerr << "  zonegroups list            list all zone groups set on this cluster\n";
   cerr << "  zonegroup set              set zone group info (requires infile)\n";
@@ -170,7 +164,6 @@ void _usage()
   cerr << "   --realm=<realm>     realm name\n";
   cerr << "   --realm-id=<realm id>     realm id\n";
   cerr << "   --realm-new-name=<realm new name> realm new name\n";
-  cerr << "   --rgw-region=<region>     region in which radosgw is running\n";
   cerr << "   --zonegroup=<zone>        zonegroup in which radosgw is running\n";
   cerr << "   --rgw-zone=<zone>         zone in which radosgw is running\n";
   cerr << "   --fix                     besides checking bucket index, will also fix it\n";
@@ -342,10 +335,6 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
       strcmp(cmd, "pools") == 0 ||
       strcmp(cmd, "quota") == 0 ||
       strcmp(cmd, "realm") == 0 ||
-      strcmp(cmd, "region") == 0 ||
-      strcmp(cmd, "regions") == 0 ||
-      strcmp(cmd, "region-map") == 0 ||
-      strcmp(cmd, "regionmap") == 0 ||
       strcmp(cmd, "replicalog") == 0 ||
       strcmp(cmd, "subuser") == 0 ||
       strcmp(cmd, "temp") == 0 ||
@@ -497,15 +486,6 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
       return OPT_REALM_RENAME;
     if (strcmp(cmd, "set-default") == 0)
       return OPT_REALM_SET_DEFAULT;
-  } else if (strcmp(prev_cmd, "region") == 0) {
-    if (strcmp(cmd, "get") == 0)
-      return OPT_ZONEGROUP_GET;
-    if (strcmp(cmd, "list") == 0)
-      return OPT_ZONEGROUP_LIST;
-    if (strcmp(cmd, "set") == 0)
-      return OPT_ZONEGROUP_SET;
-    if (strcmp(cmd, "default") == 0)
-      return OPT_ZONEGROUP_DEFAULT;
   } else if (strcmp(prev_cmd, "zonegroup") == 0) {
     if (strcmp(cmd, "get") == 0)
       return OPT_ZONEGROUP_GET;
@@ -522,17 +502,6 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
       return OPT_QUOTA_ENABLE;
     if (strcmp(cmd, "disable") == 0)
       return OPT_QUOTA_DISABLE;
-  } else if (strcmp(prev_cmd, "regions") == 0) {
-    if (strcmp(cmd, "list") == 0)
-      return OPT_ZONEGROUP_LIST;
-  } else if (strcmp(prev_cmd, "region-map") == 0 ||
-             strcmp(prev_cmd, "regionmap") == 0) {
-    if (strcmp(cmd, "get") == 0)
-      return OPT_ZONEGROUPMAP_GET;
-    if (strcmp(cmd, "set") == 0)
-      return OPT_ZONEGROUPMAP_SET;
-    if (strcmp(cmd, "update") == 0)
-      return OPT_ZONEGROUPMAP_UPDATE;
   } else if (strcmp(prev_cmd, "zonegroups") == 0) {
     if (strcmp(cmd, "list") == 0)
       return OPT_ZONEGROUP_LIST;
