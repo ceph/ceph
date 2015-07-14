@@ -2,6 +2,278 @@
  Release Notes
 ===============
 
+v0.80.10 Firefly (DRAFT)
+================
+
+This is a bugfix release for firefly.
+
+We recommend that all Firefly users upgrade.
+
+For more detailed information, see :download:`the complete changelog <changelog/v0.80.10.txt>`.
+
+Notable Changes
+---------------
+
+* build/ops: ceph.spec.in: package mkcephfs on EL6 (`issue#11955 <http://tracker.ceph.com/issues/11955>`_, `pr#4924 <http://github.com/ceph/ceph/pull/4924>`_, Ken Dreyer)
+* build/ops: debian: ceph-test and rest-bench debug packages should require their respective binary packages (`issue#11673 <http://tracker.ceph.com/issues/11673>`_, `pr#4766 <http://github.com/ceph/ceph/pull/4766>`_, Ken Dreyer)
+* build/ops: run RGW as root (`issue#11453 <http://tracker.ceph.com/issues/11453>`_, `pr#4638 <http://github.com/ceph/ceph/pull/4638>`_, Ken Dreyer)
+* common: messages/MWatchNotify: include an error code in the message (`issue#9193 <http://tracker.ceph.com/issues/9193>`_, `pr#3944 <http://github.com/ceph/ceph/pull/3944>`_, Sage Weil)
+* common: Rados.shutdown() dies with Illegal instruction (core dumped) (`issue#10153 <http://tracker.ceph.com/issues/10153>`_, `pr#3963 <http://github.com/ceph/ceph/pull/3963>`_, Federico Simoncelli)
+* common: SimpleMessenger: allow RESETSESSION whenever we forget an endpoint (`issue#10080 <http://tracker.ceph.com/issues/10080>`_, `pr#3915 <http://github.com/ceph/ceph/pull/3915>`_, Greg Farnum)
+* common: WorkQueue: make wait timeout on empty queue configurable (`issue#10817 <http://tracker.ceph.com/issues/10817>`_, `pr#3941 <http://github.com/ceph/ceph/pull/3941>`_, Samuel Just)
+* crush: set_choose_tries = 100 for erasure code rulesets (`issue#10353 <http://tracker.ceph.com/issues/10353>`_, `pr#3824 <http://github.com/ceph/ceph/pull/3824>`_, Loic Dachary)
+* doc: backport ceph-disk man page to Firefly (`issue#10724 <http://tracker.ceph.com/issues/10724>`_, `pr#3936 <http://github.com/ceph/ceph/pull/3936>`_, Nilamdyuti Goswami)
+* doc: Fix ceph command manpage to match ceph -h (`issue#10676 <http://tracker.ceph.com/issues/10676>`_, `pr#3996 <http://github.com/ceph/ceph/pull/3996>`_, David Zafman)
+* fs: mount.ceph: avoid spurious error message (`issue#10351 <http://tracker.ceph.com/issues/10351>`_, `pr#3927 <http://github.com/ceph/ceph/pull/3927>`_, Yan, Zheng)
+* librados: Fix memory leak in python rados bindings (`issue#10723 <http://tracker.ceph.com/issues/10723>`_, `pr#3935 <http://github.com/ceph/ceph/pull/3935>`_, Josh Durgin)
+* librados: fix resources leakage in RadosClient::connect() (`issue#10425 <http://tracker.ceph.com/issues/10425>`_, `pr#3828 <http://github.com/ceph/ceph/pull/3828>`_, Radoslaw Zarzynski)
+* librados: Translate operation flags from C APIs (`issue#10497 <http://tracker.ceph.com/issues/10497>`_, `pr#3930 <http://github.com/ceph/ceph/pull/3930>`_, Matt Richards)
+* librbd: acquire cache_lock before refreshing parent (`issue#5488 <http://tracker.ceph.com/issues/5488>`_, `pr#4206 <http://github.com/ceph/ceph/pull/4206>`_, Jason Dillaman)
+* librbd: snap_remove should ignore -ENOENT errors (`issue#11113 <http://tracker.ceph.com/issues/11113>`_, `pr#4245 <http://github.com/ceph/ceph/pull/4245>`_, Jason Dillaman)
+* mds: fix assertion caused by system clock backwards (`issue#11053 <http://tracker.ceph.com/issues/11053>`_, `pr#3970 <http://github.com/ceph/ceph/pull/3970>`_, Yan, Zheng)
+* mon: ignore osd failures from before up_from (`issue#10762 <http://tracker.ceph.com/issues/10762>`_, `pr#3937 <http://github.com/ceph/ceph/pull/3937>`_, Sage Weil)
+* mon: MonCap: take EntityName instead when expanding profiles (`issue#10844 <http://tracker.ceph.com/issues/10844>`_, `pr#3942 <http://github.com/ceph/ceph/pull/3942>`_, Joao Eduardo Luis)
+* mon: Monitor: fix timecheck rounds period (`issue#10546 <http://tracker.ceph.com/issues/10546>`_, `pr#3932 <http://github.com/ceph/ceph/pull/3932>`_, Joao Eduardo Luis)
+* mon: OSDMonitor: do not trust small values in osd epoch cache (`issue#10787 <http://tracker.ceph.com/issues/10787>`_, `pr#3823 <http://github.com/ceph/ceph/pull/3823>`_, Sage Weil)
+* mon: OSDMonitor: fallback to json-pretty in case of invalid formatter (`issue#9538 <http://tracker.ceph.com/issues/9538>`_, `pr#4475 <http://github.com/ceph/ceph/pull/4475>`_, Loic Dachary)
+* mon: PGMonitor: several stats output error fixes (`issue#10257 <http://tracker.ceph.com/issues/10257>`_, `pr#3826 <http://github.com/ceph/ceph/pull/3826>`_, Joao Eduardo Luis)
+* objecter: fix map skipping (`issue#9986 <http://tracker.ceph.com/issues/9986>`_, `pr#3952 <http://github.com/ceph/ceph/pull/3952>`_, Ding Dinghua)
+* osd: cache tiering: fix the atime logic of the eviction (`issue#9915 <http://tracker.ceph.com/issues/9915>`_, `pr#3949 <http://github.com/ceph/ceph/pull/3949>`_, Zhiqiang Wang)
+* osd: cancel_pull: requeue waiters (`issue#11244 <http://tracker.ceph.com/issues/11244>`_, `pr#4415 <http://github.com/ceph/ceph/pull/4415>`_, Samuel Just)
+* osd: check that source OSD is valid for MOSDRepScrub (`issue#9555 <http://tracker.ceph.com/issues/9555>`_, `pr#3947 <http://github.com/ceph/ceph/pull/3947>`_, Sage Weil)
+* osd: DBObjectMap: lock header_lock on sync() (`issue#9891 <http://tracker.ceph.com/issues/9891>`_, `pr#3948 <http://github.com/ceph/ceph/pull/3948>`_, Samuel Just)
+* osd: do not ignore deleted pgs on startup (`issue#10617 <http://tracker.ceph.com/issues/10617>`_, `pr#3933 <http://github.com/ceph/ceph/pull/3933>`_, Sage Weil)
+* osd: ENOENT on clone (`issue#11199 <http://tracker.ceph.com/issues/11199>`_, `pr#4385 <http://github.com/ceph/ceph/pull/4385>`_, Samuel Just)
+* osd: erasure-code-profile set races with erasure-code-profile rm (`issue#11144 <http://tracker.ceph.com/issues/11144>`_, `pr#4383 <http://github.com/ceph/ceph/pull/4383>`_, Loic Dachary)
+* osd: FAILED assert(soid < scrubber.start || soid >= scrubber.end) (`issue#11156 <http://tracker.ceph.com/issues/11156>`_, `pr#4185 <http://github.com/ceph/ceph/pull/4185>`_, Samuel Just)
+* osd: FileJournal: fix journalq population in do_read_entry() (`issue#6003 <http://tracker.ceph.com/issues/6003>`_, `pr#3960 <http://github.com/ceph/ceph/pull/3960>`_, Samuel Just)
+* osd: fix negative degraded objects during backfilling (`issue#7737 <http://tracker.ceph.com/issues/7737>`_, `pr#4021 <http://github.com/ceph/ceph/pull/4021>`_, Guang Yang)
+* osd: get the currently atime of the object in cache pool for eviction (`issue#9985 <http://tracker.ceph.com/issues/9985>`_, `pr#3950 <http://github.com/ceph/ceph/pull/3950>`_, Sage Weil)
+* osd: load_pgs: we need to handle the case where an upgrade from earlier versions which ignored non-existent pgs resurrects a pg with a prehistoric osdmap (`issue#11429 <http://tracker.ceph.com/issues/11429>`_, `pr#4556 <http://github.com/ceph/ceph/pull/4556>`_, Samuel Just)
+* osd: ObjectStore: Don't use largest_data_off to calc data_align. (`issue#10014 <http://tracker.ceph.com/issues/10014>`_, `pr#3954 <http://github.com/ceph/ceph/pull/3954>`_, Jianpeng Ma)
+* osd: osd_types: op_queue_age_hist and fs_perf_stat should be in osd_stat_t::o... (`issue#10259 <http://tracker.ceph.com/issues/10259>`_, `pr#3827 <http://github.com/ceph/ceph/pull/3827>`_, Samuel Just)
+* osd: PG::actingset should be used when checking the number of acting OSDs for... (`issue#11454 <http://tracker.ceph.com/issues/11454>`_, `pr#4453 <http://github.com/ceph/ceph/pull/4453>`_, Guang Yang)
+* osd: PG::all_unfound_are_queried_or_lost for non-existent osds (`issue#10976 <http://tracker.ceph.com/issues/10976>`_, `pr#4416 <http://github.com/ceph/ceph/pull/4416>`_, Mykola Golub)
+* osd: PG: always clear_primary_state (`issue#10059 <http://tracker.ceph.com/issues/10059>`_, `pr#3955 <http://github.com/ceph/ceph/pull/3955>`_, Samuel Just)
+* osd: PGLog.h: 279: FAILED assert(log.log.size() == log_keys_debug.size()) (`issue#10718 <http://tracker.ceph.com/issues/10718>`_, `pr#4382 <http://github.com/ceph/ceph/pull/4382>`_, Samuel Just)
+* osd: PGLog: include rollback_info_trimmed_to in (read|write)_log (`issue#10157 <http://tracker.ceph.com/issues/10157>`_, `pr#3964 <http://github.com/ceph/ceph/pull/3964>`_, Samuel Just)
+* osd: pg stuck stale after create with activation delay (`issue#11197 <http://tracker.ceph.com/issues/11197>`_, `pr#4384 <http://github.com/ceph/ceph/pull/4384>`_, Samuel Just)
+* osd: ReplicatedPG: fail a non-blocking flush if the object is being scrubbed (`issue#8011 <http://tracker.ceph.com/issues/8011>`_, `pr#3943 <http://github.com/ceph/ceph/pull/3943>`_, Samuel Just)
+* osd: ReplicatedPG::on_change: clean up callbacks_for_degraded_object (`issue#8753 <http://tracker.ceph.com/issues/8753>`_, `pr#3940 <http://github.com/ceph/ceph/pull/3940>`_, Samuel Just)
+* osd: ReplicatedPG::scan_range: an object can disappear between the list and t... (`issue#10150 <http://tracker.ceph.com/issues/10150>`_, `pr#3962 <http://github.com/ceph/ceph/pull/3962>`_, Samuel Just)
+* osd: requeue blocked op before flush it was blocked on (`issue#10512 <http://tracker.ceph.com/issues/10512>`_, `pr#3931 <http://github.com/ceph/ceph/pull/3931>`_, Sage Weil)
+* rgw: check for timestamp for s3 keystone auth (`issue#10062 <http://tracker.ceph.com/issues/10062>`_, `pr#3958 <http://github.com/ceph/ceph/pull/3958>`_, Abhishek Lekshmanan)
+* rgw: civetweb should use unique request id (`issue#11720 <http://tracker.ceph.com/issues/11720>`_, `pr#4780 <http://github.com/ceph/ceph/pull/4780>`_, Orit Wasserman)
+* rgw: don't allow negative / invalid content length (`issue#11890 <http://tracker.ceph.com/issues/11890>`_, `pr#4829 <http://github.com/ceph/ceph/pull/4829>`_, Yehuda Sadeh)
+* rgw: fail s3 POST auth if keystone not configured (`issue#10698 <http://tracker.ceph.com/issues/10698>`_, `pr#3966 <http://github.com/ceph/ceph/pull/3966>`_, Yehuda Sadeh)
+* rgw: flush xml header on get acl request (`issue#10106 <http://tracker.ceph.com/issues/10106>`_, `pr#3961 <http://github.com/ceph/ceph/pull/3961>`_, Yehuda Sadeh)
+* rgw: generate new tag for object when setting object attrs (`issue#11256 <http://tracker.ceph.com/issues/11256>`_, `pr#4571 <http://github.com/ceph/ceph/pull/4571>`_, Yehuda Sadeh)
+* rgw: generate the "Date" HTTP header for civetweb. (`issue#11871,11891 <http://tracker.ceph.com/issues/11871,11891>`_, `pr#4851 <http://github.com/ceph/ceph/pull/4851>`_, Radoslaw Zarzynski)
+* rgw: keystone token cache does not work correctly (`issue#11125 <http://tracker.ceph.com/issues/11125>`_, `pr#4414 <http://github.com/ceph/ceph/pull/4414>`_, Yehuda Sadeh)
+* rgw: merge manifests correctly when there's prefix override (`issue#11622 <http://tracker.ceph.com/issues/11622>`_, `pr#4697 <http://github.com/ceph/ceph/pull/4697>`_, Yehuda Sadeh)
+* rgw: send appropriate op to cancel bucket index pending operation (`issue#10770 <http://tracker.ceph.com/issues/10770>`_, `pr#3938 <http://github.com/ceph/ceph/pull/3938>`_, Yehuda Sadeh)
+* rgw: shouldn't need to disable rgw_socket_path if frontend is configured (`issue#11160 <http://tracker.ceph.com/issues/11160>`_, `pr#4275 <http://github.com/ceph/ceph/pull/4275>`_, Yehuda Sadeh)
+* rgw: Swift API. Dump container's custom metadata. (`issue#10665 <http://tracker.ceph.com/issues/10665>`_, `pr#3934 <http://github.com/ceph/ceph/pull/3934>`_, Dmytro Iurchenko)
+* rgw: Swift API. Support for X-Remove-Container-Meta-{key} header. (`issue#10475 <http://tracker.ceph.com/issues/10475>`_, `pr#3929 <http://github.com/ceph/ceph/pull/3929>`_, Dmytro Iurchenko)
+* rgw: use correct objv_tracker for bucket instance (`issue#11416 <http://tracker.ceph.com/issues/11416>`_, `pr#4379 <http://github.com/ceph/ceph/pull/4379>`_, Yehuda Sadeh)
+* tests: force checkout of submodules (`issue#11157 <http://tracker.ceph.com/issues/11157>`_, `pr#4079 <http://github.com/ceph/ceph/pull/4079>`_, Loic Dachary)
+* tools: Backport ceph-objectstore-tool changes to firefly (`issue#12327 <http://tracker.ceph.com/issues/12327>`_, `pr#3866 <http://github.com/ceph/ceph/pull/3866>`_, David Zafman)
+* tools: ceph-objectstore-tool: Output only unsupported features when incomatible (`issue#11176 <http://tracker.ceph.com/issues/11176>`_, `pr#4126 <http://github.com/ceph/ceph/pull/4126>`_, David Zafman)
+* tools: ceph-objectstore-tool: Use exit status 11 for incompatible import attemp... (`issue#11139 <http://tracker.ceph.com/issues/11139>`_, `pr#4129 <http://github.com/ceph/ceph/pull/4129>`_, David Zafman)
+* tools: Fix do_autogen.sh so that -L is allowed (`issue#11303 <http://tracker.ceph.com/issues/11303>`_, `pr#4247 <http://github.com/ceph/ceph/pull/4247>`_, Alfredo Deza)
+
+v0.80.9 Firefly
+===============
+
+This is a bugfix release for firefly.  It fixes a performance
+regression in librbd, an important CRUSH misbehavior (see below), and
+several RGW bugs.  We have also backported support for flock/fcntl
+locks to ceph-fuse and libcephfs.
+
+We recommend that all Firefly users upgrade.
+
+For more detailed information, see :download:`the complete changelog <changelog/v0.80.9.txt>`.
+
+Adjusting CRUSH maps
+--------------------
+
+* This point release fixes several issues with CRUSH that trigger
+  excessive data migration when adjusting OSD weights.  These are most
+  obvious when a very small weight change (e.g., a change from 0 to
+  .01) triggers a large amount of movement, but the same set of bugs
+  can also lead to excessive (though less noticeable) movement in
+  other cases.
+
+  However, because the bug may already have affected your cluster,
+  fixing it may trigger movement *back* to the more correct location.
+  For this reason, you must manually opt-in to the fixed behavior.
+
+  In order to set the new tunable to correct the behavior::
+
+     ceph osd crush set-tunable straw_calc_version 1
+
+  Note that this change will have no immediate effect.  However, from
+  this point forward, any 'straw' bucket in your CRUSH map that is
+  adjusted will get non-buggy internal weights, and that transition
+  may trigger some rebalancing.
+
+  You can estimate how much rebalancing will eventually be necessary
+  on your cluster with::
+
+     ceph osd getcrushmap -o /tmp/cm
+     crushtool -i /tmp/cm --num-rep 3 --test --show-mappings > /tmp/a 2>&1
+     crushtool -i /tmp/cm --set-straw-calc-version 1 -o /tmp/cm2
+     crushtool -i /tmp/cm2 --reweight -o /tmp/cm2
+     crushtool -i /tmp/cm2 --num-rep 3 --test --show-mappings > /tmp/b 2>&1
+     wc -l /tmp/a                          # num total mappings
+     diff -u /tmp/a /tmp/b | grep -c ^+    # num changed mappings
+
+   Divide the total number of lines in /tmp/a with the number of lines
+   changed.  We've found that most clusters are under 10%.
+
+   You can force all of this rebalancing to happen at once with::
+
+     ceph osd crush reweight-all
+
+   Otherwise, it will happen at some unknown point in the future when
+   CRUSH weights are next adjusted.
+
+Notable Changes
+---------------
+
+* ceph-fuse: flock, fcntl lock support (Yan, Zheng, Greg Farnum)
+* crush: fix straw bucket weight calculation, add straw_calc_version tunable (#10095 Sage Weil)
+* crush: fix tree bucket (Rongzu Zhu)
+* crush: fix underflow of tree weights (Loic Dachary, Sage Weil)
+* crushtool: add --reweight (Sage Weil)
+* librbd: complete pending operations before losing image (#10299 Jason Dillaman)
+* librbd: fix read caching performance regression (#9854 Jason Dillaman)
+* librbd: gracefully handle deleted/renamed pools (#10270 Jason Dillaman)
+* mon: fix dump of chooseleaf_vary_r tunable (Sage Weil)
+* osd: fix PG ref leak in snaptrimmer on peering (#10421 Kefu Chai)
+* osd: handle no-op write with snapshot (#10262 Sage Weil)
+* radosgw-admin: create subuser when creating user (#10103 Yehuda Sadeh)
+* rgw: change multipart uplaod id magic (#10271 Georgio Dimitrakakis, Yehuda Sadeh)
+* rgw: don't overwrite bucket/object owner when setting ACLs (#10978 Yehuda Sadeh)
+* rgw: enable IPv6 for embedded civetweb (#10965 Yehuda Sadeh)
+* rgw: fix partial swift GET (#10553 Yehuda Sadeh)
+* rgw: fix quota disable (#9907 Dong Lei)
+* rgw: index swift keys appropriately (#10471 Hemant Burman, Yehuda Sadeh)
+* rgw: make setattrs update bucket index (#5595 Yehuda Sadeh)
+* rgw: pass civetweb configurables (#10907 Yehuda Sadeh)
+* rgw: remove swift user manifest (DLO) hash calculation (#9973 Yehuda Sadeh)
+* rgw: return correct len for 0-len objects (#9877 Yehuda Sadeh)
+* rgw: S3 object copy content-type fix (#9478 Yehuda Sadeh)
+* rgw: send ETag on S3 object copy (#9479 Yehuda Sadeh)
+* rgw: send HTTP status reason explicitly in fastcgi (Yehuda Sadeh)
+* rgw: set ulimit -n from sysvinit (el6) init script (#9587 Sage Weil)
+* rgw: update swift subuser permission masks when authenticating (#9918 Yehuda Sadeh)
+* rgw: URL decode query params correctly (#10271 Georgio Dimitrakakis, Yehuda Sadeh)
+* rgw: use attrs when reading object attrs (#10307 Yehuda Sadeh)
+* rgw: use \r\n for http headers (#9254 Benedikt Fraunhofer, Yehuda Sadeh)
+
+
+v0.80.8 Firefly
+===============
+
+This is a long-awaited bugfix release for firefly.  It has several
+imporant (but relatively rare) OSD peering fixes, performance issues
+when snapshots are trimmed, several RGW fixes, a paxos corner case
+fix, and some packaging updates.
+
+We recommend that all users for v0.80.x firefly upgrade when it is
+convenient to do so.
+
+For more detailed information, see :download:`the complete changelog <changelog/v0.80.8.txt>`.
+
+Notable Changes
+---------------
+
+* build: remove stack-execute bit from assembled code sections (#10114 Dan Mick)
+* ceph-disk: fix dmcrypt key permissions (#9785 Loic Dachary)
+* ceph-disk: fix keyring location (#9653 Loic Dachary)
+* ceph-disk: make partition checks more robust (#9721 #9665 Loic Dachary)
+* ceph: cleanly shut down librados context on shutdown (#8797 Dan Mick)
+* common: add $cctid config metavariable (#6228 Adam Crume)
+* crush: align rule and ruleset ids (#9675 Xiaoxi Chen)
+* crush: fix negative weight bug during create_or_move_item (#9998 Pawel Sadowski)
+* crush: fix potential buffer overflow in erasure rules (#9492 Johnu George)
+* debian: fix python-ceph -> ceph file movement (Sage Weil)
+* libcephfs,ceph-fuse: fix flush tid wraparound bug (#9869 Greg Farnum, Yan, Zheng)
+* libcephfs: close fd befure umount (#10415 Yan, Zheng)
+* librados: fix crash from C API when read timeout is enabled (#9582 Sage Weil)
+* librados: handle reply race with pool deletion (#10372 Sage Weil)
+* librbd: cap memory utilization for read requests (Jason Dillaman)
+* librbd: do not close a closed parent image on failure (#10030 Jason Dillaman)
+* librbd: fix diff tests (#10002 Josh Durgin)
+* librbd: protect list_children from invalid pools (#10123 Jason Dillaman)
+* make check improvemens (Loic Dachary)
+* mds: fix ctime updates (#9514 Greg Farnum)
+* mds: fix journal import tool (#10025 John Spray)
+* mds: fix rare NULL deref in cap flush handler (Greg Farnum)
+* mds: handle unknown lock messages (Yan, Zheng)
+* mds: store backtrace for straydir (Yan, Zheng)
+* mon: abort startup if disk is full (#9502 Joao Eduardo Luis)
+* mon: add paxos instrumentation (Sage Weil)
+* mon: fix double-free in rare OSD startup path (Sage Weil)
+* mon: fix osdmap trimming (#9987 Sage Weil)
+* mon: fix paxos corner cases (#9301 #9053 Sage Weil)
+* osd: cancel callback on blacklisted watchers (#8315 Samuel Just)
+* osd: cleanly abort set-alloc-hint operations during upgrade (#9419 David Zafman)
+* osd: clear rollback PG metadata on PG deletion (#9293 Samuel Just)
+* osd: do not abort deep scrub if hinfo is missing (#10018 Loic Dachary)
+* osd: erasure-code regression tests (Loic Dachary)
+* osd: fix distro metadata reporting for SUSE (#8654 Danny Al-Gaaf)
+* osd: fix full OSD checks during backfill (#9574 Samuel Just)
+* osd: fix ioprio parsing (#9677 Loic Dachary)
+* osd: fix journal direct-io shutdown (#9073 Mark Kirkwood, Ma Jianpeng, Somnath Roy)
+* osd: fix journal dump (Ma Jianpeng)
+* osd: fix occasional stall during peering or activation (Sage Weil)
+* osd: fix past_interval display bug (#9752 Loic Dachary)
+* osd: fix rare crash triggered by admin socket dump_ops_in_filght (#9916 Dong Lei)
+* osd: fix snap trimming performance issues (#9487 #9113 Samuel Just, Sage Weil, Dan van der Ster, Florian Haas)
+* osd: fix snapdir handling on cache eviction (#8629 Sage Weil)
+* osd: handle map gaps in map advance code (Sage Weil)
+* osd: handle undefined CRUSH results in interval check (#9718 Samuel Just)
+* osd: include shard in JSON dump of ghobject (#10063 Loic Dachary)
+* osd: make backfill reservation denial handling more robust (#9626 Samuel Just)
+* osd: make misdirected op checks handle EC + primary affinity (#9835 Samuel Just, Sage Weil)
+* osd: mount XFS with inode64 by default (Sage Weil)
+* osd: other misc bugs (#9821 #9875 Samuel Just)
+* rgw: add .log to default log path (#9353 Alexandre Marangone)
+* rgw: clean up fcgi request context (#10194 Yehuda Sadeh)
+* rgw: convet header underscores to dashes (#9206 Yehuda Sadeh)
+* rgw: copy object data if copy target is in different pool (#9039 Yehuda Sadeh)
+* rgw: don't try to authenticate CORS peflight request (#8718 Robert Hubbard, Yehuda Sadeh)
+* rgw: fix civetweb URL decoding (#8621 Yehuda Sadeh)
+* rgw: fix hash calculation during PUT (Yehuda Sadeh)
+* rgw: fix misc bugs (#9089 #9201 Yehuda Sadeh)
+* rgw: fix object tail test (#9226 Sylvain Munaut, Yehuda Sadeh)
+* rgw: make sysvinit script run rgw under systemd context as needed (#10125 Loic Dachary)
+* rgw: separate civetweb log from rgw log (Yehuda Sadeh)
+* rgw: set length for keystone token validations (#7796 Mark Kirkwood, Yehuda Sadeh)
+* rgw: subuser creation fixes (#8587 Yehuda Sadeh)
+* rpm: misc packaging improvements (Sandon Van Ness, Dan Mick, Erik Logthenberg, Boris Ranto)
+* rpm: use standard udev rules for CentOS7/RHEL7 (#9747 Loic Dachary)
+
+
+v0.80.7 Firefly
+===============
+
+This release fixes a few critical issues with v0.80.6, particularly
+with clusters running mixed versions.
+
+We recommend that all v0.80.x Firefly users upgrade to this release.
+
+For more detailed information, see :download:`the complete changelog <changelog/v0.80.7.txt>`.
+
+Notable Changes
+---------------
+
+* osd: fix invalid memory reference in log trimming (#9731 Samuel Just)
+* osd: fix use-after-free in cache tiering code (#7588 Sage Weil)
+* osd: remove bad backfill assertion for mixed-version clusters (#9696 Samuel Just)
+
 v0.80.6 Firefly
 ===============
 
