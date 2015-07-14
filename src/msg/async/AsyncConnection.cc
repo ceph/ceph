@@ -1941,7 +1941,8 @@ int AsyncConnection::send_message(Message *m)
 
   // TODO: Currently not all messages supports reencode like MOSDMap, so here
   // only let fast dispatch support messages prepare message
-  if (async_msgr->ms_can_fast_dispatch(m))
+  bool can_fast_prepare = async_msgr->ms_can_fast_dispatch(m);
+  if (can_fast_prepare)
     prepare_send_message(f, m, bl);
 
   Mutex::Locker l(write_lock);
@@ -1954,6 +1955,8 @@ int AsyncConnection::send_message(Message *m)
                               << f << " != " << get_features() << dendl;
   }
   if (!is_queued() && can_write == CANWRITE) {
+    if (!can_fast_prepare)
+      prepare_send_message(f, m, bl);
     if (write_message(m, bl) < 0) {
       ldout(async_msgr->cct, 1) << __func__ << " send msg failed" << dendl;
       // we want to handle fault within internal thread
