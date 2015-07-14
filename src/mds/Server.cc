@@ -4438,6 +4438,9 @@ void Server::handle_client_mknod(MDRequestRef& mdr)
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return;
 
+  if (!check_access(mdr, diri, MAY_WRITE))
+    return;
+
   unsigned mode = req->head.args.mknod.mode;
   if ((mode & S_IFMT) == 0)
     mode |= S_IFREG;
