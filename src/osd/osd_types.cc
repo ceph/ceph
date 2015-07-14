@@ -4084,6 +4084,25 @@ uint64_t SnapSet::get_clone_bytes(snapid_t clone) const
   return size;
 }
 
+void SnapSet::filter(const pg_pool_t &pinfo)
+{
+  vector<snapid_t> oldsnaps;
+  oldsnaps.swap(snaps);
+  for (vector<snapid_t>::const_iterator i = oldsnaps.begin();
+       i != oldsnaps.end();
+       ++i) {
+    if (!pinfo.is_removed_snap(*i))
+      snaps.push_back(*i);
+  }
+}
+
+SnapSet SnapSet::get_filtered(const pg_pool_t &pinfo) const
+{
+  SnapSet ss = *this;
+  ss.filter(pinfo);
+  return ss;
+}
+
 // -- watch_info_t --
 
 void watch_info_t::encode(bufferlist& bl) const

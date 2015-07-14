@@ -2835,7 +2835,10 @@ ReplicatedPG::RepGather *ReplicatedPG::trim_object(const hobject_t &coid)
       ctx->log.back().mod_desc.mark_unrollbackable();
     }
   } else {
-    dout(10) << coid << " updating snapset on " << snapoid << dendl;
+    dout(10) << coid << " filtering snapset on " << snapoid << dendl;
+    snapset.filter(pool.info);
+    dout(10) << coid << " writing updated snapset on " << snapoid
+	     << ", snapset is " << snapset << dendl;
     ctx->log.push_back(
       pg_log_entry_t(
 	pg_log_entry_t::MODIFY,
@@ -6785,8 +6788,10 @@ int ReplicatedPG::start_flush(
 	   << " " << (blocking ? "blocking" : "non-blocking/best-effort")
 	   << dendl;
 
+  // get a filtered snapset, need to remove removed snaps
+  SnapSet snapset = obc->ssc->snapset.get_filtered(pool.info);
+
   // verify there are no (older) check for dirty clones
-  SnapSet& snapset = obc->ssc->snapset;
   {
     dout(20) << " snapset " << snapset << dendl;
     vector<snapid_t>::reverse_iterator p = snapset.clones.rbegin();
