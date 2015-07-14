@@ -31,6 +31,7 @@ public:
   ~Journaler();
 
   int create(uint8_t order, uint8_t splay_width);
+  int remove();
 
   void init(Context *on_init);
 
