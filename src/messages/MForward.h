@@ -102,12 +102,12 @@ public:
   }
 
   void set_message(PaxosServiceMessage *m, uint64_t features) {
-    encode_message(m, features, msg_bl);
-
-    // keep a pointer to the message.  We will not use it except for print(),
-    // and we will drop it in the dtor if it is not claimed.
+    // get a reference to the message.  We will not use it except for print(),
+    // and we will put it in the dtor if it is not claimed.
     // we could avoid doing this if only we had a const bufferlist iterator :)
-    msg = m;
+    msg = (PaxosServiceMessage*)m->get();
+
+    encode_message(m, features, msg_bl);
   }
 
   PaxosServiceMessage *claim_message() {
@@ -115,6 +115,7 @@ public:
       return get_msg_from_bl();
     }
 
+    // let whoever is claiming the message deal with putting it.
     PaxosServiceMessage *m = msg;
     msg = NULL;
     return m;
