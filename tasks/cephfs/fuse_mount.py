@@ -100,11 +100,16 @@ class FuseMount(CephFSMount):
         self.fuse_daemon = proc
 
         # Wait for the connection reference to appear in /sys
+        mount_wait = self.client_config.get('mount_wait', 0)
+        if mount_wait > 0:
+            log.info("Fuse mount waits {0} seconds before checking /sys/".format(mount_wait))
+            time.sleep(mount_wait)            
+        timeout = self.client_config.get('mount_timeout', '30')
         waited = 0
         while list_connections() == pre_mount_conns:
             time.sleep(1)
             waited += 1
-            if waited > 30:
+            if waited > timeout:
                 raise RuntimeError("Fuse mount failed to populate /sys/ after {0} seconds".format(
                     waited
                 ))
