@@ -88,7 +88,7 @@ public:
       readahead(),
       total_bytes_read(0), copyup_finisher(NULL),
       object_map(*this), aio_work_queue(NULL), op_work_queue(NULL),
-      asok_hook(new LibrbdAdminSocketHook(this))
+      refresh_in_progress(false), asok_hook(new LibrbdAdminSocketHook(this))
   {
     md_ctx.dup(p);
     data_ctx.dup(p);
