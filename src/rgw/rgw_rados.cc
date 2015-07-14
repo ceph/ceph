@@ -104,11 +104,16 @@ struct bucket_info_entry {
 static RGWChainedCacheImpl<bucket_info_entry> binfo_cache;
 
 void RGWDefaultZoneGroupInfo::dump(Formatter *f) const {
-  encode_json("default_region", default_zonegroup, f);
+  encode_json("default_zonegroup", default_zonegroup, f);
 }
 
 void RGWDefaultZoneGroupInfo::decode_json(JSONObj *obj) {
-  JSONDecoder::decode_json("default_region", default_zonegroup, obj);
+
+  JSONDecoder::decode_json("default_zonegroup", default_zonegroup, obj);
+  /* backward compatability with region */
+  if (default_zonegroup.empty()) {
+    JSONDecoder::decode_json("default_region", default_zonegroup, obj);
+  }
 }
 
 int RGWZoneGroup::get_pool_name(CephContext *cct, string *pool_name)
