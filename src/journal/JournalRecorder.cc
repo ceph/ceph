@@ -72,13 +72,18 @@ Future JournalRecorder::append(const std::string &tag,
 }
 
 void JournalRecorder::flush(Context *on_safe) {
-  Mutex::Locker locker(m_lock);
+  C_Flush *ctx;
+  {
+    Mutex::Locker locker(m_lock);
 
-  C_Flush *ctx = new C_Flush(on_safe, m_object_ptrs.size());
-  for (ObjectRecorderPtrs::iterator it = m_object_ptrs.begin();
-       it != m_object_ptrs.end(); ++it) {
-    it->second->flush(ctx);
+    ctx = new C_Flush(on_safe, m_object_ptrs.size());
+    for (ObjectRecorderPtrs::iterator it = m_object_ptrs.begin();
+         it != m_object_ptrs.end(); ++it) {
+      it->second->flush(ctx);
+    }
   }
+
+  ctx->unblock();
 }
 
 ObjectRecorderPtr JournalRecorder::get_object(uint8_t splay_offset) {
