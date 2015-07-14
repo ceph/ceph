@@ -853,6 +853,7 @@ struct RGWZoneParams {
   map<string, RGWZonePlacementInfo> placement_pools;
 
   RGWZoneParams() : is_master(false) {}
+  RGWZoneParams(const std::string& _name):name(_name) {}
 
   static int get_pool_name(CephContext *cct, string *pool_name);
   void init_name(CephContext *cct, RGWZoneGroup& zonegroup);
