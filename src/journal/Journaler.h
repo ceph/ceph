@@ -47,7 +47,7 @@ public:
   void start_append();
   Future append(const std::string &tag, const bufferlist &bl);
   void flush(Context *on_safe);
-  int stop_append();
+  void stop_append(Context *on_safe);
 
 private:
   librados::IoCtx m_header_ioctx;
