@@ -21,20 +21,20 @@ class TestDownburst(object):
         status = self.status
 
         dbrst = provision.Downburst(name, ctx.os_type, ctx.os_version, status)
-        dbrst.create = MagicMock(name='create')
-        dbrst.create.return_value = True
-        dbrst._run_create = MagicMock(name='_run_create')
-        dbrst._run_create.return_value = True
+        dbrst.executable = '/fake/path'
         dbrst.build_config = MagicMock(name='build_config')
-        dbrst.remove_config = MagicMock(name='remove_config')
+        dbrst._run_create = MagicMock(name='_run_create')
+        dbrst._run_create.return_value = (0, '', '')
+        remove_config = MagicMock(name='remove_config')
+        dbrst.remove_config = remove_config
 
         result = provision.create_if_vm(ctx, name, dbrst)
         assert result is True
 
-        dbrst.create.assert_called_once()
-        dbrst._run_create.assert_called_once()
-        dbrst.build_config.assert_called_once()
-        dbrst.remove_config.assert_called_once()
+        dbrst._run_create.assert_called_with()
+        dbrst.build_config.assert_called_with()
+        del dbrst
+        remove_config.assert_called_with()
 
     def test_destroy_if_vm_success(self):
         name = self.name
@@ -48,7 +48,7 @@ class TestDownburst(object):
         result = provision.destroy_if_vm(ctx, name, _downburst=dbrst)
         assert result is True
 
-        dbrst.destroy.assert_called_once()
+        dbrst.destroy.assert_called_with()
 
     def test_destroy_if_vm_wrong_owner(self):
         name = self.name
@@ -57,14 +57,11 @@ class TestDownburst(object):
         status['locked_by'] = 'user@a'
 
         dbrst = provision.Downburst(name, ctx.os_type, ctx.os_version, status)
-        dbrst.destroy = MagicMock(name='destroy')
-        dbrst.destroy.return_value = True
+        dbrst.destroy = MagicMock(name='destroy', side_effect=RuntimeError)
 
         result = provision.destroy_if_vm(ctx, name, user='user@b',
                                          _downburst=dbrst)
         assert result is False
-
-        dbrst.destroy.assert_called_once()
 
     def test_destroy_if_vm_wrong_description(self):
         name = self.name
@@ -74,13 +71,11 @@ class TestDownburst(object):
 
         dbrst = provision.Downburst(name, ctx.os_type, ctx.os_version, status)
         dbrst.destroy = MagicMock(name='destroy')
-        dbrst.destroy.return_value = True
+        dbrst.destroy = MagicMock(name='destroy', side_effect=RuntimeError)
 
         result = provision.destroy_if_vm(ctx, name, description='desc_b',
                                          _downburst=dbrst)
         assert result is False
-
-        dbrst.destroy.assert_called_once()
 
     @patch('teuthology.provision.downburst_executable')
     def test_create_fails_without_executable(self, m_exec):
