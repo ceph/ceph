@@ -468,7 +468,7 @@ void CInode::pop_projected_snaprealm(sr_t *next_snaprealm)
 
 // dirfrags
 
-__u32 CInode::hash_dentry_name(const string &dn)
+__u32 InodeStoreBase::hash_dentry_name(const string &dn)
 {
   int which = inode.dir_layout.dl_dir_hash;
   if (!which)
@@ -476,7 +476,7 @@ __u32 CInode::hash_dentry_name(const string &dn)
   return ceph_str_hash(which, dn.data(), dn.length());
 }
 
-frag_t CInode::pick_dirfrag(const string& dn)
+frag_t InodeStoreBase::pick_dirfrag(const string& dn)
 {
   if (dirfragtree.empty())
     return frag_t();          // avoid the string hash if we can.
@@ -1284,11 +1284,12 @@ void InodeStoreBase::encode_bare(bufferlist &bl, const bufferlist *snap_blob) co
     ::encode(bufferlist(), bl);
   ::encode(old_inodes, bl);
   ::encode(oldest_snap, bl);
+  ::encode(damage_flags, bl);
 }
 
 void InodeStoreBase::encode(bufferlist &bl, const bufferlist *snap_blob) const
 {
-  ENCODE_START(5, 4, bl);
+  ENCODE_START(6, 4, bl);
   encode_bare(bl, snap_blob);
   ENCODE_FINISH(bl);
 }
@@ -1319,8 +1320,18 @@ void InodeStoreBase::decode_bare(bufferlist::iterator &bl,
       ::decode(inode.layout, bl); // but we only care about the layout portion
     }
   }
-  if (struct_v >= 5 && !bl.end())
-    ::decode(oldest_snap, bl);
+
+  if (struct_v >= 5) {
+    // InodeStore is embedded in dentries without proper versioning, so
+    // we consume up to the end of the buffer
+    if (!bl.end()) {
+      ::decode(oldest_snap, bl);
+    }
+
+    if (!bl.end()) {
+      ::decode(damage_flags, bl);
+    }
+  }
 }
 
 
@@ -3202,7 +3213,7 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
       e.cap.wanted = cap->wanted();
       e.cap.cap_id = cap->get_cap_id();
       e.cap.seq = cap->get_last_seq();
-      dout(10) << "encode_inodestat issueing " << ccap_string(issue) << " seq " << cap->get_last_seq() << dendl;
+      dout(10) << "encode_inodestat issuing " << ccap_string(issue) << " seq " << cap->get_last_seq() << dendl;
       e.cap.mseq = cap->get_mseq();
       e.cap.realm = realm->inode->ino();
     } else {
@@ -3340,6 +3351,7 @@ void CInode::_encode_base(bufferlist& bl)
   ::encode(dirfragtree, bl);
   ::encode(xattrs, bl);
   ::encode(old_inodes, bl);
+  ::encode(damage_flags, bl);
   encode_snap(bl);
 }
 void CInode::_decode_base(bufferlist::iterator& p)
@@ -3350,6 +3362,7 @@ void CInode::_decode_base(bufferlist::iterator& p)
   ::decode(dirfragtree, p);
   ::decode(xattrs, p);
   ::decode(old_inodes, p);
+  ::decode(damage_flags, p);
   decode_snap(p);
 }
 

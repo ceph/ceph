@@ -47,6 +47,13 @@ cephfs_table_tool_SOURCES = \
 cephfs_table_tool_LDADD = $(LIBMDS) $(LIBRADOS) $(CEPH_GLOBAL)
 bin_PROGRAMS += cephfs-table-tool
 
+cephfs_data_scan_SOURCES = \
+	tools/cephfs/cephfs-data-scan.cc \
+	tools/cephfs/DataScan.cc \
+	tools/cephfs/MDSUtility.cc
+cephfs_data_scan_LDADD = $(LIBMDS) libcls_cephfs_client.la $(LIBRADOS) $(CEPH_GLOBAL)
+bin_PROGRAMS += cephfs-data-scan
+
 endif # WITH_RADOS
 endif # ENABLE_CLIENT
 endif # WITH_MDS
