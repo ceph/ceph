@@ -649,33 +649,6 @@ def update_inventory(node_dict):
     return response.ok
 
 
-def ssh_keyscan(hostnames):
-    """
-    Fetch the SSH public key of one or more hosts
-    """
-    if isinstance(hostnames, basestring):
-        raise TypeError("'hostnames' must be a list")
-    hostnames = [misc.canonicalize_hostname(name, user=None) for name in
-                 hostnames]
-    args = ['ssh-keyscan', '-T', '1', '-t', 'rsa'] + hostnames
-    p = subprocess.Popen(
-        args=args,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-    )
-    p.wait()
-
-    keys_dict = dict()
-    for line in p.stderr.readlines():
-        line = line.strip()
-        if line and not line.startswith('#'):
-            log.error(line)
-    for line in p.stdout.readlines():
-        host, key = line.strip().split(' ', 1)
-        keys_dict[host] = key
-    return keys_dict
-
-
 def updatekeys(args):
     loglevel = logging.DEBUG if args['--verbose'] else logging.INFO
     logging.basicConfig(
@@ -701,7 +674,7 @@ def do_update_keys(machines, all_=False):
     reference = list_locks(keyed_by_name=True)
     if all_:
         machines = reference.keys()
-    keys_dict = ssh_keyscan(machines)
+    keys_dict = misc.ssh_keyscan(machines)
     return push_new_keys(keys_dict, reference)
 
 
