@@ -545,7 +545,7 @@ void RGWBucketInfo::dump(Formatter *f) const
   encode_json("creation_time", creation_time, f);
   encode_json("owner", owner, f);
   encode_json("flags", flags, f);
-  encode_json("region", zonegroup, f);
+  encode_json("zonegroup", zonegroup, f);
   encode_json("placement_rule", placement_rule, f);
   encode_json("has_instance_obj", has_instance_obj, f);
   encode_json("quota", quota, f);
@@ -558,7 +558,11 @@ void RGWBucketInfo::decode_json(JSONObj *obj) {
   JSONDecoder::decode_json("creation_time", creation_time, obj);
   JSONDecoder::decode_json("owner", owner, obj);
   JSONDecoder::decode_json("flags", flags, obj);
-  JSONDecoder::decode_json("region", zonegroup, obj);
+  JSONDecoder::decode_json("zonegroup", zonegroup, obj);
+  /* backward compatability with region */
+  if (zonegroup.empty()) {
+    JSONDecoder::decode_json("region", zonegroup, obj);
+  }
   JSONDecoder::decode_json("placement_rule", placement_rule, obj);
   JSONDecoder::decode_json("has_instance_obj", has_instance_obj, obj);
   JSONDecoder::decode_json("quota", quota, obj);
@@ -799,16 +803,24 @@ void RGWZoneGroup::decode_json(JSONObj *obj)
 
 void RGWZoneGroupMap::dump(Formatter *f) const
 {
-  encode_json("regions", zonegroups, f);
-  encode_json("master_region", master_zonegroup, f);
+  encode_json("zonegroups", zonegroups, f);
+  encode_json("master_zonegroup", master_zonegroup, f);
   encode_json("bucket_quota", bucket_quota, f);
   encode_json("user_quota", user_quota, f);
 }
 
 void RGWZoneGroupMap::decode_json(JSONObj *obj)
 {
-  JSONDecoder::decode_json("regions", zonegroups, obj);
-  JSONDecoder::decode_json("master_region", master_zonegroup, obj);
+  JSONDecoder::decode_json("zonegroup", zonegroups, obj);
+  /* backward compatability with region */
+  if (zonegroups.empty()) {
+    JSONDecoder::decode_json("regions", zonegroups, obj);
+  }
+  JSONDecoder::decode_json("master_zonegroup", master_zonegroup, obj);
+  /* backward compatability with region */
+  if (master_zonegroup.empty()) {
+    JSONDecoder::decode_json("master_region", master_zonegroup, obj);
+  }
   JSONDecoder::decode_json("user_quota", user_quota, obj);
 }
 
