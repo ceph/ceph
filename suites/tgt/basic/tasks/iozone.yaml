@@ -1,6 +1,5 @@
 tasks:
 - install:
-- chef:
 - ceph:
 - tgt:
 - iscsi:
