@@ -54,6 +54,9 @@
 #include "include/str_map.h"
 #include <errno.h>
 
+#include "common/TrackedOp.h"
+#include "mon/MonOpRequest.h"
+
 
 #define CEPH_MON_PROTOCOL     13 /* cluster internal */
 
@@ -244,7 +247,7 @@ private:
    * Verify all mons are storing identical content
    */
   int scrub();
-  void handle_scrub(MMonScrub *m);
+  void handle_scrub(MonOpRequestRef op);
   void _scrub(ScrubResult *r);
   void scrub_finish();
   void scrub_reset();
@@ -411,18 +414,18 @@ private:
    *
    * @param m Sync message with operation type MMonSync::OP_START_CHUNKS
    */
-  void handle_sync(MMonSync *m);
+  void handle_sync(MonOpRequestRef op);
 
-  void _sync_reply_no_cookie(MMonSync *m);
+  void _sync_reply_no_cookie(MonOpRequestRef op);
 
-  void handle_sync_get_cookie(MMonSync *m);
-  void handle_sync_get_chunk(MMonSync *m);
-  void handle_sync_finish(MMonSync *m);
+  void handle_sync_get_cookie(MonOpRequestRef op);
+  void handle_sync_get_chunk(MonOpRequestRef op);
+  void handle_sync_finish(MonOpRequestRef op);
 
-  void handle_sync_cookie(MMonSync *m);
-  void handle_sync_forward(MMonSync *m);
-  void handle_sync_chunk(MMonSync *m);
-  void handle_sync_no_cookie(MMonSync *m);
+  void handle_sync_cookie(MonOpRequestRef op);
+  void handle_sync_forward(MonOpRequestRef op);
+  void handle_sync_chunk(MonOpRequestRef op);
+  void handle_sync_no_cookie(MonOpRequestRef op);
 
   /**
    * @} // Synchronization
@@ -487,9 +490,9 @@ private:
   health_status_t timecheck_status(ostringstream &ss,
                                    const double skew_bound,
                                    const double latency);
-  void handle_timecheck_leader(MTimeCheck *m);
-  void handle_timecheck_peon(MTimeCheck *m);
-  void handle_timecheck(MTimeCheck *m);
+  void handle_timecheck_leader(MonOpRequestRef op);
+  void handle_timecheck_peon(MonOpRequestRef op);
+  void handle_timecheck(MonOpRequestRef op);
   /**
    * @}
    */
@@ -520,7 +523,7 @@ private:
   /**
    * Handle ping messages from others.
    */
-  void handle_ping(MPing *m);
+  void handle_ping(MonOpRequestRef op);
 
   Context *probe_timeout_event;  // for probing
 
@@ -635,9 +638,9 @@ public:
   void send_latest_monmap(Connection *con);
 
   // messages
-  void handle_get_version(MMonGetVersion *m);
-  void handle_subscribe(MMonSubscribe *m);
-  void handle_mon_get_map(MMonGetMap *m);
+  void handle_get_version(MonOpRequestRef op);
+  void handle_subscribe(MonOpRequestRef op);
+  void handle_mon_get_map(MonOpRequestRef op);
 
   static void _generate_command_map(map<string,cmd_vartype>& cmdmap,
                                     map<string,string> &param_str_map);
@@ -650,10 +653,10 @@ public:
   void get_mon_status(Formatter *f, ostream& ss);
   void _quorum_status(Formatter *f, ostream& ss);
   bool _add_bootstrap_peer_hint(string cmd, cmdmap_t& cmdmap, ostream& ss);
-  void handle_command(class MMonCommand *m);
-  void handle_route(MRoute *m);
+  void handle_command(MonOpRequestRef op);
+  void handle_route(MonOpRequestRef op);
 
-  void handle_mon_metadata(MMonMetadata *m);
+  void handle_mon_metadata(MonOpRequestRef op);
   int get_mon_metadata(int mon, Formatter *f, ostream& err);
   int print_nodes(Formatter *f, ostream& err);
   map<int, Metadata> metadata;
@@ -720,11 +723,11 @@ public:
                              Formatter *f);
   void get_cluster_status(stringstream &ss, Formatter *f);
 
-  void reply_command(MMonCommand *m, int rc, const string &rs, version_t version);
-  void reply_command(MMonCommand *m, int rc, const string &rs, bufferlist& rdata, version_t version);
+  void reply_command(MonOpRequestRef op, int rc, const string &rs, version_t version);
+  void reply_command(MonOpRequestRef op, int rc, const string &rs, bufferlist& rdata, version_t version);
 
 
-  void handle_probe(MMonProbe *m);
+  void handle_probe(MonOpRequestRef op);
   /**
    * Handle a Probe Operation, replying with our name, quorum and known versions.
    *
@@ -739,8 +742,8 @@ public:
    *
    * @param m A Probe message, with an operation of type Probe.
    */
-  void handle_probe_probe(MMonProbe *m);
-  void handle_probe_reply(MMonProbe *m);
+  void handle_probe_probe(MonOpRequestRef op);
+  void handle_probe_reply(MonOpRequestRef op);
 
   // request routing
   struct RoutedRequest {
@@ -750,6 +753,7 @@ public:
     ConnectionRef con;
     uint64_t con_features;
     entity_inst_t client_inst;
+    MonOpRequestRef op;
 
     RoutedRequest() : tid(0), session(NULL), con_features(0) {}
     ~RoutedRequest() {
@@ -760,38 +764,39 @@ public:
   uint64_t routed_request_tid;
   map<uint64_t, RoutedRequest*> routed_requests;
   
-  void forward_request_leader(PaxosServiceMessage *req);
-  void handle_forward(MForward *m);
+  void forward_request_leader(MonOpRequestRef op);
+  void handle_forward(MonOpRequestRef op);
   void try_send_message(Message *m, const entity_inst_t& to);
-  void send_reply(PaxosServiceMessage *req, Message *reply);
-  void no_reply(PaxosServiceMessage *req);
+  void send_reply(MonOpRequestRef op, Message *reply);
+  void no_reply(MonOpRequestRef op);
   void resend_routed_requests();
   void remove_session(MonSession *s);
   void remove_all_sessions();
-  void waitlist_or_zap_client(Message *m);
+  void waitlist_or_zap_client(MonOpRequestRef op);
 
   void send_command(const entity_inst_t& inst,
 		    const vector<string>& com);
 
 public:
-  struct C_Command : public Context {
+  struct C_Command : public C_MonOp {
     Monitor *mon;
-    MMonCommand *m;
     int rc;
     string rs;
     bufferlist rdata;
     version_t version;
-    C_Command(Monitor *_mm, MMonCommand *_m, int r, string s, version_t v) :
-      mon(_mm), m(_m), rc(r), rs(s), version(v){}
-    C_Command(Monitor *_mm, MMonCommand *_m, int r, string s, bufferlist rd, version_t v) :
-      mon(_mm), m(_m), rc(r), rs(s), rdata(rd), version(v){}
-    void finish(int r) {
+    C_Command(Monitor *_mm, MonOpRequestRef _op, int r, string s, version_t v) :
+      C_MonOp(_op), mon(_mm), rc(r), rs(s), version(v){}
+    C_Command(Monitor *_mm, MonOpRequestRef _op, int r, string s, bufferlist rd, version_t v) :
+      C_MonOp(_op), mon(_mm), rc(r), rs(s), rdata(rd), version(v){}
+
+    virtual void _finish(int r) {
+      MMonCommand *m = static_cast<MMonCommand*>(op->get_req());
       if (r >= 0) {
         ostringstream ss;
-        if (!m->get_connection()) {
+        if (!op->get_req()->get_connection()) {
           ss << "connection dropped for command ";
         } else {
-          MonSession *s = m->get_session();
+          MonSession *s = op->get_session();
 
           // if client drops we may not have a session to draw information from.
           if (s) {
@@ -804,28 +809,29 @@ public:
         ss << "cmd='" << m->cmd << "': finished";
 
         mon->audit_clog->info() << ss.str();
-	mon->reply_command(m, rc, rs, rdata, version);
+	mon->reply_command(op, rc, rs, rdata, version);
       }
       else if (r == -ECANCELED)
-	m->put();
+        return;
       else if (r == -EAGAIN)
-	mon->_ms_dispatch(m);
+	mon->dispatch_op(op);
       else
 	assert(0 == "bad C_Command return value");
     }
   };
 
  private:
-  class C_RetryMessage : public Context {
+  class C_RetryMessage : public C_MonOp {
     Monitor *mon;
-    Message *msg;
   public:
-    C_RetryMessage(Monitor *m, Message *ms) : mon(m), msg(ms) {}
-    void finish(int r) {
+    C_RetryMessage(Monitor *m, MonOpRequestRef op) :
+      C_MonOp(op), mon(m) { }
+
+    virtual void _finish(int r) {
       if (r == -EAGAIN || r >= 0)
-	mon->_ms_dispatch(msg);
+        mon->dispatch_op(op);
       else if (r == -ECANCELED)
-	msg->put();
+        return;
       else
 	assert(0 == "bad C_RetryMessage return value");
     }
@@ -841,7 +847,8 @@ public:
     return true;
   }
   // dissociate message handling from session and connection logic
-  void dispatch(MonSession *s, Message *m, const bool src_is_mon);
+  void dispatch(MonOpRequestRef op);
+  void dispatch_op(MonOpRequestRef op);
   //mon_caps is used for un-connected messages from monitors
   MonCap * mon_caps;
   bool ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer, bool force_new);
@@ -865,6 +872,8 @@ public:
   static void read_features_off_disk(MonitorDBStore *store, CompatSet *read_features);
   void read_features();
   void write_features(MonitorDBStore::TransactionRef t);
+
+  OpTracker op_tracker;
 
  public:
   Monitor(CephContext *cct_, string nm, MonitorDBStore *s,

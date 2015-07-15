@@ -186,7 +186,8 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
   admin_hook(NULL),
   health_tick_event(NULL),
   health_interval_event(NULL),
-  routed_request_tid(0)
+  routed_request_tid(0),
+  op_tracker(cct, true, 1)
 {
   rank = -1;
 
@@ -199,7 +200,7 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
 
   paxos_service[PAXOS_MDSMAP] = new MDSMonitor(this, paxos, "mdsmap");
   paxos_service[PAXOS_MONMAP] = new MonmapMonitor(this, paxos, "monmap");
-  paxos_service[PAXOS_OSDMAP] = new OSDMonitor(this, paxos, "osdmap");
+  paxos_service[PAXOS_OSDMAP] = new OSDMonitor(cct, this, paxos, "osdmap");
   paxos_service[PAXOS_PGMAP] = new PGMonitor(this, paxos, "pgmap");
   paxos_service[PAXOS_LOG] = new LogMonitor(this, paxos, "logm");
   paxos_service[PAXOS_AUTH] = new AuthMonitor(this, paxos, "auth");
@@ -290,7 +291,8 @@ void Monitor::do_admin_command(string command, cmdmap_t& cmdmap, string format,
  
   bool read_only = (command == "mon_status" ||
 		    command == "mon_metadata" ||
-		    command == "quorum_status");
+		    command == "quorum_status" ||
+                    command == "ops");
 
   (read_only ? audit_clog->debug() : audit_clog->info())
     << "from='admin socket' entity='admin socket' "
@@ -323,6 +325,11 @@ void Monitor::do_admin_command(string command, cmdmap_t& cmdmap, string format,
     start_election();
     elector.stop_participating();
     ss << "stopped responding to quorum, initiated new election";
+  } else if (command == "ops") {
+    op_tracker.dump_ops_in_flight(f.get());
+    if (f) {
+      f->flush(ss);
+    }
   } else {
     assert(0 == "bad AdminSocket command binding");
   }
@@ -717,6 +724,11 @@ int Monitor::preinit()
                                      admin_hook,
                                      "force monitor out of the quorum");
   assert(r == 0);
+  r = admin_socket->register_command("ops",
+                                     "ops",
+                                     admin_hook,
+                                     "show the ops currently in flight");
+  assert(r == 0);
   lock.Lock();
 
   // add ourselves as a conf observer
@@ -835,6 +847,7 @@ void Monitor::shutdown()
     admin_socket->unregister_command("quorum_status");
     admin_socket->unregister_command("sync_force");
     admin_socket->unregister_command("add_bootstrap_peer_hint");
+    admin_socket->unregister_command("ops");
     delete admin_hook;
     admin_hook = NULL;
   }
@@ -1214,8 +1227,9 @@ void Monitor::sync_finish(version_t last_committed)
   bootstrap();
 }
 
-void Monitor::handle_sync(MMonSync *m)
+void Monitor::handle_sync(MonOpRequestRef op)
 {
+  MMonSync *m = static_cast<MMonSync*>(op->get_req());
   dout(10) << __func__ << " " << *m << dendl;
   switch (m->op) {
 
@@ -1223,45 +1237,46 @@ void Monitor::handle_sync(MMonSync *m)
 
   case MMonSync::OP_GET_COOKIE_FULL:
   case MMonSync::OP_GET_COOKIE_RECENT:
-    handle_sync_get_cookie(m);
+    handle_sync_get_cookie(op);
     break;
   case MMonSync::OP_GET_CHUNK:
-    handle_sync_get_chunk(m);
+    handle_sync_get_chunk(op);
     break;
 
     // client -----------
 
   case MMonSync::OP_COOKIE:
-    handle_sync_cookie(m);
+    handle_sync_cookie(op);
     break;
 
   case MMonSync::OP_CHUNK:
   case MMonSync::OP_LAST_CHUNK:
-    handle_sync_chunk(m);
+    handle_sync_chunk(op);
     break;
   case MMonSync::OP_NO_COOKIE:
-    handle_sync_no_cookie(m);
+    handle_sync_no_cookie(op);
     break;
 
   default:
     dout(0) << __func__ << " unknown op " << m->op << dendl;
     assert(0 == "unknown op");
   }
-  m->put();
 }
 
 // leader
 
-void Monitor::_sync_reply_no_cookie(MMonSync *m)
+void Monitor::_sync_reply_no_cookie(MonOpRequestRef op)
 {
+  MMonSync *m = static_cast<MMonSync*>(op->get_req());
   MMonSync *reply = new MMonSync(MMonSync::OP_NO_COOKIE, m->cookie);
   m->get_connection()->send_message(reply);
 }
 
-void Monitor::handle_sync_get_cookie(MMonSync *m)
+void Monitor::handle_sync_get_cookie(MonOpRequestRef op)
 {
+  MMonSync *m = static_cast<MMonSync*>(op->get_req());
   if (is_synchronizing()) {
-    _sync_reply_no_cookie(m);
+    _sync_reply_no_cookie(op);
     return;
   }
 
@@ -1310,13 +1325,14 @@ void Monitor::handle_sync_get_cookie(MMonSync *m)
   m->get_connection()->send_message(reply);
 }
 
-void Monitor::handle_sync_get_chunk(MMonSync *m)
+void Monitor::handle_sync_get_chunk(MonOpRequestRef op)
 {
+  MMonSync *m = static_cast<MMonSync*>(op->get_req());
   dout(10) << __func__ << " " << *m << dendl;
 
   if (sync_providers.count(m->cookie) == 0) {
     dout(10) << __func__ << " no cookie " << m->cookie << dendl;
-    _sync_reply_no_cookie(m);
+    _sync_reply_no_cookie(op);
     return;
   }
 
@@ -1330,7 +1346,7 @@ void Monitor::handle_sync_get_chunk(MMonSync *m)
     dout(10) << __func__ << " sync requester fell behind paxos, their lc " << sp.last_committed
 	     << " < our fc " << paxos->get_first_committed() << dendl;
     sync_providers.erase(m->cookie);
-    _sync_reply_no_cookie(m);
+    _sync_reply_no_cookie(op);
     return;
   }
 
@@ -1377,8 +1393,9 @@ void Monitor::handle_sync_get_chunk(MMonSync *m)
 
 // requester
 
-void Monitor::handle_sync_cookie(MMonSync *m)
+void Monitor::handle_sync_cookie(MonOpRequestRef op)
 {
+  MMonSync *m = static_cast<MMonSync*>(op->get_req());
   dout(10) << __func__ << " " << *m << dendl;
   if (sync_cookie) {
     dout(10) << __func__ << " already have a cookie, ignoring" << dendl;
@@ -1410,8 +1427,9 @@ void Monitor::sync_get_next_chunk()
   assert(g_conf->mon_sync_requester_kill_at != 4);
 }
 
-void Monitor::handle_sync_chunk(MMonSync *m)
+void Monitor::handle_sync_chunk(MonOpRequestRef op)
 {
+  MMonSync *m = static_cast<MMonSync*>(op->get_req());
   dout(10) << __func__ << " " << *m << dendl;
 
   if (m->cookie != sync_cookie) {
@@ -1464,7 +1482,7 @@ void Monitor::handle_sync_chunk(MMonSync *m)
   }
 }
 
-void Monitor::handle_sync_no_cookie(MMonSync *m)
+void Monitor::handle_sync_no_cookie(MonOpRequestRef op)
 {
   dout(10) << __func__ << dendl;
   bootstrap();
@@ -1518,23 +1536,23 @@ void Monitor::probe_timeout(int r)
   bootstrap();
 }
 
-void Monitor::handle_probe(MMonProbe *m)
+void Monitor::handle_probe(MonOpRequestRef op)
 {
+  MMonProbe *m = static_cast<MMonProbe*>(op->get_req());
   dout(10) << "handle_probe " << *m << dendl;
 
   if (m->fsid != monmap->fsid) {
     dout(0) << "handle_probe ignoring fsid " << m->fsid << " != " << monmap->fsid << dendl;
-    m->put();
     return;
   }
 
   switch (m->op) {
   case MMonProbe::OP_PROBE:
-    handle_probe_probe(m);
+    handle_probe_probe(op);
     break;
 
   case MMonProbe::OP_REPLY:
-    handle_probe_reply(m);
+    handle_probe_reply(op);
     break;
 
   case MMonProbe::OP_MISSING_FEATURES:
@@ -1543,17 +1561,15 @@ void Monitor::handle_probe(MMonProbe *m)
 	 << ", missing " << (required_features & ~CEPH_FEATURES_ALL)
 	 << dendl;
     break;
-
-  default:
-    m->put();
   }
 }
 
 /**
  * @todo fix this. This is going to cause trouble.
  */
-void Monitor::handle_probe_probe(MMonProbe *m)
+void Monitor::handle_probe_probe(MonOpRequestRef op)
 {
+  MMonProbe *m = static_cast<MMonProbe*>(op->get_req());
   MMonProbe *r;
 
   dout(10) << "handle_probe_probe " << m->get_source_inst() << *m
@@ -1603,17 +1619,17 @@ void Monitor::handle_probe_probe(MMonProbe *m)
   }
 
  out:
-  m->put();
+  return;
 }
 
-void Monitor::handle_probe_reply(MMonProbe *m)
+void Monitor::handle_probe_reply(MonOpRequestRef op)
 {
+  MMonProbe *m = static_cast<MMonProbe*>(op->get_req());
   dout(10) << "handle_probe_reply " << m->get_source_inst() << *m << dendl;
   dout(10) << " monmap is " << *monmap << dendl;
 
   // discover name and addrs during probing or electing states.
   if (!is_probing() && !is_electing()) {
-    m->put();
     return;
   }
 
@@ -1631,7 +1647,6 @@ void Monitor::handle_probe_reply(MMonProbe *m)
 	       << ", mine was " << monmap->get_epoch() << dendl;
       delete newmap;
       monmap->decode(m->monmap_bl);
-      m->put();
 
       bootstrap();
       return;
@@ -1648,7 +1663,6 @@ void Monitor::handle_probe_reply(MMonProbe *m)
     monmap->rename(peer_name, m->name);
 
     if (is_electing()) {
-      m->put();
       bootstrap();
       return;
     }
@@ -1662,7 +1676,6 @@ void Monitor::handle_probe_reply(MMonProbe *m)
       monmap->get_addr(m->name).is_blank_ip()) {
     dout(1) << " learned initial mon " << m->name << " addr " << m->get_source_addr() << dendl;
     monmap->set_addr(m->name, m->get_source_addr());
-    m->put();
 
     bootstrap();
     return;
@@ -1670,7 +1683,6 @@ void Monitor::handle_probe_reply(MMonProbe *m)
 
   // end discover phase
   if (!is_probing()) {
-    m->put();
     return;
   }
 
@@ -1678,7 +1690,6 @@ void Monitor::handle_probe_reply(MMonProbe *m)
 
   if (is_synchronizing()) {
     dout(10) << " currently syncing" << dendl;
-    m->put();
     return;
   }
 
@@ -1699,7 +1710,6 @@ void Monitor::handle_probe_reply(MMonProbe *m)
 	       << dendl;
       cancel_probe_timeout();
       sync_start(other, true);
-      m->put();
       return;
     }
     if (paxos->get_version() + g_conf->paxos_max_join_drift < m->paxos_last_version) {
@@ -1709,7 +1719,6 @@ void Monitor::handle_probe_reply(MMonProbe *m)
 	       << dendl;
       cancel_probe_timeout();
       sync_start(other, false);
-      m->put();
       return;
     }
   }
@@ -1738,7 +1747,6 @@ void Monitor::handle_probe_reply(MMonProbe *m)
       outside_quorum.insert(m->name);
     } else {
       dout(10) << " mostly ignoring mon." << m->name << ", not part of monmap" << dendl;
-      m->put();
       return;
     }
 
@@ -1755,7 +1763,6 @@ void Monitor::handle_probe_reply(MMonProbe *m)
       dout(10) << " that's not yet enough for a new quorum, waiting" << dendl;
     }
   }
-  m->put();
 }
 
 void Monitor::join_election()
@@ -2529,24 +2536,25 @@ bool Monitor::is_keyring_required()
     auth_cluster_required == "cephx";
 }
 
-void Monitor::handle_command(MMonCommand *m)
+void Monitor::handle_command(MonOpRequestRef op)
 {
+  MMonCommand *m = static_cast<MMonCommand*>(op->get_req());
   if (m->fsid != monmap->fsid) {
     dout(0) << "handle_command on fsid " << m->fsid << " != " << monmap->fsid << dendl;
-    reply_command(m, -EPERM, "wrong fsid", 0);
+    reply_command(op, -EPERM, "wrong fsid", 0);
     return;
   }
 
   MonSession *session = m->get_session();
   if (!session) {
     string rs = "Access denied";
-    reply_command(m, -EACCES, rs, 0);
+    reply_command(op, -EACCES, rs, 0);
     return;
   }
 
   if (m->cmd.empty()) {
     string rs = "No command supplied";
-    reply_command(m, -EINVAL, rs, 0);
+    reply_command(op, -EINVAL, rs, 0);
     return;
   }
 
@@ -2564,9 +2572,7 @@ void Monitor::handle_command(MMonCommand *m)
     r = -EINVAL;
     rs = ss.str();
     if (!m->get_source().is_mon())  // don't reply to mon->mon commands
-      reply_command(m, r, rs, 0);
-    else
-      m->put();
+      reply_command(op, r, rs, 0);
     return;
   }
 
@@ -2577,7 +2583,7 @@ void Monitor::handle_command(MMonCommand *m)
     format_command_descriptions(leader_supported_mon_commands,
 				leader_supported_mon_commands_size, f, &rdata);
     delete f;
-    reply_command(m, 0, "", rdata, 0);
+    reply_command(op, 0, "", rdata, 0);
     return;
   }
 
@@ -2601,7 +2607,7 @@ void Monitor::handle_command(MMonCommand *m)
                                const_cast<MonCommand*>(leader_supported_mon_commands),
                                leader_supported_mon_commands_size);
   if (!leader_cmd) {
-    reply_command(m, -EINVAL, "command not known", 0);
+    reply_command(op, -EINVAL, "command not known", 0);
     return;
   }
   // validate command is in our map & matches, or forward if it is allowed
@@ -2610,32 +2616,32 @@ void Monitor::handle_command(MMonCommand *m)
   if (!is_leader()) {
     if (!mon_cmd) {
       if (leader_cmd->has_flag(MonCommand::FLAG_NOFORWARD)) {
-	reply_command(m, -EINVAL,
+	reply_command(op, -EINVAL,
 		      "command not locally supported and not allowed to forward",
 		      0);
 	return;
       }
       dout(10) << "Command not locally supported, forwarding request "
 	       << m << dendl;
-      forward_request_leader(m);
+      forward_request_leader(op);
       return;
     } else if (!mon_cmd->is_compat(leader_cmd)) {
       if (mon_cmd->has_flag(MonCommand::FLAG_NOFORWARD)) {
-	reply_command(m, -EINVAL,
+	reply_command(op, -EINVAL,
 		      "command not compatible with leader and not allowed to forward",
 		      0);
 	return;
       }
       dout(10) << "Command not compatible with leader, forwarding request "
 	       << m << dendl;
-      forward_request_leader(m);
+      forward_request_leader(op);
       return;
     }
   }
 
   if (session->proxy_con && mon_cmd->has_flag(MonCommand::FLAG_NOFORWARD)) {
     dout(10) << "Got forward for noforward command " << m << dendl;
-    reply_command(m, -EINVAL, "forward for noforward command", rdata, 0);
+    reply_command(op, -EINVAL, "forward for noforward command", rdata, 0);
     return;
   }
 
@@ -2659,7 +2665,7 @@ void Monitor::handle_command(MMonCommand *m)
       << "from='" << session->inst << "' "
       << "entity='" << session->entity_name << "' "
       << "cmd=" << m->cmd << ":  access denied";
-    reply_command(m, -EACCES, "access denied", 0);
+    reply_command(op, -EACCES, "access denied", 0);
     return;
   }
 
@@ -2669,33 +2675,33 @@ void Monitor::handle_command(MMonCommand *m)
     << "cmd=" << m->cmd << ": dispatch";
 
   if (module == "mds" || module == "fs") {
-    mdsmon()->dispatch(m);
+    mdsmon()->dispatch(op);
     return;
   }
   if (module == "osd") {
-    osdmon()->dispatch(m);
+    osdmon()->dispatch(op);
     return;
   }
 
   if (module == "pg") {
-    pgmon()->dispatch(m);
+    pgmon()->dispatch(op);
     return;
   }
   if (module == "mon") {
-    monmon()->dispatch(m);
+    monmon()->dispatch(op);
     return;
   }
   if (module == "auth") {
-    authmon()->dispatch(m);
+    authmon()->dispatch(op);
     return;
   }
   if (module == "log") {
-    logmon()->dispatch(m);
+    logmon()->dispatch(op);
     return;
   }
 
   if (module == "config-key") {
-    config_key_service->dispatch(m);
+    config_key_service->dispatch(op);
     return;
   }
 
@@ -2709,7 +2715,7 @@ void Monitor::handle_command(MMonCommand *m)
       ds << monmap->fsid;
       rdata.append(ds);
     }
-    reply_command(m, 0, "", rdata, 0);
+    reply_command(op, 0, "", rdata, 0);
     return;
   }
 
@@ -2717,11 +2723,11 @@ void Monitor::handle_command(MMonCommand *m)
     wait_for_paxos_write();
     if (is_leader()) {
       int r = scrub();
-      reply_command(m, r, "", rdata, 0);
+      reply_command(op, r, "", rdata, 0);
     } else if (is_peon()) {
-      forward_request_leader(m);
+      forward_request_leader(op);
     } else {
-      reply_command(m, -EAGAIN, "no quorum", rdata, 0);
+      reply_command(op, -EAGAIN, "no quorum", rdata, 0);
     }
     return;
   }
@@ -2889,7 +2895,7 @@ void Monitor::handle_command(MMonCommand *m)
     // make sure our map is readable and up to date
     if (!is_leader() && !is_peon()) {
       dout(10) << " waiting for quorum" << dendl;
-      waitfor_quorum.push_back(new C_RetryMessage(this, m));
+      waitfor_quorum.push_back(new C_RetryMessage(this, op));
       return;
     }
     _quorum_status(f.get(), ds);
@@ -2965,24 +2971,24 @@ void Monitor::handle_command(MMonCommand *m)
 
  out:
   if (!m->get_source().is_mon())  // don't reply to mon->mon commands
-    reply_command(m, r, rs, rdata, 0);
-  else
-    m->put();
+    reply_command(op, r, rs, rdata, 0);
 }
 
-void Monitor::reply_command(MMonCommand *m, int rc, const string &rs, version_t version)
+void Monitor::reply_command(MonOpRequestRef op, int rc, const string &rs, version_t version)
 {
   bufferlist rdata;
-  reply_command(m, rc, rs, rdata, version);
+  reply_command(op, rc, rs, rdata, version);
 }
 
-void Monitor::reply_command(MMonCommand *m, int rc, const string &rs, bufferlist& rdata, version_t version)
+void Monitor::reply_command(MonOpRequestRef op, int rc, const string &rs,
+                            bufferlist& rdata, version_t version)
 {
+  MMonCommand *m = static_cast<MMonCommand*>(op->get_req());
+  assert(m->get_type() == MSG_MON_COMMAND);
   MMonCommandAck *reply = new MMonCommandAck(m->cmd, rc, rs, version);
   reply->set_tid(m->get_tid());
   reply->set_data(rdata);
-  send_reply(m, reply);
-  m->put();
+  send_reply(op, reply);
 }
 
 
@@ -2994,18 +3000,18 @@ void Monitor::reply_command(MMonCommand *m, int rc, const string &rs, bufferlist
 // back via the correct monitor and back to them.  (the monitor will not
 // initiate any connections.)
 
-void Monitor::forward_request_leader(PaxosServiceMessage *req)
+void Monitor::forward_request_leader(MonOpRequestRef op)
 {
+  op->mark_event(__func__);
+
   int mon = get_leader();
-  MonSession *session = 0;
-  if (req->get_connection())
-    session = static_cast<MonSession *>(req->get_connection()->get_priv());
+  MonSession *session = op->get_session();
+  PaxosServiceMessage *req = op->get_req<PaxosServiceMessage>();
+  
   if (req->get_source().is_mon() && req->get_source_addr() != messenger->get_myaddr()) {
     dout(10) << "forward_request won't forward (non-local) mon request " << *req << dendl;
-    req->put();
   } else if (session && session->proxy_con) {
     dout(10) << "forward_request won't double fwd request " << *req << dendl;
-    req->put();
   } else if (session && !session->closed) {
     RoutedRequest *rr = new RoutedRequest;
     rr->tid = ++routed_request_tid;
@@ -3014,13 +3020,15 @@ void Monitor::forward_request_leader(PaxosServiceMessage *req)
     rr->con_features = rr->con->get_features();
     encode_message(req, CEPH_FEATURES_ALL, rr->request_bl);   // for my use only; use all features
     rr->session = static_cast<MonSession *>(session->get());
+    rr->op = op;
     routed_requests[rr->tid] = rr;
     session->routed_request_tids.insert(rr->tid);
     
     dout(10) << "forward_request " << rr->tid << " request " << *req
 	     << " features " << rr->con_features << dendl;
 
-    MForward *forward = new MForward(rr->tid, req,
+    MForward *forward = new MForward(rr->tid,
+                                     req,
 				     rr->con_features,
 				     rr->session->caps);
     forward->set_priority(req->get_priority());
@@ -3030,9 +3038,10 @@ void Monitor::forward_request_leader(PaxosServiceMessage *req)
       forward->entity_name.set_type(CEPH_ENTITY_TYPE_MON);
     }
     messenger->send_message(forward, monmap->get_inst(mon));
+    op->mark_forwarded();
+    assert(op->get_req()->get_type() != 0);
   } else {
     dout(10) << "forward_request no session for request " << *req << dendl;
-    req->put();
   }
   if (session)
     session->put();
@@ -3058,11 +3067,12 @@ struct AnonConnection : public Connection {
 };
 
 //extract the original message and put it into the regular dispatch function
-void Monitor::handle_forward(MForward *m)
+void Monitor::handle_forward(MonOpRequestRef op)
 {
+  MForward *m = static_cast<MForward*>(op->get_req());
   dout(10) << "received forwarded message from " << m->client
 	   << " via " << m->get_source_inst() << dendl;
-  MonSession *session = static_cast<MonSession *>(m->get_connection()->get_priv());
+  MonSession *session = op->get_session();
   assert(session);
 
   if (!session->is_capable("mon", MON_CAP_X)) {
@@ -3071,8 +3081,11 @@ void Monitor::handle_forward(MForward *m)
   } else {
     // see PaxosService::dispatch(); we rely on this being anon
     // (c->msgr == NULL)
+    PaxosServiceMessage *req = m->claim_message();
+    assert(req != NULL);
+
     ConnectionRef c(new AnonConnection(cct));
-    MonSession *s = new MonSession(m->msg->get_source_inst(),
+    MonSession *s = new MonSession(req->get_source_inst(),
 				   static_cast<Connection*>(c.get()));
     c->set_priv(s->get());
     c->set_peer_addr(m->client.addr);
@@ -3087,8 +3100,6 @@ void Monitor::handle_forward(MForward *m)
     s->proxy_con = m->get_connection();
     s->proxy_tid = m->tid;
 
-    PaxosServiceMessage *req = m->msg;
-    m->msg = NULL;  // so ~MForward doesn't delete it
     req->set_connection(c);
 
     // not super accurate, but better than nothing.
@@ -3116,7 +3127,6 @@ void Monitor::handle_forward(MForward *m)
     s->put();
   }
   session->put();
-  m->put();
 }
 
 void Monitor::try_send_message(Message *m, const entity_inst_t& to)
@@ -3134,38 +3144,62 @@ void Monitor::try_send_message(Message *m, const entity_inst_t& to)
   }
 }
 
-void Monitor::send_reply(PaxosServiceMessage *req, Message *reply)
+void Monitor::send_reply(MonOpRequestRef op, Message *reply)
 {
-  ConnectionRef connection = req->get_connection();
-  if (!connection) {
+  op->mark_event(__func__);
+
+  MonSession *session = op->get_session();
+  Message *req = op->get_req();
+  ConnectionRef con = op->get_connection();
+
+  dout(2) << __func__ << " " << op << " " << *reply << dendl;
+
+  if (!con) {
     dout(2) << "send_reply no connection, dropping reply " << *reply
 	    << " to " << req << " " << *req << dendl;
     reply->put();
+    op->mark_event("reply: no connection");
     return;
   }
-  MonSession *session = static_cast<MonSession*>(connection->get_priv());
+
   if (!session) {
     dout(2) << "send_reply no session, dropping reply " << *reply
 	    << " to " << req << " " << *req << dendl;
     reply->put();
+    op->mark_event("reply: no session");
     return;
   }
+
+  if (!session->con && !session->proxy_con) {
+    dout(2) << "send_reply no connection, dropping reply " << *reply
+	    << " to " << req << " " << *req << dendl;
+    reply->put();
+    op->mark_event("reply: no connection");
+    return;
+  }
+
   if (session->proxy_con) {
-    dout(15) << "send_reply routing reply to " << req->get_connection()->get_peer_addr()
+    dout(15) << "send_reply routing reply to " << con->get_peer_addr()
 	     << " via " << session->proxy_con->get_peer_addr()
 	     << " for request " << *req << dendl;
     session->proxy_con->send_message(new MRoute(session->proxy_tid, reply));
+    op->mark_event("reply: send routed request");
   } else {
     session->con->send_message(reply);
+    op->mark_event("reply: send");
   }
   session->put();
 }
 
-void Monitor::no_reply(PaxosServiceMessage *req)
+void Monitor::no_reply(MonOpRequestRef op)
 {
-  MonSession *session = static_cast<MonSession*>(req->get_connection()->get_priv());
+  MonSession *session = op->get_session();
+  Message *req = op->get_req();
+
   if (!session) {
-    dout(2) << "no_reply no session, dropping non-reply to " << req << " " << *req << dendl;
+    dout(2) << "no_reply no session, dropping non-reply to "
+            << *req << dendl;
+    op->mark_event("no_reply: no session");
     return;
   }
   if (session->proxy_con) {
@@ -3174,26 +3208,31 @@ void Monitor::no_reply(PaxosServiceMessage *req)
 	       << " via " << session->proxy_con->get_peer_addr()
 	       << " for request " << *req << dendl;
       session->proxy_con->send_message(new MRoute(session->proxy_tid, NULL));
+      op->mark_event("no_reply: send routed request");
     } else {
-      dout(10) << "no_reply no quorum nullroute feature for " << req->get_source_inst()
+      dout(10) << "no_reply no quorum nullroute feature for "
+               << req->get_source_inst()
 	       << " via " << session->proxy_con->get_peer_addr()
 	       << " for request " << *req << dendl;
+      op->mark_event("no_reply: no quorum support");
     }
   } else {
-    dout(10) << "no_reply to " << req->get_source_inst() << " " << *req << dendl;
+    dout(10) << "no_reply to " << req->get_source_inst()
+             << " " << *req << dendl;
+    op->mark_event("no_reply");
   }
   session->put();
 }
 
-void Monitor::handle_route(MRoute *m)
+void Monitor::handle_route(MonOpRequestRef op)
 {
-  MonSession *session = static_cast<MonSession *>(m->get_connection()->get_priv());
+  MRoute *m = static_cast<MRoute*>(op->get_req());
+  MonSession *session = op->get_session();
   //check privileges
   if (session && !session->is_capable("mon", MON_CAP_X)) {
     dout(0) << "MRoute received from entity without appropriate perms! "
 	    << dendl;
     session->put();
-    m->put();
     return;
   }
   if (m->msg)
@@ -3225,7 +3264,6 @@ void Monitor::handle_route(MRoute *m)
       m->msg = NULL;
     }
   }
-  m->put();
   if (session)
     session->put();
 }
@@ -3246,9 +3284,11 @@ void Monitor::resend_routed_requests()
     if (mon == rank) {
       dout(10) << " requeue for self tid " << rr->tid << " " << *req << dendl;
       req->set_connection(rr->con);
-      retry.push_back(new C_RetryMessage(this, req));
+      rr->op->mark_event("retry routed request");
+      retry.push_back(new C_RetryMessage(this, rr->op));
       delete rr;
     } else {
+      rr->op->mark_event("resend forwarded message to leader");
       dout(10) << " resend to mon." << mon << " tid " << rr->tid << " " << *req << dendl;
       MForward *forward = new MForward(rr->tid, req, rr->con_features,
 				       rr->session->caps);
@@ -3302,7 +3342,7 @@ void Monitor::send_command(const entity_inst_t& inst,
   try_send_message(c, inst);
 }
 
-void Monitor::waitlist_or_zap_client(Message *m)
+void Monitor::waitlist_or_zap_client(MonOpRequestRef op)
 {
   /**
    * Wait list the new session until we're in the quorum, assuming it's
@@ -3317,48 +3357,55 @@ void Monitor::waitlist_or_zap_client(Message *m)
    * 3) command messages. We want to accept these under all possible
    * circumstances.
    */
-  ConnectionRef con = m->get_connection();
+  Message *m = op->get_req();
+  ConnectionRef con = op->get_connection();
   utime_t too_old = ceph_clock_now(g_ceph_context);
   too_old -= g_ceph_context->_conf->mon_lease;
   if (m->get_recv_stamp() > too_old &&
       con->is_connected()) {
     dout(5) << "waitlisting message " << *m << dendl;
-    maybe_wait_for_quorum.push_back(new C_RetryMessage(this, m));
+    maybe_wait_for_quorum.push_back(new C_RetryMessage(this, op));
+    op->mark_wait_for_quorum();
   } else {
     dout(5) << "discarding message " << *m << " and sending client elsewhere" << dendl;
     con->mark_down();
-    m->put();
+    op->mark_zap();
   }
 }
 
 void Monitor::_ms_dispatch(Message *m)
 {
   if (is_shutdown()) {
-    m->put();
     return;
   }
 
-  ConnectionRef connection = m->get_connection();
+  MonOpRequestRef op = op_tracker.create_request<MonOpRequest>(m);
+  dispatch(op);
+}
+
+void Monitor::dispatch(MonOpRequestRef op)
+{
+  op->mark_event("mon:dispatch");
+  ConnectionRef connection = op->get_connection();
   MonSession *s = NULL;
   MonCap caps;
-  bool src_is_mon;
+  bool src_is_mon = op->is_src_mon();
 
   // regardless of who we are or who the sender is, the message must
   // have a connection associated.  If it doesn't then something fishy
   // is going on.
   assert(connection);
 
-  src_is_mon = (connection->get_peer_type() & CEPH_ENTITY_TYPE_MON);
-
   bool reuse_caps = false;
   dout(20) << "have connection" << dendl;
-  s = static_cast<MonSession *>(connection->get_priv());
+  s = op->get_session();
   if (s && s->closed) {
     caps = s->caps;
     reuse_caps = true;
     s->put();
     s = NULL;
   }
+  Message *m = op->get_req();
   if (!s) {
     // if the sender is not a monitor, make sure their first message for a
     // session is an MAuth.  If it is not, assume it's a stray message,
@@ -3369,16 +3416,15 @@ void Monitor::_ms_dispatch(Message *m)
 			m->get_type() != CEPH_MSG_MON_GET_MAP)) {
       if (m->get_type() == CEPH_MSG_PING) {
         // let it go through and be dispatched immediately!
-        return dispatch(s, m, false);
+        return dispatch_op(op);
       }
       dout(1) << __func__ << " dropping stray message " << *m
 	      << " from " << m->get_source_inst() << dendl;
-      m->put();
       return;
     }
 
     if (!exited_quorum.is_zero() && !src_is_mon) {
-      waitlist_or_zap_client(m);
+      waitlist_or_zap_client(op);
       return;
     }
 
@@ -3386,6 +3432,7 @@ void Monitor::_ms_dispatch(Message *m)
     s = session_map.new_session(m->get_source_inst(), m->get_connection().get());
     m->get_connection()->set_priv(s->get());
     dout(10) << "ms_dispatch new session " << s << " for " << s->inst << dendl;
+    op->set_session(s);
 
     logger->set(l_mon_num_sessions, session_map.get_size());
     logger->inc(l_mon_session_add);
@@ -3416,31 +3463,30 @@ void Monitor::_ms_dispatch(Message *m)
   dout(20) << " caps " << s->caps.get_str() << dendl;
 
   if (is_synchronizing() && !src_is_mon) {
-    waitlist_or_zap_client(m);
+    waitlist_or_zap_client(op);
     return;
   }
 
-  dispatch(s, m, src_is_mon);
+  dispatch_op(op);
   s->put();
   return;
 }
 
-void Monitor::dispatch(MonSession *s, Message *m, const bool src_is_mon)
+void Monitor::dispatch_op(MonOpRequestRef op)
 {
-  assert(m != NULL);
-
+  op->mark_event("mon:dispatch_op");
   /* deal with all messages that do not necessarily need caps */
   bool dealt_with = true;
-  switch (m->get_type()) {
+  switch (op->get_req()->get_type()) {
     // auth
     case MSG_MON_GLOBAL_ID:
     case CEPH_MSG_AUTH:
       /* no need to check caps here */
-      paxos_service[PAXOS_AUTH]->dispatch((PaxosServiceMessage*)m);
+      paxos_service[PAXOS_AUTH]->dispatch(op);
       break;
 
     case CEPH_MSG_PING:
-      handle_ping(static_cast<MPing*>(m));
+      handle_ping(op);
       break;
 
     /* MMonGetMap may be used by clients to obtain a monmap *before*
@@ -3451,11 +3497,11 @@ void Monitor::dispatch(MonSession *s, Message *m, const bool src_is_mon)
      * not authenticate when obtaining a monmap.
      */
     case CEPH_MSG_MON_GET_MAP:
-      handle_mon_get_map(static_cast<MMonGetMap*>(m));
+      handle_mon_get_map(op);
       break;
 
     case CEPH_MSG_MON_METADATA:
-      return handle_mon_metadata(static_cast<MMonMetadata*>(m));
+      return handle_mon_metadata(op);
 
     default:
       dealt_with = false;
@@ -3466,7 +3512,7 @@ void Monitor::dispatch(MonSession *s, Message *m, const bool src_is_mon)
 
   /* deal with all messages which caps should be checked somewhere else */
   dealt_with = true;
-  switch (m->get_type()) {
+  switch (op->get_req()->get_type()) {
 
     // OSDs
     case CEPH_MSG_MON_GET_OSDMAP:
@@ -3476,13 +3522,13 @@ void Monitor::dispatch(MonSession *s, Message *m, const bool src_is_mon)
     case MSG_OSD_ALIVE:
     case MSG_OSD_PGTEMP:
     case MSG_REMOVE_SNAPS:
-      paxos_service[PAXOS_OSDMAP]->dispatch((PaxosServiceMessage*)m);
+      paxos_service[PAXOS_OSDMAP]->dispatch(op);
       break;
 
     // MDSs
     case MSG_MDS_BEACON:
     case MSG_MDS_OFFLOAD_TARGETS:
-      paxos_service[PAXOS_MDSMAP]->dispatch((PaxosServiceMessage*)m);
+      paxos_service[PAXOS_MDSMAP]->dispatch(op);
       break;
 
 
@@ -3490,21 +3536,21 @@ void Monitor::dispatch(MonSession *s, Message *m, const bool src_is_mon)
     case CEPH_MSG_STATFS:
     case MSG_PGSTATS:
     case MSG_GETPOOLSTATS:
-      paxos_service[PAXOS_PGMAP]->dispatch((PaxosServiceMessage*)m);
+      paxos_service[PAXOS_PGMAP]->dispatch(op);
       break;
 
     case CEPH_MSG_POOLOP:
-      paxos_service[PAXOS_OSDMAP]->dispatch((PaxosServiceMessage*)m);
+      paxos_service[PAXOS_OSDMAP]->dispatch(op);
       break;
 
     // log
     case MSG_LOG:
-      paxos_service[PAXOS_LOG]->dispatch((PaxosServiceMessage*)m);
+      paxos_service[PAXOS_LOG]->dispatch(op);
       break;
 
     // handle_command() does its own caps checking
     case MSG_MON_COMMAND:
-      handle_command(static_cast<MMonCommand*>(m));
+      handle_command(op);
       break;
 
     default:
@@ -3517,24 +3563,24 @@ void Monitor::dispatch(MonSession *s, Message *m, const bool src_is_mon)
   /* messages we, the Monitor class, need to deal with
    * but may be sent by clients. */
 
-  if (!s->is_capable("mon", MON_CAP_R)) {
-    dout(5) << __func__ << " " << m->get_source_inst()
-            << " not enough caps for " << *m << " -- dropping"
+  if (!op->get_session()->is_capable("mon", MON_CAP_R)) {
+    dout(5) << __func__ << " " << op->get_req()->get_source_inst()
+            << " not enough caps for " << *(op->get_req()) << " -- dropping"
             << dendl;
     goto drop;
   }
 
   dealt_with = true;
-  switch (m->get_type()) {
+  switch (op->get_req()->get_type()) {
 
     // misc
     case CEPH_MSG_MON_GET_VERSION:
-      handle_get_version(static_cast<MMonGetVersion*>(m));
+      handle_get_version(op);
       break;
 
     case CEPH_MSG_MON_SUBSCRIBE:
       /* FIXME: check what's being subscribed, filter accordingly */
-      handle_subscribe(static_cast<MMonSubscribe*>(m));
+      handle_subscribe(op);
       break;
 
     default:
@@ -3544,53 +3590,51 @@ void Monitor::dispatch(MonSession *s, Message *m, const bool src_is_mon)
   if (dealt_with)
     return;
 
-  if (!src_is_mon) {
+  if (!op->is_src_mon()) {
     dout(1) << __func__ << " unexpected monitor message from"
-            << " non-monitor entity " << m->get_source_inst()
-            << " " << *m << " -- dropping" << dendl;
+            << " non-monitor entity " << op->get_req()->get_source_inst()
+            << " " << *(op->get_req()) << " -- dropping" << dendl;
     goto drop;
   }
 
   /* messages that should only be sent by another monitor */
   dealt_with = true;
-  switch (m->get_type()) {
+  switch (op->get_req()->get_type()) {
 
     case MSG_ROUTE:
-      handle_route(static_cast<MRoute*>(m));
+      handle_route(op);
       break;
 
     case MSG_MON_PROBE:
-      handle_probe(static_cast<MMonProbe*>(m));
+      handle_probe(op);
       break;
 
     // Sync (i.e., the new slurp, but on steroids)
     case MSG_MON_SYNC:
-      handle_sync(static_cast<MMonSync*>(m));
+      handle_sync(op);
       break;
     case MSG_MON_SCRUB:
-      handle_scrub(static_cast<MMonScrub*>(m));
+      handle_scrub(op);
       break;
 
     /* log acks are sent from a monitor we sent the MLog to, and are
        never sent by clients to us. */
     case MSG_LOGACK:
-      log_client.handle_log_ack((MLogAck*)m);
-      m->put();
+      log_client.handle_log_ack((MLogAck*)op->get_req());
       break;
 
     // monmap
     case MSG_MON_JOIN:
-      paxos_service[PAXOS_MONMAP]->dispatch((PaxosServiceMessage*)m);
+      paxos_service[PAXOS_MONMAP]->dispatch(op);
       break;
 
     // paxos
     case MSG_MON_PAXOS:
       {
-        MMonPaxos *pm = static_cast<MMonPaxos*>(m);
-        if (!src_is_mon ||
-            !s->is_capable("mon", MON_CAP_X)) {
+        MMonPaxos *pm = static_cast<MMonPaxos*>(op->get_req());
+        if (!op->is_src_mon() ||
+            !op->get_session()->is_capable("mon", MON_CAP_X)) {
           //can't send these!
-          pm->put();
           break;
         }
 
@@ -3599,52 +3643,46 @@ void Monitor::dispatch(MonSession *s, Message *m, const bool src_is_mon)
           // good, thus just drop them and ignore them.
           dout(10) << __func__ << " ignore paxos msg from "
             << pm->get_source_inst() << dendl;
-          pm->put();
           break;
         }
 
         // sanitize
         if (pm->epoch > get_epoch()) {
           bootstrap();
-          pm->put();
           break;
         }
         if (pm->epoch != get_epoch()) {
-          pm->put();
           break;
         }
 
-        paxos->dispatch((PaxosServiceMessage*)m);
+        paxos->dispatch(op);
       }
       break;
 
     // elector messages
     case MSG_MON_ELECTION:
       //check privileges here for simplicity
-      if (s &&
-          !s->is_capable("mon", MON_CAP_X)) {
+      if (op->get_session() &&
+          !op->get_session()->is_capable("mon", MON_CAP_X)) {
         dout(0) << "MMonElection received from entity without enough caps!"
-          << s->caps << dendl;
-        m->put();
+          << op->get_session()->caps << dendl;
         break;
       }
       if (!is_probing() && !is_synchronizing()) {
-        elector.dispatch(m);
-      } else {
-        m->put();
+        elector.dispatch(op);
       }
       break;
 
     case MSG_FORWARD:
-      handle_forward(static_cast<MForward *>(m));
+      handle_forward(op);
       break;
 
     case MSG_TIMECHECK:
-      handle_timecheck(static_cast<MTimeCheck *>(m));
+      handle_timecheck(op);
       break;
 
     case MSG_MON_HEALTH:
-      health_monitor->dispatch(static_cast<MMonHealth *>(m));
+      health_monitor->dispatch(op);
       break;
 
     default:
@@ -3652,17 +3690,18 @@ void Monitor::dispatch(MonSession *s, Message *m, const bool src_is_mon)
       break;
   }
   if (!dealt_with) {
-    dout(1) << "dropping unexpected " << *m << dendl;
+    dout(1) << "dropping unexpected " << *(op->get_req()) << dendl;
     goto drop;
   }
   return;
 
 drop:
-  m->put();
+  return;
 }
 
-void Monitor::handle_ping(MPing *m)
+void Monitor::handle_ping(MonOpRequestRef op)
 {
+  MPing *m = static_cast<MPing*>(op->get_req());
   dout(10) << __func__ << " " << *m << dendl;
   MPing *reply = new MPing;
   entity_inst_t inst = m->get_source_inst();
@@ -3684,7 +3723,6 @@ void Monitor::handle_ping(MPing *m)
   reply->set_payload(payload);
   dout(10) << __func__ << " reply payload len " << reply->get_payload().length() << dendl;
   messenger->send_message(reply, inst);
-  m->put();
 }
 
 void Monitor::timecheck_start()
@@ -3874,8 +3912,9 @@ health_status_t Monitor::timecheck_status(ostringstream &ss,
   return status;
 }
 
-void Monitor::handle_timecheck_leader(MTimeCheck *m)
+void Monitor::handle_timecheck_leader(MonOpRequestRef op)
 {
+  MTimeCheck *m = static_cast<MTimeCheck*>(op->get_req());
   dout(10) << __func__ << " " << *m << dendl;
   /* handles PONG's */
   assert(m->op == MTimeCheck::OP_PONG);
@@ -3996,8 +4035,9 @@ void Monitor::handle_timecheck_leader(MTimeCheck *m)
   }
 }
 
-void Monitor::handle_timecheck_peon(MTimeCheck *m)
+void Monitor::handle_timecheck_peon(MonOpRequestRef op)
 {
+  MTimeCheck *m = static_cast<MTimeCheck*>(op->get_req());
   dout(10) << __func__ << " " << *m << dendl;
 
   assert(is_peon());
@@ -4037,38 +4077,38 @@ void Monitor::handle_timecheck_peon(MTimeCheck *m)
   m->get_connection()->send_message(reply);
 }
 
-void Monitor::handle_timecheck(MTimeCheck *m)
+void Monitor::handle_timecheck(MonOpRequestRef op)
 {
+  MTimeCheck *m = static_cast<MTimeCheck*>(op->get_req());
   dout(10) << __func__ << " " << *m << dendl;
 
   if (is_leader()) {
     if (m->op != MTimeCheck::OP_PONG) {
       dout(1) << __func__ << " drop unexpected msg (not pong)" << dendl;
     } else {
-      handle_timecheck_leader(m);
+      handle_timecheck_leader(op);
     }
   } else if (is_peon()) {
     if (m->op != MTimeCheck::OP_PING && m->op != MTimeCheck::OP_REPORT) {
       dout(1) << __func__ << " drop unexpected msg (not ping or report)" << dendl;
     } else {
-      handle_timecheck_peon(m);
+      handle_timecheck_peon(op);
     }
   } else {
     dout(1) << __func__ << " drop unexpected msg" << dendl;
   }
-  m->put();
 }
 
-void Monitor::handle_subscribe(MMonSubscribe *m)
+void Monitor::handle_subscribe(MonOpRequestRef op)
 {
+  MMonSubscribe *m = static_cast<MMonSubscribe*>(op->get_req());
   dout(10) << "handle_subscribe " << *m << dendl;
   
   bool reply = false;
 
-  MonSession *s = static_cast<MonSession *>(m->get_connection()->get_priv());
+  MonSession *s = op->get_session();
   if (!s) {
     dout(10) << " no session, dropping" << dendl;
-    m->put();
     return;
   }
 
@@ -4110,24 +4150,23 @@ void Monitor::handle_subscribe(MMonSubscribe *m)
     m->get_connection()->send_message(new MMonSubscribeAck(monmap->get_fsid(), (int)g_conf->mon_subscribe_interval));
 
   s->put();
-  m->put();
 }
 
-void Monitor::handle_get_version(MMonGetVersion *m)
+void Monitor::handle_get_version(MonOpRequestRef op)
 {
+  MMonGetVersion *m = static_cast<MMonGetVersion*>(op->get_req());
   dout(10) << "handle_get_version " << *m << dendl;
   PaxosService *svc = NULL;
 
-  MonSession *s = static_cast<MonSession *>(m->get_connection()->get_priv());
+  MonSession *s = op->get_session();
   if (!s) {
     dout(10) << " no session, dropping" << dendl;
-    m->put();
     return;
   }
 
   if (!is_leader() && !is_peon()) {
     dout(10) << " waiting for quorum" << dendl;
-    waitfor_quorum.push_back(new C_RetryMessage(this, m));
+    waitfor_quorum.push_back(new C_RetryMessage(this, op));
     goto out;
   }
 
@@ -4143,7 +4182,7 @@ void Monitor::handle_get_version(MMonGetVersion *m)
 
   if (svc) {
     if (!svc->is_readable()) {
-      svc->wait_for_readable(new C_RetryMessage(this, m));
+      svc->wait_for_readable(op, new C_RetryMessage(this, op));
       goto out;
     }
 
@@ -4156,7 +4195,6 @@ void Monitor::handle_get_version(MMonGetVersion *m)
     m->get_connection()->send_message(reply);
   }
 
-  m->put();
 
  out:
   s->put();
@@ -4224,20 +4262,20 @@ void Monitor::send_latest_monmap(Connection *con)
   con->send_message(new MMonMap(bl));
 }
 
-void Monitor::handle_mon_get_map(MMonGetMap *m)
+void Monitor::handle_mon_get_map(MonOpRequestRef op)
 {
+  MMonGetMap *m = static_cast<MMonGetMap*>(op->get_req());
   dout(10) << "handle_mon_get_map" << dendl;
   send_latest_monmap(m->get_connection().get());
-  m->put();
 }
 
-void Monitor::handle_mon_metadata(MMonMetadata *m)
+void Monitor::handle_mon_metadata(MonOpRequestRef op)
 {
+  MMonMetadata *m = static_cast<MMonMetadata*>(op->get_req());
   if (is_leader()) {
     dout(10) << __func__ << dendl;
     update_mon_metadata(m->get_source().num(), m->data);
   }
-  m->put();
 }
 
 void Monitor::update_mon_metadata(int from, const Metadata& m)
@@ -4353,8 +4391,9 @@ int Monitor::scrub()
   return 0;
 }
 
-void Monitor::handle_scrub(MMonScrub *m)
+void Monitor::handle_scrub(MonOpRequestRef op)
 {
+  MMonScrub *m = static_cast<MMonScrub*>(op->get_req());
   dout(10) << __func__ << " " << *m << dendl;
   switch (m->op) {
   case MMonScrub::OP_SCRUB:
@@ -4384,7 +4423,6 @@ void Monitor::handle_scrub(MMonScrub *m)
     }
     break;
   }
-  m->put();
 }
 
 void Monitor::_scrub(ScrubResult *r)
