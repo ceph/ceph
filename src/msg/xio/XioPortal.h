@@ -159,7 +159,7 @@ public:
     struct xio_msg *msg = xrsp->dequeue();
     struct xio_msg *next_msg = NULL;
     int code;
-    if (unlikely(!xrsp->xcon->conn || !xrsp->xcon->is_connected())) {
+    if (unlikely(!xrsp->xcon->conn)) {
       // NOTE: msg is not safe to dereference if the connection was torn down
       xrsp->xcon->msg_release_fail(msg, ENOTCONN);
     }
