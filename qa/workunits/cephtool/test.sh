@@ -578,7 +578,7 @@ function test_mon_misc()
   ceph log "$mymsg"
   ceph_watch_wait "$mymsg"
 
-  ceph mon_metadata a
+  ceph mon metadata a
 }
 
 function check_mds_active()
@@ -1601,6 +1601,30 @@ function test_mon_ping()
   ceph ping mon.*
 }
 
+function test_mon_deprecated_commands()
+{
+  # current DEPRECATED commands are:
+  #  ceph compact
+  #  ceph scrub
+  #  ceph sync force
+  #
+  # Testing should be accomplished by setting
+  # 'mon_debug_deprecated_as_obsolete = true' and expecting ENOTSUP for
+  # each one of these commands.
+
+  ceph tell mon.a injectargs '--mon-debug-deprecated-as-obsolete'
+  expect_false ceph tell mon.a compact 2> $TMPFILE
+  check_response "ENOTSUP: command is obsolete"
+
+  expect_false ceph tell mon.a scrub 2> $TMPFILE
+  check_response "ENOTSUP: command is obsolete"
+
+  expect_false ceph tell mon.a sync force 2> $TMPFILE
+  check_response "ENOTSUP: command is obsolete"
+
+  ceph tell mon.a injectargs '--no-mon-debug-deprecated-as-obsolete'
+}
+
 #
 # New tests should be added to the TESTS array below
 #
@@ -1637,6 +1661,7 @@ MON_TESTS+=" mon_heap_profiler"
 MON_TESTS+=" mon_tell"
 MON_TESTS+=" mon_crushmap_validation"
 MON_TESTS+=" mon_ping"
+MON_TESTS+=" mon_deprecated_commands"
 
 OSD_TESTS+=" osd_bench"
 
