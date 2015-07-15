@@ -18,6 +18,40 @@
 
 namespace librbd {
 
+namespace {
+
+struct C_DiscardJournalCommit : public Context {
+  typedef std::vector<ObjectExtent> ObjectExtents;
+
+  ImageCtx &image_ctx;
+  AioCompletion *aio_comp;
+  ObjectExtents object_extents;
+
+  C_DiscardJournalCommit(ImageCtx &_image_ctx, AioCompletion *_aio_comp,
+                         const ObjectExtents &_object_extents, uint64_t tid)
+    : image_ctx(_image_ctx), aio_comp(_aio_comp),
+      object_extents(_object_extents) {
+    CephContext *cct = image_ctx.cct;
+    ldout(cct, 20) << this << " C_DiscardJournalCommit: "
+                   << "delaying cache discard until journal tid " << tid << " "
+                   << "safe" << dendl;
+
+    aio_comp->add_request();
+  }
+
+  virtual void finish(int r) {
+    CephContext *cct = image_ctx.cct;
+    ldout(cct, 20) << this << " C_DiscardJournalCommit: "
+                   << "journal committed: discarding from cache" << dendl;
+
+    Mutex::Locker cache_locker(image_ctx.cache_lock);
+    image_ctx.object_cacher->discard_set(image_ctx.object_set, object_extents);
+    aio_comp->complete_request(cct, r);
+  }
+};
+
+} // anonymous namespace
+
 void AioImageRequest::aio_read(
     ImageCtx *ictx, AioCompletion *c,
     const std::vector<std::pair<uint64_t,uint64_t> > &extents,
@@ -196,7 +230,7 @@ void AbstractAioImageWrite::send_request() {
   }
 
   if (m_image_ctx.object_cacher != NULL) {
-    send_cache_requests(object_extents, snapc, journal_tid);
+    send_cache_requests(object_extents, journal_tid);
   }
   update_stats(clip_len);
 
@@ -214,7 +248,7 @@ void AbstractAioImageWrite::send_object_requests(
     ldout(cct, 20) << " oid " << p->oid << " " << p->offset << "~" << p->length
                    << " from " << p->buffer_extents << dendl;
     C_AioRequest *req_comp = new C_AioRequest(cct, m_aio_comp);
-    AioObjectRequest *request = send_object_request(*p, snapc, req_comp);
+    AioObjectRequest *request = create_object_request(*p, snapc, req_comp);
 
     // if journaling, stash the request for later; otherwise send
     if (request != NULL) {
@@ -242,14 +276,12 @@ uint64_t AioImageWrite::append_journal_event(
 
   journal::EventEntry event_entry(journal::AioWriteEvent(m_off, m_len, bl));
   return m_image_ctx.journal->append_event(m_aio_comp, event_entry, requests,
-                                           synchronous);
+                                           m_off, m_len, synchronous);
 }
 
 void AioImageWrite::send_cache_requests(const ObjectExtents &object_extents,
-                                        const ::SnapContext &snapc,
                                         uint64_t journal_tid) {
   CephContext *cct = m_image_ctx.cct;
-
   for (ObjectExtents::const_iterator p = object_extents.begin();
        p != object_extents.end(); ++p) {
     const ObjectExtent &object_extent = *p;
@@ -257,19 +289,27 @@ void AioImageWrite::send_cache_requests(const ObjectExtents &object_extents,
     bufferlist bl;
     assemble_extent(object_extent, &bl);
 
-    // TODO pass journal_tid to object cacher
     C_AioRequest *req_comp = new C_AioRequest(cct, m_aio_comp);
     m_image_ctx.write_to_cache(object_extent.oid, bl, object_extent.length,
-                               object_extent.offset, req_comp, m_op_flags);
+                               object_extent.offset, req_comp, m_op_flags,
+                               journal_tid);
   }
 }
 
-AioObjectRequest *AioImageWrite::send_object_request(
+void AioImageWrite::send_object_requests(
+    const ObjectExtents &object_extents, const ::SnapContext &snapc,
+    AioObjectRequests *aio_object_requests) {
+  // cache handles creating object requests during writeback
+  if (m_image_ctx.object_cacher == NULL) {
+    AbstractAioImageWrite::send_object_requests(object_extents, snapc,
+                                                aio_object_requests);
+  }
+}
+
+AioObjectRequest *AioImageWrite::create_object_request(
     const ObjectExtent &object_extent, const ::SnapContext &snapc,
     Context *on_finish) {
-  if (m_image_ctx.object_cacher != NULL) {
-    return NULL;
-  }
+  assert(m_image_ctx.object_cacher == NULL);
 
   bufferlist bl;
   assemble_extent(object_extent, &bl);
@@ -291,22 +331,25 @@ uint64_t AioImageDiscard::append_journal_event(
     const AioObjectRequests &requests, bool synchronous) {
   journal::EventEntry event_entry(journal::AioDiscardEvent(m_off, m_len));
   return m_image_ctx.journal->append_event(m_aio_comp, event_entry, requests,
-                                           synchronous);
+                                           m_off, m_len, synchronous);
 }
 
 void AioImageDiscard::send_cache_requests(const ObjectExtents &object_extents,
-                                          const ::SnapContext &snapc,
                                           uint64_t journal_tid) {
-  // TODO need to have cache flag pending discard for writeback or need
-  // to delay cache update until after journal commits
-  Mutex::Locker cache_locker(m_image_ctx.cache_lock);
-
-  // TODO pass journal_tid to object cacher
-  m_image_ctx.object_cacher->discard_set(m_image_ctx.object_set,
-                                         object_extents);
+  if (journal_tid == 0) {
+    Mutex::Locker cache_locker(m_image_ctx.cache_lock);
+    m_image_ctx.object_cacher->discard_set(m_image_ctx.object_set,
+                                           object_extents);
+  } else {
+    // cannot discard from cache until journal has committed
+    assert(m_image_ctx.journal != NULL);
+    m_image_ctx.journal->wait_event(
+      journal_tid, new C_DiscardJournalCommit(m_image_ctx, m_aio_comp,
+                                              object_extents, journal_tid));
+  }
 }
 
-AioObjectRequest *AioImageDiscard::send_object_request(
+AioObjectRequest *AioImageDiscard::create_object_request(
     const ObjectExtent &object_extent, const ::SnapContext &snapc,
     Context *on_finish) {
   CephContext *cct = m_image_ctx.cct;
@@ -346,7 +389,7 @@ void AioImageFlush::send_request() {
     if (m_image_ctx.journal != NULL) {
       m_image_ctx.journal->append_event(
         m_aio_comp, journal::EventEntry(journal::AioFlushEvent()),
-        AioObjectRequests(), true);
+        AioObjectRequests(), 0, 0, true);
     }
   }
 
