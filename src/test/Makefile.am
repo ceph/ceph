@@ -68,6 +68,7 @@ check_SCRIPTS += \
 	test/cephtool-test-osd.sh \
 	test/cephtool-test-mon.sh \
 	test/cephtool-test-mds.sh \
+	test/cephtool-test-rados.sh \
 	unittest_bufferlist.sh \
 	test/encoding/check-generated.sh \
 	test/mon/osd-pool-create.sh \
