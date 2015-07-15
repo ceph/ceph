@@ -24,6 +24,7 @@ nodist_libosd_tp_la_SOURCES = \
 endif
 libosd_tp_la_LIBADD = -llttng-ust -ldl
 libosd_tp_la_CPPFLAGS = -DTRACEPOINT_PROBE_DYNAMIC_LINKAGE
+libosd_tp_la_CFLAGS = -I$(top_srcdir)/src $(AM_CFLAGS)
 libosd_tp_la_LDFLAGS =
 
 if WITH_LTTNG
