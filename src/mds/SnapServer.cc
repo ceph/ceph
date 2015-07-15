@@ -46,6 +46,11 @@ void SnapServer::reset_state()
          p != mds->mdsmap->get_data_pools().end();
          ++p) {
       const pg_pool_t *pi = osdmap->get_pg_pool(*p);
+      if (!pi) {
+        // If pool isn't in OSDMap yet then can't have any snaps needing
+        // removal, skip.
+        continue;
+      }
       if (!pi->removed_snaps.empty() &&
           pi->removed_snaps.range_end() > first_free)
         first_free = pi->removed_snaps.range_end();
