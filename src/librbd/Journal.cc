@@ -309,13 +309,13 @@ void Journal::destroy_journaler() {
 
 void Journal::complete_event(Events::iterator it, int r) {
   assert(m_lock.is_locked());
+  assert(m_state == STATE_RECORDING);
 
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << this << " " << __func__ << ": tid=" << it->first << " "
                  << "r=" << r << dendl;
 
-  // TODO
-
+  m_journaler->committed(it->second.future);
   m_events.erase(it);
 }
 

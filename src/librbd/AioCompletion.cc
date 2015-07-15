@@ -14,6 +14,7 @@
 #include "librbd/internal.h"
 
 #include "librbd/AioCompletion.h"
+#include "librbd/Journal.h"
 
 #ifdef WITH_LTTNG
 #include "tracing/librbd.h"
@@ -86,6 +87,12 @@ namespace librbd {
       break;
     }
 
+    // inform the journal that the op has successfully committed
+    if (journal_tid != 0) {
+      assert(ictx->journal != NULL);
+      ictx->journal->commit_event(journal_tid, rval);
+    }
+
     // note: possible for image to be closed after op marked finished
     if (async_op.started()) {
       async_op.finish_op();
@@ -141,6 +148,12 @@ namespace librbd {
       complete(cct);
     }
     put_unlock();
+  }
+
+  void AioCompletion::associate_journal_event(uint64_t tid) {
+    Mutex::Locker l(lock);
+    assert(!done);
+    journal_tid = tid;
   }
 
   bool AioCompletion::is_complete() {
