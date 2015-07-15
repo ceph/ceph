@@ -1941,12 +1941,13 @@ int AsyncConnection::send_message(Message *m)
 
   // TODO: Currently not all messages supports reencode like MOSDMap, so here
   // only let fast dispatch support messages prepare message
-  if (async_msgr->ms_can_fast_dispatch(m))
+  bool can_fast_prepare = async_msgr->ms_can_fast_dispatch(m);
+  if (can_fast_prepare)
     prepare_send_message(f, m, bl);
 
   Mutex::Locker l(write_lock);
   // "features" changes will change the payload encoding
-  if (can_write == NOWRITE || get_features() != f) {
+  if (can_fast_prepare && (can_write == NOWRITE || get_features() != f)) {
     // ensure the correctness of message encoding
     bl.clear();
     m->get_payload().clear();
@@ -1954,6 +1955,8 @@ int AsyncConnection::send_message(Message *m)
                               << f << " != " << get_features() << dendl;
   }
   if (!is_queued() && can_write == CANWRITE) {
+    if (!can_fast_prepare)
+      prepare_send_message(f, m, bl);
     if (write_message(m, bl) < 0) {
       ldout(async_msgr->cct, 1) << __func__ << " send msg failed" << dendl;
       // we want to handle fault within internal thread
@@ -2210,36 +2213,10 @@ int AsyncConnection::write_message(Message *m, bufferlist& bl)
     m->get();
   }
 
-  bufferlist complete_bl;
-  // send tag
-  char tag = CEPH_MSGR_TAG_MSG;
-  complete_bl.append(&tag, sizeof(tag));
-
   m->calc_header_crc();
+
   ceph_msg_header& header = m->get_header();
   ceph_msg_footer& footer = m->get_footer();
-  if (has_feature(CEPH_FEATURE_NOSRCADDR)) {
-    complete_bl.append((char*)&header, sizeof(header));
-  } else {
-    ceph_msg_header_old oldheader;
-    memcpy(&oldheader, &header, sizeof(header));
-    oldheader.src.name = header.src;
-    oldheader.src.addr = get_peer_addr();
-    oldheader.orig_src = oldheader.src;
-    oldheader.reserved = header.reserved;
-    // delay crc calculate to "inject_msg_header_crc"
-    oldheader.crc = ceph_crc32c(0, (unsigned char*)&oldheader,
-                                sizeof(oldheader) - sizeof(oldheader.crc));
-    complete_bl.append((char*)&oldheader, sizeof(oldheader));
-  }
-
-  ldout(async_msgr->cct, 20) << __func__ << " sending message type=" << header.type
-                             << " src " << entity_name_t(header.src)
-                             << " front=" << header.front_len
-                             << " data=" << header.data_len
-                             << " off " << header.data_off << dendl;
-
-  complete_bl.claim_append(bl);
 
   // TODO: let sign_message could be reentry?
   // Now that we have all the crcs calculated, handle the
@@ -2258,6 +2235,33 @@ int AsyncConnection::write_message(Message *m, bufferlist& bl)
                                  << "): sig = " << footer.sig << dendl;
     }
   }
+
+  bufferlist complete_bl;
+  // send tag
+  char tag = CEPH_MSGR_TAG_MSG;
+  complete_bl.append(&tag, sizeof(tag));
+
+  if (has_feature(CEPH_FEATURE_NOSRCADDR)) {
+    complete_bl.append((char*)&header, sizeof(header));
+  } else {
+    ceph_msg_header_old oldheader;
+    memcpy(&oldheader, &header, sizeof(header));
+    oldheader.src.name = header.src;
+    oldheader.src.addr = get_peer_addr();
+    oldheader.orig_src = oldheader.src;
+    oldheader.reserved = header.reserved;
+    oldheader.crc = ceph_crc32c(0, (unsigned char*)&oldheader,
+                                sizeof(oldheader) - sizeof(oldheader.crc));
+    complete_bl.append((char*)&oldheader, sizeof(oldheader));
+  }
+
+  ldout(async_msgr->cct, 20) << __func__ << " sending message type=" << header.type
+                             << " src " << entity_name_t(header.src)
+                             << " front=" << header.front_len
+                             << " data=" << header.data_len
+                             << " off " << header.data_off << dendl;
+
+  complete_bl.claim_append(bl);
 
   // send footer; if receiver doesn't support signatures, use the old footer format
   ceph_msg_footer_old old_footer;
