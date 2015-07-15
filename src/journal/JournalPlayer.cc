@@ -159,7 +159,7 @@ bool JournalPlayer::try_pop_front(Entry *entry,
 
 void JournalPlayer::process_state(int r) {
   ldout(m_cct, 10) << __func__ << ": r=" << r << dendl;
-  if (r == 0) {
+  if (r >= 0) {
     Mutex::Locker locker(m_lock);
     switch (m_state) {
     case STATE_PREFETCH:
