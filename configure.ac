@@ -268,25 +268,36 @@ ACX_PTHREAD
 
 AC_CHECK_LIB([uuid], [uuid_parse], [true], AC_MSG_FAILURE([libuuid not found]))
 
-# rbd {map,unmap,showmapped} dependencies, Linux only
-if test x"$linux" = x"yes" -a x"$with_rbd" = x"yes"; then
+#Linux only dependencies
+if test x"$linux" = x"yes"; then
   # libblkid
   AC_CHECK_HEADER([blkid/blkid.h], [],
     AC_MSG_ERROR([blkid/blkid.h not found (libblkid-dev, libblkid-devel)]))
-  AC_CHECK_LIB([blkid], [blkid_devno_to_wholedisk], [true],
+  AC_CHECK_LIB([blkid], [blkid_get_cache], [true],
+    AC_MSG_FAILURE([libblkid not found]))
+  AC_CHECK_LIB([blkid], [blkid_find_dev_with_tag], [true],
+    AC_MSG_FAILURE([libblkid not found]))
+  AC_CHECK_LIB([blkid], [blkid_dev_devname], [true],
     AC_MSG_FAILURE([libblkid not found]))
 
-  # libudev
-  AC_CHECK_HEADER([libudev.h], [],
-    AC_MSG_ERROR([libudev.h not found (libudev-dev, libudev-devel)]))
-  AC_CHECK_LIB([udev], [udev_monitor_receive_device], [true],
-    AC_MSG_FAILURE([libudev not found]))
+  # rbd {map,unmap,showmapped} dependencies, Linux only
+  if test x"$with_rbd" = x"yes"; then
+    # libblkid
+    AC_CHECK_LIB([blkid], [blkid_devno_to_wholedisk], [true],
+      AC_MSG_FAILURE([libblkid not found]))
 
-  # libexpat
-  AC_CHECK_HEADER([expat.h], [],
-    AC_MSG_ERROR([expat.h not found (libexpat-devel)]))
-  AC_CHECK_LIB([expat], [XML_Parse], [true],
-    AC_MSG_FAILURE([libexpat not found]))
+    # libudev
+    AC_CHECK_HEADER([libudev.h], [],
+      AC_MSG_ERROR([libudev.h not found (libudev-dev, libudev-devel)]))
+    AC_CHECK_LIB([udev], [udev_monitor_receive_device], [true],
+      AC_MSG_FAILURE([libudev not found]))
+
+    # libexpat
+    AC_CHECK_HEADER([expat.h], [],
+      AC_MSG_ERROR([expat.h not found (libexpat-devel)]))
+    AC_CHECK_LIB([expat], [XML_Parse], [true],
+      AC_MSG_FAILURE([libexpat not found]))
+  fi
 fi
 
 #
