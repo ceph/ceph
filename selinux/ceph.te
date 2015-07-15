@@ -31,6 +31,7 @@ files_pid_file(ceph_var_run_t)
 allow ceph_t self:process { signal_perms };
 allow ceph_t self:fifo_file rw_fifo_file_perms;
 allow ceph_t self:unix_stream_socket create_stream_socket_perms;
+allow ceph_t self:capability { setuid setgid };
 
 manage_dirs_pattern(ceph_t, ceph_log_t, ceph_log_t)
 manage_files_pattern(ceph_t, ceph_log_t, ceph_log_t)
