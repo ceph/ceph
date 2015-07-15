@@ -62,13 +62,16 @@ namespace librbd {
 
     AsyncOperation async_op;
 
+    uint64_t journal_tid;
+
     AioCompletion() : lock("AioCompletion::lock", true, false),
 		      done(false), rval(0), complete_cb(NULL),
 		      complete_arg(NULL), rbd_comp(NULL),
 		      pending_count(0), blockers(1),
 		      ref(1), released(false), ictx(NULL),
 		      aio_type(AIO_TYPE_NONE),
-		      read_bl(NULL), read_buf(NULL), read_buf_len(0) {
+		      read_bl(NULL), read_buf(NULL), read_buf_len(0),
+                      journal_tid(0) {
     }
     ~AioCompletion() {
     }
@@ -98,6 +101,8 @@ namespace librbd {
     }
 
     void complete_request(CephContext *cct, ssize_t r);
+
+    void associate_journal_event(uint64_t tid);
 
     bool is_complete();
 
