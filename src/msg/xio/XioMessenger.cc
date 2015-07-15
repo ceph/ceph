@@ -312,7 +312,7 @@ XioMessenger::XioMessenger(CephContext *cct, entity_name_t name,
                  &xopt, sizeof(xopt));
 
       /* and set threshold for buffer callouts */
-      xopt = 16384;
+      xopt = max(cct->_conf->xio_max_send_inline, 512);
       xio_set_opt(NULL, XIO_OPTLEVEL_ACCELIO, XIO_OPTNAME_MAX_INLINE_XIO_DATA,
                  &xopt, sizeof(xopt));
       xopt = 216;
