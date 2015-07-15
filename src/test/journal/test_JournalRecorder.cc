@@ -46,7 +46,7 @@ TEST_F(TestJournalRecorder, Append) {
   ASSERT_EQ(0, client_register(oid));
 
   journal::JournalMetadataPtr metadata = create_metadata(oid);
-  ASSERT_EQ(0, metadata->init());
+  ASSERT_EQ(0, init_metadata(metadata));
 
   journal::JournalRecorder *recorder = create_recorder(oid, metadata);
 
@@ -63,7 +63,7 @@ TEST_F(TestJournalRecorder, AppendKnownOverflow) {
   ASSERT_EQ(0, client_register(oid));
 
   journal::JournalMetadataPtr metadata = create_metadata(oid);
-  ASSERT_EQ(0, metadata->init());
+  ASSERT_EQ(0, init_metadata(metadata));
   ASSERT_EQ(0U, metadata->get_active_set());
 
   journal::JournalRecorder *recorder = create_recorder(oid, metadata);
@@ -84,7 +84,7 @@ TEST_F(TestJournalRecorder, AppendDelayedOverflow) {
   ASSERT_EQ(0, client_register(oid));
 
   journal::JournalMetadataPtr metadata = create_metadata(oid);
-  ASSERT_EQ(0, metadata->init());
+  ASSERT_EQ(0, init_metadata(metadata));
   ASSERT_EQ(0U, metadata->get_active_set());
 
   journal::JournalRecorder *recorder1 = create_recorder(oid, metadata);
@@ -108,7 +108,7 @@ TEST_F(TestJournalRecorder, FutureFlush) {
   ASSERT_EQ(0, client_register(oid));
 
   journal::JournalMetadataPtr metadata = create_metadata(oid);
-  ASSERT_EQ(0, metadata->init());
+  ASSERT_EQ(0, init_metadata(metadata));
 
   journal::JournalRecorder *recorder = create_recorder(oid, metadata);
 
@@ -128,18 +128,20 @@ TEST_F(TestJournalRecorder, Flush) {
   ASSERT_EQ(0, client_register(oid));
 
   journal::JournalMetadataPtr metadata = create_metadata(oid);
-  ASSERT_EQ(0, metadata->init());
+  ASSERT_EQ(0, init_metadata(metadata));
 
   journal::JournalRecorder *recorder = create_recorder(oid, metadata);
 
   journal::Future future1 = recorder->append("tag1", create_payload("payload1"));
   journal::Future future2 = recorder->append("tag1", create_payload("payload2"));
 
-  recorder->flush();
+  C_SaferCond cond1;
+  recorder->flush(&cond1);
+  ASSERT_EQ(0, cond1.wait());
 
-  C_SaferCond cond;
-  future2.wait(&cond);
-  ASSERT_EQ(0, cond.wait());
+  C_SaferCond cond2;
+  future2.wait(&cond2);
+  ASSERT_EQ(0, cond2.wait());
   ASSERT_TRUE(future1.is_complete());
   ASSERT_TRUE(future2.is_complete());
 }

@@ -45,6 +45,8 @@ public:
     }
   };
 
+  int init_metadata(journal::JournalMetadataPtr metadata);
+
   bool wait_for_update(journal::JournalMetadataPtr metadata);
 
   static std::string _pool_name;

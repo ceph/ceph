@@ -69,6 +69,12 @@ bufferlist RadosTestFixture::create_payload(const std::string &payload) {
   return bl;
 }
 
+int RadosTestFixture::init_metadata(journal::JournalMetadataPtr metadata) {
+  C_SaferCond cond;
+  metadata->init(&cond);
+  return cond.wait();
+}
+
 bool RadosTestFixture::wait_for_update(journal::JournalMetadataPtr metadata) {
   Mutex::Locker locker(m_listener.mutex);
   while (m_listener.updates[metadata.get()] == 0) {

@@ -3,6 +3,7 @@
 
 #include "journal/ObjectRecorder.h"
 #include "common/Cond.h"
+#include "common/Finisher.h"
 #include "common/Mutex.h"
 #include "common/Timer.h"
 #include "gtest/gtest.h"
@@ -16,8 +17,14 @@ public:
   TestObjectRecorder()
     : m_flush_interval(std::numeric_limits<uint32_t>::max()),
       m_flush_bytes(std::numeric_limits<uint64_t>::max()),
-      m_flush_age(600)
+      m_flush_age(600),
+      m_finisher(NULL)
   {
+  }
+
+  ~TestObjectRecorder() {
+    m_finisher->stop();
+    delete m_finisher;
   }
 
   struct OverflowHandler : public journal::ObjectRecorder::OverflowHandler {
@@ -42,6 +49,14 @@ public:
   double m_flush_age;
   OverflowHandler m_overflow_handler;
 
+  Finisher *m_finisher;
+
+  void SetUp() {
+    RadosTestFixture::SetUp();
+    m_finisher = new Finisher(reinterpret_cast<CephContext*>(m_ioctx.cct()));
+    m_finisher->start();
+  }
+
   inline void set_flush_interval(uint32_t i) {
     m_flush_interval = i;
   }
@@ -55,7 +70,8 @@ public:
   journal::AppendBuffer create_append_buffer(const std::string &tag,
                                              uint64_t tid,
                                              const std::string &payload) {
-    journal::FutureImplPtr future(new journal::FutureImpl(tag, tid));
+    journal::FutureImplPtr future(new journal::FutureImpl(*m_finisher,
+                                                          tag, tid));
     future->init(journal::FutureImplPtr());
 
     bufferlist bl;
@@ -202,11 +218,13 @@ TEST_F(TestObjectRecorder, Flush) {
   ASSERT_FALSE(object->append(append_buffers));
   ASSERT_EQ(1U, object->get_pending_appends());
 
-  object->flush();
+  C_SaferCond cond1;
+  object->flush(&cond1);
+  ASSERT_EQ(0, cond1.wait());
 
-  C_SaferCond cond;
-  append_buffer1.first->wait(&cond);
-  ASSERT_EQ(0, cond.wait());
+  C_SaferCond cond2;
+  append_buffer1.first->wait(&cond2);
+  ASSERT_EQ(0, cond2.wait());
   ASSERT_EQ(0U, object->get_pending_appends());
 }
 
