@@ -64,6 +64,6 @@ tasks:
 - rgw: [client.0]
 - s3tests:
     client.0:
-      force-branch: firefly-original
+      force-branch: firefly
       rgw_server: client.0
 - print: "**** done s3tests"
