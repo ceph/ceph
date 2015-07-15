@@ -26,7 +26,8 @@ public:
 		           uint64_t off, uint64_t len,
 			   const SnapContext& snapc, const bufferlist &bl,
 			   utime_t mtime, uint64_t trunc_size,
-			   __u32 trunc_seq, Context *oncommit);
+			   __u32 trunc_seq, ceph_tid_t journal_tid,
+                           Context *oncommit);
 
   virtual bool may_copy_on_write(const object_t&, uint64_t, uint64_t, snapid_t);
 private:
