@@ -93,6 +93,7 @@ BuildRequires:	boost-devel
 BuildRequires:	cryptsetup
 BuildRequires:	gdbm
 BuildRequires:	hdparm
+BuildRequires:	leveldb-devel > 1.2
 BuildRequires:	libaio-devel
 BuildRequires:	libcurl-devel
 BuildRequires:	libedit-devel
@@ -101,10 +102,9 @@ BuildRequires:	libuuid-devel
 BuildRequires:	libblkid-devel >= 2.17
 BuildRequires:	libudev-devel
 BuildRequires:	libtool
-BuildRequires:	leveldb-devel > 1.2
 BuildRequires:	make
-BuildRequires:	perl
 BuildRequires:	parted
+BuildRequires:	perl
 BuildRequires:	pkgconfig
 BuildRequires:	python
 BuildRequires:	python-nose
@@ -150,6 +150,15 @@ Requires(preun):chkconfig
 Requires(preun):initscripts
 BuildRequires:	gperftools-devel
 Requires:	python-flask
+%endif
+# lttng and babeltrace for rbd-replay-prep
+%if 0%{?fedora} || 0%{?rhel} == 6
+BuildRequires:	lttng-ust-devel
+BuildRequires:	libbabeltrace-devel
+%endif
+%if 0%{?suse_version} == 1315
+BuildRequires:	lttng-ust-devel
+BuildRequires:  babeltrace-devel
 %endif
 
 %description
@@ -370,14 +379,6 @@ Group:		System Environment/Libraries
 License:	LGPL-2.0
 Requires:	ceph-common
 Requires:	xmlstarlet
-%if 0%{?fedora} || 0%{?rhel} == 6
-BuildRequires:	lttng-ust-devel
-BuildRequires:	libbabeltrace-devel
-%endif
-%if 0%(?suse_version)
-BuildRequires:	lttng-ust-devel
-BuildRequires:	babeltrace-devel
-%endif
 %description -n ceph-test
 This package contains Ceph benchmarks and test tools.
 
@@ -1090,7 +1091,7 @@ ln -sf %{_libdir}/librbd.so.1 /usr/lib64/qemu/librbd.so.1
 %{_mandir}/man8/rbd-replay-prep.8*
 %{_bindir}/rbd-replay
 %{_bindir}/rbd-replay-many
-%if 0%{?fedora} || 0%{?rhel} == 6 || 0%{?suse_version}
+%if 0%{?fedora} || 0%{?rhel} == 6 || 0%{?suse_version} == 1315
 %{_bindir}/rbd-replay-prep
 %endif
 
