@@ -29,6 +29,7 @@
 
 #include "SimpleLock.h"
 #include "LocalLock.h"
+#include "ScrubHeader.h"
 
 class CInode;
 class CDir;
@@ -147,6 +148,8 @@ public:
     bool scrub_children; /// true if we have to scrub all direct children
     bool dentry_scrubbing; /// safety check
     Context *on_finish; /// called when we finish scrubbing
+    ScrubHeaderRefConst header;
+
     scrub_info_t() :
       scrub_parent(NULL), scrub_recursive(false),
       scrub_children(false), dentry_scrubbing(false), on_finish(NULL)
@@ -173,6 +176,7 @@ public:
     return scrub_infop;
   }
   void scrub_initialize(CDir *parent, bool recurse, bool children,
+                        ScrubHeaderRefConst header,
                         Context *f);
   void scrub_finished(Context **c);
 
