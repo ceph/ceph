@@ -5226,6 +5226,8 @@ void Server::handle_client_unlink(MDRequestRef& mdr)
     return;
   }
 
+  CInode *diri = dn->get_dir()->get_inode();
+
   CDentry::linkage_t *dnl = dn->get_linkage(client, mdr);
   assert(!dnl->is_null());
 
@@ -5274,8 +5276,8 @@ void Server::handle_client_unlink(MDRequestRef& mdr)
   for (int i=0; i<(int)trace.size()-1; i++)
     rdlocks.insert(&trace[i]->lock);
   xlocks.insert(&dn->lock);
-  wrlocks.insert(&dn->get_dir()->inode->filelock);
-  wrlocks.insert(&dn->get_dir()->inode->nestlock);
+  wrlocks.insert(&diri->filelock);
+  wrlocks.insert(&diri->nestlock);
   xlocks.insert(&in->linklock);
   if (straydn) {
     wrlocks.insert(&straydn->get_dir()->inode->filelock);
@@ -5287,6 +5289,9 @@ void Server::handle_client_unlink(MDRequestRef& mdr)
   mds->locker->include_snap_rdlocks(rdlocks, dnl->get_inode());
 
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
+    return;
+
+  if (!check_access(mdr, diri, MAY_WRITE))
     return;
 
   if (in->is_dir() &&
