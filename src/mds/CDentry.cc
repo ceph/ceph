@@ -623,6 +623,7 @@ std::string CDentry::linkage_t::get_remote_d_type_string() const
 }
 
 void CDentry::scrub_initialize(CDir *parent, bool recurse, bool children,
+                        ScrubHeaderRefConst header,
                                Context *f)
 {
   if (!scrub_infop)
@@ -635,6 +636,7 @@ void CDentry::scrub_initialize(CDir *parent, bool recurse, bool children,
   scrub_infop->scrub_children = children;
   scrub_infop->dentry_scrubbing = true;
   scrub_infop->on_finish = f;
+  scrub_infop->header = header;
 
   auth_pin(this);
 }
@@ -649,6 +651,14 @@ void CDentry::scrub_finished(Context **c)
   }
 
   *c = scrub_infop->on_finish;
+
+  if (scrub_infop->header && scrub_infop->header->origin == this) {
+    // We are at the point that a tagging scrub was initiated
+    LogChannelRef clog = dir->cache->mds->clog;
+    clog->info() << "scrub complete with tag '"
+      << scrub_infop->header->tag << "'";
+    
+  }
 
   delete scrub_infop;
   scrub_infop = NULL;

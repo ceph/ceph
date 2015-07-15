@@ -11739,7 +11739,10 @@ public:
   }
 };
 
-void MDCache::enqueue_scrub(const string& path, Formatter *f, Context *fin)
+void MDCache::enqueue_scrub(
+    const string& path,
+    const std::string &tag,
+    Formatter *f, Context *fin)
 {
   dout(10) << "scrub_dentry " << path << dendl;
   MDRequestRef mdr = request_start_internal(CEPH_MDS_OP_ENQUEUE_SCRUB);
@@ -11749,7 +11752,7 @@ void MDCache::enqueue_scrub(const string& path, Formatter *f, Context *fin)
   C_ScrubEnqueued *se = new C_ScrubEnqueued(mdr, fin, f);
   mdr->internal_op_finish = se;
   // TODO pass through tag/args
-  mdr->internal_op_private = new EnqueueScrubParams(true, true, "foobar");
+  mdr->internal_op_private = new EnqueueScrubParams(true, true, tag);
   enqueue_scrub_work(mdr);
 }
 
@@ -11784,7 +11787,12 @@ void MDCache::enqueue_scrub_work(MDRequestRef& mdr)
     return;
   }
 
-  mds->scrubstack->enqueue_dentry_bottom(dn, true, true, args->tag, NULL);
+  ScrubHeaderRef header(new ScrubHeader());
+
+  header->tag = args->tag;
+  header->origin = dn;
+
+  mds->scrubstack->enqueue_dentry_bottom(dn, true, true, header, NULL);
   delete args;
   mdr->internal_op_private = NULL;
 

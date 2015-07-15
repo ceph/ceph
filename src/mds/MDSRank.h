@@ -369,7 +369,8 @@ class MDSRank {
 
   protected:
     void command_scrub_path(Formatter *f, const string& path);
-    void command_tag_path(Formatter *f, const string& path);
+    void command_tag_path(Formatter *f, const string& path,
+                          const string &tag);
     void command_flush_path(Formatter *f, const string& path);
     void command_flush_journal(Formatter *f);
     void command_get_subtrees(Formatter *f);

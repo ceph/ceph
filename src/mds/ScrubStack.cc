@@ -58,14 +58,14 @@ void ScrubStack::pop_dentry(CDentry *dn)
 }
 
 void ScrubStack::_enqueue_dentry(CDentry *dn, CDir *parent, bool recursive,
-    bool children, const std::string &tag,
+    bool children, ScrubHeaderRefConst header,
     MDSInternalContextBase *on_finish, bool top)
 {
   dout(10) << __func__ << " with {" << *dn << "}"
            << ", recursive=" << recursive << ", children=" << children
            << ", on_finish=" << on_finish << ", top=" << top << dendl;
   assert(mdcache->mds->mds_lock.is_locked_by_me());
-  dn->scrub_initialize(parent, recursive, children, on_finish);
+  dn->scrub_initialize(parent, recursive, children, header, on_finish);
   if (top)
     push_dentry(dn);
   else
@@ -73,10 +73,10 @@ void ScrubStack::_enqueue_dentry(CDentry *dn, CDir *parent, bool recursive,
 }
 
 void ScrubStack::enqueue_dentry(CDentry *dn, bool recursive, bool children,
-                                const std::string &tag,
+                                ScrubHeaderRefConst header,
                                  MDSInternalContextBase *on_finish, bool top)
 {
-  _enqueue_dentry(dn, NULL, recursive, children, tag, on_finish, top);
+  _enqueue_dentry(dn, NULL, recursive, children, header, on_finish, top);
   kick_off_scrubs();
 }
 
@@ -348,72 +348,23 @@ void ScrubStack::scrub_dirfrag(CDir *dir, bool *added_children,
     // never get random IO errors here.
     assert(r == 0);
 
+
+    CDentry *parent_dn = dir->get_inode()->get_parent_dn();
+    ScrubHeaderRefConst header = parent_dn->scrub_info()->header;
+
     // FIXME: Do I *really* need to construct a kick context for every
     // single dentry I'm going to scrub?
     MDSInternalContext *on_d_scrub = new C_KickOffScrubs(mdcache->mds, this);
     _enqueue_dentry(dn,
         dir,
-        /*
-         * FIXME: look up params from dir's inode's parent
-         */
-#if 0
-        dir->scrub_info()->scrub_recursive,
-        dir->scrub_info()->scrub_children,
-#else
-        true,
-        true,
-#endif
-        // FIXME: carry tag through
-        "foobar",
+        parent_dn->scrub_info()->scrub_recursive,
+        false,  // We are already recursing so scrub_children not meaningful
+        header,
         on_d_scrub,
         true);
 
     *added_children = true;
   }
-
-#if 0
-  bool any_unscrubbed = false;
-
-  for (CDir::map_t::iterator i = dir->begin(); i != dir->end(); ++ i) {
-    CDentry *dn = i->second;
-
-    if (dir->scrub_info()->directories_scrubbed.count(i->first) == 0
-        && dir->scrub_info()->others_scrubbed.count(i->first) == 0) {
-      dout(20) << __func__ << " dn not yet scrubbed: " << *dn << dendl;
-      any_unscrubbed = true;
-    }
-
-    if (dn->scrub_info()->dentry_scrubbing
-      ||  dir->scrub_info()->directories_scrubbed.count(i->first)
-      || dir->scrub_info()->others_scrubbed.count(i->first)) {
-      dout(20) << __func__ << " skipping already scrubbing or scrubbed " << *dn << dendl;
-      continue;
-    }
-
-    C_KickOffScrubs *c = new C_KickOffScrubs(mdcache->mds, this);
-
-    _enqueue_dentry(dn,
-        dir,
-        /*
-         * FIXME: look up params from dir's inode's parent
-         */
-#if 0
-        dir->scrub_info()->scrub_recursive,
-        dir->scrub_info()->scrub_children,
-#else
-        true,
-        true,
-#endif
-        // FIXME: carry tag through
-        "foobar",
-        c,
-        true);
-
-    *added_children = true;
-  }
-
-  *done = !any_unscrubbed;
-#endif
 }
 
 void ScrubStack::scrub_file_dentry(CDentry *dn)
