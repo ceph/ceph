@@ -52,8 +52,10 @@ TEST_F(TestClsJournal, Create) {
 
   uint8_t read_order;
   uint8_t read_splay_width;
-  ASSERT_EQ(0, client::get_immutable_metadata(ioctx, oid, &read_order,
-                                              &read_splay_width));
+  C_SaferCond cond;
+  client::get_immutable_metadata(ioctx, oid, &read_order, &read_splay_width,
+                                 &cond);
+  ASSERT_EQ(0, cond.wait());
   ASSERT_EQ(order, read_order);
   ASSERT_EQ(splay_width, read_splay_width);
 }
