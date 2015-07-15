@@ -40,7 +40,7 @@ TEST_F(TestObjectPlayer, Fetch) {
 
   C_SaferCond cond;
   object->fetch(&cond);
-  ASSERT_EQ(0, cond.wait());
+  ASSERT_LE(0, cond.wait());
 
   journal::ObjectPlayer::Entries entries;
   object->get_entries(&entries);
@@ -67,7 +67,7 @@ TEST_F(TestObjectPlayer, FetchLarge) {
 
   C_SaferCond cond;
   object->fetch(&cond);
-  ASSERT_EQ(0, cond.wait());
+  ASSERT_LE(0, cond.wait());
 
   journal::ObjectPlayer::Entries entries;
   object->get_entries(&entries);
@@ -93,7 +93,7 @@ TEST_F(TestObjectPlayer, FetchDeDup) {
 
   C_SaferCond cond;
   object->fetch(&cond);
-  ASSERT_EQ(0, cond.wait());
+  ASSERT_LE(0, cond.wait());
 
   journal::ObjectPlayer::Entries entries;
   object->get_entries(&entries);
@@ -170,7 +170,7 @@ TEST_F(TestObjectPlayer, FetchAppend) {
 
   C_SaferCond cond1;
   object->fetch(&cond1);
-  ASSERT_EQ(0, cond1.wait());
+  ASSERT_LE(0, cond1.wait());
 
   journal::ObjectPlayer::Entries entries;
   object->get_entries(&entries);
@@ -186,7 +186,7 @@ TEST_F(TestObjectPlayer, FetchAppend) {
 
   C_SaferCond cond2;
   object->fetch(&cond2);
-  ASSERT_EQ(0, cond2.wait());
+  ASSERT_LE(0, cond2.wait());
 
   object->get_entries(&entries);
   ASSERT_EQ(2U, entries.size());
@@ -210,7 +210,7 @@ TEST_F(TestObjectPlayer, PopEntry) {
 
   C_SaferCond cond;
   object->fetch(&cond);
-  ASSERT_EQ(0, cond.wait());
+  ASSERT_LE(0, cond.wait());
 
   journal::ObjectPlayer::Entries entries;
   object->get_entries(&entries);
@@ -239,7 +239,7 @@ TEST_F(TestObjectPlayer, Watch) {
   bufferlist bl;
   ::encode(entry1, bl);
   ASSERT_EQ(0, append(get_object_name(oid), bl));
-  ASSERT_EQ(0, cond1.wait());
+  ASSERT_LE(0, cond1.wait());
 
   journal::ObjectPlayer::Entries entries;
   object->get_entries(&entries);
@@ -255,7 +255,7 @@ TEST_F(TestObjectPlayer, Watch) {
   bl.clear();
   ::encode(entry2, bl);
   ASSERT_EQ(0, append(get_object_name(oid), bl));
-  ASSERT_EQ(0, cond2.wait());
+  ASSERT_LE(0, cond2.wait());
 
   object->get_entries(&entries);
   ASSERT_EQ(2U, entries.size());
