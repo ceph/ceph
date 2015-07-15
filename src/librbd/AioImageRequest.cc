@@ -50,6 +50,29 @@ struct C_DiscardJournalCommit : public Context {
   }
 };
 
+struct C_FlushJournalCommit : public Context {
+  ImageCtx &image_ctx;
+  AioCompletion *aio_comp;
+
+  C_FlushJournalCommit(ImageCtx &_image_ctx, AioCompletion *_aio_comp,
+                       uint64_t tid)
+    : image_ctx(_image_ctx), aio_comp(_aio_comp) {
+    CephContext *cct = image_ctx.cct;
+    ldout(cct, 20) << this << " C_FlushJournalCommit: "
+                   << "delaying flush until journal tid " << tid << " "
+                   << "safe" << dendl;
+
+    aio_comp->add_request();
+  }
+
+  virtual void finish(int r) {
+    CephContext *cct = image_ctx.cct;
+    ldout(cct, 20) << this << " C_FlushJournalCommit: journal committed"
+                   << dendl;
+    aio_comp->complete_request(cct, r);
+  }
+};
+
 } // anonymous namespace
 
 void AioImageRequest::aio_read(
@@ -275,8 +298,13 @@ uint64_t AioImageWrite::append_journal_event(
   bl.append(m_buf, m_len);
 
   journal::EventEntry event_entry(journal::AioWriteEvent(m_off, m_len, bl));
-  return m_image_ctx.journal->append_event(m_aio_comp, event_entry, requests,
-                                           m_off, m_len, synchronous);
+  uint64_t tid = m_image_ctx.journal->append_event(m_aio_comp, event_entry,
+                                                   requests, m_off, m_len,
+                                                   synchronous);
+  if (m_image_ctx.object_cacher == NULL) {
+    m_aio_comp->associate_journal_event(tid);
+  }
+  return tid;
 }
 
 void AioImageWrite::send_cache_requests(const ObjectExtents &object_extents,
@@ -330,8 +358,11 @@ void AioImageWrite::update_stats(size_t length) {
 uint64_t AioImageDiscard::append_journal_event(
     const AioObjectRequests &requests, bool synchronous) {
   journal::EventEntry event_entry(journal::AioDiscardEvent(m_off, m_len));
-  return m_image_ctx.journal->append_event(m_aio_comp, event_entry, requests,
-                                           m_off, m_len, synchronous);
+  uint64_t tid = m_image_ctx.journal->append_event(m_aio_comp, event_entry,
+                                                   requests, m_off, m_len,
+                                                   synchronous);
+  m_aio_comp->associate_journal_event(tid);
+  return tid;
 }
 
 void AioImageDiscard::send_cache_requests(const ObjectExtents &object_extents,
@@ -387,9 +418,15 @@ void AioImageFlush::send_request() {
     // journal the flush event
     RWLock::RLocker snap_locker(m_image_ctx.snap_lock);
     if (m_image_ctx.journal != NULL) {
-      m_image_ctx.journal->append_event(
+      uint64_t journal_tid = m_image_ctx.journal->append_event(
         m_aio_comp, journal::EventEntry(journal::AioFlushEvent()),
-        AioObjectRequests(), 0, 0, true);
+        AioObjectRequests(), 0, 0, false);
+
+      C_FlushJournalCommit *ctx = new C_FlushJournalCommit(m_image_ctx,
+                                                           m_aio_comp,
+                                                           journal_tid);
+      m_image_ctx.journal->flush_event(journal_tid, ctx);
+      m_aio_comp->associate_journal_event(journal_tid);
     }
   }
 
