@@ -3,11 +3,20 @@
 
 #include "journal/FutureImpl.h"
 #include "common/Cond.h"
+#include "common/Finisher.h"
 #include "common/Mutex.h"
 #include "gtest/gtest.h"
+#include "test/journal/RadosTestFixture.h"
 
-class TestFutureImpl : public ::testing::Test {
+class TestFutureImpl : public RadosTestFixture {
 public:
+
+  TestFutureImpl() : m_finisher(NULL) {
+  }
+  ~TestFutureImpl() {
+    m_finisher->stop();
+    delete m_finisher;
+  }
 
   struct FlushHandler : public journal::FutureImpl::FlushHandler {
     uint64_t refs;
@@ -25,16 +34,25 @@ public:
     }
   };
 
+  void SetUp() {
+    RadosTestFixture::SetUp();
+    m_finisher = new Finisher(reinterpret_cast<CephContext*>(m_ioctx.cct()));
+    m_finisher->start();
+  }
+
   journal::FutureImplPtr create_future(const std::string &tag, uint64_t tid,
                                        const journal::FutureImplPtr &prev =
                                          journal::FutureImplPtr()) {
-    journal::FutureImplPtr future(new journal::FutureImpl(tag, tid));
+    journal::FutureImplPtr future(new journal::FutureImpl(*m_finisher,
+                                                          tag, tid));
     future->init(prev);
     return future;
   }
 
   void flush(const journal::FutureImplPtr &future) {
   }
+
+  Finisher *m_finisher;
 
   FlushHandler m_flush_handler;
 };

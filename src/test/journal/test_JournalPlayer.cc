@@ -21,10 +21,12 @@ public:
     Mutex lock;
     Cond cond;
     bool entries_available;
-    bool error_occurred;
+    bool complete;
+    int complete_result;
 
     ReplayHandler()
-      : lock("lock"), entries_available(false), error_occurred(false) {}
+      : lock("lock"), entries_available(false), complete(false),
+        complete_result(0) {}
 
     virtual bool filter_entry(const std::string &tag) {
       return false;
@@ -36,8 +38,11 @@ public:
       cond.Signal();
     }
 
-    virtual void handle_error(int r) {
-      error_occurred = true;
+    virtual void handle_complete(int r) {
+      Mutex::Locker locker(lock);
+      complete = true;
+      complete_result = r;
+      cond.Signal();
     }
   };
 
@@ -99,6 +104,23 @@ public:
     return entries->size() == count;
   }
 
+  bool wait_for_complete(journal::JournalPlayerPtr player) {
+    journal::Entry entry;
+    journal::JournalPlayer::ObjectSetPosition object_set_position;
+    player->try_pop_front(&entry, &object_set_position);
+
+    Mutex::Locker locker(m_replay_hander.lock);
+    while (!m_replay_hander.complete) {
+      if (m_replay_hander.cond.WaitInterval(
+            reinterpret_cast<CephContext*>(m_ioctx.cct()),
+            m_replay_hander.lock, utime_t(10, 0)) != 0) {
+        return false;
+      }
+    }
+    m_replay_hander.complete = false;
+    return true;
+  }
+
   int write_entry(const std::string &oid, uint64_t object_num,
                   const std::string &tag, uint64_t tid) {
     bufferlist bl;
@@ -122,7 +144,7 @@ TEST_F(TestJournalPlayer, Prefetch) {
   ASSERT_EQ(0, client_commit(oid, commit_position));
 
   journal::JournalMetadataPtr metadata = create_metadata(oid);
-  ASSERT_EQ(0, metadata->init());
+  ASSERT_EQ(0, init_metadata(metadata));
 
   journal::JournalPlayerPtr player = create_player(oid, metadata);
 
@@ -135,6 +157,7 @@ TEST_F(TestJournalPlayer, Prefetch) {
 
   Entries entries;
   ASSERT_TRUE(wait_for_entries(player, 3, &entries));
+  ASSERT_TRUE(wait_for_complete(player));
 
   Entries expected_entries;
   expected_entries = boost::assign::list_of(
@@ -158,7 +181,7 @@ TEST_F(TestJournalPlayer, PrefetchWithoutCommit) {
   ASSERT_EQ(0, client_commit(oid, commit_position));
 
   journal::JournalMetadataPtr metadata = create_metadata(oid);
-  ASSERT_EQ(0, metadata->init());
+  ASSERT_EQ(0, init_metadata(metadata));
 
   journal::JournalPlayerPtr player = create_player(oid, metadata);
 
@@ -169,6 +192,7 @@ TEST_F(TestJournalPlayer, PrefetchWithoutCommit) {
 
   Entries entries;
   ASSERT_TRUE(wait_for_entries(player, 2, &entries));
+  ASSERT_TRUE(wait_for_complete(player));
 
   Entries expected_entries;
   expected_entries = boost::assign::list_of(
@@ -191,7 +215,7 @@ TEST_F(TestJournalPlayer, PrefetchMultipleTags) {
   ASSERT_EQ(0, client_commit(oid, commit_position));
 
   journal::JournalMetadataPtr metadata = create_metadata(oid);
-  ASSERT_EQ(0, metadata->init());
+  ASSERT_EQ(0, init_metadata(metadata));
 
   journal::JournalPlayerPtr player = create_player(oid, metadata);
 
@@ -208,6 +232,7 @@ TEST_F(TestJournalPlayer, PrefetchMultipleTags) {
 
   Entries entries;
   ASSERT_TRUE(wait_for_entries(player, 3, &entries));
+  ASSERT_TRUE(wait_for_complete(player));
 
   uint64_t last_tid;
   ASSERT_TRUE(metadata->get_last_allocated_tid("tag1", &last_tid));
@@ -226,7 +251,7 @@ TEST_F(TestJournalPlayer, PrefetchCorruptSequence) {
   ASSERT_EQ(0, client_commit(oid, commit_position));
 
   journal::JournalMetadataPtr metadata = create_metadata(oid);
-  ASSERT_EQ(0, metadata->init());
+  ASSERT_EQ(0, init_metadata(metadata));
 
   journal::JournalPlayerPtr player = create_player(oid, metadata);
 
@@ -242,7 +267,8 @@ TEST_F(TestJournalPlayer, PrefetchCorruptSequence) {
   journal::Entry entry;
   cls::journal::ObjectSetPosition object_set_position;
   ASSERT_FALSE(player->try_pop_front(&entry, &object_set_position));
-  ASSERT_TRUE(m_replay_hander.error_occurred);
+  ASSERT_TRUE(wait_for_complete(player));
+  ASSERT_NE(0, m_replay_hander.complete_result);
 }
 
 TEST_F(TestJournalPlayer, PrefetchAndWatch) {
@@ -258,7 +284,7 @@ TEST_F(TestJournalPlayer, PrefetchAndWatch) {
   ASSERT_EQ(0, client_commit(oid, commit_position));
 
   journal::JournalMetadataPtr metadata = create_metadata(oid);
-  ASSERT_EQ(0, metadata->init());
+  ASSERT_EQ(0, init_metadata(metadata));
 
   journal::JournalPlayerPtr player = create_player(oid, metadata);
 
