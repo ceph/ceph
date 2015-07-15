@@ -794,7 +794,9 @@ def main():
             childargs = injectargs
         if not len(childargs):
             print >> sys.stderr, \
-                'Cannot use \'tell\' with interactive mode'
+                'Cannot use \'tell\' with interactive mode.', \
+                'For an interactive shell,', \
+                'please start "{0}" without non-option arguments.'.format(sys.argv[0])
             return errno.EINVAL
 
     # fetch JSON sigs from command
