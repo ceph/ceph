@@ -679,7 +679,7 @@ def main():
     if len(childargs) >= 2 and \
         childargs[0] in ['mon', 'osd'] and \
         childargs[1] == 'tell':
-        print >> sys.stderr, '"{0} tell" is deprecated; try "tell {0}.<id>" instead (id can be "*") '.format(childargs[0])
+        print >> sys.stderr, '"{0} tell" is deprecated; try "tell {0}.<id> <command> [options...]" instead (id can be "*") '.format(childargs[0])
         return 1
 
     if parsed_args.help:
