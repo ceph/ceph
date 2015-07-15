@@ -159,7 +159,8 @@ public:
     const hobject_t &hoid,
     const list<pair<boost::tuple<uint64_t, uint64_t, uint32_t>,
 	       pair<bufferlist*, Context*> > > &to_read,
-    Context *on_complete);
+               Context *on_complete,
+               bool fast_read = false);
 
 private:
   // push
