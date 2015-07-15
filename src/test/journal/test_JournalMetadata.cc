@@ -23,7 +23,7 @@ TEST_F(TestJournalMetadata, JournalDNE) {
   std::string oid = get_temp_oid();
 
   journal::JournalMetadataPtr metadata1 = create_metadata(oid, "client1");
-  ASSERT_EQ(-ENOENT, metadata1->init());
+  ASSERT_EQ(-ENOENT, init_metadata(metadata1));
 }
 
 TEST_F(TestJournalMetadata, ClientDNE) {
@@ -33,10 +33,10 @@ TEST_F(TestJournalMetadata, ClientDNE) {
   ASSERT_EQ(0, client_register(oid, "client1", ""));
 
   journal::JournalMetadataPtr metadata1 = create_metadata(oid, "client1");
-  ASSERT_EQ(0, metadata1->init());
+  ASSERT_EQ(0, init_metadata(metadata1));
 
   journal::JournalMetadataPtr metadata2 = create_metadata(oid, "client2");
-  ASSERT_EQ(-ENOENT, metadata2->init());
+  ASSERT_EQ(-ENOENT, init_metadata(metadata2));
 }
 
 TEST_F(TestJournalMetadata, SetCommitPositions) {
@@ -46,10 +46,10 @@ TEST_F(TestJournalMetadata, SetCommitPositions) {
   ASSERT_EQ(0, client_register(oid, "client1", ""));
 
   journal::JournalMetadataPtr metadata1 = create_metadata(oid, "client1");
-  ASSERT_EQ(0, metadata1->init());
+  ASSERT_EQ(0, init_metadata(metadata1));
 
   journal::JournalMetadataPtr metadata2 = create_metadata(oid, "client1");
-  ASSERT_EQ(0, metadata2->init());
+  ASSERT_EQ(0, init_metadata(metadata2));
   ASSERT_TRUE(wait_for_update(metadata2));
 
   journal::JournalMetadata::ObjectSetPosition commit_position;
@@ -78,7 +78,7 @@ TEST_F(TestJournalMetadata, UpdateActiveObject) {
   ASSERT_EQ(0, client_register(oid, "client1", ""));
 
   journal::JournalMetadataPtr metadata1 = create_metadata(oid, "client1");
-  ASSERT_EQ(0, metadata1->init());
+  ASSERT_EQ(0, init_metadata(metadata1));
   ASSERT_TRUE(wait_for_update(metadata1));
 
   ASSERT_EQ(0U, metadata1->get_active_set());

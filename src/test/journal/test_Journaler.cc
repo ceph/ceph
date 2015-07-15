@@ -6,14 +6,15 @@
 #include "gtest/gtest.h"
 #include "test/librados/test.h"
 #include "test/journal/RadosTestFixture.h"
+#include "include/stringify.h"
 
 class TestJournaler : public RadosTestFixture {
 public:
 
   static const std::string CLIENT_ID;
 
-  static uint64_t get_temp_journal_id() {
-    return ++_journal_id;
+  static std::string get_temp_journal_id() {
+    return stringify(++_journal_id);
   }
 
   virtual void SetUp() {
@@ -32,6 +33,12 @@ public:
     return m_journaler->create(order, splay_width);
   }
 
+  int init_journaler() {
+    C_SaferCond cond;
+    m_journaler->init(&cond);
+    return cond.wait();
+  }
+
   int register_client(const std::string &client_id, const std::string &desc) {
     journal::Journaler journaler(m_ioctx, m_ioctx, m_journal_id, client_id);
     return journaler.register_client(desc);
@@ -39,7 +46,7 @@ public:
 
   static uint64_t _journal_id;
 
-  uint64_t m_journal_id;
+  std::string m_journal_id;
   journal::Journaler *m_journaler;
 };
 
@@ -64,11 +71,11 @@ TEST_F(TestJournaler, CreateInvalidParams) {
 TEST_F(TestJournaler, Init) {
   ASSERT_EQ(0, create_journal(12, 8));
   ASSERT_EQ(0, register_client(CLIENT_ID, "foo"));
-  ASSERT_EQ(0, m_journaler->init());
+  ASSERT_EQ(0, init_journaler());
 }
 
 TEST_F(TestJournaler, InitDNE) {
-  ASSERT_EQ(-ENOENT, m_journaler->init());
+  ASSERT_EQ(-ENOENT, init_journaler());
 }
 
 TEST_F(TestJournaler, RegisterClientDuplicate) {

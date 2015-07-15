@@ -53,7 +53,7 @@ TEST_F(TestJournalTrimmer, UpdateCommitPosition) {
   ASSERT_EQ(0, client_register(oid));
 
   journal::JournalMetadataPtr metadata = create_metadata(oid);
-  ASSERT_EQ(0, metadata->init());
+  ASSERT_EQ(0, init_metadata(metadata));
   ASSERT_TRUE(wait_for_update(metadata));
 
   metadata->set_active_set(10);
@@ -87,14 +87,14 @@ TEST_F(TestJournalTrimmer, ConcurrentUpdateCommitPosition) {
   ASSERT_EQ(0, client_register(oid));
 
   journal::JournalMetadataPtr metadata1 = create_metadata(oid);
-  ASSERT_EQ(0, metadata1->init());
+  ASSERT_EQ(0, init_metadata(metadata1));
   ASSERT_TRUE(wait_for_update(metadata1));
 
   metadata1->set_active_set(10);
   ASSERT_TRUE(wait_for_update(metadata1));
 
   journal::JournalMetadataPtr metadata2 = create_metadata(oid);
-  ASSERT_EQ(0, metadata2->init());
+  ASSERT_EQ(0, init_metadata(metadata2));
 
   ASSERT_EQ(0, append(oid + ".0", create_payload("payload")));
   ASSERT_EQ(0, append(oid + ".2", create_payload("payload")));
@@ -131,7 +131,7 @@ TEST_F(TestJournalTrimmer, UpdateCommitPositionWithOtherClient) {
   ASSERT_EQ(0, client_register(oid, "client2", "slow client"));
 
   journal::JournalMetadataPtr metadata = create_metadata(oid);
-  ASSERT_EQ(0, metadata->init());
+  ASSERT_EQ(0, init_metadata(metadata));
   ASSERT_TRUE(wait_for_update(metadata));
 
   metadata->set_active_set(10);
@@ -162,7 +162,7 @@ TEST_F(TestJournalTrimmer, RemoveObjects) {
   ASSERT_EQ(0, client_register(oid));
 
   journal::JournalMetadataPtr metadata = create_metadata(oid);
-  ASSERT_EQ(0, metadata->init());
+  ASSERT_EQ(0, init_metadata(metadata));
   ASSERT_TRUE(wait_for_update(metadata));
 
   metadata->set_active_set(10);
@@ -191,7 +191,7 @@ TEST_F(TestJournalTrimmer, RemoveObjectsWithOtherClient) {
   ASSERT_EQ(0, client_register(oid, "client2", "other client"));
 
   journal::JournalMetadataPtr metadata = create_metadata(oid);
-  ASSERT_EQ(0, metadata->init());
+  ASSERT_EQ(0, init_metadata(metadata));
   ASSERT_TRUE(wait_for_update(metadata));
 
   journal::JournalTrimmer *trimmer = create_trimmer(oid, metadata);
