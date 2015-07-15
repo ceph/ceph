@@ -1841,6 +1841,7 @@ void PG::queue_op(OpRequestRef& op)
     waiting_for_map.push_back(op);
     return;
   }
+  op->mark_queued_for_pg();
   osd->op_wq.queue(make_pair(PGRef(this), op));
   {
     // after queue() to include any locking costs
