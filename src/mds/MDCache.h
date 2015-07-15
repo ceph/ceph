@@ -1128,7 +1128,8 @@ public:
   /**
    * Create and start an OP_ENQUEUE_SCRUB
    */
-  void enqueue_scrub(const string& path, Formatter *f, Context *fin);
+  void enqueue_scrub(const string& path, const std::string &tag,
+                     Formatter *f, Context *fin);
 
   /**
    * Resolve path to a dentry and pass it onto the ScrubStack.
