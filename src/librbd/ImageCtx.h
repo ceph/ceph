@@ -222,7 +222,8 @@ namespace librbd {
 			     size_t len, uint64_t off, Context *onfinish,
 			     int fadvise_flags);
     void write_to_cache(object_t o, const bufferlist& bl, size_t len,
-			uint64_t off, Context *onfinish, int fadvise_flags);
+			uint64_t off, Context *onfinish, int fadvise_flags,
+                        uint64_t journal_tid);
     void user_flushed();
     void flush_cache_aio(Context *onfinish);
     int flush_cache();

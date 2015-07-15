@@ -109,13 +109,12 @@ protected:
   virtual void send_request();
 
   virtual void send_cache_requests(const ObjectExtents &object_extents,
-                                   const ::SnapContext &snapc,
                                    uint64_t journal_tid) = 0;
 
-  void send_object_requests(const ObjectExtents &object_extents,
-                            const ::SnapContext &snapc,
-                            AioObjectRequests *aio_object_requests);
-  virtual AioObjectRequest *send_object_request(
+  virtual void send_object_requests(const ObjectExtents &object_extents,
+                                    const ::SnapContext &snapc,
+                                    AioObjectRequests *aio_object_requests);
+  virtual AioObjectRequest *create_object_request(
       const ObjectExtent &object_extent, const ::SnapContext &snapc,
       Context *on_finish) = 0;
 
@@ -146,10 +145,12 @@ protected:
   void assemble_extent(const ObjectExtent &object_extent, bufferlist *bl);
 
   virtual void send_cache_requests(const ObjectExtents &object_extents,
-                                   const ::SnapContext &snapc,
                                    uint64_t journal_tid);
 
-  virtual AioObjectRequest *send_object_request(
+  virtual void send_object_requests(const ObjectExtents &object_extents,
+                                    const ::SnapContext &snapc,
+                                    AioObjectRequests *aio_object_requests);
+  virtual AioObjectRequest *create_object_request(
       const ObjectExtent &object_extent, const ::SnapContext &snapc,
       Context *on_finish);
 
@@ -177,10 +178,9 @@ protected:
   }
 
   virtual void send_cache_requests(const ObjectExtents &object_extents,
-                                   const ::SnapContext &snapc,
                                    uint64_t journal_tid);
 
-  virtual AioObjectRequest *send_object_request(
+  virtual AioObjectRequest *create_object_request(
       const ObjectExtent &object_extent, const ::SnapContext &snapc,
       Context *on_finish);
 

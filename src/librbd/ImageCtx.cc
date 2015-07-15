@@ -618,12 +618,12 @@ public:
 
   void ImageCtx::write_to_cache(object_t o, const bufferlist& bl, size_t len,
 				uint64_t off, Context *onfinish,
-				int fadvise_flags) {
+				int fadvise_flags, uint64_t journal_tid) {
     snap_lock.get_read();
     ObjectCacher::OSDWrite *wr = object_cacher->prepare_write(snapc, bl,
 							      utime_t(),
                                                               fadvise_flags,
-                                                              0);
+                                                              journal_tid);
     snap_lock.put_read();
     ObjectExtent extent(o, 0, off, len, 0);
     extent.oloc.pool = data_ctx.get_id();

@@ -6,6 +6,7 @@
 
 #include "include/int_types.h"
 #include "include/Context.h"
+#include "include/interval_set.h"
 #include "include/unordered_map.h"
 #include "include/rados/librados.hpp"
 #include "common/Mutex.h"
@@ -13,6 +14,7 @@
 #include "journal/Future.h"
 #include "journal/ReplayHandler.h"
 #include "librbd/ImageWatcher.h"
+#include <algorithm>
 #include <list>
 #include <string>
 
@@ -49,10 +51,19 @@ public:
   uint64_t append_event(AioCompletion *aio_comp,
                         const journal::EventEntry &event_entry,
                         const AioObjectRequests &requests,
+                        uint64_t offset, size_t length,
                         bool flush_entry);
+
+  void commit_event(uint64_t tid, int r);
+  void commit_event_extent(uint64_t tid, uint64_t offset, uint64_t length,
+                           int r);
+
+  void flush_event(uint64_t tid, Context *on_safe);
+  void wait_event(uint64_t tid, Context *on_safe);
 
 private:
   typedef std::list<Context *> Contexts;
+  typedef interval_set<uint64_t> ExtentInterval;
 
   enum State {
     STATE_UNINITIALIZED,
@@ -66,12 +77,19 @@ private:
     AioCompletion *aio_comp;
     AioObjectRequests aio_object_requests;
     Contexts on_safe_contexts;
+    ExtentInterval pending_extents;
+    bool safe;
+    int ret_val;
 
     Event() : aio_comp(NULL) {
     }
     Event(const ::journal::Future &_future, AioCompletion *_aio_comp,
-          const AioObjectRequests &_requests)
-      : future(_future), aio_comp(_aio_comp), aio_object_requests(_requests) {
+          const AioObjectRequests &_requests, uint64_t offset, size_t length)
+      : future(_future), aio_comp(_aio_comp), aio_object_requests(_requests),
+        safe(false), ret_val(0) {
+      if (length > 0) {
+        pending_extents.insert(offset, length);
+      }
     }
   };
   typedef ceph::unordered_map<uint64_t, Event> Events;
@@ -142,13 +160,17 @@ private:
   ReplayHandler m_replay_handler;
   bool m_close_pending;
 
-  uint64_t m_next_tid;
+  uint64_t m_event_tid;
   Events m_events;
 
   bool m_blocking_writes;
 
+  ::journal::Future wait_event(Mutex &lock, uint64_t tid, Context *on_safe);
+
   void create_journaler();
   void destroy_journaler();
+
+  void complete_event(Events::iterator it, int r);
 
   void handle_initialized(int r);
 

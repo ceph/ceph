@@ -26,7 +26,7 @@ Journal::Journal(ImageCtx &image_ctx)
   : m_image_ctx(image_ctx), m_journaler(NULL),
     m_lock("Journal::m_lock"), m_state(STATE_UNINITIALIZED),
     m_lock_listener(this), m_replay_handler(this), m_close_pending(false),
-    m_next_tid(0), m_blocking_writes(false) {
+    m_event_tid(0), m_blocking_writes(false) {
 
   ldout(m_image_ctx.cct, 5) << this << ": ictx=" << &m_image_ctx << dendl;
 
@@ -153,6 +153,7 @@ int Journal::close() {
 uint64_t Journal::append_event(AioCompletion *aio_comp,
                                const journal::EventEntry &event_entry,
                                const AioObjectRequests &requests,
+                               uint64_t offset, size_t length,
                                bool flush_entry) {
   assert(m_image_ctx.owner_lock.is_locked());
   assert(m_state == STATE_RECORDING);
@@ -164,14 +165,18 @@ uint64_t Journal::append_event(AioCompletion *aio_comp,
   uint64_t tid;
   {
     Mutex::Locker locker(m_lock);
-    tid = m_next_tid++;
-    m_events[tid] = Event(future, aio_comp, requests);
+    tid = ++m_event_tid;
+    assert(tid != 0);
+
+    m_events[tid] = Event(future, aio_comp, requests, offset, length);
   }
 
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << this << " " << __func__ << ": "
                  << "event=" << event_entry.get_event_type() << ", "
                  << "new_reqs=" << requests.size() << ", "
+                 << "offset=" << offset << ", "
+                 << "length=" << length << ", "
                  << "flush=" << flush_entry << ", tid=" << tid << dendl;
 
   Context *on_safe = new C_EventSafe(this, tid);
@@ -181,6 +186,97 @@ uint64_t Journal::append_event(AioCompletion *aio_comp,
     future.wait(on_safe);
   }
   return tid;
+}
+
+void Journal::commit_event(uint64_t tid, int r) {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 20) << this << " " << __func__ << ": tid=" << tid << ", "
+                 "r=" << r << dendl;
+
+  Mutex::Locker locker(m_lock);
+  Events::iterator it = m_events.find(tid);
+  if (it == m_events.end()) {
+    return;
+  }
+  complete_event(it, r);
+}
+
+void Journal::commit_event_extent(uint64_t tid, uint64_t offset,
+                                  uint64_t length, int r) {
+  assert(length > 0);
+
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 20) << this << " " << __func__ << ": tid=" << tid << ", "
+                 << "offset=" << offset << ", "
+                 << "length=" << length << ", "
+                 << "r=" << r << dendl;
+
+  Mutex::Locker locker(m_lock);
+  Events::iterator it = m_events.find(tid);
+  if (it == m_events.end()) {
+    return;
+  }
+
+  Event &event = it->second;
+  if (event.ret_val == 0 && r < 0) {
+    event.ret_val = r;
+  }
+
+  ExtentInterval extent;
+  extent.insert(offset, length);
+
+  ExtentInterval intersect;
+  intersect.intersection_of(extent, event.pending_extents);
+
+  event.pending_extents.subtract(intersect);
+  if (!event.pending_extents.empty()) {
+    ldout(cct, 20) << "pending extents: " << event.pending_extents << dendl;
+    return;
+  }
+  complete_event(it, event.ret_val);
+}
+
+void Journal::flush_event(uint64_t tid, Context *on_safe) {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 20) << this << " " << __func__ << ": tid=" << tid << ", "
+                 << "on_safe=" << on_safe << dendl;
+
+  ::journal::Future future;
+  {
+    Mutex::Locker locker(m_lock);
+    future = wait_event(m_lock, tid, on_safe);
+  }
+
+  if (future.is_valid()) {
+    future.flush(NULL);
+  }
+}
+
+void Journal::wait_event(uint64_t tid, Context *on_safe) {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 20) << this << " " << __func__ << ": tid=" << tid << ", "
+                 << "on_safe=" << on_safe << dendl;
+
+  Mutex::Locker locker(m_lock);
+  wait_event(m_lock, tid, on_safe);
+}
+
+::journal::Future Journal::wait_event(Mutex &lock, uint64_t tid,
+                                      Context *on_safe) {
+  assert(m_lock.is_locked());
+  CephContext *cct = m_image_ctx.cct;
+
+  Events::iterator it = m_events.find(tid);
+  if (it == m_events.end() || it->second.safe) {
+    // journal entry already safe
+    ldout(cct, 20) << "journal entry already safe" << dendl;
+    m_image_ctx.op_work_queue->queue(on_safe, 0);
+    return ::journal::Future();
+  }
+
+  Event &event = it->second;
+  event.on_safe_contexts.push_back(on_safe);
+  return event.future;
 }
 
 void Journal::create_journaler() {
@@ -209,6 +305,18 @@ void Journal::destroy_journaler() {
   delete m_journaler;
   m_journaler = NULL;
   transition_state(STATE_UNINITIALIZED);
+}
+
+void Journal::complete_event(Events::iterator it, int r) {
+  assert(m_lock.is_locked());
+
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 20) << this << " " << __func__ << ": tid=" << it->first << " "
+                 << "r=" << r << dendl;
+
+  // TODO
+
+  m_events.erase(it);
 }
 
 void Journal::handle_initialized(int r) {
@@ -294,8 +402,7 @@ void Journal::handle_event_safe(int r, uint64_t tid) {
   ldout(cct, 20) << this << " " << __func__ << ": r=" << r << ", "
                  << "tid=" << tid << dendl;
 
-  RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
-
+  // TODO: ensure this callback never sees a failure
   AioCompletion *aio_comp;
   AioObjectRequests aio_object_requests;
   Contexts on_safe_contexts;
@@ -308,18 +415,24 @@ void Journal::handle_event_safe(int r, uint64_t tid) {
     aio_comp = event.aio_comp;
     aio_object_requests.swap(event.aio_object_requests);
     on_safe_contexts.swap(event.on_safe_contexts);
-    m_events.erase(it);
+
+    if (event.pending_extents.empty()) {
+      m_events.erase(it);
+    } else {
+      event.safe = true;
+    }
   }
 
   ldout(cct, 20) << "completing tid=" << tid << dendl;
-
-  assert(m_image_ctx.image_watcher->is_lock_owner());
 
   if (r < 0) {
     // don't send aio requests if the journal fails -- bubble error up
     aio_comp->fail(cct, r);
   } else {
     // send any waiting aio requests now that journal entry is safe
+    RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
+    assert(m_image_ctx.image_watcher->is_lock_owner());
+
     for (AioObjectRequests::iterator it = aio_object_requests.begin();
          it != aio_object_requests.end(); ++it) {
       (*it)->send();
