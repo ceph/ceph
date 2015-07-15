@@ -296,7 +296,7 @@ workload_firefly:
    - print: "**** done rgw workload_firefly"
    - s3tests:
        client.0:
-         force-branch: firefly-original
+         force-branch: firefly
          rgw_server: client.0
    - print: "**** done s3tests workload_firefly"
 upgrade-sequence_firefly:
