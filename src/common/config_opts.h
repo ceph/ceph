@@ -68,7 +68,7 @@ OPTION(enable_experimental_unrecoverable_data_corrupting_features, OPT_STR, "")
 OPTION(xio_trace_mempool, OPT_BOOL, false) // mempool allocation counters
 OPTION(xio_trace_msgcnt, OPT_BOOL, false) // incoming/outgoing msg counters
 OPTION(xio_trace_xcon, OPT_BOOL, false) // Xio message encode/decode trace
-OPTION(xio_queue_depth, OPT_INT, 512) // depth of Accelio msg queue
+OPTION(xio_queue_depth, OPT_INT, 128) // depth of Accelio msg queue
 OPTION(xio_mp_min, OPT_INT, 128) // default min mempool size
 OPTION(xio_mp_max_64, OPT_INT, 65536) // max 64-byte chunks (buffer is 40)
 OPTION(xio_mp_max_256, OPT_INT, 8192) // max 256-byte chunks
