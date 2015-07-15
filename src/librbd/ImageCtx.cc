@@ -621,7 +621,9 @@ public:
 				int fadvise_flags) {
     snap_lock.get_read();
     ObjectCacher::OSDWrite *wr = object_cacher->prepare_write(snapc, bl,
-							      utime_t(), fadvise_flags);
+							      utime_t(),
+                                                              fadvise_flags,
+                                                              0);
     snap_lock.put_read();
     ObjectExtent extent(o, 0, off, len, 0);
     extent.oloc.pool = data_ctx.get_id();

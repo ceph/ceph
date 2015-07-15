@@ -155,7 +155,7 @@ namespace librbd {
 			       const SnapContext& snapc,
 			       const bufferlist &bl, utime_t mtime,
 			       uint64_t trunc_size, __u32 trunc_seq,
-			       Context *oncommit)
+			       ceph_tid_t journal_tid, Context *oncommit)
   {
     assert(m_ictx->owner_lock.is_locked());
     uint64_t object_no = oid_to_object_no(oid.name, m_ictx->object_prefix);
@@ -168,6 +168,15 @@ namespace librbd {
                                              bl, snapc, req_comp);
     req->send();
     return ++m_tid;
+  }
+
+
+  void LibrbdWriteback::overwrite_extent(const object_t& oid, uint64_t off,
+                                         uint64_t len, ceph_tid_t journal_tid) {
+    assert(journal_tid != 0);
+
+    // TODO inform the journal that we no longer expect to receive writebacks
+    //      for the specified extent
   }
 
   void LibrbdWriteback::get_client_lock() {
