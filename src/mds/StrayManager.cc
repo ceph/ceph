@@ -866,12 +866,21 @@ void StrayManager::handle_conf_change(const struct md_config_t *conf,
 void StrayManager::update_op_limit()
 {
   const OSDMap *osdmap = mds->objecter->get_osdmap_read();
+  assert(osdmap != NULL);
 
   // Number of PGs across all data pools
   uint64_t pg_count = 0;
   const std::set<int64_t> &data_pools = mds->mdsmap->get_data_pools();
   for (std::set<int64_t>::iterator i = data_pools.begin();
        i != data_pools.end(); ++i) {
+    if (osdmap->get_pg_pool(*i) == NULL) {
+      // It is possible that we have an older OSDMap than MDSMap, because
+      // we don't start watching every OSDMap until after MDSRank is
+      // initialized
+      dout(4) << __func__ << " data pool " << *i
+              << " not found in OSDMap" << dendl;
+      continue;
+    }
     pg_count += osdmap->get_pg_num(*i);
   }
 
