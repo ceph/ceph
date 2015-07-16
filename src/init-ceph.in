@@ -56,18 +56,22 @@ signal_daemon() {
     name=$1
     daemon=$2
     pidfile=$3
-    signal=$4
-    action=$5
+    oldpidfile=$4
+    signal=$5
+    action=$6
     [ -z "$action" ] && action="Stopping"
     echo -n "$action Ceph $name on $host..."
     do_cmd "if [ -e $pidfile ]; then
         pid=`cat $pidfile`
+        elif [ -e $oldpidfile ]; then
+        pid='cat $oldpidfile'
+        else exit 1
+        fi
         if [ -e /proc/\$pid ] && grep -q $daemon /proc/\$pid/cmdline ; then
 	    cmd=\"kill $signal \$pid\"
 	    echo -n \$cmd...
 	    \$cmd
-        fi
-    fi"
+        fi"
     echo done
 }
 
@@ -76,8 +80,15 @@ daemon_is_running() {
     daemon=$2
     daemon_id=$3
     pidfile=$4
-    do_cmd "[ -e $pidfile ] || exit 1   # no pid, presumably not running
+    oldpidfile=$5
+    do_cmd "if [ -e $pidfile ] ; then
 	pid=\`cat $pidfile\`
+        elif [ -e $oldpidfile ] ; then
+        pid=\`cat $oldpidfile\`
+        else
+        exit 1   # no pid, presumably not running
+        fi
+
 	[ -e /proc/\$pid ] && grep -q $daemon /proc/\$pid/cmdline && grep -qwe -i.$daemon_id /proc/\$pid/cmdline && exit 0 # running
         exit 1  # pid is something else" "" "okfail"
 }
@@ -86,12 +97,18 @@ stop_daemon() {
     name=$1
     daemon=$2
     pidfile=$3
-    signal=$4
-    action=$5
+    oldpidfile=$4
+    signal=$5
+    action=$6
     [ -z "$action" ] && action="Stopping"
     echo -n "$action Ceph $name on $host..."
     do_cmd "if [ -e $pidfile ] ; then 
 	pid=\`cat $pidfile\`
+        elif [ =e $oldpidfile ]; then
+        pid=\'cat $oldpidfile\'
+        else
+        exit 1
+        fi
 	while [ -e /proc/\$pid ] && grep -q $daemon /proc/\$pid/cmdline ; do
 	    cmd=\"kill $signal \$pid\"
 	    echo -n \$cmd...
@@ -227,7 +244,8 @@ for name in $what; do
 
     get_conf run_dir "/var/run/ceph" "run dir"
 
-    get_conf pid_file "$run_dir/$type.$id.pid" "pid file"
+    get_conf pid_file "$run_dir/$cluster-$type.$id.pid" "pid file"
+    get_conf old_pid_file "$run_dir/$type.$id.pid" "pid file"
 
     if [ "$command" = "start" ]; then
 	if [ -n "$pid_file" ]; then
@@ -246,7 +264,7 @@ for name in $what; do
             fi
         fi
 
-	if daemon_is_running $name ceph-$type $id $pid_file; then
+	if daemon_is_running $name ceph-$type $id $pid_file $old_pid_file; then
 	    echo "Starting Ceph $name on $host...already running"
 	    continue
 	fi
@@ -282,7 +300,7 @@ for name in $what; do
 	lockfile=""
     fi
 
-    get_conf asok "$run_dir/ceph-$type.$id.asok" "admin socket"
+    get_conf asok "$run_dir/$cluster-$type.$id.asok" "admin socket"
 
     case "$command" in
 	start)
@@ -397,7 +415,7 @@ for name in $what; do
 		# via mkcephfs, which is fine too; there is no harm
 		# in creating these keys.
 		get_conf mon_data "/var/lib/ceph/mon/ceph-$id" "mon data"
-		if [ "$mon_data" = "/var/lib/ceph/mon/ceph-$id" -a "$asok" = "/var/run/ceph/ceph-mon.$id.asok" ]; then
+		if [ "$mon_data" = "/var/lib/ceph/mon/ceph-$id" -a "$asok" = "/var/run/ceph/$cluster-mon.$id.asok" ]; then
 		    echo Starting ceph-create-keys on $host...
 		    cmd2="$SBINDIR/ceph-create-keys --cluster $cluster -i $id 2> /dev/null &"
 		    do_cmd "$cmd2"
@@ -412,7 +430,7 @@ for name in $what; do
 	    get_conf pre_stop "" "pre stop command"
 	    get_conf post_stop "" "post stop command"
 	    [ -n "$pre_stop" ] && do_cmd "$pre_stop"
-	    stop_daemon $name ceph-$type $pid_file
+	    stop_daemon $name ceph-$type $pid_file $old_pid_file
 	    [ -n "$pidfile" ] && rm -f $pidfile
 	    [ -n "$asok" ] && rm -f $asok
 	    [ -n "$post_stop" ] && do_cmd "$post_stop"
@@ -424,7 +442,7 @@ for name in $what; do
 	    ;;
 
 	status)
-	    if daemon_is_running $name ceph-$type $id $pid_file; then
+	    if daemon_is_running $name ceph-$type $id $pid_file $old_pid_file; then
 		echo -n "$name: running "
 		do_cmd "$BINDIR/ceph --admin-daemon $asok version 2>/dev/null" || echo unknown
             elif [ -e "$pid_file" ]; then
@@ -446,7 +464,7 @@ for name in $what; do
 	    get_conf pre_forcestop "" "pre forcestop command"
 	    get_conf post_forcestop "" "post forcestop command"
 	    [ -n "$pre_forcestop" ] && do_cmd "$pre_forcestop"
-	    stop_daemon $name ceph-$type $pid_file -9
+	    stop_daemon $name ceph-$type $pid_file $old_pid_file -9
 	    [ -n "$post_forcestop" ] && do_cmd "$post_forcestop"
 	    [ -n "$lockfile" ] && [ "$?" -eq 0 ] && rm -f $lockfile
 	    ;;
@@ -458,7 +476,7 @@ for name in $what; do
 	    ;;
 
 	force-reload | reload)
-	    signal_daemon $name ceph-$type $pid_file -1 "Reloading"
+	    signal_daemon $name ceph-$type $pid_file $old_pid_file -1 "Reloading"
 	    ;;
 
 	restart)
@@ -467,7 +485,7 @@ for name in $what; do
 	    ;;
 
         condrestart)
-            if daemon_is_running $name ceph-$type $id $pid_file; then
+            if daemon_is_running $name ceph-$type $id $pid_file $old_pid_file; then
                 $0 $options stop $name
                 $0 $options start $name
             else
