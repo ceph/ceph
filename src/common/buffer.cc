@@ -1349,12 +1349,13 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
     for (std::list<ptr>::iterator it = _buffers.begin();
 	 it != _buffers.end();
 	 ++it) {
-      nb.copy_in(pos, it->length(), it->c_str());
+      nb.copy_in(pos, it->length(), it->c_str(), false);
       pos += it->length();
     }
     _memcopy_count += pos;
     _buffers.clear();
     _buffers.push_back(nb);
+    invalidate_crc();
   }
 
 void buffer::list::rebuild_aligned(unsigned align)
