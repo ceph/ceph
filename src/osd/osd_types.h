@@ -1304,6 +1304,10 @@ struct object_stat_sum_t {
   int64_t num_objects_omap;
   int64_t num_objects_hit_set_archive;
   int64_t num_bytes_hit_set_archive;
+  int64_t num_flush;
+  int64_t num_flush_kb;
+  int64_t num_evict;
+  int64_t num_evict_kb;
 
   object_stat_sum_t()
     : num_bytes(0),
@@ -1321,7 +1325,11 @@ struct object_stat_sum_t {
       num_whiteouts(0),
       num_objects_omap(0),
       num_objects_hit_set_archive(0),
-      num_bytes_hit_set_archive(0)
+      num_bytes_hit_set_archive(0),
+      num_flush(0),
+      num_flush_kb(0),
+      num_evict(0),
+      num_evict_kb(0)
   {}
 
   void floor(int64_t f) {
@@ -1349,6 +1357,10 @@ struct object_stat_sum_t {
     FLOOR(num_objects_omap);
     FLOOR(num_objects_hit_set_archive);
     FLOOR(num_bytes_hit_set_archive);
+    FLOOR(num_flush);
+    FLOOR(num_flush_kb);
+    FLOOR(num_evict);
+    FLOOR(num_evict_kb);
 #undef FLOOR
   }
 
@@ -1384,6 +1396,10 @@ struct object_stat_sum_t {
     SPLIT(num_objects_omap);
     SPLIT(num_objects_hit_set_archive);
     SPLIT(num_bytes_hit_set_archive);
+    SPLIT(num_flush);
+    SPLIT(num_flush_kb);
+    SPLIT(num_evict);
+    SPLIT(num_evict_kb);
 #undef SPLIT
   }
 

@@ -1545,11 +1545,15 @@ void object_stat_sum_t::dump(Formatter *f) const
   f->dump_int("num_objects_omap", num_objects_omap);
   f->dump_int("num_objects_hit_set_archive", num_objects_hit_set_archive);
   f->dump_int("num_bytes_hit_set_archive", num_bytes_hit_set_archive);
+  f->dump_int("num_flush", num_flush);
+  f->dump_int("num_flush_kb", num_flush_kb);
+  f->dump_int("num_evict", num_evict);
+  f->dump_int("num_evict_kb", num_evict_kb);
 }
 
 void object_stat_sum_t::encode(bufferlist& bl) const
 {
-  ENCODE_START(11, 3, bl);
+  ENCODE_START(12, 3, bl);
   ::encode(num_bytes, bl);
   ::encode(num_objects, bl);
   ::encode(num_object_clones, bl);
@@ -1573,12 +1577,16 @@ void object_stat_sum_t::encode(bufferlist& bl) const
   ::encode(num_objects_hit_set_archive, bl);
   ::encode(num_objects_misplaced, bl);
   ::encode(num_bytes_hit_set_archive, bl);
+  ::encode(num_flush, bl);
+  ::encode(num_flush_kb, bl);
+  ::encode(num_evict, bl);
+  ::encode(num_evict_kb, bl);
   ENCODE_FINISH(bl);
 }
 
 void object_stat_sum_t::decode(bufferlist::iterator& bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(11, 3, 3, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(12, 3, 3, bl);
   ::decode(num_bytes, bl);
   if (struct_v < 3) {
     uint64_t num_kb;
@@ -1642,6 +1650,17 @@ void object_stat_sum_t::decode(bufferlist::iterator& bl)
   } else {
     num_bytes_hit_set_archive = 0;
   }
+  if (struct_v >= 12) {
+    ::decode(num_flush, bl);
+    ::decode(num_flush_kb, bl);
+    ::decode(num_evict, bl);
+    ::decode(num_evict_kb, bl);
+  } else {
+    num_flush = 0;
+    num_flush_kb = 0;
+    num_evict = 0;
+    num_evict_kb = 0;
+  }
   DECODE_FINISH(bl);
 }
 
@@ -1669,6 +1688,10 @@ void object_stat_sum_t::generate_test_instances(list<object_stat_sum_t*>& o)
   a.num_objects_misplaced = 1232;
   a.num_objects_hit_set_archive = 2;
   a.num_bytes_hit_set_archive = 27;
+  a.num_flush = 5;
+  a.num_flush_kb = 6;
+  a.num_evict = 7;
+  a.num_evict_kb = 8;
   o.push_back(new object_stat_sum_t(a));
 }
 
@@ -1697,6 +1720,10 @@ void object_stat_sum_t::add(const object_stat_sum_t& o)
   num_objects_omap += o.num_objects_omap;
   num_objects_hit_set_archive += o.num_objects_hit_set_archive;
   num_bytes_hit_set_archive += o.num_bytes_hit_set_archive;
+  num_flush += o.num_flush;
+  num_flush_kb += o.num_flush_kb;
+  num_evict += o.num_evict;
+  num_evict_kb += o.num_evict_kb;
 }
 
 void object_stat_sum_t::sub(const object_stat_sum_t& o)
@@ -1724,6 +1751,10 @@ void object_stat_sum_t::sub(const object_stat_sum_t& o)
   num_objects_omap -= o.num_objects_omap;
   num_objects_hit_set_archive -= o.num_objects_hit_set_archive;
   num_bytes_hit_set_archive -= o.num_bytes_hit_set_archive;
+  num_flush -= o.num_flush;
+  num_flush_kb -= o.num_flush_kb;
+  num_evict -= o.num_evict;
+  num_evict_kb -= o.num_evict_kb;
 }
 
 bool operator==(const object_stat_sum_t& l, const object_stat_sum_t& r)
@@ -1751,7 +1782,11 @@ bool operator==(const object_stat_sum_t& l, const object_stat_sum_t& r)
     l.num_whiteouts == r.num_whiteouts &&
     l.num_objects_omap == r.num_objects_omap &&
     l.num_objects_hit_set_archive == r.num_objects_hit_set_archive &&
-    l.num_bytes_hit_set_archive == r.num_bytes_hit_set_archive;
+    l.num_bytes_hit_set_archive == r.num_bytes_hit_set_archive &&
+    l.num_flush == r.num_flush &&
+    l.num_flush_kb == r.num_flush_kb &&
+    l.num_evict == r.num_evict &&
+    l.num_evict_kb == r.num_evict_kb;
 }
 
 // -- object_stat_collection_t --
