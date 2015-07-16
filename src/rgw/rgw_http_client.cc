@@ -294,7 +294,36 @@ void *RGWHTTPManager::ReqsThread::entry()
   return NULL;
 }
 
-RGWHTTPManager::RGWHTTPManager(CephContext *_cct) : cct(_cct), is_threaded(false),
+void RGWCompletionManager::complete(void *user_info)
+{
+  Mutex::Locker l(lock);
+  complete_reqs.push_back(user_info);
+  cond.Signal();
+}
+
+int RGWCompletionManager::get_next(void **user_info)
+{
+  Mutex::Locker l(lock);
+  while (complete_reqs.empty()) {
+    cond.Wait(lock);
+    if (going_down.read() != 0) {
+      return -ECANCELED;
+    }
+  }
+  *user_info = complete_reqs.front();
+  complete_reqs.pop_front();
+  return 0;
+}
+
+void RGWCompletionManager::go_down()
+{
+  Mutex::Locker l(lock);
+  going_down.set(1);
+  cond.Signal();
+}
+
+RGWHTTPManager::RGWHTTPManager(CephContext *_cct, RGWCompletionManager *_cm) : cct(_cct),
+                                                    completion_mgr(_cm), is_threaded(false),
                                                     reqs_lock("RGWHTTPManager::reqs_lock"), num_reqs(0), max_threaded_req(0),
                                                     reqs_thread(NULL)
 {
@@ -329,8 +358,10 @@ void RGWHTTPManager::_complete_request(rgw_http_req_data *req_data)
   if (iter != reqs.end()) {
     reqs.erase(iter);
   }
-  complete_reqs[req_data->id] = req_data;
-dout(0) << __FILE__ << ":" << __LINE__ << ": _complete_request() id=" << req_data->id << " complete_reqs.size()=" << complete_reqs.size() << dendl;
+  if (completion_mgr) {
+    completion_mgr->complete(req_data->client->get_user_info());
+  }
+  req_data->put();
 }
 
 void RGWHTTPManager::remove_request(uint64_t id)
@@ -340,11 +371,6 @@ void RGWHTTPManager::remove_request(uint64_t id)
   if (iter != reqs.end()) {
     reqs.erase(iter);
   }
-  iter = complete_reqs.find(id);
-  if (iter == reqs.end()) {
-    complete_reqs.erase(iter);
-  }
-dout(0) << __FILE__ << ":" << __LINE__ << ": remove_request() id=" << id << dendl;
 }
 
 void RGWHTTPManager::finish_request(rgw_http_req_data *req_data, int ret)
@@ -400,7 +426,7 @@ int RGWHTTPManager::add_request(RGWHTTPClient *client, const char *method, const
 
   int ret = client->init_request(method, url, req_data);
   if (ret < 0) {
-    delete req_data;
+    req_data->put();
     return ret;
   }
 
@@ -458,7 +484,6 @@ int RGWHTTPManager::process_requests(bool wait_for_data, bool *done)
 
 	int status = rgw_http_error_to_errno(http_status);
 	finish_request(req_data, status);
-	req_data->put();
         switch (msg->data.result) {
           case CURLE_OK:
             break;
@@ -560,7 +585,6 @@ void *RGWHTTPManager::reqs_thread_entry()
 
 	int status = rgw_http_error_to_errno(http_status);
 	finish_request(req_data, status);
-	req_data->put();
         switch (msg->data.result) {
           case CURLE_OK:
             break;
@@ -570,6 +594,15 @@ void *RGWHTTPManager::reqs_thread_entry()
         }
       }
     }
+  }
+
+  map<uint64_t, rgw_http_req_data *>::iterator iter = reqs.begin();
+  for (; iter != reqs.end(); ++iter) {
+    finish_request(iter->second, -ECANCELED);
+  }
+
+  if (completion_mgr) {
+    completion_mgr->go_down();
   }
   
 
