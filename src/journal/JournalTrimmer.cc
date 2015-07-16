@@ -5,6 +5,7 @@
 #include "journal/Utils.h"
 #include "common/Cond.h"
 #include "common/errno.h"
+#include "common/Finisher.h"
 #include <limits>
 
 #define dout_subsys ceph_subsys_journaler
@@ -18,19 +19,18 @@ JournalTrimmer::JournalTrimmer(librados::IoCtx &ioctx,
                                const JournalMetadataPtr &journal_metadata)
     : m_cct(NULL), m_object_oid_prefix(object_oid_prefix),
       m_journal_metadata(journal_metadata), m_lock("JournalTrimmer::m_lock"),
-      m_pending_ops(0), m_remove_set_pending(false), m_remove_set(0),
-      m_remove_set_ctx(NULL) {
+      m_remove_set_pending(false), m_remove_set(0), m_remove_set_ctx(NULL) {
   m_ioctx.dup(ioctx);
   m_cct = reinterpret_cast<CephContext *>(m_ioctx.cct());
 }
 
 JournalTrimmer::~JournalTrimmer() {
-  wait_for_ops();
+  m_async_op_tracker.wait_for_ops();
 }
 
 int JournalTrimmer::remove_objects() {
   ldout(m_cct, 20) << __func__ << dendl;
-  wait_for_ops();
+  m_async_op_tracker.wait_for_ops();
 
   C_SaferCond ctx;
   {
@@ -60,31 +60,11 @@ void JournalTrimmer::update_commit_position(
 
   {
     Mutex::Locker locker(m_lock);
-    start_op();
+    m_async_op_tracker.start_op();
   }
 
   Context *ctx = new C_CommitPositionSafe(this, object_set_position);
   m_journal_metadata->set_commit_position(object_set_position, ctx);
-}
-
-void JournalTrimmer::start_op() {
-  assert(m_lock.is_locked());
-  ++m_pending_ops;
-}
-
-void JournalTrimmer::finish_op() {
-  assert(m_lock.is_locked());
-  assert(m_pending_ops > 0);
-  if (--m_pending_ops == 0) {
-    m_pending_ops_cond.Signal();
-  }
-}
-
-void JournalTrimmer::wait_for_ops() {
-  Mutex::Locker locker(m_lock);
-  while (m_pending_ops > 0) {
-    m_pending_ops_cond.Wait(m_lock);
-  }
 }
 
 void JournalTrimmer::trim_objects(uint64_t minimum_set) {
@@ -108,7 +88,7 @@ void JournalTrimmer::trim_objects(uint64_t minimum_set) {
 void JournalTrimmer::remove_set(uint64_t object_set) {
   assert(m_lock.is_locked());
 
-  start_op();
+  m_async_op_tracker.start_op();
   uint8_t splay_width = m_journal_metadata->get_splay_width();
   C_RemoveSet *ctx = new C_RemoveSet(this, object_set, splay_width);
 
@@ -128,7 +108,6 @@ void JournalTrimmer::remove_set(uint64_t object_set) {
     assert(r == 0);
     comp->release();
   }
-  ctx->complete(-ENOENT);
 }
 
 void JournalTrimmer::handle_commit_position_safe(
@@ -164,7 +143,7 @@ void JournalTrimmer::handle_commit_position_safe(
       trim_objects(object_set_position.object_number / splay_width);
     }
   }
-  finish_op();
+  m_async_op_tracker.finish_op();
 }
 
 void JournalTrimmer::handle_set_removed(int r, uint64_t object_set) {
@@ -192,7 +171,7 @@ void JournalTrimmer::handle_set_removed(int r, uint64_t object_set) {
     ldout(m_cct, 20) << "completing remove set context" << dendl;
     m_remove_set_ctx->complete(r);
   }
-  finish_op();
+  m_async_op_tracker.finish_op();
 }
 
 JournalTrimmer::C_RemoveSet::C_RemoveSet(JournalTrimmer *_journal_trimmer,
@@ -200,7 +179,7 @@ JournalTrimmer::C_RemoveSet::C_RemoveSet(JournalTrimmer *_journal_trimmer,
                                          uint8_t _splay_width)
   : journal_trimmer(_journal_trimmer), object_set(_object_set),
     lock(utils::unique_lock_name("C_RemoveSet::lock", this)),
-    refs(_splay_width + 1), return_value(-ENOENT) {
+    refs(_splay_width), return_value(-ENOENT) {
 }
 
 void JournalTrimmer::C_RemoveSet::complete(int r) {
