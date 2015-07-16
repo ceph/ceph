@@ -153,9 +153,6 @@ void ScrubStack::scrub_dir_dentry(CDentry *dn,
     // the stack... or actually is that right?  Should we perhaps
     // only see ourselves once on the way down and once on the way
     // back up again, and not do this?
-
-    // Hmm, bigger problem, we can only actually 
-
     in->scrub_initialize(in->get_version());
   }
 
@@ -288,18 +285,15 @@ void ScrubStack::scrub_dirfrag(CDir *dir, bool *added_children,
   *is_terminal = false;
   *done = false;
 
-  // XXX HACK get the frag complete before calling
-  // scrub intiialize
-  if (!dir->is_complete()) {
-    dir->fetch(new C_KickOffScrubs(mdcache->mds, this));
-    return;
-  }
-
   if (!dir->scrub_info()->directory_scrubbing) {
-    // FIXME: greg - the CDir API seems inconsistent here, as
-    // scrub_initialize wants the dir to be complete before
-    // we start, but scrub_dentry_next handles incompleteness
-    // via its EAGAIN path.
+    // Get the frag complete before calling
+    // scrub initialize, so that it can populate its lists
+    // of dentries.
+    if (!dir->is_complete()) {
+      dir->fetch(new C_KickOffScrubs(mdcache->mds, this));
+      return;
+    }
+
     dir->scrub_initialize();
   }
 
