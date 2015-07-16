@@ -434,7 +434,8 @@ protected:
 
   // path traversal for high-level interface
   Inode *cwd;
-  int path_walk(const filepath& fp, Inode **end, bool followsym=true);
+  int path_walk(const filepath& fp, Inode **end, bool followsym=true,
+		int uid=-1, int gid=-1);
   int fill_stat(Inode *in, struct stat *st, frag_info_t *dirstat=0, nest_info_t *rstat=0);
   void touch_dn(Dentry *dn);
 
@@ -650,8 +651,8 @@ private:
 
   // internal interface
   //   call these with client_lock held!
-  int _do_lookup(Inode *dir, const string& name, Inode **target);
-  int _lookup(Inode *dir, const string& dname, Inode **target);
+  int _do_lookup(Inode *dir, const string& name, Inode **target, int uid, int gid);
+  int _lookup(Inode *dir, const string& dname, Inode **target, int uid, int gid);
 
   int _link(Inode *in, Inode *dir, const char *name, int uid=-1, int gid=-1, Inode **inp = 0);
   int _unlink(Inode *dir, const char *name, int uid=-1, int gid=-1);
@@ -804,7 +805,7 @@ public:
 
   // dirs
   int mkdir(const char *path, mode_t mode);
-  int mkdirs(const char *path, mode_t mode);
+  int mkdirs(const char *path, mode_t mode, int uid=-1, int gid=-1);
   int rmdir(const char *path);
 
   // symlinks
