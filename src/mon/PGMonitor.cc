@@ -2129,7 +2129,7 @@ void PGMonitor::get_health(list<pair<health_status_t,string> >& summary,
       nearfull = true;
       if (detail) {
 	ostringstream ss;
-	ss << "cache pool '" << mon->osdmon()->osdmap.get_pool_name(p->first)
+	ss << "cache pool '" << name
 	   << "' with " << si_t(st.stats.sum.num_bytes)
 	   << "B at/near target max "
 	   << si_t(p->second.target_max_bytes) << "B";
@@ -2183,9 +2183,10 @@ void PGMonitor::get_health(list<pair<health_status_t,string> >& summary,
       const pg_pool_t *pi = mon->osdmon()->osdmap.get_pg_pool(p->first);
       if (!pi)
 	continue;   // in case osdmap changes haven't propagated to PGMap yet
+      const string& name = mon->osdmon()->osdmap.get_pool_name(p->first);
       if (pi->get_pg_num() > pi->get_pgp_num()) {
 	ostringstream ss;
-	ss << "pool " << mon->osdmon()->osdmap.get_pool_name(p->first) << " pg_num "
+	ss << "pool " << name << " pg_num "
 	   << pi->get_pg_num() << " > pgp_num " << pi->get_pgp_num();
 	summary.push_back(make_pair(HEALTH_WARN, ss.str()));
 	if (detail)
@@ -2200,11 +2201,11 @@ void PGMonitor::get_health(list<pair<health_status_t,string> >& summary,
 	if (g_conf->mon_pg_warn_max_object_skew > 0 &&
 	    ratio > g_conf->mon_pg_warn_max_object_skew) {
 	  ostringstream ss;
-	  ss << "pool " << mon->osdmon()->osdmap.get_pool_name(p->first) << " has too few pgs";
+	  ss << "pool " << name << " has too few pgs";
 	  summary.push_back(make_pair(HEALTH_WARN, ss.str()));
 	  if (detail) {
 	    ostringstream ss;
-	    ss << "pool " << mon->osdmon()->osdmap.get_pool_name(p->first) << " objects per pg ("
+	    ss << "pool " << name << " objects per pg ("
 	       << objects_per_pg << ") is more than " << ratio << " times cluster average ("
 	       << average_objects_per_pg << ")";
 	    detail->push_back(make_pair(HEALTH_WARN, ss.str()));
