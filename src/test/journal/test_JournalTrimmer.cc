@@ -11,6 +11,10 @@ class TestJournalTrimmer : public RadosTestFixture {
 public:
 
   virtual void TearDown() {
+    for (MetadataList::iterator it = m_metadata_list.begin();
+         it != m_metadata_list.end(); ++it) {
+      (*it)->remove_listener(&m_listener);
+    }
     for (std::list<journal::JournalTrimmer*>::iterator it = m_trimmers.begin();
          it != m_trimmers.end(); ++it) {
       delete *it;
@@ -26,6 +30,7 @@ public:
   journal::JournalMetadataPtr create_metadata(const std::string &oid) {
     journal::JournalMetadataPtr metadata(new journal::JournalMetadata(
       m_ioctx, oid, "client", 0.1));
+    m_metadata_list.push_back(metadata);
     metadata->add_listener(&m_listener);
     return metadata;
   }
@@ -44,6 +49,8 @@ public:
     return m_ioctx.operate(oid, &op);
   }
 
+  typedef std::list<journal::JournalMetadataPtr> MetadataList;
+  MetadataList m_metadata_list;
   std::list<journal::JournalTrimmer*> m_trimmers;
 };
 

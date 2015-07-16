@@ -44,6 +44,10 @@ public:
     }
   };
 
+  typedef std::list<journal::ObjectRecorderPtr> ObjectRecorders;
+
+  ObjectRecorders m_object_recorders;
+
   uint32_t m_flush_interval;
   uint64_t m_flush_bytes;
   double m_flush_age;
@@ -55,6 +59,16 @@ public:
     RadosTestFixture::SetUp();
     m_finisher = new Finisher(reinterpret_cast<CephContext*>(m_ioctx.cct()));
     m_finisher->start();
+  }
+
+  void TearDown() {
+    for (ObjectRecorders::iterator it = m_object_recorders.begin();
+         it != m_object_recorders.end(); ++it) {
+      C_SaferCond cond;
+      (*it)->flush(&cond);
+      cond.wait();
+    }
+    RadosTestFixture::TearDown();
   }
 
   inline void set_flush_interval(uint32_t i) {
@@ -84,6 +98,7 @@ public:
     journal::ObjectRecorderPtr object(new journal::ObjectRecorder(
       m_ioctx, oid, 0, *m_timer, m_timer_lock, &m_overflow_handler, order,
       m_flush_interval, m_flush_bytes, m_flush_age));
+    m_object_recorders.push_back(object);
     return object;
   }
 };
