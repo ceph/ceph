@@ -21,18 +21,18 @@ Before you can add a block device to a node, you must create an image for it in
 the :term:`Ceph Storage Cluster` first. To create a block device image, execute
 the  following::
 
-	rbd create {image-name} --size {megabytes} --pool {pool-name}
+	rbd create {image-spec} --size {M/G/T} 
 	
 For example, to create a 1GB image named ``bar`` that stores information in a
 pool named ``swimmingpool``, execute the following::
 
-	rbd create bar --size 1024 --pool swimmingpool
+	rbd create swimmingpool/bar --size 1G
 
 If you don't specify pool when creating an image, it will be stored in the
 default pool ``rbd``. For example, to create a 1GB image named ``foo`` stored in
 the default pool ``rbd``, execute the following::
 
-        rbd create foo --size 1024
+        rbd create foo --size 1G
 
 .. note:: You must create a pool first before you can specify it as a 
    source. See `Storage Pools`_ for details.
@@ -67,14 +67,14 @@ For example::
 	rbd --image foo info
 	
 To retrieve information from an image within a pool, execute the following,
-but replace ``{image-name}`` with the name of the image and replace ``{pool-name}``
+but replace ``{image-name}`` with the name of the image and replace ``{image-spec}``
 with the name of the pool:: 
 
-	rbd --image {image-name} -p {pool-name} info
+	rbd info {image-spec}
 
 For example:: 
 
-	rbd --image bar -p swimmingpool info	
+	rbd info swimmingpool/foo 
 
 Resizing a Block Device Image
 =============================
@@ -85,7 +85,7 @@ a maximum capacity  that you set with the ``--size`` option. If you want to
 increase (or decrease) the maximum size of a Ceph Block Device image, execute
 the following:: 
 
-	rbd resize --image foo --size 2048
+	rbd resize swimmingpool/foo --size 2048
 
 
 Removing a Block Device Image
@@ -101,16 +101,16 @@ For example::
 	rbd rm foo
 	
 To remove a block device from a pool, execute the following, but replace 
-``{image-name}`` with the name of the image to remove and replace 
-``{pool-name}`` with the name of the pool:: 
+``{image-name}`` with ``{image-spec}``
 
-	rbd rm {image-name} -p {pool-name}
+	rbd rm {image-spece} 
 	
 For example:: 
 
-	rbd rm bar -p swimmingpool
+	rbd rm swimmingpool/bar
 
-
+<image-spec> is [pool-name]/image-name and <snap-spec> is [pool-name]/image-name@snap-name
+or you may specify individual pieces of names with -p/--pool <pool-name>, --image <image-name> and/or --snap <snap-name>.
 
 .. _Storage Pools: ../../rados/operations/pools
 .. _RBD – Manage RADOS Block Device (RBD) Images: ../../man/8/rbd/
