@@ -1826,15 +1826,15 @@ inline ostream& operator<<(ostream& out, const pg_history_t& h) {
  */
 struct pg_info_t {
   spg_t pgid;
-  eversion_t last_update;    // last object version applied to store.
-  eversion_t last_complete;  // last version pg was complete through.
-  epoch_t last_epoch_started;// last epoch at which this pg started on this osd
+  eversion_t last_update;      ///< last object version applied to store.
+  eversion_t last_complete;    ///< last version pg was complete through.
+  epoch_t last_epoch_started;  ///< last epoch at which this pg started on this osd
   
-  version_t last_user_version; // last user object version applied to store
+  version_t last_user_version; ///< last user object version applied to store
 
-  eversion_t log_tail;     // oldest log entry.
+  eversion_t log_tail;         ///< oldest log entry.
 
-  hobject_t last_backfill;   // objects >= this and < last_complete may be missing
+  hobject_t last_backfill;     ///< objects >= this and < last_complete may be missing
   bool last_backfill_bitwise;  ///< true if last_backfill reflects a bitwise (vs nibblewise) sort
 
   interval_set<snapid_t> purged_snaps;
