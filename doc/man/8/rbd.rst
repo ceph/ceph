@@ -35,7 +35,7 @@ Options
 
    Connect to specified monitor (instead of looking through ceph.conf).
 
-.. option:: -p pool, --pool pool
+.. option:: -p pool-name, --pool pool-name
 
    Interact with the given pool. Required by most commands.
 
@@ -170,16 +170,17 @@ Commands
 
   If the RBD fast-diff feature isn't enabled on images, this operation will
   require querying the OSDs for every potential object within the image.
-:command:`info` [*image-name*]
+
+:command:`info` [*image-spec*] | [*snap-spec*]
   Will dump information (such as size and order) about a specific rbd image.
   If image is a clone, information about its parent is also displayed.
   If a snapshot is specified, whether it is protected is shown as well.
 
-:command:`create` [*image-name*]
+:command:`create` [*image-spec*]
   Will create a new rbd image. You must also specify the size via --size.  The
   --stripe-unit and --stripe-count arguments are optional, but must be used together.
 
-:command:`clone` [*parent-snapname*] [*image-name*]
+:command:`clone` [*parent-snap-spec*] [*child-image-spec*]
   Will create a clone (copy-on-write child) of the parent snapshot.
   Object order will be identical to that of the parent image unless
   specified. Size will be the same as the parent snapshot. The --stripe-unit
@@ -188,7 +189,7 @@ Commands
   The parent snapshot must be protected (see `rbd snap protect`).
   This requires image format 2.
 
-:command:`flatten` [*image-name*]
+:command:`flatten` [*image-spec*]
   If image is a clone, copy all shared blocks from the parent snapshot and
   make the child independent of the parent, severing the link between
   parent snap and child.  The parent snapshot can be unprotected and
@@ -196,24 +197,24 @@ Commands
 
   This requires image format 2.
 
-:command:`children` [*image-name*]
+:command:`children` [*snap-spec*]
   List the clones of the image at the given snapshot. This checks
   every pool, and outputs the resulting poolname/imagename.
 
   This requires image format 2.
 
-:command:`resize` [*image-name*] [--allow-shrink]
+:command:`resize` [*image-spec*] [--allow-shrink]
   Resizes rbd image. The size parameter also needs to be specified.
   The --allow-shrink option lets the size be reduced.
 
-:command:`rm` [*image-name*]
+:command:`rm` [*image-spec*]
   Deletes an rbd image (including all data blocks). If the image has
   snapshots, this fails and nothing is deleted.
 
-:command:`export` [*image-name*] [*dest-path*]
+:command:`export` ([*image-spec*] | [*snap-spec*]) [*dest-path*]
   Exports image to dest path (use - for stdout).
 
-:command:`import` [*path*] [*dest-image*]
+:command:`import` [*path*] [*image-spec*]
   Creates a new image and imports its data from path (use - for
   stdin).  The import operation will try to create sparse rbd images 
   if possible.  For import from stdin, the sparsification unit is
@@ -222,7 +223,7 @@ Commands
   The --stripe-unit and --stripe-count arguments are optional, but must be
   used together.
 
-:command:`export-diff` [*image-name*] [*dest-path*] [--from-snap *snapname*] [--object-extents]
+:command:`export-diff` ([*image-spec*] | [*snap-spec*]) [*dest-path*] [--from-snap *snap-name*] [--object-extents]
   Exports an incremental diff for an image to dest path (use - for stdout).  If
   an initial snapshot is specified, only changes since that snapshot are included; otherwise,
   any regions of the image that contain data are included.  The end snapshot is specified
@@ -238,59 +239,59 @@ Commands
   'rbd merge-diff first second - | rbd merge-diff - third result'. Note this command
   currently only support the source incremental diff with stripe_count == 1
 
-:command:`import-diff` [*src-path*] [*image-name*]
+:command:`import-diff` [*src-path*] [*image-spec*]
   Imports an incremental diff of an image and applies it to the current image.  If the diff
   was generated relative to a start snapshot, we verify that snapshot already exists before
   continuing.  If there was an end snapshot we verify it does not already exist before
   applying the changes, and create the snapshot when we are done.
 
-:command:`diff` [*image-name*] [--from-snap *snapname*] [--object-extents]
+:command:`diff` [*image-spec*] | [*snap-spec*] [--from-snap *snap-name*] [--object-extents]
   Dump a list of byte extents in the image that have changed since the specified start
   snapshot, or since the image was created.  Each output line includes the starting offset
   (in bytes), the length of the region (in bytes), and either 'zero' or 'data' to indicate
   whether the region is known to be zeros or may contain other data.
 
-:command:`cp` [*src-image*] [*dest-image*]
+:command:`cp` ([*src-image-spec*] | [*src-snap-spec*]) [*dest-image-spec*]
   Copies the content of a src-image into the newly created dest-image.
   dest-image will have the same size, order, and image format as src-image.
 
-:command:`mv` [*src-image*] [*dest-image*]
+:command:`mv` [*src-image-spec*] [*dest-image-spec*]
   Renames an image.  Note: rename across pools is not supported.
 
-:command:`image-meta list` [*image-name*]
+:command:`image-meta list` [*image-spec*]
   Show metadata held on the image. The first column is the key
   and the second column is the value.
 
-:command:`image-meta get` [*image-name*] [*key*]
+:command:`image-meta get` [*image-spec*] [*key*]
   Get metadata value with the key.
 
-:command:`image-meta set` [*image-name*] [*key*] [*value*]
+:command:`image-meta set` [*image-spec*] [*key*] [*value*]
   Set metadata key with the value. They will displayed in `metadata-list`
 
-:command:`image-meta remove` [*image-name*] [*key*]
+:command:`image-meta remove` [*image-spec*] [*key*]
   Remove metadata key with the value.
 
-:command:`object-map` rebuild [*image-name*]
+:command:`object-map` rebuild [*image-spec*] | [*snap-spec*]
   Rebuilds an invalid object map for the specified image. An image snapshot can be
   specified to rebuild an invalid object map for a snapshot.
 
-:command:`snap` ls [*image-name*]
+:command:`snap` ls [*image-spec*]
   Dumps the list of snapshots inside a specific image.
 
-:command:`snap` create [*image-name*]
+:command:`snap` create [*snap-spec*]
   Creates a new snapshot. Requires the snapshot name parameter specified.
 
-:command:`snap` rollback [*image-name*]
+:command:`snap` rollback [*snap-spec*]
   Rollback image content to snapshot. This will iterate through the entire blocks
   array and update the data head content to the snapshotted version.
 
-:command:`snap` rm [*image-name*]
+:command:`snap` rm [*snap-spec*]
   Removes the specified snapshot.
 
-:command:`snap` purge [*image-name*]
+:command:`snap` purge [*image-spec*]
   Removes all snapshots from an image.
 
-:command:`snap` protect [*image-name*]
+:command:`snap` protect [*snap-spec*]
   Protect a snapshot from deletion, so that clones can be made of it
   (see `rbd clone`).  Snapshots must be protected before clones are made;
   protection implies that there exist dependent cloned children that
@@ -299,38 +300,38 @@ Commands
 
   This requires image format 2.
 
-:command:`snap` unprotect [*image-name*]
+:command:`snap` unprotect [*snap-spec*]
   Unprotect a snapshot from deletion (undo `snap protect`).  If cloned
   children remain, `snap unprotect` fails.  (Note that clones may exist
   in different pools than the parent snapshot.)
 
   This requires image format 2.
 
-:command:`map` [*image-name*] [-o | --options *map-options* ] [--read-only]
+:command:`map` [*image-spec*] | [*snap-spec*] [-o | --options *map-options* ] [--read-only]
   Maps the specified image to a block device via the rbd kernel module.
 
-:command:`unmap` [*image-name*] | [*device-path*]
+:command:`unmap` [*image-spec*] | [*snap-spec*] | [*device-path*]
   Unmaps the block device that was mapped via the rbd kernel module.
 
 :command:`showmapped`
   Show the rbd images that are mapped via the rbd kernel module.
 
-:command:`status` [*image-name*]
+:command:`status` [*image-spec*]
   Show the status of the image, including which clients have it open.
 
-:command:`feature` disable [*image-name*] [*feature*]
+:command:`feature` disable [*image-spec*] [*feature*]
   Disables the specified feature on the specified image. Multiple features can
   be specified.
 
-:command:`feature` enable [*image-name*] [*feature*]
+:command:`feature` enable [*image-spec*] [*feature*]
   Enables the specified feature on the specified image. Multiple features can
   be specified.
 
-:command:`lock` list [*image-name*]
+:command:`lock` list [*image-spec*]
   Show locks held on the image. The first column is the locker
   to use with the `lock remove` command.
 
-:command:`lock` add [*image-name*] [*lock-id*]
+:command:`lock` add [*image-spec*] [*lock-id*]
   Lock an image. The lock-id is an arbitrary name for the user's
   convenience. By default, this is an exclusive lock, meaning it
   will fail if the image is already locked. The --shared option
@@ -338,26 +339,26 @@ Commands
   any operation other than adding a lock. It does not
   protect an image from being deleted.
 
-:command:`lock` remove [*image-name*] [*lock-id*] [*locker*]
+:command:`lock` remove [*image-spec*] [*lock-id*] [*locker*]
   Release a lock on an image. The lock id and locker are
   as output by lock ls.
 
-:command:`bench-write` [*image-name*] --io-size [*io-size-in-bytes*] --io-threads [*num-ios-in-flight*] --io-total [*total-bytes-to-write*]
+:command:`bench-write` [*image-spec*] --io-size [*io-size-in-bytes*] --io-threads [*num-ios-in-flight*] --io-total [*total-bytes-to-write*]
   Generate a series of sequential writes to the image and measure the
   write throughput and latency.  Defaults are: --io-size 4096, --io-threads 16, 
   --io-total 1GB
 
-Image name
-==========
+Image and snap specs
+====================
 
-In addition to using the --pool and the --snap options, the image name can include both
-the pool name and the snapshot name. The image name format is as follows::
+| *image-spec* is [*pool-name*]/*image-name*
+| *snap-spec*  is [*pool-name*]/*image-name*\ @\ *snap-name*
 
-       [pool/]image-name[@snap]
+The default for *pool-name* is "rbd".  If an image name contains a slash
+character ('/'), *pool-name* is required.
 
-Thus an image name that contains a slash character ('/') requires specifying the pool
-name explicitly.
-
+You may specify each name individually, using --pool, --image and --snap
+options, but this is discouraged in favor of the above spec syntax.
 
 Striping
 ========
