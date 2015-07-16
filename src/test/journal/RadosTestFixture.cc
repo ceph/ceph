@@ -26,7 +26,7 @@ std::string RadosTestFixture::get_temp_oid() {
 void RadosTestFixture::SetUp() {
   ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), m_ioctx));
   m_timer = new SafeTimer(reinterpret_cast<CephContext*>(m_ioctx.cct()),
-                          m_timer_lock, false);
+                          m_timer_lock, true);
   m_timer->init();
 }
 
