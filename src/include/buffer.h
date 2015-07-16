@@ -239,7 +239,7 @@ public:
       _len = l;
     }
 
-    void append(char c);
+    unsigned append(char c);
     unsigned append(const char *p, unsigned l);
     void copy_in(unsigned o, unsigned l, const char *src);
     void zero();
