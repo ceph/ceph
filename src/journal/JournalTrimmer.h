@@ -8,6 +8,7 @@
 #include "include/rados/librados.hpp"
 #include "include/Context.h"
 #include "common/Mutex.h"
+#include "journal/AsyncOpTracker.h"
 #include "journal/JournalMetadata.h"
 #include "cls/journal/cls_journal_types.h"
 
@@ -34,9 +35,6 @@ private:
       : journal_trimmer(_journal_trimmer),
         object_set_position(_object_set_position) {}
 
-    virtual void complete(int r) {
-      finish(r);
-    }
     virtual void finish(int r) {
       journal_trimmer->handle_commit_position_safe(r, object_set_position);
     }
@@ -62,18 +60,13 @@ private:
 
   JournalMetadataPtr m_journal_metadata;
 
-  Mutex m_lock;
+  AsyncOpTracker m_async_op_tracker;
 
-  size_t m_pending_ops;
-  Cond m_pending_ops_cond;
+  Mutex m_lock;
 
   bool m_remove_set_pending;
   uint64_t m_remove_set;
   Context *m_remove_set_ctx;
-
-  void start_op();
-  void finish_op();
-  void wait_for_ops();
 
   void trim_objects(uint64_t minimum_set);
   void remove_set(uint64_t object_set);

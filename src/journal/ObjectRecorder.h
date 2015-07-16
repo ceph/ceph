@@ -79,11 +79,11 @@ private:
   };
   struct C_AppendTask : public Context {
     ObjectRecorder *object_recorder;
-    C_AppendTask(ObjectRecorder *o) : object_recorder(o) {}
-    virtual void complete(int r) {
+    C_AppendTask(ObjectRecorder *o) : object_recorder(o) {
+    }
+    virtual void finish(int r) {
       object_recorder->handle_append_task();
     }
-    virtual void finish(int r) {}
   };
   struct C_AppendFlush : public Context {
     ObjectRecorder *object_recorder;
