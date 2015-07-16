@@ -241,9 +241,9 @@ public:
 
     unsigned append(char c);
     unsigned append(const char *p, unsigned l);
-    void copy_in(unsigned o, unsigned l, const char *src);
-    void zero();
-    void zero(unsigned o, unsigned l);
+    void copy_in(unsigned o, unsigned l, const char *src, bool crc_reset = true);
+    void zero(bool crc_reset = true);
+    void zero(unsigned o, unsigned l, bool crc_reset = true);
 
   };
 
@@ -307,7 +307,7 @@ public:
       void copy_all(list &dest);
 
       // copy data in
-      void copy_in(unsigned len, const char *src);
+      void copy_in(unsigned len, const char *src, bool crc_reset = true);
       void copy_in(unsigned len, const list& otherl);
 
     };
@@ -442,7 +442,7 @@ public:
     void copy(unsigned off, unsigned len, char *dest) const;
     void copy(unsigned off, unsigned len, list &dest) const;
     void copy(unsigned off, unsigned len, std::string& dest) const;
-    void copy_in(unsigned off, unsigned len, const char *src);
+    void copy_in(unsigned off, unsigned len, const char *src, bool crc_reset = true);
     void copy_in(unsigned off, unsigned len, const list& src);
 
     void append(char c);
