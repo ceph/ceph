@@ -10,13 +10,25 @@
 
 class TestJournalMetadata : public RadosTestFixture {
 public:
+  virtual void TearDown() {
+    for (MetadataList::iterator it = m_metadata_list.begin();
+         it != m_metadata_list.end(); ++it) {
+      (*it)->remove_listener(&m_listener);
+    }
+    RadosTestFixture::TearDown();
+  }
+
   journal::JournalMetadataPtr create_metadata(const std::string &oid,
                                               const std::string &client_id) {
     journal::JournalMetadataPtr metadata(new journal::JournalMetadata(
       m_ioctx, oid, client_id, 0.1));
+    m_metadata_list.push_back(metadata);
     metadata->add_listener(&m_listener);
     return metadata;
   }
+
+  typedef std::list<journal::JournalMetadataPtr> MetadataList;
+  MetadataList m_metadata_list;
 };
 
 TEST_F(TestJournalMetadata, JournalDNE) {

@@ -145,6 +145,8 @@ TEST_F(TestFutureImpl, FlushInProgress) {
 
   future1->flush(NULL);
   ASSERT_EQ(0U, m_flush_handler.flushes);
+
+  future1->safe(0);
 }
 
 TEST_F(TestFutureImpl, FlushAlreadyComplete) {

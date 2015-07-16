@@ -15,6 +15,7 @@
 
 class TestJournalPlayer : public RadosTestFixture {
 public:
+  typedef std::list<journal::JournalPlayer *> JournalPlayers;
   typedef std::list<journal::Entry> Entries;
 
   struct ReplayHandler : public journal::ReplayHandler {
@@ -27,6 +28,9 @@ public:
     ReplayHandler()
       : lock("lock"), entries_available(false), complete(false),
         complete_result(0) {}
+
+    virtual void get() {}
+    virtual void put() {}
 
     virtual bool filter_entry(const std::string &tag) {
       return false;
@@ -45,6 +49,14 @@ public:
       cond.Signal();
     }
   };
+
+  virtual void TearDown() {
+    for (JournalPlayers::iterator it = m_players.begin();
+         it != m_players.end(); ++it) {
+      delete *it;
+    }
+    RadosTestFixture::TearDown();
+  }
 
   int create(const std::string &oid) {
     return RadosTestFixture::create(oid, 14, 2);
@@ -71,14 +83,15 @@ public:
     return metadata;
   }
 
-  journal::JournalPlayerPtr create_player(const std::string &oid,
+  journal::JournalPlayer *create_player(const std::string &oid,
                                           const journal::JournalMetadataPtr &metadata) {
-    journal::JournalPlayerPtr player(new journal::JournalPlayer(
+    journal::JournalPlayer *player(new journal::JournalPlayer(
       m_ioctx, oid + ".", metadata, &m_replay_hander));
+    m_players.push_back(player);
     return player;
   }
 
-  bool wait_for_entries(journal::JournalPlayerPtr player, uint32_t count,
+  bool wait_for_entries(journal::JournalPlayer *player, uint32_t count,
                         Entries *entries) {
     entries->clear();
     while (entries->size() < count) {
@@ -104,7 +117,7 @@ public:
     return entries->size() == count;
   }
 
-  bool wait_for_complete(journal::JournalPlayerPtr player) {
+  bool wait_for_complete(journal::JournalPlayer *player) {
     journal::Entry entry;
     journal::JournalPlayer::ObjectSetPosition object_set_position;
     player->try_pop_front(&entry, &object_set_position);
@@ -128,6 +141,7 @@ public:
     return append(oid + "." + stringify(object_num), bl);
   }
 
+  JournalPlayers m_players;
   ReplayHandler m_replay_hander;
 };
 
@@ -146,7 +160,7 @@ TEST_F(TestJournalPlayer, Prefetch) {
   journal::JournalMetadataPtr metadata = create_metadata(oid);
   ASSERT_EQ(0, init_metadata(metadata));
 
-  journal::JournalPlayerPtr player = create_player(oid, metadata);
+  journal::JournalPlayer *player = create_player(oid, metadata);
 
   ASSERT_EQ(0, write_entry(oid, 0, "tag1", 122));
   ASSERT_EQ(0, write_entry(oid, 1, "tag1", 123));
@@ -183,7 +197,7 @@ TEST_F(TestJournalPlayer, PrefetchWithoutCommit) {
   journal::JournalMetadataPtr metadata = create_metadata(oid);
   ASSERT_EQ(0, init_metadata(metadata));
 
-  journal::JournalPlayerPtr player = create_player(oid, metadata);
+  journal::JournalPlayer *player = create_player(oid, metadata);
 
   ASSERT_EQ(0, write_entry(oid, 0, "tag1", 122));
   ASSERT_EQ(0, write_entry(oid, 1, "tag1", 123));
@@ -217,7 +231,7 @@ TEST_F(TestJournalPlayer, PrefetchMultipleTags) {
   journal::JournalMetadataPtr metadata = create_metadata(oid);
   ASSERT_EQ(0, init_metadata(metadata));
 
-  journal::JournalPlayerPtr player = create_player(oid, metadata);
+  journal::JournalPlayer *player = create_player(oid, metadata);
 
   ASSERT_EQ(0, write_entry(oid, 0, "tag1", 120));
   ASSERT_EQ(0, write_entry(oid, 0, "tag2", 0));
@@ -253,7 +267,7 @@ TEST_F(TestJournalPlayer, PrefetchCorruptSequence) {
   journal::JournalMetadataPtr metadata = create_metadata(oid);
   ASSERT_EQ(0, init_metadata(metadata));
 
-  journal::JournalPlayerPtr player = create_player(oid, metadata);
+  journal::JournalPlayer *player = create_player(oid, metadata);
 
   ASSERT_EQ(0, write_entry(oid, 0, "tag1", 120));
   ASSERT_EQ(0, write_entry(oid, 0, "tag2", 0));
@@ -286,7 +300,7 @@ TEST_F(TestJournalPlayer, PrefetchAndWatch) {
   journal::JournalMetadataPtr metadata = create_metadata(oid);
   ASSERT_EQ(0, init_metadata(metadata));
 
-  journal::JournalPlayerPtr player = create_player(oid, metadata);
+  journal::JournalPlayer *player = create_player(oid, metadata);
 
   ASSERT_EQ(0, write_entry(oid, 0, "tag1", 122));
 
