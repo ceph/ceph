@@ -5,6 +5,8 @@ overrides:
     - osd_map_max_advance
     fs: xfs
     conf:
+      mon:
+        mon debug unsafe allow tier with nonempty snaps: true
       osd:
         osd map max advance: 1000
 roles:
