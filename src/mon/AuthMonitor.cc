@@ -277,45 +277,46 @@ version_t AuthMonitor::get_trim_to()
   return 0;
 }
 
-bool AuthMonitor::preprocess_query(PaxosServiceMessage *m)
+bool AuthMonitor::preprocess_query(MonOpRequestRef op)
 {
+  PaxosServiceMessage *m = static_cast<PaxosServiceMessage*>(op->get_req());
   dout(10) << "preprocess_query " << *m << " from " << m->get_orig_source_inst() << dendl;
   switch (m->get_type()) {
   case MSG_MON_COMMAND:
-    return preprocess_command((MMonCommand*)m);
+    return preprocess_command(op);
 
   case CEPH_MSG_AUTH:
-    return prep_auth((MAuth *)m, false);
+    return prep_auth(op, false);
 
   case MSG_MON_GLOBAL_ID:
     return false;
 
   default:
     assert(0);
-    m->put();
     return true;
   }
 }
 
-bool AuthMonitor::prepare_update(PaxosServiceMessage *m)
+bool AuthMonitor::prepare_update(MonOpRequestRef op)
 {
+  PaxosServiceMessage *m = static_cast<PaxosServiceMessage*>(op->get_req());
   dout(10) << "prepare_update " << *m << " from " << m->get_orig_source_inst() << dendl;
   switch (m->get_type()) {
   case MSG_MON_COMMAND:
-    return prepare_command((MMonCommand*)m);
+    return prepare_command(op);
   case MSG_MON_GLOBAL_ID:
-    return prepare_global_id((MMonGlobalID*)m); 
+    return prepare_global_id(op);
   case CEPH_MSG_AUTH:
-    return prep_auth((MAuth *)m, true);
+    return prep_auth(op, true);
   default:
     assert(0);
-    m->put();
     return false;
   }
 }
 
-uint64_t AuthMonitor::assign_global_id(MAuth *m, bool should_increase_max)
+uint64_t AuthMonitor::assign_global_id(MonOpRequestRef op, bool should_increase_max)
 {
+  MAuth *m = static_cast<MAuth*>(op->get_req());
   int total_mon = mon->monmap->size();
   dout(10) << "AuthMonitor::assign_global_id m=" << *m << " mon=" << mon->rank << "/" << total_mon
 	   << " last_allocated=" << last_allocated_id << " max_global_id=" <<  max_global_id << dendl;
@@ -352,14 +353,14 @@ uint64_t AuthMonitor::assign_global_id(MAuth *m, bool should_increase_max)
 }
 
 
-bool AuthMonitor::prep_auth(MAuth *m, bool paxos_writable)
+bool AuthMonitor::prep_auth(MonOpRequestRef op, bool paxos_writable)
 {
+  MAuth *m = static_cast<MAuth*>(op->get_req());
   dout(10) << "prep_auth() blob_size=" << m->get_auth_payload().length() << dendl;
 
-  MonSession *s = (MonSession *)m->get_connection()->get_priv();
+  MonSession *s = op->get_session();
   if (!s) {
     dout(10) << "no session, dropping" << dendl;
-    m->put();
     return true;
   }
 
@@ -439,7 +440,7 @@ bool AuthMonitor::prep_auth(MAuth *m, bool paxos_writable)
      request. If a client tries to send it later, it'll screw up its auth
      session */
   if (!s->global_id) {
-    s->global_id = assign_global_id(m, paxos_writable);
+    s->global_id = assign_global_id(op, paxos_writable);
     if (!s->global_id) {
 
       delete s->auth_handler;
@@ -447,7 +448,7 @@ bool AuthMonitor::prep_auth(MAuth *m, bool paxos_writable)
 
       if (mon->is_leader() && paxos_writable) {
         dout(10) << "increasing global id, waitlisting message" << dendl;
-        wait_for_active(new C_RetryMessage(this, m));
+        wait_for_active(op, new C_RetryMessage(this, op));
         goto done;
       }
 
@@ -459,7 +460,7 @@ bool AuthMonitor::prep_auth(MAuth *m, bool paxos_writable)
 	MMonGlobalID *req = new MMonGlobalID();
 	req->old_max_id = max_global_id;
 	mon->messenger->send_message(req, mon->monmap->get_inst(leader));
-	wait_for_finished_proposal(new C_RetryMessage(this, m));
+	wait_for_finished_proposal(op, new C_RetryMessage(this, op));
 	return true;
       }
 
@@ -486,7 +487,7 @@ bool AuthMonitor::prep_auth(MAuth *m, bool paxos_writable)
       ret = s->auth_handler->handle_request(indata, response_bl, s->global_id, caps_info, &auid);
     }
     if (ret == -EIO) {
-      wait_for_active(new C_RetryMessage(this,m));
+      wait_for_active(op, new C_RetryMessage(this,op));
       goto done;
     }
     if (caps_info.caps.length()) {
@@ -508,15 +509,15 @@ bool AuthMonitor::prep_auth(MAuth *m, bool paxos_writable)
 
 reply:
   reply = new MAuthReply(proto, &response_bl, ret, s->global_id);
-  mon->send_reply(m, reply);
-  m->put();
+  mon->send_reply(op, reply);
 done:
   s->put();
   return true;
 }
 
-bool AuthMonitor::preprocess_command(MMonCommand *m)
+bool AuthMonitor::preprocess_command(MonOpRequestRef op)
 {
+  MMonCommand *m = static_cast<MMonCommand*>(op->get_req());
   int r = -1;
   bufferlist rdata;
   stringstream ss, ds;
@@ -525,7 +526,7 @@ bool AuthMonitor::preprocess_command(MMonCommand *m)
   if (!cmdmap_from_json(m->cmd, &cmdmap, ss)) {
     // ss has reason for failure
     string rs = ss.str();
-    mon->reply_command(m, -EINVAL, rs, rdata, get_last_committed());
+    mon->reply_command(op, -EINVAL, rs, rdata, get_last_committed());
     return true;
   }
 
@@ -542,7 +543,7 @@ bool AuthMonitor::preprocess_command(MMonCommand *m)
 
   MonSession *session = m->get_session();
   if (!session) {
-    mon->reply_command(m, -EACCES, "access denied", rdata, get_last_committed());
+    mon->reply_command(op, -EACCES, "access denied", rdata, get_last_committed());
     return true;
   }
 
@@ -552,7 +553,7 @@ bool AuthMonitor::preprocess_command(MMonCommand *m)
   EntityName entity;
   if (!entity_name.empty() && !entity.from_str(entity_name)) {
     ss << "invalid entity_auth " << entity_name;
-    mon->reply_command(m, -EINVAL, ss.str(), get_last_committed());
+    mon->reply_command(op, -EINVAL, ss.str(), get_last_committed());
     return true;
   }
 
@@ -638,7 +639,7 @@ bool AuthMonitor::preprocess_command(MMonCommand *m)
   rdata.append(ds);
   string rs;
   getline(ss, rs, '\0');
-  mon->reply_command(m, r, rs, rdata, get_last_committed());
+  mon->reply_command(op, r, rs, rdata, get_last_committed());
   return true;
 }
 
@@ -662,8 +663,9 @@ void AuthMonitor::import_keyring(KeyRing& keyring)
   }
 }
 
-bool AuthMonitor::prepare_command(MMonCommand *m)
+bool AuthMonitor::prepare_command(MonOpRequestRef op)
 {
+  MMonCommand *m = static_cast<MMonCommand*>(op->get_req());
   stringstream ss, ds;
   bufferlist rdata;
   string rs;
@@ -673,7 +675,7 @@ bool AuthMonitor::prepare_command(MMonCommand *m)
   if (!cmdmap_from_json(m->cmd, &cmdmap, ss)) {
     // ss has reason for failure
     string rs = ss.str();
-    mon->reply_command(m, -EINVAL, rs, rdata, get_last_committed());
+    mon->reply_command(op, -EINVAL, rs, rdata, get_last_committed());
     return true;
   }
 
@@ -690,7 +692,7 @@ bool AuthMonitor::prepare_command(MMonCommand *m)
 
   MonSession *session = m->get_session();
   if (!session) {
-    mon->reply_command(m, -EACCES, "access denied", rdata, get_last_committed());
+    mon->reply_command(op, -EACCES, "access denied", rdata, get_last_committed());
     return true;
   }
 
@@ -713,7 +715,7 @@ bool AuthMonitor::prepare_command(MMonCommand *m)
     if (bl.length() == 0) {
       ss << "auth import: no data supplied";
       getline(ss, rs);
-      mon->reply_command(m, -EINVAL, rs, get_last_committed());
+      mon->reply_command(op, -EINVAL, rs, get_last_committed());
       return true;
     }
     bufferlist::iterator iter = bl.begin();
@@ -729,7 +731,7 @@ bool AuthMonitor::prepare_command(MMonCommand *m)
     ss << "imported keyring";
     getline(ss, rs);
     err = 0;
-    wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs,
+    wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs,
 					      get_last_committed() + 1));
     return true;
   } else if (prefix == "auth add" && !entity_name.empty()) {
@@ -766,8 +768,8 @@ bool AuthMonitor::prepare_command(MMonCommand *m)
         ::decode(inc, q);
         if (inc.op == KeyServerData::AUTH_INC_ADD &&
             inc.name == entity) {
-          wait_for_finished_proposal(
-              new Monitor::C_Command(mon, m, 0, rs, get_last_committed() + 1));
+          wait_for_finished_proposal(op,
+              new Monitor::C_Command(mon, op, 0, rs, get_last_committed() + 1));
           return true;
         }
       }
@@ -852,7 +854,7 @@ bool AuthMonitor::prepare_command(MMonCommand *m)
 
     ss << "added key for " << auth_inc.name;
     getline(ss, rs);
-    wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs,
+    wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs,
 						   get_last_committed() + 1));
     return true;
   } else if ((prefix == "auth get-or-create-key" ||
@@ -910,7 +912,7 @@ bool AuthMonitor::prepare_command(MMonCommand *m)
 	::decode(auth_inc, q);
 	if (auth_inc.op == KeyServerData::AUTH_INC_ADD &&
 	    auth_inc.name == entity) {
-	  wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs,
+	  wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs,
 						get_last_committed() + 1));
 	  return true;
 	}
@@ -946,7 +948,7 @@ bool AuthMonitor::prepare_command(MMonCommand *m)
 
     rdata.append(ds);
     getline(ss, rs);
-    wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, rdata,
+    wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs, rdata,
 					      get_last_committed() + 1));
     return true;
   } else if (prefix == "auth caps" && !entity_name.empty()) {
@@ -974,7 +976,7 @@ bool AuthMonitor::prepare_command(MMonCommand *m)
 
     ss << "updated caps for " << auth_inc.name;
     getline(ss, rs);
-    wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs,
+    wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs,
 					      get_last_committed() + 1));
     return true;
   } else if (prefix == "auth del" && !entity_name.empty()) {
@@ -990,7 +992,7 @@ bool AuthMonitor::prepare_command(MMonCommand *m)
 
     ss << "updated";
     getline(ss, rs);
-    wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs,
+    wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs,
 					      get_last_committed() + 1));
     return true;
   }
@@ -998,16 +1000,15 @@ bool AuthMonitor::prepare_command(MMonCommand *m)
 done:
   rdata.append(ds);
   getline(ss, rs, '\0');
-  mon->reply_command(m, err, rs, rdata, get_last_committed());
+  mon->reply_command(op, err, rs, rdata, get_last_committed());
   return false;
 }
 
-bool AuthMonitor::prepare_global_id(MMonGlobalID *m)
+bool AuthMonitor::prepare_global_id(MonOpRequestRef op)
 {
   dout(10) << "AuthMonitor::prepare_global_id" << dendl;
   increase_max_global_id();
 
-  m->put();
   return true;
 }
 

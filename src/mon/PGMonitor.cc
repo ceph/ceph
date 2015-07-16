@@ -575,57 +575,61 @@ version_t PGMonitor::get_trim_to()
   return 0;
 }
 
-bool PGMonitor::preprocess_query(PaxosServiceMessage *m)
+bool PGMonitor::preprocess_query(MonOpRequestRef op)
 {
+  op->mark_pgmon_event(__func__);
+  PaxosServiceMessage *m = static_cast<PaxosServiceMessage*>(op->get_req());
   dout(10) << "preprocess_query " << *m << " from " << m->get_orig_source_inst() << dendl;
   switch (m->get_type()) {
   case CEPH_MSG_STATFS:
-    handle_statfs(static_cast<MStatfs*>(m));
+    handle_statfs(op);
     return true;
   case MSG_GETPOOLSTATS:
-    return preprocess_getpoolstats(static_cast<MGetPoolStats*>(m));
+    return preprocess_getpoolstats(op);
     
   case MSG_PGSTATS:
-    return preprocess_pg_stats(static_cast<MPGStats*>(m));
+    return preprocess_pg_stats(op);
 
   case MSG_MON_COMMAND:
-    return preprocess_command(static_cast<MMonCommand*>(m));
+    return preprocess_command(op);
 
 
   default:
     assert(0);
-    m->put();
     return true;
   }
 }
 
-bool PGMonitor::prepare_update(PaxosServiceMessage *m)
+bool PGMonitor::prepare_update(MonOpRequestRef op)
 {
+  op->mark_pgmon_event(__func__);
+  PaxosServiceMessage *m = static_cast<PaxosServiceMessage*>(op->get_req());
   dout(10) << "prepare_update " << *m << " from " << m->get_orig_source_inst() << dendl;
   switch (m->get_type()) {
   case MSG_PGSTATS:
-    return prepare_pg_stats((MPGStats*)m);
+    return prepare_pg_stats(op);
 
   case MSG_MON_COMMAND:
-    return prepare_command(static_cast<MMonCommand*>(m));
+    return prepare_command(op);
 
   default:
     assert(0);
-    m->put();
     return false;
   }
 }
 
-void PGMonitor::handle_statfs(MStatfs *statfs)
+void PGMonitor::handle_statfs(MonOpRequestRef op)
 {
+  op->mark_pgmon_event(__func__);
+  MStatfs *statfs = static_cast<MStatfs*>(op->get_req());
   // check caps
   MonSession *session = statfs->get_session();
   if (!session)
-    goto out;
+    return;
   if (!session->is_capable("pg", MON_CAP_R)) {
     dout(0) << "MStatfs received from entity with insufficient privileges "
 	    << session->caps << dendl;
-    goto out;
+    return;
   }
   MStatfsReply *reply;
 
@@ -633,7 +637,7 @@ void PGMonitor::handle_statfs(MStatfs *statfs)
 
   if (statfs->fsid != mon->monmap->fsid) {
     dout(0) << "handle_statfs on fsid " << statfs->fsid << " != " << mon->monmap->fsid << dendl;
-    goto out;
+    return;
   }
 
   // fill out stfs
@@ -646,13 +650,13 @@ void PGMonitor::handle_statfs(MStatfs *statfs)
   reply->h.st.num_objects = pg_map.pg_sum.stats.sum.num_objects;
 
   // reply
-  mon->send_reply(statfs, reply);
- out:
-  statfs->put();
+  mon->send_reply(op, reply);
 }
 
-bool PGMonitor::preprocess_getpoolstats(MGetPoolStats *m)
+bool PGMonitor::preprocess_getpoolstats(MonOpRequestRef op)
 {
+  op->mark_pgmon_event(__func__);
+  MGetPoolStats *m = static_cast<MGetPoolStats*>(op->get_req());
   MGetPoolStatsReply *reply;
 
   MonSession *session = m->get_session();
@@ -682,27 +686,26 @@ bool PGMonitor::preprocess_getpoolstats(MGetPoolStats *m)
     reply->pool_stats[*p] = pg_map.pg_pool_sum[poolid];
   }
 
-  mon->send_reply(m, reply);
+  mon->send_reply(op, reply);
 
  out:
-  m->put();
   return true;
 }
 
 
-bool PGMonitor::preprocess_pg_stats(MPGStats *stats)
+bool PGMonitor::preprocess_pg_stats(MonOpRequestRef op)
 {
+  op->mark_pgmon_event(__func__);
+  MPGStats *stats = static_cast<MPGStats*>(op->get_req());
   // check caps
   MonSession *session = stats->get_session();
   if (!session) {
     dout(10) << "PGMonitor::preprocess_pg_stats: no monitor session!" << dendl;
-    stats->put();
     return true;
   }
   if (!session->is_capable("pg", MON_CAP_R)) {
     derr << "PGMonitor::preprocess_pg_stats: MPGStats received from entity "
          << "with insufficient privileges " << session->caps << dendl;
-    stats->put();
     return true;
   }
 
@@ -711,7 +714,7 @@ bool PGMonitor::preprocess_pg_stats(MPGStats *stats)
   if (stats->had_map_for > 30.0 && 
       mon->osdmon()->is_readable() &&
       stats->epoch < mon->osdmon()->osdmap.get_epoch())
-    mon->osdmon()->send_latest_now_nodelete(stats, stats->epoch+1);
+    mon->osdmon()->send_latest_now_nodelete(op, stats->epoch+1);
 
   // Always forward the PGStats to the leader, even if they are the same as
   // the old PGStats. The leader will mark as down osds that haven't sent
@@ -742,14 +745,15 @@ bool PGMonitor::pg_stats_have_changed(int from, const MPGStats *stats) const
   return false;
 }
 
-bool PGMonitor::prepare_pg_stats(MPGStats *stats) 
+bool PGMonitor::prepare_pg_stats(MonOpRequestRef op)
 {
+  op->mark_pgmon_event(__func__);
+  MPGStats *stats = static_cast<MPGStats*>(op->get_req());
   dout(10) << "prepare_pg_stats " << *stats << " from " << stats->get_orig_source() << dendl;
   int from = stats->get_orig_source().num();
 
   if (stats->fsid != mon->monmap->fsid) {
     dout(0) << "prepare_pg_stats on fsid " << stats->fsid << " != " << mon->monmap->fsid << dendl;
-    stats->put();
     return false;
   }
 
@@ -759,7 +763,6 @@ bool PGMonitor::prepare_pg_stats(MPGStats *stats)
       !mon->osdmon()->osdmap.is_up(from) ||
       stats->get_orig_source_inst() != mon->osdmon()->osdmap.get_inst(from)) {
     dout(1) << " ignoring stats from non-active osd." << dendl;
-    stats->put();
     return false;
   }
       
@@ -772,8 +775,7 @@ bool PGMonitor::prepare_pg_stats(MPGStats *stats)
 	 ++p) {
       ack->pg_stat[p->first] = make_pair(p->second.reported_seq, p->second.reported_epoch);
     }
-    mon->send_reply(stats, ack);
-    stats->put();
+    mon->send_reply(op, ack);
     return false;
   }
 
@@ -791,6 +793,7 @@ bool PGMonitor::prepare_pg_stats(MPGStats *stats)
 
   // pg stats
   MPGStatsAck *ack = new MPGStatsAck;
+  MonOpRequestRef ack_op = mon->op_tracker.create_request<MonOpRequest>(ack);
   ack->set_tid(stats->get_tid());
   for (map<pg_t,pg_stat_t>::iterator p = stats->pg_stat.begin();
        p != stats->pg_stat.end();
@@ -835,15 +838,18 @@ bool PGMonitor::prepare_pg_stats(MPGStats *stats)
     */
   }
   
-  wait_for_finished_proposal(new C_Stats(this, stats, ack));
+  wait_for_finished_proposal(op, new C_Stats(this, op, ack_op));
   return true;
 }
 
-void PGMonitor::_updated_stats(MPGStats *req, MPGStatsAck *ack)
+void PGMonitor::_updated_stats(MonOpRequestRef op, MonOpRequestRef ack_op)
 {
-  dout(7) << "_updated_stats for " << req->get_orig_source_inst() << dendl;
-  mon->send_reply(req, ack);
-  req->put();
+  op->mark_pgmon_event(__func__);
+  ack_op->mark_pgmon_event(__func__);
+  MPGStats *ack = static_cast<MPGStats*>(ack_op->get_req());
+  dout(7) << "_updated_stats for "
+          << op->get_req()->get_orig_source_inst() << dendl;
+  mon->send_reply(op, ack);
 }
 
 
@@ -873,13 +879,13 @@ void PGMonitor::check_osd_map(epoch_t epoch)
 
   if (!mon->osdmon()->is_readable()) {
     dout(10) << "check_osd_map -- osdmap not readable, waiting" << dendl;
-    mon->osdmon()->wait_for_readable(new RetryCheckOSDMap(this, epoch));
+    mon->osdmon()->wait_for_readable_ctx(new RetryCheckOSDMap(this, epoch));
     return;
   }
 
   if (!is_writeable()) {
     dout(10) << "check_osd_map -- pgmap not writeable, waiting" << dendl;
-    wait_for_writeable(new RetryCheckOSDMap(this, epoch));
+    wait_for_writeable_ctx(new RetryCheckOSDMap(this, epoch));
     return;
   }
 
@@ -1456,8 +1462,10 @@ void PGMonitor::dump_info(Formatter *f)
   f->dump_unsigned("pgmap_last_committed", get_last_committed());
 }
 
-bool PGMonitor::preprocess_command(MMonCommand *m)
+bool PGMonitor::preprocess_command(MonOpRequestRef op)
 {
+  op->mark_pgmon_event(__func__);
+  MMonCommand *m = static_cast<MMonCommand*>(op->get_req());
   int r = -1;
   bufferlist rdata;
   stringstream ss, ds;
@@ -1467,7 +1475,7 @@ bool PGMonitor::preprocess_command(MMonCommand *m)
   if (!cmdmap_from_json(m->cmd, &cmdmap, ss)) {
     // ss has reason for failure
     string rs = ss.str();
-    mon->reply_command(m, -EINVAL, rs, rdata, get_last_committed());
+    mon->reply_command(op, -EINVAL, rs, rdata, get_last_committed());
     return true;
   }
 
@@ -1476,7 +1484,7 @@ bool PGMonitor::preprocess_command(MMonCommand *m)
 
   MonSession *session = m->get_session();
   if (!session) {
-    mon->reply_command(m, -EACCES, "access denied", rdata, get_last_committed());
+    mon->reply_command(op, -EACCES, "access denied", rdata, get_last_committed());
     return true;
   }
 
@@ -1508,7 +1516,7 @@ bool PGMonitor::preprocess_command(MMonCommand *m)
       r = -ENOENT;
       ss << "pool " << poolstr << " does not exist";
       string rs = ss.str();
-      mon->reply_command(m, r, rs, get_last_committed());
+      mon->reply_command(op, r, rs, get_last_committed());
       return true;
     }
     cmd_putval(g_ceph_context, cmdmap, "pool", pool);
@@ -1778,12 +1786,14 @@ bool PGMonitor::preprocess_command(MMonCommand *m)
   string rs;
   getline(ss, rs);
   rdata.append(ds);
-  mon->reply_command(m, r, rs, rdata, get_last_committed());
+  mon->reply_command(op, r, rs, rdata, get_last_committed());
   return true;
 }
 
-bool PGMonitor::prepare_command(MMonCommand *m)
+bool PGMonitor::prepare_command(MonOpRequestRef op)
 {
+  op->mark_pgmon_event(__func__);
+  MMonCommand *m = static_cast<MMonCommand*>(op->get_req());
   stringstream ss;
   pg_t pgid;
   epoch_t epoch = mon->osdmon()->osdmap.get_epoch();
@@ -1794,7 +1804,7 @@ bool PGMonitor::prepare_command(MMonCommand *m)
   if (!cmdmap_from_json(m->cmd, &cmdmap, ss)) {
     // ss has reason for failure
     string rs = ss.str();
-    mon->reply_command(m, -EINVAL, rs, get_last_committed());
+    mon->reply_command(op, -EINVAL, rs, get_last_committed());
     return true;
   }
 
@@ -1803,7 +1813,7 @@ bool PGMonitor::prepare_command(MMonCommand *m)
 
   MonSession *session = m->get_session();
   if (!session) {
-    mon->reply_command(m, -EACCES, "access denied", get_last_committed());
+    mon->reply_command(op, -EACCES, "access denied", get_last_committed());
     return true;
   }
 
@@ -1857,13 +1867,13 @@ bool PGMonitor::prepare_command(MMonCommand *m)
   getline(ss, rs);
   if (r < 0 && rs.length() == 0)
     rs = cpp_strerror(r);
-  mon->reply_command(m, r, rs, get_last_committed());
+  mon->reply_command(op, r, rs, get_last_committed());
   return false;
 
  update:
   getline(ss, rs);
-  wait_for_finished_proposal(new Monitor::C_Command(mon, m, r, rs,
-						    get_last_committed() + 1));
+  wait_for_finished_proposal(op, new Monitor::C_Command(
+        mon, op, r, rs, get_last_committed() + 1));
   return true;
 }
 

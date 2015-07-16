@@ -39,6 +39,7 @@ noinst_HEADERS += \
 	mon/MonMap.h \
 	mon/Monitor.h \
 	mon/MonitorDBStore.h \
+	mon/MonOpRequest.h \
 	mon/OSDMonitor.h \
 	mon/PGMap.h \
 	mon/PGMonitor.h \

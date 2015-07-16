@@ -207,8 +207,10 @@ void Elector::victory()
 }
 
 
-void Elector::handle_propose(MMonElection *m)
+void Elector::handle_propose(MonOpRequestRef op)
 {
+  op->mark_event("elector:handle_propose");
+  MMonElection *m = static_cast<MMonElection*>(op->get_req());
   dout(5) << "handle_propose from " << m->get_source() << dendl;
   int from = m->get_source().num();
 
@@ -221,7 +223,7 @@ void Elector::handle_propose(MMonElection *m)
       required_features) {
     dout(5) << " ignoring propose from mon" << from
 	    << " without required features" << dendl;
-    nak_old_peer(m);
+    nak_old_peer(op);
     return;
   } else if (m->epoch > epoch) {
     bump_epoch(m->epoch);
@@ -236,7 +238,6 @@ void Elector::handle_propose(MMonElection *m)
       mon->start_election();
     } else {
       dout(5) << " ignoring old propose" << dendl;
-      m->put();
       return;
     }
   }
@@ -263,12 +264,12 @@ void Elector::handle_propose(MMonElection *m)
       dout(5) << "no, we already acked " << leader_acked << dendl;
     }
   }
-  
-  m->put();
 }
  
-void Elector::handle_ack(MMonElection *m)
+void Elector::handle_ack(MonOpRequestRef op)
 {
+  op->mark_event("elector:handle_ack");
+  MMonElection *m = static_cast<MMonElection*>(op->get_req());
   dout(5) << "handle_ack from " << m->get_source() << dendl;
   int from = m->get_source().num();
 
@@ -277,7 +278,6 @@ void Elector::handle_ack(MMonElection *m)
     dout(5) << "woah, that's a newer epoch, i must have rebooted.  bumping and re-starting!" << dendl;
     bump_epoch(m->epoch);
     start();
-    m->put();
     return;
   }
   assert(m->epoch == epoch);
@@ -286,7 +286,6 @@ void Elector::handle_ack(MMonElection *m)
       required_features) {
     dout(5) << " ignoring ack from mon" << from
 	    << " without required features" << dendl;
-    m->put();
     return;
   }
   
@@ -306,13 +305,13 @@ void Elector::handle_ack(MMonElection *m)
     // ignore, i'm deferring already.
     assert(leader_acked >= 0);
   }
-  
-  m->put();
 }
 
 
-void Elector::handle_victory(MMonElection *m)
+void Elector::handle_victory(MonOpRequestRef op)
 {
+  op->mark_event("elector:handle_victory");
+  MMonElection *m = static_cast<MMonElection*>(op->get_req());
   dout(5) << "handle_victory from " << m->get_source() << " quorum_features " << m->quorum_features << dendl;
   int from = m->get_source().num();
 
@@ -326,7 +325,6 @@ void Elector::handle_victory(MMonElection *m)
     dout(5) << "woah, that's a funny epoch, i must have rebooted.  bumping and re-starting!" << dendl;
     bump_epoch(m->epoch);
     start();
-    m->put();
     return;
   }
 
@@ -351,12 +349,12 @@ void Elector::handle_victory(MMonElection *m)
     mon->get_classic_monitor_commands(&new_cmds, &cmdsize);
     mon->set_leader_supported_commands(new_cmds, cmdsize);
   }
-
-  m->put();
 }
 
-void Elector::nak_old_peer(MMonElection *m)
+void Elector::nak_old_peer(MonOpRequestRef op)
 {
+  op->mark_event("elector:nak_old_peer");
+  MMonElection *m = static_cast<MMonElection*>(op->get_req());
   uint64_t supported_features = m->get_connection()->get_features();
 
   if (supported_features & CEPH_FEATURE_OSDMAP_ENC) {
@@ -371,11 +369,12 @@ void Elector::nak_old_peer(MMonElection *m)
     mon->features.encode(reply->sharing_bl);
     m->get_connection()->send_message(reply);
   }
-  m->put();
 }
 
-void Elector::handle_nak(MMonElection *m)
+void Elector::handle_nak(MonOpRequestRef op)
 {
+  op->mark_event("elector:handle_nak");
+  MMonElection *m = static_cast<MMonElection*>(op->get_req());
   dout(1) << "handle_nak from " << m->get_source()
 	  << " quorum_features " << m->quorum_features << dendl;
 
@@ -391,44 +390,43 @@ void Elector::handle_nak(MMonElection *m)
   // the end!
 }
 
-void Elector::dispatch(Message *m)
+void Elector::dispatch(MonOpRequestRef op)
 {
-  switch (m->get_type()) {
+  op->mark_event("elector:dispatch");
+  assert(op->is_type_election());
+
+  switch (op->get_req()->get_type()) {
     
   case MSG_MON_ELECTION:
     {
       if (!participating) {
-        m->put();
         return;
       }
-      if (m->get_source().num() >= mon->monmap->size()) {
+      if (op->get_req()->get_source().num() >= mon->monmap->size()) {
 	dout(5) << " ignoring bogus election message with bad mon rank " 
-		<< m->get_source() << dendl;
-	m->put();
+		<< op->get_req()->get_source() << dendl;
 	return;
       }
 
-      MMonElection *em = static_cast<MMonElection*>(m);
+      MMonElection *em = static_cast<MMonElection*>(op->get_req());
 
       // assume an old message encoding would have matched
       if (em->fsid != mon->monmap->fsid) {
 	dout(0) << " ignoring election msg fsid " 
 		<< em->fsid << " != " << mon->monmap->fsid << dendl;
-	m->put();
 	return;
       }
 
-      if (!mon->monmap->contains(m->get_source_addr())) {
-	dout(1) << "discarding election message: " << m->get_source_addr()
+      if (!mon->monmap->contains(em->get_source_addr())) {
+	dout(1) << "discarding election message: " << em->get_source_addr()
 		<< " not in my monmap " << *mon->monmap << dendl;
-	m->put();
 	return;
       }
 
       MonMap *peermap = new MonMap;
       peermap->decode(em->monmap_bl);
       if (peermap->epoch > mon->monmap->epoch) {
-	dout(0) << m->get_source_inst() << " has newer monmap epoch " << peermap->epoch
+	dout(0) << em->get_source_inst() << " has newer monmap epoch " << peermap->epoch
 		<< " > my epoch " << mon->monmap->epoch 
 		<< ", taking it"
 		<< dendl;
@@ -440,12 +438,11 @@ void Elector::dispatch(Message *m)
 	//mon->monmon()->paxos->stash_latest(mon->monmap->epoch, em->monmap_bl);
 	cancel_timer();
 	mon->bootstrap();
-	m->put();
 	delete peermap;
 	return;
       }
       if (peermap->epoch < mon->monmap->epoch) {
-	dout(0) << m->get_source_inst() << " has older monmap epoch " << peermap->epoch
+	dout(0) << em->get_source_inst() << " has older monmap epoch " << peermap->epoch
 		<< " < my epoch " << mon->monmap->epoch 
 		<< dendl;
       } 
@@ -453,25 +450,24 @@ void Elector::dispatch(Message *m)
 
       switch (em->op) {
       case MMonElection::OP_PROPOSE:
-	handle_propose(em);
+	handle_propose(op);
 	return;
       }
 
       if (em->epoch < epoch) {
 	dout(5) << "old epoch, dropping" << dendl;
-	em->put();
 	break;
       }
 
       switch (em->op) {
       case MMonElection::OP_ACK:
-	handle_ack(em);
+	handle_ack(op);
 	return;
       case MMonElection::OP_VICTORY:
-	handle_victory(em);
+	handle_victory(op);
 	return;
       case MMonElection::OP_NAK:
-	handle_nak(em);
+	handle_nak(op);
 	return;
       default:
 	assert(0);
