@@ -118,7 +118,7 @@ public:
   // Largest object seen
   uint64_t max_obj_size;
   // Highest mtime seen
-  time_t   max_mtime;
+  int64_t   max_mtime;
 
   AccumulateResult()
     : ceiling_obj_index(0), ceiling_obj_size(0), max_obj_size(0), max_mtime(0)
