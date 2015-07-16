@@ -37,7 +37,7 @@ ObjectRecorder::ObjectRecorder(librados::IoCtx &ioctx, const std::string &oid,
 }
 
 ObjectRecorder::~ObjectRecorder() {
-  cancel_append_task();
+  assert(m_append_task == NULL);
   assert(m_append_buffers.empty());
   assert(m_in_flight_appends.empty());
 }
@@ -72,12 +72,12 @@ void ObjectRecorder::flush(Context *on_safe) {
       future = Future(m_append_buffers.rbegin()->first);
 
       flush_appends(true);
-      cancel_append_task();
     } else if (!m_in_flight_appends.empty()) {
       AppendBuffers &append_buffers = m_in_flight_appends.rbegin()->second;
       assert(!append_buffers.empty());
       future = Future(append_buffers.rbegin()->first);
     }
+    cancel_append_task();
   }
 
   if (future.is_valid()) {
@@ -85,7 +85,6 @@ void ObjectRecorder::flush(Context *on_safe) {
   } else {
     on_safe->complete(0);
   }
-
 }
 
 void ObjectRecorder::flush(const FutureImplPtr &future) {
@@ -140,16 +139,11 @@ bool ObjectRecorder::close_object() {
 }
 
 void ObjectRecorder::handle_append_task() {
-  {
-    Mutex::Locker locker(m_lock);
-    flush_appends(true);
-  }
+  assert(m_timer_lock.is_locked());
+  m_append_task = NULL;
 
-  {
-    Mutex::Locker locker(m_timer_lock);
-    m_append_task = NULL;
-    put();
-  }
+  Mutex::Locker locker(m_lock);
+  flush_appends(true);
 }
 
 void ObjectRecorder::cancel_append_task() {
@@ -157,14 +151,12 @@ void ObjectRecorder::cancel_append_task() {
   if (m_append_task != NULL) {
     m_timer.cancel_event(m_append_task);
     m_append_task = NULL;
-    put();
   }
 }
 
 void ObjectRecorder::schedule_append_task() {
   Mutex::Locker locker(m_timer_lock);
   if (m_append_task == NULL && m_flush_age > 0) {
-    get();
     m_append_task = new C_AppendTask(this);
     m_timer.add_event_after(m_flush_age, m_append_task);
   }

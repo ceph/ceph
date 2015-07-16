@@ -19,10 +19,10 @@ ObjectPlayer::ObjectPlayer(librados::IoCtx &ioctx,
   : RefCountedObject(NULL, 0), m_object_num(object_num),
     m_oid(utils::get_object_name(object_oid_prefix, m_object_num)),
     m_cct(NULL), m_timer(timer), m_timer_lock(timer_lock), m_order(order),
-    m_watch_interval(0), m_watch_task(NULL), m_watch_fetch(this),
+    m_watch_interval(0), m_watch_task(NULL),
     m_lock(utils::unique_lock_name("ObjectPlayer::m_lock", this)),
     m_fetch_in_progress(false), m_read_off(0), m_watch_ctx(NULL),
-    m_watch_ctx_in_progress(false) {
+    m_watch_in_progress(false) {
   m_ioctx.dup(ioctx);
   m_cct = reinterpret_cast<CephContext*>(m_ioctx.cct());
 }
@@ -30,6 +30,7 @@ ObjectPlayer::ObjectPlayer(librados::IoCtx &ioctx,
 ObjectPlayer::~ObjectPlayer() {
   {
     Mutex::Locker locker(m_lock);
+    assert(!m_fetch_in_progress);
     assert(m_watch_ctx == NULL);
   }
 }
@@ -54,29 +55,33 @@ void ObjectPlayer::fetch(Context *on_finish) {
 
 void ObjectPlayer::watch(Context *on_fetch, double interval) {
   ldout(m_cct, 20) << __func__ << ": " << m_oid << " watch" << dendl;
-  {
-    Mutex::Locker locker(m_lock);
-    assert(m_watch_ctx == NULL);
-    m_watch_ctx = on_fetch;
-  }
-  {
-    Mutex::Locker locker(m_timer_lock);
-    m_watch_interval = interval;
-  }
+
+  Mutex::Locker timer_locker(m_timer_lock);
+  m_watch_interval = interval;
+
+  Mutex::Locker locker(m_lock);
+  assert(m_watch_ctx == NULL);
+  m_watch_ctx = on_fetch;
+
   schedule_watch();
 }
 
 void ObjectPlayer::unwatch() {
   ldout(m_cct, 20) << __func__ << ": " << m_oid << " unwatch" << dendl;
-  {
-    Mutex::Locker locker(m_lock);
-    while (m_watch_ctx_in_progress) {
-      m_watch_ctx_cond.Wait(m_lock);
-    }
-    delete m_watch_ctx;
-    m_watch_ctx = NULL;
-  }
+  Mutex::Locker timer_locker(m_timer_lock);
+  Mutex::Locker locker(m_lock);
+
   cancel_watch();
+
+  Context *ctx = m_watch_ctx;
+  m_watch_ctx = NULL;
+
+  m_timer_lock.Unlock();
+  while (m_watch_in_progress) {
+    m_watch_in_progress_cond.Wait(m_lock);
+  }
+  m_timer_lock.Lock();
+  delete ctx;
 }
 
 void ObjectPlayer::front(Entry *entry) const {
@@ -167,16 +172,21 @@ int ObjectPlayer::handle_fetch_complete(int r, const bufferlist &bl) {
 }
 
 void ObjectPlayer::schedule_watch() {
+  assert(m_timer_lock.is_locked());
+  assert(m_lock.is_locked());
+  if (m_watch_ctx == NULL) {
+    return;
+  }
+
   ldout(m_cct, 20) << __func__ << ": " << m_oid << " scheduling watch" << dendl;
-  Mutex::Locker locker(m_timer_lock);
   assert(m_watch_task == NULL);
   m_watch_task = new C_WatchTask(this);
   m_timer.add_event_after(m_watch_interval, m_watch_task);
 }
 
 void ObjectPlayer::cancel_watch() {
+  assert(m_timer_lock.is_locked());
   ldout(m_cct, 20) << __func__ << ": " << m_oid << " cancelling watch" << dendl;
-  Mutex::Locker locker(m_timer_lock);
   if (m_watch_task != NULL) {
     m_timer.cancel_event(m_watch_task);
     m_watch_task = NULL;
@@ -184,28 +194,34 @@ void ObjectPlayer::cancel_watch() {
 }
 
 void ObjectPlayer::handle_watch_task() {
+  assert(m_timer_lock.is_locked());
+
   ldout(m_cct, 10) << __func__ << ": " << m_oid << " polling" << dendl;
   {
-    Mutex::Locker locker(m_timer_lock);
+    Mutex::Locker locker(m_lock);
+    assert(m_watch_ctx != NULL);
+
+    m_watch_in_progress = true;
     m_watch_task = NULL;
   }
-  fetch(&m_watch_fetch);
+  fetch(new C_WatchFetch(this));
 }
 
 void ObjectPlayer::handle_watch_fetched(int r) {
   ldout(m_cct, 10) << __func__ << ": " << m_oid << " poll complete, r=" << r
                    << dendl;
-  if (r == -ENOENT) {
-    schedule_watch();
-    return;
-  }
 
-  Context *on_finish;
+  Context *on_finish = NULL;
   {
+    Mutex::Locker timer_locker(m_timer_lock);
     Mutex::Locker locker(m_lock);
-    m_watch_ctx_in_progress = true;
-    on_finish = m_watch_ctx;
-    m_watch_ctx = NULL;
+    assert(m_watch_in_progress);
+    if (r == -ENOENT) {
+      schedule_watch();
+    } else {
+      on_finish = m_watch_ctx;
+      m_watch_ctx = NULL;
+    }
   }
 
   if (on_finish != NULL) {
@@ -214,15 +230,14 @@ void ObjectPlayer::handle_watch_fetched(int r) {
 
   {
     Mutex::Locker locker(m_lock);
-    m_watch_ctx_in_progress = false;
-    m_watch_ctx_cond.Signal();
+    m_watch_in_progress = false;
+    m_watch_in_progress_cond.Signal();
   }
 }
 
 void ObjectPlayer::C_Fetch::finish(int r) {
   r = object_player->handle_fetch_complete(r, read_bl);
   on_finish->complete(r);
-  object_player->put();
 }
 
 void ObjectPlayer::C_WatchTask::finish(int r) {
