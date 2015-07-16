@@ -65,7 +65,7 @@ LIBRGW_DEPS += \
 	-lfcgi \
 	-ldl
 
-CIVETWEB_INCLUDE = --include civetweb/include/civetweb_conf.h
+CIVETWEB_INCLUDE = --include $(srcdir)/civetweb/include/civetweb_conf.h
 
 libcivetweb_la_SOURCES =  \
 	rgw/rgw_civetweb.cc \
@@ -73,7 +73,7 @@ libcivetweb_la_SOURCES =  \
 	civetweb/src/civetweb.c
 
 libcivetweb_la_CXXFLAGS = ${CIVETWEB_INCLUDE} -Woverloaded-virtual ${AM_CXXFLAGS}
-libcivetweb_la_CFLAGS = -Icivetweb/include ${CIVETWEB_INCLUDE}
+libcivetweb_la_CFLAGS = -I$(srcdir)/civetweb/include ${CIVETWEB_INCLUDE}
 
 noinst_LTLIBRARIES += libcivetweb.la
 
