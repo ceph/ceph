@@ -3874,6 +3874,7 @@ int OSDMonitor::prepare_pool_crush_ruleset(const unsigned pool_type,
 					   int *crush_ruleset,
 					   stringstream &ss)
 {
+
   if (*crush_ruleset < 0) {
     switch (pool_type) {
     case pg_pool_t::TYPE_REPLICATED:
@@ -3983,6 +3984,14 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid,
   int r;
   r = prepare_pool_crush_ruleset(pool_type, erasure_code_profile,
 				 crush_ruleset_name, &crush_ruleset, ss);
+  if (r)
+    return r;
+  CrushWrapper newcrush;
+  _get_pending_crush(newcrush);
+  CrushTester tester(newcrush, ss);
+  r = tester.test_with_crushtool(g_conf->crushtool.c_str(),
+				 osdmap.get_max_osd(),
+				 g_conf->mon_lease);
   if (r)
     return r;
   unsigned size, min_size;

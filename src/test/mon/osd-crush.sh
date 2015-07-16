@@ -78,6 +78,9 @@ function TEST_crush_rule_rm() {
 
 function TEST_crush_rule_create_erasure() {
     local dir=$1
+    # should have at least one OSD
+    run_osd $dir 0 || return 1
+
     local ruleset=ruleset3
     #
     # create a new ruleset with the default profile, implicitly
@@ -108,6 +111,15 @@ function TEST_crush_rule_create_erasure() {
     ./ceph osd erasure-code-profile ls | grep default || return 1
     ./ceph osd crush rule rm $ruleset || return 1
     ! ./ceph osd crush rule ls | grep $ruleset || return 1
+    #
+    # create a bugous ruleset and verify it cannot be used
+    # to create a pool.
+    #
+    ceph osd erasure-code-profile set myprofile plugin=lrc mapping=__DD__DD layers='[[ "_cDD_cDD", "" ],[ "cDDD____", "" ],[ "____cDDD", "" ],]' ruleset-steps='[ [ "choose", "datacenter", 3 ], [ "chooseleaf", "osd", 0] ]'
+    expect_failure $dir "Error EINVAL" \
+        ./ceph osd pool create mypool 1 1 erasure myprofile || return 1
+    ./ceph osd crush rule rm mypool || return 1
+    ./ceph osd erasure-code-profile rm myprofile || return 1
 }
 
 function check_ruleset_id_match_rule_id() {
