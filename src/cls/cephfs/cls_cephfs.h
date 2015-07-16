@@ -59,7 +59,7 @@ class AccumulateArgs
 public:
   uint64_t obj_index;
   uint64_t obj_size;
-  time_t mtime;
+  int64_t mtime;
   std::string obj_xattr_name;
   std::string mtime_xattr_name;
   std::string obj_size_xattr_name;
