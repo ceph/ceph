@@ -219,12 +219,7 @@ public:
     unsigned raw_length() const;
     int raw_nref() const;
 
-    void copy_out(unsigned o, unsigned l, char *dest) const {
-      assert(_raw);
-      if (!((o <= _len) && (o+l <= _len)))
-	throw end_of_buffer();
-      memcpy(dest, c_str()+o, l);
-    }
+    void copy_out(unsigned o, unsigned l, char *dest) const;
 
     bool can_zero_copy() const;
     int zero_copy_to_fd(int fd, int64_t *offset) const;

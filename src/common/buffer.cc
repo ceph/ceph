@@ -781,6 +781,38 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
   unsigned buffer::ptr::raw_length() const { assert(_raw); return _raw->len; }
   int buffer::ptr::raw_nref() const { assert(_raw); return _raw->nref.read(); }
 
+  void buffer::ptr::copy_out(unsigned o, unsigned l, char *dest) const {
+    assert(_raw);
+    if (o+l > _len)
+        throw end_of_buffer();
+    char* src =  _raw->data + _off + o;
+    if (l > 8) {
+        memcpy(dest, src, l);
+        return;
+    }
+    switch (l) {
+        case 8:
+            *((uint64_t*)(dest)) = *((uint64_t*)(src));
+            return;
+        case 4:
+            *((uint32_t*)(dest)) = *((uint32_t*)(src));
+            return;
+        case 3:
+            *((uint16_t*)(dest)) = *((uint16_t*)(src));
+            *((uint8_t*)(dest+2)) = *((uint8_t*)(src+2));
+            return;
+        case 2:
+            *((uint16_t*)(dest)) = *((uint16_t*)(src));
+            return;
+        case 1:
+            *((uint8_t*)(dest)) = *((uint8_t*)(src));
+            return;
+        default:
+            memcpy(dest, src, l);
+            return;
+        }
+    }
+
   unsigned buffer::ptr::wasted()
   {
     assert(_raw);
