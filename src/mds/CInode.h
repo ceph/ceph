@@ -1095,10 +1095,12 @@ public:
    * @param results A freshly-created validated_data struct, with values set
    * as described in the struct documentation.
    * @param mdr The request to be responeded upon the completion of the
-   * validation.
+   * validation (or NULL)
+   * @param fin Context to call back on completion (or NULL)
    */
   void validate_disk_state(validated_data *results,
-                           MDRequestRef& mdr);
+                           MDRequestRef& mdr,
+                           MDSInternalContext *fin);
   static void dump_validation_results(const validated_data& results,
                                       Formatter *f);
 private:

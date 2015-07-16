@@ -11710,7 +11710,7 @@ void MDCache::scrub_dentry_work(MDRequestRef& mdr)
   CInode::validated_data *vr =
       static_cast<CInode::validated_data*>(mdr->internal_op_private);
 
-  in->validate_disk_state(vr, mdr);
+  in->validate_disk_state(vr, mdr, NULL);
   return;
 }
 

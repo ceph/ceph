@@ -367,14 +367,47 @@ void ScrubStack::scrub_dirfrag(CDir *dir, bool *added_children,
   }
 }
 
+class C_InodeValidated : public MDSInternalContext
+{
+  public:
+    ScrubStack *stack;
+    CInode::validated_data result;
+    CDentry *target;
+
+    C_InodeValidated(MDSRank *mds, ScrubStack *stack_, CDentry *target_)
+      : MDSInternalContext(mds), stack(stack_), target(target_)
+    {}
+
+    void finish(int r)
+    {
+      stack->_scrub_file_dentry_done(target, r, result);
+    }
+};
+
 void ScrubStack::scrub_file_dentry(CDentry *dn)
 {
-  // No-op:
-  // TODO: hook into validate_disk_state
+  assert(dn->get_linkage()->get_inode() != NULL);
+
+  CInode *in = dn->get_linkage()->get_inode();
+  C_InodeValidated *fin = new C_InodeValidated(mdcache->mds, this, dn);
+
+  // At this stage the DN is already past scrub_initialize, so
+  // it's in the cache, it has PIN_SCRUBQUEUE and it is authpinned
+  MDRequestRef null_mdr;
+  in->validate_disk_state(&fin->result, null_mdr, fin);
+}
+
+void ScrubStack::_scrub_file_dentry_done(CDentry *dn, int r,
+    const CInode::validated_data &result)
+{
+  // FIXME: do something real with result!  DamageTable!  Spamming
+  // the cluster log for debugging purposes
+  LogChannelRef clog = mdcache->mds->clog;
+  clog->info() << " scrubbed file dentry " << dn->name << " r=" << r;
+
   Context *c = NULL;
   dn->scrub_finished(&c);
   if (c) {
-    // FIXME: pass some error code in?
     finisher->queue(new MDSIOContextWrapper(mdcache->mds, c), 0);
   }
 }
