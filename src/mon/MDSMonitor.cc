@@ -138,6 +138,11 @@ void MDSMonitor::update_from_paxos(bool *need_bootstrap)
   update_logger();
 }
 
+void MDSMonitor::init()
+{
+  (void)load_metadata(pending_metadata);
+}
+
 void MDSMonitor::create_pending()
 {
   pending_mdsmap = mdsmap;
@@ -175,8 +180,8 @@ void MDSMonitor::encode_pending(MonitorDBStore::TransactionRef t)
       i != pending_daemon_health_rm.end(); ++i) {
     t->erase(MDS_HEALTH_PREFIX, stringify(*i));
   }
-  remove_from_metadata(t);
   pending_daemon_health_rm.clear();
+  remove_from_metadata(t);
 }
 
 version_t MDSMonitor::get_trim_to()
@@ -1757,42 +1762,31 @@ void MDSMonitor::update_metadata(mds_gid_t gid,
   if (metadata.empty()) {
     return;
   }
-  bufferlist bl;
-  int err = mon->store->get(MDS_METADATA_PREFIX, "last_metadata", bl);
-  map<mds_gid_t, Metadata> last_metadata;
-  if (!err) {
-    bufferlist::iterator iter = bl.begin();
-    ::decode(last_metadata, iter);
-    bl.clear();
-  }
-  last_metadata[gid] = metadata;
+  pending_metadata[gid] = metadata;
 
   MonitorDBStore::TransactionRef t = paxos->get_pending_transaction();
-  ::encode(last_metadata, bl);
+  bufferlist bl;
+  ::encode(pending_metadata, bl);
   t->put(MDS_METADATA_PREFIX, "last_metadata", bl);
   paxos->trigger_propose();
 }
 
 void MDSMonitor::remove_from_metadata(MonitorDBStore::TransactionRef t)
 {
+  bool update = false;
+  for (map<mds_gid_t, Metadata>::iterator i = pending_metadata.begin();
+       i != pending_metadata.end(); ) {
+    if (pending_mdsmap.get_state_gid(i->first) == MDSMap::STATE_NULL) {
+      pending_metadata.erase(i++);
+      update = true;
+    } else {
+      ++i;
+    }
+  }
+  if (!update)
+    return;
   bufferlist bl;
-  int err = mon->store->get(MDS_METADATA_PREFIX, "last_metadata", bl);
-  map<mds_gid_t, Metadata> last_metadata;
-  if (err) {
-    return;
-  }
-  bufferlist::iterator iter = bl.begin();
-  ::decode(last_metadata, iter);
-  bl.clear();
-
-  if (pending_daemon_health_rm.empty()) {
-    return;
-  }
-  for (std::set<uint64_t>::const_iterator to_remove = pending_daemon_health_rm.begin();
-       to_remove != pending_daemon_health_rm.end(); ++to_remove) {
-    last_metadata.erase(mds_gid_t(*to_remove));
-  }
-  ::encode(last_metadata, bl);
+  ::encode(pending_metadata, bl);
   t->put(MDS_METADATA_PREFIX, "last_metadata", bl);
 }
 
@@ -1852,7 +1846,10 @@ int MDSMonitor::print_nodes(Formatter *f)
       continue;
     }
     const mds_gid_t gid = it->first;
-    assert(mdsmap.get_state_gid(gid) != MDSMap::STATE_NULL);
+    if (mdsmap.get_state_gid(gid) == MDSMap::STATE_NULL) {
+      dout(5) << __func__ << ": GID " << gid << " not existent" << dendl;
+      continue;
+    }
     const MDSMap::mds_info_t& mds_info = mdsmap.get_info_gid(gid);
     mdses[hostname->second].push_back(mds_info.rank);
   }

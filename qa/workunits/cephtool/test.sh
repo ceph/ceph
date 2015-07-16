@@ -579,6 +579,7 @@ function test_mon_misc()
   ceph_watch_wait "$mymsg"
 
   ceph mon_metadata a
+  ceph node ls
 }
 
 function check_mds_active()
@@ -882,6 +883,25 @@ function test_mon_mds()
 
   ceph osd pool delete fs_data fs_data --yes-i-really-really-mean-it
   ceph osd pool delete fs_metadata fs_metadata --yes-i-really-really-mean-it
+}
+
+function test_mon_mds_metadata()
+{
+  local nmons=$(ceph tell 'mon.*' version | grep -c 'version')
+  test "$nmons" -gt 0
+
+  ceph mds dump |
+  sed -nEe "s/^([0-9]+):.*'([a-z])' mds\\.([0-9]+)\\..*/\\1 \\2 \\3/p" |
+  while read gid id rank; do
+    ceph mds metadata ${gid} | grep '"hostname":'
+    ceph mds metadata ${id} | grep '"hostname":'
+    ceph mds metadata ${rank} | grep '"hostname":'
+
+    local n=$(ceph tell 'mon.*' mds metadata ${id} | grep -c '"hostname":')
+    test "$n" -eq "$nmons"
+  done
+
+  expect_false ceph mds metadata UNKNOWN
 }
 
 function test_mon_mon()
@@ -1642,6 +1662,7 @@ OSD_TESTS+=" osd_bench"
 
 MDS_TESTS+=" mds_tell"
 MDS_TESTS+=" mon_mds"
+MDS_TESTS+=" mon_mds_metadata"
 
 TESTS+=$MON_TESTS
 TESTS+=$OSD_TESTS
