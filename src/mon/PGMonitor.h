@@ -74,40 +74,40 @@ private:
   void read_pgmap_full();
   void apply_pgmap_delta(bufferlist& bl);
 
-  bool preprocess_query(PaxosServiceMessage *m);  // true if processed.
-  bool prepare_update(PaxosServiceMessage *m);
+  bool preprocess_query(MonOpRequestRef op);  // true if processed.
+  bool prepare_update(MonOpRequestRef op);
 
-  bool preprocess_pg_stats(MPGStats *stats);
+  bool preprocess_pg_stats(MonOpRequestRef op);
   bool pg_stats_have_changed(int from, const MPGStats *stats) const;
-  bool prepare_pg_stats(MPGStats *stats);
-  void _updated_stats(MPGStats *req, MPGStatsAck *ack);
+  bool prepare_pg_stats(MonOpRequestRef op);
+  void _updated_stats(MonOpRequestRef op, MonOpRequestRef ack_op);
 
-  struct C_Stats : public Context {
+  struct C_Stats : public C_MonOp {
     PGMonitor *pgmon;
-    MPGStats *req;
-    MPGStatsAck *ack;
+    MonOpRequestRef stats_op_ack;
     entity_inst_t who;
-    C_Stats(PGMonitor *p, MPGStats *r, MPGStatsAck *a) : pgmon(p), req(r), ack(a) {}
-    void finish(int r) {
+    C_Stats(PGMonitor *p,
+            MonOpRequestRef op,
+            MonOpRequestRef op_ack)
+      : C_MonOp(op), pgmon(p), stats_op_ack(op_ack) {}
+    void _finish(int r) {
       if (r >= 0) {
-	pgmon->_updated_stats(req, ack);
+	pgmon->_updated_stats(op, stats_op_ack);
       } else if (r == -ECANCELED) {
-	req->put();
-	ack->put();
+        return;
       } else if (r == -EAGAIN) {
-	pgmon->dispatch(req);
-	ack->put();
+	pgmon->dispatch(op);
       } else {
 	assert(0 == "bad C_Stats return value");
       }
     }    
   };
 
-  void handle_statfs(MStatfs *statfs);
-  bool preprocess_getpoolstats(MGetPoolStats *m);
+  void handle_statfs(MonOpRequestRef op);
+  bool preprocess_getpoolstats(MonOpRequestRef op);
 
-  bool preprocess_command(MMonCommand *m);
-  bool prepare_command(MMonCommand *m);
+  bool preprocess_command(MonOpRequestRef op);
+  bool prepare_command(MonOpRequestRef op);
 
   map<int,utime_t> last_sent_pg_create;  // per osd throttle
 

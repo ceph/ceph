@@ -126,17 +126,17 @@ void MonmapMonitor::on_active()
     mon->clog->info() << "monmap " << *mon->monmap << "\n";
 }
 
-bool MonmapMonitor::preprocess_query(PaxosServiceMessage *m)
+bool MonmapMonitor::preprocess_query(MonOpRequestRef op)
 {
+  PaxosServiceMessage *m = static_cast<PaxosServiceMessage*>(op->get_req());
   switch (m->get_type()) {
     // READs
   case MSG_MON_COMMAND:
-    return preprocess_command(static_cast<MMonCommand*>(m));
+    return preprocess_command(op);
   case MSG_MON_JOIN:
-    return preprocess_join(static_cast<MMonJoin*>(m));
+    return preprocess_join(op);
   default:
     assert(0);
-    m->put();
     return true;
   }
 }
@@ -154,8 +154,9 @@ void MonmapMonitor::dump_info(Formatter *f)
   f->close_section();
 }
 
-bool MonmapMonitor::preprocess_command(MMonCommand *m)
+bool MonmapMonitor::preprocess_command(MonOpRequestRef op)
 {
+  MMonCommand *m = static_cast<MMonCommand*>(op->get_req());
   int r = -1;
   bufferlist rdata;
   stringstream ss;
@@ -163,7 +164,7 @@ bool MonmapMonitor::preprocess_command(MMonCommand *m)
   map<string, cmd_vartype> cmdmap;
   if (!cmdmap_from_json(m->cmd, &cmdmap, ss)) {
     string rs = ss.str();
-    mon->reply_command(m, -EINVAL, rs, rdata, get_last_committed());
+    mon->reply_command(op, -EINVAL, rs, rdata, get_last_committed());
     return true;
   }
 
@@ -172,7 +173,7 @@ bool MonmapMonitor::preprocess_command(MMonCommand *m)
 
   MonSession *session = m->get_session();
   if (!session) {
-    mon->reply_command(m, -EACCES, "access denied", get_last_committed());
+    mon->reply_command(op, -EACCES, "access denied", get_last_committed());
     return true;
   }
 
@@ -249,32 +250,33 @@ reply:
     string rs;
     getline(ss, rs);
 
-    mon->reply_command(m, r, rs, rdata, get_last_committed());
+    mon->reply_command(op, r, rs, rdata, get_last_committed());
     return true;
   } else
     return false;
 }
 
 
-bool MonmapMonitor::prepare_update(PaxosServiceMessage *m)
+bool MonmapMonitor::prepare_update(MonOpRequestRef op)
 {
+  PaxosServiceMessage *m = static_cast<PaxosServiceMessage*>(op->get_req());
   dout(7) << "prepare_update " << *m << " from " << m->get_orig_source_inst() << dendl;
   
   switch (m->get_type()) {
   case MSG_MON_COMMAND:
-    return prepare_command(static_cast<MMonCommand*>(m));
+    return prepare_command(op);
   case MSG_MON_JOIN:
-    return prepare_join(static_cast<MMonJoin*>(m));
+    return prepare_join(op);
   default:
     assert(0);
-    m->put();
   }
 
   return false;
 }
 
-bool MonmapMonitor::prepare_command(MMonCommand *m)
+bool MonmapMonitor::prepare_command(MonOpRequestRef op)
 {
+  MMonCommand *m = static_cast<MMonCommand*>(op->get_req());
   stringstream ss;
   string rs;
   int err = -EINVAL;
@@ -282,7 +284,7 @@ bool MonmapMonitor::prepare_command(MMonCommand *m)
   map<string, cmd_vartype> cmdmap;
   if (!cmdmap_from_json(m->cmd, &cmdmap, ss)) {
     string rs = ss.str();
-    mon->reply_command(m, -EINVAL, rs, get_last_committed());
+    mon->reply_command(op, -EINVAL, rs, get_last_committed());
     return true;
   }
 
@@ -291,7 +293,7 @@ bool MonmapMonitor::prepare_command(MMonCommand *m)
 
   MonSession *session = m->get_session();
   if (!session) {
-    mon->reply_command(m, -EACCES, "access denied", get_last_committed());
+    mon->reply_command(op, -EACCES, "access denied", get_last_committed());
     return true;
   }
 
@@ -351,7 +353,7 @@ bool MonmapMonitor::prepare_command(MMonCommand *m)
     pending_map.add(name, addr);
     pending_map.last_changed = ceph_clock_now(g_ceph_context);
     getline(ss, rs);
-    wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs,
+    wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs,
                                                      get_last_committed() + 1));
     return true;
 
@@ -375,7 +377,7 @@ bool MonmapMonitor::prepare_command(MMonCommand *m)
     ss << "removed mon." << name << " at " << addr << ", there are now " << pending_map.size() << " monitors" ;
     getline(ss, rs);
     // send reply immediately in case we get removed
-    mon->reply_command(m, 0, rs, get_last_committed());
+    mon->reply_command(op, 0, rs, get_last_committed());
     return true;
   }
   else
@@ -383,36 +385,35 @@ bool MonmapMonitor::prepare_command(MMonCommand *m)
 
 out:
   getline(ss, rs);
-  mon->reply_command(m, err, rs, get_last_committed());
+  mon->reply_command(op, err, rs, get_last_committed());
   return false;
 }
 
-bool MonmapMonitor::preprocess_join(MMonJoin *join)
+bool MonmapMonitor::preprocess_join(MonOpRequestRef op)
 {
+  MMonJoin *join = static_cast<MMonJoin*>(op->get_req());
   dout(10) << "preprocess_join " << join->name << " at " << join->addr << dendl;
 
   MonSession *session = join->get_session();
   if (!session ||
       !session->is_capable("mon", MON_CAP_W | MON_CAP_X)) {
     dout(10) << " insufficient caps" << dendl;
-    join->put();
     return true;
   }
 
   if (pending_map.contains(join->name) && !pending_map.get_addr(join->name).is_blank_ip()) {
     dout(10) << " already have " << join->name << dendl;
-    join->put();
     return true;
   }
   if (pending_map.contains(join->addr) && pending_map.get_name(join->addr) == join->name) {
     dout(10) << " already have " << join->addr << dendl;
-    join->put();
     return true;
   }
   return false;
 }
-bool MonmapMonitor::prepare_join(MMonJoin *join)
+bool MonmapMonitor::prepare_join(MonOpRequestRef op)
 {
+  MMonJoin *join = static_cast<MMonJoin*>(op->get_req());
   dout(0) << "adding/updating " << join->name << " at " << join->addr << " to monitor cluster" << dendl;
   if (pending_map.contains(join->name))
     pending_map.remove(join->name);
@@ -420,7 +421,6 @@ bool MonmapMonitor::prepare_join(MMonJoin *join)
     pending_map.remove(pending_map.get_name(join->addr));
   pending_map.add(join->name, join->addr);
   pending_map.last_changed = ceph_clock_now(g_ceph_context);
-  join->put();
   return true;
 }
 
