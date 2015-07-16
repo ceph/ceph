@@ -1,5 +1,9 @@
 v9.0.4
-~~~~~
+======
+
+
+v9.0.3
+======
 
 * The return code for librbd's rbd_aio_read and Image::aio_read API methods no
   longer returns the number of bytes read upon success.  Instead, it returns 0
