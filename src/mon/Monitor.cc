@@ -168,7 +168,10 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
   required_features(0),
   leader(0),
   quorum_features(0),
+  // scrub
   scrub_version(0),
+  scrub_event(NULL),
+  scrub_timeout_event(NULL),
 
   // sync state
   sync_provider_count(0),
@@ -451,6 +454,8 @@ const char** Monitor::get_tracked_conf_keys() const
     "mon_health_to_clog",
     "mon_health_to_clog_interval",
     "mon_health_to_clog_tick_interval",
+    // scrub interval
+    "mon_scrub_interval",
     NULL
   };
   return KEYS;
@@ -474,6 +479,10 @@ void Monitor::handle_conf_change(const struct md_config_t *conf,
       changed.count("mon_health_to_clog_interval") ||
       changed.count("mon_health_to_clog_tick_interval")) {
     health_to_clog_update_conf(changed);
+  }
+
+  if (changed.count("mon_scrub_interval")) {
+    scrub_update_interval(conf->mon_scrub_interval);
   }
 }
 
@@ -996,6 +1005,7 @@ void Monitor::_reset()
   cancel_probe_timeout();
   timecheck_finish();
   health_events_cleanup();
+  scrub_event_cancel();
 
   leader_since = utime_t();
   if (!quorum.empty()) {
@@ -1859,6 +1869,7 @@ void Monitor::win_election(epoch_t epoch, set<int>& active, uint64_t features,
     timecheck_start();
     health_tick_start();
     do_health_to_clog_interval();
+    scrub_event_start();
   }
   collect_sys_info(&metadata[rank], g_ceph_context);
 }
@@ -2736,7 +2747,7 @@ void Monitor::handle_command(MMonCommand *m)
   if (prefix == "scrub" || prefix == "mon scrub") {
     wait_for_paxos_write();
     if (is_leader()) {
-      int r = scrub();
+      int r = scrub_start();
       reply_command(m, r, "", rdata, 0);
     } else if (is_peon()) {
       forward_request_leader(m);
@@ -4338,7 +4349,7 @@ int Monitor::print_nodes(Formatter *f, ostream& err)
 // ----------------------------------------------
 // scrub
 
-int Monitor::scrub()
+int Monitor::scrub_start()
 {
   dout(10) << __func__ << dendl;
   assert(is_leader());
@@ -4353,24 +4364,56 @@ int Monitor::scrub()
     return -EBUSY;
   }
 
+  scrub_event_cancel();
   scrub_result.clear();
+  scrub_state.reset(new ScrubState);
+
+  scrub();
+  return 0;
+}
+
+int Monitor::scrub()
+{
+  assert(is_leader());
+  assert(scrub_state);
+
+  scrub_cancel_timeout();
+  wait_for_paxos_write();
   scrub_version = paxos->get_version();
+
+
+  // scrub all keys if we're the only monitor in the quorum
+  int32_t num_keys =
+    (quorum.size() == 1 ? -1 : cct->_conf->mon_scrub_max_keys);
 
   for (set<int>::iterator p = quorum.begin();
        p != quorum.end();
        ++p) {
     if (*p == rank)
       continue;
-    MMonScrub *r = new MMonScrub(MMonScrub::OP_SCRUB, scrub_version);
+    MMonScrub *r = new MMonScrub(MMonScrub::OP_SCRUB, scrub_version,
+                                 num_keys);
+    r->key = scrub_state->last_key;
     messenger->send_message(r, monmap->get_inst(*p));
   }
 
   // scrub my keys
-  _scrub(&scrub_result[rank]);
+  bool r = _scrub(&scrub_result[rank],
+                  &scrub_state->last_key,
+                  &num_keys);
 
-  if (scrub_result.size() == quorum.size())
+  scrub_state->finished = !r;
+
+  // only after we got our scrub results do we really care whether the
+  // other monitors are late on their results.  Also, this way we avoid
+  // triggering the timeout if we end up getting stuck in _scrub() for
+  // longer than the duration of the timeout.
+  scrub_reset_timeout();
+
+  if (quorum.size() == 1) {
+    assert(scrub_state->finished == true);
     scrub_finish();
-
+  }
   return 0;
 }
 
@@ -4382,10 +4425,18 @@ void Monitor::handle_scrub(MMonScrub *m)
     {
       if (!is_peon())
 	break;
+
+      wait_for_paxos_write();
+
       if (m->version != paxos->get_version())
 	break;
-      MMonScrub *reply = new MMonScrub(MMonScrub::OP_RESULT, m->version);
-      _scrub(&reply->result);
+
+      MMonScrub *reply = new MMonScrub(MMonScrub::OP_RESULT,
+                                       m->version,
+                                       m->num_keys);
+
+      reply->key = m->key;
+      _scrub(&reply->result, &reply->key, &reply->num_keys);
       m->get_connection()->send_message(reply);
     }
     break;
@@ -4396,41 +4447,93 @@ void Monitor::handle_scrub(MMonScrub *m)
 	break;
       if (m->version != scrub_version)
 	break;
+      // reset the timeout each time we get a result
+      scrub_reset_timeout();
+
       int from = m->get_source().num();
       assert(scrub_result.count(from) == 0);
       scrub_result[from] = m->result;
 
-      if (scrub_result.size() == quorum.size())
-	scrub_finish();
+      if (scrub_result.size() == quorum.size()) {
+        scrub_check_results();
+        scrub_result.clear();
+        if (scrub_state->finished)
+          scrub_finish();
+        else
+          scrub();
+      }
     }
     break;
   }
   m->put();
 }
 
-void Monitor::_scrub(ScrubResult *r)
+bool Monitor::_scrub(ScrubResult *r,
+                     pair<string,string> *start,
+                     int *num_keys)
 {
+  assert(r != NULL);
+  assert(start != NULL);
+  assert(num_keys != NULL);
+
   set<string> prefixes = get_sync_targets_names();
   prefixes.erase("paxos");  // exclude paxos, as this one may have extra states for proposals, etc.
 
-  dout(10) << __func__ << " prefixes " << prefixes << dendl;
+  dout(10) << __func__ << " start (" << *start << ")"
+           << " num_keys " << *num_keys << dendl;
 
-  pair<string,string> start;
-  MonitorDBStore::Synchronizer synchronizer = store->get_synchronizer(start, prefixes);
+  MonitorDBStore::Synchronizer it = store->get_synchronizer(*start, prefixes);
 
-  while (synchronizer->has_next_chunk()) {
-    pair<string,string> k = synchronizer->get_next_key();
+  int scrubbed_keys = 0;
+  pair<string,string> last_key;
+
+  while (it->has_next_chunk()) {
+
+    if (*num_keys > 0 && scrubbed_keys == *num_keys)
+      break;
+
+    pair<string,string> k = it->get_next_key();
+    if (prefixes.count(k.first) == 0)
+      continue;
+
+    if (cct->_conf->mon_scrub_inject_missing_keys > 0.0 &&
+        (rand() % 10000 < cct->_conf->mon_scrub_inject_missing_keys*10000.0)) {
+      dout(10) << __func__ << " inject missing key, skipping (" << k << ")"
+               << dendl;
+      continue;
+    }
+
     bufferlist bl;
     store->get(k.first, k.second, bl);
-    dout(30) << __func__ << " " << k << " bl " << bl.length() << " bytes crc " << bl.crc32c(0) << dendl;
+    uint32_t key_crc = bl.crc32c(0);
+    dout(30) << __func__ << " " << k << " bl " << bl.length() << " bytes"
+                                     << " crc " << key_crc << dendl;
     r->prefix_keys[k.first]++;
     if (r->prefix_crc.count(k.first) == 0)
       r->prefix_crc[k.first] = 0;
     r->prefix_crc[k.first] = bl.crc32c(r->prefix_crc[k.first]);
+
+    if (cct->_conf->mon_scrub_inject_crc_mismatch > 0.0 &&
+        (rand() % 10000 < cct->_conf->mon_scrub_inject_crc_mismatch*10000.0)) {
+      dout(10) << __func__ << " inject failure at (" << k << ")" << dendl;
+      r->prefix_crc[k.first] += 1;
+    }
+
+    ++scrubbed_keys;
+    last_key = k;
   }
+
+  dout(20) << __func__ << " last_key (" << last_key << ")"
+                       << " scrubbed_keys " << scrubbed_keys
+                       << " has_next " << it->has_next_chunk() << dendl;
+
+  *start = last_key;
+  *num_keys = scrubbed_keys;
+
+  return it->has_next_chunk();
 }
 
-void Monitor::scrub_finish()
+void Monitor::scrub_check_results()
 {
   dout(10) << __func__ << dendl;
 
@@ -4451,18 +4554,91 @@ void Monitor::scrub_finish()
   }
   if (!errors)
     clog->info() << "scrub ok on " << quorum << ": " << mine << "\n";
+}
 
+inline void Monitor::scrub_timeout()
+{
+  dout(1) << __func__ << " restarting scrub" << dendl;
   scrub_reset();
+  scrub_start();
+}
+
+void Monitor::scrub_finish()
+{
+  dout(10) << __func__ << dendl;
+  scrub_reset();
+  scrub_event_start();
 }
 
 void Monitor::scrub_reset()
 {
   dout(10) << __func__ << dendl;
+  scrub_cancel_timeout();
   scrub_version = 0;
   scrub_result.clear();
+  scrub_state.reset();
 }
 
+inline void Monitor::scrub_update_interval(int secs)
+{
+  // we don't care about changes if we are not the leader.
+  // changes will be visible if we become the leader.
+  if (!is_leader())
+    return;
 
+  dout(1) << __func__ << " new interval = " << secs << dendl;
+
+  // if scrub already in progress, all changes will already be visible during
+  // the next round.  Nothing to do.
+  if (scrub_state != NULL)
+    return;
+
+  scrub_event_cancel();
+  scrub_event_start();
+}
+
+void Monitor::scrub_event_start()
+{
+  dout(10) << __func__ << dendl;
+
+  if (scrub_event)
+    scrub_event_cancel();
+
+  if (cct->_conf->mon_scrub_interval <= 0) {
+    dout(1) << __func__ << " scrub event is disabled"
+            << " (mon_scrub_interval = " << cct->_conf->mon_scrub_interval
+            << ")" << dendl;
+    return;
+  }
+
+  scrub_event = new C_Scrub(this);
+  timer.add_event_after(cct->_conf->mon_scrub_interval, scrub_event);
+}
+
+void Monitor::scrub_event_cancel()
+{
+  dout(10) << __func__ << dendl;
+  if (scrub_event) {
+    timer.cancel_event(scrub_event);
+    scrub_event = NULL;
+  }
+}
+
+inline void Monitor::scrub_cancel_timeout()
+{
+  if (scrub_timeout_event) {
+    timer.cancel_event(scrub_timeout_event);
+    scrub_timeout_event = NULL;
+  }
+}
+
+void Monitor::scrub_reset_timeout()
+{
+  dout(15) << __func__ << " reset timeout event" << dendl;
+  scrub_cancel_timeout();
+  scrub_timeout_event = new C_ScrubTimeout(this);
+  timer.add_event_after(g_conf->mon_scrub_timeout, scrub_timeout_event);
+}
 
 /************ TICK ***************/
 
