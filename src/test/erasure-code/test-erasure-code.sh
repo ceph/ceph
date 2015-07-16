@@ -125,6 +125,7 @@ function rados_osds_out_in() {
     # implies the PG have been moved to use the remaining OSDs.  Check
     # the object can still be retrieved.
     #
+    wait_for_clean || return 1
     local osds_list=$(get_osds $poolname $objname)
     local -a osds=($osds_list)
     for osd in 0 1 ; do
