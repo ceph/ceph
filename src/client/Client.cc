@@ -1397,7 +1397,7 @@ int Client::verify_reply_trace(int r,
 			 << " got_ino " << got_created_ino
 			 << " ino " << created_ino
 			 << dendl;
-	  r = _do_lookup(d->dir->parent_inode, d->name, &target);
+	  r = _do_lookup(d->dir->parent_inode, d->name, &target, uid, gid);
 	} else {
 	  // if the dentry is not linked, just do our best. see #5021.
 	  assert(0 == "how did this happen?  i want logs!");
@@ -5125,7 +5125,8 @@ void Client::renew_caps(MetaSession *session)
 // ===============================================================
 // high level (POSIXy) interface
 
-int Client::_do_lookup(Inode *dir, const string& name, InodeRef *target)
+int Client::_do_lookup(Inode *dir, const string& name, InodeRef *target,
+		       int uid, int gid)
 {
   int op = dir->snapid == CEPH_SNAPDIR ? CEPH_MDS_OP_LOOKUPSNAP : CEPH_MDS_OP_LOOKUP;
   MetaRequest *req = new MetaRequest(op);
@@ -5137,12 +5138,13 @@ int Client::_do_lookup(Inode *dir, const string& name, InodeRef *target)
   req->head.args.getattr.mask = 0;
   ldout(cct, 10) << "_do_lookup on " << path << dendl;
 
-  int r = make_request(req, 0, 0, target);
+  int r = make_request(req, uid, gid, target);
   ldout(cct, 10) << "_do_lookup res is " << r << dendl;
   return r;
 }
 
-int Client::_lookup(Inode *dir, const string& dname, InodeRef *target)
+int Client::_lookup(Inode *dir, const string& dname, InodeRef *target,
+		    int uid, int gid)
 {
   int r = 0;
   Dentry *dn = NULL;
@@ -5223,7 +5225,7 @@ int Client::_lookup(Inode *dir, const string& dname, InodeRef *target)
     }
   }
 
-  r = _do_lookup(dir, dname, target);
+  r = _do_lookup(dir, dname, target, uid, gid);
   goto done;
 
  hit_dn:
@@ -5274,7 +5276,8 @@ int Client::get_or_create(Inode *dir, const char* name,
   return 0;
 }
 
-int Client::path_walk(const filepath& origpath, InodeRef *end, bool followsym)
+int Client::path_walk(const filepath& origpath, InodeRef *end, bool followsym,
+		      int uid, int gid)
 {
   filepath path = origpath;
   InodeRef cur;
@@ -5294,7 +5297,7 @@ int Client::path_walk(const filepath& origpath, InodeRef *end, bool followsym)
     ldout(cct, 10) << " " << i << " " << *cur << " " << dname << dendl;
     ldout(cct, 20) << "  (path is " << path << ")" << dendl;
     InodeRef next;
-    int r = _lookup(cur.get(), dname, &next);
+    int r = _lookup(cur.get(), dname, &next, uid, gid);
     if (r < 0)
       return r;
     // only follow trailing symlink if followsym.  always follow
@@ -5437,7 +5440,7 @@ int Client::mkdir(const char *relpath, mode_t mode)
   return _mkdir(dir.get(), name.c_str(), mode);
 }
 
-int Client::mkdirs(const char *relpath, mode_t mode)
+int Client::mkdirs(const char *relpath, mode_t mode, int uid, int gid)
 {
   Mutex::Locker lock(client_lock);
   ldout(cct, 10) << "Client::mkdirs " << relpath << dendl;
@@ -5452,8 +5455,9 @@ int Client::mkdirs(const char *relpath, mode_t mode)
   InodeRef cur, next;
   cur = cwd;
   for (i=0; i<path.depth(); ++i) {
-    r=_lookup(cur.get(), path[i].c_str(), &next);
-    if (r < 0) break;
+    r = _lookup(cur.get(), path[i].c_str(), &next, uid, gid);
+    if (r < 0)
+      break;
     cur.swap(next);
   }
   //check that we have work left to do
@@ -5466,8 +5470,8 @@ int Client::mkdirs(const char *relpath, mode_t mode)
     r = _mkdir(cur.get(), path[i].c_str(), mode);
     //check proper creation/existence
     if (r < 0) return r;
-    r = _lookup(cur.get(), path[i], &next);
-    if(r < 0) {
+    r = _lookup(cur.get(), path[i], &next, uid, gid);
+    if (r < 0) {
       ldout(cct, 0) << "mkdirs: successfully created new directory " << path[i]
 	      << " but can't _lookup it!" << dendl;
       return r;
@@ -8519,7 +8523,7 @@ int Client::ll_lookup(Inode *parent, const char *name, struct stat *attr,
   InodeRef in;
   int r = 0;
 
-  r = _lookup(parent, dname, &in);
+  r = _lookup(parent, dname, &in, uid, gid);
   if (r < 0) {
     attr->st_ino = 0;
     goto out;
@@ -9621,7 +9625,7 @@ int Client::_unlink(Inode *dir, const char *name, int uid, int gid)
   req->dentry_drop = CEPH_CAP_FILE_SHARED;
   req->dentry_unless = CEPH_CAP_FILE_EXCL;
 
-  res = _lookup(dir, name, &otherin);
+  res = _lookup(dir, name, &otherin, uid, gid);
   if (res < 0)
     goto fail;
   req->set_other_inode(otherin.get());
@@ -9679,7 +9683,7 @@ int Client::_rmdir(Inode *dir, const char *name, int uid, int gid)
   int res = get_or_create(dir, name, &de);
   if (res < 0)
     goto fail;
-  res = _lookup(dir, name, &in);
+  res = _lookup(dir, name, &in, uid, gid);
   if (res < 0)
     goto fail;
   if (req->get_op() == CEPH_MDS_OP_RMDIR) {
@@ -9769,13 +9773,13 @@ int Client::_rename(Inode *fromdir, const char *fromname, Inode *todir, const ch
     req->dentry_unless = CEPH_CAP_FILE_EXCL;
 
     InodeRef oldin, otherin;
-    res = _lookup(fromdir, fromname, &oldin);
+    res = _lookup(fromdir, fromname, &oldin, uid, gid);
     if (res < 0)
       goto fail;
     req->set_old_inode(oldin.get());
     req->old_inode_drop = CEPH_CAP_LINK_SHARED;
 
-    res = _lookup(todir, toname, &otherin);
+    res = _lookup(todir, toname, &otherin, uid, gid);
     if (res != 0 && res != -ENOENT) {
       goto fail;
     } else if (res == 0) {
@@ -10086,7 +10090,7 @@ int Client::ll_create(Inode *parent, const char *name, mode_t mode,
 
   bool created = false;
   InodeRef in;
-  int r = _lookup(parent, name, &in);
+  int r = _lookup(parent, name, &in, uid, gid);
 
   if (r == 0 && (flags & O_CREAT) && (flags & O_EXCL))
     return -EEXIST;
