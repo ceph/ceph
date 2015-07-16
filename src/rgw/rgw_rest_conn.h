@@ -143,6 +143,13 @@ public:
 		      list<pair<string, string> > *extra_headers,
 		      RGWHTTPManager *_mgr);
 
+  void set_user_info(void *user_info) {
+    req.set_user_info(user_info);
+  }
+  void *get_user_info() {
+    return req.get_user_info();
+  }
+
   template <class T>
   int decode_resource(T *dest);
 

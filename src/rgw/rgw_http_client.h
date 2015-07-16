@@ -5,6 +5,7 @@
 #define CEPH_RGW_HTTP_CLIENT_H
 
 #include "common/RWLock.h"
+#include "common/Cond.h"
 #include "include/atomic.h"
 #include "rgw_common.h"
 
@@ -21,6 +22,8 @@ class RGWHTTPClient
 
   rgw_http_req_data *req_data;
 
+  void *user_info;
+
 protected:
   CephContext *cct;
 
@@ -28,7 +31,15 @@ protected:
   int init_request(const char *method, const char *url, rgw_http_req_data *req_data);
 public:
   virtual ~RGWHTTPClient();
-  RGWHTTPClient(CephContext *_cct): send_len (0), has_send_len(false), req_data(NULL), cct(_cct) {}
+  RGWHTTPClient(CephContext *_cct): send_len (0), has_send_len(false), req_data(NULL), user_info(NULL), cct(_cct) {}
+
+  void set_user_info(void *info) {
+    user_info = info;
+  }
+
+  void *get_user_info() {
+    return user_info;
+  }
 
   void append_header(const string& name, const string& val) {
     headers.push_back(pair<string, string>(name, val));
@@ -50,15 +61,32 @@ public:
   rgw_http_req_data *get_req_data() { return req_data; }
 };
 
+class RGWCompletionManager {
+  list<void *> complete_reqs;
+
+  Mutex lock;
+  Cond cond;
+
+  atomic_t going_down;
+
+public:
+  RGWCompletionManager() : lock("RGWCompletionManager::lock") {}
+
+  void complete(void *user_info);
+  int get_next(void **user_info);
+
+  void go_down();
+};
+
 class RGWHTTPManager {
   CephContext *cct;
+  RGWCompletionManager *completion_mgr;
   void *multi_handle;
   bool is_threaded;
   atomic_t going_down;
 
   RWLock reqs_lock;
   map<uint64_t, rgw_http_req_data *> reqs;
-  map<uint64_t, rgw_http_req_data *> complete_reqs;
   int64_t num_reqs;
   int64_t max_threaded_req;
   int thread_pipe[2];
@@ -87,7 +115,7 @@ class RGWHTTPManager {
   int signal_thread();
 
 public:
-  RGWHTTPManager(CephContext *_cct);
+  RGWHTTPManager(CephContext *_cct, RGWCompletionManager *completion_mgr = NULL);
   ~RGWHTTPManager();
 
   int set_threaded();
