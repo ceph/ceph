@@ -946,10 +946,11 @@ struct MonCommand {
   uint64_t flags;
 
   // MonCommand flags
-  enum {
-    FLAG_NOFORWARD = (1 << 0),
-  };
-
+  static const uint64_t FLAG_NONE       = 0;
+  static const uint64_t FLAG_NOFORWARD  = 1 << 0;
+  static const uint64_t FLAG_OBSOLETE   = 1 << 1;
+  static const uint64_t FLAG_DEPRECATED = 1 << 2;
+  
   bool has_flag(uint64_t flag) const { return (flags & flag) != 0; }
   void set_flag(uint64_t flag) { flags |= flag; }
   void unset_flag(uint64_t flag) { flags &= ~flag; }
@@ -974,9 +975,21 @@ struct MonCommand {
     ::decode(availability, bl);
   }
   bool is_compat(const MonCommand* o) const {
-    return cmdstring == o->cmdstring && helpstring == o->helpstring &&
+    return cmdstring == o->cmdstring &&
 	module == o->module && req_perms == o->req_perms &&
 	availability == o->availability;
+  }
+
+  bool is_noforward() const {
+    return has_flag(MonCommand::FLAG_NOFORWARD);
+  }
+
+  bool is_obsolete() const {
+    return has_flag(MonCommand::FLAG_OBSOLETE);
+  }
+
+  bool is_deprecated() const {
+    return has_flag(MonCommand::FLAG_DEPRECATED);
   }
 
   static void encode_array(const MonCommand *cmds, int size, bufferlist &bl) {

@@ -96,13 +96,15 @@ const string Monitor::MONITOR_NAME = "monitor";
 const string Monitor::MONITOR_STORE_PREFIX = "monitor_store";
 
 
+#undef FLAG
 #undef COMMAND
 #undef COMMAND_WITH_FLAG
 MonCommand mon_commands[] = {
+#define FLAG(f) (MonCommand::FLAG_##f)
 #define COMMAND(parsesig, helptext, modulename, req_perms, avail)	\
-  {parsesig, helptext, modulename, req_perms, avail, 0},
-#define COMMAND_WITH_FLAG(parsesig, helptext, modulename, req_perms, avail, flag) \
-  {parsesig, helptext, modulename, req_perms, avail, MonCommand::FLAG_##flag},
+  {parsesig, helptext, modulename, req_perms, avail, FLAG(NONE)},
+#define COMMAND_WITH_FLAG(parsesig, helptext, modulename, req_perms, avail, flags) \
+  {parsesig, helptext, modulename, req_perms, avail, flags},
 #include <mon/MonCommands.h>
 };
 #undef COMMAND
@@ -289,7 +291,7 @@ void Monitor::do_admin_command(string command, cmdmap_t& cmdmap, string format,
   args = "[" + args + "]";
  
   bool read_only = (command == "mon_status" ||
-		    command == "mon_metadata" ||
+		    command == "mon metadata" ||
 		    command == "quorum_status");
 
   (read_only ? audit_clog->debug() : audit_clog->info())
@@ -2609,7 +2611,7 @@ void Monitor::handle_command(MMonCommand *m)
                                               ARRAY_SIZE(mon_commands));
   if (!is_leader()) {
     if (!mon_cmd) {
-      if (leader_cmd->has_flag(MonCommand::FLAG_NOFORWARD)) {
+      if (leader_cmd->is_noforward()) {
 	reply_command(m, -EINVAL,
 		      "command not locally supported and not allowed to forward",
 		      0);
@@ -2620,7 +2622,7 @@ void Monitor::handle_command(MMonCommand *m)
       forward_request_leader(m);
       return;
     } else if (!mon_cmd->is_compat(leader_cmd)) {
-      if (mon_cmd->has_flag(MonCommand::FLAG_NOFORWARD)) {
+      if (mon_cmd->is_noforward()) {
 	reply_command(m, -EINVAL,
 		      "command not compatible with leader and not allowed to forward",
 		      0);
@@ -2633,7 +2635,16 @@ void Monitor::handle_command(MMonCommand *m)
     }
   }
 
-  if (session->proxy_con && mon_cmd->has_flag(MonCommand::FLAG_NOFORWARD)) {
+  if (mon_cmd->is_obsolete() ||
+      (cct->_conf->mon_debug_deprecated_as_obsolete
+       && mon_cmd->is_deprecated())) {
+    reply_command(m, -ENOTSUP,
+                  "command is obsolete; please check usage and/or man page",
+                  0);
+    return;
+  }
+
+  if (session->proxy_con && mon_cmd->is_noforward()) {
     dout(10) << "Got forward for noforward command " << m << dendl;
     reply_command(m, -EINVAL, "forward for noforward command", rdata, 0);
     return;
@@ -2681,7 +2692,16 @@ void Monitor::handle_command(MMonCommand *m)
     pgmon()->dispatch(m);
     return;
   }
-  if (module == "mon") {
+  if (module == "mon" &&
+      /* Let the Monitor class handle the following commands:
+       *  'mon compact'
+       *  'mon scrub'
+       *  'mon sync force'
+       */
+      prefix != "mon compact" &&
+      prefix != "mon scrub" &&
+      prefix != "mon sync force" &&
+      prefix != "mon metadata") {
     monmon()->dispatch(m);
     return;
   }
@@ -2713,7 +2733,7 @@ void Monitor::handle_command(MMonCommand *m)
     return;
   }
 
-  if (prefix == "scrub") {
+  if (prefix == "scrub" || prefix == "mon scrub") {
     wait_for_paxos_write();
     if (is_leader()) {
       int r = scrub();
@@ -2726,7 +2746,7 @@ void Monitor::handle_command(MMonCommand *m)
     return;
   }
 
-  if (prefix == "compact") {
+  if (prefix == "compact" || prefix == "mon compact") {
     dout(1) << "triggering manual compaction" << dendl;
     utime_t start = ceph_clock_now(g_ceph_context);
     store->compact();
@@ -2868,7 +2888,7 @@ void Monitor::handle_command(MMonCommand *m)
     rdata.append(ds);
     rs = "";
     r = 0;
-  } else if (prefix == "mon_metadata") {
+  } else if (prefix == "mon metadata") {
     string name;
     cmd_getval(g_ceph_context, cmdmap, "id", name);
     int mon = monmap->get_rank(name);
@@ -2903,7 +2923,8 @@ void Monitor::handle_command(MMonCommand *m)
     rdata.append(ds);
     rs = "";
     r = 0;
-  } else if (prefix == "sync force") {
+  } else if (prefix == "sync force" ||
+             prefix == "mon sync force") {
     string validate1, validate2;
     cmd_getval(g_ceph_context, cmdmap, "validate1", validate1);
     cmd_getval(g_ceph_context, cmdmap, "validate2", validate2);

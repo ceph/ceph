@@ -104,9 +104,17 @@
  * type, so the monitor is expected to know the type of each argument.
  * See cmdparse.cc/h for more details.
  *
- * The flag parameter for COMMAND_WITH_FLAGS macro may be:
+ * The flag parameter for COMMAND_WITH_FLAGS macro must be passed using
+ * FLAG(f), where 'f' may be one of the following:
  *
+ *  NONE      - no flag assigned
  *  NOFORWARD - command may not be forwarded
+ *  OBSOLETE  - command is considered obsolete
+ *  DEPRECATED - command is considered deprecated
+ *
+ * A command should always be first considered DEPRECATED before being
+ * considered OBSOLETE, giving due consideration to users and conforming
+ * to any guidelines regarding deprecating commands.
  */
 
 /*
@@ -215,16 +223,19 @@ COMMAND("auth del " \
 /*
  * Monitor commands (Monitor.cc)
  */
-COMMAND_WITH_FLAG("compact", "cause compaction of monitor's leveldb storage", \
-	     "mon", "rw", "cli,rest", NOFORWARD)
-COMMAND("scrub", "scrub the monitor stores", "mon", "rw", "cli,rest")
+COMMAND_WITH_FLAG("compact", "cause compaction of monitor's leveldb storage (DEPRECATED)", \
+	     "mon", "rw", "cli,rest", \
+             FLAG(NOFORWARD)|FLAG(DEPRECATED))
+COMMAND_WITH_FLAG("scrub", "scrub the monitor stores (DEPRECATED)", \
+             "mon", "rw", "cli,rest", \
+             FLAG(DEPRECATED))
 COMMAND("fsid", "show cluster FSID/UUID", "mon", "r", "cli,rest")
 COMMAND("log name=logtext,type=CephString,n=N", \
 	"log supplied text to the monitor log", "mon", "rw", "cli,rest")
 COMMAND_WITH_FLAG("injectargs " \
 	     "name=injected_args,type=CephString,n=N",			\
 	     "inject config arguments into monitor", "mon", "rw", "cli,rest",
-	     NOFORWARD)
+	     FLAG(NOFORWARD))
 COMMAND("status", "show cluster status", "mon", "r", "cli,rest")
 COMMAND("health name=detail,type=CephChoices,strings=detail,req=false", \
 	"show cluster health", "mon", "r", "cli,rest")
@@ -235,20 +246,19 @@ COMMAND("report name=tags,type=CephString,n=N,req=false", \
 	"mon", "r", "cli,rest")
 COMMAND("quorum_status", "report status of monitor quorum", \
 	"mon", "r", "cli,rest")
-COMMAND("mon_metadata name=id,type=CephString",
-	"fetch metadata for mon <id>",
-	"mon", "r", "cli,rest")
 
 COMMAND_WITH_FLAG("mon_status", "report status of monitors", "mon", "r", "cli,rest",
-	     NOFORWARD)
-COMMAND("sync force " \
+	     FLAG(NOFORWARD))
+COMMAND_WITH_FLAG("sync force " \
 	"name=validate1,type=CephChoices,strings=--yes-i-really-mean-it,req=false " \
 	"name=validate2,type=CephChoices,strings=--i-know-what-i-am-doing,req=false", \
-	"force sync of and clear monitor store", "mon", "rw", "cli,rest")
+	"force sync of and clear monitor store (DEPRECATED)", \
+        "mon", "rw", "cli,rest", \
+        FLAG(NOFORWARD)|FLAG(DEPRECATED))
 COMMAND_WITH_FLAG("heap " \
 	     "name=heapcmd,type=CephChoices,strings=dump|start_profiler|stop_profiler|release|stats", \
 	     "show heap usage info (available only if compiled with tcmalloc)", \
-	     "mon", "rw", "cli,rest", NOFORWARD)
+	     "mon", "rw", "cli,rest", FLAG(NOFORWARD))
 COMMAND("quorum name=quorumcmd,type=CephChoices,strings=enter|exit,n=1", \
 	"enter or exit quorum", "mon", "rw", "cli,rest")
 COMMAND("tell " \
@@ -256,10 +266,33 @@ COMMAND("tell " \
 	"name=args,type=CephString,n=N", \
 	"send a command to a specific daemon", "mon", "rw", "cli,rest")
 COMMAND_WITH_FLAG("version", "show mon daemon version", "mon", "r", "cli,rest",
-	     NOFORWARD)
+                  FLAG(NOFORWARD))
+
 COMMAND("node ls " \
 	"name=type,type=CephChoices,strings=all|osd|mon|mds,req=false",
 	"list all nodes in cluster [type]", "mon", "r", "cli,rest")
+/*
+ * Monitor-specific commands under module 'mon'
+ */
+COMMAND_WITH_FLAG("mon compact", \
+    "cause compaction of monitor's leveldb storage", \
+    "mon", "rw", "cli,rest", \
+    FLAG(NOFORWARD))
+COMMAND_WITH_FLAG("mon scrub",
+    "scrub the monitor stores", \
+    "mon", "rw", "cli,rest", \
+    FLAG(NONE))
+COMMAND_WITH_FLAG("mon sync force " \
+    "name=validate1,type=CephChoices,strings=--yes-i-really-mean-it,req=false " \
+    "name=validate2,type=CephChoices,strings=--i-know-what-i-am-doing,req=false", \
+    "force sync of and clear monitor store", \
+    "mon", "rw", "cli,rest", \
+    FLAG(NOFORWARD))
+COMMAND("mon metadata name=id,type=CephString",
+	"fetch metadata for mon <id>",
+	"mon", "r", "cli,rest")
+
+
 /*
  * MDS commands (MDSMonitor.cc)
  */
