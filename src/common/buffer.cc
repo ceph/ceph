@@ -946,9 +946,49 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
     assert(_raw);
     assert(o <= _len);
     assert(o+l <= _len);
+    char* dest = _raw->data + _off + o;
     if (crc_reset)
         _raw->invalidate_crc();
-    memcpy(c_str()+o, src, l);
+    if (l < 64) {
+        switch (l) {
+            case 1:
+                *((uint8_t*)(dest)) = *((uint8_t*)(src));
+                return;
+            case 2:
+                *((uint16_t*)(dest)) = *((uint16_t*)(src));
+                return;
+            case 3:
+                *((uint16_t*)(dest)) = *((uint16_t*)(src));
+                *((uint8_t*)(dest+2)) = *((uint8_t*)(src+2));
+                return;
+            case 4:
+                *((uint32_t*)(dest)) = *((uint32_t*)(src));
+                return;
+            case 8:
+                *((uint64_t*)(dest)) = *((uint64_t*)(src));
+                return;
+            default:
+                int cursor = 0;
+                while (l >= sizeof(uint64_t)) {
+                    *((uint64_t*)(dest + cursor)) = *((uint64_t*)(src + cursor));
+                    cursor += sizeof(uint64_t);
+                    l -= sizeof(uint64_t);
+                }
+                while (l >= sizeof(uint32_t)) {
+                    *((uint32_t*)(dest + cursor)) = *((uint32_t*)(src + cursor));
+                    cursor += sizeof(uint32_t);
+                    l -= sizeof(uint32_t);
+                }
+                while (l > 0) {
+                    *(dest + cursor) = *(src + cursor);
+                    cursor++;
+                    l--;
+                }
+                return;
+        }
+    } else {
+        memcpy(dest, src, l);
+    }
   }
 
   void buffer::ptr::zero(bool crc_reset)
