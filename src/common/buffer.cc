@@ -941,28 +941,30 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
     return _len + _off;
   }
     
-  void buffer::ptr::copy_in(unsigned o, unsigned l, const char *src)
+  void buffer::ptr::copy_in(unsigned o, unsigned l, const char *src, bool crc_reset)
   {
     assert(_raw);
     assert(o <= _len);
     assert(o+l <= _len);
-    _raw->invalidate_crc();
+    if (crc_reset)
+        _raw->invalidate_crc();
     memcpy(c_str()+o, src, l);
   }
 
-  void buffer::ptr::zero()
+  void buffer::ptr::zero(bool crc_reset)
   {
-    _raw->invalidate_crc();
+    if (crc_reset)
+        _raw->invalidate_crc();
     memset(c_str(), 0, _len);
   }
 
-  void buffer::ptr::zero(unsigned o, unsigned l)
+  void buffer::ptr::zero(unsigned o, unsigned l, bool crc_reset)
   {
     assert(o+l <= _len);
-    _raw->invalidate_crc();
+    if (crc_reset)
+        _raw->invalidate_crc();
     memset(c_str()+o, 0, l);
   }
-
   bool buffer::ptr::can_zero_copy() const
   {
     return _raw->can_zero_copy();
@@ -1138,7 +1140,7 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
   
   // copy data in
 
-  void buffer::list::iterator::copy_in(unsigned len, const char *src)
+  void buffer::list::iterator::copy_in(unsigned len, const char *src, bool crc_reset)
   {
     // copy
     if (p == ls->end())
@@ -1150,7 +1152,7 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
       unsigned howmuch = p->length() - p_off;
       if (len < howmuch)
 	howmuch = len;
-      p->copy_in(p_off, howmuch, src);
+      p->copy_in(p_off, howmuch, src, crc_reset);
 	
       src += howmuch;
       len -= howmuch;
@@ -1462,14 +1464,14 @@ void buffer::list::rebuild_page_aligned()
     return last_p.copy(len, dest);
   }
     
-  void buffer::list::copy_in(unsigned off, unsigned len, const char *src)
+  void buffer::list::copy_in(unsigned off, unsigned len, const char *src, bool crc_reset)
   {
     if (off + len > length())
       throw end_of_buffer();
     
     if (last_p.get_off() != off) 
       last_p.seek(off);
-    last_p.copy_in(len, src);
+    last_p.copy_in(len, src, crc_reset);
   }
 
   void buffer::list::copy_in(unsigned off, unsigned len, const list& src)
