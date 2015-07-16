@@ -182,24 +182,33 @@ private:
 
   // -- op workqueue --
   struct Op {
-    utime_t start;
-    uint64_t op;
-    list<Transaction*> tls;
-    Context *onreadable, *onreadable_sync;
-    uint64_t ops, bytes;
+    utime_t start; ///< Time when this op was created
+    uint64_t op; ///< Sequence number of this group of transactions
+    list<Transaction*> tls; ///< List of transactions that are part of this operation
+    Context *onreadable, *onreadable_sync; ///< Callbacks that are executed once the transactions are applied
+    uint64_t ops; ///< Total number of primitive operations in the transaction list
+    uint64_t bytes; ///< Total size of the transactions in the list
     TrackedOpRef osd_op;
   };
   class OpSequencer : public Sequencer_impl {
     Mutex qlock; // to protect q, for benefit of flush (peek/dequeue also protected by lock)
-    list<Op*> q;
-    list<uint64_t> jq;
+    list<Op*> q; ///< Queue for operations
+    list<uint64_t> jq; ///< Queue for journal operations
+
+    /// List of callbacks waiting for an operation to be completed.
+    /// The first member of the pair is the seq number of an operation that must complete
+    /// before the callback in the second member can be invoked.
     list<pair<uint64_t, Context*> > flush_commit_waiters;
-    Cond cond;
+    Cond cond; ///< condition variable to wait for completion of some transactions
   public:
-    Sequencer *parent;
-    Mutex apply_lock;  // for apply mutual exclusion
-    
-    /// get_max_uncompleted
+    Sequencer *parent; ///< Public interface for this internal object
+    Mutex apply_lock;  ///< must be taken when starting to apply an operation and released when done
+
+  private:
+    /** @brief Get the maximum sequence number of a queued operation.
+     * This will correspond to the latest submitted operation.
+     * If both queues are empty, seq will be set to zero.
+     * @returns true if both queues are empty */
     bool _get_max_uncompleted(
       uint64_t *seq ///< [out] max uncompleted seq
       ) {
@@ -215,9 +224,13 @@ private:
 	*seq = jq.back();
 
       return false;
-    } /// @returns true if both queues are empty
+    }
 
-    /// get_min_uncompleted
+    /** @brief Get the minimum sequence number of a queued operation.
+     * This will correspond to the earliest operation that was not completed yet.
+     * Every operation with a number lower than seq has already been completed.
+     * If both queues are empty, seq will be set to zero.
+     * @returns true if both queues are empty */
     bool _get_min_uncompleted(
       uint64_t *seq ///< [out] min uncompleted seq
       ) {
@@ -235,10 +248,13 @@ private:
       return false;
     } /// @returns true if both queues are empty
 
+  public:
+    /// Put the async commit callbacks that can be executed now in an external list.
     void _wake_flush_waiters(list<Context*> *to_queue) {
       uint64_t seq;
+      // if the queues are empty, we can execute all callbacks.
       if (_get_min_uncompleted(&seq))
-	seq = -1;
+	seq = UINT64_MAX;
 
       for (list<pair<uint64_t, Context*> >::iterator i =
 	     flush_commit_waiters.begin();
@@ -279,27 +295,28 @@ private:
       return o;
     }
 
+    /// Block until all operations currently in the queue are processed.
     void flush() {
       Mutex::Locker l(qlock);
 
       while (g_conf->filestore_blackhole)
 	cond.Wait(qlock);  // wait forever
 
+      // get our "watermark" - the last uncompleted operation currently in the queue
+      uint64_t seq_watermark = 0;
+      bool queues_empty = _get_max_uncompleted(&seq_watermark);
 
-      // get max for journal _or_ op queues
-      uint64_t seq = 0;
-      if (!q.empty())
-	seq = q.back()->op;
-      if (!jq.empty() && jq.back() > seq)
-	seq = jq.back();
-
-      if (seq) {
-	// everything prior to our watermark to drain through either/both queues
-	while ((!q.empty() && q.front()->op <= seq) ||
-	       (!jq.empty() && jq.front() <= seq))
+      if (!queues_empty) {
+	uint64_t seq_min = 0;
+	// wait until the earliest uncompleted transaction exceeds our watermark
+	// OR both queues become empty
+	while (!_get_min_uncompleted(&seq_min) && seq_min <= seq_watermark)
 	  cond.Wait(qlock);
       }
     }
+    /** @brief If there are operations in the queue, add a callback to execute after they complete.
+     * If the queue is empty, the argument will be deleted without being executed.
+     * @return true if the queue is empty and the argument will not execute, false if the callback will execute in the future. */
     bool flush_commit(Context *c) {
       Mutex::Locker l(qlock);
       uint64_t seq = 0;
