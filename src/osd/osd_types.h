@@ -1835,6 +1835,7 @@ struct pg_info_t {
   eversion_t log_tail;     // oldest log entry.
 
   hobject_t last_backfill;   // objects >= this and < last_complete may be missing
+  bool last_backfill_bitwise;  ///< true if last_backfill reflects a bitwise (vs nibblewise) sort
 
   interval_set<snapid_t> purged_snaps;
 
@@ -1845,12 +1846,14 @@ struct pg_info_t {
 
   pg_info_t()
     : last_epoch_started(0), last_user_version(0),
-      last_backfill(hobject_t::get_max())
+      last_backfill(hobject_t::get_max()),
+      last_backfill_bitwise(false)
   { }
   pg_info_t(spg_t p)
     : pgid(p),
       last_epoch_started(0), last_user_version(0),
-      last_backfill(hobject_t::get_max())
+      last_backfill(hobject_t::get_max()),
+      last_backfill_bitwise(false)
   { }
   
   bool is_empty() const { return last_update.version == 0; }
@@ -1884,7 +1887,8 @@ inline ostream& operator<<(ostream& out, const pg_info_t& pgi)
     out << " (" << pgi.log_tail << "," << pgi.last_update << "]";
   }
   if (pgi.is_incomplete())
-    out << " lb " << pgi.last_backfill;
+    out << " lb " << pgi.last_backfill
+	<< (pgi.last_backfill_bitwise ? " (bitwise)" : " (NIBBLEWISE)");
   //out << " c " << pgi.epoch_created;
   out << " local-les=" << pgi.last_epoch_started;
   out << " n=" << pgi.stats.stats.sum.num_objects;
