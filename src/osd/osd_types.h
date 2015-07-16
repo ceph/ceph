@@ -1308,6 +1308,7 @@ struct object_stat_sum_t {
   int64_t num_flush_kb;
   int64_t num_evict;
   int64_t num_evict_kb;
+  int64_t num_promote;
 
   object_stat_sum_t()
     : num_bytes(0),
@@ -1329,7 +1330,8 @@ struct object_stat_sum_t {
       num_flush(0),
       num_flush_kb(0),
       num_evict(0),
-      num_evict_kb(0)
+      num_evict_kb(0),
+      num_promote(0)
   {}
 
   void floor(int64_t f) {
@@ -1361,6 +1363,7 @@ struct object_stat_sum_t {
     FLOOR(num_flush_kb);
     FLOOR(num_evict);
     FLOOR(num_evict_kb);
+    FLOOR(num_promote);
 #undef FLOOR
   }
 
@@ -1400,6 +1403,7 @@ struct object_stat_sum_t {
     SPLIT(num_flush_kb);
     SPLIT(num_evict);
     SPLIT(num_evict_kb);
+    SPLIT(num_promote);
 #undef SPLIT
   }
 

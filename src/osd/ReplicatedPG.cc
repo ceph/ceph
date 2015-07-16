@@ -2213,6 +2213,7 @@ void ReplicatedPG::promote_object(ObjectContextRef obc,
 
   if (op)
     wait_for_blocked_object(obc->obs.oi.soid, op);
+  info.stats.stats.sum.num_promote++;
 }
 
 void ReplicatedPG::execute_ctx(OpContext *ctx)
