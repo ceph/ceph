@@ -113,6 +113,17 @@ private:
    * @pre dn->get_projected_inode()->is_file()==true;
    */
   void scrub_file_dentry(CDentry *dn);
+
+  /**
+   * Callback from completion of CInode::validate_disk_state
+   * @param dn The dentry owning the inode we were validating
+   * @param r The return status from validate_disk_state
+   * @param result Populated results from validate_disk_state
+   */
+  void _scrub_file_dentry_done(CDentry *dn, int r,
+    const CInode::validated_data &result);
+  friend class C_InodeValidated;
+
   /**
    * Make progress on scrubbing a directory-representing dirfrag and
    * its children..
