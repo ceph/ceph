@@ -1,3 +1,9 @@
+ceph (9.0.2-1) stable; urgency=low
+
+  * New upstream release
+
+ -- Alfredo Deza <adeza@redhat.com>  Tue, 14 Jul 2015 13:10:31 -0700
+
 ceph (9.0.1-1) stable; urgency=low
 
   * New upstream release
