@@ -743,10 +743,6 @@ int main(int argc, const char **argv)
     }
   }
 
-  if (bucket.empty()) {
-    cerr << "rest-bench: bucket not specified" << std::endl;
-    usage_exit();
-  }
   if (args.empty())
     usage_exit();
   int operation = 0;
