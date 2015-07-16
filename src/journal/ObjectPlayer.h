@@ -73,29 +73,23 @@ private:
   typedef boost::unordered_map<EntryKey, Entries::iterator> EntryKeys;
 
   struct C_Fetch : public Context {
-    ObjectPlayer *object_player;
+    ObjectPlayerPtr object_player;
     Context *on_finish;
     bufferlist read_bl;
     C_Fetch(ObjectPlayer *o, Context *ctx)
       : object_player(o), on_finish(ctx) {
-      object_player->get();
     }
     virtual void finish(int r);
   };
   struct C_WatchTask : public Context {
-    ObjectPlayer *object_player;
+    ObjectPlayerPtr object_player;
     C_WatchTask(ObjectPlayer *o) : object_player(o) {
-      object_player->get();
     }
     virtual void finish(int r);
   };
   struct C_WatchFetch : public Context {
-    ObjectPlayer *object_player;
+    ObjectPlayerPtr object_player;
     C_WatchFetch(ObjectPlayer *o) : object_player(o) {
-    }
-    virtual void complete(int r) {
-      finish(r);
-      object_player->put();
     }
     virtual void finish(int r);
   };
@@ -113,7 +107,6 @@ private:
 
   double m_watch_interval;
   Context *m_watch_task;
-  C_WatchFetch m_watch_fetch;
 
   mutable Mutex m_lock;
   bool m_fetch_in_progress;
@@ -125,8 +118,8 @@ private:
   InvalidRanges m_invalid_ranges;
 
   Context *m_watch_ctx;
-  Cond m_watch_ctx_cond;
-  bool m_watch_ctx_in_progress;
+  Cond m_watch_in_progress_cond;
+  bool m_watch_in_progress;
 
   int handle_fetch_complete(int r, const bufferlist &bl);
 

@@ -147,7 +147,7 @@ bool Journaler::try_pop_front(Payload *payload) {
 void Journaler::stop_replay() {
   assert(m_player != NULL);
   m_player->unwatch();
-  m_player->put();
+  delete m_player;
   m_player = NULL;
 }
 

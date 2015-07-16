@@ -7,9 +7,11 @@
 #include "include/int_types.h"
 #include "include/Context.h"
 #include "include/rados/librados.hpp"
+#include "common/Cond.h"
 #include "common/Mutex.h"
 #include "common/RefCountedObj.h"
 #include "cls/journal/cls_journal_types.h"
+#include "journal/AsyncOpTracker.h"
 #include <boost/intrusive_ptr.hpp>
 #include <boost/noncopyable.hpp>
 #include <list>
@@ -44,6 +46,7 @@ public:
   ~JournalMetadata();
 
   void init(Context *on_init);
+  void shutdown();
 
   void add_listener(Listener *listener);
   void remove_listener(Listener *listener);
@@ -148,12 +151,16 @@ private:
   };
 
   struct C_NotifyUpdate : public Context {
-    JournalMetadataPtr journal_metadata;
+    JournalMetadata* journal_metadata;
     Context *on_safe;
 
     C_NotifyUpdate(JournalMetadata *_journal_metadata, Context *_on_safe = NULL)
-      : journal_metadata(_journal_metadata), on_safe(_on_safe) {}
-
+      : journal_metadata(_journal_metadata), on_safe(_on_safe) {
+      journal_metadata->m_async_op_tracker.start_op();
+    }
+    virtual ~C_NotifyUpdate() {
+      journal_metadata->m_async_op_tracker.finish_op();
+    }
     virtual void finish(int r) {
       if (r == 0) {
         journal_metadata->async_notify_update();
@@ -165,20 +172,24 @@ private:
   };
 
   struct C_ImmutableMetadata : public Context {
-    JournalMetadataPtr journal_metadata;
+    JournalMetadata* journal_metadata;
     Context *on_finish;
 
     C_ImmutableMetadata(JournalMetadata *_journal_metadata, Context *_on_finish)
       : journal_metadata(_journal_metadata), on_finish(_on_finish) {
+      Mutex::Locker locker(journal_metadata->m_lock);
+      journal_metadata->m_async_op_tracker.start_op();
     }
-
+    virtual ~C_ImmutableMetadata() {
+      journal_metadata->m_async_op_tracker.finish_op();
+    }
     virtual void finish(int r) {
       journal_metadata->handle_immutable_metadata(r, on_finish);
     }
 
   };
   struct C_Refresh : public Context {
-    JournalMetadataPtr journal_metadata;
+    JournalMetadata* journal_metadata;
     uint64_t minimum_set;
     uint64_t active_set;
     RegisteredClients registered_clients;
@@ -186,8 +197,13 @@ private:
 
     C_Refresh(JournalMetadata *_journal_metadata, Context *_on_finish)
       : journal_metadata(_journal_metadata), minimum_set(0), active_set(0),
-        on_finish(_on_finish) {}
-
+        on_finish(_on_finish) {
+      Mutex::Locker locker(journal_metadata->m_lock);
+      journal_metadata->m_async_op_tracker.start_op();
+    }
+    virtual ~C_Refresh() {
+      journal_metadata->m_async_op_tracker.finish_op();
+    }
     virtual void finish(int r) {
       journal_metadata->handle_refresh_complete(this, r);
     }
@@ -227,6 +243,8 @@ private:
   bool m_commit_position_pending;
   ObjectSetPosition m_commit_position;
   Context *m_commit_position_ctx;
+
+  AsyncOpTracker m_async_op_tracker;
 
   void handle_immutable_metadata(int r, Context *on_init);
 

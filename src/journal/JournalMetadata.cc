@@ -20,33 +20,21 @@ JournalMetadata::JournalMetadata(librados::IoCtx &ioctx,
                                  const std::string &oid,
                                  const std::string &client_id,
                                  double commit_interval)
-    : m_cct(NULL), m_oid(oid), m_client_id(client_id),
-      m_commit_interval(commit_interval), m_order(0), m_splay_width(0),
-      m_initialized(false), m_finisher(NULL), m_timer(NULL),
+    : RefCountedObject(NULL, 0), m_cct(NULL), m_oid(oid),
+      m_client_id(client_id), m_commit_interval(commit_interval), m_order(0),
+      m_splay_width(0), m_initialized(false), m_finisher(NULL), m_timer(NULL),
       m_timer_lock("JournalMetadata::m_timer_lock"),
       m_lock("JournalMetadata::m_lock"), m_watch_ctx(this), m_watch_handle(0),
-      m_update_notifications(0), m_commit_position_pending(false),
-      m_commit_position_ctx(NULL) {
+      m_minimum_set(0), m_active_set(0), m_update_notifications(0),
+      m_commit_position_pending(false), m_commit_position_ctx(NULL) {
   m_ioctx.dup(ioctx);
   m_cct = reinterpret_cast<CephContext*>(m_ioctx.cct());
 }
 
 JournalMetadata::~JournalMetadata() {
-  if (m_timer != NULL) {
-    Mutex::Locker locker(m_timer_lock);
-    m_timer->shutdown();
-    delete m_timer;
-    m_timer = NULL;
+  if (m_initialized) {
+    shutdown();
   }
-  if (m_finisher != NULL) {
-    m_finisher->stop();
-    delete m_finisher;
-    m_finisher = NULL;
-  }
-
-  m_ioctx.unwatch2(m_watch_handle);
-  librados::Rados rados(m_ioctx);
-  rados.watch_flush();
 }
 
 void JournalMetadata::init(Context *on_init) {
@@ -56,7 +44,7 @@ void JournalMetadata::init(Context *on_init) {
   m_finisher = new Finisher(m_cct);
   m_finisher->start();
 
-  m_timer = new SafeTimer(m_cct, m_timer_lock, false);
+  m_timer = new SafeTimer(m_cct, m_timer_lock, true);
   m_timer->init();
 
   int r = m_ioctx.watch2(m_oid, &m_watch_handle, &m_watch_ctx);
@@ -70,6 +58,34 @@ void JournalMetadata::init(Context *on_init) {
   C_ImmutableMetadata *ctx = new C_ImmutableMetadata(this, on_init);
   client::get_immutable_metadata(m_ioctx, m_oid, &m_order, &m_splay_width,
                                  ctx);
+}
+
+void JournalMetadata::shutdown() {
+  assert(m_initialized);
+  m_initialized = false;
+
+  if (m_timer != NULL) {
+    Mutex::Locker locker(m_timer_lock);
+    m_timer->shutdown();
+    delete m_timer;
+    m_timer = NULL;
+  }
+
+  if (m_finisher != NULL) {
+    m_finisher->stop();
+    delete m_finisher;
+    m_finisher = NULL;
+  }
+
+  if (m_watch_handle != 0) {
+    m_ioctx.unwatch2(m_watch_handle);
+    librados::Rados rados(m_ioctx);
+    rados.watch_flush();
+    m_watch_handle = 0;
+  }
+
+  m_async_op_tracker.wait_for_ops();
+  m_ioctx.aio_flush();
 }
 
 int JournalMetadata::register_client(const std::string &description) {
