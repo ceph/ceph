@@ -37,6 +37,10 @@
 #include <ostream>
 namespace ceph {
 
+#if defined(__GNUC__) && defined(__x86_64__)
+  typedef unsigned uint128_t __attribute__ ((mode (TI)));
+#endif
+
 #ifdef BUFFER_DEBUG
 static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
 # define bdout { simple_spin_lock(&buffer_debug_lock); std::cout
@@ -800,12 +804,49 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
 
   bool buffer::ptr::is_zero() const
   {
-    const char *data = c_str();
-    for (size_t p = 0; p < _len; p++) {
-      if (data[p] != 0) {
-	return false;
-      }
+    const char* data = c_str();
+    const char* max = data + _len;
+    const char* max32 = data + (_len / sizeof(uint32_t))*sizeof(uint32_t);
+#if defined(__GNUC__) && defined(__x86_64__)
+    // we do have XMM registers in x86-64, so if we need to check at least
+    // 16 bytes, make use of them 
+    int left = _len;
+    if (left / sizeof(uint128_t) > 0) {
+        // align data pointer to 16 bytes, otherwise it'll segfault due to bug
+        // in (at least some) GCC versions (using MOVAPS instead of MOVUPS).
+        // check up to 15 first bytes while at it.
+        while (((unsigned long long)data) & 15) {
+            if (*(uint8_t*)data != 0) {
+                return false;
+            }
+            data += sizeof(uint8_t);
+            left--;
+        }
+
+        const char* max128 = data + (left / sizeof(uint128_t))*sizeof(uint128_t);
+
+        while (data < max128) {
+            if (*(uint128_t*)data != 0) {
+                return false;
+            }
+            data += sizeof(uint128_t);
+        }
     }
+#endif
+    while (data < max32) {
+        if (*(uint32_t*)data != 0) {
+            return false;
+        }
+        data += sizeof(uint32_t);
+    }
+
+    while (data < max) {
+        if (*(uint8_t*)data != 0) {
+            return false;
+        }
+        data += sizeof(uint8_t);
+    }
+
     return true;
   }
 
