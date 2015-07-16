@@ -441,7 +441,8 @@ protected:
 
   // path traversal for high-level interface
   InodeRef cwd;
-  int path_walk(const filepath& fp, InodeRef *end, bool followsym=true);
+  int path_walk(const filepath& fp, InodeRef *end, bool followsym=true,
+		int uid=-1, int gid=-1);
   int fill_stat(Inode *in, struct stat *st, frag_info_t *dirstat=0, nest_info_t *rstat=0);
   int fill_stat(InodeRef& in, struct stat *st, frag_info_t *dirstat=0, nest_info_t *rstat=0) {
     return fill_stat(in.get(), st, dirstat, rstat);
@@ -660,8 +661,8 @@ private:
 
   // internal interface
   //   call these with client_lock held!
-  int _do_lookup(Inode *dir, const string& name, InodeRef *target);
-  int _lookup(Inode *dir, const string& dname, InodeRef *target);
+  int _do_lookup(Inode *dir, const string& name, InodeRef *target, int uid, int gid);
+  int _lookup(Inode *dir, const string& dname, InodeRef *target, int uid, int gid);
 
   int _link(Inode *in, Inode *dir, const char *name, int uid=-1, int gid=-1, InodeRef *inp = 0);
   int _unlink(Inode *dir, const char *name, int uid=-1, int gid=-1);
@@ -826,7 +827,7 @@ public:
 
   // dirs
   int mkdir(const char *path, mode_t mode);
-  int mkdirs(const char *path, mode_t mode);
+  int mkdirs(const char *path, mode_t mode, int uid=-1, int gid=-1);
   int rmdir(const char *path);
 
   // symlinks
