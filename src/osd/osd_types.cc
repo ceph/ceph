@@ -1549,6 +1549,7 @@ void object_stat_sum_t::dump(Formatter *f) const
   f->dump_int("num_flush_kb", num_flush_kb);
   f->dump_int("num_evict", num_evict);
   f->dump_int("num_evict_kb", num_evict_kb);
+  f->dump_int("num_promote", num_promote);
 }
 
 void object_stat_sum_t::encode(bufferlist& bl) const
@@ -1581,6 +1582,7 @@ void object_stat_sum_t::encode(bufferlist& bl) const
   ::encode(num_flush_kb, bl);
   ::encode(num_evict, bl);
   ::encode(num_evict_kb, bl);
+  ::encode(num_promote, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -1655,11 +1657,13 @@ void object_stat_sum_t::decode(bufferlist::iterator& bl)
     ::decode(num_flush_kb, bl);
     ::decode(num_evict, bl);
     ::decode(num_evict_kb, bl);
+    ::decode(num_promote, bl);
   } else {
     num_flush = 0;
     num_flush_kb = 0;
     num_evict = 0;
     num_evict_kb = 0;
+    num_promote = 0;
   }
   DECODE_FINISH(bl);
 }
@@ -1692,6 +1696,7 @@ void object_stat_sum_t::generate_test_instances(list<object_stat_sum_t*>& o)
   a.num_flush_kb = 6;
   a.num_evict = 7;
   a.num_evict_kb = 8;
+  a.num_promote = 9;
   o.push_back(new object_stat_sum_t(a));
 }
 
@@ -1724,6 +1729,7 @@ void object_stat_sum_t::add(const object_stat_sum_t& o)
   num_flush_kb += o.num_flush_kb;
   num_evict += o.num_evict;
   num_evict_kb += o.num_evict_kb;
+  num_promote += o.num_promote;
 }
 
 void object_stat_sum_t::sub(const object_stat_sum_t& o)
@@ -1755,6 +1761,7 @@ void object_stat_sum_t::sub(const object_stat_sum_t& o)
   num_flush_kb -= o.num_flush_kb;
   num_evict -= o.num_evict;
   num_evict_kb -= o.num_evict_kb;
+  num_promote -= o.num_promote;
 }
 
 bool operator==(const object_stat_sum_t& l, const object_stat_sum_t& r)
@@ -1786,7 +1793,8 @@ bool operator==(const object_stat_sum_t& l, const object_stat_sum_t& r)
     l.num_flush == r.num_flush &&
     l.num_flush_kb == r.num_flush_kb &&
     l.num_evict == r.num_evict &&
-    l.num_evict_kb == r.num_evict_kb;
+    l.num_evict_kb == r.num_evict_kb &&
+    l.num_promote == r.num_promote;
 }
 
 // -- object_stat_collection_t --
