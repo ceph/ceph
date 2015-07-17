@@ -139,6 +139,13 @@ private:
     ReplayHandler(Journal *_journal) : journal(_journal) {
     }
 
+    virtual void get() {
+      // TODO
+    }
+    virtual void put() {
+      // TODO
+    }
+
     virtual void handle_entries_available() {
       journal->handle_replay_ready();
     }
