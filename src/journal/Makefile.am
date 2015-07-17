@@ -13,8 +13,6 @@ libjournal_la_SOURCES = \
 	journal/JournalTrimmer.cc \
 	journal/ObjectPlayer.cc \
 	journal/ObjectRecorder.cc \
-	journal/Payload.cc \
-	journal/PayloadImpl.cc \
 	journal/Utils.cc
 
 noinst_LTLIBRARIES += libjournal.la
@@ -30,8 +28,7 @@ noinst_HEADERS += \
 	journal/JournalTrimmer.h \
 	journal/ObjectPlayer.h \
 	journal/ObjectRecorder.h \
-	journal/Payload.h \
-	journal/PayloadImpl.h \
+	journal/ReplayEntry.h \
 	journal/ReplayHandler.h \
 	journal/Utils.h
 DENCODER_DEPS += libjournal.la

@@ -3,6 +3,7 @@
 
 #include "journal/JournalPlayer.h"
 #include "common/Finisher.h"
+#include "journal/Entry.h"
 #include "journal/ReplayHandler.h"
 #include "journal/Utils.h"
 
@@ -67,8 +68,10 @@ JournalPlayer::JournalPlayer(librados::IoCtx &ioctx,
     m_commit_object = commit_position.object_number;
     m_commit_tag = commit_position.entry_positions.front().tag;
 
-    for (size_t i=0; i<commit_position.entry_positions.size(); ++i) {
-      const EntryPosition &entry_position = commit_position.entry_positions[i];
+    for (EntryPositions::const_iterator it =
+           commit_position.entry_positions.begin();
+         it != commit_position.entry_positions.end(); ++it) {
+      const EntryPosition &entry_position = *it;
       m_commit_tids[entry_position.tag] = entry_position.tid;
     }
   }
@@ -121,8 +124,7 @@ void JournalPlayer::unwatch() {
   }
 }
 
-bool JournalPlayer::try_pop_front(Entry *entry,
-                                  ObjectSetPosition *object_set_position) {
+bool JournalPlayer::try_pop_front(Entry *entry, uint64_t *commit_tid) {
   Mutex::Locker locker(m_lock);
   if (m_state != STATE_PLAYBACK) {
     return false;
@@ -175,9 +177,9 @@ bool JournalPlayer::try_pop_front(Entry *entry,
     }
   }
 
-  // TODO populate the object_set_position w/ current object number and
-  //      unique entry tag mappings
   m_journal_metadata->reserve_tid(entry->get_tag(), entry->get_tid());
+  *commit_tid = m_journal_metadata->allocate_commit_tid(
+    object_player->get_object_number(), entry->get_tag(), entry->get_tid());
   return true;
 }
 

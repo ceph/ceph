@@ -25,6 +25,7 @@ JournalTrimmer::JournalTrimmer(librados::IoCtx &ioctx,
 }
 
 JournalTrimmer::~JournalTrimmer() {
+  m_journal_metadata->flush_commit_position();
   m_async_op_tracker.wait_for_ops();
 }
 
@@ -53,10 +54,13 @@ int JournalTrimmer::remove_objects() {
   return ctx.wait();
 }
 
-void JournalTrimmer::update_commit_position(
-    const ObjectSetPosition &object_set_position) {
-  ldout(m_cct, 20) << __func__ << ": pos=" << object_set_position
-                   << dendl;
+void JournalTrimmer::committed(uint64_t commit_tid) {
+  ldout(m_cct, 20) << __func__ << ": commit_tid=" << commit_tid << dendl;
+
+  ObjectSetPosition object_set_position;
+  if (!m_journal_metadata->committed(commit_tid, &object_set_position)) {
+    return;
+  }
 
   {
     Mutex::Locker locker(m_lock);
