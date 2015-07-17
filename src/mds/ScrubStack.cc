@@ -223,6 +223,11 @@ void ScrubStack::scrub_dir_dentry(CDentry *dn,
            << ", all_frags_done=" << all_frags_done << dendl;
   if (all_frags_done) {
     assert (!*added_children); // can't do this if children are still pending
+
+    // OK, so now I can... fire off a validate on the dir inode, and
+    // when it completes, come through here again, noticing that we've
+    // set a flag to indicate the the validate happened, and 
+
     scrub_dir_dentry_final(dn, &finally_done);
   }
 
@@ -259,19 +264,43 @@ bool ScrubStack::get_next_cdir(CInode *in, CDir **new_dir)
   return true;
 }
 
+class C_InodeValidated : public MDSInternalContext
+{
+  public:
+    ScrubStack *stack;
+    CInode::validated_data result;
+    CDentry *target;
+
+    C_InodeValidated(MDSRank *mds, ScrubStack *stack_, CDentry *target_)
+      : MDSInternalContext(mds), stack(stack_), target(target_)
+    {}
+
+    void finish(int r)
+    {
+      stack->_validate_inode_done(target, r, result);
+    }
+};
+
+
 void ScrubStack::scrub_dir_dentry_final(CDentry *dn, bool *finally_done)
 {
   dout(20) << __func__ << *dn << dendl;
-  *finally_done =true;
-  // FIXME: greg -- is this the right lifetime from the inode's scrub_info?
-  CInode *in = dn->get_projected_inode();
 
-  Context *fin = NULL;
-  in->scrub_finished(&fin);
-  if (fin) {
-    // FIXME: pass some error code in?
-    finisher->queue(new MDSIOContextWrapper(mdcache->mds, fin), 0);
+  // Two passes through this function.  First one triggers inode validation,
+  // second one sets finally_done
+  // FIXME: kind of overloading scrub_in_progress here, using it while
+  // dentry is still on stack to indicate that we have finished
+  // doing our validate_disk_state on the inode
+  // FIXME: the magic-constructing scrub_info() is going to leave
+  // an unneeded scrub_infop lying around here
+  *finally_done = !dn->scrub_info()->dentry_scrubbing;
+  if (!*finally_done) {
+    CInode *in = dn->get_projected_inode();
+    C_InodeValidated *fin = new C_InodeValidated(mdcache->mds, this, dn);
+    MDRequestRef null_mdr;
+    in->validate_disk_state(&fin->result, null_mdr, fin);
   }
+
   return;
 }
 
@@ -310,6 +339,7 @@ void ScrubStack::scrub_dirfrag(CDir *dir, bool *added_children,
 
     if (r == EAGAIN) {
       // Drop out, CDir fetcher will call back our kicker context
+      dout(20) << __func__ << " waiting for fetch on " << *dir << dendl;
       return;
     }
 
@@ -318,11 +348,14 @@ void ScrubStack::scrub_dirfrag(CDir *dir, bool *added_children,
       std::list<CDentry*> scrubbing;
       dir->scrub_dentries_scrubbing(&scrubbing);
       if (scrubbing.empty()) {
+        dout(20) << __func__ << " dirfrag done: " << *dir << dendl;
         // FIXME: greg: What's the diff meant to be between done and terminal
         *done = true;
         *is_terminal = true;
         continue;
       } else {
+        dout(20) << __func__ << " " << scrubbing.size() << " dentries still "
+                   "scrubbing in " << *dir << dendl;
         return;
       }
     }
@@ -342,7 +375,6 @@ void ScrubStack::scrub_dirfrag(CDir *dir, bool *added_children,
     // never get random IO errors here.
     assert(r == 0);
 
-
     CDentry *parent_dn = dir->get_inode()->get_parent_dn();
     ScrubHeaderRefConst header = parent_dn->scrub_info()->header;
 
@@ -361,28 +393,11 @@ void ScrubStack::scrub_dirfrag(CDir *dir, bool *added_children,
   }
 }
 
-class C_InodeValidated : public MDSInternalContext
-{
-  public:
-    ScrubStack *stack;
-    CInode::validated_data result;
-    CDentry *target;
-
-    C_InodeValidated(MDSRank *mds, ScrubStack *stack_, CDentry *target_)
-      : MDSInternalContext(mds), stack(stack_), target(target_)
-    {}
-
-    void finish(int r)
-    {
-      stack->_scrub_file_dentry_done(target, r, result);
-    }
-};
-
 void ScrubStack::scrub_file_dentry(CDentry *dn)
 {
   assert(dn->get_linkage()->get_inode() != NULL);
 
-  CInode *in = dn->get_linkage()->get_inode();
+  CInode *in = dn->get_projected_inode();
   C_InodeValidated *fin = new C_InodeValidated(mdcache->mds, this, dn);
 
   // At this stage the DN is already past scrub_initialize, so
@@ -391,16 +406,28 @@ void ScrubStack::scrub_file_dentry(CDentry *dn)
   in->validate_disk_state(&fin->result, null_mdr, fin);
 }
 
-void ScrubStack::_scrub_file_dentry_done(CDentry *dn, int r,
+void ScrubStack::_validate_inode_done(CDentry *dn, int r,
     const CInode::validated_data &result)
 {
   // FIXME: do something real with result!  DamageTable!  Spamming
   // the cluster log for debugging purposes
   LogChannelRef clog = mdcache->mds->clog;
-  clog->info() << " scrubbed file dentry " << dn->name << " r=" << r;
+  clog->info() << __func__ << " " << *dn << " r=" << r;
+#if 0
+  assert(dn->scrub_info_p != NULL);
+  dn->scrub_info_p->inode_validated = true;
+#endif
 
   Context *c = NULL;
-  dn->scrub_finished(&c);
+  CInode *in = dn->get_projected_inode();
+  if (in->is_dir()) {
+    // For directories, inodes undergo a scrub_init/scrub_finish cycle
+    in->scrub_finished(&c);
+  } else {
+    // For regular files, we never touch the scrub_info on the inode,
+    // just the dentry.
+    dn->scrub_finished(&c);
+  }
   if (c) {
     finisher->queue(new MDSIOContextWrapper(mdcache->mds, c), 0);
   }
