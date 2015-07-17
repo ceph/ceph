@@ -2241,10 +2241,8 @@ void RGWRados::time_log_prepare_entry(cls_log_entry& entry, const utime_t& ut, c
   cls_log_add_prepare_entry(entry, ut, section, key, bl);
 }
 
-int RGWRados::time_log_add(const string& oid, const utime_t& ut, const string& section, const string& key, bufferlist& bl)
+int RGWRados::time_log_add_init(librados::IoCtx& io_ctx)
 {
-  librados::IoCtx io_ctx;
-
   const char *log_pool = zone.log_pool.name.c_str();
   librados::Rados *rad = get_rados_handle();
   int r = rad->ioctx_create(log_pool, io_ctx);
@@ -2259,6 +2257,19 @@ int RGWRados::time_log_add(const string& oid, const utime_t& ut, const string& s
   }
   if (r < 0)
     return r;
+
+  return 0;
+
+}
+
+int RGWRados::time_log_add(const string& oid, const utime_t& ut, const string& section, const string& key, bufferlist& bl)
+{
+  librados::IoCtx io_ctx;
+
+  int r = time_log_add_init(io_ctx);
+  if (r < 0) {
+    return r;
+  }
 
   ObjectWriteOperation op;
   cls_log_add(op, ut, section, key, bl);
@@ -2267,29 +2278,24 @@ int RGWRados::time_log_add(const string& oid, const utime_t& ut, const string& s
   return r;
 }
 
-int RGWRados::time_log_add(const string& oid, list<cls_log_entry>& entries, bool monotonic_inc)
+int RGWRados::time_log_add(const string& oid, list<cls_log_entry>& entries,
+			   librados::AioCompletion *completion, bool monotonic_inc)
 {
   librados::IoCtx io_ctx;
 
-  const char *log_pool = zone.log_pool.name.c_str();
-  librados::Rados *rad = get_rados_handle();
-  int r = rad->ioctx_create(log_pool, io_ctx);
-  if (r == -ENOENT) {
-    rgw_bucket pool(log_pool);
-    r = create_pool(pool);
-    if (r < 0)
-      return r;
- 
-    // retry
-    r = rad->ioctx_create(log_pool, io_ctx);
-  }
-  if (r < 0)
+  int r = time_log_add_init(io_ctx);
+  if (r < 0) {
     return r;
+  }
 
   ObjectWriteOperation op;
   cls_log_add(op, entries, monotonic_inc);
 
-  r = io_ctx.operate(oid, &op);
+  if (!completion) {
+    r = io_ctx.operate(oid, &op);
+  } else {
+    r = io_ctx.aio_operate(oid, completion, &op);
+  }
   return r;
 }
 

@@ -1,5 +1,6 @@
 #include "common/ceph_json.h"
 #include "common/RWLock.h"
+#include "common/RefCountedObj.h"
 
 #include "rgw_common.h"
 #include "rgw_rados.h"
@@ -144,19 +145,55 @@ int RGWRemoteMetaLog::get_shard_info(int shard_id)
   return 0;
 }
 
+static void _aio_completion_notifier_cb(librados::completion_t cb, void *arg);
+
+/* a single use librados aio completion notifier that hooks into the RGWCompletionManager */
+class AioCompletionNotifier : public RefCountedObject {
+  librados::AioCompletion *c;
+  RGWCompletionManager *completion_mgr;
+  void *user_data;
+
+public:
+  AioCompletionNotifier(RGWCompletionManager *_mgr, void *_user_data) : completion_mgr(_mgr), user_data(_user_data) {
+    c = librados::Rados::aio_create_completion((void *)this, _aio_completion_notifier_cb, NULL);
+  }
+
+  ~AioCompletionNotifier() {
+    c->release();
+  }
+
+  librados::AioCompletion *completion() {
+    return c;
+  }
+
+  void cb() {
+    completion_mgr->complete(user_data);
+    put();
+  }
+};
+
+static void _aio_completion_notifier_cb(librados::completion_t cb, void *arg)
+{
+  ((AioCompletionNotifier *)arg)->cb();
+}
+
 #define CLONE_MAX_ENTRIES 100
 #define CLONE_OPS_WINDOW 16
 
 class RGWCloneMetaLogOp {
   RGWRados *store;
   RGWHTTPManager *http_manager;
+  RGWCompletionManager *completion_mgr;
 
   int shard_id;
   string marker;
+  bool truncated;
 
   int max_entries;
 
   RGWRESTReadResource *http_op;
+
+  AioCompletionNotifier *md_op_notifier;
 
   bool finished;
 
@@ -164,19 +201,24 @@ class RGWCloneMetaLogOp {
     Init = 0,
     SentRESTRequest = 1,
     ReceivedRESTResponse = 2,
-    Done = 3,
+    StoringMDLogEntries = 3,
+    Done = 4,
   } state;
+#warning need an error state
 public:
-  RGWCloneMetaLogOp(RGWRados *_store, RGWHTTPManager *_mgr, int _id, const string& _marker) : store(_store),
-                                                            http_manager(_mgr), shard_id(_id),
-                                                            marker(_marker), max_entries(CLONE_MAX_ENTRIES),
-							    http_op(NULL), finished(false),
-                                                            state(RGWCloneMetaLogOp::Init) {}
+  RGWCloneMetaLogOp(RGWRados *_store, RGWHTTPManager *_mgr, RGWCompletionManager *_completion_mgr,
+		    int _id, const string& _marker) : store(_store),
+                                                      http_manager(_mgr), completion_mgr(_completion_mgr), shard_id(_id),
+                                                      marker(_marker), truncated(false), max_entries(CLONE_MAX_ENTRIES),
+						      http_op(NULL), md_op_notifier(NULL),
+						      finished(false),
+                                                      state(RGWCloneMetaLogOp::Init) {}
 
   int operate(bool *need_wait);
 
-  int send_clone_shard();
-  int finish_clone_shard(bool *need_wait);
+  int state_init(bool *need_wait);
+  int state_sent_rest_request(bool *need_wait);
+  int state_storing_mdlog_entries(bool *need_wait);
 
   bool is_done() { return (state == Done); }
 };
@@ -185,7 +227,7 @@ int RGWRemoteMetaLog::clone_shards()
 {
   list<RGWCloneMetaLogOp *> ops;
   for (int i = 0; i < (int)log_info.num_shards; i++) {
-    RGWCloneMetaLogOp *op = new RGWCloneMetaLogOp(store, &http_manager, i, clone_markers[i]);
+    RGWCloneMetaLogOp *op = new RGWCloneMetaLogOp(store, &http_manager, &completion_mgr, i, clone_markers[i]);
     ops.push_back(op);
   }
 
@@ -237,14 +279,15 @@ int RGWCloneMetaLogOp::operate(bool *need_wait)
   switch (state) {
     case Init:
       ldout(store->ctx(), 20) << __func__ << ": shard_id=" << shard_id << ": sending request" << dendl;
-      *need_wait = true;
-      return send_clone_shard();
+      return state_init(need_wait);
     case SentRESTRequest:
       ldout(store->ctx(), 20) << __func__ << ": shard_id=" << shard_id << ": handling response" << dendl;
-      return finish_clone_shard(need_wait);
+      return state_sent_rest_request(need_wait);
     case ReceivedRESTResponse:
       assert(0);
       break; /* unreachable */
+    case StoringMDLogEntries:
+      return state_storing_mdlog_entries(need_wait);
     case Done:
       ldout(store->ctx(), 20) << __func__ << ": shard_id=" << shard_id << ": done" << dendl;
       break;
@@ -253,7 +296,7 @@ int RGWCloneMetaLogOp::operate(bool *need_wait)
   return 0;
 }
 
-int RGWCloneMetaLogOp::send_clone_shard()
+int RGWCloneMetaLogOp::state_init(bool *need_wait)
 {
   RGWRESTConn *conn = store->rest_master_conn;
 
@@ -275,18 +318,19 @@ int RGWCloneMetaLogOp::send_clone_shard()
 
   http_op->set_user_info((void *)this);
 
-  state = SentRESTRequest;
-
   int ret = http_op->aio_read();
   if (ret < 0) {
     ldout(store->ctx(), 0) << "ERROR: failed to fetch mdlog data" << dendl;
     return ret;
   }
 
+  *need_wait = true;
+  state = SentRESTRequest;
+
   return 0;
 }
 
-int RGWCloneMetaLogOp::finish_clone_shard(bool *need_wait)
+int RGWCloneMetaLogOp::state_sent_rest_request(bool *need_wait)
 {
   rgw_mdlog_shard_data data;
 
@@ -301,7 +345,7 @@ int RGWCloneMetaLogOp::finish_clone_shard(bool *need_wait)
 
   ldout(store->ctx(), 20) << "remote mdlog, shard_id=" << shard_id << " num of shard entries: " << data.entries.size() << dendl;
 
-  bool truncated = ((int)data.entries.size() == max_entries);
+  truncated = ((int)data.entries.size() == max_entries);
 
   *need_wait = false;
   if (data.entries.empty()) {
@@ -329,16 +373,25 @@ int RGWCloneMetaLogOp::finish_clone_shard(bool *need_wait)
     marker = entry.id;
   }
 
-  ret = store->meta_mgr->store_md_log_entries(dest_entries, shard_id);
+  state = StoringMDLogEntries;
+
+  md_op_notifier = new AioCompletionNotifier(completion_mgr, (void *)this);
+
+  ret = store->meta_mgr->store_md_log_entries(dest_entries, shard_id, md_op_notifier->completion());
   if (ret < 0) {
     ldout(store->ctx(), 10) << "failed to store md log entries shard_id=" << shard_id << " ret=" << ret << dendl;
     return ret;
   }
+  *need_wait = true;
+  return 0;
+}
 
+int RGWCloneMetaLogOp::state_storing_mdlog_entries(bool *need_wait)
+{
   if (truncated) {
-    *need_wait = true;
-    return send_clone_shard();
+    return state_init(need_wait);
   } else {
+    *need_wait = false;
     state = Done;
   }
 
