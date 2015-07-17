@@ -400,6 +400,7 @@ public:
       pg_shard_t source,           ///< [in] source
       const pg_info_t &oinfo,      ///< [in] info
       const pg_missing_t &omissing, ///< [in] (optional) missing
+      bool sort_bitwise,            ///< [in] local sort bitwise (vs nibblewise)
       ThreadPool::TPHandle* handle  ///< [in] ThreadPool handle
       ); ///< @return whether a new object location was discovered
 

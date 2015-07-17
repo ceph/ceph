@@ -422,7 +422,7 @@ bool PG::search_for_missing(
 {
   unsigned num_unfound_before = missing_loc.num_unfound();
   bool found_missing = missing_loc.add_source_info(
-    from, oinfo, omissing, ctx->handle);
+    from, oinfo, omissing, get_sort_bitwise(), ctx->handle);
   if (found_missing && num_unfound_before != missing_loc.num_unfound())
     publish_stats_to_osd();
   if (found_missing &&
@@ -475,6 +475,7 @@ bool PG::MissingLoc::add_source_info(
   pg_shard_t fromosd,
   const pg_info_t &oinfo,
   const pg_missing_t &omissing,
+  bool sort_bitwise,
   ThreadPool::TPHandle* handle)
 {
   bool found_missing = false;
@@ -491,6 +492,15 @@ bool PG::MissingLoc::add_source_info(
       dout(10) << "search_for_missing " << soid << " " << need
 	       << " also missing on osd." << fromosd
 	       << " (last_update " << oinfo.last_update << " < needed " << need << ")"
+	       << dendl;
+      continue;
+    }
+    if (oinfo.last_backfill != hobject_t::get_max() &&
+	oinfo.last_backfill_bitwise != sort_bitwise) {
+      dout(10) << "search_for_missing " << soid << " " << need
+	       << " also missing on osd." << fromosd
+	       << " (last_backfill " << oinfo.last_backfill
+	       << " but with wrong sort order)"
 	       << dendl;
       continue;
     }
@@ -1735,7 +1745,8 @@ void PG::activate(ObjectStore::Transaction& t,
       if (complete_shards.size() + 1 == actingbackfill.size()) {
         missing_loc.add_batch_sources_info(complete_shards);
       } else {
-        missing_loc.add_source_info(pg_whoami, info, pg_log.get_missing(), ctx->handle);
+        missing_loc.add_source_info(pg_whoami, info, pg_log.get_missing(),
+				    get_sort_bitwise(), ctx->handle);
         for (set<pg_shard_t>::iterator i = actingbackfill.begin();
 	     i != actingbackfill.end();
 	     ++i) {
@@ -1747,6 +1758,7 @@ void PG::activate(ObjectStore::Transaction& t,
 	    *i,
 	    peer_info[*i],
 	    peer_missing[*i],
+	    get_sort_bitwise(),
             ctx->handle);
         }
       }
