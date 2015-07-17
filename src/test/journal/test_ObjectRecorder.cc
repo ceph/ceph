@@ -85,7 +85,7 @@ public:
                                              uint64_t tid,
                                              const std::string &payload) {
     journal::FutureImplPtr future(new journal::FutureImpl(*m_finisher,
-                                                          tag, tid));
+                                                          tag, tid, 456));
     future->init(journal::FutureImplPtr());
 
     bufferlist bl;
