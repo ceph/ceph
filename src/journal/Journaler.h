@@ -8,7 +8,6 @@
 #include "include/buffer.h"
 #include "include/rados/librados.hpp"
 #include "journal/Future.h"
-#include "journal/Payload.h"
 #include <string>
 #include <map>
 #include "include/assert.h"
@@ -22,6 +21,7 @@ class JournalMetadata;
 class JournalPlayer;
 class JournalRecorder;
 class JournalTrimmer;
+class ReplayEntry;
 class ReplayHandler;
 
 class Journaler {
@@ -40,15 +40,16 @@ public:
 
   void start_replay(ReplayHandler *replay_handler);
   void start_live_replay(ReplayHandler *replay_handler, double interval);
-  bool try_pop_front(Payload *payload);
+  bool try_pop_front(ReplayEntry *replay_entry);
   void stop_replay();
-
-  void update_commit_position(const Payload &payload);
 
   void start_append();
   Future append(const std::string &tag, const bufferlist &bl);
   void flush(Context *on_safe);
   void stop_append(Context *on_safe);
+
+  void committed(const ReplayEntry &replay_entry);
+  void committed(const Future &future);
 
 private:
   librados::IoCtx m_header_ioctx;

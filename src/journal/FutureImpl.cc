@@ -7,8 +7,10 @@
 
 namespace journal {
 
-FutureImpl::FutureImpl(Finisher &finisher, const std::string &tag, uint64_t tid)
+FutureImpl::FutureImpl(Finisher &finisher, const std::string &tag, uint64_t tid,
+                       uint64_t commit_tid)
   : RefCountedObject(NULL, 0), m_finisher(finisher), m_tag(tag), m_tid(tid),
+    m_commit_tid(commit_tid),
     m_lock(utils::unique_lock_name("FutureImpl::m_lock", this)), m_safe(false),
     m_consistent(false), m_return_value(0), m_flush_state(FLUSH_STATE_NONE),
     m_consistent_ack(this) {

@@ -7,6 +7,7 @@
 #include "common/Finisher.h"
 #include "common/Timer.h"
 #include "cls/journal/cls_journal_client.h"
+#include <set>
 
 #define dout_subsys ceph_subsys_journaler
 #undef dout_prefix
@@ -24,9 +25,10 @@ JournalMetadata::JournalMetadata(librados::IoCtx &ioctx,
       m_client_id(client_id), m_commit_interval(commit_interval), m_order(0),
       m_splay_width(0), m_initialized(false), m_finisher(NULL), m_timer(NULL),
       m_timer_lock("JournalMetadata::m_timer_lock"),
-      m_lock("JournalMetadata::m_lock"), m_watch_ctx(this), m_watch_handle(0),
-      m_minimum_set(0), m_active_set(0), m_update_notifications(0),
-      m_commit_position_pending(false), m_commit_position_ctx(NULL) {
+      m_lock("JournalMetadata::m_lock"), m_commit_tid(0), m_watch_ctx(this),
+      m_watch_handle(0), m_minimum_set(0), m_active_set(0),
+      m_update_notifications(0), m_commit_position_ctx(NULL),
+      m_commit_position_task_ctx(NULL) {
   m_ioctx.dup(ioctx);
   m_cct = reinterpret_cast<CephContext*>(m_ioctx.cct());
 }
@@ -178,6 +180,20 @@ void JournalMetadata::set_active_set(uint64_t object_set) {
   m_active_set = object_set;
 }
 
+void JournalMetadata::flush_commit_position() {
+  {
+    Mutex::Locker locker(m_lock);
+    if (m_commit_position_task_ctx == NULL) {
+      return;
+    }
+
+    Mutex::Locker timer_locker(m_timer_lock);
+    m_timer->cancel_event(m_commit_position_task_ctx);
+    m_commit_position_task_ctx = NULL;
+  }
+  handle_commit_position_task();
+}
+
 void JournalMetadata::set_commit_position(
     const ObjectSetPosition &commit_position, Context *on_safe) {
   assert(on_safe != NULL);
@@ -281,9 +297,9 @@ void JournalMetadata::schedule_commit_task() {
   assert(m_lock.is_locked());
 
   Mutex::Locker timer_locker(m_timer_lock);
-  if (!m_commit_position_pending) {
-    m_commit_position_pending = true;
-    m_timer->add_event_after(m_commit_interval, new C_CommitPositionTask(this));
+  if (m_commit_position_task_ctx == NULL) {
+    m_commit_position_task_ctx = new C_CommitPositionTask(this);
+    m_timer->add_event_after(m_commit_interval, m_commit_position_task_ctx);
   }
 }
 
@@ -333,6 +349,77 @@ void JournalMetadata::handle_watch_notify(uint64_t notify_id, uint64_t cookie) {
 void JournalMetadata::handle_watch_error(int err) {
   lderr(m_cct) << "journal watch error: " << cpp_strerror(err) << dendl;
   schedule_watch_reset();
+}
+
+uint64_t JournalMetadata::allocate_commit_tid(uint64_t object_num,
+                                              const std::string &tag,
+                                              uint64_t tid) {
+  Mutex::Locker locker(m_lock);
+  uint64_t commit_tid = ++m_commit_tid;
+  m_pending_commit_tids[commit_tid] = CommitEntry(object_num, tag, tid);
+
+  ldout(m_cct, 20) << "allocated commit tid: commit_tid=" << commit_tid << " ["
+                   << "object_num=" << object_num << ", "
+                   << "tag=" << tag << ", tid=" << tid << "]" << dendl;
+  return commit_tid;
+}
+
+bool JournalMetadata::committed(uint64_t commit_tid,
+                                ObjectSetPosition *object_set_position) {
+  ldout(m_cct, 20) << "committed tid=" << commit_tid << dendl;
+
+  Mutex::Locker locker(m_lock);
+  {
+    CommitTids::iterator it = m_pending_commit_tids.find(commit_tid);
+    assert(it != m_pending_commit_tids.end());
+
+    CommitEntry &commit_entry = it->second;
+    commit_entry.committed = true;
+  }
+
+  if (!m_commit_position.entry_positions.empty()) {
+    *object_set_position = m_commit_position;
+  } else {
+    *object_set_position = m_client.commit_position;
+  }
+
+  bool update_commit_position = false;
+  while (!m_pending_commit_tids.empty()) {
+    CommitTids::iterator it = m_pending_commit_tids.begin();
+    CommitEntry &commit_entry = it->second;
+    if (!commit_entry.committed) {
+      break;
+    }
+
+    object_set_position->object_number = commit_entry.object_num;
+    if (!object_set_position->entry_positions.empty() &&
+        object_set_position->entry_positions.front().tag == commit_entry.tag) {
+      object_set_position->entry_positions.front() = EntryPosition(
+        commit_entry.tag, commit_entry.tid);
+    } else {
+      object_set_position->entry_positions.push_front(EntryPosition(
+        commit_entry.tag, commit_entry.tid));
+    }
+    m_pending_commit_tids.erase(it);
+    update_commit_position = true;
+  }
+
+  if (update_commit_position) {
+    // prune the position to have unique tags in commit-order
+    std::set<std::string> in_use_tags;
+    EntryPositions::iterator it = object_set_position->entry_positions.begin();
+    while (it != object_set_position->entry_positions.end()) {
+      if (!in_use_tags.insert(it->tag).second) {
+        it = object_set_position->entry_positions.erase(it);
+      } else {
+        ++it;
+      }
+    }
+
+    ldout(m_cct, 20) << "updated object set position: " << *object_set_position
+                     << dendl;
+  }
+  return update_commit_position;
 }
 
 void JournalMetadata::notify_update() {

@@ -87,6 +87,7 @@ public:
     return m_active_set;
   }
 
+  void flush_commit_position();
   void set_commit_position(const ObjectSetPosition &commit_position,
                            Context *on_safe);
   void get_commit_position(ObjectSetPosition *commit_position) const {
@@ -106,12 +107,30 @@ public:
   void reserve_tid(const std::string &tag, uint64_t tid);
   bool get_last_allocated_tid(const std::string &tag, uint64_t *tid) const;
 
+  uint64_t allocate_commit_tid(uint64_t object_num, const std::string &tag,
+                               uint64_t tid);
+  bool committed(uint64_t commit_tid, ObjectSetPosition *object_set_position);
+
   void notify_update();
   void async_notify_update();
 
 private:
   typedef std::map<std::string, uint64_t> AllocatedTids;
   typedef std::list<Listener*> Listeners;
+
+  struct CommitEntry {
+    uint64_t object_num;
+    std::string tag;
+    uint64_t tid;
+    bool committed;
+
+    CommitEntry() : object_num(0), tid(0), committed(false) {
+    }
+    CommitEntry(uint64_t _object_num, const std::string &_tag, uint64_t _tid)
+      : object_num(_object_num), tag(_tag), tid(_tid), committed(false) {
+    }
+  };
+  typedef std::map<uint64_t, CommitEntry> CommitTids;
 
   struct C_WatchCtx : public librados::WatchCtx2 {
     JournalMetadata *journal_metadata;
@@ -186,8 +205,8 @@ private:
     virtual void finish(int r) {
       journal_metadata->handle_immutable_metadata(r, on_finish);
     }
-
   };
+
   struct C_Refresh : public Context {
     JournalMetadata* journal_metadata;
     uint64_t minimum_set;
@@ -225,6 +244,9 @@ private:
 
   mutable Mutex m_lock;
 
+  uint64_t m_commit_tid;
+  CommitTids m_pending_commit_tids;
+
   Listeners m_listeners;
 
   C_WatchCtx m_watch_ctx;
@@ -240,9 +262,9 @@ private:
   size_t m_update_notifications;
   Cond m_update_cond;
 
-  bool m_commit_position_pending;
   ObjectSetPosition m_commit_position;
   Context *m_commit_position_ctx;
+  Context *m_commit_position_task_ctx;
 
   AsyncOpTracker m_async_op_tracker;
 
