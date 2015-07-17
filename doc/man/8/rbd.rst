@@ -448,10 +448,6 @@ Examples
 
 To create a new rbd image that is 100 GB::
 
-       rbd -p mypool create myimage --size 102400
-
-or alternatively::
-
        rbd create mypool/myimage --size 102400
 
 To use a non-default object size (8 MB)::
@@ -489,13 +485,13 @@ To unmap an image::
 To create an image and a clone from it::
 
        rbd import --image-format 2 image mypool/parent
-       rbd snap create --snap snapname mypool/parent
+       rbd snap create mypool/parent@snap
        rbd snap protect mypool/parent@snap
        rbd clone mypool/parent@snap otherpool/child
 
 To create an image with a smaller stripe_unit (to better distribute small writes in some workloads)::
 
-       rbd -p mypool create myimage --size 102400 --stripe-unit 65536 --stripe-count 16
+       rbd create mypool/myimage --size 102400 --stripe-unit 65536 --stripe-count 16
 
 To change an image from one image format to another, export it and then
 import it as the desired image format::
