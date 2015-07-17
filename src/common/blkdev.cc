@@ -1,3 +1,14 @@
+/*
+ * Ceph - scalable distributed file system
+ *
+ * Copyright (c) 2015 Hewlett-Packard Development Company, L.P.
+ *
+ * This is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License version 2.1, as published by the Free Software 
+ * Foundation.  See file COPYING.
+ * 
+ */
 #include <errno.h>
 #include <sys/types.h>
 #include <sys/ioctl.h>
