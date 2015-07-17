@@ -2016,6 +2016,8 @@ public:
   uint64_t acting_features;
   uint64_t upacting_features;
 
+  bool randomly_sort_nibblewise;
+
  public:
   const spg_t&      get_pgid() const { return pg_id; }
   int        get_nrep() const { return acting.size(); }
@@ -2031,7 +2033,8 @@ public:
 
   /// true if we will sort hobjects bitwise for this pg interval
   bool get_sort_bitwise() const {
-    return get_min_upacting_features() & CEPH_FEATURE_OSD_BITWISE_HOBJ_SORT;
+    return (get_min_upacting_features() & CEPH_FEATURE_OSD_BITWISE_HOBJ_SORT) &&
+      !randomly_sort_nibblewise;
   }
 
   void init_primary_up_acting(
