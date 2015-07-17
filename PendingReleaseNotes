@@ -16,3 +16,5 @@ v9.0.3
 * 'ceph mon_metadata' should now be used as 'ceph mon metadata'. There is no
   need to deprecate this command (same major release since it was first
   introduced).
+
+* The `--dump-json` option of "osdmaptool" is replaced by `--dump json`.
