@@ -1497,7 +1497,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       librados::pool_stat_t& s = i->second;
       if (!formatter) {
 	printf("%-15s "
-	       "%12lld %12lld %12lld %12lld"
+	       "%12lld %12lld %12lld %12lld "
 	       "%12lld %12lld %12lld %12lld %12lld\n",
 	       pool_name,
 	       (long long)s.num_kb,
