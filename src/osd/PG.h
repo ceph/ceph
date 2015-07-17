@@ -2019,17 +2019,14 @@ public:
   const spg_t&      get_pgid() const { return pg_id; }
   int        get_nrep() const { return acting.size(); }
 
-  void reset_all_min_features() {
-     peer_features = CEPH_FEATURES_SUPPORTED_DEFAULT;
-     acting_features = CEPH_FEATURES_SUPPORTED_DEFAULT;
-     upacting_features = CEPH_FEATURES_SUPPORTED_DEFAULT;
+  void reset_min_peer_features() {
+    peer_features = CEPH_FEATURES_SUPPORTED_DEFAULT;
   }
   uint64_t get_min_peer_features() const { return peer_features; }
+  void apply_peer_features(uint64_t f) { peer_features &= f; }
+
   uint64_t get_min_acting_features() const { return acting_features; }
   uint64_t get_min_upacting_features() const { return upacting_features; }
-  void apply_peer_features(uint64_t f) { peer_features &= f; }
-  void apply_acting_features(uint64_t f) { acting_features &= f; }
-  void apply_upacting_features(uint64_t f) { upacting_features &= f; }
 
   /// true if we will sort hobjects bitwise for this pg interval
   bool get_sort_bitwise() const {
