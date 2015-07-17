@@ -1,6 +1,6 @@
 #!/usr/bin/nosetests --nocapture
-# -*- mode:python; tab-width:4; indent-tabs-mode:t -*-
-# vim: ts=4 sw=4 smarttab expandtab
+# -*- mode:python; tab-width:4; indent-tabs-mode:t; coding:utf-8 -*-
+# vim: ts=4 sw=4 smarttab expandtab fileencoding=utf-8
 #
 # Ceph - scalable distributed file system
 #
@@ -84,6 +84,15 @@ class TestArgparse:
         assert_equal({}, validate_command(sigdict, [prefix,
                                                     command,
                                                     'toomany']))
+
+
+class TestBasic:
+
+	def test_non_ascii_in_non_options(self):
+		# unicode() is not able to convert this str parameter into unicode
+		# using the default encoding 'ascii'. and validate_command() should
+		# not choke on it.
+		assert_is_none(validate_command(sigdict, ['章鱼和鱿鱼']))
 
 
 class TestPG(TestArgparse):
