@@ -2,7 +2,7 @@
  Ceph Object Gateway S3 API
 ============================
 
-Ceph supports a RESTful API that is compatible with the basic data access model of the Amazon S3 API.
+Ceph supports a RESTful API that is compatible with the basic data access model of the `Amazon S3 API`_.
 
 API
 ---
@@ -93,3 +93,5 @@ The following common request header fields are not supported:
 +----------------------------+------------+
 | **x-amz-version-id**       | Response   |
 +----------------------------+------------+
+
+.. _Amazon S3 API: http://docs.aws.amazon.com/AmazonS3/latest/API/APIRest.html
