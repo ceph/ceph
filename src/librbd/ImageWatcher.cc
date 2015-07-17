@@ -56,8 +56,13 @@ ImageWatcher::~ImageWatcher()
 }
 
 bool ImageWatcher::is_lock_supported() const {
-  assert(m_image_ctx.owner_lock.is_locked());
   RWLock::RLocker l(m_image_ctx.snap_lock);
+  return is_lock_supported(m_image_ctx.snap_lock);
+}
+
+bool ImageWatcher::is_lock_supported(const RWLock &) const {
+  assert(m_image_ctx.owner_lock.is_locked());
+  assert(m_image_ctx.snap_lock.is_locked());
   uint64_t snap_features;
   m_image_ctx.get_features(m_image_ctx.snap_id, &snap_features);
   return ((snap_features & RBD_FEATURE_EXCLUSIVE_LOCK) != 0 &&
