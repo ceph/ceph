@@ -94,12 +94,19 @@ int PoolDump::dump(IoCtx *io_ctx)
 
     // Compose TYPE_ATTRS chunk
     // ========================
+    std::map<std::string, bufferlist> raw_xattrs;
     std::map<std::string, bufferlist> xattrs;
-    r = io_ctx->getxattrs(oid, xattrs);
+    r = io_ctx->getxattrs(oid, raw_xattrs);
     if (r < 0) {
       cerr << "error getting xattr set " << oid << ": " << cpp_strerror(r)
            << std::endl;
       return r;
+    }
+    // Prepend "_" to mimic how user keys are represented in a pg export
+    for (std::map<std::string, bufferlist>::iterator i = raw_xattrs.begin();
+         i != raw_xattrs.end(); ++i) {
+      std::pair< std::string, bufferlist> item(std::string("_") + std::string(i->first.c_str()), i->second);
+      xattrs.insert(item);
     }
     r = write_section(TYPE_ATTRS, attr_section(xattrs), file_fd);
     if (r != 0) {
