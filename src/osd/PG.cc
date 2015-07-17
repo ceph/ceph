@@ -217,7 +217,8 @@ PG::PG(OSDService *o, OSDMapRef curmap,
   pg_id(p),
   peer_features(CEPH_FEATURES_SUPPORTED_DEFAULT),
   acting_features(CEPH_FEATURES_SUPPORTED_DEFAULT),
-  upacting_features(CEPH_FEATURES_SUPPORTED_DEFAULT)
+  upacting_features(CEPH_FEATURES_SUPPORTED_DEFAULT),
+  randomly_sort_nibblewise(false)
 {
 #ifdef PG_DEBUG_REFS
   osd->add_pgid(p, this);
@@ -4731,6 +4732,15 @@ void PG::start_peering_interval(
   }
   for (vector<int>::iterator p = up.begin(); p != up.end(); ++p) {
     upacting_features &= osdmap->get_xinfo(*p).features;
+  }
+
+  if (g_conf->osd_debug_randomize_hobject_sort_order) {
+    // randomly use a nibblewise sort (when we otherwise might have
+    // done bitwise) based on some *deterministic* function such that
+    // all peers/osds will agree.
+    randomly_sort_nibblewise = (info.history.same_interval_since + info.pgid.ps()) & 1;
+  } else {
+    randomly_sort_nibblewise = false;
   }
 
   dout(10) << " up " << oldup << " -> " << up 
