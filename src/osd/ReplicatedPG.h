@@ -63,7 +63,8 @@ protected:
 public:
   PGLSFilter();
   virtual ~PGLSFilter();
-  virtual bool filter(bufferlist& xattr_data, bufferlist& outdata) = 0;
+  virtual bool filter(const hobject_t &obj, bufferlist& xattr_data,
+                      bufferlist& outdata) = 0;
   virtual string& get_xattr() { return xattr; }
 };
 
@@ -75,7 +76,8 @@ public:
     ::decode(val, params);
   }
   virtual ~PGLSPlainFilter() {}
-  virtual bool filter(bufferlist& xattr_data, bufferlist& outdata);
+  virtual bool filter(const hobject_t &obj, bufferlist& xattr_data,
+                      bufferlist& outdata);
 };
 
 class PGLSParentFilter : public PGLSFilter {
@@ -87,7 +89,8 @@ public:
     generic_dout(0) << "parent_ino=" << parent_ino << dendl;
   }
   virtual ~PGLSParentFilter() {}
-  virtual bool filter(bufferlist& xattr_data, bufferlist& outdata);
+  virtual bool filter(const hobject_t &obj, bufferlist& xattr_data,
+                      bufferlist& outdata);
 };
 
 class ReplicatedPG : public PG, public PGBackend::Listener {
