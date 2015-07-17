@@ -45,8 +45,9 @@ bool ObjectSetPosition::operator<(const ObjectSetPosition& rhs) const {
     rhs_tids[it->tag] = it->tid;
   }
 
-  for (size_t i=0; i<entry_positions.size(); ++i) {
-    const EntryPosition &entry_position = entry_positions[i];
+  for (EntryPositions::const_iterator it = entry_positions.begin();
+       it != entry_positions.end(); ++it) {
+    const EntryPosition &entry_position = *it;
     if (entry_position.tid < rhs_tids[entry_position.tag]) {
       return true;
     }
@@ -71,9 +72,10 @@ void ObjectSetPosition::decode(bufferlist::iterator& iter) {
 void ObjectSetPosition::dump(Formatter *f) {
   f->dump_unsigned("object_number", object_number);
   f->open_array_section("entry_positions");
-  for (size_t i = 0; i < entry_positions.size(); ++i) {
+  for (EntryPositions::iterator it = entry_positions.begin();
+       it != entry_positions.end(); ++it) {
     f->open_object_section("entry_position");
-    entry_positions[i].dump(f);
+    it->dump(f);
     f->close_section();
   }
   f->close_section();
@@ -134,8 +136,10 @@ std::ostream &operator<<(std::ostream &os,
                          const ObjectSetPosition &object_set_position) {
   os << "[object_number=" << object_set_position.object_number << ", "
      << "positions=[";
-  for (size_t i=0; i<object_set_position.entry_positions.size(); ++i) {
-    os << object_set_position.entry_positions[i];
+  for (EntryPositions::const_iterator it =
+         object_set_position.entry_positions.begin();
+       it != object_set_position.entry_positions.end(); ++it) {
+    os << *it;
   }
   os << "]]";
   return os;
