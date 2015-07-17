@@ -486,12 +486,6 @@ out:
 
 // =========== KeyValueStore Intern Helper Implementation ==============
 
-ostream& operator<<(ostream& out, const KeyValueStore::OpSequencer& s)
-{
-  assert(&out);
-  return out << *s.parent;
-}
-
 int KeyValueStore::_create_current()
 {
   struct stat st;
@@ -1037,20 +1031,12 @@ int KeyValueStore::queue_transactions(Sequencer *posr, list<Transaction*> &tls,
   ObjectStore::Transaction::collect_contexts(
     tls, &onreadable, &ondisk, &onreadable_sync);
 
-  // set up the sequencer
-  OpSequencer *osr;
-  if (!posr)
-    posr = &default_osr;
-  if (posr->p) {
-    osr = static_cast<OpSequencer *>(posr->p);
-    dout(5) << "queue_transactions existing " << *osr << "/" << osr->parent
-            << dendl; //<< " w/ q " << osr->q << dendl;
-  } else {
-    osr = new OpSequencer;
-    osr->parent = posr;
-    posr->p = osr;
-    dout(5) << "queue_transactions new " << *osr << "/" << osr->parent << dendl;
+  // downcast the sequencer; if NULL, use the default global one
+  OpSequencer *osr = &default_osr;
+  if (posr) {
+    osr = static_cast<OpSequencer *>(posr);
   }
+  dout(5) << "queue_transactions " << *osr << dendl;
 
   Op *o = build_op(tls, ondisk, onreadable, onreadable_sync, osd_op);
   op_queue_reserve_throttle(o, handle);
@@ -1159,7 +1145,7 @@ void KeyValueStore::_do_op(OpSequencer *osr, ThreadPool::TPHandle &handle)
   // one PG, so this lock will ensure no other concurrent write operation
   osr->apply_lock.Lock();
   Op *o = osr->peek_queue();
-  dout(5) << "_do_op " << o << " seq " << o->op << " " << *osr << "/" << osr->parent << " start" << dendl;
+  dout(5) << "_do_op " << o << " seq " << o->op << " " << *osr << " start" << dendl;
   int r = _do_transactions(o->tls, o->op, &handle);
   dout(10) << "_do_op " << o << " seq " << o->op << " r = " << r
            << ", finisher " << o->onreadable << " " << o->onreadable_sync << dendl;
@@ -1182,7 +1168,7 @@ void KeyValueStore::_finish_op(OpSequencer *osr)
   utime_t lat = ceph_clock_now(g_ceph_context);
   lat -= o->start;
 
-  dout(10) << "_finish_op " << o << " seq " << o->op << " " << *osr << "/" << osr->parent << " lat " << lat << dendl;
+  dout(10) << "_finish_op " << o << " seq " << o->op << " " << *osr << " lat " << lat << dendl;
   osr->apply_lock.Unlock();  // locked in _do_op
   op_queue_release_throttle(o);
 

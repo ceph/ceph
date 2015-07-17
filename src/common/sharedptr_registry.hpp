@@ -17,14 +17,26 @@
 
 #include <map>
 #include <memory>
+#include <string>
 #include "common/Mutex.h"
 #include "common/Cond.h"
+
+template <class V>
+struct DefaultNewFunctor {
+  V *operator()() const {
+    return new V();
+  }
+  template <class A>
+  V *operator()(const A& arg) const {
+    return new V(arg);
+  }
+};
 
 /**
  * Provides a registry of shared_ptr<V> indexed by K while
  * the references are alive.
  */
-template <class K, class V>
+template <class K, class V, class F = DefaultNewFunctor<V> >
 class SharedPtrRegistry {
 public:
   typedef ceph::shared_ptr<V> VPtr;
@@ -34,12 +46,13 @@ private:
   Mutex lock;
   Cond cond;
   map<K, pair<WeakVPtr, V*> > contents;
+  F new_functor;
 
   class OnRemoval {
-    SharedPtrRegistry<K,V> *parent;
+    SharedPtrRegistry<K,V,F> *parent;
     K key;
   public:
-    OnRemoval(SharedPtrRegistry<K,V> *parent, K key) :
+    OnRemoval(SharedPtrRegistry<K,V,F> *parent, K key) :
       parent(parent), key(key) {}
     void operator()(V *to_remove) {
       {
@@ -58,9 +71,10 @@ private:
   friend class OnRemoval;
 
 public:
-  SharedPtrRegistry() :
+  SharedPtrRegistry(F f = F()) :
     waiting(0),
-    lock("SharedPtrRegistry::lock")
+    lock("SharedPtrRegistry::lock"),
+    new_functor(f)
   {}
 
   bool empty() {
@@ -142,7 +156,7 @@ public:
       }
       cond.Wait(lock);
     }
-    V *ptr = new V();
+    V *ptr = new_functor();
     VPtr retval(ptr, OnRemoval(this, key));
     contents.insert(make_pair(key, make_pair(retval, ptr)));
     waiting--;
@@ -178,7 +192,7 @@ public:
       }
       cond.Wait(lock);
     }
-    V *ptr = new V(arg);
+    V *ptr = new_functor(arg);
     VPtr retval(ptr, OnRemoval(this, key));
     contents.insert(make_pair(key, make_pair(retval, ptr)));
     waiting--;

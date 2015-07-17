@@ -140,13 +140,6 @@ void FileStore::FSPerfTracker::update_from_perfcounters(
       l_os_apply_lat));
 }
 
-
-ostream& operator<<(ostream& out, const FileStore::OpSequencer& s)
-{
-  assert(&out);
-  return out << *s.parent;
-}
-
 int FileStore::get_cdir(coll_t cid, char *s, int len) 
 {
   const string &cid_str(cid.to_str());
@@ -1862,7 +1855,7 @@ void FileStore::_do_op(OpSequencer *osr, ThreadPool::TPHandle &handle)
   osr->apply_lock.Lock();
   Op *o = osr->peek_queue();
   apply_manager.op_apply_start(o->op);
-  dout(5) << "_do_op " << o << " seq " << o->op << " " << *osr << "/" << osr->parent << " start" << dendl;
+  dout(5) << "_do_op " << o << " seq " << o->op << " " << *osr << " start" << dendl;
   int r = _do_transactions(o->tls, o->op, &handle);
   apply_manager.op_apply_finish(o->op);
   dout(10) << "_do_op " << o << " seq " << o->op << " r = " << r
@@ -1877,7 +1870,7 @@ void FileStore::_finish_op(OpSequencer *osr)
   utime_t lat = ceph_clock_now(g_ceph_context);
   lat -= o->start;
 
-  dout(10) << "_finish_op " << o << " seq " << o->op << " " << *osr << "/" << osr->parent << " lat " << lat << dendl;
+  dout(10) << "_finish_op " << o << " seq " << o->op << " " << *osr << " lat " << lat << dendl;
   osr->apply_lock.Unlock();  // locked in _do_op
 
   // called with tp lock held
@@ -1928,19 +1921,12 @@ int FileStore::queue_transactions(Sequencer *posr, list<Transaction*> &tls,
     return 0;
   }
 
-  // set up the sequencer
-  OpSequencer *osr;
-  if (!posr)
-    posr = &default_osr;
-  if (posr->p) {
-    osr = static_cast<OpSequencer *>(posr->p);
-    dout(5) << "queue_transactions existing " << *osr << "/" << osr->parent << dendl; //<< " w/ q " << osr->q << dendl;
-  } else {
-    osr = new OpSequencer;
-    osr->parent = posr;
-    posr->p = osr;
-    dout(5) << "queue_transactions new " << *osr << "/" << osr->parent << dendl;
+  // downcast the sequencer; if NULL, use global default sequencer
+  OpSequencer *osr = &default_osr;
+  if (posr) {
+    osr = static_cast<OpSequencer*>(posr);
   }
+  dout(5) << "queue_transactions " << *osr << dendl; //<< " w/ q " << osr->q << dendl;
 
   // used to include osr information in tracepoints during transaction apply
   for (list<ObjectStore::Transaction*>::iterator i = tls.begin(); i != tls.end(); ++i) {

@@ -383,11 +383,20 @@ public:
   entity_inst_t get_owner() const { return owner; }
 };
 
+class NewSequencerFunctor {
+  ObjectStore *&store;
+public:
+  NewSequencerFunctor(ObjectStore *&os) : store(os) {}
+  ObjectStore::Sequencer *operator()(const string& name) {
+    return store->create_sequencer(name);
+  }
+};
+
 class OSDService {
 public:
   OSD *osd;
   CephContext *cct;
-  SharedPtrRegistry<spg_t, ObjectStore::Sequencer> osr_registry;
+  SharedPtrRegistry<spg_t, ObjectStore::Sequencer, NewSequencerFunctor> osr_registry;
   SharedPtrRegistry<spg_t, DeletingState> deleting_pgs;
   const int whoami;
   ObjectStore *&store;

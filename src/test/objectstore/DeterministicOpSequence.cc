@@ -37,7 +37,7 @@ DeterministicOpSequence::DeterministicOpSequence(ObjectStore *store,
 						 std::string status)
   : TestObjectStoreState(store),
     txn(0),
-    m_osr("OSR")
+    m_osr(store->create_sequencer("OSR"))
 {
   txn_object = hobject_t(sobject_t("txn", CEPH_NOSNAP));
 

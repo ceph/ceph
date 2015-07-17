@@ -190,7 +190,7 @@ private:
     uint64_t bytes; ///< Total size of the transactions in the list
     TrackedOpRef osd_op;
   };
-  class OpSequencer : public Sequencer_impl {
+  class OpSequencer : public Sequencer {
     Mutex qlock; // to protect q, for benefit of flush (peek/dequeue also protected by lock)
     list<Op*> q; ///< Queue for operations
     list<uint64_t> jq; ///< Queue for journal operations
@@ -201,7 +201,6 @@ private:
     list<pair<uint64_t, Context*> > flush_commit_waiters;
     Cond cond; ///< condition variable to wait for completion of some transactions
   public:
-    Sequencer *parent; ///< Public interface for this internal object
     Mutex apply_lock;  ///< must be taken when starting to apply an operation and released when done
 
   private:
@@ -329,25 +328,23 @@ private:
       }
     }
 
-    OpSequencer()
-      : qlock("FileStore::OpSequencer::qlock", false, false),
-	parent(0),
+    OpSequencer(const string& name)
+      : Sequencer(name),
+        qlock("FileStore::OpSequencer::qlock", false, false),
 	apply_lock("FileStore::OpSequencer::apply_lock", false, false) {}
     ~OpSequencer() {
       assert(q.empty());
     }
-
-    const string& get_name() const {
-      return parent->get_name();
-    }
   };
 
-  friend ostream& operator<<(ostream& out, const OpSequencer& s);
+  Sequencer *create_sequencer(const string& name) {
+    return new OpSequencer(name);
+  }
 
   FDCache fdcache;
   WBThrottle wbthrottle;
 
-  Sequencer default_osr;
+  OpSequencer default_osr;
   deque<OpSequencer*> op_queue;
   uint64_t op_queue_len, op_queue_bytes;
   Cond op_throttle_cond;
@@ -768,8 +765,6 @@ private:
   friend class FileStoreBackend;
   friend class TestFileStore;
 };
-
-ostream& operator<<(ostream& out, const FileStore::OpSequencer& s);
 
 struct fiemap;
 

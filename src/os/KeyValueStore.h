@@ -296,14 +296,13 @@ class KeyValueStore : public ObjectStore,
     uint64_t ops, bytes;
     TrackedOpRef osd_op;
   };
-  class OpSequencer : public Sequencer_impl {
+  class OpSequencer : public Sequencer {
     Mutex qlock; // to protect q, for benefit of flush (peek/dequeue also protected by lock)
     list<Op*> q;
     Cond cond;
     list<pair<uint64_t, Context*> > flush_commit_waiters;
     uint64_t op; // used by flush() to know the sequence of op
    public:
-    Sequencer *parent;
     Mutex apply_lock;  // for apply mutual exclusion
     
     /// get_max_uncompleted
@@ -399,22 +398,21 @@ class KeyValueStore : public ObjectStore,
       }
     }
 
-    OpSequencer()
-      : qlock("KeyValueStore::OpSequencer::qlock", false, false),
-        op(0), parent(0),
+    OpSequencer(const string& name)
+      : Sequencer(name),
+        qlock("KeyValueStore::OpSequencer::qlock", false, false),
+        op(0),
 	apply_lock("KeyValueStore::OpSequencer::apply_lock", false, false) {}
     ~OpSequencer() {
       assert(q.empty());
     }
-
-    const string& get_name() const {
-      return parent->get_name();
-    }
   };
 
-  friend ostream& operator<<(ostream& out, const OpSequencer& s);
+  Sequencer *create_sequencer(const string& name) {
+    return new OpSequencer(name);
+  }
 
-  Sequencer default_osr;
+  OpSequencer default_osr;
   deque<OpSequencer*> op_queue;
   uint64_t op_queue_len, op_queue_bytes;
   Cond op_throttle_cond;

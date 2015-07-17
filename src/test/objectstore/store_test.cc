@@ -1172,12 +1172,12 @@ public:
 };
 
 TEST_P(StoreTest, Synthetic) {
-  ObjectStore::Sequencer osr("test");
+  ObjectStore::Sequencer *osr = store->create_sequencer("test");
   MixedGenerator gen;
   gen_type rng(time(NULL));
   coll_t cid(spg_t(pg_t(1,0), shard_id_t::NO_SHARD));
 
-  SyntheticWorkloadState test_obj(store.get(), &gen, &rng, &osr, cid);
+  SyntheticWorkloadState test_obj(store.get(), &gen, &rng, osr, cid);
   test_obj.init();
   for (int i = 0; i < 1000; ++i) {
     if (!(i % 10)) cerr << "seeding object " << i << std::endl;
@@ -1212,12 +1212,12 @@ TEST_P(StoreTest, Synthetic) {
 }
 
 TEST_P(StoreTest, AttrSynthetic) {
-  ObjectStore::Sequencer osr("test");
+  ObjectStore::Sequencer *osr = store->create_sequencer("test");
   MixedGenerator gen;
   gen_type rng(time(NULL));
   coll_t cid(spg_t(pg_t(4,0),shard_id_t::NO_SHARD));
 
-  SyntheticWorkloadState test_obj(store.get(), &gen, &rng, &osr, cid);
+  SyntheticWorkloadState test_obj(store.get(), &gen, &rng, osr, cid);
   test_obj.init();
   for (int i = 0; i < 500; ++i) {
     if (!(i % 10)) cerr << "seeding object " << i << std::endl;

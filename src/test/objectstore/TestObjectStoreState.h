@@ -29,18 +29,9 @@ public:
     spg_t m_pgid;
     coll_t m_coll;
     ghobject_t m_meta_obj;
-    ObjectStore::Sequencer m_osr;
+    ObjectStore::Sequencer *m_osr;
     map<int, hobject_t*> m_objects;
     int m_next_object_id;
-
-    coll_entry_t(int i, char *coll_buf, char *meta_obj_buf)
-      : m_id(i),
-	m_pgid(pg_t(i, 1), shard_id_t::NO_SHARD),
-	m_coll(m_pgid),
-	m_meta_obj(hobject_t(sobject_t(object_t(meta_obj_buf), CEPH_NOSNAP))),
-      m_osr(coll_buf), m_next_object_id(0) {
-    }
-    ~coll_entry_t();
 
     hobject_t *touch_obj(int id);
     bool check_for_obj(int id);
@@ -54,6 +45,19 @@ public:
    private:
     hobject_t *get_obj(int id, bool remove);
     hobject_t *get_obj_at(int pos, bool remove, int *key = NULL);
+
+    coll_entry_t(int i, char *coll_buf, char *meta_obj_buf, ObjectStore::Sequencer *osr)
+      : m_id(i),
+	m_pgid(pg_t(i, 1), shard_id_t::NO_SHARD),
+	m_coll(m_pgid),
+	m_meta_obj(hobject_t(sobject_t(object_t(meta_obj_buf), CEPH_NOSNAP))),
+	m_osr(osr), m_next_object_id(0) {
+    }
+
+   public:
+    ~coll_entry_t();
+
+    friend class TestObjectStoreState;
   };
 
  protected:
