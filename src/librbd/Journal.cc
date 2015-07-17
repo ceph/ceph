@@ -8,6 +8,7 @@
 #include "librbd/ImageCtx.h"
 #include "librbd/JournalTypes.h"
 #include "journal/Journaler.h"
+#include "journal/ReplayEntry.h"
 #include "common/errno.h"
 
 #define dout_subsys ceph_subsys_rbd
@@ -369,8 +370,8 @@ void Journal::handle_replay_ready() {
       return;
     }
 
-    ::journal::Payload payload;
-    if (!m_journaler->try_pop_front(&payload)) {
+    ::journal::ReplayEntry replay_entry;
+    if (!m_journaler->try_pop_front(&replay_entry)) {
       return;
     }
 
