@@ -969,6 +969,8 @@ ln -sf %{_libdir}/librbd.so.1 /usr/lib64/qemu/librbd.so.1
 %if (0%{?fedora} || 0%{?rhel} == 6)
 %{_bindir}/rbd-replay-prep
 %endif
+%dir %{_libdir}/ceph
+%{_libdir}/ceph/ceph-monstore-update-crush.sh
 
 #################################################################################
 %if 0%{with cephfs_java}

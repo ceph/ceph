@@ -125,7 +125,7 @@ public:
     int32_t new_flags;
 
     // full (rare)
-    bufferlist fullmap;  // in leiu of below.
+    bufferlist fullmap;  // in lieu of below.
     bufferlist crush;
 
     // incremental
@@ -848,7 +848,6 @@ public:
   static string get_flag_string(unsigned flags);
   static void dump_erasure_code_profiles(const map<string,map<string,string> > &profiles,
 					 Formatter *f);
-  void dump_json(ostream& out) const;
   void dump(Formatter *f) const;
   static void generate_test_instances(list<OSDMap*>& o);
   bool check_new_blacklist_entries() const { return new_blacklist_entries; }
