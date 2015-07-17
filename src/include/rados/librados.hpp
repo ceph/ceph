@@ -109,6 +109,12 @@ namespace librados
     /// move the iterator to a given hash position.  this may (will!) be rounded to the nearest pg.
     uint32_t seek(uint32_t pos);
 
+    /**
+     * Configure PGLS filter to be applied OSD-side (requires caller
+     * to know/understand the format expected by the OSD)
+     */
+    void set_filter(const bufferlist &bl);
+
   private:
     NObjectIterator(ObjListCtx *ctx_);
     void get_next();
@@ -765,9 +771,10 @@ namespace librados
 
 
     /// Start enumerating objects for a pool
-    NObjectIterator nobjects_begin();
+    NObjectIterator nobjects_begin(const bufferlist &filter=bufferlist());
     /// Start enumerating objects for a pool starting from a hash position
-    NObjectIterator nobjects_begin(uint32_t start_hash_position);
+    NObjectIterator nobjects_begin(uint32_t start_hash_position,
+                                   const bufferlist &filter=bufferlist());
     /// Iterator indicating the end of a pool
     const NObjectIterator& nobjects_end() const;
 
