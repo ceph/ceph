@@ -1641,7 +1641,7 @@ void PG::activate(ObjectStore::Transaction& t,
 
 	pi.last_update = info.last_update;
 	pi.last_complete = info.last_update;
-	pi.last_backfill = hobject_t();
+	pi.set_last_backfill(hobject_t(), get_sort_bitwise());
 	pi.last_epoch_started = info.last_epoch_started;
 	pi.history = info.history;
 	pi.hit_set = info.hit_set;
@@ -2196,7 +2196,7 @@ void PG::split_into(pg_t child_pgid, PG *child, unsigned split_bits)
   // Info
   child->info.history = info.history;
   child->info.purged_snaps = info.purged_snaps;
-  child->info.last_backfill = info.last_backfill;
+  child->info.set_last_backfill(info.last_backfill, info.last_backfill_bitwise);
 
   child->info.stats = info.stats;
   info.stats.stats_invalid = true;
@@ -2590,7 +2590,7 @@ void PG::init(
 
   if (backfill) {
     dout(10) << __func__ << ": Setting backfill" << dendl;
-    info.last_backfill = hobject_t();
+    info.set_last_backfill(hobject_t(), get_sort_bitwise());
     info.last_complete = info.last_update;
     pg_log.mark_log_for_rewrite();
   }

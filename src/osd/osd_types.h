@@ -1856,6 +1856,11 @@ struct pg_info_t {
       last_backfill_bitwise(false)
   { }
   
+  void set_last_backfill(hobject_t pos, bool sort) {
+    last_backfill = pos;
+    last_backfill_bitwise = sort;
+  }
+
   bool is_empty() const { return last_update.version == 0; }
   bool dne() const { return history.epoch_created == 0; }
 
