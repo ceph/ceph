@@ -149,10 +149,12 @@ public:
     bool dentry_scrubbing; /// safety check
     Context *on_finish; /// called when we finish scrubbing
     ScrubHeaderRefConst header;
+    bool inode_validated;  /// Has our inode's validate_disk_state run?
 
     scrub_info_t() :
       scrub_parent(NULL), scrub_recursive(false),
-      scrub_children(false), dentry_scrubbing(false), on_finish(NULL)
+      scrub_children(false), dentry_scrubbing(false), on_finish(NULL),
+      inode_validated(false)
     {}
   };
 
