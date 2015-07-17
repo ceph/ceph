@@ -20,6 +20,7 @@ except ImportError:
             raise error
         return output
 
+import filecmp
 import os
 import subprocess
 try:
@@ -456,6 +457,45 @@ def test_get_set_osdmap(CFSD_PREFIX, osd_ids, osd_paths):
             continue
         if any(abs(w - weight) > 1e-5 for w in weights):
             logging.warning("Weight is not changed: {0} != {1}".format(weights, weight))
+            errors += 1
+    return errors
+
+def test_get_set_inc_osdmap(CFSD_PREFIX, osd_path):
+    # incrementals are not used unless we need to build an MOSDMap to update
+    # OSD's peers, so an obvious way to test it is simply overwrite an epoch
+    # with a different copy, and read it back to see if it matches.
+    kill_daemons()
+    file_e2 = tempfile.NamedTemporaryFile()
+    cmd = (CFSD_PREFIX + "--op get-inc-osdmap --file {file}").format(osd=osd_path,
+                                                                     file=file_e2.name)
+    output = check_output(cmd, shell=True)
+    epoch = int(re.findall('#(\d+)', output)[0])
+    # backup e1 incremental before overwriting it
+    epoch -= 1
+    file_e1_backup = tempfile.NamedTemporaryFile()
+    cmd = CFSD_PREFIX + "--op get-inc-osdmap --epoch {epoch} --file {file}"
+    ret = call(cmd.format(osd=osd_path, epoch=epoch, file=file_e1_backup.name), shell=True)
+    if ret: return 1
+    # overwrite e1 with e2
+    cmd = CFSD_PREFIX + "--op set-inc-osdmap --force --epoch {epoch} --file {file}"
+    ret = call(cmd.format(osd=osd_path, epoch=epoch, file=file_e2.name), shell=True)
+    if ret: return 1
+    # read from e1
+    file_e1_read = tempfile.NamedTemporaryFile(delete=False)
+    cmd = CFSD_PREFIX + "--op get-inc-osdmap --epoch {epoch} --file {file}"
+    ret = call(cmd.format(osd=osd_path, epoch=epoch, file=file_e1_read.name), shell=True)
+    if ret: return 1
+    errors = 0
+    try:
+        if not filecmp.cmp(file_e2.name, file_e1_read.name, shallow=False):
+            logging.error("{{get,set}}-inc-osdmap mismatch {0} != {1}".format(file_e2.name, file_e1_read.name))
+            errors += 1
+    finally:
+        # revert the change with file_e1_backup
+        cmd = CFSD_PREFIX + "--op set-inc-osdmap --epoch {epoch} --file {file}"
+        ret = call(cmd.format(osd=osd_path, epoch=epoch, file=file_e1_backup.name), shell=True)
+        if ret:
+            logging.error("Failed to revert the changed inc-osdmap")
             errors += 1
     return errors
 
@@ -1325,7 +1365,7 @@ def main(argv):
 
     # vstart() starts 4 OSDs
     ERRORS += test_get_set_osdmap(CFSD_PREFIX, range(4), ALLOSDS)
-    
+    ERRORS += test_get_set_inc_osdmap(CFSD_PREFIX, ALLOSDS[0])
     if ERRORS == 0:
         print "TEST PASSED"
         return 0
