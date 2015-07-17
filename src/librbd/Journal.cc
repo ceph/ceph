@@ -21,6 +21,16 @@ namespace {
 
 const std::string CLIENT_DESCRIPTION = "master image";
 
+struct C_DestroyJournaler : public Context {
+  ::journal::Journaler *journaler;
+
+  C_DestroyJournaler(::journal::Journaler *_journaler) : journaler(_journaler) {
+  }
+  virtual void finish(int r) {
+    delete journaler;
+  }
+};
+
 } // anonymous namespace
 
 Journal::Journal(ImageCtx &image_ctx)
@@ -305,8 +315,9 @@ void Journal::destroy_journaler() {
   assert(m_lock.is_locked());
 
   m_close_pending = false;
-  delete m_journaler;
+  m_image_ctx.op_work_queue->queue(new C_DestroyJournaler(m_journaler), 0);
   m_journaler = NULL;
+
   transition_state(STATE_UNINITIALIZED);
 }
 
@@ -350,6 +361,10 @@ void Journal::handle_replay_ready() {
   ldout(cct, 20) << this << " " << __func__ << dendl;
 
   Mutex::Locker locker(m_lock);
+  if (m_state != STATE_REPLAYING) {
+    return;
+  }
+
   while (true) {
     if (m_close_pending) {
       m_journaler->stop_replay();
@@ -373,6 +388,10 @@ void Journal::handle_replay_complete(int r) {
 
   {
     Mutex::Locker locker(m_lock);
+    if (m_state != STATE_REPLAYING) {
+      return;
+    }
+
     if (r < 0) {
       lderr(cct) << this << " " << __func__ << ": r=" << r << dendl;
 
@@ -490,6 +509,7 @@ void Journal::handle_lock_updated(bool lock_owner) {
   } else if (!lock_owner && m_state != STATE_UNINITIALIZED) {
     assert(m_state == STATE_RECORDING);
     assert(m_events.empty());
+
     int r = stop_recording();
     if (r < 0) {
       // TODO handle failed journal writes
@@ -499,8 +519,10 @@ void Journal::handle_lock_updated(bool lock_owner) {
 }
 
 int Journal::stop_recording() {
-  C_SaferCond cond;
+  assert(m_lock.is_locked());
+  assert(m_journaler != NULL);
 
+  C_SaferCond cond;
   m_journaler->stop_append(&cond);
 
   m_lock.Unlock();
