@@ -34,7 +34,12 @@ public:
   int get_return_value() const;
 
 private:
+  friend class Journaler;
   friend std::ostream& operator<<(std::ostream&, const Future&);
+
+  inline FutureImplPtr get_future_impl() const {
+    return m_future_impl;
+  }
 
   FutureImplPtr m_future_impl;
 };
