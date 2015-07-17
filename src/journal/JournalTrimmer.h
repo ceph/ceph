@@ -23,7 +23,7 @@ public:
   ~JournalTrimmer();
 
   int remove_objects();
-  void update_commit_position(const ObjectSetPosition &object_set_position);
+  void committed(uint64_t commit_tid);
 
 private:
   struct C_CommitPositionSafe : public Context {
