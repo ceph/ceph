@@ -66,6 +66,10 @@ class Ansible(Task):
                     again during teardown with a 'cleanup' var set to True.
                     This will allow the playbook to clean up after itself,
                     if the playbook supports this feature.
+        reconnect:  If set to True (the default), then reconnect to hosts after
+                    ansible-playbook completes. This is in case the playbook
+                    makes changes to the SSH configuration, or user accounts -
+                    we would want to reflect those changes immediately.
 
     Examples:
 
@@ -239,6 +243,12 @@ class Ansible(Task):
         )
         if status != 0:
             raise CommandFailedError(command, status)
+
+        if self.config.get('reconnect', True) is True:
+            remotes = self.cluster.remotes.keys()
+            log.debug("Reconnecting to %s", remotes)
+            for remote in remotes:
+                remote.reconnect()
 
     def _build_args(self):
         """
