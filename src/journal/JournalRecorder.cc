@@ -48,8 +48,10 @@ Future JournalRecorder::append(const std::string &tag,
   uint8_t splay_offset = tid % splay_width;
 
   ObjectRecorderPtr object_ptr = get_object(splay_offset);
+  uint64_t commit_tid = m_journal_metadata->allocate_commit_tid(
+    object_ptr->get_object_number(), tag, tid);
   FutureImplPtr future(new FutureImpl(m_journal_metadata->get_finisher(),
-                                      tag, tid));
+                                      tag, tid, commit_tid));
   future->init(m_prev_future);
   m_prev_future = future;
 
@@ -59,8 +61,6 @@ Future JournalRecorder::append(const std::string &tag,
   AppendBuffers append_buffers;
   append_buffers.push_back(std::make_pair(future, entry_bl));
   bool object_full = object_ptr->append(append_buffers);
-
-  // TODO populate the object_set_position
 
   if (object_full) {
     ldout(m_cct, 10) << "object " << object_ptr->get_oid() << " now full"

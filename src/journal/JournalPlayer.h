@@ -18,6 +18,7 @@ class SafeTimer;
 
 namespace journal {
 
+class Entry;
 class ReplayHandler;
 
 class JournalPlayer {
@@ -35,7 +36,7 @@ public:
   void prefetch_and_watch(double interval);
   void unwatch();
 
-  bool try_pop_front(Entry *entry, ObjectSetPosition *object_set_position);
+  bool try_pop_front(Entry *entry, uint64_t *commit_tid);
 
 private:
   typedef std::map<std::string, uint64_t> AllocatedTids;

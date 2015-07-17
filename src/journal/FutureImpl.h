@@ -31,7 +31,8 @@ public:
   };
   typedef boost::intrusive_ptr<FlushHandler> FlushHandlerPtr;
 
-  FutureImpl(Finisher &finisher, const std::string &tag, uint64_t tid);
+  FutureImpl(Finisher &finisher, const std::string &tag, uint64_t tid,
+             uint64_t commit_tid);
 
   void init(const FutureImplPtr &prev_future);
 
@@ -40,6 +41,9 @@ public:
   }
   inline uint64_t get_tid() const {
     return m_tid;
+  }
+  inline uint64_t get_commit_tid() const {
+    return m_commit_tid;
   }
 
   void flush(Context *on_safe = NULL);
@@ -94,6 +98,7 @@ private:
   Finisher &m_finisher;
   std::string m_tag;
   uint64_t m_tid;
+  uint64_t m_commit_tid;
 
   mutable Mutex m_lock;
   FutureImplPtr m_prev_future;

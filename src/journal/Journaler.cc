@@ -10,7 +10,7 @@
 #include "journal/JournalPlayer.h"
 #include "journal/JournalRecorder.h"
 #include "journal/JournalTrimmer.h"
-#include "journal/PayloadImpl.h"
+#include "journal/ReplayEntry.h"
 #include "journal/ReplayHandler.h"
 #include "cls/journal/cls_journal_client.h"
 #include "cls/journal/cls_journal_types.h"
@@ -131,16 +131,16 @@ void Journaler::start_live_replay(ReplayHandler *replay_handler,
   m_player->prefetch_and_watch(interval);
 }
 
-bool Journaler::try_pop_front(Payload *payload) {
+bool Journaler::try_pop_front(ReplayEntry *replay_entry) {
   assert(m_player != NULL);
 
   Entry entry;
-  ObjectSetPosition object_set_position;
-  if (!m_player->try_pop_front(&entry, &object_set_position)) {
+  uint64_t commit_tid;
+  if (!m_player->try_pop_front(&entry, &commit_tid)) {
     return false;
   }
 
-  *payload = Payload(new PayloadImpl(entry.get_data(), object_set_position));
+  *replay_entry = ReplayEntry(entry.get_data(), commit_tid);
   return true;
 }
 
@@ -151,9 +151,13 @@ void Journaler::stop_replay() {
   m_player = NULL;
 }
 
-void Journaler::update_commit_position(const Payload &payload) {
-  PayloadImplPtr payload_impl = payload.get_payload_impl();
-  m_trimmer->update_commit_position(payload_impl->get_object_set_position());
+void Journaler::committed(const ReplayEntry &replay_entry) {
+  m_trimmer->committed(replay_entry.get_commit_tid());
+}
+
+void Journaler::committed(const Future &future) {
+  FutureImplPtr future_impl = future.get_future_impl();
+  m_trimmer->committed(future_impl->get_commit_tid());
 }
 
 void Journaler::start_append() {
