@@ -1626,8 +1626,12 @@ void PG::activate(ObjectStore::Transaction& t,
       } else if (
 	pg_log.get_tail() > pi.last_update ||
 	pi.last_backfill == hobject_t() ||
+	(pi.last_backfill != hobject_t::get_max() &&
+	 pi.last_backfill_bitwise != get_sort_bitwise()) ||
+	/* ^ cover case where peer sort order was different and
+	   last_backfill cannot be interpreted */
 	(backfill_targets.count(*i) && pi.last_backfill.is_max())) {
-	/* This last case covers a situation where a replica is not contiguous
+	/* ^ This last case covers a situation where a replica is not contiguous
 	 * with the auth_log, but is contiguous with this replica.  Reshuffling
 	 * the active set to handle this would be tricky, so instead we just go
 	 * ahead and backfill it anyway.  This is probably preferrable in any
