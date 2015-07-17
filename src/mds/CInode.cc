@@ -3883,6 +3883,7 @@ void CInode::validate_disk_state(CInode::validated_data *results,
           results->raw_rstats.error_str << "dirfrag is INCOMPLETE despite fetching; probably too large compared to MDS cache size?\n";
           return true;
         }
+        // FIXME!!! Don't assert out on damage!
         assert(p->second->scrub_local());
         sub_info.add(p->second->fnode.accounted_rstat);
       }
@@ -3910,6 +3911,7 @@ void CInode::validate_disk_state(CInode::validated_data *results,
   };
 
 
+  dout(10) << "scrub starting validate_disk_state on " << *this << dendl;
   ValidationContinuation *vc = new ValidationContinuation(this,
                                                           results,
                                                           mdr,

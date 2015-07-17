@@ -657,7 +657,6 @@ void CDentry::scrub_finished(Context **c)
     LogChannelRef clog = dir->cache->mds->clog;
     clog->info() << "scrub complete with tag '"
       << scrub_infop->header->tag << "'";
-    
   }
 
   delete scrub_infop;

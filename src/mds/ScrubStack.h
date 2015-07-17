@@ -120,7 +120,7 @@ private:
    * @param r The return status from validate_disk_state
    * @param result Populated results from validate_disk_state
    */
-  void _scrub_file_dentry_done(CDentry *dn, int r,
+  void _validate_inode_done(CDentry *dn, int r,
     const CInode::validated_data &result);
   friend class C_InodeValidated;
 
