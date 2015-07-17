@@ -99,12 +99,12 @@ int RGWMetadataLog::add_entry(RGWRados *store, RGWMetadataHandler *handler, cons
   return store->time_log_add(oid, now, section, key, bl);
 }
 
-int RGWMetadataLog::store_entries_in_shard(RGWRados *store, list<cls_log_entry>& entries, int shard_id)
+int RGWMetadataLog::store_entries_in_shard(RGWRados *store, list<cls_log_entry>& entries, int shard_id, librados::AioCompletion *completion)
 {
   string oid;
 
   store->shard_name(prefix, shard_id, oid);
-  return store->time_log_add(oid, entries, false);
+  return store->time_log_add(oid, entries, completion, false);
 }
 
 void RGWMetadataLog::init_list_entries(int shard_id, utime_t& from_time, utime_t& end_time, 
@@ -267,9 +267,9 @@ RGWMetadataManager::~RGWMetadataManager()
   delete md_log;
 }
 
-int RGWMetadataManager::store_md_log_entries(list<cls_log_entry>& entries, int shard_id)
+int RGWMetadataManager::store_md_log_entries(list<cls_log_entry>& entries, int shard_id, librados::AioCompletion *completion)
 {
-  return md_log->store_entries_in_shard(store, entries, shard_id);
+  return md_log->store_entries_in_shard(store, entries, shard_id, completion);
 }
 
 int RGWMetadataManager::register_handler(RGWMetadataHandler *handler)

@@ -1193,7 +1193,7 @@ int RGWDataChangesLog::renew_entries()
 
     utime_t now = ceph_clock_now(cct);
 
-    int ret = store->time_log_add(oids[miter->first], entries);
+    int ret = store->time_log_add(oids[miter->first], entries, NULL);
     if (ret < 0) {
       /* we don't really need to have a special handling for failed cases here,
        * as this is just an optimization. */
