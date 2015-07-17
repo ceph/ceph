@@ -4702,11 +4702,26 @@ void PG::start_peering_interval(
     info.history.same_primary_since = osdmap->get_epoch();
   }
 
+  // initialize features
+  acting_features = CEPH_FEATURES_SUPPORTED_DEFAULT;
+  upacting_features = CEPH_FEATURES_SUPPORTED_DEFAULT;
+  for (vector<int>::iterator p = acting.begin(); p != acting.end(); ++p) {
+    uint64_t f = osdmap->get_xinfo(*p).features;
+    acting_features &= f;
+    upacting_features &= f;
+  }
+  for (vector<int>::iterator p = up.begin(); p != up.end(); ++p) {
+    upacting_features &= osdmap->get_xinfo(*p).features;
+  }
+
   dout(10) << " up " << oldup << " -> " << up 
 	   << ", acting " << oldacting << " -> " << acting 
 	   << ", acting_primary " << old_acting_primary << " -> " << new_acting_primary
 	   << ", up_primary " << old_up_primary << " -> " << new_up_primary
-	   << ", role " << oldrole << " -> " << role << dendl; 
+	   << ", role " << oldrole << " -> " << role
+	   << ", features acting " << acting_features
+	   << " upacting " << upacting_features
+	   << dendl;
 
   // deactivate.
   state_clear(PG_STATE_ACTIVE);
@@ -6757,7 +6772,7 @@ PG::RecoveryState::GetInfo::GetInfo(my_context ctx)
   if (!prior_set.get())
     pg->build_prior(prior_set);
 
-  pg->reset_all_min_features();
+  pg->reset_min_peer_features();
   get_infos();
   if (peer_info_requested.empty() && !prior_set->pg_down) {
     post_event(GotInfo());
@@ -6836,18 +6851,6 @@ boost::statechart::result PG::RecoveryState::GetInfo::react(const MNotifyRec& in
     dout(20) << "Adding osd: " << infoevt.from.osd << " peer features: "
       << hex << infoevt.features << dec << dendl;
     pg->apply_peer_features(infoevt.features);
-
-    if (std::find(pg->acting.begin(), pg->acting.end(), infoevt.from.osd) != pg->acting.end()) {
-      dout(20) << "Adding osd: " << infoevt.from.osd << " acting features: "
-	<< hex << infoevt.features << dec << dendl;
-      pg->apply_acting_features(infoevt.features);
-    }
-
-    if (std::find(pg->up.begin(), pg->up.end(), infoevt.from.osd) != pg->up.end()) {
-      dout(20) << "Adding osd: " << infoevt.from.osd << " upacting features: "
-	<< hex << infoevt.features << dec << dendl;
-      pg->apply_upacting_features(infoevt.features);
-    }
 
     // are we done getting everything?
     if (peer_info_requested.empty() && !prior_set->pg_down) {
