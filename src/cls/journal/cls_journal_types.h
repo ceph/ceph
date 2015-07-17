@@ -8,8 +8,8 @@
 #include "include/buffer.h"
 #include "include/encoding.h"
 #include <iosfwd>
+#include <list>
 #include <string>
-#include <vector>
 
 namespace ceph {
 class Formatter;
@@ -37,7 +37,7 @@ struct EntryPosition {
   static void generate_test_instances(std::list<EntryPosition *> &o);
 };
 
-typedef std::vector<EntryPosition> EntryPositions;
+typedef std::list<EntryPosition> EntryPositions;
 
 struct ObjectSetPosition {
   uint64_t object_number;
