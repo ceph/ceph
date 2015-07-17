@@ -2653,7 +2653,7 @@ void ReplicatedPG::do_backfill(OpRequestRef op)
     {
       assert(cct->_conf->osd_kill_backfill_at != 2);
 
-      info.last_backfill = m->last_backfill;
+      info.set_last_backfill(m->last_backfill, get_sort_bitwise());
       if (m->compat_stat_sum) {
 	info.stats.stats = m->stats.stats; // Previously, we only sent sum
       } else {
@@ -8790,7 +8790,7 @@ void ReplicatedPG::on_removal(ObjectStore::Transaction *t)
   dout(10) << "on_removal" << dendl;
 
   // adjust info to backfill
-  info.last_backfill = hobject_t();
+  info.set_last_backfill(hobject_t(), true);
   dirty_info = true;
 
 
@@ -9947,7 +9947,7 @@ int ReplicatedPG::recover_backfill(
     pg_info_t& pinfo = peer_info[bt];
 
     if (new_last_backfill > pinfo.last_backfill) {
-      pinfo.last_backfill = new_last_backfill;
+      pinfo.set_last_backfill(new_last_backfill, get_sort_bitwise());
       epoch_t e = get_osdmap()->get_epoch();
       MOSDPGBackfill *m = NULL;
       if (pinfo.last_backfill.is_max()) {
