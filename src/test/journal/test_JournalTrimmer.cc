@@ -3,6 +3,7 @@
 
 #include "journal/JournalTrimmer.h"
 #include "journal/JournalMetadata.h"
+#include "include/stringify.h"
 #include "test/journal/RadosTestFixture.h"
 #include <limits>
 #include <list>
@@ -20,6 +21,17 @@ public:
       delete *it;
     }
     RadosTestFixture::TearDown();
+  }
+
+  int append_payload(journal::JournalMetadataPtr metadata,
+                     const std::string &oid, uint64_t object_num,
+                     const std::string &payload, uint64_t *commit_tid) {
+    int r = append(oid + "." + stringify(object_num), create_payload(payload));
+    uint64_t tid = metadata->allocate_commit_tid(object_num, "tag", 123);
+    if (commit_tid != NULL) {
+      *commit_tid = tid;
+    }
+    return r;
   }
 
   using RadosTestFixture::client_register;
@@ -54,7 +66,7 @@ public:
   std::list<journal::JournalTrimmer*> m_trimmers;
 };
 
-TEST_F(TestJournalTrimmer, UpdateCommitPosition) {
+TEST_F(TestJournalTrimmer, Committed) {
   std::string oid = get_temp_oid();
   ASSERT_EQ(0, create(oid, 12, 2));
   ASSERT_EQ(0, client_register(oid));
@@ -66,72 +78,37 @@ TEST_F(TestJournalTrimmer, UpdateCommitPosition) {
   metadata->set_active_set(10);
   ASSERT_TRUE(wait_for_update(metadata));
 
-  ASSERT_EQ(0, append(oid + ".0", create_payload("payload")));
-  ASSERT_EQ(0, append(oid + ".2", create_payload("payload")));
-  ASSERT_EQ(0, append(oid + ".3", create_payload("payload")));
-  ASSERT_EQ(0, append(oid + ".5", create_payload("payload")));
+  uint64_t commit_tid1;
+  uint64_t commit_tid2;
+  uint64_t commit_tid3;
+  uint64_t commit_tid4;
+  uint64_t commit_tid5;
+  uint64_t commit_tid6;
+  ASSERT_EQ(0, append_payload(metadata, oid, 0, "payload", &commit_tid1));
+  ASSERT_EQ(0, append_payload(metadata, oid, 2, "payload", &commit_tid2));
+  ASSERT_EQ(0, append_payload(metadata, oid, 5, "payload", &commit_tid3));
+  ASSERT_EQ(0, append_payload(metadata, oid, 0, "payload", &commit_tid4));
+  ASSERT_EQ(0, append_payload(metadata, oid, 2, "payload", &commit_tid5));
+  ASSERT_EQ(0, append_payload(metadata, oid, 5, "payload", &commit_tid6));
 
   journal::JournalTrimmer *trimmer = create_trimmer(oid, metadata);
 
-  cls::journal::EntryPositions entry_positions;
-  cls::journal::ObjectSetPosition object_set_position(5, entry_positions);
-
-  trimmer->update_commit_position(object_set_position);
-
+  trimmer->committed(commit_tid4);
+  trimmer->committed(commit_tid6);
+  trimmer->committed(commit_tid2);
+  trimmer->committed(commit_tid5);
+  trimmer->committed(commit_tid3);
+  trimmer->committed(commit_tid1);
   while (metadata->get_minimum_set() != 2U) {
     ASSERT_TRUE(wait_for_update(metadata));
   }
 
   ASSERT_EQ(-ENOENT, assert_exists(oid + ".0"));
   ASSERT_EQ(-ENOENT, assert_exists(oid + ".2"));
-  ASSERT_EQ(-ENOENT, assert_exists(oid + ".3"));
   ASSERT_EQ(0, assert_exists(oid + ".5"));
 }
 
-TEST_F(TestJournalTrimmer, ConcurrentUpdateCommitPosition) {
-  std::string oid = get_temp_oid();
-  ASSERT_EQ(0, create(oid, 12, 2));
-  ASSERT_EQ(0, client_register(oid));
-
-  journal::JournalMetadataPtr metadata1 = create_metadata(oid);
-  ASSERT_EQ(0, init_metadata(metadata1));
-  ASSERT_TRUE(wait_for_update(metadata1));
-
-  metadata1->set_active_set(10);
-  ASSERT_TRUE(wait_for_update(metadata1));
-
-  journal::JournalMetadataPtr metadata2 = create_metadata(oid);
-  ASSERT_EQ(0, init_metadata(metadata2));
-
-  ASSERT_EQ(0, append(oid + ".0", create_payload("payload")));
-  ASSERT_EQ(0, append(oid + ".2", create_payload("payload")));
-  ASSERT_EQ(0, append(oid + ".3", create_payload("payload")));
-  ASSERT_EQ(0, append(oid + ".5", create_payload("payload")));
-
-  journal::JournalTrimmer *trimmer1 = create_trimmer(oid, metadata1);
-  journal::JournalTrimmer *trimmer2 = create_trimmer(oid, metadata2);
-
-  cls::journal::EntryPositions entry_positions;
-  cls::journal::ObjectSetPosition object_set_position1(2, entry_positions);
-  trimmer1->update_commit_position(object_set_position1);
-
-  cls::journal::ObjectSetPosition object_set_position2(5, entry_positions);
-  trimmer2->update_commit_position(object_set_position2);
-
-  while (metadata1->get_minimum_set() != 2U) {
-    ASSERT_TRUE(wait_for_update(metadata1));
-  }
-  while (metadata2->get_minimum_set() != 2U) {
-    ASSERT_TRUE(wait_for_update(metadata2));
-  }
-
-  ASSERT_EQ(-ENOENT, assert_exists(oid + ".0"));
-  ASSERT_EQ(-ENOENT, assert_exists(oid + ".2"));
-  ASSERT_EQ(-ENOENT, assert_exists(oid + ".3"));
-  ASSERT_EQ(0, assert_exists(oid + ".5"));
-}
-
-TEST_F(TestJournalTrimmer, UpdateCommitPositionWithOtherClient) {
+TEST_F(TestJournalTrimmer, CommittedWithOtherClient) {
   std::string oid = get_temp_oid();
   ASSERT_EQ(0, create(oid, 12, 2));
   ASSERT_EQ(0, client_register(oid));
@@ -144,17 +121,21 @@ TEST_F(TestJournalTrimmer, UpdateCommitPositionWithOtherClient) {
   metadata->set_active_set(10);
   ASSERT_TRUE(wait_for_update(metadata));
 
-  ASSERT_EQ(0, append(oid + ".0", create_payload("payload")));
-  ASSERT_EQ(0, append(oid + ".2", create_payload("payload")));
-  ASSERT_EQ(0, append(oid + ".3", create_payload("payload")));
-  ASSERT_EQ(0, append(oid + ".5", create_payload("payload")));
+  uint64_t commit_tid1;
+  uint64_t commit_tid2;
+  uint64_t commit_tid3;
+  uint64_t commit_tid4;
+  ASSERT_EQ(0, append_payload(metadata, oid, 0, "payload", &commit_tid1));
+  ASSERT_EQ(0, append_payload(metadata, oid, 2, "payload", &commit_tid2));
+  ASSERT_EQ(0, append_payload(metadata, oid, 3, "payload", &commit_tid3));
+  ASSERT_EQ(0, append_payload(metadata, oid, 5, "payload", &commit_tid4));
 
   journal::JournalTrimmer *trimmer = create_trimmer(oid, metadata);
 
-  cls::journal::EntryPositions entry_positions;
-  cls::journal::ObjectSetPosition object_set_position(5, entry_positions);
-
-  trimmer->update_commit_position(object_set_position);
+  trimmer->committed(commit_tid1);
+  trimmer->committed(commit_tid2);
+  trimmer->committed(commit_tid3);
+  trimmer->committed(commit_tid4);
   ASSERT_TRUE(wait_for_update(metadata));
 
   ASSERT_EQ(0, assert_exists(oid + ".0"));

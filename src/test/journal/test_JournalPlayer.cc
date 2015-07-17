@@ -96,9 +96,9 @@ public:
     entries->clear();
     while (entries->size() < count) {
       journal::Entry entry;
-      journal::JournalPlayer::ObjectSetPosition object_set_position;
+      uint64_t commit_tid;
       while (entries->size() < count &&
-             player->try_pop_front(&entry, &object_set_position)) {
+             player->try_pop_front(&entry, &commit_tid)) {
         entries->push_back(entry);
       }
       if (entries->size() == count) {
@@ -119,8 +119,8 @@ public:
 
   bool wait_for_complete(journal::JournalPlayer *player) {
     journal::Entry entry;
-    journal::JournalPlayer::ObjectSetPosition object_set_position;
-    player->try_pop_front(&entry, &object_set_position);
+    uint64_t commit_tid;
+    player->try_pop_front(&entry, &commit_tid);
 
     Mutex::Locker locker(m_replay_hander.lock);
     while (!m_replay_hander.complete) {
@@ -279,8 +279,8 @@ TEST_F(TestJournalPlayer, PrefetchCorruptSequence) {
   ASSERT_TRUE(wait_for_entries(player, 3, &entries));
 
   journal::Entry entry;
-  cls::journal::ObjectSetPosition object_set_position;
-  ASSERT_FALSE(player->try_pop_front(&entry, &object_set_position));
+  uint64_t commit_tid;
+  ASSERT_FALSE(player->try_pop_front(&entry, &commit_tid));
   ASSERT_TRUE(wait_for_complete(player));
   ASSERT_NE(0, m_replay_hander.complete_result);
 }
