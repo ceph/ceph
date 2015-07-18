@@ -29,7 +29,7 @@ class LoggerFile(object):
         self.level = level
 
     def write(self, string):
-        self.logger.log(self.level, string)
+        self.logger.log(self.level, string.decode('utf-8'))
 
     def flush(self):
         pass
