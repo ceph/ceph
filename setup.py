@@ -40,7 +40,7 @@ setup(
                       'boto >= 2.0b4',
                       'bunch >= 1.0.0',
                       'configobj',
-                      'six',
+                      'six >= 1.9', # python-openstackclient won't work properly with less
                       'httplib2',
                       'paramiko < 1.8',
                       'pexpect',
@@ -55,6 +55,7 @@ setup(
                       'pyopenssl>=0.13',
                       'ndg-httpsclient',
                       'pyasn1',
+                      'python-openstackclient',
                       ],
 
 
@@ -64,6 +65,7 @@ setup(
     entry_points={
         'console_scripts': [
             'teuthology = scripts.run:main',
+            'teuthology-openstack = scripts.openstack:main',
             'teuthology-nuke = scripts.nuke:main',
             'teuthology-suite = scripts.suite:main',
             'teuthology-ls = scripts.ls:main',

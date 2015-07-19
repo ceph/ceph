@@ -27,7 +27,7 @@ Linux)
         #   C) Adding "Precise" conditionals somewhere, eg. conditionalizing
         #   this bootstrap script to only use the python-libvirt package on
         #   Ubuntu Precise.
-        for package in python-dev libssl-dev python-pip python-virtualenv libevent-dev python-libvirt libmysqlclient-dev libffi-dev; do
+        for package in python-dev libssl-dev python-pip python-virtualenv libevent-dev python-libvirt libmysqlclient-dev libffi-dev libyaml-dev libpython-dev ; do
             if [ "$(dpkg --status -- $package|sed -n 's/^Status: //p')" != "install ok installed" ]; then
                 # add a space after old values
                 missing="${missing:+$missing }$package"

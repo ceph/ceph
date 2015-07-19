@@ -1,0 +1,80 @@
+#!/bin/bash
+#
+# Copyright (c) 2015 Red Hat, Inc.
+#
+# Author: Loic Dachary <loic@dachary.org>
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in
+# all copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+# THE SOFTWARE.
+#
+### BEGIN INIT INFO
+# Provides:        teuthology
+# Required-Start:  $network $remote_fs $syslog beanstalkd nginx
+# Required-Stop:   $network $remote_fs $syslog
+# Default-Start:   2 3 4 5
+# Default-Stop:
+# Short-Description: Start teuthology
+### END INIT INFO
+
+cd /home/ubuntu
+
+source /etc/default/teuthology
+
+user=${TEUTHOLOGY_USERNAME:-ubuntu}
+
+case $1 in
+        start)
+                /etc/init.d/beanstalkd start
+                su - -c "cd /home/$user/paddles ; virtualenv/bin/pecan serve config.py" $user  > /var/log/paddles.log 2>&1 &
+                su - -c "cd /home/$user/pulpito ; virtualenv/bin/python run.py" $user  > /var/log/pulpito.log 2>&1 &
+                sleep 3
+                (
+                   cd teuthology
+                   . virtualenv/bin/activate
+                   teuthology-lock --list-targets --owner scheduled_$user@teuthology > /tmp/t
+                   if test -s /tmp/t && ! grep -qq 'targets: {}' /tmp/t ; then
+		       teuthology-lock --unlock -t /tmp/t --owner scheduled_$user@teuthology
+		   fi
+		   mkdir -p /tmp/log
+		   chown $user  /tmp/log
+                   for i in $(seq 1 $NWORKERS) ; do
+                       su - -c "cd /home/$user ; source openrc.sh ; cd teuthology ; LC_ALL=C virtualenv/bin/teuthology-worker --tube openstack -l /tmp/log --archive-dir /usr/share/nginx/html" $user > /var/log/teuthology.$i 2>&1 &
+                   done
+                )
+                ;;
+        stop)
+                pkill -f 'pecan serve'
+                pkill -f 'python run.py'
+                pkill -f 'teuthology-worker'
+                pkill -f 'ansible'
+                /etc/init.d/beanstalkd stop
+                source /home/$user/teuthology/virtualenv/bin/activate
+                source /home/$user/openrc.sh
+                ip=$(ip a show dev eth0 | sed -n "s:.*inet \(.*\)/.*:\1:p")
+                openstack server list --long -f json | \
+                    jq ".[] | select(.Properties | contains(\"ownedby='$ip'\")) | .ID" | \
+                    while read uuid ; do
+                    eval openstack server delete $uuid
+                done
+                ;;
+        restart)
+                $0 stop
+                $0 start
+                ;;
+        *)
+esac

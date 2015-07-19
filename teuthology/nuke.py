@@ -14,6 +14,7 @@ from .config import FakeNamespace
 from .lock import list_locks
 from .lock import unlock_one
 from .lock import find_stale_locks
+from .lockstatus import get_status
 from .misc import config_file
 from .misc import merge_configs
 from .misc import get_testdir
@@ -488,8 +489,12 @@ def nuke_helper(ctx, should_unlock):
     (target,) = ctx.config['targets'].keys()
     host = target.split('@')[-1]
     shortname = host.split('.')[0]
-    if should_unlock and 'vpm' in shortname:
-        return
+    if should_unlock:
+        if 'vpm' in shortname:
+            return
+        status_info = get_status(host)
+        if status_info['is_vm'] and status_info['machine_type'] == 'openstack':
+            return
     log.debug('shortname: %s' % shortname)
     log.debug('{ctx}'.format(ctx=ctx))
     if (not ctx.noipmi and 'ipmi_user' in ctx.teuthology_config and

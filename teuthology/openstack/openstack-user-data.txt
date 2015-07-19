@@ -1,0 +1,15 @@
+#cloud-config
+bootcmd:
+  - touch /tmp/init.out
+system_info:
+  default_user:
+    name: TEUTHOLOGY_USERNAME
+packages:
+ - python-virtualenv
+ - git
+runcmd:
+ - su - -c '(set -x ; git clone -b wip-6502-openstack-v3 http://github.com/dachary/teuthology && cd teuthology && ./bootstrap install)' TEUTHOLOGY_USERNAME >> /tmp/init.out 2>&1
+ - echo 'export OPENRC' | tee /home/TEUTHOLOGY_USERNAME/openrc.sh
+ - su - -c '(set -x ; source openrc.sh ; cd teuthology ; source virtualenv/bin/activate ; openstack keypair delete teuthology || true ; teuthology/openstack/setup-openstack.sh --nworkers NWORKERS --setup-all)' TEUTHOLOGY_USERNAME >> /tmp/init.out 2>&1
+ - /etc/init.d/teuthology restart
+final_message: "teuthology is up and running after $UPTIME seconds"

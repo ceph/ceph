@@ -1,0 +1,8 @@
+stop_worker: true
+nuke-on-error: true
+roles:
+- - client.0
+tasks:
+- exec:
+    client.0:
+      - exit 1

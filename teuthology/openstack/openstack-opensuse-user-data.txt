@@ -1,0 +1,13 @@
+#cloud-config
+users: 
+  - name: clouduser 
+    gecos: User
+    sudo: ["ALL=(ALL) NOPASSWD:ALL"]
+    groups: users
+    ssh_pwauth: True
+chpasswd:
+  list: |
+    clouduser:linux
+  expire: False
+ssh_pwauth: True
+

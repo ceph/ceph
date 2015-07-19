@@ -369,6 +369,22 @@ def main(ctx):
     return ret
 
 
+def lock_many_openstack(ctx, num, machine_type, user=None, description=None,
+                        arch=None):
+    os_type = provision.get_distro(ctx)
+    os_version = provision.get_distro_version(ctx)
+    if hasattr(ctx, 'config'):
+        resources_hint = ctx.config.get('openstack')
+    else:
+        resources_hint = None
+    machines =  provision.ProvisionOpenStack().create(
+        num, os_type, os_version, arch, resources_hint)
+    result = {}
+    for machine in machines:
+        lock_one(machine, user, description)
+        result[machine] = None # we do not collect ssh host keys yet
+    return result
+
 def lock_many(ctx, num, machine_type, user=None, description=None,
               os_type=None, os_version=None, arch=None):
     if user is None:
@@ -385,6 +401,11 @@ def lock_many(ctx, num, machine_type, user=None, description=None,
     machine_types_list = misc.get_multi_machine_types(machine_type)
     if machine_types_list == ['vps']:
         machine_types = machine_types_list
+    elif machine_types_list == ['openstack']:
+        return lock_many_openstack(ctx, num, machine_type,
+                                   user=user,
+                                   description=description,
+                                   arch=arch)
     elif 'vps' in machine_types_list:
         machine_types_non_vps = list(machine_types_list)
         machine_types_non_vps.remove('vps')
@@ -488,7 +509,7 @@ def unlock_many(names, user):
 def unlock_one(ctx, name, user, description=None):
     name = misc.canonicalize_hostname(name, user=None)
     if not provision.destroy_if_vm(ctx, name, user, description):
-        log.error('downburst destroy failed for %s', name)
+        log.error('destroy failed for %s', name)
     request = dict(name=name, locked=False, locked_by=user,
                    description=description)
     uri = os.path.join(config.lock_server, 'nodes', name, 'lock', '')

@@ -1,0 +1,24 @@
+#cloud-config
+bootcmd:
+ - echo nameserver {nameserver} | tee /etc/resolv.conf
+ - echo search {lab_domain} | tee -a /etc/resolv.conf
+ - sed -ie 's/PEERDNS="yes"/PEERDNS="no"/' /etc/sysconfig/network-scripts/ifcfg-eth0
+ - ( curl --silent http://169.254.169.254/2009-04-04/meta-data/hostname | sed -e 's/[\.-].*//' ; eval printf "%03d%03d.{lab_domain}" $(curl --silent http://169.254.169.254/2009-04-04/meta-data/local-ipv4 | sed -e 's/.*\.\(.*\)\.\(.*\)/\1 \2/') ) | tee /etc/hostname
+ - hostname $(cat /etc/hostname)
+ - ( echo ; echo "MaxSessions 1000" ) >> /etc/ssh/sshd_config
+# See https://github.com/ceph/ceph-cm-ansible/blob/master/roles/cobbler/templates/snippets/cephlab_user
+ - ( echo 'Defaults !requiretty' ; echo 'Defaults visiblepw' ) | tee /etc/sudoers.d/cephlab_sudo ; chmod 0440 /etc/sudoers.d/cephlab_sudo
+preserve_hostname: true
+system_info:
+  default_user:
+    name: {username}
+packages:
+ - python
+ - wget
+ - git
+ - ntp
+# this does not work on centos, ssh key will not be working, maybe because there is a symlink to reach it ?
+#runcmd:
+# # if /mnt is on ephemeral, that moves /home/{username} on the ephemeral, otherwise it does nothing
+# - rsync -a --numeric-ids /home/{username}/ /mnt/ && rm -fr /home/{username} && ln -s /mnt /home/{username}
+final_message: "{up}, after $UPTIME seconds"

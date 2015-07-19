@@ -1,0 +1,25 @@
+stop_worker: true
+machine_type: openstack
+openstack:
+  machine:
+    disk: 10 # GB
+    ram: 1024 # MB
+    cpus: 1
+  volumes:
+    count: 1
+    size: 2 # GB
+os_type: ubuntu
+os_version: "14.04"
+roles:
+- - mon.a
+  - osd.0
+tasks:
+- exec:
+    mon.a:
+      - test $(sed -n -e 's/MemTotal.* \([0-9][0-9]*\).*/\1/p' < /proc/meminfo) -lt 4000000 && echo "RAM" "size" "ok"
+      - cat /proc/meminfo
+# wait for the attached volume to show up
+      - for delay in 1 2 4 8 16 32 64 128 256 512 ; do if test -e /sys/block/vdb/size ; then break ; else sleep $delay ; fi ; done
+# 4000000 because 512 bytes sectors
+      - test $(cat /sys/block/vdb/size) -gt 4000000 && echo "Disk" "size" "ok"
+      - cat /sys/block/vdb/size
