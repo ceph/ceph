@@ -43,6 +43,7 @@ protected:
 
   librados::AioCompletion *create_callback_completion();
   Context *create_callback_context();
+  Context *create_async_callback_context();
 
   virtual bool safely_cancel(int r) {
     return true;
