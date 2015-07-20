@@ -7806,11 +7806,9 @@ int Client::fsync(int fd, bool syncdataonly)
   return r;
 }
 
-int Client::_fsync(Fh *f, bool syncdataonly)
+int Client::_fsync(Inode *in, bool syncdataonly)
 {
   int r = 0;
-
-  Inode *in = f->inode;
   uint16_t wait_on_flush[CEPH_CAP_BITS];
   bool flushed_metadata = false;
   Mutex lock("Client::_fsync::lock");
@@ -7818,7 +7816,7 @@ int Client::_fsync(Fh *f, bool syncdataonly)
   bool done = false;
   C_SafeCond *object_cacher_completion = NULL;
 
-  ldout(cct, 3) << "_fsync(" << f << ", " << (syncdataonly ? "dataonly)":"data+metadata)") << dendl;
+  ldout(cct, 3) << "_fsync on " << *in << " " << (syncdataonly ? "(dataonly)":"(data+metadata)") << dendl;
   
   if (cct->_conf->client_oc) {
     object_cacher_completion = new C_SafeCond(&lock, &cond, &done, &r);
@@ -7886,6 +7884,12 @@ int Client::_fsync(Fh *f, bool syncdataonly)
   }
 
   return r;
+}
+
+int Client::_fsync(Fh *f, bool syncdataonly)
+{
+  ldout(cct, 3) << "_fsync(" << f << ", " << (syncdataonly ? "dataonly)":"data+metadata)") << dendl;
+  return _fsync(f->inode, syncdataonly);
 }
 
 int Client::fstat(int fd, struct stat *stbuf) 
@@ -10010,6 +10014,16 @@ int Client::ll_releasedir(dir_result_t *dirp)
   tout(cct) << (unsigned long)dirp << std::endl;
   _closedir(dirp);
   return 0;
+}
+
+int Client::ll_fsyncdir(dir_result_t *dirp)
+{
+  Mutex::Locker lock(client_lock);
+  ldout(cct, 3) << "ll_fsyncdir " << dirp << dendl;
+  tout(cct) << "ll_fsyncdir" << std::endl;
+  tout(cct) << (unsigned long)dirp << std::endl;
+
+  return _fsync(dirp->inode, false);
 }
 
 int Client::ll_open(Inode *in, int flags, Fh **fhp, int uid, int gid)
