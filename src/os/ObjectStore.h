@@ -406,7 +406,7 @@ public:
   private:
     TransactionData data;
 
-    void *osr; // NULL on replay
+    Sequencer *osr; // NULL on replay
 
     bool use_tbl;   //use_tbl for encode/decode
     bufferlist tbl;
@@ -730,7 +730,7 @@ public:
       return data.ops;
     }
 
-    void set_osr(void *s) {
+    void set_osr(Sequencer *s) {
       osr = s;
     }
 
