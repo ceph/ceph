@@ -5790,11 +5790,12 @@ void OSD::_dispatch(Message *m)
   default:
     {
       OpRequestRef op = op_tracker.create_request<OpRequest, Message*>(m);
-      op->mark_event("waiting_for_osdmap");
       // no map?  starting up?
       if (!osdmap) {
         dout(7) << "no OSDMap, not booted" << dendl;
+	logger->inc(l_osd_waiting_for_map);
         waiting_for_osdmap.push_back(op);
+	op->mark_delayed("no osdmap");
         break;
       }
       
