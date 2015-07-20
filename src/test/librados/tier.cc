@@ -2216,7 +2216,6 @@ TEST_F(LibRadosTwoPoolsPP, HitSetTrim) {
     c->wait_for_complete();
     c->release();
 
-    ASSERT_TRUE(ls.size() <= count + 1);
     cout << " got ls " << ls << std::endl;
     if (!ls.empty()) {
       if (!first) {
@@ -4264,7 +4263,6 @@ TEST_F(LibRadosTwoPoolsECPP, HitSetTrim) {
     c->wait_for_complete();
     c->release();
 
-    ASSERT_TRUE(ls.size() <= count + 1);
     cout << " got ls " << ls << std::endl;
     if (!ls.empty()) {
       if (!first) {
