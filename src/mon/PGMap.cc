@@ -1224,6 +1224,11 @@ void PGMap::cache_io_rate_summary(Formatter *f, ostream *out,
   }
 }
 
+void PGMap::overall_cache_io_rate_summary(Formatter *f, ostream *out) const
+{
+  cache_io_rate_summary(f, out, pg_sum_delta, stamp_delta);
+}
+
 void PGMap::pool_cache_io_rate_summary(Formatter *f, ostream *out,
                                        uint64_t poolid) const
 {
@@ -1423,6 +1428,13 @@ void PGMap::print_summary(Formatter *f, ostream *out) const
   overall_client_io_rate_summary(f, &ssr);
   if (!f && ssr.str().length())
     *out << "  client io " << ssr.str() << "\n";
+
+  ssr.clear();
+  ssr.str("");
+
+  overall_cache_io_rate_summary(f, &ssr);
+  if (!f && ssr.str().length())
+    *out << "  cache io " << ssr.str() << "\n";
 }
 
 void PGMap::print_oneline_summary(Formatter *f, ostream *out) const
