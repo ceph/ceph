@@ -1,5 +1,14 @@
 #!/bin/sh -ex
 
+cleanup()
+{
+	echo "*** Restoring to old state"
+	sudo rm -r mnt.admin/foo1 mnt.admin/foo2
+	fusermount -u mnt.admin
+	fusermount -u mnt.foo
+	rmdir mnt.admin mnt.foo
+}
+trap cleanup INT TERM EXIT
 
 echo "*** Creating directories for mount"
 mkdir -p mnt.admin mnt.foo
@@ -37,13 +46,3 @@ mkdir mnt.foo/foo1/asdf
 expect_false mkdir mnt.foo/foo2/asdf
 
 
-echo "*** Restoring to old state"
-cleanup()
-{
-
-	sudo rm -r mnt.admin/foo1 mnt.admin/foo2
-	fusermount -u mnt.admin
-	fusermount -u mnt.foo
-	rmdir mnt.admin mnt.foo
-}
-trap cleanup INT TERM EXIT
