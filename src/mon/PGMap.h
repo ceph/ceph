@@ -342,6 +342,11 @@ public:
                              const pool_stat_t& delta_sum,
                              utime_t delta_stamp) const;
   /**
+   * Obtain a formatted/plain output for the overall cache tier IO, which is
+   * calculated resorting to @p pg_sum_delta and @p stamp_delta.
+   */
+  void overall_cache_io_rate_summary(Formatter *f, ostream *out) const;
+  /**
    * Obtain a formatted/plain output for cache tier IO over a given pool
    * with id @p pool_id.  We will then obtain pool-specific data
    * from @p per_pool_sum_delta.
