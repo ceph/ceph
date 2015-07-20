@@ -419,6 +419,8 @@ def main(args):
 
 
 def nuke(ctx, should_unlock, sync_clocks=True, reboot_all=True, noipmi=False):
+    if 'targets' not in ctx.config:
+        return
     total_unnuked = {}
     targets = dict(ctx.config['targets'])
     if ctx.name:
