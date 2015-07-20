@@ -14,6 +14,7 @@
 
 
 #include <errno.h>
+#include <fcntl.h>
 
 #include <boost/spirit/include/qi.hpp>
 #include <boost/spirit/include/phoenix_operator.hpp>
@@ -138,27 +139,36 @@ bool MDSAuthCaps::is_capable(const std::string &inode_path,
 {
   if (cct)
     ldout(cct, 10) << __func__ << " inode(path /" << inode_path
-		   << " owner " << inode_uid << ":" << inode_gid
-		   << " mode 0" << std::oct << inode_mode << std::dec
-		   << ") by uid " << uid << " mask " << mask << dendl;
+		 << " owner " << inode_uid << ":" << inode_gid
+		 << " mode 0" << std::oct << inode_mode << std::dec
+		 << ") by uid " << uid << " mask " << mask << " cap: " << *this << dendl;
+
   for (std::vector<MDSCapGrant>::const_iterator i = grants.begin();
        i != grants.end();
        ++i) {
+
     if (i->match.match(inode_path, uid) &&
 	i->spec.allows(mask & (MAY_READ|MAY_EXECUTE), mask & MAY_WRITE)) {
       // check unix permissions?
-      if (i->match.uid != MDSCapMatch::MDS_AUTH_UID_ANY) {
-	// use fcntl.h macros for the file mode:
-	//  S_IRUSR  S_IRGRP  S_ROTH
-	//  S_IWUSR  S_IWGRP  S_WOTH
-	//  S_IXUSR  S_IXGRP  S_XOTH
-
-	// WRITE ME
-
+      if (i->match.uid == MDSCapMatch::MDS_AUTH_UID_ANY) {
+        return true;
       }
-      return true;
+
+      if ((!(mask & MAY_READ) || (inode_mode & S_IROTH)) &&
+      (!(mask & MAY_WRITE) || (inode_mode & S_IWOTH)) &&
+      (!(mask & MAY_EXECUTE) || (inode_mode & S_IXOTH))) {
+        return true;
+      }
+
+	  // use fcntl.h macros for the file mode:
+	  //  S_IRUSR  S_IRGRP  S_ROTH
+	  //  S_IWUSR  S_IWGRP  S_WOTH
+	  //  S_IXUSR  S_IXGRP  S_XOTH
+
+	  // WRITE ME
     }
   }
+
   return false;
 }
 
