@@ -5981,6 +5981,11 @@ void OSD::sched_scrub()
 	}
       }
       pg->unlock();
+
+      if (!service.can_inc_scrubs_pending()) {
+	break;
+      }
+
     } while (service.next_scrub_stamp(scrub, &scrub));
   }    
   dout(20) << "sched_scrub done" << dendl;
