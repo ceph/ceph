@@ -2139,11 +2139,7 @@ void OSDMonitor::send_incremental(PaxosServiceMessage *req, epoch_t first)
 	  << " to " << req->get_orig_source_inst()
 	  << dendl;
 
-  MonSession *s = NULL;
-  if (op->get_req()->get_source().is_osd()) {
-    s = op->get_session();
-  }
-
+  MonSession *s = req->get_session();
   if (s && first <= s->osd_epoch) {
     dout(10) << __func__ << s->inst << " should already have epoch "
 	     << s->osd_epoch << dendl;
@@ -2152,7 +2148,7 @@ void OSDMonitor::send_incremental(PaxosServiceMessage *req, epoch_t first)
       return;
   }
 
-  if (first < get_first_committed()) {
+  if (s && first < get_first_committed()) {
     first = get_first_committed();
     bufferlist bl;
     int err = get_version_full(first, bl);
@@ -2168,8 +2164,7 @@ void OSDMonitor::send_incremental(PaxosServiceMessage *req, epoch_t first)
     m->maps[first] = bl;
     mon->send_reply(req, m);
 
-    if (s)
-      s->osd_epoch = osdmap.get_epoch();
+    s->osd_epoch = osdmap.get_epoch();
     return;
   }
 
@@ -2206,9 +2201,7 @@ void OSDMonitor::send_incremental(epoch_t first, MonSession *session,
     m->newest_map = osdmap.get_epoch();
     m->maps[first] = bl;
     session->con->send_message(m);
-    if (session->inst.name.is_osd()) {
-      session->osd_epoch = first;
-    }
+    session->osd_epoch = first;
     first++;
   }
 
@@ -2217,10 +2210,7 @@ void OSDMonitor::send_incremental(epoch_t first, MonSession *session,
     MOSDMap *m = build_incremental(first, last);
     session->con->send_message(m);
     first = last + 1;
-
-    if (session->inst.name.is_osd()) {
-      session->osd_epoch = last;
-    }
+    session->osd_epoch = last;
 
     if (onetime)
       break;
