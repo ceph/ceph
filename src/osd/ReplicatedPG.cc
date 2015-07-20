@@ -1252,6 +1252,7 @@ void ReplicatedPG::do_request(
 	     << " flushes_in_progress pending "
 	     << "waiting for active on " << op << dendl;
     waiting_for_peered.push_back(op);
+    op->mark_delayed("waiting for peered");
     return;
   }
 
@@ -1263,6 +1264,7 @@ void ReplicatedPG::do_request(
       return;
     } else {
       waiting_for_peered.push_back(op);
+      op->mark_delayed("waiting for peered");
       return;
     }
   }
@@ -1276,6 +1278,7 @@ void ReplicatedPG::do_request(
     if (!is_active()) {
       dout(20) << " peered, not active, waiting for active on " << op << dendl;
       waiting_for_active.push_back(op);
+      op->mark_delayed("waiting for active");
       return;
     }
     if (is_replay()) {
