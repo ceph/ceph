@@ -134,14 +134,6 @@ private:
 
   map<int,double> osd_weight;
 
-  /*
-   * cache what epochs we think osds have.  this is purely
-   * optimization to try to avoid sending the same inc maps twice.
-   */
-  map<int,epoch_t> osd_epoch;
-
-  void note_osd_has_epoch(int osd, epoch_t epoch);
-
   void check_failures(utime_t now);
   bool check_failure(utime_t now, int target_osd, failure_info_t& fi);
 
