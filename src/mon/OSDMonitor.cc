@@ -2139,12 +2139,10 @@ void OSDMonitor::send_incremental(MonOpRequestRef op, epoch_t first)
 	  << " to " << op->get_req()->get_orig_source_inst()
 	  << dendl;
 
-  MonSession *s = NULL;
-  if (op->get_req()->get_source().is_osd()) {
-    s = op->get_session();
-  }
+  MonSession *s = op->get_session();
+  assert(s);
 
-  if (s && first <= s->osd_epoch) {
+  if (first <= s->osd_epoch) {
     dout(10) << __func__ << s->inst << " should already have epoch "
 	     << s->osd_epoch << dendl;
     first = s->osd_epoch + 1;
@@ -2168,8 +2166,7 @@ void OSDMonitor::send_incremental(MonOpRequestRef op, epoch_t first)
     m->maps[first] = bl;
     mon->send_reply(op, m);
 
-    if (s)
-      s->osd_epoch = osdmap.get_epoch();
+    s->osd_epoch = osdmap.get_epoch();
     return;
   }
 
@@ -2181,8 +2178,7 @@ void OSDMonitor::send_incremental(MonOpRequestRef op, epoch_t first)
   m->newest_map = osdmap.get_epoch();
   mon->send_reply(op, m);
 
-  if (s)
-    s->osd_epoch = last;
+  s->osd_epoch = last;
 }
 
 void OSDMonitor::send_incremental(epoch_t first, MonSession *session,
@@ -2206,9 +2202,7 @@ void OSDMonitor::send_incremental(epoch_t first, MonSession *session,
     m->newest_map = osdmap.get_epoch();
     m->maps[first] = bl;
     session->con->send_message(m);
-    if (session->inst.name.is_osd()) {
-      session->osd_epoch = first;
-    }
+    session->osd_epoch = first;
     first++;
   }
 
@@ -2217,10 +2211,7 @@ void OSDMonitor::send_incremental(epoch_t first, MonSession *session,
     MOSDMap *m = build_incremental(first, last);
     session->con->send_message(m);
     first = last + 1;
-
-    if (session->inst.name.is_osd()) {
-      session->osd_epoch = last;
-    }
+    session->osd_epoch = last;
 
     if (onetime)
       break;
