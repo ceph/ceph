@@ -18,12 +18,15 @@
                                                 (make it independent)
     resize --size <M/G/T> <image-spec>          resize (expand or contract) image
     rm <image-spec>                             delete an image
-    export (<image-spec> | <snap-spec>) <path>  export image to file
+    export (<image-spec> | <snap-spec>) [<path>]
+                                                export image to file
                                                 "-" for stdout
     import [--image-features <features>] [--image-shared]
-           <path> <image-spec>                  import image from file (dest
-                                                defaults as the filename part
-                                                of file). "-" for stdin
+           <path> [<image-spec>]                import image from file
+                                                "-" for stdin
+                                                "rbd/$(basename <path>)" is
+                                                assumed for <image-spec> if
+                                                omitted
     diff [--from-snap <snap-name>] [--object-extents]
            <image-spec> | <snap-spec>           print extents that differ since
                                                 a previous snap, or image creation
