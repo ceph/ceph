@@ -682,6 +682,7 @@ private:
   int _preadv_pwritev(int fd, const struct iovec *iov, unsigned iovcnt, int64_t offset, bool write);
   int _flush(Fh *fh);
   int _fsync(Fh *fh, bool syncdataonly);
+  int _fsync(Inode *in, bool syncdataonly);
   int _sync_fs();
   int _fallocate(Fh *fh, int mode, int64_t offset, int64_t length);
   int _getlk(Fh *fh, struct flock *fl, uint64_t owner);
@@ -927,6 +928,7 @@ public:
   int ll_listxattr(Inode *in, char *list, size_t size, int uid=-1, int gid=-1);
   int ll_opendir(Inode *in, dir_result_t **dirpp, int uid = -1, int gid = -1);
   int ll_releasedir(dir_result_t* dirp);
+  int ll_fsyncdir(dir_result_t* dirp);
   int ll_readlink(Inode *in, char *buf, size_t bufsize, int uid = -1, int gid = -1);
   int ll_mknod(Inode *in, const char *name, mode_t mode, dev_t rdev,
 	       struct stat *attr, Inode **out, int uid = -1, int gid = -1);
