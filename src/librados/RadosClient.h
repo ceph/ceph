@@ -79,6 +79,7 @@ public:
   ~RadosClient();
   int ping_monitor(string mon_id, string *result);
   int connect();
+  int set_client_priority(int priority);
   void shutdown();
 
   int watch_flush();

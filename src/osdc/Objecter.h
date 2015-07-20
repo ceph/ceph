@@ -1067,6 +1067,7 @@ private:
   atomic_t global_op_flags; // flags which are applied to each IO op
   bool keep_balanced_budget;
   bool honor_osdmap_full;
+  int client_priority;
 
 public:
   void maybe_request_map();
@@ -1866,6 +1867,7 @@ private:
     num_unacked(0), num_uncommitted(0),
     global_op_flags(0),
     keep_balanced_budget(false), honor_osdmap_full(true),
+    client_priority(-1),
     last_seen_osdmap_version(0),
     last_seen_pgmap_version(0),
     rwlock("Objecter::rwlock"),
@@ -1980,6 +1982,8 @@ public:
 
   int get_client_incarnation() const { return client_inc.read(); }
   void set_client_incarnation(int inc) { client_inc.set(inc); }
+  
+  void set_client_priority(int priority) { client_priority = priority;}
 
   bool have_map(epoch_t epoch);
   /// wait for epoch; true if we already have it
@@ -2047,7 +2051,10 @@ public:
 	       const SnapContext& snapc, utime_t mtime, int flags,
 	       Context *onack, Context *oncommit, version_t *objver = NULL) {
     Op *o = new Op(oid, oloc, op.ops, flags | global_op_flags.read() | CEPH_OSD_FLAG_WRITE, onack, oncommit, objver);
-    o->priority = op.priority;
+    if (client_priority != -1)
+      o->priority = client_priority;
+    else
+      o->priority = op.priority;
     o->mtime = mtime;
     o->snapc = snapc;
     o->out_rval.swap(op.out_rval);
