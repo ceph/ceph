@@ -154,10 +154,18 @@ bool MDSAuthCaps::is_capable(const std::string &inode_path,
         return true;
       }
 
-      if ((!(mask & MAY_READ) || (inode_mode & S_IROTH)) &&
-      (!(mask & MAY_WRITE) || (inode_mode & S_IWOTH)) &&
-      (!(mask & MAY_EXECUTE) || (inode_mode & S_IXOTH))) {
-        return true;
+      if (inode_uid == uid) {
+        if ((!(mask & MAY_READ) || (inode_mode & S_IRUSR)) &&
+          (!(mask & MAY_WRITE) || (inode_mode & S_IWUSR)) &&
+          (!(mask & MAY_EXECUTE) || (inode_mode & S_IXUSR))) {
+          return true;
+        }
+      } else {
+        if ((!(mask & MAY_READ) || (inode_mode & S_IROTH)) &&
+          (!(mask & MAY_WRITE) || (inode_mode & S_IWOTH)) &&
+          (!(mask & MAY_EXECUTE) || (inode_mode & S_IXOTH))) {
+          return true;
+        }
       }
 
 	  // use fcntl.h macros for the file mode:
