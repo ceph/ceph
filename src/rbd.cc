@@ -108,12 +108,15 @@ void usage()
 "                                              (make it independent)\n"
 "  resize --size <M/G/T> <image-spec>          resize (expand or contract) image\n"
 "  rm <image-spec>                             delete an image\n"
-"  export (<image-spec> | <snap-spec>) <path>  export image to file\n"
+"  export (<image-spec> | <snap-spec>) [<path>]\n"
+"                                              export image to file\n"
 "                                              \"-\" for stdout\n"
 "  import [--image-features <features>] [--image-shared]\n"
-"         <path> <image-spec>                  import image from file (dest\n"
-"                                              defaults as the filename part\n"
-"                                              of file). \"-\" for stdin\n"
+"         <path> [<image-spec>]                import image from file\n"
+"                                              \"-\" for stdin\n"
+"                                              \"rbd/$(basename <path>)\" is\n"
+"                                              assumed for <image-spec> if\n"
+"                                              omitted\n"
 "  diff [--from-snap <snap-name>] [--object-extents]\n"
 "         <image-spec> | <snap-spec>           print extents that differ since\n"
 "                                              a previous snap, or image creation\n"
@@ -3434,13 +3437,16 @@ if (!set_conf_param(v, p1, p2, p3)) { \
       cerr << "rbd: second diff was not specified" << std::endl;
       return EXIT_FAILURE;
     }
-    if (!path) {
+  }
+  if ((opt_cmd == OPT_EXPORT || opt_cmd == OPT_EXPORT_DIFF ||
+      opt_cmd == OPT_MERGE_DIFF) && !path) {
+    if (opt_cmd == OPT_EXPORT) {
+      path = imgname;
+    } else {
       cerr << "rbd: path was not specified" << std::endl;
       return EXIT_FAILURE;
     }
   }
-  if (opt_cmd == OPT_EXPORT && !path)
-    path = imgname;
 
   if ((opt_cmd == OPT_COPY || opt_cmd == OPT_CLONE || opt_cmd == OPT_RENAME) &&
       !destname ) {
@@ -3737,10 +3743,6 @@ if (!set_conf_param(v, p1, p2, p3)) { \
     break;
 
   case OPT_EXPORT:
-    if (!path) {
-      cerr << "rbd: export requires pathname" << std::endl;
-      return EINVAL;
-    }
     r = do_export(image, path);
     if (r < 0) {
       cerr << "rbd: export error: " << cpp_strerror(-r) << std::endl;
@@ -3757,10 +3759,6 @@ if (!set_conf_param(v, p1, p2, p3)) { \
     break;
 
   case OPT_EXPORT_DIFF:
-    if (!path) {
-      cerr << "rbd: export-diff requires pathname" << std::endl;
-      return EINVAL;
-    }
     r = do_export_diff(image, fromsnapname, snapname, diff_object_extents, path);
     if (r < 0) {
       cerr << "rbd: export-diff error: " << cpp_strerror(-r) << std::endl;
@@ -3777,10 +3775,6 @@ if (!set_conf_param(v, p1, p2, p3)) { \
     break;
 
   case OPT_IMPORT:
-    if (!path) {
-      cerr << "rbd: import requires pathname" << std::endl;
-      return EINVAL;
-    }
     r = do_import(rbd, dest_io_ctx, destname, &order, path,
 		  format, features, size, stripe_unit, stripe_count);
     if (r < 0) {
@@ -3790,7 +3784,6 @@ if (!set_conf_param(v, p1, p2, p3)) { \
     break;
 
   case OPT_IMPORT_DIFF:
-    assert(path);
     r = do_import_diff(image, path);
     if (r < 0) {
       cerr << "rbd: import-diff failed: " << cpp_strerror(-r) << std::endl;
