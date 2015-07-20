@@ -50,6 +50,7 @@ struct MonSession : public RefCountedObject {
   uint64_t global_id;
 
   map<string, Subscription*> sub_map;
+  epoch_t osd_epoch;		// the osdmap epoch sent to the mon client
 
   AuthServiceHandler *auth_handler;
   EntityName entity_name;
@@ -60,7 +61,9 @@ struct MonSession : public RefCountedObject {
   MonSession(const entity_inst_t& i, Connection *c) :
     con(c), inst(i), closed(false), item(this),
     auid(0),
-    global_id(0), auth_handler(NULL),
+    global_id(0),
+    osd_epoch(0),
+    auth_handler(NULL),
     proxy_con(NULL), proxy_tid(0) {
     time_established = ceph_clock_now(g_ceph_context);
   }
