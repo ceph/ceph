@@ -2125,68 +2125,29 @@ void OSDMonitor::send_full(MonOpRequestRef op)
   mon->send_reply(op, build_latest_full());
 }
 
-/* TBH, I'm fairly certain these two functions could somehow be using a single
- * helper function to do the heavy lifting. As this is not our main focus right
- * now, I'm leaving it to the next near-future iteration over the services'
- * code. We should not forget it though.
- *
- * TODO: create a helper function and get rid of the duplicated code.
- */
 void OSDMonitor::send_incremental(MonOpRequestRef op, epoch_t first)
 {
   op->mark_osdmon_event(__func__);
-  dout(5) << "send_incremental [" << first << ".." << osdmap.get_epoch() << "]"
-	  << " to " << op->get_req()->get_orig_source_inst()
-	  << dendl;
 
   MonSession *s = op->get_session();
   assert(s);
-
-  if (first <= s->osd_epoch) {
-    dout(10) << __func__ << s->inst << " should already have epoch "
-	     << s->osd_epoch << dendl;
-    first = s->osd_epoch + 1;
-    if (first > osdmap.get_epoch())
-      return;
-  }
-
-  if (first < get_first_committed()) {
-    first = get_first_committed();
-    bufferlist bl;
-    int err = get_version_full(first, bl);
-    assert(err == 0);
-    assert(bl.length());
-
-    dout(20) << "send_incremental starting with base full "
-	     << first << " " << bl.length() << " bytes" << dendl;
-
-    MOSDMap *m = new MOSDMap(osdmap.get_fsid());
-    m->oldest_map = first;
-    m->newest_map = osdmap.get_epoch();
-    m->maps[first] = bl;
-    mon->send_reply(op, m);
-
-    s->osd_epoch = osdmap.get_epoch();
-    return;
-  }
-
-  // send some maps.  it may not be all of them, but it will get them
-  // started.
-  epoch_t last = MIN(first + g_conf->osd_map_message_max, osdmap.get_epoch());
-  MOSDMap *m = build_incremental(first, last);
-  m->oldest_map = get_first_committed();
-  m->newest_map = osdmap.get_epoch();
-  mon->send_reply(op, m);
-
-  s->osd_epoch = last;
+  send_incremental(first, s, false, op);
 }
 
-void OSDMonitor::send_incremental(epoch_t first, MonSession *session,
-				  bool onetime)
+void OSDMonitor::send_incremental(epoch_t first,
+				  MonSession *session,
+				  bool onetime,
+				  MonOpRequestRef req)
 {
   dout(5) << "send_incremental [" << first << ".." << osdmap.get_epoch() << "]"
 	  << " to " << session->inst << dendl;
 
+  if (first <= session->osd_epoch) {
+    dout(10) << __func__ << session->inst << " should already have epoch "
+	     << session->osd_epoch << dendl;
+    first = session->osd_epoch + 1;
+  }
+
   if (first < get_first_committed()) {
     first = get_first_committed();
     bufferlist bl;
@@ -2201,24 +2162,37 @@ void OSDMonitor::send_incremental(epoch_t first, MonSession *session,
     m->oldest_map = first;
     m->newest_map = osdmap.get_epoch();
     m->maps[first] = bl;
-    session->con->send_message(m);
-    session->osd_epoch = first;
+
+    if (req) {
+      mon->send_reply(req, m);
+      session->osd_epoch = first;
+      return;
+    } else {
+      session->con->send_message(m);
+      session->osd_epoch = first;
+    }
     first++;
   }
 
   while (first <= osdmap.get_epoch()) {
     epoch_t last = MIN(first + g_conf->osd_map_message_max, osdmap.get_epoch());
     MOSDMap *m = build_incremental(first, last);
-    session->con->send_message(m);
-    first = last + 1;
-    session->osd_epoch = last;
 
-    if (onetime)
+    if (req) {
+      // send some maps.  it may not be all of them, but it will get them
+      // started.
+      m->oldest_map = get_first_committed();
+      m->newest_map = osdmap.get_epoch();
+      mon->send_reply(req, m);
+    } else {
+      session->con->send_message(m);
+      first = last + 1;
+    }
+    session->osd_epoch = last;
+    if (onetime || req)
       break;
   }
 }
-
-
 
 
 epoch_t OSDMonitor::blacklist(const entity_addr_t& a, utime_t until)
