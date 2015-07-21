@@ -3393,10 +3393,10 @@ Notable Changes
 * rgw: send user manifest header (Yehuda Sadeh)
 * test_librbd_fsx: test krbd as well as librbd (Ilya Dryomov)
 
-v0.80.10 Firefly (DRAFT)
+v0.80.10 Firefly
 ================
 
-This is a bugfix release for firefly.
+This is a bugfix release for Firefly.
 
 We recommend that all Firefly users upgrade.
 
