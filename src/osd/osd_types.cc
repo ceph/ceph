@@ -947,6 +947,7 @@ void pg_pool_t::dump(Formatter *f) const
   f->dump_unsigned("min_write_recency_for_promote", min_write_recency_for_promote);
   f->dump_unsigned("stripe_width", get_stripe_width());
   f->dump_unsigned("expected_num_objects", expected_num_objects);
+  f->dump_bool("fast_read", fast_read);
 }
 
 void pg_pool_t::convert_to_pg_shards(const vector<int> &from, set<pg_shard_t>* to) const {
@@ -1256,7 +1257,7 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
     return;
   }
 
-  ENCODE_START(21, 5, bl);
+  ENCODE_START(22, 5, bl);
   ::encode(type, bl);
   ::encode(size, bl);
   ::encode(crush_ruleset, bl);
@@ -1301,12 +1302,13 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
   ::encode(cache_target_dirty_high_ratio_micro, bl);
   ::encode(min_write_recency_for_promote, bl);
   ::encode(use_gmt_hitset, bl);
+  ::encode(fast_read, bl);
   ENCODE_FINISH(bl);
 }
 
 void pg_pool_t::decode(bufferlist::iterator& bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(21, 5, 5, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(22, 5, 5, bl);
   ::decode(type, bl);
   ::decode(size, bl);
   ::decode(crush_ruleset, bl);
@@ -1433,6 +1435,11 @@ void pg_pool_t::decode(bufferlist::iterator& bl)
   } else {
     use_gmt_hitset = false;
   }
+  if (struct_v >= 22) {
+    ::decode(fast_read, bl);
+  } else {
+    fast_read = false;
+  }
   DECODE_FINISH(bl);
   calc_pg_masks();
 }
@@ -1490,6 +1497,7 @@ void pg_pool_t::generate_test_instances(list<pg_pool_t*>& o)
   a.cache_min_evict_age = 2321;
   a.erasure_code_profile = "profile in osdmap";
   a.expected_num_objects = 123456;
+  a.fast_read = false;
   o.push_back(new pg_pool_t(a));
 }
 
@@ -1541,6 +1549,8 @@ ostream& operator<<(ostream& out, const pg_pool_t& p)
   out << " stripe_width " << p.get_stripe_width();
   if (p.expected_num_objects)
     out << " expected_num_objects " << p.expected_num_objects;
+  if (p.fast_read)
+    out << " fast_read " << p.fast_read;
   return out;
 }
 
