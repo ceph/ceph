@@ -77,12 +77,20 @@ class Filesystem(object):
         self.mon_manager.raw_cluster_cmd('osd', 'pool', 'create', 'data', pgs_per_fs_pool.__str__())
         self.mon_manager.raw_cluster_cmd('fs', 'new', 'default', 'metadata', 'data')
 
-    def delete(self):
-        self.mon_manager.raw_cluster_cmd('fs', 'rm', 'default', '--yes-i-really-mean-it')
-        self.mon_manager.raw_cluster_cmd('osd', 'pool', 'delete',
-                                  'metadata', 'metadata', '--yes-i-really-really-mean-it')
-        self.mon_manager.raw_cluster_cmd('osd', 'pool', 'delete',
-                                  'data', 'data', '--yes-i-really-really-mean-it')
+    def delete_all(self):
+        """
+        Remove all filesystems that exist, and any pools in use by them.
+        """
+        fs_list = json.loads(self.mon_manager.raw_cluster_cmd('fs', 'ls', '--format=json-pretty'))
+        for fs_data in fs_list:
+            self.mon_manager.raw_cluster_cmd('fs', 'rm', fs_data['name'], '--yes-i-really-mean-it')
+            self.mon_manager.raw_cluster_cmd('osd', 'pool', 'delete',
+                                             fs_data['metadata_pool'], fs_data['metadata_pool'],
+                                             '--yes-i-really-really-mean-it')
+            for data_pool in fs_data['data_pools']:
+                self.mon_manager.raw_cluster_cmd('osd', 'pool', 'delete',
+                                                 data_pool, data_pool,
+                                                 '--yes-i-really-really-mean-it')
 
     def legacy_configured(self):
         """

@@ -88,7 +88,7 @@ class CephFSTestCase(unittest.TestCase):
         # the filesystem rather than just doing a rm -rf of files
         self.fs.mds_stop()
         self.fs.mds_fail()
-        self.fs.delete()
+        self.fs.delete_all()
         self.fs.create()
 
         # In case the previous filesystem had filled up the RADOS cluster, wait for that
