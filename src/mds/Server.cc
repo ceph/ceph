@@ -3173,6 +3173,9 @@ void Server::handle_client_readdir(MDRequestRef& mdr)
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return;
 
+  if (!check_access(mdr, diri, MAY_READ))
+    return;
+
   // which frag?
   frag_t fg = (__u32)req->head.args.readdir.frag;
   string offset_str = req->get_path2();
@@ -3782,6 +3785,9 @@ void Server::handle_client_setlayout(MDRequestRef& mdr)
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return;
 
+  if (!check_access(mdr, cur, MAY_WRITE))
+    return;
+
   // project update
   inode_t *pi = cur->project_inode();
   pi->layout = layout;
@@ -3821,6 +3827,9 @@ void Server::handle_client_setdirlayout(MDRequestRef& mdr)
 
   xlocks.insert(&cur->policylock);
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
+    return;
+
+  if (!check_access(mdr, cur, MAY_WRITE))
     return;
 
   // validate layout
@@ -4251,6 +4260,9 @@ void Server::handle_client_setxattr(MDRequestRef& mdr)
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return;
 
+  if (!check_access(mdr, cur, MAY_WRITE))
+    return;
+
   map<string, bufferptr> *pxattrs = cur->get_projected_xattrs();
   if ((flags & CEPH_XATTR_CREATE) && pxattrs->count(name)) {
     dout(10) << "setxattr '" << name << "' XATTR_CREATE and EEXIST on " << *cur << dendl;
@@ -4658,6 +4670,12 @@ void Server::handle_client_link(MDRequestRef& mdr)
   xlocks.insert(&targeti->linklock);
 
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
+    return;
+
+  if (!check_access(mdr, targeti, MAY_WRITE))
+    return;
+
+  if (!check_access(mdr, dir->get_inode(), MAY_WRITE))
     return;
 
   // go!
@@ -6111,6 +6129,15 @@ void Server::handle_client_rename(MDRequestRef& mdr)
   CInode *auth_pin_freeze = !srcdn->is_auth() && srcdnl->is_primary() ? srci : NULL;
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks,
 				  &remote_wrlocks, auth_pin_freeze))
+    return;
+
+  if (!check_access(mdr, srcdn->get_dir()->get_inode(), MAY_WRITE))
+    return;
+
+  if (!check_access(mdr, destdn->get_dir()->get_inode(), MAY_WRITE))
+    return;
+
+  if (!check_access(mdr, srci, MAY_WRITE))
     return;
 
   if (oldin &&
@@ -7690,6 +7717,9 @@ void Server::handle_client_lssnap(MDRequestRef& mdr)
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return;
 
+  if (!check_access(mdr, diri, MAY_READ))
+    return;
+
   SnapRealm *realm = diri->find_snaprealm();
   map<snapid_t,SnapInfo*> infomap;
   realm->get_snap_info(infomap, diri->get_oldest_snap());
@@ -7788,6 +7818,9 @@ void Server::handle_client_mksnap(MDRequestRef& mdr)
   xlocks.insert(&diri->snaplock);
 
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
+    return;
+
+  if (!check_access(mdr, diri, MAY_WRITE))
     return;
 
   // make sure name is unique
@@ -7937,6 +7970,9 @@ void Server::handle_client_rmsnap(MDRequestRef& mdr)
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return;
 
+  if (!check_access(mdr, diri, MAY_WRITE))
+    return;
+
   // prepare
   if (!mdr->more()->stid) {
     mds->snapclient->prepare_destroy(diri->ino(), snapid,
@@ -8075,6 +8111,9 @@ void Server::handle_client_renamesnap(MDRequestRef& mdr)
   xlocks.insert(&diri->snaplock);
 
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
+    return;
+
+  if (!check_access(mdr, diri, MAY_WRITE))
     return;
 
     // prepare
