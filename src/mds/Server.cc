@@ -4686,6 +4686,12 @@ void Server::handle_client_link(MDRequestRef& mdr)
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return;
 
+  if (!check_access(mdr, targeti, MAY_WRITE))
+    return;
+
+  if (!check_access(mdr, dir->get_inode(), MAY_WRITE))
+    return;
+
   // go!
   assert(g_conf->mds_kill_link_at != 1);
 
