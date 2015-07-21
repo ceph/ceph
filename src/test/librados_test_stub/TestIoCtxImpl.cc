@@ -38,6 +38,7 @@ TestIoCtxImpl::TestIoCtxImpl(const TestIoCtxImpl& rhs)
 }
 
 TestIoCtxImpl::~TestIoCtxImpl() {
+  assert(m_pending_ops.read() == 0);
 }
 
 void TestObjectOperationImpl::get() {
@@ -104,6 +105,7 @@ int TestIoCtxImpl::aio_operate(const std::string& oid, TestObjectOperationImpl &
                                int flags) {
   // TODO flags for now
   ops.get();
+  m_pending_ops.inc();
   m_client->add_aio_operation(oid, true, boost::bind(
     &TestIoCtxImpl::execute_aio_operations, this, oid, &ops,
     reinterpret_cast<bufferlist*>(NULL),
@@ -117,6 +119,7 @@ int TestIoCtxImpl::aio_operate_read(const std::string& oid,
                                     bufferlist *pbl) {
   // TODO ignoring flags for now
   ops.get();
+  m_pending_ops.inc();
   m_client->add_aio_operation(oid, true, boost::bind(
     &TestIoCtxImpl::execute_aio_operations, this, oid, &ops, pbl, m_snapc), c);
   return 0;
@@ -155,6 +158,7 @@ int TestIoCtxImpl::operate(const std::string& oid, TestObjectOperationImpl &ops)
   AioCompletionImpl *comp = new AioCompletionImpl();
 
   ops.get();
+  m_pending_ops.inc();
   m_client->add_aio_operation(oid, false, boost::bind(
     &TestIoCtxImpl::execute_aio_operations, this, oid, &ops,
     reinterpret_cast<bufferlist*>(NULL), m_snapc), comp);
@@ -170,6 +174,7 @@ int TestIoCtxImpl::operate_read(const std::string& oid, TestObjectOperationImpl 
   AioCompletionImpl *comp = new AioCompletionImpl();
 
   ops.get();
+  m_pending_ops.inc();
   m_client->add_aio_operation(oid, false, boost::bind(
     &TestIoCtxImpl::execute_aio_operations, this, oid, &ops, pbl,
     m_snapc), comp);
@@ -272,6 +277,7 @@ int TestIoCtxImpl::execute_aio_operations(const std::string& oid,
       break;
     }
   }
+  m_pending_ops.dec();
   ops->put();
   return ret;
 }

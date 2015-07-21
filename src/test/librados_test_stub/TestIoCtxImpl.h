@@ -167,6 +167,7 @@ private:
   snap_t m_snap_seq;
   SnapContext m_snapc;
   atomic_t m_refcount;
+  atomic_t m_pending_ops;
 
   void handle_aio_notify_complete(AioCompletionImpl *aio_comp, int r);
 };
