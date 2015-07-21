@@ -4723,11 +4723,15 @@ void PG::start_peering_interval(
   acting_features = CEPH_FEATURES_SUPPORTED_DEFAULT;
   upacting_features = CEPH_FEATURES_SUPPORTED_DEFAULT;
   for (vector<int>::iterator p = acting.begin(); p != acting.end(); ++p) {
+    if (*p == CRUSH_ITEM_NONE)
+      continue;
     uint64_t f = osdmap->get_xinfo(*p).features;
     acting_features &= f;
     upacting_features &= f;
   }
   for (vector<int>::iterator p = up.begin(); p != up.end(); ++p) {
+    if (*p == CRUSH_ITEM_NONE)
+      continue;
     upacting_features &= osdmap->get_xinfo(*p).features;
   }
 
