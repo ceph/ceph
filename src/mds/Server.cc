@@ -3809,6 +3809,9 @@ void Server::handle_client_setlayout(MDRequestRef& mdr)
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return;
 
+  if (!check_access(mdr, cur, MAY_WRITE))
+    return;
+
   // project update
   inode_t *pi = cur->project_inode();
   pi->layout = layout;
@@ -3848,6 +3851,9 @@ void Server::handle_client_setdirlayout(MDRequestRef& mdr)
 
   xlocks.insert(&cur->policylock);
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
+    return;
+
+  if (!check_access(mdr, cur, MAY_WRITE))
     return;
 
   // validate layout
@@ -4266,6 +4272,9 @@ void Server::handle_client_setxattr(MDRequestRef& mdr)
 
   xlocks.insert(&cur->xattrlock);
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
+    return;
+
+  if (!check_access(mdr, cur, MAY_WRITE))
     return;
 
   map<string, bufferptr> *pxattrs = cur->get_projected_xattrs();
