@@ -596,6 +596,15 @@ static void fuse_ll_releasedir(fuse_req_t req, fuse_ino_t ino,
   fuse_reply_err(req, 0);
 }
 
+static void fuse_ll_fsyncdir(fuse_req_t req, fuse_ino_t ino, int datasync,
+			     struct fuse_file_info *fi)
+{
+  CephFuse::Handle *cfuse = (CephFuse::Handle *)fuse_req_userdata(req);
+  dir_result_t *dirp = reinterpret_cast<dir_result_t*>(fi->fh);
+  int r = cfuse->client->ll_fsyncdir(dirp);
+  fuse_reply_err(req, -r);
+}
+
 static void fuse_ll_access(fuse_req_t req, fuse_ino_t ino, int mask)
 {
   fuse_reply_err(req, 0);
@@ -817,7 +826,7 @@ const static struct fuse_lowlevel_ops fuse_ll_oper = {
  opendir: fuse_ll_opendir,
  readdir: fuse_ll_readdir,
  releasedir: fuse_ll_releasedir,
- fsyncdir: fuse_ll_fsync,
+ fsyncdir: fuse_ll_fsyncdir,
  statfs: fuse_ll_statfs,
  setxattr: fuse_ll_setxattr,
  getxattr: fuse_ll_getxattr,
