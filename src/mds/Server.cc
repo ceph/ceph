@@ -3198,6 +3198,9 @@ void Server::handle_client_readdir(MDRequestRef& mdr)
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return;
 
+  if (!check_access(mdr, diri, MAY_READ))
+    return;
+
   // which frag?
   frag_t fg = (__u32)req->head.args.readdir.frag;
   string offset_str = req->get_path2();
