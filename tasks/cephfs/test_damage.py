@@ -190,7 +190,7 @@ class TestDamage(CephFSTestCase):
             self.mount_a.umount_wait(force=True)
             self.fs.mds_stop()
             self.fs.mds_fail()
-            self.fs.admin_remote.run(args=['sudo', 'ceph', 'mds', 'repaired', '0'])
+            self.fs.mon_manager.raw_cluster_cmd('mds', 'repaired', '0')
 
             # Reset RADOS pool state
             self.fs.rados(['import', '/tmp/metadata.bin'])

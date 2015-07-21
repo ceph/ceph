@@ -43,9 +43,9 @@ class TestBacktrace(CephFSTestCase):
 
         # Create a new data pool
         new_pool_name = "data_new"
-        self.fs.admin_remote.run(args=['sudo', 'ceph', 'osd', 'pool', 'create', new_pool_name,
-                                       self.fs.get_pgs_per_fs_pool().__str__()])
-        self.fs.admin_remote.run(args=['sudo', 'ceph', 'mds', 'add_data_pool', new_pool_name])
+        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'create', new_pool_name,
+                                            self.fs.get_pgs_per_fs_pool().__str__())
+        self.fs.mon_manager.raw_cluster_cmd('mds', 'add_data_pool', new_pool_name)
         new_pool_id = get_pool_id(new_pool_name)
 
         # That an object which has switched pools gets its backtrace updated
