@@ -2136,34 +2136,99 @@ static bool looks_like_ip_address(const char *bucket)
   return (num_periods == 3);
 }
 
-int RGWHandler_ObjStore_S3::validate_bucket_name(const string& bucket, bool relaxed_names)
-{
-  int ret = RGWHandler_ObjStore::validate_bucket_name(bucket);
-  if (ret < 0)
-    return ret;
-
-  if (bucket.size() == 0)
-    return 0;
-
-  // bucket names must start with a number, letter, or underscore
-  if (!(isalpha(bucket[0]) || isdigit(bucket[0]))) {
-    if (!relaxed_names)
-      return -ERR_INVALID_BUCKET_NAME;
-    else if (!(bucket[0] == '_' || bucket[0] == '.' || bucket[0] == '-'))
-      return -ERR_INVALID_BUCKET_NAME;
-  } 
-
+static int check_bucket_name_characters_for_relaxed(const string& bucket) {
   for (const char *s = bucket.c_str(); *s; ++s) {
     char c = *s;
-    if (isdigit(c) || (c == '.'))
+    if (isdigit(c) || isalpha(c))
       continue;
-    if (isalpha(c))
-      continue;
-    if ((c == '-') || (c == '_'))
+    else if ((c == '-') || (c == '_') || (c == '.'))
       continue;
     // Invalid character
     return -ERR_INVALID_BUCKET_NAME;
   }
+  return 0;
+}
+
+static int check_bucket_name_characters_for_DNS(const string& bucket, int len) {
+  // bucket name length cannot exceed 63 characters.
+  if (len > 63)
+    return -ERR_INVALID_BUCKET_NAME;
+  // bucket name must start with either letter or number.
+  if (!(isalpha(bucket[0]) || isdigit(bucket[0])))
+    return -ERR_INVALID_BUCKET_NAME;
+  // bucket name must end with either letter or number.
+  if (!(isalpha(bucket[len-1]) || isdigit(bucket[len-1])))
+    return -ERR_INVALID_BUCKET_NAME;
+  // bucket name cannot contain a sequence of ".-" , ".." or "-."
+  bool last_char_dot = false; // last character occurred was a '.'
+  bool last_char_hyphen = false; // last character occurred was a '-'
+  for (const char *s = bucket.c_str(); *s; ++s) {
+    char c = *s;
+    // bucket name cannot contain uppercase letters.
+    if (isdigit(c) || (isalpha(c) && islower(c))) {
+      last_char_hyphen = false;
+      last_char_dot = false;
+      continue;
+    }
+    else if (c == '.') {
+      if ((last_char_hyphen || last_char_dot))
+        return -ERR_INVALID_BUCKET_NAME;
+      else {
+        last_char_dot = true;
+        continue;
+      }
+    }
+    else if (c == '-') {
+      if (last_char_dot)
+        return -ERR_INVALID_BUCKET_NAME;
+      else {
+        last_char_hyphen = true;
+        continue;
+      }
+    }
+    // Invalid character (cannot contain anything except alphanumeric, '.' and '-' )
+    else
+      return -ERR_INVALID_BUCKET_NAME;
+  }
+  return 0;
+}
+
+int RGWHandler_ObjStore_S3::validate_bucket_name(const string& bucket, int name_strictness)
+{
+  int ret = RGWHandler_ObjStore::validate_bucket_name(bucket, name_strictness);
+  if (ret < 0)
+    return ret;
+
+  int len = bucket.size();
+  if (len == 0)
+    return 0;
+
+  switch(name_strictness) {
+    case 0:
+      // bucket name cannot contain anything except alphanumeric, '.', '-' and '_'.
+      ret = check_bucket_name_characters_for_relaxed(bucket);
+      break;
+
+    case 1:
+      // bucket names must start with a number or letter
+      if (!(isalpha(bucket[0]) || isdigit(bucket[0])))
+        return -ERR_INVALID_BUCKET_NAME;
+      // bucket name cannot contain anything except alphanumeric, '.', '-' and '_'.
+      ret = check_bucket_name_characters_for_relaxed(bucket);
+      break;
+
+    case 2:
+      // check other conditions so as to confirm DNS compliance.
+      ret = check_bucket_name_characters_for_DNS(bucket, len);
+      break;
+
+    default: // default is case 1.
+      if (!(isalpha(bucket[0]) || isdigit(bucket[0])))
+        return -ERR_INVALID_BUCKET_NAME;
+      ret = check_bucket_name_characters_for_relaxed(bucket);
+  }
+  if (ret < 0)
+    return ret;
 
   if (looks_like_ip_address(bucket.c_str()))
     return -ERR_INVALID_BUCKET_NAME;
@@ -2175,8 +2240,8 @@ int RGWHandler_ObjStore_S3::init(RGWRados *store, struct req_state *s, RGWClient
 {
   dout(10) << "s->object=" << (!s->object.empty() ? s->object : rgw_obj_key("<NULL>")) << " s->bucket=" << (!s->bucket_name_str.empty() ? s->bucket_name_str : "<NULL>") << dendl;
 
-  bool relaxed_names = s->cct->_conf->rgw_relaxed_s3_bucket_names;
-  int ret = validate_bucket_name(s->bucket_name_str, relaxed_names);
+  int bucket_name_strictness_value = s->cct->_conf->rgw_s3_bucket_name_access_strictness;
+  int ret = validate_bucket_name(s->bucket_name_str, bucket_name_strictness_value);
   if (ret)
     return ret;
   ret = validate_object_name(s->object.name);
@@ -2196,6 +2261,12 @@ int RGWHandler_ObjStore_S3::init(RGWRados *store, struct req_state *s, RGWClient
       ldout(s->cct, 0) << "failed to parse copy location" << dendl;
       return -EINVAL;
     }
+    ret = validate_bucket_name(s->src_bucket_name, bucket_name_strictness_value);
+    if (ret)
+      return ret;
+    ret = validate_object_name(s->src_object.name);
+    if (ret)
+      return ret;
   }
 
   s->dialect = "s3";
