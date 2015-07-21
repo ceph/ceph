@@ -338,12 +338,12 @@ class Filesystem(object):
 
         # FIXME get the metadata pool name from mdsmap instead of hardcoding
         self.client_remote.run(args=[
-            'sudo', 'rados', '-p', 'metadata', 'get', object_id, temp_bin_path
+            'sudo', self._prefix + 'rados', '-p', 'metadata', 'get', object_id, temp_bin_path
         ])
 
         stdout = StringIO()
         self.client_remote.run(args=[
-            'sudo', 'ceph-dencoder', 'type', object_type, 'import', temp_bin_path, 'decode', 'dump_json'
+            'sudo', self._prefix + 'ceph-dencoder', 'type', object_type, 'import', temp_bin_path, 'decode', 'dump_json'
         ], stdout=stdout)
         dump_json = stdout.getvalue().strip()
         try:
@@ -506,7 +506,7 @@ class Filesystem(object):
         temp_file = "/tmp/{0}_{1}".format(obj_name, datetime.datetime.now().isoformat())
 
         args = [
-            "rados", "-p", pool, "getxattr", obj_name, xattr_name,
+            self._prefix + "rados", "-p", pool, "getxattr", obj_name, xattr_name,
             run.Raw(">"), temp_file
         ]
         try:
@@ -518,7 +518,7 @@ class Filesystem(object):
             raise ObjectNotFound(obj_name)
 
         p = remote.run(
-            args=["ceph-dencoder", "type", type, "import", temp_file, "decode", "dump_json"],
+            args=[self._prefix + "ceph-dencoder", "type", type, "import", temp_file, "decode", "dump_json"],
             stdout=StringIO()
         )
 
@@ -613,9 +613,6 @@ class Filesystem(object):
             log.info("All objects for ino {0} size {1} are absent".format(ino, size))
             return True
 
-    def _rados_commandline(self, args):
-        return ["rados"] + args
-
     def rados(self, args, pool=None, stdin_data=None):
         """
         Call into the `rados` CLI from an MDS
@@ -634,7 +631,7 @@ class Filesystem(object):
 
         # NB we could alternatively use librados pybindings for this, but it's a one-liner
         # using the `rados` CLI
-        args = self._rados_commandline(["-p", pool] + args)
+        args = [self._prefix + "rados", "-p", pool] + args
         p = remote.run(
             args=args,
             stdin=stdin_data,
@@ -693,6 +690,13 @@ class Filesystem(object):
         # MDSTables & SessionMap
         self.erase_metadata_objects("mds{rank:d}_".format(rank=rank))
 
+    @property
+    def _prefix(self):
+        """
+        Override this to set a different
+        """
+        return ""
+
     def _run_tool(self, tool, args, rank=None, quiet=False):
         mds_id = self.mds_ids[0]
         remote = self.mds_daemons[mds_id].remote
@@ -701,9 +705,9 @@ class Filesystem(object):
         # the objecter log level (unlikely to be interesting here)
         # and does not set the mds log level (very interesting here)
         if quiet:
-            base_args = [tool, '--debug-mds=1', '--debug-objecter=1']
+            base_args = [self._prefix + tool, '--debug-mds=1', '--debug-objecter=1']
         else:
-            base_args = [tool, '--debug-mds=4', '--debug-objecter=1']
+            base_args = [self._prefix + tool, '--debug-mds=4', '--debug-objecter=1']
 
         if rank is not None:
             base_args.extend(["--rank", "%d" % rank])
