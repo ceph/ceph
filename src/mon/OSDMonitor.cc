@@ -2866,7 +2866,8 @@ namespace {
     CACHE_TARGET_FULL_RATIO,
     CACHE_MIN_FLUSH_AGE, CACHE_MIN_EVICT_AGE,
     ERASURE_CODE_PROFILE, MIN_READ_RECENCY_FOR_PROMOTE,
-    WRITE_FADVISE_DONTNEED, MIN_WRITE_RECENCY_FOR_PROMOTE};
+    WRITE_FADVISE_DONTNEED, MIN_WRITE_RECENCY_FOR_PROMOTE,
+    FAST_READ};
 
   std::set<osd_pool_get_choices>
     subtract_second_from_first(const std::set<osd_pool_get_choices>& first,
@@ -3318,7 +3319,8 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
       ("erasure_code_profile", ERASURE_CODE_PROFILE)
       ("min_read_recency_for_promote", MIN_READ_RECENCY_FOR_PROMOTE)
       ("write_fadvise_dontneed", WRITE_FADVISE_DONTNEED)
-      ("min_write_recency_for_promote", MIN_WRITE_RECENCY_FOR_PROMOTE);
+      ("min_write_recency_for_promote", MIN_WRITE_RECENCY_FOR_PROMOTE)
+      ("fast_read", FAST_READ);
 
     typedef std::set<osd_pool_get_choices> choices_set_t;
 
@@ -3471,6 +3473,9 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	    f->dump_int("min_write_recency_for_promote",
 			p->min_write_recency_for_promote);
 	    break;
+          case FAST_READ:
+            f->dump_int("fast_read", p->fast_read);
+            break;
 	}
 	f->close_section();
 	f->flush(rdata);
@@ -3566,6 +3571,9 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	    ss << "min_write_recency_for_promote: " <<
 	      p->min_write_recency_for_promote << "\n";
 	    break;
+          case FAST_READ:
+            ss << "fast_read: " << p->fast_read << "\n";
+            break;
 	}
 	rdata.append(ss.str());
 	ss.str("");
@@ -4899,6 +4907,16 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
       return -EINVAL;
     }
     p.min_write_recency_for_promote = n;
+  } else if (var == "fast_read") {
+    if (val == "true" || (interr.empty() && n == 1)) {
+      if (p.is_replicated()) {
+        ss << "fast read is not supported in replication pool";
+        return -EINVAL;
+      }
+      p.fast_read = true;
+    } else if (val == "false" || (interr.empty() && n == 0)) {
+      p.fast_read = false;
+    }
   } else {
     ss << "unrecognized variable '" << var << "'";
     return -EINVAL;
