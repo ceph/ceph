@@ -160,6 +160,12 @@ bool MDSAuthCaps::is_capable(const std::string &inode_path,
           (!(mask & MAY_EXECUTE) || (inode_mode & S_IXUSR))) {
           return true;
         }
+      } else if (std::find(i->match.gids.begin(), i->match.gids.end(), inode_gid) != i->match.gids.end()) {
+        if ((!(mask & MAY_READ) || (inode_mode & S_IRGRP)) &&
+          (!(mask & MAY_WRITE) || (inode_mode & S_IWGRP)) &&
+          (!(mask & MAY_EXECUTE) || (inode_mode & S_IXGRP))) {
+          return true;
+        }
       } else {
         if ((!(mask & MAY_READ) || (inode_mode & S_IROTH)) &&
           (!(mask & MAY_WRITE) || (inode_mode & S_IWOTH)) &&
@@ -167,13 +173,6 @@ bool MDSAuthCaps::is_capable(const std::string &inode_path,
           return true;
         }
       }
-
-	  // use fcntl.h macros for the file mode:
-	  //  S_IRUSR  S_IRGRP  S_ROTH
-	  //  S_IWUSR  S_IWGRP  S_WOTH
-	  //  S_IXUSR  S_IXGRP  S_XOTH
-
-	  // WRITE ME
     }
   }
 
