@@ -34,3 +34,19 @@
   $ rbd lock remove --snap=snap img id client.1234
   rbd: snapname specified for a command that doesn't use it
   [1]
+
+  $ rbd clone foo@snap bar@snap
+  rbd: destination snapname specified for a command that doesn't use it
+  [1]
+  $ rbd import /bin/ls ls@snap
+  rbd: destination snapname specified for a command that doesn't use it
+  [1]
+  $ rbd cp foo bar@snap
+  rbd: destination snapname specified for a command that doesn't use it
+  [1]
+  $ rbd cp foo@snap bar@snap
+  rbd: destination snapname specified for a command that doesn't use it
+  [1]
+  $ rbd mv foo bar@snap
+  rbd: destination snapname specified for a command that doesn't use it
+  [1]
