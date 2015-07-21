@@ -1379,6 +1379,13 @@ public:
 	 ++i) {
       clear_session_waiting_on_pg(session, *i);
     }
+    /* Messages have connection refs, we need to clear the
+     * connection->session->message->connection
+     * cycles which result.
+     * Bug #12338
+     */
+    session->waiting_on_map.clear();
+    session->waiting_for_pg.clear();
   }
   void register_session_waiting_on_pg(Session *session, spg_t pgid) {
     Mutex::Locker l(session_waiting_lock);
