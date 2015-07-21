@@ -401,12 +401,17 @@ TEST_P(StoreTest, SimpleCloneTest) {
     ASSERT_EQ(r, 0);
   }
   ghobject_t hoid(hobject_t(sobject_t("Object 1", CEPH_NOSNAP)));
-  bufferlist small;
+  bufferlist small, large, xlarge, newdata, attr;
   small.append("small");
+  large.append("large");
+  xlarge.append("xlarge");
   {
     ObjectStore::Transaction t;
     t.touch(cid, hoid);
     t.setattr(cid, hoid, "attr1", small);
+    t.setattr(cid, hoid, "attr2", large);
+    t.setattr(cid, hoid, "attr3", xlarge);
+    t.write(cid, hoid, 10, small.length(), small);
     cerr << "Creating object and set attr " << hoid << std::endl;
     r = store->apply_transaction(t);
     ASSERT_EQ(r, 0);
@@ -415,10 +420,32 @@ TEST_P(StoreTest, SimpleCloneTest) {
   {
     ObjectStore::Transaction t;
     t.clone(cid, hoid, hoid2);
-    t.rmattr(cid, hoid, "attr1");
+    t.setattr(cid, hoid2, "attr2", small);
+    t.rmattr(cid, hoid2, "attr1");
+    t.write(cid, hoid, 10, large.length(), large);
+    t.setattr(cid, hoid, "attr1", large);
+    t.setattr(cid, hoid, "attr2", small);
     cerr << "Clone object and rm attr" << std::endl;
     r = store->apply_transaction(t);
     ASSERT_EQ(r, 0);
+    r = store->read(cid, hoid, 10, 5, newdata);
+    ASSERT_EQ(r, 5);
+    ASSERT_TRUE(newdata.contents_equal(large));
+    newdata.clear();
+    r = store->read(cid, hoid2, 10, 5, newdata);
+    ASSERT_EQ(r, 5);
+    ASSERT_TRUE(newdata.contents_equal(small));
+    r = store->getattr(cid, hoid2, "attr2", attr);
+    ASSERT_EQ(r, 5);
+    ASSERT_TRUE(attr.contents_equal(small));
+    attr.clear();
+    r = store->getattr(cid, hoid2, "attr3", attr);
+    ASSERT_EQ(r, 6);
+    ASSERT_TRUE(attr.contents_equal(xlarge));
+    attr.clear();
+    r = store->getattr(cid, hoid, "attr1", attr);
+    ASSERT_EQ(r, 5);
+    ASSERT_TRUE(attr.contents_equal(small));
   }
   {
     ObjectStore::Transaction t;
