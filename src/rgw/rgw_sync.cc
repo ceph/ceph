@@ -203,8 +203,8 @@ class RGWCloneMetaLogOp {
     ReceivedRESTResponse = 2,
     StoringMDLogEntries = 3,
     Done = 4,
+    Error = 5,
   } state;
-#warning need an error state
 public:
   RGWCloneMetaLogOp(RGWRados *_store, RGWHTTPManager *_mgr, RGWCompletionManager *_completion_mgr,
 		    int _id, const string& _marker) : store(_store),
@@ -220,8 +220,17 @@ public:
   int state_sent_rest_request(bool *need_wait);
   int state_storing_mdlog_entries(bool *need_wait);
 
-  bool is_done() { return (state == Done); }
+  bool is_done() { return (state == Done || state == Error); }
+  bool is_error() { return (state == Error); }
+
+  void error_str(RGWCloneMetaLogOp *op);
 };
+
+void RGWMetadataSync::report_error(RGWCloneMetaLogOp *op)
+{
+#warning need to have error logging infrastructure that logs on backend
+  lderr(store->ctx()) << "ERROR: failed operation: " << op->>error_str() << dendl;
+}
 
 int RGWRemoteMetaLog::clone_shards()
 {
@@ -251,6 +260,9 @@ int RGWRemoteMetaLog::clone_shards()
 	ldout(store->ctx(), 0) << "ERROR: failed to clone shard, completion_mgr.get_next() returned ret=" << ret << dendl;
       } else {
         waiting_count--;
+      }
+      if (op->is_error) {
+	report_error(op);
       }
       if (!op->is_done()) {
 	ops.push_back(op);
@@ -291,6 +303,9 @@ int RGWCloneMetaLogOp::operate(bool *need_wait)
     case Done:
       ldout(store->ctx(), 20) << __func__ << ": shard_id=" << shard_id << ": done" << dendl;
       break;
+    case Error:
+      ldout(store->ctx(), 20) << __func__ << ": shard_id=" << shard_id << ": error" << dendl;
+      break;
   }
 
   return 0;
@@ -314,7 +329,17 @@ int RGWCloneMetaLogOp::state_init(bool *need_wait)
                                   { marker_key, marker.c_str() },
                                   { NULL, NULL } };
 
-  http_op = new RGWRESTReadResource(conn, "/admin/log", pairs, NULL, http_manager);
+rgw_http_param_pair *p = pairs;
+#warning remove me
+rgw_http_param_pair pairs2[] = { { "type", "metadataz" },
+                                 { "id", buf },
+                                 { "max-entries", max_entries_buf },
+                                 { marker_key, marker.c_str() },
+                                 { NULL, NULL } };
+if (shard_id == 12) p = pairs2;
+
+
+  http_op = new RGWRESTReadResource(conn, "/admin/log", p, NULL, http_manager);
 
   http_op->set_user_info((void *)this);
 
@@ -338,6 +363,8 @@ int RGWCloneMetaLogOp::state_sent_rest_request(bool *need_wait)
   delete http_op;
   if (ret < 0) {
     ldout(store->ctx(), 0) << "ERROR: failed to wait for op, ret=" << ret << dendl;
+    *need_wait = false;
+    state = Error;
     return ret;
   }
 
