@@ -219,6 +219,23 @@ scrubbing operations.
 :Type: 32-bit Int
 :Default: ``1`` 
 
+``osd scrub begin hour``
+
+:Description: The time of day for the lower bound when a scheduled scrub can be
+              performed.
+:Type: Integer in the range of 0 to 24
+:Default: ``0``
+
+
+``osd scrub end hour``
+
+:Description: The time of day for the upper bound when a scheduled scrub can be
+              performed. Along with ``osd scrub begin hour``, they define a time
+              window, in which the scrubs can happen. But a scrub will be performed
+              no matter the time window allows or not, as long as the placement
+              group's scrub interval exceeds ``osd scrub max interval``.
+:Type: Integer in the range of 0 to 24
+:Default: ``24``
 
 ``osd scrub thread timeout`` 
 
@@ -272,6 +289,17 @@ scrubbing operations.
 :Type: Float
 :Default: Once per week.  ``60*60*24*7``
 
+
+``osd scrub interval randomize ratio``
+
+:Description: Add a random delay to ``osd scrub min interval`` when scheduling
+              the next scrub job for a placement group. The delay is a random
+              value less than ``osd scrub min interval`` \*
+              ``osd scrub interval randomized ratio``. So the default setting
+              practically randomly spreads the scrubs out in the allowed time
+              window of ``[1, 1.5]`` \* ``osd scrub min interval``.
+:Type: Float
+:Default: ``0.5``
 
 ``osd deep scrub stride``
 
