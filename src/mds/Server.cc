@@ -6139,6 +6139,15 @@ void Server::handle_client_rename(MDRequestRef& mdr)
 				  &remote_wrlocks, auth_pin_freeze))
     return;
 
+  if (!check_access(mdr, srcdn->get_dir()->get_inode(), MAY_WRITE))
+    return;
+
+  if (!check_access(mdr, destdn->get_dir()->get_inode(), MAY_WRITE))
+    return;
+
+  if (!check_access(mdr, srci, MAY_WRITE))
+    return;
+
   if (oldin &&
       oldin->is_dir() &&
       _dir_is_nonempty(mdr, oldin)) {
