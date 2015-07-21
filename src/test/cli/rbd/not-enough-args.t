@@ -4,9 +4,6 @@
   $ rbd unmap
   rbd: unmap requires either image name or device path
   [1]
-  $ rbd clone foo@snap bar@snap
-  rbd: cannot clone to a snapshot
-  [1]
   $ rbd cp foo
   rbd: destination image name was not specified
   [1]
