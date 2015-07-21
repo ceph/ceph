@@ -73,16 +73,16 @@ class Filesystem(object):
     def create(self):
         pgs_per_fs_pool = self.get_pgs_per_fs_pool()
 
-        self.admin_remote.run(args=['sudo', 'ceph', 'osd', 'pool', 'create', 'metadata', pgs_per_fs_pool.__str__()])
-        self.admin_remote.run(args=['sudo', 'ceph', 'osd', 'pool', 'create', 'data', pgs_per_fs_pool.__str__()])
-        self.admin_remote.run(args=['sudo', 'ceph', 'fs', 'new', 'default', 'metadata', 'data'])
+        self.mon_manager.raw_cluster_cmd('osd', 'pool', 'create', 'metadata', pgs_per_fs_pool.__str__())
+        self.mon_manager.raw_cluster_cmd('osd', 'pool', 'create', 'data', pgs_per_fs_pool.__str__())
+        self.mon_manager.raw_cluster_cmd('fs', 'new', 'default', 'metadata', 'data')
 
     def delete(self):
-        self.admin_remote.run(args=['sudo', 'ceph', 'fs', 'rm', 'default', '--yes-i-really-mean-it'])
-        self.admin_remote.run(args=['sudo', 'ceph', 'osd', 'pool', 'delete',
-                                  'metadata', 'metadata', '--yes-i-really-really-mean-it'])
-        self.admin_remote.run(args=['sudo', 'ceph', 'osd', 'pool', 'delete',
-                                  'data', 'data', '--yes-i-really-really-mean-it'])
+        self.mon_manager.raw_cluster_cmd('fs', 'rm', 'default', '--yes-i-really-mean-it')
+        self.mon_manager.raw_cluster_cmd('osd', 'pool', 'delete',
+                                  'metadata', 'metadata', '--yes-i-really-really-mean-it')
+        self.mon_manager.raw_cluster_cmd('osd', 'pool', 'delete',
+                                  'data', 'data', '--yes-i-really-really-mean-it')
 
     def legacy_configured(self):
         """
@@ -90,9 +90,8 @@ class Filesystem(object):
         the case, the caller should avoid using Filesystem.create
         """
         try:
-            proc = self.admin_remote.run(args=['sudo', 'ceph', '--format=json-pretty', 'osd', 'lspools'],
-                                       stdout=StringIO())
-            pools = json.loads(proc.stdout.getvalue())
+            out_text = self.mon_manager.raw_cluster_cmd('--format=json-pretty', 'osd', 'lspools')
+            pools = json.loads(out_text)
             metadata_pool_exists = 'metadata' in [p['poolname'] for p in pools]
         except CommandFailedError as e:
             # For use in upgrade tests, Ceph cuttlefish and earlier don't support
@@ -317,7 +316,7 @@ class Filesystem(object):
 
         self.mon_manager.raw_cluster_cmd_result('mds', 'set', "max_mds", "0")
         for mds_id in self.mds_ids:
-            assert not self._ctx.daemons.get_daemon('mds', mds_id).running()
+            assert not self.mds_daemons[mds_id].running()
             self.mon_manager.raw_cluster_cmd_result('mds', 'fail', mds_id)
         self.mon_manager.raw_cluster_cmd_result('fs', 'rm', "default", "--yes-i-really-mean-it")
         self.mon_manager.raw_cluster_cmd_result('fs', 'new', "default", "metadata", "data")
