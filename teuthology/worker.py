@@ -79,7 +79,8 @@ def main(ctx):
     beanstalk.watch_tube(connection, ctx.tube)
     result_proc = None
 
-    fetch_teuthology('master')
+    if teuth_config.teuthology_path is None:
+        fetch_teuthology('master')
     fetch_qa_suite('master')
 
     while True:
@@ -116,7 +117,10 @@ def main(ctx):
         job_config['teuthology_branch'] = teuthology_branch
 
         try:
-            teuth_path = fetch_teuthology(branch=teuthology_branch)
+            if teuth_config.teuthology_path is not None:
+                teuth_path = teuth_config.teuthology_path
+            else:
+                teuth_path = fetch_teuthology(branch=teuthology_branch)
             # For the teuthology tasks, we look for suite_branch, and if we
             # don't get that, we look for branch, and fall back to 'master'.
             # last-in-suite jobs don't have suite_branch or branch set.

@@ -153,7 +153,8 @@ def fetch_repos(branch, test_name):
         # teuthology, let's not wreak havoc on it.
         if config.automated_scheduling:
             # We use teuthology's master branch in all cases right now
-            fetch_teuthology('master')
+            if config.teuthology_path is None:
+                fetch_teuthology('master')
         suite_repo_path = fetch_qa_suite(branch)
     except BranchNotFoundError as exc:
         schedule_fail(message=str(exc), name=test_name)
