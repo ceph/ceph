@@ -3094,7 +3094,8 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
       goto reply;
     }
 
-    if (!p->is_erasure() && var == "erasure_code_profile") {
+    if (!p->is_erasure() &&
+        (var == "erasure_code_profile" || var == "fast_read")) {
       ss << "pool '" << poolstr
          << "' is not a erasure pool: variable not applicable";
       r = -EACCES;
@@ -3160,6 +3161,8 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
 	f->dump_int("min_read_recency_for_promote", p->min_read_recency_for_promote);
       } else if (var == "write_fadvise_dontneed") {
 	f->dump_string("write_fadvise_dontneed", p->has_flag(pg_pool_t::FLAG_WRITE_FADVISE_DONTNEED) ? "true" : "false");
+      } else if (var == "fast_read") {
+        f->dump_int("fast_read", p->fast_read);
       }
 
       f->close_section();
@@ -3213,6 +3216,8 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
 	ss << "min_read_recency_for_promote: " << p->min_read_recency_for_promote;
       } else if (var == "write_fadvise_dontneed") {
 	ss << "write_fadvise_dontneed: " <<  (p->has_flag(pg_pool_t::FLAG_WRITE_FADVISE_DONTNEED) ? "true" : "false");
+      } else if (var == "fast_read") {
+        ss << "fast_read: " << p->fast_read;
       }
 
       rdata.append(ss);
@@ -4480,6 +4485,16 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
     } else {
       ss << "expecting value 'true', 'false', '0', or '1'";
       return -EINVAL;
+    }
+  } else if (var == "fast_read") {
+    if (val == "true" || (interr.empty() && n == 1)) {
+      if (p.is_replicated()) {
+        ss << "fast read is not supported in replication pool";
+        return -EINVAL;
+      }
+      p.fast_read = true;
+    } else if (val == "false" || (interr.empty() && n == 0)) {
+      p.fast_read = false;
     }
   } else {
     ss << "unrecognized variable '" << var << "'";

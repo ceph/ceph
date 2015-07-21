@@ -1041,6 +1041,7 @@ public:
 
   uint64_t expected_num_objects; ///< expected number of objects on this pool, a value of 0 indicates
                                  ///< user does not specify any expected value
+  bool fast_read;            ///< whether turn on fast read on the pool or not
 
   pg_pool_t()
     : flags(0), type(0), size(0), min_size(0),
@@ -1065,7 +1066,8 @@ public:
       hit_set_count(0),
       min_read_recency_for_promote(0),
       stripe_width(0),
-      expected_num_objects(0)
+      expected_num_objects(0),
+      fast_read(false)
   { }
 
   void dump(Formatter *f) const;
