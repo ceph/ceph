@@ -605,6 +605,9 @@ class Filesystem(object):
             log.info("All objects for ino {0} size {1} are absent".format(ino, size))
             return True
 
+    def _rados_commandline(self, args):
+        return ["rados"] + args
+
     def rados(self, args, pool=None, stdin_data=None):
         """
         Call into the `rados` CLI from an MDS
@@ -623,7 +626,7 @@ class Filesystem(object):
 
         # NB we could alternatively use librados pybindings for this, but it's a one-liner
         # using the `rados` CLI
-        args = ["rados", "-p", pool] + args
+        args = self._rados_commandline(["-p", pool] + args)
         p = remote.run(
             args=args,
             stdin=stdin_data,
