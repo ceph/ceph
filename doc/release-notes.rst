@@ -2,10 +2,10 @@
  Release Notes
 ===============
 
-v0.80.10 Firefly (DRAFT)
+v0.80.10 Firefly
 ================
 
-This is a bugfix release for firefly.
+This is a bugfix release for Firefly.
 
 We recommend that all Firefly users upgrade.
 
