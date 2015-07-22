@@ -7,6 +7,7 @@
 #include "rgw_rados.h"
 #include "rgw_rest_client.h"
 #include "common/ceph_json.h"
+#include "common/RefCountedObj.h"
 
 
 class CephContext;
@@ -124,7 +125,7 @@ public:
   }
 };
 
-class RGWRESTReadResource {
+class RGWRESTReadResource : public RefCountedObject {
   CephContext *cct;
   RGWRESTConn *conn;
   string resource;
@@ -157,11 +158,19 @@ public:
 
   int aio_read();
 
+  string to_str() {
+    return req.to_str();
+  }
+
+  int get_http_status() {
+    return req.get_http_status();
+  }
+
   template <class T>
   int wait(T *dest);
 
   template <class T>
-  int get(T *dest);
+  int fetch(T *dest);
 };
 
 
@@ -176,7 +185,7 @@ int RGWRESTReadResource::decode_resource(T *dest)
 }
 
 template <class T>
-int RGWRESTReadResource::get(T *dest)
+int RGWRESTReadResource::fetch(T *dest)
 {
   int ret = read();
   if (ret < 0) {
@@ -194,6 +203,7 @@ template <class T>
 int RGWRESTReadResource::wait(T *dest)
 {
   int ret = req.wait();
+  put();
   if (ret < 0) {
     return ret;
   }
