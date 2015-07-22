@@ -28,6 +28,8 @@ namespace librbd {
 class AioCompletion;
 class AioObjectRequest;
 class ImageCtx;
+class JournalReplay;
+
 namespace journal {
 class EventEntry;
 }
@@ -44,6 +46,7 @@ public:
   static int remove(librados::IoCtx &io_ctx, const std::string &image_id);
 
   bool is_journal_ready() const;
+  bool is_journal_replaying() const;
 
   void open();
   int close();
@@ -157,7 +160,6 @@ private:
   ImageCtx &m_image_ctx;
 
   ::journal::Journaler *m_journaler;
-
   mutable Mutex m_lock;
   Cond m_cond;
   State m_state;
@@ -171,6 +173,8 @@ private:
   Events m_events;
 
   bool m_blocking_writes;
+
+  JournalReplay *m_journal_replay;
 
   ::journal::Future wait_event(Mutex &lock, uint64_t tid, Context *on_safe);
 

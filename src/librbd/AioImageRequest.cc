@@ -240,7 +240,8 @@ void AbstractAioImageWrite::send_request() {
                                object_extents);
     }
 
-    journaling = (m_image_ctx.journal != NULL);
+    journaling = (m_image_ctx.journal != NULL &&
+                  !m_image_ctx.journal->is_journal_replaying());
   }
 
   AioObjectRequests requests;
@@ -417,7 +418,8 @@ void AioImageFlush::send_request() {
   {
     // journal the flush event
     RWLock::RLocker snap_locker(m_image_ctx.snap_lock);
-    if (m_image_ctx.journal != NULL) {
+    if (m_image_ctx.journal != NULL &&
+        !m_image_ctx.journal->is_journal_replaying()) {
       uint64_t journal_tid = m_image_ctx.journal->append_event(
         m_aio_comp, journal::EventEntry(journal::AioFlushEvent()),
         AioObjectRequests(), 0, 0, false);

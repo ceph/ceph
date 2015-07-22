@@ -24,6 +24,7 @@ librbd_internal_la_SOURCES = \
 	librbd/ImageWatcher.cc \
 	librbd/internal.cc \
 	librbd/Journal.cc \
+	librbd/JournalReplay.cc \
 	librbd/LibrbdWriteback.cc \
 	librbd/ObjectMap.cc \
 	librbd/RebuildObjectMapRequest.cc
@@ -72,6 +73,7 @@ noinst_HEADERS += \
 	librbd/ImageWatcher.h \
 	librbd/internal.h \
 	librbd/Journal.h \
+	librbd/JournalReplay.h \
 	librbd/JournalTypes.h \
 	librbd/LibrbdWriteback.h \
 	librbd/ObjectMap.h \

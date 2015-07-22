@@ -6,6 +6,7 @@
 #include "librbd/AioImageRequestWQ.h"
 #include "librbd/AioObjectRequest.h"
 #include "librbd/ImageCtx.h"
+#include "librbd/JournalReplay.h"
 #include "librbd/JournalTypes.h"
 #include "journal/Journaler.h"
 #include "journal/ReplayEntry.h"
@@ -37,7 +38,7 @@ Journal::Journal(ImageCtx &image_ctx)
   : m_image_ctx(image_ctx), m_journaler(NULL),
     m_lock("Journal::m_lock"), m_state(STATE_UNINITIALIZED),
     m_lock_listener(this), m_replay_handler(this), m_close_pending(false),
-    m_event_tid(0), m_blocking_writes(false) {
+    m_event_tid(0), m_blocking_writes(false), m_journal_replay(NULL) {
 
   ldout(m_image_ctx.cct, 5) << this << ": ictx=" << &m_image_ctx << dendl;
 
@@ -49,6 +50,7 @@ Journal::Journal(ImageCtx &image_ctx)
 
 Journal::~Journal() {
   assert(m_journaler == NULL);
+  assert(m_journal_replay == NULL);
 
   m_image_ctx.image_watcher->unregister_listener(&m_lock_listener);
 
@@ -60,6 +62,11 @@ bool Journal::is_journal_supported(ImageCtx &image_ctx) {
   assert(image_ctx.snap_lock.is_locked());
   return ((image_ctx.features & RBD_FEATURE_JOURNALING) &&
           !image_ctx.read_only && image_ctx.snap_id == CEPH_NOSNAP);
+}
+
+bool Journal::is_journal_replaying() const {
+  Mutex::Locker locker(m_lock);
+  return (m_state == STATE_REPLAYING);
 }
 
 int Journal::create(librados::IoCtx &io_ctx, const std::string &image_id) {
@@ -312,6 +319,9 @@ void Journal::destroy_journaler() {
 
   assert(m_lock.is_locked());
 
+  delete m_journal_replay;
+  m_journal_replay = NULL;
+
   m_close_pending = false;
   m_image_ctx.op_work_queue->queue(new C_DestroyJournaler(m_journaler), 0);
   m_journaler = NULL;
@@ -350,6 +360,8 @@ void Journal::handle_initialized(int r) {
     return;
   }
 
+  m_journal_replay = new JournalReplay(m_image_ctx);
+
   transition_state(STATE_REPLAYING);
   m_journaler->start_replay(&m_replay_handler);
 }
@@ -376,8 +388,14 @@ void Journal::handle_replay_ready() {
     }
 
     m_lock.Unlock();
-    // TODO process the payload
+    bufferlist data = replay_entry.get_data();
+    bufferlist::iterator it = data.begin();
+    int r = m_journal_replay->process(it);
     m_lock.Lock();
+
+    if (r < 0) {
+      // TODO
+    }
   }
 }
 
@@ -389,6 +407,12 @@ void Journal::handle_replay_complete(int r) {
     if (m_state != STATE_REPLAYING) {
       return;
     }
+
+    if (r == 0) {
+      r = m_journal_replay->flush();
+    }
+    delete m_journal_replay;
+    m_journal_replay = NULL;
 
     if (r < 0) {
       lderr(cct) << this << " " << __func__ << ": r=" << r << dendl;
