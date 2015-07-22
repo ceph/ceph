@@ -140,6 +140,17 @@ inline ostream& operator<<(ostream& out, const set<A>& iset) {
   return out;
 }
 
+template<class A, class C>
+inline ostream& operator<<(ostream& out, const set<A, C>& iset) {
+  for (typename set<A, C>::const_iterator it = iset.begin();
+       it != iset.end();
+       ++it) {
+    if (it != iset.begin()) out << ",";
+    out << *it;
+  }
+  return out;
+}
+
 template<class A>
 inline ostream& operator<<(ostream& out, const multiset<A>& iset) {
   for (typename multiset<A>::const_iterator it = iset.begin();
