@@ -3482,6 +3482,8 @@ int FileStore::_do_copy_range(int from, int to, uint64_t srcoff, uint64_t len, u
 	break;
       }
     }
+    close(pipefd[0]);
+    close(pipefd[1]);
   } else
 #endif
   {
