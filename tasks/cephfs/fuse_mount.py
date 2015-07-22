@@ -129,21 +129,29 @@ class FuseMount(CephFSMount):
             self._fuse_conn = new_conns[0]
 
     def is_mounted(self):
+        proc = self.client_remote.run(
+            args=[
+                'stat',
+                '--file-system',
+                '--printf=%T\n',
+                '--',
+                self.mountpoint,
+            ],
+            stdout=StringIO(),
+            stderr=StringIO(),
+            wait=False
+        )
         try:
-            proc = self.client_remote.run(
-                args=[
-                    'stat',
-                    '--file-system',
-                    '--printf=%T\n',
-                    '--',
-                    self.mountpoint,
-                ],
-                stdout=StringIO(),
-            )
+            proc.wait()
         except CommandFailedError:
-            # This happens if the mount directory doesn't exist
-            log.info('mount point does not exist: %s', self.mountpoint)
-            return False
+            if "endpoint is not connected" in proc.stderr.getvalue():
+                # This happens is fuse is killed without unmount
+                log.warn("Found stale moutn point at {0}".format(self.mountpoint))
+                return True
+            else:
+                # This happens if the mount directory doesn't exist
+                log.info('mount point does not exist: %s', self.mountpoint)
+                return False
 
         fstype = proc.stdout.getvalue().rstrip('\n')
         if fstype == 'fuseblk':
