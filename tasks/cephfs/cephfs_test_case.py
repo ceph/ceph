@@ -87,7 +87,8 @@ class CephFSTestCase(unittest.TestCase):
         # To avoid any issues with e.g. unlink bugs, we destroy and recreate
         # the filesystem rather than just doing a rm -rf of files
         self.fs.mds_stop()
-        self.fs.mds_fail()
+        if self.fs.exists():
+            self.fs.mds_fail()
         self.fs.delete_all()
         self.fs.create()
 
