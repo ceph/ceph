@@ -7,7 +7,6 @@ import datetime
 import re
 
 from teuthology.exceptions import CommandFailedError
-from teuthology.orchestra import run
 from teuthology import misc
 from teuthology.nuke import clear_firewall
 from teuthology.parallel import parallel
@@ -509,23 +508,23 @@ class Filesystem(object):
 
         obj_name = "{0:x}.00000000".format(ino_no)
 
-        temp_file = "/tmp/{0}_{1}".format(obj_name, datetime.datetime.now().isoformat())
-
         args = [
-            self._prefix + "rados", "-p", pool, "getxattr", obj_name, xattr_name,
-            run.Raw(">"), temp_file
+            self._prefix + "rados", "-p", pool, "getxattr", obj_name, xattr_name
         ]
         try:
-            remote.run(
+            proc = remote.run(
                 args=args,
                 stdout=StringIO())
         except CommandFailedError as e:
             log.error(e.__str__())
             raise ObjectNotFound(obj_name)
 
+        data = proc.stdout.getvalue()
+
         p = remote.run(
-            args=[self._prefix + "ceph-dencoder", "type", type, "import", temp_file, "decode", "dump_json"],
-            stdout=StringIO()
+            args=[self._prefix + "ceph-dencoder", "type", type, "import", "-", "decode", "dump_json"],
+            stdout=StringIO(),
+            stdin=data
         )
 
         return json.loads(p.stdout.getvalue().strip())
