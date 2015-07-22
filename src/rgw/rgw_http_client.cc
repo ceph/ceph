@@ -84,6 +84,9 @@ int RGWHTTPClient::process(const char *method, const char *url)
 
   char error_buf[CURL_ERROR_SIZE];
 
+  last_method = (method ? method : "");
+  last_url = (url ? url : "");
+
   curl_handle = curl_easy_init();
 
   dout(20) << "sending request to " << url << dendl;
@@ -167,6 +170,13 @@ struct rgw_http_req_data : public RefCountedObject {
 
 };
 
+string RGWHTTPClient::to_str()
+{
+  string method_str = (last_method.empty() ? "<no-method>" : last_method);
+  string url_str = (last_url.empty() ? "<no-url>" : last_url);
+  return method_str + " " + url_str;
+}
+
 int RGWHTTPClient::init_request(const char *method, const char *url, rgw_http_req_data *_req_data)
 {
   assert(!req_data);
@@ -186,6 +196,9 @@ int RGWHTTPClient::init_request(const char *method, const char *url, rgw_http_re
   curl_slist *h = headers_to_slist(headers);
 
   req_data->h = h;
+
+  last_method = (method ? method : "");
+  last_url = (url ? url : "");
 
   curl_easy_setopt(easy_handle, CURLOPT_CUSTOMREQUEST, method);
   curl_easy_setopt(easy_handle, CURLOPT_URL, url);
