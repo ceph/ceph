@@ -3,6 +3,7 @@ overrides:
     conf:
       mon:
         mon warn on legacy crush tunables: false
+        mon debug unsafe allow tier with nonempty snaps: true
     log-whitelist:
       - scrub mismatch
       - ScrubResult
