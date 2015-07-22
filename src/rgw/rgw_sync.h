@@ -22,9 +22,12 @@ struct rgw_mdlog_info {
 
 #define RGW_ASYNC_OPS_MGR_WINDOW 16
 
+class RGWAsyncOpsManager;
+class AioCompletionNotifier;
+
 class RGWAsyncOp {
 protected:
-  RGWCompletionManager *completion_mgr;
+  RGWAsyncOpsManager *ops_mgr;
 
   bool blocked;
 
@@ -33,7 +36,7 @@ protected:
   void set_blocked(int flag) { blocked = flag; }
 
 public:
-  RGWAsyncOp(RGWCompletionManager *_completion_mgr) : completion_mgr(_completion_mgr), blocked(false) {}
+  RGWAsyncOp(RGWAsyncOpsManager *_ops_mgr) : ops_mgr(_ops_mgr), blocked(false) {}
   virtual ~RGWAsyncOp() {}
 
   virtual int operate() = 0;
@@ -57,12 +60,15 @@ protected:
 
   int ops_window;
 
+  void put_completion_notifier(AioCompletionNotifier *cn);
 public:
   RGWAsyncOpsManager(CephContext *_cct) : cct(_cct), ops_window(RGW_ASYNC_OPS_MGR_WINDOW) {}
   virtual ~RGWAsyncOpsManager() {}
 
   int run(list<RGWAsyncOp *>& ops);
   virtual void report_error(RGWAsyncOp *op);
+
+  AioCompletionNotifier *create_completion_notifier(RGWAsyncOp *op);
 };
 
 class RGWRemoteMetaLog : public RGWAsyncOpsManager {
