@@ -87,10 +87,11 @@ class FakeDispatcher : public Dispatcher {
   bool got_new;
   bool got_remote_reset;
   bool got_connect;
+  bool loopback;
 
   FakeDispatcher(bool s): Dispatcher(g_ceph_context), lock("FakeDispatcher::lock"),
                           is_server(s), got_new(false), got_remote_reset(false),
-                          got_connect(false) {}
+                          got_connect(false), loopback(false) {}
   bool ms_can_fast_dispatch_any() const { return true; }
   bool ms_can_fast_dispatch(Message *m) const {
     switch (m->get_type()) {
@@ -177,7 +178,12 @@ class FakeDispatcher : public Dispatcher {
     s->count++;
     cerr << __func__ << " conn: " << m->get_connection() << " session " << s << " count: " << s->count << std::endl;
     if (is_server) {
-      reply_message(m);
+      if (loopback)
+        assert(m->get_source().is_osd());
+      else
+        reply_message(m);
+    } else if (loopback) {
+      assert(m->get_source().is_client());
     }
     got_new = true;
     cond.Signal();
@@ -256,6 +262,7 @@ TEST_P(MessengerTest, SimpleTest) {
   ASSERT_FALSE(conn->is_connected());
 
   // 5. loopback connection
+  srv_dispatcher.loopback = true;
   conn = client_msgr->get_loopback_connection();
   {
     m = new MPing();
@@ -265,6 +272,7 @@ TEST_P(MessengerTest, SimpleTest) {
       cli_dispatcher.cond.Wait(cli_dispatcher.lock);
     cli_dispatcher.got_new = false;
   }
+  srv_dispatcher.loopback = false;
   ASSERT_TRUE(static_cast<Session*>(conn->get_priv())->get_count() == 1);
   client_msgr->shutdown();
   client_msgr->wait();
