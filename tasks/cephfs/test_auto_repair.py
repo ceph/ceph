@@ -53,8 +53,7 @@ class TestMDSAutoRepair(CephFSTestCase):
         proc = self.mount_a.run_shell(["sudo", "ls", "-id", "testdir1"])
         self.assertEqual(proc.exitstatus, 0)
         objname = "{:x}.00000000".format(long(proc.stdout.getvalue().split()[0]))
-        proc = self.mount_a.run_shell(["sudo", "rados", "-p", "metadata", "rmxattr", objname, "parent"])
-        self.assertEqual(proc.exitstatus, 0)
+        self.fs.rados(["rmxattr", objname, "parent"])
 
         # readdir (fetch dirfrag) should fix testdir1's backtrace
         self.mount_a.run_shell(["sudo", "ls", "testdir1"])
@@ -66,8 +65,7 @@ class TestMDSAutoRepair(CephFSTestCase):
         self.fs.mds_asok(['flush', 'journal'])
 
         # check if backtrace exists
-        proc = self.mount_a.run_shell(["sudo", "rados", "-p", "metadata", "getxattr", objname, "parent"])
-        self.assertEqual(proc.exitstatus, 0)
+        self.fs.rados(["getxattr", objname, "parent"])
 
     def test_mds_readonly(self):
         """
