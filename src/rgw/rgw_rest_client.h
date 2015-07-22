@@ -59,6 +59,8 @@ public:
   int forward_request(RGWAccessKey& key, req_info& info, size_t max_response, bufferlist *inbl, bufferlist *outbl);
 
   map<string, string>& get_out_headers() { return out_headers; }
+
+  int get_http_status() { return http_status; }
 };
 
 

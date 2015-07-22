@@ -24,6 +24,9 @@ class RGWHTTPClient
 
   void *user_info;
 
+  string last_method;
+  string last_url;
+
 protected:
   CephContext *cct;
 
@@ -59,6 +62,8 @@ public:
 
   int wait();
   rgw_http_req_data *get_req_data() { return req_data; }
+
+  string to_str();
 };
 
 class RGWCompletionManager {
