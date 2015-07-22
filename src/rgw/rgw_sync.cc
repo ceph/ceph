@@ -180,10 +180,9 @@ static void _aio_completion_notifier_cb(librados::completion_t cb, void *arg)
 #define CLONE_MAX_ENTRIES 100
 #define CLONE_OPS_WINDOW 16
 
-class RGWCloneMetaLogOp {
+class RGWCloneMetaLogOp : public RGWAsyncOp {
   RGWRados *store;
   RGWHTTPManager *http_manager;
-  RGWCompletionManager *completion_mgr;
 
   int shard_id;
   string marker;
@@ -197,8 +196,6 @@ class RGWCloneMetaLogOp {
 
   bool finished;
 
-  stringstream error_stream;
-
   enum State {
     Init = 0,
     SentRESTRequest = 1,
@@ -209,51 +206,40 @@ class RGWCloneMetaLogOp {
   } state;
 public:
   RGWCloneMetaLogOp(RGWRados *_store, RGWHTTPManager *_mgr, RGWCompletionManager *_completion_mgr,
-		    int _id, const string& _marker) : store(_store),
-                                                      http_manager(_mgr), completion_mgr(_completion_mgr), shard_id(_id),
+		    int _id, const string& _marker) : RGWAsyncOp(_completion_mgr), store(_store),
+                                                      http_manager(_mgr), shard_id(_id),
                                                       marker(_marker), truncated(false), max_entries(CLONE_MAX_ENTRIES),
 						      http_op(NULL), md_op_notifier(NULL),
 						      finished(false),
                                                       state(RGWCloneMetaLogOp::Init) {}
 
-  int operate(bool *need_wait);
+  int operate();
 
-  int state_init(bool *need_wait);
-  int state_sent_rest_request(bool *need_wait);
-  int state_storing_mdlog_entries(bool *need_wait);
+  int state_init();
+  int state_sent_rest_request();
+  int state_storing_mdlog_entries();
 
   bool is_done() { return (state == Done || state == Error); }
   bool is_error() { return (state == Error); }
-
-  string error_str() {
-    return error_stream.str();
-  }
 };
 
-void RGWRemoteMetaLog::report_error(RGWCloneMetaLogOp *op)
+void RGWAsyncOpsManager::report_error(RGWAsyncOp *op)
 {
 #warning need to have error logging infrastructure that logs on backend
-  lderr(store->ctx()) << "ERROR: failed operation: " << op->error_str() << dendl;
+  lderr(cct) << "ERROR: failed operation: " << op->error_str() << dendl;
 }
 
-int RGWRemoteMetaLog::clone_shards()
+int RGWAsyncOpsManager::run(list<RGWAsyncOp *>& ops)
 {
-  list<RGWCloneMetaLogOp *> ops;
-  for (int i = 0; i < (int)log_info.num_shards; i++) {
-    RGWCloneMetaLogOp *op = new RGWCloneMetaLogOp(store, &http_manager, &completion_mgr, i, clone_markers[i]);
-    ops.push_back(op);
-  }
-
   int waiting_count = 0;
-  for (list<RGWCloneMetaLogOp *>::iterator iter = ops.begin(); iter != ops.end(); ++iter) {
-    bool need_wait;
-    RGWCloneMetaLogOp *op = *iter;
-    int ret = op->operate(&need_wait);
+  for (list<RGWAsyncOp *>::iterator iter = ops.begin(); iter != ops.end(); ++iter) {
+    RGWAsyncOp *op = *iter;
+    int ret = op->operate();
     if (ret < 0) {
-      ldout(store->ctx(), 0) << "ERROR: op->operate() returned ret=" << ret << dendl;
+      ldout(cct, 0) << "ERROR: op->operate() returned ret=" << ret << dendl;
     }
 
-    if (need_wait) {
+    if (op->is_blocked()) {
       waiting_count++;
     }
 
@@ -264,7 +250,7 @@ int RGWRemoteMetaLog::clone_shards()
       RGWCloneMetaLogOp *op;
       int ret = completion_mgr.get_next((void **)&op);
       if (ret < 0) {
-	ldout(store->ctx(), 0) << "ERROR: failed to clone shard, completion_mgr.get_next() returned ret=" << ret << dendl;
+	ldout(cct, 0) << "ERROR: failed to clone shard, completion_mgr.get_next() returned ret=" << ret << dendl;
       } else {
         waiting_count--;
       }
@@ -277,10 +263,10 @@ int RGWRemoteMetaLog::clone_shards()
   }
 
   while (waiting_count > 0) {
-    RGWCloneMetaLogOp *op;
+    RGWAsyncOp *op;
     int ret = completion_mgr.get_next((void **)&op);
     if (ret < 0) {
-      ldout(store->ctx(), 0) << "ERROR: failed to clone shard, completion_mgr.get_next() returned ret=" << ret << dendl;
+      ldout(cct, 0) << "ERROR: failed to clone shard, completion_mgr.get_next() returned ret=" << ret << dendl;
       return ret;
     } else {
       waiting_count--;
@@ -290,20 +276,31 @@ int RGWRemoteMetaLog::clone_shards()
   return 0;
 }
 
-int RGWCloneMetaLogOp::operate(bool *need_wait)
+int RGWRemoteMetaLog::clone_shards()
+{
+  list<RGWAsyncOp *> ops;
+  for (int i = 0; i < (int)log_info.num_shards; i++) {
+    RGWCloneMetaLogOp *op = new RGWCloneMetaLogOp(store, &http_manager, &completion_mgr, i, clone_markers[i]);
+    ops.push_back(op);
+  }
+
+  return run(ops);
+}
+
+int RGWCloneMetaLogOp::operate()
 {
   switch (state) {
     case Init:
       ldout(store->ctx(), 20) << __func__ << ": shard_id=" << shard_id << ": sending request" << dendl;
-      return state_init(need_wait);
+      return state_init();
     case SentRESTRequest:
       ldout(store->ctx(), 20) << __func__ << ": shard_id=" << shard_id << ": handling response" << dendl;
-      return state_sent_rest_request(need_wait);
+      return state_sent_rest_request();
     case ReceivedRESTResponse:
       assert(0);
       break; /* unreachable */
     case StoringMDLogEntries:
-      return state_storing_mdlog_entries(need_wait);
+      return state_storing_mdlog_entries();
     case Done:
       ldout(store->ctx(), 20) << __func__ << ": shard_id=" << shard_id << ": done" << dendl;
       break;
@@ -315,7 +312,7 @@ int RGWCloneMetaLogOp::operate(bool *need_wait)
   return 0;
 }
 
-int RGWCloneMetaLogOp::state_init(bool *need_wait)
+int RGWCloneMetaLogOp::state_init()
 {
   RGWRESTConn *conn = store->rest_master_conn;
 
@@ -340,26 +337,26 @@ int RGWCloneMetaLogOp::state_init(bool *need_wait)
   int ret = http_op->aio_read();
   if (ret < 0) {
     ldout(store->ctx(), 0) << "ERROR: failed to fetch mdlog data" << dendl;
-    error_stream << "failed to send http operation: " << http_op->to_str() << " ret=" << ret << std::endl;
+    log_error() << "failed to send http operation: " << http_op->to_str() << " ret=" << ret << std::endl;
     http_op->put();
     return ret;
   }
 
-  *need_wait = true;
+  set_blocked(true);
   state = SentRESTRequest;
 
   return 0;
 }
 
-int RGWCloneMetaLogOp::state_sent_rest_request(bool *need_wait)
+int RGWCloneMetaLogOp::state_sent_rest_request()
 {
   rgw_mdlog_shard_data data;
 
   int ret = http_op->wait(&data);
+  set_blocked(false);
   if (ret < 0) {
     error_stream << "http operation failed: " << http_op->to_str() << " status=" << http_op->get_http_status() << std::endl;
     ldout(store->ctx(), 0) << "ERROR: failed to wait for op, ret=" << ret << dendl;
-    *need_wait = false;
     state = Error;
     http_op->put();
     return ret;
@@ -372,7 +369,6 @@ int RGWCloneMetaLogOp::state_sent_rest_request(bool *need_wait)
 
   truncated = ((int)data.entries.size() == max_entries);
 
-  *need_wait = false;
   if (data.entries.empty()) {
     state = Done;
     return 0;
@@ -404,19 +400,20 @@ int RGWCloneMetaLogOp::state_sent_rest_request(bool *need_wait)
 
   ret = store->meta_mgr->store_md_log_entries(dest_entries, shard_id, md_op_notifier->completion());
   if (ret < 0) {
+    state = Error;
     ldout(store->ctx(), 10) << "failed to store md log entries shard_id=" << shard_id << " ret=" << ret << dendl;
     return ret;
   }
-  *need_wait = true;
+  set_blocked(true);
   return 0;
 }
 
-int RGWCloneMetaLogOp::state_storing_mdlog_entries(bool *need_wait)
+int RGWCloneMetaLogOp::state_storing_mdlog_entries()
 {
+  set_blocked(false);
   if (truncated) {
-    return state_init(need_wait);
+    return state_init();
   } else {
-    *need_wait = false;
     state = Done;
   }
 
