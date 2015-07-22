@@ -7054,11 +7054,14 @@ Client::C_Readahead::C_Readahead(Client *c, Fh *f) :
     f->get();
 }
 
+Client::C_Readahead::~C_Readahead() {
+  client->_put_fh(f);
+}
+
 void Client::C_Readahead::finish(int r) {
   lgeneric_subdout(client->cct, client, 20) << "client." << client->get_nodeid() << " " << "C_Readahead on " << f->inode << dendl;
   client->put_cap_ref(f->inode, CEPH_CAP_FILE_RD | CEPH_CAP_FILE_CACHE);
   f->readahead.dec_pending();
-  client->_put_fh(f);
 }
 
 int Client::_read_async(Fh *f, uint64_t off, uint64_t len, bufferlist *bl)
