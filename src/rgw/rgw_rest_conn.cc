@@ -218,8 +218,10 @@ int RGWRESTReadResource::read()
 
 int RGWRESTReadResource::aio_read()
 {
+  get();
   int ret = req.get_resource(conn->get_key(), headers, resource, mgr);
   if (ret < 0) {
+    put();
     ldout(cct, 0) << __func__ << ": get_resource() resource=" << resource << " returned ret=" << ret << dendl;
     return ret;
   }
