@@ -20,11 +20,52 @@ struct rgw_mdlog_info {
   void decode_json(JSONObj *obj);
 };
 
-#define RGW_META_LOG_OPS_WINDOW 16
+#define RGW_ASYNC_OPS_MGR_WINDOW 16
 
-class RGWCloneMetaLogOp;
+class RGWAsyncOp {
+protected:
+  RGWCompletionManager *completion_mgr;
 
-class RGWRemoteMetaLog {
+  bool blocked;
+
+  stringstream error_stream;
+
+  void set_blocked(int flag) { blocked = flag; }
+
+public:
+  RGWAsyncOp(RGWCompletionManager *_completion_mgr) : completion_mgr(_completion_mgr), blocked(false) {}
+  virtual ~RGWAsyncOp() {}
+
+  virtual int operate() = 0;
+
+  virtual bool is_done() = 0;
+  virtual bool is_error() = 0;
+
+  stringstream& log_error() { return error_stream; }
+  string error_str() {
+    return error_stream.str();
+  }
+
+  bool is_blocked() { return blocked; }
+};
+
+class RGWAsyncOpsManager {
+  CephContext *cct;
+
+protected:
+  RGWCompletionManager completion_mgr;
+
+  int ops_window;
+
+public:
+  RGWAsyncOpsManager(CephContext *_cct) : cct(_cct), ops_window(RGW_ASYNC_OPS_MGR_WINDOW) {}
+  virtual ~RGWAsyncOpsManager() {}
+
+  int run(list<RGWAsyncOp *>& ops);
+  virtual void report_error(RGWAsyncOp *op);
+};
+
+class RGWRemoteMetaLog : public RGWAsyncOpsManager {
   RGWRados *store;
   RGWRESTConn *conn;
 
@@ -48,15 +89,12 @@ class RGWRemoteMetaLog {
   map<utime_shard, int> ts_to_shard;
   vector<string> clone_markers;
 
-  RGWCompletionManager completion_mgr;
   RGWHTTPManager http_manager;
 
-  int ops_window;
-
 public:
-  RGWRemoteMetaLog(RGWRados *_store) : store(_store), conn(NULL), ts_to_shard_lock("ts_to_shard_lock"),
-                                       http_manager(store->ctx(), &completion_mgr),
-                                       ops_window(RGW_META_LOG_OPS_WINDOW) {}
+  RGWRemoteMetaLog(RGWRados *_store) : RGWAsyncOpsManager(_store->ctx()), store(_store),
+                                       conn(NULL), ts_to_shard_lock("ts_to_shard_lock"),
+                                       http_manager(store->ctx(), &completion_mgr) {}
 
   int init();
 
@@ -65,8 +103,6 @@ public:
   int get_shard_info(int shard_id);
   int clone_shard(int shard_id, const string& marker, string *new_marker, bool *truncated);
   int clone_shards();
-
-  void report_error(RGWCloneMetaLogOp *op);
 };
 
 class RGWMetadataSync {
