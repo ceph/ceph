@@ -150,7 +150,7 @@ def _get_baseurlinfo_and_dist(ctx, remote, config):
         distro=distro,
         version=version,
     )
-    # this is used when contructing the rpm name
+    # this is used when constructing the rpm name
     result["dist_release"] = dist_release
 
     # branch/tag/sha1 flavor
@@ -173,7 +173,7 @@ def _get_gitbuilder_version(version):
 
     Minor version numbers are ignored if they end in a zero. If they do
     not end in a zero the minor version number is included with a dash as
-    the separtor instead of a period.
+    the separator instead of a period.
     """
     version_tokens = version.split(".")
     include_minor_version = (
@@ -181,7 +181,7 @@ def _get_gitbuilder_version(version):
         version_tokens[1] != "0"
     )
     if include_minor_version:
-        return "-".join(version_tokens)
+        return "_".join(version_tokens)
 
     # return only the major version
     return version_tokens[0]

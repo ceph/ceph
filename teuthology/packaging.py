@@ -1,6 +1,7 @@
 import logging
 import ast
 import re
+import requests
 
 from cStringIO import StringIO
 
@@ -25,6 +26,27 @@ Map 'generic' service name to 'flavor-specific' service name.
 _SERVICE_MAP = {
     'httpd': {'deb': 'apache2', 'rpm': 'httpd'}
 }
+
+DISTRO_CODENAME_MAP = {
+    "ubuntu": {
+        "14.04": "trusty",
+        "12.04": "precise",
+        "15.04": "vivid",
+    },
+    "debian": {
+        "7": "wheezy",
+    },
+}
+
+DEFAULT_OS_VERSION = dict(
+    ubuntu="14.04",
+    fedora="20",
+    centos="7.0",
+    opensuse="12.2",
+    sles="11-sp2",
+    rhel="7.0",
+    debian='7.0'
+)
 
 
 def get_package_name(pkg, rem):
@@ -369,3 +391,243 @@ def get_package_version(remote, package):
         )
 
     return installed_ver
+
+
+def _get_config_value_for_remote(ctx, remote, config, key):
+    """
+    Look through config, and attempt to determine the "best" value to use
+    for a given key. For example, given:
+
+        config = {
+            'all':
+                {'branch': 'master'},
+            'branch': 'next'
+        }
+        _get_config_value_for_remote(ctx, remote, config, 'branch')
+
+    would return 'master'.
+
+    :param ctx: the argparse.Namespace object
+    :param remote: the teuthology.orchestra.remote.Remote object
+    :param config: the config dict
+    :param key: the name of the value to retrieve
+    """
+    roles = ctx.cluster.remotes[remote]
+    if 'all' in config:
+        return config['all'].get(key)
+    elif roles:
+        for role in roles:
+            if role in config and key in config[role]:
+                return config[role].get(key)
+    return config.get(key)
+
+
+class GitbuilderProject(object):
+    """
+    Represents a project that is built by gitbuilder.
+    """
+
+    def __init__(self, project, job_config, ctx=None, remote=None):
+        self.project = project
+        self.job_config = job_config
+        self.ctx = ctx
+        self.remote = remote
+        # avoiding circular imports
+        from teuthology.suite import get_install_task_flavor
+        self.flavor = get_install_task_flavor(self.job_config)
+        self.sha1 = self.job_config.get("sha1")
+
+        if remote and ctx:
+            self._init_from_remote()
+        else:
+            self._init_from_config()
+
+    def _init_from_remote(self):
+        """
+        Initializes the class from a teuthology.orchestra.remote.Remote object
+        """
+        self.arch = self.remote.arch
+        self.os_type = self.remote.os.name
+        self.os_version = self.remote.os.version
+        self.pkg_type = self.remote.system_type
+        self.distro = self._get_distro(
+            distro=self.remote.os.name,
+            version=self.remote.os.version,
+            codename=self.remote.os.codename,
+        )
+
+    def _init_from_config(self):
+        """
+        Initializes the class from a teuthology job config
+        """
+        # a bad assumption, but correct for most situations I believe
+        self.arch = "x86_64"
+        self.os_type = self.job_config.get("os_type")
+        self.os_version = self._get_version()
+        self.distro = self._get_distro(
+            distro=self.os_type,
+            version=self.os_version,
+        )
+        self.pkg_type = "deb" if self.os_type.lower() in (
+            "ubuntu",
+            "debian",
+        ) else "rpm"
+
+    @property
+    def version(self):
+        if not hasattr(self, '_version'):
+            self._version = self._get_package_version()
+        return self._version
+
+    @property
+    def base_url(self):
+        return self._get_base_url()
+
+    @property
+    def uri(self):
+        return self._get_uri()
+
+    def _parse_version(self, version):
+        """
+        Parses a distro version string and returns a modified string
+        that matches the format needed for the gitbuilder url.
+
+        Minor version numbers are ignored if they end in a zero. If they do
+        not end in a zero the minor version number is included with an
+        underscore as the separator instead of a period.
+        """
+        version_tokens = version.split(".")
+        include_minor_version = (
+            len(version_tokens) > 1 and
+            version_tokens[1] != "0"
+        )
+        if include_minor_version:
+            return "_".join(version_tokens)
+
+        # return only the major version
+        return version_tokens[0]
+
+    def _get_distro(self, distro=None, version=None, codename=None):
+        """
+        Given a distro and a version, returned the combined string
+        to use in a gitbuilder url.
+
+        :param distro:   The distro as a string
+        :param version:  The version as a string
+        :param codename: The codename for the distro.
+                         Used for deb based distros.
+        """
+        if distro in ('centos', 'rhel'):
+            distro = "centos"
+        elif distro == "fedora":
+            distro = "fc"
+        else:
+            # deb based systems use codename instead of a distro/version combo
+            if not codename:
+                # lookup codename based on distro string
+                codename = self._get_codename(distro, version)
+                if not codename:
+                    msg = "No codename found for: {distro} {version}".format(
+                        distro=distro,
+                        version=version,
+                    )
+                    log.exception(msg)
+                    raise RuntimeError()
+            return codename
+
+        return "{distro}{version}".format(
+            distro=distro,
+            version=self._parse_version(version),
+        )
+
+    def _get_codename(self, distro, version):
+        major_version = version.split(".")[0]
+        distro_codes = DISTRO_CODENAME_MAP.get(distro)
+        if not distro_codes:
+            return None
+        codename = distro_codes.get(version)
+        if not codename:
+            codename = distro_codes.get(major_version)
+
+        return codename
+
+    def _get_version(self):
+        version = self.job_config.get("os_version")
+        if not version:
+            version = DEFAULT_OS_VERSION.get(self.os_type)
+
+        return version
+
+    def _get_uri(self):
+        """
+        Set the uri -- common code used by both install and debian upgrade
+        """
+        tag = branch = sha1 = None
+        if self.remote:
+            tag = _get_config_value_for_remote(self.ctx, self.job_config,
+                                               self.remote, 'tag')
+            branch = _get_config_value_for_remote(self.ctx, self.job_config,
+                                                  self.remote, 'branch')
+            sha1 = _get_config_value_for_remote(self.ctx, self.job_config,
+                                                self.remote, 'sha1')
+        else:
+            sha1 = self.sha1
+
+        if tag:
+            uri = 'ref/' + tag
+        elif branch:
+            uri = 'ref/' + branch
+        elif sha1:
+            uri = 'sha1/' + sha1
+        else:
+            # FIXME: Should master be the default?
+            log.debug("defaulting to master branch")
+            uri = 'ref/master'
+        return uri
+
+    def _get_base_url(self):
+        """
+        Figures out which package repo base URL to use.
+        """
+        template = config.baseurl_template
+        # get distro name and arch
+        base_url = template.format(
+            host=config.gitbuilder_host,
+            proj=self.project,
+            pkg_type=self.pkg_type,
+            arch=self.arch,
+            dist=self.distro,
+            flavor=self.flavor,
+            uri=self.uri,
+        )
+        return base_url
+
+    def _get_package_version(self):
+        """
+        Look for, and parse, a file called 'version' in base_url.
+        """
+        url = "{0}/version".format(self.base_url)
+        log.info("Looking for package version: {0}".format(url))
+        resp = requests.get(url)
+        version = None
+        if not resp.ok:
+            log.info(
+                'Package not there yet (got HTTP code %s), waiting...',
+                resp.status_code,
+            )
+        else:
+            version = resp.text.strip()
+            # TODO: move this parsing into a different function for
+            # easier testing
+            # FIXME: 'version' as retreived from the repo is actually the
+            # RPM version PLUS *part* of the release. Example:
+            # Right now, ceph master is given the following version in the
+            # repo file: v0.67-rc3.164.gd5aa3a9 - whereas in reality the RPM
+            # version is 0.61.7 and the release is 37.g1243c97.el6 (centos6).
+            # Point being, I have to mangle a little here.
+            if version[0] == 'v':
+                version = version[1:]
+            if '-' in version:
+                version = version.split('-')[0]
+            log.info("Found version: {0}".format(version))
+        return version
