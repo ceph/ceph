@@ -178,6 +178,8 @@ int GenericFileStoreBackend::detect_features()
 	dout(0) << "detect_features: splice is supported" << dendl;
       } else
 	dout(0) << "detect_features: splice is NOT supported" << dendl;
+      close(pipefd[0]);
+      close(pipefd[1]);
     }
   }
 #endif
