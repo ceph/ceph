@@ -1046,6 +1046,7 @@ public:
   MonClient *monc;
   Finisher *finisher;
 private:
+  int client_priority;
   OSDMap    *osdmap;
 public:
   using Dispatcher::cct;
@@ -1846,6 +1847,7 @@ private:
 	   double osd_timeout) :
     Dispatcher(cct_),
     messenger(m), monc(mc), finisher(fin),
+    client_priority(0),
     osdmap(new OSDMap),
     initialized(0),
     last_tid(0), client_inc(-1), max_linger_id(0),
@@ -1966,6 +1968,8 @@ public:
 
   int get_client_incarnation() const { return client_inc.read(); }
   void set_client_incarnation(int inc) { client_inc.set(inc); }
+  
+  void set_client_priority(int priority) { client_priority = priority;}
 
   bool have_map(epoch_t epoch);
   /// wait for epoch; true if we already have it
@@ -2024,7 +2028,10 @@ public:
 	       const SnapContext& snapc, utime_t mtime, int flags,
 	       Context *onack, Context *oncommit, version_t *objver = NULL) {
     Op *o = new Op(oid, oloc, op.ops, flags | global_op_flags.read() | CEPH_OSD_FLAG_WRITE, onack, oncommit, objver);
-    o->priority = op.priority;
+    if (client_priority)
+        o->priority = client_priority;
+    else
+        o->priority = op.priority;
     o->mtime = mtime;
     o->snapc = snapc;
     o->out_rval.swap(op.out_rval);

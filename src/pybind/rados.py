@@ -429,6 +429,16 @@ Rados object in state %s." % self.state)
             raise make_ex(ret, "error connecting to the cluster")
         self.state = "connected"
 
+    def set_priority(self, priority):
+        """
+        set client priority
+        :param priority:
+        :return:
+        """
+        ret = run_in_thread(self.librados.rados_set_client_priority, (self.cluster, c_int(priority)))
+        if (ret != 0):
+            raise make_ex(ret, "error set_priority")
+
     def get_cluster_stats(self):
         """
         Read usage info about the cluster

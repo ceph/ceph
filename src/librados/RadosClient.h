@@ -80,6 +80,8 @@ public:
   int ping_monitor(string mon_id, string *result);
   int connect();
   void shutdown();
+  
+  int set_client_priority(int priority);
 
   int watch_flush();
 

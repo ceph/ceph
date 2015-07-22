@@ -409,6 +409,14 @@ CEPH_RADOS_API int rados_connect(rados_t cluster);
  */
 CEPH_RADOS_API void rados_shutdown(rados_t cluster);
 
+/**
+ * set client priority
+ * @param cluster the clsuter to set
+ * @param priority the priority [0,255]
+ * @return 
+ */
+CEPH_RADOS_API int rados_set_client_priority(rados_t cluster, int priority);
+
 /** @} init */
 
 /**

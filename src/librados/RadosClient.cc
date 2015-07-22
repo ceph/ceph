@@ -322,6 +322,22 @@ void librados::RadosClient::shutdown()
   ldout(cct, 1) << "shutdown" << dendl;
 }
 
+int librados::RadosClient::set_client_priority(int priority)
+{
+    // objecter may not init
+    if (state != CONNECTED)
+        return -ENOENT;
+    if (!objecter)
+        return -ENOENT;
+    
+    if (priority<0 || priority>255)
+        return -EIO;
+    
+    objecter->set_client_priority(priority);
+    
+    return 0;
+}
+
 int librados::RadosClient::watch_flush()
 {
   ldout(cct, 10) << __func__ << " enter" << dendl;
