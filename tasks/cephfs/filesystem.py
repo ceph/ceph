@@ -77,6 +77,13 @@ class Filesystem(object):
         self.mon_manager.raw_cluster_cmd('osd', 'pool', 'create', 'data', pgs_per_fs_pool.__str__())
         self.mon_manager.raw_cluster_cmd('fs', 'new', 'default', 'metadata', 'data')
 
+    def exists(self):
+        """
+        Whether a filesystem is enabled at all
+        """
+        fs_list = json.loads(self.mon_manager.raw_cluster_cmd('fs', 'ls', '--format=json-pretty'))
+        return len(fs_list) > 0
+
     def delete_all(self):
         """
         Remove all filesystems that exist, and any pools in use by them.
@@ -227,7 +234,6 @@ class Filesystem(object):
                 result.append(mds_status['name'])
 
         return result
-
 
     def wait_for_daemons(self, timeout=None):
         """
