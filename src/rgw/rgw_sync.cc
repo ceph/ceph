@@ -205,8 +205,8 @@ class RGWCloneMetaLogOp : public RGWAsyncOp {
     Error = 5,
   } state;
 public:
-  RGWCloneMetaLogOp(RGWRados *_store, RGWHTTPManager *_mgr, RGWCompletionManager *_completion_mgr,
-		    int _id, const string& _marker) : RGWAsyncOp(_completion_mgr), store(_store),
+  RGWCloneMetaLogOp(RGWRados *_store, RGWHTTPManager *_mgr, RGWAsyncOpsManager *_ops_mgr,
+		    int _id, const string& _marker) : RGWAsyncOp(_ops_mgr), store(_store),
                                                       http_manager(_mgr), shard_id(_id),
                                                       marker(_marker), truncated(false), max_entries(CLONE_MAX_ENTRIES),
 						      http_op(NULL), md_op_notifier(NULL),
@@ -276,11 +276,16 @@ int RGWAsyncOpsManager::run(list<RGWAsyncOp *>& ops)
   return 0;
 }
 
+AioCompletionNotifier *RGWAsyncOpsManager::create_completion_notifier(RGWAsyncOp *op)
+{
+  return new AioCompletionNotifier(&completion_mgr, (void *)op);
+}
+
 int RGWRemoteMetaLog::clone_shards()
 {
   list<RGWAsyncOp *> ops;
   for (int i = 0; i < (int)log_info.num_shards; i++) {
-    RGWCloneMetaLogOp *op = new RGWCloneMetaLogOp(store, &http_manager, &completion_mgr, i, clone_markers[i]);
+    RGWCloneMetaLogOp *op = new RGWCloneMetaLogOp(store, &http_manager, this, i, clone_markers[i]);
     ops.push_back(op);
   }
 
@@ -396,10 +401,11 @@ int RGWCloneMetaLogOp::state_sent_rest_request()
 
   state = StoringMDLogEntries;
 
-  md_op_notifier = new AioCompletionNotifier(completion_mgr, (void *)this);
+  AioCompletionNotifier *cn = ops_mgr->create_completion_notifier(this);
 
-  ret = store->meta_mgr->store_md_log_entries(dest_entries, shard_id, md_op_notifier->completion());
+  ret = store->meta_mgr->store_md_log_entries(dest_entries, shard_id, cn->completion());
   if (ret < 0) {
+    cn->put();
     state = Error;
     ldout(store->ctx(), 10) << "failed to store md log entries shard_id=" << shard_id << " ret=" << ret << dendl;
     return ret;
