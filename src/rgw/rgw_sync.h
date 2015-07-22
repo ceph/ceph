@@ -22,6 +22,8 @@ struct rgw_mdlog_info {
 
 #define RGW_META_LOG_OPS_WINDOW 16
 
+class RGWCloneMetaLogOp;
+
 class RGWRemoteMetaLog {
   RGWRados *store;
   RGWRESTConn *conn;
