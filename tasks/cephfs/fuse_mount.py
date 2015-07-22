@@ -107,15 +107,18 @@ class FuseMount(CephFSMount):
             time.sleep(mount_wait)            
         timeout = int(self.client_config.get('mount_timeout', 30))
         waited = 0
-        while list_connections() == pre_mount_conns:
+
+        post_mount_conns = list_connections()
+        while len(post_mount_conns) <= len(pre_mount_conns):
             time.sleep(1)
             waited += 1
             if waited > timeout:
                 raise RuntimeError("Fuse mount failed to populate /sys/ after {0} seconds".format(
                     waited
                 ))
+            else:
+                post_mount_conns = list_connections()
 
-        post_mount_conns = list_connections()
         log.info("Post-mount connections: {0}".format(post_mount_conns))
 
         # Record our fuse connection number so that we can use it when
