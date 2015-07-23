@@ -12,7 +12,10 @@
 # Description:       Enable Ceph distributed file system services.
 ### END INIT INFO
 
-. /lib/lsb/init-functions
+# TODO: on FreeBSD/OSX, use equivalent script file
+if [ -e /lib/lsb/init-functions ]; then
+    . /lib/lsb/init-functions
+fi
 
 # detect systemd, also check whether the systemd-run binary exists
 SYSTEMD_RUN=$(which systemd-run 2>/dev/null)
