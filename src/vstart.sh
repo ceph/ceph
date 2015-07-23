@@ -17,8 +17,8 @@ if [ -z "${CEPH_VSTART_WRAPPER}" ]; then
 fi
 
 export PYTHONPATH=./pybind
-export LD_LIBRARY_PATH=$CEPH_LIB
-export DYLD_LIBRARY_PATH=$LD_LIBRARY_PATH
+export LD_LIBRARY_PATH=$CEPH_LIB:$LD_LIBRARY_PATH
+export DYLD_LIBRARY_PATH=$CEPH_LIB:$DYLD_LIBRARY_PATH
 
 # abort on failure
 set -e
