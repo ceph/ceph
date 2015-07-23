@@ -830,7 +830,7 @@ int HashIndex::get_path_contents_by_hash_bitwise(
   const vector<string> &path,
   const ghobject_t *next_object,
   set<string, CmpHexdigitStringBitwise> *hash_prefixes,
-  set<pair<string, ghobject_t> > *objects)
+  set<pair<string, ghobject_t>, CmpPairBitwise> *objects)
 {
   map<string, ghobject_t> rev_objects;
   int r;
@@ -963,7 +963,7 @@ int HashIndex::list_by_hash_bitwise(
   vector<string> next_path = path;
   next_path.push_back("");
   set<string, CmpHexdigitStringBitwise> hash_prefixes;
-  set<pair<string, ghobject_t> > objects;
+  set<pair<string, ghobject_t>, CmpPairBitwise> objects;
   int r = get_path_contents_by_hash_bitwise(path,
 					    next,
 					    &hash_prefixes,
@@ -974,7 +974,7 @@ int HashIndex::list_by_hash_bitwise(
        i != hash_prefixes.end();
        ++i) {
     dout(20) << __func__ << " prefix " << *i << dendl;
-    set<pair<string, ghobject_t> >::iterator j = objects.lower_bound(
+    set<pair<string, ghobject_t>, CmpPairBitwise>::iterator j = objects.lower_bound(
       make_pair(*i, ghobject_t()));
     if (j == objects.end() || j->first != *i) {
       *(next_path.rbegin()) = *(i->rbegin());
@@ -1029,7 +1029,7 @@ int HashIndex::list_by_hash_nibblewise(
   vector<string> next_path = path;
   next_path.push_back("");
   set<string> hash_prefixes;
-  set<pair<string, ghobject_t>, CmpPairNibblewise > objects;
+  set<pair<string, ghobject_t>, CmpPairNibblewise> objects;
   int r = get_path_contents_by_hash_nibblewise(path,
 					       next,
 					       &hash_prefixes,
