@@ -23,9 +23,66 @@ log = logging.getLogger(__name__)
 MDS_RESTART_GRACE = 60
 
 
-class TestClientRecovery(CephFSTestCase):
+class TestClientNetworkRecovery(CephFSTestCase):
     REQUIRE_KCLIENT_REMOTE = True
     REQUIRE_ONE_CLIENT_REMOTE = True
+    CLIENTS_REQUIRED = 2
+
+    LOAD_SETTINGS = ["mds_session_timeout", "mds_reconnect_timeout", "ms_max_backoff"]
+
+    # Environment references
+    mds_session_timeout = None
+    mds_reconnect_timeout = None
+    ms_max_backoff = None
+
+    def test_network_death(self):
+        """
+        Simulate software freeze or temporary network failure.
+
+        Check that the client blocks I/O during failure, and completes
+        I/O after failure.
+        """
+
+        # We only need one client
+        self.mount_b.umount_wait()
+
+        # Initially our one client session should be visible
+        client_id = self.mount_a.get_global_id()
+        ls_data = self._session_list()
+        self.assert_session_count(1, ls_data)
+        self.assertEqual(ls_data[0]['id'], client_id)
+        self.assert_session_state(client_id, "open")
+
+        # ...and capable of doing I/O without blocking
+        self.mount_a.create_files()
+
+        # ...but if we turn off the network
+        self.fs.set_clients_block(True)
+
+        # ...and try and start an I/O
+        write_blocked = self.mount_a.write_background()
+
+        # ...then it should block
+        self.assertFalse(write_blocked.finished)
+        self.assert_session_state(client_id, "open")
+        time.sleep(self.mds_session_timeout * 1.5)  # Long enough for MDS to consider session stale
+        self.assertFalse(write_blocked.finished)
+        self.assert_session_state(client_id, "stale")
+
+        # ...until we re-enable I/O
+        self.fs.set_clients_block(False)
+
+        # ...when it should complete promptly
+        a = time.time()
+        self.wait_until_true(lambda: write_blocked.finished, self.ms_max_backoff * 2)
+        write_blocked.wait()  # Already know we're finished, wait() to raise exception on errors
+        recovery_time = time.time() - a
+        log.info("recovery time: {0}".format(recovery_time))
+        self.assert_session_state(client_id, "open")
+
+
+class TestClientRecovery(CephFSTestCase):
+    REQUIRE_KCLIENT_REMOTE = True
     CLIENTS_REQUIRED = 2
 
     LOAD_SETTINGS = ["mds_session_timeout", "mds_reconnect_timeout", "ms_max_backoff"]
@@ -265,51 +322,6 @@ class TestClientRecovery(CephFSTestCase):
                         "should have less than {0} capabilities, have {1}".format(
                             count, num_caps
                         ))
-
-    def test_network_death(self):
-        """
-        Simulate software freeze or temporary network failure.
-
-        Check that the client blocks I/O during failure, and completes
-        I/O after failure.
-        """
-
-        # We only need one client
-        self.mount_b.umount_wait()
-
-        # Initially our one client session should be visible
-        client_id = self.mount_a.get_global_id()
-        ls_data = self._session_list()
-        self.assert_session_count(1, ls_data)
-        self.assertEqual(ls_data[0]['id'], client_id)
-        self.assert_session_state(client_id, "open")
-
-        # ...and capable of doing I/O without blocking
-        self.mount_a.create_files()
-
-        # ...but if we turn off the network
-        self.fs.set_clients_block(True)
-
-        # ...and try and start an I/O
-        write_blocked = self.mount_a.write_background()
-
-        # ...then it should block
-        self.assertFalse(write_blocked.finished)
-        self.assert_session_state(client_id, "open")
-        time.sleep(self.mds_session_timeout * 1.5)  # Long enough for MDS to consider session stale
-        self.assertFalse(write_blocked.finished)
-        self.assert_session_state(client_id, "stale")
-
-        # ...until we re-enable I/O
-        self.fs.set_clients_block(False)
-
-        # ...when it should complete promptly
-        a = time.time()
-        self.wait_until_true(lambda: write_blocked.finished, self.ms_max_backoff * 2)
-        write_blocked.wait()  # Already know we're finished, wait() to raise exception on errors
-        recovery_time = time.time() - a
-        log.info("recovery time: {0}".format(recovery_time))
-        self.assert_session_state(client_id, "open")
 
     def test_filelock(self):
         """
