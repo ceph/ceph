@@ -299,6 +299,21 @@ static inline int cmp(const hobject_t& l, const hobject_t& r, bool sort_bitwise)
     return cmp_nibblewise(l, r);
 }
 
+// these are convenient
+static inline hobject_t MAX_HOBJ(const hobject_t& l, const hobject_t& r, bool bitwise) {
+  if (cmp(l, r, bitwise) >= 0)
+    return l;
+  else
+    return r;
+}
+
+static inline hobject_t MIN_HOBJ(const hobject_t& l, const hobject_t& r, bool bitwise) {
+  if (cmp(l, r, bitwise) <= 0)
+    return l;
+  else
+    return r;
+}
+
 typedef version_t gen_t;
 
 struct ghobject_t {
@@ -438,6 +453,23 @@ static inline int cmp(const ghobject_t& l, const ghobject_t& r,
     return cmp_bitwise(l, r);
   else
     return cmp_nibblewise(l, r);
+}
+
+// these are convenient
+static inline ghobject_t MAX_GHOBJ(const ghobject_t& l, const ghobject_t& r,
+				   bool bitwise) {
+  if (cmp(l, r, bitwise) >= 0)
+    return l;
+  else
+    return r;
+}
+
+static inline ghobject_t MIN_GHOBJ(const ghobject_t& l, const ghobject_t& r,
+				   bool bitwise) {
+  if (cmp(l, r, bitwise) <= 0)
+    return l;
+  else
+    return r;
 }
 
 #endif
