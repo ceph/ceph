@@ -26,6 +26,7 @@ class RGWAsyncOpsManager;
 class AioCompletionNotifier;
 
 class RGWAsyncOp {
+  friend class RGWAsyncOpsManager;
 protected:
   RGWAsyncOpsManager *ops_mgr;
 
@@ -34,6 +35,10 @@ protected:
   stringstream error_stream;
 
   void set_blocked(int flag) { blocked = flag; }
+  int yield(int ret) {
+    set_blocked(true);
+    return ret;
+  }
 
 public:
   RGWAsyncOp(RGWAsyncOpsManager *_ops_mgr) : ops_mgr(_ops_mgr), blocked(false) {}
