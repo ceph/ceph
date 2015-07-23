@@ -4673,7 +4673,7 @@ int FileStore::collection_list(coll_t c, ghobject_t start, ghobject_t end,
   sep.hobj.pool = -1;
   sep.set_shard(shard);
   if (!c.is_temp() && !c.is_meta()) {
-    if (start < sep) {
+    if (cmp_bitwise(start, sep) < 0) { // bitwise vs nibble doesn't matter here
       dout(10) << __func__ << " first checking temp pool" << dendl;
       coll_t temp = c.get_temp();
       int r = collection_list(temp, start, end, sort_bitwise, max, ls, next);
