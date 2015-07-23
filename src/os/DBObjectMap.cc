@@ -887,10 +887,10 @@ int DBObjectMap::clone(const ghobject_t &oid,
   if (oid == target)
     return 0;
 
-  MapHeaderLock _l1(this, MIN(oid, target));
-  MapHeaderLock _l2(this, MAX(oid, target));
+  MapHeaderLock _l1(this, MIN_GHOBJ(oid, target, true));
+  MapHeaderLock _l2(this, MAX_GHOBJ(oid, target, true));
   MapHeaderLock *lsource, *ltarget;
-  if (oid > target) {
+  if (cmp_bitwise(oid, target) > 0) {
     lsource = &_l2;
     ltarget= &_l1;
   } else {
