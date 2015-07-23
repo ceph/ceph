@@ -365,6 +365,20 @@ private:
     }
   };
 
+  struct CmpPairBitwise {
+    bool operator()(const pair<string, ghobject_t>& l,
+		    const pair<string, ghobject_t>& r)
+    {
+      if (l.first < r.first)
+	return true;
+      if (l.first > r.first)
+	return false;
+      if (cmp_bitwise(l.second, r.second) < 0)
+	return true;
+      return false;
+    }
+  };
+
   struct CmpHexdigitStringBitwise {
     bool operator()(const string& l, const string& r) {
       return reverse_hexdigit_bits_string(l) < reverse_hexdigit_bits_string(r);
@@ -376,13 +390,13 @@ private:
     const vector<string> &path,             /// [in] Path to list
     const ghobject_t *next_object,          /// [in] list > *next_object
     set<string, CmpHexdigitStringBitwise> *hash_prefixes, /// [out] prefixes in dir
-    set<pair<string, ghobject_t> > *objects /// [out] objects
+    set<pair<string, ghobject_t>, CmpPairBitwise> *objects /// [out] objects
     );
   int get_path_contents_by_hash_nibblewise(
     const vector<string> &path,             /// [in] Path to list
     const ghobject_t *next_object,          /// [in] list > *next_object
     set<string> *hash_prefixes,             /// [out] prefixes in dir
-    set<pair<string, ghobject_t>, CmpPairNibblewise > *objects /// [out] objects
+    set<pair<string, ghobject_t>, CmpPairNibblewise> *objects /// [out] objects
     );
 
   /// List objects in collection in ghobject_t order
