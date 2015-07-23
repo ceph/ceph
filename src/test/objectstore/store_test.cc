@@ -329,24 +329,24 @@ TEST_P(StoreTest, Sort) {
     ASSERT_EQ(a, b);
     b.oid.name = "b";
     ASSERT_NE(a, b);
-    ASSERT_LT(a, b);
+    ASSERT_TRUE(cmp_bitwise(a, b) < 0);
     a.pool = 1;
     b.pool = 2;
-    ASSERT_LT(a, b);
+    ASSERT_TRUE(cmp_bitwise(a, b) < 0);
     a.pool = 3;
-    ASSERT_GT(a, b);
+    ASSERT_TRUE(cmp_bitwise(a, b) > 0);
   }
   {
     ghobject_t a(hobject_t(sobject_t("a", CEPH_NOSNAP)));
     ghobject_t b(hobject_t(sobject_t("b", CEPH_NOSNAP)));
     a.hobj.pool = 1;
     b.hobj.pool = 1;
-    ASSERT_LT(a, b);
+    ASSERT_TRUE(cmp_bitwise(a, b) < 0);
     a.hobj.pool = -3;
-    ASSERT_LT(a, b);
+    ASSERT_TRUE(cmp_bitwise(a, b) < 0);
     a.hobj.pool = 1;
     b.hobj.pool = -3;
-    ASSERT_GT(a, b);
+    ASSERT_TRUE(cmp_bitwise(a, b) > 0);
   }
 }
 
