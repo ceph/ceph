@@ -326,11 +326,10 @@ if [ -n "$ip" ]; then
     IP="$ip"
 else
     echo hostname $HOSTNAME
-    RAW_IP=`hostname -I`
     # filter out IPv6 and localhost addresses
-    IP="$(echo "$RAW_IP"|tr ' ' '\012'|grep -v :|grep -v '^127\.'|head -n1)"
-    # if that left nothing, then try to use the raw thing, it might work
-    if [ -z "$IP" ]; then IP="$RAW_IP"; fi
+    IP="$(ifconfig | sed -En 's/127.0.0.1//;s/.*inet (addr:)?(([0-9]*\.){3}[0-9]*).*/\2/p' | head -n1)"
+    # if nothing left, try using localhost address, it might work
+    if [ -z "$IP" ]; then IP="127.0.0.1"; fi
     echo ip $IP
 fi
 echo "ip $IP"
