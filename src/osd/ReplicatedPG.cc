@@ -9741,9 +9741,9 @@ int ReplicatedPG::recover_backfill(
 
     // Count simultaneous scans as a single op and let those complete
     if (sent_scan) {
-        ops++;
-	start_recovery_op(hobject_t::get_max()); // XXX: was pbi.end
-        break;
+      ops++;
+      start_recovery_op(hobject_t::get_max()); // XXX: was pbi.end
+      break;
     }
 
     if (backfill_info.empty() && all_peer_done()) {
