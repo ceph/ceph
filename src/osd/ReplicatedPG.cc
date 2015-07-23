@@ -2599,19 +2599,6 @@ void ReplicatedPG::do_scan(
       bufferlist::iterator p = m->get_data().begin();
       ::decode(bi.objects, p);
 
-      // handle hobject_t encoding change
-      if (bi.objects.size() && bi.objects.begin()->first.pool == -1) {
-	map<hobject_t, eversion_t, hobject_t::BitwiseComparator> tmp;
-	tmp.swap(bi.objects);
-	for (map<hobject_t, eversion_t, hobject_t::BitwiseComparator>::iterator i = tmp.begin();
-	     i != tmp.end();
-	     ++i) {
-	  hobject_t first(i->first);
-	  if (!first.is_max() && first.pool == -1)
-	    first.pool = info.pgid.pool();
-	  bi.objects[first] = i->second;
-	}
-      }
       peer_backfill_info[from] = bi;
 
       if (waiting_on_backfill.erase(from)) {
