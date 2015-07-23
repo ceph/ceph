@@ -22,7 +22,6 @@ class Pipe;
 class PipeConnection : public Connection {
   Pipe* pipe;
 
-  friend class boost::intrusive_ptr<PipeConnection>;
   friend class Pipe;
 
 public:
