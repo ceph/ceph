@@ -81,6 +81,7 @@ authentication keyring.
 .. toctree:: 
 	:maxdepth: 1
 
+        CephFS Quotas <quota>
 	Using Ceph with Hadoop <hadoop>
 	libcephfs <../../api/libcephfs-java/>
 	cephfs-journal-tool <cephfs-journal-tool>
