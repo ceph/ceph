@@ -552,6 +552,11 @@ void MDLog::trim(int m)
     return;
   }
 
+  // Clamp max_events to not be smaller than events per segment
+  if (max_events > 0 && max_events <= g_conf->mds_log_events_per_segment) {
+    max_events = g_conf->mds_log_events_per_segment + 1;
+  }
+
   submit_mutex.Lock();
 
   // trim!
@@ -572,7 +577,7 @@ void MDLog::trim(int m)
   stop += 2.0;
 
   map<uint64_t,LogSegment*>::iterator p = segments.begin();
-  while (segments.size() > 1 && p != segments.end() &&
+  while (p != segments.end() &&
 	 ((max_events >= 0 &&
 	   num_events - expiring_events - expired_events > max_events) ||
 	  (segments.size() - expiring_segments.size() - expired_segments.size() > max_segments))) {
