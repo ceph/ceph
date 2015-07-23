@@ -751,6 +751,7 @@ StrayManager::StrayManager(MDSRank *mds)
   : delayed_eval_stray(member_offset(CDentry, item_stray)),
     mds(mds), logger(NULL),
     ops_in_flight(0), files_purging(0),
+    max_purge_ops(0), 
     num_strays(0), num_strays_purging(0), num_strays_delayed(0),
     filer(mds->objecter, mds->finisher)
 {
