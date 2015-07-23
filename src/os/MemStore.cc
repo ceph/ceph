@@ -421,27 +421,10 @@ bool MemStore::collection_empty(coll_t cid)
   return c->object_map.empty();
 }
 
-int MemStore::collection_list(coll_t cid, vector<ghobject_t>& o)
+int MemStore::collection_list(coll_t cid, ghobject_t start, ghobject_t end,
+			      int max,
+			      vector<ghobject_t> *ls, ghobject_t *next)
 {
-  dout(10) << __func__ << " " << cid << dendl;
-  CollectionRef c = get_collection(cid);
-  if (!c)
-    return -ENOENT;
-  RWLock::RLocker l(c->lock);
-
-  for (map<ghobject_t,ObjectRef>::iterator p = c->object_map.begin();
-       p != c->object_map.end();
-       ++p)
-    o.push_back(p->first);
-  return 0;
-}
-
-int MemStore::collection_list_partial(coll_t cid, ghobject_t start,
-				      int min, int max, snapid_t snap, 
-				      vector<ghobject_t> *ls, ghobject_t *next)
-{
-  dout(10) << __func__ << " " << cid << " " << start << " " << min << "-"
-	   << max << " " << snap << dendl;
   CollectionRef c = get_collection(cid);
   if (!c)
     return -ENOENT;
@@ -449,33 +432,16 @@ int MemStore::collection_list_partial(coll_t cid, ghobject_t start,
 
   map<ghobject_t,ObjectRef>::iterator p = c->object_map.lower_bound(start);
   while (p != c->object_map.end() &&
-	 ls->size() < (unsigned)max) {
+	  ls->size() < (unsigned)max &&
+	  p->first < end) {
     ls->push_back(p->first);
     ++p;
   }
-  if (p == c->object_map.end())
-    *next = ghobject_t::get_max();
-  else
-    *next = p->first;
-  return 0;
-}
-
-int MemStore::collection_list_range(coll_t cid,
-				    ghobject_t start, ghobject_t end,
-				    snapid_t seq, vector<ghobject_t> *ls)
-{
-  dout(10) << __func__ << " " << cid << " " << start << " " << end
-	   << " " << seq << dendl;
-  CollectionRef c = get_collection(cid);
-  if (!c)
-    return -ENOENT;
-  RWLock::RLocker l(c->lock);
-
-  map<ghobject_t,ObjectRef>::iterator p = c->object_map.lower_bound(start);
-  while (p != c->object_map.end() &&
-	 p->first < end) {
-    ls->push_back(p->first);
-    ++p;
+  if (next != NULL) {
+    if (p == c->object_map.end())
+      *next = ghobject_t::get_max();
+    else
+      *next = p->first;
   }
   return 0;
 }

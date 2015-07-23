@@ -143,11 +143,6 @@ int LFNIndex::lookup(const ghobject_t &oid,
   );
 }
 
-int LFNIndex::collection_list(vector<ghobject_t> *ls)
-{
-  return _collection_list(ls);
-}
-
 int LFNIndex::pre_hash_collection(uint32_t pg_num, uint64_t expected_num_objs)
 {
   return _pre_hash_collection(pg_num, expected_num_objs);
@@ -155,13 +150,12 @@ int LFNIndex::pre_hash_collection(uint32_t pg_num, uint64_t expected_num_objs)
 
 
 int LFNIndex::collection_list_partial(const ghobject_t &start,
-				      int min_count,
+				      const ghobject_t &end,
 				      int max_count,
-				      snapid_t seq,
 				      vector<ghobject_t> *ls,
 				      ghobject_t *next)
 {
-  return _collection_list_partial(start, min_count, max_count, seq, ls, next);
+  return _collection_list_partial(start, end, max_count, ls, next);
 }
 
 /* Derived class utility methods */
