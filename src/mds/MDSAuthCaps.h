@@ -27,6 +27,7 @@ enum {
   MAY_READ = 1,
   MAY_WRITE = 2,
   MAY_EXECUTE = 4,
+  MAY_CREATE = 8
 };
 
 class CephContext;
@@ -108,7 +109,7 @@ public:
   bool allow_all() const;
   bool is_capable(const std::string &inode_path,
 		  uid_t inode_uid, gid_t inode_gid, unsigned inode_mode,
-		  uid_t uid, unsigned mask) const;
+		  uid_t uid, gid_t gid, unsigned mask) const;
 
   friend std::ostream &operator<<(std::ostream &out, const MDSAuthCaps &cap);
 };

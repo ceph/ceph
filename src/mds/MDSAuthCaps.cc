@@ -135,13 +135,13 @@ bool MDSCapMatch::match(const std::string &target_path,
  */
 bool MDSAuthCaps::is_capable(const std::string &inode_path,
 			     uid_t inode_uid, gid_t inode_gid, unsigned inode_mode,
-			     uid_t uid, unsigned mask) const
+			     uid_t uid, gid_t gid, unsigned mask) const
 {
   if (cct)
     ldout(cct, 10) << __func__ << " inode(path /" << inode_path
 		 << " owner " << inode_uid << ":" << inode_gid
 		 << " mode 0" << std::oct << inode_mode << std::dec
-		 << ") by uid " << uid << " mask " << mask << " cap: " << *this << dendl;
+		 << ") by uid " << uid << " gid " << gid << " mask " << mask << " cap: " << *this << dendl;
 
   for (std::vector<MDSCapGrant>::const_iterator i = grants.begin();
        i != grants.end();
@@ -149,6 +149,12 @@ bool MDSAuthCaps::is_capable(const std::string &inode_path,
 
     if (i->match.match(inode_path, uid) &&
 	i->spec.allows(mask & (MAY_READ|MAY_EXECUTE), mask & MAY_WRITE)) {
+
+	  if ((mask & MAY_CREATE) &&
+	  (inode_gid != gid)) {
+	    continue;
+	  }
+
       // check unix permissions?
       if (i->match.uid == MDSCapMatch::MDS_AUTH_UID_ANY) {
         return true;
