@@ -1088,8 +1088,8 @@ protected:
    *   - are not included in pg stats (yet)
    *   - have their stats in pending_backfill_updates on the primary
    */
-  set<hobject_t, hobject_t::BitwiseComparator> backfills_in_flight;
-  map<hobject_t, pg_stat_t, hobject_t::BitwiseComparator> pending_backfill_updates;
+  set<hobject_t, hobject_t::Comparator> backfills_in_flight;
+  map<hobject_t, pg_stat_t, hobject_t::Comparator> pending_backfill_updates;
 
   void dump_recovery_info(Formatter *f) const {
     f->open_array_section("backfill_targets");

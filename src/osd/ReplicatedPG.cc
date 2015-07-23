@@ -1225,6 +1225,8 @@ ReplicatedPG::ReplicatedPG(OSDService *o, OSDMapRef curmap,
       _pool.info, curmap, this, coll_t(p), o->store, cct)),
   object_contexts(o->cct, g_conf->osd_pg_object_context_cache_count),
   snapset_contexts_lock("ReplicatedPG::snapset_contexts"),
+  backfills_in_flight(hobject_t::Comparator(true)),
+  pending_backfill_updates(hobject_t::Comparator(true)),
   new_backfill(false),
   temp_seq(0),
   snap_trimmer_machine(this)
@@ -9010,7 +9012,7 @@ void ReplicatedPG::_clear_recovery_state()
   recovering_oids.clear();
 #endif
   last_backfill_started = hobject_t();
-  set<hobject_t, hobject_t::BitwiseComparator>::iterator i = backfills_in_flight.begin();
+  set<hobject_t, hobject_t::Comparator>::iterator i = backfills_in_flight.begin();
   while (i != backfills_in_flight.end()) {
     assert(recovering.count(*i));
     backfills_in_flight.erase(i++);
@@ -9668,6 +9670,12 @@ int ReplicatedPG::recover_backfill(
     }
     backfill_info.reset(last_backfill_started,
 			get_sort_bitwise());
+
+    // initialize comparators
+    backfills_in_flight = set<hobject_t, hobject_t::Comparator>(
+      hobject_t::Comparator(get_sort_bitwise()));
+    pending_backfill_updates = map<hobject_t, pg_stat_t, hobject_t::Comparator>(
+      hobject_t::Comparator(get_sort_bitwise()));
   }
 
   for (set<pg_shard_t>::iterator i = backfill_targets.begin();
@@ -9903,7 +9911,7 @@ int ReplicatedPG::recover_backfill(
   pgbackend->run_recovery_op(h, cct->_conf->osd_recovery_op_priority);
 
   dout(5) << "backfill_pos is " << backfill_pos << dendl;
-  for (set<hobject_t, hobject_t::BitwiseComparator>::iterator i = backfills_in_flight.begin();
+  for (set<hobject_t, hobject_t::Comparator>::iterator i = backfills_in_flight.begin();
        i != backfills_in_flight.end();
        ++i) {
     dout(20) << *i << " is still in flight" << dendl;
@@ -9913,7 +9921,8 @@ int ReplicatedPG::recover_backfill(
     backfill_pos : *(backfills_in_flight.begin());
   hobject_t new_last_backfill = earliest_backfill();
   dout(10) << "starting new_last_backfill at " << new_last_backfill << dendl;
-  for (map<hobject_t, pg_stat_t, hobject_t::BitwiseComparator>::iterator i = pending_backfill_updates.begin();
+  for (map<hobject_t, pg_stat_t, hobject_t::Comparator>::iterator i =
+	 pending_backfill_updates.begin();
        i != pending_backfill_updates.end() &&
 	 cmp(i->first, next_backfill_to_complete, get_sort_bitwise()) < 0;
        pending_backfill_updates.erase(i++)) {
