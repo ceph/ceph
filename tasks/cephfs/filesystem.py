@@ -328,6 +328,7 @@ class Filesystem(object):
         log.info("Creating new filesystem")
 
         self.mon_manager.raw_cluster_cmd_result('mds', 'set', "max_mds", "0")
+        self.mon_manager.raw_cluster_cmd('mds', 'cluster_down')
         for mds_id in self.mds_ids:
             assert not self.mds_daemons[mds_id].running()
             self.mon_manager.raw_cluster_cmd_result('mds', 'fail', mds_id)
