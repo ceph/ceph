@@ -37,6 +37,7 @@ class CephFSTestCase(unittest.TestCase):
     MDSS_REQUIRED = 1
     REQUIRE_KCLIENT_REMOTE = False
     REQUIRE_ONE_CLIENT_REMOTE = False
+    REQUIRE_MEMSTORE = False
 
     LOAD_SETTINGS = []
 
@@ -61,6 +62,13 @@ class CephFSTestCase(unittest.TestCase):
         if self.REQUIRE_ONE_CLIENT_REMOTE:
             if self.mounts[0].client_remote.hostname in self.fs.get_mds_hostnames():
                 raise case.SkipTest("Require first client to be on separate server from MDSs")
+
+        if self.REQUIRE_MEMSTORE:
+            objectstore = self.fs.get_config("osd_objectstore", "osd")
+            if objectstore != "memstore":
+                # You certainly *could* run this on a real OSD, but you don't want to sit
+                # here for hours waiting for the test to fill up a 1TB drive!
+                raise case.SkipTest("Require `memstore` OSD backend to simulate full drives")
 
         # Unmount all surplus clients
         for i in range(self.CLIENTS_REQUIRED, len(self.mounts)):
