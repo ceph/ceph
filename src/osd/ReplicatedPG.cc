@@ -280,7 +280,7 @@ void ReplicatedPG::on_global_recover(
   missing_loc.recovered(soid);
   publish_stats_to_osd();
   dout(10) << "pushed " << soid << " to all replicas" << dendl;
-  map<hobject_t, ObjectContextRef>::iterator i = recovering.find(soid);
+  map<hobject_t, ObjectContextRef, hobject_t::BitwiseComparator>::iterator i = recovering.find(soid);
   assert(i != recovering.end());
 
   // recover missing won't have had an obc, but it gets filled in
@@ -380,7 +380,7 @@ void ReplicatedPG::wait_for_unreadable_object(
   bool needs_recovery = missing_loc.needs_recovery(soid, &v);
   assert(needs_recovery);
 
-  map<hobject_t, ObjectContextRef>::const_iterator p = recovering.find(soid);
+  map<hobject_t, ObjectContextRef, hobject_t::BitwiseComparator>::const_iterator p = recovering.find(soid);
   if (p != recovering.end()) {
     dout(7) << "missing " << soid << " v " << v << ", already recovering." << dendl;
   } else if (missing_loc.is_unfound(soid)) {
@@ -720,7 +720,7 @@ int ReplicatedPG::do_command(cmdmap_t cmdmap, ostream& ss,
     }
     f->dump_int("num_missing", missing.num_missing());
     f->dump_int("num_unfound", get_num_unfound());
-    map<hobject_t,pg_missing_t::item>::const_iterator p = missing.missing.upper_bound(offset);
+    map<hobject_t,pg_missing_t::item, hobject_t::BitwiseComparator>::const_iterator p = missing.missing.upper_bound(offset);
     {
       f->open_array_section("objects");
       int32_t num = 0;
@@ -851,7 +851,7 @@ void ReplicatedPG::do_pg_op(OpRequestRef op)
 	}
 
 	assert(snapid == CEPH_NOSNAP || pg_log.get_missing().missing.empty());
-	map<hobject_t, pg_missing_t::item>::const_iterator missing_iter =
+	map<hobject_t, pg_missing_t::item, hobject_t::BitwiseComparator>::const_iterator missing_iter =
 	  pg_log.get_missing().missing.lower_bound(current);
 	vector<hobject_t>::iterator ls_iter = sentries.begin();
 	hobject_t _max = hobject_t::get_max();
@@ -1008,7 +1008,7 @@ void ReplicatedPG::do_pg_op(OpRequestRef op)
 	}
 
 	assert(snapid == CEPH_NOSNAP || pg_log.get_missing().missing.empty());
-	map<hobject_t, pg_missing_t::item>::const_iterator missing_iter =
+	map<hobject_t, pg_missing_t::item, hobject_t::BitwiseComparator>::const_iterator missing_iter =
 	  pg_log.get_missing().missing.lower_bound(current);
 	vector<hobject_t>::iterator ls_iter = sentries.begin();
 	hobject_t _max = hobject_t::get_max();
@@ -1600,7 +1600,7 @@ void ReplicatedPG::do_op(OpRequestRef& op)
   }
 
   // src_oids
-  map<hobject_t,ObjectContextRef> src_obc;
+  map<hobject_t,ObjectContextRef, hobject_t::BitwiseComparator> src_obc;
   for (vector<OSDOp>::iterator p = m->ops.begin(); p != m->ops.end(); ++p) {
     OSDOp& osd_op = *p;
 
@@ -1724,7 +1724,7 @@ void ReplicatedPG::do_op(OpRequestRef& op)
 
     // verify there is in fact a flush in progress
     // FIXME: we could make this a stronger test.
-    map<hobject_t,FlushOpRef>::iterator p = flush_ops.find(obc->obs.oi.soid);
+    map<hobject_t,FlushOpRef, hobject_t::BitwiseComparator>::iterator p = flush_ops.find(obc->obs.oi.soid);
     if (p == flush_ops.end()) {
       dout(10) << __func__ << " no flush in progress, aborting" << dendl;
       reply_ctx(ctx, -EINVAL);
@@ -2081,7 +2081,7 @@ void ReplicatedPG::finish_proxy_read(hobject_t oid, ceph_tid_t tid, int r)
   }
   proxyread_ops.erase(tid);
 
-  map<hobject_t, list<OpRequestRef> >::iterator q = in_progress_proxy_reads.find(oid);
+  map<hobject_t, list<OpRequestRef>, hobject_t::BitwiseComparator>::iterator q = in_progress_proxy_reads.find(oid);
   if (q == in_progress_proxy_reads.end()) {
     dout(10) << __func__ << " no in_progress_proxy_reads found" << dendl;
     return;
@@ -2110,7 +2110,7 @@ void ReplicatedPG::finish_proxy_read(hobject_t oid, ceph_tid_t tid, int r)
 
 void ReplicatedPG::kick_proxy_read_blocked(hobject_t& soid)
 {
-  map<hobject_t, list<OpRequestRef> >::iterator p = in_progress_proxy_reads.find(soid);
+  map<hobject_t, list<OpRequestRef>, hobject_t::BitwiseComparator>::iterator p = in_progress_proxy_reads.find(soid);
   if (p == in_progress_proxy_reads.end())
     return;
 
@@ -2142,7 +2142,7 @@ void ReplicatedPG::cancel_proxy_read_ops(bool requeue)
   }
 
   if (requeue) {
-    map<hobject_t, list<OpRequestRef> >::iterator p =
+    map<hobject_t, list<OpRequestRef>, hobject_t::BitwiseComparator>::iterator p =
       in_progress_proxy_reads.begin();
     while (p != in_progress_proxy_reads.end()) {
       list<OpRequestRef>& ls = p->second;
@@ -2204,7 +2204,7 @@ void ReplicatedPG::promote_object(ObjectContextRef obc,
    * for this case we don't use DONTNEED.
    */
   unsigned src_fadvise_flags = LIBRADOS_OP_FLAG_FADVISE_SEQUENTIAL;
-  map<hobject_t, list<OpRequestRef> >::iterator q = in_progress_proxy_reads.find(obc->obs.oi.soid);
+  map<hobject_t, list<OpRequestRef>, hobject_t::BitwiseComparator>::iterator q = in_progress_proxy_reads.find(obc->obs.oi.soid);
   if (q == in_progress_proxy_reads.end()) {
     src_fadvise_flags |= LIBRADOS_OP_FLAG_FADVISE_DONTNEED;
   }
@@ -2234,7 +2234,7 @@ void ReplicatedPG::execute_ctx(OpContext *ctx)
   MOSDOp *m = static_cast<MOSDOp*>(op->get_req());
   ObjectContextRef obc = ctx->obc;
   const hobject_t& soid = obc->obs.oi.soid;
-  map<hobject_t,ObjectContextRef>& src_obc = ctx->src_obc;
+  map<hobject_t,ObjectContextRef, hobject_t::BitwiseComparator>& src_obc = ctx->src_obc;
 
   // this method must be idempotent since we may call it several times
   // before we finally apply the resulting transaction.
@@ -2284,7 +2284,7 @@ void ReplicatedPG::execute_ctx(OpContext *ctx)
     dout(10) << " taking ondisk_read_lock" << dendl;
     obc->ondisk_read_lock();
   }
-  for (map<hobject_t,ObjectContextRef>::iterator p = src_obc.begin(); p != src_obc.end(); ++p) {
+  for (map<hobject_t,ObjectContextRef, hobject_t::BitwiseComparator>::iterator p = src_obc.begin(); p != src_obc.end(); ++p) {
     dout(10) << " taking ondisk_read_lock for src " << p->first << dendl;
     p->second->ondisk_read_lock();
   }
@@ -2311,7 +2311,7 @@ void ReplicatedPG::execute_ctx(OpContext *ctx)
     dout(10) << " dropping ondisk_read_lock" << dendl;
     obc->ondisk_read_unlock();
   }
-  for (map<hobject_t,ObjectContextRef>::iterator p = src_obc.begin(); p != src_obc.end(); ++p) {
+  for (map<hobject_t,ObjectContextRef, hobject_t::BitwiseComparator>::iterator p = src_obc.begin(); p != src_obc.end(); ++p) {
     dout(10) << " dropping ondisk_read_lock for src " << p->first << dendl;
     p->second->ondisk_read_unlock();
   }
@@ -2593,9 +2593,9 @@ void ReplicatedPG::do_scan(
 
       // handle hobject_t encoding change
       if (bi.objects.size() && bi.objects.begin()->first.pool == -1) {
-	map<hobject_t, eversion_t> tmp;
+	map<hobject_t, eversion_t, hobject_t::BitwiseComparator> tmp;
 	tmp.swap(bi.objects);
-	for (map<hobject_t, eversion_t>::iterator i = tmp.begin();
+	for (map<hobject_t, eversion_t, hobject_t::BitwiseComparator>::iterator i = tmp.begin();
 	     i != tmp.end();
 	     ++i) {
 	  hobject_t first(i->first);
@@ -6280,7 +6280,7 @@ void ReplicatedPG::process_copy_chunk(hobject_t oid, ceph_tid_t tid, int r)
 {
   dout(10) << __func__ << " " << oid << " tid " << tid
 	   << " " << cpp_strerror(r) << dendl;
-  map<hobject_t,CopyOpRef>::iterator p = copy_ops.find(oid);
+  map<hobject_t,CopyOpRef, hobject_t::BitwiseComparator>::iterator p = copy_ops.find(oid);
   if (p == copy_ops.end()) {
     dout(10) << __func__ << " no copy_op found" << dendl;
     return;
@@ -6691,7 +6691,7 @@ void ReplicatedPG::finish_promote(int r, CopyResults *results,
     // pass error to everyone blocked on this object
     // FIXME: this is pretty sloppy, but at this point we got
     // something unexpected and don't have many other options.
-    map<hobject_t,list<OpRequestRef> >::iterator blocked_iter =
+    map<hobject_t,list<OpRequestRef>, hobject_t::BitwiseComparator>::iterator blocked_iter =
       waiting_for_blocked_object.find(soid);
     if (blocked_iter != waiting_for_blocked_object.end()) {
       while (!blocked_iter->second.empty()) {
@@ -6810,7 +6810,7 @@ void ReplicatedPG::cancel_copy(CopyOpRef cop, bool requeue)
 void ReplicatedPG::cancel_copy_ops(bool requeue)
 {
   dout(10) << __func__ << dendl;
-  map<hobject_t,CopyOpRef>::iterator p = copy_ops.begin();
+  map<hobject_t,CopyOpRef, hobject_t::BitwiseComparator>::iterator p = copy_ops.begin();
   while (p != copy_ops.end()) {
     // requeue this op? can I queue up all of them?
     cancel_copy((p++)->second, requeue);
@@ -6922,7 +6922,7 @@ int ReplicatedPG::start_flush(
   if (blocking)
     obc->start_block();
 
-  map<hobject_t,FlushOpRef>::iterator p = flush_ops.find(soid);
+  map<hobject_t,FlushOpRef, hobject_t::BitwiseComparator>::iterator p = flush_ops.find(soid);
   if (p != flush_ops.end()) {
     FlushOpRef fop = p->second;
     if (fop->op == op) {
@@ -7076,7 +7076,7 @@ void ReplicatedPG::finish_flush(hobject_t oid, ceph_tid_t tid, int r)
 {
   dout(10) << __func__ << " " << oid << " tid " << tid
 	   << " " << cpp_strerror(r) << dendl;
-  map<hobject_t,FlushOpRef>::iterator p = flush_ops.find(oid);
+  map<hobject_t,FlushOpRef, hobject_t::BitwiseComparator>::iterator p = flush_ops.find(oid);
   if (p == flush_ops.end()) {
     dout(10) << __func__ << " no flush_op found" << dendl;
     return;
@@ -7245,7 +7245,7 @@ void ReplicatedPG::cancel_flush(FlushOpRef fop, bool requeue)
 void ReplicatedPG::cancel_flush_ops(bool requeue)
 {
   dout(10) << __func__ << dendl;
-  map<hobject_t,FlushOpRef>::iterator p = flush_ops.begin();
+  map<hobject_t,FlushOpRef, hobject_t::BitwiseComparator>::iterator p = flush_ops.begin();
   while (p != flush_ops.end()) {
     cancel_flush((p++)->second, requeue);
   }
@@ -8176,7 +8176,7 @@ void ReplicatedPG::add_object_context_to_pg_stat(ObjectContextRef obc, pg_stat_t
 void ReplicatedPG::kick_object_context_blocked(ObjectContextRef obc)
 {
   const hobject_t& soid = obc->obs.oi.soid;
-  map<hobject_t, list<OpRequestRef> >::iterator p = waiting_for_blocked_object.find(soid);
+  map<hobject_t, list<OpRequestRef>, hobject_t::BitwiseComparator>::iterator p = waiting_for_blocked_object.find(soid);
   if (p == waiting_for_blocked_object.end())
     return;
 
@@ -8210,7 +8210,7 @@ SnapSetContext *ReplicatedPG::get_snapset_context(
 {
   Mutex::Locker l(snapset_contexts_lock);
   SnapSetContext *ssc;
-  map<hobject_t, SnapSetContext*>::iterator p = snapset_contexts.find(
+  map<hobject_t, SnapSetContext*, hobject_t::BitwiseComparator>::iterator p = snapset_contexts.find(
     oid.get_snapdir());
   if (p != snapset_contexts.end()) {
     if (can_create || p->second->exists) {
@@ -8533,7 +8533,7 @@ ObjectContextRef ReplicatedPG::mark_object_lost(ObjectStore::Transaction *t,
 {
   // Wake anyone waiting for this object. Now that it's been marked as lost,
   // we will just return an error code.
-  map<hobject_t, list<OpRequestRef> >::iterator wmo =
+  map<hobject_t, list<OpRequestRef>, hobject_t::BitwiseComparator>::iterator wmo =
     waiting_for_unreadable_object.find(oid);
   if (wmo != waiting_for_unreadable_object.end()) {
     requeue_ops(wmo->second);
@@ -8585,9 +8585,9 @@ void ReplicatedPG::mark_all_unfound_lost(int what)
   utime_t mtime = ceph_clock_now(cct);
   info.last_update.epoch = get_osdmap()->get_epoch();
   const pg_missing_t &missing = pg_log.get_missing();
-  map<hobject_t, pg_missing_t::item>::const_iterator m =
+  map<hobject_t, pg_missing_t::item, hobject_t::BitwiseComparator>::const_iterator m =
     missing_loc.get_needs_recovery().begin();
-  map<hobject_t, pg_missing_t::item>::const_iterator mend =
+  map<hobject_t, pg_missing_t::item, hobject_t::BitwiseComparator>::const_iterator mend =
     missing_loc.get_needs_recovery().end();
   while (m != mend) {
     const hobject_t &oid(m->first);
@@ -8916,7 +8916,7 @@ void ReplicatedPG::on_change(ObjectStore::Transaction *t)
   } else {
     waiting_for_unreadable_object.clear();
   }
-  for (map<hobject_t,list<OpRequestRef> >::iterator p = waiting_for_degraded_object.begin();
+  for (map<hobject_t,list<OpRequestRef>, hobject_t::BitwiseComparator>::iterator p = waiting_for_degraded_object.begin();
        p != waiting_for_degraded_object.end();
        waiting_for_degraded_object.erase(p++)) {
     if (is_primary())
@@ -8925,7 +8925,7 @@ void ReplicatedPG::on_change(ObjectStore::Transaction *t)
       p->second.clear();
     finish_degraded_object(p->first);
   }
-  for (map<hobject_t,list<OpRequestRef> >::iterator p = waiting_for_blocked_object.begin();
+  for (map<hobject_t,list<OpRequestRef>, hobject_t::BitwiseComparator>::iterator p = waiting_for_blocked_object.begin();
        p != waiting_for_blocked_object.end();
        waiting_for_blocked_object.erase(p++)) {
     if (is_primary())
@@ -8933,7 +8933,7 @@ void ReplicatedPG::on_change(ObjectStore::Transaction *t)
     else
       p->second.clear();
   }
-  for (map<hobject_t, list<Context*> >::iterator i =
+  for (map<hobject_t, list<Context*>, hobject_t::BitwiseComparator>::iterator i =
 	 callbacks_for_degraded_object.begin();
        i != callbacks_for_degraded_object.end();
     ) {
@@ -9013,14 +9013,14 @@ void ReplicatedPG::_clear_recovery_state()
   recovering_oids.clear();
 #endif
   last_backfill_started = hobject_t();
-  set<hobject_t>::iterator i = backfills_in_flight.begin();
+  set<hobject_t, hobject_t::BitwiseComparator>::iterator i = backfills_in_flight.begin();
   while (i != backfills_in_flight.end()) {
     assert(recovering.count(*i));
     backfills_in_flight.erase(i++);
   }
 
   list<OpRequestRef> blocked_ops;
-  for (map<hobject_t, ObjectContextRef>::iterator i = recovering.begin();
+  for (map<hobject_t, ObjectContextRef, hobject_t::BitwiseComparator>::iterator i = recovering.begin();
        i != recovering.end();
        recovering.erase(i++)) {
     if (i->second) {
@@ -9114,7 +9114,7 @@ void PG::MissingLoc::check_recovery_sources(const OSDMapRef osdmap)
 	     << missing_loc_sources << dendl;
     
     // filter missing_loc
-    map<hobject_t, set<pg_shard_t> >::iterator p = missing_loc.begin();
+    map<hobject_t, set<pg_shard_t>, hobject_t::BitwiseComparator>::iterator p = missing_loc.begin();
     while (p != missing_loc.end()) {
       set<pg_shard_t>::iterator q = p->second.begin();
       while (q != p->second.end())
@@ -9573,7 +9573,7 @@ int ReplicatedPG::recover_replicas(int max, ThreadPool::TPHandle &handle)
       }
 
       dout(10) << __func__ << ": recover_object_replicas(" << soid << ")" << dendl;
-      map<hobject_t,pg_missing_t::item>::const_iterator r = m.missing.find(soid);
+      map<hobject_t,pg_missing_t::item, hobject_t::BitwiseComparator>::const_iterator r = m.missing.find(soid);
       started += prep_object_replica_pushes(soid, r->second.need,
 					    h);
     }
@@ -9688,7 +9688,7 @@ int ReplicatedPG::recover_backfill(
   vector<boost::tuple<hobject_t, eversion_t,
                       ObjectContextRef, vector<pg_shard_t> > > to_push;
   vector<boost::tuple<hobject_t, eversion_t, pg_shard_t> > to_remove;
-  set<hobject_t> add_to_stat;
+  set<hobject_t, hobject_t::BitwiseComparator> add_to_stat;
 
   for (set<pg_shard_t>::iterator i = backfill_targets.begin();
        i != backfill_targets.end();
@@ -9873,7 +9873,7 @@ int ReplicatedPG::recover_backfill(
   }
   backfill_pos = MIN(backfill_info.begin, earliest_peer_backfill());
 
-  for (set<hobject_t>::iterator i = add_to_stat.begin();
+  for (set<hobject_t, hobject_t::BitwiseComparator>::iterator i = add_to_stat.begin();
        i != add_to_stat.end();
        ++i) {
     ObjectContextRef obc = get_object_context(*i, false);
@@ -9899,7 +9899,7 @@ int ReplicatedPG::recover_backfill(
   pgbackend->run_recovery_op(h, cct->_conf->osd_recovery_op_priority);
 
   dout(5) << "backfill_pos is " << backfill_pos << dendl;
-  for (set<hobject_t>::iterator i = backfills_in_flight.begin();
+  for (set<hobject_t, hobject_t::BitwiseComparator>::iterator i = backfills_in_flight.begin();
        i != backfills_in_flight.end();
        ++i) {
     dout(20) << *i << " is still in flight" << dendl;
@@ -9909,7 +9909,7 @@ int ReplicatedPG::recover_backfill(
     backfill_pos : *(backfills_in_flight.begin());
   hobject_t new_last_backfill = earliest_backfill();
   dout(10) << "starting new_last_backfill at " << new_last_backfill << dendl;
-  for (map<hobject_t, pg_stat_t>::iterator i = pending_backfill_updates.begin();
+  for (map<hobject_t, pg_stat_t, hobject_t::BitwiseComparator>::iterator i = pending_backfill_updates.begin();
        i != pending_backfill_updates.end() &&
 	 i->first < next_backfill_to_complete;
        pending_backfill_updates.erase(i++)) {
@@ -10145,7 +10145,7 @@ void ReplicatedPG::check_local()
     return;
 
   // just scan the log.
-  set<hobject_t> did;
+  set<hobject_t, hobject_t::BitwiseComparator> did;
   for (list<pg_log_entry_t>::const_reverse_iterator p = pg_log.get_log().log.rbegin();
        p != pg_log.get_log().log.rend();
        ++p) {
@@ -11278,7 +11278,7 @@ void ReplicatedPG::_scrub_digest_updated()
 
 void ReplicatedPG::_scrub(
   ScrubMap &scrubmap,
-  const map<hobject_t, pair<uint32_t, uint32_t> > &missing_digest)
+  const map<hobject_t, pair<uint32_t, uint32_t>, hobject_t::BitwiseComparator> &missing_digest)
 {
   dout(10) << "_scrub" << dendl;
 
@@ -11295,7 +11295,7 @@ void ReplicatedPG::_scrub(
 
   bufferlist last_data;
 
-  for (map<hobject_t,ScrubMap::object>::reverse_iterator p = scrubmap.objects.rbegin(); 
+  for (map<hobject_t,ScrubMap::object, hobject_t::BitwiseComparator>::reverse_iterator p = scrubmap.objects.rbegin(); 
        p != scrubmap.objects.rend(); 
        ++p) {
     const hobject_t& soid = p->first;
@@ -11473,7 +11473,7 @@ void ReplicatedPG::_scrub(
     ++scrubber.shallow_errors;
   }
 
-  for (map<hobject_t,pair<uint32_t,uint32_t> >::const_iterator p =
+  for (map<hobject_t,pair<uint32_t,uint32_t>, hobject_t::BitwiseComparator>::const_iterator p =
 	 missing_digest.begin();
        p != missing_digest.end();
        ++p) {

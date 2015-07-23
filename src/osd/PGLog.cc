@@ -210,7 +210,7 @@ void PGLog::proc_replica_log(
     we will send the peer enough log to arrive at the same state.
   */
 
-  for (map<hobject_t, pg_missing_t::item>::iterator i = omissing.missing.begin();
+  for (map<hobject_t, pg_missing_t::item, hobject_t::BitwiseComparator>::iterator i = omissing.missing.begin();
        i != omissing.missing.end();
        ++i) {
     dout(20) << " before missing " << i->first << " need " << i->second.need
@@ -565,7 +565,7 @@ void PGLog::merge_log(ObjectStore::Transaction& t,
   // The logs must overlap.
   assert(log.head >= olog.tail && olog.head >= log.tail);
 
-  for (map<hobject_t, pg_missing_t::item>::iterator i = missing.missing.begin();
+  for (map<hobject_t, pg_missing_t::item, hobject_t::BitwiseComparator>::iterator i = missing.missing.begin();
        i != missing.missing.end();
        ++i) {
     dout(20) << "pg_missing_t sobject: " << i->first << dendl;
@@ -929,7 +929,7 @@ void PGLog::read_log(ObjectStore *store, coll_t pg_coll,
     dout(10) << "read_log checking for missing items over interval (" << info.last_complete
 	     << "," << info.last_update << "]" << dendl;
 
-    set<hobject_t> did;
+    set<hobject_t, hobject_t::BitwiseComparator> did;
     for (list<pg_log_entry_t>::reverse_iterator i = log.log.rbegin();
 	 i != log.log.rend();
 	 ++i) {
