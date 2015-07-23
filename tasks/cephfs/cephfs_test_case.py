@@ -96,6 +96,7 @@ class CephFSTestCase(unittest.TestCase):
         # the filesystem rather than just doing a rm -rf of files
         self.fs.mds_stop()
         if self.fs.exists():
+            self.fs.mon_manager.raw_cluster_cmd('mds', 'cluster_down')
             self.fs.mds_fail()
         self.fs.delete_all()
         self.fs.create()
