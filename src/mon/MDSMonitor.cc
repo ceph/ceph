@@ -1570,22 +1570,14 @@ int MDSMonitor::filesystem_command(
 	return -ENOENT;
       }
     }
-    const pg_pool_t *p = mon->osdmon()->osdmap.get_pg_pool(poolid);
-    if (!p) {
-      ss << "pool '" << poolname << "' does not exist";
-      return -ENOENT;
+
+    r = _check_pool(poolid, &ss);
+    if (r != 0) {
+      return r;
     }
-    if (p->is_erasure()) {
-      // I'm sorry Dave, I'm afraid I can't do that
-      poolid = -1;
-      ss << "can't use pool '" << poolname << "' as it's an erasure-code pool";
-      return -EINVAL;
-    }
-    if (poolid >= 0) {
-      pending_mdsmap.add_data_pool(poolid);
-      ss << "added data pool " << poolid << " to mdsmap";
-      r = 0;
-    }
+
+    pending_mdsmap.add_data_pool(poolid);
+    ss << "added data pool " << poolid << " to mdsmap";
   } else if (prefix == "mds remove_data_pool") {
     string poolname;
     cmd_getval(g_ceph_context, cmdmap, "pool", poolname);
