@@ -93,8 +93,9 @@ void usage()
 "where 'pool' is a rados pool name (default is 'rbd') and 'cmd' is one of:\n"
 "  (ls | list) [-l | --long ] [pool-name]      list rbd images\n"
 "                                              (-l includes snapshots/clones)\n"
-"  (du | disk-usage) [--image <name>] [pool-name]\n"
-"                                              show pool image disk usage stats\n"
+"  (du | disk-usage) [<image-spec> | <snap-spec>]\n"
+"                                              show disk usage stats for pool,\n"
+"                                              image or snapshot\n"
 "  info <image-spec> | <snap-spec>             show information about image size,\n"
 "                                              striping, etc.\n"
 "  create [--order <bits>] [--image-features <features>] [--image-shared]\n"
@@ -3182,7 +3183,6 @@ if (!set_conf_param(v, p1, p2, p3)) { \
     const char *v = *i;
     switch (opt_cmd) {
       case OPT_LIST:
-      case OPT_DISK_USAGE:
 	SET_CONF_PARAM(v, &poolname, NULL, NULL);
 	break;
       case OPT_INFO:
@@ -3206,6 +3206,7 @@ if (!set_conf_param(v, p1, p2, p3)) { \
       case OPT_METADATA_LIST:
       case OPT_DIFF:
       case OPT_OBJECT_MAP_REBUILD:
+      case OPT_DISK_USAGE:
 	SET_CONF_PARAM(v, &imgname, NULL, NULL);
 	break;
       case OPT_EXPORT:
