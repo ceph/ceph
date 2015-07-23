@@ -24,7 +24,11 @@
 #include "include/str_list.h"
 
 #define PLUGIN_PREFIX "libec_"
+#if defined(DARWIN)
+#define PLUGIN_SUFFIX ".dylib"
+#else
 #define PLUGIN_SUFFIX ".so"
+#endif
 #define PLUGIN_INIT_FUNCTION "__erasure_code_init"
 #define PLUGIN_VERSION_FUNCTION "__erasure_code_version"
 
