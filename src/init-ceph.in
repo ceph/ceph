@@ -59,12 +59,12 @@ signal_daemon() {
     signal=$4
     action=$5
     [ -z "$action" ] && action="Stopping"
-    echo -n "$action Ceph $name on $host..."
+    printf "$action Ceph $name on $host..."
     do_cmd "if [ -e $pidfile ]; then
         pid=`cat $pidfile`
         if [ -e /proc/\$pid ] && grep -q $daemon /proc/\$pid/cmdline ; then
 	    cmd=\"kill $signal \$pid\"
-	    echo -n \$cmd...
+	    printf \"\$cmd...\"
 	    \$cmd
         fi
     fi"
@@ -89,12 +89,12 @@ stop_daemon() {
     signal=$4
     action=$5
     [ -z "$action" ] && action="Stopping"
-    echo -n "$action Ceph $name on $host..."
+    printf "$action Ceph $name on $host..."
     do_cmd "if [ -e $pidfile ] ; then 
 	pid=\`cat $pidfile\`
 	while [ -e /proc/\$pid ] && grep -q $daemon /proc/\$pid/cmdline ; do
 	    cmd=\"kill $signal \$pid\"
-	    echo -n \$cmd...
+	    printf \"\$cmd...\"
 	    \$cmd
 	    sleep 1
 	    continue
@@ -428,7 +428,7 @@ for name in $what; do
 
 	status)
 	    if daemon_is_running $name ceph-$type $id $pid_file; then
-		echo -n "$name: running "
+		printf "$name: running "
 		do_cmd "$BINDIR/ceph --admin-daemon $asok version 2>/dev/null" || echo unknown
             elif [ -e "$pid_file" ]; then
                 # daemon is dead, but pid file still exists
