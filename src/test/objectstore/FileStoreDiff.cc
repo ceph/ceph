@@ -253,34 +253,6 @@ bool FileStoreDiff::diff_objects(FileStore *a_store, FileStore *b_store, coll_t 
   return ret;
 }
 
-bool FileStoreDiff::diff_coll_attrs(FileStore *a_store, FileStore *b_store, coll_t coll)
-{
-  bool ret = false;
-
-  int err;
-  std::map<std::string, bufferptr> b_coll_attrs, a_coll_attrs;
-  err = b_store->collection_getattrs(coll, b_coll_attrs);
-  if (err < 0 && err != -EOPNOTSUPP) {
-    dout(0) << "diff_attrs getattrs on verify coll " << coll.to_str()
-        << "returns " << err << dendl;
-    ret = true;
-  }
-  err = a_store->collection_getattrs(coll, a_coll_attrs);
-  if (err < 0 && err != -EOPNOTSUPP) {
-    dout(0) << "diff_attrs getattrs on A coll " << coll.to_str()
-              << "returns " << err << dendl;
-    ret = true;
-  }
-
-  if (b_coll_attrs.size() != a_coll_attrs.size()) {
-    dout(0) << "diff_attrs size mismatch (A: " << a_coll_attrs.size()
-        << ", B: " << a_coll_attrs.size() << ")" << dendl;
-    ret = true;
-  }
-
-  return diff_attrs(b_coll_attrs, a_coll_attrs) || ret;
-}
-
 bool FileStoreDiff::diff()
 {
   bool ret = false;
@@ -304,9 +276,6 @@ bool FileStoreDiff::diff()
 	break;
       }
     }
-
-    if (diff_coll_attrs(a_store, b_store, b_coll))
-      ret = true;
 
     if (diff_objects(a_store, b_store, b_coll))
       ret = true;
