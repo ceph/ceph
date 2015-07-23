@@ -102,7 +102,7 @@ case "$1" in
 	    if [ $DEBIAN -eq 1 ]; then
 		start-stop-daemon --start -u $user -x $RADOSGW -- -n $name
 	    elif [ -n "$SYSTEMD_RUN" ]; then
-                $SYSTEMD_RUN -r sudo -u "$user" bash -c "ulimit -n 32768; $RADOSGW -n $name"
+                $SYSTEMD_RUN -r su "$user" -c "ulimit -n 32768; $RADOSGW -n $name"
             else
 		ulimit -n 32768
                 daemon --user="$user" "$RADOSGW -n $name"
