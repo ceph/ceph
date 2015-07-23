@@ -31,8 +31,8 @@ struct ECSubWrite {
   eversion_t trim_to;
   eversion_t trim_rollback_to;
   vector<pg_log_entry_t> log_entries;
-  set<hobject_t> temp_added;
-  set<hobject_t> temp_removed;
+  set<hobject_t, hobject_t::BitwiseComparator> temp_added;
+  set<hobject_t, hobject_t::BitwiseComparator> temp_removed;
   boost::optional<pg_hit_set_history_t> updated_hit_set_history;
   ECSubWrite() : tid(0) {}
   ECSubWrite(
@@ -47,8 +47,8 @@ struct ECSubWrite {
     eversion_t trim_rollback_to,
     vector<pg_log_entry_t> log_entries,
     boost::optional<pg_hit_set_history_t> updated_hit_set_history,
-    const set<hobject_t> &temp_added,
-    const set<hobject_t> &temp_removed)
+    const set<hobject_t, hobject_t::BitwiseComparator> &temp_added,
+    const set<hobject_t, hobject_t::BitwiseComparator> &temp_removed)
     : from(from), tid(tid), reqid(reqid),
       soid(soid), stats(stats), t(t),
       at_version(at_version),
@@ -100,8 +100,8 @@ WRITE_CLASS_ENCODER(ECSubWriteReply)
 struct ECSubRead {
   pg_shard_t from;
   ceph_tid_t tid;
-  map<hobject_t, list<boost::tuple<uint64_t, uint64_t, uint32_t> > > to_read;
-  set<hobject_t> attrs_to_read;
+  map<hobject_t, list<boost::tuple<uint64_t, uint64_t, uint32_t> >, hobject_t::BitwiseComparator> to_read;
+  set<hobject_t, hobject_t::BitwiseComparator> attrs_to_read;
   void encode(bufferlist &bl, uint64_t features) const;
   void decode(bufferlist::iterator &bl);
   void dump(Formatter *f) const;
@@ -112,9 +112,9 @@ WRITE_CLASS_ENCODER_FEATURES(ECSubRead)
 struct ECSubReadReply {
   pg_shard_t from;
   ceph_tid_t tid;
-  map<hobject_t, list<pair<uint64_t, bufferlist> > > buffers_read;
-  map<hobject_t, map<string, bufferlist> > attrs_read;
-  map<hobject_t, int> errors;
+  map<hobject_t, list<pair<uint64_t, bufferlist> >, hobject_t::BitwiseComparator> buffers_read;
+  map<hobject_t, map<string, bufferlist>, hobject_t::BitwiseComparator> attrs_read;
+  map<hobject_t, int, hobject_t::BitwiseComparator> errors;
   void encode(bufferlist &bl) const;
   void decode(bufferlist::iterator &bl);
   void dump(Formatter *f) const;

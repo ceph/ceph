@@ -209,7 +209,7 @@ struct OnRecoveryReadComplete :
 
 struct RecoveryMessages {
   map<hobject_t,
-      ECBackend::read_request_t> reads;
+      ECBackend::read_request_t, hobject_t::BitwiseComparator> reads;
   void read(
     ECBackend *ec,
     const hobject_t &hoid, uint64_t off, uint64_t len,
@@ -828,7 +828,7 @@ void ECBackend::handle_sub_write(
     add_temp_objs(op.temp_added);
   }
   if (op.t.empty()) {
-    for (set<hobject_t>::iterator i = op.temp_removed.begin();
+    for (set<hobject_t, hobject_t::BitwiseComparator>::iterator i = op.temp_removed.begin();
 	 i != op.temp_removed.end();
 	 ++i) {
       dout(10) << __func__ << ": removing object " << *i
@@ -883,7 +883,7 @@ void ECBackend::handle_sub_read(
   ECSubRead &op,
   ECSubReadReply *reply)
 {
-  for(map<hobject_t, list<boost::tuple<uint64_t, uint64_t, uint32_t> > >::iterator i =
+  for(map<hobject_t, list<boost::tuple<uint64_t, uint64_t, uint32_t> >, hobject_t::BitwiseComparator>::iterator i =
         op.to_read.begin();
       i != op.to_read.end();
       ++i) {
@@ -913,7 +913,7 @@ void ECBackend::handle_sub_read(
       }
     }
   }
-  for (set<hobject_t>::iterator i = op.attrs_to_read.begin();
+  for (set<hobject_t, hobject_t::BitwiseComparator>::iterator i = op.attrs_to_read.begin();
        i != op.attrs_to_read.end();
        ++i) {
     dout(10) << __func__ << ": fulfilling attr request on "
@@ -967,7 +967,7 @@ void ECBackend::handle_sub_read_reply(
     return;
   }
   ReadOp &rop = iter->second;
-  for (map<hobject_t, list<pair<uint64_t, bufferlist> > >::iterator i =
+  for (map<hobject_t, list<pair<uint64_t, bufferlist> >, hobject_t::BitwiseComparator>::iterator i =
 	 op.buffers_read.begin();
        i != op.buffers_read.end();
        ++i) {
@@ -994,7 +994,7 @@ void ECBackend::handle_sub_read_reply(
       riter->get<2>()[from].claim(j->second);
     }
   }
-  for (map<hobject_t, map<string, bufferlist> >::iterator i = op.attrs_read.begin();
+  for (map<hobject_t, map<string, bufferlist>, hobject_t::BitwiseComparator>::iterator i = op.attrs_read.begin();
        i != op.attrs_read.end();
        ++i) {
     assert(!op.errors.count(i->first));
@@ -1005,7 +1005,7 @@ void ECBackend::handle_sub_read_reply(
     rop.complete[i->first].attrs = map<string, bufferlist>();
     (*(rop.complete[i->first].attrs)).swap(i->second);
   }
-  for (map<hobject_t, int>::iterator i = op.errors.begin();
+  for (map<hobject_t, int, hobject_t::BitwiseComparator>::iterator i = op.errors.begin();
        i != op.errors.end();
        ++i) {
     rop.complete[i->first].errors.insert(
@@ -1034,9 +1034,9 @@ shard_to_read_map.find(from);
 
 void ECBackend::complete_read_op(ReadOp &rop, RecoveryMessages *m)
 {
-  map<hobject_t, read_request_t>::iterator reqiter =
+  map<hobject_t, read_request_t, hobject_t::BitwiseComparator>::iterator reqiter =
     rop.to_read.begin();
-  map<hobject_t, read_result_t>::iterator resiter =
+  map<hobject_t, read_result_t, hobject_t::BitwiseComparator>::iterator resiter =
     rop.complete.begin();
   assert(rop.to_read.size() == rop.complete.size());
   for (; reqiter != rop.to_read.end(); ++reqiter, ++resiter) {
@@ -1067,8 +1067,8 @@ void ECBackend::filter_read_op(
   const OSDMapRef osdmap,
   ReadOp &op)
 {
-  set<hobject_t> to_cancel;
-  for (map<pg_shard_t, set<hobject_t> >::iterator i = op.source_to_obj.begin();
+  set<hobject_t, hobject_t::BitwiseComparator> to_cancel;
+  for (map<pg_shard_t, set<hobject_t, hobject_t::BitwiseComparator> >::iterator i = op.source_to_obj.begin();
        i != op.source_to_obj.end();
        ++i) {
     if (osdmap->is_down(i->first.osd)) {
@@ -1081,10 +1081,10 @@ void ECBackend::filter_read_op(
   if (to_cancel.empty())
     return;
 
-  for (map<pg_shard_t, set<hobject_t> >::iterator i = op.source_to_obj.begin();
+  for (map<pg_shard_t, set<hobject_t, hobject_t::BitwiseComparator> >::iterator i = op.source_to_obj.begin();
        i != op.source_to_obj.end();
        ) {
-    for (set<hobject_t>::iterator j = i->second.begin();
+    for (set<hobject_t, hobject_t::BitwiseComparator>::iterator j = i->second.begin();
 	 j != i->second.end();
 	 ) {
       if (to_cancel.count(*j))
@@ -1100,7 +1100,7 @@ void ECBackend::filter_read_op(
     }
   }
 
-  for (set<hobject_t>::iterator i = to_cancel.begin();
+  for (set<hobject_t, hobject_t::BitwiseComparator>::iterator i = to_cancel.begin();
        i != to_cancel.end();
        ++i) {
     get_parent()->cancel_pull(*i);
@@ -1157,7 +1157,7 @@ void ECBackend::on_change()
        i != tid_to_read_map.end();
        ++i) {
     dout(10) << __func__ << ": cancelling " << i->second << dendl;
-    for (map<hobject_t, read_request_t>::iterator j =
+    for (map<hobject_t, read_request_t, hobject_t::BitwiseComparator>::iterator j =
 	   i->second.to_read.begin();
 	 j != i->second.to_read.end();
 	 ++j) {
@@ -1189,7 +1189,7 @@ void ECBackend::on_flushed()
 void ECBackend::dump_recovery_info(Formatter *f) const
 {
   f->open_array_section("recovery_ops");
-  for (map<hobject_t, RecoveryOp>::const_iterator i = recovery_ops.begin();
+  for (map<hobject_t, RecoveryOp, hobject_t::BitwiseComparator>::const_iterator i = recovery_ops.begin();
        i != recovery_ops.end();
        ++i) {
     f->open_object_section("op");
@@ -1267,9 +1267,9 @@ void ECBackend::submit_transaction(
   
   op->t = static_cast<ECTransaction*>(_t);
 
-  set<hobject_t> need_hinfos;
+  set<hobject_t, hobject_t::BitwiseComparator> need_hinfos;
   op->t->get_append_objects(&need_hinfos);
-  for (set<hobject_t>::iterator i = need_hinfos.begin();
+  for (set<hobject_t, hobject_t::BitwiseComparator>::iterator i = need_hinfos.begin();
        i != need_hinfos.end();
        ++i) {
     ECUtil::HashInfoRef ref = get_hash_info(*i);
@@ -1319,7 +1319,7 @@ int ECBackend::get_min_avail_to_read_shards(
   bool for_recovery,
   set<pg_shard_t> *to_read)
 {
-  map<hobject_t, set<pg_shard_t> >::const_iterator miter =
+  map<hobject_t, set<pg_shard_t>, hobject_t::BitwiseComparator>::const_iterator miter =
     get_parent()->get_missing_loc_shards().find(hoid);
 
   set<int> have;
@@ -1393,7 +1393,7 @@ int ECBackend::get_min_avail_to_read_shards(
 
 void ECBackend::start_read_op(
   int priority,
-  map<hobject_t, read_request_t> &to_read,
+  map<hobject_t, read_request_t, hobject_t::BitwiseComparator> &to_read,
   OpRequestRef _op)
 {
   ceph_tid_t tid = get_parent()->get_tid();
@@ -1406,7 +1406,7 @@ void ECBackend::start_read_op(
   dout(10) << __func__ << ": starting " << op << dendl;
 
   map<pg_shard_t, ECSubRead> messages;
-  for (map<hobject_t, read_request_t>::iterator i = op.to_read.begin();
+  for (map<hobject_t, read_request_t, hobject_t::BitwiseComparator>::iterator i = op.to_read.begin();
        i != op.to_read.end();
        ++i) {
     list<boost::tuple<
@@ -1713,7 +1713,7 @@ void ECBackend::objects_read_async(
     &shards);
   assert(r == 0);
 
-  map<hobject_t, read_request_t> for_read_op;
+  map<hobject_t, read_request_t, hobject_t::BitwiseComparator> for_read_op;
   for_read_op.insert(
     make_pair(
       hoid,
