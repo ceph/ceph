@@ -10568,7 +10568,10 @@ void ReplicatedPG::hit_set_setup()
       !pool.info.hit_set_period ||
       pool.info.hit_set_params.get_type() == HitSet::TYPE_NONE) {
     hit_set_clear();
-    hit_set_remove_all();
+    // only primary is allowed to remove all the hit set objects
+    if (is_primary() && is_peered()) {
+      hit_set_remove_all();
+    }
     return;
   }
 
