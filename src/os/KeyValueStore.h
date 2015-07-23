@@ -416,9 +416,7 @@ class KeyValueStore : public ObjectStore,
 
   Sequencer default_osr;
   deque<OpSequencer*> op_queue;
-  uint64_t op_queue_len, op_queue_bytes;
-  Cond op_throttle_cond;
-  Mutex op_throttle_lock;
+  Throttle throttle_ops, throttle_bytes;
   Finisher op_finisher;
 
   ThreadPool op_tp;
