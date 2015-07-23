@@ -108,13 +108,13 @@ void ReplicatedBackend::recover_object(
 
 void ReplicatedBackend::check_recovery_sources(const OSDMapRef osdmap)
 {
-  for(map<pg_shard_t, set<hobject_t> >::iterator i = pull_from_peer.begin();
+  for(map<pg_shard_t, set<hobject_t, hobject_t::BitwiseComparator> >::iterator i = pull_from_peer.begin();
       i != pull_from_peer.end();
       ) {
     if (osdmap->is_down(i->first.osd)) {
       dout(10) << "check_recovery_sources resetting pulls from osd." << i->first
 	       << ", osdmap has it marked down" << dendl;
-      for (set<hobject_t>::iterator j = i->second.begin();
+      for (set<hobject_t, hobject_t::BitwiseComparator>::iterator j = i->second.begin();
 	   j != i->second.end();
 	   ++j) {
 	assert(pulling.count(*j) == 1);
@@ -305,8 +305,8 @@ void ReplicatedBackend::objects_read_async(
 
 class RPGTransaction : public PGBackend::PGTransaction {
   coll_t coll;
-  set<hobject_t> temp_added;
-  set<hobject_t> temp_cleared;
+  set<hobject_t, hobject_t::BitwiseComparator> temp_added;
+  set<hobject_t, hobject_t::BitwiseComparator> temp_cleared;
   ObjectStore::Transaction *t;
   uint64_t written;
   const coll_t &get_coll_ct(const hobject_t &hoid) {
@@ -338,10 +338,10 @@ public:
     t = 0;
     return _t;
   }
-  const set<hobject_t> &get_temp_added() {
+  const set<hobject_t, hobject_t::BitwiseComparator> &get_temp_added() {
     return temp_added;
   }
-  const set<hobject_t> &get_temp_cleared() {
+  const set<hobject_t, hobject_t::BitwiseComparator> &get_temp_cleared() {
     return temp_cleared;
   }
 
@@ -478,13 +478,13 @@ public:
     written += to_append->written;
     to_append->written = 0;
     t->append(*(to_append->t));
-    for (set<hobject_t>::iterator i = to_append->temp_added.begin();
+    for (set<hobject_t, hobject_t::BitwiseComparator>::iterator i = to_append->temp_added.begin();
 	 i != to_append->temp_added.end();
 	 ++i) {
       temp_cleared.erase(*i);
       temp_added.insert(*i);
     }
-    for (set<hobject_t>::iterator i = to_append->temp_cleared.begin();
+    for (set<hobject_t, hobject_t::BitwiseComparator>::iterator i = to_append->temp_cleared.begin();
 	 i != to_append->temp_cleared.end();
 	 ++i) {
       temp_added.erase(*i);
@@ -864,7 +864,7 @@ struct C_ReplicatedBackend_OnPullComplete : GenContext<ThreadPool::TPHandle&> {
 	   to_continue.begin();
 	 i != to_continue.end();
 	 ++i) {
-      map<hobject_t, ReplicatedBackend::PullInfo>::iterator j =
+      map<hobject_t, ReplicatedBackend::PullInfo, hobject_t::BitwiseComparator>::iterator j =
 	bc->pulling.find(*i);
       assert(j != bc->pulling.end());
       if (!bc->start_pushes(*i, j->second.obc, h)) {
@@ -1290,7 +1290,7 @@ void ReplicatedBackend::calc_head_subsets(
   const pg_missing_t& missing,
   const hobject_t &last_backfill,
   interval_set<uint64_t>& data_subset,
-  map<hobject_t, interval_set<uint64_t> >& clone_subsets)
+  map<hobject_t, interval_set<uint64_t>, hobject_t::BitwiseComparator>& clone_subsets)
 {
   dout(10) << "calc_head_subsets " << head
 	   << " clone_overlap " << snapset.clone_overlap << dendl;
@@ -1350,7 +1350,7 @@ void ReplicatedBackend::calc_clone_subsets(
   const pg_missing_t& missing,
   const hobject_t &last_backfill,
   interval_set<uint64_t>& data_subset,
-  map<hobject_t, interval_set<uint64_t> >& clone_subsets)
+  map<hobject_t, interval_set<uint64_t>, hobject_t::BitwiseComparator>& clone_subsets)
 {
   dout(10) << "calc_clone_subsets " << soid
 	   << " clone_overlap " << snapset.clone_overlap << dendl;
@@ -1438,11 +1438,11 @@ void ReplicatedBackend::prepare_pull(
   eversion_t _v = get_parent()->get_local_missing().missing.find(
     soid)->second.need;
   assert(_v == v);
-  const map<hobject_t, set<pg_shard_t> > &missing_loc(
+  const map<hobject_t, set<pg_shard_t>, hobject_t::BitwiseComparator> &missing_loc(
     get_parent()->get_missing_loc_shards());
   const map<pg_shard_t, pg_missing_t > &peer_missing(
     get_parent()->get_shard_missing());
-  map<hobject_t, set<pg_shard_t> >::const_iterator q = missing_loc.find(soid);
+  map<hobject_t, set<pg_shard_t>, hobject_t::BitwiseComparator>::const_iterator q = missing_loc.find(soid);
   assert(q != missing_loc.end());
   assert(!q->second.empty());
 
@@ -1534,7 +1534,7 @@ void ReplicatedBackend::prep_push_to_replica(
   dout(10) << __func__ << ": " << soid << " v" << oi.version
 	   << " size " << size << " to osd." << peer << dendl;
 
-  map<hobject_t, interval_set<uint64_t> > clone_subsets;
+  map<hobject_t, interval_set<uint64_t>, hobject_t::BitwiseComparator> clone_subsets;
   interval_set<uint64_t> data_subset;
 
   // are we doing a clone on the replica?
@@ -1592,7 +1592,7 @@ void ReplicatedBackend::prep_push(ObjectContextRef obc,
   interval_set<uint64_t> data_subset;
   if (obc->obs.oi.size)
     data_subset.insert(0, obc->obs.oi.size);
-  map<hobject_t, interval_set<uint64_t> > clone_subsets;
+  map<hobject_t, interval_set<uint64_t>, hobject_t::BitwiseComparator> clone_subsets;
 
   prep_push(obc, soid, peer,
 	    obc->obs.oi.version, data_subset, clone_subsets,
@@ -1604,7 +1604,7 @@ void ReplicatedBackend::prep_push(
   const hobject_t& soid, pg_shard_t peer,
   eversion_t version,
   interval_set<uint64_t> &data_subset,
-  map<hobject_t, interval_set<uint64_t> >& clone_subsets,
+  map<hobject_t, interval_set<uint64_t>, hobject_t::BitwiseComparator>& clone_subsets,
   PushOp *pop)
 {
   get_parent()->begin_peer_recover(peer, soid);
@@ -1730,7 +1730,7 @@ void ReplicatedBackend::submit_push_data(
 void ReplicatedBackend::submit_push_complete(ObjectRecoveryInfo &recovery_info,
 					     ObjectStore::Transaction *t)
 {
-  for (map<hobject_t, interval_set<uint64_t> >::const_iterator p =
+  for (map<hobject_t, interval_set<uint64_t>, hobject_t::BitwiseComparator>::const_iterator p =
 	 recovery_info.clone_subset.begin();
        p != recovery_info.clone_subset.end();
        ++p) {

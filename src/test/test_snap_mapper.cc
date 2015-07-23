@@ -440,8 +440,8 @@ TEST_F(MapCacherTest, Random)
 class MapperVerifier {
   PausyAsyncMap *driver;
   boost::scoped_ptr< SnapMapper > mapper;
-  map<snapid_t, set<hobject_t> > snap_to_hobject;
-  map<hobject_t, set<snapid_t> > hobject_to_snap;
+  map<snapid_t, set<hobject_t, hobject_t::BitwiseComparator> > snap_to_hobject;
+  map<hobject_t, set<snapid_t>, hobject_t::BitwiseComparator> hobject_to_snap;
   snapid_t next;
   uint32_t mask;
   uint32_t bits;
@@ -493,7 +493,7 @@ public:
     for (set<snapid_t>::iterator i = snaps.begin();
 	 i != snaps.end();
 	 ++i) {
-      map<snapid_t, set<hobject_t> >::iterator j = snap_to_hobject.find(*i);
+      map<snapid_t, set<hobject_t, hobject_t::BitwiseComparator> >::iterator j = snap_to_hobject.find(*i);
       assert(j != snap_to_hobject.end());
       j->second.insert(obj);
     }
@@ -508,9 +508,9 @@ public:
     Mutex::Locker l(lock);
     if (snap_to_hobject.empty())
       return;
-    map<snapid_t, set<hobject_t> >::iterator snap =
+    map<snapid_t, set<hobject_t, hobject_t::BitwiseComparator> >::iterator snap =
       rand_choose(snap_to_hobject);
-    set<hobject_t> hobjects = snap->second;
+    set<hobject_t, hobject_t::BitwiseComparator> hobjects = snap->second;
 
     hobject_t hoid;
     while (mapper->get_next_object_to_trim(snap->first, &hoid) == 0) {
@@ -518,7 +518,7 @@ public:
       assert(hobjects.count(hoid));
       hobjects.erase(hoid);
 
-      map<hobject_t, set<snapid_t> >::iterator j =
+      map<hobject_t, set<snapid_t>, hobject_t::BitwiseComparator>::iterator j =
 	hobject_to_snap.find(hoid);
       assert(j->second.count(snap->first));
       set<snapid_t> old_snaps(j->second);
@@ -547,12 +547,12 @@ public:
     Mutex::Locker l(lock);
     if (hobject_to_snap.empty())
       return;
-    map<hobject_t, set<snapid_t> >::iterator obj =
+    map<hobject_t, set<snapid_t>, hobject_t::BitwiseComparator>::iterator obj =
       rand_choose(hobject_to_snap);
     for (set<snapid_t>::iterator i = obj->second.begin();
 	 i != obj->second.end();
 	 ++i) {
-      map<snapid_t, set<hobject_t> >::iterator j =
+      map<snapid_t, set<hobject_t, hobject_t::BitwiseComparator> >::iterator j =
 	snap_to_hobject.find(*i);
       assert(j->second.count(obj->first));
       j->second.erase(obj->first);
@@ -571,7 +571,7 @@ public:
     Mutex::Locker l(lock);
     if (hobject_to_snap.empty())
       return;
-    map<hobject_t, set<snapid_t> >::iterator obj =
+    map<hobject_t, set<snapid_t>, hobject_t::BitwiseComparator>::iterator obj =
       rand_choose(hobject_to_snap);
     set<snapid_t> snaps;
     int r = mapper->get_snaps(obj->first, &snaps);

@@ -69,7 +69,7 @@ public:
   map<string,bufferlist> attrset;
 
   interval_set<uint64_t> data_subset;
-  map<hobject_t, interval_set<uint64_t> > clone_subsets;
+  map<hobject_t, interval_set<uint64_t>, hobject_t::BitwiseComparator> clone_subsets;
 
   bool first, complete;
 

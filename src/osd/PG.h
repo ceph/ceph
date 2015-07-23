@@ -312,8 +312,8 @@ public:
   ghobject_t    pgmeta_oid;
 
   class MissingLoc {
-    map<hobject_t, pg_missing_t::item> needs_recovery_map;
-    map<hobject_t, set<pg_shard_t> > missing_loc;
+    map<hobject_t, pg_missing_t::item, hobject_t::BitwiseComparator> needs_recovery_map;
+    map<hobject_t, set<pg_shard_t>, hobject_t::BitwiseComparator > missing_loc;
     set<pg_shard_t> missing_loc_sources;
     PG *pg;
     set<pg_shard_t> empty_set;
@@ -332,7 +332,7 @@ public:
     bool needs_recovery(
       const hobject_t &hoid,
       eversion_t *v = 0) const {
-      map<hobject_t, pg_missing_t::item>::const_iterator i =
+      map<hobject_t, pg_missing_t::item, hobject_t::BitwiseComparator>::const_iterator i =
 	needs_recovery_map.find(hoid);
       if (i == needs_recovery_map.end())
 	return false;
@@ -350,7 +350,7 @@ public:
       const set<pg_shard_t> &acting) const;
     uint64_t num_unfound() const {
       uint64_t ret = 0;
-      for (map<hobject_t, pg_missing_t::item>::const_iterator i =
+      for (map<hobject_t, pg_missing_t::item, hobject_t::BitwiseComparator>::const_iterator i =
 	     needs_recovery_map.begin();
 	   i != needs_recovery_map.end();
 	   ++i) {
@@ -373,11 +373,11 @@ public:
       missing_loc[hoid].erase(location);
     }
     void add_active_missing(const pg_missing_t &missing) {
-      for (map<hobject_t, pg_missing_t::item>::const_iterator i =
+      for (map<hobject_t, pg_missing_t::item, hobject_t::BitwiseComparator>::const_iterator i =
 	     missing.missing.begin();
 	   i != missing.missing.end();
 	   ++i) {
-	map<hobject_t, pg_missing_t::item>::const_iterator j =
+	map<hobject_t, pg_missing_t::item, hobject_t::BitwiseComparator>::const_iterator j =
 	  needs_recovery_map.find(i->first);
 	if (j == needs_recovery_map.end()) {
 	  needs_recovery_map.insert(*i);
@@ -422,10 +422,10 @@ public:
       return missing_loc.count(hoid) ?
 	missing_loc.find(hoid)->second : empty_set;
     }
-    const map<hobject_t, set<pg_shard_t> > &get_missing_locs() const {
+    const map<hobject_t, set<pg_shard_t>, hobject_t::BitwiseComparator> &get_missing_locs() const {
       return missing_loc;
     }
-    const map<hobject_t, pg_missing_t::item> &get_needs_recovery() const {
+    const map<hobject_t, pg_missing_t::item, hobject_t::BitwiseComparator> &get_needs_recovery() const {
       return needs_recovery_map;
     }
   } missing_loc;
@@ -443,7 +443,7 @@ public:
   int recovery_ops_active;
   set<pg_shard_t> waiting_on_backfill;
 #ifdef DEBUG_RECOVERY_OIDS
-  set<hobject_t> recovering_oids;
+  set<hobject_t, hobject_t::BitwiseComparator> recovering_oids;
 #endif
 
   utime_t replay_until;
@@ -653,7 +653,7 @@ protected:
   struct BackfillInterval {
     // info about a backfill interval on a peer
     eversion_t version; /// version at which the scan occurred
-    map<hobject_t,eversion_t> objects;
+    map<hobject_t,eversion_t, hobject_t::BitwiseComparator> objects;
     hobject_t begin;
     hobject_t end;
     
@@ -705,7 +705,7 @@ protected:
       f->dump_stream("begin") << begin;
       f->dump_stream("end") << end;
       f->open_array_section("objects");
-      for (map<hobject_t, eversion_t>::const_iterator i = objects.begin();
+      for (map<hobject_t, eversion_t, hobject_t::BitwiseComparator>::const_iterator i = objects.begin();
 	   i != objects.end();
 	   ++i) {
 	f->open_object_section("object");
@@ -745,11 +745,11 @@ protected:
 
   list<OpRequestRef>            waiting_for_cache_not_full;
   list<OpRequestRef>            waiting_for_all_missing;
-  map<hobject_t, list<OpRequestRef> > waiting_for_unreadable_object,
+  map<hobject_t, list<OpRequestRef>, hobject_t::BitwiseComparator> waiting_for_unreadable_object,
 			     waiting_for_degraded_object,
 			     waiting_for_blocked_object;
   // Callbacks should assume pg (and nothing else) is locked
-  map<hobject_t, list<Context*> > callbacks_for_degraded_object;
+  map<hobject_t, list<Context*>, hobject_t::BitwiseComparator> callbacks_for_degraded_object;
 
   map<eversion_t,
       list<pair<OpRequestRef, version_t> > > waiting_for_ack, waiting_for_ondisk;
@@ -757,7 +757,7 @@ protected:
   map<eversion_t,OpRequestRef>   replay_queue;
   void split_ops(PG *child, unsigned split_bits);
 
-  void requeue_object_waiters(map<hobject_t, list<OpRequestRef> >& m);
+  void requeue_object_waiters(map<hobject_t, list<OpRequestRef>, hobject_t::BitwiseComparator>& m);
   void requeue_op(OpRequestRef op);
   void requeue_ops(list<OpRequestRef> &l);
 
@@ -882,7 +882,7 @@ public:
 
   struct PGLogEntryHandler : public PGLog::LogEntryHandler {
     list<pg_log_entry_t> to_rollback;
-    set<hobject_t> to_remove;
+    set<hobject_t, hobject_t::BitwiseComparator> to_remove;
     list<pg_log_entry_t> to_trim;
     
     // LogEntryHandler
@@ -905,7 +905,7 @@ public:
 	SnapRollBacker rollbacker(j->soid, pg, t);
 	j->mod_desc.visit(&rollbacker);
       }
-      for (set<hobject_t>::iterator i = to_remove.begin();
+      for (set<hobject_t, hobject_t::BitwiseComparator>::iterator i = to_remove.begin();
 	   i != to_remove.end();
 	   ++i) {
 	pg->get_pgbackend()->rollback_create(*i, t);
@@ -1072,11 +1072,11 @@ public:
     bool must_scrub, must_deep_scrub, must_repair;
 
     // Maps from objects with errors to missing/inconsistent peers
-    map<hobject_t, set<pg_shard_t> > missing;
-    map<hobject_t, set<pg_shard_t> > inconsistent;
+    map<hobject_t, set<pg_shard_t>, hobject_t::BitwiseComparator> missing;
+    map<hobject_t, set<pg_shard_t>, hobject_t::BitwiseComparator> inconsistent;
 
     // Map from object with errors to good peers
-    map<hobject_t, list<pair<ScrubMap::object, pg_shard_t> > > authoritative;
+    map<hobject_t, list<pair<ScrubMap::object, pg_shard_t> >, hobject_t::BitwiseComparator> authoritative;
 
     // digest updates which we are waiting on
     int num_digest_updates_pending;
@@ -1211,7 +1211,7 @@ public:
     const hobject_t &begin, const hobject_t &end) = 0;
   virtual void _scrub(
     ScrubMap &map,
-    const std::map<hobject_t, pair<uint32_t, uint32_t> > &missing_digest) { }
+    const std::map<hobject_t, pair<uint32_t, uint32_t>, hobject_t::BitwiseComparator> &missing_digest) { }
   virtual void _scrub_clear_state() { }
   virtual void _scrub_finish() { }
   virtual void split_colls(
