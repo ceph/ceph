@@ -534,7 +534,9 @@ void rgw_perm_to_str(uint32_t mask, char *buf, int len)
 
 uint32_t rgw_str_to_perm(const char *str)
 {
-  if (strcasecmp(str, "read") == 0)
+  if (strcasecmp(str, "") == 0)
+    return RGW_PERM_NONE;
+  else if (strcasecmp(str, "read") == 0)
     return RGW_PERM_READ;
   else if (strcasecmp(str, "write") == 0)
     return RGW_PERM_WRITE;
@@ -543,7 +545,7 @@ uint32_t rgw_str_to_perm(const char *str)
   else if (strcasecmp(str, "full") == 0)
     return RGW_PERM_FULL_CONTROL;
 
-  return 0; // better to return no permission
+  return RGW_PERM_INVALID;
 }
 
 static bool validate_access_key(string& key)
@@ -1228,6 +1230,11 @@ int RGWSubUserPool::check_op(RGWUserAdminOpState& op_state,
 
   if (subuser.empty() && !op_state.will_gen_subuser()) {
     set_err_msg(err_msg, "empty subuser name");
+    return -EINVAL;
+  }
+
+  if (op_state.get_subuser_perm() == RGW_PERM_INVALID) {
+    set_err_msg(err_msg, "invaild subuser access");
     return -EINVAL;
   }
 
