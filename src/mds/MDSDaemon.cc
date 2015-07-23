@@ -843,6 +843,16 @@ void MDSDaemon::handle_mds_map(MMDSMap *m)
     goto out;
   }
 
+  // mark down any failed peers
+  for (map<mds_gid_t,MDSMap::mds_info_t>::const_iterator p = oldmap->get_mds_info().begin();
+       p != oldmap->get_mds_info().end();
+       ++p) {
+    if (mdsmap->get_mds_info().count(p->first) == 0) {
+      dout(10) << " peer mds gid " << p->first << " removed from map" << dendl;
+      messenger->mark_down(p->second.addr);
+    }
+  }
+
   // If I was put into standby replay, but I am configured for a different standby
   // type, ignore the map's state and request my standby type (only used
   // for oneshot replay?)
@@ -857,16 +867,6 @@ void MDSDaemon::handle_mds_map(MMDSMap *m)
   if (whoami == MDS_RANK_NONE && (
       new_state == MDSMap::STATE_STANDBY_REPLAY || new_state == MDSMap::STATE_ONESHOT_REPLAY)) {
     whoami = mdsmap->get_mds_info_gid(mds_gid_t(monc->get_global_id())).standby_for_rank;
-  }
-
-  // mark down any failed peers
-  for (map<mds_gid_t,MDSMap::mds_info_t>::const_iterator p = oldmap->get_mds_info().begin();
-       p != oldmap->get_mds_info().end();
-       ++p) {
-    if (mdsmap->get_mds_info().count(p->first) == 0) {
-      dout(10) << " peer mds gid " << p->first << " removed from map" << dendl;
-      messenger->mark_down(p->second.addr);
-    }
   }
 
   // see who i am
