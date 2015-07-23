@@ -1319,7 +1319,8 @@ void ReplicatedBackend::calc_head_subsets(
     hobject_t c = head;
     c.snap = snapset.clones[j];
     prev.intersection_of(snapset.clone_overlap[snapset.clones[j]]);
-    if (!missing.is_missing(c) && c < last_backfill) {
+    if (!missing.is_missing(c) &&
+	cmp(c, last_backfill, get_parent()->sort_bitwise()) < 0) {
       dout(10) << "calc_head_subsets " << head << " has prev " << c
 	       << " overlap " << prev << dendl;
       clone_subsets[c] = prev;
@@ -1383,7 +1384,8 @@ void ReplicatedBackend::calc_clone_subsets(
     hobject_t c = soid;
     c.snap = snapset.clones[j];
     prev.intersection_of(snapset.clone_overlap[snapset.clones[j]]);
-    if (!missing.is_missing(c) && c < last_backfill) {
+    if (!missing.is_missing(c) &&
+	cmp(c, last_backfill, get_parent()->sort_bitwise()) < 0) {
       dout(10) << "calc_clone_subsets " << soid << " has prev " << c
 	       << " overlap " << prev << dendl;
       clone_subsets[c] = prev;
@@ -1402,7 +1404,8 @@ void ReplicatedBackend::calc_clone_subsets(
     hobject_t c = soid;
     c.snap = snapset.clones[j];
     next.intersection_of(snapset.clone_overlap[snapset.clones[j-1]]);
-    if (!missing.is_missing(c) && c < last_backfill) {
+    if (!missing.is_missing(c) &&
+	cmp(c, last_backfill, get_parent()->sort_bitwise()) < 0) {
       dout(10) << "calc_clone_subsets " << soid << " has next " << c
 	       << " overlap " << next << dendl;
       clone_subsets[c] = next;

@@ -1352,7 +1352,8 @@ int ECBackend::get_min_avail_to_read_shards(
       assert(!shards.count(i->shard));
       const pg_info_t &info = get_parent()->get_shard_info(*i);
       const pg_missing_t &missing = get_parent()->get_shard_missing(*i);
-      if (hoid < info.last_backfill && !missing.is_missing(hoid)) {
+      if (cmp(hoid, info.last_backfill, get_parent()->sort_bitwise()) < 0 &&
+	  !missing.is_missing(hoid)) {
 	have.insert(i->shard);
 	shards.insert(make_pair(i->shard, *i));
       }

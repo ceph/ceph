@@ -336,7 +336,7 @@ void PGLog::_merge_object_divergent_entries(
   dout(10) << __func__ << ": merging hoid " << hoid
 	   << " entries: " << entries << dendl;
 
-  if (hoid > info.last_backfill) {
+  if (cmp(hoid, info.last_backfill, info.last_backfill_bitwise) > 0) {
     dout(10) << __func__ << ": hoid " << hoid << " after last_backfill"
 	     << dendl;
     return;
@@ -644,7 +644,7 @@ void PGLog::merge_log(ObjectStore::Transaction& t,
       pg_log_entry_t &ne = *p;
       dout(20) << "merge_log " << ne << dendl;
       log.index(ne);
-      if (ne.soid <= info.last_backfill) {
+      if (cmp(ne.soid, info.last_backfill, info.last_backfill_bitwise) <= 0) {
 	missing.add_next_event(ne);
 	if (ne.is_delete())
 	  rollbacker->remove(ne.soid);
@@ -934,7 +934,8 @@ void PGLog::read_log(ObjectStore *store, coll_t pg_coll,
 	 i != log.log.rend();
 	 ++i) {
       if (i->version <= info.last_complete) break;
-      if (i->soid > info.last_backfill) continue;
+      if (cmp(i->soid, info.last_backfill, info.last_backfill_bitwise) > 0)
+	continue;
       if (did.count(i->soid)) continue;
       did.insert(i->soid);
       
@@ -962,7 +963,8 @@ void PGLog::read_log(ObjectStore *store, coll_t pg_coll,
 	 i != divergent_priors.rend();
 	 ++i) {
       if (i->first <= info.last_complete) break;
-      if (i->second > info.last_backfill) continue;
+      if (cmp(i->second, info.last_backfill, info.last_backfill_bitwise) > 0)
+	continue;
       if (did.count(i->second)) continue;
       did.insert(i->second);
       bufferlist bv;
