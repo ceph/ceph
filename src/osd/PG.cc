@@ -505,7 +505,7 @@ bool PG::MissingLoc::add_source_info(
 	       << dendl;
       continue;
     }
-    if (p->first >= oinfo.last_backfill) {
+    if (cmp(p->first, oinfo.last_backfill, sort_bitwise) >= 0) {
       // FIXME: this is _probably_ true, although it could conceivably
       // be in the undefined region!  Hmm!
       dout(10) << "search_for_missing " << soid << " " << need
@@ -1696,7 +1696,7 @@ void PG::activate(ObjectStore::Transaction& t,
         for (list<pg_log_entry_t>::iterator p = m->log.log.begin();
              p != m->log.log.end();
              ++p)
-	  if (p->soid <= pi.last_backfill)
+	  if (cmp(p->soid, pi.last_backfill, get_sort_bitwise()) <= 0)
 	    pm.add_next_event(*p);
       }
       
@@ -3954,7 +3954,8 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
         for (list<pg_log_entry_t>::const_iterator p = pg_log.get_log().log.begin();
              p != pg_log.get_log().log.end();
              ++p) {
-          if (p->soid >= scrubber.start && p->soid < scrubber.end)
+          if (cmp(p->soid, scrubber.start, get_sort_bitwise()) >= 0 &&
+	      cmp(p->soid, scrubber.end, get_sort_bitwise()) < 0)
             scrubber.subset_last_update = p->version;
         }
 
@@ -4052,7 +4053,7 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
 	  break;
 	}
 
-	if (scrubber.end < hobject_t::get_max()) {
+	if (cmp(scrubber.end, hobject_t::get_max(), get_sort_bitwise()) < 0) {
           scrubber.state = PG::Scrubber::NEW_CHUNK;
 	  requeue_scrub();
           done = true;

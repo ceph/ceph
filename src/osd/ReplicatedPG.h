@@ -425,8 +425,10 @@ public:
     if (peer == get_primary())
       return true;
     assert(peer_info.count(peer));
-    bool should_send = hoid.pool != (int64_t)info.pgid.pool() ||
-      hoid <= MAX(last_backfill_started, peer_info[peer].last_backfill);
+    bool should_send =
+      hoid.pool != (int64_t)info.pgid.pool() ||
+      cmp(hoid, last_backfill_started, get_sort_bitwise()) <= 0 ||
+      cmp(hoid, peer_info[peer].last_backfill, get_sort_bitwise()) <= 0;
     if (!should_send)
       assert(is_backfill_targets(peer));
     return should_send;
@@ -889,7 +891,8 @@ protected:
     if (!to_req.empty()) {
       assert(ctx->obc);
       // requeue at front of scrub blocking queue if we are blocked by scrub
-      if (scrubber.write_blocked_by_scrub(ctx->obc->obs.oi.soid.get_head())) {
+      if (scrubber.write_blocked_by_scrub(ctx->obc->obs.oi.soid.get_head(),
+					  get_sort_bitwise())) {
 	waiting_for_active.splice(
 	  waiting_for_active.begin(),
 	  to_req,

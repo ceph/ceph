@@ -678,9 +678,10 @@ protected:
     }
 
     /// removes items <= soid and adjusts begin to the first object
-    void trim_to(const hobject_t &soid) {
+    void trim_to(const hobject_t &soid, bool sort_bitwise) {
       trim();
-      while (!objects.empty() && objects.begin()->first <= soid) {
+      while (!objects.empty() &&
+	     cmp(objects.begin()->first, soid, sort_bitwise) <= 0) {
 	pop_front();
       }
     }
@@ -1137,8 +1138,9 @@ public:
 
     // classic (non chunk) scrubs block all writes
     // chunky scrubs only block writes to a range
-    bool write_blocked_by_scrub(const hobject_t &soid) {
-      if (soid >= start && soid < end)
+    bool write_blocked_by_scrub(const hobject_t &soid, bool sort_bitwise) {
+      if (cmp(soid, start, sort_bitwise) >= 0 &&
+	  cmp(soid, end, sort_bitwise) < 0)
 	return true;
 
       return false;
