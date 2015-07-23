@@ -1458,15 +1458,8 @@ unsigned KeyValueStore::_do_transaction(Transaction& transaction,
       break;
 
     case Transaction::OP_COLL_SETATTR:
-      {
-        assert(0 == "not implemented");
-      }
-      break;
-
     case Transaction::OP_COLL_RMATTR:
-      {
-        assert(0 == "not implemented");
-      }
+      assert(0 == "coll attrs no longer supported");
       break;
 
     case Transaction::OP_STARTSYNC:
