@@ -144,7 +144,7 @@ Parameters
    This will disable features that are dependent upon exclusive ownership
    of the image.
 
-.. option:: --object-extents
+.. option:: --whole-object
 
    Specifies that the diff should be limited to the extents of a full object
    instead of showing intra-object deltas. When the object map feature is
@@ -223,7 +223,7 @@ Commands
   The --stripe-unit and --stripe-count arguments are optional, but must be
   used together.
 
-:command:`export-diff` [--from-snap *snap-name*] [--object-extents] (*image-spec* | *snap-spec*) *dest-path*
+:command:`export-diff` [--from-snap *snap-name*] [--whole-object] (*image-spec* | *snap-spec*) *dest-path*
   Exports an incremental diff for an image to dest path (use - for stdout).  If
   an initial snapshot is specified, only changes since that snapshot are included; otherwise,
   any regions of the image that contain data are included.  The end snapshot is specified
@@ -245,7 +245,7 @@ Commands
   continuing.  If there was an end snapshot we verify it does not already exist before
   applying the changes, and create the snapshot when we are done.
 
-:command:`diff` [--from-snap *snap-name*] [--object-extents] *image-spec* | *snap-spec*
+:command:`diff` [--from-snap *snap-name*] [--whole-object] *image-spec* | *snap-spec*
   Dump a list of byte extents in the image that have changed since the specified start
   snapshot, or since the image was created.  Each output line includes the starting offset
   (in bytes), the length of the region (in bytes), and either 'zero' or 'data' to indicate

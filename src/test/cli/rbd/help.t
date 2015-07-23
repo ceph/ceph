@@ -28,10 +28,10 @@
                                                 "rbd/$(basename <path>)" is
                                                 assumed for <image-spec> if
                                                 omitted
-    diff [--from-snap <snap-name>] [--object-extents]
+    diff [--from-snap <snap-name>] [--whole-object]
            <image-spec> | <snap-spec>           print extents that differ since
                                                 a previous snap, or image creation
-    export-diff [--from-snap <snap-name>] [--object-extents]
+    export-diff [--from-snap <snap-name>] [--whole-object]
            (<image-spec> | <snap-spec>) <path>  export an incremental diff to
                                                 path, or "-" for stdout
     merge-diff <diff1> <diff2> <path>           merge <diff1> and <diff2> into
