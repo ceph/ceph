@@ -118,10 +118,10 @@ void usage()
 "                                              \"rbd/$(basename <path>)\" is\n"
 "                                              assumed for <image-spec> if\n"
 "                                              omitted\n"
-"  diff [--from-snap <snap-name>] [--object-extents]\n"
+"  diff [--from-snap <snap-name>] [--whole-object]\n"
 "         <image-spec> | <snap-spec>           print extents that differ since\n"
 "                                              a previous snap, or image creation\n"
-"  export-diff [--from-snap <snap-name>] [--object-extents]\n"
+"  export-diff [--from-snap <snap-name>] [--whole-object]\n"
 "         (<image-spec> | <snap-spec>) <path>  export an incremental diff to\n"
 "                                              path, or \"-\" for stdout\n"
 "  merge-diff <diff1> <diff2> <path>           merge <diff1> and <diff2> into\n"
@@ -1261,7 +1261,7 @@ static int export_diff_cb(uint64_t ofs, size_t _len, int exists, void *arg)
 }
 
 static int do_export_diff(librbd::Image& image, const char *fromsnapname,
-			  const char *endsnapname, bool object_extents,
+			  const char *endsnapname, bool whole_object,
 			  const char *path)
 {
   int r;
@@ -1312,7 +1312,7 @@ static int do_export_diff(librbd::Image& image, const char *fromsnapname,
   }
 
   ExportContext ec(&image, fd, info.size);
-  r = image.diff_iterate2(fromsnapname, 0, info.size, true, object_extents,
+  r = image.diff_iterate2(fromsnapname, 0, info.size, true, whole_object,
                           export_diff_cb, (void *)&ec);
   if (r < 0)
     goto out;
@@ -1358,7 +1358,7 @@ static int diff_cb(uint64_t ofs, size_t len, int exists, void *arg)
 }
 
 static int do_diff(librbd::Image& image, const char *fromsnapname,
-                   bool object_extents, Formatter *f)
+                   bool whole_object, Formatter *f)
 {
   int r;
   librbd::image_info_t info;
@@ -1378,7 +1378,7 @@ static int do_diff(librbd::Image& image, const char *fromsnapname,
     om.t->define_column("Type", TextTable::LEFT, TextTable::LEFT);
   }
 
-  r = image.diff_iterate2(fromsnapname, 0, info.size, true, object_extents,
+  r = image.diff_iterate2(fromsnapname, 0, info.size, true, whole_object,
                           diff_cb, &om);
   if (f) {
     f->close_section();
@@ -2984,7 +2984,7 @@ int main(int argc, const char **argv)
   long long stripe_unit = 0, stripe_count = 0;
   long long bench_io_size = 4096, bench_io_threads = 16, bench_bytes = 1 << 30;
   string bench_pattern = "seq";
-  bool diff_object_extents = false;
+  bool diff_whole_object = false;
 
   std::string val, parse_err;
   std::ostringstream err;
@@ -3114,8 +3114,8 @@ int main(int argc, const char **argv)
 	output_format = strdup(val.c_str());
 	output_format_specified = true;
       }
-    } else if (ceph_argparse_flag(args, i, "--object-extents", (char *)NULL)) {
-      diff_object_extents = true;
+    } else if (ceph_argparse_flag(args, i, "--whole-object", (char *)NULL)) {
+      diff_whole_object = true;
     } else if (ceph_argparse_binary_flag(args, i, &pretty_format, NULL, "--pretty-format", (char*)NULL)) {
     } else {
       ++i;
@@ -3768,7 +3768,7 @@ if (!set_conf_param(v, p1, p2, p3)) { \
     break;
 
   case OPT_DIFF:
-    r = do_diff(image, fromsnapname, diff_object_extents, formatter.get());
+    r = do_diff(image, fromsnapname, diff_whole_object, formatter.get());
     if (r < 0) {
       cerr << "rbd: diff error: " << cpp_strerror(-r) << std::endl;
       return -r;
@@ -3776,7 +3776,7 @@ if (!set_conf_param(v, p1, p2, p3)) { \
     break;
 
   case OPT_EXPORT_DIFF:
-    r = do_export_diff(image, fromsnapname, snapname, diff_object_extents, path);
+    r = do_export_diff(image, fromsnapname, snapname, diff_whole_object, path);
     if (r < 0) {
       cerr << "rbd: export-diff error: " << cpp_strerror(-r) << std::endl;
       return -r;
