@@ -8560,6 +8560,9 @@ const char** OSD::get_tracked_conf_keys() const
     "clog_to_syslog",
     "clog_to_syslog_facility",
     "clog_to_syslog_level",
+    //schedule_flush function on cache tiering
+    "osd_tier_schedule_flush_start",
+    "osd_tier_schedule_flush_end",
     NULL
   };
   return KEYS;
@@ -8600,6 +8603,15 @@ void OSD::handle_conf_change(const struct md_config_t *conf,
       changed.count("clog_to_syslog_level") ||
       changed.count("clog_to_syslog_facility")) {
     update_log_config();
+  }
+  if (changed.count("osd_tier_schedule_flush_start") ||
+      changed.count("osd_tier_schedule_flush_end")) {
+    dout(0) << " config change " << dendl;
+    if (!service.agent_stop_flag) {
+      Mutex::Locker l(service.agent_timer_lock);
+      service.agent_schedule_flush_version++;
+      service.agent_schedule_flush_setup();
+    }
   }
 
   check_config();
