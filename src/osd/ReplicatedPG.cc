@@ -9658,12 +9658,16 @@ int ReplicatedPG::recover_backfill(
     // on_activate() was called prior to getting here
     assert(last_backfill_started == earliest_backfill());
     new_backfill = false;
+
+    // initialize BackfillIntervals (with proper sort order)
     for (set<pg_shard_t>::iterator i = backfill_targets.begin();
 	 i != backfill_targets.end();
 	 ++i) {
-      peer_backfill_info[*i].reset(peer_info[*i].last_backfill);
+      peer_backfill_info[*i].reset(peer_info[*i].last_backfill,
+				   get_sort_bitwise());
     }
-    backfill_info.reset(last_backfill_started);
+    backfill_info.reset(last_backfill_started,
+			get_sort_bitwise());
   }
 
   for (set<pg_shard_t>::iterator i = backfill_targets.begin();
@@ -9692,10 +9696,9 @@ int ReplicatedPG::recover_backfill(
        ++i) {
     peer_backfill_info[*i].trim_to(
       MAX_HOBJ(peer_info[*i].last_backfill, last_backfill_started,
-	       get_sort_bitwise()),
-      get_sort_bitwise());
+	       get_sort_bitwise()));
   }
-  backfill_info.trim_to(last_backfill_started, get_sort_bitwise());
+  backfill_info.trim_to(last_backfill_started);
 
   hobject_t backfill_pos = MIN_HOBJ(backfill_info.begin,
 				    earliest_peer_backfill(),
