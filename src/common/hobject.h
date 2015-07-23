@@ -273,6 +273,17 @@ public:
       return cmp_bitwise(l, r) < 0;
     }
   };
+
+  struct Comparator {
+    bool bitwise;
+    Comparator(bool b) : bitwise(b) {}
+    bool operator()(const hobject_t& l, const hobject_t& r) const {
+      if (bitwise)
+	return cmp_bitwise(l, r) < 0;
+      else
+	return cmp_nibblewise(l, r) < 0;
+    }
+  };
 };
 WRITE_CLASS_ENCODER(hobject_t)
 
@@ -426,6 +437,17 @@ public:
   struct BitwiseComparator {
     bool operator()(const ghobject_t& l, const ghobject_t& r) const {
       return cmp_bitwise(l, r) < 0;
+    }
+  };
+
+  struct Comparator {
+    bool bitwise;
+    Comparator(bool b) : bitwise(b) {}
+    bool operator()(const ghobject_t& l, const ghobject_t& r) const {
+         if (bitwise)
+	return cmp_bitwise(l, r) < 0;
+      else
+	return cmp_nibblewise(l, r) < 0;
     }
   };
 };
