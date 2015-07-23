@@ -231,7 +231,7 @@ private:
     RecoveryOp() : pending_read(false), state(IDLE) {}
   };
   friend ostream &operator<<(ostream &lhs, const RecoveryOp &rhs);
-  map<hobject_t, RecoveryOp> recovery_ops;
+  map<hobject_t, RecoveryOp, hobject_t::BitwiseComparator> recovery_ops;
 
 public:
   /**
@@ -285,11 +285,11 @@ public:
     ceph_tid_t tid;
     OpRequestRef op; // may be null if not on behalf of a client
 
-    map<hobject_t, read_request_t> to_read;
-    map<hobject_t, read_result_t> complete;
+    map<hobject_t, read_request_t, hobject_t::BitwiseComparator> to_read;
+    map<hobject_t, read_result_t, hobject_t::BitwiseComparator> complete;
 
-    map<hobject_t, set<pg_shard_t> > obj_to_source;
-    map<pg_shard_t, set<hobject_t> > source_to_obj;
+    map<hobject_t, set<pg_shard_t>, hobject_t::BitwiseComparator> obj_to_source;
+    map<pg_shard_t, set<hobject_t, hobject_t::BitwiseComparator> > source_to_obj;
 
     void dump(Formatter *f) const;
 
@@ -305,7 +305,7 @@ public:
   map<pg_shard_t, set<ceph_tid_t> > shard_to_read_map;
   void start_read_op(
     int priority,
-    map<hobject_t, read_request_t> &to_read,
+    map<hobject_t, read_request_t, hobject_t::BitwiseComparator> &to_read,
     OpRequestRef op);
 
 
@@ -338,13 +338,13 @@ public:
 
     ECTransaction *t;
 
-    set<hobject_t> temp_added;
-    set<hobject_t> temp_cleared;
+    set<hobject_t, hobject_t::BitwiseComparator> temp_added;
+    set<hobject_t, hobject_t::BitwiseComparator> temp_cleared;
 
     set<pg_shard_t> pending_commit;
     set<pg_shard_t> pending_apply;
 
-    map<hobject_t, ECUtil::HashInfoRef> unstable_hash_infos;
+    map<hobject_t, ECUtil::HashInfoRef, hobject_t::BitwiseComparator> unstable_hash_infos;
     ~Op() {
       delete t;
       delete on_local_applied_sync;
@@ -432,7 +432,7 @@ public:
 
   const ECUtil::stripe_info_t sinfo;
   /// If modified, ensure that the ref is held until the update is applied
-  SharedPtrRegistry<hobject_t, ECUtil::HashInfo> unstable_hashinfo_registry;
+  SharedPtrRegistry<hobject_t, ECUtil::HashInfo, hobject_t::BitwiseComparator> unstable_hashinfo_registry;
   ECUtil::HashInfoRef get_hash_info(const hobject_t &hoid);
 
   friend struct ReadCB;
