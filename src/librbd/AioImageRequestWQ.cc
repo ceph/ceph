@@ -270,35 +270,28 @@ void AioImageRequestWQ::queue(AioImageRequest *req) {
   }
 }
 
-void AioImageRequestWQ::handle_releasing_lock() {
-  assert(m_image_ctx.owner_lock.is_locked());
-
-  CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 20) << __func__ << ": ictx=" << &m_image_ctx << dendl;
-
-  if (!m_blocking_writes) {
-    m_blocking_writes = true;
-    block_writes();
-  }
-}
-
-void AioImageRequestWQ::handle_lock_updated(bool lock_supported,
-                                            bool lock_owner) {
+void AioImageRequestWQ::handle_lock_updated(
+    ImageWatcher::LockUpdateState state) {
   assert(m_image_ctx.owner_lock.is_locked());
 
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << __func__ << ": ictx=" << &m_image_ctx << ", "
-                 << "lock_support=" << lock_supported << ", "
-                 << "owner=" << lock_owner << dendl;
+                 << "state=" << state << dendl;
 
-  if ((!lock_supported || lock_owner) && m_blocking_writes) {
+  if ((state == ImageWatcher::LOCK_UPDATE_STATE_NOT_SUPPORTED ||
+       state == ImageWatcher::LOCK_UPDATE_STATE_LOCKED) && m_blocking_writes) {
     m_blocking_writes = false;
     unblock_writes();
-  } else if (lock_supported && !lock_owner) {
+  } else if (state == ImageWatcher::LOCK_UPDATE_STATE_RELEASING &&
+             !m_blocking_writes) {
+    m_blocking_writes = true;
+    block_writes();
+  } else if (state == ImageWatcher::LOCK_UPDATE_STATE_UNLOCKED) {
+    assert(m_blocking_writes);
     assert(writes_blocked());
-    if (!writes_empty()) {
-      m_image_ctx.image_watcher->request_lock();
-    }
+  } else if (state == ImageWatcher::LOCK_UPDATE_STATE_NOTIFICATION &&
+             !writes_empty()) {
+    m_image_ctx.image_watcher->request_lock();
   }
 }
 

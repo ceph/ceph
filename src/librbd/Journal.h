@@ -48,6 +48,8 @@ public:
   bool is_journal_ready() const;
   bool is_journal_replaying() const;
 
+  bool wait_for_journal_ready();
+
   void open();
   int close();
 
@@ -73,6 +75,7 @@ private:
     STATE_INITIALIZING,
     STATE_REPLAYING,
     STATE_RECORDING,
+    STATE_STOPPING_RECORDING
   };
 
   struct Event {
@@ -105,11 +108,8 @@ private:
     virtual bool handle_requested_lock() {
       return journal->handle_requested_lock();
     }
-    virtual void handle_releasing_lock() {
-      journal->handle_releasing_lock();
-    }
-    virtual void handle_lock_updated(bool lock_supported, bool lock_owner) {
-      journal->handle_lock_updated(lock_owner);
+    virtual void handle_lock_updated(ImageWatcher::LockUpdateState state) {
+      journal->handle_lock_updated(state);
     }
   };
 
@@ -169,6 +169,7 @@ private:
   ReplayHandler m_replay_handler;
   bool m_close_pending;
 
+  Mutex m_event_lock;
   uint64_t m_event_tid;
   Events m_events;
 
@@ -191,8 +192,7 @@ private:
   void handle_event_safe(int r, uint64_t tid);
 
   bool handle_requested_lock();
-  void handle_releasing_lock();
-  void handle_lock_updated(bool lock_owner);
+  void handle_lock_updated(ImageWatcher::LockUpdateState state);
 
   int stop_recording();
 

@@ -139,19 +139,22 @@ int ImageWatcher::refresh() {
 
   int r = 0;
   if (lock_support_changed) {
-    if (is_lock_supported() && !is_lock_owner()) {
+    if (is_lock_supported()) {
       // image opened, exclusive lock dynamically enabled, or now HEAD
-      notify_listeners_releasing_lock();
-    } else if (!is_lock_supported() && is_lock_owner()) {
-      // exclusive lock dynamically disabled or now snapshot
-      m_image_ctx.owner_lock.put_read();
-      {
-        RWLock::WLocker owner_locker(m_image_ctx.owner_lock);
-        r = release_lock();
+      notify_listeners_updated_lock(LOCK_UPDATE_STATE_RELEASING);
+      notify_listeners_updated_lock(LOCK_UPDATE_STATE_UNLOCKED);
+    } else if (!is_lock_supported()) {
+      if (is_lock_owner()) {
+        // exclusive lock dynamically disabled or now snapshot
+        m_image_ctx.owner_lock.put_read();
+        {
+          RWLock::WLocker owner_locker(m_image_ctx.owner_lock);
+          r = release_lock();
+        }
+        m_image_ctx.owner_lock.get_read();
       }
-      m_image_ctx.owner_lock.get_read();
+      notify_listeners_updated_lock(LOCK_UPDATE_STATE_NOT_SUPPORTED);
     }
-    notify_listeners_updated_lock();
   }
   return r;
 }
@@ -397,7 +400,7 @@ int ImageWatcher::release_lock()
 
     // alert listeners that all incoming IO needs to be stopped since the
     // lock is being released
-    notify_listeners_releasing_lock();
+    notify_listeners_updated_lock(LOCK_UPDATE_STATE_RELEASING);
 
     RWLock::WLocker md_locker(m_image_ctx.md_lock);
     r = librbd::_flush(&m_image_ctx);
@@ -416,7 +419,7 @@ int ImageWatcher::release_lock()
   {
     RWLock::RLocker owner_lock(m_image_ctx.owner_lock);
     if (m_lock_owner_state == LOCK_OWNER_STATE_NOT_LOCKED) {
-      notify_listeners_updated_lock();
+      notify_listeners_updated_lock(LOCK_UPDATE_STATE_UNLOCKED);
     }
   }
   m_image_ctx.owner_lock.get_write();
@@ -628,7 +631,11 @@ void ImageWatcher::notify_acquired_lock() {
   ldout(m_image_ctx.cct, 10) << this << " notify acquired lock" << dendl;
 
   RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
-  notify_listeners_updated_lock();
+  if (m_lock_owner_state != LOCK_OWNER_STATE_LOCKED) {
+    return;
+  }
+
+  notify_listeners_updated_lock(LOCK_UPDATE_STATE_LOCKED);
 
   bufferlist bl;
   ::encode(NotifyMessage(AcquiredLockPayload(get_client_id())), bl);
@@ -864,7 +871,7 @@ void ImageWatcher::handle_payload(const AcquiredLockPayload &payload,
     if (cancel_async_requests) {
       schedule_cancel_async_requests();
     }
-    notify_listeners_updated_lock();
+    notify_listeners_updated_lock(LOCK_UPDATE_STATE_NOTIFICATION);
   }
 }
 
@@ -890,7 +897,7 @@ void ImageWatcher::handle_payload(const ReleasedLockPayload &payload,
     if (cancel_async_requests) {
       schedule_cancel_async_requests();
     }
-    notify_listeners_updated_lock();
+    notify_listeners_updated_lock(LOCK_UPDATE_STATE_NOTIFICATION);
   }
 }
 
@@ -1167,7 +1174,7 @@ void ImageWatcher::reregister_watch() {
   }
 
   if (m_lock_owner_state == LOCK_OWNER_STATE_NOT_LOCKED) {
-    notify_listeners_updated_lock();
+    notify_listeners_updated_lock(LOCK_UPDATE_STATE_UNLOCKED);
   }
 }
 
@@ -1186,7 +1193,8 @@ void ImageWatcher::RemoteContext::finish(int r) {
   m_image_watcher.schedule_async_complete(m_async_request_id, r);
 }
 
-void ImageWatcher::notify_listeners_releasing_lock() {
+void ImageWatcher::notify_listeners_updated_lock(
+    LockUpdateState lock_update_state) {
   assert(m_image_ctx.owner_lock.is_locked());
 
   Listeners listeners;
@@ -1198,35 +1206,7 @@ void ImageWatcher::notify_listeners_releasing_lock() {
 
   for (Listeners::iterator it = listeners.begin();
        it != listeners.end(); ++it) {
-    (*it)->handle_releasing_lock();
-  }
-
-  Mutex::Locker listeners_locker(m_listeners_lock);
-  m_listeners_in_use = false;
-  m_listeners_cond.Signal();
-}
-
-void ImageWatcher::notify_listeners_updated_lock() {
-  assert(m_image_ctx.owner_lock.is_locked());
-
-  Listeners listeners;
-  {
-    Mutex::Locker listeners_locker(m_listeners_lock);
-    m_listeners_in_use = true;
-    listeners = m_listeners;
-  }
-
-  bool lock_supported;
-  {
-    RWLock::RLocker watch_locker(m_watch_lock);
-    lock_supported = m_lock_supported;
-  }
-
-  assert(lock_supported || m_lock_owner_state == LOCK_OWNER_STATE_NOT_LOCKED);
-  for (Listeners::iterator it = listeners.begin();
-       it != listeners.end(); ++it) {
-    (*it)->handle_lock_updated(lock_supported,
-                               m_lock_owner_state == LOCK_OWNER_STATE_LOCKED);
+    (*it)->handle_lock_updated(lock_update_state);
   }
 
   Mutex::Locker listeners_locker(m_listeners_lock);

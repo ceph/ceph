@@ -26,12 +26,19 @@ template <typename T> class TaskFinisher;
 
 class ImageWatcher {
 public:
+  enum LockUpdateState {
+    LOCK_UPDATE_STATE_NOT_SUPPORTED,
+    LOCK_UPDATE_STATE_LOCKED,
+    LOCK_UPDATE_STATE_RELEASING,
+    LOCK_UPDATE_STATE_UNLOCKED,
+    LOCK_UPDATE_STATE_NOTIFICATION
+  };
+
   struct Listener {
     virtual ~Listener() {}
 
     virtual bool handle_requested_lock() = 0;
-    virtual void handle_releasing_lock() = 0;
-    virtual void handle_lock_updated(bool lock_supported, bool lock_owner) = 0;
+    virtual void handle_lock_updated(LockUpdateState lock_update_state) = 0;
   };
 
   ImageWatcher(ImageCtx& image_ctx);
@@ -294,8 +301,7 @@ private:
 
   void reregister_watch();
 
-  void notify_listeners_releasing_lock();
-  void notify_listeners_updated_lock();
+  void notify_listeners_updated_lock(LockUpdateState lock_update_state);
 };
 
 } // namespace librbd

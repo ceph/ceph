@@ -38,7 +38,8 @@ Journal::Journal(ImageCtx &image_ctx)
   : m_image_ctx(image_ctx), m_journaler(NULL),
     m_lock("Journal::m_lock"), m_state(STATE_UNINITIALIZED),
     m_lock_listener(this), m_replay_handler(this), m_close_pending(false),
-    m_event_tid(0), m_blocking_writes(false), m_journal_replay(NULL) {
+    m_event_lock("Journal::m_event_lock"), m_event_tid(0),
+    m_blocking_writes(false), m_journal_replay(NULL) {
 
   ldout(m_image_ctx.cct, 5) << this << ": ictx=" << &m_image_ctx << dendl;
 
@@ -49,6 +50,7 @@ Journal::Journal(ImageCtx &image_ctx)
 }
 
 Journal::~Journal() {
+  m_image_ctx.op_work_queue->drain();
   assert(m_journaler == NULL);
   assert(m_journal_replay == NULL);
 
@@ -62,11 +64,6 @@ bool Journal::is_journal_supported(ImageCtx &image_ctx) {
   assert(image_ctx.snap_lock.is_locked());
   return ((image_ctx.features & RBD_FEATURE_JOURNALING) &&
           !image_ctx.read_only && image_ctx.snap_id == CEPH_NOSNAP);
-}
-
-bool Journal::is_journal_replaying() const {
-  Mutex::Locker locker(m_lock);
-  return (m_state == STATE_REPLAYING);
 }
 
 int Journal::create(librados::IoCtx &io_ctx, const std::string &image_id) {
@@ -120,6 +117,19 @@ bool Journal::is_journal_ready() const {
   return (m_state == STATE_RECORDING);
 }
 
+bool Journal::is_journal_replaying() const {
+  Mutex::Locker locker(m_lock);
+  return (m_state == STATE_REPLAYING);
+}
+
+bool Journal::wait_for_journal_ready() {
+  Mutex::Locker locker(m_lock);
+  while (m_state != STATE_UNINITIALIZED && m_state != STATE_RECORDING) {
+    wait_for_state_transition();
+  }
+  return (m_state == STATE_RECORDING);
+}
+
 void Journal::open() {
   Mutex::Locker locker(m_lock);
   if (m_journaler != NULL) {
@@ -152,6 +162,9 @@ int Journal::close() {
       m_close_pending = true;
       wait_for_state_transition();
       break;
+    case STATE_STOPPING_RECORDING:
+      wait_for_state_transition();
+      break;
     case STATE_RECORDING:
       r = stop_recording();
       if (r < 0) {
@@ -174,15 +187,19 @@ uint64_t Journal::append_event(AioCompletion *aio_comp,
                                uint64_t offset, size_t length,
                                bool flush_entry) {
   assert(m_image_ctx.owner_lock.is_locked());
-  assert(m_state == STATE_RECORDING);
 
   bufferlist bl;
   ::encode(event_entry, bl);
 
-  ::journal::Future future = m_journaler->append("", bl);
+  ::journal::Future future;
   uint64_t tid;
   {
     Mutex::Locker locker(m_lock);
+    assert(m_state == STATE_RECORDING);
+
+    future = m_journaler->append("", bl);
+
+    Mutex::Locker event_locker(m_event_lock);
     tid = ++m_event_tid;
     assert(tid != 0);
 
@@ -211,7 +228,7 @@ void Journal::commit_event(uint64_t tid, int r) {
   ldout(cct, 20) << this << " " << __func__ << ": tid=" << tid << ", "
                  "r=" << r << dendl;
 
-  Mutex::Locker locker(m_lock);
+  Mutex::Locker event_locker(m_event_lock);
   Events::iterator it = m_events.find(tid);
   if (it == m_events.end()) {
     return;
@@ -229,7 +246,7 @@ void Journal::commit_event_extent(uint64_t tid, uint64_t offset,
                  << "length=" << length << ", "
                  << "r=" << r << dendl;
 
-  Mutex::Locker locker(m_lock);
+  Mutex::Locker event_locker(m_event_lock);
   Events::iterator it = m_events.find(tid);
   if (it == m_events.end()) {
     return;
@@ -261,7 +278,7 @@ void Journal::flush_event(uint64_t tid, Context *on_safe) {
 
   ::journal::Future future;
   {
-    Mutex::Locker locker(m_lock);
+    Mutex::Locker event_locker(m_event_lock);
     future = wait_event(m_lock, tid, on_safe);
   }
 
@@ -275,13 +292,13 @@ void Journal::wait_event(uint64_t tid, Context *on_safe) {
   ldout(cct, 20) << this << " " << __func__ << ": tid=" << tid << ", "
                  << "on_safe=" << on_safe << dendl;
 
-  Mutex::Locker locker(m_lock);
+  Mutex::Locker event_locker(m_event_lock);
   wait_event(m_lock, tid, on_safe);
 }
 
 ::journal::Future Journal::wait_event(Mutex &lock, uint64_t tid,
                                       Context *on_safe) {
-  assert(m_lock.is_locked());
+  assert(m_event_lock.is_locked());
   CephContext *cct = m_image_ctx.cct;
 
   Events::iterator it = m_events.find(tid);
@@ -330,7 +347,7 @@ void Journal::destroy_journaler() {
 }
 
 void Journal::complete_event(Events::iterator it, int r) {
-  assert(m_lock.is_locked());
+  assert(m_event_lock.is_locked());
   assert(m_state == STATE_RECORDING);
 
   CephContext *cct = m_image_ctx.cct;
@@ -451,7 +468,7 @@ void Journal::handle_event_safe(int r, uint64_t tid) {
   AioObjectRequests aio_object_requests;
   Contexts on_safe_contexts;
   {
-    Mutex::Locker locker(m_lock);
+    Mutex::Locker event_locker(m_event_lock);
     Events::iterator it = m_events.find(tid);
     assert(it != m_events.end());
 
@@ -497,39 +514,41 @@ bool Journal::handle_requested_lock() {
   ldout(cct, 20) << this << " " << __func__ << ": " << "state=" << m_state
                  << dendl;
 
-  // prevent peers from taking our lock while we are replaying
+  // prevent peers from taking our lock while we are replaying since that
+  // will stale forward progress
   return (m_state != STATE_INITIALIZING && m_state != STATE_REPLAYING);
 }
 
-void Journal::handle_releasing_lock() {
-  CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 20) << this << " " << __func__ << dendl;
-
-  Mutex::Locker locker(m_lock);
-  if (m_state == STATE_INITIALIZING || m_state == STATE_REPLAYING) {
-    // wait for replay to successfully interrupt
-    m_close_pending = true;
-    wait_for_state_transition();
-  }
-
-  if (m_state == STATE_UNINITIALIZED || m_state == STATE_RECORDING) {
-    // prevent new write ops but allow pending ops to flush to the journal
-    block_writes();
-  }
-}
-
-void Journal::handle_lock_updated(bool lock_owner) {
+void Journal::handle_lock_updated(ImageWatcher::LockUpdateState state) {
 
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << this << " " << __func__ << ": "
-                 << "owner=" << lock_owner << dendl;
+                 << "state=" << state << dendl;
 
   Mutex::Locker locker(m_lock);
-  if (lock_owner && m_state == STATE_UNINITIALIZED) {
+  if (state == ImageWatcher::LOCK_UPDATE_STATE_LOCKED &&
+      m_state == STATE_UNINITIALIZED) {
     create_journaler();
-  } else if (!lock_owner && m_state != STATE_UNINITIALIZED) {
+  } else if (state == ImageWatcher::LOCK_UPDATE_STATE_RELEASING) {
+    if (m_state == STATE_INITIALIZING || m_state == STATE_REPLAYING) {
+      // wait for replay to successfully interrupt
+      m_close_pending = true;
+      wait_for_state_transition();
+    }
+
+    if (m_state == STATE_UNINITIALIZED || m_state == STATE_RECORDING) {
+      // prevent new write ops but allow pending ops to flush to the journal
+      block_writes();
+    }
+  } else if ((state == ImageWatcher::LOCK_UPDATE_STATE_NOT_SUPPORTED ||
+              state == ImageWatcher::LOCK_UPDATE_STATE_UNLOCKED) &&
+             m_state != STATE_UNINITIALIZED &&
+             m_state != STATE_STOPPING_RECORDING) {
     assert(m_state == STATE_RECORDING);
-    assert(m_events.empty());
+    {
+      Mutex::Locker event_locker(m_event_lock);
+      assert(m_events.empty());
+    }
 
     int r = stop_recording();
     if (r < 0) {
@@ -543,10 +562,11 @@ int Journal::stop_recording() {
   assert(m_lock.is_locked());
   assert(m_journaler != NULL);
 
-  C_SaferCond cond;
-  m_journaler->stop_append(&cond);
+  transition_state(STATE_STOPPING_RECORDING);
 
+  C_SaferCond cond;
   m_lock.Unlock();
+  m_journaler->stop_append(&cond);
   int r = cond.wait();
   m_lock.Lock();
 
