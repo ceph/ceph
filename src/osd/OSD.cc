@@ -508,6 +508,7 @@ void OSDService::agent_entry()
 {
   dout(10) << __func__ << " start" << dendl;
   agent_lock.Lock();
+  agent_schedule_flush_setup();
 
   while (!agent_stop_flag) {
     if (agent_queue.empty()) {
@@ -575,6 +576,7 @@ void OSDService::agent_stop()
       assert(0 == "agent queue not empty");
     }
 
+    agent_in_schedule_time = false;
     agent_stop_flag = true;
     agent_cond.Signal();
   }
