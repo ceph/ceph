@@ -603,6 +603,22 @@ public:
   }
 };
 
+void OSDService::agent_schedule_flush_start()
+{
+  agent_in_schedule_time = true;
+  dout(10) << __func__ << " START "
+           << " agent_in_schedule_time " << agent_in_schedule_time << dendl;
+
+  RWLock::RLocker rl(osd->pg_map_lock);
+  for (ceph::unordered_map<spg_t, PG*>::iterator p = osd->pg_map.begin();
+        p != osd->pg_map.end(); ++p) {
+    p->second->lock();
+    p->second->agent_setup();
+    dout(10) << p->first.pgid << " agent_state reset" << dendl;
+    p->second->unlock();
+  }
+}
+
 void OSDService::agent_schedule_flush_setup()
 {
   dout(10) << __func__ << " start" << dendl;
