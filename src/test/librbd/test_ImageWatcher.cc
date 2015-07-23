@@ -60,15 +60,25 @@ public:
     virtual bool handle_requested_lock() {
       return true;
     }
-    virtual void handle_releasing_lock() {
-      Mutex::Locker locker(lock);
-      ++releasing_lock_count;
-      cond.Signal();
-    }
-    virtual void handle_lock_updated(bool _lock_supported, bool _lock_owner) {
+    virtual void handle_lock_updated(
+        librbd::ImageWatcher::LockUpdateState state) {
       Mutex::Locker locker(lock);
       ++lock_updated_count;
-      lock_owner = _lock_owner;
+
+      switch (state) {
+      case librbd::ImageWatcher::LOCK_UPDATE_STATE_NOT_SUPPORTED:
+      case librbd::ImageWatcher::LOCK_UPDATE_STATE_UNLOCKED:
+      case librbd::ImageWatcher::LOCK_UPDATE_STATE_NOTIFICATION:
+        lock_owner = false;
+        break;
+      case librbd::ImageWatcher::LOCK_UPDATE_STATE_RELEASING:
+        lock_owner = false;
+        ++releasing_lock_count;
+        break;
+      case librbd::ImageWatcher::LOCK_UPDATE_STATE_LOCKED:
+        lock_owner = true;
+        break;
+      }
       cond.Signal();
     }
   };
