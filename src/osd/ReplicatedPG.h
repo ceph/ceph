@@ -242,6 +242,28 @@ public:
   };
   typedef boost::shared_ptr<ProxyReadOp> ProxyReadOpRef;
 
+  struct ProxyWriteOp {
+    OpContext *ctx;
+    OpRequestRef op;
+    hobject_t soid;
+    ceph_tid_t objecter_tid;
+    vector<OSDOp> &ops;
+    version_t user_version;
+    bool sent_disk;
+    bool sent_ack;
+    utime_t mtime;
+    bool canceled;
+    osd_reqid_t &reqid;
+
+    ProxyWriteOp(OpRequestRef _op, hobject_t oid, vector<OSDOp>& _ops, osd_reqid_t _reqid)
+      : ctx(NULL), op(_op), soid(oid),
+        objecter_tid(0), ops(_ops),
+	user_version(0), sent_disk(false),
+	sent_ack(false), canceled(false),
+        reqid(_reqid) { }
+  };
+  typedef boost::shared_ptr<ProxyWriteOp> ProxyWriteOpRef;
+
   struct FlushOp {
     ObjectContextRef obc;       ///< obc we are flushing
     OpRequestRef op;            ///< initiating op
@@ -1176,6 +1198,15 @@ protected:
 				 bool must_promote,
 				 bool in_hit_set = false);
   /**
+   * This helper function checks if a promotion is needed.
+   */
+  bool maybe_promote(ObjectContextRef obc,
+		     const hobject_t& missing_oid,
+		     const object_locator_t& oloc,
+		     bool in_hit_set,
+		     uint32_t recency,
+		     OpRequestRef promote_op);
+  /**
    * This helper function tells the client to redirect their request elsewhere.
    */
   void do_cache_redirect(OpRequestRef op);
@@ -1309,6 +1340,8 @@ protected:
     OSDOp& op,
     ObjectContextRef& obc,
     bool classic);
+  void fill_in_copy_get_noent(OpRequestRef& op, hobject_t oid,
+                              OSDOp& osd_op, bool classic);
 
   /**
    * To copy an object, call start_copy.
@@ -1385,17 +1418,28 @@ protected:
   bool pgls_filter(PGLSFilter *filter, hobject_t& sobj, bufferlist& outdata);
   int get_pgls_filter(bufferlist::iterator& iter, PGLSFilter **pfilter);
 
+  map<hobject_t, list<OpRequestRef> > in_progress_proxy_ops;
+  void kick_proxy_ops_blocked(hobject_t& soid);
+  void cancel_proxy_ops(bool requeue);
+
   // -- proxyread --
   map<ceph_tid_t, ProxyReadOpRef> proxyread_ops;
-  map<hobject_t, list<OpRequestRef> > in_progress_proxy_reads;
 
   void do_proxy_read(OpRequestRef op);
   void finish_proxy_read(hobject_t oid, ceph_tid_t tid, int r);
-  void kick_proxy_read_blocked(hobject_t& soid);
   void cancel_proxy_read(ProxyReadOpRef prdop);
-  void cancel_proxy_read_ops(bool requeue);
 
   friend struct C_ProxyRead;
+
+  // -- proxywrite --
+  map<ceph_tid_t, ProxyWriteOpRef> proxywrite_ops;
+
+  void do_proxy_write(OpRequestRef op, const hobject_t& missing_oid);
+  void finish_proxy_write(hobject_t oid, ceph_tid_t tid, int r);
+  void cancel_proxy_write(ProxyWriteOpRef pwop);
+
+  friend struct C_ProxyWrite_Apply;
+  friend struct C_ProxyWrite_Commit;
 
 public:
   ReplicatedPG(OSDService *o, OSDMapRef curmap,
@@ -1581,6 +1625,17 @@ inline ostream& operator<<(ostream& out, ReplicatedPG::RepGather& repop)
     out << " lock=" << (int)repop.ctx->lock_to_release;
   if (repop.ctx->op)
     out << " op=" << *(repop.ctx->op->get_req());
+  out << ")";
+  return out;
+}
+
+inline ostream& operator<<(ostream& out, ReplicatedPG::ProxyWriteOpRef pwop)
+{
+  out << "proxywrite(" << &pwop
+      << " " << pwop->user_version
+      << " pwop_tid=" << pwop->objecter_tid;
+  if (pwop->ctx->op)
+    out << " op=" << *(pwop->ctx->op->get_req());
   out << ")";
   return out;
 }

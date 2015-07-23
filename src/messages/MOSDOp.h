@@ -32,7 +32,7 @@ class OSD;
 
 class MOSDOp : public Message {
 
-  static const int HEAD_VERSION = 5;
+  static const int HEAD_VERSION = 6;
   static const int COMPAT_VERSION = 3;
 
 private:
@@ -56,6 +56,8 @@ private:
 
   uint64_t features;
 
+  osd_reqid_t reqid; // reqid explicitly set by sender
+
 public:
   friend class MOSDOpReply;
 
@@ -69,11 +71,17 @@ public:
     snaps = i;
   }
   void set_snap_seq(const snapid_t& s) { snap_seq = s; }
+  void set_reqid(const osd_reqid_t rid) {
+    reqid = rid;
+  }
 
   osd_reqid_t get_reqid() const {
-    return osd_reqid_t(get_orig_source(),
-		       client_inc,
-		       header.tid);
+    if (reqid != osd_reqid_t())
+      return reqid;
+    else
+      return osd_reqid_t(get_orig_source(),
+                         client_inc,
+			 header.tid);
   }
   int get_client_inc() { return client_inc; }
   ceph_tid_t get_client_tid() { return header.tid; }
@@ -263,6 +271,7 @@ struct ceph_osd_request_head {
 
       ::encode(retry_attempt, payload);
       ::encode(features, payload);
+      ::encode(reqid, payload);
     }
   }
 
@@ -310,6 +319,7 @@ struct ceph_osd_request_head {
 
       retry_attempt = -1;
       features = 0;
+      reqid = osd_reqid_t();
     } else {
       // new decode 
       ::decode(client_inc, p);
@@ -350,6 +360,11 @@ struct ceph_osd_request_head {
 	::decode(features, p);
       else
 	features = 0;
+
+      if (header.version >= 6)
+	::decode(reqid, p);
+      else
+	reqid = osd_reqid_t();
     }
 
     OSDOp::split_osd_op_vector_in_data(ops, data);
