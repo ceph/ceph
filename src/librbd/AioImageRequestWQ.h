@@ -62,11 +62,8 @@ private:
     virtual bool handle_requested_lock() {
       return true;
     }
-    virtual void handle_releasing_lock() {
-      aio_work_queue->handle_releasing_lock();
-    }
-    virtual void handle_lock_updated(bool lock_supported, bool lock_owner) {
-      aio_work_queue->handle_lock_updated(lock_supported, lock_owner);
+    virtual void handle_lock_updated(ImageWatcher::LockUpdateState state) {
+      aio_work_queue->handle_lock_updated(state);
     }
   };
 
@@ -84,8 +81,7 @@ private:
   bool is_lock_required() const;
   void queue(AioImageRequest *req);
 
-  void handle_releasing_lock();
-  void handle_lock_updated(bool lock_supported, bool lock_owner);
+  void handle_lock_updated(ImageWatcher::LockUpdateState state);
 };
 
 } // namespace librbd
