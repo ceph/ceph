@@ -349,6 +349,31 @@ class CephFSMount(object):
         self.background_procs.append(rproc)
         return rproc
 
+    def create_n_files(self, fs_path, count):
+        assert(self.is_mounted())
+
+        abs_path = os.path.join(self.mountpoint, fs_path)
+
+        pyscript = dedent("""
+            import sys
+            import time
+            import os
+
+            n = {count}
+            abs_path = "{abs_path}"
+
+            if not os.path.exists(os.path.dirname(abs_path)):
+                os.makedirs(os.path.dirname(abs_path))
+
+            for i in range(0, n):
+                fname = "{{0}}_{{1}}".format(abs_path, i)
+                h = open(fname, 'w')
+                h.write('content')
+                h.close()
+            """).format(abs_path=abs_path, count=count)
+
+        self.run_python(pyscript)
+
     def teardown(self):
         for p in self.background_procs:
             log.info("Terminating background process")

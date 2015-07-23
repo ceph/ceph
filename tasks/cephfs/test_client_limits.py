@@ -153,7 +153,7 @@ class TestClientLimits(CephFSTestCase):
         """
 
         # num of requests client issues
-        max_requests = 5000
+        max_requests = 1000
 
         # The debug hook to inject the failure only exists in the fuse client
         if not isinstance(self.mount_a, FuseMount):
@@ -166,8 +166,8 @@ class TestClientLimits(CephFSTestCase):
 
         self.fs.mds_asok(['config', 'set', 'mds_max_completed_requests', '{0}'.format(max_requests)])
 
-        # Create lots of files in background
-        self.mount_a.open_n_background("testdir/file", max_requests * 2)
+        # Create lots of files
+        self.mount_a.create_n_files("testdir/file", max_requests + 100)
 
         # Wait for the health warnings. Assume mds can handle 10 request per second at least
         self.wait_for_health("failing to advance its oldest client/flush tid", max_requests / 10)
