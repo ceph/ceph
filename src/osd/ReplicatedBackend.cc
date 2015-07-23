@@ -469,6 +469,7 @@ public:
                       expected_write_size);
   }
 
+  using PGBackend::PGTransaction::append;
   void append(
     PGTransaction *_to_append
     ) {

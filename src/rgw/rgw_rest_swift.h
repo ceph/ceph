@@ -235,9 +235,6 @@ public:
   RGWRESTMgr_SWIFT() {}
   virtual ~RGWRESTMgr_SWIFT() {}
 
-  virtual RGWRESTMgr *get_resource_mgr(struct req_state *s, const string& uri) {
-    return this;
-  }
   virtual RGWHandler *get_handler(struct req_state *s);
 };
 
