@@ -652,17 +652,23 @@ public:
   struct BackfillInterval {
     // info about a backfill interval on a peer
     eversion_t version; /// version at which the scan occurred
-    map<hobject_t,eversion_t, hobject_t::BitwiseComparator> objects;
+    map<hobject_t,eversion_t,hobject_t::Comparator> objects;
+    bool sort_bitwise;
     hobject_t begin;
     hobject_t end;
+
+    BackfillInterval(bool bitwise=true)
+      : objects(hobject_t::Comparator(bitwise)),
+	sort_bitwise(bitwise)
+    {}
     
     /// clear content
-    void clear() {
-      *this = BackfillInterval();
+    void clear(bool bitwise=true) {
+      *this = BackfillInterval(bitwise);
     }
 
-    void reset(hobject_t start) {
-      clear();
+    void reset(hobject_t start, bool bitwise) {
+      clear(bitwise);
       begin = end = start;
     }
 
@@ -677,7 +683,7 @@ public:
     }
 
     /// removes items <= soid and adjusts begin to the first object
-    void trim_to(const hobject_t &soid, bool sort_bitwise) {
+    void trim_to(const hobject_t &soid) {
       trim();
       while (!objects.empty() &&
 	     cmp(objects.begin()->first, soid, sort_bitwise) <= 0) {
@@ -705,7 +711,8 @@ public:
       f->dump_stream("begin") << begin;
       f->dump_stream("end") << end;
       f->open_array_section("objects");
-      for (map<hobject_t, eversion_t, hobject_t::BitwiseComparator>::const_iterator i = objects.begin();
+      for (map<hobject_t, eversion_t, hobject_t::Comparator>::const_iterator i =
+	     objects.begin();
 	   i != objects.end();
 	   ++i) {
 	f->open_object_section("object");
