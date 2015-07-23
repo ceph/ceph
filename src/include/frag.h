@@ -211,8 +211,6 @@ public:
 	ls.front() == x &&
 	ls.size() == 1)
       return true;
-    // A node without leaves underneath it is definitely a leaf... 
-    if (ls.empty()) return true;
     return false;
   }
 

@@ -197,19 +197,6 @@ bool Inode::caps_issued_mask(unsigned mask)
     touch_cap(auth_cap);
     return true;
   }
-  // It should fall in here, since this MDS should be the authority for that directory...
-  // I think it isn't falling in here because it thinks its looking for a file instead of 
-  // a directory - so when it checks the auth_cap->issued & mask, it fails
-  if (is_dir()) {
-    unsigned int a = 1;
-    unsigned int newmask = mask & (~(a << CEPH_CAP_SFILE));
-    if (auth_cap &&
-        cap_is_valid(auth_cap) &&
-        (auth_cap->issued & newmask) == newmask) {
-      touch_cap(auth_cap);
-      return true;
-    }
-  }
 
   // try any cap
   for (map<mds_rank_t,Cap*>::iterator it = caps.begin();
