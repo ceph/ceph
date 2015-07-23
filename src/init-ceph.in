@@ -61,8 +61,8 @@ signal_daemon() {
     [ -z "$action" ] && action="Stopping"
     printf "$action Ceph $name on $host..."
     do_cmd "if [ -e $pidfile ]; then
-        pid=`cat $pidfile`
-        if [ -e /proc/\$pid ] && grep -q $daemon /proc/\$pid/cmdline ; then
+        pid=\`cat $pidfile\`
+        if ps -p \$pid -o args= | grep -q $daemon; then
 	    cmd=\"kill $signal \$pid\"
 	    printf \"\$cmd...\"
 	    \$cmd
@@ -78,7 +78,7 @@ daemon_is_running() {
     pidfile=$4
     do_cmd "[ -e $pidfile ] || exit 1   # no pid, presumably not running
 	pid=\`cat $pidfile\`
-	[ -e /proc/\$pid ] && grep -q $daemon /proc/\$pid/cmdline && grep -qwe -i.$daemon_id /proc/\$pid/cmdline && exit 0 # running
+	ps -p \$pid -o args= | grep $daemon | grep -qwe -i.$daemon_id && exit 0 # running
         exit 1  # pid is something else" "" "okfail"
 }
 
@@ -92,7 +92,7 @@ stop_daemon() {
     printf "$action Ceph $name on $host..."
     do_cmd "if [ -e $pidfile ] ; then 
 	pid=\`cat $pidfile\`
-	while [ -e /proc/\$pid ] && grep -q $daemon /proc/\$pid/cmdline ; do
+	while ps -p \$pid -o args= | grep -q $daemon; do
 	    cmd=\"kill $signal \$pid\"
 	    printf \"\$cmd...\"
 	    \$cmd
