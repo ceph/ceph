@@ -496,8 +496,9 @@ int RGWHTTPManager::process_requests(bool wait_for_data, bool *done)
 	curl_easy_getinfo(e, CURLINFO_RESPONSE_CODE, (void **)&http_status);
 
 	int status = rgw_http_error_to_errno(http_status);
+	int result = msg->data.result;
 	finish_request(req_data, status);
-        switch (msg->data.result) {
+        switch (result) {
           case CURLE_OK:
             break;
           default:
