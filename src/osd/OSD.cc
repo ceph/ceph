@@ -226,7 +226,7 @@ OSDService::OSDService(OSD *osd) :
   agent_in_schedule_time(false),
   agent_schedule_flush_version(0),
   agent_timer_lock("OSD::agent_timer_lock"),
-  agent_timer(osd->client_messenger->cct, agent_timer_lock),
+  agent_timer(osd->client_messenger->cct, agent_timer_lock, false),
   objecter(new Objecter(osd->client_messenger->cct, osd->objecter_messenger, osd->monc, NULL, 0, 0)),
   objecter_finisher(osd->client_messenger->cct),
   watch_lock("OSD::watch_lock"),
@@ -617,6 +617,15 @@ void OSDService::agent_schedule_flush_start()
     dout(10) << p->first.pgid << " agent_state reset" << dendl;
     p->second->unlock();
   }
+}
+
+//on schedule_flush ending, setup the next period's schedule jobs.
+void OSDService::agent_schedule_flush_end()
+{
+  agent_in_schedule_time = false;
+  dout(10) << __func__ << " END "
+           << " agent_in_schedule_time " << agent_in_schedule_time << dendl;
+  agent_schedule_flush_setup();
 }
 
 void OSDService::agent_schedule_flush_setup()
