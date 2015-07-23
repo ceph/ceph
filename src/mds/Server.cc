@@ -2110,6 +2110,7 @@ bool Server::check_access(MDRequestRef& mdr, CInode *in, unsigned mask)
   Session *s = mdr->session;
 
   uid_t uid = mdr->client_request->get_caller_uid();
+  gid_t gid = mdr->client_request->get_caller_gid();
 
   // FIXME: behave with inodes in stray dir
   // FIXME: behave with hard links
@@ -2119,7 +2120,7 @@ bool Server::check_access(MDRequestRef& mdr, CInode *in, unsigned mask)
     path = path.substr(1);    // drop leading /
 
   if (s->auth_caps.is_capable(path, in->inode.uid, in->inode.gid, in->inode.mode,
-			      uid, mask)) {
+			      uid, gid, mask)) {
     return true;
   }
 
@@ -4543,7 +4544,7 @@ void Server::handle_client_mkdir(MDRequestRef& mdr)
     return;
 
   // mkdir check access
-  if (!check_access(mdr, diri, MAY_WRITE))
+  if (!check_access(mdr, diri, (MAY_WRITE | MAY_CREATE)))
     return;
 
   // new inode
