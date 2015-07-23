@@ -9714,10 +9714,7 @@ int ReplicatedPG::recover_backfill(
     backfill_pos = MIN_HOBJ(backfill_info.begin, earliest_peer_backfill(),
 			    get_sort_bitwise());
 
-    dout(20) << "   my backfill interval " << backfill_info.begin << "-" << backfill_info.end
-	     << " " << backfill_info.objects.size() << " objects"
-	     << " " << backfill_info.objects
-	     << dendl;
+    dout(20) << "   my backfill interval " << backfill_info << dendl;
 
     bool sent_scan = false;
     for (set<pg_shard_t>::iterator i = backfill_targets.begin();
@@ -9726,8 +9723,7 @@ int ReplicatedPG::recover_backfill(
       pg_shard_t bt = *i;
       BackfillInterval& pbi = peer_backfill_info[bt];
 
-      dout(20) << " peer shard " << bt << " backfill " << pbi.begin << "-"
-	       << pbi.end << " " << pbi.objects << dendl;
+      dout(20) << " peer shard " << bt << " backfill " << pbi << dendl;
       if (cmp(pbi.begin, backfill_info.begin, get_sort_bitwise()) <= 0 &&
 	  !pbi.extends_to_end() && pbi.empty()) {
 	dout(10) << " scanning peer osd." << bt << " from " << pbi.end << dendl;

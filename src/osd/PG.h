@@ -640,7 +640,6 @@ public:
   set<int> heartbeat_peers;
   set<int> probe_targets;
 
-protected:
   /**
    * BackfillInterval
    *
@@ -717,7 +716,8 @@ protected:
       f->close_section();
     }
   };
-  
+
+protected:
   BackfillInterval backfill_info;
   map<pg_shard_t, BackfillInterval> peer_backfill_info;
   bool backfill_reserved;
@@ -2294,5 +2294,7 @@ public:
 };
 
 ostream& operator<<(ostream& out, const PG& pg);
+
+ostream& operator<<(ostream& out, const PG::BackfillInterval& bi);
 
 #endif

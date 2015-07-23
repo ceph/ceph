@@ -7688,6 +7688,16 @@ void PG::RecoveryState::end_handle() {
   orig_ctx = NULL;
 }
 
+ostream& operator<<(ostream& out, const PG::BackfillInterval& bi)
+{
+  out << "BackfillInfo(" << bi.begin << "-" << bi.end
+      << " " << bi.objects.size() << " objects";
+  if (!bi.objects.empty())
+    out << " " << bi.objects;
+  out << ")";
+  return out;
+}
+
 void intrusive_ptr_add_ref(PG *pg) { pg->get("intptr"); }
 void intrusive_ptr_release(PG *pg) { pg->put("intptr"); }
 
