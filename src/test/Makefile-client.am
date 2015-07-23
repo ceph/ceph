@@ -341,6 +341,7 @@ librbd_test_la_SOURCES = \
 	test/librbd/test_librbd.cc \
 	test/librbd/test_ImageWatcher.cc \
 	test/librbd/test_internal.cc \
+	test/librbd/test_JournalReplay.cc \
 	test/librbd/test_ObjectMap.cc
 librbd_test_la_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 noinst_LTLIBRARIES += librbd_test.la
