@@ -65,6 +65,8 @@ def task(ctx, config):
         lambda: adjust_yum_repos(ctx, cal_svr, config['no_epel']),
         lambda: calamari_install(config, cal_svr),
         lambda: ceph_install(ctx, cal_svr),
+        # do it again because ceph-deploy installed epel for centos
+        lambda: remove_epel(ctx, config['no_epel']),
         lambda: calamari_connect(ctx, cal_svr),
         lambda: browser(config['start_browser'], cal_svr.hostname),
     ):
@@ -151,6 +153,24 @@ def fix_yum_repos(remote, distro):
         if remote.run(args=cmd).exitstatus:
             return False
     return True
+
+
+@contextlib.contextmanager
+def remove_epel(ctx, no_epel):
+    """
+    just remove epel.  No undo; assumed that it's used after
+    adjust_yum_repos, and relies on its state-save/restore.
+    """
+    if no_epel:
+        for remote in ctx.cluster.remotes:
+            if remote.os.name.startswith('centos'):
+                remote.run(args= [
+                    'sudo', 'rm', '-f', run.Raw('/etc/yum.repos.d/epel*')
+                ])
+    try:
+        yield
+    finally:
+        pass
 
 
 def get_iceball_with_http(url, destdir):
