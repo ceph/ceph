@@ -2348,6 +2348,25 @@ int RGWRados::time_log_info(const string& oid, cls_log_header *header)
   return 0;
 }
 
+int RGWRados::time_log_info_async(librados::IoCtx& io_ctx, const string& oid, cls_log_header *header, librados::AioCompletion *completion)
+{
+  const char *log_pool = zone.log_pool.name.c_str();
+  librados::Rados *rad = get_rados_handle();
+  int r = rad->ioctx_create(log_pool, io_ctx);
+  if (r < 0)
+    return r;
+
+  librados::ObjectReadOperation op;
+
+  cls_log_info(op, header);
+
+  int ret = io_ctx.aio_operate(oid, completion, &op, NULL);
+  if (ret < 0)
+    return ret;
+
+  return 0;
+}
+
 int RGWRados::time_log_trim(const string& oid, const utime_t& start_time, const utime_t& end_time,
 			    const string& from_marker, const string& to_marker)
 {

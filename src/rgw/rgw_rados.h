@@ -2129,6 +2129,7 @@ public:
                     int max_entries, list<cls_log_entry>& entries,
 		    const string& marker, string *out_marker, bool *truncated);
   int time_log_info(const string& oid, cls_log_header *header);
+  int time_log_info_async(librados::IoCtx& io_ctx, const string& oid, cls_log_header *header, librados::AioCompletion *completion);
   int time_log_trim(const string& oid, const utime_t& start_time, const utime_t& end_time,
                     const string& from_marker, const string& to_marker);
 
