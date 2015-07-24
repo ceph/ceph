@@ -457,7 +457,7 @@ public:
     _queue.pop_front();
     return c;
   }
-  using WorkQueueVal<GenContext<ThreadPool::TPHandle&>*>::_process;
+  using ThreadPool::WorkQueueVal<GenContext<ThreadPool::TPHandle&>*>::_process;
   void _process(GenContext<ThreadPool::TPHandle&> *c, ThreadPool::TPHandle &tp) {
     c->complete(tp);
   }
