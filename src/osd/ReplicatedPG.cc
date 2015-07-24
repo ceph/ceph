@@ -9653,7 +9653,10 @@ int ReplicatedPG::recover_backfill(
 {
   dout(10) << "recover_backfill (" << max << ")"
            << " bft=" << backfill_targets
-	   << " last_backfill_started " << last_backfill_started << dendl;
+	   << " last_backfill_started " << last_backfill_started
+	   << " sort " << (get_sort_bitwise() ? "bitwise" : "nibblewise")
+	   << (new_backfill ? " new_backfill":"")
+	   << dendl;
   assert(!backfill_targets.empty());
 
   // Initialize from prior backfill state
@@ -9926,6 +9929,7 @@ int ReplicatedPG::recover_backfill(
        i != pending_backfill_updates.end() &&
 	 cmp(i->first, next_backfill_to_complete, get_sort_bitwise()) < 0;
        pending_backfill_updates.erase(i++)) {
+    dout(20) << " pending_backfill_update " << i->first << dendl;
     assert(cmp(i->first, new_last_backfill, get_sort_bitwise()) > 0);
     for (set<pg_shard_t>::iterator j = backfill_targets.begin();
 	 j != backfill_targets.end();
