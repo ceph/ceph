@@ -24,7 +24,7 @@
 #include <stdbool.h>
 
 // FreeBSD compatibility
-#ifdef __FreeBSD__
+#if defined(__FreeBSD__) || defined(__APPLE__)
 typedef off_t loff_t;
 typedef off_t off64_t;
 #endif
