@@ -628,6 +628,7 @@ def write_one_line(parent, name, text):
     with file(tmp, 'wb') as tmp_file:
         tmp_file.write(text + '\n')
         os.fsync(tmp_file.fileno())
+    path_set_context(tmp)
     os.rename(tmp, path)
 
 
@@ -708,6 +709,15 @@ def get_osd_id(path):
         check_osd_id(osd_id)
     return osd_id
 
+def path_set_context(path):
+    # restore selinux context to default policy values
+    if which('restorecon'):
+        command(
+           [
+                'restorecon', '-R',
+                path,
+                ],
+           )
 
 def _check_output(args=None, **kwargs):
     out, ret = command(args, **kwargs)
@@ -1483,6 +1493,7 @@ def prepare_dev(
                 journal_dmcrypt=journal_dmcrypt,
                 )
         finally:
+            path_set_context(path)
             unmount(path)
     finally:
         if rawdev != dev:
