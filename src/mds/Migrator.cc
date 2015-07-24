@@ -2932,7 +2932,8 @@ int Migrator::decode_import_dir(bufferlist::iterator& blp,
     else if (icode == 'I') {
       // inode
       assert(le);
-      decode_import_inode(dn, blp, oldauth, ls, le->get_start_off(), peer_exports, updated_scatterlocks);
+      decode_import_inode(dn, blp, oldauth, ls, le->get_metablob()->event_seq,
+          peer_exports, updated_scatterlocks);
     }
     
     // add dentry to journal entry
