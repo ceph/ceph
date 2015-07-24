@@ -2,6 +2,8 @@
 
 include_directories(isa-l/include)
 
+MESSAGE("file " $(CMAKE_SOURCE_DIR)/src/erasure-code/ErasureCode.cc)
+
 set(isa_srcs
   isa-l/erasure_code/ec_base.c
   isa-l/erasure_code/ec_highlevel_func.c
@@ -24,9 +26,28 @@ set(isa_srcs
   isa-l/erasure_code/gf_vect_dot_prod_avx2.asm.s
   isa-l/erasure_code/gf_vect_dot_prod_avx.asm.s
   isa-l/erasure_code/gf_vect_dot_prod_sse.asm.s
+  isa-l/erasure_code/gf_2vect_mad_avx2.asm.s
+  isa-l/erasure_code/gf_2vect_mad_avx.asm.s
+  isa-l/erasure_code/gf_2vect_mad_sse.asm.s
+  isa-l/erasure_code/gf_3vect_mad_avx2.asm.s
+  isa-l/erasure_code/gf_3vect_mad_avx.asm.s
+  isa-l/erasure_code/gf_3vect_mad_sse.asm.s
+  isa-l/erasure_code/gf_4vect_mad_avx2.asm.s
+  isa-l/erasure_code/gf_4vect_mad_avx.asm.s
+  isa-l/erasure_code/gf_4vect_mad_sse.asm.s
+  isa-l/erasure_code/gf_5vect_mad_avx2.asm.s
+  isa-l/erasure_code/gf_5vect_mad_avx.asm.s
+  isa-l/erasure_code/gf_5vect_mad_sse.asm.s
+  isa-l/erasure_code/gf_6vect_mad_avx2.asm.s
+  isa-l/erasure_code/gf_6vect_mad_avx.asm.s
+  isa-l/erasure_code/gf_6vect_mad_sse.asm.s
+  isa-l/erasure_code/gf_vect_mad_avx2.asm.s
+  isa-l/erasure_code/gf_vect_mad_avx.asm.s
+  isa-l/erasure_code/gf_vect_mad_sse.asm.s
   isa-l/erasure_code/gf_vect_mul_avx.asm.s
   isa-l/erasure_code/gf_vect_mul_sse.asm.s
   ErasureCodeIsa.cc
+  ErasureCodeIsaTableCache.cc
   ErasureCodePluginIsa.cc
   xor_op.cc
   $<TARGET_OBJECTS:erasure_code_objs>
