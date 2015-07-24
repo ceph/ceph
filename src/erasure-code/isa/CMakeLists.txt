@@ -2,6 +2,8 @@
 
 include_directories(isa-l/include)
 
+MESSAGE("file " $(CMAKE_SOURCE_DIR)/src/erasure-code/ErasureCode.cc)
+
 set(isa_srcs
   isa-l/erasure_code/ec_base.c
   isa-l/erasure_code/gf_2vect_dot_prod_sse.asm.s
