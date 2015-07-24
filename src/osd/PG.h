@@ -667,6 +667,14 @@ public:
       *this = BackfillInterval(bitwise);
     }
 
+    /// clear objects list only
+    void clear_objects() {
+      // make sure we preserve the allocator and ordering!
+      objects = map<hobject_t,eversion_t,hobject_t::Comparator>(
+        hobject_t::Comparator(sort_bitwise));
+    }
+
+    /// reinstantiate with a new start+end position and sort order
     void reset(hobject_t start, bool bitwise) {
       clear(bitwise);
       begin = end = start;

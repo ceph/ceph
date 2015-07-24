@@ -2595,13 +2595,14 @@ void ReplicatedPG::do_scan(
       // Check that from is in backfill_targets vector
       assert(is_backfill_targets(from));
 
-      BackfillInterval bi;
+      BackfillInterval& bi = peer_backfill_info[from];
       bi.begin = m->begin;
       bi.end = m->end;
       bufferlist::iterator p = m->get_data().begin();
-      ::decode(bi.objects, p);
 
-      peer_backfill_info[from] = bi;
+      // take care to preserve ordering!
+      bi.clear_objects();
+      ::decode_noclear(bi.objects, p);
 
       if (waiting_on_backfill.erase(from)) {
 	if (waiting_on_backfill.empty()) {
@@ -9716,8 +9717,7 @@ int ReplicatedPG::recover_backfill(
 	    get_sort_bitwise()) <= 0 &&
 	!backfill_info.extends_to_end() && backfill_info.empty()) {
       hobject_t next = backfill_info.end;
-      backfill_info.clear();
-      backfill_info.begin = next;
+      backfill_info.reset(next, get_sort_bitwise());
       backfill_info.end = hobject_t::get_max();
       update_range(&backfill_info, handle);
       backfill_info.trim();
@@ -10108,7 +10108,7 @@ void ReplicatedPG::scan_range(
 {
   assert(is_locked());
   dout(10) << "scan_range from " << bi->begin << dendl;
-  bi->objects.clear();  // for good measure
+  bi->clear_objects();
 
   vector<hobject_t> ls;
   ls.reserve(max);
