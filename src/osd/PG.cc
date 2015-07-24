@@ -3931,7 +3931,7 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
               hobject_t end = objects.back().get_boundary();
               objects.pop_back();
 
-              if (objects.back().get_filestore_key() != end.get_filestore_key()) {
+              if (objects.back().get_hash() != end.get_hash()) {
                 candidate_end = end;
                 boundary_found = true;
               }
