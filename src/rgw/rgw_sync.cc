@@ -182,6 +182,7 @@ static void _aio_completion_notifier_cb(librados::completion_t cb, void *arg)
 
 class RGWCloneMetaLogOp : public RGWAsyncOp {
   RGWRados *store;
+  RGWMetadataLog *mdlog;
   RGWHTTPManager *http_manager;
 
   int shard_id;
@@ -194,17 +195,20 @@ class RGWCloneMetaLogOp : public RGWAsyncOp {
 
   AioCompletionNotifier *md_op_notifier;
 
+  int req_ret;
+  RGWMetadataLogInfo shard_info;
   rgw_mdlog_shard_data data;
 
   enum State {
     Init = 0,
-    ReadShardStatus = 1,
-    SendRESTRequest = 2,
-    ReceiveRESTResponse = 3,
-    StoreMDLogEntries = 4,
-    StoreMDLogEntriesComplete = 5,
-    Done = 6,
-    Error = 7,
+    ReadShardStatus           = 1,
+    ReadShardStatusComplete   = 2,
+    SendRESTRequest           = 3,
+    ReceiveRESTResponse       = 4,
+    StoreMDLogEntries         = 5,
+    StoreMDLogEntriesComplete = 6,
+    Done                      = 100,
+    Error                     = 200,
   } state;
 
   int set_state(State s, int ret = 0) {
@@ -214,15 +218,18 @@ class RGWCloneMetaLogOp : public RGWAsyncOp {
 public:
   RGWCloneMetaLogOp(RGWRados *_store, RGWHTTPManager *_mgr, RGWAsyncOpsManager *_ops_mgr,
 		    int _id, const string& _marker) : RGWAsyncOp(_ops_mgr), store(_store),
+                                                      mdlog(store->meta_mgr->get_log()),
                                                       http_manager(_mgr), shard_id(_id),
                                                       marker(_marker), truncated(false), max_entries(CLONE_MAX_ENTRIES),
 						      http_op(NULL), md_op_notifier(NULL),
+						      req_ret(0),
                                                       state(RGWCloneMetaLogOp::Init) {}
 
   int operate();
 
   int state_init();
   int state_read_shard_status();
+  int state_read_shard_status_complete();
   int state_send_rest_request();
   int state_receive_rest_response();
   int state_store_mdlog_entries();
@@ -313,6 +320,12 @@ int RGWCloneMetaLogOp::operate()
     case Init:
       ldout(store->ctx(), 20) << __func__ << ": shard_id=" << shard_id << ": init request" << dendl;
       return state_init();
+    case ReadShardStatus:
+      ldout(store->ctx(), 20) << __func__ << ": shard_id=" << shard_id << ": reading shard status" << dendl;
+      return state_read_shard_status();
+    case ReadShardStatusComplete:
+      ldout(store->ctx(), 20) << __func__ << ": shard_id=" << shard_id << ": reading shard status complete" << dendl;
+      return state_read_shard_status_complete();
     case SendRESTRequest:
       ldout(store->ctx(), 20) << __func__ << ": shard_id=" << shard_id << ": sending rest request" << dendl;
       return state_send_rest_request();
@@ -339,6 +352,26 @@ int RGWCloneMetaLogOp::operate()
 int RGWCloneMetaLogOp::state_init()
 {
   data = rgw_mdlog_shard_data();
+
+  return set_state(ReadShardStatus);
+}
+
+int RGWCloneMetaLogOp::state_read_shard_status()
+{
+  int ret = mdlog->get_info_async(shard_id, &shard_info, ops_mgr->get_completion_mgr(), (void *)this, &req_ret);
+  if (ret < 0) {
+    ldout(store->ctx(), 0) << "ERROR: mdlog->get_info_async() returned ret=" << ret << dendl;
+    return set_state(Error, ret);
+  }
+
+  return yield(set_state(ReadShardStatusComplete));
+}
+
+int RGWCloneMetaLogOp::state_read_shard_status_complete()
+{
+  ldout(store->ctx(), 20) << "shard_id=" << shard_id << " marker=" << shard_info.marker << " last_update=" << shard_info.last_update << dendl;
+
+  marker = shard_info.marker;
 
   return set_state(SendRESTRequest);
 }
