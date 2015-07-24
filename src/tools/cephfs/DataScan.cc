@@ -51,7 +51,7 @@ bool DataScan::parse_kwarg(
   }
 
   const std::string arg(*i);
-  const std::string val(*(++i));
+  const std::string val(*(i + 1));
 
   if (arg == std::string("--output-dir")) {
     if (driver != NULL) {
