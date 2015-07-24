@@ -501,7 +501,7 @@ def cli_test(ctx, config):
     new_mon_install = 'install --mon ' + nodename
     new_osd_install = 'install --osd ' + nodename
     new_admin = 'install --cli ' + nodename
-    create_initial= '--overwrite-conf mon create-initial ' + nodename
+    create_initial= '--overwrite-conf mon create-initial '
     execute_cdeploy(admin,new_cmd,path)
     execute_cdeploy(admin,new_mon_install,path)
     execute_cdeploy(admin,new_osd_install,path)
