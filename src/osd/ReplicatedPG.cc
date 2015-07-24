@@ -9682,6 +9682,18 @@ int ReplicatedPG::recover_backfill(
       hobject_t::Comparator(get_sort_bitwise()));
   }
 
+  // sanity check sort orders
+  assert(backfill_info.sort_bitwise == get_sort_bitwise());
+  for (map<pg_shard_t, BackfillInterval>::iterator i =
+	 peer_backfill_info.begin();
+       i != peer_backfill_info.end();
+       ++i) {
+    assert(i->second.sort_bitwise == get_sort_bitwise());
+    assert(i->second.objects.key_comp().bitwise == get_sort_bitwise());
+  }
+  assert(backfills_in_flight.key_comp().bitwise == get_sort_bitwise());
+  assert(pending_backfill_updates.key_comp().bitwise == get_sort_bitwise());
+
   for (set<pg_shard_t>::iterator i = backfill_targets.begin();
        i != backfill_targets.end();
        ++i) {
