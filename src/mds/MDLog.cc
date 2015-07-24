@@ -235,7 +235,6 @@ void MDLog::_start_entry(LogEvent *e)
 
   assert(cur_event == NULL);
   cur_event = e;
-  e->set_start_off(get_write_pos());
 
   event_seq++;
 
