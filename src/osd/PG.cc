@@ -4938,6 +4938,9 @@ ostream& operator<<(ostream& out, const PG& pg)
   if (pg.scrubber.must_scrub)
     out << " MUST_SCRUB";
 
+  if (!pg.get_sort_bitwise())
+    out << " NIBBLEWISE";
+
   //out << " (" << pg.pg_log.get_tail() << "," << pg.pg_log.get_head() << "]";
   if (pg.pg_log.get_missing().num_missing()) {
     out << " m=" << pg.pg_log.get_missing().num_missing();
