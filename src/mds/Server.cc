@@ -2901,6 +2901,9 @@ void Server::handle_client_open(MDRequestRef& mdr)
     if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
       return;
 
+    if (!check_access(mdr, cur, MAY_WRITE))
+    return;
+
     // wait for pending truncate?
     const inode_t *pi = cur->get_projected_inode();
     if (pi->is_truncating()) {
@@ -3103,6 +3106,9 @@ void Server::handle_client_openc(MDRequestRef& mdr)
   CInode *diri = dn->get_dir()->get_inode();
   rdlocks.insert(&diri->authlock);
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
+    return;
+
+  if (!check_access(mdr, diri, MAY_WRITE))
     return;
 
   CDentry::linkage_t *dnl = dn->get_projected_linkage();
