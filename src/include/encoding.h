@@ -676,6 +676,17 @@ inline void decode(std::map<T,U,C>& m, bufferlist::iterator& p)
     decode(m[k], p);
   }
 }
+template<class T, class U, class C>
+inline void decode_noclear(std::map<T,U,C>& m, bufferlist::iterator& p)
+{
+  __u32 n;
+  decode(n, p);
+  while (n--) {
+    T k;
+    decode(k, p);
+    decode(m[k], p);
+  }
+}
 template<class T, class U>
 inline void decode_noclear(std::map<T,U>& m, bufferlist::iterator& p)
 {
