@@ -3404,6 +3404,12 @@ if (!set_conf_param(v, p1, p2, p3)) { \
 
   set_pool_image_name(destname, (char **)&dest_poolname,
 		      (char **)&destname, (char **)&dest_snapname);
+			  
+  if (dest_snapname) {
+    cerr << "rbd: dest snapname specified for a command that doesn't use it"
+	     << std::endl;
+    return EXIT_FAILURE;
+  }
 
   if (opt_cmd == OPT_IMPORT) {
     if (poolname && dest_poolname) {
@@ -3444,11 +3450,6 @@ if (!set_conf_param(v, p1, p2, p3)) { \
   if ((opt_cmd == OPT_COPY || opt_cmd == OPT_CLONE || opt_cmd == OPT_RENAME) &&
       !destname ) {
     cerr << "rbd: destination image name was not specified" << std::endl;
-    return EXIT_FAILURE;
-  }
-
-  if ((opt_cmd == OPT_CLONE) && dest_snapname) {
-    cerr << "rbd: cannot clone to a snapshot" << std::endl;
     return EXIT_FAILURE;
   }
 
