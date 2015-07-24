@@ -3,6 +3,7 @@
 
 #include "common/ceph_json.h"
 #include "rgw_metadata.h"
+#include "rgw_http_client.h"
 #include "cls/version/cls_version_types.h"
 
 #include "rgw_rados.h"
@@ -164,6 +165,69 @@ int RGWMetadataLog::get_info(int shard_id, RGWMetadataLogInfo *info)
 
   info->marker = header.max_marker;
   info->last_update = header.max_time;
+
+  return 0;
+}
+
+static void _mdlog_info_completion(librados::completion_t cb, void *arg);
+
+class RGWMetadataLogInfoCompletion : public RefCountedObject {
+  RGWMetadataLogInfo *pinfo;
+  RGWCompletionManager *completion_manager;
+  void *user_info;
+  int *pret;
+  cls_log_header header;
+  librados::IoCtx io_ctx;
+  librados::AioCompletion *completion;
+
+public:
+  RGWMetadataLogInfoCompletion(RGWMetadataLogInfo *_pinfo, RGWCompletionManager *_cm, void *_uinfo, int *_pret) :
+                                               pinfo(_pinfo), completion_manager(_cm), user_info(_uinfo), pret(_pret) {
+    completion = librados::Rados::aio_create_completion((void *)this, _mdlog_info_completion, NULL);
+  }
+
+  ~RGWMetadataLogInfoCompletion() {
+    completion->release();
+  }
+
+  void finish(librados::completion_t cb) {
+    *pret = completion->get_return_value();
+    if (*pret >= 0) {
+      pinfo->marker = header.max_marker;
+      pinfo->last_update = header.max_time;
+    }
+    completion_manager->complete(user_info);
+    put();
+  }
+
+  librados::IoCtx& get_io_ctx() { return io_ctx; }
+
+  cls_log_header *get_header() {
+    return &header;
+  }
+
+  librados::AioCompletion *get_completion() {
+    return completion;
+  }
+};
+
+static void _mdlog_info_completion(librados::completion_t cb, void *arg)
+{
+  RGWMetadataLogInfoCompletion *infoc = (RGWMetadataLogInfoCompletion *)arg;
+  infoc->finish(cb);
+}
+
+int RGWMetadataLog::get_info_async(int shard_id, RGWMetadataLogInfo *info, RGWCompletionManager *completion_manager, void *user_info, int *pret)
+{
+  string oid;
+  get_shard_oid(shard_id, oid);
+
+  RGWMetadataLogInfoCompletion *req_completion = new RGWMetadataLogInfoCompletion(info, completion_manager, user_info, pret);
+
+  int ret = store->time_log_info_async(req_completion->get_io_ctx(), oid, req_completion->get_header(), req_completion->get_completion());
+  if (ret < 0) {
+    return ret;
+  }
 
   return 0;
 }
