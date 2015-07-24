@@ -3896,9 +3896,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 		   << " bytes from obj " << soid << dendl;
 
 	  // whole object?  can we verify the checksum?
-	  if (result >= 0 &&
-	      op.extent.offset == 0 && op.extent.length == oi.size &&
-	      oi.is_data_digest()) {
+	  if (op.extent.length == oi.size && oi.is_data_digest()) {
 	    uint32_t crc = osd_op.outdata.crc32c(-1);
 	    if (oi.data_digest != crc) {
 	      osd->clog->error() << info.pgid << std::hex
