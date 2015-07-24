@@ -120,6 +120,8 @@ struct RGWMetadataLogInfo {
   void decode_json(JSONObj *obj);
 };
 
+class RGWCompletionManager;
+
 class RGWMetadataLog {
   CephContext *cct;
   RGWRados *store;
@@ -160,6 +162,7 @@ public:
 
   int trim(int shard_id, const utime_t& from_time, const utime_t& end_time, const string& start_marker, const string& end_marker);
   int get_info(int shard_id, RGWMetadataLogInfo *info);
+  int get_info_async(int shard_id, RGWMetadataLogInfo *info, RGWCompletionManager *completion_manager, void *user_info, int *pret);
   int lock_exclusive(int shard_id, utime_t& duration, string&zone_id, string& owner_id);
   int unlock(int shard_id, string& zone_id, string& owner_id);
 };

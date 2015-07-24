@@ -74,6 +74,7 @@ public:
   virtual void report_error(RGWAsyncOp *op);
 
   AioCompletionNotifier *create_completion_notifier(RGWAsyncOp *op);
+  RGWCompletionManager *get_completion_mgr() { return &completion_mgr; }
 };
 
 class RGWRemoteMetaLog : public RGWAsyncOpsManager {
