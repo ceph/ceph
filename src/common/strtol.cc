@@ -162,8 +162,8 @@ uint64_t strict_sistrtoll(const char *str, std::string *err)
 
   long long r_ll = strict_strtoll(v, 10, err);
 
-  if (r_ll < 0) {
-    *err = "strict_sistrtoll: value should not be negative";
+  if (r_ll <= 0) {
+    *err = "strict_sistrtoll: value should be positive";
     return 0;
   }
 
