@@ -77,11 +77,11 @@ def lock_machines(ctx, config):
     log.info('Locking machines...')
     assert isinstance(config[0], int), 'config[0] must be an integer'
     machine_type = config[1]
-    how_many = config[0]
+    requested = config[0]
     # We want to make sure there are always this many machines available
-    to_reserve = teuth_config.reserve_machines
-    assert isinstance(to_reserve, int), 'reserve_machines must be integer'
-    assert (to_reserve >= 0), 'reserve_machines should >= 0'
+    reserved = teuth_config.reserve_machines
+    assert isinstance(reserved, int), 'reserve_machines must be integer'
+    assert (reserved >= 0), 'reserve_machines should >= 0'
 
     # change the status during the locking process
     report.try_push_job_info(ctx.config, dict(status='waiting'))
@@ -90,7 +90,7 @@ def lock_machines(ctx, config):
     while True:
         # get a candidate list of machines
         machines = lock.list_locks(machine_type=machine_type, up=True,
-                                   locked=False, count=how_many + to_reserve)
+                                   locked=False, count=requested + reserved)
         if machines is None:
             if ctx.block:
                 log.error('Error listing machines, trying again')
@@ -100,25 +100,25 @@ def lock_machines(ctx, config):
                 raise RuntimeError('Error listing machines')
 
         # make sure there are machines for non-automated jobs to run
-        if len(machines) < to_reserve + how_many and ctx.owner.startswith('scheduled'):
+        if len(machines) < reserved + requested and ctx.owner.startswith('scheduled'):
             if ctx.block:
                 log.info(
                     'waiting for more %s machines to be free (need %s + %s, have %s)...',
                     machine_type,
-                    to_reserve,
-                    how_many,
+                    reserved,
+                    requested,
                     len(machines),
                 )
                 time.sleep(10)
                 continue
             else:
                 assert 0, ('not enough machines free; need %s + %s, have %s' %
-                           (to_reserve, how_many, len(machines)))
+                           (reserved, requested, len(machines)))
 
-        newly_locked = lock.lock_many(ctx, how_many, machine_type, ctx.owner,
+        newly_locked = lock.lock_many(ctx, requested, machine_type, ctx.owner,
                                       ctx.archive, os_type, os_version, arch)
         all_locked.update(newly_locked)
-        if len(all_locked) == how_many:
+        if len(all_locked) == requested:
             vmlist = []
             for lmach in all_locked:
                 if misc.is_vm(lmach):
@@ -162,13 +162,13 @@ def lock_machines(ctx, config):
         elif not ctx.block:
             assert 0, 'not enough machines are available'
         else:
-            how_many = how_many - len(newly_locked)
-            assert how_many > 0, "lock_machines: how_many counter went" \
-                                 "negative, this shouldn't happen"
+            requested = requested - len(newly_locked)
+            assert requested > 0, "lock_machines: requested counter went" \
+                                  "negative, this shouldn't happen"
 
         log.info(
             "{total} machines locked ({new} new); need {more} more".format(
-                total=len(all_locked), new=len(newly_locked), more=how_many)
+                total=len(all_locked), new=len(newly_locked), more=requested)
         )
         log.warn('Could not lock enough machines, waiting...')
         time.sleep(10)
