@@ -35,13 +35,10 @@ def base(ctx, config):
     testdir = misc.get_testdir(ctx)
     run.wait(
         ctx.cluster.run(
-            args=[
-                'mkdir', '-p', '-m0755', '--',
-                testdir,
-                ],
+            args=['mkdir', '-p', '-m0755', '--', testdir],
             wait=False,
-            )
         )
+    )
     try:
         yield
     finally:
@@ -50,14 +47,10 @@ def base(ctx, config):
         # just cram an rm -rf here
         run.wait(
             ctx.cluster.run(
-                args=[
-                    'rmdir',
-                    '--',
-                    testdir,
-                    ],
+                args=['rmdir', '--', testdir],
                 wait=False,
-                ),
-            )
+            ),
+        )
 
 
 @contextlib.contextmanager
@@ -206,6 +199,7 @@ def save_config(ctx, config):
         with file(os.path.join(ctx.archive, 'config.yaml'), 'w') as f:
             yaml.safe_dump(ctx.config, f, default_flow_style=False)
 
+
 def check_lock(ctx, config, check_up=True):
     """
     Check lock status of remote machines.
@@ -227,9 +221,9 @@ def check_lock(ctx, config, check_up=True):
             'machine {name} is not locked'.format(name=machine)
         assert status['locked_by'] == ctx.owner, \
             'machine {name} is locked by {user}, not {owner}'.format(
-            name=machine,
-            user=status['locked_by'],
-            owner=ctx.owner,
+                name=machine,
+                user=status['locked_by'],
+                owner=ctx.owner,
             )
 
 
@@ -274,7 +268,6 @@ def check_packages(ctx, config):
                 ver=sha1,
             )
         )
-
 
 
 @contextlib.contextmanager
@@ -364,11 +357,9 @@ def check_ceph_data(ctx, config):
     """
     log.info('Checking for old /var/lib/ceph...')
     processes = ctx.cluster.run(
-        args=[
-            'test', '!', '-e', '/var/lib/ceph',
-            ],
+        args=['test', '!', '-e', '/var/lib/ceph'],
         wait=False,
-        )
+    )
     failed = False
     for proc in processes:
         try:
@@ -379,6 +370,7 @@ def check_ceph_data(ctx, config):
     if failed:
         raise RuntimeError('Stale /var/lib/ceph detected, aborting.')
 
+
 def check_conflict(ctx, config):
     """
     Note directory use conflicts and stale directories.
@@ -386,11 +378,9 @@ def check_conflict(ctx, config):
     log.info('Checking for old test directory...')
     testdir = misc.get_testdir(ctx)
     processes = ctx.cluster.run(
-        args=[
-            'test', '!', '-e', testdir,
-            ],
+        args=['test', '!', '-e', testdir],
         wait=False,
-        )
+    )
     failed = False
     for proc in processes:
         try:
@@ -450,12 +440,10 @@ def archive(ctx, config):
     archive_dir = misc.get_archive_dir(ctx)
     run.wait(
         ctx.cluster.run(
-            args=[
-                'install', '-d', '-m0755', '--', archive_dir,
-                ],
+            args=['install', '-d', '-m0755', '--', archive_dir],
             wait=False,
-            )
         )
+    )
 
     try:
         yield
@@ -480,15 +468,10 @@ def archive(ctx, config):
         log.info('Removing archive directory...')
         run.wait(
             ctx.cluster.run(
-                args=[
-                    'rm',
-                    '-rf',
-                    '--',
-                    archive_dir,
-                    ],
+                args=['rm', '-rf', '--', archive_dir],
                 wait=False,
-                ),
-            )
+            ),
+        )
 
 
 @contextlib.contextmanager
@@ -536,10 +519,10 @@ def coredump(ctx, config):
                 '{adir}/coredump'.format(adir=archive_dir),
                 run.Raw('&&'),
                 'sudo', 'sysctl', '-w', 'kernel.core_pattern={adir}/coredump/%t.%p.core'.format(adir=archive_dir),
-                ],
+            ],
             wait=False,
-            )
         )
+    )
 
     try:
         yield
@@ -554,10 +537,10 @@ def coredump(ctx, config):
                     '--ignore-fail-on-non-empty',
                     '--',
                     '{adir}/coredump'.format(adir=archive_dir),
-                    ],
+                ],
                 wait=False,
-                )
             )
+        )
 
         # set status = 'fail' if the dir is still there = coredumps were
         # seen
@@ -567,15 +550,16 @@ def coredump(ctx, config):
                     'if', 'test', '!', '-e', '{adir}/coredump'.format(adir=archive_dir), run.Raw(';'), 'then',
                     'echo', 'OK', run.Raw(';'),
                     'fi',
-                    ],
+                ],
                 stdout=StringIO(),
-                )
+            )
             if r.stdout.getvalue() != 'OK\n':
                 log.warning('Found coredumps on %s, flagging run as failed', rem)
                 set_status(ctx.summary, 'fail')
                 if 'failure_reason' not in ctx.summary:
                     ctx.summary['failure_reason'] = \
                         'Found coredumps on {rem}'.format(rem=rem)
+
 
 @contextlib.contextmanager
 def syslog(ctx, config):
@@ -593,13 +577,10 @@ def syslog(ctx, config):
     log_dir = '{adir}/syslog'.format(adir=archive_dir)
     run.wait(
         ctx.cluster.run(
-            args=[
-                'mkdir', '-p', '-m0755', '--',
-                log_dir,
-                ],
+            args=['mkdir', '-p', '-m0755', '--', log_dir],
             wait=False,
-            )
         )
+    )
 
     CONF = '/etc/rsyslog.d/80-cephtest.conf'
     kern_log = '{log_dir}/kern.log'.format(log_dir=log_dir)
@@ -624,7 +605,7 @@ def syslog(ctx, config):
                 remote=rem,
                 path=CONF,
                 data=conf_fp,
-                )
+            )
             conf_fp.seek(0)
         run.wait(
             ctx.cluster.run(
@@ -635,10 +616,10 @@ def syslog(ctx, config):
                     # rsyslog open the files
                     'rsyslog',
                     'restart',
-                    ],
+                ],
                 wait=False,
-                ),
-            )
+            ),
+        )
 
         yield
     finally:
@@ -657,10 +638,10 @@ def syslog(ctx, config):
                     'service',
                     'rsyslog',
                     'restart',
-                    ],
+                ],
                 wait=False,
-                ),
-            )
+            ),
+        )
         # race condition: nothing actually says rsyslog had time to
         # flush the file fully. oh well.
 
@@ -683,22 +664,22 @@ def syslog(ctx, config):
                     run.Raw('|'),
                     'grep', '-v', 'CRON',  # ignore cron noise
                     run.Raw('|'),
-                    'grep', '-v', 'BUG: bad unlock balance detected', # #6097
+                    'grep', '-v', 'BUG: bad unlock balance detected',  # #6097
                     run.Raw('|'),
-                    'grep', '-v', 'inconsistent lock state', # FIXME see #2523
+                    'grep', '-v', 'inconsistent lock state',  # FIXME see #2523
                     run.Raw('|'),
-                    'grep', '-v', '*** DEADLOCK ***', # part of lockdep output
+                    'grep', '-v', '*** DEADLOCK ***',  # part of lockdep output
                     run.Raw('|'),
-                    'grep', '-v', 'INFO: possible irq lock inversion dependency detected', # FIXME see #2590 and #147
+                    'grep', '-v', 'INFO: possible irq lock inversion dependency detected',  # FIXME see #2590 and #147
                     run.Raw('|'),
                     'grep', '-v', 'INFO: NMI handler (perf_event_nmi_handler) took too long to run',
                     run.Raw('|'),
                     'grep', '-v', 'INFO: recovery required on readonly',
                     run.Raw('|'),
                     'head', '-n', '1',
-                    ],
+                ],
                 stdout=StringIO(),
-                )
+            )
             stdout = r.stdout.getvalue()
             if stdout != '':
                 log.error('Error in syslog on %s: %s', rem.name, stdout)
@@ -724,10 +705,10 @@ def syslog(ctx, config):
                     '--',
                     'gzip',
                     '--',
-                    ],
+                ],
                 wait=False,
-                ),
-            )
+            ),
+        )
 
 
 def vm_setup(ctx, config):
