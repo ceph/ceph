@@ -1798,6 +1798,12 @@ void RGWPostObj::execute()
     goto done;
   }
 
+  ret = store->check_quota(s->bucket_owner.get_id(), s->bucket,
+                           user_quota, bucket_quota, s->content_length);
+  if (ret < 0) {
+    goto done;
+  }
+
   processor = select_processor();
 
   ret = processor->prepare(store, s->obj_ctx, NULL);
@@ -1832,6 +1838,12 @@ void RGWPostObj::execute()
   }
 
   s->obj_size = ofs;
+
+  ret = store->check_quota(s->bucket_owner.get_id(), s->bucket,
+                           user_quota, bucket_quota, s->obj_size);
+  if (ret < 0) {
+    goto done;
+  }
 
   hash.Final(m);
   buf_to_hex(m, CEPH_CRYPTO_MD5_DIGESTSIZE, calc_md5);
