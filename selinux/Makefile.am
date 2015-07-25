@@ -6,7 +6,7 @@ EXTRA_DIST = \
 SELINUXROOT = $(DESTDIR)$(datadir)/selinux
 
 ceph.pp: ceph.te ceph.fc ceph.if
-	$(MAKE) -f $(datadir)/selinux/devel/Makefile ceph.pp
+	$(MAKE) -j1 -f $(datadir)/selinux/devel/Makefile ceph.pp
 
 if ENABLE_SERVER
 if WITH_SELINUX
