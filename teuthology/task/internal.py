@@ -77,7 +77,7 @@ def lock_machines(ctx, config):
     log.info('Locking machines...')
     assert isinstance(config[0], int), 'config[0] must be an integer'
     machine_type = config[1]
-    requested = config[0]
+    total_requested = config[0]
     # We want to make sure there are always this many machines available
     reserved = teuth_config.reserve_machines
     assert isinstance(reserved, int), 'reserve_machines must be integer'
@@ -87,6 +87,7 @@ def lock_machines(ctx, config):
     report.try_push_job_info(ctx.config, dict(status='waiting'))
 
     all_locked = dict()
+    requested = total_requested
     while True:
         # get a candidate list of machines
         machines = lock.list_locks(machine_type=machine_type, up=True,
@@ -118,7 +119,16 @@ def lock_machines(ctx, config):
         newly_locked = lock.lock_many(ctx, requested, machine_type, ctx.owner,
                                       ctx.archive, os_type, os_version, arch)
         all_locked.update(newly_locked)
-        if len(all_locked) == requested:
+        log.info(
+            '{newly_locked} {mtype} machines locked this try, '
+            '{total_locked}/{total_requested} locked so far'.format(
+                newly_locked=len(newly_locked),
+                mtype=machine_type,
+                total_locked=len(all_locked),
+                total_requested=total_requested,
+            )
+        )
+        if len(all_locked) == total_requested:
             vmlist = []
             for lmach in all_locked:
                 if misc.is_vm(lmach):
