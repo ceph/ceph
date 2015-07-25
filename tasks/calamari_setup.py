@@ -351,20 +351,27 @@ def deploy_ceph(ctx, cal_svr):
     # 1.3 and later:
     # ceph-deploy new <all_mons>
     # ceph-deploy install --repo --release=ceph-mon <all_mons>
-    # ceph-deploy install --mon <all_mons>
+    # ceph-deploy install <all_mons>
     # ceph-deploy install --repo --release=ceph-osd <all_osds>
-    # ceph-deploy install --osd <all_osds>
+    # ceph-deploy install <all_osds>
     # ceph-deploy mon create-initial
+    #
+    # one might think the install <all_mons> and install <all_osds>
+    # commands would need --mon and --osd, but #12147 has not yet
+    # made it into RHCS 1.3.0; since the package split also hasn't
+    # landed, we can avoid using the flag and avoid the bug.
 
     cmds = ['ceph-deploy new ' + ' '.join(all_mons)]
 
     if use_install_repo:
         cmds.append('ceph-deploy install --repo --release=ceph-mon ' +
                     ' '.join(all_mons))
-        cmds.append('ceph-deploy install --mon ' + ' '.join(all_mons))
+        cmds.append('ceph-deploy install --no-adjust-repos ' +
+                    ' '.join(all_mons))
         cmds.append('ceph-deploy install --repo --release=ceph-osd ' +
                     ' '.join(all_osds))
-        cmds.append('ceph-deploy install --mon ' + ' '.join(all_osds))
+        cmds.append('ceph-deploy install --no-adjust-repos  ' +
+                    ' '.join(all_osds))
     else:
         cmds.append('ceph-deploy install ' + ' '.join(all_machines))
 
