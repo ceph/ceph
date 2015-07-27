@@ -2615,7 +2615,7 @@ void PG::init(
     pg_log.mark_log_for_rewrite();
   }
 
-  reg_next_scrub();
+  on_new_interval();
 
   dirty_info = true;
   dirty_big_info = true;
@@ -4676,8 +4676,6 @@ void PG::start_peering_interval(
   else
     set_role(-1);
 
-  reg_next_scrub();
-
   // did acting, up, primary|acker change?
   if (!lastmap) {
     dout(10) << " no lastmap" << dendl;
@@ -4723,30 +4721,7 @@ void PG::start_peering_interval(
     info.history.same_primary_since = osdmap->get_epoch();
   }
 
-  // initialize features
-  acting_features = CEPH_FEATURES_SUPPORTED_DEFAULT;
-  upacting_features = CEPH_FEATURES_SUPPORTED_DEFAULT;
-  for (vector<int>::iterator p = acting.begin(); p != acting.end(); ++p) {
-    if (*p == CRUSH_ITEM_NONE)
-      continue;
-    uint64_t f = osdmap->get_xinfo(*p).features;
-    acting_features &= f;
-    upacting_features &= f;
-  }
-  for (vector<int>::iterator p = up.begin(); p != up.end(); ++p) {
-    if (*p == CRUSH_ITEM_NONE)
-      continue;
-    upacting_features &= osdmap->get_xinfo(*p).features;
-  }
-
-  if (g_conf->osd_debug_randomize_hobject_sort_order) {
-    // randomly use a nibblewise sort (when we otherwise might have
-    // done bitwise) based on some *deterministic* function such that
-    // all peers/osds will agree.
-    randomly_sort_nibblewise = (info.history.same_interval_since + info.pgid.ps()) & 1;
-  } else {
-    randomly_sort_nibblewise = false;
-  }
+  on_new_interval();
 
   dout(10) << " up " << oldup << " -> " << up 
 	   << ", acting " << oldacting << " -> " << acting 
@@ -4831,6 +4806,38 @@ void PG::start_peering_interval(
   if (acting.empty() && !up.empty() && up_primary == pg_whoami) {
     dout(10) << " acting empty, but i am up[0], clearing pg_temp" << dendl;
     osd->queue_want_pg_temp(info.pgid.pgid, acting);
+  }
+}
+
+void PG::on_new_interval()
+{
+  const OSDMapRef osdmap = get_osdmap();
+
+  reg_next_scrub();
+
+  // initialize features
+  acting_features = CEPH_FEATURES_SUPPORTED_DEFAULT;
+  upacting_features = CEPH_FEATURES_SUPPORTED_DEFAULT;
+  for (vector<int>::iterator p = acting.begin(); p != acting.end(); ++p) {
+    if (*p == CRUSH_ITEM_NONE)
+      continue;
+    uint64_t f = osdmap->get_xinfo(*p).features;
+    acting_features &= f;
+    upacting_features &= f;
+  }
+  for (vector<int>::iterator p = up.begin(); p != up.end(); ++p) {
+    if (*p == CRUSH_ITEM_NONE)
+      continue;
+    upacting_features &= osdmap->get_xinfo(*p).features;
+  }
+
+  if (g_conf->osd_debug_randomize_hobject_sort_order) {
+    // randomly use a nibblewise sort (when we otherwise might have
+    // done bitwise) based on some *deterministic* function such that
+    // all peers/osds will agree.
+    randomly_sort_nibblewise = (info.history.same_interval_since + info.pgid.ps()) & 1;
+  } else {
+    randomly_sort_nibblewise = false;
   }
 }
 
