@@ -549,8 +549,11 @@ bool ReplicatedPG::pgls_filter(PGLSFilter *filter, hobject_t& sobj, bufferlist& 
       filter->get_xattr(),
       &bl);
     dout(0) << "getattr (sobj=" << sobj << ", attr=" << filter->get_xattr() << ") returned " << ret << dendl;
-    if (ret < 0)
-      return false;
+    if (ret < 0) {
+      if (ret != -ENODATA || filter->reject_empty_xattr()) {
+        return false;
+      }
+    }
   }
 
   return filter->filter(sobj, bl, outdata);

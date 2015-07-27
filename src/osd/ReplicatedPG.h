@@ -65,7 +65,18 @@ public:
   virtual ~PGLSFilter();
   virtual bool filter(const hobject_t &obj, bufferlist& xattr_data,
                       bufferlist& outdata) = 0;
-  virtual string& get_xattr() { return xattr; }
+
+  /**
+   * xattr key, or empty string.  If non-empty, this xattr will be fetched
+   * and the value passed into ::filter
+   */
+   virtual string& get_xattr() { return xattr; }
+
+  /**
+   * If true, objects without the named xattr (if xattr name is not empty)
+   * will be rejected without calling ::filter
+   */
+  virtual bool reject_empty_xattr() { return true; }
 };
 
 class PGLSPlainFilter : public PGLSFilter {
