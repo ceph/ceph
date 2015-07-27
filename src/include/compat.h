@@ -13,7 +13,7 @@
 #define CEPH_COMPAT_H
 
 #if defined(__FreeBSD__)
-#define	ENODATA	61
+#define	ENODATA	ENOATTR
 #define	MSG_MORE 0
 #endif /* !__FreeBSD__ */
 
