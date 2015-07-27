@@ -26,17 +26,6 @@ AsyncCompressor::AsyncCompressor(CephContext *c):
   compress_tp(g_ceph_context, "AsyncCompressor::compressor_tp", cct->_conf->async_compressor_threads, "async_compressor_threads"),
   job_lock("AsyncCompressor::job_lock"),
   compress_wq(this, c->_conf->async_compressor_thread_timeout, c->_conf->async_compressor_thread_suicide_timeout, &compress_tp) {
-  vector<string> corestrs;
-  get_str_vec(cct->_conf->async_compressor_affinity_cores, corestrs);
-  for (vector<string>::iterator it = corestrs.begin();
-       it != corestrs.end(); ++it) {
-    string err;
-    int coreid = strict_strtol(it->c_str(), 10, &err);
-    if (err == "")
-      coreids.push_back(coreid);
-    else
-      lderr(cct) << __func__ << " failed to parse " << *it << " in " << cct->_conf->async_compressor_affinity_cores << dendl;
-  }
 }
 
 void AsyncCompressor::init()
