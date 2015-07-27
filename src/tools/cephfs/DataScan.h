@@ -237,6 +237,8 @@ class DataScan : public MDSUtility
     bool force_corrupt;
     // Overwrite root objects even if they exist
     bool force_init;
+    // Only scan inodes without this scrub tag
+    string filter_tag;
 
     /**
      * @param r set to error on valid key with invalid value
