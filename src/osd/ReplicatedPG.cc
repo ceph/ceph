@@ -445,6 +445,18 @@ void ReplicatedPG::wait_for_degraded_object(const hobject_t& soid, OpRequestRef 
   op->mark_delayed("waiting for degraded object");
 }
 
+void ReplicatedPG::block_write_on_snap_rollback(
+  const hobject_t& oid, ObjectContextRef obc, OpRequestRef op)
+{
+  dout(20) << __func__ << ": blocking object " << oid.get_head()
+	   << " on snap promotion " << obc->obs.oi.soid << dendl;
+  // otherwise, we'd have blocked in do_op
+  assert(oid.is_head());
+  assert(objects_blocked_on_snap_promotion.count(oid) == 0);
+  objects_blocked_on_snap_promotion[oid] = obc;
+  wait_for_blocked_object(obc->obs.oi.soid, op);
+}
+
 void ReplicatedPG::block_write_on_degraded_snap(
   const hobject_t& snap, OpRequestRef op)
 {
@@ -1420,6 +1432,15 @@ void ReplicatedPG::do_op(OpRequestRef& op)
     hobject_t to_wait_on(head);
     to_wait_on.snap = blocked_iter->second;
     wait_for_degraded_object(to_wait_on, op);
+    return;
+  }
+  map<hobject_t, ObjectContextRef>::iterator blocked_snap_promote_iter =
+    objects_blocked_on_snap_promotion.find(head);
+  if (write_ordered && 
+      blocked_snap_promote_iter != objects_blocked_on_snap_promotion.end()) {
+    wait_for_blocked_object(
+      blocked_snap_promote_iter->second->obs.oi.soid,
+      op);
     return;
   }
 
@@ -5493,6 +5514,12 @@ int ReplicatedPG::_rollback_to(OpContext *ctx, ceph_osd_op& op)
   }
   if (maybe_handle_cache(ctx->op, true, rollback_to, ret, missing_oid, true)) {
     // promoting the rollback src, presumably
+    if (!rollback_to) {
+      // the obc must be cached now for the promotion to be happening
+      rollback_to = get_object_context(missing_oid, false);
+      assert(rollback_to);
+    }
+    block_write_on_snap_rollback(soid, rollback_to, ctx->op);
     return -EAGAIN;
   }
   if (ret == -ENOENT || (rollback_to && rollback_to->obs.oi.is_whiteout())) {
@@ -8440,6 +8467,13 @@ void ReplicatedPG::kick_object_context_blocked(ObjectContextRef obc)
   dout(10) << __func__ << " " << soid << " requeuing " << ls.size() << " requests" << dendl;
   requeue_ops(ls);
   waiting_for_blocked_object.erase(p);
+
+  map<hobject_t, ObjectContextRef>::iterator i =
+    objects_blocked_on_snap_promotion.find(obc->obs.oi.soid.get_head());
+  if (i != objects_blocked_on_snap_promotion.end()) {
+    assert(i->second == obc);
+    objects_blocked_on_snap_promotion.erase(i);
+  }
 
   if (obc->requeue_scrub_on_unblock)
     requeue_scrub();

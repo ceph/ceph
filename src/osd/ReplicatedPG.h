@@ -1583,6 +1583,9 @@ public:
 
   bool is_degraded_or_backfilling_object(const hobject_t& oid);
   void wait_for_degraded_object(const hobject_t& oid, OpRequestRef op);
+
+  void block_write_on_snap_rollback(
+    const hobject_t& oid, ObjectContextRef obc, OpRequestRef op);
   void block_write_on_degraded_snap(const hobject_t& oid, OpRequestRef op);
 
   bool maybe_await_blocked_snapset(const hobject_t &soid, OpRequestRef op);
