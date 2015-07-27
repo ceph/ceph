@@ -32,12 +32,13 @@
 #include <iostream>
 #include <vector>
 #include <map>
+#include <string.h>
 using std::map;
 using std::vector;
 
 #include "common/config.h"
 
-#define dout_subsys ceph_subsys_mds
+#define dout_subsys ceph_subsys_mds_balancer
 #undef DOUT_COND
 #define DOUT_COND(cct, l) l<=cct->_conf->debug_mds || l <= cct->_conf->debug_mds_balancer
 #undef dout_prefix
@@ -45,8 +46,30 @@ using std::vector;
 
 #define MIN_LOAD    50   //  ??
 #define MIN_REEXPORT 5  // will automatically reexport
-#define MIN_OFFLOAD 10   // point at which i stop trying, close enough
 
+// these strings are pasted together to make a Lua executable string
+// -- this is very ugly. :(
+static const char *LUA_IMPORT = "package.path = package.path .. ';";
+static const char *LUA_INIT = "?.lua;'\n require \"libmantle\"\n"
+  "log, whoami, MDSs, authmetaload, nfiles, allmetaload, targets = libmantle.parse_args(arg)\n"
+  "for i=1,#MDSs do\n"
+  "  MDSs[i][\"load\"] = ";
+static const char *LUA_LOAD = "\n"
+  "end\n"
+  "total = libmantle.get_total(MDSs)\n"
+  "libmantle.print_metrics(arg[1], MDSs)\n";
+static const char *LUA_WHEN = "\n"
+  "   E, I = libmantle.get_exporters_importers(log, MDSs)\n"
+  " else\n"
+  "   return libmantle.get_empty_targets(log, targets)\n"
+  " end\n";
+static const char *LUA_WHERE = "\n"
+  "return libmantle.convert_targets(log, targets)";
+
+static const char *LUA_INIT_HOWMUCH = "?.lua;'\n require \"libbinpacker\"\n"
+  "strategies = ";
+static const char *LUA_HOWMUCH = "\n"
+  "return libbinpacker.pack(strategies, arg)";
 
 /* This function DOES put the passed message before returning */
 int MDBalancer::proc_message(Message *m)
@@ -144,7 +167,6 @@ double mds_load_t::mds_load()
 mds_load_t MDBalancer::get_load(utime_t now)
 {
   mds_load_t load(now);
-
   if (mds->mdcache->get_root()) {
     list<CDir*> ls;
     mds->mdcache->get_root()->get_dirfrags(ls);
@@ -161,9 +183,54 @@ mds_load_t MDBalancer::get_load(utime_t now)
   load.req_rate = mds->get_req_rate();
   load.queue_len = mds->messenger->get_dispatch_queue_len();
 
-  ifstream cpu("/proc/loadavg");
-  if (cpu.is_open())
-    cpu >> load.cpu_load_avg;
+  // use instantaneous CPU util. (better for flash crowds/hotspots) instead of load average
+  ifstream cpu("/proc/stat");
+  if (cpu.is_open()) {
+    // TODO: this should be cleaned up
+    map<string, double> procstat;
+    string temp;
+    cpu >> temp;
+    cpu >> temp;
+    procstat.insert(pair<string,double>("usr", atof(temp.c_str())));
+    cpu >> temp;
+    procstat.insert(pair<string,double>("nice", atof(temp.c_str())));
+    cpu >> temp;
+    procstat.insert(pair<string,double>("sys", atof(temp.c_str())));
+    cpu >> temp;
+    procstat.insert(pair<string,double>("idle", atof(temp.c_str())));
+    cpu >> temp;
+    procstat.insert(pair<string,double>("iowait", atof(temp.c_str())));
+    cpu >> temp;
+    procstat.insert(pair<string,double>("irq", atof(temp.c_str())));
+    cpu >> temp;
+    procstat.insert(pair<string,double>("softirq", atof(temp.c_str())));
+    cpu >> temp;
+    procstat.insert(pair<string,double>("steal", atof(temp.c_str())));
+    cpu.close();
+    
+    double cpu_total = 0;
+    double cpu_work = 0;
+    for (map<string, double>:: iterator it = procstat.begin();
+         it != procstat.end();
+         it++) {
+      cpu_total += it->second;
+      if (!it->first.compare("usr") ||
+          !it->first.compare("sys") ||
+          !it->first.compare("nice"))
+        cpu_work += it->second;
+    }
+
+    // save it if it is a legit sample.
+    double cpu_work_period = cpu_work - cpu_work_prev;
+    double cpu_total_period = cpu_total - cpu_total_prev;
+    if (cpu_total_period > 100 && cpu_work_period > 100) {
+      cpu_load_avg = 100*cpu_work_period/cpu_total_period;
+      cpu_work_prev = cpu_work;
+      cpu_total_prev = cpu_total;
+      dout(15) << "get_load cpu=" << cpu_work_period << "/" << cpu_total_period << "=" << load.cpu_load_avg << dendl;
+    }
+    load.cpu_load_avg = cpu_load_avg;
+  }
 
   dout(15) << "get_load " << load << dendl;
   return load;
@@ -274,9 +341,15 @@ void MDBalancer::handle_heartbeat(MHeartbeat *m)
   {
     unsigned cluster_size = mds->get_mds_map()->get_num_in_mds();
     if (mds_load.size() == cluster_size) {
+      dump_subtree_loads();
+
       // let's go!
-      //export_empties();  // no!
-      prep_rebalance(m->get_beat());
+      if (g_conf->mds_bal_metaload != "" && g_conf->mds_bal_mdsload != "" &&
+          g_conf->mds_bal_when != "" && g_conf->mds_bal_where != "" &&
+          g_conf->mds_bal_dir != "") 
+        custom_balancer();
+      else
+        prep_rebalance(m->get_beat());
     }
   }
 
@@ -284,6 +357,115 @@ void MDBalancer::handle_heartbeat(MHeartbeat *m)
  out:
   m->put();
 }
+
+
+
+void MDBalancer::dump_subtree_loads() {
+  utime_t now = ceph_clock_now(g_ceph_context);
+  
+  // get the auth load  
+  subtrees.clear();
+  if (mds->mdcache->get_root()) {
+    list<CDir*> ls;
+    mds->mdcache->get_root()->get_dirfrags(ls);
+    double authload = 0;
+    for (list<CDir*>::iterator p = ls.begin();
+	 p != ls.end();
+	 ++p) {
+      string path;
+      (*p)->get_inode()->make_path_string_projected(path);
+      authload += (*p)->pop_auth_subtree_nested.meta_load(now, mds->mdcache->decayrate);
+      dout(5) << "AUTH LOAD: [IRD,IWR metaload]=" << (*p)->pop_auth_subtree_nested  
+              << " fragsize=" << (*p)->get_frag_size() << " path=/root" << path << dendl;
+    }
+  }
+
+  // get the rest of the load
+  set<CDir*> roots;
+  mds->mdcache->get_fullauth_subtrees(roots);
+  total_meta_load = 0;
+  for (set<CDir*>::iterator it = roots.begin();
+       it != roots.end();
+       ++it) {
+    CDir *dir = *it;
+    string path;
+    dir->get_inode()->make_path_string_projected(path);
+    subtrees.clear();
+    if (path.find("~") == 0) continue;
+
+    dout(10) << " inserting load of root dir=" << *dir << dendl;
+    subtrees.push_back(dir); // don't immediately recurse, could be dirfrag
+    total_meta_load += dir->pop_auth_subtree.meta_load(now, mds->mdcache->decayrate);
+    subtree_loads(dir, 1);
+
+    // print out the results
+    dout(10) << " printing out " << subtrees.size() << " subtrees" << dendl;
+    for (vector<CDir*>::iterator popit = subtrees.begin();
+         popit != subtrees.end();
+         ++popit) {
+      CDir *popdir = *popit;
+      string path;
+      popdir->get_inode()->make_path_string_projected(path);
+      dout(2) << "/root" << path
+              << " " << popdir->pop_auth_subtree
+              << " df=" << popdir->dirfrag()
+              << " size=" << popdir->get_frag_size() << dendl;
+    }
+    subtrees.clear();
+  }
+}
+
+
+
+void MDBalancer::subtree_loads(CDir *dir, int depth) 
+{
+  if (depth > g_conf->mds_bal_debug_dfs_depth) return;
+
+  // breadth first traversal, break when we have enough samples
+  utime_t now = ceph_clock_now(g_ceph_context);
+  for (CDir::map_t::iterator it = dir->begin();
+       it != dir->end();
+       ++it) {
+    CInode *in = it->second->get_linkage()->get_inode();
+    if (!in) continue;
+    if (!in->is_dir()) continue;
+    if (in->is_stray()) continue;
+    
+    list<CDir*> dfls;
+    in->get_dirfrags(dfls);
+    for (list<CDir*>::iterator p = dfls.begin();
+         p != dfls.end();
+         ++p) {
+      CDir *subdir = *p;
+      double metaload = subdir->pop_auth_subtree.meta_load(now, mds->mdcache->decayrate);
+      if (metaload >= g_conf->mds_bal_debug_dfs_metaload) {
+        dout(10) << " pushing back load=" << metaload << " dir=" << *subdir << dendl;
+        subtrees.push_back(subdir);
+        if (subtrees.size() > (size_t) g_conf->mds_bal_debug_dfs) return;
+      }
+    }
+  }
+
+  // recurse down since we don't have enough samples (mds_bal_debug_dfs)
+  for (CDir::map_t::iterator it = dir->begin();
+       it != dir->end();
+       ++it) {
+    CInode *in = it->second->get_linkage()->get_inode();
+    if (!in) continue;
+    if (!in->is_dir()) continue;
+    if (in->is_stray()) continue;
+    
+    list<CDir*> dfls;
+    in->get_dirfrags(dfls);
+    for (list<CDir*>::iterator p = dfls.begin();
+         p != dfls.end();
+         ++p) {
+      subtree_loads(*p, depth+1);
+      if (subtrees.size() > (size_t) g_conf->mds_bal_debug_dfs) return;
+    }
+  }
+}
+
 
 
 void MDBalancer::export_empties()
@@ -595,8 +777,164 @@ void MDBalancer::prep_rebalance(int beat)
 
 
 
+void MDBalancer::custom_balancer() 
+{
+  rebalance_time = ceph_clock_now(g_ceph_context);
+
+  dout(10) << "Preparing transfer to Lua and clearing mytargets=" << my_targets.size()
+           << " imported=" << imported.size() << " exported=" << exported.size() 
+           << dendl;
+  my_targets.clear();
+  imported.clear();
+  exported.clear();
+  mds->mdcache->migrator->clear_export_queue();
+
+  // initialize Lua and construct balancer script
+  lua_State *L = luaL_newstate();
+  luaL_openlibs(L);
+  lua_newtable(L);
+  string script = LUA_IMPORT + g_conf->mds_bal_dir + LUA_INIT +
+                  format_policy(g_conf->mds_bal_mdsload) + LUA_LOAD +
+                  format_policy(g_conf->mds_bal_when) + LUA_WHEN +
+                  format_policy(g_conf->mds_bal_where) + LUA_WHERE;
+
+  // push metrics to Lua
+  vector<pair<int, string> > args = extract_metrics();
+  push_lua_args(L, args);
+  lua_setglobal(L, "arg");
+
+  // execute script
+  if (luaL_dostring(L, script.c_str()) > 0) {
+    dout(0) << " script failed: " << lua_tostring(L, lua_gettop(L)) << dendl;
+    dump_balancer(script);
+    lua_close(L);
+    return;
+  }
+
+  // parse response
+  std::istringstream targets(lua_tostring(L, lua_gettop(L)));
+  lua_close(L);
+  string target;
+  for (mds_rank_t m = mds_rank_t(0); 
+       std::getline(targets, target, ' ');
+       m++)
+    my_targets[m] = atof(target.c_str());
+  dout(2) << " done executing, made targets=" << my_targets << dendl; 
+
+  try_rebalance();
+}
+
+
+
+vector<pair<int, string> > MDBalancer::extract_metrics() 
+{
+  // pull out some important metrics and push them to lua
+  vector<pair<int, string> > args;
+  stringstream whoami, authmetaload, files, totalmetaload;
+  whoami        << ((int) mds->get_nodeid()) + 1; // current MDS
+  files         << -1;                            // # of files in a directory (not implemented!)
+  totalmetaload << total_meta_load;               // current metadata load on all subtrees
+  authmetaload  << get_current_authmetaload();    // current metadata load on authority
+  args.push_back(pair<int, string>(LUAARG_STRING, g_conf->log_file));
+  args.push_back(pair<int, string>(LUAARG_NUMBER, whoami.str()));
+  args.push_back(pair<int, string>(LUAARG_NUMBER, authmetaload.str()));
+  args.push_back(pair<int, string>(LUAARG_NUMBER, files.str()));
+  args.push_back(pair<int, string>(LUAARG_NUMBER, totalmetaload.str()));
+
+  // pass per-MDS sextuplets to Lua balancer
+  int cluster_size = mds->get_mds_map()->get_num_in_mds();
+  for (mds_rank_t i=mds_rank_t(0); i < mds_rank_t(cluster_size); i++) {
+    map<mds_rank_t, mds_load_t>::value_type val(i, mds_load_t(ceph_clock_now(g_ceph_context)));
+    std::pair < map<mds_rank_t, mds_load_t>::iterator, bool > r(mds_load.insert(val));
+    mds_load_t &load(r.first->second);
+    dout(10) << "mds " << i << " has load < auth all req q cpu mem >:  "
+             << load.auth.meta_load() << " " << load.all.meta_load() << " "
+             << load.req_rate << " "  << load.queue_len << " " 
+             << load.cpu_load_avg << " " << "-1" << dendl;
+
+    // auth/all metadata loads are slightly stale, since they are updated with get_load. 
+    stringstream authmetaload, allmetaload, req_rate, queue_len, cpu_load_avg, mem;
+    authmetaload << load.auth.meta_load();      
+    allmetaload  << load.all.meta_load();      
+    req_rate     << load.req_rate;
+    queue_len    << load.queue_len;
+    cpu_load_avg << load.cpu_load_avg;
+    mem          << "-1";                      // TODO: add memory pressure
+    args.push_back(pair<int, string>(LUAARG_NUMBER, authmetaload.str()));
+    args.push_back(pair<int, string>(LUAARG_NUMBER, allmetaload.str()));
+    args.push_back(pair<int, string>(LUAARG_NUMBER, req_rate.str()));
+    args.push_back(pair<int, string>(LUAARG_NUMBER, queue_len.str()));
+    args.push_back(pair<int, string>(LUAARG_NUMBER, cpu_load_avg.str()));
+    args.push_back(pair<int, string>(LUAARG_NUMBER, mem.str())); 
+  }
+
+  return args;
+}
+
+
+
+void MDBalancer::push_lua_args(lua_State *L, vector<pair<int, string> >& args) 
+{
+  int index = 1;                                
+  for (vector<pair<int, string> >::iterator arg = args.begin();
+       arg != args.end();
+       arg++) {
+    lua_pushnumber(L, index++);                   // - index of value (e.g., log file)
+    if (arg->first == LUAARG_NUMBER) {            // - value of log file (e.g., the string)
+      dout(10) << "pushing number: " << *arg << dendl;
+      lua_pushnumber(L, atof(arg->second.c_str()));
+    }
+    else if (arg->first == LUAARG_STRING) {
+      dout(10) << "pushing string: " << *arg << dendl;
+      lua_pushstring(L, arg->second.c_str());
+    }
+    lua_settable(L, -3);                          // - pop 2; t[index] = val
+  }
+}
+
+
+
+double MDBalancer::get_current_authmetaload() 
+{
+  double total = 0;
+  list<CDir*> ls;
+  mds->mdcache->get_root()->get_dirfrags(ls);
+  for (list<CDir*>::iterator p = ls.begin();
+       p != ls.end();
+       p++) {
+    dout(10) << "   - for p=" << **p << "total=" << total << dendl;
+    total += (*p)->pop_auth_subtree_nested.meta_load(ceph_clock_now(g_ceph_context), mds->mdcache->decayrate);
+  }
+  return total;
+}
+
+
+
+void MDBalancer::dump_balancer(string script)
+{
+  std::istringstream script_stream(script);
+  string line; 
+  for (int i = 0; std::getline(script_stream, line); i++)
+    dout(10) << i << ". " << line << dendl;
+}
+
+
+
+string MDBalancer::format_policy(string s) 
+{
+  string ret = s;
+  replace(ret.begin(), ret.end(), '_', ' ');
+  size_t pos = 0;
+  while((pos = ret.find("\\n", pos)) != string::npos)
+    ret.replace(pos, 2, " \n");
+  return ret; 
+}
+
+
+
 void MDBalancer::try_rebalance()
 {
+  static int MIN_OFFLOAD = g_conf->mds_bal_minoffload;
   if (!check_targets())
     return;
 
@@ -648,7 +986,9 @@ void MDBalancer::try_rebalance()
     double amount = (*it).second;
 
     if (amount < MIN_OFFLOAD) continue;
-    if (amount / target_load < .2) continue;
+
+    // this threshold was too strict for some Mantle experiments
+    //if (amount / target_load < .2) continue;
 
     dout(5) << "want to send " << amount << " to mds." << target
       //<< " .. " << (*it).second << " * " << load_fac
@@ -726,13 +1066,57 @@ void MDBalancer::try_rebalance()
 
     list<CDir*> exports;
 
-    for (set<CDir*>::iterator pot = candidates.begin();
-	 pot != candidates.end();
-	 ++pot) {
-      if ((*pot)->get_inode()->is_stray()) continue;
-      find_exports(*pot, amount, exports, have, already_exporting);
-      if (have > amount-MIN_OFFLOAD)
-	break;
+    // can I put myself (irrespective if I am a whole directory or dirfrag)
+    multimap<double, CDir*> smaller;
+    for (set<CDir*>::iterator root = candidates.begin();
+	 root != candidates.end();
+	 ++root) {
+      CDir *subdir = *root;
+      string path;
+      subdir->get_inode()->make_path_string_projected(path);
+      if (path.find("~") == 0) continue;
+      if (subdir->get_inode()->is_stray()) continue;
+      if (!subdir->is_auth()) continue;
+      if (already_exporting.count(subdir)) continue;
+      if (subdir->is_frozen()) continue;
+      double rootpop = subdir->pop_auth_subtree.meta_load(rebalance_time, mds->mdcache->decayrate);
+      
+      dout(7) << "consider exporting rootpop=" << rootpop 
+              << " amount-have=" << amount << "-" << have << "=" << amount-have 
+              << " root=" << *subdir << dendl;
+      if (rootpop < amount - have) {
+        dout(7) << "it's small enough, let's kick it off to the fragment selector." << dendl;
+        if (already_exporting.count(subdir)) continue;
+        smaller.insert(pair<double,CDir*>(rootpop, subdir));
+      }
+    }
+    if (g_conf->mds_bal_dir.compare("") && g_conf->mds_bal_howmuch.compare(""))
+      dirfrag_selector(smaller, amount, exports, have, already_exporting); 
+    else {
+      // Use the old balancer policy (send off biggest dirfrags)
+      for (multimap<double,CDir*>::reverse_iterator it = smaller.rbegin();
+           it != smaller.rend();
+           ++it) {
+        exports.push_back((*it).second);
+        have += (*it).first;
+        if (have > amount - MIN_OFFLOAD)
+          break;
+      }
+    }
+    smaller.clear();
+
+    // Ok, drill down       
+    if (have < amount-MIN_OFFLOAD) {
+      for (set<CDir*>::iterator pot = candidates.begin();
+           pot != candidates.end();
+           ++pot) {
+        // if we aren't already exporting 
+        if (already_exporting.count(*pot)) continue;
+        if (find(exports.begin(), exports.end(), *pot) == exports.end())
+          find_exports(*pot, amount, exports, have, already_exporting);
+        if (have > amount-MIN_OFFLOAD)
+          break;
+      }
     }
     //fudge = amount - have;
 
@@ -878,20 +1262,27 @@ void MDBalancer::find_exports(CDir *dir,
 
   // grab some sufficiently big small items
   multimap<double,CDir*>::reverse_iterator it;
-  for (it = smaller.rbegin();
-       it != smaller.rend();
-       ++it) {
-
-    if ((*it).first < midchunk)
-      break;  // try later
-
-    dout(7) << "   taking smaller " << *(*it).second << dendl;
-
-    exports.push_back((*it).second);
-    already_exporting.insert((*it).second);
-    have += (*it).first;
+  if (g_conf->mds_bal_dir.compare("") && g_conf->mds_bal_howmuch.compare("")) {
+    dirfrag_selector(smaller, amount, exports, have, already_exporting); 
     if (have > needmin)
       return;
+    it = smaller.rbegin();
+  } else {
+    for (it = smaller.rbegin();
+         it != smaller.rend();
+         ++it) {
+
+      if ((*it).first < midchunk)
+        break;  // try later
+
+      dout(7) << "   taking smaller " << *(*it).second << dendl;
+
+      exports.push_back((*it).second);
+      already_exporting.insert((*it).second);
+      have += (*it).first;
+      if (have > needmin)
+        return;
+    }
   }
 
   // apprently not enough; drill deeper into the hierarchy (if non-replicated)
@@ -905,16 +1296,18 @@ void MDBalancer::find_exports(CDir *dir,
   }
 
   // ok fine, use smaller bits
-  for (;
-       it != smaller.rend();
-       ++it) {
-    dout(7) << "   taking (much) smaller " << it->first << " " << *(*it).second << dendl;
+  if (!g_conf->mds_bal_dir.compare("") || !g_conf->mds_bal_howmuch.compare("")) {
+    for (;
+         it != smaller.rend();
+         ++it) {
+      dout(7) << "   taking (much) smaller " << it->first << " " << *(*it).second << dendl;
 
-    exports.push_back((*it).second);
-    already_exporting.insert((*it).second);
-    have += (*it).first;
-    if (have > needmin)
-      return;
+      exports.push_back((*it).second);
+      already_exporting.insert((*it).second);
+      have += (*it).first;
+      if (have > needmin)
+        return;
+    }
   }
 
   // ok fine, drill into replicated dirs
@@ -928,6 +1321,72 @@ void MDBalancer::find_exports(CDir *dir,
   }
 
 }
+
+
+
+void MDBalancer::dirfrag_selector(multimap<double, CDir*> smaller,
+                                           double amount,
+                                           list<CDir*>& exports,
+                                           double& have,
+                                           set<CDir*>& already_exporting)
+{
+  multimap<double,CDir*>::reverse_iterator it;
+  if (smaller.size() <= 0) {
+    it = smaller.rbegin();
+    dout(10) << "not enough fragments to select from, size=" << smaller.size() << dendl;
+  } else {
+    // initialize Lua and construct dirfrag selector script
+    lua_State *L = luaL_newstate();
+    luaL_openlibs(L);
+    lua_newtable(L);
+    string script = LUA_IMPORT + g_conf->mds_bal_dir + LUA_INIT_HOWMUCH + 
+                    g_conf->mds_bal_howmuch + LUA_HOWMUCH;
+
+    // push metrics to Lua
+    vector<pair<int, string> > args;
+    vector<CDir *> frags;
+    stringstream target;
+    target << amount;
+    args.push_back(pair<int, string>(LUAARG_STRING, g_conf->log_file));
+    args.push_back(pair<int, string>(LUAARG_NUMBER, target.str()));
+    for (it = smaller.rbegin();
+       it != smaller.rend();
+       ++it) {
+      stringstream dirfrag_load;
+      dirfrag_load << (*it).first;
+      dout(10) << "pushing dirfrag: " << dirfrag_load << dendl;
+      args.push_back(pair<int, string>(LUAARG_NUMBER, dirfrag_load.str()));
+      frags.push_back((*it).second);
+    }
+    push_lua_args(L, args);
+    lua_setglobal(L, "arg");
+
+    // execute script
+    if (luaL_dostring(L, script.c_str()) > 0) {
+      dout(0) << " script failed: " << lua_tostring(L, lua_gettop(L)) << dendl;
+      dump_balancer(script);
+      lua_close(L);
+      return;
+    }
+
+    // parse response
+    std::istringstream selected_dirfrags(lua_tostring(L, lua_gettop(L)));
+    lua_close(L);
+    string dirfrag;
+    while (std::getline(selected_dirfrags, dirfrag, ' ')) {
+      int df_index = atof(dirfrag.c_str()) - 1;
+      if (df_index < 0) continue;
+      double pop = frags[df_index]->pop_auth_subtree.meta_load(rebalance_time, mds->mdcache->decayrate);
+
+      dout(10) << " exporting df=" << df_index << " dirfrag=" << dirfrag << " pop=" << pop << " frag=" << *frags[df_index] << dendl;
+      exports.push_back(frags[df_index]);
+      already_exporting.insert(frags[df_index]);
+      have += pop;
+    }
+  }
+}
+
+
 
 void MDBalancer::hit_inode(utime_t now, CInode *in, int type, int who)
 {
@@ -1117,10 +1576,6 @@ void MDBalancer::add_import(CDir *dir, utime_t now)
     dir->pop_auth_subtree_nested.add(now, mds->mdcache->decayrate, subload);
   }
 }
-
-
-
-
 
 
 void MDBalancer::show_imports(bool external)

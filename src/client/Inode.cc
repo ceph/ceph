@@ -197,6 +197,7 @@ bool Inode::caps_issued_mask(unsigned mask)
     touch_cap(auth_cap);
     return true;
   }
+
   // try any cap
   for (map<mds_rank_t,Cap*>::iterator it = caps.begin();
        it != caps.end();

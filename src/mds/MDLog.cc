@@ -31,7 +31,7 @@
 #include "common/errno.h"
 #include "include/assert.h"
 
-#define dout_subsys ceph_subsys_mds
+#define dout_subsys ceph_subsys_mds_log
 #undef DOUT_COND
 #define DOUT_COND(cct, l) l<=cct->_conf->debug_mds || l <= cct->_conf->debug_mds_log
 #undef dout_prefix

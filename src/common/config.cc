@@ -706,7 +706,7 @@ int md_config_t::set_val(const char *key, const char *val, bool meta, bool safe)
     if (strcmp(opt->name, k.c_str()) == 0) {
       if (safe && internal_safe_to_start_threads) {
 	// If threads have been started...
-	if ((opt->type == OPT_STR) || (opt->type == OPT_ADDR) ||
+        if ((opt->type == OPT_ADDR) ||
 	    (opt->type == OPT_UUID)) {
 	  // And this is NOT an integer valued variable....
 	  if (observers.find(opt->name) == observers.end()) {
