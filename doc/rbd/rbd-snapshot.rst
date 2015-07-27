@@ -59,7 +59,7 @@ To create a snapshot with ``rbd``, specify the ``snap create`` option,  the pool
 name and the image name.  ::
 
 	rbd --pool {pool-name} snap create --snap {snap-name} {image-name}
-	rbd snap create {pool-name}/{image-name}@{snap-name}
+	rbd snap create {snap-spec}
 
 For example:: 
 
@@ -73,7 +73,7 @@ List Snapshots
 To list snapshots of an image, specify the pool name and the image name. ::
 
 	rbd --pool {pool-name} snap ls {image-name} 
-	rbd snap ls {pool-name}/{image-name}
+	rbd snap ls {image-spec}
 
 For example::
 
@@ -88,7 +88,7 @@ To rollback to a snapshot with ``rbd``, specify the ``snap rollback`` option, th
 pool name, the image name and the snap name. ::
 
 	rbd --pool {pool-name} snap rollback --snap {snap-name} {image-name}
-	rbd snap rollback {pool-name}/{image-name}@{snap-name}
+	rbd snap rollback {snap-spec}
 
 For example::
 
@@ -111,7 +111,7 @@ To delete a snapshot with ``rbd``, specify the ``snap rm`` option, the pool
 name, the image name and the snap name. ::
 
 	rbd --pool {pool-name} snap rm --snap {snap-name} {image-name}
-	rbd snap rm {pool-name}/{image-name}@{snap-name}
+	rbd snap rm {snap-spec}
 	
 For example:: 
 
@@ -129,7 +129,7 @@ To delete all snapshots for an image with ``rbd``, specify the ``snap purge``
 option and the image name. ::
 
 	rbd --pool {pool-name} snap purge {image-name}
-	rbd snap purge {pool-name}/{image-name}
+	rbd snap purge {image-spec}
 
 For example:: 
 
@@ -237,7 +237,7 @@ deleted the parent snapshot. To prevent data loss, you **MUST** protect the
 snapshot before you can clone it. ::
 
 	rbd --pool {pool-name} snap protect --image {image-name} --snap {snapshot-name}	
-	rbd snap protect {pool-name}/{image-name}@{snapshot-name}
+	rbd snap protect {snap-spec}
 
 For example::
 
@@ -254,7 +254,7 @@ snapshot; and, the child pool and image name. You must protect the snapshot
 before  you can clone it. ::
 
    rbd --pool {pool-name} --image {parent-image} --snap {snap-name} --dest-pool {pool-name} --dest {child-image}
-   rbd clone {pool-name}/{parent-image}@{snap-name} {pool-name}/{child-image-name}
+   rbd clone {snap-spec} {image-spec}
 	
 For example:: 
 
@@ -272,7 +272,7 @@ you may *NOT* delete snapshots that have references from clones. You must
 flatten each clone of a snapshot, before you can delete the snapshot. :: 
 
 	rbd --pool {pool-name} snap unprotect --image {image-name} --snap {snapshot-name}
-	rbd snap unprotect {pool-name}/{image-name}@{snapshot-name}
+	rbd snap unprotect {snap-spec}
 
 For example::
 
@@ -286,7 +286,7 @@ Listing Children of a Snapshot
 To list the children of a snapshot, execute the following::
 
 	rbd --pool {pool-name} children --image {image-name} --snap {snap-name}
-	rbd children {pool-name}/{image-name}@{snapshot-name}
+	rbd children {snap-spec}
 
 For example::
 
@@ -304,7 +304,7 @@ it takes to flatten a clone increases with the size of the snapshot. To delete
 a snapshot, you must flatten the child images first. ::
 
 	rbd --pool {pool-name} flatten --image {image-name}
-	rbd flatten {pool-name}/{image-name}
+	rbd flatten {image-spec}
 
 For example:: 
 
@@ -314,6 +314,8 @@ For example::
 .. note:: Since a flattened image contains all the information from the snapshot, 
    a flattened image will take up more storage space than a layered clone.
 
+<image-spec> is [pool-name]/image-name and <snap-spec> is [pool-name]/image-name@snap-name
+or you may specify individual pieces of names with -p/--pool <pool-name>, --image <image-name> and/or --snap <snap-name>.
 
 .. _cephx: ../../rados/configuration/auth-config-ref/
 .. _User Management: ../../operations/user-management

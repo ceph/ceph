@@ -95,71 +95,72 @@ void usage()
 "                                              (-l includes snapshots/clones)\n"
 "  (du | disk-usage) [--image <name>] [pool-name]\n"
 "                                              show pool image disk usage stats\n"
-"  info <image-name>                           show information about image size,\n"
+"  info <image-spec>                           show information about image size,\n"
 "                                              striping, etc.\n"
 "  create [--order <bits>] [--image-features <features>] [--image-shared]\n"
-"         --size <M/G/T> <image-name>          create an empty image\n"
+"         --size <M/G/T> <image-spec>          create an empty image\n"
 "  clone [--order <bits>] [--image-features <features>] [--image-shared]\n"
-"        <parentsnap> <clonename>              clone a snapshot into a COW\n"
-"                                              child image\n"
-"  children <snap-name>                        display children of snapshot\n"
-"  flatten <image-name>                        fill clone with parent data\n"
+"         <snap-spec> <image-spec>             clone a snapshot into a COW child image\n"
+"  children <snap-spec>                        display children of snapshot\n"
+"  flatten <image-spec>                        fill clone with parent data\n"
 "                                              (make it independent)\n"
-"  resize --size <M/G/T> <image-name>          resize (expand or contract) image\n"
-"  rm <image-name>                             delete an image\n"
-"  export <image-name> <path>                  export image to file\n"
+"  resize --size <M/G/T> <image-spec>          resize (expand or contract) image\n"
+"  rm <image-spec>                             delete an image\n"
+"  export <image-spec> <path>                  export image to file\n"
 "                                              \"-\" for stdout\n"
 "  import [--image-features <features>] [--image-shared]\n"
-"         <path> <image-name>                  import image from file (dest\n"
+"         <path> <image-spec>                  import image from file (dest\n"
 "                                              defaults as the filename part\n"
 "                                              of file). \"-\" for stdin\n"
-"  diff [--from-snap <snap-name>] [--object-extents] <image-name>\n"
+"  diff [--from-snap <snap-name>] [--object-extents] <image-spec>\n"
 "                                              print extents that differ since\n"
 "                                              a previous snap, or image creation\n"
-"  export-diff [--from-snap <snap-name>] [--object-extents] <image-name> <path>\n"
+"  export-diff [--from-snap <snap-name>] [--object-extents] <image-spec> <path>\n"
 "                                              export an incremental diff to\n"
 "                                              path, or \"-\" for stdout\n"
 "  merge-diff <diff1> <diff2> <path>           merge <diff1> and <diff2> into\n"
 "                                              <path>, <diff1> could be \"-\"\n"
 "                                              for stdin, and <path> could be \"-\"\n"
 "                                              for stdout\n"
-"  import-diff <path> <image-name>             import an incremental diff from\n"
+"  import-diff <path> <image-spec>             import an incremental diff from\n"
 "                                              path or \"-\" for stdin\n"
 "  (cp | copy) <src> <dest>                    copy src image to dest\n"
 "  (mv | rename) <src> <dest>                  rename src image to dest\n"
-"  image-meta list <image-name>                image metadata list keys with values\n"
-"  image-meta get <image-name> <key>           image metadata get the value associated with the key\n"
-"  image-meta set <image-name> <key> <value>   image metadata set key with value\n"
-"  image-meta remove <image-name> <key>        image metadata remove the key and value associated\n"
-"  object-map rebuild <image-name>             rebuild an invalid object map\n"
-"  snap ls <image-name>                        dump list of image snapshots\n"
-"  snap create <snap-name>                     create a snapshot\n"
-"  snap rollback <snap-name>                   rollback image to snapshot\n"
-"  snap rm <snap-name>                         deletes a snapshot\n"
-"  snap purge <image-name>                     deletes all snapshots\n"
-"  snap protect <snap-name>                    prevent a snapshot from being deleted\n"
-"  snap unprotect <snap-name>                  allow a snapshot to be deleted\n"
-"  watch <image-name>                          watch events on image\n"
-"  status <image-name>                         show the status of this image\n"
-"  map <image-name>                            map image to a block device\n"
+"  image-meta list <image-spec>                image metadata list keys with values\n"
+"  image-meta get <image-spec> <key>           image metadata get the value associated with the key\n"
+"  image-meta set <image-spec> <key> <value>   image metadata set key with value\n"
+"  image-meta remove <image-spec> <key>        image metadata remove the key and value associated\n"
+"  object-map rebuild <image-spec>             rebuild an invalid object map\n"
+"  snap ls <image-spec>                        dump list of image snapshots\n"
+"  snap create <snap-spec>                     create a snapshot\n"
+"  snap rollback <snap-spec>                   rollback image to snapshot\n"
+"  snap rm <snap-spec>                          deletes a snapshot\n"
+"  snap purge <image-spec>                     deletes all snapshots\n"
+"  snap protect <snap-spec>                    prevent a snapshot from being deleted\n"
+"  snap unprotect <snap-spec>                  allow a snapshot to be deleted\n"
+"  watch <image-spec>                          watch events on image\n"
+"  status <image-spec>                         show the status of this image\n"
+"  map <image-spec>                            map image to a block device\n"
 "                                              using the kernel\n"
-"  unmap <image-name> | <device>               unmap a rbd device that was\n"
+"  unmap <image-spec> | <device>               unmap a rbd device that was\n"
 "                                              mapped by the kernel\n"
 "  showmapped                                  show the rbd images mapped\n"
 "                                              by the kernel\n"
-"  feature disable <image-name> <feature>      disable the specified image feature\n"
-"  feature enable <image-name> <feature>       enable the specified image feature\n"
-"  lock list <image-name>                      show locks held on an image\n"
-"  lock add <image-name> <id> [--shared <tag>] take a lock called id on an image\n"
-"  lock remove <image-name> <id> <locker>      release a lock on an image\n"
-"  bench-write <image-name>                    simple write benchmark\n"
+"  feature disable <image-spec> <feature>      disable the specified image feature\n"
+"  feature enable <image-spec> <feature>       enable the specified image feature\n"
+"  lock list <image-spec>                      show locks held on an image\n"
+"  lock add <image-spec> <id> [--shared <tag>] take a lock called id on an image\n"
+"  lock remove <image-spec> <id> <locker>      release a lock on an image\n"
+"  bench-write <image-spec>                    simple write benchmark\n"
 "                 --io-size <bytes>              write size\n"
 "                 --io-threads <num>             ios in flight\n"
 "                 --io-total <bytes>             total bytes to write\n"
 "                 --io-pattern <seq|rand>        write pattern\n"
 "\n"
-"<image-name>, <snap-name> are [pool/]name[@snap], or you may specify\n"
-"individual pieces of names with -p/--pool, --image, and/or --snap.\n"
+"<image-spec> is [pool-name]/image-name,\n"
+"<snap-spec> is [pool-name]/image-name@snap-name,\n"
+"or you may specify individual pieces of names with -p/--pool <pool-name>,\n"
+"--image <image-name> and/or --snap <snap-name>.\n"
 "\n"
 "Other input options:\n"
 "  -p, --pool <pool>                  source pool name\n"
@@ -3294,11 +3295,6 @@ if (!set_conf_param(v, p1, p2, p3)) { \
     }
   }
 
-  if (opt_cmd == OPT_EXPORT && !imgname) {
-    cerr << "rbd: image name was not specified" << std::endl;
-    return EXIT_FAILURE;
-  }
-
   if ((opt_cmd == OPT_IMPORT || opt_cmd == OPT_IMPORT_DIFF) && !path) {
     cerr << "rbd: path was not specified" << std::endl;
     return EXIT_FAILURE;
@@ -3676,10 +3672,6 @@ if (!set_conf_param(v, p1, p2, p3)) { \
     break;
 
   case OPT_SNAP_CREATE:
-    if (!imgname || !snapname) {
-      cerr << "rbd: snap create requires image and snapname" << std::endl;
-      return EINVAL;
-    }
     r = do_add_snap(image, snapname);
     if (r < 0) {
       cerr << "rbd: failed to create snapshot: " << cpp_strerror(-r)
@@ -3689,10 +3681,6 @@ if (!set_conf_param(v, p1, p2, p3)) { \
     break;
 
   case OPT_SNAP_ROLLBACK:
-    if (!imgname) {
-      cerr << "rbd: snap rollback requires image name" << std::endl;
-      return EINVAL;
-    }
     r = do_rollback_snap(image, snapname);
     if (r < 0) {
       cerr << "rbd: rollback failed: " << cpp_strerror(-r) << std::endl;
@@ -3701,10 +3689,6 @@ if (!set_conf_param(v, p1, p2, p3)) { \
     break;
 
   case OPT_SNAP_REMOVE:
-    if (!imgname) {
-      cerr << "rbd: snap remove requires image name" << std::endl;
-      return EINVAL;
-    }
     r = do_remove_snap(image, snapname);
     if (r < 0) {
       if (r == -EBUSY) {
@@ -3731,10 +3715,6 @@ if (!set_conf_param(v, p1, p2, p3)) { \
     break;
 
   case OPT_SNAP_PROTECT:
-    if (!imgname) {
-      cerr << "rbd: snap protect requires image name" << std::endl;
-      return EINVAL;
-    }
     r = do_protect_snap(image, snapname);
     if (r < 0) {
       cerr << "rbd: protecting snap failed: " << cpp_strerror(-r) << std::endl;
@@ -3743,10 +3723,6 @@ if (!set_conf_param(v, p1, p2, p3)) { \
     break;
 
   case OPT_SNAP_UNPROTECT:
-    if (!imgname) {
-      cerr << "rbd: snap unprotect requires image name" << std::endl;
-      return EINVAL;
-    }
     r = do_unprotect_snap(image, snapname);
     if (r < 0) {
       cerr << "rbd: unprotecting snap failed: " << cpp_strerror(-r)
