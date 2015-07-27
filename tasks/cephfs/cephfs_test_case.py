@@ -15,6 +15,14 @@ from teuthology.orchestra.run import CommandFailedError
 log = logging.getLogger(__name__)
 
 
+def long_running(f):
+    """
+    Decorator that adds an "is_long_running" attribute to the wrapped function
+    """
+    f.is_long_running = True
+    return f
+
+
 class CephFSTestCase(unittest.TestCase):
     """
     Test case for Ceph FS, requires caller to populate Filesystem and Mounts,
