@@ -32,9 +32,8 @@ eval $GRP_AUTH
 
 
 echo "*** Creating directories for client.admin"
-
 sudo mkdir -m 777 mnt.admin/foo1
-sudo mkdir -m 700 mnt.admin/foo2
+sudo mkdir -m 755 mnt.admin/foo2
 sudo mkdir -m 755 mnt.admin/foo3
 sudo mkdir -m 755 mnt.admin/foo4
 sudo mkdir -m 775 mnt.admin/foo5
@@ -44,9 +43,9 @@ ls -lsv mnt.admin
 
 echo "*** Granting ownership of directories to other users"
 sudo chgrp $GID mnt.admin/foo1
-sudo chown $USER mnt.admin/foo1
+sudo chown 0 mnt.admin/foo1
 sudo chgrp $GID mnt.admin/foo2
-sudo chown $USER mnt.admin/foo2
+sudo chown 0 mnt.admin/foo2
 
 sudo chgrp $GID mnt.admin/foo3
 sudo chown $USER mnt.admin/foo3
@@ -64,7 +63,6 @@ expect_false()
 	set -x
 	if "$@"; then return 1; else return 0; fi
 }
-
 
 mkdir mnt.foo/foo1/asdf
 expect_false mkdir mnt.foo/foo2/asdf
