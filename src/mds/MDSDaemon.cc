@@ -815,15 +815,16 @@ void MDSDaemon::handle_mds_map(MMDSMap *m)
     return;
   }
 
+  entity_addr_t addr;
+
   // keep old map, for a moment
   MDSMap *oldmap = mdsmap;
-  const MDSMap::DaemonState new_state = mdsmap->get_state_gid(mds_gid_t(monc->get_global_id()));
-  const int incarnation = mdsmap->get_inc_gid(mds_gid_t(monc->get_global_id()));
-  entity_addr_t addr;
 
   // decode and process
   mdsmap = new MDSMap;
   mdsmap->decode(m->get_encoded());
+  const MDSMap::DaemonState new_state = mdsmap->get_state_gid(mds_gid_t(monc->get_global_id()));
+  const int incarnation = mdsmap->get_inc_gid(mds_gid_t(monc->get_global_id()));
 
   monc->sub_got("mdsmap", mdsmap->get_epoch());
 
