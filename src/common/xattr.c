@@ -98,6 +98,9 @@ void *value, size_t size)
 	error = getxattr(path, name, value, size);
 #elif defined(DARWIN)
 	error = getxattr(path, name, value, size, 0 /* position  */, 0);
+	/* ENOATTR and ENODATA have different values */
+	if (error < 0 && errno == ENOATTR)
+		errno = ENODATA;
 #endif
 
 	return (error);
@@ -130,6 +133,9 @@ ceph_os_fgetxattr(int fd, const char *name, void *value,
 	error = fgetxattr(fd, name, value, size);
 #elif defined(DARWIN)
 	error = fgetxattr(fd, name, value, size, 0, 0 /* no options */);
+	/* ENOATTR and ENODATA have different values */
+	if (error < 0 && errno == ENOATTR)
+		errno = ENODATA;
 #endif
 
 	return (error);
@@ -244,6 +250,9 @@ ceph_os_removexattr(const char *path, const char *name)
 	error = removexattr(path, name);
 #elif defined(DARWIN)
 	error = removexattr(path, name, 0);
+	/* ENOATTR and ENODATA have different values */
+	if (error < 0 && errno == ENOATTR)
+		errno = ENODATA;
 #endif
 
 	return (error);
@@ -260,6 +269,9 @@ ceph_os_fremovexattr(int fd, const char *name)
 	error = fremovexattr(fd, name);
 #elif defined(DARWIN)
 	error = fremovexattr(fd, name, 0);
+	/* ENOATTR and ENODATA have different values */
+	if (error < 0 && errno == ENOATTR)
+		errno = ENODATA;
 #endif
 
 	return (error);
