@@ -20,17 +20,17 @@ Use ``rbd`` to map an image name to a kernel module. You must specify the
 image name, the pool name, and the user name. ``rbd`` will load RBD kernel
 module on your behalf if it's not already loaded. ::
 
-  sudo rbd map {image-name} --pool {pool-name} --id {user-name}
+  sudo rbd map {pool-name}/{image-name} --id {user-name}
 
 For example:: 
 
-  sudo rbd map --pool rbd myimage --id admin
+  sudo rbd map rbd/myimage --id admin
  
 If you use `cephx`_ authentication, you must also specify a secret.  It may come
 from a keyring or a file containing the secret. ::
 
-  sudo rbd map --pool rbd myimage --id admin --keyring /path/to/keyring
-  sudo rbd map --pool rbd myimage --id admin --keyfile /path/to/file
+  sudo rbd map rbd/myimage --id admin --keyring /path/to/keyring
+  sudo rbd map rbd/myimage --id admin --keyfile /path/to/file
 
 
 Show Mapped Block Devices

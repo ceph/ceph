@@ -601,7 +601,7 @@ Ceph supports the following usage for user name and secret:
               preferred approach, because you can switch user names without 
               switching the keyring path. For example:: 
 
-               sudo rbd map foo --pool rbd myimage --id client.foo --keyring /path/to/keyring
+               sudo rbd map --id foo --keyring /path/to/keyring mypool/myimage
 
 
 .. _pools: ../pools
