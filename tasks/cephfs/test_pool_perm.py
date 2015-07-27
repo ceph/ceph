@@ -26,8 +26,10 @@ class TestPoolPerm(CephFSTestCase):
                 raise RuntimeError("client does not check permission of data pool")
             """)
 
+        client_name = "client.{0}".format(self.mount_a.client_id)
+
         # set data pool read only
-        self.fs.mon_manager.raw_cluster_cmd_result('auth', 'caps', 'client.0', 'mon', 'allow r', 'osd',
+        self.fs.mon_manager.raw_cluster_cmd_result('auth', 'caps', client_name, 'mon', 'allow r', 'osd',
                                                    'allow r pool=data')
 
         self.mount_a.umount_wait()
@@ -38,7 +40,7 @@ class TestPoolPerm(CephFSTestCase):
         self.mount_a.run_python(remote_script.format(path=file_path, check_read=str(False)))
 
         # set data pool write only
-        self.fs.mon_manager.raw_cluster_cmd_result('auth', 'caps', 'client.0', 'mon', 'allow r', 'osd',
+        self.fs.mon_manager.raw_cluster_cmd_result('auth', 'caps', client_name, 'mon', 'allow r', 'osd',
                                                    'allow w pool=data')
 
         self.mount_a.umount_wait()
