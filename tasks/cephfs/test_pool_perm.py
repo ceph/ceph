@@ -49,3 +49,9 @@ class TestPoolPerm(CephFSTestCase):
 
         # read should fail
         self.mount_a.run_python(remote_script.format(path=file_path, check_read=str(True)))
+
+    def tearDown(self):
+        self.fs.mon_manager.raw_cluster_cmd_result('auth', 'caps', "client.{0}".format(self.mount_a.client_id),
+                                                   'mon', 'allow r', 'osd', 'allow rw pool=data')
+
+        super(CephFSTestCase, self).tearDown()
