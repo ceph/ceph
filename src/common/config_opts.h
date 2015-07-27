@@ -81,11 +81,6 @@ OPTION(xio_transport_type, OPT_STR, "rdma") // xio transport type: {rdma or tcp}
 OPTION(async_compressor_enabled, OPT_BOOL, false)
 OPTION(async_compressor_type, OPT_STR, "snappy")
 OPTION(async_compressor_threads, OPT_INT, 2)
-OPTION(async_compressor_set_affinity, OPT_BOOL, true)
-// example: ms_async_affinity_cores = 0,1
-// The number of coreset is expected to equal to ms_async_op_threads, otherwise
-// extra op threads will loop ms_async_affinity_cores again.
-OPTION(async_compressor_affinity_cores, OPT_STR, "")
 OPTION(async_compressor_thread_timeout, OPT_INT, 5)
 OPTION(async_compressor_thread_suicide_timeout, OPT_INT, 30)
 
