@@ -30,7 +30,7 @@ class TestPoolPerm(CephFSTestCase):
 
         # set data pool read only
         self.fs.mon_manager.raw_cluster_cmd_result('auth', 'caps', client_name, 'mon', 'allow r', 'osd',
-                                                   'allow r pool=data')
+                                                   'allow r pool={0}'.format(self.fs.get_data_pool_name()))
 
         self.mount_a.umount_wait()
         self.mount_a.mount()
@@ -41,7 +41,7 @@ class TestPoolPerm(CephFSTestCase):
 
         # set data pool write only
         self.fs.mon_manager.raw_cluster_cmd_result('auth', 'caps', client_name, 'mon', 'allow r', 'osd',
-                                                   'allow w pool=data')
+                                                   'allow w pool={0}'.format(self.fs.get_data_pool_name()))
 
         self.mount_a.umount_wait()
         self.mount_a.mount()
@@ -52,6 +52,7 @@ class TestPoolPerm(CephFSTestCase):
 
     def tearDown(self):
         self.fs.mon_manager.raw_cluster_cmd_result('auth', 'caps', "client.{0}".format(self.mount_a.client_id),
-                                                   'mon', 'allow r', 'osd', 'allow rw pool=data')
+                                                   'mon', 'allow r', 'osd',
+                                                   'allow rw pool={0}'.format(self.fs.get_data_pool_name()))
 
         super(CephFSTestCase, self).tearDown()
