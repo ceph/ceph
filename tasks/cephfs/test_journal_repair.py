@@ -10,8 +10,7 @@ import time
 
 from teuthology.orchestra.run import CommandFailedError
 from tasks.cephfs.filesystem import ObjectNotFound, ROOT_INO
-from tasks.cephfs.cephfs_test_case import CephFSTestCase
-
+from tasks.cephfs.cephfs_test_case import CephFSTestCase, long_running
 
 log = logging.getLogger(__name__)
 
@@ -135,6 +134,7 @@ class TestJournalRepair(CephFSTestCase):
         new_ino = self.mount_a.path_to_ino("afterwards")
         self.assertNotIn(new_ino, [rootfile_ino, subdir_ino, subdirfile_ino])
 
+    @long_running # 308s
     def test_reset(self):
         """
         That after forcibly modifying the backing store, we can get back into

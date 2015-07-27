@@ -3,7 +3,7 @@ import logging
 from textwrap import dedent
 import time
 import gevent
-from tasks.cephfs.cephfs_test_case import CephFSTestCase
+from tasks.cephfs.cephfs_test_case import CephFSTestCase, long_running
 
 log = logging.getLogger(__name__)
 
@@ -17,9 +17,11 @@ class TestStrays(CephFSTestCase):
     # Range of different file sizes used in throttle test's workload
     throttle_workload_size_range = 16
 
+    @long_running
     def test_ops_throttle(self):
         self._test_throttling(self.OPS_THROTTLE)
 
+    @long_running
     def test_files_throttle(self):
         self._test_throttling(self.FILES_THROTTLE)
 
