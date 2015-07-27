@@ -23,6 +23,7 @@
 #include <fcntl.h>
 #include <sys/utsname.h>
 #include <sys/uio.h>
+#include <sys/xattr.h>
 
 #if defined(__linux__)
 #include <linux/falloc.h>
@@ -8962,8 +8963,13 @@ int Client::_setxattr(Inode *in, const char *name, const void *value,
   if (vxattr && vxattr->readonly)
     return -EOPNOTSUPP;
 
+  int xattr_flags = 0;
   if (!value)
-    flags |= CEPH_XATTR_REMOVE;
+    xattr_flags |= CEPH_XATTR_REMOVE;
+  if (flags & XATTR_CREATE)
+    xattr_flags |= CEPH_XATTR_CREATE;
+  if (flags & XATTR_REPLACE)
+    xattr_flags |= CEPH_XATTR_REPLACE;
 
   MetaRequest *req = new MetaRequest(CEPH_MDS_OP_SETXATTR);
   filepath path;
@@ -8971,7 +8977,7 @@ int Client::_setxattr(Inode *in, const char *name, const void *value,
   req->set_filepath(path);
   req->set_string2(name);
   req->set_inode(in);
-  req->head.args.setxattr.flags = flags;
+  req->head.args.setxattr.flags = xattr_flags;
 
   bufferlist bl;
   bl.append((const char*)value, size);
