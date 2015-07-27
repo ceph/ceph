@@ -91,82 +91,92 @@ void usage()
   cout <<
 "usage: rbd [-n <auth user>] [OPTIONS] <cmd> ...\n"
 "where 'pool' is a rados pool name (default is 'rbd') and 'cmd' is one of:\n"
-"  (ls | list) [-l | --long ] [pool-name] list rbd images\n"
+"  (ls | list) [-l | --long ] [pool-name]      list rbd images\n"
 "                                              (-l includes snapshots/clones)\n"
-"  (du | disk-usage) [--image <name>] [pool-name]\n"
-"                                              show pool image disk usage stats\n"
-"  info <image-name>                           show information about image size,\n"
+"  (du | disk-usage) [<image-spec> | <snap-spec>]\n"
+"                                              show disk usage stats for pool,\n"
+"                                              image or snapshot\n"
+"  info <image-spec> | <snap-spec>             show information about image size,\n"
 "                                              striping, etc.\n"
 "  create [--order <bits>] [--image-features <features>] [--image-shared]\n"
-"         --size <M/G/T> <image-name>          create an empty image\n"
+"         --size <M/G/T> <image-spec>          create an empty image\n"
 "  clone [--order <bits>] [--image-features <features>] [--image-shared]\n"
-"        <parentsnap> <clonename>              clone a snapshot into a COW\n"
+"         <parent-snap-spec> <child-image-spec>\n"
+"                                              clone a snapshot into a COW\n"
 "                                              child image\n"
-"  children <snap-name>                        display children of snapshot\n"
-"  flatten <image-name>                        fill clone with parent data\n"
+"  children <snap-spec>                        display children of snapshot\n"
+"  flatten <image-spec>                        fill clone with parent data\n"
 "                                              (make it independent)\n"
-"  resize --size <M/G/T> <image-name>          resize (expand or contract) image\n"
-"  rm <image-name>                             delete an image\n"
-"  export <image-name> <path>                  export image to file\n"
+"  resize --size <M/G/T> <image-spec>          resize (expand or contract) image\n"
+"  rm <image-spec>                             delete an image\n"
+"  export (<image-spec> | <snap-spec>) [<path>]\n"
+"                                              export image to file\n"
 "                                              \"-\" for stdout\n"
 "  import [--image-features <features>] [--image-shared]\n"
-"         <path> <image-name>                  import image from file (dest\n"
-"                                              defaults as the filename part\n"
-"                                              of file). \"-\" for stdin\n"
-"  diff [--from-snap <snap-name>] [--object-extents] <image-name>\n"
-"                                              print extents that differ since\n"
+"         <path> [<image-spec>]                import image from file\n"
+"                                              \"-\" for stdin\n"
+"                                              \"rbd/$(basename <path>)\" is\n"
+"                                              assumed for <image-spec> if\n"
+"                                              omitted\n"
+"  diff [--from-snap <snap-name>] [--whole-object]\n"
+"         <image-spec> | <snap-spec>           print extents that differ since\n"
 "                                              a previous snap, or image creation\n"
-"  export-diff [--from-snap <snap-name>] [--object-extents] <image-name> <path>\n"
-"                                              export an incremental diff to\n"
+"  export-diff [--from-snap <snap-name>] [--whole-object]\n"
+"         (<image-spec> | <snap-spec>) <path>  export an incremental diff to\n"
 "                                              path, or \"-\" for stdout\n"
 "  merge-diff <diff1> <diff2> <path>           merge <diff1> and <diff2> into\n"
 "                                              <path>, <diff1> could be \"-\"\n"
 "                                              for stdin, and <path> could be \"-\"\n"
 "                                              for stdout\n"
-"  import-diff <path> <image-name>             import an incremental diff from\n"
+"  import-diff <path> <image-spec>             import an incremental diff from\n"
 "                                              path or \"-\" for stdin\n"
-"  (cp | copy) <src> <dest>                    copy src image to dest\n"
-"  (mv | rename) <src> <dest>                  rename src image to dest\n"
-"  image-meta list <image-name>                image metadata list keys with values\n"
-"  image-meta get <image-name> <key>           image metadata get the value associated with the key\n"
-"  image-meta set <image-name> <key> <value>   image metadata set key with value\n"
-"  image-meta remove <image-name> <key>        image metadata remove the key and value associated\n"
-"  object-map rebuild <image-name>             rebuild an invalid object map\n"
-"  snap ls <image-name>                        dump list of image snapshots\n"
-"  snap create <snap-name>                     create a snapshot\n"
-"  snap rollback <snap-name>                   rollback image to snapshot\n"
-"  snap rm <snap-name>                         deletes a snapshot\n"
-"  snap purge <image-name>                     deletes all snapshots\n"
-"  snap protect <snap-name>                    prevent a snapshot from being deleted\n"
-"  snap unprotect <snap-name>                  allow a snapshot to be deleted\n"
-"  watch <image-name>                          watch events on image\n"
-"  status <image-name>                         show the status of this image\n"
-"  map <image-name>                            map image to a block device\n"
+"  (cp | copy) (<src-image-spec> | <src-snap-spec>) <dest-image-spec>\n"
+"                                              copy src image to dest\n"
+"  (mv | rename) <src-image-spec> <dest-image-spec>\n"
+"                                              rename src image to dest\n"
+"  image-meta list <image-spec>                image metadata list keys with values\n"
+"  image-meta get <image-spec> <key>           image metadata get the value associated with the key\n"
+"  image-meta set <image-spec> <key> <value>   image metadata set key with value\n"
+"  image-meta remove <image-spec> <key>        image metadata remove the key and value associated\n"
+"  object-map rebuild <image-spec> | <snap-spec>\n"
+"                                              rebuild an invalid object map\n"
+"  snap ls <image-spec>                        dump list of image snapshots\n"
+"  snap create <snap-spec>                     create a snapshot\n"
+"  snap rollback <snap-spec>                   rollback image to snapshot\n"
+"  snap rm <snap-spec>                         deletes a snapshot\n"
+"  snap purge <image-spec>                     deletes all snapshots\n"
+"  snap protect <snap-spec>                    prevent a snapshot from being deleted\n"
+"  snap unprotect <snap-spec>                  allow a snapshot to be deleted\n"
+"  watch <image-spec>                          watch events on image\n"
+"  status <image-spec>                         show the status of this image\n"
+"  map <image-spec> | <snap-spec>              map image to a block device\n"
 "                                              using the kernel\n"
-"  unmap <image-name> | <device>               unmap a rbd device that was\n"
+"  unmap <image-spec> | <snap-spec> | <device> unmap a rbd device that was\n"
 "                                              mapped by the kernel\n"
 "  showmapped                                  show the rbd images mapped\n"
 "                                              by the kernel\n"
-"  feature disable <image-name> <feature>      disable the specified image feature\n"
-"  feature enable <image-name> <feature>       enable the specified image feature\n"
-"  lock list <image-name>                      show locks held on an image\n"
-"  lock add <image-name> <id> [--shared <tag>] take a lock called id on an image\n"
-"  lock remove <image-name> <id> <locker>      release a lock on an image\n"
-"  bench-write <image-name>                    simple write benchmark\n"
+"  feature disable <image-spec> <feature>      disable the specified image feature\n"
+"  feature enable <image-spec> <feature>       enable the specified image feature\n"
+"  lock list <image-spec>                      show locks held on an image\n"
+"  lock add <image-spec> <id> [--shared <tag>] take a lock called id on an image\n"
+"  lock remove <image-spec> <id> <locker>      release a lock on an image\n"
+"  bench-write <image-spec>                    simple write benchmark\n"
 "                 --io-size <bytes>              write size\n"
 "                 --io-threads <num>             ios in flight\n"
 "                 --io-total <bytes>             total bytes to write\n"
 "                 --io-pattern <seq|rand>        write pattern\n"
 "\n"
-"<image-name>, <snap-name> are [pool/]name[@snap], or you may specify\n"
-"individual pieces of names with -p/--pool, --image, and/or --snap.\n"
+"<image-spec> is [<pool-name>]/<image-name>,\n"
+"<snap-spec> is [<pool-name>]/<image-name>@<snap-name>,\n"
+"or you may specify individual pieces of names with -p/--pool <pool-name>,\n"
+"--image <image-name> and/or --snap <snap-name>.\n"
 "\n"
 "Other input options:\n"
-"  -p, --pool <pool>                  source pool name\n"
+"  -p, --pool <pool-name>             source pool name\n"
+"  --dest-pool <pool-name>            destination pool name\n"
 "  --image <image-name>               image name\n"
-"  --dest <image-name>                destination [pool and] image name\n"
+"  --dest <image-name>                destination image name\n"
 "  --snap <snap-name>                 snapshot name\n"
-"  --dest-pool <name>                 destination pool name\n"
 "  --path <path-name>                 path name for import/export\n"
 "  -s, --size <size in M/G/T>         size of image for create and resize\n"
 "  --order <bits>                     the object size in bits; object size will be\n"
@@ -1251,7 +1261,7 @@ static int export_diff_cb(uint64_t ofs, size_t _len, int exists, void *arg)
 }
 
 static int do_export_diff(librbd::Image& image, const char *fromsnapname,
-			  const char *endsnapname, bool object_extents,
+			  const char *endsnapname, bool whole_object,
 			  const char *path)
 {
   int r;
@@ -1302,7 +1312,7 @@ static int do_export_diff(librbd::Image& image, const char *fromsnapname,
   }
 
   ExportContext ec(&image, fd, info.size);
-  r = image.diff_iterate2(fromsnapname, 0, info.size, true, object_extents,
+  r = image.diff_iterate2(fromsnapname, 0, info.size, true, whole_object,
                           export_diff_cb, (void *)&ec);
   if (r < 0)
     goto out;
@@ -1348,7 +1358,7 @@ static int diff_cb(uint64_t ofs, size_t len, int exists, void *arg)
 }
 
 static int do_diff(librbd::Image& image, const char *fromsnapname,
-                   bool object_extents, Formatter *f)
+                   bool whole_object, Formatter *f)
 {
   int r;
   librbd::image_info_t info;
@@ -1368,7 +1378,7 @@ static int do_diff(librbd::Image& image, const char *fromsnapname,
     om.t->define_column("Type", TextTable::LEFT, TextTable::LEFT);
   }
 
-  r = image.diff_iterate2(fromsnapname, 0, info.size, true, object_extents,
+  r = image.diff_iterate2(fromsnapname, 0, info.size, true, whole_object,
                           diff_cb, &om);
   if (f) {
     f->close_section();
@@ -2974,7 +2984,7 @@ int main(int argc, const char **argv)
   long long stripe_unit = 0, stripe_count = 0;
   long long bench_io_size = 4096, bench_io_threads = 16, bench_bytes = 1 << 30;
   string bench_pattern = "seq";
-  bool diff_object_extents = false;
+  bool diff_whole_object = false;
 
   std::string val, parse_err;
   std::ostringstream err;
@@ -3104,8 +3114,8 @@ int main(int argc, const char **argv)
 	output_format = strdup(val.c_str());
 	output_format_specified = true;
       }
-    } else if (ceph_argparse_flag(args, i, "--object-extents", (char *)NULL)) {
-      diff_object_extents = true;
+    } else if (ceph_argparse_flag(args, i, "--whole-object", (char *)NULL)) {
+      diff_whole_object = true;
     } else if (ceph_argparse_binary_flag(args, i, &pretty_format, NULL, "--pretty-format", (char*)NULL)) {
     } else {
       ++i;
@@ -3173,7 +3183,6 @@ if (!set_conf_param(v, p1, p2, p3)) { \
     const char *v = *i;
     switch (opt_cmd) {
       case OPT_LIST:
-      case OPT_DISK_USAGE:
 	SET_CONF_PARAM(v, &poolname, NULL, NULL);
 	break;
       case OPT_INFO:
@@ -3197,6 +3206,7 @@ if (!set_conf_param(v, p1, p2, p3)) { \
       case OPT_METADATA_LIST:
       case OPT_DIFF:
       case OPT_OBJECT_MAP_REBUILD:
+      case OPT_DISK_USAGE:
 	SET_CONF_PARAM(v, &imgname, NULL, NULL);
 	break;
       case OPT_EXPORT:
@@ -3225,7 +3235,7 @@ if (!set_conf_param(v, p1, p2, p3)) { \
 	SET_CONF_PARAM(v, &imgname, &lock_cookie, NULL);
 	break;
       case OPT_LOCK_REMOVE:
-	SET_CONF_PARAM(v, &imgname, &lock_client, &lock_cookie);
+	SET_CONF_PARAM(v, &imgname, &lock_cookie, &lock_client);
 	break;
       case OPT_METADATA_SET:
 	SET_CONF_PARAM(v, &imgname, &key, &value);
@@ -3267,6 +3277,12 @@ if (!set_conf_param(v, p1, p2, p3)) { \
     return EXIT_FAILURE;
   }
 
+  if (opt_cmd != OPT_LOCK_ADD && lock_tag) {
+    cerr << "rbd: only the lock add command uses the --shared option"
+	 << std::endl;
+    return EXIT_FAILURE;
+  }
+
   if (pretty_format && !strcmp(output_format, "plain")) {
     cerr << "rbd: --pretty-format only works when --format is json or xml"
 	 << std::endl;
@@ -3294,11 +3310,6 @@ if (!set_conf_param(v, p1, p2, p3)) { \
     }
   }
 
-  if (opt_cmd == OPT_EXPORT && !imgname) {
-    cerr << "rbd: image name was not specified" << std::endl;
-    return EXIT_FAILURE;
-  }
-
   if ((opt_cmd == OPT_IMPORT || opt_cmd == OPT_IMPORT_DIFF) && !path) {
     cerr << "rbd: path was not specified" << std::endl;
     return EXIT_FAILURE;
@@ -3311,21 +3322,8 @@ if (!set_conf_param(v, p1, p2, p3)) { \
     imgname = NULL;
   }
 
-  if (opt_cmd != OPT_LOCK_ADD && lock_tag) {
-    cerr << "rbd: only the lock add command uses the --shared option"
-	 << std::endl;
-    return EXIT_FAILURE;
-  }
-
-  if ((opt_cmd == OPT_LOCK_ADD || opt_cmd == OPT_LOCK_REMOVE) &&
-      !lock_cookie) {
-    cerr << "rbd: lock id was not specified" << std::endl;
-    return EXIT_FAILURE;
-  }
-
   if (opt_cmd != OPT_LIST &&
       opt_cmd != OPT_IMPORT &&
-      opt_cmd != OPT_IMPORT_DIFF &&
       opt_cmd != OPT_UNMAP && /* needs imgname but handled below */
       opt_cmd != OPT_SHOWMAPPED &&
       opt_cmd != OPT_MERGE_DIFF &&
@@ -3347,7 +3345,6 @@ if (!set_conf_param(v, p1, p2, p3)) { \
       return EXIT_FAILURE;
     }
   }
-
   if (opt_cmd == OPT_UNMAP) {
     if (!imgname) {
       cerr << "rbd: unmap requires either image name or device path" << std::endl;
@@ -3357,24 +3354,6 @@ if (!set_conf_param(v, p1, p2, p3)) { \
     if (strncmp(imgname, "/dev/", 5) == 0) {
       devpath = imgname;
       imgname = NULL;
-    }
-  }
-
-  if (opt_cmd == OPT_FEATURE_DISABLE || opt_cmd == OPT_FEATURE_ENABLE) {
-    if (feature_names.empty()) {
-      cerr << "rbd: at least one feature name must be specified" << std::endl;
-      return EXIT_FAILURE;
-    }
-
-    features = 0;
-    for (size_t i = 0; i < feature_names.size(); ++i) {
-      uint64_t feature;
-      if (!decode_feature(feature_names[i], &feature)) {
-        cerr << "rbd: invalid feature name specified: " << feature_names[i]
-             << std::endl;
-        return EXIT_FAILURE;
-      }
-      features |= feature;
     }
   }
 
@@ -3404,6 +3383,12 @@ if (!set_conf_param(v, p1, p2, p3)) { \
 
   set_pool_image_name(destname, (char **)&dest_poolname,
 		      (char **)&destname, (char **)&dest_snapname);
+  if (dest_snapname) {
+    // no command uses dest_snapname
+    cerr << "rbd: destination snapname specified for a command that doesn't use it"
+         << std::endl;
+    return EXIT_FAILURE;
+  }
 
   if (opt_cmd == OPT_IMPORT) {
     if (poolname && dest_poolname) {
@@ -3433,22 +3418,20 @@ if (!set_conf_param(v, p1, p2, p3)) { \
       cerr << "rbd: second diff was not specified" << std::endl;
       return EXIT_FAILURE;
     }
-    if (!path) {
+  }
+  if ((opt_cmd == OPT_EXPORT || opt_cmd == OPT_EXPORT_DIFF ||
+      opt_cmd == OPT_MERGE_DIFF) && !path) {
+    if (opt_cmd == OPT_EXPORT) {
+      path = imgname;
+    } else {
       cerr << "rbd: path was not specified" << std::endl;
       return EXIT_FAILURE;
     }
   }
-  if (opt_cmd == OPT_EXPORT && !path)
-    path = imgname;
 
   if ((opt_cmd == OPT_COPY || opt_cmd == OPT_CLONE || opt_cmd == OPT_RENAME) &&
       !destname ) {
     cerr << "rbd: destination image name was not specified" << std::endl;
-    return EXIT_FAILURE;
-  }
-
-  if ((opt_cmd == OPT_CLONE) && dest_snapname) {
-    cerr << "rbd: cannot clone to a snapshot" << std::endl;
     return EXIT_FAILURE;
   }
 
@@ -3462,6 +3445,47 @@ if (!set_conf_param(v, p1, p2, p3)) { \
     cerr << "source pool: " << poolname << " dest pool: " << dest_poolname
       << std::endl;
     return EXIT_FAILURE;
+  }
+
+  if (opt_cmd == OPT_LOCK_ADD || opt_cmd == OPT_LOCK_REMOVE) {
+    if (!lock_cookie) {
+      cerr << "rbd: lock id was not specified" << std::endl;
+      return EXIT_FAILURE;
+    }
+    if (opt_cmd == OPT_LOCK_REMOVE && !lock_client) {
+      cerr << "rbd: locker was not specified" << std::endl;
+      return EXIT_FAILURE;
+    }
+  }
+
+  if (opt_cmd == OPT_FEATURE_DISABLE || opt_cmd == OPT_FEATURE_ENABLE) {
+    if (feature_names.empty()) {
+      cerr << "rbd: at least one feature name must be specified" << std::endl;
+      return EXIT_FAILURE;
+    }
+
+    features = 0;
+    for (size_t i = 0; i < feature_names.size(); ++i) {
+      uint64_t feature;
+      if (!decode_feature(feature_names[i], &feature)) {
+        cerr << "rbd: invalid feature name specified: " << feature_names[i]
+             << std::endl;
+        return EXIT_FAILURE;
+      }
+      features |= feature;
+    }
+  }
+
+  if (opt_cmd == OPT_METADATA_GET || opt_cmd == OPT_METADATA_REMOVE ||
+      opt_cmd == OPT_METADATA_SET) {
+    if (!key) {
+      cerr << "rbd: metadata key was not specified" << std::endl;
+      return EXIT_FAILURE;
+    }
+    if (opt_cmd == OPT_METADATA_SET && !value) {
+      cerr << "rbd: metadata value was not specified" << std::endl;
+      return EXIT_FAILURE;
+    }
   }
 
   bool talk_to_cluster = (opt_cmd != OPT_MAP &&
@@ -3663,10 +3687,6 @@ if (!set_conf_param(v, p1, p2, p3)) { \
     break;
 
   case OPT_SNAP_LIST:
-    if (!imgname) {
-      cerr << "rbd: snap list requires an image parameter" << std::endl;
-      return EXIT_FAILURE;
-    }
     r = do_list_snaps(image, formatter.get());
     if (r < 0) {
       cerr << "rbd: failed to list snapshots: " << cpp_strerror(-r)
@@ -3676,10 +3696,6 @@ if (!set_conf_param(v, p1, p2, p3)) { \
     break;
 
   case OPT_SNAP_CREATE:
-    if (!imgname || !snapname) {
-      cerr << "rbd: snap create requires image and snapname" << std::endl;
-      return EINVAL;
-    }
     r = do_add_snap(image, snapname);
     if (r < 0) {
       cerr << "rbd: failed to create snapshot: " << cpp_strerror(-r)
@@ -3689,10 +3705,6 @@ if (!set_conf_param(v, p1, p2, p3)) { \
     break;
 
   case OPT_SNAP_ROLLBACK:
-    if (!imgname) {
-      cerr << "rbd: snap rollback requires image name" << std::endl;
-      return EINVAL;
-    }
     r = do_rollback_snap(image, snapname);
     if (r < 0) {
       cerr << "rbd: rollback failed: " << cpp_strerror(-r) << std::endl;
@@ -3701,10 +3713,6 @@ if (!set_conf_param(v, p1, p2, p3)) { \
     break;
 
   case OPT_SNAP_REMOVE:
-    if (!imgname) {
-      cerr << "rbd: snap remove requires image name" << std::endl;
-      return EINVAL;
-    }
     r = do_remove_snap(image, snapname);
     if (r < 0) {
       if (r == -EBUSY) {
@@ -3719,10 +3727,6 @@ if (!set_conf_param(v, p1, p2, p3)) { \
     break;
 
   case OPT_SNAP_PURGE:
-    if (!imgname) {
-      cerr << "rbd: snap purge requires image name" << std::endl;
-      return EINVAL;
-    }
     r = do_purge_snaps(image);
     if (r < 0) {
       cerr << "rbd: removing snaps failed: " << cpp_strerror(-r) << std::endl;
@@ -3731,10 +3735,6 @@ if (!set_conf_param(v, p1, p2, p3)) { \
     break;
 
   case OPT_SNAP_PROTECT:
-    if (!imgname) {
-      cerr << "rbd: snap protect requires image name" << std::endl;
-      return EINVAL;
-    }
     r = do_protect_snap(image, snapname);
     if (r < 0) {
       cerr << "rbd: protecting snap failed: " << cpp_strerror(-r) << std::endl;
@@ -3743,10 +3743,6 @@ if (!set_conf_param(v, p1, p2, p3)) { \
     break;
 
   case OPT_SNAP_UNPROTECT:
-    if (!imgname) {
-      cerr << "rbd: snap unprotect requires image name" << std::endl;
-      return EINVAL;
-    }
     r = do_unprotect_snap(image, snapname);
     if (r < 0) {
       cerr << "rbd: unprotecting snap failed: " << cpp_strerror(-r)
@@ -3764,10 +3760,6 @@ if (!set_conf_param(v, p1, p2, p3)) { \
     break;
 
   case OPT_EXPORT:
-    if (!path) {
-      cerr << "rbd: export requires pathname" << std::endl;
-      return EINVAL;
-    }
     r = do_export(image, path);
     if (r < 0) {
       cerr << "rbd: export error: " << cpp_strerror(-r) << std::endl;
@@ -3776,7 +3768,7 @@ if (!set_conf_param(v, p1, p2, p3)) { \
     break;
 
   case OPT_DIFF:
-    r = do_diff(image, fromsnapname, diff_object_extents, formatter.get());
+    r = do_diff(image, fromsnapname, diff_whole_object, formatter.get());
     if (r < 0) {
       cerr << "rbd: diff error: " << cpp_strerror(-r) << std::endl;
       return -r;
@@ -3784,11 +3776,7 @@ if (!set_conf_param(v, p1, p2, p3)) { \
     break;
 
   case OPT_EXPORT_DIFF:
-    if (!path) {
-      cerr << "rbd: export-diff requires pathname" << std::endl;
-      return EINVAL;
-    }
-    r = do_export_diff(image, fromsnapname, snapname, diff_object_extents, path);
+    r = do_export_diff(image, fromsnapname, snapname, diff_whole_object, path);
     if (r < 0) {
       cerr << "rbd: export-diff error: " << cpp_strerror(-r) << std::endl;
       return -r;
@@ -3804,10 +3792,6 @@ if (!set_conf_param(v, p1, p2, p3)) { \
     break;
 
   case OPT_IMPORT:
-    if (!path) {
-      cerr << "rbd: import requires pathname" << std::endl;
-      return EINVAL;
-    }
     r = do_import(rbd, dest_io_ctx, destname, &order, path,
 		  format, features, size, stripe_unit, stripe_count);
     if (r < 0) {
@@ -3817,7 +3801,6 @@ if (!set_conf_param(v, p1, p2, p3)) { \
     break;
 
   case OPT_IMPORT_DIFF:
-    assert(path);
     r = do_import_diff(image, path);
     if (r < 0) {
       cerr << "rbd: import-diff failed: " << cpp_strerror(-r) << std::endl;
@@ -3899,7 +3882,7 @@ if (!set_conf_param(v, p1, p2, p3)) { \
     break;
 
   case OPT_LOCK_REMOVE:
-    r = do_lock_remove(image, lock_cookie, lock_client);
+    r = do_lock_remove(image, lock_client, lock_cookie);
     if (r < 0) {
       cerr << "rbd: releasing lock failed: " << cpp_strerror(r) << std::endl;
       return -r;

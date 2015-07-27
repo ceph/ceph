@@ -367,7 +367,7 @@ static int va_ceph_argparse_witharg(std::vector<const char*> &args,
       else if (first[strlen_a] == '\0') {
 	// find second part (or not)
 	if (i+1 == args.end()) {
-	  oss << "Option " << *i << " requires an argument.";
+	  oss << "Option " << *i << " requires an argument." << std::endl;
 	  i = args.erase(i);
 	  return -EINVAL;
 	}
