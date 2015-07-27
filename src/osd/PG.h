@@ -747,6 +747,7 @@ protected:
   map<hobject_t, list<OpRequestRef> > waiting_for_unreadable_object,
 			     waiting_for_degraded_object,
 			     waiting_for_blocked_object;
+  map<hobject_t, snapid_t> objects_blocked_on_degraded_snap;
   // Callbacks should assume pg (and nothing else) is locked
   map<hobject_t, list<Context*> > callbacks_for_degraded_object;
 
