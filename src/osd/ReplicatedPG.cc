@@ -371,22 +371,20 @@ bool ReplicatedPG::is_missing_object(const hobject_t& soid) const
   return pg_log.get_missing().missing.count(soid);
 }
 
-void ReplicatedPG::wait_for_unreadable_object(
-  const hobject_t& soid, OpRequestRef op)
+void ReplicatedPG::maybe_kick_recovery(
+  const hobject_t &soid)
 {
-  assert(is_unreadable_object(soid));
-
   eversion_t v;
-  bool needs_recovery = missing_loc.needs_recovery(soid, &v);
-  assert(needs_recovery);
+  if (!missing_loc.needs_recovery(soid, &v))
+    return;
 
   map<hobject_t, ObjectContextRef>::const_iterator p = recovering.find(soid);
   if (p != recovering.end()) {
-    dout(7) << "missing " << soid << " v " << v << ", already recovering." << dendl;
+    dout(7) << "object " << soid << " v " << v << ", already recovering." << dendl;
   } else if (missing_loc.is_unfound(soid)) {
-    dout(7) << "missing " << soid << " v " << v << ", is unfound." << dendl;
+    dout(7) << "object " << soid << " v " << v << ", is unfound." << dendl;
   } else {
-    dout(7) << "missing " << soid << " v " << v << ", recovering." << dendl;
+    dout(7) << "object " << soid << " v " << v << ", recovering." << dendl;
     PGBackend::RecoveryHandle *h = pgbackend->open_recovery_op();
     if (is_missing_object(soid)) {
       recover_missing(soid, v, cct->_conf->osd_client_op_priority, h);
@@ -395,6 +393,14 @@ void ReplicatedPG::wait_for_unreadable_object(
     }
     pgbackend->run_recovery_op(h, cct->_conf->osd_client_op_priority);
   }
+}
+
+void ReplicatedPG::wait_for_unreadable_object(
+  const hobject_t& soid, OpRequestRef op)
+{
+  assert(is_unreadable_object(soid));
+
+  maybe_kick_recovery(soid);
   waiting_for_unreadable_object[soid].push_back(op);
   op->mark_delayed("waiting for missing object");
 }
@@ -434,41 +440,20 @@ void ReplicatedPG::wait_for_degraded_object(const hobject_t& soid, OpRequestRef 
 {
   assert(is_degraded_or_backfilling_object(soid));
 
-  // we don't have it (yet).
-  if (recovering.count(soid)) {
-    dout(7) << "degraded "
-	    << soid 
-	    << ", already recovering"
-	    << dendl;
-  } else if (missing_loc.is_unfound(soid)) {
-    dout(7) << "degraded "
-	    << soid
-	    << ", still unfound, waiting"
-	    << dendl;
-  } else {
-    dout(7) << "degraded " 
-	    << soid 
-	    << ", recovering"
-	    << dendl;
-    eversion_t v;
-    assert(!actingbackfill.empty());
-    for (set<pg_shard_t>::iterator i = actingbackfill.begin();
-	 i != actingbackfill.end();
-	 ++i) {
-      if (*i == get_primary()) continue;
-      pg_shard_t peer = *i;
-      if (peer_missing.count(peer) &&
-	  peer_missing[peer].missing.count(soid)) {
-	v = peer_missing[peer].missing[soid].need;
-	break;
-      }
-    }
-    PGBackend::RecoveryHandle *h = pgbackend->open_recovery_op();
-    prep_object_replica_pushes(soid, v, h);
-    pgbackend->run_recovery_op(h, cct->_conf->osd_client_op_priority);
-  }
+  maybe_kick_recovery(soid);
   waiting_for_degraded_object[soid].push_back(op);
   op->mark_delayed("waiting for degraded object");
+}
+
+void ReplicatedPG::block_write_on_degraded_snap(
+  const hobject_t& snap, OpRequestRef op)
+{
+  dout(20) << __func__ << ": blocking object " << snap.get_head()
+	   << " on degraded snap " << snap << dendl;
+  // otherwise, we'd have blocked in do_op
+  assert(objects_blocked_on_degraded_snap.count(snap.get_head()) == 0);
+  objects_blocked_on_degraded_snap[snap.get_head()] = snap.snap;
+  wait_for_degraded_object(snap, op);
 }
 
 bool ReplicatedPG::maybe_await_blocked_snapset(
@@ -1425,6 +1410,16 @@ void ReplicatedPG::do_op(OpRequestRef& op)
   // degraded object?
   if (write_ordered && is_degraded_or_backfilling_object(head)) {
     wait_for_degraded_object(head, op);
+    return;
+  }
+
+  // blocked on snap?
+  map<hobject_t, snapid_t>::iterator blocked_iter =
+    objects_blocked_on_degraded_snap.find(head);
+  if (write_ordered && blocked_iter != objects_blocked_on_degraded_snap.end()) {
+    hobject_t to_wait_on(head);
+    to_wait_on.snap = blocked_iter->second;
+    wait_for_degraded_object(to_wait_on, op);
     return;
   }
 
@@ -5493,7 +5488,7 @@ int ReplicatedPG::_rollback_to(OpContext *ctx, ceph_osd_op& op)
     assert(is_missing_object(missing_oid));
     dout(20) << "_rollback_to attempted to roll back to a missing object "
 	     << missing_oid << " (requested snapid: ) " << snapid << dendl;
-    wait_for_unreadable_object(missing_oid, ctx->op);
+    block_write_on_degraded_snap(missing_oid, ctx->op);
     return ret;
   }
   if (maybe_handle_cache(ctx->op, true, rollback_to, ret, missing_oid, true)) {
@@ -5520,7 +5515,7 @@ int ReplicatedPG::_rollback_to(OpContext *ctx, ceph_osd_op& op)
     if (is_degraded_or_backfilling_object(rollback_to_sobject)) {
       dout(20) << "_rollback_to attempted to roll back to a degraded object "
 	       << rollback_to_sobject << " (requested snapid: ) " << snapid << dendl;
-      wait_for_degraded_object(rollback_to_sobject, ctx->op);
+      block_write_on_degraded_snap(rollback_to_sobject, ctx->op);
       ret = -EAGAIN;
     } else if (rollback_to->obs.oi.soid.snap == CEPH_NOSNAP) {
       // rolling back to the head; we just need to clone it.
@@ -8635,6 +8630,11 @@ void ReplicatedPG::finish_degraded_object(const hobject_t& oid)
       (*i)->complete(0);
     }
   }
+  map<hobject_t, snapid_t>::iterator i = objects_blocked_on_degraded_snap.find(
+    oid.get_head());
+  if (i != objects_blocked_on_degraded_snap.end() &&
+      i->second == oid.snap)
+    objects_blocked_on_degraded_snap.erase(i);
 }
 
 void ReplicatedPG::_committed_pushed_object(
@@ -9232,6 +9232,9 @@ void ReplicatedPG::on_change(ObjectStore::Transaction *t)
   // NOTE: we actually assert that all currently live references are dead
   // by the time the flush for the next interval completes.
   object_contexts.clear();
+
+  // should have been cleared above by finishing all of the degraded objects
+  assert(objects_blocked_on_degraded_snap.empty());
 }
 
 void ReplicatedPG::on_role_change()
