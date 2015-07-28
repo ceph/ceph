@@ -84,6 +84,9 @@ def task(ctx, config):
 
     clean_wait: (0) duration to wait before resuming thrashing once clean
 
+    sighup_delay: (0.1) duration to delay between sending signal.SIGHUP to a
+                  random live osd
+
     powercycle: (false) whether to power cycle the node instead
         of just the osd process. Note that this assumes that a single
         osd is the only important process on the node.
@@ -112,6 +115,8 @@ def task(ctx, config):
         config = {}
     assert isinstance(config, dict), \
         'thrashosds task only accepts a dict for configuration'
+    # add default value for sighup_delay
+    config['sighup_delay'] = config.get('sighup_delay', 0.1)
     overrides = ctx.config.get('overrides', {})
     teuthology.deep_merge(config, overrides.get('thrashosds', {}))
 
