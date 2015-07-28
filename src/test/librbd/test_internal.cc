@@ -257,6 +257,9 @@ TEST_F(TestInternal, AioWriteRequestsLock) {
   ASSERT_EQ(0, librbd::is_exclusive_lock_owner(ictx, &is_owner));
   ASSERT_FALSE(is_owner);
   ASSERT_FALSE(c->is_complete());
+
+  unlock_image();
+  ASSERT_EQ(0, c->wait_for_complete());
   c->put();
 }
 
@@ -277,6 +280,9 @@ TEST_F(TestInternal, AioDiscardRequestsLock) {
   ASSERT_EQ(0, librbd::is_exclusive_lock_owner(ictx, &is_owner));
   ASSERT_FALSE(is_owner);
   ASSERT_FALSE(c->is_complete());
+
+  unlock_image();
+  ASSERT_EQ(0, c->wait_for_complete());
   c->put();
 }
 
