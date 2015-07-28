@@ -23,6 +23,15 @@ def long_running(f):
     return f
 
 
+def needs_trimming(f):
+    """
+    Mark fn as requiring a client capable of trimming its cache (i.e. for ceph-fuse
+    this means it needs to be able to run as root, currently)
+    """
+    f.needs_trimming = True
+    return f
+
+
 class CephFSTestCase(unittest.TestCase):
     """
     Test case for Ceph FS, requires caller to populate Filesystem and Mounts,
