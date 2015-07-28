@@ -194,20 +194,20 @@ class TestClientLimits(CephFSTestCase):
             os.mkdir("{path}")
             for n in range(0, {num_dirs}):
                 os.mkdir("{path}/dir{{0}}".format(n))
-            """);
+            """)
 
         num_dirs = 1000
         self.mount_a.run_python(mkdir_script.format(path=dir_path, num_dirs=num_dirs))
         self.mount_a.run_shell(["sync"])
 
-        dentry_count, dentry_pinned_count = self.mount_a.get_dentry_count();
-        self.assertGreaterEqual(dentry_count, num_dirs);
-        self.assertGreaterEqual(dentry_pinned_count, num_dirs);
+        dentry_count, dentry_pinned_count = self.mount_a.get_dentry_count()
+        self.assertGreaterEqual(dentry_count, num_dirs)
+        self.assertGreaterEqual(dentry_pinned_count, num_dirs)
 
-        cache_size = num_dirs / 10;
-        self.mount_a.set_cache_size(cache_size);
-        time.sleep(30);
+        cache_size = num_dirs / 10
+        self.mount_a.set_cache_size(cache_size)
+        time.sleep(30)
 
-        dentry_count, dentry_pinned_count =  self.mount_a.get_dentry_count();
-        self.assertLessEqual(dentry_count, cache_size);
-        self.assertLessEqual(dentry_pinned_count, cache_size);
+        dentry_count, dentry_pinned_count = self.mount_a.get_dentry_count()
+        self.assertLessEqual(dentry_count, cache_size)
+        self.assertLessEqual(dentry_pinned_count, cache_size)
