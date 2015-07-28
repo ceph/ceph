@@ -897,40 +897,40 @@ void AsyncConnection::process()
           break;
         }
     }
-
-    continue;
-
-fail:
-    // clean up state internal variables and states
-    if (state >= STATE_CONNECTING_SEND_CONNECT_MSG &&
-        state <= STATE_CONNECTING_READY) {
-      delete authorizer;
-      authorizer = NULL;
-      got_bad_auth = false;
-    }
-
-    if (state > STATE_OPEN_MESSAGE_THROTTLE_MESSAGE &&
-        state <= STATE_OPEN_MESSAGE_READ_FOOTER_AND_DISPATCH
-        && policy.throttler_messages) {
-      ldout(async_msgr->cct,10) << __func__ << " releasing " << 1
-                          << " message to policy throttler "
-                          << policy.throttler_messages->get_current() << "/"
-                          << policy.throttler_messages->get_max() << dendl;
-      policy.throttler_messages->put();
-    }
-    if (state > STATE_OPEN_MESSAGE_THROTTLE_BYTES &&
-        state <= STATE_OPEN_MESSAGE_READ_FOOTER_AND_DISPATCH) {
-      uint64_t message_size = current_header.front_len + current_header.middle_len + current_header.data_len;
-      if (policy.throttler_bytes) {
-        ldout(async_msgr->cct,10) << __func__ << " releasing " << message_size
-                            << " bytes to policy throttler "
-                            << policy.throttler_bytes->get_current() << "/"
-                            << policy.throttler_bytes->get_max() << dendl;
-        policy.throttler_bytes->put(message_size);
-      }
-    }
-    fault();
   } while (prev_state != state);
+
+  return;
+
+ fail:
+  // clean up state internal variables and states
+  if (state >= STATE_CONNECTING_SEND_CONNECT_MSG &&
+      state <= STATE_CONNECTING_READY) {
+    delete authorizer;
+    authorizer = NULL;
+    got_bad_auth = false;
+  }
+
+  if (state > STATE_OPEN_MESSAGE_THROTTLE_MESSAGE &&
+      state <= STATE_OPEN_MESSAGE_READ_FOOTER_AND_DISPATCH
+      && policy.throttler_messages) {
+    ldout(async_msgr->cct,10) << __func__ << " releasing " << 1
+                        << " message to policy throttler "
+                        << policy.throttler_messages->get_current() << "/"
+                        << policy.throttler_messages->get_max() << dendl;
+    policy.throttler_messages->put();
+  }
+  if (state > STATE_OPEN_MESSAGE_THROTTLE_BYTES &&
+      state <= STATE_OPEN_MESSAGE_READ_FOOTER_AND_DISPATCH) {
+    uint64_t message_size = current_header.front_len + current_header.middle_len + current_header.data_len;
+    if (policy.throttler_bytes) {
+      ldout(async_msgr->cct,10) << __func__ << " releasing " << message_size
+                          << " bytes to policy throttler "
+                          << policy.throttler_bytes->get_current() << "/"
+                          << policy.throttler_bytes->get_max() << dendl;
+      policy.throttler_bytes->put(message_size);
+    }
+  }
+  fault();
 }
 
 int AsyncConnection::_process_connection()
