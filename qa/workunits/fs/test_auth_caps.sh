@@ -3,7 +3,7 @@
 cleanup()
 {
 	echo "*** Restoring to old state"
-	sudo rm -rf mnt.admin/foo1 mnt.admin/foo2 mnt.admin/foo3 mnt.admin/foo4 mnt.admin/foo5 mnt.admin/foo6
+	sudo rm -rf mnt.admin/foo1 mnt.admin/foo2 mnt.admin/foo3 mnt.admin/foo4 mnt.admin/foo5 mnt.admin/foo6 mnt.admin/foo7
 	fusermount -u mnt.admin
 	fusermount -u mnt.foo
 	rmdir mnt.admin mnt.foo
@@ -38,6 +38,8 @@ sudo mkdir -m 755 mnt.admin/foo3
 sudo mkdir -m 755 mnt.admin/foo4
 sudo mkdir -m 775 mnt.admin/foo5
 sudo mkdir -m 755 mnt.admin/foo6
+sudo mkdir -m 557 mnt.admin/foo7
+
 
 ls -lsv mnt.admin
 
@@ -55,6 +57,8 @@ sudo chown $OTH_UID mnt.admin/foo4
 sudo chgrp $GID mnt.admin/foo5
 sudo chgrp $GID mnt.admin/foo6
 
+sudo chgrp $GID mnt.admin/foo7
+
 ls -lsv mnt.foo
 
 echo "*** Testing auth checks"
@@ -70,5 +74,4 @@ mkdir mnt.foo/foo3/asdf
 expect_false mkdir mnt.foo/foo4/asdf
 mkdir mnt.foo/foo5/asdf
 expect_false mkdir mnt.foo/foo6/asdf
-
-
+expect_false mkdir mnt.foo/foo7/asdf
