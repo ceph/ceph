@@ -112,6 +112,14 @@ class MDSDaemon : public Dispatcher, public md_config_obs_t {
   // start up, shutdown
   int init(MDSMap::DaemonState wanted_state=MDSMap::STATE_BOOT);
 
+  /**
+   * Hint at whether we were shutdown gracefully (i.e. we were only
+   * in standby, or our rank was stopped).  Should be removed once
+   * we handle shutdown properly (e.g. clear out all message queues)
+   * such that deleting xlists doesn't assert.
+   */
+  bool is_clean_shutdown();
+
   // config observer bits
   virtual const char** get_tracked_conf_keys() const;
   virtual void handle_conf_change(const struct md_config_t *conf,
