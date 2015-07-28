@@ -94,15 +94,9 @@ const string default_zone_name = "default";
 static string zonegroup_names_oid_prefix = "zonegroups_names.";
 static RGWObjCategory main_category = RGW_OBJ_CATEGORY_MAIN;
 #define RGW_USAGE_OBJ_PREFIX "usage."
-<<<<<<< HEAD
 #define FIRST_EPOCH 1
 static string RGW_DEFAULT_ZONE_ROOT_POOL = "rgw.root";
 static string RGW_DEFAULT_ZONEGROUP_ROOT_POOL = "rgw.root";
-=======
-
-#define RGW_DEFAULT_ZONE_ROOT_POOL "rgw.root"
-#define RGW_DEFAULT_ZONEGROUP_ROOT_POOL "rgw.root"
->>>>>>> rgw: Rename Region to ZoneGroup only internal structures and class
 static string RGW_DEFAULT_REALM_ROOT_POOL = "rgw.root";
 static string RGW_DEFAULT_PERIOD_ROOT_POOL = "rgw.root";
 
@@ -119,7 +113,6 @@ struct bucket_info_entry {
 static RGWChainedCacheImpl<bucket_info_entry> binfo_cache;
 
 void RGWDefaultZoneGroupInfo::dump(Formatter *f) const {
-<<<<<<< HEAD
   encode_json("default_zonegroup", default_zonegroup, f);
 }
 
@@ -129,84 +122,21 @@ void RGWDefaultZoneGroupInfo::decode_json(JSONObj *obj) {
   /* backward compatability with region */
   if (default_zonegroup.empty()) {
     JSONDecoder::decode_json("default_region", default_zonegroup, obj);
-=======
-  encode_json("default_region", default_zonegroup, f);
-}
-
-void RGWDefaultZoneGroupInfo::decode_json(JSONObj *obj) {
-  JSONDecoder::decode_json("default_region", default_zonegroup, obj);
-}
-
-int RGWZoneGroup::get_pool_name(CephContext *cct, string *pool_name)
-{
-  *pool_name = cct->_conf->rgw_zonegroup_root_pool;
-  if (pool_name->empty()) {
-    *pool_name = RGW_DEFAULT_ZONEGROUP_ROOT_POOL;
->>>>>>> rgw: Rename Region to ZoneGroup only internal structures and class
   }
 }
 
-<<<<<<< HEAD
 const string& RGWZoneGroup::get_pool_name(CephContext *cct_)
-=======
-int RGWZoneGroup::read_default(RGWDefaultZoneGroupInfo& default_info)
->>>>>>> rgw: Rename Region to ZoneGroup only internal structures and class
 {
   if (cct_->_conf->rgw_zonegroup_root_pool.empty()) {
     return RGW_DEFAULT_ZONEGROUP_ROOT_POOL;
   }
 
-<<<<<<< HEAD
   return cct_->_conf->rgw_zonegroup_root_pool;
 }
 
 int RGWZoneGroup::create_default(bool old_format)
 {
   name = default_zonegroup_name;
-=======
-  string oid = cct->_conf->rgw_default_region_info_oid;
-  if (oid.empty()) {
-    oid = default_region_info_oid;
-  }
-
-  rgw_bucket pool(pool_name.c_str());
-  bufferlist bl;
-  RGWObjectCtx obj_ctx(store);
-  ret = rgw_get_system_obj(store, obj_ctx, pool, oid, bl, NULL, NULL);
-  if (ret < 0)
-    return ret;
-
-  try {
-    bufferlist::iterator iter = bl.begin();
-    ::decode(default_info, iter);
-  } catch (buffer::error& err) {
-    derr << "error decoding data from " << pool << ":" << oid << dendl;
-    return -EIO;
-  }
-
-  name = default_info.default_zonegroup;
-
-  return 0;
-}
-
-int RGWZoneGroup::set_as_default()
-{
-  string pool_name;
-  int ret = get_pool_name(cct, &pool_name);
-  if (ret < 0)
-    return ret;
-
-  string oid = cct->_conf->rgw_default_region_info_oid;
-  if (oid.empty()) {
-    oid = default_region_info_oid;
-  }
-
-  rgw_bucket pool(pool_name.c_str());
-  bufferlist bl;
-
-  RGWDefaultZoneGroupInfo default_info;
-  default_info.default_zonegroup = name;
->>>>>>> rgw: Rename Region to ZoneGroup only internal structures and class
 
   RGWZoneGroupPlacementTarget placement_target;
   placement_target.name = "default-placement";
@@ -221,7 +151,6 @@ int RGWZoneGroup::set_as_default()
     return r;
   }
 
-<<<<<<< HEAD
   r = zone_params.create_default();
   if (r < 0 && r != -EEXIST) {
     derr << "create_default: error in create_default  zone params: " << cpp_strerror(-r) << dendl;
@@ -253,81 +182,11 @@ int RGWZoneGroup::set_as_default()
 
   if (old_format) {
     name = id;
-=======
-int RGWZoneGroup::init(CephContext *_cct, RGWRados *_store, bool setup_zonegroup)
-{
-  cct = _cct;
-  store = _store;
-
-  if (!setup_zonegroup)
-    return 0;
-
-  string zonegroup_name = cct->_conf->rgw_region;
-
-  if (zonegroup_name.empty()) {
-    RGWDefaultZoneGroupInfo default_info;
-    int r = read_default(default_info);
-    if (r == -ENOENT) {
-      r = create_default();
-      if (r == -EEXIST) { /* we may have raced with another zonegroup creation,
-                             make sure we can read the zonegroup info and continue
-                             as usual to make sure zonegroup creation is complete */
-        ldout(cct, 0) << "create_default() returned -EEXIST, we raced with another zonegroup creation" << dendl;
-        r = read_info(name);
-      }
-      if (r < 0)
-        return r;
-      r = set_as_default(); /* set this as default even if we weren't the creators */
-      if (r < 0)
-        return r;
-      /*Re attempt to read zonegroup info from newly created default zonegroup */
-      r = read_default(default_info);
-      if (r < 0)
-	return r;
-    } else if (r < 0) {
-      lderr(cct) << "failed reading default zonegroup info: " << cpp_strerror(-r) << dendl;
-      return r;
-    }
-    zonegroup_name = default_info.default_zonegroup;
-  }
-
-  return read_info(zonegroup_name);
-}
-
-int RGWZoneGroup::read_info(const string& zonegroup_name)
-{
-  string pool_name;
-  int ret = get_pool_name(cct, &pool_name);
-  if (ret < 0)
-    return ret;
-
-  rgw_bucket pool(pool_name.c_str());
-  bufferlist bl;
-
-  name = zonegroup_name;
-
-  string oid = region_info_oid_prefix + name;
-
-  RGWObjectCtx obj_ctx(store);
-  ret = rgw_get_system_obj(store, obj_ctx, pool, oid, bl, NULL, NULL);
-  if (ret < 0) {
-    lderr(cct) << "failed reading zonegroup info from " << pool << ":" << oid << ": " << cpp_strerror(-ret) << dendl;
-    return ret;
-  }
-
-  try {
-    bufferlist::iterator iter = bl.begin();
-    ::decode(*this, iter);
-  } catch (buffer::error& err) {
-    ldout(cct, 0) << "ERROR: failed to decode zonegroup from " << pool << ":" << oid << dendl;
-    return -EIO;
->>>>>>> rgw: Rename Region to ZoneGroup only internal structures and class
   }
 
   return 0;
 }
 
-<<<<<<< HEAD
 const string& RGWZoneGroup::get_default_oid(bool old_region_format)
 {
   if (old_region_format) {
@@ -336,19 +195,6 @@ const string& RGWZoneGroup::get_default_oid(bool old_region_format)
     }
     return cct->_conf->rgw_default_region_info_oid;
   }
-=======
-int RGWZoneGroup::create_default()
-{
-  name = "default";
-  string zone_name = "default";
-
-  is_master = true;
-
-  RGWZoneGroupPlacementTarget placement_target;
-  placement_target.name = "default-placement";
-  placement_targets[placement_target.name] = placement_target;
-  default_placement = "default-placement";
->>>>>>> rgw: Rename Region to ZoneGroup only internal structures and class
 
   if (cct->_conf->rgw_default_zonegroup_info_oid.empty()) {
     return default_zone_group_info_oid;
@@ -365,28 +211,17 @@ const string& RGWZoneGroup::get_info_oid_prefix(bool old_region_format)
   return zone_group_info_oid_prefix;
 }
 
-<<<<<<< HEAD
 const string& RGWZoneGroup::get_names_oid_prefix()
 {
   return zonegroup_names_oid_prefix;
 }
-=======
-  r = store_info(true);
-  if (r < 0) {
-    derr << "error storing zone group info: " << cpp_strerror(-r) << dendl;
-    return r;
-  }
->>>>>>> rgw: Rename Region to ZoneGroup only internal structures and class
 
 const string& RGWZoneGroup::get_predefined_id() {
   return cct->_conf->rgw_zonegroup;
 }
 
-<<<<<<< HEAD
+
 int RGWZoneGroup::equals(const string& other_zonegroup)
-=======
-int RGWZoneGroup::store_info(bool exclusive)
->>>>>>> rgw: Rename Region to ZoneGroup only internal structures and class
 {
   if (is_master && other_zonegroup.empty())
     return true;
@@ -403,7 +238,6 @@ int RGWZoneGroup::add_zone(const RGWZoneParams& zone_params)
   return update();
 }
 
-<<<<<<< HEAD
 int RGWZoneGroup::remove_zone(const RGWZoneParams& zone_params)
 {
   map<string, RGWZone>::iterator iter = zones.find(zone_params.get_id());
@@ -416,14 +250,6 @@ int RGWZoneGroup::remove_zone(const RGWZoneParams& zone_params)
   zones.erase(iter);
 
   return update();
-=======
-int RGWZoneGroup::equals(const string& other_zonegroup)
-{
-  if (is_master && other_zonegroup.empty())
-    return true;
-
-  return (name == other_zonegroup);
->>>>>>> rgw: Rename Region to ZoneGroup only internal structures and class
 }
 
 int RGWSystemMetaObj::init(CephContext *_cct, RGWRados *_store, bool setup_obj, bool old_format)
@@ -1095,35 +921,20 @@ const string& RGWZoneParams::get_pool_name(CephContext *cct)
   return cct->_conf->rgw_zone_root_pool;
 }
 
-<<<<<<< HEAD
 const string& RGWZoneParams::get_default_oid(bool old_format)
 {
   return cct->_conf->rgw_default_zone_info_oid;
 }
-=======
-void RGWZoneParams::init_name(CephContext *cct, RGWZoneGroup& zonegroup)
-{
-  name = cct->_conf->rgw_zone;
-
-  if (name.empty()) {
-    name = zonegroup.master_zone;
->>>>>>> rgw: Rename Region to ZoneGroup only internal structures and class
 
 const string& RGWZoneParams::get_names_oid_prefix()
 {
   return zone_names_oid_prefix;
 }
 
-<<<<<<< HEAD
 const string& RGWZoneParams::get_info_oid_prefix(bool old_format)
 {
   return zone_info_oid_prefix;
 }
-=======
-int RGWZoneParams::init(CephContext *cct, RGWRados *store, RGWZoneGroup& zonegroup)
-{
-  init_name(cct, zonegroup);
->>>>>>> rgw: Rename Region to ZoneGroup only internal structures and class
 
 const string& RGWZoneParams::get_predefined_id() {
   return cct->_conf->rgw_zone;
@@ -1140,25 +951,11 @@ void RGWZoneParams::init_id(CephContext *cct, RGWZoneGroup& zonegroup)
       name = default_zone_name;
     }
   }
-<<<<<<< HEAD
 }
 
 int RGWZoneParams::init(CephContext *cct, RGWRados *store, RGWZoneGroup& zonegroup, bool setup_obj, bool old_format)
 {
   init_id(cct, zonegroup);
-=======
-
-  is_master = (name == zonegroup.master_zone) || (zonegroup.master_zone.empty() && name == "default");
-
-  ldout(cct, 2) << "zone " << name << " is " << (is_master ? "" : "NOT ") << "master" << dendl;
-
-  return 0;
-}
-
-int RGWZoneParams::store_info(CephContext *cct, RGWRados *store, RGWZoneGroup& zonegroup)
-{
-  init_name(cct, zonegroup);
->>>>>>> rgw: Rename Region to ZoneGroup only internal structures and class
 
   int ret = RGWSystemMetaObj::init(cct, store, setup_obj, old_format);
   if (ret < 0) {
@@ -1198,11 +995,7 @@ void RGWZoneGroupMap::decode(bufferlist::iterator& bl) {
     RGWZoneGroup& zonegroup = iter->second;
     zonegroups_by_api[zonegroup.api_name] = zonegroup;
     if (zonegroup.is_master) {
-<<<<<<< HEAD
       master_zonegroup = zonegroup.get_id();
-=======
-      master_zonegroup = zonegroup.name;
->>>>>>> rgw: Rename Region to ZoneGroup only internal structures and class
     }
   }
 }
@@ -1268,33 +1061,21 @@ int RGWZoneGroupMap::update(RGWZoneGroup& zonegroup)
     derr << "cannot update zonegroup map, master_zonegroup conflict" << dendl;
     return -EINVAL;
   }
-<<<<<<< HEAD
   map<string, RGWZoneGroup>::iterator iter = zonegroups.find(zonegroup.get_id());
-=======
-  map<string, RGWZoneGroup>::iterator iter = zonegroups.find(zonegroup.name);
->>>>>>> rgw: Rename Region to ZoneGroup only internal structures and class
   if (iter != zonegroups.end()) {
     RGWZoneGroup& old_zonegroup = iter->second;
     if (!old_zonegroup.api_name.empty()) {
       zonegroups_by_api.erase(old_zonegroup.api_name);
     }
   }
-<<<<<<< HEAD
   zonegroups[zonegroup.get_id()] = zonegroup;
-=======
-  zonegroups[zonegroup.name] = zonegroup;
->>>>>>> rgw: Rename Region to ZoneGroup only internal structures and class
 
   if (!zonegroup.api_name.empty()) {
     zonegroups_by_api[zonegroup.api_name] = zonegroup;
   }
 
   if (zonegroup.is_master) {
-<<<<<<< HEAD
     master_zonegroup = zonegroup.get_id();
-=======
-    master_zonegroup = zonegroup.name;
->>>>>>> rgw: Rename Region to ZoneGroup only internal structures and class
   }
   return 0;
 }
@@ -2749,17 +2530,12 @@ fail:
 static void add_new_connection_to_map(map<string, RGWRESTConn *> &zonegroup_conn_map, RGWZoneGroup &zonegroup, RGWRESTConn *new_connection)
 {
   // Delete if connection is already exists
-<<<<<<< HEAD
   map<string, RGWRESTConn *>::iterator iterZoneGroup = zonegroup_conn_map.find(zonegroup.get_id());
-=======
-  map<string, RGWRESTConn *>::iterator iterZoneGroup = zonegroup_conn_map.find(zonegroup.name);
->>>>>>> rgw: Rename Region to ZoneGroup only internal structures and class
   if (iterZoneGroup != zonegroup_conn_map.end()) {
     delete iterZoneGroup->second;
   }
     
   // Add new connection to connections map
-<<<<<<< HEAD
   zonegroup_conn_map[zonegroup.get_id()] = new_connection;
 }
 
@@ -2849,9 +2625,6 @@ int RGWRados::replace_region_with_zonegroup()
   }
 
   return 0;
-=======
-  zonegroup_conn_map[zonegroup.name] = new_connection;
->>>>>>> rgw: Rename Region to ZoneGroup only internal structures and class
 }
 
 /** 
@@ -2875,22 +2648,14 @@ int RGWRados::init_complete()
   }
 
   ret = zonegroup.init(cct, this);
-<<<<<<< HEAD
   if (ret < 0 && ret != -ENOENT) {
     lderr(cct) << "failed reading zonegroup info: ret "<< ret << " " << cpp_strerror(-ret) << dendl;
-=======
-  if (ret < 0)
->>>>>>> rgw: Rename Region to ZoneGroup only internal structures and class
     return ret;
   }
 
   ret = zone.init(cct, this, zonegroup);
-<<<<<<< HEAD
   if (ret < 0 && ret != -ENOENT) {
     lderr(cct) << "failed reading zone info: ret "<< ret << " " << cpp_strerror(-ret) << dendl;
-=======
-  if (ret < 0)
->>>>>>> rgw: Rename Region to ZoneGroup only internal structures and class
     return ret;
   }
 
@@ -2939,11 +2704,7 @@ int RGWRados::init_complete()
 
   map<string, RGWZone>::iterator ziter;
   for (ziter = zonegroup.zones.begin(); ziter != zonegroup.zones.end(); ++ziter) {
-<<<<<<< HEAD
     const string& id = ziter->first;
-=======
-    const string& name = ziter->first;
->>>>>>> rgw: Rename Region to ZoneGroup only internal structures and class
     RGWZone& z = ziter->second;
     if (id != zone.get_id()) {
       if (!z.endpoints.empty()) {
@@ -3083,9 +2844,8 @@ int RGWRados::list_raw_prefixed_objs(const string& pool_name, const string& pref
   return 0;
 }
 
-int RGWRados::list_zonegroups(list<string>& zonegroups)
+int RGWRados::list_regions(list<string>& regions)
 {
-<<<<<<< HEAD
   RGWZoneGroup zonegroup;
 
   return list_raw_prefixed_objs(zonegroup.get_pool_name(cct), region_info_oid_prefix, regions);
@@ -3097,14 +2857,6 @@ int RGWRados::list_zonegroups(list<string>& zonegroups)
   RGWZoneGroup zonegroup;
 
   return list_raw_prefixed_objs(zonegroup.get_pool_name(cct), zonegroup_names_oid_prefix, zonegroups);
-=======
-  string pool_name;
-  int ret = RGWZoneGroup::get_pool_name(cct, &pool_name);
-  if (ret < 0)
-    return ret;
-
-  return list_raw_prefixed_objs(pool_name, region_info_oid_prefix, zonegroups);
->>>>>>> rgw: Rename Region to ZoneGroup only internal structures and class
 }
 
 int RGWRados::list_zones(list<string>& zones)
@@ -4226,11 +3978,7 @@ int RGWRados::init_bucket_index(rgw_bucket& bucket, int num_shards)
  * returns 0 on success, -ERR# otherwise.
  */
 int RGWRados::create_bucket(RGWUserInfo& owner, rgw_bucket& bucket,
-<<<<<<< HEAD
                             const string& zonegroup_id,
-=======
-                            const string& zonegroup_name,
->>>>>>> rgw: Rename Region to ZoneGroup only internal structures and class
                             const string& placement_rule,
 			    map<std::string, bufferlist>& attrs,
                             RGWBucketInfo& info,
@@ -4244,11 +3992,7 @@ int RGWRados::create_bucket(RGWUserInfo& owner, rgw_bucket& bucket,
   string selected_placement_rule;
   for (int i = 0; i < MAX_CREATE_RETRIES; i++) {
     int ret = 0;
-<<<<<<< HEAD
     ret = select_bucket_placement(owner, zonegroup_id, placement_rule, bucket.name, bucket, &selected_placement_rule);
-=======
-    ret = select_bucket_placement(owner, zonegroup_name, placement_rule, bucket.name, bucket, &selected_placement_rule);
->>>>>>> rgw: Rename Region to ZoneGroup only internal structures and class
     if (ret < 0)
       return ret;
     bufferlist bl;
@@ -4292,11 +4036,7 @@ int RGWRados::create_bucket(RGWUserInfo& owner, rgw_bucket& bucket,
 
     info.bucket = bucket;
     info.owner = owner.user_id;
-<<<<<<< HEAD
     info.zonegroup = zonegroup_id;
-=======
-    info.zonegroup = zonegroup_name;
->>>>>>> rgw: Rename Region to ZoneGroup only internal structures and class
     info.placement_rule = selected_placement_rule;
     info.num_shards = bucket_index_max_shards;
     info.bucket_index_shard_hash_type = RGWBucketInfo::MOD;
@@ -4416,11 +4156,7 @@ int RGWRados::set_bucket_location_by_rule(const string& location_rule, const std
   map<string, RGWZonePlacementInfo>::iterator piter = zone.placement_pools.find(location_rule);
   if (piter == zone.placement_pools.end()) {
     /* couldn't find, means we cannot really place data for this bucket in this zone */
-<<<<<<< HEAD
     if (zonegroup.equals(zonegroup_id)) {
-=======
-    if (zonegroup.equals(zonegroup_name)) {
->>>>>>> rgw: Rename Region to ZoneGroup only internal structures and class
       /* that's a configuration error, zone should have that rule, as we're within the requested
        * zonegroup */
       return -EINVAL;
@@ -4440,19 +4176,11 @@ int RGWRados::set_bucket_location_by_rule(const string& location_rule, const std
 
 }
 
-<<<<<<< HEAD
 int RGWRados::select_bucket_placement(RGWUserInfo& user_info, const string& zonegroup_id, const string& placement_rule,
                                       const string& bucket_name, rgw_bucket& bucket, string *pselected_rule)
 {
   if (!zone.placement_pools.empty()) {
     return select_new_bucket_location(user_info, zonegroup_id, placement_rule, bucket_name, bucket, pselected_rule);
-=======
-int RGWRados::select_bucket_placement(RGWUserInfo& user_info, const string& zonegroup_name, const string& placement_rule,
-                                      const string& bucket_name, rgw_bucket& bucket, string *pselected_rule)
-{
-  if (!zone.placement_pools.empty()) {
-    return select_new_bucket_location(user_info, zonegroup_name, placement_rule, bucket_name, bucket, pselected_rule);
->>>>>>> rgw: Rename Region to ZoneGroup only internal structures and class
   }
 
   if (pselected_rule)
@@ -6044,11 +5772,7 @@ bool RGWRados::is_meta_master()
     return false;
   }
 
-<<<<<<< HEAD
   return (zonegroup.master_zone == zone_public_config.id);
-=======
-  return (zonegroup.master_zone == zone_public_config.name);
->>>>>>> rgw: Rename Region to ZoneGroup only internal structures and class
 }
 
 /**
@@ -6069,11 +5793,7 @@ bool RGWRados::is_syncing_bucket_meta(rgw_bucket& bucket)
   }
 
   /* zone is not master */
-<<<<<<< HEAD
   if (zonegroup.master_zone.compare(zone_public_config.id) != 0) {
-=======
-  if (zonegroup.master_zone.compare(zone_public_config.name) != 0) {
->>>>>>> rgw: Rename Region to ZoneGroup only internal structures and class
     return false;
   }
 
