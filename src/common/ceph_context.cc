@@ -20,6 +20,7 @@
 #include "common/perf_counters.h"
 #include "common/Thread.h"
 #include "common/ceph_context.h"
+#include "common/ceph_crypto.h"
 #include "common/config.h"
 #include "common/debug.h"
 #include "common/HeartbeatMap.h"
@@ -467,6 +468,7 @@ CephContext::~CephContext()
 
   delete _crypto_none;
   delete _crypto_aes;
+  ceph::crypto::shutdown();
 }
 
 void CephContext::start_service_thread()
