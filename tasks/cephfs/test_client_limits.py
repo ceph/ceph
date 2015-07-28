@@ -206,8 +206,15 @@ class TestClientLimits(CephFSTestCase):
 
         cache_size = num_dirs / 10
         self.mount_a.set_cache_size(cache_size)
-        time.sleep(30)
 
-        dentry_count, dentry_pinned_count = self.mount_a.get_dentry_count()
-        self.assertLessEqual(dentry_count, cache_size)
-        self.assertLessEqual(dentry_pinned_count, cache_size)
+        def trimmed():
+            dentry_count, dentry_pinned_count = self.mount_a.get_dentry_count()
+            log.info("waiting, dentry_count, dentry_pinned_count: {0}, {1}".format(
+                dentry_count, dentry_pinned_count
+            ))
+            if dentry_count > cache_size or dentry_pinned_count > cache_size:
+                return False
+
+            return True
+
+        self.wait_until_true(trimmed, 30)
