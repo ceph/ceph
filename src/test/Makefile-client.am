@@ -546,7 +546,7 @@ bin_DEBUGPROGRAMS += ceph_test_cls_rgw_meta
 
 ceph_test_cls_rgw_log_SOURCES = test/test_rgw_admin_log.cc
 ceph_test_cls_rgw_log_LDADD = \
-	$(LIBRADOS) $(LIBRGW) $(CEPH_GLOBAL) \
+	$(LIBRADOS) $(LIBRGW) $(LIBRGW_DEPS) $(CEPH_GLOBAL) \
 	$(UNITTEST_LDADD) $(CRYPTO_LIBS) \
 	-lcurl -lexpat \
 	libcls_version_client.a libcls_log_client.a \
