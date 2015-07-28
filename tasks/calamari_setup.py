@@ -109,6 +109,11 @@ def fix_yum_repos(remote, distro):
     contain a repo file named rhel<version-number>.repo
     """
     if distro.startswith('centos'):
+        # hack alert: detour: install lttng for ceph
+        # this works because epel is preinstalled on the vpms
+        # this is not a generic solution
+        # this is here solely to test the one-off 1.3.0 release for centos6
+        remote.run(args="sudo yum -y install lttng-tools")
         cmds = [
             'sudo mkdir /etc/yum.repos.d.old'.split(),
             ['sudo', 'cp', run.Raw('/etc/yum.repos.d/*'),
@@ -164,7 +169,7 @@ def remove_epel(ctx, no_epel):
     if no_epel:
         for remote in ctx.cluster.remotes:
             if remote.os.name.startswith('centos'):
-                remote.run(args= [
+                remote.run(args=[
                     'sudo', 'rm', '-f', run.Raw('/etc/yum.repos.d/epel*')
                 ])
     try:
@@ -351,20 +356,27 @@ def deploy_ceph(ctx, cal_svr):
     # 1.3 and later:
     # ceph-deploy new <all_mons>
     # ceph-deploy install --repo --release=ceph-mon <all_mons>
-    # ceph-deploy install --mon <all_mons>
+    # ceph-deploy install <all_mons>
     # ceph-deploy install --repo --release=ceph-osd <all_osds>
-    # ceph-deploy install --osd <all_osds>
+    # ceph-deploy install <all_osds>
     # ceph-deploy mon create-initial
+    #
+    # one might think the install <all_mons> and install <all_osds>
+    # commands would need --mon and --osd, but #12147 has not yet
+    # made it into RHCS 1.3.0; since the package split also hasn't
+    # landed, we can avoid using the flag and avoid the bug.
 
     cmds = ['ceph-deploy new ' + ' '.join(all_mons)]
 
     if use_install_repo:
         cmds.append('ceph-deploy install --repo --release=ceph-mon ' +
                     ' '.join(all_mons))
-        cmds.append('ceph-deploy install --mon ' + ' '.join(all_mons))
+        cmds.append('ceph-deploy install --no-adjust-repos ' +
+                    ' '.join(all_mons))
         cmds.append('ceph-deploy install --repo --release=ceph-osd ' +
                     ' '.join(all_osds))
-        cmds.append('ceph-deploy install --mon ' + ' '.join(all_osds))
+        cmds.append('ceph-deploy install --no-adjust-repos  ' +
+                    ' '.join(all_osds))
     else:
         cmds.append('ceph-deploy install ' + ' '.join(all_machines))
 
@@ -397,9 +409,16 @@ def undeploy_ceph(ctx, cal_svr):
     all_machines = []
     ret = True
     for remote in ctx.cluster.remotes:
-        ret &= remote.run(args=['sudo', 'stop', 'ceph-all', run.Raw('||'),
-                                'sudo', 'service', 'ceph', 'stop']
-                          ).exitstatus
+        roles = ctx.cluster.remotes[remote]
+        if (
+            not any('osd' in role for role in roles) and
+            not any('mon' in role for role in roles)
+        ):
+            continue
+        ret &= remote.run(
+            args=['sudo', 'stop', 'ceph-all', run.Raw('||'),
+                  'sudo', 'service', 'ceph', 'stop']
+        ).exitstatus
         all_machines.append(remote.shortname)
     all_machines = set(all_machines)
     cmd1 = ['ceph-deploy', 'uninstall']
