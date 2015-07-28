@@ -1,0 +1,3 @@
+overrides:
+  kernel:
+    branch: nightly_pre-single-major # nightly/pre-single-major, v3.13
