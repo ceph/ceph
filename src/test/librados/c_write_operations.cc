@@ -117,7 +117,7 @@ TEST(LibRadosCWriteOps, Xattrs) {
   ASSERT_TRUE(op);
   rados_write_op_cmpxattr(op, "key", LIBRADOS_CMPXATTR_OP_EQ, "value", 5);
   rados_write_op_setxattr(op, "key", "value", 5);
-  ASSERT_EQ(-125, rados_write_op_operate(op, ioctx, "test", NULL, 0));
+  ASSERT_EQ(-ECANCELED, rados_write_op_operate(op, ioctx, "test", NULL, 0));
 
   rados_release_write_op(op);
   rados_ioctx_destroy(ioctx);
