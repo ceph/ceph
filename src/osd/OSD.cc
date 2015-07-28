@@ -223,6 +223,8 @@ OSDService::OSDService(OSD *osd) :
   agent_active(true),
   agent_thread(this),
   agent_stop_flag(false),
+  agent_in_schedule_time(false),
+  agent_schedule_flush_version(0),
   agent_timer_lock("OSD::agent_timer_lock"),
   agent_timer(osd->client_messenger->cct, agent_timer_lock),
   objecter(new Objecter(osd->client_messenger->cct, osd->objecter_messenger, osd->monc, NULL, 0, 0)),
@@ -577,6 +579,88 @@ void OSDService::agent_stop()
     agent_cond.Signal();
   }
   agent_thread.join();
+}
+
+class AgentScheduleFlushTimeoutCB : public Context {
+  OSDService *osd;
+  string choice;
+  int version;
+public:
+  AgentScheduleFlushTimeoutCB(OSDService *o, string c, int v) :
+    osd(o),
+    choice(c),
+    version(v) {}
+  void finish(int) {
+    //skip stale schedule events' callback
+    Mutex::Locker l(osd->agent_timer_lock);
+    if (version != osd->agent_schedule_flush_version)
+      return;
+    if (choice == "start") {
+      osd->agent_schedule_flush_start();
+    } else if (choice == "end") {
+      osd->agent_schedule_flush_end();
+    }
+  }
+};
+
+void OSDService::agent_schedule_flush_setup()
+{
+  dout(10) << __func__ << " start" << dendl;
+  utime_t now = ceph_clock_now(cct);
+  struct tm tm_t;
+  time_t tt= now.sec();
+  localtime_r(&tt, &tm_t);
+  double start_after;
+  double end_after;
+
+  //transfer config string to struct tm
+  struct tm sche_st;
+  struct tm sche_ed;
+  strptime(cct->_conf->osd_tier_schedule_flush_start.c_str(), "%H:%M", &sche_st);
+  strptime(cct->_conf->osd_tier_schedule_flush_end.c_str(), "%H:%M", &sche_ed);
+  double interval_time = (sche_ed.tm_hour * 60 + sche_ed.tm_min)
+                         - (sche_st.tm_hour * 60 + sche_st.tm_min);
+
+  //no schedule_flush job
+  if (interval_time == 0) {
+    dout(10) << __func__ << " no schedule_flush set" << dendl;
+    agent_in_schedule_time = false;
+    return;
+  }
+
+  //prepare callbacks for schedule flush
+  Context *sf_start_cb = new AgentScheduleFlushTimeoutCB(this, "start", agent_schedule_flush_version);
+  Context *sf_end_cb = new AgentScheduleFlushTimeoutCB(this, "end", agent_schedule_flush_version);
+
+  if (interval_time > 0) {
+    if ((tm_t.tm_hour * 60 + tm_t.tm_min >= sche_st.tm_hour * 60 + sche_st.tm_min)
+        && (tm_t.tm_hour *60 + tm_t.tm_min < sche_ed.tm_hour * 60 + sche_ed.tm_min)) {
+      agent_in_schedule_time= true;
+    }
+  } else if ((tm_t.tm_hour * 60 + tm_t.tm_min >= sche_st.tm_hour * 60 + sche_st.tm_min)
+             || (tm_t.tm_hour *60 + tm_t.tm_min < sche_ed.tm_hour * 60 + sche_ed.tm_min)) {
+      agent_in_schedule_time= true;
+  }
+
+  //calculate time(seconds) agent_timer thread invoke schedule_flush callbacks from now.
+  if (agent_in_schedule_time)
+    start_after= 5.0;
+  else {
+    start_after = ((sche_st.tm_hour - tm_t.tm_hour) * 3600
+                   + (sche_st.tm_min - tm_t.tm_min) * 60);
+    if (start_after < 0)
+      start_after += 24 * 3600;
+  }
+  if (interval_time < 0)
+    interval_time += 24 * 60;
+  end_after = start_after + interval_time * 60;
+
+  //add events in agent_timer to tell agent process schedule_flush
+  dout(10) << __func__ << " queue timer "
+          << "start schedule_flush after " << start_after
+          << " terminate schedule_flush after " << end_after << dendl;
+  agent_timer.add_event_after(start_after, sf_start_cb);
+  agent_timer.add_event_after(end_after, sf_end_cb);
 }
 
 // -------------------------------------

@@ -658,11 +658,16 @@ public:
     }
   } agent_thread;
   bool agent_stop_flag;
-  Mutex agent_timer_lock;
-  SafeTimer agent_timer;
-
   void agent_entry();
   void agent_stop();
+
+  bool agent_in_schedule_time;
+  int agent_schedule_flush_version;
+  Mutex agent_timer_lock;
+  SafeTimer agent_timer;
+  void agent_schedule_flush_setup();
+  void agent_schedule_flush_start();  //start schedule flush work
+  void agent_schedule_flush_end();  //finish schedule flush work
 
   void _enqueue(PG *pg, uint64_t priority) {
     if (!agent_queue.empty() &&
