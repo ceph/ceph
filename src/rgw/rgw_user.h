@@ -440,7 +440,7 @@ struct RGWUserAdminOpState {
   {
     max_buckets = RGW_DEFAULT_MAX_BUCKETS;
     key_type = -1;
-    perm_mask = 0;
+    perm_mask = RGW_PERM_NONE;
     suspended = 0;
     system = 0;
     exclusive = 0;
