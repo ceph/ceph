@@ -76,7 +76,7 @@ function delete_pool() {
     ./ceph osd erasure-code-profile rm myprofile
 }
 
-function rados_put_get() {
+function rados_put() {
     local dir=$1
     local poolname=$2
     local objname=${3:-SOMETHING}
@@ -88,21 +88,57 @@ function rados_put_get() {
     # get and put an object, compare they are equal
     #
     ./rados --pool $poolname put $objname $dir/ORIGINAL || return 1
+}
+
+function rados_get() {
+    local dir=$1
+    local poolname=$2
+    local objname=${3:-SOMETHING}
+    local expect=${4:-0}
+
+    #
+    # Expect a failure to get object
+    #
+    if [ $expect = "1" ];
+    then
+        ! ./rados --pool $poolname get $objname $dir/COPY
+        return $?
+    fi
+    #
+    # get an object, compare with $dir/ORIGINAL
+    #
     ./rados --pool $poolname get $objname $dir/COPY || return 1
     diff $dir/ORIGINAL $dir/COPY || return 1
     rm $dir/COPY
+}
+
+function rados_put_get() {
+    local dir=$1
+    local poolname=$2
+    local objname=${3:-SOMETHING}
+    local expect=${4:-0}
+    local recovery=$5
+
     #
-    # take out the first OSD used to store the object and
-    # check the object can still be retrieved, which implies
-    # recovery
+    # get and put an object, compare they are equal
     #
-    local -a initial_osds=($(get_osds $poolname $objname))
-    local last=$((${#initial_osds[@]} - 1))
-    ./ceph osd out ${initial_osds[$last]} || return 1
-    ! get_osds $poolname $objname | grep '\<'${initial_osds[$last]}'\>' || return 1
-    ./rados --pool $poolname get $objname $dir/COPY || return 1
-    diff $dir/ORIGINAL $dir/COPY || return 1
-    ./ceph osd in ${initial_osds[$last]} || return 1
+    rados_put $dir $poolname $objname || return 1
+    rados_get $dir $poolname $objname $expect || return 1
+
+    if [ -n "$recovery" ];
+    then
+        #
+        # take out the first OSD used to store the object and
+        # check the object can still be retrieved, which implies
+        # recovery
+        #
+        local -a initial_osds=($(get_osds $poolname $objname))
+        local last=$((${#initial_osds[@]} - 1))
+        ./ceph osd out ${initial_osds[$last]} || return 1
+        ! get_osds $poolname $objname | grep '\<'${initial_osds[$last]}'\>' || return 1
+        rados_get $dir $poolname $objname $expect || return 1
+        ./ceph osd in ${initial_osds[$last]} || return 1
+    fi
 
     rm $dir/ORIGINAL
 }
@@ -112,33 +148,28 @@ function rados_get_data_eio() {
     shift
     local shard_id=$1
     shift
-    local osd_state=$1
+    local recovery=$1
     shift
 
     # inject eio to speificied shard
-    # OSD with eio injection will crash at reading object
     #
     local poolname=pool-jerasure
     local objname=obj-eio-$$-$shard_id
     local -a initial_osds=($(get_osds $poolname $objname))
     local osd_id=${initial_osds[$shard_id]}
     local last=$((${#initial_osds[@]} - 1))
-    # set_config osd $osd_id filestore_debug_inject_read_err true || return 1
     set_config osd $osd_id filestore_debug_inject_read_err true || return 1
     CEPH_ARGS='' ./ceph --admin-daemon $dir/ceph-osd.$osd_id.asok \
              injectdataerr $poolname $objname $shard_id || return 1
-    set_config osd $osd_id filestore_fail_eio false || return 1
-
-    rados_put_get $dir $poolname $objname || return 1
-    TIMEOUT=1 wait_for_osd $osd_state $osd_id || return 1
+    rados_put_get $dir $poolname $objname 1 $recovery || return 1
 }
 
 #
 # These two test cases try to validate the following behavior:
 #  For object on EC pool, if there is one shard having read error (
-#  either primary or replica), it will trigger OSD crash.
+#  either primary or replica), client gets the read error back.
 #
-function TEST_rados_get_without_subreadall_eio_shard_0() {
+function TEST_rados_get_subread_eio_shard_0() {
     local dir=$1
     setup_osds false || return 1
 
@@ -146,11 +177,11 @@ function TEST_rados_get_without_subreadall_eio_shard_0() {
     create_erasure_coded_pool $poolname || return 1
     # inject eio on primary OSD (0)
     local shard_id=0
-    rados_get_data_eio $dir $shard_id down || return 1
+    rados_get_data_eio $dir $shard_id || return 1
     delete_pool $poolname
 }
 
-function TEST_rados_get_without_subreadall_eio_shard_1() {
+function TEST_rados_get_subread_eio_shard_1() {
     local dir=$1
     setup_osds false || return 1
 
@@ -158,10 +189,9 @@ function TEST_rados_get_without_subreadall_eio_shard_1() {
     create_erasure_coded_pool $poolname || return 1
     # inject eio into replica OSD (1)
     local shard_id=1
-    rados_get_data_eio $dir $shard_id down || return 1
+    rados_get_data_eio $dir $shard_id || return 1
     delete_pool $poolname
 }
-
 
 : <<'DISABLED_TESTS'
 # this test case is aimed to test the fix of https://github.com/ceph/ceph/pull/2952
@@ -182,7 +212,7 @@ function TEST_rados_get_with_subreadall_eio_shard_0() {
     create_erasure_coded_pool $poolname || return 1
     # inject eio on primary OSD (0)
     local shard_id=0
-    rados_get_data_eio $dir $shard_id up || return 1
+    rados_get_data_eio $dir $shard_id recovery || return 1
 
     check_pg_status $pg "inconsistent" || return 1
     delete_pool $poolname
@@ -198,7 +228,7 @@ function TEST_rados_get_with_subreadall_eio_shard_1() {
     create_erasure_coded_pool $poolname || return 1
     # inject eio on replica OSD (1)
     local shard_id=1
-    rados_get_data_eio $dir $shard_id up || return 1
+    rados_get_data_eio $dir $shard_id recovery || return 1
 
     # the reason to skip this check when current shardid != 0 is that the first
     # k chunks returned is not always containing current shardid, so this pg may
