@@ -50,6 +50,7 @@ Dan Mick <dmick@redhat.com> <dmick@danceorelse.org>
 Danny Al-Gaaf <danny.al-gaaf@bisect.de> <danny.kukawka@bisect.de>
 David Moreau Simard <dmsimard@iweb.com> <moi@dmsimard.com>
 Dmitry Smirnov <onlyjob@member.fsf.org> <onlyjob@debian.org>
+Dmitry Yatsushkevich <dyatsushkevich@mirantis.com> <dmitry.yatsushkevich@gmail.com>
 Dominik Hannen <cantares1+github@gmail.com> Dominik Hannen <dhxgit@users.noreply.github.com>
 Eric Mourgaya <eric.mourgaya@arkea.com> <eric.mourgaya@gmail.com>
 Erwin, Brock A <Brock.Erwin@pnl.gov> <Brock.Erwin@pnl.govgit>
@@ -60,7 +61,7 @@ Florent Bautista <florent@coppint.com> FlorentCoppint <florent@coppint.com>
 Florent Flament <florent.flament@cloudwatt.com> <florent.flament-ext@cloudwatt.com>
 Florian Coste <fcoste21@gmail.com> nairolf21
 Florian Marsylle <florian.marsylle@hotmail.fr> <floleblanc@hotmail.fr>
-François Lafont <flafdivers@free.fr> François Lafont <francois.lafont@crdp.ac-versailles.fr>
+François Lafont <flafdivers@free.fr> <francois.lafont@crdp.ac-versailles.fr>
 Gary Lowell <gary.lowell@inktank.com> Gary Lowelll <gary.lowell@inktank.com>
 Gary Lowell <gary.lowell@inktank.com> <glowell@flab.ops.newdream.net>
 Gary Lowell <gary.lowell@inktank.com> <glowell@inktank.com>
@@ -87,6 +88,8 @@ Huamin Chen <hchen@redhat.com> rootfs <hchen@redhat.com>
 Huang Jun <hjwsm1989@gmail.com> huang jun <hjwsm1989@gmail.com>
 Huang Jun <hjwsm1989@gmail.com> huangjun <hjwsm1989@gmail.com>
 Ilya Dryomov <idryomov@redhat.com> <idryomov@gmail.com>
+Ilja Slepnev <islepnev@gmail.com>
+Ismael Serrano <ismael.serrano@gmail.com> <ismaels@qti.qualcomm.com>
 Jean-Charles Lopez <jelopez@redhat.com> jeanchlopez <jelopez@redhat.com>
 Jiang Heng <jiangheng0511@gmail.com> jiangheng <jiangheng0511@gmail.com>
 Jiantao He <hejiantao5@gmail.com> hejiantao5 <hejiantao5@gmail.com>
@@ -135,6 +138,7 @@ Michael Riederer <michael@riederer.org> dynamike67 <michael@riederer.org>
 Michael Rodriguez <michael@newdream.net> <michael@newdream.net>
 Michael Rodriguez <michael@newdream.net> <michael@squid.newdream.net>
 Mykola Golub <mgolub@mirantis.com> Mykola Golub <mgolub@zhuzha.mirantis.lviv.net>
+Nathan Cutler <ncutler@suse.com> <ncutler@suse.cz>
 Neil Levine <neil.levine@inktank.com> <levine@yoyo.org>
 Ning Yao <yaoning@ruijie.com.cn> <zay11022@gmail.com>
 Noah Watkins <nwatkins@redhat.com> <jayhawk@cs.ucsc.edu>
@@ -205,6 +209,7 @@ Travis Rhoden <trhoden@redhat.com> <trhoden@gmail.com>
 Tyler Brekke <tyler.brekke@inktank.com> Concubidated <tyler.brekke@inktank.com>
 Volker Assmann <volker@twisted-nerve.de> <volker@36-135.mops.RWTH-Aachen.DE>
 Volker Assmann <volker@twisted-nerve.de> <volker@stan.local>
+Varada Kari <varada.kari@sandisk.com> <kariraja@yahoo.com>
 Walter Huf <hufman@gmail.com> Walter J. Huf <hufman@gmail.com>
 Wang, Yaguang <yaguang.wang@intel.com> ywang19 <yaguang.wang@intel.com>
 Warren Usui <warren.usui@inktank.com> wusui <warren.usui@inktank.com>
