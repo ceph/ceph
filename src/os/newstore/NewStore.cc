@@ -1345,8 +1345,8 @@ bool NewStore::collection_empty(coll_t cid)
   dout(15) << __func__ << " " << cid << dendl;
   vector<ghobject_t> ls;
   ghobject_t next;
-  int r = collection_list_partial(cid, ghobject_t(), 5, 5, CEPH_NOSNAP,
-				  &ls, &next);
+  int r = collection_list(cid, ghobject_t(), ghobject_t::get_max(), true, 5,
+			  &ls, &next);
   if (r < 0)
     return false;  // fixme?
   bool empty = ls.empty();
@@ -1354,59 +1354,15 @@ bool NewStore::collection_empty(coll_t cid)
   return empty;
 }
 
-int NewStore::collection_list(coll_t cid, vector<ghobject_t>& o)
-{
-  dout(15) << __func__ << " " << cid << dendl;
-  CollectionRef c = _get_collection(cid);
-  if (!c)
-    return -ENOENT;
-  RWLock::RLocker l(c->lock);
-  int r = 0;
-  KeyValueDB::Iterator it = db->get_iterator(PREFIX_OBJ);
-  string temp_start_key, temp_end_key;
-  string start_key, end_key;
-  bool temp = true;
-  const char *end;
-  get_coll_key_range(cid, c->cnode.bits, &temp_start_key, &temp_end_key,
-		     &start_key, &end_key);
-  dout(20) << __func__ << " range " << temp_start_key << " to " << temp_end_key
-	   << " and " << start_key << " to " << end_key << dendl;
-  end = temp_start_key.c_str();
-  it->upper_bound(temp_start_key);
-  while (true) {
-    if (!it->valid() || strcmp(it->key().c_str(), end) > 0) {
-      if (!it->valid())
-	dout(20) << __func__ << " iterator not valid (end of db?)" << dendl;
-      else
-	dout(20) << __func__ << " key " << it->key() << " > " << end << dendl;
-      if (temp) {
-	dout(30) << __func__ << " switch to non-temp namespace" << dendl;
-	temp = false;
-	it->upper_bound(start_key);
-	end = end_key.c_str();
-	continue;
-      }
-      break;
-    }
-    dout(20) << __func__ << " key " << it->key() << dendl;
-    ghobject_t oid;
-    int r = get_key_object(it->key(), &oid);
-    assert(r == 0);
-    o.push_back(oid);
-    it->next();
-  }
-  dout(10) << __func__ << " " << cid << " = " << r << dendl;
-  return r;
-}
-
-int NewStore::collection_list_partial(
-  coll_t cid, ghobject_t start,
-  int min, int max, snapid_t snap,
+int NewStore::collection_list(
+  coll_t cid, ghobject_t start, ghobject_t end,
+  bool sort_bitwise, int max,
   vector<ghobject_t> *ls, ghobject_t *pnext)
 {
   dout(15) << __func__ << " " << cid
-	   << " start " << start << " min/max " << min << "/" << max
-	   << " snap " << snap << dendl;
+	   << " start " << start << " end " << end << " max " << max << dendl;
+  if (!sort_bitwise)
+    return -EOPNOTSUPP;
   CollectionRef c = _get_collection(cid);
   if (!c)
     return -ENOENT;
@@ -1416,7 +1372,8 @@ int NewStore::collection_list_partial(
   string temp_start_key, temp_end_key;
   string start_key, end_key;
   bool set_next = false;
-  const char *end;
+  string end_str;
+  const char *pend;
   bool temp;
 
   if (start == ghobject_t::get_max())
@@ -1426,87 +1383,6 @@ int NewStore::collection_list_partial(
   dout(20) << __func__ << " range " << temp_start_key << " to "
 	   << temp_end_key << " and " << start_key << " to " << end_key
 	   << " start " << start << dendl;
-  it = db->get_iterator(PREFIX_OBJ);
-  if (start == ghobject_t()) {
-    it->upper_bound(temp_start_key);
-    temp = true;
-  } else {
-    string k;
-    get_object_key(start, &k);
-    if (start.hobj.is_temp()) {
-      temp = true;
-      assert(k >= temp_start_key && k < temp_end_key);
-    } else {
-      temp = false;
-      assert(k >= start_key && k < end_key);
-    }
-    it->upper_bound(k);
-  }
-  end = temp ? temp_end_key.c_str() : end_key.c_str();
-  while (true) {
-    if (!it->valid() || strcmp(it->key().c_str(), end) > 0) {
-      if (!it->valid())
-	dout(20) << __func__ << " iterator not valid (end of db?)" << dendl;
-      else
-	dout(20) << __func__ << " key " << it->key() << " > " << end << dendl;
-      if (temp) {
-	dout(30) << __func__ << " switch to non-temp namespace" << dendl;
-	temp = false;
-	it->upper_bound(start_key);
-	end = end_key.c_str();
-	continue;
-      }
-      break;
-    }
-    dout(20) << __func__ << " key " << it->key() << dendl;
-    ghobject_t oid;
-    int r = get_key_object(it->key(), &oid);
-    assert(r == 0);
-    ls->push_back(oid);
-    if (ls->size() >= (unsigned)max) {
-      *pnext = oid;
-      set_next = true;
-      break;
-    }
-    it->next();
-  }
-  if (!set_next) {
-    *pnext = ghobject_t::get_max();
-  }
- out:
-  dout(10) << __func__ << " " << cid
-	   << " start " << start << " min/max " << min << "/" << max
-	   << " snap " << snap << " = " << r << ", ls.size() = " << ls->size()
-	   << ", next = " << *pnext << dendl;
-  return r;
-}
-
-int NewStore::collection_list_range(
-  coll_t cid, ghobject_t start, ghobject_t end,
-  snapid_t seq, vector<ghobject_t> *ls)
-{
-  dout(15) << __func__ << " " << cid
-	   << " start " << start << " end " << end
-	   << " snap " << seq << dendl;
-  CollectionRef c = _get_collection(cid);
-  if (!c)
-    return -ENOENT;
-  RWLock::RLocker l(c->lock);
-  int r = 0;
-  KeyValueDB::Iterator it;
-  string temp_start_key, temp_end_key;
-  string start_key, end_key;
-  string end_str;
-  const char *pend;
-  bool temp;
-
-  if (start == ghobject_t::get_max() || end == ghobject_t())
-    goto out;
-  get_coll_key_range(cid, c->cnode.bits, &temp_start_key, &temp_end_key,
-		     &start_key, &end_key);
-  dout(20) << __func__ << " range " << temp_start_key << " to "
-	   << temp_end_key << " and " << start_key << " to " << end_key
-	   << " start " << start << " end " << end << dendl;
   it = db->get_iterator(PREFIX_OBJ);
   if (start == ghobject_t()) {
     it->upper_bound(temp_start_key);
@@ -1537,7 +1413,7 @@ int NewStore::collection_list_range(
       if (!it->valid())
 	dout(20) << __func__ << " iterator not valid (end of db?)" << dendl;
       else
-	dout(20) << __func__ << " key " << it->key() << " > " << pend << dendl;
+	dout(20) << __func__ << " key " << it->key() << " > " << end << dendl;
       if (temp) {
 	if (end.hobj.is_temp()) {
 	  break;
@@ -1545,7 +1421,7 @@ int NewStore::collection_list_range(
 	dout(30) << __func__ << " switch to non-temp namespace" << dendl;
 	temp = false;
 	it->upper_bound(start_key);
-	pend = end_str.c_str();
+	pend = end_key.c_str();
 	continue;
       }
       break;
@@ -1555,12 +1431,21 @@ int NewStore::collection_list_range(
     int r = get_key_object(it->key(), &oid);
     assert(r == 0);
     ls->push_back(oid);
+    if (ls->size() >= (unsigned)max) {
+      *pnext = oid;
+      set_next = true;
+      break;
+    }
     it->next();
+  }
+  if (!set_next) {
+    *pnext = ghobject_t::get_max();
   }
  out:
   dout(10) << __func__ << " " << cid
-	   << " start " << start << " end " << end
-	   << " snap " << seq << " = " << r << dendl;
+	   << " start " << start << " end " << end << " max " << max
+	   << " = " << r << ", ls.size() = " << ls->size()
+	   << ", next = " << *pnext << dendl;
   return r;
 }
 
