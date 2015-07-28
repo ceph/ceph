@@ -910,8 +910,10 @@ int RGWZoneParams::init(CephContext *cct, RGWRados *store, RGWZoneGroup& zonegro
 
   string pool_name;
   int ret = get_pool_name(cct, &pool_name);
-  if (ret < 0)
+  if (ret < 0) {
+    lderr(cct) << "failed reading zone params pool name: " << cpp_strerror(-ret) << dendl;
     return ret;
+  }
 
   rgw_bucket pool(pool_name.c_str());
   bufferlist bl;
@@ -2100,17 +2102,22 @@ int RGWRados::init_complete()
   int ret;
 
   ret = realm.init(cct, this);
-  if (ret < 0 && ret != ENOENT) {
+  if (ret < 0 && ret != -ENOENT) {
+    lderr(cct) << "failed reading realm info: ret "<< ret << " " << cpp_strerror(-ret) << dendl;
     return ret;
   }
 
   ret = zonegroup.init(cct, this);
-  if (ret < 0)
+  if (ret < 0 && ret != -ENOENT) {
+    lderr(cct) << "failed reading zonegroup info: ret "<< ret << " " << cpp_strerror(-ret) << dendl;
     return ret;
+  }
 
   ret = zone.init(cct, this, zonegroup);
-  if (ret < 0)
+  if (ret < 0 && ret != -ENOENT) {
+    lderr(cct) << "failed reading zone info: ret "<< ret << " " << cpp_strerror(-ret) << dendl;
     return ret;
+  }
 
   init_unique_trans_id_deps();
 
@@ -2150,7 +2157,7 @@ int RGWRados::init_complete()
   if (need_watch_notify()) {
     ret = init_watch();
     if (ret < 0) {
-      lderr(cct) << "ERROR: failed to initialize watch" << dendl;
+      lderr(cct) << "ERROR: failed to initialize watch: " << cpp_strerror(-ret) << dendl;
       return ret;
     }
   }
