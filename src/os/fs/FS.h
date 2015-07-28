@@ -71,7 +71,7 @@ public:
     int max_iodepth;
     io_context_t ctx;
 
-    aio_queue_t(unsigned max_iodepth = 8)
+    aio_queue_t(unsigned max_iodepth)
       : max_iodepth(max_iodepth),
 	ctx(0) {
     }
@@ -91,7 +91,7 @@ public:
       }
     }
 
-    int submit(aio_t &aio) {
+    int submit(aio_t &aio, int *retries) {
       int attempts = 10;
       iocb *piocb = &aio.iocb;
       do {
@@ -99,10 +99,12 @@ public:
 	if (r < 0) {
 	  if (r == -EAGAIN && attempts-- > 0) {
 	    usleep(500);
+	    (*retries)++;
 	    continue;
 	  }
 	  return r;
 	}
+	assert(r == 1);
       } while (false);
       return 0;
     }

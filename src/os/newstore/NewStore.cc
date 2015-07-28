@@ -2624,7 +2624,8 @@ int NewStore::queue_transactions(
 void NewStore::_txc_aio_submit(TransContext *txc)
 {
   int num = txc->aios.size();
-  dout(10) << __func__ << " submitting " << num << " aios" << dendl;
+  dout(10) << __func__ << " txc " << txc << " submitting " << num << dendl;
+  assert(num > 0);
   txc->num_aio.set(num);
   for (list<FS::aio_t>::iterator p = txc->aios.begin();
        p != txc->aios.end();
@@ -2636,7 +2637,10 @@ void NewStore::_txc_aio_submit(TransContext *txc)
 	       << " len " << q->iov_len << dendl;
     dout(30) << " fd " << aio.fd << " offset " << lseek64(aio.fd, 0, SEEK_CUR)
 	     << dendl;
-    int r = aio_queue.submit(*p);
+    int retries = 0;
+    int r = aio_queue.submit(*p, &retries);
+    if (retries)
+      derr << __func__ << " retries " << retries << dendl;
     if (r) {
       derr << " aio submit got " << cpp_strerror(r) << dendl;
       assert(r == 0);
