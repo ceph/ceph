@@ -109,6 +109,11 @@ def fix_yum_repos(remote, distro):
     contain a repo file named rhel<version-number>.repo
     """
     if distro.startswith('centos'):
+        # hack alert: detour: install lttng for ceph
+        # this works because epel is preinstalled on the vpms
+        # this is not a generic solution
+        # this is here solely to test the one-off 1.3.0 release for centos6
+        remote.run(args="sudo yum -y install lttng-tools")
         cmds = [
             'sudo mkdir /etc/yum.repos.d.old'.split(),
             ['sudo', 'cp', run.Raw('/etc/yum.repos.d/*'),
