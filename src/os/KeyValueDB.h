@@ -179,7 +179,9 @@ public:
   }
 
   virtual uint64_t get_estimated_size(map<string,uint64_t> &extra) = 0;
-  virtual int get_statfs(struct statfs *buf) { int r = 0; return r; }
+  virtual int get_statfs(struct statfs *buf) {
+    return -EOPNOTSUPP;
+  }
 
   virtual ~KeyValueDB() {}
 

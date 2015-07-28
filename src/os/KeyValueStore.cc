@@ -582,13 +582,12 @@ KeyValueStore::~KeyValueStore()
 
 int KeyValueStore::statfs(struct statfs *buf)
 {
-  if (g_conf->keyvaluestore_backend != "pluggabledb") {
+  int r = backend->db->get_statfs(buf);
+  if (r < 0) {
     if (::statfs(basedir.c_str(), buf) < 0) {
       int r = -errno;
       return r;
     }
-  } else {
-    backend->db->get_statfs(buf);
   }
   return 0;
 }

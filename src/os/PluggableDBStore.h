@@ -62,12 +62,13 @@ class PluggableDBStore : public KeyValueDB {
   int do_open(ostream &out, bool create_if_missing);
   int getosdid();
   PluggableDBIterator* DBGetIterator();
-  value_t* DBGetObject(const string& key);
+  value_t* DBGetValue(const string& key);
   int DBInit(const char*, int, map<string, string>*);
   void DBClose();
   uint64_t DBGetSize();
   int DBGetStatfs(struct statfs *buf);
   int DBSubmitTransaction(map<string, DBOp>& ops);
+  int DBSubmitTransactionSync(map<string, DBOp>& ops);
   int load_symbols(const char *path);
   void load_dll(const char *path);
 public:

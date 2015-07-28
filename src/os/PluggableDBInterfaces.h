@@ -44,7 +44,8 @@ extern "C" {
 int dbinit(const char* osd_data, int osdid, std::map<string, string> *options);
 void dbclose();
 int submit_transaction(map<string, DBOp>& ops);
-value_t* getobject(const string& key);
+int submit_transaction_sync(map<string, DBOp>& ops);
+value_t* getvalue(const string& key);
 PluggableDBIterator* get_iterator();
 uint64_t getdbsize();
 int getstatfs(struct statfs *buf);

@@ -28,6 +28,7 @@
 using std::string;
 
 #define numelems(a)      (sizeof(a)/sizeof(*(a)))
+#define KEY_SEPARATOR "\000"
 
 bool PluggableDBStore::create_if_missing = false;
 
@@ -43,11 +44,14 @@ static void
 static int
 (*ptr_submit_transaction)(map<string, DBOp>& ops);
 
+static int
+(*ptr_submit_transaction_sync)(map<string, DBOp>& ops);
+
 static PluggableDBIterator*
 (*ptr_get_iterator)();
 
 static value_t*
-(*ptr_getobject)(const string& key);
+(*ptr_getvalue)(const string& key);
 
 static uint64_t
 (*ptr_getdbsize)();
@@ -62,13 +66,14 @@ static struct {
     const char *name;
     void       *func;
 } table[] ={
-    { "dbinit",                &ptr_init},
-    { "dbclose",               &ptr_close},
-    { "submit_transaction",    &ptr_submit_transaction},
-    { "get_iterator",          &ptr_get_iterator},
-    { "getobject",             &ptr_getobject},
-    { "getdbsize",             &ptr_getdbsize},
-    { "getstatfs",             &ptr_getstatfs},
+    { "dbinit",                      &ptr_init},
+    { "dbclose",                     &ptr_close},
+    { "submit_transaction",          &ptr_submit_transaction},
+    { "submit_transaction_sync",     &ptr_submit_transaction_sync},
+    { "get_iterator",                &ptr_get_iterator},
+    { "getvalue",                    &ptr_getvalue},
+    { "getdbsize",                   &ptr_getdbsize},
+    { "getstatfs",                   &ptr_getstatfs},
 };
 
 static void
@@ -112,6 +117,18 @@ PluggableDBStore::DBSubmitTransaction(map<string, DBOp>& ops)
 
     return (*ptr_submit_transaction)(ops);
 }
+
+/*
+ * submit TX
+ */
+int
+PluggableDBStore::DBSubmitTransactionSync(map<string, DBOp>& ops)
+{
+    if (unlikely(!ptr_submit_transaction_sync))
+        undefined("submit_transaction_sync");
+
+    return (*ptr_submit_transaction_sync)(ops);
+}
 /*
  * Get Iterator
  */
@@ -125,15 +142,15 @@ PluggableDBStore::DBGetIterator()
 }
 
 /*
- * GetObject
+ * GetValue
  */
 value_t*
-PluggableDBStore::DBGetObject(const string& key)
+PluggableDBStore::DBGetValue(const string& key)
 {
-    if (unlikely(!ptr_getobject))
-        undefined("getobject");
+    if (unlikely(!ptr_getvalue))
+        undefined("getvalue");
 
-    return (*ptr_getobject)(key);
+    return (*ptr_getvalue)(key);
 }
 
 /*
@@ -143,7 +160,7 @@ uint64_t
 PluggableDBStore::DBGetSize()
 {
     if (unlikely(!ptr_getdbsize))
-        undefined("getobject");
+        undefined("getdbsize");
 
     return (*ptr_getdbsize)();
 }
@@ -162,15 +179,13 @@ PluggableDBStore::DBGetStatfs(struct statfs *buf)
 
 
 uint64_t PluggableDBStore::get_estimated_size(map<string,uint64_t> &extra) {
-	uint64_t size = DBGetSize();
-	extra["total"] = size;
+    uint64_t size = DBGetSize();
+    extra["total"] = size;
     return size;
 }
 
 int PluggableDBStore::get_statfs(struct statfs *buf) {
-    int r = DBGetStatfs(buf);
-
-    return r;
+    return DBGetStatfs(buf);
 }
 
 /*
@@ -287,7 +302,13 @@ int PluggableDBStore::submit_transaction(KeyValueDB::Transaction t)
 
 int PluggableDBStore::submit_transaction_sync(KeyValueDB::Transaction t)
 {
-  return submit_transaction(t);
+  dout(20) << __func__ <<dendl;
+  PluggableDBTransactionImpl * _t =
+    static_cast<PluggableDBTransactionImpl *>(t.get());
+
+  int ret = DBSubmitTransactionSync(_t->ops);
+  logger->inc(l_PluggableDB_txns);
+  return ret;
 }
 
 void PluggableDBStore::PluggableDBTransactionImpl::set(
@@ -320,7 +341,7 @@ void PluggableDBStore::PluggableDBTransactionImpl::rmkeys_by_prefix(const string
        it->valid();
        it->next()) {
     pair<string,string> key1 = it->raw_key();
-    string key =  key1.first + "\001" + key1.second;
+    string key =  key1.first + KEY_SEPARATOR + key1.second;
     DBOp op;
     op.type = DB_OP_DELETE;
     ops[key] = op;
@@ -338,7 +359,7 @@ int PluggableDBStore::get(
        i != keys.end();
        ++i) {
     string key = combine_strings(prefix, *i);
-	value_t *value = DBGetObject(key);
+	value_t *value = DBGetValue(key);
 	if (value->datalen == 0) {
 		free(value);
 		break;
@@ -357,7 +378,7 @@ int PluggableDBStore::get(
 string PluggableDBStore::combine_strings(const string &prefix, const string &value)
 {
   string out = prefix;
-  out.push_back(1);
+  out.push_back(0);
   out.append(value);
   return out;
 }
