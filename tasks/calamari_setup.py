@@ -409,9 +409,16 @@ def undeploy_ceph(ctx, cal_svr):
     all_machines = []
     ret = True
     for remote in ctx.cluster.remotes:
-        ret &= remote.run(args=['sudo', 'stop', 'ceph-all', run.Raw('||'),
-                                'sudo', 'service', 'ceph', 'stop']
-                          ).exitstatus
+        roles = ctx.cluster.remotes[remote]
+        if (
+            not any('osd' in role for role in roles) and
+            not any('mon' in role for role in roles)
+        ):
+            continue
+        ret &= remote.run(
+            args=['sudo', 'stop', 'ceph-all', run.Raw('||'),
+                  'sudo', 'service', 'ceph', 'stop']
+        ).exitstatus
         all_machines.append(remote.shortname)
     all_machines = set(all_machines)
     cmd1 = ['ceph-deploy', 'uninstall']
