@@ -79,6 +79,16 @@ def task(ctx, config):
                     mounted: false
             - ... do something that requires the FS unmounted ...
 
+    Example that adds more generous wait time for mount (for virtual machines):
+
+        tasks:
+        - ceph:
+        - ceph-fuse:
+            client.0:
+              mount_wait: 60 # default is 0, do not wait before checking /sys/
+              mount_timeout: 120 # default is 30, give up if /sys/ is not populated
+        - interactive:
+
     :param ctx: Context
     :param config: Configuration
     """
