@@ -1132,21 +1132,24 @@ ln -sf %{_libdir}/librbd.so.1 /usr/lib64/qemu/librbd.so.1
 %{_mandir}/man8/ceph_selinux.8.*
 
 %post selinux
+/sbin/service ceph stop >/dev/null 2>&1
 semodule -n -i %{_datadir}/selinux/packages/ceph.pp
 if /usr/sbin/selinuxenabled ; then
     /usr/sbin/load_policy
     %relabel_files
 fi
+/sbin/service ceph start >/dev/null 2>&1
 exit 0
 
 %postun selinux
 if [ $1 -eq 0 ]; then
+    /sbin/service ceph stop >/dev/null 2>&1
     semodule -n -r ceph
     if /usr/sbin/selinuxenabled ; then
        /usr/sbin/load_policy
        %relabel_files
-
     fi;
+    /sbin/service ceph start >/dev/null 2>&1
 fi;
 exit 0
 
