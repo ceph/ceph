@@ -8,7 +8,7 @@ import logging
 from textwrap import dedent
 from unittest import SkipTest
 from teuthology.orchestra.run import CommandFailedError
-from tasks.cephfs.cephfs_test_case import CephFSTestCase
+from tasks.cephfs.cephfs_test_case import CephFSTestCase, needs_trimming
 from tasks.cephfs.fuse_mount import FuseMount
 import os
 import time
@@ -100,9 +100,11 @@ class TestClientLimits(CephFSTestCase):
             timeout=600,
             reject_fn=lambda x: x < int(cache_size*.8))
 
+    @needs_trimming
     def test_client_pin_root(self):
         self._test_client_pin(False)
 
+    @needs_trimming
     def test_client_pin(self):
         self._test_client_pin(True)
 
@@ -172,6 +174,7 @@ class TestClientLimits(CephFSTestCase):
         # Wait for the health warnings. Assume mds can handle 10 request per second at least
         self.wait_for_health("failing to advance its oldest client/flush tid", max_requests / 10)
 
+    @needs_trimming
     def test_client_cache_size(self):
         """
         check if client invalidate kernel dcache according to its cache size config
