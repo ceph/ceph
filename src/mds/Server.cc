@@ -4438,7 +4438,7 @@ void Server::handle_client_mknod(MDRequestRef& mdr)
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return;
 
-  if (!check_access(mdr, diri, MAY_WRITE))
+  if (!check_access(mdr, diri, MAY_WRITE|MAY_CREATE))
     return;
 
   unsigned mode = req->head.args.mknod.mode;
@@ -4609,7 +4609,7 @@ void Server::handle_client_symlink(MDRequestRef& mdr)
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return;
 
-  if (!check_access(mdr, diri, MAY_WRITE))
+  if (!check_access(mdr, diri, MAY_WRITE|MAY_CREATE))
    return;
 
   unsigned mode = S_IFLNK | 0777;
