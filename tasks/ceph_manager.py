@@ -1748,6 +1748,13 @@ class CephManager:
         """
         self.raw_cluster_cmd('osd', 'in', str(osd))
 
+    def signal_osd(self, osd, sig):
+        """
+        Wrapper to local get_daemon call which sends the given
+        signal to the given osd.
+        """
+        self.ctx.daemons.get_daemon('osd', osd).signal(sig)
+
     ## monitors
     def signal_mon(self, mon, sig):
         """
