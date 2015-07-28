@@ -805,6 +805,32 @@ AS_IF([test "x$with_librocksdb_static" = "xyes"],
 AM_CONDITIONAL(WITH_SLIBROCKSDB, [ test "x$with_librocksdb_static" = "xyes" ])
 AM_CONDITIONAL(WITH_LIBROCKSDB, [ test "x$with_librocksdb_static" = "xyes" -o "x$with_librocksdb" = "xyes" ])
 
+#use LMDB
+AC_ARG_WITH([liblmdb],
+            [AS_HELP_STRING([--with-liblmdb], [build lmdb support])],
+            [],
+            [with_liblmdb=no])
+AS_IF([test "x$with_liblmdb" = "xyes"],
+            [PKG_CHECK_MODULES([LIBLMDB], [lmdb], [], [true])])
+AS_IF([test "x$with_liblmdb" = "xyes"],
+            [AC_CHECK_LIB([lmdb], [mdb_env_create], [], [AC_MSG_FAILURE([liblmdb not found])])])
+AM_CONDITIONAL(WITH_DLIBLMDB, [ test "$with_liblmdb" = "yes" ])
+
+AC_ARG_WITH([liblmdb-static],
+            [AS_HELP_STRING([--with-liblmdb-static], [build lmdb support])],
+            [],
+            [with_liblmdb_static=no])
+AS_IF([test "x$with_liblmdb_static" = "xcheck" -a "x$HAVE_CXX11" = "x1" ],
+            [with_liblmdb_static="yes"])
+AS_IF([test "x$with_liblmdb_static" = "xyes"],
+            [AC_CONFIG_SUBDIRS([src/mdb/libraries/liblmdb])])
+AS_IF([test "x$with_liblmdb_static" = "xyes"],
+            [AC_DEFINE([HAVE_LIBLMDB], [1], [Defined if you have liblmdb enabled])])
+AM_CONDITIONAL(WITH_SLIBLMDB, [ test "x$with_liblmdb_static" = "xyes" ])
+AM_CONDITIONAL(WITH_LIBLMDB, [ test "x$with_liblmdb_static" = "xyes" -o "x$with_liblmdb" = "xyes" ])
+
+
+
 # error out if --with-jemalloc and --with-librocksdb_static as rocksdb uses tcmalloc
 if test "x$with_jemalloc" = "xyes"; then
 	if test "x$with_librocksdb_static" != "xno"; then
