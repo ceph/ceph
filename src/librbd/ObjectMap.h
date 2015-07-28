@@ -55,6 +55,10 @@ private:
     }
 
   protected:
+
+    virtual bool safely_cancel(int r) {
+      return false;
+    }
     virtual bool should_complete(int r);
     virtual int filter_return_code(int r) {
       // never propagate an error back to the caller
