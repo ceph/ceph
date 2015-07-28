@@ -934,6 +934,7 @@ if(${WITH_RADOSGW})
     rgw/rgw_replica_log.cc
     rgw/rgw_keystone.cc
     rgw/rgw_quota.cc
+    rgw/rgw_sync.cc
     rgw/rgw_dencoder.cc
     rgw/rgw_object_expirer_core.cc)
 
