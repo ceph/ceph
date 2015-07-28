@@ -309,7 +309,7 @@ class FuseMount(CephFSMount):
 
         self.umount()
 
-        if not self.fuse_daemon.finished:
+        if self.fuse_daemon and not self.fuse_daemon.finished:
             self.fuse_daemon.stdin.close()
             try:
                 self.fuse_daemon.wait()
