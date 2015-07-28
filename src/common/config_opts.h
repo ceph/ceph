@@ -487,6 +487,9 @@ OPTION(mds_max_purge_ops, OPT_U32, 8192)
 // Maximum number of concurrent RADOS ops to issue in purging, scaled by PG count
 OPTION(mds_max_purge_ops_per_pg, OPT_FLOAT, 0.5)
 
+OPTION(mds_root_ino_uid, OPT_INT, 0) // The UID of / on new filesystems
+OPTION(mds_root_ino_gid, OPT_INT, 0) // The GID of / on new filesystems
+
 // If true, compact leveldb store on mount
 OPTION(osd_compact_leveldb_on_mount, OPT_BOOL, false)
 
