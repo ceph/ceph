@@ -1317,3 +1317,12 @@ void MDSDaemon::ms_handle_accept(Connection *con)
   }
 }
 
+bool MDSDaemon::is_clean_shutdown()
+{
+  if (mds_rank) {
+    return mds_rank->is_stopped();
+  } else {
+    return true;
+  }
+}
+
