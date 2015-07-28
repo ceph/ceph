@@ -4856,7 +4856,9 @@ COMMAND("cluster_log " \
 	"osd", "rw", "cli,rest")
 COMMAND("bench " \
 	"name=count,type=CephInt,req=false " \
-	"name=size,type=CephInt,req=false ", \
+	"name=size,type=CephInt,req=false " \
+	"name=object_size,type=CephInt,req=false " \
+	"name=object_num,type=CephInt,req=false ", \
 	"OSD benchmark: write <count> <size>-byte objects, " \
 	"(default 1G size 4MB). Results in log.",
 	"osd", "rw", "cli,rest")
@@ -5030,9 +5032,12 @@ void OSD::do_command(Connection *con, ceph_tid_t tid, vector<string>& cmd, buffe
   else if (prefix == "bench") {
     int64_t count;
     int64_t bsize;
+    int64_t osize, onum;
     // default count 1G, size 4MB
     cmd_getval(cct, cmdmap, "count", count, (int64_t)1 << 30);
     cmd_getval(cct, cmdmap, "size", bsize, (int64_t)4 << 20);
+    cmd_getval(cct, cmdmap, "object_size", osize, (int64_t)0);
+    cmd_getval(cct, cmdmap, "object_num", onum, (int64_t)0);
 
     ceph::shared_ptr<ObjectStore::Sequencer> osr(
       new ObjectStore::Sequencer("bench"));
@@ -5094,12 +5099,31 @@ void OSD::do_command(Connection *con, ceph_tid_t tid, vector<string>& cmd, buffe
     dout(1) << " bench count " << count
             << " bsize " << prettybyte_t(bsize) << dendl;
 
+    ObjectStore::Transaction *cleanupt = new ObjectStore::Transaction;
+
+    if (osize && onum) {
+      bufferlist bl;
+      bufferptr bp(osize);
+      bp.zero();
+      bl.push_back(bp);
+      bl.rebuild_page_aligned();
+      for (int i=0; i<onum; ++i) {
+	char nm[30];
+	snprintf(nm, sizeof(nm), "disk_bw_test_%d", i);
+	object_t oid(nm);
+	hobject_t soid(sobject_t(oid, 0));
+	ObjectStore::Transaction *t = new ObjectStore::Transaction;
+	t->write(coll_t(), ghobject_t(soid), 0, osize, bl);
+	store->queue_transaction_and_cleanup(osr.get(), t);
+	cleanupt->remove(coll_t(), ghobject_t(soid));
+      }
+    }
+
     bufferlist bl;
     bufferptr bp(bsize);
     bp.zero();
     bl.push_back(bp);
-
-    ObjectStore::Transaction *cleanupt = new ObjectStore::Transaction;
+    bl.rebuild_page_aligned();
 
     {
       C_SaferCond waiter;
@@ -5111,13 +5135,20 @@ void OSD::do_command(Connection *con, ceph_tid_t tid, vector<string>& cmd, buffe
     utime_t start = ceph_clock_now(cct);
     for (int64_t pos = 0; pos < count; pos += bsize) {
       char nm[30];
-      snprintf(nm, sizeof(nm), "disk_bw_test_%lld", (long long)pos);
+      unsigned offset = 0;
+      if (onum && osize) {
+	snprintf(nm, sizeof(nm), "disk_bw_test_%d", (int)(rand() % onum));
+	offset = rand() % (osize / bsize) * bsize;
+      } else {
+	snprintf(nm, sizeof(nm), "disk_bw_test_%lld", (long long)pos);
+      }
       object_t oid(nm);
       hobject_t soid(sobject_t(oid, 0));
       ObjectStore::Transaction *t = new ObjectStore::Transaction;
-      t->write(coll_t::meta(), ghobject_t(soid), 0, bsize, bl);
+      t->write(coll_t::meta(), ghobject_t(soid), offset, bsize, bl);
       store->queue_transaction_and_cleanup(osr.get(), t);
-      cleanupt->remove(coll_t::meta(), ghobject_t(soid));
+      if (!onum || !osize)
+	cleanupt->remove(coll_t::meta(), ghobject_t(soid));
     }
 
     {
