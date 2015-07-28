@@ -475,10 +475,16 @@ def cli_test(ctx, config):
     if config is None:
         config = {}
         
+    test_branch=''
     if config.get('rhbuild'):
         path=None
     else:
-        path = teuthology.get_testdir(ctx)  
+        path = teuthology.get_testdir(ctx)
+        # test on branch from config eg: wip-* , master or next etc
+        # packages for all distro's should exist for wip*
+        if ctx.config.get('branch'):
+            branch=ctx.config.get('branch')
+            test_branch=' --dev={branch} '.format(branch=branch)
     mons = ctx.cluster.only(teuthology.is_type('mon'))
     for node,role in mons.remotes.iteritems():
         admin=node
@@ -498,9 +504,9 @@ def cli_test(ctx, config):
             raise RuntimeError ( "Needs minimum of 3 devices ")
     
     new_cmd= 'new ' + nodename
-    new_mon_install = 'install --mon ' + nodename
-    new_osd_install = 'install --osd ' + nodename
-    new_admin = 'install --cli ' + nodename
+    new_mon_install = 'install {branch} --mon '.format(branch=test_branch) + nodename
+    new_osd_install = 'install {branch} --osd '.format(branch=test_branch) + nodename
+    new_admin = 'install {branch} --cli '.format(branch=test_branch) + nodename
     create_initial= '--overwrite-conf mon create-initial '
     execute_cdeploy(admin,new_cmd,path)
     execute_cdeploy(admin,new_mon_install,path)
