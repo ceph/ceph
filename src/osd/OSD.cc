@@ -2077,7 +2077,7 @@ void OSD::final_init()
     "name=objname,type=CephObjectname " \
     "name=shardid,type=CephInt,req=false,range=0|255",
     test_ops_hook,
-    "inject data error into omap");
+    "inject data error to an object");
   assert(r == 0);
 
   r = admin_socket->register_command(
@@ -2087,7 +2087,7 @@ void OSD::final_init()
     "name=objname,type=CephObjectname " \
     "name=shardid,type=CephInt,req=false,range=0|255",
     test_ops_hook,
-    "inject metadata error");
+    "inject metadata error to an object");
   assert(r == 0);
   r = admin_socket->register_command(
     "set_recovery_delay",
