@@ -274,6 +274,7 @@ void ObjectMap::aio_resize(uint64_t new_size, uint8_t default_object_state,
 			   Context *on_finish) {
   assert(m_image_ctx.test_features(RBD_FEATURE_OBJECT_MAP));
   assert(m_image_ctx.owner_lock.is_locked());
+  assert(m_image_ctx.image_watcher != NULL);
   assert(m_image_ctx.image_watcher->is_lock_owner());
 
   ResizeRequest *req = new ResizeRequest(
@@ -296,7 +297,9 @@ bool ObjectMap::aio_update(uint64_t start_object_no, uint64_t end_object_no,
 {
   assert(m_image_ctx.test_features(RBD_FEATURE_OBJECT_MAP));
   assert(m_image_ctx.owner_lock.is_locked());
+  assert(m_image_ctx.image_watcher != NULL);
   assert(m_image_ctx.image_watcher->is_lock_owner());
+  assert(start_object_no < end_object_no);
 
   RWLock::WLocker l(m_image_ctx.object_map_lock);
   assert(start_object_no < end_object_no);
@@ -338,13 +341,26 @@ void ObjectMap::invalidate() {
   m_image_ctx.update_flags(m_image_ctx.snap_id, RBD_FLAG_OBJECT_MAP_INVALID,
                            true);
 
+  // do not update on-disk flags if not image owner
+  if (m_image_ctx.image_watcher == NULL ||
+      (m_image_ctx.image_watcher->is_lock_supported(m_image_ctx.snap_lock) &&
+       !m_image_ctx.image_watcher->is_lock_owner())) {
+    return;
+  }
+
   librados::ObjectWriteOperation op;
+  if (m_image_ctx.snap_id == CEPH_NOSNAP) {
+    m_image_ctx.image_watcher->assert_header_locked(&op);
+  }
   cls_client::set_flags(&op, m_image_ctx.snap_id, m_image_ctx.flags,
                         RBD_FLAG_OBJECT_MAP_INVALID);
 
   int r = m_image_ctx.md_ctx.operate(m_image_ctx.header_oid, &op);
-  if (r < 0) {
-    lderr(cct) << "failed to invalidate object map: " << cpp_strerror(r)
+  if (r == -EBUSY) {
+    ldout(cct, 5) << "skipping on-disk object map invalidation: "
+                  << "image not locked by client" << dendl;
+  } else if (r < 0) {
+    lderr(cct) << "failed to invalidate on-disk object map: " << cpp_strerror(r)
 	       << dendl;
   }
 }
@@ -403,6 +419,7 @@ bool ObjectMap::Request::invalidate() {
   m_image_ctx.flags |= RBD_FLAG_OBJECT_MAP_INVALID;
 
   librados::ObjectWriteOperation op;
+  m_image_ctx.image_watcher->assert_header_locked(&op);
   cls_client::set_flags(&op, CEPH_NOSNAP, m_image_ctx.flags,
                         RBD_FLAG_OBJECT_MAP_INVALID);
 
