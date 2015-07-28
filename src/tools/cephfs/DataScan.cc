@@ -245,6 +245,8 @@ int MetadataDriver::inject_unlinked_inode(
   inode.inode.nlink = 1;
   inode.inode.truncate_size = -1ull;
   inode.inode.truncate_seq = 1;
+  inode.inode.uid = g_conf->mds_root_ino_uid;
+  inode.inode.gid = g_conf->mds_root_ino_gid;
 
   // Force layout to default: should we let users override this so that
   // they don't have to mount the filesystem to correct it?
@@ -676,6 +678,8 @@ int MetadataDriver::inject_lost_and_found(inodeno_t ino, uint64_t file_size,
     lf_ino.inode.ino = CEPH_INO_LOST_AND_FOUND;
     lf_ino.inode.version = 1;
     lf_ino.inode.backtrace_version = 1;
+    lf_ino.inode.uid = g_conf->mds_root_ino_uid;
+    lf_ino.inode.gid = g_conf->mds_root_ino_gid;
     r = inject_linkage(CEPH_INO_ROOT, "lost+found", frag_t(), lf_ino);
     if (r < 0) {
       return r;
@@ -716,6 +720,8 @@ int MetadataDriver::inject_lost_and_found(inodeno_t ino, uint64_t file_size,
   recovered_ino.inode.ino = ino;
   recovered_ino.inode.version = 1;
   recovered_ino.inode.backtrace_version = 1;
+  recovered_ino.inode.uid = g_conf->mds_root_ino_uid;
+  recovered_ino.inode.gid = g_conf->mds_root_ino_gid;
 
   const std::string dname = lost_found_dname(ino);
 
@@ -987,6 +993,8 @@ int MetadataDriver::inject_with_backtrace(
       }
       dentry.inode.nlink = 1;
       dentry.inode.ino = ino;
+      dentry.inode.uid = g_conf->mds_root_ino_uid;
+      dentry.inode.gid = g_conf->mds_root_ino_gid;
       dentry.inode.version = 1;
       dentry.inode.backtrace_version = 1;
       r = inject_linkage(parent_ino, dname, fragment, dentry);
