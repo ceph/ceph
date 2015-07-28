@@ -355,9 +355,9 @@ class Thrasher:
         if osd is None:
             osd = random.choice(self.dead_osds)
         self.log("Reviving osd %s" % (str(osd),))
-        self.live_osds.append(osd)
-        self.dead_osds.remove(osd)
         self.ceph_manager.revive_osd(osd, self.revive_timeout)
+        self.dead_osds.remove(osd)
+        self.live_osds.append(osd)
 
     def out_osd(self, osd=None):
         """
