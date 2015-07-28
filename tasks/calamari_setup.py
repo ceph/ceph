@@ -164,7 +164,7 @@ def remove_epel(ctx, no_epel):
     if no_epel:
         for remote in ctx.cluster.remotes:
             if remote.os.name.startswith('centos'):
-                remote.run(args= [
+                remote.run(args=[
                     'sudo', 'rm', '-f', run.Raw('/etc/yum.repos.d/epel*')
                 ])
     try:
