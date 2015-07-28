@@ -194,8 +194,8 @@ struct ObjectOperation {
     string mname = "filter";
     ::encode(cname, osd_op.indata);
     ::encode(mname, osd_op.indata);
-    ::encode(cookie, osd_op.indata);
     osd_op.indata.append(filter);
+    ::encode(cookie, osd_op.indata);
   }
   void add_alloc_hint(int op, uint64_t expected_object_size,
                       uint64_t expected_write_size) {
