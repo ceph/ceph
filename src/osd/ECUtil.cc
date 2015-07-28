@@ -9,11 +9,11 @@ int ECUtil::decode(
   ErasureCodeInterfaceRef &ec_impl,
   map<int, bufferlist> &to_decode,
   bufferlist *out) {
+  assert(to_decode.size());
 
   uint64_t total_data_size = to_decode.begin()->second.length();
-
-  assert(to_decode.size());
   assert(total_data_size % sinfo.get_chunk_size() == 0);
+
   assert(out);
   assert(out->length() == 0);
 
@@ -47,10 +47,9 @@ int ECUtil::decode(
   ErasureCodeInterfaceRef &ec_impl,
   map<int, bufferlist> &to_decode,
   map<int, bufferlist*> &out) {
+  assert(to_decode.size());
 
   uint64_t total_data_size = to_decode.begin()->second.length();
-
-  assert(to_decode.size());
   assert(total_data_size % sinfo.get_chunk_size() == 0);
 
   for (map<int, bufferlist>::iterator i = to_decode.begin();
