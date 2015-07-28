@@ -3109,7 +3109,7 @@ void Server::handle_client_openc(MDRequestRef& mdr)
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return;
 
-  if (!check_access(mdr, diri, MAY_WRITE))
+  if (!check_access(mdr, diri, MAY_WRITE|MAY_CREATE))
     return;
 
   CDentry::linkage_t *dnl = dn->get_projected_linkage();
