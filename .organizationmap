@@ -24,6 +24,7 @@
 #    10	     22 GNU <contact@gnu.org>
 #
 Acaleph <contact@acale.ph> Alistair Israel <aisrael@gmail.com>
+Alcatel Lucent <contact@alcatel-lucent.com> Joseph McDonald <joseph.mcdonald@alcatel-lucent.com>
 Anchor Hosting <contact@anchor.com.au> Christian Marie <pingu@anchor.net.au>
 Anchor Hosting <contact@anchor.com.au> Sharif Olorin <sio@tesser.org>
 ArtiBit <contact@artibit.com> Rutger ter Borg <rutger@terborg.net>
@@ -40,6 +41,7 @@ CCM Benchmark <contact@ccmbenchmark.com> Laurent Barbe <laurent@ksperis.com>
 CERN <contact@cern.ch> Andreas Peters <andreas.joachim.peters@cern.ch>
 CERN <contact@cern.ch> Dan van der Ster <daniel.vanderster@cern.ch>
 CERN <contact@cern.ch> Hervé Rousseau <hroussea@cern.ch>
+CERN <contact@cern.ch> Joaquim Rocha <joaquim.rocha@cern.ch>
 CERN <contact@cern.ch> Sebastien Ponce <sebastien.ponce@cern.ch>
 Choopa, LLC <contact@choopa.com> Adam Twardowski <adam.twardowski@gmail.com>
 CISCO <contact@cisco.com> Johnu George <johnugeo@cisco.com>
@@ -49,6 +51,7 @@ Cloudwatt <libre.licensing@cloudwatt.com> Florent Flament <florent.flament@cloud
 Cloudwatt <libre.licensing@cloudwatt.com> Loic Dachary <loic@dachary.org>
 Cloudwatt <libre.licensing@cloudwatt.com> Sahid Orentino Ferdjaoui <sahid.ferdjaoui@cloudwatt.com>
 CohortFS, LLC <contact@cohortfs.com> Matt Benjamin <matt@cohortfs.com>
+CohortFS, LLC <contact@cohortfs.com> Casey Bodley <casey@cohortfs.com>
 Commerce Guys <contact@commerceguys.com> Nikola Kotur <kotnick@gmail.com>
 Corvisa LLC <contact@corvisa.com> Walter Huf <hufman@gmail.com>
 Credit Mutuel Arkea <contact@arkea.com> Eric Mourgaya <eric.mourgaya@arkea.com>
@@ -79,6 +82,7 @@ eNovance <contact@enovance.com> Sebastien Han <sebastien.han@enovance.com>
 EPAM <contact@epam.com> Andrey Kuznetsov <Andrey_Kuznetsov@epam.com>
 Exalead <contact@exalead.com> <roche+git@exalead.com>
 Fairbanks <contact@fairbanks.nl> Robert Jansen <r.jansen@fairbanks.nl>
+Fujitsu <contact@fujitsu.com> Piotr Dałek <piotr.dalek@ts.fujitsu.com>
 Fujitsu <contact@fujitsu.com> Takeshi Miyamae <miyamae.takeshi@jp.fujitsu.com>
 GameServers.com <contact@gameservers.com> Brian Rak <dn@devicenull.org>
 Gentoo <contact@gentoo.org> Kacper Kowalik <xarthisius@gentoo.org>
@@ -93,6 +97,8 @@ HGST <contact@hgst.com> Kevin Dalley <kevin@kelphead.org>
 HGST <contact@hgst.com> Lluis Pamies-Juarez <lluis.pamies-juarez@hgst.com>
 Hostplex Hosting <contact@hostplex.net> Andras Elso <elso.andras@gmail.com>
 HP <contact@hp.com> Blaine Gardner <blaine.gardner@hp.com>
+Igalia <contact@igalia.com> Javier M. Mellid <jmunhoz@igalia.com>
+Imagination Technologies Ltd. <contact@imgtec.com> Alistair Strachan <alistair.strachan@imgtec.com>
 iNic <contact@inic.no> Bjørnar Ness <bjornar.ness@gmail.com>
 Inktank <contact@inktank.com> Alexandre Marangone <alexandre.marangone@inktank.com>
 Inktank <contact@inktank.com> Alex Elder <elder@inktank.com>
@@ -155,6 +161,7 @@ Mirantis <contact@mirantis.com> Radoslaw Zarzynski <rzarzynski@mirantis.com>
 MIT Computer Science and Artificial Intelligence Laboratory <webmaster@csail.mit.edu> Stephen Jahl <stephenjahl@gmail.com>
 MSys Technologies <contact@msystechnologies.com> Rajesh Nambiar <rajesh.n@msystechnologies.com>
 Nebula <info@nebula.com> Chris Holcombe <chris.holcombe@nebula.com>
+Nebula <info@nebula.com> Anton Aksola <anton.aksola@nebula.fi>
 Opower <contact@opower.com> Derrick Schneider <derrick.schneider@opower.com>
 Pacific Northwest National Laboratory <contact@pnl.gov> Brown, David M JR <david.brown@pnl.gov>
 Pacific Northwest National Laboratory <contact@pnl.gov> Erwin, Brock A <Brock.Erwin@pnl.gov>
@@ -202,11 +209,13 @@ Red Hat <contact@redhat.com> Sahid Orentino Ferdjaoui <sahid.ferdjaoui@redhat.co
 Red Hat <contact@redhat.com> Sam Lang <slang@redhat.com>
 Red Hat <contact@redhat.com> Samuel Just <sjust@redhat.com>
 Red Hat <contact@redhat.com> Sandon Van Ness <svanness@redhat.com>
+Red Hat <contact@redhat.com> Shylesh Kumar <shmohan@redhat.com>
 Red Hat <contact@redhat.com> Tamil Muthamizhan <tmuthami@redhat.com>
 Red Hat <contact@redhat.com> Tom Callaway <spot@redhat.com>
 Red Hat <contact@redhat.com> Travis Rhoden <trhoden@redhat.com>
 Red Hat <contact@redhat.com> Tyler Brekke <tbrekke@redhat.com>
 Red Hat <contact@redhat.com> Venky Shankar <vshankar@redhat.com>
+Red Hat <contact@redhat.com> Vasu Kulkarni <vasu@redhat.com>
 Red Hat <contact@redhat.com> Warren Usui <wusui@redhat.com>
 Red Hat <contact@redhat.com> Yan, Zheng <zyan@redhat.com>
 Red Hat <contact@redhat.com> Yehuda Sadeh <ysadehwe@redhat.com>
@@ -224,6 +233,7 @@ SanDisk <contact@sandisk.com> Raju Kurunkad <raju.kurunkad@sandisk.com>
 SanDisk	<contact@sandisk.com> Shishir Gowda <shishir.gowda@sandisk.com>
 SanDisk <contact@sandisk.com> Somnath Roy <somnath.roy@sandisk.com>
 SanDisk <contact@sandisk.com> Sushma Gurram <sushma.gurram@sandisk.com>
+SanDisk <contact@sandisk.com> Varada Kari <varada.kari@sandisk.com>
 Science & Technology Facilities Council <contact@stfc.ac.uk> George Ryall <george.ryall@stfc.ac.uk>
 SendFaster <contact@sendfaster.com> Christopher O'Connell <jwriteclub@gmail.com>
 Spectra Logic <contact@spectralogic.com> Alan Somers <asomers@gmail.com>
@@ -233,7 +243,7 @@ SUSE <contact@suse.com> Hannes Reinecke <hare@suse.de>
 SUSE <contact@suse.com> Holger Macht <hmacht@suse.de>
 SUSE <contact@suse.com> Joao Eduardo Luis <joao@suse.de>
 SUSE <contact@suse.com> Karl Eichwalder <ke@suse.de>
-SUSE <contact@suse.com> Nathan Cutler <ncutler@suse.cz>
+SUSE <contact@suse.com> Nathan Cutler <ncutler@suse.com>
 SUSE <contact@suse.com> Owen Synge <osynge@suse.com>
 SUSE <contact@suse.com> Thorsten Behrens <tbehrens@suse.com>
 SUSE <contact@suse.com> Tim Serong <tserong@suse.com>
@@ -282,11 +292,14 @@ Unaffiliated <no@organization.net> Florian Coste <fcoste21@gmail.com>
 Unaffiliated <no@organization.net> Florian Marsylle <florian.marsylle@hotmail.fr>
 Unaffiliated <no@organization.net> François Lafont <flafdivers@free.fr>
 Unaffiliated <no@organization.net> Frank Yu <flyxiaoyu@gmail.com>
+Unaffiliated <no@organization.net> Jon Bernard <jbernard@tuxion.com>
 Unaffiliated <no@organization.net> Gaurav Kumar Garg <garg.gaurav52@gmail.com>
 Unaffiliated <no@organization.net> Huang Jun <hjwsm1989@gmail.com>
 Unaffiliated <no@organization.net> Haomai Wang <haomaiwang@gmail.com>
 Unaffiliated <no@organization.net> Henry Chang <henry@bigtera.com>
 Unaffiliated <no@organization.net> Ian Kelling <ian@iankelling.org>
+Unaffiliated <no@organization.net> Ilja Slepnev <islepnev@gmail.com>
+Unaffiliated <no@organization.net> Ismael Serrano <ismael.serrano@gmail.com>
 Unaffiliated <no@organization.net> Janne Grunau <j@jannau.net>
 Unaffiliated <no@organization.net> Javier Guerra <javier@guerrag.com>
 Unaffiliated <no@organization.net> Jiang Heng <jiangheng0511@gmail.com>
@@ -294,6 +307,8 @@ Unaffiliated <no@organization.net> Jiantao He <hejiantao5@gmail.com>
 Unaffiliated <no@organization.net> Jian Wen <wenjian@letv.com>
 Unaffiliated <no@organization.net> Karel Striegel <karel.striegel@ipc.be>
 Unaffiliated <no@organization.net> Kefu Chai <tchaikov@gmail.com>
+Unaffiliated <no@organization.net> Kernel Neophyte <neophyte.hacker001@gmail.com>
+Unaffiliated <no@organization.net> Ketor Meng <d.ketor@gmail.com>
 Unaffiliated <no@organization.net> Kevin Cox <kevincox@kevincox.ca>
 Unaffiliated <no@organization.net> Kim Vandry <vandry@TZoNE.ORG>
 Unaffiliated <no@organization.net> koleosfuscus <koleosfuscus@yahoo.com>
@@ -331,6 +346,7 @@ Unaffiliated <no@organization.net> Xiong Yiliang <xiongyiliang@xunlei.com>
 Unaffiliated <no@organization.net> Yann Dupont <yann@objoo.org>
 Unaffiliated <no@organization.net> Yongyue Sun <abioy.sun@gmail.com>
 Unaffiliated <no@organization.net> Zhicheng Wei <zhicheng@opensourceforge.net>
+Unaffiliated <no@organization.net> Zhe Zhang <zzxuanyuan@gmail.com>
 Unilogic Networks B.V <contact@unilogicnetworks.net> Pascal de Bruijn <pascal@unilogicnetworks.net> 
 UnitedStack <contact@unitedstack.com> Dong Yuan <yuandong1222@gmail.com>
 UnitedStack <contact@unitedstack.com> Guangliang Zhao <guangliang@unitedstack.com>
