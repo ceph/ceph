@@ -3011,6 +3011,38 @@ fail:
   return -EILSEQ;
 }
 
+int ReplicatedPG::do_writesame(OpContext *ctx, OSDOp& osd_op)
+{
+  ceph_osd_op& op = osd_op.op;
+  vector<OSDOp> write_ops(1);
+  OSDOp& write_op = write_ops[0];
+  int result = 0;
+  uint64_t write_length = op.writesame.length;
+
+  if (write_length % op.writesame.data_length)
+    return -EINVAL;
+
+  if (op.writesame.data_length != osd_op.indata.length()) {
+    derr << "invalid length ws data length " << op.writesame.data_length << " actual len " << osd_op.indata.length() << dendl;
+    return -EINVAL;
+  }
+
+  while (write_length) {
+    write_op.indata.append(osd_op.indata.c_str(), op.writesame.data_length);
+    write_length -= op.writesame.data_length;
+  }
+
+  write_op.op.op = CEPH_OSD_OP_WRITE; 
+  write_op.op.extent.offset = op.writesame.offset;
+  write_op.op.extent.length = op.writesame.length;
+
+  result = do_osd_ops(ctx, write_ops);
+  if (result < 0)
+    derr << "do_writesame do_osd_ops failed " << result << dendl;
+
+  return result;
+}
+
 // ========================================================================
 // low level osd ops
 
@@ -4297,6 +4329,12 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	ctx->delta_stats.num_wr_kb += SHIFT_ROUND_UP(op.extent.length, 10);
       }
       break;
+
+    case CEPH_OSD_OP_WRITESAME:
+      ++ctx->num_write;
+      tracepoint(osd, do_osd_op_pre_writesame, soid.oid.name.c_str(), soid.snap.val, oi.size, op.writesame.offset, op.writesame.length, op.writesame.data_length);
+     result = do_writesame(ctx, osd_op);
+     break;
 
     case CEPH_OSD_OP_ROLLBACK :
       ++ctx->num_write;
