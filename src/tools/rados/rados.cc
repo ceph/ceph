@@ -579,7 +579,7 @@ public:
     total_sent = 0;
     total_completed = 0;
     num_objs = 200;
-    max_op = 16;
+    max_op = 0;
   }
   int bootstrap(const char *pool);
   int run();
