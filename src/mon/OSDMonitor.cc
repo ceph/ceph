@@ -3367,6 +3367,12 @@ stats_out:
     f->flush(rs);
     rs << "\n";
     rdata.append(rs.str());
+  } else if (prefix == "osd crush tree") {
+    boost::scoped_ptr<Formatter> f(Formatter::create(format, "json-pretty", "json-pretty"));
+    f->open_array_section("crush_map_roots");
+    osdmap.crush->dump_tree(f.get());
+    f->close_section();
+    f->flush(rdata);
   } else if (prefix == "osd erasure-code-profile ls") {
     const map<string,map<string,string> > &profiles =
       osdmap.get_erasure_code_profiles();

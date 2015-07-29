@@ -1055,6 +1055,7 @@ public:
   void dump_tunables(Formatter *f) const;
   void list_rules(Formatter *f) const;
   void dump_tree(ostream *out, Formatter *f) const;
+  void dump_tree(Formatter *f) const;
   static void generate_test_instances(list<CrushWrapper*>& o);
 
   int get_osd_pool_default_crush_replicated_ruleset(CephContext *cct);

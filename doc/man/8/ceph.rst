@@ -669,6 +669,12 @@ Usage::
 
 	ceph osd crush show-tunables
 
+Subcommand ``tree`` shows the crush buckets and items in a tree view.
+
+Usage::
+
+	ceph osd crush tree
+
 Subcommand ``tunables`` sets crush tunables values to <profile>.
 
 Usage::
