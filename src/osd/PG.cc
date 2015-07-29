@@ -1616,7 +1616,15 @@ void PG::activate(ObjectStore::Transaction& t,
 
       bool needs_past_intervals = pi.dne();
 
-      if (pi.last_update == info.last_update) {
+      /*
+       * cover case where peer sort order was different and
+       * last_backfill cannot be interpreted
+       */
+      bool force_restart_backfill =
+	!pi.last_backfill.is_max() &&
+	pi.last_backfill_bitwise != get_sort_bitwise();
+
+      if (pi.last_update == info.last_update && !force_restart_backfill) {
         // empty log
 	if (!pi.last_backfill.is_max())
 	  osd->clog->info() << info.pgid << " continuing backfill to osd."
@@ -1643,10 +1651,7 @@ void PG::activate(ObjectStore::Transaction& t,
       } else if (
 	pg_log.get_tail() > pi.last_update ||
 	pi.last_backfill == hobject_t() ||
-	(pi.last_backfill != hobject_t::get_max() &&
-	 pi.last_backfill_bitwise != get_sort_bitwise()) ||
-	/* ^ cover case where peer sort order was different and
-	   last_backfill cannot be interpreted */
+	force_restart_backfill ||
 	(backfill_targets.count(*i) && pi.last_backfill.is_max())) {
 	/* ^ This last case covers a situation where a replica is not contiguous
 	 * with the auth_log, but is contiguous with this replica.  Reshuffling
