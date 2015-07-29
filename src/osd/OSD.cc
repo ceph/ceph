@@ -7843,7 +7843,7 @@ void OSD::do_recovery(PG *pg, ThreadPool::TPHandle &handle)
     rctx.handle = &handle;
 
     int started;
-    bool more = pg->start_recovery_ops(max, &rctx, handle, &started);
+    bool more = pg->start_recovery_ops(max, handle, &started);
     dout(10) << "do_recovery started " << started << "/" << max << " on " << *pg << dendl;
 
     /*
