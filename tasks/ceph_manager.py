@@ -5,6 +5,7 @@ from cStringIO import StringIO
 from functools import wraps
 import contextlib
 import random
+import signal
 import time
 import gevent
 import base64
@@ -112,6 +113,7 @@ class Thrasher:
         self.clean_wait = self.config.get('clean_wait', 0)
         self.minin = self.config.get("min_in", 3)
         self.chance_move_pg = self.config.get('chance_move_pg', 1.0)
+        self.sighup_delay = self.config.get('sighup_delay')
 
         num_osds = self.in_osds + self.out_osds
         self.max_pgs = self.config.get("max_pgs_per_pool_osd", 1200) * num_osds
@@ -135,6 +137,8 @@ class Thrasher:
             manager.raw_cluster_cmd('--', 'mon', 'tell', '*', 'injectargs',
                                     '--mon-osd-down-out-interval 0')
         self.thread = gevent.spawn(self.do_thrash)
+        if self.sighup_delay:
+            self.sighup_thread = gevent.spawn(self.do_sighup)
         if self.config.get('powercycle') or not self.cmd_exists_on_osds("ceph-objectstore-tool"):
             self.ceph_objectstore_tool = False
             self.test_rm_past_intervals = False
@@ -351,9 +355,9 @@ class Thrasher:
         if osd is None:
             osd = random.choice(self.dead_osds)
         self.log("Reviving osd %s" % (str(osd),))
-        self.live_osds.append(osd)
-        self.dead_osds.remove(osd)
         self.ceph_manager.revive_osd(osd, self.revive_timeout)
+        self.dead_osds.remove(osd)
+        self.live_osds.append(osd)
 
     def out_osd(self, osd=None):
         """
@@ -425,6 +429,9 @@ class Thrasher:
         """
         self.stopping = True
         self.thread.get()
+        if self.sighup_delay:
+            self.log("joining the do_sighup greenlet")
+            self.sighup_thread.get()
 
     def grow_pool(self):
         """
@@ -641,6 +648,20 @@ class Thrasher:
                 self.log(traceback.format_exc())
                 raise
         return wrapper
+
+    @log_exc
+    def do_sighup(self):
+        """
+        Loops and sends signal.SIGHUP to a random live osd.
+
+        Loop delay is controlled by the config value sighup_delay.
+        """
+        delay = float(self.sighup_delay)
+        self.log("starting do_sighup with a delay of {0}".format(delay))
+        while not self.stopping:
+            osd = random.choice(self.live_osds)
+            self.ceph_manager.signal_osd(osd, signal.SIGHUP)
+            time.sleep(delay)
 
     @log_exc
     def do_thrash(self):
@@ -1747,6 +1768,13 @@ class CephManager:
         Cluster command wrapper
         """
         self.raw_cluster_cmd('osd', 'in', str(osd))
+
+    def signal_osd(self, osd, sig):
+        """
+        Wrapper to local get_daemon call which sends the given
+        signal to the given osd.
+        """
+        self.ctx.daemons.get_daemon('osd', osd).signal(sig)
 
     ## monitors
     def signal_mon(self, mon, sig):
