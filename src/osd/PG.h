@@ -549,7 +549,7 @@ public:
 	on_applied(rctx.on_applied),
 	on_safe(rctx.on_safe),
 	transaction(rctx.transaction),
-        handle(NULL) {}
+        handle(rctx.handle) {}
 
     void accept_buffered_messages(BufferedRecoveryMessages &m) {
       assert(query_map);
