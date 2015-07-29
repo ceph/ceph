@@ -771,6 +771,11 @@ static int do_purge_snaps(librbd::Image& image)
 {
   MyProgressContext pc("Removing all snapshots");
   std::vector<librbd::snap_info_t> snaps;
+<<<<<<< HEAD
+=======
+  size_t isnapsSize = 0;
+  size_t j = 0;
+>>>>>>> e74f469390a9de937534163c4527a42cb9013c0b
   bool is_protected = false;
   int r = image.snap_list(snaps);
   if (r < 0) {
@@ -778,6 +783,7 @@ static int do_purge_snaps(librbd::Image& image)
     return r;
   }
    
+<<<<<<< HEAD
   if (0 == snaps.size())
   {
 	return 0;
@@ -802,10 +808,42 @@ static int do_purge_snaps(librbd::Image& image)
       return r;
     }
     pc.update_progress(i + 1, snaps.size());
+=======
+  isnapsSize = snaps.size();
+  if (0 == isnapsSize)
+  {
+	return 0;
+>>>>>>> e74f469390a9de937534163c4527a42cb9013c0b
   }
-
-  pc.finish();
-  return 0;
+  
+  for (size_t i = 0; i < isnapsSize; ++i) {
+	r = image.snap_is_protected(snaps[i].name.c_str(), &is_protected);
+	 if (r < 0) {
+		pc.fail();
+		return r;
+	 }
+	 if (is_protected == false)
+	 {
+		r = image.snap_remove(snaps[i].name.c_str());
+		if (r < 0) {
+		  pc.fail();
+		  return r;
+		}
+		j++;
+		pc.update_progress(j, isnapsSize);
+	 }		  
+   }
+  
+  if (j == isnapsSize)
+  {
+	 pc.finish();
+	 return 0;
+  }
+  else
+  {
+	 pc.fail(); 
+	 return -EBUSY;  
+  } 
 }
 
 static int do_protect_snap(librbd::Image& image, const char *snapname)
