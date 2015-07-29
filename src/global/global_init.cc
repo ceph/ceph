@@ -120,8 +120,6 @@ void global_init(std::vector < const char * > *alt_def_args,
 {
   global_pre_init(alt_def_args, args, module_type, code_env, flags);
 
-  g_lockdep = g_ceph_context->_conf->lockdep;
-
   // signal stuff
   int siglist[] = { SIGPIPE, 0 };
   block_signals(siglist, NULL);
@@ -142,9 +140,6 @@ void global_init(std::vector < const char * > *alt_def_args,
     }
   }
 
-  if (g_lockdep) {
-    lockdep_register_ceph_context(g_ceph_context);
-  }
   register_assert_context(g_ceph_context);
 
   // call all observers now.  this has the side-effect of configuring
