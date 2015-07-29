@@ -402,3 +402,5 @@ slversion gf_vect_mul,			00,   02,  0134
 slversion ec_encode_data_update,	00,   02,  0212
 slversion gf_vect_dot_prod,		00,   02,  0138
 slversion gf_vect_mad,			00,   01,  0213
+; inform linker that this doesn't require executable stack
+section .note.GNU-stack noalloc noexec nowrite progbits

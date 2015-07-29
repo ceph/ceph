@@ -312,7 +312,7 @@ XioMessenger::XioMessenger(CephContext *cct, entity_name_t name,
                  &xopt, sizeof(xopt));
 
       /* and set threshold for buffer callouts */
-      xopt = 16384;
+      xopt = max(cct->_conf->xio_max_send_inline, 512);
       xio_set_opt(NULL, XIO_OPTLEVEL_ACCELIO, XIO_OPTNAME_MAX_INLINE_XIO_DATA,
                  &xopt, sizeof(xopt));
       xopt = 216;
@@ -322,12 +322,12 @@ XioMessenger::XioMessenger(CephContext *cct, entity_name_t name,
       struct xio_mempool_config mempool_config = {
         6,
         {
-          {1024,  0,  4096,  262144},
-          {4096,  0,  4096,  262144},
-          {16384, 0,  4096,  262144},
-          {65536, 0,  1024,  65536},
-          {262144, 0,  512,  16384},
-          {1048576, 0, 128,  8192}
+          {1024,  0,  cct->_conf->xio_queue_depth,  262144},
+          {4096,  0,  cct->_conf->xio_queue_depth,  262144},
+          {16384, 0,  cct->_conf->xio_queue_depth,  262144},
+          {65536, 0,  128,  65536},
+          {262144, 0,  32,  16384},
+          {1048576, 0, 8,  8192}
         }
       };
       xio_set_opt(NULL,
@@ -513,10 +513,6 @@ int XioMessenger::session_event(struct xio_session *session,
   }
   break;
   case XIO_SESSION_CONNECTION_ERROR_EVENT:
-    ldout(cct,2) << xio_session_event_types[event_data->event]
-      << " user_context " << event_data->conn_user_context << dendl;
-    /* informational (Eyal)*/
-    break;
   case XIO_SESSION_CONNECTION_CLOSED_EVENT: /* orderly discon */
   case XIO_SESSION_CONNECTION_DISCONNECTED_EVENT: /* unexpected discon */
   case XIO_SESSION_CONNECTION_REFUSED_EVENT:

@@ -137,7 +137,7 @@ because it requires partial writes. It is however possible to create
 an RBD image on an erasure coded pools when a replicated pool tier set
 a cache tier::
 
-    $ rbd --pool ecpool create --size 10 myvolume
+    $ rbd create --size 10G ecpool/myvolume
 
 More information can be found in the `cache tiering
 <../cache-tiering>`_ documentation.
