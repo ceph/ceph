@@ -40,6 +40,41 @@
 
 using ceph::HeartbeatMap;
 
+namespace {
+
+class LockdepObs : public md_config_obs_t {
+public:
+  LockdepObs(CephContext *cct) : m_cct(cct), m_registered(false) {
+  }
+  virtual ~LockdepObs() {
+    if (m_registered) {
+      lockdep_unregister_ceph_context(m_cct);
+    }
+  }
+
+  const char** get_tracked_conf_keys() const {
+    static const char *KEYS[] = {"lockdep", NULL};
+    return KEYS;
+  }
+
+  void handle_conf_change(const md_config_t *conf,
+                          const std::set <std::string> &changed) {
+    if (conf->lockdep && !m_registered) {
+      lockdep_register_ceph_context(m_cct);
+      m_registered = true;
+    } else if (!conf->lockdep && m_registered) {
+      lockdep_unregister_ceph_context(m_cct);
+      m_registered = false;
+    }
+  }
+private:
+  CephContext *m_cct;
+  bool m_registered;
+};
+
+
+} // anonymous namespace
+
 class CephContextServiceThread : public Thread
 {
 public:
@@ -371,7 +406,8 @@ CephContext::CephContext(uint32_t module_type_)
     _perf_counters_conf_obs(NULL),
     _heartbeat_map(NULL),
     _crypto_none(NULL),
-    _crypto_aes(NULL)
+    _crypto_aes(NULL),
+    _lockdep_obs(NULL)
 {
   ceph_spin_init(&_service_thread_lock);
   ceph_spin_init(&_associated_objs_lock);
@@ -385,6 +421,9 @@ CephContext::CephContext(uint32_t module_type_)
 
   _cct_obs = new CephContextObs(this);
   _conf->add_observer(_cct_obs);
+
+  _lockdep_obs = new LockdepObs(this);
+  _conf->add_observer(_lockdep_obs);
 
   _perf_counters_collection = new PerfCountersCollection(this);
   _admin_socket = new AdminSocket(this);
@@ -420,10 +459,6 @@ CephContext::~CephContext()
        it != _associated_objs.end(); ++it)
     delete it->second;
 
-  if (_conf->lockdep) {
-    lockdep_unregister_ceph_context(this);
-  }
-
   _admin_socket->unregister_command("perfcounters_dump");
   _admin_socket->unregister_command("perf dump");
   _admin_socket->unregister_command("1");
@@ -456,6 +491,10 @@ CephContext::~CephContext()
   _conf->remove_observer(_cct_obs);
   delete _cct_obs;
   _cct_obs = NULL;
+
+  _conf->remove_observer(_lockdep_obs);
+  delete _lockdep_obs;
+  _lockdep_obs = NULL;
 
   _log->stop();
   delete _log;
