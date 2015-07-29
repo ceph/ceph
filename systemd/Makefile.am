@@ -2,6 +2,7 @@ unitfiles = \
 	ceph.target \
 	ceph-mds@.service \
 	ceph-mon@.service \
+	ceph-create-keys@.service \
 	ceph-osd@.service \
 	ceph-radosgw@.service
 
