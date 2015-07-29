@@ -53,6 +53,15 @@ private:
   void handle_event(const journal::AioDiscardEvent &event);
   void handle_event(const journal::AioWriteEvent &event);
   void handle_event(const journal::AioFlushEvent &event);
+  void handle_event(const journal::OpFinishEvent &event);
+  void handle_event(const journal::SnapCreateEvent &event);
+  void handle_event(const journal::SnapRemoveEvent &event);
+  void handle_event(const journal::SnapProtectEvent &event);
+  void handle_event(const journal::SnapUnprotectEvent &event);
+  void handle_event(const journal::SnapRollbackEvent &event);
+  void handle_event(const journal::RenameEvent &event);
+  void handle_event(const journal::ResizeEvent &event);
+  void handle_event(const journal::FlattenEvent &event);
   void handle_event(const journal::UnknownEvent &event);
 
   AioCompletion *create_aio_completion();

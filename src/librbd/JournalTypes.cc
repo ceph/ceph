@@ -105,6 +105,63 @@ void AioFlushEvent::decode(__u8 version, bufferlist::iterator& it) {
 void AioFlushEvent::dump(Formatter *f) const {
 }
 
+void OpEventBase::encode(bufferlist& bl) const {
+  ::encode(tid, bl);
+}
+
+void OpEventBase::decode(__u8 version, bufferlist::iterator& it) {
+  ::decode(tid, it);
+}
+
+void OpEventBase::dump(Formatter *f) const {
+  f->dump_unsigned("tid", tid);
+}
+
+void SnapEventBase::encode(bufferlist& bl) const {
+  OpStartEventBase::encode(bl);
+  ::encode(snap_name, bl);
+}
+
+void SnapEventBase::decode(__u8 version, bufferlist::iterator& it) {
+  OpStartEventBase::decode(version, it);
+  ::decode(snap_name, it);
+}
+
+void SnapEventBase::dump(Formatter *f) const {
+  OpStartEventBase::dump(f);
+  f->dump_string("snap_name", snap_name);
+}
+
+void RenameEvent::encode(bufferlist& bl) const {
+  OpStartEventBase::encode(bl);
+  ::encode(image_name, bl);
+}
+
+void RenameEvent::decode(__u8 version, bufferlist::iterator& it) {
+  OpStartEventBase::decode(version, it);
+  ::decode(image_name, it);
+}
+
+void RenameEvent::dump(Formatter *f) const {
+  OpStartEventBase::dump(f);
+  f->dump_string("image_name", image_name);
+}
+
+void ResizeEvent::encode(bufferlist& bl) const {
+  OpStartEventBase::encode(bl);
+  ::encode(size, bl);
+}
+
+void ResizeEvent::decode(__u8 version, bufferlist::iterator& it) {
+  OpStartEventBase::decode(version, it);
+  ::decode(size, it);
+}
+
+void ResizeEvent::dump(Formatter *f) const {
+  OpStartEventBase::dump(f);
+  f->dump_unsigned("size", size);
+}
+
 void UnknownEvent::encode(bufferlist& bl) const {
   assert(false);
 }
@@ -142,6 +199,33 @@ void EventEntry::decode(bufferlist::iterator& it) {
   case EVENT_TYPE_AIO_FLUSH:
     event = AioFlushEvent();
     break;
+  case EVENT_TYPE_OP_FINISH:
+    event = OpFinishEvent();
+    break;
+  case EVENT_TYPE_SNAP_CREATE:
+    event = SnapCreateEvent();
+    break;
+  case EVENT_TYPE_SNAP_REMOVE:
+    event = SnapRemoveEvent();
+    break;
+  case EVENT_TYPE_SNAP_PROTECT:
+    event = SnapProtectEvent();
+    break;
+  case EVENT_TYPE_SNAP_UNPROTECT:
+    event = SnapUnprotectEvent();
+    break;
+  case EVENT_TYPE_SNAP_ROLLBACK:
+    event = SnapRollbackEvent();
+    break;
+  case EVENT_TYPE_RENAME:
+    event = RenameEvent();
+    break;
+  case EVENT_TYPE_RESIZE:
+    event = ResizeEvent();
+    break;
+  case EVENT_TYPE_FLATTEN:
+    event = FlattenEvent();
+    break;
   default:
     event = UnknownEvent();
     break;
@@ -165,6 +249,31 @@ void EventEntry::generate_test_instances(std::list<EventEntry *> &o) {
   o.push_back(new EventEntry(AioWriteEvent(123, 456, bl)));
 
   o.push_back(new EventEntry(AioFlushEvent()));
+
+  o.push_back(new EventEntry(OpFinishEvent(123, -1)));
+
+  o.push_back(new EventEntry(SnapCreateEvent()));
+  o.push_back(new EventEntry(SnapCreateEvent(234, "snap")));
+
+  o.push_back(new EventEntry(SnapRemoveEvent()));
+  o.push_back(new EventEntry(SnapRemoveEvent(345, "snap")));
+
+  o.push_back(new EventEntry(SnapProtectEvent()));
+  o.push_back(new EventEntry(SnapProtectEvent(456, "snap")));
+
+  o.push_back(new EventEntry(SnapUnprotectEvent()));
+  o.push_back(new EventEntry(SnapUnprotectEvent(567, "snap")));
+
+  o.push_back(new EventEntry(SnapRollbackEvent()));
+  o.push_back(new EventEntry(SnapRollbackEvent(678, "snap")));
+
+  o.push_back(new EventEntry(RenameEvent()));
+  o.push_back(new EventEntry(RenameEvent(789, "image name")));
+
+  o.push_back(new EventEntry(ResizeEvent()));
+  o.push_back(new EventEntry(ResizeEvent(890, 1234)));
+
+  o.push_back(new EventEntry(FlattenEvent(901)));
 }
 
 } // namespace journal
@@ -183,6 +292,33 @@ std::ostream &operator<<(std::ostream &out,
     break;
   case EVENT_TYPE_AIO_FLUSH:
     out << "AioFlush";
+    break;
+  case EVENT_TYPE_OP_FINISH:
+    out << "OpFinish";
+    break;
+  case EVENT_TYPE_SNAP_CREATE:
+    out << "SnapCreate";
+    break;
+  case EVENT_TYPE_SNAP_REMOVE:
+    out << "SnapRemove";
+    break;
+  case EVENT_TYPE_SNAP_PROTECT:
+    out << "SnapProtect";
+    break;
+  case EVENT_TYPE_SNAP_UNPROTECT:
+    out << "SnapUnprotect";
+    break;
+  case EVENT_TYPE_SNAP_ROLLBACK:
+    out << "SnapRollback";
+    break;
+  case EVENT_TYPE_RENAME:
+    out << "Rename";
+    break;
+  case EVENT_TYPE_RESIZE:
+    out << "Resize";
+    break;
+  case EVENT_TYPE_FLATTEN:
+    out << "Flatten";
     break;
   default:
     out << "Unknown (" << static_cast<uint32_t>(type) << ")";

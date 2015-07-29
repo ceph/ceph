@@ -76,6 +76,53 @@ void JournalReplay::handle_event(const journal::AioFlushEvent &event) {
   AioImageRequest::aio_flush(&m_image_ctx, aio_comp);
 }
 
+void JournalReplay::handle_event(const journal::OpFinishEvent &event) {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 20) << this << " " << __func__ << ": Op finish event" << dendl;
+}
+
+void JournalReplay::handle_event(const journal::SnapCreateEvent &event) {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 20) << this << " " << __func__ << ": Snap create event" << dendl;
+}
+
+void JournalReplay::handle_event(const journal::SnapRemoveEvent &event) {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 20) << this << " " << __func__ << ": Snap remove event" << dendl;
+}
+
+void JournalReplay::handle_event(const journal::SnapProtectEvent &event) {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 20) << this << " " << __func__ << ": Snap protect event" << dendl;
+}
+
+void JournalReplay::handle_event(const journal::SnapUnprotectEvent &event) {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 20) << this << " " << __func__ << ": Snap unprotect event"
+                 << dendl;
+}
+
+void JournalReplay::handle_event(const journal::SnapRollbackEvent &event) {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 20) << this << " " << __func__ << ": Snap rollback start event"
+                 << dendl;
+}
+
+void JournalReplay::handle_event(const journal::RenameEvent &event) {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 20) << this << " " << __func__ << ": Rename event" << dendl;
+}
+
+void JournalReplay::handle_event(const journal::ResizeEvent &event) {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 20) << this << " " << __func__ << ": Resize start event" << dendl;
+}
+
+void JournalReplay::handle_event(const journal::FlattenEvent &event) {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 20) << this << " " << __func__ << ": Flatten start event" << dendl;
+}
+
 void JournalReplay::handle_event(const journal::UnknownEvent &event) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << this << " " << __func__ << ": unknown event" << dendl;
