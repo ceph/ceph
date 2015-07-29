@@ -196,11 +196,12 @@ void usage(ostream& out)
 "   --num-objects                    total number of objects\n"
 "   --min-object-size                min object size\n"
 "   --max-object-size                max object size\n"
-"   --min-ops                        min number of operations\n"
+"   --min-op-len                     min io size of operations\n"
+"   --max-op-len                     max io size of operations\n"
 "   --max-ops                        max number of operations\n"
-"   --max-backlog                    max backlog (in MB)\n"
-"   --percent                        percent of operations that are read\n"
-"   --target-throughput              target throughput (in MB)\n"
+"   --max-backlog                    max backlog size\n"
+"   --read-percent                   percent of operations that are read\n"
+"   --target-throughput              target throughput (in bytes)\n"
 "   --run-length                     total time (in seconds)\n"
     ;
 }
