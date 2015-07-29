@@ -28,7 +28,6 @@ typedef ceph::shared_ptr<TrackedOp> TrackedOpRef;
 class OpTracker;
 class OpHistory {
   set<pair<utime_t, TrackedOpRef> > arrived;
-  set<pair<double, TrackedOpRef> > duration;
   Mutex ops_history_lock;
   void cleanup(utime_t now);
   bool shutdown;
@@ -40,7 +39,6 @@ public:
   history_size(0), history_duration(0) {}
   ~OpHistory() {
     assert(arrived.empty());
-    assert(duration.empty());
   }
   void insert(utime_t now, TrackedOpRef op);
   void dump_ops(utime_t now, Formatter *f);
