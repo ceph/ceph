@@ -7839,12 +7839,17 @@ void OSD::do_recovery(PG *pg, ThreadPool::TPHandle &handle)
     dout(20) << "  active was " << recovery_oids[pg->info.pgid] << dendl;
 #endif
     
-    PG::RecoveryCtx rctx = create_context();
-    rctx.handle = &handle;
-
     int started;
     bool more = pg->start_recovery_ops(max, handle, &started);
     dout(10) << "do_recovery started " << started << "/" << max << " on " << *pg << dendl;
+    // If no recovery op is started, don't bother to manipulate the RecoveryCtx
+    if (!started && (more || !pg->have_unfound())) {
+      pg->unlock();
+      goto out;
+    }
+
+    PG::RecoveryCtx rctx = create_context();
+    rctx.handle = &handle;
 
     /*
      * if we couldn't start any recovery ops and things are still
