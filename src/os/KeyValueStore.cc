@@ -2939,6 +2939,8 @@ void KeyValueStore::handle_conf_change(const struct md_config_t *conf,
     m_keyvaluestore_queue_max_ops = conf->keyvaluestore_queue_max_ops;
     m_keyvaluestore_queue_max_bytes = conf->keyvaluestore_queue_max_bytes;
     m_keyvaluestore_max_expected_write_size = conf->keyvaluestore_max_expected_write_size;
+    throttle_ops.reset_max(conf->keyvaluestore_queue_max_ops);
+    throttle_bytes.reset_max(conf->keyvaluestore_queue_max_bytes);
   }
   if (changed.count("keyvaluestore_default_strip_size")) {
     m_keyvaluestore_strip_size = conf->keyvaluestore_default_strip_size;

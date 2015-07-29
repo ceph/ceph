@@ -5524,6 +5524,8 @@ void FileStore::handle_conf_change(const struct md_config_t *conf,
     m_filestore_sloppy_crc = conf->filestore_sloppy_crc;
     m_filestore_sloppy_crc_block_size = conf->filestore_sloppy_crc_block_size;
     m_filestore_max_alloc_hint_size = conf->filestore_max_alloc_hint_size;
+    throttle_ops.reset_max(conf->filestore_queue_max_ops);
+    throttle_bytes.reset_max(conf->filestore_queue_max_bytes);
   }
   if (changed.count("filestore_commit_timeout")) {
     Mutex::Locker l(sync_entry_timeo_lock);
