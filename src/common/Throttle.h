@@ -103,6 +103,10 @@ public:
   bool should_wait(int64_t c) const {
     return _should_wait(c);
   }
+  void reset_max(int64_t m) {
+    Mutex::Locker l(lock);
+    _reset_max(m);
+  }
 };
 
 
