@@ -71,27 +71,19 @@ class CEPH_BUFFER_API buffer {
 
 public:
   struct error : public std::exception{
-    const char *what() const throw () {
-      return "buffer::exception";
-    }
+    const char *what() const throw ();
   };
   struct bad_alloc : public error {
-    const char *what() const throw () {
-      return "buffer::bad_alloc";
-    }
+    const char *what() const throw ();
   };
   struct end_of_buffer : public error {
-    const char *what() const throw () {
-      return "buffer::end_of_buffer";
-    }
+    const char *what() const throw ();
   };
   struct malformed_input : public error {
     explicit malformed_input(const std::string& w) {
       snprintf(buf, sizeof(buf), "buffer::malformed_input: %s", w.c_str());
     }
-    const char *what() const throw () {
-      return buf;
-    }
+    const char *what() const throw ();
   private:
     char buf[256];
   };
