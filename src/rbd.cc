@@ -193,6 +193,7 @@ void usage()
 "  --id <username>                    rados user (without 'client.'prefix) to\n"
 "                                     authenticate as\n"
 "  --keyfile <path>                   file containing secret key for use with cephx\n"
+"  --keyring <path>                   file containing keyring for use with cephx\n"
 "  --shared <tag>                     take a shared (rather than exclusive) lock\n"
 "  --format <output-format>           output format (default: plain, json, xml)\n"
 "  --pretty-format                    make json or xml output more readable\n"
