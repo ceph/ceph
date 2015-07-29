@@ -103,6 +103,7 @@
     --id <username>                    rados user (without 'client.'prefix) to
                                        authenticate as
     --keyfile <path>                   file containing secret key for use with cephx
+    --keyring <path>                   file containing keyring for use with cephx
     --shared <tag>                     take a shared (rather than exclusive) lock
     --format <output-format>           output format (default: plain, json, xml)
     --pretty-format                    make json or xml output more readable
