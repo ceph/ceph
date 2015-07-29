@@ -572,7 +572,7 @@ public:
     min_op_len = 1024;
     target_throughput = 5 * 1024 * 1024; // B/sec
     max_op_len = 2 * 1024 * 1024;
-    max_ops = 0; 
+    max_ops = 16; 
     max_backlog = target_throughput * 2;
     run_length = 60;
 
