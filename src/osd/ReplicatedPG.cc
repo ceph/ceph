@@ -9450,8 +9450,7 @@ void PG::MissingLoc::check_recovery_sources(const OSDMapRef osdmap)
   
 
 bool ReplicatedPG::start_recovery_ops(
-  int max, RecoveryCtx *prctx,
-  ThreadPool::TPHandle &handle,
+  int max, ThreadPool::TPHandle &handle,
   int *ops_started)
 {
   int& started = *ops_started;
