@@ -22,7 +22,7 @@
 
 namespace librbd {
 
-using namespace WatchNotify;
+using namespace watch_notify;
 
 static const std::string WATCHER_LOCK_TAG = "internal";
 static const std::string WATCHER_LOCK_COOKIE_PREFIX = "auto";
@@ -615,7 +615,7 @@ void ImageWatcher::cancel_async_requests() {
   m_async_requests.clear();
 }
 
-void ImageWatcher::set_owner_client_id(const WatchNotify::ClientId& client_id) {
+void ImageWatcher::set_owner_client_id(const ClientId& client_id) {
   assert(m_owner_client_id_lock.is_locked());
   m_owner_client_id = client_id;
   ldout(m_image_ctx.cct, 10) << this << " current lock owner: "

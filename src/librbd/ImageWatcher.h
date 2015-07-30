@@ -105,7 +105,7 @@ private:
   class Task {
   public:
     Task(TaskCode task_code) : m_task_code(task_code) {}
-    Task(TaskCode task_code, const WatchNotify::AsyncRequestId &id)
+    Task(TaskCode task_code, const watch_notify::AsyncRequestId &id)
       : m_task_code(task_code), m_async_request_id(id) {}
 
     inline bool operator<(const Task& rhs) const {
@@ -120,7 +120,7 @@ private:
     }
   private:
     TaskCode m_task_code;
-    WatchNotify::AsyncRequestId m_async_request_id;
+    watch_notify::AsyncRequestId m_async_request_id;
   };
 
   struct WatchCtx : public librados::WatchCtx2 {
@@ -138,7 +138,7 @@ private:
   class RemoteProgressContext : public ProgressContext {
   public:
     RemoteProgressContext(ImageWatcher &image_watcher,
-                          const WatchNotify::AsyncRequestId &id)
+                          const watch_notify::AsyncRequestId &id)
       : m_image_watcher(image_watcher), m_async_request_id(id)
     {
     }
@@ -151,13 +151,13 @@ private:
 
   private:
     ImageWatcher &m_image_watcher;
-    WatchNotify::AsyncRequestId m_async_request_id;
+    watch_notify::AsyncRequestId m_async_request_id;
   };
 
   class RemoteContext : public Context {
   public:
     RemoteContext(ImageWatcher &image_watcher,
-      	          const WatchNotify::AsyncRequestId &id,
+      	          const watch_notify::AsyncRequestId &id,
       	          ProgressContext *prog_ctx)
       : m_image_watcher(image_watcher), m_async_request_id(id),
         m_prog_ctx(prog_ctx)
@@ -172,7 +172,7 @@ private:
 
   private:
     ImageWatcher &m_image_watcher;
-    WatchNotify::AsyncRequestId m_async_request_id;
+    watch_notify::AsyncRequestId m_async_request_id;
     ProgressContext *m_prog_ctx;
   };
 
@@ -187,7 +187,7 @@ private:
     {
     }
 
-    inline void operator()(const WatchNotify::HeaderUpdatePayload &payload) const {
+    inline void operator()(const watch_notify::HeaderUpdatePayload &payload) const {
       bufferlist out;
       image_watcher->handle_payload(payload, &out);
       image_watcher->acknowledge_notify(notify_id, handle, out);
@@ -220,11 +220,11 @@ private:
   TaskFinisher<Task> *m_task_finisher;
 
   RWLock m_async_request_lock;
-  std::map<WatchNotify::AsyncRequestId, AsyncRequest> m_async_requests;
-  std::set<WatchNotify::AsyncRequestId> m_async_pending;
+  std::map<watch_notify::AsyncRequestId, AsyncRequest> m_async_requests;
+  std::set<watch_notify::AsyncRequestId> m_async_pending;
 
   Mutex m_owner_client_id_lock;
-  WatchNotify::ClientId m_owner_client_id;
+  watch_notify::ClientId m_owner_client_id;
 
   std::string encode_lock_cookie() const;
   static bool decode_lock_cookie(const std::string &cookie, uint64_t *handle);
@@ -238,8 +238,8 @@ private:
   void schedule_cancel_async_requests();
   void cancel_async_requests();
 
-  void set_owner_client_id(const WatchNotify::ClientId &client_id);
-  WatchNotify::ClientId get_client_id();
+  void set_owner_client_id(const watch_notify::ClientId &client_id);
+  watch_notify::ClientId get_client_id();
 
   void notify_acquired_lock();
   void notify_release_lock();
@@ -250,48 +250,48 @@ private:
 
   int notify_lock_owner(bufferlist &bl);
 
-  void schedule_async_request_timed_out(const WatchNotify::AsyncRequestId &id);
-  void async_request_timed_out(const WatchNotify::AsyncRequestId &id);
-  int notify_async_request(const WatchNotify::AsyncRequestId &id,
+  void schedule_async_request_timed_out(const watch_notify::AsyncRequestId &id);
+  void async_request_timed_out(const watch_notify::AsyncRequestId &id);
+  int notify_async_request(const watch_notify::AsyncRequestId &id,
                            bufferlist &in, ProgressContext& prog_ctx);
   void notify_request_leadership();
 
-  void schedule_async_progress(const WatchNotify::AsyncRequestId &id,
+  void schedule_async_progress(const watch_notify::AsyncRequestId &id,
                                uint64_t offset, uint64_t total);
-  int notify_async_progress(const WatchNotify::AsyncRequestId &id,
+  int notify_async_progress(const watch_notify::AsyncRequestId &id,
                             uint64_t offset, uint64_t total);
-  void schedule_async_complete(const WatchNotify::AsyncRequestId &id, int r);
-  int notify_async_complete(const WatchNotify::AsyncRequestId &id, int r);
+  void schedule_async_complete(const watch_notify::AsyncRequestId &id, int r);
+  int notify_async_complete(const watch_notify::AsyncRequestId &id, int r);
 
-  int prepare_async_request(const WatchNotify::AsyncRequestId& id,
+  int prepare_async_request(const watch_notify::AsyncRequestId& id,
                             bool* new_request, Context** ctx,
                             ProgressContext** prog_ctx);
-  void cleanup_async_request(const WatchNotify::AsyncRequestId& id,
+  void cleanup_async_request(const watch_notify::AsyncRequestId& id,
                              Context *ctx);
 
-  void handle_payload(const WatchNotify::HeaderUpdatePayload& payload,
+  void handle_payload(const watch_notify::HeaderUpdatePayload& payload,
                       bufferlist *out);
-  void handle_payload(const WatchNotify::AcquiredLockPayload& payload,
+  void handle_payload(const watch_notify::AcquiredLockPayload& payload,
                       bufferlist *out);
-  void handle_payload(const WatchNotify::ReleasedLockPayload& payload,
+  void handle_payload(const watch_notify::ReleasedLockPayload& payload,
                       bufferlist *out);
-  void handle_payload(const WatchNotify::RequestLockPayload& payload,
+  void handle_payload(const watch_notify::RequestLockPayload& payload,
                       bufferlist *out);
-  void handle_payload(const WatchNotify::AsyncProgressPayload& payload,
+  void handle_payload(const watch_notify::AsyncProgressPayload& payload,
                       bufferlist *out);
-  void handle_payload(const WatchNotify::AsyncCompletePayload& payload,
+  void handle_payload(const watch_notify::AsyncCompletePayload& payload,
                       bufferlist *out);
-  void handle_payload(const WatchNotify::FlattenPayload& payload,
+  void handle_payload(const watch_notify::FlattenPayload& payload,
                       bufferlist *out);
-  void handle_payload(const WatchNotify::ResizePayload& payload,
+  void handle_payload(const watch_notify::ResizePayload& payload,
                       bufferlist *out);
-  void handle_payload(const WatchNotify::SnapCreatePayload& payload,
+  void handle_payload(const watch_notify::SnapCreatePayload& payload,
                       bufferlist *out);
-  void handle_payload(const WatchNotify::SnapRemovePayload& payload,
+  void handle_payload(const watch_notify::SnapRemovePayload& payload,
                       bufferlist *out);
-  void handle_payload(const WatchNotify::RebuildObjectMapPayload& payload,
+  void handle_payload(const watch_notify::RebuildObjectMapPayload& payload,
                       bufferlist *out);
-  void handle_payload(const WatchNotify::UnknownPayload& payload,
+  void handle_payload(const watch_notify::UnknownPayload& payload,
                       bufferlist *out);
 
   void handle_notify(uint64_t notify_id, uint64_t handle, bufferlist &bl);

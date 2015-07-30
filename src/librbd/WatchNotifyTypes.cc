@@ -7,7 +7,7 @@
 #include "common/Formatter.h"
 
 namespace librbd {
-namespace WatchNotify {
+namespace watch_notify {
 
 namespace {
 
@@ -356,12 +356,12 @@ void ResponseMessage::generate_test_instances(std::list<ResponseMessage *> &o) {
   o.push_back(new ResponseMessage(1));
 }
 
-} // namespace WatchNotify
+} // namespace watch_notify
 } // namespace librbd
 
 std::ostream &operator<<(std::ostream &out,
-                         const librbd::WatchNotify::NotifyOp &op) {
-  using namespace librbd::WatchNotify;
+                         const librbd::watch_notify::NotifyOp &op) {
+  using namespace librbd::watch_notify;
 
   switch (op) {
   case NOTIFY_OP_ACQUIRED_LOCK:
@@ -405,13 +405,13 @@ std::ostream &operator<<(std::ostream &out,
 }
 
 std::ostream &operator<<(std::ostream &out,
-                         const librbd::WatchNotify::ClientId &client_id) {
+                         const librbd::watch_notify::ClientId &client_id) {
   out << "[" << client_id.gid << "," << client_id.handle << "]";
   return out;
 }
 
 std::ostream &operator<<(std::ostream &out,
-                         const librbd::WatchNotify::AsyncRequestId &request) {
+                         const librbd::watch_notify::AsyncRequestId &request) {
   out << "[" << request.client_id.gid << "," << request.client_id.handle << ","
       << request.request_id << "]";
   return out;
