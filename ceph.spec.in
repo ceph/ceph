@@ -712,8 +712,6 @@ mkdir -p %{_localstatedir}/run/ceph/
 %{_sbindir}/rcceph
 %endif
 %{_sbindir}/ceph-disk
-%{_sbindir}/ceph-disk-activate
-%{_sbindir}/ceph-disk-prepare
 %{_sbindir}/ceph-disk-udev
 %{_sbindir}/ceph-create-keys
 %{_sbindir}/rcceph
