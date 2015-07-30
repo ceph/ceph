@@ -8790,7 +8790,10 @@ void ReplicatedPG::on_removal(ObjectStore::Transaction *t)
   dout(10) << "on_removal" << dendl;
 
   // adjust info to backfill
-  info.set_last_backfill(hobject_t(), true);
+  if (info.is_empty())
+    info.set_last_backfill(hobject_t::get_max(), true);
+  else
+    info.set_last_backfill(hobject_t(), true);
   dirty_info = true;
 
 
