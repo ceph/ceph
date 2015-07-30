@@ -195,6 +195,10 @@ public:
     : AioImageRequest(image_ctx, aio_comp) {
   }
 
+  virtual bool is_write_op() const {
+    return true;
+  }
+
 protected:
   virtual void send_request();
   virtual const char *get_request_type() const {
