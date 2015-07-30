@@ -1622,7 +1622,8 @@ void PG::activate(ObjectStore::Transaction& t,
        */
       bool force_restart_backfill =
 	!pi.last_backfill.is_max() &&
-	pi.last_backfill_bitwise != get_sort_bitwise();
+	pi.last_backfill_bitwise != get_sort_bitwise() &&
+	pg_log.get_tail() != eversion_t();
 
       if (pi.last_update == info.last_update && !force_restart_backfill) {
         // empty log
