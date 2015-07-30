@@ -12,6 +12,7 @@
  *
  */
 
+#include "include/int_types.h"
 #include "common/config.h"
 #include "common/ceph_context.h"
 #include "ceph_crypto.h"
@@ -40,37 +41,46 @@ ceph::crypto::HMACSHA1::~HMACSHA1()
 // for SECMOD_RestartModules()
 #include <secmod.h>
 
-// Initialization of NSS requires a mutex due to a race condition in
-// NSS_NoDB_Init.
 static pthread_mutex_t crypto_init_mutex = PTHREAD_MUTEX_INITIALIZER;
+static uint32_t crypto_refs = 0;
+static NSSInitContext *crypto_context = NULL;
 static pid_t crypto_init_pid = 0;
 
 void ceph::crypto::init(CephContext *cct)
 {
   pid_t pid = getpid();
-  SECStatus s;
   pthread_mutex_lock(&crypto_init_mutex);
   if (crypto_init_pid != pid) {
-    if (crypto_init_pid > 0)
+    if (crypto_init_pid > 0) {
       SECMOD_RestartModules(PR_FALSE);
+    }
     crypto_init_pid = pid;
   }
-  if (cct->_conf->nss_db_path.empty()) {
-    s = NSS_NoDB_Init(NULL);
-  } else {
-    s = NSS_Init(cct->_conf->nss_db_path.c_str());
+
+  if (++crypto_refs == 1) {
+    NSSInitParameters init_params;
+    memset(&init_params, 0, sizeof(init_params));
+    init_params.length = sizeof(init_params);
+
+    uint32_t flags = NSS_INIT_READONLY;
+    if (cct->_conf->nss_db_path.empty()) {
+      flags |= (NSS_INIT_NOCERTDB | NSS_INIT_NOMODDB);
+    }
+    crypto_context = NSS_InitContext(cct->_conf->nss_db_path.c_str(), "", "",
+                                     SECMOD_DB, &init_params, flags);
   }
   pthread_mutex_unlock(&crypto_init_mutex);
-  assert(s == SECSuccess);
+  assert(crypto_context != NULL);
 }
 
 void ceph::crypto::shutdown()
 {
-  SECStatus s;
   pthread_mutex_lock(&crypto_init_mutex);
-  s = NSS_Shutdown();
-  assert(s == SECSuccess);
-  crypto_init_pid = 0;
+  if (--crypto_refs == 0) {
+    NSS_ShutdownContext(crypto_context);
+    crypto_context = NULL;
+    crypto_init_pid = 0;
+  }
   pthread_mutex_unlock(&crypto_init_mutex);
 }
 
