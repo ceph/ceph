@@ -428,24 +428,29 @@ TEST_P(StoreTest, SimpleCloneTest) {
     cerr << "Clone object and rm attr" << std::endl;
     r = store->apply_transaction(t);
     ASSERT_EQ(r, 0);
+
     r = store->read(cid, hoid, 10, 5, newdata);
     ASSERT_EQ(r, 5);
     ASSERT_TRUE(newdata.contents_equal(large));
+
     newdata.clear();
     r = store->read(cid, hoid2, 10, 5, newdata);
     ASSERT_EQ(r, 5);
     ASSERT_TRUE(newdata.contents_equal(small));
+
     r = store->getattr(cid, hoid2, "attr2", attr);
-    ASSERT_EQ(r, 5);
+    ASSERT_EQ(r, 0);
     ASSERT_TRUE(attr.contents_equal(small));
+
     attr.clear();
     r = store->getattr(cid, hoid2, "attr3", attr);
-    ASSERT_EQ(r, 6);
+    ASSERT_EQ(r, 0);
     ASSERT_TRUE(attr.contents_equal(xlarge));
+
     attr.clear();
     r = store->getattr(cid, hoid, "attr1", attr);
-    ASSERT_EQ(r, 5);
-    ASSERT_TRUE(attr.contents_equal(small));
+    ASSERT_EQ(r, 0);
+    ASSERT_TRUE(attr.contents_equal(large));
   }
   {
     ObjectStore::Transaction t;
@@ -952,7 +957,7 @@ public:
 
     bufferlist bl;
     r = store->getattr(cid, obj, it->first, bl);
-    ASSERT_TRUE(r >= 0);
+    ASSERT_EQ(r, 0);
     ASSERT_TRUE(it->second.contents_equal(bl));
   }
 
@@ -1650,7 +1655,7 @@ TEST_P(StoreTest, XattrTest) {
   ASSERT_EQ(r, -ENODATA);
 
   r = store->getattr(cid, hoid, "attr3", bp);
-  ASSERT_GE(r, 0);
+  ASSERT_EQ(r, 0);
   bufferlist bl2;
   bl2.push_back(bp);
   ASSERT_TRUE(bl2 == attrs["attr3"]);
@@ -1859,7 +1864,7 @@ TEST_P(StoreTest, MoveRename) {
     ASSERT_TRUE(newdata.contents_equal(data));
     bufferlist newattr;
     r = store->getattr(cid, oid, "attr", newattr);
-    ASSERT_GE(r, 0);
+    ASSERT_EQ(r, 0);
     ASSERT_TRUE(newattr.contents_equal(attr));
     set<string> keys;
     keys.insert("omap_key");

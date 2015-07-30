@@ -4072,7 +4072,7 @@ int FileStore::getattr(coll_t cid, const ghobject_t& oid, const char *name, buff
     return -EIO;
   } else {
     tracepoint(objectstore, getattr_exit, r);
-    return r;
+    return r < 0 ? r : 0;
   }
 }
 
