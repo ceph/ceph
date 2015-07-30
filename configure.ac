@@ -824,13 +824,6 @@ AS_IF([test "x$with_system_libs3" = xcheck],
             [AC_SEARCH_LIBS([S3_initialize], [s3], [with_system_libs3=yes], [true], [-lpthread])])
 AM_CONDITIONAL(WITH_SYSTEM_LIBS3, [ test "$with_system_libs3" = "yes" ])
 
-# rest-bench?
-AC_ARG_WITH([rest-bench],
-	    [AS_HELP_STRING([--with-rest-bench], [enables rest-bench])],
-	    [],
-	    [with_rest_bench=no])
-AM_CONDITIONAL(WITH_REST_BENCH, [ test "$with_rest_bench" = "yes" ])
-
 # needs libcurl and libxml2
 if test "x$with_rest_bench" = xyes && test "x$with_system_libs3" = xno; then
    AC_CHECK_LIB([curl], [curl_easy_init], [], AC_MSG_ERROR([libcurl not found]))
