@@ -171,6 +171,8 @@ private:
   ceph_spinlock_t _feature_lock;
   std::set<std::string> _experimental_features;
 
+  md_config_obs_t *_lockdep_obs;
+
   friend class CephContextObs;
 };
 
