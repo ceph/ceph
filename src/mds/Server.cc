@@ -2131,7 +2131,13 @@ bool Server::check_access(MDRequestRef& mdr, CInode *in, unsigned mask)
   // FIXME: behave with inodes in stray dir
   // FIXME: behave with hard links
   string path;
-  in->make_path_string(path, false, in->get_projected_parent_dn());
+
+  if (in->is_stray()){
+    path = in->get_projected_inode()->stray_prior_path;
+  }
+  else{
+    in->make_path_string(path, false, in->get_projected_parent_dn());
+  }
   if (path.length())
     path = path.substr(1);    // drop leading /
 
