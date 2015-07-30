@@ -267,6 +267,7 @@ class AsyncConnection : public Connection {
   utime_t recv_stamp;
   utime_t throttle_stamp;
   uint64_t msg_left;
+  uint64_t front_decompress_id, middle_decompress_id, data_decompress_id;
   ceph_msg_header current_header;
   bufferlist data_buf;
   bufferlist::iterator data_blp;

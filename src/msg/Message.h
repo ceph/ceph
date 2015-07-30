@@ -34,6 +34,8 @@
 #include "common/debug.h"
 #include "common/config.h"
 
+#include "compressor/AsyncCompressor.h"
+
 // monitor internal
 #define MSG_MON_SCRUB              64
 #define MSG_MON_ELECTION           65
@@ -225,6 +227,8 @@ protected:
 
   bi::list_member_hook<> dispatch_q;
 
+  uint64_t front_compress_id, middle_compress_id, data_compress_id;
+
 public:
   class CompletionHook : public Context {
   protected:
@@ -266,7 +270,8 @@ public:
       completion_hook(NULL),
       byte_throttler(NULL),
       msg_throttler(NULL),
-      dispatch_throttle_size(0) {
+      dispatch_throttle_size(0),
+      front_compress_id(0), middle_compress_id(0), data_compress_id(0) {
     memset(&header, 0, sizeof(header));
     memset(&footer, 0, sizeof(footer));
   }
@@ -460,8 +465,9 @@ public:
 
   virtual void dump(Formatter *f) const;
 
-  void encode(uint64_t features, int crcflags);
-
+  void encode(uint64_t features);
+  void try_compress(CephContext *cct, AsyncCompressor *compressor);
+  int ready_compress(CephContext *cct, AsyncCompressor *compressor);
   void calc_crc(int crcflags);
   static bool verify_crc(CephContext *cct, int crcflags, ceph_msg_header &header,
                         ceph_msg_footer &footer, bufferlist &front,
@@ -469,7 +475,7 @@ public:
 };
 typedef boost::intrusive_ptr<Message> MessageRef;
 
-extern Message *decode_message(CephContext *cct, int crcflags,
+extern Message *decode_message(CephContext *cct,
 			       ceph_msg_header &header,
 			       ceph_msg_footer& footer, bufferlist& front,
 			       bufferlist& middle, bufferlist& data);

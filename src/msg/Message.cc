@@ -174,7 +174,7 @@ using namespace std;
 
 #define dout_subsys ceph_subsys_ms
 
-void Message::encode(uint64_t features, int crcflags)
+void Message::encode(uint64_t features)
 {
   // encode and copy out of *m
   if (empty_payload()) {
@@ -261,6 +261,74 @@ void Message::dump(Formatter *f) const
   f->dump_string("summary", ss.str());
 }
 
+void Message::try_compress(CephContext *cct, AsyncCompressor *compressor)
+{
+  ldout(cct, 20) << __func__ << " BEFORE compression:\n"
+                 << " front_len=" << payload.length()
+                 << " header.front_len=" << header.front_len
+                 << " middle_len=" << middle.length()
+                 << " header.middle_len=" << header.middle_len
+                 << " data_len=" << data.length()
+                 << " header.data_len=" << header.data_len
+                 << dendl;
+
+  if ((header.flags & CEPH_MSG_HEADER_FLAGS_COMPRESS_FRONT) && payload.length())
+    front_compress_id = compressor->async_compress(payload);
+
+  if ((header.flags & CEPH_MSG_HEADER_FLAGS_COMPRESS_MIDDLE) && middle.length())
+    middle_compress_id = compressor->async_compress(middle);
+
+  if ((header.flags & CEPH_MSG_HEADER_FLAGS_COMPRESS_DATA) && data.length())
+    data_compress_id = compressor->async_compress(data);
+}
+
+int Message::ready_compress(CephContext *cct, AsyncCompressor *compressor)
+{
+  bool finished;
+  int r;
+  int num = 0;
+
+  if (front_compress_id) {
+    r = compressor->get_compress_data(front_compress_id, payload, true, &finished);
+    if (r < 0) {
+      ldout(cct, 0) << __func__ << " failed to compress payload" << dendl;
+      return r;
+    }
+    ++num;
+    assert(finished);
+  }
+  if (middle_compress_id) {
+    r = compressor->get_compress_data(middle_compress_id, middle, true, &finished);
+    if (r < 0) {
+      ldout(cct, 0) << __func__ << " failed to compress middle" << dendl;
+      return r;
+    }
+    ++num;
+    assert(finished);
+  }
+  if (data_compress_id) {
+    r = compressor->get_compress_data(data_compress_id, data, true, &finished);
+    if (r < 0) {
+      ldout(cct, 0) << __func__ << " failed to compress data" << dendl;
+      return r;
+    }
+    ++num;
+    assert(finished);
+  }
+
+  if (num)
+    ldout(cct, 20) << __func__ << " AFTER compression:\n"
+                   << " front_len=" << payload.length()
+                   << " header.front_len=" << header.front_len
+                   << " middle_len=" << middle.length()
+                   << " header.middle_len=" << header.middle_len
+                   << " data_len=" << data.length()
+                   << " header.data_len=" << header.data_len
+                   << dendl;
+
+  return num;
+}
+
 bool Message::verify_crc(CephContext *cct, int crcflags,
 			ceph_msg_header& header,
 			ceph_msg_footer& footer,
@@ -309,11 +377,8 @@ bool Message::verify_crc(CephContext *cct, int crcflags,
   return false;
 }
 
-Message *decode_message(CephContext *cct, int crcflags,
-			ceph_msg_header& header,
-			ceph_msg_footer& footer,
-			bufferlist& front, bufferlist& middle,
-			bufferlist& data)
+Message *decode_message(CephContext *cct, ceph_msg_header& header, ceph_msg_footer& footer,
+                        bufferlist& front, bufferlist& middle, bufferlist& data)
 {
   // make message
   Message *m = 0;
@@ -801,7 +866,7 @@ void encode_message(Message *msg, uint64_t features, bufferlist& payload)
   bufferlist front, middle, data;
   ceph_msg_footer_old old_footer;
   ceph_msg_footer footer;
-  msg->encode(features, MSG_CRC_ALL);
+  msg->encode(features);
   ::encode(msg->get_header(), payload);
 
   // Here's where we switch to the old footer format.  PLR
@@ -839,6 +904,8 @@ Message *decode_message(CephContext *cct, int crcflags, bufferlist::iterator& p)
   ::decode(fr, p);
   ::decode(mi, p);
   ::decode(da, p);
-  return decode_message(cct, crcflags, h, f, fr, mi, da);
+  if (!Message::verify_crc(cct, crcflags, h, f, fr, mi, da))
+    return NULL;
+  return decode_message(cct, h, f, fr, mi, da);
 }
 
