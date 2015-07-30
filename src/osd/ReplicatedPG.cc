@@ -10052,7 +10052,7 @@ void ReplicatedPG::update_range(
   int local_min = cct->_conf->osd_backfill_scan_min;
   int local_max = cct->_conf->osd_backfill_scan_max;
 
-  if (bi->version < info.log_tail) {
+  if (bi->version == eversion_t() || bi->version < info.log_tail) {
     dout(10) << __func__<< ": bi is old, rescanning local backfill_info"
 	     << dendl;
     if (last_update_applied >= info.log_tail) {
