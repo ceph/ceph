@@ -74,7 +74,7 @@
 #define MDS_TRAVERSE_DISCOVERXLOCK 3    // succeeds on (foreign?) null, xlocked dentries.
 
 
-BOOST_STRONG_TYPEDEF(int32_t, mds_rank_t)
+typedef int32_t mds_rank_t;
 BOOST_STRONG_TYPEDEF(uint64_t, mds_gid_t)
 extern const mds_gid_t MDS_GID_NONE;
 extern const mds_rank_t MDS_RANK_NONE;
