@@ -1026,8 +1026,12 @@ void ImageWatcher::handle_payload(const SnapCreatePayload &payload,
   if (m_lock_owner_state == LOCK_OWNER_STATE_LOCKED) {
     ldout(m_image_ctx.cct, 10) << this << " remote snap_create request: "
 			       << payload.snap_name << dendl;
-    int r = librbd::snap_create_helper(&m_image_ctx, NULL,
+    C_SaferCond cond_ctx;
+    int r = librbd::snap_create_helper(&m_image_ctx, &cond_ctx,
                                        payload.snap_name.c_str());
+    if (r == 0) {
+      r = cond_ctx.wait();
+    }
 
     ::encode(ResponseMessage(r), *out);
   }
@@ -1039,8 +1043,12 @@ void ImageWatcher::handle_payload(const SnapRemovePayload &payload,
   if (m_lock_owner_state == LOCK_OWNER_STATE_LOCKED) {
     ldout(m_image_ctx.cct, 10) << this << " remote snap_remove request: "
 			       << payload.snap_name << dendl;
-    int r = librbd::snap_remove_helper(&m_image_ctx, NULL,
+    C_SaferCond cond_ctx;
+    int r = librbd::snap_remove_helper(&m_image_ctx, &cond_ctx,
                                        payload.snap_name.c_str());
+    if (r == 0) {
+      r = cond_ctx.wait();
+    }
 
     ::encode(ResponseMessage(r), *out);
   }

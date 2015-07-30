@@ -28,6 +28,11 @@ librbd_internal_la_SOURCES = \
 	librbd/operation/RebuildObjectMapRequest.cc \
 	librbd/operation/Request.cc \
 	librbd/operation/ResizeRequest.cc \
+	librbd/operation/SnapshotCreateRequest.cc \
+	librbd/operation/SnapshotProtectRequest.cc \
+	librbd/operation/SnapshotRemoveRequest.cc \
+	librbd/operation/SnapshotRollbackRequest.cc \
+	librbd/operation/SnapshotUnprotectRequest.cc \
 	librbd/operation/TrimRequest.cc
 noinst_LTLIBRARIES += librbd_internal.la
 
@@ -83,6 +88,11 @@ noinst_HEADERS += \
 	librbd/operation/RebuildObjectMapRequest.h \
 	librbd/operation/Request.h \
 	librbd/operation/ResizeRequest.h \
+	librbd/operation/SnapshotCreateRequest.h \
+	librbd/operation/SnapshotProtectRequest.h \
+	librbd/operation/SnapshotRemoveRequest.h \
+	librbd/operation/SnapshotRollbackRequest.h \
+	librbd/operation/SnapshotUnprotectRequest.h \
 	librbd/operation/TrimRequest.h
 
 endif # WITH_RBD
