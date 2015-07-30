@@ -111,9 +111,6 @@ do
 done
 
 echo -e "\nSource Code Dependencies:\n"
-echo "src/libs3"
-echo "    Name:    libs3"
-echo "    License: GPLv3"
 echo "src/leveldb"
 echo "    Name:    leveldb"
 echo "    License: Google Public License"
