@@ -13,12 +13,12 @@
 #include "librbd/AioImageRequestWQ.h"
 #include "librbd/AsyncOperation.h"
 #include "librbd/AsyncRequest.h"
-#include "librbd/AsyncResizeRequest.h"
 #include "librbd/internal.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageWatcher.h"
 #include "librbd/Journal.h"
 #include "librbd/ObjectMap.h"
+#include "librbd/ResizeRequest.h"
 
 #include <boost/bind.hpp>
 
@@ -475,9 +475,9 @@ public:
   {
     assert(snap_lock.is_locked());
     if (in_snap_id == CEPH_NOSNAP) {
-      if (!async_resize_reqs.empty() &&
-          async_resize_reqs.front()->shrinking()) {
-        return async_resize_reqs.front()->get_image_size();
+      if (!resize_reqs.empty() &&
+          resize_reqs.front()->shrinking()) {
+        return resize_reqs.front()->get_image_size();
       }
       return size;
     }

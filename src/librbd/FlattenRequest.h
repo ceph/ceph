@@ -1,7 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
-#ifndef CEPH_LIBRBD_ASYNC_FLATTEN_REQUEST_H
-#define CEPH_LIBRBD_ASYNC_FLATTEN_REQUEST_H
+#ifndef CEPH_LIBRBD_FLATTEN_REQUEST_H
+#define CEPH_LIBRBD_FLATTEN_REQUEST_H
 
 #include "librbd/AsyncRequest.h"
 #include "librbd/parent_types.h"
@@ -12,10 +12,10 @@ namespace librbd {
 class ImageCtx;
 class ProgressContext;
 
-class AsyncFlattenRequest : public AsyncRequest
+class FlattenRequest : public AsyncRequest
 {
 public:
-  AsyncFlattenRequest(ImageCtx &image_ctx, Context *on_finish,
+  FlattenRequest(ImageCtx &image_ctx, Context *on_finish,
 		      uint64_t object_size, uint64_t overlap_objects,
 		      const ::SnapContext &snapc, ProgressContext &prog_ctx)
     : AsyncRequest(image_ctx, on_finish), m_object_size(object_size),
@@ -78,4 +78,4 @@ private:
 
 } // namespace librbd
 
-#endif // CEPH_LIBRBD_ASYNC_FLATTEN_REQUEST_H
+#endif // CEPH_LIBRBD_FLATTEN_REQUEST_H

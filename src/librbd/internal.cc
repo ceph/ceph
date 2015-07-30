@@ -21,18 +21,18 @@
 #include "librbd/AioImageRequest.h"
 #include "librbd/AioImageRequestWQ.h"
 #include "librbd/AioObjectRequest.h"
-#include "librbd/AsyncFlattenRequest.h"
-#include "librbd/AsyncResizeRequest.h"
-#include "librbd/AsyncTrimRequest.h"
 #include "librbd/CopyupRequest.h"
 #include "librbd/DiffIterate.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageWatcher.h"
 #include "librbd/internal.h"
+#include "librbd/FlattenRequest.h"
 #include "librbd/Journal.h"
 #include "librbd/ObjectMap.h"
 #include "librbd/parent_types.h"
 #include "librbd/RebuildObjectMapRequest.h"
+#include "librbd/ResizeRequest.h"
+#include "librbd/TrimRequest.h"
 #include "include/util.h"
 
 #include <boost/bind.hpp>
@@ -295,8 +295,8 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
 
     C_SaferCond ctx;
     ictx->snap_lock.get_read();
-    AsyncTrimRequest *req = new AsyncTrimRequest(*ictx, &ctx, ictx->size,
-						 newsize, prog_ctx);
+    TrimRequest *req = new TrimRequest(*ictx, &ctx, ictx->size, newsize,
+                                       prog_ctx);
     ictx->snap_lock.put_read();
     req->send();
 
@@ -2017,8 +2017,7 @@ reprotect_and_return_err:
                            ProgressContext& prog_ctx)
   {
     assert(ictx->owner_lock.is_locked());
-    AsyncResizeRequest *req = new AsyncResizeRequest(*ictx, ctx, new_size,
-                                                     prog_ctx);
+    ResizeRequest *req = new ResizeRequest(*ictx, ctx, new_size, prog_ctx);
     req->send();
   }
 
@@ -2938,9 +2937,8 @@ reprotect_and_return_err:
       overlap_objects = Striper::get_num_objects(ictx->layout, overlap);
     }
 
-    AsyncFlattenRequest *req =
-      new AsyncFlattenRequest(*ictx, ctx, object_size, overlap_objects,
-			      snapc, prog_ctx);
+    FlattenRequest *req = new FlattenRequest(*ictx, ctx, object_size,
+                                             overlap_objects, snapc, prog_ctx);
     req->send();
     return 0;
   }

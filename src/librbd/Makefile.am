@@ -12,22 +12,22 @@ librbd_internal_la_SOURCES = \
 	librbd/AioImageRequest.cc \
 	librbd/AioImageRequestWQ.cc \
 	librbd/AioObjectRequest.cc \
-	librbd/AsyncFlattenRequest.cc \
 	librbd/AsyncObjectThrottle.cc \
 	librbd/AsyncOperation.cc \
 	librbd/AsyncRequest.cc \
-	librbd/AsyncResizeRequest.cc \
-	librbd/AsyncTrimRequest.cc \
 	librbd/CopyupRequest.cc \
 	librbd/DiffIterate.cc \
 	librbd/ImageCtx.cc \
 	librbd/ImageWatcher.cc \
 	librbd/internal.cc \
+	librbd/FlattenRequest.cc \
 	librbd/Journal.cc \
 	librbd/JournalReplay.cc \
 	librbd/LibrbdWriteback.cc \
 	librbd/ObjectMap.cc \
-	librbd/RebuildObjectMapRequest.cc
+	librbd/RebuildObjectMapRequest.cc \
+	librbd/ResizeRequest.cc \
+	librbd/TrimRequest.cc
 noinst_LTLIBRARIES += librbd_internal.la
 
 librbd_api_la_SOURCES = \
@@ -61,17 +61,15 @@ noinst_HEADERS += \
 	librbd/AioImageRequest.h \
 	librbd/AioImageRequestWQ.h \
 	librbd/AioObjectRequest.h \
-	librbd/AsyncFlattenRequest.h \
 	librbd/AsyncObjectThrottle.h \
 	librbd/AsyncOperation.h \
 	librbd/AsyncRequest.h \
-	librbd/AsyncResizeRequest.h \
-	librbd/AsyncTrimRequest.h \
 	librbd/CopyupRequest.h \
 	librbd/DiffIterate.h \
 	librbd/ImageCtx.h \
 	librbd/ImageWatcher.h \
 	librbd/internal.h \
+	librbd/FlattenRequest.h \
 	librbd/Journal.h \
 	librbd/JournalReplay.h \
 	librbd/JournalTypes.h \
@@ -79,8 +77,10 @@ noinst_HEADERS += \
 	librbd/ObjectMap.h \
 	librbd/parent_types.h \
 	librbd/RebuildObjectMapRequest.h \
+	librbd/ResizeRequest.h \
 	librbd/SnapInfo.h \
 	librbd/TaskFinisher.h \
+	librbd/TrimRequest.h \
 	librbd/WatchNotifyTypes.h
 
 endif # WITH_RBD

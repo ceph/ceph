@@ -1,22 +1,22 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
-#include "librbd/AsyncResizeRequest.h"
-#include "librbd/AsyncTrimRequest.h"
+#include "librbd/ResizeRequest.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageWatcher.h"
 #include "librbd/internal.h"
 #include "librbd/ObjectMap.h"
+#include "librbd/TrimRequest.h"
 #include "common/dout.h"
 #include "common/errno.h"
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
-#define dout_prefix *_dout << "librbd::AsyncResizeRequest: "
+#define dout_prefix *_dout << "librbd::ResizeRequest: "
 
 namespace librbd
 {
 
-AsyncResizeRequest::AsyncResizeRequest(ImageCtx &image_ctx, Context *on_finish,
+ResizeRequest::ResizeRequest(ImageCtx &image_ctx, Context *on_finish,
                                        uint64_t new_size,
                                        ProgressContext &prog_ctx)
   : AsyncRequest(image_ctx, on_finish),
@@ -26,13 +26,13 @@ AsyncResizeRequest::AsyncResizeRequest(ImageCtx &image_ctx, Context *on_finish,
 {
 }
 
-AsyncResizeRequest::~AsyncResizeRequest() {
-  AsyncResizeRequest *next_req = NULL;
+ResizeRequest::~ResizeRequest() {
+  ResizeRequest *next_req = NULL;
   {
     RWLock::WLocker snap_locker(m_image_ctx.snap_lock);
     assert(m_xlist_item.remove_myself());
-    if (!m_image_ctx.async_resize_reqs.empty()) {
-      next_req = m_image_ctx.async_resize_reqs.front();
+    if (!m_image_ctx.resize_reqs.empty()) {
+      next_req = m_image_ctx.resize_reqs.front();
     }
   }
 
@@ -42,7 +42,7 @@ AsyncResizeRequest::~AsyncResizeRequest() {
   }
 }
 
-bool AsyncResizeRequest::safely_cancel(int r) {
+bool ResizeRequest::safely_cancel(int r) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 5) << this << " safely_cancel: " << " r=" << r << dendl;
 
@@ -59,7 +59,7 @@ bool AsyncResizeRequest::safely_cancel(int r) {
   return true;
 }
 
-bool AsyncResizeRequest::should_complete(int r) {
+bool ResizeRequest::should_complete(int r) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 5) << this << " should_complete: " << " r=" << r << dendl;
 
@@ -115,19 +115,19 @@ bool AsyncResizeRequest::should_complete(int r) {
   return false;
 }
 
-void AsyncResizeRequest::send() {
+void ResizeRequest::send() {
   assert(m_image_ctx.owner_lock.is_locked());
 
   {
     RWLock::WLocker snap_locker(m_image_ctx.snap_lock);
     if (!m_xlist_item.is_on_list()) {
-      m_image_ctx.async_resize_reqs.push_back(&m_xlist_item);
-      if (m_image_ctx.async_resize_reqs.front() != this) {
+      m_image_ctx.resize_reqs.push_back(&m_xlist_item);
+      if (m_image_ctx.resize_reqs.front() != this) {
         return;
       }
     }
 
-    assert(m_image_ctx.async_resize_reqs.front() == this);
+    assert(m_image_ctx.resize_reqs.front() == this);
     m_original_size = m_image_ctx.size;
     compute_parent_overlap();
   }
@@ -151,7 +151,7 @@ void AsyncResizeRequest::send() {
   }
 }
 
-void AsyncResizeRequest::send_flush() {
+void ResizeRequest::send_flush() {
   ldout(m_image_ctx.cct, 5) << this << " send_flush: "
                             << " original_size=" << m_original_size
                             << " new_size=" << m_new_size << dendl;
@@ -163,7 +163,7 @@ void AsyncResizeRequest::send_flush() {
   m_image_ctx.flush_async_operations(create_async_callback_context());
 }
 
-void AsyncResizeRequest::send_invalidate_cache() {
+void ResizeRequest::send_invalidate_cache() {
   assert(m_image_ctx.owner_lock.is_locked());
   ldout(m_image_ctx.cct, 5) << this << " send_invalidate_cache: "
                             << " original_size=" << m_original_size
@@ -175,21 +175,19 @@ void AsyncResizeRequest::send_invalidate_cache() {
   m_image_ctx.invalidate_cache(create_callback_context());
 }
 
-void AsyncResizeRequest::send_trim_image() {
+void ResizeRequest::send_trim_image() {
   assert(m_image_ctx.owner_lock.is_locked());
   ldout(m_image_ctx.cct, 5) << this << " send_trim_image: "
                             << " original_size=" << m_original_size
                             << " new_size=" << m_new_size << dendl;
   m_state = STATE_TRIM_IMAGE;
 
-  AsyncTrimRequest *req = new AsyncTrimRequest(m_image_ctx,
-					       create_callback_context(),
-					       m_original_size, m_new_size,
-					       m_prog_ctx);
+  TrimRequest *req = new TrimRequest(m_image_ctx, create_callback_context(),
+				     m_original_size, m_new_size, m_prog_ctx);
   req->send();
 }
 
-void AsyncResizeRequest::send_grow_object_map() {
+void ResizeRequest::send_grow_object_map() {
   assert(m_image_ctx.owner_lock.is_locked());
   if (!m_image_ctx.object_map.enabled()) {
     send_update_header();
@@ -209,7 +207,7 @@ void AsyncResizeRequest::send_grow_object_map() {
 				    create_callback_context());
 }
 
-bool AsyncResizeRequest::send_shrink_object_map() {
+bool ResizeRequest::send_shrink_object_map() {
   assert(m_image_ctx.owner_lock.is_locked());
   if (!m_image_ctx.object_map.enabled() || m_new_size > m_original_size) {
     return true;
@@ -229,7 +227,7 @@ bool AsyncResizeRequest::send_shrink_object_map() {
   return false;
 }
 
-void AsyncResizeRequest::send_update_header() {
+void ResizeRequest::send_update_header() {
   assert(m_image_ctx.owner_lock.is_locked());
 
   ldout(m_image_ctx.cct, 5) << this << " send_update_header: "
@@ -262,7 +260,7 @@ void AsyncResizeRequest::send_update_header() {
   rados_completion->release();
 }
 
-void AsyncResizeRequest::compute_parent_overlap() {
+void ResizeRequest::compute_parent_overlap() {
   RWLock::RLocker l2(m_image_ctx.parent_lock);
   if (m_image_ctx.parent == NULL) {
     m_new_parent_overlap = 0;
@@ -271,7 +269,7 @@ void AsyncResizeRequest::compute_parent_overlap() {
   }
 }
 
-void AsyncResizeRequest::update_size_and_overlap() {
+void ResizeRequest::update_size_and_overlap() {
   RWLock::WLocker snap_locker(m_image_ctx.snap_lock);
   m_image_ctx.size = m_new_size;
 

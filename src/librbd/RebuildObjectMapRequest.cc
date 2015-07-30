@@ -5,12 +5,12 @@
 #include "common/dout.h"
 #include "common/errno.h"
 #include "librbd/AsyncObjectThrottle.h"
-#include "librbd/AsyncResizeRequest.h"
-#include "librbd/AsyncTrimRequest.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageWatcher.h"
 #include "librbd/internal.h"
 #include "librbd/ObjectMap.h"
+#include "librbd/ResizeRequest.h"
+#include "librbd/TrimRequest.h"
 #include <boost/lambda/bind.hpp>
 #include <boost/lambda/construct.hpp>
 
@@ -268,10 +268,8 @@ void RebuildObjectMapRequest::send_trim_image() {
     orig_size = m_image_ctx.get_object_size() *
                 m_image_ctx.object_map.size();
   }
-  AsyncTrimRequest *req = new AsyncTrimRequest(m_image_ctx,
-                                               create_callback_context(),
-                                               orig_size, new_size,
-                                               m_prog_ctx);
+  TrimRequest *req = new TrimRequest(m_image_ctx, create_callback_context(),
+                                     orig_size, new_size, m_prog_ctx);
   req->send();
 }
 
@@ -348,8 +346,8 @@ void RebuildObjectMapRequest::send_update_header() {
 uint64_t RebuildObjectMapRequest::get_image_size() const {
   assert(m_image_ctx.snap_lock.is_locked());
   if (m_image_ctx.snap_id == CEPH_NOSNAP) {
-    if (!m_image_ctx.async_resize_reqs.empty()) {
-      return m_image_ctx.async_resize_reqs.front()->get_image_size();
+    if (!m_image_ctx.resize_reqs.empty()) {
+      return m_image_ctx.resize_reqs.front()->get_image_size();
     } else {
       return m_image_ctx.size;
     }
