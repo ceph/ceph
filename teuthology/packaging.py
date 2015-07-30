@@ -502,8 +502,20 @@ class GitbuilderProject(object):
         return self._get_base_url()
 
     @property
-    def uri(self):
-        return self._get_uri()
+    def uri_reference(self):
+        """
+        The URI reference that identifies what build of the project
+        we'd like to use.
+
+        For example, the following could be returned::
+
+            ref/<branch>
+            sha1/<sha1>
+            ref/<tag>
+
+        :returns: The uri_reference as a string.
+        """
+        return self._get_uri_reference()
 
     def _parse_version(self, version):
         """
@@ -594,10 +606,10 @@ class GitbuilderProject(object):
 
         return version
 
-    def _get_uri(self):
+    def _get_uri_reference(self):
         """
-        Returns the URI that identifies what build of the project we'd like
-        to use.
+        Returns the URI reference that identifies what build of the project
+        we'd like to use.
 
         If a remote is given, it will attempt to read the config for the given
         remote to find either a tag, branch or sha1 defined. If there is no
@@ -644,7 +656,7 @@ class GitbuilderProject(object):
             arch=self.arch,
             dist=self.distro,
             flavor=self.flavor,
-            uri=self.uri,
+            uri=self.uri_reference,
         )
         return base_url
 
