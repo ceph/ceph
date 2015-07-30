@@ -77,8 +77,8 @@ def normalize_config(ctx, config):
         new_config = {}
         if config is None:
             config = CONFIG_DEFAULT
-        for _, roles_for_host in ctx.cluster.remotes.iteritems():
-            new_config[roles_for_host[0]] = config
+        for role in teuthology.all_roles(ctx.cluster):
+            new_config[role] = config
         return new_config
 
     new_config = {}
