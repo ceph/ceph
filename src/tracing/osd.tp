@@ -91,6 +91,28 @@ TRACEPOINT_EVENT(osd, do_osd_op_pre,
     )
 )
 
+TRACEPOINT_EVENT(osd, do_osd_op_pre_extent_cmp,
+    TP_ARGS(
+        const char*, oid,
+        uint64_t, snap,
+        uint64_t, osize,
+        uint32_t, oseq,
+        uint64_t, offset,
+        uint64_t, length,
+        uint64_t, truncate_size,
+        uint32_t, truncate_seq),
+    TP_FIELDS(
+        ctf_string(oid, oid)
+        ctf_integer(uint64_t, snap, snap)
+        ctf_integer(uint64_t, osize, osize)
+        ctf_integer(uint32_t, oseq, oseq)
+        ctf_integer(uint64_t, offset, offset)
+        ctf_integer(uint64_t, length, length)
+        ctf_integer(uint64_t, truncate_size, truncate_size)
+        ctf_integer(uint32_t, truncate_seq, truncate_seq)
+    )
+)
+
 TRACEPOINT_EVENT(osd, do_osd_op_pre_read,
     TP_ARGS(
         const char*, oid,
@@ -378,6 +400,24 @@ TRACEPOINT_EVENT(osd, do_osd_op_pre_writefull,
         ctf_integer(uint64_t, osize, osize)
         ctf_integer(uint64_t, offset, offset)
         ctf_integer(uint64_t, length, length)
+    )
+)
+
+TRACEPOINT_EVENT(osd, do_osd_op_pre_writesame,
+    TP_ARGS(
+        const char*, oid,
+        uint64_t, snap,
+        uint64_t, osize,
+        uint64_t, offset,
+        uint64_t, length,
+        uint64_t, data_length),
+    TP_FIELDS(
+        ctf_string(oid, oid)
+        ctf_integer(uint64_t, snap, snap)
+        ctf_integer(uint64_t, osize, osize)
+        ctf_integer(uint64_t, offset, offset)
+        ctf_integer(uint64_t, length, length)
+        ctf_integer(uint64_t, data_length, data_length)
     )
 )
 
