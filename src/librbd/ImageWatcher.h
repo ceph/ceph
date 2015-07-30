@@ -69,8 +69,11 @@ public:
   int notify_snap_rename(const snapid_t &src_snap_id,
                          const std::string &dst_snap_name);
   int notify_snap_remove(const std::string &snap_name);
+  int notify_snap_protect(const std::string &snap_name);
+  int notify_snap_unprotect(const std::string &snap_name);
   int notify_rebuild_object_map(uint64_t request_id,
                                 ProgressContext &prog_ctx);
+  int notify_rename(const std::string &image_name);
 
   void notify_lock_state();
   static void notify_header_update(librados::IoCtx &io_ctx,
@@ -293,7 +296,13 @@ private:
                       bufferlist *out);
   void handle_payload(const watch_notify::SnapRemovePayload& payload,
                       bufferlist *out);
+  void handle_payload(const watch_notify::SnapProtectPayload& payload,
+                      bufferlist *out);
+  void handle_payload(const watch_notify::SnapUnprotectPayload& payload,
+                      bufferlist *out);
   void handle_payload(const watch_notify::RebuildObjectMapPayload& payload,
+                      bufferlist *out);
+  void handle_payload(const watch_notify::RenamePayload& payload,
                       bufferlist *out);
   void handle_payload(const watch_notify::UnknownPayload& payload,
                       bufferlist *out);
