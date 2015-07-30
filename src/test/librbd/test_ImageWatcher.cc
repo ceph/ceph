@@ -33,7 +33,7 @@
 
 using namespace ceph;
 using namespace boost::assign;
-using namespace librbd::WatchNotify;
+using namespace librbd::watch_notify;
 
 void register_test_image_watcher() {
 }
