@@ -543,6 +543,7 @@ make DESTDIR=$RPM_BUILD_ROOT install
 find $RPM_BUILD_ROOT -type f -name "*.la" -exec rm -f {} ';'
 find $RPM_BUILD_ROOT -type f -name "*.a" -exec rm -f {} ';'
 install -D src/rbdmap $RPM_BUILD_ROOT%{_sysconfdir}/ceph/rbdmap
+install -D src/init-rbdmap $RPM_BUILD_ROOT%{_initrddir}/rbdmap
 %if 0%{?_with_systemd}
   install -m 0644 -D systemd/ceph.tmpfiles.d $RPM_BUILD_ROOT%{_tmpfilesdir}/%{name}.conf
   install -m 0644 -D systemd/ceph-rgw.tmpfiles.d $RPM_BUILD_ROOT%{_tmpfilesdir}/%{name}-rgw.conf
@@ -555,7 +556,6 @@ install -D src/rbdmap $RPM_BUILD_ROOT%{_sysconfdir}/ceph/rbdmap
 %else
   install -D src/init-ceph $RPM_BUILD_ROOT%{_initrddir}/ceph
   install -D src/init-radosgw $RPM_BUILD_ROOT%{_initrddir}/ceph-radosgw
-  install -D src/init-rbdmap $RPM_BUILD_ROOT%{_initrddir}/rbdmap
   ln -sf ../../etc/init.d/ceph %{buildroot}/%{_sbindir}/rcceph
   ln -sf ../../etc/init.d/ceph-radosgw %{buildroot}/%{_sbindir}/rcceph-radosgw
 %endif
@@ -806,9 +806,7 @@ mkdir -p %{_localstatedir}/run/ceph/
 %config %{_sysconfdir}/bash_completion.d/rados
 %config %{_sysconfdir}/bash_completion.d/rbd
 %config(noreplace) %{_sysconfdir}/ceph/rbdmap
-%if 0%{?_with_systemd}
 %{_initrddir}/rbdmap
-%endif
 %{python_sitelib}/ceph_argparse.py*
 %{python_sitelib}/ceph_daemon.py*
 %{_udevrulesdir}/50-rbd.rules
