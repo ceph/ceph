@@ -584,6 +584,9 @@ install -D src/rbdmap $RPM_BUILD_ROOT%{_sysconfdir}/ceph/rbdmap
   install -m 0755 -D systemd/ceph %{buildroot}/%{_sbindir}/rcceph
   install -m 0644 -D systemd/ceph.tmpfiles.d $RPM_BUILD_ROOT%{_tmpfilesdir}/%{name}.conf
   install -m 0644 -D systemd/tmpfiles.d_ceph-rgw.conf $RPM_BUILD_ROOT%{_tmpfilesdir}/ceph-radosgw.conf
+  install -m 0644 -D systemd/ceph-disk-activate-journal@.service $RPM_BUILD_ROOT%{_unitdir}/ceph-disk-activate-journal@.service
+  install -m 0644 -D systemd/ceph-disk-activate@.service $RPM_BUILD_ROOT%{_unitdir}/ceph-disk-activate@.service
+  install -m 0644 -D systemd/ceph-disk-dmcrypt-activate@.service $RPM_BUILD_ROOT%{_unitdir}/ceph-disk-dmcrypt-activate@.service
 %else
   install -D src/init-ceph $RPM_BUILD_ROOT%{_initrddir}/ceph
   install -D src/init-radosgw.sysv $RPM_BUILD_ROOT%{_initrddir}/ceph-radosgw
@@ -740,6 +743,9 @@ rm -rf $RPM_BUILD_ROOT
 %{_unitdir}/ceph-osd@.service
 %{_unitdir}/ceph-mon@.service
 %{_unitdir}/ceph-mds@.service
+%{_unitdir}/ceph-disk-activate-journal@.service
+%{_unitdir}/ceph-disk-activate@.service
+%{_unitdir}/ceph-disk-dmcrypt-activate@.service
 %{_unitdir}/ceph.target
 %{_tmpfilesdir}/%{name}.conf
 %else
