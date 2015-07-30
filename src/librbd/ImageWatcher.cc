@@ -544,6 +544,24 @@ int ImageWatcher::notify_snap_remove(const std::string &snap_name) {
   return notify_lock_owner(bl);
 }
 
+int ImageWatcher::notify_snap_protect(const std::string &snap_name) {
+  assert(m_image_ctx.owner_lock.is_locked());
+  assert(!is_lock_owner());
+
+  bufferlist bl;
+  ::encode(NotifyMessage(SnapProtectPayload(snap_name)), bl);
+  return notify_lock_owner(bl);
+}
+
+int ImageWatcher::notify_snap_unprotect(const std::string &snap_name) {
+  assert(m_image_ctx.owner_lock.is_locked());
+  assert(!is_lock_owner());
+
+  bufferlist bl;
+  ::encode(NotifyMessage(SnapUnprotectPayload(snap_name)), bl);
+  return notify_lock_owner(bl);
+}
+
 int ImageWatcher::notify_rebuild_object_map(uint64_t request_id,
                                             ProgressContext &prog_ctx) {
   assert(m_image_ctx.owner_lock.is_locked());
@@ -555,6 +573,15 @@ int ImageWatcher::notify_rebuild_object_map(uint64_t request_id,
   ::encode(NotifyMessage(RebuildObjectMapPayload(async_request_id)), bl);
 
   return notify_async_request(async_request_id, bl, prog_ctx);
+}
+
+int ImageWatcher::notify_rename(const std::string &image_name) {
+  assert(m_image_ctx.owner_lock.is_locked());
+  assert(!is_lock_owner());
+
+  bufferlist bl;
+  ::encode(NotifyMessage(RenamePayload(image_name)), bl);
+  return notify_lock_owner(bl);
 }
 
 void ImageWatcher::notify_lock_state() {
@@ -1054,6 +1081,30 @@ void ImageWatcher::handle_payload(const SnapRemovePayload &payload,
   }
 }
 
+void ImageWatcher::handle_payload(const SnapProtectPayload& payload,
+                                  bufferlist *out) {
+  RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
+  if (m_lock_owner_state == LOCK_OWNER_STATE_LOCKED) {
+    ldout(m_image_ctx.cct, 10) << this << " remote snap_protect request: "
+                               << payload.snap_name << dendl;
+
+    // TODO
+    ::encode(ResponseMessage(-EOPNOTSUPP), *out);
+  }
+}
+
+void ImageWatcher::handle_payload(const SnapUnprotectPayload& payload,
+                                  bufferlist *out) {
+  RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
+  if (m_lock_owner_state == LOCK_OWNER_STATE_LOCKED) {
+    ldout(m_image_ctx.cct, 10) << this << " remote snap_unprotect request: "
+                               << payload.snap_name << dendl;
+
+    // TODO
+    ::encode(ResponseMessage(-EOPNOTSUPP), *out);
+  }
+}
+
 void ImageWatcher::handle_payload(const RebuildObjectMapPayload& payload,
                                   bufferlist *out) {
   RWLock::RLocker l(m_image_ctx.owner_lock);
@@ -1077,6 +1128,18 @@ void ImageWatcher::handle_payload(const RebuildObjectMapPayload& payload,
     }
 
     ::encode(ResponseMessage(0), *out);
+  }
+}
+
+void ImageWatcher::handle_payload(const RenamePayload& payload,
+                                  bufferlist *out) {
+  RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
+  if (m_lock_owner_state == LOCK_OWNER_STATE_LOCKED) {
+    ldout(m_image_ctx.cct, 10) << this << " remote rename request: "
+                               << payload.image_name << dendl;
+
+    // TODO
+    ::encode(ResponseMessage(-EOPNOTSUPP), *out);
   }
 }
 

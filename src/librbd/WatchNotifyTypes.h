@@ -83,7 +83,10 @@ enum NotifyOp {
   NOTIFY_OP_RESIZE             = 7,
   NOTIFY_OP_SNAP_CREATE        = 8,
   NOTIFY_OP_SNAP_REMOVE        = 9,
-  NOTIFY_OP_REBUILD_OBJECT_MAP = 10
+  NOTIFY_OP_REBUILD_OBJECT_MAP = 10,
+  NOTIFY_OP_SNAP_PROTECT       = 11,
+  NOTIFY_OP_SNAP_UNPROTECT     = 12,
+  NOTIFY_OP_RENAME             = 13
 };
 
 struct AcquiredLockPayload {
@@ -133,14 +136,26 @@ struct HeaderUpdatePayload {
   void dump(Formatter *f) const;
 };
 
-struct AsyncProgressPayload {
+struct AsyncRequestPayloadBase {
+public:
+  AsyncRequestId async_request_id;
+
+  void encode(bufferlist &bl) const;
+  void decode(__u8 version, bufferlist::iterator &iter);
+  void dump(Formatter *f) const;
+
+protected:
+  AsyncRequestPayloadBase() {}
+  AsyncRequestPayloadBase(const AsyncRequestId &id) : async_request_id(id) {}
+};
+
+struct AsyncProgressPayload : public AsyncRequestPayloadBase {
   static const NotifyOp NOTIFY_OP = NOTIFY_OP_ASYNC_PROGRESS;
 
   AsyncProgressPayload() : offset(0), total(0) {}
   AsyncProgressPayload(const AsyncRequestId &id, uint64_t offset_, uint64_t total_)
-    : async_request_id(id), offset(offset_), total(total_) {}
+    : AsyncRequestPayloadBase(id), offset(offset_), total(total_) {}
 
-  AsyncRequestId async_request_id;
   uint64_t offset;
   uint64_t total;
 
@@ -149,14 +164,13 @@ struct AsyncProgressPayload {
   void dump(Formatter *f) const;
 };
 
-struct AsyncCompletePayload {
+struct AsyncCompletePayload : public AsyncRequestPayloadBase {
   static const NotifyOp NOTIFY_OP = NOTIFY_OP_ASYNC_COMPLETE;
 
   AsyncCompletePayload() {}
   AsyncCompletePayload(const AsyncRequestId &id, int r)
-    : async_request_id(id), result(r) {}
+    : AsyncRequestPayloadBase(id), result(r) {}
 
-  AsyncRequestId async_request_id;
   int result;
 
   void encode(bufferlist &bl) const;
@@ -164,67 +178,83 @@ struct AsyncCompletePayload {
   void dump(Formatter *f) const;
 };
 
-struct FlattenPayload {
+struct FlattenPayload : public AsyncRequestPayloadBase {
   static const NotifyOp NOTIFY_OP = NOTIFY_OP_FLATTEN;
 
   FlattenPayload() {}
-  FlattenPayload(const AsyncRequestId &id) : async_request_id(id) {}
-
-  AsyncRequestId async_request_id;
-
-  void encode(bufferlist &bl) const;
-  void decode(__u8 version, bufferlist::iterator &iter);
-  void dump(Formatter *f) const;
+  FlattenPayload(const AsyncRequestId &id) : AsyncRequestPayloadBase(id) {}
 };
 
-struct ResizePayload {
+struct ResizePayload : public AsyncRequestPayloadBase {
   static const NotifyOp NOTIFY_OP = NOTIFY_OP_RESIZE;
 
   ResizePayload() : size(0) {}
   ResizePayload(uint64_t size_, const AsyncRequestId &id)
-    : size(size_), async_request_id(id) {}
+    : AsyncRequestPayloadBase(id), size(size_) {}
 
   uint64_t size;
-  AsyncRequestId async_request_id;
 
   void encode(bufferlist &bl) const;
   void decode(__u8 version, bufferlist::iterator &iter);
   void dump(Formatter *f) const;
 };
 
-struct SnapCreatePayload {
+struct SnapPayloadBase {
+public:
+  std::string snap_name;
+
+  void encode(bufferlist &bl) const;
+  void decode(__u8 version, bufferlist::iterator &iter);
+  void dump(Formatter *f) const;
+
+protected:
+  SnapPayloadBase() {}
+  SnapPayloadBase(const std::string &name) : snap_name(name) {}
+};
+
+struct SnapCreatePayload : public SnapPayloadBase {
   static const NotifyOp NOTIFY_OP = NOTIFY_OP_SNAP_CREATE;
 
   SnapCreatePayload() {}
-  SnapCreatePayload(const std::string &name) : snap_name(name) {}
-
-  std::string snap_name;
-
-  void encode(bufferlist &bl) const;
-  void decode(__u8 version, bufferlist::iterator &iter);
-  void dump(Formatter *f) const;
+  SnapCreatePayload(const std::string &name) : SnapPayloadBase(name) {}
 };
 
-struct SnapRemovePayload {
+struct SnapRemovePayload : public SnapPayloadBase {
   static const NotifyOp NOTIFY_OP = NOTIFY_OP_SNAP_REMOVE;
 
   SnapRemovePayload() {}
-  SnapRemovePayload(const std::string &name) : snap_name(name) {}
-
-  std::string snap_name;
-
-  void encode(bufferlist &bl) const;
-  void decode(__u8 version, bufferlist::iterator &iter);
-  void dump(Formatter *f) const;
+  SnapRemovePayload(const std::string &name) : SnapPayloadBase(name) {}
 };
 
-struct RebuildObjectMapPayload {
+struct SnapProtectPayload : public SnapPayloadBase {
+  static const NotifyOp NOTIFY_OP = NOTIFY_OP_SNAP_PROTECT;
+
+  SnapProtectPayload() {}
+  SnapProtectPayload(const std::string &name) : SnapPayloadBase(name) {}
+};
+
+struct SnapUnprotectPayload : public SnapPayloadBase {
+  static const NotifyOp NOTIFY_OP = NOTIFY_OP_SNAP_UNPROTECT;
+
+  SnapUnprotectPayload() {}
+  SnapUnprotectPayload(const std::string &name) : SnapPayloadBase(name) {}
+};
+
+struct RebuildObjectMapPayload : public AsyncRequestPayloadBase {
   static const NotifyOp NOTIFY_OP = NOTIFY_OP_REBUILD_OBJECT_MAP;
 
   RebuildObjectMapPayload() {}
-  RebuildObjectMapPayload(const AsyncRequestId &id) : async_request_id(id) {}
+  RebuildObjectMapPayload(const AsyncRequestId &id)
+    : AsyncRequestPayloadBase(id) {}
+};
 
-  AsyncRequestId async_request_id;
+struct RenamePayload {
+  static const NotifyOp NOTIFY_OP = NOTIFY_OP_RENAME;
+
+  RenamePayload() {}
+  RenamePayload(const std::string _image_name) : image_name(_image_name) {}
+
+  std::string image_name;
 
   void encode(bufferlist &bl) const;
   void decode(__u8 version, bufferlist::iterator &iter);
@@ -249,7 +279,10 @@ typedef boost::variant<AcquiredLockPayload,
                        ResizePayload,
                        SnapCreatePayload,
                        SnapRemovePayload,
+                       SnapProtectPayload,
+                       SnapUnprotectPayload,
                        RebuildObjectMapPayload,
+                       RenamePayload,
                        UnknownPayload> Payload;
 
 struct NotifyMessage {
