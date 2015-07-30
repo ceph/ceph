@@ -73,15 +73,12 @@ void ObjectPlayer::unwatch() {
 
   cancel_watch();
 
-  Context *ctx = m_watch_ctx;
   m_watch_ctx = NULL;
-
   m_timer_lock.Unlock();
   while (m_watch_in_progress) {
     m_watch_in_progress_cond.Wait(m_lock);
   }
   m_timer_lock.Lock();
-  delete ctx;
 }
 
 void ObjectPlayer::front(Entry *entry) const {

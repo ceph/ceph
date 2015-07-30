@@ -115,6 +115,7 @@ void JournalPlayer::prefetch_and_watch(double interval) {
 
 void JournalPlayer::unwatch() {
   Mutex::Locker locker(m_lock);
+  m_watch_enabled = false;
   if (m_watch_scheduled) {
     ObjectPlayerPtr object_player = get_object_player();
     assert(object_player);
