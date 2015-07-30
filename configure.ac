@@ -10,6 +10,8 @@ AC_PREREQ(2.59)
 
 AC_INIT([ceph], [9.0.2], [ceph-devel@vger.kernel.org])
 
+AX_CXX_COMPILE_STDCXX_11(, mandatory)
+
 # Create release string.  Used with VERSION for RPMs.
 RPM_RELEASE=0
 AC_SUBST(RPM_RELEASE)
