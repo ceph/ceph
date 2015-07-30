@@ -60,7 +60,7 @@ noinst_LTLIBRARIES += libkrbd.la
 endif # LINUX
 
 rbd_SOURCES = rbd.cc
-rbd_LDADD = $(LIBKRBD) $(LIBRBD) $(LIBRADOS) $(CEPH_GLOBAL)
+rbd_LDADD = $(LIBKRBD) $(LIBRBD) $(LIBRADOS)
 if LINUX
 bin_PROGRAMS += rbd
 endif # LINUX
