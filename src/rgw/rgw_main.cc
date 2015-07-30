@@ -1261,8 +1261,6 @@ int main(int argc, const char **argv)
   dout(1) << "final shutdown" << dendl;
   g_ceph_context->put();
 
-  ceph::crypto::shutdown();
-
   signal_fd_finalize();
 
   return 0;

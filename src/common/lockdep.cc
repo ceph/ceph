@@ -67,6 +67,7 @@ void lockdep_register_ceph_context(CephContext *cct)
 {
   pthread_mutex_lock(&lockdep_mutex);
   if (g_lockdep_ceph_ctx == NULL) {
+    g_lockdep = true;
     g_lockdep_ceph_ctx = cct;
     lockdep_dout(0) << "lockdep start" << dendl;
 
