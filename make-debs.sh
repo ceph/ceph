@@ -39,7 +39,7 @@ vers=$(git describe --match "v*" | sed s/^v//)
 # options (otherwise parts of the source tree will be left out).
 #
 ./autogen.sh
-./configure --with-rocksdb --with-ocf --with-rest-bench \
+./configure --with-rocksdb --with-ocf \
     --with-nss --with-debug --enable-cephfs-java \
     --with-lttng --with-babeltrace
 #
