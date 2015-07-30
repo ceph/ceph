@@ -396,7 +396,7 @@ def get_package_version(remote, package):
 def _get_config_value_for_remote(ctx, remote, config, key):
     """
     Look through config, and attempt to determine the "best" value to use
-    for a given key. For example, given:
+    for a given key. For example, given::
 
         config = {
             'all':
@@ -430,6 +430,8 @@ class GitbuilderProject(object):
     def __init__(self, project, job_config, ctx=None, remote=None):
         self.project = project
         self.job_config = job_config
+        #TODO: we could get around the need for ctx by using a list
+        # of roles instead, ctx is only used in _get_config_value_for_remote.
         self.ctx = ctx
         self.remote = remote
         # avoiding circular imports
@@ -475,12 +477,28 @@ class GitbuilderProject(object):
 
     @property
     def version(self):
+        """
+        Performs a call to gitubilder to retrieve the version number for the
+        project. The returned value is cached so that this call only happens
+        once.
+
+        :returns: The version number of the project as a string.
+        """
         if not hasattr(self, '_version'):
             self._version = self._get_package_version()
         return self._version
 
     @property
     def base_url(self):
+        """
+        The base url that points at this project on gitbuilder.
+
+        For example::
+
+            http://gitbuilder.ceph.com/ceph-deb-raring-x86_64-basic/ref/master
+
+        :returns: A string of the base url for this project
+        """
         return self._get_base_url()
 
     @property
@@ -541,6 +559,16 @@ class GitbuilderProject(object):
         )
 
     def _get_codename(self, distro, version):
+        """
+        Attempts to find the codename for a given distro / version
+        pair.  Will first attempt to find the codename for the full
+        version and if not found will look again using only the major
+        version.  If a codename is not found, None is returned.
+
+        The constant DISTRO_CODENAME_MAP is used to provide this mapping.
+
+        :returns: The codename as string or None if not found.
+        """
         major_version = version.split(".")[0]
         distro_codes = DISTRO_CODENAME_MAP.get(distro)
         if not distro_codes:
@@ -552,6 +580,14 @@ class GitbuilderProject(object):
         return codename
 
     def _get_version(self):
+        """
+        Attempts to find the distro version from the job_config.
+
+        If not found, it will return the default version for
+        the distro found in job_config.
+
+        :returns: A string distro version
+        """
         version = self.job_config.get("os_version")
         if not version:
             version = DEFAULT_OS_VERSION.get(self.os_type)
@@ -560,7 +596,17 @@ class GitbuilderProject(object):
 
     def _get_uri(self):
         """
-        Set the uri -- common code used by both install and debian upgrade
+        Returns the URI that identifies what build of the project we'd like
+        to use.
+
+        If a remote is given, it will attempt to read the config for the given
+        remote to find either a tag, branch or sha1 defined. If there is no
+        remote, the sha1 from the config will be used.
+
+        If a tag, branch or sha1 can't be found it will default to use the
+        build from the master branch.
+
+        :returns: A string URI. Ex: ref/master
         """
         tag = branch = sha1 = None
         if self.remote:
