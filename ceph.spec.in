@@ -553,6 +553,9 @@ install -D src/init-rbdmap $RPM_BUILD_ROOT%{_initrddir}/rbdmap
   install -m 0644 -D systemd/ceph-mds@.service $RPM_BUILD_ROOT%{_unitdir}/ceph-mds@.service
   install -m 0644 -D systemd/ceph-radosgw@.service $RPM_BUILD_ROOT%{_unitdir}/ceph-radosgw@.service
   install -m 0644 -D systemd/ceph.target $RPM_BUILD_ROOT%{_unitdir}/ceph.target
+  install -m 0644 -D systemd/ceph-disk-activate-journal@.service $RPM_BUILD_ROOT%{_unitdir}/ceph-disk-activate-journal@.service
+  install -m 0644 -D systemd/ceph-disk-activate@.service $RPM_BUILD_ROOT%{_unitdir}/ceph-disk-activate@.service
+  install -m 0644 -D systemd/ceph-disk-dmcrypt-activate@.service $RPM_BUILD_ROOT%{_unitdir}/ceph-disk-dmcrypt-activate@.service
 %else
   install -D src/init-ceph $RPM_BUILD_ROOT%{_initrddir}/ceph
   install -D src/init-radosgw $RPM_BUILD_ROOT%{_initrddir}/ceph-radosgw
@@ -638,7 +641,7 @@ mkdir -p %{_localstatedir}/run/ceph/
   # /etc/systemd/system.  May as well stop them too for completeness
   # (although strictly service_del_preun would do that anyway by dint
   # of stopping ceph.target)
-  SERVICE_LIST=$(systemctl | grep -E '^ceph-mon@|^ceph-create-keys@|^ceph-osd@|^ceph-mds@'  | cut -d' ' -f1)
+  SERVICE_LIST=$(systemctl | grep -E '^ceph-mon@|^ceph-create-keys@|^ceph-osd@|^ceph-mds@|^ceph-disk-'  | cut -d' ' -f1)
   if [ -n "$SERVICE_LIST" ]; then
     for SERVICE in $SERVICE_LIST; do
       /usr/bin/systemctl --no-reload disable $SERVICE > /dev/null 2>&1 || :
@@ -700,6 +703,9 @@ mkdir -p %{_localstatedir}/run/ceph/
 %{_unitdir}/ceph-create-keys@.service
 %{_unitdir}/ceph-osd@.service
 %{_unitdir}/ceph-radosgw@.service
+%{_unitdir}/ceph-disk-activate-journal@.service
+%{_unitdir}/ceph-disk-activate@.service
+%{_unitdir}/ceph-disk-dmcrypt-activate@.service
 %{_unitdir}/ceph.target
 %else
 %{_initrddir}/ceph
