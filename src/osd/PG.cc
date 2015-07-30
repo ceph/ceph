@@ -154,8 +154,24 @@ void PGPool::update(OSDMapRef map)
   name = map->get_pool_name(id);
   if (pi->get_snap_epoch() == map->get_epoch()) {
     pi->build_removed_snaps(newly_removed_snaps);
-    newly_removed_snaps.subtract(cached_removed_snaps);
-    cached_removed_snaps.union_of(newly_removed_snaps);
+
+    interval_set<snapid_t> intersection;
+    intersection = newly_removed_snaps;
+    intersection.intersection_of(cached_removed_snaps);
+    if (intersection != cached_removed_snaps) {
+      lgeneric_subdout(g_ceph_context, osd, 1)
+	<< "PGPool::update " << id << " warning: cached_removed_snaps "
+	<< cached_removed_snaps << " not a subset of latest removed_snaps "
+	<< newly_removed_snaps << "; intersection is " << intersection
+	<< dendl;
+    }
+
+    // trust pool's set
+    cached_removed_snaps = newly_removed_snaps;
+
+    // subtract off cached value (if it intersects!)
+    newly_removed_snaps.subtract(intersection);
+
     snapc = pi->get_snap_context();
   } else {
     newly_removed_snaps.clear();
@@ -1527,7 +1543,9 @@ void PG::activate(ObjectStore::Transaction& t,
     dout(20) << "activate - purged_snaps " << info.purged_snaps
 	     << " cached_removed_snaps " << pool.cached_removed_snaps << dendl;
     snap_trimq = pool.cached_removed_snaps;
-    snap_trimq.subtract(info.purged_snaps);
+    interval_set<snapid_t> intersection = info.purged_snaps;
+    intersection.intersection_of(pool.cached_removed_snaps);
+    snap_trimq.subtract(intersection);
     dout(10) << "activate - snap_trimq " << snap_trimq << dendl;
     if (!snap_trimq.empty() && is_clean())
       queue_snap_trim();

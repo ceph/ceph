@@ -2520,7 +2520,7 @@ PGPool OSD::_get_pool(int id, OSDMapRef createmap)
   p.snapc = pi->get_snap_context();
 
   pi->build_removed_snaps(p.cached_removed_snaps);
-  dout(10) << "_get_pool " << p.id << dendl;
+  dout(10) << "_get_pool " << p.id << " cached_removed_snaps " << p.cached_removed_snaps << dendl;
   return p;
 }
 
