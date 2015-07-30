@@ -113,6 +113,14 @@ extern "C" rados_config_t rados_cct(rados_t cluster)
   return reinterpret_cast<rados_config_t>(client->cct());
 }
 
+extern "C" int rados_conf_set(rados_t cluster, const char *option,
+                              const char *value) {
+  librados::TestRadosClient *impl =
+    reinterpret_cast<librados::TestRadosClient*>(cluster);
+  CephContext *cct = impl->cct();
+  return cct->_conf->set_val(option, value);
+}
+
 extern "C" int rados_conf_parse_env(rados_t cluster, const char *var) {
   librados::TestRadosClient *client =
     reinterpret_cast<librados::TestRadosClient*>(cluster);
@@ -203,6 +211,12 @@ extern "C" void rados_ioctx_destroy(rados_ioctx_t io) {
   librados::TestIoCtxImpl *ctx =
     reinterpret_cast<librados::TestIoCtxImpl*>(io);
   ctx->put();
+}
+
+extern "C" rados_t rados_ioctx_get_cluster(rados_ioctx_t io) {
+  librados::TestIoCtxImpl *ctx =
+    reinterpret_cast<librados::TestIoCtxImpl*>(io);
+  return reinterpret_cast<rados_t>(ctx->get_rados_client());
 }
 
 extern "C" int rados_mon_command(rados_t cluster, const char **cmd,
@@ -727,6 +741,31 @@ int Rados::blacklist_add(const std::string& client_address,
 			 uint32_t expire_seconds) {
   TestRadosClient *impl = reinterpret_cast<TestRadosClient*>(client);
   return impl->blacklist_add(client_address, expire_seconds);
+}
+
+config_t Rados::cct() {
+  TestRadosClient *impl = reinterpret_cast<TestRadosClient*>(client);
+  return reinterpret_cast<config_t>(impl->cct());
+}
+
+int Rados::conf_set(const char *option, const char *value) {
+  return rados_conf_set(reinterpret_cast<rados_t>(client), option, value);
+}
+
+int Rados::conf_get(const char *option, std::string &val) {
+  TestRadosClient *impl = reinterpret_cast<TestRadosClient*>(client);
+  CephContext *cct = impl->cct();
+
+  char *str = NULL;
+  int ret = cct->_conf->get_val(option, &str, -1);
+  if (ret != 0) {
+    free(str);
+    return ret;
+  }
+
+  val = str;
+  free(str);
+  return 0;
 }
 
 int Rados::conf_parse_env(const char *env) const {
