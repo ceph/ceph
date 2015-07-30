@@ -44,7 +44,7 @@ function setup_osds() {
 
     for id in $(seq 0 3) ; do
         # TODO: the feature of "osd-pool-erasure-code-subread-all" is not yet supported.
-        if -n osd_pool_erasure_code_subread_all__is_supported; then
+        if [ -n "$osd_pool_erasure_code_subread_all__is_supported" ]; then
             run_osd $dir $id "--osd-pool-erasure-code-subread-all=$subread" || return 1
         else
             run_osd $dir $id || return 1
