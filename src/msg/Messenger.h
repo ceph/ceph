@@ -28,6 +28,7 @@ using namespace std;
 #include "include/types.h"
 #include "include/ceph_features.h"
 #include "auth/Crypto.h"
+#include "compressor/AsyncCompressor.h"
 
 #include <errno.h>
 #include <sstream>
@@ -35,6 +36,7 @@ using namespace std;
 #define SOCKET_PRIORITY_MIN_DELAY 6
 
 class Timer;
+class AsyncCompressor;
 
 
 class Messenger {
@@ -58,6 +60,7 @@ public:
    */
   CephContext *cct;
   int crcflags;
+  AsyncCompressor *compressor;
 
   /**
    * A Policy describes the rules of a Connection. Is there a limit on how
@@ -133,9 +136,10 @@ public:
       magic(0),
       socket_priority(-1),
       cct(cct_),
-      crcflags(get_default_crc_flags(cct->_conf))
+      crcflags(get_default_crc_flags(cct->_conf)), compressor(NULL)
   {
     my_inst.name = w;
+    cct->lookup_or_create_singleton_object<AsyncCompressor>(compressor, "Messenger::Messenger");
   }
   virtual ~Messenger() {}
 
