@@ -9,7 +9,7 @@
 #include <set>
 #include <map>
 #include <string>
-#include <tr1/memory>
+#include <memory>
 #include <boost/scoped_ptr.hpp>
 
 #include <errno.h>
@@ -148,7 +148,7 @@ public:
   };
 
   KeyValueDB::Transaction get_transaction() {
-    return std::tr1::shared_ptr< RocksDBTransactionImpl >(
+    return std::shared_ptr< RocksDBTransactionImpl >(
       new RocksDBTransactionImpl(this));
   }
 
