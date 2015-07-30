@@ -185,8 +185,6 @@ void Message::encode(uint64_t features, int crcflags)
     if (header.compat_version == 0)
       header.compat_version = header.version;
   }
-  if (crcflags & MSG_CRC_HEADER)
-    calc_front_crc();
 
   // update envelope
   header.front_len = get_payload().length();
@@ -194,6 +192,17 @@ void Message::encode(uint64_t features, int crcflags)
   header.data_len = get_data().length();
 
   footer.flags = CEPH_MSG_FOOTER_COMPLETE;
+}
+
+void Message::calc_crc(int crcflags)
+{
+  if (crcflags & MSG_CRC_HEADER)
+    calc_front_crc();
+
+  if (crcflags & MSG_CRC_HEADER)
+    calc_header_crc();
+  else
+    footer.flags = (unsigned)footer.flags | CEPH_MSG_FOOTER_NOHEADERCRC;
 
   if (crcflags & MSG_CRC_HEADER)
     calc_header_crc();
@@ -252,7 +261,7 @@ void Message::dump(Formatter *f) const
   f->dump_string("summary", ss.str());
 }
 
-Message *decode_message(CephContext *cct, int crcflags,
+bool Message::verify_crc(CephContext *cct, int crcflags,
 			ceph_msg_header& header,
 			ceph_msg_footer& footer,
 			bufferlist& front, bufferlist& middle,
@@ -271,7 +280,7 @@ Message *decode_message(CephContext *cct, int crcflags,
 	front.hexdump(*_dout);
 	*_dout << dendl;
       }
-      return 0;
+      return true;
     }
     if (middle_crc != footer.middle_crc) {
       if (cct) {
@@ -280,7 +289,7 @@ Message *decode_message(CephContext *cct, int crcflags,
 	middle.hexdump(*_dout);
 	*_dout << dendl;
       }
-      return 0;
+      return true;
     }
   }
   if ((crcflags & MSG_CRC_DATA) != 0 &&
@@ -293,10 +302,19 @@ Message *decode_message(CephContext *cct, int crcflags,
 	data.hexdump(*_dout);
 	*_dout << dendl;
       }
-      return 0;
+      return true;
     }
   }
 
+  return false;
+}
+
+Message *decode_message(CephContext *cct, int crcflags,
+			ceph_msg_header& header,
+			ceph_msg_footer& footer,
+			bufferlist& front, bufferlist& middle,
+			bufferlist& data)
+{
   // make message
   Message *m = 0;
   int type = header.type;

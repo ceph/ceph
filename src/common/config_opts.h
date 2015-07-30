@@ -183,6 +183,8 @@ OPTION(ms_async_set_affinity, OPT_BOOL, true)
 // core
 OPTION(ms_async_affinity_cores, OPT_STR, "")
 
+OPTION(ms_compress_all, OPT_BOOL, false)
+
 OPTION(inject_early_sigterm, OPT_BOOL, false)
 
 OPTION(mon_data, OPT_STR, "/var/lib/ceph/mon/$cluster-$id")
