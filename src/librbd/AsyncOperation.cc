@@ -3,6 +3,7 @@
 #include "librbd/AsyncOperation.h"
 #include "librbd/ImageCtx.h"
 #include "common/dout.h"
+#include "common/WorkQueue.h"
 #include "include/assert.h"
 
 #define dout_subsys ceph_subsys_rbd
