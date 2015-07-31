@@ -28,8 +28,6 @@
 #include "global/global_init.h"
 #include <gtest/gtest.h>
 
-using namespace std::tr1;
-
 class SharedLRUTest : public SharedLRU<unsigned int, int> {
 public:
   Mutex &get_lock() { return lock; }
@@ -141,28 +139,28 @@ TEST_F(SharedLRU_all, lookup) {
   unsigned int key = 1;
   {
     int value = 2;
-    ASSERT_TRUE(cache.add(key, new int(value)));
-    ASSERT_TRUE(cache.lookup(key));
+    ASSERT_TRUE(cache.add(key, new int(value)).get());
+    ASSERT_TRUE(cache.lookup(key).get());
     ASSERT_EQ(value, *cache.lookup(key));
   }
-  ASSERT_TRUE(cache.lookup(key));
+  ASSERT_TRUE(cache.lookup(key).get());
 }
 TEST_F(SharedLRU_all, lookup_or_create) {
   SharedLRUTest cache;
   {
     int value = 2;
     unsigned int key = 1;
-    ASSERT_TRUE(cache.add(key, new int(value)));
-    ASSERT_TRUE(cache.lookup_or_create(key));
+    ASSERT_TRUE(cache.add(key, new int(value)).get());
+    ASSERT_TRUE(cache.lookup_or_create(key).get());
     ASSERT_EQ(value, *cache.lookup(key));
   }
   {
     unsigned int key = 2;
-    ASSERT_TRUE(cache.lookup_or_create(key));
+    ASSERT_TRUE(cache.lookup_or_create(key).get());
     ASSERT_EQ(0, *cache.lookup(key));
   }
-  ASSERT_TRUE(cache.lookup(1));
-  ASSERT_TRUE(cache.lookup(2));
+  ASSERT_TRUE(cache.lookup(1).get());
+  ASSERT_TRUE(cache.lookup(2).get());
 }
 
 TEST_F(SharedLRU_all, wait_lookup) {
@@ -207,7 +205,7 @@ TEST_F(SharedLRU_all, wait_lookup_or_create) {
   ASSERT_TRUE(wait_for(cache, 1));
   EXPECT_EQ(value, *t.ptr);
   // waiting on a key does not block lookups on other keys
-  EXPECT_TRUE(cache.lookup_or_create(key + 12345));
+  EXPECT_TRUE(cache.lookup_or_create(key + 12345).get());
   {
     Mutex::Locker l(cache.get_lock());
     cache.get_weak_refs().erase(key);
@@ -226,8 +224,8 @@ TEST_F(SharedLRU_all, lower_bound) {
     ASSERT_FALSE(cache.lower_bound(key));
     int value = 2;
 
-    ASSERT_TRUE(cache.add(key, new int(value)));
-    ASSERT_TRUE(cache.lower_bound(key));
+    ASSERT_TRUE(cache.add(key, new int(value)).get());
+    ASSERT_TRUE(cache.lower_bound(key).get());
     EXPECT_EQ(value, *cache.lower_bound(key));
   }
 }
@@ -239,7 +237,7 @@ TEST_F(SharedLRU_all, wait_lower_bound) {
   unsigned int other_key = key + 1;
   int other_value = value + 1;
 
-  ASSERT_TRUE(cache.add(other_key, new int(other_value)));
+  ASSERT_TRUE(cache.add(other_key, new int(other_value)).get());
 
   {
     shared_ptr<int> ptr(new int);
@@ -252,7 +250,7 @@ TEST_F(SharedLRU_all, wait_lower_bound) {
   ASSERT_TRUE(wait_for(cache, 1));
   EXPECT_FALSE(t.ptr);
   // waiting on a key does not block getting lower_bound on other keys
-  EXPECT_TRUE(cache.lower_bound(other_key));
+  EXPECT_TRUE(cache.lower_bound(other_key).get());
   {
     Mutex::Locker l(cache.get_lock());
     cache.get_weak_refs().erase(key);
@@ -260,7 +258,7 @@ TEST_F(SharedLRU_all, wait_lower_bound) {
   }
   ASSERT_TRUE(wait_for(cache, 0));
   t.join();
-  EXPECT_TRUE(t.ptr);
+  EXPECT_TRUE(t.ptr.get());
 }
 TEST_F(SharedLRU_all, get_next) {
 
@@ -322,14 +320,14 @@ TEST_F(SharedLRU_all, clear) {
     ceph::shared_ptr<int> ptr = cache.add(key, new int(value));
     ASSERT_EQ(value, *cache.lookup(key));
   }
-  ASSERT_TRUE(cache.lookup(key));
+  ASSERT_TRUE(cache.lookup(key).get());
   cache.clear(key);
   ASSERT_FALSE(cache.lookup(key));
 
   {
     ceph::shared_ptr<int> ptr = cache.add(key, new int(value));
   }
-  ASSERT_TRUE(cache.lookup(key));
+  ASSERT_TRUE(cache.lookup(key).get());
   cache.clear(key);
   ASSERT_FALSE(cache.lookup(key));
 }
@@ -341,14 +339,14 @@ TEST_F(SharedLRU_all, clear_all) {
     ceph::shared_ptr<int> ptr = cache.add(key, new int(value));
     ASSERT_EQ(value, *cache.lookup(key));
   }
-  ASSERT_TRUE(cache.lookup(key));
+  ASSERT_TRUE(cache.lookup(key).get());
   cache.clear();
   ASSERT_FALSE(cache.lookup(key));
 
   ceph::shared_ptr<int> ptr2 = cache.add(key, new int(value));
-  ASSERT_TRUE(cache.lookup(key));
+  ASSERT_TRUE(cache.lookup(key).get());
   cache.clear();
-  ASSERT_TRUE(cache.lookup(key));
+  ASSERT_TRUE(cache.lookup(key).get());
   ASSERT_FALSE(cache.empty());
 }
 
@@ -379,12 +377,12 @@ TEST(SharedCache_all, lru) {
     ASSERT_FALSE(existed);
   }
 
-  ASSERT_TRUE(cache.lookup(0));
+  ASSERT_TRUE(cache.lookup(0).get());
   ASSERT_EQ(0, *cache.lookup(0));
 
   ASSERT_FALSE(cache.lookup(SIZE-1));
   ASSERT_FALSE(cache.lookup(SIZE));
-  ASSERT_TRUE(cache.lookup(SIZE+1));
+  ASSERT_TRUE(cache.lookup(SIZE+1).get());
   ASSERT_EQ((int)SIZE+1, *cache.lookup(SIZE+1));
 
   cache.purge(0);
@@ -392,7 +390,7 @@ TEST(SharedCache_all, lru) {
   shared_ptr<int> ptr2 = cache.add(0, new int(0), &existed);
   ASSERT_FALSE(ptr == ptr2);
   ptr = shared_ptr<int>();
-  ASSERT_TRUE(cache.lookup(0));
+  ASSERT_TRUE(cache.lookup(0).get());
 }
 
 int main(int argc, char **argv) {

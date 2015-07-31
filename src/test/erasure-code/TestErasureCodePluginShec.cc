@@ -36,7 +36,7 @@ TEST(ErasureCodePlugin, factory)
     EXPECT_FALSE(erasure_code);
     EXPECT_EQ(0, instance.factory("shec", profile,
                                         &erasure_code, &cerr));
-    EXPECT_TRUE(erasure_code);
+    EXPECT_TRUE(erasure_code.get());
   }
   const char *techniques[] = {
     "single",
@@ -50,7 +50,7 @@ TEST(ErasureCodePlugin, factory)
     EXPECT_FALSE(erasure_code);
     EXPECT_EQ(0, instance.factory("shec", profile,
                                   &erasure_code, &cerr));
-    EXPECT_TRUE(erasure_code);
+    EXPECT_TRUE(erasure_code.get());
   }
 }
 
@@ -197,7 +197,7 @@ TEST(ErasureCodePlugin, sse)
     EXPECT_FALSE(erasure_code);
     EXPECT_EQ(0, instance.factory("shec_" + *sse_variant, profile,
                                   &erasure_code, &cerr));
-    EXPECT_TRUE(erasure_code);
+    EXPECT_TRUE(erasure_code.get());
 
     //
     // encode
