@@ -316,14 +316,11 @@ add_subdirectory(cls)
 
 # RADOS client/library
 set(osdc_files
-  osdc/Objecter.cc)
+  osdc/Objecter.cc
+  osdc/Filer.cc)
 set(osdc_rbd_files
   osdc/ObjectCacher.cc
   osdc/Striper.cc)
-if(${WITH_CLIENT})
-  list(APPEND osdc_files
-    osdc/Filer.cc)
-endif(${WITH_CLIENT})
 add_library(osdc_rbd_objs OBJECT ${osdc_rbd_files})
 add_library(osdc STATIC ${osdc_files} $<TARGET_OBJECTS:osdc_rbd_objs>)
 
@@ -370,6 +367,42 @@ set(rados_srcs
   common/obj_bencher.cc)
 add_executable(rados ${rados_srcs} $<TARGET_OBJECTS:heap_profiler_objs>)
 target_link_libraries(rados librados global ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS} ${TCMALLOC_LIBS} libradosstriper)
+
+if (WITH_CEPHFS)
+  set(cephfs_journal_tool_srcs
+    tools/cephfs/cephfs-journal-tool.cc
+    tools/cephfs/JournalTool.cc
+    tools/cephfs/JournalFilter.cc
+    tools/cephfs/JournalScanner.cc
+    tools/cephfs/EventOutput.cc
+    tools/cephfs/Dumper.cc
+    tools/cephfs/Resetter.cc
+    tools/cephfs/MDSUtility.cc)
+  add_executable(cephfs-journal-tool ${cephfs_journal_tool_srcs}
+                 $<TARGET_OBJECTS:heap_profiler_objs>)
+  target_link_libraries(cephfs-journal-tool librados mds osdc global
+                        ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS} ${TCMALLOC_LIBS})
+
+  set(cephfs_table_tool_srcs
+    tools/cephfs/cephfs-table-tool.cc
+    tools/cephfs/TableTool.cc
+    tools/cephfs/MDSUtility.cc)
+  add_executable(cephfs-table-tool ${cephfs_table_tool_srcs}
+                 $<TARGET_OBJECTS:heap_profiler_objs>)
+  target_link_libraries(cephfs-table-tool librados mds osdc global
+                        ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS} ${TCMALLOC_LIBS})
+
+  set(cephfs_data_scan_srcs
+    tools/cephfs/cephfs-data-scan.cc
+    tools/cephfs/DataScan.cc
+    tools/cephfs/MDSUtility.cc)
+  add_executable(cephfs-data-scan ${cephfs_data_scan_srcs}
+                 $<TARGET_OBJECTS:heap_profiler_objs>)
+
+  target_link_libraries(cephfs-data-scan librados mds osdc global
+                        cls_cephfs_client
+                        ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS} ${TCMALLOC_LIBS})
+endif (WITH_CEPHFS)
 
 set(librados_config_srcs
   librados-config.cc)
@@ -622,6 +655,10 @@ install(PROGRAMS
   ${CMAKE_SOURCE_DIR}/src/ceph-disk-udev
   DESTINATION sbin)
 
+set(parse_secret_files
+  common/secret.c)
+add_library(parse_secret_objs OBJECT ${parse_secret_files})
+
 if(WITH_LIBCEPHFS)
   set(libclient_srcs
     client/Client.cc
@@ -649,8 +686,8 @@ if(WITH_LIBCEPHFS)
   set(mount_ceph_srcs
     mount/mount.ceph.c)
   add_executable(mount.ceph ${mount_ceph_srcs}
-    $<TARGET_OBJECTS:common_mountcephfs_objs>
-    $<TARGET_OBJECTS:rbd_mountcephfs_objs>)
+    $<TARGET_OBJECTS:parse_secret_objs>
+    $<TARGET_OBJECTS:common_mountcephfs_objs>)
   target_link_libraries(mount.ceph keyutils)
 
   install(TARGETS ceph-syn DESTINATION bin)
@@ -699,11 +736,8 @@ if(${WITH_RBD})
   install(TARGETS librados librbd DESTINATION lib)
   set(rbd_srcs
     rbd.cc common/TextTable.cc)
-  set(rbd_mountcephfs_files
-    common/secret.c)
-  add_library(rbd_mountcephfs_objs OBJECT ${rbd_mountcephfs_files})
   add_executable(rbd ${rbd_srcs} $<TARGET_OBJECTS:common_util_obj>
-    $<TARGET_OBJECTS:rbd_mountcephfs_objs>
+    $<TARGET_OBJECTS:parse_secret_objs>
     $<TARGET_OBJECTS:heap_profiler_objs>)
   set_target_properties(rbd PROPERTIES OUTPUT_NAME rbd)
   target_link_libraries(rbd global librbd librados common keyutils udev
