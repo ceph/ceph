@@ -296,8 +296,8 @@ class RGWMetaSyncOp : public RGWAsyncOp {
     return ret;
   }
 public:
-  RGWMetaSyncOp(RGWRados *_store, RGWHTTPManager *_mgr, RGWAsyncOpsManager *_ops_mgr,
-		int _id) : RGWAsyncOp(_ops_mgr), store(_store),
+  RGWMetaSyncOp(RGWRados *_store, RGWHTTPManager *_mgr, RGWAsyncOpsStack *_ops_stack,
+		int _id) : RGWAsyncOp(_ops_stack), store(_store),
                            mdlog(store->meta_mgr->get_log()),
                            http_manager(_mgr), sync_store(_store),
 			   shard_id(_id),
@@ -393,8 +393,8 @@ class RGWCloneMetaLogOp : public RGWAsyncOp {
     return ret;
   }
 public:
-  RGWCloneMetaLogOp(RGWRados *_store, RGWHTTPManager *_mgr, RGWAsyncOpsManager *_ops_mgr,
-		    int _id, const string& _marker) : RGWAsyncOp(_ops_mgr), store(_store),
+  RGWCloneMetaLogOp(RGWRados *_store, RGWHTTPManager *_mgr, RGWAsyncOpsStack *_ops_stack,
+		    int _id, const string& _marker) : RGWAsyncOp(_ops_stack), store(_store),
                                                       mdlog(store->meta_mgr->get_log()),
                                                       http_manager(_mgr), shard_id(_id),
                                                       marker(_marker), truncated(false), max_entries(CLONE_MAX_ENTRIES),
@@ -416,54 +416,133 @@ public:
   bool is_error() { return (state == Error); }
 };
 
-void RGWAsyncOpsManager::report_error(RGWAsyncOp *op)
+RGWAsyncOpsStack::RGWAsyncOpsStack(CephContext *_cct, RGWAsyncOpsManager *_ops_mgr, RGWAsyncOp *start) : cct(_cct), ops_mgr(_ops_mgr),
+                                                                                                         done_flag(false), error_flag(false), blocked_flag(false) {
+  if (start) {
+    ops.push_back(start);
+  }
+  pos = ops.begin();
+}
+
+int RGWAsyncOpsStack::operate()
+{
+  RGWAsyncOp *op = *pos;
+  int r = op->operate();
+  if (r < 0) {
+    ldout(cct, 0) << "ERROR: op->operate() returned r=" << r << dendl;
+  }
+
+  done_flag = op->is_done();
+  error_flag = op->is_error();
+  blocked_flag = op->is_blocked();
+
+  if (done_flag) {
+    op->put();
+    return unwind(r);
+  }
+
+  /* should r ever be negative at this point? */
+  assert(r >= 0);
+
+  return 0;
+}
+
+string RGWAsyncOpsStack::error_str()
+{
+  if (pos != ops.end()) {
+    return (*pos)->error_str();
+  }
+  return string();
+}
+
+int RGWAsyncOpsStack::call(RGWAsyncOp *next_op, int ret) {
+  ops.push_back(next_op);
+  if (pos != ops.end()) {
+    ++pos;
+  } else {
+    pos = ops.begin();
+  }
+  return ret;
+}
+
+int RGWAsyncOpsStack::unwind(int retcode)
+{
+  if (pos == ops.begin()) {
+    return retcode;
+  }
+
+  --pos;
+  RGWAsyncOp *op = *pos;
+  op->set_retcode(retcode);
+  return 0;
+}
+
+void RGWAsyncOpsStack::set_blocked(bool flag)
+{
+  blocked_flag = flag;
+  if (pos != ops.end()) {
+    (*pos)->set_blocked(flag);
+  }
+}
+
+AioCompletionNotifier *RGWAsyncOpsStack::create_completion_notifier()
+{
+  return ops_mgr->create_completion_notifier(this);
+}
+
+RGWCompletionManager *RGWAsyncOpsStack::get_completion_mgr()
+{
+  return ops_mgr->get_completion_mgr();
+}
+
+void RGWAsyncOpsManager::report_error(RGWAsyncOpsStack *op)
 {
 #warning need to have error logging infrastructure that logs on backend
   lderr(cct) << "ERROR: failed operation: " << op->error_str() << dendl;
 }
 
-int RGWAsyncOpsManager::run(list<RGWAsyncOp *>& ops)
+int RGWAsyncOpsManager::run(list<RGWAsyncOpsStack *>& stacks)
 {
   int waiting_count = 0;
-  for (list<RGWAsyncOp *>::iterator iter = ops.begin(); iter != ops.end(); ++iter) {
-    RGWAsyncOp *op = *iter;
-    int ret = op->operate();
+  for (list<RGWAsyncOpsStack *>::iterator iter = stacks.begin(); iter != stacks.end(); ++iter) {
+    RGWAsyncOpsStack *stack = *iter;
+    int ret = stack->operate();
     if (ret < 0) {
-      ldout(cct, 0) << "ERROR: op->operate() returned ret=" << ret << dendl;
+      ldout(cct, 0) << "ERROR: stack->operate() returned ret=" << ret << dendl;
     }
 
-    if (op->is_error()) {
-      report_error(op);
+    if (stack->is_error()) {
+      report_error(stack);
     }
 
-    if (op->is_blocked()) {
+    if (stack->is_blocked()) {
       waiting_count++;
-    } else if (op->is_done()) {
-      delete op;
+    } else if (stack->is_done()) {
+      delete stack;
     } else {
-      ops.push_back(op);
+      stacks.push_back(stack);
     }
 
     if (waiting_count >= ops_window) {
-      RGWCloneMetaLogOp *blocked_op;
-      int ret = completion_mgr.get_next((void **)&blocked_op);
+      RGWAsyncOpsStack *blocked_stack;
+      int ret = completion_mgr.get_next((void **)&blocked_stack);
       if (ret < 0) {
 	ldout(cct, 0) << "ERROR: failed to clone shard, completion_mgr.get_next() returned ret=" << ret << dendl;
       } else {
         waiting_count--;
       }
-      blocked_op->set_blocked(false);
-      if (!blocked_op->is_done()) {
-	ops.push_back(blocked_op);
+      blocked_stack->set_blocked(false);
+      if (!blocked_stack->is_done()) {
+	stacks.push_back(blocked_stack);
       } else {
-	delete blocked_op;
+	delete blocked_stack;
       }
     }
   }
 
   while (waiting_count > 0) {
-    RGWAsyncOp *op;
-    int ret = completion_mgr.get_next((void **)&op);
+    RGWAsyncOpsStack *stack;
+    int ret = completion_mgr.get_next((void **)&stack);
     if (ret < 0) {
       ldout(cct, 0) << "ERROR: failed to clone shard, completion_mgr.get_next() returned ret=" << ret << dendl;
       return ret;
@@ -475,31 +554,43 @@ int RGWAsyncOpsManager::run(list<RGWAsyncOp *>& ops)
   return 0;
 }
 
-AioCompletionNotifier *RGWAsyncOpsManager::create_completion_notifier(RGWAsyncOp *op)
+AioCompletionNotifier *RGWAsyncOpsManager::create_completion_notifier(RGWAsyncOpsStack *stack)
 {
-  return new AioCompletionNotifier(&completion_mgr, (void *)op);
+  return new AioCompletionNotifier(&completion_mgr, (void *)stack);
 }
 
 int RGWRemoteMetaLog::clone_shards()
 {
-  list<RGWAsyncOp *> ops;
+  list<RGWAsyncOpsStack *> stacks;
   for (int i = 0; i < (int)log_info.num_shards; i++) {
-    RGWCloneMetaLogOp *op = new RGWCloneMetaLogOp(store, &http_manager, this, i, clone_markers[i]);
-    ops.push_back(op);
+    RGWAsyncOpsStack *stack = new RGWAsyncOpsStack(store->ctx(), this);
+    int r = stack->call(new RGWCloneMetaLogOp(store, &http_manager, stack, i, clone_markers[i]));
+    if (r < 0) {
+      ldout(store->ctx(), 0) << "ERROR: stack->call() returned r=" << r << dendl;
+      return r;
+    }
+
+    stacks.push_back(stack);
   }
 
-  return run(ops);
+  return run(stacks);
 }
 
 int RGWRemoteMetaLog::fetch()
 {
-  list<RGWAsyncOp *> ops;
+  list<RGWAsyncOpsStack *> stacks;
   for (int i = 0; i < (int)log_info.num_shards; i++) {
-    RGWCloneMetaLogOp *op = new RGWCloneMetaLogOp(store, &http_manager, this, i, clone_markers[i]);
-    ops.push_back(op);
+    RGWAsyncOpsStack *stack = new RGWAsyncOpsStack(store->ctx(), this);
+    int r = stack->call(new RGWCloneMetaLogOp(store, &http_manager, stack, i, clone_markers[i]));
+    if (r < 0) {
+      ldout(store->ctx(), 0) << "ERROR: stack->call() returned r=" << r << dendl;
+      return r;
+    }
+
+    stacks.push_back(stack);
   }
 
-  return run(ops);
+  return run(stacks);
 }
 
 int RGWCloneMetaLogOp::operate()
@@ -546,7 +637,7 @@ int RGWCloneMetaLogOp::state_init()
 
 int RGWCloneMetaLogOp::state_read_shard_status()
 {
-  int ret = mdlog->get_info_async(shard_id, &shard_info, ops_mgr->get_completion_mgr(), (void *)this, &req_ret);
+  int ret = mdlog->get_info_async(shard_id, &shard_info, ops_stack->get_completion_mgr(), (void *)ops_stack, &req_ret);
   if (ret < 0) {
     ldout(store->ctx(), 0) << "ERROR: mdlog->get_info_async() returned ret=" << ret << dendl;
     return set_state(Error, ret);
@@ -584,7 +675,7 @@ int RGWCloneMetaLogOp::state_send_rest_request()
 
   http_op = new RGWRESTReadResource(conn, "/admin/log", pairs, NULL, http_manager);
 
-  http_op->set_user_info((void *)this);
+  http_op->set_user_info((void *)ops_stack);
 
   int ret = http_op->aio_read();
   if (ret < 0) {
@@ -642,7 +733,7 @@ int RGWCloneMetaLogOp::state_store_mdlog_entries()
     marker = entry.id;
   }
 
-  AioCompletionNotifier *cn = ops_mgr->create_completion_notifier(this);
+  AioCompletionNotifier *cn = ops_stack->create_completion_notifier();
 
   int ret = store->meta_mgr->store_md_log_entries(dest_entries, shard_id, cn->completion());
   if (ret < 0) {
