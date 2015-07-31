@@ -5381,8 +5381,6 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       {
 	if (maybe_create_new_object(ctx)) {
 	  t->touch(soid);
-	} else {
-	  obs.oi.clear_omap_digest();
 	}
 	t->omap_setheader(soid, osd_op.indata);
 	ctx->delta_stats.num_wr++;
