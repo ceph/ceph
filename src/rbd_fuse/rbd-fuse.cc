@@ -11,12 +11,7 @@
 #include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
-#if defined(DARWIN) 
 #include <fuse.h>
-#include "porting.h"
-#else
-#include <fuse.h>
-#endif
 #include <pthread.h>
 #include <string.h>
 #include <sys/types.h>
@@ -24,6 +19,7 @@
 #include <getopt.h>
 #include <assert.h>
 
+#include "include/compat.h"
 #include "include/rbd/librbd.h"
 
 static int gotrados = 0;

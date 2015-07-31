@@ -32,7 +32,7 @@
 #include "auth/cephx/CephxProtocol.h"
 #include "auth/AuthSessionHandler.h"
 
-#include "porting.h"
+#include "include/sock_compat.h"
 
 // Constant to limit starting sequence number to 2^31.  Nothing special about it, just a big number.  PLR
 #define SEQ_MASK  0x7fffffff 
