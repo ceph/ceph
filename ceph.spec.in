@@ -18,13 +18,6 @@
 # /var/run/ceph.
 %if 0%{?fedora} || 0%{?rhel} >= 7 || 0%{?suse_version} > 1300
 %global _with_systemd 1
-
-# Use systemd files when possible.
-%if 0%{?fedora} || 0%{?rhel} >= 7 || 0%{?suse_version}
-  %global _with_systemd 1
-  %if 0%{?rhel} || 0%{?fedora}
-    %global _unitdir /usr/lib/systemd/system
-  %endif
 %endif
 
 Name:		ceph
@@ -556,6 +549,7 @@ install -D src/init-rbdmap $RPM_BUILD_ROOT%{_initrddir}/rbdmap
   install -m 0644 -D systemd/ceph-disk-activate-journal@.service $RPM_BUILD_ROOT%{_unitdir}/ceph-disk-activate-journal@.service
   install -m 0644 -D systemd/ceph-disk-activate@.service $RPM_BUILD_ROOT%{_unitdir}/ceph-disk-activate@.service
   install -m 0644 -D systemd/ceph-disk-dmcrypt-activate@.service $RPM_BUILD_ROOT%{_unitdir}/ceph-disk-dmcrypt-activate@.service
+  install -m 0755 -D systemd/ceph $RPM_BUILD_ROOT%{_sbindir}/rcceph
 %else
   install -D src/init-ceph $RPM_BUILD_ROOT%{_initrddir}/ceph
   install -D src/init-radosgw $RPM_BUILD_ROOT%{_initrddir}/ceph-radosgw
