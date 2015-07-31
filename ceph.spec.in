@@ -338,14 +338,6 @@ Obsoletes:	python-ceph < %{epoch}:%{version}-%{release}
 This package contains Python libraries for interacting with Cephs distributed
 file system.
 
-%package -n rest-bench
-Summary:	RESTful benchmark
-Group:		System Environment/Libraries
-License:	LGPL-2.0
-Requires:	ceph-common = %{epoch}:%{version}-%{release}
-%description -n rest-bench
-RESTful bencher that can be used to benchmark radosgw performance.
-
 %package -n ceph-test
 Summary:	Ceph benchmarks and test tools
 Group:		System Environment/Libraries
@@ -495,7 +487,6 @@ export RPM_OPT_FLAGS=`echo $RPM_OPT_FLAGS | sed -e 's/i386/i486/'`
 		--mandir="%_mandir" \
 		--with-nss \
 		--without-cryptopp \
-		--with-rest-bench \
 		--with-debug \
 %if 0%{with cephfs_java}
 		--enable-cephfs-java \
@@ -921,11 +912,6 @@ ln -sf %{_libdir}/librbd.so.1 /usr/lib64/qemu/librbd.so.1
 %files -n python-cephfs
 %defattr(-,root,root,-)
 %{python_sitelib}/cephfs.py*
-
-#################################################################################
-%files -n rest-bench
-%defattr(-,root,root,-)
-%{_bindir}/rest-bench
 
 #################################################################################
 %files -n ceph-test
