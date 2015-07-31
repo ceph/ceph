@@ -109,7 +109,7 @@ void *ObjBencher::status_printer(void *_bencher) {
     else
       bandwidth = 0;
 
-    if (!isnan(bandwidth) && bandwidth > 0) {
+    if (!std::isnan(bandwidth) && bandwidth > 0) {
       if (bandwidth > data.idata.max_bandwidth)
         data.idata.max_bandwidth = bandwidth;
       if (bandwidth < data.idata.min_bandwidth)
@@ -124,7 +124,7 @@ void *ObjBencher::status_printer(void *_bencher) {
     else
       iops = 0;
 
-    if (!isnan(iops)) {
+    if (!std::isnan(iops)) {
       if (iops > data.idata.max_iops)
         data.idata.max_iops = iops;
       if (iops < data.idata.min_iops)
