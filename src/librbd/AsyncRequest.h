@@ -9,7 +9,7 @@
 #include "include/xlist.h"
 
 /* DARWIN Missing ERESTART */
-#include "porting.h"
+#include "include/compat.h"
 
 namespace librbd {
 
