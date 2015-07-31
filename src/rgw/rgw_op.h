@@ -134,6 +134,7 @@ protected:
   int ret;
   bool get_data;
   bool partial_content;
+  bool range_parsed;
   rgw_obj obj;
   utime_t gc_invalidate_time;
 
@@ -156,10 +157,11 @@ public:
     unmod_ptr = NULL;
     get_data = false;
     partial_content = false;
+    range_parsed = false;
     ret = 0;
  }
 
-  virtual bool prefetch_data() { return get_data; }
+  bool prefetch_data();
 
   void set_get_data(bool get_data) {
     this->get_data = get_data;
