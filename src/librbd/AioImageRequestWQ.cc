@@ -147,17 +147,25 @@ void AioImageRequestWQ::aio_flush(AioCompletion *c) {
 }
 
 void AioImageRequestWQ::block_writes() {
+  C_SaferCond cond_ctx;
+  block_writes(&cond_ctx);
+  cond_ctx.wait();
+}
+
+void AioImageRequestWQ::block_writes(Context *on_blocked) {
   CephContext *cct = m_image_ctx.cct;
 
-  Mutex::Locker locker(m_lock);
-  ++m_write_blockers;
-  ldout(cct, 5) << __func__ << ": " << &m_image_ctx << ", "
-                << "num=" << m_write_blockers << dendl;
-  if (m_write_blockers == 1) {
-    while (m_in_progress_writes > 0) {
-      m_cond.Wait(m_lock);
+  {
+    Mutex::Locker locker(m_lock);
+    ++m_write_blockers;
+    ldout(cct, 5) << __func__ << ": " << &m_image_ctx << ", "
+                  << "num=" << m_write_blockers << dendl;
+    if (m_in_progress_writes > 0) {
+      m_write_blocker_contexts.push_back(on_blocked);
+      return;
     }
   }
+  on_blocked->complete(0);
 }
 
 void AioImageRequestWQ::unblock_writes() {
@@ -217,6 +225,7 @@ void AioImageRequestWQ::process(AioImageRequest *req) {
     req->send();
   }
 
+  Contexts contexts;
   {
     Mutex::Locker locker(m_lock);
     if (req->is_write_op()) {
@@ -225,11 +234,15 @@ void AioImageRequestWQ::process(AioImageRequest *req) {
 
       assert(m_in_progress_writes > 0);
       if (--m_in_progress_writes == 0) {
-        m_cond.Signal();
+        contexts.swap(m_write_blocker_contexts);
       }
     }
   }
   delete req;
+
+  for (Contexts::iterator it = contexts.begin(); it != contexts.end(); ++it) {
+    (*it)->complete(0);
+  }
 }
 
 bool AioImageRequestWQ::is_journal_required() const {

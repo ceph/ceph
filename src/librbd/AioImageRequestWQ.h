@@ -44,6 +44,7 @@ public:
   }
 
   void block_writes();
+  void block_writes(Context *on_blocked);
   void unblock_writes();
 
   void register_lock_listener();
@@ -53,6 +54,8 @@ protected:
   virtual void process(AioImageRequest *req);
 
 private:
+  typedef std::list<Context *> Contexts;
+
   struct LockListener : public ImageWatcher::Listener {
     AioImageRequestWQ *aio_work_queue;
     LockListener(AioImageRequestWQ *_aio_work_queue)
@@ -69,7 +72,7 @@ private:
 
   ImageCtx &m_image_ctx;
   mutable Mutex m_lock;
-  Cond m_cond;
+  Contexts m_write_blocker_contexts;
   uint32_t m_write_blockers;
   uint32_t m_in_progress_writes;
   uint32_t m_queued_writes;
