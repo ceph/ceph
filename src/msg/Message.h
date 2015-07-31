@@ -278,6 +278,7 @@ public:
   Message(int t, int version=1, int compat_version=0)
     : connection(NULL),
       magic(0),
+      front_compress_id(0), middle_compress_id(0), data_compress_id(0),
       completion_hook(NULL),
       byte_throttler(NULL),
       msg_throttler(NULL),
