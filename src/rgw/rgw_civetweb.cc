@@ -143,6 +143,9 @@ int RGWMongoose::send_status(const char *status, const char *status_name)
   bl.append(header_data);
   header_data = bl;
 
+  int status_num = atoi(status);
+  mg_set_http_status(conn, status_num);
+
   return 0;
 }
 
