@@ -111,6 +111,5 @@ noinst_HEADERS += \
 	include/on_exit.h \
 	include/memory.h \
 	include/rados/memory.h \
-	include/hash_namespace.h \
 	include/unordered_set.h \
 	include/unordered_map.h
