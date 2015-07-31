@@ -267,11 +267,11 @@ public:
   Message()
     : connection(NULL),
       magic(0),
+      front_compress_id(0), middle_compress_id(0), data_compress_id(0),
       completion_hook(NULL),
       byte_throttler(NULL),
       msg_throttler(NULL),
-      dispatch_throttle_size(0),
-      front_compress_id(0), middle_compress_id(0), data_compress_id(0) {
+      dispatch_throttle_size(0) {
     memset(&header, 0, sizeof(header));
     memset(&footer, 0, sizeof(footer));
   }

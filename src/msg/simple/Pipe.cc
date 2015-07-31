@@ -1939,7 +1939,7 @@ int Pipe::read_message(Message **pm, AuthSessionHandler* auth_handler)
   int aborted;
   Message *message;
   utime_t recv_stamp = ceph_clock_now(msgr->cct);
-  uint64_t front_decompress_id = middle_decompress_id = data_decompress_id = 0;
+  uint64_t front_decompress_id = 0, middle_decompress_id = 0, data_decompress_id = 0;
 
   if (policy.throttler_messages) {
     ldout(msgr->cct,10) << "reader wants " << 1 << " message from policy throttler "
@@ -1980,12 +1980,12 @@ int Pipe::read_message(Message **pm, AuthSessionHandler* auth_handler)
     // try decompress front
     if (connection_state->has_feature(CEPH_FEATURE_MSG_COMPRESS) &&
         header.flags & CEPH_MSG_HEADER_FLAGS_COMPRESS_FRONT) {
-      ldout(cct, 20) << "decompressing incoming message" << dendl;
-      ldout(cct, 20) << __func__ << " BEFORE decompression:\n"
-                                 << " front_len=" << front.length()
-                                 << " header.front_len=" << header.front_len
-                                 << dendl;
-      front_decompress_id = async_msgr->compressor->async_decompress(front);
+      ldout(msgr->cct, 20) << "decompressing incoming message" << dendl;
+      ldout(msgr->cct, 20) << __func__ << " BEFORE decompression:\n"
+                                       << " front_len=" << front.length()
+                                       << " header.front_len=" << header.front_len
+                                       << dendl;
+      front_decompress_id = msgr->compressor->async_decompress(front);
     }
   }
 
@@ -2000,12 +2000,12 @@ int Pipe::read_message(Message **pm, AuthSessionHandler* auth_handler)
     // try decompress middle
     if (connection_state->has_feature(CEPH_FEATURE_MSG_COMPRESS) &&
         header.flags & CEPH_MSG_HEADER_FLAGS_COMPRESS_MIDDLE) {
-      ldout(cct, 20) << "decompressing incoming message" << dendl;
-      ldout(cct, 20) << __func__ << " BEFORE decompression:\n"
-                     << " middle_len=" << middle.length()
-                     << " header.middle_len=" << header.middle_len
-                     << dendl;
-      middle_decompress_id = async_msgr->compressor->async_decompress(middle);
+      ldout(msgr->cct, 20) << "decompressing incoming message" << dendl;
+      ldout(msgr->cct, 20) << __func__ << " BEFORE decompression:\n"
+                                       << " middle_len=" << middle.length()
+                                       << " header.middle_len=" << header.middle_len
+                                       << dendl;
+      middle_decompress_id = msgr->compressor->async_decompress(middle);
     }
   }
 
@@ -2067,13 +2067,13 @@ int Pipe::read_message(Message **pm, AuthSessionHandler* auth_handler)
     }
     // try decompress data
     if (connection_state->has_feature(CEPH_FEATURE_MSG_COMPRESS) &&
-        current_header.flags & CEPH_MSG_HEADER_FLAGS_COMPRESS_DATA) {
-      ldout(cct, 20) << "decompressing incoming message" << dendl;
-      ldout(cct, 20) << __func__ << " BEFORE decompression:\n"
-                                 << " data_len=" << data.length()
-                                 << " header.data_len=" << current_header.data_len
-                                 << dendl;
-      data_decompress_id = async_msgr->compressor->async_decompress(data);
+        header.flags & CEPH_MSG_HEADER_FLAGS_COMPRESS_DATA) {
+      ldout(msgr->cct, 20) << "decompressing incoming message" << dendl;
+      ldout(msgr->cct, 20) << __func__ << " BEFORE decompression:\n"
+                                       << " data_len=" << data.length()
+                                       << " header.data_len=" << header.data_len
+                                       << dendl;
+      data_decompress_id = msgr->compressor->async_decompress(data);
     }
   }
 
@@ -2105,32 +2105,32 @@ int Pipe::read_message(Message **pm, AuthSessionHandler* auth_handler)
 	   << " byte message" << dendl;
 
   // verify crc
-  if (Message::verify_crc(msgr->cct, msgr->crcflags, current_header,
+  if (Message::verify_crc(msgr->cct, msgr->crcflags, header,
                           footer, front, middle, data)) {
-    goto fail;
+    goto out_dethrottle;
   }
 
   bool finished;
   if (front_decompress_id) {
-    r = msgr->get_decompress_data(front_decompress_id, front, true, &finished);
-    if (r < 0) {
-      goto fail;
+    ret = msgr->compressor->get_decompress_data(front_decompress_id, front, true, &finished);
+    if (ret < 0) {
+      goto out_dethrottle;
     }
   }
   if (middle_decompress_id) {
-    r = msgr->get_decompress_data(middle_decompress_id, middle, true, &finished);
-    if (r < 0) {
-      goto fail;
+    ret = msgr->compressor->get_decompress_data(middle_decompress_id, middle, true, &finished);
+    if (ret < 0) {
+      goto out_dethrottle;
     }
   }
   if (data_decompress_id) {
-    r = msgr->get_decompress_data(data_decompress_id, data, true, &finished);
-    if (r < 0) {
-      goto fail;
+    ret = msgr->compressor->get_decompress_data(data_decompress_id, data, true, &finished);
+    if (ret < 0) {
+      goto out_dethrottle;
     }
   }
 
-  message = decode_message(msgr->cct, msgr->crcflags, header, footer, front, middle, data);
+  message = decode_message(msgr->cct, header, footer, front, middle, data);
   if (!message) {
     ret = -EINVAL;
     goto out_dethrottle;

@@ -740,13 +740,13 @@ void AsyncConnection::process()
           }
 
           // try decompress front
-          if (connection_state->has_feature(CEPH_FEATURE_MSG_COMPRESS) &&
+          if (has_feature(CEPH_FEATURE_MSG_COMPRESS) &&
               current_header.flags & CEPH_MSG_HEADER_FLAGS_COMPRESS_FRONT) {
-            ldout(cct, 20) << "decompressing incoming message" << dendl;
-            ldout(cct, 20) << __func__ << " BEFORE decompression:\n"
-                                       << " front_len=" << front.length()
-                                       << " header.front_len=" << current_header.front_len
-                                       << dendl;
+            ldout(async_msgr->cct, 20) << "decompressing incoming message" << dendl;
+            ldout(async_msgr->cct, 20) << __func__ << " BEFORE decompression:\n"
+                                                   << " front_len=" << front.length()
+                                                   << " header.front_len=" << current_header.front_len
+                                                   << dendl;
             front_decompress_id = async_msgr->compressor->async_decompress(front);
           }
           state = STATE_OPEN_MESSAGE_READ_MIDDLE;
@@ -773,13 +773,13 @@ void AsyncConnection::process()
           }
 
           // try decompress middle
-          if (connection_state->has_feature(CEPH_FEATURE_MSG_COMPRESS) &&
+          if (has_feature(CEPH_FEATURE_MSG_COMPRESS) &&
               current_header.flags & CEPH_MSG_HEADER_FLAGS_COMPRESS_MIDDLE) {
-            ldout(cct, 20) << "decompressing incoming message" << dendl;
-            ldout(cct, 20) << __func__ << " BEFORE decompression:\n"
-                           << " middle_len=" << middle.length()
-                           << " header.middle_len=" << current_header.middle_len
-                           << dendl;
+            ldout(async_msgr->cct, 20) << "decompressing incoming message" << dendl;
+            ldout(async_msgr->cct, 20) << __func__ << " BEFORE decompression:\n"
+                                                   << " middle_len=" << middle.length()
+                                                   << " header.middle_len=" << current_header.middle_len
+                                                   << dendl;
             middle_decompress_id = async_msgr->compressor->async_decompress(middle);
           }
           state = STATE_OPEN_MESSAGE_READ_DATA_PREPARE;
@@ -837,13 +837,13 @@ void AsyncConnection::process()
             state = STATE_OPEN_MESSAGE_READ_FOOTER_AND_DISPATCH;
 
           // try decompress data
-          if (connection_state->has_feature(CEPH_FEATURE_MSG_COMPRESS) &&
+          if (has_feature(CEPH_FEATURE_MSG_COMPRESS) &&
               current_header.flags & CEPH_MSG_HEADER_FLAGS_COMPRESS_DATA) {
-            ldout(cct, 20) << "decompressing incoming message" << dendl;
-            ldout(cct, 20) << __func__ << " BEFORE decompression:\n"
-                                       << " data_len=" << data.length()
-                                       << " header.data_len=" << current_header.data_len
-                                       << dendl;
+            ldout(async_msgr->cct, 20) << "decompressing incoming message" << dendl;
+            ldout(async_msgr->cct, 20) << __func__ << " BEFORE decompression:\n"
+                                                   << " data_len=" << data.length()
+                                                   << " header.data_len=" << current_header.data_len
+                                                   << dendl;
             data_decompress_id = async_msgr->compressor->async_decompress(data);
           }
 
@@ -898,24 +898,24 @@ void AsyncConnection::process()
 
           bool finished;
           if (front_decompress_id) {
-            r = async_msgr->get_decompress_data(front_decompress_id, front, true, &finished);
+            r = async_msgr->compressor->get_decompress_data(front_decompress_id, front, true, &finished);
             if (r < 0) {
               goto fail;
             }
           }
           if (middle_decompress_id) {
-            r = async_msgr->get_decompress_data(middle_decompress_id, middle, true, &finished);
+            r = async_msgr->compressor->get_decompress_data(middle_decompress_id, middle, true, &finished);
             if (r < 0) {
               goto fail;
             }
           }
           if (data_decompress_id) {
-            r = async_msgr->get_decompress_data(data_decompress_id, data, true, &finished);
+            r = async_msgr->compressor->get_decompress_data(data_decompress_id, data, true, &finished);
             if (r < 0) {
               goto fail;
             }
           }
-          Message *message = decode_message(async_msgr->cct, async_msgr->crcflags, current_header, footer, front, middle, data);
+          Message *message = decode_message(async_msgr->cct, current_header, footer, front, middle, data);
           if (!message) {
             ldout(async_msgr->cct, 1) << __func__ << " decode message failed " << dendl;
             goto fail;
