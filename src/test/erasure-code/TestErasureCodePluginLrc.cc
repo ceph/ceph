@@ -34,7 +34,7 @@ TEST(ErasureCodePlugin, factory)
   ErasureCodeInterfaceRef erasure_code;
   EXPECT_FALSE(erasure_code);
   EXPECT_EQ(0, instance.factory("lrc", profile, &erasure_code, &cerr));
-  EXPECT_TRUE(erasure_code);
+  EXPECT_TRUE(erasure_code.get());
 }
 
 int main(int argc, char **argv)
