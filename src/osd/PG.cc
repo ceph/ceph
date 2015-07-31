@@ -892,6 +892,9 @@ void PG::clear_primary_state()
 map<pg_shard_t, pg_info_t>::const_iterator PG::find_best_info(
   const map<pg_shard_t, pg_info_t> &infos) const
 {
+  /* See doc/dev/osd_internals/last_epoch_started.rst before attempting
+   * to make changes to this process.  Also, make sure to update it
+   * when you find bugs! */
   eversion_t min_last_update_acceptable = eversion_t::max();
   epoch_t max_last_epoch_started_found = 0;
   for (map<pg_shard_t, pg_info_t>::const_iterator i = infos.begin();
@@ -902,11 +905,16 @@ map<pg_shard_t, pg_info_t>::const_iterator PG::find_best_info(
       min_last_update_acceptable = eversion_t::max();
       max_last_epoch_started_found = i->second.history.last_epoch_started;
     }
-    if (max_last_epoch_started_found < i->second.last_epoch_started) {
+    if (!i->second.is_incomplete() &&
+	max_last_epoch_started_found < i->second.last_epoch_started) {
       min_last_update_acceptable = eversion_t::max();
       max_last_epoch_started_found = i->second.last_epoch_started;
     }
-    if (max_last_epoch_started_found == i->second.last_epoch_started) {
+  }
+  for (map<pg_shard_t, pg_info_t>::const_iterator i = infos.begin();
+       i != infos.end();
+       ++i) {
+    if (max_last_epoch_started_found <= i->second.last_epoch_started) {
       if (min_last_update_acceptable > i->second.last_update)
 	min_last_update_acceptable = i->second.last_update;
     }
