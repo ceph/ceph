@@ -449,23 +449,6 @@ Description: debugging symbols for radosgw
  .
  This package contains debugging symbols for radosgw.
 
-Package: rest-bench
-Architecture: linux-any
-Depends: ceph-common, curl, xml2, ${misc:Depends}, ${shlibs:Depends}
-Description: RESTful bencher that can be used to benchmark
- radosgw performance.
-
-Package: rest-bench-dbg
-Architecture: linux-any
-Section: debug
-Priority: extra
-Depends: rest-bench (= ${binary:Version}), ceph-common, curl, xml2,
-          ${misc:Depends}, ${shlibs:Depends}
-Description: debugging symbols for rest-bench
- radosgw performance.
- .
- This package contains the debugging symbols for rest-bench.
-
 Package: ceph-test
 Architecture: linux-any
 Depends: ceph-common, curl, xml2, xmlstarlet, ${misc:Depends}, ${shlibs:Depends}
