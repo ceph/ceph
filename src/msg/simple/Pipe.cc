@@ -1793,8 +1793,11 @@ void Pipe::writer()
 			      << " " << m << " " << *m << dendl;
 
 	// encode and copy out of *m
-	m->encode(features, msgr->crcflags);
+	m->encode(features);
+        m->calc_crc(msgr->crcflags);
 
+        int r = m->ready_compress(msgr->cct, msgr->compressor);
+        assert(r >= 0);
 	// prepare everything
 	const ceph_msg_header& header = m->get_header();
 	const ceph_msg_footer& footer = m->get_footer();
@@ -1936,6 +1939,7 @@ int Pipe::read_message(Message **pm, AuthSessionHandler* auth_handler)
   int aborted;
   Message *message;
   utime_t recv_stamp = ceph_clock_now(msgr->cct);
+  uint64_t front_decompress_id = middle_decompress_id = data_decompress_id = 0;
 
   if (policy.throttler_messages) {
     ldout(msgr->cct,10) << "reader wants " << 1 << " message from policy throttler "
@@ -1973,6 +1977,16 @@ int Pipe::read_message(Message **pm, AuthSessionHandler* auth_handler)
       goto out_dethrottle;
     front.push_back(bp);
     ldout(msgr->cct,20) << "reader got front " << front.length() << dendl;
+    // try decompress front
+    if (connection_state->has_feature(CEPH_FEATURE_MSG_COMPRESS) &&
+        header.flags & CEPH_MSG_HEADER_FLAGS_COMPRESS_FRONT) {
+      ldout(cct, 20) << "decompressing incoming message" << dendl;
+      ldout(cct, 20) << __func__ << " BEFORE decompression:\n"
+                                 << " front_len=" << front.length()
+                                 << " header.front_len=" << header.front_len
+                                 << dendl;
+      front_decompress_id = async_msgr->compressor->async_decompress(front);
+    }
   }
 
   // read middle
@@ -1983,6 +1997,16 @@ int Pipe::read_message(Message **pm, AuthSessionHandler* auth_handler)
       goto out_dethrottle;
     middle.push_back(bp);
     ldout(msgr->cct,20) << "reader got middle " << middle.length() << dendl;
+    // try decompress middle
+    if (connection_state->has_feature(CEPH_FEATURE_MSG_COMPRESS) &&
+        header.flags & CEPH_MSG_HEADER_FLAGS_COMPRESS_MIDDLE) {
+      ldout(cct, 20) << "decompressing incoming message" << dendl;
+      ldout(cct, 20) << __func__ << " BEFORE decompression:\n"
+                     << " middle_len=" << middle.length()
+                     << " header.middle_len=" << header.middle_len
+                     << dendl;
+      middle_decompress_id = async_msgr->compressor->async_decompress(middle);
+    }
   }
 
 
@@ -2041,6 +2065,16 @@ int Pipe::read_message(Message **pm, AuthSessionHandler* auth_handler)
 	left -= got;
       } // else we got a signal or something; just loop.
     }
+    // try decompress data
+    if (connection_state->has_feature(CEPH_FEATURE_MSG_COMPRESS) &&
+        current_header.flags & CEPH_MSG_HEADER_FLAGS_COMPRESS_DATA) {
+      ldout(cct, 20) << "decompressing incoming message" << dendl;
+      ldout(cct, 20) << __func__ << " BEFORE decompression:\n"
+                                 << " data_len=" << data.length()
+                                 << " header.data_len=" << current_header.data_len
+                                 << dendl;
+      data_decompress_id = async_msgr->compressor->async_decompress(data);
+    }
   }
 
   // footer
@@ -2069,6 +2103,33 @@ int Pipe::read_message(Message **pm, AuthSessionHandler* auth_handler)
 
   ldout(msgr->cct,20) << "reader got " << front.length() << " + " << middle.length() << " + " << data.length()
 	   << " byte message" << dendl;
+
+  // verify crc
+  if (Message::verify_crc(msgr->cct, msgr->crcflags, current_header,
+                          footer, front, middle, data)) {
+    goto fail;
+  }
+
+  bool finished;
+  if (front_decompress_id) {
+    r = msgr->get_decompress_data(front_decompress_id, front, true, &finished);
+    if (r < 0) {
+      goto fail;
+    }
+  }
+  if (middle_decompress_id) {
+    r = msgr->get_decompress_data(middle_decompress_id, middle, true, &finished);
+    if (r < 0) {
+      goto fail;
+    }
+  }
+  if (data_decompress_id) {
+    r = msgr->get_decompress_data(data_decompress_id, data, true, &finished);
+    if (r < 0) {
+      goto fail;
+    }
+  }
+
   message = decode_message(msgr->cct, msgr->crcflags, header, footer, front, middle, data);
   if (!message) {
     ret = -EINVAL;
