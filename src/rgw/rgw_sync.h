@@ -113,8 +113,8 @@ public:
   int list_shard(int shard_id);
   int list_shards();
   int get_shard_info(int shard_id);
-  int clone_shard(int shard_id, const string& marker, string *new_marker, bool *truncated);
   int clone_shards();
+  int fetch();
 };
 
 class RGWMetadataSync {
@@ -126,6 +126,7 @@ public:
 
   int init();
 
+  int fetch() { return master_log.fetch(); }
   int clone_shards() { return master_log.clone_shards(); }
 };
 

@@ -258,6 +258,7 @@ enum {
   OPT_METADATA_LIST,
   OPT_MDLOG_LIST,
   OPT_MDLOG_TRIM,
+  OPT_MDLOG_FETCH,
   OPT_MDLOG_SYNC,
   OPT_BILOG_LIST,
   OPT_BILOG_TRIM,
@@ -2840,6 +2841,23 @@ next:
     }
   }
   
+  if (opt_cmd == OPT_MDLOG_FETCH) {
+    RGWMetadataSync sync(store);
+
+    int ret = sync.init();
+    if (ret < 0) {
+      cerr << "ERROR: sync.init() returned ret=" << ret << std::endl;
+      return -ret;
+    }
+
+    ret = sync.fetch();
+    if (ret < 0) {
+      cerr << "ERROR: sync.clone_shards() returned ret=" << ret << std::endl;
+      return -ret;
+    }
+
+  }
+
   if (opt_cmd == OPT_MDLOG_SYNC) {
     RGWMetadataSync sync(store);
 
