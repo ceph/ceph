@@ -28,40 +28,39 @@ KOJI_TASK_RPMS = [rpm[0] for rpm in KOJI_TASK_RPMS_MATRIX]
 
 class TestPackaging(object):
 
-    @patch("teuthology.packaging.misc")
-    def test_get_package_name_deb(self, m_misc):
-        m_misc.get_system_type.return_value = "deb"
-        assert packaging.get_package_name('sqlite', Mock()) == "sqlite3"
+    def test_get_package_name_deb(self):
+        remote = Mock()
+        remote.os.package_type = "deb"
+        assert packaging.get_package_name('sqlite', remote) == "sqlite3"
 
-    @patch("teuthology.packaging.misc")
-    def test_get_package_name_rpm(self, m_misc):
-        m_misc.get_system_type.return_value = "rpm"
-        assert packaging.get_package_name('sqlite', Mock()) is None
+    def test_get_package_name_rpm(self):
+        remote = Mock()
+        remote.os.package_type = "rpm"
+        assert packaging.get_package_name('sqlite', remote) is None
 
-    @patch("teuthology.packaging.misc")
-    def test_get_package_name_not_found(self, m_misc):
-        m_misc.get_system_type.return_value = "rpm"
-        assert packaging.get_package_name('notthere', Mock()) is None
+    def test_get_package_name_not_found(self):
+        remote = Mock()
+        remote.os.package_type = "rpm"
+        assert packaging.get_package_name('notthere', remote) is None
 
-    @patch("teuthology.packaging.misc")
-    def test_get_service_name_deb(self, m_misc):
-        m_misc.get_system_type.return_value = "deb"
-        assert packaging.get_service_name('httpd', Mock()) == 'apache2'
+    def test_get_service_name_deb(self):
+        remote = Mock()
+        remote.os.package_type = "deb"
+        assert packaging.get_service_name('httpd', remote) == 'apache2'
 
-    @patch("teuthology.packaging.misc")
-    def test_get_service_name_rpm(self, m_misc):
-        m_misc.get_system_type.return_value = "rpm"
-        assert packaging.get_service_name('httpd', Mock()) == 'httpd'
+    def test_get_service_name_rpm(self):
+        remote = Mock()
+        remote.os.package_type = "rpm"
+        assert packaging.get_service_name('httpd', remote) == 'httpd'
 
-    @patch("teuthology.packaging.misc")
-    def test_get_service_name_not_found(self, m_misc):
-        m_misc.get_system_type.return_value = "rpm"
-        assert packaging.get_service_name('notthere', Mock()) is None
+    def test_get_service_name_not_found(self):
+        remote = Mock()
+        remote.os.package_type = "rpm"
+        assert packaging.get_service_name('notthere', remote) is None
 
-    @patch("teuthology.packaging.misc")
-    def test_install_package_deb(self, m_misc):
-        m_misc.get_system_type.return_value = "deb"
+    def test_install_package_deb(self):
         m_remote = Mock()
+        m_remote.os.package_type = "deb"
         expected = [
             'DEBIAN_FRONTEND=noninteractive',
             'sudo',
@@ -74,10 +73,9 @@ class TestPackaging(object):
         packaging.install_package('apache2', m_remote)
         m_remote.run.assert_called_with(args=expected)
 
-    @patch("teuthology.packaging.misc")
-    def test_install_package_rpm(self, m_misc):
-        m_misc.get_system_type.return_value = "rpm"
+    def test_install_package_rpm(self):
         m_remote = Mock()
+        m_remote.os.package_type = "rpm"
         expected = [
             'sudo',
             'yum',
@@ -88,10 +86,9 @@ class TestPackaging(object):
         packaging.install_package('httpd', m_remote)
         m_remote.run.assert_called_with(args=expected)
 
-    @patch("teuthology.packaging.misc")
-    def test_remove_package_deb(self, m_misc):
-        m_misc.get_system_type.return_value = "deb"
+    def test_remove_package_deb(self):
         m_remote = Mock()
+        m_remote.os.package_type = "deb"
         expected = [
             'DEBIAN_FRONTEND=noninteractive',
             'sudo',
@@ -104,10 +101,9 @@ class TestPackaging(object):
         packaging.remove_package('apache2', m_remote)
         m_remote.run.assert_called_with(args=expected)
 
-    @patch("teuthology.packaging.misc")
-    def test_remove_package_rpm(self, m_misc):
-        m_misc.get_system_type.return_value = "rpm"
+    def test_remove_package_rpm(self):
         m_remote = Mock()
+        m_remote.os.package_type = "rpm"
         expected = [
             'sudo',
             'yum',

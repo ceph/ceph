@@ -5,7 +5,6 @@ import requests
 
 from cStringIO import StringIO
 
-from teuthology import misc
 from .config import config
 
 log = logging.getLogger(__name__)
@@ -53,7 +52,7 @@ def get_package_name(pkg, rem):
     """
     Find the remote-specific name of the generic 'pkg'
     """
-    flavor = misc.get_system_type(rem)
+    flavor = rem.os.package_type
 
     try:
         return _PACKAGE_MAP[pkg][flavor]
@@ -65,7 +64,7 @@ def get_service_name(service, rem):
     """
     Find the remote-specific name of the generic 'service'
     """
-    flavor = misc.get_system_type(rem)
+    flavor = rem.os.package_type
     try:
         return _SERVICE_MAP[service][flavor]
     except KeyError:
@@ -78,7 +77,7 @@ def install_package(package, remote):
     Assumes repo has already been set up (perhaps with install_repo)
     """
     log.info('Installing package %s on %s', package, remote)
-    flavor = misc.get_system_type(remote)
+    flavor = remote.os.package_type
     if flavor == 'deb':
         pkgcmd = ['DEBIAN_FRONTEND=noninteractive',
                   'sudo',
@@ -103,7 +102,7 @@ def remove_package(package, remote):
     """
     Remove package from remote
     """
-    flavor = misc.get_system_type(remote)
+    flavor = remote.os.package_type
     if flavor == 'deb':
         pkgcmd = ['DEBIAN_FRONTEND=noninteractive',
                   'sudo',
