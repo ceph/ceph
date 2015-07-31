@@ -295,6 +295,7 @@ int Message::ready_compress(CephContext *cct, AsyncCompressor *compressor)
       return r;
     }
     ++num;
+    header.front_len = payload.length();
     assert(finished);
   }
   if (middle_compress_id) {
@@ -304,6 +305,7 @@ int Message::ready_compress(CephContext *cct, AsyncCompressor *compressor)
       return r;
     }
     ++num;
+    header.middle_len = middle.length();
     assert(finished);
   }
   if (data_compress_id) {
@@ -313,6 +315,7 @@ int Message::ready_compress(CephContext *cct, AsyncCompressor *compressor)
       return r;
     }
     ++num;
+    header.data_len = data.length();
     assert(finished);
   }
 
