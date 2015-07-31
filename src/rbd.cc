@@ -2946,6 +2946,51 @@ static bool set_conf_param(const char *param, const char **var1,
 
 bool size_set;
 
+int rados_init(librados::Rados &rados, vector<const char*> &args,
+               const std::string &keyfile, int rbd_default_format) {
+  std::string cluster_name = "ceph";
+  std::string conf_file_list;
+  CephInitParameters init_params = ceph_argparse_early_args(
+    args, CEPH_ENTITY_TYPE_CLIENT, 0, &cluster_name, &conf_file_list);
+
+  int r = rados.init2(init_params.name.to_cstr(), cluster_name.c_str(),
+                      0);
+  if (r < 0) {
+    std::cerr << "rbd: couldn't initialize rados!" << std::endl;
+    return EXIT_FAILURE;
+  }
+
+  r = rados.conf_read_file(
+    conf_file_list.empty() ? NULL : conf_file_list.c_str());
+  if (r == -EINVAL) {
+    std::cerr << "rbd: did not load config file, using default settings."
+              << std::endl;
+  } else if (r < 0) {
+    std::cerr << "rbd: failed to read configuration" << std::endl;
+    return EXIT_FAILURE;
+  }
+
+  r = rados.conf_set("keyfile", keyfile.c_str());
+  if (r < 0) {
+    std::cerr << "rbd: failed to update keyfile" << std::endl;
+    return EXIT_FAILURE;
+  }
+
+  r = rados.conf_set("rbd_default_format",
+                     stringify(rbd_default_format).c_str());
+  if (r < 0) {
+    std::cerr << "rbd: failed to update default image format" << std::endl;
+    return EXIT_FAILURE;
+  }
+
+  r = rados.conf_set("rbd_cache_writethrough_until_flush", "false");
+  if (r < 0) {
+    std::cerr << "rbd: failed to update writethrough policy" << std::endl;
+    return EXIT_FAILURE;
+  }
+  return 0;
+}
+
 int main(int argc, const char **argv)
 {
   librados::Rados rados;
@@ -2989,13 +3034,17 @@ int main(int argc, const char **argv)
   std::string val, parse_err;
   std::ostringstream err;
   uint64_t sizell = 0;
+
+  std::string keyfile = g_conf->keyfile;
+
   std::vector<const char*>::iterator i;
   for (i = args.begin(); i != args.end(); ) {
     if (ceph_argparse_double_dash(args, i)) {
       break;
     } else if (ceph_argparse_witharg(args, i, &val, "--secret", (char*)NULL)) {
-      int r = g_conf->set_val("keyfile", val.c_str());
-      assert(r == 0);
+      // update global context to support krbd crypto
+      keyfile = val;
+      g_conf->set_val_or_die("keyfile", val.c_str());
     } else if (ceph_argparse_flag(args, i, "-h", "--help", (char*)NULL)) {
       usage();
       return 0;
@@ -3011,7 +3060,6 @@ int main(int argc, const char **argv)
 	return EXIT_FAILURE;
       }
       format_specified = true;
-      g_conf->set_val_or_die("rbd_default_format", val.c_str());
     } else if (ceph_argparse_witharg(args, i, &val, "-p", "--pool", (char*)NULL)) {
       poolname = strdup(val.c_str());
     } else if (ceph_argparse_witharg(args, i, &val, "--dest-pool", (char*)NULL)) {
@@ -3104,7 +3152,6 @@ int main(int argc, const char **argv)
     } else if (ceph_argparse_witharg(args, i, &val, "--format", (char *) NULL)) {
       long long ret = strict_strtoll(val.c_str(), 10, &parse_err);
       if (parse_err.empty()) {
-	g_conf->set_val_or_die("rbd_default_format", val.c_str());
 	format = ret;
 	format_specified = true;
 	cerr << "rbd: using --format for specifying the rbd image format is"
@@ -3257,8 +3304,6 @@ if (!set_conf_param(v, p1, p2, p3)) { \
 	break;
     }
   }
-
-  g_conf->set_val_or_die("rbd_cache_writethrough_until_flush", "false");
 
   /* get defaults from rbd_default_* options to keep behavior consistent with
      manual short-form options */
@@ -3492,7 +3537,8 @@ if (!set_conf_param(v, p1, p2, p3)) { \
 			  opt_cmd != OPT_UNMAP &&
 			  opt_cmd != OPT_SHOWMAPPED &&
                           opt_cmd != OPT_MERGE_DIFF);
-  if (talk_to_cluster && rados.init_with_context(g_ceph_context) < 0) {
+  if (talk_to_cluster &&
+      rados_init(rados, args, keyfile, format) < 0) {
     cerr << "rbd: couldn't initialize rados!" << std::endl;
     return EXIT_FAILURE;
   }
