@@ -15,7 +15,25 @@
 #if defined(__FreeBSD__)
 #define	ENODATA	ENOATTR
 #define	MSG_MORE 0
+#define lseek64(fd, offset, whence) lseek(fd, offset, whence)
 #endif /* !__FreeBSD__ */
+
+#if defined(__APPLE__)
+/* PATH_MAX */
+#include <limits.h>
+
+/* O_LARGEFILE is not defined/required on OS X */
+#ifndef O_LARGEFILE
+#define O_LARGEFILE 0
+#endif
+
+/* Could be relevant for other platforms */
+#ifndef ERESTART
+#define ERESTART EINTR
+#endif
+
+#define lseek64(fd, offset, whence) lseek(fd, offset, whence)
+#endif /* DARWIN */
 
 #ifndef TEMP_FAILURE_RETRY
 #define TEMP_FAILURE_RETRY(expression) ({     \
@@ -32,10 +50,6 @@
 #else
 # define VOID_TEMP_FAILURE_RETRY(expression) \
    do { (void)TEMP_FAILURE_RETRY(expression); } while (0)
-#endif
-
-#if defined(__FreeBSD__) || defined(__APPLE__)
-#define lseek64(fd, offset, whence) lseek(fd, offset, whence)
 #endif
 
 #endif /* !CEPH_COMPAT_H */
