@@ -85,7 +85,7 @@ TEST(FlatIndex, created_unlink) {
   //
   {
     CollectionIndex::IndexedPath indexed_path;
-    const std::string object_name(1024, 'A');
+    const std::string object_name(PATH_MAX / 2, 'A');
     ghobject_t hoid(hobject_t(object_t(object_name), key, CEPH_NOSNAP, hash, pool, ""));
     int exists;
     EXPECT_EQ(0, index->lookup(hoid, &indexed_path, &exists));

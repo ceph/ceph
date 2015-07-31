@@ -122,6 +122,7 @@ int main(int argc, const char **argv, const char *envp[]) {
       }
       virtual ~RemountTest() {}
       virtual void *entry() {
+#if defined(__linux__)
 	int ver = get_linux_version();
 	assert(ver != 0);
 	bool can_invalidate_dentries = g_conf->client_try_dentry_invalidate &&
@@ -151,6 +152,9 @@ int main(int argc, const char **argv, const char *envp[]) {
 	  }
 	}
 	return reinterpret_cast<void*>(tr);
+#else
+	return reinterpret_cast<void*>(0);
+#endif
       }
     } tester;
 

@@ -18,6 +18,15 @@
 #include <math.h>
 #include <sys/time.h>
 #include <time.h>
+
+#if defined(DARWIN)
+/* For some reason this definition is lost when compiling ceph *
+ * It works fine on a stand-alone file even with same clang    *
+ * parameters                                                  */
+
+time_t timegm(struct tm *);
+#endif
+
 #include <errno.h>
 
 #include "include/types.h"
@@ -291,7 +300,8 @@ public:
         *nsec = (uint64_t)usec * 1000;
       }
     }
-    time_t t = timegm(&tm);
+    time_t t;
+    t = ::timegm(&tm);
     if (epoch)
       *epoch = (uint64_t)t;
 

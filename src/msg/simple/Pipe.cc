@@ -32,6 +32,8 @@
 #include "auth/cephx/CephxProtocol.h"
 #include "auth/AuthSessionHandler.h"
 
+#include "include/sock_compat.h"
+
 // Constant to limit starting sequence number to 2^31.  Nothing special about it, just a big number.  PLR
 #define SEQ_MASK  0x7fffffff 
 #define dout_subsys ceph_subsys_ms
@@ -48,26 +50,6 @@ ostream& Pipe::_pipe_prefix(std::ostream *_dout) {
 		<< " c=" << connection_state
 		<< ").";
 }
-
-/*
- * This optimization may not be available on all platforms (e.g. OSX).
- * Apparently a similar approach based on TCP_CORK can be used.
- */
-#ifndef MSG_MORE
-# define MSG_MORE 0
-#endif
-
-/*
- * On BSD SO_NOSIGPIPE can be set via setsockopt to block SIGPIPE.
- */
-#ifndef MSG_NOSIGNAL
-# define MSG_NOSIGNAL 0
-# ifdef SO_NOSIGPIPE
-#  define CEPH_USE_SO_NOSIGPIPE
-# else
-#  error "Cannot block SIGPIPE!"
-# endif
-#endif
 
 /**************************************
  * Pipe
@@ -850,7 +832,7 @@ void Pipe::set_socket_options()
 
   int prio = msgr->get_socket_priority();
   if (prio >= 0) {
-    int r;
+    int r = -1;
 #ifdef IPTOS_CLASS_CS6
     int iptos = IPTOS_CLASS_CS6;
     r = ::setsockopt(sd, IPPROTO_IP, IP_TOS, &iptos, sizeof(iptos));
@@ -862,7 +844,9 @@ void Pipe::set_socket_options()
     // setsockopt(IPTOS_CLASS_CS6) sets the priority of the socket as 0.
     // See http://goo.gl/QWhvsD and http://goo.gl/laTbjT
     // We need to call setsockopt(SO_PRIORITY) after it.
+#if defined(__linux__)
     r = ::setsockopt(sd, SOL_SOCKET, SO_PRIORITY, &prio, sizeof(prio));
+#endif
     if (r < 0) {
       ldout(msgr->cct,0) << "couldn't set SO_PRIORITY to " << prio
                          << ": " << cpp_strerror(errno) << dendl;

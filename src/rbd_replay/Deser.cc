@@ -11,12 +11,15 @@
  * Foundation.  See file COPYING.
  *
  */
-
+#include "acconfig.h"
 #include "Deser.hpp"
 #include <arpa/inet.h>
 #include <cstdlib>
+#if defined(DARWIN)
+#include <machine/endian.h>
+#else
 #include <endian.h>
-
+#endif
 
 rbd_replay::Deser::Deser(std::istream &in)
   : m_in(in) {
