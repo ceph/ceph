@@ -7,9 +7,7 @@ PartOf=ceph.target
 [Service]
 EnvironmentFile=-/etc/sysconfig/ceph
 Environment=CLUSTER=ceph
-ExecStart=/usr/bin/radosgw -f --conf /etc/ceph/${CLUSTER}.conf --name client.radosgw.%i
-ExecStartPre=/usr/lib/ceph-radosgw/ceph-radosgw-prestart.sh --cluster ${CLUSTER} --name %i
-User=wwwrun
+ExecStart=/usr/bin/radosgw -f --cluster ${CLUSTER} --name client.%i
 
 [Install]
 WantedBy=ceph.target
