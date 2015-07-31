@@ -2106,58 +2106,39 @@ void Server::handle_slave_auth_pin_ack(MDRequestRef& mdr, MMDSSlaveRequest *ack)
  * by mask on the given inode, based on the capability in the mdr's
  * session.
  */
-bool Server::check_access(MDRequestRef& mdr, CInode *in, unsigned mask)
+bool Server::_check_access(Session *session, CInode *in, unsigned mask, int caller_uid, int caller_gid, int setattr_uid, int setattr_gid)
 {
-  Session *s = mdr->session;
-
-  uid_t uid = mdr->client_request->get_caller_uid();
-  gid_t gid = mdr->client_request->get_caller_gid();
-
-  uid_t new_uid;
-  gid_t new_gid;
-
-  if (mask & MAY_CHOWN) {
-    new_uid = mdr->client_request->head.args.setattr.uid;
-  } else {
-    new_uid = mdr->client_request->get_caller_uid();
-  }
-
-  if (mask & MAY_CHGRP) {
-    new_gid = mdr->client_request->head.args.setattr.gid;
-  } else {
-    new_gid = mdr->client_request->get_caller_gid();
-  }
-
-  // FIXME: behave with inodes in stray dir
-  // FIXME: behave with hard links
   string path;
 
   if (in->is_stray()){
     path = in->get_projected_inode()->stray_prior_path;
-  }
-  else{
+  } else {
     in->make_path_string(path, false, in->get_projected_parent_dn());
   }
   if (path.length())
     path = path.substr(1);    // drop leading /
 
   if ((mask & (MAY_CHOWN|MAY_CHGRP)) &&
-    !(s->auth_caps.is_capable(path, in->inode.uid, in->inode.gid, in->inode.mode,
-                  new_uid, new_gid, mask))) {
-    respond_to_request(mdr, -EACCES);
+    !(session->auth_caps.is_capable(path, in->inode.uid, in->inode.gid, in->inode.mode,
+                  caller_uid, caller_gid, mask))) {
     return false;
   }
 
-  if (s->auth_caps.is_capable(path, in->inode.uid, in->inode.gid, in->inode.mode,
-			      uid, gid, mask)) {
+  if (session->auth_caps.is_capable(path, in->inode.uid, in->inode.gid, in->inode.mode,
+            caller_uid, caller_gid, mask)) {
     return true;
   }
-
-  // we are not allowed.
-  respond_to_request(mdr, -EACCES);
   return false;
 }
 
+bool Server::check_access(MDRequestRef& mdr, CInode *in, unsigned mask)
+{
+ if (!_check_access(mdr->session, in, MAY_WRITE, mdr->client_request->get_caller_uid(), mdr->client_request->get_caller_gid(),
+        mdr->client_request->head.args.setattr.uid, mdr->client_request->head.args.setattr.gid)){
+    respond_to_request(mdr, -EACCES);
+  }
+  return false;
+}
 
 /** validate_dentry_dir
  *
