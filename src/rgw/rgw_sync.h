@@ -7,6 +7,7 @@
 #include "rgw_http_client.h"
 
 #include "common/RWLock.h"
+#include "common/RefCountedObj.h"
 
 
 #define dout_subsys ceph_subsys_rgw
@@ -22,26 +23,28 @@ struct rgw_mdlog_info {
 
 #define RGW_ASYNC_OPS_MGR_WINDOW 16
 
+class RGWAsyncOpsStack;
 class RGWAsyncOpsManager;
 class AioCompletionNotifier;
 
-class RGWAsyncOp {
-  friend class RGWAsyncOpsManager;
+class RGWAsyncOp : public RefCountedObject {
+  friend class RGWAsyncOpsStack;
 protected:
-  RGWAsyncOpsManager *ops_mgr;
+  RGWAsyncOpsStack *ops_stack;
 
   bool blocked;
+  int retcode;
 
   stringstream error_stream;
 
-  void set_blocked(int flag) { blocked = flag; }
+  void set_blocked(bool flag) { blocked = flag; }
   int yield(int ret) {
     set_blocked(true);
     return ret;
   }
 
 public:
-  RGWAsyncOp(RGWAsyncOpsManager *_ops_mgr) : ops_mgr(_ops_mgr), blocked(false) {}
+  RGWAsyncOp(RGWAsyncOpsStack *_ops_stack) : ops_stack(_ops_stack), blocked(false), retcode(0) {}
   virtual ~RGWAsyncOp() {}
 
   virtual int operate() = 0;
@@ -55,6 +58,48 @@ public:
   }
 
   bool is_blocked() { return blocked; }
+
+  void set_retcode(int r) {
+    retcode = r;
+  }
+};
+
+class RGWAsyncOpsStack {
+  CephContext *cct;
+
+  RGWAsyncOpsManager *ops_mgr;
+
+  list<RGWAsyncOp *> ops;
+  list<RGWAsyncOp *>::iterator pos;
+
+  bool done_flag;
+  bool error_flag;
+  bool blocked_flag;
+
+public:
+  RGWAsyncOpsStack(CephContext *_cct, RGWAsyncOpsManager *_ops_mgr, RGWAsyncOp *start = NULL);
+
+  int operate();
+
+  bool is_done() {
+    return done_flag;
+  }
+  bool is_error() {
+    return error_flag;
+  }
+  bool is_blocked() {
+    return blocked_flag;
+  }
+
+  void set_blocked(bool flag);
+
+  string error_str();
+
+  int call(RGWAsyncOp *next_op, int ret = 0);
+  int unwind(int retcode);
+
+  AioCompletionNotifier *create_completion_notifier();
+  RGWCompletionManager *get_completion_mgr();
 };
 
 class RGWAsyncOpsManager {
@@ -70,10 +115,10 @@ public:
   RGWAsyncOpsManager(CephContext *_cct) : cct(_cct), ops_window(RGW_ASYNC_OPS_MGR_WINDOW) {}
   virtual ~RGWAsyncOpsManager() {}
 
-  int run(list<RGWAsyncOp *>& ops);
-  virtual void report_error(RGWAsyncOp *op);
+  int run(list<RGWAsyncOpsStack *>& ops);
+  virtual void report_error(RGWAsyncOpsStack *op);
 
-  AioCompletionNotifier *create_completion_notifier(RGWAsyncOp *op);
+  AioCompletionNotifier *create_completion_notifier(RGWAsyncOpsStack *stack);
   RGWCompletionManager *get_completion_mgr() { return &completion_mgr; }
 };
 
