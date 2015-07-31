@@ -2959,7 +2959,6 @@ struct object_info_t {
     return get_flag_string(flags);
   }
 
-  osd_reqid_t wrlock_by;   // [head]
   vector<snapid_t> snaps;  // [clone]
 
   uint64_t truncate_seq, truncate_size;

@@ -4256,7 +4256,7 @@ void object_info_t::encode(bufferlist& bl) const
   ::encode(size, bl);
   ::encode(mtime, bl);
   if (soid.snap == CEPH_NOSNAP)
-    ::encode(wrlock_by, bl);
+    ::encode(osd_reqid_t(), bl);  // used to be wrlock_by
   else
     ::encode(snaps, bl);
   ::encode(truncate_seq, bl);
@@ -4293,10 +4293,12 @@ void object_info_t::decode(bufferlist::iterator& bl)
   ::decode(last_reqid, bl);
   ::decode(size, bl);
   ::decode(mtime, bl);
-  if (soid.snap == CEPH_NOSNAP)
+  if (soid.snap == CEPH_NOSNAP) {
+    osd_reqid_t wrlock_by;
     ::decode(wrlock_by, bl);
-  else
+  } else {
     ::decode(snaps, bl);
+  }
   ::decode(truncate_seq, bl);
   ::decode(truncate_size, bl);
 
@@ -4368,7 +4370,6 @@ void object_info_t::dump(Formatter *f) const
   f->dump_stream("local_mtime") << local_mtime;
   f->dump_unsigned("lost", (int)is_lost());
   f->dump_unsigned("flags", (int)flags);
-  f->dump_stream("wrlock_by") << wrlock_by;
   f->open_array_section("snaps");
   for (vector<snapid_t>::const_iterator p = snaps.begin(); p != snaps.end(); ++p)
     f->dump_unsigned("snap", *p);
@@ -4401,9 +4402,7 @@ ostream& operator<<(ostream& out, const object_info_t& oi)
 {
   out << oi.soid << "(" << oi.version
       << " " << oi.last_reqid;
-  if (oi.soid.snap == CEPH_NOSNAP)
-    out << " wrlock_by=" << oi.wrlock_by;
-  else
+  if (oi.soid.snap != CEPH_NOSNAP)
     out << " " << oi.snaps;
   if (oi.flags)
     out << " " << oi.get_flag_string();
