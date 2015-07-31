@@ -403,7 +403,7 @@ int ImageWatcher::release_lock()
     notify_listeners_updated_lock(LOCK_UPDATE_STATE_RELEASING);
 
     RWLock::WLocker md_locker(m_image_ctx.md_lock);
-    r = librbd::_flush(&m_image_ctx);
+    r = m_image_ctx.flush();
     if (r < 0) {
       lderr(cct) << this << " failed to flush: " << cpp_strerror(r) << dendl;
       goto err_cancel_unlock;

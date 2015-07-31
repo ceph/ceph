@@ -185,7 +185,6 @@ namespace librbd {
                                ProgressContext &prog_ctx);
 
   int flush(ImageCtx *ictx);
-  int _flush(ImageCtx *ictx);
   int invalidate_cache(ImageCtx *ictx);
   int metadata_list(ImageCtx *ictx, const string &last, uint64_t max, map<string, bufferlist> *pairs);
   int metadata_get(ImageCtx *ictx, const std::string &key, std::string *value);

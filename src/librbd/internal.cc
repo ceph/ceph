@@ -594,7 +594,7 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
     }
 
     RWLock::WLocker md_locker(ictx->md_lock);
-    r = _flush(ictx);
+    r = ictx->flush();
     if (r < 0) {
       return r;
     }
@@ -1531,7 +1531,7 @@ reprotect_and_return_err:
 
     RWLock::RLocker owner_locker(ictx->owner_lock);
     RWLock::WLocker md_locker(ictx->md_lock);
-    r = _flush(ictx);
+    r = ictx->flush();
     if (r < 0) {
       return r;
     }
@@ -2409,7 +2409,7 @@ reprotect_and_return_err:
     }
 
     if (new_snap) {
-      _flush(ictx);
+      ictx->flush();
     }
     return 0;
   }
@@ -2464,7 +2464,6 @@ reprotect_and_return_err:
       // writes might create new snapshots. Rolling back will replace
       // the current version, so we have to invalidate that too.
       RWLock::WLocker md_locker(ictx->md_lock);
-      ictx->flush_async_operations();
       r = ictx->invalidate_cache();
       if (r < 0) {
 	return r;
@@ -2694,14 +2693,9 @@ reprotect_and_return_err:
       }
 
       ictx->cancel_async_requests();
-      ictx->flush_async_operations();
-
-      if (ictx->object_cacher) {
+      {
         RWLock::RLocker owner_locker(ictx->owner_lock);
-        r = _flush(ictx);
-        if (r < 0) {
-          return r;
-        }
+        r = ictx->flush();
       }
 
       {
@@ -2804,17 +2798,14 @@ reprotect_and_return_err:
     ictx->flush_async_operations();
     ictx->readahead.wait_for_pending();
 
-    int flush_r;
     if (ictx->object_cacher) {
-      flush_r = ictx->shutdown_cache(); // implicitly flushes
-    } else {
-      flush_r = flush(ictx);
-    }
-    if (flush_r< 0) {
-      lderr(ictx->cct) << "error flushing IO: " << cpp_strerror(flush_r)
-                       << dendl;
-      if (r == 0) {
-        r = flush_r;
+      int flush_r = ictx->shutdown_cache(); // implicitly flushes
+      if (flush_r < 0) {
+        lderr(ictx->cct) << "error flushing IO: " << cpp_strerror(flush_r)
+                         << dendl;
+        if (r == 0) {
+          r = flush_r;
+        }
       }
     }
 
@@ -3217,7 +3208,7 @@ reprotect_and_return_err:
     // ensure previous writes are visible to listsnaps
     {
       RWLock::RLocker owner_locker(ictx->owner_lock);
-      _flush(ictx);
+      ictx->flush();
     }
 
     int r = ictx_check(ictx);
@@ -3288,28 +3279,9 @@ reprotect_and_return_err:
     ictx->user_flushed();
     {
       RWLock::RLocker owner_locker(ictx->owner_lock);
-      r = _flush(ictx);
+      r = ictx->flush();
     }
     ictx->perfcounter->inc(l_librbd_flush);
-    return r;
-  }
-
-  int _flush(ImageCtx *ictx)
-  {
-    assert(ictx->owner_lock.is_locked());
-    CephContext *cct = ictx->cct;
-    int r;
-    // flush any outstanding writes
-    if (ictx->object_cacher) {
-      r = ictx->flush_cache();
-    } else {
-      r = ictx->data_ctx.aio_flush();
-      ictx->flush_async_operations();
-    }
-
-    if (r)
-      lderr(cct) << "_flush " << ictx << " r = " << r << dendl;
-
     return r;
   }
 
@@ -3322,8 +3294,6 @@ reprotect_and_return_err:
     if (r < 0) {
       return r;
     }
-
-    ictx->flush_async_operations();
 
     RWLock::RLocker owner_locker(ictx->owner_lock);
     RWLock::WLocker md_locker(ictx->md_lock);

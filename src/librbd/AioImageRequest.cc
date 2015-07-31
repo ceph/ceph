@@ -432,22 +432,10 @@ void AioImageFlush::send_request() {
     }
   }
 
-  // TODO race condition between registering op and submitting to cache
-  //      (might not be flushed -- backport needed)
-  C_AioRequest *flush_ctx = new C_AioRequest(cct, m_aio_comp);
-  m_image_ctx.flush_async_operations(flush_ctx);
+  C_AioRequest *req_comp = new C_AioRequest(cct, m_aio_comp);
+  m_image_ctx.flush(req_comp);
 
   m_aio_comp->init_time(&m_image_ctx, AIO_TYPE_FLUSH);
-  C_AioRequest *req_comp = new C_AioRequest(cct, m_aio_comp);
-  if (m_image_ctx.object_cacher != NULL) {
-    m_image_ctx.flush_cache_aio(req_comp);
-  } else {
-    librados::AioCompletion *rados_completion =
-      librados::Rados::aio_create_completion(req_comp, NULL, rados_ctx_cb);
-    m_image_ctx.data_ctx.aio_flush_async(rados_completion);
-    rados_completion->release();
-  }
-
   m_aio_comp->finish_adding_requests(cct);
   m_aio_comp->put();
 
