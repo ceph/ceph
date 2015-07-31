@@ -23,6 +23,8 @@ libmsg_la_SOURCES += \
 	msg/async/net_handler.cc \
 	msg/async/EventSelect.cc
 
+libmsg_la_LIBADD = $(LIBCOMPRESSOR)
+
 if LINUX
 libmsg_la_SOURCES += msg/async/EventEpoll.cc
 endif
