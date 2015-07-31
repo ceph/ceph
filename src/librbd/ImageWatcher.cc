@@ -389,7 +389,7 @@ bool ImageWatcher::release_lock()
   {
     RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
     RWLock::WLocker md_locker(m_image_ctx.md_lock);
-    librbd::_flush(&m_image_ctx);
+    m_image_ctx.flush();
   }
 
   m_image_ctx.owner_lock.get_write();
