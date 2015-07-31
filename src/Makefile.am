@@ -211,8 +211,7 @@ noinst_HEADERS += \
 	bash_completion/radosgw-admin \
 	mount/canonicalize.c \
 	mount/mtab.c \
-	objclass/objclass.h \
-	porting.h
+	objclass/objclass.h
 
 
 # coverage
