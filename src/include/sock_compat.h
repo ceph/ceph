@@ -1,23 +1,7 @@
+#ifndef CEPH_SOCK_COMPAT_H
+#define CEPH_SOCK_COMPAT_H
 
-#ifndef PORTING_H
-#define PORTING_H 
-#include "acconfig.h"
-
-/* TODO: move these into include/compat.h */
-
-#if defined(DARWIN) 
-#include <sys/socket.h>
-
-/* O_LARGEFILE is not defined/required on OS X */
-#define O_LARGEFILE 0
-
-/* Wonder why this is missing */
-#define PATH_MAX 1024
-
-/* Could be relevant for other platforms */
-#ifndef ERESTART
-#define ERESTART EINTR
-#endif
+#include "include/compat.h"
 
 /*
  * This optimization may not be available on all platforms (e.g. OSX).
@@ -39,5 +23,4 @@
 # endif
 #endif
 
-#endif /* DARWIN */
-#endif /* PORTING_H */
+#endif
