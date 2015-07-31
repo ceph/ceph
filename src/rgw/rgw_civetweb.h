@@ -3,6 +3,7 @@
 
 #ifndef CEPH_RGW_MONGOOSE_H
 #define CEPH_RGW_MONGOOSE_H
+#define TIME_BUF_SIZE 128
 
 #include "rgw_client_io.h"
 
