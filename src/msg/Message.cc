@@ -191,23 +191,17 @@ void Message::encode(uint64_t features)
   header.middle_len = get_middle().length();
   header.data_len = get_data().length();
 
-  footer.flags = CEPH_MSG_FOOTER_COMPLETE;
+  footer.flags |= CEPH_MSG_FOOTER_COMPLETE;
 }
 
 void Message::calc_crc(int crcflags)
 {
-  if (crcflags & MSG_CRC_HEADER)
+  if (crcflags & MSG_CRC_HEADER) {
+    calc_header_crc();
     calc_front_crc();
-
-  if (crcflags & MSG_CRC_HEADER)
-    calc_header_crc();
-  else
-    footer.flags = (unsigned)footer.flags | CEPH_MSG_FOOTER_NOHEADERCRC;
-
-  if (crcflags & MSG_CRC_HEADER)
-    calc_header_crc();
-  else
-    footer.flags = (unsigned)footer.flags | CEPH_MSG_FOOTER_NOHEADERCRC;
+  } else {
+    footer.flags |= CEPH_MSG_FOOTER_NOHEADERCRC;
+  }
 
   if (crcflags & MSG_CRC_DATA) {
     calc_data_crc();
@@ -250,7 +244,7 @@ void Message::calc_crc(int crcflags)
     }
 #endif
   } else {
-    footer.flags = (unsigned)footer.flags | CEPH_MSG_FOOTER_NODATACRC;
+    footer.flags |= CEPH_MSG_FOOTER_NODATACRC;
   }
 }
 
@@ -339,8 +333,7 @@ bool Message::verify_crc(CephContext *cct, int crcflags,
 			bufferlist& data)
 {
   // verify crc
-  if ((crcflags & MSG_CRC_HEADER) != 0 &&
-      (footer.flags & CEPH_MSG_FOOTER_NOHEADERCRC) == 0) {
+  if ((crcflags & MSG_CRC_HEADER) && !(footer.flags & CEPH_MSG_FOOTER_NOHEADERCRC)) {
     __u32 front_crc = front.crc32c(0);
     __u32 middle_crc = middle.crc32c(0);
 
@@ -363,8 +356,7 @@ bool Message::verify_crc(CephContext *cct, int crcflags,
       return true;
     }
   }
-  if ((crcflags & MSG_CRC_DATA) != 0 &&
-      (footer.flags & CEPH_MSG_FOOTER_NODATACRC) == 0) {
+  if ((crcflags & MSG_CRC_DATA) && !(footer.flags & CEPH_MSG_FOOTER_NODATACRC)) {
     __u32 data_crc = data.crc32c(0);
     if (data_crc != footer.data_crc) {
       if (cct) {
