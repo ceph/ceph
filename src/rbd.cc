@@ -771,23 +771,37 @@ static int do_purge_snaps(librbd::Image& image)
 {
   MyProgressContext pc("Removing all snapshots");
   std::vector<librbd::snap_info_t> snaps;
+  bool is_protected = false;
   int r = image.snap_list(snaps);
   if (r < 0) {
     pc.fail();
     return r;
-  }
-
-  for (size_t i = 0; i < snaps.size(); ++i) {
-    r = image.snap_remove(snaps[i].name.c_str());
-    if (r < 0) {
-      pc.fail();
-      return r;
+  } else if (0 == snaps.size()) {
+    return 0;
+  } else {  
+    for (size_t i = 0; i < snaps.size(); ++i) {
+      r = image.snap_is_protected(snaps[i].name.c_str(), &is_protected);      
+      if (r < 0) {
+        pc.fail();
+        return r;
+      } else if (is_protected == true) {
+        pc.fail();
+        cerr << "\r" <<snaps[i].name.c_str()<< " is a protected snap."<< std::endl;
+        return -EBUSY;
+      }
     }
-    pc.update_progress(i + 1, snaps.size());
-  }
+    for (size_t i = 0; i < snaps.size(); ++i) {
+      r = image.snap_remove(snaps[i].name.c_str());
+      if (r < 0) {
+        pc.fail();
+        return r;
+      }
+      pc.update_progress(i + 1, snaps.size());
+    }
 
-  pc.finish();
-  return 0;
+    pc.finish();
+    return 0;
+  }
 }
 
 static int do_protect_snap(librbd::Image& image, const char *snapname)
