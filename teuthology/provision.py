@@ -42,13 +42,14 @@ class Downburst(object):
     A class that provides methods for creating and destroying virtual machine
     instances using downburst: https://github.com/ceph/downburst
     """
-    def __init__(self, name, os_type, os_version, status=None):
+    def __init__(self, name, os_type, os_version, status=None, user='ubuntu'):
         self.name = name
         self.os_type = os_type
         self.os_version = os_version
         self.status = status or get_status(self.name)
         self.config_path = None
         self.user_path = None
+        self.user = user
         self.host = decanonicalize_hostname(self.status['vm_host']['name'])
         self.executable = downburst_executable()
 
@@ -169,7 +170,7 @@ class Downburst(object):
         self.config_path = config_fd.name
 
         user_info = {
-            'user': 'ubuntu',
+            'user': self.user,
         }
         user_fd = tempfile.NamedTemporaryFile(delete=False)
         yaml.safe_dump(user_info, user_fd)
