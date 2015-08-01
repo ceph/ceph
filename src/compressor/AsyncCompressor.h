@@ -19,8 +19,22 @@
 
 #include "include/atomic.h"
 #include "include/str_list.h"
+#include "common/perf_counters.h"
 #include "Compressor.h"
 #include "common/WorkQueue.h"
+
+enum {
+  l_compressor_first = 95000,
+  l_compressor_compress_requests,
+  l_compressor_decompress_requests,
+  l_compressor_compress_bytes,
+  l_compressor_decompress_bytes,
+  l_compressor_error_results,
+  l_compressor_nonwait_results,
+  l_compressor_nonblock_pending_results,
+  l_compressor_block_wait_results_lat,
+  l_compressor_last,
+};
 
 
 class AsyncCompressor {
@@ -28,8 +42,8 @@ class AsyncCompressor {
   Compressor *compressor;
   CephContext *cct;
   atomic_t job_id;
-  vector<int> coreids;
   ThreadPool compress_tp;
+  PerfCounters *perf_logger;
 
   enum {
     WAIT,
@@ -98,6 +112,7 @@ class AsyncCompressor {
         assert(item->status.compare_and_swap(WORKING, DONE));
       } else {
         item->status.set(ERROR);
+        async_compressor->perf_logger->inc(l_compressor_error_results);
       }
     }
     void _process_finish(Job *item) {}
@@ -109,12 +124,11 @@ class AsyncCompressor {
 
  public:
   AsyncCompressor(CephContext *c);
-  virtual ~AsyncCompressor() {}
-
-  int get_cpuid(int id) {
-    if (coreids.empty())
-      return -1;
-    return coreids[id % coreids.size()];
+  virtual ~AsyncCompressor() {
+    if (perf_logger) {
+      cct->get_perfcounters_collection()->remove(perf_logger);
+      delete perf_logger;
+    }
   }
 
   void init();
