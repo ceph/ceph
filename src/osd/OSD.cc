@@ -1689,9 +1689,9 @@ bool OSD::asok_command(string command, cmdmap_t& cmdmap, string format,
     } else {
       op_tracker.dump_historic_ops(f);
     }
-  } else if (command == "dump_shard_stats") { 
+  } else if (command == "dump_opwq_thread_stats") { 
       op_shardedwq.dump_worker_stats(f, false);
-  } else if (command == "dump_shard_stats_and_clear") { 
+  } else if (command == "dump_opwq_thread_stats_and_clear") { 
       op_shardedwq.dump_worker_stats(f, true);
   } else if (command == "dump_op_pq_state") {
     f->open_object_section("pq");
@@ -2012,13 +2012,13 @@ void OSD::final_init()
 				     asok_hook,
 				     "show slowest recent ops");
   assert(r == 0);
-  r = admin_socket->register_command("dump_shard_stats", "dump_shard_stats",
+  r = admin_socket->register_command("dump_opwq_thread_stats", "dump_opwq_thread_stats",
 				     asok_hook,
-				     "dump shard worker stats");
+				     "dump OpWQ thread worker stats");
   assert(r == 0);
-  r = admin_socket->register_command("dump_shard_stats_and_clear", "dump_shard_stats_and_clear",
+  r = admin_socket->register_command("dump_opwq_thread_stats_and_clear", "dump_opwq_thread_stats_and_clear",
 				     asok_hook,
-				     "dump shard worker stats, clearing them after");
+				     "dump OpWQ thread  worker stats, clearing them after");
   assert(r == 0);
   r = admin_socket->register_command("dump_op_pq_state", "dump_op_pq_state",
 				     asok_hook,
@@ -8223,8 +8223,8 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb ) 
       return;
     }
   }
-  sdata->ql_accum += sdata->pqueue.length(); 
   pair<PGRef, PGQueueable> item = sdata->pqueue.dequeue();
+  sdata->ql_accum += sdata->pqueue.empty() ? 1 : 2; 
   
   sdata->pg_for_processing[&*(item.first)].push_back(item.second);
   sdata->sdata_op_ordering_lock.Unlock();
