@@ -259,7 +259,7 @@ enum {
   OPT_MDLOG_LIST,
   OPT_MDLOG_TRIM,
   OPT_MDLOG_FETCH,
-  OPT_MDLOG_SYNC,
+  OPT_MDLOG_SYNC_STATUS,
   OPT_BILOG_LIST,
   OPT_BILOG_TRIM,
   OPT_DATALOG_LIST,
@@ -273,7 +273,7 @@ enum {
   OPT_REPLICALOG_DELETE,
 };
 
-static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
+static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_cmd, bool *need_more)
 {
   *need_more = false;
   // NOTE: please keep the checks in alphabetical order !!!
@@ -475,8 +475,16 @@ static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
       return OPT_MDLOG_LIST;
     if (strcmp(cmd, "trim") == 0)
       return OPT_MDLOG_TRIM;
-    if (strcmp(cmd, "sync") == 0)
-      return OPT_MDLOG_SYNC;
+    if (strcmp(cmd, "fetch") == 0)
+      return OPT_MDLOG_FETCH;
+    if (strcmp(cmd, "sync") == 0) {
+      *need_more = true;
+      return 0;
+    }
+  } else if ((strcmp(prev_prev_cmd, "mdlog") == 0) &&
+	     (strcmp(prev_cmd, "sync") == 0)) {
+    if (strcmp(cmd, "status") == 0)
+      return OPT_MDLOG_SYNC_STATUS;
   } else if (strcmp(prev_cmd, "bilog") == 0) {
     if (strcmp(cmd, "list") == 0)
       return OPT_BILOG_LIST;
@@ -1371,9 +1379,10 @@ int main(int argc, char **argv)
   }
   else {
     const char *prev_cmd = NULL;
+    const char *prev_prev_cmd = NULL;
     std::vector<const char*>::iterator i ;
     for (i = args.begin(); i != args.end(); ++i) {
-      opt_cmd = get_cmd(*i, prev_cmd, &need_more);
+      opt_cmd = get_cmd(*i, prev_cmd, prev_prev_cmd, &need_more);
       if (opt_cmd < 0) {
 	cerr << "unrecognized arg " << *i << std::endl;
 	return usage();
@@ -1382,6 +1391,7 @@ int main(int argc, char **argv)
 	++i;
 	break;
       }
+      prev_prev_cmd = prev_cmd;
       prev_cmd = *i;
     }
 
@@ -2852,13 +2862,13 @@ next:
 
     ret = sync.fetch();
     if (ret < 0) {
-      cerr << "ERROR: sync.clone_shards() returned ret=" << ret << std::endl;
+      cerr << "ERROR: sync.fetch() returned ret=" << ret << std::endl;
       return -ret;
     }
 
   }
 
-  if (opt_cmd == OPT_MDLOG_SYNC) {
+  if (opt_cmd == OPT_MDLOG_SYNC_STATUS) {
     RGWMetadataSync sync(store);
 
     int ret = sync.init();
@@ -2867,11 +2877,16 @@ next:
       return -ret;
     }
 
-    ret = sync.clone_shards();
+    RGWMetaSyncGlobalStatus sync_status;
+
+    ret = sync.get_sync_status(&sync_status);
     if (ret < 0) {
-      cerr << "ERROR: sync.clone_shards() returned ret=" << ret << std::endl;
+      cerr << "ERROR: sync.get_sync_status() returned ret=" << ret << std::endl;
       return -ret;
     }
+
+    encode_json("sync_status", sync_status, formatter);
+    formatter->flush(cout);
 
   }
 
