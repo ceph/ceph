@@ -1,3 +1,4 @@
+#!@PYTHON_EXECUTABLE@
 # -*- mode:python -*-
 # vim: ts=4 sw=4 smarttab expandtab
 #
@@ -21,6 +22,9 @@ Foundation.  See file COPYING.
 import os
 import sys
 import platform
+
+CEPH_GIT_VER="@CEPH_GIT_VER@"
+CEPH_GIT_NICE_VER="@CEPH_GIT_NICE_VER@"
 
 # Make life easier on developers:
 # If in src/, and .libs and pybind exist here, assume we're running
