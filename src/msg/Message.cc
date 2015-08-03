@@ -899,8 +899,6 @@ Message *decode_message(CephContext *cct, int crcflags, bufferlist::iterator& p)
   ::decode(fr, p);
   ::decode(mi, p);
   ::decode(da, p);
-  if (!Message::verify_crc(cct, crcflags, h, f, fr, mi, da))
-    return NULL;
   return decode_message(cct, h, f, fr, mi, da);
 }
 
