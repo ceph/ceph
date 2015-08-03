@@ -578,6 +578,11 @@ endif(${WITH_MDS})
 
 add_subdirectory(erasure-code)
 
+set(crushtool_srcs
+    tools/crushtool.cc)
+add_executable(crushtool ${crushtool_srcs})
+target_link_libraries(crushtool global)
+
 # Support/Tools
 add_subdirectory(gmock)
 add_subdirectory(test)
