@@ -2912,7 +2912,19 @@ next:
       return -ret;
     }
 
+    formatter->open_object_section("result");
     encode_json("sync_status", sync_status, formatter);
+
+    if (shard_id >= 0) {
+      rgw_sync_marker marker;
+      ret = sync.get_shard_sync_marker(shard_id, &marker);
+      if (ret < 0) {
+	cerr << "ERROR: cannot read shard status for shard_id=" << shard_id << std::endl;
+      } else {
+	::encode_json("shard_marker", marker, formatter);
+      }
+    }
+    formatter->close_section();
     formatter->flush(cout);
 
   }
