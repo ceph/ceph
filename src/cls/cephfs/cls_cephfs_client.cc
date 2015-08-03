@@ -54,6 +54,7 @@ int ClsCephFSClient::fetch_inode_accumulate_result(
   librados::IoCtx &ctx,
   const std::string &oid,
   inode_backtrace_t *backtrace,
+  ceph_file_layout *layout,
   AccumulateResult *result)
 {
   assert(backtrace != NULL);
@@ -76,12 +77,16 @@ int ClsCephFSClient::fetch_inode_accumulate_result(
   int parent_r = 0;
   bufferlist parent_bl;
   op.getxattr("parent", &parent_bl, &parent_r);
+  op.set_op_flags2(librados::OP_FAILOK);
+
+  int layout_r = 0;
+  bufferlist layout_bl;
+  op.getxattr("layout", &layout_bl, &layout_r);
+  op.set_op_flags2(librados::OP_FAILOK);
 
   bufferlist op_bl;
   int r = ctx.operate(oid, &op, &op_bl);
-  if (r < 0 && r != -ENODATA) {
-    // ENODATA acceptable from parent getxattr (just means there happens
-    // not to be a backtrace)
+  if (r < 0) {
     return r;
   }
 
@@ -122,6 +127,16 @@ int ClsCephFSClient::fetch_inode_accumulate_result(
       backtrace->decode(q);
     } catch (buffer::error &e) {
       //dout(4) << "Corrupt backtrace on '" << oid << "': " << e << dendl;
+      return -EINVAL;
+    }
+  }
+
+  // Deserialize layout
+  if (layout_bl.length()) {
+    try {
+      bufferlist::iterator q = layout_bl.begin();
+      ::decode(*layout, q);
+    } catch (buffer::error &e) {
       return -EINVAL;
     }
   }
