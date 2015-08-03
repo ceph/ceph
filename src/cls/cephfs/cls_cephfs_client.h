@@ -20,6 +20,7 @@ class ClsCephFSClient
       librados::IoCtx &ctx,
       const std::string &oid,
       inode_backtrace_t *backtrace,
+      ceph_file_layout *layout,
       AccumulateResult *result);
 };
 
