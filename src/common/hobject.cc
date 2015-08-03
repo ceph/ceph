@@ -130,6 +130,18 @@ void hobject_t::decode(bufferlist::iterator& bl)
   if (struct_v >= 4) {
     ::decode(nspace, bl);
     ::decode(pool, bl);
+    // for compat with hammer, which did not handle the transition
+    // from pool -1 -> pool INT64_MIN for MIN properly.  this object
+    // name looks a bit like a pgmeta object for the meta collection,
+    // but those do not ever exist (and is_pgmeta() pool >= 0).
+    if (pool == -1 &&
+	snap == 0 &&
+	hash == 0 &&
+	!max &&
+	oid.name.empty()) {
+      pool = INT64_MIN;
+      assert(is_min());
+    }
   }
   DECODE_FINISH(bl);
   build_filestore_key_cache();
@@ -231,6 +243,16 @@ void ghobject_t::decode(bufferlist::iterator& bl)
   if (struct_v >= 4) {
     ::decode(hobj.nspace, bl);
     ::decode(hobj.pool, bl);
+    // for compat with hammer, which did not handle the transition from
+    // pool -1 -> pool INT64_MIN for MIN properly (see hobject_t::decode()).
+    if (hobj.pool == -1 &&
+	hobj.snap == 0 &&
+	hobj.hash == 0 &&
+	!hobj.max &&
+	hobj.oid.name.empty()) {
+      hobj.pool = INT64_MIN;
+      assert(hobj.is_min());
+    }
   }
   if (struct_v >= 5) {
     ::decode(generation, bl);
