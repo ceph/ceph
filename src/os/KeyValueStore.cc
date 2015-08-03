@@ -389,13 +389,22 @@ int KeyValueStore::BufferTransaction::remove_buffer_keys(
 {
   uniq_id uid = make_pair(strip_header->cid, strip_header->oid);
   map< uniq_id, map<pair<string, string>, bufferlist> >::iterator obj_it = buffers.find(uid);
+  set<string> buffered_keys;
   if ( obj_it != buffers.end() ) {
+    // TODO: Avoid use empty bufferlist to indicate the key is removed
     for (set<string>::iterator iter = keys.begin(); iter != keys.end(); ++iter) {
       obj_it->second[make_pair(prefix, *iter)] = bufferlist();
     }
+    // TODO: Avoid collect all buffered keys when remove keys
+    if (strip_header->header->parent) {
+      for (map<pair<string, string>, bufferlist>::iterator iter = obj_it->second.begin();
+           iter != obj_it->second.end(); ++iter) {
+        buffered_keys.insert(iter->first.second);
+      }
+    }
   }
 
-  return store->backend->rm_keys(strip_header->header, prefix, keys, t);
+  return store->backend->rm_keys(strip_header->header, prefix, buffered_keys, keys, t);
 }
 
 void KeyValueStore::BufferTransaction::clear_buffer_keys(
