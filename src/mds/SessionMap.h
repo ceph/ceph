@@ -301,6 +301,8 @@ public:
     completed_requests_dirty = false;
   }
 
+  bool check_access(CInode *in, unsigned mask, int caller_uid, int caller_gid, int setattr_uid, int setattr_gid);
+
 
   Session() : 
     state(STATE_CLOSED), state_seq(0), importing_count(0),
