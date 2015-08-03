@@ -56,7 +56,6 @@ PACKAGES['ceph']['rpm'] = [
     'ceph',
     'ceph-fuse',
     'cephfs-java',
-    'rest-bench',
     'libcephfs_jni1',
     'libcephfs1',
     'librados2',
