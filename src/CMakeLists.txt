@@ -337,6 +337,7 @@ add_library(librados ${CEPH_SHARED} ${librados_srcs}
   $<TARGET_OBJECTS:common_util_obj>)
 add_dependencies(librados osdc)
 target_link_libraries(librados PRIVATE osdc osd os global common cls_lock_client
+  ${BLKID_LIBRARIES}
   ${CRYPTO_LIBS} ${EXTRALIBS} ${TCMALLOC_LIBS})
 if(${ENABLE_SHARED})
   set_target_properties(librados PROPERTIES OUTPUT_NAME rados VERSION 2.0.0
