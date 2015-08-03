@@ -16,7 +16,9 @@ if [ -z "${CEPH_VSTART_WRAPPER}" ]; then
     PATH=$(pwd):$PATH
 fi
 
-export PYTHONPATH=./pybind
+[ -z "$PYBIND" ] && PYBIND=./pybind
+
+export PYTHONPATH=$PYBIND
 export LD_LIBRARY_PATH=$CEPH_LIB
 export DYLD_LIBRARY_PATH=$LD_LIBRARY_PATH
 
@@ -315,11 +317,12 @@ echo "ip $IP"
 echo "port $PORT"
 
 
+[ -z $CEPH_ADM ] && CEPH_ADM=$CEPH_BIN/ceph
 
 if [ "$cephx" -eq 1 ]; then
-    CEPH_ADM="$CEPH_BIN/ceph -c $conf_fn -k $keyring_fn"
+    CEPH_ADM="$CEPH_ADM -c $conf_fn -k $keyring_fn"
 else
-    CEPH_ADM="$CEPH_BIN/ceph -c $conf_fn"
+    CEPH_ADM="$CEPH_ADM -c $conf_fn"
 fi
 
 MONS=""
@@ -422,6 +425,7 @@ $extra_conf
         mon osd allow primary affinity = true
         mon reweight min pgs per osd = 4
         mon osd prime pg temp = true
+        crushtool = $CEPH_BIN/crushtool
 $DAEMONOPTS
 $CMONDEBUG
 $extra_conf
