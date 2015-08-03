@@ -130,6 +130,15 @@ void hobject_t::decode(bufferlist::iterator& bl)
   if (struct_v >= 4) {
     ::decode(nspace, bl);
     ::decode(pool, bl);
+    // newer OSDs have a different hobject_t::get_min(); decode it properly.
+    if (pool == INT64_MIN &&
+	hash == 0 &&
+	snap == 0 &&
+	!max &&
+	oid.name.empty()) {
+      pool = -1;
+      assert(is_min());
+    }
   }
   DECODE_FINISH(bl);
   build_filestore_key_cache();
@@ -226,6 +235,15 @@ void ghobject_t::decode(bufferlist::iterator& bl)
   if (struct_v >= 4) {
     ::decode(hobj.nspace, bl);
     ::decode(hobj.pool, bl);
+    // newer OSDs have a different hobject_t::get_min(); decode it properly.
+    if (hobj.pool == INT64_MIN &&
+	hobj.hash == 0 &&
+	hobj.snap == 0 &&
+	!hobj.max &&
+	hobj.oid.name.empty()) {
+      hobj.pool = -1;
+      assert(hobj.is_min());
+    }
   }
   if (struct_v >= 5) {
     ::decode(generation, bl);
