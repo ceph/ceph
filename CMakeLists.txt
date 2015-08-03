@@ -207,6 +207,9 @@ endif(WITH_XIO)
 #option for RGW
 option(WITH_RADOSGW "Rados Gateway is enabled" ON)
 
+#option for CephFS
+option(WITH_CEPHFS "CephFS is enabled" ON)
+
 # Now create a useable config.h
 configure_file(
   ${PROJECT_SOURCE_DIR}/src/include/config-h.in.cmake
