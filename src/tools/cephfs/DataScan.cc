@@ -491,12 +491,17 @@ int DataScan::scan_inodes()
 
     AccumulateResult accum_res;
     inode_backtrace_t backtrace;
+    ceph_file_layout loaded_layout = g_default_file_layout;
     int r = ClsCephFSClient::fetch_inode_accumulate_result(
-        data_io, oid, &backtrace, &accum_res);
+        data_io, oid, &backtrace, &loaded_layout, &accum_res);
     
     if (r < 0) {
       dout(4) << "Unexpected error loading accumulated metadata from '"
               << oid << "': " << cpp_strerror(r) << dendl;
+      // FIXME: this creates situation where if a client has a corrupt
+      // backtrace/layout, we will fail to inject it.  We should (optionally)
+      // proceed if the backtrace/layout is corrupt but we have valid
+      // accumulated metadata.
       continue;
     }
 
@@ -504,6 +509,11 @@ int DataScan::scan_inodes()
     uint64_t file_size = 0;
     uint32_t chunk_size = g_default_file_layout.fl_object_size;
     bool have_backtrace = !(backtrace.ancestors.empty());
+
+    // This is the layout we will use for injection, populated either
+    // from loaded_layout or from best guesses
+    ceph_file_layout guessed_layout;
+    guessed_layout.fl_pg_pool = data_pool_id;
 
     // Calculate file_size, guess chunk_size
     if (accum_res.ceiling_obj_index > 0) {
@@ -515,7 +525,27 @@ int DataScan::scan_inodes()
         chunk_size = accum_res.max_obj_size;
       }
 
-      file_size = chunk_size * accum_res.ceiling_obj_index
+      if (loaded_layout.fl_pg_pool == uint32_t(-1)) {
+        // If no stashed layout was found, guess it
+        guessed_layout.fl_object_size = chunk_size;
+        guessed_layout.fl_stripe_unit = chunk_size;
+      } else if (loaded_layout.fl_object_size < accum_res.max_obj_size) {
+        // If the max size seen exceeds what the stashed layout claims, then
+        // disbelieve it.  Guess instead.
+        dout(4) << "bogus xattr layout on 0x" << std::hex << obj_name_ino
+                << std::dec << ", ignoring in favour of best guess" << dendl;
+        guessed_layout.fl_object_size = chunk_size;
+        guessed_layout.fl_stripe_unit = chunk_size;
+      } else {
+        // We have a stashed layout that we can't disprove, so apply it
+        guessed_layout = loaded_layout;
+        // User might have transplanted files from a pool with a different
+        // ID, so whatever the loaded_layout says, we'll force the injected
+        // layout to point to the pool we really read from
+        guessed_layout.fl_pg_pool = data_pool_id;
+      }
+
+      file_size = guessed_layout.fl_object_size * accum_res.ceiling_obj_index
                   + accum_res.ceiling_obj_size;
     } else {
       file_size = accum_res.ceiling_obj_size;
