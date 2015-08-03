@@ -3285,14 +3285,12 @@ int ReplicatedPG::do_tmapup(OpContext *ctx, bufferlist::iterator& bp, OSDOp& osd
   return result;
 }
 
+//EFBIG if attempt to WRITE/WRITEFULL/TRUNCATE beyond max, and length 0 writes are allowed.
 static int check_offset_and_length(uint64_t offset, uint64_t length, uint64_t max)
 {
-  if (offset >= max ||
-      length > max ||
-      offset + length > max)
-    return -EFBIG;
-
-  return 0;
+  if (offset + length < max || (offset + length == max && length) )
+    return 0;
+  return -EFBIG;
 }
 
 struct FillInExtent : public Context {
