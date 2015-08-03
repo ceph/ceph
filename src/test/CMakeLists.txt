@@ -206,31 +206,33 @@ target_link_libraries(smalliobenchdumb librados boost_program_options os global
   ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS} ${TCMALLOC_LIBS})
 
 # smalliobenchrbd
-set(smalliobenchrbd_srcs
-  bench/small_io_bench_rbd.cc
-  bench/rbd_backend.cc
-  bench/detailed_stat_collector.cc
-  bench/bencher.cc
-  ${CMAKE_SOURCE_DIR}/src/common/TextTable.cc
-  ${CMAKE_SOURCE_DIR}/src/common/secret.c
-)
-add_executable(smalliobenchrbd
-  ${smalliobenchrbd_srcs}
-  $<TARGET_OBJECTS:heap_profiler_objs>
+if (${WITH_RBD})
+  set(smalliobenchrbd_srcs
+    bench/small_io_bench_rbd.cc
+    bench/rbd_backend.cc
+    bench/detailed_stat_collector.cc
+    bench/bencher.cc
+    ${CMAKE_SOURCE_DIR}/src/common/TextTable.cc
+    ${CMAKE_SOURCE_DIR}/src/common/secret.c
   )
-target_link_libraries(smalliobenchrbd
-  librbd
-  librados
-  os
-  global
-  boost_program_options
-  blkid
-  udev
-  ${BLKID_LIBRARIES}
-  ${CMAKE_DL_LIBS}
-  ${TCMALLOC_LIBS}
-  keyutils
-  )
+  add_executable(smalliobenchrbd
+    ${smalliobenchrbd_srcs}
+    $<TARGET_OBJECTS:heap_profiler_objs>
+    )
+  target_link_libraries(smalliobenchrbd
+    librbd
+    librados
+    os
+    global
+    boost_program_options
+    blkid
+    udev
+    ${BLKID_LIBRARIES}
+    ${CMAKE_DL_LIBS}
+    ${TCMALLOC_LIBS}
+    keyutils
+    )
+endif (${WITH_RBD})
 
 # tpbench
 set(tpbench_srcs
