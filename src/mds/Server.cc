@@ -2106,34 +2106,9 @@ void Server::handle_slave_auth_pin_ack(MDRequestRef& mdr, MMDSSlaveRequest *ack)
  * by mask on the given inode, based on the capability in the mdr's
  * session.
  */
-bool Server::_check_access(Session *session, CInode *in, unsigned mask, int caller_uid, int caller_gid, int setattr_uid, int setattr_gid)
-{
-  string path;
-
-  if (in->is_stray()){
-    path = in->get_projected_inode()->stray_prior_path;
-  } else {
-    in->make_path_string(path, false, in->get_projected_parent_dn());
-  }
-  if (path.length())
-    path = path.substr(1);    // drop leading /
-
-  if ((mask & (MAY_CHOWN|MAY_CHGRP)) &&
-    !(session->auth_caps.is_capable(path, in->inode.uid, in->inode.gid, in->inode.mode,
-                  caller_uid, caller_gid, mask))) {
-    return false;
-  }
-
-  if (session->auth_caps.is_capable(path, in->inode.uid, in->inode.gid, in->inode.mode,
-            caller_uid, caller_gid, mask)) {
-    return true;
-  }
-  return false;
-}
-
 bool Server::check_access(MDRequestRef& mdr, CInode *in, unsigned mask)
 {
- if (!_check_access(mdr->session, in, MAY_WRITE, mdr->client_request->get_caller_uid(), mdr->client_request->get_caller_gid(),
+ if (!mdr->session->check_access(in, MAY_WRITE, mdr->client_request->get_caller_uid(), mdr->client_request->get_caller_gid(),
         mdr->client_request->head.args.setattr.uid, mdr->client_request->head.args.setattr.gid)){
     respond_to_request(mdr, -EACCES);
   }
