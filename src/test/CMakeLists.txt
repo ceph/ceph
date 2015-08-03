@@ -206,31 +206,33 @@ target_link_libraries(smalliobenchdumb librados boost_program_options os global
   ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS} ${TCMALLOC_LIBS})
 
 # smalliobenchrbd
-set(smalliobenchrbd_srcs
-  bench/small_io_bench_rbd.cc
-  bench/rbd_backend.cc
-  bench/detailed_stat_collector.cc
-  bench/bencher.cc
-  ${CMAKE_SOURCE_DIR}/src/common/TextTable.cc
-  ${CMAKE_SOURCE_DIR}/src/common/secret.c
-)
-add_executable(smalliobenchrbd
-  ${smalliobenchrbd_srcs}
-  $<TARGET_OBJECTS:heap_profiler_objs>
+if (${WITH_RBD})
+  set(smalliobenchrbd_srcs
+    bench/small_io_bench_rbd.cc
+    bench/rbd_backend.cc
+    bench/detailed_stat_collector.cc
+    bench/bencher.cc
+    ${CMAKE_SOURCE_DIR}/src/common/TextTable.cc
+    ${CMAKE_SOURCE_DIR}/src/common/secret.c
   )
-target_link_libraries(smalliobenchrbd
-  librbd
-  librados
-  os
-  global
-  boost_program_options
-  blkid
-  udev
-  ${BLKID_LIBRARIES}
-  ${CMAKE_DL_LIBS}
-  ${TCMALLOC_LIBS}
-  keyutils
-  )
+  add_executable(smalliobenchrbd
+    ${smalliobenchrbd_srcs}
+    $<TARGET_OBJECTS:heap_profiler_objs>
+    )
+  target_link_libraries(smalliobenchrbd
+    librbd
+    librados
+    os
+    global
+    boost_program_options
+    blkid
+    udev
+    ${BLKID_LIBRARIES}
+    ${CMAKE_DL_LIBS}
+    ${TCMALLOC_LIBS}
+    keyutils
+    )
+endif (${WITH_RBD})
 
 # tpbench
 set(tpbench_srcs
@@ -1571,7 +1573,7 @@ if(${WITH_CEPHFS})
   set_target_properties(test_libcephfs PROPERTIES COMPILE_FLAGS
     ${UNITTEST_CXX_FLAGS})
   target_link_libraries(test_libcephfs
-    libcephfs
+    cephfs
     ${UNITTEST_LIBS}
     ${EXTRALIBS}
     ${TCMALLOC_LIBS}
@@ -1776,9 +1778,9 @@ if(${WITH_CEPHFS})
   )
   target_link_libraries(test_c_headers
     librados
-    rados
-    libcephfs
+    cephfs
     ${EXTRALIBS}
+    ${BLKID_LIBRARIES}
     ${TCMALLOC_LIBS}
     ${CMAKE_DL_LIBS}
     )

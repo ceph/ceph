@@ -100,10 +100,10 @@ endif (WITH_RADOSGW)
 # cls_cephfs
 if (WITH_CEPHFS)
   add_library(cls_cephfs SHARED
-    rgw/cls_cephfs.cc)
+    cephfs/cls_cephfs.cc)
   set_target_properties(cls_cephfs PROPERTIES VERSION "1.0.0" SOVERSION "1")
   install(TARGETS cls_cephfs DESTINATION lib/rados-classes)
 
   add_library(cls_cephfs_client
-    rgw/cls_cephfs_client.cc)
+    cephfs/cls_cephfs_client.cc)
 endif (WITH_CEPHFS)
