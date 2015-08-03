@@ -117,6 +117,9 @@ set(HAVE_LIBFUSE ${FUSE_FOUND})
 CHECK_FUNCTION_EXISTS(fuse_getgroups HAVE_FUSE_GETGROUPS)
 endif(${WITH_FUSE})
 
+find_package(blkid REQUIRED)
+set(HAVE_LIBBLKID ${BLKID_FOUND})
+
 # probably fuse etc need this -- how to check? XXX
 option(WITH_MDS "MDS is here" ON)
 
@@ -129,10 +132,6 @@ option(WITH_KVS "Key value store is here" ON)
 
 # remote block storage
 option(WITH_RBD "Remote block storage is here" ON)
-if(${WITH_RBD})
-find_package(blkid REQUIRED)
-set(HAVE_LIBBLKID ${BLKID_FOUND})
-endif(${WITH_RBD})
 
 option(WITH_LEVELDB "LevelDB is here" ON)
 if(${WITH_LEVELDB})
