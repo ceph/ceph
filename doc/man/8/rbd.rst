@@ -87,16 +87,16 @@ Parameters
 
    Specifies the username (without the ``client.`` prefix) to use with the map command.
 
-.. option:: --keyfile filename
-
-   Specifies a file containing the secret to use with the map command.
-   If not specified, ``client.admin`` will be used by default.
-
 .. option:: --keyring filename
 
    Specifies a keyring file containing a secret for the specified user
    to use with the map command.  If not specified, the default keyring
    locations will be searched.
+
+.. option:: --keyfile filename
+
+   Specifies a file containing the secret key of ``--id user`` to use with the map command.
+   This option is overridden by ``--keyring`` if the latter is also specified.
 
 .. option:: --shared lock-tag
 
