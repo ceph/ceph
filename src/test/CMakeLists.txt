@@ -1571,7 +1571,7 @@ if(${WITH_CEPHFS})
   set_target_properties(test_libcephfs PROPERTIES COMPILE_FLAGS
     ${UNITTEST_CXX_FLAGS})
   target_link_libraries(test_libcephfs
-    libcephfs
+    cephfs
     ${UNITTEST_LIBS}
     ${EXTRALIBS}
     ${TCMALLOC_LIBS}
@@ -1776,9 +1776,9 @@ if(${WITH_CEPHFS})
   )
   target_link_libraries(test_c_headers
     librados
-    rados
-    libcephfs
+    cephfs
     ${EXTRALIBS}
+    ${BLKID_LIBRARIES}
     ${TCMALLOC_LIBS}
     ${CMAKE_DL_LIBS}
     )
