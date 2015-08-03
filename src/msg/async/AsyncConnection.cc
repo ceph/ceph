@@ -2351,6 +2351,9 @@ void AsyncConnection::prepare_send_message(uint64_t features, Message *m, buffer
     ldout(async_msgr->cct, 20) << __func__ << " half-reencoding features "
                                << features << " " << m << " " << *m << dendl;
 
+  int r = m->ready_compress(async_msgr->cct, async_msgr->compressor);
+  assert(r >= 0);
+
   // encode and copy out of *m
   m->encode(features);
   m->calc_crc(async_msgr->crcflags);
@@ -2371,14 +2374,6 @@ int AsyncConnection::write_message(Message *m, bufferlist& bl)
     m->get();
   }
 
-  int r = m->ready_compress(async_msgr->cct, async_msgr->compressor);
-  assert(r >= 0);
-  if (r > 0) {
-    bl.clear();
-    bl.append(m->get_payload());
-    bl.append(m->get_middle());
-    bl.append(m->get_data());
-  }
   m->calc_header_crc();
 
   ceph_msg_header& header = m->get_header();

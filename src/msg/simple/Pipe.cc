@@ -1792,12 +1792,13 @@ void Pipe::writer()
 	  ldout(msgr->cct,20) << "writer half-reencoding " << m->get_seq() << " features " << features
 			      << " " << m << " " << *m << dendl;
 
-	// encode and copy out of *m
-	m->encode(features);
-        m->calc_crc(msgr->crcflags);
-
         int r = m->ready_compress(msgr->cct, msgr->compressor);
         assert(r >= 0);
+
+	// encode and copy out of *m
+        m->encode(features);
+        m->calc_crc(msgr->crcflags);
+
 	// prepare everything
 	const ceph_msg_header& header = m->get_header();
 	const ceph_msg_footer& footer = m->get_footer();
