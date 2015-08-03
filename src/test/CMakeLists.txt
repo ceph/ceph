@@ -905,6 +905,12 @@ target_link_libraries(unittest_subprocess
 set_target_properties(unittest_subprocess PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 
+# unittest_pageset
+add_executable(unittest_pageset test_pageset.cc)
+target_link_libraries(unittest_pageset ${UNITTEST_LIBS})
+set_target_properties(unittest_pageset PROPERTIES COMPILE_FLAGS
+  ${UNITTEST_CXX_FLAGS})
+
 if(${WITH_RADOSGW})
   # test_cors
   set(test_cors_srcs test_cors.cc)

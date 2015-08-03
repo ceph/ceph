@@ -200,6 +200,11 @@ ceph_test_snap_mapper_LDADD = $(LIBOSD) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 ceph_test_snap_mapper_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_test_snap_mapper
 
+unittest_pageset_SOURCES = test/test_pageset.cc
+unittest_pageset_LDADD = $(UNITTEST_LDADD)
+unittest_pageset_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+check_TESTPROGRAMS += unittest_pageset
+
 endif # WITH_OSD
 
 if WITH_SLIBROCKSDB
