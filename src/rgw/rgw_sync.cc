@@ -80,7 +80,7 @@ int RGWRemoteMetaLog::init()
     return ret;
   }
 
-  ret = status_manager.init();
+  ret = status_manager.init(log_info.num_shards);
   if (ret < 0) {
     ldout(store->ctx(), 0) << "failed in status_manager.init() ret=" << ret << dendl;
     return ret;
@@ -190,8 +190,10 @@ static void _aio_completion_notifier_cb(librados::completion_t cb, void *arg)
 #define CLONE_OPS_WINDOW 16
 
 
-int RGWMetaSyncStatusManager::init()
+int RGWMetaSyncStatusManager::init(int _num_shards)
 {
+  num_shards = _num_shards;
+
   const char *log_pool = store->get_zone_params().log_pool.name.c_str();
   librados::Rados *rados = store->get_rados_handle();
   int r = rados->ioctx_create(log_pool, ioctx);
@@ -201,7 +203,12 @@ int RGWMetaSyncStatusManager::init()
   }
 
   global_status_oid = "mdlog.state.global";
+  shard_status_oid_prefix = "mdlog.state.shard";
   global_status_obj = rgw_obj(store->get_zone_params().log_pool, global_status_oid);
+
+  for (int i = 0; i < num_shards; i++) {
+    shard_objs[i] = rgw_obj(store->get_zone_params().log_pool, shard_obj_name(i));
+  }
 
   return 0;
 }
@@ -224,6 +231,39 @@ int RGWMetaSyncStatusManager::read_global_status()
     bufferlist::iterator iter = bl.begin();
     try {
       ::decode(global_status, iter);
+    } catch (buffer::error& err) {
+      ldout(store->ctx(), 0) << "ERROR: failed to decode global mdlog status" << dendl;
+    }
+  }
+  return 0;
+}
+
+string RGWMetaSyncStatusManager::shard_obj_name(int shard_id)
+{
+  char buf[shard_status_oid_prefix.size() + 16];
+  snprintf(buf, sizeof(buf), "%s.%d", shard_status_oid_prefix.c_str(), shard_id);
+
+  return string(buf);
+}
+
+int RGWMetaSyncStatusManager::read_shard_status(int shard_id)
+{
+  RGWObjectCtx obj_ctx(store, NULL);
+
+  RGWRados::SystemObject src(store, obj_ctx, shard_objs[shard_id]);
+  RGWRados::SystemObject::Read rop(&src);
+
+  bufferlist bl;
+
+  int ret = rop.read(0, -1, bl, NULL);
+  if (ret < 0 && ret != -ENOENT) {
+    return ret;
+  }
+
+  if (ret != -ENOENT) {
+    bufferlist::iterator iter = bl.begin();
+    try {
+      ::decode(shard_markers[shard_id], iter);
     } catch (buffer::error& err) {
       ldout(store->ctx(), 0) << "ERROR: failed to decode global mdlog status" << dendl;
     }
@@ -648,6 +688,19 @@ int RGWRemoteMetaLog::get_sync_status(RGWMetaSyncGlobalStatus *sync_status)
   }
 
   *sync_status = status_manager.get_global_status();
+
+  return 0;
+}
+
+int RGWRemoteMetaLog::get_shard_sync_marker(int shard_id, rgw_sync_marker *shard_status)
+{
+  int ret = status_manager.read_shard_status(shard_id);
+  if (ret < 0) {
+    ldout(store->ctx(), 0) << "ERROR: status_manager.read_global_status() returned ret=" << ret << dendl;
+    return ret;
+  }
+
+  *shard_status = status_manager.get_shard_status(shard_id);
 
   return 0;
 }
