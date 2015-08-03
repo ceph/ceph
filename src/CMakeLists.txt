@@ -678,7 +678,7 @@ configure_file(${CMAKE_SOURCE_DIR}/src/ceph-coverage.in
 configure_file(${CMAKE_SOURCE_DIR}/src/ceph-debugpack.in
   ${CMAKE_BINARY_DIR}/ceph-debugpack @ONLY)
 
-configure_file(${CMAKE_SOURCE_DIR}/src/ceph.in.cmake
+configure_file(${CMAKE_SOURCE_DIR}/src/ceph.in
   ${CMAKE_BINARY_DIR}/ceph @ONLY)
 
 configure_file(${CMAKE_SOURCE_DIR}/src/ceph-crush-location.in
