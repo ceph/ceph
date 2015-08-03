@@ -9854,6 +9854,7 @@ int ReplicatedPG::recover_backfill(
        i != add_to_stat.end();
        ++i) {
     ObjectContextRef obc = get_object_context(*i, false);
+    assert(obc);
     pg_stat_t stat;
     add_object_context_to_pg_stat(obc, &stat);
     pending_backfill_updates[*i] = stat;
