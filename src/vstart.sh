@@ -1,5 +1,28 @@
 #!/bin/sh
 
+# abort on failure
+set -e
+
+if [ -e CMakeCache.txt ]; then
+  # Out of tree build, learn source location from CMakeCache.txt
+  SRC_ROOT=`grep Ceph_SOURCE_DIR CMakeCache.txt | cut -d "=" -f 2`
+  [ -z "$PYBIND" ] && PYBIND=$SRC_ROOT/src/pybind
+  [ -z "$CEPH_ADM" ] && CEPH_ADM=./ceph
+  [ -z "$INIT_CEPH" ] && INIT_CEPH=./init-ceph
+  [ -z "$CEPH_BIN" ] && CEPH_BIN=src
+  [ -z "$CEPH_LIB" ] && CEPH_LIB=src
+  [ -z "$OBJCLASS_PATH" ] && OBJCLASS_PATH=src/cls
+
+  # Gather symlinks to EC plugins in one dir, because with CMake they
+  # are built into multiple locations
+  mkdir -p ec_plugins
+  for file in ./src/erasure-code/jerasure/*.so* src/erasure-code/lrc/*.so*
+  do
+    ln -sf ../${file} ec_plugins/`basename $file`
+  done
+  [ -z "$EC_PATH" ] && EC_PATH=./ec_plugins
+fi
+
 if [ -z "$CEPH_BUILD_ROOT" ]; then
         [ -z "$CEPH_BIN" ] && CEPH_BIN=.
         [ -z "$CEPH_LIB" ] && CEPH_LIB=.libs
@@ -21,9 +44,6 @@ fi
 export PYTHONPATH=$PYBIND
 export LD_LIBRARY_PATH=$CEPH_LIB
 export DYLD_LIBRARY_PATH=$LD_LIBRARY_PATH
-
-# abort on failure
-set -e
 
 [ -z "$CEPH_NUM_MON" ] && CEPH_NUM_MON="$MON"
 [ -z "$CEPH_NUM_OSD" ] && CEPH_NUM_OSD="$OSD"
