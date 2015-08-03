@@ -534,6 +534,7 @@ int GenericObjectMap::clear(const Header header,
 
 int GenericObjectMap::rm_keys(const Header header,
                               const string &prefix,
+                              const set<string> &buffered_keys,
                               const set<string> &to_clear,
                               KeyValueDB::Transaction t)
 {
@@ -563,7 +564,7 @@ int GenericObjectMap::rm_keys(const Header header,
         begin = new_complete.rbegin()->first;
       }
       while (iter->valid() && copied < 20) {
-        if (!to_clear.count(iter->key()))
+        if (!to_clear.count(iter->key()) && !buffered_keys.count(iter->key()))
           to_write[iter->key()].append(iter->value());
         if (i != to_clear.end() && *i <= iter->key()) {
           ++i;
@@ -692,6 +693,7 @@ void GenericObjectMap::clone(const Header parent, const coll_t &cid,
   // to find parent header. So it will let lookup_parent fail when "clone" and
   // "rm_keys" in one transaction. Here have to sync transaction to make
   // visiable for lookup_parent
+  // FIXME: Clear transaction operations here
   int r = submit_transaction_sync(t);
   assert(r == 0);
 }

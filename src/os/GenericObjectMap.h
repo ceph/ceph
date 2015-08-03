@@ -240,6 +240,7 @@ class GenericObjectMap {
   int rm_keys(
     const Header header,
     const string &prefix,
+    const set<string> &buffered_keys,
     const set<string> &to_clear,
     KeyValueDB::Transaction t
     );
