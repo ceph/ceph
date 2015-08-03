@@ -16,6 +16,7 @@ do_autogen.sh: make a ceph build by running autogen, etc.
 -p                               google profiler
 -O <level>                       optimize
 -c                               use cryptopp
+-C <parameter>                   add parameters to configure
 -j                               with java
 -r                               with rocksdb
 -J				 --with-jemalloc
