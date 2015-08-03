@@ -15,10 +15,11 @@ from teuthology import lockstatus
 from teuthology import lock
 from teuthology import misc
 from teuthology import provision
+from teuthology.packaging import GitbuilderProject
+from teuthology.exceptions import VersionNotFoundError
 from teuthology.job_status import get_status, set_status
 from teuthology.config import config as teuth_config
 from teuthology.parallel import parallel
-from teuthology.suite import has_packages_for_distro, get_install_task_flavor
 from ..orchestra import cluster, remote, run
 from .. import report
 from . import ansible
@@ -234,33 +235,37 @@ def check_packages(ctx, config):
     If there are missing packages, fail the job.
     """
     log.info("Checking packages...")
-    sha1 = ctx.config.get("sha1")
     os_type = ctx.config.get("os_type")
-    flavor = get_install_task_flavor(ctx.config)
+    sha1 = ctx.config.get("sha1")
     # We can only do this check if there are a defined sha1 and os_type
     # in the job config.
     if os_type and sha1:
+        package = GitbuilderProject("ceph", ctx.config)
         template = "Checking packages for os_type,'{os}' flavor '{flav}' and" \
             " ceph hash '{ver}'"
         log.info(
             template.format(
-                os=os_type,
-                flav=flavor,
-                ver=sha1,
+                os=package.os_type,
+                flav=package.flavor,
+                ver=package.sha1,
             )
         )
-        if not has_packages_for_distro(sha1, os_type, flavor):
-            msg = "Packages for os_type '{os}' and ceph hash '{ver}' not found"
+        if package.version:
+            log.info("Found packages for ceph version {ver}".format(
+                ver=package.version
+            ))
+        else:
+            msg = "Packages for distro '{d}' and ceph hash '{ver}' not found"
             msg = msg.format(
-                os=os_type,
-                ver=sha1,
+                d=package.distro,
+                ver=package.sha1,
             )
             log.error(msg)
             # set the failure message and update paddles with the status
             ctx.summary["failure_reason"] = msg
             set_status(ctx.summary, "dead")
             report.try_push_job_info(ctx.config, dict(status='dead'))
-            raise RuntimeError(msg)
+            raise VersionNotFoundError(package.base_url)
     else:
         log.info(
             "Checking packages skipped, missing os_type '{os}' or ceph hash '{ver}'".format(

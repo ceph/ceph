@@ -28,6 +28,7 @@ from teuthology.exceptions import (CommandCrashedError, CommandFailedError,
 from .orchestra import run
 from .config import config
 from .contextutil import safe_while
+from .packaging import DEFAULT_OS_VERSION
 
 log = logging.getLogger(__name__)
 
@@ -1236,22 +1237,13 @@ def get_distro_version(ctx):
     """
     Get the verstion of the distro that we are using (release number).
     """
-    default_os_version = dict(
-        ubuntu="14.04",
-        fedora="20",
-        centos="7.0",
-        opensuse="12.2",
-        sles="11-sp2",
-        rhel="7.0",
-        debian='7.0'
-    )
     distro = get_distro(ctx)
     if ctx.os_version is not None:
         return ctx.os_version
     try:
-        os_version = ctx.config.get('os_version', default_os_version[distro])
+        os_version = ctx.config.get('os_version', DEFAULT_OS_VERSION[distro])
     except AttributeError:
-        os_version = default_os_version[distro]
+        os_version = DEFAULT_OS_VERSION[distro]
     return os_version
 
 
