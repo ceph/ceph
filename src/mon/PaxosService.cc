@@ -36,7 +36,7 @@ static ostream& _prefix(std::ostream *_dout, Monitor *mon, Paxos *paxos, string 
 
 bool PaxosService::dispatch(MonOpRequestRef op)
 {
-  assert(op->is_type_service() || op->is_type_command());
+  assert(op->is_type_service() || op->is_type_monitor() || op->is_type_command());
   PaxosServiceMessage *m = static_cast<PaxosServiceMessage*>(op->get_req());
   op->mark_event("psvc:dispatch");
 
