@@ -829,4 +829,28 @@ void SessionMap::save_if_dirty(const std::set<entity_name_t> &tgt_sessions,
   }
 }
 
+bool Session::check_access(CInode *in, unsigned mask, int caller_uid, int caller_gid, int setattr_uid, int setattr_gid)
+{
+  string path;
+
+  if (in->is_stray()){
+    path = in->get_projected_inode()->stray_prior_path;
+  } else {
+    in->make_path_string(path, false, in->get_projected_parent_dn());
+  }
+  if (path.length())
+    path = path.substr(1);    // drop leading /
+
+  if ((mask & (MAY_CHOWN|MAY_CHGRP)) &&
+    !(auth_caps.is_capable(path, in->inode.uid, in->inode.gid, in->inode.mode,
+                  caller_uid, caller_gid, mask))) {
+    return false;
+  }
+
+  if (auth_caps.is_capable(path, in->inode.uid, in->inode.gid, in->inode.mode,
+            caller_uid, caller_gid, mask)) {
+    return true;
+  }
+  return false;
+}
 
