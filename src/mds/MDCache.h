@@ -894,7 +894,8 @@ protected:
     int64_t pool;
     list<MDSInternalContextBase*> waiters;
     open_ino_info_t() : checking(MDS_RANK_NONE), auth_hint(MDS_RANK_NONE),
-      check_peers(true), fetch_backtrace(true), discover(false) {}
+      check_peers(true), fetch_backtrace(true), discover(false),
+      want_replica(false), want_xlocked(false), tid(0), pool(-1) {}
   };
   ceph_tid_t open_ino_last_tid;
   map<inodeno_t,open_ino_info_t> opening_inodes;
@@ -1025,7 +1026,7 @@ private:
     utime_t last_cum_auth_pins_change;
     int last_cum_auth_pins;
     int num_remote_waiters;	// number of remote authpin waiters
-    fragment_info_t() : all_frozen(false), last_cum_auth_pins(0), num_remote_waiters(0) {}
+    fragment_info_t() : bits(0), all_frozen(false), last_cum_auth_pins(0), num_remote_waiters(0) {}
     bool is_fragmenting() { return !resultfrags.empty(); }
   };
   map<dirfrag_t,fragment_info_t> fragments;

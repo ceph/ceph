@@ -134,7 +134,9 @@ rbd_loc Worker::map_image_name(string image_name, string snap_name) const {
 
 
 Replayer::Replayer(int num_action_trackers)
-  : m_pool_name("rbd"),
+  : m_rbd(NULL), m_ioctx(0),  
+    m_pool_name("rbd"), m_latency_multiplier(1.0), 
+    m_readonly(false), m_dump_perf_counters(false),
     m_num_action_trackers(num_action_trackers),
     m_action_trackers(new action_tracker_d[m_num_action_trackers]) {
   assertf(num_action_trackers > 0, "num_action_trackers = %d", num_action_trackers);

@@ -1509,7 +1509,9 @@ class C_IO_Dir_OMAP_Fetched : public CDirIOContext {
   bufferlist btbl;
   int ret1, ret2, ret3;
 
-  C_IO_Dir_OMAP_Fetched(CDir *d, const string& w) : CDirIOContext(d), want_dn(w) { }
+  C_IO_Dir_OMAP_Fetched(CDir *d, const string& w) : 
+    CDirIOContext(d), want_dn(w),
+    ret1(0), ret2(0), ret3(0) {}
   void finish(int r) {
     // check the correctness of backtrace
     if (r >= 0 && ret3 != -ECANCELED)

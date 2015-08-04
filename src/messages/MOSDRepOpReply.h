@@ -94,7 +94,9 @@ public:
     result(result_) {
     set_tid(req->get_tid());
   }
-  MOSDRepOpReply() : Message(MSG_OSD_REPOPREPLY) {}
+  MOSDRepOpReply() 
+    : Message(MSG_OSD_REPOPREPLY), map_epoch(0),  
+      ack_type(0), result(0) {}
 private:
   ~MOSDRepOpReply() {}
 

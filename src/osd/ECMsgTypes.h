@@ -34,7 +34,7 @@ struct ECSubWrite {
   set<hobject_t> temp_added;
   set<hobject_t> temp_removed;
   boost::optional<pg_hit_set_history_t> updated_hit_set_history;
-  ECSubWrite() {}
+  ECSubWrite() : tid(0) {}
   ECSubWrite(
     pg_shard_t from,
     ceph_tid_t tid,
@@ -89,7 +89,7 @@ struct ECSubWriteReply {
   eversion_t last_complete;
   bool committed;
   bool applied;
-  ECSubWriteReply() : committed(false), applied(false) {}
+  ECSubWriteReply() : tid(0), committed(false), applied(false) {}
   void encode(bufferlist &bl) const;
   void decode(bufferlist::iterator &bl);
   void dump(Formatter *f) const;

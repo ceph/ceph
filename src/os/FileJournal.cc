@@ -1451,8 +1451,10 @@ int FileJournal::write_aio_bl(off64_t& pos, bufferlist& bl, uint64_t seq)
 	  continue;
 	}
 	assert(0 == "io_submit got unexpected error");
+      } else {
+	break;
       }
-    } while (false);
+    } while (true);
     pos += aio.len;
   }
   write_finish_cond.Signal();
