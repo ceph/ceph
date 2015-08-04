@@ -352,7 +352,9 @@ class TestGitbuilderProject(object):
 
     GITBUILDER_DISTRO_MATRIX = [
         ('rhel', '7.0', None, 'centos7'),
-        ('centos', '6.5', None, 'centos6_5'),
+        ('centos', '6.5', None, 'centos6'),
+        ('centos', '7.0', None, 'centos7'),
+        ('centos', '7.1', None, 'centos7'),
         ('fedora', '20', None, 'fc20'),
         ('ubuntu', '14.04', 'trusty', 'trusty'),
         ('ubuntu', '14.04', None, 'trusty'),
