@@ -284,6 +284,16 @@ public:
 	return cmp_nibblewise(l, r) < 0;
     }
   };
+  struct ComparatorWithDefault {
+    bool bitwise;
+    ComparatorWithDefault(bool b=true) : bitwise(b) {}
+    bool operator()(const hobject_t& l, const hobject_t& r) const {
+      if (bitwise)
+	return cmp_bitwise(l, r) < 0;
+      else
+	return cmp_nibblewise(l, r) < 0;
+    }
+  };
 };
 WRITE_CLASS_ENCODER(hobject_t)
 

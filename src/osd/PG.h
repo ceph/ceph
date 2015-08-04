@@ -2205,6 +2205,7 @@ public:
     const vector<int>& newacting, int acting_primary,
     ObjectStore::Transaction *t);
   void on_new_interval();
+  virtual void _on_new_interval() = 0;
   void start_flush(ObjectStore::Transaction *t,
 		   list<Context *> *on_applied,
 		   list<Context *> *on_safe);

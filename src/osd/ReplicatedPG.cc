@@ -8873,6 +8873,16 @@ void ReplicatedPG::on_activate()
   agent_setup();
 }
 
+void ReplicatedPG::_on_new_interval()
+{
+  // re-sort obc map?
+  if (object_contexts.get_comparator().bitwise != get_sort_bitwise()) {
+    dout(20) << __func__ << " resorting object_contexts" << dendl;
+    object_contexts.reset_comparator(
+      hobject_t::ComparatorWithDefault(get_sort_bitwise()));
+  }
+}
+
 void ReplicatedPG::on_change(ObjectStore::Transaction *t)
 {
   dout(10) << "on_change" << dendl;
