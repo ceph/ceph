@@ -367,7 +367,8 @@ void ECBackend::handle_recovery_read_complete(
     from[i->first.shard].claim(i->second);
   }
   dout(10) << __func__ << ": " << from << dendl;
-  ECUtil::decode(sinfo, ec_impl, from, target);
+  int r = ECUtil::decode(sinfo, ec_impl, from, target);
+  assert(r == 0);
   if (attrs) {
     op.xattrs.swap(*attrs);
 
@@ -1682,11 +1683,15 @@ struct CallClientContexts :
 	   ++j) {
 	to_decode[j->first.shard].claim(j->second);
       }
-      ECUtil::decode(
+      int r = ECUtil::decode(
 	ec->sinfo,
 	ec->ec_impl,
 	to_decode,
 	&bl);
+      if (r < 0) {
+        res.r = r;
+        goto out;
+      }
       assert(i->second.second);
       assert(i->second.first);
       i->second.first->substr_of(
