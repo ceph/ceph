@@ -660,7 +660,7 @@ class Thrasher:
         self.log("starting do_sighup with a delay of {0}".format(delay))
         while not self.stopping:
             osd = random.choice(self.live_osds)
-            self.ceph_manager.signal_osd(osd, signal.SIGHUP)
+            self.ceph_manager.signal_osd(osd, signal.SIGHUP, silent=True)
             time.sleep(delay)
 
     @log_exc
@@ -1769,19 +1769,19 @@ class CephManager:
         """
         self.raw_cluster_cmd('osd', 'in', str(osd))
 
-    def signal_osd(self, osd, sig):
+    def signal_osd(self, osd, sig, silent=False):
         """
         Wrapper to local get_daemon call which sends the given
         signal to the given osd.
         """
-        self.ctx.daemons.get_daemon('osd', osd).signal(sig)
+        self.ctx.daemons.get_daemon('osd', osd).signal(sig, silent=silent)
 
     ## monitors
-    def signal_mon(self, mon, sig):
+    def signal_mon(self, mon, sig, silent=False):
         """
         Wrapper to local get_deamon call
         """
-        self.ctx.daemons.get_daemon('mon', mon).signal(sig)
+        self.ctx.daemons.get_daemon('mon', mon).signal(sig, silent=silent)
 
     def kill_mon(self, mon):
         """
