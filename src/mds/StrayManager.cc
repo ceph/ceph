@@ -551,7 +551,7 @@ bool StrayManager::__eval_stray(CDentry *dn, bool delay)
     // past snaprealm parents imply snapped dentry remote links.
     // only important for directories.  normal file data snaps are handled
     // by the object store.
-    if (in->snaprealm && in->snaprealm->has_past_parents()) {
+    if (in->snaprealm) {
       if (!in->snaprealm->have_past_parents_open() &&
           !in->snaprealm->open_parents(new C_MDC_EvalStray(this, dn))) {
         return false;
