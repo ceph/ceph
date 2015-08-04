@@ -107,11 +107,11 @@ class TestInstall(object):
         m_get_config_value_for_remote.return_value = "tag"
         result = install._get_baseurlinfo_and_dist(Mock(), remote, dict())
         expected = dict(
-            dist="centos6_5",
+            dist="centos6",
             arch="x86_64",
             flavor="basic",
             uri="ref/tag",
-            dist_release="el6_5",
+            dist_release="el6",
         )
         assert result == expected
 

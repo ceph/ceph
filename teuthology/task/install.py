@@ -171,20 +171,10 @@ def _get_gitbuilder_version(version):
     Parses a distro version string and returns a modified string
     that matches the format needed for the gitbuilder url.
 
-    Minor version numbers are ignored if they end in a zero. If they do
-    not end in a zero the minor version number is included with a dash as
-    the separator instead of a period.
+    Minor version numbers are ignored.
     """
-    version_tokens = version.split(".")
-    include_minor_version = (
-        len(version_tokens) > 1 and
-        version_tokens[1] != "0"
-    )
-    if include_minor_version:
-        return "_".join(version_tokens)
-
     # return only the major version
-    return version_tokens[0]
+    return version.split(".")[0]
 
 
 def _get_baseurl(ctx, remote, config):
