@@ -2,7 +2,7 @@
 ACTION=="add", SUBSYSTEM=="block", \
   ENV{DEVTYPE}=="partition", \
   ENV{ID_PART_ENTRY_TYPE}=="4fbd7e29-9d25-41b8-afd0-062c0ceff05d", \
-  RUN+="/usr/sbin/ceph-disk-activate /dev/$name"
+  RUN+="/usr/sbin/ceph-disk activate /dev/$name"
 
 # activate ceph-tagged partitions
 ACTION=="add", SUBSYSTEM=="block", \
@@ -30,7 +30,7 @@ ACTION=="add" SUBSYSTEM=="block", \
   ENV{ID_PART_ENTRY_TYPE}=="4fbd7e29-9d25-41b8-afd0-5ec00ceff05d", \
   RUN+="/sbin/cryptsetup --key-file /etc/ceph/dmcrypt-keys/$env{ID_PART_ENTRY_UUID} --key-size 256 create $env{ID_PART_ENTRY_UUID} /dev/$name", \
   RUN+="/bin/bash -c 'while [ ! -e /dev/mapper/$env{ID_PART_ENTRY_UUID} ];do sleep 1; done'", \
-  RUN+="/usr/sbin/ceph-disk-activate /dev/mapper/$env{ID_PART_ENTRY_UUID}"
+  RUN+="/usr/sbin/ceph-disk activate /dev/mapper/$env{ID_PART_ENTRY_UUID}"
 
 # Map data device and
 # activate ceph-tagged partitions
@@ -40,4 +40,4 @@ ACTION=="add" SUBSYSTEM=="block", \
   ENV{ID_PART_ENTRY_TYPE}=="4fbd7e29-9d25-41b8-afd0-35865ceff05d", \
   RUN+="/sbin/cryptsetup --key-file /etc/ceph/dmcrypt-keys/$env{ID_PART_ENTRY_UUID}.luks.key luksOpen /dev/$name $env{ID_PART_ENTRY_UUID}", \
   RUN+="/bin/bash -c 'while [ ! -e /dev/mapper/$env{ID_PART_ENTRY_UUID} ];do sleep 1; done'", \
-  RUN+="/usr/sbin/ceph-disk-activate /dev/mapper/$env{ID_PART_ENTRY_UUID}"
+  RUN+="/usr/sbin/ceph-disk activate /dev/mapper/$env{ID_PART_ENTRY_UUID}"

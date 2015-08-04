@@ -97,8 +97,6 @@ EXTRA_DIST += \
 	$(srcdir)/upstart/rbdmap.conf \
 	ceph.in \
 	ceph-disk \
-	ceph-disk-prepare \
-	ceph-disk-activate \
 	ceph-disk-udev \
 	ceph-create-keys \
 	ceph-rest-api \
