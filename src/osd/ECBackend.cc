@@ -1297,7 +1297,7 @@ void ECBackend::submit_transaction(
   for (set<hobject_t, hobject_t::BitwiseComparator>::iterator i = need_hinfos.begin();
        i != need_hinfos.end();
        ++i) {
-    ECUtil::HashInfoRef ref = get_hash_info(*i);
+    ECUtil::HashInfoRef ref = get_hash_info(*i, false);
     if (!ref) {
       derr << __func__ << ": get_hash_info(" << *i << ")"
 	   << " returned a null pointer and there is no "
@@ -1505,7 +1505,7 @@ void ECBackend::start_read_op(
 }
 
 ECUtil::HashInfoRef ECBackend::get_hash_info(
-  const hobject_t &hoid)
+  const hobject_t &hoid, bool checks)
 {
   dout(10) << __func__ << ": Getting attr on " << hoid << dendl;
   ECUtil::HashInfoRef ref = unstable_hashinfo_registry.lookup(hoid);
@@ -1517,7 +1517,8 @@ ECUtil::HashInfoRef ECBackend::get_hash_info(
       ghobject_t(hoid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
       &st);
     ECUtil::HashInfo hinfo(ec_impl->get_chunk_count());
-    if (r >= 0 && st.st_size > 0) {
+    // XXX: What does it mean if there is no object on disk?
+    if (r >= 0) {
       dout(10) << __func__ << ": found on disk, size " << st.st_size << dendl;
       bufferlist bl;
       r = store->getattr(
@@ -1528,8 +1529,12 @@ ECUtil::HashInfoRef ECBackend::get_hash_info(
       if (r >= 0) {
 	bufferlist::iterator bp = bl.begin();
 	::decode(hinfo, bp);
-	assert(hinfo.get_total_chunk_size() == (uint64_t)st.st_size);
-      } else {
+	if (checks && hinfo.get_total_chunk_size() != (uint64_t)st.st_size) {
+	  dout(0) << __func__ << ": Mismatch of total_chunk_size "
+			       << hinfo.get_total_chunk_size() << dendl;
+	  return ECUtil::HashInfoRef();
+	}
+      } else if (st.st_size > 0) { // If empty object and no hinfo, create it
 	return ECUtil::HashInfoRef();
       }
     }
@@ -1845,7 +1850,7 @@ void ECBackend::be_deep_scrub(
     o.read_error = true;
   }
 
-  ECUtil::HashInfoRef hinfo = get_hash_info(poid);
+  ECUtil::HashInfoRef hinfo = get_hash_info(poid, false);
   if (!hinfo) {
     dout(0) << "_scan_list  " << poid << " could not retrieve hash info" << dendl;
     o.read_error = true;
