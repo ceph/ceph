@@ -18,3 +18,6 @@ v9.0.3
   introduced).
 
 * The `--dump-json` option of "osdmaptool" is replaced by `--dump json`.
+
+* The commands of "pg ls-by-{pool,primary,osd}" and "pg ls" now take "recovering"
+  instead of "recovery", to include the recovering pgs in the listed pgs.
