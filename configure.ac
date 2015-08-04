@@ -1197,6 +1197,76 @@ AC_ARG_WITH(
     ]
 )
 
+
+dnl rgw-user
+AC_SUBST(user_rgw)
+AC_ARG_WITH(
+    rgw-user,
+    AS_HELP_STRING(
+        [--with-rgw-user=USER],
+        [systemd unit directory @<:@USER_RGW@:>@
+        Defaults to "www-data"]
+    ),
+    [
+        user_rgw="$withval"
+    ],
+    [
+        if test "x$USER_RGW" = "x"; then
+            user_rgw=www-data
+        else
+            user_rgw="$USER_RGW"
+        fi
+    ]
+)
+
+dnl rgw-group
+AC_SUBST(group_rgw)
+AC_ARG_WITH(
+    rgw-group,
+    AS_HELP_STRING(
+        [--with-rgw-group=GROUP],
+        [systemd unit directory @<:@GROUP_RGW@:>@
+        Defaults to "www-data"]
+    ),
+    [
+        group_rgw="$withval"
+    ],
+    [
+        if test "x$GROUP_RGW" = "x"; then
+            group_rgw=www-data
+        else
+            group_rgw="$GROUP_RGW"
+        fi
+    ]
+)
+
+
+AC_SUBST(systemd_unit_dir)
+AC_ARG_WITH(
+    systemd-unit-dir,
+    AS_HELP_STRING(
+	    [--with-systemdsystemunitdir=DIR],
+	    [systemd unit directory @<:@SYSTEMD_UNIT_DIR@:>@
+        Defaults to the correct value for debian /etc/systemd/system/]
+    ),
+    [
+	    systemd_unit_dir="$withval"
+    ],
+    [
+        # default to the systemd admin unit directory
+        which pkg-config
+        pkg_config_exists=$?
+        if test x"$pkg_config_exists" = x"0"; then
+            systemd_unit_dir=`pkg-config systemd --variable=systemdsystemunitdir`
+        else
+            systemd_unit_dir="/etc/systemd/system/"
+        fi
+    ]
+)
+
+
+
+
 # Checks for typedefs, structures, and compiler characteristics.
 #AC_HEADER_STDBOOL
 #AC_C_CONST
@@ -1257,8 +1327,10 @@ AC_CONFIG_FILES([Makefile
 	src/ocf/rbd
 	src/java/Makefile
 	src/tracing/Makefile
+	systemd/Makefile
 	man/Makefile
 	doc/Makefile
 	systemd/ceph-osd@.service
+	systemd/ceph-rgw.tmpfiles.d
 	ceph.spec])
 AC_OUTPUT

@@ -1,0 +1,10 @@
+[Unit]
+Description=Ceph cluster key creator task
+
+# the last key created is the mds bootstrap key -- look for that.
+ConditionPathExists=!/var/lib/ceph/bootstrap-mds/ceph.keyring
+
+[Service]
+EnvironmentFile=-/etc/sysconfig/ceph
+Environment=CLUSTER=ceph
+ExecStart=/usr/sbin/ceph-create-keys --cluster ${CLUSTER} --id %i
