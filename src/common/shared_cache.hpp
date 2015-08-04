@@ -105,6 +105,24 @@ public:
     }
   }
 
+  /// adjust container comparator (for purposes of get_next sort order)
+  void reset_comparator(C comp) {
+    // get_next uses weak_refs; that's the only container we need to
+    // reorder.
+    map<K, pair<WeakVPtr, V*>, C> temp;
+
+    Mutex::Locker l(lock);
+    temp.swap(weak_refs);
+
+    // reconstruct with new comparator
+    weak_refs = map<K, pair<WeakVPtr, V*>, C>(comp);
+    weak_refs.insert(temp.begin(), temp.end());
+  }
+
+  C get_comparator() {
+    return weak_refs.key_comp();
+  }
+
   void set_cct(CephContext *c) {
     cct = c;
   }
