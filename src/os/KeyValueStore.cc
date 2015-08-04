@@ -593,7 +593,7 @@ KeyValueStore::~KeyValueStore()
 int KeyValueStore::statfs(struct statfs *buf)
 {
   int r = backend->db->get_statfs(buf);
-  if (r < 0) {
+  if (r == -EOPNOTSUPP) {
     if (::statfs(basedir.c_str(), buf) < 0) {
       int r = -errno;
       return r;
