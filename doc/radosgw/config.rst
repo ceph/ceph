@@ -88,8 +88,9 @@ configuration file.
    hierarchy, or performance may suffer.
 
 When configuring a gateway with the default region and zone, the naming
-convention for pools typically omits region and zone naming, but you can use any
-naming convention you prefer. For example:
+convention for pools typically omits region and zone naming, but you can
+use any naming convention you prefer, The only requirement currently is
+that it starts with a period. For example:
 
 
 - ``.rgw.root``
