@@ -1006,7 +1006,7 @@ protected:
   }
 
   // projected object info
-  SharedLRU<hobject_t, ObjectContext, hobject_t::BitwiseComparator> object_contexts;
+  SharedLRU<hobject_t, ObjectContext, hobject_t::ComparatorWithDefault> object_contexts;
   // map from oid.snapdir() to SnapSetContext *
   map<hobject_t, SnapSetContext*, hobject_t::BitwiseComparator> snapset_contexts;
   Mutex snapset_contexts_lock;
@@ -1558,6 +1558,7 @@ public:
 
   void on_role_change();
   void on_pool_change();
+  void _on_new_interval();
   void on_change(ObjectStore::Transaction *t);
   void on_activate();
   void on_flushed();
