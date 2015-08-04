@@ -52,6 +52,20 @@ class CommandFailedError(Exception):
             )
 
 
+class AnsibleFailedError(Exception):
+
+    """
+    Exception thrown when an ansible playbook fails
+    """
+    def __init__(self, failures):
+        self.failures = failures
+
+    def __str__(self):
+        return "{failures}".format(
+            failures=self.failures,
+        )
+
+
 class CommandCrashedError(Exception):
 
     """

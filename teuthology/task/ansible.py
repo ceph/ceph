@@ -9,7 +9,7 @@ from cStringIO import StringIO
 from tempfile import NamedTemporaryFile
 
 from teuthology.config import config as teuth_config
-from teuthology.exceptions import CommandFailedError
+from teuthology.exceptions import CommandFailedError, AnsibleFailedError
 from teuthology.repo_utils import fetch_repo
 
 from . import Task
@@ -115,6 +115,15 @@ class Ansible(Task):
         self.get_inventory() or self.generate_hosts_file()
         if not hasattr(self, 'playbook_file'):
             self.generate_playbook()
+
+    @property
+    def failure_log(self):
+        if not hasattr(self, '_failure_log'):
+            self._failure_log = NamedTemporaryFile(
+                prefix="teuth_ansible_failures_",
+                delete=False,
+            )
+        return self._failure_log
 
     def find_repo(self):
         """
@@ -229,6 +238,7 @@ class Ansible(Task):
         """
         environ = os.environ
         environ['ANSIBLE_SSH_PIPELINING'] = '1'
+        environ['ANSIBLE_FAILURE_LOG'] = self.failure_log.name
         environ['ANSIBLE_ROLES_PATH'] = "%s/roles" % self.repo_path
         args = self._build_args()
         command = ' '.join(args)
@@ -242,13 +252,30 @@ class Ansible(Task):
             timeout=None,
         )
         if status != 0:
-            raise CommandFailedError(command, status)
+            self._handle_failure(command, status)
 
         if self.config.get('reconnect', True) is True:
             remotes = self.cluster.remotes.keys()
             log.debug("Reconnecting to %s", remotes)
             for remote in remotes:
                 remote.reconnect()
+
+    def _handle_failure(self, command, status):
+        failures = None
+        with open(self.failure_log.name, 'r') as log:
+            failures = yaml.safe_load(log)
+
+        if failures:
+            if self.ctx.archive:
+                self._archive_failures()
+            raise AnsibleFailedError(failures)
+        raise CommandFailedError(command, status)
+
+    def _archive_failures(self):
+        os.rename(
+            self.failure_log.name,
+            "{0}/ansible_failures.yaml".format(self.ctx.archive)
+        )
 
     def _build_args(self):
         """
