@@ -191,6 +191,7 @@ CEPH_RBD_API int rbd_get_parent_info(rbd_image_t image,
 			             char *parent_snapname,
                                      size_t psnapnamelen);
 CEPH_RBD_API int rbd_get_flags(rbd_image_t image, uint64_t *flags);
+CEPH_RBD_API int rbd_set_image_notification(rbd_image_t image, int fd, int type);
 
 /* exclusive lock feature */
 CEPH_RBD_API int rbd_is_exclusive_lock_owner(rbd_image_t image, int *is_owner);
@@ -471,6 +472,7 @@ CEPH_RBD_API int rbd_aio_read2(rbd_image_t image, uint64_t off, size_t len,
                                char *buf, rbd_completion_t c, int op_flags);
 CEPH_RBD_API int rbd_aio_discard(rbd_image_t image, uint64_t off, uint64_t len,
                                  rbd_completion_t c);
+
 CEPH_RBD_API int rbd_aio_create_completion(void *cb_arg,
                                            rbd_callback_t complete_cb,
                                            rbd_completion_t *c);
@@ -496,6 +498,8 @@ CEPH_RBD_API int rbd_aio_flush(rbd_image_t image, rbd_completion_t c);
  * @returns 0 on success, negative error code on failure
  */
 CEPH_RBD_API int rbd_invalidate_cache(rbd_image_t image);
+
+CEPH_RBD_API int rbd_poll_io_events(rbd_image_t image, rbd_completion_t *comps, int numcomp, int max);
 
 CEPH_RBD_API int rbd_metadata_get(rbd_image_t image, const char *key, char *value, size_t *val_len);
 CEPH_RBD_API int rbd_metadata_set(rbd_image_t image, const char *key, const char *value);
