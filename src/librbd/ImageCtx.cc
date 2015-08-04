@@ -139,6 +139,7 @@ struct C_InvalidateCache : public Context {
       object_map_lock(unique_lock_name("librbd::ImageCtx::object_map_lock", this)),
       async_ops_lock(unique_lock_name("librbd::ImageCtx::async_ops_lock", this)),
       copyup_list_lock(unique_lock_name("librbd::ImageCtx::copyup_list_lock", this)),
+      completed_reqs_lock(unique_lock_name("librbd::ImageCtx::completed_reqs_lock", this)),
       extra_read_flags(0),
       old_format(true),
       order(0), size(0), features(0),

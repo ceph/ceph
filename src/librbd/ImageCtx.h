@@ -12,6 +12,7 @@
 #include <boost/optional.hpp>
 
 #include "common/Cond.h"
+#include "common/event_socket.h"
 #include "common/Mutex.h"
 #include "common/Readahead.h"
 #include "common/RWLock.h"
@@ -45,6 +46,7 @@ namespace librbd {
   class LibrbdAdminSocketHook;
   class ImageWatcher;
   class Journal;
+  class AioCompletion;
 
   namespace operation {
   class ResizeRequest;
@@ -101,6 +103,7 @@ namespace librbd {
     RWLock object_map_lock; // protects object map updates and object_map itself
     Mutex async_ops_lock; // protects async_ops and async_requests
     Mutex copyup_list_lock; // protects copyup_waiting_list
+    Mutex completed_reqs_lock; // protects completed_reqs
 
     unsigned extra_read_flags;
 
@@ -140,6 +143,9 @@ namespace librbd {
     xlist<operation::ResizeRequest*> resize_reqs;
 
     AioImageRequestWQ *aio_work_queue;
+    xlist<AioCompletion*> completed_reqs;
+    EventSocket event_socket;
+
     ContextWQ *op_work_queue;
 
     Cond refresh_cond;

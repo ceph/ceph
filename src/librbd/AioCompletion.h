@@ -63,6 +63,8 @@ namespace librbd {
     AsyncOperation async_op;
 
     uint64_t journal_tid;
+    xlist<AioCompletion*>::item m_xlist_item;
+    bool event_notify;
 
     AioCompletion() : lock("AioCompletion::lock", true, false),
 		      done(false), rval(0), complete_cb(NULL),
@@ -72,6 +74,7 @@ namespace librbd {
 		      aio_type(AIO_TYPE_NONE),
 		      read_bl(NULL), read_buf(NULL), read_buf_len(0),
                       journal_tid(0) {
+                      m_xlist_item(this), event_notify(false) {
     }
     ~AioCompletion() {
     }
@@ -128,8 +131,12 @@ namespace librbd {
       assert(ref > 0);
       int n = --ref;
       lock.Unlock();
-      if (!n)
-	delete this;
+      if (!n) {
+        ictx->completed_reqs_lock.Lock();
+        m_xlist_item.remove_myself();
+        ictx->completed_reqs_lock.Unlock();
+        delete this;
+      }
     }
 
     void block() {
@@ -144,6 +151,11 @@ namespace librbd {
         finalize(cct, rval);
         complete(cct);
       }
+    }
+
+    void enable_event_notify() {
+      Mutex::Locker l(lock);
+      event_notify = true;
     }
   };
 
