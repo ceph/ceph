@@ -479,6 +479,7 @@ CEPH_RBD_API int rbd_aio_create_completion(void *cb_arg,
 CEPH_RBD_API int rbd_aio_is_complete(rbd_completion_t c);
 CEPH_RBD_API int rbd_aio_wait_for_complete(rbd_completion_t c);
 CEPH_RBD_API ssize_t rbd_aio_get_return_value(rbd_completion_t c);
+CEPH_RBD_API void *rbd_aio_get_arg(rbd_completion_t c);
 CEPH_RBD_API void rbd_aio_release(rbd_completion_t c);
 CEPH_RBD_API int rbd_flush(rbd_image_t image);
 /**
