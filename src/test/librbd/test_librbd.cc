@@ -749,7 +749,8 @@ void aio_write_test_data_and_poll(rbd_image_t image, int fd, const char *test_da
                                   uint64_t off, size_t len, uint32_t iohint, bool *passed)
 {
   rbd_completion_t comp;
-  rbd_aio_create_completion(NULL, (rbd_callback_t) simple_write_cb, &comp);
+  uint64_t data = 0x123;
+  rbd_aio_create_completion((void*)&data, (rbd_callback_t) simple_write_cb, &comp);
   printf("created completion\n");
   printf("started write\n");
   if (iohint)
@@ -770,6 +771,7 @@ void aio_write_test_data_and_poll(rbd_image_t image, int fd, const char *test_da
   ASSERT_EQ(sizeof(count), read(fd, &count, sizeof(count)));
   int r = rbd_aio_get_return_value(comps[0]);
   ASSERT_TRUE(rbd_aio_is_complete(comps[0]));
+  ASSERT_TRUE(*(uint64_t*)rbd_aio_get_arg(comps[0]) == data);
   printf("return value is: %d\n", r);
   ASSERT_EQ(0, r);
   printf("finished write\n");
