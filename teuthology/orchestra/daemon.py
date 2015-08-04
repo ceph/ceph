@@ -101,14 +101,15 @@ class DaemonState(object):
         self.proc = self.remote.run(*cmd_args, **cmd_kwargs)
         self.log.info('Started')
 
-    def signal(self, sig):
+    def signal(self, sig, silent=False):
         """
         Send a signal to associated remote commnad
 
         :param sig: signal to send
         """
         self.proc.stdin.write(struct.pack('!b', sig))
-        self.log.info('Sent signal %d', sig)
+        if not silent:
+            self.log.info('Sent signal %d', sig)
 
     def running(self):
         """
