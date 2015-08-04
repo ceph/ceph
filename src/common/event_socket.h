@@ -25,17 +25,27 @@ class EventSocket {
   EventSocket(): socket(-1), type(EVENT_SOCKET_TYPE_NONE) {}
   bool is_valid() const { return socket != -1; }
   int init(int fd, int t) {
+    switch (t) {
+      case EVENT_SOCKET_TYPE_PIPE:
 #ifdef HAVE_EVENTFD
-    if (t == EVENT_SOCKET_TYPE_EVENTFD) {
-      socket = fd;
-      type = t;
-      return 0;
-    }
+      case EVENT_SOCKET_TYPE_EVENTFD:
 #endif
+      {
+        socket = fd;
+        type = t;
+        return 0;
+      }
+    }
     return -1;
   }
   int notify() {
     switch (type) {
+      case EVENT_SOCKET_TYPE_PIPE:
+      {
+        char buf[1];
+        buf[0] = 'i';
+        return write(socket, buf, 1);
+      }
       case EVENT_SOCKET_TYPE_EVENTFD:
       {
         uint64_t value = 1;
