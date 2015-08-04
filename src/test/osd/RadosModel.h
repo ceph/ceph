@@ -727,7 +727,8 @@ public:
 	  bool do_excl,
 	  TestOpStat *stat = 0)
     : TestOp(n, context, stat),
-      oid(oid), waiting_on(0), last_acked_tid(0), do_append(do_append),
+      oid(oid), rcompletion(NULL), waiting_on(0), 
+      last_acked_tid(0), do_append(do_append),
       do_excl(do_excl)
   {}
 		

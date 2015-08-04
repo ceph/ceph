@@ -530,7 +530,7 @@ public:
     LoadGen *lg;
     librados::AioCompletion *completion;
 
-    LoadGenOp() {}
+    LoadGenOp() : id(0), type(0), off(0), len(0), lg(NULL), completion(NULL) {}
     LoadGenOp(LoadGen *_lg) : id(0), type(0), off(0), len(0), lg(_lg), completion(NULL) {}
   };
 

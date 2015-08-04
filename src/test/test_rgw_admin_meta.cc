@@ -82,7 +82,7 @@ class test_helper {
     string *resp_data;
     unsigned resp_code;
   public:
-    test_helper() : resp_data(NULL){
+    test_helper() : curl_inst(0), resp_data(NULL), resp_code(0) {
       curl_global_init(CURL_GLOBAL_ALL);
     }
     ~test_helper(){

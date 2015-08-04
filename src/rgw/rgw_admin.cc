@@ -1051,7 +1051,6 @@ int do_check_object_locator(const string& bucket_name, bool fix, bool remove_bad
 
       if (key.name[0] == '_') {
         ret = check_obj_locator_underscore(bucket_info, obj, key, fix, remove_bad, f);
-        /* ignore return code, move to the next one */
 	
 	if (ret >= 0) {
           ret = check_obj_tail_locator_underscore(bucket_info, obj, key, fix, f);

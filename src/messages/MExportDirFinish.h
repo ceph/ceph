@@ -25,7 +25,7 @@ class MExportDirFinish : public Message {
   dirfrag_t get_dirfrag() { return dirfrag; }
   bool is_last() { return last; }
   
-  MExportDirFinish() {}
+  MExportDirFinish() : last(false) {}
   MExportDirFinish(dirfrag_t df, bool l, uint64_t tid) :
     Message(MSG_MDS_EXPORTDIRFINISH), dirfrag(df), last(l) {
     set_tid(tid);
