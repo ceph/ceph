@@ -819,24 +819,6 @@ if test "x$with_jemalloc" = "xyes"; then
 	fi
 fi
 
-# use system libs3?
-AC_ARG_WITH([system-libs3],
-	[AS_HELP_STRING([--with-system-libs3], [use system libs3])],
-	,
-	[with_system_libs3=no])
-AS_IF([test "x$with_system_libs3" = xyes],
-            [AC_CHECK_LIB([s3], [S3_initialize], [true], [AC_MSG_FAILURE([libs3 not found])], [-lpthread])])
-AS_IF([test "x$with_system_libs3" = xcheck],
-            [AC_SEARCH_LIBS([S3_initialize], [s3], [with_system_libs3=yes], [true], [-lpthread])])
-AM_CONDITIONAL(WITH_SYSTEM_LIBS3, [ test "$with_system_libs3" = "yes" ])
-
-# rest-bench?
-AC_ARG_WITH([rest-bench],
-	    [AS_HELP_STRING([--with-rest-bench], [enables rest-bench])],
-	    [],
-	    [with_rest_bench=no])
-AM_CONDITIONAL(WITH_REST_BENCH, [ test "$with_rest_bench" = "yes" ])
-
 # needs libcurl and libxml2
 if test "x$with_rest_bench" = xyes && test "x$with_system_libs3" = xno; then
    AC_CHECK_LIB([curl], [curl_easy_init], [], AC_MSG_ERROR([libcurl not found]))
@@ -1221,6 +1203,76 @@ AC_ARG_WITH(
     ]
 )
 
+
+dnl rgw-user
+AC_SUBST(user_rgw)
+AC_ARG_WITH(
+    rgw-user,
+    AS_HELP_STRING(
+        [--with-rgw-user=USER],
+        [systemd unit directory @<:@USER_RGW@:>@
+        Defaults to "www-data"]
+    ),
+    [
+        user_rgw="$withval"
+    ],
+    [
+        if test "x$USER_RGW" = "x"; then
+            user_rgw=www-data
+        else
+            user_rgw="$USER_RGW"
+        fi
+    ]
+)
+
+dnl rgw-group
+AC_SUBST(group_rgw)
+AC_ARG_WITH(
+    rgw-group,
+    AS_HELP_STRING(
+        [--with-rgw-group=GROUP],
+        [systemd unit directory @<:@GROUP_RGW@:>@
+        Defaults to "www-data"]
+    ),
+    [
+        group_rgw="$withval"
+    ],
+    [
+        if test "x$GROUP_RGW" = "x"; then
+            group_rgw=www-data
+        else
+            group_rgw="$GROUP_RGW"
+        fi
+    ]
+)
+
+
+AC_SUBST(systemd_unit_dir)
+AC_ARG_WITH(
+    systemd-unit-dir,
+    AS_HELP_STRING(
+	    [--with-systemdsystemunitdir=DIR],
+	    [systemd unit directory @<:@SYSTEMD_UNIT_DIR@:>@
+        Defaults to the correct value for debian /etc/systemd/system/]
+    ),
+    [
+	    systemd_unit_dir="$withval"
+    ],
+    [
+        # default to the systemd admin unit directory
+        which pkg-config
+        pkg_config_exists=$?
+        if test x"$pkg_config_exists" = x"0"; then
+            systemd_unit_dir=`pkg-config systemd --variable=systemdsystemunitdir`
+        else
+            systemd_unit_dir="/etc/systemd/system/"
+        fi
+    ]
+)
+
+
+
+
 # Checks for typedefs, structures, and compiler characteristics.
 #AC_HEADER_STDBOOL
 #AC_C_CONST
@@ -1281,9 +1333,11 @@ AC_CONFIG_FILES([Makefile
 	src/ocf/rbd
 	src/java/Makefile
 	src/tracing/Makefile
+	systemd/Makefile
 	man/Makefile
 	doc/Makefile
 	selinux/Makefile
 	systemd/ceph-osd@.service
+	systemd/ceph-rgw.tmpfiles.d
 	ceph.spec])
 AC_OUTPUT

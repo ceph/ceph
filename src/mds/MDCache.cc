@@ -212,6 +212,7 @@ MDCache::MDCache(MDS *m) :
 
   decayrate.set_halflife(g_conf->mds_decay_halflife);
 
+  memset(&default_file_layout, 0, sizeof(default_file_layout));
   memset(&default_log_layout, 0, sizeof(default_log_layout));
 
   did_shutdown_log_cap = false;
@@ -399,6 +400,8 @@ CInode *MDCache::create_system_inode(inodeno_t ino, int mode)
 CInode *MDCache::create_root_inode()
 {
   CInode *i = create_system_inode(MDS_INO_ROOT, S_IFDIR|0755);
+  i->inode.uid = g_conf->mds_root_ino_uid;
+  i->inode.gid = g_conf->mds_root_ino_gid;
   i->inode.layout = default_file_layout;
   i->inode.layout.fl_pg_pool = mds->mdsmap->get_first_data_pool();
   return i;

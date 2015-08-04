@@ -123,6 +123,7 @@ struct MonSessionMap {
 
   MonSession *new_session(const entity_inst_t& i, Connection *c) {
     MonSession *s = new MonSession(i, c);
+    assert(s);
     sessions.push_back(&s->item);
     if (i.name.is_osd())
       by_osd.insert(pair<int,MonSession*>(i.name.num(), s));

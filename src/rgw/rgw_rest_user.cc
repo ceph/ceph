@@ -306,6 +306,7 @@ void RGWOp_Subuser_Create::execute()
   RESTArgs::get_bool(s, "generate-secret", false, &gen_secret);
 
   perm_mask = rgw_str_to_perm(perm_str.c_str());
+  op_state.set_perm(perm_mask);
 
   // FIXME: no double checking
   if (!uid.empty())
@@ -316,9 +317,6 @@ void RGWOp_Subuser_Create::execute()
 
   if (!secret_key.empty())
     op_state.set_secret_key(secret_key);
-
-  if (perm_mask != 0)
-    op_state.set_perm(perm_mask);
 
   op_state.set_generate_subuser(gen_subuser);
 
@@ -373,6 +371,7 @@ void RGWOp_Subuser_Modify::execute()
   RESTArgs::get_bool(s, "generate-secret", false, &gen_secret);
 
   perm_mask = rgw_str_to_perm(perm_str.c_str());
+  op_state.set_perm(perm_mask);
 
   // FIXME: no double checking
   if (!uid.empty())
@@ -386,9 +385,6 @@ void RGWOp_Subuser_Modify::execute()
 
   if (gen_secret)
     op_state.set_gen_secret();
-
-  if (perm_mask != 0)
-    op_state.set_perm(perm_mask);
 
   if (!key_type_str.empty()) {
     if (key_type_str.compare("swift") == 0)

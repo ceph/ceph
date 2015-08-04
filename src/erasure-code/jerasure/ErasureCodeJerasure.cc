@@ -251,8 +251,7 @@ int ErasureCodeJerasureReedSolomonRAID6::parse(ErasureCodeProfile &profile,
 					       ostream *ss)
 {
   int err = ErasureCodeJerasure::parse(profile, ss);
-  if (profile.find("m") != profile.end())
-    profile.erase("m");
+  profile.erase("m");
   m = 2;
   if (w != 8 && w != 16 && w != 32) {
     *ss << "ReedSolomonRAID6: w=" << w
@@ -490,11 +489,9 @@ int ErasureCodeJerasureLiber8tion::parse(ErasureCodeProfile &profile,
 					 ostream *ss)
 {
   int err = ErasureCodeJerasure::parse(profile, ss);
-  if (profile.find("m") != profile.end())
-    profile.erase("m");
+  profile.erase("m");
   err |= to_int("m", profile, &m, DEFAULT_M, ss);
-  if (profile.find("w") != profile.end())
-    profile.erase("w");
+  profile.erase("w");
   err |= to_int("w", profile, &w, DEFAULT_W, ss);
   err |= to_int("packetsize", profile, &packetsize, DEFAULT_PACKETSIZE, ss);
 

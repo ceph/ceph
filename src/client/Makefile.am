@@ -16,6 +16,7 @@ noinst_HEADERS += \
 	client/Dir.h \
 	client/Fh.h \
 	client/Inode.h \
+	client/InodeRef.h \
 	client/MetaRequest.h \
 	client/MetaSession.h \
 	client/ClientSnapRealm.h \

@@ -57,42 +57,12 @@ void MetaRequest::dump(Formatter *f) const
 
 MetaRequest::~MetaRequest()
 {
-  assert(!_inode);
-  assert(!_old_inode);
-  assert(!_other_inode);
   if (_dentry)
     _dentry->put();
   if (_old_dentry)
     _old_dentry->put();
   if (reply)
     reply->put();
-}
-
-void MetaRequest::set_inode(Inode *in) {
-  assert(_inode == NULL);
-  _inode = in;
-  _inode->get();
-}
-Inode *MetaRequest::inode() {
-  return _inode;
-}
-
-void MetaRequest::set_old_inode(Inode *in) {
-  assert(_old_inode == NULL);
-  _old_inode = in;
-  _old_inode->get();
-}
-Inode *MetaRequest::old_inode() {
-  return _old_inode;
-}
-
-void MetaRequest::set_other_inode(Inode *in) {
-  assert(_other_inode == NULL);
-  _other_inode = in;
-  _other_inode->get();
-}
-Inode *MetaRequest::other_inode() {
-  return _other_inode;
 }
 
 void MetaRequest::set_dentry(Dentry *d) {

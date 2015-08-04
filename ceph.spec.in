@@ -360,14 +360,6 @@ Obsoletes:	python-ceph < %{epoch}:%{version}-%{release}
 This package contains Python libraries for interacting with Cephs distributed
 file system.
 
-%package -n rest-bench
-Summary:	RESTful benchmark
-Group:		System Environment/Libraries
-License:	LGPL-2.0
-Requires:	ceph-common = %{epoch}:%{version}-%{release}
-%description -n rest-bench
-RESTful bencher that can be used to benchmark radosgw performance.
-
 %package -n ceph-test
 Summary:	Ceph benchmarks and test tools
 Group:		System Environment/Libraries
@@ -528,12 +520,14 @@ export RPM_OPT_FLAGS=`echo $RPM_OPT_FLAGS | sed -e 's/i386/i486/'`
 		--prefix=/usr \
 		--localstatedir=/var \
 		--sysconfdir=/etc \
+%if 0%{?_with_systemd}
+		--with-systemdsystemunitdir=%_unitdir \
+%endif
 		--docdir=%{_docdir}/ceph \
 		--with-man-pages \
 		--mandir="%_mandir" \
 		--with-nss \
 		--without-cryptopp \
-		--with-rest-bench \
 		--with-debug \
 %if 0%{with cephfs_java}
 		--enable-cephfs-java \
@@ -544,9 +538,13 @@ export RPM_OPT_FLAGS=`echo $RPM_OPT_FLAGS | sed -e 's/i386/i486/'`
 		--with-librocksdb-static=check \
 %if 0%{?rhel} || 0%{?fedora}
 		--with-systemd-libexec-dir=/usr/libexec/ceph \
+		--with-rgw-user=root \
+		--with-rgw-group=root \
 %endif
 %if 0%{?opensuse} || 0%{?suse_version}
 		--with-systemd-libexec-dir=/usr/lib/ceph/ \
+		--with-rgw-user=wwwrun \
+		--with-rgw-group=www \
 %endif
 		$MY_CONF_OPT \
 		%{?_with_ocf} \
@@ -578,16 +576,28 @@ make -j$(getconf _NPROCESSORS_ONLN) check-local
 make DESTDIR=$RPM_BUILD_ROOT install
 find $RPM_BUILD_ROOT -type f -name "*.la" -exec rm -f {} ';'
 find $RPM_BUILD_ROOT -type f -name "*.a" -exec rm -f {} ';'
-install -D src/init-ceph $RPM_BUILD_ROOT%{_initrddir}/ceph
-install -D src/init-radosgw $RPM_BUILD_ROOT%{_initrddir}/ceph-radosgw
-install -D src/init-rbdmap $RPM_BUILD_ROOT%{_initrddir}/rbdmap
 install -D src/rbdmap $RPM_BUILD_ROOT%{_sysconfdir}/ceph/rbdmap
+install -D src/init-rbdmap $RPM_BUILD_ROOT%{_initrddir}/rbdmap
 %if 0%{?_with_systemd}
   install -m 0644 -D systemd/ceph.tmpfiles.d $RPM_BUILD_ROOT%{_tmpfilesdir}/%{name}.conf
+  install -m 0644 -D systemd/ceph-rgw.tmpfiles.d $RPM_BUILD_ROOT%{_tmpfilesdir}/%{name}-rgw.conf
+  install -m 0644 -D systemd/ceph-osd@.service $RPM_BUILD_ROOT%{_unitdir}/ceph-osd@.service
+  install -m 0644 -D systemd/ceph-mon@.service $RPM_BUILD_ROOT%{_unitdir}/ceph-mon@.service
+  install -m 0644 -D systemd/ceph-create-keys@.service $RPM_BUILD_ROOT%{_unitdir}/ceph-create-keys@.service
+  install -m 0644 -D systemd/ceph-mds@.service $RPM_BUILD_ROOT%{_unitdir}/ceph-mds@.service
+  install -m 0644 -D systemd/ceph-radosgw@.service $RPM_BUILD_ROOT%{_unitdir}/ceph-radosgw@.service
+  install -m 0644 -D systemd/ceph.target $RPM_BUILD_ROOT%{_unitdir}/ceph.target
+  install -m 0644 -D systemd/ceph-disk-activate-journal@.service $RPM_BUILD_ROOT%{_unitdir}/ceph-disk-activate-journal@.service
+  install -m 0644 -D systemd/ceph-disk-activate@.service $RPM_BUILD_ROOT%{_unitdir}/ceph-disk-activate@.service
+  install -m 0644 -D systemd/ceph-disk-dmcrypt-activate@.service $RPM_BUILD_ROOT%{_unitdir}/ceph-disk-dmcrypt-activate@.service
+  install -m 0755 -D systemd/ceph $RPM_BUILD_ROOT%{_sbindir}/rcceph
+%else
+  install -D src/init-ceph $RPM_BUILD_ROOT%{_initrddir}/ceph
+  install -D src/init-radosgw $RPM_BUILD_ROOT%{_initrddir}/ceph-radosgw
+  ln -sf ../../etc/init.d/ceph %{buildroot}/%{_sbindir}/rcceph
+  ln -sf ../../etc/init.d/ceph-radosgw %{buildroot}/%{_sbindir}/rcceph-radosgw
 %endif
 mkdir -p $RPM_BUILD_ROOT%{_sbindir}
-ln -sf ../../etc/init.d/ceph %{buildroot}/%{_sbindir}/rcceph
-ln -sf ../../etc/init.d/ceph-radosgw %{buildroot}/%{_sbindir}/rcceph-radosgw
 install -m 0644 -D src/logrotate.conf $RPM_BUILD_ROOT%{_sysconfdir}/logrotate.d/ceph
 install -m 0644 -D src/rgw/logrotate.conf $RPM_BUILD_ROOT%{_sysconfdir}/logrotate.d/radosgw
 chmod 0644 $RPM_BUILD_ROOT%{_docdir}/ceph/sample.ceph.conf
@@ -606,7 +616,11 @@ install -m 0644 -D udev/60-ceph-partuuid-workaround.rules $RPM_BUILD_ROOT%{_udev
 %if (0%{?rhel} && 0%{?rhel} < 7)
 install -m 0644 -D udev/95-ceph-osd-alt.rules $RPM_BUILD_ROOT/lib/udev/rules.d/95-ceph-osd.rules
 %else
+%if 0%{?_with_systemd}
+install -m 0644 -D udev/95-ceph-osd.rules.systemd $RPM_BUILD_ROOT/lib/udev/rules.d/95-ceph-osd.rules
+%else
 install -m 0644 -D udev/95-ceph-osd.rules $RPM_BUILD_ROOT/lib/udev/rules.d/95-ceph-osd.rules
+%endif
 %endif
 
 %if 0%{?rhel} >= 7 || 0%{?fedora} || 0%{?suse_version}
@@ -634,18 +648,56 @@ mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/log/radosgw
 %clean
 rm -rf $RPM_BUILD_ROOT
 
+%pre
+%if 0%{?_with_systemd}
+  %if 0%{?opensuse} || 0%{?suse_version}
+    # service_add_pre and friends don't work with parameterized systemd service
+    # instances, only with single services or targets, so we always pass
+    # ceph.target to these macros
+    %service_add_pre ceph.target
+  %endif
+%endif
+
+
 %post
 /sbin/ldconfig
-/sbin/chkconfig --add ceph
+%if 0%{?_with_systemd}
+  %if 0%{?opensuse} || 0%{?suse_version}
+    %service_add_post ceph.target
+  %endif
+%else
+  /sbin/chkconfig --add ceph
+%endif
+mkdir -p %{_localstatedir}/run/ceph/
 
 %preun
-%if %{defined suse_version}
-%stop_on_removal ceph
+%if 0%{?_with_systemd}
+  %if 0%{?opensuse} || 0%{?suse_version}
+    %service_del_preun ceph.target
+  %endif
+  # Need a special case here when removing the RPM to disable specific
+  # service instance, or stale symlinks will be left lying around in
+  # /etc/systemd/system.  May as well stop them too for completeness
+  # (although strictly service_del_preun would do that anyway by dint
+  # of stopping ceph.target)
+  SERVICE_LIST=$(systemctl | grep -E '^ceph-mon@|^ceph-create-keys@|^ceph-osd@|^ceph-mds@|^ceph-disk-'  | cut -d' ' -f1)
+  if [ -n "$SERVICE_LIST" ]; then
+    for SERVICE in $SERVICE_LIST; do
+      /usr/bin/systemctl --no-reload disable $SERVICE > /dev/null 2>&1 || :
+      /usr/bin/systemctl stop $SERVICE > /dev/null 2>&1 || :
+    done
+  fi
+%else
+  %if 0%{?opensuse} || 0%{?suse_version}
+    %stop_on_removal ceph
+  %endif
+  %if 0%{?rhel} || 0%{?fedora}
+    if [ $1 = 0 ] ; then
+      /sbin/service ceph stop >/dev/null 2>&1
+      /sbin/chkconfig --del ceph
+    fi
+  %endif
 %endif
-if [ $1 = 0 ] ; then
-    /sbin/service ceph stop >/dev/null 2>&1
-    /sbin/chkconfig --del ceph
-fi
 
 %postun
 /sbin/ldconfig
@@ -682,13 +734,22 @@ fi
 %{_bindir}/cephfs-data-scan
 %{_bindir}/ceph-debugpack
 %{_bindir}/ceph-coverage
-%{_initrddir}/ceph
 %if 0%{?_with_systemd}
 %{_tmpfilesdir}/%{name}.conf
+%{_unitdir}/ceph-mds@.service
+%{_unitdir}/ceph-mon@.service
+%{_unitdir}/ceph-create-keys@.service
+%{_unitdir}/ceph-osd@.service
+%{_unitdir}/ceph-radosgw@.service
+%{_unitdir}/ceph-disk-activate-journal@.service
+%{_unitdir}/ceph-disk-activate@.service
+%{_unitdir}/ceph-disk-dmcrypt-activate@.service
+%{_unitdir}/ceph.target
+%else
+%{_initrddir}/ceph
+%{_sbindir}/rcceph
 %endif
 %{_sbindir}/ceph-disk
-%{_sbindir}/ceph-disk-activate
-%{_sbindir}/ceph-disk-prepare
 %{_sbindir}/ceph-disk-udev
 %{_sbindir}/ceph-create-keys
 %{_sbindir}/rcceph
@@ -819,39 +880,74 @@ fi
 #################################################################################
 %files radosgw
 %defattr(-,root,root,-)
-%{_initrddir}/ceph-radosgw
 %{_bindir}/radosgw
 %{_bindir}/radosgw-admin
 %{_mandir}/man8/radosgw.8*
 %{_mandir}/man8/radosgw-admin.8*
-%{_sbindir}/rcceph-radosgw
 %config(noreplace) %{_sysconfdir}/logrotate.d/radosgw
 %config %{_sysconfdir}/bash_completion.d/radosgw-admin
 %dir %{_localstatedir}/log/radosgw/
 %dir %{_localstatedir}/lib/ceph/radosgw
+%if 0%{?_with_systemd}
+%{_tmpfilesdir}/%{name}-rgw.conf
+%else
+%{_initrddir}/ceph-radosgw
+%{_sbindir}/rcceph-radosgw
+%endif
 
 %post radosgw
 /sbin/ldconfig
-%if %{defined suse_version}
-%fillup_and_insserv -f -y ceph-radosgw
+%if 0%{?opensuse} || 0%{?suse_version}
+  # TODO: find out what exactly this systemd-tmpfiles inovcation is for
+  systemd-tmpfiles --create /%{_tmpfilesdir}/ceph-rgw.conf
+  # explicit systemctl daemon-reload (that's the only relevant bit of
+  # service_add_post; the rest is all sysvinit --> systemd migration which
+  # isn't applicable in this context (see above comment).
+  /usr/bin/systemctl daemon-reload >/dev/null 2>&1 || :
+%else
+  %if 0%{?suse_version} || 0%{?opensuse}
+    %fillup_and_insserv -f -y ceph-radosgw
+  %endif
 %endif
 
 %preun radosgw
-%if %{defined suse_version}
-%stop_on_removal ceph-radosgw
+%if 0%{?_with_systemd}
+  SERVICE_LIST=$(systemctl | grep -E '^ceph-radosgw@'  | cut -d' ' -f1)
+  if [ -n "$SERVICE_LIST" ]; then
+    for SERVICE in $SERVICE_LIST; do
+      /usr/bin/systemctl --no-reload disable $SERVICE > /dev/null 2>&1 || :
+      /usr/bin/systemctl stop $SERVICE > /dev/null 2>&1 || :
+    done
+  fi
+%else
+  %if 0%{?suse_version} || 0%{?opensuse}
+    %stop_on_removal ceph-radosgw
+  %endif
 %endif
 
 %postun radosgw
 /sbin/ldconfig
-%if %{defined suse_version}
-%restart_on_update ceph-radosgw
-%insserv_cleanup
+%if 0%{?_with_systemd}
+  SERVICE_LIST=$(systemctl | grep -E '^ceph-radosgw@'  | cut -d' ' -f1)
+  if [ -n "$SERVICE_LIST" ]; then
+    for SERVICE in $SERVICE_LIST; do
+      /usr/bin/systemctl --no-reload disable $SERVICE > /dev/null 2>&1 || :
+      /usr/bin/systemctl try-restart $SERVICE > /dev/null 2>&1 || :
+    done
+  fi
+%else
+  %if 0%{?suse_version} || 0%{?opensuse}
+    %restart_on_update ceph-radosgw
+  %endif
 %endif
 # Package removal cleanup
 if [ "$1" -eq "0" ] ; then
     rm -rf /var/log/radosgw
 fi
 
+%if 0%{?suse_version} || 0%{?opensuse}
+  %insserv_cleanup
+%endif
 
 #################################################################################
 %if %{with ocf}
@@ -961,11 +1057,6 @@ ln -sf %{_libdir}/librbd.so.1 /usr/lib64/qemu/librbd.so.1
 %files -n python-cephfs
 %defattr(-,root,root,-)
 %{python_sitelib}/cephfs.py*
-
-#################################################################################
-%files -n rest-bench
-%defattr(-,root,root,-)
-%{_bindir}/rest-bench
 
 #################################################################################
 %files -n ceph-test

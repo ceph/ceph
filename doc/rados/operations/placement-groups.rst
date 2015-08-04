@@ -58,11 +58,10 @@ cannot realistically track placement on a per-object basis.
                   |                       |
                   +-----------------------+
 
-Placement groups are invisible to the Ceph user: the CRUSH algorithm
-determines in which placement group the object will be
-placed. Although CRUSH is a deterministic function using the object
-name as a parameter, there is no way to force an object into a given
-placement group.
+The Ceph client will calculate which placement group an object should
+be in. It does this by hashing the object ID and applying an operation
+based on the number of PGs in the defined pool and the ID of the pool.
+See `Mapping PGs to OSDs`_ for details.
 
 The object's contents within a placement group are stored in a set of
 OSDs. For instance, in a replicated pool of size two, each placement
@@ -431,3 +430,4 @@ entirely. To mark the "unfound" objects as "lost", execute the following::
 
 
 .. _Create a Pool: ../pools#createpool
+.. _Mapping PGs to OSDs: ../../../architecture#mapping-pgs-to-osds

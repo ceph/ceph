@@ -3355,59 +3355,30 @@ int FileStore::_do_sparse_copy_range(int from, int to, uint64_t srcoff, uint64_t
 {
   dout(20) << __func__ << " " << srcoff << "~" << len << " to " << dstoff << dendl;
   int r = 0;
-  struct fiemap *fiemap = NULL;
-
+  map<uint64_t, uint64_t> exomap;
   // fiemap doesn't allow zero length
   if (len == 0)
     return 0;
 
-  r = backend->do_fiemap(from, srcoff, len, &fiemap);
-  if (r < 0) {
-    derr << "do_fiemap failed:" << srcoff << "~" << len << " = " << r << dendl;
-    return r;
-  }
-
-  // No need to copy
-  if (fiemap->fm_mapped_extents == 0)
-    return r;
-
-  struct fiemap_extent *extent = &fiemap->fm_extents[0];
-
-  /* start where we were asked to start */
-  if (extent->fe_logical < srcoff) {
-    extent->fe_length -= srcoff - extent->fe_logical;
-    extent->fe_logical = srcoff;
+  if (backend->has_seek_data_hole()) {
+    dout(15) << "seek_data/seek_hole " << from << " " << srcoff << "~" << len << dendl;
+    r = _do_seek_hole_data(from, srcoff, len, &exomap);
+  } else if (backend->has_fiemap()) {
+    dout(15) << "fiemap ioctl" << from << " " << srcoff << "~" << len << dendl;
+    r = _do_fiemap(from, srcoff, len, &exomap);
   }
 
   int64_t written = 0;
-  uint64_t i = 0;
-
-  while (i < fiemap->fm_mapped_extents) {
-    struct fiemap_extent *next = extent + 1;
-
-    dout(10) << __func__ << " fm_mapped_extents=" << fiemap->fm_mapped_extents
-             << " fe_logical=" << extent->fe_logical << " fe_length="
-             << extent->fe_length << dendl;
-
-    /* try to merge extents */
-    while ((i < fiemap->fm_mapped_extents - 1) &&
-           (extent->fe_logical + extent->fe_length == next->fe_logical)) {
-        next->fe_length += extent->fe_length;
-        next->fe_logical = extent->fe_logical;
-        extent = next;
-        next = extent + 1;
-        i++;
+  for (map<uint64_t, uint64_t>::iterator miter = exomap.begin(); miter != exomap.end(); ++miter) {
+    uint64_t it_off = miter->first - srcoff + dstoff;
+    r = _do_copy_range(from, to, miter->first, miter->second, it_off, true);
+    if (r < 0) {
+      r = -errno;
+      derr << "FileStore::_do_copy_range: copy error at " << miter->first << "~" << miter->second
+             << " to " << it_off << ", " << cpp_strerror(r) << dendl;
+      break;
     }
-
-    if (extent->fe_logical + extent->fe_length > srcoff + len)
-      extent->fe_length = srcoff + len - extent->fe_logical;
-
-    r = _do_copy_range(from, to, extent->fe_logical, extent->fe_length, extent->fe_logical - srcoff + dstoff, true);
-    if (r < 0)
-      goto out;
-    written += extent->fe_length;
-    i++;
-    extent++;
+    written += miter->second;
   }
 
   if (r >= 0) {
@@ -4072,7 +4043,7 @@ int FileStore::getattr(coll_t cid, const ghobject_t& oid, const char *name, buff
     return -EIO;
   } else {
     tracepoint(objectstore, getattr_exit, r);
-    return r;
+    return r < 0 ? r : 0;
   }
 }
 

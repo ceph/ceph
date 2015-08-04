@@ -879,6 +879,33 @@ int RGWGetObj::get_data_cb(bufferlist& bl, off_t bl_ofs, off_t bl_len)
   return send_response_data(bl, bl_ofs, bl_len);
 }
 
+bool RGWGetObj::prefetch_data()
+{
+  /* HEAD request, stop prefetch*/
+  if (!get_data) {
+    return false;
+  }
+
+  bool prefetch_first_chunk = true;
+  range_str = s->info.env->get("HTTP_RANGE");
+
+  if(range_str) {
+    int r = parse_range(range_str, ofs, end, &partial_content);
+    /* error on parsing the range, stop prefetch and will fail in execte() */
+    if (r < 0) {
+      range_parsed = false;
+      return false;
+    } else {
+      range_parsed = true;
+    }
+    /* range get goes to shadown objects, stop prefetch */
+    if (ofs >= s->cct->_conf->rgw_max_chunk_size) {
+      prefetch_first_chunk = false;
+    }
+  }
+
+  return get_data && prefetch_first_chunk;
+}
 void RGWGetObj::pre_exec()
 {
   rgw_bucket_object_pre_exec(s);
@@ -960,9 +987,12 @@ done_err:
 int RGWGetObj::init_common()
 {
   if (range_str) {
-    int r = parse_range(range_str, ofs, end, &partial_content);
-    if (r < 0)
-      return r;
+    /* range parsed error when prefetch*/
+    if (!range_parsed) {
+      int r = parse_range(range_str, ofs, end, &partial_content);
+      if (r < 0)
+        return r;
+    }
   }
   if (if_mod) {
     if (parse_time(if_mod, &mod_time) < 0)
