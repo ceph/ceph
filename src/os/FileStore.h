@@ -781,7 +781,7 @@ protected:
     return filestore->current_fn;
   }
   int _copy_range(int from, int to, uint64_t srcoff, uint64_t len, uint64_t dstoff) {
-    if (has_fiemap()) {
+    if (has_fiemap() || has_seek_data_hole()) {
       return filestore->_do_sparse_copy_range(from, to, srcoff, len, dstoff);
     } else {
       return filestore->_do_copy_range(from, to, srcoff, len, dstoff);
