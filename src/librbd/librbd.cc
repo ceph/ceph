@@ -304,6 +304,12 @@ namespace librbd {
     return c->get_return_value();
   }
 
+  void *RBD::AioCompletion::get_arg()
+  {
+    librbd::AioCompletion *c = (librbd::AioCompletion *)pc;
+    return c->get_arg();
+  }
+
   void RBD::AioCompletion::release()
   {
     librbd::AioCompletion *c = (librbd::AioCompletion *)pc;
@@ -2250,6 +2256,12 @@ extern "C" ssize_t rbd_aio_get_return_value(rbd_completion_t c)
 {
   librbd::RBD::AioCompletion *comp = (librbd::RBD::AioCompletion *)c;
   return comp->get_return_value();
+}
+
+extern "C" void *rbd_aio_get_arg(rbd_completion_t c)
+{
+  librbd::RBD::AioCompletion *comp = (librbd::RBD::AioCompletion *)c;
+  return comp->get_arg();
 }
 
 extern "C" void rbd_aio_release(rbd_completion_t c)

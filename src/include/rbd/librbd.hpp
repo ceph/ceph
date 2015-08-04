@@ -70,6 +70,7 @@ public:
     bool is_complete();
     int wait_for_complete();
     ssize_t get_return_value();
+    void *get_arg();
     void release();
   };
 

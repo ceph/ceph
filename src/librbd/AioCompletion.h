@@ -157,6 +157,10 @@ namespace librbd {
       Mutex::Locker l(lock);
       event_notify = true;
     }
+
+    void *get_arg() {
+      return complete_arg;
+    }
   };
 
   class C_AioRequest : public Context {
