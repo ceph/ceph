@@ -4848,6 +4848,8 @@ void PG::on_new_interval()
   } else {
     randomly_sort_nibblewise = false;
   }
+
+  _on_new_interval();
 }
 
 void PG::proc_primary_info(ObjectStore::Transaction &t, const pg_info_t &oinfo)
