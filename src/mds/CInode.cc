@@ -2577,6 +2577,10 @@ void CInode::decode_snap_blob(bufferlist& snapbl)
     open_snaprealm();
     bufferlist::iterator p = snapbl.begin();
     ::decode(snaprealm->srnode, p);
+    if (is_base()) {
+      bool ok = snaprealm->_open_parents(NULL);
+      assert(ok);
+    }
     dout(20) << "decode_snap_blob " << *snaprealm << dendl;
   }
 }
