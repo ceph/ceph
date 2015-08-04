@@ -2031,7 +2031,12 @@ public:
                          map<RGWObjCategory, RGWStorageStats> *calculated_stats);
   int bucket_rebuild_index(rgw_bucket& bucket);
   int remove_objs_from_index(rgw_bucket& bucket, list<rgw_obj_key>& oid_list);
-  int fix_head_obj_locator(rgw_bucket& bucket, rgw_obj_key& key);
+  int move_rados_obj(librados::IoCtx& src_ioctx,
+		     const string& src_oid, const string& src_locator,
+	             librados::IoCtx& dst_ioctx,
+		     const string& dst_oid, const string& dst_locator);
+  int fix_head_obj_locator(rgw_bucket& bucket, bool copy_obj, bool remove_bad, rgw_obj_key& key);
+  int fix_tail_obj_locator(rgw_bucket& bucket, rgw_obj_key& key, bool fix, bool *need_fix);
 
   int cls_user_get_header(const string& user_id, cls_user_header *header);
   int cls_user_get_header_async(const string& user_id, RGWGetUserHeader_CB *ctx);

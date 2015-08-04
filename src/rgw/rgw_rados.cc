@@ -2991,7 +2991,7 @@ int RGWRados::get_obj_ref(const rgw_obj& obj, rgw_rados_ref *ref, rgw_bucket *bu
  * fixes an issue where head objects were supposed to have a locator created, but ended
  * up without one
  */
-int RGWRados::fix_head_obj_locator(rgw_bucket& bucket, rgw_obj_key& key)
+int RGWRados::fix_head_obj_locator(rgw_bucket& bucket, bool copy_obj, bool remove_bad, rgw_obj_key& key)
 {
   string oid;
   string locator;
@@ -3041,19 +3041,174 @@ int RGWRados::fix_head_obj_locator(rgw_bucket& bucket, rgw_obj_key& key)
     return -EIO;
   }
 
-  librados::ObjectWriteOperation wop;
+  if (copy_obj) {
+    librados::ObjectWriteOperation wop;
 
-  wop.mtime(&mtime);
+    wop.mtime(&mtime);
 
-  map<string, bufferlist>::iterator iter;
-  for (iter = attrs.begin(); iter != attrs.end(); ++iter) {
-    wop.setxattr(iter->first.c_str(), iter->second);
+    map<string, bufferlist>::iterator iter;
+    for (iter = attrs.begin(); iter != attrs.end(); ++iter) {
+      wop.setxattr(iter->first.c_str(), iter->second);
+    }
+
+    wop.write(0, data);
+
+    ioctx.locator_set_key(locator);
+    ioctx.operate(oid, &wop);
   }
 
-  wop.write(0, data);
+  if (remove_bad) {
+    ioctx.locator_set_key(string());
 
-  ioctx.locator_set_key(locator);
-  ioctx.operate(oid, &wop);
+    ret = ioctx.remove(oid);
+    if (ret < 0) {
+      lderr(cct) << "ERROR: failed to remove original bad object" << dendl;
+      return ret;
+    }
+  }
+
+  return 0;
+}
+
+int RGWRados::move_rados_obj(librados::IoCtx& src_ioctx,
+			     const string& src_oid, const string& src_locator,
+		             librados::IoCtx& dst_ioctx,
+			     const string& dst_oid, const string& dst_locator)
+{
+
+#define COPY_BUF_SIZE (4 * 1024 * 1024)
+  bool done = false;
+  uint64_t chunk_size = COPY_BUF_SIZE;
+  uint64_t ofs = 0;
+  int ret = 0;
+  time_t mtime = 0;
+  uint64_t size;
+
+  if (src_oid == dst_oid && src_locator == dst_locator) {
+    return 0;
+  }
+
+  src_ioctx.locator_set_key(src_locator);
+  dst_ioctx.locator_set_key(dst_locator);
+
+  do {
+    bufferlist data;
+    ObjectReadOperation rop;
+    ObjectWriteOperation wop;
+
+    if (ofs == 0) {
+      rop.stat(&size, &mtime, NULL);
+    }
+    rop.read(ofs, chunk_size, &data, NULL);
+    ret = src_ioctx.operate(src_oid, &rop, NULL);
+    if (ret < 0) {
+      goto done_err;
+    }
+
+    if (data.length() == 0) {
+      break;
+    }
+
+    if (ofs == 0) {
+      wop.create(true); /* make it exclusive */
+      wop.mtime(&mtime);
+    }
+    wop.write(ofs, data);
+    ret = dst_ioctx.operate(dst_oid, &wop);
+    ofs += data.length();
+    done = data.length() != chunk_size;
+  } while (!done);
+
+  if (ofs != size) {
+    lderr(cct) << "ERROR: " << __func__ << ": copying " << src_oid << " -> " << dst_oid
+               << ": expected " << size << " bytes to copy, ended up with " << ofs << dendl;
+    ret = -EIO;
+    goto done_err;
+  }
+
+  src_ioctx.remove(src_oid);
+
+  return 0;
+
+done_err:
+  lderr(cct) << "ERROR: failed to copy " << src_oid << " -> " << dst_oid << dendl;
+  return ret;
+}
+
+/*
+ * fixes an issue where head objects were supposed to have a locator created, but ended
+ * up without one
+ */
+int RGWRados::fix_tail_obj_locator(rgw_bucket& bucket, rgw_obj_key& key, bool fix, bool *need_fix)
+{
+  string locator;
+
+  rgw_obj obj(bucket, key);
+
+  if (need_fix) {
+    *need_fix = false;
+  }
+
+  rgw_rados_ref ref;
+  int r = get_obj_ref(obj, &ref, &bucket);
+  if (r < 0) {
+    return r;
+  }
+
+  RGWObjState *astate = NULL;
+  RGWObjectCtx rctx(this);
+  r = get_obj_state(&rctx, obj, &astate, NULL);
+  if (r < 0)
+    return r;
+
+  if (astate->has_manifest) {
+    RGWObjManifest::obj_iterator miter;
+    RGWObjManifest& manifest = astate->manifest;
+    for (miter = manifest.obj_begin(); miter != manifest.obj_end(); ++miter) {
+      rgw_obj loc = miter.get_location();
+      string oid;
+      string locator;
+
+      if (loc.ns.empty()) {
+	/* continue, we're only interested in tail objects */
+	continue;
+      }
+
+      get_obj_bucket_and_oid_loc(loc, bucket, oid, locator);
+      ref.ioctx.locator_set_key(locator);
+
+      ldout(cct, 20) << __func__ << ": key=" << key << " oid=" << oid << " locator=" << locator << dendl;
+
+      r = ref.ioctx.stat(oid, NULL, NULL);
+      if (r != -ENOENT) {
+	continue;
+      }
+
+      string bad_loc;
+      prepend_bucket_marker(bucket, loc.get_orig_obj(), bad_loc);
+
+      /* create a new ioctx with the bad locator */
+      librados::IoCtx src_ioctx;
+      src_ioctx.dup(ref.ioctx);
+      src_ioctx.locator_set_key(bad_loc);
+
+      r = src_ioctx.stat(oid, NULL, NULL);
+      if (r != 0) {
+	/* cannot find a broken part */
+	continue;
+      }
+      ldout(cct, 20) << __func__ << ": found bad object part: " << loc << dendl;
+      if (need_fix) {
+        *need_fix = true;
+      }
+      if (fix) {
+        r = move_rados_obj(src_ioctx, oid, bad_loc, ref.ioctx, oid, locator);
+        if (r < 0) {
+          lderr(cct) << "ERROR: copy_rados_obj() on oid=" << oid << " returned r=" << r << dendl;
+        }
+      }
+    }
+  }
 
   return 0;
 }
