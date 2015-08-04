@@ -2173,7 +2173,7 @@ void FileStore::_set_replay_guard(coll_t cid,
     assert(0 == "_set_replay_guard failed");
   }
   _set_replay_guard(fd, spos, 0, in_progress);
-  ::close(fd);
+  VOID_TEMP_FAILURE_RETRY(::close(fd));
 } 
 
 
@@ -2229,7 +2229,7 @@ void FileStore::_close_replay_guard(coll_t cid,
     assert(0 == "_close_replay_guard failed");
   }
   _close_replay_guard(fd, spos);
-  ::close(fd);
+  VOID_TEMP_FAILURE_RETRY(::close(fd));
 } 
 
 void FileStore::_close_replay_guard(int fd, const SequencerPosition& spos)
