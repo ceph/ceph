@@ -527,54 +527,53 @@ int RGWSimpleAsyncOp::state_all_complete()
   return set_state(Done);
 }
 
-class RGWReadSyncStatusOp : public RGWSimpleAsyncOp {
+template <class T>
+class RGWSimpleRadosAsyncOp : public RGWSimpleAsyncOp {
   RGWAsyncRadosProcessor *async_rados;
   RGWRados *store;
   RGWObjectCtx& obj_ctx;
   bufferlist bl;
 
-  RGWMetaSyncGlobalStatus *global_status;
-  rgw_obj global_status_obj;
+  rgw_bucket pool;
+  string oid;
 
-  RGWMetaSyncStatusManager sync_store;
+  T *result;
+
   RGWAsyncGetSystemObj *req;
 
 public:
-  RGWReadSyncStatusOp(RGWAsyncRadosProcessor *_async_rados, RGWRados *_store,
+  RGWSimpleRadosAsyncOp(RGWAsyncRadosProcessor *_async_rados, RGWRados *_store,
 		      RGWObjectCtx& _obj_ctx,
-		      RGWMetaSyncGlobalStatus *_gs) : RGWSimpleAsyncOp(_store->ctx()),
+		      rgw_bucket& _pool, const string& _oid,
+		      T *_result) : RGWSimpleAsyncOp(_store->ctx()),
                                                 async_rados(_async_rados), store(_store),
-                                                obj_ctx(_obj_ctx), global_status(_gs),
-                                                sync_store(_store), req(NULL) {}
+                                                obj_ctx(_obj_ctx),
+						pool(_pool), oid(_oid),
+						result(_result),
+                                                req(NULL) { }
                                                          
-  ~RGWReadSyncStatusOp() {
+  ~RGWSimpleRadosAsyncOp() {
     delete req;
   }
 
-  int init();
   int send_request();
   int request_complete();
 };
 
-int RGWReadSyncStatusOp::init()
+template <class T>
+int RGWSimpleRadosAsyncOp<T>::send_request()
 {
-  string global_status_oid = "mdlog.state.global";
-  global_status_obj = rgw_obj(store->get_zone_params().log_pool, global_status_oid);
-
-  return 0;
-}
-
-int RGWReadSyncStatusOp::send_request()
-{
+  rgw_obj obj = rgw_obj(pool, oid);
   req = new RGWAsyncGetSystemObj(env->stack->create_completion_notifier(),
 			         store, &obj_ctx, NULL,
-				 global_status_obj,
+				 obj,
 				 &bl, 0, -1);
   async_rados->queue(req);
   return 0;
 }
 
-int RGWReadSyncStatusOp::request_complete()
+template <class T>
+int RGWSimpleRadosAsyncOp<T>::request_complete()
 {
   int ret = req->get_ret_status();
   if (ret != -ENOENT) {
@@ -583,16 +582,37 @@ int RGWReadSyncStatusOp::request_complete()
     }
     bufferlist::iterator iter = bl.begin();
     try {
-      ::decode(*global_status, iter);
+      ::decode(*result, iter);
     } catch (buffer::error& err) {
       ldout(store->ctx(), 0) << "ERROR: failed to decode global mdlog status" << dendl;
     }
   } else {
-    *global_status = RGWMetaSyncGlobalStatus();
+    *result = T();
   }
 
   return 0;
 }
+
+class RGWReadSyncStatusOp : public RGWSimpleRadosAsyncOp<RGWMetaSyncGlobalStatus> {
+  RGWAsyncRadosProcessor *async_rados;
+  RGWRados *store;
+  RGWObjectCtx& obj_ctx;
+
+  RGWMetaSyncGlobalStatus *global_status;
+
+public:
+  RGWReadSyncStatusOp(RGWAsyncRadosProcessor *_async_rados, RGWRados *_store,
+		      RGWObjectCtx& _obj_ctx,
+		      RGWMetaSyncGlobalStatus *_gs) : RGWSimpleRadosAsyncOp(_async_rados, _store, _obj_ctx,
+									    _store->get_zone_params().log_pool,
+									    "mdlog.state.global",
+									    _gs),
+                                                      async_rados(_async_rados), store(_store),
+                                                      obj_ctx(_obj_ctx), global_status(_gs) {}
+
+  ~RGWReadSyncStatusOp() {
+  }
+};
 
 class RGWMetaSyncOp : public RGWAsyncOp {
   RGWRados *store;
