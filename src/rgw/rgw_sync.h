@@ -224,9 +224,12 @@ public:
   RGWMetaSyncGlobalStatus& get_global_status() { return global_status; } 
 };
 
+class RGWAsyncRadosProcessor;
+
 class RGWRemoteMetaLog : public RGWAsyncOpsManager {
   RGWRados *store;
   RGWRESTConn *conn;
+  RGWAsyncRadosProcessor *async_rados;
 
   rgw_mdlog_info log_info;
 
@@ -258,6 +261,7 @@ public:
                                        status_manager(store) {}
 
   int init();
+  void finish();
 
   int list_shard(int shard_id);
   int list_shards();
@@ -274,6 +278,9 @@ class RGWMetadataSync {
   RGWRemoteMetaLog master_log;
 public:
   RGWMetadataSync(RGWRados *_store) : store(_store), master_log(store) {}
+  ~RGWMetadataSync() {
+    master_log.finish();
+  }
 
   int init();
 
