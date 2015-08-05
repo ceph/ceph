@@ -71,10 +71,10 @@
     lock add <image-spec> <id> [--shared <tag>] take a lock called id on an image
     lock remove <image-spec> <id> <locker>      release a lock on an image
     bench-write <image-spec>                    simple write benchmark
-                   --io-size <bytes>              write size
-                   --io-threads <num>             ios in flight
-                   --io-total <bytes>             total bytes to write
-                   --io-pattern <seq|rand>        write pattern
+                 --io-size <size in B/K/M/G/T>    write size
+                 --io-threads <num>               ios in flight
+                 --io-total <size in B/K/M/G/T>   total size to write
+                 --io-pattern <seq|rand>          write pattern
   
   <image-spec> is [<pool-name>]/<image-name>,
   <snap-spec> is [<pool-name>]/<image-name>@<snap-name>,
@@ -98,7 +98,7 @@
                                        use multiple times to enable multiple features
     --image-shared                     image will be used concurrently (disables
                                        RBD exclusive lock and dependent features)
-    --stripe-unit <size-in-bytes>      size (in bytes) of a block of data
+    --stripe-unit <size in B/K/M>      size of a block of data
     --stripe-count <num>               number of consecutive objects in a stripe
     --id <username>                    rados user (without 'client.'prefix) to
                                        authenticate as
