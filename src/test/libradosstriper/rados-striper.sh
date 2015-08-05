@@ -20,7 +20,7 @@ function run() {
     local dir=$1
     shift
 
-    export CEPH_MON="127.0.0.1:7113"
+    export CEPH_MON="127.0.0.1:7116"
     export CEPH_ARGS
     CEPH_ARGS+="--fsid=$(uuidgen) --auth-supported=none "
     CEPH_ARGS+="--mon-host=$CEPH_MON "
