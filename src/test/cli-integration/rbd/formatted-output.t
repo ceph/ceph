@@ -35,7 +35,7 @@ clone
   $ rbd clone bar@snap rbd_other/child
   $ rbd snap create rbd_other/child@snap
   $ rbd flatten rbd_other/child 2> /dev/null
-  $ rbd bench-write rbd_other/child --io-pattern seq --io-total 1 > /dev/null 2>&1
+  $ rbd bench-write rbd_other/child --io-pattern seq --io-total 1B > /dev/null 2>&1
 
 lock
 ====
