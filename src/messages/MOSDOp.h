@@ -32,7 +32,7 @@ class OSD;
 
 class MOSDOp : public Message {
 
-  static const int HEAD_VERSION = 6;
+  static const int HEAD_VERSION = 7;
   static const int COMPAT_VERSION = 3;
 
 private:
@@ -58,6 +58,14 @@ private:
 
   osd_reqid_t reqid; // reqid explicitly set by sender
 
+  /**
+   * Provides a mechanism to let client specify whether
+   * it wants to wait if OSD couldn't process the OP at
+   * the moment.
+   *
+   * True (default) if client want to wait, false otherwise.
+   */
+  bool want_wait;
 public:
   friend class MOSDOpReply;
 
@@ -101,15 +109,15 @@ public:
   utime_t get_mtime() { return mtime; }
 
   MOSDOp()
-    : Message(CEPH_MSG_OSD_OP, HEAD_VERSION, COMPAT_VERSION) { }
+    : Message(CEPH_MSG_OSD_OP, HEAD_VERSION, COMPAT_VERSION), want_wait(true) { }
   MOSDOp(int inc, long tid,
          object_t& _oid, object_locator_t& _oloc, pg_t& _pgid, epoch_t _osdmap_epoch,
-	 int _flags, uint64_t feat)
+	 int _flags, uint64_t feat, bool _want_wait = true)
     : Message(CEPH_MSG_OSD_OP, HEAD_VERSION, COMPAT_VERSION),
       client_inc(inc),
       osdmap_epoch(_osdmap_epoch), flags(_flags), retry_attempt(-1),
       oid(_oid), oloc(_oloc), pgid(_pgid),
-      features(feat) {
+      features(feat), want_wait(_want_wait) {
     set_tid(tid);
   }
 private:
@@ -192,6 +200,23 @@ public:
     return retry_attempt;
   }
 
+  /**
+   * get the flag which indicates if client want to wait
+   * if the OSD couldn't process the OP at the moment.
+   */
+  bool get_op_want_wait() const {
+    return want_wait;
+  }
+
+  /**
+   * set the flag indicating whether client want to
+   * wait if the OSD couldn't process the OP at the moment.
+   */
+  void set_op_want_wait(bool _want_wait) {
+    want_wait = _want_wait;
+  }
+
+
   // marshalling
   virtual void encode_payload(uint64_t features) {
 
@@ -272,6 +297,7 @@ struct ceph_osd_request_head {
       ::encode(retry_attempt, payload);
       ::encode(features, payload);
       ::encode(reqid, payload);
+      ::encode(want_wait, payload);
     }
   }
 
@@ -320,6 +346,7 @@ struct ceph_osd_request_head {
       retry_attempt = -1;
       features = 0;
       reqid = osd_reqid_t();
+      want_wait = true;
     } else {
       // new decode 
       ::decode(client_inc, p);
@@ -365,6 +392,11 @@ struct ceph_osd_request_head {
 	::decode(reqid, p);
       else
 	reqid = osd_reqid_t();
+
+      if (header.version >= 7)
+        ::decode(want_wait, p);
+      else
+        want_wait = true;
     }
 
     OSDOp::split_osd_op_vector_in_data(ops, data);
@@ -401,6 +433,7 @@ struct ceph_osd_request_head {
       out << " RETRY=" << get_retry_attempt();
     if (reassert_version != eversion_t())
       out << " reassert_version=" << reassert_version;
+    out << " want_wait=" << want_wait;
     if (get_snap_seq())
       out << " snapc " << get_snap_seq() << "=" << snaps;
     out << " " << ceph_osd_flag_string(get_flags());
