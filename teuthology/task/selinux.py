@@ -44,9 +44,13 @@ class SELinux(Task):
 
     def setup(self):
         super(SELinux, self).setup()
+        self.rotate_log()
         self.old_modes = self.get_modes()
         self.old_denials = self.get_denials()
         self.set_mode()
+
+    def rotate_log(self):
+        self.cluster.run(args="sudo service auditd rotate")
 
     def get_modes(self):
         """
