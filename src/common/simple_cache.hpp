@@ -18,6 +18,7 @@
 #include <map>
 #include <list>
 #include <memory>
+#include <set>
 #include "common/Mutex.h"
 #include "common/Cond.h"
 
@@ -97,6 +98,88 @@ public:
   void add(K key, V value) {
     Mutex::Locker l(lock);
     _add(key, value);
+  }
+};
+
+// a simple MRU implementation with no max size limit
+template <class K, class V>
+class SimpleMRU {
+  Mutex lock;
+  unordered_map<K, typename list<pair<K, V> >::iterator> contents;
+  list<pair<K, V> > lru;
+  map<K, V> pinned;
+
+  void _add(K key, V value) {
+    lru.push_front(make_pair(key, value));
+    contents[key] = lru.begin();
+  }
+
+public:
+  SimpleMRU() : lock("SimpleMRU::lock") {}
+
+  void pin(K key, V val) {
+    Mutex::Locker l(lock);
+    pinned.insert(make_pair(key, val));
+  }
+
+  void clear_pinned(K e) {
+    Mutex::Locker l(lock);
+    for (typename map<K, V>::iterator i = pinned.begin();
+	 i != pinned.end() && i->first <= e;
+	 pinned.erase(i++)) {
+      if (!contents.count(i->first))
+	_add(i->first, i->second);
+      else
+	lru.splice(lru.begin(), lru, contents[i->first]);
+    }
+  }
+
+  void clear(K key) {
+    Mutex::Locker l(lock);
+    typename map<K, typename list<pair<K, V> >::iterator>::iterator i =
+      contents.find(key);
+    if (i == contents.end())
+      return;
+    lru.erase(i->second);
+    contents.erase(i);
+  }
+
+  bool lookup(K key, V *out) {
+    Mutex::Locker l(lock);
+    typename list<pair<K, V> >::iterator loc = contents.count(key) ?
+      contents[key] : lru.end();
+    if (loc != lru.end()) {
+      *out = loc->second;
+      lru.splice(lru.begin(), lru, loc);
+      return true;
+    }
+    if (pinned.count(key)) {
+      *out = pinned[key];
+      return true;
+    }
+    return false;
+  }
+
+  void add(K key, V value) {
+    Mutex::Locker l(lock);
+    _add(key, value);
+  }
+
+  bool empty() {
+    Mutex::Locker l(lock);
+    return lru.empty();
+  }
+
+  void pop(K *kout, V *vout) {
+    Mutex::Locker l(lock);
+    if (!lru.empty()) {
+      if (kout)
+        *kout = lru.front().first;
+      if (vout)
+        *vout = lru.front().second;
+      contents.erase(lru.front().first);
+      lru.pop_front();
+    }
   }
 };
 
