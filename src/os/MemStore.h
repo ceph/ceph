@@ -19,7 +19,6 @@
 #include <mutex>
 #include <boost/intrusive_ptr.hpp>
 
-#include "include/assert.h"
 #include "include/unordered_map.h"
 #include "include/memory.h"
 #include "include/Spinlock.h"
@@ -27,8 +26,13 @@
 #include "common/RefCountedObj.h"
 #include "common/RWLock.h"
 #include "ObjectStore.h"
+#include "PageSet.h"
+#include "include/assert.h"
 
 class MemStore : public ObjectStore {
+private:
+  CephContext *const cct;
+
 public:
   struct Object : public RefCountedObject {
     std::mutex xattr_mutex;
@@ -117,7 +121,39 @@ public:
     }
   };
 
+  struct PageSetObject : public Object {
+    PageSet data;
+    size_t data_len;
+
+    PageSetObject(size_t page_size) : data(page_size), data_len(0) {}
+
+    size_t get_size() const override { return data_len; }
+
+    int read(uint64_t offset, uint64_t len, bufferlist &bl) override;
+    int write(uint64_t offset, const bufferlist &bl) override;
+    int clone(Object *src, uint64_t srcoff, uint64_t len,
+              uint64_t dstoff) override;
+    int truncate(uint64_t offset) override;
+
+    void encode(bufferlist& bl) const override {
+      ENCODE_START(1, 1, bl);
+      ::encode(data_len, bl);
+      data.encode(bl);
+      encode_base(bl);
+      ENCODE_FINISH(bl);
+    }
+    void decode(bufferlist::iterator& p) override {
+      DECODE_START(1, p);
+      ::decode(data_len, p);
+      data.decode(p);
+      decode_base(p);
+      DECODE_FINISH(p);
+    }
+  };
+
   struct Collection : public RefCountedObject {
+    CephContext *cct;
+    bool use_page_set;
     ceph::unordered_map<ghobject_t, ObjectRef> object_hash;  ///< for lookup
     map<ghobject_t, ObjectRef,ghobject_t::BitwiseComparator> object_map;        ///< for iteration
     map<string,bufferptr> xattr;
@@ -126,6 +162,12 @@ public:
     typedef boost::intrusive_ptr<Collection> Ref;
     friend void intrusive_ptr_add_ref(Collection *c) { c->get(); }
     friend void intrusive_ptr_release(Collection *c) { c->put(); }
+
+    ObjectRef create_object() const {
+      if (use_page_set)
+        return new PageSetObject(cct->_conf->memstore_page_size);
+      return new BufferlistObject();
+    }
 
     // NOTE: The lock only needs to protect the object_map/hash, not the
     // contents of individual objects.  The osd is already sequencing
@@ -140,9 +182,18 @@ public:
       return o->second;
     }
 
+    ObjectRef get_or_create_object(ghobject_t oid) {
+      RWLock::WLocker l(lock);
+      auto result = object_hash.emplace(oid, ObjectRef());
+      if (result.second)
+        object_map[oid] = result.first->second = create_object();
+      return result.first->second;
+    }
+
     void encode(bufferlist& bl) const {
       ENCODE_START(1, 1, bl);
       ::encode(xattr, bl);
+      ::encode(use_page_set, bl);
       uint32_t s = object_map.size();
       ::encode(s, bl);
       for (map<ghobject_t, ObjectRef,ghobject_t::BitwiseComparator>::const_iterator p = object_map.begin();
@@ -156,12 +207,13 @@ public:
     void decode(bufferlist::iterator& p) {
       DECODE_START(1, p);
       ::decode(xattr, p);
+      ::decode(use_page_set, p);
       uint32_t s;
       ::decode(s, p);
       while (s--) {
 	ghobject_t k;
 	::decode(k, p);
-	ObjectRef o(new BufferlistObject);
+	auto o = create_object();
 	o->decode(p);
 	object_map.insert(make_pair(k, o));
 	object_hash.insert(make_pair(k, o));
@@ -180,7 +232,9 @@ public:
       return result;
     }
 
-    Collection() : lock("MemStore::Collection::lock") {}
+    Collection(CephContext *cct)
+      : cct(cct), use_page_set(cct->_conf->memstore_page_set),
+        lock("MemStore::Collection::lock") {}
   };
   typedef Collection::Ref CollectionRef;
 
@@ -243,8 +297,6 @@ private:
 
   void _do_transaction(Transaction& t);
 
-  void _write_into_bl(const bufferlist& src, unsigned offset, bufferlist *dst);
-
   int _touch(coll_t cid, const ghobject_t& oid);
   int _write(coll_t cid, const ghobject_t& oid, uint64_t offset, size_t len,
 	      const bufferlist& bl, uint32_t fadvsie_flags = 0);
@@ -284,6 +336,7 @@ private:
 public:
   MemStore(CephContext *cct, const string& path)
     : ObjectStore(path),
+      cct(cct),
       coll_lock("MemStore::coll_lock"),
       apply_lock("MemStore::apply_lock"),
       finisher(cct),
