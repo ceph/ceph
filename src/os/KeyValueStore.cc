@@ -47,7 +47,6 @@
 #include "common/run_cmd.h"
 #include "common/safe_io.h"
 #include "common/perf_counters.h"
-#include "common/sync_filesystem.h"
 
 #ifdef HAVE_KINETIC
 #include "KineticStore.h"
