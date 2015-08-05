@@ -26,5 +26,4 @@ overrides:
   ceph: 
     conf: 
       global: 
-        enable experimental unrecoverable data corrupting features: shec 
-
+        enable experimental unrecoverable data corrupting features: shec, ms-type-async
