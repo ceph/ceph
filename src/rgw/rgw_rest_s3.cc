@@ -243,6 +243,7 @@ int RGWListBucket_ObjStore_S3::get_params()
     return ret;
   }
   delimiter = s->info.args.get("delimiter");
+  encoding_type = s->info.args.get("encoding-type");
   return 0;
 }
 
@@ -261,13 +262,23 @@ void RGWListBucket_ObjStore_S3::send_versioned_response()
 
   s->formatter->dump_string("IsTruncated", (max && is_truncated ? "true" : "false"));
 
+  bool encode_key = false;
+  if (strcasecmp(encoding_type.c_str(), "url") == 0)
+    encode_key = true;
+
   if (ret >= 0) {
     vector<RGWObjEnt>::iterator iter;
     for (iter = objs.begin(); iter != objs.end(); ++iter) {
       time_t mtime = iter->mtime.sec();
       const char *section_name = (iter->is_delete_marker() ? "DeleteMarker" : "Version");
       s->formatter->open_array_section(section_name);
-      s->formatter->dump_string("Key", iter->key.name);
+      if (encode_key) {
+        string key_name;
+        url_encode(iter->key.name, key_name);
+        s->formatter->dump_string("Key", key_name);
+      } else {
+        s->formatter->dump_string("Key", iter->key.name);
+      }
       string version_id = iter->key.instance;
       if (version_id.empty()) {
         version_id = "null";
@@ -328,11 +339,21 @@ void RGWListBucket_ObjStore_S3::send_response()
 
   s->formatter->dump_string("IsTruncated", (max && is_truncated ? "true" : "false"));
 
+  bool encode_key = false;
+  if (strcasecmp(encoding_type.c_str(), "url") == 0)
+    encode_key = true;
+
   if (ret >= 0) {
     vector<RGWObjEnt>::iterator iter;
     for (iter = objs.begin(); iter != objs.end(); ++iter) {
       s->formatter->open_array_section("Contents");
-      s->formatter->dump_string("Key", iter->key.name);
+      if (encode_key) {
+        string key_name;
+        url_encode(iter->key.name, key_name);
+        s->formatter->dump_string("Key", key_name);
+      } else {
+        s->formatter->dump_string("Key", iter->key.name);
+      }
       time_t mtime = iter->mtime.sec();
       dump_time(s, "LastModified", &mtime);
       s->formatter->dump_format("ETag", "\"%s\"", iter->etag.c_str());
