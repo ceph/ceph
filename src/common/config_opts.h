@@ -1281,6 +1281,8 @@ OPTION(rgw_objexp_chunk_size, OPT_U32, 100) // maximum number of entries in a si
 
 OPTION(rgw_enable_static_website, OPT_BOOL, false) // enable static website feature
 
+OPTION(rgw_num_async_rados_threads, OPT_INT, 32) // num of threads to use for async rados operations
+
 OPTION(mutex_perf_counter, OPT_BOOL, false) // enable/disable mutex perf counter
 OPTION(throttler_perf_counter, OPT_BOOL, true) // enable/disable throttler perf counter
 
