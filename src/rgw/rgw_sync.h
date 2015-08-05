@@ -128,6 +128,8 @@ public:
   virtual ~RGWAsyncOpsManager() {}
 
   int run(list<RGWAsyncOpsStack *>& ops);
+  int run(RGWAsyncOp *op);
+
   virtual void report_error(RGWAsyncOpsStack *op);
 
   AioCompletionNotifier *create_completion_notifier(RGWAsyncOpsStack *stack);
