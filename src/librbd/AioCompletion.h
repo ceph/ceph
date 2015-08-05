@@ -132,9 +132,11 @@ namespace librbd {
       int n = --ref;
       lock.Unlock();
       if (!n) {
-        ictx->completed_reqs_lock.Lock();
-        m_xlist_item.remove_myself();
-        ictx->completed_reqs_lock.Unlock();
+        if (event_notify) {
+          ictx->completed_reqs_lock.Lock();
+          m_xlist_item.remove_myself();
+          ictx->completed_reqs_lock.Unlock();
+        }
         delete this;
       }
     }
