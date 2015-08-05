@@ -258,6 +258,7 @@ protected:
   rgw_obj_key end_marker;
   string max_keys;
   string delimiter;
+  string encoding_type;
   bool list_versions;
   int max;
   int ret;
