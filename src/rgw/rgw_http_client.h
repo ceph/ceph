@@ -79,6 +79,7 @@ public:
 
   void complete(void *user_info);
   int get_next(void **user_info);
+  bool try_get_next(void **user_info);
 
   void go_down();
 };
