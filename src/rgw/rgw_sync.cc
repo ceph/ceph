@@ -119,9 +119,9 @@ protected:
     return store->get_system_obj(*obj_ctx, read_state, objv_tracker, obj, *pbl, ofs, end, NULL);
   }
 public:
-  RGWAsyncGetSystemObj(AioCompletionNotifier *cn, RGWRados *_store, RGWObjectCtx *_obj_ctx, RGWRados::SystemObject::Read::GetObjState& _read_state,
+  RGWAsyncGetSystemObj(AioCompletionNotifier *cn, RGWRados *_store, RGWObjectCtx *_obj_ctx,
                        RGWObjVersionTracker *_objv_tracker, rgw_obj& _obj,
-                       bufferlist *_pbl, off_t _ofs, off_t _end) : RGWAsyncRadosRequest(cn), store(_store), obj_ctx(_obj_ctx), read_state(_read_state),
+                       bufferlist *_pbl, off_t _ofs, off_t _end) : RGWAsyncRadosRequest(cn), store(_store), obj_ctx(_obj_ctx),
                                                                    objv_tracker(_objv_tracker), obj(_obj), pbl(_pbl),
 								  ofs(_ofs), end(_end) {
   }
@@ -424,26 +424,13 @@ int RGWMetaSyncStatusManager::set_state(RGWMetaSyncGlobalStatus::SyncState state
   return 0;
 }
 
-class RGWReadSyncStatusOp : public RGWAsyncOp {
-  RGWAsyncRadosProcessor *async_rados;
-  RGWRados *store;
-  RGWObjectCtx& obj_ctx;
-  RGWRados::SystemObject::Read::GetObjState read_state;
-  bufferlist bl;
-
-  RGWMetaSyncGlobalStatus global_status;
-  rgw_obj global_status_obj;
-
-  RGWMetaSyncStatusManager sync_store;
-  RGWAsyncGetSystemObj *req;
-
-  int shard_id;
-  string marker;
+class RGWSimpleAsyncOp : public RGWAsyncOp {
+  CephContext *cct;
 
   enum State {
     Init                      = 0,
-    ReadSyncStatus            = 1,
-    ReadSyncStatusComplete    = 2,
+    SendRequest               = 1,
+    RequestComplete           = 2,
     Done                      = 100,
     Error                     = 200,
   } state;
@@ -452,74 +439,126 @@ class RGWReadSyncStatusOp : public RGWAsyncOp {
     state = s;
     return ret;
   }
-public:
-  RGWReadSyncStatusOp(RGWAsyncRadosProcessor *_async_rados,
-		      RGWRados *_store, RGWAsyncOpsStack *_ops_stack,
-		      RGWObjectCtx& _obj_ctx, int _id) : RGWAsyncOp(_ops_stack), async_rados(_async_rados), store(_store),
-                                                         obj_ctx(_obj_ctx), sync_store(_store), req(NULL),
-		                                         shard_id(_id),
-                                                         state(RGWReadSyncStatusOp::Init) {}
-  ~RGWReadSyncStatusOp() {
-    delete req;
-  }
-
   int operate();
 
   int state_init();
-  int state_read_sync_status();
-  int state_read_sync_status_complete();
+  int state_send_request();
+  int state_request_complete();
+public:
+  RGWSimpleAsyncOp(RGWAsyncOpsStack *_stack, CephContext *_cct) : RGWAsyncOp(_stack), cct(_cct) {}
+
+  virtual int init() { return 0; }
+  virtual int send_request() = 0;
+  virtual int request_complete() = 0;
 
   bool is_done() { return (state == Done || state == Error); }
   bool is_error() { return (state == Error); }
-
-  RGWMetaSyncGlobalStatus& get_global_status() { return global_status; }
 };
 
-int RGWReadSyncStatusOp::operate()
+int RGWSimpleAsyncOp::operate()
 {
   switch (state) {
     case Init:
-      ldout(store->ctx(), 20) << __func__ << ": shard_id=" << shard_id << ": init request" << dendl;
+      ldout(cct, 20) << __func__ << ": init request" << dendl;
       return state_init();
-    case ReadSyncStatus:
-      ldout(store->ctx(), 20) << __func__ << ": shard_id=" << shard_id << ": reading shard status" << dendl;
-      return state_read_sync_status();
-    case ReadSyncStatusComplete:
-      ldout(store->ctx(), 20) << __func__ << ": shard_id=" << shard_id << ": reading shard status complete" << dendl;
-      return state_read_sync_status_complete();
+    case SendRequest:
+      ldout(cct, 20) << __func__ << ": send request" << dendl;
+      return state_send_request();
+    case RequestComplete:
+      ldout(cct, 20) << __func__ << ": request complete" << dendl;
+      return state_request_complete();
     case Done:
-      ldout(store->ctx(), 20) << __func__ << ": shard_id=" << shard_id << ": done" << dendl;
+      ldout(cct, 20) << __func__ << ": done" << dendl;
       break;
     case Error:
-      ldout(store->ctx(), 20) << __func__ << ": shard_id=" << shard_id << ": error" << dendl;
+      ldout(cct, 20) << __func__ << ": error" << dendl;
       break;
   }
 
   return 0;
 }
 
-int RGWReadSyncStatusOp::state_init()
+int RGWSimpleAsyncOp::state_init()
+{
+  int ret = init();
+  if (ret < 0) {
+    return set_state(Error, ret);
+  }
+  return set_state(SendRequest);
+}
+
+int RGWSimpleAsyncOp::state_send_request()
+{
+  int ret = send_request();
+  if (ret < 0) {
+    return set_state(Error, ret);
+  }
+  return yield(set_state(RequestComplete));
+}
+
+int RGWSimpleAsyncOp::state_request_complete()
+{
+  int ret = request_complete();
+  if (ret < 0) {
+    return set_state(Error, ret);
+  }
+  return set_state(Done);
+}
+
+class RGWReadSyncStatusOp : public RGWSimpleAsyncOp {
+  RGWAsyncRadosProcessor *async_rados;
+  RGWRados *store;
+  RGWObjectCtx& obj_ctx;
+  bufferlist bl;
+
+  RGWMetaSyncGlobalStatus global_status;
+  rgw_obj global_status_obj;
+
+  RGWMetaSyncStatusManager sync_store;
+  RGWAsyncGetSystemObj *req;
+
+public:
+  RGWReadSyncStatusOp(RGWAsyncRadosProcessor *_async_rados,
+		      RGWRados *_store, RGWAsyncOpsStack *_ops_stack,
+		      RGWObjectCtx& _obj_ctx) : RGWSimpleAsyncOp(_ops_stack, _store->ctx()),
+                                                async_rados(_async_rados), store(_store),
+                                                obj_ctx(_obj_ctx), sync_store(_store), req(NULL) {}
+                                                         
+  ~RGWReadSyncStatusOp() {
+    delete req;
+  }
+
+  int init();
+  int send_request();
+  int request_complete();
+
+  RGWMetaSyncGlobalStatus& get_global_status() { return global_status; }
+};
+
+int RGWReadSyncStatusOp::init()
 {
   string global_status_oid = "mdlog.state.global";
   global_status_obj = rgw_obj(store->get_zone_params().log_pool, global_status_oid);
 
-  return set_state(ReadSyncStatus);
+  return 0;
 }
 
-int RGWReadSyncStatusOp::state_read_sync_status()
+int RGWReadSyncStatusOp::send_request()
 {
-  RGWAsyncGetSystemObj *req = new RGWAsyncGetSystemObj(ops_stack->create_completion_notifier(),
-						       store, &obj_ctx, read_state, NULL, global_status_obj, &bl, 0, -1);
+  req = new RGWAsyncGetSystemObj(ops_stack->create_completion_notifier(),
+			         store, &obj_ctx, NULL,
+				 global_status_obj,
+				 &bl, 0, -1);
   async_rados->queue(req);
-  return yield(set_state(ReadSyncStatusComplete));
+  return 0;
 }
 
-int RGWReadSyncStatusOp::state_read_sync_status_complete()
+int RGWReadSyncStatusOp::request_complete()
 {
   int ret = req->get_ret_status();
   if (ret != -ENOENT) {
     if (ret < 0) {
-      return set_state(Error, ret);
+      return ret;
     }
     bufferlist::iterator iter = bl.begin();
     try {
@@ -528,7 +567,7 @@ int RGWReadSyncStatusOp::state_read_sync_status_complete()
       ldout(store->ctx(), 0) << "ERROR: failed to decode global mdlog status" << dendl;
     }
   }
-  return set_state(Done, 0);
+  return 0;
 }
 
 class RGWMetaSyncOp : public RGWAsyncOp {
@@ -854,7 +893,7 @@ int RGWRemoteMetaLog::get_sync_status(RGWMetaSyncGlobalStatus *sync_status)
   list<RGWAsyncOpsStack *> stacks;
   RGWAsyncOpsStack *stack = new RGWAsyncOpsStack(store->ctx(), this);
   RGWObjectCtx obj_ctx(store, NULL);
-  RGWReadSyncStatusOp *op = new RGWReadSyncStatusOp(async_rados, store, stack, obj_ctx, -1);
+  RGWReadSyncStatusOp *op = new RGWReadSyncStatusOp(async_rados, store, stack, obj_ctx);
   op->get();
   int r = stack->call(op);
 #if 0
