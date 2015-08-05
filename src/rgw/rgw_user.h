@@ -58,14 +58,14 @@ extern bool rgw_user_is_authenticated(RGWUserInfo& info);
 extern int rgw_store_user_info(RGWRados *store, RGWUserInfo& info, RGWUserInfo *old_info,
                                RGWObjVersionTracker *objv_tracker, time_t mtime, bool exclusive);
 /**
- * Given an email, finds the user info associated with it.
+ * Given an user_id, finds the user info associated with it.
  * returns: 0 on success, -ERR# on failure (including nonexistence)
  */
 extern int rgw_get_user_info_by_uid(RGWRados *store, string& user_id, RGWUserInfo& info,
                                     RGWObjVersionTracker *objv_tracker = NULL, time_t *pmtime = NULL,
                                     rgw_cache_entry_info *cache_info = NULL);
 /**
- * Given an swift username, finds the user info associated with it.
+ * Given an email, finds the user info associated with it.
  * returns: 0 on success, -ERR# on failure (including nonexistence)
  */
 extern int rgw_get_user_info_by_email(RGWRados *store, string& email, RGWUserInfo& info,
