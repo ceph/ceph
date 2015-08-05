@@ -232,6 +232,8 @@ struct Inode {
   // per-mds caps
   map<mds_rank_t, Cap*> caps;            // mds -> Cap
   Cap *auth_cap;
+  __u32 cap_dirtier_uid;
+  __u32 cap_dirtier_gid;
   unsigned dirty_caps, flushing_caps;
   uint64_t flushing_cap_seq;
   __u16 flushing_cap_tid[CEPH_CAP_BITS];
