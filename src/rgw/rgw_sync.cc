@@ -857,6 +857,28 @@ int RGWAsyncOpsManager::run(list<RGWAsyncOpsStack *>& stacks)
   return 0;
 }
 
+int RGWAsyncOpsManager::run(RGWAsyncOp *op)
+{
+  list<RGWAsyncOpsStack *> stacks;
+  RGWAsyncOpsStack *stack = new RGWAsyncOpsStack(cct, this);
+  int r = stack->call(op);
+  if (r < 0) {
+    ldout(cct, 0) << "ERROR: stack->call() returned r=" << r << dendl;
+    return r;
+  }
+
+  stacks.push_back(stack);
+
+  r = run(stacks);
+  if (r < 0) {
+    ldout(cct, 0) << "ERROR: run(stacks) returned r=" << r << dendl;
+  }
+
+  delete stack;
+
+  return r;
+}
+
 AioCompletionNotifier *RGWAsyncOpsManager::create_completion_notifier(RGWAsyncOpsStack *stack)
 {
   return new AioCompletionNotifier(&completion_mgr, (void *)stack);
@@ -898,34 +920,8 @@ int RGWRemoteMetaLog::fetch()
 
 int RGWRemoteMetaLog::get_sync_status(RGWMetaSyncGlobalStatus *sync_status)
 {
-  list<RGWAsyncOpsStack *> stacks;
-  RGWAsyncOpsStack *stack = new RGWAsyncOpsStack(store->ctx(), this);
   RGWObjectCtx obj_ctx(store, NULL);
-  RGWReadSyncStatusOp *op = new RGWReadSyncStatusOp(async_rados, store, obj_ctx, sync_status);
-  int r = stack->call(op);
-#if 0
-  int ret = status_manager.read_global_status();
-  if (ret < 0) {
-    ldout(store->ctx(), 0) << "ERROR: status_manager.read_global_status() returned ret=" << ret << dendl;
-    return ret;
-  }
-#endif
-
-  if (r < 0) {
-    ldout(store->ctx(), 0) << "ERROR: stack->call() returned r=" << r << dendl;
-    return r;
-  }
-
-  stacks.push_back(stack);
-
-  r = run(stacks);
-  if (r < 0) {
-    ldout(store->ctx(), 0) << "ERROR: run(stacks) returned r=" << r << dendl;
-  }
-
-  delete stack;
-
-  return r;
+  return run(new RGWReadSyncStatusOp(async_rados, store, obj_ctx, sync_status));
 }
 
 int RGWRemoteMetaLog::get_shard_sync_marker(int shard_id, rgw_sync_marker *shard_status)
