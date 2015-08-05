@@ -598,14 +598,10 @@ def syslog(ctx, config):
     conf_fp = StringIO('\n'.join(conf_lines))
     try:
         for rem in ctx.cluster.remotes.iterkeys():
-            # Exclude downburst VMs for now; they have SELinux disabled
-            if rem.os.package_type == 'rpm' and not misc.is_vm(rem.shortname):
-                log_context = 'system_u:object_r:var_log_t:s0'
-                for log_path in (kern_log, misc_log):
-                    rem.run(
-                        args="touch {log} && sudo chcon {con} {log}".format(
-                            log=log_path, con=log_context),
-                    )
+            log_context = 'system_u:object_r:var_log_t:s0'
+            for log_path in (kern_log, misc_log):
+                rem.run(args='touch %s' % log_path)
+                rem.chcon(log_path, log_context)
             misc.sudo_write_file(
                 remote=rem,
                 path=CONF,
