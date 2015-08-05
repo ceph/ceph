@@ -1856,6 +1856,11 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op,
       return true;
     }
 
+    if (can_proxy_read && op->need_bypass_cache()) {
+      // skip promote
+      return true;
+    }
+
     // Promote too?
     switch (pool.info.min_read_recency_for_promote) {
     case 0:
