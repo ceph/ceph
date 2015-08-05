@@ -11,7 +11,6 @@ import re
 import logging
 from cStringIO import StringIO
 from teuthology import lockstatus as ls
-from teuthology import misc
 import os
 import pwd
 import tempfile
