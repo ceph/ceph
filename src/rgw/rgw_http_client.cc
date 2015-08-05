@@ -328,6 +328,17 @@ int RGWCompletionManager::get_next(void **user_info)
   return 0;
 }
 
+bool RGWCompletionManager::try_get_next(void **user_info)
+{
+  Mutex::Locker l(lock);
+  if (complete_reqs.empty()) {
+    return false;
+  }
+  *user_info = complete_reqs.front();
+  complete_reqs.pop_front();
+  return true;
+}
+
 void RGWCompletionManager::go_down()
 {
   Mutex::Locker l(lock);
