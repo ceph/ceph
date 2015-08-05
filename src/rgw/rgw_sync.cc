@@ -444,8 +444,9 @@ class RGWSimpleAsyncOp : public RGWAsyncOp {
   int state_init();
   int state_send_request();
   int state_request_complete();
+
 public:
-  RGWSimpleAsyncOp(RGWAsyncOpsStack *_stack, CephContext *_cct) : RGWAsyncOp(_stack), cct(_cct) {}
+  RGWSimpleAsyncOp(CephContext *_cct) : cct(_cct) {}
 
   virtual int init() { return 0; }
   virtual int send_request() = 0;
@@ -518,9 +519,8 @@ class RGWReadSyncStatusOp : public RGWSimpleAsyncOp {
   RGWAsyncGetSystemObj *req;
 
 public:
-  RGWReadSyncStatusOp(RGWAsyncRadosProcessor *_async_rados,
-		      RGWRados *_store, RGWAsyncOpsStack *_ops_stack,
-		      RGWObjectCtx& _obj_ctx) : RGWSimpleAsyncOp(_ops_stack, _store->ctx()),
+  RGWReadSyncStatusOp(RGWAsyncRadosProcessor *_async_rados, RGWRados *_store,
+		      RGWObjectCtx& _obj_ctx) : RGWSimpleAsyncOp(_store->ctx()),
                                                 async_rados(_async_rados), store(_store),
                                                 obj_ctx(_obj_ctx), sync_store(_store), req(NULL) {}
                                                          
@@ -545,7 +545,7 @@ int RGWReadSyncStatusOp::init()
 
 int RGWReadSyncStatusOp::send_request()
 {
-  req = new RGWAsyncGetSystemObj(ops_stack->create_completion_notifier(),
+  req = new RGWAsyncGetSystemObj(env->stack->create_completion_notifier(),
 			         store, &obj_ctx, NULL,
 				 global_status_obj,
 				 &bl, 0, -1);
@@ -567,6 +567,7 @@ int RGWReadSyncStatusOp::request_complete()
       ldout(store->ctx(), 0) << "ERROR: failed to decode global mdlog status" << dendl;
     }
   }
+
   return 0;
 }
 
@@ -595,8 +596,7 @@ class RGWMetaSyncOp : public RGWAsyncOp {
     return ret;
   }
 public:
-  RGWMetaSyncOp(RGWRados *_store, RGWHTTPManager *_mgr, RGWAsyncOpsStack *_ops_stack,
-		int _id) : RGWAsyncOp(_ops_stack), store(_store),
+  RGWMetaSyncOp(RGWRados *_store, RGWHTTPManager *_mgr, int _id) : RGWAsyncOp(), store(_store),
                            mdlog(store->meta_mgr->get_log()),
                            http_manager(_mgr),
 			   shard_id(_id),
@@ -688,8 +688,8 @@ class RGWCloneMetaLogOp : public RGWAsyncOp {
     return ret;
   }
 public:
-  RGWCloneMetaLogOp(RGWRados *_store, RGWHTTPManager *_mgr, RGWAsyncOpsStack *_ops_stack,
-		    int _id, const string& _marker) : RGWAsyncOp(_ops_stack), store(_store),
+  RGWCloneMetaLogOp(RGWRados *_store, RGWHTTPManager *_mgr,
+		    int _id, const string& _marker) : RGWAsyncOp(), store(_store),
                                                       mdlog(store->meta_mgr->get_log()),
                                                       http_manager(_mgr), shard_id(_id),
                                                       marker(_marker), truncated(false), max_entries(CLONE_MAX_ENTRIES),
@@ -719,10 +719,10 @@ RGWAsyncOpsStack::RGWAsyncOpsStack(CephContext *_cct, RGWAsyncOpsManager *_ops_m
   pos = ops.begin();
 }
 
-int RGWAsyncOpsStack::operate()
+int RGWAsyncOpsStack::operate(RGWAsyncOpsEnv *env)
 {
   RGWAsyncOp *op = *pos;
-  int r = op->operate();
+  int r = op->do_operate(env);
   if (r < 0) {
     ldout(cct, 0) << "ERROR: op->operate() returned r=" << r << dendl;
   }
@@ -799,9 +799,15 @@ void RGWAsyncOpsManager::report_error(RGWAsyncOpsStack *op)
 int RGWAsyncOpsManager::run(list<RGWAsyncOpsStack *>& stacks)
 {
   int waiting_count = 0;
+  RGWAsyncOpsEnv env;
+
+  env.manager = this;
+  env.stacks = &stacks;
+
   for (list<RGWAsyncOpsStack *>::iterator iter = stacks.begin(); iter != stacks.end(); ++iter) {
     RGWAsyncOpsStack *stack = *iter;
-    int ret = stack->operate();
+    env.stack = stack;
+    int ret = stack->operate(&env);
     if (ret < 0) {
       ldout(cct, 0) << "ERROR: stack->operate() returned ret=" << ret << dendl;
     }
@@ -859,7 +865,7 @@ int RGWRemoteMetaLog::clone_shards()
   list<RGWAsyncOpsStack *> stacks;
   for (int i = 0; i < (int)log_info.num_shards; i++) {
     RGWAsyncOpsStack *stack = new RGWAsyncOpsStack(store->ctx(), this);
-    int r = stack->call(new RGWCloneMetaLogOp(store, &http_manager, stack, i, clone_markers[i]));
+    int r = stack->call(new RGWCloneMetaLogOp(store, &http_manager, i, clone_markers[i]));
     if (r < 0) {
       ldout(store->ctx(), 0) << "ERROR: stack->call() returned r=" << r << dendl;
       return r;
@@ -876,7 +882,7 @@ int RGWRemoteMetaLog::fetch()
   list<RGWAsyncOpsStack *> stacks;
   for (int i = 0; i < (int)log_info.num_shards; i++) {
     RGWAsyncOpsStack *stack = new RGWAsyncOpsStack(store->ctx(), this);
-    int r = stack->call(new RGWCloneMetaLogOp(store, &http_manager, stack, i, clone_markers[i]));
+    int r = stack->call(new RGWCloneMetaLogOp(store, &http_manager, i, clone_markers[i]));
     if (r < 0) {
       ldout(store->ctx(), 0) << "ERROR: stack->call() returned r=" << r << dendl;
       return r;
@@ -893,7 +899,7 @@ int RGWRemoteMetaLog::get_sync_status(RGWMetaSyncGlobalStatus *sync_status)
   list<RGWAsyncOpsStack *> stacks;
   RGWAsyncOpsStack *stack = new RGWAsyncOpsStack(store->ctx(), this);
   RGWObjectCtx obj_ctx(store, NULL);
-  RGWReadSyncStatusOp *op = new RGWReadSyncStatusOp(async_rados, store, stack, obj_ctx);
+  RGWReadSyncStatusOp *op = new RGWReadSyncStatusOp(async_rados, store, obj_ctx);
   op->get();
   int r = stack->call(op);
 #if 0
@@ -981,7 +987,7 @@ int RGWCloneMetaLogOp::state_init()
 
 int RGWCloneMetaLogOp::state_read_shard_status()
 {
-  int ret = mdlog->get_info_async(shard_id, &shard_info, ops_stack->get_completion_mgr(), (void *)ops_stack, &req_ret);
+  int ret = mdlog->get_info_async(shard_id, &shard_info, env->stack->get_completion_mgr(), (void *)env->stack, &req_ret);
   if (ret < 0) {
     ldout(store->ctx(), 0) << "ERROR: mdlog->get_info_async() returned ret=" << ret << dendl;
     return set_state(Error, ret);
@@ -1019,7 +1025,7 @@ int RGWCloneMetaLogOp::state_send_rest_request()
 
   http_op = new RGWRESTReadResource(conn, "/admin/log", pairs, NULL, http_manager);
 
-  http_op->set_user_info((void *)ops_stack);
+  http_op->set_user_info((void *)env->stack);
 
   int ret = http_op->aio_read();
   if (ret < 0) {
@@ -1077,7 +1083,7 @@ int RGWCloneMetaLogOp::state_store_mdlog_entries()
     marker = entry.id;
   }
 
-  AioCompletionNotifier *cn = ops_stack->create_completion_notifier();
+  AioCompletionNotifier *cn = env->stack->create_completion_notifier();
 
   int ret = store->meta_mgr->store_md_log_entries(dest_entries, shard_id, cn->completion());
   if (ret < 0) {
