@@ -1,6 +1,8 @@
 #include "common/ceph_json.h"
 #include "common/RWLock.h"
 #include "common/RefCountedObj.h"
+#include "common/WorkQueue.h"
+#include "common/Throttle.h"
 
 #include "rgw_common.h"
 #include "rgw_rados.h"
@@ -51,8 +53,170 @@ void rgw_mdlog_shard_data::decode_json(JSONObj *obj) {
   JSONDecoder::decode_json("entries", entries, obj);
 };
 
+static void _aio_completion_notifier_cb(librados::completion_t cb, void *arg);
+
+/* a single use librados aio completion notifier that hooks into the RGWCompletionManager */
+class AioCompletionNotifier : public RefCountedObject {
+  librados::AioCompletion *c;
+  RGWCompletionManager *completion_mgr;
+  void *user_data;
+
+public:
+  AioCompletionNotifier(RGWCompletionManager *_mgr, void *_user_data) : completion_mgr(_mgr), user_data(_user_data) {
+    c = librados::Rados::aio_create_completion((void *)this, _aio_completion_notifier_cb, NULL);
+  }
+
+  ~AioCompletionNotifier() {
+    c->release();
+  }
+
+  librados::AioCompletion *completion() {
+    return c;
+  }
+
+  void cb() {
+    completion_mgr->complete(user_data);
+    put();
+  }
+};
+
+static void _aio_completion_notifier_cb(librados::completion_t cb, void *arg)
+{
+  ((AioCompletionNotifier *)arg)->cb();
+}
+
+class RGWAsyncRadosRequest {
+  AioCompletionNotifier *notifier;
+
+  void *user_info;
+  int retcode;
+
+protected:
+  virtual int _send_request() = 0;
+public:
+  RGWAsyncRadosRequest(AioCompletionNotifier *_cn) : notifier(_cn) {}
+  virtual ~RGWAsyncRadosRequest() {}
+
+  void send_request() {
+    retcode = _send_request();
+    notifier->cb();
+  }
+
+  int get_ret_status() { return retcode; }
+};
+
+class RGWAsyncGetSystemObj : public RGWAsyncRadosRequest {
+  RGWRados *store;
+  RGWObjectCtx *obj_ctx;
+  RGWRados::SystemObject::Read::GetObjState read_state;
+  RGWObjVersionTracker *objv_tracker;
+  rgw_obj obj;
+  bufferlist *pbl;
+  off_t ofs;
+  off_t end;
+protected:
+  int _send_request() {
+    return store->get_system_obj(*obj_ctx, read_state, objv_tracker, obj, *pbl, ofs, end, NULL);
+  }
+public:
+  RGWAsyncGetSystemObj(AioCompletionNotifier *cn, RGWRados *_store, RGWObjectCtx *_obj_ctx, RGWRados::SystemObject::Read::GetObjState& _read_state,
+                       RGWObjVersionTracker *_objv_tracker, rgw_obj& _obj,
+                       bufferlist *_pbl, off_t _ofs, off_t _end) : RGWAsyncRadosRequest(cn), store(_store), obj_ctx(_obj_ctx), read_state(_read_state),
+                                                                   objv_tracker(_objv_tracker), obj(_obj), pbl(_pbl),
+								  ofs(_ofs), end(_end) {
+  }
+};
+
+
+
+class RGWAsyncRadosProcessor {
+  deque<RGWAsyncRadosRequest *> m_req_queue;
+protected:
+  RGWRados *store;
+  ThreadPool m_tp;
+  Throttle req_throttle;
+
+  struct RGWWQ : public ThreadPool::WorkQueue<RGWAsyncRadosRequest> {
+    RGWAsyncRadosProcessor *processor;
+    RGWWQ(RGWAsyncRadosProcessor *p, time_t timeout, time_t suicide_timeout, ThreadPool *tp)
+      : ThreadPool::WorkQueue<RGWAsyncRadosRequest>("RGWWQ", timeout, suicide_timeout, tp), processor(p) {}
+
+    bool _enqueue(RGWAsyncRadosRequest *req) {
+      processor->m_req_queue.push_back(req);
+      dout(20) << "enqueued request req=" << hex << req << dec << dendl;
+      _dump_queue();
+      return true;
+    }
+    void _dequeue(RGWAsyncRadosRequest *req) {
+      assert(0);
+    }
+    bool _empty() {
+      return processor->m_req_queue.empty();
+    }
+    RGWAsyncRadosRequest *_dequeue() {
+      if (processor->m_req_queue.empty())
+	return NULL;
+      RGWAsyncRadosRequest *req = processor->m_req_queue.front();
+      processor->m_req_queue.pop_front();
+      dout(20) << "dequeued request req=" << hex << req << dec << dendl;
+      _dump_queue();
+      return req;
+    }
+    using ThreadPool::WorkQueue<RGWAsyncRadosRequest>::_process;
+    void _process(RGWAsyncRadosRequest *req) {
+      processor->handle_request(req);
+      processor->req_throttle.put(1);
+    }
+    void _dump_queue() {
+      if (!g_conf->subsys.should_gather(ceph_subsys_rgw, 20)) {
+        return;
+      }
+      deque<RGWAsyncRadosRequest *>::iterator iter;
+      if (processor->m_req_queue.empty()) {
+        dout(20) << "RGWWQ: empty" << dendl;
+        return;
+      }
+      dout(20) << "RGWWQ:" << dendl;
+      for (iter = processor->m_req_queue.begin(); iter != processor->m_req_queue.end(); ++iter) {
+        dout(20) << "req: " << hex << *iter << dec << dendl;
+      }
+    }
+    void _clear() {
+      assert(processor->m_req_queue.empty());
+    }
+  } req_wq;
+
+public:
+  RGWAsyncRadosProcessor(RGWRados *_store, int num_threads)
+    : store(_store), m_tp(store->ctx(), "RGWAsyncRadosProcessor::m_tp", num_threads),
+      req_throttle(store->ctx(), "rgw_async_rados_ops", num_threads * 2),
+      req_wq(this, g_conf->rgw_op_thread_timeout,
+	     g_conf->rgw_op_thread_suicide_timeout, &m_tp) {}
+  ~RGWAsyncRadosProcessor() {}
+  void start() {
+    m_tp.start();
+  }
+  void stop() {
+    m_tp.drain(&req_wq);
+    m_tp.stop();
+  }
+  void handle_request(RGWAsyncRadosRequest *req) {
+    req->send_request();
+  }
+
+  void queue(RGWAsyncRadosRequest *req) {
+    req_throttle.get(1);
+    req_wq.queue(req);
+  }
+};
+
+
 int RGWRemoteMetaLog::init()
 {
+  CephContext *cct = store->ctx();
+  async_rados = new RGWAsyncRadosProcessor(store, cct->_conf->rgw_num_async_rados_threads);
+  async_rados->start();
+
   conn = store->rest_master_conn;
 
   rgw_http_param_pair pairs[] = { { "type", "metadata" },
@@ -87,6 +251,12 @@ int RGWRemoteMetaLog::init()
   }
 
   return 0;
+}
+
+void RGWRemoteMetaLog::finish()
+{
+  async_rados->stop();
+  delete async_rados;
 }
 
 int RGWRemoteMetaLog::list_shards()
@@ -152,38 +322,6 @@ int RGWRemoteMetaLog::get_shard_info(int shard_id)
   ldout(store->ctx(), 20) << "remote mdlog, shard_id=" << shard_id << " marker=" << info.marker << dendl;
 
   return 0;
-}
-
-static void _aio_completion_notifier_cb(librados::completion_t cb, void *arg);
-
-/* a single use librados aio completion notifier that hooks into the RGWCompletionManager */
-class AioCompletionNotifier : public RefCountedObject {
-  librados::AioCompletion *c;
-  RGWCompletionManager *completion_mgr;
-  void *user_data;
-
-public:
-  AioCompletionNotifier(RGWCompletionManager *_mgr, void *_user_data) : completion_mgr(_mgr), user_data(_user_data) {
-    c = librados::Rados::aio_create_completion((void *)this, _aio_completion_notifier_cb, NULL);
-  }
-
-  ~AioCompletionNotifier() {
-    c->release();
-  }
-
-  librados::AioCompletion *completion() {
-    return c;
-  }
-
-  void cb() {
-    completion_mgr->complete(user_data);
-    put();
-  }
-};
-
-static void _aio_completion_notifier_cb(librados::completion_t cb, void *arg)
-{
-  ((AioCompletionNotifier *)arg)->cb();
 }
 
 #define CLONE_MAX_ENTRIES 100
@@ -287,10 +425,17 @@ int RGWMetaSyncStatusManager::set_state(RGWMetaSyncGlobalStatus::SyncState state
 }
 
 class RGWReadSyncStatusOp : public RGWAsyncOp {
+  RGWAsyncRadosProcessor *async_rados;
   RGWRados *store;
-  librados::IoCtx ioctx;
+  RGWObjectCtx& obj_ctx;
+  RGWRados::SystemObject::Read::GetObjState read_state;
+  bufferlist bl;
+
+  RGWMetaSyncGlobalStatus global_status;
+  rgw_obj global_status_obj;
 
   RGWMetaSyncStatusManager sync_store;
+  RGWAsyncGetSystemObj *req;
 
   int shard_id;
   string marker;
@@ -308,10 +453,15 @@ class RGWReadSyncStatusOp : public RGWAsyncOp {
     return ret;
   }
 public:
-  RGWReadSyncStatusOp(RGWRados *_store, RGWAsyncOpsStack *_ops_stack, int _id) : RGWAsyncOp(_ops_stack), store(_store),
-                           sync_store(_store),
-			   shard_id(_id),
-                           state(RGWReadSyncStatusOp::Init) {}
+  RGWReadSyncStatusOp(RGWAsyncRadosProcessor *_async_rados,
+		      RGWRados *_store, RGWAsyncOpsStack *_ops_stack,
+		      RGWObjectCtx& _obj_ctx, int _id) : RGWAsyncOp(_ops_stack), async_rados(_async_rados), store(_store),
+                                                         obj_ctx(_obj_ctx), sync_store(_store), req(NULL),
+		                                         shard_id(_id),
+                                                         state(RGWReadSyncStatusOp::Init) {}
+  ~RGWReadSyncStatusOp() {
+    delete req;
+  }
 
   int operate();
 
@@ -321,6 +471,8 @@ public:
 
   bool is_done() { return (state == Done || state == Error); }
   bool is_error() { return (state == Error); }
+
+  RGWMetaSyncGlobalStatus& get_global_status() { return global_status; }
 };
 
 int RGWReadSyncStatusOp::operate()
@@ -348,17 +500,35 @@ int RGWReadSyncStatusOp::operate()
 
 int RGWReadSyncStatusOp::state_init()
 {
-  return 0;
+  string global_status_oid = "mdlog.state.global";
+  global_status_obj = rgw_obj(store->get_zone_params().log_pool, global_status_oid);
+
+  return set_state(ReadSyncStatus);
 }
 
 int RGWReadSyncStatusOp::state_read_sync_status()
 {
-  return 0;
+  RGWAsyncGetSystemObj *req = new RGWAsyncGetSystemObj(ops_stack->create_completion_notifier(),
+						       store, &obj_ctx, read_state, NULL, global_status_obj, &bl, 0, -1);
+  async_rados->queue(req);
+  return yield(set_state(ReadSyncStatusComplete));
 }
 
 int RGWReadSyncStatusOp::state_read_sync_status_complete()
 {
-  return 0;
+  int ret = req->get_ret_status();
+  if (ret != -ENOENT) {
+    if (ret < 0) {
+      return set_state(Error, ret);
+    }
+    bufferlist::iterator iter = bl.begin();
+    try {
+      ::decode(global_status, iter);
+    } catch (buffer::error& err) {
+      ldout(store->ctx(), 0) << "ERROR: failed to decode global mdlog status" << dendl;
+    }
+  }
+  return set_state(Done, 0);
 }
 
 class RGWMetaSyncOp : public RGWAsyncOp {
@@ -681,15 +851,38 @@ int RGWRemoteMetaLog::fetch()
 
 int RGWRemoteMetaLog::get_sync_status(RGWMetaSyncGlobalStatus *sync_status)
 {
+  list<RGWAsyncOpsStack *> stacks;
+  RGWAsyncOpsStack *stack = new RGWAsyncOpsStack(store->ctx(), this);
+  RGWObjectCtx obj_ctx(store, NULL);
+  RGWReadSyncStatusOp *op = new RGWReadSyncStatusOp(async_rados, store, stack, obj_ctx, -1);
+  op->get();
+  int r = stack->call(op);
+#if 0
   int ret = status_manager.read_global_status();
   if (ret < 0) {
     ldout(store->ctx(), 0) << "ERROR: status_manager.read_global_status() returned ret=" << ret << dendl;
     return ret;
   }
+#endif
 
-  *sync_status = status_manager.get_global_status();
+  if (r < 0) {
+    ldout(store->ctx(), 0) << "ERROR: stack->call() returned r=" << r << dendl;
+    return r;
+  }
 
-  return 0;
+  stacks.push_back(stack);
+
+  r = run(stacks);
+  if (r < 0) {
+    ldout(store->ctx(), 0) << "ERROR: run(stacks) returned r=" << r << dendl;
+  }
+
+  *sync_status = op->get_global_status();
+
+  delete stack;
+  op->put();
+
+  return r;
 }
 
 int RGWRemoteMetaLog::get_shard_sync_marker(int shard_id, rgw_sync_marker *shard_status)

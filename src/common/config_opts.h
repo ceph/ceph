@@ -1083,6 +1083,8 @@ OPTION(rgw_multipart_part_upload_limit, OPT_INT, 10000) // parts limit in multip
 
 OPTION(rgw_olh_pending_timeout_sec, OPT_INT, 3600) // time until we retire a pending olh change
 
+OPTION(rgw_num_async_rados_threads, OPT_INT, 32) // num of threads to use for async rados operations
+
 OPTION(mutex_perf_counter, OPT_BOOL, false) // enable/disable mutex perf counter
 OPTION(throttler_perf_counter, OPT_BOOL, true) // enable/disable throttler perf counter
 
