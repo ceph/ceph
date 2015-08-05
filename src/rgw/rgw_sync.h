@@ -27,11 +27,18 @@ class RGWAsyncOpsStack;
 class RGWAsyncOpsManager;
 class AioCompletionNotifier;
 
+struct RGWAsyncOpsEnv {
+  RGWAsyncOpsManager *manager;
+  list<RGWAsyncOpsStack *> *stacks;
+  RGWAsyncOpsStack *stack;
+
+  RGWAsyncOpsEnv() : manager(NULL), stacks(NULL), stack(NULL) {}
+};
+
 class RGWAsyncOp : public RefCountedObject {
   friend class RGWAsyncOpsStack;
 protected:
-  RGWAsyncOpsStack *ops_stack;
-
+  RGWAsyncOpsEnv *env;
   bool blocked;
   int retcode;
 
@@ -43,8 +50,13 @@ protected:
     return ret;
   }
 
+  int do_operate(RGWAsyncOpsEnv *_env) {
+    env = _env;
+    return operate();
+  }
+
 public:
-  RGWAsyncOp(RGWAsyncOpsStack *_ops_stack) : ops_stack(_ops_stack), blocked(false), retcode(0) {}
+  RGWAsyncOp() : env(NULL), blocked(false), retcode(0) {}
   virtual ~RGWAsyncOp() {}
 
   virtual int operate() = 0;
@@ -79,7 +91,7 @@ class RGWAsyncOpsStack {
 public:
   RGWAsyncOpsStack(CephContext *_cct, RGWAsyncOpsManager *_ops_mgr, RGWAsyncOp *start = NULL);
 
-  int operate();
+  int operate(RGWAsyncOpsEnv *env);
 
   bool is_done() {
     return done_flag;
