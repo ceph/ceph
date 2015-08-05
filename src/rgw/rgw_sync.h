@@ -117,6 +117,7 @@ public:
 class RGWAsyncOpsManager {
   CephContext *cct;
 
+  void handle_unblocked_stack(list<RGWAsyncOpsStack *>& stacks, RGWAsyncOpsStack *stack, int *waiting_count);
 protected:
   RGWCompletionManager completion_mgr;
 
