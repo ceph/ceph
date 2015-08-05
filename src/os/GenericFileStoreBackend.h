@@ -27,6 +27,7 @@ private:
   bool m_filestore_seek_data_hole;
   bool m_filestore_fsync_flushes_journal_data;
   bool m_filestore_splice;
+  bool m_filestore_syncfs;
 public:
   GenericFileStoreBackend(FileStore *fs);
   virtual ~GenericFileStoreBackend() {}
@@ -45,6 +46,7 @@ public:
   virtual int syncfs();
   virtual bool has_fiemap() { return ioctl_fiemap; }
   virtual bool has_seek_data_hole() { return seek_data_hole; }
+  virtual bool has_syncfs() { return m_filestore_syncfs; }
   virtual int do_fiemap(int fd, off_t start, size_t len, struct fiemap **pfiemap);
   virtual int clone_range(int from, int to, uint64_t srcoff, uint64_t len, uint64_t dstoff) {
     return _copy_range(from, to, srcoff, len, dstoff);

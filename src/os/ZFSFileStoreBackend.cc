@@ -24,7 +24,6 @@
 
 #include "common/errno.h"
 #include "common/config.h"
-#include "common/sync_filesystem.h"
 
 #ifdef HAVE_LIBZFS
 
@@ -180,7 +179,7 @@ int ZFSFileStoreBackend::create_checkpoint(const string& name, uint64_t *cid)
     return -EINVAL;
 
   // looks like zfsonlinux doesn't flush dirty data when taking snapshot
-  int ret = sync_filesystem(get_current_fd());
+  int ret = syncfs(get_current_fd());
   if (ret < 0) {
     ret = -errno;
     dout(0) << "create_checkpoint: sync_filesystem got" << cpp_strerror(ret) << dendl;
