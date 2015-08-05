@@ -512,7 +512,7 @@ class RGWReadSyncStatusOp : public RGWSimpleAsyncOp {
   RGWObjectCtx& obj_ctx;
   bufferlist bl;
 
-  RGWMetaSyncGlobalStatus global_status;
+  RGWMetaSyncGlobalStatus *global_status;
   rgw_obj global_status_obj;
 
   RGWMetaSyncStatusManager sync_store;
@@ -520,9 +520,11 @@ class RGWReadSyncStatusOp : public RGWSimpleAsyncOp {
 
 public:
   RGWReadSyncStatusOp(RGWAsyncRadosProcessor *_async_rados, RGWRados *_store,
-		      RGWObjectCtx& _obj_ctx) : RGWSimpleAsyncOp(_store->ctx()),
+		      RGWObjectCtx& _obj_ctx,
+		      RGWMetaSyncGlobalStatus *_gs) : RGWSimpleAsyncOp(_store->ctx()),
                                                 async_rados(_async_rados), store(_store),
-                                                obj_ctx(_obj_ctx), sync_store(_store), req(NULL) {}
+                                                obj_ctx(_obj_ctx), global_status(_gs),
+                                                sync_store(_store), req(NULL) {}
                                                          
   ~RGWReadSyncStatusOp() {
     delete req;
@@ -531,8 +533,6 @@ public:
   int init();
   int send_request();
   int request_complete();
-
-  RGWMetaSyncGlobalStatus& get_global_status() { return global_status; }
 };
 
 int RGWReadSyncStatusOp::init()
@@ -562,10 +562,12 @@ int RGWReadSyncStatusOp::request_complete()
     }
     bufferlist::iterator iter = bl.begin();
     try {
-      ::decode(global_status, iter);
+      ::decode(*global_status, iter);
     } catch (buffer::error& err) {
       ldout(store->ctx(), 0) << "ERROR: failed to decode global mdlog status" << dendl;
     }
+  } else {
+    *global_status = RGWMetaSyncGlobalStatus();
   }
 
   return 0;
@@ -899,8 +901,7 @@ int RGWRemoteMetaLog::get_sync_status(RGWMetaSyncGlobalStatus *sync_status)
   list<RGWAsyncOpsStack *> stacks;
   RGWAsyncOpsStack *stack = new RGWAsyncOpsStack(store->ctx(), this);
   RGWObjectCtx obj_ctx(store, NULL);
-  RGWReadSyncStatusOp *op = new RGWReadSyncStatusOp(async_rados, store, obj_ctx);
-  op->get();
+  RGWReadSyncStatusOp *op = new RGWReadSyncStatusOp(async_rados, store, obj_ctx, sync_status);
   int r = stack->call(op);
 #if 0
   int ret = status_manager.read_global_status();
@@ -922,10 +923,7 @@ int RGWRemoteMetaLog::get_sync_status(RGWMetaSyncGlobalStatus *sync_status)
     ldout(store->ctx(), 0) << "ERROR: run(stacks) returned r=" << r << dendl;
   }
 
-  *sync_status = op->get_global_status();
-
   delete stack;
-  op->put();
 
   return r;
 }
