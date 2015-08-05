@@ -431,6 +431,7 @@ class RGWSimpleAsyncOp : public RGWAsyncOp {
     Init                      = 0,
     SendRequest               = 1,
     RequestComplete           = 2,
+    AllComplete               = 3,
     Done                      = 100,
     Error                     = 200,
   } state;
@@ -444,6 +445,13 @@ class RGWSimpleAsyncOp : public RGWAsyncOp {
   int state_init();
   int state_send_request();
   int state_request_complete();
+  int state_all_complete();
+
+protected:
+  void call(RGWAsyncOp *op) {
+    int r = env->stack->call(op, 0);
+    assert(r == 0);
+  }
 
 public:
   RGWSimpleAsyncOp(CephContext *_cct) : cct(_cct) {}
@@ -451,6 +459,7 @@ public:
   virtual int init() { return 0; }
   virtual int send_request() = 0;
   virtual int request_complete() = 0;
+  virtual int finish() { return 0; }
 
   bool is_done() { return (state == Done || state == Error); }
   bool is_error() { return (state == Error); }
@@ -468,6 +477,9 @@ int RGWSimpleAsyncOp::operate()
     case RequestComplete:
       ldout(cct, 20) << __func__ << ": request complete" << dendl;
       return state_request_complete();
+    case AllComplete:
+      ldout(cct, 20) << __func__ << ": request complete" << dendl;
+      return state_all_complete();
     case Done:
       ldout(cct, 20) << __func__ << ": done" << dendl;
       break;
@@ -500,6 +512,15 @@ int RGWSimpleAsyncOp::state_send_request()
 int RGWSimpleAsyncOp::state_request_complete()
 {
   int ret = request_complete();
+  if (ret < 0) {
+    return set_state(Error, ret);
+  }
+  return set_state(AllComplete);
+}
+
+int RGWSimpleAsyncOp::state_all_complete()
+{
+  int ret = finish();
   if (ret < 0) {
     return set_state(Error, ret);
   }
