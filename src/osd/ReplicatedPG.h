@@ -1456,6 +1456,8 @@ private:
   hobject_t generate_temp_object();  ///< generate a new temp object name
   /// generate a new temp object name (for recovery)
   hobject_t get_temp_recovery_object(eversion_t version, snapid_t snap);
+  /// check if the op has the want_wait flag set or not
+  bool want_wait(OpRequestRef& op);
 public:
   coll_t get_coll() {
     return coll;

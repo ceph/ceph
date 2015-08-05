@@ -1363,6 +1363,11 @@ void ReplicatedPG::do_request(
   }
 
   if (!is_peered()) {
+    // Check if client wants to wait or not
+    if (!want_wait(op)) {
+        osd->reply_op_error(op, -EHOSTDOWN);
+        return;
+    }
     // Delay unless PGBackend says it's ok
     if (pgbackend->can_handle_while_inactive(op)) {
       bool handled = pgbackend->handle_message(op);
@@ -1383,8 +1388,12 @@ void ReplicatedPG::do_request(
   case CEPH_MSG_OSD_OP:
     if (!is_active()) {
       dout(20) << " peered, not active, waiting for active on " << op << dendl;
-      waiting_for_active.push_back(op);
-      op->mark_delayed("waiting for active");
+      if (!want_wait(op)) {
+        osd->reply_op_error(op, -EHOSTDOWN);
+      } else {
+        waiting_for_active.push_back(op);
+        op->mark_delayed("waiting for active");
+      }
       return;
     }
     if (is_replay()) {
@@ -6086,6 +6095,15 @@ hobject_t ReplicatedPG::get_temp_recovery_object(eversion_t version, snapid_t sn
   hobject_t hoid = info.pgid.make_temp_object(ss.str());
   dout(20) << __func__ << " " << hoid << dendl;
   return hoid;
+}
+
+bool ReplicatedPG::want_wait(OpRequestRef& op)
+{
+  if (op->get_req()->get_type() == CEPH_MSG_OSD_OP) {
+      MOSDOp *osd_op = static_cast<MOSDOp*>(op->get_req());
+      return osd_op->get_op_want_wait();
+  }
+  return true;
 }
 
 int ReplicatedPG::prepare_transaction(OpContext *ctx)

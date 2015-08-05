@@ -1213,6 +1213,10 @@ public:
 
     osd_reqid_t reqid; // explicitly setting reqid
 
+    /// number of seconds client could  wait/retry,
+    /// A value of 0 means client could wait infinitely
+    uint32_t could_wait_secs;
+
     Op(const object_t& o, const object_locator_t& ol, vector<OSDOp>& op,
        int f, Context *ac, Context *co, version_t *ov, int *offset = NULL) :
       session(NULL), incarnation(0),
@@ -1235,7 +1239,8 @@ public:
       should_resend(true),
       ctx_budgeted(false),
       data_offset(offset),
-      last_force_resend(0) {
+      last_force_resend(0),
+      could_wait_secs(0) {
       ops.swap(op);
       
       /* initialize out_* to match op vector */
@@ -1450,6 +1455,15 @@ public:
       } else {
         final_finish->complete(r);
       }
+    }
+  };
+
+  struct ResubmitOpContext: public Context {
+    Op *op;
+    Objecter *objecter;
+    ResubmitOpContext(Op *o, Objecter *ob) : op(o), objecter(ob) {}
+    void finish(int r) {
+      objecter->_op_resubmit(op);
     }
   };
   
@@ -1972,6 +1986,7 @@ private:
   // low-level
   ceph_tid_t _op_submit(Op *op, RWLock::Context& lc);
   ceph_tid_t _op_submit_with_budget(Op *op, RWLock::Context& lc, int *ctx_budget = NULL);
+  void _op_resubmit(Op *op);
   inline void unregister_op(Op *op);
 
   // public interface
@@ -2066,27 +2081,30 @@ public:
 	       ObjectOperation& op,
 	       const SnapContext& snapc, utime_t mtime, int flags,
 	       Context *onack, Context *oncommit, version_t *objver = NULL,
-	       osd_reqid_t reqid = osd_reqid_t()) {
+	       osd_reqid_t reqid = osd_reqid_t(),
+               uint32_t could_wait_secs = 0) {
     Op *o = new Op(oid, oloc, op.ops, flags | global_op_flags.read() | CEPH_OSD_FLAG_WRITE, onack, oncommit, objver);
     o->priority = op.priority;
     o->mtime = mtime;
     o->snapc = snapc;
     o->out_rval.swap(op.out_rval);
     o->reqid = reqid;
+    o->could_wait_secs = could_wait_secs;
     return o;
   }
   ceph_tid_t mutate(const object_t& oid, const object_locator_t& oloc,
 	       ObjectOperation& op,
 	       const SnapContext& snapc, utime_t mtime, int flags,
 	       Context *onack, Context *oncommit, version_t *objver = NULL,
-	       osd_reqid_t reqid = osd_reqid_t()) {
-    Op *o = prepare_mutate_op(oid, oloc, op, snapc, mtime, flags, onack, oncommit, objver, reqid);
+	       osd_reqid_t reqid = osd_reqid_t(), uint32_t could_wait_secs = 0) {
+    Op *o = prepare_mutate_op(oid, oloc, op, snapc, mtime, flags, onack, oncommit, objver, reqid, could_wait_secs);
     return op_submit(o);
   }
   Op *prepare_read_op(const object_t& oid, const object_locator_t& oloc,
 	     ObjectOperation& op,
 	     snapid_t snapid, bufferlist *pbl, int flags,
-	     Context *onack, version_t *objver = NULL, int *data_offset = NULL) {
+	     Context *onack, version_t *objver = NULL, int *data_offset = NULL,
+             uint32_t could_wait_secs = 0) {
     Op *o = new Op(oid, oloc, op.ops, flags | global_op_flags.read() | CEPH_OSD_FLAG_READ, onack, NULL, objver, data_offset);
     o->priority = op.priority;
     o->snapid = snapid;
@@ -2096,6 +2114,7 @@ public:
     o->out_bl.swap(op.out_bl);
     o->out_handler.swap(op.out_handler);
     o->out_rval.swap(op.out_rval);
+    o->could_wait_secs = could_wait_secs;
     return o;
   }
   ceph_tid_t read(const object_t& oid, const object_locator_t& oloc,

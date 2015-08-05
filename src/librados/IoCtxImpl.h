@@ -50,6 +50,10 @@ struct librados::IoCtxImpl {
   std::list<std::string> cached_pool_names;
 
   Objecter *objecter;
+  
+  // Number of seconds client could wait for operations on this Ctx,
+  // a value of 0 means client could wait infinitely
+  uint32_t could_wait_secs;
 
   IoCtxImpl();
   IoCtxImpl(RadosClient *c, Objecter *objecter,
@@ -79,6 +83,10 @@ struct librados::IoCtxImpl {
   void put() {
     if (ref_cnt.dec() == 0)
       delete this;
+  }
+
+  void set_could_wait_secs(uint32_t t) {
+    could_wait_secs = t;
   }
 
   void queue_aio_write(struct AioCompletionImpl *c);
@@ -146,7 +154,7 @@ struct librados::IoCtxImpl {
   int operate_read(const object_t& oid, ::ObjectOperation *o, bufferlist *pbl, int flags=0);
   int aio_operate(const object_t& oid, ::ObjectOperation *o,
 		  AioCompletionImpl *c, const SnapContext& snap_context,
-		  int flags);
+                  int flags);
   int aio_operate_read(const object_t& oid, ::ObjectOperation *o,
 		       AioCompletionImpl *c, int flags, bufferlist *pbl);
 

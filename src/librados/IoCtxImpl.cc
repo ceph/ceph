@@ -29,7 +29,7 @@ librados::IoCtxImpl::IoCtxImpl() :
   ref_cnt(0), client(NULL), poolid(0), assert_ver(0), last_objver(0),
   notify_timeout(30), aio_write_list_lock("librados::IoCtxImpl::aio_write_list_lock"),
   aio_write_seq(0), cached_pool_names_lock("librados::IoCtxImpl::cached_pool_names_lock"),
-  objecter(NULL)
+  objecter(NULL), could_wait_secs(0)
 {
 }
 
@@ -40,7 +40,7 @@ librados::IoCtxImpl::IoCtxImpl(RadosClient *c, Objecter *objecter,
     notify_timeout(c->cct->_conf->client_notify_timeout),
     oloc(poolid), aio_write_list_lock("librados::IoCtxImpl::aio_write_list_lock"),
     aio_write_seq(0), cached_pool_names_lock("librados::IoCtxImpl::cached_pool_names_lock"),
-    objecter(objecter)
+    objecter(objecter), could_wait_secs(0)
 {
 }
 
@@ -517,7 +517,7 @@ int librados::IoCtxImpl::operate(const object_t& oid, ::ObjectOperation *o,
   ldout(client->cct, 10) << ceph_osd_op_name(op) << " oid=" << oid << " nspace=" << oloc.nspace << dendl;
   Objecter::Op *objecter_op = objecter->prepare_mutate_op(oid, oloc,
 	                                                  *o, snapc, ut, flags,
-	                                                  NULL, oncommit, &ver);
+	                                                  NULL, oncommit, &ver, osd_reqid_t(), could_wait_secs);
   objecter->op_submit(objecter_op);
 
   mylock.Lock();
@@ -552,7 +552,7 @@ int librados::IoCtxImpl::operate_read(const object_t& oid,
   ldout(client->cct, 10) << ceph_osd_op_name(op) << " oid=" << oid << " nspace=" << oloc.nspace << dendl;
   Objecter::Op *objecter_op = objecter->prepare_read_op(oid, oloc,
 	                                      *o, snap_seq, pbl, flags,
-	                                      onack, &ver);
+	                                      onack, &ver, NULL, could_wait_secs);
   objecter->op_submit(objecter_op);
 
   mylock.Lock();
@@ -580,7 +580,7 @@ int librados::IoCtxImpl::aio_operate_read(const object_t &oid,
 
   Objecter::Op *objecter_op = objecter->prepare_read_op(oid, oloc,
 		 *o, snap_seq, pbl, flags,
-		 onack, &c->objver);
+		 onack, &c->objver, NULL, could_wait_secs);
   c->tid = objecter->op_submit(objecter_op);
   return 0;
 }
@@ -601,7 +601,7 @@ int librados::IoCtxImpl::aio_operate(const object_t& oid,
   queue_aio_write(c);
 
   c->tid = objecter->mutate(oid, oloc, *o, snap_context, ut, flags, onack, oncommit,
-		            &c->objver);
+		            &c->objver, osd_reqid_t(), could_wait_secs);
 
   return 0;
 }

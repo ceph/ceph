@@ -1329,7 +1329,7 @@ int librados::IoCtx::operate(const std::string& oid, librados::ObjectWriteOperat
   return io_ctx_impl->operate(obj, (::ObjectOperation*)o->impl, o->pmtime);
 }
 
-int librados::IoCtx::operate(const std::string& oid, librados::ObjectReadOperation *o, bufferlist *pbl)
+int librados::IoCtx::operate(const std::string& oid, librados::ObjectReadOperation *o, bufferlist *pbl) 
 {
   object_t obj(oid);
   return io_ctx_impl->operate_read(obj, (::ObjectOperation*)o->impl, pbl);
@@ -1857,6 +1857,11 @@ uint32_t librados::IoCtx::get_object_pg_hash_position(const std::string& oid)
 librados::config_t librados::IoCtx::cct()
 {
   return (config_t)io_ctx_impl->client->cct;
+}
+
+void librados::IoCtx::set_could_wait_secs(uint32_t t)
+{
+  io_ctx_impl->set_could_wait_secs(t);
 }
 
 librados::IoCtx::IoCtx(IoCtxImpl *io_ctx_impl_)
