@@ -93,7 +93,7 @@ def ceph_log(ctx, config):
         def end(self):
             self.stop_event.set()
             self.thread.get()
-            
+
     def write_rotate_conf(ctx, daemons):
         testdir = teuthology.get_testdir(ctx)
         rotate_conf_path = os.path.join(os.path.dirname(__file__), 'logrotate.conf')
@@ -103,7 +103,7 @@ def ceph_log(ctx, config):
                 log.info('writing logrotate stanza for {daemon}'.format(daemon=daemon))
                 conf += f.read().format(daemon_type=daemon,max_size=size)
                 f.seek(0, 0)
-            
+
             for remote in ctx.cluster.remotes.iterkeys():
                 teuthology.write_file(remote=remote,
                                       path='{tdir}/logrotate.ceph-test.conf'.format(tdir=testdir),
@@ -126,6 +126,8 @@ def ceph_log(ctx, config):
                         'root.root',
                         '/etc/logrotate.d/ceph-test.conf'
                     ]
+                remote.chcon('/etc/logrotate.d/ceph-test.conf',
+                             'system_u:object_r:etc_t:s0')
                 )
 
     if ctx.config.get('log-rotate'):
@@ -1095,7 +1097,7 @@ def created_pool(ctx, config):
         if new_pool not in ctx.manager.pools:
             ctx.manager.pools[new_pool] = ctx.manager.get_pool_property(
                                           new_pool, 'pg_num')
- 
+
 
 @contextlib.contextmanager
 def restart(ctx, config):
