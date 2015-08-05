@@ -11,6 +11,7 @@ import re
 import logging
 from cStringIO import StringIO
 from teuthology import lockstatus as ls
+from teuthology import misc
 import os
 import pwd
 import tempfile
@@ -194,6 +195,23 @@ class Remote(object):
         self.run(
             args=args,
             )
+
+    def chcon(self, file_path, context):
+        """
+        Set the SELinux context of a given file.
+
+        VMs and non-RPM-based hosts will skip this operation because ours
+        currently have SELinux disabled.
+
+        :param file_path: The path to the file
+        :param context:   The SELinux context to be used
+        """
+        if self.os.package_type != 'rpm':
+            return
+        if misc.is_vm(self.shortname):
+            return
+        self.run(args="sudo chcon {con} {path}".format(
+            con=context, path=file_path))
 
     def _sftp_put_file(self, local_path, remote_path):
         """
