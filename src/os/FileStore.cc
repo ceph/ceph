@@ -223,6 +223,27 @@ int FileStore::lfn_stat(coll_t cid, const ghobject_t& oid, struct stat *buf)
   return r;
 }
 
+bool FileStore::fd_has_cache(coll_t cid, const ghobject_t& oid)
+{
+  assert(get_allow_sharded_objects() ||
+	 ( oid.shard_id == shard_id_t::NO_SHARD &&
+	   oid.generation == ghobject_t::NO_GEN ));
+  bool ret = false;
+  Index index;
+  int r = get_index(cid, &index);
+  if (r < 0) {
+    dout(10) << __func__ << " could not get index r = " << r << dendl;
+    return false;
+  }
+  (index.index)->access_lock.get_read();
+  FDRef outfd = fdcache.lookup(oid);
+  if (outfd) {
+    ret = true;
+  }
+  (index.index)->access_lock.put_read();
+  return ret;
+}
+
 int FileStore::lfn_open(coll_t cid,
 			const ghobject_t& oid,
 			bool create,

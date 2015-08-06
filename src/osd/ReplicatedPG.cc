@@ -1628,6 +1628,10 @@ void ReplicatedPG::do_op(OpRequestRef& op)
     return;
   }
 
+  if (pool.info.require_rollback()) {
+    pgbackend->warmup_object_fd(oid, op, get_pool().fast_read);
+  }
+
   int r = find_object_context(
     oid, &obc, can_create,
     m->has_flag(CEPH_OSD_FLAG_MAP_SNAP_CLONE),

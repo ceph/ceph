@@ -171,21 +171,23 @@ void ECSubRead::encode(bufferlist &bl, uint64_t features) const
     }
     ::encode(tmp, bl);
     ::encode(attrs_to_read, bl);
+    ::encode(fd_load, bl);
     ENCODE_FINISH(bl);
     return;
   }
 
-  ENCODE_START(2, 2, bl);
+  ENCODE_START(3, 2, bl);
   ::encode(from, bl);
   ::encode(tid, bl);
   ::encode(to_read, bl);
   ::encode(attrs_to_read, bl);
+  ::encode(fd_load, bl);
   ENCODE_FINISH(bl);
 }
 
 void ECSubRead::decode(bufferlist::iterator &bl)
 {
-  DECODE_START(2, bl);
+  DECODE_START(3, bl);
   ::decode(from, bl);
   ::decode(tid, bl);
   if (struct_v == 1) {
@@ -204,6 +206,9 @@ void ECSubRead::decode(bufferlist::iterator &bl)
     ::decode(to_read, bl);
   }
   ::decode(attrs_to_read, bl);
+  if (struct_v >= 3) {
+    ::decode(fd_load, bl);
+  }
   DECODE_FINISH(bl);
 }
 
@@ -213,7 +218,8 @@ std::ostream &operator<<(
   return lhs
     << "ECSubRead(tid=" << rhs.tid
     << ", to_read=" << rhs.to_read
-    << ", attrs_to_read=" << rhs.attrs_to_read << ")";
+    << ", attrs_to_read=" << rhs.attrs_to_read
+    << ", fd_load=" << rhs.fd_load << ")";
 }
 
 void ECSubRead::dump(Formatter *f) const

@@ -147,6 +147,8 @@ public:
 		    pair<bufferlist*, Context*> > > &to_read,
     Context *on_complete,
     bool fast_read = false);
+  void object_fd_load(ECSubRead &op);
+  void warmup_object_fd(const hobject_t &hoid, OpRequestRef op, bool fast_read);
 
 private:
   friend struct ECRecoveryHandle;

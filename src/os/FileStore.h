@@ -395,6 +395,7 @@ public:
     bool create,
     FDRef *outfd,
     Index *index = 0);
+  bool fd_has_cache(coll_t cid, const ghobject_t& oid);
 
   void lfn_close(FDRef fd);
   int lfn_link(coll_t c, coll_t newcid, const ghobject_t& o, const ghobject_t& newoid) ;
