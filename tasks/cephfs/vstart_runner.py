@@ -37,6 +37,13 @@ handler.setFormatter(formatter)
 log.addHandler(handler)
 log.setLevel(logging.INFO)
 
+if os.path.exists("./CMakeCache.txt"):
+    # Running in build dir of a cmake build
+    BIN_PREFIX = "./src"
+else:
+    # Running in src/ of an autotools build
+    BIN_PREFIX = "./"
+
 
 class LocalRemoteProcess(object):
     def __init__(self, args, subproc, check_status, stdout, stderr):
@@ -207,7 +214,7 @@ class LocalDaemon(object):
         if self._get_pid() is not None:
             self.stop()
 
-        self.controller.run(["./ceph-{0}".format(self.daemon_type), "-i", self.daemon_id])
+        self.controller.run([os.path.join(BIN_PREFIX, "./ceph-{0}".format(self.daemon_type)), "-i", self.daemon_id])
 
 
 def safe_kill(pid):
@@ -295,7 +302,7 @@ class LocalFuseMount(FuseMount):
 
     @property
     def _prefix(self):
-        return "./"
+        return BIN_PREFIX
 
     def _asok_path(self):
         # In teuthology, the asok is named after the PID of the ceph-fuse process, because it's
@@ -344,7 +351,7 @@ class LocalFuseMount(FuseMount):
         pre_mount_conns = list_connections()
         log.info("Pre-mount connections: {0}".format(pre_mount_conns))
 
-        prefix = ["./ceph-fuse"]
+        prefix = [os.path.join(BIN_PREFIX, "ceph-fuse")]
         if os.getuid() != 0:
             prefix += ["--client-die-on-failed-remount=false"]
 
@@ -497,7 +504,7 @@ class LocalFilesystem(Filesystem):
 
     @property
     def _prefix(self):
-        return "./"
+        return BIN_PREFIX
 
     def set_clients_block(self, blocked, mds_id=None):
         raise NotImplementedError()
