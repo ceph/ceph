@@ -10,6 +10,7 @@ EXTRA_DIST += \
 	src/test/cli \
 	src/test/downloads \
 	systemd/ceph.tmpfiles.d \
+	etc/ceph.limits.d \
 	udev/50-rbd.rules \
 	udev/60-ceph-partuuid-workaround.rules \
 	udev/95-ceph-osd.rules \
