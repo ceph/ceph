@@ -1202,7 +1202,7 @@ int RGWCloneMetaLogOp::state_store_mdlog_entries_complete()
 int RGWMetadataSync::init()
 {
   if (store->is_meta_master()) {
-    return 0;
+    return -EINVAL;
   }
 
   if (!store->rest_master_conn) {
