@@ -8090,9 +8090,6 @@ void OSD::handle_op(OpRequestRef& op, OSDMapRef& osdmap)
     return;
   }
 
-  // we don't need encoded payload anymore
-  m->clear_payload();
-
   // set up a map send if the Op gets blocked for some reason
   send_map_on_destruct share_map(this, m, osdmap, m->get_map_epoch());
   Session *client_session =
