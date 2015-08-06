@@ -126,9 +126,9 @@ def ceph_log(ctx, config):
                         'root.root',
                         '/etc/logrotate.d/ceph-test.conf'
                     ]
+                )
                 remote.chcon('/etc/logrotate.d/ceph-test.conf',
                              'system_u:object_r:etc_t:s0')
-                )
 
     if ctx.config.get('log-rotate'):
         daemons = ctx.config.get('log-rotate')
