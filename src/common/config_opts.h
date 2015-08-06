@@ -1015,6 +1015,12 @@ OPTION(rgw_override_bucket_index_max_shards, OPT_U32, 0)
 OPTION(rgw_bucket_index_max_aio, OPT_U32, 8)
 
 /**
+ * Represents the number of seconds radosgw would tolerate when communicating with
+ * OSD (including retry), 0 means it would wati infinitely
+ */
+OPTION(rgw_osd_op_could_wait_secs, OPT_U32,  0)
+
+/**
  * whether or not the quota/gc threads should be started
  */
 OPTION(rgw_enable_quota_threads, OPT_BOOL, true)
