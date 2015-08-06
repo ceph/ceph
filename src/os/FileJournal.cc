@@ -143,8 +143,8 @@ int FileJournal::_open_block_device()
 	   << dendl;
   max_size = bdev_sz;
 
-  /* block devices have to write in blocks of CEPH_PAGE_SIZE */
-  block_size = CEPH_PAGE_SIZE;
+  /* get the min unit for blocks, especially for directio mode.*/
+  get_logic_block_size(fd, &block_size);
 
   if (g_conf->journal_discard) {
     discard = block_device_support_discard(fn.c_str());
@@ -497,11 +497,6 @@ int FileJournal::open(uint64_t fs_op_seq)
   if (header.alignment != block_size && directio) {
     dout(0) << "open journal alignment " << header.alignment << " does not match block size " 
 	    << block_size << " (required for direct_io journal mode)" << dendl;
-    return -EINVAL;
-  }
-  if ((header.alignment % CEPH_PAGE_SIZE) && directio) {
-    dout(0) << "open journal alignment " << header.alignment << " is not multiple of page size " << CEPH_PAGE_SIZE
-	    << " (required for direct_io journal mode)" << dendl;
     return -EINVAL;
   }
 
@@ -1028,11 +1023,11 @@ void FileJournal::align_bl(off64_t pos, bufferlist& bl)
 		   !bl.is_n_page_sized())) {
     bl.rebuild_page_aligned();
     dout(10) << __func__ << " total memcopy: " << bl.get_memcopy_count() << dendl;
-    if ((bl.length() & ~CEPH_PAGE_MASK) != 0 ||
-	(pos & ~CEPH_PAGE_MASK) != 0)
+    if ((bl.length() % header.alignment) != 0 ||
+	(pos % header.alignment) != 0)
       dout(0) << "rebuild_page_aligned failed, " << bl << dendl;
-    assert((bl.length() & ~CEPH_PAGE_MASK) == 0);
-    assert((pos & ~CEPH_PAGE_MASK) == 0);
+    assert((bl.length() % header.alignment) == 0);
+    assert((pos % header.alignment) == 0);
   }
 }
 
