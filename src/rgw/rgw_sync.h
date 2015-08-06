@@ -23,22 +23,22 @@ struct rgw_mdlog_info {
 
 #define RGW_ASYNC_OPS_MGR_WINDOW 16
 
-class RGWAsyncOpsStack;
-class RGWAsyncOpsManager;
+class RGWCoroutinesStack;
+class RGWCoroutinesManager;
 class AioCompletionNotifier;
 
-struct RGWAsyncOpsEnv {
-  RGWAsyncOpsManager *manager;
-  list<RGWAsyncOpsStack *> *stacks;
-  RGWAsyncOpsStack *stack;
+struct RGWCoroutinesEnv {
+  RGWCoroutinesManager *manager;
+  list<RGWCoroutinesStack *> *stacks;
+  RGWCoroutinesStack *stack;
 
-  RGWAsyncOpsEnv() : manager(NULL), stacks(NULL), stack(NULL) {}
+  RGWCoroutinesEnv() : manager(NULL), stacks(NULL), stack(NULL) {}
 };
 
-class RGWAsyncOp : public RefCountedObject {
-  friend class RGWAsyncOpsStack;
+class RGWCoroutine : public RefCountedObject {
+  friend class RGWCoroutinesStack;
 protected:
-  RGWAsyncOpsEnv *env;
+  RGWCoroutinesEnv *env;
   bool blocked;
   int retcode;
 
@@ -50,17 +50,17 @@ protected:
     return ret;
   }
 
-  int do_operate(RGWAsyncOpsEnv *_env) {
+  int do_operate(RGWCoroutinesEnv *_env) {
     env = _env;
     return operate();
   }
 
-  void call(RGWAsyncOp *op);
-  void call_concurrent(RGWAsyncOp *op);
+  void call(RGWCoroutine *op);
+  void spawn(RGWCoroutine *op);
 
 public:
-  RGWAsyncOp() : env(NULL), blocked(false), retcode(0) {}
-  virtual ~RGWAsyncOp() {}
+  RGWCoroutine() : env(NULL), blocked(false), retcode(0) {}
+  virtual ~RGWCoroutine() {}
 
   virtual int operate() = 0;
 
@@ -79,16 +79,16 @@ public:
   }
 };
 
-class RGWAsyncOpsStack {
+class RGWCoroutinesStack {
   CephContext *cct;
 
-  RGWAsyncOpsManager *ops_mgr;
+  RGWCoroutinesManager *ops_mgr;
 
-  list<RGWAsyncOp *> ops;
-  list<RGWAsyncOp *>::iterator pos;
+  list<RGWCoroutine *> ops;
+  list<RGWCoroutine *>::iterator pos;
 
-  set<RGWAsyncOpsStack *> blocked_by_stack;
-  set<RGWAsyncOpsStack *> blocking_stacks;
+  set<RGWCoroutinesStack *> blocked_by_stack;
+  set<RGWCoroutinesStack *> blocking_stacks;
 
 
   bool done_flag;
@@ -96,9 +96,9 @@ class RGWAsyncOpsStack {
   bool blocked_flag;
 
 public:
-  RGWAsyncOpsStack(CephContext *_cct, RGWAsyncOpsManager *_ops_mgr, RGWAsyncOp *start = NULL);
+  RGWCoroutinesStack(CephContext *_cct, RGWCoroutinesManager *_ops_mgr, RGWCoroutine *start = NULL);
 
-  int operate(RGWAsyncOpsEnv *env);
+  int operate(RGWCoroutinesEnv *env);
 
   bool is_done() {
     return done_flag;
@@ -117,24 +117,24 @@ public:
 
   string error_str();
 
-  int call(RGWAsyncOp *next_op, int ret = 0);
+  int call(RGWCoroutine *next_op, int ret = 0);
   int unwind(int retcode);
 
   AioCompletionNotifier *create_completion_notifier();
   RGWCompletionManager *get_completion_mgr();
 
-  void set_blocked_by(RGWAsyncOpsStack *s) {
+  void set_blocked_by(RGWCoroutinesStack *s) {
     blocked_by_stack.insert(s);
     s->blocking_stacks.insert(this);
   }
 
-  bool unblock_stack(RGWAsyncOpsStack **s);
+  bool unblock_stack(RGWCoroutinesStack **s);
 };
 
-class RGWAsyncOpsManager {
+class RGWCoroutinesManager {
   CephContext *cct;
 
-  void handle_unblocked_stack(list<RGWAsyncOpsStack *>& stacks, RGWAsyncOpsStack *stack, int *waiting_count);
+  void handle_unblocked_stack(list<RGWCoroutinesStack *>& stacks, RGWCoroutinesStack *stack, int *waiting_count);
 protected:
   RGWCompletionManager completion_mgr;
 
@@ -142,19 +142,19 @@ protected:
 
   void put_completion_notifier(AioCompletionNotifier *cn);
 public:
-  RGWAsyncOpsManager(CephContext *_cct) : cct(_cct), ops_window(RGW_ASYNC_OPS_MGR_WINDOW) {}
-  virtual ~RGWAsyncOpsManager() {}
+  RGWCoroutinesManager(CephContext *_cct) : cct(_cct), ops_window(RGW_ASYNC_OPS_MGR_WINDOW) {}
+  virtual ~RGWCoroutinesManager() {}
 
-  int run(list<RGWAsyncOpsStack *>& ops);
-  int run(RGWAsyncOp *op);
+  int run(list<RGWCoroutinesStack *>& ops);
+  int run(RGWCoroutine *op);
 
-  virtual void report_error(RGWAsyncOpsStack *op);
+  virtual void report_error(RGWCoroutinesStack *op);
 
-  AioCompletionNotifier *create_completion_notifier(RGWAsyncOpsStack *stack);
+  AioCompletionNotifier *create_completion_notifier(RGWCoroutinesStack *stack);
   RGWCompletionManager *get_completion_mgr() { return &completion_mgr; }
 
-  RGWAsyncOpsStack *allocate_stack() {
-    return new RGWAsyncOpsStack(cct, this);
+  RGWCoroutinesStack *allocate_stack() {
+    return new RGWCoroutinesStack(cct, this);
   }
 };
 
@@ -262,7 +262,7 @@ public:
 
 class RGWAsyncRadosProcessor;
 
-class RGWRemoteMetaLog : public RGWAsyncOpsManager {
+class RGWRemoteMetaLog : public RGWCoroutinesManager {
   RGWRados *store;
   RGWRESTConn *conn;
   RGWAsyncRadosProcessor *async_rados;
@@ -291,7 +291,7 @@ class RGWRemoteMetaLog : public RGWAsyncOpsManager {
   RGWMetaSyncStatusManager status_manager;
 
 public:
-  RGWRemoteMetaLog(RGWRados *_store) : RGWAsyncOpsManager(_store->ctx()), store(_store),
+  RGWRemoteMetaLog(RGWRados *_store) : RGWCoroutinesManager(_store->ctx()), store(_store),
                                        conn(NULL), ts_to_shard_lock("ts_to_shard_lock"),
                                        http_manager(store->ctx(), &completion_mgr),
                                        status_manager(store) {}
