@@ -1,8 +1,10 @@
 import logging
+import os
 
 from cStringIO import StringIO
 
 from teuthology.exceptions import SELinuxError
+from teuthology.misc import get_archive_dir
 from teuthology.orchestra.cluster import Cluster
 
 from . import Task
@@ -44,9 +46,13 @@ class SELinux(Task):
 
     def setup(self):
         super(SELinux, self).setup()
+        self.rotate_log()
         self.old_modes = self.get_modes()
         self.old_denials = self.get_denials()
         self.set_mode()
+
+    def rotate_log(self):
+        self.cluster.run(args="sudo service auditd rotate")
 
     def get_modes(self):
         """
@@ -98,6 +104,7 @@ class SELinux(Task):
 
     def teardown(self):
         self.restore_modes()
+        self.archive_log()
         self.get_new_denials()
 
     def restore_modes(self):
@@ -114,6 +121,20 @@ class SELinux(Task):
                 remote.run(
                     args=['sudo', '/usr/sbin/setenforce', mode],
                 )
+
+    def archive_log(self):
+        if not hasattr(self.ctx, 'archive') or not self.ctx.archive:
+            return
+        archive_dir = get_archive_dir(self.ctx)
+        audit_archive = os.path.join(archive_dir, 'audit')
+        mkdir_cmd = "mkdir {audit_archive}"
+        cp_cmd = "sudo cp /var/log/audit/audit.log {audit_archive}"
+        chown_cmd = "sudo chown $USER {audit_archive}/audit.log"
+        gzip_cmd = "gzip {audit_archive}/audit.log"
+        full_cmd = " && ".join((mkdir_cmd, cp_cmd, chown_cmd, gzip_cmd))
+        self.cluster.run(
+            args=full_cmd.format(audit_archive=audit_archive)
+        )
 
     def get_new_denials(self):
         """
