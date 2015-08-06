@@ -8424,8 +8424,8 @@ int ReplicatedPG::find_object_context(const hobject_t& oid,
     return 0;
   }
 
-  hobject_t head(oid.oid, oid.get_key(), CEPH_NOSNAP, oid.get_hash(),
-		 info.pgid.pool(), oid.get_namespace());
+  hobject_t head = oid.get_head();
+
   // want the snapdir?
   if (oid.snap == CEPH_SNAPDIR) {
     // return head or snapdir, whichever exists.
