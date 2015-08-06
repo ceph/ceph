@@ -2,6 +2,7 @@
 from StringIO import StringIO
 import json
 import logging
+import os
 import time
 import datetime
 import re
@@ -344,12 +345,12 @@ class Filesystem(object):
 
         # FIXME get the metadata pool name from mdsmap instead of hardcoding
         self.client_remote.run(args=[
-            'sudo', self._prefix + 'rados', '-p', 'metadata', 'get', object_id, temp_bin_path
+            'sudo', os.path.join(self._prefix, 'rados'), '-p', 'metadata', 'get', object_id, temp_bin_path
         ])
 
         stdout = StringIO()
         self.client_remote.run(args=[
-            'sudo', self._prefix + 'ceph-dencoder', 'type', object_type, 'import', temp_bin_path, 'decode', 'dump_json'
+            'sudo', os.path.join(self._prefix, 'ceph-dencoder'), 'type', object_type, 'import', temp_bin_path, 'decode', 'dump_json'
         ], stdout=stdout)
         dump_json = stdout.getvalue().strip()
         try:
@@ -510,7 +511,7 @@ class Filesystem(object):
         obj_name = "{0:x}.00000000".format(ino_no)
 
         args = [
-            self._prefix + "rados", "-p", pool, "getxattr", obj_name, xattr_name
+            os.path.join(self._prefix, "rados"), "-p", pool, "getxattr", obj_name, xattr_name
         ]
         try:
             proc = remote.run(
@@ -523,7 +524,7 @@ class Filesystem(object):
         data = proc.stdout.getvalue()
 
         p = remote.run(
-            args=[self._prefix + "ceph-dencoder", "type", type, "import", "-", "decode", "dump_json"],
+            args=[os.path.join(self._prefix, "ceph-dencoder"), "type", type, "import", "-", "decode", "dump_json"],
             stdout=StringIO(),
             stdin=data
         )
@@ -637,7 +638,7 @@ class Filesystem(object):
 
         # NB we could alternatively use librados pybindings for this, but it's a one-liner
         # using the `rados` CLI
-        args = [self._prefix + "rados", "-p", pool] + args
+        args = [os.path.join(self._prefix, "rados"), "-p", pool] + args
         p = remote.run(
             args=args,
             stdin=stdin_data,
@@ -711,9 +712,9 @@ class Filesystem(object):
         # the objecter log level (unlikely to be interesting here)
         # and does not set the mds log level (very interesting here)
         if quiet:
-            base_args = [self._prefix + tool, '--debug-mds=1', '--debug-objecter=1']
+            base_args = [os.path.join(self._prefix, tool), '--debug-mds=1', '--debug-objecter=1']
         else:
-            base_args = [self._prefix + tool, '--debug-mds=4', '--debug-objecter=1']
+            base_args = [os.path.join(self._prefix, tool), '--debug-mds=4', '--debug-objecter=1']
 
         if rank is not None:
             base_args.extend(["--rank", "%d" % rank])
