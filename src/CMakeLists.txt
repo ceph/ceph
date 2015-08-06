@@ -1037,6 +1037,7 @@ if(${WITH_RADOSGW})
     rgw/rgw_quota.cc
     rgw/rgw_sync.cc
     rgw/rgw_dencoder.cc
+    rgw/rgw_coroutine.cc
     rgw/rgw_object_expirer_core.cc)
 
   add_library(rgw_a STATIC ${rgw_a_srcs})
@@ -1064,11 +1065,13 @@ if(${WITH_RADOSGW})
     rgw/rgw_civetweb.cc
     rgw/rgw_civetweb_log.cc
     civetweb/src/civetweb.c
-    rgw/rgw_main.cc)
+    rgw/rgw_main.cc
+    rgw/rgw_sync.cc)
 
   set(radosgw_admin_srcs
     rgw/rgw_admin.cc
-    rgw/rgw_orphan.cc)
+    rgw/rgw_orphan.cc
+    rgw/rgw_sync.cc)
 
   set(radosgw_object_expirer_srcs
     rgw/rgw_object_expirer.cc)
