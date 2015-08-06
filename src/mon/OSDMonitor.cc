@@ -1830,6 +1830,15 @@ bool OSDMonitor::preprocess_boot(MonOpRequestRef op)
     goto ignore;
   }
 
+  if ((osdmap.get_features(CEPH_ENTITY_TYPE_OSD, NULL) &
+       CEPH_FEATURE_ERASURE_CODE_PLUGINS_V3) &&
+      !(m->get_connection()->get_features() & CEPH_FEATURE_ERASURE_CODE_PLUGINS_V3)) {
+    dout(0) << __func__ << " osdmap requires erasure code plugins v3 but osd at "
+            << m->get_orig_source_inst()
+            << " doesn't announce support -- ignore" << dendl;
+    goto ignore;
+  }
+
   if (osdmap.test_flag(CEPH_OSDMAP_SORTBITWISE) &&
       !(m->osd_features & CEPH_FEATURE_OSD_BITWISE_HOBJ_SORT)) {
     mon->clog->info() << "disallowing boot of OSD "
@@ -5573,10 +5582,11 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	if (err)
 	  goto reply;
       } else if (plugin == "shec") {
-	if (!g_ceph_context->check_experimental_feature_enabled("shec", &ss)) {
-	  err = -EINVAL;
+	err = check_cluster_features(CEPH_FEATURE_ERASURE_CODE_PLUGINS_V3, ss);
+	if (err == -EAGAIN)
+	  goto wait;
+	if (err)
 	  goto reply;
-	}
       }
       err = normalize_profile(profile_map, &ss);
       if (err)

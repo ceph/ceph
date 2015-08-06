@@ -25,7 +25,6 @@ function run() {
     export CEPH_MON="127.0.0.1:7101"
     export CEPH_ARGS
     CEPH_ARGS+="--fsid=$(uuidgen) --auth-supported=none "
-    CEPH_ARGS+="--enable-experimental-unrecoverable-data-corrupting-features=shec "
     CEPH_ARGS+="--mon-host=$CEPH_MON "
 
     setup $dir || return 1
