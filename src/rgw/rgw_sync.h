@@ -55,6 +55,9 @@ protected:
     return operate();
   }
 
+  void call(RGWAsyncOp *op);
+  void call_concurrent(RGWAsyncOp *op);
+
 public:
   RGWAsyncOp() : env(NULL), blocked(false), retcode(0) {}
   virtual ~RGWAsyncOp() {}
@@ -84,6 +87,10 @@ class RGWAsyncOpsStack {
   list<RGWAsyncOp *> ops;
   list<RGWAsyncOp *>::iterator pos;
 
+  set<RGWAsyncOpsStack *> blocked_by_stack;
+  set<RGWAsyncOpsStack *> blocking_stacks;
+
+
   bool done_flag;
   bool error_flag;
   bool blocked_flag;
@@ -99,8 +106,11 @@ public:
   bool is_error() {
     return error_flag;
   }
+  bool is_blocked_by_stack() {
+    return !blocked_by_stack.empty();
+  }
   bool is_blocked() {
-    return blocked_flag;
+    return blocked_flag || is_blocked_by_stack();
   }
 
   void set_blocked(bool flag);
@@ -112,6 +122,13 @@ public:
 
   AioCompletionNotifier *create_completion_notifier();
   RGWCompletionManager *get_completion_mgr();
+
+  void set_blocked_by(RGWAsyncOpsStack *s) {
+    blocked_by_stack.insert(s);
+    s->blocking_stacks.insert(this);
+  }
+
+  bool unblock_stack(RGWAsyncOpsStack **s);
 };
 
 class RGWAsyncOpsManager {
@@ -135,6 +152,10 @@ public:
 
   AioCompletionNotifier *create_completion_notifier(RGWAsyncOpsStack *stack);
   RGWCompletionManager *get_completion_mgr() { return &completion_mgr; }
+
+  RGWAsyncOpsStack *allocate_stack() {
+    return new RGWAsyncOpsStack(cct, this);
+  }
 };
 
 struct RGWMetaSyncGlobalStatus {
