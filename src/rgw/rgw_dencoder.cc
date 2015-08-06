@@ -419,6 +419,34 @@ void RGWBucketInfo::generate_test_instances(list<RGWBucketInfo*>& o)
   o.push_back(new RGWBucketInfo);
 }
 
+void RGWRegion::generate_test_instances(list<RGWRegion*>& o)
+{
+  RGWRegion *r = new RGWRegion;
+  o.push_back(r);
+  o.push_back(new RGWRegion);
+}
+
+void RGWZone::generate_test_instances(list<RGWZone*> &o)
+{
+  RGWZone *z = new RGWZone;
+  o.push_back(z);
+  o.push_back(new RGWZone);
+}
+
+void RGWZoneParams::generate_test_instances(list<RGWZoneParams*> &o)
+{
+  o.push_back(new RGWZoneParams);
+  o.push_back(new RGWZoneParams); 
+}
+
+void RGWOLHInfo::generate_test_instances(list<RGWOLHInfo*> &o)
+{
+  RGWOLHInfo *olh = new RGWOLHInfo;
+  olh->removed = false;
+  o.push_back(olh);
+  o.push_back(new RGWOLHInfo);
+}
+
 void RGWBucketEnt::generate_test_instances(list<RGWBucketEnt*>& o)
 {
   RGWBucketEnt *e = new RGWBucketEnt;
