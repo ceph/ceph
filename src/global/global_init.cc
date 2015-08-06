@@ -169,6 +169,32 @@ void global_init(std::vector < const char * > *alt_def_args,
 	gid = g->gr_gid;
       }
     }
+    if ((uid || gid) &&
+	g_conf->setuser_match_path.length()) {
+      struct stat st;
+      int r = ::stat(g_conf->setuser_match_path.c_str(), &st);
+      if (r < 0) {
+	r = -errno;
+	cerr << "unable to stat setuser_match_path "
+	     << g_conf->setuser_match_path
+	     << ": " << cpp_strerror(r) << std::endl;
+	exit(1);
+      }
+      if ((uid && uid != st.st_uid) ||
+	  (gid && gid != st.st_gid)) {
+	cerr << "WARNING: will not setuid/gid: " << g_conf->setuser_match_path
+	     << " owned by " << st.st_uid << ":" << st.st_gid
+	     << " and not requested " << uid << ":" << gid
+	     << std::endl;
+	uid = 0;
+	gid = 0;
+      } else {
+	dout(10) << "setuser_match_path "
+		 << g_conf->setuser_match_path << " owned by "
+		 << st.st_uid << ":" << st.st_gid << ", doing setuid/gid"
+		 << dendl;
+      }
+    }
     if (setgid(gid) != 0) {
       int r = errno;
       cerr << "unable to setgid " << gid << ": " << cpp_strerror(r)
