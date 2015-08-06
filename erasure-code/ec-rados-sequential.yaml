@@ -5,6 +5,7 @@ workload:
        ops: 4000
        objects: 50
        ec_pool: true
+       write_append_excl: false
        op_weights:
          read: 100
          write: 0
