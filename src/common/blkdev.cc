@@ -53,6 +53,14 @@ int get_block_device_size(int fd, int64_t *psize)
   return ret;
 }
 
+int get_logic_block_size(int fd, size_t *bsize)
+{
+  int ret = ::ioctl(fd, BLKSSZGET, bsize);
+  if (ret < 0)
+    *bsize = CEPH_PAGE_SIZE;
+  return 0;
+}
+
 /**
  * get the base device (strip off partition suffix and /dev/ prefix)
  *  e.g.,
@@ -210,6 +218,12 @@ int get_device_by_uuid(uuid_d dev_uuid, const char* label, char* partition,
 #elif defined(__APPLE__)
 #include <sys/disk.h>
 
+int get_logic_block_size(int fd, size_t *bsize)
+{
+  *bsize = CEPH_PAGE_SIZE;
+  return 0;
+}
+
 int get_block_device_size(int fd, int64_t *psize)
 {
   unsigned long blocksize = 0;
@@ -242,6 +256,12 @@ int get_device_by_uuid(uuid_d dev_uuid, const char* label, char* partition,
 }
 #elif defined(__FreeBSD__)
 #include <sys/disk.h>
+
+int get_logic_block_size(int fd, size_t *bsize)
+{
+  *bsize = CEPH_PAGE_SIZE;
+  return 0;
+}
 
 int get_block_device_size(int fd, int64_t *psize)
 {
