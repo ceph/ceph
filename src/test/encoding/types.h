@@ -235,7 +235,11 @@ TYPE(librbd::WatchNotify::ResponseMessage)
 #include "rgw/rgw_rados.h"
 TYPE(RGWObjManifestPart)
 TYPE(RGWObjManifest)
-
+TYPE(RGWOLHInfo)
+TYPE(RGWRegion)
+TYPE(RGWZone)
+TYPE(RGWZoneParams)     
+   
 #include "rgw/rgw_acl.h"
 TYPE(ACLPermission)
 TYPE(ACLGranteeType)
