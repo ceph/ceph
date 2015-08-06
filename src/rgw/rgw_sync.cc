@@ -424,6 +424,24 @@ int RGWMetaSyncStatusManager::set_state(RGWMetaSyncGlobalStatus::SyncState state
   return 0;
 }
 
+void RGWAsyncOp::call(RGWAsyncOp *op)
+{
+  int r = env->stack->call(op, 0);
+  assert(r == 0);
+}
+
+void RGWAsyncOp::call_concurrent(RGWAsyncOp *op)
+{
+  RGWAsyncOpsStack *stack = env->manager->allocate_stack();
+
+  int r = stack->call(op, 0);
+  assert(r == 0);
+
+  env->stacks->push_back(stack);
+
+  env->stack->set_blocked_by(stack);
+}
+
 class RGWSimpleAsyncOp : public RGWAsyncOp {
   enum State {
     Init                      = 0,
@@ -447,11 +465,6 @@ class RGWSimpleAsyncOp : public RGWAsyncOp {
 
 protected:
   CephContext *cct;
-
-  void call(RGWAsyncOp *op) {
-    int r = env->stack->call(op, 0);
-    assert(r == 0);
-  }
 
 public:
   RGWSimpleAsyncOp(CephContext *_cct) : state(Init), cct(_cct) {}
@@ -603,6 +616,7 @@ class RGWReadSyncStatusOp : public RGWSimpleRadosAsyncOp<RGWMetaSyncGlobalStatus
   RGWObjectCtx& obj_ctx;
 
   RGWMetaSyncGlobalStatus *global_status;
+  rgw_sync_marker sync_marker;
 
 public:
   RGWReadSyncStatusOp(RGWAsyncRadosProcessor *_async_rados, RGWRados *_store,
@@ -619,6 +633,10 @@ public:
 
 int RGWReadSyncStatusOp::handle_data(RGWMetaSyncGlobalStatus& data)
 {
+  call_concurrent(new RGWSimpleRadosAsyncOp<rgw_sync_marker>(async_rados, store, obj_ctx, store->get_zone_params().log_pool,
+				 "mdlog.state.0", &sync_marker));
+  call_concurrent(new RGWSimpleRadosAsyncOp<rgw_sync_marker>(async_rados, store, obj_ctx, store->get_zone_params().log_pool,
+				 "mdlog.state.1", &sync_marker));
   return 0;
 }
 
@@ -778,13 +796,14 @@ int RGWAsyncOpsStack::operate(RGWAsyncOpsEnv *env)
     ldout(cct, 0) << "ERROR: op->operate() returned r=" << r << dendl;
   }
 
-  done_flag = op->is_done();
   error_flag = op->is_error();
   blocked_flag = op->is_blocked();
 
-  if (done_flag) {
+  if (op->is_done()) {
     op->put();
-    return unwind(r);
+    r = unwind(r);
+    done_flag = (pos == ops.end());
+    return r;
   }
 
   /* should r ever be negative at this point? */
@@ -843,6 +862,20 @@ RGWCompletionManager *RGWAsyncOpsStack::get_completion_mgr()
   return ops_mgr->get_completion_mgr();
 }
 
+bool RGWAsyncOpsStack::unblock_stack(RGWAsyncOpsStack **s)
+{
+  if (blocking_stacks.empty()) {
+    return false;
+  }
+
+  set<RGWAsyncOpsStack *>::iterator iter = blocking_stacks.begin();
+  *s = *iter;
+  blocking_stacks.erase(iter);
+  (*s)->blocked_by_stack.erase(this);
+
+  return true;
+}
+
 void RGWAsyncOpsManager::report_error(RGWAsyncOpsStack *op)
 {
 #warning need to have error logging infrastructure that logs on backend
@@ -880,9 +913,21 @@ int RGWAsyncOpsManager::run(list<RGWAsyncOpsStack *>& stacks)
       report_error(stack);
     }
 
-    if (stack->is_blocked()) {
+    if (stack->is_blocked_by_stack()) {
+      /* do nothing, we'll re-add the stack when the blocking stack is done */
+    } else if (stack->is_blocked()) {
       waiting_count++;
     } else if (stack->is_done()) {
+      RGWAsyncOpsStack *s;
+      while (stack->unblock_stack(&s)) {
+	if (!s->is_blocked_by_stack() && !s->is_done()) {
+	  if (s->is_blocked()) {
+	    waiting_count++;
+	  } else {
+	    stacks.push_back(s);
+	  }
+	}
+      }
       delete stack;
     } else {
       stacks.push_back(stack);
@@ -919,7 +964,7 @@ int RGWAsyncOpsManager::run(list<RGWAsyncOpsStack *>& stacks)
 int RGWAsyncOpsManager::run(RGWAsyncOp *op)
 {
   list<RGWAsyncOpsStack *> stacks;
-  RGWAsyncOpsStack *stack = new RGWAsyncOpsStack(cct, this);
+  RGWAsyncOpsStack *stack = allocate_stack();
   int r = stack->call(op);
   if (r < 0) {
     ldout(cct, 0) << "ERROR: stack->call() returned r=" << r << dendl;
