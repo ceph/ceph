@@ -4,6 +4,7 @@ Test our tools for recovering metadata from the data pool
 """
 
 import logging
+import os
 from textwrap import dedent
 import traceback
 from collections import namedtuple
@@ -127,6 +128,86 @@ class BacktracelessFile(Workload):
 
         # We might not have got the name or path, but we should still get the size
         self.assert_equal(st['st_size'], self._initial_state['st_size'])
+
+        return self._errors
+
+
+class StripedStashedLayout(Workload):
+    def __init__(self, fs, m):
+        super(StripedStashedLayout, self).__init__(fs, m)
+
+        # Nice small stripes so we can quickly do our writes+validates
+        self.sc = 4
+        self.ss = 65536
+        self.os = 262144
+
+        self.interesting_sizes = [
+            # Exactly stripe_count objects will exist
+            self.os * self.sc,
+            # Fewer than stripe_count objects will exist
+            self.os * self.sc / 2,
+            self.os * (self.sc - 1) + self.os / 2,
+            self.os * (self.sc - 1) + self.os / 2 - 1,
+            self.os * (self.sc + 1) + self.os / 2,
+            self.os * (self.sc + 1) + self.os / 2 + 1,
+            # More than stripe_count objects will exist
+            self.os * self.sc + self.os * self.sc / 2
+        ]
+
+    def write(self):
+        # Create a dir with a striped layout set on it
+        self._mount.run_shell(["mkdir", "stripey"])
+
+        self._mount.run_shell([
+            "setfattr", "-n", "ceph.dir.layout", "-v",
+            "stripe_unit={ss} stripe_count={sc} object_size={os} pool=data".format(
+                ss=self.ss, os=self.os, sc=self.sc
+            ),
+            "./stripey"])
+
+        # Write files, then flush metadata so that its layout gets written into an xattr
+        for i, n_bytes in enumerate(self.interesting_sizes):
+            self._mount.write_test_pattern("stripey/flushed_file_{0}".format(i), n_bytes)
+            # This is really just validating the validator
+            self._mount.validate_test_pattern("stripey/flushed_file_{0}".format(i), n_bytes)
+        self._filesystem.mds_asok(["flush", "journal"])
+
+        # Write another file in the same way, but this time don't flush the metadata,
+        # so that it won't have the layout xattr
+        self._mount.write_test_pattern("stripey/unflushed_file", 1024 * 512)
+        self._mount.validate_test_pattern("stripey/unflushed_file", 1024 * 512)
+
+        self._initial_state = {
+            "unflushed_ino": self._mount.path_to_ino("stripey/unflushed_file")
+        }
+
+    def flush(self):
+        # Pass because we already selectively flushed during write
+        pass
+
+    def validate(self):
+        # The first files should have been recovered into its original location
+        # with the correct layout: read back correct data
+        for i, n_bytes in enumerate(self.interesting_sizes):
+            try:
+                self._mount.validate_test_pattern("stripey/flushed_file_{0}".format(i), n_bytes)
+            except CommandFailedError as e:
+                self._errors.append(
+                    ValidationError("File {0} (size {1}): {2}".format(i, n_bytes, e), traceback.format_exc(3))
+                )
+
+        # The unflushed file should have been recovered into lost+found without
+        # the correct layout: read back junk
+        ino_name = "%x" % self._initial_state["unflushed_ino"]
+        self.assert_equal(self._mount.ls("lost+found"), [ino_name])
+        try:
+            self._mount.validate_test_pattern(os.path.join("lost+found", ino_name), 1024 * 512)
+        except CommandFailedError:
+            pass
+        else:
+            self._errors.append(
+                ValidationError("Unexpectedly valid data in unflushed striped file", "")
+            )
 
         return self._errors
 
@@ -271,6 +352,7 @@ class TestDataScan(CephFSTestCase):
         # See that the files are present and correct
         errors = workload.validate()
         if errors:
+            log.error("Validation errors found: {0}".format(len(errors)))
             for e in errors:
                 log.error(e.exception)
                 log.error(e.backtrace)
@@ -295,6 +377,9 @@ class TestDataScan(CephFSTestCase):
 
     def test_rebuild_nondefault_layout(self):
         self._rebuild_metadata(NonDefaultLayout(self.fs, self.mount_a))
+
+    def test_stashed_layout(self):
+        self._rebuild_metadata(StripedStashedLayout(self.fs, self.mount_a))
 
     def _dirfrag_keys(self, object_id):
         keys_str = self.fs.rados(["listomapkeys", object_id])

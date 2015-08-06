@@ -278,6 +278,42 @@ class CephFSMount(object):
                         "seek={0}".format(seek)
         ])
 
+    def write_test_pattern(self, filename, size):
+        log.info("Writing {0} bytes to {1}".format(size, filename))
+        return self.run_python(dedent("""
+            import zlib
+            path = "{path}"
+            f = open(path, 'w')
+            for i in range(0, {size}):
+                val = zlib.crc32("%s" % i) & 7
+                f.write(chr(val))
+            f.close()
+        """.format(
+            path=os.path.join(self.mountpoint, filename),
+            size=size
+        )))
+
+    def validate_test_pattern(self, filename, size):
+        log.info("Validating {0} bytes from {1}".format(size, filename))
+        return self.run_python(dedent("""
+            import zlib
+            path = "{path}"
+            f = open(path, 'r')
+            bytes = f.read()
+            f.close()
+            if len(bytes) != {size}:
+                raise RuntimeError("Bad length {{0}} vs. expected {{1}}".format(
+                    len(bytes), {size}
+                ))
+            for i, b in enumerate(bytes):
+                val = zlib.crc32("%s" % i) & 7
+                if b != chr(val):
+                    raise RuntimeError("Bad data at offset {{0}}".format(i))
+        """.format(
+            path=os.path.join(self.mountpoint, filename),
+            size=size
+        )))
+
     def open_n_background(self, fs_path, count):
         """
         Open N files for writing, hold them open in a background process
