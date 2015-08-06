@@ -520,7 +520,6 @@ int RGWRegionMap::update(RGWRegion& region)
   return 0;
 }
 
-
 void RGWObjVersionTracker::prepare_op_for_read(ObjectReadOperation *op)
 {
   obj_version *check_objv = version_for_check();

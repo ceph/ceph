@@ -76,7 +76,7 @@ struct RGWOLHInfo {
      ::decode(removed, bl);
      DECODE_FINISH(bl);
   }
-
+  static void generate_test_instances(list<RGWOLHInfo*>& o);
   void dump(Formatter *f) const;
 };
 WRITE_CLASS_ENCODER(RGWOLHInfo)
@@ -788,6 +788,7 @@ struct RGWZoneParams {
   }
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
+  static void generate_test_instances(list<RGWZoneParams*>& o);
 };
 WRITE_CLASS_ENCODER(RGWZoneParams)
 
@@ -833,6 +834,7 @@ struct RGWZone {
   }
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
+  static void generate_test_instances(list<RGWZone*>& o);
 };
 WRITE_CLASS_ENCODER(RGWZone)
 
@@ -852,6 +854,7 @@ struct RGWDefaultRegionInfo {
   }
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
+  //todo: implement ceph-dencoder
 };
 WRITE_CLASS_ENCODER(RGWDefaultRegionInfo)
 
@@ -954,6 +957,7 @@ struct RGWRegion {
 
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
+  static void generate_test_instances(list<RGWRegion*>& o);
 };
 WRITE_CLASS_ENCODER(RGWRegion)
 
