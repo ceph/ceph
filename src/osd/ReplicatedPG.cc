@@ -3844,8 +3844,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 				 << " != expected 0x" << oi.data_digest
 				 << std::dec << " on " << soid;
 	      // FIXME fall back to replica or something?
-	      if (g_conf->osd_read_eio_on_bad_digest)
-		result = -EIO;
+	      result = -EIO;
 	    }
 	  }
 	}
