@@ -593,6 +593,7 @@ template <class T>
 int RGWSimpleRadosCoroutine<T>::request_complete()
 {
   int ret = req->get_ret_status();
+  retcode = ret;
   if (ret != -ENOENT) {
     if (ret < 0) {
       return ret;
@@ -633,6 +634,9 @@ public:
 
 int RGWReadSyncStatusCoroutine::handle_data(RGWMetaSyncGlobalStatus& data)
 {
+  if (retcode == -ENOENT) {
+    return retcode;
+  }
   spawn(new RGWSimpleRadosCoroutine<rgw_sync_marker>(async_rados, store, obj_ctx, store->get_zone_params().log_pool,
 				 "mdlog.state.0", &sync_marker));
   spawn(new RGWSimpleRadosCoroutine<rgw_sync_marker>(async_rados, store, obj_ctx, store->get_zone_params().log_pool,
@@ -965,6 +969,7 @@ int RGWCoroutinesManager::run(RGWCoroutine *op)
 {
   list<RGWCoroutinesStack *> stacks;
   RGWCoroutinesStack *stack = allocate_stack();
+  op->get();
   int r = stack->call(op);
   if (r < 0) {
     ldout(cct, 0) << "ERROR: stack->call() returned r=" << r << dendl;
@@ -977,6 +982,9 @@ int RGWCoroutinesManager::run(RGWCoroutine *op)
   if (r < 0) {
     ldout(cct, 0) << "ERROR: run(stacks) returned r=" << r << dendl;
   }
+
+  r = op->get_ret_status();
+  op->put();
 
   return r;
 }

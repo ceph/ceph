@@ -77,6 +77,10 @@ public:
   void set_retcode(int r) {
     retcode = r;
   }
+
+  int get_ret_status() {
+    return retcode;
+  }
 };
 
 class RGWCoroutinesStack {
