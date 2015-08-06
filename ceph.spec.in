@@ -1,12 +1,29 @@
+# vim: set noexpandtab ts=8 sw=8 :
 %bcond_with ocf
 %bcond_without cephfs_java
 %bcond_with tests
 %bcond_without tcmalloc
 %bcond_without libs_compat
+%bcond_without selinux
+
 
 %if (0%{?el5} || (0%{?rhel_version} >= 500 && 0%{?rhel_version} <= 600))
 %{!?python_sitelib: %global python_sitelib %(%{__python} -c "from distutils.sysconfig import get_python_lib; print(get_python_lib())")}
 %{!?python_sitearch: %global python_sitearch %(%{__python} -c "from distutils.sysconfig import get_python_lib; print(get_python_lib(1))")}
+%endif
+
+%if %{with selinux}
+# get selinux policy version
+%{!?_selinux_policy_version: %global _selinux_policy_version %(sed -e 's,.*selinux-policy-\\([^/]*\\)/.*,\\1,' /usr/share/selinux/devel/policyhelp 2>/dev/null || echo 0.0.0)}
+
+%define relabel_files() \
+restorecon -R /usr/bin/ceph-mon > /dev/null 2>&1; \
+restorecon -R /usr/bin/ceph-osd > /dev/null 2>&1; \
+restorecon -R /usr/bin/ceph-mds > /dev/null 2>&1; \
+restorecon -R /etc/rc\.d/init\.d/ceph > /dev/null 2>&1; \
+restorecon -R /var/run/ceph > /dev/null 2>&1; \
+restorecon -R /var/lib/ceph > /dev/null 2>&1; \
+restorecon -R /var/log/ceph > /dev/null 2>&1;
 %endif
 
 %{!?_udevrulesdir: %global _udevrulesdir /lib/udev/rules.d}
@@ -39,6 +56,9 @@ Requires:	librbd1 = %{epoch}:%{version}-%{release}
 Requires:	librados2 = %{epoch}:%{version}-%{release}
 Requires:	libcephfs1 = %{epoch}:%{version}-%{release}
 Requires:	ceph-common = %{epoch}:%{version}-%{release}
+%if 0%{with selinux}
+Requires:	ceph-selinux = %{epoch}:%{version}-%{release}
+%endif
 Requires:	python-rados = %{epoch}:%{version}-%{release}
 Requires:	python-rbd = %{epoch}:%{version}-%{release}
 Requires:	python-cephfs = %{epoch}:%{version}-%{release}
@@ -60,6 +80,11 @@ Requires: systemd
 %endif
 %if 0%{with cephfs_java}
 BuildRequires: sharutils
+%endif
+%if 0%{with selinux}
+BuildRequires:	checkpolicy
+BuildRequires:	selinux-policy-devel
+BuildRequires:	/usr/share/selinux/devel/policyhelp
 %endif
 BuildRequires:	gcc-c++
 BuildRequires:	boost-devel
@@ -394,6 +419,22 @@ This package contains the Java libraries for the Ceph File System.
 
 %endif
 
+%if 0%{with selinux}
+
+%package selinux
+Summary:	SELinux support for Ceph MON, OSD and MDS
+Group:		System Environment/Base
+Requires:	%{name}
+Requires:	policycoreutils, libselinux-utils
+Requires(post):	selinux-policy >= %{_selinux_policy_version}, policycoreutils
+Requires(postun): policycoreutils
+%description selinux
+This package contains SELinux support for Ceph MON, OSD and MDS. The package
+also performs file-system relabelling which can take a long time on heavily
+populated file-systems.
+
+%endif
+
 %if 0%{with libs_compat}
 
 %package libs-compat
@@ -493,6 +534,9 @@ export RPM_OPT_FLAGS=`echo $RPM_OPT_FLAGS | sed -e 's/i386/i486/'`
 		--with-debug \
 %if 0%{with cephfs_java}
 		--enable-cephfs-java \
+%endif
+%if 0%{with selinux}
+		--with-selinux \
 %endif
 		--with-librocksdb-static=check \
 %if 0%{?rhel} || 0%{?fedora}
@@ -663,7 +707,6 @@ mkdir -p %{_localstatedir}/run/ceph/
 %if %{defined suse_version}
 %insserv_cleanup
 %endif
-
 
 #################################################################################
 # files
@@ -1081,6 +1124,38 @@ ln -sf %{_libdir}/librbd.so.1 /usr/lib64/qemu/librbd.so.1
 %defattr(-,root,root,-)
 %{_javadir}/libcephfs.jar
 %{_javadir}/libcephfs-test.jar
+%endif
+
+#################################################################################
+%if 0%{with selinux}
+%files selinux
+%defattr(-,root,root,-)
+%attr(0600,root,root) %{_datadir}/selinux/packages/ceph.pp
+%{_datadir}/selinux/devel/include/contrib/ceph.if
+%{_mandir}/man8/ceph_selinux.8.*
+
+%post selinux
+/sbin/service ceph stop >/dev/null 2>&1
+semodule -n -i %{_datadir}/selinux/packages/ceph.pp
+if /usr/sbin/selinuxenabled ; then
+    /usr/sbin/load_policy
+    %relabel_files
+fi
+/sbin/service ceph start >/dev/null 2>&1
+exit 0
+
+%postun selinux
+if [ $1 -eq 0 ]; then
+    /sbin/service ceph stop >/dev/null 2>&1
+    semodule -n -r ceph
+    if /usr/sbin/selinuxenabled ; then
+       /usr/sbin/load_policy
+       %relabel_files
+    fi;
+    /sbin/service ceph start >/dev/null 2>&1
+fi;
+exit 0
+
 %endif
 
 #################################################################################
