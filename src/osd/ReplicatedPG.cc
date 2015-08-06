@@ -1828,6 +1828,7 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op,
   bool can_proxy_read = get_osdmap()->get_up_osd_features() &
     CEPH_FEATURE_OSD_PROXY_FEATURES;
   OpRequestRef promote_op;
+  hobject_t poid = obc ? obc->obs.oi.soid : missing_oid;
 
   switch (pool.info.cache_mode) {
   case pg_pool_t::CACHEMODE_WRITEBACK:
@@ -1869,19 +1870,40 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op,
     // Promote too?
     switch (pool.info.min_read_recency_for_promote) {
     case 0:
-      promote_object(obc, missing_oid, oloc, promote_op);
+      if (promote_op) {
+	// sync promote
+        promote_object(obc, missing_oid, oloc, promote_op);
+      } else {
+	// async promote
+	queue_async_promote(poid, oloc);
+	start_async_promote();
+      }
       break;
     case 1:
       // Check if in the current hit set
       if (in_hit_set) {
-	promote_object(obc, missing_oid, oloc, promote_op);
+        if (promote_op) {
+	  // sync promote
+	  promote_object(obc, missing_oid, oloc, promote_op);
+	} else {
+	  // async promote
+          queue_async_promote(poid, oloc);
+          start_async_promote();
+        }
       } else if (!can_proxy_read) {
 	do_cache_redirect(op);
       }
       break;
     default:
       if (in_hit_set) {
-	promote_object(obc, missing_oid, oloc, promote_op);
+        if (promote_op) {
+	  // sync promote
+	  promote_object(obc, missing_oid, oloc, promote_op);
+	} else {
+	  // async promote
+          queue_async_promote(poid, oloc);
+          start_async_promote();
+        }
       } else {
 	// Check if in other hit sets
 	map<time_t,HitSetRef>::iterator itor;
@@ -1900,7 +1922,14 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op,
           }
 	}
 	if (in_other_hit_sets) {
-	  promote_object(obc, missing_oid, oloc, promote_op);
+          if (promote_op) {
+	    // sync promote
+	    promote_object(obc, missing_oid, oloc, promote_op);
+	  } else {
+	    // async promote
+            queue_async_promote(poid, oloc);
+            start_async_promote();
+          }
 	} else if (!can_proxy_read) {
 	  do_cache_redirect(op);
 	}
@@ -2154,6 +2183,29 @@ void ReplicatedPG::cancel_proxy_read_ops(bool requeue)
   } else {
     in_progress_proxy_reads.clear();
   }
+}
+
+void ReplicatedPG::queue_async_promote(const hobject_t& oid,
+                                       const object_locator_t& oloc)
+{
+  // queue async promote
+  object_locator_t loc;
+  if (!waiting_for_promote.lookup(oid, &loc)) {
+    waiting_for_promote.add(oid, oloc);
+  }
+}
+
+void ReplicatedPG::start_async_promote()
+{
+  if (waiting_for_promote.empty()) {
+    return;
+  }
+
+  hobject_t oid;
+  object_locator_t oloc;
+  waiting_for_promote.pop(&oid, &oloc);
+  ObjectContextRef obc = get_object_context(oid, true);
+  promote_object(obc, hobject_t(), oloc, OpRequestRef());
 }
 
 class PromoteCallback: public ReplicatedPG::CopyCallback {
@@ -6775,6 +6827,9 @@ void ReplicatedPG::finish_promote(int r, CopyResults *results,
   simple_repop_submit(repop);
 
   osd->logger->inc(l_osd_tier_promote);
+
+  // start new async promote if any
+  start_async_promote();
 }
 
 void ReplicatedPG::cancel_copy(CopyOpRef cop, bool requeue)
