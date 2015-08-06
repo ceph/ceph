@@ -424,15 +424,15 @@ int RGWMetaSyncStatusManager::set_state(RGWMetaSyncGlobalStatus::SyncState state
   return 0;
 }
 
-void RGWAsyncOp::call(RGWAsyncOp *op)
+void RGWCoroutine::call(RGWCoroutine *op)
 {
   int r = env->stack->call(op, 0);
   assert(r == 0);
 }
 
-void RGWAsyncOp::call_concurrent(RGWAsyncOp *op)
+void RGWCoroutine::spawn(RGWCoroutine *op)
 {
-  RGWAsyncOpsStack *stack = env->manager->allocate_stack();
+  RGWCoroutinesStack *stack = env->manager->allocate_stack();
 
   int r = stack->call(op, 0);
   assert(r == 0);
@@ -442,7 +442,7 @@ void RGWAsyncOp::call_concurrent(RGWAsyncOp *op)
   env->stack->set_blocked_by(stack);
 }
 
-class RGWSimpleAsyncOp : public RGWAsyncOp {
+class RGWSimpleCoroutine : public RGWCoroutine {
   enum State {
     Init                      = 0,
     SendRequest               = 1,
@@ -467,7 +467,7 @@ protected:
   CephContext *cct;
 
 public:
-  RGWSimpleAsyncOp(CephContext *_cct) : state(Init), cct(_cct) {}
+  RGWSimpleCoroutine(CephContext *_cct) : state(Init), cct(_cct) {}
 
   virtual int init() { return 0; }
   virtual int send_request() = 0;
@@ -478,7 +478,7 @@ public:
   bool is_error() { return (state == Error); }
 };
 
-int RGWSimpleAsyncOp::operate()
+int RGWSimpleCoroutine::operate()
 {
   switch (state) {
     case Init:
@@ -504,7 +504,7 @@ int RGWSimpleAsyncOp::operate()
   return 0;
 }
 
-int RGWSimpleAsyncOp::state_init()
+int RGWSimpleCoroutine::state_init()
 {
   int ret = init();
   if (ret < 0) {
@@ -513,7 +513,7 @@ int RGWSimpleAsyncOp::state_init()
   return set_state(SendRequest);
 }
 
-int RGWSimpleAsyncOp::state_send_request()
+int RGWSimpleCoroutine::state_send_request()
 {
   int ret = send_request();
   if (ret < 0) {
@@ -522,7 +522,7 @@ int RGWSimpleAsyncOp::state_send_request()
   return yield(set_state(RequestComplete));
 }
 
-int RGWSimpleAsyncOp::state_request_complete()
+int RGWSimpleCoroutine::state_request_complete()
 {
   int ret = request_complete();
   if (ret < 0) {
@@ -531,7 +531,7 @@ int RGWSimpleAsyncOp::state_request_complete()
   return set_state(AllComplete);
 }
 
-int RGWSimpleAsyncOp::state_all_complete()
+int RGWSimpleCoroutine::state_all_complete()
 {
   int ret = finish();
   if (ret < 0) {
@@ -541,7 +541,7 @@ int RGWSimpleAsyncOp::state_all_complete()
 }
 
 template <class T>
-class RGWSimpleRadosAsyncOp : public RGWSimpleAsyncOp {
+class RGWSimpleRadosCoroutine : public RGWSimpleCoroutine {
   RGWAsyncRadosProcessor *async_rados;
   RGWRados *store;
   RGWObjectCtx& obj_ctx;
@@ -555,17 +555,17 @@ class RGWSimpleRadosAsyncOp : public RGWSimpleAsyncOp {
   RGWAsyncGetSystemObj *req;
 
 public:
-  RGWSimpleRadosAsyncOp(RGWAsyncRadosProcessor *_async_rados, RGWRados *_store,
+  RGWSimpleRadosCoroutine(RGWAsyncRadosProcessor *_async_rados, RGWRados *_store,
 		      RGWObjectCtx& _obj_ctx,
 		      rgw_bucket& _pool, const string& _oid,
-		      T *_result) : RGWSimpleAsyncOp(_store->ctx()),
+		      T *_result) : RGWSimpleCoroutine(_store->ctx()),
                                                 async_rados(_async_rados), store(_store),
                                                 obj_ctx(_obj_ctx),
 						pool(_pool), oid(_oid),
 						result(_result),
                                                 req(NULL) { }
                                                          
-  ~RGWSimpleRadosAsyncOp() {
+  ~RGWSimpleRadosCoroutine() {
     delete req;
   }
 
@@ -578,7 +578,7 @@ public:
 };
 
 template <class T>
-int RGWSimpleRadosAsyncOp<T>::send_request()
+int RGWSimpleRadosCoroutine<T>::send_request()
 {
   rgw_obj obj = rgw_obj(pool, oid);
   req = new RGWAsyncGetSystemObj(env->stack->create_completion_notifier(),
@@ -590,7 +590,7 @@ int RGWSimpleRadosAsyncOp<T>::send_request()
 }
 
 template <class T>
-int RGWSimpleRadosAsyncOp<T>::request_complete()
+int RGWSimpleRadosCoroutine<T>::request_complete()
 {
   int ret = req->get_ret_status();
   if (ret != -ENOENT) {
@@ -610,7 +610,7 @@ int RGWSimpleRadosAsyncOp<T>::request_complete()
   return handle_data(*result);
 }
 
-class RGWReadSyncStatusOp : public RGWSimpleRadosAsyncOp<RGWMetaSyncGlobalStatus> {
+class RGWReadSyncStatusCoroutine : public RGWSimpleRadosCoroutine<RGWMetaSyncGlobalStatus> {
   RGWAsyncRadosProcessor *async_rados;
   RGWRados *store;
   RGWObjectCtx& obj_ctx;
@@ -619,9 +619,9 @@ class RGWReadSyncStatusOp : public RGWSimpleRadosAsyncOp<RGWMetaSyncGlobalStatus
   rgw_sync_marker sync_marker;
 
 public:
-  RGWReadSyncStatusOp(RGWAsyncRadosProcessor *_async_rados, RGWRados *_store,
+  RGWReadSyncStatusCoroutine(RGWAsyncRadosProcessor *_async_rados, RGWRados *_store,
 		      RGWObjectCtx& _obj_ctx,
-		      RGWMetaSyncGlobalStatus *_gs) : RGWSimpleRadosAsyncOp(_async_rados, _store, _obj_ctx,
+		      RGWMetaSyncGlobalStatus *_gs) : RGWSimpleRadosCoroutine(_async_rados, _store, _obj_ctx,
 									    _store->get_zone_params().log_pool,
 									    "mdlog.state.global",
 									    _gs),
@@ -631,16 +631,16 @@ public:
   int handle_data(RGWMetaSyncGlobalStatus& data);
 };
 
-int RGWReadSyncStatusOp::handle_data(RGWMetaSyncGlobalStatus& data)
+int RGWReadSyncStatusCoroutine::handle_data(RGWMetaSyncGlobalStatus& data)
 {
-  call_concurrent(new RGWSimpleRadosAsyncOp<rgw_sync_marker>(async_rados, store, obj_ctx, store->get_zone_params().log_pool,
+  spawn(new RGWSimpleRadosCoroutine<rgw_sync_marker>(async_rados, store, obj_ctx, store->get_zone_params().log_pool,
 				 "mdlog.state.0", &sync_marker));
-  call_concurrent(new RGWSimpleRadosAsyncOp<rgw_sync_marker>(async_rados, store, obj_ctx, store->get_zone_params().log_pool,
+  spawn(new RGWSimpleRadosCoroutine<rgw_sync_marker>(async_rados, store, obj_ctx, store->get_zone_params().log_pool,
 				 "mdlog.state.1", &sync_marker));
   return 0;
 }
 
-class RGWMetaSyncOp : public RGWAsyncOp {
+class RGWMetaSyncCoroutine : public RGWCoroutine {
   RGWRados *store;
   RGWMetadataLog *mdlog;
   RGWHTTPManager *http_manager;
@@ -665,13 +665,13 @@ class RGWMetaSyncOp : public RGWAsyncOp {
     return ret;
   }
 public:
-  RGWMetaSyncOp(RGWRados *_store, RGWHTTPManager *_mgr, int _id) : RGWAsyncOp(), store(_store),
+  RGWMetaSyncCoroutine(RGWRados *_store, RGWHTTPManager *_mgr, int _id) : RGWCoroutine(), store(_store),
                            mdlog(store->meta_mgr->get_log()),
                            http_manager(_mgr),
 			   shard_id(_id),
                            max_entries(CLONE_MAX_ENTRIES),
 			   http_op(NULL),
-                           state(RGWMetaSyncOp::Init) {}
+                           state(RGWMetaSyncCoroutine::Init) {}
 
   int operate();
 
@@ -683,7 +683,7 @@ public:
   bool is_error() { return (state == Error); }
 };
 
-int RGWMetaSyncOp::operate()
+int RGWMetaSyncCoroutine::operate()
 {
   switch (state) {
     case Init:
@@ -706,22 +706,22 @@ int RGWMetaSyncOp::operate()
   return 0;
 }
 
-int RGWMetaSyncOp::state_init()
+int RGWMetaSyncCoroutine::state_init()
 {
   return 0;
 }
 
-int RGWMetaSyncOp::state_read_sync_status()
+int RGWMetaSyncCoroutine::state_read_sync_status()
 {
   return 0;
 }
 
-int RGWMetaSyncOp::state_read_sync_status_complete()
+int RGWMetaSyncCoroutine::state_read_sync_status_complete()
 {
   return 0;
 }
 
-class RGWCloneMetaLogOp : public RGWAsyncOp {
+class RGWCloneMetaLogCoroutine : public RGWCoroutine {
   RGWRados *store;
   RGWMetadataLog *mdlog;
   RGWHTTPManager *http_manager;
@@ -757,14 +757,14 @@ class RGWCloneMetaLogOp : public RGWAsyncOp {
     return ret;
   }
 public:
-  RGWCloneMetaLogOp(RGWRados *_store, RGWHTTPManager *_mgr,
-		    int _id, const string& _marker) : RGWAsyncOp(), store(_store),
+  RGWCloneMetaLogCoroutine(RGWRados *_store, RGWHTTPManager *_mgr,
+		    int _id, const string& _marker) : RGWCoroutine(), store(_store),
                                                       mdlog(store->meta_mgr->get_log()),
                                                       http_manager(_mgr), shard_id(_id),
                                                       marker(_marker), truncated(false), max_entries(CLONE_MAX_ENTRIES),
 						      http_op(NULL), md_op_notifier(NULL),
 						      req_ret(0),
-                                                      state(RGWCloneMetaLogOp::Init) {}
+                                                      state(RGWCloneMetaLogCoroutine::Init) {}
 
   int operate();
 
@@ -780,7 +780,7 @@ public:
   bool is_error() { return (state == Error); }
 };
 
-RGWAsyncOpsStack::RGWAsyncOpsStack(CephContext *_cct, RGWAsyncOpsManager *_ops_mgr, RGWAsyncOp *start) : cct(_cct), ops_mgr(_ops_mgr),
+RGWCoroutinesStack::RGWCoroutinesStack(CephContext *_cct, RGWCoroutinesManager *_ops_mgr, RGWCoroutine *start) : cct(_cct), ops_mgr(_ops_mgr),
                                                                                                          done_flag(false), error_flag(false), blocked_flag(false) {
   if (start) {
     ops.push_back(start);
@@ -788,9 +788,9 @@ RGWAsyncOpsStack::RGWAsyncOpsStack(CephContext *_cct, RGWAsyncOpsManager *_ops_m
   pos = ops.begin();
 }
 
-int RGWAsyncOpsStack::operate(RGWAsyncOpsEnv *env)
+int RGWCoroutinesStack::operate(RGWCoroutinesEnv *env)
 {
-  RGWAsyncOp *op = *pos;
+  RGWCoroutine *op = *pos;
   int r = op->do_operate(env);
   if (r < 0) {
     ldout(cct, 0) << "ERROR: op->operate() returned r=" << r << dendl;
@@ -812,7 +812,7 @@ int RGWAsyncOpsStack::operate(RGWAsyncOpsEnv *env)
   return 0;
 }
 
-string RGWAsyncOpsStack::error_str()
+string RGWCoroutinesStack::error_str()
 {
   if (pos != ops.end()) {
     return (*pos)->error_str();
@@ -820,7 +820,7 @@ string RGWAsyncOpsStack::error_str()
   return string();
 }
 
-int RGWAsyncOpsStack::call(RGWAsyncOp *next_op, int ret) {
+int RGWCoroutinesStack::call(RGWCoroutine *next_op, int ret) {
   ops.push_back(next_op);
   if (pos != ops.end()) {
     ++pos;
@@ -830,7 +830,7 @@ int RGWAsyncOpsStack::call(RGWAsyncOp *next_op, int ret) {
   return ret;
 }
 
-int RGWAsyncOpsStack::unwind(int retcode)
+int RGWCoroutinesStack::unwind(int retcode)
 {
   if (pos == ops.begin()) {
     pos = ops.end();
@@ -839,12 +839,12 @@ int RGWAsyncOpsStack::unwind(int retcode)
 
   --pos;
   ops.pop_back();
-  RGWAsyncOp *op = *pos;
+  RGWCoroutine *op = *pos;
   op->set_retcode(retcode);
   return 0;
 }
 
-void RGWAsyncOpsStack::set_blocked(bool flag)
+void RGWCoroutinesStack::set_blocked(bool flag)
 {
   blocked_flag = flag;
   if (pos != ops.end()) {
@@ -852,23 +852,23 @@ void RGWAsyncOpsStack::set_blocked(bool flag)
   }
 }
 
-AioCompletionNotifier *RGWAsyncOpsStack::create_completion_notifier()
+AioCompletionNotifier *RGWCoroutinesStack::create_completion_notifier()
 {
   return ops_mgr->create_completion_notifier(this);
 }
 
-RGWCompletionManager *RGWAsyncOpsStack::get_completion_mgr()
+RGWCompletionManager *RGWCoroutinesStack::get_completion_mgr()
 {
   return ops_mgr->get_completion_mgr();
 }
 
-bool RGWAsyncOpsStack::unblock_stack(RGWAsyncOpsStack **s)
+bool RGWCoroutinesStack::unblock_stack(RGWCoroutinesStack **s)
 {
   if (blocking_stacks.empty()) {
     return false;
   }
 
-  set<RGWAsyncOpsStack *>::iterator iter = blocking_stacks.begin();
+  set<RGWCoroutinesStack *>::iterator iter = blocking_stacks.begin();
   *s = *iter;
   blocking_stacks.erase(iter);
   (*s)->blocked_by_stack.erase(this);
@@ -876,13 +876,13 @@ bool RGWAsyncOpsStack::unblock_stack(RGWAsyncOpsStack **s)
   return true;
 }
 
-void RGWAsyncOpsManager::report_error(RGWAsyncOpsStack *op)
+void RGWCoroutinesManager::report_error(RGWCoroutinesStack *op)
 {
 #warning need to have error logging infrastructure that logs on backend
   lderr(cct) << "ERROR: failed operation: " << op->error_str() << dendl;
 }
 
-void RGWAsyncOpsManager::handle_unblocked_stack(list<RGWAsyncOpsStack *>& stacks, RGWAsyncOpsStack *stack, int *waiting_count)
+void RGWCoroutinesManager::handle_unblocked_stack(list<RGWCoroutinesStack *>& stacks, RGWCoroutinesStack *stack, int *waiting_count)
 {
   --(*waiting_count);
   stack->set_blocked(false);
@@ -893,16 +893,16 @@ void RGWAsyncOpsManager::handle_unblocked_stack(list<RGWAsyncOpsStack *>& stacks
   }
 }
 
-int RGWAsyncOpsManager::run(list<RGWAsyncOpsStack *>& stacks)
+int RGWCoroutinesManager::run(list<RGWCoroutinesStack *>& stacks)
 {
   int waiting_count = 0;
-  RGWAsyncOpsEnv env;
+  RGWCoroutinesEnv env;
 
   env.manager = this;
   env.stacks = &stacks;
 
-  for (list<RGWAsyncOpsStack *>::iterator iter = stacks.begin(); iter != stacks.end();) {
-    RGWAsyncOpsStack *stack = *iter;
+  for (list<RGWCoroutinesStack *>::iterator iter = stacks.begin(); iter != stacks.end();) {
+    RGWCoroutinesStack *stack = *iter;
     env.stack = stack;
     int ret = stack->operate(&env);
     if (ret < 0) {
@@ -918,7 +918,7 @@ int RGWAsyncOpsManager::run(list<RGWAsyncOpsStack *>& stacks)
     } else if (stack->is_blocked()) {
       waiting_count++;
     } else if (stack->is_done()) {
-      RGWAsyncOpsStack *s;
+      RGWCoroutinesStack *s;
       while (stack->unblock_stack(&s)) {
 	if (!s->is_blocked_by_stack() && !s->is_done()) {
 	  if (s->is_blocked()) {
@@ -933,7 +933,7 @@ int RGWAsyncOpsManager::run(list<RGWAsyncOpsStack *>& stacks)
       stacks.push_back(stack);
     }
 
-    RGWAsyncOpsStack *blocked_stack;
+    RGWCoroutinesStack *blocked_stack;
     while (completion_mgr.try_get_next((void **)&blocked_stack)) {
       handle_unblocked_stack(stacks, blocked_stack, &waiting_count);
     }
@@ -961,10 +961,10 @@ int RGWAsyncOpsManager::run(list<RGWAsyncOpsStack *>& stacks)
   return 0;
 }
 
-int RGWAsyncOpsManager::run(RGWAsyncOp *op)
+int RGWCoroutinesManager::run(RGWCoroutine *op)
 {
-  list<RGWAsyncOpsStack *> stacks;
-  RGWAsyncOpsStack *stack = allocate_stack();
+  list<RGWCoroutinesStack *> stacks;
+  RGWCoroutinesStack *stack = allocate_stack();
   int r = stack->call(op);
   if (r < 0) {
     ldout(cct, 0) << "ERROR: stack->call() returned r=" << r << dendl;
@@ -981,17 +981,17 @@ int RGWAsyncOpsManager::run(RGWAsyncOp *op)
   return r;
 }
 
-AioCompletionNotifier *RGWAsyncOpsManager::create_completion_notifier(RGWAsyncOpsStack *stack)
+AioCompletionNotifier *RGWCoroutinesManager::create_completion_notifier(RGWCoroutinesStack *stack)
 {
   return new AioCompletionNotifier(&completion_mgr, (void *)stack);
 }
 
 int RGWRemoteMetaLog::clone_shards()
 {
-  list<RGWAsyncOpsStack *> stacks;
+  list<RGWCoroutinesStack *> stacks;
   for (int i = 0; i < (int)log_info.num_shards; i++) {
-    RGWAsyncOpsStack *stack = new RGWAsyncOpsStack(store->ctx(), this);
-    int r = stack->call(new RGWCloneMetaLogOp(store, &http_manager, i, clone_markers[i]));
+    RGWCoroutinesStack *stack = new RGWCoroutinesStack(store->ctx(), this);
+    int r = stack->call(new RGWCloneMetaLogCoroutine(store, &http_manager, i, clone_markers[i]));
     if (r < 0) {
       ldout(store->ctx(), 0) << "ERROR: stack->call() returned r=" << r << dendl;
       return r;
@@ -1005,10 +1005,10 @@ int RGWRemoteMetaLog::clone_shards()
 
 int RGWRemoteMetaLog::fetch()
 {
-  list<RGWAsyncOpsStack *> stacks;
+  list<RGWCoroutinesStack *> stacks;
   for (int i = 0; i < (int)log_info.num_shards; i++) {
-    RGWAsyncOpsStack *stack = new RGWAsyncOpsStack(store->ctx(), this);
-    int r = stack->call(new RGWCloneMetaLogOp(store, &http_manager, i, clone_markers[i]));
+    RGWCoroutinesStack *stack = new RGWCoroutinesStack(store->ctx(), this);
+    int r = stack->call(new RGWCloneMetaLogCoroutine(store, &http_manager, i, clone_markers[i]));
     if (r < 0) {
       ldout(store->ctx(), 0) << "ERROR: stack->call() returned r=" << r << dendl;
       return r;
@@ -1023,7 +1023,7 @@ int RGWRemoteMetaLog::fetch()
 int RGWRemoteMetaLog::get_sync_status(RGWMetaSyncGlobalStatus *sync_status)
 {
   RGWObjectCtx obj_ctx(store, NULL);
-  return run(new RGWReadSyncStatusOp(async_rados, store, obj_ctx, sync_status));
+  return run(new RGWReadSyncStatusCoroutine(async_rados, store, obj_ctx, sync_status));
 }
 
 int RGWRemoteMetaLog::get_shard_sync_marker(int shard_id, rgw_sync_marker *shard_status)
@@ -1039,7 +1039,7 @@ int RGWRemoteMetaLog::get_shard_sync_marker(int shard_id, rgw_sync_marker *shard
   return 0;
 }
 
-int RGWCloneMetaLogOp::operate()
+int RGWCloneMetaLogCoroutine::operate()
 {
   switch (state) {
     case Init:
@@ -1074,14 +1074,14 @@ int RGWCloneMetaLogOp::operate()
   return 0;
 }
 
-int RGWCloneMetaLogOp::state_init()
+int RGWCloneMetaLogCoroutine::state_init()
 {
   data = rgw_mdlog_shard_data();
 
   return set_state(ReadShardStatus);
 }
 
-int RGWCloneMetaLogOp::state_read_shard_status()
+int RGWCloneMetaLogCoroutine::state_read_shard_status()
 {
   int ret = mdlog->get_info_async(shard_id, &shard_info, env->stack->get_completion_mgr(), (void *)env->stack, &req_ret);
   if (ret < 0) {
@@ -1092,7 +1092,7 @@ int RGWCloneMetaLogOp::state_read_shard_status()
   return yield(set_state(ReadShardStatusComplete));
 }
 
-int RGWCloneMetaLogOp::state_read_shard_status_complete()
+int RGWCloneMetaLogCoroutine::state_read_shard_status_complete()
 {
   ldout(store->ctx(), 20) << "shard_id=" << shard_id << " marker=" << shard_info.marker << " last_update=" << shard_info.last_update << dendl;
 
@@ -1101,7 +1101,7 @@ int RGWCloneMetaLogOp::state_read_shard_status_complete()
   return set_state(SendRESTRequest);
 }
 
-int RGWCloneMetaLogOp::state_send_rest_request()
+int RGWCloneMetaLogCoroutine::state_send_rest_request()
 {
   RGWRESTConn *conn = store->rest_master_conn;
 
@@ -1134,7 +1134,7 @@ int RGWCloneMetaLogOp::state_send_rest_request()
   return yield(set_state(ReceiveRESTResponse));
 }
 
-int RGWCloneMetaLogOp::state_receive_rest_response()
+int RGWCloneMetaLogCoroutine::state_receive_rest_response()
 {
   int ret = http_op->wait(&data);
   if (ret < 0) {
@@ -1157,7 +1157,7 @@ int RGWCloneMetaLogOp::state_receive_rest_response()
 }
 
 
-int RGWCloneMetaLogOp::state_store_mdlog_entries()
+int RGWCloneMetaLogCoroutine::state_store_mdlog_entries()
 {
   list<cls_log_entry> dest_entries;
 
@@ -1190,7 +1190,7 @@ int RGWCloneMetaLogOp::state_store_mdlog_entries()
   return yield(set_state(StoreMDLogEntriesComplete));
 }
 
-int RGWCloneMetaLogOp::state_store_mdlog_entries_complete()
+int RGWCloneMetaLogCoroutine::state_store_mdlog_entries_complete()
 {
   if (truncated) {
     return state_init();
