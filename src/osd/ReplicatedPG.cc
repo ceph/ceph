@@ -2319,7 +2319,7 @@ void ReplicatedPG::kick_proxy_ops_blocked(hobject_t& soid)
 void ReplicatedPG::requeue_proxy_ops(hobject_t& soid)
 {
   map<hobject_t, list<OpRequestRef>, hobject_t::BitwiseComparator>::iterator p = in_progress_proxy_ops.find(soid);
-  if (p == in_progress_proxy_reads.end())
+  if (p == in_progress_proxy_ops.end())
     return;
 
   list<OpRequestRef> ls = p->second;
@@ -2477,6 +2477,10 @@ void ReplicatedPG::finish_proxy_write(hobject_t oid, ceph_tid_t tid, int r)
     in_progress_proxy_ops.erase(oid);
   }
 
+  if (pwop->ctx->op->been_reply()) {
+    close_op_ctx(pwop->ctx, 0);
+    return;
+  }
   osd->logger->inc(l_osd_tier_proxy_write);
 
   MOSDOp *m = static_cast<MOSDOp*>(pwop->op->get_req());
@@ -6888,6 +6892,7 @@ void ReplicatedPG::process_copy_chunk(hobject_t oid, ceph_tid_t tid, int r)
       requeue_proxy_ops(cobc->obs.oi.soid);
     }
   }
+
   kick_object_context_blocked(cobc);
 }
 

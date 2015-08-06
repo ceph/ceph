@@ -197,7 +197,7 @@ public:
     OpRequestRef op;
     hobject_t soid;
     ceph_tid_t objecter_tid;
-    vector<OSDOp> &ops;
+    vector<OSDOp> ops;
     version_t user_version;
     int data_offset;
     bool canceled;              ///< true if canceled
