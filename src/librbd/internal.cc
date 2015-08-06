@@ -3432,15 +3432,15 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
     return r;
   }
 
-  int poll_io_events(ImageCtx *ictx, AioCompletion **comps, int numcomp, int max)
+  int poll_io_events(ImageCtx *ictx, AioCompletion **comps, int numcomp)
   {
-    if (numcomp < max || numcomp <= 0)
+    if (numcomp <= 0)
       return -EINVAL;
     CephContext *cct = ictx->cct;
-    ldout(cct, 20) << __func__ << " " << ictx << " numcomp = " << numcomp << " max " << max << dendl;
+    ldout(cct, 20) << __func__ << " " << ictx << " numcomp = " << numcomp << dendl;
     int i = 0;
     Mutex::Locker l(ictx->completed_reqs_lock);
-    while (i < max) {
+    while (i < numcomp) {
       if (ictx->completed_reqs.empty())
         break;
       comps[i++] = ictx->completed_reqs.front();
