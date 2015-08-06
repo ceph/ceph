@@ -145,6 +145,9 @@ public:
     string key() {
       return generic_iter->key();
     }
+    pair<string,string> raw_key() {
+	  return generic_iter->raw_key();
+	}
     bufferlist value() {
       return generic_iter->value();
     }
@@ -176,6 +179,9 @@ public:
   }
 
   virtual uint64_t get_estimated_size(map<string,uint64_t> &extra) = 0;
+  virtual int get_statfs(struct statfs *buf) {
+    return -EOPNOTSUPP;
+  }
 
   virtual ~KeyValueDB() {}
 
