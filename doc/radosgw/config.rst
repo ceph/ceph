@@ -433,11 +433,10 @@ Execute the following steps on the ``gateway host``:
 
 Create the Swift user::
 
-	sudo radosgw-admin subuser create --uid=testuser --subuser=testuser:swift
+	sudo radosgw-admin subuser create --uid=testuser --subuser=testuser:swift --access=full
 
 The output will be something like the following::
 
-	--access=full
 	{ "user_id": "testuser",
 	"display_name": "First User",
 	"email": "",
