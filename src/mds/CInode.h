@@ -80,7 +80,7 @@ public:
   snapid_t                  oldest_snap;
   damage_flags_t            damage_flags;
 
-  InodeStoreBase() : oldest_snap(CEPH_NOSNAP) { }
+  InodeStoreBase() : oldest_snap(CEPH_NOSNAP), damage_flags(0) { }
 
   /* Helpers */
   bool is_file() const    { return inode.is_file(); }
