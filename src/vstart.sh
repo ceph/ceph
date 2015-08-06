@@ -16,7 +16,7 @@ if [ -e CMakeCache.txt ]; then
   # Gather symlinks to EC plugins in one dir, because with CMake they
   # are built into multiple locations
   mkdir -p ec_plugins
-  for file in ./src/erasure-code/jerasure/*.so* src/erasure-code/lrc/*.so*
+  for file in ./src/erasure-code/jerasure/*.so* src/erasure-code/lrc/*.so* src/erasure-code/isa/*.so* 
   do
     ln -sf ../${file} ec_plugins/`basename $file`
   done
