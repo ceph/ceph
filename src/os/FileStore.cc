@@ -1178,6 +1178,8 @@ int FileStore::version_stamp_is_valid(uint32_t *version)
   bl.push_back(bp);
   bufferlist::iterator i = bl.begin();
   ::decode(*version, i);
+  dout(10) << __func__ << " was " << *version << " vs target "
+	   << target_version << dendl;
   if (*version == target_version)
     return 1;
   else
@@ -1186,6 +1188,7 @@ int FileStore::version_stamp_is_valid(uint32_t *version)
 
 int FileStore::write_version_stamp()
 {
+  dout(1) << __func__ << " " << target_version << dendl;
   bufferlist bl;
   ::encode(target_version, bl);
 
@@ -1195,6 +1198,7 @@ int FileStore::write_version_stamp()
 
 int FileStore::upgrade()
 {
+  dout(1) << "upgrade" << dendl;
   uint32_t version;
   int r = version_stamp_is_valid(&version);
   if (r < 0)
