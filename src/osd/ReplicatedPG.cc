@@ -1225,6 +1225,7 @@ ReplicatedPG::ReplicatedPG(OSDService *o, OSDMapRef curmap,
       _pool.info, curmap, this, coll_t(p), o->store, cct)),
   object_contexts(o->cct, g_conf->osd_pg_object_context_cache_count),
   snapset_contexts_lock("ReplicatedPG::snapset_contexts"),
+  in_flight_promotes(0),
   new_backfill(false),
   temp_seq(0),
   snap_trimmer_machine(this)
@@ -2188,7 +2189,7 @@ void ReplicatedPG::cancel_proxy_read_ops(bool requeue)
 void ReplicatedPG::queue_async_promote(const hobject_t& oid,
                                        const object_locator_t& oloc)
 {
-  // queue async promote
+  // put it at the head of the list
   object_locator_t loc;
   if (!waiting_for_promote.lookup(oid, &loc)) {
     waiting_for_promote.add(oid, oloc);
@@ -2198,6 +2199,11 @@ void ReplicatedPG::queue_async_promote(const hobject_t& oid,
 void ReplicatedPG::start_async_promote()
 {
   if (waiting_for_promote.empty()) {
+    return;
+  }
+
+  // throttling
+  if (in_flight_promotes >= g_conf->osd_promote_max_ops_per_pg) {
     return;
   }
 
@@ -2276,6 +2282,7 @@ void ReplicatedPG::promote_object(ObjectContextRef obc,
   if (op)
     wait_for_blocked_object(obc->obs.oi.soid, op);
   info.stats.stats.sum.num_promote++;
+  in_flight_promotes++;
 }
 
 void ReplicatedPG::execute_ctx(OpContext *ctx)
@@ -6651,6 +6658,9 @@ void ReplicatedPG::finish_promote(int r, CopyResults *results,
   const hobject_t& soid = obc->obs.oi.soid;
   dout(10) << __func__ << " " << soid << " r=" << r
 	   << " uv" << results->user_version << dendl;
+
+  assert(in_flight_promotes > 0);
+  in_flight_promotes--;
 
   if (r == -ECANCELED) {
     return;

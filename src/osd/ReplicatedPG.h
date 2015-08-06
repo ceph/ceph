@@ -1007,6 +1007,7 @@ protected:
 
   // waiting for promotion list
   SimpleMRU<hobject_t, object_locator_t> waiting_for_promote;
+  uint32_t in_flight_promotes; // number of promotions in flight
 
   // debug order that client ops are applied
   map<hobject_t, map<client_t, ceph_tid_t> > debug_op_order;
