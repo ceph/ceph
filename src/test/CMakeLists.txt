@@ -1832,3 +1832,9 @@ if(HAVE_XIO)
     ${CMAKE_DL_LIBS}
     )
 endif(HAVE_XIO)
+
+# test_queues
+add_executable(test_queues test_queues.cc)
+target_link_libraries(test_queues PRIVATE global ${UNITTEST_LIBS})
+set_target_properties(test_queues PROPERTIES COMPILE_FLAGS ${UNITTEST_CXX_FLAGS})
+
