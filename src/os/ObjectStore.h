@@ -1768,6 +1768,10 @@ public:
   virtual void set_allow_sharded_objects() = 0;
   virtual bool get_allow_sharded_objects() = 0;
 
+  virtual bool can_sort_nibblewise() {
+    return false;   // assume a backend cannot, unless it says otherwise
+  }
+
   virtual int statfs(struct statfs *buf) = 0;
 
   virtual void collect_metadata(map<string,string> *pm) { }
