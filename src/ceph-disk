@@ -86,6 +86,8 @@ DMCRYPT_LUKS_OSD_UUID =     '4fbd7e29-9d25-41b8-afd0-35865ceff05d'
 TOBE_UUID =                 '89c57f98-2fe5-4dc0-89c1-f3ad0ceff2be'
 DMCRYPT_TOBE_UUID =         '89c57f98-2fe5-4dc0-89c1-5ec00ceff2be'
 DMCRYPT_JOURNAL_TOBE_UUID = '89c57f98-2fe5-4dc0-89c1-35865ceff2be'
+OSD_DB_UUID =               '4fbd7e29-9d25-41b8-afd0-062c0ceff05d'
+DMCRYPT_OSD_DB_UUID =       '4fbd7e29-9d25-41b8-afd0-5ec00ceff05d'
 
 DEFAULT_FS_TYPE = 'xfs'
 
@@ -1283,6 +1285,16 @@ def prepare_journal_dev(
     except subprocess.CalledProcessError as e:
         raise Error(e)
 
+def prepare_dbstore_file(dbstore_file):
+    if not os.path.exists(dbstore_file):
+        LOG.debug('Creating dbstore file %s with size 0', dbstore_file)
+        with file(dbstore_file, 'wb') as db_file:
+            pass
+
+    LOG.debug('dbstore file is %s',dbstore_file)
+    return dbstore_file
+
+
 def prepare_journal_file(
     journal):
 
@@ -1360,6 +1372,7 @@ def adjust_symlink(target, path):
 def prepare_dir(
     path,
     journal,
+    dbstore_symlink,
     cluster_uuid,
     osd_uuid,
     journal_uuid,
@@ -1375,6 +1388,9 @@ def prepare_dir(
     if osd_uuid is None:
         osd_uuid = str(uuid.uuid4())
 
+    if dbstore_symlink is not None:
+        dbstore_file = prepare_dbstore_file(os.path.join(path, 'dbstore'))
+        adjust_symlink(dbstore_symlink, dbstore_file)
     if journal is not None:
         # we're using an external journal; point to it here
         adjust_symlink(journal, os.path.join(path, 'journal'))
@@ -1408,6 +1424,8 @@ def prepare_dev(
     journal_uuid,
     journal_dmcrypt,
     osd_dm_keypath,
+    keyvalue_store,
+    dbstore,
     cryptsetup_parameters,
     luks
     ):
@@ -1437,19 +1455,70 @@ def prepare_dev(
     else:
         LOG.debug('Creating osd partition on %s', data)
         try:
-            command_check_call(
-                [
-                    'sgdisk',
-                    '--largest-new=1',
-                    '--change-name=1:ceph data',
-                    '--partition-guid=1:{osd_uuid}'.format(
-                        osd_uuid=osd_uuid,
-                        ),
-                    '--typecode=1:%s' % ptype_tobe,
-                    '--',
-                    data,
-                ],
-            )
+            if keyvalue_store and dbstore:
+                num = 1
+                data_size = 2048
+                data_part = '{num}:0:{size}M'.format(
+                    num=num,
+                    size=data_size,
+                )
+                print "num : "+str(num)+" data+size: "+str(data_size)+" data_part:"+str(data_part)
+                try:
+                    LOG.debug('Creating osd partition num %d size %d on %s', num, data_size, data_part)
+                    #LOG.debug('Creating osdi partition  on %s', journal)
+                    print " creating ceph data"
+                    command_check_call(
+                        [
+                            'sgdisk',
+                            '--new={part}'.format(part=data_part),
+                            '--change-name={num}:ceph data'.format(num=num),
+                            '--partition-guid={num}:{osd_uuid}'.format(
+                                num=num,
+                                osd_uuid=osd_uuid,
+                            ),
+                            '--typecode={num}:{uuid}'.format(
+                                num=num,
+                                uuid=ptype_tobe,
+                            ),
+                            '--mbrtogpt',
+                            '--',
+                            data,
+                        ],
+                    )
+
+                except subprocess.CalledProcessError as e:
+                    raise Error(e)
+                ptype_tobe_db = OSD_DB_UUID
+                osd_db_uuid = str(uuid.uuid4())
+                print "ceph db data "
+                command_check_call(
+                    [
+                        'sgdisk',
+                        '--largest-new=2',
+                        '--change-name=2:ceph db data',
+                        '--partition-guid=2:{osd_db_uuid}'.format(
+                            osd_db_uuid=osd_db_uuid,
+                            ),
+                        '--typecode=2:%s' % ptype_tobe_db,
+                        '--',
+                        data,
+                    ],
+                )
+            else:
+                print " if not dbstore"
+                command_check_call(
+                    [
+                        'sgdisk',
+                        '--largest-new=1',
+                        '--change-name=1:ceph data',
+                        '--partition-guid=1:{osd_uuid}'.format(
+                            osd_uuid=osd_uuid,
+                            ),
+                        '--typecode=1:%s' % ptype_tobe,
+                        '--',
+                        data,
+                    ],
+                )
             update_partition('-a', data, 'created')
             command(
                 [
@@ -1498,14 +1567,41 @@ def prepare_dev(
         path = mount(dev=dev, fstype=fstype, options=mount_options)
 
         try:
-            prepare_dir(
-                path=path,
-                journal=journal,
-                cluster_uuid=cluster_uuid,
-                osd_uuid=osd_uuid,
-                journal_uuid=journal_uuid,
-                journal_dmcrypt=journal_dmcrypt,
+            if keyvalue_store and dbstore:
+                dbstore_symlink = '/dev/disk/by-partuuid/{osd_db_uuid}'.format(
+                osd_db_uuid=osd_db_uuid,
                 )
+
+                prepare_dir(
+                    path=path,
+                    journal=journal,
+                    dbstore_symlink=dbstore_symlink,
+                    cluster_uuid=cluster_uuid,
+                    osd_uuid=osd_uuid,
+                    journal_uuid=journal_uuid,
+                    journal_dmcrypt=journal_dmcrypt,
+                    )
+
+            if keyvalue_store and not dbstore:
+                prepare_dir(
+                    path=path,
+                    journal=journal,
+                    dbstore_symlink=None,
+                    cluster_uuid=cluster_uuid,
+                    osd_uuid=osd_uuid,
+                    journal_uuid=None,
+                    journal_dmcrypt=None,
+                    )
+            else:
+                prepare_dir(
+                    path=path,
+                    journal=journal,
+                    dbstore_symlink=None,
+                    cluster_uuid=cluster_uuid,
+                    osd_uuid=osd_uuid,
+                    journal_uuid=journal_uuid,
+                    journal_dmcrypt=journal_dmcrypt,
+                    )
         finally:
             path_set_context(path)
             unmount(path)
@@ -1525,6 +1621,9 @@ def prepare_dev(
             )
         except subprocess.CalledProcessError as e:
             raise Error(e)
+
+def prepare_dbstore(data):
+    pass
 
 def check_journal_reqs(args):
     _, allows_journal = command([
@@ -1624,6 +1723,14 @@ def main_prepare(args):
                     ),
                 )
 
+        obstore = get_conf_with_default(
+            cluster=args.cluster,
+            variable='osd_objectstore',
+            )
+        keyvaluestore_backend = get_conf_with_default(
+            cluster=args.cluster,
+            variable='keyvaluestore_backend',
+            )
         journal_size = get_conf_with_default(
             cluster=args.cluster,
             variable='osd_journal_size',
@@ -1702,6 +1809,39 @@ def main_prepare(args):
                 journal_dm_keypath = get_or_create_dmcrypt_key(args.journal_uuid, args.dmcrypt_key_dir, dmcrypt_keysize, luks)
             osd_dm_keypath = get_or_create_dmcrypt_key(args.osd_uuid, args.dmcrypt_key_dir, dmcrypt_keysize, luks)
 
+
+        if obstore == "keyvaluestore":
+            journal_symlink = None
+            journal_dmcrypt = None
+            journal_uuid = None
+            journal_size = None
+            args.journal = None
+            journal_dm_keypath = None
+            if args.dmcrypt:
+                journal_dm_keypath = None
+                osd_dm_keypath = get_or_create_dmcrypt_key(args.osd_uuid, args.dmcrypt_key_dir)
+        else:
+            journal_size = get_conf_with_default(
+                cluster=args.cluster,
+                variable='osd_journal_size',
+                )
+            journal_size = int(journal_size)
+
+            # colocate journal with data?
+            if stat.S_ISBLK(dmode) and not is_partition(args.data) and args.journal is None and args.journal_file is None:
+                LOG.info('Will colocate journal with data on %s', args.data)
+                args.journal = args.data
+
+            if args.journal_uuid is None:
+                args.journal_uuid = str(uuid.uuid4())
+            if args.osd_uuid is None:
+                args.osd_uuid = str(uuid.uuid4())
+
+            # dm-crypt keys?
+            if args.dmcrypt:
+                journal_dm_keypath = get_or_create_dmcrypt_key(args.journal_uuid, args.dmcrypt_key_dir)
+                osd_dm_keypath = get_or_create_dmcrypt_key(args.osd_uuid, args.dmcrypt_key_dir)
+
         # prepare journal
         journal_symlink = None
         journal_dmcrypt = None
@@ -1726,6 +1866,7 @@ def main_prepare(args):
             prepare_dir(
                 path=args.data,
                 journal=journal_symlink,
+                dbstore_symlink=None,
                 cluster_uuid=args.cluster_uuid,
                 osd_uuid=args.osd_uuid,
                 journal_uuid=journal_uuid,
@@ -1793,20 +1934,45 @@ def mkfs(
             ],
         )
 
-    command_check_call(
-        [
-            'ceph-osd',
-            '--cluster', cluster,
-            '--mkfs',
-            '--mkkey',
-            '-i', osd_id,
-            '--monmap', monmap,
-            '--osd-data', path,
-            '--osd-journal', os.path.join(path, 'journal'),
-            '--osd-uuid', fsid,
-            '--keyring', os.path.join(path, 'keyring'),
-            ],
-        )
+    obstore = get_conf_with_default(
+            cluster=cluster,
+            variable='osd_objectstore',
+            )
+    keyvaluestore_backend = get_conf_with_default(
+            cluster=cluster,
+            variable='keyvaluestore_backend',
+            )
+    if obstore == "keyvaluestore" and  keyvaluestore_backend == "pluggabledb":
+        print "Backend is pluggabledb"
+        command_check_call(
+            [
+                'ceph-osd',
+                '--cluster', cluster,
+                '--mkfs',
+                '--mkkey',
+                '-i', osd_id,
+                '--monmap', monmap,
+                '--osd-data', path,
+                '--osd-uuid', fsid,
+                '--keyring', os.path.join(path, 'keyring'),
+                ],
+            )
+    else:
+        command_check_call(
+            [
+                'ceph-osd',
+                '--cluster', cluster,
+                '--mkfs',
+                '--mkkey',
+                '-i', osd_id,
+                '--monmap', monmap,
+                '--osd-data', path,
+                '--osd-journal', os.path.join(path, 'journal'),
+                '--osd-uuid', fsid,
+                '--keyring', os.path.join(path, 'keyring'),
+                ],
+            )
+
     # TODO ceph-osd --mkfs removes the monmap file?
     # os.unlink(monmap)
 
