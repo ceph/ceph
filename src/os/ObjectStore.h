@@ -1809,14 +1809,7 @@ public:
 			std::string *value);
 
   /**
-   * get ideal min value for collection_list_partial()
-   *
-   * default to some arbitrary values; the implementation will override.
-   */
-  virtual int get_ideal_list_min() { return 32; }
-
-  /**
-   * get ideal max value for collection_list_partial()
+   * get ideal max value for collection_list()
    *
    * default to some arbitrary values; the implementation will override.
    */
@@ -2029,42 +2022,19 @@ public:
   virtual bool collection_empty(coll_t c) = 0;
 
   /**
-   * collection_list - get all objects of a collection in sorted order
-   *
-   * @param c collection name
-   * @param o [out] list of objects
-   * @returns 0 on success, negative error code on failure
-   */
-  virtual int collection_list(coll_t c, vector<ghobject_t>& o) = 0;
-
-  /**
-   * list partial contents of collection relative to a hash offset/position
-   *
-   * @param c collection
-   * @param start list objects that sort >= this value
-   * @param min return at least this many results, unless we reach the end
-   * @param max return no more than this many results
-   * @param snap return no objects with snap < snapid
-   * @param ls [out] result
-   * @param next [out] next item sorts >= this value
-   * @return zero on success, or negative error
-   */
-  virtual int collection_list_partial(coll_t c, ghobject_t start,
-				      int min, int max, snapid_t snap,
-				      vector<ghobject_t> *ls, ghobject_t *next) = 0;
-
-  /**
-   * list contents of a collection that fall in the range [start, end)
+   * list contents of a collection that fall in the range [start, end) and no more than a specified many result
    *
    * @param c collection
    * @param start list object that sort >= this value
    * @param end list objects that sort < this value
+   * @param max return no more than this many results
    * @param seq return no objects with snap < seq
    * @param ls [out] result
+   * @param next [out] next item sorts >= this value
    * @return zero on success, or negative error
    */
-  virtual int collection_list_range(coll_t c, ghobject_t start, ghobject_t end,
-	                            snapid_t seq, vector<ghobject_t> *ls) = 0;
+  virtual int collection_list(coll_t c, ghobject_t start, ghobject_t end, int max,
+			      vector<ghobject_t> *ls, ghobject_t *next) = 0;
 
   /// OMAP
   /// Get omap contents
