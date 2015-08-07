@@ -2213,6 +2213,7 @@ void ReplicatedPG::promote_object(ObjectContextRef obc,
 
   if (op)
     wait_for_blocked_object(obc->obs.oi.soid, op);
+  info.stats.stats.sum.num_promote++;
 }
 
 void ReplicatedPG::execute_ctx(OpContext *ctx)
@@ -7055,6 +7056,8 @@ int ReplicatedPG::start_flush(
   fop->objecter_tid = tid;
 
   flush_ops[soid] = fop;
+  info.stats.stats.sum.num_flush++;
+  info.stats.stats.sum.num_flush_kb += SHIFT_ROUND_UP(oi.size, 10);
   return -EINPROGRESS;
 }
 
@@ -10952,6 +10955,8 @@ bool ReplicatedPG::agent_maybe_evict(ObjectContextRef& obc)
   int r = _delete_oid(ctx, true);
   if (obc->obs.oi.is_omap())
     ctx->delta_stats.num_objects_omap--;
+  ctx->delta_stats.num_evict++;
+  ctx->delta_stats.num_evict_kb += SHIFT_ROUND_UP(obc->obs.oi.size, 10);
   assert(r == 0);
   finish_ctx(ctx, pg_log_entry_t::DELETE, false);
   simple_repop_submit(repop);
