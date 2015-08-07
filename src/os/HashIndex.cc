@@ -320,15 +320,9 @@ int HashIndex::_lookup(const ghobject_t &oid,
   return get_mangled_name(*path, oid, mangled_name, exists_out);
 }
 
-int HashIndex::_collection_list(vector<ghobject_t> *ls) {
-  vector<string> path;
-  return list_by_hash(path, 0, 0, 0, 0, ls);
-}
-
 int HashIndex::_collection_list_partial(const ghobject_t &start,
-					int min_count,
+					const ghobject_t &end,
 					int max_count,
-					snapid_t seq,
 					vector<ghobject_t> *ls,
 					ghobject_t *next) {
   vector<string> path;
@@ -336,8 +330,8 @@ int HashIndex::_collection_list_partial(const ghobject_t &start,
   if (!next)
     next = &_next;
   *next = start;
-  dout(20) << "_collection_list_partial " << start << " " << min_count << "-" << max_count << " ls.size " << ls->size() << dendl;
-  return list_by_hash(path, min_count, max_count, seq, next, ls);
+  dout(20) << __func__ << " start:" << start << " end:" << end << "-" << max_count << " ls.size " << ls->size() << dendl;
+  return list_by_hash(path, end, max_count, next, ls);
 }
 
 int HashIndex::prep_delete() {
@@ -769,7 +763,6 @@ uint32_t HashIndex::hash_prefix_to_hash(string prefix) {
 int HashIndex::get_path_contents_by_hash(const vector<string> &path,
 					 const string *lower_bound,
 					 const ghobject_t *next_object,
-					 const snapid_t *seq,
 					 set<string> *hash_prefixes,
 					 set<pair<string, ghobject_t> > *objects) {
   set<string> subdirs;
@@ -791,8 +784,6 @@ int HashIndex::get_path_contents_by_hash(const vector<string> &path,
     if (lower_bound && hash_prefix < *lower_bound)
       continue;
     if (next_object && i->second < *next_object)
-      continue;
-    if (seq && i->second.hobj.snap < *seq)
       continue;
     hash_prefixes->insert(hash_prefix);
     objects->insert(pair<string, ghobject_t>(hash_prefix, i->second));
@@ -816,9 +807,8 @@ int HashIndex::get_path_contents_by_hash(const vector<string> &path,
 }
 
 int HashIndex::list_by_hash(const vector<string> &path,
-			    int min_count,
+			    ghobject_t end,
 			    int max_count,
-			    snapid_t seq,
 			    ghobject_t *next,
 			    vector<ghobject_t> *out) {
   assert(out);
@@ -829,7 +819,6 @@ int HashIndex::list_by_hash(const vector<string> &path,
   int r = get_path_contents_by_hash(path,
 				    NULL,
 				    next,
-				    &seq,
 				    &hash_prefixes,
 				    &objects);
   if (r < 0)
@@ -841,19 +830,13 @@ int HashIndex::list_by_hash(const vector<string> &path,
     set<pair<string, ghobject_t> >::iterator j = objects.lower_bound(
       make_pair(*i, ghobject_t()));
     if (j == objects.end() || j->first != *i) {
-      if (min_count > 0 && out->size() > (unsigned)min_count) {
-	if (next)
-	  *next = ghobject_t(hobject_t("", "", CEPH_NOSNAP, hash_prefix_to_hash(*i), -1, ""));
-	return 0;
-      }
       *(next_path.rbegin()) = *(i->rbegin());
       ghobject_t next_recurse;
       if (next)
 	next_recurse = *next;
       r = list_by_hash(next_path,
-		       min_count,
+		       end,
 		       max_count,
-		       seq,
 		       &next_recurse,
 		       out);
 
@@ -869,6 +852,11 @@ int HashIndex::list_by_hash(const vector<string> &path,
 	if (max_count > 0 && out->size() == (unsigned)max_count) {
 	  if (next)
 	    *next = j->second;
+	  return 0;
+	}
+	if (j->second >= end) {
+	  if (next)
+	    *next = ghobject_t::get_max();
 	  return 0;
 	}
 	if (!next || j->second >= *next) {

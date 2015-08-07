@@ -75,15 +75,10 @@ protected:
 		      int *exists		 
 		      ) { return 0; }
 
-  virtual int _collection_list(
-			       vector<ghobject_t> *ls
-			       ) { return 0; }
-
   virtual int _collection_list_partial(
 				       const ghobject_t &start,
-				       int min_count,
+				       const ghobject_t &end,
 				       int max_count,
-				       snapid_t seq,
 				       vector<ghobject_t> *ls,
 				       ghobject_t *next
 				       ) { return 0; }

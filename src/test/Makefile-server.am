@@ -221,11 +221,6 @@ unittest_chain_xattr_LDADD = $(LIBOS) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 unittest_chain_xattr_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 check_TESTPROGRAMS += unittest_chain_xattr
 
-unittest_flatindex_SOURCES = test/os/TestFlatIndex.cc
-unittest_flatindex_LDADD = $(LIBOS) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
-unittest_flatindex_CXXFLAGS = $(UNITTEST_CXXFLAGS)
-check_TESTPROGRAMS += unittest_flatindex
-
 unittest_lfnindex_SOURCES = test/os/TestLFNIndex.cc
 unittest_lfnindex_LDADD = $(LIBOS) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 unittest_lfnindex_CXXFLAGS = $(UNITTEST_CXXFLAGS)

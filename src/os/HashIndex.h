@@ -178,9 +178,6 @@ protected:
     string *mangled_name,
     int *exists
     );
-  int _collection_list(
-    vector<ghobject_t> *ls
-    );
 
   /**
    * Pre-hash the collection to create folders according to the expected number
@@ -193,9 +190,8 @@ protected:
 
   int _collection_list_partial(
     const ghobject_t &start,
-    int min_count,
+    const ghobject_t &end,
     int max_count,
-    snapid_t seq,
     vector<ghobject_t> *ls,
     ghobject_t *next
     );
@@ -358,7 +354,6 @@ private:
     const vector<string> &path,            /// [in] Path to list
     const string *lower_bound,             /// [in] list > *lower_bound
     const ghobject_t *next_object,          /// [in] list > *next_object
-    const snapid_t *seq,                   /// [in] list >= *seq
     set<string> *hash_prefixes,            /// [out] prefixes in dir
     set<pair<string, ghobject_t> > *objects /// [out] objects
     );
@@ -366,9 +361,8 @@ private:
   /// List objects in collection in ghobject_t order
   int list_by_hash(
     const vector<string> &path, /// [in] Path to list
-    int min_count,              /// [in] List at least min_count
+    ghobject_t end,             /// [in] List only objects < end
     int max_count,              /// [in] List at most max_count
-    snapid_t seq,               /// [in] list only objects where snap >= seq
     ghobject_t *next,            /// [in,out] List objects >= *next
     vector<ghobject_t> *out      /// [out] Listed objects
     ); ///< @return Error Code, 0 on success
