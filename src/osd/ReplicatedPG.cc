@@ -846,6 +846,10 @@ void ReplicatedPG::do_pg_op(OpRequestRef op)
 	}
 
 	assert(snapid == CEPH_NOSNAP || pg_log.get_missing().missing.empty());
+
+	// ensure sort order is correct
+	pg_log.resort_missing(get_sort_bitwise());
+
 	map<hobject_t, pg_missing_t::item, hobject_t::ComparatorWithDefault>::const_iterator missing_iter =
 	  pg_log.get_missing().missing.lower_bound(current);
 	vector<hobject_t>::iterator ls_iter = sentries.begin();
@@ -1005,6 +1009,10 @@ void ReplicatedPG::do_pg_op(OpRequestRef op)
 	}
 
 	assert(snapid == CEPH_NOSNAP || pg_log.get_missing().missing.empty());
+
+	// ensure sort order is correct
+	pg_log.resort_missing(get_sort_bitwise());
+
 	map<hobject_t, pg_missing_t::item, hobject_t::ComparatorWithDefault>::const_iterator missing_iter =
 	  pg_log.get_missing().missing.lower_bound(current);
 	vector<hobject_t>::iterator ls_iter = sentries.begin();
