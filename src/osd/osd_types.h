@@ -2517,6 +2517,8 @@ struct pg_missing_t {
     rmissing.clear();
   }
 
+  void resort(bool sort_bitwise);
+
   void encode(bufferlist &bl) const;
   void decode(bufferlist::iterator &bl, int64_t pool = -1);
   void dump(Formatter *f) const;
