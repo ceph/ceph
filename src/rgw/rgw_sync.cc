@@ -486,6 +486,45 @@ int RGWSimpleRadosReadCR<T>::request_complete()
   return handle_data(*result);
 }
 
+template <class T>
+class RGWSimpleRadosWriteCR : public RGWSimpleCoroutine {
+  RGWAsyncRadosProcessor *async_rados;
+  RGWRados *store;
+  bufferlist bl;
+
+  rgw_bucket pool;
+  string oid;
+
+  RGWAsyncPutSystemObj *req;
+
+public:
+  RGWSimpleRadosWriteCR(RGWAsyncRadosProcessor *_async_rados, RGWRados *_store,
+		      rgw_bucket& _pool, const string& _oid,
+		      const T& _data) : RGWSimpleCoroutine(_store->ctx()),
+                                                async_rados(_async_rados),
+						store(_store),
+						pool(_pool), oid(_oid),
+                                                req(NULL) {
+    ::encode(_data, bl);
+  }
+
+  ~RGWSimpleRadosWriteCR() {
+    delete req;
+  }
+
+  int send_request() {
+    rgw_obj obj = rgw_obj(pool, oid);
+    req = new RGWAsyncPutSystemObj(env->stack->create_completion_notifier(),
+			           store, NULL, obj, false, bl);
+    async_rados->queue(req);
+    return 0;
+  }
+
+  int request_complete() {
+    return req->get_ret_status();
+  }
+};
+
 class RGWReadSyncStatusCoroutine : public RGWSimpleRadosReadCR<RGWMetaSyncGlobalStatus> {
   RGWAsyncRadosProcessor *async_rados;
   RGWRados *store;
