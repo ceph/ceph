@@ -1028,6 +1028,7 @@ struct RGWZoneGroup {
   bool old_region;
 
   RGWZoneGroup() : is_master(false), cct(NULL), store(NULL), old_region(false) {}
+  RGWZoneGroup(const std::string &_name):name(_name) {}
 
   void encode(bufferlist& bl) const {
     ENCODE_START(2, 1, bl);
@@ -1059,17 +1060,20 @@ struct RGWZoneGroup {
     DECODE_FINISH(bl);
   }
 
-  int init(CephContext *_cct, RGWRados *_store, bool setup_zonegroup = true);
+  int init(CephContext *_cct, RGWRados *_store, bool setup_zonegroup = true,
+	   bool old_region_format = false);
   int create_default();
   int store_info(bool exclusive);
-  int read_info(const string& zonegroup_name);
-  int read_default(RGWDefaultZoneGroupInfo& default_zonegroup);
+  int read_info(const string& zonegroup_name, bool old_region_format = false);
+  int read_default(RGWDefaultZoneGroupInfo& default_zonegroup,
+		   const string& oid);
   int set_as_default();
   int equals(const string& other_zonegroup);
-
+  int create();
+  int delete_obj(bool old_region_format = false);
   static int get_pool_name(CephContext *cct, string *pool_name);
-  const string& get_default_oid();
-  const string& get_info_oid_prefix();
+  const string& get_default_oid(bool old_region_format = false);
+  const string& get_info_oid_prefix(bool old_region_format = false);
   const string& get_json_perfix();
 
   void dump(Formatter *f) const;
@@ -1608,6 +1612,7 @@ public:
 
   int list_raw_prefixed_objs(string pool_name, const string& prefix, list<string>& result);
   int list_zonegroups(list<string>& zonegroups);
+  int list_regions(list<string>& regions);
   int list_zones(list<string>& zones);
   int list_realms(list<string>& realms);
 
@@ -1624,6 +1629,7 @@ public:
   /** Initialize the RADOS instance and prepare to do other ops */
   virtual int init_rados();
   int init_complete();
+  int replace_region_with_zonegroup();
   virtual int initialize();
   virtual void finalize();
 
