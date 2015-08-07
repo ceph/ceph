@@ -58,6 +58,7 @@ public:
     }
   };
 
+  typedef item* value_type;
   typedef item* const_reference;
 
 private:

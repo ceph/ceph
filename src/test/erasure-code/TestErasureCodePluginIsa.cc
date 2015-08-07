@@ -43,7 +43,7 @@ TEST(ErasureCodePlugin, factory)
     EXPECT_FALSE(erasure_code);
     EXPECT_EQ(0, instance.factory("isa", profile,
                                   &erasure_code, &cerr));
-    EXPECT_TRUE(erasure_code);
+    EXPECT_TRUE(erasure_code.get());
   }
 }
 
