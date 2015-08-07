@@ -2450,8 +2450,8 @@ void AsyncConnection::local_deliver()
   ldout(async_msgr->cct, 10) << __func__ << dendl;
   Mutex::Locker l(write_lock);
   while (!local_messages.empty()) {
-    Message *m = local_messages.back();
-    local_messages.pop_back();
+    Message *m = local_messages.front();
+    local_messages.pop_front();
     m->set_connection(this);
     m->set_recv_stamp(ceph_clock_now(async_msgr->cct));
     ldout(async_msgr->cct, 10) << __func__ << " " << *m << " local deliver " << dendl;
