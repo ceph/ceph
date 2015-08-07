@@ -3865,7 +3865,7 @@ struct keys_and_values
 };
 
 int Server::parse_layout_vxattr(string name, string value, const OSDMap *osdmap,
-				ceph_file_layout *layout)
+				ceph_file_layout *layout, bool validate)
 {
   dout(20) << "parse_layout_vxattr name " << name << " value '" << value << "'" << dendl;
   try {
@@ -3882,7 +3882,10 @@ int Server::parse_layout_vxattr(string name, string value, const OSDMap *osdmap,
       if (begin != end)
 	return -EINVAL;
       for (map<string,string>::iterator q = m.begin(); q != m.end(); ++q) {
-	int r = parse_layout_vxattr(string("layout.") + q->first, q->second, osdmap, layout);
+        // Skip validation on each attr, we do it once at the end (avoid
+        // rejecting intermediate states if the overall result is ok)
+	int r = parse_layout_vxattr(string("layout.") + q->first, q->second,
+                                    osdmap, layout, false);
 	if (r < 0)
 	  return r;
       }
@@ -3912,7 +3915,7 @@ int Server::parse_layout_vxattr(string name, string value, const OSDMap *osdmap,
     return -EINVAL;
   }
 
-  if (!ceph_file_layout_is_valid(layout)) {
+  if (validate && !ceph_file_layout_is_valid(layout)) {
     dout(10) << "bad layout" << dendl;
     return -EINVAL;
   }

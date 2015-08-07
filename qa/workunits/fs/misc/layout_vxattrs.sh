@@ -45,6 +45,12 @@ getfattr -n ceph.file.layout.stripe_count file2 | grep -q 16
 getfattr -n ceph.file.layout.object_size file2 | grep -q 41943040
 getfattr -n ceph.file.layout.pool file2 | grep -q data
 
+setfattr -n ceph.file.layout -v "stripe_unit=2097152 stripe_count=4 object_size=2097152 pool=data" file2
+getfattr -n ceph.file.layout.stripe_unit file2 | grep -q 2097152
+getfattr -n ceph.file.layout.stripe_count file2 | grep -q 4
+getfattr -n ceph.file.layout.object_size file2 | grep -q 2097152
+getfattr -n ceph.file.layout.pool file2 | grep -q data
+
 # dir
 rm -f dir/file || true
 rmdir dir || true
