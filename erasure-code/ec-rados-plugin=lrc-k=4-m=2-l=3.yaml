@@ -1,7 +1,7 @@
 tasks:
 - rados:
     clients: [client.0]
-    ops: 4000
+    ops: 400
     objects: 50
     ec_pool: true
     erasure_code_profile:
