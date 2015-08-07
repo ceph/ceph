@@ -128,9 +128,9 @@ int RGWZoneGroup::get_pool_name(CephContext *cct, string *pool_name)
   return 0;
 }
 
-const string& RGWZoneGroup::get_default_oid()
+const string& RGWZoneGroup::get_default_oid(bool old_region_format)
 {
-  if (old_region) {
+  if (old_region_format) {
     if (cct->_conf->rgw_default_region_info_oid.empty()) {
       return default_region_info_oid;
     }
@@ -144,15 +144,16 @@ const string& RGWZoneGroup::get_default_oid()
   return cct->_conf->rgw_default_zonegroup_info_oid;
 }
 
-const string& RGWZoneGroup::get_info_oid_prefix()
+const string& RGWZoneGroup::get_info_oid_prefix(bool old_region_format)
 {
-  if (old_region) {
+  if (old_region_format) {
     return region_info_oid_prefix;
   }
   return zone_group_info_oid_prefix;
 }
 
-int RGWZoneGroup::read_default(RGWDefaultZoneGroupInfo& default_info)
+int RGWZoneGroup::read_default(RGWDefaultZoneGroupInfo& default_info,
+			       const string& oid)
 {
   string pool_name;
 
@@ -161,7 +162,6 @@ int RGWZoneGroup::read_default(RGWDefaultZoneGroupInfo& default_info)
     return ret;
   }
 
-  string oid = get_default_oid();
   rgw_bucket pool(pool_name.c_str());
   bufferlist bl;
   RGWObjectCtx obj_ctx(store);
@@ -206,7 +206,7 @@ int RGWZoneGroup::set_as_default()
   return 0;
 }
 
-int RGWZoneGroup::init(CephContext *_cct, RGWRados *_store, bool setup_zonegroup)
+int RGWZoneGroup::init(CephContext *_cct, RGWRados *_store, bool setup_zonegroup, bool old_region_format)
 {
   cct = _cct;
   store = _store;
@@ -222,7 +222,7 @@ int RGWZoneGroup::init(CephContext *_cct, RGWRados *_store, bool setup_zonegroup
 
   if (zonegroup_name.empty()) {
     RGWDefaultZoneGroupInfo default_info;
-    int r = read_default(default_info);
+    int r = read_default(default_info, get_default_oid(old_region_format));
     if (r == -ENOENT) {
       r = create_default();
       if (r == -EEXIST) { /* we may have raced with another zonegroup creation,
@@ -237,7 +237,7 @@ int RGWZoneGroup::init(CephContext *_cct, RGWRados *_store, bool setup_zonegroup
       if (r < 0)
         return r;
       /*Re attempt to read zonegroup info from newly created default zonegroup */
-      r = read_default(default_info);
+      r = read_default(default_info, get_default_oid(old_region_format));
       if (r < 0)
 	return r;
     } else if (r < 0) {
@@ -246,11 +246,11 @@ int RGWZoneGroup::init(CephContext *_cct, RGWRados *_store, bool setup_zonegroup
     }
     zonegroup_name = default_info.default_zonegroup;
   }
-
-  return read_info(zonegroup_name);
+  
+  return read_info(zonegroup_name, old_region_format);
 }
 
-int RGWZoneGroup::read_info(const string& zonegroup_name)
+int RGWZoneGroup::read_info(const string& zonegroup_name, bool old_region_format)
 {
   string pool_name;
   int ret = get_pool_name(cct, &pool_name);
@@ -261,8 +261,7 @@ int RGWZoneGroup::read_info(const string& zonegroup_name)
   bufferlist bl;
 
   name = zonegroup_name;
-
-  string oid = get_info_oid_prefix() + name;
+  string oid = get_info_oid_prefix(old_region_format) + name;
 
   RGWObjectCtx obj_ctx(store);
   ret = rgw_get_system_obj(store, obj_ctx, pool, oid, bl, NULL, NULL);
@@ -340,6 +339,41 @@ int RGWZoneGroup::equals(const string& other_zonegroup)
     return true;
 
   return (name == other_zonegroup);
+}
+
+int RGWZoneGroup::delete_obj(bool old_region_format)
+{
+  string pool_name;
+  int ret = get_pool_name(cct, &pool_name);
+  if (ret < 0) {
+    return ret;
+  }
+  rgw_bucket pool(pool_name.c_str());
+  
+  /* check to see if obj is the default */
+  RGWDefaultZoneGroupInfo default_info;
+  ret = read_default(default_info, get_default_oid(old_region_format));
+  if (ret < 0 && ret != -ENOENT)
+    return ret;
+  if (default_info.default_zonegroup == name) {
+    string oid = get_default_oid(old_region_format);
+    rgw_obj default_named_obj(pool, oid);
+    ret = store->delete_system_obj(default_named_obj);
+    if (ret < 0) {
+      lderr(cct) << "Error delete default obj name  " << name << ": " << cpp_strerror(-ret) << dendl;
+      return ret;
+    }
+  }
+  
+  string oid  = get_info_oid_prefix(old_region_format) + name;
+  rgw_obj object(pool, oid);
+  ret = store->delete_system_obj(object);
+  if (ret < 0) {
+    lderr(cct) << "Error delete zonegroup " << name << ": " << cpp_strerror(-ret) << dendl;
+    return ret;
+  }
+
+  return ret;
 }
 
 int RGWSystemMetaObj::init(CephContext *_cct, RGWRados *_store, bool setup_obj)
@@ -2093,6 +2127,95 @@ static void add_new_connection_to_map(map<string, RGWRESTConn *> &zonegroup_conn
   zonegroup_conn_map[zonegroup.name] = new_connection;
 }
 
+
+/** 
+ * Replace all region configuration with zonegroup for
+ * backward compatability
+ * Returns 0 on success, -ERR# on failure.
+ */
+int RGWRados::replace_region_with_zonegroup()
+{
+  RGWZoneGroup zonegroup;
+  int ret = zonegroup.init(cct, this, false);
+  if (ret < 0) {
+    lderr(cct) << "failed init default zonegroup: ret "<< ret << " " << cpp_strerror(-ret) << dendl;
+    return ret;
+  }
+
+  /* copy default region */
+  /* convert default region to default zonegroup */
+  string default_oid = cct->_conf->rgw_default_region_info_oid;
+  if (default_oid.empty()) {
+    default_oid = default_region_info_oid;
+  }
+  RGWDefaultZoneGroupInfo default_info;
+  ret  = zonegroup.read_default(default_info, default_oid);
+
+  if (ret < 0 && ret != -ENOENT) {
+    lderr(cct) << "failed reading old default region: ret "<< ret << " " << cpp_strerror(-ret) << dendl;
+    return ret;
+  } else if (ret != -ENOENT) {
+    zonegroup.name = default_info.default_zonegroup;
+    ret = zonegroup.set_as_default();
+    if (ret < 0) {
+      lderr(cct) << "failed to set default zonegroup: ret "<< ret << " " << cpp_strerror(-ret) << dendl;
+      return ret;
+    }
+  }
+  /* convert regions to zonegroups */
+  list<string> regions;
+  ret = list_regions(regions);
+  if (ret < 0 && ret != -ENOENT) {
+    lderr(cct) << "failed to list regions: ret "<< ret << " " << cpp_strerror(-ret) << dendl;
+    return ret;
+  }
+
+  list<string>::iterator iter;
+  /* create zonegroups */
+  for (iter = regions.begin(); iter != regions.end(); ++iter)
+  {
+    lderr(cct) << "create zonegroup " << *iter << dendl;    
+    /* read region info default has no data */
+    if (*iter != "default"){
+      ret = zonegroup.read_info(*iter, true);
+      if (ret < 0) {
+	lderr(cct) << "failed to read region " << *iter << " info: ret "<< ret << " " << cpp_strerror(-ret)
+		   << dendl;
+	return ret;
+      }
+    }
+    ret = zonegroup.store_info(true);
+    if (ret < 0 && ret != -EEXIST) {
+      lderr(cct) << "failed to store zonegroup " << *iter << ": ret "<< ret << " " << cpp_strerror(-ret)
+		 << dendl;
+      return ret;
+    }
+  }
+
+  ret = 0;
+    
+  /* delete regions */
+  for (iter = regions.begin(); iter != regions.end(); ++iter)
+  {
+    /* there is no default region */
+    if (*iter == "default"){
+      continue;
+    }
+
+    lderr(cct) << "delete zonegroup " << *iter << dendl;
+    zonegroup.name = *iter;
+    ret = zonegroup.delete_obj(true);
+    if (ret < 0) {
+      lderr(cct) << "failed to delete region " << *iter << ": ret "<< ret << " " << cpp_strerror(-ret)
+		 << dendl;
+      return ret;
+    }
+  }    
+
+  /* update region for all zones */
+  return ret;
+}
+
 /** 
  * Initialize the RADOS instance and prepare to do other ops
  * Returns 0 on success, -ERR# on failure.
@@ -2101,6 +2224,12 @@ int RGWRados::init_complete()
 {
   int ret;
 
+  ret = replace_region_with_zonegroup();
+  if (ret < 0) {
+    lderr(cct) << "failed converting region to zonegroup : ret "<< ret << " " << cpp_strerror(-ret) << dendl;
+    return ret;
+  }
+  
   ret = realm.init(cct, this);
   if (ret < 0 && ret != -ENOENT) {
     lderr(cct) << "failed reading realm info: ret "<< ret << " " << cpp_strerror(-ret) << dendl;
@@ -2270,6 +2399,17 @@ int RGWRados::list_raw_prefixed_objs(string pool_name, const string& prefix, lis
   return 0;
 }
 
+int RGWRados::list_regions(list<string>& regions)
+{
+  string pool_name;
+  int ret = RGWZoneGroup::get_pool_name(cct, &pool_name);
+  if (ret < 0)
+    return ret;
+
+  return list_raw_prefixed_objs(pool_name, region_info_oid_prefix, regions);
+}
+
+
 int RGWRados::list_zonegroups(list<string>& zonegroups)
 {
   string pool_name;
@@ -2277,7 +2417,7 @@ int RGWRados::list_zonegroups(list<string>& zonegroups)
   if (ret < 0)
     return ret;
 
-  return list_raw_prefixed_objs(pool_name, region_info_oid_prefix, zonegroups);
+  return list_raw_prefixed_objs(pool_name, zone_group_info_oid_prefix, zonegroups);
 }
 
 int RGWRados::list_zones(list<string>& zones)
