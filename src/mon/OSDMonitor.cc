@@ -3627,6 +3627,22 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
       if (!f && !rss.str().empty())
         tss << "  client io " << rss.str() << "\n";
 
+      // dump cache tier IO rate for cache pool
+      const pg_pool_t *pool = osdmap.get_pg_pool(poolid);
+      if (pool->is_tier()) {
+        if (f) {
+          f->close_section();
+          f->open_object_section("cache_io_rate");
+        }
+
+        rss.clear();
+        rss.str("");
+
+        pg_map.pool_cache_io_rate_summary(f.get(), &rss, poolid);
+        if (!f && !rss.str().empty())
+          tss << "  cache tier io " << rss.str() << "\n";
+      }
+
       if (f) {
         f->close_section();
         f->close_section();
