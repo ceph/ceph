@@ -3374,6 +3374,17 @@ ostream& pg_log_t::print(ostream& out) const
 
 // -- pg_missing_t --
 
+void pg_missing_t::resort(bool sort_bitwise)
+{
+  if (missing.key_comp().bitwise != sort_bitwise) {
+    map<hobject_t, item, hobject_t::ComparatorWithDefault> tmp;
+    tmp.swap(missing);
+    missing = map<hobject_t, item, hobject_t::ComparatorWithDefault>(
+      hobject_t::ComparatorWithDefault(sort_bitwise));
+    missing.insert(tmp.begin(), tmp.end());
+  }
+}
+
 void pg_missing_t::encode(bufferlist &bl) const
 {
   ENCODE_START(3, 2, bl);
