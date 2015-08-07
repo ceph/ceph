@@ -353,7 +353,7 @@ void WorkloadGenerator::do_destroy_collection(ObjectStore::Transaction *t,
   m_nr_runs.set(0);
   entry->m_osr.flush();
   vector<ghobject_t> ls;
-  m_store->collection_list(entry->m_coll, ls);
+  m_store->collection_list(entry->m_coll, ghobject_t(), ghobject_t::get_max(), INT_MAX, &ls, NULL);
   dout(2) << __func__ << " coll " << entry->m_coll
       << " (" << ls.size() << " objects)" << dendl;
 
