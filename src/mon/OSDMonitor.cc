@@ -5828,7 +5828,14 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       return prepare_set_flag(op, CEPH_OSDMAP_NODEEP_SCRUB);
     else if (key == "notieragent")
       return prepare_set_flag(op, CEPH_OSDMAP_NOTIERAGENT);
-    else {
+    else if (key == "sortbitwise") {
+      if (osdmap.get_up_osd_features() & CEPH_FEATURE_OSD_BITWISE_HOBJ_SORT) {
+	return prepare_set_flag(op, CEPH_OSDMAP_SORTBITWISE);
+      } else {
+	ss << "not all up OSDs have OSD_BITWISE_HOBJ_SORT feature";
+	err = -EPERM;
+      }
+    } else {
       ss << "unrecognized flag '" << key << "'";
       err = -EINVAL;
     }
@@ -5860,6 +5867,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       return prepare_unset_flag(op, CEPH_OSDMAP_NODEEP_SCRUB);
     else if (key == "notieragent")
       return prepare_unset_flag(op, CEPH_OSDMAP_NOTIERAGENT);
+    else if (key == "sortbitwise")
+      return prepare_unset_flag(op, CEPH_OSDMAP_SORTBITWISE);
     else {
       ss << "unrecognized flag '" << key << "'";
       err = -EINVAL;
