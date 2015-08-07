@@ -63,7 +63,6 @@ class ObjectCacher {
   struct OSDRead {
     vector<ObjectExtent> extents;
     snapid_t snap;
-    map<object_t, bufferlist*> read_data;  // bits of data as they come back
     bufferlist *bl;
     int fadvise_flags;
     OSDRead(snapid_t s, bufferlist *b, int f)
