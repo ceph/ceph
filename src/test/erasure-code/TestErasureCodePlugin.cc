@@ -92,7 +92,7 @@ TEST_F(ErasureCodePluginRegistryTest, all)
 				     &erasure_code, &cerr));
   EXPECT_FALSE(erasure_code);
   EXPECT_EQ(0, instance.factory("example", profile, &erasure_code, &cerr));
-  EXPECT_TRUE(erasure_code);
+  EXPECT_TRUE(erasure_code.get());
   ErasureCodePlugin *plugin = 0;
   {
     Mutex::Locker l(instance.lock);

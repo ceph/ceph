@@ -33,7 +33,6 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "auth: "
 
-using std::auto_ptr;
 using namespace std;
 
 int KeyRing::from_ceph_context(CephContext *cct)

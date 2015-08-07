@@ -153,7 +153,7 @@ public:
   /* Do not use when a particular hash function is needed */
   explicit hobject_t(const sobject_t &o) :
     oid(o.oid), snap(o.snap), max(false), pool(POOL_META) {
-    set_hash(CEPH_HASH_NAMESPACE::hash<sobject_t>()(o));
+    set_hash(std::hash<sobject_t>()(o));
   }
 
   // maximum sorted value.
@@ -235,7 +235,7 @@ public:
 };
 WRITE_CLASS_ENCODER(hobject_t)
 
-CEPH_HASH_NAMESPACE_START
+namespace std {
   template<> struct hash<hobject_t> {
     size_t operator()(const hobject_t &r) const {
       static hash<object_t> H;
@@ -243,7 +243,7 @@ CEPH_HASH_NAMESPACE_START
       return H(r.oid) ^ I(r.snap);
     }
   };
-CEPH_HASH_NAMESPACE_END
+} // namespace std
 
 ostream& operator<<(ostream& out, const hobject_t& o);
 
@@ -364,7 +364,7 @@ public:
 };
 WRITE_CLASS_ENCODER(ghobject_t)
 
-CEPH_HASH_NAMESPACE_START
+namespace std {
   template<> struct hash<ghobject_t> {
     size_t operator()(const ghobject_t &r) const {
       static hash<object_t> H;
@@ -372,7 +372,7 @@ CEPH_HASH_NAMESPACE_START
       return H(r.hobj.oid) ^ I(r.hobj.snap);
     }
   };
-CEPH_HASH_NAMESPACE_END
+} // namespace std
 
 ostream& operator<<(ostream& out, const ghobject_t& o);
 

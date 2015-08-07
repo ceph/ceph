@@ -811,7 +811,7 @@ public:
   bool _calc_past_interval_range(epoch_t *start, epoch_t *end, epoch_t oldest_map);
   void generate_past_intervals();
   void trim_past_intervals();
-  void build_prior(std::auto_ptr<PriorSet> &prior_set);
+  void build_prior(std::unique_ptr<PriorSet> &prior_set);
 
   void remove_down_peer_info(const OSDMapRef osdmap);
 
@@ -1640,7 +1640,7 @@ public:
     struct Active;
 
     struct Peering : boost::statechart::state< Peering, Primary, GetInfo >, NamedState {
-      std::auto_ptr< PriorSet > prior_set;
+      std::unique_ptr< PriorSet > prior_set;
 
       Peering(my_context ctx);
       void exit();
