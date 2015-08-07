@@ -387,20 +387,9 @@ _done_gf_vect_mad_init:
 	pop	arg1
 	ret
 
-%macro slversion 4
-global %1_slver_%2%3%4
-global %1_slver
-%1_slver:
-%1_slver_%2%3%4:
-	dw 0x%4
-	db 0x%3, 0x%2
-%endmacro
-
 ;;;       func                 		core, ver, snum
-slversion ec_encode_data,		00,   03,  0133
-slversion gf_vect_mul,			00,   02,  0134
-slversion ec_encode_data_update,	00,   02,  0212
-slversion gf_vect_dot_prod,		00,   02,  0138
-slversion gf_vect_mad,			00,   01,  0213
-; inform linker that this doesn't require executable stack
-section .note.GNU-stack noalloc noexec nowrite progbits
+slversion ec_encode_data,		00,   04,  0133
+slversion gf_vect_mul,			00,   03,  0134
+slversion ec_encode_data_update,	00,   03,  0212
+slversion gf_vect_dot_prod,		00,   03,  0138
+slversion gf_vect_mad,			00,   02,  0213
