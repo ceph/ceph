@@ -112,6 +112,9 @@ void OSDMonitor::create_initial()
   newmap.set_epoch(1);
   newmap.created = newmap.modified = ceph_clock_now(g_ceph_context);
 
+  // new clusters should sort bitwise by default.
+  newmap.set_flag(CEPH_OSDMAP_SORTBITWISE);
+
   // encode into pending incremental
   newmap.encode(pending_inc.fullmap, mon->quorum_features | CEPH_FEATURE_RESERVED);
   pending_inc.full_crc = newmap.get_crc();
