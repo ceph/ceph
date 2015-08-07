@@ -307,7 +307,7 @@ void PG::proc_replica_log(
   dout(10) << " peer osd." << from << " now " << oinfo << " " << omissing << dendl;
   might_have_unfound.insert(from);
 
-  for (map<hobject_t, pg_missing_t::item, hobject_t::BitwiseComparator>::iterator i = omissing.missing.begin();
+  for (map<hobject_t, pg_missing_t::item, hobject_t::ComparatorWithDefault>::iterator i = omissing.missing.begin();
        i != omissing.missing.end();
        ++i) {
     dout(20) << " after missing " << i->first << " need " << i->second.need
@@ -464,12 +464,12 @@ void PG::MissingLoc::add_batch_sources_info(
   const set<pg_shard_t> &sources)
 {
   dout(10) << __func__ << ": adding sources in batch " << sources.size() << dendl;
-  for (map<hobject_t, pg_missing_t::item, hobject_t::BitwiseComparator>::const_iterator i = needs_recovery_map.begin();
+  for (map<hobject_t, pg_missing_t::item, hobject_t::ComparatorWithDefault>::const_iterator i = needs_recovery_map.begin();
       i != needs_recovery_map.end();
       ++i) {
     missing_loc[i->first].insert(sources.begin(), sources.end());
     missing_loc_sources.insert(sources.begin(), sources.end());
-    }
+  }
 }
 
 bool PG::MissingLoc::add_source_info(
@@ -481,7 +481,7 @@ bool PG::MissingLoc::add_source_info(
 {
   bool found_missing = false;
   // found items?
-  for (map<hobject_t,pg_missing_t::item, hobject_t::BitwiseComparator>::const_iterator p = needs_recovery_map.begin();
+  for (map<hobject_t,pg_missing_t::item, hobject_t::ComparatorWithDefault>::const_iterator p = needs_recovery_map.begin();
        p != needs_recovery_map.end();
        ++p) {
     const hobject_t &soid(p->first);

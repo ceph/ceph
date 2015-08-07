@@ -3389,8 +3389,8 @@ void pg_missing_t::decode(bufferlist::iterator &bl, int64_t pool)
 
   if (struct_v < 3) {
     // Handle hobject_t upgrade
-    map<hobject_t, item, hobject_t::BitwiseComparator> tmp;
-    for (map<hobject_t, item, hobject_t::BitwiseComparator>::iterator i = missing.begin();
+    map<hobject_t, item, hobject_t::ComparatorWithDefault> tmp;
+    for (map<hobject_t, item, hobject_t::ComparatorWithDefault>::iterator i = missing.begin();
 	 i != missing.end();
       ) {
       if (!i->first.is_max() && i->first.pool == -1) {
@@ -3405,7 +3405,7 @@ void pg_missing_t::decode(bufferlist::iterator &bl, int64_t pool)
     missing.insert(tmp.begin(), tmp.end());
   }
 
-  for (map<hobject_t,item, hobject_t::BitwiseComparator>::iterator it = missing.begin();
+  for (map<hobject_t,item, hobject_t::ComparatorWithDefault>::iterator it = missing.begin();
        it != missing.end();
        ++it)
     rmissing[it->second.need.version] = it->first;
@@ -3414,7 +3414,7 @@ void pg_missing_t::decode(bufferlist::iterator &bl, int64_t pool)
 void pg_missing_t::dump(Formatter *f) const
 {
   f->open_array_section("missing");
-  for (map<hobject_t,item, hobject_t::BitwiseComparator>::const_iterator p = missing.begin(); p != missing.end(); ++p) {
+  for (map<hobject_t,item, hobject_t::ComparatorWithDefault>::const_iterator p = missing.begin(); p != missing.end(); ++p) {
     f->open_object_section("item");
     f->dump_stream("object") << p->first;
     p->second.dump(f);
@@ -3470,7 +3470,7 @@ bool pg_missing_t::is_missing(const hobject_t& oid) const
 
 bool pg_missing_t::is_missing(const hobject_t& oid, eversion_t v) const
 {
-  map<hobject_t, item, hobject_t::BitwiseComparator>::const_iterator m = missing.find(oid);
+  map<hobject_t, item, hobject_t::ComparatorWithDefault>::const_iterator m = missing.find(oid);
   if (m == missing.end())
     return false;
   const pg_missing_t::item &item(m->second);
@@ -3481,7 +3481,7 @@ bool pg_missing_t::is_missing(const hobject_t& oid, eversion_t v) const
 
 eversion_t pg_missing_t::have_old(const hobject_t& oid) const
 {
-  map<hobject_t, item, hobject_t::BitwiseComparator>::const_iterator m = missing.find(oid);
+  map<hobject_t, item, hobject_t::ComparatorWithDefault>::const_iterator m = missing.find(oid);
   if (m == missing.end())
     return eversion_t();
   const pg_missing_t::item &item(m->second);
@@ -3495,7 +3495,7 @@ eversion_t pg_missing_t::have_old(const hobject_t& oid) const
 void pg_missing_t::add_next_event(const pg_log_entry_t& e)
 {
   if (e.is_update()) {
-    map<hobject_t, item, hobject_t::BitwiseComparator>::iterator missing_it;
+    map<hobject_t, item, hobject_t::ComparatorWithDefault>::iterator missing_it;
     missing_it = missing.find(e.soid);
     bool is_missing_divergent_item = missing_it != missing.end();
     if (e.prior_version == eversion_t() || e.is_clone()) {
@@ -3548,12 +3548,12 @@ void pg_missing_t::add(const hobject_t& oid, eversion_t need, eversion_t have)
 
 void pg_missing_t::rm(const hobject_t& oid, eversion_t v)
 {
-  std::map<hobject_t, pg_missing_t::item, hobject_t::BitwiseComparator>::iterator p = missing.find(oid);
+  std::map<hobject_t, pg_missing_t::item, hobject_t::ComparatorWithDefault>::iterator p = missing.find(oid);
   if (p != missing.end() && p->second.need <= v)
     rm(p);
 }
 
-void pg_missing_t::rm(const std::map<hobject_t, pg_missing_t::item, hobject_t::BitwiseComparator>::iterator &m)
+void pg_missing_t::rm(const std::map<hobject_t, pg_missing_t::item, hobject_t::ComparatorWithDefault>::iterator &m)
 {
   rmissing.erase(m->second.need.version);
   missing.erase(m);
@@ -3561,13 +3561,13 @@ void pg_missing_t::rm(const std::map<hobject_t, pg_missing_t::item, hobject_t::B
 
 void pg_missing_t::got(const hobject_t& oid, eversion_t v)
 {
-  std::map<hobject_t, pg_missing_t::item, hobject_t::BitwiseComparator>::iterator p = missing.find(oid);
+  std::map<hobject_t, pg_missing_t::item, hobject_t::ComparatorWithDefault>::iterator p = missing.find(oid);
   assert(p != missing.end());
   assert(p->second.need <= v);
   got(p);
 }
 
-void pg_missing_t::got(const std::map<hobject_t, pg_missing_t::item, hobject_t::BitwiseComparator>::iterator &m)
+void pg_missing_t::got(const std::map<hobject_t, pg_missing_t::item, hobject_t::ComparatorWithDefault>::iterator &m)
 {
   rmissing.erase(m->second.need.version);
   missing.erase(m);
@@ -3579,7 +3579,7 @@ void pg_missing_t::split_into(
   pg_missing_t *omissing)
 {
   unsigned mask = ~((~0)<<split_bits);
-  for (map<hobject_t, item, hobject_t::BitwiseComparator>::iterator i = missing.begin();
+  for (map<hobject_t, item, hobject_t::ComparatorWithDefault>::iterator i = missing.begin();
        i != missing.end();
        ) {
     if ((i->first.get_hash() & mask) == child_pgid.m_seed) {
