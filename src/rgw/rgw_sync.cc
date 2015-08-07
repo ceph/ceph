@@ -11,6 +11,8 @@
 #include "rgw_rest_conn.h"
 #include "rgw_tools.h"
 
+#include "cls/lock/cls_lock_client.h"
+
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -117,7 +119,36 @@ public:
 								   bl(_bl), mtime(_mtime) {}
 };
 
+class RGWAsyncLockSystemObj : public RGWAsyncRadosRequest {
+  RGWRados *store;
+  rgw_obj obj;
+  string lock_name;
+  uint32_t duration_secs;
 
+protected:
+  int _send_request() {
+    librados::IoCtx ioctx;
+    librados::Rados *rados = store->get_rados_handle();
+    int r = rados->ioctx_create(obj.bucket.name.c_str(), ioctx); /* system object only! */
+    if (r < 0) {
+      lderr(store->ctx()) << "ERROR: failed to open pool (" << obj.bucket.name << ") ret=" << r << dendl;
+      return r;
+    }
+
+    rados::cls::lock::Lock l(lock_name);
+    utime_t duration(duration_secs, 0);
+    l.set_duration(duration);
+
+    return l.lock_exclusive(&ioctx, obj.get_object());
+  }
+public:
+  RGWAsyncLockSystemObj(RGWAioCompletionNotifier *cn, RGWRados *_store,
+                        RGWObjVersionTracker *_objv_tracker, rgw_obj& _obj,
+		        const string& _name, uint32_t _duration_secs) : RGWAsyncRadosRequest(cn), store(_store),
+                                                                obj(_obj),
+                                                                lock_name(_name),
+							        duration_secs(_duration_secs) {}
+};
 
 
 class RGWAsyncRadosProcessor {
