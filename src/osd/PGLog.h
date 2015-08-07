@@ -388,9 +388,12 @@ public:
   //////////////////// get or set missing ////////////////////
 
   const pg_missing_t& get_missing() const { return missing; }
+  void resort_missing(bool sort_bitwise) {
+    missing.resort(sort_bitwise);
+  }
 
-  void missing_got(map<hobject_t, pg_missing_t::item, hobject_t::BitwiseComparator>::const_iterator m) {
-    map<hobject_t, pg_missing_t::item, hobject_t::BitwiseComparator>::iterator p = missing.missing.find(m->first);
+  void missing_got(map<hobject_t, pg_missing_t::item, hobject_t::ComparatorWithDefault>::const_iterator m) {
+    map<hobject_t, pg_missing_t::item, hobject_t::ComparatorWithDefault>::iterator p = missing.missing.find(m->first);
     missing.got(p);
   }
 
@@ -406,8 +409,8 @@ public:
     missing.add(oid, need, have);
   }
 
-  void missing_rm(map<hobject_t, pg_missing_t::item, hobject_t::BitwiseComparator>::const_iterator m) {
-    map<hobject_t, pg_missing_t::item, hobject_t::BitwiseComparator>::iterator p = missing.missing.find(m->first);
+  void missing_rm(map<hobject_t, pg_missing_t::item, hobject_t::ComparatorWithDefault>::const_iterator m) {
+    map<hobject_t, pg_missing_t::item, hobject_t::ComparatorWithDefault>::iterator p = missing.missing.find(m->first);
     missing.rm(p);
   }
 

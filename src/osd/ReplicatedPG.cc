@@ -711,7 +711,7 @@ int ReplicatedPG::do_command(cmdmap_t cmdmap, ostream& ss,
     }
     f->dump_int("num_missing", missing.num_missing());
     f->dump_int("num_unfound", get_num_unfound());
-    map<hobject_t,pg_missing_t::item, hobject_t::BitwiseComparator>::const_iterator p = missing.missing.upper_bound(offset);
+    map<hobject_t,pg_missing_t::item, hobject_t::ComparatorWithDefault>::const_iterator p = missing.missing.upper_bound(offset);
     {
       f->open_array_section("objects");
       int32_t num = 0;
@@ -846,7 +846,7 @@ void ReplicatedPG::do_pg_op(OpRequestRef op)
 	}
 
 	assert(snapid == CEPH_NOSNAP || pg_log.get_missing().missing.empty());
-	map<hobject_t, pg_missing_t::item, hobject_t::BitwiseComparator>::const_iterator missing_iter =
+	map<hobject_t, pg_missing_t::item, hobject_t::ComparatorWithDefault>::const_iterator missing_iter =
 	  pg_log.get_missing().missing.lower_bound(current);
 	vector<hobject_t>::iterator ls_iter = sentries.begin();
 	hobject_t _max = hobject_t::get_max();
@@ -1005,7 +1005,7 @@ void ReplicatedPG::do_pg_op(OpRequestRef op)
 	}
 
 	assert(snapid == CEPH_NOSNAP || pg_log.get_missing().missing.empty());
-	map<hobject_t, pg_missing_t::item, hobject_t::BitwiseComparator>::const_iterator missing_iter =
+	map<hobject_t, pg_missing_t::item, hobject_t::ComparatorWithDefault>::const_iterator missing_iter =
 	  pg_log.get_missing().missing.lower_bound(current);
 	vector<hobject_t>::iterator ls_iter = sentries.begin();
 	hobject_t _max = hobject_t::get_max();
@@ -8576,9 +8576,9 @@ void ReplicatedPG::mark_all_unfound_lost(int what)
   utime_t mtime = ceph_clock_now(cct);
   info.last_update.epoch = get_osdmap()->get_epoch();
   const pg_missing_t &missing = pg_log.get_missing();
-  map<hobject_t, pg_missing_t::item, hobject_t::BitwiseComparator>::const_iterator m =
+  map<hobject_t, pg_missing_t::item, hobject_t::ComparatorWithDefault>::const_iterator m =
     missing_loc.get_needs_recovery().begin();
-  map<hobject_t, pg_missing_t::item, hobject_t::BitwiseComparator>::const_iterator mend =
+  map<hobject_t, pg_missing_t::item, hobject_t::ComparatorWithDefault>::const_iterator mend =
     missing_loc.get_needs_recovery().end();
   while (m != mend) {
     const hobject_t &oid(m->first);
@@ -9574,7 +9574,7 @@ int ReplicatedPG::recover_replicas(int max, ThreadPool::TPHandle &handle)
       }
 
       dout(10) << __func__ << ": recover_object_replicas(" << soid << ")" << dendl;
-      map<hobject_t,pg_missing_t::item, hobject_t::BitwiseComparator>::const_iterator r = m.missing.find(soid);
+      map<hobject_t,pg_missing_t::item, hobject_t::ComparatorWithDefault>::const_iterator r = m.missing.find(soid);
       started += prep_object_replica_pushes(soid, r->second.need,
 					    h);
     }
