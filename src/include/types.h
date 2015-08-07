@@ -62,7 +62,6 @@ extern "C" {
 using namespace std;
 
 #include "include/unordered_map.h"
-#include "include/hash_namespace.h"
 
 #include "object.h"
 #include "intarith.h"
@@ -303,7 +302,7 @@ inline ostream& operator<<(ostream& out, inodeno_t ino) {
   return out << hex << ino.val << dec;
 }
 
-CEPH_HASH_NAMESPACE_START
+namespace std {
   template<> struct hash< inodeno_t >
   {
     size_t operator()( const inodeno_t& x ) const
@@ -312,7 +311,7 @@ CEPH_HASH_NAMESPACE_START
       return H(x.val);
     }
   };
-CEPH_HASH_NAMESPACE_END
+} // namespace std
 
 
 // file modes

@@ -601,7 +601,7 @@ int SyntheticClient::run()
         int size = iargs.front();  iargs.pop_front();
         int inflight = iargs.front();  iargs.pop_front();
         if (run_me()) {
-          dout(2) << "createobjects " << cout << " of " << size << " bytes"
+          dout(2) << "createobjects " << count << " of " << size << " bytes"
 		  << ", " << inflight << " in flight" << dendl;
           create_objects(count, size, inflight);
         }
@@ -617,7 +617,7 @@ int SyntheticClient::run()
         int rskew = iargs.front();  iargs.pop_front();
         int wskew = iargs.front();  iargs.pop_front();
         if (run_me()) {
-          dout(2) << "objectrw " << cout << " " << size << " " << wrpc 
+          dout(2) << "objectrw " << count << " " << size << " " << wrpc 
 		  << " " << overlap << " " << rskew << " " << wskew << dendl;
           object_rw(count, size, wrpc, overlap, rskew, wskew);
         }
