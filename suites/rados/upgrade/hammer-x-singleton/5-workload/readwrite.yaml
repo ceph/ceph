@@ -1,0 +1,11 @@
+tasks:
+- rados:
+    clients: [client.0]
+    ops: 4000
+    objects: 500
+    write_append_excl: false
+    op_weights:
+      read: 45
+      write: 45
+      delete: 10
+- print: "**** done rados/readwrite 5-workload"
