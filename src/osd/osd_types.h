@@ -1972,6 +1972,8 @@ struct pg_interval_t {
     int new_min_size,
     unsigned old_pg_num,
     unsigned new_pg_num,
+    bool old_sort_bitwise,
+    bool new_sort_bitwise,
     pg_t pgid
     );
 
