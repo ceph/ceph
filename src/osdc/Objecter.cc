@@ -2481,6 +2481,7 @@ int Objecter::_calc_target(op_target_t *t, epoch_t *last_force_resend,  bool any
   vector<int> up, acting;
   osdmap->pg_to_up_acting_osds(pgid, &up, &up_primary,
 			       &acting, &acting_primary);
+  bool sort_bitwise = osdmap->test_flag(CEPH_OSDMAP_SORTBITWISE);
   if (any_change && pg_interval_t::is_new_interval(
           t->acting_primary,
 	  acting_primary,
@@ -2496,6 +2497,8 @@ int Objecter::_calc_target(op_target_t *t, epoch_t *last_force_resend,  bool any
 	  min_size,
 	  t->pg_num,
 	  pg_num,
+	  t->sort_bitwise,
+	  sort_bitwise,
 	  pi->raw_pg_to_pg(pgid))) {
     force_resend = true;
   }
@@ -2521,6 +2524,7 @@ int Objecter::_calc_target(op_target_t *t, epoch_t *last_force_resend,  bool any
     t->size = size;
     t->min_size = min_size;
     t->pg_num = pg_num;
+    t->sort_bitwise = sort_bitwise;
     ldout(cct, 10) << __func__ << " "
 		   << " pgid " << pgid << " acting " << acting << dendl;
     t->used_replica = false;
