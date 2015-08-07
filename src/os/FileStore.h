@@ -460,6 +460,10 @@ public:
    */
   bool get_allow_sharded_objects();
 
+  bool can_sort_nibblewise() {
+    return true;    // i support legacy sort order
+  }
+
   void collect_metadata(map<string,string> *pm);
 
   int statfs(struct statfs *buf);
