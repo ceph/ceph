@@ -2716,6 +2716,15 @@ TEST(BufferList, InvalidateCrc) {
   EXPECT_NE(crc, bl.crc32c(0));
 }
 
+TEST(BufferList, TestIsProvidedBuffer) {
+  char buff[100];
+  bufferlist bl;
+  bl.push_back(buffer::create_static(100, buff));
+  ASSERT_TRUE(bl.is_provided_buffer(buff));
+  bl.append_zero(100);
+  ASSERT_FALSE(bl.is_provided_buffer(buff));
+}
+
 TEST(BufferHash, all) {
   {
     bufferlist bl;
