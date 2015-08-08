@@ -68,6 +68,7 @@ void usage(ostream &out)
   out << "\n";
   out << "  count_tests         print number of generated test objects (to stdout)\n";
   out << "  select_test <n>     select generated test object as in-memory object\n";
+  out << "  is_deterministic    exit w/ success if type encodes deterministically\n";
 }
 struct Dencoder {
   virtual ~Dencoder() {}
@@ -446,7 +447,12 @@ int main(int argc, const char **argv)
 	exit(1);
       }
       int n = atoi(*i);
-      err = den->select_generated(n);      
+      err = den->select_generated(n);
+    } else if (*i == string("is_deterministic")) {
+      if (den->is_deterministic())
+	exit(0);
+      else
+	exit(1);
     } else {
       cerr << "unknown option '" << *i << "'" << std::endl;
       usage(cerr);
