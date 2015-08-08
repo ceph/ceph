@@ -22,6 +22,7 @@
 #include <string>
 #include <assert.h>
 #include <fstream>
+#include <memory>
 #include <boost/thread/thread.hpp>
 #include "ios.hpp"
 
@@ -31,7 +32,7 @@ using namespace rbd_replay;
 
 class Thread {
 public:
-  typedef boost::shared_ptr<Thread> ptr;
+  typedef std::shared_ptr<Thread> ptr;
 
   Thread(thread_id_t id,
 	 uint64_t window)
@@ -379,7 +380,7 @@ private:
     } else if (strcmp(event_name, "librbd:open_image_exit") == 0) {
       IO::ptr completionIO(thread->pending_io()->create_completion(ts, threadID));
       m_ios.push_back(completionIO);
-      boost::shared_ptr<OpenImageIO> io(boost::dynamic_pointer_cast<OpenImageIO>(thread->pending_io()));
+      std::shared_ptr<OpenImageIO> io(std::dynamic_pointer_cast<OpenImageIO>(thread->pending_io()));
       assert(io);
       m_open_images.insert(io->imagectx());
     } else if (strcmp(event_name, "librbd:close_image_enter") == 0) {
@@ -393,7 +394,7 @@ private:
       IO::ptr completionIO(thread->pending_io()->create_completion(ts, threadID));
       m_ios.push_back(completionIO);
       completed(completionIO);
-      boost::shared_ptr<CloseImageIO> io(boost::dynamic_pointer_cast<CloseImageIO>(thread->pending_io()));
+      std::shared_ptr<CloseImageIO> io(std::dynamic_pointer_cast<CloseImageIO>(thread->pending_io()));
       assert(io);
       m_open_images.erase(io->imagectx());
     } else if (strcmp(event_name, "librbd:read_exit") == 0) {

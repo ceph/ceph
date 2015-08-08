@@ -16,6 +16,7 @@
 // In other words, (a.id < b.id) == (a.timestamp < b.timestamp) for all IOs a and b.
 
 #include "ios.hpp"
+#include <algorithm>
 
 using namespace std;
 using namespace rbd_replay;
@@ -134,9 +135,9 @@ void rbd_replay::batch_unreachable_from(const io_set_t& deps, const io_set_t& ba
     // Take an IO from the end, which has the highest timestamp.
     // This reduces the boundary horizon as early as possible,
     // which means we can short cut as soon as possible.
-    map<action_id_t, boost::shared_ptr<IO> >::iterator b_itr(boundary.end());
+    map<action_id_t, std::shared_ptr<IO> >::iterator b_itr(boundary.end());
     --b_itr;
-    boost::shared_ptr<IO> io(b_itr->second);
+    std::shared_ptr<IO> io(b_itr->second);
     boundary.erase(b_itr);
 
     for (io_set_t::const_iterator itr = io->dependencies().begin(), end = io->dependencies().end(); itr != end; ++itr) {

@@ -15,7 +15,7 @@
 #ifndef _INCLUDED_RBD_REPLAY_PENDINGIO_HPP
 #define _INCLUDED_RBD_REPLAY_PENDINGIO_HPP
 
-#include <boost/enable_shared_from_this.hpp>
+#include <memory>
 #include "actions.hpp"
 
 /// Do not call outside of rbd_replay::PendingIO.
@@ -27,9 +27,9 @@ namespace rbd_replay {
 /**
    A PendingIO is an I/O operation that has been started but not completed.
 */
-class PendingIO : public boost::enable_shared_from_this<PendingIO> {
+class PendingIO : public std::enable_shared_from_this<PendingIO> {
 public:
-  typedef boost::shared_ptr<PendingIO> ptr;
+  typedef std::shared_ptr<PendingIO> ptr;
 
   PendingIO(action_id_t id,
             ActionCtx &worker);

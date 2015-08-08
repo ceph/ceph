@@ -15,7 +15,7 @@
 #ifndef _INCLUDED_RBD_REPLAY_ACTIONS_HPP
 #define _INCLUDED_RBD_REPLAY_ACTIONS_HPP
 
-#include <boost/shared_ptr.hpp>
+#include <memory>
 #include "include/rbd/librbd.hpp"
 #include "Deser.hpp"
 #include "rbd_loc.hpp"
@@ -101,11 +101,11 @@ public:
 
   virtual librados::IoCtx* ioctx() = 0;
 
-  virtual void add_pending(boost::shared_ptr<PendingIO> io) = 0;
+  virtual void add_pending(std::shared_ptr<PendingIO> io) = 0;
 
   virtual bool readonly() const = 0;
 
-  virtual void remove_pending(boost::shared_ptr<PendingIO> io) = 0;
+  virtual void remove_pending(std::shared_ptr<PendingIO> io) = 0;
 
   virtual void set_action_complete(action_id_t id) = 0;
 
@@ -129,7 +129,7 @@ public:
  */
 class Action {
 public:
-  typedef boost::shared_ptr<Action> ptr;
+  typedef std::shared_ptr<Action> ptr;
 
   Action(action_id_t id,
 	 thread_id_t thread_id,
