@@ -185,7 +185,7 @@ TYPE_NOCOPY(Capability)
 TYPE(InoTable)
 
 #include "mds/SnapServer.h"
-TYPEWITHSTRAYDATA(SnapServer)
+TYPE_STRAYDATA(SnapServer)
 
 #include "mds/events/ECommitted.h"
 TYPE(ECommitted)
