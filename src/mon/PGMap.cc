@@ -1533,11 +1533,14 @@ void PGMap::print_oneline_summary(Formatter *f, ostream *out) const
 void PGMap::generate_test_instances(list<PGMap*>& o)
 {
   o.push_back(new PGMap);
-  o.push_back(new PGMap);
   list<Incremental*> inc;
   Incremental::generate_test_instances(inc);
+  delete inc.front();
   inc.pop_front();
   while (!inc.empty()) {
+    PGMap *pmp = new PGMap();
+    *pmp = *o.back();
+    o.push_back(pmp);
     o.back()->apply_incremental(NULL, *inc.front());
     delete inc.front();
     inc.pop_front();
