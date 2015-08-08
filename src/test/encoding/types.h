@@ -120,7 +120,7 @@ TYPE(AuthMonitor::Incremental)
 
 #include "mon/PGMap.h"
 TYPE(PGMap::Incremental)
-TYPE(PGMap)
+TYPE_NONDETERMINISTIC(PGMap)
 
 #include "mon/MonitorDBStore.h"
 TYPE(MonitorDBStore::Transaction)
