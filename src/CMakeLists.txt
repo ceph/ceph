@@ -17,6 +17,38 @@ message(status " ams compiler ${CMAKE_ASM_COMPILER}")
 set(CMAKE_ASM_FLAGS "-f elf64")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -rdynamic -Wall -Wtype-limits -Wignored-qualifiers -Winit-self -Wpointer-arith -Werror=format-security -fno-strict-aliasing -fsigned-char -fPIC")
 
+execute_process(
+  COMMAND "yasm -f elf64 ${CMAKE_SOURCE_DIR}/src/common/crc32c_intel_fast_asm.S -o /dev/null"
+  RETURN_VALUE no_yasm
+  OUTPUT_QUIET)
+if(no_yasm)
+  message("we do not have a modern/working yasm")
+else(no_yasm)
+  message("we have a modern and working yasm")
+  execute_process(
+    COMMAND "arch"
+    OUTPUT_VARIABLE arch
+    OUTPUT_STRIP_TRAILING_WHITESPACE)
+  if(arch STREQUAL "x86_64")
+    message("we are x84_64")
+    include(CheckCXXSourceCompiles)
+    check_cxx_source_compiles("
+      #if defined(__x86_64__) && defined(__ILP32__)
+      #error x32
+      #endif
+      int main() {}
+      " not_arch_x32)
+    if(not_arch_x32)
+      message("we are not x32")
+      add_definitions("-DHAVE_GOOD_YASM_ELF64")
+    else(not_arch_x32)
+      message("we are x32; no yasm for you")
+    endif(not_arch_x32)
+  else(arch STREQUAL "x86_64")
+    message("we are not x86_64 && !x32")
+  endif(arch STREQUAL "x86_64")
+endif(no_yasm)
+
 execute_process(COMMAND yasm -f elf64 -i ${CMAKE_SOURCE_DIR}/src/erasure-code/isa/isa-l/include/ ${CMAKE_SOURCE_DIR}/src/erasure-code/isa/isa-l/erasure_code/gf_vect_dot_prod_avx2.asm.s -o /dev/null
   RESULT_VARIABLE rc
   OUTPUT_QUIET)
