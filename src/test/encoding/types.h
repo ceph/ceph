@@ -99,10 +99,10 @@ TYPE_FEATUREFUL(ECSubRead)
 TYPE(ECSubReadReply)
 
 #include "osd/HitSet.h"
-TYPE(ExplicitHashHitSet)
-TYPE(ExplicitObjectHitSet)
+TYPE_NONDETERMINISTIC(ExplicitHashHitSet)
+TYPE_NONDETERMINISTIC(ExplicitObjectHitSet)
 TYPE(BloomHitSet)
-TYPE(HitSet)
+TYPE_NONDETERMINISTIC(HitSet)   // because some subclasses are
 TYPE(HitSet::Params)
 
 #include "os/ObjectStore.h"
