@@ -25,7 +25,7 @@
 #include "include/assert.h"
 
 #define TYPE(t)
-#define TYPEWITHSTRAYDATA(t)
+#define TYPE_STRAYDATA(t)
 #define TYPE_NONDETERMINISTIC(t)
 #define TYPE_FEATUREFUL(t)
 #define TYPE_FEATUREFUL_STRAYDATA(t)
@@ -34,7 +34,7 @@
 #define MESSAGE(t)
 #include "types.h"
 #undef TYPE
-#undef TYPEWITHSTRAYDATA
+#undef TYPE_STRAYDATA
 #undef TYPE_NONDETERMINISTIC
 #undef TYPE_FEATUREFUL
 #undef TYPE_FEATUREFUL_STRAYDATA
@@ -274,7 +274,7 @@ int main(int argc, const char **argv)
 #define T_STR(x) #x
 #define T_STRINGIFY(x) T_STR(x)
 #define TYPE(t) dencoders[T_STRINGIFY(t)] = new DencoderImplNoFeature<t>(false, false);
-#define TYPEWITHSTRAYDATA(t) dencoders[T_STRINGIFY(t)] = new DencoderImplNoFeature<t>(true, false);
+#define TYPE_STRAYDATA(t) dencoders[T_STRINGIFY(t)] = new DencoderImplNoFeature<t>(true, false);
 #define TYPE_NONDETERMINISTIC(t) dencoders[T_STRINGIFY(t)] = new DencoderImplNoFeature<t>(false, true);
 #define TYPE_FEATUREFUL(t) dencoders[T_STRINGIFY(t)] = new DencoderImplFeatureful<t>(false, false);
 #define TYPE_FEATUREFUL_STRAYDATA(t) dencoders[T_STRINGIFY(t)] = new DencoderImplFeatureful<t>(true, false);
@@ -283,7 +283,7 @@ int main(int argc, const char **argv)
 #define MESSAGE(t) dencoders[T_STRINGIFY(t)] = new MessageDencoderImpl<t>;
 #include "types.h"
 #undef TYPE
-#undef TYPEWITHSTRAYDATA
+#undef TYPE_STRAYDATA
 #undef TYPE_NONDETERMINISTIC
 #undef TYPE_FEATUREFUL
 #undef TYPE_FEATUREFUL_STRAYDATA
