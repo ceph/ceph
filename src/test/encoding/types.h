@@ -99,10 +99,10 @@ TYPE_FEATUREFUL(ECSubRead)
 TYPE(ECSubReadReply)
 
 #include "osd/HitSet.h"
-TYPE(ExplicitHashHitSet)
-TYPE(ExplicitObjectHitSet)
+TYPE_NONDETERMINISTIC(ExplicitHashHitSet)
+TYPE_NONDETERMINISTIC(ExplicitObjectHitSet)
 TYPE(BloomHitSet)
-TYPE(HitSet)
+TYPE_NONDETERMINISTIC(HitSet)   // because some subclasses are
 TYPE(HitSet::Params)
 
 #include "os/ObjectStore.h"
@@ -120,7 +120,7 @@ TYPE(AuthMonitor::Incremental)
 
 #include "mon/PGMap.h"
 TYPE(PGMap::Incremental)
-TYPE(PGMap)
+TYPE_NONDETERMINISTIC(PGMap)
 
 #include "mon/MonitorDBStore.h"
 TYPE(MonitorDBStore::Transaction)
@@ -185,7 +185,7 @@ TYPE_NOCOPY(Capability)
 TYPE(InoTable)
 
 #include "mds/SnapServer.h"
-TYPEWITHSTRAYDATA(SnapServer)
+TYPE_STRAYDATA(SnapServer)
 
 #include "mds/events/ECommitted.h"
 TYPE(ECommitted)
