@@ -20,16 +20,74 @@
 package com.ceph.fs;
 
 class CephNativeLoader {
+  private static final CephNativeLoader instance = new CephNativeLoader();
+  private static boolean initialized = false;
 
-  private static boolean loaded = false;
+  private static final String JNI_PATH_ENV_VAR = "CEPH_JNI_PATH";
+  private static final String LIBRARY_NAME = "cephfs_jni";
+  private static final String LIBRARY_FILE = "libcephfs_jni.so";
 
-  static {
-    if (!loaded) {
-      System.loadLibrary("cephfs_jni");
-      CephMount.native_initialize();
-      loaded = true;
-    }
+  private CephNativeLoader() {}
+
+  public static CephNativeLoader getInstance() {
+    return instance;
   }
 
-  static void checkLoaded() { assert(loaded); }
+  public synchronized void loadLibrary() {
+    if (initialized)
+      return;
+
+    boolean success = false;
+
+    /*
+     * Allow a Ceph specific environment variable to force
+     * the loading path.
+     */
+    String path = System.getenv(JNI_PATH_ENV_VAR);
+    try {
+      if (path != null) {
+        System.out.println("Loading libcephfs-jni: " + path);
+        System.load(path);
+        success = true;
+      } else {
+        try {
+          /*
+           * Try default Java loading path(s)
+           */
+          System.out.println("Loading libcephfs-jni from default path: " +
+              System.getProperty("java.library.path"));
+          System.loadLibrary(LIBRARY_NAME);
+          success = true;
+        } catch (final UnsatisfiedLinkError ule1) {
+          try {
+            /*
+             * Try RHEL/CentOS default path
+             */
+            path = "/usr/lib64/" + LIBRARY_FILE;
+            System.out.println("Loading libcephfs-jni: " + path);
+            System.load(path);
+            success = true;
+          } catch (final UnsatisfiedLinkError ule2) {
+            /*
+             * Try Ubuntu default path
+             */
+            path = "/usr/lib/jni/" + LIBRARY_FILE;
+            System.out.println("Loading libcephfs-jni: " + path);
+            System.load(path);
+            success = true;
+          }
+        }
+      }
+    } finally {
+      System.out.println("Loading libcephfs-jni: " +
+          (success ? "Success!" : "Failure!"));
+    }
+
+    /*
+     * Finish initialization
+     */
+    CephMount.native_initialize();
+    initialized = true;
+  }
+
 }
