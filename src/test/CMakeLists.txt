@@ -766,24 +766,6 @@ target_link_libraries(unittest_chain_xattr
   ${UNITTEST_LIBS}
   )
 
-# unittest_flatindex
-set(unittest_flatindex_srcs
-  os/TestFlatIndex.cc
-  )
-add_executable(unittest_flatindex
-  ${unittest_flatindex_srcs}
-  $<TARGET_OBJECTS:heap_profiler_objs>
-  )
-target_link_libraries(unittest_flatindex
-  os
-  global
-  ${CMAKE_DL_LIBS}
-  ${TCMALLOC_LIBS}
-  ${UNITTEST_LIBS}
-  )
-set_target_properties(unittest_flatindex PROPERTIES COMPILE_FLAGS
-  ${UNITTEST_CXX_FLAGS})
-
 # unittest_strtol
 set(unittest_strtol_srcs strtol.cc)
 add_executable(unittest_strtol
