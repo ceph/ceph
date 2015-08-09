@@ -144,7 +144,7 @@ class OpenStack(object):
                     a['RAM'] - b['RAM'] or
                     a['Disk'] - b['Disk'])
         sorted_flavor = sorted(found, cmp=sort_flavor)
-        log.info("sorted flavor = " + str(sorted_flavor))
+        log.debug("sorted flavor = " + str(sorted_flavor))
         return sorted_flavor[0]['Name']
 
     def cloud_init_wait(self, name_or_ip):
@@ -283,11 +283,21 @@ class TeuthologyOpenStack(OpenStack):
         ip = self.setup()
         if self.args.suite:
             self.run_suite()
+        if self.args.key_filename:
+            identity = '-i ' + self.args.key_filename + ' '
+        else:
+            identity = ''
+        if self.args.upload:
+            upload = 'upload to    : ' + self.args.archive_upload
+        else:
+            upload = ''
         log.info("""
 web interface: http://{ip}:8081/
-ssh access   : ssh {username}@{ip} # logs in /usr/share/nginx/html
-        """.format(ip=ip,
-                   username=self.username))
+ssh access   : ssh {identity}{username}@{ip} # logs in /usr/share/nginx/html
+{upload}""".format(ip=ip,
+                   username=self.username,
+                   identity=identity,
+                   upload=upload))
         if self.args.teardown:
             self.teardown()
 
@@ -300,11 +310,13 @@ ssh access   : ssh {username}@{ip} # logs in /usr/share/nginx/html
         argv = []
         while len(original_argv) > 0:
             if original_argv[0] in ('--name',
+                                    '--archive-upload',
                                     '--key-name',
                                     '--key-filename',
                                     '--simultaneous-jobs'):
                 del original_argv[0:2]
-            elif original_argv[0] in ('--teardown'):
+            elif original_argv[0] in ('--teardown',
+                                      '--upload'):
                 del original_argv[0]
             else:
                 argv.append(original_argv.pop(0))
@@ -435,12 +447,18 @@ ssh access   : ssh {username}@{ip} # logs in /usr/share/nginx/html
         for (var, value) in os.environ.iteritems():
             if var.startswith('OS_'):
                 openrc += ' ' + var + '=' + value
+        if self.args.upload:
+            upload = '--archive-upload ' + self.args.archive_upload
+        else:
+            upload = ''
         log.debug("OPENRC = " + openrc + " " +
                   "TEUTHOLOGY_USERNAME = " + self.username + " " +
+                  "UPLOAD = " + upload + " " +
                   "NWORKERS = " + str(self.args.simultaneous_jobs))
         content = (template.
                    replace('OPENRC', openrc).
                    replace('TEUTHOLOGY_USERNAME', self.username).
+                   replace('UPLOAD', upload).
                    replace('NWORKERS', str(self.args.simultaneous_jobs)))
         open(path, 'w').write(content)
         log.debug("get_user_data: " + content + " written to " + path)

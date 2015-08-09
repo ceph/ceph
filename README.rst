@@ -380,9 +380,9 @@ Get OpenStack credentials and test it
     | ID | Name       | Status | Task State | Power State | Networks                |
     +----+------------+--------+------------+-------------+-------------------------+
     +----+------------+--------+------------+-------------+-------------------------+
-* upload your ssh public key with::
+* create a passwordless ssh public key with::
 
-    $ openstack keypair create --public-key ~/.ssh/id_rsa.pub myself
+    $ openstack keypair create myself > myself.pem
     +-------------+-------------------------------------------------+
     | Field       | Value                                           |
     +-------------+-------------------------------------------------+
@@ -390,14 +390,20 @@ Get OpenStack credentials and test it
     | name        | myself                                          |
     | user_id     | 5cf9fa21b2e9406b9c4108c42aec6262                |
     +-------------+-------------------------------------------------+
+    $ chmod 600 myself.pem
 
 Usage
 -----
 
-* Run the dummy suite as a test (``myself`` is a keypair created as
-  explained in the previous section)::
+* Create a passwordless ssh public key::
 
-    $ teuthology-openstack --key-name myself --suite dummy
+    $ openstack keypair create myself > myself.pem
+    $ chmod 600 myself.pem
+
+* Run the dummy suite (it does nothing useful but shows all works as
+  expected)::
+
+    $ teuthology-openstack --key-filename myself.pem --key-name myself --suite dummy
     Job scheduled with name ubuntu-2015-07-24_09:03:29-dummy-master---basic-openstack and ID 1
     2015-07-24 09:03:30,520.520 INFO:teuthology.suite:ceph sha1: dedda6245ce8db8828fdf2d1a2bfe6163f1216a1
     2015-07-24 09:03:31,620.620 INFO:teuthology.suite:ceph version: v9.0.2-829.gdedda62
@@ -420,7 +426,14 @@ Usage
 * The virtual machine running the suite will persist for forensic
   analysis purposes. To destroy it run::
 
-    $ teuthology-openstack --key-name myself --teardown
+    $ teuthology-openstack --key-filename myself.pem --key-name myself --teardown
+
+* The test results can be uploaded to a publicly accessible location
+  with the ``--upload`` flag::
+
+    $ teuthology-openstack --key-filename myself.pem --key-name myself \
+                           --suite dummy --upload
+    
 
 Running the OpenStack backend integration tests
 -----------------------------------------------
@@ -428,9 +441,12 @@ Running the OpenStack backend integration tests
 The easiest way to run the integration tests is to first run a dummy suite::
 
     $ teuthology-openstack --key-name myself --suite dummy
+    ...
+    ssh access   : ssh ubuntu@167.114.242.13
 
-This will create a virtual machine suitable for running the
-integration tests. Once logged in the virtual machine:
+This will create a virtual machine suitable for the integration
+test. Login wih the ssh access displayed at the end of the
+``teuthology-openstack`` command and run the following::
 
     $ pkill -f teuthology-worker
     $ cd teuthology ; pip install "tox>=1.9"

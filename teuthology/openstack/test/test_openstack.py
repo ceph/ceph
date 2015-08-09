@@ -48,7 +48,7 @@ class TestTeuthologyOpenStack(object):
             misc.sh("openstack ip floating delete " + ip_id)
             self.can_create_floating_ips = True
         else:
-            self.can_create_floating_ips = True
+            self.can_create_floating_ips = False
         
     def setup(self):
         self.key_filename = tempfile.mktemp()
@@ -94,7 +94,10 @@ openstack keypair delete {key_name} || true
             '--filter', 'trasher',
             '--filter-out', 'erasure-code',
         ]
-        argv = self.options + teuthology_argv
+        argv = (self.options +
+                ['--upload',
+                 '--archive-upload', 'user@archive:/tmp'] +
+                teuthology_argv)
         args = scripts.openstack.parse_args(argv)
         teuthology = TeuthologyOpenStack(args, None, argv)
         teuthology.user_data = 'teuthology/openstack/test/user-data-test1.txt'
@@ -105,6 +108,7 @@ openstack keypair delete {key_name} || true
         variables = teuthology.ssh("grep 'substituded variables' /var/log/cloud-init.log")
         assert "nworkers=" + str(args.simultaneous_jobs) in variables
         assert "username=" + teuthology.username in variables
+        assert "upload=--archive-upload user@archive:/tmp" in variables
         assert os.environ['OS_AUTH_URL'] in variables
 
         out, err = capsys.readouterr()

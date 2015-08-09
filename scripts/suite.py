@@ -80,6 +80,7 @@ Scheduler arguments:
   --filter-out KEYWORDS       Do not run jobs whose description contains any of
                               the keywords in the comma separated keyword
                               string specified.
+  --archive-upload RSYNC_DEST Rsync destination to upload archives.
 """.format(default_machine_type=config.default_machine_type,
            default_results_timeout=config.results_timeout)
 

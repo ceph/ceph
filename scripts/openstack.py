@@ -58,6 +58,16 @@ and analyze results.
         action='store_true', default=None,
         help='destroy the cluster, if it exists',
     )
+    parser.add_argument(
+        '--upload',
+        action='store_true', default=False,
+        help='upload archives to an rsync server',
+    )
+    parser.add_argument(
+        '--archive-upload',
+        help='rsync destination to upload archives',
+        default='ubuntu@integration.ceph.dachary.org:./',
+    )
     # copy/pasted from scripts/suite.py
     parser.add_argument(
         'config_yaml',

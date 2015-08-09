@@ -126,6 +126,8 @@ class TeuthologyConfig(YamlConfig):
     yaml_path = os.path.join(os.path.expanduser('~/.teuthology.yaml'))
     _defaults = {
         'archive_base': '/var/lib/teuthworker/archive',
+        'archive_upload': None,
+        'archive_upload_key': None,
         'automated_scheduling': False,
         'reserve_machines': 5,
         'ceph_git_base_url': 'https://github.com/ceph/',

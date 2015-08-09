@@ -38,6 +38,7 @@ import teuthology.openstack
 import scripts.schedule
 import scripts.lock
 import scripts.suite
+from teuthology.config import config as teuth_config
 
 class Integration(object):
 
@@ -111,9 +112,12 @@ class TestSuite(Integration):
 
     def test_suite_noop(self):
         cwd = os.getcwd()
+        os.mkdir(self.d + '/upload', 0o755)
+        upload = 'localhost:' + self.d + '/upload'
         args = ['--suite', 'noop',
                 '--suite-dir', cwd + '/teuthology/openstack/test',
                 '--machine-type', 'openstack',
+                '--archive-upload', upload,
                 '--verbose']
         logging.info("TestSuite:test_suite_noop")
         scripts.suite.main(args)
@@ -121,6 +125,12 @@ class TestSuite(Integration):
         log = self.get_teuthology_log()
         assert "teuthology.run:pass" in log
         assert "Well done" in log
+        upload_key = teuth_config.archive_upload_key
+        if upload_key:
+            ssh = "RSYNC_RSH='ssh -i " + upload_key + "'"
+        else:
+            ssh = ''
+        assert 'teuthology.log' in teuthology.misc.sh(ssh + " rsync -av " + upload)
 
     def test_suite_nuke(self):
         cwd = os.getcwd()

@@ -34,6 +34,7 @@ function create_config() {
     local labdomain="$4"
     local ip="$5"
     local flavor_select="$6"
+    local archive_upload="$7"
 
     if test "$flavor_select" ; then
         flavor_select="flavor-select-regexp: $flavor_select"
@@ -43,7 +44,13 @@ function create_config() {
         network="network: $network"
     fi
 
+    if test "$archive_upload" ; then
+        archive_upload="archive_upload: $archive_upload"
+    fi
+
     cat > ~/.teuthology.yaml <<EOF
+$archive_upload
+archive_upload_key: teuthology/openstack/archive-key
 lock_server: http://localhost:8080/
 results_server: http://localhost:8080/
 queue_port: 11300
@@ -248,6 +255,12 @@ EOF
     fi
 }
 
+function setup_authorized_keys() {
+    cat teuthology/openstack/archive-key.pub >> ~/.ssh/authorized_keys
+    chmod 600 teuthology/openstack/archive-key
+    echo "APPEND to ~/.ssh/authorized_keys"
+}
+
 function setup_bootscript() {
     local nworkers=$1
 
@@ -425,6 +438,7 @@ function main() {
     local nworkers=2
     local flavor_select
     local keypair=teuthology
+    local archive_upload
 
     local do_setup_keypair=false
     local do_create_config=false
@@ -458,6 +472,10 @@ function main() {
             --nworkers)
                 shift
                 nworkers=$1
+                ;;
+            --archive-upload)
+                shift
+                archive_upload=$1
                 ;;
             --install)
                 do_install_packages=true
@@ -528,9 +546,10 @@ function main() {
     : ${nameserver:=$ip}
 
     if $do_create_config ; then
-        create_config "$network" "$subnet" "$nameserver" "$labdomain" "$ip" "$flavor_select" || return 1
+        create_config "$network" "$subnet" "$nameserver" "$labdomain" "$ip" "$flavor_select" "$archive_upload" || return 1
         setup_ansible $subnet $labdomain || return 1
         setup_ssh_config || return 1
+        setup_authorized_keys || return 1
         setup_bashrc || return 1
         setup_bootscript $nworkers || return 1
     fi
