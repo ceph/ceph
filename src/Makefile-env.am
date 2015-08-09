@@ -51,6 +51,31 @@ endif
 ##################################
 ## automake environment
 
+HARDENING_CFLAGS = \
+                   -O2 \
+                   -g \
+                   -pipe \
+                   -Wall \
+                   -Wp,-D_FORTIFY_SOURCE=2 \
+                   -fexceptions \
+                   --param=ssp-buffer-size=4 \
+                   -fPIE
+
+SET_STACK_PROTECTOR_STRONG = $(shell expr `gcc -dumpversion` \>= 4.9)
+
+		ifeq ($(SET_STACK_PROTECTOR_STRONG),1)
+				HARDENING_CFLAGS += -fstack-protector-strong
+		else
+				HARDENING_CFLAGS += -fstack-protector
+		endif
+
+
+HARDENING_LDFLAGS =  \
+                     -pie \
+                     -Wl,-z,relro \
+                     -Wl,-z,now
+
+
 AM_COMMON_CPPFLAGS = \
 	-D__CEPH__ \
 	-D_FILE_OFFSET_BITS=64 \
@@ -75,14 +100,14 @@ if !CLANG
 	AM_COMMON_CFLAGS += -rdynamic
 endif
 
-AM_CFLAGS = $(AM_COMMON_CFLAGS)
+AM_CFLAGS = $(AM_COMMON_CFLAGS) $(HARDENING_CFLAGS)
 AM_CPPFLAGS = $(AM_COMMON_CPPFLAGS)
 AM_CXXFLAGS = \
 	@AM_CXXFLAGS@ \
 	$(AM_COMMON_CFLAGS) \
 	-ftemplate-depth-1024 \
 	-Wnon-virtual-dtor \
-	-Wno-invalid-offsetof
+	-Wno-invalid-offsetof $(HARDENING_CFLAGS)
 if !CLANG
 	AM_CXXFLAGS += -Wstrict-null-sentinel
 endif
@@ -97,7 +122,7 @@ endif
 # http://sigquit.wordpress.com/2011/02/16/why-asneeded-doesnt-work-as-expected-for-your-libraries-on-your-autotools-project/
 AM_LDFLAGS =
 if LINUX
-AM_LDFLAGS += -Wl,--as-needed
+AM_LDFLAGS += -Wl,--as-needed $(HARDENING_LDFLAGS)
 endif
 
 if USE_BOOST_SPIRIT_OLD_HDR
