@@ -307,9 +307,9 @@ protected:
 
   /// Log is clean on [dirty_to, dirty_from)
   bool touched_log;
-  eversion_t dirty_to;         ///< must clear/writeout all keys up to dirty_to
-  eversion_t dirty_from;       ///< must clear/writeout all keys past dirty_from
-  eversion_t writeout_from;    ///< must writout keys past writeout_from
+  eversion_t dirty_to;         ///< must clear/writeout all keys <= dirty_to
+  eversion_t dirty_from;       ///< must clear/writeout all keys >= dirty_from
+  eversion_t writeout_from;    ///< must writout keys >= writeout_from
   set<eversion_t> trimmed;     ///< must clear keys in trimmed
   bool dirty_divergent_priors;
   CephContext *cct;
