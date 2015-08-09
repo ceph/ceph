@@ -705,6 +705,18 @@ void PGMap::dump_basic(Formatter *f) const
   osd_sum.dump(f);
   f->close_section();
 
+  f->open_object_section("osd_epochs");
+  // dump deterministically
+  map<int32_t,epoch_t> tmp;
+  tmp.insert(osd_epochs.begin(), osd_epochs.end());
+  for (map<int32_t,epoch_t>::iterator p = tmp.begin(); p != tmp.end(); ++p) {
+    f->open_object_section("osd");
+    f->dump_unsigned("osd", p->first);
+    f->dump_unsigned("epoch", p->second);
+    f->close_section();
+  }
+  f->close_section();
+
   dump_delta(f);
 }
 
