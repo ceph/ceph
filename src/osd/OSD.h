@@ -2222,10 +2222,12 @@ protected:
     public ThreadPool::WorkQueueVal<pair<PGRef, DeletingStateRef> > {
     ObjectStore *&store;
     list<pair<PGRef, DeletingStateRef> > remove_queue;
+    int64_t in_progress;
+    Mutex removewq_lock;
     RemoveWQ(ObjectStore *&o, time_t ti, time_t si, ThreadPool *tp)
       : ThreadPool::WorkQueueVal<pair<PGRef, DeletingStateRef> >(
-	"OSD::RemoveWQ", ti, si, tp),
-	store(o) {}
+	"OSD::RemoveWQ", ti, si, tp),store(o), 
+        in_progress(0), removewq_lock("OSD::removewq_lock") {}
 
     bool _empty() {
       return remove_queue.empty();
@@ -2244,6 +2246,9 @@ protected:
       pair<PGRef, DeletingStateRef> item = remove_queue.front();
       remove_queue.pop_front();
       return item;
+    }
+    int64_t get_pending_pg_removals() {
+      return in_progress + remove_queue.size();
     }
     using ThreadPool::WorkQueueVal<pair<PGRef, DeletingStateRef> >::_process;
     void _process(pair<PGRef, DeletingStateRef>, ThreadPool::TPHandle &);

@@ -675,6 +675,8 @@ void OSDService::update_osd_stat(vector<int>& hb_peers)
 
   osd_stat.hb_in.swap(hb_peers);
   osd_stat.hb_out.clear();
+  osd_stat.pending_pg_removal = osd->remove_wq.get_pending_pg_removals();
+  osd_stat.cur_epoch = get_osdmap_epoch();
 
   check_nearfull_warning(osd_stat);
 
@@ -4285,7 +4287,11 @@ void OSD::RemoveWQ::_process(
   coll_t coll = coll_t(pg->info.pgid);
   pg->osr->flush();
   bool finished = false;
-
+  
+  {
+    Mutex::Locker l(removewq_lock);
+    in_progress++;
+  }
   if (!item.second->start_or_resume_clearing())
     return;
 
@@ -4324,6 +4330,10 @@ void OSD::RemoveWQ::_process(
     TrackedOpRef());
 
   item.second->finish_deleting();
+  {
+    Mutex::Locker l(removewq_lock);
+    in_progress--;
+  }
 }
 // =========================================
 
