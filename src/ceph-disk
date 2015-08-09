@@ -953,7 +953,8 @@ def dmcrypt_map(
     keypath,
     _uuid,
     cryptsetup_parameters,
-    luks
+    luks,
+    format_dev=False,
     ):
     """
     Maps a device to a dmcrypt device.
@@ -990,7 +991,8 @@ def dmcrypt_map(
 
     try:
         if luks:
-            command_check_call(luksFormat_args)
+            if format_dev:
+		    command_check_call(luksFormat_args)
             command_check_call(luksOpen_args)
         else:
             # Plain mode has no format function, nor any validation that the key is correct.
@@ -1620,7 +1622,14 @@ def prepare_dev(
 
     dev = None
     if osd_dm_keypath:
-        dev = dmcrypt_map(rawdev, osd_dm_keypath, osd_uuid, cryptsetup_parameters, luks)
+        dev = dmcrypt_map(
+                rawdev=rawdev,
+                keypath=osd_dm_keypath,
+                _uuid=osd_uuid,
+                cryptsetup_parameters=cryptsetup_parameters,
+                luks=luks,
+                format_dev=True,
+                )
     else:
         dev = rawdev
 
@@ -2123,11 +2132,24 @@ def mount_activate(
             # proceeding.
             rawdev = dev
             ptype = get_partition_type(rawdev)
-            if ptype not in [DMCRYPT_OSD_UUID]:
+            if ptype in [DMCRYPT_OSD_UUID]:
+                luks = False
+                cryptsetup_parameters = ['--key-size', '256']
+            elif ptype in [DMCRYPT_LUKS_OSD_UUID]:
+                luks = True
+                cryptsetup_parameters = []
+            else:
                 raise Error('activate --dmcrypt called for invalid dev %s' % (dev))
             part_uuid = get_partition_uuid(rawdev)
-            dmcrypt_key_path = os.path.join(dmcrypt_key_dir, part_uuid)
-            dev = dmcrypt_map(rawdev, dmcrypt_key_path, part_uuid)
+            dmcrypt_key_path = get_dmcrypt_key_path(part_uuid, dmcrypt_key_dir, luks)
+            dev = dmcrypt_map(
+                    rawdev=rawdev,
+                    keypath=dmcrypt_key_path,
+                    _uuid=part_uuid,
+                    cryptsetup_parameters=cryptsetup_parameters,
+                    luks=luks,
+                    format_dev=False,
+                    )
 
     try:
         fstype = detect_fstype(dev=dev)
@@ -2470,11 +2492,24 @@ def main_activate_journal(args):
             # it before proceeding.
             rawdev = args.dev
             ptype = get_partition_type(rawdev)
-            if ptype not in [DMCRYPT_JOURNAL_UUID]:
+            if ptype in [DMCRYPT_JOURNAL_UUID]:
+                luks = False
+                cryptsetup_parameters = ['--key-size', '256']
+            elif ptype in [DMCRYPT_LUKS_JOURNAL_UUID]:
+                luks = True
+                cryptsetup_parameters = []
+            else:
                 raise Error('activate-journal --dmcrypt called for invalid dev %s' % (rawdev))
             part_uuid = get_partition_uuid(rawdev)
-            dmcrypt_key_path = os.path.join(args.dmcrypt_key_dir, part_uuid)
-            dev = dmcrypt_map(rawdev, dmcrypt_key_path, partd_uuid)
+            dmcrypt_key_path = get_dmcrypt_key_path(part_uuid, args.dmcrypt_key_dir, luks)
+            dev = dmcrypt_map(
+                    rawdev=rawdev,
+                    keypath=dmcrypt_key_path,
+                    _uuid=part_uuid,
+                    cryptsetup_parameters=cryptsetup_parameters,
+                    luks=luks,
+                    format_dev=False,
+                    )
         else:
             dev = args.dev
 
