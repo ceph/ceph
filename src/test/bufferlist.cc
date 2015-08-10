@@ -169,6 +169,23 @@ TEST(Buffer, constructors) {
     EXPECT_EQ(0, buffer::get_total_alloc());
 }
 
+void bench_buffer_alloc(int size, int num)
+{
+  utime_t start = ceph_clock_now(NULL);
+  for (int i=0; i<num; ++i) {
+    bufferptr p = buffer::create(size);
+  }
+  utime_t end = ceph_clock_now(NULL);
+  cout << num << " alloc of size " << size
+       << " in " << (end - start) << std::endl;
+}
+
+TEST(Buffer, BenchAlloc) {
+  bench_buffer_alloc(32, 1000000);
+  bench_buffer_alloc(4096, 1000000);
+  bench_buffer_alloc(16384, 1000000);
+}
+
 TEST(BufferRaw, ostream) {
   bufferptr ptr(1);
   std::ostringstream stream;
@@ -1055,6 +1072,25 @@ TEST(BufferList, constructors) {
     bufferlist copy(bl);
     ASSERT_EQ('A', copy[0]);
   }
+}
+
+void bench_bufferlist_alloc(int size, int num, int per)
+{
+  utime_t start = ceph_clock_now(NULL);
+  for (int i=0; i<num; ++i) {
+    bufferlist bl;
+    for (int j=0; j<per; ++j)
+      bl.append(buffer::create(size));
+  }
+  utime_t end = ceph_clock_now(NULL);
+  cout << num << " alloc of size " << size
+       << " in " << (end - start) << std::endl;
+}
+
+TEST(BufferList, BenchAlloc) {
+  bench_bufferlist_alloc(32, 100000, 16);
+  bench_bufferlist_alloc(4096, 100000, 16);
+  bench_bufferlist_alloc(16384, 100000, 16);
 }
 
 TEST(BufferList, operator_equal) {
