@@ -658,6 +658,7 @@ if(${WITH_MDS})
     mds/JournalPointer.cc
     mds/MDSTableClient.cc
     mds/MDSTableServer.cc
+    mds/ScrubStack.cc
     mds/SimpleLock.cc
     mds/SnapRealm.cc
     mds/SnapServer.cc
