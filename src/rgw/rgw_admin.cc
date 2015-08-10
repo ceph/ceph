@@ -1886,7 +1886,7 @@ int main(int argc, char **argv)
 	  return -ret;
 	}
 	RGWDefaultZoneGroupInfo default_zonegroup;
-	ret = zonegroup.read_default(default_zonegroup, zonegroup.get_default_oid());
+	ret = zonegroup.read_default(default_zonegroup, zonegroup.get_default_oid(g_ceph_context));
 	if (ret < 0 && ret != -ENOENT) {
 	  cerr << "could not determine default zonegroup: " << cpp_strerror(-ret) << std::endl;
 	}

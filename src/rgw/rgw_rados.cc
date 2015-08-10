@@ -90,7 +90,7 @@ static RGWObjCategory main_category = RGW_OBJ_CATEGORY_MAIN;
 #define RGW_USAGE_OBJ_PREFIX "usage."
 
 #define RGW_DEFAULT_ZONE_ROOT_POOL "rgw.root"
-#define RGW_DEFAULT_ZONEGROUP_ROOT_POOL "rgw.root"
+static string RGW_DEFAULT_ZONEGROUP_ROOT_POOL = "rgw.root";
 static string RGW_DEFAULT_REALM_ROOT_POOL = "rgw.root";
 static string RGW_DEFAULT_PERIOD_ROOT_POOL = "rgw.root";
 
@@ -118,30 +118,29 @@ void RGWDefaultZoneGroupInfo::decode_json(JSONObj *obj) {
     JSONDecoder::decode_json("default_region", default_zonegroup, obj);
   }
 }
-
-int RGWZoneGroup::get_pool_name(CephContext *cct, string *pool_name)
+const string& RGWZoneGroup::get_pool_name(CephContext *cct_)
 {
-  *pool_name = cct->_conf->rgw_zonegroup_root_pool;
-  if (pool_name->empty()) {
-    *pool_name = RGW_DEFAULT_ZONEGROUP_ROOT_POOL;
+  if (cct_->_conf->rgw_zonegroup_root_pool.empty()) {
+    return RGW_DEFAULT_ZONEGROUP_ROOT_POOL;
   }
-  return 0;
+
+  return cct_->_conf->rgw_zonegroup_root_pool;
 }
 
-const string& RGWZoneGroup::get_default_oid(bool old_region_format)
+const string& RGWZoneGroup::get_default_oid(CephContext *cct_, bool old_region_format)
 {
   if (old_region_format) {
-    if (cct->_conf->rgw_default_region_info_oid.empty()) {
+    if (cct_->_conf->rgw_default_region_info_oid.empty()) {
       return default_region_info_oid;
     }
-    return cct->_conf->rgw_default_region_info_oid;
+    return cct_->_conf->rgw_default_region_info_oid;
   }
 
-  if (cct->_conf->rgw_default_zonegroup_info_oid.empty()) {
+  if (cct_->_conf->rgw_default_zonegroup_info_oid.empty()) {
     return default_zone_group_info_oid;
   }
 
-  return cct->_conf->rgw_default_zonegroup_info_oid;
+  return cct_->_conf->rgw_default_zonegroup_info_oid;
 }
 
 const string& RGWZoneGroup::get_info_oid_prefix(bool old_region_format)
@@ -155,17 +154,12 @@ const string& RGWZoneGroup::get_info_oid_prefix(bool old_region_format)
 int RGWZoneGroup::read_default(RGWDefaultZoneGroupInfo& default_info,
 			       const string& oid)
 {
-  string pool_name;
-
-  int ret = get_pool_name(cct, &pool_name);
-  if (ret < 0) {
-    return ret;
-  }
+  string pool_name = get_pool_name(cct);
 
   rgw_bucket pool(pool_name.c_str());
   bufferlist bl;
   RGWObjectCtx obj_ctx(store);
-  ret = rgw_get_system_obj(store, obj_ctx, pool, oid, bl, NULL, NULL);
+  int ret = rgw_get_system_obj(store, obj_ctx, pool, oid, bl, NULL, NULL);
   if (ret < 0)
     return ret;
 
@@ -184,12 +178,9 @@ int RGWZoneGroup::read_default(RGWDefaultZoneGroupInfo& default_info,
 
 int RGWZoneGroup::set_as_default()
 {
-  string pool_name;
-  int ret = get_pool_name(cct, &pool_name);
-  if (ret < 0)
-    return ret;
+  string pool_name = get_pool_name(cct);
 
-  string oid = get_default_oid();
+  string oid = get_default_oid(cct);
 
   rgw_bucket pool(pool_name.c_str());
   bufferlist bl;
@@ -199,7 +190,7 @@ int RGWZoneGroup::set_as_default()
 
   ::encode(default_info, bl);
 
-  ret = rgw_put_system_obj(store, pool, oid, bl.c_str(), bl.length(), false, NULL, 0, NULL);
+  int ret = rgw_put_system_obj(store, pool, oid, bl.c_str(), bl.length(), false, NULL, 0, NULL);
   if (ret < 0)
     return ret;
 
@@ -222,7 +213,7 @@ int RGWZoneGroup::init(CephContext *_cct, RGWRados *_store, bool setup_zonegroup
 
   if (zonegroup_name.empty()) {
     RGWDefaultZoneGroupInfo default_info;
-    int r = read_default(default_info, get_default_oid(old_region_format));
+    int r = read_default(default_info, get_default_oid(cct, old_region_format));
     if (r == -ENOENT) {
       r = create_default();
       if (r == -EEXIST) { /* we may have raced with another zonegroup creation,
@@ -237,7 +228,7 @@ int RGWZoneGroup::init(CephContext *_cct, RGWRados *_store, bool setup_zonegroup
       if (r < 0)
         return r;
       /*Re attempt to read zonegroup info from newly created default zonegroup */
-      r = read_default(default_info, get_default_oid(old_region_format));
+      r = read_default(default_info, get_default_oid(cct, old_region_format));
       if (r < 0)
 	return r;
     } else if (r < 0) {
@@ -252,10 +243,7 @@ int RGWZoneGroup::init(CephContext *_cct, RGWRados *_store, bool setup_zonegroup
 
 int RGWZoneGroup::read_info(const string& zonegroup_name, bool old_region_format)
 {
-  string pool_name;
-  int ret = get_pool_name(cct, &pool_name);
-  if (ret < 0)
-    return ret;
+  string pool_name = get_pool_name(cct);
 
   rgw_bucket pool(pool_name.c_str());
   bufferlist bl;
@@ -264,7 +252,7 @@ int RGWZoneGroup::read_info(const string& zonegroup_name, bool old_region_format
   string oid = get_info_oid_prefix(old_region_format) + name;
 
   RGWObjectCtx obj_ctx(store);
-  ret = rgw_get_system_obj(store, obj_ctx, pool, oid, bl, NULL, NULL);
+  int ret = rgw_get_system_obj(store, obj_ctx, pool, oid, bl, NULL, NULL);
   if (ret < 0) {
     lderr(cct) << "failed reading zonegroup info from " << pool << ":" << oid << ": " << cpp_strerror(-ret) << dendl;
     return ret;
@@ -317,10 +305,7 @@ int RGWZoneGroup::create_default()
 
 int RGWZoneGroup::store_info(bool exclusive)
 {
-  string pool_name;
-  int ret = get_pool_name(cct, &pool_name);
-  if (ret < 0)
-    return ret;
+  string pool_name = get_pool_name(cct);
 
   rgw_bucket pool(pool_name.c_str());
 
@@ -328,7 +313,7 @@ int RGWZoneGroup::store_info(bool exclusive)
 
   bufferlist bl;
   ::encode(*this, bl);
-  ret = rgw_put_system_obj(store, pool, oid, bl.c_str(), bl.length(), exclusive, NULL, 0, NULL);
+  int ret = rgw_put_system_obj(store, pool, oid, bl.c_str(), bl.length(), exclusive, NULL, 0, NULL);
 
   return ret;
 }
@@ -343,20 +328,17 @@ int RGWZoneGroup::equals(const string& other_zonegroup)
 
 int RGWZoneGroup::delete_obj(bool old_region_format)
 {
-  string pool_name;
-  int ret = get_pool_name(cct, &pool_name);
-  if (ret < 0) {
-    return ret;
-  }
+  string pool_name = get_pool_name(cct);
+
   rgw_bucket pool(pool_name.c_str());
   
   /* check to see if obj is the default */
   RGWDefaultZoneGroupInfo default_info;
-  ret = read_default(default_info, get_default_oid(old_region_format));
+  int ret = read_default(default_info, get_default_oid(cct, old_region_format));
   if (ret < 0 && ret != -ENOENT)
     return ret;
   if (default_info.default_zonegroup == name) {
-    string oid = get_default_oid(old_region_format);
+    string oid = get_default_oid(cct, old_region_format);
     rgw_obj default_named_obj(pool, oid);
     ret = store->delete_system_obj(default_named_obj);
     if (ret < 0) {
@@ -2401,23 +2383,17 @@ int RGWRados::list_raw_prefixed_objs(string pool_name, const string& prefix, lis
 
 int RGWRados::list_regions(list<string>& regions)
 {
-  string pool_name;
-  int ret = RGWZoneGroup::get_pool_name(cct, &pool_name);
-  if (ret < 0)
-    return ret;
+  RGWZoneGroup zonegroup;
 
-  return list_raw_prefixed_objs(pool_name, region_info_oid_prefix, regions);
+  return list_raw_prefixed_objs(zonegroup.get_pool_name(cct), region_info_oid_prefix, regions);
 }
 
 
 int RGWRados::list_zonegroups(list<string>& zonegroups)
 {
-  string pool_name;
-  int ret = RGWZoneGroup::get_pool_name(cct, &pool_name);
-  if (ret < 0)
-    return ret;
+  RGWZoneGroup zonegroup;
 
-  return list_raw_prefixed_objs(pool_name, zone_group_info_oid_prefix, zonegroups);
+  return list_raw_prefixed_objs(zonegroup.get_pool_name(cct), zone_group_info_oid_prefix, zonegroups);
 }
 
 int RGWRados::list_zones(list<string>& zones)
