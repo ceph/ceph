@@ -223,6 +223,11 @@ add_executable(kvstorebench
 target_link_libraries(kvstorebench librados global ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS}
   ${TCMALLOC_LIBS})
 
+# ceph_objectstore_bench
+add_executable(ceph_objectstore_bench objectstore_bench.cc
+  $<TARGET_OBJECTS:heap_profiler_objs>)
+target_link_libraries(ceph_objectstore_bench global os ${TCMALLOC_LIBS})
+
 ## System tests
 
 # systest

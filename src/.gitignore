@@ -48,6 +48,7 @@ Makefile
 /ceph_xattr_bench
 /ceph_kvstorebench
 /ceph_omapbench
+/ceph_objectstore_bench
 /ceph_smalliobench
 /ceph_smalliobenchdumb
 /ceph_smalliobenchfs
