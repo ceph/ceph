@@ -429,8 +429,9 @@ ceph_test_libcephfs_SOURCES = \
 	test/libcephfs/readdir_r_cb.cc \
 	test/libcephfs/caps.cc \
 	test/libcephfs/multiclient.cc \
-	test/libcephfs/flock.cc
-ceph_test_libcephfs_LDADD = $(LIBCEPHFS) $(UNITTEST_LDADD)
+	test/libcephfs/flock.cc \
+	test/libcephfs/access.cc
+ceph_test_libcephfs_LDADD = $(LIBRADOS) $(LIBCEPHFS) $(LIBCOMMON) $(UNITTEST_LDADD)
 ceph_test_libcephfs_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_test_libcephfs
 
