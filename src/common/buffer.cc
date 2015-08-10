@@ -203,6 +203,29 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
     }
   };
 
+  class buffer::raw_combined : public buffer::raw {
+    size_t alignment;
+  public:
+    raw_combined(char *dataptr, unsigned l, unsigned align=0)
+      : raw(dataptr, l),
+	alignment(align) {
+      inc_total_alloc(len);
+    }
+    ~raw_combined() {
+      dec_total_alloc(len);
+    }
+    raw* clone_empty() {
+      if (alignment)
+	return create_aligned(len, alignment);
+      return create(len);
+    }
+
+    static void operator delete(void *ptr) {
+      raw_combined *raw = (raw_combined *)ptr;
+      ::free((void *)raw->data);
+    }
+  };
+
   class buffer::raw_malloc : public buffer::raw {
   public:
     raw_malloc(unsigned l) : raw(l) {
@@ -597,12 +620,13 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
 #endif /* HAVE_XIO */
 
   buffer::raw* buffer::copy(const char *c, unsigned len) {
-    raw* r = new raw_char(len);
+    raw* r = buffer::create(len);
     memcpy(r->data, c, len);
     return r;
   }
+
   buffer::raw* buffer::create(unsigned len) {
-    return new raw_char(len);
+    return buffer::create_aligned(len, sizeof(size_t));
   }
   buffer::raw* buffer::claim_char(unsigned len, char *buf) {
     return new raw_char(len, buf);
@@ -616,10 +640,31 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
   buffer::raw* buffer::create_static(unsigned len, char *buf) {
     return new raw_static(buf, len);
   }
+
   buffer::raw* buffer::create_aligned(unsigned len, unsigned align) {
 #ifndef __CYGWIN__
     //return new raw_mmap_pages(len);
-    return new raw_posix_aligned(len, align);
+    //return new raw_posix_aligned(len, align);
+    assert(align);
+    size_t rawlen = ROUND_UP_TO(sizeof(buffer::raw_combined), sizeof(size_t));
+    size_t datalen = ROUND_UP_TO(len, sizeof(size_t));
+
+#ifdef DARWIN
+    char *ptr = (char *) valloc(rawlen + datalen);
+#else
+    char *ptr = 0;
+    int r = ::posix_memalign((void**)(void*)&ptr, align, rawlen + datalen);
+    if (r)
+      throw bad_alloc();
+#endif /* DARWIN */
+    if (!ptr)
+      throw bad_alloc();
+
+    // actual data first, since it has presumably larger alignment restriction
+    // then put the raw_combined at the end
+    raw *ret = new (ptr + datalen) raw_combined(ptr, len, align);
+    assert((char *)ret == ptr + datalen);
+    return ret;
 #else
     return new raw_hack_aligned(len, align);
 #endif

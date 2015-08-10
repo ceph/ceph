@@ -139,6 +139,7 @@ private:
   class raw_char;
   class raw_pipe;
   class raw_unshareable; // diagnostic, unshareable char buffer
+  class raw_combined;
 
   friend std::ostream& operator<<(std::ostream& out, const raw &r);
 
