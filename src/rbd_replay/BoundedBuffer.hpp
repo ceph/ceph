@@ -4,10 +4,10 @@
 #ifndef _INCLUDED_BOUNDED_BUFFER_HPP
 #define _INCLUDED_BOUNDED_BUFFER_HPP
 
-#include <boost/bind.hpp>
+#include <functional>
+#include <condition_variable>
+#include <mutex>
 #include <boost/circular_buffer.hpp>
-#include <boost/thread/condition.hpp>
-#include <boost/thread/mutex.hpp>
 
 /**
    Blocking, fixed-capacity, thread-safe FIFO queue useful for communicating between threads.
@@ -30,8 +30,8 @@ public:
    */
   void push_front(typename boost::call_traits<value_type>::param_type item) {
     // `param_type` represents the "best" way to pass a parameter of type `value_type` to a method.
-    boost::mutex::scoped_lock lock(m_mutex);
-    m_not_full.wait(lock, boost::bind(&BoundedBuffer<value_type>::is_not_full, this));
+    std::unique_lock<std::mutex> lock(m_mutex);
+    m_not_full.wait(lock, std::bind(&BoundedBuffer<value_type>::is_not_full, this));
     m_container.push_front(item);
     ++m_unread;
     lock.unlock();
@@ -43,8 +43,8 @@ public:
      Blocks if the queue is empty.
   */
   void pop_back(value_type* pItem) {
-    boost::mutex::scoped_lock lock(m_mutex);
-    m_not_empty.wait(lock, boost::bind(&BoundedBuffer<value_type>::is_not_empty, this));
+    std::unique_lock<std::mutex> lock(m_mutex);
+    m_not_empty.wait(lock, std::bind(&BoundedBuffer<value_type>::is_not_empty, this));
     *pItem = m_container[--m_unread];
     lock.unlock();
     m_not_full.notify_one();
@@ -63,9 +63,9 @@ private:
 
   size_type m_unread;
   container_type m_container;
-  boost::mutex m_mutex;
-  boost::condition m_not_empty;
-  boost::condition m_not_full;
+  std::mutex m_mutex;
+  std::condition_variable m_not_empty;
+  std::condition_variable m_not_full;
 };
 
 #endif

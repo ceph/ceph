@@ -18,8 +18,7 @@
 // This code assumes that IO IDs and timestamps are related monotonically.
 // In other words, (a.id < b.id) == (a.timestamp < b.timestamp) for all IOs a and b.
 
-#include <boost/enable_shared_from_this.hpp>
-#include <boost/shared_ptr.hpp>
+#include <memory>
 #include <iostream>
 #include <map>
 #include <set>
@@ -31,9 +30,9 @@ namespace rbd_replay {
 
 class IO;
 
-typedef std::set<boost::shared_ptr<IO> > io_set_t;
+typedef std::set<std::shared_ptr<IO> > io_set_t;
 
-typedef std::map<action_id_t, boost::shared_ptr<IO> > io_map_t;
+typedef std::map<action_id_t, std::shared_ptr<IO> > io_map_t;
 
 /**
    Calculates reachability of IOs in the dependency graph.
@@ -57,11 +56,11 @@ void batch_unreachable_from(const io_set_t& deps, const io_set_t& base, io_set_t
    Corresponds to the Action class, except that Actions are executed by rbd-replay,
    and IOs are used by rbd-replay-prep for processing the raw trace.
  */
-class IO : public boost::enable_shared_from_this<IO> {
+class IO : public std::enable_shared_from_this<IO> {
 public:
-  typedef boost::shared_ptr<IO> ptr;
+  typedef std::shared_ptr<IO> ptr;
 
-  typedef boost::weak_ptr<IO> weak_ptr;
+  typedef std::weak_ptr<IO> weak_ptr;
 
   /**
      @param ionum ID of this %IO
@@ -151,7 +150,7 @@ private:
   action_id_t m_ionum;
   uint64_t m_start_time;
   io_set_t m_dependencies;
-  boost::weak_ptr<IO> m_completion;
+  std::weak_ptr<IO> m_completion;
   uint32_t m_num_successors;
   thread_id_t m_thread_id;
   ptr m_prev;

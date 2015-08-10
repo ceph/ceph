@@ -13,7 +13,7 @@
  */
 
 #include <vector>
-#include <boost/thread.hpp>
+#include <thread>
 #include "common/ceph_argparse.h"
 #include "global/global_init.h"
 #include "Replayer.hpp"
@@ -116,7 +116,7 @@ int main(int argc, const char **argv) {
     return 1;
   }
 
-  unsigned int nthreads = boost::thread::hardware_concurrency();
+  unsigned int nthreads = std::thread::hardware_concurrency();
   Replayer replayer(2 * nthreads + 1);
   replayer.set_latency_multiplier(latency_multiplier);
   replayer.set_pool_name(pool_name);
