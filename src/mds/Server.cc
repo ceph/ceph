@@ -2111,8 +2111,9 @@ bool Server::check_access(MDRequestRef& mdr, CInode *in, unsigned mask)
  if (!mdr->session->check_access(in, MAY_WRITE, mdr->client_request->get_caller_uid(), mdr->client_request->get_caller_gid(),
         mdr->client_request->head.args.setattr.uid, mdr->client_request->head.args.setattr.gid)){
     respond_to_request(mdr, -EACCES);
+    return false;
   }
-  return false;
+  return true;
 }
 
 /** validate_dentry_dir
