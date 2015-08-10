@@ -150,6 +150,33 @@ public:
 							        duration_secs(_duration_secs) {}
 };
 
+class RGWAsyncUnlockSystemObj : public RGWAsyncRadosRequest {
+  RGWRados *store;
+  rgw_obj obj;
+  string lock_name;
+
+protected:
+  int _send_request() {
+    librados::IoCtx ioctx;
+    librados::Rados *rados = store->get_rados_handle();
+    int r = rados->ioctx_create(obj.bucket.name.c_str(), ioctx); /* system object only! */
+    if (r < 0) {
+      lderr(store->ctx()) << "ERROR: failed to open pool (" << obj.bucket.name << ") ret=" << r << dendl;
+      return r;
+    }
+
+    rados::cls::lock::Lock l(lock_name);
+
+    return l.unlock(&ioctx, obj.get_object());
+  }
+public:
+  RGWAsyncUnlockSystemObj(RGWAioCompletionNotifier *cn, RGWRados *_store,
+                        RGWObjVersionTracker *_objv_tracker, rgw_obj& _obj,
+		        const string& _name) : RGWAsyncRadosRequest(cn), store(_store),
+                                               obj(_obj),
+                                               lock_name(_name) {}
+};
+
 
 class RGWAsyncRadosProcessor {
   deque<RGWAsyncRadosRequest *> m_req_queue;
@@ -547,6 +574,84 @@ public:
     rgw_obj obj = rgw_obj(pool, oid);
     req = new RGWAsyncPutSystemObj(env->stack->create_completion_notifier(),
 			           store, NULL, obj, false, bl);
+    async_rados->queue(req);
+    return 0;
+  }
+
+  int request_complete() {
+    return req->get_ret_status();
+  }
+};
+
+class RGWSimpleRadosLockCR : public RGWSimpleCoroutine {
+  RGWAsyncRadosProcessor *async_rados;
+  RGWRados *store;
+  string lock_name;
+  uint32_t duration;
+
+  rgw_bucket pool;
+  string oid;
+
+  RGWAsyncLockSystemObj *req;
+
+public:
+  RGWSimpleRadosLockCR(RGWAsyncRadosProcessor *_async_rados, RGWRados *_store,
+		      rgw_bucket& _pool, const string& _oid, const string& _lock_name,
+		      uint32_t _duration) : RGWSimpleCoroutine(_store->ctx()),
+                                                async_rados(_async_rados),
+						store(_store),
+						lock_name(_lock_name),
+						duration(_duration),
+						pool(_pool), oid(_oid),
+                                                req(NULL) {
+  }
+
+  ~RGWSimpleRadosLockCR() {
+    delete req;
+  }
+
+  int send_request() {
+    rgw_obj obj = rgw_obj(pool, oid);
+    req = new RGWAsyncLockSystemObj(env->stack->create_completion_notifier(),
+			           store, NULL, obj, lock_name, duration);
+    async_rados->queue(req);
+    return 0;
+  }
+
+  int request_complete() {
+    return req->get_ret_status();
+  }
+};
+
+class RGWSimpleRadosUnlockCR : public RGWSimpleCoroutine {
+  RGWAsyncRadosProcessor *async_rados;
+  RGWRados *store;
+  string lock_name;
+
+  rgw_bucket pool;
+  string oid;
+
+  RGWAsyncUnlockSystemObj *req;
+
+public:
+  RGWSimpleRadosUnlockCR(RGWAsyncRadosProcessor *_async_rados, RGWRados *_store,
+		      rgw_bucket& _pool, const string& _oid, const string& _lock_name,
+		      uint32_t _duration) : RGWSimpleCoroutine(_store->ctx()),
+                                                async_rados(_async_rados),
+						store(_store),
+						lock_name(_lock_name),
+						pool(_pool), oid(_oid),
+                                                req(NULL) {
+  }
+
+  ~RGWSimpleRadosUnlockCR() {
+    delete req;
+  }
+
+  int send_request() {
+    rgw_obj obj = rgw_obj(pool, oid);
+    req = new RGWAsyncUnlockSystemObj(env->stack->create_completion_notifier(),
+			           store, NULL, obj, lock_name);
     async_rados->queue(req);
     return 0;
   }
