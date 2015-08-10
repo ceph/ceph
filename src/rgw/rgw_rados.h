@@ -1071,8 +1071,8 @@ struct RGWZoneGroup {
   int equals(const string& other_zonegroup);
   int create();
   int delete_obj(bool old_region_format = false);
-  static int get_pool_name(CephContext *cct, string *pool_name);
-  const string& get_default_oid(bool old_region_format = false);
+  const string& get_pool_name(CephContext *cct);
+  const string& get_default_oid(CephContext *cct, bool old_region_format = false);
   const string& get_info_oid_prefix(bool old_region_format = false);
   const string& get_json_perfix();
 
