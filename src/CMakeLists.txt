@@ -583,7 +583,8 @@ install(TARGETS ceph-osd DESTINATION bin)
 if(${WITH_MDS})
   set(mds_srcs 
     mds/Capability.cc
-    mds/MDS.cc
+    mds/MDSDaemon.cc
+    mds/MDSRank.cc
     mds/Beacon.cc
     mds/flock.cc
     mds/locks.c
@@ -592,6 +593,7 @@ if(${WITH_MDS})
     mds/Mutation.cc
     mds/MDCache.cc
     mds/RecoveryQueue.cc
+    mds/StrayManager.cc
     mds/Locker.cc
     mds/Migrator.cc
     mds/MDBalancer.cc
@@ -601,8 +603,10 @@ if(${WITH_MDS})
     mds/LogEvent.cc
     mds/MDSTable.cc
     mds/InoTable.cc
+    mds/JournalPointer.cc
     mds/MDSTableClient.cc
     mds/MDSTableServer.cc
+    mds/SimpleLock.cc
     mds/SnapRealm.cc
     mds/SnapServer.cc
     mds/snap.cc
@@ -610,9 +614,7 @@ if(${WITH_MDS})
     mds/MDSContext.cc
     mds/MDSAuthCaps.cc
     mds/MDLog.cc
-    mds/JournalPointer.cc
-    mds/StrayManager.cc
-    mds/SimpleLock.cc
+    ${CMAKE_SOURCE_DIR}/src/common/TrackedOp.cc
     ${CMAKE_SOURCE_DIR}/src/osdc/Journaler.cc)
   add_library(mds ${mds_srcs})
   set(ceph_mds_srcs
