@@ -66,6 +66,12 @@ static ostream& _prefix(std::ostream *_dout, Monitor *mon, OSDMap& osdmap) {
 		<< ").osd e" << osdmap.get_epoch() << " ";
 }
 
+OSDMonitor::OSDMonitor(Monitor *mn, Paxos *p, string service_name)
+  : PaxosService(mn, p, service_name),
+    inc_osd_cache(g_conf->mon_osd_cache_size),
+    full_osd_cache(g_conf->mon_osd_cache_size),
+    thrash_map(0), thrash_last_up_osd(-1) { }
+
 bool OSDMonitor::_have_pending_crush()
 {
   return pending_inc.crush.length();
@@ -1770,6 +1776,29 @@ void OSDMonitor::send_incremental(epoch_t first, entity_inst_t& dest, bool oneti
   }
 }
 
+int OSDMonitor::get_version(version_t ver, bufferlist& bl)
+{
+    if (inc_osd_cache.lookup(ver, &bl)) {
+      return 0;
+    }
+    int ret = PaxosService::get_version(ver, bl);
+    if (!ret) {
+      inc_osd_cache.add(ver, bl);
+    }
+    return ret;
+}
+
+int OSDMonitor::get_version_full(version_t ver, bufferlist& bl)
+{
+    if (full_osd_cache.lookup(ver, &bl)) {
+      return 0;
+    }
+    int ret = PaxosService::get_version_full(ver, bl);
+    if (!ret) {
+      full_osd_cache.add(ver, bl);
+    }
+    return ret;
+}
 
 
 
