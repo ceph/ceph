@@ -27,10 +27,10 @@
 
 #define dout_subsys ceph_subsys_xio
 
-Mutex mtx("XioMessenger Package Lock");
-atomic_t initialized;
+std::mutex mtx;
+std::atomic<bool> initialized;
 
-atomic_t XioMessenger::nInstances;
+std::atomic<uint32_t> XioMessenger::nInstances;
 
 struct xio_mempool *xio_msgr_noreg_mpool;
 
@@ -259,8 +259,6 @@ XioMessenger::XioMessenger(CephContext *cct, entity_name_t name,
     dispatch_strategy(ds),
     loop_con(new XioLoopbackConnection(this)),
     special_handling(0),
-    sh_mtx("XioMessenger session mutex"),
-    sh_cond(),
     need_addr(true),
     did_bind(false),
     nonce(_nonce)
@@ -273,10 +271,10 @@ XioMessenger::XioMessenger(CephContext *cct, entity_name_t name,
   XioPool::trace_msgcnt = (cct->_conf->xio_trace_msgcnt);
 
   /* package init */
-  if (! initialized.read()) {
+  if (! initialized) {
 
-    mtx.Lock();
-    if (! initialized.read()) {
+    unique_lock l(mtx);
+    if (! initialized) {
 
       xio_init();
 
@@ -369,15 +367,15 @@ XioMessenger::XioMessenger(CephContext *cct, entity_name_t name,
       xio_msgr_ops.on_cancel_request = on_cancel_request;
 
       /* mark initialized */
-      initialized.set(1);
+      initialized = true;
     }
-    mtx.Unlock();
+    l.unlock();
   }
 
   dispatch_strategy->set_messenger(this);
 
   /* update class instance count */
-  nInstances.inc();
+  ++nInstances;
 
   local_features = features;
   loop_con->set_features(features);
@@ -405,7 +403,7 @@ void XioMessenger::learned_addr(const entity_addr_t &peer_addr_for_me)
   if (!need_addr)
     return;
 
-  sh_mtx.Lock();
+  lock_guard lck(sh_mtx);
   if (need_addr) {
     entity_addr_t t = peer_addr_for_me;
     t.set_port(my_inst.addr.get_port());
@@ -414,7 +412,6 @@ void XioMessenger::learned_addr(const entity_addr_t &peer_addr_for_me)
     need_addr = false;
     // init_local_connection();
   }
-  sh_mtx.Unlock();
 
 }
 
@@ -422,13 +419,13 @@ int XioMessenger::new_session(struct xio_session *session,
 			      struct xio_new_session_req *req,
 			      void *cb_user_context)
 {
-  if (shutdown_called.read()) {
+  if (shutdown_called) {
     return xio_reject(
       session, XIO_E_SESSION_REFUSED, NULL /* udata */, 0 /* udata len */);
   }
   int code = portals.accept(session, req, cb_user_context);
   if (! code)
-    nsessions.inc();
+    ++nsessions;
   return code;
 } /* new_session */
 
@@ -453,11 +450,14 @@ int XioMessenger::session_event(struct xio_session *session,
     (void) xio_query_connection(conn, &xcona,
 				XIO_CONNECTION_ATTR_LOCAL_ADDR|
 				XIO_CONNECTION_ATTR_PEER_ADDR);
-    (void) entity_addr_from_sockaddr(&peer_addr_for_me, (struct sockaddr *) &xcona.local_addr);
-    (void) entity_addr_from_sockaddr(&paddr, (struct sockaddr *) &xcona.peer_addr);
+    (void) entity_addr_from_sockaddr(&peer_addr_for_me,
+				    (struct sockaddr *) &xcona.local_addr);
+    (void) entity_addr_from_sockaddr(&paddr,
+				    (struct sockaddr *) &xcona.peer_addr);
     //set_myaddr(peer_addr_for_me);
     learned_addr(peer_addr_for_me);
-    ldout(cct,2) << "client: connected from " << peer_addr_for_me << " to " << paddr << dendl;
+    ldout(cct,2) << "client: connected from " << peer_addr_for_me << " to "
+		 << paddr << dendl;
 
     /* notify hook */
     this->ms_deliver_handle_connect(xcon);
@@ -479,7 +479,8 @@ int XioMessenger::session_event(struct xio_session *session,
     /* XXX assumes RDMA */
     (void) entity_addr_from_sockaddr(&s_inst.addr,
 				     (struct sockaddr *) &xcona.peer_addr);
-    (void) entity_addr_from_sockaddr(&peer_addr_for_me, (struct sockaddr *) &xcona.local_addr);
+    (void) entity_addr_from_sockaddr(&peer_addr_for_me,
+				    (struct sockaddr *) &xcona.local_addr);
 
     xcon = new XioConnection(this, XioConnection::PASSIVE, s_inst);
     xcon->session = session;
@@ -494,7 +495,7 @@ int XioMessenger::session_event(struct xio_session *session,
     xcona.user_context = xcon;
     (void) xio_modify_connection(conn, &xcona, XIO_CONNECTION_ATTR_USER_CTX);
 
-    xcon->connected.set(true);
+    xcon->connected.store(true);
 
     /* sentinel ref */
     xcon->get(); /* xcon->nref == 1 */
@@ -509,7 +510,8 @@ int XioMessenger::session_event(struct xio_session *session,
 
     ldout(cct,2) << "new connection session " << session
 		 << " xcon " << xcon << dendl;
-    ldout(cct,2) << "server: connected from " << s_inst.addr << " to " << peer_addr_for_me << dendl;
+    ldout(cct,2) << "server: connected from " << s_inst.addr << " to "
+		 << peer_addr_for_me << dendl;
   }
   break;
   case XIO_SESSION_CONNECTION_ERROR_EVENT:
@@ -551,10 +553,10 @@ int XioMessenger::session_event(struct xio_session *session,
       xp_stats.dump("xio session dtor", reinterpret_cast<uint64_t>(session));
     }
     xio_session_destroy(session);
-    if (nsessions.dec() == 0) {
-      Mutex::Locker lck(sh_mtx);
-      if (nsessions.read() == 0)
-	sh_cond.Signal();
+    if (--nsessions == 0) {
+      lock_guard lck(sh_mtx);
+      if (nsessions == 0)
+	sh_cond.notify_all();
     }
     break;
   default:
@@ -706,19 +708,23 @@ int XioMessenger::bind(const entity_addr_t& addr)
       local_rdma_addr = *a;
       const char *ep;
       if (!local_rdma_addr.parse(rdma_local_str.c_str(), &ep)) {
-	ldout(cct,0) << "ERROR:  Cannot parse rdma local: " << rdma_local_str << dendl;
+	ldout(cct,0) << "ERROR:  Cannot parse rdma local: "
+		     << rdma_local_str << dendl;
 	return -EINVAL;
       }
       if (*ep) {
-	ldout(cct,0) << "WARNING: 'rdma local trailing garbage ignored: '" << ep << dendl;
+	ldout(cct,0) << "WARNING: 'rdma local trailing garbage ignored: '"
+		     << ep << dendl;
       }
-      ldout(cct, 2) << "Found rdma_local address " << rdma_local_str.c_str() << dendl;
+      ldout(cct, 2) << "Found rdma_local address "
+		    << rdma_local_str.c_str() << dendl;
       int p = _addr.get_port();
       _addr.set_sockaddr(reinterpret_cast<struct sockaddr *>(
 			  &local_rdma_addr.ss_addr()));
       _addr.set_port(p);
     } else {
-      ldout(cct,0) << "WARNING: need 'rdma local' config for remote use!" <<dendl;
+      ldout(cct,0) << "WARNING: need 'rdma local' config for remote use!"
+		   << dendl;
     }
   }
 
@@ -798,9 +804,9 @@ int XioMessenger::_send_message(Message *m, Connection *con)
   XioConnection *xcon = static_cast<XioConnection*>(con);
 
   /* If con is not in READY state, we have to enforce policy */
-  if (xcon->cstate.session_state.read() != XioConnection::UP) {
+  if (xcon->cstate.session_state != XioConnection::UP) {
     pthread_spin_lock(&xcon->sp);
-    if (xcon->cstate.session_state.read() != XioConnection::UP) {
+    if (xcon->cstate.session_state != XioConnection::UP) {
       xcon->outgoing.mqueue.push_back(*m);
       pthread_spin_unlock(&xcon->sp);
       return 0;
@@ -815,7 +821,10 @@ int XioMessenger::_send_message_impl(Message* m, XioConnection* xcon)
 {
   int code = 0;
 
-  Mutex::Locker l(xcon->lock);
+  /* XXXX this is NOT desirable--to avoid a long serialization, we
+   * evidently need to encode the sequence number in portal thread context,
+   * after an ordering is established */
+  Mutex::Locker l(xcon->lock); // XXX uses Connection::lock
   if (unlikely(XioPool::trace_mempool)) {
     static uint32_t nreqs;
     if (unlikely((++nreqs % 65536) == 0)) {
@@ -843,7 +852,8 @@ int XioMessenger::_send_message_impl(Message* m, XioConnection* xcon)
   int ex_cnt = req_off;
   if (msg_off == 0 && ex_cnt > 0) {
     // no buffers for last msg
-    ldout(cct,10) << "msg_off 0, ex_cnt " << ex_cnt << " -> " << ex_cnt-1 << dendl;
+    ldout(cct,10) << "msg_off 0, ex_cnt " << ex_cnt << " -> "
+		  << ex_cnt-1 << dendl;
     ex_cnt--;
   }
 
@@ -865,7 +875,8 @@ int XioMessenger::_send_message_impl(Message* m, XioConnection* xcon)
     switch (m->get_type()) {
     case 43:
     // case 15:
-      ldout(cct,4) << __func__ << "stop 43 " << m->get_type() << " " << *m << dendl;
+      ldout(cct,4) << __func__ << "stop 43 " << m->get_type() << " "
+		   << *m << dendl;
       buffer::list &payload = m->get_payload();
       ldout(cct,4) << __func__ << "payload dump:" << dendl;
       payload.hexdump(cout);
@@ -936,7 +947,7 @@ assert(req->out.pdata_iov.nents || !nbuffers);
 
 int XioMessenger::shutdown()
 {
-  shutdown_called.set(true);
+  shutdown_called.store(true);
   conns_sp.lock();
   XioConnection::ConnList::iterator iter;
   iter = conns_list.begin();
@@ -944,10 +955,10 @@ int XioMessenger::shutdown()
     (void) iter->disconnect(); // XXX mark down?
   }
   conns_sp.unlock();
-  while(nsessions.read() > 0) {
-    Mutex::Locker lck(sh_mtx);
-    if (nsessions.read() > 0)
-      sh_cond.Wait(sh_mtx);
+  while(nsessions > 0) {
+    unique_lock lck(sh_mtx);
+    if (nsessions.load() > 0)
+      sh_cond.wait(lck);
   }
   portals.shutdown();
   dispatch_strategy->shutdown();
@@ -958,7 +969,7 @@ int XioMessenger::shutdown()
 
 ConnectionRef XioMessenger::get_connection(const entity_inst_t& dest)
 {
-  if (shutdown_called.read())
+  if (shutdown_called)
     return NULL;
 
   const entity_inst_t& self_inst = get_myinst();
@@ -1002,7 +1013,7 @@ ConnectionRef XioMessenger::get_connection(const entity_inst_t& dest)
       delete xcon;
       return NULL;
     }
-    nsessions.inc();
+    ++nsessions;
 
     /* this should cause callbacks with user context of conn, but
      * we can always set it explicitly */
@@ -1017,7 +1028,7 @@ ConnectionRef XioMessenger::get_connection(const entity_inst_t& dest)
       .conn_user_context = xcon
     };
     xcon->conn = xio_connect(&xcp);
-    xcon->connected.set(true);
+    xcon->connected.store(true);
 
     /* sentinel ref */
     xcon->get(); /* xcon->nref == 1 */
@@ -1088,7 +1099,7 @@ void XioMessenger::mark_down_on_empty(Connection* con)
   m->tag = XIO_NOP_TAG_MARKDOWN;
   m->set_completion_hook(pool_alloc_markdown_hook(xcon, m));
   // stall new messages
-  xcon->cstate.session_state.set(XioConnection::BARRIER);
+  xcon->cstate.session_state.store(XioConnection::BARRIER);
   (void) _send_message_impl(m, xcon);
 }
 
@@ -1108,5 +1119,5 @@ void XioMessenger::try_insert(XioConnection *xcon)
 XioMessenger::~XioMessenger()
 {
   delete dispatch_strategy;
-  nInstances.dec();
+  --nInstances;
 } /* dtor */

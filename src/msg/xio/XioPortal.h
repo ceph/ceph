@@ -19,8 +19,8 @@
 extern "C" {
 #include "libxio.h"
 }
-#include "XioInSeq.h"
 #include <boost/lexical_cast.hpp>
+#include "XioInSeq.h"
 #include "msg/SimplePolicyMessenger.h"
 #include "XioConnection.h"
 #include "XioMsg.h"
@@ -312,7 +312,7 @@ public:
 		  break;
 		};
 	      } else {
-		xcon->send.set(msg->timestamp); // need atomic?
+		xcon->send.store(msg->timestamp); // XXX relax
 		xcon->send_ctr += xmsg->hdr.msg_cnt; // only inc if cb promised
 	      }
 	      break;

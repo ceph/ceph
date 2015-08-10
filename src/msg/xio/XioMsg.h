@@ -184,7 +184,7 @@ public:
   xio_msg_ex req_0;
   xio_msg_ex* req_arr;
   struct xio_reg_mem mp_this;
-  atomic_t nrefs;
+  std::atomic<uint64_t> nrefs;
 
 public:
   XioMsg(Message *_m, XioConnection *_xcon, struct xio_reg_mem& _mp,
@@ -210,10 +210,10 @@ public:
       xcon->get();
     }
 
-  XioMsg* get() { nrefs.inc(); return this; };
+  XioMsg* get() { ++nrefs; return this; };
 
   void put(int n) {
-    int refs = nrefs.sub(n);
+    int refs = (nrefs -= n);
     if (refs == 0) {
       struct xio_reg_mem *mp = &this->mp_this;
       this->~XioMsg();

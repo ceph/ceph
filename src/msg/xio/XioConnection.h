@@ -16,6 +16,7 @@
 #ifndef XIO_CONNECTION_H
 #define XIO_CONNECTION_H
 
+#include <atomic>
 #include <boost/intrusive/avl_set.hpp>
 #include <boost/intrusive/list.hpp>
 extern "C" {
@@ -25,7 +26,6 @@ extern "C" {
 #include "XioSubmit.h"
 #include "msg/Connection.h"
 #include "msg/Messenger.h"
-#include "include/atomic.h"
 #include "auth/AuthSessionHandler.h"
 
 #define XIO_ALL_FEATURES (CEPH_FEATURES_ALL & \
@@ -65,13 +65,13 @@ public:
 private:
   XioConnection::type xio_conn_type;
   XioPortal *portal;
-  atomic_t connected;
+  std::atomic<bool> connected;
   entity_inst_t peer;
   struct xio_session *session;
   struct xio_connection	*conn;
   pthread_spinlock_t sp;
-  atomic_t send;
-  atomic_t recv;
+  std::atomic<uint64_t> send;
+  std::atomic<uint64_t> recv;
   uint32_t n_reqs; // Accelio-initiated reqs in progress (!counting partials)
   uint32_t magic;
   uint32_t special_handling;
@@ -94,7 +94,7 @@ private:
     uint32_t reconnects;
     uint32_t connect_seq, peer_global_seq;
     uint32_t in_seq, out_seq_acked; // atomic<uint64_t>, got receipt
-    atomic_t out_seq; // atomic<uint32_t>
+    std::atomic<uint64_t> out_seq;
 
     lifecycle() : state(lifecycle::INIT), in_seq(0), out_seq(0) {}
 
@@ -103,7 +103,7 @@ private:
     }
 
     uint32_t next_out_seq() {
-      return out_seq.inc();
+      return ++out_seq;
     }
 
   } state;
@@ -132,13 +132,13 @@ private:
     XioConnection *xcon;
     uint32_t protocol_version;
 
-    atomic_t session_state;
-    atomic_t startup_state;
+    std::atomic<uint32_t> session_state;
+    std::atomic<uint32_t> startup_state;
 
     uint32_t reconnects;
-    uint32_t connect_seq, global_seq, peer_global_seq;
-    uint32_t in_seq, out_seq_acked; // atomic<uint64_t>, got receipt
-    atomic_t out_seq; // atomic<uint32_t>
+    uint64_t connect_seq, global_seq, peer_global_seq;
+    uint64_t in_seq, out_seq_acked; // atomic<uint64_t>, got receipt
+    std::atomic<uint64_t> out_seq;
 
     uint32_t flags;
 
@@ -152,11 +152,11 @@ private:
 	flags(FLAG_NONE) {}
 
     uint64_t get_session_state() {
-      return session_state.read();
+      return session_state;
     }
 
     uint64_t get_startup_state() {
-      return startup_state.read();
+      return startup_state;
     }
 
     void set_in_seq(uint32_t seq) {
@@ -164,7 +164,7 @@ private:
     }
 
     uint32_t next_out_seq() {
-      return out_seq.inc();
+      return ++out_seq;
     };
 
     // state machine
@@ -225,7 +225,7 @@ private:
   friend class XioMsg;
 
   int on_disconnect_event() {
-    connected.set(false);
+    connected.store(false);
     pthread_spin_lock(&sp);
     discard_input_queue(CState::OP_FLAG_LOCKED);
     pthread_spin_unlock(&sp);
@@ -259,7 +259,7 @@ public:
       xio_connection_destroy(conn);
   }
 
-  bool is_connected() { return connected.read(); }
+  bool is_connected() { return connected; }
 
   int send_message(Message *m);
   void send_keepalive() {}
@@ -289,7 +289,7 @@ public:
 
   void disconnect() {
     if (is_connected()) {
-      connected.set(false);
+      connected.store(false);
       xio_disconnect(conn); // normal teardown will clean up conn
     }
   }
@@ -320,7 +320,7 @@ typedef boost::intrusive_ptr<XioConnection> XioConnectionRef;
 class XioLoopbackConnection : public Connection
 {
 private:
-  atomic_t seq;
+  std::atomic<uint64_t> seq;
 public:
   XioLoopbackConnection(Messenger *m) : Connection(m->cct, m), seq(0)
     {
@@ -342,11 +342,11 @@ public:
   void mark_disposable() {}
 
   uint32_t get_seq() {
-    return seq.read();
+    return seq;
   }
 
   uint32_t next_seq() {
-    return seq.inc();
+    return ++seq;
   }
 };
 

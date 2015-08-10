@@ -16,6 +16,9 @@
 #ifndef XIO_MESSENGER_H
 #define XIO_MESSENGER_H
 
+#include <atomic>
+#include <condition_variable>
+#include <mutex>
 #include "msg/SimplePolicyMessenger.h"
 extern "C" {
 #include "libxio.h"
@@ -23,17 +26,14 @@ extern "C" {
 #include "XioConnection.h"
 #include "XioPortal.h"
 #include "QueueStrategy.h"
-#include "include/atomic.h"
-#include "common/Thread.h"
-#include "common/Mutex.h"
 #include "include/Spinlock.h"
 
 class XioMessenger : public SimplePolicyMessenger
 {
 private:
-  static atomic_t nInstances;
-  atomic_t nsessions;
-  atomic_t shutdown_called;
+  static std::atomic<uint32_t> nInstances;
+  std::atomic<uint32_t> nsessions;
+  std::atomic<uint32_t> shutdown_called;
   Spinlock conns_sp;
   XioConnection::ConnList conns_list;
   XioConnection::EntitySet conns_entity_map;
@@ -41,8 +41,10 @@ private:
   DispatchStrategy* dispatch_strategy;
   XioLoopbackConnectionRef loop_con;
   uint32_t special_handling;
-  Mutex sh_mtx;
-  Cond sh_cond;
+  std::mutex sh_mtx;
+  typedef std::lock_guard<std::mutex> lock_guard;
+  typedef std::unique_lock<std::mutex> unique_lock;
+  std::condition_variable sh_cond;
   bool need_addr;
   bool did_bind;
 
