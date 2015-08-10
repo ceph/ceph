@@ -297,8 +297,10 @@ bool MDSMonitor::preprocess_beacon(MonOpRequestRef op)
   // booted, but not in map?
   if (pending_mdsmap.is_dne_gid(gid)) {
     if (state != MDSMap::STATE_BOOT) {
-      dout(7) << "mds_beacon " << *m << " is not in mdsmap" << dendl;
+      dout(7) << "mds_beacon " << *m << " is not in mdsmap (state "
+              << ceph_mds_state_name(state) << ")" << dendl;
       mon->send_reply(op, new MMDSMap(mon->monmap->fsid, &mdsmap));
+      m->put();
       return true;
     } else {
       return false;  // not booted yet.
@@ -334,6 +336,15 @@ bool MDSMonitor::preprocess_beacon(MonOpRequestRef op)
 	 info.state == MDSMap::STATE_ONESHOT_REPLAY) && state > 0) {
       dout(10) << "mds_beacon mds can't activate itself (" << ceph_mds_state_name(info.state)
 	       << " -> " << ceph_mds_state_name(state) << ")" << dendl;
+      goto reply;
+    }
+
+    if ((state == MDSMap::STATE_STANDBY || state == MDSMap::STATE_STANDBY_REPLAY)
+        && info.rank != MDS_RANK_NONE)
+    {
+      dout(4) << "mds_beacon MDS can't go back into standby after taking rank: "
+                 "held rank " << info.rank << " while requesting state "
+              << ceph_mds_state_name(state) << dendl;
       goto reply;
     }
     

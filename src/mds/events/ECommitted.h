@@ -36,7 +36,7 @@ public:
   static void generate_test_instances(list<ECommitted*>& ls);
 
   void update_segment() {}
-  void replay(MDS *mds);
+  void replay(MDSRank *mds);
 };
 
 #endif

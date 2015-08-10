@@ -15,7 +15,7 @@
 #include "mdstypes.h"
 
 #include "MDBalancer.h"
-#include "MDS.h"
+#include "MDSRank.h"
 #include "mon/MonClient.h"
 #include "MDSMap.h"
 #include "CInode.h"
@@ -113,7 +113,7 @@ void MDBalancer::tick()
 
 class C_Bal_SendHeartbeat : public MDSInternalContext {
 public:
-  C_Bal_SendHeartbeat(MDS *mds_) : MDSInternalContext(mds_) { }
+  C_Bal_SendHeartbeat(MDSRank *mds_) : MDSInternalContext(mds_) { }
   virtual void finish(int f) {
     mds->balancer->send_heartbeat();
   }
@@ -159,7 +159,7 @@ mds_load_t MDBalancer::get_load(utime_t now)
   }
 
   load.req_rate = mds->get_req_rate();
-  load.queue_len = mds->messenger->get_dispatch_queue_len();
+  load.queue_len = messenger->get_dispatch_queue_len();
 
   ifstream cpu("/proc/loadavg");
   if (cpu.is_open())
@@ -224,8 +224,8 @@ void MDBalancer::send_heartbeat()
       continue;
     MHeartbeat *hb = new MHeartbeat(load, beat_epoch);
     hb->get_import_map() = import_map;
-    mds->messenger->send_message(hb,
-                                 mds->mdsmap->get_inst(*p));
+    messenger->send_message(hb,
+                            mds->mdsmap->get_inst(*p));
   }
 }
 
@@ -758,7 +758,7 @@ void MDBalancer::try_rebalance()
 bool MDBalancer::check_targets()
 {
   // get MonMap's idea of my_targets
-  const set<mds_rank_t>& map_targets = mds->mdsmap->get_mds_info(mds->whoami).export_targets;
+  const set<mds_rank_t>& map_targets = mds->mdsmap->get_mds_info(mds->get_nodeid()).export_targets;
 
   bool send = false;
   bool ok = true;
@@ -805,8 +805,8 @@ bool MDBalancer::check_targets()
   dout(10) << "check_targets have " << map_targets << " need " << need_targets << " want " << want_targets << dendl;
 
   if (send) {
-    MMDSLoadTargets* m = new MMDSLoadTargets(mds_gid_t(mds->monc->get_global_id()), want_targets);
-    mds->monc->send_mon_message(m);
+    MMDSLoadTargets* m = new MMDSLoadTargets(mds_gid_t(mon_client->get_global_id()), want_targets);
+    mon_client->send_mon_message(m);
   }
   return ok;
 }

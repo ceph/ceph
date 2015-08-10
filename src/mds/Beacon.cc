@@ -21,7 +21,7 @@
 #include "messages/MMDSBeacon.h"
 #include "mon/MonClient.h"
 #include "mds/MDLog.h"
-#include "mds/MDS.h"
+#include "mds/MDSRank.h"
 #include "mds/MDSMap.h"
 #include "mds/Locker.h"
 
@@ -57,7 +57,6 @@ void Beacon::init(MDSMap const *mdsmap, MDSMap::DaemonState want_state_,
   Mutex::Locker l(lock);
   assert(mdsmap != NULL);
 
-  // Initialize copies of MDS state
   want_state = want_state_;
   _notify_mdsmap(mdsmap);
   standby_for_rank = standby_rank_;
@@ -195,6 +194,8 @@ void Beacon::_send()
 	   << dendl;
 
   seq_stamp[last_seq] = ceph_clock_now(g_ceph_context);
+
+  assert(want_state != MDSMap::STATE_NULL);
   
   MMDSBeacon *beacon = new MMDSBeacon(
       monc->get_fsid(), mds_gid_t(monc->get_global_id()),
@@ -230,10 +231,13 @@ void Beacon::notify_mdsmap(MDSMap const *mdsmap)
 void Beacon::_notify_mdsmap(MDSMap const *mdsmap)
 {
   assert(mdsmap != NULL);
+  assert(mdsmap->get_epoch() >= epoch);
 
-  epoch = mdsmap->get_epoch();
-  compat = get_mdsmap_compat_set_default();
-  compat.merge(mdsmap->compat);
+  if (mdsmap->get_epoch() != epoch) {
+    epoch = mdsmap->get_epoch();
+    compat = get_mdsmap_compat_set_default();
+    compat.merge(mdsmap->compat);
+  }
 }
 
 
@@ -270,11 +274,23 @@ utime_t Beacon::get_laggy_until() const
   return laggy_until;
 }
 
-void Beacon::notify_want_state(MDSMap::DaemonState const newstate)
+void Beacon::set_want_state(MDSMap const *mdsmap, MDSMap::DaemonState const newstate)
 {
   Mutex::Locker l(lock);
 
-  want_state = newstate;
+  // Update mdsmap epoch atomically with updating want_state, so that when
+  // we send a beacon with the new want state it has the latest epoch, and
+  // once we have updated to the latest epoch, we are not sending out
+  // a stale want_state (i.e. one from before making it through MDSMap
+  // handling)
+  _notify_mdsmap(mdsmap);
+
+  if (want_state != newstate) {
+    dout(10) << __func__ << ": "
+      << ceph_mds_state_name(want_state) << " -> "
+      << ceph_mds_state_name(newstate) << dendl;
+    want_state = newstate;
+  }
 }
 
 
@@ -283,9 +299,13 @@ void Beacon::notify_want_state(MDSMap::DaemonState const newstate)
  * some health metrics that we will send in the next
  * beacon.
  */
-void Beacon::notify_health(MDS const *mds)
+void Beacon::notify_health(MDSRank const *mds)
 {
   Mutex::Locker l(lock);
+  if (!mds) {
+    // No MDS rank held
+    return;
+  }
 
   // I'm going to touch this MDS, so it must be locked
   assert(mds->mds_lock.is_locked_by_me());
@@ -410,5 +430,11 @@ void Beacon::notify_health(MDS const *mds)
       large_completed_requests_metrics.clear();
     }
   }
+}
+
+MDSMap::DaemonState Beacon::get_want_state() const
+{
+  Mutex::Locker l(lock);
+  return want_state;
 }
 
