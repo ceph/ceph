@@ -3670,6 +3670,7 @@ void Monitor::dispatch_op(MonOpRequestRef op)
 
     // monmap
     case MSG_MON_JOIN:
+      op->set_type_service();
       paxos_service[PAXOS_MONMAP]->dispatch(op);
       break;
 
