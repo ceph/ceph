@@ -340,10 +340,12 @@ public:
   
   /// assign a work queue to this thread pool
   void add_work_queue(WorkQueue_* wq) {
+    Mutex::Locker l(_lock);
     work_queues.push_back(wq);
   }
   /// remove a work queue from this thread pool
   void remove_work_queue(WorkQueue_* wq) {
+    Mutex::Locker l(_lock);
     unsigned i = 0;
     while (work_queues[i] != wq)
       i++;
