@@ -25,7 +25,7 @@
 class MonClient;
 class MMDSBeacon;
 class Message;
-class MDS;
+class MDSRank;
 
 
 /**
@@ -94,13 +94,15 @@ public:
   void ms_handle_remote_reset(Connection *c) {}
 
   void notify_mdsmap(MDSMap const *mdsmap);
-  void notify_want_state(MDSMap::DaemonState const newstate);
-  void notify_health(MDS const *mds);
+  void notify_health(MDSRank const *mds);
 
   void set_standby_for(mds_rank_t rank_, std::string const &name_);
 
   void handle_mds_beacon(MMDSBeacon *m);
   void send();
+
+  void set_want_state(MDSMap const *mdsmap, MDSMap::DaemonState const newstate);
+  MDSMap::DaemonState get_want_state() const;
 
   /**
    * Send a beacon, and block until the ack is received from the mon

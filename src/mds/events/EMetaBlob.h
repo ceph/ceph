@@ -24,7 +24,7 @@
 
 #include "include/interval_set.h"
 
-class MDS;
+class MDSRank;
 class MDLog;
 class LogSegment;
 struct MDSlaveUpdate;
@@ -105,7 +105,7 @@ public:
     void dump(Formatter *f) const;
     static void generate_test_instances(list<EMetaBlob::fullbit*>& ls);
 
-    void update_inode(MDS *mds, CInode *in);
+    void update_inode(MDSRank *mds, CInode *in);
     bool is_dirty() const { return (state & STATE_DIRTY); }
     bool is_dirty_parent() const { return (state & STATE_DIRTYPARENT); }
     bool is_dirty_pool() const { return (state & STATE_DIRTYPOOL); }
@@ -376,7 +376,7 @@ private:
     truncate_finish[ino] = segoff;
   }
   
-  bool rewrite_truncate_finish(MDS const *mds, std::map<uint64_t, uint64_t> const &old_to_new);
+  bool rewrite_truncate_finish(MDSRank const *mds, std::map<uint64_t, uint64_t> const &old_to_new);
 
   void add_destroyed_inode(inodeno_t ino) {
     destroyed_inodes.push_back(ino);
@@ -574,7 +574,7 @@ private:
   }
 
   void update_segment(LogSegment *ls);
-  void replay(MDS *mds, LogSegment *ls, MDSlaveUpdate *su=NULL);
+  void replay(MDSRank *mds, LogSegment *ls, MDSlaveUpdate *su=NULL);
 };
 WRITE_CLASS_ENCODER(EMetaBlob)
 WRITE_CLASS_ENCODER(EMetaBlob::fullbit)

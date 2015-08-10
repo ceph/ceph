@@ -18,7 +18,7 @@
 #include "CInode.h"
 #include "CDir.h"
 
-#include "MDS.h"
+#include "MDSRank.h"
 #include "MDCache.h"
 #include "Locker.h"
 #include "LogSegment.h"

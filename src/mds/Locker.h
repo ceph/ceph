@@ -24,7 +24,7 @@ using std::map;
 using std::list;
 using std::set;
 
-class MDS;
+class MDSRank;
 class Session;
 class CInode;
 class CDentry;
@@ -47,11 +47,11 @@ typedef ceph::shared_ptr<MDRequestImpl> MDRequestRef;
 
 class Locker {
 private:
-  MDS *mds;
+  MDSRank *mds;
   MDCache *mdcache;
  
  public:
-  Locker(MDS *m, MDCache *c) : mds(m), mdcache(c) {}  
+  Locker(MDSRank *m, MDCache *c) : mds(m), mdcache(c) {}  
 
   SimpleLock *get_lock(int lock_type, MDSCacheObjectInfo &info);
   

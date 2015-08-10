@@ -14,7 +14,7 @@
 
 #include "SnapRealm.h"
 #include "MDCache.h"
-#include "MDS.h"
+#include "MDSRank.h"
 
 #include "messages/MClientSnap.h"
 
@@ -85,7 +85,7 @@ struct C_SR_RetryOpenParents : public MDSInternalContextBase {
     sr(s), first(f), last(l), parent_last(pl),  parent(p), fin(c) {
     sr->inode->get(CInode::PIN_OPENINGSNAPPARENTS);
   }
-  MDS *get_mds() { return sr->mdcache->mds; }
+  MDSRank *get_mds() { return sr->mdcache->mds; }
   void finish(int r) {
     if (r < 0)
       sr->_remove_missing_parent(parent_last, parent, r);

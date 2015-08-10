@@ -50,7 +50,7 @@ public:
   static void generate_test_instances(list<EOpen*>& ls);
 
   void update_segment();
-  void replay(MDS *mds);
+  void replay(MDSRank *mds);
 };
 
 #endif

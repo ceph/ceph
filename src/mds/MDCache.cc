@@ -20,7 +20,7 @@
 #include <map>
 
 #include "MDCache.h"
-#include "MDS.h"
+#include "MDSRank.h"
 #include "Server.h"
 #include "Locker.h"
 #include "MDLog.h"
@@ -107,7 +107,7 @@ extern struct ceph_file_layout g_default_file_layout;
 #define dout_subsys ceph_subsys_mds
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, mds)
-static ostream& _prefix(std::ostream *_dout, MDS *mds) {
+static ostream& _prefix(std::ostream *_dout, MDSRank *mds) {
   return *_dout << "mds." << mds->get_nodeid() << ".cache ";
 }
 
@@ -136,7 +136,7 @@ set<int> SimpleLock::empty_gather_set;
 class MDCacheContext : public virtual MDSInternalContextBase {
 protected:
   MDCache *mdcache;
-  virtual MDS *get_mds()
+  virtual MDSRank *get_mds()
   {
     assert(mdcache != NULL);
     return mdcache->mds;
@@ -156,7 +156,7 @@ public:
 class MDCacheIOContext : public virtual MDSIOContextBase {
 protected:
   MDCache *mdcache;
-  virtual MDS *get_mds()
+  virtual MDSRank *get_mds()
   {
     assert(mdcache != NULL);
     return mdcache->mds;
@@ -166,15 +166,15 @@ public:
 };
 
 
-MDCache::MDCache(MDS *m) :
+MDCache::MDCache(MDSRank *m) :
+  mds(m),
   logger(0),
-  filer(m->objecter, &m->finisher),
+  filer(m->objecter, m->finisher),
   rejoin_done(NULL),
   resolve_done(NULL),
   recovery_queue(m),
   stray_manager(m)
 {
-  mds = m;
   migrator = new Migrator(mds, this);
   root = NULL;
   myin = NULL;
@@ -379,7 +379,7 @@ void MDCache::create_unlinked_system_inode(CInode *in, inodeno_t ino,
 
   if (in->is_base()) {
     if (in->is_root())
-      in->inode_auth = mds_authority_t(mds->whoami, CDIR_AUTH_UNKNOWN);
+      in->inode_auth = mds_authority_t(mds->get_nodeid(), CDIR_AUTH_UNKNOWN);
     else
       in->inode_auth = mds_authority_t(mds_rank_t(in->ino() - MDS_INO_MDSDIR_OFFSET), CDIR_AUTH_UNKNOWN);
     in->open_snaprealm();  // empty snaprealm
@@ -414,7 +414,7 @@ void MDCache::create_empty_hierarchy(MDSGather *gather)
 
   // force empty root dir
   CDir *rootdir = root->get_or_open_dirfrag(this, frag_t());
-  adjust_subtree_auth(rootdir, mds->whoami);   
+  adjust_subtree_auth(rootdir, mds->get_nodeid());   
   rootdir->dir_rep = CDir::REP_ALL;   //NONE;
 
   rootdir->fnode.accounted_fragstat = rootdir->fnode.fragstat;
@@ -436,17 +436,17 @@ void MDCache::create_mydir_hierarchy(MDSGather *gather)
 {
   // create mds dir
   char myname[10];
-  snprintf(myname, sizeof(myname), "mds%d", int(mds->whoami));
-  CInode *my = create_system_inode(MDS_INO_MDSDIR(mds->whoami), S_IFDIR);
+  snprintf(myname, sizeof(myname), "mds%d", int(mds->get_nodeid()));
+  CInode *my = create_system_inode(MDS_INO_MDSDIR(mds->get_nodeid()), S_IFDIR);
 
   CDir *mydir = my->get_or_open_dirfrag(this, frag_t());
-  adjust_subtree_auth(mydir, mds->whoami);   
+  adjust_subtree_auth(mydir, mds->get_nodeid());   
 
   LogSegment *ls = mds->mdlog->get_current_segment();
 
   // stray dir
   for (int i = 0; i < NUM_STRAY; ++i) {
-    CInode *stray = create_system_inode(MDS_INO_STRAY(mds->whoami, i), S_IFDIR);
+    CInode *stray = create_system_inode(MDS_INO_STRAY(mds->get_nodeid(), i), S_IFDIR);
     CDir *straydir = stray->get_or_open_dirfrag(this, frag_t());
     stringstream name;
     name << "stray" << i;
@@ -584,7 +584,7 @@ struct C_MDS_RetryOpenRoot : public MDSInternalContext {
 
 void MDCache::open_root_inode(MDSInternalContextBase *c)
 {
-  if (mds->whoami == mds->mdsmap->get_root()) {
+  if (mds->get_nodeid() == mds->mdsmap->get_root()) {
     CInode *in;
     in = create_system_inode(MDS_INO_ROOT, S_IFDIR|0755);  // initially inaccurate!
     in->fetch(c);
@@ -595,7 +595,7 @@ void MDCache::open_root_inode(MDSInternalContextBase *c)
 
 void MDCache::open_mydir_inode(MDSInternalContextBase *c)
 {
-  CInode *in = create_system_inode(MDS_INO_MDSDIR(mds->whoami), S_IFDIR|0755);  // initially inaccurate!
+  CInode *in = create_system_inode(MDS_INO_MDSDIR(mds->get_nodeid()), S_IFDIR|0755);  // initially inaccurate!
   in->fetch(c);
 }
 
@@ -607,12 +607,12 @@ void MDCache::open_root()
     open_root_inode(new C_MDS_RetryOpenRoot(this));
     return;
   }
-  if (mds->whoami == mds->mdsmap->get_root()) {
+  if (mds->get_nodeid() == mds->mdsmap->get_root()) {
     assert(root->is_auth());  
     CDir *rootdir = root->get_or_open_dirfrag(this, frag_t());
     assert(rootdir);
     if (!rootdir->is_subtree_root())
-      adjust_subtree_auth(rootdir, mds->whoami);   
+      adjust_subtree_auth(rootdir, mds->get_nodeid());   
     if (!rootdir->is_complete()) {
       rootdir->fetch(new C_MDS_RetryOpenRoot(this));
       return;
@@ -627,13 +627,13 @@ void MDCache::open_root()
   }
 
   if (!myin) {
-    CInode *in = create_system_inode(MDS_INO_MDSDIR(mds->whoami), S_IFDIR|0755);  // initially inaccurate!
+    CInode *in = create_system_inode(MDS_INO_MDSDIR(mds->get_nodeid()), S_IFDIR|0755);  // initially inaccurate!
     in->fetch(new C_MDS_RetryOpenRoot(this));
     return;
   }
   CDir *mydir = myin->get_or_open_dirfrag(this, frag_t());
   assert(mydir);
-  adjust_subtree_auth(mydir, mds->whoami);
+  adjust_subtree_auth(mydir, mds->get_nodeid());
 
   populate_mydir();
 }
@@ -673,7 +673,7 @@ void MDCache::populate_mydir()
       straydn = mydir->lookup("stray");
 
     if (!straydn || !straydn->get_linkage()->get_inode()) {
-      _create_system_file(mydir, name.str().c_str(), create_system_inode(MDS_INO_STRAY(mds->whoami, i), S_IFDIR),
+      _create_system_file(mydir, name.str().c_str(), create_system_inode(MDS_INO_STRAY(mds->get_nodeid(), i), S_IFDIR),
 			  new C_MDS_RetryOpenRoot(this));
       return;
     }
@@ -2514,7 +2514,7 @@ ESubtreeMap *MDCache::create_subtree_map()
 
     // so not
     //   !me, *
-    if (dir->get_dir_auth().first != mds->whoami)
+    if (dir->get_dir_auth().first != mds->get_nodeid())
       continue;
 
     if (migrator->is_ambiguous_import(dir->dirfrag()) ||
@@ -2658,7 +2658,7 @@ void MDCache::resolve_start(MDSInternalContext *resolve_done_)
   assert(resolve_done == NULL);
   resolve_done = resolve_done_;
 
-  if (mds->mdsmap->get_root() != mds->whoami) {
+  if (mds->mdsmap->get_root() != mds->get_nodeid()) {
     // if we don't have the root dir, adjust it to UNKNOWN.  during
     // resolve we want mds0 to explicit claim the portion of it that
     // it owns, so that anything beyond its bounds get left as
@@ -2759,7 +2759,7 @@ void MDCache::send_subtree_resolves()
   for (set<mds_rank_t>::iterator p = recovery_set.begin();
        p != recovery_set.end();
        ++p) {
-    if (*p == mds->whoami)
+    if (*p == mds->get_nodeid())
       continue;
     if (mds->is_resolve() || mds->mdsmap->is_resolve(*p))
       resolves[*p] = new MMDSResolve;
@@ -3010,7 +3010,7 @@ void MDCache::handle_mds_recovery(mds_rank_t who)
     CDir *dir = p->first;
 
     if (dir->authority().first != who ||
-	dir->authority().second == mds->whoami)
+	dir->authority().second == mds->get_nodeid())
       continue;
     assert(!dir->is_auth());
    
@@ -3492,7 +3492,7 @@ void MDCache::disambiguate_imports()
   other_ambiguous_imports.clear();
 
   // my ambiguous imports
-  mds_authority_t me_ambig(mds->whoami, mds->whoami);
+  mds_authority_t me_ambig(mds->get_nodeid(), mds->get_nodeid());
   while (!my_ambiguous_imports.empty()) {
     map<dirfrag_t, vector<dirfrag_t> >::iterator q = my_ambiguous_imports.begin();
 
@@ -3508,7 +3508,7 @@ void MDCache::disambiguate_imports()
       CDir *root = get_subtree_root(dir);
       if (root != dir)
 	dout(10) << "  subtree root is " << *root << dendl;
-      assert(root->dir_auth.first != mds->whoami);  // no us!
+      assert(root->dir_auth.first != mds->get_nodeid());  // no us!
       try_trim_non_auth_subtree(root);
 
       mds->mdlog->start_submit_entry(new EImportFinish(dir, false));
@@ -3702,7 +3702,7 @@ void MDCache::recalc_auth_bits(bool replay)
 
   if (root) {
     root->inode_auth.first = mds->mdsmap->get_root();
-    bool auth = mds->whoami == root->inode_auth.first;
+    bool auth = mds->get_nodeid() == root->inode_auth.first;
     if (auth) {
       root->state_set(CInode::STATE_AUTH);
     } else {
@@ -4081,7 +4081,7 @@ void MDCache::rejoin_send_rejoins()
     rejoin_ack_gather.insert(p->first);
     mds->send_message_mds(p->second, p->first);
   }
-  rejoin_ack_gather.insert(mds->whoami);   // we need to complete rejoin_gather_finish, too
+  rejoin_ack_gather.insert(mds->get_nodeid());   // we need to complete rejoin_gather_finish, too
   rejoins_pending = false;
 
   // nothing?
@@ -5145,8 +5145,8 @@ void MDCache::rejoin_gather_finish()
   rejoin_send_acks();
   
   // signal completion of fetches, rejoin_gather_finish, etc.
-  assert(rejoin_ack_gather.count(mds->whoami));
-  rejoin_ack_gather.erase(mds->whoami);
+  assert(rejoin_ack_gather.count(mds->get_nodeid()));
+  rejoin_ack_gather.erase(mds->get_nodeid());
 
   // did we already get our acks too?
   if (rejoin_ack_gather.empty()) {
@@ -6107,7 +6107,7 @@ void MDCache::_truncate_inode(CInode *in, LogSegment *ls)
 		 pi->truncate_seq, utime_t(), 0,
 		 0, new C_OnFinisher(new C_IO_MDC_TruncateFinish(this, in,
 								       ls),
-					   &mds->finisher));
+					   mds->finisher));
 }
 
 struct C_MDC_TruncateLogged : public MDCacheContext {
@@ -6290,7 +6290,7 @@ bool MDCache::trim(int max, int count)
     CDir *subtree = *s;
     if (subtree->inode->is_mdsdir()) {
       mds_rank_t owner = mds_rank_t(MDS_INO_MDSDIR_OWNER(subtree->inode->ino()));
-      if (owner == mds->whoami) {
+      if (owner == mds->get_nodeid()) {
         continue;
       }
 
@@ -6328,7 +6328,7 @@ bool MDCache::trim(int max, int count)
   if (max == 0) {
     for (set<CInode*>::iterator p = base_inodes.begin();
          p != base_inodes.end(); ++p) {
-      if (MDS_INO_MDSDIR_OWNER((*p)->ino()) != mds->whoami) {
+      if (MDS_INO_MDSDIR_OWNER((*p)->ino()) != mds->get_nodeid()) {
         dout(20) << __func__ << ": maybe trimming base: " << *(*p) << dendl;
         if ((*p)->get_num_ref() == 0) {
           trim_inode(NULL, *p, NULL, expiremap);
@@ -6796,7 +6796,7 @@ void MDCache::try_trim_non_auth_subtree(CDir *dir)
   get_subtree_bounds(dir, bounds);
   for (set<CDir*>::iterator p = bounds.begin(); p != bounds.end(); ++p) {
     CDir *bd = *p;
-    if (bd->get_dir_auth().first != mds->whoami &&  // we are not auth
+    if (bd->get_dir_auth().first != mds->get_nodeid() &&  // we are not auth
 	bd->get_num_any() == 0 && // and empty
 	can_trim_non_auth_dirfrag(bd)) {
       CInode *bi = bd->get_inode();
@@ -6815,7 +6815,7 @@ void MDCache::try_trim_non_auth_subtree(CDir *dir)
     while (true) {
       CInode *diri = dir->get_inode();
       if (diri->is_base()) {
-	if (!diri->is_root() && diri->authority().first != mds->whoami) {
+	if (!diri->is_root() && diri->authority().first != mds->get_nodeid()) {
 	  dout(10) << " closing empty non-auth subtree " << *dir << dendl;
 	  remove_subtree(dir);
 	  dir->mark_clean();
@@ -6831,7 +6831,7 @@ void MDCache::try_trim_non_auth_subtree(CDir *dir)
 
       CDir *psub = get_subtree_root(diri->get_parent_dir());
       dout(10) << " parent subtree is " << *psub << dendl;
-      if (psub->get_dir_auth().first == mds->whoami)
+      if (psub->get_dir_auth().first == mds->get_nodeid())
 	break;  // we are auth, keep.
 
       dout(10) << " closing empty non-auth subtree " << *dir << dendl;
@@ -6986,7 +6986,7 @@ void MDCache::handle_cache_expire(MCacheExpire *m)
 	CInode *diri = get_inode(it->first.ino);
 	if (diri) {
 	  if (mds->is_rejoin() &&
-	      rejoin_ack_gather.count(mds->whoami) && // haven't sent rejoin ack yet
+	      rejoin_ack_gather.count(mds->get_nodeid()) && // haven't sent rejoin ack yet
 	      !diri->is_replica(from)) {
 	    list<CDir*> ls;
 	    diri->get_nested_dirfrags(ls);
@@ -8109,7 +8109,7 @@ void MDCache::_open_ino_backtrace_fetched(inodeno_t ino, bufferlist& bl, int err
       C_IO_MDC_OpenInoBacktraceFetched *fin =
 	new C_IO_MDC_OpenInoBacktraceFetched(this, ino);
       fetch_backtrace(ino, info.pool, fin->bl,
-		      new C_OnFinisher(fin, &mds->finisher));
+		      new C_OnFinisher(fin, mds->finisher));
       return;
     }
   } else if (err == -ENOENT) {
@@ -8121,7 +8121,7 @@ void MDCache::_open_ino_backtrace_fetched(inodeno_t ino, bufferlist& bl, int err
       C_IO_MDC_OpenInoBacktraceFetched *fin =
 	new C_IO_MDC_OpenInoBacktraceFetched(this, ino);
       fetch_backtrace(ino, info.pool, fin->bl,
-		      new C_OnFinisher(fin, &mds->finisher));
+		      new C_OnFinisher(fin, mds->finisher));
       return;
     }
   }
@@ -8349,7 +8349,7 @@ void MDCache::do_open_ino(inodeno_t ino, open_ino_info_t& info, int err)
     C_IO_MDC_OpenInoBacktraceFetched *fin =
       new C_IO_MDC_OpenInoBacktraceFetched(this, ino);
     fetch_backtrace(ino, info.pool, fin->bl,
-		    new C_OnFinisher(fin, &mds->finisher));
+		    new C_OnFinisher(fin, mds->finisher));
   } else {
     assert(!info.ancestors.empty());
     info.checking = mds->get_nodeid();
@@ -8552,7 +8552,7 @@ void MDCache::find_ino_peers(inodeno_t ino, MDSInternalContextBase *c, mds_rank_
   fip.tid = tid;
   fip.fin = c;
   fip.hint = hint;
-  fip.checked.insert(mds->whoami);
+  fip.checked.insert(mds->get_nodeid());
   _do_find_ino_peer(fip);
 }
 
@@ -8573,7 +8573,7 @@ void MDCache::_do_find_ino_peer(find_ino_peer_info_t& fip)
     fip.hint = MDS_RANK_NONE;
   } else {
     for (set<mds_rank_t>::iterator p = active.begin(); p != active.end(); ++p)
-      if (*p != mds->whoami &&
+      if (*p != mds->get_nodeid() &&
 	  fip.checked.count(*p) == 0) {
 	m = *p;
 	break;
@@ -11072,7 +11072,7 @@ void MDCache::_fragment_committed(dirfrag_t basedirfrag, list<CDir*>& resultfrag
     g_ceph_context,
     new C_OnFinisher(
       new C_IO_MDC_FragmentFinish(this, basedirfrag, resultfrags),
-      &mds->finisher));
+      mds->finisher));
 
   SnapContext nullsnapc;
   object_locator_t oloc(mds->mdsmap->get_metadata_pool());
@@ -11712,11 +11712,11 @@ void MDCache::flush_dentry(const string& path, Context *fin)
 
 class C_FinishIOMDR : public MDSInternalContextBase {
 protected:
-  MDS *mds;
+  MDSRank *mds;
   MDRequestRef mdr;
-  MDS *get_mds() { return mds; }
+  MDSRank *get_mds() { return mds; }
 public:
-  C_FinishIOMDR(MDS *mds_, MDRequestRef& mdr_) : mds(mds_), mdr(mdr_) {}
+  C_FinishIOMDR(MDSRank *mds_, MDRequestRef& mdr_) : mds(mds_), mdr(mdr_) {}
   void finish(int r) { mds->server->respond_to_request(mdr, r); }
 };
 
@@ -11803,6 +11803,11 @@ void MDCache::maybe_eval_stray(CInode *in, bool delay) {
 }
 
 void MDCache::notify_mdsmap_changed()
+{
+  stray_manager.update_op_limit();
+}
+
+void MDCache::notify_osdmap_changed()
 {
   stray_manager.update_op_limit();
 }
