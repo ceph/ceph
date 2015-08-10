@@ -529,6 +529,7 @@ int DataScan::scan_inodes()
         // If no stashed layout was found, guess it
         guessed_layout.fl_object_size = chunk_size;
         guessed_layout.fl_stripe_unit = chunk_size;
+        guessed_layout.fl_stripe_count = 1;
       } else if (loaded_layout.fl_object_size < accum_res.max_obj_size) {
         // If the max size seen exceeds what the stashed layout claims, then
         // disbelieve it.  Guess instead.
@@ -536,26 +537,85 @@ int DataScan::scan_inodes()
                 << std::dec << ", ignoring in favour of best guess" << dendl;
         guessed_layout.fl_object_size = chunk_size;
         guessed_layout.fl_stripe_unit = chunk_size;
+        guessed_layout.fl_stripe_count = 1;
       } else {
         // We have a stashed layout that we can't disprove, so apply it
         guessed_layout = loaded_layout;
+        dout(20) << "loaded layout from xattr:"
+          << " os: " << guessed_layout.fl_object_size
+          << " sc: " << guessed_layout.fl_stripe_count
+          << " su: " << guessed_layout.fl_stripe_unit
+          << dendl;
         // User might have transplanted files from a pool with a different
         // ID, so whatever the loaded_layout says, we'll force the injected
         // layout to point to the pool we really read from
         guessed_layout.fl_pg_pool = data_pool_id;
       }
 
-      file_size = guessed_layout.fl_object_size * accum_res.ceiling_obj_index
-                  + accum_res.ceiling_obj_size;
+      if (guessed_layout.fl_stripe_count == 1) {
+        // Unstriped file: simple chunking
+        file_size = guessed_layout.fl_object_size * accum_res.ceiling_obj_index
+                    + accum_res.ceiling_obj_size;
+      } else {
+        // Striped file: need to examine the last fl_stripe_count objects
+        // in the file to determine the size.
+
+        // How many complete (i.e. not last stripe) objects?
+        uint64_t complete_objs = 0;
+        if (accum_res.ceiling_obj_index > guessed_layout.fl_stripe_count - 1) {
+          complete_objs = (accum_res.ceiling_obj_index / guessed_layout.fl_stripe_count) * guessed_layout.fl_stripe_count;
+        } else {
+          complete_objs = 0;
+        }
+
+        // How many potentially-short objects (i.e. last stripe set) objects?
+        uint64_t partial_objs = accum_res.ceiling_obj_index + 1 - complete_objs;
+
+        dout(10) << "calculating striped size from complete objs: "
+                 << complete_objs << ", partial objs: " << partial_objs
+                 << dendl;
+
+        // Maximum amount of data that may be in the incomplete objects
+        uint64_t incomplete_size = 0;
+
+        // For each short object, calculate the max file size within it
+        // and accumulate the maximum
+        for (uint64_t i = complete_objs; i < complete_objs + partial_objs; ++i) {
+          char buf[60];
+          snprintf(buf, sizeof(buf), "%llx.%08llx",
+              (long long unsigned)obj_name_ino, (long long unsigned)i);
+
+          uint64_t osize(0);
+          time_t omtime(0);
+          r = data_io.stat(std::string(buf), &osize, &omtime);
+          if (r == 0) {
+	    if (osize > 0) {
+	      // Upper bound within this object
+	      uint64_t upper_size = (osize - 1) / guessed_layout.fl_stripe_unit
+		* (guessed_layout.fl_stripe_unit * guessed_layout.fl_stripe_count)
+		+ (i % guessed_layout.fl_stripe_count)
+		* guessed_layout.fl_stripe_unit + (osize - 1)
+		% guessed_layout.fl_stripe_unit + 1;
+	      incomplete_size = MAX(incomplete_size, upper_size);
+	    }
+          } else if (r == -ENOENT) {
+            // Absent object, treat as size 0 and ignore.
+          } else {
+            // Unexpected error, carry r to outer scope for handling.
+            break;
+          }
+        }
+        if (r != 0 && r != -ENOENT) {
+          derr << "Unexpected error checking size of ino 0x" << std::hex
+               << obj_name_ino << std::dec << ": " << cpp_strerror(r) << dendl;
+          continue;
+        }
+        file_size = complete_objs * guessed_layout.fl_object_size
+                    + incomplete_size;
+      }
     } else {
       file_size = accum_res.ceiling_obj_size;
     }
-
-    ceph_file_layout guessed_layout;
-    guessed_layout = g_default_file_layout;
-    guessed_layout.fl_object_size = chunk_size;
-    guessed_layout.fl_stripe_unit = chunk_size;
-    guessed_layout.fl_pg_pool = data_pool_id;
 
     // Santity checking backtrace ino against object name
     if (have_backtrace && backtrace.ino != obj_name_ino) {
