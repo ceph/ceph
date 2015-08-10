@@ -1416,6 +1416,10 @@ int MDSMonitor::management_command(
     newmap.inc = mdsmap.inc;
     newmap.enabled = mdsmap.enabled;
     newmap.inline_data_enabled = mdsmap.inline_data_enabled;
+    newmap.compat = get_mdsmap_compat_set_default();
+    newmap.session_timeout = g_conf->mds_session_timeout;
+    newmap.session_autoclose = g_conf->mds_session_autoclose;
+    newmap.max_file_size = g_conf->mds_max_file_size;
 
     // Persist the new MDSMap
     pending_mdsmap = newmap;
