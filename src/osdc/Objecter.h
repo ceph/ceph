@@ -1317,6 +1317,7 @@ public:
     int starting_pg_num;
     bool at_end_of_pool;
     bool at_end_of_pg;
+    bool sort_bitwise;
 
     int64_t pool_id;
     int pool_snap_seq;
@@ -1339,6 +1340,7 @@ public:
     NListContext() : current_pg(0), current_pg_epoch(0), starting_pg_num(0),
 		    at_end_of_pool(false),
 		    at_end_of_pg(false),
+		    sort_bitwise(false),
 		    pool_id(0),
 		    pool_snap_seq(0),
                     max_entries(0),
@@ -1382,6 +1384,7 @@ public:
     int starting_pg_num;
     bool at_end_of_pool;
     bool at_end_of_pg;
+    bool sort_bitwise;
 
     int64_t pool_id;
     int pool_snap_seq;
@@ -1404,6 +1407,7 @@ public:
     ListContext() : current_pg(0), current_pg_epoch(0), starting_pg_num(0),
 		    at_end_of_pool(false),
 		    at_end_of_pg(false),
+		    sort_bitwise(false),
 		    pool_id(0),
 		    pool_snap_seq(0),
                     max_entries(0),

@@ -3167,7 +3167,13 @@ void Objecter::list_nobjects(NListContext *list_context, Context *onfinish)
 
   if (list_context->starting_pg_num == 0) {     // there can't be zero pgs!
     list_context->starting_pg_num = pg_num;
+    list_context->sort_bitwise = osdmap->test_flag(CEPH_OSDMAP_SORTBITWISE);
     ldout(cct, 20) << pg_num << " placement groups" << dendl;
+  }
+  if (list_context->sort_bitwise != osdmap->test_flag(CEPH_OSDMAP_SORTBITWISE)) {
+    ldout(cct, 10) << " hobject sort order changed, restarting this pg" << dendl;
+    list_context->cookie = collection_list_handle_t();
+    list_context->sort_bitwise = osdmap->test_flag(CEPH_OSDMAP_SORTBITWISE);
   }
   if (list_context->starting_pg_num != pg_num) {
     // start reading from the beginning; the pgs have changed
@@ -3306,7 +3312,13 @@ void Objecter::list_objects(ListContext *list_context, Context *onfinish)
 
   if (list_context->starting_pg_num == 0) {     // there can't be zero pgs!
     list_context->starting_pg_num = pg_num;
+    list_context->sort_bitwise = osdmap->test_flag(CEPH_OSDMAP_SORTBITWISE);
     ldout(cct, 20) << pg_num << " placement groups" << dendl;
+  }
+  if (list_context->sort_bitwise != osdmap->test_flag(CEPH_OSDMAP_SORTBITWISE)) {
+    ldout(cct, 10) << " hobject sort order changed, restarting this pg" << dendl;
+    list_context->cookie = collection_list_handle_t();
+    list_context->sort_bitwise = osdmap->test_flag(CEPH_OSDMAP_SORTBITWISE);
   }
   if (list_context->starting_pg_num != pg_num) {
     // start reading from the beginning; the pgs have changed
