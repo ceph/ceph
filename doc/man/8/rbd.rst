@@ -70,9 +70,9 @@ Parameters
    Specifies the object size expressed as a number of bits, such that
    the object size is ``1 << order``. The default is 22 (4 MB).
 
-.. option:: --stripe-unit size-in-bytes
+.. option:: --stripe-unit size-in-B/K/M
 
-   Specifies the stripe unit size in bytes.  See striping section (below) for more details.
+   Specifies the stripe unit size in B/K/M.  See striping section (below) for more details.
 
 .. option:: --stripe-count num
 
@@ -176,11 +176,11 @@ Commands
   If image is a clone, information about its parent is also displayed.
   If a snapshot is specified, whether it is protected is shown as well.
 
-:command:`create` (-s | --size *size-in-M/G/T*) [--image-format *format-id*] [--order *bits*] [--stripe-unit *size-in-bytes* --stripe-count *num*] [--image-feature *feature-name*]... [--image-shared] *image-spec*
+:command:`create` (-s | --size *size-in-M/G/T*) [--image-format *format-id*] [--order *bits*] [--stripe-unit *size-in-B/K/M* --stripe-count *num*] [--image-feature *feature-name*]... [--image-shared] *image-spec*
   Will create a new rbd image. You must also specify the size via --size.  The
   --stripe-unit and --stripe-count arguments are optional, but must be used together.
 
-:command:`clone` [--order *bits*] [--stripe-unit *size-in-bytes* --stripe-count *num*] [--image-feature *feature-name*]... [--image-shared] *parent-snap-spec* *child-image-spec*
+:command:`clone` [--order *bits*] [--stripe-unit *size-in-B/K/M* --stripe-count *num*] [--image-feature *feature-name*] [--image-shared] *parent-snap-spec* *child-image-spec*
   Will create a clone (copy-on-write child) of the parent snapshot.
   Object order will be identical to that of the parent image unless
   specified. Size will be the same as the parent snapshot. The --stripe-unit
@@ -214,7 +214,7 @@ Commands
 :command:`export` (*image-spec* | *snap-spec*) [*dest-path*]
   Exports image to dest path (use - for stdout).
 
-:command:`import` [--image-format *format-id*] [--order *bits*] [--stripe-unit *size-in-bytes* --stripe-count *num*] [--image-feature *feature-name*]... [--image-shared] *src-path* [*image-spec*]
+:command:`import` [--image-format *format-id*] [--order *bits*] [--stripe-unit *size-in-B/K/M* --stripe-count *num*] [--image-feature *feature-name*]... [--image-shared] *src-path* [*image-spec*]
   Creates a new image and imports its data from path (use - for
   stdin).  The import operation will try to create sparse rbd images 
   if possible.  For import from stdin, the sparsification unit is
@@ -343,9 +343,9 @@ Commands
   Release a lock on an image. The lock id and locker are
   as output by lock ls.
 
-:command:`bench-write` [--io-size *size-in-bytes*] [--io-threads *num-ios-in-flight*] [--io-total *total-bytes-to-write*] [--io-pattern seq | rand] *image-spec*
+:command:`bench-write` [--io-size *size-in-B/K/M/G/T*] [--io-threads *num-ios-in-flight*] [--io-total *total-size-to-write-in-B/K/M/G/T*] [--io-pattern seq | rand] *image-spec*
   Generate a series of writes to the image and measure the write throughput and
-  latency.  Defaults are: --io-size 4096, --io-threads 16, --io-total 1GB,
+  latency.  Defaults are: --io-size 4096, --io-threads 16, --io-total 1G,
   --io-pattern seq.
 
 Image and snap specs
@@ -491,7 +491,7 @@ To create an image and a clone from it::
 
 To create an image with a smaller stripe_unit (to better distribute small writes in some workloads)::
 
-       rbd create mypool/myimage --size 102400 --stripe-unit 65536 --stripe-count 16
+       rbd create mypool/myimage --size 102400 --stripe-unit 65536B --stripe-count 16
 
 To change an image from one image format to another, export it and then
 import it as the desired image format::
