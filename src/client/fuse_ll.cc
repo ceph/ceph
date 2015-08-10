@@ -471,7 +471,9 @@ static void fuse_ll_open(fuse_req_t req, fuse_ino_t ino,
   if (r == 0) {
     fi->fh = (long)fh;
 #if FUSE_VERSION >= FUSE_MAKE_VERSION(2, 8)
-    if (cfuse->client->cct->_conf->fuse_use_invalidate_cb)
+    if (cfuse->client->cct->_conf->fuse_disable_pagecache)
+      fi->direct_io = 1;
+    else if (cfuse->client->cct->_conf->fuse_use_invalidate_cb)
       fi->keep_cache = 1;
 #endif
     fuse_reply_open(req, fi);
@@ -673,6 +675,12 @@ static void fuse_ll_create(fuse_req_t req, fuse_ino_t parent, const char *name,
   if (r == 0) {
     fi->fh = (long)fh;
     fe.ino = cfuse->make_fake_ino(fe.attr.st_ino, fe.attr.st_dev);
+#if FUSE_VERSION >= FUSE_MAKE_VERSION(2, 8)
+    if (cfuse->client->cct->_conf->fuse_disable_pagecache)
+      fi->direct_io = 1;
+    else if (cfuse->client->cct->_conf->fuse_use_invalidate_cb)
+      fi->keep_cache = 1;
+#endif
     fuse_reply_create(req, &fe, fi);
   } else
     fuse_reply_err(req, -r);
