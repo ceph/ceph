@@ -19,8 +19,10 @@
 extern "C" {
 #include "libxio.h"
 }
+#include <atomic>
 #include <boost/lexical_cast.hpp>
 #include "XioInSeq.h"
+#include "include/mpmc-bounded-queue.hpp"
 #include "msg/SimplePolicyMessenger.h"
 #include "XioConnection.h"
 #include "XioMsg.h"
@@ -39,31 +41,21 @@ private:
 
   struct SubmitQueue
   {
-    const static int nlanes = 7;
+    const static int nlanes = 1;
 
     struct Lane
     {
-      uint32_t size;
-      XioMsg::Queue q;
-      pthread_spinlock_t sp;
+      mpmc_bounded_queue_t<XioSubmit*> mpmc_q;
       CACHE_PAD(0);
+      Lane() : mpmc_q(1024) {}
     };
 
     Lane qlane[nlanes];
 
     int ix; /* atomicity by portal thread */
 
-    SubmitQueue() : ix(0)
-      {
-	int ix;
-	Lane* lane;
-
-	for (ix = 0; ix < nlanes; ++ix) {
-	  lane = &qlane[ix];
-	  pthread_spin_init(&lane->sp, PTHREAD_PROCESS_PRIVATE);
-	  lane->size = 0;
-	}
-      }
+    SubmitQueue()
+      {}
 
     inline Lane* get_lane(XioConnection *xcon)
       {
@@ -73,41 +65,31 @@ private:
     void enq(XioConnection *xcon, XioSubmit* xs)
       {
 	Lane* lane = get_lane(xcon);
-	pthread_spin_lock(&lane->sp);
-	lane->q.push_back(*xs);
-	++(lane->size);
-	pthread_spin_unlock(&lane->sp);
+	while (! lane->mpmc_q.enqueue(xs))
+	  ;
       }
 
     void enq(XioConnection *xcon, XioSubmit::Queue& requeue_q)
       {
-	int size = requeue_q.size();
-	Lane* lane = get_lane(xcon);
-	pthread_spin_lock(&lane->sp);
-	XioSubmit::Queue::const_iterator i1 = lane->q.end();
-	lane->q.splice(i1, requeue_q);
-	lane->size += size;
-	pthread_spin_unlock(&lane->sp);
+	auto q_iter = requeue_q.begin();
+	while (q_iter != requeue_q.end()) {
+	  XioSubmit *xs = &(*q_iter);
+	  enq(xcon, xs);
+	}
       }
 
     void deq(XioSubmit::Queue& send_q)
-      {
-	Lane* lane;
-	int cnt;
-	for (cnt = 0; cnt < nlanes; ++cnt, ++ix, ix = ix % nlanes) {
-	  lane = &qlane[ix];
-	  pthread_spin_lock(&lane->sp);
-	  if (lane->size > 0) {
-	    XioSubmit::Queue::const_iterator i1 = send_q.end();
-	    send_q.splice(i1, lane->q);
-	    lane->size = 0;
-	    ++ix, ix = ix % nlanes;
-	    pthread_spin_unlock(&lane->sp);
-	    break;
-	  }
-	  pthread_spin_unlock(&lane->sp);
-	}
+    {
+      int ix;
+      Lane* lane;
+      XioSubmit* xs;
+
+      for (ix = 0; ix < nlanes; ++ix) {
+	lane = &qlane[ix];
+	while (lane->mpmc_q.dequeue(xs))
+	  send_q.push_back(*xs);
       }
+    }
 
   }; /* SubmitQueue */
 
@@ -120,7 +102,7 @@ private:
   void *ev_loop;
   string xio_uri;
   char *portal_id;
-  bool _shutdown;
+  std::atomic<bool> _shutdown;
   bool drained;
   uint32_t magic;
   uint32_t special_handling;
@@ -241,9 +223,6 @@ public:
       do {
 	submit_q.deq(send_q);
 
-	/* shutdown() barrier */
-	pthread_spin_lock(&sp);
-
       restart:
 	size = send_q.size();
 
@@ -312,7 +291,7 @@ public:
 		  break;
 		};
 	      } else {
-		xcon->send.store(msg->timestamp); // XXX relax
+		xcon->send.store(msg->timestamp, std::memory_order_relaxed);
 		xcon->send_ctr += xmsg->hdr.msg_cnt; // only inc if cb promised
 	      }
 	      break;
@@ -326,7 +305,6 @@ public:
 	  } /* while */
 	} /* size > 0 */
 
-	pthread_spin_unlock(&sp);
 	xio_context_run_loop(ctx, 300);
 
       } while ((!_shutdown) || (!drained));
@@ -341,9 +319,7 @@ public:
 
   void shutdown()
     {
-	pthread_spin_lock(&sp);
 	_shutdown = true;
-	pthread_spin_unlock(&sp);
     }
 };
 

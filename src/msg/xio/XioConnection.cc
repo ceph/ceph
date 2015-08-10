@@ -544,7 +544,8 @@ int XioConnection::discard_input_queue(uint32_t flags)
 	portal->release_xio_rsp(static_cast<XioRsp*>(xs));
 	break;
       default:
-	ldout(msgr->cct,0) << __func__ << ": Unknown Msg type " << xs->type << dendl;
+	ldout(msgr->cct,0) << __func__ << ": Unknown Msg type " << xs->type
+			   << dendl;
 	break;
     }
   }
