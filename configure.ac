@@ -932,6 +932,9 @@ AC_CHECK_FUNC([fallocate],
 	[AC_DEFINE([CEPH_HAVE_FALLOCATE], [], [fallocate(2) is supported])],
 	[])
 
+# getgrouplist
+AC_CHECK_FUNCS([getgrouplist])
+
 #
 # Test for time-related `struct stat` members.
 #
