@@ -308,7 +308,7 @@ public:
  * session map
  */
 
-class MDS;
+class MDSRank;
 
 /**
  * Encapsulate the serialized state associated with SessionMap.  Allows
@@ -360,7 +360,7 @@ public:
 
 class SessionMap : public SessionMapStore {
 public:
-  MDS *mds;
+  MDSRank *mds;
 
 protected:
   version_t projected, committing, committed;
@@ -369,7 +369,7 @@ public:
   uint64_t set_state(Session *session, int state);
   map<version_t, list<MDSInternalContextBase*> > commit_waiters;
 
-  SessionMap(MDS *m) : mds(m),
+  SessionMap(MDSRank *m) : mds(m),
 		       projected(0), committing(0), committed(0),
                        loaded_legacy(false)
   { }

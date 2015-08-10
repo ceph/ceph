@@ -16,6 +16,8 @@
 #ifndef CEPH_MCLIENTREQUESTFORWARD_H
 #define CEPH_MCLIENTREQUESTFORWARD_H
 
+#include "msg/Message.h"
+
 class MClientRequestForward : public Message {
   int32_t dest_mds;
   int32_t num_fwd;

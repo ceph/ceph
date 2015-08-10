@@ -41,7 +41,7 @@ public:
   void dump(Formatter *f) const;
   static void generate_test_instances(list<ESubtreeMap*>& ls);
 
-  void replay(MDS *mds);
+  void replay(MDSRank *mds);
 };
 
 #endif

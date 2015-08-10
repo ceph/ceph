@@ -34,7 +34,6 @@ using namespace std;
 
 #define SOCKET_PRIORITY_MIN_DELAY 6
 
-class MDS;
 class Timer;
 
 

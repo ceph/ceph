@@ -12,11 +12,12 @@
  * 
  */
 
-#include "MDS.h"
+#include "MDSRank.h"
 #include "MDCache.h"
 #include "Mutation.h"
 #include "SessionMap.h"
 #include "osdc/Filer.h"
+#include "common/Finisher.h"
 
 #include "common/config.h"
 #include "common/errno.h"
@@ -32,7 +33,7 @@ class SessionMapIOContext : public MDSIOContextBase
 {
   protected:
     SessionMap *sessionmap;
-    MDS *get_mds() {return sessionmap->mds;}
+    MDSRank *get_mds() {return sessionmap->mds;}
   public:
     SessionMapIOContext(SessionMap *sessionmap_) : sessionmap(sessionmap_) {
       assert(sessionmap != NULL);
@@ -63,7 +64,7 @@ void SessionMap::dump()
 object_t SessionMap::get_object_name()
 {
   char s[30];
-  snprintf(s, sizeof(s), "mds%d_sessionmap", int(mds->whoami));
+  snprintf(s, sizeof(s), "mds%d_sessionmap", int(mds->get_nodeid()));
   return object_t(s);
 }
 
@@ -205,7 +206,7 @@ void SessionMap::_load_finish(
     op.omap_get_vals(last_key, "", g_conf->mds_sessionmap_keys_per_op,
         &c->session_vals, &c->values_r);
     mds->objecter->read(oid, oloc, op, CEPH_NOSNAP, NULL, 0,
-        new C_OnFinisher(c, &mds->finisher));
+        new C_OnFinisher(c, mds->finisher));
   } else {
     // I/O is complete.  Update `by_state`
     dout(10) << __func__ << ": omap load complete" << dendl;
@@ -246,7 +247,7 @@ void SessionMap::load(MDSInternalContextBase *onload)
   op.omap_get_vals("", "", g_conf->mds_sessionmap_keys_per_op,
       &c->session_vals, &c->values_r);
 
-  mds->objecter->read(oid, oloc, op, CEPH_NOSNAP, NULL, 0, new C_OnFinisher(c, &mds->finisher));
+  mds->objecter->read(oid, oloc, op, CEPH_NOSNAP, NULL, 0, new C_OnFinisher(c, mds->finisher));
 }
 
 class C_IO_SM_LoadLegacy : public SessionMapIOContext {
@@ -274,7 +275,7 @@ void SessionMap::load_legacy()
   object_locator_t oloc(mds->mdsmap->get_metadata_pool());
 
   mds->objecter->read_full(oid, oloc, CEPH_NOSNAP, &c->bl, 0,
-			   new C_OnFinisher(c, &mds->finisher));
+			   new C_OnFinisher(c, mds->finisher));
 }
 
 void SessionMap::_load_legacy_finish(int r, bufferlist &bl)
@@ -402,7 +403,7 @@ void SessionMap::save(MDSInternalContextBase *onsave, version_t needv)
   null_sessions.clear();
 
   mds->objecter->mutate(oid, oloc, op, snapc, ceph_clock_now(g_ceph_context),
-      0, NULL, new C_OnFinisher(new C_IO_SM_Save(this, version), &mds->finisher));
+      0, NULL, new C_OnFinisher(new C_IO_SM_Save(this, version), mds->finisher));
 }
 
 void SessionMap::_save_finish(version_t v)
@@ -823,7 +824,7 @@ void SessionMap::save_if_dirty(const std::set<entity_name_t> &tgt_sessions,
       object_locator_t oloc(mds->mdsmap->get_metadata_pool());
       MDSInternalContextBase *on_safe = gather_bld->new_sub();
       mds->objecter->mutate(oid, oloc, op, snapc, ceph_clock_now(g_ceph_context),
-          0, NULL, new C_OnFinisher(new C_IO_SM_Save_One(this, on_safe), &mds->finisher));
+          0, NULL, new C_OnFinisher(new C_IO_SM_Save_One(this, on_safe), mds->finisher));
     }
   }
 }
