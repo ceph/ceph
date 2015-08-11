@@ -360,6 +360,7 @@ class TestGitbuilderProject(object):
         ('ubuntu', '14.04', None, 'trusty'),
         ('debian', '7.0', None, 'wheezy'),
         ('debian', '7', None, 'wheezy'),
+        ('debian', '7.1', None, 'wheezy'),
         ('ubuntu', '12.04', None, 'precise'),
         ('ubuntu', '14.04', None, 'trusty'),
     ]
