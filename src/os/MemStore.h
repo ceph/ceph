@@ -29,7 +29,6 @@
 class MemStore : public ObjectStore {
 public:
   struct Object : public RefCountedObject {
-    bufferlist data;
     map<string,bufferptr> xattr;
     bufferlist omap_header;
     map<string,bufferlist> omap;
@@ -38,24 +37,29 @@ public:
     friend void intrusive_ptr_add_ref(Object *o) { o->get(); }
     friend void intrusive_ptr_release(Object *o) { o->put(); }
 
-    void encode(bufferlist& bl) const {
-      ENCODE_START(1, 1, bl);
-      ::encode(data, bl);
+    // interface for object data
+    virtual size_t get_size() const = 0;
+    virtual int read(uint64_t offset, uint64_t len, bufferlist &bl) = 0;
+    virtual int write(uint64_t offset, const bufferlist &bl) = 0;
+    virtual int clone(Object *src, uint64_t srcoff, uint64_t len,
+                      uint64_t dstoff) = 0;
+    virtual int truncate(uint64_t offset) = 0;
+    virtual void encode(bufferlist& bl) const = 0;
+    virtual void decode(bufferlist::iterator& p) = 0;
+
+    void encode_base(bufferlist& bl) const {
       ::encode(xattr, bl);
       ::encode(omap_header, bl);
       ::encode(omap, bl);
-      ENCODE_FINISH(bl);
     }
-    void decode(bufferlist::iterator& p) {
-      DECODE_START(1, p);
-      ::decode(data, p);
+    void decode_base(bufferlist::iterator& p) {
       ::decode(xattr, p);
       ::decode(omap_header, p);
       ::decode(omap, p);
-      DECODE_FINISH(p);
     }
+
     void dump(Formatter *f) const {
-      f->dump_int("data_len", data.length());
+      f->dump_int("data_len", get_size());
       f->dump_int("omap_header_len", omap_header.length());
 
       f->open_array_section("xattrs");
@@ -82,6 +86,31 @@ public:
     }
   };
   typedef Object::Ref ObjectRef;
+
+  struct BufferlistObject : public Object {
+    bufferlist data;
+
+    size_t get_size() const override { return data.length(); }
+
+    int read(uint64_t offset, uint64_t len, bufferlist &bl) override;
+    int write(uint64_t offset, const bufferlist &bl) override;
+    int clone(Object *src, uint64_t srcoff, uint64_t len,
+              uint64_t dstoff) override;
+    int truncate(uint64_t offset) override;
+
+    void encode(bufferlist& bl) const override {
+      ENCODE_START(1, 1, bl);
+      ::encode(data, bl);
+      encode_base(bl);
+      ENCODE_FINISH(bl);
+    }
+    void decode(bufferlist::iterator& p) override {
+      DECODE_START(1, p);
+      ::decode(data, p);
+      decode_base(p);
+      DECODE_FINISH(p);
+    }
+  };
 
   struct Collection : public RefCountedObject {
     ceph::unordered_map<ghobject_t, ObjectRef> object_hash;  ///< for lookup
@@ -126,7 +155,7 @@ public:
       while (s--) {
 	ghobject_t k;
 	::decode(k, p);
-	ObjectRef o(new Object);
+	ObjectRef o(new BufferlistObject);
 	o->decode(p);
 	object_map.insert(make_pair(k, o));
 	object_hash.insert(make_pair(k, o));
@@ -139,7 +168,7 @@ public:
       for (map<ghobject_t, ObjectRef,ghobject_t::BitwiseComparator>::const_iterator p = object_map.begin();
 	   p != object_map.end();
 	   ++p) {
-        result += p->second->data.length();
+        result += p->second->get_size();
       }
 
       return result;
