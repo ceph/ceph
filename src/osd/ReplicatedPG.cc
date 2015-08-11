@@ -504,7 +504,8 @@ void ReplicatedPG::wait_for_blocked_object(const hobject_t& soid, OpRequestRef o
   op->mark_delayed("waiting for blocked object");
 }
 
-bool PGLSParentFilter::filter(bufferlist& xattr_data, bufferlist& outdata)
+bool PGLSParentFilter::filter(const hobject_t &obj,
+                              bufferlist& xattr_data, bufferlist& outdata)
 {
   bufferlist::iterator iter = xattr_data.begin();
   inode_backtrace_t bt;
@@ -525,7 +526,8 @@ bool PGLSParentFilter::filter(bufferlist& xattr_data, bufferlist& outdata)
   return false;
 }
 
-bool PGLSPlainFilter::filter(bufferlist& xattr_data, bufferlist& outdata)
+bool PGLSPlainFilter::filter(const hobject_t &obj,
+                             bufferlist& xattr_data, bufferlist& outdata)
 {
   if (val.size() != xattr_data.length())
     return false;
@@ -539,15 +541,22 @@ bool PGLSPlainFilter::filter(bufferlist& xattr_data, bufferlist& outdata)
 bool ReplicatedPG::pgls_filter(PGLSFilter *filter, hobject_t& sobj, bufferlist& outdata)
 {
   bufferlist bl;
-  int ret = pgbackend->objects_get_attr(
-    sobj,
-    filter->get_xattr(),
-    &bl);
-  dout(0) << "getattr (sobj=" << sobj << ", attr=" << filter->get_xattr() << ") returned " << ret << dendl;
-  if (ret < 0)
-    return false;
 
-  return filter->filter(bl, outdata);
+  // If filter has expressed an interest in an xattr, load it.
+  if (!filter->get_xattr().empty()) {
+    int ret = pgbackend->objects_get_attr(
+      sobj,
+      filter->get_xattr(),
+      &bl);
+    dout(0) << "getattr (sobj=" << sobj << ", attr=" << filter->get_xattr() << ") returned " << ret << dendl;
+    if (ret < 0) {
+      if (ret != -ENODATA || filter->reject_empty_xattr()) {
+        return false;
+      }
+    }
+  }
+
+  return filter->filter(sobj, bl, outdata);
 }
 
 int ReplicatedPG::get_pgls_filter(bufferlist::iterator& iter, PGLSFilter **pfilter)
