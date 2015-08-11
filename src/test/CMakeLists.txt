@@ -92,58 +92,6 @@ add_executable(test_keys
   )
 target_link_libraries(test_keys mon global ${CMAKE_DL_LIBS} ${TCMALLOC_LIBS})
 
-## dencoder
-set(dencoder_srcs
-  encoding/ceph_dencoder.cc
-  ${CMAKE_SOURCE_DIR}/src/krbd.cc
-  ${CMAKE_SOURCE_DIR}/src/common/secret.c
-  ${CMAKE_SOURCE_DIR}/src/common/TextTable.cc
-  )
-if(${WITH_RADOSGW})
-  list(APPEND dencoder_srcs
-    ${CMAKE_SOURCE_DIR}/src/rgw/rgw_dencoder.cc
-    ${CMAKE_SOURCE_DIR}/src/rgw/rgw_acl.cc
-    ${CMAKE_SOURCE_DIR}/src/rgw/rgw_common.cc
-    ${CMAKE_SOURCE_DIR}/src/rgw/rgw_env.cc
-    ${CMAKE_SOURCE_DIR}/src/rgw/rgw_json_enc.cc
-  )
-endif(${WITH_RADOSGW})
-add_executable(dencoder ${dencoder_srcs} $<TARGET_OBJECTS:heap_profiler_objs>)
-if(${WITH_RADOSGW})
-  set(DENCODER_EXTRALIBS
-    rgw_a
-    cls_rgw_client
-    curl
-    expat
-    fcgi
-    resolv
-  )
-endif(${WITH_RADOSGW})
-target_link_libraries(dencoder
-  librados
-  librbd
-  global
-  osd
-  mds
-  mon
-  osdc
-  cls_lock_client
-  cls_refcount_client
-  cls_log_client
-  cls_statelog_client
-  cls_version_client
-  cls_replica_log_client
-  cls_kvs
-  cls_user_client
-  ${DENCODER_EXTRALIBS}
-  blkid
-  udev
-  keyutils
-  ${EXTRALIBS}
-  ${TCMALLOC_LIBS}
-  ${CMAKE_DL_LIBS}
-  )
-
 # get_command_descriptions
 add_executable(get_command_descriptions
   common/get_command_descriptions.cc
