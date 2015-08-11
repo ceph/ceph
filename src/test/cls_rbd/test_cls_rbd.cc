@@ -27,8 +27,6 @@ using ::librbd::cls_client::set_size;
 using ::librbd::cls_client::get_parent;
 using ::librbd::cls_client::set_parent;
 using ::librbd::cls_client::remove_parent;
-using ::librbd::cls_client::snapshot_add;
-using ::librbd::cls_client::snapshot_remove;
 using ::librbd::cls_client::add_child;
 using ::librbd::cls_client::remove_child;
 using ::librbd::cls_client::get_children;
@@ -49,7 +47,6 @@ using ::librbd::cls_client::get_protection_status;
 using ::librbd::cls_client::set_protection_status;
 using ::librbd::cls_client::get_stripe_unit_count;
 using ::librbd::cls_client::set_stripe_unit_count;
-using ::librbd::cls_client::old_snapshot_add;
 using ::librbd::cls_client::get_mutable_metadata;
 using ::librbd::cls_client::object_map_load;
 using ::librbd::cls_client::object_map_save;
@@ -63,6 +60,28 @@ using ::librbd::cls_client::metadata_set;
 using ::librbd::cls_client::metadata_remove;
 using ::librbd::cls_client::metadata_list;
 using ::librbd::cls_client::metadata_get;
+
+
+static int snapshot_add(librados::IoCtx *ioctx, const std::string &oid,
+                        uint64_t snap_id, const std::string &snap_name) {
+  librados::ObjectWriteOperation op;
+  ::librbd::cls_client::snapshot_add(&op, snap_id, snap_name);
+  return ioctx->operate(oid, &op);
+}
+
+static int snapshot_remove(librados::IoCtx *ioctx, const std::string &oid,
+                           uint64_t snap_id) {
+  librados::ObjectWriteOperation op;
+  ::librbd::cls_client::snapshot_remove(&op, snap_id);
+  return ioctx->operate(oid, &op);
+}
+
+static int old_snapshot_add(librados::IoCtx *ioctx, const std::string &oid,
+                            uint64_t snap_id, const std::string &snap_name) {
+  librados::ObjectWriteOperation op;
+  ::librbd::cls_client::old_snapshot_add(&op, snap_id, snap_name);
+  return ioctx->operate(oid, &op);
+}
 
 static char *random_buf(size_t len)
 {
