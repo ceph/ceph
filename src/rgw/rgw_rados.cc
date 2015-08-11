@@ -1545,6 +1545,8 @@ int RGWRados::init_complete()
   if (ret < 0)
     return ret;
 
+  init_unique_trans_id_deps();
+
   ret = region_map.read(cct, this);
   if (ret < 0) {
     if (ret != -ENOENT) {
