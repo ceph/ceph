@@ -85,6 +85,41 @@ function TEST_osd_pool_get_set() {
     teardown $dir || return 1
 }
 
+function TEST_mon_add_to_single_mon() {
+    local dir=$1
+
+    fsid=$(uuidgen)
+    MONA=127.0.0.1:7117
+    MONB=127.0.0.1:7118
+    CEPH_ARGS_orig=$CEPH_ARGS
+    CEPH_ARGS="--fsid=$fsid --auth-supported=none "
+    CEPH_ARGS+="--mon-initial-members=a "
+    CEPH_ARGS+="--mon-host=$MONA "
+
+    setup $dir || return 1
+    run_mon $dir a --public-addr $MONA || return 1
+    # wait for the quorum
+    timeout 3 ceph -s > /dev/null || return 1
+    # strictly speaking it's not a feature, but an expected hahaviour.
+    timeout 3 ceph mon add b $MONB || [ $? = 124 ] || return 1
+    run_mon $dir b --public-addr $MONB || return 1
+    teardown $dir || return 1
+
+    setup $dir || return 1
+    run_mon $dir a --public-addr $MONA || return 1
+    # without the fix of #5454, mon.a will assert failure at seeing the MMonJoin
+    # from mon.b
+    run_mon $dir b --public-addr $MONB || return 1
+    # wait for the quorum
+    timeout 9 ceph -s > /dev/null || return 1
+    local num_mons
+    num_mons=$(ceph mon dump --format=xml 2>/dev/null | $XMLSTARLET sel -t -v "count(//mons/mon)") || return 1
+    [ $num_mons == 2 ] || return 1
+    # no reason to take more than 2 secs to get this submitted
+    timeout 1 ceph mon add b $MONB || return 1
+    teardown $dir || return 1
+}
+
 main misc "$@"
 
 # Local Variables:
