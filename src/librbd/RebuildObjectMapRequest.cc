@@ -165,17 +165,16 @@ bool RebuildObjectMapRequest::should_complete(int r) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 5) << this << " should_complete: " << " r=" << r << dendl;
 
+  RWLock::RLocker owner_lock(m_image_ctx.owner_lock);
   switch (m_state) {
   case STATE_RESIZE_OBJECT_MAP:
     ldout(cct, 5) << "RESIZE_OBJECT_MAP" << dendl;
     if (r == -ESTALE && !m_attempted_trim) {
       // objects are still flagged as in-use -- delete them
       m_attempted_trim = true;
-      RWLock::RLocker owner_lock(m_image_ctx.owner_lock);
       send_trim_image();
       return false;
     } else if (r == 0) {
-      RWLock::RLocker owner_lock(m_image_ctx.owner_lock);
       send_verify_objects();
     }
     break;
@@ -183,7 +182,6 @@ bool RebuildObjectMapRequest::should_complete(int r) {
   case STATE_TRIM_IMAGE:
     ldout(cct, 5) << "TRIM_IMAGE" << dendl;
     if (r == 0) {
-      RWLock::RLocker owner_lock(m_image_ctx.owner_lock);
       send_resize_object_map();
     }
     break;
@@ -191,7 +189,6 @@ bool RebuildObjectMapRequest::should_complete(int r) {
   case STATE_VERIFY_OBJECTS:
     ldout(cct, 5) << "VERIFY_OBJECTS" << dendl;
     if (r == 0) {
-      assert(m_image_ctx.owner_lock.is_locked());
       send_save_object_map();
     }
     break;
@@ -199,7 +196,6 @@ bool RebuildObjectMapRequest::should_complete(int r) {
   case STATE_SAVE_OBJECT_MAP:
     ldout(cct, 5) << "SAVE_OBJECT_MAP" << dendl;
     if (r == 0) {
-      RWLock::RLocker owner_lock(m_image_ctx.owner_lock);
       send_update_header();
     }
     break;

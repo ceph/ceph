@@ -113,6 +113,7 @@ bool TrimRequest::should_complete(int r)
     return true;
   }
 
+  RWLock::RLocker owner_lock(m_image_ctx.owner_lock);
   switch (m_state) {
   case STATE_COPYUP_OBJECTS:
     ldout(cct, 5) << " COPYUP_OBJECTS" << dendl;
@@ -121,10 +122,7 @@ bool TrimRequest::should_complete(int r)
 
   case STATE_PRE_REMOVE:
     ldout(cct, 5) << " PRE_REMOVE" << dendl;
-    {
-      RWLock::RLocker owner_lock(m_image_ctx.owner_lock);
-      send_remove_objects();
-    }
+    send_remove_objects();
     break;
 
   case STATE_REMOVE_OBJECTS:
@@ -134,10 +132,7 @@ bool TrimRequest::should_complete(int r)
 
   case STATE_POST_REMOVE:
     ldout(cct, 5) << " POST_OBJECTS" << dendl;
-    {
-      RWLock::RLocker owner_lock(m_image_ctx.owner_lock);
-      send_clean_boundary();
-    }
+    send_clean_boundary();
     break;
 
   case STATE_CLEAN_BOUNDARY:
