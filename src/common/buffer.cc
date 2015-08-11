@@ -697,6 +697,12 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
     r->nref.inc();
     bdout << "ptr " << this << " get " << _raw << bendl;
   }
+  buffer::ptr::ptr(raw *r, unsigned o, unsigned l)
+    : _raw(r), _off(o), _len(l), embed(false)
+  {
+    r->nref.inc();
+    bdout << "ptr " << this << " get " << _raw << bendl;
+  }
   buffer::ptr::ptr(unsigned l) : _off(0), _len(l), embed(false)
   {
     _raw = create(l);
@@ -1450,12 +1456,6 @@ void buffer::list::rebuild_page_aligned()
     }
   }
 
-  void buffer::list::append(const ptr& bp)
-  {
-    if (bp.length())
-      push_back(bp);
-  }
-
   void buffer::list::append(const ptr& bp, unsigned off, unsigned len)
   {
     assert(len+off <= bp.length());
@@ -1470,8 +1470,7 @@ void buffer::list::rebuild_page_aligned()
       }
     }
     // add new item to list
-    _ptrs.push_back(*(new ptr(bp, off, len)));
-    _len += len;
+    push_back(bp.get_raw(), bp.offset() + off, len);
   }
 
   void buffer::list::append(const list& bl)

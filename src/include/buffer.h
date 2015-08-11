@@ -185,6 +185,7 @@ public:
   public:
     ptr() : _raw(0), _off(0), _len(0), embed(false) {}
     ptr(raw *r);
+    ptr(raw *r, unsigned o, unsigned l);
     ptr(unsigned l);
     ptr(const char *d, unsigned l);
     ptr(const ptr& p);
@@ -424,27 +425,35 @@ public:
       _memcopy_count = 0;
       last_p = begin();
     }
+
     void push_front(ptr& bp) {
       if (bp.length() == 0)
 	return;
-      ptr *p = new ptr(bp);
-      _ptrs.push_front(*p);
-      _len += bp.length();
+      push_front(bp.get_raw(), bp.offset(), bp.length());
     }
     void push_front(raw *r) {
       ptr *p = new ptr(r);
       _ptrs.push_front(*p);
       _len += p->length();
     }
+    void push_front(raw *r, unsigned off, unsigned len) {
+      ptr *p = new ptr(r, off, len);
+      _ptrs.push_front(*p);
+      _len += p->length();
+    }
+
     void push_back(const ptr& bp) {
       if (bp.length() == 0)
 	return;
-      ptr *p = new ptr(bp);
-      _ptrs.push_back(*p);
-      _len += bp.length();
+      push_back(bp.get_raw(), bp.offset(), bp.length());
     }
     void push_back(raw *r) {
       ptr *p = new ptr(r);
+      _ptrs.push_back(*p);
+      _len += p->length();
+    }
+    void push_back(raw *r, unsigned off, unsigned len) {
+      ptr *p = new ptr(r, off, len);
       _ptrs.push_back(*p);
       _len += p->length();
     }
@@ -506,7 +515,12 @@ public:
     void append(const std::string& s) {
       append(s.data(), s.length());
     }
-    void append(const ptr& bp);
+    void append(raw *raw) {
+      push_back(raw);
+    }
+    void append(const ptr& bp) {
+      push_back(bp);
+    }
     void append(const ptr& bp, unsigned off, unsigned len);
     void append(const list& bl);
     void append(std::istream& in);
