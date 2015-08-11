@@ -16,20 +16,27 @@
 #ifndef CEPH_MEMSTORE_H
 #define CEPH_MEMSTORE_H
 
+#include <boost/intrusive_ptr.hpp>
+
 #include "include/assert.h"
 #include "include/unordered_map.h"
 #include "include/memory.h"
 #include "common/Finisher.h"
+#include "common/RefCountedObj.h"
 #include "common/RWLock.h"
 #include "ObjectStore.h"
 
 class MemStore : public ObjectStore {
 public:
-  struct Object {
+  struct Object : public RefCountedObject {
     bufferlist data;
     map<string,bufferptr> xattr;
     bufferlist omap_header;
     map<string,bufferlist> omap;
+
+    typedef boost::intrusive_ptr<Object> Ref;
+    friend void intrusive_ptr_add_ref(Object *o) { o->get(); }
+    friend void intrusive_ptr_release(Object *o) { o->put(); }
 
     void encode(bufferlist& bl) const {
       ENCODE_START(1, 1, bl);
@@ -74,13 +81,17 @@ public:
       f->close_section();
     }
   };
-  typedef ceph::shared_ptr<Object> ObjectRef;
+  typedef Object::Ref ObjectRef;
 
-  struct Collection {
+  struct Collection : public RefCountedObject {
     ceph::unordered_map<ghobject_t, ObjectRef> object_hash;  ///< for lookup
     map<ghobject_t, ObjectRef,ghobject_t::BitwiseComparator> object_map;        ///< for iteration
     map<string,bufferptr> xattr;
     RWLock lock;   ///< for object_{map,hash}
+
+    typedef boost::intrusive_ptr<Collection> Ref;
+    friend void intrusive_ptr_add_ref(Collection *c) { c->get(); }
+    friend void intrusive_ptr_release(Collection *c) { c->put(); }
 
     // NOTE: The lock only needs to protect the object_map/hash, not the
     // contents of individual objects.  The osd is already sequencing
@@ -136,7 +147,7 @@ public:
 
     Collection() : lock("MemStore::Collection::lock") {}
   };
-  typedef ceph::shared_ptr<Collection> CollectionRef;
+  typedef Collection::Ref CollectionRef;
 
 private:
   class OmapIteratorImpl : public ObjectMap::ObjectMapIteratorImpl {
