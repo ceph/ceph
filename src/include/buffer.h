@@ -345,6 +345,10 @@ public:
       return *this;
     }
 
+    unsigned get_num_buffers() const { return _buffers.size(); }
+    const ptr& front() const { return _buffers.front(); }
+    const ptr& back() const { return _buffers.back(); }
+
     unsigned get_memcopy_count() const {return _memcopy_count; }
     const std::list<ptr>& buffers() const { return _buffers; }
     void swap(list& other);
