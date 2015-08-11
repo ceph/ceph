@@ -369,13 +369,13 @@ def deploy_ceph(ctx, cal_svr):
     cmds = ['ceph-deploy new ' + ' '.join(all_mons)]
 
     if use_install_repo:
-        cmds.append('ceph-deploy install --repo --release=ceph-mon ' +
+        cmds.append('ceph-deploy repo ceph-mon ' +
                     ' '.join(all_mons))
-        cmds.append('ceph-deploy install --no-adjust-repos ' +
+        cmds.append('ceph-deploy install --no-adjust-repos --mon ' +
                     ' '.join(all_mons))
-        cmds.append('ceph-deploy install --repo --release=ceph-osd ' +
+        cmds.append('ceph-deploy repo ceph-osd ' +
                     ' '.join(all_osds))
-        cmds.append('ceph-deploy install --no-adjust-repos  ' +
+        cmds.append('ceph-deploy install --no-adjust-repos --osd ' +
                     ' '.join(all_osds))
     else:
         cmds.append('ceph-deploy install ' + ' '.join(all_machines))
