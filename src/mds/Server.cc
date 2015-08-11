@@ -2780,7 +2780,7 @@ void Server::handle_client_open(MDRequestRef& mdr)
   MClientRequest *req = mdr->client_request;
 
   int flags = req->head.args.open.flags;
-  int cmode = ceph_flags_to_mode(req->head.args.open.flags);
+  int cmode = ceph_flags_to_mode(flags);
 
   bool need_auth = !file_mode_is_readonly(cmode) || (flags & O_TRUNC);
 
@@ -2809,7 +2809,7 @@ void Server::handle_client_open(MDRequestRef& mdr)
       return;
   }
 
-  if (mdr->snapid != CEPH_NOSNAP && mdr->client_request->may_write()) {
+  if (mdr->snapid != CEPH_NOSNAP && req->may_write()) {
     respond_to_request(mdr, -EROFS);
     return;
   }
@@ -2829,7 +2829,7 @@ void Server::handle_client_open(MDRequestRef& mdr)
     respond_to_request(mdr, -ENXIO);                 // FIXME what error do we want?
     return;
     }*/
-  if ((req->head.args.open.flags & O_DIRECTORY) && !cur->inode.is_dir()) {
+  if ((flags & O_DIRECTORY) && !cur->inode.is_dir()) {
     dout(7) << "specified O_DIRECTORY on non-directory " << *cur << dendl;
     respond_to_request(mdr, -EINVAL);
     return;
