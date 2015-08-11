@@ -18,11 +18,10 @@
 
 namespace librbd {
 
-class AsyncFlattenObjectContext : public C_AsyncObjectThrottle {
+class C_FlattenObject : public C_AsyncObjectThrottle {
 public:
-  AsyncFlattenObjectContext(AsyncObjectThrottle &throttle, ImageCtx *image_ctx,
-                            uint64_t object_size, ::SnapContext snapc,
-                            uint64_t object_no)
+  C_FlattenObject(AsyncObjectThrottle &throttle, ImageCtx *image_ctx,
+                  uint64_t object_size, ::SnapContext snapc, uint64_t object_no)
     : C_AsyncObjectThrottle(throttle, *image_ctx), m_object_size(object_size),
       m_snapc(snapc), m_object_no(object_no)
   {
@@ -67,6 +66,7 @@ bool FlattenRequest::should_complete(int r) {
     return true;
   }
 
+  RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
   switch (m_state) {
   case STATE_FLATTEN_OBJECTS:
     ldout(cct, 5) << "FLATTEN_OBJECTS" << dendl;
@@ -95,7 +95,7 @@ void FlattenRequest::send() {
 
   m_state = STATE_FLATTEN_OBJECTS;
   AsyncObjectThrottle::ContextFactory context_factory(
-    boost::lambda::bind(boost::lambda::new_ptr<AsyncFlattenObjectContext>(),
+    boost::lambda::bind(boost::lambda::new_ptr<C_FlattenObject>(),
       boost::lambda::_1, &m_image_ctx, m_object_size, m_snapc,
       boost::lambda::_2));
   AsyncObjectThrottle *throttle = new AsyncObjectThrottle(
@@ -143,9 +143,8 @@ bool FlattenRequest::send_update_header() {
 }
 
 bool FlattenRequest::send_update_children() {
+  assert(m_image_ctx.owner_lock.is_locked());
   CephContext *cct = m_image_ctx.cct;
-
-  RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
 
   // should have been canceled prior to releasing lock
   assert(!m_image_ctx.image_watcher->is_lock_supported() ||
