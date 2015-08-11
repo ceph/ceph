@@ -9996,9 +9996,11 @@ int Client::ll_open(Inode *in, int flags, Fh **fhp, int uid, int gid)
     uid = geteuid();
     gid = getegid();
   }
-  r = check_permissions(in, flags, uid, gid);
-  if (r < 0)
-    goto out;
+  if (!cct->_conf->fuse_default_permissions) {
+    r = check_permissions(in, flags, uid, gid);
+    if (r < 0)
+      goto out;
+  }
 
   r = _open(in, flags, 0, fhp /* may be NULL */, uid, gid);
 
@@ -10048,13 +10050,15 @@ int Client::ll_create(Inode *parent, const char *name, mode_t mode,
 
   ldout(cct, 20) << "ll_create created = " << created << dendl;
   if (!created) {
-    r = check_permissions(in.get(), flags, uid, gid);
-    if (r < 0) {
-      if (fhp && *fhp) {
-	int release_r = _release_fh(*fhp);
-        assert(release_r == 0);  // during create, no async data ops should have happened
+    if (!cct->_conf->fuse_default_permissions) {
+      r = check_permissions(in.get(), flags, uid, gid);
+      if (r < 0) {
+	if (fhp && *fhp) {
+	  int release_r = _release_fh(*fhp);
+	  assert(release_r == 0);  // during create, no async data ops should have happened
+	}
+	goto out;
       }
-      goto out;
     }
     if (fhp && (*fhp == NULL)) {
       r = _open(in.get(), flags, mode, fhp);
