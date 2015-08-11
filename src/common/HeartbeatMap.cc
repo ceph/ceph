@@ -32,7 +32,9 @@ namespace ceph {
 HeartbeatMap::HeartbeatMap(CephContext *cct)
   : m_cct(cct),
     m_rwlock("HeartbeatMap::m_rwlock"),
-    m_inject_unhealthy_until(0)
+    m_inject_unhealthy_until(0),
+    m_unhealthy_workers(0),
+    m_total_workers(0)
 {
 }
 
@@ -109,6 +111,8 @@ void HeartbeatMap::clear_timeout(heartbeat_handle_d *h)
 
 bool HeartbeatMap::is_healthy()
 {
+  int unhealthy = 0;
+  int total = 0;
   m_rwlock.get_read();
   time_t now = time(NULL);
   if (m_cct->_conf->heartbeat_inject_failure) {
@@ -129,11 +133,28 @@ bool HeartbeatMap::is_healthy()
     heartbeat_handle_d *h = *p;
     if (!_check(h, "is_healthy", now)) {
       healthy = false;
+      unhealthy++;
     }
+    total++;
   }
   m_rwlock.put_read();
-  ldout(m_cct, 20) << "is_healthy = " << (healthy ? "healthy" : "NOT HEALTHY") << dendl;
+
+  m_unhealthy_workers.set(unhealthy);
+  m_total_workers.set(total);
+
+  ldout(m_cct, 20) << "is_healthy = " << (healthy ? "healthy" : "NOT HEALTHY")
+    << ", total workers: " << total << ", number of unhealthy: " << unhealthy << dendl;
   return healthy;
+}
+
+int HeartbeatMap::get_unhealthy_workers() const
+{
+  return m_unhealthy_workers.read();
+}
+
+int HeartbeatMap::get_total_workers() const
+{
+  return m_total_workers.read();
 }
 
 void HeartbeatMap::check_touch_file()
