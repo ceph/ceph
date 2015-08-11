@@ -293,7 +293,7 @@ int MemStore::stat(
   ObjectRef o = c->get_object(oid);
   if (!o)
     return -ENOENT;
-  st->st_size = o->data.length();
+  st->st_size = o->get_size();
   st->st_blksize = 4096;
   st->st_blocks = (st->st_size + st->st_blksize - 1) / st->st_blksize;
   st->st_nlink = 1;
@@ -319,16 +319,15 @@ int MemStore::read(
   ObjectRef o = c->get_object(oid);
   if (!o)
     return -ENOENT;
-  if (offset >= o->data.length())
+  if (offset >= o->get_size())
     return 0;
   size_t l = len;
   if (l == 0)  // note: len == 0 means read the entire object
-    l = o->data.length();
-  else if (offset + l > o->data.length())
-    l = o->data.length() - offset;
+    l = o->get_size();
+  else if (offset + l > o->get_size())
+    l = o->get_size() - offset;
   bl.clear();
-  bl.substr_of(o->data, offset, l);
-  return bl.length();
+  return o->read(offset, l, bl);
 }
 
 int MemStore::fiemap(coll_t cid, const ghobject_t& oid,
@@ -344,11 +343,11 @@ int MemStore::fiemap(coll_t cid, const ghobject_t& oid,
   ObjectRef o = c->get_object(oid);
   if (!o)
     return -ENOENT;
-  if (offset >= o->data.length())
+  if (offset >= o->get_size())
     return 0;
   size_t l = len;
-  if (offset + l > o->data.length())
-    l = o->data.length() - offset;
+  if (offset + l > o->get_size())
+    l = o->get_size() - offset;
   map<uint64_t, uint64_t> m;
   m[offset] = l;
   ::encode(m, bl);
@@ -957,7 +956,7 @@ int MemStore::_touch(coll_t cid, const ghobject_t& oid)
 
   ObjectRef o = c->get_object(oid);
   if (!o) {
-    o.reset(new Object);
+    o.reset(new BufferlistObject);
     c->object_map[oid] = o;
     c->object_hash[oid] = o;
   }
@@ -980,44 +979,16 @@ int MemStore::_write(coll_t cid, const ghobject_t& oid,
   ObjectRef o = c->get_object(oid);
   if (!o) {
     // write implicitly creates a missing object
-    o.reset(new Object);
+    o.reset(new BufferlistObject);
     c->object_map[oid] = o;
     c->object_hash[oid] = o;
   }
 
-  int old_size = o->data.length();
-  _write_into_bl(bl, offset, &o->data);
-  used_bytes += (o->data.length() - old_size);
+  const ssize_t old_size = o->get_size();
+  o->write(offset, bl);
+  used_bytes += (o->get_size() - old_size);
 
   return 0;
-}
-
-void MemStore::_write_into_bl(const bufferlist& src, unsigned offset,
-			      bufferlist *dst)
-{
-  unsigned len = src.length();
-
-  // before
-  bufferlist newdata;
-  if (dst->length() >= offset) {
-    newdata.substr_of(*dst, 0, offset);
-  } else {
-    newdata.substr_of(*dst, 0, dst->length());
-    bufferptr bp(offset - dst->length());
-    bp.zero();
-    newdata.append(bp);
-  }
-
-  newdata.append(src);
-
-  // after
-  if (dst->length() > offset + len) {
-    bufferlist tail;
-    tail.substr_of(*dst, offset + len, dst->length() - (offset + len));
-    newdata.append(tail);
-  }
-
-  dst->claim(newdata);
 }
 
 int MemStore::_zero(coll_t cid, const ghobject_t& oid,
@@ -1043,20 +1014,10 @@ int MemStore::_truncate(coll_t cid, const ghobject_t& oid, uint64_t size)
   ObjectRef o = c->get_object(oid);
   if (!o)
     return -ENOENT;
-  if (o->data.length() > size) {
-    bufferlist bl;
-    bl.substr_of(o->data, 0, size);
-    used_bytes -= o->data.length() - size;
-    o->data.claim(bl);
-  } else if (o->data.length() == size) {
-    // do nothing
-  } else {
-    bufferptr bp(size - o->data.length());
-    bp.zero();
-    used_bytes += bp.length();
-    o->data.append(bp);
-  }
-  return 0;
+  const ssize_t old_size = o->get_size();
+  int r = o->truncate(size);
+  used_bytes += (o->get_size() - old_size);
+  return r;
 }
 
 int MemStore::_remove(coll_t cid, const ghobject_t& oid)
@@ -1073,7 +1034,7 @@ int MemStore::_remove(coll_t cid, const ghobject_t& oid)
   c->object_map.erase(oid);
   c->object_hash.erase(oid);
 
-  used_bytes -= o->data.length();
+  used_bytes -= o->get_size();
 
   return 0;
 }
@@ -1142,12 +1103,12 @@ int MemStore::_clone(coll_t cid, const ghobject_t& oldoid,
     return -ENOENT;
   ObjectRef no = c->get_object(newoid);
   if (!no) {
-    no.reset(new Object);
+    no.reset(new BufferlistObject);
     c->object_map[newoid] = no;
     c->object_hash[newoid] = no;
   }
-  used_bytes += oo->data.length() - no->data.length();
-  no->data = oo->data;
+  used_bytes += oo->get_size() - no->get_size();
+  no->clone(oo.get(), 0, oo->get_size(), 0);
   no->omap_header = oo->omap_header;
   no->omap = oo->omap;
   no->xattr = oo->xattr;
@@ -1172,20 +1133,18 @@ int MemStore::_clone_range(coll_t cid, const ghobject_t& oldoid,
     return -ENOENT;
   ObjectRef no = c->get_object(newoid);
   if (!no) {
-    no.reset(new Object);
+    no.reset(new BufferlistObject);
     c->object_map[newoid] = no;
     c->object_hash[newoid] = no;
   }
-  if (srcoff >= oo->data.length())
+  if (srcoff >= oo->get_size())
     return 0;
-  if (srcoff + len >= oo->data.length())
-    len = oo->data.length() - srcoff;
-  bufferlist bl;
-  bl.substr_of(oo->data, srcoff, len);
+  if (srcoff + len >= oo->get_size())
+    len = oo->get_size() - srcoff;
 
-  int old_size = no->data.length();
-  _write_into_bl(bl, dstoff, &no->data);
-  used_bytes += (no->data.length() - old_size);
+  const ssize_t old_size = no->get_size();
+  no->clone(oo.get(), srcoff, len, dstoff);
+  used_bytes += (no->get_size() - old_size);
 
   return len;
 }
@@ -1397,5 +1356,73 @@ int MemStore::_split_collection(coll_t cid, uint32_t bits, uint32_t match,
     }
   }
 
+  return 0;
+}
+
+// BufferlistObject
+int MemStore::BufferlistObject::read(uint64_t offset, uint64_t len,
+                                     bufferlist &bl)
+{
+  bl.substr_of(data, offset, len);
+  return bl.length();
+}
+
+int MemStore::BufferlistObject::write(uint64_t offset, const bufferlist &src)
+{
+  unsigned len = src.length();
+
+  // before
+  bufferlist newdata;
+  if (get_size() >= offset) {
+    newdata.substr_of(data, 0, offset);
+  } else {
+    newdata.substr_of(data, 0, get_size());
+    bufferptr bp(offset - get_size());
+    bp.zero();
+    newdata.append(bp);
+  }
+
+  newdata.append(src);
+
+  // after
+  if (get_size() > offset + len) {
+    bufferlist tail;
+    tail.substr_of(data, offset + len, get_size() - (offset + len));
+    newdata.append(tail);
+  }
+
+  data.claim(newdata);
+  return 0;
+}
+
+int MemStore::BufferlistObject::clone(Object *src, uint64_t srcoff,
+                                      uint64_t len, uint64_t dstoff)
+{
+  auto srcbl = dynamic_cast<const BufferlistObject*>(src);
+  if (srcbl == nullptr)
+    return -ENOTSUP;
+
+  if (srcoff == dstoff && len == src->get_size()) {
+    data = srcbl->data;
+    return 0;
+  }
+  bufferlist bl;
+  bl.substr_of(srcbl->data, srcoff, len);
+  return write(dstoff, bl);
+}
+
+int MemStore::BufferlistObject::truncate(uint64_t size)
+{
+  if (get_size() > size) {
+    bufferlist bl;
+    bl.substr_of(data, 0, size);
+    data.claim(bl);
+  } else if (get_size() == size) {
+    // do nothing
+  } else {
+    bufferptr bp(size - get_size());
+    bp.zero();
+    data.append(bp);
+  }
   return 0;
 }
