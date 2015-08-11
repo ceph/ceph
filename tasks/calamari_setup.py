@@ -345,7 +345,7 @@ def deploy_ceph(ctx, cal_svr):
     # created local repos at all, but that is the subject of a future
     # change.)
 
-    r = cal_svr.run(args='/usr/bin/test -d /mnt/MON')
+    r = cal_svr.run(args='/usr/bin/test -d /mnt/MON', check_status=False)
     use_install_repo = (r.returncode == 0)
 
     # pre-1.3:
