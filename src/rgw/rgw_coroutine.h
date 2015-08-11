@@ -54,15 +54,29 @@ struct RGWCoroutinesEnv {
   RGWCoroutinesEnv() : manager(NULL), stacks(NULL), stack(NULL) {}
 };
 
+enum RGWCoroutineState {
+  RGWCoroutine_Error = -2,
+  RGWCoroutine_Done  = -1,
+  RGWCoroutine_Run   =  0,
+};
+
 class RGWCoroutine : public RefCountedObject, public boost::asio::coroutine {
   friend class RGWCoroutinesStack;
+
 protected:
+  CephContext *cct;
+
   RGWCoroutinesEnv *env;
   bool blocked;
   int retcode;
+  int state;
 
   stringstream error_stream;
 
+  int set_state(int s, int ret = 0) {
+    state = s;
+    return ret;
+  }
   void set_blocked(bool flag) { blocked = flag; }
   int block(int ret) {
     set_blocked(true);
@@ -78,13 +92,13 @@ protected:
   void spawn(RGWCoroutine *op);
 
 public:
-  RGWCoroutine() : env(NULL), blocked(false), retcode(0) {}
+  RGWCoroutine(CephContext *_cct) : cct(_cct), env(NULL), blocked(false), retcode(0), state(RGWCoroutine_Run) {}
   virtual ~RGWCoroutine() {}
 
   virtual int operate() = 0;
 
-  virtual bool is_done() = 0;
-  virtual bool is_error() = 0;
+  bool is_done() { return (state == RGWCoroutine_Done || state == RGWCoroutine_Error); }
+  bool is_error() { return (state == RGWCoroutine_Error); }
 
   stringstream& log_error() { return error_stream; }
   string error_str() {
@@ -181,19 +195,7 @@ public:
   }
 };
 
-enum RGWCoroutineState {
-  RGWCoroutine_Run   = 0,
-  RGWCoroutine_Done  = 1,
-  RGWCoroutine_Error = 2,
-};
-
 class RGWSimpleCoroutine : public RGWCoroutine {
-  int state;
-
-  int set_state(int s, int ret = 0) {
-    state = s;
-    return ret;
-  }
   int operate();
 
   int state_init();
@@ -201,19 +203,14 @@ class RGWSimpleCoroutine : public RGWCoroutine {
   int state_request_complete();
   int state_all_complete();
 
-protected:
-  CephContext *cct;
-
 public:
-  RGWSimpleCoroutine(CephContext *_cct) : state(RGWCoroutine_Run), cct(_cct) {}
+  RGWSimpleCoroutine(CephContext *_cct) : RGWCoroutine(_cct) {}
 
   virtual int init() { return 0; }
   virtual int send_request() = 0;
   virtual int request_complete() = 0;
   virtual int finish() { return 0; }
 
-  bool is_done() { return (state == RGWCoroutine_Done || state == RGWCoroutine_Error); }
-  bool is_error() { return (state == RGWCoroutine_Error); }
 };
 
 #endif

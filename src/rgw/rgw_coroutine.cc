@@ -257,7 +257,7 @@ int RGWSimpleCoroutine::operate()
     yield return state_all_complete();
   }
 
-  return 0;
+  return set_state(RGWCoroutine_Done);
 }
 
 int RGWSimpleCoroutine::state_init()
