@@ -4376,7 +4376,7 @@ int OSDMonitor::get_crush_ruleset(const string &ruleset_name,
  * @param pg_num The pg_num to use. If set to 0, will use the system default
  * @param pgp_num The pgp_num to use. If set to 0, will use the system default
  * @param erasure_code_profile The profile name in OSDMap to be used for erasure code
- * @param pool_type TYPE_ERASURE, TYPE_REP or TYPE_RAID4
+ * @param pool_type TYPE_ERASURE, or TYPE_REP
  * @param expected_num_objects expected number of objects on the pool
  * @param ss human readable error message, if any.
  *
