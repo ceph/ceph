@@ -297,6 +297,9 @@ public:
     // this is useful to tradeoff some resources (redundant ops) for
     // low latency read, especially on relatively idle cluster
     bool do_redundant_reads;
+    // True if reading for recovery which could possibly reading only a subset
+    // of the available shards.
+    bool for_recovery;
 
     map<hobject_t, read_request_t, hobject_t::BitwiseComparator> to_read;
     map<hobject_t, read_result_t, hobject_t::BitwiseComparator> complete;
@@ -320,7 +323,13 @@ public:
     int priority,
     map<hobject_t, read_request_t, hobject_t::BitwiseComparator> &to_read,
     OpRequestRef op,
-    bool do_redundant_reads);
+    bool do_redundant_reads, bool for_recovery);
+
+  void start_remaining_read_op(ReadOp &rop,
+    map<hobject_t, read_request_t, hobject_t::BitwiseComparator> &to_read);
+  int objects_remaining_read_async(
+    const hobject_t &hoid,
+    ReadOp &rop);
 
 
   /**
@@ -469,6 +478,11 @@ public:
     bool do_redundant_reads,   ///< [in] true if we want to issue redundant reads to reduce latency
     set<pg_shard_t> *to_read   ///< [out] shards to read
     ); ///< @return error code, 0 on success
+
+  int get_remaining_shards(
+    const hobject_t &hoid,
+    const set<int> &avail,
+    set<pg_shard_t> *to_read);
 
   int objects_get_attrs(
     const hobject_t &hoid,
