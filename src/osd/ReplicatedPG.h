@@ -63,8 +63,20 @@ protected:
 public:
   PGLSFilter();
   virtual ~PGLSFilter();
-  virtual bool filter(bufferlist& xattr_data, bufferlist& outdata) = 0;
-  virtual string& get_xattr() { return xattr; }
+  virtual bool filter(const hobject_t &obj, bufferlist& xattr_data,
+                      bufferlist& outdata) = 0;
+
+  /**
+   * xattr key, or empty string.  If non-empty, this xattr will be fetched
+   * and the value passed into ::filter
+   */
+   virtual string& get_xattr() { return xattr; }
+
+  /**
+   * If true, objects without the named xattr (if xattr name is not empty)
+   * will be rejected without calling ::filter
+   */
+  virtual bool reject_empty_xattr() { return true; }
 };
 
 class PGLSPlainFilter : public PGLSFilter {
@@ -75,7 +87,8 @@ public:
     ::decode(val, params);
   }
   virtual ~PGLSPlainFilter() {}
-  virtual bool filter(bufferlist& xattr_data, bufferlist& outdata);
+  virtual bool filter(const hobject_t &obj, bufferlist& xattr_data,
+                      bufferlist& outdata);
 };
 
 class PGLSParentFilter : public PGLSFilter {
@@ -87,7 +100,8 @@ public:
     generic_dout(0) << "parent_ino=" << parent_ino << dendl;
   }
   virtual ~PGLSParentFilter() {}
-  virtual bool filter(bufferlist& xattr_data, bufferlist& outdata);
+  virtual bool filter(const hobject_t &obj, bufferlist& xattr_data,
+                      bufferlist& outdata);
 };
 
 class ReplicatedPG : public PG, public PGBackend::Listener {
