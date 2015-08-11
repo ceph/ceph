@@ -37,6 +37,9 @@
 #include <ostream>
 namespace ceph {
 
+// number of buffer::ptr's to embed in buffer::raw.
+#define RAW_NUM_PTRS 3
+
 #ifdef BUFFER_DEBUG
 static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
 # define bdout { simple_spin_lock(&buffer_debug_lock); std::cout
@@ -131,14 +134,32 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
     mutable RWLock crc_lock;
     map<pair<size_t, size_t>, pair<uint32_t, uint32_t> > crc_map;
 
+    /*
+     * embed a small number of ptrs inside the buffer descriptor.
+     * this lets buffer::list avoid an extra allocation in most
+     * cases.  see buffer::list::_get_raw_ptr().
+     */
+    Spinlock ptr_lock;  // for allocating ptrs only
+    ptr ptrs[RAW_NUM_PTRS];
+
+    void init_embed_ptrs() {
+      for (unsigned i=0; i<RAW_NUM_PTRS; ++i)
+	ptrs[i].embed = true;
+    }
+
+    // ctors
     raw(unsigned l)
       : data(NULL), len(l), nref(0),
 	crc_lock("buffer::raw::crc_lock", false)
-    { }
+    {
+      init_embed_ptrs();
+    }
     raw(char *c, unsigned l)
       : data(c), len(l), nref(0),
 	crc_lock("buffer::raw::crc_lock", false)
-    { }
+    {
+      init_embed_ptrs();
+    }
     virtual ~raw() {}
 
     // no copying.
@@ -1124,6 +1145,28 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
 
 
   // -- buffer::list --
+  buffer::ptr *buffer::list::_get_raw_ptr(raw *r, unsigned off, unsigned len)
+  {
+    if (!len)
+      len = r->len;
+
+    // try for an embedded ptr
+    r->ptr_lock.lock();
+    for (unsigned i=0; i<RAW_NUM_PTRS; ++i) {
+      if (!r->ptrs[i].have_raw()) {
+	ptr *p = &r->ptrs[i];
+	p->reset(r, off, len);
+	bdout << "list::_get_raw_ptr " << this << " raw " << r
+	      << " took ptr " << i << " " << *p << bendl;
+	r->ptr_lock.unlock();
+	return p;
+      }
+    }
+    r->ptr_lock.unlock();
+
+    // allocate a new ptr
+    return new ptr(r, off, len);
+  }
 
   void buffer::list::swap(list& other)
   {
