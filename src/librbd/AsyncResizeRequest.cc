@@ -24,21 +24,15 @@ AsyncResizeRequest::AsyncResizeRequest(ImageCtx &image_ctx, Context *on_finish,
     m_prog_ctx(prog_ctx), m_new_parent_overlap(0),
     m_xlist_item(this)
 {
-  RWLock::WLocker l(m_image_ctx.snap_lock);
-  m_image_ctx.async_resize_reqs.push_back(&m_xlist_item);
-  m_original_size = m_image_ctx.size;
-  compute_parent_overlap();
 }
 
 AsyncResizeRequest::~AsyncResizeRequest() {
   AsyncResizeRequest *next_req = NULL;
   {
-    RWLock::WLocker l(m_image_ctx.snap_lock);
+    RWLock::WLocker snap_locker(m_image_ctx.snap_lock);
     assert(m_xlist_item.remove_myself());
     if (!m_image_ctx.async_resize_reqs.empty()) {
       next_req = m_image_ctx.async_resize_reqs.front();
-      next_req->m_original_size = m_image_ctx.size;
-      next_req->compute_parent_overlap();
     }
   }
 
@@ -123,14 +117,19 @@ bool AsyncResizeRequest::should_complete(int r) {
 
 void AsyncResizeRequest::send() {
   assert(m_image_ctx.owner_lock.is_locked());
-  {
-    RWLock::RLocker l(m_image_ctx.snap_lock);
-    assert(!m_image_ctx.async_resize_reqs.empty());
 
-    // only allow a single concurrent resize request
-    if (m_image_ctx.async_resize_reqs.front() != this) {
-      return;
+  {
+    RWLock::WLocker snap_locker(m_image_ctx.snap_lock);
+    if (!m_xlist_item.is_on_list()) {
+      m_image_ctx.async_resize_reqs.push_back(&m_xlist_item);
+      if (m_image_ctx.async_resize_reqs.front() != this) {
+        return;
+      }
     }
+
+    assert(m_image_ctx.async_resize_reqs.front() == this);
+    m_original_size = m_image_ctx.size;
+    compute_parent_overlap();
   }
 
   CephContext *cct = m_image_ctx.cct;
