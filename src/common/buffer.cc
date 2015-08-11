@@ -1628,7 +1628,7 @@ void buffer::list::rebuild_page_aligned()
       throw end_of_buffer();
 
     assert(len > 0);
-    //cout << "splice off " << off << " len " << len << " ... mylen = " << length() << std::endl;
+    bdout << "splice off " << off << " len " << len << " ... mylen = " << length() << bendl;
       
     // skip off
     ptr_list_t::iterator curbuf = _ptrs.begin();
@@ -1636,12 +1636,12 @@ void buffer::list::rebuild_page_aligned()
       assert(curbuf != _ptrs.end());
       if (off >= (*curbuf).length()) {
 	// skip this buffer
-	//cout << "off = " << off << " skipping over " << *curbuf << std::endl;
+	bdout << "off = " << off << " skipping over " << *curbuf << bendl;
 	off -= (*curbuf).length();
 	++curbuf;
       } else {
 	// somewhere in this buffer!
-	//cout << "off = " << off << " somewhere in " << *curbuf << std::endl;
+	bdout << "off = " << off << " somewhere in " << *curbuf << bendl;
 	break;
       }
     }
@@ -1649,7 +1649,7 @@ void buffer::list::rebuild_page_aligned()
     if (off) {
       // add a reference to the front bit
       //  insert it before curbuf (which we'll hose)
-      //cout << "keeping front " << off << " of " << *curbuf << std::endl;
+      bdout << "keeping front " << off << " of " << *curbuf << bendl;
       _ptrs.insert(curbuf, *(new ptr(*curbuf, 0, off)));
       _len += off;
     }
@@ -1657,19 +1657,19 @@ void buffer::list::rebuild_page_aligned()
     while (len > 0) {
       // partial?
       if (off + len < (*curbuf).length()) {
-	//cout << "keeping end of " << *curbuf << ", losing first " << off+len << std::endl;
+	bdout << "keeping end of " << *curbuf << ", losing first " << off+len << bendl;
 	if (claim_by) 
 	  claim_by->append( *curbuf, off, len );
 	(*curbuf).set_offset( off+len + (*curbuf).offset() );    // ignore beginning big
 	(*curbuf).set_length( (*curbuf).length() - (len+off) );
 	_len -= off+len;
-	//cout << " now " << *curbuf << std::endl;
+	bdout << " now " << *curbuf << bendl;
 	break;
       }
       
       // hose though the end
       unsigned howmuch = (*curbuf).length() - off;
-      //cout << "discarding " << howmuch << " of " << *curbuf << std::endl;
+      bdout << "discarding " << howmuch << " of " << *curbuf << bendl;
       if (claim_by) 
 	claim_by->append( *curbuf, off, howmuch );
       _len -= (*curbuf).length();
@@ -1683,6 +1683,7 @@ void buffer::list::rebuild_page_aligned()
     // splice in *replace (implement me later?)
     
     last_p = begin();  // just in case we were in the removed region.
+    bdout << "splice done" << bendl;
   }
 
   void buffer::list::write(int off, int len, std::ostream& out) const
