@@ -860,5 +860,70 @@ void TableFormatter::finish_pending_string()
     dump_string(pending_name.c_str(), ss);
   }
 }
+
+
+
+KeyValuePlainFormatter::KeyValuePlainFormatter() {
+}
+
+KeyValuePlainFormatter::~KeyValuePlainFormatter() {
+}
+
+
+void KeyValuePlainFormatter::flush(std::ostream& os) {
+  os << m_ss.str();
+  reset();
+}
+
+void KeyValuePlainFormatter::reset() {
+  m_ss.clear();
+  m_ss.str("");
+}
+
+namespace {
+  template<typename T>
+    void key_value_plain_formatter_output_value(const char *name,
+						 T value,
+						 std::stringstream &m_ss) {
+      std::string str(name);
+      m_ss << name << ": " << value << "\n";
+    }
+}
+
+void KeyValuePlainFormatter::dump_unsigned(const char *name, uint64_t u) {
+  key_value_plain_formatter_output_value(name, u, m_ss);
+}
+
+void KeyValuePlainFormatter::dump_int(const char *name, int64_t s) {
+  key_value_plain_formatter_output_value(name, s, m_ss);
+}
+
+void KeyValuePlainFormatter::dump_float(const char *name, double d) {
+  key_value_plain_formatter_output_value(name, d, m_ss);
+}
+
+void KeyValuePlainFormatter::dump_string(const char *name,
+					 const std::string &s) {
+  key_value_plain_formatter_output_value(name, s, m_ss);
+}
+
+std::ostream& KeyValuePlainFormatter::dump_stream(const char *name) {
+  return m_ss;
+}
+
+void KeyValuePlainFormatter::dump_format_va(const char *name,
+					    const char *ns,
+					    bool quoted,
+					    const char *fmt,
+					    va_list ap) {
+}
+
+int KeyValuePlainFormatter::get_len()  const {
+  return m_ss.str().size();
+}
+void KeyValuePlainFormatter::write_raw_data(const char *data) {
+  m_ss << data;
+}
+
 }
 
