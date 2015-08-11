@@ -174,7 +174,7 @@ using namespace std;
 
 #define dout_subsys ceph_subsys_ms
 
-void Message::encode(uint64_t features, int crcflags)
+void Message::encode(uint64_t features, int flags)
 {
   // encode and copy out of *m
   if (empty_payload()) {
@@ -185,21 +185,19 @@ void Message::encode(uint64_t features, int crcflags)
     if (header.compat_version == 0)
       header.compat_version = header.version;
   }
-  if (crcflags & MSG_CRC_HEADER)
+  if (flags & MSG_CRC_HEADER)
     calc_front_crc();
 
-  // update envelope
-  header.front_len = get_payload().length();
-  header.middle_len = get_middle().length();
-  header.data_len = get_data().length();
-  if (crcflags & MSG_CRC_HEADER)
-    calc_header_crc();
+  if (! (flags & MSG_LATE_HEADER))
+    encode_header(features, flags);
 
   footer.flags = CEPH_MSG_FOOTER_COMPLETE;
 
-  if (crcflags & MSG_CRC_DATA) {
+  if (flags & MSG_CRC_DATA) {
     calc_data_crc();
 
+    /* XXX should be moved out (call explicitly after encode or late header,
+     * whichever is later */
 #ifdef ENCODE_DUMP
     bufferlist bl;
     ::encode(get_header(), bl);

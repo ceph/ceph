@@ -821,10 +821,6 @@ int XioMessenger::_send_message_impl(Message* m, XioConnection* xcon)
 {
   int code = 0;
 
-  /* XXXX this is NOT desirable--to avoid a long serialization, we
-   * evidently need to encode the sequence number in portal thread context,
-   * after an ordering is established */
-  Mutex::Locker l(xcon->lock); // XXX uses Connection::lock
   if (unlikely(XioPool::trace_mempool)) {
     static uint32_t nreqs;
     if (unlikely((++nreqs % 65536) == 0)) {
@@ -832,10 +828,8 @@ int XioMessenger::_send_message_impl(Message* m, XioConnection* xcon)
     }
   }
 
-  m->set_seq(xcon->state.next_out_seq());
   m->set_magic(magic); // trace flags and special handling
-
-  m->encode(xcon->get_features(), this->crcflags);
+  m->encode(xcon->get_features(), this->crcflags|MSG_LATE_HEADER);
 
   buffer::list &payload = m->get_payload();
   buffer::list &middle = m->get_middle();
@@ -921,20 +915,14 @@ int XioMessenger::_send_message_impl(Message* m, XioConnection* xcon)
   /* fixup first msg */
   req = &xmsg->req_0.msg;
 
-  const std::list<buffer::ptr>& header = xmsg->hdr.get_bl().buffers();
-  assert(header.size() == 1); /* XXX */
-  list<bufferptr>::const_iterator pb = header.begin();
-  req->out.header.iov_base = (char*) pb->c_str();
-  req->out.header.iov_len = pb->length();
-
   /* deliver via xio, preserve ordering */
   if (xmsg->hdr.msg_cnt > 1) {
     struct xio_msg *head = &xmsg->req_0.msg;
     struct xio_msg *tail = head;
     for (req_off = 0; ((unsigned) req_off) < xmsg->hdr.msg_cnt-1; ++req_off) {
       req = &xmsg->req_arr[req_off].msg;
-assert(!req->in.pdata_iov.nents);
-assert(req->out.pdata_iov.nents || !nbuffers);
+      assert(!req->in.pdata_iov.nents);
+      assert(req->out.pdata_iov.nents || !nbuffers);
       tail->next = req;
       tail = req;
      }

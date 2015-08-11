@@ -215,10 +215,10 @@ public:
       uint32_t xio_qdepth_high;
       XioSubmit::Queue send_q;
       XioSubmit::Queue::iterator q_iter;
-      struct xio_msg *msg = NULL;
-      XioConnection *xcon;
-      XioSubmit *xs;
-      XioMsg *xmsg;
+      struct xio_msg* msg = NULL;
+      XioConnection* xcon;
+      XioSubmit* xs;
+      XioMsg* xmsg;
 
       do {
 	submit_q.deq(send_q);
@@ -245,8 +245,8 @@ public:
 		code = ENOTCONN;
 	      else {
 		/* XXX guard Accelio send queue (should be safe to rely
-		 * on Accelio's check on below, but this assures that
-		 * all chained xio_msg are accounted) */
+		 * on Accelio's check below, but this assures that all
+		 * chained xio_msg objects are accounted) */
 		xio_qdepth_high = xcon->xio_qdepth_high_mark();
 		if (unlikely((xcon->send_ctr + xmsg->hdr.msg_cnt) >
 			     xio_qdepth_high)) {
@@ -254,7 +254,21 @@ public:
 		  goto restart;
 		}
 
+		/* cond set header */
 		msg = &xmsg->req_0.msg;
+		if (! xmsg->m->have_header()) {
+		  /* update header.seq */
+		  xmsg->m->set_seq(xcon->state.next_out_seq());
+		  /* encode it, set as xio header */
+		  xmsg->m->encode_header(xcon->get_features(), msgr->crcflags);
+		  const std::list<buffer::ptr>& header =
+		    xmsg->hdr.get_bl().buffers();
+		  assert(header.size() == 1);
+		  list<bufferptr>::const_iterator pb = header.begin();
+		  msg->out.header.iov_base = (char*) pb->c_str();
+		  msg->out.header.iov_len = pb->length();
+		}
+
 		code = xio_send_msg(xcon->conn, msg);
 		/* header trace moved here to capture xio serial# */
 		if (ldlog_p1(msgr->cct, ceph_subsys_xio, 11)) {
