@@ -282,6 +282,7 @@ enum {
   OPT_MDLOG_TRIM,
   OPT_MDLOG_FETCH,
   OPT_MDLOG_SYNC_STATUS,
+  OPT_MDLOG_SYNC_INIT,
   OPT_BILOG_LIST,
   OPT_BILOG_TRIM,
   OPT_DATALOG_LIST,
@@ -557,6 +558,8 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
 	     (strcmp(prev_cmd, "sync") == 0)) {
     if (strcmp(cmd, "status") == 0)
       return OPT_MDLOG_SYNC_STATUS;
+    if (strcmp(cmd, "init") == 0)
+      return OPT_MDLOG_SYNC_INIT;
   } else if (strcmp(prev_cmd, "bilog") == 0) {
     if (strcmp(cmd, "list") == 0)
       return OPT_BILOG_LIST;
@@ -3301,6 +3304,22 @@ next:
     formatter->close_section();
     formatter->flush(cout);
 
+  }
+
+  if (opt_cmd == OPT_MDLOG_SYNC_INIT) {
+    RGWMetadataSync sync(store);
+
+    int ret = sync.init();
+    if (ret < 0) {
+      cerr << "ERROR: sync.init() returned ret=" << ret << std::endl;
+      return -ret;
+    }
+
+    ret = sync.init_sync_status();
+    if (ret < 0) {
+      cerr << "ERROR: sync.get_sync_status() returned ret=" << ret << std::endl;
+      return -ret;
+    }
   }
 
   if (opt_cmd == OPT_BILOG_LIST) {
