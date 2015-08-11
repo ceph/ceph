@@ -195,6 +195,8 @@ public:
       release();
     }
 
+    void reset(raw *r, unsigned off, unsigned len);
+
     void unlinked_from_list() {
       if (!embed)
 	delete this;

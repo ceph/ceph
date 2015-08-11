@@ -749,6 +749,14 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
     return *this;
   }
 
+  void buffer::ptr::reset(raw *raw, unsigned off, unsigned len) {
+    bdout << "ptr::reset raw " << raw << " " << off << "~" << len << bendl;
+    _raw = raw;
+    _off = off;
+    _len = len;
+    _raw->nref.inc();
+  }
+
   buffer::raw *buffer::ptr::clone()
   {
     return _raw->clone();
@@ -1451,8 +1459,7 @@ void buffer::list::rebuild_page_aligned()
       
       // make a new append_buffer!
       unsigned alen = CEPH_BUFFER_APPEND_SIZE * (((len-1) / CEPH_BUFFER_APPEND_SIZE) + 1);
-      append_buffer = create_aligned(alen, CEPH_BUFFER_APPEND_SIZE);
-      append_buffer.set_length(0);   // unused, so far.
+      append_buffer.reset(create_aligned(alen, CEPH_BUFFER_APPEND_SIZE), 0, 0);
     }
   }
 
