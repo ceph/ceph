@@ -361,9 +361,9 @@ TEST_F(TestRawPipe, buffer_list_read_fd_zero_copy) {
   bl = bufferlist();
   EXPECT_EQ(0, bl.read_fd_zero_copy(fd, len));
   EXPECT_EQ(len, bl.length());
-  EXPECT_EQ(0u, bl.buffers().front().unused_tail_length());
-  EXPECT_EQ(1u, bl.buffers().size());
-  EXPECT_EQ(len, bl.buffers().front().raw_length());
+  EXPECT_EQ(0u, bl.front().unused_tail_length());
+  EXPECT_EQ(1u, bl.get_num_buffers());
+  EXPECT_EQ(len, bl.front().raw_length());
   EXPECT_EQ(0, memcmp(bl.c_str(), "ABC\n", len));
   EXPECT_TRUE(bl.can_zero_copy());
 }
@@ -1319,9 +1319,9 @@ TEST(BufferList, operator_equal) {
 
 TEST(BufferList, buffers) {
   bufferlist bl;
-  ASSERT_EQ((unsigned)0, bl.buffers().size());
+  ASSERT_EQ((unsigned)0, bl.get_num_buffers());
   bl.append('A');
-  ASSERT_EQ((unsigned)1, bl.buffers().size());
+  ASSERT_EQ((unsigned)1, bl.get_num_buffers());
 }
 
 TEST(BufferList, get_contiguous) {
@@ -1335,13 +1335,13 @@ TEST(BufferList, get_contiguous) {
     bl.append(a);
     bl.append(b);
     bl.append(c);
-    ASSERT_EQ(3u, bl.buffers().size());
+    ASSERT_EQ(3u, bl.get_num_buffers());
     ASSERT_EQ(0, memcmp("bar", bl.get_contiguous(3, 3), 3));
     ASSERT_EQ(0, memcmp("456", bl.get_contiguous(12, 3), 3));
     ASSERT_EQ(0, memcmp("ABC", bl.get_contiguous(18, 3), 3));
-    ASSERT_EQ(3u, bl.buffers().size());
+    ASSERT_EQ(3u, bl.get_num_buffers());
     ASSERT_EQ(0, memcmp("789ABC", bl.get_contiguous(15, 6), 6));
-    ASSERT_EQ(2u, bl.buffers().size());
+    ASSERT_EQ(2u, bl.get_num_buffers());
   }
 
   {
@@ -1355,7 +1355,7 @@ TEST(BufferList, get_contiguous) {
     bl.append(c);
 
     ASSERT_EQ(0, memcmp("789ABCDEFGHI", bl.get_contiguous(15, 12), 12));
-    ASSERT_EQ(2u, bl.buffers().size());
+    ASSERT_EQ(2u, bl.get_num_buffers());
   }
 
   {
@@ -1369,7 +1369,7 @@ TEST(BufferList, get_contiguous) {
     bl.append(c);
 
     ASSERT_EQ(0, memcmp("z123456789AB", bl.get_contiguous(8, 12), 12));
-    ASSERT_EQ(1u, bl.buffers().size());
+    ASSERT_EQ(1u, bl.get_num_buffers());
   }
 }
 
@@ -1546,13 +1546,13 @@ TEST(BufferList, rebuild_aligned_size_and_memory) {
   EXPECT_FALSE(bl.is_aligned(SIMD_ALIGN));
   EXPECT_FALSE(bl.is_n_align_sized(BUFFER_SIZE));
   EXPECT_EQ(BUFFER_SIZE * 3, bl.length());
-  EXPECT_FALSE(bl.buffers().front().is_aligned(SIMD_ALIGN));
-  EXPECT_FALSE(bl.buffers().front().is_n_align_sized(BUFFER_SIZE));
-  EXPECT_EQ(5U, bl.buffers().size());
+  EXPECT_FALSE(bl.front().is_aligned(SIMD_ALIGN));
+  EXPECT_FALSE(bl.front().is_n_align_sized(BUFFER_SIZE));
+  EXPECT_EQ(5U, bl.get_num_buffers());
   bl.rebuild_aligned_size_and_memory(BUFFER_SIZE, SIMD_ALIGN);
   EXPECT_TRUE(bl.is_aligned(SIMD_ALIGN));
   EXPECT_TRUE(bl.is_n_align_sized(BUFFER_SIZE));
-  EXPECT_EQ(3U, bl.buffers().size());
+  EXPECT_EQ(3U, bl.get_num_buffers());
 }
 
 TEST(BufferList, is_zero) {
@@ -1578,7 +1578,7 @@ TEST(BufferList, clear) {
   bl.append_zero(len);
   bl.clear();
   EXPECT_EQ((unsigned)0, bl.length());
-  EXPECT_EQ((unsigned)0, bl.buffers().size());
+  EXPECT_EQ((unsigned)0, bl.get_num_buffers());
 }
 
 TEST(BufferList, push_front) {
@@ -1590,7 +1590,7 @@ TEST(BufferList, push_front) {
     bufferptr ptr;
     bl.push_front(ptr);
     EXPECT_EQ((unsigned)0, bl.length());
-    EXPECT_EQ((unsigned)0, bl.buffers().size());
+    EXPECT_EQ((unsigned)0, bl.get_num_buffers());
   }
   unsigned len = 17;
   {
@@ -1600,9 +1600,9 @@ TEST(BufferList, push_front) {
     ptr.c_str()[0] = 'B';
     bl.push_front(ptr);
     EXPECT_EQ((unsigned)(1 + len), bl.length());
-    EXPECT_EQ((unsigned)2, bl.buffers().size());
-    EXPECT_EQ('B', bl.buffers().front()[0]);
-    EXPECT_EQ(ptr.get_raw(), bl.buffers().front().get_raw());
+    EXPECT_EQ((unsigned)2, bl.get_num_buffers());
+    EXPECT_EQ('B', bl.front()[0]);
+    EXPECT_EQ(ptr.get_raw(), bl.front().get_raw());
   }
   //
   // void push_front(raw *r)
@@ -1614,9 +1614,9 @@ TEST(BufferList, push_front) {
     ptr.c_str()[0] = 'B';
     bl.push_front(ptr.get_raw());
     EXPECT_EQ((unsigned)(1 + len), bl.length());
-    EXPECT_EQ((unsigned)2, bl.buffers().size());
-    EXPECT_EQ('B', bl.buffers().front()[0]);
-    EXPECT_EQ(ptr.get_raw(), bl.buffers().front().get_raw());
+    EXPECT_EQ((unsigned)2, bl.get_num_buffers());
+    EXPECT_EQ('B', bl.front()[0]);
+    EXPECT_EQ(ptr.get_raw(), bl.front().get_raw());
   }
   //
   // void push_front(ptr&& bp)
@@ -1650,7 +1650,7 @@ TEST(BufferList, push_back) {
     bufferptr ptr;
     bl.push_back(ptr);
     EXPECT_EQ((unsigned)0, bl.length());
-    EXPECT_EQ((unsigned)0, bl.buffers().size());
+    EXPECT_EQ((unsigned)0, bl.get_num_buffers());
   }
   unsigned len = 17;
   {
@@ -1660,9 +1660,9 @@ TEST(BufferList, push_back) {
     ptr.c_str()[0] = 'B';
     bl.push_back(ptr);
     EXPECT_EQ((unsigned)(1 + len), bl.length());
-    EXPECT_EQ((unsigned)2, bl.buffers().size());
-    EXPECT_EQ('B', bl.buffers().back()[0]);
-    EXPECT_EQ(ptr.get_raw(), bl.buffers().back().get_raw());
+    EXPECT_EQ((unsigned)2, bl.get_num_buffers());
+    EXPECT_EQ('B', bl.back()[0]);
+    EXPECT_EQ(ptr.get_raw(), bl.back().get_raw());
   }
   //
   // void push_back(raw *r)
@@ -1674,9 +1674,9 @@ TEST(BufferList, push_back) {
     ptr.c_str()[0] = 'B';
     bl.push_back(ptr.get_raw());
     EXPECT_EQ((unsigned)(1 + len), bl.length());
-    EXPECT_EQ((unsigned)2, bl.buffers().size());
-    EXPECT_EQ('B', bl.buffers().back()[0]);
-    EXPECT_EQ(ptr.get_raw(), bl.buffers().back().get_raw());
+    EXPECT_EQ((unsigned)2, bl.get_num_buffers());
+    EXPECT_EQ('B', bl.back()[0]);
+    EXPECT_EQ(ptr.get_raw(), bl.back().get_raw());
   }
   //
   // void push_back(ptr&& bp)
@@ -1704,14 +1704,14 @@ TEST(BufferList, push_back) {
 TEST(BufferList, is_contiguous) {
   bufferlist bl;
   EXPECT_TRUE(bl.is_contiguous());
-  EXPECT_EQ((unsigned)0, bl.buffers().size());
+  EXPECT_EQ((unsigned)0, bl.get_num_buffers());
   bl.append('A');  
   EXPECT_TRUE(bl.is_contiguous());
-  EXPECT_EQ((unsigned)1, bl.buffers().size());
+  EXPECT_EQ((unsigned)1, bl.get_num_buffers());
   bufferptr ptr(1);
   bl.push_back(ptr);
   EXPECT_FALSE(bl.is_contiguous());
-  EXPECT_EQ((unsigned)2, bl.buffers().size());
+  EXPECT_EQ((unsigned)2, bl.get_num_buffers());
 }
 
 TEST(BufferList, rebuild) {
@@ -1733,11 +1733,11 @@ TEST(BufferList, rebuild) {
     const std::string str(CEPH_PAGE_SIZE, 'X');
     bl.append(str.c_str(), str.size());
     bl.append(str.c_str(), str.size());
-    EXPECT_EQ((unsigned)2, bl.buffers().size());
+    EXPECT_EQ((unsigned)2, bl.get_num_buffers());
     EXPECT_TRUE(bl.is_aligned(CEPH_BUFFER_APPEND_SIZE));
     bl.rebuild();
     EXPECT_TRUE(bl.is_page_aligned());
-    EXPECT_EQ((unsigned)1, bl.buffers().size());
+    EXPECT_EQ((unsigned)1, bl.get_num_buffers());
   }
   {
     bufferlist bl;
@@ -1763,11 +1763,11 @@ TEST(BufferList, rebuild_page_aligned) {
       ptr.set_length(CEPH_PAGE_SIZE);
       bl.append(ptr);
     }
-    EXPECT_EQ((unsigned)1, bl.buffers().size());
+    EXPECT_EQ((unsigned)1, bl.get_num_buffers());
     EXPECT_FALSE(bl.is_page_aligned());
     bl.rebuild_page_aligned();
     EXPECT_TRUE(bl.is_page_aligned());
-    EXPECT_EQ((unsigned)1, bl.buffers().size());
+    EXPECT_EQ((unsigned)1, bl.get_num_buffers());
   }
   {
     bufferlist bl;
@@ -1775,7 +1775,7 @@ TEST(BufferList, rebuild_page_aligned) {
     char *p = ptr.c_str();
     bl.append(ptr);
     bl.rebuild_page_aligned();
-    EXPECT_EQ(p, bl.buffers().front().c_str());
+    EXPECT_EQ(p, bl.front().c_str());
   }
   {
     bufferlist bl;
@@ -1819,12 +1819,12 @@ TEST(BufferList, rebuild_page_aligned) {
       EXPECT_TRUE(ptr.is_n_page_sized());
       bl.append(ptr);
     }
-    EXPECT_EQ((unsigned)6, bl.buffers().size());
+    EXPECT_EQ((unsigned)6, bl.get_num_buffers());
     EXPECT_TRUE((bl.length() & ~CEPH_PAGE_MASK) == 0);
     EXPECT_FALSE(bl.is_page_aligned());
     bl.rebuild_page_aligned();
     EXPECT_TRUE(bl.is_page_aligned());
-    EXPECT_EQ((unsigned)4, bl.buffers().size());
+    EXPECT_EQ((unsigned)4, bl.get_num_buffers());
   }
 }
 
@@ -1840,11 +1840,11 @@ TEST(BufferList, claim) {
     to.append(ptr);
   }
   EXPECT_EQ((unsigned)4, to.length());
-  EXPECT_EQ((unsigned)1, to.buffers().size());
+  EXPECT_EQ((unsigned)1, to.get_num_buffers());
   to.claim(from);
   EXPECT_EQ((unsigned)2, to.length());
-  EXPECT_EQ((unsigned)1, to.buffers().size());
-  EXPECT_EQ((unsigned)0, from.buffers().size());
+  EXPECT_EQ((unsigned)1, to.get_num_buffers());
+  EXPECT_EQ((unsigned)0, from.get_num_buffers());
   EXPECT_EQ((unsigned)0, from.length());
 }
 
@@ -1860,13 +1860,13 @@ TEST(BufferList, claim_append) {
     to.append(ptr);
   }
   EXPECT_EQ((unsigned)4, to.length());
-  EXPECT_EQ((unsigned)1, to.buffers().size());
+  EXPECT_EQ((unsigned)1, to.get_num_buffers());
   to.claim_append(from);
   EXPECT_EQ((unsigned)(4 + 2), to.length());
-  EXPECT_EQ((unsigned)4, to.buffers().front().length());
-  EXPECT_EQ((unsigned)2, to.buffers().back().length());
-  EXPECT_EQ((unsigned)2, to.buffers().size());
-  EXPECT_EQ((unsigned)0, from.buffers().size());
+  EXPECT_EQ((unsigned)4, to.front().length());
+  EXPECT_EQ((unsigned)2, to.back().length());
+  EXPECT_EQ((unsigned)2, to.get_num_buffers());
+  EXPECT_EQ((unsigned)0, from.get_num_buffers());
   EXPECT_EQ((unsigned)0, from.length());
 }
 
@@ -1882,13 +1882,13 @@ TEST(BufferList, claim_prepend) {
     to.append(ptr);
   }
   EXPECT_EQ((unsigned)4, to.length());
-  EXPECT_EQ((unsigned)1, to.buffers().size());
+  EXPECT_EQ((unsigned)1, to.get_num_buffers());
   to.claim_prepend(from);
   EXPECT_EQ((unsigned)(2 + 4), to.length());
-  EXPECT_EQ((unsigned)2, to.buffers().front().length());
-  EXPECT_EQ((unsigned)4, to.buffers().back().length());
-  EXPECT_EQ((unsigned)2, to.buffers().size());
-  EXPECT_EQ((unsigned)0, from.buffers().size());
+  EXPECT_EQ((unsigned)2, to.front().length());
+  EXPECT_EQ((unsigned)4, to.back().length());
+  EXPECT_EQ((unsigned)2, to.get_num_buffers());
+  EXPECT_EQ((unsigned)0, from.get_num_buffers());
   EXPECT_EQ((unsigned)0, from.length());
 }
 
@@ -1978,9 +1978,9 @@ TEST(BufferList, append) {
   //
   {
     bufferlist bl;
-    EXPECT_EQ((unsigned)0, bl.buffers().size());
+    EXPECT_EQ((unsigned)0, bl.get_num_buffers());
     bl.append('A');
-    EXPECT_EQ((unsigned)1, bl.buffers().size());
+    EXPECT_EQ((unsigned)1, bl.get_num_buffers());
     EXPECT_TRUE(bl.is_aligned(CEPH_BUFFER_APPEND_SIZE));
   }
   //
@@ -1990,9 +1990,9 @@ TEST(BufferList, append) {
     bufferlist bl(CEPH_PAGE_SIZE);
     std::string str(CEPH_PAGE_SIZE * 2, 'X');
     bl.append(str.c_str(), str.size());
-    EXPECT_EQ((unsigned)2, bl.buffers().size());
-    EXPECT_EQ(CEPH_PAGE_SIZE, bl.buffers().front().length());
-    EXPECT_EQ(CEPH_PAGE_SIZE, bl.buffers().back().length());
+    EXPECT_EQ((unsigned)2, bl.get_num_buffers());
+    EXPECT_EQ(CEPH_PAGE_SIZE, bl.front().length());
+    EXPECT_EQ(CEPH_PAGE_SIZE, bl.back().length());
   }
   //
   // void append(const std::string& s);
@@ -2001,27 +2001,27 @@ TEST(BufferList, append) {
     bufferlist bl(CEPH_PAGE_SIZE);
     std::string str(CEPH_PAGE_SIZE * 2, 'X');
     bl.append(str);
-    EXPECT_EQ((unsigned)2, bl.buffers().size());
-    EXPECT_EQ(CEPH_PAGE_SIZE, bl.buffers().front().length());
-    EXPECT_EQ(CEPH_PAGE_SIZE, bl.buffers().back().length());
+    EXPECT_EQ((unsigned)2, bl.get_num_buffers());
+    EXPECT_EQ(CEPH_PAGE_SIZE, bl.front().length());
+    EXPECT_EQ(CEPH_PAGE_SIZE, bl.back().length());
   }
   //
   // void append(const ptr& bp);
   //
   {
     bufferlist bl;
-    EXPECT_EQ((unsigned)0, bl.buffers().size());
+    EXPECT_EQ((unsigned)0, bl.get_num_buffers());
     EXPECT_EQ((unsigned)0, bl.length());
     {
       bufferptr ptr;
       bl.append(ptr);
-      EXPECT_EQ((unsigned)0, bl.buffers().size());
+      EXPECT_EQ((unsigned)0, bl.get_num_buffers());
       EXPECT_EQ((unsigned)0, bl.length());
     }
     {
       bufferptr ptr(3);
       bl.append(ptr);
-      EXPECT_EQ((unsigned)1, bl.buffers().size());
+      EXPECT_EQ((unsigned)1, bl.get_num_buffers());
       EXPECT_EQ((unsigned)3, bl.length());
     }
   }
@@ -2031,27 +2031,27 @@ TEST(BufferList, append) {
   {
     bufferlist bl;
     bl.append('A');
-    bufferptr back(bl.buffers().back());
+    bufferptr back(bl.back());
     bufferptr in(back);
-    EXPECT_EQ((unsigned)1, bl.buffers().size());
+    EXPECT_EQ((unsigned)1, bl.get_num_buffers());
     EXPECT_EQ((unsigned)1, bl.length());
     EXPECT_DEATH(bl.append(in, (unsigned)100, (unsigned)100), "");
     EXPECT_LT((unsigned)0, in.unused_tail_length());
     in.append('B');
     bl.append(in, back.end(), 1);
-    EXPECT_EQ((unsigned)1, bl.buffers().size());
+    EXPECT_EQ((unsigned)1, bl.get_num_buffers());
     EXPECT_EQ((unsigned)2, bl.length());
     EXPECT_EQ('B', bl[1]);
   }
   {
     bufferlist bl;
-    EXPECT_EQ((unsigned)0, bl.buffers().size());
+    EXPECT_EQ((unsigned)0, bl.get_num_buffers());
     EXPECT_EQ((unsigned)0, bl.length());
     bufferptr ptr(2);
     ptr.set_length(0);
     ptr.append("AB", 2);
     bl.append(ptr, 1, 1);
-    EXPECT_EQ((unsigned)1, bl.buffers().size());
+    EXPECT_EQ((unsigned)1, bl.get_num_buffers());
     EXPECT_EQ((unsigned)1, bl.length());
   }
   //
@@ -2063,7 +2063,7 @@ TEST(BufferList, append) {
     bufferlist other;
     other.append('B');
     bl.append(other);
-    EXPECT_EQ((unsigned)2, bl.buffers().size());
+    EXPECT_EQ((unsigned)2, bl.get_num_buffers());
     EXPECT_EQ('B', bl[1]);
   }
   //
@@ -2103,10 +2103,10 @@ TEST(BufferList, append) {
 TEST(BufferList, append_zero) {
   bufferlist bl;
   bl.append('A');
-  EXPECT_EQ((unsigned)1, bl.buffers().size());
+  EXPECT_EQ((unsigned)1, bl.get_num_buffers());
   EXPECT_EQ((unsigned)1, bl.length());
   bl.append_zero(1);
-  EXPECT_EQ((unsigned)2, bl.buffers().size());
+  EXPECT_EQ((unsigned)2, bl.get_num_buffers());
   EXPECT_EQ((unsigned)2, bl.length());
   EXPECT_EQ('\0', bl[1]);
 }
@@ -2118,7 +2118,7 @@ TEST(BufferList, operator_brackets) {
   bufferlist other;
   other.append('B');
   bl.append(other);
-  EXPECT_EQ((unsigned)2, bl.buffers().size());
+  EXPECT_EQ((unsigned)2, bl.get_num_buffers());
   EXPECT_EQ('B', bl[1]);
 }
 
@@ -2129,7 +2129,7 @@ TEST(BufferList, c_str) {
   bufferlist other;
   other.append('B');
   bl.append(other);
-  EXPECT_EQ((unsigned)2, bl.buffers().size());
+  EXPECT_EQ((unsigned)2, bl.get_num_buffers());
   EXPECT_EQ(0, ::memcmp("AB", bl.c_str(), 2));
 }
 
@@ -2146,12 +2146,12 @@ TEST(BufferList, substr_of) {
     bufferptr ptr(s[i], strlen(s[i]));
     bl.push_back(ptr);
   }
-  EXPECT_EQ((unsigned)4, bl.buffers().size());
+  EXPECT_EQ((unsigned)4, bl.get_num_buffers());
 
   bufferlist other;
   other.append("TO BE CLEARED");
   other.substr_of(bl, 4, 4);
-  EXPECT_EQ((unsigned)2, other.buffers().size());
+  EXPECT_EQ((unsigned)2, other.get_num_buffers());
   EXPECT_EQ((unsigned)4, other.length());
   EXPECT_EQ(0, ::memcmp("EFGH", other.c_str(), 4));
 }
@@ -2169,13 +2169,13 @@ TEST(BufferList, splice) {
     bufferptr ptr(s[i], strlen(s[i]));
     bl.push_back(ptr);
   }
-  EXPECT_EQ((unsigned)4, bl.buffers().size());
+  EXPECT_EQ((unsigned)4, bl.get_num_buffers());
   bl.splice(0, 0);
 
   bufferlist other;
   other.append('X');
   bl.splice(4, 4, &other);
-  EXPECT_EQ((unsigned)3, other.buffers().size());
+  EXPECT_EQ((unsigned)3, other.get_num_buffers());
   EXPECT_EQ((unsigned)5, other.length());
   EXPECT_EQ(0, ::memcmp("XEFGH", other.c_str(), other.length()));
   EXPECT_EQ((unsigned)8, bl.length());
@@ -2269,7 +2269,7 @@ TEST(BufferList, read_fd) {
   EXPECT_EQ(-EBADF, bl.read_fd(fd, len));
   fd = ::open(FILENAME, O_RDONLY);
   EXPECT_EQ(len, (unsigned)bl.read_fd(fd, len));
-  EXPECT_EQ(CEPH_BUFFER_APPEND_SIZE - len, bl.buffers().front().unused_tail_length());
+  EXPECT_EQ(CEPH_BUFFER_APPEND_SIZE - len, bl.front().unused_tail_length());
   EXPECT_EQ(len, bl.length());
   ::close(fd);
   ::unlink(FILENAME);

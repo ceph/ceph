@@ -1422,7 +1422,7 @@ int FileJournal::write_aio_bl(off64_t& pos, bufferlist& bl, uint64_t seq)
   dout(20) << "write_aio_bl " << pos << "~" << bl.length() << " seq " << seq << dendl;
 
   while (bl.length() > 0) {
-    int max = MIN(bl.buffers().size(), IOV_MAX-1);
+    int max = MIN(bl.get_num_buffers(), IOV_MAX-1);
     iovec *iov = new iovec[max];
     int n = 0;
     unsigned len = 0;
