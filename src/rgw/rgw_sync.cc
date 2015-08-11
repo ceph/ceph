@@ -949,7 +949,7 @@ int RGWCloneMetaLogCoroutine::state_read_shard_status()
     return set_state(Error, ret);
   }
 
-  return yield(set_state(ReadShardStatusComplete));
+  return block(set_state(ReadShardStatusComplete));
 }
 
 int RGWCloneMetaLogCoroutine::state_read_shard_status_complete()
@@ -991,7 +991,7 @@ int RGWCloneMetaLogCoroutine::state_send_rest_request()
     return ret;
   }
 
-  return yield(set_state(ReceiveRESTResponse));
+  return block(set_state(ReceiveRESTResponse));
 }
 
 int RGWCloneMetaLogCoroutine::state_receive_rest_response()
@@ -1047,7 +1047,7 @@ int RGWCloneMetaLogCoroutine::state_store_mdlog_entries()
     ldout(store->ctx(), 10) << "failed to store md log entries shard_id=" << shard_id << " ret=" << ret << dendl;
     return set_state(Error, ret);
   }
-  return yield(set_state(StoreMDLogEntriesComplete));
+  return block(set_state(StoreMDLogEntriesComplete));
 }
 
 int RGWCloneMetaLogCoroutine::state_store_mdlog_entries_complete()
