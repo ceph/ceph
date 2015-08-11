@@ -13,6 +13,9 @@
 
 #include "cls/lock/cls_lock_client.h"
 
+#include <boost/asio/coroutine.hpp>
+#include <boost/asio/yield.hpp>
+
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -646,8 +649,7 @@ class RGWSimpleRadosUnlockCR : public RGWSimpleCoroutine {
 public:
   RGWSimpleRadosUnlockCR(RGWAsyncRadosProcessor *_async_rados, RGWRados *_store,
 		      rgw_bucket& _pool, const string& _oid, const string& _lock_name,
-		      const string& _cookie,
-		      uint32_t _duration) : RGWSimpleCoroutine(_store->ctx()),
+		      const string& _cookie) : RGWSimpleCoroutine(_store->ctx()),
                                                 async_rados(_async_rados),
 						store(_store),
 						lock_name(_lock_name),
@@ -670,6 +672,51 @@ public:
 
   int request_complete() {
     return req->get_ret_status();
+  }
+};
+
+class RGWInitSyncStatusCoroutine : public RGWCoroutine {
+  RGWAsyncRadosProcessor *async_rados;
+  RGWRados *store;
+  RGWObjectCtx& obj_ctx;
+
+  string lock_name;
+  string cookie;
+
+public:
+  RGWInitSyncStatusCoroutine(RGWAsyncRadosProcessor *_async_rados, RGWRados *_store,
+		      RGWObjectCtx& _obj_ctx) : RGWCoroutine(_store->ctx()), async_rados(_async_rados), store(_store),
+                                                obj_ctx(_obj_ctx) {
+    lock_name = "sync_lock";
+
+#define COOKIE_LEN 16
+    char buf[COOKIE_LEN + 1];
+
+    gen_rand_alphanumeric(cct, buf, sizeof(buf) - 1);
+    string cookie = buf;
+  }
+
+  int operate() {
+    reenter(this) {
+      yield {
+	uint32_t lock_duration = 30;
+	call(new RGWSimpleRadosLockCR(async_rados, store, store->get_zone_params().log_pool, "mdlog.state.global",
+			             lock_name, cookie, lock_duration));
+      }
+      yield {
+	call(new RGWSimpleRadosUnlockCR(async_rados, store, store->get_zone_params().log_pool, "mdlog.state.global",
+			             lock_name, cookie));
+      }
+      yield {
+        rgw_sync_marker sync_marker;
+        call(new RGWSimpleRadosWriteCR<rgw_sync_marker>(async_rados, store, store->get_zone_params().log_pool,
+				 "mdlog.state.global", sync_marker));
+      }
+      yield {
+	return set_state(RGWCoroutine_Done);
+      }
+    }
+    return 0;
   }
 };
 
@@ -731,7 +778,7 @@ class RGWMetaSyncCoroutine : public RGWCoroutine {
     return ret;
   }
 public:
-  RGWMetaSyncCoroutine(RGWRados *_store, RGWHTTPManager *_mgr, int _id) : RGWCoroutine(), store(_store),
+  RGWMetaSyncCoroutine(RGWRados *_store, RGWHTTPManager *_mgr, int _id) : RGWCoroutine(_store->ctx()), store(_store),
                            mdlog(store->meta_mgr->get_log()),
                            http_manager(_mgr),
 			   shard_id(_id),
@@ -824,7 +871,7 @@ class RGWCloneMetaLogCoroutine : public RGWCoroutine {
   }
 public:
   RGWCloneMetaLogCoroutine(RGWRados *_store, RGWHTTPManager *_mgr,
-		    int _id, const string& _marker) : RGWCoroutine(), store(_store),
+		    int _id, const string& _marker) : RGWCoroutine(_store->ctx()), store(_store),
                                                       mdlog(store->meta_mgr->get_log()),
                                                       http_manager(_mgr), shard_id(_id),
                                                       marker(_marker), truncated(false), max_entries(CLONE_MAX_ENTRIES),
@@ -884,6 +931,12 @@ int RGWRemoteMetaLog::get_sync_status(RGWMetaSyncGlobalStatus *sync_status)
 {
   RGWObjectCtx obj_ctx(store, NULL);
   return run(new RGWReadSyncStatusCoroutine(async_rados, store, obj_ctx, sync_status));
+}
+
+int RGWRemoteMetaLog::init_sync_status()
+{
+  RGWObjectCtx obj_ctx(store, NULL);
+  return run(new RGWInitSyncStatusCoroutine(async_rados, store, obj_ctx));
 }
 
 int RGWRemoteMetaLog::get_shard_sync_marker(int shard_id, rgw_sync_marker *shard_status)
