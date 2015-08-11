@@ -35,6 +35,17 @@ public:
     ClassMethod() : cls(0), flags(0), func(0), cxx_func(0) {}
   };
 
+  struct ClassFilter {
+    struct ClassHandler::ClassData *cls;
+    std::string name;
+    cls_cxx_filter_factory_t fn;
+
+    void unregister();
+
+    ClassFilter() : fn(0)
+    {}
+  };
+
   struct ClassData {
     enum Status { 
       CLASS_UNKNOWN,
@@ -49,7 +60,7 @@ public:
     void *handle;
 
     map<string, ClassMethod> methods_map;
-    map<string, cls_cxx_filter_factory_t> filters_map;
+    map<string, ClassFilter> filters_map;
 
     set<ClassData *> dependencies;         /* our dependencies */
     set<ClassData *> missing_dependencies; /* only missing dependencies */
@@ -65,9 +76,10 @@ public:
     ClassMethod *register_cxx_method(const char *mname, int flags, cls_method_cxx_call_t func);
     void unregister_method(ClassMethod *method);
 
-    void register_cxx_filter(
+    ClassFilter *register_cxx_filter(
         const std::string &filter_name,
         cls_cxx_filter_factory_t fn);
+    void unregister_filter(ClassFilter *method);
 
     ClassMethod *get_method(const char *mname) {
       Mutex::Locker l(handler->mutex);
@@ -75,10 +87,15 @@ public:
     }
     int get_method_flags(const char *mname);
 
-    cls_cxx_filter_factory_t get_filter(const std::string &filter_name)
+    ClassFilter *get_filter(const std::string &filter_name)
     {
       Mutex::Locker l(handler->mutex);
-      return filters_map[filter_name];
+      std::map<std::string, ClassFilter>::iterator i = filters_map.find(name);
+      if (i == filters_map.end()) {
+        return NULL;
+      } else {
+        return &(i->second);
+      }
     }
   };
 

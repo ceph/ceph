@@ -82,12 +82,23 @@ int cls_unregister_method(cls_method_handle_t handle)
   return 1;
 }
 
-int cls_register_cxx_filter(cls_handle_t hclass, const std::string &filter_name,
-			    cls_cxx_filter_factory_t fn)
+int cls_register_cxx_filter(cls_handle_t hclass,
+                            const std::string &filter_name,
+                            cls_cxx_filter_factory_t fn,
+                            cls_filter_handle_t *handle)
 {
   ClassHandler::ClassData *cls = (ClassHandler::ClassData *)hclass;
-  cls->register_cxx_filter(filter_name, fn);
-  return 0;
+  cls_filter_handle_t hfilter = (cls_filter_handle_t)cls->register_cxx_filter(filter_name, fn);
+  if (handle) {
+    *handle = hfilter;
+  }
+  return (hfilter != NULL);
+}
+
+void cls_unregister_filter(cls_filter_handle_t handle)
+{
+  ClassHandler::ClassFilter *filter = (ClassHandler::ClassFilter *)handle;
+  filter->unregister();
 }
 
 int cls_call(cls_method_context_t hctx, const char *cls, const char *method,

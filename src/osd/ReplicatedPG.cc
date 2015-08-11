@@ -623,13 +623,13 @@ int ReplicatedPG::get_pgls_filter(bufferlist::iterator& iter, PGLSFilter **pfilt
       assert(cls);
     }
 
-    cls_cxx_filter_factory_t fn = cls->get_filter(filter_name);
-    if (fn == NULL) {
+    ClassHandler::ClassFilter *class_filter = cls->get_filter(filter_name);
+    if (class_filter == NULL) {
       derr << "Error finding filter '" << filter_name << "' in class "
            << class_name << dendl;
       return -EINVAL;
     }
-    filter = fn(&iter);
+    filter = class_filter->fn(&iter);
     assert(filter);
   }
 
