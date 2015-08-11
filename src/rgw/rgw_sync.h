@@ -22,16 +22,19 @@ struct RGWMetaSyncGlobalStatus {
   };
 
   uint16_t state;
+  uint32_t num_shards;
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
     ::encode(state, bl);
+    ::encode(num_shards, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::iterator& bl) {
      DECODE_START(1, bl);
      ::decode(state, bl);
+     ::decode(num_shards, bl);
      DECODE_FINISH(bl);
   }
 
@@ -52,9 +55,10 @@ struct RGWMetaSyncGlobalStatus {
 	break;
     }
     encode_json("status", s, f);
+    encode_json("num_shards", num_shards, f);
   }
 
-  RGWMetaSyncGlobalStatus() : state((int)StateInit) {}
+  RGWMetaSyncGlobalStatus() : state((int)StateInit), num_shards(0) {}
 };
 WRITE_CLASS_ENCODER(RGWMetaSyncGlobalStatus)
 
