@@ -1330,6 +1330,10 @@ struct object_stat_sum_t {
   int64_t num_evict;
   int64_t num_evict_kb;
   int64_t num_promote;
+  int32_t num_flush_mode_high;  // 1 when in high flush mode, otherwise 0
+  int32_t num_flush_mode_low;   // 1 when in low flush mode, otherwise 0
+  int32_t num_evict_mode_some;  // 1 when in evict some mode, otherwise 0
+  int32_t num_evict_mode_full;  // 1 when in evict full mode, otherwise 0
 
   object_stat_sum_t()
     : num_bytes(0),
@@ -1352,7 +1356,9 @@ struct object_stat_sum_t {
       num_flush_kb(0),
       num_evict(0),
       num_evict_kb(0),
-      num_promote(0)
+      num_promote(0),
+      num_flush_mode_high(0), num_flush_mode_low(0),
+      num_evict_mode_some(0), num_evict_mode_full(0)
   {}
 
   void floor(int64_t f) {
@@ -1385,6 +1391,10 @@ struct object_stat_sum_t {
     FLOOR(num_evict);
     FLOOR(num_evict_kb);
     FLOOR(num_promote);
+    FLOOR(num_flush_mode_high);
+    FLOOR(num_flush_mode_low);
+    FLOOR(num_evict_mode_some);
+    FLOOR(num_evict_mode_full);
 #undef FLOOR
   }
 
@@ -1425,6 +1435,10 @@ struct object_stat_sum_t {
     SPLIT(num_evict);
     SPLIT(num_evict_kb);
     SPLIT(num_promote);
+    SPLIT(num_flush_mode_high);
+    SPLIT(num_flush_mode_low);
+    SPLIT(num_evict_mode_some);
+    SPLIT(num_evict_mode_full);
 #undef SPLIT
   }
 
