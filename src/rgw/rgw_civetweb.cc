@@ -11,24 +11,21 @@
 
 int RGWMongoose::write_data(const char *buf, int len)
 {
-  if (!header_done) {
-    header_data.append(buf, len);
-    return len;
+  const int ret = mg_write(conn, buf, len);
+  if (ret > 0) {
+    return ret;
   }
-  if (!sent_header) {
-    data.append(buf, len);
-    return len;
-  }
-  int r = mg_write(conn, buf, len);
-  if (r == 0) {
-    /* didn't send anything, error out */
-    return -EIO;
-  }
-  return r;
+
+  /* didn't send anything, error out */
+  dout(3) << "mg_write() returned " << ret << dendl;
+  return -EIO;
 }
 
-RGWMongoose::RGWMongoose(mg_connection *_conn, int _port) : conn(_conn), port(_port), header_done(false), sent_header(false), has_content_length(false),
-                                                 explicit_keepalive(false), explicit_conn_close(false)
+RGWMongoose::RGWMongoose(mg_connection *_conn, int _port)
+  : conn(_conn),
+    port(_port),
+    explicit_keepalive(false),
+    explicit_conn_close(false)
 {
 }
 
@@ -39,44 +36,16 @@ int RGWMongoose::read_data(char *buf, int len)
 
 void RGWMongoose::flush()
 {
-}
-
-int RGWMongoose::complete_request()
-{
-  if (!sent_header) {
-    if (!has_content_length) {
-      header_done = false; /* let's go back to writing the header */
-
-      if (0 && data.length() == 0) {
-        has_content_length = true;
-        print("Transfer-Enconding: %s\r\n", "chunked");
-        data.append("0\r\n\r\n", sizeof("0\r\n\r\n")-1);
-      } else {
-        int r = send_content_length(data.length());
-        if (r < 0)
-	  return r;
-      }
-    }
-
-    complete_header();
-  }
-
-  if (data.length()) {
-    int r = write_data(data.c_str(), data.length());
-    if (r < 0)
-      return r;
-    data.clear();
-  }
-
-  return 0;
+  /* NOP */
 }
 
 void RGWMongoose::init_env(CephContext *cct)
 {
   env.init(cct);
   struct mg_request_info *info = mg_get_request_info(conn);
-  if (!info)
+  if (!info) {
     return;
+  }
 
   for (int i = 0; i < info->num_headers; i++) {
     struct mg_request_info::mg_header *header = &info->http_headers[i];
@@ -129,22 +98,19 @@ void RGWMongoose::init_env(CephContext *cct)
   env.set("SERVER_PORT", port_buf);
 }
 
-int RGWMongoose::send_status(const char *status, const char *status_name)
+int RGWMongoose::send_status(const char * status,
+                             const char * status_name)
 {
-  char buf[128];
-
-  if (!status_name)
-    status_name = "";
-
-  snprintf(buf, sizeof(buf), "HTTP/1.1 %s %s\r\n", status, status_name);
-
-  bufferlist bl;
-  bl.append(buf);
-  bl.append(header_data);
-  header_data = bl;
-
   int status_num = atoi(status);
   mg_set_http_status(conn, status_num);
+
+  if (!status_name) {
+    status_name = "";
+  }
+
+  char buf[128];
+  snprintf(buf, sizeof(buf), "HTTP/1.1 %s %s\r\n", status, status_name);
+  write_data(buf, strlen(buf));
 
   return 0;
 }
@@ -156,45 +122,22 @@ int RGWMongoose::send_100_continue()
   return mg_write(conn, buf, sizeof(buf) - 1);
 }
 
-static void dump_date_header(bufferlist &out)
-{
-  char timestr[TIME_BUF_SIZE];
-  const time_t gtime = time(NULL);
-  struct tm result;
-  struct tm const * const tmp = gmtime_r(&gtime, &result);
-
-  if (tmp == NULL)
-    return;
-
-  if (strftime(timestr, sizeof(timestr), "Date: %a, %d %b %Y %H:%M:%S %Z\r\n", tmp))
-    out.append(timestr);
-}
-
 int RGWMongoose::complete_header()
 {
-  header_done = true;
-
-  if (!has_content_length) {
-    return 0;
+  string str;
+  if (explicit_keepalive) {
+    str = "Connection: Keep-Alive\r\n";
+  } else if (explicit_conn_close) {
+    str = "Connection: close\r\n";
   }
 
-  dump_date_header(header_data);
+  str.append("\r\n");
 
-  if (explicit_keepalive)
-    header_data.append("Connection: Keep-Alive\r\n");
-  else if (explicit_conn_close)
-    header_data.append("Connection: close\r\n");
-
-  header_data.append("\r\n");
-
-  sent_header = true;
-
-  return write_data(header_data.c_str(), header_data.length());
+  return write_data(str.c_str(), str.length());
 }
 
 int RGWMongoose::send_content_length(uint64_t len)
 {
-  has_content_length = true;
   char buf[21];
   snprintf(buf, sizeof(buf), "%" PRIu64, len);
   return print("Content-Length: %s\r\n", buf);

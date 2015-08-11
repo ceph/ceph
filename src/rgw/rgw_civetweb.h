@@ -15,14 +15,8 @@ class RGWMongoose : public RGWClientIO
 {
   mg_connection *conn;
 
-  bufferlist header_data;
-  bufferlist data;
-
   int port;
 
-  bool header_done;
-  bool sent_header;
-  bool has_content_length;
   bool explicit_keepalive;
   bool explicit_conn_close;
 
