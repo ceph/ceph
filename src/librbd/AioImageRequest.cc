@@ -202,9 +202,6 @@ void AioImageRead::send_request() {
 }
 
 void AbstractAioImageWrite::send_request() {
-  assert(!m_image_ctx.image_watcher->is_lock_supported() ||
-          m_image_ctx.image_watcher->is_lock_owner());
-
   CephContext *cct = m_image_ctx.cct;
 
   RWLock::RLocker md_locker(m_image_ctx.md_lock);
@@ -243,6 +240,9 @@ void AbstractAioImageWrite::send_request() {
     journaling = (m_image_ctx.journal != NULL &&
                   !m_image_ctx.journal->is_journal_replaying());
   }
+
+  assert(!m_image_ctx.image_watcher->is_lock_supported() ||
+          m_image_ctx.image_watcher->is_lock_owner());
 
   AioObjectRequests requests;
   send_object_requests(object_extents, snapc, (journaling ? &requests : NULL));
