@@ -20,6 +20,7 @@
 #define dout_subsys ceph_subsys_rgw
 
 static string mdlog_sync_status_oid = "mdlog.sync-status";
+static string mdlog_sync_status_shard_prefix = "mdlog.sync-status.";
 
 void rgw_mdlog_info::decode_json(JSONObj *obj) {
   JSONDecoder::decode_json("num_objects", num_shards, obj);
@@ -398,8 +399,8 @@ int RGWMetaSyncStatusManager::init(int _num_shards)
     return r;
   }
 
-  global_status_oid = "mdlog.state.global";
-  shard_status_oid_prefix = "mdlog.state.shard";
+  global_status_oid = mdlog_sync_status_oid;
+  shard_status_oid_prefix = mdlog_sync_status_shard_prefix;
   global_status_obj = rgw_obj(store->get_zone_params().log_pool, global_status_oid);
 
   for (int i = 0; i < num_shards; i++) {
@@ -689,7 +690,7 @@ public:
 		      RGWObjectCtx& _obj_ctx) : RGWCoroutine(_store->ctx()), async_rados(_async_rados), store(_store),
                                                 obj_ctx(_obj_ctx) {
     lock_name = "sync_lock";
-    oid = "mdlog.state.global";
+    oid = mdlog_sync_status_oid;
 
 #define COOKIE_LEN 16
     char buf[COOKIE_LEN + 1];
@@ -735,7 +736,7 @@ public:
 		      RGWObjectCtx& _obj_ctx,
 		      RGWMetaSyncGlobalStatus *_gs) : RGWSimpleRadosReadCR(_async_rados, _store, _obj_ctx,
 									    _store->get_zone_params().log_pool,
-									    "mdlog.state.global",
+									    mdlog_sync_status_oid,
 									    _gs),
                                                       async_rados(_async_rados), store(_store),
                                                       obj_ctx(_obj_ctx), global_status(_gs) {}
@@ -748,91 +749,11 @@ int RGWReadSyncStatusCoroutine::handle_data(RGWMetaSyncGlobalStatus& data)
   if (retcode == -ENOENT) {
     return retcode;
   }
+
   spawn(new RGWSimpleRadosReadCR<rgw_sync_marker>(async_rados, store, obj_ctx, store->get_zone_params().log_pool,
 				 "mdlog.state.0", &sync_marker));
   spawn(new RGWSimpleRadosReadCR<rgw_sync_marker>(async_rados, store, obj_ctx, store->get_zone_params().log_pool,
 				 "mdlog.state.1", &sync_marker));
-  return 0;
-}
-
-class RGWMetaSyncCoroutine : public RGWCoroutine {
-  RGWRados *store;
-  RGWMetadataLog *mdlog;
-  RGWHTTPManager *http_manager;
-
-  int shard_id;
-  string marker;
-
-  int max_entries;
-
-  RGWRESTReadResource *http_op;
-
-  enum State {
-    Init                      = 0,
-    ReadSyncStatus            = 1,
-    ReadSyncStatusComplete    = 2,
-    Done                      = 100,
-    Error                     = 200,
-  } state;
-
-  int set_state(State s, int ret = 0) {
-    state = s;
-    return ret;
-  }
-public:
-  RGWMetaSyncCoroutine(RGWRados *_store, RGWHTTPManager *_mgr, int _id) : RGWCoroutine(_store->ctx()), store(_store),
-                           mdlog(store->meta_mgr->get_log()),
-                           http_manager(_mgr),
-			   shard_id(_id),
-                           max_entries(CLONE_MAX_ENTRIES),
-			   http_op(NULL),
-                           state(RGWMetaSyncCoroutine::Init) {}
-
-  int operate();
-
-  int state_init();
-  int state_read_sync_status();
-  int state_read_sync_status_complete();
-
-  bool is_done() { return (state == Done || state == Error); }
-  bool is_error() { return (state == Error); }
-};
-
-int RGWMetaSyncCoroutine::operate()
-{
-  switch (state) {
-    case Init:
-      ldout(store->ctx(), 20) << __func__ << ": shard_id=" << shard_id << ": init request" << dendl;
-      return state_init();
-    case ReadSyncStatus:
-      ldout(store->ctx(), 20) << __func__ << ": shard_id=" << shard_id << ": reading shard status" << dendl;
-      return state_read_sync_status();
-    case ReadSyncStatusComplete:
-      ldout(store->ctx(), 20) << __func__ << ": shard_id=" << shard_id << ": reading shard status complete" << dendl;
-      return state_read_sync_status_complete();
-    case Done:
-      ldout(store->ctx(), 20) << __func__ << ": shard_id=" << shard_id << ": done" << dendl;
-      break;
-    case Error:
-      ldout(store->ctx(), 20) << __func__ << ": shard_id=" << shard_id << ": error" << dendl;
-      break;
-  }
-
-  return 0;
-}
-
-int RGWMetaSyncCoroutine::state_init()
-{
-  return 0;
-}
-
-int RGWMetaSyncCoroutine::state_read_sync_status()
-{
-  return 0;
-}
-
-int RGWMetaSyncCoroutine::state_read_sync_status_complete()
-{
   return 0;
 }
 
