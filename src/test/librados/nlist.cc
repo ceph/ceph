@@ -687,3 +687,46 @@ TEST_F(LibRadosListECPP, ListObjectsStartPP) {
     ++p;
   }
 }
+
+TEST_F(LibRadosListPP, ListObjectsFilterPP) {
+  char buf[128];
+  memset(buf, 0xcc, sizeof(buf));
+  bufferlist obj_content;
+  obj_content.append(buf, sizeof(buf));
+
+  std::string target_str = "content";
+
+  // Write xattr bare, no ::encod'ing
+  bufferlist target_val;
+  target_val.append(target_str);
+  bufferlist nontarget_val;
+  nontarget_val.append("rhubarb");
+
+  ASSERT_EQ(0, ioctx.write("has_xattr", obj_content, obj_content.length(), 0));
+  ASSERT_EQ(0, ioctx.write("has_wrong_xattr", obj_content, obj_content.length(), 0));
+  ASSERT_EQ(0, ioctx.write("no_xattr", obj_content, obj_content.length(), 0));
+
+  ASSERT_EQ(0, ioctx.setxattr("has_xattr", "theattr", target_val));
+  ASSERT_EQ(0, ioctx.setxattr("has_wrong_xattr", "theattr", nontarget_val));
+
+  bufferlist filter_bl;
+  std::string filter_name = "plain";
+  ::encode(filter_name, filter_bl);
+  ::encode("_theattr", filter_bl);
+  ::encode(target_str, filter_bl);
+
+  NObjectIterator iter(ioctx.nobjects_begin(filter_bl));
+  bool foundit = false;
+  int k = 0;
+  while (iter != ioctx.nobjects_end()) {
+    foundit = true;
+    // We should only see the object that matches the filter
+    ASSERT_EQ((*iter).get_oid(), "has_xattr");
+    // We should only see it once
+    ASSERT_EQ(k, 0);
+    ++iter;
+    ++k;
+  }
+  ASSERT_TRUE(foundit);
+}
+
