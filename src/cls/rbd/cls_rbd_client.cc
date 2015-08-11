@@ -3,8 +3,10 @@
 
 #include "cls/lock/cls_lock_client.h"
 #include "include/buffer.h"
+#include "include/Context.h"
 #include "include/encoding.h"
 #include "include/rbd_types.h"
+#include "common/Cond.h"
 
 #include "cls_rbd_client.h"
 
@@ -12,6 +14,60 @@
 
 namespace librbd {
   namespace cls_client {
+
+namespace {
+
+struct C_GetChildren : public Context {
+  librados::IoCtx *ioctx;
+  std::string oid;
+  parent_spec pspec;
+  std::set<std::string> *children;
+  Context *on_finish;
+  bufferlist out_bl;
+
+  C_GetChildren(librados::IoCtx *_ioctx, const std::string &_oid,
+                const parent_spec &_pspec, std::set<std::string> *_children,
+                Context *_on_finish)
+  : ioctx(_ioctx), oid(_oid), pspec(_pspec), children(_children),
+    on_finish(_on_finish) {
+  }
+
+  void send() {
+    bufferlist in_bl;
+    ::encode(pspec.pool_id, in_bl);
+    ::encode(pspec.image_id, in_bl);
+    ::encode(pspec.snap_id, in_bl);
+
+    librados::ObjectReadOperation op;
+    op.exec("rbd", "get_children", in_bl);
+
+    librados::AioCompletion *rados_completion =
+       librados::Rados::aio_create_completion(this, rados_callback, NULL);
+    int r = ioctx->aio_operate(oid, rados_completion, &op, &out_bl);
+    assert(r == 0);
+    rados_completion->release();
+  }
+
+  virtual void finish(int r) {
+    if (r == 0) {
+      try {
+        bufferlist::iterator it = out_bl.begin();
+        ::decode(*children, it);
+      } catch (const buffer::error &err) {
+        r = -EBADMSG;
+      }
+    }
+    on_finish->complete(r);
+  }
+
+  static void rados_callback(rados_completion_t c, void *arg) {
+    Context *ctx = reinterpret_cast<Context *>(arg);
+    ctx->complete(rados_aio_get_return_value(c));
+  }
+};
+
+} // anonymous namespace
+
     int get_immutable_metadata(librados::IoCtx *ioctx, const std::string &oid,
 			       std::string *object_prefix, uint8_t *order)
     {
@@ -349,29 +405,17 @@ namespace librbd {
     int get_children(librados::IoCtx *ioctx, const std::string &oid,
 		     parent_spec pspec, set<string>& children)
     {
-      bufferlist in, out;
-      ::encode(pspec.pool_id, in);
-      ::encode(pspec.image_id, in);
-      ::encode(pspec.snap_id, in);
-
-      int r = ioctx->exec(oid, "rbd", "get_children", in, out);
-      if (r < 0)
-	return r;
-      bufferlist::iterator it = out.begin();
-      try {
-	::decode(children, it);
-      } catch (const buffer::error &err) {
-	return -EBADMSG;
-      }
-      return 0;
+      C_SaferCond cond_ctx;
+      get_children(ioctx, oid, pspec, &children, &cond_ctx);
+      return cond_ctx.wait();
     }
 
-    int snapshot_add(librados::IoCtx *ioctx, const std::string &oid,
-		     snapid_t snap_id, const std::string &snap_name)
-    {
-      librados::ObjectWriteOperation op;
-      snapshot_add(&op, snap_id, snap_name);
-      return ioctx->operate(oid, &op);
+    void get_children(librados::IoCtx *ioctx, const std::string &oid,
+                      const parent_spec &pspec, std::set<string> *children,
+                      Context *on_finish) {
+      C_GetChildren *req = new C_GetChildren(ioctx, oid, pspec, children,
+                                             on_finish);
+      req->send();
     }
 
     void snapshot_add(librados::ObjectWriteOperation *op, snapid_t snap_id,
@@ -383,13 +427,11 @@ namespace librbd {
       op->exec("rbd", "snapshot_add", bl);
     }
 
-    int snapshot_remove(librados::IoCtx *ioctx, const std::string &oid,
-			snapid_t snap_id)
+    void snapshot_remove(librados::ObjectWriteOperation *op, snapid_t snap_id)
     {
-      bufferlist bl, bl2;
+      bufferlist bl;
       ::encode(snap_id, bl);
-
-      return ioctx->exec(oid, "rbd", "snapshot_remove", bl, bl2);
+      op->exec("rbd", "snapshot_remove", bl);
     }
 
     int get_snapcontext(librados::IoCtx *ioctx, const std::string &oid,
@@ -474,23 +516,21 @@ namespace librbd {
       return 0;
     }
 
-    int old_snapshot_add(librados::IoCtx *ioctx, const std::string &oid,
-			 snapid_t snap_id, const std::string &snap_name)
+    void old_snapshot_add(librados::ObjectWriteOperation *op,
+			  snapid_t snap_id, const std::string &snap_name)
     {
-      bufferlist bl, bl2;
+      bufferlist bl;
       ::encode(snap_name, bl);
       ::encode(snap_id, bl);
-
-      return ioctx->exec(oid, "rbd", "snap_add", bl, bl2);
+      op->exec("rbd", "snap_add", bl);
     }
 
-    int old_snapshot_remove(librados::IoCtx *ioctx, const std::string &oid,
-			    const std::string &snap_name)
+    void old_snapshot_remove(librados::ObjectWriteOperation *op,
+			     const std::string &snap_name)
     {
-      bufferlist bl, bl2;
+      bufferlist bl;
       ::encode(snap_name, bl);
-
-      return ioctx->exec(oid, "rbd", "snap_remove", bl, bl2);
+      op->exec("rbd", "snap_remove", bl);
     }
 
     int old_snapshot_list(librados::IoCtx *ioctx, const std::string &oid,
@@ -554,10 +594,19 @@ namespace librbd {
     int set_protection_status(librados::IoCtx *ioctx, const std::string &oid,
 			      snapid_t snap_id, uint8_t protection_status)
     {
-      bufferlist in, out;
+      // TODO remove
+      librados::ObjectWriteOperation op;
+      set_protection_status(&op, snap_id, protection_status);
+      return ioctx->operate(oid, &op);
+    }
+
+    void set_protection_status(librados::ObjectWriteOperation *op,
+                               snapid_t snap_id, uint8_t protection_status)
+    {
+      bufferlist in;
       ::encode(snap_id, in);
       ::encode(protection_status, in);
-      return ioctx->exec(oid, "rbd", "set_protection_status", in, out);
+      op->exec("rbd", "set_protection_status", in);
     }
 
     int get_stripe_unit_count(librados::IoCtx *ioctx, const std::string &oid,

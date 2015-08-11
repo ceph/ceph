@@ -14,6 +14,8 @@
 #include <string>
 #include <vector>
 
+class Context;
+
 namespace librbd {
   namespace cls_client {
     // high-level interface to the header
@@ -63,13 +65,13 @@ namespace librbd {
     int remove_child(librados::IoCtx *ioctx, const std::string &oid,
 		     parent_spec pspec, const std::string &c_imageid);
     int get_children(librados::IoCtx *ioctx, const std::string &oid,
-		     parent_spec pspec, set<string>& children);
-    int snapshot_add(librados::IoCtx *ioctx, const std::string &oid,
-		     snapid_t snap_id, const std::string &snap_name);
+                      parent_spec pspec, set<string>& children);
+    void get_children(librados::IoCtx *ioctx, const std::string &oid,
+                      const parent_spec &pspec, std::set<string> *children,
+                      Context *on_finish);
     void snapshot_add(librados::ObjectWriteOperation *op, snapid_t snap_id,
 		      const std::string &snap_name);
-    int snapshot_remove(librados::IoCtx *ioctx, const std::string &oid,
-			snapid_t snap_id);
+    void snapshot_remove(librados::ObjectWriteOperation *op, snapid_t snap_id);
     int get_snapcontext(librados::IoCtx *ioctx, const std::string &oid,
 			::SnapContext *snapc);
     int snapshot_list(librados::IoCtx *ioctx, const std::string &oid,
@@ -84,6 +86,8 @@ namespace librbd {
 			      snapid_t snap_id, uint8_t *protection_status);
     int set_protection_status(librados::IoCtx *ioctx, const std::string &oid,
 			      snapid_t snap_id, uint8_t protection_status);
+    void set_protection_status(librados::ObjectWriteOperation *op,
+                               snapid_t snap_id, uint8_t protection_status);
     int get_stripe_unit_count(librados::IoCtx *ioctx, const std::string &oid,
 			      uint64_t *stripe_unit, uint64_t *stripe_count);
     int set_stripe_unit_count(librados::IoCtx *ioctx, const std::string &oid,
@@ -136,9 +140,9 @@ namespace librbd {
 
     // class operations on the old format, kept for
     // backwards compatability
-    int old_snapshot_add(librados::IoCtx *ioctx, const std::string &oid,
-			 snapid_t snap_id, const std::string &snap_name);
-    int old_snapshot_remove(librados::IoCtx *ioctx, const std::string &oid,
+    void old_snapshot_add(librados::ObjectWriteOperation *rados_op,
+                          snapid_t snap_id, const std::string &snap_name);
+    void old_snapshot_remove(librados::ObjectWriteOperation *rados_op,
 			    const std::string &snap_name);
     int old_snapshot_list(librados::IoCtx *ioctx, const std::string &oid,
 			  std::vector<string> *names,
