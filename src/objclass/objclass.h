@@ -8,6 +8,7 @@
 
 #include "../include/types.h"
 #include "msg/msg_types.h"
+#include "common/hobject.h"
 
 extern "C" {
 #endif
@@ -94,8 +95,40 @@ extern void class_fini(void);
 typedef int (*cls_method_cxx_call_t)(cls_method_context_t ctx,
 				     class buffer::list *inbl, class buffer::list *outbl);
 
+class PGLSFilter {
+protected:
+  string xattr;
+public:
+  PGLSFilter();
+  virtual ~PGLSFilter();
+  virtual bool filter(const hobject_t &obj, bufferlist& xattr_data,
+                      bufferlist& outdata) = 0;
+
+  /**
+   * xattr key, or empty string.  If non-empty, this xattr will be fetched
+   * and the value passed into ::filter
+   */
+   virtual string& get_xattr() { return xattr; }
+
+  /**
+   * If true, objects without the named xattr (if xattr name is not empty)
+   * will be rejected without calling ::filter
+   */
+  virtual bool reject_empty_xattr() { return true; }
+};
+
+// Classes expose a filter constructor that returns a subclass of PGLSFilter
+typedef PGLSFilter* (*cls_cxx_filter_factory_t)(
+    bufferlist::iterator *args);
+
+
+
 extern int cls_register_cxx_method(cls_handle_t hclass, const char *method, int flags,
 				   cls_method_cxx_call_t class_call, cls_method_handle_t *handle);
+
+extern int cls_register_cxx_filter(cls_handle_t hclass,
+                                   const std::string &filter_name,
+				   cls_cxx_filter_factory_t fn);
 
 extern int cls_cxx_create(cls_method_context_t hctx, bool exclusive);
 extern int cls_cxx_remove(cls_method_context_t hctx);
