@@ -1388,6 +1388,22 @@ target_link_libraries(test_rados_api_list
   ${CMAKE_DL_LIBS}
   radostest)
 
+add_executable(test_rados_api_nlist
+  librados/nlist.cc
+  $<TARGET_OBJECTS:heap_profiler_objs>
+  )
+set_target_properties(test_rados_api_nlist PROPERTIES COMPILE_FLAGS
+  ${UNITTEST_CXX_FLAGS})
+target_link_libraries(test_rados_api_nlist
+  librados
+  global
+  ${UNITTEST_LIBS}
+  ${EXTRALIBS}
+  ${BLKID_LIBRARIES}
+  ${TCMALLOC_LIBS}
+  ${CMAKE_DL_LIBS}
+  radostest)
+
 add_executable(test_rados_api_pool
   librados/pool.cc
   $<TARGET_OBJECTS:heap_profiler_objs>
