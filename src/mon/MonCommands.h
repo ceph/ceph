@@ -426,6 +426,10 @@ COMMAND("osd perf", \
         "osd", \
         "r", \
         "cli,rest")
+COMMAND("osd pending_pg_removal " \
+	"name=id,type=CephInt,range=0,req=false", \
+	"check if osd <id> has pgs pending for removal", \
+	"osd", "r", "cli,rest")
 COMMAND("osd blocked-by", \
 	"print histogram of which OSDs are blocking their peers", \
 	"osd", "r", "cli,rest")
