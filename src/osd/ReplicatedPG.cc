@@ -20,6 +20,7 @@
 #include "ReplicatedPG.h"
 #include "OSD.h"
 #include "OpRequest.h"
+#include "objclass/objclass.h"
 
 #include "common/errno.h"
 #include "common/perf_counters.h"
@@ -508,6 +509,31 @@ void ReplicatedPG::wait_for_blocked_object(const hobject_t& soid, OpRequestRef o
   op->mark_delayed("waiting for blocked object");
 }
 
+class PGLSPlainFilter : public PGLSFilter {
+  string val;
+public:
+  PGLSPlainFilter(bufferlist::iterator& params) {
+    ::decode(xattr, params);
+    ::decode(val, params);
+  }
+  virtual ~PGLSPlainFilter() {}
+  virtual bool filter(const hobject_t &obj, bufferlist& xattr_data,
+                      bufferlist& outdata);
+};
+
+class PGLSParentFilter : public PGLSFilter {
+  inodeno_t parent_ino;
+public:
+  PGLSParentFilter(bufferlist::iterator& params) {
+    xattr = "_parent";
+    ::decode(parent_ino, params);
+    generic_dout(0) << "parent_ino=" << parent_ino << dendl;
+  }
+  virtual ~PGLSParentFilter() {}
+  virtual bool filter(const hobject_t &obj, bufferlist& xattr_data,
+                      bufferlist& outdata);
+};
+
 bool PGLSParentFilter::filter(const hobject_t &obj,
                               bufferlist& xattr_data, bufferlist& outdata)
 {
@@ -580,7 +606,31 @@ int ReplicatedPG::get_pgls_filter(bufferlist::iterator& iter, PGLSFilter **pfilt
   } else if (type.compare("plain") == 0) {
     filter = new PGLSPlainFilter(iter);
   } else {
-    return -EINVAL;
+    std::size_t dot = type.find(".");
+    if (dot == std::string::npos || dot == 0 || dot == type.size() - 1) {
+      return -EINVAL;
+    }
+
+    const std::string class_name = type.substr(0, dot);
+    const std::string filter_name = type.substr(dot + 1);
+    ClassHandler::ClassData *cls = NULL;
+    int r = osd->class_handler->open_class(class_name, &cls);
+    if (r != 0) {
+      derr << "Error opening class '" << class_name << "': "
+           << cpp_strerror(r) << dendl;
+      return -EINVAL;
+    } else {
+      assert(cls);
+    }
+
+    cls_cxx_filter_factory_t fn = cls->get_filter(filter_name);
+    if (fn == NULL) {
+      derr << "Error finding filter '" << filter_name << "' in class "
+           << class_name << dendl;
+      return -EINVAL;
+    }
+    filter = fn(&iter);
+    assert(filter);
   }
 
   *pfilter = filter;

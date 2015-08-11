@@ -221,6 +221,13 @@ ClassHandler::ClassMethod *ClassHandler::ClassData::register_cxx_method(const ch
   return &method;
 }
 
+void ClassHandler::ClassData::register_cxx_filter(
+    const std::string &filter_name,
+    cls_cxx_filter_factory_t fn)
+{
+  filters_map[filter_name] = fn;
+}
+
 ClassHandler::ClassMethod *ClassHandler::ClassData::_get_method(const char *mname)
 {
   map<string, ClassHandler::ClassMethod>::iterator iter = methods_map.find(mname);
