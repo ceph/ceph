@@ -682,12 +682,14 @@ class RGWInitSyncStatusCoroutine : public RGWCoroutine {
 
   string lock_name;
   string cookie;
+  string oid;
 
 public:
   RGWInitSyncStatusCoroutine(RGWAsyncRadosProcessor *_async_rados, RGWRados *_store,
 		      RGWObjectCtx& _obj_ctx) : RGWCoroutine(_store->ctx()), async_rados(_async_rados), store(_store),
                                                 obj_ctx(_obj_ctx) {
     lock_name = "sync_lock";
+    oid = "mdlog.state.global";
 
 #define COOKIE_LEN 16
     char buf[COOKIE_LEN + 1];
@@ -700,17 +702,17 @@ public:
     reenter(this) {
       yield {
 	uint32_t lock_duration = 30;
-	call(new RGWSimpleRadosLockCR(async_rados, store, store->get_zone_params().log_pool, "mdlog.state.global",
+	call(new RGWSimpleRadosLockCR(async_rados, store, store->get_zone_params().log_pool, oid,
 			             lock_name, cookie, lock_duration));
-      }
-      yield {
-	call(new RGWSimpleRadosUnlockCR(async_rados, store, store->get_zone_params().log_pool, "mdlog.state.global",
-			             lock_name, cookie));
       }
       yield {
         rgw_sync_marker sync_marker;
         call(new RGWSimpleRadosWriteCR<rgw_sync_marker>(async_rados, store, store->get_zone_params().log_pool,
-				 "mdlog.state.global", sync_marker));
+				 oid, sync_marker));
+      }
+      yield {
+	call(new RGWSimpleRadosUnlockCR(async_rados, store, store->get_zone_params().log_pool, oid,
+			             lock_name, cookie));
       }
       yield {
 	return set_state(RGWCoroutine_Done);
