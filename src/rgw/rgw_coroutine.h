@@ -1,11 +1,22 @@
 #ifndef CEPH_RGW_COROUTINE_H
 #define CEPH_RGW_COROUTINE_H
 
+#ifdef _ASSERT_H
+#define NEED_ASSERT_H
+#pragma push_macro("_ASSERT_H")
+#endif
+
+#include <boost/asio.hpp>
+#include <boost/asio/coroutine.hpp>
+
+#ifdef NEED_ASSERT_H
+#pragma pop_macro("_ASSERT_H")
+#endif
+
 #include "rgw_http_client.h"
 
 #include "common/RefCountedObj.h"
-
-
+#include "common/debug.h"
 
 #define RGW_ASYNC_OPS_MGR_WINDOW 16
 
@@ -43,7 +54,7 @@ struct RGWCoroutinesEnv {
   RGWCoroutinesEnv() : manager(NULL), stacks(NULL), stack(NULL) {}
 };
 
-class RGWCoroutine : public RefCountedObject {
+class RGWCoroutine : public RefCountedObject, public boost::asio::coroutine {
   friend class RGWCoroutinesStack;
 protected:
   RGWCoroutinesEnv *env;
@@ -53,7 +64,7 @@ protected:
   stringstream error_stream;
 
   void set_blocked(bool flag) { blocked = flag; }
-  int yield(int ret) {
+  int block(int ret) {
     set_blocked(true);
     return ret;
   }
@@ -170,17 +181,16 @@ public:
   }
 };
 
-class RGWSimpleCoroutine : public RGWCoroutine {
-  enum State {
-    Init                      = 0,
-    SendRequest               = 1,
-    RequestComplete           = 2,
-    AllComplete               = 3,
-    Done                      = 100,
-    Error                     = 200,
-  } state;
+enum RGWCoroutineState {
+  RGWCoroutine_Run   = 0,
+  RGWCoroutine_Done  = 1,
+  RGWCoroutine_Error = 2,
+};
 
-  int set_state(State s, int ret = 0) {
+class RGWSimpleCoroutine : public RGWCoroutine {
+  int state;
+
+  int set_state(int s, int ret = 0) {
     state = s;
     return ret;
   }
@@ -195,15 +205,15 @@ protected:
   CephContext *cct;
 
 public:
-  RGWSimpleCoroutine(CephContext *_cct) : state(Init), cct(_cct) {}
+  RGWSimpleCoroutine(CephContext *_cct) : state(RGWCoroutine_Run), cct(_cct) {}
 
   virtual int init() { return 0; }
   virtual int send_request() = 0;
   virtual int request_complete() = 0;
   virtual int finish() { return 0; }
 
-  bool is_done() { return (state == Done || state == Error); }
-  bool is_error() { return (state == Error); }
+  bool is_done() { return (state == RGWCoroutine_Done || state == RGWCoroutine_Error); }
+  bool is_error() { return (state == RGWCoroutine_Error); }
 };
 
 #endif

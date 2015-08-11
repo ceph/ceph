@@ -2,6 +2,9 @@
 
 #include "rgw_coroutine.h"
 
+#include <boost/asio/coroutine.hpp>
+#include <boost/asio/yield.hpp>
+
 #define dout_subsys ceph_subsys_rgw
 
 
@@ -247,25 +250,11 @@ void RGWCoroutine::spawn(RGWCoroutine *op)
 
 int RGWSimpleCoroutine::operate()
 {
-  switch (state) {
-    case Init:
-      ldout(cct, 20) << __func__ << ": init request" << dendl;
-      return state_init();
-    case SendRequest:
-      ldout(cct, 20) << __func__ << ": send request" << dendl;
-      return state_send_request();
-    case RequestComplete:
-      ldout(cct, 20) << __func__ << ": request complete" << dendl;
-      return state_request_complete();
-    case AllComplete:
-      ldout(cct, 20) << __func__ << ": all complete" << dendl;
-      return state_all_complete();
-    case Done:
-      ldout(cct, 20) << __func__ << ": done" << dendl;
-      break;
-    case Error:
-      ldout(cct, 20) << __func__ << ": error" << dendl;
-      break;
+  reenter(this) {
+    yield return state_init();
+    yield return state_send_request();
+    yield return state_request_complete();
+    yield return state_all_complete();
   }
 
   return 0;
@@ -275,36 +264,36 @@ int RGWSimpleCoroutine::state_init()
 {
   int ret = init();
   if (ret < 0) {
-    return set_state(Error, ret);
+    return set_state(RGWCoroutine_Error, ret);
   }
-  return set_state(SendRequest);
+  return 0;
 }
 
 int RGWSimpleCoroutine::state_send_request()
 {
   int ret = send_request();
   if (ret < 0) {
-    return set_state(Error, ret);
+    return set_state(RGWCoroutine_Error, ret);
   }
-  return yield(set_state(RequestComplete));
+  return block(0);
 }
 
 int RGWSimpleCoroutine::state_request_complete()
 {
   int ret = request_complete();
   if (ret < 0) {
-    return set_state(Error, ret);
+    return set_state(RGWCoroutine_Error, ret);
   }
-  return set_state(AllComplete);
+  return 0;
 }
 
 int RGWSimpleCoroutine::state_all_complete()
 {
   int ret = finish();
   if (ret < 0) {
-    return set_state(Error, ret);
+    return set_state(RGWCoroutine_Error, ret);
   }
-  return set_state(Done);
+  return 0;
 }
 
 
