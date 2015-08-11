@@ -1235,6 +1235,7 @@ int librados::IoCtxImpl::watch(const object_t& oid,
 
   if (r < 0) {
     objecter->linger_cancel(linger_op);
+    *handle = 0;
   }
 
   return r;
