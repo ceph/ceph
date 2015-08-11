@@ -227,7 +227,7 @@ int Processor::start(Worker *w)
   ldout(msgr->cct, 1) << __func__ << " " << dendl;
 
   // start thread
-  if (listen_sd > 0) {
+  if (listen_sd >= 0) {
     worker = w;
     w->center.create_file_event(listen_sd, EVENT_READABLE,
                                 EventCallbackRef(new C_processor_accept(this)));
