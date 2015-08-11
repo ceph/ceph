@@ -691,24 +691,26 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
     return new raw_unshareable(len);
   }
 
-  buffer::ptr::ptr(raw *r) : _raw(r), _off(0), _len(r->len)   // no lock needed; this is an unref raw.
+  // no lock needed; this is an unref raw.
+  buffer::ptr::ptr(raw *r) : _raw(r), _off(0), _len(r->len), embed(false)
   {
     r->nref.inc();
     bdout << "ptr " << this << " get " << _raw << bendl;
   }
-  buffer::ptr::ptr(unsigned l) : _off(0), _len(l)
+  buffer::ptr::ptr(unsigned l) : _off(0), _len(l), embed(false)
   {
     _raw = create(l);
     _raw->nref.inc();
     bdout << "ptr " << this << " get " << _raw << bendl;
   }
-  buffer::ptr::ptr(const char *d, unsigned l) : _off(0), _len(l)    // ditto.
+  buffer::ptr::ptr(const char *d, unsigned l) : _off(0), _len(l), embed(false)
   {
     _raw = copy(d, l);
     _raw->nref.inc();
     bdout << "ptr " << this << " get " << _raw << bendl;
   }
-  buffer::ptr::ptr(const ptr& p) : _raw(p._raw), _off(p._off), _len(p._len)
+  buffer::ptr::ptr(const ptr& p)
+    : _raw(p._raw), _off(p._off), _len(p._len), embed(false)
   {
     if (_raw) {
       _raw->nref.inc();
@@ -716,7 +718,7 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
     }
   }
   buffer::ptr::ptr(const ptr& p, unsigned o, unsigned l)
-    : _raw(p._raw), _off(p._off + o), _len(l)
+    : _raw(p._raw), _off(p._off + o), _len(l), embed(false)
   {
     assert(o+l <= p._len);
     assert(_raw);
@@ -775,11 +777,12 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
   {
     if (_raw) {
       bdout << "ptr " << this << " release " << _raw << bendl;
-      if (_raw->nref.dec() == 0) {
-	//cout << "hosing raw " << (void*)_raw << " len " << _raw->len << std::endl;
-	delete _raw;  // dealloc old (if any)
-      }
+      raw *t = _raw;
       _raw = 0;
+      if (t->nref.dec() == 0) {
+	//cout << "hosing raw " << (void*)t << " len " << t->len << std::endl;
+	delete t;  // dealloc old (if any)
+      }
     }
   }
 
@@ -1319,7 +1322,7 @@ void buffer::list::rebuild_aligned_size_and_memory(unsigned align_size,
       unaligned.push_back(*p);
       ptr *t = &(*p);
       _ptrs.erase(p++);
-      delete t;
+      t->unlinked_from_list();
     } while (p != _ptrs.end() &&
 	     (!p->is_aligned(align_memory) ||
 	      !p->is_n_align_sized(align_size) ||
@@ -1673,7 +1676,7 @@ void buffer::list::rebuild_page_aligned()
       _len -= (*curbuf).length();
       ptr *t = &(*curbuf);
       curbuf = _ptrs.erase(curbuf);
-      delete t;
+      t->unlinked_from_list();
       len -= howmuch;
       off = 0;
     }
