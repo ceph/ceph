@@ -291,8 +291,9 @@ int AsyncConnection::_try_send(bufferlist &send_bl, bool send)
   }
 
   uint64_t sent_bytes = 0;
-  list<bufferptr>::const_iterator pb = outcoming_bl.buffers().begin();
-  uint64_t left_pbrs = outcoming_bl.buffers().size();
+  buffer::list::ptr_list_t::const_iterator pb =
+    outcoming_bl.get_raw_ptr_list().begin();
+  uint64_t left_pbrs = outcoming_bl.get_num_buffers();
   while (left_pbrs) {
     struct msghdr msg;
     uint64_t size = MIN(left_pbrs, IOV_MAX);

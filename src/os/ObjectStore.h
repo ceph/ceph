@@ -620,16 +620,15 @@ public:
       vector<__le32> &cm,
       vector<__le32> &om) {
 
-      list<bufferptr> list = bl.buffers();
-      std::list<bufferptr>::iterator p;
-
-      for(p = list.begin(); p != list.end(); ++p) {
+      const buffer::list::ptr_list_t &list = bl.get_raw_ptr_list();
+      buffer::list::ptr_list_t::const_iterator p;
+      for (p = list.begin(); p != list.end(); ++p) {
         assert(p->length() % sizeof(Op) == 0);
 
-        char* raw_p = p->c_str();
-        char* raw_end = raw_p + p->length();
+        const char* raw_p = p->c_str();
+        const char* raw_end = raw_p + p->length();
         while (raw_p < raw_end) {
-          _update_op(reinterpret_cast<Op*>(raw_p), cm, om);
+          _update_op(reinterpret_cast<Op*>(const_cast<char *>(raw_p)), cm, om);
           raw_p += sizeof(Op);
         }
       }
