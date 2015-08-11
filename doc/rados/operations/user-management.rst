@@ -104,7 +104,7 @@ Capability syntax follows the form::
 - **Monitor Caps:** Monitor capabilities include ``r``, ``w``, ``x`` and 
   ``allow profile {cap}``. For example:: 
 
-	mon 'allow rwx`
+	mon 'allow rwx'
 	mon 'allow profile osd'
 
 - **OSD Caps:** OSD capabilities include ``r``, ``w``, ``x``, ``class-read``, 
@@ -365,12 +365,15 @@ Modify User Capabilities
 ------------------------
 
 The ``ceph auth caps`` command allows you to specify a user and change the 
-user's capabilties. To add capabilities, use the form:: 
+user's capabilities. Setting new capabilities will overwrite current capabilities.
+To view current capabilities run ``ceph auth get USERTYPE.USERID``.  To add
+capabilities, you should also specify the existing capabilities when using the form:: 
 
-	ceph auth caps USERTYPE.USERID {daemon} 'allow [r|w|x|*|...] [pool={pool-name}] [namespace={namespace-name}'
+	ceph auth caps USERTYPE.USERID {daemon} 'allow [r|w|x|*|...] [pool={pool-name}] [namespace={namespace-name}]' [{daemon} 'allow [r|w|x|*|...] [pool={pool-name}] [namespace={namespace-name}]']
 
 For example:: 
 
+	ceph auth get client.john
 	ceph auth caps client.john mon 'allow r' osd 'allow rw pool=liverpool'
 	ceph auth caps client.paul mon 'allow rw' osd 'allow rwx pool=liverpool'
 	ceph auth caps client.brian-manager mon 'allow *' osd 'allow *'
