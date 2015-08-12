@@ -856,19 +856,6 @@ int RGWRemoteMetaLog::init_sync_status()
   return run(new RGWInitSyncStatusCoroutine(async_rados, store, obj_ctx, log_info.num_shards));
 }
 
-int RGWRemoteMetaLog::get_shard_sync_marker(int shard_id, rgw_sync_marker *shard_status)
-{
-  int ret = status_manager.read_shard_status(shard_id);
-  if (ret < 0) {
-    ldout(store->ctx(), 0) << "ERROR: status_manager.read_global_status() returned ret=" << ret << dendl;
-    return ret;
-  }
-
-  *shard_status = status_manager.get_shard_status(shard_id);
-
-  return 0;
-}
-
 int RGWCloneMetaLogCoroutine::operate()
 {
   reenter(this) {
