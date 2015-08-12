@@ -1,0 +1,9 @@
+workload:
+   sequential:
+   - workunit:
+       branch: firefly
+       clients:
+         client.0:
+         - rados/test.sh
+         - cls
+   - print: "**** done  2-workload/rados_api.yaml"
