@@ -14,7 +14,7 @@ cleanup()
 	rm -rf mnt.admin/foo mnt.admin/bar
 	fusermount -u mnt.foo
 	fusermount -u mnt.admin
-	rmdir mnt.admin mnt.foo
+	rm -rf mnt.admin mnt.foo
 }
 
 trap cleanup INT TERM EXIT
