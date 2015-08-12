@@ -1,0 +1,6 @@
+tasks:
+- ceph.restart:
+    daemons: [mon.b]
+    wait-for-healthy: false
+    wait-for-osds-up: true
+- print: "**** done restarted mon.b 06-monb-upgrade-hammer/monb.yaml" 

@@ -1,0 +1,8 @@
+tasks:
+- workunit:
+    #fixes #10577
+    branch: firefly
+    clients:
+      client.0:
+        - rbd/test_librbd_python.sh
+- print: "**** done 09-workload/rbd-python.yaml"
