@@ -377,6 +377,8 @@ def deploy_ceph(ctx, cal_svr):
                     ' '.join(all_osds))
         cmds.append('ceph-deploy install --no-adjust-repos --osd ' +
                     ' '.join(all_osds))
+        # We tell users to use `hostname` in our docs. Do the same here.
+        cmds.append('ceph-deploy install --no-adjust-repos --cli `hostname`')
     else:
         cmds.append('ceph-deploy install ' + ' '.join(all_machines))
 
