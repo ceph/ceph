@@ -443,6 +443,8 @@ class GitbuilderProject(object):
         else:
             self._init_from_config()
 
+        self.dist_release = self._get_dist_release()
+
     def _init_from_remote(self):
         """
         Initializes the class from a teuthology.orchestra.remote.Remote object
@@ -515,6 +517,16 @@ class GitbuilderProject(object):
         :returns: The uri_reference as a string.
         """
         return self._get_uri_reference()
+
+    def _get_dist_release(self):
+        version = self._parse_version(self.os_version)
+        if self.os_type in ('centos', 'rhel'):
+            return "el{0}".format(version)
+        elif self.os_type == "fedora":
+            return "fc{0}".format(version)
+        else:
+            # debian and ubuntu just use the distro name
+            return self.os_type
 
     def _parse_version(self, version):
         """
@@ -610,12 +622,12 @@ class GitbuilderProject(object):
         """
         tag = branch = sha1 = None
         if self.remote:
-            tag = _get_config_value_for_remote(self.ctx, self.job_config,
-                                               self.remote, 'tag')
-            branch = _get_config_value_for_remote(self.ctx, self.job_config,
-                                                  self.remote, 'branch')
-            sha1 = _get_config_value_for_remote(self.ctx, self.job_config,
-                                                self.remote, 'sha1')
+            tag = _get_config_value_for_remote(self.ctx, self.remote,
+                                               self.job_config, 'tag')
+            branch = _get_config_value_for_remote(self.ctx, self.remote,
+                                                  self.job_config, 'branch')
+            sha1 = _get_config_value_for_remote(self.ctx, self.remote,
+                                                self.job_config, 'sha1')
         else:
             sha1 = self.sha1
 
@@ -671,9 +683,10 @@ class GitbuilderProject(object):
             # repo file: v0.67-rc3.164.gd5aa3a9 - whereas in reality the RPM
             # version is 0.61.7 and the release is 37.g1243c97.el6 (centos6).
             # Point being, I have to mangle a little here.
-            if version[0] == 'v':
-                version = version[1:]
-            if '-' in version:
-                version = version.split('-')[0]
+            if self.pkg_type == "rpm":
+                if version[0] == 'v':
+                    version = version[1:]
+                if '-' in version:
+                    version = version.split('-')[0]
             log.info("Found version: {0}".format(version))
         return version

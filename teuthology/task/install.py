@@ -5,13 +5,11 @@ import copy
 import logging
 import time
 import os
-import requests
 import subprocess
 
 from teuthology.config import config as teuth_config
 from teuthology import misc as teuthology
 from teuthology import contextutil, packaging
-from teuthology.exceptions import VersionNotFoundError
 from teuthology.parallel import parallel
 from ..orchestra import run
 
@@ -64,178 +62,15 @@ PACKAGES['ceph']['rpm'] = [
     'rbd-fuse',
 ]
 
-def _get_config_value_for_remote(ctx, remote, config, key):
-    """
-    Look through config, and attempt to determine the "best" value to use for a
-    given key. For example, given:
 
-        config = {
-            'all':
-                {'branch': 'master'},
-            'branch': 'next'
-        }
-        _get_config_value_for_remote(ctx, remote, config, 'branch')
-
-    would return 'master'.
-
-    :param ctx: the argparse.Namespace object
-    :param remote: the teuthology.orchestra.remote.Remote object
-    :param config: the config dict
-    :param key: the name of the value to retrieve
-    """
-    roles = ctx.cluster.remotes[remote]
-    if 'all' in config:
-        return config['all'].get(key)
-    elif roles:
-        for role in roles:
-            if role in config and key in config[role]:
-                return config[role].get(key)
-    return config.get(key)
-
-
-def _get_uri(tag, branch, sha1):
-    """
-    Set the uri -- common code used by both install and debian upgrade
-    """
-    uri = None
-    if tag:
-        uri = 'ref/' + tag
-    elif branch:
-        uri = 'ref/' + branch
-    elif sha1:
-        uri = 'sha1/' + sha1
-    else:
-        # FIXME: Should master be the default?
-        log.debug("defaulting to master branch")
-        uri = 'ref/master'
-    return uri
-
-
-def _get_baseurlinfo_and_dist(ctx, remote, config):
-    """
-    Through various commands executed on the remote, builds a dict which
-    will return the necessary information needed to build the url for
-    teuthology.config.baseurl_template. For example::
-
-        {
-          'arch': 'x86_64',
-          'dist': 'Centos7',
-          'flavor': 'basic',
-          'uri': 'ref/master',
-          'dist_release': 'el7',
-        }
-
-    :param ctx: the argparse.Namespace object
-    :param remote: the teuthology.orchestra.remote.Remote object
-    :param config: the config dict
-    :returns: dict -- the information you want.
-    """
-    result = dict()
-    result['arch'] = remote.arch
-
-    distro = remote.os.name
-    version = _get_gitbuilder_version(remote.os.version)
-    if distro in ('centos', 'rhel'):
-        distro = "centos"
-        dist_release = "el{0}".format(version)
-    elif distro == "fedora":
-        distro = "fc"
-        dist_release = "fc{0}".format(version)
-    else:
-        distro = remote.os.codename
-        dist_release = distro
-        version = ""
-
-    result['dist'] = "{distro}{version}".format(
-        distro=distro,
-        version=version,
+def _get_gitbuilder_project(ctx, remote, config):
+    return packaging.GitbuilderProject(
+        config.get('project', 'ceph'),
+        config,
+        remote=remote,
+        ctx=ctx
     )
-    # this is used when constructing the rpm name
-    result["dist_release"] = dist_release
 
-    # branch/tag/sha1 flavor
-    result['flavor'] = config.get('flavor', 'basic')
-
-    log.info('config is %s', config)
-    tag = _get_config_value_for_remote(ctx, remote, config, 'tag')
-    branch = _get_config_value_for_remote(ctx, remote, config, 'branch')
-    sha1 = _get_config_value_for_remote(ctx, remote, config, 'sha1')
-    uri = _get_uri(tag, branch, sha1)
-    result['uri'] = uri
-
-    return result
-
-
-def _get_gitbuilder_version(version):
-    """
-    Parses a distro version string and returns a modified string
-    that matches the format needed for the gitbuilder url.
-
-    Minor version numbers are ignored.
-    """
-    # return only the major version
-    return version.split(".")[0]
-
-
-def _get_baseurl(ctx, remote, config):
-    """
-    Figures out which package repo base URL to use.
-
-    Example:
-        'http://gitbuilder.ceph.com/ceph-deb-raring-x86_64-basic/ref/master'
-    :param ctx: the argparse.Namespace object
-    :param remote: the teuthology.orchestra.remote.Remote object
-    :param config: the config dict
-    :returns: str -- the URL
-    """
-    template = teuth_config.baseurl_template
-    # get distro name and arch
-    baseparms = _get_baseurlinfo_and_dist(ctx, remote, config)
-    base_url = template.format(
-        host=teuth_config.gitbuilder_host,
-        proj=config.get('project', 'ceph'),
-        pkg_type=remote.system_type,
-        **baseparms
-    )
-    return base_url
-
-
-def _block_looking_for_package_version(remote, base_url, wait=False):
-    """
-    Look for, and parse, a file called 'version' in base_url.
-
-    :param remote: the teuthology.orchestra.remote.Remote object
-    :param wait: wait forever for the file to show up. (default False)
-    :returns: str -- the version e.g. '0.67-240-g67a95b9-1raring'
-    :raises: VersionNotFoundError
-    """
-    url = "{0}/version".format(base_url)
-    log.info("Looking for package version: {0}".format(url))
-    while True:
-        resp = requests.get(url)
-        if not resp.ok:
-            if wait:
-                log.info(
-                    'Package not there yet (got HTTP code %s), waiting...',
-                    resp.status_code,
-                )
-                time.sleep(15)
-                continue
-            raise VersionNotFoundError(base_url)
-        break
-    version = resp.text.strip()
-    # FIXME: 'version' as retreived from the repo is actually the RPM version
-    # PLUS *part* of the release. Example:
-    # Right now, ceph master is given the following version in the repo file:
-    # v0.67-rc3.164.gd5aa3a9 - whereas in reality the RPM version is 0.61.7
-    # and the release is 37.g1243c97.el6 (for centos6).
-    # Point being, I have to mangle a little here.
-    if version[0] == 'v':
-        version = version[1:]
-    if '-' in version:
-        version = version.split('-')[0]
-    log.info("Found version: {0}".format(version))
-    return version
 
 def _get_local_dir(config, remote):
     """
@@ -249,6 +84,7 @@ def _get_local_dir(config, remote):
             fname = "%s/%s" % (ldir, fyle)
             teuthology.sudo_write_file(remote, fname, open(fname).read(), '644')
     return ldir
+
 
 def _update_deb_package_list_and_install(ctx, remote, debs, config):
     """
@@ -283,35 +119,19 @@ def _update_deb_package_list_and_install(ctx, remote, debs, config):
             stdout=StringIO(),
         )
 
-    baseparms = _get_baseurlinfo_and_dist(ctx, remote, config)
+    gitbuilder = _get_gitbuilder_project(ctx, remote, config)
     log.info("Installing packages: {pkglist} on remote deb {arch}".format(
-        pkglist=", ".join(debs), arch=baseparms['arch'])
+        pkglist=", ".join(debs), arch=gitbuilder.arch)
     )
     # get baseurl
-    base_url = _get_baseurl(ctx, remote, config)
-    log.info('Pulling from %s', base_url)
+    log.info('Pulling from %s', gitbuilder.base_url)
 
-    # get package version string
-    # FIXME this is a terrible hack.
-    while True:
-        resp = requests.get(base_url + '/version')
-        if not resp.ok:
-            if config.get('wait_for_package'):
-                log.info('Package not there yet, waiting...')
-                time.sleep(15)
-                continue
-            try:
-                resp.raise_for_status()
-            except Exception:
-                log.exception("Error fetching package version")
-            raise VersionNotFoundError("%s/version" % base_url)
-        version = resp.text.strip()
-        log.info('Package version is %s', version)
-        break
+    version = gitbuilder.version
+    log.info('Package version is %s', version)
 
     remote.run(
         args=[
-            'echo', 'deb', base_url, baseparms['dist'], 'main',
+            'echo', 'deb', gitbuilder.base_url, gitbuilder.distro, 'main',
             run.Raw('|'),
             'sudo', 'tee', '/etc/apt/sources.list.d/{proj}.list'.format(
                 proj=config.get('project', 'ceph')),
@@ -411,12 +231,14 @@ def _update_rpm_package_list_and_install(ctx, remote, rpm, config):
     :param rpm: list of packages names to install
     :param config: the config dict
     """
-    baseparms = _get_baseurlinfo_and_dist(ctx, remote, config)
+    gitbuilder = _get_gitbuilder_project(ctx, remote, config)
+    log.info('Pulling from %s', gitbuilder.base_url)
+    log.info('Package version is %s', gitbuilder.version)
     log.info("Installing packages: {pkglist} on remote rpm {arch}".format(
-        pkglist=", ".join(rpm), arch=baseparms['arch']))
-    dist_release = baseparms['dist_release']
-    project = config.get('project', 'ceph')
-    start_of_url = _get_baseurl(ctx, remote, config)
+        pkglist=", ".join(rpm), arch=gitbuilder.arch))
+    dist_release = gitbuilder.dist_release
+    project = gitbuilder.project
+    start_of_url = gitbuilder.base_url
     proj_release = '{proj}-release-{release}.{dist_release}.noarch'.format(
         proj=project, release=RELEASE, dist_release=dist_release)
     rpm_name = "{rpm_nm}.rpm".format(rpm_nm=proj_release)
@@ -429,7 +251,7 @@ def _update_rpm_package_list_and_install(ctx, remote, rpm, config):
 
     remote.run(args=['rm', '-f', rpm_name])
 
-    uri = baseparms['uri']
+    uri = gitbuilder.uri_reference
     _yum_fix_repo_priority(remote, project, uri)
     _yum_fix_repo_host(remote, project)
     _yum_set_check_obsoletes(remote)
@@ -480,13 +302,9 @@ def verify_package_version(ctx, config, remote):
     if config.get("extras"):
         log.info("Skipping version verification...")
         return True
-    base_url = _get_baseurl(ctx, remote, config)
-    version = _block_looking_for_package_version(
-        remote,
-        base_url,
-        config.get('wait_for_package', False)
-    )
-    pkg_to_check = config.get('project', 'ceph')
+    gitbuilder = _get_gitbuilder_project(ctx, remote, config)
+    version = gitbuilder.version
+    pkg_to_check = gitbuilder.project
     installed_ver = packaging.get_package_version(remote, pkg_to_check)
     if installed_ver and version in installed_ver:
         msg = "The correct {pkg} version {ver} is installed.".format(
@@ -632,8 +450,8 @@ def _remove_rpm(ctx, config, remote, rpm):
     """
     log.info("Removing packages: {pkglist} on rpm system.".format(
         pkglist=", ".join(rpm)))
-    baseparms = _get_baseurlinfo_and_dist(ctx, remote, config)
-    dist_release = baseparms['dist_release']
+    gitbuilder = _get_gitbuilder_project(ctx, remote, config)
+    dist_release = gitbuilder.dist_release
     remote.run(
         args=[
             'for', 'd', 'in',
@@ -858,47 +676,15 @@ def _upgrade_deb_packages(ctx, config, remote, debs):
             stdout=StringIO(),
         )
 
+    gitbuilder = _get_gitbuilder_project(ctx, remote, config)
     # get distro name and arch
-    r = remote.run(
-        args=['lsb_release', '-sc'],
-        stdout=StringIO(),
-    )
-    dist = r.stdout.getvalue().strip()
-    r = remote.run(
-        args=['arch'],
-        stdout=StringIO(),
-    )
-    arch = r.stdout.getvalue().strip()
-    log.info("dist %s arch %s", dist, arch)
-
-    # branch/tag/sha1 flavor
-    flavor = 'basic'
-    sha1 = config.get('sha1')
-    branch = config.get('branch')
-    tag = config.get('tag')
-    uri = _get_uri(tag, branch, sha1)
-    base_url = 'http://{host}/{proj}-deb-{dist}-{arch}-{flavor}/{uri}'.format(
-        host=teuth_config.gitbuilder_host,
-        proj=config.get('project', 'ceph'),
-        dist=dist,
-        arch=arch,
-        flavor=flavor,
-        uri=uri,
-    )
+    dist = gitbuilder.distro
+    base_url = gitbuilder.base_url
     log.info('Pulling from %s', base_url)
 
-    # get package version string
-    while True:
-        resp = requests.get(base_url + '/version')
-        if not resp.ok:
-            if config.get('wait_for_package'):
-                log.info('Package not there yet, waiting...')
-                time.sleep(15)
-                continue
-            raise VersionNotFoundError("%s/version" % base_url)
-        version = resp.text.strip()
-        log.info('Package version is %s', version)
-        break
+    version = gitbuilder.version
+    log.info('Package version is %s', version)
+
     remote.run(
         args=[
             'echo', 'deb', base_url, dist, 'main',
@@ -1047,18 +833,18 @@ def _upgrade_rpm_packages(ctx, config, remote, pkgs):
     :param pkgs: the RPM packages to be installed
     :param branch: the branch of the project to be used
     """
-    distinfo = _get_baseurlinfo_and_dist(ctx, remote, config)
+    gitbuilder = _get_gitbuilder_project(ctx, remote, config)
     log.info(
         "Host {host} is: {distro} {ver} {arch}".format(
             host=remote.shortname,
-            distro=distinfo['distro'],
-            ver=distinfo['relval'],
-            arch=distinfo['arch'],)
+            distro=gitbuilder.os_type,
+            ver=gitbuilder.os_version,
+            arch=gitbuilder.arch,)
     )
 
-    base_url = _get_baseurl(ctx, remote, config)
+    base_url = gitbuilder.base_url
     log.info('Repo base URL: %s', base_url)
-    project = config.get('project', 'ceph')
+    project = gitbuilder.project
 
     # Remove the -release package before upgrading it
     args = ['sudo', 'rpm', '-ev', '%s-release' % project]
@@ -1069,13 +855,13 @@ def _upgrade_rpm_packages(ctx, config, remote, pkgs):
         base=base_url,
         proj=project,
         release=RELEASE,
-        dist_release=distinfo['dist'],
+        dist_release=gitbuilder.dist_release,
     )
 
     # Upgrade the -release package
     args = ['sudo', 'rpm', '-Uv', release_rpm]
     remote.run(args=args)
-    uri = _get_baseurlinfo_and_dist(ctx, remote, config)['uri']
+    uri = gitbuilder.uri_reference
     _yum_fix_repo_priority(remote, project, uri)
     _yum_fix_repo_host(remote, project)
     _yum_set_check_obsoletes(remote)
