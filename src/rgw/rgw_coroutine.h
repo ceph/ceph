@@ -73,6 +73,8 @@ protected:
 
   stringstream error_stream;
 
+  list<RGWCoroutine *> spawned_ops;
+
   int set_state(int s, int ret = 0) {
     state = s;
     return ret;
@@ -90,6 +92,8 @@ protected:
 
   void call(RGWCoroutine *op);
   void spawn(RGWCoroutine *op);
+
+  int complete_spawned();
 
 public:
   RGWCoroutine(CephContext *_cct) : cct(_cct), env(NULL), blocked(false), retcode(0), state(RGWCoroutine_Run) {}

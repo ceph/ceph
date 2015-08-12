@@ -743,6 +743,7 @@ public:
                                                       obj_ctx(_obj_ctx), global_status(_gs) {}
 
   int handle_data(RGWMetaSyncGlobalStatus& data);
+  int finish();
 };
 
 int RGWReadSyncStatusCoroutine::handle_data(RGWMetaSyncGlobalStatus& data)
@@ -755,9 +756,14 @@ int RGWReadSyncStatusCoroutine::handle_data(RGWMetaSyncGlobalStatus& data)
     char buf[mdlog_sync_status_shard_prefix.size() + 16];
     snprintf(buf, sizeof(buf), "%s.%d", mdlog_sync_status_shard_prefix.c_str(), i);
     spawn(new RGWSimpleRadosReadCR<rgw_sync_marker>(async_rados, store, obj_ctx, store->get_zone_params().log_pool,
-				 buf, &sync_marker));
+				                    buf, &sync_marker));
   }
   return 0;
+}
+
+int RGWReadSyncStatusCoroutine::finish()
+{
+  return complete_spawned();
 }
 
 class RGWCloneMetaLogCoroutine : public RGWCoroutine {
