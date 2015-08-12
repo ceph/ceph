@@ -168,6 +168,8 @@ struct dir_result_t {
 
 
   InodeRef inode;
+  int owner_uid;
+  int owner_gid;
 
   int64_t offset;        // high bits: frag_t, low bits: an offset
 
