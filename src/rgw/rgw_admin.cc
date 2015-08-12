@@ -3256,7 +3256,7 @@ next:
   }
   
   if (opt_cmd == OPT_MDLOG_FETCH) {
-    RGWMetadataSync sync(store);
+    RGWMetaSyncStatusManager sync(store);
 
     int ret = sync.init();
     if (ret < 0) {
@@ -3273,7 +3273,7 @@ next:
   }
 
   if (opt_cmd == OPT_MDLOG_SYNC_STATUS) {
-    RGWMetadataSync sync(store);
+    RGWMetaSyncStatusManager sync(store);
 
     int ret = sync.init();
     if (ret < 0) {
@@ -3281,24 +3281,21 @@ next:
       return -ret;
     }
 
-    RGWMetaSyncStatusManager sync_status(store);
-
-    ret = sync.get_sync_status(&sync_status);
+    ret = sync.read_sync_status();
     if (ret < 0) {
-      cerr << "ERROR: sync.get_sync_status() returned ret=" << ret << std::endl;
+      cerr << "ERROR: sync.read_sync_status() returned ret=" << ret << std::endl;
       return -ret;
     }
 
-    formatter->open_object_section("result");
-    encode_json("sync_status", sync_status.get_global_status(), formatter);
-    encode_json("markers", sync_status.get_shard_markers(), formatter);
-    formatter->close_section();
+    rgw_meta_sync_status& sync_status = sync.get_sync_status();
+
+    encode_json("sync_status", sync_status, formatter);
     formatter->flush(cout);
 
   }
 
   if (opt_cmd == OPT_MDLOG_SYNC_INIT) {
-    RGWMetadataSync sync(store);
+    RGWMetaSyncStatusManager sync(store);
 
     int ret = sync.init();
     if (ret < 0) {
