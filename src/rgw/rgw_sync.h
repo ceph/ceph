@@ -116,6 +116,7 @@ public:
   int set_state(RGWMetaSyncGlobalStatus::SyncState state);
 
   RGWMetaSyncGlobalStatus& get_global_status() { return global_status; } 
+  map<int, rgw_sync_marker>& get_shard_markers() { return shard_markers; } 
 
   static string shard_obj_name(int shard_id);
 
@@ -165,7 +166,7 @@ public:
   int get_shard_info(int shard_id);
   int clone_shards();
   int fetch();
-  int get_sync_status(RGWMetaSyncGlobalStatus *sync_status);
+  int get_sync_status(RGWMetaSyncStatusManager *sync_status);
   int init_sync_status();
   int get_shard_sync_marker(int shard_id, rgw_sync_marker *shard_status);
 };
@@ -182,7 +183,7 @@ public:
 
   int init();
 
-  int get_sync_status(RGWMetaSyncGlobalStatus *sync_status) { return master_log.get_sync_status(sync_status); }
+  int get_sync_status(RGWMetaSyncStatusManager *sync_status) { return master_log.get_sync_status(sync_status); }
   int init_sync_status() { return master_log.init_sync_status(); }
   int get_shard_sync_marker(int shard_id, rgw_sync_marker *shard_status) {
     return master_log.get_shard_sync_marker(shard_id, shard_status);
