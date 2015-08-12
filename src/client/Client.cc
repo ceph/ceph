@@ -4419,11 +4419,13 @@ int Client::check_permissions(Inode *in, int flags, int uid, int gid)
     while (1) {
       if (getgrouplist(pw->pw_name, gid, sgids, &sgid_count) == -1) {
 	// we need to resize the group list and try again
-	sgids = (gid_t*)realloc(sgids, sgid_count * sizeof(gid_t));
-	if (sgids == NULL) {
+	void *_realloc = NULL;
+	if ((_realloc = realloc(sgids, sgid_count * sizeof(gid_t))) == NULL) {
 	  ldout(cct, 3) << "allocating group memory failed" << dendl;
+	  free(sgids);
 	  return -EACCES;
 	}
+	sgids = (gid_t*)_realloc;
 	continue;
       }
       // list was successfully retrieved
