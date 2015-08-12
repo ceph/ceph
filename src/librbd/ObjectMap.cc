@@ -4,6 +4,8 @@
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageWatcher.h"
 #include "librbd/internal.h"
+#include "librbd/object_map/ResizeRequest.h"
+#include "librbd/object_map/UpdateRequest.h"
 #include "common/dout.h"
 #include "common/errno.h"
 #include "include/stringify.h"
@@ -200,7 +202,8 @@ void ObjectMap::refresh(uint64_t snap_id)
     r = m_image_ctx.md_ctx.operate(oid, &op);
     if (r == 0) {
       m_object_map.clear();
-      resize(num_objs, OBJECT_NONEXISTENT);
+      object_map::ResizeRequest::resize(&m_object_map, num_objs,
+                                        OBJECT_NONEXISTENT);
     }
   }
   if (r < 0) {
@@ -229,7 +232,8 @@ void ObjectMap::refresh(uint64_t snap_id)
 
     r = m_image_ctx.md_ctx.operate(oid, &op);
     if (r == 0) {
-      resize(num_objs, OBJECT_NONEXISTENT);
+      object_map::ResizeRequest::resize(&m_object_map, num_objs,
+                                        OBJECT_NONEXISTENT);
     }
   } else if (m_object_map.size() > num_objs) {
     // resize op might have been interrupted
@@ -437,8 +441,9 @@ void ObjectMap::aio_resize(uint64_t new_size, uint8_t default_object_state,
   assert(!m_image_ctx.image_watcher->is_lock_supported() ||
          m_image_ctx.image_watcher->is_lock_owner());
 
-  ResizeRequest *req = new ResizeRequest(
-    m_image_ctx, m_snap_id, new_size, default_object_state, on_finish);
+  object_map::ResizeRequest *req = new object_map::ResizeRequest(
+    m_image_ctx, &m_object_map, m_snap_id, new_size, default_object_state,
+    on_finish);
   req->send();
 }
 
@@ -493,10 +498,9 @@ void ObjectMap::aio_update(uint64_t snap_id, uint64_t start_object_no,
                            uint64_t end_object_no, uint8_t new_state,
                            const boost::optional<uint8_t> &current_state,
                            Context *on_finish) {
-  UpdateRequest *req = new UpdateRequest(m_image_ctx, snap_id,
-                                         start_object_no, end_object_no,
-                                         new_state, current_state,
-                                         on_finish);
+  object_map::UpdateRequest *req = new object_map::UpdateRequest(
+    m_image_ctx, &m_object_map, snap_id, start_object_no, end_object_no,
+    new_state, current_state, on_finish);
   req->send();
 }
 
@@ -544,164 +548,6 @@ void ObjectMap::invalidate(uint64_t snap_id) {
     lderr(cct) << "failed to invalidate on-disk object map: " << cpp_strerror(r)
 	       << dendl;
   }
-}
-
-void ObjectMap::resize(uint64_t num_objs, uint8_t defualt_state) {
-  size_t orig_object_map_size = m_object_map.size();
-  m_object_map.resize(num_objs);
-  for (uint64_t i = orig_object_map_size;
-       i < m_object_map.size(); ++i) {
-    m_object_map[i] = defualt_state;
-  }
-}
-
-bool ObjectMap::Request::should_complete(int r) {
-  CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 20) << &m_image_ctx << " should_complete: r=" << r << dendl;
-
-  switch (m_state)
-  {
-  case STATE_REQUEST:
-    if (r == -EBUSY) {
-      lderr(cct) << "object map lock not owned by client" << dendl;
-      return true;
-    } else if (r < 0) {
-      lderr(cct) << "failed to update object map: " << cpp_strerror(r)
-		 << dendl;
-      return invalidate();
-    }
-
-    {
-      RWLock::WLocker l2(m_image_ctx.object_map_lock);
-      finish(&m_image_ctx.object_map);
-    }
-    return true;
-
-  case STATE_INVALIDATE:
-    ldout(cct, 20) << "INVALIDATE" << dendl;
-    if (r < 0) {
-      lderr(cct) << "failed to invalidate object map: " << cpp_strerror(r)
-		 << dendl;
-    }
-    return true;
-
-  default:
-    lderr(cct) << "invalid state: " << m_state << dendl;
-    assert(false);
-    break;
-  }
-  return false;
-}
-
-bool ObjectMap::Request::invalidate() {
-  if (m_image_ctx.test_flags(RBD_FLAG_OBJECT_MAP_INVALID)) {
-    return true;
-  }
-
-  CephContext *cct = m_image_ctx.cct;
-  RWLock::WLocker snap_locker(m_image_ctx.snap_lock);
-
-  // requests shouldn't be running while using snapshots
-  assert(m_image_ctx.snap_id == CEPH_NOSNAP);
-
-  uint64_t flags = RBD_FLAG_OBJECT_MAP_INVALID;
-  if ((m_image_ctx.features & RBD_FEATURE_FAST_DIFF) != 0) {
-    flags |= RBD_FLAG_FAST_DIFF_INVALID;
-  }
-
-  lderr(cct) << &m_image_ctx << " invalidating object map" << dendl;
-  m_state = STATE_INVALIDATE;
-  m_image_ctx.flags |= flags;
-
-  librados::ObjectWriteOperation op;
-  m_image_ctx.image_watcher->assert_header_locked(&op);
-  cls_client::set_flags(&op, CEPH_NOSNAP, flags, flags);
-
-  librados::AioCompletion *rados_completion = create_callback_completion();
-  int r = m_image_ctx.md_ctx.aio_operate(m_image_ctx.header_oid,
-					 rados_completion, &op);
-  assert(r == 0);
-  rados_completion->release();
-  return false;
-}
-
-void ObjectMap::ResizeRequest::send() {
-  CephContext *cct = m_image_ctx.cct;
-
-  RWLock::WLocker l(m_image_ctx.object_map_lock);
-  m_num_objs = Striper::get_num_objects(m_image_ctx.layout, m_new_size);
-
-  ldout(cct, 5) << &m_image_ctx << " resizing on-disk object map: "
-		<< m_num_objs << dendl;
-
-  librados::ObjectWriteOperation op;
-  if (m_snap_id == CEPH_NOSNAP) {
-    rados::cls::lock::assert_locked(&op, RBD_LOCK_NAME, LOCK_EXCLUSIVE, "", "");
-  }
-  cls_client::object_map_resize(&op, m_num_objs, m_default_object_state);
-
-  librados::AioCompletion *rados_completion = create_callback_completion();
-  std::string oid(object_map_name(m_image_ctx.id, m_snap_id));
-  int r = m_image_ctx.md_ctx.aio_operate(oid, rados_completion, &op);
-  assert(r == 0);
-  rados_completion->release();
-}
-
-void ObjectMap::ResizeRequest::finish(ObjectMap *object_map) {
-  CephContext *cct = m_image_ctx.cct;
-
-  ldout(cct, 5) << &m_image_ctx << " resizing in-memory object map: "
-		<< m_num_objs << dendl;
-  object_map->resize(m_num_objs, m_default_object_state);
-}
-
-void ObjectMap::UpdateRequest::send() {
-  assert(m_image_ctx.object_map_lock.is_locked());
-  CephContext *cct = m_image_ctx.cct;
-
-  // safe to update in-memory state first without handling rollback since any
-  // failures will invalidate the object map
-  ldout(cct, 20) << &m_image_ctx << " updating object map"
-                 << (m_snap_id != CEPH_NOSNAP ?
-                       " snap " + stringify(m_snap_id) : std::string())
-                 << ": ["
-		 << m_start_object_no << "," << m_end_object_no << ") = "
-		 << (m_current_state ?
-		       stringify(static_cast<uint32_t>(*m_current_state)) : "")
-		 << "->" << static_cast<uint32_t>(m_new_state)
-		 << dendl;
-
-  ObjectMap& object_map = m_image_ctx.object_map;
-  if (m_snap_id == object_map.m_snap_id) {
-    assert(m_image_ctx.object_map_lock.is_wlocked());
-    for (uint64_t object_no = m_start_object_no;
-         object_no < MIN(m_end_object_no, object_map.m_object_map.size());
-         ++object_no) {
-      uint8_t state = object_map.m_object_map[object_no];
-      if (!m_current_state || state == *m_current_state ||
-          (*m_current_state == OBJECT_EXISTS && state == OBJECT_EXISTS_CLEAN)) {
-        object_map.m_object_map[object_no] = m_new_state;
-      }
-    }
-  }
-
-  librados::ObjectWriteOperation op;
-  if (m_snap_id == CEPH_NOSNAP) {
-    rados::cls::lock::assert_locked(&op, RBD_LOCK_NAME, LOCK_EXCLUSIVE, "", "");
-  }
-  cls_client::object_map_update(&op, m_start_object_no, m_end_object_no,
-				m_new_state, m_current_state);
-
-  librados::AioCompletion *rados_completion = create_callback_completion();
-  std::string oid(object_map_name(m_image_ctx.id, m_snap_id));
-  int r = m_image_ctx.md_ctx.aio_operate(oid, rados_completion, &op);
-  assert(r == 0);
-  rados_completion->release();
-}
-
-void ObjectMap::UpdateRequest::finish(ObjectMap *object_map) {
-  ldout(m_image_ctx.cct, 20) << &m_image_ctx << " on-disk object map updated"
-                             << dendl;
 }
 
 } // namespace librbd
