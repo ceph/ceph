@@ -713,9 +713,11 @@ def get_osd_id(path):
     return osd_id
 
 def get_ceph_user():
-    if pwd.getpwnam('ceph') and grp.getgrnam('ceph'):
+    try:
+        pwd.getpwnam('ceph')
+        grp.getgrnam('ceph')
         return 'ceph'
-    else:
+    except KeyError:
         return 'root'
 
 def path_set_context(path):
