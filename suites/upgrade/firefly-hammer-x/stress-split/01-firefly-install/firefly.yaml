@@ -1,0 +1,6 @@
+tasks:
+- install:
+    branch: firefly
+- ceph:
+    fs: xfs
+- print: "**** done install firefly"

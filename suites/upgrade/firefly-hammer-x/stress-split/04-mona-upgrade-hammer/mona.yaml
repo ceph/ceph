@@ -1,0 +1,6 @@
+tasks:
+- ceph.restart:
+    daemons: [mon.a]
+    wait-for-healthy: false
+    wait-for-osds-up: true
+- print: "*** done restart mon.a 04-mona-upgrade-hammer/mona.yaml"

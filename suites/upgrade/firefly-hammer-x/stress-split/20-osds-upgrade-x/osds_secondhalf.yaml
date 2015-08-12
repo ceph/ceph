@@ -1,0 +1,7 @@
+tasks:
+- install.upgrade:
+    osd.3:
+- print: "**** done install.upgrade osd.3"
+- ceph.restart:
+    daemons: [osd.3, osd.4, osd.5]
+- print: "**** done 20-osds-upgrade-x/osds_secondhalf.yaml"
