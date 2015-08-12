@@ -27,6 +27,9 @@ librbd_internal_la_SOURCES = \
 	librbd/object_map/InvalidateRequest.cc \
 	librbd/object_map/Request.cc \
 	librbd/object_map/ResizeRequest.cc \
+	librbd/object_map/SnapshotCreateRequest.cc \
+	librbd/object_map/SnapshotRemoveRequest.cc \
+	librbd/object_map/SnapshotRollbackRequest.cc \
 	librbd/object_map/UpdateRequest.cc \
 	librbd/operation/FlattenRequest.cc \
 	librbd/operation/RebuildObjectMapRequest.cc \
@@ -91,6 +94,9 @@ noinst_HEADERS += \
 	librbd/object_map/InvalidateRequest.h \
 	librbd/object_map/Request.h \
 	librbd/object_map/ResizeRequest.h \
+	librbd/object_map/SnapshotCreateRequest.h \
+	librbd/object_map/SnapshotRemoveRequest.h \
+	librbd/object_map/SnapshotRollbackRequest.h \
 	librbd/object_map/UpdateRequest.h \
 	librbd/operation/FlattenRequest.h \
 	librbd/operation/RebuildObjectMapRequest.h \

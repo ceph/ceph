@@ -25,10 +25,7 @@ bool Request::should_complete(int r) {
   switch (m_state)
   {
   case STATE_REQUEST:
-    if (r == -EBUSY) {
-      lderr(cct) << "object map lock not owned by client" << dendl;
-      return true;
-    } else if (r < 0) {
+    if (r < 0) {
       lderr(cct) << "failed to update object map: " << cpp_strerror(r)
 		 << dendl;
       return invalidate();

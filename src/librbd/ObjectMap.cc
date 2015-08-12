@@ -6,6 +6,9 @@
 #include "librbd/internal.h"
 #include "librbd/object_map/InvalidateRequest.h"
 #include "librbd/object_map/ResizeRequest.h"
+#include "librbd/object_map/SnapshotCreateRequest.h"
+#include "librbd/object_map/SnapshotRemoveRequest.h"
+#include "librbd/object_map/SnapshotRollbackRequest.h"
 #include "librbd/object_map/UpdateRequest.h"
 #include "common/dout.h"
 #include "common/errno.h"
@@ -57,6 +60,11 @@ uint8_t ObjectMap::operator[](uint64_t object_no) const
 bool ObjectMap::enabled() const
 {
   RWLock::RLocker l(m_image_ctx.object_map_lock);
+  return m_enabled;
+}
+
+bool ObjectMap::enabled(const RWLock &object_map_lock) const {
+  assert(m_image_ctx.object_map_lock.is_locked());
   return m_enabled;
 }
 
@@ -243,174 +251,35 @@ void ObjectMap::refresh(uint64_t snap_id)
   }
 }
 
-void ObjectMap::rollback(uint64_t snap_id) {
-  assert(m_image_ctx.snap_lock.is_wlocked());
-  int r;
-  std::string oid(object_map_name(m_image_ctx.id, CEPH_NOSNAP));
+void ObjectMap::rollback(uint64_t snap_id, Context *on_finish) {
+  assert(m_image_ctx.snap_lock.is_locked());
+  assert(m_image_ctx.object_map_lock.is_wlocked());
+  assert(m_enabled);
 
-  CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 10) << &m_image_ctx << " rollback object map" << dendl;
-
-  if ((m_image_ctx.features & RBD_FEATURE_OBJECT_MAP) == 0) {
-    r = m_image_ctx.md_ctx.remove(oid);
-    if (r < 0 && r != -ENOENT) {
-      lderr(cct) << "unable to remove object map: " << cpp_strerror(r)
-		 << dendl;
-    }
-    return;
-  }
-
-  RWLock::WLocker l(m_image_ctx.object_map_lock);
-  if (!m_enabled) {
-    return;
-  }
-
-  std::string snap_oid(object_map_name(m_image_ctx.id, snap_id));
-  bufferlist bl;
-  r = m_image_ctx.md_ctx.read(snap_oid, bl, 0, 0);
-  if (r < 0) {
-    lderr(cct) << "unable to load snapshot object map '" << snap_oid << "': "
-	       << cpp_strerror(r) << dendl;
-    invalidate(snap_id);
-    return;
-  }
-
-  librados::ObjectWriteOperation op;
-  rados::cls::lock::assert_locked(&op, RBD_LOCK_NAME, LOCK_EXCLUSIVE, "", "");
-  op.write_full(bl);
-
-  r = m_image_ctx.md_ctx.operate(oid, &op);
-  if (r < 0) {
-    lderr(cct) << "unable to rollback object map: " << cpp_strerror(r)
-	       << dendl;
-    invalidate(CEPH_NOSNAP);
-  }
+  object_map::SnapshotRollbackRequest *req =
+    new object_map::SnapshotRollbackRequest(m_image_ctx, snap_id, on_finish);
+  req->send();
 }
 
-void ObjectMap::snapshot_add(uint64_t snap_id) {
-  assert(m_image_ctx.snap_lock.is_wlocked());
-  if ((m_image_ctx.features & RBD_FEATURE_OBJECT_MAP) == 0) {
-    return;
-  }
+void ObjectMap::snapshot_add(uint64_t snap_id, Context *on_finish) {
+  assert(m_image_ctx.snap_lock.is_locked());
+  assert((m_image_ctx.features & RBD_FEATURE_OBJECT_MAP) != 0);
 
-  CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 10) << &m_image_ctx << " snapshot object map" << dendl;
-
-  int r;
-  bufferlist bl;
-  RWLock::WLocker l(m_image_ctx.object_map_lock);
-  if (!m_enabled) {
-    return;
-  }
-  std::string oid(object_map_name(m_image_ctx.id, CEPH_NOSNAP));
-  r = m_image_ctx.md_ctx.read(oid, bl, 0, 0);
-  if (r < 0) {
-    lderr(cct) << "unable to load object map: " << cpp_strerror(r)
-	       << dendl;
-    invalidate(CEPH_NOSNAP);
-    return;
-  }
-
-  std::string snap_oid(object_map_name(m_image_ctx.id, snap_id));
-  r = m_image_ctx.md_ctx.write_full(snap_oid, bl);
-  if (r < 0) {
-    lderr(cct) << "unable to snapshot object map '" << snap_oid << "': "
-	       << cpp_strerror(r) << dendl;
-    invalidate(snap_id);
-    return;
-  }
-
-  if ((m_image_ctx.features & RBD_FEATURE_FAST_DIFF) != 0) {
-    librados::ObjectWriteOperation op;
-    rados::cls::lock::assert_locked(&op, RBD_LOCK_NAME, LOCK_EXCLUSIVE, "", "");
-    cls_client::object_map_snap_add(&op);
-    r = m_image_ctx.md_ctx.operate(oid, &op);
-    if (r < 0) {
-      lderr(cct) << "unable to snapshot object map: " << cpp_strerror(r)
-                 << dendl;
-      invalidate(CEPH_NOSNAP);
-      return;
-    }
-
-    for (uint64_t i = 0; i < m_object_map.size(); ++i) {
-      if (m_object_map[i] == OBJECT_EXISTS) {
-        m_object_map[i] = OBJECT_EXISTS_CLEAN;
-      }
-    }
-  }
+  object_map::SnapshotCreateRequest *req =
+    new object_map::SnapshotCreateRequest(m_image_ctx, &m_object_map, snap_id,
+                                          on_finish);
+  req->send();
 }
 
-int ObjectMap::snapshot_remove(uint64_t snap_id) {
-  assert(m_image_ctx.snap_lock.is_wlocked());
+void ObjectMap::snapshot_remove(uint64_t snap_id, Context *on_finish) {
+  assert(m_image_ctx.snap_lock.is_locked());
+  assert((m_image_ctx.features & RBD_FEATURE_OBJECT_MAP) != 0);
   assert(snap_id != CEPH_NOSNAP);
-  CephContext *cct = m_image_ctx.cct;
 
-  int r;
-  if ((m_image_ctx.features & RBD_FEATURE_FAST_DIFF) != 0) {
-    RWLock::WLocker l(m_image_ctx.object_map_lock);
-
-    uint64_t next_snap_id = CEPH_NOSNAP;
-    std::map<librados::snap_t, SnapInfo>::const_iterator it =
-      m_image_ctx.snap_info.find(snap_id);
-    assert(it != m_image_ctx.snap_info.end());
-
-    ++it;
-    if (it != m_image_ctx.snap_info.end()) {
-      next_snap_id = it->first;
-    }
-
-    ceph::BitVector<2> snap_object_map;
-    std::string snap_oid(object_map_name(m_image_ctx.id, snap_id));
-    r = cls_client::object_map_load(&m_image_ctx.md_ctx, snap_oid,
-                                    &snap_object_map);
-    if (r < 0) {
-      lderr(cct) << "error loading snapshot object map: " << cpp_strerror(r)
-                 << dendl;
-    }
-
-    if (r == 0) {
-      uint64_t flags;
-      m_image_ctx.get_flags(snap_id, &flags);
-      if ((flags & RBD_FLAG_OBJECT_MAP_INVALID) != 0) {
-        invalidate(next_snap_id);
-        r = -EINVAL;
-      }
-    }
-
-    if (r == 0) {
-      std::string oid(object_map_name(m_image_ctx.id, next_snap_id));
-      librados::ObjectWriteOperation op;
-      if (next_snap_id == CEPH_NOSNAP) {
-        rados::cls::lock::assert_locked(&op, RBD_LOCK_NAME, LOCK_EXCLUSIVE, "",
-                                        "");
-      }
-      cls_client::object_map_snap_remove(&op, snap_object_map);
-
-      r = m_image_ctx.md_ctx.operate(oid, &op);
-      if (r < 0) {
-        lderr(cct) << "unable to remove object map snapshot: "
-                   << cpp_strerror(r) << dendl;
-        invalidate(next_snap_id);
-      }
-    }
-
-    if (r == 0 && next_snap_id == CEPH_NOSNAP) {
-      for (uint64_t i = 0; i < m_object_map.size(); ++i) {
-        if (m_object_map[i] == OBJECT_EXISTS_CLEAN &&
-            (i >= snap_object_map.size() ||
-             snap_object_map[i] == OBJECT_EXISTS)) {
-          m_object_map[i] = OBJECT_EXISTS;
-        }
-      }
-    }
-  }
-
-  std::string oid(object_map_name(m_image_ctx.id, snap_id));
-  r = m_image_ctx.md_ctx.remove(oid);
-  if (r < 0 && r != -ENOENT) {
-    return r;
-  }
-  return 0;
+  object_map::SnapshotRemoveRequest *req =
+    new object_map::SnapshotRemoveRequest(m_image_ctx, &m_object_map, snap_id,
+                                          on_finish);
+  req->send();
 }
 
 void ObjectMap::aio_save(Context *on_finish)

@@ -5,6 +5,7 @@
 #define CEPH_LIBRBD_OPERATION_SNAPSHOT_CREATE_REQUEST_H
 
 #include "librbd/operation/Request.h"
+#include "librbd/parent_types.h"
 #include <iosfwd>
 #include <string>
 
@@ -92,6 +93,9 @@ private:
 
   uint64_t m_snap_id;
   bool m_snap_created;
+
+  uint64_t m_size;
+  parent_info m_parent_info;
 
   int filter_state_return_code(int r) const {
     if (m_state == STATE_CREATE_SNAP && r == -ESTALE) {

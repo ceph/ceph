@@ -7,6 +7,7 @@
 #include "librbd/AioImageRequestWQ.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageWatcher.h"
+#include "librbd/ObjectMap.h"
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -95,7 +96,7 @@ bool SnapshotCreateRequest::should_complete(int r) {
     break;
   case STATE_CREATE_SNAP:
     if (r == 0) {
-      m_snap_created = true;
+      update_snap_context();
       finished = send_create_object_map();
     } else {
       assert(r == -ESTALE);
@@ -111,7 +112,6 @@ bool SnapshotCreateRequest::should_complete(int r) {
   }
 
   if (finished) {
-    update_snap_context();
     resume_aio();
     resume_requests();
   }
@@ -181,14 +181,20 @@ void SnapshotCreateRequest::send_allocate_snap_id() {
 
 void SnapshotCreateRequest::send_create_snap() {
   assert(m_image_ctx.owner_lock.is_locked());
+  RWLock::RLocker snap_locker(m_image_ctx.snap_lock);
+  RWLock::RLocker parent_locker(m_image_ctx.parent_lock);
 
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 5) << this << " " << __func__ << dendl;
   m_state = STATE_CREATE_SNAP;
 
   // should have been canceled prior to releasing lock
-  assert(!m_image_ctx.image_watcher->is_lock_supported() ||
+  assert(!m_image_ctx.image_watcher->is_lock_supported(m_image_ctx.snap_lock) ||
          m_image_ctx.image_watcher->is_lock_owner());
+
+  // save current size / parent info for creating snapshot record in ImageCtx
+  m_size = m_image_ctx.size;
+  m_parent_info = m_image_ctx.parent_md;
 
   librados::ObjectWriteOperation op;
   if (m_image_ctx.old_format) {
@@ -208,7 +214,20 @@ void SnapshotCreateRequest::send_create_snap() {
 }
 
 bool SnapshotCreateRequest::send_create_object_map() {
-  // TODO add object map support
+  assert(m_image_ctx.owner_lock.is_locked());
+
+  {
+    RWLock::RLocker snap_locker(m_image_ctx.snap_lock);
+    RWLock::RLocker object_map_lock(m_image_ctx.object_map_lock);
+    if (m_image_ctx.object_map.enabled(m_image_ctx.object_map_lock)) {
+      CephContext *cct = m_image_ctx.cct;
+      ldout(cct, 5) << this << " " << __func__ << dendl;
+      m_state = STATE_CREATE_OBJECT_MAP;
+
+      m_image_ctx.object_map.snapshot_add(m_snap_id, create_callback_context());
+      return false;
+    }
+  }
   return true;
 }
 
@@ -252,9 +271,14 @@ void SnapshotCreateRequest::resume_requests() {
 
 void SnapshotCreateRequest::update_snap_context() {
   assert(m_image_ctx.owner_lock.is_locked());
+  m_snap_created = true;
 
   RWLock::WLocker snap_locker(m_image_ctx.snap_lock);
-  if (m_image_ctx.old_format || !m_snap_created) {
+  if (m_image_ctx.old_format) {
+    return;
+  }
+
+  if (m_image_ctx.get_snap_info(m_snap_id) != NULL) {
     return;
   }
 
@@ -264,6 +288,10 @@ void SnapshotCreateRequest::update_snap_context() {
   // should have been canceled prior to releasing lock
   assert(!m_image_ctx.image_watcher->is_lock_supported(m_image_ctx.snap_lock) ||
          m_image_ctx.image_watcher->is_lock_owner());
+
+  // immediately add a reference to the new snapshot
+  m_image_ctx.add_snap(m_snap_name, m_snap_id, m_size, m_parent_info,
+                       RBD_PROTECTION_STATUS_UNPROTECTED, 0);
 
   // immediately start using the new snap context if we
   // own the exclusive lock

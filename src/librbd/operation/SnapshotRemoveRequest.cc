@@ -6,6 +6,7 @@
 #include "common/errno.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageWatcher.h"
+#include "librbd/ObjectMap.h"
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -88,7 +89,19 @@ bool SnapshotRemoveRequest::should_complete(int r) {
 void SnapshotRemoveRequest::send_remove_object_map() {
   assert(m_image_ctx.owner_lock.is_locked());
 
-  // TODO add object map support
+  {
+    RWLock::RLocker snap_locker(m_image_ctx.snap_lock);
+    RWLock::RLocker object_map_locker(m_image_ctx.object_map_lock);
+    if (m_image_ctx.object_map.enabled(m_image_ctx.object_map_lock)) {
+      CephContext *cct = m_image_ctx.cct;
+      ldout(cct, 5) << this << " " << __func__ << dendl;
+      m_state = STATE_REMOVE_OBJECT_MAP;
+
+      m_image_ctx.object_map.snapshot_remove(
+        m_snap_id, create_callback_context());
+      return;
+    }
+  }
   send_remove_child();
 }
 
