@@ -663,8 +663,7 @@ int md_config_t::injectargs(const std::string& s, std::ostream *oss)
 
 void md_config_t::set_val_or_die(const char *key, const char *val)
 {
-  int ret = set_val(key, val);
-  assert(ret == 0);
+  (void)set_val(key, val);
 }
 
 int md_config_t::set_val(const char *key, const char *val, bool meta, bool safe)
