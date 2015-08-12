@@ -100,8 +100,6 @@ function TEST_mon_add_to_single_mon() {
     run_mon $dir a --public-addr $MONA || return 1
     # wait for the quorum
     timeout 120 ceph -s > /dev/null || return 1
-    # strictly speaking it's not a feature, but an expected hahaviour.
-    timeout 3 ceph mon add b $MONB || [ $? = 124 ] || return 1
     run_mon $dir b --public-addr $MONB || return 1
     teardown $dir || return 1
 
