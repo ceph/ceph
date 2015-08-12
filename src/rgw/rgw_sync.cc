@@ -269,6 +269,21 @@ public:
   }
 };
 
+int RGWRemoteMetaLog::read_log_info(rgw_mdlog_info *log_info)
+{
+  rgw_http_param_pair pairs[] = { { "type", "metadata" },
+                                  { NULL, NULL } };
+
+  int ret = conn->get_json_resource("/admin/log", pairs, *log_info);
+  if (ret < 0) {
+    ldout(store->ctx(), 0) << "ERROR: failed to fetch mdlog info" << dendl;
+    return ret;
+  }
+
+  ldout(store->ctx(), 20) << "remote mdlog, num_shards=" << log_info->num_shards << dendl;
+
+  return 0;
+}
 
 int RGWRemoteMetaLog::init()
 {
@@ -278,34 +293,9 @@ int RGWRemoteMetaLog::init()
 
   conn = store->rest_master_conn;
 
-  rgw_http_param_pair pairs[] = { { "type", "metadata" },
-                                  { NULL, NULL } };
-
-  int ret = conn->get_json_resource("/admin/log", pairs, log_info);
-  if (ret < 0) {
-    ldout(store->ctx(), 0) << "ERROR: failed to fetch mdlog info" << dendl;
-    return ret;
-  }
-
-  ldout(store->ctx(), 20) << "remote mdlog, num_shards=" << log_info.num_shards << dendl;
-
-  RWLock::WLocker wl(ts_to_shard_lock);
-  for (int i = 0; i < (int)log_info.num_shards; i++) {
-    clone_markers.push_back(string());
-    utime_shard ut;
-    ut.shard_id = i;
-    ts_to_shard[ut] = i;
-  }
-
-  ret = http_manager.set_threaded();
+  int ret = http_manager.set_threaded();
   if (ret < 0) {
     ldout(store->ctx(), 0) << "failed in http_manager.set_threaded() ret=" << ret << dendl;
-    return ret;
-  }
-
-  ret = status_manager.init(log_info.num_shards);
-  if (ret < 0) {
-    ldout(store->ctx(), 0) << "failed in status_manager.init() ret=" << ret << dendl;
     return ret;
   }
 
@@ -318,9 +308,9 @@ void RGWRemoteMetaLog::finish()
   delete async_rados;
 }
 
-int RGWRemoteMetaLog::list_shards()
+int RGWRemoteMetaLog::list_shards(int num_shards)
 {
-  for (int i = 0; i < (int)log_info.num_shards; i++) {
+  for (int i = 0; i < (int)num_shards; i++) {
     int ret = list_shard(i);
     if (ret < 0) {
       ldout(store->ctx(), 10) << "failed to list shard: ret=" << ret << dendl;
@@ -387,9 +377,16 @@ int RGWRemoteMetaLog::get_shard_info(int shard_id)
 #define CLONE_OPS_WINDOW 16
 
 
-int RGWMetaSyncStatusManager::init(int _num_shards)
+int RGWMetaSyncStatusManager::init()
 {
-  num_shards = _num_shards;
+  if (store->is_meta_master()) {
+    return -EINVAL;
+  }
+
+  if (!store->rest_master_conn) {
+    lderr(store->ctx()) << "no REST connection to master zone" << dendl;
+    return -EIO;
+  }
 
   const char *log_pool = store->get_zone_params().log_pool.name.c_str();
   librados::Rados *rados = store->get_rados_handle();
@@ -401,35 +398,33 @@ int RGWMetaSyncStatusManager::init(int _num_shards)
 
   global_status_obj = rgw_obj(store->get_zone_params().log_pool, mdlog_sync_status_oid);
 
+  r = master_log.init();
+  if (r < 0) {
+    lderr(store->ctx()) << "ERROR: failed to init remote log, r=" << r << dendl;
+    return r;
+  }
+
+  rgw_mdlog_info mdlog_info;
+  r = master_log.read_log_info(&mdlog_info);
+  if (r < 0) {
+    lderr(store->ctx()) << "ERROR: master.read_log_info() returned r=" << r << dendl;
+    return r;
+  }
+
+  num_shards = mdlog_info.num_shards;
+
   for (int i = 0; i < num_shards; i++) {
     shard_objs[i] = rgw_obj(store->get_zone_params().log_pool, shard_obj_name(i));
   }
 
-  return 0;
-}
-
-int RGWMetaSyncStatusManager::read_global_status()
-{
-  RGWObjectCtx obj_ctx(store, NULL);
-
-  RGWRados::SystemObject src(store, obj_ctx, global_status_obj);
-  RGWRados::SystemObject::Read rop(&src);
-
-  bufferlist bl;
-
-  int ret = rop.read(0, -1, bl, NULL);
-  if (ret < 0 && ret != -ENOENT) {
-    return ret;
+  RWLock::WLocker wl(ts_to_shard_lock);
+  for (int i = 0; i < num_shards; i++) {
+    clone_markers.push_back(string());
+    utime_shard ut;
+    ut.shard_id = i;
+    ts_to_shard[ut] = i;
   }
 
-  if (ret != -ENOENT) {
-    bufferlist::iterator iter = bl.begin();
-    try {
-      ::decode(global_status, iter);
-    } catch (buffer::error& err) {
-      ldout(store->ctx(), 0) << "ERROR: failed to decode global mdlog status" << dendl;
-    }
-  }
   return 0;
 }
 
@@ -439,46 +434,6 @@ string RGWMetaSyncStatusManager::shard_obj_name(int shard_id)
   snprintf(buf, sizeof(buf), "%s.%d", mdlog_sync_status_shard_prefix.c_str(), shard_id);
 
   return string(buf);
-}
-
-int RGWMetaSyncStatusManager::read_shard_status(int shard_id)
-{
-  RGWObjectCtx obj_ctx(store, NULL);
-
-  RGWRados::SystemObject src(store, obj_ctx, shard_objs[shard_id]);
-  RGWRados::SystemObject::Read rop(&src);
-
-  bufferlist bl;
-
-  int ret = rop.read(0, -1, bl, NULL);
-  if (ret < 0 && ret != -ENOENT) {
-    return ret;
-  }
-
-  if (ret != -ENOENT) {
-    bufferlist::iterator iter = bl.begin();
-    try {
-      ::decode(shard_markers[shard_id], iter);
-    } catch (buffer::error& err) {
-      ldout(store->ctx(), 0) << "ERROR: failed to decode global mdlog status" << dendl;
-    }
-  }
-  return 0;
-}
-
-int RGWMetaSyncStatusManager::set_state(RGWMetaSyncGlobalStatus::SyncState state)
-{
-  global_status.state = state;
-
-  bufferlist bl;
-  ::encode(global_status, bl);
-
-  int ret = rgw_put_system_obj(store, store->get_zone_params().log_pool, mdlog_sync_status_oid, bl.c_str(), bl.length(), false, NULL, 0, NULL);
-  if (ret < 0) {
-    return ret;
-  }
-
-  return 0;
 }
 
 template <class T>
@@ -681,7 +636,7 @@ class RGWInitSyncStatusCoroutine : public RGWCoroutine {
 
   string lock_name;
   string cookie;
-  RGWMetaSyncGlobalStatus status;
+  rgw_meta_sync_info status;
 
 public:
   RGWInitSyncStatusCoroutine(RGWAsyncRadosProcessor *_async_rados, RGWRados *_store,
@@ -705,13 +660,13 @@ public:
 			             lock_name, cookie, lock_duration));
       }
       yield {
-        call(new RGWSimpleRadosWriteCR<RGWMetaSyncGlobalStatus>(async_rados, store, store->get_zone_params().log_pool,
+        call(new RGWSimpleRadosWriteCR<rgw_meta_sync_info>(async_rados, store, store->get_zone_params().log_pool,
 				 mdlog_sync_status_oid, status));
       }
       yield {
         for (int i = 0; i < (int)status.num_shards; i++) {
-	  rgw_sync_marker marker;
-          spawn(new RGWSimpleRadosWriteCR<rgw_sync_marker>(async_rados, store, store->get_zone_params().log_pool,
+	  rgw_meta_sync_marker marker;
+          spawn(new RGWSimpleRadosWriteCR<rgw_meta_sync_marker>(async_rados, store, store->get_zone_params().log_pool,
 				                          RGWMetaSyncStatusManager::shard_obj_name(i), marker));
         }
       }
@@ -731,36 +686,37 @@ public:
   }
 };
 
-class RGWReadSyncStatusCoroutine : public RGWSimpleRadosReadCR<RGWMetaSyncGlobalStatus> {
+class RGWReadSyncStatusCoroutine : public RGWSimpleRadosReadCR<rgw_meta_sync_info> {
   RGWAsyncRadosProcessor *async_rados;
   RGWRados *store;
   RGWObjectCtx& obj_ctx;
 
-  RGWMetaSyncStatusManager *status_mgr;
+  rgw_meta_sync_status *sync_status;
 
 public:
   RGWReadSyncStatusCoroutine(RGWAsyncRadosProcessor *_async_rados, RGWRados *_store,
 		      RGWObjectCtx& _obj_ctx,
-		      RGWMetaSyncStatusManager *_sm) : RGWSimpleRadosReadCR(_async_rados, _store, _obj_ctx,
+		      rgw_meta_sync_status *_status) : RGWSimpleRadosReadCR(_async_rados, _store, _obj_ctx,
 									    _store->get_zone_params().log_pool,
 									    mdlog_sync_status_oid,
-									    &_sm->get_global_status()),
-                                                      async_rados(_async_rados), store(_store),
-                                                      obj_ctx(_obj_ctx), status_mgr(_sm) {}
+									    &_status->sync_info),
+                                                                            async_rados(_async_rados), store(_store),
+                                                                            obj_ctx(_obj_ctx),
+									    sync_status(_status) {}
 
-  int handle_data(RGWMetaSyncGlobalStatus& data);
+  int handle_data(rgw_meta_sync_info& data);
   int finish();
 };
 
-int RGWReadSyncStatusCoroutine::handle_data(RGWMetaSyncGlobalStatus& data)
+int RGWReadSyncStatusCoroutine::handle_data(rgw_meta_sync_info& data)
 {
   if (retcode == -ENOENT) {
     return retcode;
   }
 
-  map<int, rgw_sync_marker>& markers = status_mgr->get_shard_markers();
+  map<uint32_t, rgw_meta_sync_marker>& markers = sync_status->sync_markers;
   for (int i = 0; i < (int)data.num_shards; i++) {
-    spawn(new RGWSimpleRadosReadCR<rgw_sync_marker>(async_rados, store, obj_ctx, store->get_zone_params().log_pool,
+    spawn(new RGWSimpleRadosReadCR<rgw_meta_sync_marker>(async_rados, store, obj_ctx, store->get_zone_params().log_pool,
 				                    RGWMetaSyncStatusManager::shard_obj_name(i), &markers[i]));
   }
   return 0;
@@ -810,10 +766,10 @@ public:
   int state_store_mdlog_entries_complete();
 };
 
-int RGWRemoteMetaLog::clone_shards()
+int RGWRemoteMetaLog::clone_shards(int num_shards, vector<string>& clone_markers)
 {
   list<RGWCoroutinesStack *> stacks;
-  for (int i = 0; i < (int)log_info.num_shards; i++) {
+  for (int i = 0; i < (int)num_shards; i++) {
     RGWCoroutinesStack *stack = new RGWCoroutinesStack(store->ctx(), this);
     int r = stack->call(new RGWCloneMetaLogCoroutine(store, &http_manager, i, clone_markers[i]));
     if (r < 0) {
@@ -827,10 +783,10 @@ int RGWRemoteMetaLog::clone_shards()
   return run(stacks);
 }
 
-int RGWRemoteMetaLog::fetch()
+int RGWRemoteMetaLog::fetch(int num_shards, vector<string>& clone_markers)
 {
   list<RGWCoroutinesStack *> stacks;
-  for (int i = 0; i < (int)log_info.num_shards; i++) {
+  for (int i = 0; i < (int)num_shards; i++) {
     RGWCoroutinesStack *stack = new RGWCoroutinesStack(store->ctx(), this);
     int r = stack->call(new RGWCloneMetaLogCoroutine(store, &http_manager, i, clone_markers[i]));
     if (r < 0) {
@@ -844,16 +800,16 @@ int RGWRemoteMetaLog::fetch()
   return run(stacks);
 }
 
-int RGWRemoteMetaLog::get_sync_status(RGWMetaSyncStatusManager *sync_status)
+int RGWRemoteMetaLog::read_sync_status(rgw_meta_sync_status *sync_status)
 {
   RGWObjectCtx obj_ctx(store, NULL);
   return run(new RGWReadSyncStatusCoroutine(async_rados, store, obj_ctx, sync_status));
 }
 
-int RGWRemoteMetaLog::init_sync_status()
+int RGWRemoteMetaLog::init_sync_status(int num_shards)
 {
   RGWObjectCtx obj_ctx(store, NULL);
-  return run(new RGWInitSyncStatusCoroutine(async_rados, store, obj_ctx, log_info.num_shards));
+  return run(new RGWInitSyncStatusCoroutine(async_rados, store, obj_ctx, num_shards));
 }
 
 int RGWCloneMetaLogCoroutine::operate()
@@ -1014,26 +970,5 @@ int RGWCloneMetaLogCoroutine::state_store_mdlog_entries_complete()
 {
   return set_state(RGWCoroutine_Done);
 }
-
-
-int RGWMetadataSync::init()
-{
-  if (store->is_meta_master()) {
-    return -EINVAL;
-  }
-
-  if (!store->rest_master_conn) {
-    lderr(store->ctx()) << "no REST connection to master zone" << dendl;
-    return -EIO;
-  }
-
-  int ret = master_log.init();
-  if (ret < 0) {
-    return ret;
-  }
-
-  return 0;
-}
-
 
 
