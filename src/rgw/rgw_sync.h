@@ -168,7 +168,6 @@ public:
   int fetch();
   int get_sync_status(RGWMetaSyncStatusManager *sync_status);
   int init_sync_status();
-  int get_shard_sync_marker(int shard_id, rgw_sync_marker *shard_status);
 };
 
 class RGWMetadataSync {
@@ -185,9 +184,6 @@ public:
 
   int get_sync_status(RGWMetaSyncStatusManager *sync_status) { return master_log.get_sync_status(sync_status); }
   int init_sync_status() { return master_log.init_sync_status(); }
-  int get_shard_sync_marker(int shard_id, rgw_sync_marker *shard_status) {
-    return master_log.get_shard_sync_marker(shard_id, shard_status);
-  }
   int fetch() { return master_log.fetch(); }
   int clone_shards() { return master_log.clone_shards(); }
 };
