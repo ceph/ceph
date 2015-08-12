@@ -7,6 +7,7 @@
 #include "common/errno.h"
 #include "librbd/AsyncObjectThrottle.h"
 #include "librbd/ImageCtx.h"
+#include "librbd/ObjectMap.h"
 #include "librbd/operation/ResizeRequest.h"
 #include "osdc/Striper.h"
 #include <boost/lambda/bind.hpp>
@@ -145,7 +146,19 @@ void SnapshotRollbackRequest::send_resize_image() {
 void SnapshotRollbackRequest::send_rollback_object_map() {
   assert(m_image_ctx.owner_lock.is_locked());
 
-  // TODO add object map support
+  {
+    RWLock::RLocker snap_locker(m_image_ctx.snap_lock);
+    RWLock::WLocker object_map_lock(m_image_ctx.object_map_lock);
+    if (m_image_ctx.object_map.enabled(m_image_ctx.object_map_lock)) {
+      CephContext *cct = m_image_ctx.cct;
+      ldout(cct, 5) << this << " " << __func__ << dendl;
+      m_state = STATE_ROLLBACK_OBJECT_MAP;
+
+      m_image_ctx.object_map.rollback(m_snap_id, create_callback_context());
+      return;
+    }
+  }
+
   send_rollback_objects();
 }
 

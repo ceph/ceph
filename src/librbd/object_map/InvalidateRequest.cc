@@ -15,6 +15,7 @@ namespace librbd {
 namespace object_map {
 
 void InvalidateRequest::send() {
+  assert(m_image_ctx.owner_lock.is_locked());
   assert(m_image_ctx.snap_lock.is_wlocked());
 
   uint64_t snap_flags;
