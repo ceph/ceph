@@ -3281,7 +3281,7 @@ next:
       return -ret;
     }
 
-    RGWMetaSyncGlobalStatus sync_status;
+    RGWMetaSyncStatusManager sync_status(store);
 
     ret = sync.get_sync_status(&sync_status);
     if (ret < 0) {
@@ -3290,7 +3290,8 @@ next:
     }
 
     formatter->open_object_section("result");
-    encode_json("sync_status", sync_status, formatter);
+    encode_json("sync_status", sync_status.get_global_status(), formatter);
+    encode_json("markers", sync_status.get_shard_markers(), formatter);
 
     if (shard_id >= 0) {
       rgw_sync_marker marker;
