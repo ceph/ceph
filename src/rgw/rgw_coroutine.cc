@@ -238,6 +238,9 @@ void RGWCoroutine::call(RGWCoroutine *op)
 
 void RGWCoroutine::spawn(RGWCoroutine *op)
 {
+  op->get();
+  spawned_ops.push_back(op);
+
   RGWCoroutinesStack *stack = env->manager->allocate_stack();
 
   int r = stack->call(op, 0);
@@ -246,6 +249,21 @@ void RGWCoroutine::spawn(RGWCoroutine *op)
   env->stacks->push_back(stack);
 
   env->stack->set_blocked_by(stack);
+}
+
+int RGWCoroutine::complete_spawned()
+{
+  int ret = 0;
+  for (list<RGWCoroutine *>::iterator iter = spawned_ops.begin(); iter != spawned_ops.end(); ++iter) {
+    int r = (*iter)->get_ret_status();
+    if (r < 0) {
+      ret = r;
+    }
+
+    (*iter)->put();
+  }
+  spawned_ops.clear();
+  return ret;
 }
 
 int RGWSimpleCoroutine::operate()
