@@ -2026,7 +2026,7 @@ int KeyValueStore::_zero(coll_t cid, const ghobject_t& oid, uint64_t offset,
   r = check_get_rc(header->cid, header->oid, r, lookup_keys.size() == values.size());
   if (r < 0)
     return r;
-  for(set<string>::iterator it = lookup_keys.begin(); it != lookup_keys.end(); it++)
+  for(set<string>::iterator it = lookup_keys.begin(); it != lookup_keys.end(); ++it)
   {
     pair<uint64_t, uint64_t> p = off_len[*it];
     values[*it].zero(p.first, p.second);
