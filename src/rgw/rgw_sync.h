@@ -14,7 +14,7 @@ struct rgw_mdlog_info {
   void decode_json(JSONObj *obj);
 };
 
-struct RGWMetaSyncGlobalStatus {
+struct rgw_meta_sync_info {
   enum SyncState {
     StateInit = 0,
     StateBuildingFullSyncMaps = 1,
@@ -58,15 +58,15 @@ struct RGWMetaSyncGlobalStatus {
     encode_json("num_shards", num_shards, f);
   }
 
-  RGWMetaSyncGlobalStatus() : state((int)StateInit), num_shards(0) {}
+  rgw_meta_sync_info() : state((int)StateInit), num_shards(0) {}
 };
-WRITE_CLASS_ENCODER(RGWMetaSyncGlobalStatus)
+WRITE_CLASS_ENCODER(rgw_meta_sync_info)
 
-struct rgw_sync_marker {
+struct rgw_meta_sync_marker {
   uint16_t state;
   string marker;
 
-  rgw_sync_marker() : state(0) {}
+  rgw_meta_sync_marker() : state(0) {}
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
@@ -87,49 +87,79 @@ struct rgw_sync_marker {
     encode_json("marker", marker, f);
   }
 };
-WRITE_CLASS_ENCODER(rgw_sync_marker)
+WRITE_CLASS_ENCODER(rgw_meta_sync_marker)
 
+struct rgw_meta_sync_status {
+  rgw_meta_sync_info sync_info;
+  map<uint32_t, rgw_meta_sync_marker> sync_markers;
 
-class RGWMetaSyncStatusManager {
-  RGWRados *store;
-  librados::IoCtx ioctx;
+  rgw_meta_sync_status() {}
 
-  string global_status_oid;
-  string shard_status_oid_prefix;
-  rgw_obj global_status_obj;
-
-  RGWMetaSyncGlobalStatus global_status;
-  map<int, rgw_sync_marker> shard_markers;
-  map<int, rgw_obj> shard_objs;
-
-  int num_shards;
-
-public:
-  RGWMetaSyncStatusManager(RGWRados *_store) : store(_store), num_shards(0) {}
-
-  int init(int _num_shards);
-  int read_global_status();
-  int read_shard_status(int shard_id);
-  rgw_sync_marker& get_shard_status(int shard_id) {
-    return shard_markers[shard_id];
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(sync_info, bl);
+    ::encode(sync_markers, bl);
+    ENCODE_FINISH(bl);
   }
-  int set_state(RGWMetaSyncGlobalStatus::SyncState state);
 
-  RGWMetaSyncGlobalStatus& get_global_status() { return global_status; } 
-  map<int, rgw_sync_marker>& get_shard_markers() { return shard_markers; } 
+  void decode(bufferlist::iterator& bl) {
+     DECODE_START(1, bl);
+    ::decode(sync_info, bl);
+    ::decode(sync_markers, bl);
+     DECODE_FINISH(bl);
+  }
 
-  static string shard_obj_name(int shard_id);
-
+  void dump(Formatter *f) const {
+    encode_json("info", sync_info, f);
+    encode_json("markers", sync_markers, f);
+  }
 };
+WRITE_CLASS_ENCODER(rgw_meta_sync_status)
 
 class RGWAsyncRadosProcessor;
+class RGWMetaSyncStatusManager;
 
 class RGWRemoteMetaLog : public RGWCoroutinesManager {
   RGWRados *store;
   RGWRESTConn *conn;
   RGWAsyncRadosProcessor *async_rados;
 
-  rgw_mdlog_info log_info;
+  RGWHTTPManager http_manager;
+  RGWMetaSyncStatusManager *status_manager;
+
+public:
+  RGWRemoteMetaLog(RGWRados *_store, RGWMetaSyncStatusManager *_sm) : RGWCoroutinesManager(_store->ctx()), store(_store),
+                                       conn(NULL),
+                                       http_manager(store->ctx(), &completion_mgr),
+                                       status_manager(_sm) {}
+
+  int init();
+  void finish();
+
+  int read_log_info(rgw_mdlog_info *log_info);
+  int list_shard(int shard_id);
+  int list_shards(int num_shards);
+  int get_shard_info(int shard_id);
+  int clone_shards(int num_shards, vector<string>& clone_markers);
+  int fetch(int num_shards, vector<string>& clone_markers);
+  int read_sync_status(rgw_meta_sync_status *sync_status);
+  int init_sync_status(int num_shards);
+};
+
+class RGWMetaSyncStatusManager {
+  RGWRados *store;
+  librados::IoCtx ioctx;
+
+  RGWRemoteMetaLog master_log;
+
+  string global_status_oid;
+  string shard_status_oid_prefix;
+  rgw_obj global_status_obj;
+
+  rgw_meta_sync_status sync_status;
+  map<int, rgw_obj> shard_objs;
+
+  int num_shards;
 
   struct utime_shard {
     utime_t ts;
@@ -149,43 +179,20 @@ class RGWRemoteMetaLog : public RGWCoroutinesManager {
   map<utime_shard, int> ts_to_shard;
   vector<string> clone_markers;
 
-  RGWHTTPManager http_manager;
-  RGWMetaSyncStatusManager status_manager;
-
 public:
-  RGWRemoteMetaLog(RGWRados *_store) : RGWCoroutinesManager(_store->ctx()), store(_store),
-                                       conn(NULL), ts_to_shard_lock("ts_to_shard_lock"),
-                                       http_manager(store->ctx(), &completion_mgr),
-                                       status_manager(store) {}
-
-  int init();
-  void finish();
-
-  int list_shard(int shard_id);
-  int list_shards();
-  int get_shard_info(int shard_id);
-  int clone_shards();
-  int fetch();
-  int get_sync_status(RGWMetaSyncStatusManager *sync_status);
-  int init_sync_status();
-};
-
-class RGWMetadataSync {
-  RGWRados *store;
-
-  RGWRemoteMetaLog master_log;
-public:
-  RGWMetadataSync(RGWRados *_store) : store(_store), master_log(store) {}
-  ~RGWMetadataSync() {
-    master_log.finish();
-  }
+  RGWMetaSyncStatusManager(RGWRados *_store) : store(_store), master_log(store, this), num_shards(0),
+                                               ts_to_shard_lock("ts_to_shard_lock") {}
 
   int init();
 
-  int get_sync_status(RGWMetaSyncStatusManager *sync_status) { return master_log.get_sync_status(sync_status); }
-  int init_sync_status() { return master_log.init_sync_status(); }
-  int fetch() { return master_log.fetch(); }
-  int clone_shards() { return master_log.clone_shards(); }
+  rgw_meta_sync_status& get_sync_status() { return sync_status; }
+
+  static string shard_obj_name(int shard_id);
+
+  int read_sync_status() { return master_log.read_sync_status(&sync_status); }
+  int init_sync_status() { return master_log.init_sync_status(num_shards); }
+  int fetch() { return master_log.fetch(num_shards, clone_markers); }
+  int clone_shards() { return master_log.clone_shards(num_shards, clone_markers); }
 };
 
 #endif
