@@ -69,6 +69,14 @@ int do_mon_command(const char *s, string *key)
 }
 
 TEST(AccessTest, Foo) {
+  // admin mount to set up test
+  struct ceph_mount_info *admin;
+  ASSERT_EQ(0, ceph_create(&admin, NULL));
+  ASSERT_EQ(0, ceph_conf_parse_env(admin, NULL));
+  ASSERT_EQ(0, ceph_conf_read_file(admin, NULL));
+  ASSERT_EQ(0, ceph_mount(admin, "/"));
+  ASSERT_EQ(0, ceph_mkdir(admin, "/foo", 0755));
+
   // create access key
   string key;
   ASSERT_EQ(0, do_mon_command(
@@ -85,6 +93,10 @@ TEST(AccessTest, Foo) {
   ASSERT_EQ(0, ceph_mount(cmount, "/"));
 
   ceph_shutdown(cmount);
+
+  // clean up
+  ASSERT_EQ(0, ceph_rmdir(admin, "/foo"));
+  ceph_shutdown(admin);
 }
 
 int main(int argc, char **argv)
