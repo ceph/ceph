@@ -25,6 +25,7 @@
 #include "osdc/ObjectCacher.h"
 
 #include "cls/rbd/cls_rbd_client.h"
+#include "librbd/AsyncRequest.h"
 #include "librbd/LibrbdWriteback.h"
 #include "librbd/ObjectMap.h"
 #include "librbd/SnapInfo.h"
@@ -37,9 +38,9 @@ class PerfCounters;
 
 namespace librbd {
 
+  struct ImageCtx;
   class AioImageRequestWQ;
   class AsyncOperation;
-  template <typename ImageCtxT> class AsyncRequest;
   class CopyupRequest;
   class LibrbdAdminSocketHook;
   class ImageWatcher;
