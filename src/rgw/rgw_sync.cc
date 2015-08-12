@@ -399,9 +399,7 @@ int RGWMetaSyncStatusManager::init(int _num_shards)
     return r;
   }
 
-  global_status_oid = mdlog_sync_status_oid;
-  shard_status_oid_prefix = mdlog_sync_status_shard_prefix;
-  global_status_obj = rgw_obj(store->get_zone_params().log_pool, global_status_oid);
+  global_status_obj = rgw_obj(store->get_zone_params().log_pool, mdlog_sync_status_oid);
 
   for (int i = 0; i < num_shards; i++) {
     shard_objs[i] = rgw_obj(store->get_zone_params().log_pool, shard_obj_name(i));
@@ -437,8 +435,8 @@ int RGWMetaSyncStatusManager::read_global_status()
 
 string RGWMetaSyncStatusManager::shard_obj_name(int shard_id)
 {
-  char buf[shard_status_oid_prefix.size() + 16];
-  snprintf(buf, sizeof(buf), "%s.%d", shard_status_oid_prefix.c_str(), shard_id);
+  char buf[mdlog_sync_status_shard_prefix.size() + 16];
+  snprintf(buf, sizeof(buf), "%s.%d", mdlog_sync_status_shard_prefix.c_str(), shard_id);
 
   return string(buf);
 }
@@ -475,7 +473,7 @@ int RGWMetaSyncStatusManager::set_state(RGWMetaSyncGlobalStatus::SyncState state
   bufferlist bl;
   ::encode(global_status, bl);
 
-  int ret = rgw_put_system_obj(store, store->get_zone_params().log_pool, global_status_oid, bl.c_str(), bl.length(), false, NULL, 0, NULL);
+  int ret = rgw_put_system_obj(store, store->get_zone_params().log_pool, mdlog_sync_status_oid, bl.c_str(), bl.length(), false, NULL, 0, NULL);
   if (ret < 0) {
     return ret;
   }
@@ -683,7 +681,6 @@ class RGWInitSyncStatusCoroutine : public RGWCoroutine {
 
   string lock_name;
   string cookie;
-  string oid;
   RGWMetaSyncGlobalStatus status;
 
 public:
@@ -691,7 +688,6 @@ public:
 		      RGWObjectCtx& _obj_ctx, uint32_t _num_shards) : RGWCoroutine(_store->ctx()), async_rados(_async_rados), store(_store),
                                                 obj_ctx(_obj_ctx) {
     lock_name = "sync_lock";
-    oid = mdlog_sync_status_oid;
     status.num_shards = _num_shards;
 
 #define COOKIE_LEN 16
@@ -705,18 +701,29 @@ public:
     reenter(this) {
       yield {
 	uint32_t lock_duration = 30;
-	call(new RGWSimpleRadosLockCR(async_rados, store, store->get_zone_params().log_pool, oid,
+	call(new RGWSimpleRadosLockCR(async_rados, store, store->get_zone_params().log_pool, mdlog_sync_status_oid,
 			             lock_name, cookie, lock_duration));
       }
       yield {
         call(new RGWSimpleRadosWriteCR<RGWMetaSyncGlobalStatus>(async_rados, store, store->get_zone_params().log_pool,
-				 oid, status));
+				 mdlog_sync_status_oid, status));
+      }
+      yield {
+        for (int i = 0; i < (int)status.num_shards; i++) {
+	  rgw_sync_marker marker;
+          spawn(new RGWSimpleRadosWriteCR<rgw_sync_marker>(async_rados, store, store->get_zone_params().log_pool,
+				                          RGWMetaSyncStatusManager::shard_obj_name(i), marker));
+        }
       }
       /*
        * no need to unlock, we've just completely overwritten the meta object, and overridden its
        * lock
        */
       yield {
+	int ret = complete_spawned();
+	if (ret < 0) {
+	  return set_state(RGWCoroutine_Error);
+	}
 	return set_state(RGWCoroutine_Done);
       }
     }
@@ -753,10 +760,8 @@ int RGWReadSyncStatusCoroutine::handle_data(RGWMetaSyncGlobalStatus& data)
   }
 
   for (int i = 0; i < (int)data.num_shards; i++) {
-    char buf[mdlog_sync_status_shard_prefix.size() + 16];
-    snprintf(buf, sizeof(buf), "%s.%d", mdlog_sync_status_shard_prefix.c_str(), i);
     spawn(new RGWSimpleRadosReadCR<rgw_sync_marker>(async_rados, store, obj_ctx, store->get_zone_params().log_pool,
-				                    buf, &sync_marker));
+				                    RGWMetaSyncStatusManager::shard_obj_name(i), &sync_marker));
   }
   return 0;
 }
