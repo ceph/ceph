@@ -10,6 +10,7 @@
 #include <boost/optional.hpp>
 
 class Context;
+class RWLock;
 
 namespace librbd {
 
@@ -52,11 +53,12 @@ public:
                   Context *on_finish);
 
   void refresh(uint64_t snap_id);
-  void rollback(uint64_t snap_id);
-  void snapshot_add(uint64_t snap_id);
-  int snapshot_remove(uint64_t snap_id);
+  void rollback(uint64_t snap_id, Context *on_finish);
+  void snapshot_add(uint64_t snap_id, Context *on_finish);
+  void snapshot_remove(uint64_t snap_id, Context *on_finish);
 
   bool enabled() const;
+  bool enabled(const RWLock &object_map_lock) const;
 
 private:
   ImageCtx &m_image_ctx;
