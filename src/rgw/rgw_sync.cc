@@ -736,18 +736,17 @@ class RGWReadSyncStatusCoroutine : public RGWSimpleRadosReadCR<RGWMetaSyncGlobal
   RGWRados *store;
   RGWObjectCtx& obj_ctx;
 
-  RGWMetaSyncGlobalStatus *global_status;
-  rgw_sync_marker sync_marker;
+  RGWMetaSyncStatusManager *status_mgr;
 
 public:
   RGWReadSyncStatusCoroutine(RGWAsyncRadosProcessor *_async_rados, RGWRados *_store,
 		      RGWObjectCtx& _obj_ctx,
-		      RGWMetaSyncGlobalStatus *_gs) : RGWSimpleRadosReadCR(_async_rados, _store, _obj_ctx,
+		      RGWMetaSyncStatusManager *_sm) : RGWSimpleRadosReadCR(_async_rados, _store, _obj_ctx,
 									    _store->get_zone_params().log_pool,
 									    mdlog_sync_status_oid,
-									    _gs),
+									    &_sm->get_global_status()),
                                                       async_rados(_async_rados), store(_store),
-                                                      obj_ctx(_obj_ctx), global_status(_gs) {}
+                                                      obj_ctx(_obj_ctx), status_mgr(_sm) {}
 
   int handle_data(RGWMetaSyncGlobalStatus& data);
   int finish();
@@ -759,9 +758,10 @@ int RGWReadSyncStatusCoroutine::handle_data(RGWMetaSyncGlobalStatus& data)
     return retcode;
   }
 
+  map<int, rgw_sync_marker>& markers = status_mgr->get_shard_markers();
   for (int i = 0; i < (int)data.num_shards; i++) {
     spawn(new RGWSimpleRadosReadCR<rgw_sync_marker>(async_rados, store, obj_ctx, store->get_zone_params().log_pool,
-				                    RGWMetaSyncStatusManager::shard_obj_name(i), &sync_marker));
+				                    RGWMetaSyncStatusManager::shard_obj_name(i), &markers[i]));
   }
   return 0;
 }
@@ -844,7 +844,7 @@ int RGWRemoteMetaLog::fetch()
   return run(stacks);
 }
 
-int RGWRemoteMetaLog::get_sync_status(RGWMetaSyncGlobalStatus *sync_status)
+int RGWRemoteMetaLog::get_sync_status(RGWMetaSyncStatusManager *sync_status)
 {
   RGWObjectCtx obj_ctx(store, NULL);
   return run(new RGWReadSyncStatusCoroutine(async_rados, store, obj_ctx, sync_status));
