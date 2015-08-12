@@ -102,8 +102,6 @@ class RGWMetaSyncStatusManager {
   map<int, rgw_sync_marker> shard_markers;
   map<int, rgw_obj> shard_objs;
 
-  string shard_obj_name(int shard_id);
-
   int num_shards;
 
 public:
@@ -118,6 +116,9 @@ public:
   int set_state(RGWMetaSyncGlobalStatus::SyncState state);
 
   RGWMetaSyncGlobalStatus& get_global_status() { return global_status; } 
+
+  static string shard_obj_name(int shard_id);
+
 };
 
 class RGWAsyncRadosProcessor;
