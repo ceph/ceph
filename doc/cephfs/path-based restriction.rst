@@ -24,18 +24,8 @@ for example, to restrict client ``foo`` to ``bar`` directory, we will use. ::
 To restrict a client to the specfied sub-directory only, we mention the specified
 directory while mounting following the undermentioned syntax. ::
 
-./ceph-fuse -n client.*client_name* *mount_path* *directory_to_be_mounted*
+./ceph-fuse -n client.*client_name* *mount_path* -r *directory_to_be_mounted*
 
 for example, to restrict client ``foo`` to ``mnt/bar`` directory, we will use. ::
 
-./ceph-fuse -n client.foo mnt /bar
-
-
-For read-only access to sub-directory we can use. ::
-
-./ceph-fuse -n client.*client_name* *mount_path* -r *directory_to_be_mounted*
-
-for example, to restrict client ``foo`` to read-only access for ``mnt/bar``
-directory, we will use. ::
-
-./ceph-fuse -n client.foo mnt -r /foo
+./ceph-fuse -n client.foo mnt -r /bar
