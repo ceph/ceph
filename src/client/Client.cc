@@ -6208,6 +6208,8 @@ int Client::_opendir(Inode *in, dir_result_t **dirpp, int uid, int gid)
     (*dirpp)->ordered_count = in->dir->ordered_count;
   }
   (*dirpp)->start_shared_gen = in->shared_gen;
+  (*dirpp)->owner_uid = uid;
+  (*dirpp)->owner_gid = gid;
   ldout(cct, 10) << "_opendir " << in->ino << ", our cache says the first dirfrag is " << (*dirpp)->frag() << dendl;
   ldout(cct, 3) << "_opendir(" << in->ino << ") = " << 0 << " (" << *dirpp << ")" << dendl;
   return 0;
@@ -6369,7 +6371,7 @@ int Client::_readdir_get_frag(dir_result_t *dirp)
   
   
   bufferlist dirbl;
-  int res = make_request(req, -1, -1, NULL, NULL, -1, &dirbl);
+  int res = make_request(req, dirp->owner_uid, dirp->owner_gid, NULL, NULL, -1, &dirbl);
   
   if (res == -EAGAIN) {
     ldout(cct, 10) << "_readdir_get_frag got EAGAIN, retrying" << dendl;
@@ -10254,7 +10256,7 @@ int Client::ll_opendir(Inode *in, dir_result_t** dirpp, int uid, int gid)
   if (vino.snapid == CEPH_SNAPDIR) {
     *dirpp = new dir_result_t(in);
   } else {
-    r = _opendir(in, dirpp);
+    r = _opendir(in, dirpp, uid, gid);
   }
 
   tout(cct) << (unsigned long)*dirpp << std::endl;
