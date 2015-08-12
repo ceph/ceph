@@ -9,6 +9,7 @@
 #include "common/RWLock.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageWatcher.h"
+#include "librbd/object_map/InvalidateRequest.h"
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -60,30 +61,13 @@ bool Request::invalidate() {
     return true;
   }
 
-  CephContext *cct = m_image_ctx.cct;
-  RWLock::WLocker snap_locker(m_image_ctx.snap_lock);
-
-  // requests shouldn't be running while using snapshots
-  assert(m_image_ctx.snap_id == CEPH_NOSNAP);
-
-  uint64_t flags = RBD_FLAG_OBJECT_MAP_INVALID;
-  if ((m_image_ctx.features & RBD_FEATURE_FAST_DIFF) != 0) {
-    flags |= RBD_FLAG_FAST_DIFF_INVALID;
-  }
-
-  lderr(cct) << &m_image_ctx << " invalidating object map" << dendl;
   m_state = STATE_INVALIDATE;
-  m_image_ctx.flags |= flags;
 
-  librados::ObjectWriteOperation op;
-  m_image_ctx.image_watcher->assert_header_locked(&op);
-  cls_client::set_flags(&op, CEPH_NOSNAP, flags, flags);
-
-  librados::AioCompletion *rados_completion = create_callback_completion();
-  int r = m_image_ctx.md_ctx.aio_operate(m_image_ctx.header_oid,
-					 rados_completion, &op);
-  assert(r == 0);
-  rados_completion->release();
+  RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
+  RWLock::WLocker snap_locker(m_image_ctx.snap_lock);
+  InvalidateRequest *req = new InvalidateRequest(m_image_ctx, m_snap_id,
+                                                 create_callback_context());
+  req->send();
   return false;
 }
 

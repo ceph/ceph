@@ -4,6 +4,7 @@
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageWatcher.h"
 #include "librbd/internal.h"
+#include "librbd/object_map/InvalidateRequest.h"
 #include "librbd/object_map/ResizeRequest.h"
 #include "librbd/object_map/UpdateRequest.h"
 #include "common/dout.h"
@@ -513,41 +514,13 @@ void ObjectMap::invalidate(uint64_t snap_id) {
     return;
   }
 
-  flags = RBD_FLAG_OBJECT_MAP_INVALID;
-  if ((m_image_ctx.features & RBD_FEATURE_FAST_DIFF) != 0) {
-    flags |= RBD_FLAG_FAST_DIFF_INVALID;
-  }
+  // TODO remove once all methods are async
+  C_SaferCond cond_ctx;
+  object_map::InvalidateRequest *req = new object_map::InvalidateRequest(
+    m_image_ctx, m_snap_id, &cond_ctx);
+  req->send();
 
-  CephContext *cct = m_image_ctx.cct;
-  lderr(cct) << &m_image_ctx << " invalidating object map" << dendl;
-  int r = m_image_ctx.update_flags(snap_id, flags, true);
-  if (r < 0) {
-    lderr(cct) << "failed to invalidate in-memory object map: "
-               << cpp_strerror(r) << dendl;
-    return;
-  }
-
-  // do not update on-disk flags if not image owner
-  if (m_image_ctx.image_watcher == NULL ||
-      (m_image_ctx.image_watcher->is_lock_supported(m_image_ctx.snap_lock) &&
-       !m_image_ctx.image_watcher->is_lock_owner())) {
-    return;
-  }
-
-  librados::ObjectWriteOperation op;
-  if (snap_id == CEPH_NOSNAP) {
-    m_image_ctx.image_watcher->assert_header_locked(&op);
-  }
-  cls_client::set_flags(&op, snap_id, flags, flags);
-
-  r = m_image_ctx.md_ctx.operate(m_image_ctx.header_oid, &op);
-  if (r == -EBUSY) {
-    ldout(cct, 5) << "skipping on-disk object map invalidation: "
-                  << "image not locked by client" << dendl;
-  } else if (r < 0) {
-    lderr(cct) << "failed to invalidate on-disk object map: " << cpp_strerror(r)
-	       << dendl;
-  }
+  cond_ctx.wait();
 }
 
 } // namespace librbd

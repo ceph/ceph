@@ -24,6 +24,7 @@ librbd_internal_la_SOURCES = \
 	librbd/JournalReplay.cc \
 	librbd/LibrbdWriteback.cc \
 	librbd/ObjectMap.cc \
+	librbd/object_map/InvalidateRequest.cc \
 	librbd/object_map/Request.cc \
 	librbd/object_map/ResizeRequest.cc \
 	librbd/object_map/UpdateRequest.cc \
@@ -87,6 +88,7 @@ noinst_HEADERS += \
 	librbd/SnapInfo.h \
 	librbd/TaskFinisher.h \
 	librbd/WatchNotifyTypes.h \
+	librbd/object_map/InvalidateRequest.h \
 	librbd/object_map/Request.h \
 	librbd/object_map/ResizeRequest.h \
 	librbd/object_map/UpdateRequest.h \
