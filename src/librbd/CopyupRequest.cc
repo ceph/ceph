@@ -57,6 +57,7 @@ public:
       state = OBJECT_EXISTS_CLEAN;
     }
 
+    RWLock::RLocker snap_locker(m_image_ctx.snap_lock);
     RWLock::RLocker object_map_locker(m_image_ctx.object_map_lock);
     m_image_ctx.object_map.aio_update(snap_id, m_object_no, m_object_no + 1,
                                       state, boost::optional<uint8_t>(), this);
