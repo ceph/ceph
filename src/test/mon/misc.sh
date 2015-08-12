@@ -99,7 +99,7 @@ function TEST_mon_add_to_single_mon() {
     setup $dir || return 1
     run_mon $dir a --public-addr $MONA || return 1
     # wait for the quorum
-    timeout 3 ceph -s > /dev/null || return 1
+    timeout 120 ceph -s > /dev/null || return 1
     # strictly speaking it's not a feature, but an expected hahaviour.
     timeout 3 ceph mon add b $MONB || [ $? = 124 ] || return 1
     run_mon $dir b --public-addr $MONB || return 1
@@ -111,12 +111,12 @@ function TEST_mon_add_to_single_mon() {
     # from mon.b
     run_mon $dir b --public-addr $MONB || return 1
     # wait for the quorum
-    timeout 9 ceph -s > /dev/null || return 1
+    timeout 120 ceph -s > /dev/null || return 1
     local num_mons
     num_mons=$(ceph mon dump --format=xml 2>/dev/null | $XMLSTARLET sel -t -v "count(//mons/mon)") || return 1
     [ $num_mons == 2 ] || return 1
-    # no reason to take more than 2 secs to get this submitted
-    timeout 1 ceph mon add b $MONB || return 1
+    # no reason to take more than 120 secs to get this submitted
+    timeout 120 ceph mon add b $MONB || return 1
     teardown $dir || return 1
 }
 
