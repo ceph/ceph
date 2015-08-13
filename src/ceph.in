@@ -459,7 +459,7 @@ def new_style_command(parsed_args, cmdargs, target, sigdict, inbuf, verbose):
                     if ret:
                         ret = abs(ret)
                         print >> sys.stderr, \
-                            'Error: {0} {1}'.format(ret, errno.errorcode[ret])
+                            'Error: {0} {1}'.format(ret, errno.errorcode.get(ret, 'Unknown'))
                     if outbuf:
                         print outbuf
                     if outs:
@@ -860,11 +860,11 @@ def main():
                                                           sigdict, inbuf, verbose)
                     if ret < 0:
                         ret = -ret
-                        print >> sys.stderr, prefix + 'Second attempt of previously successful command failed with {0}: {1}'.format(errno.errorcode[ret], outs)
+                        print >> sys.stderr, prefix + 'Second attempt of previously successful command failed with {0}: {1}'.format(errno.errorcode.get(ret, 'Unknown'), outs)
 
         if ret < 0:
             ret = -ret
-            print >> sys.stderr, prefix + 'Error {0}: {1}'.format(errno.errorcode[ret], outs)
+            print >> sys.stderr, prefix + 'Error {0}: {1}'.format(errno.errorcode.get(ret, 'Unknown'), outs)
             if len(targets) > 1:
                 final_ret = ret
             else:
