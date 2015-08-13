@@ -33,6 +33,13 @@ std::string ObjectMap::object_map_name(const std::string &image_id,
   return oid;
 }
 
+uint8_t ObjectMap::operator[](uint64_t object_no) const
+{
+  assert(m_image_ctx.object_map_lock.is_locked());
+  assert(object_no < m_object_map.size());
+  return m_object_map[object_no];
+}
+
 bool ObjectMap::enabled() const
 {
   RWLock::RLocker l(m_image_ctx.object_map_lock);
@@ -137,8 +144,8 @@ bool ObjectMap::object_may_exist(uint64_t object_no) const
   }
   assert(object_no < m_object_map.size());
 
-  bool exists = (m_object_map[object_no] == OBJECT_EXISTS ||
-		 m_object_map[object_no] == OBJECT_PENDING);
+  uint8_t state = (*this)[object_no];
+  bool exists = (state == OBJECT_EXISTS || state == OBJECT_PENDING);
   ldout(m_image_ctx.cct, 20) << &m_image_ctx << " object_may_exist: "
 			     << "object_no=" << object_no << " r=" << exists
 			     << dendl;
@@ -295,13 +302,12 @@ bool ObjectMap::aio_update(uint64_t start_object_no, uint64_t end_object_no,
                            const boost::optional<uint8_t> &current_state,
                            Context *on_finish)
 {
-  assert(m_image_ctx.test_features(RBD_FEATURE_OBJECT_MAP));
+  assert(m_image_ctx.snap_lock.is_locked());
+  assert((m_image_ctx.features & RBD_FEATURE_OBJECT_MAP) != 0);
   assert(m_image_ctx.owner_lock.is_locked());
   assert(m_image_ctx.image_watcher != NULL);
   assert(m_image_ctx.image_watcher->is_lock_owner());
-  assert(start_object_no < end_object_no);
-
-  RWLock::WLocker l(m_image_ctx.object_map_lock);
+  assert(m_image_ctx.object_map_lock.is_wlocked());
   assert(start_object_no < end_object_no);
   
   CephContext *cct = m_image_ctx.cct;

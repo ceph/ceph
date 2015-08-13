@@ -24,6 +24,8 @@ public:
   static std::string object_map_name(const std::string &image_id,
 				     uint64_t snap_id);
 
+  uint8_t operator[](uint64_t object_no) const;
+
   int lock();
   int unlock();
 

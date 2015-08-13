@@ -28,20 +28,16 @@ class AsyncTrimObjectContext : public C_AsyncObjectThrottle {
 public:
   AsyncTrimObjectContext(AsyncObjectThrottle &throttle, ImageCtx *image_ctx,
 			 uint64_t object_no)
-    : C_AsyncObjectThrottle(throttle), m_image_ctx(*image_ctx),
-      m_object_no(object_no)
+    : C_AsyncObjectThrottle(throttle, *image_ctx), m_object_no(object_no)
   {
   }
 
   virtual int send() {
+    assert(m_image_ctx.owner_lock.is_locked());
+    assert(!m_image_ctx.image_watcher->is_lock_supported() ||
+           m_image_ctx.image_watcher->is_lock_owner());
     if (!m_image_ctx.object_map.object_may_exist(m_object_no)) {
       return 1;
-    }
-
-    RWLock::RLocker l(m_image_ctx.owner_lock);
-    if (m_image_ctx.image_watcher->is_lock_supported() &&
-        !m_image_ctx.image_watcher->is_lock_owner()) {
-      return -ERESTART;
     }
 
     string oid = m_image_ctx.get_object_name(m_object_no);
@@ -56,7 +52,6 @@ public:
   }
 
 private:
-  ImageCtx &m_image_ctx;
   uint64_t m_object_no;
 };
 
@@ -93,26 +88,29 @@ bool AsyncTrimRequest::should_complete(int r)
   switch (m_state) {
   case STATE_PRE_REMOVE:
     ldout(cct, 5) << " PRE_REMOVE" << dendl;
-    send_remove_objects();
-    break; 
+    {
+      RWLock::RLocker owner_lock(m_image_ctx.owner_lock);
+      send_remove_objects();
+    }
+    break;
 
   case STATE_REMOVE_OBJECTS:
     ldout(cct, 5) << " REMOVE_OBJECTS" << dendl;
-    if (send_post_remove()) {
-      return true;
-    }
+    send_post_remove();
     break;
 
   case STATE_POST_REMOVE:
     ldout(cct, 5) << " POST_OBJECTS" << dendl;
-    if (send_clean_boundary()) {
-      return true;
+    {
+      RWLock::RLocker owner_lock(m_image_ctx.owner_lock);
+      send_clean_boundary();
     }
     break;
 
   case STATE_CLEAN_BOUNDARY:
     ldout(cct, 5) << "CLEAN_BOUNDARY" << dendl;
-    return true;
+    finish();
+    break;
 
   case STATE_FINISHED:
     ldout(cct, 5) << "FINISHED" << dendl;
@@ -127,19 +125,18 @@ bool AsyncTrimRequest::should_complete(int r)
 }
 
 void AsyncTrimRequest::send() {
+  assert(m_image_ctx.owner_lock.is_locked());
   if (m_delete_start < m_num_objects) {
     send_pre_remove();
   } else {
-    bool finished = send_clean_boundary();
-    if (finished) {
-      m_state = STATE_FINISHED;
-      complete(0);
-    }
+    send_clean_boundary();
   }
 }
 
 void AsyncTrimRequest::send_remove_objects() {
+  assert(m_image_ctx.owner_lock.is_locked());
   CephContext *cct = m_image_ctx.cct;
+
   ldout(m_image_ctx.cct, 5) << this << " send_remove_objects: "
 			    << " delete_start=" << m_delete_start
 			    << " num_objects=" << m_num_objects << dendl;
@@ -150,15 +147,17 @@ void AsyncTrimRequest::send_remove_objects() {
     boost::lambda::bind(boost::lambda::new_ptr<AsyncTrimObjectContext>(),
       boost::lambda::_1, &m_image_ctx, boost::lambda::_2));
   AsyncObjectThrottle *throttle = new AsyncObjectThrottle(
-    *this, context_factory, ctx, m_prog_ctx, m_delete_start, m_num_objects);
+    this, m_image_ctx, context_factory, ctx, m_prog_ctx, m_delete_start,
+    m_num_objects);
   throttle->start_ops(cct->_conf->rbd_concurrent_management_ops);
 }
 
 void AsyncTrimRequest::send_pre_remove() {
+  assert(m_image_ctx.owner_lock.is_locked());
+
   bool remove_objects = false;
-  bool lost_exclusive_lock = false;
   {
-    RWLock::RLocker l(m_image_ctx.owner_lock);
+    RWLock::RLocker snap_locker(m_image_ctx.snap_lock);
     if (!m_image_ctx.object_map.enabled()) {
       remove_objects = true;
     } else {
@@ -167,18 +166,16 @@ void AsyncTrimRequest::send_pre_remove() {
 				<< " num_objects=" << m_num_objects << dendl;
       m_state = STATE_PRE_REMOVE;
 
-      if (!m_image_ctx.image_watcher->is_lock_owner()) {
-        ldout(m_image_ctx.cct, 1) << "lost exclusive lock during trim" << dendl;
-        lost_exclusive_lock = true;
-      } else {
-        // flag the objects as pending deletion
-        Context *ctx = create_callback_context();
-        if (!m_image_ctx.object_map.aio_update(m_delete_start, m_num_objects,
-					       OBJECT_PENDING, OBJECT_EXISTS,
-                                               ctx)) {
-          delete ctx;
-          remove_objects = true;
-        }
+      assert(m_image_ctx.image_watcher->is_lock_owner());
+
+      // flag the objects as pending deletion
+      Context *ctx = create_callback_context();
+      RWLock::WLocker object_map_locker(m_image_ctx.object_map_lock);
+      if (!m_image_ctx.object_map.aio_update(m_delete_start, m_num_objects,
+					     OBJECT_PENDING, OBJECT_EXISTS,
+                                             ctx)) {
+        delete ctx;
+        remove_objects = true;
       }
     }
   }
@@ -187,16 +184,15 @@ void AsyncTrimRequest::send_pre_remove() {
   if (remove_objects) {
     // no object map update required
     send_remove_objects();
-  } else if (lost_exclusive_lock) {
-    complete(-ERESTART);
   }
 }
 
-bool AsyncTrimRequest::send_post_remove() {
+void AsyncTrimRequest::send_post_remove() {
+  assert(m_image_ctx.owner_lock.is_locked());
+
   bool clean_boundary = false;
-  bool lost_exclusive_lock = false;
   {
-    RWLock::RLocker l(m_image_ctx.owner_lock);
+    RWLock::RLocker snap_locker(m_image_ctx.snap_lock);
     if (!m_image_ctx.object_map.enabled()) {
       clean_boundary = true;
     } else {
@@ -205,17 +201,16 @@ bool AsyncTrimRequest::send_post_remove() {
           		        << " num_objects=" << m_num_objects << dendl;
       m_state = STATE_POST_REMOVE;
 
-      if (!m_image_ctx.image_watcher->is_lock_owner()) {
-        ldout(m_image_ctx.cct, 1) << "lost exclusive lock during trim" << dendl;
-      } else {
-        // flag the pending objects as removed
-        Context *ctx = create_callback_context();
-        if (!m_image_ctx.object_map.aio_update(m_delete_start, m_num_objects,
-					       OBJECT_NONEXISTENT,
-					       OBJECT_PENDING, ctx)) {
-          delete ctx;
-	  clean_boundary = true;
-	}
+      assert(m_image_ctx.image_watcher->is_lock_owner());
+
+      // flag the pending objects as removed
+      Context *ctx = create_callback_context();
+      RWLock::WLocker object_map_locker(m_image_ctx.object_map_lock);
+      if (!m_image_ctx.object_map.aio_update(m_delete_start, m_num_objects,
+					     OBJECT_NONEXISTENT,
+					     OBJECT_PENDING, ctx)) {
+        delete ctx;
+	clean_boundary = true;
       }
     }
   }
@@ -223,85 +218,61 @@ bool AsyncTrimRequest::send_post_remove() {
   // avoid possible recursive lock attempts
   if (clean_boundary) {
     // no object map update required
-    return send_clean_boundary();
-  } else if (lost_exclusive_lock) {
-    complete(-ERESTART);
+    send_clean_boundary();
   }
-  return false;
 }
 
-bool AsyncTrimRequest::send_clean_boundary() {
+void AsyncTrimRequest::send_clean_boundary() {
+  assert(m_image_ctx.owner_lock.is_locked());
   CephContext *cct = m_image_ctx.cct;
   if (m_delete_off <= m_new_size) {
-    return true;
+    finish();
+    return;
   }
 
-  bool lost_exclusive_lock = false;
-  ContextCompletion *completion = NULL;
+  // should have been canceled prior to releasing lock
+  assert(!m_image_ctx.image_watcher->is_lock_supported() ||
+         m_image_ctx.image_watcher->is_lock_owner());
+  ldout(m_image_ctx.cct, 5) << this << " send_clean_boundary: "
+			    << " delete_start=" << m_delete_start
+			    << " num_objects=" << m_num_objects << dendl;
+  m_state = STATE_CLEAN_BOUNDARY;
+
+  ::SnapContext snapc;
   {
-    ldout(m_image_ctx.cct, 5) << this << " send_clean_boundary: "
-			      << " delete_start=" << m_delete_start
-			      << " num_objects=" << m_num_objects << dendl;
-    m_state = STATE_CLEAN_BOUNDARY;
+    RWLock::RLocker snap_locker(m_image_ctx.snap_lock);
+    snapc = m_image_ctx.snapc;
+  }
 
-    RWLock::RLocker l(m_image_ctx.owner_lock);
-    if (m_image_ctx.image_watcher->is_lock_supported() &&
-	!m_image_ctx.image_watcher->is_lock_owner()) {
-      ldout(m_image_ctx.cct, 1) << "lost exclusive lock during trim" << dendl;
-      lost_exclusive_lock = true;
+  // discard the weird boundary
+  std::vector<ObjectExtent> extents;
+  Striper::file_to_extents(cct, m_image_ctx.format_string,
+			   &m_image_ctx.layout, m_new_size,
+			   m_delete_off - m_new_size, 0, extents);
+
+  ContextCompletion *completion =
+    new ContextCompletion(create_callback_context(), true);
+  for (vector<ObjectExtent>::iterator p = extents.begin();
+       p != extents.end(); ++p) {
+    ldout(cct, 20) << " ex " << *p << dendl;
+    Context *req_comp = new C_ContextCompletion(*completion);
+
+    AbstractWrite *req;
+    if (p->offset == 0) {
+      req = new AioRemove(&m_image_ctx, p->oid.name, p->objectno, snapc,
+                          req_comp);
     } else {
-      ::SnapContext snapc;
-      uint64_t parent_overlap;
-      {
-        RWLock::RLocker l2(m_image_ctx.snap_lock);
-        snapc = m_image_ctx.snapc;
-
-        RWLock::RLocker l3(m_image_ctx.parent_lock);
-        int r = m_image_ctx.get_parent_overlap(CEPH_NOSNAP, &parent_overlap);
-        assert(r == 0);
-      }
-
-      // discard the weird boundary, if any
-      vector<ObjectExtent> extents;
-      Striper::file_to_extents(cct, m_image_ctx.format_string,
-			       &m_image_ctx.layout, m_new_size,
-			       m_delete_off - m_new_size, 0, extents);
-
-      completion = new ContextCompletion(create_callback_context(), true);
-      for (vector<ObjectExtent>::iterator p = extents.begin();
-           p != extents.end(); ++p) {
-        ldout(cct, 20) << " ex " << *p << dendl;
-        Context *req_comp = new C_ContextCompletion(*completion);
-
-        // reverse map this object extent onto the parent
-        vector<pair<uint64_t,uint64_t> > objectx;
-        Striper::extent_to_file(cct, &m_image_ctx.layout, p->objectno, 0,
-				m_image_ctx.layout.fl_object_size, objectx);
-        uint64_t object_overlap =
-	  m_image_ctx.prune_parent_extents(objectx, parent_overlap);
-
-        AbstractWrite *req;
-        if (p->offset == 0) {
-          req = new AioRemove(&m_image_ctx, p->oid.name, p->objectno, objectx,
-                              object_overlap, snapc, CEPH_NOSNAP, req_comp);
-        } else {
-          req = new AioTruncate(&m_image_ctx, p->oid.name, p->objectno, p->offset,
-                                objectx, object_overlap, snapc, CEPH_NOSNAP,
-                                req_comp);
-        }
-        req->send();
-      }
+      req = new AioTruncate(&m_image_ctx, p->oid.name, p->objectno,
+                            p->offset, snapc, req_comp);
     }
-
+    req->send();
   }
+  completion->finish_adding_requests();
+}
 
-  // avoid possible recursive lock attempts
-  if (lost_exclusive_lock) {
-    complete(-ERESTART);
-  } else if (completion != NULL) {
-    completion->finish_adding_requests();
-  }
-  return false;
+void AsyncTrimRequest::finish() {
+  m_state = STATE_FINISHED;
+  async_complete(0);
 }
 
 } // namespace librbd

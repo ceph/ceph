@@ -234,6 +234,8 @@ struct ResponseMessage {
 std::ostream &operator<<(std::ostream &out,
                          const librbd::WatchNotify::NotifyOp &op);
 std::ostream &operator<<(std::ostream &out,
+                         const librbd::WatchNotify::ClientId &client);
+std::ostream &operator<<(std::ostream &out,
                          const librbd::WatchNotify::AsyncRequestId &request);
 
 WRITE_CLASS_ENCODER(librbd::WatchNotify::ClientId);

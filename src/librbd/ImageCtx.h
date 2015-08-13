@@ -132,6 +132,7 @@ namespace librbd {
     xlist<AsyncResizeRequest*> async_resize_reqs;
 
     ContextWQ *aio_work_queue;
+    ContextWQ *op_work_queue;
 
     /**
      * Either image_name or image_id must be set.
