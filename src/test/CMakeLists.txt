@@ -964,7 +964,6 @@ if(${WITH_RADOSGW})
     rgw_a
     global
     curl
-    uuid
     expat
     ${BLKID_LIBRARIES}
     ${CMAKE_DL_LIBS} ${TCMALLOC_LIBS} ${UNITTEST_LIBS})
@@ -991,7 +990,6 @@ if(${WITH_RADOSGW})
     librados
     global
     curl
-    uuid
     expat
     ${BLKID_LIBRARIES}
     ${CMAKE_DL_LIBS}
@@ -1013,7 +1011,6 @@ if(${WITH_RADOSGW})
     rgw_a
     global
     curl
-    uuid
     expat
     cls_version_client
     cls_log_client
@@ -1041,7 +1038,6 @@ if(${WITH_RADOSGW})
     rgw_a
     global
     curl
-    uuid
     expat
     cls_version_client
     cls_log_client
@@ -1079,7 +1075,6 @@ if(${WITH_RADOSGW})
     cls_lock_client
     global
     curl
-    uuid
     expat
     ${BLKID_LIBRARIES}
     ${CMAKE_DL_LIBS}
