@@ -629,6 +629,49 @@ public:
   }
 };
 
+template <class T>
+class RGWReadRESTResourceCR : public RGWSimpleCoroutine {
+  RGWRESTConn *conn;
+  RGWHTTPManager *http_manager;
+  string path;
+  rgw_http_param_pair *params;
+  T *result;
+
+  RGWRESTReadResource *http_op;
+
+public:
+  RGWReadRESTResourceCR(CephContext *_cct, RGWRESTConn *_conn, RGWHTTPManager *_http_manager,
+			const string& _path, rgw_http_param_pair *_params,
+			T *_result) : RGWSimpleCoroutine(_cct), conn(_conn), http_manager(_http_manager),
+                                      path(_path), params(_params), result(_result), http_op(NULL) {}
+
+  int send_request() {
+    http_op = new RGWRESTReadResource(conn, path, params, NULL, http_manager);
+
+    http_op->set_user_info((void *)env->stack);
+
+    int ret = http_op->aio_read();
+    if (ret < 0) {
+      ldout(cct, 0) << "ERROR: failed to fetch metadata" << dendl;
+      log_error() << "failed to send http operation: " << http_op->to_str() << " ret=" << ret << std::endl;
+      http_op->put();
+      return ret;
+    }
+    return 0;
+  }
+
+  int request_complete() {
+    int ret = http_op->wait(result);
+    http_op->put();
+    if (ret < 0) {
+      error_stream << "http operation failed: " << http_op->to_str() << " status=" << http_op->get_http_status() << std::endl;
+      ldout(cct, 0) << "ERROR: failed to wait for op, ret=" << ret << dendl;
+      return ret;
+    }
+    return 0;
+  }
+};
+
 class RGWInitSyncStatusCoroutine : public RGWCoroutine {
   RGWAsyncRadosProcessor *async_rados;
   RGWRados *store;
@@ -738,9 +781,6 @@ class RGWFetchAllMetaCR : public RGWCoroutine {
 
   int max_entries;
 
-  RGWRESTReadResource *http_op;
-
-  RGWAioCompletionNotifier *md_op_notifier;
 
   int req_ret;
 
@@ -751,7 +791,6 @@ class RGWFetchAllMetaCR : public RGWCoroutine {
 public:
   RGWFetchAllMetaCR(RGWRados *_store, RGWHTTPManager *_mgr) : RGWCoroutine(_store->ctx()), store(_store),
                                                       http_manager(_mgr),
-						      http_op(NULL), md_op_notifier(NULL),
 						      req_ret(0) {}
 
   int operate() {
@@ -759,49 +798,24 @@ public:
 
     reenter(this) {
       yield {
-        http_op = new RGWRESTReadResource(conn, "/admin/metadata", NULL, NULL, http_manager);
-
-        http_op->set_user_info((void *)env->stack);
-
-        int ret = http_op->aio_read();
-        if (ret < 0) {
-          ldout(store->ctx(), 0) << "ERROR: failed to fetch metadata" << dendl;
-          log_error() << "failed to send http operation: " << http_op->to_str() << " ret=" << ret << std::endl;
-          http_op->put();
-          return ret;
-        }
-        return block(0);
+	call(new RGWReadRESTResourceCR<list<string> >(store->ctx(), conn, http_manager,
+				       "/admin/metadata", NULL, &sections));
       }
-      yield {
-	int ret = http_op->wait(&sections);
-        http_op->put();
-	if (ret < 0) {
-          error_stream << "http operation failed: " << http_op->to_str() << " status=" << http_op->get_http_status() << std::endl;
-          ldout(store->ctx(), 0) << "ERROR: failed to wait for op, ret=" << ret << dendl;
-	  return set_state(RGWCoroutine_Error);
-	}
-	sections_iter = sections.begin();
+      if (get_ret_status() < 0) {
+        ldout(store->ctx(), 0) << "ERROR: failed to fetch metadata sections" << dendl;
+	return set_state(RGWCoroutine_Error);
       }
+      sections_iter = sections.begin();
       for (; sections_iter != sections.end(); ++sections_iter) {
         yield {
 	  string entrypoint = string("/admin/metadata/") + *sections_iter;
-          http_op = new RGWRESTReadResource(conn, entrypoint, NULL, NULL, http_manager);
-          http_op->set_user_info((void *)env->stack);
-	    int ret = http_op->aio_read();
-	  if (ret < 0) {
-            ldout(store->ctx(), 0) << "ERROR: failed to fetch metadata" << dendl;
-            log_error() << "failed to send http operation: " << http_op->to_str() << " ret=" << ret << std::endl;
-            http_op->put();
-            return ret;
-	  }
-	  return block(0);
+#warning need a better scaling solution here
+	  call(new RGWReadRESTResourceCR<list<string> >(store->ctx(), conn, http_manager,
+				       entrypoint, NULL, &result));
 	}
 	yield {
-	  int ret = http_op->wait(&result);
-          http_op->put();
-	  if (ret < 0) {
-            error_stream << "http operation failed: " << http_op->to_str() << " status=" << http_op->get_http_status() << std::endl;
-            ldout(store->ctx(), 0) << "ERROR: failed to wait for op, ret=" << ret << dendl;
+	  if (get_ret_status() < 0) {
+            ldout(store->ctx(), 0) << "ERROR: failed to fetch metadata section: " << *sections_iter << dendl;
 	    return set_state(RGWCoroutine_Error);
 	  }
 	  for (list<string>::iterator iter = result.begin(); iter != result.end(); ++iter) {
@@ -811,8 +825,8 @@ public:
       }
       yield return set_state(RGWCoroutine_Done);
     }
+    return 0;
   }
-  return 0;
 };
 
 class RGWCloneMetaLogCoroutine : public RGWCoroutine {
