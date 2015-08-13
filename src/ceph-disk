@@ -34,6 +34,7 @@ import time
 import shlex
 import stat
 import math
+from ftplib import FTP
 
 """
 Prepare:
@@ -76,7 +77,8 @@ parses gparted output to create the symlinks above and triggers the
 knew the GPT partition type.
 
 """
-
+DMCRYPT_KEY_DIR = '/etc/ceph/dmcrypt-keys'
+# This is hardcoded in udev rules.
 CEPH_OSD_ONDISK_MAGIC = 'ceph osd volume v026'
 
 JOURNAL_UUID =              '45b0969e-9b03-4f30-b4c6-b4b80ceff106'
@@ -323,6 +325,16 @@ def command_check_call(arguments):
     arguments = _get_command_executable(arguments)
     LOG.info('Running command: %s', ' '.join(arguments))
     return subprocess.check_call(arguments)
+
+
+def command_check_call_stdin(stdin, arguments):
+    arguments = _get_command_executable(arguments)
+    LOG.info('Running command with fed stdin: %s', ' '.join(arguments))
+    proc = subprocess.Popen(arguments, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    out = proc.communicate(stdin)[0]
+    code = proc.wait()
+    if code != 0:
+        raise subprocess.CalledProcessError(code, ' '.join(arguments), out)
 
 
 def platform_distro():
@@ -858,6 +870,37 @@ def get_conf(cluster, variable):
     return value
 
 
+def get_global_conf(variable):
+    """
+    Get the value of the given configuration variable from the
+    global configuration section.
+
+    :raises: Error if call to ceph-conf fails.
+    :return: The variable value or None.
+    """
+    try:
+        out, ret = command(
+            [
+                'ceph-conf',
+                '--lookup',
+                variable,
+                ],
+            close_fds=True,
+            )
+    except OSError as e:
+        raise Error('error executing ceph-conf', e)
+    if ret == 1:
+        # config entry not found
+        return None
+    elif ret != 0:
+        raise Error('getting variable from configuration failed')
+    value = out.split('\n', 1)[0]
+    # don't differentiate between "var=" and no var set
+    if not value:
+        return None
+    return value
+
+
 def get_conf_with_default(cluster, variable):
     """
     Get a config value that is known to the C++ code.
@@ -900,6 +943,24 @@ def get_fsid(cluster):
     return fsid.lower()
 
 
+def get_dmcrypt_status(ptype):
+    """
+    Return a tuple of Bool
+
+    :return: Type of dmcrypt device
+    """
+    if ptype == JOURNAL_UUID or ptype == OSD_UUID or ptype == TOBE_UUID:
+        return [False, False]
+    if ptype == DMCRYPT_LUKS_JOURNAL_UUID or ptype == DMCRYPT_LUKS_OSD_UUID:
+        return [True, True]
+    if ptype == DMCRYPT_JOURNAL_UUID or ptype == DMCRYPT_OSD_UUID:
+        return [True, False]
+    if ptype == DMCRYPT_JOURNAL_TOBE_UUID:
+        return [True, False]
+    else:
+        return [False, False]
+
+
 def get_dmcrypt_key_path(
     _uuid,
     key_dir,
@@ -918,72 +979,130 @@ def get_dmcrypt_key_path(
     return path
 
 
-def get_or_create_dmcrypt_key(
-    _uuid,
-    key_dir,
-    key_size,
-    luks
-    ):
-    """
-    Get path to existing dmcrypt key or create a new key file.
+def create_dmcrypt_key(_uuid, key_size, key_dir, luks):
+    path = get_dmcrypt_key_path(_uuid, key_dir,  luks)
 
-    :return: Path to the dmcrypt key file.
-    """
-    path = get_dmcrypt_key_path(_uuid, key_dir, luks)
     if os.path.exists(path):
-        return path
+        return
 
-    # make a new key
     try:
         if not os.path.exists(key_dir):
-            os.makedirs(key_dir, stat.S_IRUSR|stat.S_IWUSR|stat.S_IXUSR)
+            os.makedirs(key_dir, stat.S_IRUSR | stat.S_IWUSR | stat.S_IXUSR)
         with file('/dev/urandom', 'rb') as i:
             key = i.read(key_size / 8)
-            fd = os.open(path, os.O_WRONLY|os.O_CREAT,
-                         stat.S_IRUSR|stat.S_IWUSR)
+            fd = os.open(path, os.O_WRONLY | os.O_CREAT,
+                         stat.S_IRUSR | stat.S_IWUSR)
             assert os.write(fd, key) == len(key)
             os.close(fd)
-        return path
     except:
         raise Error('unable to read or create dm-crypt key', path)
+
+    key_server = get_global_conf('dmcrypt_key_server')
+    if key_server:
+        ftp = FTP(key_server)
+        try:
+            ftp.login()
+            ftp.cwd('upload')
+            ftp.storbinary('STOR ' + _uuid, open(path))
+            return
+        finally:
+            # remember to delete the key file in caller function
+            ftp.quit()
+
+
+def dmcrypt_retrieve_key(uuid, key_dir, luks):
+    """
+    If a key server (FTP) is used, contact FTP user and download the key under directory "upload/".
+    If there is not a key server, look for key under DMCRYPT_KEY_DIR.
+    For backward compatibility, if a key can be found under DMCRYPT_KEY_DIR, it will be retrieved
+    from there even though the setup has a key server.
+
+    :param uuid:
+    :param luks:
+    :return: key
+    """
+    local_key_path = get_dmcrypt_key_path(uuid, key_dir, luks)
+    if os.path.exists(local_key_path):
+        return open(local_key_path, 'rb').read()
+
+    dmcrypt_key_server = get_global_conf("dmcrypt_key_server")
+    if dmcrypt_key_server:
+        ftp = FTP(dmcrypt_key_server)
+        try:
+            ftp.login()
+            ftp.cwd('upload')
+            key_blocks = []
+            ftp.retrbinary('RETR ' + uuid, key_blocks.append)
+            return ''.join(key_blocks)
+        finally:
+            ftp.quit()
+    else:
+        raise Error('unable to find dmcrypt key file for ' + uuid)
 
 
 def dmcrypt_map(
     rawdev,
-    keypath,
+    keydir,
     _uuid,
     cryptsetup_parameters,
     luks,
-    format_dev=False,
     ):
     """
     Maps a device to a dmcrypt device.
 
     :return: Path to the dmcrypt device.
     """
-    dev = '/dev/mapper/' + _uuid
-    luksFormat_args = [
-        'cryptsetup',
-        '--batch-mode',
-        '--key-file',
-        keypath,
-        'luksFormat',
-        rawdev,
-        ] + cryptsetup_parameters
+    mapped_dev = '/dev/mapper/' + _uuid
+    if os.path.islink(mapped_dev):
+        return mapped_dev
 
     luksOpen_args = [
         'cryptsetup',
+        '--batch-mode',
         '--key-file',
-        keypath,
+        '-',
         'luksOpen',
         rawdev,
-        _uuid,
-        ]
+        _uuid
+    ] + cryptsetup_parameters
 
     create_args = [
         'cryptsetup',
         '--key-file',
-        keypath,
+        '-',
+        'plainOpen',
+        rawdev,
+        _uuid
+    ] + cryptsetup_parameters
+
+    try:
+        if luks:
+            command_check_call_stdin(dmcrypt_retrieve_key(_uuid, keydir, luks), luksOpen_args)
+        else:
+            command_check_call_stdin(dmcrypt_retrieve_key(_uuid, keydir, luks), create_args)
+    except subprocess.CalledProcessError as e:
+        raise Error('unable to map device', rawdev, e)
+    return mapped_dev
+
+
+def dmcrypt_new(rawdev, _uuid, cryptsetup_parameters, key_dir, luks):
+    mapped_dev = '/dev/mapper/' + _uuid
+    if os.path.exists(mapped_dev):
+        return mapped_dev
+
+    luksFormat_args = [
+        'cryptsetup',
+        '--batch-mode',
+        '--key-file',
+        '-',
+        'luksFormat',
+        rawdev,
+        ] + cryptsetup_parameters
+
+    create_args = [
+        'cryptsetup',
+        '--key-file',
+        '-',
         'create',
         _uuid,
         rawdev,
@@ -991,33 +1110,35 @@ def dmcrypt_map(
 
     try:
         if luks:
-            if format_dev:
-		    command_check_call(luksFormat_args)
-            command_check_call(luksOpen_args)
+            command_check_call_stdin(dmcrypt_retrieve_key(_uuid, key_dir, luks), luksFormat_args)
         else:
-            # Plain mode has no format function, nor any validation that the key is correct.
-            command_check_call(create_args)
-        return dev
-
+            command_check_call_stdin(dmcrypt_retrieve_key(_uuid, key_dir, luks), create_args)
     except subprocess.CalledProcessError as e:
-        raise Error('unable to map device', rawdev, e)
+        raise Error('unable to create dmcrypt device', rawdev, e)
+
+    return dmcrypt_map(rawdev, key_dir, _uuid, cryptsetup_parameters, luks) #TODO
 
 
-def dmcrypt_unmap(
-    _uuid
-    ):
+def dmcrypt_unmap(_uuid, luks):
     """
     Removes the dmcrypt device with the given UUID.
     """
-    args = [
+    args_luks = [
         'cryptsetup',
-        'remove',
+        'luksClose',
+        _uuid
+    ]
+    args_plain = [
+        'cryptsetup',
+        'close',
         _uuid
     ]
 
     try:
-        command_check_call(args)
-
+        if luks:
+            command_check_call(args_luks)
+        else:
+            command_check_call(args_plain)
     except subprocess.CalledProcessError as e:
         raise Error('unable to unmap device', _uuid, e)
 
@@ -1330,9 +1451,10 @@ def prepare_journal_dev(
     if journal_dm_keypath:
         if luks:
             ptype = DMCRYPT_LUKS_JOURNAL_UUID
+            ptype_tobe = DMCRYPT_JOURNAL_TOBE_UUID
         else:
             ptype = DMCRYPT_JOURNAL_UUID
-        ptype_tobe = DMCRYPT_JOURNAL_TOBE_UUID
+            ptype_tobe = DMCRYPT_JOURNAL_TOBE_UUID
 
     # it is a whole disk.  create a partition!
     num = None
@@ -1404,20 +1526,31 @@ def prepare_journal_dev(
         LOG.debug('Journal is GPT partition %s', journal_symlink)
 
         if journal_dm_keypath:
-            if luks:
-                luksFormat_args = [
-                    'cryptsetup',
-                    '--batch-mode',
-                    '--key-file',
-                    journal_dm_keypath,
-                    'luksFormat',
-                    journal_dmcrypt,
-                    ] + cryptsetup_parameters
+            luksFormat_args = [
+                 'cryptsetup',
+                 '--batch-mode',
+                 '--key-file',
+                 journal_dm_keypath,
+                 'luksFormat',
+                 journal_dmcrypt,
+                   ] + cryptsetup_parameters
 
-                try:
+            create_args = [
+                 'cryptsetup',
+                 '--key-file',
+                 journal_dm_keypath,
+                 'create',
+                 journal_uuid,
+                 journal_dmcrypt,
+                   ] + cryptsetup_parameters
+
+            try:
+                if luks:
                     command_check_call(luksFormat_args)
-                except subprocess.CalledProcessError as e:
-                    raise Error('unable to format device for LUKS', journal_symlink, e)
+                else:
+                    command_check_call(create_args)
+            except subprocess.CalledProcessError as e:
+                raise Error('unable to format device for LUKS', journal_symlink, e)
 
             try:
                 command_check_call(
@@ -1564,7 +1697,8 @@ def prepare_dev(
     osd_uuid,
     journal_uuid,
     journal_dmcrypt,
-    osd_dm_keypath,
+    osd_key_path,
+    use_dmcrypt,
     cryptsetup_parameters,
     luks
     ):
@@ -1580,11 +1714,12 @@ def prepare_dev(
 
     ptype_tobe = TOBE_UUID
     ptype_osd = OSD_UUID
-    if osd_dm_keypath:
-        ptype_tobe = DMCRYPT_TOBE_UUID
+    if use_dmcrypt:
         if luks:
+            ptype_tobe = DMCRYPT_TOBE_UUID
             ptype_osd = DMCRYPT_LUKS_OSD_UUID
         else:
+            ptype_tobe = DMCRYPT_TOBE_UUID
             ptype_osd = DMCRYPT_OSD_UUID
 
     rawdev = None
@@ -1621,15 +1756,8 @@ def prepare_dev(
         rawdev = get_partition_dev(data, 1)
 
     dev = None
-    if osd_dm_keypath:
-        dev = dmcrypt_map(
-                rawdev=rawdev,
-                keypath=osd_dm_keypath,
-                _uuid=osd_uuid,
-                cryptsetup_parameters=cryptsetup_parameters,
-                luks=luks,
-                format_dev=True,
-                )
+    if use_dmcrypt:
+        dev = dmcrypt_new(rawdev, osd_uuid, cryptsetup_parameters, osd_key_path, luks)
     else:
         dev = rawdev
 
@@ -1674,7 +1802,7 @@ def prepare_dev(
             unmount(path)
     finally:
         if rawdev != dev:
-            dmcrypt_unmap(osd_uuid)
+            dmcrypt_unmap(osd_uuid, luks)
 
     if not is_partition(data):
         try:
@@ -1693,6 +1821,7 @@ def prepare_dev(
 def main_prepare(args):
     journal_dm_keypath = None
     osd_dm_keypath = None
+    use_key_server = bool(get_global_conf('dmcrypt_key_server'))
 
     try:
         prepare_lock.acquire()  # noqa
@@ -1838,8 +1967,10 @@ def main_prepare(args):
 
         # dm-crypt keys?
         if args.dmcrypt:
-            journal_dm_keypath = get_or_create_dmcrypt_key(args.journal_uuid, args.dmcrypt_key_dir, dmcrypt_keysize, luks)
-            osd_dm_keypath = get_or_create_dmcrypt_key(args.osd_uuid, args.dmcrypt_key_dir, dmcrypt_keysize, luks)
+            create_dmcrypt_key(args.journal_uuid, dmcrypt_keysize, args.dmcrypt_key_dir, luks)
+            create_dmcrypt_key(args.osd_uuid, dmcrypt_keysize, args.dmcrypt_key_dir, luks)
+            journal_dm_keypath = get_dmcrypt_key_path(args.journal_uuid, args.dmcrypt_key_dir, luks)
+            osd_dm_keypath = get_dmcrypt_key_path(args.osd_uuid, args.dmcrypt_key_dir, luks)
 
         # prepare journal
         (journal_symlink, journal_dmcrypt, journal_uuid) = prepare_journal(
@@ -1853,6 +1984,9 @@ def main_prepare(args):
             cryptsetup_parameters=cryptsetup_parameters,
             luks=luks
             )
+
+        if use_key_server and journal_dm_keypath:
+            os.remove(journal_dm_keypath)
 
         # prepare data
         if stat.S_ISDIR(dmode):
@@ -1879,13 +2013,17 @@ def main_prepare(args):
                 osd_uuid=args.osd_uuid,
                 journal_uuid=journal_uuid,
                 journal_dmcrypt=journal_dmcrypt,
-                osd_dm_keypath=osd_dm_keypath,
+                osd_key_path=args.dmcrypt_key_dir,
+                use_dmcrypt=bool(args.dmcrypt),
                 cryptsetup_parameters=cryptsetup_parameters,
                 luks=luks
                 )
         else:
             raise Error('not a dir or block device', args.data)
         prepare_lock.release()  # noqa
+
+        if use_key_server and osd_dm_keypath:
+            os.remove(osd_dm_keypath)
 
         if stat.S_ISBLK(dmode):
             update_partition('-a', args.data, 'prepared')
@@ -2123,33 +2261,19 @@ def mount_activate(
     dev,
     activate_key_template,
     init,
-    dmcrypt,
     dmcrypt_key_dir,
     ):
 
-    if dmcrypt:
-            # dev corresponds to a dmcrypt cyphertext device - map it before
-            # proceeding.
-            rawdev = dev
-            ptype = get_partition_type(rawdev)
-            if ptype in [DMCRYPT_OSD_UUID]:
-                luks = False
-                cryptsetup_parameters = ['--key-size', '256']
-            elif ptype in [DMCRYPT_LUKS_OSD_UUID]:
-                luks = True
-                cryptsetup_parameters = []
-            else:
-                raise Error('activate --dmcrypt called for invalid dev %s' % (dev))
-            part_uuid = get_partition_uuid(rawdev)
-            dmcrypt_key_path = get_dmcrypt_key_path(part_uuid, dmcrypt_key_dir, luks)
-            dev = dmcrypt_map(
-                    rawdev=rawdev,
-                    keypath=dmcrypt_key_path,
-                    _uuid=part_uuid,
-                    cryptsetup_parameters=cryptsetup_parameters,
-                    luks=luks,
-                    format_dev=False,
-                    )
+    ptype = get_partition_type(dev)
+    dmcrypt_enabled, luks_enabled = get_dmcrypt_status(ptype)
+
+    if dmcrypt_enabled:
+        part_uuid = get_partition_uuid(dev)
+        cryptsetup_parameters = []
+        if luks_enabled:
+            cryptsetup_parameters = ['--key-size', '256']
+
+        dev = dmcrypt_map(dev, dmcrypt_key_dir, part_uuid, cryptsetup_parameters, luks_enabled)
 
     try:
         fstype = detect_fstype(dev=dev)
@@ -2408,7 +2532,6 @@ def main_activate(args):
                 dev=args.path,
                 activate_key_template=args.activate_key_template,
                 init=args.mark_init,
-                dmcrypt=args.dmcrypt,
                 dmcrypt_key_dir=args.dmcrypt_key_dir,
                 )
             osd_data = get_mount_point(cluster, osd_id)
@@ -2487,29 +2610,18 @@ def main_activate_journal(args):
     dev = None
     activate_lock.acquire()  # noqa
     try:
-        if args.dmcrypt:
-            # journal dev corresponds to a dmcrypt cyphertext device - map
-            # it before proceeding.
-            rawdev = args.dev
-            ptype = get_partition_type(rawdev)
-            if ptype in [DMCRYPT_JOURNAL_UUID]:
-                luks = False
+        ptype = get_partition_type(args.dev)
+        dmcrypt_enabled, luks_enabled = get_dmcrypt_status(ptype)
+        # TODO: add raise condition here
+
+        if dmcrypt_enabled:
+            part_uuid = get_partition_uuid(args.dev)
+            cryptsetup_parameters = []
+            if luks_enabled:
                 cryptsetup_parameters = ['--key-size', '256']
-            elif ptype in [DMCRYPT_LUKS_JOURNAL_UUID]:
-                luks = True
-                cryptsetup_parameters = []
-            else:
-                raise Error('activate-journal --dmcrypt called for invalid dev %s' % (rawdev))
-            part_uuid = get_partition_uuid(rawdev)
-            dmcrypt_key_path = get_dmcrypt_key_path(part_uuid, args.dmcrypt_key_dir, luks)
-            dev = dmcrypt_map(
-                    rawdev=rawdev,
-                    keypath=dmcrypt_key_path,
-                    _uuid=part_uuid,
-                    cryptsetup_parameters=cryptsetup_parameters,
-                    luks=luks,
-                    format_dev=False,
-                    )
+
+            dev = dmcrypt_map(args.dev, args.dmcrypt_key_dir, part_uuid, cryptsetup_parameters, luks_enabled)
+            return
         else:
             dev = args.dev
 
@@ -2523,7 +2635,6 @@ def main_activate_journal(args):
             dev=path,
             activate_key_template=args.activate_key_template,
             init=args.mark_init,
-            dmcrypt=args.dmcrypt,
             dmcrypt_key_dir=args.dmcrypt_key_dir,
             )
 
@@ -2565,7 +2676,6 @@ def main_activate_all(args):
                     dev=path,
                     activate_key_template=args.activate_key_template,
                     init=args.mark_init,
-                    dmcrypt=False,
                     dmcrypt_key_dir='',
                     )
                 start_daemon(

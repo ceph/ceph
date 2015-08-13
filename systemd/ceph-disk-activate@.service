@@ -2,7 +2,9 @@
 Description=Ceph disk activation: %f
 
 [Service]
-Type=oneshot
-RemainAfterExit=yes
+Type=simple
+RemainAfterExit=no
 ExecStart=/usr/sbin/ceph-disk --verbose --log-stdout activate --mark-init systemd %f
-TimeoutSec=0
+TimeoutSec=300
+RestartSec=10
+Restart=on-failure
