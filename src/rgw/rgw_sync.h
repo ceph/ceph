@@ -144,6 +144,7 @@ public:
   int fetch(int num_shards, vector<string>& clone_markers);
   int read_sync_status(rgw_meta_sync_status *sync_status);
   int init_sync_status(int num_shards);
+  int run_sync(rgw_meta_sync_status& sync_status);
 };
 
 class RGWMetaSyncStatusManager {
@@ -193,6 +194,8 @@ public:
   int init_sync_status() { return master_log.init_sync_status(num_shards); }
   int fetch() { return master_log.fetch(num_shards, clone_markers); }
   int clone_shards() { return master_log.clone_shards(num_shards, clone_markers); }
+
+  int run() { return master_log.run_sync(sync_status); }
 };
 
 #endif
