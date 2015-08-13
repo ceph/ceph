@@ -236,9 +236,7 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
       dec_total_alloc(len);
     }
     raw* clone_empty() {
-      if (alignment)
-	return create_aligned(len, alignment);
-      return create(len);
+      return create_combined(len, alignment);
     }
 
     static void operator delete(void *ptr) {
@@ -647,7 +645,7 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
   }
 
   buffer::raw* buffer::create(unsigned len) {
-    return buffer::create_aligned(len, sizeof(size_t));
+    return buffer::create_combined(len, sizeof(size_t));
   }
   buffer::raw* buffer::claim_char(unsigned len, char *buf) {
     return new raw_char(len, buf);
@@ -666,6 +664,13 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
 #ifndef __CYGWIN__
     //return new raw_mmap_pages(len);
     //return new raw_posix_aligned(len, align);
+    return create_combined(len, align);
+#else
+    return new raw_hack_aligned(len, align);
+#endif
+  }
+
+  buffer::raw* buffer::create_combined(unsigned len, unsigned align) {
     assert(align);
     size_t rawlen = ROUND_UP_TO(sizeof(buffer::raw_combined), sizeof(size_t));
     size_t datalen = ROUND_UP_TO(len, sizeof(size_t));
@@ -686,10 +691,8 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
     raw *ret = new (ptr + datalen) raw_combined(ptr, len, align);
     assert((char *)ret == ptr + datalen);
     return ret;
-#else
-    return new raw_hack_aligned(len, align);
-#endif
   }
+
   buffer::raw* buffer::create_page_aligned(unsigned len) {
     return create_aligned(len, CEPH_PAGE_SIZE);
   }

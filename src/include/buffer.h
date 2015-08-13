@@ -159,6 +159,7 @@ public:
   static raw* claim_malloc(unsigned len, char *buf);
   static raw* create_static(unsigned len, char *buf);
   static raw* create_aligned(unsigned len, unsigned align);
+  static raw* create_combined(unsigned len, unsigned align);
   static raw* create_page_aligned(unsigned len);
   static raw* create_zero_copy(unsigned len, int fd, int64_t *offset);
   static raw* create_unshareable(unsigned len);
