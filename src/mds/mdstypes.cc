@@ -443,6 +443,7 @@ void inode_t::generate_test_instances(list<inode_t*>& ls)
 int inode_t::compare(const inode_t &other, bool *divergent) const
 {
   assert(ino == other.ino);
+  *divergent = false;
   if (version == other.version) {
     if (rdev != other.rdev ||
         ctime != other.ctime ||
