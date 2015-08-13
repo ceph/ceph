@@ -3954,6 +3954,8 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
     return ret;
   }
 
+  src_attrs[RGW_ATTR_ACL] = attrs[RGW_ATTR_ACL];
+
   set_copy_attrs(src_attrs, attrs, attrs_mod);
   attrs.erase(RGW_ATTR_ID_TAG);
 
