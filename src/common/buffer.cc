@@ -568,7 +568,7 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
     raw_unshareable(unsigned l, char *b) : raw(b, l) {
     }
     raw* clone_empty() {
-      return new raw_char(len);
+      return buffer::create(len);
     }
     bool is_shareable() {
       return false; // !shareable, will force make_shareable()
@@ -583,7 +583,7 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
     raw_static(const char *d, unsigned l) : raw((char*)d, l) { }
     ~raw_static() {}
     raw* clone_empty() {
-      return new buffer::raw_char(len);
+      return buffer::create(len);
     }
   };
 
@@ -617,7 +617,7 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
     { }
     ~xio_mempool() {}
     raw* clone_empty() {
-      return new buffer::raw_char(len);
+      return buffer::create(len);
     }
   };
 
