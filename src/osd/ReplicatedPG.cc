@@ -1529,7 +1529,7 @@ void ReplicatedPG::do_op(OpRequestRef& op)
   }
 
   bool in_hit_set = false;
-  if (hit_set) {
+  if (!op->need_bypass_cache() && hit_set) {
     if (obc.get()) {
       if (obc->obs.oi.soid != hobject_t() && hit_set->contains(obc->obs.oi.soid))
 	in_hit_set = true;
