@@ -40,6 +40,7 @@
 #define dout_prefix *_dout << "journal "
 
 const static int64_t ONE_MEG(1 << 20);
+const static int CEPH_MINIMUM_BLOCK_SIZE(4096);
 
 int FileJournal::_open(bool forwrite, bool create)
 {
@@ -143,8 +144,7 @@ int FileJournal::_open_block_device()
 	   << dendl;
   max_size = bdev_sz;
 
-  /* block devices have to write in blocks of CEPH_PAGE_SIZE */
-  block_size = CEPH_PAGE_SIZE;
+  block_size = CEPH_MINIMUM_BLOCK_SIZE;
 
   if (g_conf->journal_discard) {
     discard = block_device_support_discard(fn.c_str());
@@ -284,7 +284,7 @@ int FileJournal::_open_file(int64_t oldsize, blksize_t blksize,
   else {
     max_size = oldsize;
   }
-  block_size = MAX(blksize, (blksize_t)CEPH_PAGE_SIZE);
+  block_size = MAX(blksize, (blksize_t)CEPH_MINIMUM_BLOCK_SIZE);
 
   if (create && g_conf->journal_zero_on_create) {
     derr << "FileJournal::_open_file : zeroing journal" << dendl;
@@ -499,9 +499,9 @@ int FileJournal::open(uint64_t fs_op_seq)
 	    << block_size << " (required for direct_io journal mode)" << dendl;
     return -EINVAL;
   }
-  if ((header.alignment % CEPH_PAGE_SIZE) && directio) {
-    dout(0) << "open journal alignment " << header.alignment << " is not multiple of page size " << CEPH_PAGE_SIZE
-	    << " (required for direct_io journal mode)" << dendl;
+  if ((header.alignment % CEPH_MINIMUM_BLOCK_SIZE) && directio) {
+    dout(0) << "open journal alignment " << header.alignment << " is not multiple of minimum block size "
+           << CEPH_MINIMUM_BLOCK_SIZE << " (required for direct_io journal mode)" << dendl;
     return -EINVAL;
   }
 
@@ -1024,15 +1024,15 @@ int FileJournal::prepare_single_write(bufferlist& bl, off64_t& queue_pos, uint64
 void FileJournal::align_bl(off64_t pos, bufferlist& bl)
 {
   // make sure list segments are page aligned
-  if (directio && (!bl.is_page_aligned() ||
-		   !bl.is_n_page_sized())) {
-    bl.rebuild_page_aligned();
+  if (directio && (!bl.is_aligned(block_size) ||
+		   !bl.is_n_align_sized(CEPH_MINIMUM_BLOCK_SIZE))) {
+    bl.rebuild_aligned(CEPH_MINIMUM_BLOCK_SIZE);
     dout(10) << __func__ << " total memcopy: " << bl.get_memcopy_count() << dendl;
-    if ((bl.length() & ~CEPH_PAGE_MASK) != 0 ||
-	(pos & ~CEPH_PAGE_MASK) != 0)
+    if ((bl.length() & (CEPH_MINIMUM_BLOCK_SIZE - 1)) != 0 ||
+	(pos & (CEPH_MINIMUM_BLOCK_SIZE - 1)) != 0)
       dout(0) << "rebuild_page_aligned failed, " << bl << dendl;
-    assert((bl.length() & ~CEPH_PAGE_MASK) == 0);
-    assert((pos & ~CEPH_PAGE_MASK) == 0);
+    assert((bl.length() & (CEPH_MINIMUM_BLOCK_SIZE - 1)) == 0);
+    assert((pos & (CEPH_MINIMUM_BLOCK_SIZE - 1)) == 0);
   }
 }
 
