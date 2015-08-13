@@ -263,7 +263,10 @@ class Ansible(Task):
     def _handle_failure(self, command, status):
         failures = None
         with open(self.failure_log.name, 'r') as log:
-            failures = yaml.safe_load(log)
+            try:
+                failures = yaml.safe_load(log)
+            except yaml.parser.ParserError:
+                log.exception("Failed to load failure log...")
 
         if failures:
             if self.ctx.archive:
