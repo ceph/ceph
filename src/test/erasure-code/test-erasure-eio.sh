@@ -143,6 +143,22 @@ function rados_put_get() {
     rm $dir/ORIGINAL
 }
 
+function inject_eio() {
+    local objname=$1
+    shift
+    local dir=$1
+    shift
+    local shard_id=$1
+    shift
+
+    local poolname=pool-jerasure
+    local -a initial_osds=($(get_osds $poolname $objname))
+    local osd_id=${initial_osds[$shard_id]}
+    set_config osd $osd_id filestore_debug_inject_read_err true || return 1
+    CEPH_ARGS='' ./ceph --admin-daemon $dir/ceph-osd.$osd_id.asok \
+             injectdataerr $poolname $objname $shard_id || return 1
+}
+
 function rados_get_data_eio() {
     local dir=$1
     shift
@@ -155,13 +171,43 @@ function rados_get_data_eio() {
     #
     local poolname=pool-jerasure
     local objname=obj-eio-$$-$shard_id
+    inject_eio $objname $dir $shard_id || return 1
+    rados_put_get $dir $poolname $objname 0 $recovery || return 1
+
+    shard_id=$(expr $shard_id + 1)
+    inject_eio $objname $dir $shard_id || return 1
+    rados_get $dir $poolname $objname 1 || return 1
+}
+
+# Change the size of speificied shard
+#
+function set_size() {
+    local objname=$1
+    shift
+    local dir=$1
+    shift
+    local shard_id=$1
+    shift
+    local bytes=$1
+    shift
+    local mode=${1}
+
+    local poolname=pool-jerasure
     local -a initial_osds=($(get_osds $poolname $objname))
     local osd_id=${initial_osds[$shard_id]}
-    local last=$((${#initial_osds[@]} - 1))
-    set_config osd $osd_id filestore_debug_inject_read_err true || return 1
-    CEPH_ARGS='' ./ceph --admin-daemon $dir/ceph-osd.$osd_id.asok \
-             injectdataerr $poolname $objname $shard_id || return 1
-    rados_put_get $dir $poolname $objname 1 $recovery || return 1
+    if [ "$mode" = "add" ];
+    then
+      objectstore_tool $dir $osd_id $objname get-bytes $dir/CORRUPT || return 1
+      dd if=/dev/urandom bs=$bytes count=1 >> $dir/CORRUPT
+    elif [ "$bytes" = "0" ];
+    then
+      touch $dir/CORRUPT
+    else
+      dd if=/dev/urandom bs=$bytes count=1 of=$dir/CORRUPT
+    fi
+    objectstore_tool $dir $osd_id --op list $objname
+    objectstore_tool $dir $osd_id $objname set-bytes $dir/CORRUPT || return 1
+    rm -f $dir/CORRUPT
 }
 
 function rados_get_data_bad_size() {
@@ -173,33 +219,28 @@ function rados_get_data_bad_size() {
     shift
     local mode=${1:-set}
 
-    # Change the size of speificied shard
-    #
     local poolname=pool-jerasure
     local objname=obj-size-$$-$shard_id-$bytes
-    local -a initial_osds=($(get_osds $poolname $objname))
-    local osd_id=${initial_osds[$shard_id]}
-    local last=$((${#initial_osds[@]} - 1))
     rados_put $dir $poolname $objname || return 1
-    if [ "$mode" = "add" ];
-    then
-      objectstore_tool $dir $osd_id $objname get-bytes $dir/CORRUPT || return 1
-      dd if=/dev/urandom bs=$bytes count=1 >> $dir/CORRUPT
-    elif [ "$bytes" = "0" ];
-    then
-      touch $dir/CORRUPT
-    else
-      dd if=/dev/urandom bs=$bytes count=1 of=$dir/CORRUPT
-    fi
-    objectstore_tool $dir $osd_id $objname set-bytes $dir/CORRUPT || return 1
-    rm -f $dir/CORRUPT
+
+    # Change the size of speificied shard
+    #
+    set_size $objname $dir $shard_id $bytes $mode || return 1
+
+    rados_get $dir $poolname $objname 0 || return 1
+
+    # Leave objname and modify another shard
+    shard_id=$(expr $shard_id + 1)
+    set_size $objname $dir $shard_id $bytes $mode || return 1
     rados_get $dir $poolname $objname 1 || return 1
 }
 
 #
 # These two test cases try to validate the following behavior:
 #  For object on EC pool, if there is one shard having read error (
-#  either primary or replica), client gets the read error back.
+#  either primary or replica), client can still read object.
+#
+# If 2 shards have read errors the client will get an error.
 #
 function TEST_rados_get_subread_eio_shard_0() {
     local dir=$1
@@ -207,7 +248,7 @@ function TEST_rados_get_subread_eio_shard_0() {
 
     local poolname=pool-jerasure
     create_erasure_coded_pool $poolname || return 1
-    # inject eio on primary OSD (0)
+    # inject eio on primary OSD (0) and replica OSD (1)
     local shard_id=0
     rados_get_data_eio $dir $shard_id || return 1
     delete_pool $poolname
@@ -219,18 +260,26 @@ function TEST_rados_get_subread_eio_shard_1() {
 
     local poolname=pool-jerasure
     create_erasure_coded_pool $poolname || return 1
-    # inject eio into replica OSD (1)
+    # inject eio into replicas OSD (1) and OSD (2)
     local shard_id=1
     rados_get_data_eio $dir $shard_id || return 1
     delete_pool $poolname
 }
 
+#
+# These two test cases try to validate that following behavior:
+#  For object on EC pool, if there is one shard which an incorrect
+# size this will cause an internal read error, client can still read object.
+#
+# If 2 shards have incorrect size the client will get an error.
+#
 function TEST_rados_get_bad_size_shard_0() {
     local dir=$1
     setup_osds false || return 1
 
     local poolname=pool-jerasure
     create_erasure_coded_pool $poolname || return 1
+    # Set incorrect size into primary OSD (0) and replica OSD (1)
     local shard_id=0
     rados_get_data_bad_size $dir $shard_id 10 || return 1
     rados_get_data_bad_size $dir $shard_id 0 || return 1
@@ -244,6 +293,7 @@ function TEST_rados_get_bad_size_shard_1() {
 
     local poolname=pool-jerasure
     create_erasure_coded_pool $poolname || return 1
+    # Set incorrect size into replicas OSD (1) and OSD (2)
     local shard_id=1
     rados_get_data_bad_size $dir $shard_id 10 || return 1
     rados_get_data_bad_size $dir $shard_id 0 || return 1
