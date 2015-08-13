@@ -4,6 +4,7 @@ import requests
 import os
 import pexpect
 import yaml
+import shutil
 
 from cStringIO import StringIO
 from tempfile import NamedTemporaryFile
@@ -266,7 +267,11 @@ class Ansible(Task):
             try:
                 failures = yaml.safe_load(log)
             except yaml.parser.ParserError:
-                log.exception("Failed to load failure log...")
+                log.exception(
+                    "Failed to parse ansible failure log: {0}".format(
+                        self.failure_log.name,
+                    )
+                )
 
         if failures:
             if self.ctx.archive:
@@ -275,9 +280,13 @@ class Ansible(Task):
         raise CommandFailedError(command, status)
 
     def _archive_failures(self):
-        os.rename(
+        archive_path = "{0}/ansible_failures.yaml".format(self.ctx.archive)
+        log.info("Archiving ansible failure log at: {0}".format(
+            archive_path,
+        ))
+        shutil.move(
             self.failure_log.name,
-            "{0}/ansible_failures.yaml".format(self.ctx.archive)
+            archive_path
         )
 
     def _build_args(self):
