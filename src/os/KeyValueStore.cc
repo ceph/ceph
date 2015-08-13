@@ -592,9 +592,12 @@ KeyValueStore::~KeyValueStore()
 
 int KeyValueStore::statfs(struct statfs *buf)
 {
-  if (::statfs(basedir.c_str(), buf) < 0) {
-    int r = -errno;
-    return r;
+  int r = backend->db->get_statfs(buf);
+  if (r < 0) {
+    if (::statfs(basedir.c_str(), buf) < 0) {
+      int r = -errno;
+      return r;
+    }
   }
   return 0;
 }
