@@ -3474,7 +3474,7 @@ if (!set_conf_param(v, p1, p2, p3)) { \
   }
 
   if ((opt_cmd == OPT_COPY || opt_cmd == OPT_CLONE || opt_cmd == OPT_RENAME) &&
-      !destname ) {
+      ((!destname) || (destname[0] == '\0')) ) {
     cerr << "rbd: destination image name was not specified" << std::endl;
     return EXIT_FAILURE;
   }
