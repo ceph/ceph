@@ -173,7 +173,7 @@ function rados_get_data_bad_size() {
     shift
     local mode=${1:-set}
 
-    # inject eio to speificied shard
+    # Change the size of speificied shard
     #
     local poolname=pool-jerasure
     local objname=obj-size-$$-$shard_id-$bytes
