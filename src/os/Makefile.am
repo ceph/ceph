@@ -22,7 +22,6 @@ libos_la_SOURCES = \
 	os/KeyValueStore.cc \
 	os/ObjectStore.cc \
 	os/WBThrottle.cc \
-        os/KeyValueDB.cc \
 	common/TrackedOp.cc
 
 if LINUX
