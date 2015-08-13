@@ -1206,10 +1206,7 @@ int FileStore::upgrade()
   if (r == 1)
     return 0;
 
-  if (version < 4) {
-    derr << "ObjectStore is old at version " << version << ".  Please upgrade to hammer v0.94.x first."  << dendl;
-    return -EINVAL;
-  }
+  assert(version >= 4);  // upgrade to hammer first
 
   // nothing necessary in FileStore for v3 -> v4 upgrade; we just need to
   // open up DBObjectMap with the do_upgrade flag, which we already did.
@@ -1301,6 +1298,12 @@ int FileStore::mount()
 	 << cpp_strerror(ret) << dendl;
     goto close_fsid_fd;
   } else if (ret == 0) {
+    if (version_stamp < 4) {
+      derr << "FileStore is old at version " << version_stamp
+	   << ".  Please upgrade to hammer v0.94.x first."  << dendl;
+      ret = -EINVAL;
+      goto close_fsid_fd;
+    }
     if (do_update || (int)version_stamp < g_conf->filestore_update_to) {
       derr << "FileStore::mount : stale version stamp detected: "
 	   << version_stamp 
