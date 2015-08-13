@@ -694,6 +694,8 @@ void PG::generate_past_intervals()
       pgid = pgid.get_ancestor(last_map->get_pg_num(pgid.pool()));
     cur_map->pg_to_up_acting_osds(pgid, &up, &up_primary, &acting, &primary);
 
+    boost::scoped_ptr<IsPGRecoverablePredicate> recoverable(
+      get_is_recoverable_predicate());
     std::stringstream debug;
     bool new_interval = pg_interval_t::check_new_interval(
       old_primary,
@@ -709,6 +711,7 @@ void PG::generate_past_intervals()
       cur_map,
       last_map,
       pgid,
+      recoverable.get(),
       &past_intervals,
       &debug);
     if (new_interval) {
@@ -1336,7 +1339,7 @@ bool PG::choose_acting(pg_shard_t &auth_log_shard_id)
   }
 
   /* Check whether we have enough acting shards to later perform recovery */
-  boost::scoped_ptr<PGBackend::IsRecoverablePredicate> recoverable_predicate(
+  boost::scoped_ptr<IsPGRecoverablePredicate> recoverable_predicate(
     get_pgbackend()->get_is_recoverable_predicate());
   set<pg_shard_t> have;
   for (int i = 0; i < (int)want.size(); ++i) {
@@ -4742,6 +4745,8 @@ void PG::start_peering_interval(
     info.history.same_interval_since = osdmap->get_epoch();
   } else {
     std::stringstream debug;
+    boost::scoped_ptr<IsPGRecoverablePredicate> recoverable(
+      get_is_recoverable_predicate());
     bool new_interval = pg_interval_t::check_new_interval(
       old_acting_primary.osd,
       new_acting_primary,
@@ -4754,6 +4759,7 @@ void PG::start_peering_interval(
       osdmap,
       lastmap,
       info.pgid.pgid,
+      recoverable.get(),
       &past_intervals,
       &debug);
     dout(10) << __func__ << ": check_new_interval output: "
@@ -7471,7 +7477,7 @@ void PG::RecoveryState::RecoveryMachine::log_exit(const char *state_name, utime_
 #define dout_prefix (*_dout << (debug_pg ? debug_pg->gen_prefix() : string()) << " PriorSet: ")
 
 PG::PriorSet::PriorSet(bool ec_pool,
-		       PGBackend::IsRecoverablePredicate *c,
+		       IsPGRecoverablePredicate *c,
 		       const OSDMap &osdmap,
 		       const map<epoch_t, pg_interval_t> &past_intervals,
 		       const vector<int> &up,

@@ -197,6 +197,10 @@ public:
   void update_snap_mapper_bits(uint32_t bits) {
     snap_mapper.update_bits(bits);
   }
+  /// get_is_recoverable_predicate: caller owns returned pointer and must delete when done
+  IsPGRecoverablePredicate *get_is_recoverable_predicate() {
+    return get_pgbackend()->get_is_recoverable_predicate();
+  }
 protected:
   // Ops waiting for map, should be queued at back
   Mutex map_lock;
@@ -315,13 +319,13 @@ public:
     PG *pg;
     set<pg_shard_t> empty_set;
   public:
-    boost::scoped_ptr<PGBackend::IsReadablePredicate> is_readable;
-    boost::scoped_ptr<PGBackend::IsRecoverablePredicate> is_recoverable;
+    boost::scoped_ptr<IsPGReadablePredicate> is_readable;
+    boost::scoped_ptr<IsPGRecoverablePredicate> is_recoverable;
     MissingLoc(PG *pg)
       : pg(pg) {}
     void set_backend_predicates(
-      PGBackend::IsReadablePredicate *_is_readable,
-      PGBackend::IsRecoverablePredicate *_is_recoverable) {
+      IsPGReadablePredicate *_is_readable,
+      IsPGRecoverablePredicate *_is_recoverable) {
       is_readable.reset(_is_readable);
       is_recoverable.reset(_is_recoverable);
     }
@@ -492,9 +496,9 @@ public:
     map<int, epoch_t> blocked_by;  /// current lost_at values for any OSDs in cur set for which (re)marking them lost would affect cur set
 
     bool pg_down;   /// some down osds are included in @a cur; the DOWN pg state bit should be set.
-    boost::scoped_ptr<PGBackend::IsRecoverablePredicate> pcontdec;
+    boost::scoped_ptr<IsPGRecoverablePredicate> pcontdec;
     PriorSet(bool ec_pool,
-	     PGBackend::IsRecoverablePredicate *c,
+	     IsPGRecoverablePredicate *c,
 	     const OSDMap &osdmap,
 	     const map<epoch_t, pg_interval_t> &past_intervals,
 	     const vector<int> &up,

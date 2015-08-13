@@ -385,7 +385,7 @@ public:
    *
    * Determines the whether _have is suffient to recover an object
    */
-  class ECRecPred : public IsRecoverablePredicate {
+  class ECRecPred : public IsPGRecoverablePredicate {
     set<int> want;
     ErasureCodeInterfaceRef ec_impl;
   public:
@@ -405,7 +405,7 @@ public:
       return ec_impl->minimum_to_decode(want, have, &min) == 0;
     }
   };
-  IsRecoverablePredicate *get_is_recoverable_predicate() {
+  IsPGRecoverablePredicate *get_is_recoverable_predicate() {
     return new ECRecPred(ec_impl);
   }
 
@@ -414,7 +414,7 @@ public:
    *
    * Determines the whether _have is suffient to read an object
    */
-  class ECReadPred : public IsReadablePredicate {
+  class ECReadPred : public IsPGReadablePredicate {
     pg_shard_t whoami;
     ECRecPred rec_pred;
   public:
@@ -425,7 +425,7 @@ public:
       return _have.count(whoami) && rec_pred(_have);
     }
   };
-  IsReadablePredicate *get_is_readable_predicate() {
+  IsPGReadablePredicate *get_is_readable_predicate() {
     return new ECReadPred(get_parent()->whoami_shard(), ec_impl);
   }
 
