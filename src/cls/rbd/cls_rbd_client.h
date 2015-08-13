@@ -126,6 +126,8 @@ namespace librbd {
     // operations on the rbd_object_map.$image_id object
     int object_map_load(librados::IoCtx *ioctx, const std::string &oid,
 		        ceph::BitVector<2> *object_map);
+    void object_map_load(librados::IoCtx *ioctx, const std::string &oid,
+                         ceph::BitVector<2> *object_map, Context *on_finish);
     void object_map_save(librados::ObjectWriteOperation *rados_op,
                          const ceph::BitVector<2> &object_map);
     void object_map_resize(librados::ObjectWriteOperation *rados_op,

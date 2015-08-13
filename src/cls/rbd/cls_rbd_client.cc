@@ -17,6 +17,11 @@ namespace librbd {
 
 namespace {
 
+void rados_callback(rados_completion_t c, void *arg) {
+  Context *ctx = reinterpret_cast<Context *>(arg);
+  ctx->complete(rados_aio_get_return_value(c));
+}
+
 struct C_GetChildren : public Context {
   librados::IoCtx *ioctx;
   std::string oid;
@@ -59,12 +64,45 @@ struct C_GetChildren : public Context {
     }
     on_finish->complete(r);
   }
+};
 
-  static void rados_callback(rados_completion_t c, void *arg) {
-    Context *ctx = reinterpret_cast<Context *>(arg);
-    ctx->complete(rados_aio_get_return_value(c));
+struct C_ObjectMapLoad : public Context {
+  librados::IoCtx *ioctx;
+  std::string oid;
+  ceph::BitVector<2> *object_map;
+  Context *on_finish;
+  bufferlist out_bl;
+
+  C_ObjectMapLoad(librados::IoCtx *_ioctx, const std::string &_oid,
+                  ceph::BitVector<2> *_object_map, Context *_on_finish)
+    : ioctx(_ioctx), oid(_oid), object_map(_object_map), on_finish(_on_finish) {
+  }
+
+  void send() {
+    bufferlist in_bl;
+    librados::ObjectReadOperation op;
+    op.exec("rbd", "object_map_load", in_bl);
+
+    librados::AioCompletion *rados_completion =
+       librados::Rados::aio_create_completion(this, rados_callback, NULL);
+    int r = ioctx->aio_operate(oid, rados_completion, &op, &out_bl);
+    assert(r == 0);
+    rados_completion->release();
+  }
+
+  virtual void finish(int r) {
+    if (r == 0) {
+      try {
+        bufferlist::iterator it = out_bl.begin();
+        ::decode(*object_map, it);
+      } catch (const buffer::error &err) {
+        r = -EBADMSG;
+      }
+    }
+    on_finish->complete(r);
   }
 };
+
 
 } // anonymous namespace
 
@@ -764,6 +802,7 @@ struct C_GetChildren : public Context {
     int object_map_load(librados::IoCtx *ioctx, const std::string &oid,
 			ceph::BitVector<2> *object_map)
     {
+      // TODO eliminate sync version
       bufferlist in;
       bufferlist out;
       int r = ioctx->exec(oid, "rbd", "object_map_load", in, out);
@@ -778,6 +817,14 @@ struct C_GetChildren : public Context {
         return -EBADMSG;
       }
       return 0;
+    }
+
+    void object_map_load(librados::IoCtx *ioctx, const std::string &oid,
+                         ceph::BitVector<2> *object_map, Context *on_finish)
+    {
+      C_ObjectMapLoad *req = new C_ObjectMapLoad(ioctx, oid, object_map,
+                                                 on_finish);
+      req->send();
     }
 
     void object_map_save(librados::ObjectWriteOperation *rados_op,
