@@ -237,10 +237,7 @@ public:
   void dump(Formatter *f) const {
     f->dump_unsigned("insert_count", count);
     f->open_array_section("hash_set");
-    // dump deterministically
-    std::set<uint32_t> tmp;
-    tmp.insert(hits.begin(), hits.end());
-    for (std::set<uint32_t>::iterator p = tmp.begin(); p != tmp.end(); ++p)
+    for (ceph::unordered_set<uint32_t>::const_iterator p = hits.begin(); p != hits.end(); ++p)
       f->dump_unsigned("hash", *p);
     f->close_section();
   }
@@ -317,10 +314,7 @@ public:
   void dump(Formatter *f) const {
     f->dump_unsigned("insert_count", count);
     f->open_array_section("set");
-    // dump deterministically
-    std::set<hobject_t> tmp;
-    tmp.insert(hits.begin(), hits.end());
-    for (std::set<hobject_t>::iterator p = tmp.begin(); p != tmp.end(); ++p) {
+    for (ceph::unordered_set<hobject_t>::const_iterator p = hits.begin(); p != hits.end(); ++p) {
       f->open_object_section("object");
       p->dump(f);
       f->close_section();
