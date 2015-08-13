@@ -365,3 +365,28 @@ TEST_F(TestInternal, MultipleResize) {
   ASSERT_EQ(0, librbd::get_size(ictx, &size));
   ASSERT_EQ(0U, size);
 }
+
+TEST_F(TestInternal, ShrinkFlushesCache) {
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  {
+    RWLock::WLocker owner_locker(ictx->owner_lock);
+    ASSERT_EQ(0, ictx->image_watcher->try_lock());
+  }
+
+  std::string buffer(4096, '1');
+  C_SaferCond cond_ctx;
+  librbd::AioCompletion *c =
+    librbd::aio_create_completion_internal(&cond_ctx, librbd::rbd_ctx_cb);
+  c->get();
+  aio_write(ictx, 0, buffer.size(), buffer.c_str(), c, 0);
+
+  librbd::NoOpProgressContext no_op;
+  ASSERT_EQ(0, librbd::resize(ictx, m_image_size >> 1, no_op));
+
+  ASSERT_TRUE(c->is_complete());
+  ASSERT_EQ(0, c->wait_for_complete());
+  ASSERT_EQ(0, cond_ctx.wait());
+  c->put();
+}
