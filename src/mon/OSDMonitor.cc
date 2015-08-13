@@ -5651,7 +5651,7 @@ bool OSDMonitor::prepare_command_impl(MMonCommand *m,
     }
     if (osdmap.exists(id)) {
       pending_inc.new_weight[id] = ww;
-      ss << "reweighted osd." << id << " to " << w << " (" << ios::hex << ww << ios::dec << ")";
+      ss << "reweighted osd." << id << " to " << w << " (" << std::hex << ww << std::dec << ")";
       getline(ss, rs);
       wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs,
 						get_last_committed() + 1));
