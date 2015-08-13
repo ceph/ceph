@@ -22,6 +22,7 @@
 #include "librbd/AsyncResizeRequest.h"
 #include "librbd/AsyncTrimRequest.h"
 #include "librbd/CopyupRequest.h"
+#include "librbd/DiffIterate.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageWatcher.h"
 #include "librbd/internal.h"
@@ -29,8 +30,6 @@
 #include "librbd/parent_types.h"
 #include "librbd/RebuildObjectMapRequest.h"
 #include "include/util.h"
-
-#include "librados/snap_set_diff.h"
 
 #include <boost/bind.hpp>
 #include <boost/scope_exit.hpp>
@@ -57,121 +56,6 @@ using librados::Rados;
 namespace librbd {
 
 namespace {
-
-enum ObjectDiffState {
-  OBJECT_DIFF_STATE_NONE    = 0,
-  OBJECT_DIFF_STATE_UPDATED = 1,
-  OBJECT_DIFF_STATE_HOLE    = 2
-};
-
-int diff_object_map(ImageCtx* ictx, uint64_t from_snap_id, uint64_t to_snap_id,
-                    BitVector<2>* object_diff_state) {
-  assert(ictx->snap_lock.is_locked());
-  CephContext* cct = ictx->cct;
-
-  bool diff_from_start = (from_snap_id == 0);
-  if (from_snap_id == 0) {
-    if (!ictx->snaps.empty()) {
-      from_snap_id = ictx->snaps.back();
-    } else {
-      from_snap_id = CEPH_NOSNAP;
-    }
-  }
-
-  object_diff_state->clear();
-  int r;
-  uint64_t current_snap_id = from_snap_id;
-  uint64_t next_snap_id = to_snap_id;
-  BitVector<2> prev_object_map;
-  bool prev_object_map_valid = false;
-  while (true) {
-    uint64_t current_size = ictx->size;
-    if (current_snap_id != CEPH_NOSNAP) {
-      std::map<librados::snap_t, SnapInfo>::const_iterator snap_it =
-        ictx->snap_info.find(current_snap_id);
-      assert(snap_it != ictx->snap_info.end());
-      current_size = snap_it->second.size;
-
-      ++snap_it;
-      if (snap_it != ictx->snap_info.end()) {
-        next_snap_id = snap_it->first;
-      } else {
-        next_snap_id = CEPH_NOSNAP;
-      }
-    }
-
-    uint64_t flags;
-    r = ictx->get_flags(from_snap_id, &flags);
-    if (r < 0) {
-      lderr(cct) << "diff_object_map: failed to retrieve image flags" << dendl;
-      return r;
-    }
-    if ((flags & RBD_FLAG_FAST_DIFF_INVALID) != 0) {
-      ldout(cct, 1) << "diff_object_map: cannot perform fast diff on invalid "
-                    << "object map" << dendl;
-      return -EINVAL;
-    }
-
-    BitVector<2> object_map;
-    std::string oid(ObjectMap::object_map_name(ictx->id, current_snap_id));
-    r = cls_client::object_map_load(&ictx->md_ctx, oid, &object_map);
-    if (r < 0) {
-      lderr(cct) << "diff_object_map: failed to load object map " << oid
-                 << dendl;
-      return r;
-    }
-    ldout(cct, 20) << "diff_object_map: loaded object map " << oid << dendl;
-
-    uint64_t num_objs = Striper::get_num_objects(ictx->layout, current_size);
-    if (object_map.size() < num_objs) {
-      ldout(cct, 1) << "diff_object_map: object map too small: "
-                    << object_map.size() << " < " << num_objs << dendl;
-      return -EINVAL;
-    }
-    object_map.resize(num_objs);
-
-    uint64_t overlap = MIN(object_map.size(), prev_object_map.size());
-    for (uint64_t i = 0; i < overlap; ++i) {
-      ldout(cct, 20) << __func__ << ": object state: " << i << " "
-                     << static_cast<uint32_t>(prev_object_map[i])
-                     << "->" << static_cast<uint32_t>(object_map[i]) << dendl;
-      if (object_map[i] == OBJECT_NONEXISTENT) {
-        if (prev_object_map[i] != OBJECT_NONEXISTENT) {
-          (*object_diff_state)[i] = OBJECT_DIFF_STATE_HOLE;
-        }
-      } else if (object_map[i] == OBJECT_EXISTS ||
-                 (prev_object_map[i] != object_map[i] &&
-                  !(prev_object_map[i] == OBJECT_EXISTS &&
-                    object_map[i] == OBJECT_EXISTS_CLEAN))) {
-        (*object_diff_state)[i] = OBJECT_DIFF_STATE_UPDATED;
-      }
-    }
-    ldout(cct, 20) << "diff_object_map: computed overlap diffs" << dendl;
-
-    object_diff_state->resize(object_map.size());
-    if (object_map.size() > prev_object_map.size() &&
-        (diff_from_start || prev_object_map_valid)) {
-      for (uint64_t i = overlap; i < object_diff_state->size(); ++i) {
-        ldout(cct, 20) << __func__ << ": object state: " << i << " "
-                       << "->" << static_cast<uint32_t>(object_map[i]) << dendl;
-        if (object_map[i] == OBJECT_NONEXISTENT) {
-          (*object_diff_state)[i] = OBJECT_DIFF_STATE_NONE;
-        } else {
-          (*object_diff_state)[i] = OBJECT_DIFF_STATE_UPDATED;
-        }
-      }
-    }
-    ldout(cct, 20) << "diff_object_map: computed resize diffs" << dendl;
-
-    if (current_snap_id == next_snap_id || next_snap_id > to_snap_id) {
-      break;
-    }
-    current_snap_id = next_snap_id;
-    prev_object_map = object_map;
-    prev_object_map_valid = true;
-  }
-  return 0;
-}
 
 int remove_object_map(ImageCtx *ictx) {
   assert(ictx->snap_lock.is_locked());
@@ -3244,24 +3128,10 @@ reprotect_and_return_err:
     return total_read;
   }
 
-  int simple_diff_cb(uint64_t off, size_t len, int exists, void *arg)
-  {
-    // This reads the existing extents in a parent from the beginning
-    // of time.  Since images are thin-provisioned, the extents will
-    // always represent data, not holes.
-    assert(exists);
-    interval_set<uint64_t> *diff = static_cast<interval_set<uint64_t> *>(arg);
-    diff->insert(off, len);
-    return 0;
-  }
-
-
   int diff_iterate(ImageCtx *ictx, const char *fromsnapname, uint64_t off,
                    uint64_t len, bool include_parent, bool whole_object,
 		   int (*cb)(uint64_t, size_t, int, void *), void *arg)
   {
-    utime_t start_time, elapsed;
-
     ldout(ictx->cct, 20) << "diff_iterate " << ictx << " off = " << off
 			 << " len = " << len << dendl;
 
@@ -3272,195 +3142,21 @@ reprotect_and_return_err:
     }
 
     int r = ictx_check(ictx);
-    if (r < 0)
+    if (r < 0) {
       return r;
+    }
 
     ictx->snap_lock.get_read();
     r = clip_io(ictx, off, &len);
     ictx->snap_lock.put_read();
-    if (r < 0)
+    if (r < 0) {
       return r;
-
-    librados::IoCtx head_ctx;
-
-    ictx->md_lock.get_read();
-    ictx->snap_lock.get_read();
-    head_ctx.dup(ictx->data_ctx);
-    snap_t from_snap_id = 0;
-    uint64_t from_size = 0;
-    if (fromsnapname) {
-      from_snap_id = ictx->get_snap_id(fromsnapname);
-      from_size = ictx->get_image_size(from_snap_id);
-    }
-    snap_t end_snap_id = ictx->snap_id;
-    uint64_t end_size = ictx->get_image_size(end_snap_id);
-    ictx->snap_lock.put_read();
-    ictx->md_lock.put_read();
-    if (from_snap_id == CEPH_NOSNAP) {
-      return -ENOENT;
-    }
-    if (from_snap_id == end_snap_id) {
-      // no diff.
-      return 0;
-    }
-    if (from_snap_id >= end_snap_id) {
-      return -EINVAL;
     }
 
-    bool fast_diff_enabled = false;
-    BitVector<2> object_diff_state;
-    {
-      RWLock::RLocker snap_locker(ictx->snap_lock);
-      if (whole_object && (ictx->features & RBD_FEATURE_FAST_DIFF) != 0) {
-        r = diff_object_map(ictx, from_snap_id, end_snap_id,
-                            &object_diff_state);
-        if (r < 0) {
-          ldout(ictx->cct, 1) << "diff_iterate fast diff disabled" << dendl;
-        } else {
-          ldout(ictx->cct, 1) << "diff_iterate fast diff enabled" << dendl;
-          fast_diff_enabled = true;
-        }
-      }
-    }
-
-    // we must list snaps via the head, not end snap
-    head_ctx.snap_set_read(CEPH_SNAPDIR);
-
-    ldout(ictx->cct, 20) << "diff_iterate from " << from_snap_id << " to " << end_snap_id
-			 << " size from " << from_size << " to " << end_size << dendl;
-
-    // FIXME: if end_size > from_size, we could read_iterate for the
-    // final part, and skip the listsnaps op.
-
-    // check parent overlap only if we are comparing to the beginning of time
-    interval_set<uint64_t> parent_diff;
-    if (include_parent && from_snap_id == 0) {
-      RWLock::RLocker l(ictx->snap_lock);
-      RWLock::RLocker l2(ictx->parent_lock);
-      uint64_t overlap = end_size;
-      ictx->get_parent_overlap(from_snap_id, &overlap);
-      r = 0;
-      if (ictx->parent && overlap > 0) {
-	ldout(ictx->cct, 10) << " first getting parent diff" << dendl;
-	r = diff_iterate(ictx->parent, NULL, 0, overlap, include_parent,
-                         whole_object, simple_diff_cb, &parent_diff);
-      }
-      if (r < 0)
-	return r;
-    }
-
-    uint64_t period = ictx->get_stripe_period();
-    uint64_t left = len;
-
-    while (left > 0) {
-      uint64_t period_off = off - (off % period);
-      uint64_t read_len = min(period_off + period - off, left);
-
-      // map to extents
-      map<object_t,vector<ObjectExtent> > object_extents;
-      Striper::file_to_extents(ictx->cct, ictx->format_string, &ictx->layout,
-			       off, read_len, 0, object_extents, 0);
-
-      // get snap info for each object
-      for (map<object_t,vector<ObjectExtent> >::iterator p = object_extents.begin();
-	   p != object_extents.end();
-	   ++p) {
-	ldout(ictx->cct, 20) << "diff_iterate object " << p->first << dendl;
-
-        if (fast_diff_enabled) {
-          const uint64_t object_no = p->second.front().objectno;
-          if (object_diff_state[object_no] != OBJECT_DIFF_STATE_NONE) {
-            bool updated = (object_diff_state[object_no] ==
-                              OBJECT_DIFF_STATE_UPDATED);
-            for (std::vector<ObjectExtent>::iterator q = p->second.begin();
-                 q != p->second.end(); ++q) {
-              cb(off + q->offset, q->length, updated, arg);
-            }
-          }
-          continue;
-        }
-
-	librados::snap_set_t snap_set;
-        r = head_ctx.list_snaps(p->first.name, &snap_set);
-        if (r == -ENOENT) {
-	  if (from_snap_id == 0 && !parent_diff.empty()) {
-	    // report parent diff instead
-	    for (vector<ObjectExtent>::iterator q = p->second.begin(); q != p->second.end(); ++q) {
-	      for (vector<pair<uint64_t,uint64_t> >::iterator r = q->buffer_extents.begin();
-		   r != q->buffer_extents.end();
-		   ++r) {
-		interval_set<uint64_t> o;
-		o.insert(off + r->first, r->second);
-		o.intersection_of(parent_diff);
-		ldout(ictx->cct, 20) << " reporting parent overlap " << o << dendl;
-		for (interval_set<uint64_t>::iterator s = o.begin(); s != o.end(); ++s) {
-		  cb(s.get_start(), s.get_len(), true, arg);
-		}
-	      }
-	    }
-	  }
-	  continue;
-	}
-	if (r < 0)
-	  return r;
-
-	// calc diff from from_snap_id -> to_snap_id
-	interval_set<uint64_t> diff;
-	bool end_exists;
-	calc_snap_set_diff(ictx->cct, snap_set,
-			   from_snap_id,
-			   end_snap_id,
-			   &diff, &end_exists);
-	ldout(ictx->cct, 20) << "  diff " << diff << " end_exists=" << end_exists << dendl;
-	if (diff.empty()) {
-	  continue;
-        } else if (whole_object) {
-          // provide the full object extents to the callback
-          for (vector<ObjectExtent>::iterator q = p->second.begin();
-               q != p->second.end(); ++q) {
-            cb(off + q->offset, q->length, end_exists, arg);
-          }
-          continue;
-        }
-
-	for (vector<ObjectExtent>::iterator q = p->second.begin(); q != p->second.end(); ++q) {
-	  ldout(ictx->cct, 20) << "diff_iterate object " << p->first
-			       << " extent " << q->offset << "~" << q->length
-			       << " from " << q->buffer_extents
-			       << dendl;
-	  uint64_t opos = q->offset;
-	  for (vector<pair<uint64_t,uint64_t> >::iterator r = q->buffer_extents.begin();
-	       r != q->buffer_extents.end();
-	       ++r) {
-	    interval_set<uint64_t> overlap;  // object extents
-	    overlap.insert(opos, r->second);
-	    overlap.intersection_of(diff);
-	    ldout(ictx->cct, 20) << " opos " << opos
-				 << " buf " << r->first << "~" << r->second
-				 << " overlap " << overlap
-				 << dendl;
-	    for (interval_set<uint64_t>::iterator s = overlap.begin();
-		 s != overlap.end();
-		 ++s) {
-	      uint64_t su_off = s.get_start() - opos;
-	      uint64_t logical_off = off + r->first + su_off;
-	      ldout(ictx->cct, 20) << "   overlap extent " << s.get_start() << "~" << s.get_len()
-				   << " logical "
-				   << logical_off << "~" << s.get_len()
-				   << dendl;
-	      cb(logical_off, s.get_len(), end_exists, arg);
-	    }
-	    opos += r->second;
-	  }
-	  assert(opos == q->offset + q->length);
-	}
-      }
-
-      left -= read_len;
-      off += read_len;
-    }
-
-    return 0;
+    DiffIterate command(*ictx, fromsnapname, off, len, include_parent,
+                        whole_object, cb, arg);
+    r = command.execute();
+    return r;
   }
 
   int simple_read_cb(uint64_t ofs, size_t len, const char *buf, void *arg)
