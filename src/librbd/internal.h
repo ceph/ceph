@@ -126,6 +126,7 @@ namespace librbd {
   int open_parent(ImageCtx *ictx);
   int open_image(ImageCtx *ictx);
   int close_image(ImageCtx *ictx);
+  int close_parent(ImageCtx *ictx);
 
   int flatten(ImageCtx *ictx, ProgressContext &prog_ctx);
 

@@ -1504,8 +1504,7 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
       lderr(ictx->cct) << "parent snapshot does not exist" << dendl;
       ictx->parent->snap_lock.put_write();
       ictx->parent->cache_lock.Unlock();
-      close_image(ictx->parent);
-      ictx->parent = NULL;
+      close_parent(ictx);
       return r;
     }
     ictx->parent->snap_set(ictx->parent->snap_name);
@@ -1518,8 +1517,7 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
       ictx->parent->parent_lock.put_write();
       ictx->parent->snap_lock.put_write();
       ictx->parent->cache_lock.Unlock();
-      close_image(ictx->parent);
-      ictx->parent = NULL;
+      close_parent(ictx);
       return r;
     }
     ictx->parent->parent_lock.put_write();
@@ -1901,8 +1899,7 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
 	  ictx->parent->id != ictx->get_parent_image_id(ictx->snap_id) ||
 	  ictx->parent->snap_id != ictx->get_parent_snap_id(ictx->snap_id)) {
 	ictx->clear_nonexistence_cache();
-	close_image(ictx->parent);
-	ictx->parent = NULL;
+	close_parent(ictx);
       }
     }
 
@@ -2460,8 +2457,10 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
   {
     ldout(ictx->cct, 20) << "close_image " << ictx << dendl;
 
-    // finish all incoming IO operations
-    ictx->aio_work_queue->drain();
+    if (!ictx->read_only) {
+      // finish all incoming IO operations
+      ictx->aio_work_queue->drain();
+    }
 
     int r = 0;
     {
@@ -2509,11 +2508,11 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
     }
 
     if (ictx->parent) {
-      int close_r = close_image(ictx->parent);
+      RWLock::WLocker parent_locker(ictx->parent_lock);
+      int close_r = close_parent(ictx);
       if (r == 0 && close_r < 0) {
         r = close_r;
       }
-      ictx->parent = NULL;
     }
 
     if (ictx->image_watcher) {
@@ -2521,6 +2520,28 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
     }
 
     delete ictx;
+    return r;
+  }
+
+  int close_parent(ImageCtx *ictx)
+  {
+    assert(ictx->parent_lock.is_wlocked());
+    ImageCtx *parent_ictx = ictx->parent;
+
+    // AIO to the parent must be complete before closing
+    parent_ictx->flush_async_operations();
+    parent_ictx->readahead.wait_for_pending();
+    {
+      Mutex::Locker async_ops_locker(parent_ictx->async_ops_lock);
+      assert(parent_ictx->async_ops.empty());
+    }
+
+    // attempting to drain the work queues might result in deadlock
+    assert(parent_ictx->aio_work_queue->empty());
+    assert(parent_ictx->op_work_queue->empty());
+
+    int r = close_image(parent_ictx);
+    ictx->parent = NULL;
     return r;
   }
 
