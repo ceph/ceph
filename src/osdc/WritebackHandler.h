@@ -33,10 +33,6 @@ class WritebackHandler {
 			   const bufferlist &bl, utime_t mtime,
 			   uint64_t trunc_size, __u32 trunc_seq,
 			   Context *oncommit) = 0;
-  virtual ceph_tid_t lock(const object_t& oid, const object_locator_t& oloc,
-			  int op, int flags, Context *onack, Context *oncommit) {
-    assert(0 == "this WritebackHandler does not support the lock operation");
-  }
 
   virtual void get_client_lock() {}
   virtual void put_client_lock() {}
