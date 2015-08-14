@@ -4552,7 +4552,9 @@ int Client::check_permissions(Inode *in, int flags, int uid, int gid)
 {
   // initial number of group entries, defaults to posix standard of 16
   // PAM implementations may provide more than 16 groups....
+#if HAVE_GETGROUPLIST
   int initial_group_count = 16;
+#endif
 
   gid_t *sgids = NULL;
   int sgid_count = 0;
