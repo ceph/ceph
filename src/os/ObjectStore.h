@@ -129,19 +129,26 @@ public:
    * in parallel.
    *
    * Clients of ObjectStore create and maintain their own Sequencer objects.
+   * New object are created through the ObjectStore's create_sequencer method,
+   * which returns a derived sequencer object valid for that type of store.
    * When a list of transactions is queued the caller specifies a Sequencer to be used.
    *
+   * The default implementation of the sequencer does nothing, and is suitable
+   * for cases when the store executes the transactions synchronously.
    */
+  class Sequencer {
+    string name;
 
-  /**
-   * ABC for Sequencer implementation, private to the ObjectStore derived class.
-   * created in ...::queue_transaction(s)
-   */
-  struct Sequencer_impl {
-    virtual void flush() = 0;
+  public:
+    /// return a unique string identifier for this sequencer
+    const string& get_name() const {
+      return name;
+    }
+    /// wait for any queued transactions on this sequencer to apply
+    virtual void flush() {}
 
     /**
-     * Async flush_commit
+     * @brief Add a callback to be executed asynchronously.
      *
      * There are two cases:
      * 1) sequencer is currently idle: the method returns true and
@@ -150,46 +157,17 @@ public:
      *    called asyncronously with a value of 0 once all transactions
      *    queued on this sequencer prior to the call have been applied
      *    and committed.
+     * @return true if idle, false otherwise
      */
-    virtual bool flush_commit(
-      Context *c ///< [in] context to call upon flush/commit
-      ) = 0; ///< @return true if idle, false otherwise
+    virtual bool flush_commit(Context *c) { return true; }
 
-    virtual ~Sequencer_impl() {}
-  };
+    virtual ~Sequencer() {}
 
-  /**
-   * External (opaque) sequencer implementation
-   */
-  struct Sequencer {
-    string name;
-    Sequencer_impl *p;
+  protected:
+    Sequencer(const string& n)
+      : name(n) {}
 
-    Sequencer(string n)
-      : name(n), p(NULL) {}
-    ~Sequencer() {
-      delete p;
-    }
-
-    /// return a unique string identifier for this sequencer
-    const string& get_name() const {
-      return name;
-    }
-    /// wait for any queued transactions on this sequencer to apply
-    void flush() {
-      if (p)
-	p->flush();
-    }
-
-    /// @see Sequencer_impl::flush_commit()
-    bool flush_commit(Context *c) {
-      if (!p) {
-	delete c;
-	return true;
-      } else {
-	return p->flush_commit(c);
-      }
-    }
+    friend class ObjectStore;
   };
 
   /*********************************
@@ -428,7 +406,7 @@ public:
   private:
     TransactionData data;
 
-    void *osr; // NULL on replay
+    Sequencer *osr; // NULL on replay
 
     bool use_tbl;   //use_tbl for encode/decode
     bufferlist tbl;
@@ -752,7 +730,7 @@ public:
       return data.ops;
     }
 
-    void set_osr(void *s) {
+    void set_osr(Sequencer *s) {
       osr = s;
     }
 
@@ -1665,6 +1643,10 @@ public:
       delete t;
     }
   };
+
+  virtual Sequencer *create_sequencer(const string& name) {
+    return new Sequencer(name);
+  }
 
   // synchronous wrappers
   unsigned apply_transaction(Transaction& t, Context *ondisk=0) {

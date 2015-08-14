@@ -103,7 +103,8 @@ uint64_t do_run(ObjectStore *store, int attrsize, int numattrs,
 	      ghobject_t(hobject_t(sobject_t(obj_str.str(), CEPH_NOSNAP))));
       objects.insert(obj_str.str());
     }
-    collections[coll] = make_pair(objects, new ObjectStore::Sequencer(coll.to_str()));
+    ObjectStore::Sequencer *osr = store->create_sequencer(coll.to_str());
+    collections[coll] = make_pair(objects, osr);
   }
   store->apply_transaction(t);
 

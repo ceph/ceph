@@ -351,7 +351,7 @@ void WorkloadGenerator::do_destroy_collection(ObjectStore::Transaction *t,
 					      C_StatState *stat)
 {  
   m_nr_runs.set(0);
-  entry->m_osr.flush();
+  entry->m_osr->flush();
   vector<ghobject_t> ls;
   m_store->collection_list(entry->m_coll, ghobject_t(), ghobject_t::get_max(), INT_MAX, &ls, NULL);
   dout(2) << __func__ << " coll " << entry->m_coll
@@ -489,7 +489,7 @@ queue_tx:
       c = new C_StatWrapper(stat_state, tmp);
     }
 
-    m_store->queue_transaction(&(entry->m_osr), t, c);
+    m_store->queue_transaction(entry->m_osr, t, c);
 
     inc_in_flight();
 

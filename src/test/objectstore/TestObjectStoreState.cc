@@ -67,7 +67,7 @@ void TestObjectStoreState::init(int colls, int objs)
     }
     baseid += objs;
 
-    m_store->queue_transaction(&(entry->m_osr), t,
+    m_store->queue_transaction(entry->m_osr, t,
         new C_OnFinished(this, t));
     inc_in_flight();
 
@@ -88,7 +88,8 @@ TestObjectStoreState::coll_entry_t *TestObjectStoreState::coll_create(int id)
   memset(meta_buf, 0, 100);
   snprintf(buf, 100, "0.%d_head", id);
   snprintf(meta_buf, 100, "pglog_0.%d_head", id);
-  return (new coll_entry_t(id, buf, meta_buf));
+  ObjectStore::Sequencer *osr = m_store->create_sequencer("test");
+  return (new coll_entry_t(id, buf, meta_buf, osr));
 }
 
 TestObjectStoreState::coll_entry_t*

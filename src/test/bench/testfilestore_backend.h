@@ -3,6 +3,7 @@
 #ifndef TESTFILESTOREBACKENDH
 #define TESTFILESTOREBACKENDH
 
+#include <boost/ptr_container/ptr_map.hpp>
 #include "common/Finisher.h"
 #include "backend.h"
 #include "include/Context.h"
@@ -11,7 +12,7 @@
 class TestFileStoreBackend : public Backend {
   ObjectStore *os;
   Finisher finisher;
-  map<string, ObjectStore::Sequencer> osrs;
+  boost::ptr_map<string, ObjectStore::Sequencer> osrs;
   const bool write_infos;
 
 public:

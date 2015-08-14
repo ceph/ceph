@@ -40,8 +40,8 @@ void TestFileStoreBackend::write(
   string coll_str = c.to_str();
 
   if (!osrs.count(coll_str))
-    osrs.insert(make_pair(coll_str, ObjectStore::Sequencer(coll_str)));
-  ObjectStore::Sequencer *osr = &(osrs.find(coll_str)->second);
+    osrs.insert(coll_str, os->create_sequencer(coll_str));
+  ObjectStore::Sequencer *osr = osrs.find(coll_str)->second;
 
   hobject_t h(sobject_t(oid.substr(sep+1), 0));
   h.pool = 0;
