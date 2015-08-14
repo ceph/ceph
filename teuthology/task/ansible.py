@@ -263,9 +263,9 @@ class Ansible(Task):
 
     def _handle_failure(self, command, status):
         failures = None
-        with open(self.failure_log.name, 'r') as log:
+        with open(self.failure_log.name, 'r') as fail_log:
             try:
-                failures = yaml.safe_load(log)
+                failures = yaml.safe_load(fail_log)
             except yaml.parser.ParserError:
                 log.exception(
                     "Failed to parse ansible failure log: {0}".format(
