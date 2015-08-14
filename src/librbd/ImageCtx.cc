@@ -67,10 +67,14 @@ struct C_FlushCache : public Context {
 
 struct C_InvalidateCache : public Context {
   ImageCtx *image_ctx;
+  bool purge_on_error;
+  bool reentrant_safe;
   Context *on_finish;
 
-  C_InvalidateCache(ImageCtx *_image_ctx, Context *_on_finish)
-    : image_ctx(_image_ctx), on_finish(_on_finish) {
+  C_InvalidateCache(ImageCtx *_image_ctx, bool _purge_on_error,
+                    bool _reentrant_safe, Context *_on_finish)
+    : image_ctx(_image_ctx), purge_on_error(_purge_on_error),
+      reentrant_safe(_reentrant_safe), on_finish(_on_finish) {
   }
   virtual void finish(int r) {
     assert(image_ctx->cache_lock.is_locked());
@@ -78,6 +82,10 @@ struct C_InvalidateCache : public Context {
 
     if (r == -EBLACKLISTED) {
       lderr(cct) << "Blacklisted during flush!  Purging cache..." << dendl;
+      image_ctx->object_cacher->purge_set(image_ctx->object_set);
+    } else if (r != 0 && purge_on_error) {
+      lderr(cct) << "invalidate cache encountered error "
+                 << cpp_strerror(r) << " !Purging cache..." << dendl;
       image_ctx->object_cacher->purge_set(image_ctx->object_set);
     } else if (r != 0) {
       lderr(cct) << "flush_cache returned " << r << dendl;
@@ -93,7 +101,11 @@ struct C_InvalidateCache : public Context {
       r = -EBUSY;
     }
 
-    image_ctx->op_work_queue->queue(on_finish, r);
+    if (reentrant_safe) {
+      on_finish->complete(r);
+    } else {
+      image_ctx->op_work_queue->queue(on_finish, r);
+    }
   }
 
 };
@@ -731,21 +743,18 @@ struct C_InvalidateCache : public Context {
 
   int ImageCtx::invalidate_cache(bool purge_on_error) {
     flush_async_operations();
-
-    int result;
-    C_SaferCond ctx;
-    invalidate_cache(&ctx);
-    result = ctx.wait();
-
-    if (result && purge_on_error) {
-      cache_lock.Lock();
-      if (object_cacher != NULL) {
-	lderr(cct) << "invalidate cache met error " << cpp_strerror(result) << " !Purging cache..." << dendl;
-	object_cacher->purge_set(object_set);
-      }
-      cache_lock.Unlock();
+    if (object_cacher == NULL) {
+      return 0;
     }
 
+    cache_lock.Lock();
+    object_cacher->release_set(object_set);
+    cache_lock.Unlock();
+
+    C_SaferCond ctx;
+    flush_cache(new C_InvalidateCache(this, purge_on_error, true, &ctx));
+
+    int result = ctx.wait();
     return result;
   }
 
@@ -759,7 +768,7 @@ struct C_InvalidateCache : public Context {
     object_cacher->release_set(object_set);
     cache_lock.Unlock();
 
-    flush_cache(new C_InvalidateCache(this, on_finish));
+    flush_cache(new C_InvalidateCache(this, false, false, on_finish));
   }
 
   void ImageCtx::clear_nonexistence_cache() {
