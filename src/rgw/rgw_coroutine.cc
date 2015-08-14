@@ -236,7 +236,7 @@ void RGWCoroutine::call(RGWCoroutine *op)
   assert(r == 0);
 }
 
-void RGWCoroutine::spawn(RGWCoroutine *op)
+void RGWCoroutine::spawn(RGWCoroutine *op, bool wait)
 {
   op->get();
   spawned_ops.push_back(op);
@@ -248,7 +248,9 @@ void RGWCoroutine::spawn(RGWCoroutine *op)
 
   env->stacks->push_back(stack);
 
-  env->stack->set_blocked_by(stack);
+  if (wait) {
+    env->stack->set_blocked_by(stack);
+  }
 }
 
 int RGWCoroutine::complete_spawned()
