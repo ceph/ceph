@@ -211,6 +211,9 @@ Client::Client(Messenger *m, MonClient *mc)
   _dir_vxattrs_name_size = _vxattrs_calcu_name_size(_dir_vxattrs);
   _file_vxattrs_name_size = _vxattrs_calcu_name_size(_file_vxattrs);
 
+  user_id = cct->_conf->client_user_id;
+  group_id = cct->_conf->client_group_id;
+
   lru.lru_set_max(cct->_conf->client_cache_size);
   lru.lru_set_midpoint(cct->_conf->client_cache_mid);
 
@@ -2960,6 +2963,11 @@ void Client::send_cap(Inode *in, MetaSession *session, Cap *cap,
 				   flush,
 				   cap->mseq,
                                    cap_epoch_barrier);
+  if (user_id >= 0)
+    m->caller_uid = user_id;
+  if (group_id >= 0)
+    m->caller_gid = group_id;
+
   m->head.issue_seq = cap->issue_seq;
   m->set_tid(flush_tid);
 
@@ -3223,7 +3231,12 @@ void Client::flush_snaps(Inode *in, bool all_again, CapSnap *again)
 
     capsnap->flush_tid = ++in->last_flush_tid;
     MClientCaps *m = new MClientCaps(CEPH_CAP_OP_FLUSHSNAP, in->ino, in->snaprealm->ino, 0, mseq,
-        cap_epoch_barrier);
+				     cap_epoch_barrier);
+    if (user_id >= 0)
+      m->caller_uid = user_id;
+    if (group_id >= 0)
+      m->caller_gid = group_id;
+
     m->set_client_tid(capsnap->flush_tid);
     m->head.snap_follows = p->first;
 
