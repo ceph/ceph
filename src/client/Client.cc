@@ -1467,10 +1467,11 @@ int Client::make_request(MetaRequest *request,
   if (oldest_tid == 0 && request->get_op() != CEPH_MDS_OP_SETFILELOCK)\
     oldest_tid = tid;
 
-  if (uid < 0) {
-    uid = geteuid();
-    gid = getegid();
-  }
+  if (uid < 0)
+    uid = user_id >= 0 ? user_id : getuid();
+  if (gid < 0)
+    gid = group_id >= 0 ? group_id : getgid();
+
   request->set_caller_uid(uid);
   request->set_caller_gid(gid);
 
@@ -8739,7 +8740,7 @@ int Client::getxattr(const char *path, const char *name, void *value, size_t siz
   int r = Client::path_walk(path, &in, true);
   if (r < 0)
     return r;
-  return Client::_getxattr(in.get(), name, value, size, getuid(), getgid());
+  return Client::_getxattr(in.get(), name, value, size);
 }
 
 int Client::lgetxattr(const char *path, const char *name, void *value, size_t size)
@@ -8749,7 +8750,7 @@ int Client::lgetxattr(const char *path, const char *name, void *value, size_t si
   int r = Client::path_walk(path, &in, false);
   if (r < 0)
     return r;
-  return Client::_getxattr(in.get(), name, value, size, getuid(), getgid());
+  return Client::_getxattr(in.get(), name, value, size);
 }
 
 int Client::fgetxattr(int fd, const char *name, void *value, size_t size)
@@ -8758,7 +8759,7 @@ int Client::fgetxattr(int fd, const char *name, void *value, size_t size)
   Fh *f = get_filehandle(fd);
   if (!f)
     return -EBADF;
-  return Client::_getxattr(f->inode.get(), name, value, size, getuid(), getgid());
+  return Client::_getxattr(f->inode.get(), name, value, size);
 }
 
 int Client::listxattr(const char *path, char *list, size_t size)
@@ -8768,7 +8769,7 @@ int Client::listxattr(const char *path, char *list, size_t size)
   int r = Client::path_walk(path, &in, true);
   if (r < 0)
     return r;
-  return Client::_listxattr(in.get(), list, size, getuid(), getgid());
+  return Client::_listxattr(in.get(), list, size);
 }
 
 int Client::llistxattr(const char *path, char *list, size_t size)
@@ -8778,7 +8779,7 @@ int Client::llistxattr(const char *path, char *list, size_t size)
   int r = Client::path_walk(path, &in, false);
   if (r < 0)
     return r;
-  return Client::_listxattr(in.get(), list, size, getuid(), getgid());
+  return Client::_listxattr(in.get(), list, size);
 }
 
 int Client::flistxattr(int fd, char *list, size_t size)
@@ -8787,7 +8788,7 @@ int Client::flistxattr(int fd, char *list, size_t size)
   Fh *f = get_filehandle(fd);
   if (!f)
     return -EBADF;
-  return Client::_listxattr(f->inode.get(), list, size, getuid(), getgid());
+  return Client::_listxattr(f->inode.get(), list, size);
 }
 
 int Client::removexattr(const char *path, const char *name)
@@ -8797,7 +8798,7 @@ int Client::removexattr(const char *path, const char *name)
   int r = Client::path_walk(path, &in, true);
   if (r < 0)
     return r;
-  return Client::_removexattr(in.get(), name, getuid(), getgid());
+  return Client::_removexattr(in.get(), name);
 }
 
 int Client::lremovexattr(const char *path, const char *name)
@@ -8807,7 +8808,7 @@ int Client::lremovexattr(const char *path, const char *name)
   int r = Client::path_walk(path, &in, false);
   if (r < 0)
     return r;
-  return Client::_removexattr(in.get(), name, getuid(), getgid());
+  return Client::_removexattr(in.get(), name);
 }
 
 int Client::fremovexattr(int fd, const char *name)
@@ -8816,7 +8817,7 @@ int Client::fremovexattr(int fd, const char *name)
   Fh *f = get_filehandle(fd);
   if (!f)
     return -EBADF;
-  return Client::_removexattr(f->inode.get(), name, getuid(), getgid());
+  return Client::_removexattr(f->inode.get(), name);
 }
 
 int Client::setxattr(const char *path, const char *name, const void *value, size_t size, int flags)
@@ -8826,7 +8827,7 @@ int Client::setxattr(const char *path, const char *name, const void *value, size
   int r = Client::path_walk(path, &in, true);
   if (r < 0)
     return r;
-  return Client::_setxattr(in.get(), name, value, size, flags, getuid(), getgid());
+  return Client::_setxattr(in.get(), name, value, size, flags);
 }
 
 int Client::lsetxattr(const char *path, const char *name, const void *value, size_t size, int flags)
@@ -8836,7 +8837,7 @@ int Client::lsetxattr(const char *path, const char *name, const void *value, siz
   int r = Client::path_walk(path, &in, false);
   if (r < 0)
     return r;
-  return Client::_setxattr(in.get(), name, value, size, flags, getuid(), getgid());
+  return Client::_setxattr(in.get(), name, value, size, flags);
 }
 
 int Client::fsetxattr(int fd, const char *name, const void *value, size_t size, int flags)
@@ -8845,7 +8846,7 @@ int Client::fsetxattr(int fd, const char *name, const void *value, size_t size, 
   Fh *f = get_filehandle(fd);
   if (!f)
     return -EBADF;
-  return Client::_setxattr(f->inode.get(), name, value, size, flags, getuid(), getgid());
+  return Client::_setxattr(f->inode.get(), name, value, size, flags);
 }
 
 int Client::_getxattr(Inode *in, const char *name, void *value, size_t size,
