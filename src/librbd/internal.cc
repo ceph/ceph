@@ -2262,9 +2262,11 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
       RWLock::RLocker owner_lock(m_dest->owner_lock);
       Context *ctx = new C_CopyWrite(m_throttle, m_bl);
       AioCompletion *comp = aio_create_completion_internal(ctx, rbd_ctx_cb);
-      AioImageRequest::aio_write(m_dest, comp, m_offset, m_bl->length(),
-                                 m_bl->c_str(),
-                                 LIBRADOS_OP_FLAG_FADVISE_DONTNEED);
+
+      // coordinate through AIO WQ to ensure lock is acquired if needed
+      m_dest->aio_work_queue->aio_write(comp, m_offset, m_bl->length(),
+                                        m_bl->c_str(),
+                                        LIBRADOS_OP_FLAG_FADVISE_DONTNEED);
     }
   private:
     SimpleThrottle *m_throttle;
@@ -2493,8 +2495,6 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
       }
     }
 
-    ictx->op_work_queue->drain();
-
     if (ictx->copyup_finisher != NULL) {
       ictx->copyup_finisher->wait_for_empty();
       ictx->copyup_finisher->stop();
@@ -2506,6 +2506,8 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
         r = close_r;
       }
     }
+
+    ictx->op_work_queue->drain();
 
     if (ictx->parent) {
       RWLock::WLocker parent_locker(ictx->parent_lock);
