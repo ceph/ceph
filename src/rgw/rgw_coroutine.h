@@ -66,37 +66,30 @@ class RGWCoroutine : public RefCountedObject, public boost::asio::coroutine {
 protected:
   CephContext *cct;
 
-  RGWCoroutinesEnv *env;
-  bool blocked;
+  RGWCoroutinesStack *stack;
+  bool io_blocked; /* wait for an actual io to complete, will need manager to wait on event */
+  bool sleep; /* was set to sleep manually will be awaken manually, e.g., in producer consumer scenario */
   int retcode;
   int state;
 
   stringstream error_stream;
 
-  list<RGWCoroutine *> spawned_ops;
-
   int set_state(int s, int ret = 0) {
     state = s;
     return ret;
   }
-  void set_blocked(bool flag) { blocked = flag; }
-  int block(int ret) {
-    set_blocked(true);
+  void set_io_blocked(bool flag) { io_blocked = flag; }
+  void set_sleeping(bool flag) { sleep = flag; }
+  int io_block(int ret) {
+    set_io_blocked(true);
     return ret;
   }
 
-  int do_operate(RGWCoroutinesEnv *_env) {
-    env = _env;
-    return operate();
-  }
-
-  void call(RGWCoroutine *op);
-  void spawn(RGWCoroutine *op, bool wait);
-
-  int complete_spawned();
+  void call(RGWCoroutine *op); /* call at the same stack we're in */
+  void spawn(RGWCoroutine *op, bool wait); /* execute on a different stack */
 
 public:
-  RGWCoroutine(CephContext *_cct) : cct(_cct), env(NULL), blocked(false), retcode(0), state(RGWCoroutine_Run) {}
+  RGWCoroutine(CephContext *_cct) : cct(_cct), stack(NULL), io_blocked(false), sleep(false), retcode(0), state(RGWCoroutine_Run) {}
   virtual ~RGWCoroutine() {}
 
   virtual int operate() = 0;
@@ -109,7 +102,8 @@ public:
     return error_stream.str();
   }
 
-  bool is_blocked() { return blocked; }
+  bool is_io_blocked() { return io_blocked; }
+  bool is_sleeping() { return sleep; }
 
   void set_retcode(int r) {
     retcode = r;
@@ -120,7 +114,43 @@ public:
   }
 };
 
-class RGWCoroutinesStack {
+template <class T>
+class RGWConsumerCR : public RGWCoroutine {
+  list<T> product;
+
+public:
+  RGWConsumerCR(CephContext *_cct) : RGWCoroutine(_cct) {}
+
+  bool has_product() {
+    return product.empty();
+  }
+
+  void wait_for_product() {
+    if (!has_product()) {
+      set_sleeping(true);
+    }
+  }
+
+  bool consume(T *p) {
+    if (product.empty()) {
+      return false;
+    }
+    *p = product.front();
+    product.pop_front();
+    return true;
+  }
+
+  void receive(const T& p, bool wakeup = true) {
+    product.push_back(p);
+    if (wakeup) {
+      set_sleeping(false);
+    }
+  }
+};
+
+class RGWCoroutinesStack : public RefCountedObject {
+  friend class RGWCoroutine;
+
   CephContext *cct;
 
   RGWCoroutinesManager *ops_mgr;
@@ -128,13 +158,20 @@ class RGWCoroutinesStack {
   list<RGWCoroutine *> ops;
   list<RGWCoroutine *>::iterator pos;
 
+  list<RGWCoroutinesStack *> spawned_stacks;
+
   set<RGWCoroutinesStack *> blocked_by_stack;
   set<RGWCoroutinesStack *> blocking_stacks;
-
 
   bool done_flag;
   bool error_flag;
   bool blocked_flag;
+  bool sleep_flag;
+
+  int retcode;
+
+protected:
+  RGWCoroutinesEnv *env;
 
 public:
   RGWCoroutinesStack(CephContext *_cct, RGWCoroutinesManager *_ops_mgr, RGWCoroutine *start = NULL);
@@ -150,16 +187,26 @@ public:
   bool is_blocked_by_stack() {
     return !blocked_by_stack.empty();
   }
-  bool is_blocked() {
+  bool is_io_blocked() {
     return blocked_flag || is_blocked_by_stack();
   }
+  bool is_sleeping() {
+    return sleep_flag;
+  }
 
-  void set_blocked(bool flag);
+  int get_ret_status() {
+    return retcode;
+  }
+
+  void set_io_blocked(bool flag);
 
   string error_str();
 
   int call(RGWCoroutine *next_op, int ret = 0);
+  void spawn(RGWCoroutine *next_op, bool wait);
   int unwind(int retcode);
+
+  int complete_spawned();
 
   RGWAioCompletionNotifier *create_completion_notifier();
   RGWCompletionManager *get_completion_mgr();
@@ -170,6 +217,8 @@ public:
   }
 
   bool unblock_stack(RGWCoroutinesStack **s);
+
+  RGWCoroutinesEnv *get_env() { return env; }
 };
 
 class RGWCoroutinesManager {
@@ -195,7 +244,9 @@ public:
   RGWCompletionManager *get_completion_mgr() { return &completion_mgr; }
 
   RGWCoroutinesStack *allocate_stack() {
-    return new RGWCoroutinesStack(cct, this);
+    RGWCoroutinesStack *stack = new RGWCoroutinesStack(cct, this);
+    stack->get();
+    return stack;
   }
 };
 

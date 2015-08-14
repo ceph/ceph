@@ -10,28 +10,39 @@
 
 
 RGWCoroutinesStack::RGWCoroutinesStack(CephContext *_cct, RGWCoroutinesManager *_ops_mgr, RGWCoroutine *start) : cct(_cct), ops_mgr(_ops_mgr),
-                                                                                                         done_flag(false), error_flag(false), blocked_flag(false) {
+                                                                                                         done_flag(false), error_flag(false), blocked_flag(false),
+                                                                                                         sleep_flag(false),
+													 retcode(0),
+													 env(NULL)
+{
   if (start) {
     ops.push_back(start);
   }
   pos = ops.begin();
 }
 
-int RGWCoroutinesStack::operate(RGWCoroutinesEnv *env)
+int RGWCoroutinesStack::operate(RGWCoroutinesEnv *_env)
 {
+  env = _env;
   RGWCoroutine *op = *pos;
-  int r = op->do_operate(env);
+  op->stack = this;
+  int r = op->operate();
   if (r < 0) {
     ldout(cct, 0) << "ERROR: op->operate() returned r=" << r << dendl;
   }
 
   error_flag = op->is_error();
-  blocked_flag = op->is_blocked();
+  blocked_flag = op->is_io_blocked();
+  sleep_flag = op->is_sleeping();
 
   if (op->is_done()) {
+    int op_retcode = op->get_ret_status();
     op->put();
     r = unwind(r);
     done_flag = (pos == ops.end());
+    if (done_flag) {
+      retcode = op_retcode;
+    }
     return r;
   }
 
@@ -59,6 +70,24 @@ int RGWCoroutinesStack::call(RGWCoroutine *next_op, int ret) {
   return ret;
 }
 
+void RGWCoroutinesStack::spawn(RGWCoroutine *op, bool wait)
+{
+  op->get();
+
+  RGWCoroutinesStack *stack = env->manager->allocate_stack();
+  spawned_stacks.push_back(stack);
+
+  stack->get(); /* we'll need to collect the stack */
+  int r = stack->call(op, 0);
+  assert(r == 0);
+
+  env->stacks->push_back(stack);
+
+  if (wait) {
+    set_blocked_by(stack);
+  }
+}
+
 int RGWCoroutinesStack::unwind(int retcode)
 {
   if (pos == ops.begin()) {
@@ -73,12 +102,27 @@ int RGWCoroutinesStack::unwind(int retcode)
   return 0;
 }
 
-void RGWCoroutinesStack::set_blocked(bool flag)
+void RGWCoroutinesStack::set_io_blocked(bool flag)
 {
   blocked_flag = flag;
   if (pos != ops.end()) {
-    (*pos)->set_blocked(flag);
+    (*pos)->set_io_blocked(flag);
   }
+}
+
+int RGWCoroutinesStack::complete_spawned()
+{
+  int ret = 0;
+  for (list<RGWCoroutinesStack *>::iterator iter = spawned_stacks.begin(); iter != spawned_stacks.end(); ++iter) {
+    int r = (*iter)->get_ret_status();
+    if (r < 0) {
+      ret = r;
+    }
+
+    (*iter)->put();
+  }
+  spawned_stacks.clear();
+  return ret;
 }
 
 static void _aio_completion_notifier_cb(librados::completion_t cb, void *arg);
@@ -122,20 +166,20 @@ void RGWCoroutinesManager::report_error(RGWCoroutinesStack *op)
   lderr(cct) << "ERROR: failed operation: " << op->error_str() << dendl;
 }
 
-void RGWCoroutinesManager::handle_unblocked_stack(list<RGWCoroutinesStack *>& stacks, RGWCoroutinesStack *stack, int *waiting_count)
+void RGWCoroutinesManager::handle_unblocked_stack(list<RGWCoroutinesStack *>& stacks, RGWCoroutinesStack *stack, int *blocked_count)
 {
-  --(*waiting_count);
-  stack->set_blocked(false);
+  --(*blocked_count);
+  stack->set_io_blocked(false);
   if (!stack->is_done()) {
     stacks.push_back(stack);
   } else {
-    delete stack;
+    stack->put();
   }
 }
 
 int RGWCoroutinesManager::run(list<RGWCoroutinesStack *>& stacks)
 {
-  int waiting_count = 0;
+  int blocked_count = 0;
   RGWCoroutinesEnv env;
 
   env.manager = this;
@@ -153,47 +197,49 @@ int RGWCoroutinesManager::run(list<RGWCoroutinesStack *>& stacks)
       report_error(stack);
     }
 
-    if (stack->is_blocked_by_stack()) {
-      /* do nothing, we'll re-add the stack when the blocking stack is done */
-    } else if (stack->is_blocked()) {
-      waiting_count++;
+    if (stack->is_blocked_by_stack() || stack->is_sleeping()) {
+      /* do nothing, we'll re-add the stack when the blocking stack is done,
+       * or when we're awaken
+       */
+    } else if (stack->is_io_blocked()) {
+      blocked_count++;
     } else if (stack->is_done()) {
       RGWCoroutinesStack *s;
       while (stack->unblock_stack(&s)) {
 	if (!s->is_blocked_by_stack() && !s->is_done()) {
-	  if (s->is_blocked()) {
-	    waiting_count++;
+	  if (s->is_io_blocked()) {
+	    blocked_count++;
 	  } else {
 	    stacks.push_back(s);
 	  }
 	}
       }
-      delete stack;
+      stack->put();
     } else {
       stacks.push_back(stack);
     }
 
     RGWCoroutinesStack *blocked_stack;
     while (completion_mgr.try_get_next((void **)&blocked_stack)) {
-      handle_unblocked_stack(stacks, blocked_stack, &waiting_count);
+      handle_unblocked_stack(stacks, blocked_stack, &blocked_count);
     }
 
-    if (waiting_count >= ops_window) {
+    if (blocked_count >= ops_window) {
       int ret = completion_mgr.get_next((void **)&blocked_stack);
       if (ret < 0) {
 	ldout(cct, 0) << "ERROR: failed to clone shard, completion_mgr.get_next() returned ret=" << ret << dendl;
       }
-      handle_unblocked_stack(stacks, blocked_stack, &waiting_count);
+      handle_unblocked_stack(stacks, blocked_stack, &blocked_count);
     }
 
     ++iter;
     stacks.pop_front();
-    while (iter == stacks.end() && waiting_count > 0) {
+    while (iter == stacks.end() && blocked_count > 0) {
       int ret = completion_mgr.get_next((void **)&blocked_stack);
       if (ret < 0) {
 	ldout(cct, 0) << "ERROR: failed to clone shard, completion_mgr.get_next() returned ret=" << ret << dendl;
       }
-      handle_unblocked_stack(stacks, blocked_stack, &waiting_count);
+      handle_unblocked_stack(stacks, blocked_stack, &blocked_count);
       iter = stacks.begin();
     }
   }
@@ -232,40 +278,13 @@ RGWAioCompletionNotifier *RGWCoroutinesManager::create_completion_notifier(RGWCo
 
 void RGWCoroutine::call(RGWCoroutine *op)
 {
-  int r = env->stack->call(op, 0);
+  int r = stack->call(op, 0);
   assert(r == 0);
 }
 
 void RGWCoroutine::spawn(RGWCoroutine *op, bool wait)
 {
-  op->get();
-  spawned_ops.push_back(op);
-
-  RGWCoroutinesStack *stack = env->manager->allocate_stack();
-
-  int r = stack->call(op, 0);
-  assert(r == 0);
-
-  env->stacks->push_back(stack);
-
-  if (wait) {
-    env->stack->set_blocked_by(stack);
-  }
-}
-
-int RGWCoroutine::complete_spawned()
-{
-  int ret = 0;
-  for (list<RGWCoroutine *>::iterator iter = spawned_ops.begin(); iter != spawned_ops.end(); ++iter) {
-    int r = (*iter)->get_ret_status();
-    if (r < 0) {
-      ret = r;
-    }
-
-    (*iter)->put();
-  }
-  spawned_ops.clear();
-  return ret;
+  stack->spawn(op, wait);
 }
 
 int RGWSimpleCoroutine::operate()
@@ -295,7 +314,7 @@ int RGWSimpleCoroutine::state_send_request()
   if (ret < 0) {
     return set_state(RGWCoroutine_Error, ret);
   }
-  return block(0);
+  return io_block(0);
 }
 
 int RGWSimpleCoroutine::state_request_complete()
