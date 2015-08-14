@@ -115,7 +115,7 @@ void complain_about_parse_errors(CephContext *cct,
  * same application. */
 void common_init_finish(CephContext *cct, int flags)
 {
-  ceph::crypto::init(cct);
+  cct->init_crypto();
 
   if (!(flags & CINIT_FLAG_NO_DAEMON_ACTIONS))
     cct->start_service_thread();
