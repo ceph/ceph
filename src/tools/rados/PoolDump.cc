@@ -161,8 +161,9 @@ int PoolDump::dump(IoCtx *io_ctx)
   }
 
   r = write_simple(TYPE_POOL_END, file_fd);
+#if defined(__linux__)
   if (file_fd != STDOUT_FILENO)
     posix_fadvise(file_fd, 0, 0, POSIX_FADV_DONTNEED);
-
+#endif
   return r;
 }
