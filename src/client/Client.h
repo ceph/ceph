@@ -259,10 +259,12 @@ class Client : public Dispatcher, public md_config_obs_t {
 public:
   void tick();
 
- protected:
+protected:
   MonClient *monclient;
   Messenger *messenger;  
   client_t whoami;
+
+  int user_id, group_id;
 
   void set_cap_epoch_barrier(epoch_t e);
   epoch_t cap_epoch_barrier;
