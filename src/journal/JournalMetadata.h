@@ -148,25 +148,48 @@ private:
   };
 
   struct C_WatchReset : public Context {
-    JournalMetadataPtr journal_metadata;
+    JournalMetadata *journal_metadata;
 
     C_WatchReset(JournalMetadata *_journal_metadata)
-      : journal_metadata(_journal_metadata) {}
-
+      : journal_metadata(_journal_metadata) {
+      journal_metadata->m_async_op_tracker.start_op();
+    }
+    virtual ~C_WatchReset() {
+      journal_metadata->m_async_op_tracker.finish_op();
+    }
     virtual void finish(int r) {
       journal_metadata->handle_watch_reset();
     }
   };
 
   struct C_CommitPositionTask : public Context {
-    JournalMetadataPtr journal_metadata;
+    JournalMetadata *journal_metadata;
 
     C_CommitPositionTask(JournalMetadata *_journal_metadata)
-      : journal_metadata(_journal_metadata) {}
-
+      : journal_metadata(_journal_metadata) {
+      journal_metadata->m_async_op_tracker.start_op();
+    }
+    virtual ~C_CommitPositionTask() {
+      journal_metadata->m_async_op_tracker.finish_op();
+    }
     virtual void finish(int r) {
       journal_metadata->handle_commit_position_task();
     };
+  };
+
+  struct C_AioNotify : public Context {
+    JournalMetadata* journal_metadata;
+
+    C_AioNotify(JournalMetadata *_journal_metadata)
+      : journal_metadata(_journal_metadata) {
+      journal_metadata->m_async_op_tracker.start_op();
+    }
+    virtual ~C_AioNotify() {
+      journal_metadata->m_async_op_tracker.finish_op();
+    }
+    virtual void finish(int r) {
+      journal_metadata->handle_notified(r);
+    }
   };
 
   struct C_NotifyUpdate : public Context {
@@ -280,6 +303,7 @@ private:
   void handle_watch_reset();
   void handle_watch_notify(uint64_t notify_id, uint64_t cookie);
   void handle_watch_error(int err);
+  void handle_notified(int r);
 };
 
 } // namespace journal
