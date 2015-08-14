@@ -787,7 +787,7 @@ static int do_purge_snaps(librbd::Image& image)
         return r;
       } else if (is_protected == true) {
         pc.fail();
-        cerr << "\r" <<snaps[i].name.c_str()<< " is a protected snap."<< std::endl;
+        cerr << "\r" << "rbd: snapshot '" <<snaps[i].name.c_str()<< "' is protected from removal." << std::endl;
         return -EBUSY;
       }
     }
@@ -3847,7 +3847,9 @@ if (!set_conf_param(v, p1, p2, p3)) { \
   case OPT_SNAP_PURGE:
     r = do_purge_snaps(image);
     if (r < 0) {
-      cerr << "rbd: removing snaps failed: " << cpp_strerror(-r) << std::endl;
+      if (r != -EBUSY) {
+        cerr << "rbd: removing snaps failed: " << cpp_strerror(-r) << std::endl;
+      }
       return -r;
     }
     break;
