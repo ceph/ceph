@@ -91,7 +91,7 @@ protected:
   }
 
   void call(RGWCoroutine *op);
-  void spawn(RGWCoroutine *op);
+  void spawn(RGWCoroutine *op, bool wait);
 
   int complete_spawned();
 
