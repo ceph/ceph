@@ -2846,8 +2846,6 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
       }
     }
 
-    ictx->op_work_queue->drain();
-
     if (ictx->copyup_finisher != NULL) {
       ictx->copyup_finisher->wait_for_empty();
       ictx->copyup_finisher->stop();
@@ -2859,6 +2857,8 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
         r = close_r;
       }
     }
+
+    ictx->op_work_queue->drain();
 
     if (ictx->parent) {
       RWLock::WLocker parent_locker(ictx->parent_lock);
