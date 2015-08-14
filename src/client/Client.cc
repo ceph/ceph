@@ -5618,6 +5618,12 @@ int Client::_setattr(Inode *in, struct stat *attr, int mask, int uid, int gid,
     return -EDQUOT;
   }
   // make the change locally?
+  if ((uid >= 0 && user_id >= 0 && uid != user_id) ||
+      (gid >= 0 && group_id >= 0 && gid != group_id)) {
+    if (!mask)
+      mask |= CEPH_SETATTR_CTIME;
+    goto force_request;
+  }
 
   if (!mask) {
     // caller just needs us to bump the ctime
@@ -5670,6 +5676,7 @@ int Client::_setattr(Inode *in, struct stat *attr, int mask, int uid, int gid,
   if (!mask)
     return 0;
 
+force_request:
   MetaRequest *req = new MetaRequest(CEPH_MDS_OP_SETATTR);
 
   filepath path;
