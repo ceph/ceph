@@ -95,6 +95,7 @@ using namespace std;
 #if HAVE_GETGROUPLIST
 #include <grp.h>
 #include <pwd.h>
+#include <unistd.h>
 #endif
 
 #undef dout_prefix
@@ -4582,7 +4583,11 @@ int Client::check_permissions(Inode *in, int flags, int uid, int gid)
       return -EACCES;
     }
     while (1) {
+#if defined(__APPLE__)
+      if (getgrouplist(pw->pw_name, gid, (int *)sgids, &sgid_count) == -1) {
+#else
       if (getgrouplist(pw->pw_name, gid, sgids, &sgid_count) == -1) {
+#endif
         // we need to resize the group list and try again
         sgids = (gid_t*)realloc(sgids, sgid_count * sizeof(gid_t));
         if (sgids == NULL) {
