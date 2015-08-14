@@ -2042,8 +2042,7 @@ reprotect_and_return_err:
       lderr(ictx->cct) << "parent snapshot does not exist" << dendl;
       ictx->parent->snap_lock.put_write();
       ictx->parent->cache_lock.Unlock();
-      close_image(ictx->parent);
-      ictx->parent = NULL;
+      close_parent(ictx);
       return r;
     }
     ictx->parent->snap_set(ictx->parent->snap_name);
@@ -2056,8 +2055,7 @@ reprotect_and_return_err:
       ictx->parent->parent_lock.put_write();
       ictx->parent->snap_lock.put_write();
       ictx->parent->cache_lock.Unlock();
-      close_image(ictx->parent);
-      ictx->parent = NULL;
+      close_parent(ictx);
       return r;
     }
     ictx->parent->parent_lock.put_write();
@@ -2574,8 +2572,7 @@ reprotect_and_return_err:
 	  ictx->parent->id != ictx->get_parent_image_id(ictx->snap_id) ||
 	  ictx->parent->snap_id != ictx->get_parent_snap_id(ictx->snap_id)) {
 	ictx->clear_nonexistence_cache();
-	close_image(ictx->parent);
-	ictx->parent = NULL;
+	close_parent(ictx);
       }
     }
 
@@ -3169,8 +3166,10 @@ reprotect_and_return_err:
   {
     ldout(ictx->cct, 20) << "close_image " << ictx << dendl;
 
-    // finish all incoming IO operations
-    ictx->aio_work_queue->drain();
+    if (!ictx->read_only) {
+      // finish all incoming IO operations
+      ictx->aio_work_queue->drain();
+    }
 
     int r = 0;
     {
@@ -3222,11 +3221,11 @@ reprotect_and_return_err:
     }
 
     if (ictx->parent) {
-      int close_r = close_image(ictx->parent);
+      RWLock::WLocker parent_locker(ictx->parent_lock);
+      int close_r = close_parent(ictx);
       if (r == 0 && close_r < 0) {
         r = close_r;
       }
-      ictx->parent = NULL;
     }
 
     if (ictx->image_watcher) {
@@ -3234,6 +3233,28 @@ reprotect_and_return_err:
     }
 
     delete ictx;
+    return r;
+  }
+
+  int close_parent(ImageCtx *ictx)
+  {
+    assert(ictx->parent_lock.is_wlocked());
+    ImageCtx *parent_ictx = ictx->parent;
+
+    // AIO to the parent must be complete before closing
+    parent_ictx->flush_async_operations();
+    parent_ictx->readahead.wait_for_pending();
+    {
+      Mutex::Locker async_ops_locker(parent_ictx->async_ops_lock);
+      assert(parent_ictx->async_ops.empty());
+    }
+
+    // attempting to drain the work queues might result in deadlock
+    assert(parent_ictx->aio_work_queue->empty());
+    assert(parent_ictx->op_work_queue->empty());
+
+    int r = close_image(parent_ictx);
+    ictx->parent = NULL;
     return r;
   }
 
