@@ -32,6 +32,7 @@ public:
   void aio_flush(AioCompletion *c);
 
   using ThreadPool::PointerWQ<AioImageRequest>::drain;
+  using ThreadPool::PointerWQ<AioImageRequest>::empty;
 
   inline bool writes_empty() const {
     Mutex::Locker locker(m_lock);
