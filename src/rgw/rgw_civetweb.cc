@@ -47,7 +47,7 @@ int RGWMongoose::complete_request()
     if (!has_content_length) {
       header_done = false; /* let's go back to writing the header */
 
-      if (0 && data.length() == 0) {
+      if (data.length() == 0) {
         has_content_length = true;
         print("Transfer-Enconding: %s\r\n", "chunked");
         data.append("0\r\n\r\n", sizeof("0\r\n\r\n")-1);
