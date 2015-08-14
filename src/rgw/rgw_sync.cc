@@ -500,7 +500,7 @@ template <class T>
 int RGWSimpleRadosReadCR<T>::send_request()
 {
   rgw_obj obj = rgw_obj(pool, oid);
-  req = new RGWAsyncGetSystemObj(env->stack->create_completion_notifier(),
+  req = new RGWAsyncGetSystemObj(stack->create_completion_notifier(),
 			         store, &obj_ctx, NULL,
 				 obj,
 				 &bl, 0, -1);
@@ -558,7 +558,7 @@ public:
 
   int send_request() {
     rgw_obj obj = rgw_obj(pool, oid);
-    req = new RGWAsyncPutSystemObj(env->stack->create_completion_notifier(),
+    req = new RGWAsyncPutSystemObj(stack->create_completion_notifier(),
 			           store, NULL, obj, false, bl);
     async_rados->queue(req);
     return 0;
@@ -596,7 +596,7 @@ public:
 
   int send_request() {
     rgw_obj obj = rgw_obj(pool, oid);
-    req = new RGWAsyncWriteOmapKeys(env->stack->create_completion_notifier(), store, obj, entries);
+    req = new RGWAsyncWriteOmapKeys(stack->create_completion_notifier(), store, obj, entries);
     async_rados->queue(req);
     return 0;
   }
@@ -638,7 +638,7 @@ public:
 
   int send_request() {
     rgw_obj obj = rgw_obj(pool, oid);
-    req = new RGWAsyncLockSystemObj(env->stack->create_completion_notifier(),
+    req = new RGWAsyncLockSystemObj(stack->create_completion_notifier(),
 			           store, NULL, obj, lock_name, cookie, duration);
     async_rados->queue(req);
     return 0;
@@ -678,7 +678,7 @@ public:
 
   int send_request() {
     rgw_obj obj = rgw_obj(pool, oid);
-    req = new RGWAsyncUnlockSystemObj(env->stack->create_completion_notifier(),
+    req = new RGWAsyncUnlockSystemObj(stack->create_completion_notifier(),
 			           store, NULL, obj, lock_name, cookie);
     async_rados->queue(req);
     return 0;
@@ -708,7 +708,7 @@ public:
   int send_request() {
     http_op = new RGWRESTReadResource(conn, path, params, NULL, http_manager);
 
-    http_op->set_user_info((void *)env->stack);
+    http_op->set_user_info((void *)stack);
 
     int ret = http_op->aio_read();
     if (ret < 0) {
@@ -783,7 +783,7 @@ public:
 			             lock_name, cookie));
       }
       yield {
-	int ret = complete_spawned();
+	int ret = stack->complete_spawned();
 	if (ret < 0) {
 	  return set_state(RGWCoroutine_Error);
 	}
@@ -832,10 +832,10 @@ int RGWReadSyncStatusCoroutine::handle_data(rgw_meta_sync_info& data)
 
 int RGWReadSyncStatusCoroutine::finish()
 {
-  return complete_spawned();
+  return stack->complete_spawned();
 }
 
-class RGWOmapAppend : public RGWCoroutine {
+class RGWOmapAppend : public RGWConsumerCR<string> {
   RGWAsyncRadosProcessor *async_rados;
   RGWRados *store;
   RGWCoroutinesEnv *env;
@@ -847,38 +847,27 @@ class RGWOmapAppend : public RGWCoroutine {
 public:
 
   RGWOmapAppend(RGWAsyncRadosProcessor *_async_rados, RGWRados *_store, RGWCoroutinesEnv *_env, rgw_bucket& _pool, const string& _oid)
-                      : RGWCoroutine(_store->ctx()), async_rados(_async_rados),
+                      : RGWConsumerCR<string>(_store->ctx()), async_rados(_async_rados),
 		        store(_store), env(_env), pool(_pool), oid(_oid) {}
-  int append(const string& entry) {
-    entries[entry] = bufferlist();
-#define OMAP_APPEND_MAX_ENTRIES 10
-ldout(store->ctx(), 0) << __FILE__ << ":" << __LINE__ << dendl;
-    if (entries.size() >= OMAP_APPEND_MAX_ENTRIES) {
-ldout(store->ctx(), 0) << __FILE__ << ":" << __LINE__ << dendl;
-      int r = flush();
-      if (r < 0) {
-	ldout(cct, 0) << "ERROR: " << __func__ << "(): failed to flush entries" << dendl;
-	return r;
-      }
-      entries.clear();
-    }
-    return 0;
-  }
 
-  int flush() {
-ldout(store->ctx(), 0) << __FILE__ << ":" << __LINE__ << dendl;
-    return env->stack->call(this);
-  }
-
+#define OMAP_APPEND_MAX_ENTRIES 100
   int operate() {
-ldout(store->ctx(), 0) << __FILE__ << ":" << __LINE__ << dendl;
     reenter(this) {
-      yield {
-ldout(store->ctx(), 0) << __FILE__ << ":" << __LINE__ << dendl;
-	call(new RGWRadosSetOmapKeysCR(async_rados, store, pool, oid, entries));
-      }
-      if (get_ret_status() < 0) {
-	return set_state(RGWCoroutine_Error);
+      for (;;) {
+        yield wait_for_product();
+        yield {
+	  string entry;
+	  while (consume(&entry)) {
+	    entries[entry] = bufferlist();
+	    if (entries.size() >= OMAP_APPEND_MAX_ENTRIES) {
+	      break;
+	    }
+	  }
+	  call(new RGWRadosSetOmapKeysCR(async_rados, store, pool, oid, entries));
+	}
+        if (get_ret_status() < 0) {
+	  return set_state(RGWCoroutine_Error);
+        }
       }
       return set_state(RGWCoroutine_Done);
     }
@@ -904,11 +893,12 @@ public:
       snprintf(buf, sizeof(buf), "%s.%d", oid_prefix.c_str(), i);
       RGWOmapAppend *shard = new RGWOmapAppend(async_rados, store, env, pool, buf);
       shards.push_back(shard);
+      env->stack->spawn(shard, false);
     }
   }
-  int append(const string& entry) {
+  void append(const string& entry) {
     static int counter = 0;
-    return (shards[++counter % shards.size()]->append(entry));
+    shards[++counter % shards.size()]->receive(entry);
   }
 };
 
@@ -940,8 +930,7 @@ public:
     RGWRESTConn *conn = store->rest_master_conn;
 
     reenter(this) {
-ldout(store->ctx(), 0) << __FILE__ << ":" << __LINE__ << dendl;
-      entries_index = new RGWShardedOmapCRManager(async_rados, store, env, num_shards,
+      entries_index = new RGWShardedOmapCRManager(async_rados, store, stack->get_env(), num_shards,
 						  store->get_zone_params().log_pool, "meta.full-sync.index");
       yield {
 	call(new RGWReadRESTResourceCR<list<string> >(store->ctx(), conn, http_manager,
@@ -955,7 +944,7 @@ ldout(store->ctx(), 0) << __FILE__ << ":" << __LINE__ << dendl;
       for (; sections_iter != sections.end(); ++sections_iter) {
         yield {
 	  string entrypoint = string("/admin/metadata/") + *sections_iter;
-#warning need a better scaling solution here
+#warning need a better scaling solution here, requires streaming output
 	  call(new RGWReadRESTResourceCR<list<string> >(store->ctx(), conn, http_manager,
 				       entrypoint, NULL, &result));
 	}
@@ -967,11 +956,8 @@ ldout(store->ctx(), 0) << __FILE__ << ":" << __LINE__ << dendl;
 	  for (list<string>::iterator iter = result.begin(); iter != result.end(); ++iter) {
 	    ldout(store->ctx(), 20) << "list metadata: section=" << *sections_iter << " key=" << *iter << dendl;
 	    string s = *sections_iter + ":" + *iter;
-	    int r = entries_index->append(s);
-	    if (r < 0) {
-	      ldout(store->ctx(), 0) << "ERROR: " << __func__ << "(): failed to append entry into index" << dendl;
-	      return set_state(RGWCoroutine_Error);
-	    }
+	    entries_index->append(s);
+#warning error handling of shards
 	  }
 	}
       }
@@ -1119,13 +1105,13 @@ int RGWCloneMetaLogCoroutine::state_init()
 
 int RGWCloneMetaLogCoroutine::state_read_shard_status()
 {
-  int ret = mdlog->get_info_async(shard_id, &shard_info, env->stack->get_completion_mgr(), (void *)env->stack, &req_ret);
+  int ret = mdlog->get_info_async(shard_id, &shard_info, stack->get_completion_mgr(), (void *)stack, &req_ret);
   if (ret < 0) {
     ldout(store->ctx(), 0) << "ERROR: mdlog->get_info_async() returned ret=" << ret << dendl;
     return set_state(RGWCoroutine_Error, ret);
   }
 
-  return block(0);
+  return io_block(0);
 }
 
 int RGWCloneMetaLogCoroutine::state_read_shard_status_complete()
@@ -1157,7 +1143,7 @@ int RGWCloneMetaLogCoroutine::state_send_rest_request()
 
   http_op = new RGWRESTReadResource(conn, "/admin/log", pairs, NULL, http_manager);
 
-  http_op->set_user_info((void *)env->stack);
+  http_op->set_user_info((void *)stack);
 
   int ret = http_op->aio_read();
   if (ret < 0) {
@@ -1167,7 +1153,7 @@ int RGWCloneMetaLogCoroutine::state_send_rest_request()
     return ret;
   }
 
-  return block(0);
+  return io_block(0);
 }
 
 int RGWCloneMetaLogCoroutine::state_receive_rest_response()
@@ -1215,7 +1201,7 @@ int RGWCloneMetaLogCoroutine::state_store_mdlog_entries()
     marker = entry.id;
   }
 
-  RGWAioCompletionNotifier *cn = env->stack->create_completion_notifier();
+  RGWAioCompletionNotifier *cn = stack->create_completion_notifier();
 
   int ret = store->meta_mgr->store_md_log_entries(dest_entries, shard_id, cn->completion());
   if (ret < 0) {
@@ -1223,7 +1209,7 @@ int RGWCloneMetaLogCoroutine::state_store_mdlog_entries()
     ldout(store->ctx(), 10) << "failed to store md log entries shard_id=" << shard_id << " ret=" << ret << dendl;
     return set_state(RGWCoroutine_Error, ret);
   }
-  return block(0);
+  return io_block(0);
 }
 
 int RGWCloneMetaLogCoroutine::state_store_mdlog_entries_complete()
