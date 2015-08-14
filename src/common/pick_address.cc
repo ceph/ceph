@@ -79,15 +79,15 @@ static void fill_in_one_address(CephContext *cct,
     if (i > 0) {
       lderr(cct) << "unable to find any IP address in networks. Trying again in " << cct->_conf->ms_pick_addr_delay << " seconds " << dendl;
       sleep(cct->_conf->ms_pick_addr_delay);
-	  // To get the local IP information again
-	  int r = getifaddrs(&ifa_again);
-	  r_for = r;
-	  if (r < 0) {
+      // To get the local IP information again
+      int r = getifaddrs(&ifa_again);
+      r_for = r;
+      if (r < 0) {
         string err = cpp_strerror(errno);
         lderr(cct) << "unable to fetch interfaces and addresses: " << err << dendl;
         continue;
       }
-	  ifa = ifa_again;
+      ifa = ifa_again;
     }
     const struct sockaddr *found = find_ip_in_subnet_list(cct, ifa, networks);
     found_for = found;
