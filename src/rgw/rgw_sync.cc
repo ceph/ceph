@@ -782,13 +782,14 @@ public:
 	call(new RGWSimpleRadosUnlockCR(async_rados, store, store->get_zone_params().log_pool, mdlog_sync_status_oid,
 			             lock_name, cookie));
       }
-      yield {
-	int ret = stack->complete_spawned();
+      int ret;
+      while (stack->collect(&ret)) {
 	if (ret < 0) {
 	  return set_state(RGWCoroutine_Error);
 	}
-	return set_state(RGWCoroutine_Done);
+        yield;
       }
+      return set_state(RGWCoroutine_Done);
     }
     return 0;
   }
@@ -813,7 +814,6 @@ public:
 									    sync_status(_status) {}
 
   int handle_data(rgw_meta_sync_info& data);
-  int finish();
 };
 
 int RGWReadSyncStatusCoroutine::handle_data(rgw_meta_sync_info& data)
@@ -830,11 +830,6 @@ int RGWReadSyncStatusCoroutine::handle_data(rgw_meta_sync_info& data)
   return 0;
 }
 
-int RGWReadSyncStatusCoroutine::finish()
-{
-  return stack->complete_spawned();
-}
-
 class RGWOmapAppend : public RGWConsumerCR<string> {
   RGWAsyncRadosProcessor *async_rados;
   RGWRados *store;
@@ -843,17 +838,25 @@ class RGWOmapAppend : public RGWConsumerCR<string> {
   rgw_bucket pool;
   string oid;
 
+  bool going_down;
+
+  int num_pending_entries;
+  list<string> pending_entries;
+
   map<string, bufferlist> entries;
 public:
 
   RGWOmapAppend(RGWAsyncRadosProcessor *_async_rados, RGWRados *_store, RGWCoroutinesEnv *_env, rgw_bucket& _pool, const string& _oid)
                       : RGWConsumerCR<string>(_store->ctx()), async_rados(_async_rados),
-		        store(_store), env(_env), pool(_pool), oid(_oid) {}
+		        store(_store), env(_env), pool(_pool), oid(_oid), going_down(false), num_pending_entries(0) {}
 
 #define OMAP_APPEND_MAX_ENTRIES 100
   int operate() {
     reenter(this) {
       for (;;) {
+	if (!has_product() && going_down) {
+	  break;
+	}
         yield wait_for_product();
         yield {
 	  string entry;
@@ -863,15 +866,37 @@ public:
 	      break;
 	    }
 	  }
-	  call(new RGWRadosSetOmapKeysCR(async_rados, store, pool, oid, entries));
+	  if (entries.size() >= OMAP_APPEND_MAX_ENTRIES || going_down) {
+	    call(new RGWRadosSetOmapKeysCR(async_rados, store, pool, oid, entries));
+	    entries.clear();
+	  }
 	}
         if (get_ret_status() < 0) {
 	  return set_state(RGWCoroutine_Error);
         }
       }
+      /* done with coroutine */
       return set_state(RGWCoroutine_Done);
     }
     return 0;
+  }
+
+  void flush_pending() {
+    receive(pending_entries);
+    num_pending_entries = 0;
+  }
+
+  void append(const string& s) {
+    pending_entries.push_back(s);
+    if (++num_pending_entries >= OMAP_APPEND_MAX_ENTRIES) {
+      flush_pending();
+    }
+  }
+
+  void finish() {
+    going_down = true;
+    flush_pending();
+    set_sleeping(false);
   }
 };
 
@@ -898,7 +923,12 @@ public:
   }
   void append(const string& entry) {
     static int counter = 0;
-    shards[++counter % shards.size()]->receive(entry);
+    shards[++counter % shards.size()]->append(entry);
+  }
+  void finish() {
+    for (vector<RGWOmapAppend *>::iterator iter = shards.begin(); iter != shards.end(); ++iter) {
+      (*iter)->finish();
+    }
   }
 };
 
@@ -960,6 +990,14 @@ public:
 #warning error handling of shards
 	  }
 	}
+      }
+      yield entries_index->finish();
+      int ret;
+      while (stack->collect(&ret)) {
+	if (ret < 0) {
+	  return set_state(RGWCoroutine_Error);
+	}
+        yield;
       }
       yield return set_state(RGWCoroutine_Done);
     }
