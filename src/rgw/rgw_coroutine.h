@@ -67,8 +67,6 @@ protected:
   CephContext *cct;
 
   RGWCoroutinesStack *stack;
-  bool io_blocked; /* wait for an actual io to complete, will need manager to wait on event */
-  bool sleep; /* was set to sleep manually will be awaken manually, e.g., in producer consumer scenario */
   int retcode;
   int state;
 
@@ -78,18 +76,15 @@ protected:
     state = s;
     return ret;
   }
-  void set_io_blocked(bool flag) { io_blocked = flag; }
-  void set_sleeping(bool flag) { sleep = flag; }
-  int io_block(int ret) {
-    set_io_blocked(true);
-    return ret;
-  }
+  void set_io_blocked(bool flag);
+  void set_sleeping(bool flag);
+  int io_block(int ret);
 
   void call(RGWCoroutine *op); /* call at the same stack we're in */
   void spawn(RGWCoroutine *op, bool wait); /* execute on a different stack */
 
 public:
-  RGWCoroutine(CephContext *_cct) : cct(_cct), stack(NULL), io_blocked(false), sleep(false), retcode(0), state(RGWCoroutine_Run) {}
+  RGWCoroutine(CephContext *_cct) : cct(_cct), stack(NULL), retcode(0), state(RGWCoroutine_Run) {}
   virtual ~RGWCoroutine() {}
 
   virtual int operate() = 0;
@@ -101,9 +96,6 @@ public:
   string error_str() {
     return error_stream.str();
   }
-
-  bool is_io_blocked() { return io_blocked; }
-  bool is_sleeping() { return sleep; }
 
   void set_retcode(int r) {
     retcode = r;
@@ -122,7 +114,7 @@ public:
   RGWConsumerCR(CephContext *_cct) : RGWCoroutine(_cct) {}
 
   bool has_product() {
-    return product.empty();
+    return !product.empty();
   }
 
   void wait_for_product() {
@@ -140,12 +132,8 @@ public:
     return true;
   }
 
-  void receive(const T& p, bool wakeup = true) {
-    product.push_back(p);
-    if (wakeup) {
-      set_sleeping(false);
-    }
-  }
+  void receive(const T& p, bool wakeup = true);
+  void receive(list<T>& l, bool wakeup = true);
 };
 
 class RGWCoroutinesStack : public RefCountedObject {
@@ -168,6 +156,8 @@ class RGWCoroutinesStack : public RefCountedObject {
   bool blocked_flag;
   bool sleep_flag;
 
+  bool is_scheduled;
+
   int retcode;
 
 protected:
@@ -187,18 +177,39 @@ public:
   bool is_blocked_by_stack() {
     return !blocked_by_stack.empty();
   }
+  void set_io_blocked(bool flag) {
+    blocked_flag = flag;
+  }
   bool is_io_blocked() {
     return blocked_flag || is_blocked_by_stack();
   }
+  void set_sleeping(bool flag) {
+    bool wakeup = sleep_flag & !flag;
+    sleep_flag = flag;
+    if (wakeup) {
+      schedule();
+    }
+  }
   bool is_sleeping() {
     return sleep_flag;
+  }
+  void set_is_scheduled(bool flag) {
+    is_scheduled = flag;
+  }
+
+  void schedule(list<RGWCoroutinesStack *> *stacks = NULL) {
+    if (!stacks) {
+      stacks = env->stacks;
+    }
+    if (!is_scheduled) {
+      stacks->push_back(this);
+      is_scheduled = true;
+    }
   }
 
   int get_ret_status() {
     return retcode;
   }
-
-  void set_io_blocked(bool flag);
 
   string error_str();
 
@@ -206,7 +217,7 @@ public:
   void spawn(RGWCoroutine *next_op, bool wait);
   int unwind(int retcode);
 
-  int complete_spawned();
+  bool collect(int *ret); /* returns true if needs to be called again */
 
   RGWAioCompletionNotifier *create_completion_notifier();
   RGWCompletionManager *get_completion_mgr();
@@ -220,6 +231,25 @@ public:
 
   RGWCoroutinesEnv *get_env() { return env; }
 };
+
+template <class T>
+void RGWConsumerCR<T>::receive(list<T>& l, bool wakeup)
+{
+  product.splice(product.end(), l);
+  if (wakeup) {
+    set_sleeping(false);
+  }
+}
+
+
+template <class T>
+void RGWConsumerCR<T>::receive(const T& p, bool wakeup)
+{
+  product.push_back(p);
+  if (wakeup) {
+    set_sleeping(false);
+  }
+}
 
 class RGWCoroutinesManager {
   CephContext *cct;
