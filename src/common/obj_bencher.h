@@ -18,12 +18,13 @@
 #include "common/config.h"
 #include "common/Cond.h"
 #include "common/ceph_context.h"
+#include <cfloat>
 
 struct bench_interval_data {
-  double min_bandwidth;
-  double max_bandwidth;
-  int min_iops;
-  int max_iops;
+  double min_bandwidth = DBL_MAX;
+  double max_bandwidth = 0;
+  int min_iops = INT_MAX;
+  int max_iops = 0;
 };
 
 struct bench_history {
