@@ -9,9 +9,22 @@
 
 
 
+void RGWCoroutine::set_io_blocked(bool flag) {
+  stack->set_io_blocked(flag);
+}
+
+void RGWCoroutine::set_sleeping(bool flag) {
+  stack->set_sleeping(flag);
+}
+
+int RGWCoroutine::io_block(int ret) {
+  set_io_blocked(true);
+  return ret;
+}
+
 RGWCoroutinesStack::RGWCoroutinesStack(CephContext *_cct, RGWCoroutinesManager *_ops_mgr, RGWCoroutine *start) : cct(_cct), ops_mgr(_ops_mgr),
                                                                                                          done_flag(false), error_flag(false), blocked_flag(false),
-                                                                                                         sleep_flag(false),
+                                                                                                         sleep_flag(false), is_scheduled(false),
 													 retcode(0),
 													 env(NULL)
 {
@@ -32,8 +45,6 @@ int RGWCoroutinesStack::operate(RGWCoroutinesEnv *_env)
   }
 
   error_flag = op->is_error();
-  blocked_flag = op->is_io_blocked();
-  sleep_flag = op->is_sleeping();
 
   if (op->is_done()) {
     int op_retcode = op->get_ret_status();
@@ -102,27 +113,26 @@ int RGWCoroutinesStack::unwind(int retcode)
   return 0;
 }
 
-void RGWCoroutinesStack::set_io_blocked(bool flag)
+bool RGWCoroutinesStack::collect(int *ret) /* returns true if needs to be called again */
 {
-  blocked_flag = flag;
-  if (pos != ops.end()) {
-    (*pos)->set_io_blocked(flag);
-  }
-}
+  *ret = 0;
+  list<RGWCoroutinesStack *> new_list;
 
-int RGWCoroutinesStack::complete_spawned()
-{
-  int ret = 0;
   for (list<RGWCoroutinesStack *>::iterator iter = spawned_stacks.begin(); iter != spawned_stacks.end(); ++iter) {
-    int r = (*iter)->get_ret_status();
+    RGWCoroutinesStack *stack = *iter;
+    if (!stack->is_done()) {
+      new_list.push_back(stack);
+      continue;
+    }
+    int r = stack->get_ret_status();
     if (r < 0) {
-      ret = r;
+      *ret = r;
     }
 
-    (*iter)->put();
+    stack->put();
   }
-  spawned_stacks.clear();
-  return ret;
+  spawned_stacks.swap(new_list);
+  return (!new_list.empty());
 }
 
 static void _aio_completion_notifier_cb(librados::completion_t cb, void *arg);
@@ -188,7 +198,9 @@ int RGWCoroutinesManager::run(list<RGWCoroutinesStack *>& stacks)
   for (list<RGWCoroutinesStack *>::iterator iter = stacks.begin(); iter != stacks.end();) {
     RGWCoroutinesStack *stack = *iter;
     env.stack = stack;
+
     int ret = stack->operate(&env);
+    stack->set_is_scheduled(false);
     if (ret < 0) {
       ldout(cct, 0) << "ERROR: stack->operate() returned ret=" << ret << dendl;
     }
@@ -201,22 +213,26 @@ int RGWCoroutinesManager::run(list<RGWCoroutinesStack *>& stacks)
       /* do nothing, we'll re-add the stack when the blocking stack is done,
        * or when we're awaken
        */
+      ldout(cct, 20) << __func__ << ":" << " stack=" << (void *)stack << " is_blocked_by_stack()=" << stack->is_blocked_by_stack()
+	             << " is_sleeping=" << stack->is_sleeping() << dendl;
     } else if (stack->is_io_blocked()) {
+      ldout(cct, 20) << __func__ << ":" << " stack=" << (void *)stack << " is io blocked" << dendl;
       blocked_count++;
     } else if (stack->is_done()) {
+      ldout(cct, 20) << __func__ << ":" << " stack=" << (void *)stack << " is done" << dendl;
       RGWCoroutinesStack *s;
       while (stack->unblock_stack(&s)) {
 	if (!s->is_blocked_by_stack() && !s->is_done()) {
 	  if (s->is_io_blocked()) {
 	    blocked_count++;
 	  } else {
-	    stacks.push_back(s);
+	    s->schedule();
 	  }
 	}
       }
       stack->put();
     } else {
-      stacks.push_back(stack);
+      stack->schedule();
     }
 
     RGWCoroutinesStack *blocked_stack;
@@ -258,7 +274,7 @@ int RGWCoroutinesManager::run(RGWCoroutine *op)
     return r;
   }
 
-  stacks.push_back(stack);
+  stack->schedule(&stacks);
 
   r = run(stacks);
   if (r < 0) {
@@ -289,14 +305,18 @@ void RGWCoroutine::spawn(RGWCoroutine *op, bool wait)
 
 int RGWSimpleCoroutine::operate()
 {
+  int ret = 0;
   reenter(this) {
     yield return state_init();
     yield return state_send_request();
     yield return state_request_complete();
     yield return state_all_complete();
+    while (stack->collect(&ret)) {
+      yield;
+    }
   }
 
-  return set_state(RGWCoroutine_Done);
+  return set_state(RGWCoroutine_Done, ret);
 }
 
 int RGWSimpleCoroutine::state_init()
