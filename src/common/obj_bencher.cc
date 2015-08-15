@@ -107,9 +107,9 @@ void *ObjBencher::status_printer(void *_bencher) {
         / (1024*1024)
         / cycleSinceChange;
     else
-      bandwidth = 0;
+      bandwidth = -1;
 
-    if (!std::isnan(bandwidth) && bandwidth > 0) {
+    if (!std::isnan(bandwidth) && bandwidth > -1) {
       if (bandwidth > data.idata.max_bandwidth)
         data.idata.max_bandwidth = bandwidth;
       if (bandwidth < data.idata.min_bandwidth)
@@ -122,9 +122,9 @@ void *ObjBencher::status_printer(void *_bencher) {
       iops = (double)(data.finished - previous_writes)
         / cycleSinceChange;
     else
-      iops = 0;
+      iops = -1;
 
-    if (!std::isnan(iops)) {
+    if (!std::isnan(iops) && iops > -1) {
       if (iops > data.idata.max_iops)
         data.idata.max_iops = iops;
       if (iops < data.idata.min_iops)
@@ -201,8 +201,6 @@ int ObjBencher::aio_bench(
   data.min_latency = 9999.0; // this better be higher than initial latency!
   data.max_latency = 0;
   data.avg_latency = 0;
-  data.idata.min_bandwidth = 99999999.0;
-  data.idata.max_bandwidth = 0;
   data.object_contents = contentsChars;
   lock.Unlock();
 
