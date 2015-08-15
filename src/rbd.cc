@@ -3097,7 +3097,10 @@ int main(int argc, const char **argv)
 	return EXIT_FAILURE;
       }
       format_specified = true;
-      g_conf->set_val_or_die("rbd_default_format", val.c_str());
+      if (0 != g_conf->set_val("rbd_default_format", val.c_str())) {
+        cerr << "rbd: image format must be 1 or 2" << std::endl;
+        return EXIT_FAILURE;
+      }
     } else if (ceph_argparse_witharg(args, i, &val, "-p", "--pool", (char*)NULL)) {
       poolname = strdup(val.c_str());
     } else if (ceph_argparse_witharg(args, i, &val, "--dest-pool", (char*)NULL)) {
