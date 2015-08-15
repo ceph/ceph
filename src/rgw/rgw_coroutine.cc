@@ -124,6 +124,7 @@ int RGWCoroutinesStack::unwind(int retcode)
   return 0;
 }
 
+
 bool RGWCoroutinesStack::collect(RGWCoroutine *op, int *ret) /* returns true if needs to be called again */
 {
   rgw_spawned_stacks *s = (op ? &op->spawned : &spawned);
@@ -143,6 +144,7 @@ bool RGWCoroutinesStack::collect(RGWCoroutine *op, int *ret) /* returns true if 
 
     stack->put();
   }
+
   s->entries.swap(new_list);
   return (!new_list.empty());
 }
