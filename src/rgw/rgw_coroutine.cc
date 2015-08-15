@@ -314,9 +314,9 @@ int RGWSimpleCoroutine::operate()
     while (stack->collect(&ret)) {
       yield;
     }
+    return set_state(RGWCoroutine_Done, ret);
   }
-
-  return set_state(RGWCoroutine_Done, ret);
+  return 0;
 }
 
 int RGWSimpleCoroutine::state_init()
