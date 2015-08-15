@@ -1722,8 +1722,6 @@ struct pg_hit_set_info_t {
   bool using_gmt;	///< use gmt for creating the hit_set archive object name
   pg_hit_set_info_t(bool using_gmt = true)
     : using_gmt(using_gmt) {}
-  pg_hit_set_info_t(utime_t b, bool using_gmt)
-    : begin(b), using_gmt(using_gmt) {}
 
   void encode(bufferlist &bl) const;
   void decode(bufferlist::iterator &bl);
