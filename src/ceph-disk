@@ -80,12 +80,15 @@ knew the GPT partition type.
 CEPH_OSD_ONDISK_MAGIC = 'ceph osd volume v026'
 
 JOURNAL_UUID =              '45b0969e-9b03-4f30-b4c6-b4b80ceff106'
+MPATH_JOURNAL_UUID =        '45b0969e-8ae0-4982-bf9d-5a8d867af560'
 DMCRYPT_JOURNAL_UUID =      '45b0969e-9b03-4f30-b4c6-5ec00ceff106'
 DMCRYPT_LUKS_JOURNAL_UUID = '45b0969e-9b03-4f30-b4c6-35865ceff106'
 OSD_UUID =                  '4fbd7e29-9d25-41b8-afd0-062c0ceff05d'
+MPATH_OSD_UUID =            '4fbd7e29-8ae0-4982-bf9d-5a8d867af560'
 DMCRYPT_OSD_UUID =          '4fbd7e29-9d25-41b8-afd0-5ec00ceff05d'
 DMCRYPT_LUKS_OSD_UUID =     '4fbd7e29-9d25-41b8-afd0-35865ceff05d'
 TOBE_UUID =                 '89c57f98-2fe5-4dc0-89c1-f3ad0ceff2be'
+MPATH_TOBE_UUID =           '89c57f98-8ae0-4982-bf9d-5a8d867af560'
 DMCRYPT_TOBE_UUID =         '89c57f98-2fe5-4dc0-89c1-5ec00ceff2be'
 DMCRYPT_JOURNAL_TOBE_UUID = '89c57f98-2fe5-4dc0-89c1-35865ceff2be'
 
@@ -1244,7 +1247,7 @@ def prepare_journal_dev(
                         ' and --dmcrypt specified')
         LOG.debug('Journal %s is a partition', journal)
         LOG.warning('OSD will not be hot-swappable if journal is not the same device as the osd data')
-        if get_partition_type(journal) == JOURNAL_UUID:
+        if get_partition_type(journal) in (JOURNAL_UUID, MPATH_JOURNAL_UUID):
             LOG.debug('Journal %s was previously prepared with ceph-disk. Reusing it.', journal)
             reusing_partition = True
             # Read and reuse the partition uuid from this journal's previous life.
@@ -1276,6 +1279,9 @@ def prepare_journal_dev(
 
     ptype = JOURNAL_UUID
     ptype_tobe = JOURNAL_UUID
+    if is_mpath(journal):
+        ptype = MPATH_JOURNAL_UUID
+        ptype_tobe = MPATH_JOURNAL_UUID
     if journal_dm_keypath:
         if luks:
             ptype = DMCRYPT_LUKS_JOURNAL_UUID
@@ -1526,6 +1532,10 @@ def prepare_dev(
 
     ptype_tobe = TOBE_UUID
     ptype_osd = OSD_UUID
+    if is_mpath(data):
+        ptype_tobe = MPATH_TOBE_UUID
+        ptype_osd = MPATH_OSD_UUID
+
     if osd_dm_keypath:
         ptype_tobe = DMCRYPT_TOBE_UUID
         if luks:
@@ -2360,6 +2370,11 @@ def main_activate(args):
     try:
         mode = os.stat(args.path).st_mode
         if stat.S_ISBLK(mode):
+            if (is_partition(args.path) and
+                get_partition_type(args.path) == MPATH_OSD_UUID and
+                not is_mpath(args.path)):
+                raise Error('%s is not a multipath block device' %
+                            args.path)
             (cluster, osd_id) = mount_activate(
                 dev=args.path,
                 activate_key_template=args.activate_key_template,
@@ -2412,6 +2427,11 @@ def get_journal_osd_uuid(path):
     mode = os.stat(path).st_mode
     if not stat.S_ISBLK(mode):
         raise Error('%s is not a block device' % path)
+
+    if (get_partition_type(path) == MPATH_JOURNAL_UUID and
+        not is_mpath(path)):
+        raise Error('%s is not a multipath block device' %
+                    path)
 
     try:
         out = _check_output(
@@ -2498,7 +2518,10 @@ def main_activate_all(args):
             continue
         (tag, uuid) = name.split('.')
 
-        if tag == OSD_UUID or tag == DMCRYPT_OSD_UUID or tag == DMCRYPT_LUKS_OSD_UUID:
+        if tag in (OSD_UUID,
+                   MPATH_OSD_UUID,
+                   DMCRYPT_OSD_UUID,
+                   DMCRYPT_LUKS_OSD_UUID):
 
             if tag == DMCRYPT_OSD_UUID or tag == DMCRYPT_LUKS_OSD_UUID:
                 path = os.path.join('/dev/mapper', uuid)
@@ -2656,8 +2679,9 @@ def list_dev(dev, uuid_map, journal_map):
         ptype = get_partition_type(dev)
         prefix = ' '
 
+    LOG.debug("list_dev(dev = " + dev + ", ptype = " + ptype + ")")
     desc = []
-    if ptype == OSD_UUID:
+    if ptype in (OSD_UUID, MPATH_OSD_UUID):
         desc = list_dev_osd(dev, uuid_map)
         if desc:
             desc = ['ceph data'] + desc
@@ -2683,7 +2707,7 @@ def list_dev(dev, uuid_map, journal_map):
             desc = ['ceph data (dmcrypt LUKS %s)' % holder] + fs_desc
         else:
             desc = ['ceph data (dmcrypt LUKS)', 'holders: ' + ','.join(holders)]
-    elif ptype == JOURNAL_UUID:
+    elif ptype in (JOURNAL_UUID, MPATH_JOURNAL_UUID):
         desc.append('ceph journal')
         part_uuid = get_partition_uuid(dev)
         if part_uuid and part_uuid in journal_map:
@@ -2735,6 +2759,8 @@ def main_list(args):
             if part_uuid:
                 uuid_map[part_uuid] = dev
             ptype = get_partition_type(dev)
+            LOG.debug("main_list: " + dev + " " + ptype + " " +
+                      str(part_uuid))
             if ptype == OSD_UUID:
                 fs_type = get_dev_fs(dev)
                 if fs_type is not None:
@@ -2748,7 +2774,8 @@ def main_list(args):
                             unmount(tpath)
                     except MountError:
                         pass
-            if ptype == DMCRYPT_OSD_UUID or ptype == DMCRYPT_LUKS_OSD_UUID:
+            if ptype in (DMCRYPT_OSD_UUID,
+                         DMCRYPT_LUKS_OSD_UUID):
                 holders = is_held(dev)
                 if len(holders) == 1:
                     holder = '/dev/' + holders[0]
@@ -2764,6 +2791,9 @@ def main_list(args):
                                 unmount(tpath)
                         except MountError:
                             pass
+
+    LOG.debug("main_list: " + str(partmap) + ", " +
+              str(uuid_map) + ", " + str(journal_map))
 
     for base, parts in sorted(partmap.iteritems()):
         if parts:
