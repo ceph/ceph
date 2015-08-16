@@ -10,6 +10,16 @@ ACTION=="add", SUBSYSTEM=="block", \
   ENV{ID_PART_ENTRY_TYPE}=="45b0969e-9b03-4f30-b4c6-b4b80ceff106", \
   RUN+="/usr/sbin/ceph-disk activate-journal /dev/$name"
 
+# activate multipath ceph-tagged partitions
+ACTION=="add", SUBSYSTEM=="block", \
+  ENV{ID_PART_ENTRY_TYPE}=="4fbd7e29-8ae0-4982-bf9d-5a8d867af560", \
+  RUN+="/usr/sbin/ceph-disk activate /dev/$name"
+
+# activate multipath ceph-tagged partitions
+ACTION=="add", SUBSYSTEM=="block", \
+  ENV{ID_PART_ENTRY_TYPE}=="45b0969e-8ae0-4982-bf9d-5a8d867af560", \
+  RUN+="/usr/sbin/ceph-disk activate-journal /dev/$name"
+
 # Map journal if using dm-crypt and plain
 ACTION=="add" SUBSYSTEM=="block", \
   ENV{DEVTYPE}=="partition", \
