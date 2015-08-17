@@ -1180,10 +1180,6 @@ void ImageWatcher::reregister_watch() {
                              << "image watch" << cpp_strerror(r) << dendl;
     }
   }
-
-  if (m_lock_owner_state == LOCK_OWNER_STATE_NOT_LOCKED) {
-    notify_listeners_updated_lock(LOCK_UPDATE_STATE_UNLOCKED);
-  }
 }
 
 void ImageWatcher::WatchCtx::handle_notify(uint64_t notify_id,
