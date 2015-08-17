@@ -1054,7 +1054,7 @@ int KeyValueStore::queue_transactions(Sequencer *posr, list<Transaction*> &tls,
   if (!posr)
     posr = &default_osr;
   if (posr->p) {
-    osr = static_cast<OpSequencer *>(posr->p);
+    osr = static_cast<OpSequencer *>(posr->p.get());
     dout(5) << "queue_transactions existing " << *osr << "/" << osr->parent
             << dendl; //<< " w/ q " << osr->q << dendl;
   } else {
