@@ -155,8 +155,9 @@ bool MDSAuthCaps::is_capable(const std::string &inode_path,
         return true;
       }
 
+      // we may only create things owned by caller
       if ((mask & MAY_CREATE) &&
-	  (inode_gid != gid)) {
+	  (inode_gid != gid || inode_uid != uid)) {
 	continue;
       }
 
