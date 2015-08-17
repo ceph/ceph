@@ -572,7 +572,6 @@ public:
   void do_force_sync();
   void start_sync(Context *onsafe);
   void sync();
-  using JournalingObjectStore::sync;
   void _flush_op_queue();
   void flush();
   void sync_and_flush();
