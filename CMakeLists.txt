@@ -337,6 +337,12 @@ find_package(dpdk)
 set(HAVE_DPDK ${DPDK_FOUND})
 endif(WITH_DPDK)
 
+option(WITH_BLKIN "Use blkin to emit LTTng tracepoints for Zipkin" OFF)
+if(WITH_BLKIN)
+  find_package(blkin REQUIRED)
+  include_directories(${BLKIN_INCLUDE_DIR})
+endif(WITH_BLKIN)
+
 #option for RGW
 option(WITH_RADOSGW "Rados Gateway is enabled" ON)
 option(WITH_RADOSGW_FCGI_FRONTEND "Rados Gateway's FCGI frontend is enabled" ON)
