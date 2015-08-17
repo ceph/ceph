@@ -522,6 +522,30 @@ pg_t pg_t::get_parent() const
   return retval;
 }
 
+hobject_t pg_t::get_hobj_start() const
+{
+  return hobject_t(object_t(), string(), CEPH_NOSNAP, m_seed, m_pool,
+		   string());
+}
+
+hobject_t pg_t::get_hobj_end(unsigned pg_num) const
+{
+  // note: this assumes a bitwise sort; with the legacy nibblewise
+  // sort a PG did not always cover a single contiguous range of the
+  // (bit-reversed) hash range.
+  unsigned bits = get_split_bits(pg_num);
+  uint64_t rev_start = hobject_t::_reverse_bits(m_seed);
+  uint64_t rev_end = (rev_start | (0xffffffff >> bits)) + 1;
+  if (rev_end >= 0x100000000) {
+    assert(rev_end == 0x100000000);
+    return hobject_t::get_max();
+  } else {
+    return hobject_t(object_t(), string(), CEPH_NOSNAP,
+		   hobject_t::_reverse_bits(rev_end), m_pool,
+		   string());
+  }
+}
+
 void pg_t::dump(Formatter *f) const
 {
   f->dump_unsigned("pool", m_pool);
