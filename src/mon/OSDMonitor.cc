@@ -4404,6 +4404,17 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
     }
     BloomHitSet::Params *bloomp = static_cast<BloomHitSet::Params*>(p.hit_set_params.impl.get());
     bloomp->set_fpp(f);
+  } else if (var == "use_gmt_hitset") {
+    if (val == "true" || (interr.empty() && n == 1)) {
+      if (!(osdmap.get_up_osd_features() & CEPH_FEATURE_OSD_HITSET_GMT)) {
+	ss << "not all OSDs support GMT hit set.";
+	return -EINVAL;
+      }
+      p.use_gmt_hitset = true;
+    } else {
+      ss << "expecting value 'true' or '1'";
+      return -EINVAL;
+    }
   } else if (var == "debug_fake_ec_pool") {
     if (val == "true" || (interr.empty() && n == 1)) {
       p.flags |= pg_pool_t::FLAG_DEBUG_FAKE_EC_POOL;
