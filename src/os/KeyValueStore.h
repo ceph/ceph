@@ -591,9 +591,6 @@ class KeyValueStore : public ObjectStore,
                       BufferTransaction &t);
 
   void start_sync() {}
-  void sync() {}
-  using ObjectStore::sync;
-  void flush() {}
 
   void set_fsid(uuid_d u) { fsid = u; }
   uuid_d get_fsid() { return fsid; }
