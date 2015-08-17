@@ -2587,84 +2587,16 @@ def split_dev_base_partnum(dev):
     return (base, partnum)
 
 def get_partition_type(part):
-    """
-    Get the GPT partition type UUID.  If we have an old blkid and can't
-    get it that way, use sgdisk and use the description instead (and hope
-    dmcrypt isn't being used).
-    """
-    blkid, _ = command(
-        [
-            'blkid',
-            '-p',
-            '-o', 'udev',
-            part,
-        ]
-    )
-    saw_part_entry = False
-    for line in blkid.splitlines():
-        (key, value) = line.split('=')
-        if key == 'ID_PART_ENTRY_TYPE':
-            return value
-        if key == 'ID_PART_ENTRY_SCHEME':
-            table_type = value
-        if key.startswith('ID_PART_ENTRY_'):
-            saw_part_entry = True
+    return get_sgdisk_partition_info(part, 'Partition GUID code: (\S+)')
 
-    # hmm, is it in fact GPT?
-    table_type = None
-    base = get_partition_base(part)
-    blkid, _ = command(
-        [
-            'blkid',
-            '-p',
-            '-o', 'udev',
-            base
-        ]
-    )
-    for line in blkid.splitlines():
-        (key, value) = line.split('=')
-        if key == 'ID_PART_TABLE_TYPE':
-            table_type = value
-    if table_type != 'gpt':
-        return None    # not even GPT
+def get_partition_uuid(part):
+    return get_sgdisk_partition_info(part, 'Partition unique GUID: (\S+)')
 
-    if saw_part_entry:
-        return None    # GPT, and blkid appears to be new, so we're done.
-
-    # bah, fall back to sgdisk.
-    if 'blkid' not in warned_about:
-        LOG.warning('Old blkid does not support ID_PART_ENTRY_* fields, trying sgdisk; may not correctly identify ceph volumes with dmcrypt')
-        warned_about['blkid'] = True
-    (base, partnum) = split_dev_base_partnum(part)
-    sgdisk, _ = command(
-        [
-            'sgdisk',
-            '-p',
-            base,
-        ]
-    )
-
-    for line in sgdisk.splitlines():
-        m = re.search('\s+(\d+)\s+\d+\s+\d+\s+\S+ \S+B\s+\S+\s+(.*)', line)
-        if m is not None:
-            num = m.group(1)
-            if num != partnum:
-                continue
-            desc = m.group(2)
-            # assume unencrypted ... blkid has failed us :(
-            if desc == 'ceph data':
-                return OSD_UUID
-            if desc == 'ceph journal':
-                return JOURNAL_UUID
-
-    return None
-
-
-def get_partition_uuid(dev):
+def get_sgdisk_partition_info(dev, regexp):
     (base, partnum) = split_dev_base_partnum(dev)
     out, _ = command(['sgdisk', '-i', partnum, base])
     for line in out.splitlines():
-        m = re.match('Partition unique GUID: (\S+)', line)
+        m = re.match(regexp, line)
         if m:
             return m.group(1).lower()
     return None
