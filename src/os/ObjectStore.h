@@ -2102,7 +2102,6 @@ public:
   virtual void flush() {}
 
   virtual int flush_journal() { return -EOPNOTSUPP; }
-  virtual void sync_and_flush() {}
 
   virtual int dump_journal(ostream& out) { return -EOPNOTSUPP; }
 
