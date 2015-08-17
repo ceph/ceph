@@ -21,17 +21,18 @@ PS4='${BASH_SOURCE[0]}:$LINENO: ${FUNCNAME[0]}:  '
 
 export PATH=.:$PATH # make sure program from sources are prefered
 DIR=test-ceph-disk
-virtualenv virtualenv-$DIR
-. virtualenv-$DIR/bin/activate
-(
-    # older versions of pip will not install wrap_console scripts
-    # when using wheel packages
-    pip install --upgrade 'pip >= 6.1'
-    if test -d ceph-detect-init/wheelhouse ; then
-        wheelhouse="--no-index --use-wheel --find-links=ceph-detect-init/wheelhouse"
-    fi
-    pip --log virtualenv-$DIR/log.txt install $wheelhouse --editable ceph-detect-init
-)
+if virtualenv virtualenv-$DIR && test -d ceph-detect-init ; then
+    . virtualenv-$DIR/bin/activate
+    (
+	# older versions of pip will not install wrap_console scripts
+	# when using wheel packages
+	pip install --upgrade 'pip >= 6.1'
+	if test -d ceph-detect-init/wheelhouse ; then
+            wheelhouse="--no-index --use-wheel --find-links=ceph-detect-init/wheelhouse"
+	fi
+	pip --log virtualenv-$DIR/log.txt install $wheelhouse --editable ceph-detect-init
+    )
+fi
 OSD_DATA=$DIR/osd
 MON_ID=a
 MONA=127.0.0.1:7451
@@ -46,7 +47,9 @@ CEPH_ARGS+=" --osd-failsafe-full-ratio=.99"
 CEPH_ARGS+=" --mon-host=$MONA"
 CEPH_ARGS+=" --log-file=$DIR/\$name.log"
 CEPH_ARGS+=" --pid-file=$DIR/\$name.pidfile"
-CEPH_ARGS+=" --erasure-code-dir=.libs"
+if test -d .libs ; then
+    CEPH_ARGS+=" --erasure-code-dir=.libs"
+fi
 CEPH_ARGS+=" --auth-supported=none"
 CEPH_ARGS+=" --osd-journal-size=100"
 CEPH_DISK_ARGS=
@@ -85,14 +88,14 @@ function teardown() {
 function run_mon() {
     local mon_dir=$DIR/$MON_ID
 
-    ./ceph-mon \
+    ceph-mon \
         --id $MON_ID \
         --mkfs \
         --mon-data=$mon_dir \
         --mon-initial-members=$MON_ID \
         "$@"
 
-    ./ceph-mon \
+    ceph-mon \
         --id $MON_ID \
         --mon-data=$mon_dir \
         --mon-osd-full-ratio=.99 \
@@ -193,10 +196,10 @@ function test_mark_init() {
 
     $mkdir -p $OSD_DATA
 
-    ./ceph-disk $CEPH_DISK_ARGS \
+    ceph-disk $CEPH_DISK_ARGS \
         prepare --osd-uuid $osd_uuid $osd_data || return 1
 
-    $timeout $TIMEOUT ./ceph-disk $CEPH_DISK_ARGS \
+    $timeout $TIMEOUT ceph-disk $CEPH_DISK_ARGS \
         --verbose \
         activate \
         --mark-init=auto \
@@ -210,7 +213,7 @@ function test_mark_init() {
     else
         expected=systemd
     fi
-    $timeout $TIMEOUT ./ceph-disk $CEPH_DISK_ARGS \
+    $timeout $TIMEOUT ceph-disk $CEPH_DISK_ARGS \
         --verbose \
         activate \
         --mark-init=$expected \
@@ -227,7 +230,7 @@ function test_zap() {
     local osd_data=$DIR/dir
     $mkdir -p $osd_data
 
-    ./ceph-disk $CEPH_DISK_ARGS zap $osd_data 2>&1 | grep -q 'not full block device' || return 1
+    ceph-disk $CEPH_DISK_ARGS zap $osd_data 2>&1 | grep -q 'not full block device' || return 1
 
     $rm -fr $osd_data
 }
@@ -242,7 +245,7 @@ function test_activate_dir_magic() {
 
     mkdir -p $osd_data/fsid
     CEPH_ARGS="--fsid $uuid" \
-     ./ceph-disk $CEPH_DISK_ARGS prepare $osd_data > $DIR/out 2>&1
+     ceph-disk $CEPH_DISK_ARGS prepare $osd_data > $DIR/out 2>&1
     grep --quiet 'Is a directory' $DIR/out || return 1
     ! [ -f $osd_data/magic ] || return 1
     rmdir $osd_data/fsid
@@ -250,7 +253,7 @@ function test_activate_dir_magic() {
     echo successfully prepare the OSD
 
     CEPH_ARGS="--fsid $uuid" \
-     ./ceph-disk $CEPH_DISK_ARGS prepare $osd_data 2>&1 | tee $DIR/out
+     ceph-disk $CEPH_DISK_ARGS prepare $osd_data 2>&1 | tee $DIR/out
     grep --quiet 'Preparing osd data dir' $DIR/out || return 1
     grep --quiet $uuid $osd_data/ceph_fsid || return 1
     [ -f $osd_data/magic ] || return 1
@@ -258,7 +261,7 @@ function test_activate_dir_magic() {
     echo will not override an existing OSD
 
     CEPH_ARGS="--fsid $($uuidgen)" \
-     ./ceph-disk $CEPH_DISK_ARGS prepare $osd_data 2>&1 | tee $DIR/out
+     ceph-disk $CEPH_DISK_ARGS prepare $osd_data 2>&1 | tee $DIR/out
     grep --quiet 'ceph-disk:Data dir .* already exists' $DIR/out || return 1
     grep --quiet $uuid $osd_data/ceph_fsid || return 1
 }
@@ -266,14 +269,14 @@ function test_activate_dir_magic() {
 function test_pool_read_write() {
     local osd_uuid=$1
 
-    $timeout $TIMEOUT ./ceph osd pool set $TEST_POOL size 1 || return 1
+    $timeout $TIMEOUT ceph osd pool set $TEST_POOL size 1 || return 1
 
     local id=$(ceph osd create $osd_uuid)
     local weight=1
-    ./ceph osd crush add osd.$id $weight root=default host=localhost || return 1
+    ceph osd crush add osd.$id $weight root=default host=localhost || return 1
     echo FOO > $DIR/BAR
-    $timeout $TIMEOUT ./rados --pool $TEST_POOL put BAR $DIR/BAR || return 1
-    $timeout $TIMEOUT ./rados --pool $TEST_POOL get BAR $DIR/BAR.copy || return 1
+    $timeout $TIMEOUT rados --pool $TEST_POOL put BAR $DIR/BAR || return 1
+    $timeout $TIMEOUT rados --pool $TEST_POOL get BAR $DIR/BAR.copy || return 1
     $diff $DIR/BAR $DIR/BAR.copy || return 1
 }
 
@@ -285,10 +288,10 @@ function test_activate() {
 
     $mkdir -p $OSD_DATA
 
-    ./ceph-disk $CEPH_DISK_ARGS \
+    ceph-disk $CEPH_DISK_ARGS \
         prepare --osd-uuid $osd_uuid $to_prepare $journal || return 1
 
-    $timeout $TIMEOUT ./ceph-disk $CEPH_DISK_ARGS \
+    $timeout $TIMEOUT ceph-disk $CEPH_DISK_ARGS \
         activate \
         --mark-init=none \
         $to_activate || return 1
@@ -311,7 +314,7 @@ function test_activate_dmcrypt() {
         echo "osd_dmcrypt_type=plain" > $DIR/ceph.conf
     fi
     
-    ./ceph-disk $CEPH_DISK_ARGS \
+    ceph-disk $CEPH_DISK_ARGS \
 		prepare --dmcrypt --dmcrypt-key-dir $DIR/keys --osd-uuid=$uuid --journal-uuid=$juuid $to_prepare $journal || return 1
 
     if test $plain = plain ; then
@@ -321,8 +324,8 @@ function test_activate_dmcrypt() {
         /sbin/cryptsetup --key-file $DIR/keys/$uuid.luks.key luksOpen $to_activate $uuid
         /sbin/cryptsetup --key-file $DIR/keys/$juuid.luks.key luksOpen ${journal}${journal_p} $juuid
     fi
-    
-    $timeout $TIMEOUT ./ceph-disk $CEPH_DISK_ARGS \
+
+    $timeout $TIMEOUT ceph-disk $CEPH_DISK_ARGS \
         activate \
         --mark-init=none \
         /dev/mapper/$uuid || return 1
