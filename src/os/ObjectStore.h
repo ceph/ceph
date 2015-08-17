@@ -2097,7 +2097,6 @@ public:
     const ghobject_t &oid  ///< [in] object
     ) = 0;
 
-  virtual void sync(Context *onsync) {}
 
   virtual int flush_journal() { return -EOPNOTSUPP; }
 
