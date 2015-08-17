@@ -162,20 +162,21 @@ bool MDSAuthCaps::is_capable(const std::string &inode_path,
 
       if (inode_uid == uid) {
         if ((!(mask & MAY_READ) || (inode_mode & S_IRUSR)) &&
-          (!(mask & MAY_WRITE) || (inode_mode & S_IWUSR)) &&
-          (!(mask & MAY_EXECUTE) || (inode_mode & S_IXUSR))) {
+	    (!(mask & MAY_WRITE) || (inode_mode & S_IWUSR)) &&
+	    (!(mask & MAY_EXECUTE) || (inode_mode & S_IXUSR))) {
           return true;
         }
-      } else if (std::find(i->match.gids.begin(), i->match.gids.end(), inode_gid) != i->match.gids.end()) {
+      } else if (std::find(i->match.gids.begin(), i->match.gids.end(),
+			   inode_gid) != i->match.gids.end()) {
         if ((!(mask & MAY_READ) || (inode_mode & S_IRGRP)) &&
-          (!(mask & MAY_WRITE) || (inode_mode & S_IWGRP)) &&
-          (!(mask & MAY_EXECUTE) || (inode_mode & S_IXGRP))) {
+	    (!(mask & MAY_WRITE) || (inode_mode & S_IWGRP)) &&
+	    (!(mask & MAY_EXECUTE) || (inode_mode & S_IXGRP))) {
           return true;
         }
       } else {
         if ((!(mask & MAY_READ) || (inode_mode & S_IROTH)) &&
-          (!(mask & MAY_WRITE) || (inode_mode & S_IWOTH)) &&
-          (!(mask & MAY_EXECUTE) || (inode_mode & S_IXOTH))) {
+	    (!(mask & MAY_WRITE) || (inode_mode & S_IWOTH)) &&
+	    (!(mask & MAY_EXECUTE) || (inode_mode & S_IXOTH))) {
           return true;
         }
       }
