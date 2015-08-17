@@ -304,6 +304,20 @@ class TestGitbuilderProject(object):
         assert result == expected
 
     @patch("teuthology.packaging.config")
+    @patch("teuthology.packaging._get_config_value_for_remote")
+    def test_init_from_remote_base_url_debian(self, m_get_config_value, m_config):
+        m_config.baseurl_template = 'http://{host}/{proj}-{pkg_type}-{dist}-{arch}-{flavor}/{uri}'
+        m_config.gitbuilder_host = "gitbuilder.ceph.com"
+        m_get_config_value.return_value = None
+        # remote.os.codename returns and empty string on debian
+        rem = self._get_remote(distro="debian", codename='', version="7.1")
+        ctx = dict(foo="bar")
+        gp = packaging.GitbuilderProject("ceph", {}, ctx=ctx, remote=rem)
+        result = gp.base_url
+        expected = "http://gitbuilder.ceph.com/ceph-deb-wheezy-x86_64-basic/ref/master"
+        assert result == expected
+
+    @patch("teuthology.packaging.config")
     def test_init_from_config_base_url(self, m_config):
         m_config.baseurl_template = 'http://{host}/{proj}-{pkg_type}-{dist}-{arch}-{flavor}/{uri}'
         m_config.gitbuilder_host = "gitbuilder.ceph.com"
@@ -360,6 +374,7 @@ class TestGitbuilderProject(object):
         ('ubuntu', '14.04', None, 'trusty'),
         ('debian', '7.0', None, 'wheezy'),
         ('debian', '7', None, 'wheezy'),
+        ('debian', '7.1', None, 'wheezy'),
         ('ubuntu', '12.04', None, 'precise'),
         ('ubuntu', '14.04', None, 'trusty'),
     ]
@@ -392,3 +407,27 @@ class TestGitbuilderProject(object):
         )
         gp = packaging.GitbuilderProject("ceph", config)
         assert gp.distro == expected
+
+    GITBUILDER_DIST_RELEASE_MATRIX = [
+        ('rhel', '7.0', None, 'el7'),
+        ('centos', '6.5', None, 'el6'),
+        ('centos', '7.0', None, 'el7'),
+        ('centos', '7.1', None, 'el7'),
+        ('fedora', '20', None, 'fc20'),
+        ('debian', '7.0', None, 'debian'),
+        ('debian', '7', None, 'debian'),
+        ('debian', '7.1', None, 'debian'),
+        ('ubuntu', '12.04', None, 'ubuntu'),
+        ('ubuntu', '14.04', None, 'ubuntu'),
+    ]
+
+    @pytest.mark.parametrize(
+        "distro, version, codename, expected",
+        GITBUILDER_DIST_RELEASE_MATRIX
+    )
+    def test_get_dist_release(self, distro, version, codename, expected):
+        rem = self._get_remote(distro=distro, version=version,
+                               codename=codename)
+        ctx = dict(foo="bar")
+        gp = packaging.GitbuilderProject("ceph", {}, ctx=ctx, remote=rem)
+        assert gp.dist_release == expected
