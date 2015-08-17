@@ -633,6 +633,9 @@ def is_held(dev):
     Check if a device is held by another device (e.g., a dm-crypt mapping)
     """
     assert os.path.exists(dev)
+    if is_mpath(dev):
+        return []
+
     dev = os.path.realpath(dev)
     base = get_dev_name(dev)
 
