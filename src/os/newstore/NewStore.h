@@ -472,7 +472,6 @@ public:
 
   void sync(Context *onsync);
   void sync();
-  void flush();
 
   unsigned get_max_object_name_length() {
     return 4096;
