@@ -26,6 +26,7 @@
 #include "include/types.h"
 #include "include/buffer.h"
 #include "common/Throttle.h"
+#include "common/zipkin_trace.h"
 #include "msg_types.h"
 
 #include "common/RefCountedObj.h"
@@ -228,6 +229,11 @@ protected:
   bi::list_member_hook<> dispatch_q;
 
 public:
+  // zipkin tracing
+  ZTracer::Trace trace;
+  void encode_trace(bufferlist &bl, uint64_t features) const;
+  void decode_trace(bufferlist::iterator &p, bool create = false);
+
   class CompletionHook : public Context {
   protected:
     Message *m;
@@ -297,6 +303,7 @@ protected:
     if (byte_throttler)
       byte_throttler->put(payload.length() + middle.length() + data.length());
     release_message_throttle();
+    trace.event("message destructed");
     /* call completion hooks (if any) */
     if (completion_hook)
       completion_hook->complete(0);

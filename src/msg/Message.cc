@@ -787,6 +787,43 @@ Message *decode_message(CephContext *cct, int crcflags,
 }
 
 
+WRITE_RAW_ENCODER(blkin_trace_info)
+
+void Message::encode_trace(bufferlist &bl, uint64_t features) const
+{
+#ifdef WITH_BLKIN
+  if (features & CEPH_FEATURE_BLKIN_TRACING)
+    ::encode(*trace.get_info(), bl);
+#endif
+}
+
+void Message::decode_trace(bufferlist::iterator &p, bool create)
+{
+#ifdef WITH_BLKIN
+  if (!connection)
+    return;
+
+  const auto endpoint = connection->get_messenger()->get_trace_endpoint();
+  blkin_trace_info info = {};
+
+  // only decode a trace if both sides of the connection agree
+  if (connection->has_feature(CEPH_FEATURE_BLKIN_TRACING))
+    ::decode(info, p);
+
+  if (info.trace_id) {
+    trace.init(get_type_name(), endpoint, &info, true);
+    trace.event("decoded trace");
+  } else if (create) { // create a trace even if we didn't get one on the wire
+    trace.init(get_type_name(), endpoint);
+    trace.event("created trace");
+  }
+  trace.keyval("tid", get_tid());
+  trace.keyval("entity type", get_source().type_str());
+  trace.keyval("entity num", get_source().num());
+#endif
+}
+
+
 // This routine is not used for ordinary messages, but only when encapsulating a message
 // for forwarding and routing.  It's also used in a backward compatibility test, which only
 // effectively tests backward compability for those functions.  To avoid backward compatibility
