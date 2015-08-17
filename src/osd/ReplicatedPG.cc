@@ -413,6 +413,12 @@ void ReplicatedPG::wait_for_all_missing(OpRequestRef op)
 
 bool ReplicatedPG::is_degraded_or_backfilling_object(const hobject_t& soid)
 {
+  /* The conditions below may clear (on_local_recover, before we queue
+   * the tranasction) before we actually requeue the degraded waiters
+   * in on_global_recover after the transaction completes.
+   */
+  if (waiting_for_degraded_object.count(soid))
+    return true;
   if (pg_log.get_missing().missing.count(soid))
     return true;
   assert(!actingbackfill.empty());
