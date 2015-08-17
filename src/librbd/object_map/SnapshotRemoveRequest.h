@@ -56,6 +56,13 @@ public:
 protected:
   virtual bool should_complete(int r);
 
+  virtual int filter_return_code(int r) {
+    if (m_state == STATE_REMOVE_MAP && r == -ENOENT) {
+      return 0;
+    }
+    return r;
+  }
+
   virtual void finish() {
   }
 

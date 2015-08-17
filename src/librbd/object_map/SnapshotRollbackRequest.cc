@@ -77,7 +77,7 @@ bool SnapshotRollbackRequest::should_complete(int r) {
     finished = Request::should_complete(m_ret_val);
     break;
   case STATE_WRITE_MAP:
-    finished = true;
+    finished = Request::should_complete(r);
     break;
   default:
     assert(false);
