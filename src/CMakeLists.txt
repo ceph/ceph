@@ -179,6 +179,8 @@ set(crush_srcs
   crush/CrushCompiler.cc
   crush/CrushTester.cc)
 
+add_library(crush STATIC ${crush_srcs})
+
 add_subdirectory(json_spirit)
 
 set(xio_common_srcs)
@@ -852,6 +854,27 @@ if(${WITH_RBD})
     ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS} ${TCMALLOC_LIBS})
   install(TARGETS rbd DESTINATION bin)
   install(PROGRAMS ${CMAKE_SOURCE_DIR}/src/ceph-rbdnamer DESTINATION bin)
+
+  set(librbd_replay_srcs
+      rbd_replay/Deser.cc 
+      rbd_replay/ImageNameMap.cc 
+      rbd_replay/PendingIO.cc 
+      rbd_replay/rbd_loc.cc 
+      rbd_replay/Replayer.cc 
+      rbd_replay/Ser.cc)
+  add_library(librbd_replay STATIC ${librbd_replay_srcs})
+  target_link_libraries(librbd_replay PRIVATE librbd librados global udev)
+  add_executable(rbd_replay
+    rbd_replay/rbd-replay.cc)
+  target_link_libraries(rbd_replay librbd librados global librbd_replay)
+
+  set(librbd_replay_ios_srcs
+      rbd_replay/ios.cc)
+  add_library(librbd_replay_ios STATIC ${librbd_replay_ios_srcs})
+  target_link_libraries(librbd_replay_ios librbd librados global)
+
+  install(TARGETS librbd_replay librbd_replay_ios DESTINATION lib)
+
 endif(${WITH_RBD})
 
 # RadosGW
