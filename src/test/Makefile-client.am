@@ -442,7 +442,6 @@ unittest_encoding_SOURCES = test/encoding.cc
 ceph_test_c_headers_SOURCES = test/test_c_headers.c
 ceph_test_c_headers_LDADD = $(LIBRADOS) $(LIBCEPHFS)
 ceph_test_c_headers_CFLAGS = $(AM_CFLAGS) \
-	-Werror \
 	-Wstrict-prototypes \
 	-Wredundant-decls \
 	-Wall \
@@ -460,7 +459,7 @@ ceph_test_c_headers_CFLAGS = $(AM_CFLAGS) \
 	-Wold-style-definition \
 	-Wtype-limits
 if !CLANG
-ceph_test_c_headers_CFLAGS += -Wold-style-declaration
+ceph_test_c_headers_CFLAGS += -Werror -Wold-style-declaration
 endif # !CLANG
 bin_DEBUGPROGRAMS += ceph_test_c_headers
 
