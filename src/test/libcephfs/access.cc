@@ -99,6 +99,68 @@ TEST(AccessTest, Foo) {
   ceph_shutdown(admin);
 }
 
+TEST(AccessTest, Path){
+  struct ceph_mount_info *admin;
+  ASSERT_EQ(0, ceph_create(&admin, NULL));
+  ASSERT_EQ(0, ceph_conf_parse_env(admin, NULL));
+  ASSERT_EQ(0, ceph_conf_read_file(admin, NULL));
+  ASSERT_EQ(0, ceph_mount(admin, "/"));
+  ASSERT_EQ(0, ceph_mkdir(admin, "/bar", 0755));
+  ASSERT_EQ(0, ceph_mkdir(admin, "/foobar", 0755));
+  ASSERT_EQ(0, ceph_mkdir(admin, "/bar/p", 0755));
+  ASSERT_EQ(0, ceph_mkdir(admin, "/foobar/p", 0755));
+  int fd = ceph_open(admin, "/bar/q", O_CREAT|O_WRONLY, 0755);
+  ceph_close(admin,fd);
+  fd = ceph_open(admin, "/foobar/q", O_CREAT|O_WRONLY, 0755);
+  ceph_close(admin,fd);
+  fd = ceph_open(admin, "/foobar/z", O_CREAT|O_WRONLY, 0755);
+  ceph_write(admin, fd, "TEST FAILED", 11, 0);
+  ceph_close(admin,fd);
+
+  string key;
+  ASSERT_EQ(0, do_mon_command(
+      "{\"prefix\": \"auth get-or-create\", \"entity\": \"client.bar\", "
+      "\"caps\": [\"mon\", \"allow r\", \"osd\", \"allow rwx\", "
+      "\"mds\", \"allow r, allow rw path=/bar\""
+      "], \"format\": \"json\"}", &key));
+
+  struct ceph_mount_info *cmount;
+  ASSERT_EQ(0, ceph_create(&cmount, "bar"));
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
+  ASSERT_EQ(0, ceph_conf_read_file(cmount, NULL));
+  ASSERT_EQ(0, ceph_conf_set(cmount, "key", key.c_str()));
+  ASSERT_EQ(0, ceph_mount(cmount, "/"));
+
+  //allowed operations
+  ASSERT_GE(ceph_mkdir(cmount, "/bar/x", 0755), 0);
+  ASSERT_GE(ceph_rmdir(cmount, "/bar/p"), 0);
+  ASSERT_GE(ceph_unlink(cmount, "/bar/q"), 0);
+  fd = ceph_open(cmount, "/bar/y", O_CREAT|O_WRONLY, 0755);
+  ASSERT_GE(fd, 0);
+  ceph_write(cmount, fd, "bar", 3, 0);
+  ceph_close(cmount,fd);
+  ASSERT_GE(ceph_unlink(cmount, "/bar/y"), 0);
+  ASSERT_GE(ceph_rmdir(cmount, "/bar/x"), 0);
+  fd = ceph_open(cmount, "/foobar/z", O_RDONLY, 0644);
+  ASSERT_GE(fd, 0);
+  ceph_close(cmount,fd);
+
+  //not allowed operations
+  ASSERT_LT(ceph_mkdir(cmount, "/foobar/x", 0755), 0);
+  ASSERT_LT(ceph_rmdir(cmount, "/foobar/p"), 0);
+  ASSERT_LT(ceph_unlink(cmount, "/foobar/q"), 0);
+  fd = ceph_open(cmount, "/foobar/y", O_CREAT|O_WRONLY, 0755);
+  ASSERT_LT(fd, 0);
+
+  ceph_shutdown(cmount);
+  ASSERT_EQ(0, ceph_unlink(admin, "/foobar/q"));
+  ASSERT_EQ(0, ceph_unlink(admin, "/foobar/z"));
+  ASSERT_EQ(0, ceph_rmdir(admin, "/foobar/p"));
+  ASSERT_EQ(0, ceph_rmdir(admin, "/bar"));
+  ASSERT_EQ(0, ceph_rmdir(admin, "/foobar"));
+  ceph_shutdown(admin);
+}
+
 int main(int argc, char **argv)
 {
   ::testing::InitGoogleTest(&argc, argv);
