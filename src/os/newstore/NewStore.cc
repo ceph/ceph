@@ -1003,11 +1003,6 @@ void NewStore::sync(Context *onsync)
 #warning write sync
 }
 
-void NewStore::flush()
-{
-#warning write flush
-}
-
 void NewStore::sync()
 {
   dout(10) << __func__ << dendl;
