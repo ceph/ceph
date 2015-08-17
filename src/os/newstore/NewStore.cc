@@ -998,11 +998,6 @@ int NewStore::umount()
   return 0;
 }
 
-void NewStore::sync(Context *onsync)
-{
-#warning write sync
-}
-
 void NewStore::_sync()
 {
   dout(10) << __func__ << dendl;

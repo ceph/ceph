@@ -471,8 +471,6 @@ public:
   int umount();
   void _sync();
 
-  void sync(Context *onsync);
-
   unsigned get_max_object_name_length() {
     return 4096;
   }
