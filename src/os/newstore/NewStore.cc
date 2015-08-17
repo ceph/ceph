@@ -975,7 +975,7 @@ int NewStore::umount()
   assert(mounted);
   dout(1) << __func__ << dendl;
 
-  sync_and_flush();
+  sync();
   _reap_collections();
 
   dout(20) << __func__ << " stopping fsync_wq" << dendl;
@@ -1003,17 +1003,12 @@ void NewStore::sync(Context *onsync)
 #warning write sync
 }
 
-void NewStore::sync()
-{
-#warning write sync
-}
-
 void NewStore::flush()
 {
 #warning write flush
 }
 
-void NewStore::sync_and_flush()
+void NewStore::sync()
 {
   dout(10) << __func__ << dendl;
 
