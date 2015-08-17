@@ -574,6 +574,18 @@ def is_partition_mpath(dev):
     uuid = get_dm_uuid(dev)
     return bool(re.match('part\d+-mpath-', uuid))
 
+def partnum_mpath(dev):
+    uuid = get_dm_uuid(dev)
+    return re.findall('part(\d+)-mpath-', uuid)[0]
+
+def get_partition_base_mpath(dev):
+    slave_path = os.path.join(block_path(dev), 'slaves')
+    slaves = os.listdir(slave_path)
+    assert slaves
+    name_path = os.path.join(slave_path, slaves[0], 'dm', 'name')
+    name = open(name_path, 'r').read().strip()
+    return os.path.join('/dev/mapper', name)
+
 def is_partition(dev):
     """
     Check whether a given device path is a partition or a full disk.
@@ -2565,11 +2577,14 @@ def get_dev_fs(dev):
 
 
 def split_dev_base_partnum(dev):
-    if 'loop' in dev or 'cciss' in dev or 'nvme' in dev:
-        return re.match('(.*\d+)p(\d+)', dev).group(1, 2)
+    if is_mpath(dev):
+        partnum = partnum_mpath(dev)
+        base = get_partition_base_mpath(dev)
     else:
-        return re.match('(\D+)(\d+)', dev).group(1, 2)
-
+        b = block_path(dev)
+        partnum = open(os.path.join(b, 'partition')).read().strip()
+        base = get_partition_base(dev)
+    return (base, partnum)
 
 def get_partition_type(part):
     """
