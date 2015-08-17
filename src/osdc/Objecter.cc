@@ -4778,7 +4778,6 @@ void Objecter::enumerate_objects(
     return;
   }
 
-  // Map `start` to a PG
   rwlock.get_read();
   assert(osdmap->get_epoch());
   if (!osdmap->test_flag(CEPH_OSDMAP_SORTBITWISE)) {
@@ -4788,19 +4787,16 @@ void Objecter::enumerate_objects(
     return;
   }
   const pg_pool_t *p = osdmap->get_pg_pool(pool_id);
-  int pg_num;
   if (!p) {
     lderr(cct) << __func__ << ": pool " << pool_id << " DNE in"
                      "osd epoch " << osdmap->get_epoch() << dendl;
     rwlock.unlock();
     on_finish->complete(-ENOENT);
   } else {
-    pg_num = p->raw_hash_to_pg(start.get_hash());
     rwlock.unlock();
   }
 
-  ldout(cct, 20) << __func__ << ": start=" << start << " end=" << end
-		 << " to pg " << pg_num << dendl;
+  ldout(cct, 20) << __func__ << ": start=" << start << " end=" << end << dendl;
 
   // Stash completion state
   C_EnumerateReply *on_ack = new C_EnumerateReply(
@@ -4814,7 +4810,7 @@ void Objecter::enumerate_objects(
 
   // Issue.  See you later in _enumerate_reply
   object_locator_t oloc(pool_id, ns);
-  pg_read(pg_num, oloc, op,
+  pg_read(start.get_hash(), oloc, op,
 	  &on_ack->bl, 0, on_ack, &on_ack->epoch, &on_ack->budget);
 }
 
