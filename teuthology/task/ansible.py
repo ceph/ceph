@@ -288,6 +288,7 @@ class Ansible(Task):
             self.failure_log.name,
             archive_path
         )
+        os.chmod(archive_path, 0664)
 
     def _build_args(self):
         """
