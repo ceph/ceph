@@ -1137,24 +1137,42 @@ ln -sf %{_libdir}/librbd.so.1 /usr/lib64/qemu/librbd.so.1
 %{_mandir}/man8/ceph_selinux.8.*
 
 %post selinux
-/sbin/service ceph stop >/dev/null 2>&1
+%if 0%{?_with_systemd}
+    /usr/bin/systemctl stop ceph.target > /dev/null 2>&1 || :
+%else
+    /sbin/service ceph stop >/dev/null 2>&1 || :
+%endif
+
 semodule -n -i %{_datadir}/selinux/packages/ceph.pp
 if /usr/sbin/selinuxenabled ; then
     /usr/sbin/load_policy
     %relabel_files
 fi
-/sbin/service ceph start >/dev/null 2>&1
+
+%if 0%{?_with_systemd}
+    /usr/bin/systemctl start ceph.target > /dev/null 2>&1 || :
+%else
+    /sbin/service ceph start >/dev/null 2>&1 || :
+%endif
 exit 0
 
 %postun selinux
 if [ $1 -eq 0 ]; then
-    /sbin/service ceph stop >/dev/null 2>&1
+    %if 0%{?_with_systemd}
+	/usr/bin/systemctl stop ceph.target > /dev/null 2>&1 || :
+    %else
+	/sbin/service ceph stop >/dev/null 2>&1 || :
+    %endif
     semodule -n -r ceph
     if /usr/sbin/selinuxenabled ; then
        /usr/sbin/load_policy
        %relabel_files
     fi;
-    /sbin/service ceph start >/dev/null 2>&1
+    %if 0%{?_with_systemd}
+	/usr/bin/systemctl start ceph.target > /dev/null 2>&1 || :
+    %else
+	/sbin/service ceph start >/dev/null 2>&1 || :
+    %endif
 fi;
 exit 0
 
