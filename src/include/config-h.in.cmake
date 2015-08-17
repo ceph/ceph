@@ -267,4 +267,7 @@
 /* Version number of package */
 #cmakedefine VERSION "@VERSION@"
 
+/* Defined if blkin enabled */
+#cmakedefine WITH_BLKIN
+
 #endif /* CONFIG_H */

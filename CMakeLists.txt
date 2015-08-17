@@ -311,6 +311,12 @@ if(WITH_XIO)
 set(HAVE_XIO ${XIO_FOUND})
 endif(WITH_XIO)
 
+option(WITH_BLKIN "Use blkin to emit LTTng tracepoints for Zipkin" OFF)
+if(WITH_BLKIN)
+  find_package(blkin REQUIRED)
+  include_directories(${BLKIN_INCLUDE_DIR})
+endif(WITH_BLKIN)
+
 #option for RGW
 option(WITH_RADOSGW "Rados Gateway is enabled" ON)
 
