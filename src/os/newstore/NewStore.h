@@ -469,9 +469,9 @@ public:
 
   int mount();
   int umount();
+  void _sync();
 
   void sync(Context *onsync);
-  void sync();
 
   unsigned get_max_object_name_length() {
     return 4096;
