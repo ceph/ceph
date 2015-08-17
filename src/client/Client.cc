@@ -4879,7 +4879,7 @@ int Client::mount(const std::string &mount_root)
     MetaRequest *req = new MetaRequest(CEPH_MDS_OP_GETATTR);
     req->set_filepath(fp);
     req->head.args.getattr.mask = CEPH_STAT_CAP_INODE_ALL;
-    int res = make_request(req, -1, -1);
+    int res = make_request(req, cct->_conf->client_mount_uid, cct->_conf->client_mount_gid);
     if (res < 0) {
       if (res == -EACCES && root) {
 	ldout(cct, 1) << __func__ << " EACCES on parent of mount point; quotas may not work" << dendl;

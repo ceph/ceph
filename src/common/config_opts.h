@@ -338,6 +338,8 @@ OPTION(client_readahead_max_bytes, OPT_LONGLONG, 0)  //8 * 1024*1024
 OPTION(client_readahead_max_periods, OPT_LONGLONG, 4)  // as multiple of file layout period (object size * num stripes)
 OPTION(client_snapdir, OPT_STR, ".snap")
 OPTION(client_mountpoint, OPT_STR, "/")
+OPTION(client_mount_uid, OPT_INT, -1)
+OPTION(client_mount_gid, OPT_INT, -1)
 OPTION(client_notify_timeout, OPT_INT, 10) // in seconds
 OPTION(osd_client_watch_timeout, OPT_INT, 30) // in seconds
 OPTION(client_caps_release_delay, OPT_INT, 5) // in seconds
