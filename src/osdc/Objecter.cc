@@ -2184,9 +2184,9 @@ ceph_tid_t Objecter::_op_submit(Op *op, RWLock::Context& lc)
   _send_op_account(op);
 
   // send?
-  ldout(cct, 10) << "_op_submit oid " << op->target.base_oid
-           << " " << op->target.base_oloc << " " << op->target.target_oloc
-	   << " " << op->ops << " tid " << op->tid
+  ldout(cct, 10) << "_op_submit oid '" << op->target.base_oid
+           << "' '" << op->target.base_oloc << "' '" << op->target.target_oloc
+	   << "' " << op->ops << " tid " << op->tid
            << " osd." << (!s->is_homeless() ? s->osd : -1)
            << dendl;
 
@@ -4708,5 +4708,194 @@ void Objecter::set_epoch_barrier(epoch_t epoch)
     epoch_barrier = epoch;
     _maybe_request_map();
   }
+}
+
+
+
+hobject_t Objecter::enumerate_objects_begin()
+{
+  return hobject_t();
+}
+
+hobject_t Objecter::enumerate_objects_end()
+{
+  return hobject_t::get_max();
+}
+
+struct C_EnumerateReply : public Context {
+  bufferlist bl;
+
+  Objecter *objecter;
+  hobject_t *next;
+  std::list<librados::ListObjectImpl> *result;
+  const hobject_t end;
+  const int64_t pool_id;
+  Context *on_finish;
+
+  epoch_t epoch;
+  int budget;
+
+  C_EnumerateReply(Objecter *objecter_, hobject_t *next_,
+      std::list<librados::ListObjectImpl> *result_,
+      const hobject_t end_, const int64_t pool_id_, Context *on_finish_) :
+    objecter(objecter_), next(next_), result(result_),
+    end(end_), pool_id(pool_id_), on_finish(on_finish_),
+    epoch(0), budget(0)
+  {}
+
+  void finish(int r) {
+    objecter->_enumerate_reply(
+        bl, r, end, pool_id, budget, epoch, result, next, on_finish);
+  }
+};
+
+void Objecter::enumerate_objects(
+    int64_t pool_id,
+    const std::string &ns,
+    const hobject_t &start,
+    const hobject_t &end,
+    const uint32_t max,
+    std::list<librados::ListObjectImpl> *result, 
+    hobject_t *next,
+    Context *on_finish)
+{
+  assert(result);
+
+  if (!end.is_max() && cmp_bitwise(start, end) > 0) {
+    lderr(cct) << __func__ << ": start " << start << " > end " << end << dendl;
+    on_finish->complete(-EINVAL);
+    return;
+  }
+
+  if (max < 1) {
+    lderr(cct) << __func__ << ": result size may not be zero" << dendl;
+    on_finish->complete(-EINVAL);
+    return;
+  }
+
+  if (start.is_max()) {
+    on_finish->complete(0);
+    return;
+  }
+
+  // Map `start` to a PG
+  rwlock.get_read();
+  assert(osdmap->get_epoch());
+  if (!osdmap->test_flag(CEPH_OSDMAP_SORTBITWISE)) {
+    rwlock.unlock();
+    lderr(cct) << __func__ << ": SORTBITWISE cluster flag not set" << dendl;
+    on_finish->complete(-EOPNOTSUPP);
+    return;
+  }
+  const pg_pool_t *p = osdmap->get_pg_pool(pool_id);
+  int pg_num;
+  if (!p) {
+    lderr(cct) << __func__ << ": pool " << pool_id << " DNE in"
+                     "osd epoch " << osdmap->get_epoch() << dendl;
+    rwlock.unlock();
+    on_finish->complete(-ENOENT);
+  } else {
+    pg_num = p->raw_hash_to_pg(start.get_hash());
+    rwlock.unlock();
+  }
+
+  ldout(cct, 20) << __func__ << ": start=" << start << " end=" << end
+		 << " to pg " << pg_num << dendl;
+
+  // Stash completion state
+  C_EnumerateReply *on_ack = new C_EnumerateReply(
+      this, next, result, end, pool_id, on_finish);
+
+  // Construct pgls operation
+  bufferlist filter; // FIXME pass in?
+
+  ObjectOperation op;
+  op.pg_nls(max, filter, start, 0);
+
+  // Issue.  See you later in _enumerate_reply
+  object_locator_t oloc(pool_id, ns);
+  pg_read(pg_num, oloc, op,
+	  &on_ack->bl, 0, on_ack, &on_ack->epoch, &on_ack->budget);
+}
+
+void Objecter::_enumerate_reply(
+    bufferlist &bl,
+    int r,
+    const hobject_t &end,
+    const int64_t pool_id,
+    int budget,
+    epoch_t reply_epoch,
+    std::list<librados::ListObjectImpl> *result, 
+    hobject_t *next,
+    Context *on_finish)
+{
+  if (budget > 0) {
+    put_op_budget_bytes(budget);
+  }
+
+  if (r < 0) {
+    ldout(cct, 4) << __func__ << ": remote error " << r << dendl;
+    on_finish->complete(r);
+  }
+
+  assert(next != NULL);
+
+  // Decode the results
+  bufferlist::iterator iter = bl.begin();
+  pg_nls_response_t response;
+
+  // XXX extra_info doesn't seem used anywhere?
+  bufferlist extra_info;
+  ::decode(response, iter);
+  if (!iter.end()) {
+    ::decode(extra_info, iter);
+  }
+
+  ldout(cct, 10) << __func__ << ": got " << response.entries.size()
+		 << " handle " << response.handle
+		 << " reply_epoch " << reply_epoch << dendl;
+  ldout(cct, 20) << __func__ << ": response.entries.size "
+                 << response.entries.size() << ", response.entries "
+                 << response.entries << dendl;
+  if (cmp_bitwise(response.handle, end) <= 0) {
+    *next = response.handle;
+  } else {
+    ldout(cct, 10) << __func__ << ": adjusted next down to end " << end << dendl;
+    *next = end;
+
+    // drop anything after 'end'
+    rwlock.get_read();
+    const pg_pool_t *pool = osdmap->get_pg_pool(pool_id);
+    while (!response.entries.empty()) {
+      uint32_t hash = response.entries.back().locator.empty() ?
+	pool->hash_key(response.entries.back().oid,
+		       response.entries.back().nspace) :
+	pool->hash_key(response.entries.back().locator,
+		       response.entries.back().nspace);
+      hobject_t last(response.entries.back().oid,
+		     response.entries.back().locator,
+		     CEPH_NOSNAP,
+		     hash,
+		     pool_id,
+		     response.entries.back().nspace);
+      if (cmp_bitwise(last, end) < 0)
+	break;
+      ldout(cct, 20) << __func__ << " dropping item " << last
+		     << " >= end " << end << dendl;
+      response.entries.pop_back();
+    }
+    rwlock.put_read();
+  }
+  if (!response.entries.empty()) {
+    result->merge(response.entries);
+  }
+
+  // release the listing context's budget once all
+  // OPs (in the session) are finished
+#if 0
+  put_nlist_context_budget(list_context);
+#endif
+  on_finish->complete(r);
+  return;
 }
 
