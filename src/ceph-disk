@@ -474,6 +474,14 @@ def get_dev_size(dev, size='megabytes'):
         os.close(fd)
 
 
+def get_partition_mpath(dev, pnum):
+    part_re = "part{pnum}-mpath-".format(pnum=pnum)
+    partitions = list_partitions_mpath(dev, part_re)
+    if partitions:
+        return partitions[0]
+    else:
+        return None
+
 def get_partition_dev(dev, pnum):
     """
     get the device name for a partition
@@ -484,13 +492,16 @@ def get_partition_dev(dev, pnum):
        sda 1 -> sda1
        cciss/c0d1 1 -> cciss!c0d1p1
     """
-    name = get_dev_name(os.path.realpath(dev))
     partname = None
-    for f in os.listdir(os.path.join('/sys/block', name)):
-        if f.startswith(name) and f.endswith(str(pnum)):
-            # we want the shortest name that starts with the base name and ends with the partition number
-            if not partname or len(f) < len(partname):
-                partname = f
+    if is_mpath(dev):
+        partname = get_partition_mpath(dev, pnum)
+    else:
+        name = get_dev_name(os.path.realpath(dev))
+        for f in os.listdir(os.path.join('/sys/block', name)):
+            if f.startswith(name) and f.endswith(str(pnum)):
+                # we want the shortest name that starts with the base name and ends with the partition number
+                if not partname or len(f) < len(partname):
+                    partname = f
     if partname:
         return get_dev_path(partname)
     else:
@@ -503,21 +514,40 @@ def list_all_partitions():
     """
     dev_part_list = {}
     for name in os.listdir('/sys/block'):
+        LOG.debug("list_all_partitions: " + name)
         # /dev/fd0 may hang http://tracker.ceph.com/issues/6827
         if re.match(r'^fd\d$', name):
             continue
-        if not os.path.exists(os.path.join('/sys/block', name, 'device')):
-            continue
-        dev_part_list[name] = list_partitions(name)
+        dev_part_list[name] = list_partitions(os.path.join('/dev', name))
     return dev_part_list
 
+def list_partitions(dev):
+    dev = os.path.realpath(dev)
+    if is_mpath(dev):
+        return list_partitions_mpath(dev)
+    else:
+        return list_partitions_device(dev)
 
-def list_partitions(basename):
+def list_partitions_mpath(dev, part_re="part\d+-mpath-"):
+    p = block_path(dev)
+    partitions = []
+    holders = os.path.join(p, 'holders')
+    for holder in os.listdir(holders):
+        uuid_path = os.path.join(holders, holder, 'dm', 'uuid')
+        uuid = open(uuid_path, 'r').read()
+        LOG.debug("list_partitions_mpath: " + uuid_path + " uuid = " + uuid)
+        if re.match(part_re, uuid):
+            partitions.append(holder)
+    return partitions
+
+
+def list_partitions_device(dev):
     """
     Return a list of partitions on the given device name
     """
     partitions = []
-    for name in os.listdir(os.path.join('/sys/block', basename)):
+    basename = os.path.basename(dev)
+    for name in os.listdir(block_path(dev)):
         if name.startswith(basename):
             partitions.append(name)
     return partitions
@@ -540,10 +570,17 @@ def get_partition_base(dev):
             return '/dev/' + basename
     raise Error('no parent device for partition', dev)
 
+def is_partition_mpath(dev):
+    uuid = get_dm_uuid(dev)
+    return bool(re.match('part\d+-mpath-', uuid))
+
 def is_partition(dev):
     """
     Check whether a given device path is a partition or a full disk.
     """
+    if is_mpath(dev):
+        return is_partition_mpath(dev)
+
     dev = os.path.realpath(dev)
     if not stat.S_ISBLK(os.lstat(dev).st_mode):
         raise Error('not a block device', dev)
@@ -617,8 +654,7 @@ def verify_not_in_use(dev, check_partitions=False):
         raise Error('Device %s is in use by a device-mapper mapping (dm-crypt?)' % dev, ','.join(holders))
 
     if check_partitions and not is_partition(dev):
-        basename = get_dev_name(os.path.realpath(dev))
-        for partname in list_partitions(basename):
+        for partname in list_partitions(dev):
             partition = get_dev_path(partname)
             if is_mounted(partition):
                 raise Error('Device is mounted', partition)
