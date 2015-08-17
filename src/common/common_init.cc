@@ -24,6 +24,7 @@
 #include "common/safe_io.h"
 #include "common/valgrind.h"
 #include "common/version.h"
+#include "common/zipkin_trace.h"
 #include "include/color.h"
 
 #include <errno.h>
