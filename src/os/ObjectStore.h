@@ -137,7 +137,7 @@ public:
    * ABC for Sequencer implementation, private to the ObjectStore derived class.
    * created in ...::queue_transaction(s)
    */
-  struct Sequencer_impl {
+  struct Sequencer_impl : public RefCountedObject {
     virtual void flush() = 0;
 
     /**
@@ -155,20 +155,21 @@ public:
       Context *c ///< [in] context to call upon flush/commit
       ) = 0; ///< @return true if idle, false otherwise
 
+    Sequencer_impl() : RefCountedObject(0) {}
     virtual ~Sequencer_impl() {}
   };
+  typedef boost::intrusive_ptr<Sequencer_impl> Sequencer_implRef;
 
   /**
    * External (opaque) sequencer implementation
    */
   struct Sequencer {
     string name;
-    Sequencer_impl *p;
+    Sequencer_implRef p;
 
     Sequencer(string n)
       : name(n), p(NULL) {}
     ~Sequencer() {
-      delete p;
     }
 
     /// return a unique string identifier for this sequencer
@@ -2118,6 +2119,13 @@ public:
 };
 WRITE_CLASS_ENCODER(ObjectStore::Transaction)
 WRITE_CLASS_ENCODER(ObjectStore::Transaction::TransactionData)
+
+static inline void intrusive_ptr_add_ref(ObjectStore::Sequencer_impl *s) {
+  s->get();
+}
+static inline void intrusive_ptr_release(ObjectStore::Sequencer_impl *s) {
+  s->put();
+}
 
 ostream& operator<<(ostream& out, const ObjectStore::Sequencer& s);
 
