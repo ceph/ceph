@@ -2525,6 +2525,31 @@ public:
   void list_objects(ListContext *p, Context *onfinish);
   uint32_t list_objects_seek(ListContext *p, uint32_t pos);
 
+  hobject_t enumerate_objects_begin();
+  hobject_t enumerate_objects_end();
+  //hobject_t enumerate_objects_begin(int n, int m);
+  void enumerate_objects(
+    int64_t pool_id,
+    const std::string &ns,
+    const hobject_t &start,
+    const hobject_t &end,
+    const uint32_t max,
+    std::list<librados::ListObjectImpl> *result, 
+    hobject_t *next,
+    Context *on_finish);
+
+  void _enumerate_reply(
+      bufferlist &bl,
+      int r,
+      const hobject_t &end,
+      const int64_t pool_id,
+      int budget,
+      epoch_t reply_epoch,
+      std::list<librados::ListObjectImpl> *result, 
+      hobject_t *next,
+      Context *on_finish);
+  friend class C_EnumerateReply;
+
   // -------------------------
   // pool ops
 private:
