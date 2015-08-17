@@ -90,6 +90,7 @@ DMCRYPT_TOBE_UUID =         '89c57f98-2fe5-4dc0-89c1-5ec00ceff2be'
 DMCRYPT_JOURNAL_TOBE_UUID = '89c57f98-2fe5-4dc0-89c1-35865ceff2be'
 
 DEFAULT_FS_TYPE = 'xfs'
+SYSFS = '/sys'
 
 MOUNT_OPTIONS = dict(
     btrfs='noatime,user_subvol_rm_allowed',
@@ -363,6 +364,56 @@ def platform_information():
         str(codename).strip()
     )
 
+#
+# An alternative block_path implementation would be
+#
+#   name = basename(dev)
+#   return /sys/devices/virtual/block/$name
+#
+# It is however more fragile because it relies on the fact
+# that the basename of the device the user will use always
+# matches the one the driver will use. On Ubuntu 14.04, for
+# instance, when multipath creates a partition table on
+#
+#   /dev/mapper/353333330000007d0 -> ../dm-0
+#
+# it will create partition devices named
+#
+#   /dev/mapper/353333330000007d0-part1
+#
+# which is the same device as /dev/dm-1 but not a symbolic
+# link to it:
+#
+#   ubuntu@other:~$ ls -l /dev/mapper /dev/dm-1
+#   brw-rw---- 1 root disk 252, 1 Aug 15 17:52 /dev/dm-1
+#   lrwxrwxrwx 1 root root        7 Aug 15 17:52 353333330000007d0 -> ../dm-0
+#   brw-rw---- 1 root disk 252,   1 Aug 15 17:52 353333330000007d0-part1
+#
+# Using the basename in this case fails.
+#
+def block_path(dev):
+    path = os.path.realpath(dev)
+    rdev = os.stat(path).st_rdev
+    (M, m) = (os.major(rdev), os.minor(rdev))
+    return "{sysfs}/dev/block/{M}:{m}".format(sysfs=SYSFS, M=M, m=m)
+
+def get_dm_uuid(dev):
+    uuid_path = os.path.join(block_path(dev), 'dm', 'uuid')
+    LOG.debug("get_dm_uuid " + dev + " uuid path is " + uuid_path)
+    if not os.path.exists(uuid_path):
+        return False
+    uuid = open(uuid_path, 'r').read()
+    LOG.debug("get_dm_uuid " + dev + " uuid is " + uuid)
+    return uuid
+
+def is_mpath(dev):
+    """
+    True if the path is managed by multipath
+    """
+    uuid = get_dm_uuid(dev)
+    return (uuid and
+            (re.match('part\d+-mpath-', uuid) or
+             re.match('mpath-', uuid)))
 
 def get_dev_name(path):
     """
