@@ -97,6 +97,9 @@ namespace {
 
       while (count > 0) {
         if (queue->dequeue(obj)) {
+#if 0
+	  std::cout << "dq: " << obj << " " << obj->ix << std::endl;
+#endif
 	  --count;
         }
       }
@@ -107,7 +110,11 @@ namespace {
     {
       size_t count = COUNT;
       while (count > 0) {
-        if (queue->enqueue(&(ovec[count]))) {
+	Object *obj = &(ovec[count-1]);
+#if 0
+	std::cout << "nq: " << obj << " " << obj->ix << std::endl;
+#endif
+        if (queue->enqueue(obj)) {
 	  --count;
         }
       }
@@ -183,7 +190,7 @@ TEST(QUEUES, MAKE_OBJECTS_1024)
 {
   ovec.reserve(COUNT); /* yikes */
   for (int ix = 0; ix < COUNT; ++ix) {
-    ovec.emplace_back(Object(ix));
+    ovec.emplace_back(ix);
   }
 }
 
