@@ -150,14 +150,14 @@ bool MDSAuthCaps::is_capable(const std::string &inode_path,
     if (i->match.match(inode_path, uid) &&
 	i->spec.allows(mask & (MAY_READ|MAY_EXECUTE), mask & MAY_WRITE)) {
 
-	  if ((mask & MAY_CREATE) &&
-	  (inode_gid != gid)) {
-	    continue;
-	  }
-
       // check unix permissions?
       if (i->match.uid == MDSCapMatch::MDS_AUTH_UID_ANY) {
         return true;
+      }
+
+      if ((mask & MAY_CREATE) &&
+	  (inode_gid != gid)) {
+	continue;
       }
 
       if (inode_uid == uid) {
