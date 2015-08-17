@@ -161,6 +161,47 @@ TEST(AccessTest, Path){
   ceph_shutdown(admin);
 }
 
+TEST(AccessTest, ReadOnly){
+  struct ceph_mount_info *admin;
+  ASSERT_EQ(0, ceph_create(&admin, NULL));
+  ASSERT_EQ(0, ceph_conf_parse_env(admin, NULL));
+  ASSERT_EQ(0, ceph_conf_read_file(admin, NULL));
+  ASSERT_EQ(0, ceph_mount(admin, "/"));
+  ASSERT_EQ(0, ceph_mkdir(admin, "/ronly", 0755));
+  int fd = ceph_open(admin, "/ronly/out", O_CREAT|O_WRONLY, 0755);
+  ceph_write(admin, fd, "foo", 3, 0);
+  ceph_close(admin,fd);
+
+  string key;
+  ASSERT_EQ(0, do_mon_command(
+      "{\"prefix\": \"auth get-or-create\", \"entity\": \"client.ronly\", "
+      "\"caps\": [\"mon\", \"allow r\", \"osd\", \"allow rw\", "
+      "\"mds\", \"allow r\""
+      "], \"format\": \"json\"}", &key));
+
+  struct ceph_mount_info *cmount;
+  ASSERT_EQ(0, ceph_create(&cmount, "ronly"));
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
+  ASSERT_EQ(0, ceph_conf_read_file(cmount, NULL));
+  ASSERT_EQ(0, ceph_conf_set(cmount, "key", key.c_str()));
+  ASSERT_EQ(0, ceph_mount(cmount, "/"));
+
+  //allowed operations
+  fd = ceph_open(cmount, "/ronly/out", O_RDONLY, 0644);
+  ASSERT_GE(fd, 0);
+  ceph_close(cmount,fd);
+
+  //not allowed operations
+  fd = ceph_open(cmount, "/ronly/bar", O_CREAT|O_WRONLY, 0755);
+  ASSERT_LT(fd, 0);
+  ASSERT_LT(ceph_mkdir(cmount, "/newdir", 0755), 0);
+
+  ceph_shutdown(cmount);
+  ASSERT_EQ(0, ceph_unlink(admin, "/ronly/out"));
+  ASSERT_EQ(0, ceph_rmdir(admin, "/ronly"));
+  ceph_shutdown(admin);
+}
+
 int main(int argc, char **argv)
 {
   ::testing::InitGoogleTest(&argc, argv);
