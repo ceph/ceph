@@ -3,6 +3,8 @@
 #include "test/librbd/test_fixture.h"
 #include "test/librbd/test_support.h"
 #include "include/stringify.h"
+#include "librbd/AioImageRequestWQ.h"
+#include "librbd/ImageWatcher.h"
 #include "cls/lock/cls_lock_client.h"
 #include "cls/lock/cls_lock_types.h"
 #include "librbd/internal.h"
@@ -82,4 +84,14 @@ int TestFixture::unlock_image() {
     m_lock_cookie = "";
   }
   return r;
+}
+
+int TestFixture::acquire_exclusive_lock(librbd::ImageCtx &ictx) {
+  int r = ictx.aio_work_queue->write(0, 0, "", 0);
+  if (r != 0) {
+    return r;
+  }
+
+  RWLock::RLocker owner_locker(ictx.owner_lock);
+  return ictx.image_watcher->is_lock_owner() ? 0 : -EINVAL;
 }
