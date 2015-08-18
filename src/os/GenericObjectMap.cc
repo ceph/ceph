@@ -133,7 +133,7 @@ string GenericObjectMap::header_key(const coll_t &cid, const ghobject_t &oid)
 
   t = buf;
   snprintf(t, end - t, "%.*X", (int)(sizeof(oid.hobj.get_hash())*2),
-           oid.hobj.get_bitreverse_key_u32());
+           (uint32_t)oid.hobj.get_bitwise_key_u32());
   full_name += string(buf);
   full_name.append(GHOBJECT_KEY_SEP_S);
 
