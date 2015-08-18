@@ -48,8 +48,8 @@ int RGWCoroutinesStack::operate(RGWCoroutinesEnv *_env)
 
   if (op->is_done()) {
     int op_retcode = op->get_ret_status();
-    op->put();
     r = unwind(r);
+    op->put();
     done_flag = (pos == ops.end());
     if (done_flag) {
       retcode = op_retcode;
@@ -81,12 +81,14 @@ int RGWCoroutinesStack::call(RGWCoroutine *next_op, int ret) {
   return ret;
 }
 
-void RGWCoroutinesStack::spawn(RGWCoroutine *op, bool wait)
+void RGWCoroutinesStack::spawn(RGWCoroutine *source_op, RGWCoroutine *op, bool wait)
 {
   op->get();
 
+  rgw_spawned_stacks *s = (source_op ? &source_op->spawned : &spawned);
+
   RGWCoroutinesStack *stack = env->manager->allocate_stack();
-  spawned_stacks.push_back(stack);
+  s->entries.push_back(stack);
 
   stack->get(); /* we'll need to collect the stack */
   int r = stack->call(op, 0);
@@ -99,9 +101,17 @@ void RGWCoroutinesStack::spawn(RGWCoroutine *op, bool wait)
   }
 }
 
+void RGWCoroutinesStack::spawn(RGWCoroutine *op, bool wait)
+{
+  spawn(NULL, op, wait);
+}
+
 int RGWCoroutinesStack::unwind(int retcode)
 {
+  rgw_spawned_stacks *src_spawned = &(*pos)->spawned;
+
   if (pos == ops.begin()) {
+    spawned.inherit(src_spawned);
     pos = ops.end();
     return retcode;
   }
@@ -110,15 +120,17 @@ int RGWCoroutinesStack::unwind(int retcode)
   ops.pop_back();
   RGWCoroutine *op = *pos;
   op->set_retcode(retcode);
+  op->spawned.inherit(src_spawned);
   return 0;
 }
 
-bool RGWCoroutinesStack::collect(int *ret) /* returns true if needs to be called again */
+bool RGWCoroutinesStack::collect(RGWCoroutine *op, int *ret) /* returns true if needs to be called again */
 {
+  rgw_spawned_stacks *s = (op ? &op->spawned : &spawned);
   *ret = 0;
   list<RGWCoroutinesStack *> new_list;
 
-  for (list<RGWCoroutinesStack *>::iterator iter = spawned_stacks.begin(); iter != spawned_stacks.end(); ++iter) {
+  for (list<RGWCoroutinesStack *>::iterator iter = s->entries.begin(); iter != s->entries.end(); ++iter) {
     RGWCoroutinesStack *stack = *iter;
     if (!stack->is_done()) {
       new_list.push_back(stack);
@@ -131,8 +143,13 @@ bool RGWCoroutinesStack::collect(int *ret) /* returns true if needs to be called
 
     stack->put();
   }
-  spawned_stacks.swap(new_list);
+  s->entries.swap(new_list);
   return (!new_list.empty());
+}
+
+bool RGWCoroutinesStack::collect(int *ret) /* returns true if needs to be called again */
+{
+  return collect(NULL, ret);
 }
 
 static void _aio_completion_notifier_cb(librados::completion_t cb, void *arg);
@@ -300,7 +317,12 @@ void RGWCoroutine::call(RGWCoroutine *op)
 
 void RGWCoroutine::spawn(RGWCoroutine *op, bool wait)
 {
-  stack->spawn(op, wait);
+  stack->spawn(this, op, wait);
+}
+
+bool RGWCoroutine::collect(int *ret) /* returns true if needs to be called again */
+{
+  return stack->collect(this, ret);
 }
 
 int RGWSimpleCoroutine::operate()
