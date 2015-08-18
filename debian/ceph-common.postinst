@@ -1,6 +1,6 @@
 #!/bin/sh
 # vim: set noet ts=8:
-# postinst script for ceph-commont
+# postinst script for ceph-mds
 #
 # see: dh_installdeb(1)
 
@@ -28,6 +28,8 @@ set -e
 [ -z "$SERVER_NAME" ] && SERVER_NAME="Ceph storage service"
 [ -z "$SERVER_GROUP" ] && SERVER_GROUP=ceph
 [ -z "$SERVER_UID" ] && SERVER_UID=64045  # alloc by Debian base-passwd maintainer
+[ -z "$SERVER_GID" ] && SERVER_GID=$SERVER_UID
+
 
 # Groups that the user will be added to, if undefined, then none.
 [ -z "$SERVER_ADDGROUP" ] && SERVER_ADDGROUP=
@@ -47,7 +49,6 @@ case "$1" in
          echo -n "Adding system user $SERVER_USER.."
          adduser --quiet \
                  --system \
-                 --ingroup $SERVER_GROUP \
                  --no-create-home \
                  --disabled-password \
 	         --uid $SERVER_UID \
@@ -56,20 +57,12 @@ case "$1" in
          echo "..done"
        fi
        # 3. adjust passwd entry
+       echo -n "Setting system user $SERVER_USER properties.."
        usermod -c "$SERVER_NAME" \
                -d $SERVER_HOME   \
                -g $SERVER_GROUP  \
-                  $SERVER_USER
-       # 4. Add the user to extra groups
-       if test -n $SERVER_ADDGROUP
-       then
-           if ! groups $SERVER_USER | cut -d: -f2 | \
-              grep -qw $SERVER_ADDGROUP; then
-	        echo -n "Adding user $SERVER_USER to groups $SERVER_ADDGROUP.."
-                adduser $SERVER_USER $SERVER_ADDGROUP
-		echo "..done"
-           fi
-       fi
+               $SERVER_USER
+       echo "..done"
 
        # 5. adjust file and directory permissions
        if ! dpkg-statoverride --list $SERVER_HOME >/dev/null
