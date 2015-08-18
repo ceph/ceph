@@ -271,7 +271,6 @@ bool MemStore::exists(coll_t cid, const ghobject_t& oid)
   CollectionRef c = get_collection(cid);
   if (!c)
     return false;
-  RWLock::RLocker l(c->lock);
 
   // Perform equivalent of c->get_object_(oid) != NULL. In C++11 the
   // shared_ptr needs to be compared to nullptr.
@@ -288,7 +287,6 @@ int MemStore::stat(
   CollectionRef c = get_collection(cid);
   if (!c)
     return -ENOENT;
-  RWLock::RLocker l(c->lock);
 
   ObjectRef o = c->get_object(oid);
   if (!o)
@@ -314,7 +312,6 @@ int MemStore::read(
   CollectionRef c = get_collection(cid);
   if (!c)
     return -ENOENT;
-  RWLock::RLocker lc(c->lock);
 
   ObjectRef o = c->get_object(oid);
   if (!o)
@@ -338,7 +335,6 @@ int MemStore::fiemap(coll_t cid, const ghobject_t& oid,
   CollectionRef c = get_collection(cid);
   if (!c)
     return -ENOENT;
-  RWLock::RLocker lc(c->lock);
 
   ObjectRef o = c->get_object(oid);
   if (!o)
@@ -361,7 +357,6 @@ int MemStore::getattr(coll_t cid, const ghobject_t& oid,
   CollectionRef c = get_collection(cid);
   if (!c)
     return -ENOENT;
-  RWLock::RLocker l(c->lock);
 
   ObjectRef o = c->get_object(oid);
   if (!o)
@@ -382,7 +377,6 @@ int MemStore::getattrs(coll_t cid, const ghobject_t& oid,
   CollectionRef c = get_collection(cid);
   if (!c)
     return -ENOENT;
-  RWLock::RLocker l(c->lock);
 
   ObjectRef o = c->get_object(oid);
   if (!o)
@@ -460,7 +454,6 @@ int MemStore::omap_get(
   CollectionRef c = get_collection(cid);
   if (!c)
     return -ENOENT;
-  RWLock::RLocker l(c->lock);
 
   ObjectRef o = c->get_object(oid);
   if (!o)
@@ -482,7 +475,6 @@ int MemStore::omap_get_header(
   CollectionRef c = get_collection(cid);
   if (!c)
     return -ENOENT;
-  RWLock::RLocker l(c->lock);
 
   ObjectRef o = c->get_object(oid);
   if (!o)
@@ -502,7 +494,6 @@ int MemStore::omap_get_keys(
   CollectionRef c = get_collection(cid);
   if (!c)
     return -ENOENT;
-  RWLock::RLocker l(c->lock);
 
   ObjectRef o = c->get_object(oid);
   if (!o)
@@ -526,7 +517,6 @@ int MemStore::omap_get_values(
   CollectionRef c = get_collection(cid);
   if (!c)
     return -ENOENT;
-  RWLock::RLocker l(c->lock);
 
   ObjectRef o = c->get_object(oid);
   if (!o)
@@ -553,7 +543,6 @@ int MemStore::omap_check_keys(
   CollectionRef c = get_collection(cid);
   if (!c)
     return -ENOENT;
-  RWLock::RLocker l(c->lock);
 
   ObjectRef o = c->get_object(oid);
   if (!o)
@@ -576,7 +565,6 @@ ObjectMap::ObjectMapIterator MemStore::get_omap_iterator(coll_t cid,
   CollectionRef c = get_collection(cid);
   if (!c)
     return ObjectMap::ObjectMapIterator();
-  RWLock::RLocker l(c->lock);
 
   ObjectRef o = c->get_object(oid);
   if (!o)
@@ -959,7 +947,6 @@ int MemStore::_touch(coll_t cid, const ghobject_t& oid)
   CollectionRef c = get_collection(cid);
   if (!c)
     return -ENOENT;
-  RWLock::WLocker l(c->lock);
 
   ObjectRef o = c->get_object(oid);
   if (!o) {
@@ -981,7 +968,6 @@ int MemStore::_write(coll_t cid, const ghobject_t& oid,
   CollectionRef c = get_collection(cid);
   if (!c)
     return -ENOENT;
-  RWLock::WLocker l(c->lock);
 
   ObjectRef o = c->get_object(oid);
   if (!o) {
@@ -1016,7 +1002,6 @@ int MemStore::_truncate(coll_t cid, const ghobject_t& oid, uint64_t size)
   CollectionRef c = get_collection(cid);
   if (!c)
     return -ENOENT;
-  RWLock::WLocker l(c->lock);
 
   ObjectRef o = c->get_object(oid);
   if (!o)
@@ -1035,13 +1020,12 @@ int MemStore::_remove(coll_t cid, const ghobject_t& oid)
     return -ENOENT;
   RWLock::WLocker l(c->lock);
 
-  ObjectRef o = c->get_object(oid);
-  if (!o)
+  auto i = c->object_hash.find(oid);
+  if (i == c->object_hash.end())
     return -ENOENT;
+  c->object_hash.erase(i);
   c->object_map.erase(oid);
-  c->object_hash.erase(oid);
-
-  used_bytes -= o->get_size();
+  used_bytes -= i->second->get_size();
 
   return 0;
 }
@@ -1053,7 +1037,6 @@ int MemStore::_setattrs(coll_t cid, const ghobject_t& oid,
   CollectionRef c = get_collection(cid);
   if (!c)
     return -ENOENT;
-  RWLock::WLocker l(c->lock);
 
   ObjectRef o = c->get_object(oid);
   if (!o)
@@ -1070,7 +1053,6 @@ int MemStore::_rmattr(coll_t cid, const ghobject_t& oid, const char *name)
   CollectionRef c = get_collection(cid);
   if (!c)
     return -ENOENT;
-  RWLock::WLocker l(c->lock);
 
   ObjectRef o = c->get_object(oid);
   if (!o)
@@ -1089,7 +1071,6 @@ int MemStore::_rmattrs(coll_t cid, const ghobject_t& oid)
   CollectionRef c = get_collection(cid);
   if (!c)
     return -ENOENT;
-  RWLock::WLocker l(c->lock);
 
   ObjectRef o = c->get_object(oid);
   if (!o)
@@ -1107,7 +1088,6 @@ int MemStore::_clone(coll_t cid, const ghobject_t& oldoid,
   CollectionRef c = get_collection(cid);
   if (!c)
     return -ENOENT;
-  RWLock::WLocker l(c->lock);
 
   ObjectRef oo = c->get_object(oldoid);
   if (!oo)
@@ -1146,7 +1126,6 @@ int MemStore::_clone_range(coll_t cid, const ghobject_t& oldoid,
   CollectionRef c = get_collection(cid);
   if (!c)
     return -ENOENT;
-  RWLock::WLocker l(c->lock);
 
   ObjectRef oo = c->get_object(oldoid);
   if (!oo)
@@ -1175,7 +1154,6 @@ int MemStore::_omap_clear(coll_t cid, const ghobject_t &oid)
   CollectionRef c = get_collection(cid);
   if (!c)
     return -ENOENT;
-  RWLock::WLocker l(c->lock);
 
   ObjectRef o = c->get_object(oid);
   if (!o)
@@ -1193,7 +1171,6 @@ int MemStore::_omap_setkeys(coll_t cid, const ghobject_t &oid,
   CollectionRef c = get_collection(cid);
   if (!c)
     return -ENOENT;
-  RWLock::WLocker l(c->lock);
 
   ObjectRef o = c->get_object(oid);
   if (!o)
@@ -1211,7 +1188,6 @@ int MemStore::_omap_rmkeys(coll_t cid, const ghobject_t &oid,
   CollectionRef c = get_collection(cid);
   if (!c)
     return -ENOENT;
-  RWLock::WLocker l(c->lock);
 
   ObjectRef o = c->get_object(oid);
   if (!o)
@@ -1230,7 +1206,6 @@ int MemStore::_omap_rmkeyrange(coll_t cid, const ghobject_t &oid,
   CollectionRef c = get_collection(cid);
   if (!c)
     return -ENOENT;
-  RWLock::WLocker l(c->lock);
 
   ObjectRef o = c->get_object(oid);
   if (!o)
@@ -1249,7 +1224,6 @@ int MemStore::_omap_setheader(coll_t cid, const ghobject_t &oid,
   CollectionRef c = get_collection(cid);
   if (!c)
     return -ENOENT;
-  RWLock::WLocker l(c->lock);
 
   ObjectRef o = c->get_object(oid);
   if (!o)
