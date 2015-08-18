@@ -348,11 +348,8 @@ set(UNITTEST_LIBS gmock_main gmock gtest ${PTHREAD_LIBS})
 set(UNITTEST_CXX_FLAGS "-I${CMAKE_SOURCE_DIR}/src/gmock/include -I${CMAKE_BINARY_DIR}/src/gmock/include -I${CMAKE_SOURCE_DIR}/src/gmock/gtest/include -I${CMAKE_BINARY_DIR}/src/gmock/gtest/include -fno-strict-aliasing")
   
 # unittest_encoding
-set(unittest_encoding_srcs
-  encoding.cc
-  )
 add_executable(unittest_encoding EXCLUDE_FROM_ALL
-  ${unittest_encoding_srcs}
+  encoding.cc
   $<TARGET_OBJECTS:heap_profiler_objs>
   )
 add_test(unittest_encoding unittest_encoding)
@@ -363,11 +360,8 @@ set_target_properties(unittest_encoding
   PROPERTIES COMPILE_FLAGS ${UNITTEST_CXX_FLAGS})
 
 # unittest_addrs
-set(unittest_addrs_srcs
-  test_addrs.cc
-  )
 add_executable(unittest_addrs EXCLUDE_FROM_ALL
-  ${unittest_addrs_srcs}
+  test_addrs.cc
   $<TARGET_OBJECTS:heap_profiler_objs>
   )
 add_test(unittest_addrs unittest_addrs)
@@ -378,9 +372,8 @@ set_target_properties(unittest_addrs
   PROPERTIES COMPILE_FLAGS ${UNITTEST_CXX_FLAGS})
 
 # unittest_blkdev
-set(unittest_blkdev_srcs common/test_blkdev.cc)
 add_executable(unittest_blkdev EXCLUDE_FROM_ALL
-  ${unittest_blkdev_srcs}
+  common/test_blkdev.cc
   $<TARGET_OBJECTS:heap_profiler_objs>
   )
 add_test(unittest_blkdev unittest_blkdev)
@@ -395,11 +388,8 @@ set_target_properties(unittest_blkdev PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 
 # unittest_bloom_filter
-set(unittest_bloom_filter_srcs
-  common/test_bloom_filter.cc
-  )
 add_executable(unittest_bloom_filter EXCLUDE_FROM_ALL
-  ${unittest_bloom_filter_srcs}
+  common/test_bloom_filter.cc
   $<TARGET_OBJECTS:heap_profiler_objs>
   )
 add_test(unittest_bloom_filter unittest_bloom_filter)
@@ -434,11 +424,8 @@ set_target_properties(unittest_prioritized_queue
   PROPERTIES COMPILE_FLAGS ${UNITTEST_CXX_FLAGS})
 
 # unittest_str_map
-set(unittest_str_map_srcs
-  common/test_str_map.cc
-  )
 add_executable(unittest_str_map EXCLUDE_FROM_ALL
-  ${unittest_str_map_srcs}
+  common/test_str_map.cc
   $<TARGET_OBJECTS:heap_profiler_objs>
   )
 add_test(unittest_str_map unittest_str_map)
@@ -449,11 +436,8 @@ set_target_properties(unittest_str_map
   PROPERTIES COMPILE_FLAGS ${UNITTEST_CXX_FLAGS})
 
 # unittest_sharedptr_registry
-set(unittest_sharedptr_registry_srcs
-  common/test_sharedptr_registry.cc
-  )
 add_executable(unittest_sharedptr_registry EXCLUDE_FROM_ALL
-  ${unittest_sharedptr_registry_srcs}
+  common/test_sharedptr_registry.cc
   $<TARGET_OBJECTS:heap_profiler_objs>
   )
 add_test(unittest_sharedptr_registry unittest_sharedptr_registry)
@@ -464,11 +448,8 @@ set_target_properties(unittest_sharedptr_registry
   PROPERTIES COMPILE_FLAGS ${UNITTEST_CXX_FLAGS})
 
 # unittest_shared_cache
-set(unittest_shared_cache_srcs
-  common/test_shared_cache.cc
-  )
 add_executable(unittest_shared_cache EXCLUDE_FROM_ALL
-  ${unittest_shared_cache_srscs}
+  common/test_shared_cache.cc
   $<TARGET_OBJECTS:heap_profiler_objs>
   )
 add_test(unittest_shared_cache unittest_shared_cache)
@@ -479,11 +460,8 @@ set_target_properties(unittest_shared_cache
   PROPERTIES COMPILE_FLAGS ${UNITTEST_CXX_FLAGS})
 
 # unittest_sloppy_crc_map
-set(unittest_sloppy_crc_map_srcs
-  common/test_sloppy_crc_map.cc
-  )
 add_executable(unittest_sloppy_crc_map EXCLUDE_FROM_ALL
-  ${unittest_sloppy_crc_map_srcs}
+  common/test_sloppy_crc_map.cc
   $<TARGET_OBJECTS:heap_profiler_objs>
   )
 add_test(unittest_sloppy_crc_map unittest_sloppy_crc_map)
@@ -494,12 +472,9 @@ set_target_properties(unittest_sloppy_crc_map
   PROPERTIES COMPILE_FLAGS ${UNITTEST_CXX_FLAGS})
 
 # unittest_util
-set(unittest_util_srcs
+add_executable(unittest_util EXCLUDE_FROM_ALL
   common/test_util.cc
   ${CMAKE_SOURCE_DIR}/src/common/util.cc
-  )
-add_executable(unittest_util EXCLUDE_FROM_ALL
-  ${unittest_util_srcs}
   $<TARGET_OBJECTS:heap_profiler_objs>
   )
 add_test(unittest_util unittest_util)
@@ -515,9 +490,8 @@ set_target_properties(unittest_util
   PROPERTIES COMPILE_FLAGS ${UNITTEST_CXX_FLAGS})
 
 # unittest_crush_wrapper
-set(unittest_crush_wrapper_srcs crush/CrushWrapper.cc)
 add_executable(unittest_crush_wrapper EXCLUDE_FROM_ALL
-  ${unittest_crush_wrapper_srcs}
+  crush/CrushWrapper.cc
   $<TARGET_OBJECTS:heap_profiler_objs>
   )
 add_test(unittest_crush_wrapper unittest_crush_wrapper)
@@ -528,9 +502,8 @@ set_target_properties(unittest_crush_wrapper PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 
 # unittest_crush
-set(unittest_crush_srcs crush/crush.cc)
 add_executable(unittest_crush EXCLUDE_FROM_ALL
-  ${unittest_crush_srcs}
+  crush/crush.cc
   $<TARGET_OBJECTS:heap_profiler_objs>
   )
 add_test(unittest_crush unittest_crush)
@@ -541,9 +514,8 @@ set_target_properties(unittest_crush PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 
 # unittest_osdmap
-set(unittest_osdmap_srcs osd/TestOSDMap.cc)
 add_executable(unittest_osdmap EXCLUDE_FROM_ALL
-  ${unittest_osdmap_srcs}
+  osd/TestOSDMap.cc
   $<TARGET_OBJECTS:heap_profiler_objs>
   )
 add_test(unittest_osdmap unittest_osdmap)
@@ -554,9 +526,8 @@ set_target_properties(unittest_osdmap PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 
 # unittest_workqueue
-set(unittest_workqueue_srcs test_workqueue.cc)
 add_executable(unittest_workqueue EXCLUDE_FROM_ALL
-  ${unittest_workqueue_srcs}
+  test_workqueue.cc
   $<TARGET_OBJECTS:heap_profiler_objs>
   )
 add_test(unittest_workqueue unittest_workqueue)
@@ -568,9 +539,8 @@ set_target_properties(unittest_workqueue PROPERTIES COMPILE_FLAGS
 
 
 # unittest_striper
-set(unittest_striper_srcs test_striper.cc)
 add_executable(unittest_striper EXCLUDE_FROM_ALL
-  ${unittest_striper_srcs}
+  test_striper.cc
   $<TARGET_OBJECTS:heap_profiler_objs>
   )
 add_test(unittest_striper unittest_striper)
@@ -581,9 +551,8 @@ set_target_properties(unittest_striper PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 
 # unittest_prebufferedstreambuf
-set(unittest_prebufferedstreambuf_srcs test_prebufferedstreambuf.cc)
 add_executable(unittest_prebufferedstreambuf EXCLUDE_FROM_ALL
-  ${unittest_prebufferedstreambuf_srcs}
+  test_prebufferedstreambuf.cc
   $<TARGET_OBJECTS:heap_profiler_objs>
   )
 add_test(unittest_prebufferedstreambuf unittest_prebufferedstreambuf)
@@ -594,9 +563,8 @@ set_target_properties(unittest_prebufferedstreambuf PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 
 # unittest_str_list
-set(unittest_str_list_srcs test_str_list.cc)
 add_executable(unittest_str_list EXCLUDE_FROM_ALL
-  ${unittest_str_list_srcs}
+  test_str_list.cc
   $<TARGET_OBJECTS:heap_profiler_objs>
   )
 add_test(unittest_str_list unittest_str_list)
@@ -607,9 +575,8 @@ set_target_properties(unittest_str_list PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 
 # unittest_log
-set(unittest_log_srcs ${CMAKE_SOURCE_DIR}/src/log/test.cc)
 add_executable(unittest_log EXCLUDE_FROM_ALL
-  ${unittest_log_srcs}
+  ${CMAKE_SOURCE_DIR}/src/log/test.cc
   $<TARGET_OBJECTS:heap_profiler_objs>
   )
 add_test(unittest_log unittest_log)
@@ -620,9 +587,8 @@ set_target_properties(unittest_log PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 
 # unittest_throttle
-set(unittest_throttle_srcs common/Throttle.cc)
 add_executable(unittest_throttle EXCLUDE_FROM_ALL
-  ${unittest_throttle_srcs}
+  common/Throttle.cc
   $<TARGET_OBJECTS:heap_profiler_objs>
   )
 add_test(unittest_throttle unittest_throttle)
@@ -633,9 +599,8 @@ set_target_properties(unittest_throttle PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 
 # unittest_base64
-set(unittest_base64_srcs base64.cc)
 add_executable(unittest_base64 EXCLUDE_FROM_ALL
-  ${unittest_base64_srcs}
+  base64.cc
   $<TARGET_OBJECTS:heap_profiler_objs>
   )
 add_test(unittest_base64 unittest_base64)
@@ -644,9 +609,8 @@ target_link_libraries(unittest_base64 global ${CMAKE_DL_LIBS} ${TCMALLOC_LIBS} $
 set_target_properties(unittest_base64 PROPERTIES COMPILE_FLAGS ${UNITTEST_CXX_FLAGS})
 
 # unittest_ceph_argparse
-set(unittest_ceph_argparse_srcs ceph_argparse.cc)
 add_executable(unittest_ceph_argparse EXCLUDE_FROM_ALL
-  ${unittest_ceph_argparse_srcs}
+  ceph_argparse.cc
   $<TARGET_OBJECTS:heap_profiler_objs>
   )
 add_test(unittest_ceph_argparse unittest_ceph_argparse)
@@ -657,9 +621,8 @@ set_target_properties(unittest_ceph_argparse PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 
 # unittest_ceph_compatset
-set(unittest_ceph_compatset_srcs ceph_compatset.cc)
 add_executable(unittest_ceph_compatset EXCLUDE_FROM_ALL
-  ${unittest_ceph_compatset_srcs}
+  ceph_compatset.cc
   $<TARGET_OBJECTS:heap_profiler_objs>
   )
 add_test(unittest_ceph_compatset unittest_ceph_compatset)
@@ -681,9 +644,8 @@ target_link_libraries(unittest_mds_types global ${CMAKE_DL_LIBS}
 set_target_properties(unittest_mds_types PROPERTIES COMPILE_FLAGS ${UNITTEST_CXX_FLAGS})
 
 # unittest_osd_types
-set(unittest_osd_types_srcs osd/types.cc)
 add_executable(unittest_osd_types EXCLUDE_FROM_ALL
-  ${unittest_osd_types_srcs}
+  osd/types.cc
   $<TARGET_OBJECTS:heap_profiler_objs>
   )
 add_test(unittest_osd_types unittest_osd_types)
@@ -718,9 +680,8 @@ set_target_properties(unittest_io_priority PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 
 # unittest_gather
-set(unittest_gather_srcs gather.cc)
 add_executable(unittest_gather EXCLUDE_FROM_ALL
-  ${unittest_gather_srcs}
+  gather.cc
   $<TARGET_OBJECTS:heap_profiler_objs>
   )
 add_test(unittest_gather unittest_gather)
@@ -731,9 +692,8 @@ set_target_properties(unittest_gather PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 
 # run_cmd
-set(unittest_run_cmd_srcs run_cmd.cc)
 add_executable(unittest_run_cmd EXCLUDE_FROM_ALL
-  ${unittest_run_cmd_srcs}
+  run_cmd.cc
   $<TARGET_OBJECTS:heap_profiler_objs>
   )
 add_test(unittest_run_cmd unittest_run_cmd)
@@ -744,9 +704,8 @@ set_target_properties(unittest_run_cmd PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 
 # signals
-set(unittest_signals_srcs signals.cc)
 add_executable(unittest_signals EXCLUDE_FROM_ALL
-  ${unittest_signals_srcs}
+  signals.cc
   $<TARGET_OBJECTS:heap_profiler_objs>
   )
 add_test(unittest_signals unittest_signals)
@@ -757,9 +716,8 @@ set_target_properties(unittest_signals PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 
 # unittest_simple_spin
-set(unittest_simple_spin_srcs simple_spin.cc)
 add_executable(unittest_simple_spin EXCLUDE_FROM_ALL
-  ${unittest_simple_spin_srcs}
+  simple_spin.cc
   $<TARGET_OBJECTS:heap_profiler_objs>
   )
 add_test(unittest_simple_spin unittest_simple_spin)
@@ -770,9 +728,8 @@ set_target_properties(unittest_simple_spin PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 
 # unittest_bufferlist
-set(unittest_bufferlist_srcs bufferlist.cc)
 add_executable(unittest_bufferlist EXCLUDE_FROM_ALL
-  ${unittest_bufferlist_srcs}
+  bufferlist.cc
   $<TARGET_OBJECTS:heap_profiler_objs>
   )
 add_test(unittest_bufferlist unittest_bufferlist)
@@ -795,9 +752,8 @@ set_target_properties(unittest_xlist PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 
 # unittest_librados
-set(unittest_librados_srcs librados/librados.cc)
 add_executable(unittest_librados EXCLUDE_FROM_ALL
-  ${unittest_librados_srcs}
+  librados/librados.cc
   $<TARGET_OBJECTS:heap_profiler_objs>
   )
 add_test(unittest_librados unittest_librados)
@@ -814,9 +770,8 @@ set_target_properties(unittest_librados PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 
 # unittest_crc32
-set(unittest_crc32_srcs common/test_crc32c.cc)
 add_executable(unittest_crc32 EXCLUDE_FROM_ALL
-  ${unittest_crc32_srcs}
+  common/test_crc32c.cc
   $<TARGET_OBJECTS:heap_profiler_objs>
   )
 add_test(unittest_crc32 unittest_crc32)
@@ -827,9 +782,8 @@ set_target_properties(unittest_crc32 PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 
 # unittest_arch
-set(unittest_arch_srcs test_arch.cc)
 add_executable(unittest_arch EXCLUDE_FROM_ALL
-  ${unittest_arch_srcs}
+  test_arch.cc
   $<TARGET_OBJECTS:heap_profiler_objs>
   )
 add_test(unittest_arch unittest_arch)
@@ -852,9 +806,8 @@ set_target_properties(unittest_crypto PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 
 # unittest_crypto_init
-set(unittest_crypto_init_srcs crypto_init.cc)
 add_executable(unittest_crypto_init EXCLUDE_FROM_ALL
-  ${unittest_crypto_init_srcs}
+  crypto_init.cc
   $<TARGET_OBJECTS:heap_profiler_objs>
   )
 add_test(unittest_crypto_init unittest_crypto_init)
@@ -865,9 +818,8 @@ set_target_properties(unittest_crypto_init PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 
 # unittest_perf_counters
-set(unittest_perf_counters_srcs perf_counters.cc)
 add_executable(unittest_perf_counters EXCLUDE_FROM_ALL
-  ${unittest_perf_counters_srcs}
+  perf_counters.cc
   $<TARGET_OBJECTS:heap_profiler_objs>
   )
 add_test(unittest_perf_counters unittest_perf_counters)
@@ -878,9 +830,8 @@ set_target_properties(unittest_perf_counters PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 
 # unittest_admin_socket
-set(unittest_admin_socket_srcs admin_socket.cc)
 add_executable(unittest_admin_socket EXCLUDE_FROM_ALL
-  ${unittest_admin_socket_srcs}
+  admin_socket.cc
   $<TARGET_OBJECTS:heap_profiler_objs>
   )
 add_test(unittest_admin_socket unittest_admin_socket)
@@ -891,9 +842,8 @@ set_target_properties(unittest_admin_socket PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 
 # unittest_ceph_crypto
-set(unittest_ceph_crypto_srcs ceph_crypto.cc)
 add_executable(unittest_ceph_crypto EXCLUDE_FROM_ALL
-  ${unittest_ceph_crypto_srcs}
+  ceph_crypto.cc
   $<TARGET_OBJECTS:heap_profiler_objs>
   )
 add_test(unittest_ceph_crypto unittest_ceph_crypto)
@@ -904,9 +854,8 @@ set_target_properties(unittest_ceph_crypto PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 
 # unittest_utf8
-set(unittest_utf8_srcs utf8.cc)
 add_executable(unittest_utf8 EXCLUDE_FROM_ALL
-  ${unittest_utf8_srcs}
+  utf8.cc
   $<TARGET_OBJECTS:heap_profiler_objs>
   )
 add_test(unittest_utf8 unittest_utf8)
@@ -917,9 +866,8 @@ set_target_properties(unittest_utf8 PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 
 # unittest_mime
-set(unittest_mime_srcs mime.cc)
 add_executable(unittest_mime EXCLUDE_FROM_ALL
-  ${unittest_mime_srcs}
+  mime.cc
   $<TARGET_OBJECTS:heap_profiler_objs>
   )
 add_test(unittest_mime unittest_mime)
@@ -930,9 +878,8 @@ set_target_properties(unittest_mime PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 
 # unittest_escape
-set(unittest_escape_srcs escape.cc)
 add_executable(unittest_escape EXCLUDE_FROM_ALL
-  ${unittest_escape_srcs}
+  escape.cc
   $<TARGET_OBJECTS:heap_profiler_objs>
   )
 add_test(unittest_escape unittest_escape)
@@ -961,9 +908,8 @@ target_link_libraries(unittest_chain_xattr
   )
 
 # unittest_strtol
-set(unittest_strtol_srcs strtol.cc)
 add_executable(unittest_strtol EXCLUDE_FROM_ALL
-  ${unittest_strtol_srcs}
+  strtol.cc
   $<TARGET_OBJECTS:heap_profiler_objs>
   )
 add_test(unittest_strtol unittest_strtol)
@@ -974,9 +920,8 @@ set_target_properties(unittest_strtol PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 
 # unittest_confutils
-set(unittest_confutils_srcs confutils.cc)
 add_executable(unittest_confutils EXCLUDE_FROM_ALL
-  ${unittest_confutils_srcs}
+  confutils.cc
   $<TARGET_OBJECTS:heap_profiler_objs>
   )
 add_test(unittest_confutils unittest_confutils)
@@ -987,9 +932,8 @@ set_target_properties(unittest_confutils PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 
 # unittest_config
-set(unittest_config_srcs common/test_config.cc)
 add_executable(unittest_config EXCLUDE_FROM_ALL
-  ${unittest_config_srcs}
+  common/test_config.cc
   $<TARGET_OBJECTS:heap_profiler_objs>
   )
 add_test(unittest_config unittest_config)
@@ -1000,9 +944,8 @@ set_target_properties(unittest_config PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 
 # unittest_context
-set(unittest_context_srcs common/test_context.cc)
 add_executable(unittest_context EXCLUDE_FROM_ALL
-  ${unittest_context_srcs}
+  common/test_context.cc
   $<TARGET_OBJECTS:heap_profiler_objs>
   )
 add_test(unittest_context unittest_context)
@@ -1013,11 +956,8 @@ set_target_properties(unittest_context PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 
 # unittest_chain_xattr
-set(unittest_chain_xattr_srcs
-  objectstore/chain_xattr.cc
-  )
 add_executable(unittest_chain_xattr EXCLUDE_FROM_ALL
-  ${unittest_chain_xattr_srcs}
+  objectstore/chain_xattr.cc
   $<TARGET_OBJECTS:heap_profiler_objs>
   )
 set_target_properties(unittest_chain_xattr PROPERTIES COMPILE_FLAGS
@@ -1033,11 +973,8 @@ target_link_libraries(unittest_chain_xattr
   )
 
 # unittest_flatindex
-set(unittest_flatindex_srcs
-  os/TestFlatIndex.cc
-  )
 add_executable(unittest_flatindex EXCLUDE_FROM_ALL
-  ${unittest_flatindex_srcs}
+  os/TestFlatIndex.cc
   $<TARGET_OBJECTS:heap_profiler_objs>
   )
 add_test(unittest_flatindex unittest_flatindex)
@@ -1053,9 +990,8 @@ set_target_properties(unittest_flatindex PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 
 # unittest_safe_io
-set(unittest_safe_io_srcs test_safe_io.cc)
 add_executable(unittest_safe_io EXCLUDE_FROM_ALL
-  ${unittest_safe_op_srcs}
+  common/test_safe_io.cc
   $<TARGET_OBJECTS:heap_profiler_objs>
   )
 add_test(unittest_safe_io unittest_safe_io)
@@ -1066,9 +1002,8 @@ set_target_properties(unittest_safe_io PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 
 # unittest_heartbeatmap
-set(unittest_heartbeatmap_srcs heartbeat_map.cc)
 add_executable(unittest_heartbeatmap EXCLUDE_FROM_ALL
-  ${unittest_heartbeatmap_srcs}
+  heartbeat_map.cc
   $<TARGET_OBJECTS:heap_profiler_objs>
   )
 add_test(unittest_heartbeatmap unittest_heartbeatmap)
@@ -1081,10 +1016,8 @@ set_target_properties(unittest_heartbeatmap PROPERTIES COMPILE_FLAGS
 if(${WITH_RADOSGW})
   # unittest_formatter
   # why does this include rgw/rgw_formats.cc...?
-  set(unittest_formatter_srcs formatter.cc
-    ${CMAKE_SOURCE_DIR}/src/rgw/rgw_formats.cc)
   add_executable(unittest_formatter EXCLUDE_FROM_ALL
-    ${unittest_formatter_srcs}
+    ${CMAKE_SOURCE_DIR}/src/rgw/rgw_formats.cc
     $<TARGET_OBJECTS:heap_profiler_objs>
   )
   add_test(unittest_formatter unittest_formatter)
@@ -1096,9 +1029,8 @@ if(${WITH_RADOSGW})
 endif(${WITH_RADOSGW})
 
 # unittest_daemon_config
-set(unittest_daemon_config_srcs daemon_config.cc)
 add_executable(unittest_daemon_config EXCLUDE_FROM_ALL
-  ${unittest_daemon_config_srcs}
+  daemon_config.cc
   $<TARGET_OBJECTS:heap_profiler_objs>
   )
 add_test(unittest_daemon_config unittest_daemon_config)
@@ -1116,9 +1048,8 @@ set_target_properties(unittest_daemon_config PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 
 # unittest_libcephfs_config
-set(unittest_libcephfs_config_srcs libcephfs_config.cc)
 add_executable(unittest_libcephfs_config EXCLUDE_FROM_ALL
-  ${unittest_libcephfs_config_srcs}
+  libcephfs_config.cc
   $<TARGET_OBJECTS:heap_profiler_objs>
   )
 add_test(unittest_libcephfs_config unittest_libcephfs_config)
@@ -1129,9 +1060,8 @@ set_target_properties(unittest_libcephfs_config PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 
 # unittest_lfnindex
-set(unittest_lfnindex_srcs os/TestLFNIndex.cc)
 add_executable(unittest_lfnindex EXCLUDE_FROM_ALL
-  ${unittest_lfnindex_srcs}
+  os/TestLFNIndex.cc
   $<TARGET_OBJECTS:heap_profiler_objs>
   )
 add_test(unittest_lfnindex unittest_lfnindex)
@@ -1161,9 +1091,8 @@ set_target_properties(unittest_librados_config PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 
 # unittest_rbd_replay
-set(unittest_rbd_replay_srcs test_rbd_replay.cc)
 add_executable(unittest_rbd_replay EXCLUDE_FROM_ALL
-  ${unittest_librados_config_srcs}
+  test_rbd_replay.cc
   $<TARGET_OBJECTS:heap_profiler_objs>
   $<TARGET_OBJECTS:parse_secret_objs>
 )
@@ -1185,9 +1114,9 @@ set_target_properties(unittest_rbd_replay PROPERTIES COMPILE_FLAGS
 ${UNITTEST_CXX_FLAGS})
 
 # unittest_mon_moncap
-set(unittest_mon_moncap_srcs mon/moncap.cc)
 add_executable(unittest_mon_moncap EXCLUDE_FROM_ALL
   ${unittest_mon_moncap_srcs}
+  mon/moncap.cc
   $<TARGET_OBJECTS:heap_profiler_objs>
   )
 add_test(unittest_mon_moncap unittest_mon_moncap)
@@ -1198,8 +1127,8 @@ set_target_properties(unittest_mon_moncap PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 
 # unittest_mon_pgmap
-set(unittest_mon_pgmap_srcs mon/PGMap.cc)
 add_executable(unittest_mon_pgmap EXCLUDE_FROM_ALL
+  mon/PGMap.cc
   ${unittest_mon_moncap_srcs}
   $<TARGET_OBJECTS:heap_profiler_objs>
   )
@@ -1211,9 +1140,8 @@ set_target_properties(unittest_mon_pgmap PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 
 # unittest_ecbackend
-set(unittest_ecbackend_srcs osd/TestECBackend.cc)
 add_executable(unittest_ecbackend EXCLUDE_FROM_ALL
-  ${unittest_ecbackend_srcs}
+  osd/TestECBackend.cc
   $<TARGET_OBJECTS:heap_profiler_objs>
   )
 add_test(unittest_ecbackend unittest_ecbackend)
@@ -1283,6 +1211,7 @@ target_link_libraries(unittest_snap_mapper osd global ${CMAKE_DL_LIBS}
 set_target_properties(unittest_snap_mapper PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 
+#TODO: rocksdb unittests
 if(WITH_SLIBROCKSDB)
 # unittest_rocksdb_option_static
 add_executable(unittest_rocksdb_option_static EXCLUDE_FROM_ALL
@@ -1293,7 +1222,7 @@ add_test(unittest_rocksdb_option_static unittest_rocksdb_option_static)
 add_dependencies(check unittest_rocksdb_option_static)
 target_link_libraries(unittest_rocksdb_option_static os librocksdb global ${CMAKE_DL_LIBS}
   ${BLKID_LIBRARIES} ${TCMALLOC_LIBS} ${UNITTEST_LIBS})
-set(UNITTEST_ROCKSDB_STATIC_FLAGS "-std=gnu++11 -I rocksdb/include")
+set(UNITTEST_ROCKSDB_STATIC_FLAGS "-std=gnu++11 -Irocksdb/include")
 set_target_properties(unittest_rocksdb_option_static PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS} ${LIBROCKSDB_CFLAGS} ${AM_CXXFLAGS} ${UNITTEST_ROCKSDB_STATIC_FLAGS})
 endif(WITH_SLIBROCKSDB)
@@ -1336,12 +1265,9 @@ set_target_properties(unittest_ipaddr PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 
 # unittest_texttable
-set(unittest_texttable_srcs
+add_executable(unittest_texttable EXCLUDE_FROM_ALL
   test_texttable.cc
   ${CMAKE_SOURCE_DIR}/src/common/TextTable.cc
-  )
-add_executable(unittest_texttable EXCLUDE_FROM_ALL
-  ${unittest_texttable_srcs}
   $<TARGET_OBJECTS:heap_profiler_objs>
   )
 add_test(unittest_texttable unittest_texttable)
@@ -1352,9 +1278,8 @@ set_target_properties(unittest_texttable PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 
 # unittest_on_exit
-set(unittest_on_exit_srcs on_exit.cc)
 add_executable(unittest_on_exit EXCLUDE_FROM_ALL
-  ${unittest_on_exit_srcs}
+  on_exit.cc
   $<TARGET_OBJECTS:heap_profiler_objs>
   )
 add_test(unittest_on_exit unittest_on_exit)
@@ -1370,9 +1295,8 @@ set_target_properties(unittest_on_exit PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 
 # unittest_readahead
-set(unittest_readahead_srcs common/Readahead.cc)
 add_executable(unittest_readahead EXCLUDE_FROM_ALL
-  ${unittest_readahead_srcs}
+  common/Readahead.cc
   $<TARGET_OBJECTS:heap_profiler_objs>
   )
 add_test(unittest_readahead unittest_readahead)
@@ -1388,9 +1312,8 @@ set_target_properties(unittest_readahead PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 
 # unittest_tableformatter
-set(unittest_tableformatter_srcs common/test_tableformatter.cc)
 add_executable(unittest_tableformatter EXCLUDE_FROM_ALL
-  ${unittest_tableformatter_srcs}
+  common/test_tableformatter.cc
   $<TARGET_OBJECTS:heap_profiler_objs>
   )
 add_test(unittest_tableformatter unittest_tableformatter)
@@ -1406,9 +1329,8 @@ set_target_properties(unittest_tableformatter PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 
 # unittest_bit_vector
-set(unittest_bit_vector_srcs common/test_bit_vector.cc)
 add_executable(unittest_bit_vector EXCLUDE_FROM_ALL
-  ${unittest_bit_vector_srcs}
+  common/test_bit_vector.cc
   $<TARGET_OBJECTS:heap_profiler_objs>
   )
 add_test(unittest_bit_vector unittest_bit_vector)
@@ -1424,9 +1346,8 @@ set_target_properties(unittest_bit_vector PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 
 # unittest_subprocess
-set(unittest_subprocess_srcs test_subprocess.cc)
 add_executable(unittest_subprocess EXCLUDE_FROM_ALL
-  ${unittest_subprocess_srcs}
+  test_subprocess.cc
   $<TARGET_OBJECTS:heap_profiler_objs>
   )
 add_test(unittest_subprocess unittest_subprocess)
