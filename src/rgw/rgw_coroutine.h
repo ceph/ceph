@@ -60,6 +60,14 @@ enum RGWCoroutineState {
   RGWCoroutine_Run   =  0,
 };
 
+struct rgw_spawned_stacks {
+  list<RGWCoroutinesStack *> entries;
+
+  void inherit(rgw_spawned_stacks *source) {
+    entries.splice(entries.end(), source->entries);
+  }
+};
+
 class RGWCoroutine : public RefCountedObject, public boost::asio::coroutine {
   friend class RGWCoroutinesStack;
 
@@ -70,6 +78,8 @@ protected:
   int retcode;
   int state;
 
+  rgw_spawned_stacks spawned;
+
   stringstream error_stream;
 
   int set_state(int s, int ret = 0) {
@@ -79,9 +89,6 @@ protected:
   void set_io_blocked(bool flag);
   void set_sleeping(bool flag);
   int io_block(int ret);
-
-  void call(RGWCoroutine *op); /* call at the same stack we're in */
-  void spawn(RGWCoroutine *op, bool wait); /* execute on a different stack */
 
 public:
   RGWCoroutine(CephContext *_cct) : cct(_cct), stack(NULL), retcode(0), state(RGWCoroutine_Run) {}
@@ -104,6 +111,10 @@ public:
   int get_ret_status() {
     return retcode;
   }
+
+  void call(RGWCoroutine *op); /* call at the same stack we're in */
+  void spawn(RGWCoroutine *op, bool wait); /* execute on a different stack */
+  bool collect(int *ret); /* returns true if needs to be called again */
 };
 
 template <class T>
@@ -146,7 +157,7 @@ class RGWCoroutinesStack : public RefCountedObject {
   list<RGWCoroutine *> ops;
   list<RGWCoroutine *>::iterator pos;
 
-  list<RGWCoroutinesStack *> spawned_stacks;
+  rgw_spawned_stacks spawned;
 
   set<RGWCoroutinesStack *> blocked_by_stack;
   set<RGWCoroutinesStack *> blocking_stacks;
@@ -163,6 +174,8 @@ class RGWCoroutinesStack : public RefCountedObject {
 protected:
   RGWCoroutinesEnv *env;
 
+  void spawn(RGWCoroutine *source_op, RGWCoroutine *next_op, bool wait);
+  bool collect(RGWCoroutine *op, int *ret); /* returns true if needs to be called again */
 public:
   RGWCoroutinesStack(CephContext *_cct, RGWCoroutinesManager *_ops_mgr, RGWCoroutine *start = NULL);
 
