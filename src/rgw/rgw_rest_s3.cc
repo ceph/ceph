@@ -2683,8 +2683,36 @@ RGWOp *RGWHandler_ObjStore_S3Website::op_head()
 {
   return get_obj_op(false);
 }
+
+int RGWHandler_ObjStore_S3Website::get_errordoc(const string errordoc_key, string *error_content) {
+    ldout(s->cct, 20) << "TODO Serve Custom error page here if bucket has <Error>" << dendl;
+    *error_content = errordoc_key;
+    // 1. Check if errordoc exists
+    // 2. Check if errordoc is public
+    // 3. Fetch errordoc content
+    RGWGetObj_ObjStore_S3Website *getop = new RGWGetObj_ObjStore_S3Website;
+    getop->set_get_data(true);
+    getop->init(store, s, this);
+
+    RGWGetObj_CB cb(getop);
+    rgw_obj obj(s->bucket, errordoc_key);
+    RGWObjectCtx rctx(store);
+    //RGWRados::Object op_target(store, s->bucket_info, *static_cast<RGWObjectCtx *>(s->obj_ctx), obj);
+    RGWRados::Object op_target(store, s->bucket_info, rctx, obj);
+    RGWRados::Object::Read read_op(&op_target);
+
+    int ret;
+    int64_t ofs = 0; 
+    int64_t end = -1;
+    ret = read_op.prepare(&ofs, &end);
+    if (ret < 0)
+      return ret;
+
+    ret = read_op.iterate(ofs, end, &cb); // FIXME: need to know the final size?
+    return ret;
+}
   
-int RGWHandler_ObjStore_S3Website::error_handler(int err_no, string error_content) {
+int RGWHandler_ObjStore_S3Website::error_handler(int err_no, string *error_content) {
   const struct rgw_http_errors *r;
   int http_error_code = -1;
   r = search_err(err_no, RGW_HTTP_ERRORS, ARRAY_LEN(RGW_HTTP_ERRORS));
@@ -2706,8 +2734,7 @@ int RGWHandler_ObjStore_S3Website::error_handler(int err_no, string error_conten
     ldout(s->cct, 10) << "error handler redirect code=" << redirect_code << " proto+host:" << protocol << "://" << hostname << " -> " << s->redirect << dendl;
     return -ERR_WEBSITE_REDIRECT;
   } else if(!s->bucket_info.website_conf.error_doc.empty()) {
-    ldout(s->cct, 20) << "TODO Serve Custom error page here if bucket has <Error>" << dendl;
-    error_content = s->bucket_info.website_conf.error_doc;
+    RGWHandler_ObjStore_S3Website::get_errordoc(s->bucket_info.website_conf.error_doc, error_content);
   } else {
     ldout(s->cct, 20) << "No special error handling today!" << dendl;
   }
