@@ -3203,6 +3203,7 @@ int NewStore::_do_overlay_trim(TransContext *txc,
 {
   dout(10) << __func__ << " " << o->oid << " "
 	   << offset << "~" << length << dendl;
+  int changed = 0;
 
   map<uint64_t,overlay_t>::iterator p =
     o->onode.overlay_map.lower_bound(offset);
@@ -3231,6 +3232,7 @@ int NewStore::_do_overlay_trim(TransContext *txc,
 	txc->t->rmkey(PREFIX_OVERLAY, key);
       }
       o->onode.overlay_map.erase(p++);
+      ++changed;
       continue;
     }
     if (p->first >= offset) {
@@ -3241,6 +3243,7 @@ int NewStore::_do_overlay_trim(TransContext *txc,
       ov.value_offset += by;
       ov.length -= by;
       o->onode.overlay_map.erase(p++);
+      ++changed;
       continue;
     }
     if (p->first < offset &&
@@ -3249,6 +3252,7 @@ int NewStore::_do_overlay_trim(TransContext *txc,
 	       << dendl;
       p->second.length = offset - p->first;
       ++p;
+      ++changed;
       continue;
     }
     dout(20) << __func__ << " split " << p->first << " " << p->second
@@ -3262,8 +3266,9 @@ int NewStore::_do_overlay_trim(TransContext *txc,
     nov.length -= by;
     o->onode.shared_overlays.insert(p->second.key);
     ++p;
+    ++changed;
   }
-  return 0;
+  return changed;
 }
 
 int NewStore::_do_overlay_write(TransContext *txc,
@@ -3656,6 +3661,10 @@ int NewStore::_zero(TransContext *txc,
   RWLock::WLocker l(c->lock);
   OnodeRef o = c->get_onode(oid, true);
   _assign_nid(txc, o);
+
+  // overlay
+  if (_do_overlay_trim(txc, o, offset, length) > 0)
+    txc->write_onode(o);
 
   if (o->onode.data_map.empty()) {
     // we're already a big hole
