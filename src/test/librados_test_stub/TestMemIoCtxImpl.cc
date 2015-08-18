@@ -27,10 +27,10 @@ TestMemIoCtxImpl::TestMemIoCtxImpl(const TestMemIoCtxImpl& rhs)
   m_pool->get();
 }
 
-TestMemIoCtxImpl::TestMemIoCtxImpl(TestMemRadosClient &client, int64_t pool_id,
+TestMemIoCtxImpl::TestMemIoCtxImpl(TestMemRadosClient *client, int64_t pool_id,
                                    const std::string& pool_name,
                                    TestMemRadosClient::Pool *pool)
-    : TestIoCtxImpl(client, pool_id, pool_name), m_client(&client),
+    : TestIoCtxImpl(client, pool_id, pool_name), m_client(client),
       m_pool(pool) {
   m_pool->get();
 }

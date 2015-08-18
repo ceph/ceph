@@ -87,6 +87,8 @@ public:
 protected:
   ~TestMemRadosClient();
 
+  Pool *get_pool(const std::string &pool_name);
+
 private:
 
   typedef std::map<std::string, Pool*>		Pools;
