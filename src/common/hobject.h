@@ -60,7 +60,10 @@ public:
   }
 
   void set_key(const std::string &key_) {
-    key = key_;
+    if (key_ == oid.name)
+      key.clear();
+    else
+      key = key_;
   }
 
   string to_str() const;
