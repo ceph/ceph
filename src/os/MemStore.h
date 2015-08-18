@@ -133,7 +133,8 @@ public:
     // level.
 
     ObjectRef get_object(ghobject_t oid) {
-      ceph::unordered_map<ghobject_t,ObjectRef>::iterator o = object_hash.find(oid);
+      RWLock::RLocker l(lock);
+      auto o = object_hash.find(oid);
       if (o == object_hash.end())
 	return ObjectRef();
       return o->second;
