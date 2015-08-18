@@ -1,6 +1,6 @@
 #!/bin/sh
 # vim: set noet ts=8:
-# postinst script for ceph-mds
+# postinst script for ceph-commont
 #
 # see: dh_installdeb(1)
 
