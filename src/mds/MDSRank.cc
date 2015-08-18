@@ -1430,6 +1430,7 @@ void MDSRankDispatcher::handle_mds_map(
 
   // tell objecter my incarnation
   if (objecter->get_client_incarnation() != incarnation)
+    objecter->set_client_incarnation(incarnation);
 
   // for debug
   if (g_conf->mds_dump_cache_on_map)
