@@ -202,6 +202,25 @@ TEST(AccessTest, ReadOnly){
   ceph_shutdown(admin);
 }
 
+TEST(AccessTest, update_after_unlink){
+  struct ceph_mount_info *admin;
+  ASSERT_EQ(0, ceph_create(&admin, NULL));
+  ASSERT_EQ(0, ceph_conf_parse_env(admin, NULL));
+  ASSERT_EQ(0, ceph_conf_read_file(admin, NULL));
+  ASSERT_EQ(0, ceph_mount(admin, "/"));
+  ASSERT_EQ(0, ceph_mkdir(admin, "/foo", 0755));
+  int fd = ceph_open(admin, "/foo/bar", O_CREAT|O_WRONLY, 0755);
+  ceph_unlink(admin, "/foo/bar");
+  ASSERT_GE(ceph_write(admin, fd, "foo", 3, 0), 0);
+  ASSERT_GE(ceph_fchmod(admin, fd, 0777), 0);
+  ASSERT_GE(ceph_ftruncate(admin, fd, 0), 0);
+  ASSERT_GE(ceph_fsetxattr(admin, fd, "user.any", "bar", 3, 0), 0);
+  ceph_close(admin,fd);
+
+  ASSERT_EQ(0, ceph_rmdir(admin, "/foo"));
+  ceph_shutdown(admin);
+}
+
 int main(int argc, char **argv)
 {
   ::testing::InitGoogleTest(&argc, argv);
