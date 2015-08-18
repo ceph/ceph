@@ -1059,6 +1059,7 @@ public:
       bufferlist r2;
       r = state->store->read(state->cid, noid, 0, state->contents[noid].data.length(), r2);
       if (!state->contents[noid].data.contents_equal(r2)) {
+        assert(state->contents[noid].data.contents_equal(r2));
         ASSERT_TRUE(state->contents[noid].data.contents_equal(r2));
       }
       state->cond.Signal();
