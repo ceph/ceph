@@ -868,18 +868,6 @@ int RGWGetObj::handle_user_manifest(const char *prefix)
   return 0;
 }
 
-class RGWGetObj_CB : public RGWGetDataCB
-{
-  RGWGetObj *op;
-public:
-  RGWGetObj_CB(RGWGetObj *_op) : op(_op) {}
-  virtual ~RGWGetObj_CB() {}
-
-  int handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len) {
-    return op->get_data_cb(bl, bl_ofs, bl_len);
-  }
-};
-
 int RGWGetObj::get_data_cb(bufferlist& bl, off_t bl_ofs, off_t bl_len)
 {
   /* garbage collection related handling */
@@ -3757,11 +3745,11 @@ void RGWHandler::put_op(RGWOp *op)
   delete op;
 }
 
-int RGWOp::error_handler(int err_no, string error_content) {
+int RGWOp::error_handler(int err_no, string *error_content) {
   return dialect_handler->error_handler(err_no, error_content);
 }
 
-int RGWHandler::error_handler(int err_no, string error_content) {
+int RGWHandler::error_handler(int err_no, string *error_content) {
   // This is the do-nothing error handler
   return err_no;
 }

@@ -380,7 +380,8 @@ extern void end_header(struct req_state *s,
                        RGWOp *op = NULL,
                        const char *content_type = NULL,
                        const int64_t proposed_content_length = NO_CONTENT_LENGTH,
-		       bool force_content_type = false);
+		       bool force_content_type = false,
+		       bool force_no_error = false);
 extern void dump_start(struct req_state *s);
 extern void list_all_buckets_start(struct req_state *s);
 extern void dump_owner(struct req_state *s, string& id, string& name, const char *section = NULL);
