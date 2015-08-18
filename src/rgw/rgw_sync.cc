@@ -593,6 +593,57 @@ public:
   }
 };
 
+class RGWRadosGetOmapKeysCR : public RGWSimpleCoroutine {
+  RGWAsyncRadosProcessor *async_rados;
+  RGWRados *store;
+
+  string marker;
+  map<string, bufferlist> *entries;
+  int max_entries;
+
+  int rval;
+
+  rgw_bucket pool;
+  string oid;
+
+  RGWAioCompletionNotifier *cn;
+
+public:
+  RGWRadosGetOmapKeysCR(RGWAsyncRadosProcessor *_async_rados, RGWRados *_store,
+		      rgw_bucket& _pool, const string& _oid,
+		      const string& _marker,
+		      map<string, bufferlist> *_entries, int _max_entries) : RGWSimpleCoroutine(_store->ctx()),
+                                                async_rados(_async_rados),
+						store(_store),
+						marker(_marker),
+						entries(_entries), max_entries(_max_entries), rval(0),
+						pool(_pool), oid(_oid), cn(NULL) {
+  }
+
+  ~RGWRadosGetOmapKeysCR() {
+  }
+
+  int send_request() {
+    librados::IoCtx ioctx;
+    librados::Rados *rados = store->get_rados_handle();
+    int r = rados->ioctx_create(pool.name.c_str(), ioctx); /* system object only! */
+    if (r < 0) {
+      lderr(store->ctx()) << "ERROR: failed to open pool (" << pool.name << ") ret=" << r << dendl;
+      return r;
+    }
+
+    librados::ObjectReadOperation op;
+    op.omap_get_vals(marker, max_entries, entries, &rval);
+
+    cn = stack->create_completion_notifier();
+    return ioctx.aio_operate(oid, cn->completion(), &op, NULL);
+  }
+
+  int request_complete() {
+    return rval;
+  }
+};
+
 class RGWSimpleRadosLockCR : public RGWSimpleCoroutine {
   RGWAsyncRadosProcessor *async_rados;
   RGWRados *store;
