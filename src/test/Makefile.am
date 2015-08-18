@@ -81,7 +81,8 @@ check_SCRIPTS += \
 	test/osd/osd-bench.sh \
 	test/osd/osd-copy-from.sh \
 	test/mon/mon-handle-forward.sh \
-	test/libradosstriper/rados-striper.sh
+	test/libradosstriper/rados-striper.sh \
+	test/test_objectstore_memstore.sh
 
 if ENABLE_ROOT_MAKE_CHECK
 check_SCRIPTS += test/ceph-disk-root.sh
