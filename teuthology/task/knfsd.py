@@ -9,6 +9,17 @@ from teuthology import misc as teuthology
 
 log = logging.getLogger(__name__)
 
+def get_nfsd_args(remote, cmd):
+    args=[
+        'sudo',
+        'service',
+        'nfs',
+        cmd,
+        ]
+    if remote.os.package_type == 'deb':
+        args[2] = 'nfs-kernel-server'
+    return args
+
 @contextlib.contextmanager
 def task(ctx, config):
     """
@@ -104,6 +115,10 @@ def task(ctx, config):
                 '{MNT}'.format(MNT=mnt),
                 ],
             )
+        """
+        Start NFS kernel server
+        """
+        remote.run( args=get_nfsd_args(remote, 'restart') )
         args=[
             'sudo',
             "exportfs",
@@ -144,27 +159,8 @@ def task(ctx, config):
                     check_status=False
                     )
             finally:
-                remote.run(
-                    args=[
-                        'sudo',
-                        'exportfs',
-                        '-au',
-                        ],
-                    )
-                remote.run(
-                    args=[
-                        'sudo',
-                        'rpc.nfsd',
-                        '0',
-                        ],
-                    )
-                remote.run(
-                    args=[
-                        'sudo',
-                        'exportfs',
-                        '-f',
-                        ],
-                    )
+                log.debug('Stopping NFS server on client.{id}...'.format(id=id_))
+                remote.run( args=get_nfsd_args(remote, 'stop') )
                 log.debug('Syncing client client.{id}'.format(id=id_))
                 remote.run(
                     args=[
