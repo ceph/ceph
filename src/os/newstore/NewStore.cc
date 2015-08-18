@@ -828,7 +828,7 @@ int NewStore::_open_db()
     db = NULL;
     return -EIO;
   }
-  db->init();
+  db->init(g_conf->newstore_backend_options);
   stringstream err;
   if (db->create_and_open(err)) {
     derr << __func__ << " erroring opening db: " << err.str() << dendl;
@@ -836,6 +836,9 @@ int NewStore::_open_db()
     db = NULL;
     return -EIO;
   }
+  dout(1) << __func__ << " opened " << g_conf->newstore_backend
+	  << " path " << path
+	  << " options " << g_conf->newstore_backend_options << dendl;
   return 0;
 }
 

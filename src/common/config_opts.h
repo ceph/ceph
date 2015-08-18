@@ -793,6 +793,7 @@ OPTION(memstore_page_size, OPT_U64, 64 << 10)
 OPTION(newstore_max_dir_size, OPT_U32, 1000000)
 OPTION(newstore_onode_map_size, OPT_U32, 1024)   // onodes per collection
 OPTION(newstore_backend, OPT_STR, "rocksdb")
+OPTION(newstore_backend_options, OPT_STR, "")
 OPTION(newstore_fail_eio, OPT_BOOL, true)
 OPTION(newstore_sync_io, OPT_BOOL, false)  // perform initial io synchronously
 OPTION(newstore_sync_transaction, OPT_BOOL, false)  // perform kv txn synchronously
