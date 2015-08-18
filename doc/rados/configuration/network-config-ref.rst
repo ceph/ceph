@@ -124,26 +124,22 @@ By default, Ceph OSD Daemons `bind`_ to the first available ports on a Ceph Node
 beginning at port 6800.  Note that this behavior is not deterministic, so if you
 are running more than one OSD or MDS on the same host, or if you restart the
 daemons within a short window of time, the daemons will bind to higher ports.
-Each Ceph OSD Daemon on a Ceph Node may use up to three ports:
+Each Ceph OSD Daemon on a Ceph Node may use up to four ports:
 
 #. One for talking to clients and monitors.
 #. One for sending data to other OSDs.
-#. One for heartbeating.
+#. Two for heartbeating on each interface.
 
 .. ditaa:: 
               /---------------\
               |      OSD      |
-              |           +---+----------------+
-              |           | Clients & Monitors |
-              |           +---+----------------+
+              |           +---+----------------+-----------+
+              |           | Clients & Monitors | Heartbeat |
+              |           +---+----------------+-----------+
               |               |
-              |           +---+----------------+
-              |           | Data Replication   |
-              |           +---+----------------+
-              |               |
-              |           +---+----------------+
-              |           | Heartbeat          |
-              |           +---+----------------+
+              |           +---+----------------+-----------+
+              |           | Data Replication   | Heartbeat |
+              |           +---+----------------+-----------+
               | cCCC          |
               \---------------/
 
