@@ -91,10 +91,10 @@ static void append_escaped(const string &in, string *out)
 {
   char hexbyte[8];
   for (string::const_iterator i = in.begin(); i != in.end(); ++i) {
-    if (*i <= '%') {
-      snprintf(hexbyte, sizeof(hexbyte), "%%%02x", (unsigned)*i);
+    if (*i <= '#') {
+      snprintf(hexbyte, sizeof(hexbyte), "#%02x", (unsigned)*i);
       out->append(hexbyte);
-    } else if (*i >= 126) {
+    } else if (*i >= '~') {
       snprintf(hexbyte, sizeof(hexbyte), "~%02x", (unsigned)*i);
       out->append(hexbyte);
     } else {
@@ -107,7 +107,7 @@ static int decode_escaped(const char *p, string *out)
 {
   const char *orig_p = p;
   while (*p && *p != '!') {
-    if (*p == '%' || *p == '~') {
+    if (*p == '#' || *p == '~') {
       unsigned hex;
       int r = sscanf(++p, "%2x", &hex);
       if (r < 1)
