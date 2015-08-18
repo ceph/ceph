@@ -898,7 +898,8 @@ if(${WITH_RADOSGW})
     rgw/rgw_replica_log.cc
     rgw/rgw_keystone.cc
     rgw/rgw_quota.cc
-    rgw/rgw_dencoder.cc)
+    rgw/rgw_dencoder.cc
+    rgw/rgw_object_expirer_core.cc)
 
   add_library(rgw_a STATIC ${rgw_a_srcs})
 
@@ -931,19 +932,30 @@ if(${WITH_RADOSGW})
     rgw/rgw_admin.cc
     rgw/rgw_orphan.cc)
 
+  set(radosgw_object_expirer_srcs
+    rgw/rgw_object_expirer.cc)
+
   add_executable(radosgw ${radosgw_srcs} $<TARGET_OBJECTS:heap_profiler_objs>)
   target_link_libraries(radosgw rgw_a librados
     cls_rgw_client cls_lock_client cls_refcount_client
-    cls_log_client cls_statelog_client cls_version_client
-    cls_replica_log_client cls_user_client
+    cls_log_client cls_statelog_client cls_timeindex_client
+    cls_version_client cls_replica_log_client cls_user_client
     curl expat global fcgi resolv ${BLKID_LIBRARIES} ${TCMALLOC_LIBS})
   install(TARGETS radosgw DESTINATION bin)
 
   add_executable(radosgw-admin ${radosgw_admin_srcs} $<TARGET_OBJECTS:heap_profiler_objs>)
   target_link_libraries(radosgw-admin rgw_a librados
     cls_rgw_client cls_lock_client cls_refcount_client
-    cls_log_client cls_statelog_client cls_version_client
-    cls_replica_log_client cls_user_client
+    cls_log_client cls_statelog_client cls_timeindex_client
+    cls_version_client cls_replica_log_client cls_user_client
     curl expat global fcgi resolv ${BLKID_LIBRARIES} ${TCMALLOC_LIBS})
   install(TARGETS radosgw-admin DESTINATION bin)
+
+  add_executable(radosgw-object-expirer ${radosgw_object_expirer_srcs} $<TARGET_OBJECTS:heap_profiler_objs>)
+  target_link_libraries(radosgw-object-expirer rgw_a librados
+    cls_rgw_client cls_lock_client cls_refcount_client
+    cls_log_client cls_statelog_client cls_timeindex_client
+    cls_version_client cls_replica_log_client cls_user_client
+    curl expat global fcgi resolv ${TCMALLOC_LIBS})
+  install(TARGETS radosgw-object-expirer DESTINATION bin)
 endif(${WITH_RADOSGW})
