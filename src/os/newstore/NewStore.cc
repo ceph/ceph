@@ -154,7 +154,7 @@ static void get_coll_key_range(const coll_t& cid, int bits,
 	     (unsigned)hobject_t::_reverse_bits(pgid.ps()));
     start->append(buf);
     snprintf(buf, sizeof(buf), ".%016llx.%08x.",
-	     (unsigned long long)((-1ll - pgid.pool()) + 0x8000000000000000ull),
+	     (unsigned long long)((-2ll - pgid.pool()) + 0x8000000000000000ull),
 	     (unsigned)hobject_t::_reverse_bits(pgid.ps()));
     temp_start->append(buf);
 
@@ -165,7 +165,7 @@ static void get_coll_key_range(const coll_t& cid, int bits,
 	       (unsigned long long)(pgid.pool() + 0x8000000000000000ull));
       end->append(buf);
       snprintf(buf, sizeof(buf), ".%016llx.gggggggg.",
-	       (unsigned long long)((-1ll - pgid.pool()) + 0x8000000000000000ull));
+	       (unsigned long long)((-2ll - pgid.pool()) + 0x8000000000000000ull));
       temp_end->append(buf);
     } else {
       snprintf(buf, sizeof(buf), ".%016llx.%08x.",
@@ -173,7 +173,7 @@ static void get_coll_key_range(const coll_t& cid, int bits,
 	       (unsigned)end_hash);
       end->append(buf);
       snprintf(buf, sizeof(buf), ".%016llx.%08x.",
-	       (unsigned long long)((-1ll - pgid.pool()) + 0x8000000000000000ull),
+	       (unsigned long long)((-2ll - pgid.pool()) + 0x8000000000000000ull),
 	       (unsigned)end_hash);
       temp_end->append(buf);
     }
