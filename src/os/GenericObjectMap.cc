@@ -133,7 +133,7 @@ string GenericObjectMap::header_key(const coll_t &cid, const ghobject_t &oid)
 
   t = buf;
   snprintf(t, end - t, "%.*X", (int)(sizeof(oid.hobj.get_hash())*2),
-           (uint32_t)oid.get_filestore_key_u32());
+           (uint32_t)oid.get_nibblewise_key_u32());
   full_name += string(buf);
   full_name.append(GHOBJECT_KEY_SEP_S);
 
@@ -265,7 +265,7 @@ bool GenericObjectMap::parse_header_key(const string &long_name,
     (*out) = ghobject_t(hobject_t(name, key, snap, hash, (int64_t)pool, ns),
                         generation, shard_id);
     // restore reversed hash. see calculate_key
-    out->hobj.set_hash(out->get_filestore_key());
+    out->hobj.set_hash(out->get_nibblewise_key());
   }
 
   if (out_coll) {
