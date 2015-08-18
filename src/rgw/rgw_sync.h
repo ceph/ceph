@@ -63,10 +63,14 @@ struct rgw_meta_sync_info {
 WRITE_CLASS_ENCODER(rgw_meta_sync_info)
 
 struct rgw_meta_sync_marker {
+  enum SyncState {
+    FullSync = 0,
+    IncrementalSync = 1,
+  };
   uint16_t state;
   string marker;
 
-  rgw_meta_sync_marker() : state(0) {}
+  rgw_meta_sync_marker() : state(FullSync) {}
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
