@@ -799,6 +799,10 @@ public:
 	uint32_t lock_duration = 30;
 	call(new RGWSimpleRadosLockCR(async_rados, store, store->get_zone_params().log_pool, mdlog_sync_status_oid,
 			             lock_name, cookie, lock_duration));
+	if (retcode < 0) {
+	  ldout(cct, 0) << "ERROR: failed to take a lock on " << mdlog_sync_status_oid << dendl;
+	  return set_state(RGWCoroutine_Error, retcode);
+	}
       }
       yield {
         call(new RGWSimpleRadosWriteCR<rgw_meta_sync_info>(async_rados, store, store->get_zone_params().log_pool,
@@ -808,6 +812,10 @@ public:
 	uint32_t lock_duration = 30;
 	call(new RGWSimpleRadosLockCR(async_rados, store, store->get_zone_params().log_pool, mdlog_sync_status_oid,
 			             lock_name, cookie, lock_duration));
+	if (retcode < 0) {
+	  ldout(cct, 0) << "ERROR: failed to take a lock on " << mdlog_sync_status_oid << dendl;
+	  return set_state(RGWCoroutine_Error, retcode);
+	}
       }
       yield {
         for (int i = 0; i < (int)status.num_shards; i++) {
@@ -815,6 +823,11 @@ public:
           spawn(new RGWSimpleRadosWriteCR<rgw_meta_sync_marker>(async_rados, store, store->get_zone_params().log_pool,
 				                          RGWMetaSyncStatusManager::shard_obj_name(i), marker), true);
         }
+      }
+      yield {
+	status.state = rgw_meta_sync_info::StateBuildingFullSyncMaps;
+        call(new RGWSimpleRadosWriteCR<rgw_meta_sync_info>(async_rados, store, store->get_zone_params().log_pool,
+				 mdlog_sync_status_oid, status));
       }
       yield { /* unlock */
 	call(new RGWSimpleRadosUnlockCR(async_rados, store, store->get_zone_params().log_pool, mdlog_sync_status_oid,
@@ -1130,7 +1143,35 @@ int RGWRemoteMetaLog::init_sync_status(int num_shards)
 int RGWRemoteMetaLog::run_sync(int num_shards, rgw_meta_sync_status& sync_status)
 {
   RGWObjectCtx obj_ctx(store, NULL);
-  return run(new RGWFetchAllMetaCR(store, &http_manager, async_rados, num_shards));
+
+  int r = run(new RGWReadSyncStatusCoroutine(async_rados, store, obj_ctx, &sync_status));
+  if (r < 0) {
+    ldout(store->ctx(), 0) << "ERROR: failed to fetch sync status" << dendl;
+    return r;
+  }
+
+  switch ((rgw_meta_sync_info::SyncState)sync_status.sync_info.state) {
+    case rgw_meta_sync_info::StateInit:
+      ldout(store->ctx(), 20) << __func__ << "(): init" << dendl;
+      r = run(new RGWInitSyncStatusCoroutine(async_rados, store, obj_ctx, num_shards));
+      /* fall through */
+    case rgw_meta_sync_info::StateBuildingFullSyncMaps:
+      ldout(store->ctx(), 20) << __func__ << "(): building full sync maps" << dendl;
+      r = run(new RGWFetchAllMetaCR(store, &http_manager, async_rados, num_shards));
+      if (r < 0) {
+        ldout(store->ctx(), 0) << "ERROR: failed to fetch all metadata keys" << dendl;
+        return r;
+      }
+      /* fall through */
+    case rgw_meta_sync_info::StateSync:
+      ldout(store->ctx(), 20) << __func__ << "(): sync" << dendl;
+      break;
+    default:
+      ldout(store->ctx(), 0) << "ERROR: bad sync state!" << dendl;
+      return -EIO;
+  }
+
+  return 0;
 }
 
 int RGWCloneMetaLogCoroutine::operate()
