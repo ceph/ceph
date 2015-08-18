@@ -367,6 +367,7 @@ int MemStore::getattr(coll_t cid, const ghobject_t& oid,
   if (!o)
     return -ENOENT;
   string k(name);
+  std::lock_guard<std::mutex> lock(o->xattr_mutex);
   if (!o->xattr.count(k)) {
     return -ENODATA;
   }
@@ -386,6 +387,7 @@ int MemStore::getattrs(coll_t cid, const ghobject_t& oid,
   ObjectRef o = c->get_object(oid);
   if (!o)
     return -ENOENT;
+  std::lock_guard<std::mutex> lock(o->xattr_mutex);
   aset = o->xattr;
   return 0;
 }
@@ -1056,6 +1058,7 @@ int MemStore::_setattrs(coll_t cid, const ghobject_t& oid,
   ObjectRef o = c->get_object(oid);
   if (!o)
     return -ENOENT;
+  std::lock_guard<std::mutex> lock(o->xattr_mutex);
   for (map<string,bufferptr>::const_iterator p = aset.begin(); p != aset.end(); ++p)
     o->xattr[p->first] = p->second;
   return 0;
@@ -1072,9 +1075,11 @@ int MemStore::_rmattr(coll_t cid, const ghobject_t& oid, const char *name)
   ObjectRef o = c->get_object(oid);
   if (!o)
     return -ENOENT;
-  if (!o->xattr.count(name))
+  std::lock_guard<std::mutex> lock(o->xattr_mutex);
+  auto i = o->xattr.find(name);
+  if (i == o->xattr.end())
     return -ENODATA;
-  o->xattr.erase(name);
+  o->xattr.erase(i);
   return 0;
 }
 
@@ -1089,6 +1094,7 @@ int MemStore::_rmattrs(coll_t cid, const ghobject_t& oid)
   ObjectRef o = c->get_object(oid);
   if (!o)
     return -ENOENT;
+  std::lock_guard<std::mutex> lock(o->xattr_mutex);
   o->xattr.clear();
   return 0;
 }
@@ -1115,10 +1121,13 @@ int MemStore::_clone(coll_t cid, const ghobject_t& oldoid,
   used_bytes += oo->get_size() - no->get_size();
   no->clone(oo.get(), 0, oo->get_size(), 0);
 
-  // take both omap locks with std::lock()
-  std::unique_lock<std::mutex> oo_lock(oo->omap_mutex, std::defer_lock),
+  // take xattr and omap locks with std::lock()
+  std::unique_lock<std::mutex>
+      ox_lock(oo->xattr_mutex, std::defer_lock),
+      nx_lock(no->xattr_mutex, std::defer_lock),
+      oo_lock(oo->omap_mutex, std::defer_lock),
       no_lock(no->omap_mutex, std::defer_lock);
-  std::lock(oo_lock, no_lock);
+  std::lock(ox_lock, nx_lock, oo_lock, no_lock);
 
   no->omap_header = oo->omap_header;
   no->omap = oo->omap;
