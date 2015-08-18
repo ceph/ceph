@@ -770,7 +770,7 @@ public:
 			             lock_name, cookie));
       }
       int ret;
-      while (stack->collect(&ret)) {
+      while (collect(&ret)) {
 	if (ret < 0) {
 	  return set_state(RGWCoroutine_Error);
 	}
@@ -820,7 +820,6 @@ int RGWReadSyncStatusCoroutine::handle_data(rgw_meta_sync_info& data)
 class RGWOmapAppend : public RGWConsumerCR<string> {
   RGWAsyncRadosProcessor *async_rados;
   RGWRados *store;
-  RGWCoroutinesEnv *env;
 
   rgw_bucket pool;
   string oid;
@@ -833,9 +832,9 @@ class RGWOmapAppend : public RGWConsumerCR<string> {
   map<string, bufferlist> entries;
 public:
 
-  RGWOmapAppend(RGWAsyncRadosProcessor *_async_rados, RGWRados *_store, RGWCoroutinesEnv *_env, rgw_bucket& _pool, const string& _oid)
+  RGWOmapAppend(RGWAsyncRadosProcessor *_async_rados, RGWRados *_store, rgw_bucket& _pool, const string& _oid)
                       : RGWConsumerCR<string>(_store->ctx()), async_rados(_async_rados),
-		        store(_store), env(_env), pool(_pool), oid(_oid), going_down(false), num_pending_entries(0) {}
+		        store(_store), pool(_pool), oid(_oid), going_down(false), num_pending_entries(0) {}
 
 #define OMAP_APPEND_MAX_ENTRIES 100
   int operate() {
@@ -890,22 +889,22 @@ public:
 class RGWShardedOmapCRManager {
   RGWAsyncRadosProcessor *async_rados;
   RGWRados *store;
-  RGWCoroutinesEnv *env;
+  RGWCoroutine *op;
 
   int num_shards;
 
   vector<RGWOmapAppend *> shards;
 public:
-  RGWShardedOmapCRManager(RGWAsyncRadosProcessor *_async_rados, RGWRados *_store, RGWCoroutinesEnv *_env, int _num_shards, rgw_bucket& pool, const string& oid_prefix)
+  RGWShardedOmapCRManager(RGWAsyncRadosProcessor *_async_rados, RGWRados *_store, RGWCoroutine *_op, int _num_shards, rgw_bucket& pool, const string& oid_prefix)
                       : async_rados(_async_rados),
-		        store(_store), env(_env), num_shards(_num_shards) {
+		        store(_store), op(_op), num_shards(_num_shards) {
     shards.reserve(num_shards);
     for (int i = 0; i < num_shards; ++i) {
       char buf[oid_prefix.size() + 16];
       snprintf(buf, sizeof(buf), "%s.%d", oid_prefix.c_str(), i);
-      RGWOmapAppend *shard = new RGWOmapAppend(async_rados, store, env, pool, buf);
+      RGWOmapAppend *shard = new RGWOmapAppend(async_rados, store, pool, buf);
       shards.push_back(shard);
-      env->stack->spawn(shard, false);
+      op->spawn(shard, false);
     }
   }
   void append(const string& entry) {
@@ -947,7 +946,7 @@ public:
     RGWRESTConn *conn = store->rest_master_conn;
 
     reenter(this) {
-      entries_index = new RGWShardedOmapCRManager(async_rados, store, stack->get_env(), num_shards,
+      entries_index = new RGWShardedOmapCRManager(async_rados, store, this, num_shards,
 						  store->get_zone_params().log_pool, "meta.full-sync.index");
       yield {
 	call(new RGWReadRESTResourceCR<list<string> >(store->ctx(), conn, http_manager,
@@ -980,7 +979,7 @@ public:
       }
       yield entries_index->finish();
       int ret;
-      while (stack->collect(&ret)) {
+      while (collect(&ret)) {
 	if (ret < 0) {
 	  return set_state(RGWCoroutine_Error);
 	}
