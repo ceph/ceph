@@ -259,9 +259,9 @@ int cmp_bitwise(const hobject_t& l, const hobject_t& r)
     return -1;
   if (l.pool > r.pool)
     return 1;
-  if (l.get_bitreverse_key() < r.get_bitreverse_key())
+  if (l.get_bitwise_key() < r.get_bitwise_key())
     return -1;
-  if (l.get_bitreverse_key() > r.get_bitreverse_key())
+  if (l.get_bitwise_key() > r.get_bitwise_key())
     return 1;
   if (l.nspace < r.nspace)
     return -1;

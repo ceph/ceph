@@ -219,11 +219,11 @@ public:
   }
 
   // newer bit-reversed key
-  uint64_t get_bitreverse_key_u32() const {
+  uint32_t get_bitwise_key_u32() const {
     assert(!max);
     return hash_reverse_bits;
   }
-  uint64_t get_bitreverse_key() const {
+  uint64_t get_bitwise_key() const {
     return max ? 0x100000000ull : hash_reverse_bits;
   }
 
@@ -233,6 +233,10 @@ public:
   }
   void set_nibblewise_key_u32(uint32_t value) {
     hash = _reverse_nibbles(value);
+    build_hash_cache();
+  }
+  void set_bitwise_key_u32(uint32_t value) {
+    hash = _reverse_bits(value);
     build_hash_cache();
   }
 
