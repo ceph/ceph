@@ -272,23 +272,26 @@ class Ansible(Task):
                         self.failure_log.name,
                     )
                 )
+                # archive the log anyway so we can see what tripped up
+                # the yaml parsing
+                self._archive_failures()
 
         if failures:
-            if self.ctx.archive:
-                self._archive_failures()
+            self._archive_failures()
             raise AnsibleFailedError(failures)
         raise CommandFailedError(command, status)
 
     def _archive_failures(self):
-        archive_path = "{0}/ansible_failures.yaml".format(self.ctx.archive)
-        log.info("Archiving ansible failure log at: {0}".format(
-            archive_path,
-        ))
-        shutil.move(
-            self.failure_log.name,
-            archive_path
-        )
-        os.chmod(archive_path, 0664)
+        if self.ctx.archive:
+            archive_path = "{0}/ansible_failures.yaml".format(self.ctx.archive)
+            log.info("Archiving ansible failure log at: {0}".format(
+                archive_path,
+            ))
+            shutil.move(
+                self.failure_log.name,
+                archive_path
+            )
+            os.chmod(archive_path, 0664)
 
     def _build_args(self):
         """
