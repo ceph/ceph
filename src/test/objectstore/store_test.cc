@@ -695,6 +695,59 @@ TEST_P(StoreTest, SimpleCloneTest) {
   }
 }
 
+TEST_P(StoreTest, OmapCloneTest) {
+  int r;
+  coll_t cid;
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    cerr << "Creating collection " << cid << std::endl;
+    r = store->apply_transaction(t);
+    ASSERT_EQ(r, 0);
+  }
+  ghobject_t hoid(hobject_t(sobject_t("Object 1", CEPH_NOSNAP)));
+  bufferlist small;
+  small.append("small");
+  map<string,bufferlist> km;
+  km["foo"] = small;
+  km["bar"].append("asdfjkasdkjdfsjkafskjsfdj");
+  bufferlist header;
+  header.append("this is a header");
+  {
+    ObjectStore::Transaction t;
+    t.touch(cid, hoid);
+    t.omap_setkeys(cid, hoid, km);
+    t.omap_setheader(cid, hoid, header);
+    cerr << "Creating object and set omap " << hoid << std::endl;
+    r = store->apply_transaction(t);
+    ASSERT_EQ(r, 0);
+  }
+  ghobject_t hoid2(hobject_t(sobject_t("Object 2", CEPH_NOSNAP)));
+  {
+    ObjectStore::Transaction t;
+    t.clone(cid, hoid, hoid2);
+    cerr << "Clone object" << std::endl;
+    r = store->apply_transaction(t);
+    ASSERT_EQ(r, 0);
+  }
+  {
+    map<string,bufferlist> r;
+    bufferlist h;
+    store->omap_get(cid, hoid2, &h, &r);
+    ASSERT_TRUE(h.contents_equal(header));
+    ASSERT_EQ(r.size(), km.size());
+  }
+  {
+    ObjectStore::Transaction t;
+    t.remove(cid, hoid);
+    t.remove(cid, hoid2);
+    t.remove_collection(cid);
+    cerr << "Cleaning" << std::endl;
+    r = store->apply_transaction(t);
+    ASSERT_EQ(r, 0);
+  }
+}
+
 TEST_P(StoreTest, SimpleCloneRangeTest) {
   int r;
   coll_t cid;
