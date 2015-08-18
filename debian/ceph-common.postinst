@@ -80,7 +80,9 @@ case "$1" in
        if ! dpkg-statoverride --list /var/log/ceph >/dev/null
        then
            chown -R $SERVER_USER:$SERVER_GROUP /var/log/ceph
-           chmod u=rwx,g=rxs,o= /var/log/ceph
+	   # members of group ceph can log here, but cannot remove
+	   # others' files.  non-members cannot read any logs.
+           chmod u=rwx,g=rwxs,o=t /var/log/ceph
        fi
 
     ;;
