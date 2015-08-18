@@ -4560,12 +4560,6 @@ void Client::handle_cap_grant(MetaSession *session, Inode *in, Cap *cap, MClient
 
 int Client::check_permissions(Inode *in, int flags, int uid, int gid)
 {
-  // initial number of group entries, defaults to posix standard of 16
-  // PAM implementations may provide more than 16 groups....
-#if HAVE_GETGROUPLIST
-  int initial_group_count = 16;
-#endif
-
   gid_t *sgids = NULL;
   int sgid_count = 0;
   if (getgroups_cb) {
@@ -4578,7 +4572,9 @@ int Client::check_permissions(Inode *in, int flags, int uid, int gid)
 #if HAVE_GETGROUPLIST
   else {
     //use PAM to get the group list
-    sgid_count = initial_group_count;
+    // initial number of group entries, defaults to posix standard of 16
+    // PAM implementations may provide more than 16 groups....
+    sgid_count = 16;
     sgids = (gid_t*)malloc(sgid_count * sizeof(gid_t));
     if (sgids == NULL) {
       ldout(cct, 3) << "allocating group memory failed" << dendl;
