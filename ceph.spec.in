@@ -1143,9 +1143,9 @@ ln -sf %{_libdir}/librbd.so.1 /usr/lib64/qemu/librbd.so.1
     /sbin/service ceph stop >/dev/null 2>&1 || :
 %endif
 
-semodule -n -i %{_datadir}/selinux/packages/ceph.pp
-if /usr/sbin/selinuxenabled ; then
-    /usr/sbin/load_policy
+%{_sbindir}/semodule -n -i %{_datadir}/selinux/packages/ceph.pp
+if %{_sbindir}/selinuxenabled ; then
+    %{_sbindir}/load_policy
     %relabel_files
 fi
 
@@ -1163,9 +1163,9 @@ if [ $1 -eq 0 ]; then
     %else
 	/sbin/service ceph stop >/dev/null 2>&1 || :
     %endif
-    semodule -n -r ceph
-    if /usr/sbin/selinuxenabled ; then
-       /usr/sbin/load_policy
+    %{_sbindir}/semodule -n -r ceph
+    if %{_sbindir}/selinuxenabled ; then
+       %{_sbindir}/load_policy
        %relabel_files
     fi;
     %if 0%{?_with_systemd}
