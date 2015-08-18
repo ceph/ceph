@@ -18,10 +18,12 @@ protected:
   RGWOp *op_post() { return NULL; }
   RGWOp *op_copy() { return NULL; }
   RGWOp *op_options() { return NULL; }
+
+  int get_errordoc(const string errordoc_key, string *error_content);
 public:
   RGWHandler_ObjStore_S3Website() : RGWHandler_ObjStore_S3() {}
   virtual ~RGWHandler_ObjStore_S3Website() {}
-  virtual int error_handler(int err_no, string error_content);
+  virtual int error_handler(int err_no, string *error_content);
 };
 
 class RGWHandler_ObjStore_Service_S3Website : public RGWHandler_ObjStore_S3Website {

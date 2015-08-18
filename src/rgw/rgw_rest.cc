@@ -538,7 +538,7 @@ void dump_trans_id(req_state *s)
 }
 
 void end_header(struct req_state *s, RGWOp *op, const char *content_type, const int64_t proposed_content_length,
-		bool force_content_type)
+		bool force_content_type, bool force_no_error)
 {
   string ctype;
 
@@ -573,7 +573,7 @@ void end_header(struct req_state *s, RGWOp *op, const char *content_type, const 
       ctype.append("; charset=utf-8");
     content_type = ctype.c_str();
   }
-  if (s->err.is_err()) {
+  if (!force_no_error && s->err.is_err()) {
     dump_start(s);
     if(s->format != RGW_FORMAT_HTML) {
       s->formatter->open_object_section("Error");
@@ -625,12 +625,12 @@ void abort_early(struct req_state *s, RGWOp *op, int err_no, RGWHandler* handler
   // op->error_handler is responsible for calling it's handler error_handler
   if(op != NULL) {
     int new_err_no;
-    new_err_no = op->error_handler(err_no, error_content);
+    new_err_no = op->error_handler(err_no, &error_content);
     ldout(s->cct, 20) << "op->ERRORHANDLER: err_no=" << err_no << " new_err_no=" << new_err_no << dendl;
     err_no = new_err_no;
   } else if(handler != NULL) {
     int new_err_no;
-    new_err_no = handler->error_handler(err_no, error_content);
+    new_err_no = handler->error_handler(err_no, &error_content);
     ldout(s->cct, 20) << "handler->ERRORHANDLER: err_no=" << err_no << " new_err_no=" << new_err_no << dendl;
     err_no = new_err_no;
   }
@@ -661,10 +661,14 @@ void abort_early(struct req_state *s, RGWOp *op, int err_no, RGWHandler* handler
   }
   if(!error_content.empty()) {
     ldout(s->cct, 20) << "error_content is set, we need to serve it INSTEAD of firing the formatter" << dendl;
-    assert(false); 
+#warning TODO we must add all error entries as headers here
+    end_header(s, op, NULL, NO_CONTENT_LENGTH, false, true);
+    s->cio->write(error_content.c_str(), error_content.size());
+    s->formatter->reset();
+  } else {
+    end_header(s, op);
+    rgw_flush_formatter_and_reset(s, s->formatter);
   }
-  end_header(s, op);
-  rgw_flush_formatter_and_reset(s, s->formatter);
   perfcounter->inc(l_rgw_failed_req);
 }
 
