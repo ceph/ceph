@@ -304,6 +304,14 @@ void get_omap_key(uint64_t id, const string& key, string *out)
   out->append(key);
 }
 
+void rewrite_omap_key(uint64_t id, string old, string *out)
+{
+  char buf[32];
+  snprintf(buf, sizeof(buf), "%016llx", (unsigned long long)id);
+  *out = buf;
+  out->append(old.substr(16));
+}
+
 void decode_omap_key(const string& key, string *user_key)
 {
   *user_key = key.substr(17);
@@ -486,8 +494,7 @@ NewStore::Collection::Collection(NewStore *ns, coll_t c)
   : store(ns),
     cid(c),
     lock("NewStore::Collection::lock"),
-    onode_map() //store->cct, store->cct->_conf->newstore_onode_map_size)
-#warning fixme size the lru/cache
+    onode_map()
 {
 }
 
@@ -3501,7 +3508,34 @@ int NewStore::_clone(TransContext *txc,
   r = _do_write(txc, newo, 0, oldo->onode.size, bl, 0);
 
   newo->onode.attrs = oldo->onode.attrs;
-  // fixme: omap
+
+  // clone omap
+  if (o->onode.omap_head) {
+    dout(20) << __func__ << " clearing old omap data" << dendl;
+    _do_omap_clear(txc, o->onode.omap_head, true);
+  }
+  if (oldo->onode.omap_head) {
+    dout(20) << __func__ << " copying omap data" << dendl;
+    _get_omap_id(txc, o);
+    KeyValueDB::Iterator it = db->get_iterator(PREFIX_OMAP);
+    string head, tail;
+    get_omap_header(oldo->onode.omap_head, &head);
+    get_omap_tail(oldo->onode.omap_head, &tail);
+    it->lower_bound(head);
+    while (it->valid()) {
+      string key;
+      if (it->key() == tail) {
+	dout(30) << __func__ << "  reached tail" << dendl;
+	break;
+      } else {
+	dout(30) << __func__ << "  got header/data " << it->key() << dendl;
+	assert(it->key() < tail);
+	rewrite_omap_key(o->onode.omap_head, it->key(), &key);
+	txc->t->set(PREFIX_OMAP, key, it->value());
+      }
+      it->next();
+    }
+  }
 
   txc->write_onode(newo);
 
