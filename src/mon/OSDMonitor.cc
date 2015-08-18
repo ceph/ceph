@@ -3068,6 +3068,7 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
     if (!p->is_tier() &&
         (var == "hit_set_type" || var == "hit_set_period" ||
          var == "hit_set_count" || var == "hit_set_fpp" ||
+	 var == "use_gmt_hitset" ||
          var == "target_max_objects" || var == "target_max_bytes" ||
          var == "cache_target_full_ratio" ||
          var == "cache_target_dirty_ratio" ||
@@ -3120,6 +3121,8 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
 	  BloomHitSet::Params *bloomp = static_cast<BloomHitSet::Params*>(p->hit_set_params.impl.get());
 	  f->dump_float("hit_set_fpp", bloomp->get_fpp());
 	}
+      } else if (var == "use_gmt_hitset") {
+	f->dump_bool("use_gmt_hitset", p->use_gmt_hitset);
       } else if (var == "target_max_objects") {
         f->dump_unsigned("target_max_objects", p->target_max_objects);
       } else if (var == "target_max_bytes") {
@@ -3177,6 +3180,8 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
 	}
 	BloomHitSet::Params *bloomp = static_cast<BloomHitSet::Params*>(p->hit_set_params.impl.get());
 	ss << "hit_set_fpp: " << bloomp->get_fpp();
+      } else if (var == "use_gmt_hitset") {
+	ss << "use_gmt_hitset: " << p->use_gmt_hitset << "\n";
       } else if (var == "target_max_objects") {
         ss << "target_max_objects: " << p->target_max_objects;
       } else if (var == "target_max_bytes") {
