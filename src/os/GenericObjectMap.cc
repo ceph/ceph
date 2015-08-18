@@ -1101,14 +1101,14 @@ int GenericObjectMap::list_objects(const coll_t &cid, ghobject_t start, ghobject
       break;
     }
 
-    if (header.oid >= end) {
+    if (cmp_bitwise(header.oid, end) >= 0) {
       if (next)
 	*next = ghobject_t::get_max();
       break;
     }
 
-    assert(start <= header.oid);
-    assert(header.oid < end);
+    assert(cmp_bitwise(start, header.oid) <= 0);
+    assert(cmp_bitwise(header.oid, end) < 0);
 
 
     size++;

@@ -2374,12 +2374,16 @@ void pg_history_t::generate_test_instances(list<pg_history_t*>& o)
 
 void pg_info_t::encode(bufferlist &bl) const
 {
-  ENCODE_START(30, 26, bl);
+  ENCODE_START(31, 26, bl);
   ::encode(pgid.pgid, bl);
   ::encode(last_update, bl);
   ::encode(last_complete, bl);
   ::encode(log_tail, bl);
-  ::encode(last_backfill, bl);
+  if (last_backfill_bitwise && last_backfill != last_backfill.get_max()) {
+    ::encode(hobject_t(), bl);
+  } else {
+    ::encode(last_backfill, bl);
+  }
   ::encode(stats, bl);
   history.encode(bl);
   ::encode(purged_snaps, bl);
@@ -2387,12 +2391,14 @@ void pg_info_t::encode(bufferlist &bl) const
   ::encode(last_user_version, bl);
   ::encode(hit_set, bl);
   ::encode(pgid.shard, bl);
+  ::encode(last_backfill, bl);
+  ::encode(last_backfill_bitwise, bl);
   ENCODE_FINISH(bl);
 }
 
 void pg_info_t::decode(bufferlist::iterator &bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(29, 26, 26, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(31, 26, 26, bl);
   if (struct_v < 23) {
     old_pg_t opgid;
     ::decode(opgid, bl);
@@ -2407,8 +2413,10 @@ void pg_info_t::decode(bufferlist::iterator &bl)
     bool log_backlog;
     ::decode(log_backlog, bl);
   }
-  if (struct_v >= 24)
-    ::decode(last_backfill, bl);
+  hobject_t old_last_backfill;
+  if (struct_v >= 24) {
+    ::decode(old_last_backfill, bl);
+  }
   ::decode(stats, bl);
   history.decode(bl);
   if (struct_v >= 22)
@@ -2432,6 +2440,13 @@ void pg_info_t::decode(bufferlist::iterator &bl)
     ::decode(pgid.shard, bl);
   else
     pgid.shard = shard_id_t::NO_SHARD;
+  if (struct_v >= 31) {
+    ::decode(last_backfill, bl);
+    ::decode(last_backfill_bitwise, bl);
+  } else {
+    last_backfill = old_last_backfill;
+    last_backfill_bitwise = false;
+  }
   DECODE_FINISH(bl);
 }
 
@@ -2445,6 +2460,7 @@ void pg_info_t::dump(Formatter *f) const
   f->dump_stream("log_tail") << log_tail;
   f->dump_int("last_user_version", last_user_version);
   f->dump_stream("last_backfill") << last_backfill;
+  f->dump_int("last_backfill_bitwise", (int)last_backfill_bitwise);
   f->dump_stream("purged_snaps") << purged_snaps;
   f->open_object_section("history");
   history.dump(f);
@@ -2476,6 +2492,7 @@ void pg_info_t::generate_test_instances(list<pg_info_t*>& o)
   o.back()->last_user_version = 2;
   o.back()->log_tail = eversion_t(7, 8);
   o.back()->last_backfill = hobject_t(object_t("objname"), "key", 123, 456, -1, "");
+  o.back()->last_backfill_bitwise = true;
   {
     list<pg_stat_t*> s;
     pg_stat_t::generate_test_instances(s);
@@ -3367,8 +3384,8 @@ void pg_missing_t::decode(bufferlist::iterator &bl, int64_t pool)
 
   if (struct_v < 3) {
     // Handle hobject_t upgrade
-    map<hobject_t, item> tmp;
-    for (map<hobject_t, item>::iterator i = missing.begin();
+    map<hobject_t, item, hobject_t::BitwiseComparator> tmp;
+    for (map<hobject_t, item, hobject_t::BitwiseComparator>::iterator i = missing.begin();
 	 i != missing.end();
       ) {
       if (!i->first.is_max() && i->first.pool == -1) {
@@ -3383,7 +3400,7 @@ void pg_missing_t::decode(bufferlist::iterator &bl, int64_t pool)
     missing.insert(tmp.begin(), tmp.end());
   }
 
-  for (map<hobject_t,item>::iterator it = missing.begin();
+  for (map<hobject_t,item, hobject_t::BitwiseComparator>::iterator it = missing.begin();
        it != missing.end();
        ++it)
     rmissing[it->second.need.version] = it->first;
@@ -3392,7 +3409,7 @@ void pg_missing_t::decode(bufferlist::iterator &bl, int64_t pool)
 void pg_missing_t::dump(Formatter *f) const
 {
   f->open_array_section("missing");
-  for (map<hobject_t,item>::const_iterator p = missing.begin(); p != missing.end(); ++p) {
+  for (map<hobject_t,item, hobject_t::BitwiseComparator>::const_iterator p = missing.begin(); p != missing.end(); ++p) {
     f->open_object_section("item");
     f->dump_stream("object") << p->first;
     p->second.dump(f);
@@ -3448,7 +3465,7 @@ bool pg_missing_t::is_missing(const hobject_t& oid) const
 
 bool pg_missing_t::is_missing(const hobject_t& oid, eversion_t v) const
 {
-  map<hobject_t, item>::const_iterator m = missing.find(oid);
+  map<hobject_t, item, hobject_t::BitwiseComparator>::const_iterator m = missing.find(oid);
   if (m == missing.end())
     return false;
   const pg_missing_t::item &item(m->second);
@@ -3459,7 +3476,7 @@ bool pg_missing_t::is_missing(const hobject_t& oid, eversion_t v) const
 
 eversion_t pg_missing_t::have_old(const hobject_t& oid) const
 {
-  map<hobject_t, item>::const_iterator m = missing.find(oid);
+  map<hobject_t, item, hobject_t::BitwiseComparator>::const_iterator m = missing.find(oid);
   if (m == missing.end())
     return eversion_t();
   const pg_missing_t::item &item(m->second);
@@ -3473,7 +3490,7 @@ eversion_t pg_missing_t::have_old(const hobject_t& oid) const
 void pg_missing_t::add_next_event(const pg_log_entry_t& e)
 {
   if (e.is_update()) {
-    map<hobject_t, item>::iterator missing_it;
+    map<hobject_t, item, hobject_t::BitwiseComparator>::iterator missing_it;
     missing_it = missing.find(e.soid);
     bool is_missing_divergent_item = missing_it != missing.end();
     if (e.prior_version == eversion_t() || e.is_clone()) {
@@ -3526,12 +3543,12 @@ void pg_missing_t::add(const hobject_t& oid, eversion_t need, eversion_t have)
 
 void pg_missing_t::rm(const hobject_t& oid, eversion_t v)
 {
-  std::map<hobject_t, pg_missing_t::item>::iterator p = missing.find(oid);
+  std::map<hobject_t, pg_missing_t::item, hobject_t::BitwiseComparator>::iterator p = missing.find(oid);
   if (p != missing.end() && p->second.need <= v)
     rm(p);
 }
 
-void pg_missing_t::rm(const std::map<hobject_t, pg_missing_t::item>::iterator &m)
+void pg_missing_t::rm(const std::map<hobject_t, pg_missing_t::item, hobject_t::BitwiseComparator>::iterator &m)
 {
   rmissing.erase(m->second.need.version);
   missing.erase(m);
@@ -3539,13 +3556,13 @@ void pg_missing_t::rm(const std::map<hobject_t, pg_missing_t::item>::iterator &m
 
 void pg_missing_t::got(const hobject_t& oid, eversion_t v)
 {
-  std::map<hobject_t, pg_missing_t::item>::iterator p = missing.find(oid);
+  std::map<hobject_t, pg_missing_t::item, hobject_t::BitwiseComparator>::iterator p = missing.find(oid);
   assert(p != missing.end());
   assert(p->second.need <= v);
   got(p);
 }
 
-void pg_missing_t::got(const std::map<hobject_t, pg_missing_t::item>::iterator &m)
+void pg_missing_t::got(const std::map<hobject_t, pg_missing_t::item, hobject_t::BitwiseComparator>::iterator &m)
 {
   rmissing.erase(m->second.need.version);
   missing.erase(m);
@@ -3557,7 +3574,7 @@ void pg_missing_t::split_into(
   pg_missing_t *omissing)
 {
   unsigned mask = ~((~0)<<split_bits);
-  for (map<hobject_t, item>::iterator i = missing.begin();
+  for (map<hobject_t, item, hobject_t::BitwiseComparator>::iterator i = missing.begin();
        i != missing.end();
        ) {
     if ((i->first.get_hash() & mask) == child_pgid.m_seed) {
@@ -4553,9 +4570,9 @@ void ObjectRecoveryInfo::decode(bufferlist::iterator &bl,
   if (struct_v < 2) {
     if (!soid.is_max() && soid.pool == -1)
       soid.pool = pool;
-    map<hobject_t, interval_set<uint64_t> > tmp;
+    map<hobject_t, interval_set<uint64_t>, hobject_t::BitwiseComparator> tmp;
     tmp.swap(clone_subset);
-    for (map<hobject_t, interval_set<uint64_t> >::iterator i = tmp.begin();
+    for (map<hobject_t, interval_set<uint64_t>, hobject_t::BitwiseComparator>::iterator i = tmp.begin();
 	 i != tmp.end();
 	 ++i) {
       hobject_t first(i->first);
@@ -4833,11 +4850,11 @@ void ScrubMap::merge_incr(const ScrubMap &l)
   assert(valid_through == l.incr_since);
   valid_through = l.valid_through;
 
-  for (map<hobject_t,object>::const_iterator p = l.objects.begin();
+  for (map<hobject_t,object, hobject_t::BitwiseComparator>::const_iterator p = l.objects.begin();
        p != l.objects.end();
        ++p){
     if (p->second.negative) {
-      map<hobject_t,object>::iterator q = objects.find(p->first);
+      map<hobject_t,object, hobject_t::BitwiseComparator>::iterator q = objects.find(p->first);
       if (q != objects.end()) {
 	objects.erase(q);
       }
@@ -4875,9 +4892,9 @@ void ScrubMap::decode(bufferlist::iterator& bl, int64_t pool)
 
   // handle hobject_t upgrade
   if (struct_v < 3) {
-    map<hobject_t, object> tmp;
+    map<hobject_t, object, hobject_t::BitwiseComparator> tmp;
     tmp.swap(objects);
-    for (map<hobject_t, object>::iterator i = tmp.begin();
+    for (map<hobject_t, object, hobject_t::BitwiseComparator>::iterator i = tmp.begin();
 	 i != tmp.end();
 	 ++i) {
       hobject_t first(i->first);
@@ -4893,7 +4910,7 @@ void ScrubMap::dump(Formatter *f) const
   f->dump_stream("valid_through") << valid_through;
   f->dump_stream("incremental_since") << incr_since;
   f->open_array_section("objects");
-  for (map<hobject_t,object>::const_iterator p = objects.begin(); p != objects.end(); ++p) {
+  for (map<hobject_t,object, hobject_t::BitwiseComparator>::const_iterator p = objects.begin(); p != objects.end(); ++p) {
     f->open_object_section("object");
     f->dump_string("name", p->first.oid.name);
     f->dump_unsigned("hash", p->first.get_hash());
