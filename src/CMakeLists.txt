@@ -862,6 +862,7 @@ if(${WITH_RBD})
   install(PROGRAMS ${CMAKE_SOURCE_DIR}/src/ceph-rbdnamer DESTINATION bin)
 
   set(librbd_replay_srcs
+      rbd_replay/actions.cc 
       rbd_replay/Deser.cc 
       rbd_replay/ImageNameMap.cc 
       rbd_replay/PendingIO.cc 
@@ -870,9 +871,13 @@ if(${WITH_RBD})
       rbd_replay/Ser.cc)
   add_library(librbd_replay STATIC ${librbd_replay_srcs})
   target_link_libraries(librbd_replay PRIVATE librbd librados global udev)
+
   add_executable(rbd_replay
-    rbd_replay/rbd-replay.cc)
-  target_link_libraries(rbd_replay librbd librados global librbd_replay)
+    rbd_replay/rbd-replay.cc
+    $<TARGET_OBJECTS:parse_secret_objs>
+    )
+  target_link_libraries(rbd_replay librbd librados global librbd_replay keyutils)
+  install(TARGETS rbd_replay DESTINATION bin)
 
   set(librbd_replay_ios_srcs
       rbd_replay/ios.cc)
