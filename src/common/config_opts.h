@@ -799,6 +799,7 @@ OPTION(newstore_fsync_threads, OPT_INT, 16)  // num threads calling fsync
 OPTION(newstore_fsync_thread_timeout, OPT_INT, 30) // thread timeout value
 OPTION(newstore_fsync_thread_suicide_timeout, OPT_INT, 120) // suicide timeout value
 OPTION(newstore_fid_prealloc, OPT_INT, 1024)
+OPTION(newstore_nid_prealloc, OPT_INT, 1024)
 
 OPTION(filestore_omap_backend, OPT_STR, "leveldb")
 

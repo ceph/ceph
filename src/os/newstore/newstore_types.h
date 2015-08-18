@@ -90,6 +90,7 @@ WRITE_CLASS_ENCODER(fragment_t)
 
 /// onode: per-object metadata
 struct onode_t {
+  uint64_t nid;                        ///< numeric id (locally unique)
   uint64_t size;                       ///< object size
   map<string, bufferptr> attrs;        ///< attrs
   map<uint64_t, fragment_t> data_map;  ///< data (offset to fragment mapping)
@@ -99,7 +100,9 @@ struct onode_t {
   uint32_t expected_write_size;
 
   onode_t()
-    : size(0), omap_head(0),
+    : nid(0),
+      size(0),
+      omap_head(0),
       expected_object_size(0),
       expected_write_size(0) {}
 

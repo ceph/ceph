@@ -97,6 +97,7 @@ void fragment_t::generate_test_instances(list<fragment_t*>& o)
 void onode_t::encode(bufferlist& bl) const
 {
   ENCODE_START(1, 1, bl);
+  ::encode(nid, bl);
   ::encode(size, bl);
   ::encode(attrs, bl);
   ::encode(data_map, bl);
@@ -109,6 +110,7 @@ void onode_t::encode(bufferlist& bl) const
 void onode_t::decode(bufferlist::iterator& p)
 {
   DECODE_START(1, p);
+  ::decode(nid, p);
   ::decode(size, p);
   ::decode(attrs, p);
   ::decode(data_map, p);
@@ -120,6 +122,7 @@ void onode_t::decode(bufferlist::iterator& p)
 
 void onode_t::dump(Formatter *f) const
 {
+  f->dump_unsigned("nid", nid);
   f->dump_unsigned("size", size);
   f->open_object_section("attrs");
   for (map<string,bufferptr>::const_iterator p = attrs.begin();

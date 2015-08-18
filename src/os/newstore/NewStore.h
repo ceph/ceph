@@ -378,7 +378,9 @@ private:
   fid_t fid_last;  ///< last allocated fid
   fid_t fid_max;   ///< max fid we can allocate before reserving more
 
-  atomic64_t omap_id;
+  Mutex nid_lock;
+  uint64_t nid_last;
+  uint64_t nid_max;
 
   Mutex wal_lock;
   atomic64_t wal_seq;
@@ -432,8 +434,8 @@ private:
   int _open_fid(fid_t fid);
   int _remove_fid(fid_t fid);
 
-  int _recover_next_omap_id();
-  void _get_omap_id(TransContext *txc, OnodeRef o);
+  int _recover_next_nid();
+  void _assign_nid(TransContext *txc, OnodeRef o);
 
   int _clean_fid_tail(TransContext *txc, const fragment_t& f);
 
@@ -657,7 +659,7 @@ private:
   int _rmattrs(TransContext *txc,
 	       CollectionRef& c,
 	       const ghobject_t& oid);
-  void _do_omap_clear(TransContext *txc, uint64_t id, bool remove_tail);
+  void _do_omap_clear(TransContext *txc, uint64_t id);
   int _omap_clear(TransContext *txc,
 		  CollectionRef& c,
 		  const ghobject_t& oid);
