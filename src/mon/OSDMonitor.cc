@@ -2824,7 +2824,7 @@ namespace {
   enum osd_pool_get_choices {
     SIZE, MIN_SIZE, CRASH_REPLAY_INTERVAL,
     PG_NUM, PGP_NUM, CRUSH_RULESET, HIT_SET_TYPE,
-    HIT_SET_PERIOD, HIT_SET_COUNT, HIT_SET_FPP,
+    HIT_SET_PERIOD, HIT_SET_COUNT, HIT_SET_FPP, USE_GMT_HITSET,
     AUID, TARGET_MAX_OBJECTS, TARGET_MAX_BYTES,
     CACHE_TARGET_DIRTY_RATIO, CACHE_TARGET_DIRTY_HIGH_RATIO,
     CACHE_TARGET_FULL_RATIO,
@@ -3272,6 +3272,7 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
       ("pg_num", PG_NUM)("pgp_num", PGP_NUM)("crush_ruleset", CRUSH_RULESET)
       ("hit_set_type", HIT_SET_TYPE)("hit_set_period", HIT_SET_PERIOD)
       ("hit_set_count", HIT_SET_COUNT)("hit_set_fpp", HIT_SET_FPP)
+      ("use_gmt_hitset", USE_GMT_HITSET)
       ("auid", AUID)("target_max_objects", TARGET_MAX_OBJECTS)
       ("target_max_bytes", TARGET_MAX_BYTES)
       ("cache_target_dirty_ratio", CACHE_TARGET_DIRTY_RATIO)
@@ -3389,6 +3390,9 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	      }
 	    }
 	    break;
+	  case USE_GMT_HITSET:
+	    f->dump_bool("use_gmt_hitset", p->use_gmt_hitset);
+	    break;
 	  case TARGET_MAX_OBJECTS:
 	    f->dump_unsigned("target_max_objects", p->target_max_objects);
 	    break;
@@ -3489,6 +3493,9 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 		goto reply;
 	      }
 	    }
+	    break;
+	  case USE_GMT_HITSET:
+	    ss << "use_gmt_hitset: " << p->use_gmt_hitset << "\n";
 	    break;
 	  case TARGET_MAX_OBJECTS:
 	    ss << "target_max_objects: " << p->target_max_objects << "\n";
