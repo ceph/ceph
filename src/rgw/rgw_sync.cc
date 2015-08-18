@@ -123,29 +123,6 @@ public:
 								   bl(_bl), mtime(_mtime) {}
 };
 
-class RGWAsyncWriteOmapKeys : public RGWAsyncRadosRequest {
-  RGWRados *store;
-  rgw_obj obj;
-  map<string, bufferlist> entries;
-
-protected:
-  int _send_request() {
-    librados::IoCtx ioctx;
-    librados::Rados *rados = store->get_rados_handle();
-    int r = rados->ioctx_create(obj.bucket.name.c_str(), ioctx); /* system object only! */
-    if (r < 0) {
-      lderr(store->ctx()) << "ERROR: failed to open pool (" << obj.bucket.name << ") ret=" << r << dendl;
-      return r;
-    }
-
-    return ioctx.omap_set(obj.get_object(), entries);
-  }
-public:
-  RGWAsyncWriteOmapKeys(RGWAioCompletionNotifier *cn, RGWRados *_store, rgw_obj& _obj,
-		     map<string, bufferlist>& _entries) : RGWAsyncRadosRequest(cn), store(_store),
-                                                                obj(_obj), entries(_entries) {}
-};
-
 class RGWAsyncLockSystemObj : public RGWAsyncRadosRequest {
   RGWRados *store;
   rgw_obj obj;
@@ -577,7 +554,7 @@ class RGWRadosSetOmapKeysCR : public RGWSimpleCoroutine {
   rgw_bucket pool;
   string oid;
 
-  RGWAsyncWriteOmapKeys *req;
+  RGWAioCompletionNotifier *cn;
 
 public:
   RGWRadosSetOmapKeysCR(RGWAsyncRadosProcessor *_async_rados, RGWRados *_store,
@@ -586,23 +563,33 @@ public:
                                                 async_rados(_async_rados),
 						store(_store),
 						entries(_entries),
-						pool(_pool), oid(_oid),
-                                                req(NULL) {
+						pool(_pool), oid(_oid), cn(NULL) {
   }
 
   ~RGWRadosSetOmapKeysCR() {
-    delete req;
+    cn->put();
   }
 
   int send_request() {
-    rgw_obj obj = rgw_obj(pool, oid);
-    req = new RGWAsyncWriteOmapKeys(stack->create_completion_notifier(), store, obj, entries);
-    async_rados->queue(req);
-    return 0;
+    librados::IoCtx ioctx;
+    librados::Rados *rados = store->get_rados_handle();
+    int r = rados->ioctx_create(pool.name.c_str(), ioctx); /* system object only! */
+    if (r < 0) {
+      lderr(store->ctx()) << "ERROR: failed to open pool (" << pool.name << ") ret=" << r << dendl;
+      return r;
+    }
+
+    librados::ObjectWriteOperation op;
+    op.omap_set(entries);
+
+    cn = stack->create_completion_notifier();
+    cn->get();
+    return ioctx.aio_operate(oid, cn->completion(), &op);
   }
 
   int request_complete() {
-    return req->get_ret_status();
+    return cn->completion()->get_return_value();
+
   }
 };
 
