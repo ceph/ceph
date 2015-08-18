@@ -1574,6 +1574,10 @@ int NewStore::collection_list(
   const char *pend;
   bool temp;
 
+  ghobject_t static_next;
+  if (!pnext)
+    pnext = &static_next;
+
   if (start == ghobject_t::get_max())
     goto out;
   get_coll_key_range(cid, c->cnode.bits, &temp_start_key, &temp_end_key,
