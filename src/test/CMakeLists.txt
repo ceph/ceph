@@ -302,45 +302,6 @@ target_link_libraries(bench_log global pthread rt ${BLKID_LIBRARIES} ${CMAKE_DL_
 ## Unit tests
 #make check starts here
 
-add_custom_target(symlinks  COMMAND
-  ln -sf ${CMAKE_SOURCE_DIR}/src/test/ ${CMAKE_BINARY_DIR}/src/test/ &&
-  ln -sf ${CMAKE_BINARY_DIR}/src/ceph-mon ${CMAKE_BINARY_DIR}/src/test/ &&
-  ln -sf ${CMAKE_BINARY_DIR}/ceph ${CMAKE_BINARY_DIR}/src/test/ &&
-  ln -sf ${CMAKE_BINARY_DIR}/src/ceph-authtool ${CMAKE_BINARY_DIR}/src/test/ &&
-  ln -sf ${CMAKE_BINARY_DIR}/src/ceph-conf ${CMAKE_BINARY_DIR}/src/test/ &&
-  ln -sf ${CMAKE_BINARY_DIR}/src/ceph-osd ${CMAKE_BINARY_DIR}/src/test/ &&
-  ln -sf ${CMAKE_SOURCE_DIR}/src/ceph-disk ${CMAKE_BINARY_DIR}/src/test/ &&
-  ln -sf ${CMAKE_SOURCE_DIR}/qa/ ${CMAKE_BINARY_DIR}/src/
-  COMMENT "Symlinks for test directory have been created")
-add_dependencies(check symlinks)
-
-add_test(NAME ceph_objectstore_tool COMMAND python ${CMAKE_SOURCE_DIR}/src/test/ceph_objectstore_tool.py)
-add_dependencies(check ceph_objectstore_tool)
-
-add_test(NAME ceph_argparse_py COMMAND python ${CMAKE_SOURCE_DIR}/src/test/pybind/test_ceph_argparse.py)
-add_dependencies(check ceph_argparse_py)
-
-add_test(NAME unittest_bufferlist_shell COMMAND bash ${CMAKE_SOURCE_DIR}/src/unittest_bufferlist.sh) 
-add_dependencies(check unittest_bufferlist_shell)
-
-add_test(NAME check_generated COMMAND bash ${CMAKE_SOURCE_DIR}/src/test/encoding/check-generated.sh)
-add_dependencies(check check_generated)
-
-add_test(NAME misc COMMAND bash ${CMAKE_SOURCE_DIR}/src/test/mon/misc.sh)
-add_dependencies(check misc)
-
-add_test(NAME mkfs COMMAND bash	${CMAKE_SOURCE_DIR}/src/test/mon/mkfs.sh)
-add_dependencies(check mkfs)
-
-add_test(NAME ceph_disk COMMAND bash ${CMAKE_SOURCE_DIR}/src/test/ceph-disk.sh)
-add_dependencies(check ceph_disk)
-
-add_test(NAME mon_handle_forward COMMAND bash ${CMAKE_SOURCE_DIR}/src/test/mon/mon-handle-forward.sh)
-add_dependencies(check mon_handle_forward)
-
-add_test(NAME vstart_wrapped_tests COMMAND bash ${CMAKE_SOURCE_DIR}/src/test/vstart_wrapped_tests.sh)
-add_dependencies(check mon_handle_forward)
-
 set(UNITTEST_LIBS gtest_main ${PTHREAD_LIBS})
 set(UNITTEST_CXX_FLAGS "${CMAKE_CXX_FLAGS} -I${CMAKE_SOURCE_DIR}/src/gtest/include -I${CMAKE_BINARY_DIR}/src/gtest/include -fno-strict-aliasing")
 
@@ -1350,7 +1311,6 @@ add_executable(unittest_subprocess EXCLUDE_FROM_ALL
   test_subprocess.cc
   $<TARGET_OBJECTS:heap_profiler_objs>
   )
-add_test(unittest_subprocess unittest_subprocess)
 add_dependencies(check unittest_subprocess)
 target_link_libraries(unittest_subprocess
   global
@@ -1368,20 +1328,20 @@ target_link_libraries(unittest_pageset ${UNITTEST_LIBS})
 set_target_properties(unittest_pageset PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 
-## unittest_async_compressor
-#add_executable(unittest_async_compressor EXCLUDE_FROM_ALL
-#  common/test_async_compressor.cc
-#  $<TARGET_OBJECTS:heap_profiler_objs>
-#)
-#add_dependencies(check unittest_async_compressor)
-#target_link_libraries(unittest_async_compressor
-#  global
-#  compressor
-#  ${CMAKE_DL_LIBS}
-#  ${TCMALLOC_LIBS}
-#  ${UNITTEST_LIBS})
-#set_target_properties(unittest_async_compressor PROPERTIES COMPILE_FLAGS
-#  ${UNITTEST_CXX_FLAGS})
+# unittest_async_compressor
+add_executable(unittest_async_compressor EXCLUDE_FROM_ALL
+  common/test_async_compressor.cc
+  $<TARGET_OBJECTS:heap_profiler_objs>
+)
+add_dependencies(check unittest_async_compressor)
+target_link_libraries(unittest_async_compressor
+  global
+  compressor
+  ${CMAKE_DL_LIBS}
+  ${TCMALLOC_LIBS}
+  ${UNITTEST_LIBS})
+set_target_properties(unittest_async_compressor PROPERTIES COMPILE_FLAGS
+  ${UNITTEST_CXX_FLAGS})
 
 add_subdirectory(erasure-code EXCLUDE_FROM_ALL)
 #make check ends here
@@ -1534,7 +1494,8 @@ add_executable(multi_stress_watch
 target_link_libraries(multi_stress_watch librados global radostest
   ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS} ${TCMALLOC_LIBS})
 
-add_executable(test_librbd
+# unittest_librbd
+add_executable(unittest_librbd EXCLUDE_FROM_ALL
   librbd/test_librbd.cc
   librbd/test_fixture.cc
   librbd/test_ImageWatcher.cc
@@ -1545,9 +1506,10 @@ add_executable(test_librbd
   ${CMAKE_SOURCE_DIR}/src/common/TextTable.cc
   ${CMAKE_SOURCE_DIR}/src/common/secret.c
   )
-set_target_properties(test_librbd PROPERTIES COMPILE_FLAGS
+add_dependencies(check unittest_librbd)
+set_target_properties(unittest_librbd PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
-target_link_libraries(test_librbd
+target_link_libraries(unittest_librbd
   librbd
   librados
   ${UNITTEST_LIBS}
