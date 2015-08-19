@@ -151,11 +151,12 @@ int LFNIndex::pre_hash_collection(uint32_t pg_num, uint64_t expected_num_objs)
 
 int LFNIndex::collection_list_partial(const ghobject_t &start,
 				      const ghobject_t &end,
+				      bool sort_bitwise,
 				      int max_count,
 				      vector<ghobject_t> *ls,
 				      ghobject_t *next)
 {
-  return _collection_list_partial(start, end, max_count, ls, next);
+  return _collection_list_partial(start, end, sort_bitwise, max_count, ls, next);
 }
 
 /* Derived class utility methods */
@@ -451,7 +452,7 @@ int LFNIndex::list_objects(const vector<string> &to_list, int max_objs,
 }
 
 int LFNIndex::list_subdirs(const vector<string> &to_list,
-				  set<string> *out)
+			   vector<string> *out)
 {
   string to_list_path = get_full_path_subdir(to_list);
   DIR *dir = ::opendir(to_list_path.c_str());
@@ -468,7 +469,7 @@ int LFNIndex::list_subdirs(const vector<string> &to_list,
     string demangled_name;
     ghobject_t obj;
     if (lfn_is_subdir(short_name, &demangled_name)) {
-      out->insert(demangled_name);
+      out->push_back(demangled_name);
     }
   }
 

@@ -2506,7 +2506,7 @@ void OSD::clear_temp_objects()
     ghobject_t next;
     while (1) {
       vector<ghobject_t> objects;
-      store->collection_list(*p, next, ghobject_t::get_max(),
+      store->collection_list(*p, next, ghobject_t::get_max(), true,
 			     store->get_ideal_list_max(),
 			     &objects, &next);
       if (objects.empty())
@@ -2546,7 +2546,8 @@ void OSD::recursive_remove_collection(ObjectStore *store, spg_t pgid, coll_t tmp
   SnapMapper mapper(&driver, 0, 0, 0, pgid.shard);
 
   vector<ghobject_t> objects;
-  store->collection_list(tmp, ghobject_t(), ghobject_t::get_max(), INT_MAX, &objects, 0);
+  store->collection_list(tmp, ghobject_t(), ghobject_t::get_max(), true,
+			 INT_MAX, &objects, 0);
 
   // delete them.
   unsigned removed = 0;
@@ -4230,6 +4231,7 @@ bool remove_dir(
     coll,
     next,
     ghobject_t::get_max(),
+    true,
     store->get_ideal_list_max(),
     &olist,
     &next);
@@ -4445,6 +4447,9 @@ void OSD::_maybe_boot(epoch_t oldest, epoch_t newest)
   // if our map within recent history, try to add ourselves to the osdmap.
   if (osdmap->test_flag(CEPH_OSDMAP_NOUP)) {
     dout(5) << "osdmap NOUP flag is set, waiting for it to clear" << dendl;
+  } else if (!osdmap->test_flag(CEPH_OSDMAP_SORTBITWISE) &&
+	     !store->can_sort_nibblewise()) {
+    dout(1) << "osdmap SORTBITWISE flag is NOT set but our backend does not support nibblewise sort" << dendl;
   } else if (is_waiting_for_healthy() || !_is_healthy()) {
     // if we are not healthy, do not mark ourselves up (yet)
     dout(1) << "not healthy; waiting to boot" << dendl;
@@ -5187,9 +5192,9 @@ void OSD::do_command(Connection *con, ceph_tid_t tid, vector<string>& cmd, buffe
       pg->lock();
 
       fout << *pg << std::endl;
-      std::map<hobject_t, pg_missing_t::item>::const_iterator mend =
+      std::map<hobject_t, pg_missing_t::item, hobject_t::BitwiseComparator>::const_iterator mend =
 	pg->pg_log.get_missing().missing.end();
-      std::map<hobject_t, pg_missing_t::item>::const_iterator mi =
+      std::map<hobject_t, pg_missing_t::item, hobject_t::BitwiseComparator>::const_iterator mi =
 	pg->pg_log.get_missing().missing.begin();
       for (; mi != mend; ++mi) {
 	fout << mi->first << " -> " << mi->second << std::endl;
@@ -7591,7 +7596,7 @@ void OSD::handle_pg_query(OpRequestRef op)
      * before the pg is recreated, we'll just start it off backfilling
      * instead of just empty */
     if (service.deleting_pgs.lookup(pgid))
-      empty.last_backfill = hobject_t();
+      empty.set_last_backfill(hobject_t(), true);
     if (it->second.type == pg_query_t::LOG ||
 	it->second.type == pg_query_t::FULLLOG) {
       ConnectionRef con = service.get_con_osd_cluster(from, osdmap->get_epoch());

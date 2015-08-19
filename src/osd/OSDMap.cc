@@ -2368,6 +2368,8 @@ string OSDMap::get_flag_string(unsigned f)
     s += ",nodeep-scrub";
   if (f & CEPH_OSDMAP_NOTIERAGENT)
     s += ",notieragent";
+  if (f & CEPH_OSDMAP_SORTBITWISE)
+    s += ",sortbitwise";
   if (s.length())
     s.erase(0, 1);
   return s;

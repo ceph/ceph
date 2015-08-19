@@ -78,7 +78,7 @@ public:
 
   struct Collection {
     ceph::unordered_map<ghobject_t, ObjectRef> object_hash;  ///< for lookup
-    map<ghobject_t, ObjectRef> object_map;        ///< for iteration
+    map<ghobject_t, ObjectRef,ghobject_t::BitwiseComparator> object_map;        ///< for iteration
     map<string,bufferptr> xattr;
     RWLock lock;   ///< for object_{map,hash}
 
@@ -99,7 +99,7 @@ public:
       ::encode(xattr, bl);
       uint32_t s = object_map.size();
       ::encode(s, bl);
-      for (map<ghobject_t, ObjectRef>::const_iterator p = object_map.begin();
+      for (map<ghobject_t, ObjectRef,ghobject_t::BitwiseComparator>::const_iterator p = object_map.begin();
 	   p != object_map.end();
 	   ++p) {
 	::encode(p->first, bl);
@@ -125,7 +125,7 @@ public:
 
     uint64_t used_bytes() const {
       uint64_t result = 0;
-      for (map<ghobject_t, ObjectRef>::const_iterator p = object_map.begin();
+      for (map<ghobject_t, ObjectRef,ghobject_t::BitwiseComparator>::const_iterator p = object_map.begin();
 	   p != object_map.end();
 	   ++p) {
         result += p->second->data.length();
@@ -307,7 +307,7 @@ public:
   bool collection_exists(coll_t c);
   bool collection_empty(coll_t c);
   int collection_list(coll_t cid, ghobject_t start, ghobject_t end,
-		      int max,
+		      bool sort_bitwise, int max,
 		      vector<ghobject_t> *ls, ghobject_t *next);
 
   int omap_get(

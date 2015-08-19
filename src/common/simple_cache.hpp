@@ -21,13 +21,13 @@
 #include "common/Mutex.h"
 #include "common/Cond.h"
 
-template <class K, class V>
+template <class K, class V, class C = std::less<K> >
 class SimpleLRU {
   Mutex lock;
   size_t max_size;
-  map<K, typename list<pair<K, V> >::iterator> contents;
+  map<K, typename list<pair<K, V> >::iterator, C> contents;
   list<pair<K, V> > lru;
-  map<K, V> pinned;
+  map<K, V, C> pinned;
 
   void trim_cache() {
     while (lru.size() > max_size) {
@@ -52,7 +52,7 @@ public:
 
   void clear_pinned(K e) {
     Mutex::Locker l(lock);
-    for (typename map<K, V>::iterator i = pinned.begin();
+    for (typename map<K, V, C>::iterator i = pinned.begin();
 	 i != pinned.end() && i->first <= e;
 	 pinned.erase(i++)) {
       if (!contents.count(i->first))
@@ -64,7 +64,7 @@ public:
 
   void clear(K key) {
     Mutex::Locker l(lock);
-    typename map<K, typename list<pair<K, V> >::iterator>::iterator i =
+    typename map<K, typename list<pair<K, V> >::iterator, C>::iterator i =
       contents.find(key);
     if (i == contents.end())
       return;

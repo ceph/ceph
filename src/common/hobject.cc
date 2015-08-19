@@ -144,7 +144,7 @@ void hobject_t::decode(bufferlist::iterator& bl)
     }
   }
   DECODE_FINISH(bl);
-  build_filestore_key_cache();
+  build_hash_cache();
 }
 
 void hobject_t::decode(json_spirit::Value& v)
@@ -168,7 +168,7 @@ void hobject_t::decode(json_spirit::Value& v)
     else if (p.name_ == "namespace")
       nspace = p.value_.get_str();
   }
-  build_filestore_key_cache();
+  build_hash_cache();
 }
 
 void hobject_t::dump(Formatter *f) const
@@ -201,7 +201,13 @@ ostream& operator<<(ostream& out, const hobject_t& o)
   if (o.is_max())
     return out << "MAX";
   out << o.pool << '/';
-  out << std::hex << o.get_hash() << std::dec;
+  out << std::hex;
+  out.width(8);
+  out.fill('0');
+  out << o.get_hash();
+  out.width(0);
+  out.fill(' ');
+  out << std::dec;
   if (o.nspace.length())
     out << ":" << o.nspace;
   if (o.get_key().length())
@@ -209,6 +215,74 @@ ostream& operator<<(ostream& out, const hobject_t& o)
   out << "/" << o.oid << "/" << o.snap;
   return out;
 }
+
+int cmp_nibblewise(const hobject_t& l, const hobject_t& r)
+{
+  if (l.max < r.max)
+    return -1;
+  if (l.max > r.max)
+    return 1;
+  if (l.pool < r.pool)
+    return -1;
+  if (l.pool > r.pool)
+    return 1;
+  if (l.get_filestore_key() < r.get_filestore_key())
+    return -1;
+  if (l.get_filestore_key() > r.get_filestore_key())
+    return 1;
+  if (l.nspace < r.nspace)
+    return -1;
+  if (l.nspace > r.nspace)
+    return 1;
+  if (l.get_effective_key() < r.get_effective_key())
+    return -1;
+  if (l.get_effective_key() > r.get_effective_key())
+    return 1;
+  if (l.oid < r.oid)
+    return -1;
+  if (l.oid > r.oid)
+    return 1;
+  if (l.snap < r.snap)
+    return -1;
+  if (l.snap > r.snap)
+    return 1;
+  return 0;
+}
+
+int cmp_bitwise(const hobject_t& l, const hobject_t& r)
+{
+  if (l.max < r.max)
+    return -1;
+  if (l.max > r.max)
+    return 1;
+  if (l.pool < r.pool)
+    return -1;
+  if (l.pool > r.pool)
+    return 1;
+  if (l.get_bitreverse_key() < r.get_bitreverse_key())
+    return -1;
+  if (l.get_bitreverse_key() > r.get_bitreverse_key())
+    return 1;
+  if (l.nspace < r.nspace)
+    return -1;
+  if (l.nspace > r.nspace)
+    return 1;
+  if (l.get_effective_key() < r.get_effective_key())
+    return -1;
+  if (l.get_effective_key() > r.get_effective_key())
+    return 1;
+  if (l.oid < r.oid)
+    return -1;
+  if (l.oid > r.oid)
+    return 1;
+  if (l.snap < r.snap)
+    return -1;
+  if (l.snap > r.snap)
+    return 1;
+  return 0;
+}
+
+
 
 // This is compatible with decode for hobject_t prior to
 // version 5.
@@ -334,4 +408,44 @@ ostream& operator<<(ostream& out, const ghobject_t& o)
     out << "/" << std::hex << (unsigned)(o.generation) << std::dec;
   }
   return out;
+}
+
+int cmp_nibblewise(const ghobject_t& l, const ghobject_t& r)
+{
+  if (l.max < r.max)
+    return -1;
+  if (l.max > r.max)
+    return 1;
+  if (l.shard_id < r.shard_id)
+    return -1;
+  if (l.shard_id > r.shard_id)
+    return 1;
+  int ret = cmp_nibblewise(l.hobj, r.hobj);
+  if (ret != 0)
+    return ret;
+  if (l.generation < r.generation)
+    return -1;
+  if (l.generation > r.generation)
+    return 1;
+  return 0;
+}
+
+int cmp_bitwise(const ghobject_t& l, const ghobject_t& r)
+{
+  if (l.max < r.max)
+    return -1;
+  if (l.max > r.max)
+    return 1;
+  if (l.shard_id < r.shard_id)
+    return -1;
+  if (l.shard_id > r.shard_id)
+    return 1;
+  int ret = cmp_bitwise(l.hobj, r.hobj);
+  if (ret != 0)
+    return ret;
+  if (l.generation < r.generation)
+    return -1;
+  if (l.generation > r.generation)
+    return 1;
+  return 0;
 }

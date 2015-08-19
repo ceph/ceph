@@ -1378,14 +1378,14 @@ TEST(ghobject_t, cmp) {
   sep.set_shard(shard_id_t(1));
   sep.hobj.pool = -1;
   cout << min << " < " << sep << std::endl;
-  ASSERT_LT(min, sep);
+  ASSERT_TRUE(cmp_bitwise(min, sep) < 0);
 
   sep.set_shard(shard_id_t::NO_SHARD);
   cout << "sep shard " << sep.shard_id << std::endl;
   ghobject_t o(hobject_t(object_t(), string(), CEPH_NOSNAP, 0x42,
 			 1, string()));
   cout << "o " << o << std::endl;
-  ASSERT_GT(o, sep);
+  ASSERT_TRUE(cmp_bitwise(o, sep) > 0);
 }
 
 /*

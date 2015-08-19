@@ -647,7 +647,7 @@ public:
   bool agent_valid_iterator;
   int agent_ops;
   int flush_mode_high_count; //once have one pg with FLUSH_MODE_HIGH then flush objects with high speed
-  set<hobject_t> agent_oids;
+  set<hobject_t, hobject_t::BitwiseComparator> agent_oids;
   bool agent_active;
   struct AgentThread : public Thread {
     OSDService *osd;
@@ -2153,7 +2153,7 @@ protected:
   utime_t defer_recovery_until;
   int recovery_ops_active;
 #ifdef DEBUG_RECOVERY_OIDS
-  map<spg_t, set<hobject_t> > recovery_oids;
+  map<spg_t, set<hobject_t, hobject_t::BitwiseComparator> > recovery_oids;
 #endif
 
   struct RecoveryWQ : public ThreadPool::WorkQueue<PG> {

@@ -210,7 +210,7 @@ void PGLog::proc_replica_log(
     we will send the peer enough log to arrive at the same state.
   */
 
-  for (map<hobject_t, pg_missing_t::item>::iterator i = omissing.missing.begin();
+  for (map<hobject_t, pg_missing_t::item, hobject_t::BitwiseComparator>::iterator i = omissing.missing.begin();
        i != omissing.missing.end();
        ++i) {
     dout(20) << " before missing " << i->first << " need " << i->second.need
@@ -336,7 +336,7 @@ void PGLog::_merge_object_divergent_entries(
   dout(10) << __func__ << ": merging hoid " << hoid
 	   << " entries: " << entries << dendl;
 
-  if (hoid > info.last_backfill) {
+  if (cmp(hoid, info.last_backfill, info.last_backfill_bitwise) > 0) {
     dout(10) << __func__ << ": hoid " << hoid << " after last_backfill"
 	     << dendl;
     return;
@@ -565,7 +565,7 @@ void PGLog::merge_log(ObjectStore::Transaction& t,
   // The logs must overlap.
   assert(log.head >= olog.tail && olog.head >= log.tail);
 
-  for (map<hobject_t, pg_missing_t::item>::iterator i = missing.missing.begin();
+  for (map<hobject_t, pg_missing_t::item, hobject_t::BitwiseComparator>::iterator i = missing.missing.begin();
        i != missing.missing.end();
        ++i) {
     dout(20) << "pg_missing_t sobject: " << i->first << dendl;
@@ -644,7 +644,7 @@ void PGLog::merge_log(ObjectStore::Transaction& t,
       pg_log_entry_t &ne = *p;
       dout(20) << "merge_log " << ne << dendl;
       log.index(ne);
-      if (ne.soid <= info.last_backfill) {
+      if (cmp(ne.soid, info.last_backfill, info.last_backfill_bitwise) <= 0) {
 	missing.add_next_event(ne);
 	if (ne.is_delete())
 	  rollbacker->remove(ne.soid);
@@ -929,12 +929,13 @@ void PGLog::read_log(ObjectStore *store, coll_t pg_coll,
     dout(10) << "read_log checking for missing items over interval (" << info.last_complete
 	     << "," << info.last_update << "]" << dendl;
 
-    set<hobject_t> did;
+    set<hobject_t, hobject_t::BitwiseComparator> did;
     for (list<pg_log_entry_t>::reverse_iterator i = log.log.rbegin();
 	 i != log.log.rend();
 	 ++i) {
       if (i->version <= info.last_complete) break;
-      if (i->soid > info.last_backfill) continue;
+      if (cmp(i->soid, info.last_backfill, info.last_backfill_bitwise) > 0)
+	continue;
       if (did.count(i->soid)) continue;
       did.insert(i->soid);
       
@@ -962,7 +963,8 @@ void PGLog::read_log(ObjectStore *store, coll_t pg_coll,
 	 i != divergent_priors.rend();
 	 ++i) {
       if (i->first <= info.last_complete) break;
-      if (i->second > info.last_backfill) continue;
+      if (cmp(i->second, info.last_backfill, info.last_backfill_bitwise) > 0)
+	continue;
       if (did.count(i->second)) continue;
       did.insert(i->second);
       bufferlist bv;
