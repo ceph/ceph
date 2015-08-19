@@ -14,13 +14,14 @@ class ProgressContext;
 
 namespace operation {
 
-class FlattenRequest : public Request
+template <typename ImageCtxT = ImageCtx>
+class FlattenRequest : public Request<ImageCtxT>
 {
 public:
-  FlattenRequest(ImageCtx &image_ctx, Context *on_finish,
-		      uint64_t object_size, uint64_t overlap_objects,
-		      const ::SnapContext &snapc, ProgressContext &prog_ctx)
-    : Request(image_ctx, on_finish), m_object_size(object_size),
+  FlattenRequest(ImageCtxT &image_ctx, Context *on_finish,
+		 uint64_t object_size, uint64_t overlap_objects,
+		 const ::SnapContext &snapc, ProgressContext &prog_ctx)
+    : Request<ImageCtxT>(image_ctx, on_finish), m_object_size(object_size),
       m_overlap_objects(overlap_objects), m_snapc(snapc), m_prog_ctx(prog_ctx),
       m_ignore_enoent(false)
   {
@@ -83,5 +84,7 @@ private:
 
 } // namespace operation
 } // namespace librbd
+
+extern template class librbd::operation::FlattenRequest<librbd::ImageCtx>;
 
 #endif // CEPH_LIBRBD_OPERATION_FLATTEN_REQUEST_H

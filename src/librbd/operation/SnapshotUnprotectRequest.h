@@ -16,7 +16,8 @@ class ImageCtx;
 
 namespace operation {
 
-class SnapshotUnprotectRequest : public Request {
+template <typename ImageCtxT = ImageCtx>
+class SnapshotUnprotectRequest : public Request<ImageCtxT> {
 public:
   /**
    * Snap Unprotect goes through the following state machine:
@@ -49,7 +50,7 @@ public:
     STATE_UNPROTECT_SNAP_ROLLBACK
   };
 
-  SnapshotUnprotectRequest(ImageCtx &image_ctx, Context *on_finish,
+  SnapshotUnprotectRequest(ImageCtxT &image_ctx, Context *on_finish,
 		           const std::string &snap_name);
 
 protected:
@@ -86,5 +87,7 @@ private:
 
 } // namespace operation
 } // namespace librbd
+
+extern template class librbd::operation::SnapshotUnprotectRequest<librbd::ImageCtx>;
 
 #endif // CEPH_LIBRBD_OPERATION_SNAPSHOT_UNPROTECT_REQUEST_H

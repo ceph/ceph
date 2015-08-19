@@ -49,7 +49,7 @@ namespace librbd {
   class AioCompletion;
 
   namespace operation {
-  class ResizeRequest;
+  template <typename> class ResizeRequest;
   }
 
   struct ImageCtx {
@@ -140,7 +140,7 @@ namespace librbd {
 
     atomic_t async_request_seq;
 
-    xlist<operation::ResizeRequest*> resize_reqs;
+    xlist<operation::ResizeRequest<ImageCtx>*> resize_reqs;
 
     AioImageRequestWQ *aio_work_queue;
     xlist<AioCompletion*> completed_reqs;

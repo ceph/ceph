@@ -16,10 +16,11 @@ namespace operation {
 
 namespace {
 
+template <typename I>
 std::ostream& operator<<(std::ostream& os,
-                         const SnapshotRenameRequest::State& state) {
+                         const typename SnapshotRenameRequest<I>::State& state) {
   switch(state) {
-  case SnapshotRenameRequest::STATE_RENAME_SNAP:
+  case SnapshotRenameRequest<I>::STATE_RENAME_SNAP:
     os << "RENAME_SNAP";
     break;
   }
@@ -28,19 +29,23 @@ std::ostream& operator<<(std::ostream& os,
 
 } // anonymous namespace
 
-SnapshotRenameRequest::SnapshotRenameRequest(ImageCtx &image_ctx,
-                                             Context *on_finish,
-                                             uint64_t snap_id,
-                                             const std::string &snap_name)
-  : Request(image_ctx, on_finish), m_snap_id(snap_id), m_snap_name(snap_name) {
+template <typename I>
+SnapshotRenameRequest<I>::SnapshotRenameRequest(I &image_ctx,
+						Context *on_finish,
+						uint64_t snap_id,
+						const std::string &snap_name)
+  : Request<I>(image_ctx, on_finish), m_snap_id(snap_id), m_snap_name(snap_name) {
 }
 
-void SnapshotRenameRequest::send_op() {
+template <typename I>
+void SnapshotRenameRequest<I>::send_op() {
   send_rename_snap();
 }
 
-bool SnapshotRenameRequest::should_complete(int r) {
-  CephContext *cct = m_image_ctx.cct;
+template <typename I>
+bool SnapshotRenameRequest<I>::should_complete(int r) {
+  I &image_ctx = this->m_image_ctx;
+  CephContext *cct = image_ctx.cct;
   ldout(cct, 5) << this << " " << __func__ << ": state=" << m_state << ", "
                 << "r=" << r << dendl;
   if (r < 0) {
@@ -49,29 +54,31 @@ bool SnapshotRenameRequest::should_complete(int r) {
   return true;
 }
 
-void SnapshotRenameRequest::send_rename_snap() {
-  assert(m_image_ctx.owner_lock.is_locked());
-  RWLock::RLocker md_locker(m_image_ctx.md_lock);
-  RWLock::RLocker snap_locker(m_image_ctx.snap_lock);
+template <typename I>
+void SnapshotRenameRequest<I>::send_rename_snap() {
+  I &image_ctx = this->m_image_ctx;
+  assert(image_ctx.owner_lock.is_locked());
+  RWLock::RLocker md_locker(image_ctx.md_lock);
+  RWLock::RLocker snap_locker(image_ctx.snap_lock);
 
-  CephContext *cct = m_image_ctx.cct;
+  CephContext *cct = image_ctx.cct;
   ldout(cct, 5) << this << " " << __func__ << dendl;
 
   m_state = STATE_RENAME_SNAP;
 
   librados::ObjectWriteOperation op;
-  if (m_image_ctx.old_format) {
+  if (image_ctx.old_format) {
     cls_client::old_snapshot_rename(&op, m_snap_id, m_snap_name);
   } else {
-    if (m_image_ctx.image_watcher->is_lock_owner()) {
-      m_image_ctx.image_watcher->assert_header_locked(&op);
+    if (image_ctx.image_watcher->is_lock_owner()) {
+      image_ctx.image_watcher->assert_header_locked(&op);
     }
     cls_client::snapshot_rename(&op, m_snap_id, m_snap_name);
   }
 
-  librados::AioCompletion *rados_completion = create_callback_completion();
-  int r = m_image_ctx.md_ctx.aio_operate(m_image_ctx.header_oid,
-                                         rados_completion, &op);
+  librados::AioCompletion *rados_completion = this->create_callback_completion();
+  int r = image_ctx.md_ctx.aio_operate(image_ctx.header_oid,
+                                       rados_completion, &op);
   assert(r == 0);
   rados_completion->release();
 }
@@ -79,3 +86,4 @@ void SnapshotRenameRequest::send_rename_snap() {
 } // namespace operation
 } // namespace librbd
 
+template class librbd::operation::SnapshotRenameRequest<librbd::ImageCtx>;
