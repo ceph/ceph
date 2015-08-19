@@ -267,14 +267,12 @@ class Ansible(Task):
             try:
                 failures = yaml.safe_load(fail_log)
             except yaml.parser.ParserError:
-                log.exception(
+                log.error(
                     "Failed to parse ansible failure log: {0}".format(
                         self.failure_log.name,
                     )
                 )
-                # archive the log anyway so we can see what tripped up
-                # the yaml parsing
-                self._archive_failures()
+                failures = fail_log
 
         if failures:
             self._archive_failures()
