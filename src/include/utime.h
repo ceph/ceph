@@ -21,6 +21,7 @@
 #include <errno.h>
 
 #include "include/types.h"
+#include "include/timegm.h"
 #include "common/strtol.h"
 
 
@@ -291,7 +292,7 @@ public:
         *nsec = (uint64_t)usec * 1000;
       }
     }
-    time_t t = timegm(&tm);
+    time_t t = internal_timegm(&tm);
     if (epoch)
       *epoch = (uint64_t)t;
 
