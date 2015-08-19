@@ -266,6 +266,17 @@ protected:
 
   int user_id, group_id;
 
+  int get_uid() {
+    if (user_id >= 0)
+      return user_id;
+    return ::geteuid();
+  }
+  int get_gid() {
+    if (group_id >= 0)
+      return group_id;
+    return ::getegid();
+  }
+
   void set_cap_epoch_barrier(epoch_t e);
   epoch_t cap_epoch_barrier;
 
