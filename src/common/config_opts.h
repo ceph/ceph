@@ -706,6 +706,13 @@ OPTION(osd_pg_object_context_cache_count, OPT_INT, 64)
 // determines whether PGLog::check() compares written out log to stored log
 OPTION(osd_debug_pg_log_writeout, OPT_BOOL, false)
 
+// when first access object it can transform fadvise flag NOCACHE into DONTNEED.
+OPTION(osd_munge_nocache_wontneed_on_first_access, OPT_BOOL, true)
+
+// peering will effect obc(ObjectContext) cache. After peering+this time,
+// the obc cache is in normal state.
+OPTION(osd_warmup_obc_time, OPT_DOUBLE, 1200.0)  //second
+
 // default timeout while caling WaitInterval on an empty queue
 OPTION(threadpool_default_timeout, OPT_INT, 60)
 // default wait time for an empty queue before pinging the hb timeout

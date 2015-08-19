@@ -3435,6 +3435,23 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       op.op = CEPH_OSD_OP_TRUNCATE;
     }
 
+    /*
+     * The mean of LIBRADOS_OP_FLAG_FADVISE_NOCACHE is this client(only for this client) don't
+     * need data in the future. For filestore, it hope if no data found in page
+     * cache it should use directio. But at present, filesystem don't handle this.
+     * So we use a tricky method that if can't find object in cache of
+     * ObjectContext which mean in the past shorttime none access this object.
+     * In this case, we transform NOCACHE into DONTNEED.
+     * Although this method isn't exactly. But at some case it can work and don't affect others.
+     * Avoid DONTNEED on a freshly peered PG where we may not have a warm obc cache and may get false positives.
+     * We record the end-time of last peer event.
+     */
+    if (!(ctx->obc->found_in_cache) && (op.flags & CEPH_OSD_OP_FLAG_FADVISE_NOCACHE) &&
+	g_conf->osd_munge_nocache_wontneed_on_first_access &&
+	(last_peer_endtime != utime_t() &&
+	 (last_peer_endtime < ceph_clock_now(NULL) + cct->_conf->osd_warmup_obc_time)))
+      op.flags = op.flags | CEPH_OSD_OP_FLAG_FADVISE_DONTNEED;
+
     switch (op.op) {
       
       // --- READS ---
@@ -7809,6 +7826,7 @@ ObjectContextRef ReplicatedPG::get_object_context(const hobject_t& soid,
   osd->logger->inc(l_osd_object_ctx_cache_total);
   if (obc) {
     osd->logger->inc(l_osd_object_ctx_cache_hit);
+    obc->found_in_cache = true;
     dout(10) << __func__ << ": found obc in cache: " << obc
 	     << dendl;
   } else {
@@ -8976,6 +8994,7 @@ void ReplicatedPG::on_change(ObjectStore::Transaction *t)
   // NOTE: we actually assert that all currently live references are dead
   // by the time the flush for the next interval completes.
   object_contexts.clear();
+  last_peer_endtime = utime_t();
 }
 
 void ReplicatedPG::on_role_change()

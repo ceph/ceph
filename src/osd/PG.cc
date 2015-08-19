@@ -1957,6 +1957,10 @@ void PG::all_activated_and_committed()
         get_osdmap()->get_epoch(),
         get_osdmap()->get_epoch(),
         AllReplicasActivated())));
+
+  //For pg create/load/recover/backfill, at the end it be there.
+  last_peer_endtime = ceph_clock_now(cct);
+
 }
 
 void PG::queue_snap_trim()
@@ -5403,6 +5407,7 @@ PG::RecoveryState::Reset::Reset(my_context ctx)
   PG *pg = context< RecoveryMachine >().pg;
 
   pg->flushes_in_progress = 0;
+  pg->last_peer_endtime = utime_t();
   pg->set_last_peering_reset();
 }
 
