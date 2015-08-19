@@ -830,7 +830,8 @@ if(${WITH_RBD})
     librbd/librbd.cc
     librbd/LibrbdWriteback.cc
     librbd/ObjectMap.cc
-    librbd/RebuildObjectMapRequest.cc)
+    librbd/RebuildObjectMapRequest.cc
+    librbd/DiffIterate.cc)
   add_library(librbd ${CEPH_SHARED} ${librbd_srcs}
     $<TARGET_OBJECTS:osdc_rbd_objs>
     $<TARGET_OBJECTS:common_util_obj>)
