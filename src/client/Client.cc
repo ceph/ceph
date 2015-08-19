@@ -266,8 +266,8 @@ Client::Client(Messenger *m, MonClient *mc)
   _dir_vxattrs_name_size = _vxattrs_calcu_name_size(_dir_vxattrs);
   _file_vxattrs_name_size = _vxattrs_calcu_name_size(_file_vxattrs);
 
-  user_id = cct->_conf->client_user_id;
-  group_id = cct->_conf->client_group_id;
+  user_id = cct->_conf->client_mount_uid;
+  group_id = cct->_conf->client_mount_gid;
 
   lru.lru_set_max(cct->_conf->client_cache_size);
   lru.lru_set_midpoint(cct->_conf->client_cache_mid);
@@ -5053,7 +5053,7 @@ int Client::mount(const std::string &mount_root, bool require_mds)
     MetaRequest *req = new MetaRequest(CEPH_MDS_OP_GETATTR);
     req->set_filepath(fp);
     req->head.args.getattr.mask = CEPH_STAT_CAP_INODE_ALL;
-    int res = make_request(req, cct->_conf->client_mount_uid, cct->_conf->client_mount_gid);
+    int res = make_request(req, -1, -1);
     if (res < 0) {
       if (res == -EACCES && root) {
 	ldout(cct, 1) << __func__ << " EACCES on parent of mount point; quotas may not work" << dendl;
