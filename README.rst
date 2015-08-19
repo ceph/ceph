@@ -40,19 +40,22 @@ Provided Utilities
 * ``teuthology-updatekeys`` - Update SSH host keys for a mchine
 * ``teuthology-worker`` - Worker daemon to monitor the queue and execute jobs
 
+For a description of the distinct services that utilities interact with see
+:ref:`components`.
 
 Installation
 ============
-See, :ref:`installation_and_setup`.
+
+See :ref:`installation_and_setup`.
 
 
 Infrastructure
 ==============
 
-This examples in this document are based on the lab machine configuration
-used by the Red Hat Ceph development and quality assurance teams.  Other
-instances of ceph being used in a development or testing environment may
-differ from these examples. 
+These examples in this document are based on the lab machine configuration used
+by the Red Hat Ceph development and quality assurance teams (see
+:ref:`lab_setup`). Other instances of a Ceph Lab being used in a
+development or testing environment may differ from these examples.
 
 
 Test configuration
@@ -162,7 +165,7 @@ To see the status of all machines, use the ``--list`` option. This can
 be restricted to particular machines as well::
 
     ./virtualenv/bin/teuthology-lock --list machine1 machine2
-   
+
 
 Choosing machines for a job
 ---------------------------
@@ -264,7 +267,7 @@ new tasks in this directory.
 Many of these tasks are used to run shell scripts that are defined in the
 ceph/ceph-qa-suite.
 
-If machines were locked as part of the run (with the --lock switch), 
+If machines were locked as part of the run (with the --lock switch),
 teuthology normally leaves them locked when there is any task failure
 for investigation of the machine state.  When developing new teuthology
 tasks, sometimes this behavior is not useful.  The ``unlock_on_failure``
