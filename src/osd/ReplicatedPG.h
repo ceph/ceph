@@ -1005,6 +1005,10 @@ protected:
   map<hobject_t, SnapSetContext*> snapset_contexts;
   Mutex snapset_contexts_lock;
 
+  // waiting for promotion list
+  SimpleMRU<hobject_t, object_locator_t> waiting_for_promote;
+  uint32_t in_flight_promotes; // number of promotions in flight
+
   // debug order that client ops are applied
   map<hobject_t, map<client_t, ceph_tid_t> > debug_op_order;
 
@@ -1203,6 +1207,9 @@ protected:
 		      const hobject_t& missing_object, ///< oid (if !obc)
 		      const object_locator_t& oloc,    ///< locator for obc|oid
 		      OpRequestRef op);                ///< [optional] client op
+  void queue_async_promote(const hobject_t& oid,
+                           const object_locator_t& oloc);
+  void start_async_promote();
 
   int prepare_transaction(OpContext *ctx);
   list<pair<OpRequestRef, OpContext*> > in_progress_async_reads;

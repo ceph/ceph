@@ -1225,6 +1225,7 @@ ReplicatedPG::ReplicatedPG(OSDService *o, OSDMapRef curmap,
       _pool.info, curmap, this, coll_t(p), o->store, cct)),
   object_contexts(o->cct, g_conf->osd_pg_object_context_cache_count),
   snapset_contexts_lock("ReplicatedPG::snapset_contexts"),
+  in_flight_promotes(0),
   new_backfill(false),
   temp_seq(0),
   snap_trimmer_machine(this)
@@ -1828,6 +1829,7 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op,
   bool can_proxy_read = get_osdmap()->get_up_osd_features() &
     CEPH_FEATURE_OSD_PROXY_FEATURES;
   OpRequestRef promote_op;
+  hobject_t poid = obc ? obc->obs.oi.soid : missing_oid;
 
   switch (pool.info.cache_mode) {
   case pg_pool_t::CACHEMODE_WRITEBACK:
@@ -1869,19 +1871,40 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op,
     // Promote too?
     switch (pool.info.min_read_recency_for_promote) {
     case 0:
-      promote_object(obc, missing_oid, oloc, promote_op);
+      if (promote_op) {
+	// sync promote
+        promote_object(obc, missing_oid, oloc, promote_op);
+      } else {
+	// async promote
+	queue_async_promote(poid, oloc);
+	start_async_promote();
+      }
       break;
     case 1:
       // Check if in the current hit set
       if (in_hit_set) {
-	promote_object(obc, missing_oid, oloc, promote_op);
+        if (promote_op) {
+	  // sync promote
+	  promote_object(obc, missing_oid, oloc, promote_op);
+	} else {
+	  // async promote
+          queue_async_promote(poid, oloc);
+          start_async_promote();
+        }
       } else if (!can_proxy_read) {
 	do_cache_redirect(op);
       }
       break;
     default:
       if (in_hit_set) {
-	promote_object(obc, missing_oid, oloc, promote_op);
+        if (promote_op) {
+	  // sync promote
+	  promote_object(obc, missing_oid, oloc, promote_op);
+	} else {
+	  // async promote
+          queue_async_promote(poid, oloc);
+          start_async_promote();
+        }
       } else {
 	// Check if in other hit sets
 	map<time_t,HitSetRef>::iterator itor;
@@ -1900,7 +1923,14 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op,
           }
 	}
 	if (in_other_hit_sets) {
-	  promote_object(obc, missing_oid, oloc, promote_op);
+          if (promote_op) {
+	    // sync promote
+	    promote_object(obc, missing_oid, oloc, promote_op);
+	  } else {
+	    // async promote
+            queue_async_promote(poid, oloc);
+            start_async_promote();
+          }
 	} else if (!can_proxy_read) {
 	  do_cache_redirect(op);
 	}
@@ -2156,6 +2186,34 @@ void ReplicatedPG::cancel_proxy_read_ops(bool requeue)
   }
 }
 
+void ReplicatedPG::queue_async_promote(const hobject_t& oid,
+                                       const object_locator_t& oloc)
+{
+  // put it at the head of the list
+  object_locator_t loc;
+  if (!waiting_for_promote.lookup(oid, &loc)) {
+    waiting_for_promote.add(oid, oloc);
+  }
+}
+
+void ReplicatedPG::start_async_promote()
+{
+  if (waiting_for_promote.empty()) {
+    return;
+  }
+
+  // throttling
+  if (in_flight_promotes >= g_conf->osd_promote_max_ops_per_pg) {
+    return;
+  }
+
+  hobject_t oid;
+  object_locator_t oloc;
+  waiting_for_promote.pop(&oid, &oloc);
+  ObjectContextRef obc = get_object_context(oid, true);
+  promote_object(obc, hobject_t(), oloc, OpRequestRef());
+}
+
 class PromoteCallback: public ReplicatedPG::CopyCallback {
   ObjectContextRef obc;
   ReplicatedPG *pg;
@@ -2224,6 +2282,7 @@ void ReplicatedPG::promote_object(ObjectContextRef obc,
   if (op)
     wait_for_blocked_object(obc->obs.oi.soid, op);
   info.stats.stats.sum.num_promote++;
+  in_flight_promotes++;
 }
 
 void ReplicatedPG::execute_ctx(OpContext *ctx)
@@ -6600,6 +6659,9 @@ void ReplicatedPG::finish_promote(int r, CopyResults *results,
   dout(10) << __func__ << " " << soid << " r=" << r
 	   << " uv" << results->user_version << dendl;
 
+  assert(in_flight_promotes > 0);
+  in_flight_promotes--;
+
   if (r == -ECANCELED) {
     return;
   }
@@ -6775,6 +6837,9 @@ void ReplicatedPG::finish_promote(int r, CopyResults *results,
   simple_repop_submit(repop);
 
   osd->logger->inc(l_osd_tier_promote);
+
+  // start new async promote if any
+  start_async_promote();
 }
 
 void ReplicatedPG::cancel_copy(CopyOpRef cop, bool requeue)
