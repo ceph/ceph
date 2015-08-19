@@ -434,6 +434,7 @@ enum {
 	CEPH_OSD_COPY_FROM_FLAG_IGNORE_CACHE = 4, /* ignore osd cache logic */
 	CEPH_OSD_COPY_FROM_FLAG_MAP_SNAP_CLONE = 8, /* map snap direct to
 						     * cloneid */
+	CEPH_OSD_COPY_FROM_FLAG_RWORDERED = 16, /* order with write */
 };
 
 enum {

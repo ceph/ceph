@@ -2803,6 +2803,10 @@ MOSDOp *Objecter::_prepare_osd_op(Op *op)
   else
     m->set_priority(cct->_conf->osd_client_op_priority);
 
+  if (op->reqid != osd_reqid_t()) {
+    m->set_reqid(op->reqid);
+  }
+
   logger->inc(l_osdc_op_send);
   logger->inc(l_osdc_op_send_bytes, m->get_data().length());
 

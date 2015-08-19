@@ -654,12 +654,18 @@ struct ObjectOperation {
 	out_flags(flags), out_data_digest(dd), out_omap_digest(od),
         out_reqids(oreqids), prval(r) {}
     void finish(int r) {
-      if (r < 0)
+      // reqids are copied on ENOENT
+      if (r < 0 && r != -ENOENT)
 	return;
       try {
 	bufferlist::iterator p = bl.begin();
 	object_copy_data_t copy_reply;
 	::decode(copy_reply, p);
+	if (r == -ENOENT) {
+	  if (out_reqids)
+	    *out_reqids = copy_reply.reqids;
+	  return;
+	}
 	if (out_size)
 	  *out_size = copy_reply.size;
 	if (out_mtime)
@@ -1202,6 +1208,8 @@ public:
     int *data_offset;
 
     epoch_t last_force_resend;
+
+    osd_reqid_t reqid; // explicitly setting reqid
 
     Op(const object_t& o, const object_locator_t& ol, vector<OSDOp>& op,
        int f, Context *ac, Context *co, version_t *ov, int *offset = NULL) :
@@ -2051,19 +2059,22 @@ public:
   Op *prepare_mutate_op(const object_t& oid, const object_locator_t& oloc,
 	       ObjectOperation& op,
 	       const SnapContext& snapc, utime_t mtime, int flags,
-	       Context *onack, Context *oncommit, version_t *objver = NULL) {
+	       Context *onack, Context *oncommit, version_t *objver = NULL,
+	       osd_reqid_t reqid = osd_reqid_t()) {
     Op *o = new Op(oid, oloc, op.ops, flags | global_op_flags.read() | CEPH_OSD_FLAG_WRITE, onack, oncommit, objver);
     o->priority = op.priority;
     o->mtime = mtime;
     o->snapc = snapc;
     o->out_rval.swap(op.out_rval);
+    o->reqid = reqid;
     return o;
   }
   ceph_tid_t mutate(const object_t& oid, const object_locator_t& oloc,
 	       ObjectOperation& op,
 	       const SnapContext& snapc, utime_t mtime, int flags,
-	       Context *onack, Context *oncommit, version_t *objver = NULL) {
-    Op *o = prepare_mutate_op(oid, oloc, op, snapc, mtime, flags, onack, oncommit, objver);
+	       Context *onack, Context *oncommit, version_t *objver = NULL,
+	       osd_reqid_t reqid = osd_reqid_t()) {
+    Op *o = prepare_mutate_op(oid, oloc, op, snapc, mtime, flags, onack, oncommit, objver, reqid);
     return op_submit(o);
   }
   Op *prepare_read_op(const object_t& oid, const object_locator_t& oloc,
