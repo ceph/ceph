@@ -104,6 +104,9 @@ bool OpRequest::need_promote() {
 bool OpRequest::need_skip_promote() {
   return check_rmw(CEPH_OSD_RMW_FLAG_SKIP_PROMOTE);
 }
+bool OpRequest::need_bypass_cache() {
+  return check_rmw(CEPH_OSD_RMW_FLAG_BYPASS_CACHE);
+}
 
 void OpRequest::set_rmw_flags(int flags) {
 #ifdef WITH_LTTNG
@@ -123,6 +126,7 @@ void OpRequest::set_pg_op() { set_rmw_flags(CEPH_OSD_RMW_FLAG_PGOP); }
 void OpRequest::set_cache() { set_rmw_flags(CEPH_OSD_RMW_FLAG_CACHE); }
 void OpRequest::set_promote() { set_rmw_flags(CEPH_OSD_RMW_FLAG_FORCE_PROMOTE); }
 void OpRequest::set_skip_promote() { set_rmw_flags(CEPH_OSD_RMW_FLAG_SKIP_PROMOTE); }
+void OpRequest::set_bypass_cache() { set_rmw_flags(CEPH_OSD_RMW_FLAG_BYPASS_CACHE); }
 
 void OpRequest::mark_flag_point(uint8_t flag, const string& s) {
 #ifdef WITH_LTTNG
