@@ -5,6 +5,7 @@
 # Copyright (C) 2014, 2015 Red Hat <contact@redhat.com>
 #
 # Author: Loic Dachary <loic@dachary.org>
+# Modified: Shinobu Kinjo <skinjo@redhat.com>
 #
 #  This library is free software; you can redistribute it and/or
 #  modify it under the terms of the GNU Lesser General Public
@@ -17,19 +18,8 @@ mkdir -p $DIR
 if test $(id -u) != 0 ; then
     SUDO=sudo
 fi
+
 export LC_ALL=C # the following is vulnerable to i18n
-
-if test -f /etc/redhat-release ; then
-    $SUDO yum install -y redhat-lsb-core
-fi
-
-if type apt-get > /dev/null 2>&1 ; then
-    $SUDO apt-get install -y lsb-release
-fi
-
-if type zypper > /dev/null 2>&1 ; then
-    $SUDO zypper --gpg-auto-import-keys --non-interactive install openSUSE-release lsb-release
-fi
 
 case $(lsb_release -si) in
 Ubuntu|Debian|Devuan)
@@ -51,29 +41,16 @@ Ubuntu|Debian|Devuan)
                 backports="-t $(lsb_release -sc)-backports"
                 ;;
         esac
+
         packages=$(echo $packages) # change newlines into spaces
         $SUDO env DEBIAN_FRONTEND=noninteractive apt-get install $backports -y $packages || exit 1
         ;;
 CentOS|Fedora|RedHatEnterpriseServer)
-        case $(lsb_release -si) in
-            Fedora)
-                $SUDO yum install -y yum-utils
-                ;;
-            CentOS|RedHatEnterpriseServer)
-                $SUDO yum install -y yum-utils
-                MAJOR_VERSION=$(lsb_release -rs | cut -f1 -d.)
-                if test $(lsb_release -si) == RedHatEnterpriseServer ; then
-                    $SUDO yum install subscription-manager
-                    $SUDO subscription-manager repos --enable=rhel-$MAJOR_VERSION-server-optional-rpms
-                fi
-                $SUDO yum-config-manager --add-repo https://dl.fedoraproject.org/pub/epel/$MAJOR_VERSION/x86_64/ 
-                $SUDO yum install --nogpgcheck -y epel-release
-                $SUDO rpm --import /etc/pki/rpm-gpg/RPM-GPG-KEY-EPEL-$MAJOR_VERSION
-                $SUDO rm -f /etc/yum.repos.d/dl.fedoraproject.org*
-                ;;
-        esac
+
         sed -e 's/@//g' < ceph.spec.in > $DIR/ceph.spec
+
         $SUDO yum-builddep -y $DIR/ceph.spec 2>&1 | tee $DIR/yum-builddep.out
+
         ! grep -q -i error: $DIR/yum-builddep.out || exit 1
         ;;
 *SUSE*)
