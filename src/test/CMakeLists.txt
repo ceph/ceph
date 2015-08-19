@@ -850,24 +850,6 @@ target_link_libraries(unittest_escape global ${CMAKE_DL_LIBS} ${TCMALLOC_LIBS}
 set_target_properties(unittest_escape PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 
-# unittest_chain_xattr
-set(unittest_chain_xattr_srcs
-  objectstore/chain_xattr.cc
-  )
-add_executable(unittest_chain_xattr
-  ${unittest_chain_xattr_srcs}
-  $<TARGET_OBJECTS:heap_profiler_objs>
-  )
-set_target_properties(unittest_chain_xattr PROPERTIES COMPILE_FLAGS
-  ${UNITTEST_CXX_FLAGS})
-target_link_libraries(unittest_chain_xattr
-  os
-  global
-  ${CMAKE_DL_LIBS}
-  ${TCMALLOC_LIBS}
-  ${UNITTEST_LIBS}
-  )
-
 # unittest_strtol
 add_executable(unittest_strtol EXCLUDE_FROM_ALL
   strtol.cc
@@ -932,22 +914,7 @@ target_link_libraries(unittest_chain_xattr
   ${TCMALLOC_LIBS}
   ${UNITTEST_LIBS}
   )
-
-# unittest_flatindex
-add_executable(unittest_flatindex EXCLUDE_FROM_ALL
-  os/TestFlatIndex.cc
-  $<TARGET_OBJECTS:heap_profiler_objs>
-  )
-add_test(unittest_flatindex unittest_flatindex)
-add_dependencies(check unittest_flatindex)
-target_link_libraries(unittest_flatindex
-  os
-  global
-  ${CMAKE_DL_LIBS}
-  ${TCMALLOC_LIBS}
-  ${UNITTEST_LIBS}
-  )
-set_target_properties(unittest_flatindex PROPERTIES COMPILE_FLAGS
+set_target_properties(unittest_chain_xattr PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 
 # unittest_safe_io
