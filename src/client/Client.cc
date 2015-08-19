@@ -1470,9 +1470,9 @@ int Client::make_request(MetaRequest *request,
     oldest_tid = tid;
 
   if (uid < 0)
-    uid = user_id >= 0 ? user_id : getuid();
+    uid = get_uid();
   if (gid < 0)
-    gid = group_id >= 0 ? group_id : getgid();
+    gid = get_gid();
 
   request->set_caller_uid(uid);
   request->set_caller_gid(gid);
@@ -6749,8 +6749,8 @@ int Client::open(const char *relpath, int flags, mode_t mode, int stripe_unit,
 
   if (!created) {
     // posix says we can only check permissions of existing files
-    uid_t uid = geteuid();
-    gid_t gid = getegid();
+    uid_t uid = get_uid();
+    gid_t gid = get_gid();
     r = check_permissions(in.get(), flags, uid, gid);
     if (r < 0)
       goto out;
@@ -10092,8 +10092,8 @@ int Client::ll_open(Inode *in, int flags, Fh **fhp, int uid, int gid)
 
   int r;
   if (uid < 0) {
-    uid = geteuid();
-    gid = getegid();
+    uid = get_uid();
+    gid = get_gid();
   }
   if (!cct->_conf->fuse_default_permissions) {
     r = check_permissions(in, flags, uid, gid);
