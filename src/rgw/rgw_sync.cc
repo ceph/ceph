@@ -1059,6 +1059,66 @@ static string full_sync_index_shard_oid(int shard_id)
   return string(buf);
 }
 
+template <class T>
+class RGWReadRemoteMetadataCR : public RGWCoroutine {
+  RGWRados *store;
+  RGWHTTPManager *http_manager;
+  RGWAsyncRadosProcessor *async_rados;
+
+  RGWRESTReadResource *http_op;
+
+  string section;
+  string key;
+
+  bufferlist *pbl;
+
+public:
+  RGWReadRemoteMetadataCR(RGWRados *_store, RGWHTTPManager *_mgr, RGWAsyncRadosProcessor *_async_rados,
+                                                      const string& _section, const string& _key, bufferlist *_pbl) : RGWCoroutine(_store->ctx()), store(_store),
+                                                      http_manager(_mgr),
+						      async_rados(_async_rados),
+                                                      http_op(NULL),
+                                                      section(_section),
+                                                      key(_key),
+						      pbl(_pbl) {
+  }
+
+  int operate() {
+    RGWRESTConn *conn = store->rest_master_conn;
+    reenter(this) {
+      yield {
+        rgw_http_param_pair pairs[] = { { NULL, NULL } };
+
+        string p = string("/metadata") + section + "/" + key;
+
+        http_op = new RGWRESTReadResource(conn, p, pairs, NULL, http_manager);
+
+        http_op->set_user_info((void *)stack);
+
+        int ret = http_op->aio_read();
+        if (ret < 0) {
+          ldout(store->ctx(), 0) << "ERROR: failed to fetch mdlog data" << dendl;
+          log_error() << "failed to send http operation: " << http_op->to_str() << " ret=" << ret << std::endl;
+          http_op->put();
+          return set_state(RGWCoroutine_Error, ret);
+        }
+
+        return io_block(0);
+      }
+      yield {
+        int ret = http_op->wait_bl(pbl);
+        if (ret < 0) {
+          return set_state(RGWCoroutine_Error, ret);
+        }
+        return set_state(RGWCoroutine_Done, 0);
+      }
+    }
+    return 0;
+  }
+};
+
+
+
 class RGWMetaSyncShardCR : public RGWCoroutine {
   RGWRados *store;
   RGWHTTPManager *http_manager;
@@ -1108,7 +1168,7 @@ public:
               // update shard marker
             }
           }
-        } while (entries.size() == max_entries);
+        } while ((int)entries.size() == max_entries);
         // update shard state
         return set_state(RGWCoroutine_Done, 0);
       } else if (sync_marker.state == rgw_meta_sync_marker::IncrementalSync) {
