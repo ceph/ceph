@@ -75,10 +75,6 @@ if(${WITH_PROFILER})
   list(APPEND EXTRALIBS profiler)
 endif(${WITH_PROFILER})
 
-if(WITH_CDS)
-  list(APPEND EXTRALIBS ${CDS_LIBS})
-endif(WITH_CDS)
-
 if(USE_NSS)
   if(NSS_FOUND)
     if(NSPR_FOUND)
