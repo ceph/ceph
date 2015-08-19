@@ -2307,6 +2307,7 @@ public:
   virtual void agent_delay() = 0;
   virtual void agent_clear() = 0;
   virtual void agent_choose_mode_restart() = 0;
+  virtual void agent_setup() = 0;
 };
 
 ostream& operator<<(ostream& out, const PG& pg);

@@ -11161,7 +11161,8 @@ bool ReplicatedPG::agent_choose_mode(bool restart, OpRequestRef op)
   if (info.stats.stats_invalid) {
     // idle; stats can't be trusted until we scrub.
     dout(20) << __func__ << " stats invalid (post-split), idle" << dendl;
-  } else if (dirty_micro > flush_high_target) {
+  } else if (dirty_micro > flush_high_target ||
+             (osd->agent_in_schedule_time && dirty_micro > 0)) {
     flush_mode = TierAgentState::FLUSH_MODE_HIGH;
   } else if (dirty_micro > flush_target) {
     flush_mode = TierAgentState::FLUSH_MODE_LOW;
