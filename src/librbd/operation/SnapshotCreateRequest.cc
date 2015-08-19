@@ -18,25 +18,26 @@ namespace operation {
 
 namespace {
 
+template <typename I>
 std::ostream& operator<<(std::ostream& os,
-                         const SnapshotCreateRequest::State& state) {
+                         const typename SnapshotCreateRequest<I>::State& state) {
   switch(state) {
-  case SnapshotCreateRequest::STATE_SUSPEND_REQUESTS:
+  case SnapshotCreateRequest<I>::STATE_SUSPEND_REQUESTS:
     os << "SUSPEND_REQUESTS";
     break;
-  case SnapshotCreateRequest::STATE_SUSPEND_AIO:
+  case SnapshotCreateRequest<I>::STATE_SUSPEND_AIO:
     os << "SUSPEND_AIO";
     break;
-  case SnapshotCreateRequest::STATE_ALLOCATE_SNAP_ID:
+  case SnapshotCreateRequest<I>::STATE_ALLOCATE_SNAP_ID:
     os << "ALLOCATE_SNAP_ID";
     break;
-  case SnapshotCreateRequest::STATE_CREATE_SNAP:
+  case SnapshotCreateRequest<I>::STATE_CREATE_SNAP:
     os << "CREATE_SNAP";
     break;
-  case SnapshotCreateRequest::STATE_CREATE_OBJECT_MAP:
+  case SnapshotCreateRequest<I>::STATE_CREATE_OBJECT_MAP:
     os << "CREATE_OBJECT_MAP";
     break;
-  case SnapshotCreateRequest::STATE_RELEASE_SNAP_ID:
+  case SnapshotCreateRequest<I>::STATE_RELEASE_SNAP_ID:
     os << "RELEASE_SNAP_ID";
     break;
   default:
@@ -48,20 +49,24 @@ std::ostream& operator<<(std::ostream& os,
 
 } // anonymous namespace
 
-SnapshotCreateRequest::SnapshotCreateRequest(ImageCtx &image_ctx,
-                                             Context *on_finish,
-                                             const std::string &snap_name)
-  : Request(image_ctx, on_finish), m_snap_name(snap_name), m_ret_val(0),
+template <typename I>
+SnapshotCreateRequest<I>::SnapshotCreateRequest(I &image_ctx,
+                                                Context *on_finish,
+                                                const std::string &snap_name)
+  : Request<I>(image_ctx, on_finish), m_snap_name(snap_name), m_ret_val(0),
     m_aio_suspended(false), m_requests_suspended(false),
     m_snap_id(CEPH_NOSNAP), m_snap_created(false) {
 }
 
-void SnapshotCreateRequest::send_op() {
+template <typename I>
+void SnapshotCreateRequest<I>::send_op() {
   send_suspend_requests();
 }
 
-bool SnapshotCreateRequest::should_complete(int r) {
-  CephContext *cct = m_image_ctx.cct;
+template <typename I>
+bool SnapshotCreateRequest<I>::should_complete(int r) {
+  I &image_ctx = this->m_image_ctx;
+  CephContext *cct = image_ctx.cct;
   ldout(cct, 5) << this << " " << __func__ << ": state=" << m_state << ", "
                 << "r=" << r << dendl;
   r = filter_state_return_code(r);
@@ -76,7 +81,7 @@ bool SnapshotCreateRequest::should_complete(int r) {
     return should_complete_error();
   }
 
-  RWLock::RLocker owner_lock(m_image_ctx.owner_lock);
+  RWLock::RLocker owner_lock(image_ctx.owner_lock);
   bool finished = false;
   switch (m_state) {
   case STATE_SUSPEND_REQUESTS:
@@ -112,8 +117,10 @@ bool SnapshotCreateRequest::should_complete(int r) {
   return finished;
 }
 
-bool SnapshotCreateRequest::should_complete_error() {
-  CephContext *cct = m_image_ctx.cct;
+template <typename I>
+bool SnapshotCreateRequest<I>::should_complete_error() {
+  I &image_ctx = this->m_image_ctx;
+  CephContext *cct = image_ctx.cct;
   lderr(cct) << this << " " << __func__ << ": "
              << "ret_val=" << m_ret_val << dendl;
 
@@ -130,120 +137,138 @@ bool SnapshotCreateRequest::should_complete_error() {
   return finished;
 }
 
-void SnapshotCreateRequest::send_suspend_requests() {
-  assert(m_image_ctx.owner_lock.is_locked());
+template <typename I>
+void SnapshotCreateRequest<I>::send_suspend_requests() {
+  I &image_ctx = this->m_image_ctx;
+  assert(image_ctx.owner_lock.is_locked());
 
   // TODO suspend (shrink) resize to ensure consistent RBD mirror
   send_suspend_aio();
 }
 
-void SnapshotCreateRequest::send_suspend_aio() {
-  assert(m_image_ctx.owner_lock.is_locked());
+template <typename I>
+void SnapshotCreateRequest<I>::send_suspend_aio() {
+  I &image_ctx = this->m_image_ctx;
+  assert(image_ctx.owner_lock.is_locked());
 
-  CephContext *cct = m_image_ctx.cct;
+  CephContext *cct = image_ctx.cct;
   ldout(cct, 5) << this << " " << __func__ << dendl;
 
   m_state = STATE_SUSPEND_AIO;
   m_aio_suspended = true;
 
   // can issue a re-entrant callback if no IO in-progress
-  m_image_ctx.aio_work_queue->block_writes(create_async_callback_context());
+  image_ctx.aio_work_queue->block_writes(this->create_async_callback_context());
 }
 
-void SnapshotCreateRequest::send_allocate_snap_id() {
-  assert(m_image_ctx.owner_lock.is_locked());
+template <typename I>
+void SnapshotCreateRequest<I>::send_allocate_snap_id() {
+  I &image_ctx = this->m_image_ctx;
+  assert(image_ctx.owner_lock.is_locked());
 
-  CephContext *cct = m_image_ctx.cct;
+  CephContext *cct = image_ctx.cct;
   ldout(cct, 5) << this << " " << __func__ << dendl;
   m_state = STATE_ALLOCATE_SNAP_ID;
 
   // TODO create an async version of selfmanaged_snap_create
-  int r = m_image_ctx.md_ctx.selfmanaged_snap_create(&m_snap_id);
-  async_complete(r);
+  int r = image_ctx.md_ctx.selfmanaged_snap_create(&m_snap_id);
+  this->async_complete(r);
 }
 
-void SnapshotCreateRequest::send_create_snap() {
-  assert(m_image_ctx.owner_lock.is_locked());
-  RWLock::RLocker snap_locker(m_image_ctx.snap_lock);
-  RWLock::RLocker parent_locker(m_image_ctx.parent_lock);
+template <typename I>
+void SnapshotCreateRequest<I>::send_create_snap() {
+  I &image_ctx = this->m_image_ctx;
+  assert(image_ctx.owner_lock.is_locked());
+  RWLock::RLocker snap_locker(image_ctx.snap_lock);
+  RWLock::RLocker parent_locker(image_ctx.parent_lock);
 
-  CephContext *cct = m_image_ctx.cct;
+  CephContext *cct = image_ctx.cct;
   ldout(cct, 5) << this << " " << __func__ << dendl;
   m_state = STATE_CREATE_SNAP;
 
   // should have been canceled prior to releasing lock
-  assert(!m_image_ctx.image_watcher->is_lock_supported(m_image_ctx.snap_lock) ||
-         m_image_ctx.image_watcher->is_lock_owner());
+  assert(!image_ctx.image_watcher->is_lock_supported(image_ctx.snap_lock) ||
+         image_ctx.image_watcher->is_lock_owner());
 
   // save current size / parent info for creating snapshot record in ImageCtx
-  m_size = m_image_ctx.size;
-  m_parent_info = m_image_ctx.parent_md;
+  m_size = image_ctx.size;
+  m_parent_info = image_ctx.parent_md;
 
   librados::ObjectWriteOperation op;
-  if (m_image_ctx.old_format) {
+  if (image_ctx.old_format) {
     cls_client::old_snapshot_add(&op, m_snap_id, m_snap_name);
   } else {
-    if (m_image_ctx.image_watcher->is_lock_owner()) {
-      m_image_ctx.image_watcher->assert_header_locked(&op);
+    if (image_ctx.image_watcher->is_lock_owner()) {
+      image_ctx.image_watcher->assert_header_locked(&op);
     }
     cls_client::snapshot_add(&op, m_snap_id, m_snap_name);
   }
 
-  librados::AioCompletion *rados_completion = create_callback_completion();
-  int r = m_image_ctx.md_ctx.aio_operate(m_image_ctx.header_oid,
+  librados::AioCompletion *rados_completion =
+    this->create_callback_completion();
+  int r = image_ctx.md_ctx.aio_operate(image_ctx.header_oid,
                                          rados_completion, &op);
   assert(r == 0);
   rados_completion->release();
 }
 
-bool SnapshotCreateRequest::send_create_object_map() {
-  assert(m_image_ctx.owner_lock.is_locked());
+template <typename I>
+bool SnapshotCreateRequest<I>::send_create_object_map() {
+  I &image_ctx = this->m_image_ctx;
+  assert(image_ctx.owner_lock.is_locked());
 
   {
-    RWLock::RLocker snap_locker(m_image_ctx.snap_lock);
-    RWLock::RLocker object_map_lock(m_image_ctx.object_map_lock);
-    if (m_image_ctx.object_map.enabled(m_image_ctx.object_map_lock)) {
-      CephContext *cct = m_image_ctx.cct;
+    RWLock::RLocker snap_locker(image_ctx.snap_lock);
+    RWLock::RLocker object_map_lock(image_ctx.object_map_lock);
+    if (image_ctx.object_map.enabled(image_ctx.object_map_lock)) {
+      CephContext *cct = image_ctx.cct;
       ldout(cct, 5) << this << " " << __func__ << dendl;
       m_state = STATE_CREATE_OBJECT_MAP;
 
-      m_image_ctx.object_map.snapshot_add(m_snap_id, create_callback_context());
+      image_ctx.object_map.snapshot_add(m_snap_id,
+                                        this->create_callback_context());
       return false;
     }
   }
   return true;
 }
 
-bool SnapshotCreateRequest::send_release_snap_id() {
+template <typename I>
+bool SnapshotCreateRequest<I>::send_release_snap_id() {
+  I &image_ctx = this->m_image_ctx;
   if (m_snap_id != CEPH_NOSNAP && !m_snap_created) {
-    CephContext *cct = m_image_ctx.cct;
+    CephContext *cct = image_ctx.cct;
     ldout(cct, 5) << this << " " << __func__ << ": snap_id=" << m_snap_id
                   << dendl;
     m_state = STATE_RELEASE_SNAP_ID;
 
     // TODO add async version of selfmanaged_snap_remove
-    int r = m_image_ctx.data_ctx.selfmanaged_snap_remove(m_snap_id);
+    int r = image_ctx.data_ctx.selfmanaged_snap_remove(m_snap_id);
     m_snap_id = CEPH_NOSNAP;
 
-    async_complete(r);
+    this->async_complete(r);
     return false;
   }
   return true;
 }
 
-void SnapshotCreateRequest::resume_aio() {
+template <typename I>
+void SnapshotCreateRequest<I>::resume_aio() {
+  I &image_ctx = this->m_image_ctx;
   if (m_aio_suspended) {
-    CephContext *cct = m_image_ctx.cct;
+    CephContext *cct = image_ctx.cct;
     ldout(cct, 5) << this << " " << __func__ << dendl;
 
-    m_image_ctx.aio_work_queue->unblock_writes();
+    image_ctx.aio_work_queue->unblock_writes();
     m_aio_suspended = false;
   }
 }
 
-void SnapshotCreateRequest::resume_requests() {
+template <typename I>
+void SnapshotCreateRequest<I>::resume_requests() {
+  I &image_ctx = this->m_image_ctx;
   if (m_requests_suspended) {
-    CephContext *cct = m_image_ctx.cct;
+    CephContext *cct = image_ctx.cct;
     ldout(cct, 5) << this << " " << __func__ << dendl;
 
     // TODO
@@ -251,42 +276,46 @@ void SnapshotCreateRequest::resume_requests() {
   }
 }
 
-void SnapshotCreateRequest::update_snap_context() {
-  assert(m_image_ctx.owner_lock.is_locked());
+template <typename I>
+void SnapshotCreateRequest<I>::update_snap_context() {
+  I &image_ctx = this->m_image_ctx;
+  assert(image_ctx.owner_lock.is_locked());
   m_snap_created = true;
 
-  RWLock::WLocker snap_locker(m_image_ctx.snap_lock);
-  if (m_image_ctx.old_format) {
+  RWLock::WLocker snap_locker(image_ctx.snap_lock);
+  if (image_ctx.old_format) {
     return;
   }
 
-  if (m_image_ctx.get_snap_info(m_snap_id) != NULL) {
+  if (image_ctx.get_snap_info(m_snap_id) != NULL) {
     return;
   }
 
-  CephContext *cct = m_image_ctx.cct;
+  CephContext *cct = image_ctx.cct;
   ldout(cct, 5) << this << " " << __func__ << dendl;
 
   // should have been canceled prior to releasing lock
-  assert(!m_image_ctx.image_watcher->is_lock_supported(m_image_ctx.snap_lock) ||
-         m_image_ctx.image_watcher->is_lock_owner());
+  assert(!image_ctx.image_watcher->is_lock_supported(image_ctx.snap_lock) ||
+         image_ctx.image_watcher->is_lock_owner());
 
   // immediately add a reference to the new snapshot
-  m_image_ctx.add_snap(m_snap_name, m_snap_id, m_size, m_parent_info,
-                       RBD_PROTECTION_STATUS_UNPROTECTED, 0);
+  image_ctx.add_snap(m_snap_name, m_snap_id, m_size, m_parent_info,
+                     RBD_PROTECTION_STATUS_UNPROTECTED, 0);
 
   // immediately start using the new snap context if we
   // own the exclusive lock
   std::vector<snapid_t> snaps;
   snaps.push_back(m_snap_id);
-  snaps.insert(snaps.end(), m_image_ctx.snapc.snaps.begin(),
-               m_image_ctx.snapc.snaps.end());
+  snaps.insert(snaps.end(), image_ctx.snapc.snaps.begin(),
+               image_ctx.snapc.snaps.end());
 
-  m_image_ctx.snapc.seq = m_snap_id;
-  m_image_ctx.snapc.snaps.swap(snaps);
-  m_image_ctx.data_ctx.selfmanaged_snap_set_write_ctx(
-    m_image_ctx.snapc.seq, m_image_ctx.snaps);
+  image_ctx.snapc.seq = m_snap_id;
+  image_ctx.snapc.snaps.swap(snaps);
+  image_ctx.data_ctx.selfmanaged_snap_set_write_ctx(
+    image_ctx.snapc.seq, image_ctx.snaps);
 }
 
 } // namespace operation
 } // namespace librbd
+
+template class librbd::operation::SnapshotCreateRequest<librbd::ImageCtx>;

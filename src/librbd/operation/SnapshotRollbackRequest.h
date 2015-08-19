@@ -17,7 +17,8 @@ class ProgressContext;
 
 namespace operation {
 
-class SnapshotRollbackRequest : public Request {
+template <typename ImageCtxT = ImageCtx>
+class SnapshotRollbackRequest : public Request<ImageCtxT> {
 public:
   /**
    * Snap Rollback goes through the following state machine:
@@ -54,7 +55,7 @@ public:
     STATE_INVALIDATE_CACHE
   };
 
-  SnapshotRollbackRequest(ImageCtx &image_ctx, Context *on_finish,
+  SnapshotRollbackRequest(ImageCtxT &image_ctx, Context *on_finish,
                           const std::string &snap_name, uint64_t snap_id,
                           uint64_t snap_size, ProgressContext &prog_ctx);
 
@@ -84,5 +85,7 @@ private:
 
 } // namespace operation
 } // namespace librbd
+
+extern template class librbd::operation::SnapshotRollbackRequest<librbd::ImageCtx>;
 
 #endif // CEPH_LIBRBD_OPERATION_SNAPSHOT_ROLLBACK_REQUEST_H

@@ -17,7 +17,8 @@ class ImageCtx;
 
 namespace operation {
 
-class SnapshotCreateRequest : public Request {
+template <typename ImageCtxT = ImageCtx>
+class SnapshotCreateRequest : public Request<ImageCtxT> {
 public:
   /**
    * Snap Create goes through the following state machine:
@@ -64,7 +65,7 @@ public:
     STATE_RELEASE_SNAP_ID
   };
 
-  SnapshotCreateRequest(ImageCtx &image_ctx, Context *on_finish,
+  SnapshotCreateRequest(ImageCtxT &image_ctx, Context *on_finish,
 		        const std::string &snap_name);
 
 protected:
@@ -120,5 +121,7 @@ private:
 
 } // namespace operation
 } // namespace librbd
+
+extern template class librbd::operation::SnapshotCreateRequest<librbd::ImageCtx>;
 
 #endif // CEPH_LIBRBD_OPERATION_SNAPSHOT_CREATE_REQUEST_H

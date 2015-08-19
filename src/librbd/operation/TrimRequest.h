@@ -13,12 +13,13 @@ class ProgressContext;
 
 namespace operation {
 
-class TrimRequest : public AsyncRequest<>
+template <typename ImageCtxT = ImageCtx>
+class TrimRequest : public AsyncRequest<ImageCtxT>
 {
 public:
-  TrimRequest(ImageCtx &image_ctx, Context *on_finish,
-		   uint64_t original_size, uint64_t new_size,
-		   ProgressContext &prog_ctx);
+  TrimRequest(ImageCtxT &image_ctx, Context *on_finish,
+	      uint64_t original_size, uint64_t new_size,
+	      ProgressContext &prog_ctx);
 
   virtual void send();
 
@@ -89,5 +90,7 @@ private:
 
 } // namespace operation
 } // namespace librbd
+
+extern template class librbd::operation::TrimRequest<librbd::ImageCtx>;
 
 #endif // CEPH_LIBRBD_OPERATION_TRIM_REQUEST_H
