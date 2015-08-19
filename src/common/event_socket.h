@@ -39,23 +39,29 @@ class EventSocket {
     return -1;
   }
   int notify() {
+    int ret;
     switch (type) {
       case EVENT_SOCKET_TYPE_PIPE:
       {
         char buf[1];
         buf[0] = 'i';
-        return write(socket, buf, 1);
+        ret = write(socket, buf, 1);
+        if (ret < 0)
+          ret = -errno;
       }
       case EVENT_SOCKET_TYPE_EVENTFD:
       {
         uint64_t value = 1;
-        return write(socket, &value, sizeof (value));
+        ret = write(socket, &value, sizeof (value));
+        if (ret < 0)
+          ret = -errno;
       }
       default:
       {
-        return -1;
+        ret = -1;
       }
     }
+    return ret;
   }
 };
 
