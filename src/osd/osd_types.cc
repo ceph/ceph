@@ -318,6 +318,8 @@ void osd_stat_t::dump(Formatter *f) const
   f->close_section();
   f->dump_int("snap_trim_queue_len", snap_trim_queue_len);
   f->dump_int("num_snap_trimming", num_snap_trimming);
+  f->dump_int("pending_pg_removal", pending_pg_removal);
+  f->dump_int("current_osdmap_epoch", cur_epoch);
   f->open_object_section("op_queue_age_hist");
   op_queue_age_hist.dump(f);
   f->close_section();
@@ -328,7 +330,7 @@ void osd_stat_t::dump(Formatter *f) const
 
 void osd_stat_t::encode(bufferlist &bl) const
 {
-  ENCODE_START(4, 2, bl);
+  ENCODE_START(5, 2, bl);
   ::encode(kb, bl);
   ::encode(kb_used, bl);
   ::encode(kb_avail, bl);
@@ -338,12 +340,14 @@ void osd_stat_t::encode(bufferlist &bl) const
   ::encode(hb_out, bl);
   ::encode(op_queue_age_hist, bl);
   ::encode(fs_perf_stat, bl);
+  ::encode(pending_pg_removal, bl);
+  ::encode(cur_epoch, bl);
   ENCODE_FINISH(bl);
 }
 
 void osd_stat_t::decode(bufferlist::iterator &bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(4, 2, 2, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(5, 2, 2, bl);
   ::decode(kb, bl);
   ::decode(kb_used, bl);
   ::decode(kb_avail, bl);
@@ -355,6 +359,10 @@ void osd_stat_t::decode(bufferlist::iterator &bl)
     ::decode(op_queue_age_hist, bl);
   if (struct_v >= 4)
     ::decode(fs_perf_stat, bl);
+  if (struct_v >= 5) {
+    ::decode(pending_pg_removal, bl);
+    ::decode(cur_epoch, bl);
+  }
   DECODE_FINISH(bl);
 }
 

@@ -766,9 +766,14 @@ struct osd_stat_t {
   pow2_hist_t op_queue_age_hist;
 
   objectstore_perf_stat_t fs_perf_stat;
+  // number of pgs to be removed
+  int64_t pending_pg_removal;
+  // current osdmap epoch
+  epoch_t cur_epoch;
 
   osd_stat_t() : kb(0), kb_used(0), kb_avail(0),
-		 snap_trim_queue_len(0), num_snap_trimming(0) {}
+		 snap_trim_queue_len(0), num_snap_trimming(0),
+                 pending_pg_removal(0), cur_epoch(0) {}
 
   void add(const osd_stat_t& o) {
     kb += o.kb;
@@ -778,6 +783,8 @@ struct osd_stat_t {
     num_snap_trimming += o.num_snap_trimming;
     op_queue_age_hist.add(o.op_queue_age_hist);
     fs_perf_stat.add(o.fs_perf_stat);
+    pending_pg_removal += o.pending_pg_removal;
+    cur_epoch = o.cur_epoch;
   }
   void sub(const osd_stat_t& o) {
     kb -= o.kb;
@@ -787,6 +794,8 @@ struct osd_stat_t {
     num_snap_trimming -= o.num_snap_trimming;
     op_queue_age_hist.sub(o.op_queue_age_hist);
     fs_perf_stat.sub(o.fs_perf_stat);
+    pending_pg_removal -= o.pending_pg_removal;
+    cur_epoch = o.cur_epoch;
   }
 
   void dump(Formatter *f) const;
@@ -805,7 +814,9 @@ inline bool operator==(const osd_stat_t& l, const osd_stat_t& r) {
     l.hb_in == r.hb_in &&
     l.hb_out == r.hb_out &&
     l.op_queue_age_hist == r.op_queue_age_hist &&
-    l.fs_perf_stat == r.fs_perf_stat;
+    l.fs_perf_stat == r.fs_perf_stat &&
+    l.pending_pg_removal == r.pending_pg_removal &&
+    l.cur_epoch == r.cur_epoch;
 }
 inline bool operator!=(const osd_stat_t& l, const osd_stat_t& r) {
   return !(l == r);
@@ -819,7 +830,8 @@ inline ostream& operator<<(ostream& out, const osd_stat_t& s) {
 	     << kb_t(s.kb) << " total, "
 	     << "peers " << s.hb_in << "/" << s.hb_out
 	     << " op hist " << s.op_queue_age_hist.h
-	     << ")";
+	     << " pending pg removal " << s.pending_pg_removal
+             << " current epoch " << s.cur_epoch << ")";
 }
 
 

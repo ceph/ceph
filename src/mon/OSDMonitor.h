@@ -136,6 +136,9 @@ private:
 
   map<int,double> osd_weight;
 
+  // the most recent osdmap epoch that a pool removal happens on mon
+  epoch_t epoch_recent_pool_delete;
+
   /*
    * cache what epochs we think osds have.  this is purely
    * optimization to try to avoid sending the same inc maps twice.
@@ -445,6 +448,12 @@ private:
 	pending_inc.new_flags = osdmap.flags;
       pending_inc.new_flags &= ~flag;
     }
+  }
+  epoch_t get_epoch_recent_pool_delete() {
+    return epoch_recent_pool_delete;
+  }
+  void set_epoch_recent_pool_delete(epoch_t e) {
+    epoch_recent_pool_delete = e;
   }
 };
 

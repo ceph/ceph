@@ -2917,6 +2917,48 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
     }
     rdata.append(ds);
   }
+  else if (prefix == "osd pending_pg_removal") {
+    int32_t osdid = -1;
+    cmd_getval(g_ceph_context, cmdmap, "id", osdid);
+    ceph::unordered_map<int32_t, osd_stat_t> osd_stat_map = mon->pgmon()->pg_map.osd_stat;
+    epoch_t epoch_recent_pool_delete = get_epoch_recent_pool_delete();
+    if (osdid != -1) {
+      osd_stat_t osd_stat = osd_stat_map[osdid];
+      if ((osd_stat.pending_pg_removal > 0) ||  
+          (osd_stat.cur_epoch < epoch_recent_pool_delete)) {
+        ds << " osd." << osdid << " has " << osd_stat.pending_pg_removal << " pgs to be removed" \
+           << " or osdmap epoch " << osd_stat.cur_epoch << " on osd." << osdid \
+           << " is lower than " << epoch_recent_pool_delete  \
+           << " that a pool removal happended on monitor \n";
+      } else {
+        ds << " osd." << osdid << " has no pending pgs to be removed" \
+           << " and osdmap epoch " << osd_stat.cur_epoch << " on osd." << osdid \
+           << " is greater than " << epoch_recent_pool_delete  \
+           << " that a pool removal happended on monitor \n";
+      }
+    } else {
+      bool pending = false;
+      for (ceph::unordered_map<int32_t, osd_stat_t>::iterator it = osd_stat_map.begin(); \
+        it != osd_stat_map.end(); it++ ) {
+        if ((it->second.pending_pg_removal > 0) ||
+            (it->second.cur_epoch < epoch_recent_pool_delete)) {
+          ds << " osd." << it->first << " has " << it->second.pending_pg_removal << " pgs to be removed" \
+             << " or osdmap epoch " << it->second.cur_epoch << " on osd." << it->first \
+             << " is lower than " << epoch_recent_pool_delete  \
+             << " that a pool removal happended on monitor \n";
+          pending = true;
+        }
+      }
+      if (!pending) {
+        ds << " none of osds has pending pgs to be removed" \
+           << " and osdmap epoch on all osds is greater than epoch " \
+           << epoch_recent_pool_delete  \
+           << " that a pool removal happended on monitor \n";
+      }
+    }
+
+    rdata.append(ds);
+  }
   else if (prefix == "osd blocked-by") {
     const PGMap &pgm = mon->pgmon()->pg_map;
     if (f) {
@@ -7512,6 +7554,7 @@ int OSDMonitor::_prepare_remove_pool(int64_t pool, ostream *ss)
 
   // remove
   pending_inc.old_pools.insert(pool);
+  set_epoch_recent_pool_delete(osdmap.get_epoch());
 
   // remove any pg_temp mappings for this pool too
   for (map<pg_t,vector<int32_t> >::iterator p = osdmap.pg_temp->begin();
