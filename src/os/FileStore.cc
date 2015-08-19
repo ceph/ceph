@@ -3768,6 +3768,7 @@ void FileStore::start_sync(Context *onsafe)
   Mutex::Locker l(lock);
   sync_waiters.push_back(onsafe);
   sync_cond.Signal();
+  force_sync = true;
   dout(10) << "start_sync" << dendl;
 }
 
