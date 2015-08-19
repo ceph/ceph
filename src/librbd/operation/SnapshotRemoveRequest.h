@@ -16,7 +16,8 @@ class ImageCtx;
 
 namespace operation {
 
-class SnapshotRemoveRequest : public Request {
+template <typename ImageCtxT = ImageCtx>
+class SnapshotRemoveRequest : public Request<ImageCtxT> {
 public:
   /**
    * Snap Remove goes through the following state machine:
@@ -54,7 +55,7 @@ public:
     STATE_RELEASE_SNAP_ID
   };
 
-  SnapshotRemoveRequest(ImageCtx &image_ctx, Context *on_finish,
+  SnapshotRemoveRequest(ImageCtxT &image_ctx, Context *on_finish,
 		        const std::string &snap_name, uint64_t snap_id);
 
 protected:
@@ -89,5 +90,7 @@ private:
 
 } // namespace operation
 } // namespace librbd
+
+extern template class librbd::operation::SnapshotRemoveRequest<librbd::ImageCtx>;
 
 #endif // CEPH_LIBRBD_OPERATION_SNAPSHOT_REMOVE_REQUEST_H
