@@ -581,8 +581,22 @@ int MemStore::queue_transactions(Sequencer *osr,
 				 TrackedOpRef op,
 				 ThreadPool::TPHandle *handle)
 {
-  // fixme: ignore the Sequencer and serialize everything.
-  Mutex::Locker l(apply_lock);
+  // because memstore operations are synchronous, we can implement the
+  // Sequencer with a mutex. this guarantees ordering on a given sequencer,
+  // while allowing operations on different sequencers to happen in parallel
+  struct OpSequencer : public Sequencer_impl {
+    std::mutex mutex;
+    void flush() override {}
+    bool flush_commit(Context*) override { return true; }
+  };
+
+  std::unique_lock<std::mutex> lock;
+  if (osr) {
+    auto seq = reinterpret_cast<OpSequencer**>(&osr->p);
+    if (*seq == nullptr)
+      *seq = new OpSequencer;
+    lock = std::unique_lock<std::mutex>((*seq)->mutex);
+  }
 
   for (list<Transaction*>::iterator p = tls.begin(); p != tls.end(); ++p) {
     // poke the TPHandle heartbeat just to exercise that code path
