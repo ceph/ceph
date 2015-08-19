@@ -1826,15 +1826,16 @@ inline ostream& operator<<(ostream& out, const pg_history_t& h) {
  */
 struct pg_info_t {
   spg_t pgid;
-  eversion_t last_update;    // last object version applied to store.
-  eversion_t last_complete;  // last version pg was complete through.
-  epoch_t last_epoch_started;// last epoch at which this pg started on this osd
+  eversion_t last_update;      ///< last object version applied to store.
+  eversion_t last_complete;    ///< last version pg was complete through.
+  epoch_t last_epoch_started;  ///< last epoch at which this pg started on this osd
   
-  version_t last_user_version; // last user object version applied to store
+  version_t last_user_version; ///< last user object version applied to store
 
-  eversion_t log_tail;     // oldest log entry.
+  eversion_t log_tail;         ///< oldest log entry.
 
-  hobject_t last_backfill;   // objects >= this and < last_complete may be missing
+  hobject_t last_backfill;     ///< objects >= this and < last_complete may be missing
+  bool last_backfill_bitwise;  ///< true if last_backfill reflects a bitwise (vs nibblewise) sort
 
   interval_set<snapid_t> purged_snaps;
 
@@ -1845,14 +1846,21 @@ struct pg_info_t {
 
   pg_info_t()
     : last_epoch_started(0), last_user_version(0),
-      last_backfill(hobject_t::get_max())
+      last_backfill(hobject_t::get_max()),
+      last_backfill_bitwise(false)
   { }
   pg_info_t(spg_t p)
     : pgid(p),
       last_epoch_started(0), last_user_version(0),
-      last_backfill(hobject_t::get_max())
+      last_backfill(hobject_t::get_max()),
+      last_backfill_bitwise(false)
   { }
   
+  void set_last_backfill(hobject_t pos, bool sort) {
+    last_backfill = pos;
+    last_backfill_bitwise = sort;
+  }
+
   bool is_empty() const { return last_update.version == 0; }
   bool dne() const { return history.epoch_created == 0; }
 
@@ -1884,7 +1892,8 @@ inline ostream& operator<<(ostream& out, const pg_info_t& pgi)
     out << " (" << pgi.log_tail << "," << pgi.last_update << "]";
   }
   if (pgi.is_incomplete())
-    out << " lb " << pgi.last_backfill;
+    out << " lb " << pgi.last_backfill
+	<< (pgi.last_backfill_bitwise ? " (bitwise)" : " (NIBBLEWISE)");
   //out << " c " << pgi.epoch_created;
   out << " local-les=" << pgi.last_epoch_started;
   out << " n=" << pgi.stats.stats.sum.num_objects;
@@ -1963,6 +1972,8 @@ struct pg_interval_t {
     int new_min_size,
     unsigned old_pg_num,
     unsigned new_pg_num,
+    bool old_sort_bitwise,
+    bool new_sort_bitwise,
     pg_t pgid
     );
 
@@ -2482,7 +2493,7 @@ struct pg_missing_t {
   }; 
   WRITE_CLASS_ENCODER(item)
 
-  map<hobject_t, item> missing;         // oid -> (need v, have v)
+  map<hobject_t, item, hobject_t::ComparatorWithDefault> missing;  // oid -> (need v, have v)
   map<version_t, hobject_t> rmissing;  // v -> oid
 
   unsigned int num_missing() const;
@@ -2496,15 +2507,17 @@ struct pg_missing_t {
   void revise_have(hobject_t oid, eversion_t have);
   void add(const hobject_t& oid, eversion_t need, eversion_t have);
   void rm(const hobject_t& oid, eversion_t v);
-  void rm(const std::map<hobject_t, pg_missing_t::item>::iterator &m);
+  void rm(const std::map<hobject_t, pg_missing_t::item, hobject_t::ComparatorWithDefault>::iterator &m);
   void got(const hobject_t& oid, eversion_t v);
-  void got(const std::map<hobject_t, pg_missing_t::item>::iterator &m);
+  void got(const std::map<hobject_t, pg_missing_t::item, hobject_t::ComparatorWithDefault>::iterator &m);
   void split_into(pg_t child_pgid, unsigned split_bits, pg_missing_t *omissing);
 
   void clear() {
     missing.clear();
     rmissing.clear();
   }
+
+  void resort(bool sort_bitwise);
 
   void encode(bufferlist &bl) const;
   void decode(bufferlist::iterator &bl, int64_t pool = -1);
@@ -3479,7 +3492,7 @@ struct ObjectRecoveryInfo {
   object_info_t oi;
   SnapSet ss;
   interval_set<uint64_t> copy_subset;
-  map<hobject_t, interval_set<uint64_t> > clone_subset;
+  map<hobject_t, interval_set<uint64_t>, hobject_t::BitwiseComparator> clone_subset;
 
   ObjectRecoveryInfo() : size(0) { }
 
@@ -3605,7 +3618,7 @@ struct ScrubMap {
   };
   WRITE_CLASS_ENCODER(object)
 
-  map<hobject_t,object> objects;
+  map<hobject_t,object, hobject_t::BitwiseComparator> objects;
   eversion_t valid_through;
   eversion_t incr_since;
 

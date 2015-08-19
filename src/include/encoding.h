@@ -453,6 +453,27 @@ inline void decode(std::set<T>& s, bufferlist::iterator& p)
   }
 }
 
+template<class T, class C>
+inline void encode(const std::set<T, C>& s, bufferlist& bl)
+{
+  __u32 n = (__u32)(s.size());
+  encode(n, bl);
+  for (typename std::set<T, C>::const_iterator p = s.begin(); p != s.end(); ++p)
+    encode(*p, bl);
+}
+template<class T, class C>
+inline void decode(std::set<T, C>& s, bufferlist::iterator& p)
+{
+  __u32 n;
+  decode(n, p);
+  s.clear();
+  while (n--) {
+    T v;
+    decode(v, p);
+    s.insert(v);
+  }
+}
+
 template<class T>
 inline void encode_nohead(const std::set<T>& s, bufferlist& bl)
 {
@@ -611,6 +632,16 @@ inline void encode(const std::map<T,U>& m, bufferlist& bl)
     encode(p->second, bl);
   }
 }
+template<class T, class U, class C>
+inline void encode(const std::map<T,U,C>& m, bufferlist& bl)
+{
+  __u32 n = (__u32)(m.size());
+  encode(n, bl);
+  for (typename std::map<T,U,C>::const_iterator p = m.begin(); p != m.end(); ++p) {
+    encode(p->first, bl);
+    encode(p->second, bl);
+  }
+}
 template<class T, class U>
 inline void encode(const std::map<T,U>& m, bufferlist& bl, uint64_t features)
 {
@@ -627,6 +658,29 @@ inline void decode(std::map<T,U>& m, bufferlist::iterator& p)
   __u32 n;
   decode(n, p);
   m.clear();
+  while (n--) {
+    T k;
+    decode(k, p);
+    decode(m[k], p);
+  }
+}
+template<class T, class U, class C>
+inline void decode(std::map<T,U,C>& m, bufferlist::iterator& p)
+{
+  __u32 n;
+  decode(n, p);
+  m.clear();
+  while (n--) {
+    T k;
+    decode(k, p);
+    decode(m[k], p);
+  }
+}
+template<class T, class U, class C>
+inline void decode_noclear(std::map<T,U,C>& m, bufferlist::iterator& p)
+{
+  __u32 n;
+  decode(n, p);
   while (n--) {
     T k;
     decode(k, p);

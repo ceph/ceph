@@ -22,7 +22,7 @@
 #include "common/Mutex.h"
 #include "common/Cond.h"
 
-template <class K, class V>
+template <class K, class V, class C = std::less<K> >
 class SharedLRU {
   CephContext *cct;
   typedef ceph::shared_ptr<V> VPtr;
@@ -34,10 +34,10 @@ class SharedLRU {
 public:
   int waiting;
 private:
-  map<K, typename list<pair<K, VPtr> >::iterator > contents;
+  map<K, typename list<pair<K, VPtr> >::iterator, C> contents;
   list<pair<K, VPtr> > lru;
 
-  map<K, pair<WeakVPtr, V*> > weak_refs;
+  map<K, pair<WeakVPtr, V*>, C> weak_refs;
 
   void trim_cache(list<VPtr> *to_release) {
     while (size > max_size) {
@@ -47,7 +47,7 @@ private:
   }
 
   void lru_remove(const K& key) {
-    typename map<K, typename list<pair<K, VPtr> >::iterator>::iterator i =
+    typename map<K, typename list<pair<K, VPtr> >::iterator, C>::iterator i =
       contents.find(key);
     if (i == contents.end())
       return;
@@ -57,7 +57,7 @@ private:
   }
 
   void lru_add(const K& key, const VPtr& val, list<VPtr> *to_release) {
-    typename map<K, typename list<pair<K, VPtr> >::iterator>::iterator i =
+    typename map<K, typename list<pair<K, VPtr> >::iterator, C>::iterator i =
       contents.find(key);
     if (i != contents.end()) {
       lru.splice(lru.begin(), lru, i->second);
@@ -71,7 +71,7 @@ private:
 
   void remove(const K& key, V *valptr) {
     Mutex::Locker l(lock);
-    typename map<K, pair<WeakVPtr, V*> >::iterator i = weak_refs.find(key);
+    typename map<K, pair<WeakVPtr, V*>, C>::iterator i = weak_refs.find(key);
     if (i != weak_refs.end() && i->second.second == valptr) {
       weak_refs.erase(i);
     }
@@ -80,9 +80,9 @@ private:
 
   class Cleanup {
   public:
-    SharedLRU<K, V> *cache;
+    SharedLRU<K, V, C> *cache;
     K key;
-    Cleanup(SharedLRU<K, V> *cache, K key) : cache(cache), key(key) {}
+    Cleanup(SharedLRU<K, V, C> *cache, K key) : cache(cache), key(key) {}
     void operator()(V *ptr) {
       cache->remove(key, ptr);
       delete ptr;
@@ -105,6 +105,24 @@ public:
     }
   }
 
+  /// adjust container comparator (for purposes of get_next sort order)
+  void reset_comparator(C comp) {
+    // get_next uses weak_refs; that's the only container we need to
+    // reorder.
+    map<K, pair<WeakVPtr, V*>, C> temp;
+
+    Mutex::Locker l(lock);
+    temp.swap(weak_refs);
+
+    // reconstruct with new comparator
+    weak_refs = map<K, pair<WeakVPtr, V*>, C>(comp);
+    weak_refs.insert(temp.begin(), temp.end());
+  }
+
+  C get_comparator() {
+    return weak_refs.key_comp();
+  }
+
   void set_cct(CephContext *c) {
     cct = c;
   }
@@ -116,7 +134,7 @@ public:
   }
 
   void dump_weak_refs(ostream& out) {
-    for (typename map<K, pair<WeakVPtr, V*> >::iterator p = weak_refs.begin();
+    for (typename map<K, pair<WeakVPtr, V*>, C>::iterator p = weak_refs.begin();
 	 p != weak_refs.end();
 	 ++p) {
       out << __func__ << " " << this << " weak_refs: "
@@ -188,7 +206,7 @@ public:
 	retry = false;
 	if (weak_refs.empty())
 	  break;
-	typename map<K, pair<WeakVPtr, V*> >::iterator i =
+	typename map<K, pair<WeakVPtr, V*>, C>::iterator i =
 	  weak_refs.lower_bound(key);
 	if (i == weak_refs.end())
 	  --i;
@@ -210,7 +228,7 @@ public:
     {
       Mutex::Locker l(lock);
       VPtr next_val;
-      typename map<K, pair<WeakVPtr, V*> >::iterator i = weak_refs.upper_bound(key);
+      typename map<K, pair<WeakVPtr, V*>, C>::iterator i = weak_refs.upper_bound(key);
 
       while (i != weak_refs.end() &&
 	     !(next_val = i->second.first.lock()))
@@ -246,7 +264,7 @@ public:
       bool retry = false;
       do {
 	retry = false;
-	typename map<K, pair<WeakVPtr, V*> >::iterator i = weak_refs.find(key);
+	typename map<K, pair<WeakVPtr, V*>, C>::iterator i = weak_refs.find(key);
 	if (i != weak_refs.end()) {
 	  val = i->second.first.lock();
 	  if (val) {
@@ -270,7 +288,7 @@ public:
       bool retry = false;
       do {
 	retry = false;
-	typename map<K, pair<WeakVPtr, V*> >::iterator i = weak_refs.find(key);
+	typename map<K, pair<WeakVPtr, V*>, C>::iterator i = weak_refs.find(key);
 	if (i != weak_refs.end()) {
 	  val = i->second.first.lock();
 	  if (val) {
@@ -320,7 +338,7 @@ public:
     list<VPtr> to_release;
     {
       Mutex::Locker l(lock);
-      typename map<K, pair<WeakVPtr, V*> >::iterator actual =
+      typename map<K, pair<WeakVPtr, V*>, C>::iterator actual =
 	weak_refs.lower_bound(key);
       if (actual != weak_refs.end() && actual->first == key) {
         if (existed) 

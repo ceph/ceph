@@ -434,7 +434,7 @@ public:
     bufferlist tbl;
 
     map<coll_t, __le32> coll_index;
-    map<ghobject_t, __le32> object_index;
+    map<ghobject_t, __le32, ghobject_t::BitwiseComparator> object_index;
 
     __le32 coll_id;
     __le32 object_id;
@@ -660,7 +660,7 @@ public:
       }
 
       vector<__le32> om(other.object_index.size());
-      map<ghobject_t, __le32>::iterator object_index_p;
+      map<ghobject_t, __le32, ghobject_t::BitwiseComparator>::iterator object_index_p;
       for (object_index_p = other.object_index.begin();
            object_index_p != other.object_index.end();
            ++object_index_p) {
@@ -796,7 +796,7 @@ public:
           colls[coll_index_p->second] = coll_index_p->first;
         }
 
-        map<ghobject_t, __le32>::iterator object_index_p;
+        map<ghobject_t, __le32, ghobject_t::BitwiseComparator>::iterator object_index_p;
         for (object_index_p = t->object_index.begin();
              object_index_p != t->object_index.end();
              ++object_index_p) {
@@ -892,7 +892,7 @@ private:
       return index_id;
     }
     __le32 _get_object_id(const ghobject_t& oid) {
-      map<ghobject_t, __le32>::iterator o = object_index.find(oid);
+      map<ghobject_t, __le32, ghobject_t::BitwiseComparator>::iterator o = object_index.find(oid);
       if (o != object_index.end())
         return o->second;
 
@@ -1768,6 +1768,10 @@ public:
   virtual void set_allow_sharded_objects() = 0;
   virtual bool get_allow_sharded_objects() = 0;
 
+  virtual bool can_sort_nibblewise() {
+    return false;   // assume a backend cannot, unless it says otherwise
+  }
+
   virtual int statfs(struct statfs *buf) = 0;
 
   virtual void collect_metadata(map<string,string> *pm) { }
@@ -2027,13 +2031,15 @@ public:
    * @param c collection
    * @param start list object that sort >= this value
    * @param end list objects that sort < this value
+   * @param sort_bitwise sort bitwise (instead of legacy nibblewise)
    * @param max return no more than this many results
    * @param seq return no objects with snap < seq
    * @param ls [out] result
    * @param next [out] next item sorts >= this value
    * @return zero on success, or negative error
    */
-  virtual int collection_list(coll_t c, ghobject_t start, ghobject_t end, int max,
+  virtual int collection_list(coll_t c, ghobject_t start, ghobject_t end,
+			      bool sort_bitwise, int max,
 			      vector<ghobject_t> *ls, ghobject_t *next) = 0;
 
   /// OMAP

@@ -132,7 +132,7 @@ void MemStore::dump(Formatter *f)
     f->close_section();
 
     f->open_array_section("objects");
-    for (map<ghobject_t,ObjectRef>::iterator q = p->second->object_map.begin();
+    for (map<ghobject_t,ObjectRef,ghobject_t::BitwiseComparator>::iterator q = p->second->object_map.begin();
 	 q != p->second->object_map.end();
 	 ++q) {
       f->open_object_section("object");
@@ -422,18 +422,20 @@ bool MemStore::collection_empty(coll_t cid)
 }
 
 int MemStore::collection_list(coll_t cid, ghobject_t start, ghobject_t end,
-			      int max,
+			      bool sort_bitwise, int max,
 			      vector<ghobject_t> *ls, ghobject_t *next)
 {
+  if (!sort_bitwise)
+    return -EOPNOTSUPP;
   CollectionRef c = get_collection(cid);
   if (!c)
     return -ENOENT;
   RWLock::RLocker l(c->lock);
 
-  map<ghobject_t,ObjectRef>::iterator p = c->object_map.lower_bound(start);
+  map<ghobject_t,ObjectRef,ghobject_t::BitwiseComparator>::iterator p = c->object_map.lower_bound(start);
   while (p != c->object_map.end() &&
-	  ls->size() < (unsigned)max &&
-	  p->first < end) {
+	 ls->size() < (unsigned)max &&
+	 cmp_bitwise(p->first, end) < 0) {
     ls->push_back(p->first);
     ++p;
   }
@@ -1251,7 +1253,7 @@ int MemStore::_omap_rmkeyrange(coll_t cid, const ghobject_t &oid,
   ObjectRef o = c->get_object(oid);
   if (!o)
     return -ENOENT;
-  map<string,bufferlist>::iterator p = o->omap.upper_bound(first);
+  map<string,bufferlist>::iterator p = o->omap.lower_bound(first);
   map<string,bufferlist>::iterator e = o->omap.lower_bound(last);
   while (p != e)
     o->omap.erase(p++);
@@ -1382,7 +1384,7 @@ int MemStore::_split_collection(coll_t cid, uint32_t bits, uint32_t match,
   RWLock::WLocker l1(MIN(&(*sc), &(*dc))->lock);
   RWLock::WLocker l2(MAX(&(*sc), &(*dc))->lock);
 
-  map<ghobject_t,ObjectRef>::iterator p = sc->object_map.begin();
+  map<ghobject_t,ObjectRef,ghobject_t::BitwiseComparator>::iterator p = sc->object_map.begin();
   while (p != sc->object_map.end()) {
     if (p->first.match(bits, match)) {
       dout(20) << " moving " << p->first << dendl;
