@@ -61,6 +61,7 @@ public:
   map<string, string>& get_out_headers() { return out_headers; }
 
   int get_http_status() { return http_status; }
+  int get_status() { return status; }
 };
 
 

@@ -166,6 +166,14 @@ public:
     return req.get_http_status();
   }
 
+  int wait_bl(bufferlist *pbl) {
+    if (req.get_status() < 0) {
+      return req.get_status();
+    }
+    *pbl = bl;
+    return 0;
+  }
+
   template <class T>
   int wait(T *dest);
 
@@ -177,7 +185,11 @@ public:
 template <class T>
 int RGWRESTReadResource::decode_resource(T *dest)
 {
-  int ret = parse_decode_json(cct, *dest, bl);
+  int ret = req.get_status();
+  if (ret < 0) {
+    return ret;
+  }
+  ret = parse_decode_json(cct, *dest, bl);
   if (ret < 0) {
     return ret;
   }
