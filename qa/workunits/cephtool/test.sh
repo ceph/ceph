@@ -370,14 +370,7 @@ function test_tiering()
   rados -p cache4 put foo2 $tmpfile
   rm -f $tmpfile
   ceph tell osd.\* flush_pg_stats || true
-  ceph df | grep cache4 | grep ' 2 '
-  local max_objects=1
-  ceph osd pool set cache4 target_max_objects $max_objects
-  local max_bytes=1024
-  ceph osd pool set cache4 target_max_bytes $max_bytes
-  ceph health | grep WARN | grep cache4
-  ceph health detail | grep cache4 | grep 'target max' | grep "${max_objects} objects"
-  ceph health detail | grep cache4 | grep 'target max' | grep "${max_bytes}B"
+  ceph df | grep datapool | grep ' 2 '
   ceph osd tier remove-overlay datapool
   ceph osd tier remove datapool cache4
   ceph osd pool delete cache4 cache4 --yes-i-really-really-mean-it

@@ -764,6 +764,16 @@ protected:
   map<hobject_t, list<OpRequestRef>, hobject_t::BitwiseComparator> waiting_for_unreadable_object,
 			     waiting_for_degraded_object,
 			     waiting_for_blocked_object;
+
+  map<
+    hobject_t,
+    snapid_t,
+    hobject_t::BitwiseComparator> objects_blocked_on_degraded_snap;
+  map<
+    hobject_t,
+    ObjectContextRef,
+    hobject_t::BitwiseComparator> objects_blocked_on_snap_promotion;
+
   // Callbacks should assume pg (and nothing else) is locked
   map<hobject_t, list<Context*>, hobject_t::BitwiseComparator> callbacks_for_degraded_object;
 
