@@ -116,6 +116,8 @@ void Log::set_log_file(string fn)
 
 void Log::reopen_log_file()
 {
+  pthread_mutex_lock(&m_flush_mutex);
+  m_flush_mutex_holder = pthread_self();
   if (m_fd >= 0)
     VOID_TEMP_FAILURE_RETRY(::close(m_fd));
   if (m_log_file.length()) {
@@ -123,6 +125,8 @@ void Log::reopen_log_file()
   } else {
     m_fd = -1;
   }
+  m_flush_mutex_holder = 0;
+  pthread_mutex_unlock(&m_flush_mutex);
 }
 
 void Log::set_syslog_level(int log, int crash)
