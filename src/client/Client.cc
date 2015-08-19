@@ -2946,10 +2946,8 @@ void Client::send_cap(Inode *in, MetaSession *session, Cap *cap,
 				   flush,
 				   cap->mseq,
                                    cap_epoch_barrier);
-  if (user_id >= 0)
-    m->caller_uid = user_id;
-  if (group_id >= 0)
-    m->caller_gid = group_id;
+  m->caller_uid = in->cap_dirtier_uid;
+  m->caller_gid = in->cap_dirtier_gid;
 
   m->head.issue_seq = cap->issue_seq;
   m->set_tid(flush_tid);
@@ -4340,6 +4338,10 @@ void Client::handle_cap_flush_ack(MetaSession *session, Inode *in, Cap *cap, MCl
 	  << " cleaned " << ccap_string(cleaned) << " on " << *in
 	  << " with " << ccap_string(dirty) << dendl;
 
+  if (!dirty) {
+    in->cap_dirtier_uid = -1;
+    in->cap_dirtier_gid = -1;
+  }
 
   if (!cleaned) {
     ldout(cct, 10) << " tid " << m->get_client_tid() << " != any cap bit tids" << dendl;
@@ -5617,17 +5619,22 @@ int Client::_setattr(Inode *in, struct stat *attr, int mask, int uid, int gid,
       is_quota_bytes_exceeded(in, (unsigned long)attr->st_size - in->size)) {
     return -EDQUOT;
   }
+
+  if (uid < 0) {
+    uid = get_uid();
+    gid = get_gid();
+  }
+
   // make the change locally?
-  if ((uid >= 0 && user_id >= 0 && uid != user_id) ||
-      (gid >= 0 && group_id >= 0 && gid != group_id)) {
+  if ((in->cap_dirtier_uid >= 0 && uid != in->cap_dirtier_uid) ||
+      (in->cap_dirtier_gid >= 0 && gid != in->cap_dirtier_gid)) {
+    ldout(cct, 10) << __func__ << " caller " << uid << ":" << gid
+		   << " != cap dirtier " << in->cap_dirtier_uid << ":"
+		   << in->cap_dirtier_gid << ", forcing sync setattr"
+		   << dendl;
     if (!mask)
       mask |= CEPH_SETATTR_CTIME;
     goto force_request;
-  }
-
-  if (uid < 0) {
-    uid = geteuid();
-    gid = getegid();
   }
 
   if (!mask) {
