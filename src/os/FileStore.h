@@ -458,6 +458,10 @@ public:
    */
   bool get_allow_sharded_objects();
 
+  bool can_sort_nibblewise() {
+    return true;    // i support legacy sort order
+  }
+
   void collect_metadata(map<string,string> *pm);
 
   int statfs(struct statfs *buf);
@@ -583,8 +587,8 @@ public:
 
   // DEBUG read error injection, an object is removed from both on delete()
   Mutex read_error_lock;
-  set<ghobject_t> data_error_set; // read() will return -EIO
-  set<ghobject_t> mdata_error_set; // getattr(),stat() will return -EIO
+  set<ghobject_t, ghobject_t::BitwiseComparator> data_error_set; // read() will return -EIO
+  set<ghobject_t, ghobject_t::BitwiseComparator> mdata_error_set; // getattr(),stat() will return -EIO
   void inject_data_error(const ghobject_t &oid);
   void inject_mdata_error(const ghobject_t &oid);
   void debug_obj_on_delete(const ghobject_t &oid);
@@ -615,7 +619,8 @@ public:
 				   const SequencerPosition &spos);
 
   // collections
-  int collection_list(coll_t c, ghobject_t start, ghobject_t end, int max,
+  int collection_list(coll_t c, ghobject_t start, ghobject_t end,
+		      bool sort_bitwise, int max,
 		      vector<ghobject_t> *ls, ghobject_t *next);
   int list_collections(vector<coll_t>& ls);
   int list_collections(vector<coll_t>& ls, bool include_temp);

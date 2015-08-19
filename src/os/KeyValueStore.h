@@ -234,11 +234,27 @@ class KeyValueStore : public ObjectStore,
   // 4. Clone or rename
   struct BufferTransaction {
     typedef pair<coll_t, ghobject_t> uniq_id;
-    typedef map<uniq_id, StripObjectMap::StripObjectHeaderRef> StripHeaderMap;
+
+    struct CollGhobjectPairBitwiseComparator {
+      bool operator()(const uniq_id& l,
+		      const uniq_id& r) const {
+	if (l.first < r.first)
+	  return true;
+	if (l.first != r.first)
+	  return false;
+	if (cmp_bitwise(l.second, r.second) < 0)
+	  return true;
+	return false;
+      }
+    };
+
+    typedef map<uniq_id, StripObjectMap::StripObjectHeaderRef,
+		CollGhobjectPairBitwiseComparator> StripHeaderMap;
 
     //Dirty records
     StripHeaderMap strip_headers;
-    map< uniq_id, map<pair<string, string>, bufferlist> > buffers;  // pair(prefix, key),to buffer updated data in one transaction
+    map< uniq_id, map<pair<string, string>, bufferlist>,
+	 CollGhobjectPairBitwiseComparator> buffers;  // pair(prefix, key),to buffer updated data in one transaction
 
     list<Context*> finishes;
 
@@ -617,7 +633,7 @@ class KeyValueStore : public ObjectStore,
   bool collection_exists(coll_t c);
   bool collection_empty(coll_t c);
   int collection_list(coll_t c, ghobject_t start, ghobject_t end,
-		      int max,
+		      bool sort_bitwise, int max,
 		      vector<ghobject_t> *ls, ghobject_t *next);
   int collection_version_current(coll_t c, uint32_t *version);
 

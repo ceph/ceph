@@ -117,7 +117,7 @@
 
      virtual std::string gen_dbg_prefix() const = 0;
 
-     virtual const map<hobject_t, set<pg_shard_t> > &get_missing_loc_shards()
+     virtual const map<hobject_t, set<pg_shard_t>, hobject_t::BitwiseComparator> &get_missing_loc_shards()
        const = 0;
 
      virtual const pg_missing_t &get_local_missing() const = 0;
@@ -205,6 +205,7 @@
      virtual pg_shard_t primary_shard() const = 0;
 
      virtual uint64_t min_peer_features() const = 0;
+     virtual bool sort_bitwise() const = 0;
 
      virtual bool transaction_use_tbl() = 0;
      virtual hobject_t get_temp_recovery_object(eversion_t version,
@@ -325,20 +326,20 @@
    virtual void dump_recovery_info(Formatter *f) const = 0;
 
  private:
-   set<hobject_t> temp_contents;
+   set<hobject_t, hobject_t::BitwiseComparator> temp_contents;
  public:
    // Track contents of temp collection, clear on reset
    void add_temp_obj(const hobject_t &oid) {
      temp_contents.insert(oid);
    }
-   void add_temp_objs(const set<hobject_t> &oids) {
+   void add_temp_objs(const set<hobject_t, hobject_t::BitwiseComparator> &oids) {
      temp_contents.insert(oids.begin(), oids.end());
    }
    void clear_temp_obj(const hobject_t &oid) {
      temp_contents.erase(oid);
    }
-   void clear_temp_objs(const set<hobject_t> &oids) {
-     for (set<hobject_t>::const_iterator i = oids.begin();
+   void clear_temp_objs(const set<hobject_t, hobject_t::BitwiseComparator> &oids) {
+     for (set<hobject_t, hobject_t::BitwiseComparator>::const_iterator i = oids.begin();
 	  i != oids.end();
 	  ++i) {
        temp_contents.erase(*i);
@@ -563,10 +564,10 @@
      const map<pg_shard_t,ScrubMap*> &maps,
      bool okseed,   ///< true if scrub digests have same seed our oi digests
      bool repair,
-     map<hobject_t, set<pg_shard_t> > &missing,
-     map<hobject_t, set<pg_shard_t> > &inconsistent,
-     map<hobject_t, list<pg_shard_t> > &authoritative,
-     map<hobject_t, pair<uint32_t,uint32_t> > &missing_digest,
+     map<hobject_t, set<pg_shard_t>, hobject_t::BitwiseComparator> &missing,
+     map<hobject_t, set<pg_shard_t>, hobject_t::BitwiseComparator> &inconsistent,
+     map<hobject_t, list<pg_shard_t>, hobject_t::BitwiseComparator> &authoritative,
+     map<hobject_t, pair<uint32_t,uint32_t>, hobject_t::BitwiseComparator> &missing_digest,
      int &shallow_errors, int &deep_errors,
      const spg_t& pgid,
      const vector<int> &acting,
