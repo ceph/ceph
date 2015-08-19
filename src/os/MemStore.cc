@@ -1387,6 +1387,7 @@ int MemStore::_split_collection(coll_t cid, uint32_t bits, uint32_t match,
 int MemStore::BufferlistObject::read(uint64_t offset, uint64_t len,
                                      bufferlist &bl)
 {
+  std::lock_guard<Spinlock> lock(mutex);
   bl.substr_of(data, offset, len);
   return bl.length();
 }
@@ -1394,6 +1395,8 @@ int MemStore::BufferlistObject::read(uint64_t offset, uint64_t len,
 int MemStore::BufferlistObject::write(uint64_t offset, const bufferlist &src)
 {
   unsigned len = src.length();
+
+  std::lock_guard<Spinlock> lock(mutex);
 
   // before
   bufferlist newdata;
@@ -1422,21 +1425,25 @@ int MemStore::BufferlistObject::write(uint64_t offset, const bufferlist &src)
 int MemStore::BufferlistObject::clone(Object *src, uint64_t srcoff,
                                       uint64_t len, uint64_t dstoff)
 {
-  auto srcbl = dynamic_cast<const BufferlistObject*>(src);
+  auto srcbl = dynamic_cast<BufferlistObject*>(src);
   if (srcbl == nullptr)
     return -ENOTSUP;
 
-  if (srcoff == dstoff && len == src->get_size()) {
-    data = srcbl->data;
-    return 0;
-  }
   bufferlist bl;
-  bl.substr_of(srcbl->data, srcoff, len);
+  {
+    std::lock_guard<Spinlock> lock(srcbl->mutex);
+    if (srcoff == dstoff && len == src->get_size()) {
+      data = srcbl->data;
+      return 0;
+    }
+    bl.substr_of(srcbl->data, srcoff, len);
+  }
   return write(dstoff, bl);
 }
 
 int MemStore::BufferlistObject::truncate(uint64_t size)
 {
+  std::lock_guard<Spinlock> lock(mutex);
   if (get_size() > size) {
     bufferlist bl;
     bl.substr_of(data, 0, size);
