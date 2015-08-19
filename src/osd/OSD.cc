@@ -2189,6 +2189,7 @@ void OSD::create_logger()
   osd_plb.add_u64_counter(l_osd_tier_clean, "tier_clean", "Dirty tier flag cleaned");
   osd_plb.add_u64_counter(l_osd_tier_delay, "tier_delay", "Tier delays (agent waiting)");
   osd_plb.add_u64_counter(l_osd_tier_proxy_read, "tier_proxy_read", "Tier proxy reads");
+  osd_plb.add_u64_counter(l_osd_tier_proxy_write, "tier_proxy_write", "Tier proxy writes");
 
   osd_plb.add_u64_counter(l_osd_agent_wake, "agent_wake", "Tiering agent wake up");
   osd_plb.add_u64_counter(l_osd_agent_skip, "agent_skip", "Objects skipped by agent");
@@ -8639,11 +8640,15 @@ int OSD::init_op_flags(OpRequestRef& op)
       }
 
     case CEPH_OSD_OP_DELETE:
-      // if we get a delete with FAILOK we can skip promote.  without
+      // if we get a delete with FAILOK we can skip handle cache. without
       // FAILOK we still need to promote (or do something smarter) to
       // determine whether to return ENOENT or 0.
       if (iter == m->ops.begin() &&
 	  iter->op.flags == CEPH_OSD_OP_FLAG_FAILOK) {
+	op->set_skip_handle_cache();
+      }
+      // skip promotion when proxying a delete op
+      if (m->ops.size() == 1) {
 	op->set_skip_promote();
       }
       break;
@@ -8651,10 +8656,28 @@ int OSD::init_op_flags(OpRequestRef& op)
     case CEPH_OSD_OP_CACHE_TRY_FLUSH:
     case CEPH_OSD_OP_CACHE_FLUSH:
     case CEPH_OSD_OP_CACHE_EVICT:
-      // If try_flush/flush/evict is the only op, no need to promote.
+      // If try_flush/flush/evict is the only op, can skip handle cache.
       if (m->ops.size() == 1) {
-	op->set_skip_promote();
+	op->set_skip_handle_cache();
       }
+      break;
+
+    case CEPH_OSD_OP_WRITE:
+    case CEPH_OSD_OP_ZERO:
+    case CEPH_OSD_OP_TRUNCATE:
+      // always force promotion for object overwrites on a ec base pool
+      {
+        int64_t poolid = m->get_pg().pool();
+        const pg_pool_t *pool = osdmap->get_pg_pool(poolid);
+        if (pool->is_tier()) {
+          const pg_pool_t *base_pool = osdmap->get_pg_pool(pool->tier_of);
+          assert(base_pool);
+          if (base_pool->is_erasure()) {
+            op->set_promote();
+          }
+        }
+      }
+      break;
 
     default:
       break;
