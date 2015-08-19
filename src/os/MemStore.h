@@ -22,6 +22,7 @@
 #include "include/assert.h"
 #include "include/unordered_map.h"
 #include "include/memory.h"
+#include "include/Spinlock.h"
 #include "common/Finisher.h"
 #include "common/RefCountedObj.h"
 #include "common/RWLock.h"
@@ -91,6 +92,7 @@ public:
   typedef Object::Ref ObjectRef;
 
   struct BufferlistObject : public Object {
+    Spinlock mutex;
     bufferlist data;
 
     size_t get_size() const override { return data.length(); }
