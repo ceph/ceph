@@ -17,6 +17,7 @@ packages:
  - wget
  - git
  - ntp
+ - redhat-lsb-core
 # this does not work on centos, ssh key will not be working, maybe because there is a symlink to reach it ?
 #runcmd:
 # # if /mnt is on ephemeral, that moves /home/{username} on the ephemeral, otherwise it does nothing
