@@ -426,7 +426,7 @@ Summary:	SELinux support for Ceph MON, OSD and MDS
 Group:		System Environment/Base
 Requires:	%{name}
 Requires:	policycoreutils, libselinux-utils
-Requires(post): selinux-policy-base >= %{_selinux_policy_version}, policycoreutils
+Requires(post): selinux-policy-base >= %{_selinux_policy_version}, policycoreutils, gawk
 Requires(postun): policycoreutils
 %description selinux
 This package contains SELinux support for Ceph MON, OSD and MDS. The package
