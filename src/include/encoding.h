@@ -164,7 +164,8 @@ inline void encode(const std::string& s, bufferlist& bl, uint64_t features=0)
 {
   __u32 len = s.length();
   encode(len, bl);
-  bl.append(s.data(), len);
+  if (len)
+    bl.append(s.data(), len);
 }
 inline void decode(std::string& s, bufferlist::iterator& p)
 {
@@ -189,7 +190,8 @@ inline void encode(const char *s, bufferlist& bl)
 {
   __u32 len = strlen(s);
   encode(len, bl);
-  bl.append(s, len);
+  if (len)
+    bl.append(s, len);
 }
 
 
