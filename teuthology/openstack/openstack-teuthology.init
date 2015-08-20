@@ -44,6 +44,8 @@ case $1 in
                 su - -c "cd /home/$user/pulpito ; virtualenv/bin/python run.py" $user  > /var/log/pulpito.log 2>&1 &
                 sleep 3
                 (
+                   cd /home/$user
+                   source openrc.sh
                    cd teuthology
                    . virtualenv/bin/activate
                    teuthology-lock --list-targets --owner scheduled_$user@teuthology > /tmp/t
