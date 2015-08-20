@@ -551,7 +551,7 @@ TEST_F(TestImageWatcher, RequestLock) {
   ASSERT_EQ(0, register_image_watch(*ictx));
 
   register_lock_listener(*ictx);
-  m_notify_acks = {{NOTIFY_OP_ACQUIRED_LOCK, bufferlist()}};
+  m_notify_acks = {{NOTIFY_OP_ACQUIRED_LOCK, {}}};
 
   {
     RWLock::RLocker owner_locker(ictx->owner_lock);
@@ -611,7 +611,7 @@ TEST_F(TestImageWatcher, RequestLockFromPeer) {
   {
     Mutex::Locker l(m_callback_lock);
     m_notifies.clear();
-    m_notify_acks = {{NOTIFY_OP_ACQUIRED_LOCK, bufferlist()}};
+    m_notify_acks = {{NOTIFY_OP_ACQUIRED_LOCK, {}}};
   }
 
   {
@@ -663,7 +663,7 @@ TEST_F(TestImageWatcher, RequestLockTimedOut) {
     Mutex::Locker l(m_callback_lock);
     ASSERT_EQ(0, unlock_image());
     m_notifies.clear();
-    m_notify_acks = {{NOTIFY_OP_ACQUIRED_LOCK, bufferlist()}};
+    m_notify_acks = {{NOTIFY_OP_ACQUIRED_LOCK, {}}};
   }
 
   ASSERT_TRUE(wait_for_notifies(*ictx));
@@ -716,7 +716,7 @@ TEST_F(TestImageWatcher, RequestLockIgnored) {
     Mutex::Locker l(m_callback_lock);
     ASSERT_EQ(0, unlock_image());
     m_notifies.clear();
-    m_notify_acks = {{NOTIFY_OP_ACQUIRED_LOCK, bufferlist()}};
+    m_notify_acks = {{NOTIFY_OP_ACQUIRED_LOCK, {}}};
   }
 
   ASSERT_TRUE(wait_for_notifies(*ictx));
@@ -776,7 +776,7 @@ TEST_F(TestImageWatcher, RequestLockTryLockRace) {
     Mutex::Locker l(m_callback_lock);
     ASSERT_EQ(0, unlock_image());
     m_notifies.clear();
-    m_notify_acks = {{NOTIFY_OP_RELEASED_LOCK, bufferlist()}};
+    m_notify_acks = {{NOTIFY_OP_RELEASED_LOCK, {}}};
   }
 
   ASSERT_EQ(0, m_ioctx.notify2(ictx->header_oid, bl, 5000, NULL));
@@ -785,7 +785,7 @@ TEST_F(TestImageWatcher, RequestLockTryLockRace) {
   {
     Mutex::Locker l(m_callback_lock);
     m_notifies.clear();
-    m_notify_acks = {{NOTIFY_OP_ACQUIRED_LOCK, bufferlist()}};
+    m_notify_acks = {{NOTIFY_OP_ACQUIRED_LOCK, {}}};
   }
 
   {
@@ -834,7 +834,7 @@ TEST_F(TestImageWatcher, RequestLockTryLockFailed) {
     Mutex::Locker l(m_callback_lock);
     ASSERT_EQ(0, unlock_image());
     m_notifies.clear();
-    m_notify_acks = {{NOTIFY_OP_ACQUIRED_LOCK, bufferlist()}};
+    m_notify_acks = {{NOTIFY_OP_ACQUIRED_LOCK, {}}};
   }
 
   ASSERT_TRUE(wait_for_notifies(*ictx));
@@ -1164,7 +1164,7 @@ TEST_F(TestImageWatcher, PeerRequestsLock) {
   ASSERT_EQ(0, register_image_watch(*ictx));
 
   register_lock_listener(*ictx);
-  m_notify_acks = {{NOTIFY_OP_ACQUIRED_LOCK, bufferlist()}};
+  m_notify_acks = {{NOTIFY_OP_ACQUIRED_LOCK, {}}};
 
   {
     RWLock::RLocker owner_locker(ictx->owner_lock);
@@ -1186,7 +1186,7 @@ TEST_F(TestImageWatcher, PeerRequestsLock) {
   {
     Mutex::Locker l(m_callback_lock);
     m_notifies.clear();
-    m_notify_acks = {{NOTIFY_OP_RELEASED_LOCK, bufferlist()}};
+    m_notify_acks = {{NOTIFY_OP_RELEASED_LOCK, {}}};
   }
 
   bufferlist bl;
