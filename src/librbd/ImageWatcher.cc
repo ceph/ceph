@@ -958,6 +958,20 @@ void ImageWatcher::handle_payload(const SnapCreatePayload &payload,
   }
 }
 
+void ImageWatcher::handle_payload(const SnapRenamePayload &payload,
+				  bufferlist *out) {
+  RWLock::RLocker l(m_image_ctx.owner_lock);
+  if (m_lock_owner_state == LOCK_OWNER_STATE_LOCKED) {
+    ldout(m_image_ctx.cct, 10) << this << " remote snap_rename request: "
+			       << payload.src_snap_id << " to " 
+			       << payload.dst_snap_name << dendl;
+    int r = librbd::snap_rename_helper(&m_image_ctx, NULL,
+                                       payload.src_snap_id,
+                                       payload.dst_snap_name.c_str());
+
+    ::encode(ResponseMessage(r), *out);
+  }
+}
 void ImageWatcher::handle_payload(const SnapRemovePayload &payload,
 				  bufferlist *out) {
   RWLock::RLocker l(m_image_ctx.owner_lock);

@@ -269,6 +269,8 @@ namespace librbd {
 		        bufferlist *out);
     void handle_payload(const WatchNotify::SnapCreatePayload& payload,
 		        bufferlist *out);
+    void handle_payload(const WatchNotify::SnapRenamePayload& payload,
+		        bufferlist *out);
     void handle_payload(const WatchNotify::SnapRemovePayload& payload,
 		        bufferlist *out);
     void handle_payload(const WatchNotify::RebuildObjectMapPayload& payload,
