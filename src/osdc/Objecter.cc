@@ -2279,6 +2279,7 @@ epoch_t Objecter::op_cancel_writes(int r)
   rwlock.get_write();
 
   std::vector<ceph_tid_t> to_cancel;
+  bool found = false;
 
   for (map<int, OSDSession *>::iterator siter = osd_sessions.begin(); siter != osd_sessions.end(); ++siter) {
     OSDSession *s = siter->second;
@@ -2289,19 +2290,26 @@ epoch_t Objecter::op_cancel_writes(int r)
       }
     }
     s->lock.unlock();
-  }
 
-  for (std::vector<ceph_tid_t>::iterator titer = to_cancel.begin(); titer != to_cancel.end(); ++titer) {
-    int cancel_result = _op_cancel(*titer, r);
-    // We hold rwlock across search and cancellation, so cancels should always succeed
-    assert(cancel_result == 0);
+    for (std::vector<ceph_tid_t>::iterator titer = to_cancel.begin(); titer != to_cancel.end(); ++titer) {
+      int cancel_result = op_cancel(s, *titer, r);
+      // We hold rwlock across search and cancellation, so cancels should always succeed
+      assert(cancel_result == 0);
+    }
+    if (!found && to_cancel.size())
+      found = true;
+    to_cancel.clear();
   }
 
   const epoch_t epoch = osdmap->get_epoch();
 
   rwlock.unlock();
 
-  return epoch;
+  if (found) {
+    return epoch;
+  } else {
+    return -1;
+  }
 }
 
 bool Objecter::is_pg_changed(
