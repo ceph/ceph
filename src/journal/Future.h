@@ -24,7 +24,7 @@ public:
   Future(const FutureImplPtr &future_impl) : m_future_impl(future_impl) {}
 
   inline bool is_valid() const {
-    return m_future_impl;
+    return m_future_impl.get() != nullptr;
   }
 
   void flush(Context *on_safe);
