@@ -1,4 +1,18 @@
 {
+   older boost mersenne twister uses uninitialized memory for randomness
+   Memcheck:Cond
+   ...
+   fun:*Monitor::prepare_new_fingerprint*
+   ...
+}
+{
+   older boost mersenne twister uses uninitialized memory for randomness
+   Memcheck:Value8
+   ...
+   fun:*Monitor::prepare_new_fingerprint*
+   ...
+}
+{
    apparent TLS leak in eglibc
    Memcheck:Leak
    fun:calloc
