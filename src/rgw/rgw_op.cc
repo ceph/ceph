@@ -1435,21 +1435,21 @@ void RGWCreateBucket::execute()
     creation_time = 0;
   }
 
-  string zonegroup_name;
+  string zonegroup_id;
 
   if (s->system_request) {
-    zonegroup_name = s->info.args.get(RGW_SYS_PARAM_PREFIX "region");
-    if (zonegroup_name.empty()) {
-      zonegroup_name = store->zonegroup.name;
+    zonegroup_id = s->info.args.get(RGW_SYS_PARAM_PREFIX "zonegroup");
+    if (zonegroup_id.empty()) {
+      zonegroup_id = store->zonegroup.id;
     }
   } else {
-    zonegroup_name = store->zonegroup.name;
+    zonegroup_id = store->zonegroup.id;
   }
 
   if (s->bucket_exists) {
     string selected_placement_rule;
     rgw_bucket bucket;
-    ret = store->select_bucket_placement(s->user, zonegroup_name, placement_rule, s->bucket_name_str, bucket, &selected_placement_rule);
+    ret = store->select_bucket_placement(s->user, zonegroup_id, placement_rule, s->bucket_name_str, bucket, &selected_placement_rule);
     if (selected_placement_rule != s->bucket_info.placement_rule) {
       ret = -EEXIST;
       return;
@@ -1465,7 +1465,7 @@ void RGWCreateBucket::execute()
     attrs[RGW_ATTR_CORS] = corsbl;
   }
   s->bucket.name = s->bucket_name_str;
-  ret = store->create_bucket(s->user, s->bucket, zonegroup_name, placement_rule, attrs, info, pobjv,
+  ret = store->create_bucket(s->user, s->bucket, zonegroup_id, placement_rule, attrs, info, pobjv,
                              &ep_objv, creation_time, pmaster_bucket, true);
   /* continue if EEXIST and create_bucket will fail below.  this way we can recover
    * from a partial create by retrying it. */
