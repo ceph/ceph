@@ -1411,14 +1411,15 @@ int FileJournal::write_aio_bl(off64_t& pos, bufferlist& bl, uint64_t seq)
   dout(20) << "write_aio_bl " << pos << "~" << bl.length() << " seq " << seq << dendl;
   
   while (bl.length() > 0) {
-    int max = MIN(bl.buffers().size(), IOV_MAX-1);
+    int max = MIN(bl.get_num_buffers(), IOV_MAX-1);
     iovec *iov = new iovec[max];
     int n = 0;
     unsigned len = 0;
-    for (std::list<buffer::ptr>::const_iterator p = bl.buffers().begin();
+    for (buffer::list::ptr_list_t::const_iterator p =
+	   bl.get_raw_ptr_list().begin();
 	 n < max;
 	 ++p, ++n) {
-      assert(p != bl.buffers().end());
+      assert(p != bl.get_raw_ptr_list().end());
       iov[n].iov_base = (void *)p->c_str();
       iov[n].iov_len = p->length();
       len += p->length();

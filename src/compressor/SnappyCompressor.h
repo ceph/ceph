@@ -21,12 +21,13 @@
 #include "Compressor.h"
 
 class BufferlistSource : public snappy::Source {
-  list<bufferptr>::const_iterator pb;
+  buffer::list::ptr_list_t::const_iterator pb;
   size_t pb_off;
   size_t left;
 
  public:
-  BufferlistSource(bufferlist &data): pb(data.buffers().begin()), pb_off(0), left(data.length()) {}
+  BufferlistSource(bufferlist &data)
+    : pb(data.get_raw_ptr_list().begin()), pb_off(0), left(data.length()) {}
   virtual ~BufferlistSource() {}
   virtual size_t Available() const { return left; }
   virtual const char* Peek(size_t* len) {

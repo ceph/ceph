@@ -128,7 +128,7 @@ public:
     // populate the bufferlist with bufferptr pointing
     // to chunk boundaries
     //
-    const bufferptr ptr = out.buffers().front();
+    const bufferptr &ptr = out.front();
     for (set<int>::iterator j = want_to_encode.begin();
          j != want_to_encode.end();
          ++j) {
@@ -172,9 +172,9 @@ public:
 	// two recovers it.
 	//
         map<int, bufferlist>::const_iterator k = chunks.begin();
-        const char *a = k->second.buffers().front().c_str();
+        const char *a = k->second.front().c_str();
         ++k;
-        const char *b = k->second.buffers().front().c_str();
+        const char *b = k->second.front().c_str();
         bufferptr chunk(chunk_length);
 	char *c = chunk.c_str();
         for (unsigned j = 0; j < chunk_length; j++) {

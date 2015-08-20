@@ -114,7 +114,7 @@ void Bencher::init(
 {
   bufferlist bl;
   for (uint64_t i = 0; i < size; ++i) {
-    bl.append(0);
+    bl.append((char)0);
   }
   Mutex lock("init_lock");
   Cond cond;

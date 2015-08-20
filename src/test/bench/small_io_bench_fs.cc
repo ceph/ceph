@@ -164,7 +164,7 @@ int main(int argc, char **argv)
   cout << "Creating objects.." << std::endl;
   bufferlist bl;
   for (uint64_t i = 0; i < vm["object-size"].as<unsigned>(); ++i) {
-    bl.append(0);
+    bl.append((char)0);
   }
 
   for (uint64_t num = 0; num < vm["num-colls"].as<unsigned>(); ++num) {

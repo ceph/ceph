@@ -42,6 +42,8 @@
 #include <string>
 #include <exception>
 
+#include "boost/intrusive/list.hpp"
+
 #include "page.h"
 #include "crc32c.h"
 
@@ -139,6 +141,7 @@ private:
   class raw_char;
   class raw_pipe;
   class raw_unshareable; // diagnostic, unshareable char buffer
+  class raw_combined;
 
   friend std::ostream& operator<<(std::ostream& out, const raw &r);
 
@@ -156,6 +159,7 @@ public:
   static raw* claim_malloc(unsigned len, char *buf);
   static raw* create_static(unsigned len, char *buf);
   static raw* create_aligned(unsigned len, unsigned align);
+  static raw* create_combined(unsigned len, unsigned align);
   static raw* create_page_aligned(unsigned len);
   static raw* create_zero_copy(unsigned len, int fd, int64_t *offset);
   static raw* create_unshareable(unsigned len);
@@ -168,14 +172,22 @@ public:
    * a buffer pointer.  references (a subsequence of) a raw buffer.
    */
   class CEPH_BUFFER_API ptr {
+  private:
     raw *_raw;
     unsigned _off, _len;
+    bool embed;
+    friend class raw;
 
+  public:
+    boost::intrusive::list_member_hook<> _list_item;
+
+  private:
     void release();
 
   public:
-    ptr() : _raw(0), _off(0), _len(0) {}
+    ptr() : _raw(0), _off(0), _len(0), embed(false) {}
     ptr(raw *r);
+    ptr(raw *r, unsigned o, unsigned l);
     ptr(unsigned l);
     ptr(const char *d, unsigned l);
     ptr(const ptr& p);
@@ -183,6 +195,15 @@ public:
     ptr& operator= (const ptr& p);
     ~ptr() {
       release();
+    }
+
+    void reset(raw *r, unsigned off, unsigned len);
+
+    void unlinked_from_list() {
+      if (!embed)
+	delete this;
+      else
+	release();
     }
 
     bool have_raw() const { return _raw ? true:false; }
@@ -261,29 +282,38 @@ public:
    */
 
   class CEPH_BUFFER_API list {
+  public:
+    typedef boost::intrusive::list<
+      ptr,
+      boost::intrusive::member_hook<
+        ptr,
+	boost::intrusive::list_member_hook<>,
+	&ptr::_list_item> > ptr_list_t;
+
+  private:
     // my private bits
-    std::list<ptr> _buffers;
+    ptr_list_t _ptrs;
     unsigned _len;
-    unsigned _memcopy_count; //the total of memcopy using rebuild().
-    ptr append_buffer;  // where i put small appends.
+    unsigned _memcopy_count; // the total of memcopy using rebuild().
+    ptr append_buffer;       // where i put small appends.
 
   public:
     class CEPH_BUFFER_API iterator {
-      list *bl;
-      std::list<ptr> *ls; // meh.. just here to avoid an extra pointer dereference..
-      unsigned off;  // in bl
-      std::list<ptr>::iterator p;
-      unsigned p_off; // in *p
+      list *bl;                /// current buffer::list
+      ptr_list_t *ls;          /// &bl->_ptrs
+      ptr_list_t::iterator p;  /// iterator in *ls
+      unsigned off;            /// offset in bl
+      unsigned p_off;          /// offset in *p
     public:
       // constructor.  position.
-      iterator() :
-	bl(0), ls(0), off(0), p_off(0) {}
-      iterator(list *l, unsigned o=0) : 
-	bl(l), ls(&bl->_buffers), off(0), p(ls->begin()), p_off(0) {
+      iterator()
+	: bl(0), ls(0), off(0), p_off(0) { }
+      iterator(list *l, unsigned o=0)
+	: bl(l), ls(&l->_ptrs), p(ls->begin()), off(0), p_off(0) {
 	advance(o);
       }
-      iterator(list *l, unsigned o, std::list<ptr>::iterator ip, unsigned po) : 
-	bl(l), ls(&bl->_buffers), off(o), p(ip), p_off(po) { }
+      iterator(list *l, unsigned o, ptr_list_t::iterator ip, unsigned po)
+	: bl(l), ls(&l->_ptrs), p(ip), off(o), p_off(po) { }
 
       /// get current iterator offset in buffer::list
       unsigned get_off() const { return off; }
@@ -294,7 +324,6 @@ public:
       /// true if iterator is at the end of the buffer::list
       bool end() const {
 	return p == ls->end();
-	//return off == bl->length();
       }
 
       void advance(int o);
@@ -326,33 +355,39 @@ public:
   public:
     // cons/des
     list() : _len(0), _memcopy_count(0), last_p(this) {}
-    list(unsigned prealloc) : _len(0), _memcopy_count(0), last_p(this) {
+    list(unsigned prealloc)
+      : _len(0), _memcopy_count(0), last_p(this) {
       append_buffer = buffer::create(prealloc);
       append_buffer.set_length(0);   // unused, so far.
     }
-    ~list() {}
-    list(const list& other) : _buffers(other._buffers), _len(other._len),
-			      _memcopy_count(other._memcopy_count), last_p(this) {
+    ~list() {
+      clear();
+    }
+    list(const list& other)
+      : _len(0), _memcopy_count(0), last_p(this) {
+      append(other);
       make_shareable();
     }
     list& operator= (const list& other) {
       if (this != &other) {
-        _buffers = other._buffers;
-        _len = other._len;
+	clear();
+	append(other);
 	make_shareable();
       }
       return *this;
     }
 
     unsigned get_memcopy_count() const {return _memcopy_count; }
-    const std::list<ptr>& buffers() const { return _buffers; }
+
+    const ptr_list_t& get_raw_ptr_list() const { return _ptrs; }
+
     void swap(list& other);
     unsigned length() const {
 #if 0
       // DEBUG: verify _len
       unsigned len = 0;
-      for (std::list<ptr>::const_iterator it = _buffers.begin();
-	   it != _buffers.end();
+      for (ptr_list_t::const_iterator it = _ptrs.begin();
+	   it != _ptrs.end();
 	   it++) {
 	len += (*it).length();
       }
@@ -370,32 +405,65 @@ public:
 
     bool is_zero() const;
 
+    unsigned get_num_buffers() const {
+      return _ptrs.size();
+    }
+
+    const ptr& front() const {
+      assert(!_ptrs.empty());
+      return _ptrs.front();
+    }
+    const ptr& back() const {
+      assert(!_ptrs.empty());
+      return _ptrs.back();
+    }
+
     // modifiers
     void clear() {
-      _buffers.clear();
+      while (!_ptrs.empty()) {
+	ptr *p = &_ptrs.front();
+	_ptrs.pop_front();
+	p->unlinked_from_list();
+      }
       _len = 0;
       _memcopy_count = 0;
       last_p = begin();
     }
+
+  private:
+    ptr *_get_raw_ptr(raw *r, unsigned off, unsigned len);
+
+  public:
     void push_front(ptr& bp) {
       if (bp.length() == 0)
 	return;
-      _buffers.push_front(bp);
-      _len += bp.length();
+      push_front(bp.get_raw(), bp.offset(), bp.length());
     }
     void push_front(raw *r) {
-      ptr bp(r);
-      push_front(bp);
+      ptr *p = _get_raw_ptr(r, 0, 0);
+      _ptrs.push_front(*p);
+      _len += p->length();
     }
+    void push_front(raw *r, unsigned off, unsigned len) {
+      ptr *p = _get_raw_ptr(r, off, len);
+      _ptrs.push_front(*p);
+      _len += p->length();
+    }
+
     void push_back(const ptr& bp) {
       if (bp.length() == 0)
 	return;
-      _buffers.push_back(bp);
-      _len += bp.length();
+      push_back(bp.get_raw(), bp.offset(), bp.length());
     }
     void push_back(raw *r) {
-      ptr bp(r);
-      push_back(bp);
+      ptr *p = _get_raw_ptr(r, 0, 0);
+      _ptrs.push_back(*p);
+      _len += p->length();
+    }
+    void push_back(raw *r, unsigned off, unsigned len) {
+      ptr *p = _get_raw_ptr(r, off, len);
+      _ptrs.push_back(*p);
+      _len += p->length();
     }
 
     void zero();
@@ -419,8 +487,7 @@ public:
 
     // clone non-shareable buffers (make shareable)
     void make_shareable() {
-      std::list<buffer::ptr>::iterator pb;
-      for (pb = _buffers.begin(); pb != _buffers.end(); ++pb) {
+      for (auto pb = _ptrs.begin(); pb != _ptrs.end(); ++pb) {
         (void) pb->make_shareable();
       }
     }
@@ -430,8 +497,7 @@ public:
     {
       if (this != &bl) {
         clear();
-        std::list<buffer::ptr>::const_iterator pb;
-        for (pb = bl._buffers.begin(); pb != bl._buffers.end(); ++pb) {
+        for (auto pb = bl._ptrs.begin(); pb != bl._ptrs.end(); ++pb) {
           push_back(*pb);
         }
       }
@@ -441,7 +507,7 @@ public:
       return iterator(this, 0);
     }
     iterator end() {
-      return iterator(this, _len, _buffers.end(), 0);
+      return iterator(this, _len, _ptrs.end(), 0);
     }
 
     // crope lookalikes.
@@ -457,7 +523,12 @@ public:
     void append(const std::string& s) {
       append(s.data(), s.length());
     }
-    void append(const ptr& bp);
+    void append(raw *raw) {
+      push_back(raw);
+    }
+    void append(const ptr& bp) {
+      push_back(bp);
+    }
     void append(const ptr& bp, unsigned off, unsigned len);
     void append(const list& bl);
     void append(std::istream& in);
