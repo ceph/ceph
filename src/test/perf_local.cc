@@ -666,7 +666,7 @@ double perf_prefetch()
 #endif
 }
 
-#if defined(__i386__) || defined(__x86_64__)
+#if defined(__x86_64__)
 /**
  * This function is used to seralize machine instructions so that no
  * instructions that appear after it in the current thread can run before any
@@ -686,7 +686,7 @@ static inline void serialize() {
 
 // Measure the cost of cpuid
 double perf_serialize() {
-#if defined(__i386__) || defined(__x86_64__)
+#if defined(__x86_64__)
   int count = 1000000;
   uint64_t start = Cycles::rdtsc();
   for (int i = 0; i < count; i++) {
