@@ -1008,6 +1008,7 @@ WRITE_CLASS_ENCODER(RGWZoneGroupPlacementTarget)
 
 
 struct RGWZoneGroup {
+  string id;
   string name;
   string api_name;
   list<string> endpoints;
@@ -1047,7 +1048,7 @@ struct RGWZoneGroup {
   RGWZoneGroup(const std::string &_name):name(_name) {}
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(3, 1, bl);
+    ENCODE_START(4, 1, bl);
     ::encode(name, bl);
     ::encode(api_name, bl);
     ::encode(is_master, bl);
@@ -1058,11 +1059,12 @@ struct RGWZoneGroup {
     ::encode(default_placement, bl);
     ::encode(hostnames, bl);
     ::encode(hostnames_s3website, bl);
+    ::encode(id, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::iterator& bl) {
-    DECODE_START(3, bl);
+    DECODE_START(4, bl);
     ::decode(name, bl);
     ::decode(api_name, bl);
     ::decode(is_master, bl);
@@ -1077,9 +1079,15 @@ struct RGWZoneGroup {
     if (struct_v >= 3) {
       ::decode(hostnames_s3website, bl);
     }
+    if (struct_v >= 4) {
+      ::decode(id, bl);
+    } else {
+      id = name;
+    }
     DECODE_FINISH(bl);
   }
 
+  int read_id(const string& obj_name, string& obj_id);
   int init(CephContext *_cct, RGWRados *_store, bool setup_zonegroup = true,
 	   bool old_region_format = false);
   int create_default();
@@ -1092,10 +1100,11 @@ struct RGWZoneGroup {
   int create();
   int delete_obj(bool old_region_format = false);
   const string& get_pool_name(CephContext *cct);
-  const string& get_default_oid(CephContext *cct, bool old_region_format = false);
+  const string& get_default_oid(bool old_region_format = false);
   const string& get_info_oid_prefix(bool old_region_format = false);
   const string& get_json_perfix();
-
+  const string& get_names_oid_prefix();
+  
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
   static void generate_test_instances(list<RGWZoneGroup*>& o);
@@ -1564,7 +1573,7 @@ protected:
 
   bool pools_initialized;
 
-  string zonegroup_name;
+  string zonegroup_id;
   string zone_name;
   string trans_id_suffix;
 
@@ -1595,15 +1604,6 @@ public:
   void set_context(CephContext *_cct) {
     cct = _cct;
   }
-
-  void set_zonegroup(const string& name) {
-    zonegroup_name = name;
-  }
-
-  void set_zone(const string& name) {
-    zone_name = name;
-  }
-
 
   /**
    * AmazonS3 errors contain a HostId string, but is an opaque base64 blob; we
@@ -1710,14 +1710,14 @@ public:
    * returns 0 on success, -ERR# otherwise.
    */
   virtual int init_bucket_index(rgw_bucket& bucket, int num_shards);
-  int select_bucket_placement(RGWUserInfo& user_info, const string& zonegroup_name, const string& rule,
+  int select_bucket_placement(RGWUserInfo& user_info, const string& zonegroup_id, const string& rule,
                               const string& tenant_name, const string& bucket_name, rgw_bucket& bucket, string *pselected_rule);
   int select_legacy_bucket_placement(const string& tenant_name, const string& bucket_name, rgw_bucket& bucket);
-  int select_new_bucket_location(RGWUserInfo& user_info, const string& zonegroup_name, const string& rule,
+  int select_new_bucket_location(RGWUserInfo& user_info, const string& zonegroup_id, const string& rule,
                                  const string& tenant_name, const string& bucket_name, rgw_bucket& bucket, string *pselected_rule);
   int set_bucket_location_by_rule(const string& location_rule, const string& tenant_name, const string& bucket_name, rgw_bucket& bucket);
   virtual int create_bucket(RGWUserInfo& owner, rgw_bucket& bucket,
-                            const string& zonegroup_name,
+                            const string& zonegroup_id,
                             const string& placement_rule,
                             map<std::string,bufferlist>& attrs,
                             RGWBucketInfo& bucket_info,
