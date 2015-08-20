@@ -419,9 +419,6 @@ void calc_hmac_sha1(const char *key, int key_len,
   HMACSHA1 hmac((const unsigned char *)key, key_len);
   hmac.Update((const unsigned char *)msg, msg_len);
   hmac.Final((unsigned char *)dest);
-  
-  char hex_str[(CEPH_CRYPTO_HMACSHA1_DIGESTSIZE * 2) + 1];
-  buf_to_hex((unsigned char *)dest, CEPH_CRYPTO_HMACSHA1_DIGESTSIZE, hex_str);
 }
 
 int gen_rand_base64(CephContext *cct, char *dest, int size) /* size should be the required string size + 1 */
