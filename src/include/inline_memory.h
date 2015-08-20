@@ -14,11 +14,11 @@
 #ifndef CEPH_INLINE_MEMORY_H
 #define CEPH_INLINE_MEMORY_H
 
-// only define these for x86_64 for now.
+#if defined(__GNUC__)
 
-#if defined(__GNUC__) && defined(__x86_64__)
-
-typedef unsigned uint128_t __attribute__ ((mode (TI)));
+typedef struct __attribute__((__packed__)) { uint16_t val; } packed_uint16_t;
+typedef struct __attribute__((__packed__)) { uint32_t val; } packed_uint32_t;
+typedef struct __attribute__((__packed__)) { uint64_t val; } packed_uint64_t;
 
 // optimize for the common case, which is very small copies
 static inline void maybe_inline_memcpy(char *dest, const char *src, size_t l,
@@ -34,17 +34,17 @@ void maybe_inline_memcpy(char *dest, const char *src, size_t l,
   }
   switch (l) {
   case 8:
-    *((uint64_t*)(dest)) = *((uint64_t*)(src));
+    ((packed_uint64_t*)dest)->val = ((packed_uint64_t*)src)->val;
     return;
   case 4:
-    *((uint32_t*)(dest)) = *((uint32_t*)(src));
+    ((packed_uint32_t*)dest)->val = ((packed_uint32_t*)src)->val;
     return;
   case 3:
-    *((uint16_t*)(dest)) = *((uint16_t*)(src));
+    ((packed_uint16_t*)dest)->val = ((packed_uint16_t*)src)->val;
     *((uint8_t*)(dest+2)) = *((uint8_t*)(src+2));
     return;
   case 2:
-    *((uint16_t*)(dest)) = *((uint16_t*)(src));
+    ((packed_uint16_t*)dest)->val = ((packed_uint16_t*)src)->val;
     return;
   case 1:
     *((uint8_t*)(dest)) = *((uint8_t*)(src));
@@ -68,6 +68,17 @@ void maybe_inline_memcpy(char *dest, const char *src, size_t l,
     }
   }
 }
+
+#else
+
+#define maybe_inline_memcpy(d, s, l, x) memcpy(d, s, l)
+
+#endif
+
+
+#if defined(__GNUC__) && defined(__x86_64__)
+
+typedef unsigned uint128_t __attribute__ ((mode (TI)));
 
 static inline bool mem_is_zero(const char *data, size_t len)
   __attribute__((always_inline));
@@ -117,11 +128,7 @@ bool mem_is_zero(const char *data, size_t len)
   return true;
 }
 
-#else  // x86_64
-
-// on other architectures, default to something simple.
-
-#define maybe_inline_memcpy(d, s, l, x) memcpy(d, s, l)
+#else  // gcc and x86_64
 
 static inline bool mem_is_zero(const char *data, size_t len) {
   const char *end = data + len;
