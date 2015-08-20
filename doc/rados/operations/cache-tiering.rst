@@ -197,10 +197,10 @@ found in any of the most recent ``min_read_recency_for_promote`` HitSets. ::
 
 	ceph osd pool set {cachepool} min_read_recency_for_promote 1
 
-.. note:: The longer the period and the higher the count, the more RAM the
-   ``ceph-osd`` daemon consumes.  In particular, when the agent is active to 
-   flush or evict cache objects, all ``hit_set_count`` HitSets are loaded 
-   into RAM.
+.. note:: The longer the period and the higher the min_read_recency_for_promote,
+   the more RAM the ``ceph-osd`` daemon consumes. In particular, when the agent
+   is active to flush or evict cache objects, all ``hit_set_count`` HitSets are
+   loaded into RAM.
 
 
 Cache Sizing
