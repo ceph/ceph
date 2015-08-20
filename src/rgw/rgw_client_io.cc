@@ -10,10 +10,11 @@
 #define dout_subsys ceph_subsys_rgw
 
 void RGWClientIO::init(CephContext *cct) {
-  init_env(cct);
+  engine->init_env(cct);
 
   if (cct->_conf->subsys.should_gather(ceph_subsys_rgw, 20)) {
-    std::map<string, string, ltstr_nocase>& env_map = env.get_map();
+    std::map<string, string, ltstr_nocase>& env_map = \
+        engine->get_env().get_map();
     std::map<string, string, ltstr_nocase>::iterator iter = env_map.begin();
 
     for (iter = env_map.begin(); iter != env_map.end(); ++iter) {
@@ -40,10 +41,11 @@ int RGWClientIO::print(const char *format, ...)
       return write(buf, ret);
     }
 
-    if (ret >= 0)
+    if (ret >= 0) {
       size = ret + 1;
-    else
+    } else {
       size *= 2;
+    }
   }
 
   /* not reachable */
@@ -51,12 +53,14 @@ int RGWClientIO::print(const char *format, ...)
 
 int RGWClientIO::write(const char *buf, int len)
 {
-  int ret = write_data(buf, len);
-  if (ret < 0)
+  int ret = engine->write_data(buf, len);
+  if (ret < 0) {
     return ret;
+  }
 
-  if (account)
+  if (account) {
     bytes_sent += ret;
+  }
 
   if (ret < len) {
     /* sent less than tried to send, error out */
@@ -69,9 +73,10 @@ int RGWClientIO::write(const char *buf, int len)
 
 int RGWClientIO::read(char *buf, int max, int *actual)
 {
-  int ret = read_data(buf, max);
-  if (ret < 0)
+  int ret = engine->read_data(buf, max);
+  if (ret < 0) {
     return ret;
+  }
 
   *actual = ret;
 

@@ -4,11 +4,32 @@
 #ifndef CEPH_RGW_CLIENT_IO_H
 #define CEPH_RGW_CLIENT_IO_H
 
+#include <memory>
 #include <stdlib.h>
 
 #include "include/types.h"
 
 #include "rgw_common.h"
+
+class RGWClientIOEngine {
+public:
+  virtual ~RGWClientIOEngine() {};
+
+  virtual int write_data(const char *buf, int len) = 0;
+  virtual int read_data(char *buf, int max) = 0;
+
+  virtual void init_env(CephContext *cct) = 0;
+  virtual void flush(RGWClientIO& controller) = 0;
+  virtual int send_status(RGWClientIO& controller,
+                          const char * const status,
+                          const char * const status_name) = 0;
+  virtual int send_100_continue(RGWClientIO& controller) = 0;
+  virtual int complete_header(RGWClientIO& controller) = 0;
+  virtual int complete_request(RGWClientIO& controller) = 0;
+  virtual int send_content_length(RGWClientIO& controller, uint64_t len) = 0;
+  virtual RGWEnv& get_env() = 0;
+};
+
 
 class RGWClientIO {
   bool account;
@@ -17,37 +38,87 @@ class RGWClientIO {
   size_t bytes_received;
 
 protected:
-  RGWEnv env;
+  const std::shared_ptr<RGWClientIOEngine> engine;
 
-  virtual void init_env(CephContext *cct) = 0;
-
-  virtual int write_data(const char *buf, int len) = 0;
-  virtual int read_data(char *buf, int max) = 0;
+  RGWClientIO(const std::shared_ptr<RGWClientIOEngine> engine)
+    : account(false),
+      bytes_sent(0),
+      bytes_received(0),
+      engine(engine) {
+  }
 
 public:
-  virtual ~RGWClientIO() {}
-  RGWClientIO() : account(false), bytes_sent(0), bytes_received(0) {}
+  class Builder;
+
+  virtual ~RGWClientIO() {
+  }
 
   void init(CephContext *cct);
   int print(const char *format, ...);
   int write(const char *buf, int len);
-  virtual void flush() = 0;
   int read(char *buf, int max, int *actual);
 
-  virtual int send_status(const char *status, const char *status_name) = 0;
-  virtual int send_100_continue() = 0;
-  virtual int complete_header() = 0;
-  virtual int complete_request() = 0;
-  virtual int send_content_length(uint64_t len) = 0;
-
-  RGWEnv& get_env() { return env; }
+  RGWEnv& get_env() {
+    return engine->get_env();
+  }
 
   void set_account(bool _account) {
     account = _account;
   }
 
-  uint64_t get_bytes_sent() { return bytes_sent; }
-  uint64_t get_bytes_received() { return bytes_received; }
+  uint64_t get_bytes_sent() const {
+    return bytes_sent;
+  }
+
+  uint64_t get_bytes_received() const {
+    return bytes_received;
+  }
+
+  /* Public interface parts which must be implemented for concrete
+   * frontend provider. */
+  virtual void flush() {
+    engine->flush(*this);
+  }
+
+  virtual int send_status(const char * const status,
+                          const char * const status_name) {
+    return engine->send_status(*this, status, status_name);
+  }
+
+  virtual int send_100_continue() {
+    return engine->send_100_continue(*this);
+  }
+
+  virtual int complete_header() {
+    return engine->complete_header(*this);
+  }
+
+  virtual int complete_request() {
+    return engine->complete_request(*this);
+  }
+
+  virtual int send_content_length(const uint64_t len) {
+    return engine->send_content_length(*this, len);
+  }
 };
 
+
+class RGWClientIO::Builder {
+protected:
+  /* Last stage in pipeline. */
+  std::shared_ptr<RGWClientIOEngine> final_engine;
+
+public:
+  Builder(std::shared_ptr<RGWClientIOEngine> engine)
+    : final_engine(engine) {
+  }
+
+  RGWClientIO getResult() {
+    std::shared_ptr<RGWClientIOEngine> stage = final_engine;
+
+    stage = std::make_shared<RGWClientIOEngineBufferAware>(stage);
+
+    return RGWClientIO(stage);
+  }
+};
 #endif
