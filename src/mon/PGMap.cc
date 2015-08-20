@@ -1204,32 +1204,77 @@ void PGMap::cache_io_rate_summary(Formatter *f, ostream *out,
 {
   pool_stat_t pos_delta = delta_sum;
   pos_delta.floor(0);
-  if (pos_delta.stats.sum.num_flush ||
-      pos_delta.stats.sum.num_evict ||
-      pos_delta.stats.sum.num_promote) {
-    if (pos_delta.stats.sum.num_flush) {
-      int64_t flush = (pos_delta.stats.sum.num_flush_kb << 10) / (double)delta_stamp;
-      if (f) {
-	f->dump_int("flush_bytes_sec", flush);
-      } else {
-	*out << pretty_si_t(flush) << "B/s flush";
-      }
+  bool have_output = false;
+
+  if (pos_delta.stats.sum.num_flush) {
+    int64_t flush = (pos_delta.stats.sum.num_flush_kb << 10) / (double)delta_stamp;
+    if (f) {
+      f->dump_int("flush_bytes_sec", flush);
+    } else {
+      *out << pretty_si_t(flush) << "B/s flush";
+      have_output = true;
     }
-    if (pos_delta.stats.sum.num_evict) {
-      int64_t evict = (pos_delta.stats.sum.num_evict_kb << 10) / (double)delta_stamp;
-      if (f) {
-	f->dump_int("evict_bytes_sec", evict);
-      } else {
-	*out << ", " << pretty_si_t(evict) << "B/s evict";
-      }
+  }
+  if (pos_delta.stats.sum.num_evict) {
+    int64_t evict = (pos_delta.stats.sum.num_evict_kb << 10) / (double)delta_stamp;
+    if (f) {
+      f->dump_int("evict_bytes_sec", evict);
+    } else {
+      if (have_output)
+	*out << ", ";
+      *out << pretty_si_t(evict) << "B/s evict";
+      have_output = true;
     }
-    if (pos_delta.stats.sum.num_promote) {
-      int64_t promote = pos_delta.stats.sum.num_promote / (double)delta_stamp;
-      if (f) {
-        f->dump_int("promote_op_per_sec", promote);
-      } else {
-        *out << ", " << pretty_si_t(promote) << "op/s promote";
-      }
+  }
+  if (pos_delta.stats.sum.num_promote) {
+    int64_t promote = pos_delta.stats.sum.num_promote / (double)delta_stamp;
+    if (f) {
+      f->dump_int("promote_op_per_sec", promote);
+    } else {
+      if (have_output)
+	*out << ", ";
+      *out << pretty_si_t(promote) << "op/s promote";
+      have_output = true;
+    }
+  }
+  if (pos_delta.stats.sum.num_flush_mode_low) {
+    if (f) {
+      f->dump_int("num_flush_mode_low", pos_delta.stats.sum.num_flush_mode_low);
+    } else {
+      if (have_output)
+	*out << ", ";
+      *out << pretty_si_t(pos_delta.stats.sum.num_flush_mode_low) << "PG(s) flushing";
+      have_output = true;
+    }
+  }
+  if (pos_delta.stats.sum.num_flush_mode_high) {
+    if (f) {
+      f->dump_int("num_flush_mode_high", pos_delta.stats.sum.num_flush_mode_high);
+    } else {
+      if (have_output)
+	*out << ", ";
+      *out << pretty_si_t(pos_delta.stats.sum.num_flush_mode_high) << "PG(s) flushing (high)";
+      have_output = true;
+    }
+  }
+  if (pos_delta.stats.sum.num_evict_mode_some) {
+    if (f) {
+      f->dump_int("num_evict_mode_some", pos_delta.stats.sum.num_evict_mode_some);
+    } else {
+      if (have_output)
+	*out << ", ";
+      *out << pretty_si_t(pos_delta.stats.sum.num_evict_mode_some) << "PG(s) evicting";
+      have_output = true;
+    }
+  }
+  if (pos_delta.stats.sum.num_evict_mode_full) {
+    if (f) {
+      f->dump_int("num_evict_mode_full", pos_delta.stats.sum.num_evict_mode_full);
+    } else {
+      if (have_output)
+	*out << ", ";
+      *out << pretty_si_t(pos_delta.stats.sum.num_evict_mode_full) << "PG(s) evicting (full)";
+      have_output = true;
     }
   }
 }
