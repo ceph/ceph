@@ -1051,7 +1051,6 @@ static int do_bench_write(librbd::Image& image, uint64_t io_size,
     i = 0;
     while (i < io_threads && off < io_bytes &&
 	   b.start_write(io_threads, thread_offset[i], io_size, bl, op_flags)) {
-      ++i;
       ++ios;
       off += io_size;
 
@@ -1065,6 +1064,7 @@ static int do_bench_write(librbd::Image& image, uint64_t io_size,
         if (thread_offset[i] + io_size > size)
           thread_offset[i] = 0;
       }
+      ++i;
     }
 
     utime_t now = ceph_clock_now(NULL);
