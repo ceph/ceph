@@ -1,0 +1,28 @@
+tasks:
+- parallel:
+    - workload-2
+    - flip-and-success
+
+workload-2:
+  sequential:
+  - rados:
+      clients: [client.0]
+      ops: 1000
+      objects: 50
+      pools: [base-pool]
+      op_weights:
+        read: 100
+        write: 100
+        delete: 50
+        snap_create: 50
+        snap_remove: 50
+        rollback: 50
+  - print: "**** done rados after upgrading"
+
+flip-and-success:
+  sequential:
+    - exec:
+        client.0:
+          - ceph osd set sortbitwise
+          - ceph osd pool set cache-pool use_gmt_hitset true
+    - print: "**** done flip-and-success"
