@@ -70,6 +70,9 @@ namespace librbd {
 		      const std::string &snap_name);
     int snapshot_remove(librados::IoCtx *ioctx, const std::string &oid,
 			snapid_t snap_id);
+    void snapshot_rename(librados::ObjectWriteOperation *op,
+			snapid_t src_snap_id,
+			const std::string &dst_name);
     int get_snapcontext(librados::IoCtx *ioctx, const std::string &oid,
 			::SnapContext *snapc);
     int snapshot_list(librados::IoCtx *ioctx, const std::string &oid,
@@ -144,6 +147,9 @@ namespace librbd {
 			  std::vector<string> *names,
 			  std::vector<uint64_t> *sizes,
 			  ::SnapContext *snapc);
+    int old_snapshot_rename(librados::IoCtx *ioctx, const std::string &oid,
+			    snapid_t src_snap_id,
+			    const std::string &dst_name);
   } // namespace cls_client
 } // namespace librbd
 #endif // CEPH_LIBRBD_CLS_RBD_CLIENT_H
