@@ -9,7 +9,6 @@
 #include "gtest/gtest.h"
 #include "test/librados/test.h"
 #include "test/journal/RadosTestFixture.h"
-#include <boost/assign/list_of.hpp>
 
 class TestObjectPlayer : public RadosTestFixture {
 public:
@@ -46,8 +45,7 @@ TEST_F(TestObjectPlayer, Fetch) {
   object->get_entries(&entries);
   ASSERT_EQ(2U, entries.size());
 
-  journal::ObjectPlayer::Entries expected_entries = boost::assign::list_of(
-    entry1)(entry2);
+  journal::ObjectPlayer::Entries expected_entries = {entry1, entry2};
   ASSERT_EQ(expected_entries, entries);
 }
 
@@ -73,8 +71,7 @@ TEST_F(TestObjectPlayer, FetchLarge) {
   object->get_entries(&entries);
   ASSERT_EQ(1U, entries.size());
 
-  journal::ObjectPlayer::Entries expected_entries = boost::assign::list_of(
-    entry1);
+  journal::ObjectPlayer::Entries expected_entries = {entry1};
   ASSERT_EQ(expected_entries, entries);
 }
 
@@ -99,8 +96,7 @@ TEST_F(TestObjectPlayer, FetchDeDup) {
   object->get_entries(&entries);
   ASSERT_EQ(1U, entries.size());
 
-  journal::ObjectPlayer::Entries expected_entries = boost::assign::list_of(
-    entry2);
+  journal::ObjectPlayer::Entries expected_entries = {entry2};
   ASSERT_EQ(expected_entries, entries);
 }
 
@@ -151,8 +147,7 @@ TEST_F(TestObjectPlayer, FetchCorrupt) {
   object->get_entries(&entries);
   ASSERT_EQ(2U, entries.size());
 
-  journal::ObjectPlayer::Entries expected_entries = boost::assign::list_of(
-    entry1)(entry2);
+  journal::ObjectPlayer::Entries expected_entries = {entry1, entry2};
   ASSERT_EQ(expected_entries, entries);
 }
 
@@ -176,8 +171,7 @@ TEST_F(TestObjectPlayer, FetchAppend) {
   object->get_entries(&entries);
   ASSERT_EQ(1U, entries.size());
 
-  journal::ObjectPlayer::Entries expected_entries = boost::assign::list_of(
-    entry1);
+  journal::ObjectPlayer::Entries expected_entries = {entry1};
   ASSERT_EQ(expected_entries, entries);
 
   bl.clear();
@@ -191,7 +185,7 @@ TEST_F(TestObjectPlayer, FetchAppend) {
   object->get_entries(&entries);
   ASSERT_EQ(2U, entries.size());
 
-  expected_entries = boost::assign::list_of(entry1)(entry2);
+  expected_entries = {entry1, entry2};
   ASSERT_EQ(expected_entries, entries);
 }
 
@@ -246,7 +240,7 @@ TEST_F(TestObjectPlayer, Watch) {
   ASSERT_EQ(1U, entries.size());
 
   journal::ObjectPlayer::Entries expected_entries;
-  expected_entries = boost::assign::list_of(entry1);
+  expected_entries = {entry1};
   ASSERT_EQ(expected_entries, entries);
 
   C_SaferCond cond2;
@@ -260,7 +254,7 @@ TEST_F(TestObjectPlayer, Watch) {
   object->get_entries(&entries);
   ASSERT_EQ(2U, entries.size());
 
-  expected_entries = boost::assign::list_of(entry1)(entry2);
+  expected_entries = {entry1, entry2};
   ASSERT_EQ(expected_entries, entries);
 }
 

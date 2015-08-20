@@ -11,7 +11,6 @@
 #include "gtest/gtest.h"
 #include "test/journal/RadosTestFixture.h"
 #include <list>
-#include <boost/assign/list_of.hpp>
 
 class TestJournalPlayer : public RadosTestFixture {
 public:
@@ -149,8 +148,8 @@ TEST_F(TestJournalPlayer, Prefetch) {
   std::string oid = get_temp_oid();
 
   journal::JournalPlayer::EntryPositions positions;
-  positions = boost::assign::list_of(
-    cls::journal::EntryPosition("tag1", 122));
+  positions = {
+    cls::journal::EntryPosition("tag1", 122) };
   cls::journal::ObjectSetPosition commit_position(0, positions);
 
   ASSERT_EQ(0, create(oid));
@@ -174,10 +173,10 @@ TEST_F(TestJournalPlayer, Prefetch) {
   ASSERT_TRUE(wait_for_complete(player));
 
   Entries expected_entries;
-  expected_entries = boost::assign::list_of(
-    create_entry("tag1", 123))(
-    create_entry("tag1", 124))(
-    create_entry("tag1", 125));
+  expected_entries = {
+    create_entry("tag1", 123),
+    create_entry("tag1", 124),
+    create_entry("tag1", 125)};
   ASSERT_EQ(expected_entries, entries);
 
   uint64_t last_tid;
@@ -209,9 +208,9 @@ TEST_F(TestJournalPlayer, PrefetchWithoutCommit) {
   ASSERT_TRUE(wait_for_complete(player));
 
   Entries expected_entries;
-  expected_entries = boost::assign::list_of(
-    create_entry("tag1", 122))(
-    create_entry("tag1", 123));
+  expected_entries = {
+    create_entry("tag1", 122),
+    create_entry("tag1", 123)};
   ASSERT_EQ(expected_entries, entries);
 }
 
@@ -219,9 +218,9 @@ TEST_F(TestJournalPlayer, PrefetchMultipleTags) {
   std::string oid = get_temp_oid();
 
   journal::JournalPlayer::EntryPositions positions;
-  positions = boost::assign::list_of(
-    cls::journal::EntryPosition("tag1", 122))(
-    cls::journal::EntryPosition("tag2", 1));
+  positions = {
+    cls::journal::EntryPosition("tag1", 122),
+    cls::journal::EntryPosition("tag2", 1)};
   cls::journal::ObjectSetPosition commit_position(0, positions);
 
   ASSERT_EQ(0, create(oid));
@@ -289,8 +288,8 @@ TEST_F(TestJournalPlayer, PrefetchAndWatch) {
   std::string oid = get_temp_oid();
 
   journal::JournalPlayer::EntryPositions positions;
-  positions = boost::assign::list_of(
-    cls::journal::EntryPosition("tag1", 122));
+  positions = {
+    cls::journal::EntryPosition("tag1", 122)};
   cls::journal::ObjectSetPosition commit_position(0, positions);
 
   ASSERT_EQ(0, create(oid));
@@ -311,12 +310,12 @@ TEST_F(TestJournalPlayer, PrefetchAndWatch) {
   ASSERT_TRUE(wait_for_entries(player, 1, &entries));
 
   Entries expected_entries;
-  expected_entries = boost::assign::list_of(create_entry("tag1", 123));
+  expected_entries = {create_entry("tag1", 123)};
   ASSERT_EQ(expected_entries, entries);
 
   ASSERT_EQ(0, write_entry(oid, 0, "tag1", 124));
   ASSERT_TRUE(wait_for_entries(player, 1, &entries));
 
-  expected_entries = boost::assign::list_of(create_entry("tag1", 124));
+  expected_entries = {create_entry("tag1", 124)};
   ASSERT_EQ(expected_entries, entries);
 }
