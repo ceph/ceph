@@ -41,20 +41,14 @@ ostream& EventCenter::_event_prefix(std::ostream *_dout)
 
 class C_handle_notify : public EventCallback {
   EventCenter *center;
-  CephContext *cct;
 
  public:
-  C_handle_notify(EventCenter *c, CephContext *c): center(c), cct(c) {}
+  C_handle_notify(EventCenter *c): center(c) {}
   void do_request(int fd_or_id) {
     char c[256];
-    int r;
     do {
       center->already_wakeup.set(0);
-      r = read(fd_or_id, c, sizeof(c));
-      if (r < 0) {
-        ldout(cct, 1) << __func__ << " read notify pipe failed: " << cpp_strerror(errno) << dendl;
-        break;
-      }
+      read(fd_or_id, c, sizeof(c));
     } while (center->already_wakeup.read());
   }
 };
@@ -105,7 +99,7 @@ int EventCenter::init(int n)
   memset(file_events, 0, sizeof(FileEvent)*n);
 
   nevent = n;
-  create_file_event(notify_receive_fd, EVENT_READABLE, EventCallbackRef(new C_handle_notify(this, cct)));
+  create_file_event(notify_receive_fd, EVENT_READABLE, EventCallbackRef(new C_handle_notify(this)));
   return 0;
 }
 
