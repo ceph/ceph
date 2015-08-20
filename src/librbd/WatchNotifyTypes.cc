@@ -241,6 +241,22 @@ void SnapCreatePayload::dump(Formatter *f) const {
   f->dump_string("snap_name", snap_name);
 }
 
+void SnapRenamePayload::encode(bufferlist &bl) const {
+  ::encode(static_cast<uint32_t>(NOTIFY_OP_SNAP_RENAME), bl);
+  ::encode(src_snap_id, bl);
+  ::encode(dst_snap_name, bl);
+}
+
+void SnapRenamePayload::decode(__u8 version, bufferlist::iterator &iter) {
+  ::decode(src_snap_id, iter);
+  ::decode(dst_snap_name, iter);
+}
+
+void SnapRenamePayload::dump(Formatter *f) const {
+  f->dump_string("notify_op", stringify(NOTIFY_OP_SNAP_RENAME));
+  f->dump_unsigned("src_snap_id", src_snap_id);
+  f->dump_string("dst_snap_name", dst_snap_name);
+}
 void SnapRemovePayload::encode(bufferlist &bl) const {
   ::encode(static_cast<uint32_t>(NOTIFY_OP_SNAP_REMOVE), bl);
   ::encode(snap_name, bl);
@@ -328,6 +344,9 @@ void NotifyMessage::decode(bufferlist::iterator& iter) {
   case NOTIFY_OP_REBUILD_OBJECT_MAP:
     payload = RebuildObjectMapPayload();
     break;
+  case NOTIFY_OP_SNAP_RENAME:
+    payload = SnapRenamePayload();
+    break;
   default:
     payload = UnknownPayload();
     break;
@@ -412,6 +431,9 @@ std::ostream &operator<<(std::ostream &out,
     break;
   case NOTIFY_OP_SNAP_REMOVE:
     out << "SnapRemove";
+    break;
+  case NOTIFY_OP_SNAP_RENAME:
+    out << "SnapRename";
     break;
   case NOTIFY_OP_REBUILD_OBJECT_MAP:
     out << "RebuildObjectMap";
