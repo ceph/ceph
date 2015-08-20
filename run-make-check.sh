@@ -56,23 +56,28 @@ function do_make() {
 }
 
 # All packages will be installed with this function.
+# More packages...
+#  git
 function run() {
     # Same logic as install-deps.sh for finding package installer
     local install_cmd
 
-    DIST=`cat /etc/issue`
+    DIST=`head -n1 /etc/os-release`
 
     if [[ `echo $DIST | grep -i fedora`  ]]; then
         # Fedora?
         $SUDO dnf update -y
-        $SUDO dnf install -y dnf-plugins-core redhat-lsb-core ccache jq
-    elif [[ `echo $DIST | grep -i centos` ||  `echo $dist | grep -i "red hat"` ]]; then
+        $SUDO dnf install -y git dnf-plugins-core redhat-lsb-core ccache jq
+    elif [[ `echo $DIST | grep -i centos` ||  `echo $DIST | grep -i "red hat"` ]]; then
         # CentOS ro RHEL?
         $SUDO yum update -y
-        $SUDO yum install -y yum-utils redhat-lsb-core ccache jq
+        $SUDO yum install -y git yum-utils redhat-lsb-core ccache jq
         #
+echo "1"; sleep 30
         MAJOR_VERSION=$(lsb_release -rs | cut -f1 -d.)
+echo "2"; sleep 30
         if test $(lsb_release -si) == RedHatEnterpriseServer ; then
+echo "3"; sleep 30
             $SUDO yum install subscription-manager
             $SUDO subscription-manager repos --enable=rhel-$MAJOR_VERSION-server-optional-rpms
         fi
@@ -83,11 +88,11 @@ function run() {
     elif [[ `echo $DIST | grep -i ubuntu` ||  `echo $DIST | egrep -i 'debian|devuan'` ]]; then
         # Ubuntu or Debian?
         $SUDO apt-get update -y
-        $SUDO apt-get install -y lsb-release ccache jq dpkg-dev
+        $SUDO apt-get install -y git lsb-release ccache jq dpkg-dev
     elif [[ `echo $DIST | grep -i suse` ]]; then
         # SuSE?
         $SUDO zypper --non-interactive --auto-agree-with-licenses patch
-        $SUDO zypper --gpg-auto-import-keys --non-interactive install openSUSE-release lsb-release ccache jq
+        $SUDO zypper --gpg-auto-import-keys --non-interactive install git openSUSE-release lsb-release ccache jq
     else
         # Something -;
         echo "WARNING: Don't know how to install packages" >&2
