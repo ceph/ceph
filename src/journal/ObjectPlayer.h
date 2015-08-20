@@ -5,7 +5,6 @@
 #define CEPH_JOURNAL_OBJECT_PLAYER_H
 
 #include "include/Context.h"
-#include "include/hash_namespace.h"
 #include "include/interval_set.h"
 #include "include/rados/librados.hpp"
 #include "common/Cond.h"
