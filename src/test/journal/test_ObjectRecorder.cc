@@ -10,7 +10,6 @@
 #include "test/librados/test.h"
 #include "test/journal/RadosTestFixture.h"
 #include <limits>
-#include <boost/assign/list_of.hpp>
 
 class TestObjectRecorder : public RadosTestFixture {
 public:
@@ -111,13 +110,13 @@ TEST_F(TestObjectRecorder, Append) {
   journal::AppendBuffer append_buffer1 = create_append_buffer("tag", 123,
                                                              "payload");
   journal::AppendBuffers append_buffers;
-  append_buffers = boost::assign::list_of(append_buffer1);
+  append_buffers = {append_buffer1};
   ASSERT_FALSE(object->append(append_buffers));
   ASSERT_EQ(1U, object->get_pending_appends());
 
   journal::AppendBuffer append_buffer2 = create_append_buffer("tag", 124,
                                                              "payload");
-  append_buffers = boost::assign::list_of(append_buffer2);
+  append_buffers = {append_buffer2};
   ASSERT_FALSE(object->append(append_buffers));
   ASSERT_EQ(2U, object->get_pending_appends());
 
@@ -136,13 +135,13 @@ TEST_F(TestObjectRecorder, AppendFlushByCount) {
   journal::AppendBuffer append_buffer1 = create_append_buffer("tag", 123,
                                                              "payload");
   journal::AppendBuffers append_buffers;
-  append_buffers = boost::assign::list_of(append_buffer1);
+  append_buffers = {append_buffer1};
   ASSERT_FALSE(object->append(append_buffers));
   ASSERT_EQ(1U, object->get_pending_appends());
 
   journal::AppendBuffer append_buffer2 = create_append_buffer("tag", 124,
                                                              "payload");
-  append_buffers = boost::assign::list_of(append_buffer2);
+  append_buffers = {append_buffer2};
   ASSERT_FALSE(object->append(append_buffers));
   ASSERT_EQ(0U, object->get_pending_appends());
 
@@ -160,13 +159,13 @@ TEST_F(TestObjectRecorder, AppendFlushByBytes) {
   journal::AppendBuffer append_buffer1 = create_append_buffer("tag", 123,
                                                              "payload");
   journal::AppendBuffers append_buffers;
-  append_buffers = boost::assign::list_of(append_buffer1);
+  append_buffers = {append_buffer1};
   ASSERT_FALSE(object->append(append_buffers));
   ASSERT_EQ(1U, object->get_pending_appends());
 
   journal::AppendBuffer append_buffer2 = create_append_buffer("tag", 124,
                                                              "payload");
-  append_buffers = boost::assign::list_of(append_buffer2);
+  append_buffers = {append_buffer2};
   ASSERT_FALSE(object->append(append_buffers));
   ASSERT_EQ(0U, object->get_pending_appends());
 
@@ -184,12 +183,12 @@ TEST_F(TestObjectRecorder, AppendFlushByAge) {
   journal::AppendBuffer append_buffer1 = create_append_buffer("tag", 123,
                                                              "payload");
   journal::AppendBuffers append_buffers;
-  append_buffers = boost::assign::list_of(append_buffer1);
+  append_buffers = {append_buffer1};
   ASSERT_FALSE(object->append(append_buffers));
 
   journal::AppendBuffer append_buffer2 = create_append_buffer("tag", 124,
                                                              "payload");
-  append_buffers = boost::assign::list_of(append_buffer2);
+  append_buffers = {append_buffer2};
   ASSERT_FALSE(object->append(append_buffers));
 
   C_SaferCond cond;
@@ -207,12 +206,12 @@ TEST_F(TestObjectRecorder, AppendFilledObject) {
   journal::AppendBuffer append_buffer1 = create_append_buffer("tag", 123,
                                                               payload);
   journal::AppendBuffers append_buffers;
-  append_buffers = boost::assign::list_of(append_buffer1);
+  append_buffers = {append_buffer1};
   ASSERT_FALSE(object->append(append_buffers));
 
   journal::AppendBuffer append_buffer2 = create_append_buffer("tag", 124,
                                                               payload);
-  append_buffers = boost::assign::list_of(append_buffer2);
+  append_buffers = {append_buffer2};
   ASSERT_TRUE(object->append(append_buffers));
 
   C_SaferCond cond;
@@ -229,7 +228,7 @@ TEST_F(TestObjectRecorder, Flush) {
   journal::AppendBuffer append_buffer1 = create_append_buffer("tag", 123,
                                                              "payload");
   journal::AppendBuffers append_buffers;
-  append_buffers = boost::assign::list_of(append_buffer1);
+  append_buffers = {append_buffer1};
   ASSERT_FALSE(object->append(append_buffers));
   ASSERT_EQ(1U, object->get_pending_appends());
 
@@ -251,7 +250,7 @@ TEST_F(TestObjectRecorder, FlushFuture) {
   journal::AppendBuffer append_buffer = create_append_buffer("tag", 123,
                                                              "payload");
   journal::AppendBuffers append_buffers;
-  append_buffers = boost::assign::list_of(append_buffer);
+  append_buffers = {append_buffer};
   ASSERT_FALSE(object->append(append_buffers));
   ASSERT_EQ(1U, object->get_pending_appends());
 
@@ -272,7 +271,7 @@ TEST_F(TestObjectRecorder, FlushDetachedFuture) {
                                                              "payload");
 
   journal::AppendBuffers append_buffers;
-  append_buffers = boost::assign::list_of(append_buffer);
+  append_buffers = {append_buffer};
 
   object->flush(append_buffer.first);
   ASSERT_FALSE(append_buffer.first->is_flush_in_progress());
@@ -296,7 +295,7 @@ TEST_F(TestObjectRecorder, Overflow) {
   journal::AppendBuffer append_buffer2 = create_append_buffer("tag", 124,
                                                               payload);
   journal::AppendBuffers append_buffers;
-  append_buffers = boost::assign::list_of(append_buffer1)(append_buffer2);
+  append_buffers = {append_buffer1, append_buffer2};
   ASSERT_TRUE(object1->append(append_buffers));
 
   C_SaferCond cond;
@@ -306,7 +305,7 @@ TEST_F(TestObjectRecorder, Overflow) {
 
   journal::AppendBuffer append_buffer3 = create_append_buffer("bar", 123,
                                                               payload);
-  append_buffers = boost::assign::list_of(append_buffer3);
+  append_buffers = {append_buffer3};
 
   ASSERT_FALSE(object2->append(append_buffers));
   append_buffer3.first->flush(NULL);

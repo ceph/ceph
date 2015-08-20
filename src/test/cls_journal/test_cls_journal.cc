@@ -9,7 +9,6 @@
 #include <errno.h>
 #include <set>
 #include <string>
-#include <boost/assign/list_of.hpp>
 
 using namespace cls::journal;
 
@@ -201,8 +200,7 @@ TEST_F(TestClsJournal, ClientRegister) {
   std::set<Client> clients;
   ASSERT_EQ(0, client::client_list(ioctx, oid, &clients));
 
-  std::set<Client> expected_clients = boost::assign::list_of(
-    Client("id1", "desc1"));
+  std::set<Client> expected_clients = {Client("id1", "desc1")};
   ASSERT_EQ(expected_clients, clients);
 }
 
@@ -247,9 +245,9 @@ TEST_F(TestClsJournal, ClientCommit) {
   ASSERT_EQ(0, client::client_register(ioctx, oid, "id1", "desc1"));
 
   cls::journal::EntryPositions entry_positions;
-  entry_positions = boost::assign::list_of(
-    cls::journal::EntryPosition("tag1", 120))(
-    cls::journal::EntryPosition("tag2", 121));
+  entry_positions = {
+    cls::journal::EntryPosition("tag1", 120),
+    cls::journal::EntryPosition("tag2", 121)};
   cls::journal::ObjectSetPosition object_set_position(
     1, entry_positions);
 
@@ -260,8 +258,8 @@ TEST_F(TestClsJournal, ClientCommit) {
   std::set<Client> clients;
   ASSERT_EQ(0, client::client_list(ioctx, oid, &clients));
 
-  std::set<Client> expected_clients = boost::assign::list_of(
-    Client("id1", "desc1", object_set_position));
+  std::set<Client> expected_clients = {
+    Client("id1", "desc1", object_set_position)};
   ASSERT_EQ(expected_clients, clients);
 }
 
@@ -275,10 +273,10 @@ TEST_F(TestClsJournal, ClientCommitInvalid) {
   ASSERT_EQ(0, client::client_register(ioctx, oid, "id1", "desc1"));
 
   cls::journal::EntryPositions entry_positions;
-  entry_positions = boost::assign::list_of(
-    cls::journal::EntryPosition("tag1", 120))(
-    cls::journal::EntryPosition("tag1", 121))(
-    cls::journal::EntryPosition("tag2", 121));
+  entry_positions = {
+    cls::journal::EntryPosition("tag1", 120),
+    cls::journal::EntryPosition("tag1", 121),
+    cls::journal::EntryPosition("tag2", 121)};
   cls::journal::ObjectSetPosition object_set_position(
     1, entry_positions);
 
