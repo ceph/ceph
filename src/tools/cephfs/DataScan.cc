@@ -491,12 +491,17 @@ int DataScan::scan_inodes()
 
     AccumulateResult accum_res;
     inode_backtrace_t backtrace;
+    ceph_file_layout loaded_layout = g_default_file_layout;
     int r = ClsCephFSClient::fetch_inode_accumulate_result(
-        data_io, oid, &backtrace, &accum_res);
+        data_io, oid, &backtrace, &loaded_layout, &accum_res);
     
     if (r < 0) {
       dout(4) << "Unexpected error loading accumulated metadata from '"
               << oid << "': " << cpp_strerror(r) << dendl;
+      // FIXME: this creates situation where if a client has a corrupt
+      // backtrace/layout, we will fail to inject it.  We should (optionally)
+      // proceed if the backtrace/layout is corrupt but we have valid
+      // accumulated metadata.
       continue;
     }
 
@@ -504,6 +509,11 @@ int DataScan::scan_inodes()
     uint64_t file_size = 0;
     uint32_t chunk_size = g_default_file_layout.fl_object_size;
     bool have_backtrace = !(backtrace.ancestors.empty());
+
+    // This is the layout we will use for injection, populated either
+    // from loaded_layout or from best guesses
+    ceph_file_layout guessed_layout;
+    guessed_layout.fl_pg_pool = data_pool_id;
 
     // Calculate file_size, guess chunk_size
     if (accum_res.ceiling_obj_index > 0) {
@@ -515,8 +525,94 @@ int DataScan::scan_inodes()
         chunk_size = accum_res.max_obj_size;
       }
 
-      file_size = chunk_size * accum_res.ceiling_obj_index
-                  + accum_res.ceiling_obj_size;
+      if (loaded_layout.fl_pg_pool == uint32_t(-1)) {
+        // If no stashed layout was found, guess it
+        guessed_layout.fl_object_size = chunk_size;
+        guessed_layout.fl_stripe_unit = chunk_size;
+        guessed_layout.fl_stripe_count = 1;
+      } else if (loaded_layout.fl_object_size < accum_res.max_obj_size) {
+        // If the max size seen exceeds what the stashed layout claims, then
+        // disbelieve it.  Guess instead.
+        dout(4) << "bogus xattr layout on 0x" << std::hex << obj_name_ino
+                << std::dec << ", ignoring in favour of best guess" << dendl;
+        guessed_layout.fl_object_size = chunk_size;
+        guessed_layout.fl_stripe_unit = chunk_size;
+        guessed_layout.fl_stripe_count = 1;
+      } else {
+        // We have a stashed layout that we can't disprove, so apply it
+        guessed_layout = loaded_layout;
+        dout(20) << "loaded layout from xattr:"
+          << " os: " << guessed_layout.fl_object_size
+          << " sc: " << guessed_layout.fl_stripe_count
+          << " su: " << guessed_layout.fl_stripe_unit
+          << dendl;
+        // User might have transplanted files from a pool with a different
+        // ID, so whatever the loaded_layout says, we'll force the injected
+        // layout to point to the pool we really read from
+        guessed_layout.fl_pg_pool = data_pool_id;
+      }
+
+      if (guessed_layout.fl_stripe_count == 1) {
+        // Unstriped file: simple chunking
+        file_size = guessed_layout.fl_object_size * accum_res.ceiling_obj_index
+                    + accum_res.ceiling_obj_size;
+      } else {
+        // Striped file: need to examine the last fl_stripe_count objects
+        // in the file to determine the size.
+
+        // How many complete (i.e. not last stripe) objects?
+        uint64_t complete_objs = 0;
+        if (accum_res.ceiling_obj_index > guessed_layout.fl_stripe_count - 1) {
+          complete_objs = (accum_res.ceiling_obj_index / guessed_layout.fl_stripe_count) * guessed_layout.fl_stripe_count;
+        } else {
+          complete_objs = 0;
+        }
+
+        // How many potentially-short objects (i.e. last stripe set) objects?
+        uint64_t partial_objs = accum_res.ceiling_obj_index + 1 - complete_objs;
+
+        dout(10) << "calculating striped size from complete objs: "
+                 << complete_objs << ", partial objs: " << partial_objs
+                 << dendl;
+
+        // Maximum amount of data that may be in the incomplete objects
+        uint64_t incomplete_size = 0;
+
+        // For each short object, calculate the max file size within it
+        // and accumulate the maximum
+        for (uint64_t i = complete_objs; i < complete_objs + partial_objs; ++i) {
+          char buf[60];
+          snprintf(buf, sizeof(buf), "%llx.%08llx",
+              (long long unsigned)obj_name_ino, (long long unsigned)i);
+
+          uint64_t osize(0);
+          time_t omtime(0);
+          r = data_io.stat(std::string(buf), &osize, &omtime);
+          if (r == 0) {
+	    if (osize > 0) {
+	      // Upper bound within this object
+	      uint64_t upper_size = (osize - 1) / guessed_layout.fl_stripe_unit
+		* (guessed_layout.fl_stripe_unit * guessed_layout.fl_stripe_count)
+		+ (i % guessed_layout.fl_stripe_count)
+		* guessed_layout.fl_stripe_unit + (osize - 1)
+		% guessed_layout.fl_stripe_unit + 1;
+	      incomplete_size = MAX(incomplete_size, upper_size);
+	    }
+          } else if (r == -ENOENT) {
+            // Absent object, treat as size 0 and ignore.
+          } else {
+            // Unexpected error, carry r to outer scope for handling.
+            break;
+          }
+        }
+        if (r != 0 && r != -ENOENT) {
+          derr << "Unexpected error checking size of ino 0x" << std::hex
+               << obj_name_ino << std::dec << ": " << cpp_strerror(r) << dendl;
+          continue;
+        }
+        file_size = complete_objs * guessed_layout.fl_object_size
+                    + incomplete_size;
+      }
     } else {
       file_size = accum_res.ceiling_obj_size;
     }
@@ -537,7 +633,7 @@ int DataScan::scan_inodes()
          * don't put it in the stray dir, because while that would technically
          * give it linkage it would still be invisible to the user */
         r = driver->inject_lost_and_found(
-            obj_name_ino, file_size, file_mtime, chunk_size, data_pool_id);
+            obj_name_ino, file_size, file_mtime, guessed_layout);
         if (r < 0) {
           dout(4) << "Error injecting 0x" << std::hex << backtrace.ino
             << std::dec << " into lost+found: " << cpp_strerror(r) << dendl;
@@ -549,7 +645,7 @@ int DataScan::scan_inodes()
       } else {
         /* Happy case: we will inject a named dentry for this inode */
         r = driver->inject_with_backtrace(
-            backtrace, file_size, file_mtime, chunk_size, data_pool_id);
+            backtrace, file_size, file_mtime, guessed_layout);
         if (r < 0) {
           dout(4) << "Error injecting 0x" << std::hex << backtrace.ino
             << std::dec << " with backtrace: " << cpp_strerror(r) << dendl;
@@ -562,7 +658,7 @@ int DataScan::scan_inodes()
     } else {
       /* Backtrace-less case: we will inject a lost+found dentry */
       r = driver->inject_lost_and_found(
-          obj_name_ino, file_size, file_mtime, chunk_size, data_pool_id);
+          obj_name_ino, file_size, file_mtime, guessed_layout);
       if (r < 0) {
         dout(4) << "Error injecting 0x" << std::hex << obj_name_ino
           << std::dec << " into lost+found: " << cpp_strerror(r) << dendl;
@@ -653,7 +749,7 @@ int MetadataDriver::read_dentry(inodeno_t parent_ino, frag_t frag,
 }
 
 int MetadataDriver::inject_lost_and_found(inodeno_t ino, uint64_t file_size,
-    time_t file_mtime, uint32_t chunk_size, int64_t data_pool_id)
+    time_t file_mtime, const ceph_file_layout &layout)
 {
   // Create lost+found if doesn't exist
   bool created = false;
@@ -706,10 +802,7 @@ int MetadataDriver::inject_lost_and_found(inodeno_t ino, uint64_t file_size,
   recovered_ino.inode.atime.tv.tv_sec = file_mtime;
   recovered_ino.inode.ctime.tv.tv_sec = file_mtime;
 
-  recovered_ino.inode.layout = g_default_file_layout;
-  recovered_ino.inode.layout.fl_object_size = chunk_size;
-  recovered_ino.inode.layout.fl_stripe_unit = chunk_size;
-  recovered_ino.inode.layout.fl_pg_pool = data_pool_id;
+  recovered_ino.inode.layout = layout;
 
   recovered_ino.inode.truncate_seq = 1;
   recovered_ino.inode.truncate_size = -1ull;
@@ -839,7 +932,7 @@ int MetadataDriver::get_frag_of(
 
 int MetadataDriver::inject_with_backtrace(
     const inode_backtrace_t &backtrace, uint64_t file_size, time_t file_mtime,
-    uint32_t chunk_size, int64_t data_pool_id)
+    const ceph_file_layout &layout)
     
 {
 
@@ -949,7 +1042,7 @@ int MetadataDriver::inject_with_backtrace(
           << std::hex << existing_dentry.inode.ino << std::dec << dendl;
         // Fall back to lost+found!
         return inject_lost_and_found(backtrace.ino, file_size, file_mtime,
-            chunk_size, data_pool_id);
+            layout);
       }
     }
 
@@ -971,10 +1064,7 @@ int MetadataDriver::inject_with_backtrace(
         dentry.inode.atime.tv.tv_sec = file_mtime;
         dentry.inode.ctime.tv.tv_sec = file_mtime;
 
-        dentry.inode.layout = g_default_file_layout;
-        dentry.inode.layout.fl_object_size = chunk_size;
-        dentry.inode.layout.fl_stripe_unit = chunk_size;
-        dentry.inode.layout.fl_pg_pool = data_pool_id;
+        dentry.inode.layout = layout;
 
         dentry.inode.truncate_seq = 1;
         dentry.inode.truncate_size = -1ull;
@@ -1198,8 +1288,7 @@ int LocalFileDriver::inject_with_backtrace(
     const inode_backtrace_t &bt,
     uint64_t size,
     time_t mtime,
-    uint32_t chunk_size,
-    int64_t data_pool_id)
+    const ceph_file_layout &layout)
 {
   std::string path_builder = path;
 
@@ -1215,7 +1304,9 @@ int LocalFileDriver::inject_with_backtrace(
     // Last entry is the filename itself
     bool is_file = (i + 1 == bt.ancestors.rend());
     if (is_file) {
-      inject_data(path_builder, size, chunk_size, bt.ino);
+      // FIXME: inject_data won't cope with interesting (i.e. striped)
+      // layouts (need a librados-compatible Filer to read these)
+      inject_data(path_builder, size, layout.fl_object_size, bt.ino);
     } else {
       int r = mkdir(path_builder.c_str(), 0755);
       if (r != 0 && r != -EPERM) {
@@ -1233,8 +1324,7 @@ int LocalFileDriver::inject_lost_and_found(
     inodeno_t ino,
     uint64_t size,
     time_t mtime,
-    uint32_t chunk_size,
-    int64_t data_pool_id)
+    const ceph_file_layout &layout)
 {
   std::string lf_path = path + "/lost+found";
   int r = mkdir(lf_path.c_str(), 0755);
@@ -1245,7 +1335,7 @@ int LocalFileDriver::inject_lost_and_found(
   }
   
   std::string file_path = lf_path + "/" + lost_found_dname(ino);
-  return inject_data(file_path, size, chunk_size, ino);
+  return inject_data(file_path, size, layout.fl_object_size, ino);
 }
 
 int LocalFileDriver::init_roots(int64_t data_pool_id)
