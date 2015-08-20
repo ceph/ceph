@@ -2155,7 +2155,7 @@ void MDSRankDispatcher::update_log_config()
 			       log_channel, log_prio) == 0)
     clog->update_config(log_to_monitors, log_to_syslog,
 			log_channel, log_prio);
-  derr << "log_to_monitors " << log_to_monitors << dendl;
+  dout(10) << __func__ << " log_to_monitors " << log_to_monitors << dendl;
 }
 
 void MDSRank::create_logger()
