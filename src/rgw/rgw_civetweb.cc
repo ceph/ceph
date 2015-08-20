@@ -24,6 +24,7 @@ int RGWMongoose::write_data(const char *buf, int len)
 RGWMongoose::RGWMongoose(mg_connection *_conn, int _port)
   : conn(_conn),
     port(_port),
+    has_content_length(false),
     explicit_keepalive(false),
     explicit_conn_close(false)
 {
@@ -124,6 +125,10 @@ int RGWMongoose::send_100_continue()
 
 int RGWMongoose::complete_header()
 {
+  if (!has_content_length) {
+    mg_enforce_close(conn);
+  }
+
   string str;
   if (explicit_keepalive) {
     str = "Connection: Keep-Alive\r\n";
@@ -138,6 +143,8 @@ int RGWMongoose::complete_header()
 
 int RGWMongoose::send_content_length(uint64_t len)
 {
+  has_content_length = true;
+
   char buf[21];
   snprintf(buf, sizeof(buf), "%" PRIu64, len);
   return print("Content-Length: %s\r\n", buf);
