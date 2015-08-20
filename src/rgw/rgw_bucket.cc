@@ -1523,19 +1523,6 @@ public:
 
 class RGWBucketMetadataHandler : public RGWMetadataHandler {
 
-  int init_bucket(RGWRados *store, string& bucket_name, rgw_bucket& bucket, RGWObjVersionTracker *objv_tracker) {
-    RGWBucketInfo bucket_info;
-    RGWObjectCtx obj_ctx(store);
-    int r = store->get_bucket_info(obj_ctx, bucket_name, bucket_info, NULL);
-    if (r < 0) {
-      cerr << "could not get bucket info for bucket=" << bucket_name << std::endl;
-      return r;
-    }
-    bucket = bucket_info.bucket;
-
-    return 0;
-  }
-
 public:
   string get_type() { return "bucket"; }
 
@@ -1684,19 +1671,6 @@ public:
 };
 
 class RGWBucketInstanceMetadataHandler : public RGWMetadataHandler {
-
-  int init_bucket(RGWRados *store, string& bucket_name, rgw_bucket& bucket, RGWObjVersionTracker *objv_tracker) {
-    RGWBucketInfo bucket_info;
-    RGWObjectCtx obj_ctx(store);
-    int r = store->get_bucket_info(obj_ctx, bucket_name, bucket_info, NULL);
-    if (r < 0) {
-      cerr << "could not get bucket info for bucket=" << bucket_name << std::endl;
-      return r;
-    }
-    bucket = bucket_info.bucket;
-
-    return 0;
-  }
 
 public:
   string get_type() { return "bucket.instance"; }
