@@ -5,7 +5,6 @@
 #include "test/journal/RadosTestFixture.h"
 #include "common/Cond.h"
 #include "common/Mutex.h"
-#include <boost/assign/list_of.hpp>
 #include <map>
 
 class TestJournalMetadata : public RadosTestFixture {
@@ -70,8 +69,8 @@ TEST_F(TestJournalMetadata, SetCommitPositions) {
   ASSERT_EQ(commit_position, read_commit_position);
 
   journal::JournalMetadata::EntryPositions entry_positions;
-  entry_positions = boost::assign::list_of(
-    cls::journal::EntryPosition("tag1", 122));
+  entry_positions = {
+    cls::journal::EntryPosition("tag1", 122)};
   commit_position = journal::JournalMetadata::ObjectSetPosition(1, entry_positions);
 
   C_SaferCond cond;
