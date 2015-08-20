@@ -38,6 +38,10 @@ if WITH_JEMALLOC
 librados_la_LDFLAGS += -ljemalloc
 endif
 
+if WITH_TCMALLOC
+librados_la_LDFLAGS += -ltcmalloc
+endif
+
 lib_LTLIBRARIES += librados.la
 
 noinst_HEADERS += \
