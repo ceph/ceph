@@ -22,6 +22,5 @@ int main(int argc, char **argv)
 
   int r = RUN_ALL_TESTS();
   g_ceph_context->put();
-  ceph::crypto::shutdown();
   return r;
 }
