@@ -2241,7 +2241,10 @@ int Objecter::op_cancel(OSDSession *s, ceph_tid_t tid, int r)
   if (op->onack) {
     op->onack->complete(r);
     op->onack = NULL;
+    num_unacked.dec();
   }
+  if (op->oncommit || op->oncommit_sync)
+    num_uncommitted.dec();
   if (op->oncommit) {
     op->oncommit->complete(r);
     op->oncommit = NULL;
