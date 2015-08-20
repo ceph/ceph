@@ -11511,10 +11511,18 @@ bool ReplicatedPG::agent_choose_mode(bool restart, OpRequestRef op)
 	    << " -> "
 	    << TierAgentState::get_flush_mode_name(flush_mode)
 	    << dendl;
-    if (flush_mode == TierAgentState::FLUSH_MODE_HIGH)
+    if (flush_mode == TierAgentState::FLUSH_MODE_HIGH) {
       osd->agent_inc_high_count();
-    if (agent_state->flush_mode == TierAgentState::FLUSH_MODE_HIGH)
+      info.stats.stats.sum.num_flush_mode_high = 1;
+    } else if (flush_mode == TierAgentState::FLUSH_MODE_LOW) {
+      info.stats.stats.sum.num_flush_mode_low = 1;
+    }
+    if (agent_state->flush_mode == TierAgentState::FLUSH_MODE_HIGH) {
       osd->agent_dec_high_count();
+      info.stats.stats.sum.num_flush_mode_high = 0;
+    } else if (agent_state->flush_mode == TierAgentState::FLUSH_MODE_LOW) {
+      info.stats.stats.sum.num_flush_mode_low = 0;
+    }
     agent_state->flush_mode = flush_mode;
   }
   if (evict_mode != agent_state->evict_mode) {
@@ -11530,6 +11538,16 @@ bool ReplicatedPG::agent_choose_mode(bool restart, OpRequestRef op)
       requeue_ops(waiting_for_active);
       requeue_ops(waiting_for_cache_not_full);
       requeued = true;
+    }
+    if (evict_mode == TierAgentState::EVICT_MODE_SOME) {
+      info.stats.stats.sum.num_evict_mode_some = 1;
+    } else if (evict_mode == TierAgentState::EVICT_MODE_FULL) {
+      info.stats.stats.sum.num_evict_mode_full = 1;
+    }
+    if (agent_state->evict_mode == TierAgentState::EVICT_MODE_SOME) {
+      info.stats.stats.sum.num_evict_mode_some = 0;
+    } else if (agent_state->evict_mode == TierAgentState::EVICT_MODE_FULL) {
+      info.stats.stats.sum.num_evict_mode_full = 0;
     }
     agent_state->evict_mode = evict_mode;
   }
