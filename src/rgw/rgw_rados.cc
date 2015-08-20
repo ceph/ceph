@@ -217,10 +217,10 @@ int RGWZoneGroup::init(CephContext *_cct, RGWRados *_store, bool setup_zonegroup
     if (r == -ENOENT) {
       r = create_default();
       if (r == -EEXIST) { /* we may have raced with another zonegroup creation,
-                             make sure we can read the zonegroup info and continue
-                             as usual to make sure zonegroup creation is complete */
-        ldout(cct, 0) << "create_default() returned -EEXIST, we raced with another zonegroup creation" << dendl;
-        r = read_info(name);
+			     make sure we can read the zonegroup info and continue
+			     as usual to make sure zonegroup creation is complete */
+	ldout(cct, 0) << "create_default() returned -EEXIST, we raced with another zonegroup creation" << dendl;
+	r = read_info(name);
       }
       if (r < 0)
         return r;
@@ -2194,7 +2194,13 @@ int RGWRados::replace_region_with_zonegroup()
     }
   }    
 
-  /* update region for all zones */
+  if (!cct->_conf->rgw_region.empty() && cct->_conf->rgw_zonegroup.empty()) {
+    ret = cct->_conf->set_val("rgw_zonegroup", cct->_conf->rgw_region.c_str());
+    if (ret < 0) {
+      derr << "failed to set rgw_zonegroup to " << cct->_conf->rgw_region << dendl;
+    }
+  }
+
   return ret;
 }
 
