@@ -2718,8 +2718,6 @@ int OSDMap::get_erasure_code_profile_default(CephContext *cct,
   int r = get_json_str_map(cct->_conf->osd_pool_default_erasure_code_profile,
 		      *ss,
 		      &profile_map);
-  profile_map["directory"] =
-    cct->_conf->erasure_code_dir;
   return r;
 }
 
