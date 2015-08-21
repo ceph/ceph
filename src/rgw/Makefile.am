@@ -4,6 +4,7 @@ if ENABLE_CLIENT
 DENCODER_SOURCES += \
 	rgw/rgw_dencoder.cc \
 	rgw/rgw_acl.cc \
+	rgw/rgw_basic_types.cc \
 	rgw/rgw_common.cc \
 	rgw/rgw_env.cc \
 	rgw/rgw_json_enc.cc
@@ -29,6 +30,7 @@ librgw_la_SOURCES =  \
 	rgw/rgw_rest_client.cc \
 	rgw/rgw_rest_conn.cc \
 	rgw/rgw_op.cc \
+	rgw/rgw_basic_types.cc \
 	rgw/rgw_common.cc \
 	rgw/rgw_cache.cc \
 	rgw/rgw_formats.cc \
@@ -130,6 +132,7 @@ noinst_HEADERS += \
 	rgw/rgw_client_io.h \
 	rgw/rgw_fcgi.h \
 	rgw/rgw_xml.h \
+	rgw/rgw_basic_types.h \
 	rgw/rgw_cache.h \
 	rgw/rgw_common.h \
 	rgw/rgw_cors.h \

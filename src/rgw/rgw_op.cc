@@ -320,7 +320,7 @@ static int read_policy(RGWRados *store, struct req_state *s,
     ret = get_policy_from_attr(s->cct, store, s->obj_ctx, bucket_info, bucket_attrs, &bucket_policy, no_obj);
     if (ret < 0)
       return ret;
-    string& owner = bucket_policy.get_owner().get_id();
+    rgw_user& owner = bucket_policy.get_owner().get_id();
     if (!s->system_request && owner.compare(s->user.user_id) != 0 &&
         !bucket_policy.verify_permission(s->user.user_id, s->perm_mask, RGW_PERM_READ))
       ret = -EACCES;
@@ -356,6 +356,9 @@ static int rgw_build_policies(RGWRados *store, struct req_state *s, bool only_bu
     }
   }
 
+  // XXX do something about the conflict with the '/' syntax below
+  string tenant_name = "";
+
   s->bucket_acl = new RGWAccessControlPolicy(s->cct);
 
   if (s->copy_source) { /* check if copy source is within the current domain */
@@ -370,7 +373,7 @@ static int rgw_build_policies(RGWRados *store, struct req_state *s, bool only_bu
 
     RGWBucketInfo source_info;
 
-    ret = store->get_bucket_info(obj_ctx, copy_source_str, source_info, NULL);
+    ret = store->get_bucket_info(obj_ctx, tenant_name, copy_source_str, source_info, NULL);
     if (ret == 0) {
       string& region = source_info.region;
       s->local_source = store->region.equals(region);
@@ -380,7 +383,7 @@ static int rgw_build_policies(RGWRados *store, struct req_state *s, bool only_bu
   if (!s->bucket_name_str.empty()) {
     s->bucket_exists = true;
     if (s->bucket_instance_id.empty()) {
-      ret = store->get_bucket_info(obj_ctx, s->bucket_name_str, s->bucket_info, NULL, &s->bucket_attrs);
+      ret = store->get_bucket_info(obj_ctx, tenant_name, s->bucket_name_str, s->bucket_info, NULL, &s->bucket_attrs);
     } else {
       ret = store->get_bucket_instance_info(obj_ctx, s->bucket_instance_id, s->bucket_info, NULL, &s->bucket_attrs);
     }
@@ -825,7 +828,7 @@ int RGWGetObj::handle_user_manifest(const char *prefix)
     RGWBucketInfo bucket_info;
     map<string, bufferlist> bucket_attrs;
     RGWObjectCtx obj_ctx(store);
-    int r = store->get_bucket_info(obj_ctx, bucket_name, bucket_info, NULL, &bucket_attrs);
+    int r = store->get_bucket_info(obj_ctx, s->tenant, bucket_name, bucket_info, NULL, &bucket_attrs);
     if (r < 0) {
       ldout(s->cct, 0) << "could not get bucket info for bucket=" << bucket_name << dendl;
       return r;
@@ -1065,7 +1068,8 @@ void RGWListBuckets::execute()
   }
 
   if (supports_account_metadata()) {
-    ret = rgw_get_user_attrs_by_uid(store, s->user.user_id, attrs);
+    /* XXX tenant needed? */
+    ret = rgw_get_user_attrs_by_uid(store, s->user.user_id.id, attrs);
     if (ret < 0) {
       goto send_end;
     }
@@ -1356,8 +1360,9 @@ static int forward_request_to_master(struct req_state *s, obj_version *objv, RGW
   }
   ldout(s->cct, 0) << "sending create_bucket request to master region" << dendl;
   bufferlist response;
+  string uid_str = s->user.user_id.to_str();
 #define MAX_REST_RESPONSE (128 * 1024) // we expect a very small response
-  int ret = store->rest_master_conn->forward(s->user.user_id, s->info, objv, MAX_REST_RESPONSE, &in_data, &response);
+  int ret = store->rest_master_conn->forward(uid_str, s->info, objv, MAX_REST_RESPONSE, &in_data, &response);
   if (ret < 0)
     return ret;
 
@@ -1399,7 +1404,7 @@ void RGWCreateBucket::execute()
 
   /* we need to make sure we read bucket info, it's not read before for this specific request */
   RGWObjectCtx& obj_ctx = *static_cast<RGWObjectCtx *>(s->obj_ctx);
-  ret = store->get_bucket_info(obj_ctx, s->bucket_name_str, s->bucket_info, NULL, &s->bucket_attrs);
+  ret = store->get_bucket_info(obj_ctx, s->tenant, s->bucket_name_str, s->bucket_info, NULL, &s->bucket_attrs);
   if (ret < 0 && ret != -ENOENT)
     return;
   s->bucket_exists = (ret != -ENOENT);
@@ -1454,7 +1459,9 @@ void RGWCreateBucket::execute()
   if (s->bucket_exists) {
     string selected_placement_rule;
     rgw_bucket bucket;
-    ret = store->select_bucket_placement(s->user, region_name, placement_rule, s->bucket_name_str, bucket, &selected_placement_rule);
+    ret = store->select_bucket_placement(s->user, region_name, placement_rule,
+                                         s->user.user_id.tenant, s->bucket_name_str, bucket,
+                                         &selected_placement_rule);
     if (selected_placement_rule != s->bucket_info.placement_rule) {
       ret = -EEXIST;
       return;
@@ -1497,7 +1504,7 @@ void RGWCreateBucket::execute()
 
   ret = rgw_link_bucket(store, s->user.user_id, s->bucket, info.creation_time, false);
   if (ret && !existed && ret != -EEXIST) {  /* if it exists (or previously existed), don't remove it! */
-    ret = rgw_unlink_bucket(store, s->user.user_id, s->bucket.name);
+    ret = rgw_unlink_bucket(store, s->user.user_id, s->bucket.tenant, s->bucket.name);
     if (ret < 0) {
       ldout(s->cct, 0) << "WARNING: failed to unlink bucket: ret=" << ret << dendl;
     }
@@ -1549,7 +1556,7 @@ void RGWDeleteBucket::execute()
   ret = store->delete_bucket(s->bucket, ot);
 
   if (ret == 0) {
-    ret = rgw_unlink_bucket(store, s->user.user_id, s->bucket.name, false);
+    ret = rgw_unlink_bucket(store, s->user.user_id, s->bucket.tenant, s->bucket.name, false);
     if (ret < 0) {
       ldout(s->cct, 0) << "WARNING: failed to unlink bucket: ret=" << ret << dendl;
     }
@@ -2283,7 +2290,8 @@ void RGWPutMetadataAccount::execute()
   }
 
   rgw_get_request_metadata(s->cct, s->info, attrs, false);
-  rgw_get_user_attrs_by_uid(store, s->user.user_id, orig_attrs, &acct_op_tracker);
+  /* XXX tenant needed? */
+  rgw_get_user_attrs_by_uid(store, s->user.user_id.id, orig_attrs, &acct_op_tracker);
   prepare_add_del_attrs(orig_attrs, rmattr_names, attrs, rmattrs);
   populate_with_generic_attrs(s, attrs);
 
@@ -2297,7 +2305,8 @@ void RGWPutMetadataAccount::execute()
     }
   }
 
-  ret = rgw_store_user_attrs(store, s->user.user_id, attrs, &rmattrs, &acct_op_tracker);
+  /* XXX tenant needed? */
+  ret = rgw_store_user_attrs(store, s->user.user_id.id, attrs, &rmattrs, &acct_op_tracker);
   if (ret < 0) {
     return;
   }
@@ -2512,7 +2521,8 @@ int RGWCopyObj::verify_permission()
 
   RGWObjectCtx& obj_ctx = *static_cast<RGWObjectCtx *>(s->obj_ctx);
 
-  ret = store->get_bucket_info(obj_ctx, src_bucket_name, src_bucket_info, NULL, &src_attrs);
+  // XXX Using the requestor's tenant improperly
+  ret = store->get_bucket_info(obj_ctx, s->tenant, src_bucket_name, src_bucket_info, NULL, &src_attrs);
   if (ret < 0)
     return ret;
 
@@ -2541,7 +2551,8 @@ int RGWCopyObj::verify_permission()
     dest_bucket_info = src_bucket_info;
     dest_attrs = src_attrs;
   } else {
-    ret = store->get_bucket_info(obj_ctx, dest_bucket_name, dest_bucket_info, NULL, &dest_attrs);
+    // XXX Using the requestor's tenant improperly
+    ret = store->get_bucket_info(obj_ctx, s->tenant, dest_bucket_name, dest_bucket_info, NULL, &dest_attrs);
     if (ret < 0)
       return ret;
   }

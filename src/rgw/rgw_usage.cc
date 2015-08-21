@@ -30,7 +30,7 @@ static void dump_usage_categories_info(Formatter *formatter, const rgw_usage_log
   formatter->close_section(); // categories
 }
 
-int RGWUsage::show(RGWRados *store, string& uid, uint64_t start_epoch,
+int RGWUsage::show(RGWRados *store, rgw_user& uid, uint64_t start_epoch,
 		   uint64_t end_epoch, bool show_log_entries, bool show_log_sum,
 		   map<string, bool> *categories,
 		   RGWFormatterFlusher& flusher)
@@ -135,7 +135,7 @@ int RGWUsage::show(RGWRados *store, string& uid, uint64_t start_epoch,
   return 0;
 }
 
-int RGWUsage::trim(RGWRados *store, string& uid, uint64_t start_epoch,
+int RGWUsage::trim(RGWRados *store, rgw_user& uid, uint64_t start_epoch,
 		   uint64_t end_epoch)
 {
   return store->trim_usage(uid, start_epoch, end_epoch);

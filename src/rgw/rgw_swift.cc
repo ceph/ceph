@@ -545,6 +545,8 @@ int authenticate_temp_url(RGWRados *store, req_state *s)
   if (s->bucket_name_str.empty())
     return -EPERM;
 
+  string tenant_name = "";  /* XXX Swift TempUrl bucket */
+
   if (s->object.empty())
     return -EPERM;
 
@@ -559,7 +561,7 @@ int authenticate_temp_url(RGWRados *store, req_state *s)
   /* need to get user info of bucket owner */
   RGWBucketInfo bucket_info;
 
-  int ret = store->get_bucket_info(*static_cast<RGWObjectCtx *>(s->obj_ctx), s->bucket_name_str, bucket_info, NULL);
+  int ret = store->get_bucket_info(*static_cast<RGWObjectCtx *>(s->obj_ctx), tenant_name, s->bucket_name_str, bucket_info, NULL);
   if (ret < 0)
     return -EPERM;
 
@@ -684,7 +686,7 @@ bool RGWSwift::do_verify_swift_token(RGWRados *store, req_state *s)
     return false;
   }
 
-  s->swift_user = info.user;
+  s->swift_user = info.user.to_str();
   s->swift_groups = info.auth_groups;
 
   string swift_user = s->swift_user;

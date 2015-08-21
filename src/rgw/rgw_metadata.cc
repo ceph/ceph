@@ -273,10 +273,6 @@ RGWMetadataHandler *RGWMetadataManager::get_handler(const char *type)
 void RGWMetadataManager::parse_metadata_key(const string& metadata_key, string& type, string& entry)
 {
   int pos = metadata_key.find(':');
-  if (pos < 0) {
-    type = metadata_key;
-  }
-
   type = metadata_key.substr(0, pos);
   entry = metadata_key.substr(pos + 1);
 }

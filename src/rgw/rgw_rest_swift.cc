@@ -356,7 +356,8 @@ void RGWStatAccount_ObjStore_SWIFT::execute()
 {
   RGWStatAccount_ObjStore::execute();
 
-  ret = rgw_get_user_attrs_by_uid(store, s->user.user_id, attrs);
+  /* XXX tenant needed? */
+  ret = rgw_get_user_attrs_by_uid(store, s->user.user_id.id, attrs);
 }
 
 void RGWStatAccount_ObjStore_SWIFT::send_response()
@@ -814,7 +815,7 @@ void RGWCopyObj_ObjStore_SWIFT::dump_copy_info()
 
   /* Dump X-Copied-From-Account */
   string account_name;
-  url_encode(s->user.user_id, account_name);
+  url_encode(s->user.user_id.id, account_name); // XXX tenant
   s->cio->print("X-Copied-From-Account: %s\r\n", account_name.c_str());
 
   /* Dump X-Copied-From-Last-Modified. */
