@@ -10594,7 +10594,7 @@ void ReplicatedPG::hit_set_remove_all()
     // Once we hit a degraded object just skip
     if (is_degraded_or_backfilling_object(aoid))
       return;
-    if (scrubber.write_blocked_by_scrub(aoid))
+    if (scrubber.write_blocked_by_scrub(aoid, get_sort_bitwise()))
       return;
   }
 
