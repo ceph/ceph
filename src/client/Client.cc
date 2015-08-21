@@ -4584,6 +4584,7 @@ int Client::check_permissions(Inode *in, int flags, int uid, int gid)
     pw = getpwuid(uid);
     if (pw == NULL) {
       ldout(cct, 3) << "getting user entry failed" << dendl;
+      free(sgids); 
       return -EACCES;
     }
     while (1) {
