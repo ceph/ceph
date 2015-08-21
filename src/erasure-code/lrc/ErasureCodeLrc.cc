@@ -228,6 +228,7 @@ int ErasureCodeLrc::layers_init(ostream *ss)
     if (layer.profile.find("directory") == layer.profile.end())
       layer.profile["directory"] = directory;
     int err = registry.factory(layer.profile["plugin"],
+			       directory,
 			       layer.profile,
 			       &layer.erasure_code,
 			       ss);

@@ -188,12 +188,12 @@ void usage()
 
 int preload_erasure_code()
 {
-  string directory = g_conf->osd_pool_default_erasure_code_directory;
   string plugins = g_conf->osd_erasure_code_plugins;
   stringstream ss;
-  int r = ErasureCodePluginRegistry::instance().preload(plugins,
-							directory,
-							&ss);
+  int r = ErasureCodePluginRegistry::instance().preload(
+    plugins,
+    g_conf->erasure_code_dir,
+    &ss);
   if (r)
     derr << ss.str() << dendl;
   else

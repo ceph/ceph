@@ -74,8 +74,9 @@ public:
   };
   vector<Step> ruleset_steps;
 
-  ErasureCodeLrc() :
-    chunk_count(0), data_chunk_count(0), ruleset_root("default")
+  ErasureCodeLrc(const std::string &dir)
+    : directory(dir),
+      chunk_count(0), data_chunk_count(0), ruleset_root("default")
   {
     ruleset_steps.push_back(Step("chooseleaf", "host", 0));
   }

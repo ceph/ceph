@@ -288,6 +288,7 @@ PGBackend *PGBackend::build_pg_backend(
     stringstream ss;
     ceph::ErasureCodePluginRegistry::instance().factory(
       profile.find("plugin")->second,
+      g_conf->erasure_code_dir,
       profile,
       &ec_impl,
       &ss);

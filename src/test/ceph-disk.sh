@@ -46,7 +46,7 @@ CEPH_ARGS+=" --osd-failsafe-full-ratio=.99"
 CEPH_ARGS+=" --mon-host=$MONA"
 CEPH_ARGS+=" --log-file=$DIR/\$name.log"
 CEPH_ARGS+=" --pid-file=$DIR/\$name.pidfile"
-CEPH_ARGS+=" --osd-pool-default-erasure-code-directory=.libs"
+CEPH_ARGS+=" --erasure-code-dir=.libs"
 CEPH_ARGS+=" --auth-supported=none"
 CEPH_ARGS+=" --osd-journal-size=100"
 CEPH_DISK_ARGS=

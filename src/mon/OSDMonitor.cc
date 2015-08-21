@@ -3994,7 +3994,9 @@ int OSDMonitor::normalize_profile(ErasureCodeProfile &profile, ostream *ss)
   ErasureCodeInterfaceRef erasure_code;
   ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
   ErasureCodeProfile::const_iterator plugin = profile.find("plugin");
-  int err = instance.factory(plugin->second, profile, &erasure_code, ss);
+  int err = instance.factory(plugin->second,
+			     g_conf->erasure_code_dir,
+			     profile, &erasure_code, ss);
   if (err)
     return err;
   return erasure_code->init(profile, ss);
@@ -4054,7 +4056,9 @@ int OSDMonitor::get_erasure_code(const string &erasure_code_profile,
     return -EINVAL;
   }
   ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
-  return instance.factory(plugin->second, profile, erasure_code, ss);
+  return instance.factory(plugin->second,
+			  g_conf->erasure_code_dir,
+			  profile, erasure_code, ss);
 }
 
 int OSDMonitor::check_cluster_features(uint64_t features,
@@ -4175,7 +4179,7 @@ int OSDMonitor::parse_erasure_code_profile(const vector<string> &erasure_code_pr
 
   if ((*erasure_code_profile_map).count("directory") == 0)
     (*erasure_code_profile_map)["directory"] =
-      g_conf->osd_pool_default_erasure_code_directory;
+      g_conf->erasure_code_dir;
 
   return 0;
 }

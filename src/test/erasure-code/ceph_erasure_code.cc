@@ -128,7 +128,8 @@ int ErasureCodeCommand::plugin_exists() {
   ErasureCodePlugin *plugin = 0;
   Mutex::Locker l(instance.lock);
   stringstream ss;
-  int code = instance.load(vm["plugin_exists"].as<string>(), profile["directory"], &plugin, &ss);
+  int code = instance.load(vm["plugin_exists"].as<string>(),
+			   g_conf->erasure_code_dir, &plugin, &ss);
   if (code)
     cerr << ss.str() << endl;
   return code;
@@ -144,6 +145,7 @@ int ErasureCodeCommand::display_information() {
   }
 
   int code = instance.factory(profile["plugin"],
+			      g_conf->erasure_code_dir,
 			      profile,
 			      &erasure_code, &cerr);
   if (code)
