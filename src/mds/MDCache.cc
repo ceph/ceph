@@ -6290,7 +6290,7 @@ bool MDCache::trim(int max, int count)
     CDir *subtree = *s;
     if (subtree->inode->is_mdsdir()) {
       mds_rank_t owner = mds_rank_t(MDS_INO_MDSDIR_OWNER(subtree->inode->ino()));
-      if (owner == mds->get_nodeid()) {
+      if (owner == mds->get_nodeid() || !mds->mdsmap->is_up(owner)) {
         continue;
       }
 
