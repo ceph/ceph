@@ -685,6 +685,15 @@ namespace librbd {
     return r;
   }
 
+  int Image::snap_rename(const char *srcname, const char *dstname)
+  {
+    ImageCtx *ictx = (ImageCtx *)ctx;
+    tracepoint(librbd, snap_rename_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only, srcname, dstname);
+    int r = librbd::snap_rename(ictx, srcname, dstname);
+    tracepoint(librbd, snap_rename_exit, r);
+    return r;
+  }
+
   int Image::snap_rollback_with_progress(const char *snap_name,
 					 ProgressContext& prog_ctx)
   {
@@ -1443,6 +1452,15 @@ extern "C" int rbd_snap_create(rbd_image_t image, const char *snap_name)
   tracepoint(librbd, snap_create_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only, snap_name);
   int r = librbd::snap_create(ictx, snap_name);
   tracepoint(librbd, snap_create_exit, r);
+  return r;
+}
+
+extern "C" int rbd_snap_rename(rbd_image_t image, const char *srcname, const char *dstname)
+{
+  librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
+  tracepoint(librbd, snap_rename_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only, srcname, dstname);
+  int r = librbd::snap_rename(ictx, srcname, dstname);
+  tracepoint(librbd, snap_rename_exit, r);
   return r;
 }
 

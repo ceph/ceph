@@ -496,6 +496,16 @@ int ImageWatcher::notify_snap_create(const std::string &snap_name) {
   return notify_lock_owner(bl);
 }
 
+int ImageWatcher::notify_snap_rename(const snapid_t &src_snap_id,
+				     const std::string &dst_snap_name) {
+  assert(m_image_ctx.owner_lock.is_locked());
+  assert(!is_lock_owner());
+
+  bufferlist bl;
+  ::encode(NotifyMessage(SnapRenamePayload(src_snap_id, dst_snap_name)), bl);
+
+  return notify_lock_owner(bl);
+}
 int ImageWatcher::notify_snap_remove(const std::string &snap_name) {
   assert(m_image_ctx.owner_lock.is_locked());
   assert(!is_lock_owner());
