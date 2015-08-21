@@ -136,6 +136,22 @@ public:
 };
 
 
+class RGWClientIOEnginePrefixer : public RGWClientIOEngineDecorator {
+protected:
+  const std::string prefix;
+  RGWEnv env;
+
+public:
+  RGWClientIOEnginePrefixer(std::shared_ptr<RGWClientIOEngine> engine,
+                            std::string const pfx)
+    : RGWClientIOEngineDecorator(engine),
+      prefix(pfx) {
+  }
+
+  virtual RGWEnv& get_env() override;
+};
+
+
 class RGWClientIO {
   bool account;
 
@@ -214,6 +230,9 @@ protected:
    * setting HTTP status or not and we need to reorder operations. */
   bool needs_reordering = false;
 
+  /* Prepend each requested URL with this prefix. */
+  std::string prefix;
+
   /* Last stage in pipeline. */
   std::shared_ptr<RGWClientIOEngine> final_engine;
 
@@ -228,8 +247,18 @@ public:
     return prev;
   }
 
+  string use_prefix(const string s) {
+    const auto prev = prefix;
+    prefix = s;
+    return prev;
+  }
+
   RGWClientIO getResult() {
     std::shared_ptr<RGWClientIOEngine> stage = final_engine;
+
+    if (prefix.length()) {
+      stage = std::make_shared<RGWClientIOEnginePrefixer>(stage, prefix);
+    }
 
     if (needs_reordering) {
       stage = std::make_shared<RGWClientIOEngineReorderer>(stage);

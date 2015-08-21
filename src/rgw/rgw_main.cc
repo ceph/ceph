@@ -173,6 +173,7 @@ struct RGWProcessEnv {
   RGWREST *rest;
   OpsLogSocket *olog;
   int port;
+  string prefix;
 };
 
 class RGWProcess {
@@ -726,6 +727,7 @@ static int civetweb_callback(struct mg_connection *conn) {
   RGWClientIO::Builder cio_builder(
           std::make_shared<RGWMongoose>(conn, pe->port));
   cio_builder.set_reordering(true);
+  cio_builder.use_prefix(pe->prefix);
   RGWClientIO client_io = cio_builder.getResult();
 
   int ret = process_request(store, rest, req, client_io, olog);
@@ -985,6 +987,8 @@ public:
     set_conf_default(conf_map, "num_threads", thread_pool_buf);
     set_conf_default(conf_map, "decode_url", "no");
 
+    conf_map.erase("prefix");
+
     const char *options[conf_map.size() * 2 + 1];
     int i = 0;
     for (map<string, string>::iterator iter = conf_map.begin(); iter != conf_map.end(); ++iter) {
@@ -1191,23 +1195,25 @@ int main(int argc, const char **argv)
   for (multimap<string, RGWFrontendConfig *>::iterator fiter = fe_map.begin(); fiter != fe_map.end(); ++fiter) {
     RGWFrontendConfig *config = fiter->second;
     string framework = config->get_framework();
+    string prefix;
+    config->get_val("prefix", "", &prefix);
     RGWFrontend *fe;
     if (framework == "fastcgi" || framework == "fcgi") {
-      RGWProcessEnv fcgi_pe = { store, &rest, olog, 0 };
+      RGWProcessEnv fcgi_pe = { store, &rest, olog, 0, prefix };
 
       fe = new RGWFCGXFrontend(fcgi_pe, config);
     } else if (framework == "civetweb" || framework == "mongoose") {
       int port;
       config->get_val("port", 80, &port);
 
-      RGWProcessEnv env = { store, &rest, olog, port };
+      RGWProcessEnv env = { store, &rest, olog, port, prefix };
 
       fe = new RGWMongooseFrontend(env, config);
     } else if (framework == "loadgen") {
       int port;
       config->get_val("port", 80, &port);
 
-      RGWProcessEnv env = { store, &rest, olog, port };
+      RGWProcessEnv env = { store, &rest, olog, port, prefix };
 
       fe = new RGWLoadGenFrontend(env, config);
     } else {

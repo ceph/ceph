@@ -196,3 +196,16 @@ int RGWClientIOEngineBufferAware::complete_request(RGWClientIO& controller)
 
   return RGWClientIOEngineDecorator::complete_request(controller);
 }
+
+
+RGWEnv& RGWClientIOEnginePrefixer::get_env()
+{
+  char remapped_uri[256];
+
+  env = RGWClientIOEngineDecorator::get_env();
+  snprintf(remapped_uri, sizeof(remapped_uri), "%s%s",
+          prefix.c_str(), env.get("REQUEST_URI"));
+  env.set("REQUEST_URI", remapped_uri);
+
+  return env;
+}
