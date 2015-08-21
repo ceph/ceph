@@ -35,7 +35,6 @@ public:
 		      ostream *ss) {
     ErasureCodeLrc *interface;
     interface = new ErasureCodeLrc(directory);
-    assert(profile.count("directory") != 0);
     int r = interface->init(profile, ss);
     if (r) {
       delete interface;

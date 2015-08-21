@@ -4177,10 +4177,6 @@ int OSDMonitor::parse_erasure_code_profile(const vector<string> &erasure_code_pr
   if (user_map.count("plugin") && user_map["plugin"] != default_plugin)
     (*erasure_code_profile_map) = user_map;
 
-  if ((*erasure_code_profile_map).count("directory") == 0)
-    (*erasure_code_profile_map)["directory"] =
-      g_conf->erasure_code_dir;
-
   return 0;
 }
 
