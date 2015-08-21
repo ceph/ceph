@@ -4451,24 +4451,32 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid,
   int r;
   r = prepare_pool_crush_ruleset(pool_type, erasure_code_profile,
 				 crush_ruleset_name, &crush_ruleset, ss);
-  if (r)
+  if (r) {
+    dout(10) << " prepare_pool_crush_ruleset returns " << r << dendl;
     return r;
+  }
   CrushWrapper newcrush;
   _get_pending_crush(newcrush);
   CrushTester tester(newcrush, *ss);
   r = tester.test_with_crushtool(g_conf->crushtool.c_str(),
 				 osdmap.get_max_osd(),
 				 g_conf->mon_lease);
-  if (r)
+  if (r) {
+    dout(10) << " tester.test_with_crushtool returns " << r << dendl;
     return r;
+  }
   unsigned size, min_size;
   r = prepare_pool_size(pool_type, erasure_code_profile, &size, &min_size, ss);
-  if (r)
+  if (r) {
+    dout(10) << " prepare_pool_size returns " << r << dendl;
     return r;
+  }
   uint32_t stripe_width = 0;
   r = prepare_pool_stripe_width(pool_type, erasure_code_profile, &stripe_width, ss);
-  if (r)
+  if (r) {
+    dout(10) << " prepare_pool_stripe_width returns " << r << dendl;
     return r;
+  }
 
   for (map<int64_t,string>::iterator p = pending_inc.new_pool_names.begin();
        p != pending_inc.new_pool_names.end();
