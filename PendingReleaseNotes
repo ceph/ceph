@@ -1,6 +1,10 @@
 v9.0.4
 ======
 
+* The on-disk format for the experimental KeyValueStore OSD backend has
+  changed.  You will need to remove any OSDs using that backend before you
+  upgrade any test clusters that use it.
+
 
 v9.0.3
 ======
