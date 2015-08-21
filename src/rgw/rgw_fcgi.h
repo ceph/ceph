@@ -10,22 +10,34 @@
 struct FCGX_Request;
 
 
-class RGWFCGX : public RGWClientIO
+class RGWFCGX : public RGWClientIOEngine
 {
   FCGX_Request *fcgx;
-protected:
-  void init_env(CephContext *cct);
-  int write_data(const char *buf, int len);
-  int read_data(char *buf, int len);
+  RGWEnv env;
 
-  int send_status(const char *status, const char *status_name);
-  int send_100_continue();
-  int complete_header();
-  int complete_request() { return 0; }
-  int send_content_length(uint64_t len);
 public:
   RGWFCGX(FCGX_Request *_fcgx) : fcgx(_fcgx) {}
-  void flush();
+
+  void init_env(CephContext *cct) override;
+  int write_data(const char *buf, int len) override;
+  int read_data(char *buf, int len) override;
+
+  int send_status(RGWClientIO& controller,
+                  const char *status,
+                  const char *status_name) override;
+  int send_100_continue(RGWClientIO& controller) override;
+  int complete_header(RGWClientIO& controller) override;
+  int send_content_length(RGWClientIO& controller,
+                          uint64_t len) override;
+  void flush(RGWClientIO& controller) override;
+
+  int complete_request(RGWClientIO& controller) override {
+    return 0;
+  }
+
+  RGWEnv& get_env() override {
+    return env;
+  }
 };
 
 
