@@ -2898,6 +2898,7 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
            ictx->aio_work_queue->writes_empty());
 
     ictx->cancel_async_requests();
+    ictx->clear_pending_completions();
     ictx->flush_async_operations();
     ictx->readahead.wait_for_pending();
 

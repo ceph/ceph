@@ -132,7 +132,7 @@ namespace librbd {
       int n = --ref;
       lock.Unlock();
       if (!n) {
-        if (event_notify) {
+        if (ictx && event_notify) {
           ictx->completed_reqs_lock.Lock();
           m_xlist_item.remove_myself();
           ictx->completed_reqs_lock.Unlock();
@@ -155,9 +155,9 @@ namespace librbd {
       }
     }
 
-    void enable_event_notify() {
+    void set_event_notify(bool s) {
       Mutex::Locker l(lock);
-      event_notify = true;
+      event_notify = s;
     }
 
     void *get_arg() {

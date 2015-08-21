@@ -261,6 +261,7 @@ namespace librbd {
 
     void open_journal();
     int close_journal(bool force);
+    void clear_pending_completions();
   };
 }
 
