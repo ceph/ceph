@@ -1512,7 +1512,7 @@ public:
     const pg_pool_t *pool,
     ObjectStore::Transaction *t) {
     coll_t target = coll_t(child);
-    PG::_create(*t, child);
+    PG::_create(*t, child, split_bits);
     t->split_collection(
       coll,
       split_bits,

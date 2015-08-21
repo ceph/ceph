@@ -444,7 +444,7 @@ void DeterministicOpSequence::_do_coll_create(coll_t cid, uint32_t pg_num, uint6
 {
   ObjectStore::Transaction t;
   note_txn(&t);
-  t.create_collection(cid);
+  t.create_collection(cid, 32);
   bufferlist hint;
   ::encode(pg_num, hint);
   ::encode(num_objs, hint);

@@ -343,6 +343,10 @@ struct pg_t {
    */
   unsigned get_split_bits(unsigned pg_num) const;
 
+  bool contains(int bits, const ghobject_t& oid) {
+    return oid.match(bits, ps());
+  }
+
   void encode(bufferlist& bl) const {
     __u8 v = 1;
     ::encode(v, bl);
@@ -600,6 +604,11 @@ public:
   void decode(bufferlist::iterator& bl);
 
   inline bool operator==(const coll_t& rhs) const {
+    // only compare type if meta
+    if (type != rhs.type)
+      return false;
+    if (type == TYPE_META)
+      return true;
     return type == rhs.type && pgid == rhs.pgid;
   }
   inline bool operator!=(const coll_t& rhs) const {

@@ -93,8 +93,8 @@ uint64_t do_run(ObjectStore *store, int attrsize, int numattrs,
   ObjectStore::Transaction t;
   map<coll_t, pair<set<string>, ObjectStore::Sequencer*> > collections;
   for (int i = 0; i < 3*THREADS; ++i) {
-    coll_t coll(spg_t(pg_t(i, run), shard_id_t::NO_SHARD));
-    t.create_collection(coll);
+    coll_t coll(spg_t(pg_t(0, i + 1000*run), shard_id_t::NO_SHARD));
+    t.create_collection(coll, 0);
     set<string> objects;
     for (int i = 0; i < transsize; ++i) {
       stringstream obj_str;
