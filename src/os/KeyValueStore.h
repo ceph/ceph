@@ -435,51 +435,10 @@ class KeyValueStore : public ObjectStore,
   Throttle throttle_ops, throttle_bytes;
   Finisher op_finisher;
 
-  ThreadPool op_tp;
-  struct OpWQ : public ThreadPool::WorkQueue<OpSequencer> {
-    KeyValueStore *store;
-    OpWQ(KeyValueStore *fs, time_t timeout, time_t suicide_timeout,
-         ThreadPool *tp) :
-      ThreadPool::WorkQueue<OpSequencer>("KeyValueStore::OpWQ",
-                                         timeout, suicide_timeout, tp),
-      store(fs) {}
-
-    bool _enqueue(OpSequencer *osr) {
-      store->op_queue.push_back(osr);
-      return true;
-    }
-    void _dequeue(OpSequencer *o) {
-      assert(0);
-    }
-    bool _empty() {
-      return store->op_queue.empty();
-    }
-    OpSequencer *_dequeue() {
-      if (store->op_queue.empty())
-	return NULL;
-      OpSequencer *osr = store->op_queue.front();
-      store->op_queue.pop_front();
-      return osr;
-    }
-    using ThreadPool::WorkQueue<OpSequencer>::_process;
-    void _process(OpSequencer *osr, ThreadPool::TPHandle &handle) {
-      store->_do_op(osr, handle);
-    }
-    void _process_finish(OpSequencer *osr) {
-      store->_finish_op(osr);
-    }
-    void _clear() {
-      assert(store->op_queue.empty());
-    }
-  } op_wq;
-
   Op *build_op(list<Transaction*>& tls, Context *ondisk, Context *onreadable,
                Context *onreadable_sync, TrackedOpRef osd_op);
-  void queue_op(OpSequencer *osr, Op *o);
   void op_queue_reserve_throttle(Op *o, ThreadPool::TPHandle *handle = NULL);
-  void _do_op(OpSequencer *osr, ThreadPool::TPHandle &handle);
   void op_queue_release_throttle(Op *o);
-  void _finish_op(OpSequencer *osr);
 
   PerfCounters *perf_logger;
 
