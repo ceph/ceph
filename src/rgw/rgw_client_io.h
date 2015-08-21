@@ -31,6 +31,62 @@ public:
 };
 
 
+class RGWClientIOEngineDecorator : public RGWClientIOEngine {
+  std::shared_ptr<RGWClientIOEngine> decorated;
+
+public:
+  RGWClientIOEngineDecorator(std::shared_ptr<RGWClientIOEngine> impl)
+    : decorated(impl) {
+  }
+
+  /* A lot of wrappers */
+  virtual void init_env(CephContext *cct) override {
+    return decorated->init_env(cct);
+  }
+
+  virtual int write_data(const char * const buf,
+                         const int len) override {
+    return decorated->write_data(buf, len);
+  }
+
+  virtual int read_data(char * const buf,
+                        const int max) override {
+    return decorated->read_data(buf, max);
+  }
+
+  virtual void flush(RGWClientIO& controller) {
+    return decorated->flush(controller);
+  }
+
+  virtual int send_status(RGWClientIO& controller,
+                          const char * const status,
+                          const char * const status_name) override {
+    return decorated->send_status(controller, status, status_name);
+  }
+
+  virtual int send_100_continue(RGWClientIO& controller) override {
+    return decorated->send_100_continue(controller);
+  }
+
+  virtual int complete_header(RGWClientIO& controller) override {
+    return decorated->complete_header(controller);
+  }
+
+  virtual int complete_request(RGWClientIO& controller) override {
+    return decorated->complete_request(controller);
+  }
+
+  virtual int send_content_length(RGWClientIO& controller,
+                                  const uint64_t len) override {
+    return decorated->send_content_length(controller, len);
+  }
+
+  virtual RGWEnv& get_env() override {
+    return decorated->get_env();
+  }
+};
+
+
 class RGWClientIO {
   bool account;
 
