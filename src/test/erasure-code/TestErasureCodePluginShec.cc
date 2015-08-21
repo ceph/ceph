@@ -31,7 +31,6 @@ TEST(ErasureCodePlugin, factory)
 {
   ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
   map<std::string,std::string> profile;
-  profile["directory"] = ".libs";
   {
     ErasureCodeInterfaceRef erasure_code;
     EXPECT_FALSE(erasure_code);
@@ -48,7 +47,6 @@ TEST(ErasureCodePlugin, factory)
   };
   for(const char **technique = techniques; *technique; technique++) {
     ErasureCodeInterfaceRef erasure_code;
-    profile["directory"] = ".libs";
     profile["technique"] = *technique;
     EXPECT_FALSE(erasure_code);
     EXPECT_EQ(0, instance.factory("shec",
@@ -76,7 +74,6 @@ TEST(ErasureCodePlugin, select)
   // load test plugins instead of actual plugins to assert the desired side effect
   // happens
   profile["shec-name"] = "test_shec";
-  profile["directory"] = ".libs";
   profile["technique"] = "multiple";
 
   // all features are available, load the SSE4 plugin
@@ -195,7 +192,6 @@ TEST(ErasureCodePlugin, sse)
 
   ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
   map<std::string,std::string> profile;
-  profile["directory"] = ".libs";
   profile["technique"] = "multiple";
   profile["k"] = "2";
   profile["m"] = "1";

@@ -49,7 +49,6 @@ TEST(ErasureCodeShec, init_1)
   ErasureCodeProfile *profile = new ErasureCodeProfile();
   (*profile)["plugin"] = "shec";
   (*profile)["technique"] = "";
-  (*profile)["directory"] = "/usr/lib64/ceph/erasure-code";
   (*profile)["ruleset-failure-domain"] = "osd";
   (*profile)["k"] = "4";
   (*profile)["m"] = "3";
@@ -249,7 +248,6 @@ TEST(ErasureCodeShec, init_8)
 				  ErasureCodeShec::MULTIPLE);
   ErasureCodeProfile *profile = new ErasureCodeProfile();
   (*profile)["plugin"] = "shec";
-  (*profile)["directory"] = "/usr/lib64/";	//unexpected value
   (*profile)["technique"] = "";
   (*profile)["ruleset-failure-domain"] = "osd";
   (*profile)["k"] = "4";

@@ -29,7 +29,6 @@ TEST(ErasureCodePlugin, factory)
 {
   ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
   ErasureCodeProfile profile;
-  profile["directory"] = ".libs";
   profile["mapping"] = "DD_";
   profile["layers"] = "[ [ \"DDc\", \"\" ] ]";
   ErasureCodeInterfaceRef erasure_code;
