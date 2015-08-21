@@ -139,8 +139,12 @@ MDSDaemon::MDSDaemon(const std::string &n, Messenger *m, MonClient *mc) :
 MDSDaemon::~MDSDaemon() {
   Mutex::Locker lock(mds_lock);
 
-  if (mds_rank) {delete mds_rank ; mds_rank = NULL; }
-  if (objecter) {delete objecter ; objecter = NULL; }
+  delete mds_rank; 
+  mds_rank = NULL; 
+  delete objecter; 
+  objecter = NULL;
+  delete mdsmap;
+  mdsmap = NULL;
 
   delete authorize_handler_service_registry;
   delete authorize_handler_cluster_registry;
