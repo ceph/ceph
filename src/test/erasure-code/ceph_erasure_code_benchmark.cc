@@ -155,7 +155,9 @@ int ErasureCodeBench::encode()
   ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
   ErasureCodeInterfaceRef erasure_code;
   stringstream messages;
-  int code = instance.factory(plugin, profile, &erasure_code, &messages);
+  int code = instance.factory(plugin,
+			      g_conf->erasure_code_dir,
+			      profile, &erasure_code, &messages);
   if (code) {
     cerr << messages.str() << endl;
     return code;
@@ -257,7 +259,9 @@ int ErasureCodeBench::decode()
   ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
   ErasureCodeInterfaceRef erasure_code;
   stringstream messages;
-  int code = instance.factory(plugin, profile, &erasure_code, &messages);
+  int code = instance.factory(plugin,
+			      g_conf->erasure_code_dir,
+			      profile, &erasure_code, &messages);
   if (code) {
     cerr << messages.str() << endl;
     return code;
