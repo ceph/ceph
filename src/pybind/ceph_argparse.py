@@ -666,7 +666,7 @@ def parse_funcsig(sig):
     return newsig
 
 
-def parse_json_funcsigs(s, consumer):
+def parse_json_funcsigs(s, consumer, readonly=False):
     """
     A function signature is mostly an array of argdesc; it's represented
     in JSON as
@@ -695,7 +695,8 @@ def parse_json_funcsigs(s, consumer):
     the cluster state perspective), and 'avail' as a hint for
     whether the command should be advertised by CLI, REST, or both.
     If avail does not contain 'consumer', don't include the command
-    in the returned dict.
+    in the returned dict. Optionally filter out wx commands if
+    'readonly' is True.
     """
     try:
         overall = json.loads(s)
@@ -710,6 +711,10 @@ def parse_json_funcsigs(s, consumer):
         # check 'avail' and possibly ignore this command
         if 'avail' in cmd:
             if consumer not in cmd['avail']:
+                continue
+        # filter out w/x cmds if readonly
+        if readonly and 'perm' in cmd:
+            if 'w' in cmd['perm'] or 'x' in cmd['perm']:
                 continue
         # rewrite the 'sig' item with the argdesc-ized version, and...
         cmd['sig'] = parse_funcsig(cmd['sig'])

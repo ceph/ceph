@@ -34,6 +34,7 @@ def parse_args():
     parser.add_argument('--cluster', help='Ceph cluster name')
     parser.add_argument('-n', '--name', help='Ceph client name')
     parser.add_argument('-i', '--id', help='Ceph client id')
+    parser.add_argument('--readonly', action='store_true', help='Only allow readonly commands')
 
     return parser.parse_known_args()
 
@@ -56,6 +57,7 @@ app = ceph_rest_api.generate_app(
     parsed_args.cluster,
     parsed_args.name,
     parsed_args.id,
+    parsed_args.readonly,
     rest,
 )
 

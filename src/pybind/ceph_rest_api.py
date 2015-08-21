@@ -64,7 +64,7 @@ def find_up_osd(app):
 METHOD_DICT = {'r': ['GET'], 'w': ['PUT', 'DELETE']}
 
 
-def api_setup(app, conf, cluster, clientname, clientid, args):
+def api_setup(app, conf, cluster, clientname, clientid, readonly, args):
     '''
     This is done globally, and cluster connection kept open for
     the lifetime of the daemon.  librados should assure that even
@@ -84,7 +84,7 @@ def api_setup(app, conf, cluster, clientname, clientid, args):
             raise EnvironmentError(ret, err)
 
         try:
-            sigdict = parse_json_funcsigs(outbuf, 'rest')
+            sigdict = parse_json_funcsigs(outbuf, 'rest', readonly=readonly)
         except Exception as e:
             err = "Can't parse command descriptions: {}".format(e)
             app.logger.error(err)
@@ -141,7 +141,7 @@ def api_setup(app, conf, cluster, clientname, clientid, args):
     app.ceph_sigdict = get_command_descriptions(app.ceph_cluster)
 
     osdid = find_up_osd(app)
-    if osdid is not None:
+    if osdid is not None and not readonly:
         osd_sigdict = get_command_descriptions(app.ceph_cluster,
                                                target=('osd', int(osdid)))
 
@@ -500,8 +500,8 @@ def handler(catchall_path=None, fmt=None, target=None):
 # Main entry point from wrapper/WSGI server: call with cmdline args,
 # get back the WSGI app entry point
 #
-def generate_app(conf, cluster, clientname, clientid, args):
-    addr, port = api_setup(app, conf, cluster, clientname, clientid, args)
+def generate_app(conf, cluster, clientname, clientid, readonly, args):
+    addr, port = api_setup(app, conf, cluster, clientname, clientid, readonly, args)
     app.ceph_addr = addr
     app.ceph_port = port
     return app
