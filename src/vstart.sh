@@ -384,7 +384,7 @@ if [ "$start_mon" -eq 1 ]; then
         mon osd full ratio = .99
         mon data avail warn = 10
         mon data avail crit = 1
-        osd pool default erasure code directory = $EC_PATH
+        erasure code dir = $EC_PATH
         osd pool default erasure code profile = plugin=jerasure technique=reed_sol_van k=2 m=1 ruleset-failure-domain=osd
         rgw frontends = fastcgi, civetweb port=$CEPH_RGW_PORT
         rgw dns name = localhost
