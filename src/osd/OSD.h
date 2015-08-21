@@ -389,6 +389,7 @@ public:
   OSD *osd;
   CephContext *cct;
   SharedPtrRegistry<spg_t, ObjectStore::Sequencer> osr_registry;
+  ceph::shared_ptr<ObjectStore::Sequencer> meta_osr;
   SharedPtrRegistry<spg_t, DeletingState> deleting_pgs;
   const int whoami;
   ObjectStore *&store;

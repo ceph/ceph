@@ -73,7 +73,7 @@ int RocksDBStore::tryInterpret(const string key, const string val, rocksdb::Opti
 int RocksDBStore::ParseOptionsFromString(const string opt_str, rocksdb::Options &opt)
 {
   map<string, string> str_map;
-  int r = get_str_map(opt_str, "\n;", &str_map);
+  int r = get_str_map(opt_str, ",\n;", &str_map);
   if (r < 0)
     return r;
   map<string, string>::iterator it;
@@ -88,6 +88,8 @@ int RocksDBStore::ParseOptionsFromString(const string opt_str, rocksdb::Options 
 	return -EINVAL;
       }
     }
+    lgeneric_dout(cct, 0) << " set rocksdb option " << it->first
+			  << " = " << it->second << dendl;
   }
   return 0;
 }

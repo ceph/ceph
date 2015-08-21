@@ -23,6 +23,7 @@
 #endif
 
 #include <stdio.h>
+#include <sys/uio.h>
 
 #if defined(__linux__)	// For malloc(2).
 #include <malloc.h>
@@ -39,6 +40,7 @@
 #include <iosfwd>
 #include <iomanip>
 #include <list>
+#include <vector>
 #include <string>
 #include <exception>
 
@@ -485,6 +487,7 @@ public:
     int write_file(const char *fn, int mode=0644);
     int write_fd(int fd) const;
     int write_fd_zero_copy(int fd) const;
+    void prepare_iov(std::vector<iovec> *piov) const;
     uint32_t crc32c(uint32_t crc) const;
 	void invalidate_crc();
   };

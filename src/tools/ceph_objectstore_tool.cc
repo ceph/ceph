@@ -164,14 +164,12 @@ int action_on_all_objects_in_pg(ObjectStore *store, string pgidstr, action_on_ob
     if (r < 0)
       break;
   }
-  store->sync_and_flush();
   return r;
 }
 
 int action_on_all_objects_in_exact_pg(ObjectStore *store, coll_t coll, action_on_object_t &action, bool debug)
 {
   int r = _action_on_all_objects_in_pg(store, coll, action, debug);
-  store->sync_and_flush();
   return r;
 }
 
@@ -212,7 +210,6 @@ int _action_on_all_objects(ObjectStore *store, action_on_object_t &action, bool 
 int action_on_all_objects(ObjectStore *store, action_on_object_t &action, bool debug)
 {
   int r = _action_on_all_objects(store, action, debug);
-  store->sync_and_flush();
   return r;
 }
 
@@ -1343,7 +1340,8 @@ int ObjectStoreTool::do_import(ObjectStore *store, OSDSuperblock& sb,
 
   if (!dry_run) {
     ObjectStore::Transaction *t = new ObjectStore::Transaction;
-    PG::_create(*t, pgid);
+    PG::_create(*t, pgid,
+		pgid.get_split_bits(curmap.get_pg_pool(pgid.pool())->get_pg_num()));
     PG::_init(*t, pgid, NULL);
 
     // mark this coll for removal until we're done

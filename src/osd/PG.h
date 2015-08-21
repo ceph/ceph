@@ -2148,7 +2148,7 @@ public:
   // pg on-disk state
   void do_pending_flush();
 
-  static void _create(ObjectStore::Transaction& t, spg_t pgid);
+  static void _create(ObjectStore::Transaction& t, spg_t pgid, int bits);
   static void _init(ObjectStore::Transaction& t,
 		    spg_t pgid, const pg_pool_t *pool);
 

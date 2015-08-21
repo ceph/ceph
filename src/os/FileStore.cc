@@ -426,6 +426,9 @@ int FileStore::lfn_link(coll_t c, coll_t newcid, const ghobject_t& o, const ghob
     if (r < 0)
       return -errno;
 
+    // make sure old fd for unlinked/overwritten file is gone
+    fdcache.clear(newoid);
+
     r = index_new->created(newoid, path_new->path());
     if (r < 0) {
       assert(!m_filestore_fail_eio || r != -EIO);
@@ -1694,6 +1697,8 @@ int FileStore::umount()
 {
   dout(5) << "umount " << basedir << dendl;
   
+  flush();
+  sync();
   do_force_sync();
 
   lock.Lock();
@@ -1924,7 +1929,7 @@ int FileStore::queue_transactions(Sequencer *posr, list<Transaction*> &tls,
   if (!posr)
     posr = &default_osr;
   if (posr->p) {
-    osr = static_cast<OpSequencer *>(posr->p);
+    osr = static_cast<OpSequencer *>(posr->p.get());
     dout(5) << "queue_transactions existing " << *osr << "/" << osr->parent << dendl; //<< " w/ q " << osr->q << dendl;
   } else {
     osr = new OpSequencer;
@@ -3763,6 +3768,7 @@ void FileStore::start_sync(Context *onsafe)
   Mutex::Locker l(lock);
   sync_waiters.push_back(onsafe);
   sync_cond.Signal();
+  force_sync = true;
   dout(10) << "start_sync" << dendl;
 }
 
@@ -3837,6 +3843,14 @@ void FileStore::sync_and_flush()
     sync();
   }
   dout(10) << "sync_and_flush done" << dendl;
+}
+
+int FileStore::flush_journal()
+{
+  dout(10) << __func__ << dendl;
+  sync_and_flush();
+  sync();
+  return 0;
 }
 
 int FileStore::snapshot(const string& name)

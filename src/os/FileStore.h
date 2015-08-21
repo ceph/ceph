@@ -304,7 +304,6 @@ private:
       Mutex::Locker l(qlock);
       uint64_t seq = 0;
       if (_get_max_uncompleted(&seq)) {
-	delete c;
 	return true;
       } else {
 	flush_commit_waiters.push_back(make_pair(seq, c));
@@ -573,11 +572,11 @@ public:
   void do_force_sync();
   void start_sync(Context *onsafe);
   void sync();
-  using JournalingObjectStore::sync;
   void _flush_op_queue();
   void flush();
   void sync_and_flush();
 
+  int flush_journal();
   int dump_journal(ostream& out);
 
   void set_fsid(uuid_d u) {

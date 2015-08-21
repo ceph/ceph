@@ -80,7 +80,7 @@ string hobject_t::to_str() const
   uint64_t poolid(pool);
   t += snprintf(t, end - t, "%.*llX", 16, (long long unsigned)poolid);
 
-  uint32_t revhash(get_filestore_key_u32());
+  uint32_t revhash(get_nibblewise_key_u32());
   t += snprintf(t, end - t, ".%.*X", 8, revhash);
 
   if (snap == CEPH_NOSNAP)
@@ -226,9 +226,9 @@ int cmp_nibblewise(const hobject_t& l, const hobject_t& r)
     return -1;
   if (l.pool > r.pool)
     return 1;
-  if (l.get_filestore_key() < r.get_filestore_key())
+  if (l.get_nibblewise_key() < r.get_nibblewise_key())
     return -1;
-  if (l.get_filestore_key() > r.get_filestore_key())
+  if (l.get_nibblewise_key() > r.get_nibblewise_key())
     return 1;
   if (l.nspace < r.nspace)
     return -1;
@@ -259,9 +259,9 @@ int cmp_bitwise(const hobject_t& l, const hobject_t& r)
     return -1;
   if (l.pool > r.pool)
     return 1;
-  if (l.get_bitreverse_key() < r.get_bitreverse_key())
+  if (l.get_bitwise_key() < r.get_bitwise_key())
     return -1;
-  if (l.get_bitreverse_key() > r.get_bitreverse_key())
+  if (l.get_bitwise_key() > r.get_bitwise_key())
     return 1;
   if (l.nspace < r.nspace)
     return -1;
@@ -341,7 +341,7 @@ void ghobject_t::decode(bufferlist::iterator& bl)
     max = false;
   }
   DECODE_FINISH(bl);
-  hobj.set_hash(hobj.get_hash()); //to call build_filestore_key_cache();
+  hobj.build_hash_cache();
 }
 
 void ghobject_t::decode(json_spirit::Value& v)
