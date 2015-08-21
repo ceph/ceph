@@ -1497,6 +1497,7 @@ int Objecter::calc_target(op_target_t *t, epoch_t *last_force_resend, bool any_c
   vector<int> up, acting;
   osdmap->pg_to_up_acting_osds(pgid, &up, &up_primary,
 			       &acting, &acting_primary);
+  unsigned prev_seed = ceph_stable_mod(pgid.ps(), t->pg_num, t->pg_num_mask);
   if (any_change && pg_interval_t::is_new_interval(
           t->acting_primary,
 	  acting_primary,
@@ -1512,7 +1513,7 @@ int Objecter::calc_target(op_target_t *t, epoch_t *last_force_resend, bool any_c
 	  min_size,
 	  t->pg_num,
 	  pg_num,
-	  pi->raw_pg_to_pg(pgid))) {
+	  pg_t(prev_seed, pgid.pool(), pgid.preferred()))) {
     force_resend = true;
   }
 
@@ -1537,6 +1538,7 @@ int Objecter::calc_target(op_target_t *t, epoch_t *last_force_resend, bool any_c
     t->size = size;
     t->min_size = min_size;
     t->pg_num = pg_num;
+    t->pg_num_mask = pi->get_pg_num_mask();
     ldout(cct, 10) << __func__ << " "
 		   << " pgid " << pgid << " acting " << acting << dendl;
     t->used_replica = false;
