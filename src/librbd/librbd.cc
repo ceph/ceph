@@ -283,7 +283,6 @@ namespace librbd {
 							     complete_cb);
     pc = (void *)c;
     c->rbd_comp = this;
-    c->enable_event_notify();
   }
 
   bool RBD::AioCompletion::is_complete()
