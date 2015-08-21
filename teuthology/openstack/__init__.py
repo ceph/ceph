@@ -33,6 +33,7 @@ import teuthology
 
 from teuthology.contextutil import safe_while
 from teuthology.config import config as teuth_config
+from teuthology.orchestra import connection
 from teuthology import misc
 
 log = logging.getLogger(__name__)
@@ -153,8 +154,9 @@ class OpenStack(object):
         """
         log.debug('cloud_init_wait ' + name_or_ip)
         client_args = {
+            'user_at_host': '@'.join((self.username, name_or_ip)),
             'timeout': 10,
-            'username': self.username,
+            'retry': False,
         }
         if self.key_filename:
             log.debug("using key " + self.key_filename)
@@ -169,13 +171,9 @@ class OpenStack(object):
                         " grep '" + self.up_string + "' " +
                         "/var/log/cloud-init*.log")
             while proceed():
-                client = paramiko.SSHClient()
                 try:
-                    client.set_missing_host_key_policy(
-                        paramiko.AutoAddPolicy())
-                    client.connect(name_or_ip, **client_args)
+                    client = connection.connect(**client_args)
                 except paramiko.PasswordRequiredException as e:
-                    client.close()
                     raise Exception(
                         "The private key requires a passphrase.\n"
                         "Create a new key with:"
@@ -184,21 +182,17 @@ class OpenStack(object):
                         "and call teuthology-openstack with the options\n"
                         " --key-name myself --key-filename myself.pem\n")
                 except paramiko.AuthenticationException as e:
-                    client.close()
                     log.debug('cloud_init_wait AuthenticationException ' + str(e))
                     continue
                 except socket.timeout as e:
-                    client.close()
                     log.debug('cloud_init_wait connect socket.timeout ' + str(e))
                     continue
                 except socket.error as e:
-                    client.close()
                     log.debug('cloud_init_wait connect socket.error ' + str(e))
                     continue
                 except Exception as e:
                     if 'Unknown server' not in str(e):
                         log.exception('cloud_init_wait ' + name_or_ip)
-                    client.close()
                     if 'Unknown server' in str(e):
                         continue
                     else:
@@ -355,19 +349,17 @@ ssh access   : ssh {identity}{username}@{ip} # logs in /usr/share/nginx/html
         Run a command in the OpenStack instance of the teuthology cluster.
         Return the stdout / stderr of the command.
         """
-        client_args = {
-            'username': self.username,
-        }
-        if self.key_filename:
-            log.debug("ssh using key " + self.key_filename)
-            client_args['key_filename'] = self.key_filename
         instance_id = self.get_instance_id(self.args.name)
         ip = self.get_floating_ip_or_ip(instance_id)
+        client_args = {
+            'user_at_host': '@'.join((self.username, ip)),
+            'retry': False,
+        }
+        if self.key_filename:
+            log.debug("ssh overriding key with " + self.key_filename)
+            client_args['key_filename'] = self.key_filename
         log.debug("ssh " + self.username + "@" + str(ip) + " " + command)
-        client = paramiko.SSHClient()
-        client.set_missing_host_key_policy(
-            paramiko.AutoAddPolicy())
-        client.connect(ip, **client_args)
+        client = connection.connect(**client_args)
         stdin, stdout, stderr = client.exec_command(command)
         stdout.channel.settimeout(300)
         out = ''
