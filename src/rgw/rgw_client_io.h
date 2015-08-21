@@ -113,6 +113,29 @@ public:
 };
 
 
+class RGWClientIOEngineBufferAware : public RGWClientIOEngineDecorator {
+protected:
+  bufferlist data;
+
+  bool has_content_length;
+  bool buffer_data;
+
+  virtual int write_data(const char *buf, const int len) override;
+
+public:
+  RGWClientIOEngineBufferAware(std::shared_ptr<RGWClientIOEngine> engine)
+    : RGWClientIOEngineDecorator(engine),
+      has_content_length(false),
+      buffer_data(false) {
+  }
+
+  int send_content_length(RGWClientIO& controller,
+                          const uint64_t len) override;
+  int complete_request(RGWClientIO& controller) override;
+  int complete_header(RGWClientIO& controller) override;
+};
+
+
 class RGWClientIO {
   bool account;
 

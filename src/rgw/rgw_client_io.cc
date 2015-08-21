@@ -148,3 +148,51 @@ int RGWClientIOEngineReorderer::complete_header(RGWClientIO& controller)
 
   return RGWClientIOEngineDecorator::complete_header(controller);
 }
+
+
+int RGWClientIOEngineBufferAware::write_data(const char *buf, int len) {
+  if (buffer_data) {
+    data.append(buf, len);
+    return len;
+  }
+
+  return RGWClientIOEngineDecorator::write_data(buf, len);
+}
+
+int RGWClientIOEngineBufferAware::send_content_length(RGWClientIO& controller,
+                                                      const uint64_t len) {
+  has_content_length = true;
+  return RGWClientIOEngineDecorator::send_content_length(controller, len);
+}
+
+int RGWClientIOEngineBufferAware::complete_header(RGWClientIO& controller)
+{
+  if (!has_content_length) {
+    /* We will dump everything in complete_request(). */
+    buffer_data = true;
+    return 0;
+  }
+
+  return RGWClientIOEngineDecorator::complete_header(controller);
+}
+
+int RGWClientIOEngineBufferAware::complete_request(RGWClientIO& controller)
+{
+  if (buffer_data) {
+    buffer_data = false;
+
+    send_content_length(controller, data.length());
+    RGWClientIOEngineDecorator::complete_header(controller);
+
+    if (data.length()) {
+      int ret = RGWClientIOEngineDecorator::write_data(data.c_str(),
+              data.length());
+      if (ret < 0) {
+        return ret;
+      }
+      data.clear();
+    }
+  }
+
+  return RGWClientIOEngineDecorator::complete_request(controller);
+}
