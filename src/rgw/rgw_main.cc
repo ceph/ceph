@@ -725,6 +725,7 @@ static int civetweb_callback(struct mg_connection *conn) {
 
   RGWClientIO::Builder cio_builder(
           std::make_shared<RGWMongoose>(conn, pe->port));
+  cio_builder.set_reordering(true);
   RGWClientIO client_io = cio_builder.getResult();
 
   int ret = process_request(store, rest, req, client_io, olog);

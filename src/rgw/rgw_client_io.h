@@ -87,6 +87,32 @@ public:
 };
 
 
+class RGWClientIOEngineReorderer : public RGWClientIOEngineDecorator {
+protected:
+  enum class ReorderState {
+    RGW_EARLY_HEADERS,  /* Headers sent before calling send_status. */
+    RGW_STATUS_SEEN,    /* Status has been seen. */
+    RGW_DATA            /* Header has been completed. */
+  } phase;
+
+  bufferlist early_header_data;
+  bufferlist header_data;
+
+public:
+  RGWClientIOEngineReorderer(std::shared_ptr<RGWClientIOEngine> engine)
+    : RGWClientIOEngineDecorator(engine),
+      phase(ReorderState::RGW_EARLY_HEADERS) {
+  }
+
+  virtual int write_data(const char *buf, const int len) override;
+  virtual int send_status(RGWClientIO& controller,
+                         const char * const status,
+                         const char * const status_name) override;
+  virtual int send_100_continue(RGWClientIO& controller) override;
+  virtual int complete_header(RGWClientIO& controller) override;
+};
+
+
 class RGWClientIO {
   bool account;
 
@@ -161,6 +187,10 @@ public:
 
 class RGWClientIO::Builder {
 protected:
+  /* Whether engine is resistant to sending some headers first and then
+   * setting HTTP status or not and we need to reorder operations. */
+  bool needs_reordering = false;
+
   /* Last stage in pipeline. */
   std::shared_ptr<RGWClientIOEngine> final_engine;
 
@@ -169,8 +199,18 @@ public:
     : final_engine(engine) {
   }
 
+  bool set_reordering(const bool enabled) {
+    const auto prev = needs_reordering;
+    needs_reordering = enabled;
+    return prev;
+  }
+
   RGWClientIO getResult() {
     std::shared_ptr<RGWClientIOEngine> stage = final_engine;
+
+    if (needs_reordering) {
+      stage = std::make_shared<RGWClientIOEngineReorderer>(stage);
+    }
 
     stage = std::make_shared<RGWClientIOEngineBufferAware>(stage);
 

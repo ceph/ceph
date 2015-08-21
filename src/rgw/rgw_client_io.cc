@@ -85,3 +85,66 @@ int RGWClientIO::read(char *buf, int max, int *actual)
   return 0;
 }
 
+
+int RGWClientIOEngineReorderer::write_data(const char * const buf, const int len)
+{
+  switch (phase) {
+  case ReorderState::RGW_EARLY_HEADERS:
+    early_header_data.append(buf, len);
+    return len;
+  case ReorderState::RGW_STATUS_SEEN:
+    header_data.append(buf, len);
+    return len;
+  case ReorderState::RGW_DATA:
+    /* FALL THROUGH */;
+  }
+
+  return RGWClientIOEngineDecorator::write_data(buf, len);
+}
+
+int RGWClientIOEngineReorderer::send_status(RGWClientIO& controller,
+                                            const char * const status,
+                                            const char * const status_name)
+{
+  phase = ReorderState::RGW_STATUS_SEEN;
+
+  return RGWClientIOEngineDecorator::send_status(controller, status,
+          status_name);
+}
+
+int RGWClientIOEngineReorderer::send_100_continue(RGWClientIO& controller)
+{
+  auto prev = phase;
+  phase = ReorderState::RGW_STATUS_SEEN;
+
+  auto ret = RGWClientIOEngineDecorator::send_100_continue(controller);
+  phase = prev;
+
+  return ret;
+}
+
+int RGWClientIOEngineReorderer::complete_header(RGWClientIO& controller)
+{
+  /* Change state in order to immediately send everything we get. */
+  phase = ReorderState::RGW_DATA;
+
+  /* Header data in buffers are already counted. */
+  if (header_data.length()) {
+    ssize_t rc = write_data(header_data.c_str(), header_data.length());
+    if (rc < 0) {
+      return rc;
+    }
+    header_data.clear();
+  }
+
+  if (early_header_data.length()) {
+    ssize_t rc = write_data(early_header_data.c_str(),
+            early_header_data.length());
+    if (rc < 0) {
+      return rc;
+    }
+    early_header_data.clear();
+  }
+
+  return RGWClientIOEngineDecorator::complete_header(controller);
+}
