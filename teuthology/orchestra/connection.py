@@ -38,7 +38,7 @@ def create_key(keytype, key):
 
 
 def connect(user_at_host, host_key=None, keep_alive=False, timeout=60,
-            _SSHClient=None, _create_key=None, retry=True):
+            _SSHClient=None, _create_key=None, retry=True, key_filename=None):
     """
     ssh connection routine.
 
@@ -50,6 +50,7 @@ def connect(user_at_host, host_key=None, keep_alive=False, timeout=60,
     :param _create_key: routine to create a key (defaults to local reate_key)
     :param retry:       Whether or not to retry failed connection attempts
                         (eventually giving up if none succeed). Default is True
+    :param key_filename:  Optionally override which private key to use.
     :return: ssh connection.
     """
     user, host = split_user(user_at_host)
@@ -78,6 +79,8 @@ def connect(user_at_host, host_key=None, keep_alive=False, timeout=60,
         username=user,
         timeout=timeout
     )
+    if key_filename:
+        connect_args['key_filename'] = key_filename
 
     ssh_config_path = os.path.expanduser("~/.ssh/config")
     if os.path.exists(ssh_config_path):
@@ -85,10 +88,11 @@ def connect(user_at_host, host_key=None, keep_alive=False, timeout=60,
         ssh_config.parse(open(ssh_config_path))
         opts = ssh_config.lookup(host)
         opts_to_args = {
-            'identityfile': 'key_filename',
             'host': 'hostname',
             'user': 'username'
         }
+        if not key_filename:
+            opts_to_args['identityfile'] = 'key_filename'
         for opt_name, arg_name in opts_to_args.items():
             if opt_name in opts:
                 value = opts[opt_name]
