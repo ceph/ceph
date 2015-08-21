@@ -50,6 +50,7 @@ namespace librbd {
     int notify_resize(uint64_t request_id, uint64_t size,
 		      ProgressContext &prog_ctx);
     int notify_snap_create(const std::string &snap_name);
+    int notify_snap_rename(const snapid_t &src_snap_id, const std::string &dst_snap_name);
     int notify_snap_remove(const std::string &snap_name);
     int notify_rebuild_object_map(uint64_t request_id,
                                   ProgressContext &prog_ctx);
