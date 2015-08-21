@@ -38,7 +38,7 @@ def create_key(keytype, key):
 
 
 def connect(user_at_host, host_key=None, keep_alive=False, timeout=60,
-            _SSHClient=None, _create_key=None):
+            _SSHClient=None, _create_key=None, retry=True):
     """
     ssh connection routine.
 
@@ -48,6 +48,8 @@ def connect(user_at_host, host_key=None, keep_alive=False, timeout=60,
     :param timeout:    timeout in seconds
     :param _SSHClient: client, default is paramiko ssh client
     :param _create_key: routine to create a key (defaults to local reate_key)
+    :param retry:       Whether or not to retry failed connection attempts
+                        (eventually giving up if none succeed). Default is True
     :return: ssh connection.
     """
     user, host = split_user(user_at_host)
@@ -96,13 +98,17 @@ def connect(user_at_host, host_key=None, keep_alive=False, timeout=60,
 
     log.info(connect_args)
 
-    # just let the exceptions bubble up to caller
-    with safe_while(sleep=1, action='connect to ' + host) as proceed:
-        while proceed():
-            try:
-                ssh.connect(**connect_args)
-                break
-            except paramiko.AuthenticationException:
-                log.exception("Error connecting to {host}".format(host=host))
+    if not retry:
+        ssh.connect(**connect_args)
+    else:
+        # Retries are implemented using safe_while
+        with safe_while(sleep=1, action='connect to ' + host) as proceed:
+            while proceed():
+                try:
+                    ssh.connect(**connect_args)
+                    break
+                except paramiko.AuthenticationException:
+                    log.exception(
+                        "Error connecting to {host}".format(host=host))
     ssh.get_transport().set_keepalive(keep_alive)
     return ssh
