@@ -26,7 +26,6 @@ TEST(ErasureCodePlugin, factory)
 {
   ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
   ErasureCodeProfile profile;
-  profile["directory"] = ".libs";
   {
     ErasureCodeInterfaceRef erasure_code;
     EXPECT_FALSE(erasure_code);

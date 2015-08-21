@@ -76,7 +76,6 @@ TEST_P(ParameterTest, parameter_all)
   ErasureCodeProfile *profile = new ErasureCodeProfile();
   (*profile)["plugin"] = "shec";
   (*profile)["technique"] = "";
-  (*profile)["directory"] = "/usr/lib64/ceph/erasure-code";
   (*profile)["ruleset-failure-domain"] = "osd";
   (*profile)["k"] = k;
   (*profile)["m"] = m;
