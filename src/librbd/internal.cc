@@ -644,6 +644,45 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
     return 0;
   }
 
+  int snap_rename(ImageCtx *ictx, const char *srcname, const char *dstname)
+  {
+    ldout(ictx->cct, 20) << "snap_rename " << ictx << " from " << srcname << " to " << dstname << dendl;
+
+    snapid_t snap_id;
+    if (ictx->read_only) {
+      return -EROFS;
+    }
+
+    int r = ictx_check(ictx);
+    if (r < 0)
+      return r;
+
+    {
+      RWLock::RLocker l(ictx->snap_lock);
+      snap_id = ictx->get_snap_id(srcname);
+      if (snap_id == CEPH_NOSNAP) {
+        return -ENOENT;
+      }
+      if (ictx->get_snap_id(dstname) != CEPH_NOSNAP) {
+        return -EEXIST;
+      }
+    }
+
+    r = invoke_async_request(ictx, "snap_rename", true,
+                             boost::bind(&snap_rename_helper, ictx, _1,
+                                         snap_id, dstname),
+                             boost::bind(&ImageWatcher::notify_snap_rename,
+                                         ictx->image_watcher, snap_id,
+					 dstname));
+    if (r < 0 && r != -EEXIST) {
+      return r;
+    }
+
+    ictx->perfcounter->inc(l_librbd_snap_rename);
+    notify_change(ictx->md_ctx, ictx->header_oid, ictx);
+    return 0;
+  }
+
   int snap_rename_helper(ImageCtx* ictx, Context* ctx,
                          const uint64_t src_snap_id,
                          const char* dst_name) {

@@ -189,6 +189,8 @@ CEPH_RBD_API int rbd_snap_rollback_with_progress(rbd_image_t image,
                                                  const char *snapname,
 				                 librbd_progress_fn_t cb,
                                                  void *cbdata);
+CEPH_RBD_API int rbd_snap_rename(rbd_image_t image, const char *snapname,
+				 const char* dstsnapsname);
 /**
  * Prevent a snapshot from being deleted until it is unprotected.
  *
