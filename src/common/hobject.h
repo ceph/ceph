@@ -23,8 +23,6 @@
 #include "json_spirit/json_spirit_value.h"
 #include "include/assert.h"   // spirit clobbers it!
 
-typedef uint64_t filestore_hobject_key_t;
-
 namespace ceph {
   class Formatter;
 }
@@ -42,7 +40,7 @@ struct hobject_t {
 private:
   uint32_t hash;
   bool max;
-  filestore_hobject_key_t filestore_key_cache;
+  uint32_t nibblewise_key_cache;
   uint32_t hash_reverse_bits;
   static const int64_t POOL_META = -1;
   static const int64_t POOL_TEMP_START = -2; // and then negative
@@ -60,7 +58,10 @@ public:
   }
 
   void set_key(const std::string &key_) {
-    key = key_;
+    if (key_ == oid.name)
+      key.clear();
+    else
+      key = key_;
   }
 
   string to_str() const;
@@ -209,29 +210,33 @@ public:
     int64_t pool);
 
   // filestore nibble-based key
-  filestore_hobject_key_t get_filestore_key_u32() const {
+  uint32_t get_nibblewise_key_u32() const {
     assert(!max);
-    return filestore_key_cache;
+    return nibblewise_key_cache;
   }
-  filestore_hobject_key_t get_filestore_key() const {
-    return max ? 0x100000000ull : filestore_key_cache;
+  uint64_t get_nibblewise_key() const {
+    return max ? 0x100000000ull : nibblewise_key_cache;
   }
 
   // newer bit-reversed key
-  uint64_t get_bitreverse_key_u32() const {
+  uint32_t get_bitwise_key_u32() const {
     assert(!max);
     return hash_reverse_bits;
   }
-  uint64_t get_bitreverse_key() const {
+  uint64_t get_bitwise_key() const {
     return max ? 0x100000000ull : hash_reverse_bits;
   }
 
   void build_hash_cache() {
-    filestore_key_cache = _reverse_nibbles(hash);
+    nibblewise_key_cache = _reverse_nibbles(hash);
     hash_reverse_bits = _reverse_bits(hash);
   }
-  void set_filestore_key_u32(uint32_t value) {
+  void set_nibblewise_key_u32(uint32_t value) {
     hash = _reverse_nibbles(value);
+    build_hash_cache();
+  }
+  void set_bitwise_key_u32(uint32_t value) {
+    hash = _reverse_bits(value);
     build_hash_cache();
   }
 
@@ -385,11 +390,11 @@ public:
     ret.hobj.pool = hobj.pool;
     return ret;
   }
-  filestore_hobject_key_t get_filestore_key_u32() const {
-    return hobj.get_filestore_key_u32();
+  uint32_t get_nibblewise_key_u32() const {
+    return hobj.get_nibblewise_key_u32();
   }
-  filestore_hobject_key_t get_filestore_key() const {
-    return hobj.get_filestore_key();
+  uint32_t get_nibblewise_key() const {
+    return hobj.get_nibblewise_key();
   }
 
   bool is_degenerate() const {

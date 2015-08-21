@@ -2700,10 +2700,10 @@ int PG::_prepare_write_info(map<string,bufferlist> *km,
   return 0;
 }
 
-void PG::_create(ObjectStore::Transaction& t, spg_t pgid)
+void PG::_create(ObjectStore::Transaction& t, spg_t pgid, int bits)
 {
   coll_t coll(pgid);
-  t.create_collection(coll);
+  t.create_collection(coll, bits);
 }
 
 void PG::_init(ObjectStore::Transaction& t, spg_t pgid, const pg_pool_t *pool)
@@ -3584,7 +3584,7 @@ void PG::_scan_snaps(ScrubMap &smap)
 			    << "...repaired";
 	}
 	snap_mapper.add_oid(hoid, oi_snaps, &_t);
-	r = osd->store->apply_transaction(t);
+	r = osd->store->apply_transaction(osr.get(), t);
 	if (r != 0) {
 	  derr << __func__ << ": apply_transaction got " << cpp_strerror(r)
 	       << dendl;
@@ -4622,13 +4622,14 @@ void PG::reset_interval_flush()
   dout(10) << "Clearing blocked outgoing recovery messages" << dendl;
   recovery_state.clear_blocked_outgoing();
   
-  if (!osr->flush_commit(
-      new QueuePeeringEvt<IntervalFlush>(
-	this, get_osdmap()->get_epoch(), IntervalFlush()))) {
+  Context *c = new QueuePeeringEvt<IntervalFlush>(
+    this, get_osdmap()->get_epoch(), IntervalFlush());
+  if (!osr->flush_commit(c)) {
     dout(10) << "Beginning to block outgoing recovery messages" << dendl;
     recovery_state.begin_block_outgoing();
   } else {
     dout(10) << "Not blocking outgoing recovery messages" << dendl;
+    delete c;
   }
 }
 

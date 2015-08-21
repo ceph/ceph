@@ -137,15 +137,15 @@ public:
    * ABC for Sequencer implementation, private to the ObjectStore derived class.
    * created in ...::queue_transaction(s)
    */
-  struct Sequencer_impl {
+  struct Sequencer_impl : public RefCountedObject {
     virtual void flush() = 0;
 
     /**
      * Async flush_commit
      *
      * There are two cases:
-     * 1) sequencer is currently idle: the method returns true and
-     *    c is deleted
+     * 1) sequencer is currently idle: the method returns true.  c is
+     *    not touched.
      * 2) sequencer is not idle: the method returns false and c is
      *    called asyncronously with a value of 0 once all transactions
      *    queued on this sequencer prior to the call have been applied
@@ -155,20 +155,21 @@ public:
       Context *c ///< [in] context to call upon flush/commit
       ) = 0; ///< @return true if idle, false otherwise
 
+    Sequencer_impl() : RefCountedObject(0) {}
     virtual ~Sequencer_impl() {}
   };
+  typedef boost::intrusive_ptr<Sequencer_impl> Sequencer_implRef;
 
   /**
    * External (opaque) sequencer implementation
    */
   struct Sequencer {
     string name;
-    Sequencer_impl *p;
+    Sequencer_implRef p;
 
     Sequencer(string n)
       : name(n), p(NULL) {}
     ~Sequencer() {
-      delete p;
     }
 
     /// return a unique string identifier for this sequencer
@@ -184,7 +185,6 @@ public:
     /// @see Sequencer_impl::flush_commit()
     bool flush_commit(Context *c) {
       if (!p) {
-	delete c;
 	return true;
       } else {
 	return p->flush_commit(c);
@@ -838,11 +838,11 @@ public:
         ::decode(keys, data_bl_p);
       }
 
-      ghobject_t get_oid(__le32 oid_id) {
+      const ghobject_t &get_oid(__le32 oid_id) {
         assert(oid_id < objects.size());
         return objects[oid_id];
       }
-      coll_t get_cid(__le32 cid_id) {
+      const coll_t &get_cid(__le32 cid_id) {
         assert(cid_id < colls.size());
         return colls[cid_id];
       }
@@ -1190,7 +1190,7 @@ public:
       data.ops++;
     }
     /// Create the collection
-    void create_collection(coll_t cid) {
+    void create_collection(coll_t cid, int bits) {
       if (use_tbl) {
         __u32 op = OP_MKCOLL;
         ::encode(op, tbl);
@@ -1199,6 +1199,7 @@ public:
         Op* _op = _get_next_op();
         _op->op = OP_MKCOLL;
         _op->cid = _get_coll_id(cid);
+	_op->split_bits = bits;
       }
       data.ops++;
     }
@@ -2096,10 +2097,8 @@ public:
     const ghobject_t &oid  ///< [in] object
     ) = 0;
 
-  virtual void sync(Context *onsync) {}
-  virtual void sync() {}
-  virtual void flush() {}
-  virtual void sync_and_flush() {}
+
+  virtual int flush_journal() { return -EOPNOTSUPP; }
 
   virtual int dump_journal(ostream& out) { return -EOPNOTSUPP; }
 
@@ -2117,6 +2116,13 @@ public:
 };
 WRITE_CLASS_ENCODER(ObjectStore::Transaction)
 WRITE_CLASS_ENCODER(ObjectStore::Transaction::TransactionData)
+
+static inline void intrusive_ptr_add_ref(ObjectStore::Sequencer_impl *s) {
+  s->get();
+}
+static inline void intrusive_ptr_release(ObjectStore::Sequencer_impl *s) {
+  s->put();
+}
 
 ostream& operator<<(ostream& out, const ObjectStore::Sequencer& s);
 
