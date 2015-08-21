@@ -1357,7 +1357,7 @@ static int do_export_diff(librbd::Image& image, const char *fromsnapname,
   if (fd < 0)
     return -errno;
 
-  BOOST_SCOPE_EXIT(&r, &fd, &path) {
+  BOOST_SCOPE_EXIT((&r) (&fd) (&path)) {
     close(fd);
     if (r < 0 && fd != 1) {
       remove(path);
