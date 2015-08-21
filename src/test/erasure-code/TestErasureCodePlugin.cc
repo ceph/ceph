@@ -32,7 +32,6 @@ protected:
   public:
     virtual void *entry() {
       ErasureCodeProfile profile;
-      profile["directory"] = ".libs";
       ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
       ErasureCodeInterfaceRef erasure_code;
       instance.factory("hangs",
@@ -76,7 +75,6 @@ TEST_F(ErasureCodePluginRegistryTest, all)
 {
   ErasureCodeProfile profile;
   string directory(".libs");
-  profile["directory"] = directory;
   ErasureCodeInterfaceRef erasure_code;
   ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
   EXPECT_FALSE(erasure_code);

@@ -110,9 +110,6 @@ int ErasureCodeCommand::setup(int argc, char** argv) {
     }
   }
 
-  if (profile.count("directory") == 0)
-    profile["directory"] = ".libs";
-
   return 0;
 }
 

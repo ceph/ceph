@@ -136,16 +136,12 @@ int ErasureCodeNonRegression::setup(int argc, char** argv) {
       } else {
 	profile[strs[0]] = strs[1];
       }
-      if (strs[0] != "directory")
-	directory += " " + *i;
+      directory += " " + *i;
     }
   }
 
   if (vm.count("path"))
     directory = vm["path"].as<string>();
-
-  if (profile.count("directory") == 0)
-    profile["directory"] = ".libs";
 
   return 0;
 }

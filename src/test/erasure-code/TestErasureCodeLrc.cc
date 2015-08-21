@@ -351,7 +351,6 @@ TEST(ErasureCodeLrc, layers_sanity_checks)
     ErasureCodeProfile profile;
     profile["mapping"] =
 	    "__DDD__DD";
-    profile["directory"] = ".libs";
     const char *description_string =
       "[ "
       "  [ \"_cDDD_cDD\", \"\" ],"
@@ -383,7 +382,6 @@ TEST(ErasureCodeLrc, layers_sanity_checks)
   {
     ErasureCodeLrc lrc(g_conf->erasure_code_dir);
     ErasureCodeProfile profile;
-    profile["directory"] = ".libs";
     profile["mapping"] =
 	    "DD";
     const char *description_string =
@@ -408,7 +406,6 @@ TEST(ErasureCodeLrc, layers_init)
       "  [ \"_cDDD_cDD_\", \"directory=.libs\" ],"
       "]";
     profile["layers"] = description_string;
-    profile["directory"] = ".libs";
     json_spirit::mArray description;
     EXPECT_EQ(0, lrc.layers_description(profile, &description, &cerr));
     EXPECT_EQ(0, lrc.layers_parse(description_string, description, &cerr));
@@ -433,7 +430,6 @@ TEST(ErasureCodeLrc, init)
     "  [ \"_____cDDD\", \"\" ],"
     "]";
   profile["layers"] = description_string;
-  profile["directory"] = ".libs";
   EXPECT_EQ(0, lrc.init(profile, &cerr));
 }
 
@@ -444,7 +440,6 @@ TEST(ErasureCodeLrc, init_kml)
   profile["k"] = "4";
   profile["m"] = "2";
   profile["l"] = "3";
-  profile["directory"] = ".libs";
   EXPECT_EQ(0, lrc.init(profile, &cerr));
   EXPECT_EQ((unsigned int)(4 + 2 + (4 + 2) / 3), lrc.get_chunk_count());
 }
@@ -464,7 +459,6 @@ TEST(ErasureCodeLrc, minimum_to_decode)
       "  [ \"_____cDDD\", \"\" ],"
       "]";
     profile["layers"] = description_string;
-    profile["directory"] = ".libs";
     EXPECT_EQ(0, lrc.init(profile, &cerr));
     set<int> want_to_read;
     want_to_read.insert(1);
@@ -489,7 +483,6 @@ TEST(ErasureCodeLrc, minimum_to_decode)
       "  [ \"_____DDDDc\", \"\" ],"
       "]";
     profile["layers"] = description_string;
-    profile["directory"] = ".libs";
     EXPECT_EQ(0, lrc.init(profile, &cerr));
     EXPECT_EQ(profile["mapping"].length(),
 	      lrc.get_chunk_count());
@@ -539,7 +532,6 @@ TEST(ErasureCodeLrc, minimum_to_decode)
       "  [ \"_____cDDD\", \"\" ],"
       "]";
     profile["layers"] = description_string;
-    profile["directory"] = ".libs";
     EXPECT_EQ(0, lrc.init(profile, &cerr));
     EXPECT_EQ(profile["mapping"].length(),
 	      lrc.get_chunk_count());
@@ -618,7 +610,6 @@ TEST(ErasureCodeLrc, encode_decode)
     "  [ \"____cDDD\", \"\" ]," // second local layer
     "]";
   profile["layers"] = description_string;
-  profile["directory"] = ".libs";
   EXPECT_EQ(0, lrc.init(profile, &cerr));
   EXPECT_EQ(4U, lrc.get_data_chunk_count());
   unsigned int stripe_width = g_conf->osd_pool_erasure_code_stripe_width;
@@ -749,7 +740,6 @@ TEST(ErasureCodeLrc, encode_decode_2)
     " [ \"____DDDc\", \"\" ],"
     "]";
   profile["layers"] = description_string;
-  profile["directory"] = ".libs";
   EXPECT_EQ(0, lrc.init(profile, &cerr));
   EXPECT_EQ(4U, lrc.get_data_chunk_count());
   unsigned int stripe_width = g_conf->osd_pool_erasure_code_stripe_width;

@@ -30,7 +30,6 @@ TEST(ErasureCodePlugin, factory)
 {
   ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
   ErasureCodeProfile profile;
-  profile["directory"] = ".libs";
   {
     ErasureCodeInterfaceRef erasure_code;
     EXPECT_FALSE(erasure_code);
@@ -53,7 +52,6 @@ TEST(ErasureCodePlugin, factory)
   for(const char **technique = techniques; *technique; technique++) {
     ErasureCodeInterfaceRef erasure_code;
     ErasureCodeProfile profile;
-    profile["directory"] = ".libs";
     profile["technique"] = *technique;
     EXPECT_FALSE(erasure_code);
     EXPECT_EQ(0, instance.factory("jerasure",
@@ -81,7 +79,6 @@ TEST(ErasureCodePlugin, select)
   // load test plugins instead of actual plugins to assert the desired side effect
   // happens
   profile["jerasure-name"] = "test_jerasure";
-  profile["directory"] = ".libs";
   profile["technique"] = "reed_sol_van";
 
   // all features are available, load the SSE4 plugin
@@ -200,7 +197,6 @@ TEST(ErasureCodePlugin, sse)
 
   ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
   ErasureCodeProfile profile;
-  profile["directory"] = ".libs";
   profile["technique"] = "reed_sol_van";
   profile["k"] = "2";
   profile["m"] = "1";

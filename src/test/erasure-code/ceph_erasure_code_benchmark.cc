@@ -108,9 +108,6 @@ int ErasureCodeBench::setup(int argc, char** argv) {
     }
   }
 
-  if (profile.count("directory") == 0)
-    profile["directory"] = ".libs";
-
   in_size = vm["size"].as<int>();
   max_iterations = vm["iterations"].as<int>();
   plugin = vm["plugin"].as<string>();
