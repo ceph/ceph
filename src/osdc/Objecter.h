@@ -2299,7 +2299,8 @@ public:
 		  snapid_t snap, bufferlist *pbl, int flags,
 		  Context *onfinish,
 	          version_t *objver = NULL, ObjectOperation *extra_ops = NULL) {
-    return read(oid, oloc, 0, 0, snap, pbl, flags | global_op_flags.read() | CEPH_OSD_FLAG_READ, onfinish, objver);
+    return read(oid, oloc, 0, 0, snap, pbl, flags | global_op_flags.read() | CEPH_OSD_FLAG_READ,
+		onfinish, objver, extra_ops);
   }
 
 
