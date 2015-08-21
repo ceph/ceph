@@ -373,6 +373,10 @@ int CrushTester::test_with_crushtool(const string& crushtool,
   cmd_args.push_back("--test");
   cmd_args.push_back("--check");
   cmd_args.push_back(opt_max_id.c_str());
+  cmd_args.push_back("--min-x");
+  cmd_args.push_back("1");
+  cmd_args.push_back("--max-x");
+  cmd_args.push_back("50");
   if (ruleset >= 0) {
     cmd_args.push_back("--ruleset");
     cmd_args.push_back(stringify(ruleset).c_str());
