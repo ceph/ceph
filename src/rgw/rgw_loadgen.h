@@ -24,24 +24,32 @@ struct RGWLoadGenRequestEnv {
   int sign(RGWAccessKey& access_key);
 };
 
-class RGWLoadGenIO : public RGWClientIO
+class RGWLoadGenIO : public RGWClientIOEngine
 {
   uint64_t left_to_read;
   RGWLoadGenRequestEnv *req;
+  RGWEnv env;
+
 public:
+  RGWLoadGenIO(RGWLoadGenRequestEnv *_re) : left_to_read(0), req(_re) {}
+
   void init_env(CephContext *cct);
 
   int write_data(const char *buf, int len);
   int read_data(char *buf, int len);
 
-  int send_status(const char *status, const char *status_name);
-  int send_100_continue();
-  int complete_header();
-  int complete_request();
-  int send_content_length(uint64_t len);
+  int send_status(RGWClientIO& controller,
+                  const char *status,
+                  const char *status_name);
+  int send_100_continue(RGWClientIO& controller);
+  int complete_header(RGWClientIO& controller);
+  int complete_request(RGWClientIO& controller);
+  int send_content_length(RGWClientIO& controller, uint64_t len);
+  void flush(RGWClientIO& controller);
 
-  RGWLoadGenIO(RGWLoadGenRequestEnv *_re) : left_to_read(0), req(_re) {}
-  void flush();
+  RGWEnv& get_env() override {
+    return env;
+  }
 };
 
 
