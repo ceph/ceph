@@ -1357,6 +1357,13 @@ static int do_export_diff(librbd::Image& image, const char *fromsnapname,
   if (fd < 0)
     return -errno;
 
+  BOOST_SCOPE_EXIT(&r, &fd, &path) {
+    close(fd);
+    if (r < 0 && fd != 1) {
+      remove(path);
+    }
+  } BOOST_SCOPE_EXIT_END
+
   {
     // header
     bufferlist bl;
@@ -1384,7 +1391,6 @@ static int do_export_diff(librbd::Image& image, const char *fromsnapname,
 
     r = bl.write_fd(fd);
     if (r < 0) {
-      close(fd);
       return r;
     }
   }
@@ -1410,7 +1416,6 @@ static int do_export_diff(librbd::Image& image, const char *fromsnapname,
   }
 
  out:
-  close(fd);
   if (r < 0)
     ec.pc.fail();
   else
