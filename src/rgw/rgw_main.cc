@@ -535,18 +535,22 @@ static void godown_alarm(int signum)
   _exit(0);
 }
 
-static int process_request(RGWRados *store, RGWREST *rest, RGWRequest *req, RGWClientIO *client_io, OpsLogSocket *olog)
+static int process_request(RGWRados *store,
+                           RGWREST *rest,
+                           RGWRequest *req,
+                           RGWClientIO& client_io,
+                           OpsLogSocket *olog)
 {
   int ret = 0;
 
-  client_io->init(g_ceph_context);
+  client_io.init(g_ceph_context);
 
   req->log_init();
 
   dout(1) << "====== starting new request req=" << hex << req << dec << " =====" << dendl;
   perfcounter->inc(l_rgw_req);
 
-  RGWEnv& rgw_env = client_io->get_env();
+  RGWEnv& rgw_env = client_io.get_env();
 
   struct req_state rstate(g_ceph_context, &rgw_env);
 
@@ -564,7 +568,7 @@ static int process_request(RGWRados *store, RGWREST *rest, RGWRequest *req, RGWC
   int init_error = 0;
   bool should_log = false;
   RGWRESTMgr *mgr;
-  RGWHandler *handler = rest->get_handler(store, s, client_io, &mgr, &init_error);
+  RGWHandler *handler = rest->get_handler(store, s, &client_io, &mgr, &init_error);
   if (init_error != 0) {
     abort_early(s, NULL, init_error);
     goto done;
@@ -637,7 +641,7 @@ static int process_request(RGWRados *store, RGWREST *rest, RGWRequest *req, RGWC
   op->execute();
   op->complete();
 done:
-  int r = client_io->complete_request();
+  int r = client_io.complete_request();
   if (r < 0) {
     dout(0) << "ERROR: client_io->complete_request() returned " << r << dendl;
   }
@@ -662,10 +666,11 @@ void RGWFCGXProcess::handle_request(RGWRequest *r)
 {
   RGWFCGXRequest *req = static_cast<RGWFCGXRequest *>(r);
   FCGX_Request *fcgx = req->fcgx;
-  RGWFCGX client_io(fcgx);
 
+  RGWClientIO::Builder cio_builder(std::make_shared<RGWFCGX>(fcgx));
+  RGWClientIO client_io = cio_builder.getResult();
  
-  int ret = process_request(store, rest, req, &client_io, olog);
+  int ret = process_request(store, rest, req, client_io, olog);
   if (ret < 0) {
     /* we don't really care about return code */
     dout(20) << "process_request() returned " << ret << dendl;
@@ -692,9 +697,10 @@ void RGWLoadGenProcess::handle_request(RGWRequest *r)
   env.set_date(tm);
   env.sign(access_key);
 
-  RGWLoadGenIO client_io(&env);
+  RGWClientIO::Builder cio_builder(std::make_shared<RGWLoadGenIO>(&env));
+  RGWClientIO client_io = cio_builder.getResult();
 
-  int ret = process_request(store, rest, req, &client_io, olog);
+  int ret = process_request(store, rest, req, client_io, olog);
   if (ret < 0) {
     /* we don't really care about return code */
     dout(20) << "process_request() returned " << ret << dendl;
@@ -716,9 +722,12 @@ static int civetweb_callback(struct mg_connection *conn) {
   OpsLogSocket *olog = pe->olog;
 
   RGWRequest *req = new RGWRequest(store->get_new_req_id());
-  RGWMongoose client_io(conn, pe->port);
 
-  int ret = process_request(store, rest, req, &client_io, olog);
+  RGWClientIO::Builder cio_builder(
+          std::make_shared<RGWMongoose>(conn, pe->port));
+  RGWClientIO client_io = cio_builder.getResult();
+
+  int ret = process_request(store, rest, req, client_io, olog);
   if (ret < 0) {
     /* we don't really care about return code */
     dout(20) << "process_request() returned " << ret << dendl;
