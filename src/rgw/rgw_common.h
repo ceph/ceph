@@ -25,6 +25,7 @@
 #include <string.h>
 #include <string>
 #include <map>
+#include <memory>
 #include "include/types.h"
 #include "include/utime.h"
 #include "rgw_acl.h"
@@ -303,7 +304,7 @@ class RGWConf;
 class RGWEnv {
   std::map<string, string, ltstr_nocase> env_map;
 public:
-  RGWConf *conf; 
+  std::shared_ptr<RGWConf> conf;
 
   RGWEnv();
   ~RGWEnv();

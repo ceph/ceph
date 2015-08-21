@@ -6,17 +6,18 @@
 
 #include <string>
 #include <map>
+#include <memory>
 
 #define dout_subsys ceph_subsys_rgw
 
 RGWEnv::RGWEnv()
+  : conf(std::make_shared<RGWConf>())
 {
-  conf = new RGWConf;
 }
 
 RGWEnv::~RGWEnv()
 {
-  delete conf;
+  /* NOP */
 }
 
 void RGWEnv::init(CephContext *cct)
