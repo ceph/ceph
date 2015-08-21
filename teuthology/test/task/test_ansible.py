@@ -257,7 +257,9 @@ class TestAnsibleTask(TestTask):
         logger = StringIO()
         with patch.object(ansible.pexpect, 'run') as m_run:
             m_run.return_value = ('', 0)
-            task.execute_playbook(_logfile=logger)
+            with patch.object(Remote, 'reconnect') as m_reconnect:
+                m_reconnect.return_value = True
+                task.execute_playbook(_logfile=logger)
             m_run.assert_called_once_with(
                 ' '.join(args),
                 logfile=logger,
