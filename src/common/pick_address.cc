@@ -70,25 +70,59 @@ static void fill_in_one_address(CephContext *cct,
 				const string networks,
 				const char *conf_var)
 {
-  const struct sockaddr *found = find_ip_in_subnet_list(cct, ifa, networks);
-  if (!found) {
-    lderr(cct) << "unable to find any IP address in networks: " << networks << dendl;
+  struct ifaddrs *ifa_again;
+  const struct sockaddr *found_for = NULL;
+  char buf[INET6_ADDRSTRLEN];
+  int err_for = 0;
+  int r_for = 0;
+  for (int i = 0; i < cct->_conf->ms_pick_addr_retry_count; i++) {
+    if (i > 0) {
+      lderr(cct) << "unable to find any IP address in networks. Trying again in " << cct->_conf->ms_pick_addr_delay << " seconds " << dendl;
+      sleep(cct->_conf->ms_pick_addr_delay);
+      // To get the local IP information again
+      int r = getifaddrs(&ifa_again);
+      r_for = r;
+      if (r < 0) {
+        string err = cpp_strerror(errno);
+        lderr(cct) << "unable to fetch interfaces and addresses: " << err << dendl;
+        continue;
+      }
+      ifa = ifa_again;
+    }
+    const struct sockaddr *found = find_ip_in_subnet_list(cct, ifa, networks);
+    found_for = found;
+    if (!found) {
+      lderr(cct) << "unable to find any IP address in networks: " << networks << dendl;
+	  continue;
+    }
+
+    int err;
+    err = getnameinfo(found,
+		      (found->sa_family == AF_INET)
+		      ? sizeof(struct sockaddr_in)
+		      : sizeof(struct sockaddr_in6),
+
+		      buf, sizeof(buf),
+		      NULL, 0,
+		      NI_NUMERICHOST);
+    err_for = err;
+    if (err != 0) {
+      lderr(cct) << "unable to convert chosen address to string: " << gai_strerror(err) << dendl;
+      continue;
+    }
+    break;
+  }
+  if (r_for < 0) {
+    string err = cpp_strerror(errno);
+    lderr(cct) << "unable to fetch interfaces and addresses: " << err << "after " << cct->_conf->ms_pick_addr_retry_count << " attempts" << dendl;
     exit(1);
   }
-
-  char buf[INET6_ADDRSTRLEN];
-  int err;
-
-  err = getnameinfo(found,
-		    (found->sa_family == AF_INET)
-		    ? sizeof(struct sockaddr_in)
-		    : sizeof(struct sockaddr_in6),
-
-		    buf, sizeof(buf),
-		    NULL, 0,
-		    NI_NUMERICHOST);
-  if (err != 0) {
-    lderr(cct) << "unable to convert chosen address to string: " << gai_strerror(err) << dendl;
+  if (!found_for) {
+    lderr(cct) << "unable to find any IP address in networks: " << networks << "after " << cct->_conf->ms_pick_addr_retry_count << " attempts" << dendl;
+    exit(1);
+  }
+  if (err_for != 0) {
+    lderr(cct) << "unable to convert chosen address to string: " << gai_strerror(err_for) << "after " << cct->_conf->ms_pick_addr_retry_count << " attempts" << dendl;
     exit(1);
   }
 
