@@ -31,6 +31,7 @@
 
   TODO:
 
+  * collection_list must flush pending db work
   * multiple fragments per object (with configurable size.. maybe 1 or 2 mb default?)
     * read path should be totally generic (handle any fragment pattern)
     * write path should ideally tolerate any fragment pattern, but only generate a fixed layout (since the tunable may be changed over time).
@@ -1766,6 +1767,7 @@ int NewStore::omap_get(
   }
   if (!o->onode.omap_head)
     goto out;
+  o->flush();
   {
     KeyValueDB::Iterator it = db->get_iterator(PREFIX_OMAP);
     string head, tail;
@@ -1814,6 +1816,7 @@ int NewStore::omap_get_header(
   }
   if (!o->onode.omap_head)
     goto out;
+  o->flush();
   {
     string head;
     get_omap_header(o->onode.omap_head, &head);
@@ -1847,6 +1850,7 @@ int NewStore::omap_get_keys(
   }
   if (!o->onode.omap_head)
     goto out;
+  o->flush();
   {
     KeyValueDB::Iterator it = db->get_iterator(PREFIX_OMAP);
     string head, tail;
@@ -1896,6 +1900,7 @@ int NewStore::omap_get_values(
   }
   if (!o->onode.omap_head)
     goto out;
+  o->flush();
   for (set<string>::const_iterator p = keys.begin(); p != keys.end(); ++p) {
     string key;
     get_omap_key(o->onode.omap_head, *p, &key);
@@ -1930,6 +1935,7 @@ int NewStore::omap_check_keys(
   }
   if (!o->onode.omap_head)
     goto out;
+  o->flush();
   for (set<string>::const_iterator p = keys.begin(); p != keys.end(); ++p) {
     string key;
     get_omap_key(o->onode.omap_head, *p, &key);
@@ -1964,6 +1970,7 @@ ObjectMap::ObjectMapIterator NewStore::get_omap_iterator(
     dout(10) << __func__ << " " << oid << "doesn't exist" <<dendl;
     return ObjectMap::ObjectMapIterator();
   }
+  o->flush();
   dout(10) << __func__ << " header = " << o->onode.omap_head <<dendl;
   KeyValueDB::Iterator it = db->get_iterator(PREFIX_OMAP);
   return ObjectMap::ObjectMapIterator(new OmapIteratorImpl(c, o, it));
