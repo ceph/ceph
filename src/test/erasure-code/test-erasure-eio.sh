@@ -25,7 +25,6 @@ function run() {
     export CEPH_MON="127.0.0.1:7112"
     export CEPH_ARGS
     CEPH_ARGS+="--fsid=$(uuidgen) --auth-supported=none "
-    CEPH_ARGS+="--enable-experimental-unrecoverable-data-corrupting-features=shec "
     CEPH_ARGS+="--mon-host=$CEPH_MON "
 
     local funcs=${@:-$(set | sed -n -e 's/^\(TEST_[0-9a-z_]*\) .*/\1/p')}

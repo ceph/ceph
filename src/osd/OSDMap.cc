@@ -1066,9 +1066,12 @@ uint64_t OSDMap::get_features(int entity_type, uint64_t *pmask) const
 	 ++p) {
       const map<string,string> &profile = p->second;
       map<string,string>::const_iterator plugin = profile.find("plugin");
-      if (plugin != profile.end() && (plugin->second == "isa" ||
-				      plugin->second == "lrc"))
-	features |= CEPH_FEATURE_ERASURE_CODE_PLUGINS_V2;
+      if (plugin != profile.end()) {
+	if (plugin->second == "isa" || plugin->second == "lrc")
+	  features |= CEPH_FEATURE_ERASURE_CODE_PLUGINS_V2;
+	if (plugin->second == "shec")
+	  features |= CEPH_FEATURE_ERASURE_CODE_PLUGINS_V3;
+      }
     }
   }
   mask |= CEPH_FEATURE_OSDHASHPSPOOL | CEPH_FEATURE_OSD_CACHEPOOL;
