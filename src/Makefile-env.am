@@ -218,6 +218,8 @@ LIBMON += -ljemalloc
 LIBOSD += -ljemalloc
 LIBMDS += -ljemalloc
 LIBRGW += -ljemalloc
+LIBRBD += -ljemalloc
+LIBRADOS += -ljemalloc
 endif # WITH_JEMALLOC
 
 if ENABLE_COVERAGE

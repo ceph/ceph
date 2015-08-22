@@ -33,6 +33,15 @@ if LINUX
 librados_la_CXXFLAGS += -fvisibility=hidden -fvisibility-inlines-hidden
 librados_la_LDFLAGS += -Xcompiler -Xlinker -Xcompiler '--exclude-libs=ALL'
 endif
+
+if WITH_JEMALLOC
+librados_la_LDFLAGS += -ljemalloc
+endif
+
+if WITH_TCMALLOC
+librados_la_LDFLAGS += -ltcmalloc
+endif
+
 lib_LTLIBRARIES += librados.la
 
 noinst_HEADERS += \

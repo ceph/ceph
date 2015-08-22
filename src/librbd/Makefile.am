@@ -48,6 +48,15 @@ if LINUX
 librbd_la_CXXFLAGS = -fvisibility=hidden -fvisibility-inlines-hidden
 librbd_la_LDFLAGS += -Xcompiler -Xlinker -Xcompiler '--exclude-libs=ALL'
 endif
+
+if WITH_JEMALLOC
+librbd_la_LDFLAGS += -ljemalloc
+endif
+
+if WITH_TCMALLOC
+librbd_la_LDFLAGS += -ltcmalloc
+endif
+
 lib_LTLIBRARIES += librbd.la
 
 noinst_HEADERS += \
