@@ -6132,15 +6132,9 @@ void ReplicatedPG::finish_ctx(OpContext *ctx, int log_op_type, bool maintain_ssc
 				    ctx->user_at_version, ctx->reqid,
 				    ctx->mtime));
   if (soid.snap < CEPH_NOSNAP) {
-    set<snapid_t> _snaps(ctx->new_obs.oi.snaps.begin(),
-			 ctx->new_obs.oi.snaps.end());
     switch (log_op_type) {
     case pg_log_entry_t::MODIFY:
     case pg_log_entry_t::PROMOTE:
-      dout(20) << __func__ << " encoding snaps " << ctx->new_obs.oi.snaps
-	       << dendl;
-      ::encode(ctx->new_obs.oi.snaps, ctx->log.back().snaps);
-      break;
     case pg_log_entry_t::CLEAN:
       dout(20) << __func__ << " encoding snaps " << ctx->new_obs.oi.snaps
 	       << dendl;
