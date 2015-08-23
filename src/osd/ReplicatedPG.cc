@@ -1320,6 +1320,7 @@ ReplicatedPG::ReplicatedPG(OSDService *o, OSDMapRef curmap,
   pgbackend(
     PGBackend::build_pg_backend(
       _pool.info, curmap, this, coll_t(p), o->store, cct)),
+  reuse_dist(NULL),
   object_contexts(o->cct, g_conf->osd_pg_object_context_cache_count),
   snapset_contexts_lock("ReplicatedPG::snapset_contexts"),
   backfills_in_flight(hobject_t::Comparator(true)),
@@ -1914,6 +1915,16 @@ void ReplicatedPG::do_op(OpRequestRef& op)
 
   op->mark_started();
   ctx->src_obc.swap(src_obc);
+  if (reuse_dist != NULL) {
+    if (reuse_dist_start_stamp + pool.info.reuse_dist_clear_period <= m->get_recv_stamp()) {
+      dout(20) << " clear mrc starting from " << reuse_dist_start_stamp
+	<< " with reuse_dist_clear_period " << pool.info.reuse_dist_clear_period
+	<< " by operation at " << m->get_recv_stamp() << dendl;
+      reuse_dist->clear();
+      reuse_dist_start_stamp = ceph_clock_now(NULL);
+    }
+    reuse_dist->access(m->get_oid().name);
+  }
 
   execute_ctx(ctx);
 }
@@ -9368,6 +9379,7 @@ void ReplicatedPG::on_activate()
   }
 
   hit_set_setup();
+  reuse_dist_setup();
   agent_setup();
 }
 
@@ -9500,6 +9512,7 @@ void ReplicatedPG::on_pool_change()
     requeue_ops(waiting_for_cache_not_full);
   }
   hit_set_setup();
+  reuse_dist_setup();
   agent_setup();
 }
 
@@ -10737,6 +10750,45 @@ void ReplicatedPG::hit_set_clear()
   hit_set.reset();
   hit_set_start_stamp = utime_t();
   hit_set_flushing.clear();
+}
+
+void ReplicatedPG::reuse_dist_setup() {
+  dout(1) << __func__ << " size "<<pool.info.reuse_dist_size <<
+    " step " << pool.info.reuse_dist_step <<
+    " threshold " << pool.info.reuse_dist_threshold <<
+    " max_threshold " << pool.info.reuse_dist_max_threshold << dendl;
+  if (reuse_dist == NULL) {
+    if (is_active() &&
+	is_primary() &&
+	pool.info.reuse_dist_size &&
+	pool.info.reuse_dist_step &&
+	pool.info.reuse_dist_threshold &&
+	pool.info.reuse_dist_max_threshold &&
+	pool.info.reuse_dist_clear_period) {
+      reuse_dist = new ReuseDist(pool.info.reuse_dist_size,
+	  pool.info.reuse_dist_step,
+	  pool.info.reuse_dist_threshold,
+	  pool.info.reuse_dist_max_threshold);
+      reuse_dist_start_stamp = ceph_clock_now(NULL);
+    }
+  } else {
+    reuse_dist->clear();
+    delete reuse_dist;
+    if (is_active() &&
+	is_primary() &&
+	pool.info.reuse_dist_size &&
+	pool.info.reuse_dist_step &&
+	pool.info.reuse_dist_threshold &&
+	pool.info.reuse_dist_max_threshold &&
+	pool.info.reuse_dist_clear_period) {
+
+      reuse_dist = new ReuseDist(pool.info.reuse_dist_size,
+	  pool.info.reuse_dist_step,
+	  pool.info.reuse_dist_threshold,
+	  pool.info.reuse_dist_max_threshold);
+      reuse_dist_start_stamp = ceph_clock_now(NULL);
+    }
+  }
 }
 
 void ReplicatedPG::hit_set_setup()

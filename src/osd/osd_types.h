@@ -1108,6 +1108,12 @@ public:
   uint32_t cache_min_flush_age;  ///< minimum age (seconds) before we can flush
   uint32_t cache_min_evict_age;  ///< minimum age (seconds) before we can evict
 
+  uint32_t reuse_dist_clear_period; ///< periodicity to clear reuse distance histogram
+  uint32_t reuse_dist_size; ///< the number of histogram intervals
+  uint32_t reuse_dist_step; ///< the size of histogram intervals
+  uint32_t reuse_dist_threshold; ///< parameter T in SHARDS
+  uint32_t reuse_dist_max_threshold; ///< parameter P in SHARDS, rate of T/P accesses are recorded
+
   HitSet::Params hit_set_params; ///< The HitSet params to use on this pool
   uint32_t hit_set_period;      ///< periodicity of HitSet segments (seconds)
   uint32_t hit_set_count;       ///< number of periods to retain
@@ -1140,6 +1146,11 @@ public:
       cache_target_full_ratio_micro(0),
       cache_min_flush_age(0),
       cache_min_evict_age(0),
+      reuse_dist_clear_period(0),
+      reuse_dist_size(0),
+      reuse_dist_step(0),
+      reuse_dist_threshold(0),
+      reuse_dist_max_threshold(0),
       hit_set_params(),
       hit_set_period(0),
       hit_set_count(0),
