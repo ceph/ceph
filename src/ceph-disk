@@ -2726,13 +2726,38 @@ def main_list(args):
                         except MountError:
                             pass
 
-    for base, parts in sorted(partmap.iteritems()):
-        if parts:
-            print '%s :' % get_dev_path(base)
-            for p in sorted(parts):
-                list_dev(get_dev_path(p), uuid_map, journal_map)
-        else:
-            list_dev(get_dev_path(base), uuid_map, journal_map)
+    if not args.device:
+        for base, parts in sorted(partmap.iteritems()):
+            if parts:
+                print '%s :' % get_dev_path(base)
+                for p in sorted(parts):
+                    list_dev(get_dev_path(p), uuid_map, journal_map)
+            else:
+                list_dev(get_dev_path(base), uuid_map, journal_map)
+    else:
+        notfound = []
+        for dev in args.device:
+            found = False
+            for base, parts in sorted(partmap.iteritems()):
+                if get_dev_path(base) == dev:
+                    if parts:
+                        print '%s :' % get_dev_path(base)
+                        for p in sorted(parts):
+                            list_dev(get_dev_path(p), uuid_map, journal_map)
+                    else:
+                        list_dev(get_dev_path(base), uuid_map, journal_map)
+                    found = True
+                    break
+                for p in sorted(parts):
+                    if get_dev_path(p) == dev:
+                        print '%s :' % get_dev_path(base)
+                        list_dev(get_dev_path(p), uuid_map, journal_map)
+                        found = True
+                        break
+            if not found:
+                notfound.append(dev)
+        if notfound:
+            raise Error('not found', ', '.join(notfound))
 
 
 ###########################
@@ -3058,6 +3083,12 @@ def parse_args():
         )
 
     list_parser = subparsers.add_parser('list', help='List disks, partitions, and Ceph OSDs')
+    list_parser.add_argument(
+        'device',
+        metavar='DEV',
+        nargs='*',
+        help='path to block device',
+        )
     list_parser.set_defaults(
         func=main_list,
         )

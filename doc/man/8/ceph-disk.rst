@@ -18,7 +18,7 @@ Synopsis
 
 | **ceph-disk** **activate-all**
 
-| **ceph-disk** **list**
+| **ceph-disk** **list** [*dev-path* ...]
 
 Description
 ===========
@@ -147,7 +147,7 @@ List disk partitions and Ceph OSDs. It is run directly or triggered by
 
 Usage::
 
-	ceph-disk list
+	ceph-disk list [DEV ...]
 
 suppress-activate
 -----------------
