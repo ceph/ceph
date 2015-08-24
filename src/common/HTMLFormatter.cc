@@ -36,8 +36,66 @@
 namespace ceph {
 
 HTMLFormatter::HTMLFormatter(bool pretty)
-: XMLFormatter(pretty)
+: XMLFormatter(pretty), m_header_done(false), m_status(NULL), m_status_name(NULL)
 {
+}
+
+HTMLFormatter::~HTMLFormatter()
+{
+  if(m_status) {
+    free((void*)m_status);
+    m_status = NULL;
+  }
+  if(m_status_name) {
+    free((void*)m_status_name);
+    m_status_name = NULL;
+  }
+}
+
+void HTMLFormatter::reset()
+{
+  XMLFormatter::reset();
+  m_header_done = false;
+  if(m_status) {
+    free((void*)m_status);
+    m_status = NULL;
+  }
+  if(m_status_name) {
+    free((void*)m_status_name);
+    m_status_name = NULL;
+  }
+}
+
+void HTMLFormatter::set_status(const char* status, const char* status_name)
+{
+  assert(status != NULL); // new status must not be NULL
+  assert(m_status == NULL); // status should NOT be set multiple times
+  m_status = strdup(status);
+  if(status_name)
+    m_status_name = strdup(status_name);
+};
+
+void HTMLFormatter::output_header() {
+  if(!m_header_done) {
+    m_header_done = true;
+    assert(m_status != NULL); // it should be set by this point
+    std::string status_line(m_status);
+    if(m_status_name) {
+      status_line += " ";
+      status_line += m_status_name;
+    }
+    open_object_section("html");
+    print_spaces();
+    m_ss << "<head><title>" << status_line << "</title></head>";
+    if (m_pretty)
+      m_ss << "\n";
+    open_object_section("body");
+    print_spaces();
+    m_ss << "<h1>" << status_line << "</h1>";
+    if (m_pretty)
+      m_ss << "\n";
+    open_object_section("ul");
+  }
 }
 
 template <typename T>
@@ -104,6 +162,5 @@ void HTMLFormatter::dump_format_va(const char* name, const char *ns, bool quoted
   if (m_pretty)
     m_ss << "\n";
 }
-
 
 } // namespace ceph

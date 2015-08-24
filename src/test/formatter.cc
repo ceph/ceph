@@ -132,7 +132,7 @@ TEST(XmlFormatter, DTD) {
   ostringstream oss;
   XMLFormatter fmt(false);
 
-  fmt.write_raw_data(XMLFormatter::XML_1_DTD);
+  fmt.output_header();
   fmt.open_array_section("foo");
   fmt.dump_stream("blah") << "hithere";
   fmt.dump_float("pi", 3.14);
@@ -146,7 +146,7 @@ TEST(XmlFormatter, Clear) {
   ostringstream oss;
   XMLFormatter fmt(false);
 
-  fmt.write_raw_data(XMLFormatter::XML_1_DTD);
+  fmt.output_header();
   fmt.open_array_section("foo");
   fmt.dump_stream("blah") << "hithere";
   fmt.dump_float("pi", 3.14);
@@ -169,7 +169,7 @@ TEST(XmlFormatter, NamespaceTest) {
   ostringstream oss;
   XMLFormatter fmt(false);
 
-  fmt.write_raw_data(XMLFormatter::XML_1_DTD);
+  fmt.output_header();
   fmt.open_array_section_in_ns("foo",
 			   "http://s3.amazonaws.com/doc/2006-03-01/");
   fmt.dump_stream("blah") << "hithere";

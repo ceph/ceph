@@ -23,6 +23,10 @@ namespace ceph {
     static const char *XML_1_DTD;
     XMLFormatter(bool pretty = false);
 
+    virtual void set_status(const char* status, const char* status_name) {};
+    virtual void output_header();
+    virtual void output_footer();
+
     void flush(std::ostream& os);
     void reset();
     void open_array_section(const char *name);
@@ -54,6 +58,7 @@ namespace ceph {
     std::deque<std::string> m_sections;
     bool m_pretty;
     std::string m_pending_string_name;
+    bool m_header_done;
   };
 
 }

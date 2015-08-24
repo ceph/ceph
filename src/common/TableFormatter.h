@@ -22,6 +22,9 @@ namespace ceph {
   public:
     TableFormatter(bool keyval = false);
 
+    virtual void set_status(const char* status, const char* status_name) {};
+    virtual void output_header() {};
+    virtual void output_footer() {};
     void flush(std::ostream& os);
     void reset();
     virtual void open_array_section(const char *name);
