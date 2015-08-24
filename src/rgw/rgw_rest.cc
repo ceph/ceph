@@ -7,6 +7,7 @@
 #include "common/Formatter.h"
 #include "common/JSONFormatter.h"
 #include "common/XMLFormatter.h"
+#include "common/HTMLFormatter.h"
 #include "common/utf8.h"
 #include "include/str_list.h"
 #include "rgw_common.h"
@@ -533,6 +534,9 @@ void end_header(struct req_state *s, RGWOp *op, const char *content_type, const 
       break;
     case RGW_FORMAT_JSON:
       ctype = "application/json";
+      break;
+    case RGW_FORMAT_HTML:
+      ctype = "text/html";
       break;
     default:
       ctype = "text/plain";
@@ -1120,6 +1124,8 @@ int RGWHandler_ObjStore::allocate_formatter(struct req_state *s, int default_typ
       s->format = RGW_FORMAT_XML;
     } else if (format_str.compare("json") == 0) {
       s->format = RGW_FORMAT_JSON;
+    } else if (format_str.compare("html") == 0) {
+      s->format = RGW_FORMAT_HTML;
     } else {
       const char *accept = s->info.env->get("HTTP_ACCEPT");
       if (accept) {
@@ -1133,6 +1139,8 @@ int RGWHandler_ObjStore::allocate_formatter(struct req_state *s, int default_typ
           s->format = RGW_FORMAT_XML;
         } else if (strcmp(format_buf, "application/json") == 0) {
           s->format = RGW_FORMAT_JSON;
+        } else if (strcmp(format_buf, "text/html") == 0) {
+          s->format = RGW_FORMAT_HTML;
         }
       }
     }
@@ -1147,6 +1155,9 @@ int RGWHandler_ObjStore::allocate_formatter(struct req_state *s, int default_typ
       break;
     case RGW_FORMAT_JSON:
       s->formatter = new JSONFormatter(false);
+      break;
+    case RGW_FORMAT_HTML:
+      s->formatter = new HTMLFormatter(false);
       break;
     default:
       return -EINVAL;
