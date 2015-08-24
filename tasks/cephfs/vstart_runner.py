@@ -24,21 +24,13 @@ import signal
 import threading
 import datetime
 import re
-from tasks.ceph_manager import CephManager
 import os
 import time
 import json
 import sys
 import errno
 
-
-from teuthology.exceptions import CommandFailedError
-
-from tasks.cephfs.fuse_mount import FuseMount
-from tasks.cephfs.filesystem import Filesystem
-import subprocess
 import logging
-from teuthology.contextutil import MaxWhileTries
 
 log = logging.getLogger(__name__)
 
@@ -49,6 +41,20 @@ formatter = logging.Formatter(
 handler.setFormatter(formatter)
 log.addHandler(handler)
 log.setLevel(logging.INFO)
+
+try:
+    from teuthology.exceptions import CommandFailedError
+    from tasks.ceph_manager import CephManager
+    from tasks.cephfs.fuse_mount import FuseMount
+    from tasks.cephfs.filesystem import Filesystem
+    from teuthology.contextutil import MaxWhileTries
+except ImportError:
+    sys.stderr.write("***\nError importing packages, have you activated your teuthology virtualenv "
+                     "and set PYTHONPATH to point to teuthology and ceph-qa-suite?\n***\n\n")
+    raise
+
+# Must import after teuthology because of gevent monkey patching
+import subprocess
 
 if os.path.exists("./CMakeCache.txt"):
     # Running in build dir of a cmake build
