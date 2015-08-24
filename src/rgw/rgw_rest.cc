@@ -548,7 +548,7 @@ void end_header(struct req_state *s, RGWOp *op, const char *content_type, const 
     dump_access_control(s, op);
   }
 
-  if (s->prot_flags & RGW_REST_SWIFT && !content_type) {
+  if (s->prot_flags & RGW_PROTO_SWIFT && !content_type) {
     force_content_type = true;
   }
 
