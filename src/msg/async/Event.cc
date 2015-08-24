@@ -32,26 +32,35 @@
 #define dout_subsys ceph_subsys_ms
 
 #undef dout_prefix
+#define dout_prefix *_dout << "EventCallback "
+class C_handle_notify : public EventCallback {
+  EventCenter *center;
+  CephContext *cct;
+
+ public:
+  C_handle_notify(EventCenter *c, CephContext *cc): center(c), cct(cc) {}
+  void do_request(int fd_or_id) {
+    char c[256];
+    int r;
+    do {
+      center->already_wakeup.set(0);
+      r = read(fd_or_id, c, sizeof(c));
+      if (r < 0) {
+        ldout(cct, 1) << __func__ << " read notify pipe failed: " << cpp_strerror(errno) << dendl;
+        break;
+      }
+    } while (center->already_wakeup.read());
+  }
+};
+
+#undef dout_prefix
 #define dout_prefix _event_prefix(_dout)
+
 ostream& EventCenter::_event_prefix(std::ostream *_dout)
 {
   return *_dout << "Event(" << this << " owner=" << get_owner() << " nevent=" << nevent
                 << " time_id=" << time_event_next_id << ").";
 }
-
-class C_handle_notify : public EventCallback {
-  EventCenter *center;
-
- public:
-  C_handle_notify(EventCenter *c): center(c) {}
-  void do_request(int fd_or_id) {
-    char c[256];
-    do {
-      center->already_wakeup.set(0);
-      read(fd_or_id, c, sizeof(c));
-    } while (center->already_wakeup.read());
-  }
-};
 
 int EventCenter::init(int n)
 {
@@ -99,7 +108,7 @@ int EventCenter::init(int n)
   memset(file_events, 0, sizeof(FileEvent)*n);
 
   nevent = n;
-  create_file_event(notify_receive_fd, EVENT_READABLE, EventCallbackRef(new C_handle_notify(this)));
+  create_file_event(notify_receive_fd, EVENT_READABLE, EventCallbackRef(new C_handle_notify(this, cct)));
   return 0;
 }
 
