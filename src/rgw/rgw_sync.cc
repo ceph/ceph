@@ -1059,7 +1059,6 @@ static string full_sync_index_shard_oid(int shard_id)
   return string(buf);
 }
 
-template <class T>
 class RGWReadRemoteMetadataCR : public RGWCoroutine {
   RGWRados *store;
   RGWHTTPManager *http_manager;
@@ -1087,9 +1086,10 @@ public:
     RGWRESTConn *conn = store->rest_master_conn;
     reenter(this) {
       yield {
-        rgw_http_param_pair pairs[] = { { NULL, NULL } };
+        rgw_http_param_pair pairs[] = { { "key" , key.c_str()},
+	                                { NULL, NULL } };
 
-        string p = string("/metadata") + section + "/" + key;
+        string p = string("/admin/metadata/") + section + "/" + key;
 
         http_op = new RGWRESTReadResource(conn, p, pairs, NULL, http_manager);
 
@@ -1134,6 +1134,8 @@ class RGWMetaSyncShardCR : public RGWCoroutine {
 
   string oid;
 
+  bufferlist md_bl;
+
 public:
   RGWMetaSyncShardCR(RGWRados *_store, RGWHTTPManager *_mgr, RGWAsyncRadosProcessor *_async_rados,
 		     rgw_bucket& _pool,
@@ -1147,26 +1149,35 @@ public:
 
   int operate() {
     RGWRESTConn *conn = store->rest_master_conn;
+    string section;
+    string key;
 
 #define OMAP_GET_MAX_ENTRIES 100
     int max_entries = OMAP_GET_MAX_ENTRIES;
+    ssize_t pos;
     reenter(this) {
       if (sync_marker.state == rgw_meta_sync_marker::FullSync) {
         oid = full_sync_index_shard_oid(shard_id);
         do {
-          yield call(new RGWRadosGetOmapKeysCR(store, pool, oid, sync_marker.marker, &entries, max_entries));
+          yield return call(new RGWRadosGetOmapKeysCR(store, pool, oid, sync_marker.marker, &entries, max_entries));
           if (retcode < 0) {
             ldout(store->ctx(), 0) << "ERROR: " << __func__ << "(): RGWRadosGetOmapKeysCR() returned ret=" << retcode << dendl;
             return set_state(RGWCoroutine_Error, retcode);
           }
           iter = entries.begin();
-          yield {
-            for (; iter != entries.end(); ++iter) {
-              ldout(store->ctx(), 20) << __func__ << ": full sync: " << iter->first << dendl;
+          for (; iter != entries.end(); ++iter) {
+            ldout(store->ctx(), 20) << __func__ << ": full sync: " << iter->first << dendl;
               // fetch remote
+	    pos = iter->first.find(':');
+	    section = iter->first.substr(0, pos);
+	    key = iter->first.substr(pos + 1);
+	    yield return call(new RGWReadRemoteMetadataCR(store, http_manager, async_rados, 
+                                                            section, key, &md_bl));
               // write local
               // update shard marker
-            }
+	    if (retcode < 0) {
+              return set_state(RGWCoroutine_Error, retcode);
+	    }
           }
         } while ((int)entries.size() == max_entries);
         // update shard state

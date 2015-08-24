@@ -112,7 +112,7 @@ public:
     return retcode;
   }
 
-  void call(RGWCoroutine *op); /* call at the same stack we're in */
+  int call(RGWCoroutine *op); /* call at the same stack we're in */
   void spawn(RGWCoroutine *op, bool wait); /* execute on a different stack */
   bool collect(int *ret); /* returns true if needs to be called again */
 };
