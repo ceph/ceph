@@ -334,7 +334,7 @@ struct Inode {
     }
   };
 
-  bool check_mode(uid_t uid, gid_t gid, gid_t *sgids, int sgid_count, uint32_t flags);
+  bool check_mode(uid_t uid, gid_t gid, gid_t *sgids, int sgid_count, unsigned want);
 
   // CAPS --------
   void get_open_ref(int mode);
