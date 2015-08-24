@@ -6,6 +6,7 @@
 #include "common/utf8.h"
 #include "common/OutputDataSocket.h"
 #include "common/Formatter.h"
+#include "common/JSONFormatter.h"
 
 #include "rgw_log.h"
 #include "rgw_acl.h"

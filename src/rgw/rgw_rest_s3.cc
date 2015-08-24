@@ -6,6 +6,7 @@
 
 #include "common/ceph_crypto.h"
 #include "common/Formatter.h"
+#include "common/JSONFormatter.h"
 #include "common/utf8.h"
 #include "common/ceph_json.h"
 

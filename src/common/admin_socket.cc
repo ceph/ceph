@@ -26,6 +26,7 @@
 #include "common/safe_io.h"
 #include "common/version.h"
 #include "common/Formatter.h"
+#include "common/JSONFormatter.h"
 
 #include <errno.h>
 #include <fcntl.h>

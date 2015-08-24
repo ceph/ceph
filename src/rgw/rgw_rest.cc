@@ -5,6 +5,8 @@
 #include <limits.h>
 
 #include "common/Formatter.h"
+#include "common/JSONFormatter.h"
+#include "common/XMLFormatter.h"
 #include "common/utf8.h"
 #include "include/str_list.h"
 #include "rgw_common.h"

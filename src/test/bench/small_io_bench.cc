@@ -14,6 +14,7 @@
 #include <fstream>
 
 #include "common/Formatter.h"
+#include "common/JSONFormatter.h"
 
 #include "bencher.h"
 #include "rados_backend.h"

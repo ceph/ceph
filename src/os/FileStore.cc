@@ -67,6 +67,8 @@
 #include "common/perf_counters.h"
 #include "common/sync_filesystem.h"
 #include "common/fd.h"
+#include "common/Formatter.h"
+#include "common/JSONFormatter.h"
 #include "HashIndex.h"
 #include "DBObjectMap.h"
 #include "KeyValueDB.h"
