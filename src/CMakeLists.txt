@@ -898,7 +898,8 @@ if(WITH_LIBCEPHFS)
     client/MetaRequest.cc
     client/ClientSnapRealm.cc
     client/MetaSession.cc
-    client/Trace.cc)
+    client/Trace.cc
+    client/posix_acl.cc)
   add_library(client ${libclient_srcs})
   target_link_libraries(client osdc mds ${LIBEDIT_LIBS})
   set(libcephfs_srcs libcephfs.cc)
