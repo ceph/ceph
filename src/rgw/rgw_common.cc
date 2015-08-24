@@ -341,18 +341,17 @@ bool parse_iso8601(const char *s, struct tm *t)
   }
   string str;
   trim_whitespace(p, str);
-  if (str.size() == 1 && str[0] == 'Z')
+  int len = str.size();
+
+  if (len == 1 && str[0] == 'Z')
     return true;
 
-  if (str.size() != 5) {
-    return false;
-  }
   if (str[0] != '.' ||
-      str[str.size() - 1] != 'Z')
+      str[len - 1] != 'Z')
     return false;
 
   uint32_t ms;
-  int r = stringtoul(str.substr(1, 3), &ms);
+  int r = stringtoul(str.substr(1, len - 2), &ms);
   if (r < 0)
     return false;
 
