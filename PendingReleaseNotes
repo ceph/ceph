@@ -1,3 +1,6 @@
+v9.1.0
+======
+
 v9.0.4
 ======
 
@@ -5,23 +8,3 @@ v9.0.4
   changed.  You will need to remove any OSDs using that backend before you
   upgrade any test clusters that use it.
 
-
-v9.0.3
-======
-
-* The return code for librbd's rbd_aio_read and Image::aio_read API methods no
-  longer returns the number of bytes read upon success.  Instead, it returns 0
-  upon success and a negative value upon failure.
-
-* 'ceph scrub', 'ceph compact' and 'ceph sync force are now DEPRECATED.  Users
-  should instead use 'ceph mon scrub', 'ceph mon compact' and
-  'ceph mon sync force'.
-
-* 'ceph mon_metadata' should now be used as 'ceph mon metadata'. There is no
-  need to deprecate this command (same major release since it was first
-  introduced).
-
-* The `--dump-json` option of "osdmaptool" is replaced by `--dump json`.
-
-* The commands of "pg ls-by-{pool,primary,osd}" and "pg ls" now take "recovering"
-  instead of "recovery", to include the recovering pgs in the listed pgs.
