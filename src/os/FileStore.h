@@ -33,6 +33,8 @@ using namespace std;
 
 #include "common/Timer.h"
 #include "common/WorkQueue.h"
+#include "common/Formatter.h"
+#include "common/JSONFormatter.h"
 
 #include "common/Mutex.h"
 #include "HashIndex.h"

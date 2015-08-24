@@ -33,6 +33,7 @@ using namespace std;
 #include "common/WorkQueue.h"
 #include "common/Finisher.h"
 #include "common/fd.h"
+#include "common/JSONFormatter.h"
 
 #include "common/Mutex.h"
 #include "GenericObjectMap.h"

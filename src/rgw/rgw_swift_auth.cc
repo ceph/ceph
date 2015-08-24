@@ -6,6 +6,7 @@
 
 #include "common/ceph_crypto.h"
 #include "common/Clock.h"
+#include "common/JSONFormatter.h"
 
 #include "auth/Crypto.h"
 

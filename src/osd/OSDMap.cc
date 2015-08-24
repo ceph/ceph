@@ -19,6 +19,7 @@
 
 #include "common/config.h"
 #include "common/Formatter.h"
+#include "common/JSONFormatter.h"
 #include "common/TextTable.h"
 #include "include/ceph_features.h"
 #include "include/str_map.h"
