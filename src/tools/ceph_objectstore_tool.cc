@@ -19,6 +19,7 @@
 #include <stdlib.h>
 
 #include "common/Formatter.h"
+#include "common/JSONFormatter.h"
 #include "common/errno.h"
 #include "common/ceph_argparse.h"
 

@@ -23,6 +23,7 @@
 #include "include/assert.h"
 #include "include/stringify.h"
 #include "common/Formatter.h"
+#include "common/JSONFormatter.h"
 
 #define dout_subsys ceph_subsys_paxos
 #undef dout_prefix

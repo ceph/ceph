@@ -14,6 +14,8 @@
 
 #include "common/ceph_argparse.h"
 #include "common/errno.h"
+#include "common/Formatter.h"
+#include "common/JSONFormatter.h"
 
 #include "mds/SessionMap.h"
 #include "mds/InoTable.h"
