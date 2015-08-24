@@ -78,6 +78,10 @@ OPTION(xio_mp_max_hint, OPT_INT, 4096) // max size-hint chunks
 OPTION(xio_portal_threads, OPT_INT, 2) // xio portal threads per messenger
 OPTION(xio_transport_type, OPT_STR, "rdma") // xio transport type: {rdma or tcp}
 OPTION(xio_max_send_inline, OPT_INT, 512) // xio maximum threshold to send inline
+OPTION(xio_submit_lanes, OPT_INT, 3) // lane count, post-mpmc default small n
+OPTION(xio_submit_spins, OPT_INT, 100)
+OPTION(xio_submit_max_delay_ms, OPT_INT, 100)
+OPTION(xio_submit_mpmc_depth, OPT_INT, 1024)
 
 OPTION(async_compressor_enabled, OPT_BOOL, false)
 OPTION(async_compressor_type, OPT_STR, "snappy")

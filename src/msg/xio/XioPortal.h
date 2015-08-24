@@ -20,6 +20,7 @@ extern "C" {
 #include "libxio.h"
 }
 #include <atomic>
+#include <vector>
 #include <boost/lexical_cast.hpp>
 #include "XioInSeq.h"
 #include "include/mpmc-bounded-queue.hpp"
@@ -41,21 +42,40 @@ private:
 
   struct SubmitQueue
   {
-    const static int nlanes = 1;
+
+    int nlanes;
+    int nspins;
 
     struct Lane
     {
       mpmc_bounded_queue_t<XioSubmit*> mpmc_q;
       CACHE_PAD(0);
-      Lane() : mpmc_q(1024) {}
+      Lane(uint32_t mpmc_depth) : mpmc_q(mpmc_depth)
+	{}
     };
 
-    Lane qlane[nlanes];
-
+    Lane* qlane;
     int ix; /* atomicity by portal thread */
 
-    SubmitQueue()
-      {}
+    SubmitQueue(uint32_t nlanes, uint32_t nspins, uint32_t mpmc_depth)
+      : nspins(nspins)
+      {
+	qlane = static_cast<Lane*>(::operator new(nlanes * sizeof(Lane)));
+	assert(qlane);
+	for (unsigned ix = 0; ix < nlanes; ++ix) {
+	  Lane* lane = &qlane[ix];
+	  new (lane) Lane(mpmc_depth);
+	}
+      }
+
+    ~SubmitQueue()
+      {
+	for (unsigned ix = 0; ix < nlanes; ++ix) {
+	  Lane* lane = &qlane[ix];
+	  lane->~Lane();
+	}
+	::operator delete(qlane);
+      }
 
     inline Lane* get_lane(XioConnection *xcon)
       {
@@ -80,14 +100,16 @@ private:
 
     void deq(XioSubmit::Queue& send_q)
     {
-      int ix;
+      int ix, n;
       Lane* lane;
       XioSubmit* xs;
 
-      for (ix = 0; ix < nlanes; ++ix) {
+      for (ix = 0, n = 0; ix < nlanes; ++ix) {
 	lane = &qlane[ix];
-	while (lane->mpmc_q.dequeue(xs))
-	  send_q.push_back(*xs);
+	for (n = 0; n < nspins; ++n) {
+	  if (lane->mpmc_q.dequeue(xs))
+	    send_q.push_back(*xs);
+	}
       }
     }
 
@@ -112,7 +134,11 @@ private:
 
 public:
   XioPortal(Messenger *_msgr) :
-  msgr(_msgr), ctx(NULL), server(NULL), submit_q(), xio_uri(""),
+  msgr(_msgr), ctx(NULL), server(NULL),
+  submit_q(msgr->cct->_conf->xio_submit_lanes,
+	  msgr->cct->_conf->xio_submit_spins,
+	  msgr->cct->_conf->xio_submit_mpmc_depth),
+  xio_uri(""),
   portal_id(NULL), _shutdown(false), drained(false),
   magic(0),
   special_handling(0)
