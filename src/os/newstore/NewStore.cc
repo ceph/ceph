@@ -1574,7 +1574,6 @@ int NewStore::collection_list(
   string temp_start_key, temp_end_key;
   string start_key, end_key;
   bool set_next = false;
-  string end_str;
   const char *pend;
   bool temp;
 
@@ -1608,16 +1607,17 @@ int NewStore::collection_list(
   if (end.hobj.is_max()) {
     pend = temp ? temp_end_key.c_str() : end_key.c_str();
   } else {
-    get_object_key(end, &end_str);
+    get_object_key(end, &end_key);
     if (end.hobj.is_temp()) {
       if (temp)
-	pend = end_str.c_str();
+	pend = end_key.c_str();
       else
 	goto out;
     } else {
-      pend = temp ? temp_end_key.c_str() : end_str.c_str();
+      pend = temp ? temp_end_key.c_str() : end_key.c_str();
     }
   }
+  dout(30) << __func__ << " pend " << pend << dendl;
   while (true) {
     if (!it->valid() || strcmp(it->key().c_str(), pend) > 0) {
       if (!it->valid())
@@ -1632,6 +1632,7 @@ int NewStore::collection_list(
 	temp = false;
 	it->upper_bound(start_key);
 	pend = end_key.c_str();
+	dout(30) << __func__ << " pend " << pend << dendl;
 	continue;
       }
       break;
