@@ -49,6 +49,10 @@ namespace ceph {
     }
     virtual void reset() = 0;
 
+    virtual void set_status(const char* status, const char* status_name) = 0;
+    virtual void output_header() = 0;
+    virtual void output_footer() = 0;
+
     virtual void open_array_section(const char *name) = 0;
     virtual void open_array_section_in_ns(const char *name, const char *ns) = 0;
     virtual void open_object_section(const char *name) = 0;
