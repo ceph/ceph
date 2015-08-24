@@ -2,6 +2,142 @@
  Release Notes
 ===============
 
+v9.0.3
+======
+
+This is the second to last batch of development work for the
+Infernalis cycle.  The most intrusive change is an internal (non
+user-visible) change to the OSD's ObjectStore interface.  Many fixes and
+improvements elsewhere across RGW, RBD, and another big pile of CephFS
+scrub/repair improvements.
+
+Upgrading
+---------
+
+* The return code for librbd's rbd_aio_read and Image::aio_read API methods no
+  longer returns the number of bytes read upon success.  Instead, it returns 0
+  upon success and a negative value upon failure.
+
+* 'ceph scrub', 'ceph compact' and 'ceph sync force are now DEPRECATED.  Users
+  should instead use 'ceph mon scrub', 'ceph mon compact' and
+  'ceph mon sync force'.
+
+* 'ceph mon_metadata' should now be used as 'ceph mon metadata'. There is no
+  need to deprecate this command (same major release since it was first
+  introduced).
+
+* The `--dump-json` option of "osdmaptool" is replaced by `--dump json`.
+
+* The commands of "pg ls-by-{pool,primary,osd}" and "pg ls" now take "recovering"
+  instead of "recovery", to include the recovering pgs in the listed pgs.
+
+
+Notable Changes
+---------------
+
+  * autotools: fix out of tree build (Krxysztof Kosinski)
+  * autotools: improve make check output (Loic Dachary)
+  * buffer: add invalidate_crc() (Piotr Dalek)
+  * buffer: fix zero bug (#12252 Haomai Wang)
+  * build: fix junit detection on Fedora 22 (Ira Cooper)
+  * ceph-disk: install pip > 6.1 (#11952 Loic Dachary)
+  * cephfs-data-scan: many additions, improvements (John Spray)
+  * ceph: improve error output for 'tell' (#11101 Kefu Chai)
+  * ceph-objectstore-tool: misc improvements (David Zafman)
+  * ceph-objectstore-tool: refactoring and cleanup (John Spray)
+  * ceph_test_rados: test pipelined reads (Zhiqiang Wang)
+  * common: fix bit_vector extent calc (#12611 Jason Dillaman)
+  * common: make work queue addition/removal thread safe (#12662 Jason Dillaman)
+  * common: optracker improvements (Zhiqiang Wang, Jianpeng Ma)
+  * crush: add --check to validate dangling names, max osd id (Kefu Chai)
+  * crush: cleanup, sync with kernel (Ilya Dryomov)
+  * crush: fix subtree base weight on adjust_subtree_weight (#11855 Sage Weil)
+  * crypo: fix NSS leak (Jason Dillaman)
+  * crypto: fix unbalanced init/shutdown (#12598 Zheng Yan)
+  * doc: misc updates (Kefu Chai, Owen Synge, Gael Fenet-Garde, Loic Dachary, Yannick Atchy-Dalama, Jiaying Ren, Kevin Caradant, Robert Maxime, Nicolas Yong, Germain Chipaux, Arthur Gorjux, Gabriel Sentucq, Clement Lebrun, Jean-Remi Deveaux, Clair Massot, Robin Tang, Thomas Laumondais, Jordan Dorne, Yuan Zhou, Valentin Thomas, Pierre Chaumont, Benjamin Troquereau, Benjamin Sesia, Vikhyat Umrao)
+  * erasure-code: cleanup (Kefu Chai)
+  * erasure-code: improve tests (Loic Dachary)
+  * erasure-code: shec: fix recovery bugs (Takanori Nakao, Shotaro Kawaguchi)
+  * libcephfs: add pread, pwrite (Jevon Qiao)
+  * libcephfs,ceph-fuse: cache cleanup (Zheng Yan)
+  * librados: add src_fadvise_flags for copy-from (Jianpeng Ma)
+  * librados: respect default_crush_ruleset on pool_create (#11640 Yuan Zhou)
+  * librbd: fadvise for copy, export, import (Jianpeng Ma)
+  * librbd: handle NOCACHE fadvise flag (Jinapeng Ma)
+  * librbd: optionally disable allocation hint (Haomai Wang)
+  * librbd: prevent race between resize requests (#12664 Jason Dillaman)
+  * log: fix data corruption race resulting from log rotation (#12465 Samuel Just)
+  * mds: expose frags via asok (John Spray)
+  * mds: fix setting entire file layout in one setxattr (John Spray)
+  * mds: fix shutdown (John Spray)
+  * mds: handle misc corruption issues (John Spray)
+  * mds: misc fixes (Jianpeng Ma, Dan van der Ster, Zhang Zhi)
+  * mds: misc snap fixes (Zheng Yan)
+  * mds: store layout on header object (#4161 John Spray)
+  * misc performance and cleanup (Nathan Cutler, Xinxin Shu)
+  * mon: add NOFORWARD, OBSOLETE, DEPRECATE flags for mon commands (Joao Eduardo Luis)
+  * mon: add PG count to 'ceph osd df' output (Michal Jarzabek)
+  * mon: clean up, reorg some mon commands (Joao Eduardo Luis)
+  * mon: disallow >2 tiers (#11840 Kefu Chai)
+  * mon: fix log dump crash when debugging (Mykola Golub)
+  * mon: fix metadata update race (Mykola Golub)
+  * mon: fix refresh (#11470 Joao Eduardo Luis)
+  * mon: make blocked op messages more readable (Jianpeng Ma)
+  * mon: only send mon metadata to supporting peers (Sage Weil)
+  * mon: periodic background scrub (Joao Eduardo Luis)
+  * mon: prevent pgp_num > pg_num (#12025 Xinxin Shu)
+  * mon: reject large max_mds values (#12222 John Spray)
+  * msgr: add ceph_perf_msgr tool (Hoamai Wang)
+  * msgr: async: fix seq handling (Haomai Wang)
+  * msgr: xio: fastpath improvements (Raju Kurunkad)
+  * msgr: xio: sync with accellio v1.4 (Vu Pham)
+  * osd: clean up temp object if promotion fails (Jianpeng Ma)
+  * osd: constrain collections to meta and PGs (normal and temp) (Sage Weil)
+  * osd: filestore: clone using splice (Jianpeng Ma)
+  * osd: filestore: fix recursive lock (Xinxin Shu)
+  * osd: fix dup promotion lost op bug (Zhiqiang Wang)
+  * osd: fix temp-clearing (David Zafman)
+  * osd: include a temp namespace within each collection/pgid (Sage Weil)
+  * osd: low and high speed flush modes (Mingxin Liu)
+  * osd: peer_features includes self (David Zafman)
+  * osd: recovery, peering fixes (#11687 Samuel Just)
+  * osd: require firefly features (David Zafman)
+  * osd: set initial crush weight with more precision (Sage Weil)
+  * osd: use a temp object for recovery (Sage Weil)
+  * osd: use blkid to collection partition information (Joseph Handzik)
+  * rados: add --striper option to use libradosstriper (#10759 Sebastien Ponce)
+  * radosgw-admin: fix subuser modify output (#12286 Guce)
+  * rados: handle --snapid arg properly (Abhishek Lekshmanan)
+  * rados: improve bench buffer handling, performance (Piotr Dalek)
+  * rados: new pool import implementation (John Spray)
+  * rbd: fix link issues (Jason Dillaman)
+  * rbd: improve CLI arg parsing, usage (Ilya Dryomov)
+  * rbd: recognize queue_depth kernel option (Ilya Dryomov)
+  * rbd: support G and T units for CLI (Abhishek Lekshmanan)
+  * rbd: use image-spec and snap-spec in help (Vikhyat Umrao, Ilya Dryomov)
+  * rest-bench: misc fixes (Shawn Chen)
+  * rest-bench: support https (#3968 Yuan Zhou)
+  * rgw: add max multipart upload parts (#12146 Abshishek Dixit)
+  * rgw: add Trasnaction-Id to response (Abhishek Dixit)
+  * rgw: document layout of pools and objects (Pete Zaitcev)
+  * rgw: do not preserve ACLs when copying object (#12370 Yehuda Sadeh)
+  * rgw: fix Connection: header handling (#12298 Wido den Hollander)
+  * rgw: fix data corruptions race condition (#11749 Wuxingyi)
+  * rgw: fix JSON response when getting user quota (#12117 Wuxingyi)
+  * rgw: force content_type for swift bucket stats requests (#12095 Orit Wasserman)
+  * rgw: improved support for swift account metadata (Radoslaw Zarzynski)
+  * rgw: make max put size configurable (#6999 Yuan Zhou)
+  * rgw: orphan detection tool (Yehuda Sadeh)
+  * rgw: swift: do not override sent content type (#12363 Orit Wasserman)
+  * rgw: swift: set Content-Length for account GET (#12158 Radoslav Zarzynski)
+  * rpm: always rebuild and install man pages for rpm (Owen Synge)
+  * rpm: misc fixes (Boris Ranto, Owen Synge, Ken Dreyer, Ira Cooper)
+  * systemd: logrotate fixes (Tim Seron, Lars Marowsky-Bree, Nathan Cutler)
+  * sysvinit compat: misc fixes (Owen Synge)
+  * test: misc fs test improvements (John Spray, Loic Dachary)
+  * test: python tests, linter cleanup (Alfredo Deza)
+
+
 v9.0.2
 ======
 
