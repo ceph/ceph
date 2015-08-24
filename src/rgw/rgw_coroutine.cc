@@ -309,10 +309,11 @@ RGWAioCompletionNotifier *RGWCoroutinesManager::create_completion_notifier(RGWCo
   return new RGWAioCompletionNotifier(&completion_mgr, (void *)stack);
 }
 
-void RGWCoroutine::call(RGWCoroutine *op)
+int RGWCoroutine::call(RGWCoroutine *op)
 {
   int r = stack->call(op, 0);
   assert(r == 0);
+  return 0;
 }
 
 void RGWCoroutine::spawn(RGWCoroutine *op, bool wait)
