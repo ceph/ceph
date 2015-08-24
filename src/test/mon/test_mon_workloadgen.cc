@@ -51,6 +51,7 @@
 #include "auth/AuthAuthorizeHandler.h"
 #include "include/uuid.h"
 #include "include/assert.h"
+#include "common/JSONFormatter.h"
 
 #include "messages/MOSDBoot.h"
 #include "messages/MOSDAlive.h"
