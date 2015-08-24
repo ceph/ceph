@@ -351,7 +351,7 @@ class LocalFuseMount(FuseMount):
 
         def list_connections():
             self.client_remote.run(
-                args=["sudo", "mount", "-t", "fusectl", "/sys/fs/fuse/connections", "/sys/fs/fuse/connections"],
+                args=["mount", "-t", "fusectl", "/sys/fs/fuse/connections", "/sys/fs/fuse/connections"],
                 check_status=False
             )
             p = self.client_remote.run(
