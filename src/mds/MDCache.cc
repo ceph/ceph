@@ -26,6 +26,7 @@
 #include "MDLog.h"
 #include "MDBalancer.h"
 #include "Migrator.h"
+#include "ScrubStack.h"
 
 #include "SnapClient.h"
 
@@ -8821,6 +8822,9 @@ void MDCache::dispatch_request(MDRequestRef& mdr)
     case CEPH_MDS_OP_VALIDATE:
       scrub_dentry_work(mdr);
       break;
+    case CEPH_MDS_OP_ENQUEUE_SCRUB:
+      enqueue_scrub_work(mdr);
+      break;
     case CEPH_MDS_OP_FLUSH:
       flush_dentry_work(mdr);
       break;
@@ -11674,6 +11678,21 @@ void MDCache::scrub_dentry(const string& path, Formatter *f, Context *fin)
   scrub_dentry_work(mdr);
 }
 
+/**
+ * The private data for an OP_ENQUEUE_SCRUB MDRequest
+ */
+class EnqueueScrubParams
+{
+  public:
+  const bool recursive;
+  const bool children;
+  const std::string tag;
+  EnqueueScrubParams(bool r, bool c, const std::string &tag_)
+    : recursive(r), children(c), tag(tag_)
+  {}
+};
+
+
 void MDCache::scrub_dentry_work(MDRequestRef& mdr)
 {
   set<SimpleLock*> rdlocks, wrlocks, xlocks;
@@ -11694,6 +11713,87 @@ void MDCache::scrub_dentry_work(MDRequestRef& mdr)
   in->validate_disk_state(vr, mdr);
   return;
 }
+
+
+class C_ScrubEnqueued : public Context
+{
+public:
+  MDRequestRef mdr;
+  Context *on_finish;
+  Formatter *formatter;
+  C_ScrubEnqueued(MDRequestRef& mdr,
+                  Context *fin, Formatter *f) :
+    mdr(mdr), on_finish(fin), formatter(f) {}
+
+  void finish(int r) {
+#if 0
+    if (r >= 0) { // we got into the scrubbing dump it
+      results.dump(formatter);
+    } else { // we failed the lookup or something; dump ourselves
+      formatter->open_object_section("results");
+      formatter->dump_int("return_code", r);
+      formatter->close_section(); // results
+    }
+#endif
+    on_finish->complete(r);
+  }
+};
+
+void MDCache::enqueue_scrub(const string& path, Formatter *f, Context *fin)
+{
+  dout(10) << "scrub_dentry " << path << dendl;
+  MDRequestRef mdr = request_start_internal(CEPH_MDS_OP_ENQUEUE_SCRUB);
+  filepath fp(path.c_str());
+  mdr->set_filepath(fp);
+
+  C_ScrubEnqueued *se = new C_ScrubEnqueued(mdr, fin, f);
+  mdr->internal_op_finish = se;
+  // TODO pass through tag/args
+  mdr->internal_op_private = new EnqueueScrubParams(true, true, "foobar");
+  enqueue_scrub_work(mdr);
+}
+
+void MDCache::enqueue_scrub_work(MDRequestRef& mdr)
+{
+  set<SimpleLock*> rdlocks, wrlocks, xlocks;
+  CInode *in = mds->server->rdlock_path_pin_ref(mdr, 0, rdlocks, true);
+  if (NULL == in)
+    return;
+
+  // TODO: Remove this restriction
+  assert(in->is_auth());
+
+  bool locked = mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks);
+  if (!locked)
+    return;
+
+  CDentry *dn = in->get_parent_dn();
+
+  // We got to this inode by path, so it must have a parent
+  assert(dn != NULL);
+
+  // Not setting a completion context here because we don't
+  // want to block asok caller on long running scrub
+  EnqueueScrubParams *args = static_cast<EnqueueScrubParams*>(
+      mdr->internal_op_private);
+  assert(args != NULL);
+
+  // Cannot scrub same dentry twice at same time
+  if (dn->scrub_info()->dentry_scrubbing) {
+    mds->server->respond_to_request(mdr, -EBUSY);
+    return;
+  }
+
+  mds->scrubstack->enqueue_dentry_bottom(dn, true, true, args->tag, NULL);
+  delete args;
+  mdr->internal_op_private = NULL;
+
+  // Successfully enqueued
+  mds->server->respond_to_request(mdr, 0);
+  return;
+}
+
+
 
 void MDCache::flush_dentry(const string& path, Context *fin)
 {
