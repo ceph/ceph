@@ -268,6 +268,7 @@ protected:
   client_t whoami;
 
   int user_id, group_id;
+  int acl_type;
 
   int get_uid() {
     if (user_id >= 0)
@@ -712,6 +713,7 @@ private:
   int _rmdir(Inode *dir, const char *name, int uid=-1, int gid=-1);
   int _symlink(Inode *dir, const char *name, const char *target, int uid=-1, int gid=-1, InodeRef *inp = 0);
   int _mknod(Inode *dir, const char *name, mode_t mode, dev_t rdev, int uid=-1, int gid=-1, InodeRef *inp = 0);
+  int _do_setattr(Inode *in, struct stat *attr, int mask, int uid, int gid, InodeRef *inp);
   int _setattr(Inode *in, struct stat *attr, int mask, int uid=-1, int gid=-1, InodeRef *inp = 0);
   int _setattr(InodeRef &in, struct stat *attr, int mask, int uid=-1, int gid=-1, InodeRef *inp = 0) {
     return _setattr(in.get(), attr, mask, uid, gid, inp);
@@ -723,6 +725,7 @@ private:
   int _readlink(Inode *in, char *buf, size_t size);
   int _getxattr(Inode *in, const char *name, void *value, size_t len, int uid=-1, int gid=-1);
   int _listxattr(Inode *in, char *names, size_t len, int uid=-1, int gid=-1);
+  int _do_setxattr(Inode *in, const char *name, const void *value, size_t len, int flags, int uid, int gid);
   int _setxattr(Inode *in, const char *name, const void *value, size_t len, int flags, int uid=-1, int gid=-1);
   int _removexattr(Inode *in, const char *nm, int uid=-1, int gid=-1);
   int _open(Inode *in, int flags, mode_t mode, Fh **fhp, int uid=-1, int gid=-1);
@@ -746,6 +749,17 @@ private:
 
   int get_or_create(Inode *dir, const char* name,
 		    Dentry **pdn, bool expect_null=false);
+
+  enum {
+    NO_ACL = 0,
+    POSIX_ACL,
+  };
+
+  enum {
+    MAY_EXEC = 1,
+    MAY_WRITE = 2,
+    MAY_READ = 4,
+  };
 
   int check_permissions(Inode *in, int flags, int uid, int gid);
 
@@ -808,6 +822,11 @@ private:
   void _encode_filelocks(Inode *in, bufferlist& bl);
   void _release_filelocks(Fh *fh);
   void _update_lock_state(struct flock *fl, uint64_t owner, ceph_lock_state_t *lock_state);
+
+  int _posix_acl_create(Inode *dir, mode_t *mode, bufferlist& xattrs_bl, int uid, int gid);
+  int _posix_acl_chmod(Inode *in, mode_t mode, int uid, int gid);
+  int _posix_acl_permission(Inode *in, int uid, int gid,
+			    gid_t *sgids, int sgid_count, unsigned want);
 public:
   int mount(const std::string &mount_root, bool require_mds=false);
   void unmount();
