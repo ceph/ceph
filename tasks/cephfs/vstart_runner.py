@@ -31,6 +31,7 @@ import json
 import sys
 import errno
 
+
 from teuthology.exceptions import CommandFailedError
 
 from tasks.cephfs.fuse_mount import FuseMount
@@ -578,6 +579,15 @@ class LocalFilesystem(Filesystem):
 def exec_test():
     from unittest import suite
     import unittest
+
+    # Help developers by stopping up-front if their tree isn't built enough for all the
+    # tools that the tests might want to use (add more here if needed)
+    require_binaries = ["ceph-dencoder", "cephfs-journal-tool", "cephfs-data-scan",
+                        "cephfs-table-tool", "ceph-fuse", "rados"]
+    missing_binaries = [b for b in require_binaries if not os.path.exists(os.path.join(BIN_PREFIX, b))]
+    if missing_binaries:
+        log.error("Some ceph binaries missing, please build them: {0}".format(" ".join(missing_binaries)))
+        sys.exit(-1)
 
     # Run with two clients because some tests require the second one
     clients = ["0", "1"]
