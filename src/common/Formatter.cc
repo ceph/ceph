@@ -21,6 +21,7 @@
 #include "JSONFormatter.h"
 #include "TableFormatter.h"
 #include "XMLFormatter.h"
+#include "HTMLFormatter.h"
 #include "common/escape.h"
 
 #include <iostream>
@@ -86,6 +87,10 @@ Formatter *Formatter::create(const std::string &type,
     return new TableFormatter();
   else if (mytype == "table-kv")
     return new TableFormatter(true);
+  else if (mytype == "html")
+    return new HTMLFormatter(false);
+  else if (mytype == "html-pretty")
+    return new HTMLFormatter(true);
   else if (fallback != "")
     return create(fallback, "", "");
   else
