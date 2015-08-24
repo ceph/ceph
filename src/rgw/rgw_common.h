@@ -89,6 +89,7 @@ using ceph::crypto::MD5;
 #define RGW_FORMAT_PLAIN        0
 #define RGW_FORMAT_XML          1
 #define RGW_FORMAT_JSON         2
+#define RGW_FORMAT_HTML         3
 
 #define RGW_CAP_READ            0x1
 #define RGW_CAP_WRITE           0x2

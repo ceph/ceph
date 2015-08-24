@@ -43,7 +43,7 @@ namespace ceph {
     void open_array_section_with_attrs(const char *name, const FormatterAttrs& attrs);
     void open_object_section_with_attrs(const char *name, const FormatterAttrs& attrs);
     void dump_string_with_attrs(const char *name, const std::string& s, const FormatterAttrs& attrs);
-  private:
+  protected:
     void open_section_in_ns(const char *name, const char *ns, const FormatterAttrs *attrs);
     void finish_pending_string();
     void print_spaces();
