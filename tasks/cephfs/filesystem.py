@@ -628,9 +628,6 @@ class Filesystem(object):
         if pool is None:
             pool = self.get_metadata_pool_name()
 
-        if stdin_data is None:
-            stdin_data = StringIO()
-
         # Doesn't matter which MDS we use to run rados commands, they all
         # have access to the pools
         mds_id = self.mds_ids[0]
