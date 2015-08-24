@@ -49,7 +49,8 @@ def respawn_in_path(lib_path, pybind_path):
 
     if lib_path_var in os.environ:
         if lib_path not in os.environ[lib_path_var]:
-            os.environ[lib_path_var] += ':' + lib_path
+            curr_lib_path = os.environ[lib_path_var]
+            os.environ[lib_path_var] = lib_path + ':' + curr_lib_path
             print >> sys.stderr, DEVMODEMSG
             os.execvp(py_binary, execv_cmd + sys.argv)
     else:
