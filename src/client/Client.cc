@@ -97,6 +97,7 @@ using namespace std;
 #include "MetaSession.h"
 #include "MetaRequest.h"
 #include "ObjecterWriteback.h"
+#include "posix_acl.h"
 
 #include "include/assert.h"
 #include "include/stat.h"
@@ -4778,12 +4779,24 @@ int Client::check_permissions(Inode *in, int flags, int uid, int gid)
     }    
   }
 #endif
+  unsigned want = 0;
+  if ((flags & O_ACCMODE) == O_WRONLY)
+    want = MAY_WRITE;
+  else if ((flags & O_ACCMODE) == O_RDWR)
+    want = MAY_READ | MAY_WRITE;
+  else if ((flags & O_ACCMODE) == O_RDONLY)
+    want = MAY_READ;
+
+  int ret = _posix_acl_permission(in, uid, gid, sgids, sgid_count, want);
+  if (ret != -EAGAIN)
+    return ret;
 
   // check permissions before doing anything else
-  int ret = 0;
-  if (uid != 0 && !in->check_mode(uid, gid, sgids, sgid_count, flags)) {
+  if (uid == 0 || in->check_mode(uid, gid, sgids, sgid_count, want))
+    ret = 0;
+  else
     ret = -EACCES;
-  }
+
   if (sgids)
     free(sgids);
   return ret;
@@ -5778,8 +5791,8 @@ int Client::_getattr(Inode *in, int mask, int uid, int gid, bool force)
   return res;
 }
 
-int Client::_setattr(Inode *in, struct stat *attr, int mask, int uid, int gid,
-		     InodeRef *inp)
+int Client::_do_setattr(Inode *in, struct stat *attr, int mask, int uid, int gid,
+			InodeRef *inp)
 {
   int issued = in->caps_issued();
 
@@ -5936,6 +5949,17 @@ force_request:
   int res = make_request(req, uid, gid, inp);
   ldout(cct, 10) << "_setattr result=" << res << dendl;
   return res;
+}
+
+int Client::_setattr(Inode *in, struct stat *attr, int mask, int uid, int gid,
+		     InodeRef *inp)
+{
+  int ret = _do_setattr(in, attr, mask, uid, gid, inp);
+  if (ret < 0)
+   return ret;
+  if (mask & CEPH_SETATTR_MODE)
+    ret = _posix_acl_chmod(in, attr->st_mode, uid, gid);
+  return ret;
 }
 
 int Client::setattr(const char *relpath, struct stat *attr, int mask)
@@ -9106,6 +9130,11 @@ int Client::_getxattr(Inode *in, const char *name, void *value, size_t size,
     goto out;
   }
 
+  if (!cct->_conf->client_posix_acl && !strncmp(name, "system.", 7)) {
+    r = -EOPNOTSUPP;
+    goto out;
+  }
+
   r = _getattr(in, CEPH_STAT_CAP_XATTR, uid, gid, in->xattr_version == 0);
   if (r == 0) {
     string n(name);
@@ -9199,23 +9228,9 @@ int Client::ll_listxattr(Inode *in, char *names, size_t size, int uid,
   return _listxattr(in, names, size, uid, gid);
 }
 
-int Client::_setxattr(Inode *in, const char *name, const void *value,
-		      size_t size, int flags, int uid, int gid)
+int Client::_do_setxattr(Inode *in, const char *name, const void *value,
+			 size_t size, int flags, int uid, int gid)
 {
-  if (in->snapid != CEPH_NOSNAP) {
-    return -EROFS;
-  }
-
-  // same xattrs supported by kernel client
-  if (strncmp(name, "user.", 5) &&
-      strncmp(name, "security.", 9) &&
-      strncmp(name, "trusted.", 8) &&
-      strncmp(name, "ceph.", 5))
-    return -EOPNOTSUPP;
-
-  const VXattr *vxattr = _match_vxattr(in, name);
-  if (vxattr && vxattr->readonly)
-    return -EOPNOTSUPP;
 
   int xattr_flags = 0;
   if (!value)
@@ -9243,6 +9258,61 @@ int Client::_setxattr(Inode *in, const char *name, const void *value,
   ldout(cct, 3) << "_setxattr(" << in->ino << ", \"" << name << "\") = " <<
     res << dendl;
   return res;
+}
+
+int Client::_setxattr(Inode *in, const char *name, const void *value,
+		      size_t size, int flags, int uid, int gid)
+{
+  if (in->snapid != CEPH_NOSNAP) {
+    return -EROFS;
+  }
+
+  int posix_acl_xattr = cct->_conf->client_posix_acl &&
+			!strncmp(name, "system.", 7);
+
+  if (strncmp(name, "user.", 5) &&
+      strncmp(name, "security.", 9) &&
+      strncmp(name, "trusted.", 8) &&
+      strncmp(name, "ceph.", 5) &&
+      !posix_acl_xattr)
+    return -EOPNOTSUPP;
+
+  if (posix_acl_xattr) {
+    if (!strcmp(name, POSIX_ACL_XATTR_ACCESS)) {
+      mode_t new_mode = in->mode;
+      if (value) {
+	int ret = posix_acl_equiv_mode(value, size, &new_mode);
+	if (ret < 0)
+	  return ret;
+	if (ret == 0) {
+	  value = NULL;
+	  size = 0;
+	}
+	if (new_mode != in->mode) {
+	  struct stat attr;
+	  attr.st_mode = new_mode;
+	  ret = _do_setattr(in, &attr, CEPH_SETATTR_MODE, uid, gid, NULL);
+	  if (ret < 0)
+	    return ret;
+	}
+      }
+    } else if (!strcmp(name, POSIX_ACL_XATTR_DEFAULT)) {
+      if (value) {
+	if (!S_ISDIR(in->mode))
+	  return -EACCES;
+	if (!posix_acl_valid(value, size))
+	  return -EINVAL;
+      }
+    } else {
+      return -EOPNOTSUPP;
+    }
+  } else {
+    const VXattr *vxattr = _match_vxattr(in, name);
+    if (vxattr && vxattr->readonly)
+      return -EOPNOTSUPP;
+  }
+
+  return _do_setxattr(in, name, value, size, flags, uid, gid);
 }
 
 int Client::check_data_pool_exist(string name, string value, const OSDMap *osdmap)
@@ -9326,6 +9396,7 @@ int Client::_removexattr(Inode *in, const char *name, int uid, int gid)
 
   // same xattrs supported by kernel client
   if (strncmp(name, "user.", 5) &&
+      strncmp(name, "system.", 7) &&
       strncmp(name, "security.", 9) &&
       strncmp(name, "trusted.", 8) &&
       strncmp(name, "ceph.", 5))
@@ -9621,13 +9692,20 @@ int Client::_mknod(Inode *dir, const char *name, mode_t mode, dev_t rdev,
   path.push_dentry(name);
   req->set_filepath(path); 
   req->set_inode(dir);
-  req->head.args.mknod.mode = mode;
   req->head.args.mknod.rdev = rdev;
   req->dentry_drop = CEPH_CAP_FILE_SHARED;
   req->dentry_unless = CEPH_CAP_FILE_EXCL;
 
+  bufferlist xattrs_bl;
+  int res = _posix_acl_create(dir, &mode, xattrs_bl, uid, gid);
+  if (res < 0)
+    goto fail;
+  req->head.args.mknod.mode = mode;
+  if (xattrs_bl.length() > 0)
+    req->set_data(xattrs_bl);
+
   Dentry *de;
-  int res = get_or_create(dir, name, &de);
+  res = get_or_create(dir, name, &de);
   if (res < 0)
     goto fail;
   req->set_dentry(de);
@@ -9712,7 +9790,6 @@ int Client::_create(Inode *dir, const char *name, int flags, mode_t mode,
   req->set_filepath(path);
   req->set_inode(dir);
   req->head.args.open.flags = flags | O_CREAT;
-  req->head.args.open.mode = mode;
 
   req->head.args.open.stripe_unit = stripe_unit;
   req->head.args.open.stripe_count = stripe_count;
@@ -9721,11 +9798,17 @@ int Client::_create(Inode *dir, const char *name, int flags, mode_t mode,
   req->dentry_drop = CEPH_CAP_FILE_SHARED;
   req->dentry_unless = CEPH_CAP_FILE_EXCL;
 
-  bufferlist extra_bl;
-  inodeno_t created_ino;
+  mode |= S_IFREG;
+  bufferlist xattrs_bl;
+  int res = _posix_acl_create(dir, &mode, xattrs_bl, uid, gid);
+  if (res < 0)
+    goto fail;
+  req->head.args.open.mode = mode;
+  if (xattrs_bl.length() > 0)
+    req->set_data(xattrs_bl);
 
   Dentry *de;
-  int res = get_or_create(dir, name, &de);
+  res = get_or_create(dir, name, &de);
   if (res < 0)
     goto fail;
   req->set_dentry(de);
@@ -9781,12 +9864,20 @@ int Client::_mkdir(Inode *dir, const char *name, mode_t mode, int uid, int gid,
   path.push_dentry(name);
   req->set_filepath(path);
   req->set_inode(dir);
-  req->head.args.mkdir.mode = mode;
   req->dentry_drop = CEPH_CAP_FILE_SHARED;
   req->dentry_unless = CEPH_CAP_FILE_EXCL;
 
+  mode |= S_IFDIR;
+  bufferlist xattrs_bl;
+  int res = _posix_acl_create(dir, &mode, xattrs_bl, uid, gid);
+  if (res < 0)
+    goto fail;
+  req->head.args.mkdir.mode = mode;
+  if (xattrs_bl.length() > 0)
+    req->set_data(xattrs_bl);
+
   Dentry *de;
-  int res = get_or_create(dir, name, &de);
+  res = get_or_create(dir, name, &de);
   if (res < 0)
     goto fail;
   req->set_dentry(de);
@@ -11414,6 +11505,93 @@ int Client::check_pool_perm(Inode *in, int need)
     return -EPERM;
   }
 
+  return 0;
+}
+
+int Client::_posix_acl_permission(Inode *in, int uid, int gid,
+				  gid_t *sgids, int sgid_count, unsigned want)
+{
+  if (cct->_conf->client_posix_acl) {
+    int r = _getattr(in, CEPH_STAT_CAP_XATTR | CEPH_STAT_CAP_MODE,
+		     uid, gid, in->xattr_version == 0);
+    if (r < 0)
+      return r;
+
+    if (in->xattrs.count(POSIX_ACL_XATTR_ACCESS)) {
+      const bufferptr& access_acl = in->xattrs[POSIX_ACL_XATTR_ACCESS];
+      if (in->mode & S_IRWXG)
+	return posix_acl_permission(access_acl, in->uid, in->gid,
+				    uid, gid, sgids, sgid_count, want);
+    }
+  }
+  return -EAGAIN;
+}
+
+int Client::_posix_acl_chmod(Inode *in, mode_t mode, int uid, int gid)
+{
+  if (!cct->_conf->client_posix_acl)
+    return 0;
+
+  int r = _getattr(in, CEPH_STAT_CAP_XATTR, uid, gid, in->xattr_version == 0);
+  if (r < 0)
+    goto out;
+
+  if (in->xattrs.count(POSIX_ACL_XATTR_ACCESS)) {
+    const bufferptr& access_acl = in->xattrs[POSIX_ACL_XATTR_ACCESS];
+    bufferptr acl(access_acl.c_str(), access_acl.length());
+    r = posix_acl_chmod_masq(acl, mode);
+    if (r < 0)
+      goto out;
+    r = _do_setxattr(in, POSIX_ACL_XATTR_ACCESS, acl.c_str(), acl.length(), 0, uid, gid);
+  } else {
+    r = 0;
+  }
+out:
+  ldout(cct, 10) << __func__ << " ino " << in->ino << " result=" << r << dendl;
+  return r;
+}
+
+int Client::_posix_acl_create(Inode *dir, mode_t *mode, bufferlist& xattrs_bl,
+			      int uid, int gid)
+{
+  if (!cct->_conf->client_posix_acl)
+    return 0;
+
+  if (S_ISLNK(*mode))
+    return 0;
+
+  int r = _getattr(dir, CEPH_STAT_CAP_XATTR, uid, gid, dir->xattr_version == 0);
+  if (r < 0)
+    goto out;
+
+  if (dir->xattrs.count(POSIX_ACL_XATTR_DEFAULT)) {
+    map<string, bufferptr> xattrs;
+
+    const bufferptr& default_acl = dir->xattrs[POSIX_ACL_XATTR_DEFAULT];
+    bufferptr acl(default_acl.c_str(), default_acl.length());
+    r = posix_acl_create_masq(acl, mode);
+    if (r < 0)
+      goto out;
+
+    if (r > 0) {
+      r = posix_acl_equiv_mode(acl.c_str(), acl.length(), mode);
+      if (r < 0)
+	goto out;
+      if (r > 0)
+	xattrs[POSIX_ACL_XATTR_ACCESS] = acl;
+    }
+
+    if (S_ISDIR(*mode))
+      xattrs[POSIX_ACL_XATTR_DEFAULT] = dir->xattrs[POSIX_ACL_XATTR_DEFAULT];
+
+    r = xattrs.size();
+    if (r > 0)
+      ::encode(xattrs, xattrs_bl);
+  } else {
+    r = 0;
+  }
+out:
+  ldout(cct, 10) << __func__ << " dir ino " << dir->ino << " result=" << r << dendl;
   return 0;
 }
 
