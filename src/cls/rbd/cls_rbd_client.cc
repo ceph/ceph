@@ -392,6 +392,14 @@ namespace librbd {
       return ioctx->exec(oid, "rbd", "snapshot_remove", bl, bl2);
     }
 
+    int snapshot_rename(librados::IoCtx *ioctx, const std::string &oid,
+			 snapid_t src_snap_id,
+		         const std::string &dst_name)
+    {
+      librados::ObjectWriteOperation op;
+      snapshot_rename(&op, src_snap_id, dst_name);
+      return ioctx->operate(oid, &op);
+    }
     void snapshot_rename(librados::ObjectWriteOperation *op,
 			 snapid_t src_snap_id,
 		         const std::string &dst_name)
