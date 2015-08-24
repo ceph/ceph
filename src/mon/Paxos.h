@@ -121,6 +121,9 @@ e 12v
 #include "common/perf_counters.h"
 #include <errno.h>
 
+#include "common/Formatter.h"
+#include "common/JSONFormatter.h"
+
 #include "MonitorDBStore.h"
 #include "mon/MonOpRequest.h"
 

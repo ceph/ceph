@@ -13,7 +13,8 @@
  */
 
 #include "test/unit.h"
-#include "common/Formatter.h"
+#include "common/JSONFormatter.h"
+#include "common/XMLFormatter.h"
 
 #include <sstream>
 #include <string>

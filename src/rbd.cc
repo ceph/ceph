@@ -52,6 +52,8 @@
 #include "include/util.h"
 
 #include "common/Formatter.h"
+#include "common/JSONFormatter.h"
+#include "common/XMLFormatter.h"
 #include "common/Throttle.h"
 
 #if defined(__linux__)
