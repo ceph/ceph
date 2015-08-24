@@ -3,7 +3,19 @@ Useful hack: override Filesystem and Mount interfaces to run a CephFSTestCase ag
 ceph instance instead of a packaged/installed cluster.  Use this to turn around test cases
 quickly during development.
 
-Because many systems require root to work with fuse mounts, run this as root.
+For example, if you have teuthology, ceph-qa-suite and ceph all in ~git, then you would:
+
+    # Activate the teuthology virtualenv
+    source ~/git/teuthology/virtualenv/bin/activate
+    # Go into your ceph source tree
+    cd ~/git/ceph/src
+    # Start a vstart cluster
+    MDS=2 MON=1 OSD=3 ./vstart.sh -n
+    # Invoke a test using this script, with PYTHONPATH set appropriately
+    PYTHONPATH=~/git/teuthology/:~/git/ceph-qa-suite/ python ~/git/ceph-qa-suite/tasks/cephfs/vstart_runner.py
+
+If you built out of tree with CMake, then switch to your build directory before executing vstart_runner.
+
 """
 
 from StringIO import StringIO
