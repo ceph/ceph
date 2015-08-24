@@ -50,6 +50,7 @@ BuildRequires: sharutils
 %endif
 BuildRequires:	gcc-c++
 BuildRequires:	boost-devel
+BuildRequires:  boost-random
 %if 0%{defined suse_version}
 BuildRequires:  libbz2-devel
 %else
