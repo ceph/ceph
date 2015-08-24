@@ -106,10 +106,12 @@ class JobPrinter(JobProcessor):
     def process_job(self, job_id):
         job_config = self.jobs[job_id]['job_config']
         job_index = self.jobs[job_id]['index']
+        job_priority = job_config['priority']
         job_name = job_config['name']
         job_desc = job_config['description']
-        print 'Job: {i:>4} {job_name}/{job_id}'.format(
+        print 'Job: {i:>4} priority: {pri:>4} {job_name}/{job_id}'.format(
             i=job_index,
+            pri=job_priority,
             job_id=job_id,
             job_name=job_name,
             )
