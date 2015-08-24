@@ -125,9 +125,11 @@ TEST(MDSAuthCaps, AllowUid) {
   ASSERT_TRUE(cap.is_capable("foo", 10, 10, 0755, 10, 10, MAY_WRITE));
   ASSERT_FALSE(cap.is_capable("foo", 0, 0, 0777, 0, 10, MAY_READ|MAY_CREATE));
   ASSERT_FALSE(cap.is_capable("foo", 10, 10, 0755, 0, 0, MAY_READ));
-  ASSERT_TRUE(cap.is_capable("foo", 0, 10, 0777, 10, 10, MAY_READ|MAY_CREATE));
+  ASSERT_TRUE(cap.is_capable("foo", 0, 10, 0777, 10, 10, MAY_READ));
+  ASSERT_FALSE(cap.is_capable("foo", 0, 10, 0777, 10, 10, MAY_READ|MAY_CREATE));
   ASSERT_TRUE(cap.is_capable("foo", 0, 10, 0557, 10, 10, MAY_READ));
-  ASSERT_FALSE(cap.is_capable("foo", 0, 0, 0557, 10, 10, MAY_READ|MAY_CREATE));
+  ASSERT_TRUE(cap.is_capable("foo", 0, 0, 0557, 10, 10, MAY_READ));
+  ASSERT_FALSE(cap.is_capable("foo", 0, 0, 0557, 10, 10, MAY_CREATE));
   ASSERT_FALSE(cap.is_capable("foo", 10, 10, 0577, 10, 10, MAY_WRITE));
 }
 
