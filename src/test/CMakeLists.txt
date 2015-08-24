@@ -301,6 +301,101 @@ target_link_libraries(bench_log global pthread rt ${BLKID_LIBRARIES} ${CMAKE_DL_
 
 ## Unit tests
 #make check starts here
+add_custom_target(symlinks  COMMAND
+  ln -sf ${CMAKE_SOURCE_DIR}/src/test/ ${CMAKE_BINARY_DIR}/src/test/ &&
+  ln -sf ${CMAKE_BINARY_DIR}/src/ceph-mon ${CMAKE_BINARY_DIR}/src/test/ &&
+  ln -sf ${CMAKE_BINARY_DIR}/ceph ${CMAKE_BINARY_DIR}/src/test/ &&
+  ln -sf ${CMAKE_BINARY_DIR}/src/ceph-authtool ${CMAKE_BINARY_DIR}/src/test/ &&
+  ln -sf ${CMAKE_BINARY_DIR}/src/ceph-conf ${CMAKE_BINARY_DIR}/src/test/ &&
+  ln -sf ${CMAKE_BINARY_DIR}/src/ceph-osd ${CMAKE_BINARY_DIR}/src/test/ &&
+  ln -sf ${CMAKE_SOURCE_DIR}/src/ceph-disk ${CMAKE_BINARY_DIR}/src/test/ &&
+  ln -sf ${CMAKE_SOURCE_DIR}/qa/ ${CMAKE_BINARY_DIR}/src/
+  COMMENT "Symlinks for test scripts have been created")
+add_dependencies(check symlinks)
+
+add_test(NAME unittest_bufferlist_shell COMMAND bash ${CMAKE_SOURCE_DIR}/src/unittest_bufferlist.sh)
+add_dependencies(check unittest_bufferlist_shell)
+
+add_test(NAME run_tox COMMAND bash ${CMAKE_SOURCE_DIR}/src/ceph-detect-init/run-tox.sh)
+add_dependencies(check run_tox)
+
+add_test(NAME cephtool_test_osd COMMAND bash ${CMAKE_SOURCE_DIR}/src/test/cephtool-test-osd.sh)
+add_dependencies(check cephtool_test_osd)
+
+add_test(NAME check_generated COMMAND bash ${CMAKE_SOURCE_DIR}/src/test/encoding/check-generated.sh)
+add_dependencies(check check_generated)
+
+add_test(NAME cephtool_test_rados COMMAND bash ${CMAKE_SOURCE_DIR}/src/test/cephtool-test-rados.sh)
+add_dependencies(check cephtool_test_rados)
+
+add_test(NAME run_rbd_unit_tests COMMAND bash ${CMAKE_SOURCE_DIR}/src/test/run-rbd-unit-tests.sh)
+add_dependencies(check run_rbd_unit_tests)
+
+add_test(NAME mkfs COMMAND bash	${CMAKE_SOURCE_DIR}/src/test/mon/mkfs.sh)
+add_dependencies(check mkfs)
+
+add_test(NAME misc COMMAND bash ${CMAKE_SOURCE_DIR}/src/test/mon/misc.sh)
+add_dependencies(check misc)
+
+add_test(NAME osd_config COMMAND bash ${CMAKE_SOURCE_DIR}/src/test/osd/osd-config.sh)
+add_dependencies(check osd_config)
+
+add_test(NAME osd_pool_create COMMAND bash ${CMAKE_SOURCE_DIR}/src/test/mon/osd-pool-create.sh)
+add_dependencies(check osd_pool_create)
+
+add_test(NAME osd_copy_from COMMAND bash ${CMAKE_SOURCE_DIR}/src/test/osd/osd-copy-from.sh)
+add_dependencies(check osd_copy_from)
+
+add_test(NAME mon_handle_forward COMMAND bash ${CMAKE_SOURCE_DIR}/src/test/mon/mon-handle-forward.sh)
+add_dependencies(check mon_handle_forward)
+
+add_test(NAME osd_erasure_code_profile COMMAND bash ${CMAKE_SOURCE_DIR}/src/test/mon/osd-erasure-code-profile.sh)
+add_dependencies(check osd_erasure_code_profile)
+
+add_test(NAME osd_crush COMMAND bash ${CMAKE_SOURCE_DIR}/src/test/mon/osd-crush.sh)
+add_dependencies(check osd_crush)
+
+add_test(NAME test_ceph_daemon COMMAND python ${CMAKE_SOURCE_DIR}/src/test/pybind/test_ceph_daemon.py)
+add_dependencies(check test_ceph_daemon)
+
+add_test(NAME rados_striper COMMAND bash ${CMAKE_SOURCE_DIR}/src/test/libradosstriper/rados-striper.sh)
+add_dependencies(check rados_striper)
+
+add_test(NAME osd_bench COMMAND bash ${CMAKE_SOURCE_DIR}/src/test/osd/osd-bench.sh)
+add_dependencies(check osd_bench)
+
+add_test(NAME test_erasure_code COMMAND bash ${CMAKE_SOURCE_DIR}/src/test/erasure-code/test-erasure-code.sh)
+add_dependencies(check test_erasure_code)
+
+add_test(NAME cephtool_test_mds COMMAND bash ${CMAKE_SOURCE_DIR}/src/test/cephtool-test-mds.sh)
+add_dependencies(check cephtool_test_mds)
+
+add_test(NAME test_ceph_argparse_py COMMAND python ${CMAKE_SOURCE_DIR}/src/test/pybind/test_ceph_argparse.py)
+add_dependencies(check test_ceph_argparse_py)
+
+add_test(NAME test_erasure_eio COMMAND bash ${CMAKE_SOURCE_DIR}/src/test/erasure-code/test-erasure-eio.sh)
+add_dependencies(check test_erasure_eio)
+
+add_test(NAME ceph_disk COMMAND bash ${CMAKE_SOURCE_DIR}/src/test/ceph-disk.sh)
+add_dependencies(check ceph_disk)
+
+add_test(NAME readable COMMAND bash ${CMAKE_SOURCE_DIR}/src/test/encoding/readable.sh)
+add_dependencies(check readable)
+
+add_test(NAME ceph_objectstore_tool COMMAND python ${CMAKE_SOURCE_DIR}/src/test/ceph_objectstore_tool.py)
+add_dependencies(check ceph_objectstore_tool)
+
+add_test(NAME test_ceph_helpers COMMAND bash ${CMAKE_SOURCE_DIR}/src/test/test-ceph-helpers.sh)
+add_dependencies(check test_ceph_helpers)
+
+add_test(NAME cephtool_test_mon COMMAND bash ${CMAKE_SOURCE_DIR}/src/test/cephtool-test-mon.sh)
+add_dependencies(check cephtool_test_mon)
+
+add_test(NAME encode_decode_non_regression COMMAND bash ${CMAKE_SOURCE_DIR}/qa/workunits/erasure-code/encode-decode-non-regression.sh)
+add_dependencies(check encode_decode_non_regression)
+
+add_test(NAME osd_scrub_repair COMMAND bash ${CMAKE_SOURCE_DIR}/src/osd/osd-scrub-repair.sh)
+add_dependencies(check osd_scrub_repair)
 
 set(UNITTEST_LIBS gtest_main ${PTHREAD_LIBS})
 set(UNITTEST_CXX_FLAGS "${CMAKE_CXX_FLAGS} -I${CMAKE_SOURCE_DIR}/src/gtest/include -I${CMAKE_BINARY_DIR}/src/gtest/include -fno-strict-aliasing")
@@ -730,7 +825,7 @@ target_link_libraries(unittest_librados
 set_target_properties(unittest_librados PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 
-# unittest_crc32
+# unittest_crc32c
 add_executable(unittest_crc32 EXCLUDE_FROM_ALL
   common/test_crc32c.cc
   $<TARGET_OBJECTS:heap_profiler_objs>
