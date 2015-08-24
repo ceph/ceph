@@ -34,6 +34,8 @@
 
 #include "common/blkdev.h"
 #include "common/linux_version.h"
+#include "common/Formatter.h"
+#include "common/JSONFormatter.h"
 
 #define dout_subsys ceph_subsys_journal
 #undef dout_prefix

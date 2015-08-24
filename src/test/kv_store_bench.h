@@ -20,6 +20,7 @@
 #include "global/global_context.h"
 #include "common/Mutex.h"
 #include "common/Cond.h"
+#include "common/JSONFormatter.h"
 
 #include <string>
 #include <climits>
