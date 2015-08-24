@@ -1729,6 +1729,10 @@ bool MDSRankDispatcher::handle_asok_command(
     string path;
     cmd_getval(g_ceph_context, cmdmap, "path", path);
     command_scrub_path(f, path);
+  } else if (command == "tag path") {
+    string path;
+    cmd_getval(g_ceph_context, cmdmap, "path", path);
+    command_tag_path(f, path);
   } else if (command == "flush_path") {
     string path;
     cmd_getval(g_ceph_context, cmdmap, "path", path);
@@ -1789,6 +1793,16 @@ void MDSRank::command_scrub_path(Formatter *f, const string& path)
   }
   scond.wait();
   // scrub_dentry() finishers will dump the data for us; we're done!
+}
+
+void MDSRank::command_tag_path(Formatter *f, const string& path)
+{
+  C_SaferCond scond;
+  {
+    Mutex::Locker l(mds_lock);
+    mdcache->enqueue_scrub(path, f, &scond);
+  }
+  scond.wait();
 }
 
 void MDSRank::command_flush_path(Formatter *f, const string& path)
