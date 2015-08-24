@@ -21,6 +21,11 @@ namespace ceph {
   class HTMLFormatter : public XMLFormatter {
   public:
     HTMLFormatter(bool pretty = false);
+    ~HTMLFormatter();
+    void reset();
+
+    virtual void set_status(const char* status, const char* status_name);
+    virtual void output_header();
 
     void dump_unsigned(const char *name, uint64_t u);
     void dump_int(const char *name, int64_t u);
@@ -34,6 +39,10 @@ namespace ceph {
   private:
 	template <typename T> void dump_template(const char *name, T arg);
 
+    bool m_header_done;
+
+    const char* m_status;
+    const char* m_status_name;
   };
 
 }
