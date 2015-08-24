@@ -70,6 +70,9 @@ namespace librbd {
 		      const std::string &snap_name);
     int snapshot_remove(librados::IoCtx *ioctx, const std::string &oid,
 			snapid_t snap_id);
+    int snapshot_rename(librados::IoCtx *ioctx, const std::string &oid,
+			snapid_t src_snap_id,
+			const std::string &dst_name);
     void snapshot_rename(librados::ObjectWriteOperation *op,
 			snapid_t src_snap_id,
 			const std::string &dst_name);
