@@ -50,9 +50,7 @@ target_link_libraries(unittest_erasure_code_jerasure_plugin
 set_target_properties(unittest_erasure_code_jerasure_plugin PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 
-#not sure how to check for YASM_EFL64 right now, setting it true
-set(WITH_BETTER_YASM_ELF64 1)
-if(WITH_BETTER_YASM_ELF64)
+if(HAVE_BETTER_YASM_ELF64)
 
 #unittest_erasure_code_isa
 add_executable(unittest_erasure_code_isa EXCLUDE_FROM_ALL
@@ -94,7 +92,7 @@ target_link_libraries(unittest_erasure_code_plugin_isa
   ${UNITTEST_LIBS})
 set_target_properties(unittest_erasure_code_plugin_isa PROPERTIES COMPILE_FLAGS
 ${UNITTEST_CXX_FLAGS})
-endif(WITH_BETTER_YASM_ELF64)
+endif(HAVE_BETTER_YASM_ELF64)
 
 # unittest_erasure_code_lrc
 add_executable(unittest_erasure_code_lrc EXCLUDE_FROM_ALL
