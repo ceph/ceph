@@ -46,8 +46,12 @@ XMLFormatter::XMLFormatter(bool pretty)
 void XMLFormatter::flush(std::ostream& os)
 {
   finish_pending_string();
-  os << m_ss.str();
-  if (m_pretty)
+  output_footer();
+  std::string m_ss_str = m_ss.str();
+  os << m_ss_str;
+  /* There is a small catch here. If the rest of the formatter had NO output,
+   * we should NOT output a newline. This primarily triggers on HTTP redirects */
+  if (m_pretty && !m_ss_str.empty())
     os << "\n";
   m_ss.clear();
   m_ss.str("");
@@ -61,6 +65,24 @@ void XMLFormatter::reset()
   m_pending_string.str("");
   m_sections.clear();
   m_pending_string_name.clear();
+  m_header_done = false;
+}
+
+void XMLFormatter::output_header()
+{
+  if(!m_header_done) {
+    m_header_done = true;
+    write_raw_data(XMLFormatter::XML_1_DTD);;
+    if (m_pretty)
+      m_ss << "\n";
+  }
+}
+
+void XMLFormatter::output_footer()
+{
+  while(!m_sections.empty()) {
+    close_section();
+  }
 }
 
 void XMLFormatter::open_object_section(const char *name)
