@@ -42,6 +42,8 @@
 #include "common/ceph_argparse.h"
 #include "common/version.h"
 #include "common/io_priority.h"
+#include "common/Formatter.h"
+#include "common/JSONFormatter.h"
 
 #include "os/ObjectStore.h"
 

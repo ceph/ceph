@@ -16,6 +16,7 @@
 
 #include "common/ceph_argparse.h"
 #include "common/errno.h"
+#include "common/JSONFormatter.h"
 #include "osdc/Journaler.h"
 #include "mds/mdstypes.h"
 #include "mds/LogEvent.h"
