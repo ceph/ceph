@@ -164,7 +164,10 @@ class LocalRemote(object):
                                    stdin=subprocess.PIPE,
                                    cwd=cwd)
 
-        if stdin and isinstance(stdin, basestring):
+        if stdin:
+            if not isinstance(stdin, basestring):
+                raise RuntimeError("Can't handle non-string stdins on a vstart cluster")
+
             # Hack: writing to stdin is not deadlock-safe, but it "always" works
             # as long as the input buffer is "small"
             subproc.stdin.write(stdin)
