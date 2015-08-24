@@ -128,6 +128,7 @@ private:
   bool drained;
   uint32_t magic;
   uint32_t special_handling;
+  uint32_t delay_ms;
 
   friend class XioPortals;
   friend class XioMessenger;
@@ -141,7 +142,8 @@ public:
   xio_uri(""),
   portal_id(NULL), _shutdown(false), drained(false),
   magic(0),
-  special_handling(0)
+  special_handling(0),
+  delay_ms(msgr->cct->_conf->xio_submit_mpmc_depth)
     {
       pthread_spin_init(&sp, PTHREAD_PROCESS_PRIVATE);
       pthread_mutex_init(&mtx, NULL);
@@ -345,7 +347,7 @@ public:
 	  } /* while */
 	} /* size > 0 */
 
-	xio_context_run_loop(ctx, 300);
+	xio_context_run_loop(ctx, delay_ms);
 
       } while ((!_shutdown) || (!drained));
 
