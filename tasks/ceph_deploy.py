@@ -529,15 +529,18 @@ def cli_test(ctx, config):
     if out.split(None, 1)[0] == 'HEALTH_WARN':
         log.info('All ceph-deploy cli tests passed')
     else:
-       raise RuntimeError ( "Failed to reach HEALTH_WARN State")
-    
+        raise RuntimeError ( "Failed to reach HEALTH_WARN State")
+
     #test rgw cli
-    rgw_install = 'install --rgw ' + nodename
+    rgw_install = 'install {branch} --rgw {node}'.format(
+        branch=test_branch,
+        node=nodename,
+    )
     rgw_create =  'rgw create ' + nodename
     execute_cdeploy(admin,rgw_install,path)
     execute_cdeploy(admin,rgw_create,path)
-    try: 
-      yield
+    try:
+        yield
     finally:
         log.info("cleaning up")
         if system_type == 'deb':
