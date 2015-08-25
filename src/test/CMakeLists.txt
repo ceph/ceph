@@ -826,15 +826,15 @@ set_target_properties(unittest_librados PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 
 # unittest_crc32c
-add_executable(unittest_crc32 EXCLUDE_FROM_ALL
+add_executable(unittest_crc32c EXCLUDE_FROM_ALL
   common/test_crc32c.cc
   $<TARGET_OBJECTS:heap_profiler_objs>
   )
-add_test(unittest_crc32 unittest_crc32)
-add_dependencies(check unittest_crc32)
-target_link_libraries(unittest_crc32 global ${CMAKE_DL_LIBS} ${TCMALLOC_LIBS}
+add_test(unittest_crc32c unittest_crc32c)
+add_dependencies(check unittest_crc32c)
+target_link_libraries(unittest_crc32c global ${CMAKE_DL_LIBS} ${TCMALLOC_LIBS}
   ${UNITTEST_LIBS})
-set_target_properties(unittest_crc32 PROPERTIES COMPILE_FLAGS
+set_target_properties(unittest_crc32c PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 
 # unittest_arch
