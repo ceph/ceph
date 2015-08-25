@@ -1,5 +1,6 @@
 [Unit]
 Description=Ceph disk journal activation: %f
+After=network-online.target
 
 [Service]
 Type=simple
