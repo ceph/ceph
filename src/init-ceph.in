@@ -376,7 +376,10 @@ for name in $what; do
 	    fi
 
 	    echo Starting Ceph $name on $host...
-	    mkdir -p $run_dir
+	    if [ ! -d $run_dir ]; then
+		# assume /var/run exists
+		install -d -m0755 -o ceph -g ceph /var/run/ceph
+	    fi
 	    get_conf pre_start_eval "" "pre start eval"
 	    [ -n "$pre_start_eval" ] && $pre_start_eval
 	    get_conf pre_start "" "pre start command"
