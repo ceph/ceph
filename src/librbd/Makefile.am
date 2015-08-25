@@ -33,6 +33,7 @@ librbd_internal_la_SOURCES = \
 	librbd/object_map/UpdateRequest.cc \
 	librbd/operation/FlattenRequest.cc \
 	librbd/operation/RebuildObjectMapRequest.cc \
+	librbd/operation/RenameRequest.cc \
 	librbd/operation/Request.cc \
 	librbd/operation/ResizeRequest.cc \
 	librbd/operation/SnapshotCreateRequest.cc \
@@ -100,6 +101,7 @@ noinst_HEADERS += \
 	librbd/object_map/UpdateRequest.h \
 	librbd/operation/FlattenRequest.h \
 	librbd/operation/RebuildObjectMapRequest.h \
+	librbd/operation/RenameRequest.h \
 	librbd/operation/Request.h \
 	librbd/operation/ResizeRequest.h \
 	librbd/operation/SnapshotCreateRequest.h \

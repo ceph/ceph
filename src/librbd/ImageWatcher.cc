@@ -1116,8 +1116,12 @@ void ImageWatcher::handle_payload(const RenamePayload& payload,
     ldout(m_image_ctx.cct, 10) << this << " remote rename request: "
                                << payload.image_name << dendl;
 
-    // TODO
-    ::encode(ResponseMessage(-EOPNOTSUPP), *out);
+    C_SaferCond cond_ctx;
+    librbd::rename_helper(&m_image_ctx, &cond_ctx,
+                          payload.image_name.c_str());
+
+    int r = cond_ctx.wait();
+    ::encode(ResponseMessage(r), *out);
   }
 }
 

@@ -89,6 +89,7 @@ namespace librbd {
 	    uint64_t features, int *c_order,
 	    uint64_t stripe_unit, int stripe_count);
   int rename(librados::IoCtx& io_ctx, const char *srcname, const char *dstname);
+  void rename_helper(ImageCtx *ictx, Context *ctx, const char *dstname);
   int info(ImageCtx *ictx, image_info_t& info, size_t image_size);
   int get_old_format(ImageCtx *ictx, uint8_t *old);
   int get_size(ImageCtx *ictx, uint64_t *size);

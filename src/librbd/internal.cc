@@ -32,6 +32,7 @@
 #include "librbd/parent_types.h"
 #include "librbd/operation/FlattenRequest.h"
 #include "librbd/operation/RebuildObjectMapRequest.h"
+#include "librbd/operation/RenameRequest.h"
 #include "librbd/operation/ResizeRequest.h"
 #include "librbd/operation/SnapshotCreateRequest.h"
 #include "librbd/operation/SnapshotProtectRequest.h"
@@ -1237,13 +1238,16 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
     ldout(cct, 20) << "rename " << &io_ctx << " " << srcname << " -> "
 		   << dstname << dendl;
 
-    bool old_format;
-    uint64_t src_size;
-    int r = detect_format(io_ctx, srcname, &old_format, &src_size);
+    ImageCtx *ictx = new ImageCtx(srcname, "", "", io_ctx, false);
+    int r = open_image(ictx);
     if (r < 0) {
-      lderr(cct) << "error finding source object: " << cpp_strerror(r) << dendl;
+      lderr(ictx->cct) << "error opening source image: " << cpp_strerror(r)
+		       << dendl;
       return r;
     }
+    BOOST_SCOPE_EXIT((ictx)) {
+      close_image(ictx);
+    } BOOST_SCOPE_EXIT_END
 
     r = detect_format(io_ctx, dstname, NULL, NULL);
     if (r < 0 && r != -ENOENT) {
@@ -1256,91 +1260,53 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
       return -EEXIST;
     }
 
-    string src_oid =
-      old_format ? old_header_name(srcname) : id_obj_name(srcname);
-    string dst_oid =
-      old_format ? old_header_name(dstname) : id_obj_name(dstname);
-
-    string id;
-    if (!old_format) {
-      r = cls_client::get_id(&io_ctx, src_oid, &id);
-      if (r < 0) {
-	lderr(cct) << "error reading image id: " << cpp_strerror(r) << dendl;
-	return r;
-      }
-    }
-
-    bufferlist databl;
-    map<string, bufferlist> omap_values;
-    r = io_ctx.read(src_oid, databl, src_size, 0);
-    if (r < 0) {
-      lderr(cct) << "error reading source object: " << src_oid << ": "
-		 << cpp_strerror(r) << dendl;
-      return r;
-    }
-
-    int MAX_READ = 1024;
-    string last_read = "";
-    do {
-      map<string, bufferlist> outbl;
-      r = io_ctx.omap_get_vals(src_oid, last_read, MAX_READ, &outbl);
-      if (r < 0) {
-	lderr(cct) << "error reading source object omap values: "
-		   << cpp_strerror(r) << dendl;
-	return r;
-      }
-      omap_values.insert(outbl.begin(), outbl.end());
-      if (!outbl.empty())
-	last_read = outbl.rbegin()->first;
-    } while (r == MAX_READ);
-
-    librados::ObjectWriteOperation op;
-    op.create(true);
-    op.write_full(databl);
-    if (!omap_values.empty())
-      op.omap_set(omap_values);
-    r = io_ctx.operate(dst_oid, &op);
-    if (r < 0) {
-      lderr(cct) << "error writing destination object: " << dst_oid << ": "
-		 << cpp_strerror(r) << dendl;
-      return r;
-    }
-
-    if (old_format) {
-      r = tmap_set(io_ctx, dstname);
-      if (r < 0) {
-	io_ctx.remove(dst_oid);
-	lderr(cct) << "couldn't add " << dstname << " to directory: "
-		   << cpp_strerror(r) << dendl;
-	return r;
-      }
-      r = tmap_rm(io_ctx, srcname);
-      if (r < 0) {
-	lderr(cct) << "warning: couldn't remove old entry from directory ("
-		   << srcname << ")" << dendl;
+    if (ictx->test_features(RBD_FEATURE_JOURNALING)) {
+      r = invoke_async_request(ictx, "rename", true,
+                               boost::bind(&rename_helper, ictx, _1,
+                                           dstname),
+                               boost::bind(&ImageWatcher::notify_rename,
+                                           ictx->image_watcher, dstname));
+      if (r < 0 && r != -EEXIST) {
+        return r;
       }
     } else {
-      r = cls_client::dir_rename_image(&io_ctx, RBD_DIRECTORY,
-				       srcname, dstname, id);
+      RWLock::RLocker owner_lock(ictx->owner_lock);
+      C_SaferCond cond_ctx;
+      rename_helper(ictx, &cond_ctx, dstname);
+
+      r = cond_ctx.wait();
       if (r < 0) {
-	lderr(cct) << "error updating directory: " << cpp_strerror(r) << dendl;
-	return r;
+        return r;
       }
     }
 
-    r = io_ctx.remove(src_oid);
-    if (r < 0 && r != -ENOENT) {
-      lderr(cct) << "warning: couldn't remove old source object ("
-		 << src_oid << ")" << dendl;
+    if (ictx->old_format) {
+      notify_change(ictx->md_ctx, ictx->header_oid, ictx);
     }
-
-    if (old_format) {
-      notify_change(io_ctx, old_header_name(srcname), NULL);
-    }
-
     return 0;
   }
 
+  void rename_helper(ImageCtx *ictx, Context *ctx, const char *dstname)
+  {
+    assert(ictx->owner_lock.is_locked());
+    if (ictx->test_features(RBD_FEATURE_JOURNALING)) {
+      assert(!ictx->image_watcher->is_lock_supported() ||
+	     ictx->image_watcher->is_lock_owner());
+    }
+
+    ldout(ictx->cct, 20) << "rename_helper " << ictx << " " << dstname
+                         << dendl;
+
+    int r = ictx_check(ictx, ictx->owner_lock);
+    if (r < 0) {
+      ctx->complete(r);
+      return;
+    }
+
+    operation::RenameRequest *req =
+      new operation::RenameRequest(*ictx, ctx, dstname);
+    req->send();
+  }
 
   int info(ImageCtx *ictx, image_info_t& info, size_t infosize)
   {
