@@ -21,52 +21,52 @@ typedef struct __attribute__((__packed__)) { uint32_t val; } packed_uint32_t;
 typedef struct __attribute__((__packed__)) { uint64_t val; } packed_uint64_t;
 
 // optimize for the common case, which is very small copies
-static inline void maybe_inline_memcpy(char *dest, const char *src, size_t l,
+static inline void *maybe_inline_memcpy(void *dest, const void *src, size_t l,
 				       size_t inline_len)
   __attribute__((always_inline));
 
-void maybe_inline_memcpy(char *dest, const char *src, size_t l,
+void *maybe_inline_memcpy(void *dest, const void *src, size_t l,
 			 size_t inline_len)
 {
   if (l > inline_len) {
-    memcpy(dest, src, l);
-    return;
+    return memcpy(dest, src, l);
   }
   switch (l) {
   case 8:
     ((packed_uint64_t*)dest)->val = ((packed_uint64_t*)src)->val;
-    return;
+    return dest;
   case 4:
     ((packed_uint32_t*)dest)->val = ((packed_uint32_t*)src)->val;
-    return;
+    return dest;
   case 3:
     ((packed_uint16_t*)dest)->val = ((packed_uint16_t*)src)->val;
-    *((uint8_t*)(dest+2)) = *((uint8_t*)(src+2));
-    return;
+    *((uint8_t*)((char*)dest+2)) = *((uint8_t*)((char*)src+2));
+    return dest;
   case 2:
     ((packed_uint16_t*)dest)->val = ((packed_uint16_t*)src)->val;
-    return;
+    return dest;
   case 1:
     *((uint8_t*)(dest)) = *((uint8_t*)(src));
-    return;
+    return dest;
   default:
     int cursor = 0;
     while (l >= sizeof(uint64_t)) {
-      *((uint64_t*)(dest + cursor)) = *((uint64_t*)(src + cursor));
+      *((uint64_t*)((char*)dest + cursor)) = *((uint64_t*)((char*)src + cursor));
       cursor += sizeof(uint64_t);
       l -= sizeof(uint64_t);
     }
     while (l >= sizeof(uint32_t)) {
-      *((uint32_t*)(dest + cursor)) = *((uint32_t*)(src + cursor));
+      *((uint32_t*)((char*)dest + cursor)) = *((uint32_t*)((char*)src + cursor));
       cursor += sizeof(uint32_t);
       l -= sizeof(uint32_t);
     }
     while (l > 0) {
-      *(dest + cursor) = *(src + cursor);
+      *((char*)dest + cursor) = *((char*)src + cursor);
       cursor++;
       l--;
     }
   }
+  return dest;
 }
 
 #else
