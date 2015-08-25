@@ -788,15 +788,15 @@ struct C_ObjectMapLoad : public Context {
       return ioctx->exec(oid, "rbd", "dir_remove_image", in, out);
     }
 
-    int dir_rename_image(librados::IoCtx *ioctx, const std::string &oid,
+    void dir_rename_image(librados::ObjectWriteOperation *op,
 			 const std::string &src, const std::string &dest,
 			 const std::string &id)
     {
-      bufferlist in, out;
+      bufferlist in;
       ::encode(src, in);
       ::encode(dest, in);
       ::encode(id, in);
-      return ioctx->exec(oid, "rbd", "dir_rename_image", in, out);
+      op->exec("rbd", "dir_rename_image", in);
     }
 
     int object_map_load(librados::IoCtx *ioctx, const std::string &oid,

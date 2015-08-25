@@ -119,9 +119,9 @@ namespace librbd {
     int dir_remove_image(librados::IoCtx *ioctx, const std::string &oid,
 			 const std::string &name, const std::string &id);
     // atomic remove and add
-    int dir_rename_image(librados::IoCtx *ioctx, const std::string &oid,
-			 const std::string &src, const std::string &dest,
-			 const std::string &id);
+    void dir_rename_image(librados::ObjectWriteOperation *op,
+			  const std::string &src, const std::string &dest,
+			  const std::string &id);
 
     // operations on the rbd_object_map.$image_id object
     int object_map_load(librados::IoCtx *ioctx, const std::string &oid,
