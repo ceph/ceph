@@ -137,7 +137,10 @@ namespace librbd {
   void snap_rename_helper(ImageCtx *ictx, Context* ctx,
                           const uint64_t src_snap_id, const char *dst_name);
   int snap_protect(ImageCtx *ictx, const char *snap_name);
+  void snap_protect_helper(ImageCtx *ictx, Context* ctx, const char *snap_name);
   int snap_unprotect(ImageCtx *ictx, const char *snap_name);
+  void snap_unprotect_helper(ImageCtx *ictx, Context* ctx,
+                             const char *snap_name);
   int snap_is_protected(ImageCtx *ictx, const char *snap_name,
 			bool *is_protected);
   int refresh_parent(ImageCtx *ictx);
