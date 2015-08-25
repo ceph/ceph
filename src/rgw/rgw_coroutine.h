@@ -18,7 +18,7 @@
 #include "common/RefCountedObj.h"
 #include "common/debug.h"
 
-#define RGW_ASYNC_OPS_MGR_WINDOW 16
+#define RGW_ASYNC_OPS_MGR_WINDOW 100
 
 class RGWCoroutinesStack;
 class RGWCoroutinesManager;

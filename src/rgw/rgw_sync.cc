@@ -375,8 +375,6 @@ int RGWRemoteMetaLog::get_shard_info(int shard_id)
 }
 
 #define CLONE_MAX_ENTRIES 100
-#define CLONE_OPS_WINDOW 16
-
 
 int RGWMetaSyncStatusManager::init()
 {
@@ -1117,7 +1115,103 @@ public:
   }
 };
 
+class RGWAsyncMetaStoreEntry : public RGWAsyncRadosRequest {
+  RGWRados *store;
+  string raw_key;
+  bufferlist bl;
+protected:
+  int _send_request() {
+    int ret = store->meta_mgr->put(raw_key, bl, RGWMetadataHandler::APPLY_ALWAYS);
+    if (ret < 0) {
+      ldout(store->ctx(), 0) << "ERROR: can't put key: ret=" << ret << dendl;
+      return ret;
+    }
+    return 0;
+  }
+public:
+  RGWAsyncMetaStoreEntry(RGWAioCompletionNotifier *cn, RGWRados *_store,
+                       const string& _raw_key,
+                       bufferlist& _bl) : RGWAsyncRadosRequest(cn), store(_store),
+                                          raw_key(_raw_key), bl(_bl) {}
+};
 
+
+class RGWMetaStoreEntryCR : public RGWSimpleCoroutine {
+  RGWAsyncRadosProcessor *async_rados;
+  RGWRados *store;
+  string raw_key;
+  bufferlist bl;
+
+  RGWAsyncMetaStoreEntry *req;
+
+public:
+  RGWMetaStoreEntryCR(RGWAsyncRadosProcessor *_async_rados, RGWRados *_store,
+                       const string& _raw_key,
+                       bufferlist& _bl) : RGWSimpleCoroutine(_store->ctx()), async_rados(_async_rados), store(_store),
+                                          raw_key(_raw_key), bl(_bl), req(NULL) {
+  }
+
+  ~RGWMetaStoreEntryCR() {
+    delete req;
+  }
+
+  int send_request() {
+    req = new RGWAsyncMetaStoreEntry(stack->create_completion_notifier(),
+			           store, raw_key, bl);
+    async_rados->queue(req);
+    return 0;
+  }
+
+  int request_complete() {
+    return req->get_ret_status();
+  }
+};
+
+class RGWMetaSyncSingleEntryCR : public RGWCoroutine {
+  RGWRados *store;
+  RGWHTTPManager *http_manager;
+  RGWAsyncRadosProcessor *async_rados;
+
+  string raw_key;
+
+  ssize_t pos;
+  string section;
+  string key;
+
+  bufferlist md_bl;
+
+public:
+  RGWMetaSyncSingleEntryCR(RGWRados *_store, RGWHTTPManager *_mgr, RGWAsyncRadosProcessor *_async_rados,
+		           const string& _raw_key) : RGWCoroutine(_store->ctx()), store(_store),
+                                                      http_manager(_mgr),
+						      async_rados(_async_rados),
+						      raw_key(_raw_key), pos(0) {
+  }
+
+  int operate() {
+    reenter(this) {
+      yield {
+        pos = raw_key.find(':');
+        section = raw_key.substr(0, pos);
+        key = raw_key.substr(pos + 1);
+        call(new RGWReadRemoteMetadataCR(store, http_manager, async_rados, section, key, &md_bl));
+      }
+        // write local
+        // update shard marker
+      if (retcode < 0) {
+        return set_state(RGWCoroutine_Error, retcode);
+      }
+
+      yield call(new RGWMetaStoreEntryCR(async_rados, store, raw_key, md_bl));
+
+      if (retcode < 0) {
+        return set_state(RGWCoroutine_Error, retcode);
+      }
+      return set_state(RGWCoroutine_Done, 0);
+    }
+    return 0;
+  }
+};
 
 class RGWMetaSyncShardCR : public RGWCoroutine {
   RGWRados *store;
@@ -1133,8 +1227,6 @@ class RGWMetaSyncShardCR : public RGWCoroutine {
   map<string, bufferlist>::iterator iter;
 
   string oid;
-
-  bufferlist md_bl;
 
 public:
   RGWMetaSyncShardCR(RGWRados *_store, RGWHTTPManager *_mgr, RGWAsyncRadosProcessor *_async_rados,
@@ -1154,7 +1246,6 @@ public:
 
 #define OMAP_GET_MAX_ENTRIES 100
     int max_entries = OMAP_GET_MAX_ENTRIES;
-    ssize_t pos;
     reenter(this) {
       if (sync_marker.state == rgw_meta_sync_marker::FullSync) {
         oid = full_sync_index_shard_oid(shard_id);
@@ -1167,13 +1258,8 @@ public:
           iter = entries.begin();
           for (; iter != entries.end(); ++iter) {
             ldout(store->ctx(), 20) << __func__ << ": full sync: " << iter->first << dendl;
-              // fetch remote
-	    pos = iter->first.find(':');
-	    section = iter->first.substr(0, pos);
-	    key = iter->first.substr(pos + 1);
-	    yield return call(new RGWReadRemoteMetadataCR(store, http_manager, async_rados, 
-                                                            section, key, &md_bl));
-              // write local
+              // fetch remote and write locally
+            yield spawn(new RGWMetaSyncSingleEntryCR(store, http_manager, async_rados, iter->first), false);
               // update shard marker
 	    if (retcode < 0) {
               return set_state(RGWCoroutine_Error, retcode);
