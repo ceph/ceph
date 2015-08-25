@@ -777,11 +777,20 @@ int RGWGetObj_ObjStore_SWIFT::send_response_data(bufferlist& bl, off_t bl_ofs, o
 {
   string content_type;
 
-  if (sent_header)
+  if (sent_header) {
     goto send_data;
+  }
 
-  if (range_str)
+  set_req_state_err(s, (partial_content && !ret) ? STATUS_PARTIAL_CONTENT : ret);
+  dump_errno(s);
+  if (s->err.is_err()) {
+    end_header(s, NULL);
+    return 0;
+  }
+
+  if (range_str) {
     dump_range(s, ofs, end, s->obj_size);
+  }
 
   dump_content_length(s, total_len);
   dump_last_modified(s, lastmod);
@@ -801,8 +810,6 @@ int RGWGetObj_ObjStore_SWIFT::send_response_data(bufferlist& bl, off_t bl_ofs, o
     dump_object_metadata(s, attrs);
   }
 
-  set_req_state_err(s, (partial_content && !ret) ? STATUS_PARTIAL_CONTENT : ret);
-  dump_errno(s);
   end_header(s, this, !content_type.empty() ? content_type.c_str() : "binary/octet-stream");
 
   sent_header = true;
