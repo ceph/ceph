@@ -1021,6 +1021,66 @@ TEST_F(TestImageWatcher, NotifySnapRemove) {
   ASSERT_EQ(expected_notify_ops, m_notifies);
 }
 
+TEST_F(TestImageWatcher, NotifySnapProtect) {
+  REQUIRE_FEATURE(RBD_FEATURE_EXCLUSIVE_LOCK);
+
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  ASSERT_EQ(0, register_image_watch(*ictx));
+  ASSERT_EQ(0, lock_image(*ictx, LOCK_EXCLUSIVE,
+        "auto " + stringify(m_watch_ctx->get_handle())));
+
+  m_notify_acks = {{NOTIFY_OP_SNAP_PROTECT, create_response_message(0)}};
+
+  RWLock::RLocker l(ictx->owner_lock);
+  ASSERT_EQ(0, ictx->image_watcher->notify_snap_protect("snap"));
+
+  NotifyOps expected_notify_ops;
+  expected_notify_ops += NOTIFY_OP_SNAP_PROTECT;
+  ASSERT_EQ(expected_notify_ops, m_notifies);
+}
+
+TEST_F(TestImageWatcher, NotifySnapUnprotect) {
+  REQUIRE_FEATURE(RBD_FEATURE_EXCLUSIVE_LOCK);
+
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  ASSERT_EQ(0, register_image_watch(*ictx));
+  ASSERT_EQ(0, lock_image(*ictx, LOCK_EXCLUSIVE,
+        "auto " + stringify(m_watch_ctx->get_handle())));
+
+  m_notify_acks = {{NOTIFY_OP_SNAP_UNPROTECT, create_response_message(0)}};
+
+  RWLock::RLocker l(ictx->owner_lock);
+  ASSERT_EQ(0, ictx->image_watcher->notify_snap_unprotect("snap"));
+
+  NotifyOps expected_notify_ops;
+  expected_notify_ops += NOTIFY_OP_SNAP_UNPROTECT;
+  ASSERT_EQ(expected_notify_ops, m_notifies);
+}
+
+TEST_F(TestImageWatcher, NotifyRename) {
+  REQUIRE_FEATURE(RBD_FEATURE_EXCLUSIVE_LOCK);
+
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  ASSERT_EQ(0, register_image_watch(*ictx));
+  ASSERT_EQ(0, lock_image(*ictx, LOCK_EXCLUSIVE,
+        "auto " + stringify(m_watch_ctx->get_handle())));
+
+  m_notify_acks = {{NOTIFY_OP_RENAME, create_response_message(0)}};
+
+  RWLock::RLocker l(ictx->owner_lock);
+  ASSERT_EQ(0, ictx->image_watcher->notify_rename("new_name"));
+
+  NotifyOps expected_notify_ops;
+  expected_notify_ops += NOTIFY_OP_RENAME;
+  ASSERT_EQ(expected_notify_ops, m_notifies);
+}
+
 TEST_F(TestImageWatcher, NotifyAsyncTimedOut) {
   REQUIRE_FEATURE(RBD_FEATURE_EXCLUSIVE_LOCK);
 
