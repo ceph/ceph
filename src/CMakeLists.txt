@@ -683,6 +683,7 @@ set(crushtool_srcs
     tools/crushtool.cc)
 add_executable(crushtool ${crushtool_srcs})
 target_link_libraries(crushtool global)
+install(TARGETS crushtool DESTINATION bin)
 
 # Support/Tools
 add_subdirectory(gmock)
