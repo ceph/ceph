@@ -639,27 +639,72 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
     ldout(ictx->cct, 20) << "snap_protect " << ictx << " " << snap_name
 			 << dendl;
 
-    if (ictx->read_only)
+    if (ictx->read_only) {
       return -EROFS;
+    }
 
     int r = ictx_check(ictx);
-    if (r < 0)
-      return r;
-
-    // TODO integrate w/ watch/notify
-    RWLock::RLocker owner_locker(ictx->owner_lock);
-
-    C_SaferCond cond_ctx;
-    operation::SnapshotProtectRequest *request =
-      new operation::SnapshotProtectRequest(*ictx, &cond_ctx, snap_name);
-    request->send();
-    r = cond_ctx.wait();
     if (r < 0) {
       return r;
     }
 
+    {
+      RWLock::RLocker snap_locker(ictx->snap_lock);
+      bool is_protected;
+      r = ictx->is_snap_protected(ictx->get_snap_id(snap_name), &is_protected);
+      if (r < 0) {
+        return r;
+      }
+
+      if (is_protected) {
+        return -EBUSY;
+      }
+    }
+
+    if (ictx->test_features(RBD_FEATURE_JOURNALING)) {
+      r = invoke_async_request(ictx, "snap_protect", true,
+                               boost::bind(&snap_protect_helper, ictx, _1,
+                                           snap_name),
+                               boost::bind(&ImageWatcher::notify_snap_protect,
+                                           ictx->image_watcher, snap_name));
+      if (r < 0 && r != -EBUSY) {
+        return r;
+      }
+    } else {
+      RWLock::RLocker owner_lock(ictx->owner_lock);
+      C_SaferCond cond_ctx;
+      snap_protect_helper(ictx, &cond_ctx, snap_name);
+
+      r = cond_ctx.wait();
+      if (r < 0) {
+        return r;
+      }
+    }
+
     notify_change(ictx->md_ctx, ictx->header_oid, ictx);
     return 0;
+  }
+
+  void snap_protect_helper(ImageCtx *ictx, Context* ctx, const char *snap_name)
+  {
+    assert(ictx->owner_lock.is_locked());
+    if (ictx->test_features(RBD_FEATURE_JOURNALING)) {
+      assert(!ictx->image_watcher->is_lock_supported() ||
+             ictx->image_watcher->is_lock_owner());
+    }
+
+    ldout(ictx->cct, 20) << "snap_protect_helper " << ictx << " " << snap_name
+                         << dendl;
+
+    int r = ictx_check(ictx, ictx->owner_lock);
+    if (r < 0) {
+      ctx->complete(r);
+      return;
+    }
+
+    operation::SnapshotProtectRequest *request =
+      new operation::SnapshotProtectRequest(*ictx, ctx, snap_name);
+    request->send();
   }
 
   int snap_unprotect(ImageCtx *ictx, const char *snap_name)
@@ -667,27 +712,74 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
     ldout(ictx->cct, 20) << "snap_unprotect " << ictx << " " << snap_name
 			 << dendl;
 
-    if (ictx->read_only)
+    if (ictx->read_only) {
       return -EROFS;
+    }
 
     int r = ictx_check(ictx);
-    if (r < 0)
-      return r;
-
-    // TODO integrate w/ watch/notify
-    RWLock::RLocker owner_locker(ictx->owner_lock);
-
-    C_SaferCond cond_ctx;
-    operation::SnapshotUnprotectRequest *request
-      = new operation::SnapshotUnprotectRequest(*ictx, &cond_ctx, snap_name);
-    request->send();
-    r = cond_ctx.wait();
     if (r < 0) {
       return r;
     }
 
+    {
+      RWLock::RLocker snap_locker(ictx->snap_lock);
+      bool is_unprotected;
+      r = ictx->is_snap_unprotected(ictx->get_snap_id(snap_name),
+                                    &is_unprotected);
+      if (r < 0) {
+        return r;
+      }
+
+      if (is_unprotected) {
+        return -EINVAL;
+      }
+    }
+
+    if (ictx->test_features(RBD_FEATURE_JOURNALING)) {
+      r = invoke_async_request(ictx, "snap_unprotect", true,
+                               boost::bind(&snap_unprotect_helper, ictx, _1,
+                                           snap_name),
+                               boost::bind(&ImageWatcher::notify_snap_unprotect,
+                                           ictx->image_watcher, snap_name));
+      if (r < 0 && r != -EINVAL) {
+        return r;
+      }
+    } else {
+      RWLock::RLocker owner_lock(ictx->owner_lock);
+      C_SaferCond cond_ctx;
+      snap_unprotect_helper(ictx, &cond_ctx, snap_name);
+
+      r = cond_ctx.wait();
+      if (r < 0) {
+        return r;
+      }
+    }
+
     notify_change(ictx->md_ctx, ictx->header_oid, ictx);
     return 0;
+  }
+
+  void snap_unprotect_helper(ImageCtx *ictx, Context* ctx,
+                             const char *snap_name)
+  {
+    assert(ictx->owner_lock.is_locked());
+    if (ictx->test_features(RBD_FEATURE_JOURNALING)) {
+      assert(!ictx->image_watcher->is_lock_supported() ||
+             ictx->image_watcher->is_lock_owner());
+    }
+
+    ldout(ictx->cct, 20) << "snap_protect_helper " << ictx << " " << snap_name
+                         << dendl;
+
+    int r = ictx_check(ictx, ictx->owner_lock);
+    if (r < 0) {
+      ctx->complete(r);
+      return;
+    }
+
+    operation::SnapshotUnprotectRequest *request =
+      new operation::SnapshotUnprotectRequest(*ictx, ctx, snap_name);
+    request->send();
   }
 
   int snap_is_protected(ImageCtx *ictx, const char *snap_name,

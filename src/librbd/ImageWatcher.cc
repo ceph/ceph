@@ -1065,9 +1065,12 @@ void ImageWatcher::handle_payload(const SnapProtectPayload& payload,
   if (m_lock_owner_state == LOCK_OWNER_STATE_LOCKED) {
     ldout(m_image_ctx.cct, 10) << this << " remote snap_protect request: "
                                << payload.snap_name << dendl;
+    C_SaferCond cond_ctx;
+    librbd::snap_protect_helper(&m_image_ctx, &cond_ctx,
+                                payload.snap_name.c_str());
 
-    // TODO
-    ::encode(ResponseMessage(-EOPNOTSUPP), *out);
+    int r = cond_ctx.wait();
+    ::encode(ResponseMessage(r), *out);
   }
 }
 
@@ -1077,9 +1080,12 @@ void ImageWatcher::handle_payload(const SnapUnprotectPayload& payload,
   if (m_lock_owner_state == LOCK_OWNER_STATE_LOCKED) {
     ldout(m_image_ctx.cct, 10) << this << " remote snap_unprotect request: "
                                << payload.snap_name << dendl;
+    C_SaferCond cond_ctx;
+    librbd::snap_unprotect_helper(&m_image_ctx, &cond_ctx,
+                                  payload.snap_name.c_str());
 
-    // TODO
-    ::encode(ResponseMessage(-EOPNOTSUPP), *out);
+    int r = cond_ctx.wait();
+    ::encode(ResponseMessage(r), *out);
   }
 }
 
@@ -1099,7 +1105,7 @@ void ImageWatcher::handle_payload(const RebuildObjectMapPayload& payload,
       librbd::async_rebuild_object_map(&m_image_ctx, ctx, *prog_ctx);
     }
 
-    ::encode(ResponseMessage(0), *out);
+    ::encode(ResponseMessage(r), *out);
   }
 }
 
