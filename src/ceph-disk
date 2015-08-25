@@ -1025,7 +1025,24 @@ def dmcrypt_retrieve_key(uuid, key_dir, luks):
     if os.path.exists(local_key_path):
         return open(local_key_path, 'rb').read()
 
-    dmcrypt_key_server = get_global_conf("dmcrypt_key_server")
+    key_handling_service = get_global_conf("key_store_service")
+    return retrieve_key_with_service(key_handling_service, uuid)
+
+
+def retrieve_key_with_service(service, uuid):
+    if service == 'ftps':
+        return get_key_via_ftp(uuid)
+    elif service == 'deo':
+        log.INFO('Deo is used an does not need any further actions')
+        pass
+    elif service == 'https':
+        raise Error(service + 'is not implemented yet.')
+    else:
+        raise Error(service + 'is either missspelled or not supported yet.')
+
+
+def get_key_via_ftp(uuid):
+    dmcrypt_key_server = get_global_conf("dmcrypt_key_server")  
     if dmcrypt_key_server:
         ftp = FTP(dmcrypt_key_server)
         try:
@@ -1116,7 +1133,7 @@ def dmcrypt_new(rawdev, _uuid, cryptsetup_parameters, key_dir, luks):
     except subprocess.CalledProcessError as e:
         raise Error('unable to create dmcrypt device', rawdev, e)
 
-    return dmcrypt_map(rawdev, key_dir, _uuid, cryptsetup_parameters, luks) #TODO
+    return dmcrypt_map(rawdev, key_dir, _uuid, cryptsetup_parameters, luks)
 
 
 def dmcrypt_unmap(_uuid, luks):
