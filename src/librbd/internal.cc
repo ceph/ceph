@@ -2140,11 +2140,12 @@ reprotect_and_return_err:
     if (ictx->parent) {
       uint64_t overlap;
       r = ictx->get_parent_overlap(ictx->snap_id, &overlap);
-      if (r < 0)
+      if (r < 0 && r != -ENOENT) {
 	return r;
-      if (!overlap ||
+      }
+      if (r == -ENOENT || overlap == 0 ||
 	  ictx->parent->md_ctx.get_id() !=
-	  ictx->get_parent_pool_id(ictx->snap_id) ||
+            ictx->get_parent_pool_id(ictx->snap_id) ||
 	  ictx->parent->id != ictx->get_parent_image_id(ictx->snap_id) ||
 	  ictx->parent->snap_id != ictx->get_parent_snap_id(ictx->snap_id)) {
 	ictx->clear_nonexistence_cache();
