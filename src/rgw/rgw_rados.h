@@ -742,11 +742,12 @@ protected:
 
   int store_name(bool exclusive);
   int store_info(bool exclusive);
-  int read_info(const string& obj_id);
+  int read_info(const string& obj_id, bool old_format = false);
   int read_id(const string& obj_name, string& obj_id);
-  int read_default(RGWDefaultSystemMetaObjInfo& default_info);
+  int read_default(RGWDefaultSystemMetaObjInfo& default_info,
+		   const string& oid);
   /* read and use default id */
-  int use_default();
+  int use_default(bool old_format = false);
 
 public:
   RGWSystemMetaObj() {}
@@ -773,21 +774,23 @@ public:
     DECODE_FINISH(bl);
   }
 
-  int init(CephContext *_cct, RGWRados *_store, bool setup_obj = true);
+  int init(CephContext *_cct, RGWRados *_store, bool setup_obj = true, bool old_format = false);
   int read_default_id(string& default_id);
   int set_as_default();
   int delete_default();
   int create();
-  int delete_obj();
+  int delete_obj(bool old_format = false);
   int rename(const string& new_name);
   int update() { return store_info(false);}
 
   virtual const string& get_pool_name(CephContext *cct) = 0;
 
-  virtual const string& get_default_oid() = 0;
+  virtual const string& get_default_oid(bool old_format = false) = 0;
   virtual const string& get_names_oid_prefix() = 0;
-  virtual const string& get_info_oid_prefix() = 0;
-
+  virtual const string& get_info_oid_prefix(bool old_format = false) = 0;
+  virtual int create_default() {
+    return -ENOENT;
+  }
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
 };
@@ -1170,9 +1173,9 @@ public:
   }
 
   const string& get_pool_name(CephContext *cct);
-  const string& get_default_oid();
+  const string& get_default_oid(bool old_format = false);
   const string& get_names_oid_prefix();
-  const string& get_info_oid_prefix();
+  const string& get_info_oid_prefix(bool old_format = false);
 
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);

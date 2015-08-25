@@ -431,7 +431,7 @@ int RGWZoneGroup::delete_obj(bool old_region_format)
   return ret;
 }
 
-int RGWSystemMetaObj::init(CephContext *_cct, RGWRados *_store, bool setup_obj)
+int RGWSystemMetaObj::init(CephContext *_cct, RGWRados *_store, bool setup_obj, bool old_format)
 {
   cct = _cct;
   store = _store;
@@ -439,14 +439,18 @@ int RGWSystemMetaObj::init(CephContext *_cct, RGWRados *_store, bool setup_obj)
   if (!setup_obj)
     return 0;
 
+  if (old_format && id.empty()) {
+    id = name;
+  }
+
   if (id.empty()) {
     int r;
     if (name.empty()) {
-      r = use_default();
+      r = use_default(old_format);
       if (r < 0) {
 	return r;
       }
-    } else {
+    } else if (!old_format) {
       r = read_id(name, id);
       if (r < 0) {
 	lderr(cct) << "error in read_id fir id " << id << " : " << cpp_strerror(-r) << dendl;
@@ -458,10 +462,9 @@ int RGWSystemMetaObj::init(CephContext *_cct, RGWRados *_store, bool setup_obj)
   return read_info(id);
 }
 
-int RGWSystemMetaObj::read_default(RGWDefaultSystemMetaObjInfo& default_info)
+int RGWSystemMetaObj::read_default(RGWDefaultSystemMetaObjInfo& default_info, const string& oid)
 {
   string pool_name = get_pool_name(cct);
-  string oid =  get_default_oid();
 
   rgw_bucket pool(pool_name.c_str());
   bufferlist bl;
@@ -485,7 +488,7 @@ int RGWSystemMetaObj::read_default_id(string& default_id)
 {
   RGWDefaultSystemMetaObjInfo default_info;
 
-  int ret = read_default(default_info);
+  int ret = read_default(default_info, get_default_oid());
   if (ret < 0) {
     return ret;
   }
@@ -495,10 +498,10 @@ int RGWSystemMetaObj::read_default_id(string& default_id)
   return 0;
 }
 
-int RGWSystemMetaObj::use_default()
+int RGWSystemMetaObj::use_default(bool old_format)
 {
   RGWDefaultSystemMetaObjInfo default_info;
-  int ret = read_default(default_info);
+  int ret = read_default(default_info, get_default_oid(old_format));
   if (ret < 0)
     return ret;
 
@@ -553,18 +556,18 @@ int RGWSystemMetaObj::read_id(const string& obj_name, string& object_id)
   return 0;
 }
 
-int RGWSystemMetaObj::delete_obj()
+int RGWSystemMetaObj::delete_obj(bool old_format)
 {
   string pool_name = get_pool_name(cct);
   rgw_bucket pool(pool_name.c_str());
 
   /* check to see if obj is the default */
   RGWDefaultSystemMetaObjInfo default_info;
-  int ret = read_default(default_info);
+  int ret = read_default(default_info, get_default_oid(old_format));
   if (ret < 0 && ret != -ENOENT)
     return ret;
-  if (default_info.default_id == id) {
-    string oid = get_default_oid();
+  if (default_info.default_id == id || (old_format && default_info.default_id == name)) {
+    string oid = get_default_oid(old_format);
     rgw_obj default_named_obj(pool, oid);
     ret = store->delete_system_obj(default_named_obj);
     if (ret < 0) {
@@ -572,15 +575,23 @@ int RGWSystemMetaObj::delete_obj()
       return ret;
     }
   }
-  string oid  = get_names_oid_prefix() + name;
-  rgw_obj object_name(pool, oid);
-  ret = store->delete_system_obj(object_name);
-  if (ret < 0) {
-    lderr(cct) << "Error delete obj name  " << name << ": " << cpp_strerror(-ret) << dendl;
-    return ret;
+  if (!old_format) {
+    string oid  = get_names_oid_prefix() + name;
+    rgw_obj object_name(pool, oid);
+    ret = store->delete_system_obj(object_name);
+    if (ret < 0) {
+      lderr(cct) << "Error delete obj name  " << name << ": " << cpp_strerror(-ret) << dendl;
+      return ret;
+    }
   }
 
-  oid  = get_info_oid_prefix() + id;
+  string oid = get_info_oid_prefix(old_format);  
+  if (old_format) {
+    oid += name;
+  } else {
+    oid += id;
+  }
+
   rgw_obj object_id(pool, oid);
   ret = store->delete_system_obj(object_id);
   if (ret < 0) {
@@ -642,14 +653,14 @@ int RGWSystemMetaObj::rename(const string& new_name)
   return ret;
 }
 
-int RGWSystemMetaObj::read_info(const string& obj_id)
+int RGWSystemMetaObj::read_info(const string& obj_id, bool old_format)
 {
   string pool_name = get_pool_name(cct);
 
   rgw_bucket pool(pool_name.c_str());
   bufferlist bl;
 
-  string oid= get_info_oid_prefix() + obj_id;
+  string oid = get_info_oid_prefix(old_format) + obj_id;
 
   RGWObjectCtx obj_ctx(store);
   int ret = rgw_get_system_obj(store, obj_ctx, pool, oid, bl, NULL, NULL);
@@ -720,7 +731,7 @@ const string& RGWRealm::get_pool_name(CephContext *cct)
   return cct->_conf->rgw_realm_root_pool;
 }
 
-const string& RGWRealm::get_default_oid()
+const string& RGWRealm::get_default_oid(bool old_format)
 {
   if (cct->_conf->rgw_default_realm_info_oid.empty()) {
     return default_realm_info_oid;
@@ -733,7 +744,7 @@ const string& RGWRealm::get_names_oid_prefix()
   return realm_names_oid_prefix;
 }
 
-const string& RGWRealm::get_info_oid_prefix()
+const string& RGWRealm::get_info_oid_prefix(bool old_format)
 {
   return realm_info_oid_prefix;
 }
