@@ -22,7 +22,7 @@ ACTION=="add" SUBSYSTEM=="block", \
 # ceph journal dmcrypt + luks
 ACTION=="add" SUBSYSTEM=="block", \
   ENV{DEVTYPE}=="partition", \
-  ENV{ID_PART_ENTRY_TYPE}=="45b0969e-9b03-4f30-b4c6-5ec00ceff106", \
+  ENV{ID_PART_ENTRY_TYPE}=="45b0969e-9b03-4f30-b4c6-35865ceff106", \
   TAG+="systemd", \
   ENV{SYSTEMD_WANTS}+="ceph-disk-activate-journal@/dev/$name.service"
 
