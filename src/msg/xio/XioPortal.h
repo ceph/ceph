@@ -170,6 +170,7 @@ public:
 	xcmp->xcon->msg_release_fail(msg, code);
       msg = next_msg;
     }
+    xcmp->trace.event("xio_release_msg");
     xcmp->finalize(); /* unconditional finalize */
   }
 
@@ -273,6 +274,7 @@ public:
 		  goto restart;
 		}
 
+		xs->trace.event("xio_send_msg");
 		msg = xsend->get_xio_msg();
 		code = xio_send_msg(xcon->conn, msg);
 		/* header trace moved here to capture xio serial# */
