@@ -330,10 +330,15 @@ using OpenStack virtual machines.
 Prerequisites
 -------------
 
-An OpenStack tenant with access to the nova and cinder API (for
-instance http://entercloudsuite.com/). If the cinder API is not
-available (for instance https://www.ovh.com/fr/cloud/), some jobs
-won't run because they expect volumes attached to each instance.
+An OpenStack tenant with access to the nova and cinder API. If the
+cinder API is not available, some jobs won't run because they expect
+volumes attached to each instance.
+
+Apply for an OpenStack account
+------------------------------
+
+* Send a mail to `Loic Dachary <mailto:loic@dachary.org>`_
+* Store the credentials sent to you in $HOME/openrc.sh
 
 Setup OpenStack at Enter Cloud Suite
 ------------------------------------
@@ -400,8 +405,10 @@ Usage
     $ openstack keypair create myself > myself.pem
     $ chmod 600 myself.pem
 
-* Run the dummy suite (it does nothing useful but shows all works as
-  expected)::
+* Run the dummy suite. It does nothing useful but shows all works as
+  expected. Note that the first time it is run, it can take a long
+  time (from a few minutes to half an hour or so) because it downloads
+  and uploads a cloud image to the OpenStack provider. ::
 
     $ teuthology-openstack --key-filename myself.pem --key-name myself --suite dummy
     Job scheduled with name ubuntu-2015-07-24_09:03:29-dummy-master---basic-openstack and ID 1
@@ -434,6 +441,18 @@ Usage
     $ teuthology-openstack --key-filename myself.pem --key-name myself \
                            --suite dummy --upload
     
+
+Troubleshooting
+---------------
+
+Debian Jessie users may face the following error::
+
+   NameError: name 'PROTOCOL_SSLv3' is not defined
+
+The `workaround
+<https://github.com/mistio/mist.io/issues/434#issuecomment-86484952>`_
+suggesting to replace ``PROTOCOL_SSLv3`` with ``PROTOCOL_SSLv23`` in
+the ssl.py has been reported to work.
 
 Running the OpenStack backend integration tests
 -----------------------------------------------
