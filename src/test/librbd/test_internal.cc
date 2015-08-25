@@ -314,7 +314,7 @@ TEST_F(TestInternal, CancelAsyncResize) {
     size -= MIN(size, 1<<18);
     {
       RWLock::RLocker l(ictx->owner_lock);
-      ASSERT_EQ(0, librbd::async_resize(ictx, &ctx, size, prog_ctx));
+      librbd::async_resize(ictx, &ctx, size, prog_ctx);
     }
 
     // try to interrupt the in-progress resize
@@ -358,8 +358,7 @@ TEST_F(TestInternal, MultipleResize) {
 
     RWLock::RLocker l(ictx->owner_lock);
     contexts.push_back(new C_SaferCond());
-    ASSERT_EQ(0, librbd::async_resize(ictx, contexts.back(), new_size,
-                                      prog_ctx));
+    librbd::async_resize(ictx, contexts.back(), new_size, prog_ctx);
   }
 
   for (uint32_t i = 0; i < contexts.size(); ++i) {
