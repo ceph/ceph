@@ -705,6 +705,13 @@ void ObjectWriteOperation::set_alloc_hint(uint64_t expected_object_size,
 			       expected_object_size, expected_write_size));
 }
 
+
+void ObjectWriteOperation::tmap_update(const bufferlist& cmdbl) {
+  TestObjectOperationImpl *o = reinterpret_cast<TestObjectOperationImpl*>(impl);
+  o->ops.push_back(boost::bind(&TestIoCtxImpl::tmap_update, _1, _2,
+                               cmdbl));
+}
+
 void ObjectWriteOperation::truncate(uint64_t off) {
   TestObjectOperationImpl *o = reinterpret_cast<TestObjectOperationImpl*>(impl);
   o->ops.push_back(boost::bind(&TestIoCtxImpl::truncate, _1, _2, off, _4));
