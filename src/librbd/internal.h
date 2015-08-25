@@ -104,13 +104,13 @@ namespace librbd {
 	     ProgressContext& prog_ctx);
   int resize(ImageCtx *ictx, uint64_t size, ProgressContext& prog_ctx);
   int snap_create(ImageCtx *ictx, const char *snap_name);
-  int snap_create_helper(ImageCtx *ictx, Context* ctx, const char *snap_name);
+  void snap_create_helper(ImageCtx *ictx, Context* ctx, const char *snap_name);
   int snap_list(ImageCtx *ictx, std::vector<snap_info_t>& snaps);
   bool snap_exists(ImageCtx *ictx, const char *snap_name);
   int snap_rollback(ImageCtx *ictx, const char *snap_name,
 		    ProgressContext& prog_ctx);
   int snap_remove(ImageCtx *ictx, const char *snap_name);
-  int snap_remove_helper(ImageCtx *ictx, Context* ctx, const char *snap_name);
+  void snap_remove_helper(ImageCtx *ictx, Context* ctx, const char *snap_name);
   int snap_protect(ImageCtx *ictx, const char *snap_name);
   int snap_unprotect(ImageCtx *ictx, const char *snap_name);
   int snap_is_protected(ImageCtx *ictx, const char *snap_name,
@@ -172,13 +172,11 @@ namespace librbd {
   void readahead(ImageCtx *ictx,
                  const vector<pair<uint64_t,uint64_t> >& image_extents);
 
-  int async_flatten(ImageCtx *ictx, Context *ctx, ProgressContext &prog_ctx);
-  int async_resize(ImageCtx *ictx, Context *ctx, uint64_t size,
-		   ProgressContext &prog_ctx);
-  void async_resize_helper(ImageCtx *ictx, Context *ctx, uint64_t new_size,
-                           ProgressContext& prog_ctx);
-  int async_rebuild_object_map(ImageCtx *ictx, Context *ctx,
-                               ProgressContext &prog_ctx);
+  void async_flatten(ImageCtx *ictx, Context *ctx, ProgressContext &prog_ctx);
+  void async_resize(ImageCtx *ictx, Context *ctx, uint64_t size,
+                    ProgressContext &prog_ctx);
+  void async_rebuild_object_map(ImageCtx *ictx, Context *ctx,
+                                ProgressContext &prog_ctx);
 
   int flush(ImageCtx *ictx);
   int invalidate_cache(ImageCtx *ictx);

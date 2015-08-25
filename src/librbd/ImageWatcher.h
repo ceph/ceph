@@ -269,8 +269,6 @@ private:
   int prepare_async_request(const watch_notify::AsyncRequestId& id,
                             bool* new_request, Context** ctx,
                             ProgressContext** prog_ctx);
-  void cleanup_async_request(const watch_notify::AsyncRequestId& id,
-                             Context *ctx);
 
   void handle_payload(const watch_notify::HeaderUpdatePayload& payload,
                       bufferlist *out);

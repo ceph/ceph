@@ -862,14 +862,6 @@ int ImageWatcher::prepare_async_request(const AsyncRequestId& async_request_id,
   return 0;
 }
 
-void ImageWatcher::cleanup_async_request(const AsyncRequestId& async_request_id,
-                                         Context *ctx) {
-  delete ctx;
-
-  RWLock::WLocker l(m_async_request_lock);
-  m_async_pending.erase(async_request_id);
-}
-
 void ImageWatcher::handle_payload(const HeaderUpdatePayload &payload,
 				  bufferlist *out) {
   ldout(m_image_ctx.cct, 10) << this << " image header updated" << dendl;
@@ -1010,12 +1002,7 @@ void ImageWatcher::handle_payload(const FlattenPayload &payload,
     if (new_request) {
       ldout(m_image_ctx.cct, 10) << this << " remote flatten request: "
 				 << payload.async_request_id << dendl;
-      r = librbd::async_flatten(&m_image_ctx, ctx, *prog_ctx);
-      if (r < 0) {
-	lderr(m_image_ctx.cct) << this << " remove flatten request failed: "
-			       << cpp_strerror(r) << dendl;
-        cleanup_async_request(payload.async_request_id, ctx);
-      }
+      librbd::async_flatten(&m_image_ctx, ctx, *prog_ctx);
     }
 
     ::encode(ResponseMessage(r), *out);
@@ -1035,12 +1022,7 @@ void ImageWatcher::handle_payload(const ResizePayload &payload,
       ldout(m_image_ctx.cct, 10) << this << " remote resize request: "
 				 << payload.async_request_id << " "
 				 << payload.size << dendl;
-      r = librbd::async_resize(&m_image_ctx, ctx, payload.size, *prog_ctx);
-      if (r < 0) {
-	lderr(m_image_ctx.cct) << this << " remove resize request failed: "
-			       << cpp_strerror(r) << dendl;
-        cleanup_async_request(payload.async_request_id, ctx);
-      }
+      librbd::async_resize(&m_image_ctx, ctx, payload.size, *prog_ctx);
     }
 
     ::encode(ResponseMessage(r), *out);
@@ -1054,12 +1036,10 @@ void ImageWatcher::handle_payload(const SnapCreatePayload &payload,
     ldout(m_image_ctx.cct, 10) << this << " remote snap_create request: "
 			       << payload.snap_name << dendl;
     C_SaferCond cond_ctx;
-    int r = librbd::snap_create_helper(&m_image_ctx, &cond_ctx,
-                                       payload.snap_name.c_str());
-    if (r == 0) {
-      r = cond_ctx.wait();
-    }
+    librbd::snap_create_helper(&m_image_ctx, &cond_ctx,
+                               payload.snap_name.c_str());
 
+    int r = cond_ctx.wait();
     ::encode(ResponseMessage(r), *out);
   }
 }
@@ -1071,12 +1051,10 @@ void ImageWatcher::handle_payload(const SnapRemovePayload &payload,
     ldout(m_image_ctx.cct, 10) << this << " remote snap_remove request: "
 			       << payload.snap_name << dendl;
     C_SaferCond cond_ctx;
-    int r = librbd::snap_remove_helper(&m_image_ctx, &cond_ctx,
-                                       payload.snap_name.c_str());
-    if (r == 0) {
-      r = cond_ctx.wait();
-    }
+    librbd::snap_remove_helper(&m_image_ctx, &cond_ctx,
+                               payload.snap_name.c_str());
 
+    int r = cond_ctx.wait();
     ::encode(ResponseMessage(r), *out);
   }
 }
@@ -1118,13 +1096,7 @@ void ImageWatcher::handle_payload(const RebuildObjectMapPayload& payload,
       ldout(m_image_ctx.cct, 10) << this
                                  << " remote rebuild object map request: "
                                  << payload.async_request_id << dendl;
-      r = librbd::async_rebuild_object_map(&m_image_ctx, ctx, *prog_ctx);
-      if (r < 0) {
-        lderr(m_image_ctx.cct) << this
-                               << " remove rebuild object map request failed: "
-                               << cpp_strerror(r) << dendl;
-        cleanup_async_request(payload.async_request_id, ctx);
-      }
+      librbd::async_rebuild_object_map(&m_image_ctx, ctx, *prog_ctx);
     }
 
     ::encode(ResponseMessage(0), *out);
