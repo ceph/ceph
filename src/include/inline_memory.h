@@ -16,10 +16,6 @@
 
 #if defined(__GNUC__)
 
-typedef struct __attribute__((__packed__)) { uint16_t val; } packed_uint16_t;
-typedef struct __attribute__((__packed__)) { uint32_t val; } packed_uint32_t;
-typedef struct __attribute__((__packed__)) { uint64_t val; } packed_uint64_t;
-
 // optimize for the common case, which is very small copies
 static inline void *maybe_inline_memcpy(void *dest, const void *src, size_t l,
 				       size_t inline_len)
@@ -33,30 +29,26 @@ void *maybe_inline_memcpy(void *dest, const void *src, size_t l,
   }
   switch (l) {
   case 8:
-    ((packed_uint64_t*)dest)->val = ((packed_uint64_t*)src)->val;
-    return dest;
+    return __builtin_memcpy(dest, src, 8);
   case 4:
-    ((packed_uint32_t*)dest)->val = ((packed_uint32_t*)src)->val;
-    return dest;
+    return __builtin_memcpy(dest, src, 4);
   case 3:
-    ((packed_uint16_t*)dest)->val = ((packed_uint16_t*)src)->val;
-    *((uint8_t*)((char*)dest+2)) = *((uint8_t*)((char*)src+2));
-    return dest;
+    return __builtin_memcpy(dest, src, 3);
   case 2:
-    ((packed_uint16_t*)dest)->val = ((packed_uint16_t*)src)->val;
-    return dest;
+    return __builtin_memcpy(dest, src, 2);
   case 1:
-    *((uint8_t*)(dest)) = *((uint8_t*)(src));
-    return dest;
+    return __builtin_memcpy(dest, src, 1);
   default:
     int cursor = 0;
     while (l >= sizeof(uint64_t)) {
-      *((uint64_t*)((char*)dest + cursor)) = *((uint64_t*)((char*)src + cursor));
+      __builtin_memcpy((char*)dest + cursor, (char*)src + cursor,
+		       sizeof(uint64_t));
       cursor += sizeof(uint64_t);
       l -= sizeof(uint64_t);
     }
     while (l >= sizeof(uint32_t)) {
-      *((uint32_t*)((char*)dest + cursor)) = *((uint32_t*)((char*)src + cursor));
+      __builtin_memcpy((char*)dest + cursor, (char*)src + cursor,
+		       sizeof(uint32_t));
       cursor += sizeof(uint32_t);
       l -= sizeof(uint32_t);
     }
