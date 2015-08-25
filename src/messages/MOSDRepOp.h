@@ -81,10 +81,12 @@ public:
     p = payload.begin();
     // splitted to partial and final
     ::decode(map_epoch, p);
-    if (header.version >= 2)
+    if (header.version >= 2) {
       ::decode(min_epoch, p);
-    else
+      decode_trace(p);
+    } else {
       min_epoch = map_epoch;
+    }
     ::decode(reqid, p);
     ::decode(pgid, p);
   }
@@ -112,10 +114,12 @@ public:
 
   void encode_payload(uint64_t features) override {
     ::encode(map_epoch, payload);
-    if (HAVE_FEATURE(features, SERVER_LUMINOUS))
+    if (HAVE_FEATURE(features, SERVER_LUMINOUS)) {
       ::encode(min_epoch, payload);
-    else
+      encode_trace(payload, features);
+    } else {
       header.version = 1;
+    }
     ::encode(reqid, payload);
     ::encode(pgid, payload);
     ::encode(poid, payload);
