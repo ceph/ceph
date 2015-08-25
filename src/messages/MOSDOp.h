@@ -33,7 +33,7 @@ class OSD;
 
 class MOSDOp : public Message {
 
-  static const int HEAD_VERSION = 7;
+  static const int HEAD_VERSION = 8;
   static const int COMPAT_VERSION = 3;
 
 private:
@@ -349,6 +349,8 @@ struct ceph_osd_request_head {
 
       ::encode(retry_attempt, payload);
       ::encode(features, payload);
+
+      encode_trace(payload, features);
     }
   }
 
@@ -494,6 +496,10 @@ struct ceph_osd_request_head {
     ::decode(retry_attempt, p);
 
     ::decode(features, p);
+
+    if (header.version >= 8) {
+      decode_trace(p);
+    }
 
     OSDOp::split_osd_op_vector_in_data(ops, data);
 
