@@ -82,7 +82,7 @@ public:
   }
 
   bool is_temp() const {
-    return pool < POOL_TEMP_START && pool != INT64_MIN;
+    return pool <= POOL_TEMP_START && pool != INT64_MIN;
   }
   bool is_meta() const {
     return pool == POOL_META;
