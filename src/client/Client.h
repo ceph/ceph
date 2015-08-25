@@ -96,6 +96,8 @@ struct CommandOp
   std::string  *outs;
 };
 
+/* error code for ceph_fuse */
+#define CEPH_FUSE_NO_MDS_UP    -(1<<2) /* no mds up deteced in ceph_fuse */
 
 // ============================================
 // types for my local metadata cache
