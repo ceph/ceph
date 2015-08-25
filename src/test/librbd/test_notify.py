@@ -13,6 +13,7 @@ from rbd import (RBD,
 POOL_NAME='rbd'
 PARENT_IMG_NAME='test_notify_parent'
 CLONE_IMG_NAME='test_notify_clone'
+CLONE_IMG_RENAME='test_notify_clone2'
 IMG_SIZE = 16 << 20
 IMG_ORDER = 20
 
@@ -103,6 +104,16 @@ def slave(ioctx):
         assert(not image.is_exclusive_lock_owner())
         assert('snap1' in map(lambda snap: snap['name'], image.list_snaps()))
 
+        print("protect_snap")
+        image.protect_snap('snap1')
+        assert(not image.is_exclusive_lock_owner())
+        assert(image.is_protected_snap())
+
+        print("unprotect_snap")
+        image.unprotect_snap('snap1')
+        assert(not image.is_exclusive_lock_owner())
+        assert(not image.is_protected_snap())
+
         print("remove_snap")
         image.remove_snap('snap1')
         assert(not image.is_exclusive_lock_owner())
@@ -113,7 +124,10 @@ def slave(ioctx):
         image.write(data, 0)
         assert(image.is_exclusive_lock_owner())
 
-        print("finished")
+    print("rename")
+    RBD().rename(ioctx, CLONE_IMG_NAME, CLONE_IMG_RENAME);
+
+    print("finished")
 
 def main():
     if len(sys.argv) != 2 or sys.argv[1] not in ['master', 'slave']:
