@@ -111,6 +111,7 @@ namespace librbd {
   int clone(IoCtx& p_ioctx, const char *p_name, const char *p_snap_name,
 	    IoCtx& c_ioctx, const char *c_name, ImageOptions& c_opts);
   int rename(librados::IoCtx& io_ctx, const char *srcname, const char *dstname);
+  void rename_helper(ImageCtx *ictx, Context *ctx, const char *dstname);
   int info(ImageCtx *ictx, image_info_t& info, size_t image_size);
   int get_old_format(ImageCtx *ictx, uint8_t *old);
   int get_size(ImageCtx *ictx, uint64_t *size);
