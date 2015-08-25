@@ -29,6 +29,8 @@ import time
 import json
 import sys
 import errno
+from unittest import suite
+import unittest
 
 import logging
 
@@ -48,6 +50,7 @@ try:
     from tasks.cephfs.fuse_mount import FuseMount
     from tasks.cephfs.filesystem import Filesystem
     from teuthology.contextutil import MaxWhileTries
+    from teuthology.task import interactive
 except ImportError:
     sys.stderr.write("***\nError importing packages, have you activated your teuthology virtualenv "
                      "and set PYTHONPATH to point to teuthology and ceph-qa-suite?\n***\n\n")
@@ -585,10 +588,29 @@ class LocalFilesystem(Filesystem):
         pass
 
 
-def exec_test():
-    from unittest import suite
-    import unittest
+class InteractiveFailureResult(unittest.TextTestResult):
+    """
+    Specialization that implements interactive-on-error style
+    behavior.
+    """
+    def addFailure(self, test, err):
+        super(InteractiveFailureResult, self).addFailure(test, err)
+        log.error(self._exc_info_to_string(err, test))
+        log.error("Failure in test '{0}', going interactive".format(
+            self.getDescription(test)
+        ))
+        interactive.task(ctx=None, config=None)
 
+    def addError(self, test, err):
+        super(InteractiveFailureResult, self).addError(test, err)
+        log.error(self._exc_info_to_string(err, test))
+        log.error("Error in test '{0}', going interactive".format(
+            self.getDescription(test)
+        ))
+        interactive.task(ctx=None, config=None)
+
+
+def exec_test():
     # Help developers by stopping up-front if their tree isn't built enough for all the
     # tools that the tests might want to use (add more here if needed)
     require_binaries = ["ceph-dencoder", "cephfs-journal-tool", "cephfs-data-scan",
@@ -696,7 +718,18 @@ def exec_test():
             else:
                 yield s, t
 
-    modules = sys.argv[1:]
+    interactive_on_error = False
+
+    args = sys.argv[1:]
+    flags = [a for a in args if a.startswith("-")]
+    modules = [a for a in args if not a.startswith("-")]
+    for f in flags:
+        if f == "--interactive":
+            interactive_on_error = True
+        else:
+            log.error("Unknown option '{0}'".format(f))
+            sys.exit(-1)
+
     if modules:
         log.info("Executing modules: {0}".format(modules))
         module_suites = []
@@ -741,7 +774,10 @@ def exec_test():
     for s, method in victims:
         s._tests.remove(method)
 
-    result_class = unittest.TextTestResult
+    if interactive_on_error:
+        result_class = InteractiveFailureResult
+    else:
+        result_class = unittest.TextTestResult
     fail_on_skip = False
 
     class LoggingResult(result_class):
