@@ -1123,18 +1123,19 @@ public:
     object_t target_oid;
     object_locator_t target_oloc;
 
-    bool precalc_pgid;   ///< true if we are directed at base_pgid, not base_oid
-    pg_t base_pgid;      ///< explciti pg target, if any
+    bool precalc_pgid;    ///< true if we are directed at base_pgid, not base_oid
+    pg_t base_pgid;       ///< explciti pg target, if any
 
-    pg_t pgid;           ///< last pg we mapped to
-    unsigned pg_num;     ///< last pg_num we mapped to
-    vector<int> up;      ///< set of up osds for last pg we mapped to
-    vector<int> acting;  ///< set of acting osds for last pg we mapped to
-    int up_primary;      ///< primary for last pg we mapped to based on the up set
-    int acting_primary;  ///< primary for last pg we mapped to based on the acting set
-    int size;        ///< the size of the pool when were were last mapped
-    int min_size;        ///< the min size of the pool when were were last mapped
-    bool sort_bitwise;   ///< whether the hobject_t sort order is bitwise
+    pg_t pgid;            ///< last pg we mapped to
+    unsigned pg_num;      ///< last pg_num we mapped to
+    unsigned pg_num_mask; ///< last pg_num_mask we mapped to
+    vector<int> up;       ///< set of up osds for last pg we mapped to
+    vector<int> acting;   ///< set of acting osds for last pg we mapped to
+    int up_primary;       ///< primary for last pg we mapped to based on the up set
+    int acting_primary;   ///< primary for last pg we mapped to based on the acting set
+    int size;             ///< the size of the pool when were were last mapped
+    int min_size;         ///< the min size of the pool when were were last mapped
+    bool sort_bitwise;    ///< whether the hobject_t sort order is bitwise
 
     bool used_replica;
     bool paused;
@@ -1147,6 +1148,7 @@ public:
 	base_oloc(oloc),
 	precalc_pgid(false),
 	pg_num(0),
+        pg_num_mask(0),
 	up_primary(-1),
 	acting_primary(-1),
 	size(-1),
