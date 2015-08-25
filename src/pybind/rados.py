@@ -584,7 +584,7 @@ Rados object in state %s." % self.state)
                 return c_name.value
                 break
 
-    @requires(('pool_name', str), ('auid', opt(int)), ('crush_rule', opt(str)))
+    @requires(('pool_name', str), ('auid', opt(int)), ('crush_rule', opt(int)))
     def create_pool(self, pool_name, auid=None, crush_rule=None):
         """
         Create a pool:
@@ -598,7 +598,7 @@ Rados object in state %s." % self.state)
         :param auid: the id of the owner of the new pool
         :type auid: int
         :param crush_rule: rule to use for placement in the new pool
-        :type crush_rule: str
+        :type crush_rule: int
 
         :raises: :class:`TypeError`, :class:`Error`
         """
