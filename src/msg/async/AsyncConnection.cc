@@ -1948,6 +1948,7 @@ int AsyncConnection::send_message(Message *m)
                                << " Drop message " << m << dendl;
     m->put();
   } else {
+    m->trace.event("async enqueueing message");
     out_q[m->get_priority()].emplace_back(std::move(bl), m);
     ldout(async_msgr->cct, 15) << __func__ << " inline write is denied, reschedule m=" << m << dendl;
     if (can_write != WriteStatus::REPLACING)
@@ -2266,6 +2267,7 @@ ssize_t AsyncConnection::write_message(Message *m, bufferlist& bl, bool more)
     outcoming_bl.append((char*)&old_footer, sizeof(old_footer));
   }
 
+  m->trace.event("async writing message");
   logger->inc(l_msgr_send_bytes, outcoming_bl.length() - original_bl_len);
   ldout(async_msgr->cct, 20) << __func__ << " sending " << m->get_seq()
                              << " " << m << dendl;
