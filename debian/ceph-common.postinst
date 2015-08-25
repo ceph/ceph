@@ -78,6 +78,13 @@ case "$1" in
            chmod u=rwx,g=rwxs,o=t /var/log/ceph
        fi
 
+       # 6. fix /var/run/ceph
+       if [ -d /var/run/ceph ]; then
+	   echo -n "Fixing /var/run/ceph ownership.."
+	   chown $SERVER_USER:$SERVER_GROUP /var/run/ceph
+	   echo "..done"
+       fi
+
     ;;
     abort-upgrade|abort-remove|abort-deconfigure)
 	:
