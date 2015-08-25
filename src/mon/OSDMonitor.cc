@@ -3582,7 +3582,7 @@ void OSDMonitor::get_pools_health(
       } else if (warn_threshold > 0 &&
 		 sum.num_bytes >= pool.quota_max_bytes*warn_threshold) {
         ss << "pool '" << pool_name
-           << "' has " << si_t(sum.num_bytes) << " objects"
+           << "' has " << si_t(sum.num_bytes) << " bytes"
            << " (max " << si_t(pool.quota_max_bytes) << ")";
         status = HEALTH_WARN;
       }
