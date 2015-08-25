@@ -107,6 +107,7 @@ class Objecter;
 class MonClient;
 class Finisher;
 class MMDSMap;
+class ScrubStack;
 
 /**
  * The public part of this class's interface is what's exposed to all
@@ -151,6 +152,7 @@ class MDSRank {
     Locker       *locker;
     MDLog        *mdlog;
     MDBalancer   *balancer;
+    ScrubStack   *scrubstack;
 
     InoTable     *inotable;
 
@@ -367,6 +369,8 @@ class MDSRank {
 
   protected:
     void command_scrub_path(Formatter *f, const string& path);
+    void command_tag_path(Formatter *f, const string& path,
+                          const string &tag);
     void command_flush_path(Formatter *f, const string& path);
     void command_flush_journal(Formatter *f);
     void command_get_subtrees(Formatter *f);

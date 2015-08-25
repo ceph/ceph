@@ -19,8 +19,6 @@
 #include "messages/MMDSMap.h"
 
 #include "MDSMap.h"
-//#include "MDS.h"
-#include "mds_table_types.h"
 #include "SnapClient.h"
 #include "SnapServer.h"
 #include "MDBalancer.h"
@@ -30,6 +28,7 @@
 #include "InoTable.h"
 #include "mon/MonClient.h"
 #include "common/HeartbeatMap.h"
+#include "ScrubStack.h"
 
 
 #include "MDSRank.h"
@@ -58,7 +57,8 @@ MDSRank::MDSRank(
     mdsmap(mdsmap_),
     objecter(objecter_),
     server(NULL), mdcache(NULL), locker(NULL), mdlog(NULL),
-    balancer(NULL), inotable(NULL), snapserver(NULL), snapclient(NULL),
+    balancer(NULL), scrubstack(NULL),
+    inotable(NULL), snapserver(NULL), snapclient(NULL),
     sessionmap(this), logger(NULL), mlogger(NULL),
     op_tracker(g_ceph_context, g_conf->mds_enable_op_tracker, 
                g_conf->osd_num_op_tracker_shard),
@@ -81,6 +81,8 @@ MDSRank::MDSRank(
   mdlog = new MDLog(this);
   balancer = new MDBalancer(this, messenger, monc);
 
+  scrubstack = new ScrubStack(mdcache, finisher);
+
   inotable = new InoTable(this);
   snapserver = new SnapServer(this, monc);
   snapclient = new SnapClient(this);
@@ -100,6 +102,7 @@ MDSRank::~MDSRank()
     g_ceph_context->get_heartbeat_map()->remove_worker(hb);
   }
 
+  if (scrubstack) { delete scrubstack; scrubstack = NULL; }
   if (mdcache) { delete mdcache; mdcache = NULL; }
   if (mdlog) { delete mdlog; mdlog = NULL; }
   if (balancer) { delete balancer; balancer = NULL; }
@@ -1726,6 +1729,12 @@ bool MDSRankDispatcher::handle_asok_command(
     string path;
     cmd_getval(g_ceph_context, cmdmap, "path", path);
     command_scrub_path(f, path);
+  } else if (command == "tag path") {
+    string path;
+    cmd_getval(g_ceph_context, cmdmap, "path", path);
+    string tag;
+    cmd_getval(g_ceph_context, cmdmap, "tag", tag);
+    command_tag_path(f, path, tag);
   } else if (command == "flush_path") {
     string path;
     cmd_getval(g_ceph_context, cmdmap, "path", path);
@@ -1786,6 +1795,17 @@ void MDSRank::command_scrub_path(Formatter *f, const string& path)
   }
   scond.wait();
   // scrub_dentry() finishers will dump the data for us; we're done!
+}
+
+void MDSRank::command_tag_path(Formatter *f,
+    const string& path, const std::string &tag)
+{
+  C_SaferCond scond;
+  {
+    Mutex::Locker l(mds_lock);
+    mdcache->enqueue_scrub(path, tag, f, &scond);
+  }
+  scond.wait();
 }
 
 void MDSRank::command_flush_path(Formatter *f, const string& path)

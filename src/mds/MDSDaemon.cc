@@ -232,6 +232,12 @@ void MDSDaemon::set_up_admin_socket()
                                      asok_hook,
                                      "scrub an inode and output results");
   assert(r == 0);
+  r = admin_socket->register_command("tag path",
+                                     "tag path name=path,type=CephString"
+                                     " name=tag,type=CephString",
+                                     asok_hook,
+                                     "Apply scrub tag recursively");
+   assert(r == 0);
   r = admin_socket->register_command("flush_path",
                                      "flush_path name=path,type=CephString",
                                      asok_hook,

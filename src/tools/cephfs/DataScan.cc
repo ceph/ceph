@@ -51,7 +51,7 @@ bool DataScan::parse_kwarg(
   }
 
   const std::string arg(*i);
-  const std::string val(*(++i));
+  const std::string val(*(i + 1));
 
   if (arg == std::string("--output-dir")) {
     if (driver != NULL) {
@@ -59,6 +59,7 @@ bool DataScan::parse_kwarg(
       *r = -EINVAL;
       return false;
     }
+    dout(4) << "Using local file output to '" << val << "'" << dendl;
     driver = new LocalFileDriver(val, data_io);
     return true;
   } else if (arg == std::string("-n")) {
@@ -78,6 +79,10 @@ bool DataScan::parse_kwarg(
       *r = -EINVAL;
       return false;
     }
+    return true;
+  } else if (arg == std::string("--filter-tag")) {
+    filter_tag = val;
+    dout(10) << "Applying tag filter: '" << filter_tag << "'" << dendl;
     return true;
   } else {
     return false;
@@ -155,6 +160,7 @@ int DataScan::main(const std::vector<const char*> &args)
     driver = new MetadataDriver();
     driver->set_force_corrupt(force_corrupt);
     driver->set_force_init(force_init);
+    dout(4) << "Using metadata pool output" << dendl;
   }
 
   dout(4) << "connecting to RADOS..." << dendl;
@@ -446,7 +452,30 @@ int DataScan::scan_inodes()
   float progress = 0.0;
   librados::NObjectIterator i = data_io.nobjects_begin(n, m);
 #else
-  librados::NObjectIterator i = data_io.nobjects_begin();
+  librados::NObjectIterator i;
+  bool legacy_filtering = false;
+
+  bufferlist filter_bl;
+  ::encode(std::string("cephfs"), filter_bl);
+  std::string scrub_tag = filter_tag;
+  ::encode(std::string(scrub_tag), filter_bl);
+
+  // try/catch to deal with older OSDs that don't support
+  // the cephfs pgls filtering mode
+  try {
+    i = data_io.nobjects_begin(filter_bl);
+    dout(4) << "OSDs accepted cephfs object filtering" << dendl;
+  } catch (const std::runtime_error &e) {
+    // A little unfriendly, librados raises std::runtime_error
+    // on pretty much any unhandled I/O return value, such as
+    // the OSD saying -EINVAL because of our use of a filter
+    // mode that it doesn't know about.
+    std::cerr << "OSDs do not support cephfs object filtering: using "
+                 "(slower) fallback mode" << std::endl;
+    legacy_filtering = true;
+    i = data_io.nobjects_begin();
+  }
+
 #endif
   librados::NObjectIterator i_end = data_io.nobjects_end();
 
@@ -483,10 +512,36 @@ int DataScan::scan_inodes()
       continue;
     }
 
-    // We are only interested in 0th objects during this phase: we touched
-    // the other objects during scan_extents
-    if (obj_name_offset != 0) {
-      continue;
+    if (legacy_filtering) {
+      dout(20) << "Applying filter to " << oid << dendl;
+
+      // We are only interested in 0th objects during this phase: we touched
+      // the other objects during scan_extents
+      if (obj_name_offset != 0) {
+        dout(20) << "Non-zeroth object" << dendl;
+        continue;
+      }
+
+      bufferlist scrub_tag_bl;
+      int r = data_io.getxattr(oid, "scrub_tag", scrub_tag_bl);
+      if (r >= 0) {
+        std::string read_tag;
+        bufferlist::iterator q = scrub_tag_bl.begin();
+        ::decode(read_tag, q);
+        if (read_tag == filter_tag) {
+          dout(20) << "skipping " << oid << " because it has the filter_tag"
+                   << dendl;
+          continue;
+        } else {
+          dout(20) << "read non-matching tag '" << read_tag << "'" << dendl;
+        }
+      } else {
+        dout(20) << "no tag read (" << r << ")" << dendl;
+      }
+
+    } else {
+      assert(obj_name_offset == 0);
+      dout(20) << "OSD matched oid " << oid << dendl;
     }
 
     AccumulateResult accum_res;
@@ -495,7 +550,11 @@ int DataScan::scan_inodes()
     int r = ClsCephFSClient::fetch_inode_accumulate_result(
         data_io, oid, &backtrace, &loaded_layout, &accum_res);
     
-    if (r < 0) {
+    if (r == -EINVAL) {
+      dout(4) << "Accumulated metadata missing from '"
+              << oid << ", did you run scan_extents?" << dendl;
+      continue;
+    } else  if (r < 0) {
       dout(4) << "Unexpected error loading accumulated metadata from '"
               << oid << "': " << cpp_strerror(r) << dendl;
       // FIXME: this creates situation where if a client has a corrupt
