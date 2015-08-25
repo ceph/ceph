@@ -11,7 +11,8 @@ namespace librados {
 
 TestWatchNotify::TestWatchNotify(CephContext *cct)
   : m_cct(cct), m_finisher(new Finisher(cct)), m_handle(), m_notify_id(),
-    m_file_watcher_lock("librados::TestWatchNotify::m_file_watcher_lock") {
+    m_file_watcher_lock("librados::TestWatchNotify::m_file_watcher_lock"),
+    m_pending_notifies(0) {
   m_cct->get();
   m_finisher->start();
 }
@@ -31,6 +32,13 @@ TestWatchNotify::Watcher::Watcher()
   : lock("TestWatchNotify::Watcher::lock") {
 }
 
+void TestWatchNotify::flush() {
+  Mutex::Locker file_watcher_locker(m_file_watcher_lock);
+  while (m_pending_notifies > 0) {
+    m_file_watcher_cond.Wait(m_file_watcher_lock);
+  }
+}
+
 int TestWatchNotify::list_watchers(const std::string& o,
                                    std::list<obj_watch_t> *out_watchers) {
   SharedWatcher watcher = get_watcher(o);
@@ -42,7 +50,7 @@ int TestWatchNotify::list_watchers(const std::string& o,
        it != watcher->watch_handles.end(); ++it) {
     obj_watch_t obj;
     strcpy(obj.addr, ":/0");
-    obj.watcher_id = static_cast<int64_t>(it->second.handle);
+    obj.watcher_id = static_cast<int64_t>(it->second.instance_id);
     obj.cookie = it->second.handle;
     obj.timeout_seconds = 30;
     out_watchers->push_back(obj);
@@ -61,6 +69,7 @@ int TestWatchNotify::notify(const std::string& oid, bufferlist& bl,
     RWLock::WLocker l(watcher->lock);
     {
       Mutex::Locker l2(m_file_watcher_lock);
+      ++m_pending_notifies;
       uint64_t notify_id = ++m_notify_id;
 
       SharedNotifyHandle notify_handle(new NotifyHandle());
@@ -104,12 +113,14 @@ void TestWatchNotify::notify_ack(const std::string& o, uint64_t notify_id,
   notify_handle->cond.Signal();
 }
 
-int TestWatchNotify::watch(const std::string& o, uint64_t *handle,
-                           librados::WatchCtx *ctx, librados::WatchCtx2 *ctx2) {
+int TestWatchNotify::watch(const std::string& o, uint64_t instance_id,
+                           uint64_t *handle, librados::WatchCtx *ctx,
+                           librados::WatchCtx2 *ctx2) {
   SharedWatcher watcher = get_watcher(o);
 
   RWLock::WLocker l(watcher->lock);
   WatchHandle watch_handle;
+  watch_handle.instance_id = instance_id;
   watch_handle.handle = ++m_handle;
   watch_handle.watch_ctx = ctx;
   watch_handle.watch_ctx2 = ctx2;
@@ -160,20 +171,27 @@ void TestWatchNotify::execute_notify(const std::string &oid,
                                      bufferlist &bl, uint64_t notify_id,
                                      Mutex *lock, Cond *cond,
                                      bool *done) {
-  SharedWatcher watcher = get_watcher(oid);
-  RWLock::RLocker l(watcher->lock);
+  WatchHandles watch_handles;
+  SharedNotifyHandle notify_handle;
+
+  {
+    SharedWatcher watcher = get_watcher(oid);
+    RWLock::RLocker l(watcher->lock);
+
+    NotifyHandles::iterator n_it = watcher->notify_handles.find(notify_id);
+    if (n_it == watcher->notify_handles.end()) {
+      return;
+    }
+
+    watch_handles = watcher->watch_handles;
+    notify_handle = n_it->second;
+  }
 
   utime_t timeout;
   timeout.set_from_double(ceph_clock_now(m_cct) + 15);
 
-  NotifyHandles::iterator n_it = watcher->notify_handles.find(notify_id);
-  if (n_it == watcher->notify_handles.end()) {
-    return;
-  }
-  SharedNotifyHandle notify_handle = n_it->second;
-
-  for (WatchHandles::iterator w_it = watcher->watch_handles.begin();
-       w_it != watcher->watch_handles.end(); ++w_it) {
+  for (WatchHandles::iterator w_it = watch_handles.begin();
+       w_it != watch_handles.end(); ++w_it) {
     WatchHandle &watch_handle = w_it->second;
 
     bufferlist notify_bl;
@@ -203,6 +221,13 @@ void TestWatchNotify::execute_notify(const std::string &oid,
   Mutex::Locker l3(*lock);
   *done = true;
   cond->Signal();
+
+  {
+    Mutex::Locker file_watcher_locker(m_file_watcher_lock);
+    if (--m_pending_notifies == 0) {
+      m_file_watcher_cond.Signal();
+    }
+  }
 }
 
 } // namespace librados

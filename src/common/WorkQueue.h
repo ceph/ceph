@@ -433,35 +433,36 @@ public:
   }
 };
 
-class ContextWQ : public ThreadPool::WorkQueueVal<Context *> {
+class ContextWQ : public ThreadPool::WorkQueueVal<std::pair<Context *, int> > {
 public:
   ContextWQ(const string &name, time_t ti, ThreadPool *tp)
-    : ThreadPool::WorkQueueVal<Context *>(name, ti, 0, tp) {}
+    : ThreadPool::WorkQueueVal<std::pair<Context *, int> >(name, ti, 0, tp) {}
 
-  void queue(Context *ctx) {
-    ThreadPool::WorkQueueVal<Context *>::queue(ctx);
+  void queue(Context *ctx, int result = 0) {
+    ThreadPool::WorkQueueVal<std::pair<Context *, int> >::queue(
+      std::make_pair(ctx, result));
   }
 
 protected:
-  virtual void _enqueue(Context *item) {
+  virtual void _enqueue(std::pair<Context *, int> item) {
     _queue.push_back(item);
   }
-  virtual void _enqueue_front(Context *item) {
+  virtual void _enqueue_front(std::pair<Context *, int> item) {
     _queue.push_front(item);
   }
   virtual bool _empty() {
     return _queue.empty();
   }
-  virtual Context *_dequeue() {
-    Context *item = _queue.front();
+  virtual std::pair<Context *, int> _dequeue() {
+    std::pair<Context *, int> item = _queue.front();
     _queue.pop_front();
     return item;
   }
-  virtual void _process(Context *item) {
-    item->complete(0);
+  virtual void _process(std::pair<Context *, int> item) {
+    item.first->complete(item.second);
   }
 private:
-  list<Context *> _queue;
+  list<std::pair<Context *, int> > _queue;
 };
 
 class ShardedThreadPool {

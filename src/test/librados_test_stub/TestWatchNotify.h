@@ -35,6 +35,7 @@ public:
   typedef std::map<uint64_t, SharedNotifyHandle> NotifyHandles;
 
   struct WatchHandle {
+    uint64_t instance_id;
     uint64_t handle;
     librados::WatchCtx* watch_ctx;
     librados::WatchCtx2* watch_ctx2;
@@ -53,13 +54,14 @@ public:
   TestWatchNotify(CephContext *cct);
   ~TestWatchNotify();
 
+  void flush();
   int list_watchers(const std::string& o,
                     std::list<obj_watch_t> *out_watchers);
   int notify(const std::string& o, bufferlist& bl,
              uint64_t timeout_ms, bufferlist *pbl);
   void notify_ack(const std::string& o, uint64_t notify_id,
                   uint64_t handle, uint64_t gid, bufferlist& bl);
-  int watch(const std::string& o, uint64_t *handle,
+  int watch(const std::string& o, uint64_t instance_id, uint64_t *handle,
             librados::WatchCtx *ctx, librados::WatchCtx2 *ctx2);
   int unwatch(uint64_t handle);
 
@@ -74,6 +76,9 @@ private:
   uint64_t m_notify_id;
 
   Mutex m_file_watcher_lock;
+  Cond m_file_watcher_cond;
+  uint64_t m_pending_notifies;
+
   FileWatchers	m_file_watchers;
 
   SharedWatcher get_watcher(const std::string& oid);
