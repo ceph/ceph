@@ -4,6 +4,6 @@ workload:
        branch: firefly
        clients:
          client.0:
-         - rados/test.sh
+         - rados/test-upgrade-v9.0.1.sh
          - cls
    - print: "**** done  2-workload/rados_api.yaml"
