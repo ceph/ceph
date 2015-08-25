@@ -1,4 +1,5 @@
 %bcond_with ocf
+%bcond_without cephfs_java
 
 %if ! (0%{?fedora} > 12 || 0%{?rhel} > 5)
 %{!?python_sitelib: %global python_sitelib %(%{__python} -c "from distutils.sysconfig import get_python_lib; print(get_python_lib())")}
@@ -331,6 +332,8 @@ BuildRequires:	libbabeltrace-devel
 %description -n ceph-test
 This package contains Ceph benchmarks and test tools.
 
+%if 0%{with cephfs_java}
+
 %package -n libcephfs_jni1
 Summary:	Java Native Interface library for CephFS Java bindings.
 Group:		System Environment/Libraries
@@ -369,6 +372,8 @@ BuildRequires:  junit
 %endif
 %description -n cephfs-java
 This package contains the Java libraries for the Ceph File System.
+
+%endif
 
 %package libs-compat
 Summary:	Meta package to include ceph libraries.
@@ -455,7 +460,9 @@ export RPM_OPT_FLAGS=`echo $RPM_OPT_FLAGS | sed -e 's/i386/i486/'`
 		--without-cryptopp \
 		--with-rest-bench \
 		--with-debug \
+%if 0%{with cephfs_java}
 		--enable-cephfs-java \
+%endif
 		--with-librocksdb-static=check \
 		$MY_CONF_OPT \
 		%{?_with_ocf} \
@@ -882,6 +889,7 @@ ln -sf %{_libdir}/librbd.so.1 /usr/lib64/qemu/librbd.so.1
 %endif
 
 #################################################################################
+%if 0%{with cephfs_java}
 %files -n libcephfs_jni1
 %defattr(-,root,root,-)
 %{_libdir}/libcephfs_jni.so.*
@@ -896,6 +904,7 @@ ln -sf %{_libdir}/librbd.so.1 /usr/lib64/qemu/librbd.so.1
 %defattr(-,root,root,-)
 %{_javadir}/libcephfs.jar
 %{_javadir}/libcephfs-test.jar
+%endif
 
 #################################################################################
 %files libs-compat
