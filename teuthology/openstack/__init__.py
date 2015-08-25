@@ -358,7 +358,6 @@ ssh access   : ssh {identity}{username}@{ip} # logs in /usr/share/nginx/html
         if self.key_filename:
             log.debug("ssh overriding key with " + self.key_filename)
             client_args['key_filename'] = self.key_filename
-        log.debug("ssh " + self.username + "@" + str(ip) + " " + command)
         client = connection.connect(**client_args)
         stdin, stdout, stderr = client.exec_command(command)
         stdout.channel.settimeout(300)
