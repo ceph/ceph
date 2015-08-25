@@ -177,7 +177,7 @@ int prepare_image_update(ImageCtx *ictx) {
 
 int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
                          bool permit_snapshot,
-                         const boost::function<int(Context*)>& local_request,
+                         const boost::function<void(Context*)>& local_request,
                          const boost::function<int()>& remote_request) {
   int r;
   do {
@@ -208,10 +208,7 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
                             << dendl;
       }
 
-      r = local_request(&ctx);
-      if (r < 0) {
-        return r;
-      }
+      local_request(&ctx);
     }
 
     r = ctx.wait();
@@ -719,7 +716,7 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
     return 0;
   }
 
-  int snap_create_helper(ImageCtx* ictx, Context* ctx, const char* snap_name) {
+  void snap_create_helper(ImageCtx* ictx, Context* ctx, const char* snap_name) {
     assert(ictx->owner_lock.is_locked());
     assert(!ictx->image_watcher->is_lock_supported() ||
 	   ictx->image_watcher->is_lock_owner());
@@ -729,13 +726,13 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
 
     int r = ictx_check(ictx, ictx->owner_lock);
     if (r < 0) {
-      return r;
+      ctx->complete(r);
+      return;
     }
 
     operation::SnapshotCreateRequest *req =
       new operation::SnapshotCreateRequest(*ictx, ctx, snap_name);
     req->send();
-    return 0;
   }
 
   int snap_remove(ImageCtx *ictx, const char *snap_name)
@@ -770,10 +767,7 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
     } else {
       RWLock::RLocker owner_lock(ictx->owner_lock);
       C_SaferCond cond_ctx;
-      r = snap_remove_helper(ictx, &cond_ctx, snap_name);
-      if (r < 0) {
-        return r;
-      }
+      snap_remove_helper(ictx, &cond_ctx, snap_name);
 
       r = cond_ctx.wait();
       if (r < 0) {
@@ -787,7 +781,7 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
     return 0;
   }
 
-  int snap_remove_helper(ImageCtx *ictx, Context *ctx, const char *snap_name)
+  void snap_remove_helper(ImageCtx *ictx, Context *ctx, const char *snap_name)
   {
     assert(ictx->owner_lock.is_locked());
     {
@@ -802,7 +796,8 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
 
     int r = ictx_check(ictx, ictx->owner_lock);
     if (r < 0) {
-      return r;
+      ctx->complete(r);
+      return;
     }
 
     uint64_t snap_id;
@@ -811,7 +806,8 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
       snap_id = ictx->get_snap_id(snap_name);
       if (snap_id == CEPH_NOSNAP) {
         lderr(ictx->cct) << "No such snapshot found." << dendl;
-        return -ENOENT;
+        ctx->complete(-ENOENT);
+        return;
       }
 
       bool is_protected;
@@ -829,7 +825,6 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
     operation::SnapshotRemoveRequest *req =
       new operation::SnapshotRemoveRequest(*ictx, ctx, snap_name, snap_id);
     req->send();
-    return 0;
   }
 
   int snap_rename(ImageCtx *ictx, const char *srcname, const char *dstname)
@@ -882,8 +877,8 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
     return 0;
   }
 
-  int snap_rename_helper(ImageCtx* ictx, Context* ctx,
-                         const uint64_t src_snap_id, const char* dst_name) {
+  void snap_rename_helper(ImageCtx* ictx, Context* ctx,
+                          const uint64_t src_snap_id, const char* dst_name) {
     assert(ictx->owner_lock.is_locked());
     if ((ictx->features & RBD_FEATURE_JOURNALING) != 0) {
       assert(!ictx->image_watcher->is_lock_supported() ||
@@ -894,13 +889,13 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
 
     int r = ictx_check(ictx, ictx->owner_lock);
     if (r < 0) {
-      return r;
+      ctx->complete(r);
+      return;
     }
 
     operation::SnapshotRenameRequest *req =
       new operation::SnapshotRenameRequest(*ictx, ctx, src_snap_id, dst_name);
     req->send();
-    return 0;
   }
 
   int snap_protect(ImageCtx *ictx, const char *snap_name)
@@ -2102,8 +2097,8 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
     return r;
   }
 
-  int async_resize(ImageCtx *ictx, Context *ctx, uint64_t size,
-		   ProgressContext &prog_ctx)
+  void async_resize(ImageCtx *ictx, Context *ctx, uint64_t size,
+                    ProgressContext &prog_ctx)
   {
     assert(ictx->owner_lock.is_locked());
     assert(!ictx->image_watcher->is_lock_supported() ||
@@ -2117,26 +2112,20 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
 
     int r = ictx_check(ictx, ictx->owner_lock);
     if (r < 0) {
-      return r;
+      ctx->complete(r);
+      return;
     }
 
     {
       RWLock::RLocker snap_locker(ictx->snap_lock);
       if (ictx->snap_id != CEPH_NOSNAP || ictx->read_only) {
-        return -EROFS;
+        ctx->complete(-EROFS);
+        return;
       }
     }
 
-    async_resize_helper(ictx, ctx, size, prog_ctx);
-    return 0;
-  }
-
-  void async_resize_helper(ImageCtx *ictx, Context *ctx, uint64_t new_size,
-                           ProgressContext& prog_ctx)
-  {
-    assert(ictx->owner_lock.is_locked());
     operation::ResizeRequest *req = new operation::ResizeRequest(
-      *ictx, ctx, new_size, prog_ctx);
+      *ictx, ctx, size, prog_ctx);
     req->send();
   }
 
@@ -2938,7 +2927,7 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
     return 0;
   }
 
-  int async_flatten(ImageCtx *ictx, Context *ctx, ProgressContext &prog_ctx)
+  void async_flatten(ImageCtx *ictx, Context *ctx, ProgressContext &prog_ctx)
   {
     assert(ictx->owner_lock.is_locked());
     assert(!ictx->image_watcher->is_lock_supported() ||
@@ -2951,7 +2940,8 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
     // ictx_check also updates parent data
     if ((r = ictx_check(ictx, ictx->owner_lock)) < 0) {
       lderr(cct) << "ictx_check failed" << dendl;
-      return r;
+      ctx->complete(r);
+      return;
     }
 
     uint64_t object_size;
@@ -2964,17 +2954,20 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
       RWLock::RLocker l2(ictx->parent_lock);
 
       if (ictx->read_only) {
-        return -EROFS;
+        ctx->complete(-EROFS);
+        return;
       }
 
       // can't flatten a non-clone
       if (ictx->parent_md.spec.pool_id == -1) {
 	lderr(cct) << "image has no parent" << dendl;
-	return -EINVAL;
+        ctx->complete(-EINVAL);
+	return;
       }
       if (ictx->snap_id != CEPH_NOSNAP) {
 	lderr(cct) << "snapshots cannot be flattened" << dendl;
-	return -EROFS;
+        ctx->complete(-EROFS);
+	return;
       }
 
       snapc = ictx->snapc;
@@ -2990,7 +2983,6 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
     operation::FlattenRequest *req = new operation::FlattenRequest(
       *ictx, ctx, object_size, overlap_objects, snapc, prog_ctx);
     req->send();
-    return 0;
   }
 
   int rebuild_object_map(ImageCtx *ictx, ProgressContext &prog_ctx) {
@@ -3017,8 +3009,8 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
     return r;
   }
 
-  int async_rebuild_object_map(ImageCtx *ictx, Context *ctx,
-                               ProgressContext &prog_ctx) {
+  void async_rebuild_object_map(ImageCtx *ictx, Context *ctx,
+                                ProgressContext &prog_ctx) {
     assert(ictx->owner_lock.is_locked());
     assert(!ictx->image_watcher->is_lock_supported() ||
 	   ictx->image_watcher->is_lock_owner());
@@ -3027,21 +3019,23 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
     ldout(cct, 20) << "async_rebuild_object_map " << ictx << dendl;
 
     if (ictx->read_only) {
-      return -EROFS;
+      ctx->complete(-EROFS);
+      return;
     }
     if (!ictx->test_features(RBD_FEATURE_OBJECT_MAP)) {
-      return -EINVAL;
+      ctx->complete(-EINVAL);
+      return;
     }
 
     int r = ictx_check(ictx, ictx->owner_lock);
     if (r < 0) {
-      return r;
+      ctx->complete(r);
+      return;
     }
 
     operation::RebuildObjectMapRequest *req =
       new operation::RebuildObjectMapRequest(*ictx, ctx, prog_ctx);
     req->send();
-    return 0;
   }
 
   int list_lockers(ImageCtx *ictx,
