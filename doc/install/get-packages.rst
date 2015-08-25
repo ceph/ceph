@@ -177,9 +177,14 @@ You may find releases for CentOS/RHEL and others (installed with YUM) at::
 
 The major releases of Ceph include:
 
-- **Giant:** Giant is the most recent major release of Ceph. These packages
-  are recommended for anyone deploying Ceph in a production environment. 
-  Critical bug fixes are backported and point releases are made as necessary.
+- **Hammer:** Hammer is the most recent, and is also the eighth major release
+  of Ceph.  These packages are recommended for anyone deploying Ceph in a 
+  production environment. Critical bug fixes are backported and point releases
+  are made as necessary.
+
+- **Giant:** Giant is the seventh major release of Ceph. These packages are
+  recommended for anyone deploying Ceph in a production environment.  Critical
+  bug fixes are backported and point releases are made as necessary.
 
 - **Firefly:** Firefly is the sixth major release of Ceph. These packages
   are recommended for anyone deploying Ceph in a production environment. 
