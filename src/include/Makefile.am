@@ -68,6 +68,7 @@ noinst_HEADERS += \
 	include/filepath.h \
 	include/frag.h \
 	include/hash.h \
+	include/inline_memory.h \
 	include/intarith.h \
 	include/interval_set.h \
 	include/int_types.h \
