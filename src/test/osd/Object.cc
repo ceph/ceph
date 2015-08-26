@@ -183,3 +183,41 @@ bool ObjectDesc::check(bufferlist &to_check) {
   }
   return true;
 }
+
+bool ObjectDesc::check_sparse(const std::map<uint64_t, uint64_t>& extents,
+			      bufferlist &to_check) {
+  auto i = begin();
+  auto p = to_check.begin();
+  uint64_t pos = 0;
+  for (auto extent : extents) {
+    const uint64_t start = extent.first;
+    const uint64_t end = start + extent.second;
+    for (; pos < end; ++i, ++pos) {
+      if (i.end()) {
+	std::cout << "reached end of iterator first" << std::endl;
+	return false;
+      }
+      if (pos < start) {
+	// check the hole
+	if (*i != '\0') {
+	  std::cout << "incorrect buffer at pos " << pos << std::endl;
+	  return false;
+	}
+      } else {
+	// then the extent
+	if (*i != *p) {
+	  std::cout << "incorrect buffer at pos " << pos << std::endl;
+	  return false;
+	}
+	++p;
+      }
+    }
+  }
+  uint64_t size = layers.empty() ? 0 :
+    most_recent_gen()->get_length(most_recent());
+  if (pos != size) {
+    std::cout << "only read " << pos << " out of size " << size << std::endl;
+    return false;
+  }
+  return true;
+}
