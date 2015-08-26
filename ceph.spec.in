@@ -491,10 +491,6 @@ python-rados, python-rbd and python-cephfs. Packages still depending on
 python-ceph should be fixed to depend on python-rados, python-rbd or
 python-cephfs instead.
 
-%if 0%{?opensuse} || 0%{?suse_version}
-%debug_package
-%endif
-
 #################################################################################
 # common
 #################################################################################
@@ -544,7 +540,7 @@ export RPM_OPT_FLAGS=`echo $RPM_OPT_FLAGS | sed -e 's/i386/i486/'`
 		--with-rgw-user=root \
 		--with-rgw-group=root \
 %endif
-%if 0%{?opensuse} || 0%{?suse_version}
+%if 0%{?suse_version}
 		--with-systemd-libexec-dir=/usr/lib/ceph/ \
 		--with-rgw-user=wwwrun \
 		--with-rgw-group=www \
@@ -653,7 +649,7 @@ rm -rf $RPM_BUILD_ROOT
 
 %pre
 %if 0%{?_with_systemd}
-  %if 0%{?opensuse} || 0%{?suse_version}
+  %if 0%{?suse_version}
     # service_add_pre and friends don't work with parameterized systemd service
     # instances, only with single services or targets, so we always pass
     # ceph.target to these macros
@@ -665,7 +661,7 @@ rm -rf $RPM_BUILD_ROOT
 %post
 /sbin/ldconfig
 %if 0%{?_with_systemd}
-  %if 0%{?opensuse} || 0%{?suse_version}
+  %if 0%{?suse_version}
     %service_add_post ceph.target
   %endif
 %else
@@ -675,7 +671,7 @@ mkdir -p %{_localstatedir}/run/ceph/
 
 %preun
 %if 0%{?_with_systemd}
-  %if 0%{?opensuse} || 0%{?suse_version}
+  %if 0%{?suse_version}
     %service_del_preun ceph.target
   %endif
   # Need a special case here when removing the RPM to disable specific
@@ -693,9 +689,6 @@ mkdir -p %{_localstatedir}/run/ceph/
     fi
   fi
 %else
-  %if 0%{?opensuse} || 0%{?suse_version}
-    %stop_on_removal ceph
-  %endif
   %if 0%{?rhel} || 0%{?fedora}
     if [ $1 = 0 ] ; then
       /sbin/service ceph stop >/dev/null 2>&1
@@ -899,7 +892,7 @@ fi
 
 %post radosgw
 /sbin/ldconfig
-%if 0%{?opensuse} || 0%{?suse_version}
+%if 0%{?suse_version}
   # TODO: find out what exactly this systemd-tmpfiles inovcation is for
   systemd-tmpfiles --create /%{_tmpfilesdir}/ceph-rgw.conf
   # explicit systemctl daemon-reload (that's the only relevant bit of
