@@ -90,7 +90,7 @@ namespace librbd {
     // inform the journal that the op has successfully committed
     if (journal_tid != 0) {
       assert(ictx->journal != NULL);
-      ictx->journal->commit_event(journal_tid, rval);
+      ictx->journal->commit_io_event(journal_tid, rval);
     }
 
     // note: possible for image to be closed after op marked finished

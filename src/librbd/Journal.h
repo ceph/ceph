@@ -48,20 +48,23 @@ public:
   bool is_journal_ready() const;
   bool is_journal_replaying() const;
 
-  bool wait_for_journal_ready();
+  void wait_for_journal_ready(Context *on_ready);
+  void wait_for_journal_ready();
 
   void open();
   int close();
 
-  uint64_t append_event(AioCompletion *aio_comp,
-                        const journal::EventEntry &event_entry,
-                        const AioObjectRequests &requests,
-                        uint64_t offset, size_t length,
-                        bool flush_entry);
+  uint64_t append_io_event(AioCompletion *aio_comp,
+                           const journal::EventEntry &event_entry,
+                           const AioObjectRequests &requests,
+                           uint64_t offset, size_t length,
+                           bool flush_entry);
+  void commit_io_event(uint64_t tid, int r);
+  void commit_io_event_extent(uint64_t tid, uint64_t offset, uint64_t length,
+                              int r);
 
-  void commit_event(uint64_t tid, int r);
-  void commit_event_extent(uint64_t tid, uint64_t offset, uint64_t length,
-                           int r);
+  uint64_t append_op_event(journal::EventEntry &event_entry);
+  void commit_op_event(uint64_t tid, int r);
 
   void flush_event(uint64_t tid, Context *on_safe);
   void wait_event(uint64_t tid, Context *on_safe);
@@ -137,6 +140,19 @@ private:
     }
   };
 
+  struct C_WaitForReady : public Context {
+    Journal *journal;
+    Context *on_ready;
+
+    C_WaitForReady(Journal *_journal, Context *_on_ready)
+      : journal(_journal), on_ready(_on_ready) {
+    }
+
+    virtual void finish(int r) {
+      journal->handle_wait_for_ready(on_ready);
+    }
+  };
+
   struct ReplayHandler : public ::journal::ReplayHandler {
     Journal *journal;
     ReplayHandler(Journal *_journal) : journal(_journal) {
@@ -164,6 +180,7 @@ private:
   Cond m_cond;
   State m_state;
 
+  Contexts m_wait_for_state_contexts;
   LockListener m_lock_listener;
 
   ReplayHandler m_replay_handler;
@@ -201,6 +218,8 @@ private:
 
   void transition_state(State state);
   void wait_for_state_transition();
+  void schedule_wait_for_ready(Context *on_ready);
+  void handle_wait_for_ready(Context *on_ready);
 };
 
 } // namespace librbd

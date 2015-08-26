@@ -565,16 +565,17 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
     if (r < 0)
       return r;
 
-    bool fast_diff_enabled = false;
+    bool proxy_op = false;
     {
       RWLock::RLocker snap_locker(ictx->snap_lock);
       if (ictx->get_snap_id(snap_name) == CEPH_NOSNAP) {
         return -ENOENT;
       }
-      fast_diff_enabled = ((ictx->features & RBD_FEATURE_FAST_DIFF) != 0);
+      proxy_op = ((ictx->features & RBD_FEATURE_FAST_DIFF) != 0 ||
+                  (ictx->features & RBD_FEATURE_JOURNALING) != 0);
     }
 
-    if (fast_diff_enabled) {
+    if (proxy_op) {
       r = invoke_async_request(ictx, "snap_remove", true,
                                boost::bind(&snap_remove_helper, ictx, _1,
                                            snap_name),
@@ -2199,6 +2200,10 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
       if (ictx->image_watcher->is_lock_supported() &&
 	  !ictx->image_watcher->is_lock_owner()) {
 	return -EROFS;
+      }
+
+      if (ictx->journal != NULL) {
+        ictx->journal->wait_for_journal_ready();
       }
 
       ictx->snap_lock.get_read();

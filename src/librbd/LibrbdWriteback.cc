@@ -116,7 +116,7 @@ namespace librbd {
 
     virtual void complete(int r) {
       if (request_sent || r < 0) {
-        commit_event_extent(r);
+        commit_io_event_extent(r);
         req_comp->complete(r);
         delete this;
       } else {
@@ -127,7 +127,7 @@ namespace librbd {
     virtual void finish(int r) {
     }
 
-    void commit_event_extent(int r) {
+    void commit_io_event_extent(int r) {
       CephContext *cct = image_ctx->cct;
       ldout(cct, 20) << this << " C_WriteJournalCommit: "
                      << "write committed: updating journal commit position"
@@ -141,8 +141,8 @@ namespace librbd {
                               bl.length(), file_extents);
       for (Extents::iterator it = file_extents.begin();
            it != file_extents.end(); ++it) {
-        image_ctx->journal->commit_event_extent(journal_tid, it->first,
-                                                it->second, r);
+        image_ctx->journal->commit_io_event_extent(journal_tid, it->first,
+                                                   it->second, r);
       }
     }
 
@@ -270,8 +270,8 @@ namespace librbd {
                             len, file_extents);
     for (Extents::iterator it = file_extents.begin();
          it != file_extents.end(); ++it) {
-      m_ictx->journal->commit_event_extent(journal_tid, it->first, it->second,
-                                           0);
+      m_ictx->journal->commit_io_event_extent(journal_tid, it->first,
+                                              it->second, 0);
     }
   }
 

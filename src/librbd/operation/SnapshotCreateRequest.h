@@ -82,6 +82,10 @@ protected:
     return r;
   }
 
+  virtual journal::Event create_event() const {
+    return journal::SnapCreateEvent(0, m_snap_name);
+  }
+
 private:
   std::string m_snap_name;
   State m_state;

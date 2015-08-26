@@ -30,6 +30,10 @@ protected:
   virtual void send_op();
   virtual bool should_complete(int r);
 
+  virtual journal::Event create_event() const {
+    return journal::FlattenEvent(0);
+  }
+
 private:
   /**
    * Flatten goes through the following state machine to copyup objects

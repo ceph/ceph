@@ -11,6 +11,8 @@
 #include "journal/Journaler.h"
 #include "journal/ReplayEntry.h"
 #include "common/errno.h"
+#include <boost/utility/enable_if.hpp>
+#include <boost/type_traits/is_base_of.hpp>
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -29,6 +31,27 @@ struct C_DestroyJournaler : public Context {
   }
   virtual void finish(int r) {
     delete journaler;
+  }
+};
+
+struct SetOpRequestTid : public boost::static_visitor<void> {
+  uint64_t tid;
+
+  SetOpRequestTid(uint64_t _tid) : tid(_tid) {
+  }
+
+  template <typename Event>
+  typename boost::enable_if<boost::is_base_of<journal::OpEventBase, Event>,
+                            void>::type
+  operator()(Event &event) const {
+    event.tid = tid;
+  }
+
+  template <typename Event>
+  typename boost::disable_if<boost::is_base_of<journal::OpEventBase, Event>,
+                            void>::type
+  operator()(Event &event) const {
+    assert(false);
   }
 };
 
@@ -53,6 +76,7 @@ Journal::~Journal() {
   m_image_ctx.op_work_queue->drain();
   assert(m_journaler == NULL);
   assert(m_journal_replay == NULL);
+  assert(m_wait_for_state_contexts.empty());
 
   m_image_ctx.image_watcher->unregister_listener(&m_lock_listener);
 
@@ -122,12 +146,16 @@ bool Journal::is_journal_replaying() const {
   return (m_state == STATE_REPLAYING);
 }
 
-bool Journal::wait_for_journal_ready() {
+void Journal::wait_for_journal_ready(Context *on_ready) {
   Mutex::Locker locker(m_lock);
-  while (m_state != STATE_UNINITIALIZED && m_state != STATE_RECORDING) {
+  schedule_wait_for_ready(on_ready);
+}
+
+void Journal::wait_for_journal_ready() {
+  Mutex::Locker locker(m_lock);
+  while (m_state != STATE_RECORDING) {
     wait_for_state_transition();
   }
-  return (m_state == STATE_RECORDING);
 }
 
 void Journal::open() {
@@ -181,11 +209,11 @@ int Journal::close() {
   return 0;
 }
 
-uint64_t Journal::append_event(AioCompletion *aio_comp,
-                               const journal::EventEntry &event_entry,
-                               const AioObjectRequests &requests,
-                               uint64_t offset, size_t length,
-                               bool flush_entry) {
+uint64_t Journal::append_io_event(AioCompletion *aio_comp,
+                                  const journal::EventEntry &event_entry,
+                                  const AioObjectRequests &requests,
+                                  uint64_t offset, size_t length,
+                                  bool flush_entry) {
   assert(m_image_ctx.owner_lock.is_locked());
 
   bufferlist bl;
@@ -223,7 +251,7 @@ uint64_t Journal::append_event(AioCompletion *aio_comp,
   return tid;
 }
 
-void Journal::commit_event(uint64_t tid, int r) {
+void Journal::commit_io_event(uint64_t tid, int r) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << this << " " << __func__ << ": tid=" << tid << ", "
                  "r=" << r << dendl;
@@ -236,8 +264,8 @@ void Journal::commit_event(uint64_t tid, int r) {
   complete_event(it, r);
 }
 
-void Journal::commit_event_extent(uint64_t tid, uint64_t offset,
-                                  uint64_t length, int r) {
+void Journal::commit_io_event_extent(uint64_t tid, uint64_t offset,
+                                     uint64_t length, int r) {
   assert(length > 0);
 
   CephContext *cct = m_image_ctx.cct;
@@ -269,6 +297,47 @@ void Journal::commit_event_extent(uint64_t tid, uint64_t offset,
     return;
   }
   complete_event(it, event.ret_val);
+}
+
+uint64_t Journal::append_op_event(journal::EventEntry &event_entry) {
+  assert(m_image_ctx.owner_lock.is_locked());
+
+  uint64_t tid;
+  {
+    Mutex::Locker locker(m_lock);
+    assert(m_state == STATE_RECORDING);
+
+    Mutex::Locker event_locker(m_event_lock);
+    tid = ++m_event_tid;
+    assert(tid != 0);
+
+    // inject the generated tid into the provided event entry
+    boost::apply_visitor(SetOpRequestTid(tid), event_entry.event);
+
+    bufferlist bl;
+    ::encode(event_entry, bl);
+    m_journaler->append("", bl);
+  }
+
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 20) << this << " " << __func__ << ": "
+                 << "event=" << event_entry.get_event_type() << ", "
+                 << "tid=" << tid << dendl;
+  return tid;
+}
+
+void Journal::commit_op_event(uint64_t tid, int r) {
+  journal::EventEntry event_entry((journal::OpFinishEvent(tid, r)));
+
+  bufferlist bl;
+  ::encode(event_entry, bl);
+
+  {
+    Mutex::Locker locker(m_lock);
+    assert(m_state == STATE_RECORDING);
+
+    m_journaler->append("", bl);
+  }
 }
 
 void Journal::flush_event(uint64_t tid, Context *on_safe) {
@@ -603,6 +672,13 @@ void Journal::transition_state(State state) {
   assert(m_lock.is_locked());
   m_state = state;
   m_cond.Signal();
+
+  Contexts wait_for_state_contexts;
+  wait_for_state_contexts.swap(m_wait_for_state_contexts);
+  for (Contexts::iterator it = wait_for_state_contexts.begin();
+       it != wait_for_state_contexts.end(); ++it) {
+    (*it)->complete(0);
+  }
 }
 
 void Journal::wait_for_state_transition() {
@@ -610,6 +686,27 @@ void Journal::wait_for_state_transition() {
   State state = m_state;
   while (m_state == state) {
     m_cond.Wait(m_lock);
+  }
+}
+
+void Journal::schedule_wait_for_ready(Context *on_ready) {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 20) << this << __func__ << ": on_ready=" << on_ready << dendl;
+
+  assert(m_lock.is_locked());
+  m_wait_for_state_contexts.push_back(new C_WaitForReady(this, on_ready));
+}
+
+void Journal::handle_wait_for_ready(Context *on_ready) {
+  assert(m_lock.is_locked());
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 20) << this << " " << __func__ << ": on_ready=" << on_ready << ", "
+                 << "state=" << m_state << dendl;
+
+  if (m_state == STATE_RECORDING) {
+    m_image_ctx.op_work_queue->queue(on_ready, 0);
+  } else {
+    schedule_wait_for_ready(on_ready);
   }
 }
 
