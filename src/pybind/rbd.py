@@ -670,6 +670,24 @@ class Image(object):
         if ret != 0:
             raise make_ex(ret, 'error creating snapshot %s from %s' % (name, self.name))
 
+    def rename_snap(self, srcname, dstname):
+        """
+        rename a snapshot of the image.
+
+        :param srcname: the src name of the snapshot
+        :type srcname: str
+        :param dstname: the dst name of the snapshot
+        :type dstname: str
+        :raises: :class:`ImageExists`
+        """
+        if not isinstance(srcname, str):
+            raise TypeError('src name must be a string')
+        if not isinstance(dstname, str):
+            raise TypeError('dst name must be a string')
+        ret = self.librbd.rbd_snap_rename(self.image, c_char_p(srcname), c_char_p(dstname))
+        if ret != 0:
+            raise make_ex(ret, 'error renaming snapshot of %s from %s to %s' % (self.name, srcname, dstname))
+
     def remove_snap(self, name):
         """
         Delete a snapshot of the image.
