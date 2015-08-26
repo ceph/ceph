@@ -225,9 +225,8 @@ int ErasureCodeLrc::layers_init(ostream *ss)
       layer.profile["plugin"] = "jerasure";
     if (layer.profile.find("technique") == layer.profile.end())
       layer.profile["technique"] = "reed_sol_van";
-    if (layer.profile.find("directory") == layer.profile.end())
-      layer.profile["directory"] = directory;
     int err = registry.factory(layer.profile["plugin"],
+			       directory,
 			       layer.profile,
 			       &layer.erasure_code,
 			       ss);
@@ -272,9 +271,6 @@ int ErasureCodeLrc::parse(ErasureCodeProfile &profile,
   int r = ErasureCode::parse(profile, ss);
   if (r)
     return r;
-
-  if (profile.count("directory") != 0)
-    directory = profile.find("directory")->second;
 
   return parse_ruleset(profile, ss);
 }

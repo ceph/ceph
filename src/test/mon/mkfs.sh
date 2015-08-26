@@ -42,7 +42,7 @@ function mon_mkfs() {
     ./ceph-mon \
         --id $MON_ID \
         --fsid $fsid \
-        --osd-pool-default-erasure-code-directory=.libs \
+        --erasure-code-dir=.libs \
         --mkfs \
         --mon-data=$MON_DIR \
         --mon-initial-members=$MON_ID \
@@ -56,7 +56,7 @@ function mon_run() {
         --chdir= \
         --mon-osd-full-ratio=.99 \
         --mon-data-avail-crit=1 \
-        --osd-pool-default-erasure-code-directory=.libs \
+        --erasure-code-dir=.libs \
         --mon-data=$MON_DIR \
         --log-file=$MON_DIR/log \
         --mon-cluster-log-file=$MON_DIR/log \
@@ -83,7 +83,7 @@ function auth_none() {
         --id $MON_ID \
         --mon-osd-full-ratio=.99 \
         --mon-data-avail-crit=1 \
-        --osd-pool-default-erasure-code-directory=.libs \
+        --erasure-code-dir=.libs \
         --mon-data=$MON_DIR \
         --extract-monmap $MON_DIR/monmap
 
@@ -150,7 +150,7 @@ function makedir() {
         --id $MON_ID \
         --mon-osd-full-ratio=.99 \
         --mon-data-avail-crit=1 \
-        --osd-pool-default-erasure-code-directory=.libs \
+        --erasure-code-dir=.libs \
         --mkfs \
         --mon-data=$toodeep 2>&1 | tee $DIR/makedir.log
     grep 'toodeep.*No such file' $DIR/makedir.log > /dev/null
