@@ -3,7 +3,7 @@
 #ifndef CEPH_LIBRBD_OPERATION_RESIZE_REQUEST_H
 #define CEPH_LIBRBD_OPERATION_RESIZE_REQUEST_H
 
-#include "librbd/AsyncRequest.h"
+#include "librbd/operation/Request.h"
 #include "include/xlist.h"
 
 namespace librbd
@@ -14,14 +14,12 @@ class ProgressContext;
 
 namespace operation {
 
-class ResizeRequest : public AsyncRequest
+class ResizeRequest : public Request
 {
 public:
   ResizeRequest(ImageCtx &image_ctx, Context *on_finish, uint64_t new_size,
                      ProgressContext &prog_ctx);
   virtual ~ResizeRequest();
-
-  virtual void send();
 
   inline bool shrinking() const {
     return m_new_size < m_original_size;
@@ -30,6 +28,10 @@ public:
   inline uint64_t get_image_size() const {
     return m_new_size;
   }
+
+protected:
+  virtual void send_op();
+  virtual bool should_complete(int r);
 
 private:
   /**
@@ -83,8 +85,6 @@ private:
   uint64_t m_new_parent_overlap;
 
   xlist<ResizeRequest *>::item m_xlist_item;
-
-  virtual bool should_complete(int r);
 
   void send_flush();
   void send_invalidate_cache();

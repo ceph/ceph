@@ -138,7 +138,7 @@ bool TrimRequest::should_complete(int r)
 
   case STATE_CLEAN_BOUNDARY:
     ldout(cct, 5) << "CLEAN_BOUNDARY" << dendl;
-    finish(0);
+    send_finish(0);
     break;
 
   case STATE_FINISHED:
@@ -304,7 +304,7 @@ void TrimRequest::send_clean_boundary() {
   assert(m_image_ctx.owner_lock.is_locked());
   CephContext *cct = m_image_ctx.cct;
   if (m_delete_off <= m_new_size) {
-    finish(0);
+    send_finish(0);
     return;
   }
 
@@ -349,7 +349,7 @@ void TrimRequest::send_clean_boundary() {
   completion->finish_adding_requests();
 }
 
-void TrimRequest::finish(int r) {
+void TrimRequest::send_finish(int r) {
   m_state = STATE_FINISHED;
   async_complete(r);
 }

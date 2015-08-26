@@ -3,7 +3,7 @@
 #ifndef CEPH_LIBRBD_OPERATION_FLATTEN_REQUEST_H
 #define CEPH_LIBRBD_OPERATION_FLATTEN_REQUEST_H
 
-#include "librbd/AsyncRequest.h"
+#include "librbd/operation/Request.h"
 #include "librbd/parent_types.h"
 #include "common/snap_types.h"
 
@@ -14,21 +14,20 @@ class ProgressContext;
 
 namespace operation {
 
-class FlattenRequest : public AsyncRequest
+class FlattenRequest : public Request
 {
 public:
   FlattenRequest(ImageCtx &image_ctx, Context *on_finish,
 		      uint64_t object_size, uint64_t overlap_objects,
 		      const ::SnapContext &snapc, ProgressContext &prog_ctx)
-    : AsyncRequest(image_ctx, on_finish), m_object_size(object_size),
+    : Request(image_ctx, on_finish), m_object_size(object_size),
       m_overlap_objects(overlap_objects), m_snapc(snapc), m_prog_ctx(prog_ctx),
       m_ignore_enoent(false)
   {
   }
 
-  virtual void send();
-
 protected:
+  virtual void send_op();
   virtual bool should_complete(int r);
 
 private:
