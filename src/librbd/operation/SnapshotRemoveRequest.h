@@ -61,6 +61,10 @@ protected:
   virtual void send_op();
   virtual bool should_complete(int r);
 
+  virtual journal::Event create_event() const {
+    return journal::SnapRemoveEvent(0, m_snap_name);
+  }
+
 private:
   std::string m_snap_name;
   uint64_t m_snap_id;

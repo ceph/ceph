@@ -29,9 +29,15 @@ public:
     return m_new_size;
   }
 
+  virtual void send();
+
 protected:
   virtual void send_op();
   virtual bool should_complete(int r);
+
+  virtual journal::Event create_event() const {
+    return journal::ResizeEvent(0, m_new_size);
+  }
 
 private:
   /**
