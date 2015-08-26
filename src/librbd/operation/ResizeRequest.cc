@@ -99,7 +99,7 @@ bool ResizeRequest::should_complete(int r) {
   return false;
 }
 
-void ResizeRequest::send_op() {
+void ResizeRequest::send() {
   assert(m_image_ctx.owner_lock.is_locked());
 
   {
@@ -115,6 +115,12 @@ void ResizeRequest::send_op() {
     m_original_size = m_image_ctx.size;
     compute_parent_overlap();
   }
+
+  Request::send();
+}
+
+void ResizeRequest::send_op() {
+  assert(m_image_ctx.owner_lock.is_locked());
 
   CephContext *cct = m_image_ctx.cct;
   if (is_canceled()) {
