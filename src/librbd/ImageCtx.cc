@@ -19,7 +19,7 @@
 #include "librbd/Journal.h"
 #include "librbd/LibrbdAdminSocketHook.h"
 #include "librbd/ObjectMap.h"
-#include "librbd/ResizeRequest.h"
+#include "librbd/operation/ResizeRequest.h"
 
 #include <boost/bind.hpp>
 
