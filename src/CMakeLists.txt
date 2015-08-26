@@ -478,12 +478,18 @@ if(${WITH_RADOSGW})
   )
   set(DENCODER_EXTRALIBS
     rgw_a
+    cls_version_client
+    cls_log_client
+    cls_refcount_client
+    cls_user_client
+    cls_statelog_client
     cls_rgw_client
     curl
     expat
     fcgi
     resolv
-  )
+    )
+  
 endif(${WITH_RADOSGW})
 
 add_executable(ceph-dencoder ${dencoder_srcs} $<TARGET_OBJECTS:heap_profiler_objs>)

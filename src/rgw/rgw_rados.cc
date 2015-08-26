@@ -270,7 +270,7 @@ int RGWSystemMetaObj::init(CephContext *_cct, RGWRados *_store, bool setup_obj, 
       id = get_predefined_id();
       if (id.empty()) {
 	r = use_default(old_format);
-	if (r == -ENOENT) { 
+	if (r == -ENOENT) {
 	  r = create_default();
 	}
 	if (r < 0) {
