@@ -983,6 +983,8 @@ public:
 
   bufferlist result;
   int retval;
+  std::map<uint64_t, uint64_t> extent_result;
+  bool is_sparse_read;
 
   map<string, bufferlist> attrs;
   int attrretval;
@@ -1003,9 +1005,10 @@ public:
       oid(oid),
       snap(0),
       retval(0),
+      is_sparse_read(false),
       attrretval(0)
   {}
-		
+  
   void _begin()
   {
     context->state_lock.Lock();
@@ -1049,11 +1052,23 @@ public:
       context->io_ctx.snap_set_read(context->snaps[snap]);
     }
 
-    op.read(0,
-	    !old_value.has_contents() ? 0 :
-	    old_value.most_recent_gen()->get_length(old_value.most_recent()),
-	    &result,
-	    &retval);
+    uint64_t read_len = 0;
+    if (old_value.has_contents())
+      read_len = old_value.most_recent_gen()->get_length(old_value.most_recent());
+    if (rand() % 2) {
+      is_sparse_read = false;
+      op.read(0,
+	      read_len,
+	      &result,
+	      &retval);
+    } else {
+      is_sparse_read = true;
+      op.sparse_read(0,
+		     read_len,
+		     &extent_result,
+		     &result,
+		     &retval);
+    }
 
     for (map<string, ContDesc>::iterator i = old_value.attrs.begin();
 	 i != old_value.attrs.end();
@@ -1122,9 +1137,16 @@ public:
 	       << ", expected " << old_value.most_recent() << std::endl;
 	  context->errors++;
 	}
-	if (!old_value.check(result)) {
-	  cerr << num << ": oid " << oid << " contents " << to_check << " corrupt" << std::endl;
-	  context->errors++;
+	if (is_sparse_read) {
+	  if (!old_value.check_sparse(extent_result, result)) {
+	    cerr << num << ": oid " << oid << " contents " << to_check << " corrupt" << std::endl;
+	    context->errors++;
+	  }
+	} else {
+	  if (!old_value.check(result)) {
+	    cerr << num << ": oid " << oid << " contents " << to_check << " corrupt" << std::endl;
+	    context->errors++;
+	  }
 	}
 	if (context->errors) assert(0);
       }
