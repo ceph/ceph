@@ -8,9 +8,9 @@
                                                 image or snapshot
     info <image-spec> | <snap-spec>             show information about image size,
                                                 striping, etc.
-    create [--order <bits>] [--image-features <features>] [--image-shared]
+    create [--object-size <B/K/M>] [--image-features <features>] [--image-shared]
            --size <M/G/T> <image-spec>          create an empty image
-    clone [--order <bits>] [--image-features <features>] [--image-shared]
+    clone [--object-size <B/K/M>] [--image-features <features>] [--image-shared]
            <parent-snap-spec> <child-image-spec>
                                                 clone a snapshot into a COW
                                                 child image
@@ -89,8 +89,8 @@
     --snap <snap-name>                 snapshot name
     --path <path-name>                 path name for import/export
     -s, --size <size in M/G/T>         size of image for create and resize
-    --order <bits>                     the object size in bits; object size will be
-                                       (1 << order) bytes. Default is 22 (4 MB).
+    --object-size <B/K/M>              the object size in B/K/M
+                                       default object size is 4 MB.
     --image-format <format-number>     format to use when creating an image
                                        format 1 is the original format
                                        format 2 supports cloning (default)

@@ -98,9 +98,9 @@ void usage()
 "                                              image or snapshot\n"
 "  info <image-spec> | <snap-spec>             show information about image size,\n"
 "                                              striping, etc.\n"
-"  create [--order <bits>] [--image-features <features>] [--image-shared]\n"
+"  create [--object-size <B/K/M>] [--image-features <features>] [--image-shared]\n"
 "         --size <M/G/T> <image-spec>          create an empty image\n"
-"  clone [--order <bits>] [--image-features <features>] [--image-shared]\n"
+"  clone [--object-size <B/K/M>] [--image-features <features>] [--image-shared]\n"
 "         <parent-snap-spec> <child-image-spec>\n"
 "                                              clone a snapshot into a COW\n"
 "                                              child image\n"
@@ -179,8 +179,8 @@ void usage()
 "  --snap <snap-name>                 snapshot name\n"
 "  --path <path-name>                 path name for import/export\n"
 "  -s, --size <size in M/G/T>         size of image for create and resize\n"
-"  --order <bits>                     the object size in bits; object size will be\n"
-"                                     (1 << order) bytes. Default is 22 (4 MB).\n"
+"  --object-size <B/K/M>              the object size in B/K/M\n"
+"                                     default object size is 4 MB.\n"
 "  --image-format <format-number>     format to use when creating an image\n"
 "                                     format 1 is the original format\n"
 "                                     format 2 supports cloning (default)\n"
@@ -3157,6 +3157,22 @@ int main(int argc, const char **argv)
       if ((order <= 0) || (order < 12) || (order > 25)) {
 	cerr << "rbd: order must be between 12 (4 KB) and 25 (32 MB)" << std::endl;
 	return EXIT_FAILURE;
+      }
+      cerr << "rbd: --order is deprecated, please use --object-size" << std::endl;
+    } else if (ceph_argparse_witharg(args, i, &val, err, "--object-size", (char*)NULL)) {
+      if (!err.str().empty()) {
+	cerr << "rbd: " << err.str() << std::endl;
+	return EXIT_FAILURE;
+      }
+      int object_size = strict_sistrtoll(val.c_str(), &parse_err);
+      if (!parse_err.empty()) {
+        cerr << "rbd: error parsing --object-size " << parse_err << std::endl;
+        return EXIT_FAILURE;
+      }
+      order = std::round(std::log2(object_size));
+      if ((order <= 0) || (order < 12) || (order > 25)) {
+        cerr << "rbd: object size must be between 4K and 32M" << std::endl;
+        return EXIT_FAILURE;
       }
     } else if (ceph_argparse_witharg(args, i, &val, err, "--io-size", (char*)NULL)) {
       if (!err.str().empty()) {
