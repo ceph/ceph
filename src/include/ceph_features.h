@@ -65,6 +65,7 @@
 #define CEPH_FEATURE_OSD_PROXY_FEATURES (1ULL<<49)  /* overlap w/ above */
 #define CEPH_FEATURE_MON_METADATA (1ULL<<50)
 #define CEPH_FEATURE_OSD_BITWISE_HOBJ_SORT (1ULL<<51) /* can sort objs bitwise */
+#define CEPH_FEATURE_OSD_HITSET_GMT (1ULL<<51) /* overlap with bitwise sort */
 #define CEPH_FEATURE_OSD_PROXY_WRITE_FEATURES (1ULL<<52)
 #define CEPH_FEATURE_ERASURE_CODE_PLUGINS_V3 (1ULL<<53)
 
