@@ -29,12 +29,12 @@
 
 class ErasureCodePluginLrc : public ErasureCodePlugin {
 public:
-  virtual int factory(ErasureCodeProfile &profile,
+  virtual int factory(const std::string &directory,
+		      ErasureCodeProfile &profile,
 		      ErasureCodeInterfaceRef *erasure_code,
 		      ostream *ss) {
     ErasureCodeLrc *interface;
-    interface = new ErasureCodeLrc();
-    assert(profile.count("directory") != 0);
+    interface = new ErasureCodeLrc(directory);
     int r = interface->init(profile, ss);
     if (r) {
       delete interface;

@@ -188,7 +188,6 @@ TEST(ParameterTest, combination_all)
 							 std::string>();
   (*profile)["plugin"] = "shec";
   (*profile)["technique"] = "";
-  (*profile)["directory"] = "/usr/lib64/ceph/erasure-code";
   (*profile)["ruleset-failure-domain"] = "osd";
   (*profile)["k"] = k;
   (*profile)["m"] = m;
@@ -395,6 +394,8 @@ int main(int argc, char **argv)
 
   global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
   common_init_finish(g_ceph_context);
+
+  g_conf->set_val("erasure_code_dir", ".libs", false, false);
 
   ::testing::InitGoogleTest(&argc, argv);
 
