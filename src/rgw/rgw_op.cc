@@ -2186,17 +2186,17 @@ void RGWPutMetadataAccount::filter_out_temp_url(map<string, bufferlist>& add_att
                                                 map<int, string>& temp_url_keys)
 {
   map<string, bufferlist>::iterator iter;
-  for (iter = add_attrs.begin(); iter != add_attrs.end(); ++iter) {
-    const string name = iter->first;
 
-    if (name.compare(RGW_ATTR_TEMPURL_KEY1) == 0) {
-      temp_url_keys[0] = iter->second.c_str();
-      add_attrs.erase(name);
-    }
-    if (name.compare(RGW_ATTR_TEMPURL_KEY2) == 0) {
-      temp_url_keys[1] = iter->second.c_str();
-      add_attrs.erase(name);
-    }
+  iter = add_attrs.find(RGW_ATTR_TEMPURL_KEY1);
+  if (iter != add_attrs.end()) {
+    temp_url_keys[0] = iter->second.c_str();
+    add_attrs.erase(iter);
+  }
+
+  iter = add_attrs.find(RGW_ATTR_TEMPURL_KEY2);
+  if (iter != add_attrs.end()) {
+    temp_url_keys[1] = iter->second.c_str();
+    add_attrs.erase(iter);
   }
 
   set<string>::const_iterator riter;
