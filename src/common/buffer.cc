@@ -897,8 +897,8 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
     assert(_raw);
     assert(l <= unused_tail_length());
     char* c = _raw->data + _off + _len;
+    _len += l;
     if (l <= 32) {
-        _len += l;
         switch (l) {
             case 16:
                 *((uint64_t*)(c)) = *((uint64_t*)(p));
@@ -936,7 +936,6 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
     }
     else {
         memcpy(c, p, l);
-        _len += l;
     }
     return _len + _off;
   }
