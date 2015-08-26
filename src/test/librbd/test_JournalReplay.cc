@@ -90,20 +90,20 @@ TEST_F(TestJournalReplay, AioDiscardEvent) {
   wait_for_lock_owner(ictx);
 
   ictx->journal->open();
-  ASSERT_TRUE(ictx->journal->wait_for_journal_ready());
+  ictx->journal->wait_for_journal_ready();
 
   librbd::journal::EventEntry event_entry(
     librbd::journal::AioDiscardEvent(0, payload.size()));
   librbd::Journal::AioObjectRequests requests;
   {
     RWLock::RLocker owner_locker(ictx->owner_lock);
-    ictx->journal->append_event(NULL, event_entry, requests, 0, 0, true);
+    ictx->journal->append_io_event(NULL, event_entry, requests, 0, 0, true);
   }
   ASSERT_EQ(0, ictx->journal->close());
 
   // re-open the journal so that it replays the new entry
   ictx->journal->open();
-  ASSERT_TRUE(ictx->journal->wait_for_journal_ready());
+  ictx->journal->wait_for_journal_ready();
 
   aio_comp = new librbd::AioCompletion();
   ictx->aio_work_queue->aio_read(aio_comp, 0, read_payload.size(),
@@ -126,7 +126,7 @@ TEST_F(TestJournalReplay, AioWriteEvent) {
   wait_for_lock_owner(ictx);
 
   ictx->journal->open();
-  ASSERT_TRUE(ictx->journal->wait_for_journal_ready());
+  ictx->journal->wait_for_journal_ready();
 
   std::string payload(4096, '1');
   bufferlist payload_bl;
@@ -136,13 +136,13 @@ TEST_F(TestJournalReplay, AioWriteEvent) {
   librbd::Journal::AioObjectRequests requests;
   {
     RWLock::RLocker owner_locker(ictx->owner_lock);
-    ictx->journal->append_event(NULL, event_entry, requests, 0, 0, true);
+    ictx->journal->append_io_event(NULL, event_entry, requests, 0, 0, true);
   }
   ASSERT_EQ(0, ictx->journal->close());
 
   // re-open the journal so that it replays the new entry
   ictx->journal->open();
-  ASSERT_TRUE(ictx->journal->wait_for_journal_ready());
+  ictx->journal->wait_for_journal_ready();
 
   std::string read_payload(4096, '\0');
   librbd::AioCompletion *aio_comp = new librbd::AioCompletion();
@@ -166,14 +166,14 @@ TEST_F(TestJournalReplay, AioFlushEvent) {
   wait_for_lock_owner(ictx);
 
   ictx->journal->open();
-  ASSERT_TRUE(ictx->journal->wait_for_journal_ready());
+  ictx->journal->wait_for_journal_ready();
 
   librbd::journal::AioFlushEvent aio_flush_event;
   librbd::journal::EventEntry event_entry(aio_flush_event);
   librbd::Journal::AioObjectRequests requests;
   {
     RWLock::RLocker owner_locker(ictx->owner_lock);
-    ictx->journal->append_event(NULL, event_entry, requests, 0, 0, true);
+    ictx->journal->append_io_event(NULL, event_entry, requests, 0, 0, true);
   }
   ASSERT_EQ(0, ictx->journal->close());
 
@@ -192,7 +192,7 @@ TEST_F(TestJournalReplay, AioFlushEvent) {
 
   // re-open the journal so that it replays the new entry
   ictx->journal->open();
-  ASSERT_TRUE(ictx->journal->wait_for_journal_ready());
+  ictx->journal->wait_for_journal_ready();
 
   ASSERT_TRUE(aio_comp->is_complete());
   ASSERT_EQ(0, aio_comp->wait_for_complete());
