@@ -1119,10 +1119,19 @@ ln -sf %{_libdir}/librbd.so.1 /usr/lib64/qemu/librbd.so.1
 
 %post selinux
 %if 0%{?_with_systemd}
-    /usr/bin/systemctl stop ceph.target > /dev/null 2>&1 || :
+    /usr/bin/systemctl status ceph.target > /dev/null 2>&1
 %else
-    /sbin/service ceph stop >/dev/null 2>&1 || :
+    /sbin/service ceph status >/dev/null 2>&1
 %endif
+STATUS=$?
+
+if test $STATUS -eq 0; then
+%if 0%{?_with_systemd}
+    /usr/bin/systemctl stop ceph.target > /dev/null 2>&1
+%else
+    /sbin/service ceph stop >/dev/null 2>&1
+%endif
+fi
 
 OLD_POLVER=$(%{_sbindir}/semodule -l | grep -P '^ceph[\t ]' | awk '{print $2}')
 %{_sbindir}/semodule -n -i %{_datadir}/selinux/packages/ceph.pp
@@ -1134,34 +1143,51 @@ if %{_sbindir}/selinuxenabled; then
    fi
 fi
 
+# Start iff it was started before
+if test $STATUS -eq 0; then
 %if 0%{?_with_systemd}
     /usr/bin/systemctl start ceph.target > /dev/null 2>&1 || :
 %else
     /sbin/service ceph start >/dev/null 2>&1 || :
 %endif
+fi
+
 exit 0
 
 %postun selinux
 if [ $1 -eq 0 ]; then
     %if 0%{?_with_systemd}
-	/usr/bin/systemctl stop ceph.target > /dev/null 2>&1 || :
+        /usr/bin/systemctl status ceph.target > /dev/null 2>&1
     %else
-	/sbin/service ceph stop >/dev/null 2>&1 || :
+        /sbin/service ceph status >/dev/null 2>&1
     %endif
+    STATUS=$?
+
+    if test $STATUS -eq 0; then
+    %if 0%{?_with_systemd}
+        /usr/bin/systemctl stop ceph.target > /dev/null 2>&1
+    %else
+        /sbin/service ceph stop >/dev/null 2>&1
+    %endif
+    fi
+
     %{_sbindir}/semodule -n -r ceph
     if %{_sbindir}/selinuxenabled ; then
        %{_sbindir}/load_policy
        %relabel_files
     fi;
+
+    if test $STATUS -eq 0; then
     %if 0%{?_with_systemd}
 	/usr/bin/systemctl start ceph.target > /dev/null 2>&1 || :
     %else
 	/sbin/service ceph start >/dev/null 2>&1 || :
     %endif
-fi;
+    fi
+fi
 exit 0
 
-%endif
+%endif # with selinux
 
 #################################################################################
 %if 0%{with libs_compat}
