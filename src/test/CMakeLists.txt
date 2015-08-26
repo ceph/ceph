@@ -1450,6 +1450,23 @@ target_link_libraries(test_objectstore
   ${CMAKE_DL_LIBS}
   )
 
+add_executable(test_keyvaluedb
+  objectstore/test_kv.cc
+  $<TARGET_OBJECTS:heap_profiler_objs>
+  )
+set_target_properties(test_keyvaluedb PROPERTIES COMPILE_FLAGS
+  ${UNITTEST_CXX_FLAGS})
+target_link_libraries(test_keyvaluedb
+  os
+  common
+  ${UNITTEST_LIBS}
+  global
+  ${EXTRALIBS}
+  ${BLKID_LIBRARIES}
+  ${TCMALLOC_LIBS}
+  ${CMAKE_DL_LIBS}
+  )
+
 add_executable(test_objectstore_workloadgen
   objectstore/workload_generator.cc
   objectstore/TestObjectStoreState.cc
