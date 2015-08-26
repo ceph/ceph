@@ -34,7 +34,7 @@ class SharedLRU {
 public:
   int waiting;
 private:
-  map<K, typename list<pair<K, VPtr> >::iterator, C> contents;
+  unordered_map<K, typename list<pair<K, VPtr> >::iterator> contents;
   list<pair<K, VPtr> > lru;
 
   map<K, pair<WeakVPtr, V*>, C> weak_refs;
@@ -47,7 +47,7 @@ private:
   }
 
   void lru_remove(const K& key) {
-    typename map<K, typename list<pair<K, VPtr> >::iterator, C>::iterator i =
+    typename unordered_map<K, typename list<pair<K, VPtr> >::iterator>::iterator i =
       contents.find(key);
     if (i == contents.end())
       return;
@@ -57,7 +57,7 @@ private:
   }
 
   void lru_add(const K& key, const VPtr& val, list<VPtr> *to_release) {
-    typename map<K, typename list<pair<K, VPtr> >::iterator, C>::iterator i =
+    typename unordered_map<K, typename list<pair<K, VPtr> >::iterator>::iterator i =
       contents.find(key);
     if (i != contents.end()) {
       lru.splice(lru.begin(), lru, i->second);
