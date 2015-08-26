@@ -73,7 +73,7 @@ private:
     const uint64_t m_snap_id;
 
     virtual bool should_complete(int r);
-    virtual int filter_return_code(int r) {
+    virtual int filter_return_code(int r) const {
       // never propagate an error back to the caller
       return 0;
     }

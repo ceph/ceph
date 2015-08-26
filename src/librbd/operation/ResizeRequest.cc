@@ -20,7 +20,7 @@ namespace operation {
 ResizeRequest::ResizeRequest(ImageCtx &image_ctx, Context *on_finish,
                                        uint64_t new_size,
                                        ProgressContext &prog_ctx)
-  : AsyncRequest(image_ctx, on_finish),
+  : Request(image_ctx, on_finish),
     m_original_size(0), m_new_size(new_size),
     m_prog_ctx(prog_ctx), m_new_parent_overlap(0),
     m_xlist_item(this)
@@ -99,7 +99,7 @@ bool ResizeRequest::should_complete(int r) {
   return false;
 }
 
-void ResizeRequest::send() {
+void ResizeRequest::send_op() {
   assert(m_image_ctx.owner_lock.is_locked());
 
   {

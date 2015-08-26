@@ -89,7 +89,7 @@ bool FlattenRequest::should_complete(int r) {
   return false;
 }
 
-void FlattenRequest::send() {
+void FlattenRequest::send_op() {
   assert(m_image_ctx.owner_lock.is_locked());
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 5) << this << " send" << dendl;

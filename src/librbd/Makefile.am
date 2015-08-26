@@ -27,6 +27,7 @@ librbd_internal_la_SOURCES = \
 	librbd/ObjectMap.cc \
 	librbd/operation/FlattenRequest.cc \
 	librbd/operation/RebuildObjectMapRequest.cc \
+	librbd/operation/Request.cc \
 	librbd/operation/ResizeRequest.cc \
 	librbd/operation/TrimRequest.cc
 noinst_LTLIBRARIES += librbd_internal.la
@@ -78,6 +79,7 @@ noinst_HEADERS += \
 	librbd/WatchNotifyTypes.h \
 	librbd/operation/FlattenRequest.h \
 	librbd/operation/RebuildObjectMapRequest.h \
+	librbd/operation/Request.h \
 	librbd/operation/ResizeRequest.h \
 	librbd/operation/TrimRequest.h
 
