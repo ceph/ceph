@@ -2051,17 +2051,19 @@ TEST_P(StoreTest, OMapIterator) {
     t.omap_setkeys(cid, hoid, start_set);
     store->apply_transaction(t);
   }
-  ObjectMap::ObjectMapIterator iter = store->get_omap_iterator(cid, hoid);
+  ObjectMap::ObjectMapIterator iter;
   bool correct;
   //basic iteration
   for (int i = 0; i < 100; i++) {
     if (!(i%5)) {
       std::cout << "On iteration " << i << std::endl;
     }
-    ObjectStore::Transaction t;
     bufferlist bl;
-    iter = store->get_omap_iterator(cid, hoid);
 
+    // FileStore may deadlock two active iterators over the same data
+    iter = ObjectMap::ObjectMapIterator();
+
+    iter = store->get_omap_iterator(cid, hoid);
     for (iter->seek_to_first(), count=0; iter->valid(); iter->next(), count++) {
       string key = iter->key();
       bufferlist value = iter->value();
@@ -2077,6 +2079,9 @@ TEST_P(StoreTest, OMapIterator) {
     }
     ASSERT_EQ(attrs.size(), count);
 
+    // FileStore may deadlock an active iterator vs apply_transaction
+    iter = ObjectMap::ObjectMapIterator();
+
     char buf[100];
     snprintf(buf, sizeof(buf), "%d", i);
     bl.clear();
@@ -2085,9 +2090,12 @@ TEST_P(StoreTest, OMapIterator) {
     map<string, bufferlist> to_add;
     to_add.insert(pair<string, bufferlist>("key-" + string(buf), bl));
     attrs.insert(pair<string, bufferlist>("key-" + string(buf), bl));
+    ObjectStore::Transaction t;
     t.omap_setkeys(cid, hoid, to_add);
     store->apply_transaction(t);
   }
+
+  iter = store->get_omap_iterator(cid, hoid);
   //lower bound
   string bound_key = "key-5";
   iter->lower_bound(bound_key);
@@ -2104,6 +2112,8 @@ TEST_P(StoreTest, OMapIterator) {
   }
   ASSERT_EQ(correct, true);
 
+  // FileStore may deadlock an active iterator vs apply_transaction
+  iter = ObjectMap::ObjectMapIterator();
   {
     ObjectStore::Transaction t;
     t.remove(cid, hoid);
