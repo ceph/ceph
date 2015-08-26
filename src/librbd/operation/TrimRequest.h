@@ -84,7 +84,7 @@ private:
   void send_pre_remove();
   void send_post_remove();
   void send_clean_boundary();
-  void finish(int r);
+  void send_finish(int r);
 };
 
 } // namespace operation
