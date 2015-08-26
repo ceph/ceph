@@ -1955,9 +1955,12 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op,
       }
 
       // Promote too?
-      bool promoted = maybe_promote(obc, missing_oid, oloc, in_hit_set,
-	                            pool.info.min_read_recency_for_promote,
-				    promote_op);
+      bool promoted = false;
+      if (!op->need_skip_promote()) {
+        promoted = maybe_promote(obc, missing_oid, oloc, in_hit_set,
+                                 pool.info.min_read_recency_for_promote,
+                                 promote_op);
+      }
       if (!promoted && !can_proxy_read) {
 	// redirect the op if it's not proxied and not promoting
 	do_cache_redirect(op);
