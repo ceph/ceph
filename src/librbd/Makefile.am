@@ -20,14 +20,14 @@ librbd_internal_la_SOURCES = \
 	librbd/ImageCtx.cc \
 	librbd/ImageWatcher.cc \
 	librbd/internal.cc \
-	librbd/FlattenRequest.cc \
 	librbd/Journal.cc \
 	librbd/JournalReplay.cc \
 	librbd/LibrbdWriteback.cc \
 	librbd/ObjectMap.cc \
-	librbd/RebuildObjectMapRequest.cc \
-	librbd/ResizeRequest.cc \
-	librbd/TrimRequest.cc
+	librbd/operation/FlattenRequest.cc \
+	librbd/operation/RebuildObjectMapRequest.cc \
+	librbd/operation/ResizeRequest.cc \
+	librbd/operation/TrimRequest.cc
 noinst_LTLIBRARIES += librbd_internal.la
 
 librbd_api_la_SOURCES = \
@@ -69,19 +69,19 @@ noinst_HEADERS += \
 	librbd/ImageCtx.h \
 	librbd/ImageWatcher.h \
 	librbd/internal.h \
-	librbd/FlattenRequest.h \
 	librbd/Journal.h \
 	librbd/JournalReplay.h \
 	librbd/JournalTypes.h \
 	librbd/LibrbdWriteback.h \
 	librbd/ObjectMap.h \
 	librbd/parent_types.h \
-	librbd/RebuildObjectMapRequest.h \
-	librbd/ResizeRequest.h \
 	librbd/SnapInfo.h \
 	librbd/TaskFinisher.h \
-	librbd/TrimRequest.h \
-	librbd/WatchNotifyTypes.h
+	librbd/WatchNotifyTypes.h \
+	librbd/operation/FlattenRequest.h \
+	librbd/operation/RebuildObjectMapRequest.h \
+	librbd/operation/ResizeRequest.h \
+	librbd/operation/TrimRequest.h
 
 endif # WITH_RBD
 endif # WITH_RADOS

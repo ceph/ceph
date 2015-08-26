@@ -18,7 +18,7 @@
 #include "librbd/ImageWatcher.h"
 #include "librbd/Journal.h"
 #include "librbd/ObjectMap.h"
-#include "librbd/ResizeRequest.h"
+#include "librbd/operation/ResizeRequest.h"
 
 #include <boost/bind.hpp>
 

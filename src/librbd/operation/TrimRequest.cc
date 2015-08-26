@@ -1,6 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
-#include "librbd/TrimRequest.h"
+
+#include "librbd/operation/TrimRequest.h"
 #include "librbd/AsyncObjectThrottle.h"
 #include "librbd/AioObjectRequest.h"
 #include "librbd/ImageCtx.h"
@@ -21,8 +22,8 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "librbd::TrimRequest: "
 
-namespace librbd
-{
+namespace librbd {
+namespace operation {
 
 class C_CopyupObject : public C_AsyncObjectThrottle {
 public:
@@ -353,4 +354,5 @@ void TrimRequest::finish(int r) {
   async_complete(r);
 }
 
+} // namespace operation
 } // namespace librbd

@@ -1,7 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#include "librbd/RebuildObjectMapRequest.h"
+#include "librbd/operation/RebuildObjectMapRequest.h"
 #include "common/dout.h"
 #include "common/errno.h"
 #include "librbd/AsyncObjectThrottle.h"
@@ -9,8 +9,8 @@
 #include "librbd/ImageWatcher.h"
 #include "librbd/internal.h"
 #include "librbd/ObjectMap.h"
-#include "librbd/ResizeRequest.h"
-#include "librbd/TrimRequest.h"
+#include "librbd/operation/ResizeRequest.h"
+#include "librbd/operation/TrimRequest.h"
 #include <boost/lambda/bind.hpp>
 #include <boost/lambda/construct.hpp>
 
@@ -19,6 +19,7 @@
 #define dout_prefix *_dout << "librbd::RebuildObjectMapRequest: "
 
 namespace librbd {
+namespace operation {
 
 namespace {
 
@@ -351,4 +352,5 @@ uint64_t RebuildObjectMapRequest::get_image_size() const {
   return  m_image_ctx.get_image_size(m_image_ctx.snap_id);
 }
 
+} // namespace operation
 } // namespace librbd

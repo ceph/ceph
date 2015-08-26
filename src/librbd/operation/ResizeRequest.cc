@@ -1,11 +1,12 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
-#include "librbd/ResizeRequest.h"
+
+#include "librbd/operation/ResizeRequest.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageWatcher.h"
 #include "librbd/internal.h"
 #include "librbd/ObjectMap.h"
-#include "librbd/TrimRequest.h"
+#include "librbd/operation/TrimRequest.h"
 #include "common/dout.h"
 #include "common/errno.h"
 
@@ -13,8 +14,8 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "librbd::ResizeRequest: "
 
-namespace librbd
-{
+namespace librbd {
+namespace operation {
 
 ResizeRequest::ResizeRequest(ImageCtx &image_ctx, Context *on_finish,
                                        uint64_t new_size,
@@ -262,4 +263,5 @@ void ResizeRequest::update_size_and_overlap() {
   }
 }
 
+} // namespace operation
 } // namespace librbd

@@ -26,13 +26,13 @@
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageWatcher.h"
 #include "librbd/internal.h"
-#include "librbd/FlattenRequest.h"
 #include "librbd/Journal.h"
 #include "librbd/ObjectMap.h"
 #include "librbd/parent_types.h"
-#include "librbd/RebuildObjectMapRequest.h"
-#include "librbd/ResizeRequest.h"
-#include "librbd/TrimRequest.h"
+#include "librbd/operation/FlattenRequest.h"
+#include "librbd/operation/RebuildObjectMapRequest.h"
+#include "librbd/operation/ResizeRequest.h"
+#include "librbd/operation/TrimRequest.h"
 #include "include/util.h"
 
 #include <boost/bind.hpp>
@@ -295,8 +295,8 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
 
     C_SaferCond ctx;
     ictx->snap_lock.get_read();
-    TrimRequest *req = new TrimRequest(*ictx, &ctx, ictx->size, newsize,
-                                       prog_ctx);
+    operation::TrimRequest *req = new operation::TrimRequest(
+      *ictx, &ctx, ictx->size, newsize, prog_ctx);
     ictx->snap_lock.put_read();
     req->send();
 
@@ -2017,7 +2017,8 @@ reprotect_and_return_err:
                            ProgressContext& prog_ctx)
   {
     assert(ictx->owner_lock.is_locked());
-    ResizeRequest *req = new ResizeRequest(*ictx, ctx, new_size, prog_ctx);
+    operation::ResizeRequest *req = new operation::ResizeRequest(
+      *ictx, ctx, new_size, prog_ctx);
     req->send();
   }
 
@@ -2928,8 +2929,8 @@ reprotect_and_return_err:
       overlap_objects = Striper::get_num_objects(ictx->layout, overlap);
     }
 
-    FlattenRequest *req = new FlattenRequest(*ictx, ctx, object_size,
-                                             overlap_objects, snapc, prog_ctx);
+    operation::FlattenRequest *req = new operation::FlattenRequest(
+      *ictx, ctx, object_size, overlap_objects, snapc, prog_ctx);
     req->send();
     return 0;
   }
@@ -2979,8 +2980,8 @@ reprotect_and_return_err:
       return r;
     }
 
-    RebuildObjectMapRequest *req = new RebuildObjectMapRequest(*ictx, ctx,
-                                                               prog_ctx);
+    operation::RebuildObjectMapRequest *req =
+      new operation::RebuildObjectMapRequest(*ictx, ctx, prog_ctx);
     req->send();
     return 0;
   }

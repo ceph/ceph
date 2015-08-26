@@ -1,7 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
-#ifndef CEPH_LIBRBD_RESIZE_REQUEST_H
-#define CEPH_LIBRBD_RESIZE_REQUEST_H
+#ifndef CEPH_LIBRBD_OPERATION_RESIZE_REQUEST_H
+#define CEPH_LIBRBD_OPERATION_RESIZE_REQUEST_H
 
 #include "librbd/AsyncRequest.h"
 #include "include/xlist.h"
@@ -11,6 +11,8 @@ namespace librbd
 
 class ImageCtx;
 class ProgressContext;
+
+namespace operation {
 
 class ResizeRequest : public AsyncRequest
 {
@@ -96,6 +98,7 @@ private:
 
 };
 
+} // namespace operation
 } // namespace librbd
 
-#endif // CEPH_LIBRBD_RESIZE_REQUEST_H
+#endif // CEPH_LIBRBD_OPERATION_RESIZE_REQUEST_H

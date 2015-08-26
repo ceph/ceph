@@ -1,7 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
-#ifndef CEPH_LIBRBD_REBUILD_OBJECT_MAP_REQUEST_H
-#define CEPH_LIBRBD_REBUILD_OBJECT_MAP_REQUEST_H
+#ifndef CEPH_LIBRBD_OPERATION_REBUILD_OBJECT_MAP_REQUEST_H
+#define CEPH_LIBRBD_OPERATION_REBUILD_OBJECT_MAP_REQUEST_H
 
 #include "include/int_types.h"
 #include "librbd/AsyncRequest.h"
@@ -10,6 +10,8 @@ namespace librbd {
 
 class ImageCtx;
 class ProgressContext;
+
+namespace operation {
 
 class RebuildObjectMapRequest : public AsyncRequest {
 public:
@@ -73,6 +75,7 @@ private:
 
 };
 
+} // namespace operation
 } // namespace librbd
 
-#endif // CEPH_LIBRBD_REBUILD_OBJECT_MAP_REQUEST_H
+#endif // CEPH_LIBRBD_OPERATION_REBUILD_OBJECT_MAP_REQUEST_H

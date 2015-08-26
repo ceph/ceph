@@ -1,7 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#include "librbd/FlattenRequest.h"
+#include "librbd/operation/FlattenRequest.h"
 #include "librbd/AioObjectRequest.h"
 #include "librbd/AsyncObjectThrottle.h"
 #include "librbd/ImageCtx.h"
@@ -17,6 +17,7 @@
 #define dout_prefix *_dout << "librbd::FlattenRequest: "
 
 namespace librbd {
+namespace operation {
 
 class C_FlattenObject : public C_AsyncObjectThrottle {
 public:
@@ -173,4 +174,5 @@ bool FlattenRequest::send_update_children() {
   return false;
 }
 
+} // namespace operation
 } // namespace librbd
