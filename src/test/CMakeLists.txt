@@ -2096,6 +2096,7 @@ if(${WITH_CEPHFS})
     libcephfs/caps.cc
     libcephfs/multiclient.cc
     libcephfs/flock.cc
+    libcephfs/acl.cc
     $<TARGET_OBJECTS:heap_profiler_objs>
   )
   set_target_properties(test_libcephfs PROPERTIES COMPILE_FLAGS

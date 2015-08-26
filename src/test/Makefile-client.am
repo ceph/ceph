@@ -497,7 +497,9 @@ ceph_test_libcephfs_SOURCES = \
 	test/libcephfs/readdir_r_cb.cc \
 	test/libcephfs/caps.cc \
 	test/libcephfs/multiclient.cc \
-	test/libcephfs/access.cc
+	test/libcephfs/access.cc \
+	test/libcephfs/acl.cc
+
 if LINUX
 ceph_test_libcephfs_SOURCES += test/libcephfs/flock.cc
 endif # LINUX
