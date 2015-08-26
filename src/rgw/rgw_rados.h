@@ -748,6 +748,9 @@ protected:
 		   const string& oid);
   /* read and use default id */
   int use_default(bool old_format = false);
+  virtual int create_default(bool old_format = false) {
+    return -ENOENT;
+  }
 
 public:
   RGWSystemMetaObj() {}
@@ -775,7 +778,7 @@ public:
   }
 
   int init(CephContext *_cct, RGWRados *_store, bool setup_obj = true, bool old_format = false);
-  int read_default_id(string& default_id);
+  int read_default_id(string& default_id, bool old_format = false);
   int set_as_default();
   int delete_default();
   int create();
@@ -784,13 +787,11 @@ public:
   int update() { return store_info(false);}
 
   virtual const string& get_pool_name(CephContext *cct) = 0;
-
   virtual const string& get_default_oid(bool old_format = false) = 0;
   virtual const string& get_names_oid_prefix() = 0;
   virtual const string& get_info_oid_prefix(bool old_format = false) = 0;
-  virtual int create_default() {
-    return -ENOENT;
-  }
+  virtual const string& get_predefined_id() = 0;
+
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
 };
@@ -1011,9 +1012,7 @@ struct RGWZoneGroupPlacementTarget {
 WRITE_CLASS_ENCODER(RGWZoneGroupPlacementTarget)
 
 
-struct RGWZoneGroup {
-  string id;
-  string name;
+struct RGWZoneGroup : public RGWSystemMetaObj {
   string api_name;
   list<string> endpoints;
   bool is_master;
@@ -1026,18 +1025,12 @@ struct RGWZoneGroup {
 
   list<string> hostnames;
 
-  CephContext *cct;
-  RGWRados *store;
-
-  bool old_region;
-
-  RGWZoneGroup() : is_master(false), cct(NULL), store(NULL), old_region(false) {}
-  RGWZoneGroup(const std::string &_name):name(_name) {}
+  RGWZoneGroup(): is_master(false){}
+  RGWZoneGroup(const std::string &_name):RGWSystemMetaObj(_name) {}
 
   void encode(bufferlist& bl) const {
     ENCODE_START(3, 1, bl);
-    ::encode(id, bl);
-    ::encode(name, bl);
+    RGWSystemMetaObj::encode(bl);
     ::encode(api_name, bl);
     ::encode(is_master, bl);
     ::encode(endpoints, bl);
@@ -1051,11 +1044,12 @@ struct RGWZoneGroup {
 
   void decode(bufferlist::iterator& bl) {
     DECODE_START(3, bl);
-    if (struct_v >= 3)
-      ::decode(id, bl);
-    ::decode(name, bl);
-    if (struct_v < 3)
+    if (struct_v >= 3) {
+      RGWSystemMetaObj::decode(bl);
+    } else {
+      ::decode(name, bl);
       id = name;
+    }
     ::decode(api_name, bl);
     ::decode(is_master, bl);
     ::decode(endpoints, bl);
@@ -1069,24 +1063,15 @@ struct RGWZoneGroup {
     DECODE_FINISH(bl);
   }
 
-  int read_id(const string& obj_name, string& obj_id);
-  int init(CephContext *_cct, RGWRados *_store, bool setup_zonegroup = true,
-	   bool old_region_format = false);
-  int create_default();
-  int store_info(bool exclusive);
-  int read_info(const string& zonegroup_name, bool old_region_format = false);
-  int read_default(RGWDefaultZoneGroupInfo& default_zonegroup,
-		   const string& oid);
-  int set_as_default();
+  int create_default(bool old_format = false);
   int equals(const string& other_zonegroup);
-  int create();
-  int delete_obj(bool old_region_format = false);
+
   const string& get_pool_name(CephContext *cct);
   const string& get_default_oid(bool old_region_format = false);
   const string& get_info_oid_prefix(bool old_region_format = false);
-  const string& get_json_perfix();
   const string& get_names_oid_prefix();
-  
+  const string& get_predefined_id();
+
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
   static void generate_test_instances(list<RGWZoneGroup*>& o);
@@ -1176,7 +1161,9 @@ public:
   const string& get_default_oid(bool old_format = false);
   const string& get_names_oid_prefix();
   const string& get_info_oid_prefix(bool old_format = false);
-
+  const string& get_predefined_id() {
+    return id;
+  }
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
 

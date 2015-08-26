@@ -761,7 +761,7 @@ void RGWZoneGroupPlacementTarget::decode_json(JSONObj *obj)
 
 void RGWZoneGroup::dump(Formatter *f) const
 {
-  encode_json("name", name, f);
+  RGWSystemMetaObj::dump(f);
   encode_json("api_name", api_name, f);
   encode_json("is_master", is_master, f);
   encode_json("endpoints", endpoints, f);
@@ -789,7 +789,7 @@ static void decode_placement_targets(map<string, RGWZoneGroupPlacementTarget>& t
 
 void RGWZoneGroup::decode_json(JSONObj *obj)
 {
-  JSONDecoder::decode_json("name", name, obj);
+  RGWSystemMetaObj::decode_json(obj);
   JSONDecoder::decode_json("api_name", api_name, obj);
   JSONDecoder::decode_json("is_master", is_master, obj);
   JSONDecoder::decode_json("endpoints", endpoints, obj);
@@ -860,7 +860,7 @@ static void decode_zonegroups(map<string, RGWZoneGroup>& zonegroups, JSONObj *o)
 {
   RGWZoneGroup zg;
   zg.decode_json(o);
-  zonegroups[zg.name] = zg;
+  zonegroups[zg.get_id()] = zg;
 }
 
 void RGWRealm::decode_json(JSONObj *obj)

@@ -410,7 +410,7 @@ static int rgw_build_policies(RGWRados *store, struct req_state *s, bool only_bu
       s->zonegroup_endpoint = dest_zonegroup->second.endpoints.front();
     }
     if (s->bucket_exists && !store->zonegroup.equals(zonegroup)) {
-      ldout(s->cct, 0) << "NOTICE: request for data in a different zonegroup (" << zonegroup << " != " << store->zonegroup.name << ")" << dendl;
+      ldout(s->cct, 0) << "NOTICE: request for data in a different zonegroup (" << zonegroup << " != " << store->zonegroup.get_name() << ")" << dendl;
       /* we now need to make sure that the operation actually requires copy source, that is
        * it's a copy operation
        */
@@ -1440,10 +1440,10 @@ void RGWCreateBucket::execute()
   if (s->system_request) {
     zonegroup_id = s->info.args.get(RGW_SYS_PARAM_PREFIX "zonegroup");
     if (zonegroup_id.empty()) {
-      zonegroup_id = store->zonegroup.id;
+      zonegroup_id = store->zonegroup.get_id();
     }
   } else {
-    zonegroup_id = store->zonegroup.id;
+    zonegroup_id = store->zonegroup.get_id();
   }
 
   if (s->bucket_exists) {
