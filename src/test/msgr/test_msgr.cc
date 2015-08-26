@@ -983,6 +983,17 @@ class SyntheticWorkload {
     ConnectionRef conn = _get_random_connection();
     dispatcher.clear_pending(conn);
     conn->mark_down();
+    par<Messenger*, Messenger*> &p = available_connections[conn];
+    // it's a lossless policy, so we need to mark down each side
+    if (!p.first->get_default_policy().server && !p.second->get_default_policy().server) {
+      ConnectionRef peer;
+      if (conn->get_messenger() == p.first)
+        peer = p.second->get_connection(p.first->get_myinst());
+      else
+        peer = p.first->get_connection(p.second->get_myinst());
+      peer->mark_down();
+      dispatcher.clear_pending(peer);
+    }
     ASSERT_EQ(available_connections.erase(conn), 1U);
   }
 
