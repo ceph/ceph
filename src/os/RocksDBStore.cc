@@ -259,8 +259,7 @@ void RocksDBStore::RocksDBTransactionImpl::rmkeys_by_prefix(const string &prefix
   for (it->seek_to_first();
        it->valid();
        it->next()) {
-    string key = combine_strings(prefix, it->key());
-    bat->Delete(key);
+    bat->Delete(combine_strings(prefix, it->key()));
   }
 }
 
