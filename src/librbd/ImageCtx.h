@@ -44,7 +44,10 @@ namespace librbd {
   class LibrbdAdminSocketHook;
   class ImageWatcher;
   class Journal;
+
+  namespace operation {
   class ResizeRequest;
+  }
 
   struct ImageCtx {
     CephContext *cct;
@@ -133,7 +136,7 @@ namespace librbd {
 
     atomic_t async_request_seq;
 
-    xlist<ResizeRequest*> resize_reqs;
+    xlist<operation::ResizeRequest*> resize_reqs;
 
     AioImageRequestWQ *aio_work_queue;
     ContextWQ *op_work_queue;
