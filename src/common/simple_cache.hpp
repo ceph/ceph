@@ -25,7 +25,7 @@ template <class K, class V, class C = std::less<K> >
 class SimpleLRU {
   Mutex lock;
   size_t max_size;
-  map<K, typename list<pair<K, V> >::iterator, C> contents;
+  unordered_map<K, typename list<pair<K, V> >::iterator> contents;
   list<pair<K, V> > lru;
   map<K, V, C> pinned;
 
@@ -64,7 +64,7 @@ public:
 
   void clear(K key) {
     Mutex::Locker l(lock);
-    typename map<K, typename list<pair<K, V> >::iterator, C>::iterator i =
+    typename unordered_map<K, typename list<pair<K, V> >::iterator>::iterator i =
       contents.find(key);
     if (i == contents.end())
       return;
