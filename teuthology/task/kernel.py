@@ -7,8 +7,6 @@ import logging
 import os
 import re
 import shlex
-import urllib2
-import urlparse
 
 from teuthology import misc as teuthology
 from ..orchestra import run
@@ -23,6 +21,7 @@ from ..packaging import (
     get_koji_package_name,
     get_koji_task_rpm_info,
     get_koji_task_result,
+    GitbuilderProject,
 )
 
 log = logging.getLogger(__name__)
@@ -354,31 +353,19 @@ def download_kernel(ctx, config):
             procs[role_remote.name] = proc
         else:
             # gitbuilder package - src is sha1
-            log.info('Downloading kernel {sha1} on {role}...'.format(sha1=src,
-                                                                     role=role))
-            needs_download = True
-            package_type = role_remote.os.package_type
-            if package_type == 'rpm':
-                system_type = role_remote.os.name
-                system_ver = role_remote.os.version
-                if '.' in system_ver:
-                   system_ver = system_ver.split('.')[0]
-                ldist = '{system_type}{system_ver}'.format(
-                    system_type=system_type, system_ver=system_ver)
-                larch = 'x86_64'
-            elif package_type == 'deb':
-                ldist, larch = role_remote.os.codename, role_remote.arch
-            else:
-                raise UnsupportedPackageTypeError(role_remote)
-
-            _, baseurl = teuthology.get_ceph_binary_url(
-                package='kernel',
+            log.info('Downloading kernel {sha1} on {role}...'.format(
                 sha1=src,
-                format=package_type,
-                flavor='basic',
-                arch=larch,
-                dist=ldist,
-                )
+                role=role,
+            ))
+            needs_download = True
+
+            gitbuilder = GitbuilderProject(
+                'kernel',
+                ctx.config.get('kernel'),
+                ctx=ctx,
+                remote=role_remote,
+            )
+            baseurl = gitbuilder.base_url + "/"
 
             pkg_name = gitbuilder_pkg_name(role_remote)
 
@@ -1158,7 +1145,7 @@ def task(ctx, config):
     for role, role_config in config.iteritems():
         # gather information about this remote
         (role_remote,) = ctx.cluster.only(role).remotes.keys()
-        system_type, system_ver = role_remote.os.name, role_remote.os.version
+        system_type = role_remote.os.name
         if role_config.get('rpm') or role_config.get('deb'):
             # We only care about path - deb: vs rpm: is meaningless,
             # rpm: just happens to be parsed first.  Nothing is stopping
@@ -1222,42 +1209,22 @@ def task(ctx, config):
                 need_install[role] = build_info
                 need_version[role] = version
         else:
-            package_type = role_remote.os.package_type
-            larch = role_remote.arch
-            if package_type == 'rpm':
-                if '.' in system_ver:
-                    system_ver = system_ver.split('.')[0]
-                ldist = '{system_type}{system_ver}'.format(system_type=system_type, system_ver=system_ver)
-            if package_type == 'deb':
-                system_ver = role_remote.os.codename
-                ldist = '{system_ver}'.format(system_ver=system_ver)
-            sha1, base_url = teuthology.get_ceph_binary_url(
-                package='kernel',
-                branch=role_config.get('branch'),
-                tag=role_config.get('tag'),
-                sha1=role_config.get('sha1'),
-                flavor='basic',
-                format=package_type,
-                dist=ldist,
-                arch=larch,
-                )
+            gitbuilder = GitbuilderProject(
+                "kernel",
+                ctx.config.get('kernel'),
+                ctx=ctx,
+                remote=role_remote,
+            )
+            sha1 = gitbuilder.sha1
             log.debug('sha1 for {role} is {sha1}'.format(role=role, sha1=sha1))
             ctx.summary['{role}-kernel-sha1'.format(role=role)] = sha1
 
             if need_to_install(ctx, role, sha1):
-                version = sha1
-                version_url = urlparse.urljoin(base_url, 'version')
-                try:
-                    version_fp = urllib2.urlopen(version_url)
-                    version = version_fp.read().rstrip('\n')
-                    version_fp.close()
-                except urllib2.HTTPError:
-                    log.debug('failed to get utsrelease string using url {url}'.format(
-                              url=version_url))
+                version = gitbuilder.version
 
                 if not version:
                     raise VersionNotFoundError("{url} is empty!".format(
-                        url=version_url))
+                        url=gitbuilder.base_url + "/version"))
 
                 need_install[role] = sha1
                 need_version[role] = version
