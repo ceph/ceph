@@ -1910,8 +1910,8 @@ int main(int argc, char **argv)
 	  cerr << "failed to list zonegroups: " << cpp_strerror(-ret) << std::endl;
 	  return -ret;
 	}
-	RGWDefaultZoneGroupInfo default_zonegroup;
-	ret = zonegroup.read_default(default_zonegroup, zonegroup.get_default_oid(g_ceph_context));
+	string default_zonegroup;
+	ret = zonegroup.read_default_id(default_zonegroup);
 	if (ret < 0 && ret != -ENOENT) {
 	  cerr << "could not determine default zonegroup: " << cpp_strerror(-ret) << std::endl;
 	}
@@ -1936,7 +1936,7 @@ int main(int argc, char **argv)
 	  return 1;
 	}
 
-	ret = zonegroup.store_info(false);
+	ret = zonegroup.update();
 	if (ret < 0) {
 	  cerr << "ERROR: couldn't store zone info: " << cpp_strerror(-ret) << std::endl;
 	  return 1;
@@ -2005,13 +2005,6 @@ int main(int argc, char **argv)
           zonegroupmap.zonegroups.clear();
         }
 
-	RGWZoneGroup zonegroup;
-	ret = zonegroup.init(g_ceph_context, store, false);
-	if (ret < 0) {
-	  cerr << "failed to init zonegroup: " << cpp_strerror(-ret) << std::endl;
-	  return -ret;
-	}
-
 	list<string> zonegroups;
 	ret = store->list_zonegroups(zonegroups);
 	if (ret < 0) {
@@ -2020,9 +2013,10 @@ int main(int argc, char **argv)
 	}
 
 	for (list<string>::iterator iter = zonegroups.begin(); iter != zonegroups.end(); ++iter) {
-	  ret = zonegroup.read_info(*iter);
+	  RGWZoneGroup zonegroup(*iter);
+	  ret = zonegroup.init(g_ceph_context, store);
 	  if (ret < 0) {
-	    cerr << "failed to read zonegroup info (name=" << *iter << "): " << cpp_strerror(-ret) << std::endl;
+	    cerr << "failed to init zonegroup: " << cpp_strerror(-ret) << std::endl;
 	    return -ret;
 	  }
 	  zonegroupmap.update(zonegroup);

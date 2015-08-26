@@ -481,10 +481,6 @@ set(dencoder_srcs
 if(${WITH_RADOSGW})
   list(APPEND dencoder_srcs
     rgw/rgw_dencoder.cc
-    rgw/rgw_acl.cc
-    rgw/rgw_common.cc
-    rgw/rgw_env.cc
-    rgw/rgw_json_enc.cc
   )
   set(DENCODER_EXTRALIBS
     rgw_a
@@ -510,6 +506,7 @@ target_link_libraries(ceph-dencoder
   mds
   mon
   osdc
+  ${DENCODER_EXTRALIBS}
   journal
   cls_lock_client
   cls_refcount_client
@@ -521,7 +518,6 @@ target_link_libraries(ceph-dencoder
   cls_user_client
   cls_journal_client
   cls_timeindex_client
-  ${DENCODER_EXTRALIBS}
   blkid
   udev
   keyutils

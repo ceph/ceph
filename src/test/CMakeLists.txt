@@ -1496,6 +1496,7 @@ if(${WITH_RADOSGW})
     cls_replica_log_client
     cls_kvs
     cls_user_client
+    cls_timeindex_client
     librados
     global
     curl
