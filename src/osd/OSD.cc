@@ -5162,6 +5162,12 @@ void OSD::do_command(Connection *con, ceph_tid_t tid, vector<string>& cmd, buffe
 
     // clean up
     store->queue_transaction_and_cleanup(osr.get(), cleanupt);
+    {
+      C_SaferCond waiter;
+      if (!osr->flush_commit(&waiter)) {
+	waiter.wait();
+      }
+    }
 
     uint64_t rate = (double)count / (end - start);
     if (f) {
