@@ -536,7 +536,7 @@ void AsyncConnection::process()
           ldout(async_msgr->cct, 20) << __func__ << " begin MSG" << dendl;
           ceph_msg_header header;
           ceph_msg_header_old oldheader;
-          __u32 header_crc;
+          __u32 header_crc = 0;
           int len;
           if (has_feature(CEPH_FEATURE_NOSRCADDR))
             len = sizeof(header);
