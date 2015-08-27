@@ -117,14 +117,6 @@ EXTRA_DIST += \
         $(srcdir)/test/coverage.sh \
 	$(patsubst %,$(srcdir)/%,$(check_SCRIPTS))
 
-docker-check:
-	$(srcdir)/test/container-make-check-ubuntu-14.04.sh
-	$(srcdir)/test/container-make-check-centos-centos7.sh
-
-EXTRA_DIST += \
-	$(srcdir)/test/container-make-check-ubuntu-14.04.sh
-	$(srcdir)/test/container-make-check-centos-centos7.sh
-
 # target to build but not run the unit tests
 unittests:: $(check_PROGRAMS)
 
