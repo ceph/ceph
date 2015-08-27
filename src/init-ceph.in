@@ -304,9 +304,9 @@ for name in $what; do
 	    [ -n "$max_open_files" ] && files="ulimit -n $max_open_files;"
 
 	    if [ -n "$SYSTEMD_RUN" ]; then
-		cmd="$SYSTEMD_RUN -r bash -c '$files $cmd --cluster $cluster -f'"
+		cmd="$SYSTEMD_RUN -r bash -c '$files $cmd --cluster $cluster --setuser ceph --setgroup ceph -f'"
 	    else
-		cmd="$files $wrap $cmd --cluster $cluster $runmode"
+		cmd="$files $wrap $cmd --cluster $cluster --setuser ceph --setgroup ceph $runmode"
 	    fi
 
 	    if [ $dofsmount -eq 1 ] && [ -n "$fs_devs" ]; then
@@ -376,7 +376,10 @@ for name in $what; do
 	    fi
 
 	    echo Starting Ceph $name on $host...
-	    mkdir -p $run_dir
+	    if [ ! -d $run_dir ]; then
+		# assume /var/run exists
+		install -d -m0755 -o ceph -g ceph /var/run/ceph
+	    fi
 	    get_conf pre_start_eval "" "pre start eval"
 	    [ -n "$pre_start_eval" ] && $pre_start_eval
 	    get_conf pre_start "" "pre start command"
