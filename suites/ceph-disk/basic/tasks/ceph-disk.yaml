@@ -1,0 +1,40 @@
+overrides:
+  ceph-deploy:
+    conf:
+      global:
+        debug ms: 1
+      osd:
+        debug osd: 10
+      mon:
+        debug mon: 10
+roles:
+- - mon.a
+  - client.0
+openstack:
+  machine:
+    disk: 10 # GB
+    ram: 2000 # MB
+    cpus: 1
+  volumes: # attached to each instance
+    count: 3
+    size: 1 # GB
+tasks:
+- install:
+     extras: yes
+- print: "**** done install extras"
+- ssh_keys:
+- print: "**** done ssh_keys"
+- ceph-deploy:
+- print: "**** done ceph-deploy"
+#
+# Keep this around for debugging purposes. If uncommented the target
+# will pause and the workunit can be run and debug manually.
+#
+# - exec:
+#     client.0:
+#       - sleep 1000000000 # forever
+#
+- workunit:
+    clients:
+      all:
+        - ceph-disk/ceph-disk.sh
