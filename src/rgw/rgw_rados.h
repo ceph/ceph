@@ -22,6 +22,7 @@ class RGWWatcher;
 class SafeTimer;
 class ACLOwner;
 class RGWGC;
+class RGWObjectExpirer;
 
 /* flags for put_obj_meta() */
 #define PUT_OBJ_CREATE      0x01
@@ -1241,6 +1242,7 @@ class RGWRados
   };
 
   RGWGC *gc;
+  RGWObjectExpirer *obj_expirer;
   bool use_gc_thread;
   bool quota_threads;
 
@@ -1297,7 +1299,7 @@ protected:
 
 public:
   RGWRados() : max_req_id(0), lock("rados_timer_lock"), watchers_lock("watchers_lock"), timer(NULL),
-               gc(NULL), use_gc_thread(false), quota_threads(false),
+               gc(NULL), obj_expirer(NULL), use_gc_thread(false), quota_threads(false),
                num_watchers(0), watchers(NULL),
                watch_initialized(false),
                bucket_id_lock("rados_bucket_id"),
