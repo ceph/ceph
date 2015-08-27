@@ -8,7 +8,7 @@ class RGWRESTMgr_Lib : public RGWRESTMgr_S3 {
 public:
   RGWRESTMgr_Lib() {}
   virtual ~RGWRESTMgr_Lib() {}
-  virtual RGWHandler *get_handler(struct req_state *s);
+  virtual RGWHandler* get_handler(struct req_state* s);
 };
 
 class RGWHandler_ObjStore_Lib : public RGWHandler_User {
@@ -18,4 +18,4 @@ public:
   virtual ~RGWHandler_ObjStore_Lib() {}
 };
 
-#endif
+#endif /* CEPH_RGW_REST_LIB_H */

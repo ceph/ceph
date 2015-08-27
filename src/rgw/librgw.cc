@@ -50,13 +50,13 @@
 
 #define dout_subsys ceph_subsys_rgw
 
-int librgw_create(librgw_t *rgw, const char * const id)
+int librgw_create(librgw_t* rgw, const char* const id)
 {
   CephInitParameters iparams(CEPH_ENTITY_TYPE_CLIENT);
   if (id) {
     iparams.name.set(CEPH_ENTITY_TYPE_CLIENT, id);
   }
-  CephContext *cct = common_preinit(iparams, CODE_ENVIRONMENT_LIBRARY, 0);
+  CephContext* cct = common_preinit(iparams, CODE_ENVIRONMENT_LIBRARY, 0);
   cct->_conf->set_val("log_to_stderr", "false"); // quiet by default
   cct->_conf->set_val("err_to_stderr", "true"); // quiet by default
   cct->_conf->parse_env(); // environment variables override
@@ -67,7 +67,7 @@ int librgw_create(librgw_t *rgw, const char * const id)
   return 0;
 }
 
-int librgw_acl_bin2xml(librgw_t rgw, const char *bin, int bin_len, char **xml)
+int librgw_acl_bin2xml(librgw_t rgw, const char* bin, int bin_len, char** xml)
 {
   try {
     // convert to bufferlist
@@ -89,7 +89,7 @@ int librgw_acl_bin2xml(librgw_t rgw, const char *bin, int bin_len, char **xml)
       return -ENOBUFS;
     return 0;
   }
-  catch (const std::exception &e) {
+  catch (const std::exception& e) {
     lderr(rgw) << "librgw_acl_bin2xml: caught exception " << e.what() << dendl;
     return -2000;
   }
@@ -104,19 +104,19 @@ void librgw_free_xml(librgw_t rgw, char *xml)
   free(xml);
 }
 
-int librgw_acl_xml2bin(librgw_t rgw, const char *xml, char **bin, int *bin_len)
+int librgw_acl_xml2bin(librgw_t rgw, const char* xml, char** bin, int* bin_len)
 {
   char *bin_ = NULL;
   try {
-    RGWACLXMLParser_S3 parser((CephContext *)rgw);
+    RGWACLXMLParser_S3 parser((CephContext*)rgw);
     if (!parser.init()) {
       return -1000;
     }
     if (!parser.parse(xml, strlen(xml), true)) {
       return -EINVAL;
     }
-    RGWAccessControlPolicy_S3 *policy =
-      (RGWAccessControlPolicy_S3 *)parser.find_first("AccessControlPolicy");
+    RGWAccessControlPolicy_S3* policy =
+      (RGWAccessControlPolicy_S3*)parser.find_first("AccessControlPolicy");
     if (!policy) {
       return -1001;
     }
@@ -134,7 +134,7 @@ int librgw_acl_xml2bin(librgw_t rgw, const char *xml, char **bin, int *bin_len)
     *bin_len = bin_len_;
     return 0;
   }
-  catch (const std::exception &e) {
+  catch (const std::exception& e) {
     lderr(rgw) << "librgw_acl_bin2xml: caught exception " << e.what() << dendl;
   }
   catch (...) {
@@ -146,7 +146,7 @@ int librgw_acl_xml2bin(librgw_t rgw, const char *xml, char **bin, int *bin_len)
   return -2000;
 }
 
-void librgw_free_bin(librgw_t rgw, char *bin)
+void librgw_free_bin(librgw_t rgw, char* bin)
 {
   free(bin);
 }
@@ -169,13 +169,15 @@ struct RGWLibRequest : public RGWRequest {
   string method;
   string resource;
   int content_length;
-  atomic_t *fail_flag;
+  atomic_t* fail_flag;
 
-  RGWLibRequest(uint64_t req_id, const string& _m, const  string& _r, int _cl, bool user_command,
-		atomic_t *_ff) :  RGWRequest(req_id), method(_m), resource(_r), content_length(_cl), fail_flag(_ff)
-  {
-     s->librgw_user_command =  user_command;
-  }
+  RGWLibRequest(uint64_t req_id, const string& _m, const  string& _r, int _cl,
+		bool user_command, atomic_t* _ff)
+    :  RGWRequest(req_id), method(_m), resource(_r), content_length(_cl),
+       fail_flag(_ff)
+    {
+      s->librgw_user_command =  user_command;
+    }
 };
 
 void RGWLibRequestEnv::set_date(utime_t& tm)
@@ -194,42 +196,45 @@ int RGWLibRequestEnv::sign(RGWAccessKey& access_key)
   string digest;
 
   rgw_create_s3_canonical_header(request_method.c_str(),
-                                 NULL, /* const char *content_md5 */
-                                 content_type.c_str(),
-                                 date_str.c_str(),
-                                 meta_map,
-                                 uri.c_str(),
-                                 sub_resources,
-                                 canonical_header);
+				 NULL, /* const char* content_md5 */
+				 content_type.c_str(),
+				 date_str.c_str(),
+				 meta_map,
+				 uri.c_str(),
+				 sub_resources,
+				 canonical_header);
 
   int ret = rgw_get_s3_header_digest(canonical_header, access_key.key, digest);
   if (ret < 0) {
     return ret;
   }
-
+  return 0;
 };
 
 class RGWLibFrontend : public RGWProcessFrontend {
 public:
-  RGWLibFrontend(RGWProcessEnv& pe, RGWFrontendConfig *_conf) : RGWProcessFrontend(pe, _conf) {}
+  RGWLibFrontend(RGWProcessEnv& pe, RGWFrontendConfig *_conf)
+    : RGWProcessFrontend(pe, _conf) {}
   int init();
-  void gen_request(const string& method, const string& resource, int content_length, bool user_command,
-		   atomic_t *fail_flag);
+  void gen_request(const string& method, const string& resource,
+		   int content_length, bool user_command,
+		   atomic_t* fail_flag);
 };
 
 class RGWLibProcess : public RGWProcess {
     RGWAccessKey access_key;
 public:
-  RGWLibProcess(CephContext *cct, RGWProcessEnv *pe, int num_threads, RGWFrontendConfig *_conf) :
+  RGWLibProcess(CephContext* cct, RGWProcessEnv* pe, int num_threads,
+		RGWFrontendConfig* _conf) :
     RGWProcess(cct, pe, num_threads, _conf) {}
   void run();
   void checkpoint();
-  void handle_request(RGWRequest *req);
-  void gen_request(const string& method, const string& resource, int content_length, bool user_command,
-		   atomic_t *fail_flag);
+  void handle_request(RGWRequest* req);
+  void gen_request(const string& method, const string& resource,
+		   int content_length, bool user_command,
+		   atomic_t* fail_flag);
   void set_access_key(RGWAccessKey& key) { access_key = key; }
 };
-
 
 void RGWLibProcess::checkpoint()
 {
@@ -238,21 +243,24 @@ void RGWLibProcess::checkpoint()
 
 void RGWLibProcess::run()
 {
+  /* XXX */
 }
 
-void RGWLibProcess::gen_request(const string& method, const string& resource, int content_length,
-				bool user_command, atomic_t *fail_flag)
+void RGWLibProcess::gen_request(const string& method, const string& resource,
+				int content_length, bool user_command,
+				atomic_t* fail_flag)
 {
-  RGWLibRequest *req = new RGWLibRequest(store->get_new_req_id(), method, resource,
-					 content_length, user_command, fail_flag);
+  RGWLibRequest* req = new RGWLibRequest(store->get_new_req_id(), method,
+					 resource, content_length,
+					 user_command, fail_flag);
   dout(10) << "allocated request req=" << hex << req << dec << dendl;
   req_throttle.get(1);
   req_wq.queue(req);
 }
 
-void RGWLibProcess::handle_request(RGWRequest *r)
+void RGWLibProcess::handle_request(RGWRequest* r)
 {
-  RGWLibRequest *req = static_cast<RGWLibRequest *>(r);
+  RGWLibRequest* req = static_cast<RGWLibRequest*>(r);
 
   RGWLibRequestEnv env;
 
@@ -274,14 +282,16 @@ void RGWLibProcess::handle_request(RGWRequest *r)
     dout(20) << "process_request() returned " << ret << dendl;
 
   }
-    delete req;
+  delete req;
 }
 
-void RGWLibFrontend::gen_request(const string& method, const string& resource, int content_length,
-				 bool user_command, atomic_t *fail_flag)
+void RGWLibFrontend::gen_request(const string& method, const string& resource,
+				 int content_length, bool user_command,
+				 atomic_t* fail_flag)
 {
-     RGWLibProcess *lib_process = static_cast<RGWLibProcess *>(pprocess);
-     lib_process->gen_request(method, resource, content_length, user_command, fail_flag);
+  RGWLibProcess* lib_process = static_cast<RGWLibProcess*>(pprocess);
+  lib_process->gen_request(method, resource, content_length, user_command,
+			   fail_flag);
 }
 
 int RGWLib::init()
@@ -294,7 +304,8 @@ int RGWLib::init()
   def_args.push_back("--log-file=/var/log/radosgw/$cluster-$name.log");
 
   vector<const char*> args;
-  global_init(&def_args, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_DAEMON,
+  global_init(&def_args, args, CEPH_ENTITY_TYPE_CLIENT,
+	      CODE_ENVIRONMENT_DAEMON,
 	      CINIT_FLAG_UNPRIVILEGED_DAEMON_DEFAULTS);
 
   Mutex mutex("main");
@@ -396,7 +407,7 @@ int RGWLib::stop()
   return 0;
 }
 
-int RGWLib::get_uri(const uint64_t handle, string &uri)
+int RGWLib::get_uri(const uint64_t handle, string& uri)
 {
   ceph::unordered_map<uint64_t, string>::iterator i = handles_map.find(handle);
   if (i != handles_map.end()) {
@@ -408,7 +419,8 @@ int RGWLib::get_uri(const uint64_t handle, string &uri)
 
 uint64_t RGWLib::get_new_handle(const string& uri)
 {
-  ceph::unordered_map<string, uint64_t>::iterator i = allocated_objects_handles.find(uri);
+  ceph::unordered_map<string, uint64_t>::iterator i =
+    allocated_objects_handles.find(uri);
   if (i != allocated_objects_handles.end()) {
     return i->second;
   }
@@ -429,12 +441,12 @@ int RGWLibIO::set_uid(RGWRados *store, const rgw_user& uid)
   return ret;
 }
 
-int RGWLibIO::write_data(const char *buf, int len)
+int RGWLibIO::write_data(const char* buf, int len)
 {
   return len;
 }
 
-int RGWLibIO::read_data(char *buf, int len)
+int RGWLibIO::read_data(char* buf, int len)
 {
   int read_len = MIN(left_to_read, (uint64_t)len);
   left_to_read -= read_len;
@@ -443,6 +455,7 @@ int RGWLibIO::read_data(char *buf, int len)
 
 void RGWLibIO::flush()
 {
+  /* XXX */
 }
 
 int RGWLibIO::complete_request()
@@ -450,7 +463,7 @@ int RGWLibIO::complete_request()
   return 0;
 }
 
-void RGWLibIO::init_env(CephContext *cct)
+void RGWLibIO::init_env(CephContext* cct)
 {
   env.init(cct);
 
@@ -463,7 +476,8 @@ void RGWLibIO::init_env(CephContext *cct)
   env.set("CONTENT_TYPE", re->content_type.c_str());
   env.set("HTTP_DATE", re->date_str.c_str());
 
-  for (map<string, string>::iterator iter = re->headers.begin(); iter != re->headers.end(); ++iter) {
+  for (map<string, string>::iterator iter = re->headers.begin();
+       iter != re->headers.end(); ++iter) {
     env.set(iter->first.c_str(), iter->second.c_str());
   }
 
@@ -497,28 +511,31 @@ int RGWLibIO::send_content_length(uint64_t len)
   return 0;
 }
 
-int RGWLib::get_userinfo_by_uid(const string& uid, RGWUserInfo &info)
+int RGWLib::get_userinfo_by_uid(const string& uid, RGWUserInfo& info)
 {
   atomic_t failed;
-
   fe->gen_request("GET", uid, 4096, true, &failed);
   return failed.read();
 }
 
 int RGWLib::get_user_acl()
 {
+  return 0;
 }
 
 int RGWLib::set_user_permissions()
 {
+  return 0;
 }
 
 int RGWLib::set_user_quota()
 {
+  return 0;
 }
 
 int RGWLib::get_user_quota()
 {
+  return 0;
 }
 
 int RGWLib::get_user_buckets_list()
@@ -532,46 +549,57 @@ int RGWLib::get_user_buckets_list()
 
 int RGWLib::get_bucket_objects_list()
 {
+  return 0;
 }
 
 int RGWLib::create_bucket()
 {
+  return 0;
 }
 
 int RGWLib::delete_bucket()
 {
+  return 0;
 }
 
 int RGWLib::get_bucket_attributes()
 {
+  return 0;
 }
 
 int RGWLib::set_bucket_attributes()
 {
+  return 0;
 }
 
-int RGWLib::create_object ()
+int RGWLib::create_object()
 {
+  return 0;
 }
 
 int RGWLib::delete_object()
 {
+  return 0;
 }
 
 int RGWLib::write()
 {
+  return 0;
 }
 
 int RGWLib::read()
 {
+  return 0;
 }
 
 int RGWLib::get_object_attributes()
 {
+  return 0;
 }
 
 int RGWLib::set_object_attributes()
 {
+  return 0;
 }
 
 /* global RGW library object */
