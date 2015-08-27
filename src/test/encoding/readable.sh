@@ -59,6 +59,20 @@ do
 		    failed=$(($failed + 1))
 		    continue
 		fi
+
+		# nondeterministic classes may dump
+		# nondeterministically.  compare the sorted json
+		# output.  this is a weaker test, but is better than
+		# nothing.
+		if ! ./ceph-dencoder type $type is_deterministic
+		then
+		    echo "  sorting json output for nondeterministic object"
+		    for f in $tmp1 $tmp2; do
+			sort $f | sed 's/,$//' > $f.new
+			mv $f.new $f
+		    done
+		fi
+
 		if ! cmp $tmp1 $tmp2; then
 		    echo "**** reencode of $vdir/objects/$type/$f resulted in a different dump ****"
 		    diff $tmp1 $tmp2
