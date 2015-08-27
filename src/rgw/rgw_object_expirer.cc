@@ -54,11 +54,6 @@ static void usage()
   generic_server_usage();
 }
 
-static inline utime_t get_last_run_time(void)
-{
-  return utime_t();
-}
-
 int main(const int argc, const char **argv)
 {
   vector<const char *> args;
@@ -95,28 +90,15 @@ int main(const int argc, const char **argv)
   /* Guard to not forget about closing the rados store. */
   StoreDestructor store_dtor(store);
 
-  utime_t last_run = get_last_run_time();
-  ObjectExpirer objexp(store);
+  RGWObjectExpirer objexp(store);
+  objexp.start_processor();
+
+  const utime_t interval(g_ceph_context->_conf->rgw_objexp_gc_interval, 0);
   while (true) {
-    const utime_t round_start = ceph_clock_now(g_ceph_context);
-    objexp.inspect_all_shards(last_run, round_start);
-
-    last_run = round_start;
-
-    /* End of the real work for now. Prepare for sleep. */
-    const utime_t round_time = ceph_clock_now(g_ceph_context) - round_start;
-    const utime_t interval(g_ceph_context->_conf->rgw_objexp_gc_interval, 0);
-
-    if (round_time < interval) {
-      /* This should be the main path of execution. All currently expired
-       * objects have been removed and we need go sleep waiting for the next
-       * turn. If the check isn't true, it means we have to much hints
-       * in relation to interval time. */
-      const utime_t sleep_period = interval - round_time;
-      dout(20) << "sleeping for " << sleep_period << dendl;
-      sleep_period.sleep();
-    }
+    interval.sleep();
   }
+
+  /* unreachable */
 
   return EXIT_SUCCESS;
 }

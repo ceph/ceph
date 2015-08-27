@@ -18,6 +18,10 @@
 #include "common/Formatter.h"
 #include "common/errno.h"
 
+#include "common/Mutex.h"
+#include "common/Cond.h"
+#include "common/Thread.h"
+
 #include "global/global_init.h"
 
 #include "include/utime.h"
@@ -33,7 +37,7 @@
 #include "rgw_usage.h"
 #include "rgw_replica_log.h"
 
-class ObjectExpirer {
+class RGWObjectExpirer {
 protected:
   RGWRados * const store;
 
@@ -41,8 +45,23 @@ protected:
                        const string& bucket_id,
                        RGWBucketInfo& bucket_info);
 
+  class OEWorker : public Thread {
+    CephContext *cct;
+    RGWObjectExpirer *oe;
+    Mutex lock;
+    Cond cond;
+
+  public:
+    OEWorker(CephContext *_cct, RGWObjectExpirer *_oe) : cct(_cct), oe(_oe), lock("OEWorker") {}
+    void *entry();
+    void stop();
+  };
+
+  OEWorker *worker;
+  atomic_t down_flag;
+
 public:
-  ObjectExpirer(RGWRados * const _store)
+  RGWObjectExpirer(RGWRados * const _store)
     : store(_store)
   {}
 
@@ -61,5 +80,9 @@ public:
 
   void inspect_all_shards(const utime_t& last_run,
                           const utime_t& round_start);
+
+  bool going_down();
+  void start_processor();
+  void stop_processor();
 };
 #endif /* CEPH_OBJEXP_H */
