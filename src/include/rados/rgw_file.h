@@ -81,7 +81,7 @@ int read(const struct nfs_handle *handle);
 
 int write(const struct nfs_handle *handle);
 
-int set_user_permissions(cosnt char *uid);
+int set_user_permissions(const char *uid);
 
 int get_user_permissions(const char *uid);
 
