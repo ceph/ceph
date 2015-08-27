@@ -11,35 +11,57 @@ else
         rocksdb/PATENTS \
         rocksdb/README.md \
         rocksdb/ROCKSDB_LITE.md \
-        rocksdb/configure.ac \
-	rocksdb/Makefile.am \
+	rocksdb/AUTHORS \
+	rocksdb/configure.ac \
+	rocksdb/CONTRIBUTING.md \
 	rocksdb/db/builder.cc \
 	rocksdb/db/builder.h \
 	rocksdb/db/c.cc \
 	rocksdb/db/column_family.cc \
 	rocksdb/db/column_family.h \
+	rocksdb/db/column_family_test.cc \
+	rocksdb/db/compact_files_test.cc \
 	rocksdb/db/compaction.cc \
 	rocksdb/db/compaction.h \
 	rocksdb/db/compaction_job.cc \
 	rocksdb/db/compaction_job.h \
+	rocksdb/db/compaction_job_test.cc \
 	rocksdb/db/compaction_picker.cc \
 	rocksdb/db/compaction_picker.h \
+	rocksdb/db/compaction_picker_test.cc \
+	rocksdb/db/comparator_db_test.cc \
+	rocksdb/db/corruption_test.cc \
+	rocksdb/db/c_test.c \
+	rocksdb/db/cuckoo_table_db_test.cc \
+	rocksdb/db/db_bench.cc \
 	rocksdb/db/db_filesnapshot.cc \
 	rocksdb/db/dbformat.cc \
 	rocksdb/db/dbformat.h \
+	rocksdb/db/dbformat_test.cc \
 	rocksdb/db/db_impl.cc \
 	rocksdb/db/db_impl_debug.cc \
+	rocksdb/db/db_impl_experimental.cc \
 	rocksdb/db/db_impl.h \
 	rocksdb/db/db_impl_readonly.cc \
 	rocksdb/db/db_impl_readonly.h \
 	rocksdb/db/db_iter.cc \
 	rocksdb/db/db_iter.h \
+	rocksdb/db/db_iter_test.cc \
+	rocksdb/db/db_test.cc \
+	rocksdb/db/deletefile_test.cc \
+	rocksdb/db/event_logger_helpers.cc \
+	rocksdb/db/event_logger_helpers.h \
+	rocksdb/db/experimental.cc \
+	rocksdb/db/fault_injection_test.cc \
 	rocksdb/db/file_indexer.cc \
 	rocksdb/db/file_indexer.h \
+	rocksdb/db/file_indexer_test.cc \
 	rocksdb/db/filename.cc \
 	rocksdb/db/filename.h \
+	rocksdb/db/filename_test.cc \
 	rocksdb/db/flush_job.cc \
 	rocksdb/db/flush_job.h \
+	rocksdb/db/flush_job_test.cc \
 	rocksdb/db/flush_scheduler.cc \
 	rocksdb/db/flush_scheduler.h \
 	rocksdb/db/forward_iterator.cc \
@@ -47,9 +69,11 @@ else
 	rocksdb/db/internal_stats.cc \
 	rocksdb/db/internal_stats.h \
 	rocksdb/db/job_context.h \
+	rocksdb/db/listener_test.cc \
 	rocksdb/db/log_format.h \
 	rocksdb/db/log_reader.cc \
 	rocksdb/db/log_reader.h \
+	rocksdb/db/log_test.cc \
 	rocksdb/db/log_writer.cc \
 	rocksdb/db/log_writer.h \
 	rocksdb/db/managed_iterator.cc \
@@ -60,45 +84,73 @@ else
 	rocksdb/db/memtable.h \
 	rocksdb/db/memtable_list.cc \
 	rocksdb/db/memtable_list.h \
+	rocksdb/db/memtable_list_test.cc \
+	rocksdb/db/memtablerep_bench.cc \
 	rocksdb/db/merge_context.h \
 	rocksdb/db/merge_helper.cc \
 	rocksdb/db/merge_helper.h \
 	rocksdb/db/merge_operator.cc \
+	rocksdb/db/merge_test.cc \
+	rocksdb/db/perf_context_test.cc \
+	rocksdb/db/plain_table_db_test.cc \
+	rocksdb/db/prefix_test.cc \
 	rocksdb/db/repair.cc \
 	rocksdb/db/skiplist.h \
+	rocksdb/db/skiplist_test.cc \
 	rocksdb/db/slice.cc \
 	rocksdb/db/snapshot.h \
 	rocksdb/db/table_cache.cc \
 	rocksdb/db/table_cache.h \
 	rocksdb/db/table_properties_collector.cc \
 	rocksdb/db/table_properties_collector.h \
+	rocksdb/db/table_properties_collector_test.cc \
 	rocksdb/db/transaction_log_impl.cc \
 	rocksdb/db/transaction_log_impl.h \
 	rocksdb/db/version_builder.cc \
 	rocksdb/db/version_builder.h \
+	rocksdb/db/version_builder_test.cc \
 	rocksdb/db/version_edit.cc \
 	rocksdb/db/version_edit.h \
+	rocksdb/db/version_edit_test.cc \
 	rocksdb/db/version_set.cc \
 	rocksdb/db/version_set.h \
+	rocksdb/db/version_set_test.cc \
 	rocksdb/db/wal_manager.cc \
 	rocksdb/db/wal_manager.h \
+	rocksdb/db/wal_manager_test.cc \
 	rocksdb/db/write_batch_base.cc \
 	rocksdb/db/write_batch.cc \
 	rocksdb/db/write_batch_internal.h \
+	rocksdb/db/write_batch_test.cc \
 	rocksdb/db/writebuffer.h \
 	rocksdb/db/write_controller.cc \
 	rocksdb/db/write_controller.h \
+	rocksdb/db/write_controller_test.cc \
 	rocksdb/db/write_thread.cc \
 	rocksdb/db/write_thread.h \
-	rocksdb/hdfs/README \
+	rocksdb/doc/doc.css \
+	rocksdb/doc/index.html \
+	rocksdb/doc/log_format.txt \
+	rocksdb/doc/rockslogo.jpg \
+	rocksdb/doc/rockslogo.png \
+	rocksdb/examples/column_families_example.cc \
+	rocksdb/examples/compact_files_example.cc \
+	rocksdb/examples/c_simple_example.c \
+	rocksdb/examples/.gitignore \
+	rocksdb/examples/Makefile \
+	rocksdb/examples/README.md \
+	rocksdb/examples/simple_example.cc \
 	rocksdb/hdfs/env_hdfs.h \
+	rocksdb/hdfs/README \
 	rocksdb/hdfs/setup.sh \
+	rocksdb/HISTORY.md \
 	rocksdb/include/rocksdb/cache.h \
 	rocksdb/include/rocksdb/c.h \
 	rocksdb/include/rocksdb/compaction_filter.h \
 	rocksdb/include/rocksdb/comparator.h \
 	rocksdb/include/rocksdb/db.h \
 	rocksdb/include/rocksdb/env.h \
+	rocksdb/include/rocksdb/experimental.h \
 	rocksdb/include/rocksdb/filter_policy.h \
 	rocksdb/include/rocksdb/flush_block_policy.h \
 	rocksdb/include/rocksdb/immutable_options.h \
@@ -128,6 +180,7 @@ else
 	rocksdb/include/rocksdb/utilities/convenience.h \
 	rocksdb/include/rocksdb/utilities/db_ttl.h \
 	rocksdb/include/rocksdb/utilities/document_db.h \
+	rocksdb/include/rocksdb/utilities/flashcache.h \
 	rocksdb/include/rocksdb/utilities/geo_db.h \
 	rocksdb/include/rocksdb/utilities/json_document.h \
 	rocksdb/include/rocksdb/utilities/leveldb_options.h \
@@ -140,24 +193,36 @@ else
 	rocksdb/include/rocksdb/write_batch.h \
 	rocksdb/include/utilities/backupable_db.h \
 	rocksdb/include/utilities/db_ttl.h \
+	rocksdb/include/utilities/document_db.h \
 	rocksdb/include/utilities/geo_db.h \
+	rocksdb/include/utilities/json_document.h \
 	rocksdb/include/utilities/stackable_db.h \
 	rocksdb/include/utilities/utility_db.h \
+	rocksdb/INSTALL.md \
+	rocksdb/LICENSE \
 	rocksdb/m4/libtool.m4 \
 	rocksdb/m4/lt~obsolete.m4 \
 	rocksdb/m4/ltoptions.m4 \
 	rocksdb/m4/ltsugar.m4 \
 	rocksdb/m4/ltversion.m4 \
+	rocksdb/Makefile.am \
+	rocksdb/PATENTS \
 	rocksdb/port/likely.h \
+	rocksdb/port/port_example.h \
 	rocksdb/port/port.h \
 	rocksdb/port/port_posix.cc \
 	rocksdb/port/port_posix.h \
+	rocksdb/port/README \
 	rocksdb/port/stack_trace.cc \
 	rocksdb/port/stack_trace.h \
+	rocksdb/port/win/stdint.h \
+	rocksdb/README.md \
+	rocksdb/ROCKSDB_LITE.md \
 	rocksdb/table/adaptive_table_factory.cc \
 	rocksdb/table/adaptive_table_factory.h \
 	rocksdb/table/block_based_filter_block.cc \
 	rocksdb/table/block_based_filter_block.h \
+	rocksdb/table/block_based_filter_block_test.cc \
 	rocksdb/table/block_based_table_builder.cc \
 	rocksdb/table/block_based_table_builder.h \
 	rocksdb/table/block_based_table_factory.cc \
@@ -170,22 +235,27 @@ else
 	rocksdb/table/block.h \
 	rocksdb/table/block_hash_index.cc \
 	rocksdb/table/block_hash_index.h \
+	rocksdb/table/block_hash_index_test.cc \
 	rocksdb/table/block_prefix_index.cc \
 	rocksdb/table/block_prefix_index.h \
+	rocksdb/table/block_test.cc \
 	rocksdb/table/bloom_block.cc \
 	rocksdb/table/bloom_block.h \
 	rocksdb/table/cuckoo_table_builder.cc \
 	rocksdb/table/cuckoo_table_builder.h \
+	rocksdb/table/cuckoo_table_builder_test.cc \
 	rocksdb/table/cuckoo_table_factory.cc \
 	rocksdb/table/cuckoo_table_factory.h \
 	rocksdb/table/cuckoo_table_reader.cc \
 	rocksdb/table/cuckoo_table_reader.h \
+	rocksdb/table/cuckoo_table_reader_test.cc \
 	rocksdb/table/filter_block.h \
 	rocksdb/table/flush_block_policy.cc \
 	rocksdb/table/format.cc \
 	rocksdb/table/format.h \
 	rocksdb/table/full_filter_block.cc \
 	rocksdb/table/full_filter_block.h \
+	rocksdb/table/full_filter_block_test.cc \
 	rocksdb/table/get_context.cc \
 	rocksdb/table/get_context.h \
 	rocksdb/table/iterator.cc \
@@ -193,8 +263,10 @@ else
 	rocksdb/table/iter_heap.h \
 	rocksdb/table/merger.cc \
 	rocksdb/table/merger.h \
+	rocksdb/table/merger_test.cc \
 	rocksdb/table/meta_blocks.cc \
 	rocksdb/table/meta_blocks.h \
+	rocksdb/table/mock_table.cc \
 	rocksdb/table/mock_table.h \
 	rocksdb/table/plain_table_builder.cc \
 	rocksdb/table/plain_table_builder.h \
@@ -209,41 +281,57 @@ else
 	rocksdb/table/table_builder.h \
 	rocksdb/table/table_properties.cc \
 	rocksdb/table/table_properties_internal.h \
+	rocksdb/table/table_reader_bench.cc \
 	rocksdb/table/table_reader.h \
+	rocksdb/table/table_test.cc \
 	rocksdb/table/two_level_iterator.cc \
 	rocksdb/table/two_level_iterator.h \
-	rocksdb/third-party/gtest-1.7.0/fused-src/gtest/gtest.h \
-	rocksdb/third-party/gtest-1.7.0/fused-src/gtest/gtest-all.cc \
+	rocksdb/third-party/fbson/COMMIT.md \
 	rocksdb/third-party/fbson/FbsonDocument.h \
 	rocksdb/third-party/fbson/FbsonJsonParser.h \
 	rocksdb/third-party/fbson/FbsonStream.h \
 	rocksdb/third-party/fbson/FbsonUtil.h \
 	rocksdb/third-party/fbson/FbsonWriter.h \
+	rocksdb/third-party/flashcache/flashcache_ioctl.h \
+	rocksdb/third-party/gtest-1.7.0/fused-src/gtest/gtest-all.cc \
+	rocksdb/third-party/gtest-1.7.0/fused-src/gtest/gtest.h \
+	rocksdb/USERS.md \
 	rocksdb/util/allocator.h \
 	rocksdb/util/arena.cc \
 	rocksdb/util/arena.h \
+	rocksdb/util/arena_test.cc \
 	rocksdb/util/auto_roll_logger.cc \
 	rocksdb/util/auto_roll_logger.h \
+	rocksdb/util/auto_roll_logger_test.cc \
 	rocksdb/util/autovector.h \
-	rocksdb/util/benchharness.h \
+	rocksdb/util/autovector_test.cc \
 	rocksdb/util/bloom.cc \
+	rocksdb/util/bloom_test.cc \
 	rocksdb/util/build_version.h \
+	rocksdb/util/cache_bench.cc \
 	rocksdb/util/cache.cc \
+	rocksdb/util/cache_test.cc \
 	rocksdb/util/coding.cc \
 	rocksdb/util/coding.h \
+	rocksdb/util/coding_test.cc \
 	rocksdb/util/comparator.cc \
 	rocksdb/util/compression.h \
 	rocksdb/util/crc32c.cc \
 	rocksdb/util/crc32c.h \
+	rocksdb/util/crc32c_test.cc \
 	rocksdb/util/db_info_dumper.cc \
 	rocksdb/util/db_info_dumper.h \
 	rocksdb/util/dynamic_bloom.cc \
 	rocksdb/util/dynamic_bloom.h \
+	rocksdb/util/dynamic_bloom_test.cc \
 	rocksdb/util/env.cc \
 	rocksdb/util/env_hdfs.cc \
 	rocksdb/util/env_posix.cc \
+	rocksdb/util/env_test.cc \
 	rocksdb/util/event_logger.cc \
 	rocksdb/util/event_logger.h \
+	rocksdb/util/event_logger_test.cc \
+	rocksdb/util/filelock_test.cc \
 	rocksdb/util/file_util.cc \
 	rocksdb/util/file_util.h \
 	rocksdb/util/filter_policy.cc \
@@ -257,37 +345,52 @@ else
 	rocksdb/util/hash_skiplist_rep.h \
 	rocksdb/util/histogram.cc \
 	rocksdb/util/histogram.h \
+	rocksdb/util/histogram_test.cc \
 	rocksdb/util/instrumented_mutex.cc \
 	rocksdb/util/instrumented_mutex.h \
 	rocksdb/util/iostats_context.cc \
 	rocksdb/util/iostats_context_imp.h \
 	rocksdb/utilities/backupable/backupable_db.cc \
+	rocksdb/utilities/backupable/backupable_db_test.cc \
 	rocksdb/utilities/checkpoint/checkpoint.cc \
 	rocksdb/utilities/compacted_db/compacted_db_impl.cc \
 	rocksdb/utilities/compacted_db/compacted_db_impl.h \
 	rocksdb/utilities/convenience/convenience.cc \
 	rocksdb/utilities/document/document_db.cc \
+	rocksdb/utilities/document/document_db_test.cc \
 	rocksdb/utilities/document/json_document_builder.cc \
 	rocksdb/utilities/document/json_document.cc \
+	rocksdb/utilities/document/json_document_test.cc \
+	rocksdb/utilities/flashcache/flashcache.cc \
+	rocksdb/utilities/flashcache/flashcache.h \
 	rocksdb/utilities/geodb/geodb_impl.cc \
 	rocksdb/utilities/geodb/geodb_impl.h \
+	rocksdb/utilities/geodb/geodb_test.cc \
 	rocksdb/utilities/leveldb_options/leveldb_options.cc \
+	rocksdb/utilities/merge_operators.h \
 	rocksdb/utilities/merge_operators/put.cc \
 	rocksdb/utilities/merge_operators/string_append/stringappend2.cc \
 	rocksdb/utilities/merge_operators/string_append/stringappend2.h \
 	rocksdb/utilities/merge_operators/string_append/stringappend.cc \
 	rocksdb/utilities/merge_operators/string_append/stringappend.h \
+	rocksdb/utilities/merge_operators/string_append/stringappend_test.cc \
 	rocksdb/utilities/merge_operators/uint64add.cc \
-	rocksdb/utilities/merge_operators.h \
+	rocksdb/utilities/redis/README \
 	rocksdb/utilities/redis/redis_list_exception.h \
 	rocksdb/utilities/redis/redis_list_iterator.h \
 	rocksdb/utilities/redis/redis_lists.cc \
 	rocksdb/utilities/redis/redis_lists.h \
+	rocksdb/utilities/redis/redis_lists_test.cc \
 	rocksdb/utilities/spatialdb/spatial_db.cc \
+	rocksdb/utilities/spatialdb/spatial_db_test.cc \
 	rocksdb/utilities/spatialdb/utils.h \
 	rocksdb/utilities/ttl/db_ttl_impl.cc \
 	rocksdb/utilities/ttl/db_ttl_impl.h \
+	rocksdb/utilities/ttl/ttl_test.cc \
 	rocksdb/utilities/write_batch_with_index/write_batch_with_index.cc \
+	rocksdb/utilities/write_batch_with_index/write_batch_with_index_internal.cc \
+	rocksdb/utilities/write_batch_with_index/write_batch_with_index_internal.h \
+	rocksdb/utilities/write_batch_with_index/write_batch_with_index_test.cc \
 	rocksdb/util/ldb_cmd.cc \
 	rocksdb/util/ldb_cmd_execute_result.h \
 	rocksdb/util/ldb_cmd.h \
@@ -296,8 +399,13 @@ else
 	rocksdb/util/log_buffer.h \
 	rocksdb/util/logging.cc \
 	rocksdb/util/logging.h \
+	rocksdb/util/log_write_bench.cc \
+	rocksdb/util/manual_compaction_test.cc \
 	rocksdb/util/memenv.cc \
+	rocksdb/util/memenv_test.cc \
+	rocksdb/util/mock_env.cc \
 	rocksdb/util/mock_env.h \
+	rocksdb/util/mock_env_test.cc \
 	rocksdb/util/murmurhash.cc \
 	rocksdb/util/murmurhash.h \
 	rocksdb/util/mutable_cf_options.cc \
@@ -307,15 +415,19 @@ else
 	rocksdb/util/options.cc \
 	rocksdb/util/options_helper.cc \
 	rocksdb/util/options_helper.h \
+	rocksdb/util/options_test.cc \
 	rocksdb/util/perf_context.cc \
 	rocksdb/util/perf_context_imp.h \
 	rocksdb/util/posix_logger.h \
 	rocksdb/util/random.h \
 	rocksdb/util/rate_limiter.cc \
 	rocksdb/util/rate_limiter.h \
+	rocksdb/util/rate_limiter_test.cc \
 	rocksdb/util/scoped_arena_iterator.h \
 	rocksdb/util/skiplistrep.cc \
 	rocksdb/util/slice.cc \
+	rocksdb/util/slice_transform_test.cc \
+	rocksdb/util/sst_dump_test.cc \
 	rocksdb/util/sst_dump_tool.cc \
 	rocksdb/util/sst_dump_tool_imp.h \
 	rocksdb/util/statistics.cc \
@@ -327,10 +439,14 @@ else
 	rocksdb/util/string_util.h \
 	rocksdb/util/sync_point.cc \
 	rocksdb/util/sync_point.h \
+	rocksdb/util/testharness.cc \
 	rocksdb/util/testharness.h \
+	rocksdb/util/testutil.cc \
 	rocksdb/util/testutil.h \
+	rocksdb/util/thread_list_test.cc \
 	rocksdb/util/thread_local.cc \
 	rocksdb/util/thread_local.h \
+	rocksdb/util/thread_local_test.cc \
 	rocksdb/util/thread_operation.h \
 	rocksdb/util/thread_status_impl.cc \
 	rocksdb/util/thread_status_updater.cc \
