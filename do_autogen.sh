@@ -18,7 +18,7 @@ do_autogen.sh: make a ceph build by running autogen, etc.
 -c                               use cryptopp
 -C <parameter>                   add parameters to configure
 -j                               with java
--r                               with rocksdb
+-R                               without rocksdb
 -J				 --with-jemalloc
 -L				 --without-lttng
 
@@ -33,6 +33,7 @@ die() {
 debug_level=0
 verbose=0
 profile=0
+rocksdb=1
 CONFIGURE_FLAGS="--disable-static --with-lttng"
 while getopts  "d:e:hHrTPJLjpcvO:C:" flag
 do
@@ -55,7 +56,7 @@ do
 
     j) CONFIGURE_FLAGS="$CONFIGURE_FLAGS --enable-cephfs-java";;
 
-    r) CONFIGURE_FLAGS="$CONFIGURE_FLAGS --with-librocksdb-static";;
+    R) rocksdb=0;;
 
     v) verbose=1;;
 
@@ -71,6 +72,10 @@ do
         exit 1;;
     esac
 done
+
+if [ $rocksdb -eq 1 ]; then
+    CONFIGURE_FLAGS="$CONFIGURE_FLAGS --with-librocksdb-static"
+fi
 
 if [ $profile -eq 1 ]; then
     if [ $debug_level -ne 0 ]; then
