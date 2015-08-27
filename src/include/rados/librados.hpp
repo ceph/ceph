@@ -28,10 +28,13 @@ namespace librados
   struct IoCtxImpl;
   class ObjectOperationImpl;
   struct ObjListCtx;
+  struct MRCListCtx;
   struct PoolAsyncCompletionImpl;
   class RadosClient;
   struct ListObjectImpl;
+  struct MRCObjectImpl;
   class NObjectIteratorImpl;
+  class MRCIteratorImpl;
 
   typedef void *list_ctx_t;
   typedef uint64_t auid_t;
@@ -85,6 +88,28 @@ namespace librados
     ListObjectImpl *impl;
   };
   CEPH_RADOS_API std::ostream& operator<<(std::ostream& out, const librados::ListObject& lop);
+
+
+  class CEPH_RADOS_API MRCObject
+  {
+  public:
+    const std::string& get_nspace() const;
+    const int& get_pgid() const;
+    const std::vector<int>& get_mrc() const;
+
+    MRCObject();
+    ~MRCObject();
+    MRCObject( const MRCObject&);
+    MRCObject& operator=(const MRCObject& rhs);
+  private:
+    MRCObject(MRCObjectImpl *impl);
+
+    friend class MRCIteratorImpl;
+    friend std::ostream& operator<<(std::ostream& out, const MRCObject& lop);
+
+    MRCObjectImpl *impl;
+  };
+  CEPH_RADOS_API std::ostream& operator<<(std::ostream& out, const librados::MRCObject& lop);
 
   class CEPH_RADOS_API NObjectIterator : public std::iterator <std::forward_iterator_tag, ListObject> {
   public:
@@ -149,6 +174,32 @@ namespace librados
     void get_next();
     ceph::shared_ptr < ObjListCtx > ctx;
     std::pair<std::string, std::string> cur_obj;
+  };
+
+  class CEPH_RADOS_API MRCIterator : public std::iterator <std::forward_iterator_tag, MRCObject> {
+  public:
+    static const MRCIterator __EndMRCIterator;
+    MRCIterator(): impl(NULL) {}
+    ~MRCIterator();
+    MRCIterator(const MRCIterator &rhs);
+    MRCIterator& operator=(const MRCIterator& rhs);
+
+    bool operator==(const MRCIterator& rhs) const;
+    bool operator!=(const MRCIterator& rhs) const;
+    const MRCObject& operator*() const;
+    const MRCObject* operator->() const;
+    MRCIterator &operator++(); // Preincrement
+    MRCIterator operator++(int); // Postincrement
+    friend class IoCtx;
+    friend class MRCIteratorImpl;
+
+    /// move the iterator to a given hash position.  this may (will!) be rounded to the nearest pg.
+    uint32_t seek(uint32_t pos);
+
+  private:
+    MRCIterator(MRCListCtx *ctx_);
+    void get_next();
+    MRCIteratorImpl *impl;
   };
 
   /// DEPRECATED; do not use
@@ -785,6 +836,10 @@ namespace librados
     /// Iterator indicating the end of a pool
     const ObjectIterator& objects_end() const __attribute__ ((deprecated));
 
+    /// Start enumerating objects for a pool
+    MRCIterator mrc_begin();
+    /// Start enumerating objects for a pool starting from a hash position
+    const MRCIterator& mrc_end() const;
     /**
      * List available hit set objects
      *

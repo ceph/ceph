@@ -1259,6 +1259,20 @@ void ReplicatedPG::do_pg_op(OpRequestRef op)
       }
       break;
 
+    case CEPH_OSD_OP_GET_MRC:
+      {
+	if (reuse_dist == NULL) {
+	  pg_mrc_response_t response;
+	  ::encode(response, osd_op.outdata);
+	} else {
+	  pg_mrc_response_t response;
+	  response.histogram = reuse_dist->get_histogram();
+	  ::encode(response, osd_op.outdata);
+	}
+      }
+      break;
+
+
 
     default:
       result = -EINVAL;

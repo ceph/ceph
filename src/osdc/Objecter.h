@@ -288,6 +288,12 @@ struct ObjectOperation {
     out_handler[p] = ctx;
   }
 
+  // read mrc
+  void add_mrc(epoch_t epoch) {
+    OSDOp& osd_op = add_op(CEPH_OSD_OP_GET_MRC);
+    osd_op.op.op = CEPH_OSD_OP_GET_MRC;
+  }
+
   struct C_ObjectOperation_sparse_read : public Context {
     bufferlist bl;
     bufferlist *data_bl;
@@ -1400,6 +1406,35 @@ public:
     }
   };
 
+  struct MRCListContext{
+    int current_pg;
+    epoch_t current_pg_epoch;
+    int starting_pg_num;
+    bool at_end_of_pool;
+
+    int64_t pool_id;
+    int pool_snap_seq;
+    string nspace;
+
+    bufferlist bl;
+    std::list<vector<int> > list;
+
+    int ctx_budget;
+
+    MRCListContext() : current_pg(0), current_pg_epoch(0), starting_pg_num(0),
+		       at_end_of_pool(false),
+		       pool_id(0),
+		       pool_snap_seq(0),
+		       nspace(),
+		       bl(),
+		       list(),
+		       ctx_budget(-1) {}
+
+    bool at_end() const {
+      return at_end_of_pool;
+    }
+  };
+
   // Old pgls context we still use for talking to older OSDs
   struct ListContext {
     int current_pg;
@@ -1467,6 +1502,22 @@ public:
     }
   };
   
+  struct C_MRC_List : public Context {
+    MRCListContext *list_context;
+    Context *final_finish;
+    Objecter *objecter;
+    epoch_t epoch;
+    C_MRC_List(MRCListContext *lc, Context * finish, Objecter *ob) :
+      list_context(lc), final_finish(finish), objecter(ob), epoch(0) {}
+    void finish(int r) {
+      if (r >= 0) {
+        objecter->_mrc_list_reply(list_context, r, final_finish, epoch);
+      } else {
+        final_finish->complete(r);
+      }
+    }
+  };
+
   struct PoolStatOp {
     ceph_tid_t tid;
     list<string> pools;
@@ -1849,6 +1900,8 @@ private:
 		   epoch_t reply_epoch);
   void _list_reply(ListContext *list_context, int r, Context *final_finish,
 		   epoch_t reply_epoch);
+  void _mrc_list_reply(MRCListContext *list_context, int r, Context *final_finish,
+		       epoch_t reply_epoch);
 
   void resend_mon_ops();
 
@@ -1883,6 +1936,7 @@ private:
     put_op_budget_bytes(op_budget);
   }
   void put_list_context_budget(ListContext *list_context);
+  void put_mrc_list_context_budget(MRCListContext *list_context);
   void put_nlist_context_budget(NListContext *list_context);
   Throttle op_throttle_bytes, op_throttle_ops;
 
@@ -2113,6 +2167,24 @@ public:
     o->out_rval.swap(op.out_rval);
     return o;
   }
+  Op *prepare_get_mrc_op(const pg_t& pgid, const object_locator_t& oloc,
+	     ObjectOperation& op,
+	     snapid_t snapid, bufferlist *pbl, int flags,
+	     Context *onack, version_t *objver = NULL, int *data_offset = NULL) {
+    Op *o = new Op(NULL, oloc, op.ops, flags | global_op_flags.read() | CEPH_OSD_FLAG_READ, onack, NULL, objver, data_offset);
+    o->target.base_pgid = pgid;
+    o->target.precalc_pgid = true;
+    o->priority = op.priority;
+    o->snapid = CEPH_NOSNAP;
+    o->outbl = pbl;
+    if (!o->outbl && op.size() == 1 && op.out_bl[0]->length())
+	o->outbl = op.out_bl[0];
+    o->out_bl.swap(op.out_bl);
+    o->out_handler.swap(op.out_handler);
+    o->out_rval.swap(op.out_rval);
+    return o;
+  }
+
   ceph_tid_t read(const object_t& oid, const object_locator_t& oloc,
 		  ObjectOperation& op,
 		  snapid_t snapid, bufferlist *pbl, int flags,
@@ -2491,6 +2563,7 @@ public:
   void list_nobjects(NListContext *p, Context *onfinish);
   uint32_t list_nobjects_seek(NListContext *p, uint32_t pos);
   void list_objects(ListContext *p, Context *onfinish);
+  void list_mrc(MRCListContext *p, Context *onfinish);
   uint32_t list_objects_seek(ListContext *p, uint32_t pos);
 
   // -------------------------

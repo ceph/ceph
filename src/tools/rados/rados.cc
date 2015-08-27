@@ -439,6 +439,42 @@ static int do_put(IoCtx& io_ctx, RadosStriper& striper,
   return ret;
 }
 
+
+static int do_get_mrc(IoCtx& io_ctx, bool first, unsigned op_size)
+{
+
+  MRCIterator iter(io_ctx.mrc_begin());
+  if (first) {
+    vector<int> h = (*iter).get_mrc();
+    if (h.size() == 0) {
+    	cout << "MRC is not recorded, please run \"ceph osd pool set-mrc first -p <pool-name>\" first" << std::endl;
+    } else {
+      cout << "Estimate MRC of the first pg: " << std::endl;
+      for (unsigned int i = 0; i < h.size(); i++) {
+          cout << i << " " << h[i] << std::endl;
+      }
+    }
+    return 0;
+  } else {
+    while (iter != io_ctx.mrc_end()) {
+      vector<int> h = (*iter).get_mrc();
+      if (h.size() == 0) {
+        cout << "MRC is not recorded, please run \"ceph osd pool set-mrc all -p <pool-name>\" first" << std::endl;
+        break;
+      }
+      cout << "MRC of pg " << (*iter).get_pgid() << std::endl;
+      for (unsigned int i = 0; i < h.size(); i++) {
+        cout << i << " " << h[i] << std::endl;
+      }
+      iter++;
+    }
+    if (iter != io_ctx.mrc_begin()) {
+      return 0;
+    }
+  }
+  return -1;
+}
+
 class RadosWatchCtx : public librados::WatchCtx2 {
   IoCtx& ioctx;
   string name;
@@ -2833,6 +2869,20 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     if (ret < 0) {
       cerr << "error from import: "
 	   << cpp_strerror(ret) << std::endl;
+      goto out;
+    }
+  } else if (strcmp(nargs[0], "get-mrc") == 0) {
+    if (!pool_name || nargs.size() < 2)
+      usage_exit();
+    if (strcmp(nargs[1], "first") == 0) {
+      ret = do_get_mrc(io_ctx, true, op_size);
+    } else if (strcmp(nargs[1], "all") == 0) {
+      ret = do_get_mrc(io_ctx, false, op_size);
+    } else {
+      usage_exit();
+    }
+    if (ret < 0) {
+      cerr << "error getting mrc of " << pool_name << std::endl;
       goto out;
     }
   } else {

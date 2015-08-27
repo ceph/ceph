@@ -2682,6 +2682,30 @@ struct pg_ls_response_t {
 
 WRITE_CLASS_ENCODER(pg_ls_response_t)
 
+struct pg_mrc_response_t{
+  vector<int> histogram;
+  void encode(bufferlist& bl) const {
+    ::encode(histogram, bl);
+  }
+  void decode(bufferlist::iterator& bl) {
+    ::decode(histogram, bl);
+  }
+  void dump(Formatter *f) const {
+    f->open_array_section("histogram");
+    for (unsigned int i = 0; i < histogram.size(); i++) {
+      f->dump_int("h", histogram[i]);
+    }
+    f->close_section();
+  }
+  static void generate_test_instances(list<pg_mrc_response_t*>& o) {
+    o.push_back(new pg_mrc_response_t);
+    o.push_back(new pg_mrc_response_t);
+    o.back()->histogram.push_back(1);
+    o.back()->histogram.push_back(2);
+  }
+};
+
+WRITE_CLASS_ENCODER(pg_mrc_response_t)
 /**
  * object_copy_cursor_t
  */
