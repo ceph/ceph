@@ -223,6 +223,25 @@ TEST_F(LibRadosIoPP, ReadOpPP) {
   }
 }
 
+TEST_F(LibRadosIoPP, SparseReadOpPP) {
+  char buf[128];
+  memset(buf, 0xcc, sizeof(buf));
+  bufferlist bl;
+  bl.append(buf, sizeof(buf));
+  ASSERT_EQ(0, ioctx.write("foo", bl, sizeof(buf), 0));
+
+  {
+    std::map<uint64_t, uint64_t> extents;
+    bufferlist read_bl;
+    int rval = -1;
+    ObjectReadOperation op;
+    op.sparse_read(0, sizeof(buf), &extents, &read_bl, &rval);
+    ASSERT_EQ(0, ioctx.operate("foo", &op, nullptr));
+    ASSERT_EQ(0, rval);
+    assert_eq_sparse(bl, extents, read_bl);
+  }
+}
+
 TEST_F(LibRadosIo, RoundTrip) {
   char buf[128];
   char buf2[128];
@@ -718,6 +737,25 @@ TEST_F(LibRadosIoECPP, ReadOpPP) {
       ASSERT_EQ(0, rval2);
       ASSERT_EQ(0, memcmp(read_bl1.c_str(), buf, sizeof(buf)));
       ASSERT_EQ(0, memcmp(read_bl2.c_str(), buf, sizeof(buf)));
+  }
+}
+
+TEST_F(LibRadosIoECPP, SparseReadOpPP) {
+  char buf[128];
+  memset(buf, 0xcc, sizeof(buf));
+  bufferlist bl;
+  bl.append(buf, sizeof(buf));
+  ASSERT_EQ(0, ioctx.write("foo", bl, sizeof(buf), 0));
+
+  {
+    std::map<uint64_t, uint64_t> extents;
+    bufferlist read_bl;
+    int rval = -1;
+    ObjectReadOperation op;
+    op.sparse_read(0, sizeof(buf), &extents, &read_bl, &rval);
+    ASSERT_EQ(0, ioctx.operate("foo", &op, nullptr));
+    ASSERT_EQ(0, rval);
+    assert_eq_sparse(bl, extents, read_bl);
   }
 }
 
