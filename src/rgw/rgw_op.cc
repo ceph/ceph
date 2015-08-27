@@ -967,7 +967,13 @@ void RGWGetObj::execute()
   attr_iter = attrs.find(RGW_ATTR_DELETE_AT);
   if (need_object_expiration() && attr_iter != attrs.end()) {
     utime_t delete_at;
-    ::decode(delete_at, attr_iter->second);
+    try {
+      ::decode(delete_at, attr_iter->second);
+    } catch (buffer::error& err) {
+      ret = -EIO;
+      ldout(s->cct, 0) << "ERROR: failed to decode " RGW_ATTR_DELETE_AT " attribute" << dendl;
+      goto done_err;
+    }
 
     if (delete_at <= ceph_clock_now(g_ceph_context)) {
       ret = -ENOENT;
