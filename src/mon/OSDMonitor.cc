@@ -1870,6 +1870,26 @@ bool OSDMonitor::preprocess_boot(MonOpRequestRef op)
     }
   }
 
+  // make sure upgrades stop at hammer
+  //  * OSD_PROXY_FEATURES is the last pre-hammer feature
+  //  * MON_METADATA is the first post-hammer feature
+  if (osdmap.get_num_up_osds() > 0) {
+    if ((m->osd_features & CEPH_FEATURE_MON_METADATA) &&
+	!(osdmap.get_up_osd_features() & CEPH_FEATURE_OSD_PROXY_FEATURES)) {
+      mon->clog->info() << "disallowing boot of post-hammer OSD "
+			<< m->get_orig_source_inst()
+			<< " because one or more up OSDs is pre-hammer\n";
+      goto ignore;
+    }
+    if (!(m->osd_features & CEPH_FEATURE_OSD_PROXY_FEATURES) &&
+	(osdmap.get_up_osd_features() & CEPH_FEATURE_MON_METADATA)) {
+      mon->clog->info() << "disallowing boot of pre-hammer OSD "
+			<< m->get_orig_source_inst()
+			<< " because all up OSDs are post-hammer\n";
+      goto ignore;
+    }
+  }
+
   // already booted?
   if (osdmap.is_up(from) &&
       osdmap.get_inst(from) == m->get_orig_source_inst()) {
@@ -4433,24 +4453,32 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid,
   int r;
   r = prepare_pool_crush_ruleset(pool_type, erasure_code_profile,
 				 crush_ruleset_name, &crush_ruleset, ss);
-  if (r)
+  if (r) {
+    dout(10) << " prepare_pool_crush_ruleset returns " << r << dendl;
     return r;
+  }
   CrushWrapper newcrush;
   _get_pending_crush(newcrush);
   CrushTester tester(newcrush, *ss);
   r = tester.test_with_crushtool(g_conf->crushtool.c_str(),
 				 osdmap.get_max_osd(),
 				 g_conf->mon_lease);
-  if (r)
+  if (r) {
+    dout(10) << " tester.test_with_crushtool returns " << r << dendl;
     return r;
+  }
   unsigned size, min_size;
   r = prepare_pool_size(pool_type, erasure_code_profile, &size, &min_size, ss);
-  if (r)
+  if (r) {
+    dout(10) << " prepare_pool_size returns " << r << dendl;
     return r;
+  }
   uint32_t stripe_width = 0;
   r = prepare_pool_stripe_width(pool_type, erasure_code_profile, &stripe_width, ss);
-  if (r)
+  if (r) {
+    dout(10) << " prepare_pool_stripe_width returns " << r << dendl;
     return r;
+  }
 
   for (map<int64_t,string>::iterator p = pending_inc.new_pool_names.begin();
        p != pending_inc.new_pool_names.end();
