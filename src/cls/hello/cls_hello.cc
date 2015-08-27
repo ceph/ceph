@@ -268,6 +268,7 @@ public:
     } catch (buffer::error &e) {
       return -EINVAL;
     }
+    return 0;
   }
 
   virtual ~PGLSHelloFilter() {}
