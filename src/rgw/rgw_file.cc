@@ -19,7 +19,7 @@ bool is_bucket(const string& uri)
 /*
   get generate nfs_handle
 */
-int rgw_get_handle(const char *uri, struct nfs_handle *handle)
+int rgw_get_handle(const char* uri, struct nfs_handle* handle)
 {
   handle->handle = librgw.get_handle(uri);
   return 0;
@@ -28,13 +28,13 @@ int rgw_get_handle(const char *uri, struct nfs_handle *handle)
 /*
   check nfs_handle
 */
-int rgw_check_handle(const struct nfs_handle *handle)
+int rgw_check_handle(const struct nfs_handle* handle)
 {
   return librgw.check_handle(handle);
 }
 
-int rgw_mount(const char *uid, const char *key, const char *secret,
-	                const struct nfs_handle *handle)
+int rgw_mount(const char* uid, const char* key, const char* secret,
+	      const struct nfs_handle* handle)
 {
   int rc;
   string uri = uid + "\";
@@ -63,7 +63,8 @@ int rgw_mount(const char *uid, const char *key, const char *secret,
 /*
   create a new dirctory
 */
-int rgw_create_directory(const struct nfs_handle *parent_handle, const char *name)
+int rgw_create_directory(const struct nfs_handle* parent_handle,
+const char* name)
 {
   return 0;
 }
@@ -71,28 +72,29 @@ int rgw_create_directory(const struct nfs_handle *parent_handle, const char *nam
 /*
   create a new file
 */
-int rgw_create_file(const struct nfs_handle *parent_handle, const char* name)
+int rgw_create_file(const struct nfs_handle* parent_handle, const char* name)
 {
   return 0;
 }
 
-int rgw_rename(const struct nfs_handle *parent_handle, const char* old_name, const char* new_name)
+int rgw_rename(const struct nfs_handle* parent_handle, const char* old_name,
+const char* new_name)
 {
   return 0;
 }
 /*
   remove file or directory
 */
-int rgw_unlink(const struct nfs_handle *parent_handle, const char* path)
+int rgw_unlink(const struct nfs_handle* parent_handle, const char* path)
 {
   return 0;
 }
 
 /*
-    lookup a directory or file
+  lookup a directory or file
 */
-int rgw_lookup(const struct nfs_handle *parent_handle, const struct nfs_handle *parent_handle,
-	       const char *path, uint64_t *handle)
+int rgw_lookup(const struct nfs_handle* parent_handle, const struct nfs_handle*
+               parent_handle, const char* path, uint64_t* handle)
 {
   string uri;
   int rc;
@@ -119,7 +121,7 @@ int rgw_lookup(const struct nfs_handle *parent_handle, const struct nfs_handle *
 /*
   read directory content
 */
-int rgw_readdir(const struct nfs_handle *parent_handle, const char *path)
+int rgw_readdir(const struct nfs_handle* parent_handle, const char* path)
 {
   string uri;
   int rc;
@@ -136,10 +138,8 @@ int rgw_readdir(const struct nfs_handle *parent_handle, const char *path)
     /* get the object list */
     return librgw.get_buckets_object_list();
   } else { /* parent cannot be an object */
-    return -1;    
+    return -1;
   }
 
   return 0;
 }
-
-
