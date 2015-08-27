@@ -4441,6 +4441,10 @@ void OSD::_maybe_boot(epoch_t oldest, epoch_t newest)
   } else if (!osdmap->test_flag(CEPH_OSDMAP_SORTBITWISE) &&
 	     !store->can_sort_nibblewise()) {
     dout(1) << "osdmap SORTBITWISE flag is NOT set but our backend does not support nibblewise sort" << dendl;
+  } else if (osdmap->get_num_up_osds() &&
+	     (osdmap->get_up_osd_features() & CEPH_FEATURE_HAMMER_0_94_4) == 0) {
+    dout(1) << "osdmap indicates one or more pre-v0.94.4 hammer OSDs is running"
+	    << dendl;
   } else if (is_waiting_for_healthy() || !_is_healthy()) {
     // if we are not healthy, do not mark ourselves up (yet)
     dout(1) << "not healthy; waiting to boot" << dendl;
