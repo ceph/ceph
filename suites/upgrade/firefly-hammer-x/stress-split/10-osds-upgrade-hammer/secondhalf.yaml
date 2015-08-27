@@ -1,0 +1,8 @@
+tasks:
+- install.upgrade:
+    osd.3: 
+       branch: hammer
+- print: "**** done install.upgrade hammer"
+- ceph.restart:
+    daemons: [osd.3, osd.4, osd.5]
+- print: "**** done 10-osds-upgrade-hammer/secondhalf.yaml" 

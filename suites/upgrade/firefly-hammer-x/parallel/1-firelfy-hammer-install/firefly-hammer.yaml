@@ -1,0 +1,14 @@
+tasks:
+- install:
+   branch: firefly
+- print: "**** done firefly install"
+- ceph:
+   fs: xfs
+- parallel:
+   - workload
+   - upgrade-sequence
+- print: "**** done parallel"
+- install.upgrade:
+    client.0:
+      branch: hammer
+- print: "*** client.0 upgraded to hammer"  

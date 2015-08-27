@@ -1,0 +1,8 @@
+tasks:
+   - parallel:
+     - workload2
+     - upgrade-sequence2
+   - print: "**** done parallel workload2 and upgrade-sequence2"
+   - install.upgrade:
+       client.0:
+   - print: "**** done install.upgrade client.0 to the version from teuthology-suite arg"
