@@ -2348,16 +2348,25 @@ int RGWRados::time_log_trim(const string& oid, const utime_t& start_time, const 
   return cls_log_trim(io_ctx, oid, start_time, end_time, from_marker, to_marker);
 }
 
-string RGWRados::objexp_hint_get_shardname(const utime_t &ts)
+string RGWRados::objexp_hint_get_shardname(int shard_num)
 {
-  const time_t roundedts = ts.sec() / cct->_conf->rgw_objexp_time_step;
-  const unsigned int shnum = roundedts % cct->_conf->rgw_objexp_hints_num_shards;
-
   char buf[32];
-  snprintf(buf, sizeof(buf), "%010u", shnum);
+  snprintf(buf, sizeof(buf), "%010u", shard_num);
 
   string objname("obj_delete_at_hint.");
   return objname + buf;
+}
+
+#define MAX_PBJEXP_SHARDS_PRIME 7877
+
+int RGWRados::objexp_key_shard(const rgw_obj_key& key)
+{
+  string obj_key = key.name + key.instance;
+  int num_shards = cct->_conf->rgw_objexp_hints_num_shards;
+  uint32_t sid = ceph_str_hash_linux(obj_key.c_str(), obj_key.size());
+  uint32_t sid2 = sid ^ ((sid & 0xFF) << 24);
+  sid = sid2 % MAX_BUCKET_INDEX_SHARDS_PRIME % num_shards;
+  return sid % num_shards;
 }
 
 static string objexp_hint_get_keyext(const string& bucket_name,
@@ -2384,40 +2393,14 @@ int RGWRados::objexp_hint_add(const utime_t& delete_at,
   ObjectWriteOperation op;
   cls_timeindex_add(op, delete_at, keyext, hebl);
 
-  string shard_name = objexp_hint_get_shardname(delete_at);
+  string shard_name = objexp_hint_get_shardname(objexp_key_shard(obj_key));
   return objexp_pool_ctx.operate(shard_name, &op);
 }
 
-void  RGWRados::objexp_get_shard(const utime_t& start_time,
-                                 const utime_t& end_time,
-                                 utime_t &marker,                     /* in/out */
-                                 string& shard,                       /* out */
-                                 bool& truncated)                     /* out */
+void  RGWRados::objexp_get_shard(int shard_num,
+                                 string& shard)                       /* out */
 {
-  if (marker.is_zero()) {
-    marker = start_time;
-  }
-
-  const uint32_t num_shards = cct->_conf->rgw_objexp_hints_num_shards;
-  const time_t time_step = cct->_conf->rgw_objexp_time_step;
-
-  const time_t sts = start_time.sec() / time_step;
-  const time_t ets = end_time.sec() / time_step;
-  const time_t mts = marker.sec() / time_step;
-
-  const uint32_t periods = ets - sts;
-  const uint32_t iters = min(periods, num_shards - 1);
-
-  shard = objexp_hint_get_shardname(marker);
-
-  if (mts - sts < iters) {
-    truncated = true;
-    marker += utime_t(time_step, 0);
-  } else {
-    truncated = false;
-  }
-
-  return;
+  shard = objexp_hint_get_shardname(shard_num);
 }
 
 int RGWRados::objexp_hint_list(const string& oid,
