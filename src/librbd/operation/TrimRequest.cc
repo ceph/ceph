@@ -330,7 +330,7 @@ void TrimRequest::send_clean_boundary() {
                            extents);
 
   ContextCompletion *completion =
-    new ContextCompletion(create_callback_context(), true);
+    new ContextCompletion(create_async_callback_context(), true);
   for (vector<ObjectExtent>::iterator p = extents.begin();
        p != extents.end(); ++p) {
     ldout(cct, 20) << " ex " << *p << dendl;
