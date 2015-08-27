@@ -1153,13 +1153,13 @@ bool OSDMonitor::preprocess_get_osdmap(MMonGetOSDMap *m)
   epoch_t last = osdmap.get_epoch();
   int max = g_conf->osd_map_message_max;
   for (epoch_t e = MAX(first, m->get_full_first());
-       e < MIN(last, m->get_full_last()) && max > 0;
+       e <= MIN(last, m->get_full_last()) && max > 0;
        ++e, --max) {
     int r = get_version_full(e, reply->maps[e]);
     assert(r >= 0);
   }
   for (epoch_t e = MAX(first, m->get_inc_first());
-       e < MIN(last, m->get_inc_last()) && max > 0;
+       e <= MIN(last, m->get_inc_last()) && max > 0;
        ++e, --max) {
     int r = get_version(e, reply->incremental_maps[e]);
     assert(r >= 0);
@@ -1614,7 +1614,27 @@ bool OSDMonitor::preprocess_boot(MOSDBoot *m)
             << " doesn't announce support -- ignore" << dendl;
     goto ignore;
   }
-  
+
+  // make sure upgrades stop at hammer
+  //  * OSD_PROXY_FEATURES is the last pre-hammer feature
+  //  * MON_METADATA is the first post-hammer feature
+  if (osdmap.get_num_up_osds() > 0) {
+    if ((m->osd_features & CEPH_FEATURE_MON_METADATA) &&
+	!(osdmap.get_up_osd_features() & CEPH_FEATURE_OSD_PROXY_FEATURES)) {
+      mon->clog->info() << "disallowing boot of post-hammer OSD "
+			<< m->get_orig_source_inst()
+			<< " because one or more up OSDs is pre-hammer\n";
+      goto ignore;
+    }
+    if (!(m->osd_features & CEPH_FEATURE_OSD_PROXY_FEATURES) &&
+	(osdmap.get_up_osd_features() & CEPH_FEATURE_MON_METADATA)) {
+      mon->clog->info() << "disallowing boot of pre-hammer OSD "
+			<< m->get_orig_source_inst()
+			<< " because all up OSDs are post-hammer\n";
+      goto ignore;
+    }
+  }
+
   // already booted?
   if (osdmap.is_up(from) &&
       osdmap.get_inst(from) == m->get_orig_source_inst()) {
