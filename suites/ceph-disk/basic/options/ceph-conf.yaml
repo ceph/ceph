@@ -1,0 +1,11 @@
+overrides:
+   ceph-deploy:
+      separate_journal_disk:
+      only_mon: true
+      conf:
+         global:
+             mon pg warn min per osd: 2
+             osd pool default size: 2
+             osd crush chooseleaf type: 0 # failure domain == osd
+             osd pg bits: 2
+             osd pgp bits: 2
