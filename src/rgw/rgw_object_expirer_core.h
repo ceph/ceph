@@ -39,7 +39,7 @@
 
 class RGWObjectExpirer {
 protected:
-  RGWRados * const store;
+  RGWRados *store;
 
   int init_bucket_info(const string& bucket_name,
                        const string& bucket_id,
@@ -61,7 +61,7 @@ protected:
   atomic_t down_flag;
 
 public:
-  RGWObjectExpirer(RGWRados * const _store)
+  RGWObjectExpirer(RGWRados *_store)
     : store(_store)
   {}
 
