@@ -26,6 +26,7 @@
 using namespace std;
 
 #include "include/types.h"
+#include "common/simple_cache.hpp"
 #include "msg/Messenger.h"
 
 #include "osd/OSDMap.h"
@@ -136,6 +137,9 @@ private:
 
   map<int,double> osd_weight;
 
+  SimpleLRU<version_t, bufferlist> inc_osd_cache;
+  SimpleLRU<version_t, bufferlist> full_osd_cache;
+
   void check_failures(utime_t now);
   bool check_failure(utime_t now, int target_osd, failure_info_t& fi);
 
@@ -157,7 +161,6 @@ private:
   void encode_pending(MonitorDBStore::TransactionRef t);
   void on_active();
   void on_shutdown();
-
   /**
    * we haven't delegated full version stashing to paxosservice for some time
    * now, making this function useless in current context.
@@ -387,11 +390,7 @@ private:
   int load_metadata(int osd, map<string, string>& m, ostream *err);
 
  public:
-  OSDMonitor(CephContext *cct, Monitor *mn, Paxos *p, string service_name)
-  : PaxosService(mn, p, service_name),
-    thrash_map(0), thrash_last_up_osd(-1),
-    op_tracker(cct, true, 1)
-  { }
+  OSDMonitor(CephContext *cct, Monitor *mn, Paxos *p, const string& service_name);
 
   void tick();  // check state, take actions
 
@@ -416,6 +415,9 @@ private:
     op->mark_osdmon_event(__func__);
     send_incremental(op, start);
   }
+
+  int get_version(version_t ver, bufferlist& bl) override;
+  int get_version_full(version_t ver, bufferlist& bl) override;
 
   epoch_t blacklist(const entity_addr_t& a, utime_t until);
 
