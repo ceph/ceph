@@ -1606,10 +1606,11 @@ public:
         const char *if_match;
         const char *if_nomatch;
         uint64_t olh_epoch;
+	time_t delete_at;
 
         MetaParams() : mtime(NULL), rmattrs(NULL), data(NULL), manifest(NULL), ptag(NULL),
                  remove_objs(NULL), set_mtime(0), category(RGW_OBJ_CATEGORY_MAIN), flags(0),
-                 if_match(NULL), if_nomatch(NULL), olh_epoch(0) {}
+                 if_match(NULL), if_nomatch(NULL), olh_epoch(0), delete_at(0) {}
       } meta;
 
       Write(RGWRados::Object *_target) : target(_target) {}
@@ -1808,6 +1809,7 @@ public:
                        map<string, bufferlist>& attrs,
                        RGWObjCategory category,
                        uint64_t olh_epoch,
+		       time_t delete_at,
                        string *version_id,
                        string *ptag,
                        string *petag,
@@ -1855,6 +1857,7 @@ public:
                map<std::string, bufferlist>& attrs,
                RGWObjCategory category,
                uint64_t olh_epoch,
+	       time_t delete_at,
                string *version_id,
                string *ptag,
                string *petag,
@@ -1873,6 +1876,7 @@ public:
                map<string, bufferlist>& attrs,
                RGWObjCategory category,
                uint64_t olh_epoch,
+	       time_t delete_at,
                string *version_id,
                string *ptag,
                string *petag,
@@ -2377,7 +2381,7 @@ protected:
   RGWBucketInfo bucket_info;
 
   virtual int do_complete(string& etag, time_t *mtime, time_t set_mtime,
-                          map<string, bufferlist>& attrs,
+                          map<string, bufferlist>& attrs, time_t delete_at,
                           const char *if_match = NULL, const char *if_nomatch = NULL) = 0;
 
 public:
@@ -2393,7 +2397,7 @@ public:
     assert(0);
   }
   virtual int complete(string& etag, time_t *mtime, time_t set_mtime,
-                       map<string, bufferlist>& attrs,
+                       map<string, bufferlist>& attrs, time_t delete_at,
                        const char *if_match = NULL, const char *if_nomatch = NULL);
 
   CephContext *ctx();
@@ -2464,7 +2468,7 @@ protected:
 
   int write_data(bufferlist& bl, off_t ofs, void **phandle, bool exclusive);
   virtual int do_complete(string& etag, time_t *mtime, time_t set_mtime,
-                          map<string, bufferlist>& attrs,
+                          map<string, bufferlist>& attrs, time_t delete_at,
                           const char *if_match = NULL, const char *if_nomatch = NULL);
 
   int prepare_next_part(off_t ofs);

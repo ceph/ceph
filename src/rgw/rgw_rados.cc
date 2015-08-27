@@ -892,10 +892,10 @@ void RGWObjVersionTracker::generate_new_write_ver(CephContext *cct)
 }
 
 int RGWPutObjProcessor::complete(string& etag, time_t *mtime, time_t set_mtime,
-                                 map<string, bufferlist>& attrs,
+                                 map<string, bufferlist>& attrs, time_t delete_at,
                                  const char *if_match, const char * if_nomatch)
 {
-  int r = do_complete(etag, mtime, set_mtime, attrs, if_match, if_nomatch);
+  int r = do_complete(etag, mtime, set_mtime, attrs, delete_at, if_match, if_nomatch);
   if (r < 0)
     return r;
 
@@ -1209,7 +1209,7 @@ int RGWPutObjProcessor_Atomic::complete_writing_data()
 }
 
 int RGWPutObjProcessor_Atomic::do_complete(string& etag, time_t *mtime, time_t set_mtime,
-                                           map<string, bufferlist>& attrs,
+                                           map<string, bufferlist>& attrs, time_t delete_at,
                                            const char *if_match,
                                            const char *if_nomatch) {
   int r = complete_writing_data();
@@ -1235,6 +1235,7 @@ int RGWPutObjProcessor_Atomic::do_complete(string& etag, time_t *mtime, time_t s
   obj_op.meta.owner = bucket_info.owner;
   obj_op.meta.flags = PUT_OBJ_CREATE;
   obj_op.meta.olh_epoch = olh_epoch;
+  obj_op.meta.delete_at = delete_at;
 
   r = obj_op.write_meta(obj_len, attrs);
   if (r < 0) {
@@ -3624,6 +3625,17 @@ int RGWRados::Object::Write::write_meta(uint64_t size,
     }
   }
 
+  if (meta.delete_at > 0) {
+    rgw_obj_key obj_key;
+    obj.get_index_key(&obj_key);
+
+    r = store->objexp_hint_add(utime_t(meta.delete_at, 0), bucket.name, bucket.bucket_id, obj_key);
+    if (r < 0) {
+      ldout(store->ctx(), 0) << "ERROR: objexp_hint_add() returned r=" << r << ", object will not get removed" << dendl;
+      /* ignoring error, nothing we can do at this point */
+    }
+  }
+
   /* update quota cache */
   store->quota_handler->update_stats(meta.owner, bucket, (orig_exists ? 0 : 1), size, orig_size);
 
@@ -3861,8 +3873,8 @@ public:
     processor->set_extra_data_len(len);
   }
 
-  int complete(string& etag, time_t *mtime, time_t set_mtime, map<string, bufferlist>& attrs) {
-    return processor->complete(etag, mtime, set_mtime, attrs);
+  int complete(string& etag, time_t *mtime, time_t set_mtime, map<string, bufferlist>& attrs, time_t delete_at) {
+    return processor->complete(etag, mtime, set_mtime, attrs, delete_at);
   }
 };
 
@@ -3925,7 +3937,7 @@ int RGWRados::rewrite_obj(RGWBucketInfo& dest_bucket_info, rgw_obj& obj)
     return ret;
   }
 
-  return copy_obj_data(rctx, dest_bucket_info, read_op, end, obj, obj, max_chunk_size, NULL, mtime, attrset, RGW_OBJ_CATEGORY_MAIN, 0, NULL, NULL, NULL, NULL);
+  return copy_obj_data(rctx, dest_bucket_info, read_op, end, obj, obj, max_chunk_size, NULL, mtime, attrset, RGW_OBJ_CATEGORY_MAIN, 0, 0, NULL, NULL, NULL, NULL);
 }
 
 int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
@@ -3948,6 +3960,7 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
                map<string, bufferlist>& attrs,
                RGWObjCategory category,
                uint64_t olh_epoch,
+	       time_t delete_at,
                string *version_id,
                string *ptag,
                string *petag,
@@ -4047,7 +4060,7 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
     set_copy_attrs(src_attrs, attrs, attrs_mod);
   }
 
-  ret = cb.complete(etag, mtime, set_mtime, attrs);
+  ret = cb.complete(etag, mtime, set_mtime, attrs, delete_at);
   if (ret < 0) {
     goto set_err_state;
   }
@@ -4128,6 +4141,7 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
                map<string, bufferlist>& attrs,
                RGWObjCategory category,
                uint64_t olh_epoch,
+	       time_t delete_at,
                string *version_id,
                string *ptag,
                string *petag,
@@ -4160,7 +4174,7 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
     return fetch_remote_obj(obj_ctx, user_id, client_id, op_id, info, source_zone,
                dest_obj, src_obj, dest_bucket_info, src_bucket_info, src_mtime, mtime, mod_ptr,
                unmod_ptr, if_match, if_nomatch, attrs_mod, attrs, category,
-               olh_epoch, version_id, ptag, petag, err, progress_cb, progress_data);
+               olh_epoch, delete_at, version_id, ptag, petag, err, progress_cb, progress_data);
   }
 
   map<string, bufferlist> src_attrs;
@@ -4238,7 +4252,7 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
 
   if (copy_data) { /* refcounting tail wouldn't work here, just copy the data */
     return copy_obj_data(obj_ctx, dest_bucket_info, read_op, end, dest_obj, src_obj,
-                         max_chunk_size, mtime, 0, attrs, category, olh_epoch,
+                         max_chunk_size, mtime, 0, attrs, category, olh_epoch, delete_at,
                          version_id, ptag, petag, err);
   }
 
@@ -4330,6 +4344,7 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
   write_op.meta.flags = PUT_OBJ_CREATE;
   write_op.meta.category = category;
   write_op.meta.olh_epoch = olh_epoch;
+  write_op.meta.delete_at = delete_at;
 
   ret = write_op.write_meta(end + 1, attrs);
   if (ret < 0) {
@@ -4373,6 +4388,7 @@ int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
                map<string, bufferlist>& attrs,
                RGWObjCategory category,
                uint64_t olh_epoch,
+	       time_t delete_at,
                string *version_id,
                string *ptag,
                string *petag,
@@ -4429,7 +4445,7 @@ int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
     }
   }
 
-  ret = processor.complete(etag, mtime, set_mtime, attrs);
+  ret = processor.complete(etag, mtime, set_mtime, attrs, delete_at);
 
   return ret;
 }
@@ -5503,12 +5519,16 @@ int RGWRados::set_attrs(void *ctx, rgw_obj& obj,
 
     if (name.compare(RGW_ATTR_DELETE_AT) == 0) {
       utime_t ts;
-      ::decode(ts, bl);
+      try {
+        ::decode(ts, bl);
 
-      rgw_obj_key obj_key;
-      obj.get_index_key(&obj_key);
+        rgw_obj_key obj_key;
+        obj.get_index_key(&obj_key);
 
-      objexp_hint_add(ts, bucket.name, bucket.bucket_id, obj_key);
+        objexp_hint_add(ts, bucket.name, bucket.bucket_id, obj_key);
+      } catch (buffer::error& err) {
+	ldout(cct, 0) << "ERROR: failed to decode " RGW_ATTR_DELETE_AT << " attr" << dendl;
+      }
     }
   }
 
