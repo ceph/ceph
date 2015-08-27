@@ -2948,6 +2948,18 @@ def parse_args(argv):
         help='sub-command help',
         )
 
+    make_prepare_parser(subparsers)
+    make_activate_parser(subparsers)
+    make_activate_journal_parser(subparsers)
+    make_activate_all_parser(subparsers)
+    make_list_parser(subparsers)
+    make_suppress_parser(subparsers)
+    make_zap_parser(subparsers)
+
+    args = parser.parse_args(argv)
+    return args
+
+def make_prepare_parser(subparsers):
     prepare_parser = subparsers.add_parser('prepare', help='Prepare a directory or disk for a Ceph OSD')
     prepare_parser.add_argument(
         '--cluster',
@@ -3025,7 +3037,9 @@ def parse_args(argv):
     prepare_parser.set_defaults(
         func=main_prepare,
         )
+    return prepare_parser
 
+def make_activate_parser(subparsers):
     activate_parser = subparsers.add_parser('activate', help='Activate a Ceph OSD')
     activate_parser.add_argument(
         '--mount',
@@ -3071,7 +3085,9 @@ def parse_args(argv):
         activate_key_template='{statedir}/bootstrap-osd/{cluster}.keyring',
         func=main_activate,
         )
+    return activate_parser
 
+def make_activate_journal_parser(subparsers):
     activate_journal_parser = subparsers.add_parser('activate-journal', help='Activate an OSD via its journal device')
     activate_journal_parser.add_argument(
         'dev',
@@ -3106,7 +3122,9 @@ def parse_args(argv):
         activate_key_template='{statedir}/bootstrap-osd/{cluster}.keyring',
         func=main_activate_journal,
         )
+    return activate_journal_parser
 
+def make_activate_all_parser(subparsers):
     activate_all_parser = subparsers.add_parser('activate-all', help='Activate all tagged OSD partitions')
     activate_all_parser.add_argument(
         '--activate-key',
@@ -3125,12 +3143,16 @@ def parse_args(argv):
         activate_key_template='{statedir}/bootstrap-osd/{cluster}.keyring',
         func=main_activate_all,
         )
+    return activate_all_parser
 
+def make_list_parser(subparsers):
     list_parser = subparsers.add_parser('list', help='List disks, partitions, and Ceph OSDs')
     list_parser.set_defaults(
         func=main_list,
         )
+    return list_parser
 
+def make_suppress_parser(subparsers):
     suppress_parser = subparsers.add_parser('suppress-activate', help='Suppress activate on a device (prefix)')
     suppress_parser.add_argument(
         'path',
@@ -3152,7 +3174,9 @@ def parse_args(argv):
     unsuppress_parser.set_defaults(
         func=main_unsuppress,
         )
+    return suppress_parser
 
+def make_zap_parser(subparsers):
     zap_parser = subparsers.add_parser('zap', help='Zap/erase/destroy a device\'s partition table (and contents)')
     zap_parser.add_argument(
         'dev',
@@ -3163,9 +3187,7 @@ def parse_args(argv):
     zap_parser.set_defaults(
         func=main_zap,
         )
-
-    args = parser.parse_args(argv)
-    return args
+    return zap_parser
 
 def main(argv):
     args = parse_args(argv)
