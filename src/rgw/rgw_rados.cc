@@ -8127,6 +8127,12 @@ int RGWRados::process_gc()
   return gc->process();
 }
 
+int RGWRados::process_expire_objects()
+{
+  obj_expirer->inspect_all_shards(utime_t(), ceph_clock_now(cct));
+  return 0;
+}
+
 int RGWRados::cls_rgw_init_index(librados::IoCtx& index_ctx, librados::ObjectWriteOperation& op, string& oid)
 {
   bufferlist in;
