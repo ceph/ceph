@@ -74,6 +74,15 @@ def is_healthy(ctx, config):
         tries += 1
         if tries >= max_tries:
             msg = "ceph health was unable to get 'HEALTH_OK' after waiting 15 minutes"
+            remote.run(
+                args=[
+                    'cd',
+                    '{tdir}'.format(tdir=testdir),
+                    run.Raw('&&'),
+                    'sudo', 'ceph',
+                    'report',
+                ],
+            )
             raise RuntimeError(msg)
 
         r = remote.run(
