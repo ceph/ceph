@@ -707,8 +707,12 @@ static void dump_object_metadata(struct req_state * const s,
   iter = attrs.find(RGW_ATTR_DELETE_AT);
   if (iter != attrs.end()) {
     utime_t delete_at;
-    ::decode(delete_at, iter->second);
-    s->cio->print("X-Delete-At: %lu\r\n", delete_at.sec());
+    try {
+      ::decode(delete_at, iter->second);
+      s->cio->print("X-Delete-At: %lu\r\n", delete_at.sec());
+    } catch (buffer::error& err) {
+      dout(0) << "ERROR: cannot decode object's " RGW_ATTR_DELETE_AT " attr, ignoring" << dendl;
+    }
   }
 }
 
