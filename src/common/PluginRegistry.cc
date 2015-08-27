@@ -29,7 +29,7 @@
 #define PLUGIN_PREFIX "libceph_"
 #define PLUGIN_SUFFIX ".so"
 #define PLUGIN_INIT_FUNCTION "__ceph_plugin_init"
-#define PLUGIN_VERSION_FUNCTION "__ceph_version"
+#define PLUGIN_VERSION_FUNCTION "__ceph_plugin_version"
 
 #define dout_subsys ceph_subsys_context
 
