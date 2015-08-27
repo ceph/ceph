@@ -1088,6 +1088,7 @@ OPTION(rgw_olh_pending_timeout_sec, OPT_INT, 3600) // time until we retire a pen
 OPTION(rgw_objexp_gc_interval, OPT_U32, 60 * 10) // maximum time between round of expired objects garbage collecting
 OPTION(rgw_objexp_time_step, OPT_U32, 4096) // number of seconds for rounding the timestamps
 OPTION(rgw_objexp_hints_num_shards, OPT_U32, 127) // maximum number of parts in which the hint index is stored in
+OPTION(rgw_objexp_chunk_size, OPT_U32, 100) // maximum number of entries in a single operation when processing objexp data
 
 OPTION(mutex_perf_counter, OPT_BOOL, false) // enable/disable mutex perf counter
 OPTION(throttler_perf_counter, OPT_BOOL, true) // enable/disable throttler perf counter

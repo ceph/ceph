@@ -161,7 +161,7 @@ static int cls_timeindex_list(cls_method_context_t hctx,
     cls_timeindex_entry e;
 
     if (parse_index(index, e.key_ts, e.key_ext) < 0) {
-      CLS_LOG(1, "ERROR: cls_timeindex_list: could not parse index=%s",
+      CLS_LOG(0, "ERROR: cls_timeindex_list: could not parse index=%s",
               index.c_str());
     } else {
       CLS_LOG(20, "DEBUG: cls_timeindex_list: index=%s, key_ext=%s, bl.len = %d",
