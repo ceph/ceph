@@ -35,7 +35,7 @@ using namespace std;
 
 #define dout_subsys ceph_subsys_rgw
 
-int ObjectExpirer::init_bucket_info(const string& bucket_name,
+int RGWObjectExpirer::init_bucket_info(const string& bucket_name,
                                     const string& bucket_id,
                                     RGWBucketInfo& bucket_info)
 {
@@ -48,7 +48,7 @@ int ObjectExpirer::init_bucket_info(const string& bucket_name,
   return ret;
 }
 
-int ObjectExpirer::garbage_single_object(objexp_hint_entry& hint)
+int RGWObjectExpirer::garbage_single_object(objexp_hint_entry& hint)
 {
   RGWBucketInfo bucket_info;
 
@@ -73,7 +73,7 @@ int ObjectExpirer::garbage_single_object(objexp_hint_entry& hint)
   return ret;
 }
 
-void ObjectExpirer::garbage_chunk(list<cls_timeindex_entry>& entries,      /* in  */
+void RGWObjectExpirer::garbage_chunk(list<cls_timeindex_entry>& entries,      /* in  */
                                   bool& need_trim)                         /* out */
 {
   need_trim = false;
@@ -107,7 +107,7 @@ void ObjectExpirer::garbage_chunk(list<cls_timeindex_entry>& entries,      /* in
   return;
 }
 
-void ObjectExpirer::trim_chunk(const string& shard,
+void RGWObjectExpirer::trim_chunk(const string& shard,
                                const utime_t& from,
                                const utime_t& to)
 {
@@ -121,7 +121,7 @@ void ObjectExpirer::trim_chunk(const string& shard,
   return;
 }
 
-void ObjectExpirer::proceed_single_shard(const string& shard,
+void RGWObjectExpirer::proceed_single_shard(const string& shard,
                                          const utime_t& last_run,
                                          const utime_t& round_start)
 {
@@ -152,7 +152,7 @@ void ObjectExpirer::proceed_single_shard(const string& shard,
   return;
 }
 
-void ObjectExpirer::inspect_all_shards(const utime_t& last_run,
+void RGWObjectExpirer::inspect_all_shards(const utime_t& last_run,
                                        const utime_t& round_start)
 {
   bool is_next_available;
@@ -170,3 +170,62 @@ void ObjectExpirer::inspect_all_shards(const utime_t& last_run,
 
   return;
 }
+
+bool RGWObjectExpirer::going_down()
+{
+  return (down_flag.read() != 0);
+}
+
+void RGWObjectExpirer::start_processor()
+{
+  worker = new OEWorker(store->ctx(), this);
+  worker->create();
+}
+
+void RGWObjectExpirer::stop_processor()
+{
+  down_flag.set(1);
+  if (worker) {
+    worker->stop();
+    worker->join();
+  }
+  delete worker;
+  worker = NULL;
+}
+
+void *RGWObjectExpirer::OEWorker::entry() {
+  utime_t last_run;
+  do {
+    utime_t start = ceph_clock_now(cct);
+    dout(2) << "object expiration: start" << dendl;
+    oe->inspect_all_shards(last_run, start);
+    dout(2) << "object expiration: stop" << dendl;
+
+    last_run = start;
+
+    if (oe->going_down())
+      break;
+
+    utime_t end = ceph_clock_now(cct);
+    end -= start;
+    int secs = cct->_conf->rgw_objexp_gc_interval;
+
+    if (secs <= end.sec())
+      continue; // next round
+
+    secs -= end.sec();
+
+    lock.Lock();
+    cond.WaitInterval(cct, lock, utime_t(secs, 0));
+    lock.Unlock();
+  } while (!oe->going_down());
+
+  return NULL;
+}
+
+void RGWObjectExpirer::OEWorker::stop()
+{
+  Mutex::Locker l(lock);
+  cond.Signal();
+}
+
