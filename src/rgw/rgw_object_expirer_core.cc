@@ -33,7 +33,11 @@ using namespace std;
 #include "rgw_replica_log.h"
 #include "rgw_object_expirer_core.h"
 
+#include "cls/lock/cls_lock_client.h"
+
 #define dout_subsys ceph_subsys_rgw
+
+static string objexp_lock_name = "gc_process";
 
 int RGWObjectExpirer::init_bucket_info(const string& bucket_name,
                                     const string& bucket_id,
@@ -132,9 +136,23 @@ void RGWObjectExpirer::proceed_single_shard(const string& shard,
   CephContext *cct = store->ctx();
   int num_entries = cct->_conf->rgw_objexp_chunk_size;
 
+  int max_secs = cct->_conf->rgw_objexp_gc_interval;
+  utime_t end = ceph_clock_now(cct);
+  end += max_secs;
+
+  rados::cls::lock::Lock l(objexp_lock_name);
+
+  utime_t time(max_secs, 0);
+  l.set_duration(time);
+
+  int ret = l.lock_exclusive(&store->objexp_pool_ctx, shard);
+  if (ret == -EBUSY) { /* already locked by another processor */
+    dout(5) << __func__ << "(): failed to acquire lock on " << shard << dendl;
+    return;
+  }
   do {
     list<cls_timeindex_entry> entries;
-    int ret = store->objexp_hint_list(shard, last_run, round_start,
+    ret = store->objexp_hint_list(shard, last_run, round_start,
                                       num_entries, marker, entries,
                                       &out_marker, &truncated);
     if (ret < 0) {
@@ -149,9 +167,15 @@ void RGWObjectExpirer::proceed_single_shard(const string& shard,
       trim_chunk(shard, last_run, round_start);
     }
 
+    utime_t now = ceph_clock_now(g_ceph_context);
+    if (now >= end) {
+      break;
+    }
+
     marker = out_marker;
   } while (truncated);
 
+  l.unlock(&store->objexp_pool_ctx, shard);
   return;
 }
 
