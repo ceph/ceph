@@ -6,11 +6,10 @@
 #include "rgw_rest_lib.h"
 
 
-RGWHandler *RGWRESTMgr_Lib::get_handler(struct req_state *s)
+RGWHandler* RGWRESTMgr_Lib::get_handler(struct req_state* s)
 {
   if (!s->librgw_user_command) {
     return new RGWHandler_ObjStore_Lib;
   }
-
   return RGWRESTMgr_S3::get_handler(s);
 }
