@@ -4908,7 +4908,8 @@ int RGWRados::Object::Delete::delete_obj()
         bufferlist::iterator iter = bl.begin();
         ::decode(delete_at, iter);
       } catch (buffer::error& err) {
-        dout(5) << "ERROR: couldn't decode RGW_ATTR_DELETE_AT" << dendl;
+        ldout(store->ctx(), 0) << "ERROR: couldn't decode RGW_ATTR_DELETE_AT" << dendl;
+	return -EIO;
       }
 
       if (params.expiration_time != delete_at) {

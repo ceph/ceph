@@ -54,7 +54,7 @@ int RGWObjectExpirer::garbage_single_object(objexp_hint_entry& hint)
 
   int ret = init_bucket_info(hint.bucket_name, hint.bucket_id, bucket_info);
   if (ret < 0) {
-    dout(1) << "ERROR: could not init bucket: " << cpp_strerror(-ret) << dendl;
+    ldout(store->ctx(), 1) << "ERROR: could not init bucket: " << cpp_strerror(-ret) << dendl;
     return ret;
   }
 
@@ -83,12 +83,12 @@ void RGWObjectExpirer::garbage_chunk(list<cls_timeindex_entry>& entries,      /*
        ++iter)
   {
     objexp_hint_entry hint;
-    dout(15) << "got removal hint for: " << iter->key_ts.sec() \
+    ldout(store->ctx(), 15) << "got removal hint for: " << iter->key_ts.sec() \
         << " - " << iter->key_ext << dendl;
 
     int ret = store->objexp_hint_parse(*iter, hint);
     if (ret < 0) {
-      dout(1) << "cannot parse removal hint for " << hint.obj_key << dendl;
+      ldout(store->ctx(), 1) << "cannot parse removal hint for " << hint.obj_key << dendl;
       continue;
     }
 
@@ -96,9 +96,9 @@ void RGWObjectExpirer::garbage_chunk(list<cls_timeindex_entry>& entries,      /*
      * We can silently ignore that and move forward. */
     ret = garbage_single_object(hint);
     if (ret == -ERR_PRECONDITION_FAILED) {
-      dout(15) << "not actual hint for object: " << hint.obj_key << dendl;
+      ldout(store->ctx(), 15) << "not actual hint for object: " << hint.obj_key << dendl;
     } else if (ret < 0) {
-      dout(1) << "cannot remove expired object: " << hint.obj_key << dendl;
+      ldout(store->ctx(), 1) << "cannot remove expired object: " << hint.obj_key << dendl;
     }
 
     need_trim = true;
@@ -111,11 +111,11 @@ void RGWObjectExpirer::trim_chunk(const string& shard,
                                const utime_t& from,
                                const utime_t& to)
 {
-  dout(20) << "trying to trim removal hints to  " << to << dendl;
+  ldout(store->ctx(), 20) << "trying to trim removal hints to  " << to << dendl;
 
   int ret = store->objexp_hint_trim(shard, from, to);
   if (ret < 0) {
-    dout(0) << "ERROR during trim: " << ret << dendl;
+    ldout(store->ctx(), 0) << "ERROR during trim: " << ret << dendl;
   }
 
   return;
@@ -129,13 +129,16 @@ void RGWObjectExpirer::proceed_single_shard(const string& shard,
   string out_marker;
   bool truncated = false;
 
+  CephContext *cct = store->ctx();
+  int num_entries = cct->_conf->rgw_objexp_chunk_size;
+
   do {
     list<cls_timeindex_entry> entries;
     int ret = store->objexp_hint_list(shard, last_run, round_start,
-                                      1000, marker, entries,
+                                      num_entries, marker, entries,
                                       &out_marker, &truncated);
     if (ret < 0) {
-      dout(10) << "cannot get removal hints from shard: " << shard << dendl;
+      ldout(cct, 10) << "cannot get removal hints from shard: " << shard << dendl;
       continue;
     }
 
@@ -163,7 +166,7 @@ void RGWObjectExpirer::inspect_all_shards(const utime_t& last_run,
     store->objexp_get_shard(last_run, round_start, shard_marker, shard,
             is_next_available);
 
-    dout(20) << "proceeding shard = " << shard << dendl;
+    ldout(store->ctx(), 20) << "proceeding shard = " << shard << dendl;
 
     proceed_single_shard(shard, last_run, round_start);
   } while (is_next_available);
@@ -197,9 +200,9 @@ void *RGWObjectExpirer::OEWorker::entry() {
   utime_t last_run;
   do {
     utime_t start = ceph_clock_now(cct);
-    dout(2) << "object expiration: start" << dendl;
+    ldout(cct, 2) << "object expiration: start" << dendl;
     oe->inspect_all_shards(last_run, start);
-    dout(2) << "object expiration: stop" << dendl;
+    ldout(cct, 2) << "object expiration: stop" << dendl;
 
     last_run = start;
 
