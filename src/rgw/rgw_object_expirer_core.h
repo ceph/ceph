@@ -74,7 +74,7 @@ public:
                   const utime_t& from,
                   const utime_t& to);
 
-  void proceed_single_shard(const string& shard,
+  void process_single_shard(const string& shard,
                             const utime_t& last_run,
                             const utime_t& round_start);
 
