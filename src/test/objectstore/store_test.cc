@@ -55,13 +55,18 @@ public:
                                               string(GetParam()),
                                               string("store_test_temp_dir"),
                                               string("store_test_temp_journal"));
+    if (!store_) {
+      cerr << __func__ << ": objectstore type " << string(GetParam()) << " doesn't exist yet!" << std::endl;
+      return;
+    }
     store.reset(store_);
     EXPECT_EQ(store->mkfs(), 0);
     EXPECT_EQ(store->mount(), 0);
   }
 
   virtual void TearDown() {
-    store->umount();
+    if (store)
+      store->umount();
   }
 };
 
@@ -2413,7 +2418,7 @@ TEST_P(StoreTest, SetAllocHint) {
 INSTANTIATE_TEST_CASE_P(
   ObjectStore,
   StoreTest,
-  ::testing::Values("memstore", "filestore", "keyvaluestore", "newstore"));
+  ::testing::Values("memstore", "filestore", "keyvaluestore"/*, "newstore" */));
 
 #else
 
