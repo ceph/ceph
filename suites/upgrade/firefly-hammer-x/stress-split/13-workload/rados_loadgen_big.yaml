@@ -1,0 +1,6 @@
+tasks:
+- workunit:
+    clients:
+      client.0:
+        - rados/load-gen-big.sh
+- print: "**** done 13-workload/rados_loadgen_big.yaml"
