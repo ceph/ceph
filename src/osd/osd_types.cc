@@ -1239,7 +1239,7 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
     return;
   }
 
-  ENCODE_START(17, 5, bl);
+  ENCODE_START(21, 5, bl);
   ::encode(type, bl);
   ::encode(size, bl);
   ::encode(crush_ruleset, bl);
@@ -1289,7 +1289,7 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
 
 void pg_pool_t::decode(bufferlist::iterator& bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(17, 5, 5, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(21, 5, 5, bl);
   ::decode(type, bl);
   ::decode(size, bl);
   ::decode(crush_ruleset, bl);
@@ -1408,6 +1408,8 @@ void pg_pool_t::decode(bufferlist::iterator& bl)
   if (struct_v >= 20) {
     uint32_t dummy;
     ::decode(dummy, bl);
+  }
+  if (struct_v >= 21) {
     ::decode(use_gmt_hitset, bl);
   } else {
     use_gmt_hitset = false;
