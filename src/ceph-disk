@@ -32,6 +32,8 @@ import tempfile
 import uuid
 import time
 import shlex
+import pwd
+import grp
 
 """
 Prepare:
@@ -710,6 +712,14 @@ def get_osd_id(path):
         check_osd_id(osd_id)
     return osd_id
 
+def get_ceph_user():
+    try:
+        pwd.getpwnam('ceph')
+        grp.getgrnam('ceph')
+        return 'ceph'
+    except KeyError:
+        return 'root'
+
 def path_set_context(path):
     # restore selinux context to default policy values
     if which('restorecon'):
@@ -718,6 +728,15 @@ def path_set_context(path):
                 'restorecon', '-R',
                 path,
                 ],
+           )
+
+    # if ceph user exists, set owner to ceph
+    if get_ceph_user() == 'ceph':
+        command(
+           [
+                'chown', '-R', 'ceph:ceph',
+                path,
+                 ],
            )
 
 def _check_output(args=None, **kwargs):
@@ -1806,6 +1825,8 @@ def mkfs(
             '--osd-journal', os.path.join(path, 'journal'),
             '--osd-uuid', fsid,
             '--keyring', os.path.join(path, 'keyring'),
+            '--setuser', get_ceph_user(),
+            '--setgroup', get_ceph_user(),
             ],
         )
     # TODO ceph-osd --mkfs removes the monmap file?

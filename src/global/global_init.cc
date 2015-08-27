@@ -29,6 +29,9 @@
 #include "include/compat.h"
 #include "include/color.h"
 
+#include <pwd.h>
+#include <grp.h>
+
 #include <errno.h>
 #include <deque>
 #ifdef WITH_LTTNG
@@ -130,13 +133,104 @@ void global_init(std::vector < const char * > *alt_def_args,
   if (g_conf->log_flush_on_exit)
     g_ceph_context->_log->set_flush_on_exit();
 
+  // consider --setuser root a no-op, even if we're not root
+  if (getuid() != 0) {
+    if (g_conf->setuser.length()) {
+      cerr << "ignoring --setuser " << g_conf->setuser << " since I am not root"
+	   << std::endl;
+      g_conf->set_val("setuser", "", false, false);
+    }
+    if (g_conf->setgroup.length()) {
+      cerr << "ignoring --setgroup " << g_conf->setgroup
+	   << " since I am not root" << std::endl;
+      g_conf->set_val("setgroup", "", false, false);
+    }
+  }
+
+  // drop privileges?
+  if (g_conf->setgroup.length() ||
+      g_conf->setuser.length()) {
+    uid_t uid = 0;  // zero means no change; we can only drop privs here.
+    gid_t gid = 0;
+    if (g_conf->setuser.length()) {
+      uid = atoi(g_conf->setuser.c_str());
+      if (!uid) {
+	char buf[4096];
+	struct passwd pa;
+	struct passwd *p = 0;
+	getpwnam_r(g_conf->setuser.c_str(), &pa, buf, sizeof(buf), &p);
+	if (!p) {
+	  cerr << "unable to look up user '" << g_conf->setuser << "'"
+	       << std::endl;
+	  exit(1);
+	}
+	uid = p->pw_uid;
+	gid = p->pw_gid;
+      }
+    }
+    if (g_conf->setgroup.length() > 0) {
+      gid = atoi(g_conf->setgroup.c_str());
+      if (!gid) {
+	char buf[4096];
+	struct group gr;
+	struct group *g = 0;
+	getgrnam_r(g_conf->setgroup.c_str(), &gr, buf, sizeof(buf), &g);
+	if (!g) {
+	  cerr << "unable to look up group '" << g_conf->setgroup << "'"
+	       << std::endl;
+	  exit(1);
+	}
+	gid = g->gr_gid;
+      }
+    }
+    if ((uid || gid) &&
+	g_conf->setuser_match_path.length()) {
+      struct stat st;
+      int r = ::stat(g_conf->setuser_match_path.c_str(), &st);
+      if (r < 0) {
+	r = -errno;
+	cerr << "unable to stat setuser_match_path "
+	     << g_conf->setuser_match_path
+	     << ": " << cpp_strerror(r) << std::endl;
+	exit(1);
+      }
+      if ((uid && uid != st.st_uid) ||
+	  (gid && gid != st.st_gid)) {
+	cerr << "WARNING: will not setuid/gid: " << g_conf->setuser_match_path
+	     << " owned by " << st.st_uid << ":" << st.st_gid
+	     << " and not requested " << uid << ":" << gid
+	     << std::endl;
+	uid = 0;
+	gid = 0;
+      } else {
+	dout(10) << "setuser_match_path "
+		 << g_conf->setuser_match_path << " owned by "
+		 << st.st_uid << ":" << st.st_gid << ", doing setuid/gid"
+		 << dendl;
+      }
+    }
+    if (setgid(gid) != 0) {
+      int r = errno;
+      cerr << "unable to setgid " << gid << ": " << cpp_strerror(r)
+	   << std::endl;
+      exit(1);
+    }
+    if (setuid(uid) != 0) {
+      int r = errno;
+      cerr << "unable to setuid " << uid << ": " << cpp_strerror(r)
+	   << std::endl;
+      exit(1);
+    }
+    dout(0) << "set uid:gid to " << uid << ":" << gid << dendl;
+  }
+
   if (g_conf->run_dir.length() &&
       code_env == CODE_ENVIRONMENT_DAEMON &&
       !(flags & CINIT_FLAG_NO_DAEMON_ACTIONS)) {
     int r = ::mkdir(g_conf->run_dir.c_str(), 0755);
     if (r < 0 && errno != EEXIST) {
       r = -errno;
-      derr << "warning: unable to create " << g_conf->run_dir << ": " << cpp_strerror(r) << dendl;
+      cerr << "warning: unable to create " << g_conf->run_dir << ": " << cpp_strerror(r) << std::endl;
     }
   }
 
