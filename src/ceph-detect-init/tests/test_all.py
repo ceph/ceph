@@ -38,6 +38,9 @@ logging.basicConfig(format='%(asctime)s %(levelname)s %(message)s',
 class TestCephDetectInit(testtools.TestCase):
 
     def test_centos(self):
+        with mock.patch('ceph_detect_init.centos.release',
+                        '7.0'):
+            self.assertEqual('systemd', centos.choose_init())
         self.assertEqual('sysvinit', centos.choose_init())
 
     def test_debian(self):
