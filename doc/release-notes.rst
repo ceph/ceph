@@ -508,11 +508,22 @@ Notable Changes
 * rocksdb: update to latest (Xiaoxi Chen)
 * rpm: loosen ceph-test dependencies (Ken Dreyer)
 
-v0.94.3 hammer (draft)
-======================
+v0.94.3 Hammer
+==============
 
-* The commands of "pg ls-by-{pool,primary,osd}" and "pg ls" now take "recovering"
-instead of "recovery", to include the recovering pgs in the listed pgs.
+This Hammer point release fixes a critical (though rare) data
+corruption bug that could be triggered when logs are rotated via
+SIGHUP.  It also fixes a range of other important bugs in the OSD,
+monitor, RGW, RGW, and CephFS.
+
+All v0.94.x Hammer users are strongly encouraged to upgrade.
+
+Upgrading
+---------
+
+* The ``pg ls-by-{pool,primary,osd}`` commands and ``pg ls`` now take
+  the argument ``recovering`` instead of ``recovery`` in order to
+  include the recovering pgs in the listed pgs.
 
 Notable Changes
 ---------------
@@ -582,6 +593,10 @@ Notable Changes
 * fs: client: reference counting 'struct Fh' (`issue#12088 <http://tracker.ceph.com/issues/12088>`_, `pr#5222 <http://github.com/ceph/ceph/pull/5222>`_, Yan, Zheng)
 * build/ops: ceph.spec: update OpenSUSE BuildRequires  (`issue#11611 <http://tracker.ceph.com/issues/11611>`_, `pr#4667 <http://github.com/ceph/ceph/pull/4667>`_, Loic Dachary)
 
+For more detailed information, see :download:`the complete changelog <changelog/v0.94.3.txt>`.
+
+
+  
 v0.94.2 Hammer
 ==============
 
