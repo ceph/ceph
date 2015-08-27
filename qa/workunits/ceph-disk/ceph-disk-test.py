@@ -144,6 +144,7 @@ class TestCephDisk(object):
         logging.basicConfig(level=logging.DEBUG)
         c = CephDisk()
         c.helper("install augeas-tools augeas")
+        c.helper("install multipath-tools device-mapper-multipath")
         c.augtool("set /files/etc/ceph/ceph.conf/global/osd_journal_size 100")
 
     def test_destroy_osd(self):
@@ -344,6 +345,50 @@ class TestCephDisk(object):
         assert journal_partition['path'] == journal_path
         c.destroy_osd(osd_uuid)
         c.sh("ceph-disk zap " + data_disk + " " + journal_disk)
+
+    def test_activate_multipath(self):
+        c = CephDisk()
+        if c.sh("lsb_release -si") != 'CentOS':
+            pytest.skip("see issue https://bugs.launchpad.net/ubuntu/+source/multipath-tools/+bug/1488688")
+        c.ensure_sd()
+        #
+        # Figure out the name of the multipath device
+        #
+        disk = c.unused_disks('sd.')[0]
+        c.sh("mpathconf --enable || true")
+        c.sh("multipath " + disk)
+        holders = os.listdir("/sys/block/" + os.path.basename(disk) + "/holders")
+        assert 1 == len(holders)
+        name = open("/sys/block/" + holders[0] + "/dm/name").read()
+        multipath = "/dev/mapper/" + name
+        #
+        # Prepare the multipath device
+        #
+        osd_uuid = str(uuid.uuid1())
+        c.sh("ceph-disk zap " + multipath)
+        c.sh("ceph-disk prepare --osd-uuid " + osd_uuid +
+             " " + multipath)
+        device = json.loads(c.helper("ceph-disk list --format json " + multipath))[0]
+        assert len(device['partitions']) == 2
+        data_partition = c.get_osd_partition(osd_uuid)
+        assert data_partition['type'] == 'data'
+        #
+        # Activate it although it should auto activate
+        #
+        if True: # remove this block when http://tracker.ceph.com/issues/12786 is fixed
+            c.sh("ceph-disk activate " + data_partition['path'])
+            device = json.loads(c.helper("ceph-disk list --format json " + multipath))[0]
+            assert len(device['partitions']) == 2
+            data_partition = c.get_osd_partition(osd_uuid)
+        assert data_partition['state'] == 'active'
+        journal_partition = c.get_journal_partition(osd_uuid)
+        assert journal_partition
+        c.helper("pool_read_write")
+        c.destroy_osd(osd_uuid)
+        c.sh("ceph-disk zap " + multipath)
+        c.sh("udevadm settle")
+        c.sh("multipath -F")
+        c.unload_scsi_debug()
 
 class CephDiskTest(CephDisk):
 
