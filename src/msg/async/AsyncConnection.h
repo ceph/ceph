@@ -18,6 +18,7 @@
 #define CEPH_MSG_ASYNCCONNECTION_H
 
 #include <pthread.h>
+#include <signal.h>
 #include <climits>
 #include <list>
 #include <map>
@@ -45,6 +46,10 @@ class AsyncMessenger;
 class AsyncConnection : public Connection {
 
   int read_bulk(int fd, char *buf, int len);
+#if !defined(MSG_NOSIGNAL) && !defined(SO_NOSIGPIPE)
+  void suppress_sigpipe();
+  void restore_sigpipe();
+#endif
   int do_sendmsg(struct msghdr &msg, int len, bool more);
   int try_send(bufferlist &bl, bool send=true) {
     Mutex::Locker l(write_lock);
@@ -290,6 +295,12 @@ class AsyncConnection : public Connection {
   NetHandler net;
   EventCenter *center;
   ceph::shared_ptr<AuthSessionHandler> session_security;
+
+#if !defined(MSG_NOSIGNAL) && !defined(SO_NOSIGPIPE)
+  sigset_t sigpipe_mask;
+  bool sigpipe_pending;
+  bool sigpipe_unblock;
+#endif
 
  public:
   // used by eventcallback

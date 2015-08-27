@@ -179,6 +179,11 @@ class DispatchQueue;
   private:
     int sd;
     struct iovec msgvec[IOV_MAX];
+#if !defined(MSG_NOSIGNAL) && !defined(SO_NOSIGPIPE)
+    sigset_t sigpipe_mask;
+    bool sigpipe_pending;
+    bool sigpipe_unblock;
+#endif
 
   public:
     int port;
@@ -246,6 +251,11 @@ class DispatchQueue;
     int write_ack(uint64_t s);
     int write_keepalive();
     int write_keepalive2(char tag, const utime_t &t);
+#if !defined(MSG_NOSIGNAL) && !defined(SO_NOSIGPIPE)
+    void suppress_sigpipe();
+    void restore_sigpipe();
+#endif
+
 
     void fault(bool reader=false);
 

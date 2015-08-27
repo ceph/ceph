@@ -104,7 +104,7 @@ public:
 #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
 
 TEST_F(LibRadosWatchNotify, WatchNotify) {
-  ASSERT_NE(SEM_FAILED, (sem = sem_open("test_watch_notify_sem", O_CREAT, 0644, 0)));
+  ASSERT_NE(SEM_FAILED, (sem = sem_open("/test_watch_notify_sem", O_CREAT, 0644, 0)));
   char buf[128];
   memset(buf, 0xcc, sizeof(buf));
   ASSERT_EQ(0, rados_write(ioctx, "foo", buf, sizeof(buf), 0));
@@ -124,7 +124,7 @@ TEST_F(LibRadosWatchNotify, WatchNotify) {
 }
 
 TEST_P(LibRadosWatchNotifyPP, WatchNotify) {
-  ASSERT_NE(SEM_FAILED, (sem = sem_open("test_watch_notify_sem", O_CREAT, 0644, 0)));
+  ASSERT_NE(SEM_FAILED, (sem = sem_open("/test_watch_notify_sem", O_CREAT, 0644, 0)));
   char buf[128];
   memset(buf, 0xcc, sizeof(buf));
   bufferlist bl1;
@@ -145,7 +145,7 @@ TEST_P(LibRadosWatchNotifyPP, WatchNotify) {
 }
 
 TEST_F(LibRadosWatchNotifyEC, WatchNotify) {
-  ASSERT_NE(SEM_FAILED, (sem = sem_open("test_watch_notify_sem", O_CREAT, 0644, 0)));
+  ASSERT_NE(SEM_FAILED, (sem = sem_open("/test_watch_notify_sem", O_CREAT, 0644, 0)));
   char buf[128];
   memset(buf, 0xcc, sizeof(buf));
   ASSERT_EQ(0, rados_write(ioctx, "foo", buf, sizeof(buf), 0));
@@ -160,7 +160,7 @@ TEST_F(LibRadosWatchNotifyEC, WatchNotify) {
 }
 
 TEST_F(LibRadosWatchNotifyECPP, WatchNotify) {
-  ASSERT_NE(SEM_FAILED, (sem = sem_open("test_watch_notify_sem", O_CREAT, 0644, 0)));
+  ASSERT_NE(SEM_FAILED, (sem = sem_open("/test_watch_notify_sem", O_CREAT, 0644, 0)));
   char buf[128];
   memset(buf, 0xcc, sizeof(buf));
   bufferlist bl1;
@@ -183,7 +183,7 @@ TEST_F(LibRadosWatchNotifyECPP, WatchNotify) {
 // --
 
 TEST_P(LibRadosWatchNotifyPP, WatchNotifyTimeout) {
-  ASSERT_NE(SEM_FAILED, (sem = sem_open("test_watch_notify_sem", O_CREAT, 0644, 0)));
+  ASSERT_NE(SEM_FAILED, (sem = sem_open("/test_watch_notify_sem", O_CREAT, 0644, 0)));
   ioctx.set_notify_timeout(1);
   uint64_t handle;
   WatchNotifyTestCtx ctx;
@@ -200,7 +200,7 @@ TEST_P(LibRadosWatchNotifyPP, WatchNotifyTimeout) {
 }
 
 TEST_F(LibRadosWatchNotifyECPP, WatchNotifyTimeout) {
-  ASSERT_NE(SEM_FAILED, (sem = sem_open("test_watch_notify_sem", O_CREAT, 0644, 0)));
+  ASSERT_NE(SEM_FAILED, (sem = sem_open("/test_watch_notify_sem", O_CREAT, 0644, 0)));
   ioctx.set_notify_timeout(1);
   uint64_t handle;
   WatchNotifyTestCtx ctx;

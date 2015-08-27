@@ -170,6 +170,10 @@ using namespace std;
 #include "messages/MOSDECSubOpRead.h"
 #include "messages/MOSDECSubOpReadReply.h"
 
+#if defined(__sun)
+#include "common/solaris_message_errno.h"
+#endif
+
 #define DEBUGLVL  10    // debug level of output
 
 #define dout_subsys ceph_subsys_ms
@@ -748,6 +752,9 @@ Message *decode_message(CephContext *cct, int crcflags,
 
   try {
     m->decode_payload();
+#if defined(__sun)
+    translate_message_errno(cct,m);
+#endif
   }
   catch (const buffer::error &e) {
     if (cct) {

@@ -50,6 +50,9 @@
 #include "include/str_list.h"
 #include "common/errno.h"
 
+#if defined(__sun)
+#include "common/solaris_errno.h"
+#endif
 
 #define dout_subsys ceph_subsys_objecter
 #undef dout_prefix
@@ -3095,10 +3098,18 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
     // set rval before running handlers so that handlers
     // can change it if e.g. decoding fails
     if (*pr)
+#if defined(__sun)
+      **pr = translate_errno(cct, p->rval);
+#else
       **pr = p->rval;
+#endif
     if (*ph) {
       ldout(cct, 10) << " op " << i << " handler " << *ph << dendl;
+#if defined(__sun)
+      (*ph)->complete(translate_errno(cct, p->rval));
+#else
       (*ph)->complete(p->rval);
+#endif
       *ph = NULL;
     }
   }

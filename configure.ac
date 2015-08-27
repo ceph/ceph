@@ -68,10 +68,14 @@ linux*)
 freebsd*)
 	freebsd="yes"
 	;;
+solaris*)
+	solaris="yes"
+	;;
 esac
 AM_CONDITIONAL(LINUX, test x"$linux" = x"yes")
 AM_CONDITIONAL(FREEBSD, test x"$freebsd" = x"yes")
 AM_CONDITIONAL(DARWIN, test x"$darwin" = x"yes")
+AM_CONDITIONAL(SOLARIS, test x"$solaris" = x"yes")
 
 # Checks for programs.
 AC_PROG_CXX
@@ -946,6 +950,7 @@ AC_CHECK_HEADERS([ \
 	sys/time.h \
 	sys/vfs.h \
 	sys/xattr.h \
+	sys/cdefs.h \
 	syslog.h \
 	utime.h \
 ])

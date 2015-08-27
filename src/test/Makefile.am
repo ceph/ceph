@@ -134,6 +134,11 @@ UNITTEST_LDADD = \
 	$(top_builddir)/src/gmock/gtest/lib/libgtest.la \
 	$(PTHREAD_LIBS)
 
+if SOLARIS
+UNITTEST_LDADD += \
+	-lsocket -lnsl
+endif
+
 unittest_addrs_SOURCES = test/test_addrs.cc
 unittest_addrs_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 unittest_addrs_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)

@@ -40,7 +40,7 @@ public:
   std::string init()
   {
     int ret;
-    if (SEM_FAILED == (m_sem = sem_open("test_aio_sem", O_CREAT, 0644, 0))) {
+    if (SEM_FAILED == (m_sem = sem_open("/test_aio_sem", O_CREAT, 0644, 0))) {
       int err = errno;
       ostringstream oss;
       oss << "sem_open failed: " << cpp_strerror(err);
@@ -97,7 +97,7 @@ public:
   std::string init()
   {
     int ret;
-    if (SEM_FAILED == (m_sem = sem_open("test_aio_sem", O_CREAT, 0644, 0))) {
+    if (SEM_FAILED == (m_sem = sem_open("/test_aio_sem", O_CREAT, 0644, 0))) {
       int err = errno;
       ostringstream oss;
       oss << "sem_open failed: " << cpp_strerror(err);
@@ -1702,7 +1702,7 @@ public:
   std::string init()
   {
     int ret;
-    if (SEM_FAILED == (m_sem = sem_open("test_aio_sem", O_CREAT, 0644, 0))) {
+    if (SEM_FAILED == (m_sem = sem_open("/test_aio_sem", O_CREAT, 0644, 0))) {
       int err = errno;
       ostringstream oss;
       oss << "sem_open failed: " << cpp_strerror(err);
@@ -1759,7 +1759,7 @@ public:
   std::string init()
   {
     int ret;
-    if (SEM_FAILED == (m_sem = sem_open("test_aio_sem", O_CREAT, 0644, 0))) {
+    if (SEM_FAILED == (m_sem = sem_open("/test_aio_sem", O_CREAT, 0644, 0))) {
       int err = errno;
       ostringstream oss;
       oss << "sem_open failed: " << cpp_strerror(err);

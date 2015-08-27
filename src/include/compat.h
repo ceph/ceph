@@ -53,4 +53,11 @@
 #define lseek64(fd, offset, whence) lseek(fd, offset, whence)
 #endif
 
+#if defined(__sun)
+#define LOG_AUTHPRIV    (10<<3)
+#define LOG_FTP         (11<<3)
+#define __STRING(x)     "x"
+#define IFTODT(mode)   (((mode) & 0170000) >> 12)
+#endif
+
 #endif /* !CEPH_COMPAT_H */

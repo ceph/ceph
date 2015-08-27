@@ -26,7 +26,6 @@ libcommon_internal_la_SOURCES = \
 	common/MemoryModel.cc \
 	common/armor.c \
 	common/fd.cc \
-	common/xattr.c \
 	common/safe_io.c \
 	common/snap_types.cc \
 	common/str_list.cc \
@@ -57,10 +56,6 @@ libcommon_internal_la_SOURCES = \
 	common/entity_name.cc \
 	common/ceph_crypto.cc \
 	common/ceph_crypto_cms.cc \
-	common/ceph_json.cc \
-	common/ipaddr.cc \
-	common/pick_address.cc \
-	common/util.cc \
 	common/TextTable.cc \
 	common/ceph_fs.cc \
 	common/ceph_hash.cc \
@@ -69,14 +64,36 @@ libcommon_internal_la_SOURCES = \
 	common/addr_parsing.c \
 	common/hobject.cc \
 	common/bloom_filter.cc \
-	common/linux_version.c \
 	common/module.c \
 	common/Readahead.cc \
 	common/Cycles.cc \
 	common/ContextCompletion.cc
 
+if ENABLE_SERVER
+libcommon_internal_la_SOURCES += \
+	common/xattr.c \
+	common/ipaddr.cc \
+	common/ceph_json.cc \
+	common/util.cc \
+	common/pick_address.cc
+endif
+
+if LINUX
+libcommon_internal_la_SOURCES += \
+	common/linux_version.c 
+endif
+
+if SOLARIS
+libcommon_internal_la_SOURCES += \
+        common/solaris_errno.cc
+endif
+
+if WITH_RBD
+if LINUX
 libcommon_internal_la_SOURCES += \
 	common/blkdev.cc
+endif
+endif
 
 if ENABLE_XIO
 libcommon_internal_la_SOURCES += \

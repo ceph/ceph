@@ -62,7 +62,9 @@ inline void decode_raw(T& t, bufferlist::iterator &p)
   inline void decode(type &v, bufferlist::iterator& p) { __ASSERT_FUNCTION decode_raw(v, p); }
 
 WRITE_RAW_ENCODER(__u8)
+#ifndef _CHAR_IS_SIGNED
 WRITE_RAW_ENCODER(__s8)
+#endif
 WRITE_RAW_ENCODER(char)
 WRITE_RAW_ENCODER(ceph_le64)
 WRITE_RAW_ENCODER(ceph_le32)

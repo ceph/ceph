@@ -229,12 +229,85 @@ int AsyncConnection::read_bulk(int fd, char *buf, int len)
   return nread;
 }
 
+/* 
+ SIGPIPE suppression - for platforms without SO_NOSIGPIPE or MSG_NOSIGNAL
+  http://krokisplace.blogspot.in/2010/02/suppressing-sigpipe-in-library.html 
+  http://www.microhowto.info/howto/ignore_sigpipe_without_affecting_other_threads_in_a_process.html 
+*/
+#if !defined(MSG_NOSIGNAL) && !defined(SO_NOSIGPIPE)
+void AsyncConnection::suppress_sigpipe()
+{
+  /*
+    We want to ignore possible SIGPIPE that we can generate on write.
+    SIGPIPE is delivered *synchronously* and *only* to the thread
+    doing the write.  So if it is reported as already pending (which
+    means the thread blocks it), then we do nothing: if we generate
+    SIGPIPE, it will be merged with the pending one (there's no
+    queuing), and that suits us well.  If it is not pending, we block
+    it in this thread (and we avoid changing signal action, because it
+    is per-process).
+  */
+  sigset_t pending;
+  sigemptyset(&pending);
+  sigpending(&pending);
+  sigpipe_pending = sigismember(&pending, SIGPIPE);
+  if (!sigpipe_pending)
+    {
+      sigset_t blocked;
+      sigemptyset(&blocked);
+      pthread_sigmask(SIG_BLOCK, &sigpipe_mask, &blocked);
+
+      /* Maybe is was blocked already?  */
+      sigpipe_unblock = ! sigismember(&blocked, SIGPIPE);
+    }
+}
+
+
+void AsyncConnection::restore_sigpipe()
+{
+  /*
+    If SIGPIPE was pending already we do nothing.  Otherwise, if it
+    become pending (i.e., we generated it), then we sigwait() it (thus
+    clearing pending status).  Then we unblock SIGPIPE, but only if it
+    were us who blocked it.
+  */
+  if (!sigpipe_pending)
+    {
+      sigset_t pending;
+      sigemptyset(&pending);
+      sigpending(&pending);
+      if (sigismember(&pending, SIGPIPE))
+        {
+          /*
+            Protect ourselves from a situation when SIGPIPE was sent
+            by the user to the whole process, and was delivered to
+            other thread before we had a chance to wait for it.
+          */
+          static const struct timespec nowait = { 0, 0 };
+          TEMP_FAILURE_RETRY(sigtimedwait(&sigpipe_mask, NULL, &nowait));
+        }
+
+      if (sigpipe_unblock)
+        pthread_sigmask(SIG_UNBLOCK, &sigpipe_mask, NULL);
+    }
+}
+#endif  /* !defined(MSG_NOSIGNAL) && !defined(SO_NOSIGPIPE) */
+
 // return the length of msg needed to be sent,
 // < 0 means error occured
 int AsyncConnection::do_sendmsg(struct msghdr &msg, int len, bool more)
 {
+#if !defined(MSG_NOSIGNAL) && !defined(SO_NOSIGPIPE)
+    suppress_sigpipe();
+#endif
+
   while (len > 0) {
-    int r = ::sendmsg(sd, &msg, MSG_NOSIGNAL | (more ? MSG_MORE : 0));
+    int r;
+#if defined(MSG_NOSIGNAL)
+    r = ::sendmsg(sd, &msg, MSG_NOSIGNAL);
+#else
+    r = ::sendmsg(sd, &msg, 0);
+#endif /* defined(MSG_NOSIGNAL) */
 
     if (r == 0) {
       ldout(async_msgr->cct, 10) << __func__ << " sendmsg got r==0!" << dendl;
@@ -266,6 +339,9 @@ int AsyncConnection::do_sendmsg(struct msghdr &msg, int len, bool more)
         break;
       }
     }
+#if !defined(MSG_NOSIGNAL) && !defined(SO_NOSIGPIPE)
+    restore_sigpipe();
+#endif
   }
   return len;
 }
