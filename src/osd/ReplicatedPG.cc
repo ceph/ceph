@@ -512,9 +512,16 @@ void ReplicatedPG::wait_for_blocked_object(const hobject_t& soid, OpRequestRef o
 class PGLSPlainFilter : public PGLSFilter {
   string val;
 public:
-  PGLSPlainFilter(bufferlist::iterator& params) {
-    ::decode(xattr, params);
-    ::decode(val, params);
+  virtual int init(bufferlist::iterator &params)
+  {
+    try {
+      ::decode(xattr, params);
+      ::decode(val, params);
+    } catch (buffer::error &e) {
+      return -EINVAL;
+    }
+
+    return 0;
   }
   virtual ~PGLSPlainFilter() {}
   virtual bool filter(const hobject_t &obj, bufferlist& xattr_data,
@@ -524,10 +531,19 @@ public:
 class PGLSParentFilter : public PGLSFilter {
   inodeno_t parent_ino;
 public:
-  PGLSParentFilter(bufferlist::iterator& params) {
+  PGLSParentFilter() {
     xattr = "_parent";
-    ::decode(parent_ino, params);
+  }
+  virtual int init(bufferlist::iterator &params)
+  {
+    try {
+      ::decode(parent_ino, params);
+    } catch (buffer::error &e) {
+      return -EINVAL;
+    }
     generic_dout(0) << "parent_ino=" << parent_ino << dendl;
+
+    return 0;
   }
   virtual ~PGLSParentFilter() {}
   virtual bool filter(const hobject_t &obj, bufferlist& xattr_data,
@@ -602,9 +618,9 @@ int ReplicatedPG::get_pgls_filter(bufferlist::iterator& iter, PGLSFilter **pfilt
   }
 
   if (type.compare("parent") == 0) {
-    filter = new PGLSParentFilter(iter);
+    filter = new PGLSParentFilter();
   } else if (type.compare("plain") == 0) {
-    filter = new PGLSPlainFilter(iter);
+    filter = new PGLSPlainFilter();
   } else {
     std::size_t dot = type.find(".");
     if (dot == std::string::npos || dot == 0 || dot == type.size() - 1) {
@@ -629,13 +645,28 @@ int ReplicatedPG::get_pgls_filter(bufferlist::iterator& iter, PGLSFilter **pfilt
            << class_name << dendl;
       return -EINVAL;
     }
-    filter = class_filter->fn(&iter);
-    assert(filter);
+    filter = class_filter->fn();
+    if (!filter) {
+      // Object classes are obliged to return us something, but let's
+      // give an error rather than asserting out.
+      derr << "Buggy class " << class_name << " failed to construct "
+              "filter " << filter_name << dendl;
+      return -EINVAL;
+    }
   }
 
-  *pfilter = filter;
-
-  return  0;
+  assert(filter);
+  int r = filter->init(iter);
+  if (r < 0) {
+    derr << "Error initializing filter " << type << ": "
+         << cpp_strerror(r) << dendl;
+    delete filter;
+    return -EINVAL;
+  } else {
+    // Successfully constructed and initialized, return it.
+    *pfilter = filter;
+    return  0;
+  }
 }
 
 
