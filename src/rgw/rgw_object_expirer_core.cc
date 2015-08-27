@@ -125,7 +125,7 @@ void RGWObjectExpirer::trim_chunk(const string& shard,
   return;
 }
 
-void RGWObjectExpirer::proceed_single_shard(const string& shard,
+void RGWObjectExpirer::process_single_shard(const string& shard,
                                          const utime_t& last_run,
                                          const utime_t& round_start)
 {
@@ -179,20 +179,21 @@ void RGWObjectExpirer::proceed_single_shard(const string& shard,
   return;
 }
 
-void RGWObjectExpirer::inspect_all_shards(const utime_t& last_run,
-                                       const utime_t& round_start)
+void RGWObjectExpirer::inspect_all_shards(const utime_t& last_run, const utime_t& round_start)
 {
   bool is_next_available;
   utime_t shard_marker;
 
-  do {
+  CephContext *cct = store->ctx();
+  int num_shards = cct->_conf->rgw_objexp_hints_num_shards;
+
+  for (int i = 0; i < num_shards; i++) {
     string shard;
-    store->objexp_get_shard(last_run, round_start, shard_marker, shard,
-            is_next_available);
+    store->objexp_get_shard(i, shard);
 
     ldout(store->ctx(), 20) << "proceeding shard = " << shard << dendl;
 
-    proceed_single_shard(shard, last_run, round_start);
+    process_single_shard(shard, last_run, round_start);
   } while (is_next_available);
 
   return;
