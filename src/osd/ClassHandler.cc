@@ -221,6 +221,17 @@ ClassHandler::ClassMethod *ClassHandler::ClassData::register_cxx_method(const ch
   return &method;
 }
 
+ClassHandler::ClassFilter *ClassHandler::ClassData::register_cxx_filter(
+    const std::string &filter_name,
+    cls_cxx_filter_factory_t fn)
+{
+  ClassFilter &filter = filters_map[filter_name];
+  filter.fn = fn;
+  filter.name = filter_name;
+  filter.cls = this;
+  return &filter;
+}
+
 ClassHandler::ClassMethod *ClassHandler::ClassData::_get_method(const char *mname)
 {
   map<string, ClassHandler::ClassMethod>::iterator iter = methods_map.find(mname);
@@ -250,6 +261,20 @@ void ClassHandler::ClassData::unregister_method(ClassHandler::ClassMethod *metho
 void ClassHandler::ClassMethod::unregister()
 {
   cls->unregister_method(this);
+}
+
+void ClassHandler::ClassData::unregister_filter(ClassHandler::ClassFilter *filter)
+{
+  /* no need for locking, called under the class_init mutex */
+   map<string, ClassFilter>::iterator iter = filters_map.find(filter->name);
+   if (iter == filters_map.end())
+     return;
+   filters_map.erase(iter);
+}
+
+void ClassHandler::ClassFilter::unregister()
+{
+  cls->unregister_filter(this);
 }
 
 int ClassHandler::ClassMethod::exec(cls_method_context_t ctx, bufferlist& indata, bufferlist& outdata)
