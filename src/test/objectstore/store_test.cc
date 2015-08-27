@@ -65,7 +65,8 @@ public:
   }
 
   virtual void TearDown() {
-    store->umount();
+    if (store)
+      store->umount();
   }
 };
 
