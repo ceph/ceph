@@ -84,11 +84,7 @@ check_SCRIPTS += \
 	test/libradosstriper/rados-striper.sh \
 	test/test_objectstore_memstore.sh
 
-if ENABLE_ROOT_MAKE_CHECK
-check_SCRIPTS += test/ceph-disk-root.sh
-else
 check_SCRIPTS += test/ceph-disk.sh
-endif
 
 EXTRA_DIST += \
 	$(srcdir)/test/python/ceph-disk/setup.py \
