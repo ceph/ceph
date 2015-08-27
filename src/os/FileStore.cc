@@ -1181,6 +1181,8 @@ int FileStore::version_stamp_is_valid(uint32_t *version)
   bl.push_back(bp);
   bufferlist::iterator i = bl.begin();
   ::decode(*version, i);
+  dout(10) << __func__ << " was " << *version << " vs target "
+	   << target_version << dendl;
   if (*version == target_version)
     return 1;
   else
@@ -1189,6 +1191,7 @@ int FileStore::version_stamp_is_valid(uint32_t *version)
 
 int FileStore::write_version_stamp()
 {
+  dout(1) << __func__ << " " << target_version << dendl;
   bufferlist bl;
   ::encode(target_version, bl);
 
@@ -1198,6 +1201,7 @@ int FileStore::write_version_stamp()
 
 int FileStore::upgrade()
 {
+  dout(1) << "upgrade" << dendl;
   uint32_t version;
   int r = version_stamp_is_valid(&version);
   if (r < 0)
@@ -1205,10 +1209,7 @@ int FileStore::upgrade()
   if (r == 1)
     return 0;
 
-  if (version < 3) {
-    derr << "ObjectStore is old at version " << version << ".  Please upgrade to firefly v0.80.x, convert your store, and then upgrade."  << dendl;
-    return -EINVAL;
-  }
+  assert(version >= 4);  // upgrade to hammer first
 
   // nothing necessary in FileStore for v3 -> v4 upgrade; we just need to
   // open up DBObjectMap with the do_upgrade flag, which we already did.
@@ -1300,6 +1301,12 @@ int FileStore::mount()
 	 << cpp_strerror(ret) << dendl;
     goto close_fsid_fd;
   } else if (ret == 0) {
+    if (version_stamp < 4) {
+      derr << "FileStore is old at version " << version_stamp
+	   << ".  Please upgrade to hammer v0.94.x first."  << dendl;
+      ret = -EINVAL;
+      goto close_fsid_fd;
+    }
     if (do_update || (int)version_stamp < g_conf->filestore_update_to) {
       derr << "FileStore::mount : stale version stamp detected: "
 	   << version_stamp 
@@ -2638,27 +2645,8 @@ unsigned FileStore::_do_transaction(
       break;
 
     case Transaction::OP_COLL_SETATTR:
-      {
-        coll_t cid = i.get_cid(op->cid);
-        string name = i.decode_string();
-        bufferlist bl;
-        i.decode_bl(bl);
-        tracepoint(objectstore, coll_setattr_enter, osr_name);
-        if (_check_replay_guard(cid, spos) > 0)
-          r = _collection_setattr(cid, name.c_str(), bl.c_str(), bl.length());
-        tracepoint(objectstore, coll_setattr_exit, r);
-      }
-      break;
-
     case Transaction::OP_COLL_RMATTR:
-      {
-        coll_t cid = i.get_cid(op->cid);
-        string name = i.decode_string();
-        tracepoint(objectstore, coll_rmattr_enter, osr_name);
-        if (_check_replay_guard(cid, spos) > 0)
-          r = _collection_rmattr(cid, name.c_str());
-        tracepoint(objectstore, coll_rmattr_exit, r);
-      }
+      assert(0 == "coll attributes no longer supported");
       break;
 
     case Transaction::OP_STARTSYNC:
@@ -4337,143 +4325,6 @@ int FileStore::_rmattrs(coll_t cid, const ghobject_t& oid,
   lfn_close(fd);
  out:
   dout(10) << "rmattrs " << cid << "/" << oid << " = " << r << dendl;
-  return r;
-}
-
-
-
-// collections
-
-int FileStore::collection_getattr(coll_t c, const char *name,
-				  void *value, size_t size) 
-{
-  char fn[PATH_MAX];
-  get_cdir(c, fn, sizeof(fn));
-  dout(15) << "collection_getattr " << fn << " '" << name << "' len " << size << dendl;
-  int r;
-  int fd = ::open(fn, O_RDONLY);
-  if (fd < 0) {
-    r = -errno;
-    goto out;
-  }
-  char n[PATH_MAX];
-  get_attrname(name, n, PATH_MAX);
-  r = chain_fgetxattr(fd, n, value, size);
-  VOID_TEMP_FAILURE_RETRY(::close(fd));
- out:
-  dout(10) << "collection_getattr " << fn << " '" << name << "' len " << size << " = " << r << dendl;
-  assert(!m_filestore_fail_eio || r != -EIO);
-  return r;
-}
-
-int FileStore::collection_getattr(coll_t c, const char *name, bufferlist& bl)
-{
-  char fn[PATH_MAX];
-  get_cdir(c, fn, sizeof(fn));
-  dout(15) << "collection_getattr " << fn << " '" << name << "'" << dendl;
-  char n[PATH_MAX];
-  get_attrname(name, n, PATH_MAX);
-  buffer::ptr bp;
-  int r;
-  int fd = ::open(fn, O_RDONLY);
-  if (fd < 0) {
-    r = -errno;
-    goto out;
-  }
-  r = _fgetattr(fd, n, bp);
-  bl.push_back(bp);
-  VOID_TEMP_FAILURE_RETRY(::close(fd));
- out:
-  dout(10) << "collection_getattr " << fn << " '" << name << "' = " << r << dendl;
-  assert(!m_filestore_fail_eio || r != -EIO);
-  return r;
-}
-
-int FileStore::collection_getattrs(coll_t cid, map<string,bufferptr>& aset) 
-{
-  char fn[PATH_MAX];
-  get_cdir(cid, fn, sizeof(fn));
-  dout(10) << "collection_getattrs " << fn << dendl;
-  int r = 0;
-  int fd = ::open(fn, O_RDONLY);
-  if (fd < 0) {
-    r = -errno;
-    goto out;
-  }
-  r = _fgetattrs(fd, aset);
-  VOID_TEMP_FAILURE_RETRY(::close(fd));
- out:
-  dout(10) << "collection_getattrs " << fn << " = " << r << dendl;
-  assert(!m_filestore_fail_eio || r != -EIO);
-  return r;
-}
-
-
-int FileStore::_collection_setattr(coll_t c, const char *name,
-				  const void *value, size_t size) 
-{
-  char fn[PATH_MAX];
-  get_cdir(c, fn, sizeof(fn));
-  dout(10) << "collection_setattr " << fn << " '" << name << "' len " << size << dendl;
-  char n[PATH_MAX];
-  int r;
-  int fd = ::open(fn, O_RDONLY);
-  if (fd < 0) {
-    r = -errno;
-    goto out;
-  }
-  get_attrname(name, n, PATH_MAX);
-  r = chain_fsetxattr(fd, n, value, size);
-  VOID_TEMP_FAILURE_RETRY(::close(fd));
- out:
-  dout(10) << "collection_setattr " << fn << " '" << name << "' len " << size << " = " << r << dendl;
-  return r;
-}
-
-int FileStore::_collection_rmattr(coll_t c, const char *name) 
-{
-  char fn[PATH_MAX];
-  get_cdir(c, fn, sizeof(fn));
-  dout(15) << "collection_rmattr " << fn << dendl;
-  char n[PATH_MAX];
-  get_attrname(name, n, PATH_MAX);
-  int r;
-  int fd = ::open(fn, O_RDONLY);
-  if (fd < 0) {
-    r = -errno;
-    goto out;
-  }
-  r = chain_fremovexattr(fd, n);
-  VOID_TEMP_FAILURE_RETRY(::close(fd));
- out:
-  dout(10) << "collection_rmattr " << fn << " = " << r << dendl;
-  return r;
-}
-
-
-int FileStore::_collection_setattrs(coll_t cid, map<string,bufferptr>& aset) 
-{
-  char fn[PATH_MAX];
-  get_cdir(cid, fn, sizeof(fn));
-  dout(15) << "collection_setattrs " << fn << dendl;
-  int r = 0;
-  int fd = ::open(fn, O_RDONLY);
-  if (fd < 0) {
-    r = -errno;
-    goto out;
-  }
-  for (map<string,bufferptr>::iterator p = aset.begin();
-       p != aset.end();
-       ++p) {
-    char n[PATH_MAX];
-    get_attrname(p->first.c_str(), n, PATH_MAX);
-    r = chain_fsetxattr(fd, n, p->second.c_str(), p->second.length());
-    if (r < 0)
-      break;
-  }
-  VOID_TEMP_FAILURE_RETRY(::close(fd));
- out:
-  dout(10) << "collection_setattrs " << fn << " = " << r << dendl;
   return r;
 }
 

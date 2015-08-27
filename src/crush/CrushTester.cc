@@ -359,7 +359,12 @@ int CrushTester::test_with_crushtool(const char *crushtool_cmd, int max_id, int 
 {
   SubProcessTimed crushtool(crushtool_cmd, true, false, true, timeout);
   string opt_max_id = boost::lexical_cast<string>(max_id);
-  crushtool.add_cmd_args("-i", "-", "--test", "--check", opt_max_id.c_str(), NULL);
+  crushtool.add_cmd_args(
+    "-i", "-",
+    "--test", "--check", opt_max_id.c_str(),
+    "--min-x", "1",
+    "--max-x", "50",
+    NULL);
   int ret = crushtool.spawn();
   if (ret != 0) {
     err << "failed run crushtool: " << crushtool.err();
