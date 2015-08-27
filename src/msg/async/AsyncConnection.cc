@@ -178,7 +178,7 @@ AsyncConnection::AsyncConnection(CephContext *cct, AsyncMessenger *m, EventCente
     write_lock("AsyncConnection::write_lock"), can_write(NOWRITE),
     open_write(false), keepalive(false), lock("AsyncConnection::lock"), recv_buf(NULL),
     recv_max_prefetch(MIN(msgr->cct->_conf->ms_tcp_prefetch_max_size, TCP_PREFETCH_MIN_SIZE)),
-    recv_start(0), recv_end(0), got_bad_auth(false), authorizer(NULL), replacing(false),
+    recv_start(0), recv_end(0), got_bad_auth(false), reconnect(false), authorizer(NULL), replacing(false),
     is_reset_from_peer(false), once_ready(false), state_buffer(NULL), state_offset(0), net(cct), center(c)
 {
   read_handler.reset(new C_handle_read(this));
@@ -967,17 +967,31 @@ int AsyncConnection::_process_connection()
           ::close(sd);
         }
 
-        sd = net.connect(get_peer_addr());
+        sd = net.nonblock_connect(get_peer_addr());
         if (sd < 0) {
           goto fail;
         }
-        r = net.set_nonblock(sd);
+        center->create_file_event(sd, EVENT_READABLE, read_handler);
+        state = STATE_CONNECTING_RE;
+        break;
+      }
+
+    case STATE_CONNECTING_RE:
+      {
+        if (reconnect == false) {
+          reconnect = true;
+          break;
+        }
+
+        reconnect = false;
+
+        r = net.reconnect(get_peer_addr(), sd);
         if (r < 0) {
           goto fail;
         }
+
         net.set_socket_options(sd);
 
-        center->create_file_event(sd, EVENT_READABLE, read_handler);
         state = STATE_CONNECTING_WAIT_BANNER;
         break;
       }
@@ -2415,7 +2429,7 @@ void AsyncConnection::handle_write()
       ldout(async_msgr->cct, 10) << __func__ << " state is " << get_state_name(state)
                                  << " policy.server is false" << dendl;
       _connect();
-    } else if (sd >= 0 && state != STATE_CONNECTING && state != STATE_CLOSED) {
+    } else if (sd >= 0 && state != STATE_CONNECTING && state != STATE_CONNECTING_RE && state != STATE_CLOSED) {
       r = _try_send(bl);
       if (r < 0) {
         ldout(async_msgr->cct, 1) << __func__ << " send outcoming bl failed" << dendl;

@@ -30,6 +30,7 @@ namespace ceph {
     int set_nonblock(int sd);
     void set_socket_options(int sd);
     int connect(const entity_addr_t &addr);
+    int reconnect(const entity_addr_t &addr, int sd);
     int nonblock_connect(const entity_addr_t &addr);
   };
 }

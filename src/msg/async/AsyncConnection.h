@@ -160,6 +160,7 @@ class AsyncConnection : public Connection {
     STATE_OPEN_TAG_CLOSE,
     STATE_WAIT_SEND,
     STATE_CONNECTING,
+    STATE_CONNECTING_RE,
     STATE_CONNECTING_WAIT_BANNER,
     STATE_CONNECTING_WAIT_IDENTIFY_PEER,
     STATE_CONNECTING_SEND_CONNECT_MSG,
@@ -196,6 +197,7 @@ class AsyncConnection : public Connection {
                                         "STATE_OPEN_TAG_CLOSE",
                                         "STATE_WAIT_SEND",
                                         "STATE_CONNECTING",
+                                        "STATE_CONNECTING_RE",
                                         "STATE_CONNECTING_WAIT_BANNER",
                                         "STATE_CONNECTING_WAIT_IDENTIFY_PEER",
                                         "STATE_CONNECTING_SEND_CONNECT_MSG",
@@ -268,6 +270,7 @@ class AsyncConnection : public Connection {
   bufferlist front, middle, data;
   ceph_msg_connect connect_msg;
   // Connecting state
+  bool reconnect;
   bool got_bad_auth;
   AuthAuthorizer *authorizer;
   ceph_msg_connect_reply connect_reply;
