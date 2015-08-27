@@ -14,10 +14,10 @@ libceph_os_la_SOURCES = \
 
 libceph_os_la_CXXFLAGS = ${AM_CXXFLAGS}
 libceph_os_la_LIBADD = $(PTHREAD_LIBS) $(EXTRALIBS) $(LIBKVSTORE)
-if WITH_LTTNG
-libceph_os_la_LIBADD += $(LIBOS_TP)
-endif
-EXTRALIBS += -llttng-ust
+#if WITH_LTTNG
+#libceph_os_la_LIBADD += $(LIBOS_TP)
+#endif
+#EXTRALIBS += -llttng-ust
 
 libceph_os_la_LDFLAGS = ${AM_LDFLAGS} -version-info 1:0:0
 
