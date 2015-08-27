@@ -371,6 +371,8 @@ def build_ceph_cluster(ctx, config):
         log.info(traceback.format_exc())
         raise
     finally:
+        if config.get('keep_running'):
+            return
         log.info('Stopping ceph...')
         ctx.cluster.run(args=['sudo', 'stop', 'ceph-all', run.Raw('||'),
                               'sudo', 'service', 'ceph', 'stop' ])
@@ -613,6 +615,7 @@ def task(ctx, config):
              branch:
                 stable: bobtail
              mon_initial_members: 1
+             keep_running: true
 
         tasks:
         - install:
@@ -651,13 +654,6 @@ def task(ctx, config):
     with contextutil.nested(
          lambda: install_fn.ship_utilities(ctx=ctx, config=None),
          lambda: download_ceph_deploy(ctx=ctx, config=config),
-         lambda: build_ceph_cluster(ctx=ctx, config=dict(
-                 conf=config.get('conf', {}),
-                 branch=config.get('branch',{}),
-                 dmcrypt=config.get('dmcrypt',None),
-                 separate_journal_disk=config.get('separate_journal_disk',None),
-                 mon_initial_members=config.get('mon_initial_members', None),
-                 test_mon_destroy=config.get('test_mon_destroy', None),
-                 )),
+         lambda: build_ceph_cluster(ctx=ctx, config=config),
         ):
         yield
