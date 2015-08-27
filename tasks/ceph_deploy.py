@@ -357,11 +357,12 @@ def build_ceph_cluster(ctx, config):
                         perms='0644'
                     )
 
-            log.info('Configuring CephFS...')
-            ceph_fs = Filesystem(ctx, admin_remote=clients.remotes.keys()[0])
-            if not ceph_fs.legacy_configured():
-                ceph_fs.create()
-        else:
+            if mds_nodes:
+                log.info('Configuring CephFS...')
+                ceph_fs = Filesystem(ctx, admin_remote=clients.remotes.keys()[0])
+                if not ceph_fs.legacy_configured():
+                    ceph_fs.create()
+        elif not config.get('only_mon'):
             raise RuntimeError(
                 "The cluster is NOT operational due to insufficient OSDs")
         yield
@@ -615,6 +616,7 @@ def task(ctx, config):
              branch:
                 stable: bobtail
              mon_initial_members: 1
+             only_mon: true
              keep_running: true
 
         tasks:
