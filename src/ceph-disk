@@ -2905,7 +2905,7 @@ def setup_sysconfdir(dir):
     SYSCONFDIR = dir
 
 
-def parse_args():
+def parse_args(argv):
     parser = argparse.ArgumentParser(
         'ceph-disk',
         )
@@ -3164,12 +3164,11 @@ def parse_args():
         func=main_zap,
         )
 
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     return args
 
-
-def main():
-    args = parse_args()
+def main(argv):
+    args = parse_args(argv)
 
     loglevel = logging.WARNING
     if args.verbose:
@@ -3221,5 +3220,5 @@ def main_catch(func, args):
 
 
 if __name__ == '__main__':
-    main()
+    main(sys.argv[1:])
     warned_about = {}
