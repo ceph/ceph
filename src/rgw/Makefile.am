@@ -9,6 +9,13 @@ DENCODER_SOURCES += \
 	rgw/rgw_env.cc \
 	rgw/rgw_json_enc.cc
 
+DENCODER_DEPS += -lcurl -lexpat \
+	libcls_version_client.a \
+	libcls_log_client.a \
+	libcls_refcount_client.la \
+	libcls_user_client.a \
+	libcls_statelog_client.a
+
 if WITH_RADOS
 if WITH_RADOSGW
 
@@ -53,6 +60,7 @@ librgw_la_SOURCES =  \
 	rgw/rgw_dencoder.cc \
 	rgw/rgw_object_expirer_core.cc \
 	rgw/rgw_website.cc
+
 librgw_la_CXXFLAGS = -Woverloaded-virtual ${AM_CXXFLAGS}
 noinst_LTLIBRARIES += librgw.la
 
