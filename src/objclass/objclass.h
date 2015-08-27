@@ -107,6 +107,13 @@ public:
                       bufferlist& outdata) = 0;
 
   /**
+   * Arguments passed from the RADOS client.  Implementations must
+   * handle any encoding errors, and return an appropriate error code,
+   * or 0 on valid input.
+   */
+  virtual int init(bufferlist::iterator &params) = 0;
+
+  /**
    * xattr key, or empty string.  If non-empty, this xattr will be fetched
    * and the value passed into ::filter
    */
@@ -120,9 +127,7 @@ public:
 };
 
 // Classes expose a filter constructor that returns a subclass of PGLSFilter
-typedef PGLSFilter* (*cls_cxx_filter_factory_t)(
-    bufferlist::iterator *args);
-
+typedef PGLSFilter* (*cls_cxx_filter_factory_t)();
 
 
 extern int cls_register_cxx_method(cls_handle_t hclass, const char *method, int flags,
