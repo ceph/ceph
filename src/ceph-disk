@@ -2980,18 +2980,7 @@ def parse_args():
 def main():
     args = parse_args()
 
-    loglevel = logging.WARNING
-    if args.verbose:
-        loglevel = logging.DEBUG
-
-    if args.log_stdout:
-        ch = logging.StreamHandler(stream=sys.stdout)
-        ch.setLevel(loglevel)
-        LOG.addHandler(ch)
-    else:
-        logging.basicConfig(
-            level=loglevel,
-            )
+    setup_logging(args.verbose, args.log_stdout)
 
     if args.prepend_to_path != '':
         path = os.environ.get('PATH', os.defpath)
@@ -3004,6 +2993,20 @@ def main():
         args.func(args)
     else:
         main_catch(args.func, args)
+
+def setup_logging(verbose, log_stdout):
+    loglevel = logging.WARNING
+    if verbose:
+        loglevel = logging.DEBUG
+
+    if log_stdout:
+        ch = logging.StreamHandler(stream=sys.stdout)
+        ch.setLevel(loglevel)
+        LOG.addHandler(ch)
+    else:
+        logging.basicConfig(
+            level=loglevel,
+            )
 
 def main_catch(func, args):
 
