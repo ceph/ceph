@@ -1871,19 +1871,19 @@ bool OSDMonitor::preprocess_boot(MonOpRequestRef op)
   }
 
   // make sure upgrades stop at hammer
-  //  * OSD_PROXY_FEATURES is the last pre-hammer feature
+  //  * HAMMER_0_94_4 is the required hammer feature
   //  * MON_METADATA is the first post-hammer feature
   if (osdmap.get_num_up_osds() > 0) {
     if ((m->osd_features & CEPH_FEATURE_MON_METADATA) &&
-	!(osdmap.get_up_osd_features() & CEPH_FEATURE_OSD_PROXY_FEATURES)) {
+	!(osdmap.get_up_osd_features() & CEPH_FEATURE_HAMMER_0_94_4)) {
       mon->clog->info() << "disallowing boot of post-hammer OSD "
 			<< m->get_orig_source_inst()
-			<< " because one or more up OSDs is pre-hammer\n";
+			<< " because one or more up OSDs is pre-hammer v0.94.4\n";
       goto ignore;
     }
-    if (!(m->osd_features & CEPH_FEATURE_OSD_PROXY_FEATURES) &&
+    if (!(m->osd_features & CEPH_FEATURE_HAMMER_0_94_4) &&
 	(osdmap.get_up_osd_features() & CEPH_FEATURE_MON_METADATA)) {
-      mon->clog->info() << "disallowing boot of pre-hammer OSD "
+      mon->clog->info() << "disallowing boot of pre-hammer v0.94.4 OSD "
 			<< m->get_orig_source_inst()
 			<< " because all up OSDs are post-hammer\n";
       goto ignore;
