@@ -2,11 +2,14 @@ if ENABLE_CLIENT
 
 # inject rgw stuff in the decoder testcase
 DENCODER_SOURCES += \
-	rgw/rgw_dencoder.cc \
-	rgw/rgw_acl.cc \
-	rgw/rgw_common.cc \
-	rgw/rgw_env.cc \
-	rgw/rgw_json_enc.cc
+	rgw/rgw_dencoder.cc
+
+DENCODER_DEPS += -lcurl -lexpat \
+	libcls_version_client.a \
+	libcls_log_client.a \
+	libcls_refcount_client.la \
+	libcls_user_client.a \
+	libcls_statelog_client.a
 
 if WITH_RADOS
 if WITH_RADOSGW
@@ -47,7 +50,6 @@ librgw_la_SOURCES =  \
 	rgw/rgw_keystone.cc \
 	rgw/rgw_quota.cc \
 	rgw/rgw_sync.cc \
-	rgw/rgw_dencoder.cc \
 	rgw/rgw_object_expirer_core.cc
 librgw_la_CXXFLAGS = -Woverloaded-virtual ${AM_CXXFLAGS}
 noinst_LTLIBRARIES += librgw.la
