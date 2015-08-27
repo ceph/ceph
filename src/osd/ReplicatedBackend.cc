@@ -623,6 +623,11 @@ void ReplicatedBackend::op_applied(
   InProgressOp *op)
 {
   dout(10) << __func__ << ": " << op->tid << dendl;
+  if (!in_progress_ops.count(op->tid) || &(in_progress_ops.find(op->tid)->second) != op) {
+    // the op has been cancelled because of a change
+    return;
+  }
+
   if (op->op)
     op->op->mark_event("op_applied");
 
@@ -643,6 +648,11 @@ void ReplicatedBackend::op_commit(
   InProgressOp *op)
 {
   dout(10) << __func__ << ": " << op->tid << dendl;
+  if (!in_progress_ops.count(op->tid) || &(in_progress_ops.find(op->tid)->second) != op) {
+    // the op has been cancelled because of a change
+    return;
+  }
+
   if (op->op)
     op->op->mark_event("op_commit");
 
