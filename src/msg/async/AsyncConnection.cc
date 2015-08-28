@@ -2076,7 +2076,7 @@ void AsyncConnection::fault()
   }
 
   write_lock.Lock();
-  if (sd >= 0) {
+  if (sd >= 0 && state != STATE_CONNECTING_RE) {
     shutdown_socket();
     center->delete_file_event(sd, EVENT_READABLE|EVENT_WRITABLE);
     ::close(sd);
