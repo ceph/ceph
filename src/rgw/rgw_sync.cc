@@ -1347,7 +1347,6 @@ public:
             marker_tracker->start(iter->first);
               // fetch remote and write locally
             yield spawn(new RGWMetaSyncSingleEntryCR(store, http_manager, async_rados, iter->first, marker_tracker), false);
-              // update shard marker
 	    if (retcode < 0) {
               return set_state(RGWCoroutine_Error, retcode);
 	    }
@@ -1510,6 +1509,14 @@ int RGWRemoteMetaLog::run_sync(int num_shards, rgw_meta_sync_status& sync_status
       r = run(new RGWFetchAllMetaCR(store, &http_manager, async_rados, num_shards));
       if (r < 0) {
         ldout(store->ctx(), 0) << "ERROR: failed to fetch all metadata keys" << dendl;
+        return r;
+      }
+
+      sync_status.sync_info.state = rgw_meta_sync_info::StateSync;
+      r = run(new RGWSimpleRadosWriteCR<rgw_meta_sync_info>(async_rados, store, store->get_zone_params().log_pool,
+				 mdlog_sync_status_oid, sync_status.sync_info));
+      if (r < 0) {
+        ldout(store->ctx(), 0) << "ERROR: failed to update sync status" << dendl;
         return r;
       }
       /* fall through */
