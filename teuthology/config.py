@@ -147,6 +147,19 @@ class TeuthologyConfig(YamlConfig):
         'koji_task_url': 'https://kojipkgs.fedoraproject.org/work/',
         'baseurl_template': 'http://{host}/{proj}-{pkg_type}-{dist}-{arch}-{flavor}/{uri}',
         'teuthology_path': None,
+        'openstack': {
+            'user-data': 'teuthology/openstack/openstack-{os_type}-{os_version}-user-data.txt',
+            'ip': '1.1.1.1',
+            'machine': {
+                'disk': 20,
+                'ram': 8000,
+                'cpus': 1,
+            },
+            'volumes': {
+                'count': 3,
+                'size': 10,
+            },
+        },
     }
 
     def __init__(self, yaml_path=None):
