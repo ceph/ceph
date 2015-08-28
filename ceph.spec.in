@@ -771,6 +771,7 @@ mkdir -p %{_localstatedir}/run/ceph/
 %{_libdir}/rados-classes/libcls_cephfs.so*
 %{_libdir}/rados-classes/libcls_rbd.so*
 %{_libdir}/rados-classes/libcls_hello.so*
+%{_libdir}/rados-classes/libcls_numops.so*
 %{_libdir}/rados-classes/libcls_rgw.so*
 %{_libdir}/rados-classes/libcls_lock.so*
 %{_libdir}/rados-classes/libcls_kvs.so*
