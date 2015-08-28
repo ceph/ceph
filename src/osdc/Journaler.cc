@@ -431,7 +431,8 @@ void Journaler::_write_head(Context *oncommit)
   object_locator_t oloc(pg_pool);
   objecter->write_full(oid, oloc, snapc, bl, ceph_clock_now(cct), 0, 
 		       NULL, 
-		       wrap_finisher(new C_WriteHead(this, last_written, wrap_finisher(oncommit))));
+		       wrap_finisher(new C_WriteHead(this, last_written, wrap_finisher(oncommit))),
+		       0, 0, write_iohint);
 }
 
 void Journaler::_finish_write_head(int r, Header &wrote, C_OnFinisher *oncommit)
@@ -623,7 +624,7 @@ void Journaler::_do_flush(unsigned amount)
   filer.write(ino, &layout, snapc,
 	      flush_pos, len, write_bl, ceph_clock_now(cct),
 	      0,
-	      NULL, wrap_finisher(onsafe));
+	      NULL, wrap_finisher(onsafe), write_iohint);
 
   flush_pos += len;
   assert(write_buf.length() == write_pos - flush_pos);
