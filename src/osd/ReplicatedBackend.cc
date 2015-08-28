@@ -584,8 +584,10 @@ void ReplicatedBackend::op_applied(
   FUNCTRACE();
   OID_EVENT_TRACE_WITH_MSG((op && op->op) ? op->op->get_req() : NULL, "OP_APPLIED_BEGIN", true);
   dout(10) << __func__ << ": " << op->tid << dendl;
-  if (op->op)
+  if (op->op) {
     op->op->mark_event("op_applied");
+    op->op->pg_trace.event("op applied");
+  }
 
   op->waiting_for_applied.erase(get_parent()->whoami_shard());
   parent->op_applied(op->v);
@@ -606,8 +608,10 @@ void ReplicatedBackend::op_commit(
   FUNCTRACE();
   OID_EVENT_TRACE_WITH_MSG((op && op->op) ? op->op->get_req() : NULL, "OP_COMMIT_BEGIN", true);
   dout(10) << __func__ << ": " << op->tid << dendl;
-  if (op->op)
+  if (op->op) {
     op->op->mark_event("op_commit");
+    op->op->pg_trace.event("op commit");
+  }
 
   op->waiting_for_commit.erase(get_parent()->whoami_shard());
 
@@ -661,6 +665,7 @@ void ReplicatedBackend::do_repop_reply(OpRequestRef op)
         ostringstream ss;
         ss << "sub_op_commit_rec from " << from;
 	ip_op.op->mark_event_string(ss.str());
+	ip_op.op->pg_trace.event("sub_op_commit_rec");
       }
     } else {
       assert(ip_op.waiting_for_applied.count(from));
@@ -668,6 +673,7 @@ void ReplicatedBackend::do_repop_reply(OpRequestRef op)
         ostringstream ss;
         ss << "sub_op_applied_rec from " << from;
 	ip_op.op->mark_event_string(ss.str());
+	ip_op.op->pg_trace.event("sub_op_applied_rec");
       }
     }
     ip_op.waiting_for_applied.erase(from);
@@ -1021,6 +1027,8 @@ void ReplicatedBackend::issue_op(
   InProgressOp *op,
   ObjectStore::Transaction &op_t)
 {
+  if (op->op)
+    op->op->pg_trace.event("issue replication ops");
 
   if (parent->get_actingbackfill_shards().size() > 1) {
     ostringstream ss;
@@ -1053,7 +1061,8 @@ void ReplicatedBackend::issue_op(
       op_t,
       peer,
       pinfo);
-
+    if (op->op)
+      wr->trace.init("replicated op", nullptr, &op->op->pg_trace);
     get_parent()->send_message_osd_cluster(
       peer.osd, wr, get_osdmap()->get_epoch());
   }
@@ -1151,6 +1160,7 @@ void ReplicatedBackend::repop_applied(RepModifyRef rm)
 {
   rm->op->mark_event("sub_op_applied");
   rm->applied = true;
+  rm->op->pg_trace.event("sup_op_applied");
 
   dout(10) << __func__ << " on " << rm << " op "
 	   << *rm->op->get_req() << dendl;
@@ -1164,6 +1174,7 @@ void ReplicatedBackend::repop_applied(RepModifyRef rm)
       req, parent->whoami_shard(),
       0, get_osdmap()->get_epoch(), req->min_epoch, CEPH_OSD_FLAG_ACK);
     ack->set_priority(CEPH_MSG_PRIO_HIGH); // this better match commit priority!
+    ack->trace = rm->op->pg_trace;
     get_parent()->send_message_osd_cluster(
       rm->ackerosd, ack, get_osdmap()->get_epoch());
   }
@@ -1174,6 +1185,7 @@ void ReplicatedBackend::repop_applied(RepModifyRef rm)
 void ReplicatedBackend::repop_commit(RepModifyRef rm)
 {
   rm->op->mark_commit_sent();
+  rm->op->pg_trace.event("sup_op_commit");
   rm->committed = true;
 
   // send commit.
@@ -1192,6 +1204,7 @@ void ReplicatedBackend::repop_commit(RepModifyRef rm)
     0, get_osdmap()->get_epoch(), m->get_min_epoch(), CEPH_OSD_FLAG_ONDISK);
   reply->set_last_complete_ondisk(rm->last_complete);
   reply->set_priority(CEPH_MSG_PRIO_HIGH); // this better match ack priority!
+  reply->trace = rm->op->pg_trace;
   get_parent()->send_message_osd_cluster(
     rm->ackerosd, reply, get_osdmap()->get_epoch());
 
