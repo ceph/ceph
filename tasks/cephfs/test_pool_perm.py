@@ -55,4 +55,4 @@ class TestPoolPerm(CephFSTestCase):
                                                    'mon', 'allow r', 'osd',
                                                    'allow rw pool={0}'.format(self.fs.get_data_pool_name()))
 
-        super(CephFSTestCase, self).tearDown()
+        super(TestPoolPerm, self).tearDown()
