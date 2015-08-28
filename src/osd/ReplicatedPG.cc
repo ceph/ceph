@@ -3908,7 +3908,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	break;
       }
       ++ctx->num_read;
-      if (pool.info.require_rollback()) {
+      if (pool.info.ec_pool()) {
 	// translate sparse read to a normal one if not supported
 	ctx->pending_async_reads.push_back(
 	  make_pair(
