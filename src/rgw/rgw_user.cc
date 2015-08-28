@@ -1260,7 +1260,7 @@ int RGWSubUserPool::execute_add(RGWUserAdminOpState& op_state,
   subuser_pair.first = subuser_str;
 
   // assumes key should be created
-  if (op_state.has_key_op()) {
+  if (!op_state.has_existing_subuser() && op_state.has_key_op()) {
     ret = user->keys.add(op_state, &subprocess_msg, true);
     if (ret < 0) {
       set_err_msg(err_msg, "unable to create subuser key, " + subprocess_msg);

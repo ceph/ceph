@@ -1714,6 +1714,7 @@ int main(int argc, char **argv)
 
   // required to gather errors from operations
   std::string err_msg;
+  std::string sub_err_msg;
 
   bool output_user_info = true;
 
@@ -1725,15 +1726,19 @@ int main(int argc, char **argv)
       user_op.set_generate_key(); // generate a new key by default
     }
     ret = user.add(user_op, &err_msg);
-    if (ret < 0) {
+    if (ret < 0 && subuser.empty()) {
       cerr << "could not create user: " << err_msg << std::endl;
       return -ret;
     }
     if (!subuser.empty()) {
-      ret = user.subusers.add(user_op, &err_msg);
-      if (ret < 0) {
-        cerr << "could not create subuser: " << err_msg << std::endl;
-        return -ret;
+      int sub_ret = user.subusers.add(user_op, &sub_err_msg);
+      if (sub_ret < 0) {
+        if (ret < 0) {
+          cerr << "could not create user: " << err_msg << std::endl;
+          return -ret;
+        }
+        cerr << "could not create subuser: " << sub_err_msg << std::endl;
+        return -sub_ret;
       }
     }
     break;
