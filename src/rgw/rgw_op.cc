@@ -916,6 +916,20 @@ void RGWGetObj::pre_exec()
   rgw_bucket_object_pre_exec(s);
 }
 
+static bool object_is_expired(map<string, bufferlist>& attrs) {
+  map<string, bufferlist>::iterator iter = attrs.find(RGW_ATTR_DELETE_AT);
+  if (iter != attrs.end()) {
+    utime_t delete_at;
+    ::decode(delete_at, iter->second);
+
+    if (delete_at <= ceph_clock_now(g_ceph_context)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 void RGWGetObj::execute()
 {
   utime_t start_time = s->time;
@@ -965,6 +979,13 @@ void RGWGetObj::execute()
       ldout(s->cct, 0) << "ERROR: failed to handle user manifest ret=" << ret << dendl;
     }
     return;
+  }
+
+  /* Check whether the object has expired. Swift API documentation
+   * stands that we should return 404 Not Found in such case. */
+  if (need_object_expiration() && object_is_expired(attrs)) {
+    ret = -ENOENT;
+    goto done_err;
   }
 
   ofs = new_ofs;
@@ -2341,9 +2362,23 @@ void RGWPutMetadataObject::execute()
     return;
   }
 
+  /* Check whether the object has expired. Swift API documentation
+   * stands that we should return 404 Not Found in such case. */
+  if (need_object_expiration() && object_is_expired(orig_attrs)) {
+    ret = -ENOENT;
+    return;
+  }
+
   /* Filter currently existing attributes. */
   prepare_add_del_attrs(orig_attrs, attrs, rmattrs);
   populate_with_generic_attrs(s, attrs);
+
+  if (!delete_at.is_zero()) {
+    bufferlist delatbl;
+    ::encode(delete_at, delatbl);
+    attrs[RGW_ATTR_DELETE_AT] = delatbl;
+  }
+
   ret = store->set_attrs(s->obj_ctx, obj, attrs, &rmattrs, NULL);
 }
 
