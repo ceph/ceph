@@ -1180,6 +1180,11 @@ if(${WITH_RADOSGW})
   set_target_properties(rgw_a PROPERTIES OUTPUT_NAME rgw)
   install(TARGETS rgw_a DESTINATION lib)
 
+  install(FILES
+    include/rados/librgw.h
+    include/rados/rgw_file.h
+  DESTINATION include/rados)
+
   include_directories("${CMAKE_SOURCE_DIR}/src/civetweb/include")
 
   set(radosgw_srcs
