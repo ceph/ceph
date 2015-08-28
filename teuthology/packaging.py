@@ -675,15 +675,15 @@ class GitbuilderProject(object):
             )
         else:
             version = resp.text.strip()
-            # TODO: move this parsing into a different function for
-            # easier testing
-            # FIXME: 'version' as retreived from the repo is actually the
-            # RPM version PLUS *part* of the release. Example:
-            # Right now, ceph master is given the following version in the
-            # repo file: v0.67-rc3.164.gd5aa3a9 - whereas in reality the RPM
-            # version is 0.61.7 and the release is 37.g1243c97.el6 (centos6).
-            # Point being, I have to mangle a little here.
-            if self.pkg_type == "rpm":
+            if self.pkg_type == "rpm" and self.project == "ceph":
+                # TODO: move this parsing into a different function for
+                # easier testing
+                # FIXME: 'version' as retreived from the repo is actually the
+                # RPM version PLUS *part* of the release. Example:
+                # Right now, ceph master is given the following version in the
+                # repo file: v0.67-rc3.164.gd5aa3a9 - whereas in reality the RPM
+                # version is 0.61.7 and the release is 37.g1243c97.el6 (centos6).
+                # Point being, I have to mangle a little here.
                 if version[0] == 'v':
                     version = version[1:]
                 if '-' in version:
