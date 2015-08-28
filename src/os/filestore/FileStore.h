@@ -33,6 +33,7 @@ using namespace std;
 
 #include "common/Timer.h"
 #include "common/WorkQueue.h"
+#include "common/zipkin_trace.h"
 
 #include "common/Mutex.h"
 #include "HashIndex.h"
@@ -193,6 +194,7 @@ private:
     Context *onreadable, *onreadable_sync;
     uint64_t ops, bytes;
     TrackedOpRef osd_op;
+    ZTracer::Trace trace;
   };
   class OpSequencer : public Sequencer_impl {
     Mutex qlock; // to protect q, for benefit of flush (peek/dequeue also protected by lock)
@@ -267,6 +269,7 @@ private:
     void queue(Op *o) {
       Mutex::Locker l(qlock);
       q.push_back(o);
+      o->trace.keyval("queue depth", q.size());
     }
     Op *peek_queue() {
       Mutex::Locker l(qlock);
@@ -394,6 +397,8 @@ private:
   void new_journal();
 
   PerfCounters *logger;
+
+  ZTracer::Endpoint trace_endpoint;
 
 public:
   int lfn_find(const ghobject_t& oid, const Index& index,

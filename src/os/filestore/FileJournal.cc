@@ -1003,8 +1003,11 @@ void FileJournal::queue_completions_thru(uint64_t seq)
     }
     if (next.finish)
       finisher->queue(next.finish);
-    if (next.tracked_op)
+    if (next.tracked_op) {
       next.tracked_op->mark_event("journaled_completion_queued");
+      next.tracked_op->journal_trace.event("queued completion");
+      next.tracked_op->journal_trace.keyval("completed through", seq);
+    }
     items.erase(it++);
   }
   batch_unpop_completions(items);
@@ -1049,8 +1052,10 @@ int FileJournal::prepare_single_write(write_item &next_write, bufferlist& bl, of
   footerptr.copy_in(post_offset + magic2_offset, sizeof(uint64_t), (char *)&magic2);
 
   bl.claim_append(ebl);
-  if (next_write.tracked_op)
+  if (next_write.tracked_op) {
     next_write.tracked_op->mark_event("write_thread_in_journal_buffer");
+    next_write.tracked_op->journal_trace.event("prepare_single_write");
+  }
 
   journalq.push_back(pair<uint64_t,off64_t>(seq, queue_pos));
   writing_seq = seq;
@@ -1681,6 +1686,12 @@ void FileJournal::submit_entry(uint64_t seq, bufferlist& e, uint32_t orig_len,
     logger->inc(l_os_j_bytes, e.length());
   }
 
+  if (osd_op) {
+    osd_op->mark_event("commit_queued_for_journal_write");
+    osd_op->journal_trace.init("journal", &trace_endpoint, &osd_op->store_trace);
+    osd_op->journal_trace.event("submit_entry");
+    osd_op->journal_trace.keyval("seq", seq);
+  }
   {
     Mutex::Locker l1(writeq_lock);
 #ifdef HAVE_LIBAIO
@@ -1700,6 +1711,8 @@ void FileJournal::submit_entry(uint64_t seq, bufferlist& e, uint32_t orig_len,
     if (writeq.empty())
       writeq_cond.Signal();
     writeq.push_back(write_item(seq, e, orig_len, osd_op));
+    if (osd_op)
+      osd_op->journal_trace.keyval("queue depth", writeq.size());
   }
 }
 

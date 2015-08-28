@@ -25,7 +25,7 @@ using std::deque;
 #include "common/Thread.h"
 #include "common/Throttle.h"
 #include "JournalThrottle.h"
-
+#include "common/zipkin_trace.h"
 
 #ifdef HAVE_LIBAIO
 # include <libaio.h>
@@ -46,8 +46,7 @@ public:
     Context *finish;
     utime_t start;
     TrackedOpRef tracked_op;
-    completion_item(uint64_t o, Context *c, utime_t s,
-		    TrackedOpRef opref)
+    completion_item(uint64_t o, Context *c, utime_t s, TrackedOpRef opref)
       : seq(o), finish(c), start(s), tracked_op(opref) {}
     completion_item() : seq(0), finish(0), start(0) {}
   };
@@ -56,6 +55,7 @@ public:
     bufferlist bl;
     uint32_t orig_len;
     TrackedOpRef tracked_op;
+    ZTracer::Trace trace;
     write_item(uint64_t s, bufferlist& b, int ol, TrackedOpRef opref) :
       seq(s), orig_len(ol), tracked_op(opref) {
       bl.claim(b, buffer::list::CLAIM_ALLOW_NONSHAREABLE); // potential zero-copy
@@ -106,7 +106,7 @@ public:
 
   void submit_entry(uint64_t seq, bufferlist& bl, uint32_t orig_len,
 		    Context *oncommit,
-		    TrackedOpRef osd_op = TrackedOpRef());
+                    TrackedOpRef osd_op = TrackedOpRef()) override;
   /// End protected by finisher_lock
 
   /*
@@ -388,6 +388,8 @@ private:
     return ROUND_UP_TO(sizeof(header), block_size);
   }
 
+  ZTracer::Endpoint trace_endpoint;
+
  public:
   FileJournal(uuid_d fsid, Finisher *fin, Cond *sync_cond, const char *f, bool dio=false, bool ai=true, bool faio=false) :
     Journal(fsid, fin, sync_cond),
@@ -421,7 +423,8 @@ private:
     write_stop(true),
     aio_stop(true),
     write_thread(this),
-    write_finish_thread(this) {
+    write_finish_thread(this),
+    trace_endpoint("0.0.0.0", 0, "FileJournal") {
 
       if (aio && !directio) {
         derr << "FileJournal::_open_any: aio not supported without directio; disabling aio" << dendl;
