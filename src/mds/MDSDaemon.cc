@@ -993,10 +993,28 @@ void MDSDaemon::suicide()
 
   clean_up_admin_socket();
 
+  // Inform MDS we are going away, then shut down beacon
   beacon.set_want_state(mdsmap, MDSMap::STATE_DNE);
+  if (!mdsmap->is_dne_gid(mds_gid_t(monc->get_global_id()))) {
+    // Notify the MDSMonitor that we're dying, so that it doesn't have to
+    // wait for us to go laggy.  Only do this if we're actually in the
+    // MDSMap, because otherwise the MDSMonitor will drop our message.
+    beacon.send_and_wait(1);
+  }
+  beacon.shutdown();
+
+  timer.shutdown();
 
   if (mds_rank) {
     mds_rank->shutdown();
+  } else {
+
+    if (objecter->initialized.read()) {
+      objecter->shutdown();
+    }
+
+    monc->shutdown();
+    messenger->shutdown();
   }
 }
 
