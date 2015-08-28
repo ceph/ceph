@@ -697,8 +697,8 @@ void OSDService::send_message_osd_cluster(int peer, Message *m, epoch_t from_epo
     return;
   }
   const entity_inst_t& peer_inst = next_map->get_cluster_inst(peer);
-  Connection *peer_con = osd->cluster_messenger->get_connection(peer_inst).get();
-  share_map_peer(peer, peer_con, next_map);
+  ConnectionRef peer_con = osd->cluster_messenger->get_connection(peer_inst);
+  share_map_peer(peer, peer_con.get(), next_map);
   peer_con->send_message(m);
   release_map(next_map);
 }
