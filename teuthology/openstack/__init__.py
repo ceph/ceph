@@ -442,13 +442,16 @@ ssh access   : ssh {identity}{username}@{ip} # logs in /usr/share/nginx/html
             upload = '--archive-upload ' + self.args.archive_upload
         else:
             upload = ''
+        clone = teuth_config.openstack['clone']
         log.debug("OPENRC = " + openrc + " " +
                   "TEUTHOLOGY_USERNAME = " + self.username + " " +
+                  "CLONE_OPENSTACK = " + clone + " " +
                   "UPLOAD = " + upload + " " +
                   "NWORKERS = " + str(self.args.simultaneous_jobs))
         content = (template.
                    replace('OPENRC', openrc).
                    replace('TEUTHOLOGY_USERNAME', self.username).
+                   replace('CLONE_OPENSTACK', clone).
                    replace('UPLOAD', upload).
                    replace('NWORKERS', str(self.args.simultaneous_jobs)))
         open(path, 'w').write(content)

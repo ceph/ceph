@@ -59,6 +59,7 @@ lab_domain: $labdomain
 max_job_time: 14400 # 4 hours
 teuthology_path: .
 openstack:
+  clone: git clone -b wip-6502-openstack-v3 http://github.com/dachary/teuthology
   user-data: teuthology/openstack/openstack-{os_type}-{os_version}-user-data.txt
   ip: $ip
   nameserver: $nameserver

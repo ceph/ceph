@@ -114,6 +114,12 @@ Here is a sample configuration with many of the options set and documented::
     #
     openstack:
 
+      # The teuthology-openstack command will clone teuthology with
+      # this command for the purpose of deploying teuthology from
+      # scratch and run workers listening on the openstack tube
+      #
+      clone: git clone -b wip-6502-openstack-v3 http://github.com/dachary/teuthology
+
       # The path to the user-data file used when creating a target. It can have
       # the {os_type} and {os_version} placeholders which are replaced with
       # the value of --os-type and --os-version. No instance of a give {os_type}
