@@ -230,7 +230,8 @@ bool CephContext::check_experimental_feature_enabled(const std::string& feat,
 						     std::ostream *message)
 {
   ceph_spin_lock(&_feature_lock);
-  bool enabled = _experimental_features.count(feat);
+  bool enabled = (_experimental_features.count(feat) ||
+		  _experimental_features.count("*"));
   ceph_spin_unlock(&_feature_lock);
 
   if (enabled) {
