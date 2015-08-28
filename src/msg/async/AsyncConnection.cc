@@ -178,7 +178,7 @@ AsyncConnection::AsyncConnection(CephContext *cct, AsyncMessenger *m, EventCente
     write_lock("AsyncConnection::write_lock"), can_write(NOWRITE),
     open_write(false), keepalive(false), lock("AsyncConnection::lock"), recv_buf(NULL),
     recv_max_prefetch(MIN(msgr->cct->_conf->ms_tcp_prefetch_max_size, TCP_PREFETCH_MIN_SIZE)),
-    recv_start(0), recv_end(0), got_bad_auth(false), reconnect(false), authorizer(NULL), replacing(false),
+    recv_start(0), recv_end(0), got_bad_auth(false), authorizer(NULL), replacing(false),
     is_reset_from_peer(false), once_ready(false), state_buffer(NULL), state_offset(0), net(cct), center(c)
 {
   read_handler.reset(new C_handle_read(this));
@@ -978,13 +978,6 @@ int AsyncConnection::_process_connection()
 
     case STATE_CONNECTING_RE:
       {
-        if (reconnect == false) {
-          reconnect = true;
-          break;
-        }
-
-        reconnect = false;
-
         r = net.reconnect(get_peer_addr(), sd);
         if (r < 0) {
           goto fail;
@@ -2137,7 +2130,9 @@ void AsyncConnection::fault()
       if (backoff > async_msgr->cct->_conf->ms_max_backoff)
         backoff.set_from_double(async_msgr->cct->_conf->ms_max_backoff);
     }
-    state = STATE_CONNECTING;
+
+    if (state != STATE_CONNECTING_RE)
+      state = STATE_CONNECTING;
     ldout(async_msgr->cct, 10) << __func__ << " waiting " << backoff << dendl;
   }
 

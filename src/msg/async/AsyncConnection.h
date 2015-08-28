@@ -270,7 +270,6 @@ class AsyncConnection : public Connection {
   bufferlist front, middle, data;
   ceph_msg_connect connect_msg;
   // Connecting state
-  bool reconnect;
   bool got_bad_auth;
   AuthAuthorizer *authorizer;
   ceph_msg_connect_reply connect_reply;
