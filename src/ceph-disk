@@ -34,7 +34,7 @@ import time
 import shlex
 import stat
 import math
-from ftplib import FTP
+from ftplib import FTP_TLS
 
 """
 Prepare:
@@ -997,17 +997,32 @@ def create_dmcrypt_key(_uuid, key_size, key_dir, luks):
     except:
         raise Error('unable to read or create dm-crypt key', path)
 
-    key_server = get_global_conf('dmcrypt_key_server')
-    if key_server:
-        ftp = FTP(key_server)
-        try:
-            ftp.login()
-            ftp.cwd('upload')
-            ftp.storbinary('STOR ' + _uuid, open(path))
-            return
-        finally:
-            # remember to delete the key file in caller function
-            ftp.quit()
+    service = get_global_conf("key_store_service")
+    if service == None:
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT,
+                     stat.S_IRUSR | stat.S_IWUSR)
+        assert os.write(fd, key) == len(key)
+        os.close(fd)
+        LOG.debug('Keys are being store locally.')
+        return
+    elif service == 'ftps':
+        key_server = get_global_conf('dmcrypt_key_server')
+        if key_server:
+            ftp = FTP_TLS(key_server)
+            try:
+                ftp.login()
+                ftp.cwd('upload')
+                ftp.storbinary('STOR ' + _uuid, open(path))
+                return
+            finally:
+                ftp.quit()
+    elif service == 'deo':
+        LOG.debug('Deo is used an does not need any further actions')
+        return
+    elif service == 'https':
+        raise Error(service + 'is not implemented yet.')
+    else:
+        raise Error(service + 'is either missspelled or not supported yet.')
 
 
 def dmcrypt_retrieve_key(uuid, key_dir, luks):
@@ -1025,36 +1040,28 @@ def dmcrypt_retrieve_key(uuid, key_dir, luks):
     if os.path.exists(local_key_path):
         return open(local_key_path, 'rb').read()
 
-    key_handling_service = get_global_conf("key_store_service")
-    return retrieve_key_with_service(key_handling_service, uuid)
-
-
-def retrieve_key_with_service(service, uuid):
+    service = get_global_conf("key_store_service")
     if service == 'ftps':
-        return get_key_via_ftp(uuid)
+        dmcrypt_key_server = get_global_conf("dmcrypt_key_server")
+        if dmcrypt_key_server:
+            ftp = FTP_TLS(dmcrypt_key_server)
+            try:
+                ftp.login()
+                ftp.cwd('upload')
+                key_blocks = []
+                ftp.retrbinary('RETR ' + uuid, key_blocks.append)
+                return ''.join(key_blocks)
+            finally:
+                ftp.quit()
+        else:
+            raise Error('unable to find dmcrypt key file for ' + uuid)
     elif service == 'deo':
-        log.INFO('Deo is used an does not need any further actions')
-        pass
+        LOG.debug('Deo is used an does not need any further actions')
+        return
     elif service == 'https':
         raise Error(service + 'is not implemented yet.')
     else:
         raise Error(service + 'is either missspelled or not supported yet.')
-
-
-def get_key_via_ftp(uuid):
-    dmcrypt_key_server = get_global_conf("dmcrypt_key_server")  
-    if dmcrypt_key_server:
-        ftp = FTP(dmcrypt_key_server)
-        try:
-            ftp.login()
-            ftp.cwd('upload')
-            key_blocks = []
-            ftp.retrbinary('RETR ' + uuid, key_blocks.append)
-            return ''.join(key_blocks)
-        finally:
-            ftp.quit()
-    else:
-        raise Error('unable to find dmcrypt key file for ' + uuid)
 
 
 def dmcrypt_map(
