@@ -310,7 +310,7 @@ function test_activate_dmcrypt() {
     if test $plain = plain ; then
         echo "osd_dmcrypt_type=plain" > $DIR/ceph.conf
     fi
-    
+
     ./ceph-disk $CEPH_DISK_ARGS \
 		prepare --dmcrypt --dmcrypt-key-dir $DIR/keys --osd-uuid=$uuid --journal-uuid=$juuid $to_prepare $journal || return 1
 
@@ -321,11 +321,42 @@ function test_activate_dmcrypt() {
         /sbin/cryptsetup --key-file $DIR/keys/$uuid.luks.key luksOpen $to_activate $uuid
         /sbin/cryptsetup --key-file $DIR/keys/$juuid.luks.key luksOpen ${journal}${journal_p} $juuid
     fi
-    
+
     $timeout $TIMEOUT ./ceph-disk $CEPH_DISK_ARGS \
         activate \
         --mark-init=none \
         /dev/mapper/$uuid || return 1
+
+    test_pool_read_write $uuid || return 1
+}
+
+# similar to test_activate_dmcrypt(), but uses ceph-disk activate to map the
+# cyphertext device, instead of doing it manually.
+function test_activate_map_dmcrypt() {
+    local to_prepare=$1
+    local to_activate=$2
+    local journal=$3
+    local journal_p=$4
+    local uuid=$5
+    local juuid=$6
+    local plain=$7
+
+    $mkdir -p $OSD_DATA
+
+    if test $plain = plain ; then
+        echo "osd_dmcrypt_type=plain" > $DIR/ceph.conf
+    fi
+
+    ./ceph-disk $CEPH_DISK_ARGS \
+		prepare --dmcrypt --dmcrypt-key-dir $DIR/keys --osd-uuid=$uuid \
+		--journal-uuid=$juuid $to_prepare $journal || return 1
+
+    $timeout $TIMEOUT ./ceph-disk $CEPH_DISK_ARGS \
+        activate \
+        --mark-init=none \
+        --dmcrypt \
+        --dmcrypt-key-dir $DIR/keys \
+        $to_activate || return 1
 
     test_pool_read_write $uuid || return 1
 }
@@ -594,6 +625,44 @@ function activate_dmcrypt_plain_dev_body() {
 
 function test_activate_dmcrypt_plain_dev() {
     test_setup_dev_and_run activate_dmcrypt_plain_dev_body
+}
+
+function activate_dmcrypt_map_body() {
+    local disk=$1
+    local journal=$2
+    local newdisk=$3
+    local uuid=$($uuidgen)
+    local juuid=$($uuidgen)
+
+    setup
+    run_mon
+    test_activate_map_dmcrypt $disk ${disk}p1 $journal p1 $uuid $juuid not_plain || return 1
+    kill_daemons
+    umount /dev/mapper/$uuid || return 1
+    teardown
+}
+
+function test_activate_dmcrypt_map() {
+    test_setup_dev_and_run activate_dmcrypt_map_body
+}
+
+function activate_dmcrypt_map_plain_body() {
+    local disk=$1
+    local journal=$2
+    local newdisk=$3
+    local uuid=$($uuidgen)
+    local juuid=$($uuidgen)
+
+    setup
+    run_mon
+    test_activate_map_dmcrypt $disk ${disk}p1 $journal p1 $uuid $juuid plain || return 1
+    kill_daemons
+    umount /dev/mapper/$uuid || return 1
+    teardown
+}
+
+function test_activate_dmcrypt_map_plain() {
+    test_setup_dev_and_run activate_dmcrypt_map_plain_body
 }
 
 function test_find_cluster_by_uuid() {
