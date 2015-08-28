@@ -9720,11 +9720,8 @@ int ReplicatedPG::recover_primary(int max, ThreadPool::TPHandle &handle)
 
     eversion_t need = item.need;
 
-    bool unfound = missing_loc.is_unfound(soid);
-
     dout(10) << "recover_primary "
              << soid << " " << item.need
-	     << (unfound ? " (unfound)":"")
 	     << (missing.is_missing(soid) ? " (missing)":"")
 	     << (missing.is_missing(head) ? " (missing head)":"")
              << (recovering.count(soid) ? " (recovering)":"")
@@ -9800,7 +9797,6 @@ int ReplicatedPG::recover_primary(int max, ThreadPool::TPHandle &handle)
 	    dout(10) << " will pull " << alternate_need << " or " << need
 		     << " from one of " << missing_loc.get_locations(soid)
 		     << dendl;
-	    unfound = false;
 	  }
 	}
 	break;
@@ -9809,8 +9805,6 @@ int ReplicatedPG::recover_primary(int max, ThreadPool::TPHandle &handle)
    
     if (!recovering.count(soid)) {
       if (recovering.count(head)) {
-	++skipped;
-      } else if (unfound) {
 	++skipped;
       } else {
 	int r = recover_missing(
@@ -10304,6 +10298,7 @@ int ReplicatedPG::recover_backfill(
        i != add_to_stat.end();
        ++i) {
     ObjectContextRef obc = get_object_context(*i, false);
+    assert(obc);
     pg_stat_t stat;
     add_object_context_to_pg_stat(obc, &stat);
     pending_backfill_updates[*i] = stat;
