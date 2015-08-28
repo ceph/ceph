@@ -1431,10 +1431,16 @@ void RGWRados::finalize()
 {
   if (finisher) {
     finisher->stop();
-    delete finisher;
   }
   if (need_watch_notify()) {
     finalize_watch();
+  }
+  if (finisher) {
+    /* delete finisher only after cleaning up watches, as watch error path might call
+     * into finisher. We stop finisher before finalizing watch to make sure we don't
+     * actually handle any racing work
+     */
+    delete finisher;
   }
   delete meta_mgr;
   delete data_log;
