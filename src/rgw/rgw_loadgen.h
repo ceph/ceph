@@ -47,6 +47,11 @@ public:
   int send_content_length(RGWClientIO& controller, uint64_t len);
   void flush(RGWClientIO& controller);
 
+  int send_content_length(RGWClientIO& controller,
+                          const RGWDynamicLengthMode) override {
+    return 0;
+  }
+
   RGWEnv& get_env() override {
     return env;
   }

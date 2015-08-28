@@ -160,6 +160,17 @@ int RGWClientIOEngineBufferAware::write_data(const char *buf, int len) {
 }
 
 int RGWClientIOEngineBufferAware::send_content_length(RGWClientIO& controller,
+                                                      const RGWDynamicLengthMode mode)
+{
+  if (RGWDynamicLengthMode::LENGTH_CALCULATE != mode) {
+    /* Deactivate. Buffering is not necessary. */
+    has_content_length = false;
+  }
+
+  return RGWClientIOEngineDecorator::send_content_length(controller, mode);
+}
+
+int RGWClientIOEngineBufferAware::send_content_length(RGWClientIO& controller,
                                                       const uint64_t len) {
   has_content_length = true;
   return RGWClientIOEngineDecorator::send_content_length(controller, len);

@@ -11,6 +11,22 @@
 
 #include "rgw_common.h"
 
+/* Users of RGWClientIO sometimes are simply unable to specify exact
+ * size of theirs output before generating it. In such cases, they
+ * could tell us what to do through sending a special values instead
+ * of number of bytes. */
+enum class RGWDynamicLengthMode {
+  /* Do nothing. Result depends on used frontend as well (in FCGI case)
+   * on HTTP server. HTTP client will be informed where end-of-stream
+   * really is by, most likely, closing socket.
+   * This might limit possibilities to use keep-alive mode! */
+  LENGTH_NONE,
+
+  /* Buffer all incoming data in memory, count it and generate
+   * Content-Length HTTP header. */
+  LENGTH_CALCULATE
+};
+
 class RGWClientIOEngine {
 public:
   virtual ~RGWClientIOEngine() {};
@@ -26,6 +42,8 @@ public:
   virtual int send_100_continue(RGWClientIO& controller) = 0;
   virtual int complete_header(RGWClientIO& controller) = 0;
   virtual int complete_request(RGWClientIO& controller) = 0;
+  virtual int send_content_length(RGWClientIO& controller,
+                                  RGWDynamicLengthMode mode) = 0;
   virtual int send_content_length(RGWClientIO& controller, uint64_t len) = 0;
   virtual RGWEnv& get_env() = 0;
 };
@@ -74,6 +92,11 @@ public:
 
   virtual int complete_request(RGWClientIO& controller) override {
     return decorated->complete_request(controller);
+  }
+
+  virtual int send_content_length(RGWClientIO& controller,
+                                  const RGWDynamicLengthMode mode) override {
+    return decorated->send_content_length(controller, mode);
   }
 
   virtual int send_content_length(RGWClientIO& controller,
@@ -130,7 +153,9 @@ public:
   }
 
   int send_content_length(RGWClientIO& controller,
-                          const uint64_t len) override;
+                          RGWDynamicLengthMode mode) override;
+  int send_content_length(RGWClientIO& controller,
+                          uint64_t len) override;
   int complete_request(RGWClientIO& controller) override;
   int complete_header(RGWClientIO& controller) override;
 };
@@ -216,6 +241,10 @@ public:
 
   virtual int complete_request() {
     return engine->complete_request(*this);
+  }
+
+  virtual int send_content_length(const RGWDynamicLengthMode mode) {
+    return engine->send_content_length(*this, mode);
   }
 
   virtual int send_content_length(const uint64_t len) {
