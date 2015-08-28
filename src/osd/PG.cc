@@ -212,7 +212,9 @@ PG::PG(OSDService *o, OSDMapRef curmap,
   #ifdef PG_DEBUG_REFS
   _ref_id_lock("PG::_ref_id_lock"), _ref_id(0),
   #endif
-  deleting(false), dirty_info(false), dirty_big_info(false),
+  deleting(false),
+  trace_endpoint("0.0.0.0", 0, "PG"),
+  dirty_info(false), dirty_big_info(false),
   info(p),
   info_struct_v(0),
   coll(p), pg_log(cct),
@@ -249,6 +251,11 @@ PG::PG(OSDService *o, OSDMapRef curmap,
 {
 #ifdef PG_DEBUG_REFS
   osd->add_pgid(p, this);
+#endif
+#ifdef WITH_BLKIN
+  std::stringstream ss;
+  ss << "PG " << info.pgid;
+  trace_endpoint.copy_name(ss.str());
 #endif
 }
 

@@ -263,6 +263,7 @@ protected:
 public:
   bool deleting;  // true while in removing or OSD is shutting down
 
+  ZTracer::Endpoint trace_endpoint;
 
   void lock_suspend_timeout(ThreadPool::TPHandle &handle);
   void lock(bool no_lockdep = false) const;
