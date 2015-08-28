@@ -1031,8 +1031,7 @@ public:
    * @returns true if any useful work was accomplished; false otherwise
    */
   virtual bool start_recovery_ops(
-    int max, RecoveryCtx *prctx,
-    ThreadPool::TPHandle &handle,
+    int max, ThreadPool::TPHandle &handle,
     int *ops_begun) = 0;
 
   void purge_strays();
