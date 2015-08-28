@@ -1814,6 +1814,7 @@ OSD::OSD(CephContext *cct_, ObjectStore *store_,
   clog(log_client.create_channel()),
   whoami(id),
   dev_path(dev), journal_path(jdev),
+  trace_endpoint("0.0.0.0", 0, "osd"),
   asok_hook(NULL),
   osd_compat(get_osd_compat_set()),
   osd_tp(cct, "OSD::osd_tp", "tp_osd", cct->_conf->osd_op_threads, "osd_op_threads"),
@@ -1879,6 +1880,11 @@ OSD::OSD(CephContext *cct_, ObjectStore *store_,
                                            cct->_conf->osd_op_history_duration);
   op_tracker.set_history_slow_op_size_and_threshold(cct->_conf->osd_op_history_slow_op_size,
                                                     cct->_conf->osd_op_history_slow_op_threshold);
+#ifdef WITH_BLKIN
+  std::stringstream ss;
+  ss << "osd." << whoami;
+  trace_endpoint.copy_name(ss.str());
+#endif
 }
 
 OSD::~OSD()
@@ -6509,6 +6515,9 @@ void OSD::ms_fast_dispatch(Message *m)
         reqid.name._num, reqid.tid, reqid.inc);
   }
 
+  if (m->trace)
+    op->osd_trace.init("osd op", &trace_endpoint, &m->trace);
+
   // note sender epoch, min req'd epoch
   op->sent_epoch = static_cast<MOSDFastDispatchOp*>(m)->get_map_epoch();
   op->min_epoch = static_cast<MOSDFastDispatchOp*>(m)->get_min_epoch();
@@ -6744,6 +6753,8 @@ void OSD::_dispatch(Message *m)
   case MSG_OSD_RECOVERY_RESERVE:
     {
       OpRequestRef op = op_tracker.create_request<OpRequest, Message*>(m);
+      if (m->trace)
+        op->osd_trace.init("osd op", &trace_endpoint, &m->trace);
       // no map?  starting up?
       if (!osdmap) {
         dout(7) << "no OSDMap, not booted" << dendl;
@@ -8914,6 +8925,9 @@ void OSD::enqueue_op(spg_t pg, OpRequestRef& op, epoch_t epoch)
 	   << " latency " << latency
 	   << " epoch " << epoch
 	   << " " << *(op->get_req()) << dendl;
+  op->osd_trace.event("enqueue op");
+  op->osd_trace.keyval("priority", op->get_req()->get_priority());
+  op->osd_trace.keyval("cost", op->get_req()->get_cost());
   op->mark_queued_for_pg();
   op_shardedwq.queue(make_pair(pg, PGQueueable(op, epoch)));
 }
@@ -8950,6 +8964,7 @@ void OSD::dequeue_op(
     return;
 
   op->mark_reached_pg();
+  op->osd_trace.event("dequeue_op");
 
   pg->do_request(op, handle);
 
