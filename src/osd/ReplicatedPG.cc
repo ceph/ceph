@@ -11131,14 +11131,14 @@ bool ReplicatedPG::agent_work(int start_max, int agent_flush_quota)
       continue;
     }
 
-    if (agent_state->flush_mode != TierAgentState::FLUSH_MODE_IDLE &&
-	agent_flush_quota > 0 && agent_maybe_flush(obc)) {
-      ++started;
-      --agent_flush_quota;
-    }
     if (agent_state->evict_mode != TierAgentState::EVICT_MODE_IDLE &&
 	agent_maybe_evict(obc))
       ++started;
+    else if (agent_state->flush_mode != TierAgentState::FLUSH_MODE_IDLE &&
+             agent_flush_quota > 0 && agent_maybe_flush(obc)) {
+      ++started;
+      --agent_flush_quota;
+    }
     if (started >= start_max) {
       // If finishing early, set "next" to the next object
       if (++p != ls.end())
