@@ -305,11 +305,10 @@ class TestClientRecovery(CephFSTestCase):
 
         # ...when it should complete promptly
         a = time.time()
-        write_blocked.wait()
-        b = time.time()
-        recovery_time = b - a
+        self.wait_until_true(lambda: write_blocked.finished, self.ms_max_backoff * 2)
+        write_blocked.wait()  # Already know we're finished, wait() to raise exception on errors
+        recovery_time = time.time() - a
         log.info("recovery time: {0}".format(recovery_time))
-        self.assertLess(recovery_time, self.ms_max_backoff * 2)
         self.assert_session_state(client_id, "open")
 
     def test_filelock(self):
