@@ -21,6 +21,7 @@
 #include "include/utime.h"
 #include "common/Mutex.h"
 #include "common/histogram.h"
+#include "common/zipkin_trace.h"
 #include "msg/Message.h"
 #include "include/memory.h"
 #include "common/RWLock.h"
@@ -222,6 +223,8 @@ protected:
   virtual void _unregistered() {};
 
 public:
+  ZTracer::Trace osd_trace;
+
   virtual ~TrackedOp() {}
 
   void get() {
