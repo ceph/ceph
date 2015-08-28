@@ -350,7 +350,6 @@ int RGWLib::init()
   rgw_bucket_init(store->meta_mgr);
   rgw_log_usage_init(g_ceph_context, store);
 
-
   mgr = new RGWRESTMgr_Lib();
   mgr->set_logging(true);
   rest.register_default_mgr(mgr);
