@@ -72,6 +72,9 @@ string RGWCoroutinesStack::error_str()
 }
 
 int RGWCoroutinesStack::call(RGWCoroutine *next_op, int ret) {
+  if (!next_op) {
+    return ret;
+  }
   ops.push_back(next_op);
   if (pos != ops.end()) {
     ++pos;
@@ -83,6 +86,9 @@ int RGWCoroutinesStack::call(RGWCoroutine *next_op, int ret) {
 
 void RGWCoroutinesStack::spawn(RGWCoroutine *source_op, RGWCoroutine *op, bool wait)
 {
+  if (!op) {
+    return;
+  }
   op->get();
 
   rgw_spawned_stacks *s = (source_op ? &source_op->spawned : &spawned);
@@ -284,6 +290,9 @@ int RGWCoroutinesManager::run(list<RGWCoroutinesStack *>& stacks)
 
 int RGWCoroutinesManager::run(RGWCoroutine *op)
 {
+  if (!op) {
+    return 0;
+  }
   list<RGWCoroutinesStack *> stacks;
   RGWCoroutinesStack *stack = allocate_stack();
   op->get();
