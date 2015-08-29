@@ -1197,7 +1197,7 @@ public:
     pending[key] = true;
   }
 
-  int finish(const string& key) {
+  RGWCoroutine *finish(const string& key) {
     assert(!pending.empty());
 
     map<string, bool>::iterator iter = pending.begin();
@@ -1214,17 +1214,17 @@ public:
     if (key == first_key && (updates_since_flush >= META_SYNC_UPDATE_MARKER_WINDOW || pending.empty())) {
       return update_marker(high_marker);
     }
-    return 0;
+    return NULL;
   }
 
-  int update_marker(const string& new_marker) {
+  RGWCoroutine *update_marker(const string& new_marker) {
     sync_marker.marker = new_marker;
 
     updates_since_flush = 0;
 
     ldout(store->ctx(), 20) << __func__ << "(): updating marker marker_oid=" << marker_oid << " marker=" << new_marker << dendl;
-    return cr->call(new RGWSimpleRadosWriteCR<rgw_meta_sync_marker>(async_rados, store, store->get_zone_params().log_pool,
-				 marker_oid, sync_marker));
+    return new RGWSimpleRadosWriteCR<rgw_meta_sync_marker>(async_rados, store, store->get_zone_params().log_pool,
+				 marker_oid, sync_marker);
   }
 };
 
@@ -1274,7 +1274,7 @@ public:
       sync_status = retcode;
       yield {
         /* update marker */
-        int ret = marker_tracker->finish(raw_key);
+        int ret = call(marker_tracker->finish(raw_key));
         if (ret < 0) {
           ldout(store->ctx(), 0) << "ERROR: marker_tracker->finish(" << raw_key << ") returned ret=" << ret << dendl;
           return set_state(RGWCoroutine_Error, sync_status);
@@ -1322,19 +1322,29 @@ public:
                                                       marker_tracker(NULL) {
   }
 
+  ~RGWMetaSyncShardCR() {
+    delete marker_tracker;
+  }
+
+  void set_marker_tracker(RGWMetaSyncShardMarkerTrack *mt) {
+    delete marker_tracker;
+    marker_tracker = mt;
+  }
+
   int operate() {
     RGWRESTConn *conn = store->rest_master_conn;
     string section;
     string key;
+    int ret;
 
 #define OMAP_GET_MAX_ENTRIES 100
     int max_entries = OMAP_GET_MAX_ENTRIES;
     reenter(this) {
       if (sync_marker.state == rgw_meta_sync_marker::FullSync) {
         oid = full_sync_index_shard_oid(shard_id);
-	marker_tracker = new RGWMetaSyncShardMarkerTrack(store, http_manager, async_rados, this,
+	set_marker_tracker(new RGWMetaSyncShardMarkerTrack(store, http_manager, async_rados, this,
                                                          RGWMetaSyncStatusManager::shard_obj_name(shard_id),
-                                                         sync_marker);
+                                                         sync_marker));
         do {
           yield return call(new RGWRadosGetOmapKeysCR(store, pool, oid, sync_marker.marker, &entries, max_entries));
           if (retcode < 0) {
@@ -1350,12 +1360,37 @@ public:
 	    if (retcode < 0) {
               return set_state(RGWCoroutine_Error, retcode);
 	    }
+	    sync_marker.marker = iter->first;
           }
         } while ((int)entries.size() == max_entries);
+
+	/* wait for all operations to complete */
+        while (collect(&ret)) {
+	  if (ret < 0) {
+	    ldout(store->ctx(), 0) << "ERROR: a sync operation returned error" << dendl;
+	    /* we should have reported this error */
+#warning deal with error
+	  }
+          yield;
+        }
+
+        yield {
+	  /* update marker to reflect we're done with full sync */
+	  sync_marker.state = rgw_meta_sync_marker::IncrementalSync;
+	  sync_marker.marker.clear();
+	  call(new RGWSimpleRadosWriteCR<rgw_meta_sync_marker>(async_rados, store, store->get_zone_params().log_pool,
+				                                     RGWMetaSyncStatusManager::shard_obj_name(shard_id), sync_marker));
+	}
+	if (retcode < 0) {
+	  ldout(store->ctx(), 0) << "ERROR: failed to set sync marker: retcode=" << retcode << dendl;
+	  return set_state(RGWCoroutine_Error, retcode);
+	}
+	goto incremental_sync;
         // update shard state
-        return set_state(RGWCoroutine_Done, 0);
       } else if (sync_marker.state == rgw_meta_sync_marker::IncrementalSync) {
+incremental_sync:
         int r = incremental_sync();
+        return set_state(RGWCoroutine_Done, 0);
       } else {
         return set_state(RGWCoroutine_Error, -EIO);
       }
@@ -1489,6 +1524,12 @@ int RGWRemoteMetaLog::init_sync_status(int num_shards)
   return run(new RGWInitSyncStatusCoroutine(async_rados, store, obj_ctx, num_shards));
 }
 
+int RGWRemoteMetaLog::set_sync_info(const rgw_meta_sync_info& sync_info)
+{
+  return run(new RGWSimpleRadosWriteCR<rgw_meta_sync_info>(async_rados, store, store->get_zone_params().log_pool,
+				 mdlog_sync_status_oid, sync_info));
+}
+
 int RGWRemoteMetaLog::run_sync(int num_shards, rgw_meta_sync_status& sync_status)
 {
   RGWObjectCtx obj_ctx(store, NULL);
@@ -1513,8 +1554,7 @@ int RGWRemoteMetaLog::run_sync(int num_shards, rgw_meta_sync_status& sync_status
       }
 
       sync_status.sync_info.state = rgw_meta_sync_info::StateSync;
-      r = run(new RGWSimpleRadosWriteCR<rgw_meta_sync_info>(async_rados, store, store->get_zone_params().log_pool,
-				 mdlog_sync_status_oid, sync_status.sync_info));
+      r = set_sync_info(sync_status.sync_info);
       if (r < 0) {
         ldout(store->ctx(), 0) << "ERROR: failed to update sync status" << dendl;
         return r;
