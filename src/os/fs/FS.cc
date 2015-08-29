@@ -24,9 +24,12 @@
 
 #include "FS.h"
 
-#include "XFS.h"
-
 #include "acconfig.h"
+
+#ifdef HAVE_LIBXFS
+#include "XFS.h"
+#endif
+
 #ifdef DARWIN
 #include <sys/mount.h>
 #else
