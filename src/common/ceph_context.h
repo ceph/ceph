@@ -112,14 +112,19 @@ public:
 
   template<typename T>
   void lookup_or_create_singleton_object(T*& p, const std::string &name) {
-    ceph_spin_lock(&_associated_objs_lock);
     if (!_associated_objs.count(name)) {
-      p = new T(this);
-      _associated_objs[name] = reinterpret_cast<AssociatedSingletonObject*>(p);
+      ceph_spin_lock(&_associated_objs_lock);
+      if (!_associated_objs.count(name)) {
+        p = new T(this);
+        _associated_objs[name] = reinterpret_cast<AssociatedSingletonObject*>(p);
+      }
+      else{
+        p = reinterpret_cast<T*>(_associated_objs[name]);
+      }
+      ceph_spin_unlock(&_associated_objs_lock);
     } else {
       p = reinterpret_cast<T*>(_associated_objs[name]);
     }
-    ceph_spin_unlock(&_associated_objs_lock);
   }
   /**
    * get a crypto handler
