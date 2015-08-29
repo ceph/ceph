@@ -67,7 +67,7 @@ libec_isa_la_CXXFLAGS = ${AM_CXXFLAGS} -I $(srcdir)/erasure-code/isa/isa-l/inclu
 libec_isa_la_CCASFLAGS = ${AM_CCASFLAGS} -I $(abs_srcdir)/erasure-code/isa/isa-l/include/
 
 libec_isa_la_LIBADD = $(LIBCRUSH) $(PTHREAD_LIBS) $(EXTRALIBS)
-libec_isa_la_LDFLAGS = ${AM_LDFLAGS} -version-info 2:13:0
+libec_isa_la_LDFLAGS = ${AM_LDFLAGS} -version-info 2:14:0
 if LINUX
 libec_isa_la_LDFLAGS += -export-symbols-regex '.*__erasure_code_.*'
 endif
