@@ -919,7 +919,7 @@ AC_SUBST(BOOST_THREAD_LIBS)
 BOOST_RANDOM_LIBS=""
 saved_LIBS="${LIBS}"
 LIBS=""
-AC_CHECK_LIB(boost_random, main, [],
+AC_CHECK_LIB(boost_random-mt, main, [],
     [AC_CHECK_LIB(boost_random, main, [],
         AC_MSG_FAILURE(["Boost random library not found."]))])
 BOOST_RANDOM_LIBS="${LIBS}"
