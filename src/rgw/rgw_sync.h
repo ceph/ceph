@@ -148,6 +148,7 @@ public:
   int fetch(int num_shards, vector<string>& clone_markers);
   int read_sync_status(rgw_meta_sync_status *sync_status);
   int init_sync_status(int num_shards);
+  int set_sync_info(const rgw_meta_sync_info& sync_info);
   int run_sync(int num_shards, rgw_meta_sync_status& sync_status);
 };
 
@@ -187,7 +188,6 @@ class RGWMetaSyncStatusManager {
 public:
   RGWMetaSyncStatusManager(RGWRados *_store) : store(_store), master_log(store, this), num_shards(0),
                                                ts_to_shard_lock("ts_to_shard_lock") {}
-
   int init();
 
   rgw_meta_sync_status& get_sync_status() { return sync_status; }
