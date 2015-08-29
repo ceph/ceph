@@ -2370,7 +2370,7 @@ def main_activate_journal(args):
                 raise Error('activate-journal --dmcrypt called for invalid dev %s' % (rawdev))
             part_uuid = get_partition_uuid(rawdev)
             dmcrypt_key_path = os.path.join(args.dmcrypt_key_dir, part_uuid)
-            dev = dmcrypt_map(rawdev, dmcrypt_key_path, partd_uuid)
+            dev = dmcrypt_map(rawdev, dmcrypt_key_path, part_uuid)
         else:
             dev = args.dev
 
