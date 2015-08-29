@@ -27,6 +27,9 @@
 ;  OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
+%ifndef _REG_SIZES_ASM_
+%define _REG_SIZES_ASM_
+
 %define EFLAGS_HAS_CPUID        (1<<21)
 %define FLAG_CPUID1_ECX_CLMUL   (1<<1)
 %define FLAG_CPUID1_EDX_SSE2    (1<<26)
@@ -94,3 +97,27 @@
 %define BYTE(reg)  reg %+ b
 
 %define XWORD(reg) reg %+ x
+
+%ifidn __OUTPUT_FORMAT__,elf32
+section .note.GNU-stack noalloc noexec nowrite progbits
+section .text
+%endif
+%ifidn __OUTPUT_FORMAT__,elf64
+section .note.GNU-stack noalloc noexec nowrite progbits
+section .text
+%endif
+%ifidn __OUTPUT_FORMAT__, macho64
+%define elf64 macho64
+%endif
+
+%macro slversion 4
+	section .text
+	global %1_slver_%2%3%4
+	global %1_slver
+	%1_slver:
+	%1_slver_%2%3%4:
+		dw 0x%4
+		db 0x%3, 0x%2
+%endmacro
+
+%endif ; ifndef _REG_SIZES_ASM_
