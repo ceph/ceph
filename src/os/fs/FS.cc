@@ -14,7 +14,6 @@
 
 #include <errno.h>
 #include <sys/types.h>
-#include <sys/vfs.h>
 #include <sys/stat.h>
 #include <fcntl.h>
 
@@ -28,6 +27,12 @@
 #include "XFS.h"
 
 #include "acconfig.h"
+#ifdef DARWIN
+#include <sys/mount.h>
+#else
+#include <sys/vfs.h>
+#endif
+#include "include/compat.h"
 
 // ---------------
 
