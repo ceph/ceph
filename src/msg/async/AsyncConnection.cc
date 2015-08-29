@@ -988,6 +988,8 @@ int AsyncConnection::_process_connection()
           goto fail;
         }
 
+        first_connect = false;
+
         net.set_socket_options(sd);
 
         state = STATE_CONNECTING_WAIT_BANNER;
