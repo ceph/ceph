@@ -64,7 +64,7 @@ def make_release_notes(gh, repo, ref, plaintext):
 
             title = pr['title']
 
-            title_re = '^(common|mon|osd|fs|librbd|rbd|fs|mds|objecter|rgw|build/ops|tests|tools|doc|crush|librados):'
+            title_re = '^(cli|common|mon|osd|fs|librbd|rbd|fs|mds|objecter|rgw|build/ops|tests|tools|doc|crush|librados):'
             if not re.match(title_re, title):
                 print ("ERROR: http://github.com/ceph/ceph/pull/" + str(number) + " title " + title + " does not match " + title_re)
             # Big assumption, do a sanity check in the end, we are
@@ -80,9 +80,9 @@ def make_release_notes(gh, repo, ref, plaintext):
             print (">>>>>>> " + str(len(prs)) + " pr for issue " + issue)
         for (author, title, number) in prs:
             if plaintext:
-                print ("* {title} (#{issue}, {author})".format(title=title, issue=issue, author=author))
+                print (u"* {title} (#{issue}, {author})".format(title=title, issue=issue, author=author))
             else:
-                print ("* {title} (`issue#{issue} <http://tracker.ceph.com/issues/{issue}>`_, `pr#{number} <http://github.com/ceph/ceph/pull/{number}>`_, {author})".format(title=title, issue=issue, author=author, number=number))
+                print (u"* {title} (`issue#{issue} <http://tracker.ceph.com/issues/{issue}>`_, `pr#{number} <http://github.com/ceph/ceph/pull/{number}>`_, {author})".format(title=title, issue=issue, author=author, number=number))
 
 
 if __name__ == "__main__":
