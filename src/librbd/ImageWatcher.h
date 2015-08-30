@@ -219,6 +219,7 @@ namespace librbd {
     void schedule_cancel_async_requests();
     void cancel_async_requests();
 
+    void set_owner_client_id(const WatchNotify::ClientId &client_id);
     WatchNotify::ClientId get_client_id();
 
     void notify_release_lock();

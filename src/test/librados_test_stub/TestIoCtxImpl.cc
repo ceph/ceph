@@ -244,7 +244,8 @@ int TestIoCtxImpl::unwatch(uint64_t handle) {
 
 int TestIoCtxImpl::watch(const std::string& o, uint64_t *handle,
                          librados::WatchCtx *ctx, librados::WatchCtx2 *ctx2) {
-  return m_client->get_watch_notify().watch(o, handle, ctx, ctx2);
+  return m_client->get_watch_notify().watch(o, get_instance_id(), handle, ctx,
+                                            ctx2);
 }
 
 int TestIoCtxImpl::execute_aio_operations(const std::string& oid,

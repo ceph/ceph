@@ -43,7 +43,7 @@ Mutex::Mutex(const std::string &n, bool r, bool ld,
     pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE);
     pthread_mutex_init(&_m,&attr);
     pthread_mutexattr_destroy(&attr);
-    if (g_lockdep)
+    if (lockdep && g_lockdep)
       _register();
   }
   else if (lockdep) {
@@ -75,7 +75,7 @@ Mutex::~Mutex() {
     cct->get_perfcounters_collection()->remove(logger);
     delete logger;
   }
-  if (g_lockdep) {
+  if (lockdep && g_lockdep) {
     lockdep_unregister(id);
   }
 }

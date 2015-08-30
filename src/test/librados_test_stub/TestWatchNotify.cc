@@ -50,7 +50,7 @@ int TestWatchNotify::list_watchers(const std::string& o,
        it != watcher->watch_handles.end(); ++it) {
     obj_watch_t obj;
     strcpy(obj.addr, ":/0");
-    obj.watcher_id = static_cast<int64_t>(it->second.handle);
+    obj.watcher_id = static_cast<int64_t>(it->second.instance_id);
     obj.cookie = it->second.handle;
     obj.timeout_seconds = 30;
     out_watchers->push_back(obj);
@@ -113,12 +113,14 @@ void TestWatchNotify::notify_ack(const std::string& o, uint64_t notify_id,
   notify_handle->cond.Signal();
 }
 
-int TestWatchNotify::watch(const std::string& o, uint64_t *handle,
-                           librados::WatchCtx *ctx, librados::WatchCtx2 *ctx2) {
+int TestWatchNotify::watch(const std::string& o, uint64_t instance_id,
+                           uint64_t *handle, librados::WatchCtx *ctx,
+                           librados::WatchCtx2 *ctx2) {
   SharedWatcher watcher = get_watcher(o);
 
   RWLock::WLocker l(watcher->lock);
   WatchHandle watch_handle;
+  watch_handle.instance_id = instance_id;
   watch_handle.handle = ++m_handle;
   watch_handle.watch_ctx = ctx;
   watch_handle.watch_ctx2 = ctx2;
