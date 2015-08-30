@@ -421,7 +421,8 @@ Description: Ceph distributed file system client library (development files)
 
 Package: radosgw
 Architecture: linux-any
-Depends: ceph-common (= ${binary:Version}), ${misc:Depends}, ${shlibs:Depends}
+Depends: ceph-common (= ${binary:Version}), mime-support,
+         ${misc:Depends}, ${shlibs:Depends}
 Description: REST gateway for RADOS distributed object store
  RADOS is a distributed object store used by the Ceph distributed
  storage system.  This package provides a REST gateway to the
