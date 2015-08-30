@@ -2892,8 +2892,8 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
         << " pool '" << poolstr << "' (" << pool << ")"
         << " object '" << fullobjname << "' ->"
         << " pg " << pgid << " (" << mpgid << ")"
-        << " -> up (" << up << ", p" << up_p << ") acting ("
-        << acting << ", p" << acting_p << ")";
+        << " -> up (" << pg_vector_string(up) << ", p" << up_p << ") acting ("
+        << pg_vector_string(acting) << ", p" << acting_p << ")";
       rdata.append(ds);
     }
   } else if ((prefix == "osd scrub" ||
