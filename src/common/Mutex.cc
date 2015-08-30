@@ -17,14 +17,15 @@
 #include "common/perf_counters.h"
 #include "common/ceph_context.h"
 #include "common/config.h"
+#include "include/stringify.h"
 #include "include/utime.h"
 #include "common/Clock.h"
 
-Mutex::Mutex(const char *n, bool r, bool ld,
+Mutex::Mutex(const std::string &n, bool r, bool ld,
 	     bool bt,
 	     CephContext *cct) :
-  name(n), id(-1), recursive(r), lockdep(ld), backtrace(bt),
-  nlock(0), locked_by(0), cct(cct), logger(0)
+  name(n), id(-1), recursive(r), lockdep(ld), backtrace(bt), nlock(0),
+  locked_by(0), cct(cct), logger(0)
 {
   if (cct) {
     PerfCountersBuilder b(cct, string("mutex-") + name,
@@ -73,6 +74,9 @@ Mutex::~Mutex() {
   if (cct && logger) {
     cct->get_perfcounters_collection()->remove(logger);
     delete logger;
+  }
+  if (g_lockdep) {
+    lockdep_unregister(id);
   }
 }
 
