@@ -63,14 +63,12 @@ BuildRequires:	python-argparse
 BuildRequires:	python-nose
 BuildRequires:	python-requests
 BuildRequires:	python-virtualenv
+BuildRequires:	snappy-devel
 BuildRequires:	util-linux
 BuildRequires:	xfsprogs
 BuildRequires:	xfsprogs-devel
 BuildRequires:	xmlstarlet
 BuildRequires:	yasm
-%if 0%{?rhel} || 0%{?centos} || 0%{?fedora} || 0%{?suse_version}
-BuildRequires:	snappy-devel
-%endif
 %if 0%{?suse_version}
 BuildRequires:	net-tools
 %endif
