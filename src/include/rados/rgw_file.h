@@ -14,6 +14,8 @@
 #ifndef RGW_FILE_H
 #define RGW_FILE_H
 
+#include <stdint.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -43,7 +45,7 @@ int rgw_check_handle(const struct rgw_file_handle *handle);
  attach rgw namespace
 */
 int rgw_mount(const char *uid, const char *key, const char *secret,
-	      const struct rgw_file_handle *handle);
+	      struct rgw_file_handle *handle);
 
 /*
   create a new dirctory
@@ -56,7 +58,6 @@ int rgw_create_directory(const struct rgw_file_handle *parent_handle,
 */
 int rgw_create_file(const struct rgw_file_handle *parent_handle,
 		    const char* name);
-
 
 /*
   move/rename a new file
@@ -73,7 +74,7 @@ int rgw_unlink(const struct rgw_file_handle *parent_handle, const char* path);
   lookup a directory or file
 */
 int rgw_lookup(const struct rgw_file_handle *parent_handle, const char *path,
-	       uint64_t *handle);
+	       struct rgw_file_handle *handle);
 
 /*
   read  directory content

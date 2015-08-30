@@ -37,7 +37,9 @@ public:
 
   /* generate dynamic handle currently unique per librgw object
    */
-  uint64_t get_new_handle(const string& url);
+  uint64_t get_handle(const string& url);
+
+  int check_handle(uint64_t handle);
 
   int get_uri(const uint64_t handle, string &uri);
 
