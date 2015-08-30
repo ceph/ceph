@@ -46,9 +46,12 @@
 
 #include <errno.h>
 #include <sstream>
+#include <string>
 #include <string.h>
 
 #define dout_subsys ceph_subsys_rgw
+
+using std::string;
 
 int librgw_create(librgw_t* rgw, const char* const id)
 {
@@ -419,7 +422,7 @@ int RGWLib::get_uri(const uint64_t handle, string& uri)
   return -1;
 }
 
-uint64_t RGWLib::get_new_handle(const string& uri)
+uint64_t RGWLib::get_handle(const string& uri)
 {
   ceph::unordered_map<string, uint64_t>::iterator i =
     allocated_objects_handles.find(uri);
@@ -431,6 +434,13 @@ uint64_t RGWLib::get_new_handle(const string& uri)
   handles_map[last_allocated_handle.read()] = uri;
 
   return last_allocated_handle.read();
+}
+
+int RGWLib::check_handle(uint64_t handle)
+{
+  ceph::unordered_map<uint64_t, string>::const_iterator i =
+    handles_map.find(handle);
+  return (i != handles_map.end());
 }
 
 int RGWLibIO::set_uid(RGWRados *store, const rgw_user& uid)
@@ -491,117 +501,6 @@ void RGWLibIO::init_env(CephContext* cct)
   char port_buf[16];
   snprintf(port_buf, sizeof(port_buf), "%d", re->port);
   env.set("SERVER_PORT", port_buf);
-}
-
-int RGWLibIO::send_status(int status, const char *status_name)
-{
-  return 0;
-}
-
-int RGWLibIO::send_100_continue()
-{
-  return 0;
-}
-
-int RGWLibIO::complete_header()
-{
-  return 0;
-}
-
-int RGWLibIO::send_content_length(uint64_t len)
-{
-  return 0;
-}
-
-int RGWLib::get_userinfo_by_uid(const string& uid, RGWUserInfo& info)
-{
-  atomic_t failed;
-  fe->gen_request("GET", uid, 4096, true, &failed);
-  return failed.read();
-}
-
-int RGWLib::get_user_acl()
-{
-  return 0;
-}
-
-int RGWLib::set_user_permissions()
-{
-  return 0;
-}
-
-int RGWLib::set_user_quota()
-{
-  return 0;
-}
-
-int RGWLib::get_user_quota()
-{
-  return 0;
-}
-
-int RGWLib::get_user_buckets_list()
-{
-  /* need to authanitcate first */
-  atomic_t failed;
-  fe->gen_request("GET", "", 4096, false, &failed);
-  return failed.read();
-
-}
-
-int RGWLib::get_bucket_objects_list()
-{
-  return 0;
-}
-
-int RGWLib::create_bucket()
-{
-  return 0;
-}
-
-int RGWLib::delete_bucket()
-{
-  return 0;
-}
-
-int RGWLib::get_bucket_attributes()
-{
-  return 0;
-}
-
-int RGWLib::set_bucket_attributes()
-{
-  return 0;
-}
-
-int RGWLib::create_object()
-{
-  return 0;
-}
-
-int RGWLib::delete_object()
-{
-  return 0;
-}
-
-int RGWLib::write()
-{
-  return 0;
-}
-
-int RGWLib::read()
-{
-  return 0;
-}
-
-int RGWLib::get_object_attributes()
-{
-  return 0;
-}
-
-int RGWLib::set_object_attributes()
-{
-  return 0;
 }
 
 /* global RGW library object */
