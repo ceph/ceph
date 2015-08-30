@@ -35,4 +35,9 @@ Context *AsyncRequest::create_callback_context() {
   return new FunctionContext(boost::bind(&AsyncRequest::complete, this, _1));
 }
 
+Context *AsyncRequest::create_async_callback_context() {
+  return new FunctionContext(boost::bind(&AsyncRequest::async_complete, this,
+                                         _1));;
+}
+
 } // namespace librbd
