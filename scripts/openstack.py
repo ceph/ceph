@@ -66,7 +66,7 @@ and analyze results.
     parser.add_argument(
         '--archive-upload',
         help='rsync destination to upload archives',
-        default='ubuntu@integration.ceph.dachary.org:./',
+        default='ubuntu@teuthology-logs.public.ceph.com:./',
     )
     # copy/pasted from scripts/suite.py
     parser.add_argument(
