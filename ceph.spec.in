@@ -618,11 +618,7 @@ install -m 0644 -D udev/60-ceph-partuuid-workaround.rules $RPM_BUILD_ROOT%{_udev
 %if (0%{?rhel} && 0%{?rhel} < 7)
 install -m 0644 -D udev/95-ceph-osd-alt.rules $RPM_BUILD_ROOT/lib/udev/rules.d/95-ceph-osd.rules
 %else
-%if 0%{?_with_systemd}
-install -m 0644 -D udev/95-ceph-osd.rules.systemd $RPM_BUILD_ROOT/lib/udev/rules.d/95-ceph-osd.rules
-%else
 install -m 0644 -D udev/95-ceph-osd.rules $RPM_BUILD_ROOT/lib/udev/rules.d/95-ceph-osd.rules
-%endif
 %endif
 
 %if 0%{?rhel} >= 7 || 0%{?fedora} || 0%{?suse_version}
