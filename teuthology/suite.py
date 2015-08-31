@@ -265,11 +265,12 @@ def prepare_and_schedule(job_config, suite_repo_path, base_yaml_paths, limit,
     arch = get_arch(job_config.machine_type)
 
     base_args = [
-        os.path.join(os.path.dirname(sys.argv[0]), 'teuthology-schedule'),
         '--name', job_config.name,
         '--num', str(num),
         '--worker', get_worker(job_config.machine_type),
     ]
+    if dry_run:
+        base_args.append('--dry-run')
     if job_config.priority:
         base_args.extend(['--priority', str(job_config.priority)])
     if verbose:
@@ -294,6 +295,7 @@ def prepare_and_schedule(job_config, suite_repo_path, base_yaml_paths, limit,
         arch=arch,
         limit=limit,
         dry_run=dry_run,
+        verbose=verbose,
         filter_in=filter_in,
         filter_out=filter_out,
         subset=subset
@@ -307,9 +309,11 @@ def prepare_and_schedule(job_config, suite_repo_path, base_yaml_paths, limit,
             arg.extend(['--timeout', timeout])
         if dry_run:
             log.info('dry-run: %s' % ' '.join(arg))
-        else:
-            subprocess.check_call(
+            teuthology_schedule(
                 args=arg,
+                dry_run=dry_run,
+                verbose=verbose,
+                log_prefix="Results email: ",
             )
         results_url = get_results_url(job_config.name)
         if results_url:
@@ -492,6 +496,7 @@ def schedule_suite(job_config,
                    arch,
                    limit=0,
                    dry_run=True,
+                   verbose=1,
                    filter_in=None,
                    filter_out=None,
                    subset=None
@@ -599,23 +604,15 @@ def schedule_suite(job_config,
             'Scheduling %s', job['desc']
         )
 
-        if dry_run:
-            # Quote any individual args so that individual commands can be
-            # copied and pasted in order to execute them individually.
-            printable_args = []
-            for item in job['args']:
-                if ' ' in item:
-                    printable_args.append("'%s'" % item)
-                else:
-                    printable_args.append(item)
-            prefix = "dry-run:"
-            if job in jobs_missing_packages:
-                prefix = "dry-run (missing packages):"
-            log.info('%s %s' % (prefix, ' '.join(printable_args)))
-        else:
-            subprocess.check_call(
-                args=job['args'],
-            )
+        log_prefix = ''
+        if dry_run and job in jobs_missing_packages:
+            log_prefix = "Missing Packages: "
+        teuthology_schedule(
+            args=job['args'],
+            dry_run=dry_run,
+            verbose=verbose,
+            log_prefix=log_prefix,
+        )
 
     count = len(jobs_to_schedule)
     missing_count = len(jobs_missing_packages)
@@ -626,6 +623,37 @@ def schedule_suite(job_config,
         log.info('Suite %s in %s scheduled %d jobs with missing packages.' %
                  (suite_name, path, missing_count))
     return count
+
+
+def teuthology_schedule(args, verbose, dry_run, log_prefix=''):
+    """
+    Run teuthology-schedule to schedule individual jobs.
+
+    If --dry-run has been passed but --verbose has been passed just once, don't
+    actually run the command - only print what would be executed.
+
+    If --dry-run has been passed and --verbose has been passed multiple times,
+    do both.
+    """
+    exec_path = os.path.join(
+        os.path.dirname(sys.argv[0]),
+        'teuthology-schedule')
+    args.insert(0, exec_path)
+    if dry_run:
+        # Quote any individual args so that individual commands can be copied
+        # and pasted in order to execute them individually.
+        printable_args = []
+        for item in args:
+            if ' ' in item:
+                printable_args.append("'%s'" % item)
+            else:
+                printable_args.append(item)
+        log.info('{0}{1}'.format(
+            log_prefix,
+            ' '.join(printable_args),
+        ))
+    if not dry_run or (dry_run and verbose > 1):
+        subprocess.check_call(args=args)
 
 
 def get_install_task_flavor(job_config):
