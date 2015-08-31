@@ -223,6 +223,11 @@ add_executable(kvstorebench
 target_link_libraries(kvstorebench librados global ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS}
   ${TCMALLOC_LIBS})
 
+# ceph_objectstore_bench
+add_executable(ceph_objectstore_bench objectstore_bench.cc
+  $<TARGET_OBJECTS:heap_profiler_objs>)
+target_link_libraries(ceph_objectstore_bench global os ${TCMALLOC_LIBS})
+
 ## System tests
 
 # systest
@@ -898,6 +903,12 @@ target_link_libraries(unittest_subprocess
   ${TCMALLOC_LIBS}
   ${UNITTEST_LIBS})
 set_target_properties(unittest_subprocess PROPERTIES COMPILE_FLAGS
+  ${UNITTEST_CXX_FLAGS})
+
+# unittest_pageset
+add_executable(unittest_pageset test_pageset.cc)
+target_link_libraries(unittest_pageset ${UNITTEST_LIBS})
+set_target_properties(unittest_pageset PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 
 if(${WITH_RADOSGW})

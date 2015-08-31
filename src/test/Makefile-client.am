@@ -68,6 +68,10 @@ ceph_omapbench_SOURCES = test/omap_bench.cc
 ceph_omapbench_LDADD = $(LIBRADOS) $(CEPH_GLOBAL)
 bin_DEBUGPROGRAMS += ceph_omapbench
 
+ceph_objectstore_bench_SOURCES = test/objectstore_bench.cc
+ceph_objectstore_bench_LDADD = $(LIBOS) $(CEPH_GLOBAL)
+bin_DEBUGPROGRAMS += ceph_objectstore_bench
+
 if LINUX
 ceph_kvstorebench_SOURCES = \
 	test/kv_store_bench.cc \
