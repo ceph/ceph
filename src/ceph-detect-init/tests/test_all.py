@@ -52,9 +52,15 @@ class TestCephDetectInit(testtools.TestCase):
             self.assertEqual('upstart', debian.choose_init())
 
     def test_fedora(self):
+        with mock.patch('ceph_detect_init.fedora.release',
+                        '22'):
+            self.assertEqual('systemd', fedora.choose_init())
         self.assertEqual('sysvinit', fedora.choose_init())
 
     def test_rhel(self):
+        with mock.patch('ceph_detect_init.rhel.release',
+                        '7.0'):
+            self.assertEqual('systemd', rhel.choose_init())
         self.assertEqual('sysvinit', rhel.choose_init())
 
     def test_suse(self):
