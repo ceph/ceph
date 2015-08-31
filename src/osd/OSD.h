@@ -1799,6 +1799,7 @@ private:
   void handle_osd_map(class MOSDMap *m);
   void note_down_osd(int osd);
   void note_up_osd(int osd);
+  void set_pool_last_map_marked_full(OSDMap *o, epoch_t &e);
   
   bool advance_pg(
     epoch_t advance_to, PG *pg,
