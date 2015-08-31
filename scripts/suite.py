@@ -6,7 +6,7 @@ from teuthology.config import config
 
 doc = """
 usage: teuthology-suite --help
-       teuthology-suite --suite <suite> [options] [<config_yaml>...]
+       teuthology-suite [-v | -vv ]--suite <suite> [options] [<config_yaml>...]
 
 Run a suite of ceph integration tests. A suite is a directory containing
 facets. A facet is a directory containing config snippets. Running a suite
@@ -20,7 +20,9 @@ runs the dumpling-x facet of the upgrade suite.
 Miscellaneous arguments:
   -h, --help                  Show this help message and exit
   -v, --verbose               Be more verbose
-  --dry-run                   Do a dry run; do not schedule anything
+  --dry-run                   Do a dry run; do not schedule anything. In
+                              combination with -vv, also call
+                              teuthology-schedule with --dry-run.
 
 Standard arguments:
   <config_yaml>               Optional extra job yaml to include
