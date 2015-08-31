@@ -428,8 +428,11 @@ ceph_test_libcephfs_SOURCES = \
 	test/libcephfs/test.cc \
 	test/libcephfs/readdir_r_cb.cc \
 	test/libcephfs/caps.cc \
-	test/libcephfs/multiclient.cc \
-	test/libcephfs/flock.cc
+	test/libcephfs/multiclient.cc
+if LINUX
+ceph_test_libcephfs_SOURCES += test/libcephfs/flock.cc
+endif # LINUX
+
 ceph_test_libcephfs_LDADD = $(LIBCEPHFS) $(UNITTEST_LDADD)
 ceph_test_libcephfs_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_test_libcephfs
@@ -439,7 +442,6 @@ unittest_encoding_SOURCES = test/encoding.cc
 ceph_test_c_headers_SOURCES = test/test_c_headers.c
 ceph_test_c_headers_LDADD = $(LIBRADOS) $(LIBCEPHFS)
 ceph_test_c_headers_CFLAGS = $(AM_CFLAGS) \
-	-Werror \
 	-Wstrict-prototypes \
 	-Wredundant-decls \
 	-Wall \
@@ -454,9 +456,11 @@ ceph_test_c_headers_CFLAGS = $(AM_CFLAGS) \
 	-Wformat-y2k \
 	-Winit-self \
 	-Wignored-qualifiers \
-	-Wold-style-declaration \
 	-Wold-style-definition \
 	-Wtype-limits
+if !CLANG
+ceph_test_c_headers_CFLAGS += -Werror -Wold-style-declaration
+endif # !CLANG
 bin_DEBUGPROGRAMS += ceph_test_c_headers
 
 endif # WITH_CEPHFS
