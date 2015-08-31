@@ -376,14 +376,18 @@ def build_ceph_cluster(ctx, config):
             return
         log.info('Stopping ceph...')
         ctx.cluster.run(args=['sudo', 'stop', 'ceph-all', run.Raw('||'),
-                              'sudo', 'service', 'ceph', 'stop' ])
+                              'sudo', 'service', 'ceph', 'stop', run.Raw('||'),
+                              'sudo', 'systemctl', 'stop', 'ceph.target'])
 
         # Are you really not running anymore?
         # try first with the init tooling
         # ignoring the status so this becomes informational only
-        ctx.cluster.run(args=['sudo', 'status', 'ceph-all', run.Raw('||'),
-                              'sudo', 'service',  'ceph', 'status'],
-                              check_status=False)
+        ctx.cluster.run(
+            args=[
+                'sudo', 'status', 'ceph-all', run.Raw('||'),
+                'sudo', 'service',  'ceph', 'status', run.Raw('||'),
+                'sudo', 'systemctl', 'status', 'ceph.target'],
+            check_status=False)
 
         # and now just check for the processes themselves, as if upstart/sysvinit
         # is lying to us. Ignore errors if the grep fails
@@ -555,11 +559,10 @@ def cli_test(ctx, config):
         yield
     finally:
         log.info("cleaning up")
-        if system_type == 'deb':
-            remote.run(args=['sudo', 'stop','ceph-all'],check_status=False)
-            remote.run(args=['sudo', 'service','ceph', '-a', 'stop'],check_status=False)
-        else:
-            remote.run(args=['sudo', '/etc/init.d/ceph', '-a', 'stop'],check_status=False)
+        ctx.cluster.run(args=['sudo', 'stop', 'ceph-all', run.Raw('||'),
+                              'sudo', 'service', 'ceph', 'stop', run.Raw('||'),
+                              'sudo', 'systemctl', 'stop', 'ceph.target'],
+                        check_status=False)
         time.sleep(4)
         for i in range(3):
             umount_dev = "{d}1".format(d=devs[i])
