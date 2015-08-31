@@ -232,6 +232,15 @@ class ExecutableNotFound(CephDiskException):
 
 ####### utils
 
+def is_systemd():
+    """
+    Detect whether systemd is running
+    """
+    with file('/proc/1/comm', 'rb') as i:
+        for line in i:
+            if 'systemd' in line:
+                return True
+    return False
 
 def maybe_mkdir(*a, **kw):
     """
@@ -2604,6 +2613,22 @@ def get_dev_fs(dev):
     else:
         return None
 
+def get_dev_udev_properties(dev):
+    out, _ = command(
+        [
+            '/sbin/blkid',
+            '-o',
+            'udev',
+            '-p',
+            dev,
+        ]
+    )
+    p = {}
+    for line in out.split('\n'):
+        if line:
+            (key, value) = line.split('=')
+            p[key] = value
+    return p    
 
 def split_dev_base_partnum(dev):
     if is_mpath(dev):
@@ -2943,6 +2968,184 @@ def main_zap(args):
 
 ###########################
 
+def main_trigger(args):
+    if is_systemd() and not args.sync:
+        service='ceph-disk@{dev}.service'.format(
+            cmd=cmd,
+            dev=dev)
+        LOG.info('systemd detected, triggering %s' % service)
+        command(
+            [
+                'systemctl',
+                '--no-block',
+                'start',
+                service,
+            ]
+        )
+        return
+
+    p = get_dev_udev_properties(args.dev)
+
+    if 'ID_PART_ENTRY_TYPE' not in p:
+        raise Error('no ID_PART_ENTRY_TYPE for %s' % args.dev)
+    parttype = p['ID_PART_ENTRY_TYPE']
+
+    if 'ID_PART_ENTRY_UUID' not in p:
+        raise Error('no ID_PART_ENTRY_UUID for %s' % args.dev)
+    partid = p['ID_PART_ENTRY_UUID']
+    
+    if parttype in [OSD_UUID, MPATH_OSD_UUID]:
+        trigger_cmd('activate', args.dev)
+    elif parttype in [JOURNAL_UUID, MPATH_JOURNAL_UUID]:
+        trigger_cmd('activate-journal', args.dev)
+
+        # journals are easy: map, chown, activate-journal
+    elif parttype == DMCRYPT_JOURNAL_UUID:
+        command(
+            [
+                '/sbin/cryptsetup',
+                '--key-file',
+                '/etc/ceph/dmcrypt-keys/{partid}'.format(partid=partid),
+                '--key-size',
+                '256',
+                'create',
+                partid,
+                args.dev,
+            ]
+        )
+        newdev='/dev/mapper/' + partid
+        count=0
+        while not os.path.exists(newdev) and count <= 10:
+            time.sleep(1)
+            count += 1
+        command(
+            [
+                '/bin/chown',
+                'ceph:ceph',
+                newdev,
+            ]
+        )
+        command(
+            [
+                '/usr/sbin/ceph-disk',
+                'activate-journal',
+                newdev,
+            ]
+            )
+    elif parttype == DMCRYPT_LUKS_JOURNAL_UUID:
+        command(
+            [
+                '/sbin/cryptsetup',
+                '--key-file',
+                '/etc/ceph/dmcrypt-keys/{partid}.luks.key'.format(
+                    partid=partid),
+                'luksOpen',
+                args.dev,
+                partid,
+            ]
+        )
+        newdev='/dev/mapper/' + partid
+        count=0
+        while not os.path.exists(newdev) and count <= 10:
+            time.sleep(1)
+            count += 1
+        command(
+            [
+                '/bin/chown',
+                'ceph:ceph',
+                newdev,
+            ]
+        )
+        command(
+            [
+                '/usr/sbin/ceph-disk',
+                'activate-journal',
+                newdev,
+            ]
+            )
+
+        # osd data: map, activate
+    elif parttype == DMCRYPT_OSD_UUID:
+        command(
+            [
+                '/sbin/cryptsetup',
+                '--key-file',
+                '/etc/ceph/dmcrypt-keys/{partid}'.format(partid=partid),
+                '--key-size',
+                '256',
+                'create',
+                partid,
+                args.dev,
+            ]
+        )
+        newdev='/dev/mapper/' + partid
+        count=0
+        while not os.path.exists(newdev) and count <= 10:
+            time.sleep(1)
+            count += 1
+        command(
+            [
+                '/usr/sbin/ceph-disk',
+                'activate',
+                newdev,
+            ]
+        )
+
+    elif parttype == DMCRYPT_LUKS_OSD_UUID:
+        command(
+            [
+                '/sbin/cryptsetup',
+                '--key-file',
+                '/etc/ceph/dmcrypt-keys/{partid}.luks.key'.format(
+                    partid=partid),
+                'luksOpen',
+                args.dev,
+                partid,
+            ]
+        )
+        newdev='/dev/mapper/' + partid
+        count=0
+        while not os.path.exists(newdev) and count <= 10:
+            time.sleep(1)
+            count += 1
+        command(
+            [
+                '/usr/sbin/ceph-disk',
+                'activate',
+                newdev,
+            ]
+        )
+
+    else:
+        raise Error('unrecognized partition type %s' % parttype)
+
+        
+def trigger_cmd(cmd, dev, args=[]):
+    if is_systemd():
+        service='ceph-disk-{cmd}@{dev}.service'.format(
+            cmd=cmd,
+            dev=dev)
+        LOG.info('systemd detected, triggering %s' % service)
+        command(
+            [
+                'systemctl',
+                '--no-block',
+                'start',
+                service,
+            ]
+        )
+    else:
+        # run synchronously
+        LOG.info('systemd not detected, running ceph-disk synchronously')
+        command(
+            [
+                'ceph-disk',
+                cmd,
+                dev,
+            ] + args
+        )
+
+###########################
 
 def setup_statedir(dir):
     # XXX The following use of globals makes linting
@@ -3021,9 +3224,26 @@ def parse_args(argv):
     make_list_parser(subparsers)
     make_suppress_parser(subparsers)
     make_zap_parser(subparsers)
+    make_trigger_parser(subparsers)
 
     args = parser.parse_args(argv)
     return args
+
+def make_trigger_parser(subparsers):
+    trigger_parser = subparsers.add_parser('trigger', help='Trigger an event (caled by udev)')
+    trigger_parser.add_argument(
+        'dev',
+        help=('device'),
+        )
+    trigger_parser.add_argument(
+        '--sync',
+        action='store_true', default=None,
+        help=('do operation synchronously; do not trigger systemd'),
+        )
+    trigger_parser.set_defaults(
+        func=main_trigger,
+        )
+    return trigger_parser
 
 def make_prepare_parser(subparsers):
     prepare_parser = subparsers.add_parser('prepare', help='Prepare a directory or disk for a Ceph OSD')
