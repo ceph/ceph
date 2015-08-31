@@ -23,6 +23,7 @@
 #include <fcntl.h>
 #include <sys/utsname.h>
 #include <sys/uio.h>
+#include <sys/xattr.h>
 
 #if defined(__linux__)
 #include <linux/falloc.h>
@@ -94,6 +95,7 @@ using namespace std;
 #if HAVE_GETGROUPLIST
 #include <grp.h>
 #include <pwd.h>
+#include <unistd.h>
 #endif
 
 #undef dout_prefix
@@ -4581,7 +4583,11 @@ int Client::check_permissions(Inode *in, int flags, int uid, int gid)
       return -EACCES;
     }
     while (1) {
+#if defined(__APPLE__)
+      if (getgrouplist(pw->pw_name, gid, (int *)sgids, &sgid_count) == -1) {
+#else
       if (getgrouplist(pw->pw_name, gid, sgids, &sgid_count) == -1) {
+#endif
         // we need to resize the group list and try again
         sgids = (gid_t*)realloc(sgids, sgid_count * sizeof(gid_t));
         if (sgids == NULL) {
@@ -8962,8 +8968,13 @@ int Client::_setxattr(Inode *in, const char *name, const void *value,
   if (vxattr && vxattr->readonly)
     return -EOPNOTSUPP;
 
+  int xattr_flags = 0;
   if (!value)
-    flags |= CEPH_XATTR_REMOVE;
+    xattr_flags |= CEPH_XATTR_REMOVE;
+  if (flags & XATTR_CREATE)
+    xattr_flags |= CEPH_XATTR_CREATE;
+  if (flags & XATTR_REPLACE)
+    xattr_flags |= CEPH_XATTR_REPLACE;
 
   MetaRequest *req = new MetaRequest(CEPH_MDS_OP_SETXATTR);
   filepath path;
@@ -8971,7 +8982,7 @@ int Client::_setxattr(Inode *in, const char *name, const void *value,
   req->set_filepath(path);
   req->set_string2(name);
   req->set_inode(in);
-  req->head.args.setxattr.flags = flags;
+  req->head.args.setxattr.flags = xattr_flags;
 
   bufferlist bl;
   bl.append((const char*)value, size);

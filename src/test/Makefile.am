@@ -152,7 +152,9 @@ check_TESTPROGRAMS += unittest_addrs
 unittest_blkdev_SOURCES = test/common/test_blkdev.cc
 unittest_blkdev_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 unittest_blkdev_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
+if LINUX
 check_TESTPROGRAMS += unittest_blkdev
+endif
 
 unittest_bloom_filter_SOURCES = test/common/test_bloom_filter.cc
 unittest_bloom_filter_CXXFLAGS = $(UNITTEST_CXXFLAGS)

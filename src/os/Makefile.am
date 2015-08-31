@@ -8,7 +8,6 @@ if ENABLE_SERVER
 libos_la_SOURCES = \
 	os/chain_xattr.cc \
 	os/fs/FS.cc \
-	os/fs/XFS.cc \
 	os/DBObjectMap.cc \
 	os/GenericObjectMap.cc \
 	os/FileJournal.cc \
@@ -31,7 +30,9 @@ libos_la_SOURCES += os/BtrfsFileStoreBackend.cc
 endif
 
 if WITH_LIBXFS
-libos_la_SOURCES += os/XfsFileStoreBackend.cc
+libos_la_SOURCES += \
+    os/fs/XFS.cc \
+    os/XfsFileStoreBackend.cc
 endif
 
 if WITH_LIBZFS

@@ -120,6 +120,18 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
     return 65536;
   }
 
+  const char * buffer::error::what() const throw () {
+    return "buffer::exception";
+  }
+  const char * buffer::bad_alloc::what() const throw () {
+    return "buffer::bad_alloc";
+  }
+  const char * buffer::end_of_buffer::what() const throw () {
+    return "buffer::end_of_buffer";
+  }
+  const char * buffer::malformed_input::what() const throw () {
+    return buf;
+  }
   buffer::error_code::error_code(int error) :
     buffer::malformed_input(cpp_strerror(error).c_str()), code(error) {}
 
