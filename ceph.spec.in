@@ -591,9 +591,7 @@ install -D etc/ceph.limits.d $RPM_BUILD_ROOT%{_sysconfdir}/security/limits.d/cep
   install -m 0644 -D systemd/ceph-mds@.service $RPM_BUILD_ROOT%{_unitdir}/ceph-mds@.service
   install -m 0644 -D systemd/ceph-radosgw@.service $RPM_BUILD_ROOT%{_unitdir}/ceph-radosgw@.service
   install -m 0644 -D systemd/ceph.target $RPM_BUILD_ROOT%{_unitdir}/ceph.target
-  install -m 0644 -D systemd/ceph-disk-activate-journal@.service $RPM_BUILD_ROOT%{_unitdir}/ceph-disk-activate-journal@.service
-  install -m 0644 -D systemd/ceph-disk-activate@.service $RPM_BUILD_ROOT%{_unitdir}/ceph-disk-activate@.service
-  install -m 0644 -D systemd/ceph-disk-dmcrypt-activate@.service $RPM_BUILD_ROOT%{_unitdir}/ceph-disk-dmcrypt-activate@.service
+  install -m 0644 -D systemd/ceph-disk@.service $RPM_BUILD_ROOT%{_unitdir}/ceph-disk@.service
   install -m 0755 -D systemd/ceph $RPM_BUILD_ROOT%{_sbindir}/rcceph
 %else
   install -D src/init-ceph $RPM_BUILD_ROOT%{_initrddir}/ceph
@@ -747,9 +745,7 @@ mkdir -p %{_localstatedir}/run/ceph/
 %{_unitdir}/ceph-create-keys@.service
 %{_unitdir}/ceph-osd@.service
 %{_unitdir}/ceph-radosgw@.service
-%{_unitdir}/ceph-disk-activate-journal@.service
-%{_unitdir}/ceph-disk-activate@.service
-%{_unitdir}/ceph-disk-dmcrypt-activate@.service
+%{_unitdir}/ceph-disk@.service
 %{_unitdir}/ceph.target
 %else
 %{_initrddir}/ceph
