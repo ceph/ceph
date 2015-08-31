@@ -281,11 +281,15 @@ int GenericFileStoreBackend::do_fiemap(int fd, off_t start, size_t len, struct f
   fiemap->fm_length = len + start % CEPH_PAGE_SIZE;
   fiemap->fm_flags = FIEMAP_FLAG_SYNC; /* flush extents to disk if needed */
 
+#if defined(DARWIN)
+  ret = -ENOTSUP;
+  goto done_err;
+#else
   if (ioctl(fd, FS_IOC_FIEMAP, fiemap) < 0) {
     ret = -errno;
     goto done_err;
   }
-
+#endif
   size = sizeof(struct fiemap_extent) * (fiemap->fm_mapped_extents);
 
   _realloc_fiemap = (struct fiemap *)realloc(fiemap, sizeof(struct fiemap) + size);
@@ -301,12 +305,16 @@ int GenericFileStoreBackend::do_fiemap(int fd, off_t start, size_t len, struct f
   fiemap->fm_extent_count = fiemap->fm_mapped_extents;
   fiemap->fm_mapped_extents = 0;
 
+#if defined(DARWIN)
+  ret = -ENOTSUP;
+  goto done_err;
+#else
   if (ioctl(fd, FS_IOC_FIEMAP, fiemap) < 0) {
     ret = -errno;
     goto done_err;
   }
   *pfiemap = fiemap;
-
+#endif
   return 0;
 
 done_err:

@@ -13,9 +13,24 @@
 #define CEPH_COMPAT_H
 
 #if defined(__FreeBSD__)
-#define	ENODATA	61
+#define	ENODATA	ENOATTR
 #define	MSG_MORE 0
 #endif /* !__FreeBSD__ */
+
+#if defined(__APPLE__)
+/* PATH_MAX */
+#include <limits.h>
+
+/* O_LARGEFILE is not defined/required on OS X */
+#ifndef O_LARGEFILE
+#define O_LARGEFILE 0
+#endif
+
+/* Could be relevant for other platforms */
+#ifndef ERESTART
+#define ERESTART EINTR
+#endif
+#endif /* __APPLE__ */
 
 #ifndef TEMP_FAILURE_RETRY
 #define TEMP_FAILURE_RETRY(expression) ({     \

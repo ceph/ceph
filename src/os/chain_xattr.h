@@ -8,7 +8,16 @@
 
 #include <errno.h>
 
+#if defined(__linux__)
+#include <limits.h>
+#define CHAIN_XATTR_MAX_NAME_LEN ((XATTR_NAME_MAX + 1) / 2)
+#elif defined(__APPLE__) || defined(__FreeBSD__)
+#include <sys/xattr.h>
+#define CHAIN_XATTR_MAX_NAME_LEN ((XATTR_MAXNAMELEN + 1) / 2)
+#else
 #define CHAIN_XATTR_MAX_NAME_LEN  128
+#endif
+
 #define CHAIN_XATTR_MAX_BLOCK_LEN 2048
 
 /*
