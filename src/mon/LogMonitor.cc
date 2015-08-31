@@ -12,6 +12,8 @@
  * 
  */
 
+#include <boost/algorithm/string/predicate.hpp>
+
 #include <sstream>
 #include <syslog.h>
 
@@ -28,6 +30,7 @@
 #include "osd/osd_types.h"
 #include "common/errno.h"
 #include "common/config.h"
+#include "common/strtol.h"
 #include "include/assert.h"
 #include "include/str_list.h"
 #include "include/str_map.h"
@@ -671,6 +674,33 @@ string LogMonitor::log_channel_info::expand_channel_meta(
                    << "' to '" << s << "'" << dendl;
 
   return s;
+}
+
+bool LogMonitor::log_channel_info::do_log_to_syslog(const string &channel) {
+  string v = get_str_map_key(log_to_syslog, channel,
+                             &CLOG_CONFIG_DEFAULT_KEY);
+  // We expect booleans, but they are in k/v pairs, kept
+  // as strings, in 'log_to_syslog'. We must ensure
+  // compatibility with existing boolean handling, and so
+  // we are here using a modified version of how
+  // md_config_t::set_val_raw() handles booleans. We will
+  // accept both 'true' and 'false', but will also check for
+  // '1' and '0'. The main distiction between this and the
+  // original code is that we will assume everything not '1',
+  // '0', 'true' or 'false' to be 'false'.
+  bool ret = false;
+
+  if (boost::iequals(v, "false")) {
+    ret = false;
+  } else if (boost::iequals(v, "true")) {
+    ret = true;
+  } else {
+    std::string err;
+    int b = strict_strtol(v.c_str(), 10, &err);
+    ret = (err.empty() && b == 1);
+  }
+
+  return ret;
 }
 
 void LogMonitor::handle_conf_change(const struct md_config_t *conf,
