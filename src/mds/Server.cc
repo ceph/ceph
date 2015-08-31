@@ -16,7 +16,6 @@
 #include "include/assert.h"  // lexical_cast includes system assert.h
 
 #include <boost/config/warning_disable.hpp>
-#include <boost/spirit/include/qi.hpp>
 #include <boost/fusion/include/std_pair.hpp>
 
 #include "MDSRank.h"
@@ -3850,30 +3849,7 @@ void Server::handle_client_setdirlayout(MDRequestRef& mdr)
   journal_and_reply(mdr, cur, 0, le, new C_MDS_inode_update_finish(mds, mdr, cur));
 }
 
-
-
-
 // XATTRS
-
-// parse a map of keys/values.
-namespace qi = boost::spirit::qi;
-
-template <typename Iterator>
-struct keys_and_values
-  : qi::grammar<Iterator, std::map<string, string>()>
-{
-    keys_and_values()
-      : keys_and_values::base_type(query)
-    {
-      query =  pair >> *(qi::lit(' ') >> pair);
-      pair  =  key >> '=' >> value;
-      key   =  qi::char_("a-zA-Z_") >> *qi::char_("a-zA-Z_0-9");
-      value = +qi::char_("a-zA-Z_0-9");
-    }
-    qi::rule<Iterator, std::map<string, string>()> query;
-    qi::rule<Iterator, std::pair<string, string>()> pair;
-    qi::rule<Iterator, string()> key, value;
-};
 
 int Server::parse_layout_vxattr(string name, string value, const OSDMap *osdmap,
 				ceph_file_layout *layout, bool validate)
