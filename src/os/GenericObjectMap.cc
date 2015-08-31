@@ -157,7 +157,6 @@ string GenericObjectMap::header_key(const coll_t &cid, const ghobject_t &oid)
   full_name += string(buf);
 
   if (oid.generation != ghobject_t::NO_GEN) {
-    assert(oid.shard_id != shard_id_t::NO_SHARD);
     full_name.append(GHOBJECT_KEY_SEP_S);
 
     t = buf;
