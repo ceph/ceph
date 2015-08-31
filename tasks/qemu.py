@@ -181,6 +181,9 @@ def _setup_nfs_mount(remote, client, mount_dir):
         dir=export_dir
     )
     remote.run(args=[
+        'sudo', 'sed', '-i', '/^\/export\//d', "/etc/exports",
+    ])
+    remote.run(args=[
         'echo', export, run.Raw("|"),
         'sudo', 'tee', '-a', "/etc/exports",
     ])
