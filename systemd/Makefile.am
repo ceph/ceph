@@ -5,9 +5,7 @@ unitfiles = \
 	ceph-create-keys@.service \
 	ceph-osd@.service \
 	ceph-radosgw@.service \
-	ceph-disk-activate-journal@.service \
-	ceph-disk-activate@.service \
-	ceph-disk-dmcrypt-activate@.service
+	ceph-disk@.service
 
 unitdir = $(systemd_unit_dir)
 
