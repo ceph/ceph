@@ -221,6 +221,49 @@ function test_mon_injectargs_SI()
   $SUDO ceph daemon mon.a config set mon_pg_warn_min_objects $initial_value
 }
 
+function test_tiering_agent()
+{
+  local slow=slow_eviction
+  local fast=fast_eviction
+  ceph osd pool create $slow  1 1
+  ceph osd pool create $fast  1 1
+  ceph osd tier add $slow $fast
+  ceph osd tier cache-mode $fast writeback
+  ceph osd tier set-overlay $slow $fast
+  ceph osd pool set $fast hit_set_type bloom
+  rados -p $slow put obj1 /etc/group
+  ceph osd pool set $fast target_max_objects  1
+  ceph osd pool set $fast hit_set_count 1
+  ceph osd pool set $fast hit_set_period 5
+  # wait for the object to be evicted from the cache
+  local evicted
+  evicted=false
+  for i in 1 2 4 8 16 32 64 128 256 ; do
+      if ! rados -p $fast ls | grep obj1 ; then
+          evicted=true
+          break
+      fi
+      sleep $i
+  done
+  $evicted # assert
+  # the object is proxy read and promoted to the cache
+  rados -p $slow get obj1 /tmp/obj1
+  # wait for the promoted object to be evicted again
+  evicted=false
+  for i in 1 2 4 8 16 32 64 128 256 ; do
+      if ! rados -p $fast ls | grep obj1 ; then
+          evicted=true
+          break
+      fi
+      sleep $i
+  done
+  $evicted # assert
+  ceph osd tier remove-overlay $slow
+  ceph osd tier remove $slow $fast
+  ceph osd pool delete $fast $fast --yes-i-really-really-mean-it
+  ceph osd pool delete $slow $slow --yes-i-really-really-mean-it
+}
+
 function test_tiering()
 {
   # tiering
@@ -1679,6 +1722,7 @@ MON_TESTS+=" mon_ping"
 MON_TESTS+=" mon_deprecated_commands"
 
 OSD_TESTS+=" osd_bench"
+OSD_TESTS+=" tiering_agent"
 
 MDS_TESTS+=" mds_tell"
 MDS_TESTS+=" mon_mds"
