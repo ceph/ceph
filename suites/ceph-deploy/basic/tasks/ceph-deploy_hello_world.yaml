@@ -23,9 +23,6 @@ openstack:
     count: 3
     size: 10 # GB
 tasks:
-- install:
-     extras: yes
-- print: "**** done install extras"
 - ssh_keys:
 - print: "**** done ssh_keys"
 - ceph-deploy:
