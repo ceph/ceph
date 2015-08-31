@@ -418,12 +418,6 @@ AC_ARG_ENABLE(gitversion,
 
 AM_CONDITIONAL(NO_GIT_VERSION, [test "x$enable_gitversion" = "xno"])
 
-AC_ARG_ENABLE([root-make-check],
-            [AS_HELP_STRING([--enable-root-make-check], [enable make check tests that require root privileges])],
-            [],
-            [enable_root_make_check=no])
-AM_CONDITIONAL(ENABLE_ROOT_MAKE_CHECK, test "x$enable_root_make_check" != xno)
-
 # profiler?
 AC_ARG_WITH([profiler],
             [AS_HELP_STRING([--with-profiler], [build extra profiler binaries])],
