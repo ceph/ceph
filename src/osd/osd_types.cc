@@ -1086,17 +1086,17 @@ SnapContext pg_pool_t::get_snap_context() const
   return SnapContext(get_snap_seq(), s);
 }
 
-static string make_hash_str(const string &inkey, const string &nspace)
-{
-  if (nspace.empty())
-    return inkey;
-  return nspace + '\037' + inkey;
-}
-
 uint32_t pg_pool_t::hash_key(const string& key, const string& ns) const
 {
-  string n = make_hash_str(key, ns);
-  return ceph_str_hash(object_hash, n.c_str(), n.length());
+ if (ns.empty()) 
+    return ceph_str_hash(object_hash, key.data(), key.length());
+  int nsl = ns.length();
+  int len = key.length() + nsl + 1;
+  char buf[len];
+  memcpy(&buf[0], ns.data(), nsl);
+  buf[nsl] = '\037';
+  memcpy(&buf[nsl+1], key.data(), key.length());
+  return ceph_str_hash(object_hash, &buf[0], len);
 }
 
 uint32_t pg_pool_t::raw_hash_to_pg(uint32_t v) const
