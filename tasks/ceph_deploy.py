@@ -74,6 +74,15 @@ def is_healthy(ctx, config):
         tries += 1
         if tries >= max_tries:
             msg = "ceph health was unable to get 'HEALTH_OK' after waiting 15 minutes"
+            remote.run(
+                args=[
+                    'cd',
+                    '{tdir}'.format(tdir=testdir),
+                    run.Raw('&&'),
+                    'sudo', 'ceph',
+                    'report',
+                ],
+            )
             raise RuntimeError(msg)
 
         r = remote.run(
@@ -348,11 +357,12 @@ def build_ceph_cluster(ctx, config):
                         perms='0644'
                     )
 
-            log.info('Configuring CephFS...')
-            ceph_fs = Filesystem(ctx, admin_remote=clients.remotes.keys()[0])
-            if not ceph_fs.legacy_configured():
-                ceph_fs.create()
-        else:
+            if mds_nodes:
+                log.info('Configuring CephFS...')
+                ceph_fs = Filesystem(ctx, admin_remote=clients.remotes.keys()[0])
+                if not ceph_fs.legacy_configured():
+                    ceph_fs.create()
+        elif not config.get('only_mon'):
             raise RuntimeError(
                 "The cluster is NOT operational due to insufficient OSDs")
         yield
@@ -362,6 +372,8 @@ def build_ceph_cluster(ctx, config):
         log.info(traceback.format_exc())
         raise
     finally:
+        if config.get('keep_running'):
+            return
         log.info('Stopping ceph...')
         ctx.cluster.run(args=['sudo', 'stop', 'ceph-all', run.Raw('||'),
                               'sudo', 'service', 'ceph', 'stop' ])
@@ -604,6 +616,8 @@ def task(ctx, config):
              branch:
                 stable: bobtail
              mon_initial_members: 1
+             only_mon: true
+             keep_running: true
 
         tasks:
         - install:
@@ -642,13 +656,6 @@ def task(ctx, config):
     with contextutil.nested(
          lambda: install_fn.ship_utilities(ctx=ctx, config=None),
          lambda: download_ceph_deploy(ctx=ctx, config=config),
-         lambda: build_ceph_cluster(ctx=ctx, config=dict(
-                 conf=config.get('conf', {}),
-                 branch=config.get('branch',{}),
-                 dmcrypt=config.get('dmcrypt',None),
-                 separate_journal_disk=config.get('separate_journal_disk',None),
-                 mon_initial_members=config.get('mon_initial_members', None),
-                 test_mon_destroy=config.get('test_mon_destroy', None),
-                 )),
+         lambda: build_ceph_cluster(ctx=ctx, config=config),
         ):
         yield
