@@ -1719,6 +1719,8 @@ public:
    *         the global full flag is set, else false
    */
   bool osdmap_pool_full(const int64_t pool_id) const;
+  bool _osdmap_pool_full(const int64_t pool_id) const;
+  void update_pool_full_map(map<int64_t, bool>& pool_full_map);
 
  private:
   map<uint64_t, LingerOp*>  linger_ops;
@@ -1765,6 +1767,7 @@ public:
     RECALC_OP_TARGET_OSD_DOWN,
   };
   bool _osdmap_full_flag() const;
+  bool _osdmap_has_pool_full() const;
 
   bool target_should_be_paused(op_target_t *op);
   int _calc_target(op_target_t *t, epoch_t *last_force_resend=0, bool any_change=false);
@@ -1928,7 +1931,8 @@ private:
 
   void _scan_requests(OSDSession *s,
                      bool force_resend,
-		     bool force_resend_writes,
+		     bool cluster_full,
+                     map<int64_t, bool> *pool_full_map,
 		     map<ceph_tid_t, Op*>& need_resend,
 		     list<LingerOp*>& need_resend_linger,
 		     map<ceph_tid_t, CommandOp*>& need_resend_command);
