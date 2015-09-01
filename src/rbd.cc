@@ -2077,12 +2077,16 @@ static int do_merge_diff(const char *first, const char *second, const char *path
   // and the (offset,length) in wztag must be ascending order.
 
   r = parse_diff_header(fd, &f_tag, &f_from, &f_to, &f_size);
-  if (r < 0)
+  if (r < 0) {
+    cerr << "rbd: failed to parse first diff header" << std::endl;
     goto done;
+  }
 
   r = parse_diff_header(sd, &s_tag, &s_from, &s_to, &s_size);
-  if (r < 0)
+  if (r < 0) {
+    cerr << "rbd: failed to parse second diff header" << std::endl;
     goto done;
+  }
 
   if (f_to != s_from) {
     r = -EINVAL;
@@ -2113,8 +2117,10 @@ static int do_merge_diff(const char *first, const char *second, const char *path
     ::encode(s_size, bl);
 
     r = bl.write_fd(pd);
-    if (r < 0)
+    if (r < 0) {
+      cerr << "rbd: failed to write merged diff header" << std::endl;
       goto done;
+    }
   }
 
   if (f_size > s_size)
@@ -2131,8 +2137,13 @@ static int do_merge_diff(const char *first, const char *second, const char *path
       uint64_t last_off = f_off;
 
       r = parse_diff_body(fd, &f_tag, &f_off, &f_len);
-      if (r < 0)
+      dout(2) << "first diff data chunk: tag=" << f_tag << ", "
+              << "off=" << f_off << ", "
+              << "len=" << f_len << dendl;
+      if (r < 0) {
+        cerr << "rbd: failed to read first diff data chunk header" << std::endl;
         goto done;
+      }
 
       if (f_tag == 'e') {
         f_end = true;
@@ -2146,6 +2157,8 @@ static int do_merge_diff(const char *first, const char *second, const char *path
 
       if (last_off > f_off) {
         r = -ENOTSUP;
+        cerr << "rbd: out-of-order offset from first diff ("
+             << last_off << " > " << f_off << ")" << std::endl;
         goto done;
       }
     }
@@ -2154,8 +2167,14 @@ static int do_merge_diff(const char *first, const char *second, const char *path
       uint64_t last_off = s_off;
 
       r = parse_diff_body(sd, &s_tag, &s_off, &s_len);
-      if (r < 0)
+      dout(2) << "second diff data chunk: tag=" << f_tag << ", "
+              << "off=" << f_off << ", "
+              << "len=" << f_len << dendl;
+      if (r < 0) {
+        cerr << "rbd: failed to read second diff data chunk header"
+             << std::endl;
         goto done;
+      }
 
       if (s_tag == 'e') {
         s_end = true;
@@ -2168,6 +2187,8 @@ static int do_merge_diff(const char *first, const char *second, const char *path
 
       if (last_off > s_off) {
         r = -ENOTSUP;
+        cerr << "rbd: out-of-order offset from second diff ("
+             << last_off << " > " << s_off << ")" << std::endl;
         goto done;
       }
     }
@@ -2195,12 +2216,12 @@ static int do_merge_diff(const char *first, const char *second, const char *path
         if (first_stdin) {
           bufferptr bp = buffer::create(delta);
           r = safe_read_exact(fd, bp.c_str(), delta);
-          if (r < 0)
-            goto done;
         } else {
           r = lseek(fd, delta, SEEK_CUR);
-          if(r < 0)
-            goto done;
+        }
+        if (r < 0) {
+          cerr << "rbd: failed to skip first diff data" << std::endl;
+          goto done;
         }
       }
       f_off += delta;
