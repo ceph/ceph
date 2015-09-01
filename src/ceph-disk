@@ -2462,7 +2462,8 @@ def get_journal_osd_uuid(path):
     if not stat.S_ISBLK(mode):
         raise Error('%s is not a block device' % path)
 
-    if (get_partition_type(path) == MPATH_JOURNAL_UUID and
+    if (is_partition(path) and
+        get_partition_type(path) == MPATH_JOURNAL_UUID and
         not is_mpath(path)):
         raise Error('%s is not a multipath block device' %
                     path)
