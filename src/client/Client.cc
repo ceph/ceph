@@ -7148,7 +7148,7 @@ int Client::preadv(int fd, const struct iovec *iov, int iovcnt, loff_t offset)
 {
   if (iovcnt < 0)
     return EINVAL;
-     return _preadv_pwritev(fd, iov, iovcnt, offset, false);
+  return _preadv_pwritev(fd, iov, iovcnt, offset, false);
 }
 
 int Client::_read(Fh *f, int64_t offset, uint64_t size, bufferlist *bl)
@@ -7481,7 +7481,7 @@ int Client::pwritev(int fd, const struct iovec *iov, int iovcnt, int64_t offset)
 {
   if (iovcnt < 0)
     return EINVAL;
-    return _preadv_pwritev(fd, iov, iovcnt, offset, true); 
+  return _preadv_pwritev(fd, iov, iovcnt, offset, true);
 }
 
 int Client::_preadv_pwritev(int fd, const struct iovec *iov, unsigned iovcnt, int64_t offset, bool write)
