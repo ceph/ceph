@@ -854,6 +854,7 @@ void RGWRealm::dump(Formatter *f) const
   RGWSystemMetaObj::dump(f);
   encode_json("master_zonegroup", master_zonegroup, f);
   encode_json_map("zonegroups", zonegroups, f);
+  encode_json("current_period", current_period, f);
 }
 
 static void decode_zonegroups(map<string, RGWZoneGroup>& zonegroups, JSONObj *o)
@@ -868,6 +869,7 @@ void RGWRealm::decode_json(JSONObj *obj)
   RGWSystemMetaObj::decode_json(obj);
   JSONDecoder::decode_json("master_zonegroup", master_zonegroup, obj);
   JSONDecoder::decode_json("zonegroups", zonegroups, decode_zonegroups, obj);
+  JSONDecoder::decode_json("current_period", current_period, obj);
 }
 
 

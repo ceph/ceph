@@ -51,7 +51,6 @@ static inline void get_obj_bucket_and_oid_loc(const rgw_obj& obj, rgw_bucket& bu
   prepend_bucket_marker(bucket, obj.get_object(), oid);
   const string& loc = obj.get_loc();
   if (!loc.empty()) {
-    prepend_bucket_marker(bucket, obj.get_loc(), locator);
   } else {
     locator.clear();
   }
@@ -1134,6 +1133,7 @@ class RGWRealm : public RGWSystemMetaObj
 {
   string master_zonegroup;
   map<string, RGWZoneGroup> zonegroups;
+  string current_period;
 
 public:
   RGWRealm() {}
@@ -1146,6 +1146,7 @@ public:
     RGWSystemMetaObj::encode(bl);
     ::encode(master_zonegroup, bl);
     ::encode(zonegroups, bl);
+    ::encode(current_period, bl);
     ENCODE_FINISH(bl);
   }
 
@@ -1154,6 +1155,7 @@ public:
     RGWSystemMetaObj::decode(bl);
     ::decode(master_zonegroup, bl);
     ::decode(zonegroups, bl);
+    ::decode(current_period, bl);
     DECODE_FINISH(bl);
   }
 
@@ -1167,7 +1169,9 @@ public:
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
 
-  int get_current_period_id(string& id);
+  const string& get_current_period() {
+    return current_period;
+  }
 };
 WRITE_CLASS_ENCODER(RGWRealm)
 
