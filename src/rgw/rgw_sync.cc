@@ -722,6 +722,34 @@ public:
   }
 };
 
+class RGWReadMDLogShardInfo : public RGWSimpleCoroutine {
+  RGWRados *store;
+  RGWMetadataLog *mdlog;
+  int req_ret;
+
+  int shard_id;
+  RGWMetadataLogInfo *shard_info;
+public:
+  RGWReadMDLogShardInfo(RGWRados *_store, int _shard_id, RGWMetadataLogInfo *_shard_info) : RGWSimpleCoroutine(_store->ctx()),
+                                                store(_store), mdlog(store->meta_mgr->get_log()),
+                                                req_ret(0), shard_id(_shard_id), shard_info(_shard_info) {
+  }
+
+  int send_request() {
+    int ret = mdlog->get_info_async(shard_id, shard_info, stack->get_completion_mgr(), (void *)stack, &req_ret);
+    if (ret < 0) {
+      ldout(store->ctx(), 0) << "ERROR: mdlog->get_info_async() returned ret=" << ret << dendl;
+      return set_state(RGWCoroutine_Error, ret);
+    }
+
+    return 0;
+  }
+
+  int request_complete() {
+    return req_ret;
+  }
+};
+
 template <class T>
 class RGWReadRESTResourceCR : public RGWSimpleCoroutine {
   RGWRESTConn *conn;
@@ -765,18 +793,79 @@ public:
   }
 };
 
+class RGWReadRemoteMDLogShardInfoCR : public RGWCoroutine {
+  RGWRados *store;
+  RGWHTTPManager *http_manager;
+  RGWAsyncRadosProcessor *async_rados;
+
+  RGWRESTReadResource *http_op;
+
+  int shard_id;
+  RGWMetadataLogInfo *shard_info;
+
+public:
+  RGWReadRemoteMDLogShardInfoCR(RGWRados *_store, RGWHTTPManager *_mgr, RGWAsyncRadosProcessor *_async_rados,
+                                                      int _shard_id, RGWMetadataLogInfo *_shard_info) : RGWCoroutine(_store->ctx()), store(_store),
+                                                      http_manager(_mgr),
+						      async_rados(_async_rados),
+                                                      http_op(NULL),
+                                                      shard_id(_shard_id),
+                                                      shard_info(_shard_info) {
+  }
+
+  int operate() {
+    RGWRESTConn *conn = store->rest_master_conn;
+    reenter(this) {
+      yield {
+	char buf[16];
+	snprintf(buf, sizeof(buf), "%d", shard_id);
+        rgw_http_param_pair pairs[] = { { "type" , "metadata" },
+	                                { "id", buf },
+					{ "info" , NULL },
+	                                { NULL, NULL } };
+
+        string p = "/admin/log/";
+
+        http_op = new RGWRESTReadResource(conn, p, pairs, NULL, http_manager);
+
+        http_op->set_user_info((void *)stack);
+
+        int ret = http_op->aio_read();
+        if (ret < 0) {
+          ldout(store->ctx(), 0) << "ERROR: failed to read from " << p << dendl;
+          log_error() << "failed to send http operation: " << http_op->to_str() << " ret=" << ret << std::endl;
+          http_op->put();
+          return set_state(RGWCoroutine_Error, ret);
+        }
+
+        return io_block(0);
+      }
+      yield {
+        int ret = http_op->wait(shard_info);
+        if (ret < 0) {
+          return set_state(RGWCoroutine_Error, ret);
+        }
+        return set_state(RGWCoroutine_Done, 0);
+      }
+    }
+    return 0;
+  }
+};
+
 class RGWInitSyncStatusCoroutine : public RGWCoroutine {
   RGWAsyncRadosProcessor *async_rados;
   RGWRados *store;
+  RGWHTTPManager *http_manager;
   RGWObjectCtx& obj_ctx;
 
   string lock_name;
   string cookie;
   rgw_meta_sync_info status;
-
+  map<int, RGWMetadataLogInfo> shards_info;
 public:
-  RGWInitSyncStatusCoroutine(RGWAsyncRadosProcessor *_async_rados, RGWRados *_store,
+  RGWInitSyncStatusCoroutine(RGWAsyncRadosProcessor *_async_rados, RGWRados *_store, RGWHTTPManager *_http_mgr,
 		      RGWObjectCtx& _obj_ctx, uint32_t _num_shards) : RGWCoroutine(_store->ctx()), async_rados(_async_rados), store(_store),
+                                                http_manager(_http_mgr),
                                                 obj_ctx(_obj_ctx) {
     lock_name = "sync_lock";
     status.num_shards = _num_shards;
@@ -789,6 +878,7 @@ public:
   }
 
   int operate() {
+    int ret;
     reenter(this) {
       yield {
 	uint32_t lock_duration = 30;
@@ -812,9 +902,22 @@ public:
 	  return set_state(RGWCoroutine_Error, retcode);
 	}
       }
+      /* fetch current position in logs */
+      yield {
+        for (int i = 0; i < (int)status.num_shards; i++) {
+          spawn(new RGWReadRemoteMDLogShardInfoCR(store, http_manager, async_rados, i, &shards_info[i]), false);
+	}
+      }
+      while (collect(&ret)) {
+	if (ret < 0) {
+	  return set_state(RGWCoroutine_Error);
+	}
+        yield;
+      }
       yield {
         for (int i = 0; i < (int)status.num_shards; i++) {
 	  rgw_meta_sync_marker marker;
+	  marker.next_step_marker = shards_info[i].marker;
           spawn(new RGWSimpleRadosWriteCR<rgw_meta_sync_marker>(async_rados, store, store->get_zone_params().log_pool,
 				                          RGWMetaSyncStatusManager::shard_obj_name(i), marker), true);
         }
@@ -828,7 +931,6 @@ public:
 	call(new RGWSimpleRadosUnlockCR(async_rados, store, store->get_zone_params().log_pool, mdlog_sync_status_oid,
 			             lock_name, cookie));
       }
-      int ret;
       while (collect(&ret)) {
 	if (ret < 0) {
 	  return set_state(RGWCoroutine_Error);
@@ -1378,7 +1480,8 @@ public:
         yield {
 	  /* update marker to reflect we're done with full sync */
 	  sync_marker.state = rgw_meta_sync_marker::IncrementalSync;
-	  sync_marker.marker.clear();
+	  sync_marker.marker = sync_marker.next_step_marker;
+	  sync_marker.next_step_marker.clear();
 	  call(new RGWSimpleRadosWriteCR<rgw_meta_sync_marker>(async_rados, store, store->get_zone_params().log_pool,
 				                                     RGWMetaSyncStatusManager::shard_obj_name(shard_id), sync_marker));
 	}
@@ -1522,7 +1625,7 @@ int RGWRemoteMetaLog::read_sync_status(rgw_meta_sync_status *sync_status)
 int RGWRemoteMetaLog::init_sync_status(int num_shards)
 {
   RGWObjectCtx obj_ctx(store, NULL);
-  return run(new RGWInitSyncStatusCoroutine(async_rados, store, obj_ctx, num_shards));
+  return run(new RGWInitSyncStatusCoroutine(async_rados, store, &http_manager, obj_ctx, num_shards));
 }
 
 int RGWRemoteMetaLog::set_sync_info(const rgw_meta_sync_info& sync_info)
@@ -1544,7 +1647,7 @@ int RGWRemoteMetaLog::run_sync(int num_shards, rgw_meta_sync_status& sync_status
   switch ((rgw_meta_sync_info::SyncState)sync_status.sync_info.state) {
     case rgw_meta_sync_info::StateInit:
       ldout(store->ctx(), 20) << __func__ << "(): init" << dendl;
-      r = run(new RGWInitSyncStatusCoroutine(async_rados, store, obj_ctx, num_shards));
+      r = run(new RGWInitSyncStatusCoroutine(async_rados, store, &http_manager, obj_ctx, num_shards));
       /* fall through */
     case rgw_meta_sync_info::StateBuildingFullSyncMaps:
       ldout(store->ctx(), 20) << __func__ << "(): building full sync maps" << dendl;
