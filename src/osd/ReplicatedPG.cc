@@ -3667,6 +3667,8 @@ struct FillInVerifyExtent : public Context {
   void finish(int len) {
     *rval = len;
     *r = len;
+    if (len < 0)
+      return;
     // whole object?  can we verify the checksum?
     if (maybe_crc && *r == size) {
       uint32_t crc = outdatap->crc32c(-1);
