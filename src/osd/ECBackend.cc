@@ -1003,7 +1003,7 @@ void ECBackend::handle_sub_read_reply(
     assert(!op.errors.count(i->first));	// If attribute error we better not have sent a buffer
     if (!rop.to_read.count(i->first)) {
       // We canceled this read! @see filter_read_op
-dout(0) << __func__ << " to_read skipping" << dendl;
+      dout(20) << __func__ << " to_read skipping" << dendl;
       continue;
     }
     list<boost::tuple<uint64_t, uint64_t, uint32_t> >::const_iterator req_iter =
@@ -1030,7 +1030,7 @@ dout(0) << __func__ << " to_read skipping" << dendl;
     assert(!op.errors.count(i->first));	// if read error better not have sent an attribute
     if (!rop.to_read.count(i->first)) {
       // We canceled this read! @see filter_read_op
-dout(0) << __func__ << " to_read skipping" << dendl;
+      dout(20) << __func__ << " to_read skipping" << dendl;
       continue;
     }
     rop.complete[i->first].attrs = map<string, bufferlist>();
@@ -1043,7 +1043,7 @@ dout(0) << __func__ << " to_read skipping" << dendl;
       make_pair(
 	from,
 	i->second));
-dout(0) << __func__ << " shard=" << from << " error=" << i->second << dendl;
+    dout(20) << __func__ << " shard=" << from << " error=" << i->second << dendl;
   }
 
   map<pg_shard_t, set<ceph_tid_t> >::iterator siter =
@@ -1068,14 +1068,14 @@ dout(0) << __func__ << " shard=" << from << " error=" << i->second << dendl;
         j != iter->second.returned.front().get<2>().end();
         ++j) {
         have.insert(j->first.shard);
-dout(0) << __func__ << " have shard=" << j->first.shard << dendl;
+        dout(20) << __func__ << " have shard=" << j->first.shard << dendl;
       }
       set<int> want_to_read, dummy_minimum;
       get_want_to_read_shards(&want_to_read);
       int err;
       // XXX: Could just do if (have.size < ec_impl->get_data_chunk_count())
       if ((err = ec_impl->minimum_to_decode(want_to_read, have, &dummy_minimum)) < 0) {
-dout(0) << __func__ << " minimum_to_decode failed" << dendl;
+	dout(20) << __func__ << " minimum_to_decode failed" << dendl;
         if (rop.in_progress.empty()) {
 	  // If we don't have enough copies and we haven't sent reads for all shards
 	  // we can send the rest of the reads, if any.
@@ -1088,17 +1088,18 @@ dout(0) << __func__ << " minimum_to_decode failed" << dendl;
 	    // Couldn't read any additional shards so handle as completed with errors
 	  }
 	  if (rop.complete[iter->first].errors.empty()) {
-dout(0) << __func__ << " simply not enough copies err=" << err << dendl;
+	    dout(20) << __func__ << " simply not enough copies err=" << err << dendl;
 	  } else {
 	    // Grab the first error
 	    err = rop.complete[iter->first].errors.begin()->second;
-dout(0) << __func__ << ": Use one of the shard errors err=" << err << dendl;
+	    dout(20) << __func__ << ": Use one of the shard errors err=" << err << dendl;
 	  }
 	  rop.complete[iter->first].r = err;
 	  ++is_complete;
 	}
       } else {
-dout(0) << __func__ << " Enough copies for " << iter->first << " (ignore errors)" << dendl;
+	if (!rop.complete[iter->first].errors.empty())
+	  dout(10) << __func__ << " Enough copies for " << iter->first << " (ignore errors)" << dendl;
 	++is_complete;
 	rop.complete[iter->first].errors.clear();
         assert(rop.complete[iter->first].r == 0);
@@ -1106,7 +1107,7 @@ dout(0) << __func__ << " Enough copies for " << iter->first << " (ignore errors)
     }
   }
   if (rop.in_progress.empty() || is_complete == rop.complete.size()) {
-dout(0) << __func__ << " Complete: " << rop << dendl;
+    dout(20) << __func__ << " Complete: " << rop << dendl;
     complete_read_op(rop, m);
   } else {
     dout(10) << __func__ << " readop not complete: " << rop << dendl;
