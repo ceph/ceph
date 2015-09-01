@@ -552,12 +552,6 @@ const string& RGWRealm::get_info_oid_prefix(bool old_format)
   return realm_info_oid_prefix;
 }
 
-int RGWRealm::get_current_period_id(string& period_id)
-{
-  return -ENOTSUP;
-}
-
-
 int RGWPeriod::init(const string& period_id, epoch_t period_epoch,  bool setup_obj)
 {
   if (!period_id.empty()) {
@@ -594,10 +588,7 @@ int RGWPeriod::init(const string& period_realm_id, const string& period_realm_na
   }
 
   if (id.empty()) {
-    ret = realm.get_current_period_id(realm_id);
-    if (ret < 0) {
-      return ret;
-    }
+    id = realm.get_current_period();
   }
 
   if (!epoch) {
