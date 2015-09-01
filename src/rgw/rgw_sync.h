@@ -69,6 +69,7 @@ struct rgw_meta_sync_marker {
   };
   uint16_t state;
   string marker;
+  string next_step_marker;
 
   rgw_meta_sync_marker() : state(FullSync) {}
 
@@ -76,6 +77,7 @@ struct rgw_meta_sync_marker {
     ENCODE_START(1, 1, bl);
     ::encode(state, bl);
     ::encode(marker, bl);
+    ::encode(next_step_marker, bl);
     ENCODE_FINISH(bl);
   }
 
@@ -83,12 +85,14 @@ struct rgw_meta_sync_marker {
      DECODE_START(1, bl);
     ::decode(state, bl);
     ::decode(marker, bl);
+    ::decode(next_step_marker, bl);
      DECODE_FINISH(bl);
   }
 
   void dump(Formatter *f) const {
     encode_json("state", (int)state, f);
     encode_json("marker", marker, f);
+    encode_json("next_step_marker", next_step_marker, f);
   }
 };
 WRITE_CLASS_ENCODER(rgw_meta_sync_marker)
