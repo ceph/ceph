@@ -90,15 +90,14 @@ bool Journal::is_journal_supported(ImageCtx &image_ctx) {
           !image_ctx.read_only && image_ctx.snap_id == CEPH_NOSNAP);
 }
 
-int Journal::create(librados::IoCtx &io_ctx, const std::string &image_id) {
+int Journal::create(librados::IoCtx &io_ctx, const std::string &image_id,
+		    double commit_age, uint8_t order, uint8_t splay_width) {
   CephContext *cct = reinterpret_cast<CephContext *>(io_ctx.cct());
   ldout(cct, 5) << __func__ << ": image=" << image_id << dendl;
 
-  // TODO configurable commit flush interval
-  ::journal::Journaler journaler(io_ctx, image_id, "", 5);
+  ::journal::Journaler journaler(io_ctx, image_id, "", commit_age);
 
-  // TODO order / splay width via config / image metadata / data pool
-  int r = journaler.create(24, 4, io_ctx.get_id());
+  int r = journaler.create(order, splay_width, io_ctx.get_id());
   if (r < 0) {
     lderr(cct) << "failed to create journal: " << cpp_strerror(r) << dendl;
     return r;
@@ -116,8 +115,8 @@ int Journal::remove(librados::IoCtx &io_ctx, const std::string &image_id) {
   CephContext *cct = reinterpret_cast<CephContext *>(io_ctx.cct());
   ldout(cct, 5) << __func__ << ": image=" << image_id << dendl;
 
-  // TODO configurable commit flush interval
-  ::journal::Journaler journaler(io_ctx, image_id, "", 5);
+  ::journal::Journaler journaler(io_ctx, image_id, "",
+				 cct->_conf->rbd_journal_commit_age);
 
   bool journal_exists;
   int r = journaler.exists(&journal_exists);
@@ -407,7 +406,7 @@ void Journal::create_journaler() {
   // TODO allow alternate pool for journal objects and commit flush interval
   m_close_pending = false;
   m_journaler = new ::journal::Journaler(m_image_ctx.md_ctx, m_image_ctx.id, "",
-                                         5);
+                                         m_image_ctx.journal_commit_age);
 
   m_journaler->init(new C_InitJournal(this));
   transition_state(STATE_INITIALIZING);
@@ -533,8 +532,9 @@ void Journal::handle_replay_complete(int r) {
       return;
     }
 
-    // TODO configurable flush interval, flush bytes, and flush age
-    m_journaler->start_append(0, 0, 0);
+    m_journaler->start_append(m_image_ctx.journal_object_flush_interval,
+			      m_image_ctx.journal_object_flush_bytes,
+			      m_image_ctx.journal_object_flush_age);
     transition_state(STATE_RECORDING);
 
     unblock_writes();
