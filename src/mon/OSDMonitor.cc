@@ -2881,7 +2881,8 @@ namespace {
     CACHE_TARGET_FULL_RATIO,
     CACHE_MIN_FLUSH_AGE, CACHE_MIN_EVICT_AGE,
     ERASURE_CODE_PROFILE, MIN_READ_RECENCY_FOR_PROMOTE,
-    WRITE_FADVISE_DONTNEED, MIN_WRITE_RECENCY_FOR_PROMOTE};
+    WRITE_FADVISE_DONTNEED, MIN_WRITE_RECENCY_FOR_PROMOTE,
+    FAST_READ};
 
   std::set<osd_pool_get_choices>
     subtract_second_from_first(const std::set<osd_pool_get_choices>& first,
@@ -3334,7 +3335,8 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
       ("erasure_code_profile", ERASURE_CODE_PROFILE)
       ("min_read_recency_for_promote", MIN_READ_RECENCY_FOR_PROMOTE)
       ("write_fadvise_dontneed", WRITE_FADVISE_DONTNEED)
-      ("min_write_recency_for_promote", MIN_WRITE_RECENCY_FOR_PROMOTE);
+      ("min_write_recency_for_promote", MIN_WRITE_RECENCY_FOR_PROMOTE)
+      ("fast_read", FAST_READ);
 
     typedef std::set<osd_pool_get_choices> choices_set_t;
 
@@ -3490,6 +3492,9 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	    f->dump_int("min_write_recency_for_promote",
 			p->min_write_recency_for_promote);
 	    break;
+          case FAST_READ:
+            f->dump_int("fast_read", p->fast_read);
+            break;
 	}
 	f->close_section();
 	f->flush(rdata);
@@ -3588,6 +3593,9 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	    ss << "min_write_recency_for_promote: " <<
 	      p->min_write_recency_for_promote << "\n";
 	    break;
+          case FAST_READ:
+            ss << "fast_read: " << p->fast_read << "\n";
+            break;
 	}
 	rdata.append(ss.str());
 	ss.str("");
@@ -4031,12 +4039,12 @@ int OSDMonitor::prepare_new_pool(MonOpRequestRef op)
     return prepare_new_pool(m->name, m->auid, m->crush_rule, ruleset_name,
 			    0, 0,
                             erasure_code_profile,
-			    pg_pool_t::TYPE_REPLICATED, 0, &ss);
+			    pg_pool_t::TYPE_REPLICATED, 0, FAST_READ_OFF, &ss);
   else
     return prepare_new_pool(m->name, session->auid, m->crush_rule, ruleset_name,
 			    0, 0,
                             erasure_code_profile,
-			    pg_pool_t::TYPE_REPLICATED, 0, &ss);
+			    pg_pool_t::TYPE_REPLICATED, 0, FAST_READ_OFF, &ss);
 }
 
 int OSDMonitor::crush_rename_bucket(const string& srcname,
@@ -4420,6 +4428,7 @@ int OSDMonitor::get_crush_ruleset(const string &ruleset_name,
  * @param erasure_code_profile The profile name in OSDMap to be used for erasure code
  * @param pool_type TYPE_ERASURE, or TYPE_REP
  * @param expected_num_objects expected number of objects on the pool
+ * @param fast_read fast read type. 
  * @param ss human readable error message, if any.
  *
  * @return 0 on success, negative errno on failure.
@@ -4431,6 +4440,7 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid,
 				 const string &erasure_code_profile,
                                  const unsigned pool_type,
                                  const uint64_t expected_num_objects,
+                                 FastReadType fast_read,
 				 ostream *ss)
 {
   if (name.length() == 0)
@@ -4449,6 +4459,10 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid,
     *ss << "'pgp_num' must be greater than 0 and lower or equal than 'pg_num'"
         << ", which in this case is " << pg_num;
     return -ERANGE;
+  }
+  if (pool_type == pg_pool_t::TYPE_REPLICATED && fast_read == FAST_READ_ON) {
+    *ss << "'fast_read' can only apply to erasure coding pool";
+    return -EINVAL;
   }
   int r;
   r = prepare_pool_crush_ruleset(pool_type, erasure_code_profile,
@@ -4505,6 +4519,24 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid,
   if (g_conf->osd_pool_use_gmt_hitset &&
       (osdmap.get_up_osd_features() & CEPH_FEATURE_OSD_HITSET_GMT))
     pi->use_gmt_hitset = true;
+
+  if (pool_type == pg_pool_t::TYPE_ERASURE) {
+    switch (fast_read) {
+      case FAST_READ_OFF:
+        pi->fast_read = false;
+        break;
+      case FAST_READ_ON:
+        pi->fast_read = true;
+        break;
+      case FAST_READ_DEFAULT:
+        pi->fast_read = g_conf->mon_osd_pool_ec_fast_read;
+        break;
+      default:
+        *ss << "invalid fast_read setting: " << fast_read;
+        return -EINVAL;
+    }
+  }
+
   pi->size = size;
   pi->min_size = min_size;
   pi->crush_ruleset = crush_ruleset;
@@ -4942,6 +4974,16 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
       return -EINVAL;
     }
     p.min_write_recency_for_promote = n;
+  } else if (var == "fast_read") {
+    if (val == "true" || (interr.empty() && n == 1)) {
+      if (p.is_replicated()) {
+        ss << "fast read is not supported in replication pool";
+        return -EINVAL;
+      }
+      p.fast_read = true;
+    } else if (val == "false" || (interr.empty() && n == 0)) {
+      p.fast_read = false;
+    }
   } else {
     ss << "unrecognized variable '" << var << "'";
     return -EINVAL;
@@ -6539,12 +6581,22 @@ done:
       err = -EINVAL;
       goto reply;
     }
+
+    int8_t fast_read_param;
+    cmd_getval(g_ceph_context, cmdmap, "fast_read", fast_read_param, int8_t(-1));
+    FastReadType fast_read = FAST_READ_DEFAULT;
+    if (fast_read_param == 0)
+      fast_read = FAST_READ_OFF;
+    else if (fast_read_param > 0)
+      fast_read = FAST_READ_ON;
+    
     err = prepare_new_pool(poolstr, 0, // auid=0 for admin created pool
 			   -1, // default crush rule
 			   ruleset_name,
 			   pg_num, pgp_num,
 			   erasure_code_profile, pool_type,
                            (uint64_t)expected_num_objects,
+                           fast_read,
 			   &ss);
     if (err < 0) {
       switch(err) {
