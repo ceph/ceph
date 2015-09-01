@@ -3690,7 +3690,8 @@ int NewStore::_zero(TransContext *txc,
 	goto out;
       }
       f.length = (offset + length) - f.offset;
-      ::ftruncate(fd, f.length);
+      r = ::ftruncate(fd, f.length);
+      assert(r == 0);   // this shouldn't fail
       dout(20) << __func__ << " tail " << f.fid << " truncating up to "
 	       << f.length << dendl;
       o->onode.size = offset + length;
