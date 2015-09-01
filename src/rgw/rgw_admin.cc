@@ -1643,12 +1643,15 @@ int main(int argc, char **argv)
       break;
     case OPT_PERIOD_GET_CURRENT:
       {
-	RGWRealm realm(g_ceph_context, store);
-	string current_id;
-	int ret = realm.get_current_period_id(current_id);
-	if (ret == -ENOENT) {
-	  cout << "No current period" << std::endl;
+	RGWRealm realm(realm_id, realm_name);
+	int ret = realm.init(g_ceph_context, store);
+	if (ret < 0 ) {
+	  cerr << "Error initing realm " << cpp_strerror(-ret) << std::endl;
 	  return ret;
+	}
+	string current_id = realm.get_current_period();
+	if (current_id.empty()) {
+	  cout << "No current period" << std::endl;
 	} else if (ret < 0) {
 	  cerr << "Error reading current period:" << cpp_strerror(-ret) << std::endl;
 	  return ret;
@@ -1662,16 +1665,16 @@ int main(int argc, char **argv)
 	  cerr << "Missing period id" << std::endl;
 	  return -EINVAL;
 	}
-	RGWPeriod period(g_ceph_context, store, period_id);
-	int ret = period.init();
-	if (ret < 0) {
-	  cerr << "period init failed: " << cpp_strerror(-ret) << std::endl;
-	  return -ret;
+	RGWRealm realm(realm_id, realm_name);
+	int ret = realm.init(g_ceph_context, store);
+	if (ret < 0 ) {
+	  cerr << "Error initing realm " << cpp_strerror(-ret) << std::endl;
+	  return ret;
 	}
-	ret = period.activate();
-	if (ret < 0) {
-	  cerr << "period activate failed: " << cpp_strerror(-ret) << std::endl;
-	  return -ret;
+	ret = realm.set_current_period(period_id);
+	if (ret < 0 ) {
+	  cerr << "Error setting current period " << period_id << ":" << cpp_strerror(-ret) << std::endl;
+	  return ret;
 	}
       }
       break;

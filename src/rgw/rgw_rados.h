@@ -1172,6 +1172,7 @@ public:
   const string& get_current_period() {
     return current_period;
   }
+  int set_current_period(const string& period_id);  
 };
 WRITE_CLASS_ENCODER(RGWRealm)
 
