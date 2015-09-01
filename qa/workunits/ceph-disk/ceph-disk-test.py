@@ -13,6 +13,12 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU Library Public License for more details.
 #
+# When debugging these tests, here are a few useful commands:
+#
+#  export PATH=..:$PATH
+#  python ceph-disk-test.py --verbose --destroy-osd 0
+#  py.test -s -v -k test_activate_dmcrypt_luks ceph-disk-test.py
+#
 import argparse
 import json
 import logging
@@ -178,33 +184,14 @@ class TestCephDisk(object):
         disk = c.unused_disks()[0]
         osd_uuid = str(uuid.uuid1())
         journal_uuid = str(uuid.uuid1())
-        d = tempfile.mkdtemp()
         c.sh("ceph-disk zap " + disk)
         c.sh("ceph-disk prepare " +
-             " --dmcrypt-key-dir " + d +
              " --osd-uuid " + osd_uuid +
              " --journal-uuid " + journal_uuid +
              " --dmcrypt " +
              " " + disk)
-        if type == 'plain':
-            c.sh("cryptsetup --key-file " + d + "/" + osd_uuid +
-                 " --key-size 256 create " + osd_uuid +
-                 " " + disk + "1")
-        else:
-            c.sh("cryptsetup --key-file " + d + "/" + osd_uuid + ".luks.key" +
-                 " luksOpen " +
-                 " " + disk + "1" +
-                 " " + osd_uuid)
-        if type == 'plain':
-            c.sh("cryptsetup --key-file " + d + "/" + journal_uuid +
-                 " --key-size 256 create " + journal_uuid +
-                 " " + disk + "2")
-        else:
-            c.sh("cryptsetup --key-file " + d + "/" + journal_uuid + ".luks.key" +
-                 " luksOpen " +
-                 " " + disk + "2" +
-                 " " + journal_uuid)
-        c.sh("ceph-disk activate /dev/mapper/" + osd_uuid)
+        data_partition = c.get_osd_partition(osd_uuid)
+        c.sh("ceph-disk activate --dmcrypt " + data_partition['path'])
         data_partition = c.get_osd_partition(osd_uuid)
         assert data_partition['type'] == 'data'
         assert data_partition['state'] == 'active'
