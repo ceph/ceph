@@ -48,10 +48,17 @@
 #include <sstream>
 #include <string>
 #include <string.h>
+#include <mutex>
 
 #define dout_subsys ceph_subsys_rgw
 
 using std::string;
+
+static std::mutex librgw_mtx;
+
+RGWLib librgw; /* XXX initialize? */
+
+extern "C" {
 
 int librgw_create(librgw_t* rgw, const char* const id)
 {
@@ -59,13 +66,21 @@ int librgw_create(librgw_t* rgw, const char* const id)
   if (id) {
     iparams.name.set(CEPH_ENTITY_TYPE_CLIENT, id);
   }
+
   CephContext* cct = common_preinit(iparams, CODE_ENVIRONMENT_LIBRARY, 0);
   cct->_conf->set_val("log_to_stderr", "false"); // quiet by default
   cct->_conf->set_val("err_to_stderr", "true"); // quiet by default
   cct->_conf->parse_env(); // environment variables override
   cct->_conf->apply_changes(NULL);
-
   common_init_finish(cct);
+
+  /* assign ref'd cct as g_ceph_context if none exists */
+  if (! g_ceph_context) {
+    std::lock_guard<std::mutex> lg(librgw_mtx);
+    if (! g_ceph_context)
+      g_ceph_context = cct->get();
+  }
+
   *rgw = cct;
   return 0;
 }
@@ -291,6 +306,12 @@ void RGWLibProcess::handle_request(RGWRequest* r)
   delete req;
 }
 
+int RGWLibFrontend::init()
+{
+  /* XXX */
+  return 0;
+}
+
 void RGWLibFrontend::gen_request(const string& method, const string& resource,
 				 int content_length, bool user_command,
 				 atomic_t* fail_flag)
@@ -453,6 +474,27 @@ int RGWLibIO::set_uid(RGWRados *store, const rgw_user& uid)
   return ret;
 }
 
+/* TODO: implement */
+int RGWLibIO::send_status(int status, const char* status_name)
+{
+  return 0;
+}
+
+int RGWLibIO::send_100_continue()
+{
+  return 0;
+}
+
+int RGWLibIO::complete_header()
+{
+  return 0;
+}
+
+int RGWLibIO::send_content_length(uint64_t len)
+{
+  return 0;
+}
+
 int RGWLibIO::write_data(const char* buf, int len)
 {
   return len;
@@ -515,3 +557,5 @@ int librgw_stop()
 {
   return rgwlib.stop();
 }
+
+} /* extern "C" */
