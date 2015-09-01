@@ -11,6 +11,7 @@
 #include <time.h>
 #include <unistd.h>
 #include <iostream>
+#include "gtest/gtest.h"
 
 using namespace librados;
 
@@ -255,4 +256,28 @@ int destroy_one_ec_pool_pp(const std::string &pool_name, Rados &cluster)
   }
   cluster.shutdown();
   return ret;
+}
+
+void assert_eq_sparse(bufferlist& expected,
+                      const std::map<uint64_t, uint64_t>& extents,
+                      bufferlist& actual) {
+  auto i = expected.begin();
+  auto p = actual.begin();
+  uint64_t pos = 0;
+  for (auto extent : extents) {
+    const uint64_t start = extent.first;
+    const uint64_t end = start + extent.second;
+    for (; pos < end; ++i, ++pos) {
+      ASSERT_FALSE(i.end());
+      if (pos < start) {
+        // check the hole
+        ASSERT_EQ('\0', *i);
+      } else {
+        // then the extent
+        ASSERT_EQ(*i, *p);
+        ++p;
+      }
+    }
+  }
+  ASSERT_EQ(expected.length(), pos);
 }
