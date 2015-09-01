@@ -124,12 +124,12 @@ void ResizeRequest::send_op() {
 
   CephContext *cct = m_image_ctx.cct;
   if (is_canceled()) {
-    complete(-ERESTART);
+    async_complete(-ERESTART);
   } else if (m_original_size == m_new_size) {
     ldout(cct, 2) << this << " no change in size (" << m_original_size
 		  << " -> " << m_new_size << ")" << dendl;
     m_state = STATE_FINISHED;
-    complete(0);
+    async_complete(0);
   } else if (m_new_size > m_original_size) {
     ldout(cct, 2) << this << " expanding image (" << m_original_size
 		  << " -> " << m_new_size << ")" << dendl;
