@@ -3012,7 +3012,7 @@ def main_trigger(args):
             [
                 'systemctl',
                 '--no-block',
-                'start',
+                'restart',
                 service,
             ]
         )
