@@ -73,7 +73,7 @@ endif(PKG_CONFIG_FOUND)
 
 find_path(
     FUSE_INCLUDE_DIRS
-    NAMES fuse.h
+    NAMES fuse_common.h fuse_lowlevel.h fuse.h
     PATHS "${PC_FUSE_INCLUDE_DIRS}"
     DOC "Include directories for FUSE"
 )
@@ -94,8 +94,8 @@ if(NOT FUSE_LIBRARIES)
 endif(NOT FUSE_LIBRARIES)
 
 if(FUSE_FOUND)
-    if(EXISTS "${FUSE_INCLUDE_DIRS}/fuse/fuse_common.h")
-        file(READ "${FUSE_INCLUDE_DIRS}/fuse/fuse_common.h" _contents)
+    if(EXISTS "${FUSE_INCLUDE_DIRS}/fuse_common.h")
+        file(READ "${FUSE_INCLUDE_DIRS}/fuse_common.h" _contents)
         string(REGEX REPLACE ".*# *define *FUSE_MAJOR_VERSION *([0-9]+).*" "\\1" FUSE_MAJOR_VERSION "${_contents}")
         string(REGEX REPLACE ".*# *define *FUSE_MINOR_VERSION *([0-9]+).*" "\\1" FUSE_MINOR_VERSION "${_contents}")
         set(FUSE_VERSION "${FUSE_MAJOR_VERSION}.${FUSE_MINOR_VERSION}")
