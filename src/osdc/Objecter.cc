@@ -1891,6 +1891,7 @@ void Objecter::tick()
   for (map<int,OSDSession*>::iterator siter = osd_sessions.begin(); siter != osd_sessions.end(); ++siter) {
     OSDSession *s = siter->second;
     RWLock::RLocker l(s->lock);
+    bool found = false;
     for (map<ceph_tid_t,Op*>::iterator p = s->ops.begin();
 	p != s->ops.end();
 	++p) {
@@ -1898,7 +1899,7 @@ void Objecter::tick()
       assert(op->session);
       if (op->stamp < cutoff) {
 	ldout(cct, 2) << " tid " << p->first << " on osd." << op->session->osd << " is laggy" << dendl;
-	toping.insert(op->session);
+	found = true;
 	++laggy_ops;
       }
     }
@@ -1909,7 +1910,7 @@ void Objecter::tick()
       RWLock::WLocker wl(op->watch_lock);
       assert(op->session);
       ldout(cct, 10) << " pinging osd that serves lingering tid " << p->first << " (osd." << op->session->osd << ")" << dendl;
-      toping.insert(op->session);
+      found = true;
       if (op->is_watch && op->registered && !op->last_error)
 	_send_linger_ping(op);
     }
@@ -1919,8 +1920,10 @@ void Objecter::tick()
       CommandOp *op = p->second;
       assert(op->session);
       ldout(cct, 10) << " pinging osd that serves command tid " << p->first << " (osd." << op->session->osd << ")" << dendl;
-      toping.insert(op->session);
+      found = true;
     }
+    if (found)
+      toping.insert(s);
   }
   if (num_homeless_ops.read() || !toping.empty()) {
     _maybe_request_map();
