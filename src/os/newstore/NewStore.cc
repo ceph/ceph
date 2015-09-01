@@ -37,19 +37,8 @@
     * write path should ideally tolerate any fragment pattern, but only generate a fixed layout (since the tunable may be changed over time).
   * rocksdb: use db_paths (db/ and db.bulk/ ?)
   * rocksdb: auto-detect use_fsync option when not xfs or btrfs
-  * hobject sorting
-      - backfill
-      - scrub
-      - pgnls
-      - tiering agent position
-      - ObjectStore::collection_list_range
-      - ObjectStore::collection_list_partial
-      - DBObjectMap::clone lock ordering
-      - HashIndex::get_path_contents_by_hash
-      - HashIndex::list_by_hash
   * avoid mtime updates when doing open-by-handle
   * fid xattr backpointer
-  * kill collection_list_range
   * inline first fsync_item in TransContext to void allocation?
   * refcounted fragments (for efficient clone)
 
