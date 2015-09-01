@@ -777,9 +777,11 @@ public:
 
       bufferlist::iterator data_bl_p;
 
+    public:
       vector<coll_t> colls;
       vector<ghobject_t> objects;
 
+    private:
       iterator(Transaction *t)
         : t(t),
 	  data_bl_p(t->data_bl.begin()),

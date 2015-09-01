@@ -134,6 +134,7 @@ SUBSYS(throttle, 1, 1)
 SUBSYS(refs, 0, 0)
 SUBSYS(xio, 1, 5)
 SUBSYS(compressor, 1, 5)
+SUBSYS(newstore, 1, 5)
 
 OPTION(key, OPT_STR, "")
 OPTION(keyfile, OPT_STR, "")
@@ -788,6 +789,36 @@ OPTION(osd_bench_duration, OPT_U32, 30) // duration of 'osd bench', capped at 30
 OPTION(memstore_device_bytes, OPT_U64, 1024*1024*1024)
 OPTION(memstore_page_set, OPT_BOOL, true)
 OPTION(memstore_page_size, OPT_U64, 64 << 10)
+
+OPTION(newstore_max_dir_size, OPT_U32, 1000000)
+OPTION(newstore_onode_map_size, OPT_U32, 1024)   // onodes per collection
+OPTION(newstore_backend, OPT_STR, "rocksdb")
+OPTION(newstore_backend_options, OPT_STR, "")
+OPTION(newstore_fail_eio, OPT_BOOL, true)
+OPTION(newstore_sync_io, OPT_BOOL, false)  // perform initial io synchronously
+OPTION(newstore_sync_transaction, OPT_BOOL, false)  // perform kv txn synchronously
+OPTION(newstore_sync_submit_transaction, OPT_BOOL, false)
+OPTION(newstore_sync_wal_apply, OPT_BOOL, true)     // perform initial wal work synchronously (possibly in combination with aio so we only *queue* ios)
+OPTION(newstore_fsync_threads, OPT_INT, 16)  // num threads calling fsync
+OPTION(newstore_fsync_thread_timeout, OPT_INT, 30) // thread timeout value
+OPTION(newstore_fsync_thread_suicide_timeout, OPT_INT, 120) // suicide timeout value
+OPTION(newstore_wal_threads, OPT_INT, 4)
+OPTION(newstore_wal_thread_timeout, OPT_INT, 30)
+OPTION(newstore_wal_thread_suicide_timeout, OPT_INT, 120)
+OPTION(newstore_max_ops, OPT_U64, 512)
+OPTION(newstore_max_bytes, OPT_U64, 64*1024*1024)
+OPTION(newstore_wal_max_ops, OPT_U64, 512)
+OPTION(newstore_wal_max_bytes, OPT_U64, 128*1024*1024)
+OPTION(newstore_fid_prealloc, OPT_INT, 1024)
+OPTION(newstore_nid_prealloc, OPT_INT, 1024)
+OPTION(newstore_overlay_max_length, OPT_INT, 65536)
+OPTION(newstore_overlay_max, OPT_INT, 32)
+OPTION(newstore_open_by_handle, OPT_BOOL, true)
+OPTION(newstore_o_direct, OPT_BOOL, true)
+OPTION(newstore_db_path, OPT_STR, "")
+OPTION(newstore_aio, OPT_BOOL, true)
+OPTION(newstore_aio_poll_ms, OPT_INT, 250)  // milliseconds
+OPTION(newstore_aio_max_queue_depth, OPT_INT, 4096)
 
 OPTION(filestore_omap_backend, OPT_STR, "leveldb")
 

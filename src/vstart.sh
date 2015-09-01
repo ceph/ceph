@@ -78,6 +78,7 @@ overwrite_conf=1
 cephx=1 #turn cephx on by default
 cache=""
 memstore=0
+newstore=0
 journal=1
 
 MON_ADDR=""
@@ -196,6 +197,9 @@ case $1 in
     --memstore )
 	    memstore=1
 	    ;;
+    --newstore )
+	    newstore=1
+	    ;;
     --hitset )
 	    hitset="$hitset $2 $3"
 	    shift
@@ -271,6 +275,7 @@ else
         debug monc = 20
         debug journal = 20
         debug filestore = 20
+        debug newstore = 30
         debug rgw = 20
         debug objclass = 20'
     CMDSDEBUG='
@@ -292,6 +297,10 @@ fi
 if [ "$memstore" -eq 1 ]; then
     COSDMEMSTORE='
 	osd objectstore = memstore'
+fi
+if [ "$newstore" -eq 1 ]; then
+    COSDMEMSTORE='
+	osd objectstore = newstore'
 fi
 
 # lockdep everywhere?
