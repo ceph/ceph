@@ -1258,7 +1258,7 @@ inline string percentify(const float& a) {
 //void PGMonitor::dump_object_stat_sum(stringstream& ss, Formatter *f,
 void PGMonitor::dump_object_stat_sum(TextTable &tbl, Formatter *f,
 				     object_stat_sum_t &sum, uint64_t avail,
-				     bool verbose)
+				     bool verbose) const
 {
   if (f) {
     f->dump_int("kb_used", SHIFT_ROUND_UP(sum.num_bytes, 10));
@@ -1289,7 +1289,7 @@ void PGMonitor::dump_object_stat_sum(TextTable &tbl, Formatter *f,
   }
 }
 
-int64_t PGMonitor::get_rule_avail(OSDMap& osdmap, int ruleno)
+int64_t PGMonitor::get_rule_avail(OSDMap& osdmap, int ruleno) const
 {
   map<int,float> wm;
   int r = osdmap.crush->get_rule_weight_osd_map(ruleno, &wm);
@@ -1412,7 +1412,7 @@ void PGMonitor::dump_pool_stats(stringstream &ss, Formatter *f, bool verbose)
   }
 }
 
-void PGMonitor::dump_fs_stats(stringstream &ss, Formatter *f, bool verbose)
+void PGMonitor::dump_fs_stats(stringstream &ss, Formatter *f, bool verbose) const
 {
   if (f) {
     f->open_object_section("stats");
@@ -1452,7 +1452,7 @@ void PGMonitor::dump_fs_stats(stringstream &ss, Formatter *f, bool verbose)
 }
 
 
-void PGMonitor::dump_info(Formatter *f)
+void PGMonitor::dump_info(Formatter *f) const
 {
   f->open_object_section("pgmap");
   pg_map.dump(f);
