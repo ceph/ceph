@@ -1881,54 +1881,50 @@ void Objecter::tick()
 
   set<OSDSession*> toping;
 
-  int r = 0;
 
   // look for laggy requests
   utime_t cutoff = ceph_clock_now(cct);
   cutoff -= cct->_conf->objecter_timeout;  // timeout
 
-  unsigned laggy_ops;
+  unsigned laggy_ops = 0;
 
-  do {
-    laggy_ops = 0;
-    for (map<int,OSDSession*>::iterator siter = osd_sessions.begin(); siter != osd_sessions.end(); ++siter) {
-      OSDSession *s = siter->second;
-      RWLock::RLocker l(s->lock);
-      for (map<ceph_tid_t,Op*>::iterator p = s->ops.begin();
-           p != s->ops.end();
-           ++p) {
-        Op *op = p->second;
-        assert(op->session);
-        if (op->stamp < cutoff) {
-          ldout(cct, 2) << " tid " << p->first << " on osd." << op->session->osd << " is laggy" << dendl;
-          toping.insert(op->session);
-          ++laggy_ops;
-        }
-      }
-      for (map<uint64_t,LingerOp*>::iterator p = s->linger_ops.begin();
-           p != s->linger_ops.end();
-           ++p) {
-        LingerOp *op = p->second;
-        RWLock::WLocker wl(op->watch_lock);
-        assert(op->session);
-        ldout(cct, 10) << " pinging osd that serves lingering tid " << p->first << " (osd." << op->session->osd << ")" << dendl;
-        toping.insert(op->session);
-	if (op->is_watch && op->registered && !op->last_error)
-	  _send_linger_ping(op);
-      }
-      for (map<uint64_t,CommandOp*>::iterator p = s->command_ops.begin();
-           p != s->command_ops.end();
-           ++p) {
-        CommandOp *op = p->second;
-        assert(op->session);
-        ldout(cct, 10) << " pinging osd that serves command tid " << p->first << " (osd." << op->session->osd << ")" << dendl;
-        toping.insert(op->session);
+  for (map<int,OSDSession*>::iterator siter = osd_sessions.begin(); siter != osd_sessions.end(); ++siter) {
+    OSDSession *s = siter->second;
+    RWLock::RLocker l(s->lock);
+    for (map<ceph_tid_t,Op*>::iterator p = s->ops.begin();
+	p != s->ops.end();
+	++p) {
+      Op *op = p->second;
+      assert(op->session);
+      if (op->stamp < cutoff) {
+	ldout(cct, 2) << " tid " << p->first << " on osd." << op->session->osd << " is laggy" << dendl;
+	toping.insert(op->session);
+	++laggy_ops;
       }
     }
-    if (num_homeless_ops.read() || !toping.empty()) {
-      _maybe_request_map();
+    for (map<uint64_t,LingerOp*>::iterator p = s->linger_ops.begin();
+	p != s->linger_ops.end();
+	++p) {
+      LingerOp *op = p->second;
+      RWLock::WLocker wl(op->watch_lock);
+      assert(op->session);
+      ldout(cct, 10) << " pinging osd that serves lingering tid " << p->first << " (osd." << op->session->osd << ")" << dendl;
+      toping.insert(op->session);
+      if (op->is_watch && op->registered && !op->last_error)
+	_send_linger_ping(op);
     }
-  } while (r == -EAGAIN);
+    for (map<uint64_t,CommandOp*>::iterator p = s->command_ops.begin();
+	p != s->command_ops.end();
+	++p) {
+      CommandOp *op = p->second;
+      assert(op->session);
+      ldout(cct, 10) << " pinging osd that serves command tid " << p->first << " (osd." << op->session->osd << ")" << dendl;
+      toping.insert(op->session);
+    }
+  }
+  if (num_homeless_ops.read() || !toping.empty()) {
+    _maybe_request_map();
+  }
 
   logger->set(l_osdc_op_laggy, laggy_ops);
   logger->set(l_osdc_osd_laggy, toping.size());
