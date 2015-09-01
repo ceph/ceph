@@ -65,7 +65,7 @@ public:
 
   journal::Journaler *create_journaler(librbd::ImageCtx *ictx) {
     journal::Journaler *journaler = new journal::Journaler(
-      ictx->md_ctx, ictx->md_ctx, ictx->id, "dummy client");
+      ictx->md_ctx, ictx->md_ctx, ictx->id, "dummy client", 5);
 
     int r = journaler->register_client("unit test client");
     if (r < 0) {

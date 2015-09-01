@@ -27,7 +27,8 @@ class ReplayHandler;
 class Journaler {
 public:
   Journaler(librados::IoCtx &header_ioctx, librados::IoCtx &data_ioctx,
-            const std::string &journal_id, const std::string &client_id);
+	    const std::string &journal_id, const std::string &client_id,
+	    double commit_interval);
   ~Journaler();
 
   int create(uint8_t order, uint8_t splay_width);
@@ -43,7 +44,7 @@ public:
   bool try_pop_front(ReplayEntry *replay_entry);
   void stop_replay();
 
-  void start_append();
+  void start_append(int flush_interval, uint64_t flush_bytes, double flush_age);
   Future append(const std::string &tag, const bufferlist &bl);
   void flush(Context *on_safe);
   void stop_append(Context *on_safe);

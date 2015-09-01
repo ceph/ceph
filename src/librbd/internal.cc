@@ -939,7 +939,9 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
         goto err_remove_object_map;
       }
 
-      r = Journal::create(io_ctx, id);
+      r = Journal::create(io_ctx, id, cct->_conf->rbd_journal_commit_age,
+			  cct->_conf->rbd_journal_order,
+			  cct->_conf->rbd_journal_splay_width);
       if (r < 0) {
         lderr(cct) << "error creating journal: " << cpp_strerror(r) << dendl;
         goto err_remove_object_map;
@@ -1422,7 +1424,8 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
         }
         features_mask |= RBD_FEATURE_EXCLUSIVE_LOCK;
 
-        r = Journal::create(ictx->md_ctx, ictx->id);
+        r = Journal::create(ictx->md_ctx, ictx->id, ictx->journal_commit_age,
+			    ictx->journal_order, ictx->journal_splay_width);
         if (r < 0) {
           lderr(cct) << "error creating image journal: " << cpp_strerror(r)
                      << dendl;

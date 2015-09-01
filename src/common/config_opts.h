@@ -1000,6 +1000,16 @@ OPTION(rbd_default_features, OPT_INT, 3) // only applies to format 2 images
 
 OPTION(rbd_default_map_options, OPT_STR, "") // default rbd map -o / --options
 
+/**
+ * RBD journal options.
+ */
+OPTION(rbd_journal_order, OPT_U32, 24) // bits to shift to compute journal object max size, between 12 and 64
+OPTION(rbd_journal_splay_width, OPT_U32, 4) // number of active journal objects
+OPTION(rbd_journal_commit_age, OPT_DOUBLE, 5) // commit time interval, seconds
+OPTION(rbd_journal_object_flush_interval, OPT_INT, 0) // maximum number of pending commits per journal object
+OPTION(rbd_journal_object_flush_bytes, OPT_INT, 0) // maximum number of pending bytes per journal object
+OPTION(rbd_journal_object_flush_age, OPT_DOUBLE, 0) // maximum age (in seconds) for pending commits
+
 OPTION(nss_db_path, OPT_STR, "") // path to nss db
 
 

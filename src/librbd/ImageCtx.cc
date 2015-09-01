@@ -980,6 +980,12 @@ struct C_InvalidateCache : public Context {
     ASSIGN_OPTION(blacklist_expire_seconds);
     ASSIGN_OPTION(request_timed_out_seconds);
     ASSIGN_OPTION(enable_alloc_hint);
+    ASSIGN_OPTION(journal_order);
+    ASSIGN_OPTION(journal_splay_width);
+    ASSIGN_OPTION(journal_commit_age);
+    ASSIGN_OPTION(journal_object_flush_interval);
+    ASSIGN_OPTION(journal_object_flush_bytes);
+    ASSIGN_OPTION(journal_object_flush_age);
   }
 
   void ImageCtx::open_journal() {

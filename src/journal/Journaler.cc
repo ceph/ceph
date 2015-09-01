@@ -44,7 +44,7 @@ using namespace cls::journal;
 
 Journaler::Journaler(librados::IoCtx &header_ioctx, librados::IoCtx &data_ioctx,
                      const std::string &journal_id,
-                     const std::string &client_id)
+		     const std::string &client_id, double commit_interval)
   : m_client_id(client_id), m_metadata(NULL), m_player(NULL), m_recorder(NULL),
     m_trimmer(NULL)
 {
@@ -55,9 +55,8 @@ Journaler::Journaler(librados::IoCtx &header_ioctx, librados::IoCtx &data_ioctx,
   m_header_oid = JOURNAL_HEADER_PREFIX + journal_id;
   m_object_oid_prefix = JOURNAL_OBJECT_PREFIX + journal_id + ".";
 
-  // TODO configurable commit interval
   m_metadata = new JournalMetadata(m_header_ioctx, m_header_oid, m_client_id,
-                                   5);
+                                   commit_interval);
   m_metadata->get();
 
   m_trimmer = new JournalTrimmer(m_header_ioctx, m_object_oid_prefix,
@@ -161,14 +160,15 @@ void Journaler::committed(const Future &future) {
   m_trimmer->committed(future_impl->get_commit_tid());
 }
 
-void Journaler::start_append() {
+void Journaler::start_append(int flush_interval, uint64_t flush_bytes,
+			     double flush_age) {
   assert(m_recorder == NULL);
 
   // TODO verify active object set >= current replay object set
 
-  // TODO configurable flush intervals
   m_recorder = new JournalRecorder(m_data_ioctx, m_object_oid_prefix,
-                                   m_metadata, 0, 0, 0);
+				   m_metadata, flush_interval, flush_bytes,
+				   flush_age);
 }
 
 void Journaler::stop_append(Context *on_safe) {
