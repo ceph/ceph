@@ -152,6 +152,12 @@ private:
   CrushWrapper &_get_stable_crush();
   void _get_pending_crush(CrushWrapper& newcrush);
 
+  enum FastReadType {
+    FAST_READ_OFF,
+    FAST_READ_ON,
+    FAST_READ_DEFAULT
+  };
+
   // svc
 public:  
   void create_initial();
@@ -312,6 +318,7 @@ private:
 		       const string &erasure_code_profile,
                        const unsigned pool_type,
                        const uint64_t expected_num_objects,
+                       FastReadType fast_read,
 		       ostream *ss);
   int prepare_new_pool(MonOpRequestRef op);
 
