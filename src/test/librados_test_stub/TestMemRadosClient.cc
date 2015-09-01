@@ -78,7 +78,7 @@ int TestMemRadosClient::pool_delete(const std::string &pool_name) {
   if (iter == m_pools.end()) {
     return -ENOENT;
   }
-  delete iter->second;
+  iter->second->put();
   m_pools.erase(iter);
   return 0;
 }

@@ -8,13 +8,16 @@
 #include "common/dout.h"
 #include "common/errno.h"
 #include "common/perf_counters.h"
+#include "common/WorkQueue.h"
 
+#include "librbd/AioImageRequestWQ.h"
 #include "librbd/AsyncOperation.h"
 #include "librbd/AsyncRequest.h"
 #include "librbd/AsyncResizeRequest.h"
 #include "librbd/internal.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageWatcher.h"
+#include "librbd/Journal.h"
 #include "librbd/ObjectMap.h"
 
 #include <boost/bind.hpp>
@@ -64,6 +67,7 @@ public:
       exclusive_locked(false),
       name(image_name),
       image_watcher(NULL),
+      journal(NULL),
       refresh_seq(0),
       last_refresh(0),
       owner_lock(unique_lock_name("librbd::ImageCtx::owner_lock", this)),
@@ -84,7 +88,8 @@ public:
       object_cacher(NULL), writeback_handler(NULL), object_set(NULL),
       readahead(),
       total_bytes_read(0), copyup_finisher(NULL),
-      object_map(*this), aio_work_queue(NULL), op_work_queue(NULL)
+      object_map(*this), aio_work_queue(NULL), op_work_queue(NULL),
+      refresh_in_progress(false)
   {
     md_ctx.dup(p);
     data_ctx.dup(p);
@@ -97,15 +102,17 @@ public:
     ThreadPoolSingleton *thread_pool_singleton;
     cct->lookup_or_create_singleton_object<ThreadPoolSingleton>(
       thread_pool_singleton, "librbd::thread_pool");
-    aio_work_queue = new ContextWQ("librbd::aio_work_queue",
-                                   cct->_conf->rbd_op_thread_timeout,
-                                   thread_pool_singleton);
+    aio_work_queue = new AioImageRequestWQ(this, "librbd::aio_work_queue",
+                                           cct->_conf->rbd_op_thread_timeout,
+                                           thread_pool_singleton);
     op_work_queue = new ContextWQ("librbd::op_work_queue",
                                   cct->_conf->rbd_op_thread_timeout,
                                   thread_pool_singleton);
   }
 
   ImageCtx::~ImageCtx() {
+    assert(journal == NULL);
+
     perf_stop();
     if (object_cacher) {
       delete object_cacher;
@@ -611,10 +618,12 @@ public:
 
   void ImageCtx::write_to_cache(object_t o, const bufferlist& bl, size_t len,
 				uint64_t off, Context *onfinish,
-				int fadvise_flags) {
+				int fadvise_flags, uint64_t journal_tid) {
     snap_lock.get_read();
     ObjectCacher::OSDWrite *wr = object_cacher->prepare_write(snapc, bl,
-							      utime_t(), fadvise_flags);
+							      utime_t(),
+                                                              fadvise_flags,
+                                                              journal_tid);
     snap_lock.put_read();
     ObjectExtent extent(o, 0, off, len, 0);
     extent.oloc.pool = data_ctx.get_id();
@@ -743,6 +752,7 @@ public:
   int ImageCtx::register_watch() {
     assert(image_watcher == NULL);
     image_watcher = new ImageWatcher(*this);
+    aio_work_queue->register_lock_listener();
     return image_watcher->register_watch();
   }
 
@@ -784,7 +794,7 @@ public:
   void ImageCtx::flush_async_operations(Context *on_finish) {
     Mutex::Locker l(async_ops_lock);
     if (async_ops.empty()) {
-      op_work_queue->queue(on_finish, 0);
+      on_finish->complete(0);
       return;
     }
 
@@ -923,5 +933,25 @@ public:
     ASSIGN_OPTION(blacklist_expire_seconds);
     ASSIGN_OPTION(request_timed_out_seconds);
     ASSIGN_OPTION(enable_alloc_hint);
+  }
+
+  void ImageCtx::open_journal() {
+    assert(journal == NULL);
+    journal = new Journal(*this);
+  }
+
+  int ImageCtx::close_journal(bool force) {
+    assert(journal != NULL);
+    int r = journal->close();
+    if (r < 0) {
+      lderr(cct) << "failed to flush journal: " << cpp_strerror(r) << dendl;
+      if (!force) {
+        return r;
+      }
+    }
+
+    delete journal;
+    journal = NULL;
+    return r;
   }
 }

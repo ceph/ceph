@@ -52,6 +52,9 @@ static librados::TestRadosClient *get_rados_client() {
     cct->_conf->apply_changes(NULL);
     s_rados_client.reset(new librados::TestMemRadosClient(cct),
                          &DeallocateRadosClient);
+    if (g_ceph_context == NULL) {
+      g_ceph_context = cct;
+    }
     cct->put();
   }
   s_rados_client->get();
@@ -339,6 +342,13 @@ int IoCtx::aio_flush() {
 int IoCtx::aio_flush_async(AioCompletion *c) {
   TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
   ctx->aio_flush_async(c->pc);
+  return 0;
+}
+
+int IoCtx::aio_notify(const std::string& oid, AioCompletion *c, bufferlist& bl,
+                      uint64_t timeout_ms, bufferlist *pbl) {
+  TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
+  ctx->aio_notify(oid, c->pc, bl, timeout_ms, pbl);
   return 0;
 }
 
@@ -660,6 +670,11 @@ void ObjectReadOperation::sparse_read(uint64_t off, uint64_t len,
                      boost::bind(op, _1, _2, _3, _4), prval);
   }
   o->ops.push_back(op);
+}
+
+void ObjectWriteOperation::append(const bufferlist &bl) {
+  TestObjectOperationImpl *o = reinterpret_cast<TestObjectOperationImpl*>(impl);
+  o->ops.push_back(boost::bind(&TestIoCtxImpl::append, _1, _2, bl, _4));
 }
 
 void ObjectWriteOperation::create(bool exclusive) {

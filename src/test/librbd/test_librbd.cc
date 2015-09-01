@@ -2929,17 +2929,20 @@ TEST_F(TestLibRBD, UpdateFeatures)
   ASSERT_EQ(-EINVAL, image.update_features(0, true));
 
   ASSERT_EQ(0, image.update_features(RBD_FEATURE_EXCLUSIVE_LOCK |
-                                       RBD_FEATURE_OBJECT_MAP |
-                                       RBD_FEATURE_FAST_DIFF, false));
+                                     RBD_FEATURE_OBJECT_MAP |
+                                     RBD_FEATURE_FAST_DIFF |
+                                     RBD_FEATURE_JOURNALING, false));
 
-  // cannot enable object map w/o exclusive lock
+  // cannot enable object map nor journaling w/o exclusive lock
   ASSERT_EQ(-EINVAL, image.update_features(RBD_FEATURE_OBJECT_MAP, true));
+  ASSERT_EQ(-EINVAL, image.update_features(RBD_FEATURE_JOURNALING, true));
   ASSERT_EQ(0, image.update_features(RBD_FEATURE_EXCLUSIVE_LOCK, true));
 
   // cannot enable fast diff w/o object map
   ASSERT_EQ(-EINVAL, image.update_features(RBD_FEATURE_FAST_DIFF, true));
   ASSERT_EQ(0, image.update_features(RBD_FEATURE_OBJECT_MAP |
-                                       RBD_FEATURE_FAST_DIFF, true));
+                                     RBD_FEATURE_FAST_DIFF |
+                                     RBD_FEATURE_JOURNALING, true));
 
   uint64_t expected_flags = RBD_FLAG_OBJECT_MAP_INVALID |
                             RBD_FLAG_FAST_DIFF_INVALID;
@@ -2958,6 +2961,10 @@ TEST_F(TestLibRBD, UpdateFeatures)
   // cannot disable exclusive lock w/ object map
   ASSERT_EQ(-EINVAL, image.update_features(RBD_FEATURE_EXCLUSIVE_LOCK, false));
   ASSERT_EQ(0, image.update_features(RBD_FEATURE_OBJECT_MAP, false));
+
+  // cannot disable exclusive lock w/ journaling
+  ASSERT_EQ(-EINVAL, image.update_features(RBD_FEATURE_EXCLUSIVE_LOCK, false));
+  ASSERT_EQ(0, image.update_features(RBD_FEATURE_JOURNALING, false));
 
   ASSERT_EQ(0, image.get_flags(&flags));
   ASSERT_EQ(0U, flags);
@@ -3051,8 +3058,9 @@ TEST_F(TestLibRBD, BlockingAIO)
   ASSERT_EQ(0, rbd.open(ioctx, image, name.c_str(), NULL));
 
   bufferlist bl;
-  bl.append(std::string(256, '1'));
+  ASSERT_EQ(0, image.write(0, bl.length(), bl));
 
+  bl.append(std::string(256, '1'));
   librbd::RBD::AioCompletion *write_comp =
     new librbd::RBD::AioCompletion(NULL, NULL);
   ASSERT_EQ(0, image.aio_write(0, bl.length(), bl, write_comp));

@@ -3,6 +3,7 @@
 #include "librbd/AsyncRequest.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/internal.h"
+#include "common/WorkQueue.h"
 #include <boost/bind.hpp>
 
 namespace librbd

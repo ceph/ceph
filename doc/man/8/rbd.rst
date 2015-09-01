@@ -137,6 +137,7 @@ Parameters
    * object-map: object map support (requires exclusive-lock)
    * fast-diff: fast diff calculations (requires object-map)
    * deep-flatten: snapshot flatten support
+   * journaling: journaled IO support (requires exclusive-lock)
 
 .. option:: --image-shared
 

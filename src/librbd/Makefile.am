@@ -1,4 +1,5 @@
 librbd_types_la_SOURCES = \
+	librbd/JournalTypes.cc \
 	librbd/WatchNotifyTypes.cc
 noinst_LTLIBRARIES += librbd_types.la
 
@@ -8,7 +9,9 @@ if WITH_RBD
 
 librbd_internal_la_SOURCES = \
 	librbd/AioCompletion.cc \
-	librbd/AioRequest.cc \
+	librbd/AioImageRequest.cc \
+	librbd/AioImageRequestWQ.cc \
+	librbd/AioObjectRequest.cc \
 	librbd/AsyncFlattenRequest.cc \
 	librbd/AsyncObjectThrottle.cc \
 	librbd/AsyncOperation.cc \
@@ -20,6 +23,8 @@ librbd_internal_la_SOURCES = \
 	librbd/ImageCtx.cc \
 	librbd/ImageWatcher.cc \
 	librbd/internal.cc \
+	librbd/Journal.cc \
+	librbd/JournalReplay.cc \
 	librbd/LibrbdWriteback.cc \
 	librbd/ObjectMap.cc \
 	librbd/RebuildObjectMapRequest.cc
@@ -32,11 +37,12 @@ noinst_LTLIBRARIES += librbd_api.la
 librbd_la_SOURCES = \
 	librbd/librbd.cc
 librbd_la_LIBADD = \
-	librbd_internal.la $(LIBRBD_TYPES) \
+	librbd_internal.la $(LIBRBD_TYPES) libjournal.la \
 	$(LIBRADOS) $(LIBCOMMON) $(LIBOSDC) \
 	librados_internal.la \
 	libcls_rbd_client.la \
 	libcls_lock_client.la \
+	libcls_journal_client.la \
 	$(PTHREAD_LIBS) $(EXTRALIBS)
 
 if WITH_LTTNG
@@ -52,7 +58,9 @@ lib_LTLIBRARIES += librbd.la
 
 noinst_HEADERS += \
 	librbd/AioCompletion.h \
-	librbd/AioRequest.h \
+	librbd/AioImageRequest.h \
+	librbd/AioImageRequestWQ.h \
+	librbd/AioObjectRequest.h \
 	librbd/AsyncFlattenRequest.h \
 	librbd/AsyncObjectThrottle.h \
 	librbd/AsyncOperation.h \
@@ -64,6 +72,9 @@ noinst_HEADERS += \
 	librbd/ImageCtx.h \
 	librbd/ImageWatcher.h \
 	librbd/internal.h \
+	librbd/Journal.h \
+	librbd/JournalReplay.h \
+	librbd/JournalTypes.h \
 	librbd/LibrbdWriteback.h \
 	librbd/ObjectMap.h \
 	librbd/parent_types.h \

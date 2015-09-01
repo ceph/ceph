@@ -17,6 +17,7 @@ public:
 
   template <typename Payload>
   inline void operator()(const Payload &payload) const {
+    ::encode(static_cast<uint32_t>(Payload::NOTIFY_OP), m_bl);
     payload.encode(m_bl);
   }
 
@@ -45,6 +46,8 @@ public:
 
   template <typename Payload>
   inline void operator()(const Payload &payload) const {
+    NotifyOp notify_op = Payload::NOTIFY_OP;
+    m_formatter->dump_string("notify_op", stringify(notify_op));
     payload.dump(m_formatter);
   }
 
@@ -87,7 +90,6 @@ void AsyncRequestId::dump(Formatter *f) const {
 }
 
 void AcquiredLockPayload::encode(bufferlist &bl) const {
-  ::encode(static_cast<uint32_t>(NOTIFY_OP_ACQUIRED_LOCK), bl);
   ::encode(client_id, bl);
 }
 
@@ -98,14 +100,12 @@ void AcquiredLockPayload::decode(__u8 version, bufferlist::iterator &iter) {
 }
 
 void AcquiredLockPayload::dump(Formatter *f) const {
-  f->dump_string("notify_op", stringify(NOTIFY_OP_ACQUIRED_LOCK));
   f->open_object_section("client_id");
   client_id.dump(f);
   f->close_section();
 }
 
 void ReleasedLockPayload::encode(bufferlist &bl) const {
-  ::encode(static_cast<uint32_t>(NOTIFY_OP_RELEASED_LOCK), bl);
   ::encode(client_id, bl);
 }
 
@@ -116,14 +116,12 @@ void ReleasedLockPayload::decode(__u8 version, bufferlist::iterator &iter) {
 }
 
 void ReleasedLockPayload::dump(Formatter *f) const {
-  f->dump_string("notify_op", stringify(NOTIFY_OP_RELEASED_LOCK));
   f->open_object_section("client_id");
   client_id.dump(f);
   f->close_section();
 }
 
 void RequestLockPayload::encode(bufferlist &bl) const {
-  ::encode(static_cast<uint32_t>(NOTIFY_OP_REQUEST_LOCK), bl);
   ::encode(client_id, bl);
 }
 
@@ -134,25 +132,21 @@ void RequestLockPayload::decode(__u8 version, bufferlist::iterator &iter) {
 }
 
 void RequestLockPayload::dump(Formatter *f) const {
-  f->dump_string("notify_op", stringify(NOTIFY_OP_REQUEST_LOCK));
   f->open_object_section("client_id");
   client_id.dump(f);
   f->close_section();
 }
 
 void HeaderUpdatePayload::encode(bufferlist &bl) const {
-  ::encode(static_cast<uint32_t>(NOTIFY_OP_HEADER_UPDATE), bl);
 }
 
 void HeaderUpdatePayload::decode(__u8 version, bufferlist::iterator &iter) {
 }
 
 void HeaderUpdatePayload::dump(Formatter *f) const {
-  f->dump_string("notify_op", stringify(NOTIFY_OP_HEADER_UPDATE));
 }
 
 void AsyncProgressPayload::encode(bufferlist &bl) const {
-  ::encode(static_cast<uint32_t>(NOTIFY_OP_ASYNC_PROGRESS), bl);
   ::encode(async_request_id, bl);
   ::encode(offset, bl);
   ::encode(total, bl);
@@ -165,7 +159,6 @@ void AsyncProgressPayload::decode(__u8 version, bufferlist::iterator &iter) {
 }
 
 void AsyncProgressPayload::dump(Formatter *f) const {
-  f->dump_string("notify_op", stringify(NOTIFY_OP_ASYNC_PROGRESS));
   f->open_object_section("async_request_id");
   async_request_id.dump(f);
   f->close_section();
@@ -174,7 +167,6 @@ void AsyncProgressPayload::dump(Formatter *f) const {
 }
 
 void AsyncCompletePayload::encode(bufferlist &bl) const {
-  ::encode(static_cast<uint32_t>(NOTIFY_OP_ASYNC_COMPLETE), bl);
   ::encode(async_request_id, bl);
   ::encode(result, bl);
 }
@@ -185,7 +177,6 @@ void AsyncCompletePayload::decode(__u8 version, bufferlist::iterator &iter) {
 }
 
 void AsyncCompletePayload::dump(Formatter *f) const {
-  f->dump_string("notify_op", stringify(NOTIFY_OP_ASYNC_COMPLETE));
   f->open_object_section("async_request_id");
   async_request_id.dump(f);
   f->close_section();
@@ -193,7 +184,6 @@ void AsyncCompletePayload::dump(Formatter *f) const {
 }
 
 void FlattenPayload::encode(bufferlist &bl) const {
-  ::encode(static_cast<uint32_t>(NOTIFY_OP_FLATTEN), bl);
   ::encode(async_request_id, bl);
 }
 
@@ -202,14 +192,12 @@ void FlattenPayload::decode(__u8 version, bufferlist::iterator &iter) {
 }
 
 void FlattenPayload::dump(Formatter *f) const {
-  f->dump_string("notify_op", stringify(NOTIFY_OP_FLATTEN));
   f->open_object_section("async_request_id");
   async_request_id.dump(f);
   f->close_section();
 }
 
 void ResizePayload::encode(bufferlist &bl) const {
-  ::encode(static_cast<uint32_t>(NOTIFY_OP_RESIZE), bl);
   ::encode(size, bl);
   ::encode(async_request_id, bl);
 }
@@ -220,7 +208,6 @@ void ResizePayload::decode(__u8 version, bufferlist::iterator &iter) {
 }
 
 void ResizePayload::dump(Formatter *f) const {
-  f->dump_string("notify_op", stringify(NOTIFY_OP_RESIZE));
   f->dump_unsigned("size", size);
   f->open_object_section("async_request_id");
   async_request_id.dump(f);
@@ -228,7 +215,6 @@ void ResizePayload::dump(Formatter *f) const {
 }
 
 void SnapCreatePayload::encode(bufferlist &bl) const {
-  ::encode(static_cast<uint32_t>(NOTIFY_OP_SNAP_CREATE), bl);
   ::encode(snap_name, bl);
 }
 
@@ -237,12 +223,10 @@ void SnapCreatePayload::decode(__u8 version, bufferlist::iterator &iter) {
 }
 
 void SnapCreatePayload::dump(Formatter *f) const {
-  f->dump_string("notify_op", stringify(NOTIFY_OP_SNAP_CREATE));
   f->dump_string("snap_name", snap_name);
 }
 
 void SnapRemovePayload::encode(bufferlist &bl) const {
-  ::encode(static_cast<uint32_t>(NOTIFY_OP_SNAP_REMOVE), bl);
   ::encode(snap_name, bl);
 }
 
@@ -251,12 +235,10 @@ void SnapRemovePayload::decode(__u8 version, bufferlist::iterator &iter) {
 }
 
 void SnapRemovePayload::dump(Formatter *f) const {
-  f->dump_string("notify_op", stringify(NOTIFY_OP_SNAP_REMOVE));
   f->dump_string("snap_name", snap_name);
 }
 
 void RebuildObjectMapPayload::encode(bufferlist &bl) const {
-  ::encode(static_cast<uint32_t>(NOTIFY_OP_REBUILD_OBJECT_MAP), bl);
   ::encode(async_request_id, bl);
 }
 
@@ -265,7 +247,6 @@ void RebuildObjectMapPayload::decode(__u8 version, bufferlist::iterator &iter) {
 }
 
 void RebuildObjectMapPayload::dump(Formatter *f) const {
-  f->dump_string("notify_op", stringify(NOTIFY_OP_REBUILD_OBJECT_MAP));
   f->open_object_section("async_request_id");
   async_request_id.dump(f);
   f->close_section();

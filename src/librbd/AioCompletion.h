@@ -5,21 +5,19 @@
 
 #include "common/Cond.h"
 #include "common/Mutex.h"
-#include "common/ceph_context.h"
-#include "common/perf_counters.h"
 #include "include/Context.h"
 #include "include/utime.h"
 #include "include/rbd/librbd.hpp"
 
 #include "librbd/AsyncOperation.h"
-#include "librbd/ImageCtx.h"
-#include "librbd/internal.h"
 
 #include "osdc/Striper.h"
 
+class CephContext;
+
 namespace librbd {
 
-  class AioRead;
+  class AioObjectRead;
 
   typedef enum {
     AIO_TYPE_READ = 0,
@@ -31,7 +29,7 @@ namespace librbd {
 
   /**
    * AioCompletion is the overall completion for a single
-   * rbd I/O request. It may be composed of many AioRequests,
+   * rbd I/O request. It may be composed of many AioObjectRequests,
    * which each go to a single object.
    *
    * The retrying of individual requests is handled at a lower level,
@@ -64,13 +62,16 @@ namespace librbd {
 
     AsyncOperation async_op;
 
+    uint64_t journal_tid;
+
     AioCompletion() : lock("AioCompletion::lock", true, false),
 		      done(false), rval(0), complete_cb(NULL),
 		      complete_arg(NULL), rbd_comp(NULL),
 		      pending_count(0), blockers(1),
 		      ref(1), released(false), ictx(NULL),
 		      aio_type(AIO_TYPE_NONE),
-		      read_bl(NULL), read_buf(NULL), read_buf_len(0) {
+		      read_bl(NULL), read_buf(NULL), read_buf_len(0),
+                      journal_tid(0) {
     }
     ~AioCompletion() {
     }
@@ -88,15 +89,7 @@ namespace librbd {
 
     void finish_adding_requests(CephContext *cct);
 
-    void init_time(ImageCtx *i, aio_type_t t) {
-      if (ictx == NULL) {
-        ictx = i;
-        aio_type = t;
-        start_time = ceph_clock_now(ictx->cct);
-
-	async_op.start_op(*ictx);
-      }
-    }
+    void init_time(ImageCtx *i, aio_type_t t);
 
     void fail(CephContext *cct, int r);
 
@@ -108,6 +101,8 @@ namespace librbd {
     }
 
     void complete_request(CephContext *cct, ssize_t r);
+
+    void associate_journal_event(uint64_t tid);
 
     bool is_complete();
 
@@ -152,45 +147,45 @@ namespace librbd {
     }
   };
 
-  class C_AioRead : public Context {
+  class C_AioRequest : public Context {
   public:
-    C_AioRead(CephContext *cct, AioCompletion *completion)
-      : m_cct(cct), m_completion(completion), m_req(NULL)
-    { }
-    virtual ~C_AioRead() {}
-    virtual void finish(int r);
-    void set_req(AioRead *req) {
-      m_req = req;
+    C_AioRequest(CephContext *cct, AioCompletion *completion)
+      : m_cct(cct), m_completion(completion) {
+      m_completion->add_request();
     }
-  private:
-    CephContext *m_cct;
-    AioCompletion *m_completion;
-    AioRead *m_req;
-  };
-
-  class C_AioWrite : public Context {
-  public:
-    C_AioWrite(CephContext *cct, AioCompletion *completion)
-      : m_cct(cct), m_completion(completion) {}
-    virtual ~C_AioWrite() {}
+    virtual ~C_AioRequest() {}
     virtual void finish(int r) {
       m_completion->complete_request(m_cct, r);
     }
-  private:
+  protected:
     CephContext *m_cct;
     AioCompletion *m_completion;
+  };
+
+  class C_AioRead : public C_AioRequest {
+  public:
+    C_AioRead(CephContext *cct, AioCompletion *completion)
+      : C_AioRequest(cct, completion), m_req(NULL) {
+    }
+    virtual ~C_AioRead() {}
+    virtual void finish(int r);
+    void set_req(AioObjectRead *req) {
+      m_req = req;
+    }
+  private:
+    AioObjectRead *m_req;
   };
 
   class C_CacheRead : public Context {
   public:
-    explicit C_CacheRead(ImageCtx *ictx, AioRead *req)
+    explicit C_CacheRead(ImageCtx *ictx, AioObjectRead *req)
       : m_image_ctx(*ictx), m_req(req), m_enqueued(false) {}
     virtual void complete(int r);
   protected:
     virtual void finish(int r);
   private:
     ImageCtx &m_image_ctx;
-    AioRead *m_req;
+    AioObjectRead *m_req;
     bool m_enqueued;
   };
 }

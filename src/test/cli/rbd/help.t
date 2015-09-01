@@ -113,7 +113,7 @@
     --allow-shrink                     allow shrinking of an image when resizing
   
   Supported image features:
-    layering (+), striping (+), exclusive-lock (*), object-map (*), fast-diff (*), deep-flatten
+    layering (+), striping (+), exclusive-lock (*), object-map (*), fast-diff (*), deep-flatten, journaling (*)
   
     (*) supports enabling/disabling on existing images
     (+) enabled by default for new images if features are not specified
