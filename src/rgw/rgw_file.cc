@@ -156,6 +156,7 @@ int rgw_readdir(const struct rgw_file_handle* parent_handle, const char* path)
     return rc;
   }
 
+#if 0
   if (is_root(uri)) {
     /* get the bucket list */
     return librgw.get_user_buckets_list();
@@ -165,6 +166,7 @@ int rgw_readdir(const struct rgw_file_handle* parent_handle, const char* path)
   } else { /* parent cannot be an object */
     return -1;
   }
+#endif
 
   return 0;
 }

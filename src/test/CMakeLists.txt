@@ -2383,6 +2383,22 @@ target_link_libraries(test_keyvaluedb_iterators
   ${CMAKE_DL_LIBS}
   )
 
+# librgw_file (nfs-like RGW interface)
+add_executable(test_librgw_file
+  librgw_file.cc
+  $<TARGET_OBJECTS:heap_profiler_objs>
+  )
+set_target_properties(test_librgw_file PROPERTIES COMPILE_FLAGS
+  ${UNITTEST_CXX_FLAGS})
+target_link_libraries(test_librgw_file
+  rgw
+  librados
+  ${UNITTEST_LIBS}
+  ${EXTRALIBS}
+  ${ALLOC_LIBS}
+  ${CMAKE_DL_LIBS}
+  )
+
 if(${HAVE_LIBFUSE})
   add_executable(test_cfuse_cache_invalidate
     test_cfuse_cache_invalidate.cc
@@ -2475,3 +2491,4 @@ if(HAVE_XIO)
     ${CMAKE_DL_LIBS}
     )
 endif(HAVE_XIO)
+
