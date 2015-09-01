@@ -1025,7 +1025,9 @@ struct RGWZoneGroup : public RGWSystemMetaObj {
   list<string> hostnames;
 
   RGWZoneGroup(): is_master(false){}
+  RGWZoneGroup(const std::string &id, const std::string &name):RGWSystemMetaObj(id, name) {}
   RGWZoneGroup(const std::string &_name):RGWSystemMetaObj(_name) {}
+  RGWZoneGroup(const std::string &_name, CephContext *cct, RGWRados* store):RGWSystemMetaObj(_name, cct , store) {}
 
   void encode(bufferlist& bl) const {
     ENCODE_START(3, 1, bl);
