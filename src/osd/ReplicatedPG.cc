@@ -7800,10 +7800,12 @@ void ReplicatedPG::eval_repop(RepGather *repop)
 	     << " wants=" << (m->wants_ack() ? "a":"") << (m->wants_ondisk() ? "d":"")
 	     << (repop->rep_done ? " DONE" : "")
 	     << dendl;
-  else
+  else {
     dout(10) << "eval_repop " << *repop << " (no op)"
 	     << (repop->rep_done ? " DONE" : "")
 	     << dendl;
+    publish_stats_to_osd();
+  }
 
   if (repop->rep_done)
     return;
