@@ -2787,6 +2787,13 @@ next:
   return 0;
 }
 
+int RGWRados::key_to_shard_id(const string& key, int max_shards)
+{
+  uint32_t val = ceph_str_hash_linux(key.c_str(), key.size());
+#warning a bad hash, need to use prime
+  return val % max_shards;
+}
+
 void RGWRados::shard_name(const string& prefix, unsigned max_shards, const string& key, string& name)
 {
   uint32_t val = ceph_str_hash_linux(key.c_str(), key.size());
