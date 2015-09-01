@@ -18,6 +18,7 @@
 #include "include/rados/librados.h"
 #include "include/rados/librados.hpp"
 
+#include <map>
 #include <string>
 #include <unistd.h>
 
@@ -35,6 +36,9 @@ int destroy_one_pool(const std::string &pool_name, rados_t *cluster);
 int destroy_one_ec_pool(const std::string &pool_name, rados_t *cluster);
 int destroy_one_pool_pp(const std::string &pool_name, librados::Rados &cluster);
 int destroy_one_ec_pool_pp(const std::string &pool_name, librados::Rados &cluster);
+void assert_eq_sparse(bufferlist& expected,
+                      const std::map<uint64_t, uint64_t>& extents,
+                      bufferlist& actual);
 
 class TestAlarm
 {
