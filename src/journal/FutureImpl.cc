@@ -124,10 +124,13 @@ void FutureImpl::finish() {
 
   Contexts contexts;
   contexts.swap(m_contexts);
+
+  m_lock.Unlock();
   for (Contexts::iterator it = contexts.begin();
        it != contexts.end(); ++it) {
     (*it)->complete(m_return_value);
   }
+  m_lock.Lock();
 }
 
 std::ostream &operator<<(std::ostream &os, const FutureImpl &future) {
