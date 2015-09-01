@@ -113,6 +113,39 @@ TEST_P(KVTest, PutReopen) {
   fini();
 }
 
+TEST_P(KVTest, BenchCommit) {
+  int n = 1024;
+  ASSERT_EQ(0, db->create_and_open(cout));
+  utime_t start = ceph_clock_now(NULL);
+  {
+    cout << "priming" << std::endl;
+    // prime
+    bufferlist big;
+    bufferptr bp(1048576);
+    bp.zero();
+    big.append(bp);
+    for (int i=0; i<30; ++i) {
+      KeyValueDB::Transaction t = db->get_transaction();
+      t->set("prefix", "big" + stringify(i), big);
+      db->submit_transaction_sync(t);
+    }
+  }
+  cout << "now doing small writes" << std::endl;
+  bufferlist data;
+  bufferptr bp(1024);
+  bp.zero();
+  data.append(bp);
+  for (int i=0; i<n; ++i) {
+    KeyValueDB::Transaction t = db->get_transaction();
+    t->set("prefix", "key" + stringify(i), data);
+    db->submit_transaction_sync(t);
+  }
+  utime_t end = ceph_clock_now(NULL);
+  utime_t dur = end - start;
+  cout << n << " commits in " << dur << ", avg latency " << (dur / (double)n)
+       << std::endl;
+}
+
 
 INSTANTIATE_TEST_CASE_P(
   KeyValueDB,
