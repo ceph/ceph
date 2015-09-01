@@ -3960,7 +3960,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 
         op.extent.length = total_read;
 
-        osd_op.outdata.claim_append(bl);
+        ::encode(m, osd_op.outdata); // re-encode since it might be modified
         ::encode_destructively(data_bl, osd_op.outdata);
 
 	ctx->delta_stats.num_rd_kb += SHIFT_ROUND_UP(op.extent.length, 10);
