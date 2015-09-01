@@ -8,7 +8,6 @@ if ENABLE_SERVER
 libos_la_SOURCES = \
 	os/chain_xattr.cc \
 	os/fs/FS.cc \
-	os/fs/XFS.cc \
 	os/DBObjectMap.cc \
 	os/GenericObjectMap.cc \
 	os/FileJournal.cc \
