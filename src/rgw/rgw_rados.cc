@@ -552,6 +552,22 @@ const string& RGWRealm::get_info_oid_prefix(bool old_format)
   return realm_info_oid_prefix;
 }
 
+int RGWRealm::set_current_period(const string& period_id) {
+  /* check to see period id is valid */
+  RGWPeriod new_current(cct, store);  
+  int ret = new_current.init(period_id);
+  if (ret < 0) {
+    return ret;
+  }
+  if (new_current.get_predecessor() != current_period) {
+    ldout(cct, 0) << "set_current_period new period " << period_id <<
+      " is not a perdecessor of the current period "<< current_period << dendl;
+    return -EINVAL;
+  }
+  current_period = period_id;
+  return store_info(true);
+}
+
 int RGWPeriod::init(const string& period_id, epoch_t period_epoch,  bool setup_obj)
 {
   if (!period_id.empty()) {
