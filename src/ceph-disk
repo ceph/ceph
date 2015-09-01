@@ -3028,6 +3028,13 @@ def main_trigger(args):
         raise Error('no ID_PART_ENTRY_UUID for %s' % args.dev)
     partid = p['ID_PART_ENTRY_UUID']
 
+    LOG.info('trigger {dev} parttype {parttype} uuid {partid}'.format(
+        dev=args.dev,
+        parttype=parttype,
+        partid=partid,
+        )
+    )
+
     if parttype in [OSD_UUID, MPATH_OSD_UUID]:
         command(
             [
