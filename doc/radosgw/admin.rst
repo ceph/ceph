@@ -182,7 +182,7 @@ subuser), specify ``user rm`` and the user ID. ::
 
 To remove the subuser only, specify ``subuser rm`` and the subuser ID. ::
 
-	radosgw-admin subuser rm --uid=johndoe:swift
+	radosgw-admin subuser rm --subuser=johndoe:swift
 
 
 Options include:
@@ -198,10 +198,10 @@ Remove a Subuser
 ----------------
 
 When you remove a sub user, you are removing access to the Swift interface. 
-The user will remain in the system. The Ceph Object Gateway  To remove the subuser, specify 
+The user will remain in the system. To remove the subuser, specify 
 ``subuser rm`` and the subuser ID. ::
 
-	radosgw-admin subuser rm --uid=johndoe:swift
+	radosgw-admin subuser rm --subuser=johndoe:swift
 
 
 
