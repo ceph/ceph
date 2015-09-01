@@ -10,23 +10,23 @@ int ECUtil::decode(
   map<int, bufferlist> &to_decode,
   bufferlist *out) {
 
-  uint64_t total_chunk_size = to_decode.begin()->second.length();
+  uint64_t total_data_size = to_decode.begin()->second.length();
 
   assert(to_decode.size());
-  assert(total_chunk_size % sinfo.get_chunk_size() == 0);
+  assert(total_data_size % sinfo.get_chunk_size() == 0);
   assert(out);
   assert(out->length() == 0);
 
   for (map<int, bufferlist>::iterator i = to_decode.begin();
        i != to_decode.end();
        ++i) {
-    assert(i->second.length() == total_chunk_size);
+    assert(i->second.length() == total_data_size);
   }
 
-  if (total_chunk_size == 0)
+  if (total_data_size == 0)
     return 0;
 
-  for (uint64_t i = 0; i < total_chunk_size; i += sinfo.get_chunk_size()) {
+  for (uint64_t i = 0; i < total_data_size; i += sinfo.get_chunk_size()) {
     map<int, bufferlist> chunks;
     for (map<int, bufferlist>::iterator j = to_decode.begin();
 	 j != to_decode.end();
@@ -48,18 +48,18 @@ int ECUtil::decode(
   map<int, bufferlist> &to_decode,
   map<int, bufferlist*> &out) {
 
-  uint64_t total_chunk_size = to_decode.begin()->second.length();
+  uint64_t total_data_size = to_decode.begin()->second.length();
 
   assert(to_decode.size());
-  assert(total_chunk_size % sinfo.get_chunk_size() == 0);
+  assert(total_data_size % sinfo.get_chunk_size() == 0);
 
   for (map<int, bufferlist>::iterator i = to_decode.begin();
        i != to_decode.end();
        ++i) {
-    assert(i->second.length() == total_chunk_size);
+    assert(i->second.length() == total_data_size);
   }
 
-  if (total_chunk_size == 0)
+  if (total_data_size == 0)
     return 0;
 
   set<int> need;
@@ -71,7 +71,7 @@ int ECUtil::decode(
     need.insert(i->first);
   }
 
-  for (uint64_t i = 0; i < total_chunk_size; i += sinfo.get_chunk_size()) {
+  for (uint64_t i = 0; i < total_data_size; i += sinfo.get_chunk_size()) {
     map<int, bufferlist> chunks;
     for (map<int, bufferlist>::iterator j = to_decode.begin();
 	 j != to_decode.end();
@@ -92,7 +92,7 @@ int ECUtil::decode(
   for (map<int, bufferlist*>::iterator i = out.begin();
        i != out.end();
        ++i) {
-    assert(i->second->length() == total_chunk_size);
+    assert(i->second->length() == total_data_size);
   }
   return 0;
 }
