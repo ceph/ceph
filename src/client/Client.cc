@@ -4889,8 +4889,6 @@ int Client::mount(const std::string &mount_root, bool require_mds)
     }
   }
 
-  // hack: get+pin root inode.
-  //  fuse assumes it's always there.
   filepath fp(CEPH_INO_ROOT);
   if (!mount_root.empty())
     fp = filepath(mount_root.c_str());
@@ -4899,9 +4897,13 @@ int Client::mount(const std::string &mount_root, bool require_mds)
     req->set_filepath(fp);
     req->head.args.getattr.mask = CEPH_STAT_CAP_INODE_ALL;
     int res = make_request(req, -1, -1);
-    ldout(cct, 10) << "root getattr result=" << res << dendl;
-    if (res < 0)
+    if (res < 0) {
+      if (res == -EACCES && root) {
+	ldout(cct, 1) << __func__ << " EACCES on parent of mount point; quotas may not work" << dendl;
+	break;
+      }
       return res;
+    }
 
     if (fp.depth())
       fp.pop_dentry();
@@ -4909,7 +4911,6 @@ int Client::mount(const std::string &mount_root, bool require_mds)
       break;
   }
 
-  assert(root_ancestor->is_root());
   assert(root);
   _ll_get(root);
 
