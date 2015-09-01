@@ -1001,7 +1001,7 @@ void ECBackend::handle_sub_read_reply(
   map<ceph_tid_t, ReadOp>::iterator iter = tid_to_read_map.find(op.tid);
   if (iter == tid_to_read_map.end()) {
     //canceled
-    dout(10) << __func__ << ": abort " << op << dendl;
+    dout(20) << __func__ << ": dropped " << op << dendl;
     return;
   }
   ReadOp &rop = iter->second;
@@ -1082,7 +1082,6 @@ void ECBackend::handle_sub_read_reply(
       set<int> want_to_read, dummy_minimum;
       get_want_to_read_shards(&want_to_read);
       int err;
-      // XXX: Could just do if (have.size < ec_impl->get_data_chunk_count())
       if ((err = ec_impl->minimum_to_decode(want_to_read, have, &dummy_minimum)) < 0) {
 	dout(20) << __func__ << " minimum_to_decode failed" << dendl;
         if (rop.in_progress.empty()) {
@@ -1610,6 +1609,7 @@ void ECBackend::start_read_op(
   dout(10) << __func__ << ": started " << op << dendl;
 }
 
+// This is based on start_read_op(), maybe this should be refactored
 void ECBackend::start_remaining_read_op(
   ReadOp &op,
   map<hobject_t, read_request_t, hobject_t::BitwiseComparator> &to_read)
@@ -1621,7 +1621,8 @@ void ECBackend::start_remaining_read_op(
   dout(10) << __func__ << ": starting additional " << op << dendl;
 
   map<pg_shard_t, ECSubRead> messages;
-  for (map<hobject_t, read_request_t>::iterator i = op.to_read.begin();
+  for (map<hobject_t, read_request_t,
+           hobject_t::BitwiseComparator>::iterator i = op.to_read.begin();
        i != op.to_read.end();
        ++i) {
     bool need_attrs = i->second.want_attrs;
@@ -1956,7 +1957,7 @@ int ECBackend::objects_remaining_read_async(
   ReadOp &rop)
 {
   set<int> already_read;
-  set<pg_shard_t> ots = rop.obj_to_source[hoid];
+  const set<pg_shard_t>& ots = rop.obj_to_source[hoid];
   for (set<pg_shard_t>::iterator i = ots.begin(); i != ots.end(); ++i)
     already_read.insert(i->shard);
   dout(10) << __func__ << " have/error shards=" << already_read << dendl;

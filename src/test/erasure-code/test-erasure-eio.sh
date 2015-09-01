@@ -102,7 +102,7 @@ function rados_get() {
     if [ $expect = "1" ];
     then
         ! ./rados --pool $poolname get $objname $dir/COPY
-        return $?
+        return
     fi
     #
     # get an object, compare with $dir/ORIGINAL
