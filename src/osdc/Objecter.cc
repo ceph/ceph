@@ -2771,9 +2771,15 @@ void Objecter::_cancel_linger_op(Op *op)
   ldout(cct, 15) << "cancel_op " << op->tid << dendl;
 
   assert(!op->should_resend);
-  delete op->onack;
-  delete op->oncommit;
-  delete op->oncommit_sync;
+  if (op->onack) {
+    delete op->onack;
+    num_unacked.dec();
+  }
+  if (op->oncommit || op->oncommit_sync) {
+    delete op->oncommit;
+    delete op->oncommit_sync;
+    num_uncommitted.dec();
+  }
 
   _finish_op(op);
 }
