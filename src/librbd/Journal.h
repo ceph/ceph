@@ -199,6 +199,7 @@ private:
   void block_writes();
   void unblock_writes();
 
+  void flush_journal();
   void transition_state(State state);
   void wait_for_state_transition();
 };

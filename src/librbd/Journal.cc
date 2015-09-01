@@ -542,6 +542,9 @@ void Journal::handle_lock_updated(ImageWatcher::LockUpdateState state) {
       // prevent new write ops but allow pending ops to flush to the journal
       block_writes();
     }
+    if (m_state == STATE_RECORDING) {
+      flush_journal();
+    }
   } else if ((state == ImageWatcher::LOCK_UPDATE_STATE_NOT_SUPPORTED ||
               state == ImageWatcher::LOCK_UPDATE_STATE_UNLOCKED) &&
              m_state != STATE_UNINITIALIZED &&
@@ -595,6 +598,19 @@ void Journal::unblock_writes() {
     m_blocking_writes = false;
     m_image_ctx.aio_work_queue->unblock_writes();
   }
+}
+
+void Journal::flush_journal() {
+  assert(m_lock.is_locked());
+
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 20) << this << " " << __func__ << dendl;
+
+  m_lock.Unlock();
+  C_SaferCond cond_ctx;
+  m_journaler->flush(&cond_ctx);
+  cond_ctx.wait();
+  m_lock.Lock();
 }
 
 void Journal::transition_state(State state) {
