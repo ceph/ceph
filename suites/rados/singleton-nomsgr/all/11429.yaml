@@ -90,6 +90,10 @@ tasks:
   - sleep:
       duration: 30
   - install.upgrade:
+      mon.a:
+        branch: hammer
+  - ceph.restart: [mon.a, mon.b, mon.c, osd.0, osd.1, osd.2]
+  - install.upgrade:
       mon.a: null
   - ceph.restart:
       daemons:
