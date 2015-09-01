@@ -1,7 +1,7 @@
 .. _ruby:
 
-Ruby S3 Examples (aws-sdk gem ~>2)
-==================================
+Ruby `AWS::SDK`_ Examples (aws-sdk gem ~>2)
+===========================================
 
 Settings
 ---------------------
@@ -141,6 +141,7 @@ This downloads the object ``poetry.pdf`` and saves it in
 ``/home/larry/documents/``
 
 .. code-block:: ruby
+
 	s3_client.get_object(bucket: 'my-new-bucket', key: 'poetry.pdf', response_target: '/home/larry/documents/poetry.pdf')
 
 
@@ -183,12 +184,12 @@ The output of this will look something like::
    http://objects.dreamhost.com/my-bucket-name/hello.txt
    http://objects.dreamhost.com/my-bucket-name/secret_plans.txt?Signature=XXXXXXXXXXXXXXXXXXXXXXXXXXX&Expires=1316027075&AWSAccessKeyId=XXXXXXXXXXXXXXXXXXX
 
-.. _`Aws::S3`: http://docs.aws.amazon.com/sdkforruby/api/Aws/S3/Client.html
+.. _`AWS::SDK`: http://docs.aws.amazon.com/sdkforruby/api/Aws/S3/Client.html
 
 
 
-Ruby S3 Examples (aws-s3 gem)
-=============================
+Ruby `AWS::S3`_ Examples (aws-s3 gem)
+=====================================
 
 Creating a Connection
 ---------------------
