@@ -968,7 +968,8 @@ public:
   }
   void append(const string& entry) {
     static int counter = 0;
-    shards[++counter % shards.size()]->append(entry);
+    int shard_id = store->key_to_shard_id(entry, shards.size());
+    shards[shard_id]->append(entry);
   }
   void finish() {
     for (vector<RGWOmapAppend *>::iterator iter = shards.begin(); iter != shards.end(); ++iter) {
