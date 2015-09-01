@@ -104,7 +104,7 @@ class FuseMount(CephFSMount):
         if mount_wait > 0:
             log.info("Fuse mount waits {0} seconds before checking /sys/".format(mount_wait))
             time.sleep(mount_wait)            
-        timeout = self.client_config.get('mount_timeout', '30')
+        timeout = int(self.client_config.get('mount_timeout', 30))
         waited = 0
         while list_connections() == pre_mount_conns:
             time.sleep(1)
