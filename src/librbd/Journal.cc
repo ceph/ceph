@@ -355,7 +355,9 @@ void Journal::complete_event(Events::iterator it, int r) {
                  << "r=" << r << dendl;
 
   m_journaler->committed(it->second.future);
-  m_events.erase(it);
+  if (it->second.safe) {
+    m_events.erase(it);
+  }
 }
 
 void Journal::handle_initialized(int r) {
