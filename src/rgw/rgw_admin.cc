@@ -86,10 +86,13 @@ void _usage()
   cerr << "  realm remove               remove a zonegroup from the realm\n";
   cerr << "  realm rename               rename a realm\n";
   cerr << "  realm set-default          set realm as default\n";
-  cerr << "  zonegroup get              show zone group info\n";
-  cerr << "  zonegroups list            list all zone groups set on this cluster\n";
-  cerr << "  zonegroup set              set zone group info (requires infile)\n";
+  cerr << "  zonegroup create           create a new zone group info\n";
   cerr << "  zonegroup default          set default zone group\n";
+  cerr << "  zonegroup delete           delete a zone group info\n";
+  cerr << "  zonegroup get              show zone group info\n";
+  cerr << "  zonegroup set              set zone group info (requires infile)\n";
+  cerr << "  zonegroup rename          rename a zone group\n";
+  cerr << "  zonegroups list            list all zone groups set on this cluster\n";
   cerr << "  zonegroup-map get          show zonegroup-map\n";
   cerr << "  zonegroup-map set          set zonegroup-map (requires infile)\n";
   cerr << "  zone get                   show zone cluster params\n";
@@ -257,10 +260,13 @@ enum {
   OPT_GC_PROCESS,
   OPT_ORPHANS_FIND,
   OPT_ORPHANS_FINISH,
+  OPT_ZONEGROUP_CREATE,
+  OPT_ZONEGROUP_DEFAULT,
+  OPT_ZONEGROUP_DELETE,
   OPT_ZONEGROUP_GET,
   OPT_ZONEGROUP_LIST,
   OPT_ZONEGROUP_SET,
-  OPT_ZONEGROUP_DEFAULT,
+  OPT_ZONEGROUP_RENAME ,  
   OPT_ZONEGROUPMAP_GET,
   OPT_ZONEGROUPMAP_SET,
   OPT_ZONEGROUPMAP_UPDATE,
@@ -480,14 +486,20 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
     if (strcmp(cmd, "set-default") == 0)
       return OPT_REALM_SET_DEFAULT;
   } else if (strcmp(prev_cmd, "zonegroup") == 0) {
+    if (strcmp(cmd, "create")== 0)
+      return OPT_ZONEGROUP_CREATE;
+    if (strcmp(cmd, "default") == 0)
+      return OPT_ZONEGROUP_DEFAULT;
+    if (strcmp(cmd, "delete") == 0)
+      return OPT_ZONEGROUP_DELETE;
     if (strcmp(cmd, "get") == 0)
       return OPT_ZONEGROUP_GET;
     if (strcmp(cmd, "list") == 0)
       return OPT_ZONEGROUP_LIST;
     if (strcmp(cmd, "set") == 0)
       return OPT_ZONEGROUP_SET;
-    if (strcmp(cmd, "default") == 0)
-      return OPT_ZONEGROUP_DEFAULT;
+    if (strcmp(cmd, "rename") == 0)
+      return OPT_ZONEGROUP_RENAME;
   } else if (strcmp(prev_cmd, "quota") == 0) {
     if (strcmp(cmd, "set") == 0)
       return OPT_QUOTA_SET;
@@ -1204,6 +1216,8 @@ int main(int argc, char **argv)
   std::string key_type_str;
   std::string period_id, url, parent_period;
   std::string realm_name, realm_id, realm_new_name;
+  std::string zone_name;
+  std::string zonegroup_name, zonegroup_id, zonegroup_new_name;
   epoch_t period_epoch = 0;
   int key_type = KEY_TYPE_UNDEFINED;
   rgw_bucket bucket;
@@ -1477,6 +1491,14 @@ int main(int argc, char **argv)
       realm_id = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--realm-new-name", (char*)NULL)) {
       realm_new_name = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--zonegroup-id", (char*)NULL)) {
+      zonegroup_id = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--zonegroup-name", (char*)NULL)) {
+      zonegroup_name = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--zonegroup-new-name", (char*)NULL)) {
+      zonegroup_new_name = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--zone-name", (char*)NULL)) {
+      zonegroup_name = val;
     } else if (strncmp(*i, "-", 1) == 0) {
       cerr << "ERROR: invalid flag " << *i << std::endl;
       return EINVAL;
@@ -1541,8 +1563,10 @@ int main(int argc, char **argv)
 
   RGWStreamFlusher f(formatter, cout);
 
-  bool raw_storage_op = (opt_cmd == OPT_ZONEGROUP_GET || opt_cmd == OPT_ZONEGROUP_LIST ||
+  bool raw_storage_op = (opt_cmd == OPT_ZONEGROUP_CREATE || opt_cmd == OPT_ZONEGROUP_DELETE ||
+			 opt_cmd == OPT_ZONEGROUP_GET || opt_cmd == OPT_ZONEGROUP_LIST ||
                          opt_cmd == OPT_ZONEGROUP_SET || opt_cmd == OPT_ZONEGROUP_DEFAULT ||
+			 opt_cmd == OPT_ZONEGROUP_RENAME ||
                          opt_cmd == OPT_ZONEGROUPMAP_GET || opt_cmd == OPT_ZONEGROUPMAP_SET ||
                          opt_cmd == OPT_ZONEGROUPMAP_UPDATE ||
                          opt_cmd == OPT_ZONE_GET || opt_cmd == OPT_ZONE_SET ||
@@ -1837,6 +1861,55 @@ int main(int argc, char **argv)
 	}
       }
       break;
+    case OPT_ZONEGROUP_CREATE:
+      {
+	if (zonegroup_name.empty()) {
+	  cerr << " Missing zonegroup name" << std::endl;
+	  return -EINVAL;
+	}
+	RGWZoneGroup zonegroup(zonegroup_name, g_ceph_context, store);
+	int ret = zonegroup.create();
+	if (ret < 0) {
+	  cerr << "failed to create zonegroup" << zonegroup_name << ": " << cpp_strerror(-ret) << std::endl;
+	  return -ret;
+	}
+      }
+      break;
+    case OPT_ZONEGROUP_DEFAULT:
+      {
+	RGWZoneGroup zonegroup;
+	int ret = zonegroup.init(g_ceph_context, store);
+	if (ret < 0) {
+	  cerr << "failed to init zonegroup: " << cpp_strerror(-ret) << std::endl;
+	  return -ret;
+	}
+
+	ret = zonegroup.set_as_default();
+	if (ret < 0) {
+	  cerr << "failed to set zonegroup as default: " << cpp_strerror(-ret) << std::endl;
+	  return -ret;
+	}
+      }
+      break;
+    case OPT_ZONEGROUP_DELETE:
+      {
+	if (zonegroup_id.empty() && zonegroup_name.empty()) {
+	  cerr << "no zonegroup name or id provided" << std::endl;
+	  return -EINVAL;
+	}
+	RGWZoneGroup zonegroup(zonegroup_id, zonegroup_name);
+	int ret = zonegroup.init(g_ceph_context, store);
+	if (ret < 0) {
+	  cerr << "failed to init zonegroup: " << cpp_strerror(-ret) << std::endl;
+	  return -ret;
+	}
+	ret = zonegroup.delete_obj();
+	if (ret < 0) {
+	  cerr << "ERROR: couldn't delete zonegroup: " << cpp_strerror(-ret) << std::endl;
+	  return ret;
+	}
+      }
+      break;
     case OPT_ZONEGROUP_GET:
       {
 	RGWZoneGroup zonegroup;
@@ -1902,18 +1975,25 @@ int main(int argc, char **argv)
 	formatter->flush(cout);
       }
       break;
-    case OPT_ZONEGROUP_DEFAULT:
+    case OPT_ZONEGROUP_RENAME:
       {
-	RGWZoneGroup zonegroup;
+	if (zonegroup_new_name.empty()) {
+	  cerr << " missing zonegroup new name" << std::endl;
+	  return -EINVAL;
+	}
+	if (zonegroup_id.empty() && zonegroup_name.empty()) {
+	  cerr << "no zonegroup name or id provided" << std::endl;
+	  return -EINVAL;
+	}
+	RGWZoneGroup zonegroup(zonegroup_id, zonegroup_name);
 	int ret = zonegroup.init(g_ceph_context, store);
 	if (ret < 0) {
 	  cerr << "failed to init zonegroup: " << cpp_strerror(-ret) << std::endl;
 	  return -ret;
 	}
-
-	ret = zonegroup.set_as_default();
+	ret = zonegroup.rename(zonegroup_new_name);
 	if (ret < 0) {
-	  cerr << "failed to set zonegroup as default: " << cpp_strerror(-ret) << std::endl;
+	  cerr << "failed to rename zonegroup: " << cpp_strerror(-ret) << std::endl;
 	  return -ret;
 	}
       }
