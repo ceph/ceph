@@ -1155,6 +1155,7 @@ void Objecter::handle_osd_map(MOSDMap *m)
 	_send_op(op);
       }
     } else {
+      _op_cancel_map_check(op);
       _cancel_linger_op(op);
     }
     s->lock.unlock();
@@ -1809,6 +1810,7 @@ void Objecter::_kick_requests(OSDSession *session, map<uint64_t, LingerOp *>& lr
       if (!op->target.paused)
 	resend[op->tid] = op;
     } else {
+      _op_cancel_map_check(op);
       _cancel_linger_op(op);
     }
   }
