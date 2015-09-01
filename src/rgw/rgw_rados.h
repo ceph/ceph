@@ -1042,7 +1042,9 @@ struct RGWZoneGroup : public RGWSystemMetaObj {
   map<string, list<string> > api_endpoints_map;
 
   RGWZoneGroup(): is_master(false){}
+  RGWZoneGroup(const std::string &id, const std::string &name):RGWSystemMetaObj(id, name) {}
   RGWZoneGroup(const std::string &_name):RGWSystemMetaObj(_name) {}
+  RGWZoneGroup(const std::string &_name, CephContext *cct, RGWRados* store):RGWSystemMetaObj(_name, cct , store) {}
 
   void encode(bufferlist& bl) const {
     ENCODE_START(4, 1, bl);
