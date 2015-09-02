@@ -561,7 +561,7 @@ class TestOSD(TestArgparse):
                                                     'toomany']))
 
     def test_metadata(self):
-        self.check_1_natural_arg('osd', 'metadata')
+        self.check_0_or_1_natural_arg('osd', 'metadata')
 
     def test_scrub(self):
         self.check_1_string_arg('osd', 'scrub')

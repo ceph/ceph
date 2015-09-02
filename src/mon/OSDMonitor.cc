@@ -3085,14 +3085,15 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
     f->close_section();
     f->flush(rdata);
   } else if (prefix == "osd metadata") {
-    int64_t osd;
-    if (!cmd_getval(g_ceph_context, cmdmap, "id", osd)) {
+    int64_t osd = -1;
+    if (cmd_vartype_stringify(cmdmap["id"]).size() &&
+        !cmd_getval(g_ceph_context, cmdmap, "id", osd)) {
       ss << "unable to parse osd id value '"
          << cmd_vartype_stringify(cmdmap["id"]) << "'";
       r = -EINVAL;
       goto reply;
     }
-    if (!osdmap.exists(osd)) {
+    if (osd >= 0 && !osdmap.exists(osd)) {
       ss << "osd." << osd << " does not exist";
       r = -ENOENT;
       goto reply;
@@ -3100,11 +3101,27 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
     string format;
     cmd_getval(g_ceph_context, cmdmap, "format", format);
     boost::scoped_ptr<Formatter> f(Formatter::create(format, "json-pretty", "json-pretty"));
-    f->open_object_section("osd_metadata");
-    r = dump_osd_metadata(osd, f.get(), &ss);
-    if (r < 0)
-      goto reply;
-    f->close_section();
+    if (osd >= 0) {
+      f->open_object_section("osd_metadata");
+      f->dump_unsigned("id", osd);
+      r = dump_osd_metadata(osd, f.get(), &ss);
+      if (r < 0)
+        goto reply;
+      f->close_section();
+    } else {
+      f->open_array_section("osd_metadata");
+      for (int i=0; i<osdmap.get_max_osd(); ++i) {
+        if (osdmap.exists(i)) {
+          f->open_object_section("osd");
+          f->dump_unsigned("id", i);
+          r = dump_osd_metadata(i, f.get(), NULL);
+          if (r < 0)
+            goto reply;
+          f->close_section();
+        }
+      }
+      f->close_section();
+    }
     f->flush(rdata);
   } else if (prefix == "osd map") {
     string poolstr, objstr, namespacestr;
