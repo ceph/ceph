@@ -223,6 +223,10 @@ void MDSDaemon::set_up_admin_socket()
 				     "ops", asok_hook,
 				     "show the ops currently in flight");
   assert(r == 0);
+  r = admin_socket->register_command("dump_blocked_ops", "dump_blocked_ops",
+      asok_hook,
+      "show the blocked ops currently in flight");
+  assert(r == 0);
   r = admin_socket->register_command("dump_historic_ops", "dump_historic_ops",
 				     asok_hook,
 				     "show slowest recent ops");
@@ -308,6 +312,7 @@ void MDSDaemon::clean_up_admin_socket()
   admin_socket->unregister_command("status");
   admin_socket->unregister_command("dump_ops_in_flight");
   admin_socket->unregister_command("ops");
+  admin_socket->unregister_command("dump_blocked_ops");
   admin_socket->unregister_command("dump_historic_ops");
   admin_socket->unregister_command("scrub_path");
   admin_socket->unregister_command("flush_path");

@@ -1635,13 +1635,22 @@ bool MDSRankDispatcher::handle_asok_command(
   if (command == "dump_ops_in_flight" ||
              command == "ops") {
     if (!op_tracker.tracking_enabled) {
-      ss << "op_tracker tracking is not enabled";
+      ss << "op_tracker tracking is not enabled now, so no ops are tracked currently, even those get stuck. \
+	  please enable \"osd_enable_op_tracker\", and the tracker will start to track new ops received afterwards.";
     } else {
       op_tracker.dump_ops_in_flight(f);
     }
+  } else if (command == "dump_blocked_ops") {
+    if (!op_tracker.tracking_enabled) {
+      ss << "op_tracker tracking is not enabled now, so no ops are tracked currently, even those get stuck. \
+	Please enable \"osd_enable_op_tracker\", and the tracker will start to track new ops received afterwards.";
+    } else {
+      op_tracker.dump_ops_in_flight(f, true);
+    }
   } else if (command == "dump_historic_ops") {
     if (!op_tracker.tracking_enabled) {
-      ss << "op_tracker tracking is not enabled";
+      ss << "op_tracker tracking is not enabled now, so no ops are tracked currently, even those get stuck. \
+	  please enable \"osd_enable_op_tracker\", and the tracker will start to track new ops received afterwards.";
     } else {
       op_tracker.dump_historic_ops(f);
     }
