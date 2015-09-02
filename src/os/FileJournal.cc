@@ -823,7 +823,7 @@ void FileJournal::write_header_sync()
   dout(20) << __func__ << " finish" << dendl;
 }
 
-int FileJournal::check_for_full(uint64_t seq, off64_t pos, off64_t size)
+int FileJournal::check_for_full(off64_t pos, off64_t size)
 {
   // already full?
   if (full_state != FULL_NOTFULL)
@@ -976,7 +976,7 @@ int FileJournal::prepare_single_write(bufferlist& bl, off64_t& queue_pos, uint64
   bufferlist &ebl = next_write.bl;
   off64_t size = ebl.length();
 
-  int r = check_for_full(seq, queue_pos, size);
+  int r = check_for_full(queue_pos, size);
   if (r < 0)
     return r;   // ENOSPC or EAGAIN
 

@@ -309,7 +309,7 @@ private:
 
   void queue_completions_thru(uint64_t seq);
 
-  int check_for_full(uint64_t seq, off64_t pos, off64_t size);
+  int check_for_full(off64_t pos, off64_t size);
   int prepare_multi_write(bufferlist& bl, uint64_t& orig_ops, uint64_t& orig_bytee);
   int prepare_single_write(bufferlist& bl, off64_t& queue_pos, uint64_t& orig_ops, uint64_t& orig_bytes);
   void do_write(bufferlist& bl);
