@@ -259,6 +259,12 @@ class OpenStack(object):
 class TeuthologyOpenStack(OpenStack):
 
     def __init__(self, args, config, argv):
+        """
+        args is of type argparse.Namespace as returned
+        when parsing argv and config is the job 
+        configuration. The argv argument can be re-used
+        to build the arguments list of teuthology-suite.
+        """
         super(TeuthologyOpenStack, self).__init__()
         self.argv = argv
         self.args = args
