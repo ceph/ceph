@@ -698,7 +698,7 @@ do_rgw()
 
     RGWSUDO=
     [ $CEPH_RGW_PORT -lt 1024 ] && RGWSUDO=sudo
-    $RGWSUDO $CEPH_BIN/radosgw --log-file=${CEPH_OUT_DIR}/rgw.log ${RGWDEBUG} --debug-ms=1
+    $RGWSUDO $CEPH_BIN/radosgw --log-file=${CEPH_OUT_DIR}/rgw.log ${RGWDEBUG} --debug-ms=1 -c $conf_fn
 
     # Create S3 user
     local akey='0555b35654ad1656d804'
@@ -724,7 +724,7 @@ do_rgw()
 
     # Create Swift user
     echo "setting up user tester"
-    $CEPH_BIN/radosgw-admin user create --subuser=test:tester --display-name=Tester-Subuser --key-type=swift --secret=testing > /dev/null
+    $CEPH_BIN/radosgw-admin user create --subuser=test:tester --display-name=Tester-Subuser --key-type=swift --secret=testing -c $conf_fn > /dev/null
 
     echo ""
     echo "S3 User Info:"
