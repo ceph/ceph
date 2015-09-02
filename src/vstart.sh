@@ -107,7 +107,10 @@ usage=$usage"\t--hitset <pool> <hit_set_type>: enable hitset tracking\n"
 usage=$usage"\t-e : create an erasure pool\n";
 usage=$usage"\t-o config\t\t add extra config parameters to all sections\n"
 usage=$usage"\t-J no journal\t\tdisable filestore journal\n"
-
+usage=$usage"\t--mon_num specify ceph monitor count\n"
+usage=$usage"\t--osd_num specify ceph osd count\n"
+usage=$usage"\t--mds_num specify ceph mds count\n"
+usage=$usage"\t--rgw_port specify ceph rgw http listen port\n"
 
 usage_exit() {
 	printf "$usage"
@@ -165,6 +168,23 @@ case $1 in
     --smallmds )
 	    smallmds=1
 	    ;;
+    --mon_num )
+            echo "mon_num:$2"
+            CEPH_NUM_MON="$2"
+            shift
+            ;;
+    --osd_num )
+            CEPH_NUM_OSD=$2
+            shift
+            ;;
+    --mds_num )
+            CEPH_NUM_MDS=$2
+            shift
+            ;;
+    --rgw_port )
+            CEPH_RGW_PORT=$2
+            shift
+            ;;
     mon )
 	    start_mon=1
 	    start_all=0
