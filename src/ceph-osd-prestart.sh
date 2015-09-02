@@ -54,7 +54,7 @@ fi
 
 # ensure ownership is correct
 owner=`stat -c %U $data/.`
-if [ $owner -ne 'ceph' -a $owner -ne 'root' ]; then
+if [ $owner != 'ceph' -a $owner != 'root' ]; then
     echo "ceph-osd data dir $data is not owned by 'ceph' or 'root'"
     echo "you must 'ceph-disk chown ...' or similar to fix ownership"
     exit 1
