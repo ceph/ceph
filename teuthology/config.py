@@ -126,6 +126,8 @@ class TeuthologyConfig(YamlConfig):
     yaml_path = os.path.join(os.path.expanduser('~/.teuthology.yaml'))
     _defaults = {
         'archive_base': '/var/lib/teuthworker/archive',
+        'archive_upload': None,
+        'archive_upload_key': None,
         'automated_scheduling': False,
         'reserve_machines': 5,
         'ceph_git_base_url': 'https://github.com/ceph/',
@@ -145,6 +147,20 @@ class TeuthologyConfig(YamlConfig):
         'koji_task_url': 'https://kojipkgs.fedoraproject.org/work/',
         'baseurl_template': 'http://{host}/{proj}-{pkg_type}-{dist}-{arch}-{flavor}/{uri}',
         'teuthology_path': None,
+        'openstack': {
+            'clone': 'git clone http://github.com/ceph/teuthology',
+            'user-data': 'teuthology/openstack/openstack-{os_type}-{os_version}-user-data.txt',
+            'ip': '1.1.1.1',
+            'machine': {
+                'disk': 20,
+                'ram': 8000,
+                'cpus': 1,
+            },
+            'volumes': {
+                'count': 3,
+                'size': 10,
+            },
+        },
     }
 
     def __init__(self, yaml_path=None):

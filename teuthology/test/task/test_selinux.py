@@ -11,7 +11,9 @@ class TestSELinux(object):
         self.ctx = FakeNamespace()
         self.ctx.config = dict()
 
-    def test_host_exclusion(self):
+    @patch('teuthology.task.selinux.get_status')
+    def test_host_exclusion(self, mock_get_status):
+        mock_get_status.return_value = None
         with patch.multiple(
             Remote,
             os=DEFAULT,

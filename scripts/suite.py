@@ -74,12 +74,13 @@ Scheduler arguments:
   --timeout <timeout>         How long, in seconds, to wait for jobs to finish
                               before sending email. This does not kill jobs.
                               [default: {default_results_timeout}]
-  --filter KEYWORDS           Only run jobs whose name contains at least one
+  --filter KEYWORDS           Only run jobs whose description contains at least one
                               of the keywords in the comma separated keyword
                               string specified.
-  --filter-out KEYWORDS       Do not run jobs whose name contains any of
+  --filter-out KEYWORDS       Do not run jobs whose description contains any of
                               the keywords in the comma separated keyword
                               string specified.
+  --archive-upload RSYNC_DEST Rsync destination to upload archives.
 """.format(default_machine_type=config.default_machine_type,
            default_results_timeout=config.results_timeout)
 

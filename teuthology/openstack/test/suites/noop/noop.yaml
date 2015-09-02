@@ -1,0 +1,9 @@
+stop_worker: true
+roles:
+- - mon.a
+  - osd.0
+tasks:
+- exec:
+    mon.a:
+      - echo "Well done !"
+

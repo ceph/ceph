@@ -58,6 +58,9 @@ def main(args):
     email = args['--email']
     if email:
         config.results_email = email
+    if args['--archive-upload']:
+        config.archive_upload = args['--archive-upload']
+        log.info('Will upload archives to ' + args['--archive-upload'])
     timeout = args['--timeout']
     filter_in = args['--filter']
     filter_out = args['--filter-out']
@@ -244,6 +247,8 @@ def create_initial_config(suite, suite_branch, ceph_branch, teuthology_branch,
         teuthology_branch=teuthology_branch,
         machine_type=machine_type,
         distro=distro,
+        archive_upload=config.archive_upload,
+        archive_upload_key=config.archive_upload_key,
     )
     conf_dict = substitute_placeholders(dict_templ, config_input)
     conf_dict.update(kernel_dict)
@@ -1009,6 +1014,8 @@ dict_templ = {
     'branch': Placeholder('ceph_branch'),
     'sha1': Placeholder('ceph_hash'),
     'teuthology_branch': Placeholder('teuthology_branch'),
+    'archive_upload': Placeholder('archive_upload'),
+    'archive_upload_key': Placeholder('archive_upload_key'),
     'machine_type': Placeholder('machine_type'),
     'nuke-on-error': True,
     'os_type': Placeholder('distro'),

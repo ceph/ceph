@@ -109,3 +109,75 @@ Here is a sample configuration with many of the options set and documented::
     #           armv7l
     #           etc.
     baseurl_template: http://{host}/{proj}-{pkg_type}-{dist}-{arch}-{flavor}/{uri}
+
+    # The OpenStack backend configuration, a dictionary interpreted as follows
+    #
+    openstack:
+
+      # The teuthology-openstack command will clone teuthology with
+      # this command for the purpose of deploying teuthology from
+      # scratch and run workers listening on the openstack tube
+      #
+      clone: git clone -b wip-6502-openstack-v3 http://github.com/dachary/teuthology
+
+      # The path to the user-data file used when creating a target. It can have
+      # the {os_type} and {os_version} placeholders which are replaced with
+      # the value of --os-type and --os-version. No instance of a give {os_type}
+      # and {os_version} combination can be created unless such a file exists.
+      #
+      user-data: teuthology/openstack/openstack-{os_type}-{os_version}-user-data.txt
+  
+      # The IP number of the instance running the teuthology cluster. It will
+      # be used to build user facing URLs and should usually be the floating IP
+      # associated with the instance running the pulpito server.
+      #
+      ip: 8.4.8.4
+
+      # OpenStack has predefined machine sizes (called flavors)
+      # For a given job requiring N machines, the following example select
+      # the smallest flavor that satisfies these requirements. For instance
+      # If there are three flavors
+      #
+      #   F1 (10GB disk, 2000MB RAM, 1CPU)
+      #   F2 (100GB disk, 7000MB RAM, 1CPU)
+      #   F3 (50GB disk, 7000MB RAM, 1CPU)
+      #
+      # and machine: { disk: 40, ram: 7000, cpus: 1 }, F3 will be chosen.
+      # F1 does not have enough RAM (2000 instead of the 7000 minimum) and
+      # although F2 satisfies all the requirements, it is larger than F3
+      # (100GB instead of 50GB) and presumably more expensive.
+      #
+      # This configuration applies to all instances created for teuthology jobs
+      # that do not redefine these values.
+      #
+      machine:
+      
+        # The minimum root disk size of the flavor, in GB
+        #
+        disk: 20 # GB
+
+        # The minimum RAM size of the flavor, in MB
+        # 
+        ram: 8000 # MB
+
+        # The minimum number of vCPUS of the flavor
+        #
+        cpus: 1
+
+      # The volumes attached to each instance. In the following example,
+      # three volumes of 10 GB will be created for each instanced and 
+      # will show as /dev/vdb, /dev/vdc and /dev/vdd
+      #
+      #
+      # This configuration applies to all instances created for teuthology jobs
+      # that do not redefine these values.
+      #
+      volumes:
+
+        # The number of volumes
+        #
+        count: 3
+        
+        # The size of each volume, in GB
+        #
+        size: 10 # GB

@@ -1,0 +1,12 @@
+stop_worker: true
+machine_type: openstack
+os_type: ubuntu
+os_version: "14.04"
+roles:
+- - mon.a
+  - osd.0
+tasks:
+- exec:
+    mon.a:
+      - echo "Well done !"
+

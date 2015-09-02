@@ -567,6 +567,31 @@ def coredump(ctx, config):
 
 
 @contextlib.contextmanager
+def archive_upload(ctx, config):
+    """
+    Upload the archive directory to a designated location
+    """
+    try:
+        yield
+    finally:
+        upload = ctx.config.get('archive_upload')
+        archive_path = ctx.config.get('archive_path')
+        if upload and archive_path:
+            log.info('Uploading archives ...')
+            upload_key = ctx.config.get('archive_upload_key')
+            if upload_key:
+                ssh = "RSYNC_RSH='ssh -i " + upload_key + "'"
+            else:
+                ssh = ''
+            split_path = archive_path.split('/')
+            split_path.insert(-2, '.')
+            misc.sh(ssh + " rsync -avz --relative /" +
+                    os.path.join(*split_path) + " " +
+                    upload)
+        else:
+            log.info('Not uploading archives.')
+
+@contextlib.contextmanager
 def syslog(ctx, config):
     """
     start syslog / stop syslog on exit.

@@ -1,0 +1,20 @@
+stop_worker: true
+machine_type: openstack
+openstack:
+  machine:
+    disk: 10 # GB
+    ram: 1024 # MB
+    cpus: 1
+  volumes:
+    count: 0
+    size: 2 # GB
+os_type: ubuntu
+os_version: "14.04"
+roles:
+- - mon.a
+  - osd.0
+tasks:
+- exec:
+    mon.a:
+      - cat /proc/meminfo
+      - test $(sed -n -e 's/MemTotal.* \([0-9][0-9]*\).*/\1/p' < /proc/meminfo) -lt 4000000 && echo "RAM" "size" "ok"

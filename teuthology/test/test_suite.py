@@ -41,6 +41,8 @@ class TestSuiteOffline(object):
             teuthology_branch='teuthology_branch',
             machine_type='machine_type',
             distro='distro',
+            archive_upload='archive_upload',
+            archive_upload_key='archive_upload_key',
         )
         output_dict = suite.substitute_placeholders(suite.dict_templ,
                                                     input_dict)
@@ -58,6 +60,8 @@ class TestSuiteOffline(object):
             ceph_hash='ceph_hash',
             teuthology_branch='teuthology_branch',
             machine_type='machine_type',
+            archive_upload='archive_upload',
+            archive_upload_key='archive_upload_key',
             distro=None,
         )
         output_dict = suite.substitute_placeholders(suite.dict_templ,

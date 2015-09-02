@@ -1,0 +1,27 @@
+#cloud-config
+bootcmd:
+ - echo nameserver {nameserver} | tee /etc/resolv.conf
+ - echo search {lab_domain} | tee -a /etc/resolv.conf
+ - sed -ie 's/PEERDNS="yes"/PEERDNS="no"/' /etc/sysconfig/network-scripts/ifcfg-eth0
+ - ( curl --silent http://169.254.169.254/2009-04-04/meta-data/hostname | sed -e 's/[\.-].*//' ; eval printf "%03d%03d.{lab_domain}" $(curl --silent http://169.254.169.254/2009-04-04/meta-data/local-ipv4 | sed -e 's/.*\.\(.*\)\.\(.*\)/\1 \2/') ) | tee /etc/hostname
+ - hostname $(cat /etc/hostname)
+ - yum install -y yum-utils && yum-config-manager --add-repo https://dl.fedoraproject.org/pub/epel/6/x86_64/ && yum install --nogpgcheck -y epel-release && rpm --import /etc/pki/rpm-gpg/RPM-GPG-KEY-EPEL-6 && rm /etc/yum.repos.d/dl.fedoraproject.org*
+ - ( echo ; echo "MaxSessions 1000" ) >> /etc/ssh/sshd_config
+ - ( echo 'Defaults !requiretty' ; echo 'Defaults visiblepw' ) | tee /etc/sudoers.d/cephlab_sudo
+preserve_hostname: true
+system_info:
+  default_user:
+    name: {username}
+packages:
+ - python
+ - wget
+ - git
+ - ntp
+ - dracut-modules-growroot
+runcmd:
+ - mkinitrd --force /boot/initramfs-2.6.32-504.1.3.el6.x86_64.img 2.6.32-504.1.3.el6.x86_64
+ - reboot
+#runcmd:
+# # if /mnt is on ephemeral, that moves /home/{username} on the ephemeral, otherwise it does nothing
+# - rsync -a --numeric-ids /home/{username}/ /mnt/ && rm -fr /home/{username} && ln -s /mnt /home/{username}
+final_message: "{up}, after $UPTIME seconds"
