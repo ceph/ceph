@@ -268,9 +268,6 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
 
   for (int o = 0; o < osdmap.get_max_osd(); o++) {
     if (osdmap.is_down(o)) {
-      // invalidate osd_epoch cache
-      osd_epoch.erase(o);
-
       // populate down -> out map
       if (osdmap.is_in(o) &&
 	  down_pending_out.count(o) == 0) {
@@ -279,11 +276,7 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
       }
     }
   }
-  // blow away any osd_epoch items beyond max_osd
-  map<int,epoch_t>::iterator p = osd_epoch.upper_bound(osdmap.get_max_osd());
-  while (p != osd_epoch.end()) {
-    osd_epoch.erase(p++);
-  }
+  // XXX: need to trim MonSession connected with a osd whose id > max_osd?
 
   /** we don't have any of the feature bit infrastructure in place for
    * supporting primary_temp mappings without breaking old clients/OSDs.*/
@@ -1212,7 +1205,7 @@ bool OSDMonitor::preprocess_failure(MOSDFailure *m)
 	osdmap.get_addr(from) != m->get_orig_source_inst().addr ||
 	osdmap.is_down(from)) {
       dout(5) << "preprocess_failure from dead osd." << from << ", ignoring" << dendl;
-      send_incremental(m, m->get_epoch()+1);
+      send_incremental(op, m->get_epoch()+1);
       goto didit;
     }
   }
@@ -1222,14 +1215,14 @@ bool OSDMonitor::preprocess_failure(MOSDFailure *m)
   if (!osdmap.have_inst(badboy)) {
     dout(5) << "preprocess_failure dne(/dup?): " << m->get_target() << ", from " << m->get_orig_source_inst() << dendl;
     if (m->get_epoch() < osdmap.get_epoch())
-      send_incremental(m, m->get_epoch()+1);
+      send_incremental(op, m->get_epoch()+1);
     goto didit;
   }
   if (osdmap.get_inst(badboy) != m->get_target()) {
     dout(5) << "preprocess_failure wrong osd: report " << m->get_target() << " != map's " << osdmap.get_inst(badboy)
 	    << ", from " << m->get_orig_source_inst() << dendl;
     if (m->get_epoch() < osdmap.get_epoch())
-      send_incremental(m, m->get_epoch()+1);
+      send_incremental(op, m->get_epoch()+1);
     goto didit;
   }
 
@@ -1238,7 +1231,7 @@ bool OSDMonitor::preprocess_failure(MOSDFailure *m)
       osdmap.get_up_from(badboy) > m->get_epoch()) {
     dout(5) << "preprocess_failure dup/old: " << m->get_target() << ", from " << m->get_orig_source_inst() << dendl;
     if (m->get_epoch() < osdmap.get_epoch())
-      send_incremental(m, m->get_epoch()+1);
+      send_incremental(op, m->get_epoch()+1);
     goto didit;
   }
 
@@ -1296,7 +1289,7 @@ bool OSDMonitor::preprocess_mark_me_down(MOSDMarkMeDown *m)
       osdmap.get_addr(from) != m->get_target().addr) {
     dout(5) << "preprocess_mark_me_down from dead osd."
 	    << from << ", ignoring" << dendl;
-    send_incremental(m, m->get_epoch()+1);
+    send_incremental(op, m->get_epoch()+1);
     goto reply;
   }
 
@@ -1547,7 +1540,10 @@ void OSDMonitor::process_failures()
       failure_info.erase(p++);
 
       while (!ls.empty()) {
-	send_latest(ls.front(), ls.front()->get_epoch());
+        MonOpRequestRef o = ls.front();
+        o->mark_event(__func__);
+        MOSDFailure *m = o->get_req<MOSDFailure>();
+	send_latest(o, m->get_epoch());
 	ls.pop_front();
       }
     }
@@ -1658,14 +1654,14 @@ bool OSDMonitor::preprocess_boot(MOSDBoot *m)
   if (osdmap.exists(from) &&
       osdmap.get_info(from).up_from > m->version) {
     dout(7) << "prepare_boot msg from before last up_from, ignoring" << dendl;
-    send_latest(m, m->sb.current_epoch+1);
+    send_latest(op, m->sb.current_epoch+1);
     return true;
   }
 
   // noup?
   if (!can_mark_up(from)) {
     dout(7) << "preprocess_boot ignoring boot from " << m->get_orig_source_inst() << dendl;
-    send_latest(m, m->sb.current_epoch+1);
+    send_latest(op, m->sb.current_epoch+1);
     return true;
   }
 
@@ -1823,7 +1819,7 @@ void OSDMonitor::_booted(MOSDBoot *m, bool logit)
     mon->clog->info() << m->get_orig_source_inst() << " boot\n";
   }
 
-  send_latest(m, m->sb.current_epoch+1);
+  send_latest(op, m->sb.current_epoch+1);
 }
 
 
@@ -1883,10 +1879,11 @@ bool OSDMonitor::prepare_alive(MOSDAlive *m)
 
 void OSDMonitor::_reply_map(PaxosServiceMessage *m, epoch_t e)
 {
+  op->mark_osdmon_event(__func__);
   dout(7) << "_reply_map " << e
-	  << " from " << m->get_orig_source_inst()
+	  << " from " << op->get_req()->get_orig_source_inst()
 	  << dendl;
-  send_latest(m, e);
+  send_latest(op, e);
 }
 
 // -------------
@@ -2067,15 +2064,15 @@ bool OSDMonitor::prepare_remove_snaps(MRemoveSnaps *m)
 // ---------------
 // map helpers
 
-void OSDMonitor::send_latest(PaxosServiceMessage *m, epoch_t start)
+void OSDMonitor::send_latest(MonOpRequestRef op, epoch_t start)
 {
-  dout(5) << "send_latest to " << m->get_orig_source_inst()
+  op->mark_osdmon_event(__func__);
+  dout(5) << "send_latest to " << op->get_req()->get_orig_source_inst()
 	  << " start " << start << dendl;
   if (start == 0)
-    send_full(m);
+    send_full(op);
   else
-    send_incremental(m, start);
-  m->put();
+    send_incremental(op, start);
 }
 
 
@@ -2121,99 +2118,36 @@ MOSDMap *OSDMonitor::build_incremental(epoch_t from, epoch_t to)
   return m;
 }
 
-void OSDMonitor::send_full(PaxosServiceMessage *m)
+void OSDMonitor::send_full(MonOpRequestRef op)
 {
-  dout(5) << "send_full to " << m->get_orig_source_inst() << dendl;
-  mon->send_reply(m, build_latest_full());
+  op->mark_osdmon_event(__func__);
+  dout(5) << "send_full to " << op->get_req()->get_orig_source_inst() << dendl;
+  mon->send_reply(op, build_latest_full());
 }
 
-/* TBH, I'm fairly certain these two functions could somehow be using a single
- * helper function to do the heavy lifting. As this is not our main focus right
- * now, I'm leaving it to the next near-future iteration over the services'
- * code. We should not forget it though.
- *
- * TODO: create a helper function and get rid of the duplicated code.
- */
-void OSDMonitor::send_incremental(PaxosServiceMessage *req, epoch_t first)
+void OSDMonitor::send_incremental(MonOpRequestRef op, epoch_t first)
 {
-  dout(5) << "send_incremental [" << first << ".." << osdmap.get_epoch() << "]"
-	  << " to " << req->get_orig_source_inst()
-	  << dendl;
+  op->mark_osdmon_event(__func__);
 
-  int osd = -1;
-  if (req->get_source().is_osd()) {
-    osd = req->get_source().num();
-    map<int,epoch_t>::iterator p = osd_epoch.find(osd);
-    if (p != osd_epoch.end()) {
-      if (first <= p->second) {
-	dout(10) << __func__ << " osd." << osd << " should already have epoch "
-		 << p->second << dendl;
-	first = p->second + 1;
-	if (first > osdmap.get_epoch())
-	  return;
-      }
-    }
-  }
-
-  if (first < get_first_committed()) {
-    first = get_first_committed();
-    bufferlist bl;
-    int err = get_version_full(first, bl);
-    assert(err == 0);
-    assert(bl.length());
-
-    dout(20) << "send_incremental starting with base full "
-	     << first << " " << bl.length() << " bytes" << dendl;
-
-    MOSDMap *m = new MOSDMap(osdmap.get_fsid());
-    m->oldest_map = first;
-    m->newest_map = osdmap.get_epoch();
-    m->maps[first] = bl;
-    mon->send_reply(req, m);
-
-    if (osd >= 0)
-      note_osd_has_epoch(osd, osdmap.get_epoch());
-    return;
-  }
-
-  // send some maps.  it may not be all of them, but it will get them
-  // started.
-  epoch_t last = MIN(first + g_conf->osd_map_message_max, osdmap.get_epoch());
-  MOSDMap *m = build_incremental(first, last);
-  m->oldest_map = get_first_committed();
-  m->newest_map = osdmap.get_epoch();
-  mon->send_reply(req, m);
-
-  if (osd >= 0)
-    note_osd_has_epoch(osd, last);
+  MonSession *s = op->get_session();
+  assert(s);
+  send_incremental(first, s, false, op);
 }
 
-// FIXME: we assume the OSD actually receives this.  if the mon
-// session drops and they reconnect we may not share the same maps
-// with them again, which could cause a strange hang (perhaps stuck
-// 'waiting for osdmap' requests?).  this information should go in the
-// MonSession, but I think these functions need to be refactored in
-// terms of MonSession first for that to work.
-void OSDMonitor::note_osd_has_epoch(int osd, epoch_t epoch)
-{
-  dout(20) << __func__ << " osd." << osd << " epoch " << epoch << dendl;
-  map<int,epoch_t>::iterator p = osd_epoch.find(osd);
-  if (p != osd_epoch.end()) {
-    dout(20) << __func__ << " osd." << osd << " epoch " << epoch
-	     << " (was " << p->second << ")" << dendl;
-    p->second = epoch;
-  } else {
-    dout(20) << __func__ << " osd." << osd << " epoch " << epoch << dendl;
-    osd_epoch[osd] = epoch;
-  }
-}
-
-void OSDMonitor::send_incremental(epoch_t first, MonSession *session,
-				  bool onetime)
+void OSDMonitor::send_incremental(epoch_t first,
+				  MonSession *session,
+				  bool onetime,
+				  MonOpRequestRef req)
 {
   dout(5) << "send_incremental [" << first << ".." << osdmap.get_epoch() << "]"
 	  << " to " << session->inst << dendl;
 
+  if (first <= session->osd_epoch) {
+    dout(10) << __func__ << session->inst << " should already have epoch "
+	     << session->osd_epoch << dendl;
+    first = session->osd_epoch + 1;
+  }
+
   if (first < get_first_committed()) {
     first = get_first_committed();
     bufferlist bl;
@@ -2228,25 +2162,37 @@ void OSDMonitor::send_incremental(epoch_t first, MonSession *session,
     m->oldest_map = first;
     m->newest_map = osdmap.get_epoch();
     m->maps[first] = bl;
-    session->con->send_message(m);
+
+    if (req) {
+      mon->send_reply(req, m);
+      session->osd_epoch = first;
+      return;
+    } else {
+      session->con->send_message(m);
+      session->osd_epoch = first;
+    }
     first++;
   }
 
   while (first <= osdmap.get_epoch()) {
     epoch_t last = MIN(first + g_conf->osd_map_message_max, osdmap.get_epoch());
     MOSDMap *m = build_incremental(first, last);
-    session->con->send_message(m);
-    first = last + 1;
 
-    if (session->inst.name.is_osd())
-      note_osd_has_epoch(session->inst.name.num(), last);
-
-    if (onetime)
+    if (req) {
+      // send some maps.  it may not be all of them, but it will get them
+      // started.
+      m->oldest_map = get_first_committed();
+      m->newest_map = osdmap.get_epoch();
+      mon->send_reply(req, m);
+    } else {
+      session->con->send_message(m);
+      first = last + 1;
+    }
+    session->osd_epoch = last;
+    if (onetime || req)
       break;
   }
 }
-
-
 
 
 epoch_t OSDMonitor::blacklist(const entity_addr_t& a, utime_t until)

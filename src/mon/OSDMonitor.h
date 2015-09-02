@@ -134,14 +134,6 @@ private:
 
   map<int,double> osd_weight;
 
-  /*
-   * cache what epochs we think osds have.  this is purely
-   * optimization to try to avoid sending the same inc maps twice.
-   */
-  map<int,epoch_t> osd_epoch;
-
-  void note_osd_has_epoch(int osd, epoch_t epoch);
-
   void check_failures(utime_t now);
   bool check_failure(utime_t now, int target_osd, failure_info_t& fi);
 
@@ -217,9 +209,12 @@ private:
   // ...
   MOSDMap *build_latest_full();
   MOSDMap *build_incremental(epoch_t first, epoch_t last);
-  void send_full(PaxosServiceMessage *m);
-  void send_incremental(PaxosServiceMessage *m, epoch_t first);
-  void send_incremental(epoch_t first, MonSession *session, bool onetime);
+  void send_full(MonOpRequestRef op);
+  void send_incremental(MonOpRequestRef op, epoch_t first);
+  // @param req an optional op request, if the osdmaps are replies to it. so
+  //            @c Monitor::send_reply() can mark_event with it.
+  void send_incremental(epoch_t first, MonSession *session, bool onetime,
+			MonOpRequestRef req = MonOpRequestRef());
 
   int reweight_by_utilization(int oload, std::string& out_str, bool by_pg,
 			      const set<int64_t> *pools);
@@ -402,9 +397,10 @@ private:
 			   std::map<int,utime_t> &last_osd_report);
   void mark_all_down();
 
-  void send_latest(PaxosServiceMessage *m, epoch_t start=0);
-  void send_latest_now_nodelete(PaxosServiceMessage *m, epoch_t start=0) {
-    send_incremental(m, start);
+  void send_latest(MonOpRequestRef op, epoch_t start=0);
+  void send_latest_now_nodelete(MonOpRequestRef op, epoch_t start=0) {
+    op->mark_osdmon_event(__func__);
+    send_incremental(op, start);
   }
 
   epoch_t blacklist(const entity_addr_t& a, utime_t until);
