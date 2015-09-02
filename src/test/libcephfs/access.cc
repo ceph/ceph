@@ -27,6 +27,7 @@
 #include <iostream>
 #include <vector>
 #include "common/ceph_argparse.h"
+#include "include/stringify.h"
 #include "json_spirit/json_spirit.h"
 
 #ifdef __linux__
@@ -38,11 +39,12 @@ rados_t cluster;
 
 string key;
 
-int do_mon_command(const char *s, string *key)
+int do_mon_command(string s, string *key)
 {
   char *outs, *outbuf;
   size_t outs_len, outbuf_len;
-  int r = rados_mon_command(cluster, (const char **)&s, 1,
+  const char *ss = s.c_str();
+  int r = rados_mon_command(cluster, (const char **)&ss, 1,
 			    0, 0,
 			    &outbuf, &outbuf_len,
 			    &outs, &outs_len);
@@ -68,25 +70,32 @@ int do_mon_command(const char *s, string *key)
   return r;
 }
 
+string get_unique_dir()
+{
+  return string("/ceph_test_libcephfs.") + stringify(rand());
+}
+
 TEST(AccessTest, Foo) {
+  string dir = get_unique_dir();
+  string user = "libcephfs_foo_test." + stringify(rand());
   // admin mount to set up test
   struct ceph_mount_info *admin;
   ASSERT_EQ(0, ceph_create(&admin, NULL));
   ASSERT_EQ(0, ceph_conf_parse_env(admin, NULL));
   ASSERT_EQ(0, ceph_conf_read_file(admin, NULL));
   ASSERT_EQ(0, ceph_mount(admin, "/"));
-  ASSERT_EQ(0, ceph_mkdir(admin, "/foo", 0755));
+  ASSERT_EQ(0, ceph_mkdir(admin, dir.c_str(), 0755));
 
   // create access key
   string key;
   ASSERT_EQ(0, do_mon_command(
-      "{\"prefix\": \"auth get-or-create\", \"entity\": \"client.foo\", "
+      "{\"prefix\": \"auth get-or-create\", \"entity\": \"client." + user + "\", "
       "\"caps\": [\"mon\", \"allow *\", \"osd\", \"allow rw\", "
       "\"mds\", \"allow rw\""
       "], \"format\": \"json\"}", &key));
 
   struct ceph_mount_info *cmount;
-  ASSERT_EQ(0, ceph_create(&cmount, "foo"));
+  ASSERT_EQ(0, ceph_create(&cmount, user.c_str()));
   ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
   ASSERT_EQ(0, ceph_conf_read_file(cmount, NULL));
   ASSERT_EQ(0, ceph_conf_set(cmount, "key", key.c_str()));
@@ -95,125 +104,148 @@ TEST(AccessTest, Foo) {
   ceph_shutdown(cmount);
 
   // clean up
-  ASSERT_EQ(0, ceph_rmdir(admin, "/foo"));
+  ASSERT_EQ(0, ceph_rmdir(admin, dir.c_str()));
   ceph_shutdown(admin);
 }
 
 TEST(AccessTest, Path) {
+  string good = get_unique_dir();
+  string bad = get_unique_dir();
+  string user = "libcephfs_path_test." + stringify(rand());
   struct ceph_mount_info *admin;
   ASSERT_EQ(0, ceph_create(&admin, NULL));
   ASSERT_EQ(0, ceph_conf_parse_env(admin, NULL));
   ASSERT_EQ(0, ceph_conf_read_file(admin, NULL));
   ASSERT_EQ(0, ceph_mount(admin, "/"));
-  ASSERT_EQ(0, ceph_mkdir(admin, "/bar", 0755));
-  ASSERT_EQ(0, ceph_mkdir(admin, "/foobar", 0755));
-  ASSERT_EQ(0, ceph_mkdir(admin, "/bar/p", 0755));
-  ASSERT_EQ(0, ceph_mkdir(admin, "/foobar/p", 0755));
-  int fd = ceph_open(admin, "/bar/q", O_CREAT|O_WRONLY, 0755);
-  ceph_close(admin,fd);
-  fd = ceph_open(admin, "/foobar/q", O_CREAT|O_WRONLY, 0755);
-  ceph_close(admin,fd);
-  fd = ceph_open(admin, "/foobar/z", O_CREAT|O_WRONLY, 0755);
+  ASSERT_EQ(0, ceph_mkdir(admin, good.c_str(), 0755));
+  ASSERT_EQ(0, ceph_mkdir(admin, string(good + "/p").c_str(), 0755));
+  ASSERT_EQ(0, ceph_mkdir(admin, bad.c_str(), 0755));
+  ASSERT_EQ(0, ceph_mkdir(admin, string(bad + "/p").c_str(), 0755));
+  int fd = ceph_open(admin, string(good + "/q").c_str(), O_CREAT|O_WRONLY, 0755);
+  ceph_close(admin, fd);
+  fd = ceph_open(admin, string(bad + "/q").c_str(), O_CREAT|O_WRONLY, 0755);
+  ceph_close(admin, fd);
+  fd = ceph_open(admin, string(bad + "/z").c_str(), O_CREAT|O_WRONLY, 0755);
   ceph_write(admin, fd, "TEST FAILED", 11, 0);
-  ceph_close(admin,fd);
+  ceph_close(admin, fd);
 
   string key;
   ASSERT_EQ(0, do_mon_command(
-      "{\"prefix\": \"auth get-or-create\", \"entity\": \"client.bar\", "
+      "{\"prefix\": \"auth get-or-create\", \"entity\": \"client." + user + "\", "
       "\"caps\": [\"mon\", \"allow r\", \"osd\", \"allow rwx\", "
-      "\"mds\", \"allow r, allow rw path=/bar\""
+      "\"mds\", \"allow r, allow rw path=" + good + "\""
       "], \"format\": \"json\"}", &key));
 
   struct ceph_mount_info *cmount;
-  ASSERT_EQ(0, ceph_create(&cmount, "bar"));
+  ASSERT_EQ(0, ceph_create(&cmount, user.c_str()));
   ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
   ASSERT_EQ(0, ceph_conf_read_file(cmount, NULL));
   ASSERT_EQ(0, ceph_conf_set(cmount, "key", key.c_str()));
   ASSERT_EQ(0, ceph_mount(cmount, "/"));
 
-  //allowed operations
-  ASSERT_GE(ceph_mkdir(cmount, "/bar/x", 0755), 0);
-  ASSERT_GE(ceph_rmdir(cmount, "/bar/p"), 0);
-  ASSERT_GE(ceph_unlink(cmount, "/bar/q"), 0);
-  fd = ceph_open(cmount, "/bar/y", O_CREAT|O_WRONLY, 0755);
+  // allowed
+  ASSERT_GE(ceph_mkdir(cmount, string(good + "/x").c_str(), 0755), 0);
+  ASSERT_GE(ceph_rmdir(cmount, string(good + "/p").c_str()), 0);
+  ASSERT_GE(ceph_unlink(cmount, string(good + "/q").c_str()), 0);
+  fd = ceph_open(cmount, string(good + "/y").c_str(), O_CREAT|O_WRONLY, 0755);
   ASSERT_GE(fd, 0);
   ceph_write(cmount, fd, "bar", 3, 0);
-  ceph_close(cmount,fd);
-  ASSERT_GE(ceph_unlink(cmount, "/bar/y"), 0);
-  ASSERT_GE(ceph_rmdir(cmount, "/bar/x"), 0);
-  fd = ceph_open(cmount, "/foobar/z", O_RDONLY, 0644);
-  ASSERT_GE(fd, 0);
-  ceph_close(cmount,fd);
+  ceph_close(cmount, fd);
+  ASSERT_GE(ceph_unlink(cmount, string(good + "/y").c_str()), 0);
+  ASSERT_GE(ceph_rmdir(cmount, string(good + "/x").c_str()), 0);
 
-  //not allowed operations
-  ASSERT_LT(ceph_mkdir(cmount, "/foobar/x", 0755), 0);
-  ASSERT_LT(ceph_rmdir(cmount, "/foobar/p"), 0);
-  ASSERT_LT(ceph_unlink(cmount, "/foobar/q"), 0);
-  fd = ceph_open(cmount, "/foobar/y", O_CREAT|O_WRONLY, 0755);
+  fd = ceph_open(cmount, string(bad + "/z").c_str(), O_RDONLY, 0644);
+  ASSERT_GE(fd, 0);
+  ceph_close(cmount, fd);
+
+  // not allowed
+  ASSERT_LT(ceph_mkdir(cmount, string(bad + "/x").c_str(), 0755), 0);
+  ASSERT_LT(ceph_rmdir(cmount, string(bad + "/p").c_str()), 0);
+  ASSERT_LT(ceph_unlink(cmount, string(bad + "/q").c_str()), 0);
+  fd = ceph_open(cmount, string(bad + "/y").c_str(), O_CREAT|O_WRONLY, 0755);
   ASSERT_LT(fd, 0);
 
-  // update after unlink
-  fd = ceph_open(cmount, "/bar/unlinkme", O_CREAT|O_WRONLY, 0755);
-  ceph_unlink(cmount, "/bar/unlinkme");
+  // unlink open file
+  fd = ceph_open(cmount, string(good + "/unlinkme").c_str(), O_CREAT|O_WRONLY, 0755);
+  ceph_unlink(cmount, string(good + "/unlinkme").c_str());
   ASSERT_GE(ceph_write(cmount, fd, "foo", 3, 0), 0);
   ASSERT_GE(ceph_fchmod(cmount, fd, 0777), 0);
   ASSERT_GE(ceph_ftruncate(cmount, fd, 0), 0);
   ASSERT_GE(ceph_fsetxattr(cmount, fd, "user.any", "bar", 3, 0), 0);
   ceph_close(cmount, fd);
 
+  // rename open file
+  fd = ceph_open(cmount, string(good + "/renameme").c_str(), O_CREAT|O_WRONLY, 0755);
+  ASSERT_EQ(ceph_rename(admin, string(good + "/renameme").c_str(),
+			string(bad + "/asdf").c_str()), 0);
+  ASSERT_GE(ceph_write(cmount, fd, "foo", 3, 0), 0);
+  ASSERT_GE(ceph_fchmod(cmount, fd, 0777), -EACCES);
+  ASSERT_GE(ceph_ftruncate(cmount, fd, 0), -EACCES);
+  ASSERT_GE(ceph_fsetxattr(cmount, fd, "user.any", "bar", 3, 0), -EACCES);
+  ceph_close(cmount, fd);
+  
   ceph_shutdown(cmount);
-  ASSERT_EQ(0, ceph_unlink(admin, "/foobar/q"));
-  ASSERT_EQ(0, ceph_unlink(admin, "/foobar/z"));
-  ASSERT_EQ(0, ceph_rmdir(admin, "/foobar/p"));
-  ASSERT_EQ(0, ceph_rmdir(admin, "/bar"));
-  ASSERT_EQ(0, ceph_rmdir(admin, "/foobar"));
+  ASSERT_EQ(0, ceph_unlink(admin, string(bad + "/q").c_str()));
+  ASSERT_EQ(0, ceph_unlink(admin, string(bad + "/z").c_str()));
+  ASSERT_EQ(0, ceph_rmdir(admin, string(bad + "/p").c_str()));
+  ASSERT_EQ(0, ceph_unlink(admin, string(bad + "/asdf").c_str()));
+  ASSERT_EQ(0, ceph_rmdir(admin, good.c_str()));
+  ASSERT_EQ(0, ceph_rmdir(admin, bad.c_str()));
   ceph_shutdown(admin);
 }
 
-TEST(AccessTest, ReadOnly){
+TEST(AccessTest, ReadOnly) {
+  string dir = get_unique_dir();
+  string dir2 = get_unique_dir();
+  string user = "libcephfs_readonly_test." + stringify(rand());
   struct ceph_mount_info *admin;
   ASSERT_EQ(0, ceph_create(&admin, NULL));
   ASSERT_EQ(0, ceph_conf_parse_env(admin, NULL));
   ASSERT_EQ(0, ceph_conf_read_file(admin, NULL));
   ASSERT_EQ(0, ceph_mount(admin, "/"));
-  ASSERT_EQ(0, ceph_mkdir(admin, "/ronly", 0755));
-  int fd = ceph_open(admin, "/ronly/out", O_CREAT|O_WRONLY, 0755);
+  ASSERT_EQ(0, ceph_mkdir(admin, dir.c_str(), 0755));
+  int fd = ceph_open(admin, string(dir + "/out").c_str(), O_CREAT|O_WRONLY, 0755);
   ceph_write(admin, fd, "foo", 3, 0);
   ceph_close(admin,fd);
 
   string key;
   ASSERT_EQ(0, do_mon_command(
-      "{\"prefix\": \"auth get-or-create\", \"entity\": \"client.ronly\", "
+      "{\"prefix\": \"auth get-or-create\", \"entity\": \"client." + user + "\", "
       "\"caps\": [\"mon\", \"allow r\", \"osd\", \"allow rw\", "
       "\"mds\", \"allow r\""
       "], \"format\": \"json\"}", &key));
 
   struct ceph_mount_info *cmount;
-  ASSERT_EQ(0, ceph_create(&cmount, "ronly"));
+  ASSERT_EQ(0, ceph_create(&cmount, user.c_str()));
   ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
   ASSERT_EQ(0, ceph_conf_read_file(cmount, NULL));
   ASSERT_EQ(0, ceph_conf_set(cmount, "key", key.c_str()));
   ASSERT_EQ(0, ceph_mount(cmount, "/"));
 
-  //allowed operations
-  fd = ceph_open(cmount, "/ronly/out", O_RDONLY, 0644);
+  // allowed
+  fd = ceph_open(cmount, string(dir + "/out").c_str(), O_RDONLY, 0644);
   ASSERT_GE(fd, 0);
   ceph_close(cmount,fd);
 
-  //not allowed operations
-  fd = ceph_open(cmount, "/ronly/bar", O_CREAT|O_WRONLY, 0755);
+  // not allowed
+  fd = ceph_open(cmount, string(dir + "/bar").c_str(), O_CREAT|O_WRONLY, 0755);
   ASSERT_LT(fd, 0);
-  ASSERT_LT(ceph_mkdir(cmount, "/newdir", 0755), 0);
+  ASSERT_LT(ceph_mkdir(cmount, dir2.c_str(), 0755), 0);
 
   ceph_shutdown(cmount);
-  ASSERT_EQ(0, ceph_unlink(admin, "/ronly/out"));
-  ASSERT_EQ(0, ceph_rmdir(admin, "/ronly"));
+  ASSERT_EQ(0, ceph_unlink(admin, string(dir + "/out").c_str()));
+  ASSERT_EQ(0, ceph_rmdir(admin, dir.c_str()));
+  ceph_shutdown(admin);
+}
+
   ceph_shutdown(admin);
 }
 
 int main(int argc, char **argv)
 {
   ::testing::InitGoogleTest(&argc, argv);
+
+  srand(getpid());
 
   rados_create(&cluster, NULL);
   rados_conf_read_file(cluster, NULL);
