@@ -765,6 +765,11 @@ public:
   RGWAsyncWait(RGWAioCompletionNotifier *cn, CephContext *_cct, Mutex *_lock, Cond *_cond, int _secs) : RGWAsyncRadosRequest(cn),
                                        cct(_cct),
                                        lock(_lock), cond(_cond), interval(_secs, 0) {}
+
+  void wakeup() {
+    Mutex::Locker l(*lock);
+    cond->Signal();
+  }
 };
 
 class RGWWaitCR : public RGWSimpleCoroutine {
@@ -784,6 +789,7 @@ public:
   }
 
   ~RGWWaitCR() {
+    wakeup();
     delete req;
   }
 
@@ -795,6 +801,10 @@ public:
 
   int request_complete() {
     return req->get_ret_status();
+  }
+
+  void wakeup() {
+    req->wakeup();
   }
 };
 
