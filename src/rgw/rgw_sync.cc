@@ -1523,6 +1523,45 @@ public:
   }
 };
 
+class RGWCloneMetaLogCoroutine : public RGWCoroutine {
+  RGWRados *store;
+  RGWMetadataLog *mdlog;
+  RGWHTTPManager *http_manager;
+
+  int shard_id;
+  string marker;
+  bool truncated;
+
+  int max_entries;
+
+  RGWRESTReadResource *http_op;
+
+  RGWAioCompletionNotifier *md_op_notifier;
+
+  int req_ret;
+  RGWMetadataLogInfo shard_info;
+  rgw_mdlog_shard_data data;
+
+public:
+  RGWCloneMetaLogCoroutine(RGWRados *_store, RGWHTTPManager *_mgr,
+		    int _id, const string& _marker) : RGWCoroutine(_store->ctx()), store(_store),
+                                                      mdlog(store->meta_mgr->get_log()),
+                                                      http_manager(_mgr), shard_id(_id),
+                                                      marker(_marker), truncated(false), max_entries(CLONE_MAX_ENTRIES),
+						      http_op(NULL), md_op_notifier(NULL),
+						      req_ret(0) {}
+
+  int operate();
+
+  int state_init();
+  int state_read_shard_status();
+  int state_read_shard_status_complete();
+  int state_send_rest_request();
+  int state_receive_rest_response();
+  int state_store_mdlog_entries();
+  int state_store_mdlog_entries_complete();
+};
+
 class RGWMetaSyncShardCR : public RGWCoroutine {
   RGWRados *store;
   RGWHTTPManager *http_manager;
@@ -1647,6 +1686,10 @@ public:
       do {
 #define INCREMENTAL_MAX_ENTRIES 100
         yield call(new RGWReadMDLogEntriesCR(async_rados, store, shard_id, &sync_marker.marker, INCREMENTAL_MAX_ENTRIES, &log_entries, &truncated));
+	if (log_entries.size() < INCREMENTAL_MAX_ENTRIES) {
+          ldout(store->ctx(), 20) << __func__ << ": syncing mdlog for shard_id=" << shard_id << dendl;
+	  yield call(new RGWCloneMetaLogCoroutine(store, http_manager, shard_id, sync_marker.marker));
+	}
         for (list<cls_log_entry>::iterator iter = log_entries.begin(); iter != log_entries.end(); ++iter) {
           ldout(store->ctx(), 20) << __func__ << ": log_entry: " << iter->id << ":" << iter->section << ":" << iter->name << ":" << iter->timestamp << dendl;
 	}
@@ -1690,45 +1733,6 @@ public:
     }
     return 0;
   }
-};
-
-class RGWCloneMetaLogCoroutine : public RGWCoroutine {
-  RGWRados *store;
-  RGWMetadataLog *mdlog;
-  RGWHTTPManager *http_manager;
-
-  int shard_id;
-  string marker;
-  bool truncated;
-
-  int max_entries;
-
-  RGWRESTReadResource *http_op;
-
-  RGWAioCompletionNotifier *md_op_notifier;
-
-  int req_ret;
-  RGWMetadataLogInfo shard_info;
-  rgw_mdlog_shard_data data;
-
-public:
-  RGWCloneMetaLogCoroutine(RGWRados *_store, RGWHTTPManager *_mgr,
-		    int _id, const string& _marker) : RGWCoroutine(_store->ctx()), store(_store),
-                                                      mdlog(store->meta_mgr->get_log()),
-                                                      http_manager(_mgr), shard_id(_id),
-                                                      marker(_marker), truncated(false), max_entries(CLONE_MAX_ENTRIES),
-						      http_op(NULL), md_op_notifier(NULL),
-						      req_ret(0) {}
-
-  int operate();
-
-  int state_init();
-  int state_read_shard_status();
-  int state_read_shard_status_complete();
-  int state_send_rest_request();
-  int state_receive_rest_response();
-  int state_store_mdlog_entries();
-  int state_store_mdlog_entries_complete();
 };
 
 int RGWRemoteMetaLog::clone_shards(int num_shards, vector<string>& clone_markers)
