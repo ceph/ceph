@@ -327,6 +327,12 @@ public:
       ::decode(rules, bl);
     } else {
       explicit_objs = true;
+      if (!objs.empty()) {
+        map<uint64_t, RGWObjManifestPart>::iterator iter = objs.begin();
+        head_obj = iter->second.loc;
+        head_size = iter->second.size;
+        max_head_size = head_size;
+      }
     }
 
     if (struct_v >= 4) {
