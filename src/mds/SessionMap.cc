@@ -732,6 +732,9 @@ void SessionMap::save_if_dirty(const std::set<entity_name_t> &tgt_sessions,
 // =================
 // Session
 
+#undef dout_prefix
+#define dout_prefix *_dout << "Session "
+
 /**
  * Calculate the length of the `requests` member list,
  * because elist does not have a size() method.
@@ -832,14 +835,18 @@ void Session::decode(bufferlist::iterator &p)
   _update_human_name();
 }
 
-bool Session::check_access(CInode *in, unsigned mask, int caller_uid, int caller_gid, int setattr_uid, int setattr_gid)
+bool Session::check_access(CInode *in, unsigned mask,
+			   int caller_uid, int caller_gid,
+			   int setattr_uid, int setattr_gid)
 {
   string path;
-
-  if (in->is_stray()){
+  CInode *diri = in->get_parent_inode();
+  if (diri && diri->is_stray()){
     path = in->get_projected_inode()->stray_prior_path;
+    dout(20) << __func__ << " stray_prior_path " << path << dendl;
   } else {
     in->make_path_string(path, false, in->get_projected_parent_dn());
+    dout(20) << __func__ << " path " << path << dendl;
   }
   if (path.length())
     path = path.substr(1);    // drop leading /
