@@ -87,6 +87,10 @@ if(USE_NSS)
   endif(NSS_FOUND)
 endif(USE_NSS)
 
+if(WITH_FUSE)
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -I${PC_FUSE_INCLUDE_DIRS}")
+endif(WITH_FUSE)
+
 if(${HAVE_ATOMIC_OPS})
   set(EXTRALIBS
 	atomic_ops
