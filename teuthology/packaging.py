@@ -34,6 +34,7 @@ DISTRO_CODENAME_MAP = {
     },
     "debian": {
         "7": "wheezy",
+        "8": "jessie",
     },
 }
 
