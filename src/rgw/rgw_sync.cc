@@ -751,6 +751,53 @@ public:
   }
 };
 
+class RGWAsyncWait : public RGWAsyncRadosRequest {
+  CephContext *cct;
+  Mutex *lock;
+  Cond *cond;
+  utime_t interval;
+protected:
+  int _send_request() {
+    Mutex::Locker l(*lock);
+    return cond->WaitInterval(cct, *lock, interval);
+  }
+public:
+  RGWAsyncWait(RGWAioCompletionNotifier *cn, CephContext *_cct, Mutex *_lock, Cond *_cond, int _secs) : RGWAsyncRadosRequest(cn),
+                                       cct(_cct),
+                                       lock(_lock), cond(_cond), interval(_secs, 0) {}
+};
+
+class RGWWaitCR : public RGWSimpleCoroutine {
+  RGWAsyncRadosProcessor *async_rados;
+  CephContext *cct;
+  Mutex *lock;
+  Cond *cond;
+  int secs;
+
+  RGWAsyncWait *req;
+
+public:
+  RGWWaitCR(RGWAsyncRadosProcessor *_async_rados, CephContext *_cct,
+	    Mutex *_lock, Cond *_cond,
+            int _secs) : RGWSimpleCoroutine(cct), cct(_cct),
+                         async_rados(_async_rados), lock(_lock), cond(_cond), secs(_secs) {
+  }
+
+  ~RGWWaitCR() {
+    delete req;
+  }
+
+  int send_request() {
+    req = new RGWAsyncWait(stack->create_completion_notifier(), cct,  lock, cond, secs);
+    async_rados->queue(req);
+    return 0;
+  }
+
+  int request_complete() {
+    return req->get_ret_status();
+  }
+};
+
 class RGWAsyncReadMDLogEntries : public RGWAsyncRadosRequest {
   RGWRados *store;
   RGWMetadataLog *mdlog;
@@ -1486,6 +1533,8 @@ class RGWMetaSyncShardCR : public RGWCoroutine {
   list<cls_log_entry> log_entries;
   bool truncated;
 
+  Mutex inc_lock;
+  Cond inc_cond;
 
   boost::asio::coroutine incremental_cr;
   boost::asio::coroutine full_cr;
@@ -1500,7 +1549,7 @@ public:
 						      pool(_pool),
 						      shard_id(_shard_id),
 						      sync_marker(_marker),
-                                                      marker_tracker(NULL), truncated(false) {
+                                                      marker_tracker(NULL), truncated(false), inc_lock("RGWMetaSyncShardCR::inc_lock") {
   }
 
   ~RGWMetaSyncShardCR() {
@@ -1591,6 +1640,8 @@ public:
         for (list<cls_log_entry>::iterator iter = log_entries.begin(); iter != log_entries.end(); ++iter) {
           ldout(store->ctx(), 20) << __func__ << ": log_entry: " << iter->id << ":" << iter->section << ":" << iter->name << ":" << iter->timestamp << dendl;
 	}
+#define INCREMENTAL_INTERVAL 20
+	yield call(new RGWWaitCR(async_rados, store->ctx(), &inc_lock, &inc_cond, INCREMENTAL_INTERVAL));
       } while (true);
     }
     /* TODO */
