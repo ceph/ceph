@@ -1244,6 +1244,7 @@ protected:
 
   string region_name;
   string zone_name;
+  string trans_id_suffix;
 
   RGWQuotaHandler *quota_handler;
 
@@ -2063,6 +2064,34 @@ public:
     return s;
   }
 
+  void init_unique_trans_id_deps() {
+    char buf[16 + 2 + 1]; /* uint64_t needs 16, 2 hyphens add further 2 */
+
+    snprintf(buf, sizeof(buf), "-%llx-", (unsigned long long)instance_id());
+    url_encode(string(buf) + zone.name, trans_id_suffix);
+  }
+
+  /* In order to preserve compability with Swift API, transaction ID
+   * should contain at least 32 characters satisfying following spec:
+   *  - first 21 chars must be in range [0-9a-f]. Swift uses this
+   *    space for storing fragment of UUID obtained through a call to
+   *    uuid4() function of Python's uuid module;
+   *  - char no. 22 must be a hyphen;
+   *  - at least 10 next characters constitute hex-formatted timestamp
+   *    padded with zeroes if necessary. All bytes must be in [0-9a-f]
+   *    range;
+   *  - last, optional part of transaction ID is any url-encoded string
+   *    without restriction on length. */
+  string unique_trans_id(const uint64_t unique_num) {
+    char buf[41]; /* 2 + 21 + 1 + 16 (timestamp can consume up to 16) + 1 */
+    time_t timestamp = time(NULL);
+
+    snprintf(buf, sizeof(buf), "tx%021llx-%010llx",
+             (unsigned long long)unique_num,
+             (unsigned long long)timestamp);
+
+    return string(buf) + trans_id_suffix;
+  }
 
   void get_log_pool_name(string& name) {
     name = zone.log_pool.name;

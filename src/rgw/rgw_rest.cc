@@ -492,9 +492,21 @@ void dump_start(struct req_state *s)
   }
 }
 
+void dump_trans_id(req_state *s)
+{
+  if (s->prot_flags & RGW_REST_SWIFT) {
+    s->cio->print("X-Trans-Id: %s\r\n", s->trans_id.c_str());
+  }
+  else {
+    s->cio->print("x-amz-request-id: %s\r\n", s->trans_id.c_str());
+  }
+}
+
 void end_header(struct req_state *s, RGWOp *op, const char *content_type, const int64_t proposed_content_length)
 {
   string ctype;
+
+  dump_trans_id(s);
 
   if (op) {
     dump_access_control(s, op);

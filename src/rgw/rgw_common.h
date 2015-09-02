@@ -1057,6 +1057,8 @@ struct req_state {
 
    string req_id;
 
+   string trans_id;
+
    req_info info;
 
    req_state(CephContext *_cct, class RGWEnv *e);

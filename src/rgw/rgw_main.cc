@@ -555,8 +555,9 @@ static int process_request(RGWRados *store, RGWREST *rest, RGWRequest *req, RGWC
   s->obj_ctx = &rados_ctx;
 
   s->req_id = store->unique_id(req->id);
+  s->trans_id = store->unique_trans_id(req->id);
 
-  req->log(s, "initializing");
+  req->log_format(s, "initializing for trans_id = %s", s->trans_id.c_str());
 
   RGWOp *op = NULL;
   int init_error = 0;
