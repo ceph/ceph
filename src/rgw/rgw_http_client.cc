@@ -256,6 +256,16 @@ static int do_curl_wait(CephContext *cct, CURLM *handle, int signal_fd)
     dout(0) << "ERROR: curl_multi_wait() returned " << ret << dendl;
     return -EIO;
   }
+
+  if (wait_fd.revents > 0) {
+    uint32_t buf;
+    ret = read(signal_fd, (void *)&buf, sizeof(buf));
+    if (ret < 0) {
+      ret = -errno;
+      dout(0) << "ERROR: " << __func__ << "(): read() returned " << ret << dendl;
+      return ret;
+    }
+  }
   return 0;
 }
 
