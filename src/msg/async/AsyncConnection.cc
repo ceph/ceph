@@ -841,6 +841,8 @@ void AsyncConnection::process()
           in_seq.set(message->get_seq());
           ldout(async_msgr->cct, 10) << __func__ << " got message " << message->get_seq()
                                << " " << message << " " << *message << dendl;
+	  ldout(async_msgr->cct, 1) << " == rx == " << message << " " << *message
+				    << dendl;
 
           // if send_message always successfully send, it may have no
           // opportunity to send seq ack. 10 is a experience value.
@@ -1921,6 +1923,8 @@ void AsyncConnection::accept(int incoming)
 int AsyncConnection::send_message(Message *m)
 {
   ldout(async_msgr->cct, 10) << __func__ << " m=" << m << dendl;
+  ldout(async_msgr->cct, 1) << " == tx == " << m << " " << *m
+			    << dendl;
 
   // optimistic think it's ok to encode(actually may broken now)
   if (!m->get_priority())
