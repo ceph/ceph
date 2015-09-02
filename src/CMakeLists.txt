@@ -341,6 +341,7 @@ set_source_files_properties(${CMAKE_SOURCE_DIR}/src/ceph_ver.c
   ${CMAKE_SOURCE_DIR}/src/test/encoding/ceph_dencoder.cc
   APPEND PROPERTY OBJECT_DEPENDS ${CMAKE_BINARY_DIR}/src/include/ceph_ver.h)
 
+target_link_libraries(common blkid)
 if(${WITH_PROFILER})
   target_link_libraries(common profiler)
 endif(${WITH_PROFILER})
@@ -578,6 +579,10 @@ set(libos_srcs
   os/KeyValueStore.cc
   os/KeyValueDB.cc
   os/MemStore.cc
+  os/newstore/NewStore.cc
+  os/newstore/newstore_types.cc
+  os/fs/FS.cc
+  os/fs/XFS.cc
   os/GenericObjectMap.cc
   os/HashIndex.cc)
 set(os_mon_files
@@ -587,7 +592,7 @@ add_library(os STATIC ${libos_srcs} $<TARGET_OBJECTS:os_mon_objs>)
 if(${HAVE_LIBAIO})
   target_link_libraries(os aio)
 endif(${HAVE_LIBAIO})
-target_link_libraries(os leveldb snappy)
+target_link_libraries(os uuid leveldb snappy)
 
 set(cls_references_files objclass/class_api.cc)
 add_library(cls_references_objs OBJECT ${cls_references_files})
