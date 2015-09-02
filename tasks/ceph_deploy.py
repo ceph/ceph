@@ -204,7 +204,6 @@ def build_ceph_cluster(ctx, config):
         mon_node = get_nodes_using_role(ctx, 'mon')
         mon_nodes = " ".join(mon_node)
         new_mon = './ceph-deploy new'+" "+mon_nodes
-        install_nodes = './ceph-deploy install ' + (ceph_branch if ceph_branch else "--dev=master") + " " + all_nodes
         mon_hostname = mon_nodes.split(' ')[0]
         mon_hostname = str(mon_hostname)
         gather_keys = './ceph-deploy gatherkeys'+" "+mon_hostname
@@ -234,9 +233,16 @@ def build_ceph_cluster(ctx, config):
                     teuthology.append_lines_to_file(ceph_admin, conf_path, lines,
                                                     sudo=True)
 
+        # install ceph
+        install_nodes = './ceph-deploy install ' + (ceph_branch if ceph_branch else "--dev=master") + " " + all_nodes
         estatus_install = execute_ceph_deploy(install_nodes)
         if estatus_install != 0:
             raise RuntimeError("ceph-deploy: Failed to install ceph")
+        # install ceph-test package too
+        install_nodes2 = './ceph-deploy install --tests ' + (ceph_branch if ceph_branch else "--dev=master") + " " + all_nodes
+        estatus_install = execute_ceph_deploy(install_nodes2)
+        if estatus_install != 0:
+            raise RuntimeError("ceph-deploy: Failed to install ceph-test")
 
         mon_create_nodes = './ceph-deploy mon create-initial'
         # If the following fails, it is OK, it might just be that the monitors
