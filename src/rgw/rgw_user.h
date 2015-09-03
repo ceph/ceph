@@ -266,7 +266,7 @@ struct RGWUserAdminOpState {
     size_t pos = _subuser.find(":");
 
     if (pos != string::npos) {
-      user_id = _subuser.substr(0, pos);
+      user_id.id = _subuser.substr(0, pos);
       subuser = _subuser.substr(pos+1);
     } else {
       subuser = _subuser;
@@ -411,8 +411,9 @@ struct RGWUserAdminOpState {
     if (user_id.id.empty() || subuser.empty())
       return "";
 
+    // XXX have to ignore tenant here least we make a double-colon
     string kid;
-    user_id.to_str(kid);
+    user_id.id.to_str(kid);
     kid.append(":");
     kid.append(subuser);
 
@@ -424,7 +425,7 @@ struct RGWUserAdminOpState {
       return "";
 
     std::string generated_subuser;
-    user_id.to_str(generated_subuser);
+    user_id.to_str(generated_subuser); // P3: may blow up with nonempty tenant
     std::string rand_suffix;
 
     int sub_buf_size = RAND_SUBUSER_LEN + 1;
