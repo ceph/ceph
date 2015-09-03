@@ -389,6 +389,7 @@ void Journal::create_journaler() {
 
   assert(m_lock.is_locked());
   assert(m_state == STATE_UNINITIALIZED);
+  assert(m_journaler == NULL);
 
   // TODO allow alternate pool for journal objects
   m_close_pending = false;
@@ -448,6 +449,8 @@ void Journal::handle_initialized(int r) {
     destroy_journaler();
     return;
   }
+
+  ldout(cct, 20) << __func__ << ": Journaler" << *m_journaler << dendl;
 
   m_journal_replay = new JournalReplay(m_image_ctx);
 

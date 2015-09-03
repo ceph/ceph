@@ -192,4 +192,16 @@ void Journaler::create_player(ReplayHandler *replay_handler) {
                                replay_handler);
 }
 
+std::ostream &operator<<(std::ostream &os,
+			 const Journaler &journaler) {
+  os << "[metadata=";
+  if (journaler.m_metadata != NULL) {
+    os << *journaler.m_metadata;
+  } else {
+    os << "NULL";
+  }
+  os << "]";
+  return os;
+}
+
 } // namespace journal
