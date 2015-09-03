@@ -549,7 +549,7 @@ ceph_test_cls_rgw_opstate_LDADD = \
 	$(LIBRADOS) $(LIBRGW) $(CEPH_GLOBAL) \
 	$(UNITTEST_LDADD) $(CRYPTO_LIBS) \
 	-lcurl -lexpat \
-	libcls_version_client.a libcls_log_client.a \
+	libcls_version_client.a libcls_log_client.a  libcls_timeindex_client.a \
 	libcls_statelog_client.a libcls_refcount_client.la \
 	libcls_rgw_client.la libcls_user_client.a libcls_lock_client.la \
 	$(LIBRADOS)

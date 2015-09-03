@@ -942,6 +942,7 @@ if(${WITH_RADOSGW})
     cls_refcount_client
     cls_log_client
     cls_statelog_client
+    cls_timeindex_client
     cls_version_client
     cls_replica_log_client
     cls_kvs
@@ -1028,6 +1029,7 @@ if(${WITH_RADOSGW})
     cls_version_client
     cls_log_client
     cls_statelog_client
+    cls_timeindex_client
     cls_refcount_client
     cls_rgw_client
     cls_user_client

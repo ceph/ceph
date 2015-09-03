@@ -481,6 +481,40 @@ void RGWDeleteBucket_ObjStore_SWIFT::send_response()
   rgw_flush_formatter_and_reset(s, s->formatter);
 }
 
+static int get_delete_at_param(req_state *s, time_t *delete_at)
+{
+  /* Handle Swift object expiration. */
+  utime_t delat_proposal;
+  string x_delete = s->info.env->get("HTTP_X_DELETE_AFTER", "");
+
+  if (x_delete.empty()) {
+    x_delete = s->info.env->get("HTTP_X_DELETE_AT", "");
+  } else {
+    /* X-Delete-After HTTP is present. It means we need add its value
+     * to the current time. */
+    delat_proposal = ceph_clock_now(g_ceph_context);
+  }
+
+  if (x_delete.empty()) {
+    return 0;
+  }
+  string err;
+  long ts = strict_strtoll(x_delete.c_str(), 10, &err);
+
+  if (!err.empty()) {
+    return -EINVAL;
+  }
+
+  delat_proposal += utime_t(ts, 0);
+  if (delat_proposal < ceph_clock_now(g_ceph_context)) {
+    return -EINVAL;
+  }
+
+  *delete_at = delat_proposal.sec();
+
+  return 0;
+}
+
 int RGWPutObj_ObjStore_SWIFT::get_params()
 {
   if (s->has_bad_meta)
@@ -514,6 +548,12 @@ int RGWPutObj_ObjStore_SWIFT::get_params()
   policy.create_default(s->user.user_id, s->user.display_name);
 
   obj_manifest = s->info.env->get("HTTP_X_OBJECT_MANIFEST");
+
+  int r = get_delete_at_param(s, &delete_at);
+  if (r < 0) {
+    ldout(s->cct, 5) << "ERROR: failed to get Delete-At param" << dendl;
+    return r;
+  }
 
   return RGWPutObj_ObjStore::get_params();
 }
@@ -620,6 +660,13 @@ int RGWPutMetadataObject_ObjStore_SWIFT::get_params()
     return -EINVAL;
   }
 
+  /* Handle Swift object expiration. */
+  int r = get_delete_at_param(s, &delete_at);
+  if (r < 0) {
+    ldout(s->cct, 5) << "ERROR: failed to get Delete-At param" << dendl;
+    return r;
+  }
+
   placement_rule = s->info.env->get("HTTP_X_STORAGE_POLICY", "");
   return 0;
 }
@@ -683,6 +730,17 @@ static void dump_object_metadata(struct req_state * const s,
   for (riter = response_attrs.begin(); riter != response_attrs.end(); ++riter) {
     s->cio->print("%s: %s\r\n", riter->first.c_str(), riter->second.c_str());
   }
+
+  iter = attrs.find(RGW_ATTR_DELETE_AT);
+  if (iter != attrs.end()) {
+    utime_t delete_at;
+    try {
+      ::decode(delete_at, iter->second);
+      s->cio->print("X-Delete-At: %lu\r\n", delete_at.sec());
+    } catch (buffer::error& err) {
+      dout(0) << "ERROR: cannot decode object's " RGW_ATTR_DELETE_AT " attr, ignoring" << dendl;
+    }
+  }
 }
 
 int RGWCopyObj_ObjStore_SWIFT::init_dest_policy()
@@ -709,6 +767,12 @@ int RGWCopyObj_ObjStore_SWIFT::get_params()
     attrs_mod = RGWRados::ATTRSMOD_REPLACE;
   } else {
     attrs_mod = RGWRados::ATTRSMOD_MERGE;
+  }
+
+  int r = get_delete_at_param(s, &delete_at);
+  if (r < 0) {
+    ldout(s->cct, 5) << "ERROR: failed to get Delete-At param" << dendl;
+    return r;
   }
 
   return 0;
