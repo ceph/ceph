@@ -1820,7 +1820,6 @@ void FileStore::op_queue_reserve_throttle(Op *o, ThreadPool::TPHandle *handle)
   logger->set(l_os_oq_max_ops, max_ops);
   logger->set(l_os_oq_max_bytes, max_bytes);
 
-  utime_t start = ceph_clock_now(g_ceph_context);
   if (handle)
     handle->suspend_tp_timeout();
   if (throttle_ops.should_wait(1) || 
@@ -1833,9 +1832,6 @@ void FileStore::op_queue_reserve_throttle(Op *o, ThreadPool::TPHandle *handle)
   throttle_bytes.get(o->bytes);
   if (handle)
     handle->reset_tp_timeout();
-
-  utime_t end = ceph_clock_now(g_ceph_context);
-  logger->tinc(l_os_queue_lat, end - start);
 
   logger->set(l_os_oq_ops, throttle_ops.get_current());
   logger->set(l_os_oq_bytes, throttle_bytes.get_current());
@@ -1931,6 +1927,7 @@ int FileStore::queue_transactions(Sequencer *posr, list<Transaction*> &tls,
     return 0;
   }
 
+  utime_t start = ceph_clock_now(g_ceph_context);
   // set up the sequencer
   OpSequencer *osr;
   if (!posr)
@@ -1982,6 +1979,8 @@ int FileStore::queue_transactions(Sequencer *posr, list<Transaction*> &tls,
       assert(0);
     }
     submit_manager.op_submit_finish(op_num);
+    utime_t end = ceph_clock_now(g_ceph_context);
+    logger->tinc(l_os_queue_lat, end - start);
     return 0;
   }
 
@@ -2002,6 +2001,8 @@ int FileStore::queue_transactions(Sequencer *posr, list<Transaction*> &tls,
     if (ondisk)
       apply_manager.add_waiter(op_num, ondisk);
     submit_manager.op_submit_finish(op_num);
+    utime_t end = ceph_clock_now(g_ceph_context);
+    logger->tinc(l_os_queue_lat, end - start);
     return 0;
   }
 
@@ -2034,6 +2035,8 @@ int FileStore::queue_transactions(Sequencer *posr, list<Transaction*> &tls,
   submit_manager.op_submit_finish(op);
   apply_manager.op_apply_finish(op);
 
+  utime_t end = ceph_clock_now(g_ceph_context);
+  logger->tinc(l_os_queue_lat, end - start);
   return r;
 }
 
