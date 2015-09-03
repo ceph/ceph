@@ -139,9 +139,10 @@ bool MDSAuthCaps::is_capable(const std::string &inode_path,
 {
   if (cct)
     ldout(cct, 10) << __func__ << " inode(path /" << inode_path
-		 << " owner " << inode_uid << ":" << inode_gid
-		 << " mode 0" << std::oct << inode_mode << std::dec
-		 << ") by uid " << uid << " gid " << gid << " mask " << mask << " cap: " << *this << dendl;
+		   << " owner " << inode_uid << ":" << inode_gid
+		   << " mode 0" << std::oct << inode_mode << std::dec
+		   << ") by uid " << uid << " gid " << gid << " mask " << mask
+		   << " cap: " << *this << dendl;
 
   for (std::vector<MDSCapGrant>::const_iterator i = grants.begin();
        i != grants.end();
