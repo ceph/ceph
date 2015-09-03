@@ -145,5 +145,11 @@ std::ostream &operator<<(std::ostream &os,
   return os;
 }
 
+std::ostream &operator<<(std::ostream &os, const Client &client) {
+  os << "[id=" << client.id << ", description=" << client.description
+     << ", commit_position=" << client.commit_position << "]";
+  return os;
+}
+
 } // namespace journal
 } // namespace cls

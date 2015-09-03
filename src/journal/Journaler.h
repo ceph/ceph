@@ -66,7 +66,13 @@ private:
   JournalTrimmer *m_trimmer;
 
   void create_player(ReplayHandler *replay_handler);
+
+  friend std::ostream &operator<<(std::ostream &os,
+				  const Journaler &journaler);
 };
+
+std::ostream &operator<<(std::ostream &os,
+			 const Journaler &journaler);
 
 } // namespace journal
 

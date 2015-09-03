@@ -304,7 +304,16 @@ private:
   void handle_watch_notify(uint64_t notify_id, uint64_t cookie);
   void handle_watch_error(int err);
   void handle_notified(int r);
+
+  friend std::ostream &operator<<(std::ostream &os,
+				  const JournalMetadata &journal_metadata);
 };
+
+std::ostream &operator<<(std::ostream &os,
+			 const JournalMetadata::RegisteredClients &clients);
+
+std::ostream &operator<<(std::ostream &os,
+			 const JournalMetadata &journal_metadata);
 
 } // namespace journal
 
