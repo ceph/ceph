@@ -837,7 +837,7 @@ void Session::decode(bufferlist::iterator &p)
 
 bool Session::check_access(CInode *in, unsigned mask,
 			   int caller_uid, int caller_gid,
-			   int setattr_uid, int setattr_gid)
+			   int new_uid, int new_gid)
 {
   string path;
   CInode *diri = in->get_parent_inode();
@@ -857,21 +857,15 @@ bool Session::check_access(CInode *in, unsigned mask,
     if (!(auth_caps.is_capable(path, caller_uid, caller_gid,
 			       0 /* irrelevant */,
 			       caller_uid, caller_gid,
-			       MAY_CREATE))) {
+			       MAY_CREATE, 0, 0))) {
       return false;
     }
     mask &= ~MAY_CREATE;
   }
 
-  if ((mask & (MAY_CHOWN|MAY_CHGRP)) &&
-      !(auth_caps.is_capable(path, in->inode.uid, in->inode.gid, in->inode.mode,
-			     caller_uid, caller_gid, mask))) {
-    return false;
-  }
-
-  // normal unix MAY_{READ,WRITE} checks
   if (auth_caps.is_capable(path, in->inode.uid, in->inode.gid, in->inode.mode,
-			   caller_uid, caller_gid, mask)) {
+			   caller_uid, caller_gid, mask,
+			   new_uid, new_gid)) {
     return true;
   }
   return false;
