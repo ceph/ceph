@@ -1679,13 +1679,14 @@ int main(int argc, char **argv)
 	  return ret;
 	}
 	string current_id = realm.get_current_period();
-	if (current_id.empty()) {
-	  cout << "No current period" << std::endl;
-	} else if (ret < 0) {
+	if (ret < 0) {
 	  cerr << "Error reading current period:" << cpp_strerror(-ret) << std::endl;
 	  return ret;
 	}
-	cout << "Current period: " << current_id << std::endl;
+	formatter->open_object_section("period_get_current");
+	encode_json("current_period", current_id, formatter);
+	formatter->close_section();
+	formatter->flush(cout);
       }
       break;
     case OPT_PERIOD_ACTIVATE:
