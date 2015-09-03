@@ -412,8 +412,7 @@ struct RGWUserAdminOpState {
       return "";
 
     // XXX have to ignore tenant here least we make a double-colon
-    string kid;
-    user_id.id.to_str(kid);
+    string kid = user_id.id;
     kid.append(":");
     kid.append(subuser);
 
