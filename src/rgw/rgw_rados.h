@@ -21,6 +21,7 @@ class RGWWatcher;
 class SafeTimer;
 class ACLOwner;
 class RGWGC;
+class RGWMetaNotifier;
 class RGWObjectExpirer;
 class RGWRESTConn;
 
@@ -1490,6 +1491,7 @@ class Finisher;
 class RGWRados
 {
   friend class RGWGC;
+  friend class RGWMetaNotifier;
   friend class RGWObjectExpirer;
   friend class RGWStateLog;
   friend class RGWReplicaLogger;
@@ -1537,6 +1539,8 @@ class RGWRados
   RGWObjectExpirer *obj_expirer;
   bool use_gc_thread;
   bool quota_threads;
+
+  RGWMetaNotifier *meta_notifier;
 
   int num_watchers;
   RGWWatcher **watchers;
@@ -1594,6 +1598,7 @@ protected:
 public:
   RGWRados() : max_req_id(0), lock("rados_timer_lock"), watchers_lock("watchers_lock"), timer(NULL),
                gc(NULL), obj_expirer(NULL), use_gc_thread(false), quota_threads(false),
+               meta_notifier(NULL),
                num_watchers(0), watchers(NULL),
                watch_initialized(false),
                bucket_id_lock("rados_bucket_id"),

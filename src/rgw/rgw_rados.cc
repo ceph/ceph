@@ -1945,6 +1945,111 @@ void RGWObjectCtx::set_prefetch_data(rgw_obj& obj) {
   }
 }
 
+class RGWMetaNotifier {
+  CephContext *cct;
+  RGWRados *store;
+  atomic_t down_flag;
+
+  class WMWorker : public Thread {
+    CephContext *cct;
+    RGWMetaNotifier *notifier;
+    Mutex lock;
+    Cond cond;
+
+  public:
+    WMWorker(CephContext *_cct, RGWMetaNotifier *_n) : cct(_cct), notifier(_n), lock("WMWorker") {}
+    void *entry();
+    void stop();
+  };
+
+  WMWorker *worker;
+public:
+  RGWMetaNotifier(RGWRados *_store) : cct(_store->ctx()), store(_store), worker(NULL) {}
+  ~RGWMetaNotifier() {
+    stop();
+  }
+
+  int process();
+
+  bool going_down() { return down_flag.read() != 0; }
+  void start();
+  void stop();
+};
+
+void RGWMetaNotifier::WMWorker::stop()
+{
+  Mutex::Locker l(lock);
+  cond.Signal();
+}
+
+void *RGWMetaNotifier::WMWorker::entry() {
+  uint64_t msec = cct->_conf->rgw_md_notify_interval_msec;
+  utime_t interval = utime_t(msec / 1000, (msec % 1000) * 1000000);
+
+  do {
+    utime_t start = ceph_clock_now(cct);
+    int r = notifier->process();
+    if (r < 0) {
+      dout(0) << "ERROR: meta notifier process() returned error r=" << r << dendl;
+    }
+
+    if (notifier->going_down())
+      break;
+
+    utime_t end = ceph_clock_now(cct);
+    end -= start;
+
+    uint64_t cur_msec = cct->_conf->rgw_md_notify_interval_msec;
+    if (cur_msec != msec) { /* was it reconfigured? */
+      interval = utime_t(msec / 1000, (msec % 1000) * 1000000);
+    }
+
+    if (interval <= end)
+      continue; // next round
+
+    utime_t wait_time = interval;
+    wait_time -= end;
+
+    lock.Lock();
+    cond.WaitInterval(cct, lock, wait_time);
+    lock.Unlock();
+  } while (!notifier->going_down());
+
+  return NULL;
+}
+
+void RGWMetaNotifier::start()
+{
+  worker = new WMWorker(cct, this);
+  worker->create();
+}
+
+void RGWMetaNotifier::stop()
+{
+  down_flag.set(1);
+  if (worker) {
+    worker->stop();
+    worker->join();
+  }
+  delete worker;
+  worker = NULL;
+}
+
+int RGWMetaNotifier::process()
+{
+  set<int> shards;
+
+  RGWMetadataLog *log = store->meta_mgr->get_log();
+
+  log->read_clear_modified(&shards);
+
+  for (set<int>::iterator iter = shards.begin(); iter != shards.end(); ++iter) {
+    ldout(cct, 20) << __func__ << "(): notifying mdlog change, shard_id=" << *iter << dendl;
+  }
+
+  return 0;
+}
+
 int RGWRados::get_required_alignment(rgw_bucket& bucket, uint64_t *alignment)
 {
   IoCtx ioctx;
@@ -2010,6 +2115,7 @@ void RGWRados::finalize()
   delete obj_expirer;
   obj_expirer = NULL;
 
+  meta_notifier->stop();
   delete rest_master_conn;
 
   map<string, RGWRESTConn *>::iterator iter;
@@ -2296,6 +2402,11 @@ int RGWRados::init_complete()
   if (use_gc_thread) {
     gc->start_processor();
     obj_expirer->start_processor();
+  }
+
+  meta_notifier = new RGWMetaNotifier(this);
+  if (is_meta_master()) {
+    meta_notifier->start();
   }
 
   quota_handler = RGWQuotaHandler::generate_handler(this, quota_threads);
