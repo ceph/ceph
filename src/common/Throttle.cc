@@ -282,3 +282,89 @@ int SimpleThrottle::wait_for_ret()
     m_cond.Wait(m_lock);
   return m_ret;
 }
+
+void C_OrderedThrottle::finish(int r) {
+  m_ordered_throttle->finish_op(m_tid, r);
+}
+
+OrderedThrottle::OrderedThrottle(uint64_t max, bool ignore_enoent)
+  : m_lock("OrderedThrottle::m_lock"), m_max(max), m_current(0), m_ret_val(0),
+    m_ignore_enoent(ignore_enoent), m_next_tid(0), m_complete_tid(0) {
+}
+
+C_OrderedThrottle *OrderedThrottle::start_op(Context *on_finish) {
+  assert(on_finish != NULL);
+
+  Mutex::Locker locker(m_lock);
+  uint64_t tid = m_next_tid++;
+  m_tid_result[tid] = Result(on_finish);
+  C_OrderedThrottle *ctx = new C_OrderedThrottle(this, tid);
+
+  complete_pending_ops();
+  while (m_max == m_current) {
+    m_cond.Wait(m_lock);
+    complete_pending_ops();
+  }
+  ++m_current;
+
+  return ctx;
+}
+
+void OrderedThrottle::end_op(int r) {
+  Mutex::Locker locker(m_lock);
+  assert(m_current > 0);
+
+  if (r < 0 && m_ret_val == 0 && (r != -ENOENT || !m_ignore_enoent)) {
+    m_ret_val = r;
+  }
+  --m_current;
+  m_cond.Signal();
+}
+
+void OrderedThrottle::finish_op(uint64_t tid, int r) {
+  Mutex::Locker locker(m_lock);
+
+  TidResult::iterator it = m_tid_result.find(tid);
+  assert(it != m_tid_result.end());
+
+  it->second.finished = true;
+  it->second.ret_val = r;
+  m_cond.Signal();
+}
+
+bool OrderedThrottle::pending_error() const {
+  Mutex::Locker locker(m_lock);
+  return (m_ret_val < 0);
+}
+
+int OrderedThrottle::wait_for_ret() {
+  Mutex::Locker locker(m_lock);
+  complete_pending_ops();
+
+  while (m_current > 0) {
+    m_cond.Wait(m_lock);
+    complete_pending_ops();
+  }
+  return m_ret_val;
+}
+
+void OrderedThrottle::complete_pending_ops() {
+  assert(m_lock.is_locked());
+
+  while (true) {
+    TidResult::iterator it = m_tid_result.begin();
+    if (it == m_tid_result.end() || it->first != m_complete_tid ||
+        !it->second.finished) {
+      break;
+    }
+
+    Result result = it->second;
+    m_tid_result.erase(it);
+
+    m_lock.Unlock();
+    result.on_finish->complete(result.ret_val);
+    m_lock.Lock();
+
+    ++m_complete_tid;
+  }
+}
