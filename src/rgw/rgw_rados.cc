@@ -2251,7 +2251,7 @@ void RGWRados::schedule_context(Context *c) {
   finisher->queue(c);
 }
 
-int RGWRados::list_raw_prefixed_objs(string pool_name, const string& prefix, list<string>& result)
+int RGWRados::list_raw_prefixed_objs(const string& pool_name, const string& prefix, list<string>& result)
 {
   rgw_bucket pool(pool_name.c_str());
   bool is_truncated;

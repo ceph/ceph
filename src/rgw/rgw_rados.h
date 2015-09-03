@@ -1616,7 +1616,7 @@ public:
                        RGWListRawObjsCtx& ctx, list<string>& oids,
                        bool *is_truncated);
 
-  int list_raw_prefixed_objs(string pool_name, const string& prefix, list<string>& result);
+  int list_raw_prefixed_objs(const string& pool_name, const string& prefix, list<string>& result);
   int list_zonegroups(list<string>& zonegroups);
   int list_regions(list<string>& regions);
   int list_zones(list<string>& zones);
