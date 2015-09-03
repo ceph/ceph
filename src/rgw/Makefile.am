@@ -146,6 +146,7 @@ noinst_HEADERS += \
 	rgw/rgw_gc.h \
 	rgw/rgw_metadata.h \
 	rgw/rgw_multi_del.h \
+	rgw/rgw_object_expirer_core.h \
 	rgw/rgw_op.h \
 	rgw/rgw_orphan.h \
 	rgw/rgw_http_client.h \
