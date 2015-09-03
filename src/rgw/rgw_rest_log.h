@@ -159,6 +159,20 @@ public:
   }
 };
 
+class RGWOp_MDLog_Notify : public RGWRESTOp {
+public:
+  RGWOp_MDLog_Notify() {}
+  ~RGWOp_MDLog_Notify() {}
+
+  int check_caps(RGWUserCaps& caps) {
+    return caps.check_cap("mdlog", RGW_CAP_WRITE);
+  }
+  void execute();
+  virtual const string name() {
+    return "mdlog_notify";
+  }
+};
+
 class RGWOp_MDLog_Delete : public RGWRESTOp {
 public:
   RGWOp_MDLog_Delete() {}
