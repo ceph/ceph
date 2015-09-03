@@ -95,7 +95,9 @@ int RGWMetadataLog::add_entry(RGWRados *store, RGWMetadataHandler *handler, cons
   string hash_key;
   handler->get_hash_key(section, key, hash_key);
 
-  store->shard_name(prefix, cct->_conf->rgw_md_log_max_shards, hash_key, oid);
+  int shard_id;
+  store->shard_name(prefix, cct->_conf->rgw_md_log_max_shards, hash_key, oid, &shard_id);
+  mark_modified(shard_id);
   utime_t now = ceph_clock_now(cct);
   return store->time_log_add(oid, now, section, key, bl);
 }
@@ -104,6 +106,7 @@ int RGWMetadataLog::store_entries_in_shard(RGWRados *store, list<cls_log_entry>&
 {
   string oid;
 
+  mark_modified(shard_id);
   store->shard_name(prefix, shard_id, oid);
   return store->time_log_add(oid, entries, completion, false);
 }
@@ -260,6 +263,26 @@ int RGWMetadataLog::unlock(int shard_id, string& zone_id, string& owner_id) {
   get_shard_oid(shard_id, oid);
 
   return store->unlock(store->zone.log_pool, oid, zone_id, owner_id);
+}
+
+void RGWMetadataLog::mark_modified(int shard_id)
+{
+  lock.get_read();
+  if (modified_shards.find(shard_id) != modified_shards.end()) {
+    lock.unlock();
+    return;
+  }
+  lock.unlock();
+
+  RWLock::WLocker wl(lock);
+  modified_shards.insert(shard_id);
+}
+
+void RGWMetadataLog::read_clear_modified(set<int> *modified)
+{
+  RWLock::WLocker wl(lock);
+  modified->swap(modified_shards);
+  modified_shards.clear();
 }
 
 obj_version& RGWMetadataObject::get_version()
