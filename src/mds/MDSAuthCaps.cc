@@ -137,7 +137,8 @@ bool MDSAuthCaps::is_capable(const std::string &inode_path,
 			     uid_t inode_uid, gid_t inode_gid,
 			     unsigned inode_mode,
 			     uid_t caller_uid, gid_t caller_gid,
-			     unsigned mask) const
+			     unsigned mask,
+			     uid_t new_uid, gid_t new_gid) const
 {
   if (cct)
     ldout(cct, 10) << __func__ << " inode(path /" << inode_path
@@ -145,6 +146,7 @@ bool MDSAuthCaps::is_capable(const std::string &inode_path,
 		   << " mode 0" << std::oct << inode_mode << std::dec
 		   << ") by caller " << caller_uid << ":" << caller_gid
 		   << " mask " << mask
+		   << " new " << new_uid << ":" << new_gid
 		   << " cap: " << *this << dendl;
 
   for (std::vector<MDSCapGrant>::const_iterator i = grants.begin();
@@ -165,6 +167,21 @@ bool MDSAuthCaps::is_capable(const std::string &inode_path,
 	continue;
       }
 
+      // chown/chgrp
+      if (mask & MAY_CHOWN) {
+	if (new_uid != caller_uid ||   // you can't chown to someone else
+	    inode_uid != caller_uid) { // you can't chown from someone else
+	  continue;
+	}
+      }
+      if (mask & MAY_CHGRP) {
+	// you can only chgrp *to* one of your groups... if you own the file.
+	if (inode_uid != caller_uid ||
+	    std::find(i->match.gids.begin(), i->match.gids.end(), new_gid) ==
+	    i->match.gids.end()) {
+	  continue;
+	}
+      }
 
       if (inode_uid == caller_uid) {
         if ((!(mask & MAY_READ) || (inode_mode & S_IRUSR)) &&

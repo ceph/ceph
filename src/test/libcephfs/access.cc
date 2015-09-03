@@ -303,6 +303,30 @@ TEST(AccessTest, User) {
   ASSERT_EQ(0, ceph_chown(admin, dir.c_str(), 123, 456));
   ASSERT_EQ(-EACCES, ceph_mkdir(cmount, string(dir + "/no").c_str(), 0755));
 
+  // chown and chgrp
+  ASSERT_EQ(0, ceph_chmod(admin, dir.c_str(), 0700));
+  ASSERT_EQ(0, ceph_chown(admin, dir.c_str(), 123, 456));
+  ASSERT_EQ(0, ceph_chown(cmount, dir.c_str(), 123, 789));
+  ASSERT_EQ(0, ceph_chown(cmount, dir.c_str(), 123, 456));
+  ASSERT_EQ(0, ceph_chown(cmount, dir.c_str(), -1, 789));
+  ASSERT_EQ(0, ceph_chown(cmount, dir.c_str(), -1, 456));
+  ASSERT_EQ(-EACCES, ceph_chown(cmount, dir.c_str(), 123, 1));
+  ASSERT_EQ(-EACCES, ceph_chown(cmount, dir.c_str(), 1, 456));
+
+  ASSERT_EQ(0, ceph_chown(admin, dir.c_str(), 1, 1));
+  ASSERT_EQ(-EACCES, ceph_chown(cmount, dir.c_str(), 123, 456));
+  ASSERT_EQ(-EACCES, ceph_chown(cmount, dir.c_str(), 123, -1));
+  ASSERT_EQ(-EACCES, ceph_chown(cmount, dir.c_str(), -1, 456));
+
+  ASSERT_EQ(0, ceph_chown(admin, dir.c_str(), 1, 456));
+  ASSERT_EQ(-EACCES, ceph_chown(cmount, dir.c_str(), 123, 456));
+  ASSERT_EQ(-EACCES, ceph_chown(cmount, dir.c_str(), 123, -1));
+  ASSERT_EQ(-EACCES, ceph_chown(cmount, dir.c_str(), -1, 456));
+
+  ASSERT_EQ(0, ceph_chown(admin, dir.c_str(), 123, 1));
+  ASSERT_EQ(0, ceph_chown(cmount, dir.c_str(), -1, 456));
+  ASSERT_EQ(0, ceph_chown(cmount, dir.c_str(), 123, 789));
+
   ceph_shutdown(cmount);
 
   // clean up
