@@ -364,7 +364,7 @@ Setup
 
 * Get and configure teuthology::
 
-    $ git clone -b wip-6502-openstack-v3 http://github.com/dachary/teuthology
+    $ git clone http://github.com/ceph/teuthology
     $ cd teuthology ; ./bootstrap install
     $ source virtualenv/bin/activate
 
