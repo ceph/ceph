@@ -593,6 +593,7 @@ install -D etc/ceph.limits.d $RPM_BUILD_ROOT%{_sysconfdir}/security/limits.d/cep
   install -m 0644 -D systemd/ceph.target $RPM_BUILD_ROOT%{_unitdir}/ceph.target
   install -m 0644 -D systemd/ceph-disk@.service $RPM_BUILD_ROOT%{_unitdir}/ceph-disk@.service
   install -m 0755 -D systemd/ceph $RPM_BUILD_ROOT%{_sbindir}/rcceph
+  install -m 0644 -D etc/sysconfig/ceph $RPM_BUILD_ROOT%{_sysconfdir}/sysconfig/ceph
 %else
   install -D src/init-ceph $RPM_BUILD_ROOT%{_initrddir}/ceph
   install -D src/init-radosgw $RPM_BUILD_ROOT%{_initrddir}/ceph-radosgw
@@ -743,6 +744,7 @@ mkdir -p %{_localstatedir}/run/ceph/
 %{_unitdir}/ceph-radosgw@.service
 %{_unitdir}/ceph-disk@.service
 %{_unitdir}/ceph.target
+%config %{_sysconfdir}/sysconfig/ceph
 %else
 %{_initrddir}/ceph
 %{_sbindir}/rcceph
