@@ -31,6 +31,22 @@ struct rgw_file_handle
   uint64_t handle;
 };
 
+/* XXX mount info hypothetical--emulate Unix, support at least
+ * UUID-length fsid */
+struct rgw_statvfs {
+    uint64_t  f_bsize;    /* file system block size */
+    uint64_t  f_frsize;   /* fragment size */
+    uint64_t     f_blocks;   /* size of fs in f_frsize units */
+    uint64_t     f_bfree;    /* # free blocks */
+    uint64_t     f_bavail;   /* # free blocks for unprivileged users */
+    uint64_t     f_files;    /* # inodes */
+    uint64_t     f_ffree;    /* # free inodes */
+    uint64_t     f_favail;   /* # free inodes for unprivileged users */
+    uint64_t     f_fsid[2];     /* file system ID */
+    uint64_t     f_flag;     /* mount flags */
+    uint64_t     f_namemax;  /* maximum filename length */
+};
+
 /*
   get entity handle
 */
@@ -46,6 +62,12 @@ int rgw_check_handle(const struct rgw_file_handle *handle);
 */
 int rgw_mount(const char *uid, const char *key, const char *secret,
 	      struct rgw_file_handle *handle);
+
+/*
+  get filesystem attributes
+*/
+int rgw_statfs(const struct rgw_file_handle *parent_handle,
+	       struct rgw_statvfs *vfs_st);
 
 /*
   create a new dirctory
