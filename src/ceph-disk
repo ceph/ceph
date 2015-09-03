@@ -1049,6 +1049,8 @@ def dmcrypt_map(
         else:
             # Plain mode has no format function, nor any validation that the key is correct.
             command_check_call(create_args)
+        # set proper ownership of mapped device
+        command_check_call(['chown', 'ceph:ceph', dev])
         return dev
 
     except subprocess.CalledProcessError as e:
