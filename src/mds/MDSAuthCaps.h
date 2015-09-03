@@ -80,7 +80,11 @@ struct MDSCapMatch {
   {
     return uid == MDS_AUTH_UID_ANY && path == "";
   }
-  bool match(const std::string &target_path, const int target_uid) const;
+
+  // check whether this grant matches against a given file and caller uid:gid
+  bool match(const std::string &target_path,
+	     const int caller_uid,
+	     const int caller_gid) const;
 };
 
 struct MDSCapGrant {

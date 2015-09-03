@@ -107,10 +107,13 @@ void MDSCapMatch::normalize_path()
 }
 
 bool MDSCapMatch::match(const std::string &target_path,
-			const int target_uid) const
+			const int caller_uid,
+			const int caller_gid) const
 {
   if (uid != MDS_AUTH_UID_ANY) {
-    if (uid != target_uid)
+    if (uid != caller_uid)
+      return false;
+    if (std::find(gids.begin(), gids.end(), caller_gid) == gids.end())
       return false;
   }
   if (path.length()) {
@@ -153,7 +156,7 @@ bool MDSAuthCaps::is_capable(const std::string &inode_path,
        i != grants.end();
        ++i) {
 
-    if (i->match.match(inode_path, caller_uid) &&
+    if (i->match.match(inode_path, caller_uid, caller_gid) &&
 	i->spec.allows(mask & (MAY_READ|MAY_EXECUTE), mask & MAY_WRITE)) {
 
       // check unix permissions?
