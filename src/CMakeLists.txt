@@ -573,7 +573,11 @@ set(libos_srcs
   os/KeyValueDB.cc
   os/MemStore.cc
   os/GenericObjectMap.cc
-  os/HashIndex.cc)
+  os/HashIndex.cc
+  os/newstore/NewStore.cc
+  os/newstore/newstore_types.cc
+  os/fs/FS.cc
+  os/fs/XFS.cc)
 set(os_mon_files
   os/LevelDBStore.cc)
 add_library(os_mon_objs OBJECT ${os_mon_files})
