@@ -111,10 +111,10 @@ BuildRequires:	pkgconfig
 BuildRequires:	python
 BuildRequires:	python-nose
 BuildRequires:	python-requests
-%if ( 0%{?rhel} > 0 && 0%{?rhel} < 7 ) || ( 0%{?centos} > 0 && 0%{?centos} < 7 )
+%if 0%{?rhel} > 0 && 0%{?rhel} < 7
 BuildRequires:	python-sphinx10
 %endif
-%if 0%{?fedora} || 0%{?suse_version} || 0%{?rhel} >= 7 || 0%{?centos} >= 7
+%if 0%{?fedora} || 0%{?suse_version} || 0%{?rhel} >= 7
 BuildRequires:	python-sphinx
 %endif
 
@@ -853,7 +853,7 @@ mkdir -p %{_localstatedir}/run/ceph/
 CEPH_GROUP_ID=""
 CEPH_USER_ID=""
 # disabled for now until we have the numbers
-%if 0%{?rhel} || 0%{?centos} || 0%{?fedora}
+%if 0%{?rhel} || 0%{?fedora}
 CEPH_GROUP_ID="-g 167"
 CEPH_USER_ID="-u 167"
 %endif
