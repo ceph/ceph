@@ -172,7 +172,7 @@ int rgw_getattr(const struct rgw_file_handle *handle, struct stat *st)
 /*
   read directory content
 */
-int rgw_readdir(const struct rgw_file_handle *parent_handle, uint64_t offset,
+int rgw_readdir(const struct rgw_file_handle *parent_handle, uint64_t *offset,
 		rgw_readdir_cb rcb, void *cb_arg, int *eof)
 {
   string uri;
