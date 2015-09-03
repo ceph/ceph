@@ -9,6 +9,7 @@
 #include "common/dout.h"
 #include "common/errno.h"
 #include "common/Throttle.h"
+#include "common/WorkQueue.h"
 #include "cls/lock/cls_lock_client.h"
 #include "include/stringify.h"
 
@@ -2012,13 +2013,7 @@ reprotect_and_return_err:
 
       Context *ctx = new C_CopyWrite(m_throttle, m_bl);
       AioCompletion *comp = aio_create_completion_internal(ctx, rbd_ctx_cb);
-      r = aio_write(m_dest, m_offset, m_bl->length(), m_bl->c_str(), comp);
-      if (r < 0) {
-	ctx->complete(r);
-	comp->release();
-	lderr(m_dest->cct) << "error writing to destination image at offset "
-			   << m_offset << ": " << cpp_strerror(r) << dendl;
-      }
+      aio_write(m_dest, m_offset, m_bl->length(), m_bl->c_str(), comp);
     }
   private:
     SimpleThrottle *m_throttle;
@@ -2051,20 +2046,15 @@ reprotect_and_return_err:
     SimpleThrottle throttle(cct->_conf->rbd_concurrent_management_ops, false);
     uint64_t period = src->get_stripe_period();
     for (uint64_t offset = 0; offset < src_size; offset += period) {
+      if (throttle.pending_error()) {
+        return throttle.wait_for_ret();
+      }
+
       uint64_t len = min(period, src_size - offset);
       bufferlist *bl = new bufferlist();
       Context *ctx = new C_CopyRead(&throttle, dest, offset, bl);
       AioCompletion *comp = aio_create_completion_internal(ctx, rbd_ctx_cb);
-      r = aio_read(src, offset, len, NULL, bl, comp);
-      if (r < 0) {
-	ctx->complete(r);
-	comp->release();
-	throttle.wait_for_ret();
-	lderr(cct) << "could not read from source image from "
-		   << offset << " to " << offset + len << ": "
-		   << cpp_strerror(r) << dendl;
-	return r;
-      }
+      aio_read(src, offset, len, NULL, bl, comp);
       prog_ctx.update_progress(offset, src_size);
     }
 
@@ -2150,6 +2140,9 @@ reprotect_and_return_err:
   void close_image(ImageCtx *ictx)
   {
     ldout(ictx->cct, 20) << "close_image " << ictx << dendl;
+
+    ictx->aio_work_queue->drain();
+
     if (ictx->object_cacher) {
       ictx->shutdown_cache(); // implicitly flushes
     } else {
@@ -2220,6 +2213,10 @@ reprotect_and_return_err:
     SimpleThrottle throttle(cct->_conf->rbd_concurrent_management_ops, false);
 
     for (uint64_t ono = 0; ono < overlap_objects; ono++) {
+      if (throttle.pending_error()) {
+        return throttle.wait_for_ret();
+      }
+
       {
 	RWLock::RLocker l(ictx->parent_lock);
 	// stop early if the parent went away - it just means
@@ -2243,12 +2240,7 @@ reprotect_and_return_err:
       Context *comp = new C_SimpleThrottle(&throttle);
       AioWrite *req = new AioWrite(ictx, oid, ono, 0, objectx, object_overlap,
 				   bl, snapc, CEPH_NOSNAP, comp);
-      r = req->send();
-      if (r < 0) {
-	lderr(cct) << "failed to flatten object " << oid << dendl;
-	goto err;
-      }
-
+      req->send();
       prog_ctx.update_progress(ono, overlap_objects);
     }
 
@@ -2438,12 +2430,7 @@ reprotect_and_return_err:
 
       Context *ctx = new C_SafeCond(&mylock, &cond, &done, &ret);
       AioCompletion *c = aio_create_completion_internal(ctx, rbd_ctx_cb);
-      r = aio_read(ictx, off, read_len, NULL, &bl, c);
-      if (r < 0) {
-	c->release();
-	delete ctx;
-	return r;
-      }
+      aio_read(ictx, off, read_len, NULL, &bl, c);
 
       mylock.Lock();
       while (!done)
@@ -2673,12 +2660,7 @@ reprotect_and_return_err:
 
     Context *ctx = new C_SafeCond(&mylock, &cond, &done, &ret);
     AioCompletion *c = aio_create_completion_internal(ctx, rbd_ctx_cb);
-    int r = aio_read(ictx, image_extents, buf, pbl, c);
-    if (r < 0) {
-      c->release();
-      delete ctx;
-      return r;
-    }
+    aio_read(ictx, image_extents, buf, pbl, c);
 
     mylock.Lock();
     while (!done)
@@ -2707,12 +2689,7 @@ reprotect_and_return_err:
 
     Context *ctx = new C_SafeCond(&mylock, &cond, &done, &ret);
     AioCompletion *c = aio_create_completion_internal(ctx, rbd_ctx_cb);
-    r = aio_write(ictx, off, mylen, buf, c);
-    if (r < 0) {
-      c->release();
-      delete ctx;
-      return r;
-    }
+    aio_write(ictx, off, mylen, buf, c);
 
     mylock.Lock();
     while (!done)
@@ -2743,12 +2720,7 @@ reprotect_and_return_err:
 
     Context *ctx = new C_SafeCond(&mylock, &cond, &done, &ret);
     AioCompletion *c = aio_create_completion_internal(ctx, rbd_ctx_cb);
-    int r = aio_discard(ictx, off, len, c);
-    if (r < 0) {
-      c->release();
-      delete ctx;
-      return r;
-    }
+    aio_discard(ictx, off, len, c);
 
     mylock.Lock();
     while (!done)
@@ -2866,18 +2838,20 @@ reprotect_and_return_err:
     return 0;
   }
 
-  int aio_flush(ImageCtx *ictx, AioCompletion *c)
+  void aio_flush(ImageCtx *ictx, AioCompletion *c)
   {
     CephContext *cct = ictx->cct;
     ldout(cct, 20) << "aio_flush " << ictx << " completion " << c <<  dendl;
 
+    c->get();
     int r = ictx_check(ictx);
-    if (r < 0)
-      return r;
+    if (r < 0) {
+      c->fail(cct, r);
+      return;
+    }
 
     ictx->user_flushed();
 
-    c->get();
     c->add_request();
     c->init_time(ictx, AIO_TYPE_FLUSH);
     C_AioWrite *req_comp = new C_AioWrite(cct, c);
@@ -2892,8 +2866,6 @@ reprotect_and_return_err:
     c->finish_adding_requests(cct);
     c->put();
     ictx->perfcounter->inc(l_librbd_aio_flush);
-
-    return 0;
   }
 
   int flush(ImageCtx *ictx)
@@ -2941,21 +2913,26 @@ reprotect_and_return_err:
     return ictx->invalidate_cache();
   }
 
-  int aio_write(ImageCtx *ictx, uint64_t off, size_t len, const char *buf,
-		AioCompletion *c)
+  void aio_write(ImageCtx *ictx, uint64_t off, size_t len, const char *buf,
+		 AioCompletion *c)
   {
     CephContext *cct = ictx->cct;
     ldout(cct, 20) << "aio_write " << ictx << " off = " << off << " len = "
 		   << len << " buf = " << (void*)buf << dendl;
 
+    c->get();
     int r = ictx_check(ictx);
-    if (r < 0)
-      return r;
+    if (r < 0) {
+      c->fail(cct, r);
+      return;
+    }
 
     uint64_t mylen = len;
     r = clip_io(ictx, off, &mylen);
-    if (r < 0)
-      return r;
+    if (r < 0) {
+      c->fail(cct, r);
+      return;
+    }
 
     ictx->snap_lock.get_read();
     snapid_t snap_id = ictx->snap_id;
@@ -2966,8 +2943,10 @@ reprotect_and_return_err:
     ictx->parent_lock.put_read();
     ictx->snap_lock.put_read();
 
-    if (snap_id != CEPH_NOSNAP || ictx->read_only)
-      return -EROFS;
+    if (snap_id != CEPH_NOSNAP || ictx->read_only) {
+      c->fail(cct, -EROFS);
+      return;
+    }
 
     ldout(cct, 20) << "  parent overlap " << overlap << dendl;
 
@@ -2978,7 +2957,6 @@ reprotect_and_return_err:
 			       &ictx->layout, off, mylen, 0, extents);
     }
 
-    c->get();
     c->init_time(ictx, AIO_TYPE_WRITE);
     for (vector<ObjectExtent>::iterator p = extents.begin(); p != extents.end(); ++p) {
       ldout(cct, 20) << " oid " << p->oid << " " << p->offset << "~" << p->length
@@ -3007,35 +2985,35 @@ reprotect_and_return_err:
 				     objectx, object_overlap,
 				     bl, snapc, snap_id, req_comp);
 	c->add_request();
-	r = req->send();
-	if (r < 0)
-	  goto done;
+	req->send();
       }
     }
-  done:
+
     c->finish_adding_requests(ictx->cct);
     c->put();
 
     ictx->perfcounter->inc(l_librbd_aio_wr);
     ictx->perfcounter->inc(l_librbd_aio_wr_bytes, mylen);
-
-    /* FIXME: cleanup all the allocated stuff */
-    return r;
   }
 
-  int aio_discard(ImageCtx *ictx, uint64_t off, uint64_t len, AioCompletion *c)
+  void aio_discard(ImageCtx *ictx, uint64_t off, uint64_t len, AioCompletion *c)
   {
     CephContext *cct = ictx->cct;
     ldout(cct, 20) << "aio_discard " << ictx << " off = " << off << " len = "
 		   << len << dendl;
 
+    c->get();
     int r = ictx_check(ictx);
-    if (r < 0)
-      return r;
+    if (r < 0) {
+      c->fail(cct, r);
+      return;
+    }
 
     r = clip_io(ictx, off, &len);
-    if (r < 0)
-      return r;
+    if (r < 0) {
+      c->fail(cct, r);
+      return;
+    }
 
     // TODO: check for snap
     ictx->snap_lock.get_read();
@@ -3047,8 +3025,10 @@ reprotect_and_return_err:
     ictx->parent_lock.put_read();
     ictx->snap_lock.put_read();
 
-    if (snap_id != CEPH_NOSNAP || ictx->read_only)
-      return -EROFS;
+    if (snap_id != CEPH_NOSNAP || ictx->read_only) {
+      c->fail(cct, -EROFS);
+      return;
+    }
 
     // map
     vector<ObjectExtent> extents;
@@ -3057,7 +3037,6 @@ reprotect_and_return_err:
 			       &ictx->layout, off, len, 0, extents);
     }
 
-    c->get();
     c->init_time(ictx, AIO_TYPE_DISCARD);
     for (vector<ObjectExtent>::iterator p = extents.begin(); p != extents.end(); ++p) {
       ldout(cct, 20) << " oid " << p->oid << " " << p->offset << "~" << p->length
@@ -3088,12 +3067,10 @@ reprotect_and_return_err:
 			  snapc, snap_id, req_comp);
       }
 
-      r = req->send();
-      if (r < 0)
-	goto done;
+      req->send();
     }
+
     r = 0;
-  done:
     if (ictx->object_cacher) {
       Mutex::Locker l(ictx->cache_lock);
       ictx->object_cacher->discard_set(ictx->object_set, extents);
@@ -3104,9 +3081,6 @@ reprotect_and_return_err:
 
     ictx->perfcounter->inc(l_librbd_aio_discard);
     ictx->perfcounter->inc(l_librbd_aio_discard_bytes, len);
-
-    /* FIXME: cleanup all the allocated stuff */
-    return r;
   }
 
   void rbd_req_cb(completion_t cb, void *arg)
@@ -3116,23 +3090,27 @@ reprotect_and_return_err:
     req->complete(comp->get_return_value());
   }
 
-  int aio_read(ImageCtx *ictx, uint64_t off, size_t len,
+  void aio_read(ImageCtx *ictx, uint64_t off, size_t len,
 	       char *buf, bufferlist *bl,
 	       AioCompletion *c)
   {
     vector<pair<uint64_t,uint64_t> > image_extents(1);
     image_extents[0] = make_pair(off, len);
-    return aio_read(ictx, image_extents, buf, bl, c);
+    aio_read(ictx, image_extents, buf, bl, c);
   }
 
-  int aio_read(ImageCtx *ictx, const vector<pair<uint64_t,uint64_t> >& image_extents,
-	       char *buf, bufferlist *pbl, AioCompletion *c)
+  void aio_read(ImageCtx *ictx, const vector<pair<uint64_t,uint64_t> >& image_extents,
+	        char *buf, bufferlist *pbl, AioCompletion *c)
   {
-    ldout(ictx->cct, 20) << "aio_read " << ictx << " completion " << c << " " << image_extents << dendl;
+    CephContext *cct = ictx->cct;
+    ldout(cct, 20) << "aio_read " << ictx << " completion " << c << " " << image_extents << dendl;
 
+    c->get();
     int r = ictx_check(ictx);
-    if (r < 0)
-      return r;
+    if (r < 0) {
+      c->fail(cct, r);
+      return;
+    }
 
     ictx->snap_lock.get_read();
     snap_t snap_id = ictx->snap_id;
@@ -3147,8 +3125,10 @@ reprotect_and_return_err:
 	 ++p) {
       uint64_t len = p->second;
       r = clip_io(ictx, p->first, &len);
-      if (r < 0)
-	return r;
+      if (r < 0) {
+        c->fail(cct, r);
+	return;
+      }
       if (len == 0)
 	continue;
 
@@ -3157,13 +3137,10 @@ reprotect_and_return_err:
       buffer_ofs += len;
     }
 
-    int64_t ret;
-
     c->read_buf = buf;
     c->read_buf_len = buffer_ofs;
     c->read_bl = pbl;
 
-    c->get();
     c->init_time(ictx, AIO_TYPE_READ);
     for (map<object_t,vector<ObjectExtent> >::iterator p = object_extents.begin(); p != object_extents.end(); ++p) {
       for (vector<ObjectExtent>::iterator q = p->second.begin(); q != p->second.end(); ++q) {
@@ -3184,25 +3161,16 @@ reprotect_and_return_err:
 				    q->length, q->offset,
 				    cache_comp);
 	} else {
-	  r = req->send();
-	  if (r < 0 && r == -ENOENT)
-	    r = 0;
-	  if (r < 0) {
-	    ret = r;
-	    goto done;
-	  }
+	  req->send();
 	}
       }
     }
-    ret = buffer_ofs;
-  done:
+
     c->finish_adding_requests(ictx->cct);
     c->put();
 
     ictx->perfcounter->inc(l_librbd_aio_rd);
     ictx->perfcounter->inc(l_librbd_aio_rd_bytes, buffer_ofs);
-
-    return ret;
   }
 
   AioCompletion *aio_create_completion() {

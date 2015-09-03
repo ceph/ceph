@@ -179,14 +179,15 @@ namespace librbd {
 	       char *buf, bufferlist *pbl);
   ssize_t write(ImageCtx *ictx, uint64_t off, size_t len, const char *buf);
   int discard(ImageCtx *ictx, uint64_t off, uint64_t len);
-  int aio_write(ImageCtx *ictx, uint64_t off, size_t len, const char *buf,
-		AioCompletion *c);
-  int aio_discard(ImageCtx *ictx, uint64_t off, uint64_t len, AioCompletion *c);
-  int aio_read(ImageCtx *ictx, uint64_t off, size_t len,
-	       char *buf, bufferlist *pbl, AioCompletion *c);
-  int aio_read(ImageCtx *ictx, const vector<pair<uint64_t,uint64_t> >& image_extents,
-	       char *buf, bufferlist *pbl, AioCompletion *c);
-  int aio_flush(ImageCtx *ictx, AioCompletion *c);
+
+  void aio_write(ImageCtx *ictx, uint64_t off, size_t len, const char *buf,
+		 AioCompletion *c);
+  void aio_discard(ImageCtx *ictx, uint64_t off, uint64_t len, AioCompletion *c);
+  void aio_read(ImageCtx *ictx, uint64_t off, size_t len,
+	        char *buf, bufferlist *pbl, AioCompletion *c);
+  void aio_read(ImageCtx *ictx, const vector<pair<uint64_t,uint64_t> >& image_extents,
+	        char *buf, bufferlist *pbl, AioCompletion *c);
+  void aio_flush(ImageCtx *ictx, AioCompletion *c);
   int flush(ImageCtx *ictx);
   int _flush(ImageCtx *ictx);
   int invalidate_cache(ImageCtx *ictx);

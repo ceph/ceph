@@ -330,7 +330,7 @@ private:
 
 public:
   ThreadPool(CephContext *cct_, string nm, int n, const char *option = NULL);
-  ~ThreadPool();
+  virtual ~ThreadPool();
 
   /// return number of threads currently running
   int get_num_threads() {
@@ -431,6 +431,37 @@ public:
   void finish(int) {
     wq->queue(c);
   }
+};
+
+class ContextWQ : public ThreadPool::WorkQueueVal<Context *> {
+public:
+  ContextWQ(const string &name, time_t ti, ThreadPool *tp)
+    : ThreadPool::WorkQueueVal<Context *>(name, ti, 0, tp) {}
+
+  void queue(Context *ctx) {
+    ThreadPool::WorkQueueVal<Context *>::queue(ctx);
+  }
+
+protected:
+  virtual void _enqueue(Context *item) {
+    _queue.push_back(item);
+  }
+  virtual void _enqueue_front(Context *item) {
+    _queue.push_front(item);
+  }
+  virtual bool _empty() {
+    return _queue.empty();
+  }
+  virtual Context *_dequeue() {
+    Context *item = _queue.front();
+    _queue.pop_front();
+    return item;
+  }
+  virtual void _process(Context *item) {
+    item->complete(0);
+  }
+private:
+  list<Context *> _queue;
 };
 
 #endif
