@@ -16,6 +16,9 @@
 
 #include "include/stringify.h"
 #include "mds/MDSAuthCaps.h"
+#include "common/ceph_argparse.h"
+#include "common/common_init.h"
+#include "global/global_init.h"
 
 #include "gtest/gtest.h"
 
@@ -114,10 +117,11 @@ TEST(MDSAuthCaps, AllowAll) {
 }
 
 TEST(MDSAuthCaps, AllowUid) {
-  MDSAuthCaps cap;
-  ASSERT_TRUE(cap.parse(g_ceph_context, "allow * uid=10", NULL));
+  MDSAuthCaps cap(g_ceph_context);
+  ASSERT_TRUE(cap.parse(g_ceph_context, "allow * uid=10 gids=10,11", NULL));
   ASSERT_FALSE(cap.allow_all());
-  ASSERT_TRUE(cap.is_capable("foo", 0, 0, 0777, 10, 0, MAY_READ | MAY_WRITE, 0, 0));
+  ASSERT_TRUE(cap.is_capable("foo", 0, 0, 0777, 10, 10, MAY_READ | MAY_WRITE, 0, 0));
+  ASSERT_FALSE(cap.is_capable("foo", 0, 0, 0777, 10, 0, MAY_READ | MAY_WRITE, 0, 0));
   ASSERT_FALSE(cap.is_capable("foo", 0, 0, 0777, -1, 0, MAY_READ | MAY_WRITE, 0, 0));
   ASSERT_FALSE(cap.is_capable("foo", 0, 0, 0777, 0, 0, MAY_READ | MAY_WRITE, 0, 0));
   ASSERT_TRUE(cap.is_capable("foo", 0, 10, 0775, 10, 10, MAY_READ, 0, 0));
@@ -129,7 +133,7 @@ TEST(MDSAuthCaps, AllowUid) {
   ASSERT_FALSE(cap.is_capable("foo", 0, 10, 0777, 10, 10, MAY_READ|MAY_CREATE, 0, 0));
   ASSERT_TRUE(cap.is_capable("foo", 0, 10, 0557, 10, 10, MAY_READ, 0, 0));
   ASSERT_TRUE(cap.is_capable("foo", 0, 0, 0557, 10, 10, MAY_READ, 0, 0));
-  ASSERT_FALSE(cap.is_capable("foo", 0, 0, 0557, 10, 10, MAY_CREATE, 0, 0));
+  ASSERT_TRUE(cap.is_capable("foo", 0, 0, 0557, 10, 10, MAY_WRITE, 0, 0));
   ASSERT_FALSE(cap.is_capable("foo", 10, 10, 0577, 10, 10, MAY_WRITE, 0, 0));
 }
 
@@ -181,4 +185,18 @@ TEST(MDSAuthCaps, OutputParsed) {
     ASSERT_TRUE(cap.parse(g_ceph_context, test_values[i].input, &cout));
     ASSERT_EQ(test_values[i].output, stringify(cap));
   }
+}
+
+int main(int argc, char **argv)
+{
+  ::testing::InitGoogleTest(&argc, argv);
+
+  vector<const char*> args;
+  argv_to_vec(argc, (const char **)argv, args);
+  env_to_vec(args, NULL);
+
+  global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
+  common_init_finish(g_ceph_context);
+
+  return RUN_ALL_TESTS();
 }
