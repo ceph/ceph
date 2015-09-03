@@ -238,6 +238,78 @@ TEST(AccessTest, ReadOnly) {
   ceph_shutdown(admin);
 }
 
+TEST(AccessTest, User) {
+  string dir = get_unique_dir();
+  string user = "libcephfs_user_test." + stringify(rand());
+
+  // admin mount to set up test
+  struct ceph_mount_info *admin;
+  ASSERT_EQ(0, ceph_create(&admin, NULL));
+  ASSERT_EQ(0, ceph_conf_parse_env(admin, NULL));
+  ASSERT_EQ(0, ceph_conf_read_file(admin, NULL));
+  ASSERT_EQ(0, ceph_mount(admin, "/"));
+  ASSERT_EQ(0, ceph_mkdir(admin, dir.c_str(), 0755));
+
+  // create access key
+  string key;
+  ASSERT_EQ(0, do_mon_command(
+      "{\"prefix\": \"auth get-or-create\", \"entity\": \"client." + user + "\", "
+      "\"caps\": [\"mon\", \"allow *\", \"osd\", \"allow rw\", "
+      "\"mds\", \"allow rw uid=123 gids=456,789\""
+      "], \"format\": \"json\"}", &key));
+
+  struct ceph_mount_info *cmount;
+  ASSERT_EQ(0, ceph_create(&cmount, user.c_str()));
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
+  ASSERT_EQ(0, ceph_conf_read_file(cmount, NULL));
+  ASSERT_EQ(0, ceph_conf_set(cmount, "key", key.c_str()));
+  ASSERT_EQ(-EACCES, ceph_mount(cmount, "/"));
+  ASSERT_EQ(0, ceph_conf_set(cmount, "client_mount_uid", "123"));
+  ASSERT_EQ(0, ceph_conf_set(cmount, "client_mount_gid", "456"));
+  ASSERT_EQ(0, ceph_mount(cmount, "/"));
+
+  // user bits
+  ASSERT_EQ(0, ceph_chmod(admin, dir.c_str(), 0700));
+  ASSERT_EQ(0, ceph_chown(admin, dir.c_str(), 123, 456));
+  ASSERT_EQ(0, ceph_mkdir(cmount, string(dir + "/u1").c_str(), 0755));
+  ASSERT_EQ(0, ceph_chown(admin, dir.c_str(), 1, 456));
+  ASSERT_EQ(-EACCES, ceph_mkdir(cmount, string(dir + "/no").c_str(), 0755));
+
+  // group bits
+  ASSERT_EQ(0, ceph_chmod(admin, dir.c_str(), 0770));
+  ASSERT_EQ(0, ceph_chown(admin, dir.c_str(), 1, 456));
+  ASSERT_EQ(0, ceph_mkdir(cmount, string(dir + "/u2").c_str(), 0755));
+  ASSERT_EQ(0, ceph_chown(admin, dir.c_str(), 1, 2));
+  ASSERT_EQ(-EACCES, ceph_mkdir(cmount, string(dir + "/no").c_str(), 0755));
+
+  // user overrides group
+  ASSERT_EQ(0, ceph_chmod(admin, dir.c_str(), 0470));
+  ASSERT_EQ(0, ceph_chown(admin, dir.c_str(), 123, 456));
+  ASSERT_EQ(-EACCES, ceph_mkdir(cmount, string(dir + "/no").c_str(), 0755));
+
+  // other
+  ASSERT_EQ(0, ceph_chmod(admin, dir.c_str(), 0777));
+  ASSERT_EQ(0, ceph_chown(admin, dir.c_str(), 1, 1));
+  ASSERT_EQ(0, ceph_mkdir(cmount, string(dir + "/u3").c_str(), 0755));
+  ASSERT_EQ(0, ceph_chmod(admin, dir.c_str(), 0770));
+  ASSERT_EQ(-EACCES, ceph_mkdir(cmount, string(dir + "/no").c_str(), 0755));
+
+  // user and group overrides other
+  ASSERT_EQ(0, ceph_chmod(admin, dir.c_str(), 07));
+  ASSERT_EQ(0, ceph_chown(admin, dir.c_str(), 1, 456));
+  ASSERT_EQ(-EACCES, ceph_mkdir(cmount, string(dir + "/no").c_str(), 0755));
+  ASSERT_EQ(0, ceph_chown(admin, dir.c_str(), 123, 1));
+  ASSERT_EQ(-EACCES, ceph_mkdir(cmount, string(dir + "/no").c_str(), 0755));
+  ASSERT_EQ(0, ceph_chown(admin, dir.c_str(), 123, 456));
+  ASSERT_EQ(-EACCES, ceph_mkdir(cmount, string(dir + "/no").c_str(), 0755));
+
+  ceph_shutdown(cmount);
+
+  // clean up
+  ASSERT_EQ(0, ceph_rmdir(admin, string(dir + "/u1").c_str()));
+  ASSERT_EQ(0, ceph_rmdir(admin, string(dir + "/u2").c_str()));
+  ASSERT_EQ(0, ceph_rmdir(admin, string(dir + "/u3").c_str()));
+  ASSERT_EQ(0, ceph_rmdir(admin, dir.c_str()));
   ceph_shutdown(admin);
 }
 
