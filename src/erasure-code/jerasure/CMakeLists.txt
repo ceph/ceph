@@ -3,30 +3,6 @@
 include_directories(gf-complete/include)
 include_directories(jerasure/include)
 
-## detect sse support
-
-# create a tmp file with an empty main()
-set(sse_srcs "${CMAKE_BINARY_DIR}/src/erasure-code/jerasure/tmp_sse.c")
-file(WRITE ${sse_srcs} "void main() {}")
-
-# try each -msse flag
-try_compile(INTEL_SSE ${CMAKE_BINARY_DIR} ${sse_srcs}
-  COMPILE_DEFINITIONS "-msse")
-try_compile(INTEL_SSE2 ${CMAKE_BINARY_DIR} ${sse_srcs}
-  COMPILE_DEFINITIONS "-msse2")
-try_compile(INTEL_SSE3 ${CMAKE_BINARY_DIR} ${sse_srcs}
-  COMPILE_DEFINITIONS "-msse3")
-try_compile(INTEL_SSSE3 ${CMAKE_BINARY_DIR} ${sse_srcs}
-  COMPILE_DEFINITIONS "-mssse3")
-try_compile(INTEL_SSE4_1 ${CMAKE_BINARY_DIR} ${sse_srcs}
-  COMPILE_DEFINITIONS "-msse4.1")
-try_compile(INTEL_SSE4_2 ${CMAKE_BINARY_DIR} ${sse_srcs}
-  COMPILE_DEFINITIONS "-msse4.2")
-
-# clean up tmp file
-file(REMOVE ${sse_srcs})
-
-
 set(jerasure_srcs
   jerasure/src/cauchy.c
   jerasure/src/galois.c
@@ -54,6 +30,8 @@ add_dependencies(ec_jerasure_generic ${CMAKE_SOURCE_DIR}/src/ceph_ver.h)
 target_link_libraries(ec_jerasure_generic ${EXTRALIBS})
 set_target_properties(ec_jerasure_generic PROPERTIES VERSION 2.0.0 SOVERSION 2)
 install(TARGETS ec_jerasure_generic DESTINATION lib/erasure-code)
+
+#TODO: LIB_EC_JERASURE_NEON, rough draft of similar target in erasure-code/shec/CMakeLists.txt
 
 # ec_jerasure_sse3
 if(INTEL_SSE)
