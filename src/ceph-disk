@@ -242,6 +242,15 @@ def is_systemd():
                 return True
     return False
 
+def is_upstart():
+    """
+    Detect whether upstart is running
+    """
+    (out, _) = command(['init', '--version'])
+    if 'upstart' in out:
+        return True
+    return False
+
 def maybe_mkdir(*a, **kw):
     """
     Creates a new directory if it doesn't exist, removes
