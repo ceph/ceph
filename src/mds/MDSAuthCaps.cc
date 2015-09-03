@@ -164,12 +164,6 @@ bool MDSAuthCaps::is_capable(const std::string &inode_path,
         return true;
       }
 
-      // we may only create things owned by caller
-      if ((mask & MAY_CREATE) &&
-	  (inode_gid != caller_gid || inode_uid != caller_uid)) {
-	continue;
-      }
-
       // chown/chgrp
       if (mask & MAY_CHOWN) {
 	if (new_uid != caller_uid ||   // you can't chown to someone else

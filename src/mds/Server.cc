@@ -3097,7 +3097,7 @@ void Server::handle_client_openc(MDRequestRef& mdr)
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return;
 
-  if (!check_access(mdr, diri, MAY_WRITE|MAY_CREATE))
+  if (!check_access(mdr, diri, MAY_WRITE))
     return;
 
   CDentry::linkage_t *dnl = dn->get_projected_linkage();
@@ -4448,7 +4448,7 @@ void Server::handle_client_mknod(MDRequestRef& mdr)
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return;
 
-  if (!check_access(mdr, diri, MAY_WRITE|MAY_CREATE))
+  if (!check_access(mdr, diri, MAY_WRITE))
     return;
 
   unsigned mode = req->head.args.mknod.mode;
@@ -4540,7 +4540,7 @@ void Server::handle_client_mkdir(MDRequestRef& mdr)
     return;
 
   // mkdir check access
-  if (!check_access(mdr, diri, (MAY_WRITE | MAY_CREATE)))
+  if (!check_access(mdr, diri, MAY_WRITE))
     return;
 
   // new inode
@@ -4619,7 +4619,7 @@ void Server::handle_client_symlink(MDRequestRef& mdr)
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return;
 
-  if (!check_access(mdr, diri, MAY_WRITE|MAY_CREATE))
+  if (!check_access(mdr, diri, MAY_WRITE))
    return;
 
   unsigned mode = S_IFLNK | 0777;
