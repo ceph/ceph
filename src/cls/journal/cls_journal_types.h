@@ -97,6 +97,8 @@ std::ostream &operator<<(std::ostream &os,
                          const EntryPosition &entry_position);
 std::ostream &operator<<(std::ostream &os,
                          const ObjectSetPosition &object_set_position);
+std::ostream &operator<<(std::ostream &os,
+			 const Client &client);
 
 } // namespace journal
 } // namespace cls

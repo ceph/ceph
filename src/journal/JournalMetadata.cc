@@ -461,4 +461,32 @@ void JournalMetadata::handle_notified(int r) {
   ldout(m_cct, 10) << "notified journal header update: r=" << r << dendl;
 }
 
+std::ostream &operator<<(std::ostream &os,
+			 const JournalMetadata::RegisteredClients &clients) {
+  os << "[";
+  for (JournalMetadata::RegisteredClients::const_iterator c = clients.begin();
+       c != clients.end(); c++) {
+    os << (c == clients.begin() ? "" : ", " ) << *c;
+  }
+  os << "]";
+  return os;
+}
+
+std::ostream &operator<<(std::ostream &os,
+			 const JournalMetadata &jm) {
+  Mutex::Locker locker(jm.m_lock);
+  os << "[oid=" << jm.m_oid << ", "
+     << "initialized=" << jm.m_initialized << ", "
+     << "order=" << (int)jm.m_order << ", "
+     << "splay_width=" << (int)jm.m_splay_width << ", "
+     << "minimum_set=" << jm.m_minimum_set << ", "
+     << "active_set=" << jm.m_active_set << ", "
+     << "client_id=" << jm.m_client_id << ", "
+     << "commit_tid=" << jm.m_commit_tid << ", "
+     << "commit_interval=" << jm.m_commit_interval << ", "
+     << "commit_position=" << jm.m_commit_position << ", "
+     << "registered_clients=" << jm.m_registered_clients << "]";
+  return os;
+}
+
 } // namespace journal
