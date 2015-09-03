@@ -80,6 +80,16 @@ int rgw_mount(const char* uid, const char* key, const char* _secret,
 }
 
 /*
+  get filesystem attributes
+*/
+int rgw_statfs(const struct rgw_file_handle *parent_handle,
+	       struct rgw_statvfs *vfs_st)
+{
+  memset(vfs_st, 0, sizeof(struct rgw_statvfs));
+  return 0;
+}
+
+/*
   create a new dirctory
 */
 int rgw_create_directory(const struct rgw_file_handle* parent_handle,
