@@ -2915,10 +2915,13 @@ int RGWRados::key_to_shard_id(const string& key, int max_shards)
   return val % max_shards;
 }
 
-void RGWRados::shard_name(const string& prefix, unsigned max_shards, const string& key, string& name)
+void RGWRados::shard_name(const string& prefix, unsigned max_shards, const string& key, string& name, int *shard_id)
 {
   uint32_t val = ceph_str_hash_linux(key.c_str(), key.size());
   char buf[16];
+  if (shard_id) {
+    *shard_id = val % max_shards;
+  }
   snprintf(buf, sizeof(buf), "%u", (unsigned)(val % max_shards));
   name = prefix + buf;
 }
