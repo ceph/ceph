@@ -24,6 +24,9 @@ noinst_LIBRARIES += libcls_log_client.a
 libcls_statelog_client_a_SOURCES = cls/statelog/cls_statelog_client.cc
 noinst_LIBRARIES += libcls_statelog_client.a
 
+libcls_timeindex_client_a_SOURCES = cls/timeindex/cls_timeindex_client.cc
+noinst_LIBRARIES += libcls_timeindex_client.a
+
 libcls_replica_log_client_a_SOURCES = \
 	cls/replica_log/cls_replica_log_types.cc \
 	cls/replica_log/cls_replica_log_ops.cc \
@@ -73,6 +76,9 @@ noinst_HEADERS += \
 	cls/statelog/cls_statelog_types.h \
 	cls/statelog/cls_statelog_ops.h \
 	cls/statelog/cls_statelog_client.h \
+	cls/timeindex/cls_timeindex_types.h \
+	cls/timeindex/cls_timeindex_ops.h \
+	cls/timeindex/cls_timeindex_client.h \
 	cls/replica_log/cls_replica_log_types.h \
 	cls/replica_log/cls_replica_log_ops.h \
 	cls/replica_log/cls_replica_log_client.h \
