@@ -3030,6 +3030,18 @@ def main_trigger(args):
             ]
         )
         return
+    if is_upstart() and not args.sync:
+        LOG.info('upstart detected, triggering ceph-disk task')
+        command(
+            [
+                'initctl',
+                'emit',
+                'ceph-disk',
+                'dev={dev}'.format(dev=args.dev),
+                'pid={pid}'.format(pid=os.getpid()),
+            ]
+        )
+        return
 
     parttype = get_partition_type(args.dev)
     partid = get_partition_uuid(args.dev)
