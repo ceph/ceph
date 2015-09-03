@@ -1162,11 +1162,6 @@ def task(ctx, config):
     assert isinstance(config, dict), \
         "task install only supports a dictionary for configuration"
 
-    rhbuild = None
-    if config.get('rhbuild'):
-        rhbuild = config.get('rhbuild')
-        log.info("Build is %s " % rhbuild)
-
     project, = config.get('project', 'ceph'),
     log.debug('project %s' % project)
     overrides = ctx.config.get('overrides')
@@ -1174,6 +1169,11 @@ def task(ctx, config):
         install_overrides = overrides.get('install', {})
         teuthology.deep_merge(config, install_overrides.get(project, {}))
     log.debug('config %s' % config)
+
+    rhbuild = None
+    if config.get('rhbuild'):
+        rhbuild = config.get('rhbuild')
+        log.info("Build is %s " % rhbuild)
 
     flavor = get_flavor(config)
     log.info("Using flavor: %s", flavor)
