@@ -101,7 +101,10 @@ int rgw_lookup(const struct rgw_file_handle *parent_handle, const char *path,
 /*
   read  directory content
 */
-int rgw_readdir(const struct rgw_file_handle *parent_handle, const char *path);
+typedef bool (*rgw_readdir_cb)(const char *name, void *arg, uint64_t cookie);
+
+int rgw_readdir(const struct rgw_file_handle *parent_handle, uint64_t offset,
+		rgw_readdir_cb cb, void *cb_arg, int *eof);
 
 int rgw_set_attributes(const struct rgw_file_handle *handle);
 

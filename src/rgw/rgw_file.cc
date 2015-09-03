@@ -172,7 +172,8 @@ int rgw_getattr(const struct rgw_file_handle *handle, struct stat *st)
 /*
   read directory content
 */
-int rgw_readdir(const struct rgw_file_handle* parent_handle, const char* path)
+int rgw_readdir(const struct rgw_file_handle *parent_handle, uint64_t offset,
+		rgw_readdir_cb rcb, void *cb_arg, int *eof)
 {
   string uri;
   int rc;
@@ -182,7 +183,7 @@ int rgw_readdir(const struct rgw_file_handle* parent_handle, const char* path)
     return rc;
   }
 
-#if 0
+#if 0 /* TODO: implement */
   if (is_root(uri)) {
     /* get the bucket list */
     return librgw.get_user_buckets_list();
@@ -193,6 +194,13 @@ int rgw_readdir(const struct rgw_file_handle* parent_handle, const char* path)
     return -1;
   }
 #endif
+
+  /* XXXX */
+  (void) rcb("test1", cb_arg, 1);
+  (void) rcb("test2", cb_arg, 2);
+  (void) rcb("test3", cb_arg, 3);
+
+  *eof = true;
 
   return 0;
 }
