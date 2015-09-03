@@ -4024,6 +4024,20 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
       JSONDecoder::decode_json("attrs", src_attrs, &jp);
 
       src_attrs.erase(RGW_ATTR_MANIFEST); // not interested in original object layout
+      if (source_zone.empty()) { /* need to preserve expiration if copy in the same zonegroup */
+        src_attrs.erase(RGW_ATTR_DELETE_AT);
+      } else {
+	map<string, bufferlist>::iterator iter = src_attrs.find(RGW_ATTR_DELETE_AT);
+	if (iter != src_attrs.end()) {
+	  try {
+	    utime_t da;
+	    ::decode(da, iter->second);
+	    delete_at = (time_t)da.sec();
+	  } catch (buffer::error& err) {
+	    ldout(cct, 0) << "ERROR: failed to decode delete_at field in intra zone copy" << dendl;
+	  }
+	}
+      }
     }
   }
 
@@ -4182,6 +4196,7 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
   }
 
   src_attrs[RGW_ATTR_ACL] = attrs[RGW_ATTR_ACL];
+  src_attrs.erase(RGW_ATTR_DELETE_AT);
 
   set_copy_attrs(src_attrs, attrs, attrs_mod);
   attrs.erase(RGW_ATTR_ID_TAG);
