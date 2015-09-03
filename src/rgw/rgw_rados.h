@@ -908,6 +908,7 @@ struct RGWZoneParams {
 WRITE_CLASS_ENCODER(RGWZoneParams)
 
 struct RGWZone {
+  string id;
   string name;
   list<string> endpoints;
   bool log_meta;
@@ -925,7 +926,8 @@ struct RGWZone {
   RGWZone() : log_meta(false), log_data(false), bucket_index_max_shards(0) {}
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(3, 1, bl);
+    ENCODE_START(4, 1, bl);
+    ::encode(id, bl);
     ::encode(name, bl);
     ::encode(endpoints, bl);
     ::encode(log_meta, bl);
@@ -935,8 +937,14 @@ struct RGWZone {
   }
 
   void decode(bufferlist::iterator& bl) {
-    DECODE_START(2, bl);
+    DECODE_START(3, bl);
+    if (struct_v >= 4) {
+      ::decode(id, bl);
+    }
     ::decode(name, bl);
+    if (struct_v < 4) {
+      id = name;
+    }
     ::decode(endpoints, bl);
     if (struct_v >= 2) {
       ::decode(log_meta, bl);
