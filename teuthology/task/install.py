@@ -12,6 +12,7 @@ from teuthology import misc as teuthology
 from teuthology import contextutil, packaging
 from teuthology.parallel import parallel
 from ..orchestra import run
+from . import ansible
 
 log = logging.getLogger(__name__)
 
@@ -1143,7 +1144,12 @@ def task(ctx, config):
         branch: foo
         extra_packages: ['samba']
     - install:
-        rhbuild: 1.2.3
+        rhbuild: 1.3.0 
+        playbook: downstream_setup.yml
+        vars:
+           yum_repos:
+             - url: "http://location.repo"
+               name: "ceph_repo"
 
     Overrides are project specific:
 
@@ -1179,13 +1185,17 @@ def task(ctx, config):
     log.info("Using flavor: %s", flavor)
 
     ctx.summary['flavor'] = flavor
+    nested_tasks = [lambda: rh_install(ctx=ctx, config=config),
+                    lambda: ship_utilities(ctx=ctx, config=None)]
 
     if config.get('rhbuild'):
-        with contextutil.nested(
-            lambda: rh_install(ctx=ctx, config=config),
-            lambda: ship_utilities(ctx=ctx, config=None)
-        ):
-            yield
+        if config.get('playbook'):
+            ansible_config=dict(config)
+            # remove key not required by ansible task
+            del ansible_config['rhbuild']
+            nested_tasks.insert(0, lambda: ansible.CephLab(ctx,config=ansible_config))
+        with contextutil.nested(*nested_tasks):
+                yield
     else:
         with contextutil.nested(
             lambda: install(ctx=ctx, config=dict(
