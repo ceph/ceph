@@ -125,6 +125,7 @@ void _usage()
   cerr << "   --access=<access>         Set access permissions for sub-user, should be one\n";
   cerr << "                             of read, write, readwrite, full\n";
   cerr << "   --display-name=<name>\n";
+  cerr << "   --max_buckets             max number of buckets for a user\n";
   cerr << "   --system                  set the system flag on the user\n";
   cerr << "   --bucket=<bucket>\n";
   cerr << "   --pool=<pool>\n";
