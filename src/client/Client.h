@@ -705,6 +705,8 @@ private:
 
   int check_permissions(Inode *in, int flags, int uid, int gid);
 
+  int check_data_pool_exist(string name, string value, const OSDMap *osdmap);
+
   vinodeno_t _get_vino(Inode *in);
   inodeno_t _get_inodeno(Inode *in);
 
