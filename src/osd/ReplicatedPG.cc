@@ -6244,8 +6244,14 @@ void ReplicatedPG::finish_ctx(OpContext *ctx, int log_op_type, bool maintain_ssc
     ctx->obc->ssc->snapset = ctx->new_snapset;
   }
 
+  apply_ctx_stats(ctx, scrub_ok);
+}
+
+void ReplicatedPG::apply_ctx_stats(OpContext *ctx, bool scrub_ok)
+{
   info.stats.stats.add(ctx->delta_stats);
 
+  const hobject_t& soid = ctx->obs->oi.soid;
   for (set<pg_shard_t>::iterator i = backfill_targets.begin();
        i != backfill_targets.end();
        ++i) {
