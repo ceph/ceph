@@ -1916,6 +1916,16 @@ void ReplicatedPG::do_op(OpRequestRef& op)
   ctx->src_obc.swap(src_obc);
 
   execute_ctx(ctx);
+  utime_t prepare_latency = ceph_clock_now(cct);
+  prepare_latency -= op->get_dequeued_time();
+  osd->logger->tinc(l_osd_op_prepare_lat, prepare_latency);
+  if (op->may_read() && op->may_write()) {
+    osd->logger->tinc(l_osd_op_rw_prepare_lat, prepare_latency);
+  } else if (op->may_read()) {
+    osd->logger->tinc(l_osd_op_r_prepare_lat, prepare_latency);
+  } else if (op->may_write() || op->may_cache()) {
+    osd->logger->tinc(l_osd_op_w_prepare_lat, prepare_latency);
+  }
 }
 
 bool ReplicatedPG::maybe_handle_cache(OpRequestRef op,

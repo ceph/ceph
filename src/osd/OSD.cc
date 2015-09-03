@@ -2116,6 +2116,8 @@ void OSD::create_logger()
       "Latency of client operations (including queue time)", "lat");       // client op latency
   osd_plb.add_time_avg(l_osd_op_process_lat, "op_process_latency", 
       "Latency of client operations (excluding queue time)");   // client op process latency
+  osd_plb.add_time_avg(l_osd_op_prepare_lat, "op_prepare_latency",
+      "Latency of client operations (excluding queue time and wait for finished)"); // client op prepare latency
 
   osd_plb.add_u64_counter(l_osd_op_r,      "op_r", 
       "Client read operations");        // client reads
@@ -2125,6 +2127,8 @@ void OSD::create_logger()
       "Latency of read operation (including queue time)");    // client read latency
   osd_plb.add_time_avg(l_osd_op_r_process_lat, "op_r_process_latency", 
       "Latency of read operation (excluding queue time)");   // client read process latency
+  osd_plb.add_time_avg(l_osd_op_r_prepare_lat, "op_r_prepare_latency",
+      "Latency of read operations (excluding queue time and wait for finished)"); // client read prepare latency
   osd_plb.add_u64_counter(l_osd_op_w,      "op_w", 
       "Client write operations");        // client writes
   osd_plb.add_u64_counter(l_osd_op_w_inb,  "op_w_in_bytes", 
@@ -2135,6 +2139,8 @@ void OSD::create_logger()
       "Latency of write operation (including queue time)");    // client write latency
   osd_plb.add_time_avg(l_osd_op_w_process_lat, "op_w_process_latency", 
       "Latency of write operation (excluding queue time)");   // client write process latency
+  osd_plb.add_time_avg(l_osd_op_w_prepare_lat, "op_w_prepare_latency",
+      "Latency of write operations (excluding queue time and wait for finished)"); // client write prepare latency
   osd_plb.add_u64_counter(l_osd_op_rw,     "op_rw", 
       "Client read-modify-write operations");       // client rmw
   osd_plb.add_u64_counter(l_osd_op_rw_inb, "op_rw_in_bytes", 
@@ -2147,6 +2153,8 @@ void OSD::create_logger()
       "Latency of read-modify-write operation (including queue time)");   // client rmw latency
   osd_plb.add_time_avg(l_osd_op_rw_process_lat, "op_rw_process_latency", 
       "Latency of read-modify-write operation (excluding queue time)");   // client rmw process latency
+  osd_plb.add_time_avg(l_osd_op_rw_prepare_lat, "op_rw_prepare_latency", 
+      "Latency of read-modify-write operations (excluding queue time and wait for finished)"); // client rmw prepare latency
 
   osd_plb.add_u64_counter(l_osd_sop,       "subop", "Suboperations");         // subops
   osd_plb.add_u64_counter(l_osd_sop_inb,   "subop_in_bytes", "Suboperations total size");     // subop in bytes
