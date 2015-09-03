@@ -829,7 +829,7 @@ Subcommand ``metadata`` fetches metadata for osd <id>.
 
 Usage::
 
-	ceph osd metadata <int[0-]>
+	ceph osd metadata {int[0-]} (default all)
 
 Subcommand ``out`` sets osd(s) <id> [<id>...] out.
 
