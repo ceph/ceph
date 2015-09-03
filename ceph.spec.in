@@ -93,6 +93,7 @@ BuildRequires:	/usr/share/selinux/devel/policyhelp
 BuildRequires:	gcc-c++
 BuildRequires:	boost-devel
 BuildRequires:  boost-random
+BuildRequires:  cmake
 BuildRequires:	cryptsetup
 BuildRequires:	gdbm
 BuildRequires:	hdparm

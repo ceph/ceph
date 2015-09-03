@@ -75,10 +75,6 @@ if(${WITH_PROFILER})
   list(APPEND EXTRALIBS profiler)
 endif(${WITH_PROFILER})
 
-if(WITH_CDS)
-  list(APPEND EXTRALIBS ${CDS_LIBS})
-endif(WITH_CDS)
-
 if(USE_NSS)
   if(NSS_FOUND)
     if(NSPR_FOUND)
@@ -178,6 +174,8 @@ set(crush_srcs
   crush/CrushWrapper.cc
   crush/CrushCompiler.cc
   crush/CrushTester.cc)
+
+add_library(crush STATIC ${crush_srcs})
 
 add_subdirectory(json_spirit)
 
@@ -343,7 +341,7 @@ endif(${WITH_PROFILER})
 
 add_library(common_utf8 STATIC common/utf8.c)
 
-target_link_libraries( common json_spirit common_utf8 erasure_code rt uuid ${CRYPTO_LIBS} ${Boost_LIBRARIES})
+target_link_libraries( common json_spirit common_utf8 erasure_code rt uuid ${CRYPTO_LIBS} ${Boost_LIBRARIES} ${BLKID_LIBRARIES})
 
 set(libglobal_srcs
   global/global_init.cc
@@ -685,6 +683,7 @@ set(crushtool_srcs
     tools/crushtool.cc)
 add_executable(crushtool ${crushtool_srcs})
 target_link_libraries(crushtool global)
+install(TARGETS crushtool DESTINATION bin)
 
 # Support/Tools
 add_subdirectory(gmock)
@@ -694,6 +693,12 @@ add_executable(cephfstool ${cephfs_srcs})
 target_link_libraries(cephfstool common ${EXTRALIBS})
 set_target_properties(cephfstool PROPERTIES OUTPUT_NAME cephfs)
 install(TARGETS cephfstool DESTINATION bin)
+
+set(compressor_srcs 
+  compressor/Compressor.cc
+  compressor/AsyncCompressor.cc)
+add_library(compressor STATIC ${compressor_srcs})
+target_link_libraries(compressor common snappy)
 
 #set(ceph_srcs tools/ceph.cc tools/common.cc)
 #add_executable(ceph ${ceph_srcs})
@@ -806,6 +811,7 @@ if(WITH_LIBCEPHFS)
       client/fuse_ll.cc)
     add_executable(ceph-fuse ${ceph_fuse_srcs})
     target_link_libraries(ceph-fuse fuse client global)
+    set_target_properties(ceph-fuse PROPERTIES COMPILE_FLAGS "-I${FUSE_INCLUDE_DIRS}")
     install(TARGETS ceph-fuse DESTINATION bin)
   endif(WITH_FUSE)
 endif(WITH_LIBCEPHFS)
@@ -852,6 +858,32 @@ if(${WITH_RBD})
     ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS} ${TCMALLOC_LIBS})
   install(TARGETS rbd DESTINATION bin)
   install(PROGRAMS ${CMAKE_SOURCE_DIR}/src/ceph-rbdnamer DESTINATION bin)
+
+  set(librbd_replay_srcs
+      rbd_replay/actions.cc 
+      rbd_replay/Deser.cc 
+      rbd_replay/ImageNameMap.cc 
+      rbd_replay/PendingIO.cc 
+      rbd_replay/rbd_loc.cc 
+      rbd_replay/Replayer.cc 
+      rbd_replay/Ser.cc)
+  add_library(librbd_replay STATIC ${librbd_replay_srcs})
+  target_link_libraries(librbd_replay PRIVATE librbd librados global udev)
+
+  add_executable(rbd_replay
+    rbd_replay/rbd-replay.cc
+    $<TARGET_OBJECTS:parse_secret_objs>
+    )
+  target_link_libraries(rbd_replay librbd librados global librbd_replay keyutils)
+  install(TARGETS rbd_replay DESTINATION bin)
+
+  set(librbd_replay_ios_srcs
+      rbd_replay/ios.cc)
+  add_library(librbd_replay_ios STATIC ${librbd_replay_ios_srcs})
+  target_link_libraries(librbd_replay_ios librbd librados global)
+
+  install(TARGETS librbd_replay librbd_replay_ios DESTINATION lib)
+
 endif(${WITH_RBD})
 
 # RadosGW
