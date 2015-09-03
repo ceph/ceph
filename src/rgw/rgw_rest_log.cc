@@ -268,6 +268,36 @@ void RGWOp_MDLog_Unlock::execute() {
   http_ret = meta_log->unlock(shard_id, zone_id, locker_id);
 }
 
+void RGWOp_MDLog_Notify::execute() {
+  char *data;
+  int len = 0;
+#define LARGE_ENOUGH_BUF (128 * 1024)
+  int r = rgw_rest_read_all_input(s, &data, &len, LARGE_ENOUGH_BUF);
+  if (r < 0) {
+    http_ret = r;
+    return;
+  }
+
+  ldout(s->cct, 20) << __func__ << "(): read data: " << string(data, len) << dendl;
+
+  JSONParser p;
+  r = p.parse(data, len);
+  free(data);
+  if (r < 0) {
+    ldout(s->cct, 0) << "ERROR: failed to parse JSON" << dendl;
+    http_ret = r;
+    return;
+  }
+
+  list<int> updated_shards;
+  try {
+#warning FIXME
+  } catch (buffer::error& err) {
+  }
+
+  http_ret = 0;
+}
+
 void RGWOp_BILog_List::execute() {
   string bucket_name = s->info.args.get("bucket"),
          marker = s->info.args.get("marker"),
@@ -750,6 +780,8 @@ RGWOp *RGWHandler_Log::op_post() {
       return new RGWOp_MDLog_Lock;
     else if (s->info.args.exists("unlock"))
       return new RGWOp_MDLog_Unlock;
+    else if (s->info.args.exists("notify"))
+      return new RGWOp_MDLog_Notify;	    
   } else if (type.compare("data") == 0) {
     if (s->info.args.exists("lock"))
       return new RGWOp_DATALog_Lock;
