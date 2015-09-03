@@ -364,6 +364,39 @@ class TestGitbuilderProject(object):
         gp = packaging.GitbuilderProject("ceph", {}, ctx=ctx, remote=rem)
         assert not gp.version
 
+    @patch("teuthology.packaging.config")
+    @patch("teuthology.packaging._get_config_value_for_remote")
+    @patch("requests.get")
+    def test_get_package_sha1_fetched_found(self, m_get, m_get_config_value,
+                                            m_config):
+        m_config.baseurl_template = 'http://{host}/{proj}-{pkg_type}-{dist}-{arch}-{flavor}/{uri}'
+        m_config.gitbuilder_host = "gitbuilder.ceph.com"
+        m_get_config_value.return_value = None
+        resp = Mock()
+        resp.ok = True
+        resp.text = "the_sha1"
+        m_get.return_value = resp
+        rem = self._get_remote()
+        ctx = dict(foo="bar")
+        gp = packaging.GitbuilderProject("ceph", {}, ctx=ctx, remote=rem)
+        assert gp.sha1 == "the_sha1"
+
+    @patch("teuthology.packaging.config")
+    @patch("teuthology.packaging._get_config_value_for_remote")
+    @patch("requests.get")
+    def test_get_package_sha1_fetched_not_found(self, m_get, m_get_config_value,
+                                           m_config):
+        m_config.baseurl_template = 'http://{host}/{proj}-{pkg_type}-{dist}-{arch}-{flavor}/{uri}'
+        m_config.gitbuilder_host = "gitbuilder.ceph.com"
+        m_get_config_value.return_value = None
+        resp = Mock()
+        resp.ok = False
+        m_get.return_value = resp
+        rem = self._get_remote()
+        ctx = dict(foo="bar")
+        gp = packaging.GitbuilderProject("ceph", {}, ctx=ctx, remote=rem)
+        assert not gp.sha1
+
     GITBUILDER_DISTRO_MATRIX = [
         ('rhel', '7.0', None, 'centos7'),
         ('centos', '6.5', None, 'centos6'),

@@ -437,7 +437,6 @@ class GitbuilderProject(object):
         # avoiding circular imports
         from teuthology.suite import get_install_task_flavor
         self.flavor = get_install_task_flavor(self.job_config)
-        self.sha1 = self.job_config.get("sha1")
 
         if remote and ctx:
             self._init_from_remote()
@@ -476,6 +475,21 @@ class GitbuilderProject(object):
             "ubuntu",
             "debian",
         ) else "rpm"
+
+    @property
+    def sha1(self):
+        """
+        Performs a call to gitbuilder to retrieve the sha1 if not provided in
+        the job_config. The returned value is cached so that this call only
+        happens once.
+
+        :returns: The sha1 of the project as a string.
+        """
+        if not hasattr(self, "_sha1"):
+            self._sha1 = self.job_config.get('sha1')
+            if not self._sha1:
+                self._sha1 = self._get_package_sha1()
+        return self._sha1
 
     @property
     def version(self):
@@ -691,3 +705,23 @@ class GitbuilderProject(object):
                     version = version.split('-')[0]
             log.info("Found version: {0}".format(version))
         return version
+
+    def _get_package_sha1(self):
+        """
+        Look for, and parse, a file called 'sha1' in base_url.
+        """
+        url = "{0}/sha1".format(self.base_url)
+        log.info("Looking for package sha1: {0}".format(url))
+        resp = requests.get(url)
+        sha1 = None
+        if not resp.ok:
+            # TODO: maybe we should have this retry a few times?
+            log.error(
+                'Package sha1 was not there (got HTTP code %s)...',
+                resp.status_code,
+            )
+        else:
+            sha1 = resp.text.strip()
+            log.info("Found sha1: {0}".format(sha1))
+
+        return sha1
