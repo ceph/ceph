@@ -134,21 +134,24 @@ bool MDSCapMatch::match(const std::string &target_path,
  * requested path + op.
  */
 bool MDSAuthCaps::is_capable(const std::string &inode_path,
-			     uid_t inode_uid, gid_t inode_gid, unsigned inode_mode,
-			     uid_t uid, gid_t gid, unsigned mask) const
+			     uid_t inode_uid, gid_t inode_gid,
+			     unsigned inode_mode,
+			     uid_t caller_uid, gid_t caller_gid,
+			     unsigned mask) const
 {
   if (cct)
     ldout(cct, 10) << __func__ << " inode(path /" << inode_path
 		   << " owner " << inode_uid << ":" << inode_gid
 		   << " mode 0" << std::oct << inode_mode << std::dec
-		   << ") by uid " << uid << " gid " << gid << " mask " << mask
+		   << ") by caller " << caller_uid << ":" << caller_gid
+		   << " mask " << mask
 		   << " cap: " << *this << dendl;
 
   for (std::vector<MDSCapGrant>::const_iterator i = grants.begin();
        i != grants.end();
        ++i) {
 
-    if (i->match.match(inode_path, uid) &&
+    if (i->match.match(inode_path, caller_uid) &&
 	i->spec.allows(mask & (MAY_READ|MAY_EXECUTE), mask & MAY_WRITE)) {
 
       // check unix permissions?
@@ -158,11 +161,12 @@ bool MDSAuthCaps::is_capable(const std::string &inode_path,
 
       // we may only create things owned by caller
       if ((mask & MAY_CREATE) &&
-	  (inode_gid != gid || inode_uid != uid)) {
+	  (inode_gid != caller_gid || inode_uid != caller_uid)) {
 	continue;
       }
 
-      if (inode_uid == uid) {
+
+      if (inode_uid == caller_uid) {
         if ((!(mask & MAY_READ) || (inode_mode & S_IRUSR)) &&
 	    (!(mask & MAY_WRITE) || (inode_mode & S_IWUSR)) &&
 	    (!(mask & MAY_EXECUTE) || (inode_mode & S_IXUSR))) {
