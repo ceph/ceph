@@ -144,6 +144,22 @@ int rgw_lookup(const struct rgw_file_handle *parent_handle, const char* path,
 }
 
 /*
+   get unix attributes for object
+*/
+int rgw_getattr(const struct rgw_file_handle *handle, struct stat *st)
+{
+  string uri;
+  int rc;
+
+  rc = librgw.get_uri(handle->handle, uri);
+  if (rc < 0 ) { /* invalid parent */
+    return rc;
+  }
+
+  return 0;
+}
+
+/*
   read directory content
 */
 int rgw_readdir(const struct rgw_file_handle* parent_handle, const char* path)
