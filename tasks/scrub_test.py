@@ -84,7 +84,7 @@ def task(ctx, config):
     # fuzz time
     ls_fp = StringIO()
     osd_remote.run(
-        args=[ 'ls', data_path ],
+        args=[ 'sudo', 'ls', data_path ],
         stdout=ls_fp,
     )
     ls_out = ls_fp.getvalue()
