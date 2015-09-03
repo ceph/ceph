@@ -1133,8 +1133,10 @@ TEST(LibCephFS, GetPoolId) {
   ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
   ASSERT_EQ(ceph_mount(cmount, NULL), 0);
 
-  ASSERT_GE(ceph_get_pool_id(cmount, "data"), 0);
-  ASSERT_GE(ceph_get_pool_id(cmount, "metadata"), 0);
+  char name[80];
+  memset(name, 0, sizeof(name));
+  ASSERT_LE(0, ceph_get_path_pool_name(cmount, "/", name, sizeof(name)));
+  ASSERT_GE(ceph_get_pool_id(cmount, name), 0);
   ASSERT_EQ(ceph_get_pool_id(cmount, "weflkjwelfjwlkejf"), -ENOENT);
 
   ceph_shutdown(cmount);
@@ -1151,7 +1153,10 @@ TEST(LibCephFS, GetPoolReplication) {
   ASSERT_EQ(ceph_get_pool_replication(cmount, -10), -ENOENT);
 
   /* valid pool */
-  int pool_id = ceph_get_pool_id(cmount, "data");
+  int pool_id;
+  int stripe_unit, stripe_count, object_size;
+  ASSERT_EQ(0, ceph_get_path_layout(cmount, "/", &stripe_unit, &stripe_count,
+				    &object_size, &pool_id));
   ASSERT_GE(pool_id, 0);
   ASSERT_GT(ceph_get_pool_replication(cmount, pool_id), 0);
 
