@@ -85,6 +85,8 @@ int rgw_set_attributes(const struct rgw_file_handle *handle);
 
 int rgw_get_attributes(const struct rgw_file_handle *handle);
 
+int rgw_getattr(const struct rgw_file_handle *handle, struct stat *st);
+
 int rgw_open(const struct rgw_file_handle *handle);
 
 int rgw_close(const struct rgw_file_handle *handle);
