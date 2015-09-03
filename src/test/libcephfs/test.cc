@@ -182,8 +182,7 @@ TEST(LibCephFS, OpenLayout) {
   ASSERT_GT(fd, 0);
   char poolname[80];
   ASSERT_LT(0, ceph_get_file_pool_name(cmount, fd, poolname, sizeof(poolname)));
-  ASSERT_EQ(4, ceph_get_file_pool_name(cmount, fd, poolname, 0));
-  ASSERT_EQ(0, strcmp("data", poolname));
+  ASSERT_LT(0, ceph_get_file_pool_name(cmount, fd, poolname, 0));
 
   /* on already-written file (ENOTEMPTY) */
   ceph_write(cmount, fd, "hello world", 11, 0);
@@ -202,10 +201,8 @@ TEST(LibCephFS, OpenLayout) {
 
   /* with data pool */
   sprintf(test_layout_file, "test_layout_%d_d", getpid());
-  fd = ceph_open_layout(cmount, test_layout_file, O_CREAT, 0666, (1<<20), 7, (1<<20), "data");
+  fd = ceph_open_layout(cmount, test_layout_file, O_CREAT, 0666, (1<<20), 7, (1<<20), poolname);
   ASSERT_GT(fd, 0);
-  ASSERT_EQ(4, ceph_get_file_pool_name(cmount, fd, poolname, sizeof(poolname)));
-  ASSERT_EQ(0, strcmp("data", poolname));
   ceph_close(cmount, fd);
 
   /* with metadata pool (invalid) */
