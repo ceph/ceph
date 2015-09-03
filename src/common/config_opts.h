@@ -1043,6 +1043,7 @@ OPTION(rgw_user_quota_sync_wait_time, OPT_INT, 3600 * 24) // min time between tw
 OPTION(rgw_multipart_min_part_size, OPT_INT, 5 * 1024 * 1024) // min size for each part (except for last one) in multipart upload
 
 OPTION(rgw_olh_pending_timeout_sec, OPT_INT, 3600) // time until we retire a pending olh change
+OPTION(rgw_user_max_buckets, OPT_U32, 1000) // global option to set max buckets count for all user
 
 OPTION(mutex_perf_counter, OPT_BOOL, false) // enable/disable mutex perf counter
 OPTION(throttler_perf_counter, OPT_BOOL, true) // enable/disable throttler perf counter
