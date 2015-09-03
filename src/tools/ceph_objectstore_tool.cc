@@ -147,7 +147,7 @@ int action_on_all_objects_in_pg(ObjectStore *store, string pgidstr, action_on_ob
       continue;
 
     // If an exact match or treat no shard as any shard
-    if (cand_pgid == pgid || 
+    if (cand_pgid == pgid ||
         (pgid.is_no_shard() && pgid.pgid == cand_pgid.pgid)) {
       colls_to_check.push_back(*i);
     }
@@ -958,18 +958,18 @@ int ObjectStoreTool::get_object(ObjectStore *store, coll_t coll,
     object_locator_t loc(ob.hoid.hobj);
     pg_t raw_pgid = curmap.object_locator_to_pg(oid, loc);
     pg_t pgid = curmap.raw_pg_to_pg(raw_pgid);
-  
+
     spg_t coll_pgid;
     if (coll.is_pg(&coll_pgid) == false) {
       cerr << "INTERNAL ERROR: Bad collection during import" << std::endl;
       return -EFAULT;
     }
     if (coll_pgid.shard != ob.hoid.shard_id) {
-      cerr << "INTERNAL ERROR: Importing shard " << coll_pgid.shard 
+      cerr << "INTERNAL ERROR: Importing shard " << coll_pgid.shard
         << " but object shard is " << ob.hoid.shard_id << std::endl;
       return -EFAULT;
     }
-     
+
     if (coll_pgid.pgid != pgid) {
       cerr << "Skipping object '" << ob.hoid << "' which belongs in pg " << pgid << std::endl;
       *skipped_objects = true;
