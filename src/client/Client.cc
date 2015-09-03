@@ -25,6 +25,9 @@
 #include <sys/uio.h>
 #include <sys/xattr.h>
 
+#include <boost/lexical_cast.hpp>
+#include <boost/fusion/include/std_pair.hpp>
+
 #if defined(__linux__)
 #include <linux/falloc.h>
 #endif
@@ -1915,6 +1918,11 @@ void Client::send_request(MetaRequest *request, MetaSession *session,
       r->releases.swap(request->cap_releases);
   }
   r->set_mdsmap_epoch(mdsmap->get_epoch());
+  if (r->head.op == CEPH_MDS_OP_SETXATTR) {
+    const OSDMap *osdmap = objecter->get_osdmap_read();
+    r->set_osdmap_epoch(osdmap->get_epoch());
+    objecter->put_osdmap_read();
+  }
 
   if (request->mds == -1) {
     request->sent_stamp = ceph_clock_now(cct);
@@ -8996,9 +9004,67 @@ int Client::_setxattr(Inode *in, const char *name, const void *value,
   return res;
 }
 
+int Client::check_data_pool_exist(string name, string value, const OSDMap *osdmap)
+{
+  string tmp;
+  if (name == "layout") {
+    string::iterator begin = value.begin();
+    string::iterator end = value.end();
+    keys_and_values<string::iterator> p;    // create instance of parser
+    std::map<string, string> m;             // map to receive results
+    if (!qi::parse(begin, end, p, m)) {     // returns true if successful
+      return -EINVAL;
+    }
+    if (begin != end)
+      return -EINVAL;
+    for (map<string,string>::iterator q = m.begin(); q != m.end(); ++q) {
+      if (q->first == "pool") {
+	tmp = q->second;
+	break;
+      }
+    }
+  } else if (name == "layout.pool") {
+    tmp = value;
+  }
+
+  if (tmp.length()) {
+    int64_t pool;
+    try {
+      pool = boost::lexical_cast<unsigned>(tmp);
+      if (!osdmap->have_pg_pool(pool))
+	return -ENOENT;
+    } catch (boost::bad_lexical_cast const&) {
+      pool = osdmap->lookup_pg_pool_name(tmp);
+      if (pool < 0) {
+	return -ENOENT;
+      }
+    }
+  }
+
+  return 0;
+}
+
 int Client::ll_setxattr(Inode *in, const char *name, const void *value,
 			size_t size, int flags, int uid, int gid)
 {
+  // For setting pool of layout, MetaRequest need osdmap epoch.
+  // There is a race which create a new data pool but client and mds both don't have.
+  // Make client got the latest osdmap which make mds quickly judge whether get newer osdmap.
+  if (strcmp(name, "ceph.file.layout.pool") == 0 ||  strcmp(name, "ceph.dir.layout.pool") == 0 ||
+      strcmp(name, "ceph.file.layout") == 0 || strcmp(name, "ceph.dir.layout") == 0) {
+    string rest(strstr(name, "layout"));
+    string v((const char*)value);
+    const OSDMap *osdmap = objecter->get_osdmap_read();
+    int r = check_data_pool_exist(rest, v, osdmap);
+    objecter->put_osdmap_read();
+
+    if (r == -ENOENT) {
+      C_SaferCond ctx;
+      objecter->wait_for_latest_osdmap(&ctx);
+      ctx.wait();
+    }
+  }
+
   Mutex::Locker lock(client_lock);
 
   vinodeno_t vino = _get_vino(in);
