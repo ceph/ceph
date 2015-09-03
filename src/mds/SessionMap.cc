@@ -851,14 +851,27 @@ bool Session::check_access(CInode *in, unsigned mask,
   if (path.length())
     path = path.substr(1);    // drop leading /
 
+  // for creation, we always assign the new inode the caller uid+gid.
+  // verify that is permitted.
+  if (mask & MAY_CREATE) {
+    if (!(auth_caps.is_capable(path, caller_uid, caller_gid,
+			       0 /* irrelevant */,
+			       caller_uid, caller_gid,
+			       MAY_CREATE))) {
+      return false;
+    }
+    mask &= ~MAY_CREATE;
+  }
+
   if ((mask & (MAY_CHOWN|MAY_CHGRP)) &&
-    !(auth_caps.is_capable(path, in->inode.uid, in->inode.gid, in->inode.mode,
-                  caller_uid, caller_gid, mask))) {
+      !(auth_caps.is_capable(path, in->inode.uid, in->inode.gid, in->inode.mode,
+			     caller_uid, caller_gid, mask))) {
     return false;
   }
 
+  // normal unix MAY_{READ,WRITE} checks
   if (auth_caps.is_capable(path, in->inode.uid, in->inode.gid, in->inode.mode,
-            caller_uid, caller_gid, mask)) {
+			   caller_uid, caller_gid, mask)) {
     return true;
   }
   return false;
