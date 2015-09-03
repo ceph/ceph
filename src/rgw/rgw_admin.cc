@@ -31,6 +31,7 @@ using namespace std;
 #include "rgw_formats.h"
 #include "rgw_usage.h"
 #include "rgw_replica_log.h"
+#include "rgw_orphan.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -232,6 +233,8 @@ enum {
   OPT_QUOTA_DISABLE,
   OPT_GC_LIST,
   OPT_GC_PROCESS,
+  OPT_ORPHANS_FIND,
+  OPT_ORPHANS_FINISH,
   OPT_REGION_GET,
   OPT_REGION_LIST,
   OPT_REGION_SET,
@@ -281,6 +284,7 @@ static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
       strcmp(cmd, "object") == 0 ||
       strcmp(cmd, "olh") == 0 ||
       strcmp(cmd, "opstate") == 0 ||
+      strcmp(cmd, "orphans") == 0 || 
       strcmp(cmd, "pool") == 0 ||
       strcmp(cmd, "pools") == 0 ||
       strcmp(cmd, "quota") == 0 ||
@@ -441,6 +445,11 @@ static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
       return OPT_GC_LIST;
     if (strcmp(cmd, "process") == 0)
       return OPT_GC_PROCESS;
+  } else if (strcmp(prev_cmd, "orphans") == 0) {
+    if (strcmp(cmd, "find") == 0)
+      return OPT_ORPHANS_FIND;
+    if (strcmp(cmd, "finish") == 0)
+      return OPT_ORPHANS_FINISH;
   } else if (strcmp(prev_cmd, "metadata") == 0) {
     if (strcmp(cmd, "get") == 0)
       return OPT_METADATA_GET;
@@ -1059,6 +1068,7 @@ int do_check_object_locator(const string& bucket_name, bool fix, bool remove_bad
   return 0;
 }
 
+
 int main(int argc, char **argv) 
 {
   vector<const char*> args;
@@ -1140,6 +1150,11 @@ int main(int argc, char **argv)
 
   BIIndexType bi_index_type = PlainIdx;
 
+  string job_id;
+  int num_shards = 0;
+  int max_concurrent_ios = 32;
+  uint64_t orphan_stale_secs = (24 * 3600);
+
   std::string val;
   std::ostringstream errs;
   string err;
@@ -1189,6 +1204,8 @@ int main(int argc, char **argv)
         cerr << "bad key type: " << key_type_str << std::endl;
         return usage();
       }
+    } else if (ceph_argparse_witharg(args, i, &val, "--job-id", (char*)NULL)) {
+      job_id = val;
     } else if (ceph_argparse_binary_flag(args, i, &gen_access_key, NULL, "--gen-access-key", (char*)NULL)) {
       // do nothing
     } else if (ceph_argparse_binary_flag(args, i, &gen_secret_key, NULL, "--gen-secret", (char*)NULL)) {
@@ -1238,6 +1255,12 @@ int main(int argc, char **argv)
       start_date = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--end-date", "--end-time", (char*)NULL)) {
       end_date = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--num-shards", (char*)NULL)) {
+      num_shards = atoi(val.c_str());
+    } else if (ceph_argparse_witharg(args, i, &val, "--max-concurrent-ios", (char*)NULL)) {
+      max_concurrent_ios = atoi(val.c_str());
+    } else if (ceph_argparse_witharg(args, i, &val, "--orphan-stale-secs", (char*)NULL)) {
+      orphan_stale_secs = (uint64_t)atoi(val.c_str());
     } else if (ceph_argparse_witharg(args, i, &val, "--shard-id", (char*)NULL)) {
       shard_id = atoi(val.c_str());
       specified_shard_id = true;
@@ -2554,6 +2577,55 @@ next:
     if (ret < 0) {
       cerr << "ERROR: gc processing returned error: " << cpp_strerror(-ret) << std::endl;
       return 1;
+    }
+  }
+
+  if (opt_cmd == OPT_ORPHANS_FIND) {
+    RGWOrphanSearch search(store, max_concurrent_ios, orphan_stale_secs);
+
+    if (job_id.empty()) {
+      cerr << "ERROR: --job-id not specified" << std::endl;
+      return EINVAL;
+    }
+    if (pool_name.empty()) {
+      cerr << "ERROR: --pool not specified" << std::endl;
+      return EINVAL;
+    }
+
+    RGWOrphanSearchInfo info;
+
+    info.pool = pool_name;
+    info.job_name = job_id;
+    info.num_shards = num_shards;
+
+    int ret = search.init(job_id, &info);
+    if (ret < 0) {
+      cerr << "could not init search, ret=" << ret << std::endl;
+      return -ret;
+    }
+    ret = search.run();
+    if (ret < 0) {
+      return -ret;
+    }
+  }
+
+  if (opt_cmd == OPT_ORPHANS_FINISH) {
+    RGWOrphanSearch search(store, max_concurrent_ios, orphan_stale_secs);
+
+    if (job_id.empty()) {
+      cerr << "ERROR: --job-id not specified" << std::endl;
+      return EINVAL;
+    }
+    int ret = search.init(job_id, NULL);
+    if (ret < 0) {
+      if (ret == -ENOENT) {
+        cerr << "job not found" << std::endl;
+      }
+      return -ret;
+    }
+    ret = search.finish();
+    if (ret < 0) {
+      return -ret;
     }
   }
 

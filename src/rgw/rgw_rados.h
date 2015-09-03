@@ -1243,7 +1243,13 @@ class RGWRados
   void cls_obj_check_prefix_exist(librados::ObjectOperation& op, const string& prefix, bool fail_if_exist);
 protected:
   CephContext *cct;
-  librados::Rados *rados;
+
+  librados::Rados **rados;
+  atomic_t next_rados_handle;
+  uint32_t num_rados_handles;
+  RWLock handle_lock;
+  std::map<pthread_t, int> rados_map;
+
   librados::IoCtx gc_pool_ctx;        // .rgw.gc
 
   bool pools_initialized;
@@ -1263,8 +1269,9 @@ public:
                watch_initialized(false),
                bucket_id_lock("rados_bucket_id"),
                bucket_index_max_shards(0),
-               max_bucket_id(0),
-               cct(NULL), rados(NULL),
+               max_bucket_id(0), cct(NULL),
+               rados(NULL), next_rados_handle(0),
+               num_rados_handles(0), handle_lock("rados_handle_lock"),
                pools_initialized(false),
                quota_handler(NULL),
                finisher(NULL),
@@ -1295,14 +1302,21 @@ public:
   map<string, RGWRESTConn *> zone_conn_map;
   map<string, RGWRESTConn *> region_conn_map;
 
+  RGWZoneParams& get_zone_params() { return zone; }
+
   RGWMetadataManager *meta_mgr;
 
   RGWDataChangesLog *data_log;
 
   virtual ~RGWRados() {
+    for (uint32_t i=0; i < num_rados_handles; i++) {
+      if (rados[i]) {
+        rados[i]->shutdown();
+        delete rados[i];
+      }
+    }
     if (rados) {
-      rados->shutdown();
-      delete rados;
+      delete[] rados;
     }
   }
 
@@ -1593,6 +1607,38 @@ public:
       Delete(RGWRados::Object *_target) : target(_target) {}
 
       int delete_obj();
+    };
+
+    struct Stat {
+      RGWRados::Object *source;
+
+      struct Result {
+        rgw_obj obj;
+        RGWObjManifest manifest;
+        bool has_manifest;
+        uint64_t size;
+        time_t mtime;
+        map<string, bufferlist> attrs;
+
+        Result() : has_manifest(false), size(0), mtime(0) {}
+      } result;
+
+      struct State {
+        librados::IoCtx io_ctx;
+        librados::AioCompletion *completion;
+        int ret;
+
+        State() : completion(NULL), ret(0) {}
+      } state;
+
+
+      Stat(RGWRados::Object *_source) : source(_source) {}
+
+      int stat_async();
+      int wait();
+      int stat();
+    private:
+      int finish();
     };
   };
 
@@ -2110,6 +2156,8 @@ public:
   bool need_to_log_metadata() {
     return zone_public_config.log_meta;
   }
+
+  librados::Rados* get_rados_handle();
 
  private:
   /**
