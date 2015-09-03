@@ -1580,7 +1580,7 @@ int main(int argc, char **argv)
 			 opt_cmd == OPT_PERIOD_DELETE || opt_cmd == OPT_PERIOD_GET ||
 			 opt_cmd == OPT_PERIOD_PULL || opt_cmd == OPT_PERIOD_PUSH ||
 			 opt_cmd == OPT_PERIOD_GET_CURRENT ||
-			 opt_cmd == OPT_REALM_DELETE || opt_cmd == OPT_REALM_GET ||
+			 opt_cmd == OPT_REALM_DELETE || opt_cmd == OPT_REALM_GET || opt_cmd == OPT_REALM_LIST ||
 			 opt_cmd == OPT_REALM_GET_DEFAULT || opt_cmd == OPT_REALM_REMOVE ||
 			 opt_cmd == OPT_REALM_RENAME || opt_cmd == OPT_REALM_SET_DEFAULT);
 
