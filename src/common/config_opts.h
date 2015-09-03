@@ -1123,6 +1123,7 @@ OPTION(rgw_multipart_min_part_size, OPT_INT, 5 * 1024 * 1024) // min size for ea
 OPTION(rgw_multipart_part_upload_limit, OPT_INT, 10000) // parts limit in multipart upload
 
 OPTION(rgw_olh_pending_timeout_sec, OPT_INT, 3600) // time until we retire a pending olh change
+OPTION(rgw_user_max_buckets, OPT_U32, 1000) // global option to set max buckets count for all user
 
 OPTION(mutex_perf_counter, OPT_BOOL, false) // enable/disable mutex perf counter
 OPTION(throttler_perf_counter, OPT_BOOL, true) // enable/disable throttler perf counter

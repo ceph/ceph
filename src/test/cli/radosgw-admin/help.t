@@ -82,6 +82,7 @@
      --access=<access>         Set access permissions for sub-user, should be one
                                of read, write, readwrite, full
      --display-name=<name>
+     --max_buckets             max number of buckets for a user
      --system                  set the system flag on the user
      --bucket=<bucket>
      --pool=<pool>
