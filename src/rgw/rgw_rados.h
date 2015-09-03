@@ -13,6 +13,7 @@
 #include "cls/version/cls_version_types.h"
 #include "cls/log/cls_log_types.h"
 #include "cls/statelog/cls_statelog_types.h"
+#include "cls/timeindex/cls_timeindex_types.h"
 #include "rgw_log.h"
 #include "rgw_metadata.h"
 #include "rgw_rest_conn.h"
@@ -21,6 +22,7 @@ class RGWWatcher;
 class SafeTimer;
 class ACLOwner;
 class RGWGC;
+class RGWObjectExpirer;
 
 /* flags for put_obj_meta() */
 #define PUT_OBJ_CREATE      0x01
@@ -993,6 +995,32 @@ struct RGWRegionMap {
 };
 WRITE_CLASS_ENCODER(RGWRegionMap)
 
+struct objexp_hint_entry {
+  string bucket_name;
+  string bucket_id;
+  rgw_obj_key obj_key;
+  utime_t exp_time;
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(bucket_name, bl);
+    ::encode(bucket_id, bl);
+    ::encode(obj_key, bl);
+    ::encode(exp_time, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::iterator& bl) {
+    DECODE_START(1, bl);
+    ::decode(bucket_name, bl);
+    ::decode(bucket_id, bl);
+    ::decode(obj_key, bl);
+    ::decode(exp_time, bl);
+    DECODE_FINISH(bl);
+  }
+};
+WRITE_CLASS_ENCODER(objexp_hint_entry)
+
 class RGWDataChangesLog;
 class RGWReplicaLogger;
   
@@ -1171,12 +1199,14 @@ class Finisher;
 class RGWRados
 {
   friend class RGWGC;
+  friend class RGWObjectExpirer;
   friend class RGWStateLog;
   friend class RGWReplicaLogger;
 
   /** Open the pool used as root for this gateway */
   int open_root_pool_ctx();
   int open_gc_pool_ctx();
+  int open_objexp_pool_ctx();
 
   int open_bucket_pool_ctx(const string& bucket_name, const string& pool, librados::IoCtx&  io_ctx);
   int open_bucket_index_ctx(rgw_bucket& bucket, librados::IoCtx&  index_ctx);
@@ -1213,6 +1243,7 @@ class RGWRados
   };
 
   RGWGC *gc;
+  RGWObjectExpirer *obj_expirer;
   bool use_gc_thread;
   bool quota_threads;
 
@@ -1255,6 +1286,7 @@ protected:
   std::map<pthread_t, int> rados_map;
 
   librados::IoCtx gc_pool_ctx;        // .rgw.gc
+  librados::IoCtx objexp_pool_ctx;
 
   bool pools_initialized;
 
@@ -1268,7 +1300,7 @@ protected:
 
 public:
   RGWRados() : max_req_id(0), lock("rados_timer_lock"), watchers_lock("watchers_lock"), timer(NULL),
-               gc(NULL), use_gc_thread(false), quota_threads(false),
+               gc(NULL), obj_expirer(NULL), use_gc_thread(false), quota_threads(false),
                num_watchers(0), watchers(NULL),
                watch_initialized(false),
                bucket_id_lock("rados_bucket_id"),
@@ -1574,10 +1606,11 @@ public:
         const char *if_match;
         const char *if_nomatch;
         uint64_t olh_epoch;
+	time_t delete_at;
 
         MetaParams() : mtime(NULL), rmattrs(NULL), data(NULL), manifest(NULL), ptag(NULL),
                  remove_objs(NULL), set_mtime(0), category(RGW_OBJ_CATEGORY_MAIN), flags(0),
-                 if_match(NULL), if_nomatch(NULL), olh_epoch(0) {}
+                 if_match(NULL), if_nomatch(NULL), olh_epoch(0), delete_at(0) {}
       } meta;
 
       Write(RGWRados::Object *_target) : target(_target) {}
@@ -1597,6 +1630,7 @@ public:
         string marker_version_id;
         uint32_t bilog_flags;
         list<rgw_obj_key> *remove_objs;
+        utime_t expiration_time;
 
         DeleteParams() : versioning_status(0), olh_epoch(0), bilog_flags(0), remove_objs(NULL) {}
       } params;
@@ -1775,6 +1809,7 @@ public:
                        map<string, bufferlist>& attrs,
                        RGWObjCategory category,
                        uint64_t olh_epoch,
+		       time_t delete_at,
                        string *version_id,
                        string *ptag,
                        string *petag,
@@ -1822,6 +1857,7 @@ public:
                map<std::string, bufferlist>& attrs,
                RGWObjCategory category,
                uint64_t olh_epoch,
+	       time_t delete_at,
                string *version_id,
                string *ptag,
                string *petag,
@@ -1840,6 +1876,7 @@ public:
                map<string, bufferlist>& attrs,
                RGWObjCategory category,
                uint64_t olh_epoch,
+	       time_t delete_at,
                string *version_id,
                string *ptag,
                string *petag,
@@ -1862,8 +1899,12 @@ public:
   int bucket_suspended(rgw_bucket& bucket, bool *suspended);
 
   /** Delete an object.*/
-  virtual int delete_obj(RGWObjectCtx& obj_ctx, RGWBucketInfo& bucket_owner, rgw_obj& src_obj,
-                         int versioning_status, uint16_t bilog_flags = 0);
+  virtual int delete_obj(RGWObjectCtx& obj_ctx,
+                         RGWBucketInfo& bucket_owner,
+                         rgw_obj& src_obj,
+                         int versioning_status,
+                         uint16_t bilog_flags = 0,
+                         const utime_t& expiration_time = utime_t());
 
   /* Delete a system object */
   virtual int delete_system_obj(rgw_obj& src_obj, RGWObjVersionTracker *objv_tracker = NULL);
@@ -2071,6 +2112,31 @@ public:
   int time_log_info(const string& oid, cls_log_header *header);
   int time_log_trim(const string& oid, const utime_t& start_time, const utime_t& end_time,
                     const string& from_marker, const string& to_marker);
+
+  string objexp_hint_get_shardname(int shard_num);
+  int objexp_key_shard(const rgw_obj_key& key);
+  void objexp_get_shard(int shard_num,
+                        string& shard);                       /* out */
+  int objexp_hint_add(const utime_t& delete_at,
+                      const string& bucket_name,
+                      const string& bucket_id,
+                      const rgw_obj_key& obj_key);
+  int objexp_hint_list(const string& oid,
+                       const utime_t& start_time,
+                       const utime_t& end_time,
+                       const int max_entries,
+                       const string& marker,
+                       list<cls_timeindex_entry>& entries, /* out */
+                       string *out_marker,                 /* out */
+                       bool *truncated);                   /* out */
+  int objexp_hint_parse(cls_timeindex_entry &ti_entry,
+                        objexp_hint_entry& hint_entry);    /* out */
+  int objexp_hint_trim(const string& oid,
+                       const utime_t& start_time,
+                       const utime_t& end_time,
+                       const string& from_marker = std::string(),
+                       const string& to_marker   = std::string());
+
   int lock_exclusive(rgw_bucket& pool, const string& oid, utime_t& duration, string& zone_id, string& owner_id);
   int unlock(rgw_bucket& pool, const string& oid, string& zone_id, string& owner_id);
 
@@ -2082,6 +2148,7 @@ public:
 
   int list_gc_objs(int *index, string& marker, uint32_t max, bool expired_only, std::list<cls_rgw_gc_obj_info>& result, bool *truncated);
   int process_gc();
+  int process_expire_objects();
   int defer_gc(void *ctx, rgw_obj& obj);
 
   int bucket_check_index(rgw_bucket& bucket,
@@ -2312,7 +2379,7 @@ protected:
   RGWBucketInfo bucket_info;
 
   virtual int do_complete(string& etag, time_t *mtime, time_t set_mtime,
-                          map<string, bufferlist>& attrs,
+                          map<string, bufferlist>& attrs, time_t delete_at,
                           const char *if_match = NULL, const char *if_nomatch = NULL) = 0;
 
 public:
@@ -2328,7 +2395,7 @@ public:
     assert(0);
   }
   virtual int complete(string& etag, time_t *mtime, time_t set_mtime,
-                       map<string, bufferlist>& attrs,
+                       map<string, bufferlist>& attrs, time_t delete_at,
                        const char *if_match = NULL, const char *if_nomatch = NULL);
 
   CephContext *ctx();
@@ -2399,7 +2466,7 @@ protected:
 
   int write_data(bufferlist& bl, off_t ofs, void **phandle, bool exclusive);
   virtual int do_complete(string& etag, time_t *mtime, time_t set_mtime,
-                          map<string, bufferlist>& attrs,
+                          map<string, bufferlist>& attrs, time_t delete_at,
                           const char *if_match = NULL, const char *if_nomatch = NULL);
 
   int prepare_next_part(off_t ofs);
