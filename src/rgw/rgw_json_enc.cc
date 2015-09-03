@@ -776,7 +776,7 @@ static void decode_zones(map<string, RGWZone>& zones, JSONObj *o)
 {
   RGWZone z;
   z.decode_json(o);
-  zones[z.name] = z;
+  zones[z.id] = z;
 }
 
 static void decode_placement_targets(map<string, RGWZoneGroupPlacementTarget>& targets, JSONObj *o)
