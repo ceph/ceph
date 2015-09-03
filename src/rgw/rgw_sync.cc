@@ -773,8 +773,8 @@ public:
 };
 
 class RGWWaitCR : public RGWSimpleCoroutine {
-  RGWAsyncRadosProcessor *async_rados;
   CephContext *cct;
+  RGWAsyncRadosProcessor *async_rados;
   Mutex *lock;
   Cond *cond;
   int secs;
@@ -1424,25 +1424,25 @@ public:
                                                                 marker_oid(_marker_oid),
                                                                 sync_marker(_marker), updates_since_flush(0) {}
 
-  void start(const string& key) {
-    pending[key] = true;
+  void start(const string& pos) {
+    pending[pos] = true;
   }
 
-  RGWCoroutine *finish(const string& key) {
+  RGWCoroutine *finish(const string& pos) {
     assert(!pending.empty());
 
     map<string, bool>::iterator iter = pending.begin();
-    const string& first_key = iter->first;
+    const string& first_pos = iter->first;
 
-    if (key > high_marker) {
-      high_marker = key;
+    if (pos > high_marker) {
+      high_marker = pos;
     }
 
-    pending.erase(key);
+    pending.erase(pos);
 
     updates_since_flush++;
 
-    if (key == first_key && (updates_since_flush >= META_SYNC_UPDATE_MARKER_WINDOW || pending.empty())) {
+    if (pos == first_pos && (updates_since_flush >= META_SYNC_UPDATE_MARKER_WINDOW || pending.empty())) {
       return update_marker(high_marker);
     }
     return NULL;
@@ -1465,6 +1465,7 @@ class RGWMetaSyncSingleEntryCR : public RGWCoroutine {
   RGWAsyncRadosProcessor *async_rados;
 
   string raw_key;
+  string entry_marker;
 
   ssize_t pos;
   string section;
@@ -1478,10 +1479,11 @@ class RGWMetaSyncSingleEntryCR : public RGWCoroutine {
 
 public:
   RGWMetaSyncSingleEntryCR(RGWRados *_store, RGWHTTPManager *_mgr, RGWAsyncRadosProcessor *_async_rados,
-		           const string& _raw_key, RGWMetaSyncShardMarkerTrack *_marker_tracker) : RGWCoroutine(_store->ctx()), store(_store),
+		           const string& _raw_key, const string& _entry_marker, RGWMetaSyncShardMarkerTrack *_marker_tracker) : RGWCoroutine(_store->ctx()), store(_store),
                                                       http_manager(_mgr),
 						      async_rados(_async_rados),
-						      raw_key(_raw_key), pos(0), sync_status(0),
+						      raw_key(_raw_key), entry_marker(_entry_marker),
+                                                      pos(0), sync_status(0),
                                                       marker_tracker(_marker_tracker) {
   }
 
@@ -1505,9 +1507,9 @@ public:
       sync_status = retcode;
       yield {
         /* update marker */
-        int ret = call(marker_tracker->finish(raw_key));
+        int ret = call(marker_tracker->finish(entry_marker));
         if (ret < 0) {
-          ldout(store->ctx(), 0) << "ERROR: marker_tracker->finish(" << raw_key << ") returned ret=" << ret << dendl;
+          ldout(store->ctx(), 0) << "ERROR: marker_tracker->finish(" << entry_marker << ") returned ret=" << ret << dendl;
           return set_state(RGWCoroutine_Error, sync_status);
         }
       }
@@ -1586,9 +1588,11 @@ class RGWMetaSyncShardCR : public RGWCoroutine {
   RGWMetaSyncShardMarkerTrack *marker_tracker;
 
   list<cls_log_entry> log_entries;
+  list<cls_log_entry>::iterator log_iter;
   bool truncated;
 
   string mdlog_marker;
+  string raw_key;
 
   Mutex inc_lock;
   Cond inc_cond;
@@ -1654,7 +1658,7 @@ public:
           ldout(store->ctx(), 20) << __func__ << ": full sync: " << iter->first << dendl;
           marker_tracker->start(iter->first);
             // fetch remote and write locally
-          yield spawn(new RGWMetaSyncSingleEntryCR(store, http_manager, async_rados, iter->first, marker_tracker), false);
+          yield spawn(new RGWMetaSyncSingleEntryCR(store, http_manager, async_rados, iter->first, iter->first, marker_tracker), false);
           if (retcode < 0) {
             return set_state(RGWCoroutine_Error, retcode);
           }
@@ -1692,6 +1696,9 @@ public:
   int incremental_sync() {
     reenter(&incremental_cr) {
       mdlog_marker = sync_marker.marker;
+      set_marker_tracker(new RGWMetaSyncShardMarkerTrack(store, http_manager, async_rados, this,
+                                                         RGWMetaSyncStatusManager::shard_obj_name(shard_id),
+                                                         sync_marker));
       do {
 #define INCREMENTAL_MAX_ENTRIES 100
 	ldout(store->ctx(), 20) << __func__ << ":" << __LINE__ << ": shard_id=" << shard_id << " mdlog_marker=" << mdlog_marker << " sync_marker.marker=" << sync_marker.marker << dendl;
@@ -1703,8 +1710,14 @@ public:
 	ldout(store->ctx(), 20) << __func__ << ":" << __LINE__ << ": shard_id=" << shard_id << " mdlog_marker=" << mdlog_marker << " sync_marker.marker=" << sync_marker.marker << dendl;
 	if (mdlog_marker > sync_marker.marker) {
           yield call(new RGWReadMDLogEntriesCR(async_rados, store, shard_id, &sync_marker.marker, INCREMENTAL_MAX_ENTRIES, &log_entries, &truncated));
-          for (list<cls_log_entry>::iterator iter = log_entries.begin(); iter != log_entries.end(); ++iter) {
-            ldout(store->ctx(), 20) << __func__ << ":" << __LINE__ << ": shard_id=" << shard_id << " log_entry: " << iter->id << ":" << iter->section << ":" << iter->name << ":" << iter->timestamp << dendl;
+          for (log_iter = log_entries.begin(); log_iter != log_entries.end(); ++log_iter) {
+            ldout(store->ctx(), 20) << __func__ << ":" << __LINE__ << ": shard_id=" << shard_id << " log_entry: " << log_iter->id << ":" << log_iter->section << ":" << log_iter->name << ":" << log_iter->timestamp << dendl;
+            marker_tracker->start(log_iter->id);
+            raw_key = log_iter->section + ":" + log_iter->name;
+            yield spawn(new RGWMetaSyncSingleEntryCR(store, http_manager, async_rados, raw_key, log_iter->id, marker_tracker), false);
+            if (retcode < 0) {
+              return set_state(RGWCoroutine_Error, retcode);
+          }
 	  }
 	}
 	ldout(store->ctx(), 20) << __func__ << ":" << __LINE__ << ": shard_id=" << shard_id << " mdlog_marker=" << mdlog_marker << " sync_marker.marker=" << sync_marker.marker << dendl;
