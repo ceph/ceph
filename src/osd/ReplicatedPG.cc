@@ -3093,8 +3093,7 @@ ReplicatedPG::RepGather *ReplicatedPG::trim_object(const hobject_t &coid)
       if (*p == last)
 	break;
     assert(p != snapset.clones.end());
-    object_stat_sum_t delta;
-    delta.num_bytes -= snapset.get_clone_bytes(last);
+    ctx->delta_stats.num_bytes -= snapset.get_clone_bytes(last);
 
     if (p != snapset.clones.begin()) {
       // not the oldest... merge overlap into next older clone
@@ -3104,25 +3103,24 @@ ReplicatedPG::RepGather *ReplicatedPG::trim_object(const hobject_t &coid)
       bool adjust_prev_bytes = is_present_clone(prev_coid);
 
       if (adjust_prev_bytes)
-	delta.num_bytes -= snapset.get_clone_bytes(*n);
+	ctx->delta_stats.num_bytes -= snapset.get_clone_bytes(*n);
 
       snapset.clone_overlap[*n].intersection_of(
 	snapset.clone_overlap[*p]);
 
       if (adjust_prev_bytes)
-	delta.num_bytes += snapset.get_clone_bytes(*n);
+	ctx->delta_stats.num_bytes += snapset.get_clone_bytes(*n);
     }
-    delta.num_objects--;
+    ctx->delta_stats.num_objects--;
     if (coi.is_dirty())
-      delta.num_objects_dirty--;
+      ctx->delta_stats.num_objects_dirty--;
     if (coi.is_omap())
-      delta.num_objects_omap--;
+      ctx->delta_stats.num_objects_omap--;
     if (coi.is_whiteout()) {
       dout(20) << __func__ << " trimming whiteout on " << coid << dendl;
-      delta.num_whiteouts--;
+      ctx->delta_stats.num_whiteouts--;
     }
-    delta.num_object_clones--;
-    info.stats.stats.add(delta);
+    ctx->delta_stats.num_object_clones--;
     obc->obs.exists = false;
 
     snapset.clones.erase(p);
@@ -12162,6 +12160,8 @@ boost::statechart::result ReplicatedPG::TrimmingObjects::react(const SnapTrim&)
     }
     assert(repop);
     repop->queue_snap_trimmer = true;
+
+    info.stats.stats.add(ctx->delta_stats);
 
     repops.insert(repop->get());
     pg->simple_repop_submit(repop);
