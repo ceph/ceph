@@ -29,99 +29,23 @@ enum ObjectDiffState {
   OBJECT_DIFF_STATE_HOLE    = 2
 };
 
-class DiffContext {
-public:
-  typedef boost::tuple<uint64_t, size_t, bool> Diff;
-  typedef std::list<Diff> Diffs;
-
+struct DiffContext {
+  DiffIterate::Callback callback;
+  void *callback_arg;
   bool whole_object;
   uint64_t from_snap_id;
   uint64_t end_snap_id;
   interval_set<uint64_t> parent_diff;
+  OrderedThrottle throttle;
 
   DiffContext(ImageCtx &image_ctx, DiffIterate::Callback callback,
               void *callback_arg, bool _whole_object, uint64_t _from_snap_id,
               uint64_t _end_snap_id)
-    : whole_object(_whole_object), from_snap_id(_from_snap_id),
-      end_snap_id(_end_snap_id), m_lock("librbd::DiffContext::m_lock"),
-      m_image_ctx(image_ctx), m_callback(callback),
-      m_callback_arg(callback_arg), m_pending_ops(0), m_return_value(0),
-      m_next_request(0), m_waiting_request(0)
-  {
+    : callback(callback), callback_arg(callback_arg),
+      whole_object(_whole_object), from_snap_id(_from_snap_id),
+      end_snap_id(_end_snap_id),
+      throttle(image_ctx.concurrent_management_ops, true) {
   }
-
-  int invoke_callback() {
-    Mutex::Locker locker(m_lock);
-    if (m_return_value < 0) {
-      return m_return_value;
-    }
-
-    std::map<uint64_t, Diffs>::iterator it;
-    while ((it = m_request_diffs.begin()) != m_request_diffs.end() &&
-           it->first == m_waiting_request) {
-      Diffs diffs = it->second;
-      m_request_diffs.erase(it);
-
-      for (Diffs::const_iterator d = diffs.begin(); d != diffs.end(); ++d) {
-        m_lock.Unlock();
-        int r = m_callback(d->get<0>(), d->get<1>(), d->get<2>(),
-                           m_callback_arg);
-        m_lock.Lock();
-
-        if (m_return_value == 0 && r < 0) {
-          m_return_value = r;
-          return m_return_value;
-        }
-      }
-      ++m_waiting_request;
-    }
-    return 0;
-  }
-
-  int wait_for_ret() {
-    Mutex::Locker locker(m_lock);
-    while (m_pending_ops > 0) {
-      m_cond.Wait(m_lock);
-    }
-    return m_return_value;
-  }
-
-  uint64_t start_op() {
-    Mutex::Locker locker(m_lock);
-    while (m_pending_ops >= m_image_ctx.concurrent_management_ops) {
-        m_cond.Wait(m_lock);
-    }
-    ++m_pending_ops;
-    return m_next_request++;
-  }
-
-  void finish_op(uint64_t request_num, int r, const Diffs &diffs) {
-    Mutex::Locker locker(m_lock);
-    m_request_diffs[request_num] = diffs;
-
-    if (m_return_value == 0 && r < 0) {
-      m_return_value = r;
-    }
-
-    --m_pending_ops;
-    m_cond.Signal();
-  }
-
-private:
-  Mutex m_lock;
-  Cond m_cond;
-
-  ImageCtx &m_image_ctx;
-  DiffIterate::Callback m_callback;
-  void *m_callback_arg;
-
-  uint32_t m_pending_ops;
-  int m_return_value;
-
-  uint64_t m_next_request;
-  uint64_t m_waiting_request;
-
-  std::map<uint64_t, Diffs> m_request_diffs;
 };
 
 class C_DiffObject : public Context {
@@ -131,30 +55,33 @@ public:
                uint64_t offset, const std::vector<ObjectExtent> &object_extents)
     : m_image_ctx(image_ctx), m_head_ctx(head_ctx),
       m_diff_context(diff_context), m_oid(oid), m_offset(offset),
-      m_object_extents(object_extents), m_snap_ret(0)
-  {
-    m_request_num = m_diff_context.start_op();
+      m_object_extents(object_extents), m_snap_ret(0) {
   }
 
   void send() {
+    C_OrderedThrottle *ctx = m_diff_context.throttle.start_op(this);
+    librados::AioCompletion *rados_completion =
+      librados::Rados::aio_create_completion(ctx, NULL, rados_ctx_cb);
+
     librados::ObjectReadOperation op;
     op.list_snaps(&m_snap_set, &m_snap_ret);
 
-    librados::AioCompletion *rados_completion =
-      librados::Rados::aio_create_completion(this, NULL, rados_ctx_cb);
     int r = m_head_ctx.aio_operate(m_oid, rados_completion, &op, NULL);
     assert(r == 0);
     rados_completion->release();
   }
 
 protected:
+  typedef boost::tuple<uint64_t, size_t, bool> Diff;
+  typedef std::list<Diff> Diffs;
+
   virtual void finish(int r) {
     CephContext *cct = m_image_ctx.cct;
     if (r == 0 && m_snap_ret < 0) {
       r = m_snap_ret;
     }
 
-    DiffContext::Diffs diffs;
+    Diffs diffs;
     if (r == 0) {
       ldout(cct, 20) << "object " << m_oid << ": list_snaps complete" << dendl;
       compute_diffs(&diffs);
@@ -168,7 +95,16 @@ protected:
                      << cpp_strerror(r) << dendl;
     }
 
-    m_diff_context.finish_op(m_request_num, r, diffs);
+    if (r == 0) {
+      for (Diffs::const_iterator d = diffs.begin(); d != diffs.end(); ++d) {
+        r = m_diff_context.callback(d->get<0>(), d->get<1>(), d->get<2>(),
+                                    m_diff_context.callback_arg);
+        if (r < 0) {
+          break;
+        }
+      }
+    }
+    m_diff_context.throttle.end_op(r);
   }
 
 private:
@@ -183,7 +119,7 @@ private:
   librados::snap_set_t m_snap_set;
   int m_snap_ret;
 
-  void compute_diffs(DiffContext::Diffs *diffs) {
+  void compute_diffs(Diffs *diffs) {
     CephContext *cct = m_image_ctx.cct;
 
     // calc diff from from_snap_id -> to_snap_id
@@ -236,7 +172,7 @@ private:
     }
   }
 
-  void compute_parent_overlap(DiffContext::Diffs *diffs) {
+  void compute_parent_overlap(Diffs *diffs) {
     if (m_diff_context.from_snap_id == 0 &&
         !m_diff_context.parent_diff.empty()) {
       // report parent diff instead
@@ -379,9 +315,8 @@ int DiffIterate::execute() {
                                                      p->second);
         diff_object->send();
 
-        r = diff_context.invoke_callback();
-        if (r < 0) {
-          diff_context.wait_for_ret();
+        if (diff_context.throttle.pending_error()) {
+          r = diff_context.throttle.wait_for_ret();
           return r;
         }
       }
@@ -391,13 +326,11 @@ int DiffIterate::execute() {
     off += read_len;
   }
 
-  r = diff_context.wait_for_ret();
+  r = diff_context.throttle.wait_for_ret();
   if (r < 0) {
     return r;
   }
-
-  r = diff_context.invoke_callback();
-  return r;
+  return 0;
 }
 
 int DiffIterate::diff_object_map(uint64_t from_snap_id, uint64_t to_snap_id,
