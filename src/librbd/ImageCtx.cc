@@ -798,7 +798,7 @@ public:
     ldout(cct, 10) << "canceling async requests: count="
                    << async_requests.size() << dendl;
 
-    for (xlist<AsyncRequest*>::iterator it = async_requests.begin();
+    for (xlist<AsyncRequest<>*>::iterator it = async_requests.begin();
          !it.end(); ++it) {
       ldout(cct, 10) << "canceling async request: " << *it << dendl;
       (*it)->cancel();
