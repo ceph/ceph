@@ -140,9 +140,8 @@ int rgw_mkdir(const struct rgw_file_handle *parent_handle,
 /*
   rename object
 */
-int rgw_rename(const struct rgw_file_handle* parent_handle,
-	       const char* old_name,
-	       const char* new_name)
+int rgw_rename(struct rgw_file_handle *olddir, const char* old_name,
+	       struct rgw_file_handle *newdir, const char* new_name)
 {
   return 0;
 }
