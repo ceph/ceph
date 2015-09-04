@@ -1365,9 +1365,9 @@ Options
 
 	Name of the Ceph cluster.
 
-.. option:: --admin-daemon ADMIN_SOCKET
+.. option:: daemon ADMIN_SOCKET, daemon DAEMON_NAME, --admin-socket ADMIN_SOCKET, --admin-socket DAEMON_NAME
 
-	Submit admin-socket commands.
+	Submit admin-socket commands via admin sockets in /var/run/ceph.
 
 .. option:: --admin-socket ADMIN_SOCKET_NOPE
 
