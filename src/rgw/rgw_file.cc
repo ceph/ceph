@@ -90,29 +90,63 @@ int rgw_statfs(const struct rgw_file_handle *parent_handle,
 }
 
 /*
-  create a new dirctory
+  generic create
 */
-int rgw_create_directory(const struct rgw_file_handle* parent_handle,
-			 const char* name)
+int rgw_create(const struct rgw_file_handle *parent_handle,
+	       const char *name, mode_t mode, struct stat *st,
+	       struct rgw_file_handle *handle)
 {
+  string uri;
+  int rc;
+
+  rc = librgw.get_uri(parent_handle->handle, uri);
+  if (rc < 0 ) { /* invalid parent */
+    return rc;
+  }
+
+  uri += "\\";
+  uri += name;
+
+  /* TODO: implement */
+
+  return rgw_get_handle(uri.c_str(), handle);
+}
+
+/*
+  create a new directory
+*/
+int rgw_mkdir(const struct rgw_file_handle *parent_handle,
+	      const char *name, mode_t mode, struct stat *st,
+	      struct rgw_file_handle *handle)
+{
+  string uri;
+  int rc;
+
+  rc = librgw.get_uri(parent_handle->handle, uri);
+  if (rc < 0 ) { /* invalid parent */
+    return rc;
+  }
+
+  /* cannot create a bucket in a bucket */
+  if (! is_root(uri)) {
+    return EINVAL;
+  }
+
+  /* TODO: implement */
+
   return 0;
 }
 
 /*
-  create a new file
+  rename object
 */
-int rgw_create_file(const struct rgw_file_handle* parent_handle,
-		    const char* name)
-{
-  return 0;
-}
-
 int rgw_rename(const struct rgw_file_handle* parent_handle,
 	       const char* old_name,
 	       const char* new_name)
 {
   return 0;
 }
+
 /*
   remove file or directory
 */
@@ -166,6 +200,16 @@ int rgw_getattr(const struct rgw_file_handle *handle, struct stat *st)
     return rc;
   }
 
+  return 0;
+}
+
+/*
+  set unix attributes for object
+*/
+int rgw_setattr(const struct rgw_file_handle *handle, struct stat *st,
+		uint32_t mask)
+{
+  /* XXX no-op */
   return 0;
 }
 
