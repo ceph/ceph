@@ -88,8 +88,8 @@ int rgw_mkdir(const struct rgw_file_handle *parent_handle,
 /*
   rename object
 */
-int rgw_rename(const struct rgw_file_handle *parent_handle,
-	       const char* old_name, const char* new_name);
+int rgw_rename(struct rgw_file_handle *olddir, const char* old_name,
+	       struct rgw_file_handle *newdir, const char* new_name);
 
 /*
   remove file or directory
@@ -110,12 +110,14 @@ typedef bool (*rgw_readdir_cb)(const char *name, void *arg, uint64_t offset);
 int rgw_readdir(const struct rgw_file_handle *parent_handle, uint64_t *offset,
 		rgw_readdir_cb cb, void *cb_arg, bool *eof);
 
-int rgw_set_attributes(const struct rgw_file_handle *handle);
-
-int rgw_get_attributes(const struct rgw_file_handle *handle);
-
+/*
+   get unix attributes for object
+*/
 int rgw_getattr(const struct rgw_file_handle *handle, struct stat *st);
 
+/*
+   set unix attributes for object
+*/
 int rgw_setattr(const struct rgw_file_handle *handle, struct stat *st,
 		uint32_t mask);
 
