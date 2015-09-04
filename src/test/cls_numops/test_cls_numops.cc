@@ -77,7 +77,7 @@ TEST(ClsNumOps, Add) {
 
   ASSERT_EQ(0, ioctx.omap_get_vals_by_keys("myobject", keys, &omap));
 
-  omap.find(key);
+  it = omap.find(key);
 
   ASSERT_NE(omap.end(), it);
 
@@ -166,7 +166,7 @@ TEST(ClsNumOps, Sub) {
 
   ASSERT_EQ(0, ioctx.omap_get_vals_by_keys("myobject", keys, &omap));
 
-  omap.find(key);
+  it = omap.find(key);
 
   ASSERT_NE(omap.end(), it);
 
@@ -269,7 +269,7 @@ TEST(ClsNumOps, Mul) {
 
   ASSERT_EQ(0, ioctx.omap_get_vals_by_keys("myobject", keys, &omap));
 
-  omap.find(key);
+  it = omap.find(key);
 
   ASSERT_NE(omap.end(), it);
 
@@ -370,7 +370,7 @@ TEST(ClsNumOps, Div) {
 
   ASSERT_EQ(0, ioctx.omap_get_vals_by_keys("myobject", keys, &omap));
 
-  omap.find(key);
+  it = omap.find(key);
 
   ASSERT_NE(omap.end(), it);
 
