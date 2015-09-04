@@ -2316,6 +2316,26 @@ void ReplicatedPG::kick_proxy_ops_blocked(hobject_t& soid)
   in_progress_proxy_ops.erase(p);
 }
 
+void ReplicatedPG::requeue_proxy_ops(hobject_t& soid)
+{
+  map<hobject_t, list<OpRequestRef>, hobject_t::BitwiseComparator>::iterator p = in_progress_proxy_ops.find(soid);
+  if (p == in_progress_proxy_ops.end())
+    return;
+
+  list<OpRequestRef> ls = p->second;
+  for (list<OpRequestRef>::iterator it = ls.begin(); it != ls.end(); ++it) {
+    MOSDOp *m = static_cast<MOSDOp*>((*it)->get_req());
+    for (uint32_t i = 0; i < m->ops.size(); i++) {
+      // in order not to race with ops's outdate used by inflight proxy ops,
+      // we should alloc new buffer for requeue_ops
+      bufferlist bl;
+      m->ops[i].outdata = bl;
+    }
+  }
+  dout(10) << __func__ << " " << soid << " requeuing " << ls.size() << " requests" << dendl;
+  requeue_ops(ls);
+}
+
 void ReplicatedPG::cancel_proxy_read(ProxyReadOpRef prdop)
 {
   dout(10) << __func__ << " " << prdop->soid << dendl;
@@ -2457,6 +2477,10 @@ void ReplicatedPG::finish_proxy_write(hobject_t oid, ceph_tid_t tid, int r)
     in_progress_proxy_ops.erase(oid);
   }
 
+  if (pwop->ctx->op->been_reply()) {
+    close_op_ctx(pwop->ctx, 0);
+    return;
+  }
   osd->logger->inc(l_osd_tier_proxy_write);
 
   MOSDOp *m = static_cast<MOSDOp*>(pwop->op->get_req());
@@ -6328,6 +6352,11 @@ void ReplicatedPG::finish_ctx(OpContext *ctx, int log_op_type, bool maintain_ssc
 
 void ReplicatedPG::complete_read_ctx(int result, OpContext *ctx)
 {
+  if (ctx->op->been_reply()) {
+    close_op_ctx(ctx, 0);
+    return;
+  }
+  ctx->op->set_reply();
   MOSDOp *m = static_cast<MOSDOp*>(ctx->op->get_req());
   assert(ctx->async_reads_complete());
 
@@ -6844,18 +6873,23 @@ void ReplicatedPG::process_copy_chunk(hobject_t oid, ceph_tid_t tid, int r)
 
   // cancel and requeue proxy ops on this object
   if (!r) {
-    kick_proxy_ops_blocked(cobc->obs.oi.soid);
-    for (map<ceph_tid_t, ProxyReadOpRef>::iterator it = proxyread_ops.begin();
-	it != proxyread_ops.end(); ++it) {
-      if (it->second->soid == cobc->obs.oi.soid) {
-	cancel_proxy_read(it->second);
+    if (g_conf->osd_tier_kick_read_after_promote) {
+      // cancel and requeue proxy ops on this object
+      kick_proxy_ops_blocked(cobc->obs.oi.soid);
+      for (map<ceph_tid_t, ProxyReadOpRef>::iterator it = proxyread_ops.begin();
+          it != proxyread_ops.end(); ++it) {
+        if (it->second->soid == cobc->obs.oi.soid) {
+          cancel_proxy_read(it->second);
+        }
       }
-    }
-    for (map<ceph_tid_t, ProxyWriteOpRef>::iterator it = proxywrite_ops.begin();
-	 it != proxywrite_ops.end(); ++it) {
-      if (it->second->soid == cobc->obs.oi.soid) {
-	cancel_proxy_write(it->second);
+      for (map<ceph_tid_t, ProxyWriteOpRef>::iterator it = proxywrite_ops.begin();
+           it != proxywrite_ops.end(); ++it) {
+        if (it->second->soid == cobc->obs.oi.soid) {
+          cancel_proxy_write(it->second);
+        }
       }
+    } else {
+      requeue_proxy_ops(cobc->obs.oi.soid);
     }
   }
 

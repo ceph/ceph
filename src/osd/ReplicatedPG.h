@@ -197,7 +197,7 @@ public:
     OpRequestRef op;
     hobject_t soid;
     ceph_tid_t objecter_tid;
-    vector<OSDOp> &ops;
+    vector<OSDOp> ops;
     version_t user_version;
     int data_offset;
     bool canceled;              ///< true if canceled
@@ -1403,6 +1403,7 @@ protected:
 
   void do_proxy_read(OpRequestRef op);
   void finish_proxy_read(hobject_t oid, ceph_tid_t tid, int r);
+  void requeue_proxy_ops(hobject_t& soid);
   void cancel_proxy_read(ProxyReadOpRef prdop);
 
   friend struct C_ProxyRead;
