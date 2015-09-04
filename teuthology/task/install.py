@@ -12,6 +12,7 @@ from teuthology import misc as teuthology
 from teuthology import contextutil, packaging
 from teuthology.parallel import parallel
 from ..orchestra import run
+from . import ansible
 
 log = logging.getLogger(__name__)
 
@@ -714,7 +715,7 @@ def rh_install(ctx, config):
     :param config: the config dict
     """
     version = config['rhbuild']
-    rh_versions = ['1.3.0']
+    rh_versions = ['1.3.0', '1.3.1']
     if version in rh_versions:
         log.info("%s is a supported version", version)
     else:
@@ -758,7 +759,7 @@ def rh_install_pkgs(ctx, remote, installed_version):
     :param remote: the teuthology.orchestra.remote.Remote object
     """
     pkgs = ['ceph-deploy']
-    rh_version_check = {'0.94.1': '1.3.0'}
+    rh_version_check = {'0.94.1': '1.3.0', '0.94.2': '1.3.1'}
     for pkg in pkgs:
         log.info("Check if ceph-deploy is already installed on node %s", remote.shortname)
         remote.run(args=['sudo', 'yum', 'clean', 'metadata'])
@@ -1143,7 +1144,12 @@ def task(ctx, config):
         branch: foo
         extra_packages: ['samba']
     - install:
-        rhbuild: 1.2.3
+        rhbuild: 1.3.0 
+        playbook: downstream_setup.yml
+        vars:
+           yum_repos:
+             - url: "http://location.repo"
+               name: "ceph_repo"
 
     Overrides are project specific:
 
@@ -1162,11 +1168,6 @@ def task(ctx, config):
     assert isinstance(config, dict), \
         "task install only supports a dictionary for configuration"
 
-    rhbuild = None
-    if config.get('rhbuild'):
-        rhbuild = config.get('rhbuild')
-        log.info("Build is %s " % rhbuild)
-
     project, = config.get('project', 'ceph'),
     log.debug('project %s' % project)
     overrides = ctx.config.get('overrides')
@@ -1175,17 +1176,26 @@ def task(ctx, config):
         teuthology.deep_merge(config, install_overrides.get(project, {}))
     log.debug('config %s' % config)
 
+    rhbuild = None
+    if config.get('rhbuild'):
+        rhbuild = config.get('rhbuild')
+        log.info("Build is %s " % rhbuild)
+
     flavor = get_flavor(config)
     log.info("Using flavor: %s", flavor)
 
     ctx.summary['flavor'] = flavor
+    nested_tasks = [lambda: rh_install(ctx=ctx, config=config),
+                    lambda: ship_utilities(ctx=ctx, config=None)]
 
     if config.get('rhbuild'):
-        with contextutil.nested(
-            lambda: rh_install(ctx=ctx, config=config),
-            lambda: ship_utilities(ctx=ctx, config=None)
-        ):
-            yield
+        if config.get('playbook'):
+            ansible_config=dict(config)
+            # remove key not required by ansible task
+            del ansible_config['rhbuild']
+            nested_tasks.insert(0, lambda: ansible.CephLab(ctx,config=ansible_config))
+        with contextutil.nested(*nested_tasks):
+                yield
     else:
         with contextutil.nested(
             lambda: install(ctx=ctx, config=dict(
