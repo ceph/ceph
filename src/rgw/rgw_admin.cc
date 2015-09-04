@@ -126,6 +126,7 @@ void _usage()
   cout << "   --access=<access>         Set access permissions for sub-user, should be one\n";
   cout << "                             of read, write, readwrite, full\n";
   cout << "   --display-name=<name>\n";
+  cout << "   --max_buckets             max number of buckets for a user\n";
   cout << "   --system                  set the system flag on the user\n";
   cout << "   --bucket=<bucket>\n";
   cout << "   --pool=<pool>\n";
