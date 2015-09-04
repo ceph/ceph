@@ -219,9 +219,6 @@ Group:		System Environment/Libraries
 License:	LGPL-2.0
 Requires:	librados2 = %{version}-%{release}
 Requires:	librbd1 = %{version}-%{release}
-%if 0%{defined suse_version}
-%py_requires
-%endif
 %description -n python-ceph
 This package contains Python libraries for interacting with Cephs RADOS
 object storage.
