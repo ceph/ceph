@@ -187,6 +187,13 @@ function test_tiering()
   ceph osd pool delete cache cache --yes-i-really-really-mean-it
   ceph osd pool delete cache2 cache2 --yes-i-really-really-mean-it
 
+  # make sure we can't create an ec pool tier
+  ceph osd pool create eccache 2 2 erasure
+  ceph osd pool create repbase 2
+  expect_false ceph osd tier add repbase eccache
+  ceph osd pool delete repbase repbase --yes-i-really-really-mean-it
+  ceph osd pool delete eccache eccache --yes-i-really-really-mean-it
+
   # convenient add-cache command
   ceph osd pool create cache3 2
   ceph osd tier add-cache data cache3 1024000
