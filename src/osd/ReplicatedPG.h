@@ -221,7 +221,7 @@ public:
     bool sent_ack;
     utime_t mtime;
     bool canceled;
-    osd_reqid_t &reqid;
+    osd_reqid_t reqid;
 
     ProxyWriteOp(OpRequestRef _op, hobject_t oid, vector<OSDOp>& _ops, osd_reqid_t _reqid)
       : ctx(NULL), op(_op), soid(oid),
