@@ -1511,7 +1511,7 @@ int MemStore::PageSetObject::clone(Object *src, uint64_t srcoff,
   const int64_t delta = dstoff - srcoff;
 
   auto &src_data = static_cast<PageSetObject*>(src)->data;
-  const auto src_page_size = src_data.get_page_size();
+  const uint64_t src_page_size = src_data.get_page_size();
 
   auto &dst_data = data;
   const auto dst_page_size = dst_data.get_page_size();
