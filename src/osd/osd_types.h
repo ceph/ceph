@@ -533,7 +533,7 @@ public:
   }
 
   explicit coll_t(spg_t pgid)
-    : type(TYPE_PG), pgid(pgid)
+    : type(TYPE_PG), pgid(pgid), removal_seq(0)
   {
     calc_str();
   }
