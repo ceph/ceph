@@ -6599,8 +6599,8 @@ done:
       goto reply;
     }
 
-    int8_t fast_read_param;
-    cmd_getval(g_ceph_context, cmdmap, "fast_read", fast_read_param, int8_t(-1));
+    int64_t fast_read_param;
+    cmd_getval(g_ceph_context, cmdmap, "fast_read", fast_read_param, int64_t(-1));
     FastReadType fast_read = FAST_READ_DEFAULT;
     if (fast_read_param == 0)
       fast_read = FAST_READ_OFF;
