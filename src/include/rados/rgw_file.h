@@ -14,6 +14,7 @@
 #ifndef RGW_FILE_H
 #define RGW_FILE_H
 
+#include <sys/types.h>
 #include <stdint.h>
 
 #ifdef __cplusplus
@@ -69,20 +70,23 @@ int rgw_mount(const char *uid, const char *key, const char *secret,
 int rgw_statfs(const struct rgw_file_handle *parent_handle,
 	       struct rgw_statvfs *vfs_st);
 
-/*
-  create a new dirctory
-*/
-int rgw_create_directory(const struct rgw_file_handle *parent_handle,
-			 const char *name);
 
 /*
-  create a new file
+  create file
 */
-int rgw_create_file(const struct rgw_file_handle *parent_handle,
-		    const char* name);
+int rgw_create(const struct rgw_file_handle *parent_handle,
+	       const char *name, mode_t mode, struct stat *st,
+	       struct rgw_file_handle *handle);
 
 /*
-  move/rename a new file
+  create a new directory
+*/
+int rgw_mkdir(const struct rgw_file_handle *parent_handle,
+	      const char *name, mode_t mode, struct stat *st,
+	      struct rgw_file_handle *handle);
+
+/*
+  rename object
 */
 int rgw_rename(const struct rgw_file_handle *parent_handle,
 	       const char* old_name, const char* new_name);
@@ -111,6 +115,9 @@ int rgw_set_attributes(const struct rgw_file_handle *handle);
 int rgw_get_attributes(const struct rgw_file_handle *handle);
 
 int rgw_getattr(const struct rgw_file_handle *handle, struct stat *st);
+
+int rgw_setattr(const struct rgw_file_handle *handle, struct stat *st,
+		uint32_t mask);
 
 int rgw_open(const struct rgw_file_handle *handle);
 
