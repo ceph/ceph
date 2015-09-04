@@ -212,6 +212,9 @@ FUSE based client to map Ceph rbd images to files
 Summary:	Rados REST gateway
 Group:		Development/Libraries
 Requires:	ceph-common = %{epoch}:%{version}-%{release}
+%if 0%{with selinux}
+Requires:	ceph-selinux = %{epoch}:%{version}-%{release}
+%endif
 Requires:	librados2 = %{epoch}:%{version}-%{release}
 %if 0%{defined suse_version}
 BuildRequires:	libexpat-devel
