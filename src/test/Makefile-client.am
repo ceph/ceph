@@ -321,7 +321,8 @@ librbd_test_la_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 noinst_LTLIBRARIES += librbd_test.la
 
 unittest_librbd_SOURCES = \
-        test/librbd/test_main.cc
+        test/librbd/test_main.cc \
+	test/librbd/test_mock_fixture.cc
 unittest_librbd_CXXFLAGS = $(UNITTEST_CXXFLAGS) -DTEST_LIBRBD_INTERNALS
 unittest_librbd_LDADD = \
 	librbd_test.la librbd_api.la librbd_internal.la $(LIBRBD_TYPES) \
@@ -350,6 +351,15 @@ ceph_test_librbd_api_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 ceph_test_librbd_api_LDADD = \
 	$(LIBRBD) $(LIBRADOS) $(LIBCOMMON) $(UNITTEST_LDADD) $(RADOS_TEST_LDADD)
 bin_DEBUGPROGRAMS += ceph_test_librbd_api
+
+noinst_HEADERS += \
+	test/librbd/test_fixture.h \
+	test/librbd/test_mock_fixture.h \
+	test/librbd/test_support.h \
+	test/librbd/mock/MockContextWQ.h \
+	test/librbd/mock/MockImageCtx.h \
+	test/librbd/mock/MockImageWatcher.h \
+	test/librbd/mock/MockObjectMap.h
 
 if WITH_LTTNG
 unittest_librbd_LDADD += $(LIBRBD_TP)
