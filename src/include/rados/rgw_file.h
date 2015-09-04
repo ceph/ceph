@@ -16,6 +16,7 @@
 
 #include <sys/types.h>
 #include <stdint.h>
+#include <stdbool.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -108,7 +109,7 @@ int rgw_lookup(const struct rgw_file_handle *parent_handle, const char *path,
 typedef bool (*rgw_readdir_cb)(const char *name, void *arg, uint64_t offset);
 
 int rgw_readdir(const struct rgw_file_handle *parent_handle, uint64_t *offset,
-		rgw_readdir_cb rcb, void *cb_arg, int *eof);
+		rgw_readdir_cb rcb, void *cb_arg, bool *eof);
 
 /* XXX (get|set)attr mask bits */
 #define RGW_SETATTR_MODE   1
