@@ -297,6 +297,9 @@ void set_req_state_err(struct req_state *s, int err_no)
   if (r) {
     s->err.http_ret = r->http_ret;
     s->err.s3_code = r->s3_code;
+    if (r->s3_err_message){
+  	  s->err.message = r->s3_err_message;
+    }
     return;
   }
   dout(0) << "WARNING: set_req_state_err err_no=" << err_no << " resorting to 500" << dendl;
@@ -547,6 +550,8 @@ void end_header(struct req_state *s, RGWOp *op, const char *content_type, const 
       s->formatter->dump_string("Code", s->err.s3_code);
     if (!s->err.message.empty())
       s->formatter->dump_string("Message", s->err.message);
+    if (!s->trans_id.empty())
+      s->formatter->dump_string("RequestId", s->trans_id);
     s->formatter->close_section();
     dump_content_length(s, s->formatter->get_len());
   } else {
