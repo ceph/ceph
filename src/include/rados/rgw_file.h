@@ -88,8 +88,8 @@ int rgw_mkdir(const struct rgw_file_handle *parent_handle,
 /*
   rename object
 */
-int rgw_rename(struct rgw_file_handle *olddir, const char* old_name,
-	       struct rgw_file_handle *newdir, const char* new_name);
+int rgw_rename(const struct rgw_file_handle *olddir, const char* old_name,
+	       const struct rgw_file_handle *newdir, const char* new_name);
 
 /*
   remove file or directory
@@ -108,7 +108,16 @@ int rgw_lookup(const struct rgw_file_handle *parent_handle, const char *path,
 typedef bool (*rgw_readdir_cb)(const char *name, void *arg, uint64_t offset);
 
 int rgw_readdir(const struct rgw_file_handle *parent_handle, uint64_t *offset,
-		rgw_readdir_cb cb, void *cb_arg, bool *eof);
+		rgw_readdir_cb rcb, void *cb_arg, int *eof);
+
+/* XXX (get|set)attr mask bits */
+#define RGW_SETATTR_MODE   1
+#define RGW_SETATTR_UID    2
+#define RGW_SETATTR_GID    4
+#define RGW_SETATTR_MTIME  8
+#define RGW_SETATTR_ATIME 16
+#define RGW_SETATTR_SIZE  32
+#define RGW_SETATTR_CTIME 64
 
 /*
    get unix attributes for object
@@ -121,13 +130,37 @@ int rgw_getattr(const struct rgw_file_handle *handle, struct stat *st);
 int rgw_setattr(const struct rgw_file_handle *handle, struct stat *st,
 		uint32_t mask);
 
-int rgw_open(const struct rgw_file_handle *handle);
+/*
+   truncate file
+*/
+int rgw_truncate(const struct rgw_file_handle *handle, uint64_t size);
 
-int rgw_close(const struct rgw_file_handle *handle);
+/*
+   open file
+*/
+int rgw_open(const struct rgw_file_handle *handle, uint32_t flags);
 
-int rgwf_read(const struct rgw_file_handle *handle);
+/*
+   close file
+*/
+int rgw_close(const struct rgw_file_handle *handle, uint32_t flags);
 
-int rgwf_write(const struct rgw_file_handle *handle);
+/*
+   read data from file
+*/
+int rgw_read(const struct rgw_file_handle *handle, uint64_t offset,
+	     size_t length, void *buffer);
+
+/*
+   write data to file
+*/
+int rgw_write(const struct rgw_file_handle *handle, uint64_t offset,
+	      size_t length, void *buffer);
+
+/*
+   sync written data
+*/
+int rgw_fsync(const struct rgw_file_handle *handle);
 
 int set_user_permissions(const char *uid);
 
@@ -141,9 +174,9 @@ int set_file_permissions(const struct rgw_file_handle *handle);
 
 int get_file_permissions(const struct rgw_file_handle *handle);
 
-int rgwf_acl2perm();
+int rgw_acl2perm();
 
-int rgwf_perm2acl();
+int rgw_perm2acl();
 
 #ifdef __cplusplus
 }

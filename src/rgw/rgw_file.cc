@@ -50,6 +50,9 @@ int rgw_check_handle(const struct rgw_file_handle* handle)
   return librgw.check_handle(handle->handle);
 }
 
+/* librgw */
+extern "C" {
+
 int rgw_mount(const char* uid, const char* key, const char* _secret,
 	      struct rgw_file_handle* handle)
 {
@@ -140,8 +143,8 @@ int rgw_mkdir(const struct rgw_file_handle *parent_handle,
 /*
   rename object
 */
-int rgw_rename(struct rgw_file_handle *olddir, const char* old_name,
-	       struct rgw_file_handle *newdir, const char* new_name)
+int rgw_rename(const struct rgw_file_handle *olddir, const char* old_name,
+	       const struct rgw_file_handle *newdir, const char* new_name)
 {
   return 0;
 }
@@ -213,6 +216,30 @@ int rgw_setattr(const struct rgw_file_handle *handle, struct stat *st,
 }
 
 /*
+   truncate file
+*/
+int rgw_truncate(const struct rgw_file_handle *handle, uint64_t size)
+{
+  return 0;
+}
+
+/*
+   open file
+*/
+int rgw_open(const struct rgw_file_handle *handle, uint32_t flags)
+{
+  return 0;
+}
+
+/*
+   close file
+*/
+int rgw_close(const struct rgw_file_handle *handle, uint32_t flags)
+{
+  return 0;
+}
+
+/*
   read directory content
 */
 int rgw_readdir(const struct rgw_file_handle *parent_handle, uint64_t *offset,
@@ -247,3 +274,31 @@ int rgw_readdir(const struct rgw_file_handle *parent_handle, uint64_t *offset,
 
   return 0;
 }
+
+/*
+   read data from file
+*/
+int rgw_read(const struct rgw_file_handle *handle, uint64_t offset,
+	     size_t length, void *buffer)
+{
+  return 0;
+}
+
+/*
+   write data to file
+*/
+int rgw_write(const struct rgw_file_handle *handle, uint64_t offset,
+	      size_t length, void *buffer)
+{
+  return 0;
+}
+
+/*
+   sync written data
+*/
+int rgw_fsync(const struct rgw_file_handle *handle)
+{
+  return 0;
+}
+
+} /* extern "C" */
