@@ -3951,8 +3951,8 @@ void OSDService::send_message_osd_cluster(int peer, Message *m, epoch_t from_epo
     return;
   }
   const entity_inst_t& peer_inst = next_osdmap->get_cluster_inst(peer);
-  Connection *peer_con = osd->cluster_messenger->get_connection(peer_inst).get();
-  osd->_share_map_outgoing(peer, peer_con, next_osdmap);
+  ConnectionRef peer_con = osd->cluster_messenger->get_connection(peer_inst);
+  osd->_share_map_outgoing(peer, peer_con.get(), next_osdmap);
   osd->cluster_messenger->send_message(m, peer_inst);
 }
 
