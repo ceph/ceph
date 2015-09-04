@@ -42,7 +42,7 @@ setup(
                       'configobj',
                       'six',
                       'httplib2',
-                      'paramiko < 1.8',
+                      'paramiko >= 1.15.1',
                       'pexpect',
                       'requests >= 2.3.0',
                       'raven',
