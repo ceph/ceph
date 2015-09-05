@@ -129,7 +129,7 @@ def download(ctx, config):
         if not branch:
             ceph_branch = ctx.config.get('branch')
             suite_branch = ctx.config.get('suite_branch', ceph_branch)
-            branch = cconf.get('branch', suite_branch)
+            branch = cconf.get('branch', 'ceph-' + suite_branch)
         if not branch:
             raise ValueError(
                 "Could not determine what branch to use for s3tests!")
