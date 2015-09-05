@@ -245,7 +245,7 @@ void ghobject_t::decode(json_spirit::Value& v)
     if (p.name_ == "generation")
       generation = p.value_.get_uint64();
     else if (p.name_ == "shard_id")
-      shard_id = p.value_.get_int();
+      shard_id = shard_id_t (p.value_.get_int());
   }
 }
 
@@ -254,7 +254,7 @@ void ghobject_t::dump(Formatter *f) const
   hobj.dump(f);
   if (generation != NO_GEN)
     f->dump_int("generation", generation);
-  if (shard_id != ghobject_t::NO_SHARD)
+  if (shard_id != shard_id_t::NO_SHARD)
     f->dump_int("shard_id", shard_id);
 }
 
