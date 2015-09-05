@@ -289,10 +289,11 @@ void RGWOp_MDLog_Notify::execute() {
     return;
   }
 
-  list<int> updated_shards;
-  try {
-#warning FIXME
-  } catch (buffer::error& err) {
+  set<int> updated_shards;
+  decode_json_obj(updated_shards, &p);
+
+  for (set<int>::iterator iter = updated_shards.begin(); iter != updated_shards.end(); ++iter) {
+    ldout(s->cct, 0) << __func__ << "(): updated shard=" << *iter << dendl;
   }
 
   http_ret = 0;
