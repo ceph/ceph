@@ -226,4 +226,88 @@ int RGWRESTReadResource::wait(T *dest)
   }
   return 0;
 }
+
+class RGWRESTPostResource : public RefCountedObject {
+  CephContext *cct;
+  RGWRESTConn *conn;
+  string resource;
+  list<pair<string, string> > params;
+  map<string, string> headers;
+  bufferlist bl;
+  RGWStreamIntoBufferlist cb;
+
+  RGWHTTPManager *mgr;
+  RGWRESTStreamRWRequest req;
+
+public:
+  RGWRESTPostResource(RGWRESTConn *_conn,
+		      const string& _resource,
+		      const rgw_http_param_pair *pp,
+		      list<pair<string, string> > *extra_headers,
+		      RGWHTTPManager *_mgr);
+
+  void set_user_info(void *user_info) {
+    req.set_user_info(user_info);
+  }
+  void *get_user_info() {
+    return req.get_user_info();
+  }
+
+  template <class T>
+  int decode_resource(T *dest);
+
+  int send(bufferlist& bl);
+
+  int aio_send(bufferlist& bl);
+
+  string to_str() {
+    return req.to_str();
+  }
+
+  int get_http_status() {
+    return req.get_http_status();
+  }
+
+  int wait_bl(bufferlist *pbl) {
+    if (req.get_status() < 0) {
+      return req.get_status();
+    }
+    *pbl = bl;
+    return 0;
+  }
+
+  template <class T>
+  int wait(T *dest);
+};
+
+template <class T>
+int RGWRESTPostResource::decode_resource(T *dest)
+{
+  int ret = req.get_status();
+  if (ret < 0) {
+    return ret;
+  }
+  ret = parse_decode_json(cct, *dest, bl);
+  if (ret < 0) {
+    return ret;
+  }
+  return 0;
+}
+
+template <class T>
+int RGWRESTPostResource::wait(T *dest)
+{
+  int ret = req.wait();
+  put();
+  if (ret < 0) {
+    return ret;
+  }
+
+  ret = decode_resource(dest);
+  if (ret < 0) {
+    return ret;
+  }
+  return 0;
+}
+
 #endif
