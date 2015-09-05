@@ -539,7 +539,7 @@ int RGWRESTStreamWriteRequest::complete(string& etag, time_t *mtime)
   return status;
 }
 
-int RGWRESTStreamReadRequest::get_obj(RGWAccessKey& key, map<string, string>& extra_headers, rgw_obj& obj)
+int RGWRESTStreamRWRequest::get_obj(RGWAccessKey& key, map<string, string>& extra_headers, rgw_obj& obj)
 {
   string urlsafe_bucket, urlsafe_object;
   url_encode(obj.bucket.name, urlsafe_bucket);
@@ -549,7 +549,7 @@ int RGWRESTStreamReadRequest::get_obj(RGWAccessKey& key, map<string, string>& ex
   return get_resource(key, extra_headers, resource);
 }
 
-int RGWRESTStreamReadRequest::get_resource(RGWAccessKey& key, map<string, string>& extra_headers, const string& resource, RGWHTTPManager *mgr)
+int RGWRESTStreamRWRequest::get_resource(RGWAccessKey& key, map<string, string>& extra_headers, const string& resource, RGWHTTPManager *mgr)
 {
   string new_url = url;
   if (new_url[new_url.size() - 1] != '/')
@@ -581,7 +581,7 @@ int RGWRESTStreamReadRequest::get_resource(RGWAccessKey& key, map<string, string
     new_env.set(iter->first.c_str(), iter->second.c_str());
   }
 
-  new_info.method = "GET";
+  new_info.method = method;
 
   new_info.script_uri = "/";
   new_info.script_uri.append(new_resource);
@@ -619,7 +619,7 @@ int RGWRESTStreamReadRequest::get_resource(RGWAccessKey& key, map<string, string
   return 0;
 }
 
-int RGWRESTStreamReadRequest::complete(string& etag, time_t *mtime, map<string, string>& attrs)
+int RGWRESTStreamRWRequest::complete(string& etag, time_t *mtime, map<string, string>& attrs)
 {
   set_str_from_headers(out_headers, "ETAG", etag);
   if (mtime) {
@@ -660,7 +660,7 @@ int RGWRESTStreamReadRequest::complete(string& etag, time_t *mtime, map<string, 
   return status;
 }
 
-int RGWRESTStreamReadRequest::handle_header(const string& name, const string& val)
+int RGWRESTStreamRWRequest::handle_header(const string& name, const string& val)
 {
   if (name == "RGWX_EMBEDDED_METADATA_LEN") {
     string err;
@@ -675,7 +675,7 @@ int RGWRESTStreamReadRequest::handle_header(const string& name, const string& va
   return 0;
 }
 
-int RGWRESTStreamReadRequest::receive_data(void *ptr, size_t len)
+int RGWRESTStreamRWRequest::receive_data(void *ptr, size_t len)
 {
   bufferptr bp((const char *)ptr, len);
   bufferlist bl;
@@ -687,10 +687,18 @@ int RGWRESTStreamReadRequest::receive_data(void *ptr, size_t len)
   return len;
 }
 
-int RGWRESTStreamReadRequest::send_data(void *ptr, size_t len)
+int RGWRESTStreamRWRequest::send_data(void *ptr, size_t len)
 {
-  /* not sending any data */
-  return 0;
+  if (outbl.length() == 0) {
+    return 0;
+  }
+
+  uint64_t send_size = min(len, outbl.length() - write_ofs);
+  if (send_size > 0) {
+    memcpy(ptr, outbl.c_str() + write_ofs, send_size);
+    write_ofs += send_size;
+  }
+  return send_size;
 }
 
 class StreamIntoBufferlist : public RGWGetDataCB {
@@ -703,68 +711,3 @@ public:
   }
 };
 
-#if 0
-struct RGWRESTRequestParams {
-  string resource;
-  list<pair<string, string> > *params;
-  map<string, string> *headers;
-
-  RGWRESTRequestParams() : params(NULL), headers(NULL) {}
-};
-
-
-class RGWRESTBufferReadRequest {
-  RGWRESTConn *conn;
-  RGWRESTRequestParams *params;
-  bufferlist bl;
-  StreamIntoBufferlist cb;
-  RGWRESTStreamReadRequest req;
-
-  list<pair<string, string> > http_params;
-  map<string, string> http_headers;
-public:
-  RGWRESTBufferReadRequest(RGWRESTConn *_conn,
-			   RGWRESTRequestParams *_params,
-			   RGWHTTPManager *mgr = NULL) : conn(_conn), params(_params), cb(bl) {
-    if (params->params) {
-      list<pair<string, string> >::iterator iter = params->params->begin();
-      for (; iter != params->params->end(); ++iter) {
-        http_params.push_back(*iter);
-      }
-    }
-    http_params.push_back(pair<string, string>(RGW_SYS_PARAM_PREFIX "region", conn->get_region()));
-
-    if (params->headers) {
-      for (map<string, string>::iterator iter = params->headers->begin();
-	   iter != params->headers->end(); ++iter) {
-        http_headers[iter->first] = iter->second;
-      }
-    }
-  }
-
-
-  int get();
-};
-
-int RGWRESTBufferReadRequest::get()
-{
-  string url;
-  int ret = conn->get_url(url);
-  if (ret < 0)
-    return ret;
-
-  req.init(cct, url, &cb, NULL, &http_params);
-
-  ret = req.get_resource(key, http_headers, resource, mgr);
-  if (ret < 0) {
-    ldout(cct, 0) << __func__ << ": get() resource=" << resource << " returned ret=" << ret << dendl;
-    return ret;
-  }
-
-  string etag;
-  map<string, string> attrs;
-  return req.complete(etag, NULL, attrs);
-}
-
-
-#endif
