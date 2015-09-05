@@ -84,29 +84,44 @@ public:
   RGWGetDataCB *get_out_cb() { return cb; }
 };
 
-class RGWRESTStreamReadRequest : public RGWRESTSimpleRequest {
+class RGWRESTStreamRWRequest : public RGWRESTSimpleRequest {
   Mutex lock;
   RGWGetDataCB *cb;
+  bufferlist outbl;
   bufferlist in_data;
   size_t chunk_ofs;
   size_t ofs;
   RGWHTTPManager http_manager;
+  const char *method;
+  uint64_t write_ofs;
 protected:
   int handle_header(const string& name, const string& val);
 public:
   int send_data(void *ptr, size_t len);
   int receive_data(void *ptr, size_t len);
 
-  RGWRESTStreamReadRequest(CephContext *_cct, const string& _url, RGWGetDataCB *_cb, list<pair<string, string> > *_headers,
+  RGWRESTStreamRWRequest(CephContext *_cct, const char *_method, const string& _url, RGWGetDataCB *_cb,
+	        list<pair<string, string> > *_headers,
                 list<pair<string, string> > *_params) : RGWRESTSimpleRequest(_cct, _url, _headers, _params),
                 lock("RGWRESTStreamReadRequest"), cb(_cb),
-                chunk_ofs(0), ofs(0), http_manager(_cct) {}
-  ~RGWRESTStreamReadRequest() {}
+                chunk_ofs(0), ofs(0), http_manager(_cct), method(_method), write_ofs(0) {
+  }
+  virtual ~RGWRESTStreamRWRequest() {}
   int get_obj(RGWAccessKey& key, map<string, string>& extra_headers, rgw_obj& obj);
   int get_resource(RGWAccessKey& key, map<string, string>& extra_headers, const string& resource, RGWHTTPManager *mgr = NULL);
   int complete(string& etag, time_t *mtime, map<string, string>& attrs);
 
+  void set_outbl(bufferlist& _outbl) {
+    outbl.swap(_outbl);
+  }
+
   void set_in_cb(RGWGetDataCB *_cb) { cb = _cb; }
+};
+
+class RGWRESTStreamReadRequest : public RGWRESTStreamRWRequest {
+public:
+  RGWRESTStreamReadRequest(CephContext *_cct, const string& _url, RGWGetDataCB *_cb, list<pair<string, string> > *_headers,
+                list<pair<string, string> > *_params) : RGWRESTStreamRWRequest(_cct, "GET", _url, _cb, _headers, _params) {}
 };
 
 #endif
