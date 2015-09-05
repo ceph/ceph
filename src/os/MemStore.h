@@ -124,10 +124,11 @@ public:
   struct PageSetObject : public Object {
     PageSet data;
     uint64_t data_len;
-
+#if defined(__GLIBCXX__)
     // use a thread-local vector for the pages returned by PageSet, so we
     // can avoid allocations in read/write()
     static thread_local PageSet::page_vector tls_pages;
+#endif
 
     PageSetObject(size_t page_size) : data(page_size), data_len(0) {}
 

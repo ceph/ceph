@@ -1426,9 +1426,14 @@ int MemStore::BufferlistObject::truncate(uint64_t size)
 
 // PageSetObject
 
+#if defined(__GLIBCXX__)
 // use a thread-local vector for the pages returned by PageSet, so we
 // can avoid allocations in read/write()
 thread_local PageSet::page_vector MemStore::PageSetObject::tls_pages;
+#define DEFINE_PAGE_VECTOR(name)
+#else
+#define DEFINE_PAGE_VECTOR(name) PageSet::page_vector name;
+#endif
 
 int MemStore::PageSetObject::read(uint64_t offset, uint64_t len, bufferlist& bl)
 {
@@ -1436,6 +1441,7 @@ int MemStore::PageSetObject::read(uint64_t offset, uint64_t len, bufferlist& bl)
   const auto end = offset + len;
   auto remaining = len;
 
+  DEFINE_PAGE_VECTOR(tls_pages);
   data.get_range(offset, len, tls_pages);
 
   // allocate a buffer for the data
@@ -1482,6 +1488,7 @@ int MemStore::PageSetObject::write(uint64_t offset, const bufferlist &src)
 {
   unsigned len = src.length();
 
+  DEFINE_PAGE_VECTOR(tls_pages);
   // make sure the page range is allocated
   data.alloc_range(offset, src.length(), tls_pages);
 
@@ -1516,10 +1523,11 @@ int MemStore::PageSetObject::clone(Object *src, uint64_t srcoff,
   auto &dst_data = data;
   const auto dst_page_size = dst_data.get_page_size();
 
+  DEFINE_PAGE_VECTOR(tls_pages);
   PageSet::page_vector dst_pages;
 
   while (len) {
-    const auto count = std::min(len, src_page_size * 16);
+    const auto count = std::min(len, (uint64_t)src_page_size * 16);
     src_data.get_range(srcoff, count, tls_pages);
 
     for (auto &src_page : tls_pages) {
@@ -1560,6 +1568,7 @@ int MemStore::PageSetObject::truncate(uint64_t size)
   if (page_offset == size)
     return 0;
 
+  DEFINE_PAGE_VECTOR(tls_pages);
   // write zeroes to the rest of the last page
   data.get_range(page_offset, page_size, tls_pages);
   if (tls_pages.empty())
