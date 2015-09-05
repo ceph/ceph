@@ -36,6 +36,8 @@
 
 #include "rgw_tools.h"
 
+#include "rgw_coroutine.h"
+
 #include "common/Clock.h"
 
 #include "include/rados/librados.hpp"
@@ -1945,6 +1947,93 @@ void RGWObjectCtx::set_prefetch_data(rgw_obj& obj) {
   }
 }
 
+template <class S, class T>
+class RGWPostRESTResourceCR : public RGWSimpleCoroutine {
+  RGWRESTConn *conn;
+  RGWHTTPManager *http_manager;
+  string path;
+  rgw_http_param_pair *params;
+  T *result;
+  S input;
+
+  RGWRESTPostResource *http_op;
+
+public:
+  RGWPostRESTResourceCR(CephContext *_cct, RGWRESTConn *_conn, RGWHTTPManager *_http_manager,
+			const string& _path, rgw_http_param_pair *_params, S& _input,
+			T *_result) : RGWSimpleCoroutine(_cct), conn(_conn), http_manager(_http_manager),
+                                      path(_path), params(_params), result(_result), input(_input), http_op(NULL) {}
+
+  int send_request() {
+    http_op = new RGWRESTPostResource(conn, path, params, NULL, http_manager);
+
+    http_op->set_user_info((void *)stack);
+
+    JSONFormatter jf;
+    encode_json("data", input, &jf);
+    std::stringstream ss;
+    jf.flush(ss);
+    bufferlist bl;
+    bl.append(ss.str());
+
+    int ret = http_op->aio_send(bl);
+    if (ret < 0) {
+      ldout(cct, 0) << "ERROR: failed to send post request" << dendl;
+      http_op->put();
+      return ret;
+    }
+    return 0;
+  }
+
+  int request_complete() {
+    int ret;
+    if (result) {
+      ret = http_op->wait(result);
+    } else {
+      bufferlist bl;
+      ret = http_op->wait_bl(&bl);
+    }
+    http_op->put();
+    if (ret < 0) {
+      error_stream << "http operation failed: " << http_op->to_str() << " status=" << http_op->get_http_status() << std::endl;
+      ldout(cct, 0) << "ERROR: failed to wait for op, ret=" << ret << ": " << http_op->to_str() << dendl;
+      return ret;
+    }
+    return 0;
+  }
+};
+
+class RGWMetaNotifierManager : public RGWCoroutinesManager {
+  RGWRados *store;
+  RGWHTTPManager http_manager;
+
+public:
+  RGWMetaNotifierManager(RGWRados *_store) : RGWCoroutinesManager(_store->ctx()), store(_store),
+                                             http_manager(store->ctx(), &completion_mgr) {
+    http_manager.set_threaded();
+  }
+
+  int notify_all(map<string, RGWRESTConn *>& conn_map, set<int>& shards) {
+    rgw_http_param_pair pairs[] = { { "type", "metadata" },
+                                    { "notify", NULL },
+                                    { NULL, NULL } };
+
+    list<RGWCoroutinesStack *> stacks;
+    for (map<string, RGWRESTConn *>::iterator iter = conn_map.begin(); iter != conn_map.end(); ++iter) {
+      RGWRESTConn *conn = iter->second;
+      RGWCoroutinesStack *stack = new RGWCoroutinesStack(store->ctx(), this);
+      int r = stack->call(new RGWPostRESTResourceCR<set<int>, int>(store->ctx(), conn, &http_manager, "/admin/log", pairs, shards, NULL));
+      if (r < 0) {
+	ldout(store->ctx(), 0) << "ERROR: failed sending mdlog notification POST to " << iter->first << dendl;
+      }
+
+      stacks.push_back(stack);
+    }
+    return run(stacks);
+  }
+};
+
+
 class RGWMetaNotifier {
   CephContext *cct;
   RGWRados *store;
@@ -1963,8 +2052,9 @@ class RGWMetaNotifier {
   };
 
   WMWorker *worker;
+  RGWMetaNotifierManager notify_mgr;
 public:
-  RGWMetaNotifier(RGWRados *_store) : cct(_store->ctx()), store(_store), worker(NULL) {}
+  RGWMetaNotifier(RGWRados *_store) : cct(_store->ctx()), store(_store), worker(NULL), notify_mgr(_store) {}
   ~RGWMetaNotifier() {
     stop();
   }
@@ -2043,9 +2133,20 @@ int RGWMetaNotifier::process()
 
   log->read_clear_modified(&shards);
 
+  if (shards.empty()) {
+    return 0;
+  }
+
   for (set<int>::iterator iter = shards.begin(); iter != shards.end(); ++iter) {
     ldout(cct, 20) << __func__ << "(): notifying mdlog change, shard_id=" << *iter << dendl;
   }
+
+  for (map<string, RGWRESTConn *>::iterator iter = store->zone_conn_map.begin();
+       iter != store->zone_conn_map.end(); ++iter) {
+    RGWRESTConn *conn = iter->second;
+  }
+
+  notify_mgr.notify_all(store->zone_conn_map, shards);
 
   return 0;
 }
