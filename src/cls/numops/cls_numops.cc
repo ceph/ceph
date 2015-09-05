@@ -20,7 +20,7 @@
  */
 
 #include "objclass/objclass.h"
-#include <asm-generic/errno.h>
+#include <errno.h>
 #include <iostream>
 #include <map>
 #include <string>
