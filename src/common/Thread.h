@@ -29,8 +29,8 @@ class Thread {
   void *entry_wrapper();
 
  public:
-  explicit Thread(const Thread& other);
-  const Thread& operator=(const Thread& other);
+  Thread(const Thread&) = delete;
+  Thread& operator=(const Thread&) = delete;
 
   Thread();
   virtual ~Thread();
