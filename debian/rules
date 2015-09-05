@@ -129,6 +129,34 @@ binary-arch: build install
 	mv debian/ceph/etc/init/ceph-mds* debian/ceph-mds/etc/init
 	install -d -m0755 debian/radosgw/etc/init
 	install -m0644 src/upstart/radosgw*.conf debian/radosgw/etc/init
+	# install the systemd stuff manually since we have funny service names
+	install -d -m0755 debian/ceph-common/lib/systemd/system
+	install -m0644 systemd/ceph.target debian/ceph-common/lib/systemd/system
+	install -d -m0755 debian/ceph-common/etc/default/ceph
+	install -m0644 etc/default/ceph debian/ceph-common/etc/default/ceph
+	install -d -m0755 debian/ceph-common/lib/tmpfiles.d
+	install -m 0644 -D systemd/ceph.tmpfiles.d debian/ceph-common/lib/tmpfiles.d/ceph.conf
+
+	install -d -m0755 debian/ceph/lib/systemd/system
+	install -m0644 systemd/ceph-mon@.service debian/ceph/lib/systemd/system
+	install -m0644 systemd/ceph-create-keys@.service debian/ceph/lib/systemd/system
+	install -m0644 systemd/ceph-osd@.service debian/ceph/lib/systemd/system
+	install -m0644 systemd/ceph-disk@.service debian/ceph/lib/systemd/system
+	sed -i s./etc/sysconfig/./etc/default/.g debian/ceph/lib/systemd/system/ceph-mon@.service
+	sed -i s./etc/sysconfig/./etc/default/.g debian/ceph/lib/systemd/system/ceph-create-keys@.service
+	sed -i s./etc/sysconfig/./etc/default/.g debian/ceph/lib/systemd/system/ceph-osd@.service
+	sed -i s./etc/sysconfig/./etc/default/.g debian/ceph/lib/systemd/system/ceph-disk@.service
+
+	install -d -m0755 debian/ceph-mds/lib/systemd/system
+	install -m0644 systemd/ceph-mds@.service debian/ceph-mds/lib/systemd/system
+	sed -i s./etc/sysconfig/./etc/default/.g debian/ceph-mds/lib/systemd/system/ceph-mds@.service
+
+	install -d -m0755 debian/radosgw/lib/systemd/system
+	install -m0644 systemd/ceph-radosgw@.service debian/radosgw/lib/systemd/system
+	sed -i s./etc/sysconfig/./etc/default/.g debian/radosgw/lib/systemd/system/ceph-radosgw@.service
+	install -d -m0755 debian/radosgw/lib/tmpfiles.d
+	install -m 0644 -D systemd/ceph-rgw.tmpfiles.d debian/radosgw/lib/tmpfiles.d/ceph-rgw.conf
+
 	dh_installman -a
 	dh_lintian -a
 	dh_link -a
