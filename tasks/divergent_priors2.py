@@ -186,7 +186,7 @@ def task(ctx, config):
     log.info('reading divergent objects')
     for i in range(DIVERGENT_WRITE + DIVERGENT_REMOVE):
         exit_status = rados(ctx, mon, ['-p', 'foo', 'get', 'existing_%d' % i,
-                            '-o', '/tmp/existing'])
+                                       '/tmp/existing'])
         assert exit_status is 0
 
     (remote,) = ctx.\
