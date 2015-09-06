@@ -52,7 +52,8 @@ Journaler::Journaler(librados::IoCtx &header_ioctx,
   m_cct = reinterpret_cast<CephContext *>(m_header_ioctx.cct());
 
   m_header_oid = JOURNAL_HEADER_PREFIX + journal_id;
-  m_object_oid_prefix = JOURNAL_OBJECT_PREFIX + journal_id + ".";
+  m_object_oid_prefix = JOURNAL_OBJECT_PREFIX +
+    stringify(m_header_ioctx.get_id()) + "." + journal_id + ".";
 
   m_metadata = new JournalMetadata(m_header_ioctx, m_header_oid, m_client_id,
                                    commit_interval);
