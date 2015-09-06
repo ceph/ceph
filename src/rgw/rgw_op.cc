@@ -1477,6 +1477,7 @@ void RGWCreateBucket::execute()
     attrs[RGW_ATTR_CORS] = corsbl;
   }
   s->bucket.name = s->bucket_name_str;
+  s->bucket.tenant = s->tenant;
   ret = store->create_bucket(s->user, s->bucket, region_name, placement_rule, attrs, info, pobjv,
                              &ep_objv, creation_time, pmaster_bucket, true);
   /* continue if EEXIST and create_bucket will fail below.  this way we can recover
