@@ -7,6 +7,7 @@
 #include "include/Context.h"
 #include "include/rados/librados.hpp"
 #include "include/xlist.h"
+#include "include/compat.h"
 
 namespace librbd {
 

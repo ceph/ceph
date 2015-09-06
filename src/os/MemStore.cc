@@ -27,6 +27,7 @@
 #include "include/memory.h"
 #include "common/errno.h"
 #include "MemStore.h"
+#include "include/compat.h"
 
 #define dout_subsys ceph_subsys_filestore
 #undef dout_prefix
