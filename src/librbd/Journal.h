@@ -43,7 +43,8 @@ public:
 
   static bool is_journal_supported(ImageCtx &image_ctx);
   static int create(librados::IoCtx &io_ctx, const std::string &image_id,
-		    double commit_age, uint8_t order, uint8_t splay_width);
+		    double commit_age, uint8_t order, uint8_t splay_width,
+		    const std::string &object_pool);
   static int remove(librados::IoCtx &io_ctx, const std::string &image_id);
 
   bool is_journal_ready() const;
