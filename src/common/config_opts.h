@@ -1009,6 +1009,7 @@ OPTION(rbd_journal_commit_age, OPT_DOUBLE, 5) // commit time interval, seconds
 OPTION(rbd_journal_object_flush_interval, OPT_INT, 0) // maximum number of pending commits per journal object
 OPTION(rbd_journal_object_flush_bytes, OPT_INT, 0) // maximum number of pending bytes per journal object
 OPTION(rbd_journal_object_flush_age, OPT_DOUBLE, 0) // maximum age (in seconds) for pending commits
+OPTION(rbd_journal_object_pool, OPT_STR, "") // pool for journal objects
 
 OPTION(nss_db_path, OPT_STR, "") // path to nss db
 

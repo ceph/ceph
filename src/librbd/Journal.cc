@@ -91,13 +91,28 @@ bool Journal::is_journal_supported(ImageCtx &image_ctx) {
 }
 
 int Journal::create(librados::IoCtx &io_ctx, const std::string &image_id,
-		    double commit_age, uint8_t order, uint8_t splay_width) {
+		    double commit_age, uint8_t order, uint8_t splay_width,
+		    const std::string &object_pool) {
   CephContext *cct = reinterpret_cast<CephContext *>(io_ctx.cct());
   ldout(cct, 5) << __func__ << ": image=" << image_id << dendl;
 
-  ::journal::Journaler journaler(io_ctx, io_ctx, image_id, "", commit_age);
+  int64_t pool_id = -1;
+  if (!object_pool.empty()) {
+    librados::Rados rados(io_ctx);
+    IoCtx data_io_ctx;
+    int r = rados.ioctx_create(object_pool.c_str(), data_io_ctx);
+    if (r != 0) {
+      lderr(cct) << "failed to create journal: "
+		 << "error opening journal objects pool '" << object_pool
+		 << "': " << cpp_strerror(r) << dendl;
+      return r;
+    }
+    pool_id = data_io_ctx.get_id();
+  }
 
-  int r = journaler.create(order, splay_width);
+  ::journal::Journaler journaler(io_ctx, image_id, "", commit_age);
+
+  int r = journaler.create(order, splay_width, pool_id);
   if (r < 0) {
     lderr(cct) << "failed to create journal: " << cpp_strerror(r) << dendl;
     return r;
@@ -115,8 +130,9 @@ int Journal::remove(librados::IoCtx &io_ctx, const std::string &image_id) {
   CephContext *cct = reinterpret_cast<CephContext *>(io_ctx.cct());
   ldout(cct, 5) << __func__ << ": image=" << image_id << dendl;
 
-  ::journal::Journaler journaler(io_ctx, io_ctx, image_id, "",
+  ::journal::Journaler journaler(io_ctx, image_id, "",
 				 cct->_conf->rbd_journal_commit_age);
+
   C_SaferCond cond;
   journaler.init(&cond);
 
@@ -391,10 +407,8 @@ void Journal::create_journaler() {
   assert(m_state == STATE_UNINITIALIZED);
   assert(m_journaler == NULL);
 
-  // TODO allow alternate pool for journal objects
   m_close_pending = false;
-  m_journaler = new ::journal::Journaler(m_image_ctx.md_ctx, m_image_ctx.md_ctx,
-					 m_image_ctx.id, "",
+  m_journaler = new ::journal::Journaler(m_image_ctx.md_ctx, m_image_ctx.id, "",
 					 m_image_ctx.journal_commit_age);
 
   m_journaler->init(new C_InitJournal(this));

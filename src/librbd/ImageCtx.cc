@@ -986,6 +986,7 @@ struct C_InvalidateCache : public Context {
     ASSIGN_OPTION(journal_object_flush_interval);
     ASSIGN_OPTION(journal_object_flush_bytes);
     ASSIGN_OPTION(journal_object_flush_age);
+    ASSIGN_OPTION(journal_object_pool);
   }
 
   void ImageCtx::open_journal() {

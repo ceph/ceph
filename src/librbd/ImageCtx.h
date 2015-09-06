@@ -174,6 +174,7 @@ namespace librbd {
     int journal_object_flush_interval;
     uint64_t journal_object_flush_bytes;
     double journal_object_flush_age;
+    std::string journal_object_pool;
     static bool _filter_metadata_confs(const string &prefix, std::map<string, bool> &configs,
                                        map<string, bufferlist> &pairs, map<string, bufferlist> *res);
 

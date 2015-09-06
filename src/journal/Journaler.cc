@@ -42,14 +42,13 @@ struct C_DeleteRecorder : public Context {
 
 using namespace cls::journal;
 
-Journaler::Journaler(librados::IoCtx &header_ioctx, librados::IoCtx &data_ioctx,
-                     const std::string &journal_id,
+Journaler::Journaler(librados::IoCtx &header_ioctx,
+		     const std::string &journal_id,
 		     const std::string &client_id, double commit_interval)
   : m_client_id(client_id), m_metadata(NULL), m_player(NULL), m_recorder(NULL),
     m_trimmer(NULL)
 {
   m_header_ioctx.dup(header_ioctx);
-  m_data_ioctx.dup(data_ioctx);
   m_cct = reinterpret_cast<CephContext *>(m_header_ioctx.cct());
 
   m_header_oid = JOURNAL_HEADER_PREFIX + journal_id;
@@ -58,9 +57,6 @@ Journaler::Journaler(librados::IoCtx &header_ioctx, librados::IoCtx &data_ioctx,
   m_metadata = new JournalMetadata(m_header_ioctx, m_header_oid, m_client_id,
                                    commit_interval);
   m_metadata->get();
-
-  m_trimmer = new JournalTrimmer(m_header_ioctx, m_object_oid_prefix,
-                                 m_metadata);
 }
 
 Journaler::~Journaler() {
@@ -74,10 +70,34 @@ Journaler::~Journaler() {
 }
 
 void Journaler::init(Context *on_init) {
-  m_metadata->init(on_init);
+  m_metadata->init(new C_InitJournaler(this, on_init));
 }
 
-int Journaler::create(uint8_t order, uint8_t splay_width) {
+int Journaler::init_complete() {
+  int64_t pool_id = m_metadata->get_pool_id();
+
+  if (pool_id < 0 || pool_id == m_header_ioctx.get_id()) {
+    ldout(m_cct, 20) << "using image pool for journal data" << dendl;
+    m_data_ioctx.dup(m_header_ioctx);
+  } else {
+    ldout(m_cct, 20) << "using pool id=" << pool_id << " for journal data"
+		     << dendl;
+    librados::Rados rados(m_header_ioctx);
+    int r = rados.ioctx_create2(pool_id, m_data_ioctx);
+    if (r < 0) {
+      if (r == -ENOENT) {
+	ldout(m_cct, 1) << "pool id=" << pool_id << " no longer exists"
+			<< dendl;
+      }
+      return r;
+    }
+  }
+  m_trimmer = new JournalTrimmer(m_data_ioctx, m_object_oid_prefix,
+                                 m_metadata);
+  return 0;
+}
+
+int Journaler::create(uint8_t order, uint8_t splay_width, int64_t pool_id) {
   if (order > 64 || order < 12) {
     lderr(m_cct) << "order must be in the range [12, 64]" << dendl;
     return -EDOM;
@@ -87,7 +107,8 @@ int Journaler::create(uint8_t order, uint8_t splay_width) {
   }
 
   ldout(m_cct, 5) << "creating new journal: " << m_header_oid << dendl;
-  int r = client::create(m_header_ioctx, m_header_oid, order, splay_width);
+  int r = client::create(m_header_ioctx, m_header_oid, order, splay_width,
+			 pool_id);
   if (r < 0) {
     lderr(m_cct) << "failed to create journal: " << cpp_strerror(r) << dendl;
     return r;
