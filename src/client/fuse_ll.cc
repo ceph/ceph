@@ -14,6 +14,8 @@
 
 #define FUSE_USE_VERSION 30
 
+#include <sys/types.h>
+#include <sys/wait.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
