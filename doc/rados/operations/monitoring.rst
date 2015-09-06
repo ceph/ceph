@@ -272,8 +272,8 @@ following command::
 
 For example, the following are equivalent::
 
-        ceph daemon osd.0 foo
-	ceph daemon /var/run/ceph/ceph-osd.0.asok foo
+    ceph daemon osd.0 foo
+    ceph daemon /var/run/ceph/ceph-osd.0.asok foo
 
 To view the available admin socket commands, execute the following command:: 
 
