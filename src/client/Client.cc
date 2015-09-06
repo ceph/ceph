@@ -112,6 +112,10 @@ using namespace std;
 
 #define  tout(cct)       if (!cct->_conf->client_trace.empty()) traceout
 
+// FreeBSD fails to define this
+#ifndef O_DSYNC
+#define O_DSYNC 0x0
+#endif
 // Darwin fails to define this
 #ifndef O_RSYNC
 #define O_RSYNC 0x0

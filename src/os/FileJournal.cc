@@ -35,6 +35,10 @@
 #include "common/blkdev.h"
 #include "common/linux_version.h"
 
+#if defined(__FreeBSD__)
+#define O_DSYNC O_SYNC
+#endif
+
 #define dout_subsys ceph_subsys_journal
 #undef dout_prefix
 #define dout_prefix *_dout << "journal "
