@@ -97,7 +97,7 @@ int TestIoCtxImpl::aio_operate(const std::string& oid, TestObjectOperationImpl &
   ops.get();
   m_client->add_aio_operation(oid, true, boost::bind(
     &TestIoCtxImpl::execute_aio_operations, this, oid, &ops,
-    reinterpret_cast<bufferlist*>(NULL),
+    reinterpret_cast<bufferlist*>(0),
     snap_context != NULL ? *snap_context : m_snapc), c);
   return 0;
 }
@@ -148,7 +148,7 @@ int TestIoCtxImpl::operate(const std::string& oid, TestObjectOperationImpl &ops)
   ops.get();
   m_client->add_aio_operation(oid, false, boost::bind(
     &TestIoCtxImpl::execute_aio_operations, this, oid, &ops,
-    reinterpret_cast<bufferlist*>(NULL), m_snapc), comp);
+    reinterpret_cast<bufferlist*>(0), m_snapc), comp);
 
   comp->wait_for_safe();
   int ret = comp->get_return_value();
