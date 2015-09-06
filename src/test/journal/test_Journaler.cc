@@ -20,8 +20,7 @@ public:
   virtual void SetUp() {
     RadosTestFixture::SetUp();
     m_journal_id = get_temp_journal_id();
-    m_journaler = new journal::Journaler(m_ioctx, m_ioctx, m_journal_id,
-                                         CLIENT_ID);
+    m_journaler = new journal::Journaler(m_ioctx, m_journal_id, CLIENT_ID);
   }
 
   virtual void TearDown() {
@@ -30,7 +29,7 @@ public:
   }
 
   int create_journal(uint8_t order, uint8_t splay_width) {
-    return m_journaler->create(order, splay_width);
+    return m_journaler->create(order, splay_width, -1);
   }
 
   int init_journaler() {
@@ -40,7 +39,7 @@ public:
   }
 
   int register_client(const std::string &client_id, const std::string &desc) {
-    journal::Journaler journaler(m_ioctx, m_ioctx, m_journal_id, client_id);
+    journal::Journaler journaler(m_ioctx, m_journal_id, client_id);
     return journaler.register_client(desc);
   }
 

@@ -23,8 +23,8 @@ JournalMetadata::JournalMetadata(librados::IoCtx &ioctx,
                                  double commit_interval)
     : RefCountedObject(NULL, 0), m_cct(NULL), m_oid(oid),
       m_client_id(client_id), m_commit_interval(commit_interval), m_order(0),
-      m_splay_width(0), m_initialized(false), m_finisher(NULL), m_timer(NULL),
-      m_timer_lock("JournalMetadata::m_timer_lock"),
+      m_splay_width(0), m_pool_id(-1), m_initialized(false), m_finisher(NULL),
+      m_timer(NULL), m_timer_lock("JournalMetadata::m_timer_lock"),
       m_lock("JournalMetadata::m_lock"), m_commit_tid(0), m_watch_ctx(this),
       m_watch_handle(0), m_minimum_set(0), m_active_set(0),
       m_update_notifications(0), m_commit_position_ctx(NULL),
@@ -59,7 +59,7 @@ void JournalMetadata::init(Context *on_init) {
 
   C_ImmutableMetadata *ctx = new C_ImmutableMetadata(this, on_init);
   client::get_immutable_metadata(m_ioctx, m_oid, &m_order, &m_splay_width,
-                                 ctx);
+                                 &m_pool_id, ctx);
 }
 
 void JournalMetadata::shutdown() {
@@ -479,6 +479,7 @@ std::ostream &operator<<(std::ostream &os,
      << "initialized=" << jm.m_initialized << ", "
      << "order=" << (int)jm.m_order << ", "
      << "splay_width=" << (int)jm.m_splay_width << ", "
+     << "pool_id=" << jm.m_pool_id << ", "
      << "minimum_set=" << jm.m_minimum_set << ", "
      << "active_set=" << jm.m_active_set << ", "
      << "client_id=" << jm.m_client_id << ", "

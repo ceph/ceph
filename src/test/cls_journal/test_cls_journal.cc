@@ -47,16 +47,19 @@ TEST_F(TestClsJournal, Create) {
 
   uint8_t order = 1;
   uint8_t splay_width = 2;
-  ASSERT_EQ(0, client::create(ioctx, oid, order, splay_width));
+  int64_t pool_id = ioctx.get_id();
+  ASSERT_EQ(0, client::create(ioctx, oid, order, splay_width, pool_id));
 
   uint8_t read_order;
   uint8_t read_splay_width;
+  int64_t read_pool_id;
   C_SaferCond cond;
   client::get_immutable_metadata(ioctx, oid, &read_order, &read_splay_width,
-                                 &cond);
+                                 &read_pool_id, &cond);
   ASSERT_EQ(0, cond.wait());
   ASSERT_EQ(order, read_order);
   ASSERT_EQ(splay_width, read_splay_width);
+  ASSERT_EQ(pool_id, read_pool_id);
 }
 
 TEST_F(TestClsJournal, MinimumSet) {
@@ -65,7 +68,7 @@ TEST_F(TestClsJournal, MinimumSet) {
 
   std::string oid = get_temp_image_name();
 
-  ASSERT_EQ(0, client::create(ioctx, oid, 2, 4));
+  ASSERT_EQ(0, client::create(ioctx, oid, 2, 4, ioctx.get_id()));
 
   librados::ObjectWriteOperation op1;
   client::set_active_set(&op1, 300);
@@ -92,7 +95,7 @@ TEST_F(TestClsJournal, MinimumSetStale) {
 
   std::string oid = get_temp_image_name();
 
-  ASSERT_EQ(0, client::create(ioctx, oid, 2, 4));
+  ASSERT_EQ(0, client::create(ioctx, oid, 2, 4, ioctx.get_id()));
 
   librados::ObjectWriteOperation op1;
   client::set_active_set(&op1, 300);
@@ -123,7 +126,7 @@ TEST_F(TestClsJournal, MinimumSetOrderConstraint) {
 
   std::string oid = get_temp_image_name();
 
-  ASSERT_EQ(0, client::create(ioctx, oid, 2, 4));
+  ASSERT_EQ(0, client::create(ioctx, oid, 2, 4, ioctx.get_id()));
 
   librados::ObjectWriteOperation op1;
   client::set_minimum_set(&op1, 123);
@@ -145,7 +148,7 @@ TEST_F(TestClsJournal, ActiveSet) {
 
   std::string oid = get_temp_image_name();
 
-  ASSERT_EQ(0, client::create(ioctx, oid, 2, 4));
+  ASSERT_EQ(0, client::create(ioctx, oid, 2, 4, ioctx.get_id()));
 
   uint64_t active_set = 234;
   librados::ObjectWriteOperation op1;
@@ -168,7 +171,7 @@ TEST_F(TestClsJournal, ActiveSetStale) {
 
   std::string oid = get_temp_image_name();
 
-  ASSERT_EQ(0, client::create(ioctx, oid, 2, 4));
+  ASSERT_EQ(0, client::create(ioctx, oid, 2, 4, ioctx.get_id()));
 
   librados::ObjectWriteOperation op1;
   client::set_active_set(&op1, 345);
@@ -185,8 +188,8 @@ TEST_F(TestClsJournal, CreateDuplicate) {
 
   std::string oid = get_temp_image_name();
 
-  ASSERT_EQ(0, client::create(ioctx, oid, 2, 4));
-  ASSERT_EQ(-EEXIST, client::create(ioctx, oid, 3, 5));
+  ASSERT_EQ(0, client::create(ioctx, oid, 2, 4, ioctx.get_id()));
+  ASSERT_EQ(-EEXIST, client::create(ioctx, oid, 3, 5, ioctx.get_id()));
 }
 
 TEST_F(TestClsJournal, ClientRegister) {
@@ -241,7 +244,7 @@ TEST_F(TestClsJournal, ClientCommit) {
 
   std::string oid = get_temp_image_name();
 
-  ASSERT_EQ(0, client::create(ioctx, oid, 2, 2));
+  ASSERT_EQ(0, client::create(ioctx, oid, 2, 2, ioctx.get_id()));
   ASSERT_EQ(0, client::client_register(ioctx, oid, "id1", "desc1"));
 
   cls::journal::EntryPositions entry_positions;
@@ -269,7 +272,7 @@ TEST_F(TestClsJournal, ClientCommitInvalid) {
 
   std::string oid = get_temp_image_name();
 
-  ASSERT_EQ(0, client::create(ioctx, oid, 2, 2));
+  ASSERT_EQ(0, client::create(ioctx, oid, 2, 2, ioctx.get_id()));
   ASSERT_EQ(0, client::client_register(ioctx, oid, "id1", "desc1"));
 
   cls::journal::EntryPositions entry_positions;
@@ -304,7 +307,7 @@ TEST_F(TestClsJournal, ClientList) {
 
   std::string oid = get_temp_image_name();
 
-  ASSERT_EQ(0, client::create(ioctx, oid, 12, 5));
+  ASSERT_EQ(0, client::create(ioctx, oid, 12, 5, ioctx.get_id()));
 
   std::set<Client> expected_clients;
   librados::ObjectWriteOperation op1;
