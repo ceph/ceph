@@ -204,7 +204,6 @@ def build_ceph_cluster(ctx, config):
         mon_node = get_nodes_using_role(ctx, 'mon')
         mon_nodes = " ".join(mon_node)
         new_mon = './ceph-deploy new'+" "+mon_nodes
-        install_nodes = './ceph-deploy install ' + (ceph_branch if ceph_branch else "--dev=master") + " " + all_nodes
         mon_hostname = mon_nodes.split(' ')[0]
         mon_hostname = str(mon_hostname)
         gather_keys = './ceph-deploy gatherkeys'+" "+mon_hostname
@@ -234,9 +233,16 @@ def build_ceph_cluster(ctx, config):
                     teuthology.append_lines_to_file(ceph_admin, conf_path, lines,
                                                     sudo=True)
 
+        # install ceph
+        install_nodes = './ceph-deploy install ' + (ceph_branch if ceph_branch else "--dev=master") + " " + all_nodes
         estatus_install = execute_ceph_deploy(install_nodes)
         if estatus_install != 0:
             raise RuntimeError("ceph-deploy: Failed to install ceph")
+        # install ceph-test package too
+        install_nodes2 = './ceph-deploy install --tests ' + (ceph_branch if ceph_branch else "--dev=master") + " " + all_nodes
+        estatus_install = execute_ceph_deploy(install_nodes2)
+        if estatus_install != 0:
+            raise RuntimeError("ceph-deploy: Failed to install ceph-test")
 
         mon_create_nodes = './ceph-deploy mon create-initial'
         # If the following fails, it is OK, it might just be that the monitors
@@ -376,14 +382,18 @@ def build_ceph_cluster(ctx, config):
             return
         log.info('Stopping ceph...')
         ctx.cluster.run(args=['sudo', 'stop', 'ceph-all', run.Raw('||'),
-                              'sudo', 'service', 'ceph', 'stop' ])
+                              'sudo', 'service', 'ceph', 'stop', run.Raw('||'),
+                              'sudo', 'systemctl', 'stop', 'ceph.target'])
 
         # Are you really not running anymore?
         # try first with the init tooling
         # ignoring the status so this becomes informational only
-        ctx.cluster.run(args=['sudo', 'status', 'ceph-all', run.Raw('||'),
-                              'sudo', 'service',  'ceph', 'status'],
-                              check_status=False)
+        ctx.cluster.run(
+            args=[
+                'sudo', 'status', 'ceph-all', run.Raw('||'),
+                'sudo', 'service',  'ceph', 'status', run.Raw('||'),
+                'sudo', 'systemctl', 'status', 'ceph.target'],
+            check_status=False)
 
         # and now just check for the processes themselves, as if upstart/sysvinit
         # is lying to us. Ignore errors if the grep fails
@@ -555,11 +565,10 @@ def cli_test(ctx, config):
         yield
     finally:
         log.info("cleaning up")
-        if system_type == 'deb':
-            remote.run(args=['sudo', 'stop','ceph-all'],check_status=False)
-            remote.run(args=['sudo', 'service','ceph', '-a', 'stop'],check_status=False)
-        else:
-            remote.run(args=['sudo', '/etc/init.d/ceph', '-a', 'stop'],check_status=False)
+        ctx.cluster.run(args=['sudo', 'stop', 'ceph-all', run.Raw('||'),
+                              'sudo', 'service', 'ceph', 'stop', run.Raw('||'),
+                              'sudo', 'systemctl', 'stop', 'ceph.target'],
+                        check_status=False)
         time.sleep(4)
         for i in range(3):
             umount_dev = "{d}1".format(d=devs[i])
