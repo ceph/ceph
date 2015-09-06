@@ -29,6 +29,8 @@
 
 #include "global/global_context.h"
 
+#include "include/compat.h"
+
 
 using namespace rados::cls::lock;
 

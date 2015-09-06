@@ -20,8 +20,9 @@
 #if defined(__APPLE__)
 /* PATH_MAX */
 #include <limits.h>
+#endif /* __APPLE__ */
 
-/* O_LARGEFILE is not defined/required on OS X */
+/* O_LARGEFILE is not defined/required on OSX/FreeBSD */
 #ifndef O_LARGEFILE
 #define O_LARGEFILE 0
 #endif
@@ -30,7 +31,6 @@
 #ifndef ERESTART
 #define ERESTART EINTR
 #endif
-#endif /* __APPLE__ */
 
 #ifndef TEMP_FAILURE_RETRY
 #define TEMP_FAILURE_RETRY(expression) ({     \

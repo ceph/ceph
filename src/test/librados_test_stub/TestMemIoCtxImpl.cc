@@ -7,6 +7,7 @@
 #include <boost/algorithm/string/predicate.hpp>
 #include <boost/bind.hpp>
 #include <errno.h>
+#include <include/compat.h>
 
 static void to_vector(const interval_set<uint64_t> &set,
                       std::vector<std::pair<uint64_t, uint64_t> > *vec) {
