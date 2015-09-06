@@ -178,7 +178,7 @@ AsyncConnection::AsyncConnection(CephContext *cct, AsyncMessenger *m, EventCente
     write_lock("AsyncConnection::write_lock"), can_write(NOWRITE),
     open_write(false), keepalive(false), lock("AsyncConnection::lock"), recv_buf(NULL),
     recv_max_prefetch(MIN(msgr->cct->_conf->ms_tcp_prefetch_max_size, TCP_PREFETCH_MIN_SIZE)),
-    recv_start(0), recv_end(0), got_bad_auth(false), first_connect(false), authorizer(NULL), replacing(false),
+    recv_start(0), recv_end(0), got_bad_auth(false), authorizer(NULL), replacing(false),
     is_reset_from_peer(false), once_ready(false), state_buffer(NULL), state_offset(0), net(cct), center(c)
 {
   read_handler.reset(new C_handle_read(this));
@@ -971,8 +971,8 @@ int AsyncConnection::_process_connection()
         if (sd < 0) {
           goto fail;
         }
+
         center->create_file_event(sd, EVENT_READABLE, read_handler);
-        first_connect = true;
         state = STATE_CONNECTING_RE;
         break;
       }
@@ -981,14 +981,10 @@ int AsyncConnection::_process_connection()
       {
         r = net.reconnect(get_peer_addr(), sd);
         if (r < 0) {
-          if (first_connect == true) {
-            first_connect = false;
+          if (r == -EINPROGRESS || r == -EALREADY)
             break;
-          }
           goto fail;
         }
-
-        first_connect = false;
 
         net.set_socket_options(sd);
 
