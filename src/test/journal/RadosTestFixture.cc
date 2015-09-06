@@ -40,7 +40,7 @@ void RadosTestFixture::TearDown() {
 
 int RadosTestFixture::create(const std::string &oid, uint8_t order,
                              uint8_t splay_width) {
-  return cls::journal::client::create(m_ioctx, oid, order, splay_width);
+  return cls::journal::client::create(m_ioctx, oid, order, splay_width, -1);
 }
 
 int RadosTestFixture::append(const std::string &oid, const bufferlist &bl) {

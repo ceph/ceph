@@ -19,6 +19,7 @@ cls_handle_t h_class;
 cls_method_handle_t h_journal_create;
 cls_method_handle_t h_journal_get_order;
 cls_method_handle_t h_journal_get_splay_width;
+cls_method_handle_t h_journal_get_pool_id;
 cls_method_handle_t h_journal_get_minimum_set;
 cls_method_handle_t h_journal_set_minimum_set;
 cls_method_handle_t h_journal_get_active_set;
@@ -35,6 +36,7 @@ static const uint64_t MAX_KEYS_READ = 64;
 
 static const std::string HEADER_KEY_ORDER         = "order";
 static const std::string HEADER_KEY_SPLAY_WIDTH   = "splay_width";
+static const std::string HEADER_KEY_POOL_ID       = "pool_id";
 static const std::string HEADER_KEY_MINIMUM_SET   = "minimum_set";
 static const std::string HEADER_KEY_ACTIVE_SET    = "active_set";
 static const std::string HEADER_KEY_CLIENT_PREFIX = "client_";
@@ -88,10 +90,12 @@ int write_key(cls_method_context_t hctx, const string &key, const T &t) {
 int journal_create(cls_method_context_t hctx, bufferlist *in, bufferlist *out) {
   uint8_t order;
   uint8_t splay_width;
+  int64_t pool_id;
   try {
     bufferlist::iterator iter = in->begin();
     ::decode(order, iter);
     ::decode(splay_width, iter);
+    ::decode(pool_id, iter);
   } catch (const buffer::error &err) {
     CLS_ERR("failed to decode input parameters: %s", err.what());
     return -EINVAL;
@@ -110,6 +114,11 @@ int journal_create(cls_method_context_t hctx, bufferlist *in, bufferlist *out) {
   }
 
   r = write_key(hctx, HEADER_KEY_SPLAY_WIDTH, splay_width);
+  if (r < 0) {
+    return r;
+  }
+
+  r = write_key(hctx, HEADER_KEY_POOL_ID, pool_id);
   if (r < 0) {
     return r;
   }
@@ -164,6 +173,26 @@ int journal_get_splay_width(cls_method_context_t hctx, bufferlist *in,
   }
 
   ::encode(splay_width, *out);
+  return 0;
+}
+
+/**
+ * Input:
+ * none
+ *
+ * Output:
+ * pool_id (int64_t)
+ * @returns 0 on success, negative error code on failure
+ */
+int journal_get_pool_id(cls_method_context_t hctx, bufferlist *in,
+                            bufferlist *out) {
+  int64_t pool_id;
+  int r = read_key(hctx, HEADER_KEY_POOL_ID, &pool_id);
+  if (r < 0) {
+    return r;
+  }
+
+  ::encode(pool_id, *out);
   return 0;
 }
 
@@ -549,6 +578,9 @@ void CEPH_CLS_API __cls_init()
   cls_register_cxx_method(h_class, "get_splay_width",
                           CLS_METHOD_RD,
                           journal_get_splay_width, &h_journal_get_splay_width);
+  cls_register_cxx_method(h_class, "get_pool_id",
+                          CLS_METHOD_RD,
+                          journal_get_pool_id, &h_journal_get_pool_id);
   cls_register_cxx_method(h_class, "get_minimum_set",
                           CLS_METHOD_RD,
                           journal_get_minimum_set,

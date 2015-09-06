@@ -92,14 +92,15 @@ struct C_ClientList : public C_AioExec {
 struct C_ImmutableMetadata : public C_AioExec {
   uint8_t *order;
   uint8_t *splay_width;
+  int64_t *pool_id;
   Context *on_finish;
   bufferlist outbl;
 
   C_ImmutableMetadata(librados::IoCtx &_ioctx, const std::string &_oid,
                       uint8_t *_order, uint8_t *_splay_width,
-                      Context *_on_finish)
+		      int64_t *_pool_id, Context *_on_finish)
     : C_AioExec(_ioctx, _oid), order(_order), splay_width(_splay_width),
-      on_finish(_on_finish) {
+      pool_id(_pool_id), on_finish(_on_finish) {
   }
 
   void send() {
@@ -107,6 +108,7 @@ struct C_ImmutableMetadata : public C_AioExec {
     bufferlist inbl;
     op.exec("journal", "get_order", inbl);
     op.exec("journal", "get_splay_width", inbl);
+    op.exec("journal", "get_pool_id", inbl);
 
     librados::AioCompletion *rados_completion =
       librados::Rados::aio_create_completion(this, rados_callback, NULL);
@@ -121,6 +123,7 @@ struct C_ImmutableMetadata : public C_AioExec {
         bufferlist::iterator iter = outbl.begin();
         ::decode(*order, iter);
         ::decode(*splay_width, iter);
+        ::decode(*pool_id, iter);
       } catch (const buffer::error &err) {
         r = -EBADMSG;
       }
@@ -175,10 +178,11 @@ struct C_MutableMetadata : public C_AioExec {
 } // anonymous namespace
 
 int create(librados::IoCtx &ioctx, const std::string &oid, uint8_t order,
-           uint8_t splay) {
+           uint8_t splay, int64_t pool_id) {
   bufferlist inbl;
   ::encode(order, inbl);
   ::encode(splay, inbl);
+  ::encode(pool_id, inbl);
 
   bufferlist outbl;
   int r = ioctx.exec(oid, "journal", "create", inbl, outbl);
@@ -190,9 +194,9 @@ int create(librados::IoCtx &ioctx, const std::string &oid, uint8_t order,
 
 void get_immutable_metadata(librados::IoCtx &ioctx, const std::string &oid,
                             uint8_t *order, uint8_t *splay_width,
-                            Context *on_finish) {
+                            int64_t *pool_id, Context *on_finish) {
   C_ImmutableMetadata *metadata = new C_ImmutableMetadata(ioctx, oid, order,
-                                                          splay_width,
+                                                          splay_width, pool_id,
                                                           on_finish);
   metadata->send();
 }
