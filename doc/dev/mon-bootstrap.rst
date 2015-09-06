@@ -146,7 +146,7 @@ their own address).  For example::
 When these daemons are started, they will know their own address, but
 not their peers.  They can learn those addresses via the admin socket::
 
-     ceph mon.<id> add_bootstrap_peer_hint <peer ip>
+     ceph daemon mon.<id> add_bootstrap_peer_hint <peer ip>
 
 Once they learn enough of their peers from the initial member set,
 they will be able to create the cluster.
