@@ -5212,12 +5212,12 @@ void PG::handle_advance_map(
 	   << dendl;
   update_osdmap_ref(osdmap);
   pool.update(osdmap);
-  if (pool.info.last_change == osdmap_ref->get_epoch())
-    on_pool_change();
   AdvMap evt(
     osdmap, lastmap, newup, up_primary,
     newacting, acting_primary);
   recovery_state.handle_event(evt, rctx);
+  if (pool.info.last_change == osdmap_ref->get_epoch())
+    on_pool_change();
 }
 
 void PG::handle_activate_map(RecoveryCtx *rctx)
