@@ -23,10 +23,16 @@
 #include <fcntl.h>
 #include <sys/utsname.h>
 #include <sys/uio.h>
-#include <sys/xattr.h>
 
 #include <boost/lexical_cast.hpp>
 #include <boost/fusion/include/std_pair.hpp>
+
+#if defined(__FreeBSD__)
+#define XATTR_CREATE    0x1
+#define XATTR_REPLACE   0x2
+#else
+#include <sys/xattr.h>
+#endif
 
 #if defined(__linux__)
 #include <linux/falloc.h>
