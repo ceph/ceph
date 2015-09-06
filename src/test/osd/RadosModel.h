@@ -23,6 +23,7 @@
 #include "common/sharedptr_registry.hpp"
 #include "common/errno.h"
 #include "osd/HitSet.h"
+#include "json_spirit/json_spirit.h"
 
 #ifndef RADOSMODEL_H
 #define RADOSMODEL_H
@@ -188,6 +189,7 @@ public:
   bool pool_snaps;
   bool write_fadvise_dontneed;
   int snapname_num;
+  int64_t stripe_width;
 
   RadosTestContext(const string &pool_name, 
 		   int max_in_flight,
@@ -213,8 +215,109 @@ public:
     no_omap(no_omap),
     pool_snaps(pool_snaps),
     write_fadvise_dontneed(write_fadvise_dontneed),
-    snapname_num(0)
+    snapname_num(0),
+    stripe_width(0)
   {
+  }
+
+  bool is_ecpool(librados::Rados& cluster, string pool_name)
+  {
+    bufferlist inbl;
+    string cmd = string("{\"prefix\": \"osd pool ls\", \"detail\": \"detail\", \"format\": \"json\"}");
+    bufferlist outbl;
+    int r = cluster.mon_command(cmd, inbl, &outbl, NULL);
+    assert(r >= 0);
+    string outstr(outbl.c_str(), outbl.length());
+    json_spirit::Value v;
+    if (!json_spirit::read(outstr, v)) {
+      cerr <<" unable to parse json " << outstr << std::endl;
+      return false;
+    }
+  
+    json_spirit::Array& a = v.get_array();
+    for (json_spirit::Array::size_type i=0; i<a.size(); i++) {
+      string pn = "";
+      bool ecpool = false;
+      json_spirit::Object& o = a[i].get_obj();
+      for (json_spirit::Object::size_type i=0; i<o.size(); i++) {
+        json_spirit::Pair& p = o[i];
+        if (p.name_ == "pool_name") {
+          pn = p.value_.get_str();
+        } else if (p.name_ == "type" && p.value_.get_int64() == 3) {
+          // type is 3 means ec pool
+          ecpool = true;
+        }
+      }
+      cout << "pool_name= " << pn << " ecpool "<< ecpool << std::endl;
+      if (pn == pool_name) {
+        return ecpool;
+      }
+    }
+    return false;
+  }
+
+  int64_t tierpool_stripe_width(librados::Rados& cluster, string pool_name)
+  {
+     int64_t pool_id = cluster.pool_lookup(pool_name.c_str());
+     if (pool_id >= 0) {
+       int64_t base_tier;
+       int ret = cluster.pool_get_base_tier(pool_id, &base_tier);
+       if (ret == 0 && base_tier != pool_id && base_tier >= 0) {
+         string base_name;
+         ret = cluster.pool_reverse_lookup(base_tier, &base_name);
+         cout << "cache pool " << pool_name << "tier of " << base_name << std::endl;
+         if (ret == 0) {
+           bool ec_pool = is_ecpool(cluster, base_name);
+           if (ec_pool) {
+             return ecpool_stripe_width(cluster, base_name);
+           }
+         }
+       }
+     }
+     return 0;
+  }
+
+  int64_t ecpool_stripe_width(librados::Rados& cluster, string pool_nam)
+  {
+    bufferlist inbl;
+    string cmd = string("{\"prefix\": \"osd pool ls\", \"detail\": \"detail\", \"format\": \"json\"}");
+    bufferlist outbl;
+    int r = cluster.mon_command(cmd, inbl, &outbl, NULL);
+    assert(r >= 0);
+    string outstr(outbl.c_str(), outbl.length());
+    json_spirit::Value v;
+    if (!json_spirit::read(outstr, v)) {
+      cerr <<" unable to parse json " << outstr << std::endl;
+      return -1;
+    }
+  
+    json_spirit::Array& a = v.get_array();
+    for (json_spirit::Array::size_type i=0; i<a.size(); i++) {
+      string pn = "";
+      uint64_t stripe_width = 0;
+      json_spirit::Object& o = a[i].get_obj();
+      for (json_spirit::Object::size_type i=0; i<o.size(); i++) {
+        json_spirit::Pair& p = o[i];
+        if (p.name_ == "pool_name") {
+          pn = p.value_.get_str();
+        } else if (p.name_ == "stripe_width") {
+          stripe_width = p.value_.get_uint64();
+        }
+      }
+      cout << "pool_name= " << pn << " stripe_width "<< stripe_width << std::endl;
+      if (pn == pool_nam)
+        return stripe_width;
+    }
+    return -1;
+  }
+
+  int64_t get_stripe_width(librados::Rados& cluster, string pool_name)
+  {
+     bool ec_pool = is_ecpool(cluster, pool_name);
+     if (ec_pool) {
+       return ecpool_stripe_width(cluster, pool_name);
+     }
+     return tierpool_stripe_width(cluster, pool_name);
   }
 
   int init()
@@ -245,6 +348,12 @@ public:
       rados.shutdown();
       return r;
     }
+    // use the small reads which have a size and (offset % stripe_width) distributed randomly on 
+    // [0, stripe_width) . this would trigger fast read in ec pool. 
+    // we need to make sure the chunk overlap case is well handled in direct fast read in ec pool.
+    int64_t sw = get_stripe_width(rados, pool_name);
+    if (sw > 0)
+      stripe_width = sw;
     char hostname_cstr[100];
     gethostname(hostname_cstr, 100);
     stringstream hostpid;
@@ -994,6 +1103,7 @@ public:
   vector<int> retvals;
   vector<std::map<uint64_t, uint64_t>> extent_results;
   vector<bool> is_sparse_read;
+  vector<pair<uint64_t, uint64_t>> read_offset_len;
   uint64_t waiting_on;
 
   map<string, bufferlist> attrs;
@@ -1020,27 +1130,62 @@ public:
       retvals(3),
       extent_results(3),
       is_sparse_read(3, false),
+      read_offset_len(3, make_pair(0, 0)),
       waiting_on(0),
       attrretval(0)
   {}
 
-  void _do_read(librados::ObjectReadOperation& read_op, int index) {
+  void _do_read(librados::ObjectReadOperation& read_op, int index, int64_t stripe_width) {
     uint64_t len = 0;
     if (old_value.has_contents())
       len = old_value.most_recent_gen()->get_length(old_value.most_recent());
-    if (rand() % 2) {
-      is_sparse_read[index] = false;
-      read_op.read(0,
-		   len,
-		   &results[index],
-		   &retvals[index]);
+    if (stripe_width == 0) {
+      if (rand() % 2) {
+        is_sparse_read[index] = false;
+        read_offset_len[index] = make_pair(0, len);
+        read_op.read(0,
+          	   len,
+          	   &results[index],
+          	   &retvals[index]);
+      } else {
+        is_sparse_read[index] = true;
+        read_offset_len[index] = make_pair(0, len);
+        read_op.sparse_read(0,
+          		  len,
+          		  &extent_results[index],
+          		  &results[index],
+          		  &retvals[index]);
+      }
     } else {
-      is_sparse_read[index] = true;
-      read_op.sparse_read(0,
-			  len,
-			  &extent_results[index],
-			  &results[index],
-			  &retvals[index]);
+      if (rand() % 3 == 0) {
+        is_sparse_read[index] = false;
+        read_offset_len[index] = make_pair(0, len);
+        read_op.read(0,
+          	   len,
+          	   &results[index],
+          	   &retvals[index]);
+      } else if (rand() % 3 == 1){
+        is_sparse_read[index] = true;
+        read_offset_len[index] = make_pair(0, len);
+        read_op.sparse_read(0,
+          		  len,
+          		  &extent_results[index],
+          		  &results[index],
+          		  &retvals[index]);
+      } else {
+        uint64_t off = 0;
+        is_sparse_read[index] = false;
+        if (len)
+          off = rand() % len;
+        uint64_t left_len = len - off;
+        uint64_t r_len = rand() % stripe_width;
+        r_len = (r_len < left_len ? r_len : left_len);
+        read_offset_len[index] = make_pair(off, len);
+        read_op.read(off,
+          	   r_len,
+          	   &results[index],
+          	   &retvals[index]);
+      }
     }
   }
 
@@ -1089,7 +1234,7 @@ public:
     if (snap >= 0) {
       context->io_ctx.snap_set_read(context->snaps[snap]);
     }
-    _do_read(op, 0);
+    _do_read(op, 0, context->stripe_width);
     for (map<string, ContDesc>::iterator i = old_value.attrs.begin();
 	 i != old_value.attrs.end();
 	 ++i) {
@@ -1121,7 +1266,7 @@ public:
     // OSD's read behavior in some scenarios
     for (uint32_t i = 1; i < 3; ++i) {
       librados::ObjectReadOperation pipeline_op;
-      _do_read(pipeline_op, i);
+      _do_read(pipeline_op, i, context->stripe_width);
       assert(!context->io_ctx.aio_operate(context->prefix+oid, completions[i], &pipeline_op, 0));
       waiting_on++;
     }
@@ -1202,7 +1347,7 @@ public:
 	      context->errors++;
 	    }
 	  } else {
-	    if (!old_value.check(results[i])) {
+	    if (!old_value.check(results[i], read_offset_len[i].first, read_offset_len[i].second)) {
 	      cerr << num << ": oid " << oid << " contents " << to_check << " corrupt" << std::endl;
 	      context->errors++;
 	    }

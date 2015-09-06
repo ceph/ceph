@@ -160,9 +160,21 @@ void ObjectDesc::update(ContentsGenerator *gen, const ContDesc &next) {
   return;
 }
 
-bool ObjectDesc::check(bufferlist &to_check) {
+bool ObjectDesc::check(bufferlist &to_check, uint64_t offset, uint64_t len) {
   iterator i = begin();
-  uint64_t pos = 0;
+  uint64_t off = offset;
+  for (; !i.end(); ++i) {
+    if (off == 0)
+      break;
+    off--;
+  }
+
+  if (i.end() && off != 0) {
+    std::cout << "reached end of iterator first, offset = " << offset << std::endl;
+    return false;
+  }
+
+  uint64_t pos = offset;
   for (bufferlist::iterator p = to_check.begin();
        !p.end();
        ++p, ++i, ++pos) {
@@ -175,11 +187,20 @@ bool ObjectDesc::check(bufferlist &to_check) {
       return false;
     }
   }
-  uint64_t size = layers.empty() ? 0 : 
+ 
+  uint64_t size = layers.empty() ? 0 :
     most_recent_gen()->get_length(most_recent());
-  if (pos != size) {
-    std::cout << "only read " << pos << " out of size " << size << std::endl;
-    return false;
+  if (len == 0) {
+    if (pos != size) {
+      std::cout << " not reached end of object " << size << "~" << size << std::endl;
+      return false;
+    }
+  } else {
+    if (to_check.length() != len) {
+      std::cout << "the length of return val is not we need " << to_check.length() << "~"
+                << len << std::endl;
+      return false;
+    }
   }
   return true;
 }
