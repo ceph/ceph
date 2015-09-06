@@ -1802,8 +1802,8 @@ protected:
     xlist<PG*> scrub_finalize_queue;
 
   public:
-    ScrubFinalizeWQ(time_t ti, ThreadPool *tp)
-      : ThreadPool::WorkQueue<PG>("OSD::ScrubFinalizeWQ", ti, ti*10, tp) {}
+    ScrubFinalizeWQ(time_t ti, time_t si, ThreadPool *tp)
+      : ThreadPool::WorkQueue<PG>("OSD::ScrubFinalizeWQ", ti, si, tp) {}
 
     bool _empty() {
       return scrub_finalize_queue.empty();

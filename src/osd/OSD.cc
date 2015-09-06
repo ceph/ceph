@@ -983,7 +983,10 @@ OSD::OSD(CephContext *cct_, ObjectStore *store_,
     cct->_conf->osd_scrub_thread_timeout,
     cct->_conf->osd_scrub_thread_suicide_timeout,
     &disk_tp),
-  scrub_finalize_wq(cct->_conf->osd_scrub_finalize_thread_timeout, &op_tp),
+  scrub_finalize_wq(
+    cct->_conf->osd_scrub_finalize_thread_timeout, 
+    cct->_conf->osd_scrub_finalize_thread_suicide_timeout, 
+    &op_tp),
   rep_scrub_wq(
     this,
     cct->_conf->osd_scrub_thread_timeout,
