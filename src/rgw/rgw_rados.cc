@@ -7543,6 +7543,7 @@ int RGWRados::get_bucket_entrypoint_info(RGWObjectCtx& obj_ctx,
   make_bucket_entry_name(tenant_name, bucket_name, bucket_entry);
   int ret = rgw_get_system_obj(this, obj_ctx, zone.domain_root, bucket_entry, bl, objv_tracker, pmtime, pattrs, cache_info);
   if (ret < 0) {
+    ldout(cct, 20) << "rgw_get_system_obj returned ret=" << ret << dendl;
     return ret;
   }
 
