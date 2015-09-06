@@ -63,6 +63,9 @@ public:
   inline uint8_t get_splay_width() const {
     return m_splay_width;
   }
+  inline int64_t get_pool_id() const {
+    return m_pool_id;
+  }
 
   inline Finisher &get_finisher() {
     return *m_finisher;
@@ -259,6 +262,7 @@ private:
 
   uint8_t m_order;
   uint8_t m_splay_width;
+  int64_t m_pool_id;
   bool m_initialized;
 
   Finisher *m_finisher;
