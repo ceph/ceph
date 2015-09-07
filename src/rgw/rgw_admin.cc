@@ -2092,8 +2092,7 @@ int main(int argc, char **argv)
 	if (ret < 0) {
 	  cerr << "WARNING: failed to initialize zonegroup " << zonegroup_name << std::endl;
 	}
-	RGWZoneParams zone;
-	zone.id = zone_id;
+	RGWZoneParams zone(zone_id, zone_name);
 	ret = zone.init(g_ceph_context, store, zonegroup);
 	if (ret < 0) {
 	  cerr << "unable to initialize zone: " << cpp_strerror(-ret) << std::endl;
@@ -2126,13 +2125,20 @@ int main(int argc, char **argv)
 	  cerr << "WARNING: failed to initialize zonegroup" << std::endl;
 	}
 	RGWZoneParams zone;
-	zone.init_default(store);
+	ret = zone.init(g_ceph_context, store, zonegroup, false);
+	if (ret < 0) {
+	  return 1;
+	}
 	ret = read_decode_json(infile, zone);
 	if (ret < 0) {
 	  return 1;
 	}
-
-	ret = zone.store_info(g_ceph_context, store, zonegroup);
+	ret = zone.init(g_ceph_context, store, zonegroup);
+	if (ret < 0) {
+	  cerr << "ERROR: couldn't init zone: " << cpp_strerror(-ret) << std::endl;
+	  return ret;
+	}
+	ret = zone.update();
 	if (ret < 0) {
 	  cerr << "ERROR: couldn't store zone info: " << cpp_strerror(-ret) << std::endl;
 	  return 1;
