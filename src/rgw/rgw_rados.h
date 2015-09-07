@@ -845,6 +845,7 @@ struct RGWZoneParams {
   rgw_bucket user_swift_pool;
   rgw_bucket user_uid_pool;
 
+  string id;
   string name;
   bool is_master;
 
@@ -853,16 +854,15 @@ struct RGWZoneParams {
   map<string, RGWZonePlacementInfo> placement_pools;
 
   RGWZoneParams() : is_master(false) {}
-  RGWZoneParams(const std::string& _name):name(_name) {}
 
   static int get_pool_name(CephContext *cct, string *pool_name);
-  void init_name(CephContext *cct, RGWZoneGroup& zonegroup);
+  void init_id(CephContext *cct, RGWZoneGroup& zonegroup);
   int init(CephContext *cct, RGWRados *store, RGWZoneGroup& zonegroup);
   void init_default(RGWRados *store);
   int store_info(CephContext *cct, RGWRados *store, RGWZoneGroup& zonegroup);
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(5, 1, bl);
+    ENCODE_START(6, 1, bl);
     ::encode(domain_root, bl);
     ::encode(control_pool, bl);
     ::encode(gc_pool, bl);
@@ -873,6 +873,7 @@ struct RGWZoneParams {
     ::encode(user_email_pool, bl);
     ::encode(user_swift_pool, bl);
     ::encode(user_uid_pool, bl);
+    ::encode(id, bl);
     ::encode(name, bl);
     ::encode(system_key, bl);
     ::encode(placement_pools, bl);
@@ -881,7 +882,7 @@ struct RGWZoneParams {
   }
 
   void decode(bufferlist::iterator& bl) {
-     DECODE_START(5, bl);
+    DECODE_START(6, bl);
     ::decode(domain_root, bl);
     ::decode(control_pool, bl);
     ::decode(gc_pool, bl);
@@ -892,8 +893,15 @@ struct RGWZoneParams {
     ::decode(user_email_pool, bl);
     ::decode(user_swift_pool, bl);
     ::decode(user_uid_pool, bl);
-    if (struct_v >= 2)
+    if (struct_v >= 6) {
+      ::decode(id, bl);
+    }
+    if (struct_v >= 2) {
       ::decode(name, bl);
+      if (struct_v < 6) {
+	id = name;
+      }
+    }
     if (struct_v >= 3)
       ::decode(system_key, bl);
     if (struct_v >= 4)
@@ -2455,7 +2463,7 @@ public:
   string unique_id(uint64_t unique_num) {
     char buf[32];
     snprintf(buf, sizeof(buf), ".%llu.%llu", (unsigned long long)instance_id(), (unsigned long long)unique_num);
-    string s = zone.name + buf;
+    string s = zone.id + buf;
     return s;
   }
 
