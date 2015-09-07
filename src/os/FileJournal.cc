@@ -1635,6 +1635,7 @@ void FileJournal::commit_start(uint64_t seq)
     break; // all good
 
   case FULL_FULL:
+    /*
     if (seq >= journaled_seq) {
       dout(1) << " FULL_FULL -> FULL_WAIT.  commit_start on seq "
 	      << seq << " > journaled_seq " << journaled_seq
@@ -1647,6 +1648,8 @@ void FileJournal::commit_start(uint64_t seq)
 	      << ", remaining in FULL_FULL"
 	      << dendl;
     }
+    */
+    full_state = FULL_WAIT;
     break;
 
   case FULL_WAIT:
