@@ -757,8 +757,8 @@ public:
   RGWSystemMetaObj(const string& _id, const string& _name) : id(_id), name(_name) {}
   RGWSystemMetaObj(CephContext *_cct, RGWRados *_store): cct(_cct), store(_store){}
   RGWSystemMetaObj(const string& _name, CephContext *_cct, RGWRados *_store): name(_name), cct(_cct), store(_store){}
-  const string& get_name() { return name; }
-  const string& get_id() { return id; }
+  const string& get_name() const { return name; }
+  const string& get_id() const { return id; }
 
   virtual ~RGWSystemMetaObj() {}
 
@@ -1085,6 +1085,8 @@ struct RGWZoneGroup : public RGWSystemMetaObj {
 
   int create_default(bool old_format = false);
   int equals(const string& other_zonegroup);
+  int add_zone(const RGWZoneParams& zone_params);
+  int remove_zone(const RGWZoneParams& zone_params);
 
   const string& get_pool_name(CephContext *cct);
   const string& get_default_oid(bool old_region_format = false);
