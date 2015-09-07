@@ -49,6 +49,10 @@ librgw_la_SOURCES =  \
 librgw_la_CXXFLAGS = -Woverloaded-virtual ${AM_CXXFLAGS}
 noinst_LTLIBRARIES += librgw.la
 
+# Bypass civetweb dlopen() calls for ssl/crypto support and link the libraries
+# directly (below).
+CIVETWEB_COPT = -DNO_SSL_DL
+
 LIBRGW_DEPS += \
 	$(LIBRADOS) \
 	libcls_rgw_client.la \
@@ -63,6 +67,8 @@ LIBRGW_DEPS += \
 	-lexpat \
 	-lm \
 	-lfcgi \
+	-lssl \
+	-lcrypto \
 	-ldl
 
 CIVETWEB_INCLUDE = --include civetweb/include/civetweb_conf.h
@@ -72,8 +78,8 @@ libcivetweb_la_SOURCES =  \
 	rgw/rgw_civetweb_log.cc \
 	civetweb/src/civetweb.c
 
-libcivetweb_la_CXXFLAGS = ${CIVETWEB_INCLUDE} -Woverloaded-virtual ${AM_CXXFLAGS}
-libcivetweb_la_CFLAGS = -Icivetweb/include ${CIVETWEB_INCLUDE}
+libcivetweb_la_CXXFLAGS = ${CIVETWEB_INCLUDE} -Woverloaded-virtual ${AM_CXXFLAGS} ${CIVETWEB_COPT}
+libcivetweb_la_CFLAGS = -Icivetweb/include ${CIVETWEB_INCLUDE} ${CIVETWEB_COPT}
 
 noinst_LTLIBRARIES += libcivetweb.la
 
