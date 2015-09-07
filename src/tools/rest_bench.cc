@@ -281,6 +281,11 @@ public:
     list_bucket_handler.listBucketCallback = list_bucket_callback;
 
   }
+  ~RESTDispatcher()
+  {
+    req_wq.drain();
+    m_tp.stop();
+  } 
   void process_context(req_context *ctx);
   void get_obj(req_context *ctx);
   void put_obj(req_context *ctx);
@@ -738,10 +743,6 @@ int main(int argc, const char **argv)
     }
   }
 
-  if (bucket.empty()) {
-    cerr << "rest-bench: bucket not specified" << std::endl;
-    usage_exit();
-  }
   if (args.empty())
     usage_exit();
   int operation = 0;
