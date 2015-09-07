@@ -165,10 +165,11 @@ BuildRequires:	lttng-ust-devel
 BuildRequires:  babeltrace-devel
 %endif
 %endif
-# expat and fastcgi for RGW
+# expat, fastcgi and openssl for RGW
 %if 0%{?suse_version}
 BuildRequires:	libexpat-devel
 BuildRequires:	FastCGI-devel
+BuildRequires:  openssl-devel
 %endif
 %if 0%{?rhel} || 0%{?fedora}
 BuildRequires:	expat-devel
