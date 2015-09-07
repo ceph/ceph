@@ -1221,7 +1221,7 @@ int main(int argc, char **argv)
   std::string key_type_str;
   std::string period_id, url, parent_period;
   std::string realm_name, realm_id, realm_new_name;
-  std::string zone_name;
+  std::string zone_name, zone_id;
   std::string zonegroup_name, zonegroup_id, zonegroup_new_name;
   epoch_t period_epoch = 0;
   int key_type = KEY_TYPE_UNDEFINED;
@@ -2092,7 +2092,8 @@ int main(int argc, char **argv)
 	if (ret < 0) {
 	  cerr << "WARNING: failed to initialize zonegroup " << zonegroup_name << std::endl;
 	}
-	RGWZoneParams zone(zone_name);
+	RGWZoneParams zone;
+	zone.id = zone_id;
 	ret = zone.init(g_ceph_context, store, zonegroup);
 	if (ret < 0) {
 	  cerr << "unable to initialize zone: " << cpp_strerror(-ret) << std::endl;
