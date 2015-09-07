@@ -226,6 +226,28 @@ int RGWZoneGroup::equals(const string& other_zonegroup)
   return (id  == other_zonegroup);
 }
 
+int RGWZoneGroup::add_zone(const RGWZoneParams& zone_params)
+{
+  RGWZone& zone = zones[zone_params.get_id()];
+  zone.name = zone_params.get_name();
+  zone.id = zone_params.get_id();
+
+  return update();
+}
+
+int RGWZoneGroup::remove_zone(const RGWZoneParams& zone_params)
+{
+  map<string, RGWZone>::iterator iter = zones.find(zone_params.get_id());
+
+  if (iter == zones.end()) {
+    lderr(cct) << "zone " << zone_params.get_name() << " " << zone_params.get_id() << " doesn't exists "<< dendl;
+    return -ENOENT;
+  }
+
+  zones.erase(iter);
+
+  return update();
+}
 
 int RGWSystemMetaObj::init(CephContext *_cct, RGWRados *_store, bool setup_obj, bool old_format)
 {
@@ -254,7 +276,6 @@ int RGWSystemMetaObj::init(CephContext *_cct, RGWRados *_store, bool setup_obj, 
       }
     } else if (!old_format) {
       r = read_id(name, id);
-      lderr(cct) << "read_id name " << name << " id " << id  << dendl;
       if (r < 0) {
 	lderr(cct) << "error in read_id for id " << id << " : " << cpp_strerror(-r) << dendl;
 	return r;
