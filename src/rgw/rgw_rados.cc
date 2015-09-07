@@ -4522,9 +4522,11 @@ int RGWRados::delete_bucket(rgw_bucket& bucket, RGWObjVersionTracker& objv_track
     }
   } while (is_truncated);
 
-  r = rgw_bucket_delete_bucket_obj(this, bucket.name, objv_tracker);
-  if (r < 0)
+  r = rgw_bucket_delete_bucket_obj(this, bucket.tenant, bucket.name, objv_tracker);
+  if (r < 0) {
+    ldout(cct, 0) << "rgw_bucket_delete_bucket_obj() returned r=" << r << dendl;
     return r;
+  }
 
   /* if the bucked is not synced we can remove the meta file */
   if (!is_syncing_bucket_meta(bucket)) {

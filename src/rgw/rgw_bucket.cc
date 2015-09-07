@@ -461,9 +461,15 @@ int rgw_remove_bucket(RGWRados *store, rgw_bucket& bucket, bool delete_children)
   return ret;
 }
 
-int rgw_bucket_delete_bucket_obj(RGWRados *store, string& bucket_name, RGWObjVersionTracker& objv_tracker)
+int rgw_bucket_delete_bucket_obj(RGWRados * const store,
+                                 const string& tenant_name,
+                                 const string& bucket_name,
+                                 RGWObjVersionTracker& objv_tracker)
 {
-  return store->meta_mgr->remove_entry(bucket_meta_handler, bucket_name, &objv_tracker);
+  string key;
+
+  store->make_bucket_entry_name(tenant_name, bucket_name, key);
+  return store->meta_mgr->remove_entry(bucket_meta_handler, key, &objv_tracker);
 }
 
 static void set_err_msg(std::string *sink, std::string msg)
@@ -1628,7 +1634,7 @@ public:
       lderr(store->ctx()) << "could not unlink bucket=" << entry << " owner=" << be.owner << dendl;
     }
 
-    ret = rgw_bucket_delete_bucket_obj(store, entry, objv_tracker);
+    ret = rgw_bucket_delete_bucket_obj(store, tenant_name, bucket_name, objv_tracker);
     if (ret < 0) {
       lderr(store->ctx()) << "could not delete bucket=" << entry << dendl;
     }
