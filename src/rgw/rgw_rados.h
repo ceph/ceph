@@ -831,7 +831,7 @@ struct RGWZonePlacementInfo {
 };
 WRITE_CLASS_ENCODER(RGWZonePlacementInfo)
 
-struct RGWZoneParams {
+struct RGWZoneParams : RGWSystemMetaObj {
   rgw_bucket domain_root;
   rgw_bucket metadata_heap;
   rgw_bucket control_pool;
@@ -845,8 +845,6 @@ struct RGWZoneParams {
   rgw_bucket user_swift_pool;
   rgw_bucket user_uid_pool;
 
-  string id;
-  string name;
   bool is_master;
 
   RGWAccessKey system_key;
@@ -854,12 +852,20 @@ struct RGWZoneParams {
   map<string, RGWZonePlacementInfo> placement_pools;
 
   RGWZoneParams() : is_master(false) {}
+  RGWZoneParams(const string& name) : RGWSystemMetaObj(name), is_master(false) {}
+  RGWZoneParams(const string& id, const string& name) : RGWSystemMetaObj(id, name), is_master(false) {}
 
-  static int get_pool_name(CephContext *cct, string *pool_name);
+  const string& get_pool_name(CephContext *cct);
+  const string& get_default_oid(bool old_format = false);
+  const string& get_names_oid_prefix();
+  const string& get_info_oid_prefix(bool old_format = false);
+  const string& get_predefined_id();
+
+  int init(CephContext *_cct, RGWRados *_store, RGWZoneGroup& zonegroup, bool setup_obj = true,
+	   bool old_format = false);
+
   void init_id(CephContext *cct, RGWZoneGroup& zonegroup);
-  int init(CephContext *cct, RGWRados *store, RGWZoneGroup& zonegroup);
-  void init_default(RGWRados *store);
-  int store_info(CephContext *cct, RGWRados *store, RGWZoneGroup& zonegroup);
+  int create_default(bool old_format = false);
 
   void encode(bufferlist& bl) const {
     ENCODE_START(6, 1, bl);
@@ -873,8 +879,7 @@ struct RGWZoneParams {
     ::encode(user_email_pool, bl);
     ::encode(user_swift_pool, bl);
     ::encode(user_uid_pool, bl);
-    ::encode(id, bl);
-    ::encode(name, bl);
+    RGWSystemMetaObj::encode(bl);
     ::encode(system_key, bl);
     ::encode(placement_pools, bl);
     ::encode(metadata_heap, bl);
@@ -894,13 +899,10 @@ struct RGWZoneParams {
     ::decode(user_swift_pool, bl);
     ::decode(user_uid_pool, bl);
     if (struct_v >= 6) {
-      ::decode(id, bl);
-    }
-    if (struct_v >= 2) {
+      RGWSystemMetaObj::decode(bl);
+    } else if (struct_v >= 2) {
       ::decode(name, bl);
-      if (struct_v < 6) {
 	id = name;
-      }
     }
     if (struct_v >= 3)
       ::decode(system_key, bl);
@@ -2463,7 +2465,7 @@ public:
   string unique_id(uint64_t unique_num) {
     char buf[32];
     snprintf(buf, sizeof(buf), ".%llu.%llu", (unsigned long long)instance_id(), (unsigned long long)unique_num);
-    string s = zone.id + buf;
+    string s = zone.get_id() + buf;
     return s;
   }
 
@@ -2471,7 +2473,7 @@ public:
     char buf[16 + 2 + 1]; /* uint64_t needs 16, 2 hyphens add further 2 */
 
     snprintf(buf, sizeof(buf), "-%llx-", (unsigned long long)instance_id());
-    url_encode(string(buf) + zone.name, trans_id_suffix);
+    url_encode(string(buf) + zone.get_name(), trans_id_suffix);
   }
 
   /* In order to preserve compability with Swift API, transaction ID
