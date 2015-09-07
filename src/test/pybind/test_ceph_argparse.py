@@ -213,7 +213,6 @@ class TestAuth(TestArgparse):
 
     def test_print_key(self):
         self.check_1_string_arg('auth', 'print-key')
-        self.check_1_string_arg('auth', 'print_key')
 
     def test_list(self):
         self.check_no_arg('auth', 'list')

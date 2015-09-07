@@ -9,7 +9,7 @@
 Synopsis
 ========
 
-| **ceph** **auth** [ *add* \| *caps* \| *del* \| *export* \| *get* \| *get-key* \| *get-or-create* \| *get-or-create-key* \| *import* \| *list* \| *print-key* \| *print_key* ] ...
+| **ceph** **auth** [ *add* \| *caps* \| *del* \| *export* \| *get* \| *get-key* \| *get-or-create* \| *get-or-create-key* \| *import* \| *list* \| *print-key* ] ...
 
 | **ceph** **compact**
 
@@ -154,12 +154,6 @@ Subcommand ``print-key`` displays requested key.
 Usage::
 
 	ceph auth print-key <entity>
-
-Subcommand ``print_key`` displays requested key.
-
-Usage::
-
-	ceph auth print_key <entity>
 
 
 compact
