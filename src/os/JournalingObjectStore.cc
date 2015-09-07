@@ -222,7 +222,7 @@ bool JournalingObjectStore::ApplyManager::commit_start()
   
    set<uint64_t>::iterator it = applying_seq_set.begin();
    if(it== applying_seq_set.end())
-        _committing_seq = committing_seq = 1; //init set 1
+        _committing_seq = committing_seq = max_applied_seq; //init set 1
    else
        _committing_seq = committing_seq = *it;
 

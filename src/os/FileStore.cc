@@ -3605,7 +3605,7 @@ void FileStore::sync_entry()
     fin.swap(sync_waiters);
     lock.Unlock();
     
-    op_tp.pause();
+    //op_tp.pause();
     if (apply_manager.commit_start()) {
       utime_t start = ceph_clock_now(g_ceph_context);
       uint64_t cp = apply_manager.get_committing_seq();
@@ -3658,7 +3658,7 @@ void FileStore::sync_entry()
       } else
       {
 	apply_manager.commit_started();
-	op_tp.unpause();
+   //	op_tp.unpause();
 
 	object_map->sync();
 	int err = backend->syncfs();
@@ -3714,7 +3714,7 @@ void FileStore::sync_entry()
       timer.cancel_event(sync_entry_timeo);
       sync_entry_timeo_lock.Unlock();
     } else {
-      op_tp.unpause();
+     // op_tp.unpause();
     }
     
     lock.Lock();
