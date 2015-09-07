@@ -55,6 +55,7 @@ Mutex::Mutex(const char *n, bool r, bool ld,
     pthread_mutexattr_init(&attr);
     pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_ERRORCHECK);
     pthread_mutex_init(&_m, &attr);
+    pthread_mutexattr_destroy(&attr);
     if (g_lockdep)
       _register();
   }
