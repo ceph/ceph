@@ -266,8 +266,8 @@ enum {
   OPT_ZONEGROUP_DEFAULT,
   OPT_ZONEGROUP_DELETE,
   OPT_ZONEGROUP_GET,
-  OPT_ZONEGROUP_LIST,
   OPT_ZONEGROUP_SET,
+  OPT_ZONEGROUP_LIST,
   OPT_ZONEGROUP_RENAME ,  
   OPT_ZONEGROUPMAP_GET,
   OPT_ZONEGROUPMAP_SET,
@@ -1504,16 +1504,16 @@ int main(int argc, char **argv)
       realm_new_name = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--zonegroup-id", (char*)NULL)) {
       zonegroup_id = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--zonegroup-name", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--zonegroup", (char*)NULL)) {
       zonegroup_name = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--zonegroup-new-name", (char*)NULL)) {
       zonegroup_new_name = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--zone-name", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--zone", (char*)NULL)) {
       zone_name = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--zone-id", (char*)NULL)) {
       zone_id = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--zone-new-name", (char*)NULL)) {
-      zone_new_name = val;      
+      zone_new_name = val;
     } else if (strncmp(*i, "-", 1) == 0) {
       cerr << "ERROR: invalid flag " << *i << std::endl;
       return EINVAL;
@@ -1982,11 +1982,7 @@ int main(int argc, char **argv)
       break;
     case OPT_ZONEGROUP_SET:
       {
-	if (zonegroup_id.empty() && zonegroup_name.empty()) {
-	  cerr << "no zonegroup name or id provided" << std::endl;
-	  return -EINVAL;
-	}
-	RGWZoneGroup zonegroup(zonegroup_id, zonegroup_name);
+	RGWZoneGroup zonegroup;
 	int ret = zonegroup.init(g_ceph_context, store, false);
 	if (ret < 0) {
 	  cerr << "failed to init zonegroup: " << cpp_strerror(-ret) << std::endl;
@@ -1996,8 +1992,7 @@ int main(int argc, char **argv)
 	if (ret < 0) {
 	  return 1;
 	}
-
-	ret = zonegroup.update();
+	ret = zonegroup.create();
 	if (ret < 0) {
 	  cerr << "ERROR: couldn't store zone info: " << cpp_strerror(-ret) << std::endl;
 	  return 1;
@@ -2114,6 +2109,12 @@ int main(int argc, char **argv)
 	  cerr << "failed to create zone " << zone_name << ": " << cpp_strerror(-ret) << std::endl;
 	  return ret;
 	}
+	ret = zonegroup.add_zone(zone);
+	if (ret < 0) {
+	  cerr << "failed to add zone " << zone_name << " to zonegroup " << zonegroup.get_name() << ": "
+	       << cpp_strerror(-ret) << std::endl;
+	  return ret;
+	}
       }
       break;
    case OPT_ZONE_DELETE:
@@ -2132,6 +2133,12 @@ int main(int argc, char **argv)
 	if (ret < 0) {
 	  cerr << "unable to initialize zone: " << cpp_strerror(-ret) << std::endl;
 	  return -ret;
+	}
+	ret = zonegroup.remove_zone(zone);
+	if (ret < 0 && ret != -ENOENT) {
+	  cerr << "failed to remove zone " << zone_name << " from zonegroup " << zonegroup.get_name() << ": "
+	       << cpp_strerror(-ret) << std::endl;
+	  return ret;
 	}
 	ret = zone.delete_obj();
 	if (ret < 0) {
@@ -2173,14 +2180,14 @@ int main(int argc, char **argv)
 	if (ret < 0) {
 	  return 1;
 	}
-	ret = zone.init(g_ceph_context, store, zonegroup);
+	ret = zone.create();
 	if (ret < 0) {
-	  cerr << "ERROR: couldn't init zone: " << cpp_strerror(-ret) << std::endl;
-	  return ret;
+	  cerr << "ERROR: couldn't create zone: " << cpp_strerror(-ret) << std::endl;
+	  return 1;
 	}
-	ret = zone.update();
+	ret = zonegroup.add_zone(zone);
 	if (ret < 0) {
-	  cerr << "ERROR: couldn't store zone info: " << cpp_strerror(-ret) << std::endl;
+	  cerr << "ERROR: couldn't add zone: " << cpp_strerror(-ret) << std::endl;
 	  return 1;
 	}
 	encode_json("zone", zone, formatter);
