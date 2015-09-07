@@ -270,7 +270,7 @@ int RGWSystemMetaObj::init(CephContext *_cct, RGWRados *_store, bool setup_obj, 
       id = get_predefined_id();
       if (id.empty()) {
 	r = use_default(old_format);
-	if (r == -ENOENT) {
+	if (r == -ENOENT) { 
 	  r = create_default();
 	}
 	if (r < 0) {
@@ -279,6 +279,7 @@ int RGWSystemMetaObj::init(CephContext *_cct, RGWRados *_store, bool setup_obj, 
       }
     } else if (!old_format) {
       r = read_id(name, id);
+      lderr(cct) << "read_id name " << name << " id " << id  << dendl;
       if (r < 0) {
 	lderr(cct) << "error in read_id for id " << id << " : " << cpp_strerror(-r) << dendl;
 	return r;
@@ -2968,12 +2969,14 @@ int RGWRados::init_watch()
 
   if (r == -ENOENT) {
     r = rad->pool_create(control_pool);
+    derr << "init_watch pool_create " << cpp_strerror(-r) << dendl;
     if (r == -EEXIST)
       r = 0;
     if (r < 0)
       return r;
 
     r = rad->ioctx_create(control_pool, control_pool_ctx);
+    derr << "init_watch ioctx_create " << cpp_strerror(-r) << dendl;
     if (r < 0)
       return r;
   }
