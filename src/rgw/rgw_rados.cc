@@ -72,6 +72,7 @@ static string default_storage_extra_pool = "rgw.buckets.non-ec";
 static string avail_pools = ".pools.avail";
 
 static string zone_info_oid_prefix = "zone_info.";
+static string zone_names_oid_prefix = "zone_names.";
 static string region_info_oid_prefix = "region_info.";
 static string zone_group_info_oid_prefix = "zonegroup_info.";
 static string realm_names_oid_prefix = "realms_names.";
@@ -90,7 +91,7 @@ static string zonegroup_names_oid_prefix = "zonegroups_names.";
 static RGWObjCategory main_category = RGW_OBJ_CATEGORY_MAIN;
 #define RGW_USAGE_OBJ_PREFIX "usage."
 
-#define RGW_DEFAULT_ZONE_ROOT_POOL "rgw.root"
+static string RGW_DEFAULT_ZONE_ROOT_POOL = "rgw.root";
 static string RGW_DEFAULT_ZONEGROUP_ROOT_POOL = "rgw.root";
 static string RGW_DEFAULT_REALM_ROOT_POOL = "rgw.root";
 static string RGW_DEFAULT_PERIOD_ROOT_POOL = "rgw.root";
@@ -131,9 +132,8 @@ const string& RGWZoneGroup::get_pool_name(CephContext *cct_)
 
 int RGWZoneGroup::create_default(bool old_format)
 {
-  name = default_zonegroup_name;
-  string zone_name = default_zone_name;
 
+  name = default_zonegroup_name;
   is_master = true;
 
   RGWZoneGroupPlacementTarget placement_target;
@@ -141,20 +141,25 @@ int RGWZoneGroup::create_default(bool old_format)
   placement_targets[placement_target.name] = placement_target;
   default_placement = "default-placement";
 
-  RGWZone& default_zone = zones[zone_name];
-  default_zone.name = zone_name;
+  RGWZoneParams zone_params(default_zone_name);
 
-  RGWZoneParams zone_params;
-  zone_params.name = zone_name;
-  zone_params.init_default(store);
-
-  int r = zone_params.store_info(cct, store, *this);
-  if (r < 0 && r != -EEXIST) {
-    derr << "error storing zone params: " << cpp_strerror(-r) << dendl;
+  int r = zone_params.init(cct, store, *this, false);
+  if (r < 0) {
+    derr << "create_default: error initializing zone params: " << cpp_strerror(-r) << dendl;
     return r;
   }
 
-  r = store_info(true);
+  r = zone_params.create_default();
+  if (r < 0 && r != -EEXIST) {
+    derr << "create_default: error in create_default  zone params: " << cpp_strerror(-r) << dendl;
+    return r;
+  }
+
+  RGWZone& default_zone = zones[zone_params.get_id()];
+  default_zone.name = zone_params.get_name();
+  default_zone.id = zone_params.get_id();
+
+  r = create();
   if (r < 0 && r != -EEXIST) {
     derr << "error storing zone group info: " << cpp_strerror(-r) << dendl;
     return r;
@@ -172,17 +177,11 @@ int RGWZoneGroup::create_default(bool old_format)
   if (r < 0) {
     return r;
   }
-  /*Re attempt to read  info */
-  RGWDefaultSystemMetaObjInfo default_info;
-  r = read_default(default_info, get_default_oid(old_format));
-  if (r < 0) {
-    return r;
-  }
-  id = default_info.default_id;
+
   if (old_format) {
     name = id;
   }
-  
+
   return 0;
 }
 
@@ -246,7 +245,7 @@ int RGWSystemMetaObj::init(CephContext *_cct, RGWRados *_store, bool setup_obj, 
       id = get_predefined_id();
       if (id.empty()) {
 	r = use_default(old_format);
-	if (r == -ENOENT) {
+	if (r == -ENOENT) { 
 	  r = create_default();
 	}
 	if (r < 0) {
@@ -255,6 +254,7 @@ int RGWSystemMetaObj::init(CephContext *_cct, RGWRados *_store, bool setup_obj, 
       }
     } else if (!old_format) {
       r = read_id(name, id);
+      lderr(cct) << "read_id name " << name << " id " << id  << dendl;
       if (r < 0) {
 	lderr(cct) << "error in read_id for id " << id << " : " << cpp_strerror(-r) << dendl;
 	return r;
@@ -486,11 +486,11 @@ int RGWSystemMetaObj::read_info(const string& obj_id, bool old_format)
 int RGWSystemMetaObj::create()
 {
   int ret;
-
+  
   /* check to see the name is not used */
   ret = read_id(name, id);
   if (ret == 0) {
-    ldout(cct, 0) << "ERROR: name already in use for obj id " << id << dendl;
+    ldout(cct, 0) << "ERROR: name " << name << "already in use for obj id " << id << dendl;
     return -EEXIST;
   } else if ( ret != -ENOENT) {
     lderr(cct) << "failed reading obj id  " << id << ": " << cpp_strerror(-ret) << dendl;
@@ -763,8 +763,11 @@ const string& RGWPeriod::get_pool_name(CephContext *cct)
   return cct->_conf->rgw_period_root_pool;
 }
 
-void RGWZoneParams::init_default(RGWRados *store)
+int RGWZoneParams::create_default(bool old_format)
 {
+  name = default_zone_name;
+  is_master = true;
+
   domain_root = "rgw.data.root";
   metadata_heap = "rgw.meta";
   control_pool = "rgw.control";
@@ -789,16 +792,60 @@ void RGWZoneParams::init_default(RGWRados *store)
     default_placement.data_extra_pool = default_storage_extra_pool;
     placement_pools["default-placement"] = default_placement;
   }
-}
 
-int RGWZoneParams::get_pool_name(CephContext *cct, string *pool_name)
-{
-  *pool_name = cct->_conf->rgw_zone_root_pool;
-  if (pool_name->empty()) {
-    *pool_name = RGW_DEFAULT_ZONE_ROOT_POOL;
+  r = create();
+  if (r < 0 && r != -EEXIST) {
+    derr << "RGWZoneParams::create_default: error creating default zone params: " << cpp_strerror(-r) << dendl;
+    return r;
   }
 
-  return 0;
+  if (r == -EEXIST) {
+    ldout(cct, 0) << "RGWZoneParams::create_default() returned -EEXIST, we raced with another zone params creation" << dendl;
+    r = read_info(id);
+    if (r < 0) {
+      return r;
+    }
+  }
+
+  r = set_as_default();
+  if (r < 0) {
+    derr << "RGWZoneParams::create_default: error in set_as_default default zone params: " << cpp_strerror(-r) << dendl;
+    return r;
+  }
+
+  if (old_format) {
+    name = id;
+  }
+
+  return r;
+}
+
+const string& RGWZoneParams::get_pool_name(CephContext *cct)
+{
+  if (cct->_conf->rgw_zone_root_pool.empty()) {
+    return RGW_DEFAULT_ZONE_ROOT_POOL;
+  }
+
+  return cct->_conf->rgw_zone_root_pool;
+}
+
+const string& RGWZoneParams::get_default_oid(bool old_format)
+{
+  return cct->_conf->rgw_default_zone_info_oid;
+}
+
+const string& RGWZoneParams::get_names_oid_prefix()
+{
+  return zone_names_oid_prefix;
+}
+
+const string& RGWZoneParams::get_info_oid_prefix(bool old_format)
+{
+  return zone_info_oid_prefix;
+}
+
+const string& RGWZoneParams::get_predefined_id() {
+  return cct->_conf->rgw_zone;
 }
 
 void RGWZoneParams::init_id(CephContext *cct, RGWZoneGroup& zonegroup)
@@ -808,62 +855,24 @@ void RGWZoneParams::init_id(CephContext *cct, RGWZoneGroup& zonegroup)
   if (id.empty()) {
     id = zonegroup.master_zone;
 
-    if (id.empty()) {
-      id = default_zone_name;
+    if (id.empty() && name.empty()) {
+      name = default_zone_name;
     }
   }
 }
 
-int RGWZoneParams::init(CephContext *cct, RGWRados *store, RGWZoneGroup& zonegroup)
+int RGWZoneParams::init(CephContext *cct, RGWRados *store, RGWZoneGroup& zonegroup, bool setup_obj, bool old_format)
 {
   init_id(cct, zonegroup);
 
-  string pool_name;
-  int ret = get_pool_name(cct, &pool_name);
+  int ret = RGWSystemMetaObj::init(cct, store, setup_obj, old_format);
   if (ret < 0) {
-    lderr(cct) << "failed reading zone params pool name: " << cpp_strerror(-ret) << dendl;
     return ret;
-  }
-
-  rgw_bucket pool(pool_name.c_str());
-  bufferlist bl;
-
-  string oid = zone_info_oid_prefix + id;
-  RGWObjectCtx obj_ctx(store);
-  ret = rgw_get_system_obj(store, obj_ctx, pool, oid, bl, NULL, NULL);
-  if (ret < 0)
-    return ret;
-
-  try {
-    bufferlist::iterator iter = bl.begin();
-    ::decode(*this, iter);
-  } catch (buffer::error& err) {
-    ldout(cct, 0) << "ERROR: failed to decode zone info from " << pool << ":" << oid << dendl;
-    return -EIO;
   }
 
   is_master = (id == zonegroup.master_zone) || (zonegroup.master_zone.empty() && id == default_zone_name);
 
   ldout(cct, 2) << "zone " << name << " is " << (is_master ? "" : "NOT ") << "master" << dendl;
-
-  return 0;
-}
-
-int RGWZoneParams::store_info(CephContext *cct, RGWRados *store, RGWZoneGroup& zonegroup)
-{
-  init_id(cct, zonegroup);
-
-  string pool_name;
-  int ret = get_pool_name(cct, &pool_name);
-  if (ret < 0)
-    return ret;
-
-  rgw_bucket pool(pool_name.c_str());
-  string oid = zone_info_oid_prefix + id;
-
-  bufferlist bl;
-  ::encode(*this, bl);
-  ret = rgw_put_system_obj(store, pool, oid, bl.c_str(), bl.length(), false, NULL, 0, NULL);
 
   return ret;
 }
@@ -2170,8 +2179,8 @@ int RGWRados::init_complete()
   for (ziter = zonegroup.zones.begin(); ziter != zonegroup.zones.end(); ++ziter) {
     const string& id = ziter->first;
     RGWZone& z = ziter->second;
-    if (id != zone.id) {
-      ldout(cct, 20) << "generating connection object for zone " << name << dendl;
+    if (id != zone.get_id()) {
+      ldout(cct, 20) << "generating connection object for zone " << zone.get_name() << " id" << id << dendl;
       zone_conn_map[id] = new RGWRESTConn(cct, this, z.endpoints);
     } else {
       zone_public_config = z;
@@ -2291,12 +2300,10 @@ int RGWRados::list_zonegroups(list<string>& zonegroups)
 
 int RGWRados::list_zones(list<string>& zones)
 {
-  string pool_name;
-  int ret = RGWZoneParams::get_pool_name(cct, &pool_name);
-  if (ret < 0)
-    return ret;
+  RGWZoneParams zoneparams;
+  string pool_name = zoneparams.get_pool_name(cct);
 
-  return list_raw_prefixed_objs(pool_name, zone_info_oid_prefix, zones);
+  return list_raw_prefixed_objs(pool_name, zone_names_oid_prefix, zones);
 }
 
 int RGWRados::list_realms(list<string>& realms)
@@ -2369,16 +2376,22 @@ int RGWRados::open_objexp_pool_ctx()
 int RGWRados::init_watch()
 {
   const char *control_pool = zone.control_pool.name.c_str();
+  derr << "init_watch control pool " << control_pool  << dendl;
+
   librados::Rados *rad = rados[0];
   int r = rad->ioctx_create(control_pool, control_pool_ctx);
+  derr << "init_watch ioctx_create " << cpp_strerror(-r) << dendl;
+
   if (r == -ENOENT) {
     r = rad->pool_create(control_pool);
+    derr << "init_watch pool_create " << cpp_strerror(-r) << dendl;
     if (r == -EEXIST)
       r = 0;
     if (r < 0)
       return r;
 
     r = rad->ioctx_create(control_pool, control_pool_ctx);
+    derr << "init_watch ioctx_create " << cpp_strerror(-r) << dendl;
     if (r < 0)
       return r;
   }
@@ -3411,8 +3424,8 @@ int RGWRados::create_bucket(RGWUserInfo& owner, rgw_bucket& bucket,
     if (!pmaster_bucket) {
       uint64_t iid = instance_id();
       uint64_t bid = next_bucket_id();
-      char buf[zone.id.size() + 48];
-      snprintf(buf, sizeof(buf), "%s.%llu.%llu", zone.id.c_str(), (long long)iid, (long long)bid);
+      char buf[zone.get_id().size() + 48];
+      snprintf(buf, sizeof(buf), "%s.%llu.%llu", zone.get_id().c_str(), (long long)iid, (long long)bid);
       bucket.marker = buf;
       bucket.bucket_id = bucket.marker;
     } else {
