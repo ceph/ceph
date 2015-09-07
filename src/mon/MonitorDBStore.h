@@ -461,8 +461,10 @@ class MonitorDBStore
 
       for (; iter->valid(); iter->next()) {
         pair<string,string> r = iter->raw_key();
-        if (sync_prefixes.count(r.first) > 0)
+        if (sync_prefixes.count(r.first) > 0) {
+          iter->next();
           return r;
+        }
       }
       return pair<string,string>();
     }
