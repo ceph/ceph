@@ -5110,7 +5110,7 @@ bool RGWRados::is_meta_master()
     return false;
   }
 
-  return (zonegroup.master_zone == zone_public_config.name);
+  return (zonegroup.master_zone == zone_public_config.id);
 }
 
 /**
@@ -5131,7 +5131,7 @@ bool RGWRados::is_syncing_bucket_meta(rgw_bucket& bucket)
   }
 
   /* zone is not master */
-  if (zonegroup.master_zone.compare(zone_public_config.name) != 0) {
+  if (zonegroup.master_zone.compare(zone_public_config.id) != 0) {
     return false;
   }
 
