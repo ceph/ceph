@@ -279,7 +279,6 @@ int RGWSystemMetaObj::init(CephContext *_cct, RGWRados *_store, bool setup_obj, 
       }
     } else if (!old_format) {
       r = read_id(name, id);
-      lderr(cct) << "read_id name " << name << " id " << id  << dendl;
       if (r < 0) {
 	lderr(cct) << "error in read_id for id " << id << " : " << cpp_strerror(-r) << dendl;
 	return r;
