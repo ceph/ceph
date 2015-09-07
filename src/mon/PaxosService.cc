@@ -127,6 +127,16 @@ void PaxosService::refresh(bool *need_bootstrap)
   update_from_paxos(need_bootstrap);
 }
 
+void PaxosService::post_refresh()
+{
+  dout(10) << __func__ << dendl;
+
+  post_paxos_update();
+
+  if (mon->is_peon() && !waiting_for_finished_proposal.empty()) {
+    finish_contexts(g_ceph_context, waiting_for_finished_proposal, -EAGAIN);
+  }
+}
 
 void PaxosService::remove_legacy_versions()
 {
