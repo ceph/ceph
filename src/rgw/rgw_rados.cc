@@ -801,22 +801,22 @@ int RGWZoneParams::get_pool_name(CephContext *cct, string *pool_name)
   return 0;
 }
 
-void RGWZoneParams::init_name(CephContext *cct, RGWZoneGroup& zonegroup)
+void RGWZoneParams::init_id(CephContext *cct, RGWZoneGroup& zonegroup)
 {
-  name = cct->_conf->rgw_zone;
+  id = cct->_conf->rgw_zone;
 
-  if (name.empty()) {
-    name = zonegroup.master_zone;
+  if (id.empty()) {
+    id = zonegroup.master_zone;
 
-    if (name.empty()) {
-      name = default_zonegroup_name;
+    if (id.empty()) {
+      id = default_zone_name;
     }
   }
 }
 
 int RGWZoneParams::init(CephContext *cct, RGWRados *store, RGWZoneGroup& zonegroup)
 {
-  init_name(cct, zonegroup);
+  init_id(cct, zonegroup);
 
   string pool_name;
   int ret = get_pool_name(cct, &pool_name);
@@ -828,7 +828,7 @@ int RGWZoneParams::init(CephContext *cct, RGWRados *store, RGWZoneGroup& zonegro
   rgw_bucket pool(pool_name.c_str());
   bufferlist bl;
 
-  string oid = zone_info_oid_prefix + name;
+  string oid = zone_info_oid_prefix + id;
   RGWObjectCtx obj_ctx(store);
   ret = rgw_get_system_obj(store, obj_ctx, pool, oid, bl, NULL, NULL);
   if (ret < 0)
@@ -842,7 +842,7 @@ int RGWZoneParams::init(CephContext *cct, RGWRados *store, RGWZoneGroup& zonegro
     return -EIO;
   }
 
-  is_master = (name == zonegroup.master_zone) || (zonegroup.master_zone.empty() && name == default_zonegroup_name);
+  is_master = (id == zonegroup.master_zone) || (zonegroup.master_zone.empty() && id == default_zone_name);
 
   ldout(cct, 2) << "zone " << name << " is " << (is_master ? "" : "NOT ") << "master" << dendl;
 
@@ -851,7 +851,7 @@ int RGWZoneParams::init(CephContext *cct, RGWRados *store, RGWZoneGroup& zonegro
 
 int RGWZoneParams::store_info(CephContext *cct, RGWRados *store, RGWZoneGroup& zonegroup)
 {
-  init_name(cct, zonegroup);
+  init_id(cct, zonegroup);
 
   string pool_name;
   int ret = get_pool_name(cct, &pool_name);
@@ -859,7 +859,7 @@ int RGWZoneParams::store_info(CephContext *cct, RGWRados *store, RGWZoneGroup& z
     return ret;
 
   rgw_bucket pool(pool_name.c_str());
-  string oid = zone_info_oid_prefix + name;
+  string oid = zone_info_oid_prefix + id;
 
   bufferlist bl;
   ::encode(*this, bl);
@@ -2168,11 +2168,11 @@ int RGWRados::init_complete()
 
   map<string, RGWZone>::iterator ziter;
   for (ziter = zonegroup.zones.begin(); ziter != zonegroup.zones.end(); ++ziter) {
-    const string& name = ziter->first;
+    const string& id = ziter->first;
     RGWZone& z = ziter->second;
-    if (name != zone.name) {
+    if (id != zone.id) {
       ldout(cct, 20) << "generating connection object for zone " << name << dendl;
-      zone_conn_map[name] = new RGWRESTConn(cct, this, z.endpoints);
+      zone_conn_map[id] = new RGWRESTConn(cct, this, z.endpoints);
     } else {
       zone_public_config = z;
     }
@@ -3411,8 +3411,8 @@ int RGWRados::create_bucket(RGWUserInfo& owner, rgw_bucket& bucket,
     if (!pmaster_bucket) {
       uint64_t iid = instance_id();
       uint64_t bid = next_bucket_id();
-      char buf[zone.name.size() + 48];
-      snprintf(buf, sizeof(buf), "%s.%llu.%llu", zone.name.c_str(), (long long)iid, (long long)bid);
+      char buf[zone.id.size() + 48];
+      snprintf(buf, sizeof(buf), "%s.%llu.%llu", zone.id.c_str(), (long long)iid, (long long)bid);
       bucket.marker = buf;
       bucket.bucket_id = bucket.marker;
     } else {
