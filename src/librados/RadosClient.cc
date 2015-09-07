@@ -551,7 +551,7 @@ bool librados::RadosClient::put() {
 }
  
 int librados::RadosClient::pool_create(string& name, unsigned long long auid,
-				       __u8 crush_rule)
+				       int16_t crush_rule)
 {
   int r = wait_for_osdmap();
   if (r < 0) {
@@ -578,7 +578,7 @@ int librados::RadosClient::pool_create(string& name, unsigned long long auid,
 
 int librados::RadosClient::pool_create_async(string& name, PoolAsyncCompletionImpl *c,
 					     unsigned long long auid,
-					     __u8 crush_rule)
+					     int16_t crush_rule)
 {
   int r = wait_for_osdmap();
   if (r < 0)
