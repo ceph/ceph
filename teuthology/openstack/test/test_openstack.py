@@ -93,6 +93,7 @@ openstack keypair delete {key_name} || true
             '--timeout', '234',
             '--filter', 'trasher',
             '--filter-out', 'erasure-code',
+            '--throttle', '3',
         ]
         argv = (self.options +
                 ['--upload',

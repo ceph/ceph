@@ -157,5 +157,14 @@ and analyze results.
               'the keywords in the comma separated keyword '
               'string specified. ')
     )
+    parser.add_argument(
+        '--throttle',
+        help=('When scheduling, wait SLEEP seconds between jobs. '
+              'Useful to avoid bursts that may be too hard on '
+              'the underlying infrastructure or exceed OpenStack API '
+              'limits (server creation per minute for instance).'),
+        type=int,
+        default=15,
+    )
 
     return parser.parse_args(argv)
