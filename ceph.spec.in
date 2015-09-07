@@ -218,7 +218,10 @@ Requires:	librados2 = %{version}-%{release}
 %if 0%{?suse_version}
 BuildRequires:	libexpat-devel
 BuildRequires:	FastCGI-devel
-%else
+BuildRequires:  openssl-devel
+Requires:       libopenssl1_0_0
+%endif
+%if 0%{?rhel} || 0%{?fedora}
 BuildRequires:	expat-devel
 BuildRequires:	fcgi-devel
 Requires:	mailcap
