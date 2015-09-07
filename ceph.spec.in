@@ -750,7 +750,6 @@ mkdir -p %{_localstatedir}/run/ceph/
 %{_unitdir}/ceph.target
 %else
 %{_initrddir}/ceph
-%{_sbindir}/rcceph
 %endif
 %{_sbindir}/ceph-disk
 %{_sbindir}/ceph-disk-udev
