@@ -2610,6 +2610,38 @@ TEST_F(TestLibRBD, TestPendingAio)
   rados_ioctx_destroy(ioctx);
 }
 
+TEST_F(TestLibRBD, RenameViaLockOwner)
+{
+  REQUIRE_FEATURE(RBD_FEATURE_LAYERING | RBD_FEATURE_EXCLUSIVE_LOCK);
+
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(m_pool_name.c_str(), ioctx));
+
+  librbd::RBD rbd;
+  std::string name = get_temp_image_name();
+  uint64_t size = 2 << 20;
+  int order = 0;
+  ASSERT_EQ(0, create_image_pp(rbd, ioctx, name.c_str(), size, &order));
+
+  librbd::Image image1;
+  ASSERT_EQ(0, rbd.open(ioctx, image1, name.c_str(), NULL));
+
+  bufferlist bl;
+  ASSERT_EQ(0, image1.write(0, 0, bl));
+
+  bool lock_owner;
+  ASSERT_EQ(0, image1.is_exclusive_lock_owner(&lock_owner));
+  ASSERT_TRUE(lock_owner);
+
+  std::string new_name = get_temp_image_name();
+  ASSERT_EQ(0, rbd.rename(ioctx, name.c_str(), new_name.c_str()));
+  ASSERT_EQ(0, image1.is_exclusive_lock_owner(&lock_owner));
+  ASSERT_TRUE(lock_owner);
+
+  librbd::Image image2;
+  ASSERT_EQ(0, rbd.open(ioctx, image2, new_name.c_str(), NULL));
+}
+
 TEST_F(TestLibRBD, SnapCreateViaLockOwner)
 {
   REQUIRE_FEATURE(RBD_FEATURE_LAYERING | RBD_FEATURE_EXCLUSIVE_LOCK);
@@ -2680,6 +2712,91 @@ TEST_F(TestLibRBD, SnapRemoveViaLockOwner)
   ASSERT_EQ(0, image2.snap_remove("snap1"));
   ASSERT_FALSE(image1.snap_exists("snap1"));
   ASSERT_FALSE(image2.snap_exists("snap1"));
+
+  ASSERT_EQ(0, image1.is_exclusive_lock_owner(&lock_owner));
+  ASSERT_TRUE(lock_owner);
+}
+
+TEST_F(TestLibRBD, SnapProtectViaLockOwner)
+{
+  REQUIRE_FEATURE(RBD_FEATURE_LAYERING | RBD_FEATURE_EXCLUSIVE_LOCK);
+
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(m_pool_name.c_str(), ioctx));
+
+  librbd::RBD rbd;
+  std::string name = get_temp_image_name();
+  uint64_t size = 2 << 20;
+  int order = 0;
+  ASSERT_EQ(0, create_image_pp(rbd, ioctx, name.c_str(), size, &order));
+
+  librbd::Image image1;
+  ASSERT_EQ(0, rbd.open(ioctx, image1, name.c_str(), NULL));
+
+  bufferlist bl;
+  ASSERT_EQ(0, image1.write(0, 0, bl));
+
+  bool lock_owner;
+  ASSERT_EQ(0, image1.is_exclusive_lock_owner(&lock_owner));
+  ASSERT_TRUE(lock_owner);
+  ASSERT_EQ(0, image1.snap_create("snap1"));
+
+  librbd::Image image2;
+  ASSERT_EQ(0, rbd.open(ioctx, image2, name.c_str(), NULL));
+
+  ASSERT_EQ(0, image2.is_exclusive_lock_owner(&lock_owner));
+  ASSERT_FALSE(lock_owner);
+
+  ASSERT_EQ(0, image2.snap_protect("snap1"));
+  bool is_protected;
+  ASSERT_EQ(0, image2.snap_is_protected("snap1", &is_protected));
+  ASSERT_TRUE(is_protected);
+  ASSERT_EQ(0, image1.snap_is_protected("snap1", &is_protected));
+  ASSERT_TRUE(is_protected);
+
+  ASSERT_EQ(0, image1.is_exclusive_lock_owner(&lock_owner));
+  ASSERT_TRUE(lock_owner);
+}
+
+TEST_F(TestLibRBD, SnapUnprotectViaLockOwner)
+{
+  REQUIRE_FEATURE(RBD_FEATURE_LAYERING | RBD_FEATURE_EXCLUSIVE_LOCK);
+
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(m_pool_name.c_str(), ioctx));
+
+  librbd::RBD rbd;
+  std::string name = get_temp_image_name();
+  uint64_t size = 2 << 20;
+  int order = 0;
+  ASSERT_EQ(0, create_image_pp(rbd, ioctx, name.c_str(), size, &order));
+
+  librbd::Image image1;
+  ASSERT_EQ(0, rbd.open(ioctx, image1, name.c_str(), NULL));
+
+  bufferlist bl;
+  ASSERT_EQ(0, image1.write(0, 0, bl));
+
+  bool lock_owner;
+  ASSERT_EQ(0, image1.is_exclusive_lock_owner(&lock_owner));
+  ASSERT_TRUE(lock_owner);
+  ASSERT_EQ(0, image1.snap_create("snap1"));
+  ASSERT_EQ(0, image1.snap_protect("snap1"));
+  bool is_protected;
+  ASSERT_EQ(0, image1.snap_is_protected("snap1", &is_protected));
+  ASSERT_TRUE(is_protected);
+
+  librbd::Image image2;
+  ASSERT_EQ(0, rbd.open(ioctx, image2, name.c_str(), NULL));
+
+  ASSERT_EQ(0, image2.is_exclusive_lock_owner(&lock_owner));
+  ASSERT_FALSE(lock_owner);
+
+  ASSERT_EQ(0, image2.snap_unprotect("snap1"));
+  ASSERT_EQ(0, image2.snap_is_protected("snap1", &is_protected));
+  ASSERT_FALSE(is_protected);
+  ASSERT_EQ(0, image1.snap_is_protected("snap1", &is_protected));
+  ASSERT_FALSE(is_protected);
 
   ASSERT_EQ(0, image1.is_exclusive_lock_owner(&lock_owner));
   ASSERT_TRUE(lock_owner);
@@ -2929,17 +3046,20 @@ TEST_F(TestLibRBD, UpdateFeatures)
   ASSERT_EQ(-EINVAL, image.update_features(0, true));
 
   ASSERT_EQ(0, image.update_features(RBD_FEATURE_EXCLUSIVE_LOCK |
-                                       RBD_FEATURE_OBJECT_MAP |
-                                       RBD_FEATURE_FAST_DIFF, false));
+                                     RBD_FEATURE_OBJECT_MAP |
+                                     RBD_FEATURE_FAST_DIFF |
+                                     RBD_FEATURE_JOURNALING, false));
 
-  // cannot enable object map w/o exclusive lock
+  // cannot enable object map nor journaling w/o exclusive lock
   ASSERT_EQ(-EINVAL, image.update_features(RBD_FEATURE_OBJECT_MAP, true));
+  ASSERT_EQ(-EINVAL, image.update_features(RBD_FEATURE_JOURNALING, true));
   ASSERT_EQ(0, image.update_features(RBD_FEATURE_EXCLUSIVE_LOCK, true));
 
   // cannot enable fast diff w/o object map
   ASSERT_EQ(-EINVAL, image.update_features(RBD_FEATURE_FAST_DIFF, true));
   ASSERT_EQ(0, image.update_features(RBD_FEATURE_OBJECT_MAP |
-                                       RBD_FEATURE_FAST_DIFF, true));
+                                     RBD_FEATURE_FAST_DIFF |
+                                     RBD_FEATURE_JOURNALING, true));
 
   uint64_t expected_flags = RBD_FLAG_OBJECT_MAP_INVALID |
                             RBD_FLAG_FAST_DIFF_INVALID;
@@ -2958,6 +3078,10 @@ TEST_F(TestLibRBD, UpdateFeatures)
   // cannot disable exclusive lock w/ object map
   ASSERT_EQ(-EINVAL, image.update_features(RBD_FEATURE_EXCLUSIVE_LOCK, false));
   ASSERT_EQ(0, image.update_features(RBD_FEATURE_OBJECT_MAP, false));
+
+  // cannot disable exclusive lock w/ journaling
+  ASSERT_EQ(-EINVAL, image.update_features(RBD_FEATURE_EXCLUSIVE_LOCK, false));
+  ASSERT_EQ(0, image.update_features(RBD_FEATURE_JOURNALING, false));
 
   ASSERT_EQ(0, image.get_flags(&flags));
   ASSERT_EQ(0U, flags);
@@ -3051,8 +3175,9 @@ TEST_F(TestLibRBD, BlockingAIO)
   ASSERT_EQ(0, rbd.open(ioctx, image, name.c_str(), NULL));
 
   bufferlist bl;
-  bl.append(std::string(256, '1'));
+  ASSERT_EQ(0, image.write(0, bl.length(), bl));
 
+  bl.append(std::string(256, '1'));
   librbd::RBD::AioCompletion *write_comp =
     new librbd::RBD::AioCompletion(NULL, NULL);
   ASSERT_EQ(0, image.aio_write(0, bl.length(), bl, write_comp));

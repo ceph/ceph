@@ -22,11 +22,10 @@ public:
   virtual ~AsyncRequest();
 
   void complete(int r) {
-    if (m_canceled && safely_cancel(r)) {
-      m_on_finish->complete(-ERESTART);
-      delete this;
-    } else if (should_complete(r)) {
-      m_on_finish->complete(filter_return_code(r));
+    if (should_complete(r)) {
+      r = filter_return_code(r);
+      finish(r);
+      m_on_finish->complete(r);
       delete this;
     }
   }
@@ -50,12 +49,12 @@ protected:
 
   void async_complete(int r);
 
-  virtual bool safely_cancel(int r) {
-    return true;
-  }
   virtual bool should_complete(int r) = 0;
-  virtual int filter_return_code(int r) {
+  virtual int filter_return_code(int r) const {
     return r;
+  }
+
+  virtual void finish(int r) {
   }
 private:
   bool m_canceled;

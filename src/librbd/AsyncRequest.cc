@@ -3,6 +3,7 @@
 #include "librbd/AsyncRequest.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/internal.h"
+#include "common/WorkQueue.h"
 #include <boost/bind.hpp>
 
 namespace librbd
@@ -11,6 +12,7 @@ namespace librbd
 AsyncRequest::AsyncRequest(ImageCtx &image_ctx, Context *on_finish)
   : m_image_ctx(image_ctx), m_on_finish(on_finish), m_canceled(false),
     m_xlist_item(this) {
+  assert(m_on_finish != NULL);
   Mutex::Locker l(m_image_ctx.async_ops_lock);
   m_image_ctx.async_requests.push_back(&m_xlist_item);
 }

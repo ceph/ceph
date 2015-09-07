@@ -27,8 +27,6 @@ using ::librbd::cls_client::set_size;
 using ::librbd::cls_client::get_parent;
 using ::librbd::cls_client::set_parent;
 using ::librbd::cls_client::remove_parent;
-using ::librbd::cls_client::snapshot_add;
-using ::librbd::cls_client::snapshot_remove;
 using ::librbd::cls_client::add_child;
 using ::librbd::cls_client::remove_child;
 using ::librbd::cls_client::get_children;
@@ -49,7 +47,6 @@ using ::librbd::cls_client::get_protection_status;
 using ::librbd::cls_client::set_protection_status;
 using ::librbd::cls_client::get_stripe_unit_count;
 using ::librbd::cls_client::set_stripe_unit_count;
-using ::librbd::cls_client::old_snapshot_add;
 using ::librbd::cls_client::get_mutable_metadata;
 using ::librbd::cls_client::object_map_load;
 using ::librbd::cls_client::object_map_save;
@@ -63,6 +60,28 @@ using ::librbd::cls_client::metadata_set;
 using ::librbd::cls_client::metadata_remove;
 using ::librbd::cls_client::metadata_list;
 using ::librbd::cls_client::metadata_get;
+
+
+static int snapshot_add(librados::IoCtx *ioctx, const std::string &oid,
+                        uint64_t snap_id, const std::string &snap_name) {
+  librados::ObjectWriteOperation op;
+  ::librbd::cls_client::snapshot_add(&op, snap_id, snap_name);
+  return ioctx->operate(oid, &op);
+}
+
+static int snapshot_remove(librados::IoCtx *ioctx, const std::string &oid,
+                           uint64_t snap_id) {
+  librados::ObjectWriteOperation op;
+  ::librbd::cls_client::snapshot_remove(&op, snap_id);
+  return ioctx->operate(oid, &op);
+}
+
+static int old_snapshot_add(librados::IoCtx *ioctx, const std::string &oid,
+                            uint64_t snap_id, const std::string &snap_name) {
+  librados::ObjectWriteOperation op;
+  ::librbd::cls_client::old_snapshot_add(&op, snap_id, snap_name);
+  return ioctx->operate(oid, &op);
+}
 
 static char *random_buf(size_t len)
 {
@@ -280,20 +299,28 @@ TEST_F(TestClsRbd, directory_methods)
   ASSERT_EQ(0, dir_get_id(&ioctx, oid, imgname2, &id));
   ASSERT_EQ(valid_id2, id);
 
-  ASSERT_EQ(-ESTALE, dir_rename_image(&ioctx, oid, imgname, imgname2, valid_id2));
+  librados::ObjectWriteOperation op1;
+  dir_rename_image(&op1, imgname, imgname2, valid_id2);
+  ASSERT_EQ(-ESTALE, ioctx.operate(oid, &op1));
   ASSERT_EQ(-ESTALE, dir_remove_image(&ioctx, oid, imgname, valid_id2));
-  ASSERT_EQ(-EEXIST, dir_rename_image(&ioctx, oid, imgname, imgname2, valid_id));
+  librados::ObjectWriteOperation op2;
+  dir_rename_image(&op2, imgname, imgname2, valid_id);
+  ASSERT_EQ(-EEXIST, ioctx.operate(oid, &op2));
   ASSERT_EQ(0, dir_get_id(&ioctx, oid, imgname, &id));
   ASSERT_EQ(valid_id, id);
   ASSERT_EQ(0, dir_get_name(&ioctx, oid, valid_id2, &name));
   ASSERT_EQ(imgname2, name);
 
-  ASSERT_EQ(0, dir_rename_image(&ioctx, oid, imgname, imgname3, valid_id));
+  librados::ObjectWriteOperation op3;
+  dir_rename_image(&op3, imgname, imgname3, valid_id);
+  ASSERT_EQ(0, ioctx.operate(oid, &op3));
   ASSERT_EQ(0, dir_get_id(&ioctx, oid, imgname3, &id));
   ASSERT_EQ(valid_id, id);
   ASSERT_EQ(0, dir_get_name(&ioctx, oid, valid_id, &name));
   ASSERT_EQ(imgname3, name);
-  ASSERT_EQ(0, dir_rename_image(&ioctx, oid, imgname3, imgname, valid_id));
+  librados::ObjectWriteOperation op4;
+  dir_rename_image(&op4, imgname3, imgname, valid_id);
+  ASSERT_EQ(0, ioctx.operate(oid, &op4));
 
   ASSERT_EQ(0, dir_remove_image(&ioctx, oid, imgname, valid_id));
   ASSERT_EQ(0, dir_list(&ioctx, oid, "", 30, &images));

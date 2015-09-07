@@ -58,6 +58,12 @@ libcls_numops_client_la_SOURCES = cls/numops/cls_numops_client.cc
 noinst_LTLIBRARIES += libcls_numops_client.la
 DENCODER_DEPS += libcls_numops_client.la
 
+libcls_journal_client_la_SOURCES = \
+	cls/journal/cls_journal_client.cc \
+	cls/journal/cls_journal_types.cc
+noinst_LTLIBRARIES += libcls_journal_client.la
+DENCODER_DEPS += libcls_journal_client.la
+
 noinst_HEADERS += \
 	cls/lock/cls_lock_types.h \
 	cls/lock/cls_lock_ops.h \
@@ -89,4 +95,6 @@ noinst_HEADERS += \
 	cls/user/cls_user_ops.h \
 	cls/user/cls_user_types.h \
 	cls/cephfs/cls_cephfs.h \
-	cls/cephfs/cls_cephfs_client.h
+	cls/cephfs/cls_cephfs_client.h \
+	cls/journal/cls_journal_client.h \
+	cls/journal/cls_journal_types.h

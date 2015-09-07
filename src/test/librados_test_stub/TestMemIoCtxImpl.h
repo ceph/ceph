@@ -12,14 +12,17 @@ namespace librados {
 class TestMemIoCtxImpl : public TestIoCtxImpl {
 public:
   TestMemIoCtxImpl();
-  explicit TestMemIoCtxImpl(TestMemRadosClient &client, int64_t m_pool_id,
-                            const std::string& pool_name,
-                            TestMemRadosClient::Pool *pool);
+  TestMemIoCtxImpl(TestMemRadosClient &client, int64_t m_pool_id,
+                   const std::string& pool_name,
+                   TestMemRadosClient::Pool *pool);
+  virtual ~TestMemIoCtxImpl();
 
   virtual TestIoCtxImpl *clone();
 
   virtual int aio_remove(const std::string& oid, AioCompletionImpl *c);
 
+  virtual int append(const std::string& oid, const bufferlist &bl,
+                     const SnapContext &snapc);
   virtual int assert_exists(const std::string &oid);
 
   virtual int create(const std::string& oid, bool exclusive);

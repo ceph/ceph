@@ -23,14 +23,21 @@ TestMemIoCtxImpl::TestMemIoCtxImpl() {
 }
 
 TestMemIoCtxImpl::TestMemIoCtxImpl(const TestMemIoCtxImpl& rhs)
-  : TestIoCtxImpl(rhs), m_client(rhs.m_client), m_pool(rhs.m_pool) {
-  }
+    : TestIoCtxImpl(rhs), m_client(rhs.m_client), m_pool(rhs.m_pool) {
+  m_pool->get();
+}
 
 TestMemIoCtxImpl::TestMemIoCtxImpl(TestMemRadosClient &client, int64_t pool_id,
                                    const std::string& pool_name,
                                    TestMemRadosClient::Pool *pool)
-  : TestIoCtxImpl(client, pool_id, pool_name), m_client(&client), m_pool(pool) {
-  }
+    : TestIoCtxImpl(client, pool_id, pool_name), m_client(&client),
+      m_pool(pool) {
+  m_pool->get();
+}
+
+TestMemIoCtxImpl::~TestMemIoCtxImpl() {
+  m_pool->put();
+}
 
 TestIoCtxImpl *TestMemIoCtxImpl::clone() {
   return new TestMemIoCtxImpl(*this);
@@ -40,6 +47,23 @@ int TestMemIoCtxImpl::aio_remove(const std::string& oid, AioCompletionImpl *c) {
   m_client->add_aio_operation(oid, true,
                               boost::bind(&TestMemIoCtxImpl::remove, this, oid),
                               c);
+  return 0;
+}
+
+int TestMemIoCtxImpl::append(const std::string& oid, const bufferlist &bl,
+                             const SnapContext &snapc) {
+  if (get_snap_read() != CEPH_NOSNAP) {
+    return -EROFS;
+  }
+
+  TestMemRadosClient::SharedFile file;
+  {
+    RWLock::WLocker l(m_pool->file_lock);
+    file = get_file(oid, true, snapc);
+  }
+
+  RWLock::WLocker l(file->lock);
+  file->data.append(bl);
   return 0;
 }
 

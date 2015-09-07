@@ -8,14 +8,17 @@
 #include "common/dout.h"
 #include "common/errno.h"
 #include "common/perf_counters.h"
+#include "common/WorkQueue.h"
 
+#include "librbd/AioImageRequestWQ.h"
 #include "librbd/AsyncOperation.h"
 #include "librbd/AsyncRequest.h"
-#include "librbd/AsyncResizeRequest.h"
 #include "librbd/internal.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageWatcher.h"
+#include "librbd/Journal.h"
 #include "librbd/ObjectMap.h"
+#include "librbd/operation/ResizeRequest.h"
 
 #include <boost/bind.hpp>
 
@@ -49,6 +52,64 @@ public:
   }
 };
 
+struct C_FlushCache : public Context {
+  ImageCtx *image_ctx;
+  Context *on_safe;
+
+  C_FlushCache(ImageCtx *_image_ctx, Context *_on_safe)
+    : image_ctx(_image_ctx), on_safe(_on_safe) {
+  }
+  virtual void finish(int r) {
+    // successful cache flush indicates all IO is now safe
+    on_safe->complete(r);
+  }
+};
+
+struct C_InvalidateCache : public Context {
+  ImageCtx *image_ctx;
+  bool purge_on_error;
+  bool reentrant_safe;
+  Context *on_finish;
+
+  C_InvalidateCache(ImageCtx *_image_ctx, bool _purge_on_error,
+                    bool _reentrant_safe, Context *_on_finish)
+    : image_ctx(_image_ctx), purge_on_error(_purge_on_error),
+      reentrant_safe(_reentrant_safe), on_finish(_on_finish) {
+  }
+  virtual void finish(int r) {
+    assert(image_ctx->cache_lock.is_locked());
+    CephContext *cct = image_ctx->cct;
+
+    if (r == -EBLACKLISTED) {
+      lderr(cct) << "Blacklisted during flush!  Purging cache..." << dendl;
+      image_ctx->object_cacher->purge_set(image_ctx->object_set);
+    } else if (r != 0 && purge_on_error) {
+      lderr(cct) << "invalidate cache encountered error "
+                 << cpp_strerror(r) << " !Purging cache..." << dendl;
+      image_ctx->object_cacher->purge_set(image_ctx->object_set);
+    } else if (r != 0) {
+      lderr(cct) << "flush_cache returned " << r << dendl;
+    }
+
+    loff_t unclean = image_ctx->object_cacher->release_set(
+      image_ctx->object_set);
+    if (unclean == 0) {
+      r = 0;
+    } else {
+      lderr(cct) << "could not release all objects from cache: "
+                 << unclean << " bytes remain" << dendl;
+      r = -EBUSY;
+    }
+
+    if (reentrant_safe) {
+      on_finish->complete(r);
+    } else {
+      image_ctx->op_work_queue->queue(on_finish, r);
+    }
+  }
+
+};
+
 } // anonymous namespace
 
   const string ImageCtx::METADATA_CONF_PREFIX = "conf_";
@@ -64,6 +125,7 @@ public:
       exclusive_locked(false),
       name(image_name),
       image_watcher(NULL),
+      journal(NULL),
       refresh_seq(0),
       last_refresh(0),
       owner_lock(unique_lock_name("librbd::ImageCtx::owner_lock", this)),
@@ -84,7 +146,8 @@ public:
       object_cacher(NULL), writeback_handler(NULL), object_set(NULL),
       readahead(),
       total_bytes_read(0), copyup_finisher(NULL),
-      object_map(*this), aio_work_queue(NULL), op_work_queue(NULL)
+      object_map(*this), aio_work_queue(NULL), op_work_queue(NULL),
+      refresh_in_progress(false)
   {
     md_ctx.dup(p);
     data_ctx.dup(p);
@@ -97,15 +160,17 @@ public:
     ThreadPoolSingleton *thread_pool_singleton;
     cct->lookup_or_create_singleton_object<ThreadPoolSingleton>(
       thread_pool_singleton, "librbd::thread_pool");
-    aio_work_queue = new ContextWQ("librbd::aio_work_queue",
-                                   cct->_conf->rbd_op_thread_timeout,
-                                   thread_pool_singleton);
+    aio_work_queue = new AioImageRequestWQ(this, "librbd::aio_work_queue",
+                                           cct->_conf->rbd_op_thread_timeout,
+                                           thread_pool_singleton);
     op_work_queue = new ContextWQ("librbd::op_work_queue",
                                   cct->_conf->rbd_op_thread_timeout,
                                   thread_pool_singleton);
   }
 
   ImageCtx::~ImageCtx() {
+    assert(journal == NULL);
+
     perf_stop();
     if (object_cacher) {
       delete object_cacher;
@@ -468,9 +533,9 @@ public:
   {
     assert(snap_lock.is_locked());
     if (in_snap_id == CEPH_NOSNAP) {
-      if (!async_resize_reqs.empty() &&
-          async_resize_reqs.front()->shrinking()) {
-        return async_resize_reqs.front()->get_image_size();
+      if (!resize_reqs.empty() &&
+          resize_reqs.front()->shrinking()) {
+        return resize_reqs.front()->get_image_size();
       }
       return size;
     }
@@ -611,10 +676,12 @@ public:
 
   void ImageCtx::write_to_cache(object_t o, const bufferlist& bl, size_t len,
 				uint64_t off, Context *onfinish,
-				int fadvise_flags) {
+				int fadvise_flags, uint64_t journal_tid) {
     snap_lock.get_read();
     ObjectCacher::OSDWrite *wr = object_cacher->prepare_write(snapc, bl,
-							      utime_t(), fadvise_flags);
+							      utime_t(),
+                                                              fadvise_flags,
+                                                              journal_tid);
     snap_lock.put_read();
     ObjectExtent extent(o, 0, off, len, 0);
     extent.oloc.pool = data_ctx.get_id();
@@ -647,28 +714,22 @@ public:
     }
   }
 
-  void ImageCtx::flush_cache_aio(Context *onfinish) {
+  int ImageCtx::flush_cache() {
+    C_SaferCond cond_ctx;
+    flush_cache(&cond_ctx);
+
+    ldout(cct, 20) << "waiting for cache to be flushed" << dendl;
+    int r = cond_ctx.wait();
+    ldout(cct, 20) << "finished flushing cache" << dendl;
+
+    return r;
+  }
+
+  void ImageCtx::flush_cache(Context *onfinish) {
     assert(owner_lock.is_locked());
     cache_lock.Lock();
     object_cacher->flush_set(object_set, onfinish);
     cache_lock.Unlock();
-  }
-
-  int ImageCtx::flush_cache() {
-    int r = 0;
-    Mutex mylock("librbd::ImageCtx::flush_cache");
-    Cond cond;
-    bool done;
-    Context *onfinish = new C_SafeCond(&mylock, &cond, &done, &r);
-    flush_cache_aio(onfinish);
-    mylock.Lock();
-    while (!done) {
-      ldout(cct, 20) << "waiting for cache to be flushed" << dendl;
-      cond.Wait(mylock);
-    }
-    mylock.Unlock();
-    ldout(cct, 20) << "finished flushing cache" << dendl;
-    return r;
   }
 
   int ImageCtx::shutdown_cache() {
@@ -681,20 +742,19 @@ public:
   }
 
   int ImageCtx::invalidate_cache(bool purge_on_error) {
-    int result;
-    C_SaferCond ctx;
-    invalidate_cache(&ctx);
-    result = ctx.wait();
-
-    if (result && purge_on_error) {
-      cache_lock.Lock();
-      if (object_cacher != NULL) {
-	lderr(cct) << "invalidate cache met error " << cpp_strerror(result) << " !Purging cache..." << dendl;
-	object_cacher->purge_set(object_set);
-      }
-      cache_lock.Unlock();
+    flush_async_operations();
+    if (object_cacher == NULL) {
+      return 0;
     }
 
+    cache_lock.Lock();
+    object_cacher->release_set(object_set);
+    cache_lock.Unlock();
+
+    C_SaferCond ctx;
+    flush_cache(new C_InvalidateCache(this, purge_on_error, true, &ctx));
+
+    int result = ctx.wait();
     return result;
   }
 
@@ -708,29 +768,7 @@ public:
     object_cacher->release_set(object_set);
     cache_lock.Unlock();
 
-    flush_cache_aio(new FunctionContext(boost::bind(
-      &ImageCtx::invalidate_cache_completion, this, _1, on_finish)));
-  }
-
-  void ImageCtx::invalidate_cache_completion(int r, Context *on_finish) {
-    assert(cache_lock.is_locked());
-    if (r == -EBLACKLISTED) {
-      lderr(cct) << "Blacklisted during flush!  Purging cache..." << dendl;
-      object_cacher->purge_set(object_set);
-    } else if (r != 0) {
-      lderr(cct) << "flush_cache returned " << r << dendl;
-    }
-
-    loff_t unclean = object_cacher->release_set(object_set);
-    if (unclean == 0) {
-      r = 0;
-    } else {
-      lderr(cct) << "could not release all objects from cache: "
-                 << unclean << " bytes remain" << dendl;
-      r = -EBUSY;
-    }
-
-    op_work_queue->queue(on_finish, r);
+    flush_cache(new C_InvalidateCache(this, false, false, on_finish));
   }
 
   void ImageCtx::clear_nonexistence_cache() {
@@ -743,6 +781,7 @@ public:
   int ImageCtx::register_watch() {
     assert(image_watcher == NULL);
     image_watcher = new ImageWatcher(*this);
+    aio_work_queue->register_lock_listener();
     return image_watcher->register_watch();
   }
 
@@ -782,15 +821,31 @@ public:
   }
 
   void ImageCtx::flush_async_operations(Context *on_finish) {
-    Mutex::Locker l(async_ops_lock);
-    if (async_ops.empty()) {
-      op_work_queue->queue(on_finish, 0);
-      return;
+    {
+      Mutex::Locker l(async_ops_lock);
+      if (!async_ops.empty()) {
+        ldout(cct, 20) << "flush async operations: " << on_finish << " "
+                       << "count=" << async_ops.size() << dendl;
+        async_ops.front()->add_flush_context(on_finish);
+        return;
+      }
     }
+    on_finish->complete(0);
+  }
 
-    ldout(cct, 20) << "flush async operations: " << on_finish << " "
-                   << "count=" << async_ops.size() << dendl;
-    async_ops.front()->add_flush_context(on_finish);
+  int ImageCtx::flush() {
+    C_SaferCond cond_ctx;
+    flush(&cond_ctx);
+    return cond_ctx.wait();
+  }
+
+  void ImageCtx::flush(Context *on_safe) {
+    assert(owner_lock.is_locked());
+    if (object_cacher != NULL) {
+      // flush cache after completing all in-flight AIO ops
+      on_safe = new C_FlushCache(this, on_safe);
+    }
+    flush_async_operations(on_safe);
   }
 
   void ImageCtx::cancel_async_requests() {
@@ -923,5 +978,25 @@ public:
     ASSIGN_OPTION(blacklist_expire_seconds);
     ASSIGN_OPTION(request_timed_out_seconds);
     ASSIGN_OPTION(enable_alloc_hint);
+  }
+
+  void ImageCtx::open_journal() {
+    assert(journal == NULL);
+    journal = new Journal(*this);
+  }
+
+  int ImageCtx::close_journal(bool force) {
+    assert(journal != NULL);
+    int r = journal->close();
+    if (r < 0) {
+      lderr(cct) << "failed to flush journal: " << cpp_strerror(r) << dendl;
+      if (!force) {
+        return r;
+      }
+    }
+
+    delete journal;
+    journal = NULL;
+    return r;
   }
 }
