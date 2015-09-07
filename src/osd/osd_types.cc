@@ -1055,25 +1055,22 @@ void pg_pool_t::add_unmanaged_snap(uint64_t& snapid)
 {
   if (removed_snaps.empty()) {
     assert(!is_pool_snaps_mode());
-    removed_snaps.insert(snapid_t(1));
-    snap_seq = 1;
+    removed_snaps.insert(snapid_t(0));
   }
-  snapid = snap_seq = snap_seq + 1;
+  snap_seq = snap_seq + 1;
+  snapid = snap_seq;
 }
 
 void pg_pool_t::remove_snap(snapid_t s)
 {
   assert(snaps.count(s));
   snaps.erase(s);
-  snap_seq = snap_seq + 1;
 }
 
 void pg_pool_t::remove_unmanaged_snap(snapid_t s)
 {
   assert(is_unmanaged_snaps_mode());
   removed_snaps.insert(s);
-  snap_seq = snap_seq + 1;
-  removed_snaps.insert(get_snap_seq());
 }
 
 SnapContext pg_pool_t::get_snap_context() const
