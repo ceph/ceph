@@ -33,7 +33,7 @@ _ceph()
                 return 0
                 ;;
             auth)
-                COMPREPLY=( $(compgen -W "list add del print_key print-key export get get-key import get-or-create get-or-create-key" -- ${cur}) )
+                COMPREPLY=( $(compgen -W "list add del print-key export get get-key import get-or-create get-or-create-key" -- ${cur}) )
                 return 0
                 ;;
             pg)

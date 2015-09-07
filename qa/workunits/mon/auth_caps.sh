@@ -72,7 +72,6 @@ read_ops() {
   expect $ret ceph auth export client.admin $args
   expect $ret ceph auth list $args
   expect $ret ceph auth print-key client.admin $args
-  expect $ret ceph auth print_key client.admin $args
 }
 
 write_ops() {

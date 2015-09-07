@@ -604,7 +604,6 @@ bool AuthMonitor::preprocess_command(MonOpRequestRef op)
       r = 0;
     }
   } else if (prefix == "auth print-key" ||
-	     prefix == "auth print_key" ||
 	     prefix == "auth get-key") {
     EntityAuth auth;
     if (!mon->key_server.get_auth(entity, auth)) {

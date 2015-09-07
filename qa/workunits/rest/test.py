@@ -99,7 +99,6 @@ if __name__ == '__main__':
 
     expect('auth/get-key?entity=client.xx', 'GET', 200, 'json', JSONHDR)
     expect('auth/print-key?entity=client.xx', 'GET', 200, 'json', JSONHDR)
-    expect('auth/print_key?entity=client.xx', 'GET', 200, 'json', JSONHDR)
 
     expect('auth/caps?entity=client.xx&caps=osd&caps=allow+rw', 'PUT', 200,
            'json', JSONHDR)
