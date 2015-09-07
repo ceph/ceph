@@ -1,9 +1,10 @@
 from copy import deepcopy
 from datetime import datetime
 
-from mock import patch, Mock
+from mock import patch, Mock, DEFAULT
 
 from teuthology import suite
+from scripts.suite import main
 from teuthology.config import config
 
 
@@ -703,3 +704,39 @@ class TestBuildMatrix(object):
         assert fragments[0] == 'thrash/ceph/base.yaml'
         assert fragments[1] == 'thrash/ceph-thrash/default.yaml'
 
+
+class TestSuiteMain(object):
+
+    def test_main(self):
+        suite_name = 'SUITE'
+        throttle = '3'
+        machine_type = 'burnupi'
+        def prepare_and_schedule(**kwargs):
+            assert kwargs['job_config']['suite'] == suite_name
+            assert kwargs['throttle'] == throttle
+
+        with patch.multiple(
+                suite,
+                fetch_repos=DEFAULT,
+                prepare_and_schedule=prepare_and_schedule,
+                ):
+            main(['--suite', suite_name,
+                  '--throttle', throttle,
+                  '--machine-type', machine_type])
+
+    def test_schedule_suite(self):
+        suite_name = 'noop'
+        throttle = '3'
+        machine_type = 'burnupi'
+
+        with patch.multiple(
+                suite,
+                fetch_repos=DEFAULT,
+                teuthology_schedule=DEFAULT,
+                sleep=DEFAULT,
+                ) as m:
+            main(['--suite', suite_name,
+                  '--suite-dir', 'teuthology/test',
+                  '--throttle', throttle,
+                  '--machine-type', machine_type])
+            m['sleep'].assert_called_with(int(throttle))
