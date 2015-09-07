@@ -205,7 +205,7 @@ int rgw_store_user_info(RGWRados *store,
 }
 
 int rgw_store_user_attrs(RGWRados *const store,
-                         string& user_id,
+                         const string& user_id,
                          map<string, bufferlist>& attrs,
                          map<string, bufferlist>* const rmattrs,
                          RGWObjVersionTracker * const objv_tracker)

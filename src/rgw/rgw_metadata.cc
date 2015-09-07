@@ -607,8 +607,10 @@ int RGWMetadataManager::remove_entry(RGWMetadataHandler *handler, string& key, R
   return 0;
 }
 
-int RGWMetadataManager::set_attrs(RGWMetadataHandler *handler, string& key,
-                                  rgw_obj& obj, map<string, bufferlist>& attrs,
+int RGWMetadataManager::set_attrs(RGWMetadataHandler *handler,
+                                  const string& key,
+                                  rgw_obj& obj,
+                                  map<string, bufferlist>& attrs,
                                   map<string, bufferlist>* rmattrs,
                                   RGWObjVersionTracker *objv_tracker)
 {
