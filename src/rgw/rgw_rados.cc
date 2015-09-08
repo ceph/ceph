@@ -2034,62 +2034,81 @@ public:
 };
 
 
-class RGWMetaNotifier {
-  CephContext *cct;
-  RGWRados *store;
-  atomic_t down_flag;
-
-  class WMWorker : public Thread {
+class RGWRadosThread {
+  class Worker : public Thread {
     CephContext *cct;
-    RGWMetaNotifier *notifier;
+    RGWRadosThread *processor;
     Mutex lock;
     Cond cond;
 
   public:
-    WMWorker(CephContext *_cct, RGWMetaNotifier *_n) : cct(_cct), notifier(_n), lock("WMWorker") {}
+    Worker(CephContext *_cct, RGWRadosThread *_p) : cct(_cct), processor(_p), lock("RGWRadosThread::Worker") {}
     void *entry();
-    void stop();
+    void stop() {
+      Mutex::Locker l(lock);
+      cond.Signal();
+    }
   };
 
-  WMWorker *worker;
-  RGWMetaNotifierManager notify_mgr;
+  Worker *worker;
+
+protected:
+  CephContext *cct;
+  RGWRados *store;
+
+  atomic_t down_flag;
+
+  virtual uint64_t interval_msec() = 0;
+  virtual void stop_process() {}
 public:
-  RGWMetaNotifier(RGWRados *_store) : cct(_store->ctx()), store(_store), worker(NULL), notify_mgr(_store) {}
-  ~RGWMetaNotifier() {
+  RGWRadosThread(RGWRados *_store) : worker(NULL), cct(_store->ctx()), store(_store) {}
+  virtual ~RGWRadosThread() {
     stop();
   }
 
-  int process();
+  virtual int process() = 0;
 
   bool going_down() { return down_flag.read() != 0; }
   void start();
   void stop();
 };
 
-void RGWMetaNotifier::WMWorker::stop()
+void RGWRadosThread::start()
 {
-  Mutex::Locker l(lock);
-  cond.Signal();
+  worker = new Worker(cct, this);
+  worker->create();
 }
 
-void *RGWMetaNotifier::WMWorker::entry() {
-  uint64_t msec = cct->_conf->rgw_md_notify_interval_msec;
+void RGWRadosThread::stop()
+{
+  down_flag.set(1);
+  stop_process();
+  if (worker) {
+    worker->stop();
+    worker->join();
+  }
+  delete worker;
+  worker = NULL;
+}
+
+void *RGWRadosThread::Worker::entry() {
+  uint64_t msec = processor->interval_msec();
   utime_t interval = utime_t(msec / 1000, (msec % 1000) * 1000000);
 
   do {
     utime_t start = ceph_clock_now(cct);
-    int r = notifier->process();
+    int r = processor->process();
     if (r < 0) {
-      dout(0) << "ERROR: meta notifier process() returned error r=" << r << dendl;
+      dout(0) << "ERROR: processor->process() returned error r=" << r << dendl;
     }
 
-    if (notifier->going_down())
+    if (processor->going_down())
       break;
 
     utime_t end = ceph_clock_now(cct);
     end -= start;
 
-    uint64_t cur_msec = cct->_conf->rgw_md_notify_interval_msec;
+    uint64_t cur_msec = processor->interval_msec();
     if (cur_msec != msec) { /* was it reconfigured? */
       interval = utime_t(msec / 1000, (msec % 1000) * 1000000);
     }
@@ -2103,27 +2122,22 @@ void *RGWMetaNotifier::WMWorker::entry() {
     lock.Lock();
     cond.WaitInterval(cct, lock, wait_time);
     lock.Unlock();
-  } while (!notifier->going_down());
+  } while (!processor->going_down());
 
   return NULL;
 }
 
-void RGWMetaNotifier::start()
-{
-  worker = new WMWorker(cct, this);
-  worker->create();
-}
+class RGWMetaNotifier : public RGWRadosThread {
+  RGWMetaNotifierManager notify_mgr;
 
-void RGWMetaNotifier::stop()
-{
-  down_flag.set(1);
-  if (worker) {
-    worker->stop();
-    worker->join();
+  uint64_t interval_msec() {
+    return cct->_conf->rgw_md_notify_interval_msec;
   }
-  delete worker;
-  worker = NULL;
-}
+public:
+  RGWMetaNotifier(RGWRados *_store) : RGWRadosThread(_store), notify_mgr(_store) {}
+
+  int process();
+};
 
 int RGWMetaNotifier::process()
 {
