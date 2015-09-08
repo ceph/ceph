@@ -2112,18 +2112,25 @@ void *RGWRadosThread::Worker::entry() {
 
     uint64_t cur_msec = processor->interval_msec();
     if (cur_msec != msec) { /* was it reconfigured? */
+      msec = cur_msec;
       interval = utime_t(msec / 1000, (msec % 1000) * 1000000);
     }
 
-    if (interval <= end)
-      continue; // next round
+    if (cur_msec > 0) {
+      if (interval <= end)
+        continue; // next round
 
-    utime_t wait_time = interval;
-    wait_time -= end;
+      utime_t wait_time = interval;
+      wait_time -= end;
 
-    lock.Lock();
-    cond.WaitInterval(cct, lock, wait_time);
-    lock.Unlock();
+      lock.Lock();
+      cond.WaitInterval(cct, lock, wait_time);
+      lock.Unlock();
+    } else {
+      lock.Lock();
+      cond.Wait(lock);
+      lock.Unlock();
+    }
   } while (!processor->going_down());
 
   return NULL;
@@ -2254,6 +2261,11 @@ void RGWRados::finalize()
      */
     delete finisher;
   }
+  if (run_sync_thread) {
+    sync_processor_thread->stop();
+    delete sync_processor_thread;
+    sync_processor_thread = NULL;
+  }
   delete meta_mgr;
   delete data_log;
   if (use_gc_thread) {
@@ -2267,11 +2279,6 @@ void RGWRados::finalize()
   obj_expirer = NULL;
 
   meta_notifier->stop();
-  if (run_sync_thread) {
-    sync_processor_thread->stop();
-    delete sync_processor_thread;
-    sync_processor_thread = NULL;
-  }
   delete rest_master_conn;
 
   map<string, RGWRESTConn *>::iterator iter;

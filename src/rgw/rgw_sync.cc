@@ -380,7 +380,7 @@ int RGWRemoteMetaLog::get_shard_info(int shard_id)
 int RGWMetaSyncStatusManager::init()
 {
   if (store->is_meta_master()) {
-    return -EINVAL;
+    return 0;
   }
 
   if (!store->rest_master_conn) {
@@ -1819,6 +1819,10 @@ int RGWRemoteMetaLog::set_sync_info(const rgw_meta_sync_info& sync_info)
 
 int RGWRemoteMetaLog::run_sync(int num_shards, rgw_meta_sync_status& sync_status)
 {
+  if (store->is_meta_master()) {
+    return 0;
+  }
+
   RGWObjectCtx obj_ctx(store, NULL);
 
   int r = run(new RGWReadSyncStatusCoroutine(async_rados, store, obj_ctx, &sync_status));
