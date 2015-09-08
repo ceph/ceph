@@ -13,6 +13,8 @@
  */
 
 #include <stdint.h>
+#include <tuple>
+#include <iostream>
 
 #include "include/rados/librgw.h"
 #include "include/rados/rgw_file.h"
@@ -28,6 +30,8 @@ namespace {
   string access_key("C4B4D3E4H355VTDTQXRF");
   string secret_key("NRBkhM2rUZNUbydD86HpNJ110VpQjVroumCOHJXw");
   struct rgw_fs *fs = nullptr;
+  typedef std::tuple<string,uint64_t> fid_type; //in c++2014 can alias...
+  std::vector<fid_type> fids1;
 }
 
 TEST(LibRGW, INIT) {
@@ -41,6 +45,27 @@ TEST(LibRGW, MOUNT) {
 		      &fs);
   ASSERT_EQ(ret, 0);
   ASSERT_NE(fs, nullptr);
+}
+
+extern "C" {
+  static bool r1_cb(const char* name, void *arg, uint64_t offset) {
+    // don't need arg--it would point to fids1
+    fids1.push_back(fid_type(name, offset));
+    return true; /* XXX ? */
+  }
+}
+
+TEST(LibRGW, LIST_BUCKETS) {
+  /* list buckets via readdir in fs root */
+  using std::get;
+
+  bool eof = false;
+  int ret = rgw_readdir(fs, &fs->root_fh, 0 /* offset */, r1_cb, &fids1, &eof);
+  for (auto& fid : fids1) {
+    std::cout << "fname: " << get<0>(fid) << " fid: " << get<1>(fid)
+	      << std::endl;
+  }
+  ASSERT_EQ(ret, 0);
 }
 
 TEST(LibRGW, UMOUNT) {
