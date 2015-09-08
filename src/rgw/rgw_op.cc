@@ -1829,11 +1829,15 @@ void RGWPutObj::execute()
   }
 
   ret = get_params();
-  if (ret < 0)
+  if (ret < 0) {
+    ldout(s->cct, 20) << "get_params() returned ret=" << ret << dendl;
     goto done;
+  }
 
   ret = get_system_versioning_params(s, &olh_epoch, &version_id);
   if (ret < 0) {
+    ldout(s->cct, 20) << "get_system_versioning_params() returned ret=" \
+        << ret << dendl;
     goto done;
   }
 
@@ -1858,6 +1862,7 @@ void RGWPutObj::execute()
     ret = store->check_quota(s->bucket_owner.get_id(), s->bucket,
                              user_quota, bucket_quota, s->content_length);
     if (ret < 0) {
+      ldout(s->cct, 20) << "check_quota() returned ret=" << ret << dendl;
       goto done;
     }
   }
@@ -1870,8 +1875,10 @@ void RGWPutObj::execute()
   processor = select_processor(*static_cast<RGWObjectCtx *>(s->obj_ctx), &multipart);
 
   ret = processor->prepare(store, NULL);
-  if (ret < 0)
+  if (ret < 0) {
+    ldout(s->cct, 20) << "processor->prepare() returned ret=" << ret << dendl;
     goto done;
+  }
 
   do {
     bufferlist data;
@@ -1941,6 +1948,7 @@ void RGWPutObj::execute()
   ret = store->check_quota(s->bucket_owner.get_id(), s->bucket,
                            user_quota, bucket_quota, s->obj_size);
   if (ret < 0) {
+    ldout(s->cct, 20) << "second check_quota() returned ret=" << ret << dendl;
     goto done;
   }
 
