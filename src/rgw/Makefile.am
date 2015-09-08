@@ -98,6 +98,7 @@ radosgw_SOURCES = \
 	rgw/rgw_rest_opstate.cc \
 	rgw/rgw_rest_replica_log.cc \
 	rgw/rgw_rest_config.cc \
+	rgw/rgw_rest_realm.cc \
 	rgw/rgw_http_client.cc \
 	rgw/rgw_swift.cc \
 	rgw/rgw_swift_auth.cc \
