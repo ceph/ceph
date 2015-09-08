@@ -12,6 +12,7 @@ import subprocess
 import smtplib
 import socket
 import sys
+from time import sleep
 import yaml
 import math
 from email.mime.text import MIMEText
@@ -64,6 +65,7 @@ def main(args):
     timeout = args['--timeout']
     filter_in = args['--filter']
     filter_out = args['--filter-out']
+    throttle = args['--throttle']
 
     subset = None
     if args['--subset']:
@@ -115,6 +117,7 @@ def main(args):
                          filter_in=filter_in,
                          filter_out=filter_out,
                          subset=subset,
+                         throttle=throttle,
                          )
     os.remove(base_yaml_path)
 
@@ -260,7 +263,8 @@ def prepare_and_schedule(job_config, suite_repo_path, base_yaml_paths, limit,
                          num, timeout, dry_run, verbose,
                          filter_in,
                          filter_out,
-                         subset):
+                         subset,
+                         throttle):
     """
     Puts together some "base arguments" with which to execute
     teuthology-schedule for each job, then passes them and other parameters to
@@ -303,7 +307,8 @@ def prepare_and_schedule(job_config, suite_repo_path, base_yaml_paths, limit,
         verbose=verbose,
         filter_in=filter_in,
         filter_out=filter_out,
-        subset=subset
+        subset=subset,
+        throttle=throttle
     )
 
     if job_config.email and num_jobs:
@@ -504,7 +509,8 @@ def schedule_suite(job_config,
                    verbose=1,
                    filter_in=None,
                    filter_out=None,
-                   subset=None
+                   subset=None,
+                   throttle=None,
                    ):
     """
     schedule one suite.
@@ -618,6 +624,9 @@ def schedule_suite(job_config,
             verbose=verbose,
             log_prefix=log_prefix,
         )
+        if not dry_run and throttle:
+            log.info("pause between jobs : --throttle " + str(throttle))
+            sleep(int(throttle))
 
     count = len(jobs_to_schedule)
     missing_count = len(jobs_missing_packages)

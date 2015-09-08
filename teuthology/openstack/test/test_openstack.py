@@ -93,6 +93,7 @@ openstack keypair delete {key_name} || true
             '--timeout', '234',
             '--filter', 'trasher',
             '--filter-out', 'erasure-code',
+            '--throttle', '3',
         ]
         argv = (self.options +
                 ['--upload',
@@ -109,7 +110,7 @@ openstack keypair delete {key_name} || true
         assert "nworkers=" + str(args.simultaneous_jobs) in variables
         assert "username=" + teuthology.username in variables
         assert "upload=--archive-upload user@archive:/tmp" in variables
-        assert "upload=git clone" in variables
+        assert "clone=git clone" in variables
         assert os.environ['OS_AUTH_URL'] in variables
 
         out, err = capsys.readouterr()
