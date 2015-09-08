@@ -4025,7 +4025,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 
         op.extent.length = total_read;
 
-        osd_op.outdata.claim_append(bl);
+        ::encode(m, osd_op.outdata); // re-encode since it might be modified
         ::encode_destructively(data_bl, osd_op.outdata);
 
 	dout(10) << " sparse_read got " << total_read << " bytes from object " << soid << dendl;
