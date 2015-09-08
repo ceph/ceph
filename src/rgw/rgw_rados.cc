@@ -2395,22 +2395,18 @@ int RGWRados::open_objexp_pool_ctx()
 int RGWRados::init_watch()
 {
   const char *control_pool = zone.control_pool.name.c_str();
-  derr << "init_watch control pool " << control_pool  << dendl;
 
   librados::Rados *rad = rados[0];
   int r = rad->ioctx_create(control_pool, control_pool_ctx);
-  derr << "init_watch ioctx_create " << cpp_strerror(-r) << dendl;
 
   if (r == -ENOENT) {
     r = rad->pool_create(control_pool);
-    derr << "init_watch pool_create " << cpp_strerror(-r) << dendl;
     if (r == -EEXIST)
       r = 0;
     if (r < 0)
       return r;
 
     r = rad->ioctx_create(control_pool, control_pool_ctx);
-    derr << "init_watch ioctx_create " << cpp_strerror(-r) << dendl;
     if (r < 0)
       return r;
   }
