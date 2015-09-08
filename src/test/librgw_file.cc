@@ -24,6 +24,8 @@
 
 namespace {
   librgw_t rgw = nullptr;
+  string access_key("C4B4D3E4H355VTDTQXRF");
+  string secret_key("NRBkhM2rUZNUbydD86HpNJ110VpQjVroumCOHJXw");
 }
 
 TEST(LibRGW, INIT) {
@@ -38,6 +40,24 @@ TEST(LibRGW, SHUTDOWN) {
 
 int main(int argc, char *argv[])
 {
+  string val;
+  vector<const char*> args;
+
+  argv_to_vec(argc, const_cast<const char**>(argv), args);
+  env_to_vec(args);
+
+  for (auto arg_iter = args.begin(); arg_iter != args.end();) {
+    if (ceph_argparse_witharg(args, arg_iter, &val, "--access",
+			      (char*) NULL)) {
+      access_key = val;
+    } else if (ceph_argparse_witharg(args, arg_iter, &val, "--secret",
+				     (char*) NULL)) {
+      secret_key = val;
+    } else {
+      ++arg_iter;
+    }
+  }
+
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
 }
