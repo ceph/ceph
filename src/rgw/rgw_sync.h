@@ -204,6 +204,10 @@ public:
   int clone_shards() { return master_log.clone_shards(num_shards, clone_markers); }
 
   int run() { return master_log.run_sync(num_shards, sync_status); }
+
+  void stop() {
+    master_log.stop();
+  }
 };
 
 #endif
