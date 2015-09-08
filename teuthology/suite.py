@@ -276,7 +276,7 @@ def prepare_and_schedule(job_config, suite_repo_path, base_yaml_paths, limit,
     ]
     if dry_run:
         base_args.append('--dry-run')
-    if job_config.priority:
+    if job_config.priority is not None:
         base_args.extend(['--priority', str(job_config.priority)])
     if verbose:
         base_args.append('-v')
