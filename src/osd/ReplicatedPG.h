@@ -1581,6 +1581,11 @@ public:
     PGBackend::PGTransaction *t,
     const string &key,
     bufferlist &val);
+  void setattrs_maybe_cache(
+    ObjectContextRef obc,
+    OpContext *op,
+    PGBackend::PGTransaction *t,
+    map<string, bufferlist> &attrs);
   void rmattr_maybe_cache(
     ObjectContextRef obc,
     OpContext *op,
