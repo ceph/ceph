@@ -221,6 +221,32 @@ function test_mon_injectargs_SI()
   $SUDO ceph daemon mon.a config set mon_pg_warn_min_objects $initial_value
 }
 
+function test_12748()
+{
+    ceph osd pool create foo 12 12
+    ceph osd pool create foo-hot 12 12
+    ceph osd tier add foo foo-hot
+    ceph osd tier cache-mode foo-hot writeback
+    ceph osd tier set-overlay foo foo-hot
+
+    rbd create --size 10M --image-format 2 foo/bar
+    sudo ./rbd-fuse -p foo -c $PWD/ceph.conf /mnt
+    sudo mkfs.ext4 -f /mnt/bar
+    sudo umount /mnt
+
+    rbd snap create foo/bar@snap
+    rbd export foo/bar /tmp/foo-1
+    rbd export foo/bar@snap /tmp/snap-1
+    test $(md5sum /tmp/foo-1) = $(md5sum /tmp/snap-1)
+
+    ceph osd tier cache-mode foo-hot forward
+    rados -p foo-hot cache-flush-evict-all
+    rados -p foo-hot cache-flush-evict-all
+    rbd export foo/bar /tmp/foo-2
+    rbd export foo/bar@snap /tmp/snap-2
+    test $(md5sum /tmp/foo-2) = $(md5sum /tmp/snap-2)
+}
+
 function test_tiering_agent()
 {
   local slow=slow_eviction
