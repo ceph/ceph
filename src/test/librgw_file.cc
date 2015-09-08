@@ -24,14 +24,28 @@
 
 namespace {
   librgw_t rgw = nullptr;
+  string uid("testuser");
   string access_key("C4B4D3E4H355VTDTQXRF");
   string secret_key("NRBkhM2rUZNUbydD86HpNJ110VpQjVroumCOHJXw");
+  struct rgw_fs *fs = nullptr;
 }
 
 TEST(LibRGW, INIT) {
   int ret = librgw_create(&rgw, nullptr, 0, nullptr);
   ASSERT_EQ(ret, 0);
   ASSERT_NE(rgw, nullptr);
+}
+
+TEST(LibRGW, MOUNT) {
+  int ret = rgw_mount(uid.c_str(), access_key.c_str(), secret_key.c_str(),
+		      &fs);
+  ASSERT_EQ(ret, 0);
+  ASSERT_NE(fs, nullptr);
+}
+
+TEST(LibRGW, UMOUNT) {
+  int ret = rgw_umount(fs);
+  ASSERT_EQ(ret, 0);
 }
 
 TEST(LibRGW, SHUTDOWN) {
@@ -53,7 +67,11 @@ int main(int argc, char *argv[])
     } else if (ceph_argparse_witharg(args, arg_iter, &val, "--secret",
 				     (char*) NULL)) {
       secret_key = val;
-    } else {
+    } else if (ceph_argparse_witharg(args, arg_iter, &val, "--uid",
+				     (char*) NULL)) {
+      uid = val;
+    }
+    else {
       ++arg_iter;
     }
   }
