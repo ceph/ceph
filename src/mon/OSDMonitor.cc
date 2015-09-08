@@ -4067,6 +4067,9 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid,
   if (g_conf->osd_pool_use_gmt_hitset &&
       (osdmap.get_up_osd_features() & CEPH_FEATURE_OSD_HITSET_GMT))
     pi->use_gmt_hitset = true;
+  else
+    pi->use_gmt_hitset = false;
+
   pi->size = size;
   pi->min_size = min_size;
   pi->crush_ruleset = crush_ruleset;
