@@ -921,6 +921,7 @@ protected:
   boost::scoped_ptr<TierAgentState> agent_state;
 
   friend struct C_AgentFlushStartStop;
+  friend struct C_AgentEvictStartStop;
   friend struct C_HitSetFlushing;
 
   void agent_setup();       ///< initialize agent state
