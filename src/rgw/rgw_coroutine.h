@@ -266,6 +266,7 @@ void RGWConsumerCR<T>::receive(const T& p, bool wakeup)
 
 class RGWCoroutinesManager {
   CephContext *cct;
+  atomic_t going_down;
 
   void handle_unblocked_stack(list<RGWCoroutinesStack *>& stacks, RGWCoroutinesStack *stack, int *waiting_count);
 protected:
@@ -280,6 +281,10 @@ public:
 
   int run(list<RGWCoroutinesStack *>& ops);
   int run(RGWCoroutine *op);
+  void stop() {
+    going_down.set(1);
+    completion_mgr.go_down();
+  }
 
   virtual void report_error(RGWCoroutinesStack *op);
 
