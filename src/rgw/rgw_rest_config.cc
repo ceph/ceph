@@ -73,23 +73,23 @@ void RGWOp_Period_Post::execute() {
   epoch_t epoch = 0;
   RESTArgs::get_uint32(s, "epoch", 0, &epoch);
 
-  period = new RGWPeriod(g_ceph_context, store);
-  http_ret = period->init(period_id, epoch);
+  RGWPeriod period(g_ceph_context, store);
+  http_ret = period.init(period_id, epoch);
   if (http_ret < 0) {
     dout(5) << "failed to read period" << dendl;
-  }
-}
-
-void RGWOp_Period_Post::send_response() {
-  set_req_state_err(s, http_ret);
-  dump_errno(s);
-  end_header(s);
-
-  if (http_ret < 0)
     return;
+  }
 
-  encode_json("period", *period, s->formatter);
-  flusher.flush();
+#define PERIOD_INPUT_MAX_LEN 4096
+  bool empty;
+  http_ret = rgw_rest_get_json_input(store->ctx(), s, period,
+                                     PERIOD_INPUT_MAX_LEN, &empty);
+  if (http_ret < 0) {
+    dout(5) << "failed to decode period" << dendl;
+    return;
+  }
+
+  period.store_info(false);
 }
 
 RGWOp* RGWHandler_Config::op_get() {
