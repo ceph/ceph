@@ -47,16 +47,14 @@ public:
 };
 
 class RGWOp_Period_Post : public RGWRESTOp {
-  RGWPeriod *period;
 public:
-  RGWOp_Period_Post() : period(NULL) {}
-  ~RGWOp_Period_Post() { delete period; }
+  RGWOp_Period_Post() {}
+  ~RGWOp_Period_Post() {}
 
   int verify_permission() {
     return 0;
   }
   void execute();
-  virtual void send_response();
   virtual const string name() {
     return "post_period";
   }
