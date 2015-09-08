@@ -1392,6 +1392,16 @@ int main(int argc, char **argv)
           break;
       }
     }
+
+    /* check key parameter conflict */
+    if ((!access_key.empty()) && gen_access_key) {
+        cerr << "ERROR: key parameter conflict, --access-key & --gen-access-key" << std::endl;
+        return -EINVAL;
+    }
+    if ((!secret_key.empty()) && gen_secret_key) {
+        cerr << "ERROR: key parameter conflict, --secret & --gen-secret" << std::endl;
+        return -EINVAL;
+    }
   }
 
   // default to pretty json
