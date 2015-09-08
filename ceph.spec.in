@@ -698,11 +698,7 @@ rm -rf $RPM_BUILD_ROOT
   %if 0%{?suse_version}
     %service_del_preun ceph.target
   %endif
-  # Need a special case here when removing the RPM to disable specific
-  # service instance, or stale symlinks will be left lying around in
-  # /etc/systemd/system.  May as well stop them too for completeness
-  # (although strictly service_del_preun would do that anyway by dint
-  # of stopping ceph.target)
+  # Disable and stop on removal.
   if [ $1 = 0 ] ; then
     SERVICE_LIST=$(systemctl | grep -E '^ceph-mon@|^ceph-create-keys@|^ceph-osd@|^ceph-mds@|^ceph-disk-'  | cut -d' ' -f1)
     if [ -n "$SERVICE_LIST" ]; then
@@ -723,6 +719,24 @@ rm -rf $RPM_BUILD_ROOT
 
 %postun
 /sbin/ldconfig
+%if 0%{?_with_systemd}
+  if [ $1 = 1 ] ; then
+    # Restart on upgrade, but only if "CEPH_AUTO_RESTART_ON_UPGRADE" is set to
+    # "yes". In any case: if units are not running, do not touch them.
+    SYSCONF_CEPH=/etc/sysconfig/ceph
+    if [ -f $SYSCONF_CEPH -a -r $SYSCONF_CEPH ] ; then
+      source $SYSCONF_CEPH
+    fi
+    if [ "X$CEPH_AUTO_RESTART_ON_UPGRADE" = "Xyes" ] ; then
+      SERVICE_LIST=$(systemctl | grep -E '^ceph-mon@|^ceph-create-keys@|^ceph-osd@|^ceph-mds@|^ceph-disk-'  | cut -d' ' -f1)
+      if [ -n "$SERVICE_LIST" ]; then
+        for SERVICE in $SERVICE_LIST; do
+          /usr/bin/systemctl try-restart $SERVICE > /dev/null 2>&1 || :
+        done
+      fi
+    fi
+  fi
+%endif
 
 #################################################################################
 # files
@@ -963,24 +977,36 @@ fi
 
 %preun radosgw
 %if 0%{?_with_systemd}
-  SERVICE_LIST=$(systemctl | grep -E '^ceph-radosgw@'  | cut -d' ' -f1)
-  if [ -n "$SERVICE_LIST" ]; then
-    for SERVICE in $SERVICE_LIST; do
-      /usr/bin/systemctl --no-reload disable $SERVICE > /dev/null 2>&1 || :
-      /usr/bin/systemctl stop $SERVICE > /dev/null 2>&1 || :
-    done
+  # Disable and stop on removal.
+  if [ $1 = 0 ] ; then
+    SERVICE_LIST=$(systemctl | grep -E '^ceph-radosgw@'  | cut -d' ' -f1)
+    if [ -n "$SERVICE_LIST" ]; then
+      for SERVICE in $SERVICE_LIST; do
+        /usr/bin/systemctl --no-reload disable $SERVICE > /dev/null 2>&1 || :
+        /usr/bin/systemctl stop $SERVICE > /dev/null 2>&1 || :
+      done
+    fi
   fi
 %endif
 
 %postun radosgw
 /sbin/ldconfig
 %if 0%{?_with_systemd}
-  SERVICE_LIST=$(systemctl | grep -E '^ceph-radosgw@'  | cut -d' ' -f1)
-  if [ -n "$SERVICE_LIST" ]; then
-    for SERVICE in $SERVICE_LIST; do
-      /usr/bin/systemctl --no-reload disable $SERVICE > /dev/null 2>&1 || :
-      /usr/bin/systemctl try-restart $SERVICE > /dev/null 2>&1 || :
-    done
+  if [ $1 = 1 ] ; then
+    # Restart on upgrade, but only if "CEPH_AUTO_RESTART_ON_UPGRADE" is set to
+    # "yes". In any case: if units are not running, do not touch them.
+    SYSCONF_CEPH=/etc/sysconfig/ceph
+    if [ -f $SYSCONF_CEPH -a -r $SYSCONF_CEPH ] ; then
+      source $SYSCONF_CEPH
+    fi
+    if [ "X$CEPH_AUTO_RESTART_ON_UPGRADE" = "Xyes" ] ; then
+      SERVICE_LIST=$(systemctl | grep -E '^ceph-radosgw@'  | cut -d' ' -f1)
+      if [ -n "$SERVICE_LIST" ]; then
+        for SERVICE in $SERVICE_LIST; do
+          /usr/bin/systemctl try-restart $SERVICE > /dev/null 2>&1 || :
+        done
+      fi
+    fi
   fi
 %endif
 
