@@ -546,10 +546,62 @@ static int do_flatten(librbd::Image& image)
   return 0;
 }
 
+static int get_image_watchers(librados::IoCtx &io_ctx, librbd::Image &image,
+                             const char *imgname, std::list<obj_watch_t> &watchers)
+{
+  librbd::image_info_t info;
+  uint8_t old_format;
+  string header_oid;
+
+  int r = image.old_format(&old_format);
+  if (r < 0)
+    return r;
+
+  if (old_format) {
+    header_oid = imgname;
+    header_oid += RBD_SUFFIX;
+  } else {
+    r = image.stat(info, sizeof(info));
+    if (r < 0)
+      return r;
+
+    char prefix[RBD_MAX_BLOCK_NAME_SIZE + 1];
+    strncpy(prefix, info.block_name_prefix, RBD_MAX_BLOCK_NAME_SIZE);
+    prefix[RBD_MAX_BLOCK_NAME_SIZE] = '\0';
+
+    header_oid = RBD_HEADER_PREFIX;
+    header_oid.append(prefix + strlen(RBD_DATA_PREFIX));
+  }
+  
+  r = io_ctx.list_watchers(header_oid, &watchers);
+  return r;
+}
+
 static int do_rename(librbd::RBD &rbd, librados::IoCtx& io_ctx,
 		     const char *imgname, const char *destname)
 {
-  int r = rbd.rename(io_ctx, imgname, destname);
+  librbd::Image image;
+  int r = rbd.open_read_only(io_ctx, image, imgname, NULL);
+  if (r < 0) {
+    cerr << "rbd: error opening image " << imgname << ": "
+         << cpp_strerror(-r) << std::endl;
+    return -r;
+  }
+
+  std::list<obj_watch_t> watchers;
+  r = get_image_watchers(io_ctx, image, imgname, watchers);
+  if (r < 0)
+    return r;
+  if (!watchers.empty()) {
+    cerr << "this image has watchers, cannot rename while it is in use" << std::endl;
+    return -EBUSY;
+  }
+  r = image.close();
+  if (r < 0) {
+    cerr << "rbd: error while closing image: " << cpp_strerror(-r) << std::endl;
+    return -r;
+  }
+  r = rbd.rename(io_ctx, imgname, destname);
   if (r < 0)
     return r;
   return 0;
@@ -2408,33 +2460,8 @@ static int do_watch(librados::IoCtx& pp, librbd::Image &image,
 static int do_show_status(librados::IoCtx &io_ctx, librbd::Image &image,
                           const char *imgname, Formatter *f)
 {
-  librbd::image_info_t info;
-  uint8_t old_format;
-  int r;
-  string header_oid;
   std::list<obj_watch_t> watchers;
-
-  r = image.old_format(&old_format);
-  if (r < 0)
-    return r;
-
-  if (old_format) {
-    header_oid = imgname;
-    header_oid += RBD_SUFFIX;
-  } else {
-    r = image.stat(info, sizeof(info));
-    if (r < 0)
-      return r;
-
-    char prefix[RBD_MAX_BLOCK_NAME_SIZE + 1];
-    strncpy(prefix, info.block_name_prefix, RBD_MAX_BLOCK_NAME_SIZE);
-    prefix[RBD_MAX_BLOCK_NAME_SIZE] = '\0';
-
-    header_oid = RBD_HEADER_PREFIX;
-    header_oid.append(prefix + strlen(RBD_DATA_PREFIX));
-  }
-
-  r = io_ctx.list_watchers(header_oid, &watchers);
+  int r = get_image_watchers(io_ctx, image, imgname, watchers);
   if (r < 0)
     return r;
 
