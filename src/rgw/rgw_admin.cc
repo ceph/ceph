@@ -1993,11 +1993,16 @@ int main(int argc, char **argv)
 	  return 1;
 	}
 	ret = zonegroup.create();
-	if (ret < 0) {
-	  cerr << "ERROR: couldn't store zone info: " << cpp_strerror(-ret) << std::endl;
+	if (ret < 0 && ret != -EEXIST) {
+	  cerr << "ERROR: couldn't create zonegroup info: " << cpp_strerror(-ret) << std::endl;
 	  return 1;
+	} else if (ret == -EEXIST) {
+	  ret = zonegroup.update();
+	  if (ret < 0) {
+	    cerr << "ERROR: couldn't store zonegroup info: " << cpp_strerror(-ret) << std::endl;
+	    return 1;
+	  }
 	}
-
 	encode_json("zonegroup", zonegroup, formatter);
 	formatter->flush(cout);
       }
@@ -2180,10 +2185,20 @@ int main(int argc, char **argv)
 	if (ret < 0) {
 	  return 1;
 	}
+	if (zone.get_name().empty() && zone.get_id().empty()) {
+	  cerr << "ERROR: missing zone name " << cpp_strerror(-ret) << std::endl;
+	  return 1;
+	}
 	ret = zone.create();
-	if (ret < 0) {
+	if (ret < 0 && ret != -EEXIST) {
 	  cerr << "ERROR: couldn't create zone: " << cpp_strerror(-ret) << std::endl;
 	  return 1;
+	} else if (ret == -EEXIST) {
+	  ret = zone.update();
+	  if (ret < 0) {
+	    cerr << "ERROR: couldn't update zone: " << cpp_strerror(-ret) << std::endl;
+	    return 1;
+	  }
 	}
 	ret = zonegroup.add_zone(zone);
 	if (ret < 0) {
