@@ -609,7 +609,8 @@ def is_partition(dev):
         return is_partition_mpath(dev)
 
     dev = os.path.realpath(dev)
-    if not stat.S_ISBLK(os.lstat(dev).st_mode):
+    st = os.lstat(dev)
+    if not stat.S_ISBLK(st.st_mode):
         raise Error('not a block device', dev)
 
     name = get_dev_name(dev)
@@ -617,9 +618,10 @@ def is_partition(dev):
         return False
 
     # make sure it is a partition of something else
-    for basename in os.listdir('/sys/block'):
-        if os.path.exists(os.path.join('/sys/block', basename, name)):
-            return True
+    major = os.major(st.st_rdev)
+    minor = os.minor(st.st_rdev)
+    if os.path.exists('/sys/dev/block/%d:%d/partition' % (major, minor)):
+        return True
 
     raise Error('not a disk or partition', dev)
 
