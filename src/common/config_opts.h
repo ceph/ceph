@@ -1140,6 +1140,7 @@ OPTION(rgw_objexp_chunk_size, OPT_U32, 100) // maximum number of entries in a si
 
 OPTION(rgw_num_async_rados_threads, OPT_INT, 32) // num of threads to use for async rados operations
 OPTION(rgw_md_notify_interval_msec, OPT_INT, 200) // metadata changes notification interval to followers
+OPTION(rgw_run_sync_thread, OPT_BOOL, true) // whether radosgw (not radosgw-admin) spawns the sync thread
 
 OPTION(mutex_perf_counter, OPT_BOOL, false) // enable/disable mutex perf counter
 OPTION(throttler_perf_counter, OPT_BOOL, true) // enable/disable throttler perf counter

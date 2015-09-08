@@ -54,6 +54,7 @@ using namespace librados;
 
 #include "rgw_gc.h"
 #include "rgw_object_expirer_core.h"
+#include "rgw_sync.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -2066,6 +2067,7 @@ public:
     stop();
   }
 
+  virtual int init() { return 0; }
   virtual int process() = 0;
 
   bool going_down() { return down_flag.read() != 0; }
@@ -2165,6 +2167,40 @@ int RGWMetaNotifier::process()
   return 0;
 }
 
+class RGWSyncProcessorThread : public RGWRadosThread {
+  CephContext *cct;
+  RGWMetaSyncStatusManager sync;
+
+  uint64_t interval_msec() {
+    return 0; /* no interval associated, it'll run once until stopped */
+  }
+  void stop_processor() {
+    sync.stop();
+  }
+public:
+  RGWSyncProcessorThread(RGWRados *_store) : RGWRadosThread(_store), cct(_store->ctx()), sync(_store) {}
+
+  int init();
+  int process();
+};
+
+int RGWSyncProcessorThread::init()
+{
+  int ret = sync.init();
+  if (ret < 0) {
+    ldout(cct, 0) << "ERROR: sync.init() returned " << ret << dendl;
+    return ret;
+  }
+
+  return 0;
+}
+
+int RGWSyncProcessorThread::process()
+{
+  sync.run();
+  return 0;
+}
+
 int RGWRados::get_required_alignment(rgw_bucket& bucket, uint64_t *alignment)
 {
   IoCtx ioctx;
@@ -2231,6 +2267,11 @@ void RGWRados::finalize()
   obj_expirer = NULL;
 
   meta_notifier->stop();
+  if (run_sync_thread) {
+    sync_processor_thread->stop();
+    delete sync_processor_thread;
+    sync_processor_thread = NULL;
+  }
   delete rest_master_conn;
 
   map<string, RGWRESTConn *>::iterator iter;
@@ -2522,6 +2563,16 @@ int RGWRados::init_complete()
   meta_notifier = new RGWMetaNotifier(this);
   if (is_meta_master()) {
     meta_notifier->start();
+  }
+
+  if (run_sync_thread) {
+    sync_processor_thread = new RGWSyncProcessorThread(this);
+    ret = sync_processor_thread->init();
+    if (ret < 0) {
+      ldout(cct, 0) << "ERROR: failed to initialize" << dendl;
+      return ret;
+    }
+    sync_processor_thread->start();
   }
 
   quota_handler = RGWQuotaHandler::generate_handler(this, quota_threads);
@@ -10264,7 +10315,7 @@ uint64_t RGWRados::next_bucket_id()
   return ++max_bucket_id;
 }
 
-RGWRados *RGWStoreManager::init_storage_provider(CephContext *cct, bool use_gc_thread, bool quota_threads)
+RGWRados *RGWStoreManager::init_storage_provider(CephContext *cct, bool use_gc_thread, bool quota_threads, bool run_sync_thread)
 {
   int use_cache = cct->_conf->rgw_cache_enabled;
   RGWRados *store = NULL;
@@ -10274,7 +10325,7 @@ RGWRados *RGWStoreManager::init_storage_provider(CephContext *cct, bool use_gc_t
     store = new RGWCache<RGWRados>; 
   }
 
-  if (store->initialize(cct, use_gc_thread, quota_threads) < 0) {
+  if (store->initialize(cct, use_gc_thread, quota_threads, run_sync_thread) < 0) {
     delete store;
     return NULL;
   }

@@ -23,6 +23,7 @@ class ACLOwner;
 class RGWGC;
 class RGWMetaNotifier;
 class RGWObjectExpirer;
+class RGWSyncProcessorThread;
 class RGWRESTConn;
 
 /* flags for put_obj_meta() */
@@ -1493,6 +1494,7 @@ class RGWRados
   friend class RGWGC;
   friend class RGWMetaNotifier;
   friend class RGWObjectExpirer;
+  friend class RGWSyncProcessorThread;
   friend class RGWStateLog;
   friend class RGWReplicaLogger;
 
@@ -1539,8 +1541,10 @@ class RGWRados
   RGWObjectExpirer *obj_expirer;
   bool use_gc_thread;
   bool quota_threads;
+  bool run_sync_thread;
 
   RGWMetaNotifier *meta_notifier;
+  RGWSyncProcessorThread *sync_processor_thread;
 
   int num_watchers;
   RGWWatcher **watchers;
@@ -1598,7 +1602,7 @@ protected:
 public:
   RGWRados() : max_req_id(0), lock("rados_timer_lock"), watchers_lock("watchers_lock"), timer(NULL),
                gc(NULL), obj_expirer(NULL), use_gc_thread(false), quota_threads(false),
-               meta_notifier(NULL),
+               run_sync_thread(false), meta_notifier(NULL),
                num_watchers(0), watchers(NULL),
                watch_initialized(false),
                bucket_id_lock("rados_bucket_id"),
@@ -1665,10 +1669,11 @@ public:
 
   CephContext *ctx() { return cct; }
   /** do all necessary setup of the storage device */
-  int initialize(CephContext *_cct, bool _use_gc_thread, bool _quota_threads) {
+  int initialize(CephContext *_cct, bool _use_gc_thread, bool _quota_threads, bool _run_sync_thread) {
     set_context(_cct);
     use_gc_thread = _use_gc_thread;
     quota_threads = _quota_threads;
+    run_sync_thread = _run_sync_thread;
     return initialize();
   }
   /** Initialize the RADOS instance and prepare to do other ops */
@@ -2614,15 +2619,15 @@ public:
 class RGWStoreManager {
 public:
   RGWStoreManager() {}
-  static RGWRados *get_storage(CephContext *cct, bool use_gc_thread, bool quota_threads) {
-    RGWRados *store = init_storage_provider(cct, use_gc_thread, quota_threads);
+  static RGWRados *get_storage(CephContext *cct, bool use_gc_thread, bool quota_threads, bool run_sync_thread) {
+    RGWRados *store = init_storage_provider(cct, use_gc_thread, quota_threads, run_sync_thread);
     return store;
   }
   static RGWRados *get_raw_storage(CephContext *cct) {
     RGWRados *store = init_raw_storage_provider(cct);
     return store;
   }
-  static RGWRados *init_storage_provider(CephContext *cct, bool use_gc_thread, bool quota_threads);
+  static RGWRados *init_storage_provider(CephContext *cct, bool use_gc_thread, bool quota_threads, bool run_sync_thread);
   static RGWRados *init_raw_storage_provider(CephContext *cct);
   static void close_storage(RGWRados *store);
 
