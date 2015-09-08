@@ -27,7 +27,7 @@ namespace {
 }
 
 TEST(LibRGW, INIT) {
-  int ret = librgw_create(&rgw, NULL);
+  int ret = librgw_create(&rgw, nullptr, 0, nullptr);
   ASSERT_EQ(ret, 0);
   ASSERT_NE(rgw, nullptr);
 }
