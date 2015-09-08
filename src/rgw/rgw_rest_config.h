@@ -31,10 +31,10 @@ public:
 };
 
 class RGWOp_Period_Get : public RGWRESTOp {
-  RGWPeriod period;
+  RGWPeriod *period;
 public:
-  RGWOp_Period_Get(): period(g_ceph_context, store) {}
-  ~RGWOp_Period_Get() {}
+  RGWOp_Period_Get() : period(NULL) {}
+  ~RGWOp_Period_Get() { delete period; }
 
   int verify_permission() {
     return 0;
@@ -47,10 +47,10 @@ public:
 };
 
 class RGWOp_Period_Post : public RGWRESTOp {
-  RGWPeriod period;
+  RGWPeriod *period;
 public:
-  RGWOp_Period_Post(): period(g_ceph_context, store) {}
-  ~RGWOp_Period_Post() {}
+  RGWOp_Period_Post() : period(NULL) {}
+  ~RGWOp_Period_Post() { delete period; }
 
   int verify_permission() {
     return 0;
