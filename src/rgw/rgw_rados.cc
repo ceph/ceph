@@ -132,9 +132,7 @@ const string& RGWZoneGroup::get_pool_name(CephContext *cct_)
 
 int RGWZoneGroup::create_default(bool old_format)
 {
-
   name = default_zonegroup_name;
-  is_master = true;
 
   RGWZoneGroupPlacementTarget placement_target;
   placement_target.name = "default-placement";
