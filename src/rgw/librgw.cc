@@ -190,6 +190,8 @@ void RGWLibProcess::handle_request(RGWRequest* r)
 int RGWLibFrontend::init()
 {
   /* XXX */
+  pprocess = new RGWLibProcess(g_ceph_context, &env,
+			       g_conf->rgw_thread_pool_size, conf);
   return 0;
 }
 
