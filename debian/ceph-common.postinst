@@ -85,6 +85,9 @@ case "$1" in
 	   echo "..done"
        fi
 
+       # create /run/ceph.  fail softly if systemd isn't present or
+       # something.
+       [ -x /bin/systemd-tmpfiles ] && systemd-tmpfiles --create || true
     ;;
     abort-upgrade|abort-remove|abort-deconfigure)
 	:
