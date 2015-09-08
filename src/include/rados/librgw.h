@@ -19,7 +19,7 @@ extern "C" {
 #endif
 
 typedef void* librgw_t;
-int librgw_create(librgw_t *rgw, const char * const id);
+int librgw_create(librgw_t *rgw, const char * const id, int argc, char **argv);
 int librgw_acl_bin2xml(librgw_t rgw, const char *bin, int bin_len, char **xml);
 void librgw_free_xml(librgw_t rgw, char *xml);
 int librgw_acl_xml2bin(librgw_t rgw, const char *xml, char **bin,

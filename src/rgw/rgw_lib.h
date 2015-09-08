@@ -33,6 +33,7 @@ public:
   ~RGWLib() {}
 
   int init();
+  int init(vector<const char *>& args);
   int stop();
 
   /* generate dynamic handle currently unique per librgw object
