@@ -581,8 +581,8 @@ static bool remove_old_indexes(RGWRados *store,
 
   if (!old_info.user_id.empty() &&
       old_info.user_id.compare(new_info.user_id) != 0) {
-    if (old_info.user_id.tenant != new_info.user_id.tenant) {
-      ldout(store->ctx(), 0) << "ERROR: tenant mismatch: " << old_info.user_id.tenant << " != " << new_info.user_id.tenant << dendl;
+    if (old_info.user_id.get_bns() != new_info.user_id.get_bns()) {
+      ldout(store->ctx(), 0) << "ERROR: tenant mismatch: " << dendl; // << old_info.user_id.default_tenant << " != " << new_info.user_id.default_tenant << dendl;
       return false;
     }
     ret = rgw_remove_uid_index(store, old_info.user_id);
@@ -685,7 +685,7 @@ static void dump_user_info(Formatter *f, RGWUserInfo &info,
 {
   f->open_object_section("user_info");
 
-  f->dump_string("tenant", info.user_id.tenant);
+  f->dump_string("bucket_namespace", info.user_id.get_bns().get_id());
   f->dump_string("user_id", info.user_id.id);
   f->dump_string("display_name", info.display_name);
   f->dump_string("email", info.user_email);

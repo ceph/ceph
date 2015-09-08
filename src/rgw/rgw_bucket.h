@@ -201,7 +201,7 @@ class RGWBucket
   RGWAccessHandle handle;
 
   RGWUserInfo user_info;
-  std::string tenant;
+  rgw_bucket_namespace bucket_nspace;
   std::string bucket_name;
 
   bool failure;

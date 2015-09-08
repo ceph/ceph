@@ -35,7 +35,6 @@ public:
 
 
 struct rgw_user {
-  std::string tenant;
   std::string id;
   bool has_own_bns;
 
@@ -64,32 +63,23 @@ struct rgw_user {
   }
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(2, 1, bl);
-    ::encode(tenant, bl);
+    ENCODE_START(3, 3, bl);
     ::encode(id, bl);
     ::encode(has_own_bns, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
-    DECODE_START(1, bl);
-    ::decode(tenant, bl);
+    DECODE_START(3, bl);
     ::decode(id, bl);
-    if (struct_v >= 2) {
-      ::decode(has_own_bns, bl);
-    }
+    ::decode(has_own_bns, bl);
     DECODE_FINISH(bl);
   }
 
   void to_str(std::string& str) const {
-    if (!tenant.empty()) {
-      str = tenant + ':' + id;
-    } else {
-      str = id;
-    }
+    str = id;
   }
 
   void clear() {
-    tenant.clear();
     id.clear();
   }
 
@@ -104,14 +94,7 @@ struct rgw_user {
   }
 
   void from_str(const std::string& str) {
-    ssize_t pos = str.find(':');
-    if (pos >= 0) {
-      tenant = str.substr(0, pos);
-      id = str.substr(pos + 1);
-    } else {
-      tenant.clear();
-      id = str;
-    }
+    id = str;
   }
 
   rgw_user& operator=(const string& str) {
@@ -120,10 +103,6 @@ struct rgw_user {
   }
 
   int compare(const rgw_user& u) const {
-    int r = tenant.compare(u.tenant);
-    if (r != 0)
-      return r;
-
     return id.compare(u.id);
   }
   int compare(const string& str) const {
@@ -138,11 +117,6 @@ struct rgw_user {
     return (compare(rhs) == 0);
   }
   bool operator<(const rgw_user& rhs) const {
-    if (tenant < rhs.tenant) {
-      return true;
-    } else if (tenant > rhs.tenant) {
-      return false;
-    }
     return (id < rhs.id);
   }
 };

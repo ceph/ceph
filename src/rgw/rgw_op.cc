@@ -1459,8 +1459,12 @@ void RGWCreateBucket::execute()
   if (s->bucket_exists) {
     string selected_placement_rule;
     rgw_bucket bucket;
-    ret = store->select_bucket_placement(s->user, region_name, placement_rule,
-                                         s->user.user_id.tenant, s->bucket_name_str, bucket,
+    ret = store->select_bucket_placement(s->user,
+                                         region_name,
+                                         placement_rule,
+                                         s->user.user_id.get_bns().get_id(),
+                                         s->bucket_name_str,
+                                         bucket,
                                          &selected_placement_rule);
     if (selected_placement_rule != s->bucket_info.placement_rule) {
       ret = -EEXIST;
