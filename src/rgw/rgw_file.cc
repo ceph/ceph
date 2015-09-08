@@ -53,8 +53,11 @@ int rgw_check_handle(const struct rgw_file_handle* handle)
 /* librgw */
 extern "C" {
 
+/*
+ attach rgw namespace
+*/
 int rgw_mount(const char* uid, const char* key, const char* _secret,
-	      struct rgw_file_handle* handle)
+	      struct rgw_fs **rgw_fs)
 {
   int rc;
   string uri(uid);
@@ -79,13 +82,38 @@ int rgw_mount(const char* uid, const char* key, const char* _secret,
     return rc;
   }
 
-  return rgw_get_handle(uri.c_str(), handle);
+  /* stash access data for "mount" */
+  struct rgw_fs *new_fs = (struct rgw_fs *) malloc(sizeof(struct rgw_fs));
+  new_fs->user_id = strdup(uid);
+  new_fs->access_key_id = strdup(key);
+  new_fs->secret_access_key = strdup(_secret);
+
+  /* stash the root */
+  rc = rgw_get_handle(uri.c_str(), &new_fs->root_fh);
+
+  *rgw_fs = new_fs;
+
+  return rc;
+}
+
+/*
+ detach rgw namespace
+*/
+int rgw_umount(struct rgw_fs *rgw_fs)
+{
+  free(rgw_fs->user_id);
+  free(rgw_fs->access_key_id);
+  free(rgw_fs->secret_access_key);
+  free(rgw_fs);
+
+  return 0;
 }
 
 /*
   get filesystem attributes
 */
-int rgw_statfs(const struct rgw_file_handle *parent_handle,
+int rgw_statfs(struct rgw_fs *rgw_fs,
+	       const struct rgw_file_handle *parent_handle,
 	       struct rgw_statvfs *vfs_st)
 {
   memset(vfs_st, 0, sizeof(struct rgw_statvfs));
@@ -95,7 +123,8 @@ int rgw_statfs(const struct rgw_file_handle *parent_handle,
 /*
   generic create
 */
-int rgw_create(const struct rgw_file_handle *parent_handle,
+int rgw_create(struct rgw_fs *rgw_fs,
+	       const struct rgw_file_handle *parent_handle,
 	       const char *name, mode_t mode, struct stat *st,
 	       struct rgw_file_handle *handle)
 {
@@ -118,7 +147,8 @@ int rgw_create(const struct rgw_file_handle *parent_handle,
 /*
   create a new directory
 */
-int rgw_mkdir(const struct rgw_file_handle *parent_handle,
+int rgw_mkdir(struct rgw_fs *rgw_fs,
+	      const struct rgw_file_handle *parent_handle,
 	      const char *name, mode_t mode, struct stat *st,
 	      struct rgw_file_handle *handle)
 {
@@ -143,7 +173,8 @@ int rgw_mkdir(const struct rgw_file_handle *parent_handle,
 /*
   rename object
 */
-int rgw_rename(const struct rgw_file_handle *olddir, const char* old_name,
+int rgw_rename(struct rgw_fs *rgw_fs,
+	       const struct rgw_file_handle *olddir, const char* old_name,
 	       const struct rgw_file_handle *newdir, const char* new_name)
 {
   return 0;
@@ -152,7 +183,8 @@ int rgw_rename(const struct rgw_file_handle *olddir, const char* old_name,
 /*
   remove file or directory
 */
-int rgw_unlink(const struct rgw_file_handle* parent_handle, const char* path)
+int rgw_unlink(struct rgw_fs *rgw_fs,
+	       const struct rgw_file_handle* parent_handle, const char* path)
 {
   return 0;
 }
@@ -160,7 +192,8 @@ int rgw_unlink(const struct rgw_file_handle* parent_handle, const char* path)
 /*
   lookup a directory or file
 */
-int rgw_lookup(const struct rgw_file_handle *parent_handle, const char* path,
+int rgw_lookup(struct rgw_fs *rgw_fs,
+	       const struct rgw_file_handle *parent_handle, const char* path,
 	       struct rgw_file_handle *handle)
 {
   string uri;
@@ -192,7 +225,8 @@ int rgw_lookup(const struct rgw_file_handle *parent_handle, const char* path,
 /*
    get unix attributes for object
 */
-int rgw_getattr(const struct rgw_file_handle *handle, struct stat *st)
+int rgw_getattr(struct rgw_fs *rgw_fs,
+		const struct rgw_file_handle *handle, struct stat *st)
 {
   string uri;
   int rc;
@@ -208,7 +242,8 @@ int rgw_getattr(const struct rgw_file_handle *handle, struct stat *st)
 /*
   set unix attributes for object
 */
-int rgw_setattr(const struct rgw_file_handle *handle, struct stat *st,
+int rgw_setattr(struct rgw_fs *rgw_fs,
+		const struct rgw_file_handle *handle, struct stat *st,
 		uint32_t mask)
 {
   /* XXX no-op */
@@ -218,7 +253,8 @@ int rgw_setattr(const struct rgw_file_handle *handle, struct stat *st,
 /*
    truncate file
 */
-int rgw_truncate(const struct rgw_file_handle *handle, uint64_t size)
+int rgw_truncate(struct rgw_fs *rgw_fs,
+		 const struct rgw_file_handle *handle, uint64_t size)
 {
   return 0;
 }
@@ -226,7 +262,8 @@ int rgw_truncate(const struct rgw_file_handle *handle, uint64_t size)
 /*
    open file
 */
-int rgw_open(const struct rgw_file_handle *handle, uint32_t flags)
+int rgw_open(struct rgw_fs *rgw_fs,
+	     const struct rgw_file_handle *handle, uint32_t flags)
 {
   return 0;
 }
@@ -234,7 +271,8 @@ int rgw_open(const struct rgw_file_handle *handle, uint32_t flags)
 /*
    close file
 */
-int rgw_close(const struct rgw_file_handle *handle, uint32_t flags)
+int rgw_close(struct rgw_fs *rgw_fs,
+	      const struct rgw_file_handle *handle, uint32_t flags)
 {
   return 0;
 }
@@ -242,7 +280,8 @@ int rgw_close(const struct rgw_file_handle *handle, uint32_t flags)
 /*
   read directory content
 */
-int rgw_readdir(const struct rgw_file_handle *parent_handle, uint64_t *offset,
+int rgw_readdir(struct rgw_fs *rgw_fs,
+		const struct rgw_file_handle *parent_handle, uint64_t *offset,
 		rgw_readdir_cb rcb, void *cb_arg, bool *eof)
 {
   string uri;
@@ -278,7 +317,8 @@ int rgw_readdir(const struct rgw_file_handle *parent_handle, uint64_t *offset,
 /*
    read data from file
 */
-int rgw_read(const struct rgw_file_handle *handle, uint64_t offset,
+int rgw_read(struct rgw_fs *rgw_fs,
+	     const struct rgw_file_handle *handle, uint64_t offset,
 	     size_t length, void *buffer)
 {
   return 0;
@@ -287,7 +327,8 @@ int rgw_read(const struct rgw_file_handle *handle, uint64_t offset,
 /*
    write data to file
 */
-int rgw_write(const struct rgw_file_handle *handle, uint64_t offset,
+int rgw_write(struct rgw_fs *rgw_fs,
+	      const struct rgw_file_handle *handle, uint64_t offset,
 	      size_t length, void *buffer)
 {
   return 0;
@@ -296,7 +337,7 @@ int rgw_write(const struct rgw_file_handle *handle, uint64_t offset,
 /*
    sync written data
 */
-int rgw_fsync(const struct rgw_file_handle *handle)
+int rgw_fsync(struct rgw_fs *rgw_fs, const struct rgw_file_handle *handle)
 {
   return 0;
 }
