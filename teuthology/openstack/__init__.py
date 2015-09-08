@@ -57,6 +57,7 @@ class OpenStack(object):
         'centos-6.5': 'http://cloud.centos.org/centos/6/images/CentOS-6-x86_64-GenericCloud.qcow2',
         'centos-7.0': 'http://cloud.centos.org/centos/7/images/CentOS-7-x86_64-GenericCloud-20150628_01.qcow2',
         'ubuntu-14.04': 'https://cloud-images.ubuntu.com/trusty/current/trusty-server-cloudimg-amd64-disk1.img',
+        'debian-8.0': 'http://cdimage.debian.org/cdimage/openstack/current/debian-8.1.0-openstack-amd64.qcow2',
     }
 
     def __init__(self):
@@ -191,12 +192,12 @@ class OpenStack(object):
                     log.debug('cloud_init_wait connect socket.error ' + str(e))
                     continue
                 except Exception as e:
-                    if 'Unknown server' not in str(e):
-                        log.exception('cloud_init_wait ' + name_or_ip)
-                    if 'Unknown server' in str(e):
-                        continue
-                    else:
-                        raise e
+                    transients = ('Incompatible ssh peer', 'Unknown server')
+                    for transient in transients:
+                        if transient in str(e):
+                            continue
+                    log.exception('cloud_init_wait ' + name_or_ip)
+                    raise
                 log.debug('cloud_init_wait ' + all_done)
                 try:
                     stdin, stdout, stderr = client.exec_command(all_done)
