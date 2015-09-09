@@ -813,7 +813,7 @@ void RGWZoneGroupMap::dump(Formatter *f) const
 
 void RGWZoneGroupMap::decode_json(JSONObj *obj)
 {
-  JSONDecoder::decode_json("zonegroup", zonegroups, obj);
+  JSONDecoder::decode_json("zonegroups", zonegroups, obj);
   /* backward compatability with region */
   if (zonegroups.empty()) {
     JSONDecoder::decode_json("regions", zonegroups, obj);
@@ -823,6 +823,7 @@ void RGWZoneGroupMap::decode_json(JSONObj *obj)
   if (master_zonegroup.empty()) {
     JSONDecoder::decode_json("master_region", master_zonegroup, obj);
   }
+  JSONDecoder::decode_json("bucket_quota", bucket_quota, obj);
   JSONDecoder::decode_json("user_quota", user_quota, obj);
 }
 
