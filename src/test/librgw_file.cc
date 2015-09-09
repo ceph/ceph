@@ -42,7 +42,7 @@ TEST(LibRGW, INIT) {
 }
 
 TEST(LibRGW, MOUNT) {
-  int ret = rgw_mount(uid.c_str(), access_key.c_str(), secret_key.c_str(),
+  int ret = rgw_mount(rgw, uid.c_str(), access_key.c_str(), secret_key.c_str(),
 		      &fs);
   ASSERT_EQ(ret, 0);
   ASSERT_NE(fs, nullptr);
