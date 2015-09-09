@@ -3815,6 +3815,8 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
 
   if (source_zone.empty()) {
     set_copy_attrs(src_attrs, attrs, attrs_mod);
+  } else {
+    attrs = src_attrs;
   }
 
   ret = cb.complete(etag, mtime, set_mtime, attrs);
