@@ -77,7 +77,7 @@ void _usage()
   cerr << "  period get-current         get current period info\n";
   cerr << "  period pull                pull a period\n";
   cerr << "  period push                push a period\n";
-  cerr << "  period list                list all period\n";
+  cerr << "  period list                list all periods\n";
   cerr << "  quota set                  set quota params\n";
   cerr << "  quota enable               enable quota\n";
   cerr << "  quota disable              disable quota\n";
