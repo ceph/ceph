@@ -73,6 +73,7 @@ public:
 /* request interface */
 
 struct RGWLibRequestEnv {
+  /* XXXX do we need ANY of this??? Matt */
   int port;
   uint64_t content_length;
   string content_type;
