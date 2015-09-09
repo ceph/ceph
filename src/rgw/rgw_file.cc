@@ -2,13 +2,14 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "include/rados/rgw_file.h"
-#include "include/rados/librgw.h"
 
 #include "rgw_lib.h"
 #include "rgw_rados.h"
 #include "rgw_resolve.h"
 #include "rgw_op.h"
 #include "rgw_rest.h"
+#include "rgw_acl.h"
+#include "rgw_acl_s3.h"
 #include "rgw_frontend.h"
 #include "rgw_request.h"
 #include "rgw_process.h"
@@ -16,8 +17,13 @@
 #include "rgw_rest_s3.h"
 #include "rgw_rest_lib.h"
 #include "rgw_auth_s3.h"
+#include "rgw_user.h"
+#include "rgw_bucket.h"
+
 #include "rgw_lib.h"
 
+
+#define dout_subsys ceph_subsys_rgw
 
 extern RGWLib librgw;
 
@@ -56,8 +62,8 @@ extern "C" {
 /*
  attach rgw namespace
 */
-int rgw_mount(const char* uid, const char* key, const char* _secret,
-	      struct rgw_fs **rgw_fs)
+int rgw_mount(librgw_t rgw, const char* uid, const char* key,
+	      const char* _secret, struct rgw_fs **rgw_fs)
 {
   int rc;
   string uri(uid);
@@ -85,12 +91,13 @@ int rgw_mount(const char* uid, const char* key, const char* _secret,
   /* stash access data for "mount" */
   struct rgw_fs *new_fs =
     static_cast<struct rgw_fs*>(operator new (sizeof(struct rgw_fs)));
+  new_fs->rgw = rgw;
   new_fs->user_id = strdup(uid);
   new_fs->access_key_id = strdup(key);
   new_fs->secret_access_key = strdup(_secret);
 
   /* stash the root */
-  rc = rgw_get_handle(uri.c_str(), &new_fs->root_fh);
+  rc = rgw_get_handle("", &new_fs->root_fh);
 
   *rgw_fs = new_fs;
 
@@ -293,6 +300,44 @@ int rgw_readdir(struct rgw_fs *rgw_fs,
     return rc;
   }
 
+  CephContext* cct = static_cast<CephContext*>(rgw_fs->rgw);
+  RGWRados* store = librgw.get_store();
+
+  /* XXX current open-coded logic should move into librgw (need
+   * functor mechanism wrapping callback */
+
+  if (is_root(uri)) {
+    /* get the bucket list */
+    string marker; // XXX need to match offset
+    uint64_t nread, bucket_count, bucket_objcount;
+    RGWUserBuckets buckets;
+    uint64_t max_buckets = cct->_conf->rgw_list_buckets_max_chunk;
+
+    /* XXX check offsets */
+    uint64_t ix = 3;
+    rc = rgw_read_user_buckets(store, rgw_fs->user_id, buckets, marker,
+			       max_buckets, true);
+    if (rc < 0) {
+      ldout(cct, 10) << "WARNING: failed on rgw_get_user_buckets uid="
+		     << rgw_fs->user_id << dendl;
+      return rc;
+    } else {
+      bucket_count = 0;
+      bucket_objcount = 0;
+      map<string, RGWBucketEnt>& m = buckets.get_buckets();
+      for (auto& ib : m) {
+	RGWBucketEnt& bent = ib.second;
+	bucket_objcount += bent.count;
+	marker = ib.first;
+	(void) rcb(bent.bucket.name.c_str(), cb_arg, ix++);
+      }
+      bucket_count += m.size();
+    }
+  } else {
+    /* !root uri */
+    
+  }
+
 #if 0 /* TODO: implement */
   if (is_root(uri)) {
     /* get the bucket list */
@@ -304,11 +349,6 @@ int rgw_readdir(struct rgw_fs *rgw_fs,
     return -1;
   }
 #endif
-
-  /* XXXX */
-  (void) rcb("test1", cb_arg, 1);
-  (void) rcb("test2", cb_arg, 2);
-  (void) rcb("test3", cb_arg, 3);
 
   *eof = true;
 
