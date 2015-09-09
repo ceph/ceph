@@ -2389,16 +2389,15 @@ int RGWRados::list_periods(list<string>& periods)
 int RGWRados::list_periods(const string& current_period, list<string>& periods)
 {
   int ret;
-  string parent_period = current_period;
-
-  while(!parent_period.empty()) {    
+  string period_id = current_period;
+  while(!period_id.empty()) {
     RGWPeriod period(cct, this);
-    ret = period.init(parent_period, 0);
+    ret = period.init(period_id);
     if (ret < 0) {
       return ret;
     }
     periods.push_back(period.get_id());
-    parent_period = period.get_id();
+    period_id = period.get_predecessor();
   }
   
   return ret;
