@@ -6,11 +6,15 @@
 #include "common/ceph_context.h"
 #include "common/dout.h"
 #include "common/errno.h"
+#include "common/perf_counters.h"
+#include "common/WorkQueue.h"
 
-#include "librbd/AioRequest.h"
+#include "librbd/AioObjectRequest.h"
+#include "librbd/ImageCtx.h"
 #include "librbd/internal.h"
 
 #include "librbd/AioCompletion.h"
+#include "librbd/Journal.h"
 
 #ifdef WITH_LTTNG
 #include "tracing/librbd.h"
@@ -83,6 +87,12 @@ namespace librbd {
       break;
     }
 
+    // inform the journal that the op has successfully committed
+    if (journal_tid != 0) {
+      assert(ictx->journal != NULL);
+      ictx->journal->commit_event(journal_tid, rval);
+    }
+
     // note: possible for image to be closed after op marked finished
     if (async_op.started()) {
       async_op.finish_op();
@@ -96,6 +106,16 @@ namespace librbd {
     done = true;
     cond.Signal();
     tracepoint(librbd, aio_complete_exit);
+  }
+
+  void AioCompletion::init_time(ImageCtx *i, aio_type_t t) {
+    if (ictx == NULL) {
+      ictx = i;
+      aio_type = t;
+      start_time = ceph_clock_now(ictx->cct);
+
+      async_op.start_op(*ictx);
+    }
   }
 
   void AioCompletion::fail(CephContext *cct, int r)
@@ -128,6 +148,12 @@ namespace librbd {
       complete(cct);
     }
     put_unlock();
+  }
+
+  void AioCompletion::associate_journal_event(uint64_t tid) {
+    Mutex::Locker l(lock);
+    assert(!done);
+    journal_tid = tid;
   }
 
   bool AioCompletion::is_complete() {
@@ -170,7 +196,7 @@ namespace librbd {
       m_completion->lock.Unlock();
       r = m_req->m_object_len;
     }
-    m_completion->complete_request(m_cct, r);
+    C_AioRequest::finish(r);
   }
 
   void C_CacheRead::complete(int r) {

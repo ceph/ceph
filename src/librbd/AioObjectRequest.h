@@ -24,14 +24,14 @@ namespace librbd {
    * Its subclasses encapsulate logic for dealing with special cases
    * for I/O due to layering.
    */
-  class AioRequest
+  class AioObjectRequest
   {
   public:
-    AioRequest(ImageCtx *ictx, const std::string &oid,
-               uint64_t objectno, uint64_t off, uint64_t len,
-               librados::snap_t snap_id,
-               Context *completion, bool hide_enoent);
-    virtual ~AioRequest() {}
+    AioObjectRequest(ImageCtx *ictx, const std::string &oid,
+                     uint64_t objectno, uint64_t off, uint64_t len,
+                     librados::snap_t snap_id,
+                     Context *completion, bool hide_enoent);
+    virtual ~AioObjectRequest() {}
 
     virtual void add_copyup_ops(librados::ObjectWriteOperation *wr) {};
 
@@ -56,14 +56,14 @@ namespace librbd {
     bool m_hide_enoent;
   };
 
-  class AioRead : public AioRequest {
+  class AioObjectRead : public AioObjectRequest {
   public:
-    AioRead(ImageCtx *ictx, const std::string &oid,
-	    uint64_t objectno, uint64_t offset, uint64_t len,
-	    vector<pair<uint64_t,uint64_t> >& be,
-	    librados::snap_t snap_id, bool sparse,
-	    Context *completion, int op_flags);
-    virtual ~AioRead();
+    AioObjectRead(ImageCtx *ictx, const std::string &oid,
+	          uint64_t objectno, uint64_t offset, uint64_t len,
+	          vector<pair<uint64_t,uint64_t> >& be,
+	          librados::snap_t snap_id, bool sparse,
+	          Context *completion, int op_flags);
+    virtual ~AioObjectRead();
 
     virtual bool should_complete(int r);
     virtual void send();
@@ -113,12 +113,12 @@ namespace librbd {
     void read_from_parent(const vector<pair<uint64_t,uint64_t> >& image_extents);
   };
 
-  class AbstractWrite : public AioRequest {
+  class AbstractAioObjectWrite : public AioObjectRequest {
   public:
-    AbstractWrite(ImageCtx *ictx, const std::string &oid, uint64_t object_no,
-                  uint64_t object_off, uint64_t len, const ::SnapContext &snapc,
-		  Context *completion, bool hide_enoent);
-    virtual ~AbstractWrite() {}
+    AbstractAioObjectWrite(ImageCtx *ictx, const std::string &oid,
+                           uint64_t object_no, uint64_t object_off,
+                           uint64_t len, const ::SnapContext &snapc,
+                           Context *completion, bool hide_enoent);
 
     virtual void add_copyup_ops(librados::ObjectWriteOperation *wr)
     {
@@ -193,16 +193,15 @@ namespace librbd {
     void send_copyup();
   };
 
-  class AioWrite : public AbstractWrite {
+  class AioObjectWrite : public AbstractAioObjectWrite {
   public:
-    AioWrite(ImageCtx *ictx, const std::string &oid, uint64_t object_no,
-             uint64_t object_off, const ceph::bufferlist &data,
-             const ::SnapContext &snapc, Context *completion)
-      : AbstractWrite(ictx, oid, object_no, object_off, data.length(), snapc,
-		      completion, false),
+    AioObjectWrite(ImageCtx *ictx, const std::string &oid, uint64_t object_no,
+                   uint64_t object_off, const ceph::bufferlist &data,
+                   const ::SnapContext &snapc, Context *completion)
+      : AbstractAioObjectWrite(ictx, oid, object_no, object_off, data.length(),
+                               snapc, completion, false),
 	m_write_data(data), m_op_flags(0) {
     }
-    virtual ~AioWrite() {}
 
     void set_op_flags(int op_flags) {
       m_op_flags = op_flags;
@@ -223,14 +222,14 @@ namespace librbd {
     int m_op_flags;
   };
 
-  class AioRemove : public AbstractWrite {
+  class AioObjectRemove : public AbstractAioObjectWrite {
   public:
-    AioRemove(ImageCtx *ictx, const std::string &oid, uint64_t object_no,
-	      const ::SnapContext &snapc, Context *completion)
-      : AbstractWrite(ictx, oid, object_no, 0, 0, snapc, completion, true),
+    AioObjectRemove(ImageCtx *ictx, const std::string &oid, uint64_t object_no,
+	            const ::SnapContext &snapc, Context *completion)
+      : AbstractAioObjectWrite(ictx, oid, object_no, 0, 0, snapc, completion,
+                               true),
         m_object_state(OBJECT_NONEXISTENT) {
     }
-    virtual ~AioRemove() {}
 
   protected:
     virtual void add_write_ops(librados::ObjectWriteOperation *wr) {
@@ -269,11 +268,12 @@ namespace librbd {
     uint8_t m_object_state;
   };
 
-  class AioTrim : public AbstractWrite {
+  class AioObjectTrim : public AbstractAioObjectWrite {
   public:
-    AioTrim(ImageCtx *ictx, const std::string &oid, uint64_t object_no,
-            const ::SnapContext &snapc, Context *completion)
-      : AbstractWrite(ictx, oid, object_no, 0, 0, snapc, completion, true) {
+    AioObjectTrim(ImageCtx *ictx, const std::string &oid, uint64_t object_no,
+                  const ::SnapContext &snapc, Context *completion)
+      : AbstractAioObjectWrite(ictx, oid, object_no, 0, 0, snapc, completion,
+                               true) {
     }
 
   protected:
@@ -294,15 +294,14 @@ namespace librbd {
     }
   };
 
-  class AioTruncate : public AbstractWrite {
+  class AioObjectTruncate : public AbstractAioObjectWrite {
   public:
-    AioTruncate(ImageCtx *ictx, const std::string &oid, uint64_t object_no,
-                uint64_t object_off, const ::SnapContext &snapc,
-                Context *completion)
-      : AbstractWrite(ictx, oid, object_no, object_off, 0, snapc, completion,
-                      true) {
+    AioObjectTruncate(ImageCtx *ictx, const std::string &oid,
+                      uint64_t object_no, uint64_t object_off,
+                      const ::SnapContext &snapc, Context *completion)
+      : AbstractAioObjectWrite(ictx, oid, object_no, object_off, 0, snapc,
+                               completion, true) {
     }
-    virtual ~AioTruncate() {}
 
   protected:
     virtual void add_write_ops(librados::ObjectWriteOperation *wr) {
@@ -318,15 +317,14 @@ namespace librbd {
     }
   };
 
-  class AioZero : public AbstractWrite {
+  class AioObjectZero : public AbstractAioObjectWrite {
   public:
-    AioZero(ImageCtx *ictx, const std::string &oid, uint64_t object_no,
-            uint64_t object_off, uint64_t object_len,
-            const ::SnapContext &snapc, Context *completion)
-      : AbstractWrite(ictx, oid, object_no, object_off, object_len, snapc,
-                      completion, true) {
+    AioObjectZero(ImageCtx *ictx, const std::string &oid, uint64_t object_no,
+                  uint64_t object_off, uint64_t object_len,
+                  const ::SnapContext &snapc, Context *completion)
+      : AbstractAioObjectWrite(ictx, oid, object_no, object_off, object_len,
+                               snapc, completion, true) {
     }
-    virtual ~AioZero() {}
 
   protected:
     virtual void add_write_ops(librados::ObjectWriteOperation *wr) {
