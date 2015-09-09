@@ -74,6 +74,7 @@ check_SCRIPTS += \
 	test/mon/osd-pool-create.sh \
 	test/mon/misc.sh \
 	test/mon/osd-crush.sh \
+	test/mon/mon-ping.sh \
 	test/mon/osd-erasure-code-profile.sh \
 	test/mon/mkfs.sh \
 	test/mon/mon-scrub.sh \
