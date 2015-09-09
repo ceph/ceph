@@ -18,6 +18,8 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+#include "include/rados/librgw.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -35,6 +37,7 @@ struct rgw_file_handle
 
 struct rgw_fs
 {
+  librgw_t rgw;
   struct rgw_file_handle root_fh;
   char *user_id;
   char *access_key_id;
@@ -71,8 +74,8 @@ int rgw_check_handle(const struct rgw_file_handle *handle);
 /*
  attach rgw namespace
 */
-int rgw_mount(const char *uid, const char *key, const char *secret,
-	      struct rgw_fs **rgw_fs);
+int rgw_mount(librgw_t rgw, const char *uid, const char *key,
+	      const char *secret, struct rgw_fs **rgw_fs);
 
 /*
  detach rgw namespace
