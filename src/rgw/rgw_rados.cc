@@ -2332,6 +2332,13 @@ int RGWRados::list_realms(list<string>& realms)
   return list_raw_prefixed_objs(pool_name, realm_names_oid_prefix, realms);
 }
 
+int RGWRados::list_periods(list<string>& periods)
+{
+  RGWPeriod period(cct, this);
+
+  return list_raw_prefixed_objs(period.get_pool_name(cct), period.get_info_oid_prefix(), periods);
+}
+
 /**
  * Open the pool used as root for this gateway
  * Returns: 0 on success, -ERR# otherwise.
