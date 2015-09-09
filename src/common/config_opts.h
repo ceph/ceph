@@ -924,6 +924,7 @@ OPTION(rbd_blacklist_expire_seconds, OPT_INT, 0) // number of seconds to blackli
 OPTION(rbd_request_timed_out_seconds, OPT_INT, 30) // number of seconds before maint request times out
 OPTION(rbd_skip_partial_discard, OPT_BOOL, false) // when trying to discard a range inside an object, set to true to skip zeroing the range.
 OPTION(rbd_enable_alloc_hint, OPT_BOOL, true) // when writing a object, it will issue a hint to osd backend to indicate the expected size object need
+OPTION(rbd_snap_max_nums, OPT_U64, 255) // Max number snap of image
 
 /*
  * The following options change the behavior for librbd's image creation methods that
