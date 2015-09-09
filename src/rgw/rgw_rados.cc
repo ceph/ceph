@@ -2339,6 +2339,25 @@ int RGWRados::list_periods(list<string>& periods)
   return list_raw_prefixed_objs(period.get_pool_name(cct), period.get_info_oid_prefix(), periods);
 }
 
+
+int RGWRados::list_periods(const string& current_period, list<string>& periods)
+{
+  int ret;
+  string parent_period = current_period;
+
+  while(!parent_period.empty()) {    
+    RGWPeriod period(cct, this);
+    ret = period.init(parent_period, 0);
+    if (ret < 0) {
+      return ret;
+    }
+    periods.push_back(period.get_id());
+    parent_period = period.get_id();
+  }
+  
+  return ret;
+}
+
 /**
  * Open the pool used as root for this gateway
  * Returns: 0 on success, -ERR# otherwise.

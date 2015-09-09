@@ -86,6 +86,7 @@ void _usage()
   cerr << "  realm get                  show realm info\n";
   cerr << "  realm get-default          get default realm name\n";
   cerr << "  realm list                 list realms\n";
+  cerr << "  realm list-periods         list all realm periods\n";
   cerr << "  realm remove               remove a zonegroup from the realm\n";
   cerr << "  realm rename               rename a realm\n";
   cerr << "  realm set-default          set realm as default\n";
@@ -314,6 +315,7 @@ enum {
   OPT_REALM_GET,
   OPT_REALM_GET_DEFAULT,
   OPT_REALM_LIST,
+  OPT_REALM_LIST_PERIODS,
   OPT_REALM_REMOVE,
   OPT_REALM_RENAME,
   OPT_REALM_SET_DEFAULT,
@@ -494,11 +496,13 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
     if (strcmp(cmd, "delete") == 0)
       return OPT_REALM_DELETE;
     if (strcmp(cmd, "get") == 0)
-	  return OPT_REALM_GET;
+      return OPT_REALM_GET;
     if (strcmp(cmd, "get-default") == 0)
-	  return OPT_REALM_GET_DEFAULT;
+      return OPT_REALM_GET_DEFAULT;
     if (strcmp(cmd, "list") == 0)
-	  return OPT_REALM_LIST;
+      return OPT_REALM_LIST;
+    if (strcmp(cmd, "list-periods") == 0)
+      return OPT_REALM_LIST_PERIODS;
     if (strcmp(cmd, "remove") == 0)
       return OPT_REALM_REMOVE;
     if (strcmp(cmd, "rename") == 0)
@@ -1625,6 +1629,7 @@ int main(int argc, char **argv)
 			 opt_cmd == OPT_PERIOD_PULL || opt_cmd == OPT_PERIOD_PUSH ||
 			 opt_cmd == OPT_PERIOD_GET_CURRENT || opt_cmd == OPT_PERIOD_LIST ||
 			 opt_cmd == OPT_REALM_DELETE || opt_cmd == OPT_REALM_GET || opt_cmd == OPT_REALM_LIST ||
+			 opt_cmd == OPT_REALM_LIST_PERIODS ||
 			 opt_cmd == OPT_REALM_GET_DEFAULT || opt_cmd == OPT_REALM_REMOVE ||
 			 opt_cmd == OPT_REALM_RENAME || opt_cmd == OPT_REALM_SET_DEFAULT);
 
@@ -1896,6 +1901,30 @@ int main(int argc, char **argv)
 	cout << std::endl;
       }
       break;
+    case OPT_REALM_LIST_PERIODS:
+      {
+	RGWRealm realm(realm_id, realm_name);
+	int ret = realm.init(g_ceph_context, store);
+	if (ret < 0) {
+	  cerr << "realm.init failed: " << cpp_strerror(-ret) << std::endl;
+	  return -ret;
+	}
+	string current_period = realm.get_current_period();
+	list<string> periods;
+	ret = store->list_periods(current_period, periods);
+	if (ret < 0) {
+	  cerr << "list periods failed: " << cpp_strerror(-ret) << std::endl;
+	  return -ret;
+	}	
+	formatter->open_object_section("realm_periods_list");
+	encode_json("current_period", current_period, formatter);
+	encode_json("periods", periods, formatter);
+	formatter->close_section();
+	formatter->flush(cout);
+	cout << std::endl;
+      }
+      break;
+
     case OPT_REALM_RENAME:
       {
 	RGWRealm realm(realm_id, realm_name);
