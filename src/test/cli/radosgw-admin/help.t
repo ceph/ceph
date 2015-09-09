@@ -124,7 +124,8 @@
      --categories=<list>       comma separated list of categories, used in usage show
      --caps=<caps>             list of caps (e.g., "usage=read, write; user=read"
      --yes-i-really-mean-it    required for certain operations
-  
+     --reset-regions           reset regionmap when regionmap update
+ 
   <date> := "YYYY-MM-DD[ hh:mm:ss]"
   
   Quota options:
