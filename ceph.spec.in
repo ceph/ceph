@@ -687,7 +687,7 @@ rm -rf $RPM_BUILD_ROOT
   %endif
 %endif
 
-%postun
+%postun -p /bin/bash
 /sbin/ldconfig
 %if 0%{?_with_systemd}
   if [ $1 = 1 ] ; then
@@ -935,7 +935,7 @@ fi
   fi
 %endif
 
-%postun radosgw
+%postun radosgw -p /bin/bash
 /sbin/ldconfig
 %if 0%{?_with_systemd}
   if [ $1 = 1 ] ; then
