@@ -2093,6 +2093,17 @@ TEST(BufferList, zero) {
     bl.zero((unsigned)3, (unsigned)3);
     EXPECT_EQ(0, ::memcmp("ABC\0\0\0GHIKLM", bl.c_str(), 9));
   }
+  {
+    bufferlist bl;
+    bufferptr ptr1(4);
+    bufferptr ptr2(4);
+    memset(ptr1.c_str(), 'a', 4);
+    memset(ptr2.c_str(), 'b', 4);
+    bl.append(ptr1);
+    bl.append(ptr2);
+    bl.zero((unsigned)2, (unsigned)4);
+    EXPECT_EQ(0, ::memcmp("aa\0\0\0\0bb", bl.c_str(), 8));
+  }
 }
 
 TEST(BufferList, EmptyAppend) {
