@@ -1263,7 +1263,11 @@ public:
   const string& get_pool_name(CephContext *cct);
   const string& get_latest_epoch_oid();
   const string& get_info_oid_prefix();
-  
+
+  void set_predecessor(const string& predecessor)
+  {
+    predecessor_uuid = predecessor;
+  }
   int get_latest_epoch(epoch_t& epoch);
   int init(const string& realm_id = "", const string &realm_name = "", bool setup_obj = true);
   int init(const string& period_id, epoch_t epoch, bool setup_obj = true);
@@ -1271,7 +1275,7 @@ public:
   int delete_obj();
   int store_info(bool exclusive);
   int activate() { return -ENOTSUP;}
-
+  
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);    
     ::encode(id, bl);
