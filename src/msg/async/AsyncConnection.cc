@@ -841,7 +841,7 @@ void AsyncConnection::process()
           in_seq.set(message->get_seq());
           ldout(async_msgr->cct, 10) << __func__ << " got message " << message->get_seq()
                                << " " << message << " " << *message << dendl;
-	  ldout(async_msgr->cct, 1) << " == rx == " << message << " " << *message
+	  ldout(async_msgr->cct, 1) << " == rx == " << message->get_source() << " " << message << " " << *message
 				    << dendl;
 
           // if send_message always successfully send, it may have no
