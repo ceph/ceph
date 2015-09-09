@@ -1620,6 +1620,8 @@ int main(int argc, char **argv)
 	  cerr << "ERROR: couldn't prepare new period " << ": " << cpp_strerror(-ret) << std::endl;
 	  return ret;
 	}
+	encode_json("period", period, formatter);
+	formatter->flush(cout);
       }
       break;
     case OPT_PERIOD_DELETE:
