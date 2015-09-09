@@ -18,10 +18,6 @@
 #include "include/rbd/librbd.h"
 #include "include/rbd/librbd.hpp"
 
-#include "global/global_context.h"
-#include "global/global_init.h"
-#include "common/ceph_argparse.h"
-#include "common/config.h"
 #include "common/Thread.h"
 
 #include "gtest/gtest.h"
@@ -83,6 +79,12 @@ static int create_image_full(rados_ioctx_t ioctx, const char *name,
 			      uint64_t features)
 {
   if (old_format) {
+    // ensure old-format tests actually use the old format
+    int r = rados_conf_set(rados_ioctx_get_cluster(ioctx),
+                           "rbd_default_format", "1");
+    if (r < 0) {
+      return r;
+    }
     return rbd_create(ioctx, name, size, order);
   } else if ((features & RBD_FEATURE_STRIPINGV2) != 0) {
     return rbd_create3(ioctx, name, size, features, order, 65536, 16);
@@ -113,6 +115,11 @@ static int create_image_pp(librbd::RBD &rbd,
   if (r < 0)
     return r;
   if (old_format) {
+    librados::Rados rados(ioctx);
+    int r = rados.conf_set("rbd_default_format", "1");
+    if (r < 0) {
+      return r;
+    }
     return rbd.create(ioctx, name, size, order);
   } else {
     return rbd.create2(ioctx, name, size, features, order);
@@ -1441,7 +1448,9 @@ TEST_F(TestLibRBD, TestClone2)
 
 TEST_F(TestLibRBD, TestCoR)
 {
-  if (!g_conf->rbd_clone_copy_on_read) {
+  std::string config_value;
+  ASSERT_EQ(0, _rados.conf_get("rbd_clone_copy_on_read", config_value));
+  if (config_value == "false") {
     std::cout << "SKIPPING due to disabled rbd_copy_on_read" << std::endl;
     return;
   }
@@ -2341,7 +2350,9 @@ TEST_F(TestLibRBD, ZeroLengthRead)
 
 TEST_F(TestLibRBD, LargeCacheRead)
 {
-  if (!g_conf->rbd_cache) {
+  std::string config_value;
+  ASSERT_EQ(0, _rados.conf_get("rbd_cache", config_value));
+  if (config_value == "false") {
     std::cout << "SKIPPING due to disabled cache" << std::endl;
     return;
   }
@@ -2349,17 +2360,21 @@ TEST_F(TestLibRBD, LargeCacheRead)
   rados_ioctx_t ioctx;
   rados_ioctx_create(_cluster, m_pool_name.c_str(), &ioctx);
 
-  uint64_t orig_cache_size = g_conf->rbd_cache_size;
-  g_conf->set_val("rbd_cache_size", "16777216");
+  uint32_t new_cache_size = 16777216;
+  std::string orig_cache_size;
+  ASSERT_EQ(0, _rados.conf_get("rbd_cache_size", orig_cache_size));
+  ASSERT_EQ(0, _rados.conf_set("rbd_cache_size",
+                               stringify(new_cache_size).c_str()));
+  ASSERT_EQ(0, _rados.conf_get("rbd_cache_size", config_value));
+  ASSERT_EQ(stringify(new_cache_size), config_value);
   BOOST_SCOPE_EXIT( (orig_cache_size) ) {
-    g_conf->set_val("rbd_cache_size", stringify(orig_cache_size).c_str());
+    ASSERT_EQ(0, _rados.conf_set("rbd_cache_size", orig_cache_size.c_str()));
   } BOOST_SCOPE_EXIT_END;
-  ASSERT_EQ(16777216, g_conf->rbd_cache_size);
 
   rbd_image_t image;
   int order = 0;
   const char *name = "testimg";
-  uint64_t size = g_conf->rbd_cache_size + 1;
+  uint64_t size = new_cache_size + 1;
 
   ASSERT_EQ(0, create_image(ioctx, name, size, &order));
   ASSERT_EQ(0, rbd_open(ioctx, name, &image, NULL));
@@ -2622,8 +2637,7 @@ TEST_F(TestLibRBD, BlockingAIO)
   int order = 18;
   ASSERT_EQ(0, create_image_pp(rbd, ioctx, name.c_str(), size, &order));
 
-  CephContext *cct = reinterpret_cast<CephContext*>(ioctx.cct());
-  cct->_conf->set_val_or_die("rbd_non_blocking_aio", "0");
+  ASSERT_EQ(0, _rados.conf_set("rbd_non_blocking_aio", "0"));
 
   librbd::Image image;
   ASSERT_EQ(0, rbd.open(ioctx, image, name.c_str(), NULL));

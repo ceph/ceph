@@ -42,7 +42,6 @@
 #include "include/krbd.h"
 #include "include/rados/librados.h"
 #include "include/rbd/librbd.h"
-#include "common/ceph_crypto.h"
 
 #define NUMPRINTCOLUMNS 32	/* # columns of data to print on each line */
 
@@ -2312,7 +2311,6 @@ main(int argc, char **argv)
 	krbd_destroy(krbd);
 	rados_shutdown(cluster);
 
-        ceph::crypto::shutdown();
 	free(original_buf);
 	free(good_buf);
 	free(temp_buf);
