@@ -90,7 +90,7 @@ const string default_zone_name = "default";
 static string zonegroup_names_oid_prefix = "zonegroups_names.";
 static RGWObjCategory main_category = RGW_OBJ_CATEGORY_MAIN;
 #define RGW_USAGE_OBJ_PREFIX "usage."
-
+#define FIRST_EPOCH 1
 static string RGW_DEFAULT_ZONE_ROOT_POOL = "rgw.root";
 static string RGW_DEFAULT_ZONEGROUP_ROOT_POOL = "rgw.root";
 static string RGW_DEFAULT_REALM_ROOT_POOL = "rgw.root";
@@ -573,18 +573,19 @@ const string& RGWRealm::get_info_oid_prefix(bool old_format)
 
 int RGWRealm::set_current_period(const string& period_id) {
   /* check to see period id is valid */
-  RGWPeriod new_current(cct, store);  
-  int ret = new_current.init(period_id);
+  RGWPeriod new_current(cct, store, period_id);  
+  int ret = new_current.init();
   if (ret < 0) {
+    derr << "Error init new period id " << period_id << " : " << cpp_strerror(-ret) << dendl;
     return ret;
   }
-  if (new_current.get_predecessor() != current_period) {
+  if (!current_period.empty() && new_current.get_predecessor() != current_period) {
     ldout(cct, 0) << "set_current_period new period " << period_id <<
       " is not a perdecessor of the current period "<< current_period << dendl;
     return -EINVAL;
   }
   current_period = period_id;
-  return store_info(true);
+  return update();
 }
 
 int RGWPeriod::init(const string& period_id, epoch_t period_epoch,  bool setup_obj)
@@ -614,10 +615,12 @@ int RGWPeriod::init(const string& period_realm_id, const string& period_realm_na
   RGWRealm realm(realm_id, period_realm_name);
   int ret = realm.init(cct, store);
   if (ret < 0) {
+    derr << "failed to init realm " << period_realm_name  << " id " << realm_id << " : " << cpp_strerror(-ret) <<
+      dendl;
     return ret;
   }
 
-  /* update realm_id incare we used a period_name */
+  /* update realm_id in case we used a realm name */
   if (realm_id.empty()) {
     realm_id = realm.get_id();
   }
@@ -629,11 +632,13 @@ int RGWPeriod::init(const string& period_realm_id, const string& period_realm_na
   if (!epoch) {
     ret = use_latest_epoch();
     if (ret < 0) {
+      derr << "failed to use_latest_epoch " << period_realm_name  << " id " << realm_id << " : "
+	   << cpp_strerror(-ret) << dendl;
       return ret;
     }
   }
 
-  return read_info(id);
+  return read_info();
 }
 
 const string& RGWPeriod::get_latest_epoch_oid()
@@ -649,19 +654,32 @@ const string& RGWPeriod::get_info_oid_prefix()
   return period_info_oid_prefix;
 }
 
+const string RGWPeriod::get_period_oid_prefix()
+{
+  return get_info_oid_prefix() + realm_id + "." + id;
+}
+
+const string RGWPeriod::get_period_oid()
+{
+  std::ostringstream oss;
+  oss << get_period_oid_prefix() << "." << epoch;
+
+  return oss.str();;
+}
+
 int RGWPeriod::read_latest_epoch(RGWPeriodLatestEpochInfo& info)
 {
   string pool_name = get_pool_name(cct);
-  string oid = get_info_oid_prefix() + id +
-    get_latest_epoch_oid();
+  string oid = get_period_oid_prefix() + get_latest_epoch_oid();
 
   rgw_bucket pool(pool_name.c_str());
   bufferlist bl;
   RGWObjectCtx obj_ctx(store);
   int ret = rgw_get_system_obj(store, obj_ctx, pool, oid, bl, NULL, NULL);
-  if (ret < 0)
+  if (ret < 0) {
+    derr << "error read_lastest_epoch " << pool << ":" << oid << dendl;
     return ret;
-
+  }
   try {
     bufferlist::iterator iter = bl.begin();
     ::decode(info, iter);
@@ -691,22 +709,42 @@ int RGWPeriod::use_latest_epoch()
 {
   RGWPeriodLatestEpochInfo info;
   int ret = read_latest_epoch(info);
-  if (ret < 0)
+  if (ret < 0) {
     return ret;
+  }
 
   epoch = info.epoch;
 
   return 0;
 }
 
+int RGWPeriod::set_latest_epoch(const epoch_t& epoch)
+{
+  string pool_name = get_pool_name(cct);
+  string oid = get_period_oid_prefix() + get_latest_epoch_oid();
 
+  rgw_bucket pool(pool_name.c_str());
+  bufferlist bl;
+
+  RGWPeriodLatestEpochInfo info;
+  info.epoch = epoch;
+
+  ::encode(info, bl);
+
+  int ret = rgw_put_system_obj(store, pool, oid, bl.c_str(), bl.length(), false, NULL, 0, NULL);
+  if (ret < 0)
+    return ret;
+
+  return 0;
+
+
+}
 int RGWPeriod::delete_obj()
 {
   string pool_name = get_pool_name(cct);
   rgw_bucket pool(pool_name.c_str());
-  string oid  = get_info_oid_prefix() + id;
 
-  rgw_obj object_id(pool, oid);
+  rgw_obj object_id(pool, get_period_oid());
   int ret = store->delete_system_obj(object_id);
   if (ret < 0) {
     lderr(cct) << "Error delete object id " << id << ": " << cpp_strerror(-ret) << dendl;
@@ -715,19 +753,18 @@ int RGWPeriod::delete_obj()
   return ret;
 }
 
-int RGWPeriod::read_info(const string& obj_id)
+int RGWPeriod::read_info()
 {
   string pool_name = get_pool_name(cct);
 
   rgw_bucket pool(pool_name.c_str());
   bufferlist bl;
 
-  string oid = get_info_oid_prefix()  + obj_id;
 
   RGWObjectCtx obj_ctx(store);
-  int ret = rgw_get_system_obj(store, obj_ctx, pool, oid, bl, NULL, NULL);
+  int ret = rgw_get_system_obj(store, obj_ctx, pool, get_period_oid(), bl, NULL, NULL);
   if (ret < 0) {
-    lderr(cct) << "failed reading obj info from " << pool << ":" << oid << ": " << cpp_strerror(-ret) << dendl;
+    lderr(cct) << "failed reading obj info from " << pool << ":" << get_period_oid() << ": " << cpp_strerror(-ret) << dendl;
     return ret;
   }
 
@@ -735,7 +772,7 @@ int RGWPeriod::read_info(const string& obj_id)
     bufferlist::iterator iter = bl.begin();
     ::decode(*this, iter);
   } catch (buffer::error& err) {
-    ldout(cct, 0) << "ERROR: failed to decode obj from " << pool << ":" << oid << dendl;
+    ldout(cct, 0) << "ERROR: failed to decode obj from " << pool << ":" << get_period_oid() << dendl;
     return -EIO;
   }
 
@@ -745,7 +782,7 @@ int RGWPeriod::read_info(const string& obj_id)
 int RGWPeriod::create()
 {
   int ret;
-
+  
   /* create unique id */
   uuid_d new_uuid;
   char uuid_str[37];
@@ -753,9 +790,16 @@ int RGWPeriod::create()
   new_uuid.print(uuid_str);
   id = uuid_str;
 
+  epoch = FIRST_EPOCH;
+  
   ret = store_info(true);
   if (ret < 0) {
     ldout(cct, 0) << "ERROR:  storing info for " << id << ": " << cpp_strerror(-ret) << dendl;
+  }
+
+  ret = set_latest_epoch(epoch);
+  if (ret < 0) {
+    ldout(cct, 0) << "ERROR: setting latest epoch " << id << ": " << cpp_strerror(-ret) << dendl;
   }
 
   return ret;
@@ -767,8 +811,10 @@ int RGWPeriod::store_info(bool exclusive)
 
   rgw_bucket pool(pool_name.c_str());
 
-  string oid = get_info_oid_prefix() + id;
-
+  std::ostringstream oss;
+  oss << get_info_oid_prefix() << realm_id << "." << id << "." << epoch;
+  string oid = oss.str();
+  derr << " period store_info " << oid << dendl;
   bufferlist bl;
   ::encode(*this, bl);
   return rgw_put_system_obj(store, pool, oid, bl.c_str(), bl.length(), exclusive, NULL, 0, NULL);
