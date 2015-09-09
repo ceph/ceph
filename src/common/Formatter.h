@@ -95,6 +95,7 @@ namespace ceph {
     JSONFormatter(bool p = false);
 
     void flush(std::ostream& os);
+    using Formatter::flush; // don't hide Formatter::flush(bufferlist &bl)
     void reset();
     virtual void open_array_section(const char *name);
     void open_array_section_in_ns(const char *name, const char *ns);
@@ -136,6 +137,7 @@ namespace ceph {
     XMLFormatter(bool pretty = false);
 
     void flush(std::ostream& os);
+    using Formatter::flush; // don't hide Formatter::flush(bufferlist &bl)
     void reset();
     void open_array_section(const char *name);
     void open_array_section_in_ns(const char *name, const char *ns);
@@ -173,6 +175,7 @@ namespace ceph {
     TableFormatter(bool keyval = false);
 
     void flush(std::ostream& os);
+    using Formatter::flush; // don't hide Formatter::flush(bufferlist &bl)
     void reset();
     virtual void open_array_section(const char *name);
     void open_array_section_in_ns(const char *name, const char *ns);
