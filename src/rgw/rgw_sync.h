@@ -126,6 +126,7 @@ WRITE_CLASS_ENCODER(rgw_meta_sync_status)
 
 class RGWAsyncRadosProcessor;
 class RGWMetaSyncStatusManager;
+class RGWMetaSyncCR;
 
 class RGWRemoteMetaLog : public RGWCoroutinesManager {
   RGWRados *store;
@@ -135,11 +136,13 @@ class RGWRemoteMetaLog : public RGWCoroutinesManager {
   RGWHTTPManager http_manager;
   RGWMetaSyncStatusManager *status_manager;
 
+  RGWMetaSyncCR *meta_sync_cr;
+
 public:
   RGWRemoteMetaLog(RGWRados *_store, RGWMetaSyncStatusManager *_sm) : RGWCoroutinesManager(_store->ctx()), store(_store),
                                        conn(NULL),
                                        http_manager(store->ctx(), &completion_mgr),
-                                       status_manager(_sm) {}
+                                       status_manager(_sm), meta_sync_cr(NULL) {}
 
   int init();
   void finish();
@@ -154,6 +157,8 @@ public:
   int init_sync_status(int num_shards);
   int set_sync_info(const rgw_meta_sync_info& sync_info);
   int run_sync(int num_shards, rgw_meta_sync_status& sync_status);
+
+  void wakeup(int shard_id);
 };
 
 class RGWMetaSyncStatusManager {
@@ -205,6 +210,7 @@ public:
 
   int run() { return master_log.run_sync(num_shards, sync_status); }
 
+  void wakeup(int shard_id) { return master_log.wakeup(shard_id); }
   void stop() {
     master_log.stop();
   }

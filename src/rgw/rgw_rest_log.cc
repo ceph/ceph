@@ -292,9 +292,13 @@ void RGWOp_MDLog_Notify::execute() {
   set<int> updated_shards;
   decode_json_obj(updated_shards, &p);
 
-  for (set<int>::iterator iter = updated_shards.begin(); iter != updated_shards.end(); ++iter) {
-    ldout(s->cct, 0) << __func__ << "(): updated shard=" << *iter << dendl;
+  if (store->ctx()->_conf->subsys.should_gather(ceph_subsys_rgw, 20)) {
+    for (set<int>::iterator iter = updated_shards.begin(); iter != updated_shards.end(); ++iter) {
+      ldout(s->cct, 20) << __func__ << "(): updated shard=" << *iter << dendl;
+    }
   }
+
+  store->wakeup_sync_shards(updated_shards);
 
   http_ret = 0;
 }
