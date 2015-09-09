@@ -105,6 +105,7 @@ namespace librbd {
   int snap_create(ImageCtx *ictx, const char *snap_name);
   int snap_create_helper(ImageCtx *ictx, Context* ctx, const char *snap_name);
   int snap_list(ImageCtx *ictx, std::vector<snap_info_t>& snaps);
+  int snap_list_nums(ImageCtx *ictx, uint64_t *snap_nums);
   bool snap_exists(ImageCtx *ictx, const char *snap_name);
   int snap_rollback(ImageCtx *ictx, const char *snap_name,
 		    ProgressContext& prog_ctx);
