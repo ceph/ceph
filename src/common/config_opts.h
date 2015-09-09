@@ -176,6 +176,8 @@ OPTION(mon_sync_fs_threshold, OPT_INT, 5)   // sync() when writing this many obj
 OPTION(mon_compact_on_start, OPT_BOOL, false)  // compact leveldb on ceph-mon start
 OPTION(mon_compact_on_bootstrap, OPT_BOOL, false)  // trigger leveldb compaction on bootstrap
 OPTION(mon_compact_on_trim, OPT_BOOL, true)       // compact (a prefix) when we trim old states
+OPTION(mon_osd_cache_size, OPT_INT, 10)  // the size of osdmaps cache, not to rely on underlying store's cache
+
 OPTION(mon_tick_interval, OPT_INT, 5)
 OPTION(mon_subscribe_interval, OPT_DOUBLE, 300)
 OPTION(mon_delta_reset_interval, OPT_DOUBLE, 10)   // seconds of inactivity before we reset the pg delta to 0

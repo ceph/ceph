@@ -859,7 +859,7 @@ public:
    * @param bl The bufferlist to be populated
    * @return 0 on success; <0 otherwise
    */
-  int get_version(version_t ver, bufferlist& bl) {
+  virtual int get_version(version_t ver, bufferlist& bl) {
     return mon->store->get(get_service_name(), ver, bl);
   }
   /**
@@ -869,7 +869,7 @@ public:
    * @param bl The bufferlist to be populated
    * @returns 0 on success; <0 otherwise
    */
-  int get_version_full(version_t ver, bufferlist& bl) {
+  virtual int get_version_full(version_t ver, bufferlist& bl) {
     string key = mon->store->combine_strings(full_prefix_name, ver);
     return mon->store->get(get_service_name(), key, bl);
   }
