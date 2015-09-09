@@ -909,7 +909,7 @@ protected:
   void hit_set_persist();   ///< persist hit info
   bool hit_set_apply_log(); ///< apply log entries to update in-memory HitSet
   void hit_set_trim(RepGather *repop, unsigned max); ///< discard old HitSets
-  void hit_set_in_memory_trim();                     ///< discard old in memory HitSets
+  void hit_set_in_memory_trim(uint32_t max_in_memory); ///< discard old in memory HitSets
   void hit_set_remove_all();
 
   hobject_t get_hit_set_current_object(utime_t stamp);
