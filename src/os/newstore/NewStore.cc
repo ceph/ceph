@@ -463,7 +463,7 @@ int NewStore::OnodeHashLRU::trim(int max)
   int num = onode_map.size() - max;
   lru_list_t::iterator p = lru.end();
   if (num)
-    p--;
+    --p;
   while (num > 0) {
     Onode *o = &*p;
     int refs = o->nref.read();
@@ -2487,7 +2487,7 @@ void NewStore::_kv_sync_thread()
       if (!g_conf->newstore_sync_submit_transaction) {
 	for (std::deque<TransContext *>::iterator it = kv_committing.begin();
 	     it != kv_committing.end();
-	     it++) {
+	     ++it) {
 	  db->submit_transaction((*it)->t);
 	}
       }
@@ -2497,7 +2497,7 @@ void NewStore::_kv_sync_thread()
       KeyValueDB::Transaction txc_cleanup_sync = db->get_transaction();
       for (std::deque<TransContext *>::iterator it = wal_cleaning.begin();
 	    it != wal_cleaning.end();
-	    it++) {
+	    ++it) {
 	wal_transaction_t& wt =*(*it)->wal_txn;
 	// cleanup the data in overlays
 	for (list<wal_op_t>::iterator p = wt.ops.begin(); p != wt.ops.end(); ++p) {
