@@ -76,6 +76,7 @@ void _usage()
   cerr << "  period get-current         get current period info\n";
   cerr << "  period pull                pull a period\n";
   cerr << "  period push                push a period\n";
+  cerr << "  period list                list all period\n";
   cerr << "  quota enable               enable quota\n";
   cerr << "  quota disable              disable quota\n";
   cerr << "  realm create               create a new realm\n";
@@ -316,6 +317,7 @@ enum {
   OPT_PERIOD_ACTIVATE,
   OPT_PERIOD_PULL,
   OPT_PERIOD_PUSH,
+  OPT_PERIOD_LIST,
 };
 
 static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_cmd, bool *need_more)
@@ -473,6 +475,8 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
       return OPT_PERIOD_PULL;
     if (strcmp(cmd, "push") == 0)
       return OPT_PERIOD_PUSH;
+    if (strcmp(cmd, "list") == 0)
+      return OPT_PERIOD_LIST;
   } else if (strcmp(prev_cmd, "realm") == 0) {
     if (strcmp(cmd, "create") == 0)
       return OPT_REALM_CREATE;
@@ -1590,7 +1594,7 @@ int main(int argc, char **argv)
 			 opt_cmd == OPT_PERIOD_PREPARE || opt_cmd == OPT_PERIOD_ACTIVATE ||
 			 opt_cmd == OPT_PERIOD_DELETE || opt_cmd == OPT_PERIOD_GET ||
 			 opt_cmd == OPT_PERIOD_PULL || opt_cmd == OPT_PERIOD_PUSH ||
-			 opt_cmd == OPT_PERIOD_GET_CURRENT ||
+			 opt_cmd == OPT_PERIOD_GET_CURRENT || opt_cmd == OPT_PERIOD_LIST ||
 			 opt_cmd == OPT_REALM_DELETE || opt_cmd == OPT_REALM_GET || opt_cmd == OPT_REALM_LIST ||
 			 opt_cmd == OPT_REALM_GET_DEFAULT || opt_cmd == OPT_REALM_REMOVE ||
 			 opt_cmd == OPT_REALM_RENAME || opt_cmd == OPT_REALM_SET_DEFAULT);
@@ -1751,6 +1755,21 @@ int main(int argc, char **argv)
 	if (ret < 0) {
 	  cerr << "Error storing period " << period.get_id() << ": " << cpp_strerror(ret) << std::endl;
 	}
+      }
+      break;
+    case OPT_PERIOD_LIST:
+      {
+	list<string> periods;
+	int ret = store->list_periods(periods);
+	if (ret < 0) {
+	  cerr << "failed to list periods: " << cpp_strerror(-ret) << std::endl;
+	  return -ret;
+	}
+	formatter->open_object_section("periods_list");
+	encode_json("periods", periods, formatter);
+	formatter->close_section();
+	formatter->flush(cout);
+	cout << std::endl;
       }
       break;
     case OPT_REALM_CREATE:

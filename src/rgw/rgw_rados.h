@@ -1590,7 +1590,7 @@ public:
   int list_regions(list<string>& regions);
   int list_zones(list<string>& zones);
   int list_realms(list<string>& realms);
-
+  int list_periods(list<string>& periods);
   void tick();
 
   CephContext *ctx() { return cct; }
