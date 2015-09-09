@@ -4,6 +4,7 @@
 #ifndef CEPH_RGW_REST_LIB_H
 #define CEPH_RGW_REST_LIB_H
 
+/* XXX should derive from RGWRESTMgr directly */
 class RGWRESTMgr_Lib : public RGWRESTMgr_S3 {
 public:
   RGWRESTMgr_Lib() {}
