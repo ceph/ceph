@@ -2255,8 +2255,10 @@ static int do_metadata_list(librbd::Image& image, Formatter *f)
   TextTable tbl;
 
   r = image.metadata_list("", 0, &pairs);
-  if (r < 0)
+  if (r < 0) {
+    cerr << "failed to list metadata of image : " << cpp_strerror(r) << std::endl;
     return r;
+  }
 
   if (f) {
     f->open_object_section("metadatas");
@@ -2275,10 +2277,11 @@ static int do_metadata_list(librbd::Image& image, Formatter *f)
 
     for (map<string, bufferlist>::iterator it = pairs.begin();
          it != pairs.end(); ++it) {
+      string val(it->second.c_str(), it->second.length());
       if (f) {
-        f->dump_string(it->first.c_str(), it->second.c_str());
+        f->dump_string(it->first.c_str(), val.c_str());
       } else {
-        tbl << it->first << it->second.c_str() << TextTable::endrow;
+        tbl << it->first << val.c_str() << TextTable::endrow;
       }
     }
     if (!f)
@@ -2295,22 +2298,31 @@ static int do_metadata_list(librbd::Image& image, Formatter *f)
 static int do_metadata_set(librbd::Image& image, const char *key,
                           const char *value)
 {
-  return image.metadata_set(key, value);
+  int r = image.metadata_set(key, value);
+  if (r < 0) {
+    cerr << "failed to set metadata " << key << " of image : " << cpp_strerror(r) << std::endl;
+  }
+  return r;
 }
 
 static int do_metadata_remove(librbd::Image& image, const char *key)
 {
-  return image.metadata_remove(key);
+  int r = image.metadata_remove(key);
+  if (r < 0) {
+    cerr << "failed to remove metadata " << key << " of image : " << cpp_strerror(r) << std::endl;
+  }
 }
 
 static int do_metadata_get(librbd::Image& image, const char *key)
 {
   string s;
   int r = image.metadata_get(key, &s);
-  if (r < 0)
+  if (r < 0) {
+    cerr << "failed to get metadata " << key << " of image : " << cpp_strerror(r) << std::endl;
     return r;
-  cout << s;
-  return 0;
+  }
+  cout << s << std::endl;
+  return r;
 }
 
 static int do_copy(librbd::Image &src, librados::IoCtx& dest_pp,
