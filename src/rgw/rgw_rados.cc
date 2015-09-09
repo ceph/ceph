@@ -573,16 +573,16 @@ const string& RGWRealm::get_info_oid_prefix(bool old_format)
 
 int RGWRealm::set_current_period(const string& period_id) {
   /* check to see period id is valid */
-  RGWPeriod new_current(cct, store, period_id);  
+  RGWPeriod new_current(cct, store, period_id);
   int ret = new_current.init();
   if (ret < 0) {
     derr << "Error init new period id " << period_id << " : " << cpp_strerror(-ret) << dendl;
     return ret;
   }
-  if (!current_period.empty() && new_current.get_predecessor() != current_period) {
-    ldout(cct, 0) << "set_current_period new period " << period_id <<
-      " is not a perdecessor of the current period "<< current_period << dendl;
-    return -EINVAL;
+  new_current.set_predecessor(id);
+  ret = new_current.store_info(false);
+  if (ret < 0) {
+    return ret;
   }
   current_period = period_id;
   return update();
