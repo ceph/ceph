@@ -216,6 +216,9 @@ struct librados::IoCtxImpl {
   void set_assert_src_version(const object_t& oid, uint64_t ver);
   void set_notify_timeout(uint32_t timeout);
 
+  int cache_pin(const object_t& oid);
+  int cache_unpin(const object_t& oid);
+
 };
 
 #endif

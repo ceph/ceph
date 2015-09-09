@@ -3127,6 +3127,8 @@ ReplicatedPG::RepGather *ReplicatedPG::trim_object(const hobject_t &coid)
       dout(20) << __func__ << " trimming whiteout on " << coid << dendl;
       delta.num_whiteouts--;
     }
+    if (coi.is_cache_pinned())
+      delta.num_objects_pinned--;
     delta.num_object_clones--;
     info.stats.stats.add(delta);
     obc->obs.exists = false;
@@ -3786,6 +3788,8 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
     case CEPH_OSD_OP_CACHE_TRY_FLUSH:
     case CEPH_OSD_OP_UNDIRTY:
     case CEPH_OSD_OP_COPY_FROM:  // we handle user_version update explicitly
+    case CEPH_OSD_OP_CACHE_PIN:
+    case CEPH_OSD_OP_CACHE_UNPIN:
       break;
     default:
       if (op.op & CEPH_OSD_OP_MODE_WR)
@@ -4158,6 +4162,11 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  result = 0;
 	  break;
 	}
+	if (oi.is_cache_pinned()) {
+	  dout(10) << "cache-try-flush on a pinned object, consider unpin this object first" << dendl;
+	  result = -EPERM;
+	  break;
+	}
 	if (oi.is_dirty()) {
 	  result = start_flush(ctx->op, ctx->obc, false, NULL, NULL);
 	  if (result == -EINPROGRESS)
@@ -4183,6 +4192,11 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	}
 	if (!obs.exists) {
 	  result = 0;
+	  break;
+	}
+	if (oi.is_cache_pinned()) {
+	  dout(10) << "cache-flush on a pinned object, consider unpin this object first" << dendl;
+	  result = -EPERM;
 	  break;
 	}
 	hobject_t missing;
@@ -4214,6 +4228,11 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	}
 	if (!obs.exists) {
 	  result = 0;
+	  break;
+	}
+	if (oi.is_cache_pinned()) {
+	  dout(10) << "cache-evict on a pinned object, consider unpin this object first" << dendl;
+	  result = -EPERM;
 	  break;
 	}
 	if (oi.is_dirty()) {
@@ -4934,6 +4953,56 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	    dout(10) << " can't remove: no watch by " << entity << dendl;
 	  }
         }
+      }
+      break;
+
+    case CEPH_OSD_OP_CACHE_PIN:
+      tracepoint(osd, do_osd_op_pre_cache_pin, soid.oid.name.c_str(), soid.snap.val);
+      if ((!pool.info.is_tier() ||
+	  pool.info.cache_mode == pg_pool_t::CACHEMODE_NONE)) {
+        result = -EINVAL;
+        dout(10) << " pin object is only allowed on the cache tier " << dendl;
+        break;
+      }
+      ++ctx->num_write;
+      {
+	if (!obs.exists || oi.is_whiteout()) {
+	  result = -ENOENT;
+	  break;
+	}
+
+	if (!oi.is_cache_pinned()) {
+	  oi.set_flag(object_info_t::FLAG_CACHE_PIN);
+	  ctx->modify = true;
+	  ctx->delta_stats.num_objects_pinned++;
+	  ctx->delta_stats.num_wr++;
+	}
+	result = 0;
+      }
+      break;
+
+    case CEPH_OSD_OP_CACHE_UNPIN:
+      tracepoint(osd, do_osd_op_pre_cache_unpin, soid.oid.name.c_str(), soid.snap.val);
+      if ((!pool.info.is_tier() ||
+	  pool.info.cache_mode == pg_pool_t::CACHEMODE_NONE)) {
+        result = -EINVAL;
+        dout(10) << " pin object is only allowed on the cache tier " << dendl;
+        break;
+      }
+      ++ctx->num_write;
+      {
+	if (!obs.exists || oi.is_whiteout()) {
+	  result = -ENOENT;
+	  break;
+	}
+
+	if (oi.is_cache_pinned()) {
+	  oi.clear_flag(object_info_t::FLAG_CACHE_PIN);
+	  ctx->modify = true;
+	  ctx->delta_stats.num_objects_pinned--;
+	  ctx->delta_stats.num_wr++;
+	}
+	result = 0;
       }
       break;
 
@@ -5904,6 +5973,8 @@ void ReplicatedPG::make_writeable(OpContext *ctx)
     }
     if (snap_oi->is_omap())
       ctx->delta_stats.num_objects_omap++;
+    if (snap_oi->is_cache_pinned())
+      ctx->delta_stats.num_objects_pinned++;
     ctx->delta_stats.num_object_clones++;
     ctx->new_snapset.clones.push_back(coid.snap);
     ctx->new_snapset.clone_size[coid.snap] = ctx->obs->oi.size;
@@ -8606,6 +8677,8 @@ void ReplicatedPG::add_object_context_to_pg_stat(ObjectContextRef obc, pg_stat_t
     stat.num_whiteouts++;
   if (oi.is_omap())
     stat.num_objects_omap++;
+  if (oi.is_cache_pinned())
+    stat.num_objects_pinned++;
 
   if (oi.soid.snap && oi.soid.snap != CEPH_NOSNAP && oi.soid.snap != CEPH_SNAPDIR) {
     stat.num_object_clones++;
@@ -11345,6 +11418,11 @@ bool ReplicatedPG::agent_maybe_flush(ObjectContextRef& obc)
     osd->logger->inc(l_osd_agent_skip);
     return false;
   }
+  if (obc->obs.oi.is_cache_pinned()) {
+    dout(20) << __func__ << " skip (cache_pinned) " << obc->obs.oi << dendl;
+    osd->logger->inc(l_osd_agent_skip);
+    return false;
+  }
 
   utime_t now = ceph_clock_now(NULL);
   utime_t ob_local_mtime;
@@ -11413,6 +11491,10 @@ bool ReplicatedPG::agent_maybe_evict(ObjectContextRef& obc)
   }
   if (obc->is_blocked()) {
     dout(20) << __func__ << " skip (blocked) " << obc->obs.oi << dendl;
+    return false;
+  }
+  if (obc->obs.oi.is_cache_pinned()) {
+    dout(20) << __func__ << " skip (cache_pinned) " << obc->obs.oi << dendl;
     return false;
   }
 
@@ -11931,6 +12013,8 @@ void ReplicatedPG::_scrub(
 	++stat.num_whiteouts;
       if (oi.is_omap())
 	++stat.num_objects_omap;
+      if (oi.is_cache_pinned())
+	++stat.num_objects_pinned;
     }
 
     if (!next_clone.is_min() && next_clone != soid &&
@@ -12075,6 +12159,7 @@ void ReplicatedPG::_scrub_finish()
 	   << scrub_cstat.sum.num_object_clones << "/" << info.stats.stats.sum.num_object_clones << " clones, "
 	   << scrub_cstat.sum.num_objects_dirty << "/" << info.stats.stats.sum.num_objects_dirty << " dirty, "
 	   << scrub_cstat.sum.num_objects_omap << "/" << info.stats.stats.sum.num_objects_omap << " omap, "
+	   << scrub_cstat.sum.num_objects_pinned << "/" << info.stats.stats.sum.num_objects_pinned << " pinned, "
 	   << scrub_cstat.sum.num_objects_hit_set_archive << "/" << info.stats.stats.sum.num_objects_hit_set_archive << " hit_set_archive, "
 	   << scrub_cstat.sum.num_bytes << "/" << info.stats.stats.sum.num_bytes << " bytes, "
 	   << scrub_cstat.sum.num_bytes_hit_set_archive << "/" << info.stats.stats.sum.num_bytes_hit_set_archive << " hit_set_archive bytes."
@@ -12086,6 +12171,8 @@ void ReplicatedPG::_scrub_finish()
        !info.stats.dirty_stats_invalid) ||
       (scrub_cstat.sum.num_objects_omap != info.stats.stats.sum.num_objects_omap &&
        !info.stats.omap_stats_invalid) ||
+      (scrub_cstat.sum.num_objects_pinned != info.stats.stats.sum.num_objects_pinned &&
+       !info.stats.pin_stats_invalid) ||
       (scrub_cstat.sum.num_objects_hit_set_archive != info.stats.stats.sum.num_objects_hit_set_archive &&
        !info.stats.hitset_stats_invalid) ||
       (scrub_cstat.sum.num_bytes_hit_set_archive != info.stats.stats.sum.num_bytes_hit_set_archive &&
@@ -12098,6 +12185,7 @@ void ReplicatedPG::_scrub_finish()
 		      << scrub_cstat.sum.num_object_clones << "/" << info.stats.stats.sum.num_object_clones << " clones, "
 		      << scrub_cstat.sum.num_objects_dirty << "/" << info.stats.stats.sum.num_objects_dirty << " dirty, "
 		      << scrub_cstat.sum.num_objects_omap << "/" << info.stats.stats.sum.num_objects_omap << " omap, "
+		      << scrub_cstat.sum.num_objects_pinned << "/" << info.stats.stats.sum.num_objects_pinned << " pinned, "
 		      << scrub_cstat.sum.num_objects_hit_set_archive << "/" << info.stats.stats.sum.num_objects_hit_set_archive << " hit_set_archive, "
 		      << scrub_cstat.sum.num_whiteouts << "/" << info.stats.stats.sum.num_whiteouts << " whiteouts, "
 		      << scrub_cstat.sum.num_bytes << "/" << info.stats.stats.sum.num_bytes << " bytes, "

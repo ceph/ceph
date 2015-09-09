@@ -1038,6 +1038,17 @@ struct ObjectOperation {
       out_rval[i] = &sops[i].rval;
     }
   }
+
+  /**
+   * Pin/unpin an object in cache tier
+   */
+  void cache_pin() {
+    add_op(CEPH_OSD_OP_CACHE_PIN);
+  }
+
+  void cache_unpin() {
+    add_op(CEPH_OSD_OP_CACHE_UNPIN);
+  }
 };
 
 
