@@ -43,7 +43,7 @@ logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.WARNING)
 def wait_for_health():
     print "Wait for health_ok...",
     tries = 0
-    while call("./ceph health 2> /dev/null | grep -v 'HEALTH_OK\|HEALTH_WARN' > /dev/null", shell=True) == 0:
+    while call("ceph health 2> /dev/null | grep -v 'HEALTH_OK\|HEALTH_WARN' > /dev/null", shell=True) == 0:
         if ++tries == 30:
             raise Exception("Time exceeded to go to health")
         time.sleep(5)
@@ -51,7 +51,7 @@ def wait_for_health():
 
 
 def get_pool_id(name, nullfd):
-    cmd = "./ceph osd pool stats {pool}".format(pool=name).split()
+    cmd = "ceph osd pool stats {pool}".format(pool=name).split()
     # pool {pool} id # .... grab the 4 field
     return check_output(cmd, stderr=nullfd).split()[3]
 
@@ -138,7 +138,7 @@ def cat_file(level, filename):
 def vstart(new, opt=""):
     print "vstarting....",
     NEW = new and "-n" or ""
-    call("MON=1 OSD=4 CEPH_PORT=7400 ./vstart.sh -l {new} -d mon osd {opt} > /dev/null 2>&1".format(new=NEW, opt=opt), shell=True)
+    call("MON=1 OSD=4 CEPH_PORT=7400 vstart.sh -l {new} -d mon osd {opt} > /dev/null 2>&1".format(new=NEW, opt=opt), shell=True)
     print "DONE"
 
 
@@ -192,7 +192,7 @@ def verify(DATADIR, POOL, NAME_PREFIX):
             os.unlink(TMPFILE)
         except:
             pass
-        cmd = "./rados -p {pool} -N '{nspace}' get {file} {out}".format(pool=POOL, file=file, out=TMPFILE, nspace=nspace)
+        cmd = "rados -p {pool} -N '{nspace}' get {file} {out}".format(pool=POOL, file=file, out=TMPFILE, nspace=nspace)
         logging.debug(cmd)
         call(cmd, shell=True, stdout=nullfd, stderr=nullfd)
         cmd = "diff -q {src} {result}".format(src=path, result=TMPFILE)
@@ -318,7 +318,7 @@ CEPH_CONF = os.path.join(CEPH_DIR, 'ceph.conf')
 
 
 def kill_daemons():
-    call("./init-ceph -c {conf} stop osd mon > /dev/null 2>&1".format(conf=CEPH_CONF), shell=True)
+    call("init-ceph -c {conf} stop osd mon > /dev/null 2>&1".format(conf=CEPH_CONF), shell=True)
 
 
 def check_data(DATADIR, TMPFILE, OSDDIR, SPLIT_NAME):
@@ -362,7 +362,7 @@ def set_osd_weight(CFSD_PREFIX, osd_ids, osd_path, weight):
     
     new_crush_file = tempfile.NamedTemporaryFile(delete=False)
     old_crush_file = tempfile.NamedTemporaryFile(delete=False)
-    ret = call("./osdmaptool --export-crush {crush_file} {osdmap_file}".format(osdmap_file=osdmap_file.name,
+    ret = call("osdmaptool --export-crush {crush_file} {osdmap_file}".format(osdmap_file=osdmap_file.name,
                                                                           crush_file=old_crush_file.name),
                stdout=subprocess.DEVNULL,
                stderr=subprocess.DEVNULL,
@@ -370,7 +370,7 @@ def set_osd_weight(CFSD_PREFIX, osd_ids, osd_path, weight):
     assert(ret == 0)
 
     for osd_id in osd_ids:
-        cmd = "./crushtool -i {crush_file} --reweight-item osd.{osd} {weight} -o {new_crush_file}".format(osd=osd_id,
+        cmd = "crushtool -i {crush_file} --reweight-item osd.{osd} {weight} -o {new_crush_file}".format(osd=osd_id,
                                                                                                           crush_file=old_crush_file.name,
                                                                                                           weight=weight,
                                                                                                           new_crush_file=new_crush_file.name)
@@ -382,7 +382,7 @@ def set_osd_weight(CFSD_PREFIX, osd_ids, osd_path, weight):
     old_crush_file, new_crush_file = new_crush_file, old_crush_file
     old_crush_file.close()
 
-    ret = call("./osdmaptool --import-crush {crush_file} {osdmap_file}".format(osdmap_file=osdmap_file.name,
+    ret = call("osdmaptool --import-crush {crush_file} {osdmap_file}".format(osdmap_file=osdmap_file.name,
                                                                                crush_file=new_crush_file.name),
                stdout=subprocess.DEVNULL,
                stderr=subprocess.DEVNULL,
@@ -406,12 +406,12 @@ def get_osd_weights(CFSD_PREFIX, osd_ids, osd_path):
     # osdmaptool, but please keep in mind, they are different:
     #    item weights in crush map versus weight associated with each osd in osdmap
     crush_file = tempfile.NamedTemporaryFile(delete=False)
-    ret = call("./osdmaptool --export-crush {crush_file} {osdmap_file}".format(osdmap_file=osdmap_file.name,
+    ret = call("osdmaptool --export-crush {crush_file} {osdmap_file}".format(osdmap_file=osdmap_file.name,
                                                                                crush_file=crush_file.name),
                stdout=subprocess.DEVNULL,
                shell=True)
     assert(ret == 0)
-    output = check_output("./crushtool --tree -i {crush_file} | tail -n {num_osd}".format(crush_file=crush_file.name,
+    output = check_output("crushtool --tree -i {crush_file} | tail -n {num_osd}".format(crush_file=crush_file.name,
                                                                                           num_osd=len(osd_ids)),
                           stderr=subprocess.DEVNULL,
                           shell=True)
@@ -495,6 +495,7 @@ def main(argv):
         nullfd = open(os.devnull, "w")
 
     call("rm -fr {dir}; mkdir {dir}".format(dir=CEPH_DIR), shell=True)
+    os.environ["PATH"] = ":" + os.environ["PATH"]
     os.environ["CEPH_DIR"] = CEPH_DIR
     OSDDIR = os.path.join(CEPH_DIR, "dev")
     REP_POOL = "rep_pool"
@@ -523,27 +524,27 @@ def main(argv):
     pid = os.getpid()
     TESTDIR = "/tmp/test.{pid}".format(pid=pid)
     DATADIR = "/tmp/data.{pid}".format(pid=pid)
-    CFSD_PREFIX = "./ceph-objectstore-tool --data-path " + OSDDIR + "/{osd} --journal-path " + OSDDIR + "/{osd}.journal "
+    CFSD_PREFIX = "ceph-objectstore-tool --data-path " + OSDDIR + "/{osd} --journal-path " + OSDDIR + "/{osd}.journal "
     PROFNAME = "testecprofile"
 
     os.environ['CEPH_CONF'] = CEPH_CONF
     vstart(new=True)
     wait_for_health()
 
-    cmd = "./ceph osd pool create {pool} {pg} {pg} replicated".format(pool=REP_POOL, pg=PG_COUNT)
+    cmd = "ceph osd pool create {pool} {pg} {pg} replicated".format(pool=REP_POOL, pg=PG_COUNT)
     logging.debug(cmd)
     call(cmd, shell=True, stdout=nullfd, stderr=nullfd)
     REPID = get_pool_id(REP_POOL, nullfd)
 
     print "Created Replicated pool #{repid}".format(repid=REPID)
 
-    cmd = "./ceph osd erasure-code-profile set {prof} ruleset-failure-domain=osd".format(prof=PROFNAME)
+    cmd = "ceph osd erasure-code-profile set {prof} ruleset-failure-domain=osd".format(prof=PROFNAME)
     logging.debug(cmd)
     call(cmd, shell=True, stdout=nullfd, stderr=nullfd)
-    cmd = "./ceph osd erasure-code-profile get {prof}".format(prof=PROFNAME)
+    cmd = "ceph osd erasure-code-profile get {prof}".format(prof=PROFNAME)
     logging.debug(cmd)
     call(cmd, shell=True, stdout=nullfd, stderr=nullfd)
-    cmd = "./ceph osd pool create {pool} {pg} {pg} erasure {prof}".format(pool=EC_POOL, prof=PROFNAME, pg=PG_COUNT)
+    cmd = "ceph osd pool create {pool} {pg} {pg} erasure {prof}".format(pool=EC_POOL, prof=PROFNAME, pg=PG_COUNT)
     logging.debug(cmd)
     call(cmd, shell=True, stdout=nullfd, stderr=nullfd)
     ECID = get_pool_id(EC_POOL, nullfd)
@@ -583,7 +584,7 @@ def main(argv):
                 fd.write(data)
             fd.close()
 
-            cmd = "./rados -p {pool} -N '{nspace}' put {name} {ddname}".format(pool=REP_POOL, name=NAME, ddname=DDNAME, nspace=nspace)
+            cmd = "rados -p {pool} -N '{nspace}' put {name} {ddname}".format(pool=REP_POOL, name=NAME, ddname=DDNAME, nspace=nspace)
             logging.debug(cmd)
             ret = call(cmd, shell=True, stderr=nullfd)
             if ret != 0:
@@ -602,7 +603,7 @@ def main(argv):
                     continue
                 mykey = "key{i}-{k}".format(i=i, k=k)
                 myval = "val{i}-{k}".format(i=i, k=k)
-                cmd = "./rados -p {pool} -N '{nspace}' setxattr {name} {key} {val}".format(pool=REP_POOL, name=NAME, key=mykey, val=myval, nspace=nspace)
+                cmd = "rados -p {pool} -N '{nspace}' setxattr {name} {key} {val}".format(pool=REP_POOL, name=NAME, key=mykey, val=myval, nspace=nspace)
                 logging.debug(cmd)
                 ret = call(cmd, shell=True)
                 if ret != 0:
@@ -613,7 +614,7 @@ def main(argv):
             # Create omap header in all objects but REPobject1
             if i < ATTR_OBJS + 1 and i != 1:
                 myhdr = "hdr{i}".format(i=i)
-                cmd = "./rados -p {pool} -N '{nspace}' setomapheader {name} {hdr}".format(pool=REP_POOL, name=NAME, hdr=myhdr, nspace=nspace)
+                cmd = "rados -p {pool} -N '{nspace}' setomapheader {name} {hdr}".format(pool=REP_POOL, name=NAME, hdr=myhdr, nspace=nspace)
                 logging.debug(cmd)
                 ret = call(cmd, shell=True)
                 if ret != 0:
@@ -627,7 +628,7 @@ def main(argv):
                     continue
                 mykey = "okey{i}-{k}".format(i=i, k=k)
                 myval = "oval{i}-{k}".format(i=i, k=k)
-                cmd = "./rados -p {pool} -N '{nspace}' setomapval {name} {key} {val}".format(pool=REP_POOL, name=NAME, key=mykey, val=myval, nspace=nspace)
+                cmd = "rados -p {pool} -N '{nspace}' setomapval {name} {key} {val}".format(pool=REP_POOL, name=NAME, key=mykey, val=myval, nspace=nspace)
                 logging.debug(cmd)
                 ret = call(cmd, shell=True)
                 if ret != 0:
@@ -660,7 +661,7 @@ def main(argv):
                 fd.write(data)
             fd.close()
 
-            cmd = "./rados -p {pool} -N '{nspace}' put {name} {ddname}".format(pool=EC_POOL, name=NAME, ddname=DDNAME, nspace=nspace)
+            cmd = "rados -p {pool} -N '{nspace}' put {name} {ddname}".format(pool=EC_POOL, name=NAME, ddname=DDNAME, nspace=nspace)
             logging.debug(cmd)
             ret = call(cmd, shell=True, stderr=nullfd)
             if ret != 0:
@@ -679,7 +680,7 @@ def main(argv):
                     continue
                 mykey = "key{i}-{k}".format(i=i, k=k)
                 myval = "val{i}-{k}".format(i=i, k=k)
-                cmd = "./rados -p {pool} -N '{nspace}' setxattr {name} {key} {val}".format(pool=EC_POOL, name=NAME, key=mykey, val=myval, nspace=nspace)
+                cmd = "rados -p {pool} -N '{nspace}' setxattr {name} {key} {val}".format(pool=EC_POOL, name=NAME, key=mykey, val=myval, nspace=nspace)
                 logging.debug(cmd)
                 ret = call(cmd, shell=True)
                 if ret != 0:
@@ -775,11 +776,11 @@ def main(argv):
     ERRORS += test_failure(cmd, "Must provide --type (filestore, memstore, keyvaluestore)")
 
     # Don't specify a data-path
-    cmd = "./ceph-objectstore-tool --journal-path {dir}/{osd}.journal --type memstore --op list --pgid {pg}".format(dir=OSDDIR, osd=ONEOSD, pg=ONEPG)
+    cmd = "ceph-objectstore-tool --journal-path {dir}/{osd}.journal --type memstore --op list --pgid {pg}".format(dir=OSDDIR, osd=ONEOSD, pg=ONEPG)
     ERRORS += test_failure(cmd, "Must provide --data-path")
 
     # Don't specify a journal-path for filestore
-    cmd = "./ceph-objectstore-tool --type filestore --data-path {dir}/{osd} --op list --pgid {pg}".format(dir=OSDDIR, osd=ONEOSD, pg=ONEPG)
+    cmd = "ceph-objectstore-tool --type filestore --data-path {dir}/{osd} --op list --pgid {pg}".format(dir=OSDDIR, osd=ONEOSD, pg=ONEPG)
     ERRORS += test_failure(cmd, "Must provide --journal-path")
 
     cmd = (CFSD_PREFIX + "--op remove").format(osd=ONEOSD)
@@ -1317,7 +1318,7 @@ def main(argv):
 
     if EXP_ERRORS == 0:
         NEWPOOL = "rados-import-pool"
-        cmd = "./rados mkpool {pool}".format(pool=NEWPOOL)
+        cmd = "rados mkpool {pool}".format(pool=NEWPOOL)
         logging.debug(cmd)
         ret = call(cmd, shell=True, stdout=nullfd, stderr=nullfd)
 
@@ -1332,26 +1333,26 @@ def main(argv):
                 if first:
                     first = False
                     # This should do nothing
-                    cmd = "./rados import -p {pool} --dry-run {file}".format(pool=NEWPOOL, file=file)
+                    cmd = "rados import -p {pool} --dry-run {file}".format(pool=NEWPOOL, file=file)
                     logging.debug(cmd)
                     ret = call(cmd, shell=True, stdout=nullfd)
                     if ret != 0:
                         logging.error("Rados import --dry-run failed from {file} with {ret}".format(file=file, ret=ret))
                         ERRORS += 1
-                    cmd = "./rados -p {pool} ls".format(pool=NEWPOOL)
+                    cmd = "rados -p {pool} ls".format(pool=NEWPOOL)
                     logging.debug(cmd)
                     data = check_output(cmd, shell=True)
                     if data:
                         logging.error("'{data}'".format(data=data))
                         logging.error("Found objects after dry-run")
                         ERRORS += 1
-                cmd = "./rados import -p {pool} {file}".format(pool=NEWPOOL, file=file)
+                cmd = "rados import -p {pool} {file}".format(pool=NEWPOOL, file=file)
                 logging.debug(cmd)
                 ret = call(cmd, shell=True, stdout=nullfd)
                 if ret != 0:
                     logging.error("Rados import failed from {file} with {ret}".format(file=file, ret=ret))
                     ERRORS += 1
-                cmd = "./rados import -p {pool} --no-overwrite {file}".format(pool=NEWPOOL, file=file)
+                cmd = "rados import -p {pool} --no-overwrite {file}".format(pool=NEWPOOL, file=file)
                 logging.debug(cmd)
                 ret = call(cmd, shell=True, stdout=nullfd)
                 if ret != 0:
@@ -1375,11 +1376,11 @@ def main(argv):
     SPLIT_OBJ_COUNT = 5
     SPLIT_NSPACE_COUNT = 2
     SPLIT_NAME = "split"
-    cmd = "./ceph osd pool create {pool} {pg} {pg} replicated".format(pool=SPLIT_POOL, pg=PG_COUNT)
+    cmd = "ceph osd pool create {pool} {pg} {pg} replicated".format(pool=SPLIT_POOL, pg=PG_COUNT)
     logging.debug(cmd)
     call(cmd, shell=True, stdout=nullfd, stderr=nullfd)
     SPLITID = get_pool_id(SPLIT_POOL, nullfd)
-    pool_size = int(check_output("./ceph osd pool get {pool} size".format(pool=SPLIT_POOL), shell=True, stderr=nullfd).split(" ")[1])
+    pool_size = int(check_output("ceph osd pool get {pool} size".format(pool=SPLIT_POOL), shell=True, stderr=nullfd).split(" ")[1])
     EXP_ERRORS = 0
     RM_ERRORS = 0
     IMP_ERRORS = 0
@@ -1408,7 +1409,7 @@ def main(argv):
                 fd.write(data)
             fd.close()
 
-            cmd = "./rados -p {pool} -N '{nspace}' put {name} {ddname}".format(pool=SPLIT_POOL, name=NAME, ddname=DDNAME, nspace=nspace)
+            cmd = "rados -p {pool} -N '{nspace}' put {name} {ddname}".format(pool=SPLIT_POOL, name=NAME, ddname=DDNAME, nspace=nspace)
             logging.debug(cmd)
             ret = call(cmd, shell=True, stderr=nullfd)
             if ret != 0:
@@ -1443,7 +1444,7 @@ def main(argv):
 
         time.sleep(20)
 
-        cmd = "./ceph osd pool set {pool} pg_num 2".format(pool=SPLIT_POOL)
+        cmd = "ceph osd pool set {pool} pg_num 2".format(pool=SPLIT_POOL)
         logging.debug(cmd)
         ret = call(cmd, shell=True, stdout=nullfd, stderr=nullfd)
         time.sleep(5)

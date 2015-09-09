@@ -16,4 +16,5 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU Library Public License for more details.
 #
-CEPH_BUFFER_TRACK=true ./unittest_bufferlist
+export PATH=:$PATH
+CEPH_BUFFER_TRACK=true unittest_bufferlist

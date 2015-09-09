@@ -39,7 +39,7 @@ function TEST_mon_scrub() {
 
     run_mon $dir a || return 1
 
-    ./ceph mon scrub || return 1
+    ceph mon scrub || return 1
 }
 
 main mon-scrub "$@"

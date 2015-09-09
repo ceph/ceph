@@ -30,7 +30,7 @@ function vstart_setup()
     trap "teardown $CEPH_DIR" EXIT
     export LC_ALL=C # some tests are vulnerable to i18n
     export PATH="$(pwd):${PATH}"
-    ./vstart.sh \
+    vstart.sh \
         -o 'paxos propose interval = 0.01' \
         -n -l $CEPH_START || return 1
     export CEPH_CONF=$CEPH_DIR/ceph.conf
