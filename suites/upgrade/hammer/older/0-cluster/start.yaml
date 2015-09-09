@@ -17,4 +17,4 @@ roles:
   - osd.4
   - osd.5
   - client.0
-  - client.1
+- - client.1
