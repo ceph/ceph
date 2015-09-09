@@ -979,7 +979,6 @@ int AsyncConnection::_process_connection()
         if (r < 0) {
           goto fail;
         }
-        net.set_socket_options(sd);
 
         center->create_file_event(sd, EVENT_READABLE, read_handler);
         state = STATE_CONNECTING_WAIT_BANNER;

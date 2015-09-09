@@ -116,6 +116,9 @@ int NetHandler::generic_connect(const entity_addr_t& addr, bool nonblock)
       return ret;
     }
   }
+
+  set_socket_options(s);
+
   ret = ::connect(s, (sockaddr*)&addr.addr, addr.addr_size());
   if (ret < 0) {
     if (errno == EINPROGRESS && nonblock)
@@ -125,8 +128,6 @@ int NetHandler::generic_connect(const entity_addr_t& addr, bool nonblock)
     close(s);
     return -errno;
   }
-
-  set_socket_options(s);
 
   return s;
 }
