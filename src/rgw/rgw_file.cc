@@ -225,7 +225,7 @@ int rgw_lookup(struct rgw_fs *rgw_fs,
   uri += "/";
   uri += path;
 
-  /* find or create an handle for the object or bucket */
+  /* find or create a handle for the object or bucket */
   handle->handle = librgw.get_handle(uri);
   return 0;
 }
