@@ -181,7 +181,6 @@ void RGWObjectExpirer::process_single_shard(const string& shard,
 
 void RGWObjectExpirer::inspect_all_shards(const utime_t& last_run, const utime_t& round_start)
 {
-  bool is_next_available;
   utime_t shard_marker;
 
   CephContext *cct = store->ctx();
@@ -194,7 +193,7 @@ void RGWObjectExpirer::inspect_all_shards(const utime_t& last_run, const utime_t
     ldout(store->ctx(), 20) << "proceeding shard = " << shard << dendl;
 
     process_single_shard(shard, last_run, round_start);
-  } while (is_next_available);
+  }
 
   return;
 }
