@@ -107,9 +107,6 @@ BuildRequires:	xfsprogs
 BuildRequires:	xfsprogs-devel
 BuildRequires:	xmlstarlet
 BuildRequires:	yasm
-%if 0%{?suse_version}
-BuildRequires:	net-tools
-%endif
 
 #################################################################################
 # distro-conditional dependencies
@@ -122,6 +119,7 @@ BuildRequires:	systemd-rpm-macros
 %endif
 PreReq:		%fillup_prereq
 Requires:	python-Flask
+BuildRequires:	net-tools
 BuildRequires:	libbz2-devel
 %if 0%{?suse_version} > 1210
 Requires:	gptfdisk
