@@ -819,13 +819,10 @@ public:
         return false;
 
       string key = it->first.substr(conf_prefix_len, it->first.size() - conf_prefix_len);
-      for (map<string, bool>::iterator cit = configs.begin();
-           cit != configs.end(); ++cit) {
-        if (!key.compare(cit->first)) {
-          cit->second = true;
-          res->insert(make_pair(key, it->second));
-          break;
-        }
+      map<string, bool>::iterator cit = configs.find(key);
+      if ( cit != configs.end()) {
+        cit->second = true;
+        res->insert(make_pair(key, it->second));
       }
     }
     return true;
@@ -882,20 +879,22 @@ public:
                                                  pairs, &res);
       for (map<string, bufferlist>::iterator it = res.begin();
            it != res.end(); ++it) {
-        j = local_config_t.set_val(it->first.c_str(), it->second.c_str());
+        string val(it->second.c_str(), it->second.length());
+        j = local_config_t.set_val(it->first.c_str(), val);
         if (j < 0) {
           lderr(cct) << __func__ << " failed to set config " << it->first
                      << " with value " << it->second.c_str() << ": " << j
                      << dendl;
         }
-        break;
       }
       start = pairs.rbegin()->first;
     }
 
 #define ASSIGN_OPTION(config)                                                  \
     do {                                                                       \
-      if (configs[#config])                                                    \
+      string key = "rbd_";						       \
+      key = key + #config;					      	       \
+      if (configs[key])                                                        \
         config = local_config_t.rbd_##config;                                  \
       else                                                                     \
         config = cct->_conf->rbd_##config;                                     \
