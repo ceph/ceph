@@ -2131,7 +2131,16 @@ reprotect_and_return_err:
 
     return 0;
   }
+  
+  int snap_list_nums(ImageCtx *ictx, uint64_t *snap_nums)
+  {
+    ldout(ictx->cct, 20) << "snap_list " << ictx << dendl;
 
+    RWLock::RLocker l(ictx->snap_lock);
+	*snap_nums = ictx->snap_info.size();
+    return 0;
+  } 
+  
   bool snap_exists(ImageCtx *ictx, const char *snap_name)
   {
     ldout(ictx->cct, 20) << "snap_exists " << ictx << " " << snap_name << dendl;
