@@ -1584,7 +1584,7 @@ void ReplicatedPG::do_op(OpRequestRef& op)
     // purposes here it doesn't matter which one we get.
     eversion_t replay_version;
     version_t user_version;
-    bool got = pg_log.get_log().get_request(
+    bool got = const_cast<PGLog::IndexedLog&>(pg_log.get_log()).get_request(
       m->get_reqid(), &replay_version, &user_version);
     if (got) {
       dout(3) << __func__ << " dup " << m->get_reqid()
@@ -6572,7 +6572,7 @@ int ReplicatedPG::fill_in_copy_get(
   if (cursor.is_complete()) {
     // include reqids only in the final step.  this is a bit fragile
     // but it works...
-    pg_log.get_log().get_object_reqids(ctx->obc->obs.oi.soid, 10, &reply_obj.reqids);
+    const_cast<PGLog::IndexedLog&>(pg_log.get_log()).get_object_reqids(ctx->obc->obs.oi.soid, 10, &reply_obj.reqids);
     dout(20) << " got reqids" << dendl;
   }
 
@@ -6606,7 +6606,7 @@ void ReplicatedPG::fill_in_copy_get_noent(OpRequestRef& op, hobject_t oid,
   uint64_t features = m->get_features();
   object_copy_data_t reply_obj;
 
-  pg_log.get_log().get_object_reqids(oid, 10, &reply_obj.reqids);
+  const_cast<PGLog::IndexedLog&>(pg_log.get_log()).get_object_reqids(oid, 10, &reply_obj.reqids);
   dout(20) << __func__ << " got reqids " << reply_obj.reqids << dendl;
   if (classic) {
     reply_obj.encode_classic(osd_op.outdata);
@@ -9054,7 +9054,7 @@ void ReplicatedPG::mark_all_unfound_lost(int what)
   dout(3) << __func__ << " " << pg_log_entry_t::get_op_name(what) << dendl;
 
   dout(30) << __func__ << ": log before:\n";
-  pg_log.get_log().print(*_dout);
+  const_cast<PGLog::IndexedLog&>(pg_log.get_log()).print(*_dout);
   *_dout << dendl;
 
   ObjectStore::Transaction *t = new ObjectStore::Transaction;
@@ -9133,7 +9133,7 @@ void ReplicatedPG::mark_all_unfound_lost(int what)
   }
 
   dout(30) << __func__ << ": log after:\n";
-  pg_log.get_log().print(*_dout);
+  const_cast<PGLog::IndexedLog&>(pg_log.get_log()).print(*_dout);
   *_dout << dendl;
 
   info.stats.stats_invalid = true;

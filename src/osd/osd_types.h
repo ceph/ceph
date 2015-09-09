@@ -600,6 +600,7 @@ public:
     return false;
   }
 
+  spg_t* get_pgid() { return &pgid; }
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& bl);
 
