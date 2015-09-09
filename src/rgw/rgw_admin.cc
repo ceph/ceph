@@ -163,6 +163,8 @@ void _usage()
   cerr << "   --remote=<remote>         remote to pull period\n";
   cerr << "   --parent=<id>             parent period id\n";
   cerr << "   --period=<id>             period id\n";
+  cerr << "   --master-zonegroup=<id>   master zonegroup id\n";
+  cerr << "   --master-zone=<id>        master zone id\n";
   cerr << "   --realm=<realm>     realm name\n";
   cerr << "   --realm-id=<realm id>     realm id\n";
   cerr << "   --realm-new-name=<realm new name> realm new name\n";
@@ -1230,6 +1232,7 @@ int main(int argc, char **argv)
   std::string start_date, end_date;
   std::string key_type_str;
   std::string period_id, url, parent_period;
+  std::string master_zonegroup, master_zone;
   std::string realm_name, realm_id, realm_new_name;
   std::string zone_name, zone_id, zone_new_name;
   std::string zonegroup_name, zonegroup_id, zonegroup_new_name;
@@ -1496,6 +1499,10 @@ int main(int argc, char **argv)
       }
     } else if (ceph_argparse_witharg(args, i, &val, "--parent", (char*)NULL)) {
       parent_period = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--master-zonegroup", (char*)NULL)) {
+      master_zonegroup = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--master-zone", (char*)NULL)) {
+      master_zone = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--period", (char*)NULL)) {
       period_id = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--url", (char*)NULL)) {
@@ -1618,7 +1625,7 @@ int main(int argc, char **argv)
     switch (opt_cmd) {
     case OPT_PERIOD_PREPARE:
       {
-	RGWPeriod period( g_ceph_context, store);
+	RGWPeriod period(g_ceph_context, store, master_zonegroup, master_zone);
 	int ret = period.create();
 	if (ret < 0) {
 	  cerr << "ERROR: couldn't prepare new period " << ": " << cpp_strerror(-ret) << std::endl;
