@@ -2132,6 +2132,8 @@ reprotect_and_return_err:
     return 0;
   }
   
+  // Before the call snap_list_nums ()
+  // use ictx_check () detection
   int snap_list_nums(ImageCtx *ictx, uint64_t *snap_nums)
   {
     ldout(ictx->cct, 20) << "snap_list " << ictx << dendl;
