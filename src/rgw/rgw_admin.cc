@@ -6,8 +6,6 @@
 #include <sstream>
 #include <string>
 
-using namespace std;
-
 #include "auth/Crypto.h"
 
 #include "common/armor.h"
@@ -34,6 +32,8 @@ using namespace std;
 #include "rgw_orphan.h"
 #include "rgw_sync.h"
 #include "rgw_rest_conn.h"
+
+using namespace std;
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -165,9 +165,10 @@ void _usage()
   cerr << "   --remote=<remote>         remote to pull period\n";
   cerr << "   --parent=<id>             parent period id\n";
   cerr << "   --period=<id>             period id\n";
+  cerr << "   --epoch=<number>          period epoch\n";
   cerr << "   --master-zonegroup=<id>   master zonegroup id\n";
   cerr << "   --master-zone=<id>        master zone id\n";
-  cerr << "   --realm=<realm>     realm name\n";
+  cerr << "   --realm=<realm>           realm name\n";
   cerr << "   --realm-id=<realm id>     realm id\n";
   cerr << "   --realm-new-name=<realm new name> realm new name\n";
   cerr << "   --zonegroup=<zonegroup>   zonegroup name\n";
@@ -1195,9 +1196,10 @@ int do_check_object_locator(const string& bucket_name, bool fix, bool remove_bad
 }
 
 #define MAX_REST_RESPONSE (128 * 1024) // we expect a very small response
-int send_to_remote_gateway(const string& remote,req_info& info, JSONParser& p)
+int send_to_remote_gateway(const string& remote, req_info& info, JSONParser& p,
+                           bufferlist &in_data)
 {
-  bufferlist in_data, response;
+  bufferlist response;
   RGWRESTConn *conn;
   if (remote.empty()) {
     if (!store->rest_master_conn) {
@@ -1239,12 +1241,11 @@ int main(int argc, char **argv)
   std::string date, subuser, access, format;
   std::string start_date, end_date;
   std::string key_type_str;
-  std::string period_id, url, parent_period;
+  std::string period_id, period_epoch, remote, url, parent_period;
   std::string master_zonegroup, master_zone;
   std::string realm_name, realm_id, realm_new_name;
   std::string zone_name, zone_id, zone_new_name;
   std::string zonegroup_name, zonegroup_id, zonegroup_new_name;
-  epoch_t period_epoch = 0;
   int key_type = KEY_TYPE_UNDEFINED;
   rgw_bucket bucket;
   uint32_t perm_mask = 0;
@@ -1513,6 +1514,10 @@ int main(int argc, char **argv)
       master_zone = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--period", (char*)NULL)) {
       period_id = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--epoch", (char*)NULL)) {
+      period_epoch = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--remote", (char*)NULL)) {
+      remote = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--url", (char*)NULL)) {
       url = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--realm", (char*)NULL)) {
@@ -1608,7 +1613,6 @@ int main(int argc, char **argv)
                          opt_cmd == OPT_ZONE_LIST || opt_cmd == OPT_ZONE_CREATE || opt_cmd == OPT_REALM_CREATE ||
 			 opt_cmd == OPT_PERIOD_PREPARE || opt_cmd == OPT_PERIOD_ACTIVATE ||
 			 opt_cmd == OPT_PERIOD_DELETE || opt_cmd == OPT_PERIOD_GET ||
-			 opt_cmd == OPT_PERIOD_PULL || opt_cmd == OPT_PERIOD_PUSH ||
 			 opt_cmd == OPT_PERIOD_GET_CURRENT || opt_cmd == OPT_PERIOD_LIST ||
 			 opt_cmd == OPT_REALM_DELETE || opt_cmd == OPT_REALM_GET || opt_cmd == OPT_REALM_LIST ||
 			 opt_cmd == OPT_REALM_LIST_PERIODS ||
@@ -1730,60 +1734,6 @@ int main(int argc, char **argv)
 	if (ret < 0 ) {
 	  cerr << "Error setting current period " << period_id << ":" << cpp_strerror(-ret) << std::endl;
 	  return ret;
-	}
-      }
-      break;
-    case OPT_PERIOD_PUSH:
-      {
-	req_info info(g_ceph_context, NULL);
-	info.method = "POST";
-	info.request_uri = "/admin/realm/period?";
-	if (!period_id.empty()) {
-	  info.request_uri += "period_id=" + period_id;
-	}
-	if (!period_epoch) {
-	  if (!period_id.empty()) {
-	    info.request_uri =+ "&";
-	  }
-	  info.request_uri += "epoch=" + period_epoch;
-	}
-
-	JSONParser p;
-	int ret = send_to_remote_gateway(url, info,p);
-	if (ret < 0) {
-	  return ret;
-	}
-      }
-      break;
-    case OPT_PERIOD_PULL:
-      {
-	req_info info(g_ceph_context, NULL);
-	info.method = "GET";
-	info.request_uri = "/admin/realm/period?";
-	if (!period_id.empty()) {
-	  info.request_uri += "period_id=" + period_id;
-	}
-	if (!period_epoch) {
-	  if (!period_id.empty()) {
-	    info.request_uri =+ "&";
-	  }
-	  info.request_uri += "epoch=" + period_epoch;
-	}
-	JSONParser p;
-	int ret = send_to_remote_gateway(url, info,p);
-	if (ret < 0) {
-	  return ret;
-	}
-	RGWPeriod period(g_ceph_context, store);
-	try {
-	  decode_json_obj(period, &p);
-	} catch (JSONDecoder::err& e) {
-          cout << "failed to decode JSON input: " << e.message << std::endl;
-	  return -EINVAL;
-	}
-	ret = period.store_info(true);
-	if (ret < 0) {
-	  cerr << "Error storing period " << period.get_id() << ": " << cpp_strerror(ret) << std::endl;
 	}
       }
       break;
@@ -2557,8 +2507,77 @@ int main(int argc, char **argv)
       cerr << "could not remove key: " << err_msg << std::endl;
       return -ret;
     }
+  case OPT_PERIOD_PUSH:
+    {
+      RGWEnv env;
+      req_info info(g_ceph_context, &env);
+      info.method = "POST";
+      info.request_uri = "/admin/realm/period";
 
-    break;
+      map<string, string> &params = info.args.get_params();
+      if (!period_id.empty())
+        params["period_id"] = period_id;
+      if (!period_epoch.empty())
+        params["epoch"] = period_epoch;
+
+      // load the period
+      RGWPeriod period(g_ceph_context, store, period_id);
+      int ret = period.init();
+      if (ret < 0) {
+        cerr << "period init failed: " << cpp_strerror(-ret) << std::endl;
+        return ret;
+      }
+      // json format into a bufferlist
+      JSONFormatter jf(false);
+      encode_json("period", period, &jf);
+      bufferlist bl;
+      jf.flush(bl);
+
+      JSONParser p;
+      ret = send_to_remote_gateway(url, info, p, bl);
+      if (ret < 0) {
+        cerr << "request failed: " << cpp_strerror(-ret) << std::endl;
+        return ret;
+      }
+    }
+    return 0;
+  case OPT_PERIOD_PULL:
+    {
+      RGWEnv env;
+      req_info info(g_ceph_context, &env);
+      info.method = "GET";
+      info.request_uri = "/admin/realm/period";
+
+      map<string, string> &params = info.args.get_params();
+      if (!period_id.empty())
+        params["period_id"] = period_id;
+      if (!period_epoch.empty())
+        params["epoch"] = period_epoch;
+
+      bufferlist bl;
+      JSONParser p;
+      int ret = send_to_remote_gateway(url, info, p, bl);
+      if (ret < 0) {
+        cerr << "request failed: " << cpp_strerror(-ret) << std::endl;
+        return ret;
+      }
+      RGWPeriod period(g_ceph_context, store);
+      try {
+        decode_json_obj(period, &p);
+      } catch (JSONDecoder::err& e) {
+        cout << "failed to decode JSON input: " << e.message << std::endl;
+        return -EINVAL;
+      }
+      ret = period.store_info(false);
+      if (ret < 0) {
+        cerr << "Error storing period " << period.get_id() << ": " << cpp_strerror(ret) << std::endl;
+      }
+
+      encode_json("period", period, formatter);
+      formatter->flush(cout);
+      cout << std::endl;
+    }
+    return 0;
   default:
     output_user_info = false;
   }
