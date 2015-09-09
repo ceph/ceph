@@ -32,6 +32,8 @@ public:
   RGWLib() {}
   ~RGWLib() {}
 
+  RGWRados* get_store() { return store; }
+
   int init();
   int init(vector<const char *>& args);
   int stop();
