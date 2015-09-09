@@ -6370,6 +6370,9 @@ void OSD::handle_osd_map(MOSDMap *m)
       if (!osdmap->is_up(whoami)) {
 	if (service.is_preparing_to_stop() || service.is_stopping()) {
 	  service.got_stop_ack();
+	} else if (!cct->get_heartbeat_map()->is_healthy()){
+	  clog->warn() << "internal heartbeat not healthy, map e" << osdmap->get_epoch()
+		      << " marked me down";
 	} else {
 	  clog->warn() << "map e" << osdmap->get_epoch()
 		      << " wrongly marked me down";
@@ -6393,7 +6396,8 @@ void OSD::handle_osd_map(MOSDMap *m)
 		    << " had wrong hb front addr (" << osdmap->get_hb_front_addr(whoami)
 		     << " != my " << hb_front_server_messenger->get_myaddr() << ")";
       
-      if (!service.is_stopping()) {
+      if (!service.is_stopping() && cct->get_heartbeat_map()->is_healthy()) {
+        //do not restart if internal heartbeat not healthy, prevent osd flipping.
         epoch_t up_epoch = 0;
         epoch_t bind_epoch = osdmap->get_epoch();
         service.set_epochs(NULL,&up_epoch, &bind_epoch);
