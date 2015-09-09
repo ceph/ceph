@@ -208,17 +208,16 @@ bool MDSMonitor::preprocess_beacon(MMDSBeacon *m)
 
   // check privileges, ignore if fails
   MonSession *session = m->get_session();
-  if (!session)
-    goto out;
+  assert(session);
   if (!session->is_capable("mds", MON_CAP_X)) {
     dout(0) << "preprocess_beacon got MMDSBeacon from entity with insufficient privileges "
 	    << session->caps << dendl;
-    goto out;
+    goto ignore;
   }
 
   if (m->get_fsid() != mon->monmap->fsid) {
     dout(0) << "preprocess_beacon on fsid " << m->get_fsid() << " != " << mon->monmap->fsid << dendl;
-    goto out;
+    goto ignore;
   }
 
   dout(12) << "preprocess_beacon " << *m
@@ -229,13 +228,13 @@ bool MDSMonitor::preprocess_beacon(MMDSBeacon *m)
   // make sure the address has a port
   if (m->get_orig_source_addr().get_port() == 0) {
     dout(1) << " ignoring boot message without a port" << dendl;
-    goto out;
+    goto ignore;
   }
 
   // check compat
   if (!m->get_compat().writeable(mdsmap.compat)) {
     dout(1) << " mds " << m->get_source_inst() << " can't write to mdsmap " << mdsmap.compat << dendl;
-    goto out;
+    goto ignore;
   }
 
   // fw to leader?
@@ -244,7 +243,7 @@ bool MDSMonitor::preprocess_beacon(MMDSBeacon *m)
 
   if (pending_mdsmap.test_flag(CEPH_MDSMAP_DOWN)) {
     dout(7) << " mdsmap DOWN flag set, ignoring mds " << m->get_source_inst() << " beacon" << dendl;
-    goto out;
+    goto ignore;
   }
 
   // booted, but not in map?
@@ -252,7 +251,8 @@ bool MDSMonitor::preprocess_beacon(MMDSBeacon *m)
     if (state != MDSMap::STATE_BOOT) {
       dout(7) << "mds_beacon " << *m << " is not in mdsmap" << dendl;
       mon->send_reply(m, new MMDSMap(mon->monmap->fsid, &mdsmap));
-      goto out;
+      m->put();
+      return true;
     } else {
       return false;  // not booted yet.
     }
@@ -262,13 +262,13 @@ bool MDSMonitor::preprocess_beacon(MMDSBeacon *m)
   // old seq?
   if (info.state_seq > seq) {
     dout(7) << "mds_beacon " << *m << " has old seq, ignoring" << dendl;
-    goto out;
+    goto ignore;
   }
 
   if (mdsmap.get_epoch() != m->get_last_epoch_seen()) {
     dout(10) << "mds_beacon " << *m
 	     << " ignoring requested state, because mds hasn't seen latest map" << dendl;
-    goto ignore;
+    goto reply;
   }
 
   if (info.laggy()) {
@@ -277,17 +277,17 @@ bool MDSMonitor::preprocess_beacon(MMDSBeacon *m)
   }
   if (state == MDSMap::STATE_BOOT) {
     // ignore, already booted.
-    goto out;
+    goto ignore;
   }
   // is there a state change here?
-  if (info.state != state) {    
+  if (info.state != state) {
     // legal state change?
     if ((info.state == MDSMap::STATE_STANDBY ||
 	 info.state == MDSMap::STATE_STANDBY_REPLAY ||
 	 info.state == MDSMap::STATE_ONESHOT_REPLAY) && state > 0) {
       dout(10) << "mds_beacon mds can't activate itself (" << ceph_mds_state_name(info.state)
 	       << " -> " << ceph_mds_state_name(state) << ")" << dendl;
-      goto ignore;
+      goto reply;
     }
     
     if (info.state == MDSMap::STATE_STANDBY &&
@@ -299,21 +299,24 @@ bool MDSMonitor::preprocess_beacon(MMDSBeacon *m)
       dout(10) << "mds_beacon can't standby-replay mds." << m->get_standby_for_rank() << " at this time (cluster degraded, or mds not active)" << dendl;
       dout(10) << "pending_mdsmap.is_degraded()==" << pending_mdsmap.is_degraded()
           << " rank state: " << ceph_mds_state_name(pending_mdsmap.get_state(m->get_standby_for_rank())) << dendl;
-      goto ignore;
+      goto reply;
     }
     _note_beacon(m);
     return false;  // need to update map
   }
 
- ignore:
+ reply:
   // note time and reply
   _note_beacon(m);
   mon->send_reply(m,
 		  new MMDSBeacon(mon->monmap->fsid, m->get_global_id(), m->get_name(),
 				 mdsmap.get_epoch(), state, seq));
-  
-  // done
- out:
+  m->put();
+  return true;
+
+ ignore:
+  // I won't reply this beacon, drop it.
+  mon->no_reply(m);
   m->put();
   return true;
 }
@@ -525,8 +528,14 @@ void MDSMonitor::_updated(MMDSBeacon *m)
   if (m->get_state() == MDSMap::STATE_STOPPED) {
     // send the map manually (they're out of the map, so they won't get it automatic)
     mon->send_reply(m, new MMDSMap(mon->monmap->fsid, &mdsmap));
+  } else {
+    mon->send_reply(m, new MMDSBeacon(mon->monmap->fsid,
+				      m->get_global_id(),
+				      m->get_name(),
+				      mdsmap.get_epoch(),
+				      m->get_state(),
+				      m->get_seq()));
   }
-
   m->put();
 }
 
