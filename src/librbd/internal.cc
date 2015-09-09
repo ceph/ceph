@@ -731,16 +731,23 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
     assert(ictx->owner_lock.is_locked());
     assert(!ictx->image_watcher->is_lock_supported() ||
 	   ictx->image_watcher->is_lock_owner());
-
+    uint64_t snap_nums = 0;
+    
     ldout(ictx->cct, 20) << "snap_create_helper " << ictx << " " << snap_name
                          << dendl;
-
+	
     int r = ictx_check(ictx, true);
     if (r < 0) {
       return r;
     }
 
     RWLock::WLocker md_locker(ictx->md_lock);
+    snap_list_nums(ictx, &snap_nums);
+    if (ictx->cct->_conf->rbd_snap_max_nums <= snap_nums)
+    {
+    	lderr(ictx->cct) << "snap_create " << ictx << " " << "snap more than max: " << ictx->cct->_conf->rbd_snap_max_nums << dendl;
+    	return -EPERM;
+    }
     r = _flush(ictx);
     if (r < 0) {
       return r;
