@@ -83,7 +83,8 @@ int rgw_mount(const char* uid, const char* key, const char* _secret,
   }
 
   /* stash access data for "mount" */
-  struct rgw_fs *new_fs = (struct rgw_fs *) malloc(sizeof(struct rgw_fs));
+  struct rgw_fs *new_fs =
+    static_cast<struct rgw_fs*>(operator new (sizeof(struct rgw_fs)));
   new_fs->user_id = strdup(uid);
   new_fs->access_key_id = strdup(key);
   new_fs->secret_access_key = strdup(_secret);
@@ -104,7 +105,7 @@ int rgw_umount(struct rgw_fs *rgw_fs)
   free(rgw_fs->user_id);
   free(rgw_fs->access_key_id);
   free(rgw_fs->secret_access_key);
-  free(rgw_fs);
+  operator delete (rgw_fs);
 
   return 0;
 }
