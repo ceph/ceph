@@ -715,16 +715,19 @@ int RGWBucket::check_bad_index_multipart(RGWBucketAdminOpState& op_state,
       string oid = key.name;
 
       int pos = oid.find_last_of('.');
-      if (pos < 0)
-        continue;
-
-      string name = oid.substr(0, pos);
-      string suffix = oid.substr(pos + 1);
-
-      if (suffix.compare("meta") == 0) {
-        meta_objs[name] = true;
+      if (pos < 0) {
+        /* obj has no suffix */
+        all_objs[key] = oid;
       } else {
-        all_objs[key] = name;
+        /* obj has suffix */
+        string name = oid.substr(0, pos);
+        string suffix = oid.substr(pos + 1);
+
+        if (suffix.compare("meta") == 0) {
+          meta_objs[name] = true;
+        } else {
+          all_objs[key] = name;
+        }
       }
     }
 
