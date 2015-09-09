@@ -1730,6 +1730,11 @@ public:
     /* TODO */
     return 0;
   }
+
+  void wakeup() {
+    Mutex::Locker l(inc_lock);
+    inc_cond.Signal();
+  }
 };
 
 class RGWMetaSyncCR : public RGWCoroutine {
@@ -1738,6 +1743,8 @@ class RGWMetaSyncCR : public RGWCoroutine {
   RGWAsyncRadosProcessor *async_rados;
 
   rgw_meta_sync_status sync_status;
+
+  map<int, RGWMetaSyncShardCR *> shard_crs;
 
 
 public:
@@ -1754,14 +1761,27 @@ public:
 	for (; iter != sync_status.sync_markers.end(); ++iter) {
 	  uint32_t shard_id = iter->first;
 	  rgw_meta_sync_marker marker;
-          spawn(new RGWMetaSyncShardCR(store, http_manager, async_rados, store->get_zone_params().log_pool,
+
+	  RGWMetaSyncShardCR *shard_cr = new RGWMetaSyncShardCR(store, http_manager, async_rados, store->get_zone_params().log_pool,
 				       shard_id,
-				       sync_status.sync_markers[shard_id]), true);
+				       sync_status.sync_markers[shard_id]);
+
+
+	  shard_crs[shard_id] = shard_cr;
+          spawn(shard_cr, true);
         }
       }
       yield return set_state(RGWCoroutine_Done);
     }
     return 0;
+  }
+
+  void wakeup(int shard_id) {
+    map<int, RGWMetaSyncShardCR *>::iterator iter = shard_crs.find(shard_id);
+    if (iter == shard_crs.end()) {
+      return;
+    }
+    iter->second->wakeup();
   }
 };
 
@@ -1853,7 +1873,8 @@ int RGWRemoteMetaLog::run_sync(int num_shards, rgw_meta_sync_status& sync_status
       /* fall through */
     case rgw_meta_sync_info::StateSync:
       ldout(store->ctx(), 20) << __func__ << "(): sync" << dendl;
-      r = run(new RGWMetaSyncCR(store, &http_manager, async_rados, sync_status));
+      meta_sync_cr = new RGWMetaSyncCR(store, &http_manager, async_rados, sync_status);
+      r = run(meta_sync_cr);
       if (r < 0) {
         ldout(store->ctx(), 0) << "ERROR: failed to fetch all metadata keys" << dendl;
         return r;
@@ -1865,6 +1886,14 @@ int RGWRemoteMetaLog::run_sync(int num_shards, rgw_meta_sync_status& sync_status
   }
 
   return 0;
+}
+
+void RGWRemoteMetaLog::wakeup(int shard_id)
+{
+  if (!meta_sync_cr) {
+    return;
+  }
+  meta_sync_cr->wakeup(shard_id);
 }
 
 int RGWCloneMetaLogCoroutine::operate()

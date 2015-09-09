@@ -1546,6 +1546,8 @@ class RGWRados
   RGWMetaNotifier *meta_notifier;
   RGWSyncProcessorThread *sync_processor_thread;
 
+  Mutex sync_thread_lock;
+
   int num_watchers;
   RGWWatcher **watchers;
   std::set<int> watchers_set;
@@ -1603,6 +1605,7 @@ public:
   RGWRados() : max_req_id(0), lock("rados_timer_lock"), watchers_lock("watchers_lock"), timer(NULL),
                gc(NULL), obj_expirer(NULL), use_gc_thread(false), quota_threads(false),
                run_sync_thread(false), meta_notifier(NULL),
+               sync_processor_thread(NULL), sync_thread_lock("sync_thread_lock"),
                num_watchers(0), watchers(NULL),
                watch_initialized(false),
                bucket_id_lock("rados_bucket_id"),
@@ -2197,7 +2200,8 @@ public:
    * Check to see if the bucket metadata is synced
    */
   bool is_syncing_bucket_meta(rgw_bucket& bucket);
-  
+  void wakeup_sync_shards(set<int>& shard_ids);
+
   int set_bucket_owner(rgw_bucket& bucket, ACLOwner& owner);
   int set_buckets_enabled(std::vector<rgw_bucket>& buckets, bool enabled);
   int bucket_suspended(rgw_bucket& bucket, bool *suspended);
