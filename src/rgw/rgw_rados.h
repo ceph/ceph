@@ -1244,6 +1244,12 @@ public:
 	    const string& period_id = "", epoch_t _epoch = 0)
     : id(period_id), epoch(_epoch), cct(_cct), store(_store) {}
 
+  RGWPeriod(CephContext *_cct, RGWRados *_store,
+	    const string& _master_zonegroup, const string& _master_zone,
+	    const string& period_id = "", epoch_t _epoch = 0)
+    : id(period_id), epoch(_epoch), master_zonegroup(_master_zonegroup), master_zone(_master_zone), cct(_cct),
+      store(_store) {}
+
   string get_id() { return id;}
   epoch_t get_epoch() { return epoch;}
   string get_predecessor() { return predecessor_uuid;}
@@ -1253,7 +1259,7 @@ public:
   const string& get_pool_name(CephContext *cct);
   const string& get_latest_epoch_oid();
   const string& get_info_oid_prefix();
-
+  
   int get_latest_epoch(epoch_t& epoch);
   int init(const string& realm_id = "", const string &realm_name = "", bool setup_obj = true);
   int init(const string& period_id, epoch_t epoch, bool setup_obj = true);
