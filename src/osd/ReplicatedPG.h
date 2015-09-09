@@ -95,6 +95,8 @@ public:
     uint32_t source_data_digest, source_omap_digest;
     uint32_t data_digest, omap_digest;
     vector<pair<osd_reqid_t, version_t> > reqids; // [(reqid, user_version)]
+    uint64_t truncate_seq;
+    uint64_t truncate_size;
     bool is_data_digest() {
       return flags & object_copy_data_t::FLAG_DATA_DIGEST;
     }
@@ -108,7 +110,8 @@ public:
 	has_omap(false),
 	flags(0),
 	source_data_digest(-1), source_omap_digest(-1),
-	data_digest(-1), omap_digest(-1)
+	data_digest(-1), omap_digest(-1),
+	truncate_seq(0), truncate_size(0)
     {}
   };
 
