@@ -30,8 +30,9 @@ namespace {
   string access_key("C4B4D3E4H355VTDTQXRF");
   string secret_key("NRBkhM2rUZNUbydD86HpNJ110VpQjVroumCOHJXw");
   struct rgw_fs *fs = nullptr;
-  typedef std::tuple<string,uint64_t> fid_type; //in c++2014 can alias...
+  typedef std::tuple<string,uint64_t, struct rgw_file_handle*> fid_type; //in c++2014 can alias...
   std::vector<fid_type> fids1;
+  std::vector<fid_type> fids2;
 }
 
 TEST(LibRGW, INIT) {
@@ -50,7 +51,7 @@ TEST(LibRGW, MOUNT) {
 extern "C" {
   static bool r1_cb(const char* name, void *arg, uint64_t offset) {
     // don't need arg--it would point to fids1
-    fids1.push_back(fid_type(name, offset));
+    fids1.push_back(fid_type(name, offset, nullptr /* handle */));
     return true; /* XXX ? */
   }
 }
@@ -66,6 +67,53 @@ TEST(LibRGW, LIST_BUCKETS) {
 	      << std::endl;
   }
   ASSERT_EQ(ret, 0);
+}
+
+extern "C" {
+  static bool r2_cb(const char* name, void *arg, uint64_t offset) {
+    // don't need arg--it would point to fids2
+    fids2.push_back(fid_type(name, offset, nullptr));
+    return true; /* XXX ? */
+  }
+}
+
+TEST(LibRGW, LOOKUP_BUCKETS) {
+  using std::get;
+
+  int ret = 0;
+  for (auto& fid : fids1) {
+    struct rgw_file_handle *rgw_fh = new rgw_file_handle();
+    ret = rgw_lookup(fs, &fs->root_fh, get<0>(fid).c_str(), rgw_fh);
+    ASSERT_EQ(ret, 0);
+    get<2>(fid) = rgw_fh;
+    ASSERT_NE(get<2>(fid), nullptr);
+  }
+}
+
+TEST(LibRGW, LIST_OBJECTS) {
+  /* list objects via readdir, bucketwise */
+  using std::get;
+
+  for (auto& fid : fids1) {
+    std::cout << "readdir in bucket " << get<0>(fid) << std::endl;
+    bool eof = false;
+    int ret = rgw_readdir(fs, get<2>(fid), 0 /* offset */, r2_cb, &fids2,
+			  &eof);
+    for (auto& fid2 : fids2) {
+      std::cout << "fname: " << get<0>(fid2) << " fid: " << get<1>(fid2)
+		<< std::endl;
+    }
+    ASSERT_EQ(ret, 0);
+  }
+}
+
+TEST(LibRGW, CLEANUP) {
+  using std::get;
+  for (auto& fids : { fids1, fids2 }) {
+    for (auto& fid : fids) {
+      delete get<2>(fid);
+    }
+  }
 }
 
 TEST(LibRGW, UMOUNT) {
