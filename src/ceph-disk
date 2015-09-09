@@ -529,6 +529,8 @@ def list_all_partitions(names):
         names = os.listdir('/sys/block')
     dev_part_list = {}
     for name in names:
+        if 'ram' in name or 'loop' in name:
+            continue
         LOG.debug("list_all_partitions: " + name)
         # /dev/fd0 may hang http://tracker.ceph.com/issues/6827
         if re.match(r'^fd\d$', name):
