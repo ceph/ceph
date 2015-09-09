@@ -1233,11 +1233,14 @@ class RGWPeriod
   CephContext *cct;
   RGWRados *store;
 
-  int read_info(const string& obj_id);
+  int read_info();
   int read_latest_epoch(RGWPeriodLatestEpochInfo& epoch_info);
   int use_latest_epoch();
   int set_latest_epoch(const epoch_t& epoch);
   int use_current_period();
+
+  const string get_period_oid();
+  const string get_period_oid_prefix();
 
 public:
   RGWPeriod(CephContext *_cct, RGWRados *_store,
@@ -1250,11 +1253,12 @@ public:
     : id(period_id), epoch(_epoch), master_zonegroup(_master_zonegroup), master_zone(_master_zone), cct(_cct),
       store(_store) {}
 
-  string get_id() { return id;}
+  const string& get_id() { return id;}
   epoch_t get_epoch() { return epoch;}
-  string get_predecessor() { return predecessor_uuid;}
-  string get_master_zonegroup() { return master_zonegroup;}
-  string get_master_zone() { return master_zone;}
+  const string& get_predecessor() { return predecessor_uuid;}
+  const string& get_master_zonegroup() { return master_zonegroup;}
+  const string& get_master_zone() { return master_zone;}
+  const string& get_realm() { return realm_id;}
 
   const string& get_pool_name(CephContext *cct);
   const string& get_latest_epoch_oid();
@@ -1263,14 +1267,13 @@ public:
   int get_latest_epoch(epoch_t& epoch);
   int init(const string& realm_id = "", const string &realm_name = "", bool setup_obj = true);
   int init(const string& period_id, epoch_t epoch, bool setup_obj = true);
-
   int create();
   int delete_obj();
   int store_info(bool exclusive);
   int activate() { return -ENOTSUP;}
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(1, 1, bl);    
     ::encode(id, bl);
     ::encode(epoch, bl);
     ::encode(predecessor_uuid, bl);

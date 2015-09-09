@@ -1652,10 +1652,21 @@ int main(int argc, char **argv)
     switch (opt_cmd) {
     case OPT_PERIOD_PREPARE:
       {
-	RGWPeriod period(g_ceph_context, store, master_zonegroup, master_zone);
-	int ret = period.create();
+	RGWRealm realm(realm_id, realm_name);
+	int ret = realm.init(g_ceph_context, store);
 	if (ret < 0) {
-	  cerr << "ERROR: couldn't prepare new period " << ": " << cpp_strerror(-ret) << std::endl;
+	  cerr << "could not init realm " << ": " << cpp_strerror(-ret) << std::endl;
+	  return ret;
+	}
+	RGWPeriod period(g_ceph_context, store, master_zonegroup, master_zone);
+	ret = period.init(realm.get_id(), realm.get_name(), false);
+	if (ret < 0) {
+	  cerr << "failed to init period " << ": " << cpp_strerror(-ret) << std::endl;
+	  return ret;
+	}
+	ret = period.create();
+	if (ret < 0) {
+	  cerr << "ERROR: couldn't create period " << ": " << cpp_strerror(-ret) << std::endl;
 	  return ret;
 	}
 	encode_json("period", period, formatter);
@@ -1694,6 +1705,7 @@ int main(int argc, char **argv)
 	  cerr << "period init failed: " << cpp_strerror(-ret) << std::endl;
 	  return -ret;
 	}
+	encode_json("realm", period.get_realm(), formatter);
 	encode_json("period", period, formatter);
 	formatter->flush(cout);
 	cout << std::endl;
@@ -1730,6 +1742,7 @@ int main(int argc, char **argv)
 	  cerr << "Error initing realm " << cpp_strerror(-ret) << std::endl;
 	  return ret;
 	}
+	cerr << "realm id " << realm.get_id() << " name " << realm.get_name() << std::endl;
 	ret = realm.set_current_period(period_id);
 	if (ret < 0 ) {
 	  cerr << "Error setting current period " << period_id << ":" << cpp_strerror(-ret) << std::endl;
