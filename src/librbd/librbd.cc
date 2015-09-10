@@ -2943,6 +2943,41 @@ extern "C" int rbd_aio_write2(rbd_image_t image, uint64_t off, size_t len,
   return 0;
 }
 
+extern "C" int rbd_aio_writev(rbd_image_t image, const struct iovec *iov,
+                              int iovcnt, uint64_t off, rbd_completion_t c)
+{
+  librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
+  librbd::RBD::AioCompletion *comp = (librbd::RBD::AioCompletion *)c;
+
+  // convert the scatter list into a bufferlist
+  ssize_t len = 0;
+  bufferlist bl;
+  for (int i = 0; i < iovcnt; ++i) {
+    const struct iovec &io = iov[i];
+    len += io.iov_len;
+    if (len < 0) {
+      break;
+    }
+
+    bl.push_back(create_write_raw(ictx, static_cast<char*>(io.iov_base),
+                                  io.iov_len));
+  }
+
+  int r = 0;
+  if (iovcnt <= 0 || len < 0) {
+    r = -EINVAL;
+  }
+
+  tracepoint(librbd, aio_write_enter, ictx, ictx->name.c_str(),
+             ictx->snap_name.c_str(), ictx->read_only, off, len, NULL,
+             comp->pc);
+  if (r == 0) {
+    ictx->io_work_queue->aio_write(get_aio_completion(comp), off, len,
+                                   std::move(bl), 0);
+  }
+  tracepoint(librbd, aio_write_exit, r);
+  return r;
+}
 
 extern "C" int rbd_aio_discard(rbd_image_t image, uint64_t off, uint64_t len,
 			       rbd_completion_t c)
@@ -2978,6 +3013,43 @@ extern "C" int rbd_aio_read2(rbd_image_t image, uint64_t off, size_t len,
                                 librbd::io::ReadResult{buf, len},op_flags);
   tracepoint(librbd, aio_read_exit, 0);
   return 0;
+}
+
+extern "C" int rbd_aio_readv(rbd_image_t image, const struct iovec *iov,
+                             int iovcnt, uint64_t off, rbd_completion_t c)
+{
+  librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
+  librbd::RBD::AioCompletion *comp = (librbd::RBD::AioCompletion *)c;
+
+  ssize_t len = 0;
+  for (int i = 0; i < iovcnt; ++i) {
+    len += iov[i].iov_len;
+    if (len < 0) {
+      break;
+    }
+  }
+
+  int r = 0;
+  if (iovcnt == 0 || len < 0) {
+    r = -EINVAL;
+  }
+
+  tracepoint(librbd, aio_read_enter, ictx, ictx->name.c_str(),
+             ictx->snap_name.c_str(), ictx->read_only, off, len, NULL,
+             comp->pc);
+  if (r == 0) {
+    librbd::io::ReadResult read_result;
+    if (iovcnt == 1) {
+      read_result = std::move(librbd::io::ReadResult(
+        static_cast<char *>(iov[0].iov_base), iov[0].iov_len));
+    } else {
+      read_result = std::move(librbd::io::ReadResult(iov, iovcnt));
+    }
+    ictx->io_work_queue->aio_read(get_aio_completion(comp), off, len,
+                                  std::move(read_result), 0);
+  }
+  tracepoint(librbd, aio_read_exit, r);
+  return r;
 }
 
 extern "C" int rbd_flush(rbd_image_t image)

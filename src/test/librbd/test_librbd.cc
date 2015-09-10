@@ -1622,6 +1622,79 @@ TEST_F(TestLibRBD, TestDataPoolIO)
 
   rados_ioctx_destroy(ioctx);
 }
+
+TEST_F(TestLibRBD, TestScatterGatherIO)
+{
+  rados_ioctx_t ioctx;
+  rados_ioctx_create(_cluster, m_pool_name.c_str(), &ioctx);
+
+  rbd_image_t image;
+  int order = 0;
+  std::string name = get_temp_image_name();
+  uint64_t size = 20 << 20;
+
+  ASSERT_EQ(0, create_image(ioctx, name.c_str(), size, &order));
+  ASSERT_EQ(0, rbd_open(ioctx, name.c_str(), &image, NULL));
+
+  std::string write_buffer("This is a test");
+  struct iovec bad_iovs[] = {
+    {.iov_base = NULL, .iov_len = static_cast<size_t>(-1)}
+  };
+  struct iovec write_iovs[] = {
+    {.iov_base = &write_buffer[0],  .iov_len = 5},
+    {.iov_base = &write_buffer[5],  .iov_len = 3},
+    {.iov_base = &write_buffer[8],  .iov_len = 2},
+    {.iov_base = &write_buffer[10], .iov_len = 4}
+  };
+
+  rbd_completion_t comp;
+  rbd_aio_create_completion(NULL, NULL, &comp);
+  ASSERT_EQ(-EINVAL, rbd_aio_writev(image, write_iovs, 0, 0, comp));
+  ASSERT_EQ(-EINVAL, rbd_aio_writev(image, bad_iovs, 1, 0, comp));
+  ASSERT_EQ(0, rbd_aio_writev(image, write_iovs,
+                              sizeof(write_iovs) / sizeof(struct iovec),
+                              1<<order, comp));
+  ASSERT_EQ(0, rbd_aio_wait_for_complete(comp));
+  ASSERT_EQ(0, rbd_aio_get_return_value(comp));
+  rbd_aio_release(comp);
+
+  std::string read_buffer(write_buffer.size(), '1');
+  struct iovec read_iovs[] = {
+    {.iov_base = &read_buffer[0],  .iov_len = 4},
+    {.iov_base = &read_buffer[8],  .iov_len = 4},
+    {.iov_base = &read_buffer[12], .iov_len = 2}
+  };
+
+  rbd_aio_create_completion(NULL, NULL, &comp);
+  ASSERT_EQ(-EINVAL, rbd_aio_readv(image, read_iovs, 0, 0, comp));
+  ASSERT_EQ(-EINVAL, rbd_aio_readv(image, bad_iovs, 1, 0, comp));
+  ASSERT_EQ(0, rbd_aio_readv(image, read_iovs,
+                             sizeof(read_iovs) / sizeof(struct iovec),
+                             1<<order, comp));
+  ASSERT_EQ(0, rbd_aio_wait_for_complete(comp));
+  ASSERT_EQ(10U, rbd_aio_get_return_value(comp));
+  rbd_aio_release(comp);
+  ASSERT_EQ("This1111 is a ", read_buffer);
+
+  std::string linear_buffer(write_buffer.size(), '1');
+  struct iovec linear_iovs[] = {
+    {.iov_base = &linear_buffer[4], .iov_len = 4}
+  };
+  rbd_aio_create_completion(NULL, NULL, &comp);
+  ASSERT_EQ(0, rbd_aio_readv(image, linear_iovs,
+                             sizeof(linear_iovs) / sizeof(struct iovec),
+                             1<<order, comp));
+  ASSERT_EQ(0, rbd_aio_wait_for_complete(comp));
+  ASSERT_EQ(4U, rbd_aio_get_return_value(comp));
+  rbd_aio_release(comp);
+  ASSERT_EQ("1111This111111", linear_buffer);
+
+  ASSERT_PASSED(validate_object_map, image);
+  ASSERT_EQ(0, rbd_close(image));
+
+  rados_ioctx_destroy(ioctx);
+}
+
 TEST_F(TestLibRBD, TestEmptyDiscard)
 {
   rados_ioctx_t ioctx;
