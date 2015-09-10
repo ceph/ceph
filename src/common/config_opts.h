@@ -617,6 +617,11 @@ OPTION(osd_recover_clone_overlap, OPT_BOOL, true)   // preserve clone_overlap du
 OPTION(osd_op_num_threads_per_shard, OPT_INT, 2)
 OPTION(osd_op_num_shards, OPT_INT, 5)
 
+// Set to true for testing.  Users should NOT set this.
+// If set to true even after reading enough shards to
+// decode the object, any error will be reported.
+OPTION(osd_read_ec_check_for_errors, OPT_BOOL, false) // return error if any ec shard has an error
+
 // Only use clone_overlap for recovery if there are fewer than
 // osd_recover_clone_overlap_limit entries in the overlap set
 OPTION(osd_recover_clone_overlap_limit, OPT_INT, 10)
