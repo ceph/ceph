@@ -282,6 +282,7 @@ librados_test_stub_la_SOURCES = \
 	test/librados_test_stub/TestRadosClient.cc \
 	test/librados_test_stub/TestWatchNotify.cc
 noinst_HEADERS += \
+	test/librados_test_stub/LibradosTestStub.h \
 	test/librados_test_stub/TestClassHandler.h \
 	test/librados_test_stub/TestRadosClient.h \
 	test/librados_test_stub/TestMemRadosClient.h \
