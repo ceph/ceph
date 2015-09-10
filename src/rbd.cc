@@ -77,6 +77,19 @@ map<string, string> map_options; // -o / --options map
 
 #define dout_subsys ceph_subsys_rbd
 
+namespace {
+
+void aio_context_callback(librbd::completion_t completion, void *arg)
+{
+  librbd::RBD::AioCompletion *aio_completion =
+    reinterpret_cast<librbd::RBD::AioCompletion*>(completion);
+  Context *context = reinterpret_cast<Context *>(arg);
+  context->complete(aio_completion->get_return_value());
+  aio_completion->release();
+}
+
+} // anonymous namespace
+
 static std::map<uint64_t, std::string> feature_mapping =
   boost::assign::map_list_of(
     RBD_FEATURE_LAYERING, "layering")(
@@ -1104,51 +1117,31 @@ static int do_bench_write(librbd::Image& image, uint64_t io_size,
   return 0;
 }
 
-struct ExportContext {
-  librbd::Image *image;
-  int fd;
-  uint64_t totalsize;
-  MyProgressContext pc;
-
-  SimpleThrottle throttle;
-  Mutex lock;
-
-  ExportContext(librbd::Image *i, int f, uint64_t t, int max_ops) :
-    image(i),
-    fd(f),
-    totalsize(t),
-    pc("Exporting image"),
-    throttle(max_ops, true),
-    lock("ExportContext::lock")
-  {}
-};
-
-class AioExportContext : public Context
+class C_Export : public Context
 {
 public:
-  AioExportContext(SimpleThrottle &simple_throttle, librbd::Image &image,
+  C_Export(SimpleThrottle &simple_throttle, librbd::Image &image,
                    uint64_t offset, uint64_t length, int fd)
     : m_aio_completion(
-        new librbd::RBD::AioCompletion(this, &AioExportContext::aio_callback)),
-      m_throttle(simple_throttle),
-      m_offset(offset),
-      m_fd(fd)
+        new librbd::RBD::AioCompletion(this, &aio_context_callback)),
+      m_throttle(simple_throttle), m_image(image), m_offset(offset),
+      m_length(length), m_fd(fd)
+  {
+  }
+
+  void send()
   {
     m_throttle.start_op();
 
     int op_flags = LIBRADOS_OP_FLAG_FADVISE_SEQUENTIAL |
 		   LIBRADOS_OP_FLAG_FADVISE_NOCACHE;
-    int r = image.aio_read2(offset, length, m_bufferlist, m_aio_completion,
-			    op_flags);
+    int r = m_image.aio_read2(m_offset, m_length, m_bufferlist,
+                              m_aio_completion, op_flags);
     if (r < 0) {
       cerr << "rbd: error requesting read from source image" << std::endl;
+      m_aio_completion->release();
       m_throttle.end_op(r);
     }
-  }
-
-  virtual ~AioExportContext()
-  {
-    m_aio_completion->release();
   }
 
   virtual void finish(int r)
@@ -1186,19 +1179,13 @@ public:
     }
   }
 
-  static void aio_callback(librbd::completion_t completion, void *arg)
-  {
-    librbd::RBD::AioCompletion *aio_completion =
-      reinterpret_cast<librbd::RBD::AioCompletion*>(completion);
-    AioExportContext *export_context = reinterpret_cast<AioExportContext*>(arg);
-    export_context->complete(aio_completion->get_return_value());
-  }
-
 private:
   librbd::RBD::AioCompletion *m_aio_completion;
   SimpleThrottle &m_throttle;
+  librbd::Image &m_image;
   bufferlist m_bufferlist;
   uint64_t m_offset;
+  uint64_t m_length;
   int m_fd;
 };
 
@@ -1229,8 +1216,14 @@ static int do_export(librbd::Image& image, const char *path)
   SimpleThrottle throttle(max_concurrent_ops, false);
   uint64_t period = image.get_stripe_count() * (1ull << info.order);
   for (uint64_t offset = 0; offset < info.size; offset += period) {
+    if (throttle.pending_error()) {
+      break;
+    }
+
     uint64_t length = min(period, info.size - offset);
-    new AioExportContext(throttle, image, offset, length, fd);
+    C_Export *ctx = new C_Export(throttle, image, offset, length, fd);
+    ctx->send();
+
     pc.update_progress(offset, info.size);
   }
 
@@ -1250,92 +1243,90 @@ static int do_export(librbd::Image& image, const char *path)
   return r;
 }
 
-class C_ExportDiff {
+struct ExportDiffContext {
+  librbd::Image *image;
+  int fd;
+  uint64_t totalsize;
+  MyProgressContext pc;
+  OrderedThrottle throttle;
+
+  ExportDiffContext(librbd::Image *i, int f, uint64_t t, int max_ops) :
+    image(i), fd(f), totalsize(t), pc("Exporting image"),
+    throttle(max_ops, true) {
+  }
+};
+
+class C_ExportDiff : public Context {
 public:
-  C_ExportDiff(ExportContext *ec, uint64_t offset, uint64_t length)
-    : m_export_context(ec), m_offset(offset), m_length(length)
-  {
+  C_ExportDiff(ExportDiffContext *edc, uint64_t offset, uint64_t length,
+               bool exists)
+    : m_export_diff_context(edc), m_offset(offset), m_length(length),
+      m_exists(exists) {
   }
 
   int send() {
-    if (m_export_context->throttle.pending_error()) {
-      return m_export_context->throttle.wait_for_ret();
+    if (m_export_diff_context->throttle.pending_error()) {
+      return m_export_diff_context->throttle.wait_for_ret();
     }
-    m_export_context->throttle.start_op();
 
-    librbd::RBD::AioCompletion *aio_completion =
-      new librbd::RBD::AioCompletion(this, &C_ExportDiff::aio_callback);
-    int op_flags = LIBRADOS_OP_FLAG_FADVISE_NOCACHE;
-    int r = m_export_context->image->aio_read2(m_offset, m_length, m_read_data,
-                                               aio_completion, op_flags);
-    if (r < 0) {
-      aio_completion->release();
-      complete(r);
+    C_OrderedThrottle *ctx = m_export_diff_context->throttle.start_op(this);
+    if (m_exists) {
+      librbd::RBD::AioCompletion *aio_completion =
+        new librbd::RBD::AioCompletion(ctx, &aio_context_callback);
+
+      int op_flags = LIBRADOS_OP_FLAG_FADVISE_NOCACHE;
+      int r = m_export_diff_context->image->aio_read2(
+        m_offset, m_length, m_read_data, aio_completion, op_flags);
+      if (r < 0) {
+        aio_completion->release();
+        ctx->complete(r);
+      }
+    } else {
+      ctx->complete(0);
     }
-    return r;
+    return 0;
   }
 
   static int export_diff_cb(uint64_t offset, size_t length, int exists,
                             void *arg) {
-    ExportContext *ec = reinterpret_cast<ExportContext *>(arg);
+    ExportDiffContext *edc = reinterpret_cast<ExportDiffContext *>(arg);
 
-    int r;
-    {
-      if (exists) {
-        C_ExportDiff *context = new C_ExportDiff(ec, offset, length);
-        r = context->send();
-      } else {
-        Mutex::Locker lock(ec->lock);
-        r = write_extent(ec, offset, length, false);
+    C_ExportDiff *context = new C_ExportDiff(edc, offset, length, exists);
+    return context->send();
+  }
+
+protected:
+  virtual void finish(int r) {
+    if (r >= 0) {
+      if (m_exists) {
+        m_exists = !m_read_data.is_zero();
+      }
+      r = write_extent(m_export_diff_context, m_offset, m_length, m_exists);
+      if (r == 0 && m_exists) {
+        r = m_read_data.write_fd(m_export_diff_context->fd);
       }
     }
-    ec->pc.update_progress(offset, ec->totalsize);
-    return r;
+    m_export_diff_context->throttle.end_op(r);
   }
 
 private:
-  ExportContext *m_export_context;
+  ExportDiffContext *m_export_diff_context;
   uint64_t m_offset;
   uint64_t m_length;
+  bool m_exists;
   bufferlist m_read_data;
 
-  void complete(int r) {
-    {
-      Mutex::Locker locker(m_export_context->lock);
-      if (r >= 0) {
-        r = write_extent(m_export_context, m_offset, m_length,
-                         !m_read_data.is_zero());
-        if (r == 0) {
-          // block
-          r = m_read_data.write_fd(m_export_context->fd);
-        }
-      }
-    }
-    m_export_context->throttle.end_op(r);
-    delete this;
-  }
-
-  static void aio_callback(librbd::completion_t completion, void *arg)
-  {
-    librbd::RBD::AioCompletion *aio_completion =
-      reinterpret_cast<librbd::RBD::AioCompletion*>(completion);
-    C_ExportDiff *context = reinterpret_cast<C_ExportDiff*>(arg);
-
-    context->complete(aio_completion->get_return_value());
-    aio_completion->release();
-  }
-
-  static int write_extent(ExportContext *ec, uint64_t offset, uint64_t length,
-                          bool exists) {
-    assert(ec->lock.is_locked());
-
+  static int write_extent(ExportDiffContext *edc, uint64_t offset,
+                          uint64_t length, bool exists) {
     // extent
     bufferlist bl;
     __u8 tag = exists ? 'w' : 'z';
     ::encode(tag, bl);
     ::encode(offset, bl);
     ::encode(length, bl);
-    int r = bl.write_fd(ec->fd);
+    int r = bl.write_fd(edc->fd);
+
+    edc->pc.update_progress(offset, edc->totalsize);
     return r;
   }
 };
@@ -1397,15 +1388,15 @@ static int do_export_diff(librbd::Image& image, const char *fromsnapname,
     }
   }
 
-  ExportContext ec(&image, fd, info.size,
-                   g_conf->rbd_concurrent_management_ops);
+  ExportDiffContext edc(&image, fd, info.size,
+                        g_conf->rbd_concurrent_management_ops);
   r = image.diff_iterate2(fromsnapname, 0, info.size, true, whole_object,
-                          &C_ExportDiff::export_diff_cb, (void *)&ec);
+                          &C_ExportDiff::export_diff_cb, (void *)&edc);
   if (r < 0) {
     goto out;
   }
 
-  r = ec.throttle.wait_for_ret();
+  r = edc.throttle.wait_for_ret();
   if (r < 0) {
     goto out;
   }
@@ -1419,9 +1410,9 @@ static int do_export_diff(librbd::Image& image, const char *fromsnapname,
 
  out:
   if (r < 0)
-    ec.pc.fail();
+    edc.pc.fail();
   else
-    ec.pc.finish();
+    edc.pc.finish();
   return r;
 }
 
@@ -1539,31 +1530,31 @@ done_img:
   update_snap_name(*new_img, snap);
 }
 
-class AioImportContext : public Context
+class C_Import : public Context
 {
 public:
-  AioImportContext(SimpleThrottle &simple_throttle, librbd::Image &image,
-                   bufferlist &bl, uint64_t offset)
-    : m_throttle(simple_throttle),
+  C_Import(SimpleThrottle &simple_throttle, librbd::Image &image,
+           bufferlist &bl, uint64_t offset)
+    : m_throttle(simple_throttle), m_image(image),
       m_aio_completion(
-        new librbd::RBD::AioCompletion(this, &AioImportContext::aio_callback)),
+        new librbd::RBD::AioCompletion(this, &aio_context_callback)),
       m_bufferlist(bl), m_offset(offset)
+  {
+  }
+
+  void send()
   {
     m_throttle.start_op();
 
     int op_flags = LIBRADOS_OP_FLAG_FADVISE_SEQUENTIAL |
 		   LIBRADOS_OP_FLAG_FADVISE_NOCACHE;
-    int r = image.aio_write2(m_offset, m_bufferlist.length(), m_bufferlist,
-			     m_aio_completion, op_flags);
+    int r = m_image.aio_write2(m_offset, m_bufferlist.length(), m_bufferlist,
+			       m_aio_completion, op_flags);
     if (r < 0) {
       cerr << "rbd: error requesting write to destination image" << std::endl;
+      m_aio_completion->release();
       m_throttle.end_op(r);
     }
-  }
-
-  virtual ~AioImportContext()
-  {
-    m_aio_completion->release();
   }
 
   virtual void finish(int r)
@@ -1575,16 +1566,9 @@ public:
     m_throttle.end_op(r);
   }
 
-  static void aio_callback(librbd::completion_t completion, void *arg)
-  {
-    librbd::RBD::AioCompletion *aio_completion =
-      reinterpret_cast<librbd::RBD::AioCompletion*>(completion);
-    AioImportContext *import_context = reinterpret_cast<AioImportContext*>(arg);
-    import_context->complete(aio_completion->get_return_value());
-  }
-
 private:
   SimpleThrottle &m_throttle;
+  librbd::Image &m_image;
   librbd::RBD::AioCompletion *m_aio_completion;
   bufferlist m_bufferlist;
   uint64_t m_offset;
@@ -1669,6 +1653,10 @@ static int do_import(librbd::RBD &rbd, librados::IoCtx& io_ctx,
 
   // loop body handles 0 return, as we may have a block to flush
   while ((readlen = ::read(fd, p + blklen, reqlen)) >= 0) {
+    if (throttle->pending_error()) {
+      break;
+    }
+
     blklen += readlen;
     // if read was short, try again to fill the block before writing
     if (readlen && ((size_t)readlen < reqlen)) {
@@ -1693,7 +1681,8 @@ static int do_import(librbd::RBD &rbd, librados::IoCtx& io_ctx,
     // write as much as we got; perhaps less than imgblklen
     // but skip writing zeros to create sparse images
     if (!bl.is_zero()) {
-      new AioImportContext(*throttle, image, bl, image_pos);
+      C_Import *ctx = new C_Import(*throttle, image, bl, image_pos);
+      ctx->send();
     }
 
     // done with whole block, whether written or not
@@ -2077,12 +2066,16 @@ static int do_merge_diff(const char *first, const char *second, const char *path
   // and the (offset,length) in wztag must be ascending order.
 
   r = parse_diff_header(fd, &f_tag, &f_from, &f_to, &f_size);
-  if (r < 0)
+  if (r < 0) {
+    cerr << "rbd: failed to parse first diff header" << std::endl;
     goto done;
+  }
 
   r = parse_diff_header(sd, &s_tag, &s_from, &s_to, &s_size);
-  if (r < 0)
+  if (r < 0) {
+    cerr << "rbd: failed to parse second diff header" << std::endl;
     goto done;
+  }
 
   if (f_to != s_from) {
     r = -EINVAL;
@@ -2113,8 +2106,10 @@ static int do_merge_diff(const char *first, const char *second, const char *path
     ::encode(s_size, bl);
 
     r = bl.write_fd(pd);
-    if (r < 0)
+    if (r < 0) {
+      cerr << "rbd: failed to write merged diff header" << std::endl;
       goto done;
+    }
   }
 
   if (f_size > s_size)
@@ -2131,8 +2126,13 @@ static int do_merge_diff(const char *first, const char *second, const char *path
       uint64_t last_off = f_off;
 
       r = parse_diff_body(fd, &f_tag, &f_off, &f_len);
-      if (r < 0)
+      dout(2) << "first diff data chunk: tag=" << f_tag << ", "
+              << "off=" << f_off << ", "
+              << "len=" << f_len << dendl;
+      if (r < 0) {
+        cerr << "rbd: failed to read first diff data chunk header" << std::endl;
         goto done;
+      }
 
       if (f_tag == 'e') {
         f_end = true;
@@ -2146,6 +2146,8 @@ static int do_merge_diff(const char *first, const char *second, const char *path
 
       if (last_off > f_off) {
         r = -ENOTSUP;
+        cerr << "rbd: out-of-order offset from first diff ("
+             << last_off << " > " << f_off << ")" << std::endl;
         goto done;
       }
     }
@@ -2154,8 +2156,14 @@ static int do_merge_diff(const char *first, const char *second, const char *path
       uint64_t last_off = s_off;
 
       r = parse_diff_body(sd, &s_tag, &s_off, &s_len);
-      if (r < 0)
+      dout(2) << "second diff data chunk: tag=" << f_tag << ", "
+              << "off=" << f_off << ", "
+              << "len=" << f_len << dendl;
+      if (r < 0) {
+        cerr << "rbd: failed to read second diff data chunk header"
+             << std::endl;
         goto done;
+      }
 
       if (s_tag == 'e') {
         s_end = true;
@@ -2168,6 +2176,8 @@ static int do_merge_diff(const char *first, const char *second, const char *path
 
       if (last_off > s_off) {
         r = -ENOTSUP;
+        cerr << "rbd: out-of-order offset from second diff ("
+             << last_off << " > " << s_off << ")" << std::endl;
         goto done;
       }
     }
@@ -2195,12 +2205,12 @@ static int do_merge_diff(const char *first, const char *second, const char *path
         if (first_stdin) {
           bufferptr bp = buffer::create(delta);
           r = safe_read_exact(fd, bp.c_str(), delta);
-          if (r < 0)
-            goto done;
         } else {
           r = lseek(fd, delta, SEEK_CUR);
-          if(r < 0)
-            goto done;
+        }
+        if (r < 0) {
+          cerr << "rbd: failed to skip first diff data" << std::endl;
+          goto done;
         }
       }
       f_off += delta;
