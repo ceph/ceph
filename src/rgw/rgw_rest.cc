@@ -263,7 +263,7 @@ static bool rgw_find_host_in_domains(const string& host, string *domain, string 
       subdomain->clear();
     } else {
       if (host[pos - 1] != '.') {
-        continue;
+	continue;
       }
 
       *domain = host.substr(pos);
@@ -274,12 +274,14 @@ static bool rgw_find_host_in_domains(const string& host, string *domain, string 
   return false;
 }
 
-static void dump_status(struct req_state *s, int status, const char *status_name)
+static void dump_status(struct req_state *s, int status,
+			const char *status_name)
 {
   s->formatter->set_status(status, status_name);
-  int r = s->cio->send_status(status, status_name);
+  int r = STREAM_IO(s)->send_status(status, status_name);
   if (r < 0) {
-    ldout(s->cct, 0) << "ERROR: s->cio->send_status() returned err=" << r << dendl;
+    ldout(s->cct, 0) << "ERROR: s->cio->send_status() returned err=" << r
+		     << dendl;
   }
 }
 
@@ -290,7 +292,7 @@ void rgw_flush_formatter_and_reset(struct req_state *s, Formatter *formatter)
   formatter->flush(oss);
   std::string outs(oss.str());
   if (!outs.empty() && s->op != OP_HEAD) {
-    s->cio->write(outs.c_str(), outs.size());
+    STREAM_IO(s)->write(outs.c_str(), outs.size());
   }
 
   s->formatter->reset();
@@ -302,7 +304,7 @@ void rgw_flush_formatter(struct req_state *s, Formatter *formatter)
   formatter->flush(oss);
   std::string outs(oss.str());
   if (!outs.empty() && s->op != OP_HEAD) {
-    s->cio->write(outs.c_str(), outs.size());
+    STREAM_IO(s)->write(outs.c_str(), outs.size());
   }
 }
 
@@ -316,7 +318,8 @@ void set_req_state_err(struct rgw_err& err,     /* out */
     err_no = -err_no;
   err.ret = -err_no;
   if (prot_flags & RGW_REST_SWIFT) {
-    r = search_err(err_no, RGW_HTTP_SWIFT_ERRORS, ARRAY_LEN(RGW_HTTP_SWIFT_ERRORS));
+    r = search_err(err_no, RGW_HTTP_SWIFT_ERRORS,
+		   ARRAY_LEN(RGW_HTTP_SWIFT_ERRORS));
     if (r) {
       err.http_ret = r->http_ret;
       err.s3_code = r->s3_code;
@@ -334,7 +337,8 @@ void set_req_state_err(struct rgw_err& err,     /* out */
     err.s3_code = r->s3_code;
     return;
   }
-  dout(0) << "WARNING: set_req_state_err err_no=" << err_no << " resorting to 500" << dendl;
+  dout(0) << "WARNING: set_req_state_err err_no=" << err_no
+	  << " resorting to 500" << dendl;
 
   err.http_ret = 500;
   err.s3_code = "UnknownError";
@@ -370,7 +374,7 @@ void dump_errno(struct req_state *s, int http_ret)
 
 void dump_string_header(struct req_state *s, const char *name, const char *val)
 {
-  int r = s->cio->print("%s: %s\r\n", name, val);
+  int r = STREAM_IO(s)->print("%s: %s\r\n", name, val);
   if (r < 0) {
     ldout(s->cct, 0) << "ERROR: s->cio->print() returned err=" << r << dendl;
   }
@@ -378,12 +382,12 @@ void dump_string_header(struct req_state *s, const char *name, const char *val)
 
 void dump_content_length(struct req_state *s, uint64_t len)
 {
-  int r = s->cio->send_content_length(len);
+  int r = STREAM_IO(s)->send_content_length(len);
   if (r < 0) {
     ldout(s->cct, 0) << "ERROR: s->cio->send_content_length() returned err="
                      << r << dendl;
   }
-  r = s->cio->print("Accept-Ranges: bytes\r\n");
+  r = STREAM_IO(s)->print("Accept-Ranges: bytes\r\n");
   if (r < 0) {
     ldout(s->cct, 0) << "ERROR: s->cio->print() returned err=" << r << dendl;
   }
@@ -397,11 +401,10 @@ void dump_etag(struct req_state * const s, const char * const etag)
 
   int r;
   if (s->prot_flags & RGW_REST_SWIFT) {
-    r = s->cio->print("etag: %s\r\n", etag);
+    r = STREAM_IO(s)->print("etag: %s\r\n", etag);
   } else {
-    r = s->cio->print("ETag: \"%s\"\r\n", etag);
+    r = STREAM_IO(s)->print("ETag: \"%s\"\r\n", etag);
   }
-
   if (r < 0) {
     ldout(s->cct, 0) << "ERROR: s->cio->print() returned err=" << r << dendl;
   }
@@ -410,7 +413,7 @@ void dump_etag(struct req_state * const s, const char * const etag)
 void dump_pair(struct req_state *s, const char *key, const char *value)
 {
   if ( (strlen(key) > 0) && (strlen(value) > 0))
-    s->cio->print("%s: %s\r\n", key, value);
+    STREAM_IO(s)->print("%s: %s\r\n", key, value);
 }
 
 void dump_bucket_from_state(struct req_state *s)
@@ -425,7 +428,7 @@ void dump_bucket_from_state(struct req_state *s)
       } else {
         url_encode(s->bucket_name, b);
       }
-      s->cio->print("Bucket: %s\r\n", b.c_str());
+      STREAM_IO(s)->print("Bucket: %s\r\n", b.c_str());
     }
   }
 }
@@ -446,13 +449,13 @@ void dump_uri_from_state(struct req_state *s)
       location += s->bucket_name;
       location += "/";
       if (!s->object.empty()) {
-        location += s->object.name;
-        s->cio->print("Location: %s\r\n", location.c_str());
+	location += s->object.name;
+	STREAM_IO(s)->print("Location: %s\r\n", location.c_str());
       }
     }
   }
   else {
-    s->cio->print("Location: \"%s\"\r\n", s->info.request_uri.c_str());
+    STREAM_IO(s)->print("Location: \"%s\"\r\n", s->info.request_uri.c_str());
   }
 }
 
@@ -461,7 +464,7 @@ void dump_redirect(struct req_state *s, const string& redirect)
   if (redirect.empty())
     return;
 
-  s->cio->print("Location: %s\r\n", redirect.c_str());
+  STREAM_IO(s)->print("Location: %s\r\n", redirect.c_str());
 }
 
 void dump_time_header(struct req_state *s, const char *name, time_t t)
@@ -476,7 +479,7 @@ void dump_time_header(struct req_state *s, const char *name, time_t t)
   if (strftime(timestr, sizeof(timestr), "%a, %d %b %Y %H:%M:%S %Z", tmp) == 0)
     return;
 
-  int r = s->cio->print("%s: %s\r\n", name, timestr);
+  int r = STREAM_IO(s)->print("%s: %s\r\n", name, timestr);
   if (r < 0) {
     ldout(s->cct, 0) << "ERROR: s->cio->print() returned err=" << r << dendl;
   }
@@ -492,7 +495,7 @@ void dump_epoch_header(struct req_state *s, const char *name, time_t t)
   char buf[32];
   snprintf(buf, sizeof(buf), "%lld", (long long)t);
 
-  int r = s->cio->print("%s: %s\r\n", name, buf);
+  int r = STREAM_IO(s)->print("%s: %s\r\n", name, buf);
   if (r < 0) {
     ldout(s->cct, 0) << "ERROR: s->cio->print() returned err=" << r << dendl;
   }
@@ -512,7 +515,8 @@ void dump_time(struct req_state *s, const char *name, time_t *t)
   s->formatter->dump_string(name, buf);
 }
 
-void dump_owner(struct req_state *s, rgw_user& id, string& name, const char *section)
+void dump_owner(struct req_state *s, rgw_user& id, string& name,
+		const char *section)
 {
   if (!section)
     section = "Owner";
@@ -522,19 +526,21 @@ void dump_owner(struct req_state *s, rgw_user& id, string& name, const char *sec
   s->formatter->close_section();
 }
 
-void dump_access_control(struct req_state *s, const char *origin, const char *meth,
-                         const char *hdr, const char *exp_hdr, uint32_t max_age) {
+void dump_access_control(struct req_state *s, const char *origin,
+			 const char *meth,
+			 const char *hdr, const char *exp_hdr,
+			 uint32_t max_age) {
   if (origin && (origin[0] != '\0')) {
-    s->cio->print("Access-Control-Allow-Origin: %s\r\n", origin);
+    STREAM_IO(s)->print("Access-Control-Allow-Origin: %s\r\n", origin);
     if (meth && (meth[0] != '\0'))
-      s->cio->print("Access-Control-Allow-Methods: %s\r\n", meth);
+      STREAM_IO(s)->print("Access-Control-Allow-Methods: %s\r\n", meth);
     if (hdr && (hdr[0] != '\0'))
-      s->cio->print("Access-Control-Allow-Headers: %s\r\n", hdr);
+      STREAM_IO(s)->print("Access-Control-Allow-Headers: %s\r\n", hdr);
     if (exp_hdr && (exp_hdr[0] != '\0')) {
-      s->cio->print("Access-Control-Expose-Headers: %s\r\n", exp_hdr);
+      STREAM_IO(s)->print("Access-Control-Expose-Headers: %s\r\n", exp_hdr);
     }
     if (max_age != CORS_MAX_AGE_INVALID) {
-      s->cio->print("Access-Control-Max-Age: %d\r\n", max_age);
+      STREAM_IO(s)->print("Access-Control-Max-Age: %d\r\n", max_age);
     }
   }
 }
@@ -550,7 +556,8 @@ void dump_access_control(req_state *s, RGWOp *op)
   if (!op->generate_cors_headers(origin, method, header, exp_header, &max_age))
     return;
 
-  dump_access_control(s, origin.c_str(), method.c_str(), header.c_str(), exp_header.c_str(), max_age);
+  dump_access_control(s, origin.c_str(), method.c_str(), header.c_str(),
+		      exp_header.c_str(), max_age);
 }
 
 void dump_start(struct req_state *s)
@@ -564,15 +571,16 @@ void dump_start(struct req_state *s)
 void dump_trans_id(req_state *s)
 {
   if (s->prot_flags & RGW_REST_SWIFT) {
-    s->cio->print("X-Trans-Id: %s\r\n", s->trans_id.c_str());
+    STREAM_IO(s)->print("X-Trans-Id: %s\r\n", s->trans_id.c_str());
   }
   else {
-    s->cio->print("x-amz-request-id: %s\r\n", s->trans_id.c_str());
+    STREAM_IO(s)->print("x-amz-request-id: %s\r\n", s->trans_id.c_str());
   }
 }
 
-void end_header(struct req_state *s, RGWOp *op, const char *content_type, const int64_t proposed_content_length,
-		bool force_content_type, bool force_no_error)
+void end_header(struct req_state* s, RGWOp* op, const char *content_type,
+		const int64_t proposed_content_length, bool force_content_type,
+		bool force_no_error)
 {
   string ctype;
 
@@ -581,7 +589,7 @@ void end_header(struct req_state *s, RGWOp *op, const char *content_type, const 
   if ((!s->err.is_err()) &&
       (s->bucket_info.owner != s->user.user_id) &&
       (s->bucket_info.requester_pays)) {
-    s->cio->print("x-amz-request-charged: requester\r\n");
+    STREAM_IO(s)->print("x-amz-request-charged: requester\r\n");
   }
 
   if (op) {
@@ -594,7 +602,8 @@ void end_header(struct req_state *s, RGWOp *op, const char *content_type, const 
 
   /* do not send content type if content length is zero
      and the content type was not set by the user */
-  if (force_content_type || (!content_type &&  s->formatter->get_len()  != 0) || s->err.is_err()){
+  if (force_content_type ||
+      (!content_type &&  s->formatter->get_len()  != 0) || s->err.is_err()){
     switch (s->format) {
     case RGW_FORMAT_XML:
       ctype = "application/xml";
@@ -640,21 +649,24 @@ void end_header(struct req_state *s, RGWOp *op, const char *content_type, const 
 
   int r;
   if (content_type) {
-      r = s->cio->print("Content-Type: %s\r\n", content_type);
+      r = STREAM_IO(s)->print("Content-Type: %s\r\n", content_type);
       if (r < 0) {
-	ldout(s->cct, 0) << "ERROR: s->cio->print() returned err=" << r << dendl;
+	ldout(s->cct, 0) << "ERROR: STREAM_IO(s)->print() returned err=" << r
+			 << dendl;
       }
   }
-  r = s->cio->complete_header();
+  r = STREAM_IO(s)->complete_header();
   if (r < 0) {
-    ldout(s->cct, 0) << "ERROR: s->cio->complete_header() returned err=" << r << dendl;
+    ldout(s->cct, 0) << "ERROR: STREAM_IO(s)->complete_header() returned err="
+		     << r << dendl;
   }
 
-  s->cio->set_account(true);
+  STREAM_IO(s)->set_account(true);
   rgw_flush_formatter_and_reset(s, s->formatter);
 }
 
-void abort_early(struct req_state *s, RGWOp *op, int err_no, RGWHandler* handler)
+void abort_early(struct req_state *s, RGWOp *op, int err_no,
+		 RGWHandler* handler)
 {
   string error_content("");
   if (!s->formatter) {
@@ -666,12 +678,14 @@ void abort_early(struct req_state *s, RGWOp *op, int err_no, RGWHandler* handler
   if (op != NULL) {
     int new_err_no;
     new_err_no = op->error_handler(err_no, &error_content);
-    ldout(s->cct, 20) << "op->ERRORHANDLER: err_no=" << err_no << " new_err_no=" << new_err_no << dendl;
+    ldout(s->cct, 20) << "op->ERRORHANDLER: err_no=" << err_no
+		      << " new_err_no=" << new_err_no << dendl;
     err_no = new_err_no;
   } else if (handler != NULL) {
     int new_err_no;
     new_err_no = handler->error_handler(err_no, &error_content);
-    ldout(s->cct, 20) << "handler->ERRORHANDLER: err_no=" << err_no << " new_err_no=" << new_err_no << dendl;
+    ldout(s->cct, 20) << "handler->ERRORHANDLER: err_no=" << err_no
+		      << " new_err_no=" << new_err_no << dendl;
     err_no = new_err_no;
   }
   set_req_state_err(s, err_no);
@@ -700,17 +714,19 @@ void abort_early(struct req_state *s, RGWOp *op, int err_no, RGWHandler* handler
     }
   }
   if (!error_content.empty()) {
-    ldout(s->cct, 20) << "error_content is set, we need to serve it INSTEAD of firing the formatter" << dendl;
+    ldout(s->cct, 20) << "error_content is set, we need to serve it INSTEAD"
+      " of firing the formatter" << dendl;
     /*
      * FIXME we must add all error entries as headers here:
-     * when having a working errordoc, then the s3 error fields are rendered as HTTP headers, e.g.:
+     * when having a working errordoc, then the s3 error fields are
+     * rendered as HTTP headers, e.g.:
      *
      *   x-amz-error-code: NoSuchKey
      *   x-amz-error-message: The specified key does not exist.
      *   x-amz-error-detail-Key: foo
      */
     end_header(s, op, NULL, NO_CONTENT_LENGTH, false, true);
-    s->cio->write(error_content.c_str(), error_content.size());
+    STREAM_IO(s)->write(error_content.c_str(), error_content.size());
     s->formatter->reset();
   } else {
     end_header(s, op);
@@ -721,16 +737,19 @@ void abort_early(struct req_state *s, RGWOp *op, int err_no, RGWHandler* handler
 
 void dump_continue(struct req_state *s)
 {
-  s->cio->send_100_continue();
+  STREAM_IO(s)->send_100_continue();
 }
 
-void dump_range(struct req_state *s, uint64_t ofs, uint64_t end, uint64_t total)
+void dump_range(struct req_state *s, uint64_t ofs, uint64_t end,
+		uint64_t total)
 {
   char range_buf[128];
 
-  /* dumping range into temp buffer first, as libfcgi will fail to digest %lld */
-  snprintf(range_buf, sizeof(range_buf), "%lld-%lld/%lld", (long long)ofs, (long long)end, (long long)total);
-  int r = s->cio->print("Content-Range: bytes %s\r\n", range_buf);
+  /* dumping range into temp buffer first, as libfcgi will fail to digest
+   * %lld */
+  snprintf(range_buf, sizeof(range_buf), "%lld-%lld/%lld", (long long)ofs,
+	   (long long)end, (long long)total);
+  int r = STREAM_IO(s)->print("Content-Range: bytes %s\r\n", range_buf);
   if (r < 0) {
     ldout(s->cct, 0) << "ERROR: s->cio->print() returned err=" << r << dendl;
   }
@@ -747,7 +766,8 @@ int RGWGetObj_ObjStore::get_params()
   return 0;
 }
 
-int RESTArgs::get_string(struct req_state *s, const string& name, const string& def_val, string *val, bool *existed)
+int RESTArgs::get_string(struct req_state *s, const string& name,
+			 const string& def_val, string *val, bool *existed)
 {
   bool exists;
   *val = s->info.args.get(name, &exists);
@@ -763,7 +783,8 @@ int RESTArgs::get_string(struct req_state *s, const string& name, const string& 
   return 0;
 }
 
-int RESTArgs::get_uint64(struct req_state *s, const string& name, uint64_t def_val, uint64_t *val, bool *existed)
+int RESTArgs::get_uint64(struct req_state *s, const string& name,
+			 uint64_t def_val, uint64_t *val, bool *existed)
 {
   bool exists;
   string sval = s->info.args.get(name, &exists);
@@ -783,7 +804,8 @@ int RESTArgs::get_uint64(struct req_state *s, const string& name, uint64_t def_v
   return 0;
 }
 
-int RESTArgs::get_int64(struct req_state *s, const string& name, int64_t def_val, int64_t *val, bool *existed)
+int RESTArgs::get_int64(struct req_state *s, const string& name,
+			int64_t def_val, int64_t *val, bool *existed)
 {
   bool exists;
   string sval = s->info.args.get(name, &exists);
@@ -803,7 +825,8 @@ int RESTArgs::get_int64(struct req_state *s, const string& name, int64_t def_val
   return 0;
 }
 
-int RESTArgs::get_uint32(struct req_state *s, const string& name, uint32_t def_val, uint32_t *val, bool *existed)
+int RESTArgs::get_uint32(struct req_state *s, const string& name,
+			 uint32_t def_val, uint32_t *val, bool *existed)
 {
   bool exists;
   string sval = s->info.args.get(name, &exists);
@@ -823,7 +846,8 @@ int RESTArgs::get_uint32(struct req_state *s, const string& name, uint32_t def_v
   return 0;
 }
 
-int RESTArgs::get_int32(struct req_state *s, const string& name, int32_t def_val, int32_t *val, bool *existed)
+int RESTArgs::get_int32(struct req_state *s, const string& name,
+			int32_t def_val, int32_t *val, bool *existed)
 {
   bool exists;
   string sval = s->info.args.get(name, &exists);
@@ -843,7 +867,8 @@ int RESTArgs::get_int32(struct req_state *s, const string& name, int32_t def_val
   return 0;
 }
 
-int RESTArgs::get_time(struct req_state *s, const string& name, const utime_t& def_val, utime_t *val, bool *existed)
+int RESTArgs::get_time(struct req_state *s, const string& name,
+		       const utime_t& def_val, utime_t *val, bool *existed)
 {
   bool exists;
   string sval = s->info.args.get(name, &exists);
@@ -970,7 +995,7 @@ int RGWPutObj_ObjStore::get_data(bufferlist& bl)
     bufferptr bp(cl);
 
     int read_len; /* cio->read() expects int * */
-    int r = s->cio->read(bp.c_str(), cl, &read_len);
+    int r = STREAM_IO(s)->read(bp.c_str(), cl, &read_len);
     len = read_len;
     if (r < 0)
       return r;
@@ -1015,7 +1040,7 @@ int RGWPutACLs_ObjStore::get_params()
        return op_ret;
     }
     int read_len;
-    int r = s->cio->read(data, cl, &read_len);
+    int r = STREAM_IO(s)->read(data, cl, &read_len);
     len = read_len;
     if (r < 0)
       return r;
@@ -1027,7 +1052,8 @@ int RGWPutACLs_ObjStore::get_params()
   return op_ret;
 }
 
-static int read_all_chunked_input(req_state *s, char **pdata, int *plen, int max_read)
+static int read_all_chunked_input(req_state *s, char **pdata, int *plen,
+				  int max_read)
 {
 #define READ_CHUNK 4096
 #define MAX_READ_CHUNK (128 * 1024)
@@ -1039,7 +1065,7 @@ static int read_all_chunked_input(req_state *s, char **pdata, int *plen, int max
 
   int read_len = 0, len = 0;
   do {
-    int r = s->cio->read(data + len, need_to_read, &read_len);
+    int r = STREAM_IO(s)->read(data + len, need_to_read, &read_len);
     if (r < 0) {
       free(data);
       return r;
@@ -1052,15 +1078,15 @@ static int read_all_chunked_input(req_state *s, char **pdata, int *plen, int max
 	need_to_read *= 2;
 
       if (total > max_read) {
-        free(data);
-        return -ERANGE;
+	free(data);
+	return -ERANGE;
       }
       total += need_to_read;
 
       void *p = realloc(data, total + 1);
       if (!p) {
-        free(data);
-        return -ENOMEM;
+	free(data);
+	return -ENOMEM;
       }
       data = (char *)p;
     } else {
@@ -1076,7 +1102,8 @@ static int read_all_chunked_input(req_state *s, char **pdata, int *plen, int max
   return 0;
 }
 
-int rgw_rest_read_all_input(struct req_state *s, char **pdata, int *plen, int max_len)
+int rgw_rest_read_all_input(struct req_state *s, char **pdata, int *plen,
+			    int max_len)
 {
   size_t cl = 0;
   int len = 0;
@@ -1092,7 +1119,7 @@ int rgw_rest_read_all_input(struct req_state *s, char **pdata, int *plen, int ma
     if (!data) {
        return -ENOMEM;
     }
-    int ret = s->cio->read(data, cl, &len);
+    int ret = STREAM_IO(s)->read(data, cl, &len);
     if (ret < 0) {
       free(data);
       return ret;
@@ -1113,7 +1140,6 @@ int rgw_rest_read_all_input(struct req_state *s, char **pdata, int *plen, int ma
 
   return 0;
 }
-
 
 int RGWCompleteMultipart_ObjStore::get_params()
 {
@@ -1198,7 +1224,7 @@ int RGWDeleteMultiObj_ObjStore::get_params()
       return op_ret;
     }
     int read_len;
-    op_ret = s->cio->read(data, cl, &read_len);
+    op_ret = STREAM_IO(s)->read(data, cl, &read_len);
     len = read_len;
     if (op_ret < 0)
       return op_ret;
@@ -1226,8 +1252,9 @@ int RGWRESTOp::verify_permission()
   return check_caps(s->user.caps);
 }
 
-
-int RGWHandler_ObjStore::allocate_formatter(struct req_state *s, int default_type, bool configurable)
+int RGWHandler_ObjStore::allocate_formatter(struct req_state *s,
+					    int default_type,
+					    bool configurable)
 {
   s->format = default_type;
   if (configurable) {
@@ -1498,11 +1525,12 @@ static int64_t parse_content_length(const char *content_length)
 
   return len;
 }
-int RGWREST::preprocess(struct req_state *s, RGWClientIO *cio)
+
+int RGWREST::preprocess(struct req_state *s, RGWStreamIO *sio)
 {
   req_info& info = s->info;
 
-  s->cio = cio;
+  s->cio = sio;
   if (info.host.size()) {
     ldout(s->cct, 10) << "host=" << info.host << dendl;
     string domain;
@@ -1531,27 +1559,37 @@ int RGWREST::preprocess(struct req_state *s, RGWClientIO *cio)
       << " in_hosted_domain_s3website=" << in_hosted_domain_s3website 
       << dendl;
 
-    if (g_conf->rgw_resolve_cname && !in_hosted_domain && !in_hosted_domain_s3website) {
+    if (g_conf->rgw_resolve_cname
+	&& !in_hosted_domain
+	&& !in_hosted_domain_s3website) {
       string cname;
       bool found;
       int r = rgw_resolver->resolve_cname(info.host, cname, &found);
       if (r < 0) {
-        ldout(s->cct, 0) << "WARNING: rgw_resolver->resolve_cname() returned r=" << r << dendl;
+	ldout(s->cct, 0)
+	  << "WARNING: rgw_resolver->resolve_cname() returned r=" << r
+	  << dendl;
       }
 
       if (found) {
-        ldout(s->cct, 5) << "resolved host cname " << info.host << " -> "
+	ldout(s->cct, 5) << "resolved host cname " << info.host << " -> "
 			 << cname << dendl;
-        in_hosted_domain = rgw_find_host_in_domains(cname, &domain, &subdomain, hostnames_set);
+	in_hosted_domain =
+	  rgw_find_host_in_domains(cname, &domain, &subdomain, hostnames_set);
 
-        if (s3website_enabled && !in_hosted_domain_s3website) {
-            in_hosted_domain_s3website = rgw_find_host_in_domains(cname, &s3website_domain, &s3website_subdomain, hostnames_s3website_set);
-	    if (in_hosted_domain_s3website) {
-	      in_hosted_domain = true; // TODO: should hostnames be a strict superset of hostnames_s3website?
-	      domain = s3website_domain;
-	      subdomain = s3website_subdomain;
-	      s->prot_flags |= RGW_REST_WEBSITE;
-	    }
+        if (s3website_enabled
+	    && !in_hosted_domain_s3website) {
+	  in_hosted_domain_s3website =
+	    rgw_find_host_in_domains(cname, &s3website_domain,
+				     &s3website_subdomain,
+				     hostnames_s3website_set);
+	  if (in_hosted_domain_s3website) {
+	    in_hosted_domain = true; // TODO: should hostnames be a
+				     // strict superset of hostnames_s3website?
+	    domain = s3website_domain;
+	    subdomain = s3website_subdomain;
+	    s->prot_flags |= RGW_REST_WEBSITE;
+	  }
         }
 
         ldout(s->cct, 20)
@@ -1594,7 +1632,7 @@ int RGWREST::preprocess(struct req_state *s, RGWClientIO *cio)
    * Ergo if we are in Authorizer role, we MUST look at HTTP_CONTENT_LENGTH
    * instead of CONTENT_LENGTH for the Content-Length.
    *
-   * There is one slight wrinkle in this, and that's older versions of 
+   * There is one slight wrinkle in this, and that's older versions of
    * nginx/lighttpd/apache setting BOTH headers. As a result, we have to check
    * both headers and can't always simply pick A or B.
    */
@@ -1603,7 +1641,8 @@ int RGWREST::preprocess(struct req_state *s, RGWClientIO *cio)
   if (!http_content_length != !content_length) {
     /* Easy case: one or the other is missing */
     s->length = (content_length ? content_length : http_content_length);
-  } else if (s->cct->_conf->rgw_content_length_compat && content_length && http_content_length) {
+  } else if (s->cct->_conf->rgw_content_length_compat &&
+	     content_length && http_content_length) {
     /* Hard case: Both are set, we have to disambiguate */
     int64_t content_length_i, http_content_length_i;
 
@@ -1626,13 +1665,13 @@ int RGWREST::preprocess(struct req_state *s, RGWClientIO *cio)
       }
     }
     s->length = content_length;
-    // End of: else if (s->cct->_conf->rgw_content_length_compat && content_length &&
+    // End of: else if (s->cct->_conf->rgw_content_length_compat &&
+    //   content_length &&
     // http_content_length)
   } else {
     /* no content length was defined */
     s->length = NULL;
   }
-
 
   if (s->length) {
     if (*s->length == '\0') {
@@ -1641,8 +1680,8 @@ int RGWREST::preprocess(struct req_state *s, RGWClientIO *cio)
       string err;
       s->content_length = strict_strtoll(s->length, 10, &err);
       if (!err.empty()) {
-        ldout(s->cct, 10) << "bad content length, aborting" << dendl;
-        return -EINVAL;
+	ldout(s->cct, 10) << "bad content length, aborting" << dendl;
+	return -EINVAL;
       }
     }
   }
@@ -1653,7 +1692,8 @@ int RGWREST::preprocess(struct req_state *s, RGWClientIO *cio)
   }
 
   map<string, string>::iterator giter;
-  for (giter = generic_attrs_map.begin(); giter != generic_attrs_map.end(); ++giter) {
+  for (giter = generic_attrs_map.begin(); giter != generic_attrs_map.end();
+       ++giter) {
     const char *env = info.env->get(giter->first.c_str());
     if (env) {
       s->generic_attrs[giter->second] = env;
@@ -1673,12 +1713,13 @@ int RGWREST::preprocess(struct req_state *s, RGWClientIO *cio)
   return 0;
 }
 
-RGWHandler *RGWREST::get_handler(RGWRados *store, struct req_state *s, RGWClientIO *cio,
-				 RGWRESTMgr **pmgr, int *init_error)
+RGWHandler *RGWREST::get_handler(RGWRados *store, struct req_state *s,
+				 RGWStreamIO *sio, RGWRESTMgr **pmgr,
+				 int *init_error)
 {
   RGWHandler *handler;
 
-  *init_error = preprocess(s, cio);
+  *init_error = preprocess(s, sio);
   if (*init_error < 0)
     return NULL;
 
@@ -1696,12 +1737,47 @@ RGWHandler *RGWREST::get_handler(RGWRados *store, struct req_state *s, RGWClient
     *init_error = -ERR_METHOD_NOT_ALLOWED;
     return NULL;
   }
-  *init_error = handler->init(store, s, cio);
+  *init_error = handler->init(store, s, sio);
   if (*init_error < 0) {
     m->put_handler(handler);
     return NULL;
   }
 
   return handler;
-}
+} /* get stream handler */
+
+RGWHandler *RGWREST::get_handler(RGWRados *store, struct req_state *s,
+				 RGWLibIO *io, RGWRESTMgr **pmgr,
+				 int *init_error)
+{
+  RGWHandler *handler = nullptr;
+
+#if 0 /* XXXX */
+  *init_error = preprocess(s, io);
+  if (*init_error < 0)
+    return NULL;
+
+  RGWRESTMgr *m = mgr.get_resource_mgr(s, s->decoded_uri, &s->relative_uri);
+  if (!m) {
+    *init_error = -ERR_METHOD_NOT_ALLOWED;
+    return NULL;
+  }
+
+  if (pmgr)
+    *pmgr = m;
+
+  handler = m->get_handler(s);
+  if (!handler) {
+    *init_error = -ERR_METHOD_NOT_ALLOWED;
+    return NULL;
+  }
+  *init_error = handler->init(store, s, io);
+  if (*init_error < 0) {
+    m->put_handler(handler);
+    return NULL;
+  }
+#endif
+  return handler;
+} /* get direct handler */
+
 

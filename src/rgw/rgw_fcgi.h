@@ -14,8 +14,7 @@
 
 struct FCGX_Request;
 
-
-class RGWFCGX : public RGWClientIO
+class RGWFCGX : public RGWStreamIO
 {
   FCGX_Request *fcgx;
 
@@ -35,6 +34,5 @@ public:
   explicit RGWFCGX(FCGX_Request *_fcgx) : fcgx(_fcgx), status_num(0) {}
   void flush();
 };
-
 
 #endif
