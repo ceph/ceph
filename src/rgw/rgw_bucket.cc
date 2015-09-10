@@ -126,7 +126,6 @@ int rgw_bucket_sync_user_stats(RGWRados *store, const string& tenant_name, const
 int rgw_link_bucket(RGWRados *store, const rgw_user& user_id, rgw_bucket& bucket, time_t creation_time, bool update_entrypoint)
 {
   int ret;
-  // XXX Actually, should we use user_id.tenant when creating bucket?
   string& tenant_name = bucket.tenant;
   string& bucket_name = bucket.name;
 
