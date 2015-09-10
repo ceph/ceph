@@ -2645,8 +2645,7 @@ def _check_osd_status(cluster, osd_id):
                 [
                     'ceph',
                     'osd',
-                    'find',
-                    osd_id,
+                    'dump',
                     '--cluster={cluster}'.format(
                         cluster=cluster,
                         ),
@@ -2657,9 +2656,9 @@ def _check_osd_status(cluster, osd_id):
     except subprocess.CalledProcessError as e:
         raise Error(e)
     out_json = json.loads(out)
-    if out_json['status IN/OUT'] == u'IN':
+    if out_json[u'osds'][int(osd_id)][u'in'] is 1:
         status_code += 2
-    if out_json['status UP/DOWN'] == u'UP':
+    if out_json[u'osds'][int(osd_id)][u'up'] is 1:
         status_code += 1
     return status_code
 
