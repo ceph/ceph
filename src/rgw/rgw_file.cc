@@ -308,15 +308,17 @@ int rgw_readdir(struct rgw_fs *rgw_fs,
 
   if (is_root(uri)) {
     /* get the bucket list */
-    string marker; // XXX need to match offset
+    string start; // XXX need to match offset
+    string end; // XXX need to match offset
     uint64_t nread, bucket_count, bucket_objcount;
     RGWUserBuckets buckets;
     uint64_t max_buckets = cct->_conf->rgw_list_buckets_max_chunk;
 
     /* XXX check offsets */
     uint64_t ix = 3;
-    rc = rgw_read_user_buckets(store, rgw_fs->user_id, buckets, marker,
-			       max_buckets, true);
+    rgw_user uid(rgw_fs->user_id);
+    rc = rgw_read_user_buckets(store, uid, buckets, start, end, max_buckets,
+			       true);
     if (rc < 0) {
       ldout(cct, 10) << "WARNING: failed on rgw_get_user_buckets uid="
 		     << rgw_fs->user_id << dendl;
@@ -328,7 +330,7 @@ int rgw_readdir(struct rgw_fs *rgw_fs,
       for (auto& ib : m) {
 	RGWBucketEnt& bent = ib.second;
 	bucket_objcount += bent.count;
-	marker = ib.first;
+	start = ib.first;
 	(void) rcb(bent.bucket.name.c_str(), cb_arg, ix++);
       }
       bucket_count += m.size();

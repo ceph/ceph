@@ -51,37 +51,39 @@ int RGWListBuckets_ObjStore_SWIFT::get_params()
 }
 
 static void dump_account_metadata(struct req_state * const s,
-                                  const uint32_t buckets_count,
-                                  const uint64_t buckets_object_count,
-                                  const uint64_t buckets_size,
-                                  const uint64_t buckets_size_rounded,
-                                  map<string, bufferlist>& attrs)
+				  const uint32_t buckets_count,
+				  const uint64_t buckets_object_count,
+				  const uint64_t buckets_size,
+				  const uint64_t buckets_size_rounded,
+				  map<string, bufferlist>& attrs)
 {
   char buf[32];
   utime_t now = ceph_clock_now(g_ceph_context);
   snprintf(buf, sizeof(buf), "%0.5f", (double)now);
   /* Adding X-Timestamp to keep align with Swift API */
-  s->cio->print("X-Timestamp: %s\r\n", buf);
+  STREAM_IO(s)->print("X-Timestamp: %s\r\n", buf);
   snprintf(buf, sizeof(buf), "%lld", (long long)buckets_count);
-  s->cio->print("X-Account-Container-Count: %s\r\n", buf);
+  STREAM_IO(s)->print("X-Account-Container-Count: %s\r\n", buf);
   snprintf(buf, sizeof(buf), "%lld", (long long)buckets_object_count);
-  s->cio->print("X-Account-Object-Count: %s\r\n", buf);
+  STREAM_IO(s)->print("X-Account-Object-Count: %s\r\n", buf);
   snprintf(buf, sizeof(buf), "%lld", (long long)buckets_size);
-  s->cio->print("X-Account-Bytes-Used: %s\r\n", buf);
+  STREAM_IO(s)->print("X-Account-Bytes-Used: %s\r\n", buf);
   snprintf(buf, sizeof(buf), "%lld", (long long)buckets_size_rounded);
-  s->cio->print("X-Account-Bytes-Used-Actual: %s\r\n", buf);
+  STREAM_IO(s)->print("X-Account-Bytes-Used-Actual: %s\r\n", buf);
 
   /* Dump TempURL-related stuff */
   if (s->perm_mask == RGW_PERM_FULL_CONTROL) {
     map<int, string>::iterator iter;
     iter = s->user.temp_url_keys.find(0);
     if (iter != s->user.temp_url_keys.end() && !iter->second.empty()) {
-      s->cio->print("X-Account-Meta-Temp-Url-Key: %s\r\n", iter->second.c_str());
+      STREAM_IO(s)->print("X-Account-Meta-Temp-Url-Key: %s\r\n",
+			  iter->second.c_str());
     }
 
     iter = s->user.temp_url_keys.find(1);
     if (iter != s->user.temp_url_keys.end() && !iter->second.empty()) {
-      s->cio->print("X-Account-Meta-Temp-Url-Key-2: %s\r\n", iter->second.c_str());
+      STREAM_IO(s)->print("X-Account-Meta-Temp-Url-Key-2: %s\r\n",
+			  iter->second.c_str());
     }
   }
 
@@ -93,9 +95,11 @@ static void dump_account_metadata(struct req_state * const s,
     map<string, string>::const_iterator geniter = rgw_to_http_attrs.find(name);
 
     if (geniter != rgw_to_http_attrs.end()) {
-      s->cio->print("%s: %s\r\n", geniter->second.c_str(), iter->second.c_str());
+      STREAM_IO(s)->print("%s: %s\r\n", geniter->second.c_str(),
+			  iter->second.c_str());
     } else if (strncmp(name, RGW_ATTR_META_PREFIX, PREFIX_LEN) == 0) {
-      s->cio->print("X-Account-Meta-%s: %s\r\n", name + PREFIX_LEN, iter->second.c_str());
+      STREAM_IO(s)->print("X-Account-Meta-%s: %s\r\n", name + PREFIX_LEN,
+			  iter->second.c_str());
     }
   }
 }
@@ -319,27 +323,30 @@ static void dump_container_metadata(struct req_state *s, RGWBucketEnt& bucket)
 {
   char buf[32];
   /* Adding X-Timestamp to keep align with Swift API */
-  snprintf(buf, sizeof(buf), "%lld.00000", (long long)s->bucket_info.creation_time);
-  s->cio->print("X-Timestamp: %s\r\n", buf);
+  snprintf(buf, sizeof(buf), "%lld.00000",
+	   (long long)s->bucket_info.creation_time);
+  STREAM_IO(s)->print("X-Timestamp: %s\r\n", buf);
   snprintf(buf, sizeof(buf), "%lld", (long long)bucket.count);
-  s->cio->print("X-Container-Object-Count: %s\r\n", buf);
+  STREAM_IO(s)->print("X-Container-Object-Count: %s\r\n", buf);
   snprintf(buf, sizeof(buf), "%lld", (long long)bucket.size);
-  s->cio->print("X-Container-Bytes-Used: %s\r\n", buf);
+  STREAM_IO(s)->print("X-Container-Bytes-Used: %s\r\n", buf);
   snprintf(buf, sizeof(buf), "%lld", (long long)bucket.size_rounded);
-  s->cio->print("X-Container-Bytes-Used-Actual: %s\r\n", buf);
+  STREAM_IO(s)->print("X-Container-Bytes-Used-Actual: %s\r\n", buf);
 
   if (s->object.empty()) {
-    RGWAccessControlPolicy_SWIFT *swift_policy = static_cast<RGWAccessControlPolicy_SWIFT *>(s->bucket_acl);
+    RGWAccessControlPolicy_SWIFT *swift_policy
+      = static_cast<RGWAccessControlPolicy_SWIFT *>(s->bucket_acl);
     string read_acl, write_acl;
     swift_policy->to_str(read_acl, write_acl);
     if (read_acl.size()) {
-      s->cio->print("X-Container-Read: %s\r\n", read_acl.c_str());
+      STREAM_IO(s)->print("X-Container-Read: %s\r\n", read_acl.c_str());
     }
     if (write_acl.size()) {
-      s->cio->print("X-Container-Write: %s\r\n", write_acl.c_str());
+      STREAM_IO(s)->print("X-Container-Write: %s\r\n", write_acl.c_str());
     }
     if (!s->bucket_info.placement_rule.empty()) {
-      s->cio->print("X-Storage-Policy: %s\r\n", s->bucket_info.placement_rule.c_str());
+      STREAM_IO(s)->print("X-Storage-Policy: %s\r\n",
+			  s->bucket_info.placement_rule.c_str());
     }
 
     /* Dump user-defined metadata items and generic attrs. */
@@ -352,9 +359,11 @@ static void dump_container_metadata(struct req_state *s, RGWBucketEnt& bucket)
       map<string, string>::const_iterator geniter = rgw_to_http_attrs.find(name);
 
       if (geniter != rgw_to_http_attrs.end()) {
-        s->cio->print("%s: %s\r\n", geniter->second.c_str(), iter->second.c_str());
+        STREAM_IO(s)->print("%s: %s\r\n", geniter->second.c_str(),
+			    iter->second.c_str());
       } else if (strncmp(name, RGW_ATTR_META_PREFIX, PREFIX_LEN) == 0) {
-        s->cio->print("X-Container-Meta-%s: %s\r\n", name + PREFIX_LEN, iter->second.c_str());
+        STREAM_IO(s)->print("X-Container-Meta-%s: %s\r\n", name + PREFIX_LEN,
+			    iter->second.c_str());
       }
     }
   }
@@ -548,10 +557,10 @@ int RGWPutObj_ObjStore_SWIFT::get_params()
     if (suffix) {
       suffix++;
       if (*suffix) {
-        string suffix_str(suffix);
+	string suffix_str(suffix);
 	const char *mime = rgw_find_mime_by_ext(suffix_str);
 	if (mime) {
-          s->generic_attrs[RGW_ATTR_CONTENT_TYPE] = mime;
+	  s->generic_attrs[RGW_ATTR_CONTENT_TYPE] = mime;
 	}
       }
     }
@@ -621,9 +630,9 @@ void RGWPutObj_ObjStore_SWIFT::send_response()
 #define CONT_PUT_ATTR_PREFIX        "HTTP_X_CONTAINER_META_"
 
 static void get_rmattrs_from_headers(const req_state * const s,
-                                     const char * const put_prefix,
-                                     const char * const del_prefix,
-                                     set<string>& rmattr_names)
+				     const char * const put_prefix,
+				     const char * const del_prefix,
+				     set<string>& rmattr_names)
 {
   map<string, string, ltstr_nocase>& m = s->info.env->get_map();
   map<string, string, ltstr_nocase>::const_iterator iter;
@@ -638,7 +647,7 @@ static void get_rmattrs_from_headers(const req_state * const s,
       /* Explicitly requested removal. */
       prefix_len = del_prefix_len;
     } else if ((strncasecmp(p, put_prefix, put_prefix_len) == 0)
-        && iter->second.empty()) {
+	       && iter->second.empty()) {
       /* Removal requested by putting an empty value. */
       prefix_len = put_prefix_len;
     }
@@ -657,7 +666,8 @@ int RGWPutMetadataAccount_ObjStore_SWIFT::get_params()
     return -EINVAL;
   }
 
-  get_rmattrs_from_headers(s, ACCT_PUT_ATTR_PREFIX, ACCT_REMOVE_ATTR_PREFIX, rmattr_names);
+  get_rmattrs_from_headers(s, ACCT_PUT_ATTR_PREFIX, ACCT_REMOVE_ATTR_PREFIX,
+			   rmattr_names);
   return 0;
 }
 
@@ -678,12 +688,14 @@ int RGWPutMetadataBucket_ObjStore_SWIFT::get_params()
     return -EINVAL;
   }
 
-  int r = get_swift_container_settings(s, store, &policy, &has_policy, &cors_config, &has_cors);
+  int r = get_swift_container_settings(s, store, &policy, &has_policy,
+				       &cors_config, &has_cors);
   if (r < 0) {
     return r;
   }
 
-  get_rmattrs_from_headers(s, CONT_PUT_ATTR_PREFIX, CONT_REMOVE_ATTR_PREFIX, rmattr_names);
+  get_rmattrs_from_headers(s, CONT_PUT_ATTR_PREFIX, CONT_REMOVE_ATTR_PREFIX,
+			   rmattr_names);
   placement_rule = s->info.env->get("HTTP_X_STORAGE_POLICY", "");
   return 0;
 }
@@ -836,7 +848,7 @@ void RGWDeleteObj_ObjStore_SWIFT::send_response()
 }
 
 static void get_contype_from_attrs(map<string, bufferlist>& attrs,
-                                   string& content_type)
+				   string& content_type)
 {
   map<string, bufferlist>::iterator iter = attrs.find(RGW_ATTR_CONTENT_TYPE);
   if (iter != attrs.end()) {
@@ -845,7 +857,7 @@ static void get_contype_from_attrs(map<string, bufferlist>& attrs,
 }
 
 static void dump_object_metadata(struct req_state * const s,
-                                 map<string, bufferlist> attrs)
+				 map<string, bufferlist> attrs)
 {
   map<string, string> response_attrs;
   map<string, string>::const_iterator riter;
@@ -857,14 +869,18 @@ static void dump_object_metadata(struct req_state * const s,
 
     if (aiter != rgw_to_http_attrs.end()) {
       response_attrs[aiter->second] = iter->second.c_str();
-    } else if (strncmp(name, RGW_ATTR_META_PREFIX, sizeof(RGW_ATTR_META_PREFIX)-1) == 0) {
+    } else if (strncmp(name, RGW_ATTR_META_PREFIX,
+		       sizeof(RGW_ATTR_META_PREFIX)-1) == 0) {
       name += sizeof(RGW_ATTR_META_PREFIX) - 1;
-      s->cio->print("X-Object-Meta-%s: %s\r\n", name, iter->second.c_str());
+      STREAM_IO(s)->print("X-Object-Meta-%s: %s\r\n",
+			  name, iter->second.c_str());
     }
   }
 
-  for (riter = response_attrs.begin(); riter != response_attrs.end(); ++riter) {
-    s->cio->print("%s: %s\r\n", riter->first.c_str(), riter->second.c_str());
+  for (riter = response_attrs.begin(); riter != response_attrs.end();
+       ++riter) {
+    STREAM_IO(s)->print("%s: %s\r\n", riter->first.c_str(),
+			riter->second.c_str());
   }
 
   iter = attrs.find(RGW_ATTR_DELETE_AT);
@@ -872,9 +888,10 @@ static void dump_object_metadata(struct req_state * const s,
     utime_t delete_at;
     try {
       ::decode(delete_at, iter->second);
-      s->cio->print("X-Delete-At: %lu\r\n", delete_at.sec());
+      STREAM_IO(s)->print("X-Delete-At: %lu\r\n", delete_at.sec());
     } catch (buffer::error& err) {
-      dout(0) << "ERROR: cannot decode object's " RGW_ATTR_DELETE_AT " attr, ignoring" << dendl;
+      dout(0) << "ERROR: cannot decode object's " RGW_ATTR_DELETE_AT
+	" attr, ignoring" << dendl;
     }
   }
 }
@@ -944,12 +961,13 @@ void RGWCopyObj_ObjStore_SWIFT::dump_copy_info()
   string objname, bucketname;
   url_encode(src_object.name, objname);
   url_encode(src_bucket.name, bucketname);
-  s->cio->print("X-Copied-From: %s/%s\r\n", bucketname.c_str(), objname.c_str());
+  STREAM_IO(s)->print("X-Copied-From: %s/%s\r\n", bucketname.c_str(),
+		      objname.c_str());
 
   /* Dump X-Copied-From-Account */
   string account_name;
   url_encode(s->user.user_id.id, account_name); // XXX tenant
-  s->cio->print("X-Copied-From-Account: %s\r\n", account_name.c_str());
+  STREAM_IO(s)->print("X-Copied-From-Account: %s\r\n", account_name.c_str());
 
   /* Dump X-Copied-From-Last-Modified. */
   dump_time_header(s, "X-Copied-From-Last-Modified", src_mtime);
@@ -968,7 +986,8 @@ void RGWCopyObj_ObjStore_SWIFT::send_response()
     dump_copy_info();
     get_contype_from_attrs(attrs, content_type);
     dump_object_metadata(s, attrs);
-    end_header(s, this, !content_type.empty() ? content_type.c_str() : "binary/octet-stream");
+    end_header(s, this, !content_type.empty() ? content_type.c_str()
+	       : "binary/octet-stream");
   } else {
     s->formatter->close_section();
     rgw_flush_formatter(s, s->formatter);
@@ -989,7 +1008,8 @@ int RGWGetObj_ObjStore_SWIFT::send_response_data_error()
   return send_response_data(bl, 0, 0);
 }
 
-int RGWGetObj_ObjStore_SWIFT::send_response_data(bufferlist& bl, off_t bl_ofs, off_t bl_len)
+int RGWGetObj_ObjStore_SWIFT::send_response_data(bufferlist& bl, off_t bl_ofs,
+						 off_t bl_len)
 {
   string content_type;
 
@@ -997,8 +1017,8 @@ int RGWGetObj_ObjStore_SWIFT::send_response_data(bufferlist& bl, off_t bl_ofs, o
     goto send_data;
   }
 
-  set_req_state_err(s, (partial_content && !op_ret) ? STATUS_PARTIAL_CONTENT :
-		    op_ret);
+  set_req_state_err(s, (partial_content && !op_ret) ? STATUS_PARTIAL_CONTENT
+		    : op_ret);
   dump_errno(s);
   if (s->err.is_err()) {
     end_header(s, NULL);
@@ -1011,9 +1031,9 @@ int RGWGetObj_ObjStore_SWIFT::send_response_data(bufferlist& bl, off_t bl_ofs, o
 
   dump_content_length(s, total_len);
   dump_last_modified(s, lastmod);
-  s->cio->print("X-Timestamp: %lld.00000\r\n", (long long)lastmod);
+  STREAM_IO(s)->print("X-Timestamp: %lld.00000\r\n", (long long)lastmod);
   if (is_slo) {
-    s->cio->print("X-Static-Large-Object: True\r\n");
+    STREAM_IO(s)->print("X-Static-Large-Object: True\r\n");
   }
 
   if (! op_ret) {
@@ -1021,8 +1041,8 @@ int RGWGetObj_ObjStore_SWIFT::send_response_data(bufferlist& bl, off_t bl_ofs, o
     if (iter != attrs.end()) {
       bufferlist& bl = iter->second;
       if (bl.length()) {
-        char *etag = bl.c_str();
-        dump_etag(s, etag);
+	char *etag = bl.c_str();
+	dump_etag(s, etag);
       }
     }
 
@@ -1030,13 +1050,14 @@ int RGWGetObj_ObjStore_SWIFT::send_response_data(bufferlist& bl, off_t bl_ofs, o
     dump_object_metadata(s, attrs);
   }
 
-  end_header(s, this, !content_type.empty() ? content_type.c_str() : "binary/octet-stream");
+  end_header(s, this, !content_type.empty() ? content_type.c_str()
+	     : "binary/octet-stream");
 
   sent_header = true;
 
 send_data:
   if (get_data && !op_ret) {
-    int r = s->cio->write(bl.c_str() + bl_ofs, bl_len);
+    int r = STREAM_IO(s)->write(bl.c_str() + bl_ofs, bl_len);
     if (r < 0)
       return r;
   }
@@ -1062,16 +1083,18 @@ void RGWOptionsCORS_ObjStore_SWIFT::send_response()
   }
   get_response_params(hdrs, exp_hdrs, &max_age);
   dump_errno(s);
-  dump_access_control(s, origin, req_meth, hdrs.c_str(), exp_hdrs.c_str(), max_age);
+  dump_access_control(s, origin, req_meth, hdrs.c_str(), exp_hdrs.c_str(),
+		      max_age);
   end_header(s, NULL);
 }
 
-int RGWBulkDelete_ObjStore_SWIFT::get_data(list<RGWBulkDelete::acct_path_t>& items,
-                                           bool * const is_truncated)
+int RGWBulkDelete_ObjStore_SWIFT::get_data(
+  list<RGWBulkDelete::acct_path_t>& items, bool * const is_truncated)
 {
-  const size_t MAX_LINE_SIZE = 2048;
+  constexpr size_t MAX_LINE_SIZE = 2048;
 
-  RGWClientIOStreamBuf ciosb(*s->cio, (size_t)s->cct->_conf->rgw_max_chunk_size);
+  RGWClientIOStreamBuf ciosb(static_cast<RGWStreamIO&>(*(s->cio)),
+			     std::size_t(s->cct->_conf->rgw_max_chunk_size));
   istream cioin(&ciosb);
 
   char buf[MAX_LINE_SIZE];
@@ -1453,7 +1476,8 @@ int RGWHandler_ObjStore_SWIFT::init_from_header(struct req_state *s)
   return 0;
 }
 
-int RGWHandler_ObjStore_SWIFT::init(RGWRados *store, struct req_state *s, RGWClientIO *cio)
+int RGWHandler_ObjStore_SWIFT::init(RGWRados *store, struct req_state *s,
+				    RGWClientIO *cio)
 {
   struct req_init_state *t = &s->init_state;
 
@@ -1461,9 +1485,10 @@ int RGWHandler_ObjStore_SWIFT::init(RGWRados *store, struct req_state *s, RGWCli
 
   const char *copy_source = s->info.env->get("HTTP_X_COPY_FROM");
   if (copy_source) {
-    bool result = RGWCopyObj::parse_copy_location(copy_source, t->src_bucket, s->src_object);
+    bool result = RGWCopyObj::parse_copy_location(copy_source, t->src_bucket,
+						  s->src_object);
     if (!result)
-       return -ERR_BAD_URL;
+      return -ERR_BAD_URL;
   }
 
   if (s->op == OP_COPY) {
@@ -1473,7 +1498,9 @@ int RGWHandler_ObjStore_SWIFT::init(RGWRados *store, struct req_state *s, RGWCli
 
     string dest_bucket_name;
     rgw_obj_key dest_obj_key;
-    bool result = RGWCopyObj::parse_copy_location(req_dest, dest_bucket_name, dest_obj_key);
+    bool result =
+      RGWCopyObj::parse_copy_location(req_dest, dest_bucket_name,
+				      dest_obj_key);
     if (!result)
        return -ERR_BAD_URL;
 
@@ -1489,7 +1516,6 @@ int RGWHandler_ObjStore_SWIFT::init(RGWRados *store, struct req_state *s, RGWCli
 
   return RGWHandler_ObjStore::init(store, s, cio);
 }
-
 
 RGWHandler *RGWRESTMgr_SWIFT::get_handler(struct req_state *s)
 {
