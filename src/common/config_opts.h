@@ -1039,6 +1039,7 @@ OPTION(rgw_swift_auth_url, OPT_STR, "")        // default URL to go and verify t
 OPTION(rgw_swift_auth_entry, OPT_STR, "auth")  // entry point for which a url is considered a swift auth url
 OPTION(rgw_swift_tenant_name, OPT_STR, "")  // tenant name to use for swift access
 OPTION(rgw_swift_enforce_content_length, OPT_BOOL, false)  // enforce generation of Content-Length even in cost of performance or scalability
+OPTION(rgw_swift_create_account_with_bns, OPT_BOOL, true)  // whether to create Swift accounts with a dedicated namespace for its buckets
 OPTION(rgw_keystone_url, OPT_STR, "")  // url for keystone server
 OPTION(rgw_keystone_admin_token, OPT_STR, "")  // keystone admin token (shared secret)
 OPTION(rgw_keystone_admin_user, OPT_STR, "")  // keystone admin user name

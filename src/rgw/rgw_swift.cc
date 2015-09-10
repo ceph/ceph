@@ -371,9 +371,13 @@ int RGWSwift::check_revoked()
   return 0;
 }
 
-static void rgw_set_keystone_token_auth_info(KeystoneToken& token, struct rgw_swift_auth_info *info)
+static void rgw_set_keystone_token_auth_info(KeystoneToken& token,
+                                             struct rgw_swift_auth_info *info)
 {
-  info->user = token.token.tenant.id;
+  /* If the requested account currently doesn't exist, it may be created with
+   * its own namespace for buckets depending on the configuration option. */
+  info->user = rgw_user(token.token.tenant.id,
+          g_conf->rgw_swift_create_account_with_bns);
   info->display_name = token.token.tenant.name;
   info->status = 200;
 }
