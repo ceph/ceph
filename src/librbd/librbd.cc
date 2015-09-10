@@ -2394,6 +2394,12 @@ extern "C" int rbd_aio_write2(rbd_image_t image, uint64_t off, size_t len,
   return 0;
 }
 
+extern "C" int rbd_aio_writev(rbd_image_t image, const struct iovec *iov,
+                              int iovcnt, uint64_t off, rbd_completion_t c)
+{
+  // TODO
+  return -EINVAL;
+}
 
 extern "C" int rbd_aio_discard(rbd_image_t image, uint64_t off, uint64_t len,
 			       rbd_completion_t c)
@@ -2429,6 +2435,13 @@ extern "C" int rbd_aio_read2(rbd_image_t image, uint64_t off, size_t len,
                                  op_flags);
   tracepoint(librbd, aio_read_exit, 0);
   return 0;
+}
+
+extern "C" int rbd_aio_readv(rbd_image_t image, const struct iovec *iov,
+                             int iovcnt, uint64_t off, rbd_completion_t c)
+{
+  // TODO
+  return -EINVAL;
 }
 
 extern "C" int rbd_flush(rbd_image_t image)
