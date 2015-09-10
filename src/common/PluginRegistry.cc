@@ -100,17 +100,26 @@ int PluginRegistry::add(const std::string& type,
 Plugin *PluginRegistry::get(const std::string& type,
 			    const std::string& name)
 {
+  Mutex::Locker l(lock);
+  return get_locked(type, name);
+}
+
+Plugin *PluginRegistry::get_locked(const std::string& type,
+			    const std::string& name)
+{
   assert(lock.is_locked());
   Plugin *ret = 0;
-
   std::map<std::string,Plugin*>::iterator j;
-  std::map<std::string,map<std::string,Plugin*> >::iterator i =
-    plugins.find(type);
-  if (i == plugins.end())
+  std::map<std::string,map<std::string,Plugin*> >::iterator i = plugins.find(type);
+  if (i == plugins.end()) {
+    ldout(cct, 10) << __func__ << "couldn't find " << type << " in plugin registry " << name << dendl;
     goto out;
-  j = i->second.find(type);
-  if (j == i->second.end())
+  }
+  j = i->second.find(name);
+  if (j == i->second.end()) {
+    ldout(cct, 10) << __func__ << "couldn't find factory plugin " << type << "  " << name << dendl;
     goto out;
+  }
   ret = j->second;
 
  out:
@@ -170,7 +179,7 @@ int PluginRegistry::load(const std::string &type,
     return -ENOENT;
   }
 
-  Plugin *plugin = get(type, name);
+  Plugin *plugin = get_locked(type, name);
   if (plugin == 0) {
     lderr(cct) << __func__ << " " << fname << " "
 	       << PLUGIN_INIT_FUNCTION << "()"
