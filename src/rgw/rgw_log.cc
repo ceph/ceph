@@ -23,7 +23,8 @@ static void set_param_str(struct req_state *s, const char *name, string& str)
 }
 
 string render_log_object_name(const string& format,
-			      struct tm *dt, string& bucket_id, const string& bucket_name)
+			      struct tm *dt, string& bucket_id,
+			      const string& bucket_name)
 {
   string o;
   for (unsigned i=0; i<format.size(); i++) {
@@ -305,9 +306,10 @@ int rgw_log_op(RGWRados *store, struct req_state *s, const string& op_name, OpsL
   entry.obj_size = s->obj_size;
 
   if (s->cct->_conf->rgw_remote_addr_param.length())
-    set_param_str(s, s->cct->_conf->rgw_remote_addr_param.c_str(), entry.remote_addr);
+    set_param_str(s, s->cct->_conf->rgw_remote_addr_param.c_str(),
+		  entry.remote_addr);
   else
-    set_param_str(s, "REMOTE_ADDR", entry.remote_addr);    
+    set_param_str(s, "REMOTE_ADDR", entry.remote_addr);
   set_param_str(s, "HTTP_USER_AGENT", entry.user_agent);
   set_param_str(s, "HTTP_REFERRER", entry.referrer);
   set_param_str(s, "REQUEST_URI", entry.uri);
@@ -317,7 +319,6 @@ int rgw_log_op(RGWRados *store, struct req_state *s, const string& op_name, OpsL
   if (s->object_acl)
     entry.object_owner = s->object_acl->get_owner().get_id();
   entry.bucket_owner = s->bucket_owner.get_id();
-
 
   uint64_t bytes_sent = s->cio->get_bytes_sent();
   uint64_t bytes_received = s->cio->get_bytes_received();

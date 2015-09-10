@@ -27,9 +27,10 @@ int RGWMongoose::write_data(const char *buf, int len)
   return r;
 }
 
-RGWMongoose::RGWMongoose(mg_connection *_conn, int _port) : conn(_conn), port(_port), status_num(0), header_done(false),
-                                                 sent_header(false), has_content_length(false),
-                                                 explicit_keepalive(false), explicit_conn_close(false)
+RGWMongoose::RGWMongoose(mg_connection *_conn, int _port)
+  : conn(_conn), port(_port), status_num(0), header_done(false),
+    sent_header(false), has_content_length(false),
+    explicit_keepalive(false), explicit_conn_close(false)
 {
 }
 
@@ -60,8 +61,8 @@ int RGWMongoose::complete_request()
         print("Transfer-Enconding: %s\r\n", "chunked");
         data.append("0\r\n\r\n", sizeof("0\r\n\r\n")-1);
       } else {
-        int r = send_content_length(data.length());
-        if (r < 0)
+	int r = send_content_length(data.length());
+	if (r < 0)
 	  return r;
       }
     }
@@ -114,11 +115,11 @@ void RGWMongoose::init_env(CephContext *cct)
       char c = *src;
       switch (c) {
        case '-':
-         c = '_';
-         break;
-       default:
-         c = toupper(c);
-         break;
+	 c = '_';
+	 break;
+      default:
+	c = toupper(c);
+	break;
       }
       *dest = c;
     }
@@ -182,7 +183,8 @@ static void dump_date_header(bufferlist &out)
   if (tmp == NULL)
     return;
 
-  if (strftime(timestr, sizeof(timestr), "Date: %a, %d %b %Y %H:%M:%S %Z\r\n", tmp))
+  if (strftime(timestr, sizeof(timestr),
+	       "Date: %a, %d %b %Y %H:%M:%S %Z\r\n", tmp))
     out.append(timestr);
 }
 

@@ -32,8 +32,10 @@ void RGWProcess::RGWWQ::_dump_queue()
   }
 } /* RGWProcess::RGWWQ::_dump_queue */
 
+/* XXX this is really an HTTP request path, so the type of
+ * RGWClientIO is RGWStreamIO */
 int process_request(RGWRados *store, RGWREST *rest, RGWRequest *req,
-		    RGWClientIO *client_io, OpsLogSocket *olog)
+		    RGWStreamIO *client_io, OpsLogSocket *olog)
 {
   int ret = 0;
 
