@@ -1347,7 +1347,11 @@ int OSD::mkfs(CephContext *cct, ObjectStore *store, const string &dev,
     bufferlist sbbl;
     ret = store->read(coll_t::meta(), OSD_SUPERBLOCK_POBJECT, 0, 0, sbbl);
     if (ret >= 0) {
+      /* if we already have superblock, check content of superblock */
       dout(0) << " have superblock" << dendl;
+      bufferlist::iterator p;
+      p = sbbl.begin();
+      ::decode(sb, p);
       if (whoami != sb.whoami) {
 	derr << "provided osd id " << whoami << " != superblock's " << sb.whoami << dendl;
 	ret = -EINVAL;
