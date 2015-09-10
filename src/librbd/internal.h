@@ -13,6 +13,7 @@
 #include "include/buffer_fwd.h"
 #include "include/rbd/librbd.hpp"
 #include "include/rbd_types.h"
+#include "librbd/ReadResult.h"
 
 enum {
   l_librbd_first = 26000,

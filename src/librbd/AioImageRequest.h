@@ -9,6 +9,7 @@
 #include "common/snap_types.h"
 #include "osd/osd_types.h"
 #include "librbd/AioCompletion.h"
+#include "librbd/ReadResult.h"
 #include <list>
 #include <utility>
 #include <vector>
@@ -27,11 +28,12 @@ public:
 
   static void aio_read(ImageCtxT *ictx, AioCompletion *c,
                        const std::vector<std::pair<uint64_t,uint64_t> > &extents,
-                       char *buf, bufferlist *pbl, int op_flags);
+                       const ReadResult &read_result, int op_flags);
   static void aio_read(ImageCtxT *ictx, AioCompletion *c, uint64_t off,
-                       size_t len, char *buf, bufferlist *pbl, int op_flags);
+                       size_t len, const ReadResult &result_result,
+                       int op_flags);
   static void aio_write(ImageCtxT *ictx, AioCompletion *c, uint64_t off,
-                        size_t len, const char *buf, int op_flags);
+                        size_t len, const bufferlist &bl, int op_flags);
   static void aio_discard(ImageCtxT *ictx, AioCompletion *c, uint64_t off,
                           uint64_t len);
   static void aio_flush(ImageCtxT *ictx, AioCompletion *c);
@@ -59,17 +61,16 @@ protected:
 class AioImageRead : public AioImageRequest<> {
 public:
   AioImageRead(ImageCtx &image_ctx, AioCompletion *aio_comp, uint64_t off,
-               size_t len, char *buf, bufferlist *pbl, int op_flags)
-    : AioImageRequest(image_ctx, aio_comp), m_buf(buf), m_pbl(pbl),
-      m_op_flags(op_flags) {
-    m_image_extents.push_back(std::make_pair(off, len));
+               size_t len, const ReadResult &read_result, int op_flags)
+    : AioImageRead(image_ctx, aio_comp, {{off, len}}, read_result, op_flags) {
   }
 
   AioImageRead(ImageCtx &image_ctx, AioCompletion *aio_comp,
-               const Extents &image_extents, char *buf, bufferlist *pbl,
+               const Extents &image_extents, const ReadResult &read_result,
                int op_flags)
     : AioImageRequest(image_ctx, aio_comp), m_image_extents(image_extents),
-      m_buf(buf), m_pbl(pbl), m_op_flags(op_flags) {
+      m_op_flags(op_flags) {
+    m_aio_comp->read_result = read_result;
   }
 
 protected:
@@ -77,10 +78,9 @@ protected:
   virtual const char *get_request_type() const {
     return "aio_read";
   }
+
 private:
   Extents m_image_extents;
-  char *m_buf;
-  bufferlist *m_pbl;
   int m_op_flags;
 };
 
@@ -134,8 +134,8 @@ private:
 class AioImageWrite : public AbstractAioImageWrite {
 public:
   AioImageWrite(ImageCtx &image_ctx, AioCompletion *aio_comp, uint64_t off,
-                size_t len, const char *buf, int op_flags)
-    : AbstractAioImageWrite(image_ctx, aio_comp, off, len), m_buf(buf),
+                size_t len, const bufferlist &bl, int op_flags)
+    : AbstractAioImageWrite(image_ctx, aio_comp, off, len), m_bl(bl),
       m_op_flags(op_flags) {
   }
 
@@ -146,8 +146,6 @@ protected:
   virtual const char *get_request_type() const {
     return "aio_write";
   }
-
-  void assemble_extent(const ObjectExtent &object_extent, bufferlist *bl);
 
   virtual void send_cache_requests(const ObjectExtents &object_extents,
                                    uint64_t journal_tid);
@@ -162,9 +160,12 @@ protected:
   virtual uint64_t append_journal_event(const AioObjectRequests &requests,
                                         bool synchronous);
   virtual void update_stats(size_t length);
+
 private:
-  const char *m_buf;
+  const bufferlist m_bl;
   int m_op_flags;
+
+  void assemble_extent(const ObjectExtent &object_extent, bufferlist *bl);
 };
 
 class AioImageDiscard : public AbstractAioImageWrite {

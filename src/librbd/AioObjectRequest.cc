@@ -17,6 +17,7 @@
 #include "librbd/ImageWatcher.h"
 #include "librbd/internal.h"
 #include "librbd/ObjectMap.h"
+#include "librbd/ReadResult.h"
 #include "librbd/Utils.h"
 
 #include <boost/bind.hpp>
@@ -281,8 +282,9 @@ namespace librbd {
 			   << " extents " << parent_extents
 			   << dendl;
     RWLock::RLocker owner_locker(m_ictx->parent->owner_lock);
+    ReadResult read_result{read_result::Bufferlist{&m_read_data}};
     AioImageRequest<>::aio_read(m_ictx->parent, m_parent_completion,
-                                parent_extents, NULL, &m_read_data, 0);
+                                parent_extents, read_result, 0);
   }
 
   /** write **/

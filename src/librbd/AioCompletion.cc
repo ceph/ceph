@@ -15,6 +15,8 @@
 
 #include "librbd/AioCompletion.h"
 #include "librbd/Journal.h"
+#include <boost/variant/apply_visitor.hpp>
+#include <boost/variant/static_visitor.hpp>
 
 #ifdef WITH_LTTNG
 #include "tracing/librbd.h"
@@ -28,6 +30,49 @@
 
 namespace librbd {
 
+namespace {
+
+struct FinalizeReadResult : public boost::static_visitor<void> {
+  CephContext *cct;
+  bufferlist &bl;
+
+  FinalizeReadResult(CephContext *_cct, bufferlist &_bl) : cct(_cct), bl(_bl) {
+  }
+
+  void operator()(read_result::Linear &linear) const {
+    assert(bl.length() <= linear.buf_len);
+    bl.copy(0, bl.length(), linear.buf);
+    ldout(cct, 20) << "AioCompletion::finalize() copied resulting "
+                   << bl.length() << " bytes to " << (void*)linear.buf << dendl;
+  }
+
+  void operator()(read_result::Vector &vector) const {
+    ldout(cct, 20) << "AioCompletion::finalize() moving resulting "
+                   << bl.length() << " bytes to iovec " << (void*)vector.iov
+                   << dendl;
+
+    bufferlist::iterator it = bl.begin();
+    size_t length = bl.length();
+    size_t offset = 0;
+    int idx = 0;
+    for (; offset < length && idx < vector.iov_count; idx++) {
+      size_t len = MIN(vector.iov[idx].iov_len, length - offset);
+      it.copy(len, static_cast<char *>(vector.iov[idx].iov_base));
+      offset += len;
+    }
+    assert(offset == bl.length());
+  }
+
+  void operator()(read_result::Bufferlist &bufferlist) const {
+    ldout(cct, 20) << "AioCompletion::finalize() moving resulting "
+                   << bl.length() << " bytes to bl " << (void*)bufferlist.bl
+                   << dendl;
+    bufferlist.bl->claim(bl);
+  }
+};
+
+} // anonymous namespace
+
   int AioCompletion::wait_for_complete() {
     tracepoint(librbd, aio_wait_for_complete_enter, this);
     lock.Lock();
@@ -40,26 +85,14 @@ namespace librbd {
 
   void AioCompletion::finalize(CephContext *cct, ssize_t rval)
   {
-    ldout(cct, 20) << this << " " << __func__ << ": r=" << rval << ", "
-                   << "read_buf=" << reinterpret_cast<void*>(read_buf) << ", "
-                   << "real_bl=" <<  reinterpret_cast<void*>(read_bl) << dendl;
+    ldout(cct, 20) << "AioCompletion::finalize() " << (void*)this << " "
+                   << "rval=" << rval << dendl;
     if (rval >= 0 && aio_type == AIO_TYPE_READ) {
       // FIXME: make the destriper write directly into a buffer so
       // that we avoid shuffling pointers and copying zeros around.
       bufferlist bl;
       destriper.assemble_result(cct, bl, true);
-
-      if (read_buf) {
-	assert(bl.length() == read_buf_len);
-	bl.copy(0, read_buf_len, read_buf);
-	ldout(cct, 20) << "copied resulting " << bl.length()
-		       << " bytes to " << (void*)read_buf << dendl;
-      }
-      if (read_bl) {
-	ldout(cct, 20) << "moving resulting " << bl.length()
-		       << " bytes to bl " << (void*)read_bl << dendl;
-	read_bl->claim(bl);
-      }
+      boost::apply_visitor(FinalizeReadResult(cct, bl), read_result);
     }
   }
 
