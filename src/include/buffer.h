@@ -372,7 +372,7 @@ public:
 #endif
       return _len;
     }
-    bool contents_equal(buffer::list& other);
+    bool contents_equal(const buffer::list& other) const;
 
     bool can_zero_copy() const;
     bool is_aligned(unsigned align) const;
