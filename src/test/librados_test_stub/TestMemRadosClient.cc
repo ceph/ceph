@@ -38,10 +38,7 @@ TestMemRadosClient::Pool::Pool()
 
 TestIoCtxImpl *TestMemRadosClient::create_ioctx(int64_t pool_id,
 						const std::string &pool_name) {
-  Pools::iterator iter = m_pools.find(pool_name);
-  assert(iter != m_pools.end());
-
-  return new TestMemIoCtxImpl(*this, pool_id, pool_name, iter->second);
+  return new TestMemIoCtxImpl(this, pool_id, pool_name, get_pool(pool_name));
 }
 
 void TestMemRadosClient::object_list(int64_t pool_id,
@@ -78,7 +75,7 @@ int TestMemRadosClient::pool_delete(const std::string &pool_name) {
   if (iter == m_pools.end()) {
     return -ENOENT;
   }
-  delete iter->second;
+  iter->second->put();
   m_pools.erase(iter);
   return 0;
 }
@@ -123,6 +120,13 @@ int TestMemRadosClient::watch_flush() {
 int TestMemRadosClient::blacklist_add(const std::string& client_address,
 				      uint32_t expire_seconds) {
   return 0;
+}
+
+TestMemRadosClient::Pool *TestMemRadosClient::get_pool(
+    const std::string &pool_name) {
+  Pools::iterator iter = m_pools.find(pool_name);
+  assert(iter != m_pools.end());
+  return iter->second;
 }
 
 } // namespace librados
