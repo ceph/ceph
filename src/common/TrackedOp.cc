@@ -242,12 +242,8 @@ bool OpTracker::check_ops_in_flight(std::vector<string> &warning_vector)
 void OpTracker::get_age_ms_histogram(pow2_hist_t *h)
 {
   h->clear();
-
   utime_t now = ceph_clock_now(NULL);
-  unsigned bin = 30;
-  uint32_t lb = 1 << (bin-1);  // lower bound for this bin
-  int count = 0;
-  
+
   for (uint32_t iter = 0; iter < num_optracker_shards; iter++) {
     ShardedTrackingData* sdata = sharded_in_flight_list[iter];
     assert(NULL != sdata);
@@ -257,21 +253,9 @@ void OpTracker::get_age_ms_histogram(pow2_hist_t *h)
                                                                !i.end(); ++i) {
       utime_t age = now - (*i)->get_initiated();
       uint32_t ms = (long)(age * 1000.0);
-      if (ms >= lb) {
-        count++;
-        continue;
-      }
-      if (count)
-        h->set_bin(bin, count);
-      while (lb > ms) {
-        bin--;
-        lb >>= 1;
-      }
-      count = 1;
+      h->add(ms);
     }
   }
-  if (count)
-    h->set_bin(bin, count);
 }
 
 void OpTracker::mark_event(TrackedOp *op, const string &dest, utime_t time)
