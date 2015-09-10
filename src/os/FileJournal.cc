@@ -629,6 +629,7 @@ int FileJournal::_fdump(Formatter &f, bool simple)
 
     if (!pos) {
       dout(2) << "_dump -- not readable" << dendl;
+      close();
       return false;
     }
     stringstream ss;
