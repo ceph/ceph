@@ -1116,7 +1116,7 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
     other.last_p = other.begin();
   }
 
-  bool buffer::list::contents_equal(ceph::buffer::list& other)
+  bool buffer::list::contents_equal(const ceph::buffer::list& other) const
   {
     if (length() != other.length())
       return false;
@@ -1149,8 +1149,8 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
 
     // byte-wise comparison
     if (false) {
-      bufferlist::iterator me = begin();
-      bufferlist::iterator him = other.begin();
+      bufferlist::const_iterator me = begin();
+      bufferlist::const_iterator him = other.begin();
       while (!me.end()) {
 	if (*me != *him)
 	  return false;
