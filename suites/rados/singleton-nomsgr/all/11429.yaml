@@ -19,6 +19,7 @@ overrides:
     - slow request
     - scrub mismatch
     - ScrubResult
+    - failed to encode
 roles:
 - - mon.a
   - mds.a
