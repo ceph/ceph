@@ -347,6 +347,7 @@ public:
 			      _memcopy_count(other._memcopy_count), last_p(this) {
       make_shareable();
     }
+    list(list&& other);
     list& operator= (const list& other) {
       if (this != &other) {
         _buffers = other._buffers;

@@ -1105,6 +1105,15 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
 
   // -- buffer::list --
 
+  buffer::list::list(list&& other)
+    : _buffers(std::move(other._buffers)),
+      _len(other._len),
+      _memcopy_count(other._memcopy_count),
+      last_p(this) {
+    append_buffer.swap(other.append_buffer);
+    other.clear();
+  }
+
   void buffer::list::swap(list& other)
   {
     std::swap(_len, other._len);
