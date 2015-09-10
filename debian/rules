@@ -87,6 +87,7 @@ install: build
 	install -D -m 755 src/init-rbdmap $(DESTDIR)/etc/init.d/rbdmap
 	install -D -m 644 etc/ceph.limits.d $(DESTDIR)/etc/security/limits.d/ceph
 
+
 # Add here commands to install the package into debian/testpack.
 # Build architecture-independent files here.
 binary-indep: build install
@@ -132,6 +133,11 @@ binary-arch: build install
 	dh_installman -a
 	dh_lintian -a
 	dh_link -a
+
+	# for some reason /usr/share/ceph/* is forced 644 ... fix key files
+	chmod 600 debian/ceph-common/usr/share/ceph/id_dsa_drop.ceph.com
+	chmod 600 debian/ceph-common/usr/share/ceph/id_dsa_drop.ceph.com.pub
+	chmod 600 debian/ceph-common/usr/share/ceph/known_hosts_drop.ceph.com
 
 	dh_strip -pceph --dbg-package=ceph-dbg
 	dh_strip -pceph-mds --dbg-package=ceph-mds-dbg
