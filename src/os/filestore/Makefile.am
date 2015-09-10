@@ -18,7 +18,10 @@ noinst_HEADERS += \
 	os/ObjectStore.h \
 	os/filestore/WBThrottle.h \
 	os/filestore/XfsFileStoreBackend.h \
-	os/filestore/ZFSFileStoreBackend.h
+	os/filestore/ZFSFileStoreBackend.h \
+	os/keyvaluestore/DBObjectMap.h \
+	os/keyvaluestore/KeyValueDB.h \
+	os/keyvaluestore/LevelDBStore.h
 
 libceph_filestore_la_SOURCES = \
 	os/filestore/chain_xattr.cc \
@@ -31,7 +34,10 @@ libceph_filestore_la_SOURCES = \
 	os/filestore/JournalingObjectStore.cc \
 	os/filestore/LFNIndex.cc \
 	os/filestore/WBThrottle.cc \
-	os/filestore/FileStorePlugin.cc
+	os/keyvaluestore/KeyValueDB.cc \
+	os/keyvaluestore/DBObjectMap.cc \
+	os/keyvaluestore/LevelDBStore.cc \
+	os/filestore/FileStoreFactory.cc
 
 if LINUX
 libceph_filestore_la_SOURCES += os/filestore/BtrfsFileStoreBackend.cc
@@ -58,7 +64,7 @@ EXTRALIBS += -ldl -llttng-ust -llttng-ust-tracepoint
 libceph_filestore_la_CXXFLAGS = ${AM_CXXFLAGS}
 libceph_filestore_la_CPPFLAGS = -DTRACEPOINT_PROBE_DYNAMIC_LINKAGE
 libceph_filestore_la_LIBADD = $(EXTRALIBS)
-libceph_filestore_la_LIBADD += $(LIBOS) $(PTHREAD_LIBS) $(EXTRALIBS) $(LIBKVSTORE)
+libceph_filestore_la_LIBADD += $(LIBOS) $(PTHREAD_LIBS) $(EXTRALIBS)
 if WITH_LTTNG
 libceph_filestore_la_LIBADD += $(LIBOS_TP)
 endif

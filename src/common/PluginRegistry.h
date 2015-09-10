@@ -20,16 +20,14 @@
 
 #include <string>
 #include <map>
-
 #include "common/Mutex.h"
 
-class CephContext;
-
-extern "C" {
+extern "C"
+{
   const char *__ceph_plugin_version();
   int __ceph_plugin_init(CephContext *cct,
-			 const std::string& type,
-			 const std::string& name);
+                         const std::string& type,
+                         const std::string& name);
 }
 
 namespace ceph {
@@ -54,10 +52,10 @@ namespace ceph {
     PluginRegistry(CephContext *cct);
     ~PluginRegistry();
 
-    int add(const std::string& type, const std::string& name,
-	    Plugin *factory);
+    int add(const std::string& type, const std::string& name, Plugin *factory);
     int remove(const std::string& type, const std::string& name);
     Plugin *get(const std::string& type, const std::string& name);
+    Plugin *get_locked(const std::string& type, const std::string& name);
 
     int load(const std::string& type,
 	     const std::string& name);
