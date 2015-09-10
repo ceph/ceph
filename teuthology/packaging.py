@@ -434,9 +434,6 @@ class GitbuilderProject(object):
         # of roles instead, ctx is only used in _get_config_value_for_remote.
         self.ctx = ctx
         self.remote = remote
-        # avoiding circular imports
-        from teuthology.suite import get_install_task_flavor
-        self.flavor = get_install_task_flavor(self.job_config)
 
         if remote and ctx:
             self._init_from_remote()
@@ -458,6 +455,9 @@ class GitbuilderProject(object):
             version=self.remote.os.version,
             codename=self.remote.os.codename,
         )
+        # when we're initializing with a remote we most likely have
+        # a task config, not the entire teuthology job config
+        self.flavor = self.job_config.get("flavor", "basic")
 
     def _init_from_config(self):
         """
@@ -475,6 +475,12 @@ class GitbuilderProject(object):
             "ubuntu",
             "debian",
         ) else "rpm"
+        # avoiding circular imports
+        from teuthology.suite import get_install_task_flavor
+        # when we're initializing from a full teuthology config, not just a
+        # task config we need to make sure we're looking at the flavor for
+        # the install task
+        self.flavor = get_install_task_flavor(self.job_config)
 
     @property
     def sha1(self):
