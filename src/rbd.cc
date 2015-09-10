@@ -2321,6 +2321,7 @@ static int do_metadata_remove(librbd::Image& image, const char *key)
   if (r < 0) {
     cerr << "failed to remove metadata " << key << " of image : " << cpp_strerror(r) << std::endl;
   }
+  return r;
 }
 
 static int do_metadata_get(librbd::Image& image, const char *key)
