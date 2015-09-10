@@ -464,10 +464,16 @@ struct RGWUserInfo
   map<int, string> temp_url_keys;
   RGWQuotaInfo user_quota;
 
-  RGWUserInfo() : auid(0), suspended(0), max_buckets(RGW_DEFAULT_MAX_BUCKETS), op_mask(RGW_OP_TYPE_ALL), system(0) {}
+  RGWUserInfo()
+    : auid(0),
+      suspended(0),
+      max_buckets(RGW_DEFAULT_MAX_BUCKETS),
+      op_mask(RGW_OP_TYPE_ALL),
+      system(0) {
+  }
 
   void encode(bufferlist& bl) const {
-     ENCODE_START(17, 9, bl);
+     ENCODE_START(18, 9, bl);
      ::encode(auid, bl);
      string access_key;
      string secret_key;
@@ -506,6 +512,7 @@ struct RGWUserInfo
      ::encode(temp_url_keys, bl);
      ::encode(user_quota, bl);
      ::encode(user_id.tenant, bl);
+     ::encode(user_id.has_own_bns, bl);
      ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
@@ -572,8 +579,15 @@ struct RGWUserInfo
     }
     if (struct_v >= 17) {
       ::decode(user_id.tenant, bl);
+      ::decode(user_id.has_own_bns, bl);
     } else {
       user_id.tenant.clear();
+      user_id.has_own_bns = false;
+    }
+    if (struct_v >= 18) {
+      ::decode(user_id.has_own_bns, bl);
+    } else {
+      user_id.has_own_bns = false;
     }
     DECODE_FINISH(bl);
   }

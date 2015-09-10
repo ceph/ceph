@@ -5,25 +5,78 @@
 
 #include "include/types.h"
 
+
+class rgw_bucket_namespace {
+  std::string bns_id;
+
+public:
+  rgw_bucket_namespace()
+    : bns_id(std::string()) {
+  }
+
+  rgw_bucket_namespace(const std::string b)
+    : bns_id(b) {
+  }
+
+  std::string get_id() const {
+    return bns_id;
+  }
+
+  bool operator!=(const rgw_bucket_namespace& rhs) const {
+    return (bns_id != rhs.bns_id);
+  }
+  bool operator==(const rgw_bucket_namespace& rhs) const {
+    return (bns_id == rhs.bns_id);
+  }
+  bool operator<(const rgw_bucket_namespace& rhs) const {
+    return (bns_id < rhs.bns_id);
+  }
+};
+
+
 struct rgw_user {
   std::string tenant;
   std::string id;
+  bool has_own_bns;
 
-  rgw_user() {}
-  rgw_user(const std::string& s) {
+  rgw_user()
+    : id(std::string()),
+      has_own_bns(false) {
+  }
+
+  rgw_user(const std::string& s, const bool h = false)
+    : has_own_bns(h) {
     from_str(s);
   }
 
+  std::string get_id() const {
+    return id;
+  }
+
+  /* Answer whether a given stored bucket entry points in his own
+   * namespace or not. */
+  rgw_bucket_namespace get_bns() const {
+    if (has_own_bns) {
+      return rgw_bucket_namespace(get_id());
+    } else {
+      return rgw_bucket_namespace();
+    }
+  }
+
   void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
     ::encode(tenant, bl);
     ::encode(id, bl);
+    ::encode(has_own_bns, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
     DECODE_START(1, bl);
     ::decode(tenant, bl);
     ::decode(id, bl);
+    if (struct_v >= 2) {
+      ::decode(has_own_bns, bl);
+    }
     DECODE_FINISH(bl);
   }
 
