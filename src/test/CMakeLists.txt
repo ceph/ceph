@@ -358,6 +358,9 @@ add_dependencies(check osd_crush)
 add_test(NAME mon_scrub COMMAND bash ${CMAKE_SOURCE_DIR}/src/test/mon/mon-scrub.sh)
 add_dependencies(check mon_scrub)
 
+add_test(NAME mon_ping COMMAND bash ${CMAKE_SOURCE_DIR}/src/test/mon/mon-ping.sh)
+add_dependencies(check mon_ping)
+
 add_test(NAME test_ceph_daemon COMMAND python ${CMAKE_SOURCE_DIR}/src/test/pybind/test_ceph_daemon.py)
 add_dependencies(check test_ceph_daemon)
 
