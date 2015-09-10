@@ -67,6 +67,12 @@ Deactivate:
  - create deactive flag
  - umount device and remove mount point
 
+Destroy:
+ - remove OSD from CRUSH map
+ - remove OSD cephx key
+ - deallocate OSD ID
+ - destroy data (with --zap option)
+
 We rely on /dev/disk/by-partuuid to find partitions by their UUID;
 this is what the journal symlink inside the osd data volume normally
 points to.
@@ -2779,6 +2785,119 @@ def main_deactivate(args):
 
 ###########################
 
+def _remove_from_crush_map(cluster, osd_id):
+    LOG.info("Prepare to remove osd.%s from crush map..." % osd_id)
+    try:
+        out, ret = command(
+                [
+                    'ceph',
+                    'osd',
+                    'crush',
+                    'remove',
+                    'osd.%s' % osd_id,
+                    ],
+                )
+    except subprocess.CalledProcessError as e:
+        raise Error(e)
+
+def _delete_osd_auth_key(cluster, osd_id):
+    LOG.info("Prepare to delete osd.%s cephx key..." % osd_id)
+    try:
+        out, ret = command(
+                [
+                    'ceph',
+                    'auth',
+                    'del',
+                    'osd.%s' % osd_id,
+                    ],
+                )
+    except subprocess.CalledProcessError as e:
+        raise Error(e)
+
+def _deallocate_osd_id(cluster, osd_id):
+    LOG.info("Prepare to deallocate the osd-id: %s..." % osd_id)
+    try:
+        out, ret = command(
+                [
+                    'ceph',
+                    'osd',
+                    'rm',
+                    '%s' % osd_id,
+                    ],
+                )
+    except subprocess.CalledProcessError as e:
+        raise Error(e)
+
+def main_destroy(args):
+    if args.cluster is None:
+        args.cluster = 'ceph'
+    if args.osd_id is None:
+        raise Error("osd id can not be zero. Try to use --osd-id <OSDID>.")
+
+    # Before osd deactivate, we cannot destroy it
+    status_code = _check_osd_status(args.cluster, args.osd_id)
+    if status_code != OSD_STATUS_OUT_DOWN:
+        raise Error("Could not destroy the active osd. (osd-id: %s)" % \
+                    args.osd_id)
+
+    # GET the mounted device and mount point.
+    mount_info = convert_osd_id(args.cluster, args.osd_id)
+
+    # Remove OSD from crush map
+    _remove_from_crush_map(args.cluster, args.osd_id)
+
+    # Remove OSD cephx key
+    _delete_osd_auth_key(args.cluster, args.osd_id)
+
+    # Deallocate OSD ID
+    _deallocate_osd_id(args.cluster, args.osd_id)
+
+    # Check zap flag. If we found zap flag, we need to find device for
+    # destroy this osd data.
+    if args.zap is True:
+
+        # try to find osd data device.
+        partmap = list_all_partitions(None)
+        # list all partition which have the partition name with
+        # deactive flag
+        devtocheck = []
+        for base, parts in sorted(partmap.iteritems()):
+            if not parts:
+                continue
+            for p in parts:
+                (dev, p_num) = split_dev_base_partnum(os.path.join("/dev", p))
+                part_name = get_partition_name(os.path.join("/dev", p))
+                LOG.debug("device: %s, p_num: %s" % (dev, p_num))
+                LOG.debug("part_name: %s" % part_name)
+                if part_name == "ceph data (deactive)" or \
+                   part_name == "ceph journal (deactive)":
+                    devtocheck.append(os.path.join("/dev", p))
+
+        # check all above device's osd_id
+        # if the osd_id is correct, zap it.
+        for item in devtocheck:
+            try:
+                fs_type = get_dev_fs(item)
+                if fs_type != None:
+                    tpath = mount(dev=item, fstype=fs_type, options='')
+                    if tpath:
+                        try:
+                            whoami = get_oneliner(tpath, 'whoami')
+                        finally:
+                            unmount(tpath)
+                if whoami is args.osd_id:
+                    (dev, part_num) = split_dev_base_partnum(item)
+            except MountError:
+                pass
+
+        # earse the osd data
+        LOG.info("Prepare to zap the device %s" % dev)
+        zap(dev)
+
+    return
+
+###########################
+
 def get_journal_osd_uuid(path):
     if not os.path.exists(path):
         raise Error('%s does not exist' % path)
@@ -3575,6 +3694,7 @@ def parse_args(argv):
     make_list_parser(subparsers)
     make_suppress_parser(subparsers)
     make_deactivate_parser(subparsers)
+    make_destroy_parser(subparsers)
     make_zap_parser(subparsers)
     make_trigger_parser(subparsers)
 
@@ -3841,6 +3961,28 @@ def make_deactivate_parser(subparsers):
         )
     deactivate_parser.set_defaults(
         func=main_deactivate,
+        )
+
+def make_destroy_parser(subparsers):
+    destroy_parser = subparsers.add_parser('destroy', help='Destroy a Ceph OSD')
+    destroy_parser.add_argument(
+        '--cluster',
+        metavar='NAME',
+        default='ceph',
+        help='cluster name to assign this disk to',
+        )
+    destroy_parser.add_argument(
+        '--osd-id',
+        metavar='OSDID',
+        help='ID of OSD to destroy'
+        )
+    destroy_parser.add_argument(
+        '--zap',
+        action='store_true', default=False,
+        help='option to erase data and partition',
+        )
+    destroy_parser.set_defaults(
+        func=main_destroy,
         )
 
 def make_zap_parser(subparsers):
