@@ -1353,7 +1353,10 @@ void ReplicatedPG::do_op(OpRequestRef op)
     }
   }
 
+  bool in_hit_set = false;
   if (hit_set) {
+    if (missing_oid != hobject_t() && hit_set->contains(missing_oid))
+      in_hit_set = true;
     hit_set->insert(oid);
     if (hit_set->is_full() ||
 	hit_set_start_stamp + pool.info.hit_set_period <= m->get_recv_stamp()) {
@@ -1366,7 +1369,7 @@ void ReplicatedPG::do_op(OpRequestRef op)
   }
 
   if ((m->get_flags() & CEPH_OSD_FLAG_IGNORE_CACHE) == 0 &&
-      maybe_handle_cache(op, write_ordered, obc, r, missing_oid, false))
+      maybe_handle_cache(op, write_ordered, obc, r, missing_oid, false, in_hit_set))
     return;
 
   if (r) {
@@ -1561,7 +1564,8 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op,
 				      bool write_ordered,
 				      ObjectContextRef obc,
                                       int r, const hobject_t& missing_oid,
-				      bool must_promote)
+				      bool must_promote,
+				      bool in_hit_set)
 {
   if (obc)
     dout(25) << __func__ << " " << obc->obs.oi << " "
@@ -1606,7 +1610,43 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op,
     if (!must_promote && can_skip_promote(op, obc)) {
       return false;
     }
-    promote_object(op, obc, missing_oid);
+    if (op->may_write() || write_ordered || must_promote || !hit_set) {
+      promote_object(op, obc, missing_oid);
+    } else {
+      switch (pool.info.min_read_recency_for_promote) {
+      case 0:
+        promote_object(op, obc, missing_oid);
+        break;
+      case 1:
+        // Check if in the current hit set
+        if (in_hit_set) {
+          promote_object(op, obc, missing_oid);
+        } else {
+          do_cache_redirect(op, obc);
+        }
+        break;
+      default:
+        if (in_hit_set) {
+          promote_object(op, obc, missing_oid);
+        } else {
+          // Check if in other hit sets
+          map<time_t,HitSetRef>::iterator itor;
+          bool in_other_hit_sets = false;
+          for (itor = agent_state->hit_set_map.begin(); itor != agent_state->hit_set_map.end(); itor++) {
+            if (itor->second->contains(missing_oid)) {
+              in_other_hit_sets = true;
+              break;
+            }
+          }
+          if (in_other_hit_sets) {
+            promote_object(op, obc, missing_oid);
+          } else {
+            do_cache_redirect(op, obc);
+          }
+        }
+        break;
+      }
+    }
     return true;
 
   case pg_pool_t::CACHEMODE_FORWARD:
@@ -10962,8 +11002,10 @@ void ReplicatedPG::hit_set_persist()
   info.hit_set.current_info.end = now;
   dout(20) << __func__ << " archive " << oid << dendl;
 
-  if (agent_state)
+  if (agent_state) {
     agent_state->add_hit_set(info.hit_set.current_info.begin, hit_set);
+    hit_set_in_memory_trim();
+  }
 
   // hold a ref until it is flushed to disk
   hit_set_flushing[info.hit_set.current_info.begin] = hit_set;
@@ -11099,8 +11141,6 @@ void ReplicatedPG::hit_set_trim(RepGather *repop, unsigned max)
       repop->ctx->op_t->remove(oid);
       repop->ctx->log.back().mod_desc.mark_unrollbackable();
     }
-    if (agent_state)
-      agent_state->remove_oldest_hit_set();
     updated_hit_set_hist.history.pop_front();
 
     ObjectContextRef obc = get_object_context(oid, false);
@@ -11108,6 +11148,19 @@ void ReplicatedPG::hit_set_trim(RepGather *repop, unsigned max)
     --repop->ctx->delta_stats.num_objects;
     --repop->ctx->delta_stats.num_objects_hit_set_archive;
     repop->ctx->delta_stats.num_bytes -= obc->obs.oi.size;
+  }
+}
+
+void ReplicatedPG::hit_set_in_memory_trim()
+{
+  unsigned max = pool.info.hit_set_count;
+  unsigned max_in_memory = pool.info.min_read_recency_for_promote > 0 ? pool.info.min_read_recency_for_promote - 1 : 0;
+
+  if (max_in_memory > max) {
+    max_in_memory = max;
+  }
+  while (agent_state->hit_set_map.size() > max_in_memory) {
+    agent_state->remove_oldest_hit_set();
   }
 }
 
@@ -11303,6 +11356,9 @@ bool ReplicatedPG::agent_work(int start_max)
   else
     agent_state->position = next;
 
+  // Discard old in memory HitSets
+  hit_set_in_memory_trim();
+
   if (need_delay) {
     assert(agent_state->delaying == false);
     agent_delay();
@@ -11317,7 +11373,6 @@ bool ReplicatedPG::agent_work(int start_max)
 void ReplicatedPG::agent_load_hit_sets()
 {
   if (agent_state->evict_mode == TierAgentState::EVICT_MODE_IDLE) {
-    agent_state->discard_hit_sets();
     return;
   }
 
