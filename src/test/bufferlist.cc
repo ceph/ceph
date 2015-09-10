@@ -1128,6 +1128,17 @@ TEST(BufferList, constructors) {
     bufferlist copy(bl);
     ASSERT_EQ('A', copy[0]);
   }
+  //
+  // list(list&& other)
+  //
+  {
+    bufferlist bl(1);
+    bl.append('A');
+    bufferlist copy = std::move(bl);
+    ASSERT_EQ(0U, bl.length());
+    ASSERT_EQ(1U, copy.length());
+    ASSERT_EQ('A', copy[0]);
+  }
 }
 
 TEST(BufferList, operator_equal) {
