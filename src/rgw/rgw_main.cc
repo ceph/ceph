@@ -1055,6 +1055,9 @@ int main(int argc, const char **argv)
   init_timer.add_event_after(g_conf->rgw_init_timeout, new C_InitTimeout);
   mutex.Unlock();
 
+  // Enable the perf counter before starting the service thread
+  g_ceph_context->enable_perf_counter();
+
   common_init_finish(g_ceph_context);
 
   rgw_tools_init(g_ceph_context);
