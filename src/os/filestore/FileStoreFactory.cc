@@ -2,8 +2,8 @@
 #include "ceph_ver.h"
 #include "common/debug.h"
 #include "os/ObjectStore.h"
-#include "os/memstore/MemStore.h"
 #include "common/PluginRegistry.h"
+#include "os/filestore/FileStore.h"
 // -----------------------------------------------------------------------------
 #define dout_subsys ceph_subsys_filestore
 #undef dout_prefix
@@ -11,18 +11,18 @@
 
 static ostream& _prefix(std::ostream* _dout)
 {
-  return *_dout << "MemStorePlugin: ";
+  return *_dout << "FileStoreFactory: ";
 }
 
 
-class MemStorePlugin : public Plugin {
+class FileStoreFactory : public ObjectStore::Factory {
 public:
-  MemStorePlugin(CephContext *cct):Plugin(cct) { }
-  virtual ObjectStore* factory(CephContext *cct, const string& type,const string& data, const string& journal, osflagbits_t flags)
+  FileStoreFactory(CephContext *cct):ObjectStore::Factory(cct) { }
+  ObjectStore* factory(CephContext *cct, const string& type,const string& data, const string& journal, osflagbits_t flags)
   {
 	dout(10) << __func__ << dendl;	  
-    MemStore *fs = NULL;
-    fs = new MemStore(cct, data);
+    FileStore *fs = NULL;
+    fs = new FileStore(data, journal, flags);
     assert(fs);
     return fs;
   }
@@ -30,16 +30,17 @@ public:
 
 // -----------------------------------------------------------------------------
 
-const char *__ceph_plugin_version()
+extern "C" const char *__ceph_plugin_version()
 {
   return CEPH_GIT_NICE_VER;
 }
 
 // -----------------------------------------------------------------------------
 
-int __ceph_plugin_init(CephContext * cct, char *plugin_name, char *directory)
+extern "C" int __ceph_plugin_init(CephContext * cct, const std::string& plugin_name, const std::string& directory)
 {
+  dout(10) << __func__ << dendl;
   PluginRegistry *reg = cct->get_plugin_registry();
-  reg->add("ObjectStore", "MemStore", new MemStorePlugin(cct));
+  reg->add("objectstore", "filestore", new FileStoreFactory(cct));
   return 0;
 }

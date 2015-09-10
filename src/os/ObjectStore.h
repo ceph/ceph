@@ -112,7 +112,9 @@ public:
 			     const string& journal,
 			     osflagbits_t flags = 0);
 
-  struct Factory : public ceph::Plugin {
+  class Factory : public ceph::Plugin {
+    public:
+    Factory(CephContext *cct):Plugin(cct) { }
     virtual ObjectStore *factory(CephContext *cct,
 				 const string& type,
 				 const string& data,

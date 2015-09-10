@@ -16,7 +16,7 @@ libceph_keyvaluestore_la_SOURCES = \
 	os/keyvaluestore/LevelDBStore.cc \
 	os/keyvaluestore/KeyValueDB.cc \
 	os/keyvaluestore/KeyValueStore.cc \
-	os/keyvaluestore/KeyValueStorePlugin.cc
+	os/keyvaluestore/KeyValueStoreFactory.cc
 
 libceph_keyvaluestore_la_CXXFLAGS = ${AM_CXXFLAGS}
 libceph_keyvaluestore_la_LIBADD =  $(PTHREAD_LIBS) $(EXTRALIBS) $(LIBCOMMON)
