@@ -26,9 +26,9 @@ namespace librbd {
 
 namespace {
 
-class UpdateObjectMap : public C_AsyncObjectThrottle {
+class UpdateObjectMap : public C_AsyncObjectThrottle<> {
 public:
-  UpdateObjectMap(AsyncObjectThrottle &throttle, ImageCtx *image_ctx,
+  UpdateObjectMap(AsyncObjectThrottle<> &throttle, ImageCtx *image_ctx,
                   uint64_t object_no, const std::vector<uint64_t> *snap_ids,
                   size_t snap_id_idx)
     : C_AsyncObjectThrottle(throttle, *image_ctx),
@@ -301,11 +301,11 @@ private:
       m_state = STATE_OBJECT_MAP;
 
       RWLock::RLocker owner_locker(m_ictx->owner_lock);
-      AsyncObjectThrottle::ContextFactory context_factory(
+      AsyncObjectThrottle<>::ContextFactory context_factory(
         boost::lambda::bind(boost::lambda::new_ptr<UpdateObjectMap>(),
         boost::lambda::_1, m_ictx, m_object_no, &m_snap_ids,
         boost::lambda::_2));
-      AsyncObjectThrottle *throttle = new AsyncObjectThrottle(
+      AsyncObjectThrottle<> *throttle = new AsyncObjectThrottle<>(
         NULL, *m_ictx, context_factory, create_callback_context(), NULL, 0,
         m_snap_ids.size());
       throttle->start_ops(m_ictx->concurrent_management_ops);

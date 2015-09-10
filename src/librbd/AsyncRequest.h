@@ -8,17 +8,15 @@
 #include "include/rados/librados.hpp"
 #include "include/xlist.h"
 
-/* DARWIN Missing ERESTART */
-#include "include/compat.h"
-
 namespace librbd {
 
 class ImageCtx;
 
+template <typename ImageCtxT = ImageCtx>
 class AsyncRequest
 {
 public:
-  AsyncRequest(ImageCtx &image_ctx, Context *on_finish);
+  AsyncRequest(ImageCtxT &image_ctx, Context *on_finish);
   virtual ~AsyncRequest();
 
   void complete(int r) {
@@ -41,7 +39,7 @@ public:
   }
 
 protected:
-  ImageCtx &m_image_ctx;
+  ImageCtxT &m_image_ctx;
   Context *m_on_finish;
 
   librados::AioCompletion *create_callback_completion();
@@ -59,26 +57,11 @@ protected:
   }
 private:
   bool m_canceled;
-  xlist<AsyncRequest *>::item m_xlist_item;
-};
-
-class C_AsyncRequest : public Context
-{
-public:
-  C_AsyncRequest(AsyncRequest *req)
-    : m_req(req)
-  {
-  }
-
-protected:
-  virtual void finish(int r) {
-    m_req->complete(r);
-  }
-
-private:
-  AsyncRequest *m_req;
+  typename xlist<AsyncRequest<ImageCtxT> *>::item m_xlist_item;
 };
 
 } // namespace librbd
+
+extern template class librbd::AsyncRequest<librbd::ImageCtx>;
 
 #endif //CEPH_LIBRBD_ASYNC_REQUEST_H

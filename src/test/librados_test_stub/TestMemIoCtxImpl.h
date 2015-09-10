@@ -12,9 +12,10 @@ namespace librados {
 class TestMemIoCtxImpl : public TestIoCtxImpl {
 public:
   TestMemIoCtxImpl();
-  explicit TestMemIoCtxImpl(TestMemRadosClient &client, int64_t m_pool_id,
-                            const std::string& pool_name,
-                            TestMemRadosClient::Pool *pool);
+  TestMemIoCtxImpl(TestMemRadosClient *client, int64_t m_pool_id,
+                   const std::string& pool_name,
+                   TestMemRadosClient::Pool *pool);
+  virtual ~TestMemIoCtxImpl();
 
   virtual TestIoCtxImpl *clone();
 
@@ -54,6 +55,11 @@ public:
   virtual int xattr_set(const std::string& oid, const std::string &name,
                         bufferlist& bl);
   virtual int zero(const std::string& oid, uint64_t off, uint64_t len);
+
+protected:
+  TestMemRadosClient::Pool *get_pool() {
+    return m_pool;
+  }
 
 private:
   TestMemIoCtxImpl(const TestMemIoCtxImpl&);

@@ -18,9 +18,9 @@ TestIoCtxImpl::TestIoCtxImpl() : m_client(NULL) {
   get();
 }
 
-TestIoCtxImpl::TestIoCtxImpl(TestRadosClient &client, int64_t pool_id,
+TestIoCtxImpl::TestIoCtxImpl(TestRadosClient *client, int64_t pool_id,
                              const std::string& pool_name)
-  : m_client(&client), m_pool_id(pool_id), m_pool_name(pool_name),
+  : m_client(client), m_pool_id(pool_id), m_pool_name(pool_name),
     m_snap_seq(CEPH_NOSNAP)
 {
   m_client->get();
@@ -113,17 +113,17 @@ int TestIoCtxImpl::aio_operate_read(const std::string& oid,
   return 0;
 }
 
-int TestIoCtxImpl::exec(const std::string& oid, TestClassHandler &handler,
+int TestIoCtxImpl::exec(const std::string& oid, TestClassHandler *handler,
                         const char *cls, const char *method,
                         bufferlist& inbl, bufferlist* outbl,
                         const SnapContext &snapc) {
-  cls_method_cxx_call_t call = handler.get_method(cls, method);
+  cls_method_cxx_call_t call = handler->get_method(cls, method);
   if (call == NULL) {
     return -ENOSYS;
   }
 
   return (*call)(reinterpret_cast<cls_method_context_t>(
-    handler.get_method_context(this, oid, snapc).get()), &inbl, outbl);
+    handler->get_method_context(this, oid, snapc).get()), &inbl, outbl);
 }
 
 int TestIoCtxImpl::list_watchers(const std::string& o,

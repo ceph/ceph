@@ -25,6 +25,11 @@ class TestIoCtxImpl;
 class TestRadosClient {
 public:
 
+  static void Deallocate(librados::TestRadosClient* client)
+  {
+    client->put();
+  }
+
   typedef boost::function<int()> AioFunction;
 
   struct Object {
