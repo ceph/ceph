@@ -2265,11 +2265,16 @@ int OSD::shutdown()
 {
   if (!service.prepare_to_stop())
     return 0; // already shutting down
-  osd_lock.Lock();
+  
+  bool is_osd_locked = osd_lock.is_locked_by_me();
+  if (!is_osd_locked)
+    osd_lock.Lock();
   if (is_stopping()) {
-    osd_lock.Unlock();
+    if (!is_osd_locked)
+       osd_lock.Unlock();
     return 0;
   }
+  
   derr << "shutdown" << dendl;
 
   set_state(STATE_STOPPING);
@@ -2443,6 +2448,8 @@ int OSD::shutdown()
 
   peering_wq.clear();
 
+  if (is_osd_locked)
+    osd_lock.Lock();//it was acquired by the caller, pretend that nothing happened.
   return r;
 }
 
