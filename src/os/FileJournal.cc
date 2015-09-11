@@ -1097,13 +1097,14 @@ void FileJournal::do_write(bufferlist& bl)
   // entry
   off64_t pos = write_pos;
 
-  // Adjust write_pos
-  align_bl(pos, bl);
   write_pos += bl.length();
   if (write_pos >= header.max_size)
     write_pos = write_pos - header.max_size + get_top();
 
   write_lock.Unlock();
+
+  // Adjust write_pos
+  align_bl(pos, bl);
 
   // split?
   off64_t split = 0;
