@@ -7,7 +7,9 @@
 #include "Mutex.h"
 #include "Cond.h"
 #include <list>
+#include <map>
 #include "include/atomic.h"
+#include "include/Context.h"
 
 class CephContext;
 class PerfCounters;
@@ -148,6 +150,72 @@ public:
   }
 private:
   SimpleThrottle *m_throttle;
+};
+
+class OrderedThrottle;
+
+class C_OrderedThrottle : public Context {
+public:
+  C_OrderedThrottle(OrderedThrottle *ordered_throttle, uint64_t tid)
+    : m_ordered_throttle(ordered_throttle), m_tid(tid) {
+  }
+
+protected:
+  virtual void finish(int r);
+
+private:
+  OrderedThrottle *m_ordered_throttle;
+  uint64_t m_tid;
+};
+
+/**
+ * @class OrderedThrottle
+ * Throttles the maximum number of active requests and completes them in order
+ *
+ * Operations can complete out-of-order but their associated Context callback
+ * will completed in-order during invokation of start_op() and wait_for_ret()
+ */
+class OrderedThrottle {
+public:
+  OrderedThrottle(uint64_t max, bool ignore_enoent);
+
+  C_OrderedThrottle *start_op(Context *on_finish);
+  void end_op(int r);
+
+  bool pending_error() const;
+  int wait_for_ret();
+
+protected:
+  friend class C_OrderedThrottle;
+
+  void finish_op(uint64_t tid, int r);
+
+private:
+  struct Result {
+    bool finished;
+    int ret_val;
+    Context *on_finish;
+
+    Result(Context *_on_finish = NULL)
+      : finished(false), ret_val(0), on_finish(_on_finish) {
+    }
+  };
+
+  typedef std::map<uint64_t, Result> TidResult;
+
+  mutable Mutex m_lock;
+  Cond m_cond;
+  uint64_t m_max;
+  uint64_t m_current;
+  int m_ret_val;
+  bool m_ignore_enoent;
+
+  uint64_t m_next_tid;
+  uint64_t m_complete_tid;
+
+  TidResult m_tid_result;
+
+  void complete_pending_ops();
 };
 
 #endif

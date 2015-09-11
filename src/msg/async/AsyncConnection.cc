@@ -841,7 +841,7 @@ void AsyncConnection::process()
           in_seq.set(message->get_seq());
           ldout(async_msgr->cct, 10) << __func__ << " got message " << message->get_seq()
                                << " " << message << " " << *message << dendl;
-	  ldout(async_msgr->cct, 1) << " == rx == " << message << " " << *message
+	  ldout(async_msgr->cct, 1) << " == rx == " << message->get_source() << " " << message << " " << *message
 				    << dendl;
 
           // if send_message always successfully send, it may have no
@@ -979,7 +979,6 @@ int AsyncConnection::_process_connection()
         if (r < 0) {
           goto fail;
         }
-        net.set_socket_options(sd);
 
         center->create_file_event(sd, EVENT_READABLE, read_handler);
         state = STATE_CONNECTING_WAIT_BANNER;
@@ -1506,6 +1505,10 @@ int AsyncConnection::handle_connect_reply(ceph_msg_connect &connect, ceph_msg_co
   }
   if (reply.tag == CEPH_MSGR_TAG_WAIT) {
     ldout(async_msgr->cct, 3) << __func__ << " connect got WAIT (connection race)" << dendl;
+    if (!once_ready) {
+      ldout(async_msgr->cct, 1) << __func__ << " got WAIT while connection isn't registered, just closed." << dendl;
+      goto fail;
+    }
     state = STATE_WAIT;
   }
 

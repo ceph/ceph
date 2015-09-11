@@ -1516,10 +1516,13 @@ fail:
   for (uint32_t i=0; i < num_rados_handles; i++) {
     if (rados[i]) {
       delete rados[i];
+      rados[i] = NULL;
     }
   }
+  num_rados_handles = 0;
   if (rados) {
     delete[] rados;
+    rados = NULL;
   }
 
   return ret;
@@ -4055,6 +4058,8 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
 
   if (source_zone.empty()) {
     set_copy_attrs(src_attrs, attrs, attrs_mod);
+  } else {
+    attrs = src_attrs;
   }
 
   ret = cb.complete(etag, mtime, set_mtime, attrs, delete_at);
