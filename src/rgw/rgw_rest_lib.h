@@ -13,7 +13,7 @@ public:
 };
 
 class RGWHandler_ObjStore_Lib : public RGWHandler_User {
-  friend class RGWRestMgr_Lib;
+  friend class RGWRESTMgr_Lib;
 public:
   RGWHandler_ObjStore_Lib() {}
   virtual ~RGWHandler_ObjStore_Lib() {}
