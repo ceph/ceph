@@ -11,6 +11,10 @@ EXTRA_DIST += \
 	src/test/downloads \
 	systemd/ceph.tmpfiles.d \
 	etc/ceph.limits.d \
+	etc/default/ceph \
+	etc/sysconfig/ceph \
+	etc/sysconfig/SuSEfirewall2.d/services/ceph-mon \
+	etc/sysconfig/SuSEfirewall2.d/services/ceph-osd-mds \
 	udev/50-rbd.rules \
 	udev/60-ceph-partuuid-workaround.rules \
 	udev/95-ceph-osd.rules \
