@@ -29,7 +29,7 @@ def task(ctx, config):
           k: 2
           m: 1
           ruleset-failure-domain: osd
-
+        cleanup: false (defaults to true)
     example:
 
     tasks:
@@ -60,6 +60,9 @@ def task(ctx, config):
         else:
             profile_name = None
 
+        cleanup = []
+        if not config.get('cleanup', True):
+            cleanup = ['--no-cleanup']
         pool = 'data'
         if config.get('create_pool', True):
             if config.get('pool'):
@@ -81,7 +84,7 @@ def task(ctx, config):
                           '-b', str(config.get('size', 4<<20)),
                           '-p' , pool,
                           'bench', str(config.get('time', 360)), 'write',
-                          ]).format(tdir=testdir),
+                          ] + cleanup).format(tdir=testdir),
                 ],
             logger=log.getChild('radosbench.{id}'.format(id=id_)),
             stdin=run.PIPE,
