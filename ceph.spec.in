@@ -815,15 +815,14 @@ mkdir -p %{_localstatedir}/run/ceph/
 %{_mandir}/man8/ceph-clsinfo.8*
 %{_mandir}/man8/librados-config.8*
 #set up placeholder directories
-%attr(770,ceph,ceph) %dir %{_localstatedir}/lib/ceph/
-%attr(770,ceph,ceph) %dir %{_localstatedir}/lib/ceph/tmp
-%attr(770,ceph,ceph) %dir %{_localstatedir}/lib/ceph/mon
-%attr(770,ceph,ceph) %dir %{_localstatedir}/lib/ceph/osd
-%attr(770,ceph,ceph) %dir %{_localstatedir}/lib/ceph/mds
-%attr(770,ceph,ceph) %dir %{_localstatedir}/lib/ceph/bootstrap-osd
-%attr(770,ceph,ceph) %dir %{_localstatedir}/lib/ceph/bootstrap-mds
-%attr(770,ceph,ceph) %dir %{_localstatedir}/lib/ceph/bootstrap-rgw
-%attr(770,ceph,ceph) %dir %{_localstatedir}/run/ceph/
+%attr(750,ceph,ceph) %dir %{_localstatedir}/lib/ceph/tmp
+%attr(750,ceph,ceph) %dir %{_localstatedir}/lib/ceph/mon
+%attr(750,ceph,ceph) %dir %{_localstatedir}/lib/ceph/osd
+%attr(750,ceph,ceph) %dir %{_localstatedir}/lib/ceph/mds
+%attr(750,ceph,ceph) %dir %{_localstatedir}/lib/ceph/bootstrap-osd
+%attr(750,ceph,ceph) %dir %{_localstatedir}/lib/ceph/bootstrap-mds
+%attr(750,ceph,ceph) %dir %{_localstatedir}/lib/ceph/bootstrap-rgw
+%attr(770,ceph,ceph) %dir %{_localstatedir}/run/ceph
 
 #################################################################################
 %files -n ceph-common
@@ -852,7 +851,6 @@ mkdir -p %{_localstatedir}/run/ceph/
 %{_datadir}/ceph/id_dsa_drop.ceph.com
 %{_datadir}/ceph/id_dsa_drop.ceph.com.pub
 %dir %{_sysconfdir}/ceph/
-%dir %{_localstatedir}/log/ceph/
 %dir %{_datarootdir}/ceph/
 %dir %{_libexecdir}/ceph/
 %config %{_sysconfdir}/bash_completion.d/rados
@@ -862,7 +860,8 @@ mkdir -p %{_localstatedir}/run/ceph/
 %{python_sitelib}/ceph_argparse.py*
 %{python_sitelib}/ceph_daemon.py*
 %{_udevrulesdir}/50-rbd.rules
-%attr(2750,ceph,ceph) %dir %{_localstatedir}/log/ceph/
+%attr(3770,ceph,ceph) %dir %{_localstatedir}/log/ceph/
+%attr(750,ceph,ceph) %dir %{_localstatedir}/lib/ceph/
 
 %pre -n ceph-common
 CEPH_GROUP_ID=""
