@@ -298,6 +298,13 @@ You may set values for the following keys:
 :Version: Version ``FIXME``
 
 
+``write_fadvise_dontneed``
+
+:Description: Set/Unset WRITE_FADVISE_DONTNEED flag on a given pool.
+:Type: Integer
+:Valid Range: 1 sets flag, 0 unsets flag
+
+
 ``hit_set_type``
 
 :Description: Enables hit set tracking for cache pools.
