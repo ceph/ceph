@@ -212,7 +212,7 @@ public:
 
   void wakeup(int shard_id) { return master_log.wakeup(shard_id); }
   void stop() {
-    master_log.stop();
+    master_log.finish();
   }
 };
 
