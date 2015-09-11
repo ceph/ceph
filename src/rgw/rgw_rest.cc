@@ -1524,7 +1524,7 @@ static int64_t parse_content_length(const char *content_length)
   return len;
 }
 
-int RGWREST::preprocess(struct req_state *s, RGWStreamIO *sio)
+int RGWREST::preprocess(struct req_state *s, RGWClientIO cio)
 {
   req_info& info = s->info;
 
@@ -1750,11 +1750,11 @@ RGWHandler *RGWREST::get_handler(RGWRados *store, struct req_state *s,
 {
   RGWHandler *handler = nullptr;
 
-#if 0 /* XXXX */
   *init_error = preprocess(s, io);
   if (*init_error < 0)
     return NULL;
 
+#if 0 /* XXXX */
   RGWRESTMgr *m = mgr.get_resource_mgr(s, s->decoded_uri, &s->relative_uri);
   if (!m) {
     *init_error = -ERR_METHOD_NOT_ALLOWED;

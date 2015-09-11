@@ -423,7 +423,7 @@ class RGWLibIO;
 class RGWREST {
   RGWRESTMgr mgr;
 
-  static int preprocess(struct req_state *s, RGWStreamIO *sio);
+  static int preprocess(struct req_state *s, RGWClientIO *sio);
 public:
   RGWREST() {}
   RGWHandler *get_handler(RGWRados *store, struct req_state *s,
