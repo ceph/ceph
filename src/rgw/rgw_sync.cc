@@ -306,6 +306,7 @@ int RGWRemoteMetaLog::init()
 
 void RGWRemoteMetaLog::finish()
 {
+  stop();
   async_rados->stop();
   delete async_rados;
 }
