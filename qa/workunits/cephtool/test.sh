@@ -1357,9 +1357,13 @@ function test_mon_osd_pool_set()
 
   for flag in hashpspool nodelete nopgchange nosizechange write_fadvise_dontneed; do
       ceph osd pool set $TEST_POOL_GETSET $flag false
+      ceph osd pool get $TEST_POOL_GETSET $flag | grep "$flag: false"
       ceph osd pool set $TEST_POOL_GETSET $flag true
+      ceph osd pool get $TEST_POOL_GETSET $flag | grep "$flag: true"
       ceph osd pool set $TEST_POOL_GETSET $flag 1
+      ceph osd pool get $TEST_POOL_GETSET $flag | grep "$flag: true"
       ceph osd pool set $TEST_POOL_GETSET $flag 0
+      ceph osd pool get $TEST_POOL_GETSET $flag | grep "$flag: false"
       expect_false ceph osd pool set $TEST_POOL_GETSET $flag asdf
       expect_false ceph osd pool set $TEST_POOL_GETSET $flag 2
   done
