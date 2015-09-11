@@ -6469,8 +6469,10 @@ void OSD::handle_osd_map(MOSDMap *m)
   else if (do_restart)
     start_boot();
 
+  osd_lock.Unlock();
   if (do_shutdown)
     shutdown();
+  osd_lock.Lock();
 
   m->put();
 }
