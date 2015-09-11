@@ -793,6 +793,7 @@ mkdir -p %{_localstatedir}/run/ceph/
 %config %{_sysconfdir}/security/limits.d/ceph.conf
 %config %{_sysconfdir}/bash_completion.d/ceph
 %config(noreplace) %{_sysconfdir}/logrotate.d/ceph
+%config(noreplace) %{_sysconfdir}/sysconfig/ceph
 %if 0%{?suse_version}
 %config %{_sysconfdir}/sysconfig/SuSEfirewall2.d/services/ceph-mon
 %config %{_sysconfdir}/sysconfig/SuSEfirewall2.d/services/ceph-osd-mds
