@@ -97,6 +97,15 @@ int preload_erasure_code()
   return r;
 }
 
+int preload_plugins()
+{
+  stringstream ss;
+  PluginRegistry *reg = g_ceph_context->get_plugin_registry();
+  assert(reg);
+  int r = reg->load("objectstore", g_conf->osd_objectstore);
+  return r;
+}
+
 int main(int argc, const char **argv) 
 {
   vector<const char*> args;
@@ -206,6 +215,8 @@ int main(int argc, const char **argv)
     derr << "must specify '--osd-data=foo' data path" << dendl;
     usage();
   }
+  if (preload_plugins() < 0)
+    return -1;
 
   // the store
   ObjectStore *store = ObjectStore::create(g_ceph_context,

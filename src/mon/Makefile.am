@@ -20,7 +20,7 @@ libmon_la_SOURCES = \
 	mon/HealthMonitor.cc \
 	mon/DataHealthService.cc \
 	mon/ConfigKeyService.cc
-libmon_la_LIBADD = $(LIBAUTH) $(LIBCOMMON) $(LIBOS) $(LIBMON_TYPES)
+libmon_la_LIBADD = $(LIBAUTH) $(LIBCOMMON) $(LIBOS) $(LIBFILESTORE) $(LIBMEMSTORE) $(LIBKVSTORE) $(LIBMON_TYPES)
 noinst_LTLIBRARIES += libmon.la
 
 noinst_HEADERS += \

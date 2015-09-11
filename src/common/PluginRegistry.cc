@@ -29,7 +29,7 @@
 #define PLUGIN_PREFIX "libceph_"
 #define PLUGIN_SUFFIX ".so"
 #define PLUGIN_INIT_FUNCTION "__ceph_plugin_init"
-#define PLUGIN_VERSION_FUNCTION "__ceph_version"
+#define PLUGIN_VERSION_FUNCTION "__ceph_plugin_version"
 
 #define dout_subsys ceph_subsys_context
 
@@ -100,17 +100,26 @@ int PluginRegistry::add(const std::string& type,
 Plugin *PluginRegistry::get(const std::string& type,
 			    const std::string& name)
 {
+  Mutex::Locker l(lock);
+  return get_locked(type, name);
+}
+
+Plugin *PluginRegistry::get_locked(const std::string& type,
+			    const std::string& name)
+{
   assert(lock.is_locked());
   Plugin *ret = 0;
-
   std::map<std::string,Plugin*>::iterator j;
-  std::map<std::string,map<std::string,Plugin*> >::iterator i =
-    plugins.find(type);
-  if (i == plugins.end())
+  std::map<std::string,map<std::string,Plugin*> >::iterator i = plugins.find(type);
+  if (i == plugins.end()) {
+    ldout(cct, 10) << __func__ << "couldn't find " << type << " in plugin registry " << name << dendl;
     goto out;
-  j = i->second.find(type);
-  if (j == i->second.end())
+  }
+  j = i->second.find(name);
+  if (j == i->second.end()) {
+    ldout(cct, 10) << __func__ << "couldn't find factory plugin " << type << "  " << name << dendl;
     goto out;
+  }
   ret = j->second;
 
  out:
@@ -122,7 +131,7 @@ Plugin *PluginRegistry::get(const std::string& type,
 int PluginRegistry::load(const std::string &type,
 			 const std::string &name)
 {
-  assert(lock.is_locked());
+  Mutex::Locker l(lock);
   ldout(cct, 10) << __func__ << " " << type << " " << name << dendl;
 
   std::string fname = cct->_conf->plugin_dir + "/" + type + "/" PLUGIN_PREFIX
@@ -170,7 +179,7 @@ int PluginRegistry::load(const std::string &type,
     return -ENOENT;
   }
 
-  Plugin *plugin = get(type, name);
+  Plugin *plugin = get_locked(type, name);
   if (plugin == 0) {
     lderr(cct) << __func__ << " " << fname << " "
 	       << PLUGIN_INIT_FUNCTION << "()"

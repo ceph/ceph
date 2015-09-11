@@ -16,9 +16,9 @@
 #include "include/memory.h"
 #include "ObjectStore.h"
 #include "common/Formatter.h"
-#include "FileStore.h"
-#include "MemStore.h"
-#include "KeyValueStore.h"
+#include "filestore/FileStore.h"
+#include "memstore/MemStore.h"
+#include "keyvaluestore/KeyValueStore.h"
 #include "common/safe_io.h"
 
 ObjectStore *ObjectStore::create(CephContext *cct,
@@ -27,18 +27,9 @@ ObjectStore *ObjectStore::create(CephContext *cct,
 				 const string& journal,
 			         osflagbits_t flags)
 {
-  if (type == "filestore") {
-    return new FileStore(data, journal, flags);
-  }
-  if (type == "memstore") {
-    return new MemStore(cct, data);
-  }
-  if (type == "keyvaluestore" &&
-      cct->check_experimental_feature_enabled("keyvaluestore")) {
-    return new KeyValueStore(data);
-  }
-
   PluginRegistry *reg = cct->get_plugin_registry();
+
+  // assuming we have preloaded the all the supported  types
   Factory *factory = dynamic_cast<Factory*>(reg->get("objectstore", type));
   if (factory) {
     return factory->factory(cct, type, data, journal, flags);
@@ -46,6 +37,7 @@ ObjectStore *ObjectStore::create(CephContext *cct,
   return NULL;
 }
 
+#if 0
 int ObjectStore::write_meta(const std::string& key,
 			    const std::string& value)
 {
@@ -74,13 +66,11 @@ int ObjectStore::read_meta(const std::string& key,
   return 0;
 }
 
-
-
-
 ostream& operator<<(ostream& out, const ObjectStore::Sequencer& s)
 {
   return out << "osr(" << s.get_name() << " " << &s << ")";
 }
+#endif
 
 unsigned ObjectStore::apply_transactions(Sequencer *osr,
 					 list<Transaction*> &tls,

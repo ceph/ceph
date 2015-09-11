@@ -23,36 +23,36 @@ using std::string;
 
 int RocksDBStore::init()
 {
-  options.write_buffer_size = g_conf->rocksdb_write_buffer_size;
-  options.write_buffer_num = g_conf->rocksdb_write_buffer_num;
-  options.min_write_buffer_number_to_merge = g_conf->rocksdb_min_write_buffer_number_to_merge;
+  options.write_buffer_size = cct->_conf->rocksdb_write_buffer_size;
+  options.write_buffer_num = cct->_conf->rocksdb_write_buffer_num;
+  options.min_write_buffer_number_to_merge = cct->_conf->rocksdb_min_write_buffer_number_to_merge;
 
-  options.level0_file_num_compaction_trigger = g_conf->rocksdb_level0_file_num_compaction_trigger;
-  options.level0_slowdown_writes_trigger = g_conf->rocksdb_level0_slowdown_writes_trigger;
-  options.level0_stop_writes_trigger = g_conf->rocksdb_level0_stop_writes_trigger;
+  options.level0_file_num_compaction_trigger = cct->_conf->rocksdb_level0_file_num_compaction_trigger;
+  options.level0_slowdown_writes_trigger = cct->_conf->rocksdb_level0_slowdown_writes_trigger;
+  options.level0_stop_writes_trigger = cct->_conf->rocksdb_level0_stop_writes_trigger;
 
-  options.max_bytes_for_level_base = g_conf->rocksdb_max_bytes_for_level_base;
-  options.max_bytes_for_level_multiplier = g_conf->rocksdb_max_bytes_for_level_multiplier;
-  options.target_file_size_base = g_conf->rocksdb_target_file_size_base;
-  options.target_file_size_multiplier = g_conf->rocksdb_target_file_size_multiplier;
-  options.num_levels = g_conf->rocksdb_num_levels;
-  options.cache_size = g_conf->rocksdb_cache_size;
-  options.block_size = g_conf->rocksdb_block_size;
-  options.bloom_bits_per_key = g_conf->rocksdb_bloom_bits_per_key;
+  options.max_bytes_for_level_base = cct->_conf->rocksdb_max_bytes_for_level_base;
+  options.max_bytes_for_level_multiplier = cct->_conf->rocksdb_max_bytes_for_level_multiplier;
+  options.target_file_size_base = cct->_conf->rocksdb_target_file_size_base;
+  options.target_file_size_multiplier = cct->_conf->rocksdb_target_file_size_multiplier;
+  options.num_levels = cct->_conf->rocksdb_num_levels;
+  options.cache_size = cct->_conf->rocksdb_cache_size;
+  options.block_size = cct->_conf->rocksdb_block_size;
+  options.bloom_bits_per_key = cct->_conf->rocksdb_bloom_bits_per_key;
 
-  options.max_background_compactions = g_conf->rocksdb_max_background_compactions;
-  options.compaction_threads = g_conf->rocksdb_compaction_threads;
-  options.max_background_flushes = g_conf->rocksdb_max_background_flushes;
-  options.flusher_threads = g_conf->rocksdb_flusher_threads;
+  options.max_background_compactions = cct->_conf->rocksdb_max_background_compactions;
+  options.compaction_threads = cct->_conf->rocksdb_compaction_threads;
+  options.max_background_flushes = cct->_conf->rocksdb_max_background_flushes;
+  options.flusher_threads = cct->_conf->rocksdb_flusher_threads;
 
-  options.max_open_files = g_conf->rocksdb_max_open_files;
-  options.compression_type = g_conf->rocksdb_compression;
-  options.paranoid_checks = g_conf->rocksdb_paranoid;
-  options.log_file = g_conf->rocksdb_log;
-  options.info_log_level = g_conf->rocksdb_info_log_level;
-  options.wal_dir = g_conf->rocksdb_wal_dir;
-  options.disableDataSync = g_conf->rocksdb_disableDataSync;
-  options.disableWAL = g_conf->rocksdb_disableWAL;
+  options.max_open_files = cct->_conf->rocksdb_max_open_files;
+  options.compression_type = cct->_conf->rocksdb_compression;
+  options.paranoid_checks = cct->_conf->rocksdb_paranoid;
+  options.log_file = cct->_conf->rocksdb_log;
+  options.info_log_level = cct->_conf->rocksdb_info_log_level;
+  options.wal_dir = cct->_conf->rocksdb_wal_dir;
+  options.disableDataSync = cct->_conf->rocksdb_disableDataSync;
+  options.disableWAL = cct->_conf->rocksdb_disableWAL;
   return 0;
 }
 
@@ -103,12 +103,12 @@ int RocksDBStore::do_open(ostream &out, bool create_if_missing)
     ldoptions.compression = rocksdb::kNoCompression;
 
   if(options.disableDataSync) {
-    derr << "Warning: DataSync is disabled, may lose data on node failure" << dendl;
+    //derr << "Warning: DataSync is disabled, may lose data on node failure" << dendl;
     ldoptions.disableDataSync = options.disableDataSync;
   }
 
   if(options.disableWAL) {
-    derr << "Warning: Write Ahead Log is disabled, may lose data on failure" << dendl;
+    //derr << "Warning: Write Ahead Log is disabled, may lose data on failure" << dendl;
   }  
   if(options.wal_dir.length())
     ldoptions.wal_dir = options.wal_dir;
@@ -139,14 +139,14 @@ int RocksDBStore::do_open(ostream &out, bool create_if_missing)
   }
   //db.reset(_db);
 
-  if (g_conf->rocksdb_compact_on_mount) {
-    derr << "Compacting rocksdb store..." << dendl;
+  if (cct->_conf->rocksdb_compact_on_mount) {
+    //derr << "Compacting rocksdb store..." << dendl;
     compact();
-    derr << "Finished compacting rocksdb store" << dendl;
+    //derr << "Finished compacting rocksdb store" << dendl;
   }
 
 
-  PerfCountersBuilder plb(g_ceph_context, "rocksdb", l_rocksdb_first, l_rocksdb_last);
+  PerfCountersBuilder plb(cct, "rocksdb", l_rocksdb_first, l_rocksdb_last);
   plb.add_u64_counter(l_rocksdb_gets, "rocksdb_get", "Gets");
   plb.add_u64_counter(l_rocksdb_txns, "rocksdb_transaction", "Transactions");
   plb.add_u64_counter(l_rocksdb_compact, "rocksdb_compact", "Compactions");

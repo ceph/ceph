@@ -20,7 +20,7 @@
 #include "detailed_stat_collector.h"
 #include "distribution.h"
 #include "global/global_init.h"
-#include "os/FileStore.h"
+#include "os/filestore/FileStore.h"
 #include "testfilestore_backend.h"
 #include "common/perf_counters.h"
 
