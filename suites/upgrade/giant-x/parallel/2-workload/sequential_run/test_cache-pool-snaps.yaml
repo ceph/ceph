@@ -6,15 +6,15 @@ workload:
   sequential:
     - exec:
         client.0:
-          - ceph osd pool create base 4
-          - ceph osd pool create cache 4
-          - ceph osd tier add base cache
-          - ceph osd tier cache-mode cache writeback
-          - ceph osd tier set-overlay base cache
-          - ceph osd pool set cache hit_set_type bloom
-          - ceph osd pool set cache hit_set_count 8
-          - ceph osd pool set cache hit_set_period 3600
-          - ceph osd pool set cache target_max_objects 250
+          - sudo ceph osd pool create base 4
+          - sudo ceph osd pool create cache 4
+          - sudo ceph osd tier add base cache
+          - sudo ceph osd tier cache-mode cache writeback
+          - sudo ceph osd tier set-overlay base cache
+          - sudo ceph osd pool set cache hit_set_type bloom
+          - sudo ceph osd pool set cache hit_set_count 8
+          - sudo ceph osd pool set cache hit_set_period 3600
+          - sudo ceph osd pool set cache target_max_objects 250
     - rados:
         clients: [client.0]
         pools: [base]

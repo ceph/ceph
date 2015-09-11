@@ -1,7 +1,7 @@
 tasks:
 - exec:
     client.0:
-      - ceph osd deep-scrub '*'
+      - sudo ceph osd deep-scrub '*'
 - sequential:
   - rados:
       clients: [client.0]

@@ -285,6 +285,7 @@ def cephfs_setup(ctx, config):
         all_roles = [item for remote_roles in mdss.remotes.values() for item in remote_roles]
         num_active = len([r for r in all_roles if is_active_mds(r)])
         mon_remote.run(args=[
+            'sudo',
             'adjust-ulimits',
             'ceph-coverage',
             coverage_dir,
@@ -886,11 +887,12 @@ def get_all_pg_info(rem_site, testdir):
     Get the results of a ceph pg dump
     """
     info = rem_site.run(args=[
-                        'adjust-ulimits',
-                        'ceph-coverage',
-                        '{tdir}/archive/coverage'.format(tdir=testdir),
-                        'ceph', 'pg', 'dump',
-                        '--format', 'json'], stdout=StringIO())
+        'sudo',
+        'adjust-ulimits',
+        'ceph-coverage',
+        '{tdir}/archive/coverage'.format(tdir=testdir),
+        'ceph', 'pg', 'dump',
+        '--format', 'json'], stdout=StringIO())
     all_info = json.loads(info.stdout.getvalue())
     return all_info['pg_stats']
 
@@ -928,6 +930,7 @@ def osd_scrub_pgs(ctx, config):
             if role.startswith('osd.'):
                 log.info("Scrubbing osd {osd}".format(osd=role))
                 rem_site.run(args=[
+                            'sudo',
                             'adjust-ulimits',
                             'ceph-coverage',
                             '{tdir}/archive/coverage'.format(tdir=testdir),
@@ -1078,6 +1081,7 @@ def wait_for_mon_quorum(ctx, config):
     while True:
         r = remote.run(
             args=[
+                'sudo',
                 'ceph',
                 'quorum_status',
                 ],

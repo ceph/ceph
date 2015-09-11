@@ -6,19 +6,19 @@ overrides:
 tasks:
 - exec:
     client.0:
-      - ceph osd erasure-code-profile set teuthologyprofile ruleset-failure-domain=osd k=2 m=1
-      - ceph osd pool create ecbase 4 4 erasure teuthologyprofile
-      - ceph osd pool create eccache 4
-      - ceph osd tier add ecbase eccache
-      - ceph osd tier cache-mode eccache writeback
-      - ceph osd tier set-overlay ecbase eccache
-      - ceph osd pool set eccache hit_set_type bloom
-      - ceph osd pool set eccache hit_set_count 8
-      - ceph osd pool set eccache hit_set_period 60
-      - ceph osd pool set eccache target_max_objects 250
+      - sudo ceph osd erasure-code-profile set teuthologyprofile ruleset-failure-domain=osd k=2 m=1
+      - sudo ceph osd pool create ecbase 4 4 erasure teuthologyprofile
+      - sudo ceph osd pool create eccache 4
+      - sudo ceph osd tier add ecbase eccache
+      - sudo ceph osd tier cache-mode eccache writeback
+      - sudo ceph osd tier set-overlay ecbase eccache
+      - sudo ceph osd pool set eccache hit_set_type bloom
+      - sudo ceph osd pool set eccache hit_set_count 8
+      - sudo ceph osd pool set eccache hit_set_period 60
+      - sudo ceph osd pool set eccache target_max_objects 250
 - exec:
     client.0:
-      - ceph osd deep-scrub '*'
+      - sudo ceph osd deep-scrub '*'
 - sequential:
   - rados:
       clients: [client.0]

@@ -56,9 +56,10 @@ def task(ctx, config):
 
     proc = mon.run(
              args=[
-                'daemon-helper',
-                'kill',
-                'ceph', '-w'
+                 'sudo',
+                 'daemon-helper',
+                 'kill',
+                 'ceph', '-w'
              ],
              stdin=run.PIPE,
              stdout=StringIO(),
@@ -83,9 +84,10 @@ def task(ctx, config):
 
     proc = mon.run(
              args=[
-                'daemon-helper',
-                'kill',
-                'ceph', '-w'
+                 'sudo',
+                 'daemon-helper',
+                 'kill',
+                 'ceph', '-w'
              ],
              stdin=run.PIPE,
              stdout=StringIO(),
@@ -124,9 +126,10 @@ def task(ctx, config):
 
     proc = mon.run(
              args=[
-                'daemon-helper',
-                'kill',
-                'ceph', '-w'
+                 'sudo',
+                 'daemon-helper',
+                 'kill',
+                 'ceph', '-w'
              ],
              stdin=run.PIPE,
              stdout=StringIO(),
@@ -152,9 +155,10 @@ def task(ctx, config):
 
     proc = mon.run(
              args=[
-                'daemon-helper',
-                'kill',
-                'ceph', '-w'
+                 'sudo',
+                 'daemon-helper',
+                 'kill',
+                 'ceph', '-w'
              ],
              stdin=run.PIPE,
              stdout=StringIO(),
@@ -182,9 +186,10 @@ def task(ctx, config):
 
     proc = mon.run(
              args=[
-                'daemon-helper',
-                'kill',
-                'ceph', '-w'
+                 'sudo',
+                 'daemon-helper',
+                 'kill',
+                 'ceph', '-w'
              ],
              stdin=run.PIPE,
              stdout=StringIO(),

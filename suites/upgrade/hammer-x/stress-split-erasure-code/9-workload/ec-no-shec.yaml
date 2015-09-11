@@ -6,4 +6,4 @@ tasks:
 - exec:
     mon.a:
       - |-
-        ceph osd erasure-code-profile set profile-shec k=2 m=1 c=1 plugin=shec 2>&1 | grep "unsupported by"
+        sudo ceph osd erasure-code-profile set profile-shec k=2 m=1 c=1 plugin=shec 2>&1 | grep "unsupported by"

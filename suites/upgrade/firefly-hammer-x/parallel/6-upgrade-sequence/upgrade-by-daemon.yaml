@@ -19,7 +19,7 @@ upgrade-sequence2:
    - print: "**** running mixed versions of osds and mons"
    - exec:
       mon.b:
-        - ceph osd crush tunables hammer
+        - sudo ceph osd crush tunables hammer
    - install.upgrade:
        mon.b:
    - print: "**** done install.upgrade mon.b to the version from teuthology-suite arg"

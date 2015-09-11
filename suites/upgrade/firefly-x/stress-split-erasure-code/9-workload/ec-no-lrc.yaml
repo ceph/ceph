@@ -6,4 +6,4 @@ tasks:
 - exec:
     mon.a:
       - |-
-        ceph osd erasure-code-profile set profile-lrc plugin=lrc 2>&1 | grep "unsupported by:"
+        sudo ceph osd erasure-code-profile set profile-lrc plugin=lrc 2>&1 | grep "unsupported by:"

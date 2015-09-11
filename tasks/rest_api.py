@@ -170,6 +170,7 @@ def task(ctx, config):
                     )
                 rems.run(
                     args=[
+                        'sudo',
                         'ceph',
                         'auth',
                         'import',
