@@ -80,6 +80,11 @@ void MDLog::create_logger()
   g_ceph_context->get_perfcounters_collection()->add(logger);
 }
 
+void MDLog::set_write_iohint(unsigned iohint_flags)
+{
+  journaler->set_write_iohint(iohint_flags);
+}
+
 class C_MDL_WriteError : public MDSIOContextBase {
   protected:
   MDLog *mdlog;
