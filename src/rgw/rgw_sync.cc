@@ -1233,6 +1233,32 @@ public:
 						      req_ret(0), entries_index(NULL) {
   }
 
+  void append_section_from_set(set<string>& all_sections, const string& name) {
+    set<string>::iterator iter = all_sections.find(name);
+    if (iter != all_sections.end()) {
+      sections.push_back(name);
+      all_sections.erase(iter);
+    }
+  }
+  /*
+   * meta sync should go in the following order: user, bucket.instance, bucket
+   * then whatever other sections exist (if any)
+   */
+  void rearrange_sections() {
+    set<string> all_sections;
+    for (list<string>::iterator iter = sections.begin(); iter != sections.end(); ++iter) {
+      all_sections.insert(*iter);
+    }
+    sections.clear();
+    append_section_from_set(all_sections, "user");
+    append_section_from_set(all_sections, "bucket.instance");
+    append_section_from_set(all_sections, "bucket");
+
+    for (set<string>::iterator iter = all_sections.begin(); iter != all_sections.end(); ++iter) {
+      sections.push_back(*iter);
+    }
+  }
+
   int operate() {
     RGWRESTConn *conn = store->rest_master_conn;
 
@@ -1247,6 +1273,7 @@ public:
         ldout(store->ctx(), 0) << "ERROR: failed to fetch metadata sections" << dendl;
 	return set_state(RGWCoroutine_Error);
       }
+      rearrange_sections();
       sections_iter = sections.begin();
       for (; sections_iter != sections.end(); ++sections_iter) {
         yield {
