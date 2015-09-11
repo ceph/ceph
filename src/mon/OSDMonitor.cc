@@ -2876,9 +2876,9 @@ namespace {
     SIZE, MIN_SIZE, CRASH_REPLAY_INTERVAL,
     PG_NUM, PGP_NUM, CRUSH_RULESET, HASHPSPOOL,
     NODELETE, NOPGCHANGE, NOSIZECHANGE,
-    WRITE_FADVISE_DONTNEED, HIT_SET_TYPE,
-    HIT_SET_PERIOD, HIT_SET_COUNT, HIT_SET_FPP, USE_GMT_HITSET,
-    AUID, TARGET_MAX_OBJECTS, TARGET_MAX_BYTES,
+    WRITE_FADVISE_DONTNEED, NOSCRUB, NODEEP_SCRUB,
+    HIT_SET_TYPE, HIT_SET_PERIOD, HIT_SET_COUNT, HIT_SET_FPP,
+    USE_GMT_HITSET, AUID, TARGET_MAX_OBJECTS, TARGET_MAX_BYTES,
     CACHE_TARGET_DIRTY_RATIO, CACHE_TARGET_DIRTY_HIGH_RATIO,
     CACHE_TARGET_FULL_RATIO,
     CACHE_MIN_FLUSH_AGE, CACHE_MIN_EVICT_AGE,
@@ -3342,6 +3342,7 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
       ("pg_num", PG_NUM)("pgp_num", PGP_NUM)("crush_ruleset", CRUSH_RULESET)
       ("hashpspool", HASHPSPOOL)("nodelete", NODELETE)
       ("nopgchange", NOPGCHANGE)("nosizechange", NOSIZECHANGE)
+      ("noscrub", NOSCRUB)("nodeep-scrub", NODEEP_SCRUB)
       ("write_fadvise_dontneed", WRITE_FADVISE_DONTNEED)
       ("hit_set_type", HIT_SET_TYPE)("hit_set_period", HIT_SET_PERIOD)
       ("hit_set_count", HIT_SET_COUNT)("hit_set_fpp", HIT_SET_FPP)
@@ -3444,6 +3445,8 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	  case NOPGCHANGE:
 	  case NOSIZECHANGE:
 	  case WRITE_FADVISE_DONTNEED:
+	  case NOSCRUB:
+	  case NODEEP_SCRUB:
 	    for (i = ALL_CHOICES.begin(); i != ALL_CHOICES.end(); ++i) {
 	      if (i->second == *it)
 		break;
@@ -3620,6 +3623,8 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	  case NOPGCHANGE:
 	  case NOSIZECHANGE:
 	  case WRITE_FADVISE_DONTNEED:
+	  case NOSCRUB:
+	  case NODEEP_SCRUB:
 	    for (i = ALL_CHOICES.begin(); i != ALL_CHOICES.end(); ++i) {
 	      if (i->second == *it)
 		break;
@@ -4872,7 +4877,8 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
     }
     p.crush_ruleset = n;
   } else if (var == "hashpspool" || var == "nodelete" || var == "nopgchange" ||
-	     var == "nosizechange" || var == "write_fadvise_dontneed") {
+	     var == "nosizechange" || var == "write_fadvise_dontneed" ||
+	     var == "noscrub" || var == "nodeep-scrub") {
     uint64_t flag = pg_pool_t::get_flag_by_name(var);
     // make sure we only compare against 'n' if we didn't receive a string
     if (val == "true" || (interr.empty() && n == 1)) {
