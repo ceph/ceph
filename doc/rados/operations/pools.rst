@@ -305,6 +305,20 @@ You may set values for the following keys:
 :Valid Range: 1 sets flag, 0 unsets flag
 
 
+``noscrub``
+
+:Description: Set/Unset NOSCRUB flag on a given pool.
+:Type: Integer
+:Valid Range: 1 sets flag, 0 unsets flag
+
+
+``nodeep-scrub``
+
+:Description: Set/Unset NODEEP_SCRUB flag on a given pool.
+:Type: Integer
+:Valid Range: 1 sets flag, 0 unsets flag
+
+
 ``hit_set_type``
 
 :Description: Enables hit set tracking for cache pools.
