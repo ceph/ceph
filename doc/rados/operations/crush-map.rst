@@ -479,11 +479,7 @@ CRUSH maps support the notion of 'CRUSH rules', which are the rules that
 determine data placement for a pool. For large clusters, you will likely create
 many pools where each pool may have its own CRUSH ruleset and rules. The default
 CRUSH map has a rule for each pool, and one ruleset assigned to each of the
-default pools, which include:
-
-- ``data``
-- ``metadata``
-- ``rbd``
+default pools.
 
 .. note:: In most cases, you will not need to modify the default rules. When
    you create a new pool, its default ruleset is ``0``.
