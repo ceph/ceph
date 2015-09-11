@@ -21,7 +21,7 @@ upgrade-sequence:
    - exec:
       mon.b:
         # is this command valid?
-        - ceph osd crush tunables firefly
+        - sudo ceph osd crush tunables firefly
    - install.upgrade:
        mon.b:
          branch: hammer

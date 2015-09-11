@@ -17,14 +17,14 @@ tasks:
         osd max pg log entries: 100
 - exec:
     client.0:
-      - ceph osd pool create foo 64
+      - sudo ceph osd pool create foo 64
       - rados -p foo bench 60 write -b 1024 --no-cleanup
-      - ceph osd pool set foo size 3
-      - ceph osd out 0 1
+      - sudo ceph osd pool set foo size 3
+      - sudo ceph osd out 0 1
 - sleep:
     duration: 60
 - exec:
     client.0:
-      - ceph osd in 0 1
+      - sudo ceph osd in 0 1
 - sleep:
     duration: 60
