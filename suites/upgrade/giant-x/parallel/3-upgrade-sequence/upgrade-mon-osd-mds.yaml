@@ -20,7 +20,7 @@ upgrade-sequence:
 #do we need to use "ceph osd crush tunables giant" ?
    - exec:
       mon.b:
-        - ceph osd crush tunables firefly
+        - sudo ceph osd crush tunables firefly
    - print: "**** done ceph osd crush tunables firefly"
    - install.upgrade:
        mon.b:

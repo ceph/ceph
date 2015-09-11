@@ -19,7 +19,7 @@ upgrade-sequence:
    - print: "**** running mixed versions of osds and mons"
    - exec:
       mon.b:
-        - ceph osd crush tunables firefly
+        - sudo ceph osd crush tunables firefly
    - install.upgrade:
        mon.b:
    - print: "**** done install.upgrade mon.b to the version from teuthology-suite arg"

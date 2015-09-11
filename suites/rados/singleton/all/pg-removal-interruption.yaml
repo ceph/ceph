@@ -12,13 +12,13 @@ tasks:
     - slow request
 - exec:
     client.0:
-      - ceph osd pool create foo 128 128
+      - sudo ceph osd pool create foo 128 128
       - sleep 5
-      - ceph tell osd.0 injectargs -- --osd-inject-failure-on-pg-removal
-      - ceph osd pool delete foo foo --yes-i-really-really-mean-it
+      - sudo ceph tell osd.0 injectargs -- --osd-inject-failure-on-pg-removal
+      - sudo ceph osd pool delete foo foo --yes-i-really-really-mean-it
 - ceph.wait_for_failure: [osd.0]
 - ceph.restart: [osd.0]
 - exec:
     client.0:
-      - ceph tell osd.0 flush_pg_stats
+      - sudo ceph tell osd.0 flush_pg_stats
 - ceph.healthy:
