@@ -130,12 +130,15 @@ struct rgw_http_req_data : public RefCountedObject {
   atomic_t done;
   RGWHTTPClient *client;
   RGWHTTPManager *mgr;
+  char error_buf[CURL_ERROR_SIZE];
 
   Mutex lock;
   Cond cond;
 
   rgw_http_req_data() : easy_handle(NULL), h(NULL), id(-1), ret(0), client(NULL),
-                        mgr(NULL), lock("rgw_http_req_data::lock") {}
+                        mgr(NULL), lock("rgw_http_req_data::lock") {
+    memset(error_buf, 0, sizeof(error_buf));
+  }
   ~rgw_http_req_data() {
     if (mgr) {
       mgr->remove_request(id);
@@ -153,7 +156,6 @@ struct rgw_http_req_data : public RefCountedObject {
     ret = r;
     cond.Signal();
     done.set(1);
-
     if (easy_handle)
       curl_easy_cleanup(easy_handle);
 
@@ -185,8 +187,6 @@ int RGWHTTPClient::init_request(const char *method, const char *url, rgw_http_re
 
   CURL *easy_handle;
 
-  char error_buf[CURL_ERROR_SIZE];
-
   easy_handle = curl_easy_init();
 
   req_data->easy_handle = easy_handle;
@@ -208,7 +208,7 @@ int RGWHTTPClient::init_request(const char *method, const char *url, rgw_http_re
   curl_easy_setopt(easy_handle, CURLOPT_WRITEHEADER, (void *)this);
   curl_easy_setopt(easy_handle, CURLOPT_WRITEFUNCTION, receive_http_data);
   curl_easy_setopt(easy_handle, CURLOPT_WRITEDATA, (void *)this);
-  curl_easy_setopt(easy_handle, CURLOPT_ERRORBUFFER, (void *)error_buf);
+  curl_easy_setopt(easy_handle, CURLOPT_ERRORBUFFER, (void *)req_data->error_buf);
   if (h) {
     curl_easy_setopt(easy_handle, CURLOPT_HTTPHEADER, (void *)h);
   }
@@ -523,7 +523,7 @@ int RGWHTTPManager::process_requests(bool wait_for_data, bool *done)
           case CURLE_OK:
             break;
           default:
-            dout(20) << "ERROR: msg->data.result=" << msg->data.result << dendl;
+            dout(20) << "ERROR: msg->data.result=" << result << dendl;
             return -EIO;
         }
       }
@@ -611,26 +611,29 @@ void *RGWHTTPManager::reqs_thread_entry()
     CURLMsg *msg;
     while ((msg = curl_multi_info_read((CURLM *)multi_handle, &msgs_left))) {
       if (msg->msg == CURLMSG_DONE) {
+	int result = msg->data.result;
 	CURL *e = msg->easy_handle;
 	rgw_http_req_data *req_data;
 	curl_easy_getinfo(e, CURLINFO_PRIVATE, (void **)&req_data);
+	curl_multi_remove_handle((CURLM *)multi_handle, e);
 
 	long http_status;
 	curl_easy_getinfo(e, CURLINFO_RESPONSE_CODE, (void **)&http_status);
 
 	int status = rgw_http_error_to_errno(http_status);
 	finish_request(req_data, status);
-        switch (msg->data.result) {
+        switch (result) {
           case CURLE_OK:
             break;
           default:
-            dout(20) << "ERROR: msg->data.result=" << msg->data.result << dendl;
+            dout(20) << "ERROR: msg->data.result=" << result << dendl;
 	    break;
         }
       }
     }
   }
 
+  RWLock::WLocker rl(reqs_lock);
   map<uint64_t, rgw_http_req_data *>::iterator iter = reqs.begin();
   for (; iter != reqs.end(); ++iter) {
     finish_request(iter->second, -ECANCELED);
@@ -640,7 +643,6 @@ void *RGWHTTPManager::reqs_thread_entry()
     completion_mgr->go_down();
   }
   
-
   return 0;
 }
 
