@@ -240,6 +240,13 @@ void global_init(std::vector < const char * > *alt_def_args,
   // and opening the log file immediately.
   g_conf->call_all_observers();
 
+  // test leak checking
+  if (g_conf->debug_deliberately_leak_memory) {
+    derr << "deliberately leaking some memory" << dendl;
+    char *s = new char[1234567];
+    (void)s;
+  }
+
   if (code_env == CODE_ENVIRONMENT_DAEMON && !(flags & CINIT_FLAG_NO_DAEMON_ACTIONS))
     output_ceph_version();
 }
