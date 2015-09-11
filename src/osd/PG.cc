@@ -2751,7 +2751,8 @@ int PG::peek_map_epoch(ObjectStore *store,
   map<string,bufferlist> values;
   int r = store->omap_get_values(coll, pgmeta_oid, keys, &values);
   if (r != 0) {
-    assert(0 == "unable to open pg metadata");
+    // probably bug 10617; see OSD::load_pgs()
+    return -1;
   }
   assert(values.size() == 2);
 
