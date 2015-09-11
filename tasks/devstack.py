@@ -109,7 +109,7 @@ def create_pools(ceph_node, pool_size):
     log.info("Creating pools on Ceph cluster...")
 
     for pool_name in ['volumes', 'images', 'backups']:
-        args = ['ceph', 'osd', 'pool', 'create', pool_name, pool_size]
+        args = ['sudo', 'ceph', 'osd', 'pool', 'create', pool_name, pool_size]
         ceph_node.run(args=args)
 
 
@@ -125,11 +125,11 @@ def generate_ceph_keys(ceph_node):
     log.info("Generating Ceph keys...")
 
     ceph_auth_cmds = [
-        ['ceph', 'auth', 'get-or-create', 'client.cinder', 'mon',
+        ['sudo', 'ceph', 'auth', 'get-or-create', 'client.cinder', 'mon',
             'allow r', 'osd', 'allow class-read object_prefix rbd_children, allow rwx pool=volumes, allow rx pool=images'],  # noqa
-        ['ceph', 'auth', 'get-or-create', 'client.glance', 'mon',
+        ['sudo', 'ceph', 'auth', 'get-or-create', 'client.glance', 'mon',
             'allow r', 'osd', 'allow class-read object_prefix rbd_children, allow rwx pool=images'],  # noqa
-        ['ceph', 'auth', 'get-or-create', 'client.cinder-backup', 'mon',
+        ['sudo', 'ceph', 'auth', 'get-or-create', 'client.cinder-backup', 'mon',
             'allow r', 'osd', 'allow class-read object_prefix rbd_children, allow rwx pool=backups'],  # noqa
     ]
     for cmd in ceph_auth_cmds:
@@ -142,7 +142,7 @@ def distribute_ceph_keys(devstack_node, ceph_node):
     def copy_key(from_remote, key_name, to_remote, dest_path, owner):
         key_stringio = StringIO()
         from_remote.run(
-            args=['ceph', 'auth', 'get-or-create', key_name],
+            args=['sudo', 'ceph', 'auth', 'get-or-create', key_name],
             stdout=key_stringio)
         key_stringio.seek(0)
         misc.sudo_write_file(to_remote, dest_path,
@@ -173,7 +173,7 @@ def set_libvirt_secret(devstack_node, ceph_node):
     log.info("Setting libvirt secret...")
 
     cinder_key_stringio = StringIO()
-    ceph_node.run(args=['ceph', 'auth', 'get-key', 'client.cinder'],
+    ceph_node.run(args=['sudo', 'ceph', 'auth', 'get-key', 'client.cinder'],
                   stdout=cinder_key_stringio)
     cinder_key = cinder_key_stringio.getvalue().strip()
 
