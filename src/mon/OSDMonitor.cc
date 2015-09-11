@@ -4849,7 +4849,7 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
     }
     p.crush_ruleset = n;
   } else if (var == "hashpspool" || var == "nodelete" || var == "nopgchange" ||
-	     var == "nosizechange") {
+	     var == "nosizechange" || var == "write_fadvise_dontneed") {
     uint64_t flag = pg_pool_t::get_flag_by_name(var);
     // make sure we only compare against 'n' if we didn't receive a string
     if (val == "true" || (interr.empty() && n == 1)) {
@@ -4979,15 +4979,6 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
       return -EINVAL;
     }
     p.min_read_recency_for_promote = n;
-  } else if (var == "write_fadvise_dontneed") {
-    if (val == "true" || (interr.empty() && n == 1)) {
-      p.flags |= pg_pool_t::FLAG_WRITE_FADVISE_DONTNEED;
-    } else if (val == "false" || (interr.empty() && n == 0)) {
-      p.flags &= ~pg_pool_t::FLAG_WRITE_FADVISE_DONTNEED;
-    } else {
-      ss << "expecting value 'true', 'false', '0', or '1'";
-      return -EINVAL;
-    }
   } else if (var == "min_write_recency_for_promote") {
     if (interr.length()) {
       ss << "error parsing integer value '" << val << "': " << interr;
