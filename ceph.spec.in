@@ -816,7 +816,7 @@ mkdir -p %{_localstatedir}/run/ceph/
 %attr(750,ceph,ceph) %dir %{_localstatedir}/lib/ceph/bootstrap-osd
 %attr(750,ceph,ceph) %dir %{_localstatedir}/lib/ceph/bootstrap-mds
 %attr(750,ceph,ceph) %dir %{_localstatedir}/lib/ceph/bootstrap-rgw
-%attr(750,ceph,ceph) %dir %{_localstatedir}/run/ceph
+%attr(770,ceph,ceph) %dir %{_localstatedir}/run/ceph
 
 #################################################################################
 %files -n ceph-common
