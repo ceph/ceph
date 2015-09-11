@@ -233,8 +233,7 @@ int RGWRESTSimpleRequest::forward_request(RGWAccessKey& key, req_info& info, siz
   }
 
   string params_str;
-  map<string, string>& args = new_info.args.get_params();
-  get_params_str(args, params_str);
+  get_params_str(info.args.get_params(), params_str);
 
   string new_url = url;
   string& resource = new_info.request_uri;
