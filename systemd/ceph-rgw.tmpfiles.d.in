@@ -1,2 +1,2 @@
 # create rgw socket directory
-d /var/run/ceph-rgw 0755 @user_rgw@ @group_rgw@ - -
+d /run/ceph-rgw 0755 @user_rgw@ @group_rgw@ - -
