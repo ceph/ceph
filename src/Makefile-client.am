@@ -1,4 +1,4 @@
-bash_completiondir = $(sysconfdir)/bash_completion.d
+bash_completiondir = @bash_completiondir@
 bash_completion_DATA = $(srcdir)/bash_completion/ceph
 
 bin_SCRIPTS += \
