@@ -7754,6 +7754,14 @@ int MDCache::path_traverse(MDRequestRef& mdr, Message *req, MDSInternalContextBa
     }
     */
 
+    // Before doing dirfrag->dn lookup, compare with DamageTable's
+    // record of which dentries were unreadable
+    if (mds->damage_table.is_dentry_damaged(curdir, path[depth], snapid)) {
+      dout(4) << "traverse: stopped lookup at damaged dentry "
+              << *curdir << "/" << path[depth] << " snap=" << snapid << dendl;
+      return -EIO;
+    }
+
     // dentry
     CDentry *dn = curdir->lookup(path[depth], snapid);
     CDentry::linkage_t *dnl = dn ? dn->get_projected_linkage() : 0;
@@ -7813,6 +7821,11 @@ int MDCache::path_traverse(MDRequestRef& mdr, Message *req, MDSInternalContextBa
 	} else {
           dout(7) << "remote link to " << dnl->get_remote_ino() << ", which i don't have" << dendl;
 	  assert(mdr);  // we shouldn't hit non-primary dentries doing a non-mdr traversal!
+          if (mds->damage_table.is_remote_damaged(dnl->get_remote_ino())) {
+            dout(4) << "traverse: remote dentry points to damaged ino "
+                    << *dn << dendl;
+            return -EIO;
+          }
           open_remote_dentry(dn, true, _get_waiter(mdr, req, fin),
 			     (null_okay && depth == path.depth() - 1));
 	  if (mds->logger) mds->logger->inc(l_mds_traverse_remote_ino);
@@ -7871,6 +7884,15 @@ int MDCache::path_traverse(MDRequestRef& mdr, Message *req, MDSInternalContextBa
 	}
         return -ENOENT;
       } else {
+
+        // Check DamageTable for missing fragments before trying to fetch
+        // this
+        if (mds->damage_table.is_dirfrag_damaged(curdir)) {
+          dout(4) << "traverse: damaged dirfrag " << *curdir
+                  << ", blocking fetch" << dendl;
+          return -EIO;
+        }
+
 	// directory isn't complete; reload
         dout(7) << "traverse: incomplete dir contents for " << *cur << ", fetching" << dendl;
         touch_inode(cur);
@@ -8055,6 +8077,12 @@ void MDCache::_open_remote_dentry_finish(CDentry *dn, inodeno_t ino, MDSInternal
   if (r < 0) {
       dout(0) << "open_remote_dentry_finish bad remote dentry " << *dn << dendl;
       dn->state_set(CDentry::STATE_BADREMOTEINO);
+      bool fatal = mds->damage_table.notify_remote_damaged(
+          dn->get_projected_linkage()->get_remote_ino());
+      if (fatal) {
+        mds->damaged();
+        assert(0);  // unreachable, damaged() respawns us
+      }
   }
   fin->complete(r < 0 ? r : 0);
 }
