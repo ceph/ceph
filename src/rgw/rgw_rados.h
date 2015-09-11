@@ -1243,8 +1243,11 @@ class RGWPeriod
   const string get_period_oid_prefix();
 
 public:
+  RGWPeriod(CephContext *_cct, RGWRados *_store)
+    : epoch(0), cct(_cct), store(_store) {}
+
   RGWPeriod(CephContext *_cct, RGWRados *_store,
-	    const string& period_id = "", epoch_t _epoch = 0)
+	    const string& period_id, epoch_t _epoch = 0)
     : id(period_id), epoch(_epoch), cct(_cct), store(_store) {}
 
   RGWPeriod(CephContext *_cct, RGWRados *_store,
@@ -1269,8 +1272,9 @@ public:
     predecessor_uuid = predecessor;
   }
   int get_latest_epoch(epoch_t& epoch);
-  int init(const string& realm_id = "", const string &realm_name = "", bool setup_obj = true);
-  int init(const string& period_id, epoch_t epoch, bool setup_obj = true);
+  int init(const string& realm_id, const string &realm_name, bool setup_obj = true);
+  int init(const string& period_id, epoch_t epoch = 0, bool setup_obj = true);
+  int init(bool setup_obj = true, const string& realm_name = "");
   int create();
   int delete_obj();
   int store_info(bool exclusive);
