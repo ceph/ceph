@@ -246,8 +246,12 @@ def valgrind_post(ctx, config):
                 log.error('saw valgrind issue %s in %s', kind, file)
                 valgrind_exception = Exception('saw valgrind issues')
 
-        if valgrind_exception is not None:
-            raise valgrind_exception
+        if config.get('expect_valgrind_errors'):
+            if not valgrind_exception:
+                raise Exception('expected valgrind issues and found none')
+        else:
+            if valgrind_exception:
+                raise valgrind_exception
 
 @contextlib.contextmanager
 def crush_setup(ctx, config):
