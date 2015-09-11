@@ -61,7 +61,7 @@ Activate:
  - triggered on ceph service startup with 'ceph-disk activate-all'
 
 Deactivate:
- - stop ceph-osd service if needed (If osd still in osd map, make it out first)
+ - stop ceph-osd service if needed (make osd out with option --mark-out)
  - remove 'ready', 'active', and INIT-specific files
  - remove gpt partition type and change partition name (prevent triggered by udev)
  - create deactive flag
@@ -2743,10 +2743,12 @@ def main_deactivate(args):
     # Do not do anything if osd is already down.
     status_code = _check_osd_status(args.cluster, args.osd_id)
     if status_code == OSD_STATUS_IN_UP:
-        _mark_osd_out(args.cluster, args.osd_id)
+        if args.mark_out is True:
+            _mark_osd_out(args.cluster, args.osd_id)
         stop_daemon(args.cluster, args.osd_id)
     elif status_code == OSD_STATUS_IN_DOWN:
-        _mark_osd_out(args.cluster, args.osd_id)
+        if args.mark_out is True:
+            _mark_osd_out(args.cluster, args.osd_id)
     elif status_code == OSD_STATUS_OUT_UP:
         stop_daemon(args.cluster, args.osd_id)
     elif status_code == OSD_STATUS_OUT_DOWN:
@@ -3957,6 +3959,11 @@ def make_deactivate_parser(subparsers):
         '--osd-id',
         metavar='OSDID',
         help='ID of OSD to deactivate'
+        )
+    deactivate_parser.add_argument(
+        '--mark-out',
+        action='store_true', default=False,
+        help='option to mark this osd out',
         )
     deactivate_parser.set_defaults(
         func=main_deactivate,
