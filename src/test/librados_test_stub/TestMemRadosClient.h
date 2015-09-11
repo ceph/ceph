@@ -6,8 +6,10 @@
 
 #include "test/librados_test_stub/TestRadosClient.h"
 #include "include/atomic.h"
+#include "include/assert.h"
 #include "include/buffer.h"
 #include "include/interval_set.h"
+#include "common/RefCountedObj.h"
 #include "common/RWLock.h"
 #include <boost/shared_ptr.hpp>
 #include <list>
@@ -48,7 +50,7 @@ public:
   typedef std::map<std::string, FileSnapshots> Files;
 
   typedef std::set<uint64_t> SnapSeqs;
-  struct Pool {
+  struct Pool : public RefCountedObject {
     Pool();
 
     int64_t pool_id;
@@ -84,6 +86,8 @@ public:
 			    uint32_t expire_seconds);
 protected:
   ~TestMemRadosClient();
+
+  Pool *get_pool(const std::string &pool_name);
 
 private:
 
