@@ -2866,7 +2866,12 @@ int PG::peek_map_epoch(ObjectStore *store,
     values.clear();
     keys.insert(ek);
     store->omap_get_values(META_COLL, legacy_infos_oid, keys, &values);
-    assert(values.size() == 1);
+    if (values.size() < 1) {
+      // see #13060: this suggests we failed to upgrade this pg
+      // because it was a zombie and then removed the legacy infos
+      // object.  skip it.
+      return -1;
+    }
     bufferlist::iterator p = values[ek].begin();
     ::decode(cur_epoch, p);
   } else {
