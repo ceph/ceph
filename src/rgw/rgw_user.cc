@@ -1,4 +1,3 @@
-
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
@@ -1775,9 +1774,6 @@ int RGWUser::execute_add(RGWUserAdminOpState& op_state, std::string *err_msg)
   // fail if the user exists already
   if (op_state.has_existing_user()) {
     
-      return execute_modify(op_state, err_msg);
-    }
-
     set_err_msg(err_msg, "user: " + op_state.user_id + " exists");
 
     return -EEXIST;
