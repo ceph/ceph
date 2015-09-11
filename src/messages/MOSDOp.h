@@ -371,7 +371,11 @@ struct ceph_osd_request_head {
   }
 
   void clear_buffers() {
+    vector<OSDOp> tmp(ops.size()); //asok dump_historic_ops use
+    for (unsigned i = 0; i < ops.size(); i++)
+      tmp[i].op = ops[i].op;
     ops.clear();
+    ops = tmp;
   }
 
   const char *get_type_name() const { return "osd_op"; }
