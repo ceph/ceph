@@ -4,6 +4,7 @@ overrides:
     - wrongly marked me down
     - objects unfound and apparently lost
     - log bound mismatch
+    - failed to encode map e
 tasks:
 - thrashosds:
     timeout: 1200
