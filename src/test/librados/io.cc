@@ -118,6 +118,15 @@ TEST_F(LibRadosIoPP, ReadOpPP) {
   }
 
   {
+      bufferlist op_bl;
+      ObjectReadOperation op;
+      op.read(0, 0, NULL, NULL); //len=0 mean read the whole object data.
+      ASSERT_EQ(0, ioctx.operate("foo", &op, &op_bl));
+      ASSERT_EQ(sizeof(buf), op_bl.length());
+      ASSERT_EQ(0, memcmp(op_bl.c_str(), buf, sizeof(buf)));
+  }
+
+  {
       bufferlist read_bl, op_bl;
       ObjectReadOperation op;
       op.read(0, sizeof(buf), &read_bl, NULL);
@@ -632,6 +641,15 @@ TEST_F(LibRadosIoECPP, ReadOpPP) {
       ASSERT_EQ(0, ioctx.operate("foo", &op, &op_bl));
       ASSERT_EQ(sizeof(buf), op_bl.length());
       ASSERT_EQ(0, memcmp(op_bl.c_str(), buf, sizeof(buf)));
+  }
+
+  {
+    bufferlist op_bl;
+    ObjectReadOperation op;
+    op.read(0, 0, NULL, NULL); //len=0 mean read the whole object data
+    ASSERT_EQ(0, ioctx.operate("foo", &op, &op_bl));
+    ASSERT_EQ(sizeof(buf), op_bl.length());
+    ASSERT_EQ(0, memcmp(op_bl.c_str(), buf, sizeof(buf)));
   }
 
   {
