@@ -2728,9 +2728,10 @@ bool PG::_has_removal_flag(ObjectStore *store,
   return false;
 }
 
-epoch_t PG::peek_map_epoch(ObjectStore *store,
-			   spg_t pgid,
-			   bufferlist *bl)
+int PG::peek_map_epoch(ObjectStore *store,
+		       spg_t pgid,
+		       epoch_t *pepoch,
+		       bufferlist *bl)
 {
   coll_t coll(pgid);
   ghobject_t legacy_infos_oid(OSD::make_infos_oid());
@@ -2750,7 +2751,8 @@ epoch_t PG::peek_map_epoch(ObjectStore *store,
   map<string,bufferlist> values;
   int r = store->omap_get_values(coll, pgmeta_oid, keys, &values);
   if (r != 0) {
-    assert(0 == "unable to open pg metadata");
+    // probably bug 10617; see OSD::load_pgs()
+    return -1;
   }
   assert(values.size() == 2);
 
@@ -2764,7 +2766,8 @@ epoch_t PG::peek_map_epoch(ObjectStore *store,
   bp = values[epoch_key].begin();
   ::decode(cur_epoch, bp);
 
-  return cur_epoch;
+  *pepoch = cur_epoch;
+  return 0;
 }
 
 void PG::write_if_dirty(ObjectStore::Transaction& t)
