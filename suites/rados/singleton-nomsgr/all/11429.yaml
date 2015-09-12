@@ -50,6 +50,7 @@ tasks:
       size: 1
       pool: toremove
       create_pool: false
+      cleanup: false
   - ceph_manager.remove_pool:
       args: ['toremove']
   - sleep:
@@ -59,13 +60,7 @@ tasks:
         - osd.0
         - osd.1
         - osd.2
-  - sleep:
-      duration: 30
   - ceph_manager.wait_for_clean: null
-  - radosbench:
-      clients: [client.0]
-      time: 60
-      size: 1
   - ceph_manager.create_pool:
       args: ['newpool']
   - loop:
@@ -75,8 +70,6 @@ tasks:
             args: ['newpool', 'min_size', 2]
         - ceph_manager.set_pool_property:
             args: ['newpool', 'min_size', 1]
-  - sleep:
-      duration: 30
   - ceph_manager.wait_for_clean: null
   - loop:
       count: 100
@@ -86,25 +79,36 @@ tasks:
         - ceph_manager.set_pool_property:
             args: ['newpool', 'min_size', 1]
   - sleep:
-      duration: 30
+      duration: 10
   - ceph_manager.wait_for_clean: null
-  - sleep:
-      duration: 30
+  - print: '**** done creating zombie pgs'
+
   - install.upgrade:
       mon.a:
         branch: hammer
-  - ceph.restart: [mon.a, mon.b, mon.c, osd.0, osd.1, osd.2]
+  - ceph.restart: [mon.a, mon.b, mon.c, osd.0, osd.1, osd.2, mds.a]
+  - ceph_manager.wait_for_clean: null
+  - ceph.restart: [osd.0, osd.1, osd.2]
+  - ceph_manager.wait_for_clean: null
+  - exec:
+      osd.0:
+        - sudo grep 'unable to peek at' /var/log/ceph/ceph-osd.0.log
+      osd.1:
+        - sudo grep 'unable to peek at' /var/log/ceph/ceph-osd.1.log
+      osd.2:
+        - sudo grep 'unable to peek at' /var/log/ceph/ceph-osd.2.log
+  - print: '**** done verifying hammer upgrade'
+
   - install.upgrade:
       mon.a: null
-  - ceph.restart:
-      daemons:
-        - osd.0
-        - osd.1
-        - osd.2
-  - sleep:
-      duration: 30
+  - ceph.restart: [mon.a, mon.b, mon.c, osd.0, osd.1, osd.2, mds.a]
+  - ceph_manager.wait_for_clean: null
+  - ceph.restart: [osd.0, osd.1, osd.2]
   - radosbench:
       clients: [client.0]
       time: 30
       size: 1
   - ceph_manager.wait_for_clean: null
+  - ceph.restart: [osd.0, osd.1, osd.2]
+  - ceph_manager.wait_for_clean: null
+  - print: '**** done verifying final upgrade'
