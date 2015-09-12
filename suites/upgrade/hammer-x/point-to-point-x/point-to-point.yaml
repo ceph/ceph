@@ -68,6 +68,7 @@ workload1:
          - rados/load-gen-big.sh
    - print: "**** done rados/load-gen-big.sh workload1"
    - workunit:
+       branch: hammer
        clients:
          client.0:
          - rados/test.sh
@@ -122,6 +123,7 @@ upgrade-sequence1:
 workload_hammer:
    sequential:
    - workunit:
+       branch: hammer
        clients:
          client.1:
          - rados/test.sh
