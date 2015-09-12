@@ -2808,9 +2808,10 @@ bool PG::_has_removal_flag(ObjectStore *store,
   return false;
 }
 
-epoch_t PG::peek_map_epoch(ObjectStore *store,
-			   spg_t pgid,
-			   bufferlist *bl)
+int PG::peek_map_epoch(ObjectStore *store,
+		       spg_t pgid,
+		       epoch_t *pepoch,
+		       bufferlist *bl)
 {
   coll_t coll(pgid);
   hobject_t legacy_infos_oid(OSD::make_infos_oid());
@@ -2855,7 +2856,8 @@ epoch_t PG::peek_map_epoch(ObjectStore *store,
       return 0;
     if (struct_v < 6) {
       ::decode(cur_epoch, bp);
-      return cur_epoch;
+      *pepoch = cur_epoch;
+      return 0;
     }
 
     // get epoch out of leveldb
@@ -2864,13 +2866,19 @@ epoch_t PG::peek_map_epoch(ObjectStore *store,
     values.clear();
     keys.insert(ek);
     store->omap_get_values(META_COLL, legacy_infos_oid, keys, &values);
-    assert(values.size() == 1);
+    if (values.size() < 1) {
+      // see #13060: this suggests we failed to upgrade this pg
+      // because it was a zombie and then removed the legacy infos
+      // object.  skip it.
+      return -1;
+    }
     bufferlist::iterator p = values[ek].begin();
     ::decode(cur_epoch, p);
   } else {
     assert(0 == "unable to open pg metadata");
   }
-  return cur_epoch;
+  *pepoch = cur_epoch;
+  return 0;
 }
 
 #pragma GCC diagnostic pop
