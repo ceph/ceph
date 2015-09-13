@@ -524,7 +524,7 @@ done
 %endif
 
 ./autogen.sh
-MY_CONF_OPT=""
+MY_CONF_OPT="$CEPH_EXTRA_CONFIGURE_ARGS"
 
 MY_CONF_OPT="$MY_CONF_OPT --with-radosgw"
 
