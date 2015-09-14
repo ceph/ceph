@@ -549,8 +549,6 @@ int authenticate_temp_url(RGWRados *store, req_state *s)
   if (s->bucket_name_str.empty())
     return -EPERM;
 
-  string tenant_name = "";  /* XXX Swift TempUrl bucket */
-
   if (s->object.empty())
     return -EPERM;
 
@@ -562,12 +560,28 @@ int authenticate_temp_url(RGWRados *store, req_state *s)
   if (temp_url_expires.empty())
     return -EPERM;
 
-  /* need to get user info of bucket owner */
-  RGWBucketInfo bucket_info;
+  /* TempURL case is completely different than the Keystone auth - you may
+   * get account name only through extraction from URL. In turn, knowledge
+   * about account is neccessary to obtain its bucket namespace (BNS).
+   * Without that, the access will be limited to accounts with empty BNS. */
+  rgw_bucket_namespace bns;
+  if (g_conf->rgw_swift_account_in_url) {
+    RGWUserInfo ui_bns;
 
-  int ret = store->get_bucket_info(*static_cast<RGWObjectCtx *>(s->obj_ctx), tenant_name, s->bucket_name_str, bucket_info, NULL);
-  if (ret < 0)
+    if (rgw_get_user_info_by_uid(store, s->account_name, ui_bns) < 0) {
+      return -EPERM;
+    }
+
+    bns = ui_bns.user_id.get_bns();
+  }
+
+  /* Need to get user info of bucket owner. */
+  RGWBucketInfo bucket_info;
+  int ret = store->get_bucket_info(*static_cast<RGWObjectCtx *>(s->obj_ctx),
+          bns.get_id(), s->bucket_name_str, bucket_info, NULL);
+  if (ret < 0) {
     return -EPERM;
+  }
 
   dout(20) << "temp url user (bucket owner): " << bucket_info.owner << dendl;
   if (rgw_get_user_info_by_uid(store, bucket_info.owner, s->user) < 0) {
@@ -579,8 +593,9 @@ int authenticate_temp_url(RGWRados *store, req_state *s)
     return -EPERM;
   }
 
-  if (!s->info.method)
+  if (!s->info.method) {
     return -EPERM;
+  }
 
   utime_t now = ceph_clock_now(g_ceph_context);
 
