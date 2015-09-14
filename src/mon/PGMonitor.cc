@@ -847,6 +847,7 @@ void PGMonitor::_updated_stats(MonOpRequestRef op, MonOpRequestRef ack_op)
   op->mark_pgmon_event(__func__);
   ack_op->mark_pgmon_event(__func__);
   MPGStats *ack = static_cast<MPGStats*>(ack_op->get_req());
+  ack->get();  // MonOpRequestRef owns one ref; give the other to send_reply.
   dout(7) << "_updated_stats for "
           << op->get_req()->get_orig_source_inst() << dendl;
   mon->send_reply(op, ack);
