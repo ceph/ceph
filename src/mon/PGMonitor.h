@@ -47,6 +47,7 @@ public:
   PGMap pg_map;
 
   bool need_check_down_pgs;
+  set<int> need_check_down_pg_osds;
 
   epoch_t last_map_pg_create_osd_epoch;
 
@@ -131,10 +132,13 @@ private:
    * check pgs for down primary osds
    *
    * clears need_check_down_pgs
+   * clears need_check_down_pg_osds
    *
    * @return true if we updated pending_inc (and should propose)
    */
   bool check_down_pgs();
+  void _mark_pg_stale(pg_t pgid, const pg_stat_t& cur_stat);
+
 
   /**
    * Dump stats from pgs stuck in specified states.

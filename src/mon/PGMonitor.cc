@@ -128,7 +128,8 @@ void PGMonitor::tick()
   if (mon->is_leader()) {
     bool propose = false;
     
-    if (need_check_down_pgs && check_down_pgs())
+    if ((need_check_down_pgs || !need_check_down_pg_osds.empty()) &&
+	check_down_pgs())
       propose = true;
     
     if (propose) {
@@ -914,7 +915,7 @@ void PGMonitor::check_osd_map(epoch_t epoch)
 	 p != inc.new_state.end();
 	 ++p) {
       if (p->second & CEPH_OSD_UP) {   // true if marked up OR down, but we're too lazy to check which
-	need_check_down_pgs = true;
+	need_check_down_pg_osds.insert(p->first);
 
 	// clear out the last_osd_report for this OSD
         map<int, utime_t>::iterator report = last_osd_report.find(p->first);
@@ -951,7 +952,8 @@ void PGMonitor::check_osd_map(epoch_t epoch)
   if (register_new_pgs())
     propose = true;
 
-  if (need_check_down_pgs && check_down_pgs())
+  if ((need_check_down_pgs || !need_check_down_pg_osds.empty()) &&
+      check_down_pgs())
     propose = true;
   
   if (propose)
@@ -1214,6 +1216,21 @@ void PGMonitor::send_pg_creates(int osd, Connection *con)
   last_sent_pg_create[osd] = ceph_clock_now(g_ceph_context);
 }
 
+void PGMonitor::_mark_pg_stale(pg_t pgid, const pg_stat_t& cur_stat)
+{
+  dout(10) << " marking pg " << pgid << " stale" << dendl;
+  map<pg_t,pg_stat_t>::iterator q = pending_inc.pg_stat_updates.find(pgid);
+  pg_stat_t *stat;
+  if (q == pending_inc.pg_stat_updates.end()) {
+    stat = &pending_inc.pg_stat_updates[pgid];
+    *stat = cur_stat;
+  } else {
+    stat = &q->second;
+  }
+  stat->state |= PG_STATE_STALE;
+  stat->last_unstale = ceph_clock_now(g_ceph_context);
+}
+
 bool PGMonitor::check_down_pgs()
 {
   dout(10) << "check_down_pgs" << dendl;
@@ -1221,28 +1238,36 @@ bool PGMonitor::check_down_pgs()
   OSDMap *osdmap = &mon->osdmon()->osdmap;
   bool ret = false;
 
-  for (ceph::unordered_map<pg_t,pg_stat_t>::iterator p = pg_map.pg_stat.begin();
-       p != pg_map.pg_stat.end();
-       ++p) {
-    if ((p->second.state & PG_STATE_STALE) == 0 &&
-	p->second.acting_primary != -1 &&
-	osdmap->is_down(p->second.acting_primary)) {
-      dout(10) << " marking pg " << p->first << " stale with acting " << p->second.acting << dendl;
+  // if a large number of osds changed state, just iterate over the whole
+  // pg map.
+  if (need_check_down_pg_osds.size() > (unsigned)osdmap->get_max_osd() / 20)
+    need_check_down_pgs = true;
 
-      map<pg_t,pg_stat_t>::iterator q = pending_inc.pg_stat_updates.find(p->first);
-      pg_stat_t *stat;
-      if (q == pending_inc.pg_stat_updates.end()) {
-	stat = &pending_inc.pg_stat_updates[p->first];
-	*stat = p->second;
-      } else {
-	stat = &q->second;
+  if (need_check_down_pgs) {
+    for (auto p : pg_map.pg_stat) {
+      if ((p.second.state & PG_STATE_STALE) == 0 &&
+	  p.second.acting_primary != -1 &&
+	  osdmap->is_down(p.second.acting_primary)) {
+	_mark_pg_stale(p.first, p.second);
+	ret = true;
       }
-      stat->state |= PG_STATE_STALE;
-      stat->last_unstale = ceph_clock_now(g_ceph_context);
-      ret = true;
+    }
+  } else {
+    for (auto osd : need_check_down_pg_osds) {
+      if (osdmap->is_down(osd)) {
+	for (auto pgid : pg_map.pg_by_osd[osd]) {
+	  const pg_stat_t &stat = pg_map.pg_stat[pgid];
+	  if ((stat.state & PG_STATE_STALE) == 0 &&
+	      stat.acting_primary != -1) {
+	    _mark_pg_stale(pgid, stat);
+	    ret = true;
+	  }
+	}
+      }
     }
   }
   need_check_down_pgs = false;
+  need_check_down_pg_osds.clear();
 
   return ret;
 }
