@@ -190,6 +190,11 @@ unittest_sloppy_crc_map_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 unittest_sloppy_crc_map_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 check_TESTPROGRAMS += unittest_sloppy_crc_map
 
+unittest_time_SOURCES = test/common/test_time.cc
+unittest_time_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+unittest_time_LDADD = $(LIBCOMMON) -lm $(UNITTEST_LDADD) $(CRYPTO_LIBS) $(EXTRALIBS)
+check_TESTPROGRAMS += unittest_time
+
 unittest_util_SOURCES = test/common/test_util.cc
 unittest_util_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 unittest_util_LDADD = $(LIBCOMMON) -lm $(UNITTEST_LDADD) $(CRYPTO_LIBS) $(EXTRALIBS)
