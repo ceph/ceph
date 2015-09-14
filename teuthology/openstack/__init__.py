@@ -57,7 +57,7 @@ class OpenStack(object):
         'centos-6.5': 'http://cloud.centos.org/centos/6/images/CentOS-6-x86_64-GenericCloud.qcow2',
         'centos-7.0': 'http://cloud.centos.org/centos/7/images/CentOS-7-x86_64-GenericCloud-20150628_01.qcow2',
         'ubuntu-14.04': 'https://cloud-images.ubuntu.com/trusty/current/trusty-server-cloudimg-amd64-disk1.img',
-        'debian-8.0': 'http://cdimage.debian.org/cdimage/openstack/current/debian-8.1.0-openstack-amd64.qcow2',
+        'debian-8.0': 'http://cdimage.debian.org/cdimage/openstack/current/debian-8.2.0-openstack-amd64.qcow2',
     }
 
     def __init__(self):
