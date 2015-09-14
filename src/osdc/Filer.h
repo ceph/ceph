@@ -26,7 +26,10 @@
  * "files" are identified by ino.
  */
 
+
 #include "include/types.h"
+
+#include "common/ceph_time.h"
 
 #include "osd/OSDMap.h"
 #include "Objecter.h"
@@ -53,7 +56,8 @@ class Filer {
     snapid_t snapid;
 
     uint64_t *psize;
-    utime_t *pmtime;
+    ceph::real_time *pmtime;
+    utime_t *pumtime;
 
     int flags;
 
@@ -65,7 +69,7 @@ class Filer {
     uint64_t probing_off, probing_len;
 
     map<object_t, uint64_t> known_size;
-    utime_t max_mtime;
+    ceph::real_time max_mtime;
 
     set<object_t> ops;
 
@@ -73,17 +77,27 @@ class Filer {
     bool found_size;
 
     Probe(inodeno_t i, ceph_file_layout &l, snapid_t sn,
-	  uint64_t f, uint64_t *e, utime_t *m, int fl, bool fw, Context *c) :
+	  uint64_t f, uint64_t *e, ceph::real_time *m, int fl, bool fw,
+	  Context *c) :
       lock("Filer::Probe"), ino(i), layout(l), snapid(sn),
-      psize(e), pmtime(m), flags(fl), fwd(fw), onfinish(c),
+      psize(e), pmtime(m), pumtime(nullptr), flags(fl), fwd(fw), onfinish(c),
       probing_off(f), probing_len(0),
+      err(0), found_size(false) {}
+
+    Probe(inodeno_t i, ceph_file_layout &l, snapid_t sn,
+	  uint64_t f, uint64_t *e, utime_t *m, int fl, bool fw,
+	  Context *c) :
+      lock("Filer::Probe"), ino(i), layout(l), snapid(sn),
+      psize(e), pmtime(nullptr), pumtime(m), flags(fl), fwd(fw),
+      onfinish(c), probing_off(f), probing_len(0),
       err(0), found_size(false) {}
   };
 
   class C_Probe;
 
   void _probe(Probe *p);
-  bool _probed(Probe *p, const object_t& oid, uint64_t size, utime_t mtime);
+  bool _probed(Probe *p, const object_t& oid, uint64_t size,
+	       ceph::real_time mtime);
 
  public:
   Filer(const Filer& other);
@@ -141,7 +155,7 @@ class Filer {
 	    uint64_t offset,
 	    uint64_t len,
 	    bufferlist& bl,
-	    utime_t mtime,
+	    ceph::real_time mtime,
 	    int flags,
 	    Context *onack,
 	    Context *oncommit,
@@ -159,7 +173,7 @@ class Filer {
 		  uint64_t offset,
 		  uint64_t len,
 		  bufferlist& bl,
-		  utime_t mtime,
+		  ceph::real_time mtime,
 		  int flags,
 		  uint64_t truncate_size,
 		  __u32 truncate_seq,
@@ -180,7 +194,7 @@ class Filer {
 	       uint64_t offset,
 	       uint64_t len,
 	       __u32 truncate_seq,
-	       utime_t mtime,
+	       ceph::real_time mtime,
 	       int flags,
 	       Context *onack,
 	       Context *oncommit) {
@@ -218,7 +232,7 @@ class Filer {
 	   const SnapContext& snapc,
 	   uint64_t offset,
 	   uint64_t len,
-	   utime_t mtime,
+	   ceph::real_time mtime,
 	   int flags,
 	   bool keep_first,
 	   Context *onack,
@@ -263,7 +277,7 @@ class Filer {
 	   const SnapContext& snapc,
 	   uint64_t offset,
 	   uint64_t len,
-	   utime_t mtime,
+	   ceph::real_time mtime,
 	   int flags,
 	   Context *onack,
 	   Context *oncommit) {
@@ -279,9 +293,8 @@ class Filer {
 		  ceph_file_layout *layout,
 		  const SnapContext& snapc,
 		  uint64_t first_obj, uint64_t num_obj,
-		  utime_t mtime,
-		  int flags,
-		  Context *oncommit);
+		  ceph::real_time mtime,
+		  int flags, Context *oncommit);
   void _do_purge_range(struct PurgeRange *pr, int fin);
 
   /*
@@ -294,10 +307,36 @@ class Filer {
 	    snapid_t snapid,
 	    uint64_t start_from,
 	    uint64_t *end,
+	    ceph::real_time *mtime,
+	    bool fwd,
+	    int flags,
+	    Context *onfinish);
+
+  int probe(inodeno_t ino,
+	    ceph_file_layout *layout,
+	    snapid_t snapid,
+	    uint64_t start_from,
+	    uint64_t *end,
+	    bool fwd,
+	    int flags,
+	    Context *onfinish) {
+    return probe(ino, layout, snapid, start_from, end,
+		 (ceph::real_time* )0, fwd, flags, onfinish);
+  }
+
+  int probe(inodeno_t ino,
+	    ceph_file_layout *layout,
+	    snapid_t snapid,
+	    uint64_t start_from,
+	    uint64_t *end,
 	    utime_t *mtime,
 	    bool fwd,
 	    int flags,
 	    Context *onfinish);
+
+private:
+  int probe_impl(Probe* probe, ceph_file_layout *layout,
+		 uint64_t start_from, uint64_t *end);
 };
 
 #endif // !CEPH_FILER_H

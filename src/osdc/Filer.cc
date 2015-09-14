@@ -38,7 +38,7 @@ public:
   Probe *probe;
   object_t oid;
   uint64_t size;
-  utime_t mtime;
+  ceph::real_time mtime;
   C_Probe(Filer *f, Probe *p, object_t o) : filer(f), probe(p), oid(o),
 					    size(0) {}
   void finish(int r) {
@@ -69,7 +69,7 @@ int Filer::probe(inodeno_t ino,
 		 snapid_t snapid,
 		 uint64_t start_from,
 		 uint64_t *end, // LB, when !fwd
-		 utime_t *pmtime,
+		 ceph::real_time *pmtime,
 		 bool fwd,
 		 int flags,
 		 Context *onfinish)
@@ -84,6 +84,34 @@ int Filer::probe(inodeno_t ino,
   Probe *probe = new Probe(ino, *layout, snapid, start_from, end, pmtime,
 			   flags, fwd, onfinish);
 
+  return probe_impl(probe, layout, start_from, end);
+}
+
+int Filer::probe(inodeno_t ino,
+		 ceph_file_layout *layout,
+		 snapid_t snapid,
+		 uint64_t start_from,
+		 uint64_t *end, // LB, when !fwd
+		 utime_t *pmtime,
+		 bool fwd,
+		 int flags,
+		 Context *onfinish)
+{
+  ldout(cct, 10) << "probe " << (fwd ? "fwd ":"bwd ")
+	   << hex << ino << dec
+	   << " starting from " << start_from
+	   << dendl;
+
+  assert(snapid);  // (until there is a non-NOSNAP write)
+
+  Probe *probe = new Probe(ino, *layout, snapid, start_from, end, pmtime,
+			   flags, fwd, onfinish);
+  return probe_impl(probe, layout, start_from, end);
+}
+
+int Filer::probe_impl(Probe* probe, ceph_file_layout *layout,
+		      uint64_t start_from, uint64_t *end) // LB, when !fwd
+{
   // period (bytes before we jump unto a new set of object(s))
   uint64_t period = (uint64_t)layout->fl_stripe_count *
     (uint64_t)layout->fl_object_size;
@@ -106,6 +134,7 @@ int Filer::probe(inodeno_t ino,
 
   return 0;
 }
+
 
 
 /**
@@ -150,7 +179,7 @@ void Filer::_probe(Probe *probe)
  * @return true if probe is complete and Probe object may be freed.
  */
 bool Filer::_probed(Probe *probe, const object_t& oid, uint64_t size,
-		    utime_t mtime)
+		    ceph::real_time mtime)
 {
   assert(probe->lock.is_locked_by_me());
 
@@ -222,7 +251,8 @@ bool Filer::_probed(Probe *probe, const object_t& oid, uint64_t size,
 	  ldout(cct, 10) << "_probed found size at " << end << dendl;
 	  *probe->psize = end;
 
-	  if (!probe->pmtime)  // stop if we don't need mtime too
+	  if (!probe->pmtime &&
+	      !probe->pumtime)  // stop if we don't need mtime too
 	    break;
 	}
 	oleft -= i->second;
@@ -231,7 +261,8 @@ bool Filer::_probed(Probe *probe, const object_t& oid, uint64_t size,
     break;
   }
 
-  if (!probe->found_size || (probe->probing_off && probe->pmtime)) {
+  if (!probe->found_size || (probe->probing_off && (probe->pmtime ||
+						    probe->pumtime))) {
     // keep probing!
     ldout(cct, 10) << "_probed probing further" << dendl;
 
@@ -253,8 +284,10 @@ bool Filer::_probed(Probe *probe, const object_t& oid, uint64_t size,
   } else if (probe->pmtime) {
     ldout(cct, 10) << "_probed found mtime " << probe->max_mtime << dendl;
     *probe->pmtime = probe->max_mtime;
+  } else if (probe->pumtime) {
+    ldout(cct, 10) << "_probed found mtime " << probe->max_mtime << dendl;
+    *probe->pumtime = ceph::real_clock::to_ceph_timespec(probe->max_mtime);
   }
-
   // done!
   probe->lock.Unlock();
   return true;
@@ -269,22 +302,23 @@ struct PurgeRange {
   ceph_file_layout layout;
   SnapContext snapc;
   uint64_t first, num;
-  utime_t mtime;
+  ceph::real_time mtime;
   int flags;
   Context *oncommit;
   int uncommitted;
   PurgeRange(inodeno_t i, ceph_file_layout& l, const SnapContext& sc,
-	     uint64_t fo, uint64_t no, utime_t t, int fl, Context *fin) :
-	  lock("Filer::PurgeRange"), ino(i), layout(l), snapc(sc),
-	  first(fo), num(no), mtime(t), flags(fl), oncommit(fin),
-	  uncommitted(0) {}
+	     uint64_t fo, uint64_t no, ceph::real_time t, int fl,
+	     Context *fin)
+    : lock("Filer::PurgeRange"), ino(i), layout(l), snapc(sc),
+      first(fo), num(no), mtime(t), flags(fl), oncommit(fin),
+      uncommitted(0) {}
 };
 
 int Filer::purge_range(inodeno_t ino,
 		       ceph_file_layout *layout,
 		       const SnapContext& snapc,
 		       uint64_t first_obj, uint64_t num_obj,
-		       utime_t mtime,
+		       ceph::real_time mtime,
 		       int flags,
 		       Context *oncommit)
 {

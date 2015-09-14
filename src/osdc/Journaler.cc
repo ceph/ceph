@@ -26,6 +26,8 @@
 #define dout_prefix *_dout << objecter->messenger->get_myname() \
   << ".journaler" << (readonly ? "(ro) ":"(rw) ")
 
+using std::chrono::seconds;
+
 
 void Journaler::set_readonly()
 {
@@ -304,7 +306,7 @@ void Journaler::_probe(Context *finish, uint64_t *end)
   assert(state == STATE_PROBING || state == STATE_REPROBING);
   // probe the log
   filer.probe(ino, &layout, CEPH_NOSNAP,
-	      write_pos, end, 0, true, 0, wrap_finisher(finish));
+	      write_pos, end, true, 0, wrap_finisher(finish));
 }
 
 void Journaler::_reprobe(C_OnFinisher *finish)
@@ -429,7 +431,7 @@ void Journaler::_write_head(Context *oncommit)
   assert(last_written.write_pos >= last_written.expire_pos);
   assert(last_written.expire_pos >= last_written.trimmed_pos);
 
-  last_wrote_head = ceph_clock_now(cct);
+  last_wrote_head = ceph::real_clock::now(cct);
 
   bufferlist bl;
   ::encode(last_written, bl);
@@ -437,9 +439,10 @@ void Journaler::_write_head(Context *oncommit)
 
   object_t oid = file_object_t(ino, 0);
   object_locator_t oloc(pg_pool);
-  objecter->write_full(oid, oloc, snapc, bl, ceph_clock_now(cct), 0, NULL,
-		       wrap_finisher(new C_WriteHead(this, last_written,
-						     wrap_finisher(oncommit))),
+  objecter->write_full(oid, oloc, snapc, bl, ceph::real_clock::now(cct), 0,
+		       NULL, wrap_finisher(new C_WriteHead(
+					     this, last_written,
+					     wrap_finisher(oncommit))),
 		       0, 0, write_iohint);
 }
 
@@ -469,15 +472,16 @@ void Journaler::_finish_write_head(int r, Header &wrote,
 class Journaler::C_Flush : public Context {
   Journaler *ls;
   uint64_t start;
-  utime_t stamp;
+  ceph::real_time stamp;
 public:
-  C_Flush(Journaler *l, int64_t s, utime_t st) : ls(l), start(s), stamp(st) {}
+  C_Flush(Journaler *l, int64_t s, ceph::real_time st)
+    : ls(l), start(s), stamp(st) {}
   void finish(int r) {
     ls->_finish_flush(r, start, stamp);
   }
 };
 
-void Journaler::_finish_flush(int r, uint64_t start, utime_t stamp)
+void Journaler::_finish_flush(int r, uint64_t start, ceph::real_time stamp)
 {
   Mutex::Locker l(lock);
   assert(!readonly);
@@ -493,8 +497,7 @@ void Journaler::_finish_flush(int r, uint64_t start, utime_t stamp)
 
   // calc latency?
   if (logger) {
-    utime_t lat = ceph_clock_now(cct);
-    lat -= stamp;
+    ceph::timespan lat = ceph::real_clock::now(cct) - stamp;
     logger->tinc(logger_key_lat, lat);
   }
 
@@ -622,7 +625,7 @@ void Journaler::_do_flush(unsigned amount)
 
   // submit write for anything pending
   // flush _start_ pos to _finish_flush
-  utime_t now = ceph_clock_now(cct);
+  ceph::real_time now = ceph::real_clock::now(cct);
   SnapContext snapc;
 
   Context *onsafe = new C_Flush(this, flush_pos, now);  // on COMMIT
@@ -638,7 +641,7 @@ void Journaler::_do_flush(unsigned amount)
   }
 
   filer.write(ino, &layout, snapc,
-	      flush_pos, len, write_bl, ceph_clock_now(cct),
+	      flush_pos, len, write_bl, ceph::real_clock::now(cct),
 	      0,
 	      NULL, wrap_finisher(onsafe), write_iohint);
 
@@ -725,8 +728,8 @@ void Journaler::_flush(C_OnFinisher *onsafe)
   }
 
   // write head?
-  if (last_wrote_head.sec() + cct->_conf->journaler_write_head_interval
-      < ceph_clock_now(cct).sec()) {
+  if (last_wrote_head + seconds(cct->_conf->journaler_write_head_interval)
+      < ceph::real_clock::now(cct)) {
     _write_head();
   }
 }
@@ -780,8 +783,8 @@ void Journaler::_issue_prezero()
     SnapContext snapc;
     Context *c = wrap_finisher(new C_Journaler_Prezero(this, prezeroing_pos,
 						       len));
-    filer.zero(ino, &layout, snapc, prezeroing_pos, len, ceph_clock_now(cct),
-	       0, NULL, c);
+    filer.zero(ino, &layout, snapc, prezeroing_pos, len,
+	       ceph::real_clock::now(cct), 0, NULL, c);
     prezeroing_pos += len;
   }
 }
@@ -1115,7 +1118,7 @@ void Journaler::erase(Context *completion)
   uint64_t first = trimmed_pos / get_layout_period();
   uint64_t num = (write_pos - trimmed_pos) / get_layout_period() + 2;
   filer.purge_range(ino, &layout, SnapContext(), first, num,
-		    ceph_clock_now(cct), 0,
+		    ceph::real_clock::now(cct), 0,
 		    wrap_finisher(new C_EraseFinish(
 				    this, wrap_finisher(completion))));
 
@@ -1131,7 +1134,7 @@ void Journaler::_finish_erase(int data_result, C_OnFinisher *completion)
 
   if (data_result == 0) {
     // Async delete the journal header
-    filer.purge_range(ino, &layout, SnapContext(), 0, 1, ceph_clock_now(cct),
+    filer.purge_range(ino, &layout, SnapContext(), 0, 1, ceph::real_clock::now(cct),
 		      0, wrap_finisher(completion));
   } else {
     lderr(cct) << "Failed to delete journal " << ino << " data: "
@@ -1261,7 +1264,8 @@ void Journaler::_trim()
   uint64_t first = trimming_pos / period;
   uint64_t num = (trim_to - trimming_pos) / period;
   SnapContext snapc;
-  filer.purge_range(ino, &layout, snapc, first, num, ceph_clock_now(cct), 0,
+  filer.purge_range(ino, &layout, snapc, first, num,
+		    ceph::real_clock::now(cct), 0,
 		    wrap_finisher(new C_Trim(this, trim_to)));
   trimming_pos = trim_to;
 }

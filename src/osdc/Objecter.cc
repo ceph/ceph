@@ -50,6 +50,15 @@
 #include "include/str_list.h"
 #include "common/errno.h"
 
+using ceph::real_time;
+using ceph::real_clock;
+
+using ceph::mono_clock;
+using ceph::mono_time;
+
+using ceph::timespan;
+
+
 #define dout_subsys ceph_subsys_objecter
 #undef dout_prefix
 #define dout_prefix *_dout << messenger->get_myname() << ".objecter "
@@ -331,11 +340,8 @@ void Objecter::init()
 	       << cpp_strerror(ret) << dendl;
   }
 
-  timer_lock.Lock();
-  timer.init();
-  timer_lock.Unlock();
-
   update_crush_location();
+
   cct->_conf->add_observer(this);
 
   initialized.set(1);
@@ -348,7 +354,7 @@ void Objecter::start()
 {
   RWLock::RLocker rl(rwlock);
 
-  schedule_tick();
+  start_tick();
   if (osdmap->get_epoch() == 0) {
     _maybe_request_map();
   }
@@ -446,10 +452,9 @@ void Objecter::shutdown()
   }
 
   if (tick_event) {
-    Mutex::Locker l(timer_lock);
     if (timer.cancel_event(tick_event)) {
       ldout(cct, 10) <<  " successfully canceled tick" << dendl;
-      tick_event = NULL;
+      tick_event = 0;
     }
   }
 
@@ -469,12 +474,7 @@ void Objecter::shutdown()
   // Let go of Objecter write lock so timer thread can shutdown
   rwlock.unlock();
 
-  {
-    Mutex::Locker l(timer_lock);
-    timer.shutdown();
-  }
-
-  assert(tick_event == NULL);
+  assert(tick_event == 0);
 }
 
 void Objecter::_send_linger(LingerOp *info)
@@ -636,7 +636,7 @@ void Objecter::_send_linger_ping(LingerOp *info)
     return;
   }
 
-  utime_t now = ceph_clock_now(NULL);
+  ceph::mono_time now = ceph::mono_clock::now();
   ldout(cct, 10) << __func__ << " " << info->linger_id << " now " << now
 		 << dendl;
 
@@ -663,7 +663,7 @@ void Objecter::_send_linger_ping(LingerOp *info)
   logger->inc(l_osdc_linger_ping);
 }
 
-void Objecter::_linger_ping(LingerOp *info, int r, utime_t sent,
+void Objecter::_linger_ping(LingerOp *info, int r, mono_time sent,
 			    uint32_t register_gen)
 {
   RWLock::WLocker l(info->watch_lock);
@@ -691,17 +691,17 @@ int Objecter::linger_check(LingerOp *info)
 {
   RWLock::RLocker l(info->watch_lock);
 
-  utime_t stamp = info->watch_valid_thru;
+  mono_time stamp = info->watch_valid_thru;
   if (!info->watch_pending_async.empty())
     stamp = MIN(info->watch_valid_thru, info->watch_pending_async.front());
-  utime_t age = ceph_clock_now(NULL) - stamp;
+  auto age = mono_clock::now() - stamp;
 
   ldout(cct, 10) << __func__ << " " << info->linger_id
 		 << " err " << info->last_error
 		 << " age " << age << dendl;
   if (info->last_error)
     return info->last_error;
-  return age.to_msec();
+  return std::chrono::duration_cast<std::chrono::milliseconds>(age).count();
 }
 
 void Objecter::linger_cancel(LingerOp *info)
@@ -744,7 +744,7 @@ Objecter::LingerOp *Objecter::linger_register(const object_t& oid,
   if (info->target.base_oloc.key == oid)
     info->target.base_oloc.key.clear();
   info->target.flags = flags;
-  info->watch_valid_thru = ceph_clock_now(NULL);
+  info->watch_valid_thru = mono_clock::now();
 
   RWLock::WLocker l(rwlock);
 
@@ -764,7 +764,8 @@ Objecter::LingerOp *Objecter::linger_register(const object_t& oid,
 
 ceph_tid_t Objecter::linger_watch(LingerOp *info,
 				  ObjectOperation& op,
-				  const SnapContext& snapc, utime_t mtime,
+				  const SnapContext& snapc,
+				  real_time mtime,
 				  bufferlist& inbl,
 				  Context *oncommit,
 				  version_t *objver)
@@ -1970,12 +1971,12 @@ void Objecter::_linger_ops_resend(map<uint64_t, LingerOp *>& lresend)
   }
 }
 
-void Objecter::schedule_tick()
+void Objecter::start_tick()
 {
-  Mutex::Locker l(timer_lock);
-  assert(tick_event == NULL);
-  tick_event = new C_Tick(this);
-  timer.add_event_after(cct->_conf->objecter_tick_interval, tick_event);
+  assert(tick_event == 0);
+  tick_event =
+    timer.add_event(ceph::make_timespan(cct->_conf->objecter_tick_interval),
+		    &Objecter::tick, this);
 }
 
 void Objecter::tick()
@@ -1986,7 +1987,7 @@ void Objecter::tick()
 
   // we are only called by C_Tick
   assert(tick_event);
-  tick_event = NULL;
+  tick_event = 0;
 
   if (!initialized.read()) {
     // we raced with shutdown
@@ -1998,8 +1999,8 @@ void Objecter::tick()
 
 
   // look for laggy requests
-  utime_t cutoff = ceph_clock_now(cct);
-  cutoff -= cct->_conf->objecter_timeout;  // timeout
+  auto cutoff = ceph::mono_clock::now();
+  cutoff -= osd_timeout;  // timeout
 
   unsigned laggy_ops = 0;
 
@@ -2062,7 +2063,8 @@ void Objecter::tick()
   }
 
   // reschedule
-  schedule_tick();
+  tick_event = timer.reschedule_me(ceph::make_timespan(
+				     cct->_conf->objecter_tick_interval));
 }
 
 void Objecter::resend_mon_ops()
@@ -2116,21 +2118,7 @@ void Objecter::resend_mon_ops()
   }
 }
 
-
-
 // read | write ---------------------------
-
-class C_CancelOp : public Context
-{
-  ceph_tid_t tid;
-  Objecter *objecter;
-public:
-  C_CancelOp(ceph_tid_t tid, Objecter *objecter) : tid(tid),
-						   objecter(objecter) {}
-  void finish(int r) {
-    objecter->op_cancel(tid, -ETIMEDOUT);
-  }
-};
 
 ceph_tid_t Objecter::op_submit(Op *op, int *ctx_budget)
 {
@@ -2159,12 +2147,13 @@ ceph_tid_t Objecter::_op_submit_with_budget(Op *op, RWLock::Context& lc,
     }
   }
 
-  if (osd_timeout > 0) {
+  if (osd_timeout > timespan(0)) {
     if (op->tid == 0)
       op->tid = last_tid.inc();
-    op->ontimeout = new C_CancelOp(op->tid, this);
-    Mutex::Locker l(timer_lock);
-    timer.add_event_after(osd_timeout, op->ontimeout);
+    auto tid = op->tid;
+    op->ontimeout = timer.add_event(osd_timeout,
+				    [this, tid]() {
+				      op_cancel(tid, -ETIMEDOUT); });
   }
 
   return _op_submit(op, lc);
@@ -2948,10 +2937,8 @@ void Objecter::_finish_op(Op *op, int r)
   if (!op->ctx_budgeted && op->budgeted)
     put_op_budget(op);
 
-  if (op->ontimeout && r != -ETIMEDOUT) {
-    Mutex::Locker l(timer_lock);
+  if (op->ontimeout && r != -ETIMEDOUT)
     timer.cancel_event(op->ontimeout);
-  }
 
   _session_op_remove(op->session, op);
 
@@ -2995,7 +2982,7 @@ MOSDOp *Objecter::_prepare_osd_op(Op *op)
     flags |= CEPH_OSD_FLAG_FULL_FORCE;
 
   op->target.paused = false;
-  op->stamp = ceph_clock_now(cct);
+  op->stamp = ceph::mono_clock::now();
 
   MOSDOp *m = new MOSDOp(client_inc.read(), op->tid,
 			 op->target.target_oid, op->target.target_oloc,
@@ -3052,7 +3039,7 @@ void Objecter::_send_op(Op *op, MOSDOp *m)
     op->con->revoke_rx_buffer(op->tid);
   }
   if (op->outbl &&
-      op->ontimeout == NULL &&  // only post rx_buffer if no timeout; see #9582
+      op->ontimeout == 0 &&  // only post rx_buffer if no timeout; see #9582
       op->outbl->length()) {
     ldout(cct, 20) << " posting rx buffer for " << op->tid << " on " << con
 		   << dendl;
@@ -3844,25 +3831,13 @@ int Objecter::change_pool_auid(int64_t pool, Context *onfinish, uint64_t auid)
   return 0;
 }
 
-class C_CancelPoolOp : public Context
-{
-  ceph_tid_t tid;
-  Objecter *objecter;
-public:
-  C_CancelPoolOp(ceph_tid_t tid, Objecter *objecter)
-    : tid(tid), objecter(objecter) {}
-  void finish(int r) {
-    objecter->pool_op_cancel(tid, -ETIMEDOUT);
-  }
-};
-
 void Objecter::pool_op_submit(PoolOp *op)
 {
   assert(rwlock.is_locked());
-  if (mon_timeout > 0) {
-    Mutex::Locker l(timer_lock);
-    op->ontimeout = new C_CancelPoolOp(op->tid, this);
-    timer.add_event_after(mon_timeout, op->ontimeout);
+  if (mon_timeout > timespan(0)) {
+    op->ontimeout = timer.add_event(mon_timeout,
+				    [this, op]() {
+				      pool_op_cancel(op->tid, -ETIMEDOUT); });
   }
   _pool_op_submit(op);
 }
@@ -3878,7 +3853,7 @@ void Objecter::_pool_op_submit(PoolOp *op)
   if (op->snapid) m->snapid = op->snapid;
   if (op->crush_rule) m->crush_rule = op->crush_rule;
   monc->send_mon_message(m);
-  op->last_submit = ceph_clock_now(cct);
+  op->last_submit = ceph::mono_clock::now();
 
   logger->inc(l_osdc_poolop_send);
 }
@@ -3983,7 +3958,6 @@ void Objecter::_finish_pool_op(PoolOp *op, int r)
   logger->set(l_osdc_poolop_active, pool_ops.size());
 
   if (op->ontimeout && r != -ETIMEDOUT) {
-    Mutex::Locker l(timer_lock);
     timer.cancel_event(op->ontimeout);
   }
 
@@ -3991,19 +3965,6 @@ void Objecter::_finish_pool_op(PoolOp *op, int r)
 }
 
 // pool stats
-
-class C_CancelPoolStatOp : public Context
-{
-  ceph_tid_t tid;
-  Objecter *objecter;
-public:
-  C_CancelPoolStatOp(ceph_tid_t tid, Objecter *objecter)
-    : tid(tid), objecter(objecter) {}
-  void finish(int r) {
-    // note that objecter lock == timer lock, and is already held
-    objecter->pool_stat_op_cancel(tid, -ETIMEDOUT);
-  }
-};
 
 void Objecter::get_pool_stats(list<string>& pools,
 			      map<string,pool_stat_t> *result,
@@ -4016,11 +3977,13 @@ void Objecter::get_pool_stats(list<string>& pools,
   op->pools = pools;
   op->pool_stats = result;
   op->onfinish = onfinish;
-  op->ontimeout = NULL;
-  if (mon_timeout > 0) {
-    Mutex::Locker l(timer_lock);
-    op->ontimeout = new C_CancelPoolStatOp(op->tid, this);
-    timer.add_event_after(mon_timeout, op->ontimeout);
+  if (mon_timeout > timespan(0)) {
+    op->ontimeout = timer.add_event(mon_timeout,
+				    [this, op]() {
+				      pool_stat_op_cancel(op->tid,
+							  -ETIMEDOUT); });
+  } else {
+    op->ontimeout = 0;
   }
 
   RWLock::WLocker wl(rwlock);
@@ -4038,7 +4001,7 @@ void Objecter::_poolstat_submit(PoolStatOp *op)
   monc->send_mon_message(new MGetPoolStats(monc->get_fsid(), op->tid,
 					   op->pools,
 					   last_seen_pgmap_version));
-  op->last_submit = ceph_clock_now(cct);
+  op->last_submit = ceph::mono_clock::now();
 
   logger->inc(l_osdc_poolstat_send);
 }
@@ -4099,25 +4062,11 @@ void Objecter::_finish_pool_stat_op(PoolStatOp *op, int r)
   poolstat_ops.erase(op->tid);
   logger->set(l_osdc_poolstat_active, poolstat_ops.size());
 
-  if (op->ontimeout && r != -ETIMEDOUT) {
-    Mutex::Locker l(timer_lock);
+  if (op->ontimeout && r != -ETIMEDOUT)
     timer.cancel_event(op->ontimeout);
-  }
 
   delete op;
 }
-
-class C_CancelStatfsOp : public Context
-{
-  ceph_tid_t tid;
-  Objecter *objecter;
-public:
-  C_CancelStatfsOp(ceph_tid_t tid, Objecter *objecter)
-    : tid(tid), objecter(objecter) {}
-  void finish(int r) {
-    objecter->statfs_op_cancel(tid, -ETIMEDOUT);
-  }
-};
 
 void Objecter::get_fs_stats(ceph_statfs& result, Context *onfinish)
 {
@@ -4128,11 +4077,13 @@ void Objecter::get_fs_stats(ceph_statfs& result, Context *onfinish)
   op->tid = last_tid.inc();
   op->stats = &result;
   op->onfinish = onfinish;
-  op->ontimeout = NULL;
-  if (mon_timeout > 0) {
-    Mutex::Locker l(timer_lock);
-    op->ontimeout = new C_CancelStatfsOp(op->tid, this);
-    timer.add_event_after(mon_timeout, op->ontimeout);
+  if (mon_timeout > timespan(0)) {
+    op->ontimeout = timer.add_event(mon_timeout,
+				    [this, op]() {
+				      statfs_op_cancel(op->tid,
+						       -ETIMEDOUT); });
+  } else {
+    op->ontimeout = 0;
   }
   statfs_ops[op->tid] = op;
 
@@ -4148,7 +4099,7 @@ void Objecter::_fs_stats_submit(StatfsOp *op)
   ldout(cct, 10) << "fs_stats_submit" << op->tid << dendl;
   monc->send_mon_message(new MStatfs(monc->get_fsid(), op->tid,
 				     last_seen_pgmap_version));
-  op->last_submit = ceph_clock_now(cct);
+  op->last_submit = ceph::mono_clock::now();
 
   logger->inc(l_osdc_statfs_send);
 }
@@ -4207,10 +4158,8 @@ void Objecter::_finish_statfs_op(StatfsOp *op, int r)
   statfs_ops.erase(op->tid);
   logger->set(l_osdc_statfs_active, statfs_ops.size());
 
-  if (op->ontimeout && r != -ETIMEDOUT) {
-    Mutex::Locker l(timer_lock);
+  if (op->ontimeout && r != -ETIMEDOUT)
     timer.cancel_event(op->ontimeout);
-  }
 
   delete op;
 }
@@ -4637,20 +4586,6 @@ void Objecter::handle_command_reply(MCommandReply *m)
   m->put();
 }
 
-class C_CancelCommandOp : public Context
-{
-  Objecter::OSDSession *s;
-  ceph_tid_t tid;
-  Objecter *objecter;
-public:
-  C_CancelCommandOp(Objecter::OSDSession *s, ceph_tid_t tid,
-		    Objecter *objecter)
-    : s(s), tid(tid), objecter(objecter) {}
-  void finish(int r) {
-    objecter->command_op_cancel(s, tid, -ETIMEDOUT);
-  }
-};
-
 int Objecter::submit_command(CommandOp *c, ceph_tid_t *ptid)
 {
   RWLock::WLocker wl(rwlock);
@@ -4668,10 +4603,11 @@ int Objecter::submit_command(CommandOp *c, ceph_tid_t *ptid)
 
   (void)_calc_command_target(c);
   _assign_command_session(c);
-  if (osd_timeout > 0) {
-    Mutex::Locker l(timer_lock);
-    c->ontimeout = new C_CancelCommandOp(c->session, tid, this);
-    timer.add_event_after(osd_timeout, c->ontimeout);
+  if (osd_timeout > timespan(0)) {
+    c->ontimeout = timer.add_event(osd_timeout,
+				   [this, c, tid]() {
+				     command_op_cancel(c->session, tid,
+						       -ETIMEDOUT); });
   }
 
   if (!c->session->is_homeless()) {
@@ -4804,10 +4740,8 @@ void Objecter::_finish_command(CommandOp *c, int r, string rs)
   if (c->onfinish)
     c->onfinish->complete(r);
 
-  if (c->ontimeout && r != -ETIMEDOUT) {
-    Mutex::Locker l(timer_lock);
+  if (c->ontimeout && r != -ETIMEDOUT)
     timer.cancel_event(c->ontimeout);
-  }
 
   OSDSession *s = c->session;
   s->lock.get_write();

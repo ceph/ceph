@@ -12,6 +12,8 @@
 #include "include/assert.h"
 
 #define MAX_FLUSH_UNDER_LOCK 20  ///< max bh's we start writeback on
+
+using std::chrono::seconds;
 				 /// while holding the lock
 
 /*** ObjectCacher::BufferHead ***/
@@ -570,6 +572,7 @@ ObjectCacher::ObjectCacher(CephContext *cct_, string name,
     cct(cct_), writeback_handler(wb), name(name), lock(l),
     max_dirty(max_dirty), target_dirty(target_dirty),
     max_size(max_bytes), max_objects(max_objects),
+    max_dirty_age(ceph::make_timespan(max_dirty_age)),
     block_writes_upfront(block_writes_upfront),
     flush_set_callback(flush_callback),
     flush_set_callback_arg(flush_callback_arg),
@@ -577,7 +580,6 @@ ObjectCacher::ObjectCacher(CephContext *cct_, string name,
     stat_clean(0), stat_zero(0), stat_dirty(0), stat_rx(0), stat_tx(0),
     stat_missing(0), stat_error(0), stat_dirty_waiting(0), reads_outstanding(0)
 {
-  this->max_dirty_age.set_from_double(max_dirty_age);
   perf_start();
   finisher.start();
 }
@@ -1031,7 +1033,7 @@ void ObjectCacher::bh_write_commit(int64_t poolid, sobject_t oid, loff_t start,
 void ObjectCacher::flush(loff_t amount)
 {
   assert(lock.is_locked());
-  utime_t cutoff = ceph_clock_now(cct);
+  ceph::real_time cutoff = ceph::real_clock::now();
 
   ldout(cct, 10) << "flush " << amount << dendl;
 
@@ -1447,7 +1449,7 @@ void ObjectCacher::retry_waiting_reads()
 int ObjectCacher::writex(OSDWrite *wr, ObjectSet *oset, Context *onfreespace)
 {
   assert(lock.is_locked());
-  utime_t now = ceph_clock_now(cct);
+  ceph::real_time now = ceph::real_clock::now();
   uint64_t bytes_written = 0;
   uint64_t bytes_written_in_flush = 0;
   bool dontneed = wr->fadvise_flags & LIBRADOS_OP_FLAG_FADVISE_DONTNEED;
@@ -1542,7 +1544,7 @@ void ObjectCacher::C_WaitForWrite::finish(int r)
 void ObjectCacher::maybe_wait_for_writeback(uint64_t len)
 {
   assert(lock.is_locked());
-  utime_t start = ceph_clock_now(cct);
+  ceph::mono_time start = ceph::mono_clock::now();
   int blocked = 0;
   // wait for writeback?
   //  - wait for dirty and tx bytes (relative to the max_dirty threshold)
@@ -1566,7 +1568,7 @@ void ObjectCacher::maybe_wait_for_writeback(uint64_t len)
   if (blocked && perfcounter) {
     perfcounter->inc(l_objectcacher_write_ops_blocked);
     perfcounter->inc(l_objectcacher_write_bytes_blocked, len);
-    utime_t blocked = ceph_clock_now(cct) - start;
+    ceph::timespan blocked = ceph::mono_clock::now() - start;
     perfcounter->tinc(l_objectcacher_write_time_blocked, blocked);
   }
 }
@@ -1642,7 +1644,7 @@ void ObjectCacher::flusher_entry()
       flush(actual - target_dirty);
     } else {
       // check tail of lru for old dirty items
-      utime_t cutoff = ceph_clock_now(cct);
+      ceph::real_time cutoff = ceph::real_clock::now();
       cutoff -= max_dirty_age;
       BufferHead *bh = 0;
       int max = MAX_FLUSH_UNDER_LOCK;
@@ -1666,7 +1668,7 @@ void ObjectCacher::flusher_entry()
       break;
 
     writeback_handler.put_client_lock();
-    flusher_cond.WaitInterval(cct, lock, utime_t(1,0));
+    flusher_cond.WaitInterval(cct, lock, seconds(1));
     lock.Unlock();
 
     writeback_handler.get_client_lock();
