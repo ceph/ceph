@@ -8105,7 +8105,7 @@ void OSD::handle_op(OpRequestRef& op, OSDMapRef& osdmap)
 
     // too big?
     if (cct->_conf->osd_max_write_size &&
-	m->get_data_len() > cct->_conf->osd_max_write_size << 20) {
+	m->get_data_len() > ((int64_t)g_conf->osd_max_write_size) << 20) {
       // journal can't hold commit!
       derr << "handle_op msg data len " << m->get_data_len()
 	   << " > osd_max_write_size " << (cct->_conf->osd_max_write_size << 20)
