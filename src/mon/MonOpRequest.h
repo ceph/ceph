@@ -140,7 +140,7 @@ public:
   MonSession *get_session() const {
     if (!session)
       return NULL;
-    return (MonSession*)session->get();
+    return session;
   }
 
   template<class T>

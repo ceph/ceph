@@ -452,8 +452,6 @@ bool AuthMonitor::prep_auth(MonOpRequestRef op, bool paxos_writable)
         goto done;
       }
 
-      s->put();
-
       if (!mon->is_leader()) {
 	dout(10) << "not the leader, requesting more ids from leader" << dendl;
 	int leader = mon->get_leader();
@@ -511,7 +509,6 @@ reply:
   reply = new MAuthReply(proto, &response_bl, ret, s->global_id);
   mon->send_reply(op, reply);
 done:
-  s->put();
   return true;
 }
 
