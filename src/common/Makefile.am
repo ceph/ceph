@@ -277,7 +277,8 @@ noinst_HEADERS += \
 	common/ceph_time.h \
 	common/ceph_timer.h \
 	common/align.h \
-	common/mutex_debug.h
+	common/mutex_debug.h \
+	common/shunique_lock.h
 
 if ENABLE_XIO
 noinst_HEADERS += \
