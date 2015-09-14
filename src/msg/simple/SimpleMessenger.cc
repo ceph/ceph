@@ -96,6 +96,7 @@ int SimpleMessenger::_send_message(Message *m, const entity_inst_t& dest)
 {
   // set envelope
   m->get_header().src = get_myname();
+  m->set_cct(cct);
 
   if (!m->get_priority()) m->set_priority(get_default_send_priority());
  
