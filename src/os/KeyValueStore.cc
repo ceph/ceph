@@ -1051,13 +1051,13 @@ int KeyValueStore::queue_transactions(Sequencer *posr, list<Transaction*> &tls,
   assert(posr);
   if (posr->p) {
     osr = static_cast<OpSequencer *>(posr->p.get());
-    dout(5) << "queue_transactions existing " << *osr << "/" << osr->parent
+    dout(5) << "queue_transactions existing " << osr << " " << *osr << "/" << osr->parent
             << dendl; //<< " w/ q " << osr->q << dendl;
   } else {
     osr = new OpSequencer;
     osr->parent = posr;
     posr->p = osr;
-    dout(5) << "queue_transactions new " << *osr << "/" << osr->parent << dendl;
+    dout(5) << "queue_transactions new " << osr << " " << *osr << "/" << osr->parent << dendl;
   }
 
   Op *o = build_op(tls, ondisk, onreadable, onreadable_sync, osd_op);
