@@ -172,7 +172,7 @@ public:
   void handle_client_setlayout(MDRequestRef& mdr);
   void handle_client_setdirlayout(MDRequestRef& mdr);
 
-  int parse_layout_vxattr(string name, string value, const OSDMap *osdmap,
+  int parse_layout_vxattr(string name, string value, const OSDMap& osdmap,
 			  ceph_file_layout *layout, bool validate=true);
   int parse_quota_vxattr(string name, string value, quota_info_t *quota);
   void handle_set_vxattr(MDRequestRef& mdr, CInode *cur,

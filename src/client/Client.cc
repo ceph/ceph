@@ -443,18 +443,13 @@ void Client::dump_status(Formatter *f)
 
   ldout(cct, 1) << __func__ << dendl;
 
-  const OSDMap *osdmap = objecter->get_osdmap_read();
-  const epoch_t osd_epoch = osdmap->get_epoch();
-  objecter->put_osdmap_read();
+  const epoch_t osd_epoch
+    = objecter->with_osdmap(std::mem_fn(&OSDMap::get_epoch));
 
   if (f) {
     f->open_object_section("metadata");
-    {
-      for (std::map<std::string, std::string>::const_iterator i = metadata.begin();
-           i != metadata.end(); ++i) {
-        f->dump_string(i->first.c_str(), i->second);
-      }
-    }
+    for (const auto& kv : metadata)
+      f->dump_string(kv.first.c_str(), kv.second);
     f->close_section();
 
     f->dump_int("dentry_count", lru.lru_get_size());
@@ -2050,9 +2045,9 @@ void Client::send_request(MetaRequest *request, MetaSession *session,
   }
   r->set_mdsmap_epoch(mdsmap->get_epoch());
   if (r->head.op == CEPH_MDS_OP_SETXATTR) {
-    const OSDMap *osdmap = objecter->get_osdmap_read();
-    r->set_osdmap_epoch(osdmap->get_epoch());
-    objecter->put_osdmap_read();
+    objecter->with_osdmap([r](const OSDMap& o) {
+	r->set_osdmap_epoch(o.get_epoch());
+      });
   }
 
   if (request->mds == -1) {
@@ -2315,21 +2310,16 @@ void Client::handle_osd_map(MOSDMap *m)
     // cancel_writes
     std::vector<int64_t> full_pools;
 
-    const OSDMap *osd_map = objecter->get_osdmap_read();
-    const map<int64_t,pg_pool_t>& pools = osd_map->get_pools();
-    for (map<int64_t,pg_pool_t>::const_iterator i = pools.begin();
-         i != pools.end(); ++i) {
-      if (i->second.has_flag(pg_pool_t::FLAG_FULL)) {
-        full_pools.push_back(i->first);
-      }
-    }
+    objecter->with_osdmap([&full_pools](const OSDMap &o) {
+	for (const auto& kv : o.get_pools()) {
+	  if (kv.second.has_flag(pg_pool_t::FLAG_FULL)) {
+	    full_pools.push_back(kv.first);
+	  }
+	}
+      });
 
-    objecter->put_osdmap_read();
-
-    for (std::vector<int64_t>::iterator i = full_pools.begin();
-         i != full_pools.end(); ++i) {
-      _handle_full_flag(*i);
-    }
+    for (auto p : full_pools)
+      _handle_full_flag(p);
 
     // Subscribe to subsequent maps to watch for the full flag going
     // away.  For the global full flag objecter does this for us, but
@@ -9866,9 +9856,9 @@ int Client::ll_setxattr(Inode *in, const char *name, const void *value,
       strcmp(name, "ceph.file.layout") == 0 || strcmp(name, "ceph.dir.layout") == 0) {
     string rest(strstr(name, "layout"));
     string v((const char*)value);
-    const OSDMap *osdmap = objecter->get_osdmap_read();
-    int r = check_data_pool_exist(rest, v, osdmap);
-    objecter->put_osdmap_read();
+    int r = objecter->with_osdmap([&](const OSDMap& o) {
+      return check_data_pool_exist(rest, v, &o);
+    });
 
     if (r == -ENOENT) {
       C_SaferCond ctx;
@@ -9992,14 +9982,14 @@ size_t Client::_vxattrcb_layout(Inode *in, char *val, size_t size)
       (unsigned long long)in->layout.fl_stripe_unit,
       (unsigned long long)in->layout.fl_stripe_count,
       (unsigned long long)in->layout.fl_object_size);
-  const OSDMap *osdmap = objecter->get_osdmap_read();
-  if (osdmap->have_pg_pool(in->layout.fl_pg_pool))
-    r += snprintf(val + r, size - r, "%s",
-	osdmap->get_pool_name(in->layout.fl_pg_pool).c_str());
-  else
-    r += snprintf(val + r, size - r, "%lld",
-	(unsigned long long)in->layout.fl_pg_pool);
-  objecter->put_osdmap_read();
+  objecter->with_osdmap([&](const OSDMap& o) {
+      if (o.have_pg_pool(in->layout.fl_pg_pool))
+	r += snprintf(val + r, size - r, "%s",
+		      o.get_pool_name(in->layout.fl_pg_pool).c_str());
+      else
+	r += snprintf(val + r, size - r, "%" PRIu64,
+		      (uint64_t)in->layout.fl_pg_pool);
+    });
   return r;
 }
 size_t Client::_vxattrcb_layout_stripe_unit(Inode *in, char *val, size_t size)
@@ -10017,12 +10007,13 @@ size_t Client::_vxattrcb_layout_object_size(Inode *in, char *val, size_t size)
 size_t Client::_vxattrcb_layout_pool(Inode *in, char *val, size_t size)
 {
   size_t r;
-  const OSDMap *osdmap = objecter->get_osdmap_read();
-  if (osdmap->have_pg_pool(in->layout.fl_pg_pool))
-    r = snprintf(val, size, "%s", osdmap->get_pool_name(in->layout.fl_pg_pool).c_str());
-  else
-    r = snprintf(val, size, "%lld", (unsigned long long)in->layout.fl_pg_pool);
-  objecter->put_osdmap_read();
+  objecter->with_osdmap([&](const OSDMap& o) {
+      if (o.have_pg_pool(in->layout.fl_pg_pool))
+	r = snprintf(val, size, "%s", o.get_pool_name(
+		       in->layout.fl_pg_pool).c_str());
+      else
+	r = snprintf(val, size, "%" PRIu64, (uint64_t)in->layout.fl_pg_pool);
+    });
   return r;
 }
 size_t Client::_vxattrcb_dir_entries(Inode *in, char *val, size_t size)
@@ -10301,9 +10292,8 @@ int Client::_create(Inode *dir, const char *name, int flags, mode_t mode,
 
   int64_t pool_id = -1;
   if (data_pool && *data_pool) {
-    const OSDMap * osdmap = objecter->get_osdmap_read();
-    pool_id = osdmap->lookup_pg_pool_name(data_pool);
-    objecter->put_osdmap_read();
+    pool_id = objecter->with_osdmap(
+      std::mem_fn(&OSDMap::lookup_pg_pool_name), data_pool);
     if (pool_id < 0)
       return -EINVAL;
     if (pool_id > 0xffffffffll)
@@ -10870,29 +10860,25 @@ out:
 int Client::ll_num_osds(void)
 {
   Mutex::Locker lock(client_lock);
-  const OSDMap *osdmap = objecter->get_osdmap_read();
-  int ret = osdmap->get_num_osds();
-  objecter->put_osdmap_read();
-  return ret;
+  return objecter->with_osdmap(std::mem_fn(&OSDMap::get_num_osds));
 }
 
 int Client::ll_osdaddr(int osd, uint32_t *addr)
 {
   Mutex::Locker lock(client_lock);
-  const OSDMap *osdmap = objecter->get_osdmap_read();
-  bool exists = osdmap->exists(osd);
   entity_addr_t g;
-  if (exists)
-    g = osdmap->get_addr(osd);
-  objecter->put_osdmap_read();
-  if (!exists) {
+  bool exists = objecter->with_osdmap([&](const OSDMap& o) {
+      if (!o.exists(osd))
+	return false;
+      g = o.get_addr(osd);
+      return true;
+    });
+  if (!exists)
     return -1;
-  }
   uint32_t nb_addr = (g.in4_addr()).sin_addr.s_addr;
   *addr = ntohl(nb_addr);
   return 0;
 }
-
 uint32_t Client::ll_stripe_unit(Inode *in)
 {
   Mutex::Locker lock(client_lock);
@@ -10940,15 +10926,15 @@ int Client::ll_get_stripe_osd(Inode *in, uint64_t blockno,
   uint64_t objectno = objectsetno * stripe_count + stripepos;  // object id
 
   object_t oid = file_object_t(ino, objectno);
-  const OSDMap *osdmap = objecter->get_osdmap_read();
-  ceph_object_layout olayout = osdmap->file_to_object_layout(oid, *layout, "");
-  objecter->put_osdmap_read();
-
-  pg_t pg = (pg_t)olayout.ol_pgid;
-  vector<int> osds;
-  int primary;
-  osdmap->pg_to_osds(pg, &osds, &primary);
-  return osds[0];
+  return objecter->with_osdmap([&](const OSDMap& o) {
+      ceph_object_layout olayout =
+	o.file_to_object_layout(oid, *layout, string());
+      pg_t pg = (pg_t)olayout.ol_pgid;
+      vector<int> osds;
+      int primary;
+      o.pg_to_osds(pg, &osds, &primary);
+      return osds[0];
+    });
 }
 
 /* Return the offset of the block, internal to the object */
@@ -11608,34 +11594,24 @@ int Client::fdescribe_layout(int fd, ceph_file_layout *lp)
 int64_t Client::get_pool_id(const char *pool_name)
 {
   Mutex::Locker lock(client_lock);
-  const OSDMap *osdmap = objecter->get_osdmap_read();
-  int64_t pool = osdmap->lookup_pg_pool_name(pool_name);
-  objecter->put_osdmap_read();
-  return pool;
+  return objecter->with_osdmap(std::mem_fn(&OSDMap::lookup_pg_pool_name),
+			       pool_name);
 }
 
 string Client::get_pool_name(int64_t pool)
 {
   Mutex::Locker lock(client_lock);
-  const OSDMap *osdmap = objecter->get_osdmap_read();
-  string ret;
-  if (osdmap->have_pg_pool(pool))
-    ret = osdmap->get_pool_name(pool);
-  objecter->put_osdmap_read();
-  return ret;
+  return objecter->with_osdmap([pool](const OSDMap& o) {
+      return o.have_pg_pool(pool) ? o.get_pool_name(pool) : string();
+    });
 }
 
 int Client::get_pool_replication(int64_t pool)
 {
   Mutex::Locker lock(client_lock);
-  const OSDMap *osdmap = objecter->get_osdmap_read();
-  int ret;
-  if (!osdmap->have_pg_pool(pool))
-    ret = -ENOENT;
-  else
-    ret = osdmap->get_pg_pool(pool)->get_size();
-  objecter->put_osdmap_read();
-  return ret;
+  return objecter->with_osdmap([pool](const OSDMap& o) {
+      return o.have_pg_pool(pool) ? o.get_pg_pool(pool)->get_size() : -ENOENT;
+    });
 }
 
 int Client::get_file_extent_osds(int fd, loff_t off, loff_t *len, vector<int>& osds)
@@ -11651,10 +11627,10 @@ int Client::get_file_extent_osds(int fd, loff_t off, loff_t *len, vector<int>& o
   Striper::file_to_extents(cct, in->ino, &in->layout, off, 1, in->truncate_size, extents);
   assert(extents.size() == 1);
 
-  const OSDMap *osdmap = objecter->get_osdmap_read();
-  pg_t pg = osdmap->object_locator_to_pg(extents[0].oid, extents[0].oloc);
-  osdmap->pg_to_acting_osds(pg, osds);
-  objecter->put_osdmap_read();
+  objecter->with_osdmap([&](const OSDMap& o) {
+      pg_t pg = o.object_locator_to_pg(extents[0].oid, extents[0].oloc);
+      o.pg_to_acting_osds(pg, osds);
+    });
 
   if (osds.empty())
     return -EINVAL;
@@ -11686,13 +11662,13 @@ int Client::get_osd_crush_location(int id, vector<pair<string, string> >& path)
   Mutex::Locker lock(client_lock);
   if (id < 0)
     return -EINVAL;
-  const OSDMap *osdmap = objecter->get_osdmap_read();
-  int ret = osdmap->crush->get_full_location_ordered(id, path);
-  objecter->put_osdmap_read();
-  return ret;
+  return objecter->with_osdmap([&](const OSDMap& o) {
+      return o.crush->get_full_location_ordered(id, path);
+    });
 }
 
-int Client::get_file_stripe_address(int fd, loff_t offset, vector<entity_addr_t>& address)
+int Client::get_file_stripe_address(int fd, loff_t offset,
+				    vector<entity_addr_t>& address)
 {
   Mutex::Locker lock(client_lock);
 
@@ -11703,38 +11679,35 @@ int Client::get_file_stripe_address(int fd, loff_t offset, vector<entity_addr_t>
 
   // which object?
   vector<ObjectExtent> extents;
-  Striper::file_to_extents(cct, in->ino, &in->layout, offset, 1, in->truncate_size, extents);
+  Striper::file_to_extents(cct, in->ino, &in->layout, offset, 1,
+			   in->truncate_size, extents);
   assert(extents.size() == 1);
 
   // now we have the object and its 'layout'
-  const OSDMap *osdmap = objecter->get_osdmap_read();
-  pg_t pg = osdmap->object_locator_to_pg(extents[0].oid, extents[0].oloc);
-  vector<int> osds;
-  osdmap->pg_to_acting_osds(pg, osds);
-  int ret = 0;
-  if (!osds.empty()) {
-    ret = -EINVAL;
-  } else {
-    for (unsigned i = 0; i < osds.size(); i++) {
-      entity_addr_t addr = osdmap->get_addr(osds[i]);
-      address.push_back(addr);
-    }
-  }
-  objecter->put_osdmap_read();
-  return ret;
+  return objecter->with_osdmap([&](const OSDMap& o) {
+      pg_t pg = o.object_locator_to_pg(extents[0].oid, extents[0].oloc);
+      vector<int> osds;
+      o.pg_to_acting_osds(pg, osds);
+      if (osds.empty())
+	return -EINVAL;
+      for (unsigned i = 0; i < osds.size(); i++) {
+	entity_addr_t addr = o.get_addr(osds[i]);
+	address.push_back(addr);
+      }
+      return 0;
+    });
 }
 
 int Client::get_osd_addr(int osd, entity_addr_t& addr)
 {
   Mutex::Locker lock(client_lock);
-  const OSDMap *osdmap = objecter->get_osdmap_read();
-  int ret = 0;
-  if (!osdmap->exists(osd))
-    ret = -ENOENT;
-  else
-    addr = osdmap->get_addr(osd);
-  objecter->put_osdmap_read();
-  return ret;
+  return objecter->with_osdmap([&](const OSDMap& o) {
+      if (!o.exists(osd))
+	return -ENOENT;
+
+      addr = o.get_addr(osd);
+      return 0;
+    });
 }
 
 int Client::enumerate_layout(int fd, vector<ObjectExtent>& result,
@@ -11761,12 +11734,12 @@ int Client::enumerate_layout(int fd, vector<ObjectExtent>& result,
 int Client::get_local_osd()
 {
   Mutex::Locker lock(client_lock);
-  const OSDMap *osdmap = objecter->get_osdmap_read();
-  if (osdmap->get_epoch() != local_osd_epoch) {
-    local_osd = osdmap->find_osd_on_ip(messenger->get_myaddr());
-    local_osd_epoch = osdmap->get_epoch();
-  }
-  objecter->put_osdmap_read();
+  objecter->with_osdmap([this](const OSDMap& o) {
+      if (o.get_epoch() != local_osd_epoch) {
+	local_osd = o.find_osd_on_ip(messenger->get_myaddr());
+	local_osd_epoch = o.get_epoch();
+      }
+    });
   return local_osd;
 }
 
