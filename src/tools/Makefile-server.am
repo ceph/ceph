@@ -3,7 +3,7 @@ ceph_osdomap_tool_LDADD = $(LIBOS) $(CEPH_GLOBAL) $(BOOST_PROGRAM_OPTIONS_LIBS)
 bin_DEBUGPROGRAMS += ceph-osdomap-tool
 
 ceph_monstore_tool_SOURCES = tools/ceph_monstore_tool.cc
-ceph_monstore_tool_LDADD = $(LIBOS) $(CEPH_GLOBAL) $(BOOST_PROGRAM_OPTIONS_LIBS)
+ceph_monstore_tool_LDADD = $(LIBOS) $(CEPH_GLOBAL) $(BOOST_PROGRAM_OPTIONS_LIBS) $(LIBMON)
 bin_DEBUGPROGRAMS += ceph-monstore-tool
 
 ceph_kvstore_tool_SOURCES = tools/ceph_kvstore_tool.cc
