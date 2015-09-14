@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 /*
  * Ceph - scalable distributed file system
@@ -7,9 +7,9 @@
  *
  * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
- * License version 2.1, as published by the Free Software 
+ * License version 2.1, as published by the Free Software
  * Foundation.  See file COPYING.
- * 
+ *
  */
 
 
@@ -17,13 +17,14 @@
 #define CEPH_COND_H
 
 #include <time.h>
-
-#include "Mutex.h"
-#include "Clock.h"
+#include <pthread.h>
 
 #include "include/Context.h"
 
-#include <pthread.h>
+#include "common/ceph_time.h"
+#include "common/Mutex.h"
+#include "common/Clock.h"
+
 
 class Cond {
   // my bits
@@ -73,10 +74,25 @@ class Cond {
 
     return r;
   }
+
   int WaitInterval(CephContext *cct, Mutex &mutex, utime_t interval) {
     utime_t when = ceph_clock_now(cct);
     when += interval;
     return WaitUntil(mutex, when);
+  }
+
+  template<typename Duration>
+  int WaitInterval(CephContext *cct, Mutex &mutex, Duration interval) {
+    ceph::real_time when(ceph::real_clock::now(cct));
+    when += interval;
+
+    struct timespec ts = ceph::real_clock::to_timespec(when);
+
+    mutex._pre_unlock();
+    int r = pthread_cond_timedwait(&_c, &mutex._m, &ts);
+    mutex._post_lock();
+
+    return r;
   }
 
   int SloppySignal() { 
