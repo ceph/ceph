@@ -265,7 +265,8 @@ noinst_HEADERS += \
 	common/TracepointProvider.h \
 	common/event_socket.h \
 	common/PluginRegistry.h \
-	common/ceph_time.h
+	common/ceph_time.h \
+	common/ceph_timer.h
 
 if ENABLE_XIO
 noinst_HEADERS += \
