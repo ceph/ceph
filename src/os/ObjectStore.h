@@ -155,7 +155,7 @@ public:
       Context *c ///< [in] context to call upon flush/commit
       ) = 0; ///< @return true if idle, false otherwise
 
-    Sequencer_impl() : RefCountedObject(0) {}
+    Sequencer_impl() : RefCountedObject(NULL, 0) {}
     virtual ~Sequencer_impl() {}
   };
   typedef boost::intrusive_ptr<Sequencer_impl> Sequencer_implRef;
