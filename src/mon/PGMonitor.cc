@@ -422,20 +422,34 @@ void PGMonitor::apply_pgmap_delta(bufferlist& bl)
   version_t v = pg_map.version + 1;
 
   utime_t inc_stamp;
-  bufferlist dirty_pgs, dirty_osds;
+  bufferlist dirty_pgs, dirty_osds, deleted_pgs;
   {
     bufferlist::iterator p = bl.begin();
     ::decode(inc_stamp, p);
     ::decode(dirty_pgs, p);
     ::decode(dirty_osds, p);
+    if (!p.end())
+      ::decode(deleted_pgs, p);
   }
 
   pool_stat_t pg_sum_old = pg_map.pg_sum;
   ceph::unordered_map<uint64_t, pool_stat_t> pg_pool_sum_old;
 
-  // pgs
   set<int64_t> deleted_pools;
-  bufferlist::iterator p = dirty_pgs.begin();
+
+  // pgs
+  bufferlist::iterator p = deleted_pgs.begin();
+  while (!p.end()) {
+    pg_t pgid;
+    ::decode(pgid, p);
+    if (pg_pool_sum_old.count(pgid.pool()) == 0)
+      pg_pool_sum_old[pgid.pool()] = pg_map.pg_pool_sum[pgid.pool()];
+    pg_map.remove_pg(pgid);
+    if (pgid.ps() == 0)
+      deleted_pools.insert(pgid.pool());
+  }
+
+  p = dirty_pgs.begin();
   while (!p.end()) {
     pg_t pgid;
     ::decode(pgid, p);
@@ -522,6 +536,7 @@ void PGMonitor::encode_pending(MonitorDBStore::TransactionRef t)
 
   bufferlist incbl;
   ::encode(pending_inc.stamp, incbl);
+  bufferlist deleted_pgs;
   {
     bufferlist dirty;
     string prefix = pgmap_pg_prefix;
@@ -534,7 +549,8 @@ void PGMonitor::encode_pending(MonitorDBStore::TransactionRef t)
       t->put(prefix, stringify(p->first), bl);
     }
     for (set<pg_t>::const_iterator p = pending_inc.pg_remove.begin(); p != pending_inc.pg_remove.end(); ++p) {
-      ::encode(*p, dirty);
+#warning fixme compat we need a feature bit conditional here
+      ::encode(*p, deleted_pgs);
       t->erase(prefix, stringify(*p));
     }
     ::encode(dirty, incbl);
@@ -561,6 +577,7 @@ void PGMonitor::encode_pending(MonitorDBStore::TransactionRef t)
     }
     ::encode(dirty, incbl);
   }
+  ::encode(deleted_pgs, incbl);
 
   put_version(t, version, incbl);
 
