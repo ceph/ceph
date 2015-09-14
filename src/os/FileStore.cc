@@ -1935,12 +1935,13 @@ int FileStore::queue_transactions(Sequencer *posr, list<Transaction*> &tls,
   assert(posr);
   if (posr->p) {
     osr = static_cast<OpSequencer *>(posr->p.get());
-    dout(5) << "queue_transactions existing " << *osr << "/" << osr->parent << dendl; //<< " w/ q " << osr->q << dendl;
+    dout(5) << "queue_transactions existing " << osr << " " << *osr << dendl;
   } else {
     osr = new OpSequencer;
+    osr->set_cct(g_ceph_context);
     osr->parent = posr;
     posr->p = osr;
-    dout(5) << "queue_transactions new " << *osr << "/" << osr->parent << dendl;
+    dout(5) << "queue_transactions new " << osr << " " << *osr << dendl;
   }
 
   // used to include osr information in tracepoints during transaction apply
