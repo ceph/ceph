@@ -1165,7 +1165,7 @@ if(${WITH_RADOSGW})
     rgw/rgw_sync.cc
     rgw/rgw_dencoder.cc
     rgw/rgw_coroutine.cc
-    rgw/rgw_object_expirer_core.cc
+    rgw/rgw_cr_rados.cc
     rgw/rgw_object_expirer_core.cc
     rgw/rgw_website.cc
     rgw/rgw_xml_enc.cc)
