@@ -80,14 +80,10 @@ class CephDisk:
             pass
         disk = self.unused_disks()[0]
         self.lvm_disk = disk
-        lvm_part_uuid = str(uuid.uuid1())
-        lvm_part_uuid_dev = '/dev/disk/by-partuuid/' + lvm_part_uuid
-        self.lvm_part_uuid_dev = lvm_part_uuid_dev
         try:
-            self.sh("sgdisk -n0:0:0 -t0:8e00 -u0:" + lvm_part_uuid)
-            self.sh("pvcreate " + lvm_part_uuid_dev)
-            self.sh("vgcreate vg " + lvm_part_uuid_dev)
-            self.sh("lvcreate -n lv -l 100%FREE vg " + lvm_part_uuid_dev)
+            self.sh("pvcreate " + disk)
+            self.sh("vgcreate vg " + disk)
+            self.sh("lvcreate -n lv -l 100%FREE vg " + disk)
         except:
             raise Exception("Unable to create LV.")
         return "/dev/vg/lv"
@@ -99,8 +95,7 @@ class CephDisk:
         try:
             self.sh("lvremove -f vg/lv")
             self.sh("vgremove -f vg")
-            self.sh("pvremove -f " + self.lvm_part_uuid_dev)
-            self.sh("sgdisk -Z " + self.lvm_disk)
+            self.sh("pvremove -f " + self.lvm_disk)
         except:
             raise Exception("Unable to remove LVM configuration.")
 
