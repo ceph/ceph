@@ -137,6 +137,7 @@ noinst_HEADERS += \
 	rgw/rgw_client_io.h \
 	rgw/rgw_coroutine.h \
 	rgw/rgw_cr_rados.h \
+	rgw/rgw_cr_rest.h \
 	rgw/rgw_fcgi.h \
 	rgw/rgw_xml.h \
 	rgw/rgw_cache.h \

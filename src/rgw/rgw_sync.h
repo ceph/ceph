@@ -2,6 +2,7 @@
 #define CEPH_RGW_SYNC_H
 
 #include "rgw_coroutine.h"
+#include "rgw_http_client.h"
 
 #include "common/RWLock.h"
 
