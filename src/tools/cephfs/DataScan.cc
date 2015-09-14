@@ -37,6 +37,8 @@ void DataScan::usage()
     << "    --force-corrupt: overrite apparently corrupt structures\n"
     << "    --force-init: write root inodes even if they exist\n"
     << "    --force-pool: use data pool even if it is not in MDSMap\n"
+    << "\n"
+    << "  cephfs-data-scan scan_frags [--force-corrupt]\n"
     << std::endl;
 
   generic_client_usage();
@@ -199,11 +201,31 @@ int DataScan::main(const std::vector<const char*> &args)
     }
   }
 
+  if (command == "scan_frags") {
+    int const metadata_pool_id = mdsmap->get_metadata_pool();
+
+    dout(4) << "resolving metadata pool " << metadata_pool_id << dendl;
+    std::string metadata_pool_name;
+    int r = rados.pool_reverse_lookup(metadata_pool_id, &metadata_pool_name);
+    if (r < 0) {
+      std::cerr << "Pool " << metadata_pool_id
+        << " identified in MDS map not found in RADOS!" << std::endl;
+      return r;
+    }
+
+    r = rados.ioctx_create(metadata_pool_name.c_str(), metadata_io);
+    if (r != 0) {
+      return r;
+    }
+  }
+
   // Finally, dispatch command
   if (command == "scan_inodes") {
     return scan_inodes();
   } else if (command == "scan_extents") {
     return scan_extents();
+  } else if (command == "scan_frags") {
+    return scan_frags();
   } else if (command == "init") {
     return driver->init_roots(mdsmap->get_first_data_pool());
   } else {
@@ -675,7 +697,221 @@ int DataScan::scan_inodes()
   return 0;
 }
 
-int MetadataDriver::read_fnode(
+int DataScan::scan_frags()
+{
+  librados::NObjectIterator i;
+  bool legacy_filtering = false;
+
+  bufferlist filter_bl;
+  ClsCephFSClient::build_tag_filter(filter_tag, &filter_bl);
+
+  // try/catch to deal with older OSDs that don't support
+  // the cephfs pgls filtering mode
+  try {
+    i = metadata_io.nobjects_begin(filter_bl);
+    dout(4) << "OSDs accepted cephfs object filtering" << dendl;
+  } catch (const std::runtime_error &e) {
+    // A little unfriendly, librados raises std::runtime_error
+    // on pretty much any unhandled I/O return value, such as
+    // the OSD saying -EINVAL because of our use of a filter
+    // mode that it doesn't know about.
+    std::cerr << "OSDs do not support cephfs object filtering: using "
+                 "(slower) fallback mode" << std::endl;
+    legacy_filtering = true;
+    i = metadata_io.nobjects_begin();
+  }
+
+  librados::NObjectIterator i_end = metadata_io.nobjects_end();
+
+  bool roots_present;
+  int r = driver->check_roots(&roots_present);
+  if (r != 0) {
+    derr << "Unexpected error checking roots: '"
+      << cpp_strerror(r) << "'" << dendl;
+    return r;
+  }
+
+  if (!roots_present) {
+    std::cerr << "Some or all system inodes are absent.  Run 'init' from "
+      "one node before running 'scan_inodes'" << std::endl;
+    return -EIO;
+  }
+
+  for (; i != i_end; ++i) {
+    const std::string oid = i->get_oid();
+    uint64_t obj_name_ino = 0;
+    uint64_t obj_name_offset = 0;
+    r = parse_oid(oid, &obj_name_ino, &obj_name_offset);
+    if (r != 0) {
+      dout(4) << "Bad object name '" << oid << "', skipping" << dendl;
+      continue;
+    }
+
+    if (obj_name_ino < (1ULL << 40)) {
+      // FIXME: we're skipping stray dirs here: if they're
+      // orphaned then we should be resetting them some other
+      // way
+      dout(10) << "Skipping system ino " << obj_name_ino << dendl;
+      continue;
+    }
+
+    if (legacy_filtering) {
+      dout(20) << "Applying filter to " << oid << dendl;
+
+      // We are only interested in 0th objects during this phase: we touched
+      // the other objects during scan_extents
+      if (obj_name_offset != 0) {
+        dout(20) << "Non-zeroth object" << dendl;
+        continue;
+      }
+
+      bufferlist scrub_tag_bl;
+      int r = metadata_io.getxattr(oid, "scrub_tag", scrub_tag_bl);
+      if (r >= 0) {
+        std::string read_tag;
+        bufferlist::iterator q = scrub_tag_bl.begin();
+        ::decode(read_tag, q);
+        if (read_tag == filter_tag) {
+          dout(20) << "skipping " << oid << " because it has the filter_tag"
+                   << dendl;
+          continue;
+        } else {
+          dout(20) << "read non-matching tag '" << read_tag << "'" << dendl;
+        }
+      } else {
+        dout(20) << "no tag read (" << r << ")" << dendl;
+      }
+
+    } else {
+      assert(obj_name_offset == 0);
+      dout(20) << "OSD matched oid " << oid << dendl;
+    }
+
+    AccumulateResult accum_res;
+    inode_backtrace_t backtrace;
+
+    // Default to inherit layout (i.e. no explicit layout on dir) which is
+    // expressed as a zeroed layout struct (see inode_t::has_layout)
+    ceph_file_layout loaded_layout;
+    memset(&loaded_layout, 0, sizeof(loaded_layout));
+
+    int parent_r = 0;
+    bufferlist parent_bl;
+    int layout_r = 0;
+    bufferlist layout_bl;
+    bufferlist op_bl;
+
+    librados::ObjectReadOperation op;
+    op.getxattr("parent", &parent_bl, &parent_r);
+    op.getxattr("layout", &layout_bl, &layout_r);
+    int r = metadata_io.operate(oid, &op, &op_bl);
+    if (r != 0 && r != -ENODATA) {
+      derr << "Unexpected error reading backtrace: " << cpp_strerror(parent_r) << dendl;
+      continue;
+    }
+
+    if (parent_r != -ENODATA) {
+      try {
+        bufferlist::iterator q = parent_bl.begin();
+        backtrace.decode(q);
+      } catch (buffer::error &e) {
+        dout(4) << "Corrupt backtrace on '" << oid << "': " << e << dendl;
+        if (!force_corrupt) {
+          continue;
+        } else {
+          // Treat backtrace as absent: we'll inject into lost+found
+          backtrace = inode_backtrace_t();
+        }
+      }
+    }
+
+    if (layout_r != -ENODATA) {
+      try {
+        bufferlist::iterator q = layout_bl.begin();
+        ::decode(loaded_layout, q);
+      } catch (buffer::error &e) {
+        dout(4) << "Corrupt layout on '" << oid << "': " << e << dendl;
+        if (!force_corrupt) {
+          continue;
+        }
+      }
+    }
+
+    bool have_backtrace = !(backtrace.ancestors.empty());
+
+    // Santity checking backtrace ino against object name
+    if (have_backtrace && backtrace.ino != obj_name_ino) {
+      dout(4) << "Backtrace ino 0x" << std::hex << backtrace.ino
+        << " doesn't match object name ino 0x" << obj_name_ino
+        << std::dec << dendl;
+      have_backtrace = false;
+    }
+
+    uint64_t fnode_version = 0;
+    fnode_t fnode;
+    r = read_fnode(obj_name_ino, frag_t(), &fnode, &fnode_version);
+    if (r == -EINVAL) {
+      derr << "Corrupt fnode on " << oid << dendl;
+      if (force_corrupt) {
+        fnode.fragstat.mtime = 0;
+        fnode.fragstat.nfiles = 1;
+        fnode.fragstat.nsubdirs = 0;
+      } else {
+        continue;
+      }
+    }
+
+    InodeStore dentry;
+    build_dir_dentry(obj_name_ino, fnode.fragstat.nfiles,
+        fnode.fragstat.nsubdirs, fnode.fragstat.mtime, loaded_layout, &dentry);
+
+    // Inject inode to the metadata pool
+    if (have_backtrace) {
+      inode_backpointer_t root_bp = *(backtrace.ancestors.rbegin());
+      if (MDS_INO_IS_MDSDIR(root_bp.dirino)) {
+        /* Special case for strays: even if we have a good backtrace,
+         * don't put it in the stray dir, because while that would technically
+         * give it linkage it would still be invisible to the user */
+        r = driver->inject_lost_and_found(obj_name_ino, dentry);
+        if (r < 0) {
+          dout(4) << "Error injecting 0x" << std::hex << backtrace.ino
+            << std::dec << " into lost+found: " << cpp_strerror(r) << dendl;
+          if (r == -EINVAL) {
+            dout(4) << "Use --force-corrupt to overwrite structures that "
+                       "appear to be corrupt" << dendl;
+          }
+        }
+      } else {
+        /* Happy case: we will inject a named dentry for this inode */
+        r = driver->inject_with_backtrace(backtrace, dentry);
+        if (r < 0) {
+          dout(4) << "Error injecting 0x" << std::hex << backtrace.ino
+            << std::dec << " with backtrace: " << cpp_strerror(r) << dendl;
+          if (r == -EINVAL) {
+            dout(4) << "Use --force-corrupt to overwrite structures that "
+                       "appear to be corrupt" << dendl;
+          }
+        }
+      }
+    } else {
+      /* Backtrace-less case: we will inject a lost+found dentry */
+      r = driver->inject_lost_and_found(
+          obj_name_ino, dentry);
+      if (r < 0) {
+        dout(4) << "Error injecting 0x" << std::hex << obj_name_ino
+          << std::dec << " into lost+found: " << cpp_strerror(r) << dendl;
+        if (r == -EINVAL) {
+          dout(4) << "Use --force-corrupt to overwrite structures that "
+                     "appear to be corrupt" << dendl;
+        }
+      }
+    }
+  }
+
+  return 0;
+}
+
+int MetadataTool::read_fnode(
     inodeno_t ino, frag_t frag, fnode_t *fnode,
     uint64_t *last_version)
 {
@@ -699,7 +935,7 @@ int MetadataDriver::read_fnode(
   return 0;
 }
 
-int MetadataDriver::read_dentry(inodeno_t parent_ino, frag_t frag,
+int MetadataTool::read_dentry(inodeno_t parent_ino, frag_t frag,
                 const std::string &dname, InodeStore *inode)
 {
   assert(inode != NULL);
@@ -765,19 +1001,16 @@ int MetadataDriver::inject_lost_and_found(
     if (r == -EINVAL && !force_corrupt) {
       return r;
     }
-    // Inject dentry
-    lf_ino.inode.mode = 0755 | S_IFDIR;
-    // Set nfiles to something non-zero, to fool any other code
-    // that tries to ignore 'empty' directories.  This won't be
-    // accurate, but it should avoid functional issues.
-    lf_ino.inode.dirstat.nfiles = 1;
-    lf_ino.inode.size = 1;
-    lf_ino.inode.nlink = 1;
-    lf_ino.inode.ino = CEPH_INO_LOST_AND_FOUND;
-    lf_ino.inode.version = 1;
-    lf_ino.inode.backtrace_version = 1;
-    lf_ino.inode.uid = g_conf->mds_root_ino_uid;
-    lf_ino.inode.gid = g_conf->mds_root_ino_gid;
+
+    // To have a directory not specify a layout, give it zeros (see
+    // inode_t::has_layout)
+    ceph_file_layout inherit_layout;
+    memset(&inherit_layout, 0, sizeof(inherit_layout));
+
+    // Construct LF inode
+    build_dir_dentry(CEPH_INO_LOST_AND_FOUND, 1, 0, 0, inherit_layout, &lf_ino);
+
+    // Inject link to LF inode in the root dir
     r = inject_linkage(CEPH_INO_ROOT, "lost+found", frag_t(), lf_ino);
     if (r < 0) {
       return r;
@@ -1046,6 +1279,7 @@ int MetadataDriver::inject_with_backtrace(
         // Set nfiles to something non-zero, to fool any other code
         // that tries to ignore 'empty' directories.  This won't be
         // accurate, but it should avoid functional issues.
+
         ancestor_dentry.inode.dirstat.nfiles = 1;
         ancestor_dentry.inode.size = 1;
 
@@ -1339,7 +1573,7 @@ int LocalFileDriver::check_roots(bool *result)
   return 0;
 }
 
-void DataScan::build_file_dentry(
+void MetadataTool::build_file_dentry(
     inodeno_t ino, uint64_t file_size, time_t file_mtime,
     const ceph_file_layout &layout, InodeStore *out)
 {
@@ -1360,6 +1594,35 @@ void DataScan::build_file_dentry(
   out->inode.inline_data.version = CEPH_INLINE_NONE;
 
   out->inode.nlink = 1;
+  out->inode.ino = ino;
+  out->inode.version = 1;
+  out->inode.backtrace_version = 1;
+  out->inode.uid = g_conf->mds_root_ino_uid;
+  out->inode.gid = g_conf->mds_root_ino_gid;
+}
+
+void MetadataTool::build_dir_dentry(
+    inodeno_t ino, uint64_t nfiles, uint64_t nsubdirs,
+    time_t mtime, const ceph_file_layout &layout, InodeStore *out)
+{
+  assert(out != NULL);
+
+  out->inode.mode = 0755 | S_IFDIR;
+  out->inode.size = nfiles;
+  out->inode.dirstat.nfiles = nfiles;
+  out->inode.max_size_ever = nfiles;
+  out->inode.mtime.tv.tv_sec = mtime;
+  out->inode.atime.tv.tv_sec = mtime;
+  out->inode.ctime.tv.tv_sec = mtime;
+
+  out->inode.layout = layout;
+
+  out->inode.truncate_seq = 1;
+  out->inode.truncate_size = -1ull;
+
+  out->inode.inline_data.version = CEPH_INLINE_NONE;
+
+  out->inode.nlink = 2 + nsubdirs;
   out->inode.ino = ino;
   out->inode.version = 1;
   out->inode.backtrace_version = 1;
