@@ -3083,8 +3083,6 @@ void Monitor::forward_request_leader(MonOpRequestRef op)
   } else {
     dout(10) << "forward_request no session for request " << *req << dendl;
   }
-  if (session)
-    session->put();
 }
 
 // fake connection attached to forwarded messages
@@ -3166,7 +3164,6 @@ void Monitor::handle_forward(MonOpRequestRef op)
     _ms_dispatch(req);
     s->put();
   }
-  session->put();
 }
 
 void Monitor::try_send_message(Message *m, const entity_inst_t& to)
@@ -3228,7 +3225,6 @@ void Monitor::send_reply(MonOpRequestRef op, Message *reply)
     session->con->send_message(reply);
     op->mark_event("reply: send");
   }
-  session->put();
 }
 
 void Monitor::no_reply(MonOpRequestRef op)
@@ -3261,7 +3257,6 @@ void Monitor::no_reply(MonOpRequestRef op)
              << " " << *req << dendl;
     op->mark_event("no_reply");
   }
-  session->put();
 }
 
 void Monitor::handle_route(MonOpRequestRef op)
@@ -3272,7 +3267,6 @@ void Monitor::handle_route(MonOpRequestRef op)
   if (session && !session->is_capable("mon", MON_CAP_X)) {
     dout(0) << "MRoute received from entity without appropriate perms! "
 	    << dendl;
-    session->put();
     return;
   }
   if (m->msg)
@@ -3304,8 +3298,6 @@ void Monitor::handle_route(MonOpRequestRef op)
       m->msg = NULL;
     }
   }
-  if (session)
-    session->put();
 }
 
 void Monitor::resend_routed_requests()
@@ -3444,7 +3436,6 @@ void Monitor::dispatch(MonOpRequestRef op)
   if (s && s->closed) {
     caps = s->caps;
     reuse_caps = true;
-    s->put();
     s = NULL;
   }
   Message *m = op->get_req();
@@ -3510,7 +3501,6 @@ void Monitor::dispatch(MonOpRequestRef op)
   } else {
     dispatch_op(op);
   }
-  s->put();
   return;
 }
 
@@ -4207,7 +4197,6 @@ void Monitor::handle_subscribe(MonOpRequestRef op)
   if (reply)
     m->get_connection()->send_message(new MMonSubscribeAck(monmap->get_fsid(), (int)g_conf->mon_subscribe_interval));
 
-  s->put();
 }
 
 void Monitor::handle_get_version(MonOpRequestRef op)
@@ -4252,10 +4241,8 @@ void Monitor::handle_get_version(MonOpRequestRef op)
 
     m->get_connection()->send_message(reply);
   }
-
-
  out:
-  s->put();
+  return;
 }
 
 bool Monitor::ms_handle_reset(Connection *con)
