@@ -73,6 +73,7 @@ case $1 in
                     while read uuid ; do
                     eval openstack server delete $uuid
                 done
+                rm -fr /home/$user/src/*
                 ;;
         restart)
                 $0 stop
