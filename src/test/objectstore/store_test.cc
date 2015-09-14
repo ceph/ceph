@@ -408,7 +408,7 @@ TEST_P(StoreTest, SimpleObjectTest) {
 
     bufferlist in;
     r = store->read(cid, hoid, 0, bl.length(), in);
-    ASSERT_EQ(bl.length(), r);
+    ASSERT_EQ((int)bl.length(), r);
     in.hexdump(cout);
     ASSERT_TRUE(in.contents_equal(bl));
   }
@@ -2000,14 +2000,14 @@ TEST_P(StoreTest, OMapTest) {
       bufferlist hdr;
       map<string,bufferlist> m;
       store->omap_get(cid, hoid, &hdr, &m);
-      ASSERT_EQ(6, hdr.length());
+      ASSERT_EQ(6u, hdr.length());
       ASSERT_TRUE(m.count("2"));
       ASSERT_TRUE(!m.count("3"));
       ASSERT_TRUE(!m.count("6"));
       ASSERT_TRUE(m.count("7"));
       ASSERT_TRUE(m.count("8"));
       //cout << m << std::endl;
-      ASSERT_EQ(6, m.size());
+      ASSERT_EQ(6u, m.size());
     }
     {
       ObjectStore::Transaction t;
@@ -2018,8 +2018,8 @@ TEST_P(StoreTest, OMapTest) {
       bufferlist hdr;
       map<string,bufferlist> m;
       store->omap_get(cid, hoid, &hdr, &m);
-      ASSERT_EQ(0, hdr.length());
-      ASSERT_EQ(0, m.size());
+      ASSERT_EQ(0u, hdr.length());
+      ASSERT_EQ(0u, m.size());
     }
   }
 
@@ -2077,7 +2077,7 @@ TEST_P(StoreTest, OMapIterator) {
       }
       ASSERT_EQ(correct, true);
     }
-    ASSERT_EQ(attrs.size(), count);
+    ASSERT_EQ((int)attrs.size(), count);
 
     // FileStore may deadlock an active iterator vs apply_transaction
     iter = ObjectMap::ObjectMapIterator();
