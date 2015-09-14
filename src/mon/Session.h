@@ -59,6 +59,7 @@ struct MonSession : public RefCountedObject {
   uint64_t proxy_tid;
 
   MonSession(const entity_inst_t& i, Connection *c) :
+    RefCountedObject(g_ceph_context),
     con(c), inst(i), closed(false), item(this),
     auid(0),
     global_id(0),
