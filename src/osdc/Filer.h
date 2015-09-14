@@ -27,6 +27,8 @@
  */
 
 
+#include <mutex>
+
 #include "include/types.h"
 
 #include "common/ceph_time.h"
@@ -50,7 +52,9 @@ class Filer {
 
   // probes
   struct Probe {
-    Mutex lock;
+    std::mutex lock;
+    typedef std::lock_guard<std::mutex> lock_guard;
+    typedef std::unique_lock<std::mutex> unique_lock;
     inodeno_t ino;
     ceph_file_layout layout;
     snapid_t snapid;
@@ -79,7 +83,7 @@ class Filer {
     Probe(inodeno_t i, ceph_file_layout &l, snapid_t sn,
 	  uint64_t f, uint64_t *e, ceph::real_time *m, int fl, bool fw,
 	  Context *c) :
-      lock("Filer::Probe"), ino(i), layout(l), snapid(sn),
+      ino(i), layout(l), snapid(sn),
       psize(e), pmtime(m), pumtime(nullptr), flags(fl), fwd(fw), onfinish(c),
       probing_off(f), probing_len(0),
       err(0), found_size(false) {}
@@ -87,7 +91,7 @@ class Filer {
     Probe(inodeno_t i, ceph_file_layout &l, snapid_t sn,
 	  uint64_t f, uint64_t *e, utime_t *m, int fl, bool fw,
 	  Context *c) :
-      lock("Filer::Probe"), ino(i), layout(l), snapid(sn),
+      ino(i), layout(l), snapid(sn),
       psize(e), pmtime(nullptr), pumtime(m), flags(fl), fwd(fw),
       onfinish(c), probing_off(f), probing_len(0),
       err(0), found_size(false) {}
@@ -95,9 +99,9 @@ class Filer {
 
   class C_Probe;
 
-  void _probe(Probe *p);
+  void _probe(Probe *p, Probe::unique_lock& pl);
   bool _probed(Probe *p, const object_t& oid, uint64_t size,
-	       ceph::real_time mtime);
+	       ceph::real_time mtime, Probe::unique_lock& pl);
 
  public:
   Filer(const Filer& other);
