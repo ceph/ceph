@@ -47,9 +47,7 @@ class RecoveryDriver {
      */
     virtual int inject_with_backtrace(
         const inode_backtrace_t &bt,
-        uint64_t size,
-        time_t mtime,
-        const ceph_file_layout &layout) = 0;
+        const InodeStore &dentry) = 0;
 
     /**
      * Inject an inode + dentry into the lost+found directory,
@@ -57,9 +55,7 @@ class RecoveryDriver {
      */
     virtual int inject_lost_and_found(
         inodeno_t ino,
-        uint64_t size,
-        time_t mtime,
-        const ceph_file_layout &layout) = 0;
+        const InodeStore &dentry) = 0;
 
     /**
      * Create any missing roots (i.e. mydir, strays, root inode)
@@ -120,15 +116,11 @@ class LocalFileDriver : public RecoveryDriver
 
     int inject_with_backtrace(
         const inode_backtrace_t &bt,
-        uint64_t size,
-        time_t mtime,
-        ceph_file_layout const &layout);
+        const InodeStore &dentry);
 
     int inject_lost_and_found(
         inodeno_t ino,
-        uint64_t size,
-        time_t mtime,
-        ceph_file_layout const &layout);
+        const InodeStore &dentry);
 
     int init_roots(int64_t data_pool_id);
 
@@ -193,15 +185,11 @@ class MetadataDriver : public RecoveryDriver
 
     int inject_with_backtrace(
         const inode_backtrace_t &bt,
-        uint64_t size,
-        time_t mtime,
-        ceph_file_layout const &layout);
+        const InodeStore &dentry);
 
     int inject_lost_and_found(
         inodeno_t ino,
-        uint64_t size,
-        time_t mtime,
-        ceph_file_layout const &layout);
+        const InodeStore &dentry);
 
     int init_roots(int64_t data_pool_id);
 
@@ -253,6 +241,12 @@ class DataScan : public MDSUtility
     bool parse_arg(
       const std::vector<const char*> &arg,
       std::vector<const char *>::const_iterator &i);
+
+    void build_file_dentry(
+      inodeno_t ino, uint64_t file_size, time_t file_mtime,
+      const ceph_file_layout &layout,
+      InodeStore *out);
+
 
   public:
     void usage();
