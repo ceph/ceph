@@ -64,6 +64,11 @@ else(no_yasm)
 endif(no_yasm)
 
 
+set(CMAKE_ASM_COMPILER  yasm)
+message(status " asm compiler ${CMAKE_ASM_COMPILER}")
+set(CMAKE_ASM_FLAGS "-f elf64")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -rdynamic -Wall -Wtype-limits -Wignored-qualifiers -Winit-self -Wpointer-arith -Werror=format-security -fno-strict-aliasing -fsigned-char -fPIC")
+
 set(CMAKE_CXX_FLAGS "${CMAKE_C_FLAGS} -ftemplate-depth-1024 -Wno-invalid-offsetof -Wnon-virtual-dtor -Wno-invalid-offsetof -Wstrict-null-sentinel -Woverloaded-virtual")
 
 # require c++11
