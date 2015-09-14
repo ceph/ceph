@@ -10,6 +10,8 @@
 #include "rgw_http_errors.h"
 #include "common/RefCountedObj.h"
 
+#include "rgw_coroutine.h"
+
 #define dout_subsys ceph_subsys_rgw
 
 static size_t receive_http_header(void *ptr, size_t size, size_t nmemb, void *_info)
@@ -315,45 +317,6 @@ void *RGWHTTPManager::ReqsThread::entry()
 {
   manager->reqs_thread_entry();
   return NULL;
-}
-
-void RGWCompletionManager::complete(void *user_info)
-{
-  Mutex::Locker l(lock);
-  complete_reqs.push_back(user_info);
-  cond.Signal();
-}
-
-int RGWCompletionManager::get_next(void **user_info)
-{
-  Mutex::Locker l(lock);
-  while (complete_reqs.empty()) {
-    cond.Wait(lock);
-    if (going_down.read() != 0) {
-      return -ECANCELED;
-    }
-  }
-  *user_info = complete_reqs.front();
-  complete_reqs.pop_front();
-  return 0;
-}
-
-bool RGWCompletionManager::try_get_next(void **user_info)
-{
-  Mutex::Locker l(lock);
-  if (complete_reqs.empty()) {
-    return false;
-  }
-  *user_info = complete_reqs.front();
-  complete_reqs.pop_front();
-  return true;
-}
-
-void RGWCompletionManager::go_down()
-{
-  Mutex::Locker l(lock);
-  going_down.set(1);
-  cond.Signal();
 }
 
 RGWHTTPManager::RGWHTTPManager(CephContext *_cct, RGWCompletionManager *_cm) : cct(_cct),

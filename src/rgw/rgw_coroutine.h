@@ -13,15 +13,33 @@
 #pragma pop_macro("_ASSERT_H")
 #endif
 
-#include "rgw_http_client.h"
-
 #include "common/RefCountedObj.h"
 #include "common/debug.h"
+
+#include "rgw_common.h"
 
 #define RGW_ASYNC_OPS_MGR_WINDOW 100
 
 class RGWCoroutinesStack;
 class RGWCoroutinesManager;
+
+class RGWCompletionManager {
+  list<void *> complete_reqs;
+
+  Mutex lock;
+  Cond cond;
+
+  atomic_t going_down;
+
+public:
+  RGWCompletionManager() : lock("RGWCompletionManager::lock") {}
+
+  void complete(void *user_info);
+  int get_next(void **user_info);
+  bool try_get_next(void **user_info);
+
+  void go_down();
+};
 
 /* a single use librados aio completion notifier that hooks into the RGWCompletionManager */
 class RGWAioCompletionNotifier : public RefCountedObject {
