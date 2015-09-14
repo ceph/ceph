@@ -169,6 +169,8 @@ void _usage()
   cerr << "   --parent=<id>             parent period id\n";
   cerr << "   --period=<id>             period id\n";
   cerr << "   --epoch=<number>          period epoch\n";
+  cerr << "   --master                  set as master\n";
+  cerr << "   --master-url              master url\n";
   cerr << "   --master-zonegroup=<id>   master zonegroup id\n";
   cerr << "   --master-zone=<id>        master zone id\n";
   cerr << "   --realm=<realm>           realm name\n";
@@ -1274,6 +1276,8 @@ int main(int argc, char **argv)
   std::string realm_name, realm_id, realm_new_name;
   std::string zone_name, zone_id, zone_new_name;
   std::string zonegroup_name, zonegroup_id, zonegroup_new_name;
+  std::string master_url;
+  bool is_master = false;
   int key_type = KEY_TYPE_UNDEFINED;
   rgw_bucket bucket;
   uint32_t perm_mask = 0;
@@ -1539,6 +1543,10 @@ int main(int argc, char **argv)
       }
     } else if (ceph_argparse_witharg(args, i, &val, "--parent", (char*)NULL)) {
       parent_period = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--master", (char*)NULL)) {
+      is_master = true;
+    } else if (ceph_argparse_witharg(args, i, &val, "--master-url", (char*)NULL)) {
+      master_url = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--master-zonegroup", (char*)NULL)) {
       master_zonegroup = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--master-zone", (char*)NULL)) {
@@ -1989,7 +1997,7 @@ int main(int argc, char **argv)
 	  cerr << " Missing zonegroup name" << std::endl;
 	  return -EINVAL;
 	}
-	RGWZoneGroup zonegroup(zonegroup_name, g_ceph_context, store);
+	RGWZoneGroup zonegroup(zonegroup_name, is_master, g_ceph_context, store);
 	int ret = zonegroup.create();
 	if (ret < 0) {
 	  cerr << "failed to create zonegroup" << zonegroup_name << ": " << cpp_strerror(-ret) << std::endl;

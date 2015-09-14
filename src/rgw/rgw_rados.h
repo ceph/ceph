@@ -1046,7 +1046,8 @@ struct RGWZoneGroup : public RGWSystemMetaObj {
   RGWZoneGroup(): is_master(false){}
   RGWZoneGroup(const std::string &id, const std::string &name):RGWSystemMetaObj(id, name) {}
   RGWZoneGroup(const std::string &_name):RGWSystemMetaObj(_name) {}
-  RGWZoneGroup(const std::string &_name, CephContext *cct, RGWRados* store):RGWSystemMetaObj(_name, cct , store) {}
+  RGWZoneGroup(const std::string &_name, bool _is_master, CephContext *cct, RGWRados* store)
+    : RGWSystemMetaObj(_name, cct , store),is_master(_is_master) {}
 
   void encode(bufferlist& bl) const {
     ENCODE_START(3, 1, bl);
