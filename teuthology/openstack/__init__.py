@@ -410,11 +410,11 @@ ssh access   : ssh {identity}{username}@{ip} # logs in /usr/share/nginx/html
             'ram': 1024, # MB
             'cpus': 1,
         }
-        if self.args.simultaneous_jobs > 25:
+        if self.args.simultaneous_jobs > 100:
             hint['ram'] = 30000 # MB
-        elif self.args.simultaneous_jobs > 10:
+        elif self.args.simultaneous_jobs > 25:
             hint['ram'] = 7000 # MB
-        elif self.args.simultaneous_jobs > 3:
+        elif self.args.simultaneous_jobs > 10:
             hint['ram'] = 4000 # MB
 
         select = None
