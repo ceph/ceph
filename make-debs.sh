@@ -34,6 +34,7 @@ git clean -dxf
 # d) contains the short hash of the commit
 #
 vers=$(git describe --match "v*" | sed s/^v//)
+sha1=$(git rev-parse HEAD)
 #
 # creating the distribution tarbal requires some configure
 # options (otherwise parts of the source tree will be left out).
@@ -86,16 +87,26 @@ if test $NPROC -gt 1 ; then
 fi
 PATH=/usr/lib/ccache:$PATH dpkg-buildpackage $j -uc -us
 cd ../..
-mkdir -p $codename/conf
-cat > $codename/conf/distributions <<EOF
+#
+# Create a repository in a directory with a name structured
+# as 
+#
+arch=x86_64
+base=ceph-deb-$codename-$arch-basic
+sha1_dir=$codename/$base/sha1/$sha1
+mkdir -p $sha1_dir/conf
+cat > $sha1_dir/conf/distributions <<EOF
 Codename: $codename
 Suite: stable
 Components: main
 Architectures: i386 amd64 source
 EOF
-ln -s $codename/conf conf
-reprepro --basedir $(pwd) include $codename WORKDIR/*.changes
-#
-# teuthology needs the version in the version file
-#
-echo $dvers > $codename/version
+reprepro --basedir $sha1_dir include $codename WORKDIR/*.changes
+echo $dvers > $sha1_dir/version
+echo $sha1 > $sha1_dir/sha1
+ref_dir=$codename/$base/ref
+mkdir -p $ref_dir
+git for-each-ref | grep $sha1 | while read sha1 type ref ; do
+    base_ref=$(basename $ref)
+    ln -sf $sha1_dir $ref_dir/$base_ref
+done
