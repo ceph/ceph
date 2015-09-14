@@ -52,7 +52,8 @@ int RGWRESTConn::forward(const rgw_user& uid, req_info& info, obj_version *objv,
     return ret;
   string uid_str = uid.to_str();
   list<pair<string, string> > params;
-  params.push_back(pair<string, string>(RGW_SYS_PARAM_PREFIX "uid", uid_str));
+  if (!uid.empty())
+    params.push_back(pair<string, string>(RGW_SYS_PARAM_PREFIX "uid", uid_str));
   params.push_back(pair<string, string>(RGW_SYS_PARAM_PREFIX "region", zone_group));
   if (objv) {
     params.push_back(pair<string, string>(RGW_SYS_PARAM_PREFIX "tag", objv->tag));
