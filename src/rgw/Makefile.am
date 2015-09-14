@@ -21,6 +21,7 @@ librgw_la_SOURCES =  \
 	rgw/rgw_acl_swift.cc \
 	rgw/rgw_client_io.cc \
 	rgw/rgw_coroutine.cc \
+	rgw/rgw_cr_rados.cc \
 	rgw/rgw_fcgi.cc \
 	rgw/rgw_xml.cc \
 	rgw/rgw_usage.cc \
@@ -135,6 +136,7 @@ noinst_HEADERS += \
 	rgw/rgw_acl_swift.h \
 	rgw/rgw_client_io.h \
 	rgw/rgw_coroutine.h \
+	rgw/rgw_cr_rados.h \
 	rgw/rgw_fcgi.h \
 	rgw/rgw_xml.h \
 	rgw/rgw_cache.h \

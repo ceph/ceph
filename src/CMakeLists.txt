@@ -933,6 +933,7 @@ if(${WITH_RADOSGW})
     rgw/rgw_sync.cc
     rgw/rgw_dencoder.cc
     rgw/rgw_coroutine.cc
+    rgw/rgw_cr_rados.cc
     rgw/rgw_object_expirer_core.cc)
 
   add_library(rgw_a STATIC ${rgw_a_srcs})
