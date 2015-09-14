@@ -1345,7 +1345,7 @@ int RGWGetBucketLocation::verify_permission()
 
 int RGWCreateBucket::verify_permission()
 {
-  if (!rgw_user_is_authenticated(s->user)) {
+  if (!rgw_user_is_authenticated(s->auth_user)) {
     return -EACCES;
   }
 
@@ -2261,7 +2261,7 @@ int RGWPutMetadataAccount::handle_temp_url_update(const map<int, string>& temp_u
 
 int RGWPutMetadataAccount::verify_permission()
 {
-  if (!rgw_user_is_authenticated(s->user)) {
+  if (!rgw_user_is_authenticated(s->auth_user)) {
     return -EACCES;
   }
 
