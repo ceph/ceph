@@ -595,7 +595,6 @@ install -D src/init-rbdmap $RPM_BUILD_ROOT%{_initrddir}/rbdmap
 install -m 0644 -D etc/sysconfig/ceph $RPM_BUILD_ROOT%{_sysconfdir}/sysconfig/ceph
 %if 0%{?_with_systemd}
   install -m 0644 -D systemd/ceph.tmpfiles.d $RPM_BUILD_ROOT%{_tmpfilesdir}/%{name}.conf
-  install -m 0644 -D systemd/ceph-rgw.tmpfiles.d $RPM_BUILD_ROOT%{_tmpfilesdir}/%{name}-rgw.conf
   install -m 0644 -D systemd/ceph-osd@.service $RPM_BUILD_ROOT%{_unitdir}/ceph-osd@.service
   install -m 0644 -D systemd/ceph-mon@.service $RPM_BUILD_ROOT%{_unitdir}/ceph-mon@.service
   install -m 0644 -D systemd/ceph-create-keys@.service $RPM_BUILD_ROOT%{_unitdir}/ceph-create-keys@.service
@@ -916,7 +915,6 @@ fi
 %dir %{_localstatedir}/log/radosgw/
 %dir %{_localstatedir}/lib/ceph/radosgw
 %if 0%{?_with_systemd}
-%{_tmpfilesdir}/%{name}-rgw.conf
 %else
 %{_initrddir}/ceph-radosgw
 %{_sbindir}/rcceph-radosgw
@@ -925,8 +923,6 @@ fi
 %post radosgw
 /sbin/ldconfig
 %if 0%{?suse_version}
-  # TODO: find out what exactly this systemd-tmpfiles inovcation is for
-  systemd-tmpfiles --create /%{_tmpfilesdir}/ceph-rgw.conf
   # explicit systemctl daemon-reload (that's the only relevant bit of
   # service_add_post; the rest is all sysvinit --> systemd migration which
   # isn't applicable in this context (see above comment).

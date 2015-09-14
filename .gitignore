@@ -52,7 +52,6 @@ missing
 py-compile
 release
 stamp-h1
-systemd/ceph-rgw.tmpfiles.d
 systemd/Makefile
 vgcore.*
 

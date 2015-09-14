@@ -153,8 +153,6 @@ binary-arch: build install
 	install -d -m0755 debian/radosgw/lib/systemd/system
 	install -m0644 systemd/ceph-radosgw@.service debian/radosgw/lib/systemd/system
 	sed -i s./etc/sysconfig/./etc/default/.g debian/radosgw/lib/systemd/system/ceph-radosgw@.service
-	install -d -m0755 debian/radosgw/usr/lib/tmpfiles.d
-	install -m 0644 -D systemd/ceph-rgw.tmpfiles.d debian/radosgw/usr/lib/tmpfiles.d/ceph-rgw.conf
 
 	dh_installman -a
 	dh_lintian -a
