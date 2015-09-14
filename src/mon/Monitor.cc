@@ -3507,10 +3507,9 @@ void Monitor::dispatch(MonOpRequestRef op)
 
   if (is_synchronizing() && !src_is_mon) {
     waitlist_or_zap_client(op);
-    return;
+  } else {
+    dispatch_op(op);
   }
-
-  dispatch_op(op);
   s->put();
   return;
 }
