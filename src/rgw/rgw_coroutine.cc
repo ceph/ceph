@@ -8,9 +8,26 @@
 #define dout_subsys ceph_subsys_rgw
 
 
+RGWCompletionManager::RGWCompletionManager(CephContext *_cct) : cct(_cct), lock("RGWCompletionManager::lock"),
+                                            timer(cct, lock)
+{
+  timer.init();
+}
+
+RGWCompletionManager::~RGWCompletionManager()
+{
+  Mutex::Locker l(lock);
+  timer.cancel_all_events();
+}
+
 void RGWCompletionManager::complete(void *user_info)
 {
   Mutex::Locker l(lock);
+  _complete(user_info);
+}
+
+void RGWCompletionManager::_complete(void *user_info)
+{
   complete_reqs.push_back(user_info);
   cond.Signal();
 }
@@ -46,6 +63,26 @@ void RGWCompletionManager::go_down()
   going_down.set(1);
   cond.Signal();
 }
+
+void RGWCompletionManager::wait_interval(void *opaque, utime_t& interval, void *user_info)
+{
+  Mutex::Locker l(lock);
+  assert(waiters.find(opaque) != waiters.end());
+  waiters[opaque] = user_info;
+  timer.add_event_after(interval, new WaitContext(this, opaque));
+}
+
+void RGWCompletionManager::wakeup(void *opaque)
+{
+  Mutex::Locker l(lock);
+  map<void *, void *>::iterator iter = waiters.find(opaque);
+  if (iter != waiters.end()) {
+    void *user_id = iter->second;
+    waiters.erase(iter);
+    _complete(user_id);
+  }
+}
+
 
 void RGWCoroutine::set_io_blocked(bool flag) {
   stack->set_io_blocked(flag);
@@ -148,6 +185,20 @@ void RGWCoroutinesStack::spawn(RGWCoroutine *source_op, RGWCoroutine *op, bool w
 void RGWCoroutinesStack::spawn(RGWCoroutine *op, bool wait)
 {
   spawn(NULL, op, wait);
+}
+
+int RGWCoroutinesStack::wait(utime_t& interval)
+{
+  RGWCompletionManager *completion_mgr = env->manager->get_completion_mgr();
+  completion_mgr->wait_interval((void *)this, interval, (void *)this);
+  set_io_blocked(true);
+  return 0;
+}
+
+void RGWCoroutinesStack::wakeup()
+{
+  RGWCompletionManager *completion_mgr = env->manager->get_completion_mgr();
+  completion_mgr->wakeup((void *)this);
 }
 
 int RGWCoroutinesStack::unwind(int retcode)
@@ -374,6 +425,16 @@ void RGWCoroutine::spawn(RGWCoroutine *op, bool wait)
 bool RGWCoroutine::collect(int *ret) /* returns true if needs to be called again */
 {
   return stack->collect(this, ret);
+}
+
+int RGWCoroutine::wait(utime_t& interval)
+{
+  return stack->wait(interval);
+}
+
+void RGWCoroutine::wakeup()
+{
+  stack->wakeup();
 }
 
 int RGWSimpleCoroutine::operate()
