@@ -208,6 +208,7 @@ def get_initial_tasks(lock, config, machine_type):
         {'internal.sudo': None},
         {'internal.syslog': None},
         {'internal.timer': None},
+        {'internal.buildpackages_prep': None},
         {'selinux': None},
     ])
 

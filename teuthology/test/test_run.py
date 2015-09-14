@@ -105,6 +105,7 @@ class TestRun(object):
         assert {"kernel": "the_kernel"} in result
         # added because use_existing_cluster == False
         assert {'internal.vm_setup': None} in result
+        assert {'internal.buildpackages_prep': None} in result
 
     @patch("teuthology.run.fetch_qa_suite")
     def test_fetch_tasks_if_needed(self, m_fetch_qa_suite):
