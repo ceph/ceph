@@ -534,7 +534,6 @@ KeyValueStore::KeyValueStore(const std::string &base,
   ondisk_finisher(g_ceph_context),
   collections_lock("KeyValueStore::collections_lock"),
   lock("KeyValueStore::lock"),
-  default_osr("default"),
   throttle_ops(g_ceph_context, "keyvaluestore_ops", g_conf->keyvaluestore_queue_max_ops),
   throttle_bytes(g_ceph_context, "keyvaluestore_bytes", g_conf->keyvaluestore_queue_max_bytes),
   op_finisher(g_ceph_context),
@@ -1049,8 +1048,7 @@ int KeyValueStore::queue_transactions(Sequencer *posr, list<Transaction*> &tls,
 
   // set up the sequencer
   OpSequencer *osr;
-  if (!posr)
-    posr = &default_osr;
+  assert(posr);
   if (posr->p) {
     osr = static_cast<OpSequencer *>(posr->p.get());
     dout(5) << "queue_transactions existing " << *osr << "/" << osr->parent
