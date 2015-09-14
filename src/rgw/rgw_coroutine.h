@@ -13,8 +13,10 @@
 #pragma pop_macro("_ASSERT_H")
 #endif
 
+#include "include/utime.h"
 #include "common/RefCountedObj.h"
 #include "common/debug.h"
+#include "common/Timer.h"
 
 #include "rgw_common.h"
 
@@ -24,21 +26,44 @@ class RGWCoroutinesStack;
 class RGWCoroutinesManager;
 
 class RGWCompletionManager {
+  CephContext *cct;
   list<void *> complete_reqs;
 
   Mutex lock;
   Cond cond;
 
+  SafeTimer timer;
+
   atomic_t going_down;
 
+  map<void *, void *> waiters;
+
+  class WaitContext : public Context {
+    RGWCompletionManager *manager;
+    void *opaque;
+  public:
+    WaitContext(RGWCompletionManager *_cm, void *_opaque) : manager(_cm), opaque(_opaque) {}
+    void finish(int r) {
+      manager->wakeup(opaque);
+    }
+  };
+
+  void _complete(void *user_info);
 public:
-  RGWCompletionManager() : lock("RGWCompletionManager::lock") {}
+  RGWCompletionManager(CephContext *_cct);
+  ~RGWCompletionManager();
 
   void complete(void *user_info);
   int get_next(void **user_info);
   bool try_get_next(void **user_info);
 
   void go_down();
+
+  /*
+   * wait for interval length to complete user_info
+   */
+  void wait_interval(void *opaque, utime_t& interval, void *user_info);
+  void wakeup(void *opaque);
 };
 
 /* a single use librados aio completion notifier that hooks into the RGWCompletionManager */
@@ -133,6 +158,9 @@ public:
   int call(RGWCoroutine *op); /* call at the same stack we're in */
   void spawn(RGWCoroutine *op, bool wait); /* execute on a different stack */
   bool collect(int *ret); /* returns true if needs to be called again */
+
+  int wait(utime_t& interval);
+  void wakeup();
 };
 
 template <class T>
@@ -248,6 +276,9 @@ public:
   void spawn(RGWCoroutine *next_op, bool wait);
   int unwind(int retcode);
 
+  int wait(utime_t& interval);
+  void wakeup();
+
   bool collect(int *ret); /* returns true if needs to be called again */
 
   RGWAioCompletionNotifier *create_completion_notifier();
@@ -294,7 +325,7 @@ protected:
 
   void put_completion_notifier(RGWAioCompletionNotifier *cn);
 public:
-  RGWCoroutinesManager(CephContext *_cct) : cct(_cct), ops_window(RGW_ASYNC_OPS_MGR_WINDOW) {}
+  RGWCoroutinesManager(CephContext *_cct) : cct(_cct), completion_mgr(cct), ops_window(RGW_ASYNC_OPS_MGR_WINDOW) {}
   virtual ~RGWCoroutinesManager() {}
 
   int run(list<RGWCoroutinesStack *>& ops);
