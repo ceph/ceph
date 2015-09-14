@@ -1224,7 +1224,26 @@ int send_to_remote_gateway(const string& remote, req_info& info, JSONParser& p,
     }
     conn = iter->second;
   }
-  int ret = conn->forward("admin", info, NULL, MAX_REST_RESPONSE, &in_data, &response);
+  int ret = conn->forward("", info, NULL, MAX_REST_RESPONSE, &in_data, &response);
+  if (ret < 0) {
+    return ret;
+  }
+  ret = p.parse(response.c_str(), response.length());
+  if (ret < 0) {
+    cout << "failed to parse response" << std::endl;
+    return ret;
+  }
+  return 0;
+}
+
+int send_to_url(const string& url, RGWAccessKey& key, req_info& info,
+                JSONParser& p, bufferlist &in_data)
+{
+  list<pair<string, string> > params;
+  RGWRESTSimpleRequest req(g_ceph_context, url, NULL, &params);
+
+  bufferlist response;
+  int ret = req.forward_request(key, info, MAX_REST_RESPONSE, &in_data, &response);
   if (ret < 0) {
     return ret;
   }
@@ -2580,9 +2599,22 @@ int main(int argc, char **argv)
       if (!period_epoch.empty())
         params["epoch"] = period_epoch;
 
+      int ret = 0;
+
       bufferlist bl;
       JSONParser p;
-      int ret = send_to_remote_gateway(url, info, p, bl);
+      if (!url.empty()) {
+        if (access_key.empty() || secret_key.empty()) {
+          cerr << "An --access-key and --secret must be provided with --url." << std::endl;
+          return -EINVAL;
+        }
+        RGWAccessKey key;
+        key.id = access_key;
+        key.key = secret_key;
+        ret = send_to_url(url, key, info, p, bl);
+      } else {
+        ret = send_to_remote_gateway(remote, info, p, bl);
+      }
       if (ret < 0) {
         cerr << "request failed: " << cpp_strerror(-ret) << std::endl;
         return ret;
