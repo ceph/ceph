@@ -85,7 +85,6 @@ class CephDisk:
         self.lvm_part_uuid_dev = lvm_part_uuid_dev
         try:
             self.sh("sgdisk -n0:0:0 -t0:8e00 -u0:" + lvm_part_uuid)
-            self.sh("udevadm settle")
             self.sh("pvcreate " + lvm_part_uuid_dev)
             self.sh("vgcreate vg " + lvm_part_uuid_dev)
             self.sh("lvcreate -n lv -l 100%FREE vg " + lvm_part_uuid_dev)
