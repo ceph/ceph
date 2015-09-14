@@ -1,0 +1,5 @@
+roles:
+    - [mon.0, client.0]
+tasks:
+    - buildpackages:
+    - install:
