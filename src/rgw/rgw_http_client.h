@@ -66,23 +66,7 @@ public:
   string to_str();
 };
 
-class RGWCompletionManager {
-  list<void *> complete_reqs;
-
-  Mutex lock;
-  Cond cond;
-
-  atomic_t going_down;
-
-public:
-  RGWCompletionManager() : lock("RGWCompletionManager::lock") {}
-
-  void complete(void *user_info);
-  int get_next(void **user_info);
-  bool try_get_next(void **user_info);
-
-  void go_down();
-};
+class RGWCompletionManager;
 
 class RGWHTTPManager {
   CephContext *cct;

@@ -3,7 +3,7 @@
 
 #include "common/ceph_json.h"
 #include "rgw_metadata.h"
-#include "rgw_http_client.h"
+#include "rgw_coroutine.h"
 #include "cls/version/cls_version_types.h"
 
 #include "rgw_rados.h"
