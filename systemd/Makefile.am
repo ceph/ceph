@@ -15,5 +15,4 @@ EXTRA_DIST = \
 	$(unitfiles) \
 	ceph \
 	ceph.tmpfiles.d \
-	ceph-rgw.tmpfiles.d.in \
 	ceph-radosgw-prestart.sh

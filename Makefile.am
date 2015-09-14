@@ -10,7 +10,6 @@ EXTRA_DIST += \
 	src/test/cli \
 	src/test/downloads \
 	systemd/ceph.tmpfiles.d \
-	etc/ceph.limits.d \
 	etc/default/ceph \
 	etc/sysconfig/ceph \
 	etc/sysconfig/SuSEfirewall2.d/services/ceph-mon \
