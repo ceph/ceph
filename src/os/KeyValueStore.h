@@ -429,7 +429,6 @@ class KeyValueStore : public ObjectStore,
 
   friend ostream& operator<<(ostream& out, const OpSequencer& s);
 
-  Sequencer default_osr;
   deque<OpSequencer*> op_queue;
   Throttle throttle_ops, throttle_bytes;
   Finisher op_finisher;
