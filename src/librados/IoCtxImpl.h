@@ -168,7 +168,7 @@ struct librados::IoCtxImpl {
   struct C_aio_stat_Ack : public Context {
     librados::AioCompletionImpl *c;
     time_t *pmtime;
-    utime_t mtime;
+    ceph::real_time mtime;
     C_aio_stat_Ack(AioCompletionImpl *_c, time_t *pm);
     void finish(int r);
   };

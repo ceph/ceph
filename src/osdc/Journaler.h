@@ -57,11 +57,14 @@
 #ifndef CEPH_JOURNALER_H
 #define CEPH_JOURNALER_H
 
+#include <list>
+#include <map>
+
 #include "Objecter.h"
 #include "Filer.h"
 
-#include <list>
-#include <map>
+#include "common/Timer.h"
+
 
 class CephContext;
 class Context;
@@ -270,7 +273,7 @@ private:
   void _trim();
 
   // header
-  utime_t last_wrote_head;
+  ceph::real_time last_wrote_head;
   void _finish_write_head(int r, Header &wrote, C_OnFinisher *oncommit);
   class C_WriteHead;
   friend class C_WriteHead;
@@ -317,7 +320,7 @@ private:
 
   void _flush(C_OnFinisher *onsafe);
   void _do_flush(unsigned amount=0);
-  void _finish_flush(int r, uint64_t start, utime_t stamp);
+  void _finish_flush(int r, uint64_t start, ceph::real_time stamp);
   class C_Flush;
   friend class C_Flush;
 

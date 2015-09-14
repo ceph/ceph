@@ -7333,13 +7333,13 @@ int Client::uninline_data(Inode *in, Context *onfinish)
   create_ops.create(false);
 
   objecter->mutate(oid,
-                   OSDMap::file_to_object_locator(in->layout),
-                   create_ops,
-                   in->snaprealm->get_snap_context(),
-                   ceph_clock_now(cct),
-                   0,
-                   NULL,
-                   NULL);
+		   OSDMap::file_to_object_locator(in->layout),
+		   create_ops,
+		   in->snaprealm->get_snap_context(),
+		   ceph::real_clock::now(cct),
+		   0,
+		   NULL,
+		   NULL);
 
   bufferlist inline_version_bl;
   ::encode(in->inline_version, inline_version_bl);
@@ -7354,13 +7354,13 @@ int Client::uninline_data(Inode *in, Context *onfinish)
   uninline_ops.setxattr("inline_version", stringify(in->inline_version));
 
   objecter->mutate(oid,
-                   OSDMap::file_to_object_locator(in->layout),
-                   uninline_ops,
-                   in->snaprealm->get_snap_context(),
-                   ceph_clock_now(cct),
-                   0,
-                   NULL,
-                   onfinish);
+		   OSDMap::file_to_object_locator(in->layout),
+		   uninline_ops,
+		   in->snaprealm->get_snap_context(),
+		   ceph::real_clock::now(cct),
+		   0,
+		   NULL,
+		   onfinish);
 
   return 0;
 }
@@ -7902,8 +7902,10 @@ int Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf,
     get_cap_ref(in, CEPH_CAP_FILE_BUFFER);
 
     // async, caching, non-blocking.
-    r = objectcacher->file_write(&in->oset, &in->layout, in->snaprealm->get_snap_context(),
-			         offset, size, bl, ceph_clock_now(cct), 0);
+    r = objectcacher->file_write(&in->oset, &in->layout,
+				 in->snaprealm->get_snap_context(),
+				 offset, size, bl, ceph::real_clock::now(cct),
+				 0);
     put_cap_ref(in, CEPH_CAP_FILE_BUFFER);
 
     if (r < 0)
@@ -7927,7 +7929,7 @@ int Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf,
     get_cap_ref(in, CEPH_CAP_FILE_BUFFER);  // released by onsafe callback
 
     r = filer->write_trunc(in->ino, &in->layout, in->snaprealm->get_snap_context(),
-			   offset, size, bl, ceph_clock_now(cct), 0,
+			   offset, size, bl, ceph::real_clock::now(cct), 0,
 			   in->truncate_size, in->truncate_seq,
 			   onfinish, new C_OnFinisher(onsafe, &objecter_finisher));
     if (r < 0)
@@ -10577,7 +10579,7 @@ int Client::ll_write_block(Inode *in, uint64_t blockid,
 		  length,
 		  fakesnap,
 		  bl,
-		  ceph_clock_now(cct),
+		  ceph::real_clock::now(cct),
 		  0,
 		  onack,
 		  onsafe);
@@ -10743,12 +10745,13 @@ int Client::_fallocate(Fh *fh, int mode, int64_t offset, int64_t length)
 
       _invalidate_inode_cache(in, offset, length);
       r = filer->zero(in->ino, &in->layout,
-                      in->snaprealm->get_snap_context(),
-                      offset, length,
-                      ceph_clock_now(cct),
-                      0, true, onfinish, new C_OnFinisher(onsafe, &objecter_finisher));
+		      in->snaprealm->get_snap_context(),
+		      offset, length,
+		      ceph::real_clock::now(cct),
+		      0, true, onfinish,
+		      new C_OnFinisher(onsafe, &objecter_finisher));
       if (r < 0)
-        goto done;
+	goto done;
 
       in->mtime = ceph_clock_now(cct);
       mark_caps_dirty(in, CEPH_CAP_FILE_WR);
@@ -11375,17 +11378,17 @@ int Client::check_pool_perm(Inode *in, int need)
 
     C_SaferCond rd_cond;
     ObjectOperation rd_op;
-    rd_op.stat(NULL, (utime_t*)NULL, NULL);
+    rd_op.stat(NULL, (ceph::real_time*)nullptr, NULL);
 
     objecter->mutate(oid, OSDMap::file_to_object_locator(in->layout), rd_op,
-		     nullsnapc, ceph_clock_now(cct), 0, &rd_cond, NULL);
+		     nullsnapc, ceph::real_clock::now(cct), 0, &rd_cond, NULL);
 
     C_SaferCond wr_cond;
     ObjectOperation wr_op;
     wr_op.create(true);
 
     objecter->mutate(oid, OSDMap::file_to_object_locator(in->layout), wr_op,
-		     nullsnapc, ceph_clock_now(cct), 0, &wr_cond, NULL);
+		     nullsnapc, ceph::real_clock::now(cct), 0, &wr_cond, NULL);
 
     client_lock.Unlock();
     int rd_ret = rd_cond.wait();
