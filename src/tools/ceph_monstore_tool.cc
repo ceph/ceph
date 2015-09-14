@@ -12,6 +12,7 @@
 */
 #include <boost/program_options/variables_map.hpp>
 #include <boost/program_options/parsers.hpp>
+#include <boost/scope_exit.hpp>
 
 #include <stdlib.h>
 #include <string>
@@ -23,6 +24,10 @@
 #include "include/stringify.h"
 #include "mon/MonitorDBStore.h"
 #include "mon/Paxos.h"
+#include "mon/MonMap.h"
+#include "mon/PGMap.h"
+#include "mds/MDSMap.h"
+#include "osd/OSDMap.h"
 
 namespace po = boost::program_options;
 using namespace std;
@@ -550,6 +555,7 @@ int main(int argc, char **argv) {
   } else if (cmd == "get") {
     unsigned v = 0;
     string outpath;
+    bool readable = false;
     string map_type;
     // visible options for this command
     po::options_description op_desc("Allowed 'get' options");
@@ -559,6 +565,8 @@ int main(int argc, char **argv) {
        "output file (default: stdout)")
       ("version,v", po::value<unsigned>(&v),
        "map version to obtain")
+      ("readable,r", po::value<bool>(&readable)->default_value(false),
+       "print the map infomation in human readable format")
       ;
     // this is going to be a positional argument; we don't want to show
     // it as an option during --help, but we do want to have it captured
@@ -599,6 +607,12 @@ int main(int argc, char **argv) {
         goto done;
       }
     }
+    BOOST_SCOPE_EXIT((&r) (&fd) (&outpath)) {
+      ::close(fd);
+      if (r < 0 && fd != STDOUT_FILENO) {
+        ::remove(outpath.c_str());
+      }
+    } BOOST_SCOPE_EXIT_END
 
     bufferlist bl;
     r = 0;
@@ -610,10 +624,38 @@ int main(int argc, char **argv) {
     if (r < 0) {
       std::cerr << "Error getting map: " << cpp_strerror(r) << std::endl;
       err = EINVAL;
-      ::close(fd);
       goto done;
     }
-    bl.write_fd(fd);
+
+    if (readable) {
+      stringstream ss;
+      bufferlist out;
+      if (map_type == "monmap") {
+        MonMap monmap;
+        monmap.decode(bl);
+        monmap.print(ss);
+      } else if (map_type == "osdmap") {
+        OSDMap osdmap;
+        osdmap.decode(bl);
+        osdmap.print(ss);
+      } else if (map_type == "pgmap") {
+        PGMap pgmap;
+        bufferlist::iterator p = bl.begin();
+        pgmap.decode(p);
+        pgmap.print_summary(NULL, &ss);
+      } else if (map_type == "mdsmap") {
+        MDSMap mdsmap;
+        mdsmap.decode(bl);
+        mdsmap.print(ss);
+      } else {
+        std::cerr << "The type of the map does not exist: " << map_type << std::endl
+                  << "You can only specify[osdmap|monmap|pgmap|mdsmap]" << std::endl;
+      }
+      out.append(ss);
+      out.write_fd(fd);
+    } else {
+      bl.write_fd(fd);
+    }
 
     if (!outpath.empty()) {
       std::cout << "wrote " << map_type
