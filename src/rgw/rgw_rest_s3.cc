@@ -2638,11 +2638,23 @@ int RGW_Auth_S3::authorize_v4(RGWRados *store, struct req_state *s)
 
   string request_payload;
 
+  bool unsigned_payload = false;
   if (using_qs) {
-    len = -1;
+    unsigned_payload = true;
   }
 
-  if (!using_qs && ((s->content_length > 0) || s->info.env->get("HTTP_TRANSFER_ENCODING"))) {
+  if (using_qs || ((s->content_length == 0) && s->info.env->get("HTTP_TRANSFER_ENCODING") == NULL)) {
+
+    /* requests lacking of body are authenticated now */
+
+    /* craft canonical request */
+
+    string canonical_req;
+    string canonical_req_hash;
+
+    rgw_create_s3_v4_canonical_request(s, canonical_uri, canonical_qs,
+        canonical_hdrs, signed_hdrs, request_payload, unsigned_payload,
+        canonical_req, canonical_req_hash);
 
     /* TODO: read body in request_payload */
 

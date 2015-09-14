@@ -259,14 +259,14 @@ void rgw_assemble_s3_v4_canonical_request(const char *method, const char *canoni
  */
 void rgw_create_s3_v4_canonical_request(struct req_state *s, const string& canonical_uri, const string& canonical_qs,
                                         const string& canonical_hdrs, const string& signed_hdrs, const string& request_payload,
-                                        string& canonical_req, string& canonical_req_hash)
+                                        bool unsigned_payload, string& canonical_req, string& canonical_req_hash)
 {
   string request_payload_hash;
 
-  if (len < 0) {
+  if (unsigned_payload) {
     request_payload_hash = "UNSIGNED-PAYLOAD";
   } else {
-    rgw_hash_s3_string_sha256(data, len, request_payload_hash);
+    rgw_hash_s3_string_sha256(request_payload.c_str(), request_payload.size(), request_payload_hash);
   }
 
   dout(10) << "payload request hash = " << request_payload_hash << dendl;

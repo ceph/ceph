@@ -15,7 +15,7 @@ int rgw_get_s3_header_digest(const string& auth_hdr, const string& key, string& 
 void rgw_hash_s3_string_sha256(const string& str, string& dest);
 void rgw_create_s3_v4_canonical_request(struct req_state *s, const string& canonical_uri, const string& canonical_qs,
                                         const string& canonical_hdrs, const string& signed_hdrs, const string& request_payload,
-                                        string& canonical_req, string& canonical_req_hash);
+                                        bool unsigned_payload, string& canonical_req, string& canonical_req_hash);
 void rgw_create_s3_v4_string_to_sign(const string& algorithm, const string& request_date, const string& credential_scope, const string& hashed_qr, string& string_to_sign);
 int rgw_calculate_s3_v4_aws_signature(struct req_state *s, const string& access_key_id, const string &date, const string& region, const string& service, const string& string_to_sign, string& signature);
 
