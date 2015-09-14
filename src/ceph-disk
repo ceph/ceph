@@ -35,6 +35,7 @@ import time
 import shlex
 import pwd
 import grp
+import syslog
 
 """
 Prepare:
@@ -51,9 +52,9 @@ Activate:
  - if encrypted, map the dmcrypt volume
  - mount the volume in a temp location
  - allocate an osd id (if needed)
- - if deactived, change the gpt partition info correctly
+ - if deactived, no-op (to activate with --reactivate flag)
  - remount in the correct location /var/lib/ceph/osd/$cluster-$id
- - remove the deactive flag
+ - remove the deactive flag (with --reactivate flag)
  - start ceph-osd
 
  - triggered by udev when it sees the OSD gpt partition type
@@ -63,7 +64,6 @@ Activate:
 Deactivate:
  - stop ceph-osd service if needed (make osd out with option --mark-out)
  - remove 'ready', 'active', and INIT-specific files
- - remove gpt partition type and change partition name (prevent triggered by udev)
  - create deactive flag
  - umount device and remove mount point
 
@@ -95,7 +95,6 @@ knew the GPT partition type.
 
 CEPH_OSD_ONDISK_MAGIC = 'ceph osd volume v026'
 
-LINUX_RESERVED_TYPE =       '8da63339-0007-60c0-c436-083ac8230908'
 JOURNAL_UUID =              '45b0969e-9b03-4f30-b4c6-b4b80ceff106'
 MPATH_JOURNAL_UUID =        '45b0969e-8ae0-4982-bf9d-5a8d867af560'
 DMCRYPT_JOURNAL_UUID =      '45b0969e-9b03-4f30-b4c6-5ec00ceff106'
@@ -2237,6 +2236,7 @@ def mount_activate(
     init,
     dmcrypt,
     dmcrypt_key_dir,
+    reactivate=False,
     ):
 
     if dmcrypt:
@@ -2299,6 +2299,11 @@ def mount_activate(
     # check if the disk is deactive, change the journal owner, group
     # mode for correct user and group.
     if os.path.exists(os.path.join(path, 'deactive')):
+        # logging to syslog will help us easy to know udev triggered failure
+        if not reactivate:
+            unmount(path)
+            syslog.syslog(syslog.LOG_ERR, 'OSD deactivated! reactivate with: --reactivate')
+            raise Error('OSD deactivated! reactivate with: --reactivate')
         # flag to activate a deactive osd.
         deactive = True
         journal_dev = os.path.realpath(os.path.join(path,'journal'))
@@ -2327,23 +2332,8 @@ def mount_activate(
         (osd_id, cluster) = activate(path, activate_key_template, init)
 
         # Now active successfully
-        # change the gpt partition type for bootup (meet the udev rules)
-        if deactive:
-            # Change OSD gpt partition type
-            if is_mpath(dev):
-                type_code = MPATH_OSD_UUID
-            else:
-                type_code = OSD_UUID
-            _change_gpt_partition_info(dev, type_code)
-
-            # Change Journal gpt partition type
-            if is_mpath(journal_dev):
-                type_code = MPATH_JOURNAL_UUID
-            else:
-                type_code = JOURNAL_UUID
-            _change_gpt_partition_info(journal_dev, type_code)
-
-            # Remove the deactive flag
+        # If we got reactivate and deactive, remove the deactive file
+        if deactive and reactivate:
             try:
                 os.remove(os.path.join(path, 'deactive'))
                 LOG.info('Remove `deactive` file.')
@@ -2576,6 +2566,7 @@ def main_activate(args):
                 init=args.mark_init,
                 dmcrypt=args.dmcrypt,
                 dmcrypt_key_dir=args.dmcrypt_key_dir,
+                reactivate=args.reactivate,
                 )
             osd_data = get_mount_point(cluster, osd_id)
 
@@ -2639,6 +2630,7 @@ def _check_osd_status(cluster, osd_id):
     11(3) : means OSD IN AND UP
     """
     LOG.info("Checking osd id: %s ..." % osd_id)
+    found = False
     status_code = 0
     try:
         out, ret = command(
@@ -2656,10 +2648,15 @@ def _check_osd_status(cluster, osd_id):
     except subprocess.CalledProcessError as e:
         raise Error(e)
     out_json = json.loads(out)
-    if out_json[u'osds'][int(osd_id)][u'in'] is 1:
-        status_code += 2
-    if out_json[u'osds'][int(osd_id)][u'up'] is 1:
-        status_code += 1
+    for item in out_json[u'osds']:
+        if item.get(u'osd') is int(osd_id):
+            found = True
+            if item.get(u'in') is 1:
+                status_code += 2
+            if item.get(u'up') is 1:
+                status_code += 1
+    if not found:
+        raise Error('Could not osd.%s in osd tree!' % osd_id)
     return status_code
 
 
@@ -2702,77 +2699,48 @@ def _remove_osd_directory_files(mounted_path, cluster):
         pass
 
 
-def _change_gpt_partition_info(device_part, type_code=LINUX_RESERVED_TYPE):
-    """
-    Due to udev rule 95-ceph-osd.rules, we need to remove the
-    gpt partition type to prevent trigger ceph-disk-activate.
-
-    Also change partition name for zap in destroy stage
-    """
-
-    (device, part_num) = split_dev_base_partnum(device_part)
-
-    part_name = get_partition_name(device_part)
-
-    if type_code is LINUX_RESERVED_TYPE:
-        part_name = part_name + ' (deactive)'
-
-    if type_code is MPATH_JOURNAL_UUID or type_code is JOURNAL_UUID or \
-       type_code is MPATH_OSD_UUID or type_code is OSD_UUID:
-        part_name = part_name.replace(" (deactive)", "")
-
-    try:
-        command_check_call(
-                    [
-                        'sgdisk',
-                        '--change-name=%s:%s' % (part_num, part_name),
-                        '--typecode=%s:%s' % (part_num, type_code),
-                        '--',
-                        device,
-                    ],
-                )
-    except subprocess.CalledProcessError as e:
-        raise Error(e)
-
-
 def main_deactivate(args):
+    mount_info = []
     if args.cluster is None:
         args.cluster = 'ceph'
-    if args.osd_id is None:
-        raise Error("osd id can not be zero. Try to use --osd-id <OSDID>.")
+
+    if args.deactivate_by_id:
+        osd_id = args.deactivate_by_id
+    else:
+       if not os.path.exists(args.path):
+           raise Error('%s does not exist' % args.path)
+       else:
+           mounted_path = is_mounted(args.path)
+           if mounted_path is None:
+               raise Error('%s is not mounted' % args.path)
+           osd_id = get_oneliner(mounted_path, 'whoami')
+           mount_info.append(args.path)
+           mount_info.append(mounted_path)
+
     # Do not do anything if osd is already down.
-    status_code = _check_osd_status(args.cluster, args.osd_id)
+    status_code = _check_osd_status(args.cluster, osd_id)
     if status_code == OSD_STATUS_IN_UP:
         if args.mark_out is True:
-            _mark_osd_out(args.cluster, args.osd_id)
-        stop_daemon(args.cluster, args.osd_id)
+            _mark_osd_out(args.cluster, osd_id)
+        stop_daemon(args.cluster, osd_id)
     elif status_code == OSD_STATUS_IN_DOWN:
         if args.mark_out is True:
-            _mark_osd_out(args.cluster, args.osd_id)
+            _mark_osd_out(args.cluster, osd_id)
+        LOG.info("OSD already out/down. Do not do anything now.")
+        return
     elif status_code == OSD_STATUS_OUT_UP:
-        stop_daemon(args.cluster, args.osd_id)
+        stop_daemon(args.cluster, osd_id)
     elif status_code == OSD_STATUS_OUT_DOWN:
         LOG.info("OSD already out/down. Do not do anything now.")
         return
 
     # GET the mounted device and mount point.
-    mount_info = convert_osd_id(args.cluster, args.osd_id)
+    # If we already get mount_info (with specific parameter), pass this stage
+    if not mount_info:
+        mount_info = convert_osd_id(args.cluster, osd_id)
 
     # remove 'ready', 'active', and INIT-specific files.
     _remove_osd_directory_files(mount_info[1], args.cluster)
-
-    # Remove filesystem gpt partition type
-    _change_gpt_partition_info(mount_info[0], LINUX_RESERVED_TYPE)
-
-    # Check journal
-    # if journal is exist, remove the gpt partition type
-    journal_path = os.path.join(mount_info[1], 'journal')
-    if os.path.exists(journal_path) and os.path.islink(journal_path):
-        _change_gpt_partition_info(os.path.realpath(journal_path), \
-                                   LINUX_RESERVED_TYPE)
-    else:
-        LOG.info('Journal is not exist on osd.%s (or not symlink).', \
-                 args.osd_id)
 
     # Write deactivate to osd directory!
     with file(os.path.join(mount_info[1], 'deactive'), 'w'):
@@ -2830,70 +2798,93 @@ def _deallocate_osd_id(cluster, osd_id):
         raise Error(e)
 
 def main_destroy(args):
+    mount_info = []
     if args.cluster is None:
         args.cluster = 'ceph'
-    if args.osd_id is None:
-        raise Error("osd id can not be zero. Try to use --osd-id <OSDID>.")
+
+    if args.destroy_by_id:
+        osd_id = args.destroy_by_id
+    else:
+       if not os.path.exists(args.path):
+           raise Error('%s does not exist' % args.path)
+       else:
+           # mount point is removed, try to mount to tmp.folder
+           try:
+                fs_type = get_dev_fs(args.path)
+                if fs_type != None:
+                    tpath = mount(dev=args.path, fstype=fs_type, options='')
+                    if tpath:
+                        try:
+                            osd_id = get_oneliner(tpath, 'whoami')
+                        finally:
+                            unmount(tpath)
+           except MountError:
+               pass
+           mount_info.append(args.path)
+
 
     # Before osd deactivate, we cannot destroy it
-    status_code = _check_osd_status(args.cluster, args.osd_id)
-    if status_code != OSD_STATUS_OUT_DOWN:
+    status_code = _check_osd_status(args.cluster, osd_id)
+    if status_code != OSD_STATUS_OUT_DOWN and \
+       status_code != OSD_STATUS_IN_DOWN:
         raise Error("Could not destroy the active osd. (osd-id: %s)" % \
-                    args.osd_id)
-
-    # GET the mounted device and mount point.
-    mount_info = convert_osd_id(args.cluster, args.osd_id)
+                    osd_id)
 
     # Remove OSD from crush map
-    _remove_from_crush_map(args.cluster, args.osd_id)
+    _remove_from_crush_map(args.cluster, osd_id)
 
     # Remove OSD cephx key
-    _delete_osd_auth_key(args.cluster, args.osd_id)
+    _delete_osd_auth_key(args.cluster, osd_id)
 
     # Deallocate OSD ID
-    _deallocate_osd_id(args.cluster, args.osd_id)
+    _deallocate_osd_id(args.cluster, osd_id)
 
     # Check zap flag. If we found zap flag, we need to find device for
     # destroy this osd data.
     if args.zap is True:
 
-        # try to find osd data device.
-        partmap = list_all_partitions(None)
-        # list all partition which have the partition name with
-        # deactive flag
-        devtocheck = []
-        for base, parts in sorted(partmap.iteritems()):
-            if not parts:
-                continue
-            for p in parts:
-                (dev, p_num) = split_dev_base_partnum(os.path.join("/dev", p))
-                part_name = get_partition_name(os.path.join("/dev", p))
-                LOG.debug("device: %s, p_num: %s" % (dev, p_num))
-                LOG.debug("part_name: %s" % part_name)
-                if part_name == "ceph data (deactive)" or \
-                   part_name == "ceph journal (deactive)":
+        # easy to do when we get device
+        if mount_info:
+            base_dev = get_partition_base(mount_info[0])
+        else:
+            # try to find osd data device.
+            partmap = list_all_partitions(None)
+            # list all partition which have the partition name with
+            # deactive flag
+            devtocheck = []
+            found = False
+            for base, parts in sorted(partmap.iteritems()):
+                if not parts:
+                    continue
+                for p in parts:
+                    (dev, p_num) = split_dev_base_partnum(os.path.join("/dev", p))
+                    LOG.debug("device: %s, p_num: %s" % (dev, p_num))
                     devtocheck.append(os.path.join("/dev", p))
 
-        # check all above device's osd_id
-        # if the osd_id is correct, zap it.
-        for item in devtocheck:
-            try:
-                fs_type = get_dev_fs(item)
-                if fs_type != None:
-                    tpath = mount(dev=item, fstype=fs_type, options='')
-                    if tpath:
-                        try:
-                            whoami = get_oneliner(tpath, 'whoami')
-                        finally:
-                            unmount(tpath)
-                if whoami is args.osd_id:
-                    (dev, part_num) = split_dev_base_partnum(item)
-            except MountError:
-                pass
+            # check all above device's osd_id
+            # if the osd_id is correct, zap it.
+            for item in devtocheck:
+                try:
+                    whoami = -1
+                    fs_type = get_dev_fs(item)
+                    if fs_type != None:
+                        tpath = mount(dev=item, fstype=fs_type, options='')
+                        if tpath:
+                            try:
+                                whoami = get_oneliner(tpath, 'whoami')
+                            finally:
+                                unmount(tpath)
+                    if whoami is osd_id:
+                        found = True
+                        (base_dev, part_num) = split_dev_base_partnum(item)
+                except MountError:
+                     pass
+            if not found:
+                raise Error('Could not find the partition of osd.%s!' % osd_id)
 
         # earse the osd data
-        LOG.info("Prepare to zap the device %s" % dev)
-        zap(dev)
+        LOG.info("Prepare to zap the device %s" % base_dev)
+        zap(base_dev)
 
     return
 
@@ -3109,10 +3100,6 @@ def get_partition_type(part):
 
 def get_partition_uuid(part):
     return get_sgdisk_partition_info(part, 'Partition unique GUID: (\S+)')
-
-def get_partition_name(part):
-    regexp = "Partition name: \'*([A-Za-z ]+[ ()A-Za-z]*)\'*"
-    return get_sgdisk_partition_info(part, regexp)
 
 def get_sgdisk_partition_info(dev, regexp):
     (base, partnum) = split_dev_base_partnum(dev)
@@ -3840,6 +3827,11 @@ def make_activate_parser(subparsers):
         default='/etc/ceph/dmcrypt-keys',
         help='directory where dm-crypt keys are stored',
         )
+    activate_parser.add_argument(
+        '--reactivate',
+        action='store_true', default=False,
+        help='activate the deactived OSD',
+        )
     activate_parser.set_defaults(
         activate_key_template='{statedir}/bootstrap-osd/{cluster}.keyring',
         func=main_activate,
@@ -3956,14 +3948,20 @@ def make_deactivate_parser(subparsers):
         help='cluster name to assign this disk to',
         )
     deactivate_parser.add_argument(
-        '--osd-id',
-        metavar='OSDID',
-        help='ID of OSD to deactivate'
+        'path',
+        metavar='PATH',
+        nargs='?',
+        help='path to block device or directory',
+        )
+    deactivate_parser.add_argument(
+        '--deactivate-by-id',
+        metavar='<id>',
+        help='ID of OSD to deactive'
         )
     deactivate_parser.add_argument(
         '--mark-out',
         action='store_true', default=False,
-        help='option to mark this osd out',
+        help='option to mark the osd out',
         )
     deactivate_parser.set_defaults(
         func=main_deactivate,
@@ -3978,8 +3976,14 @@ def make_destroy_parser(subparsers):
         help='cluster name to assign this disk to',
         )
     destroy_parser.add_argument(
-        '--osd-id',
-        metavar='OSDID',
+        'path',
+        metavar='PATH',
+        nargs='?',
+        help='path to block device or directory',
+        )
+    destroy_parser.add_argument(
+        '--destroy-by-id',
+        metavar='<id>',
         help='ID of OSD to destroy'
         )
     destroy_parser.add_argument(
