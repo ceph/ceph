@@ -1568,7 +1568,6 @@ OSD::OSD(CephContext *cct_, ObjectStore *store_,
   debug_drop_pg_create_left(-1),
   stats_ack_timeout(cct->_conf->osd_mon_ack_timeout),
   outstanding_pg_stats(false),
-  timeout_mon_on_pg_stats(true),
   up_thru_wanted(0), up_thru_pending(0),
   requested_full_first(0),
   requested_full_last(0),
@@ -3988,13 +3987,12 @@ void OSD::tick()
 
     // mon report?
     utime_t now = ceph_clock_now(cct);
-    if (outstanding_pg_stats && timeout_mon_on_pg_stats &&
+    if (outstanding_pg_stats &&
 	(now - stats_ack_timeout) > last_pg_stats_ack) {
       dout(1) << __func__ << " mon hasn't acked PGStats in "
 	      << now - last_pg_stats_ack
 	      << " seconds, reconnecting elsewhere" << dendl;
-      monc->reopen_session(new C_MonStatsAckTimer(this));
-      timeout_mon_on_pg_stats = false;
+      monc->reopen_session();
       last_pg_stats_ack = ceph_clock_now(cct);  // reset clock
       last_pg_stats_sent = utime_t();
       stats_ack_timeout =
