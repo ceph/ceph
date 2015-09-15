@@ -150,6 +150,11 @@ void MDSRankDispatcher::tick()
 {
   heartbeat_reset();
 
+  if (beacon.is_laggy()) {
+    dout(5) << "tick bailing out since we seem laggy" << dendl;
+    return;
+  }
+
   check_ops_in_flight();
 
   // Wake up thread in case we use to be laggy and have waiting_for_nolaggy
@@ -194,6 +199,9 @@ void MDSRankDispatcher::tick()
     if (snapserver)
       snapserver->check_osd_map(false);
   }
+
+  // Expose ourselves to Beacon to update health indicators
+  beacon.notify_health(this);
 }
 
 void MDSRankDispatcher::shutdown()
