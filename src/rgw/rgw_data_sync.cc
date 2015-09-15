@@ -56,6 +56,43 @@ void rgw_datalog_shard_data::decode_json(JSONObj *obj) {
   JSONDecoder::decode_json("entries", entries, obj);
 };
 
+class RGWReadDataSyncStatusCoroutine : public RGWSimpleRadosReadCR<rgw_data_sync_info> {
+  RGWAsyncRadosProcessor *async_rados;
+  RGWRados *store;
+  RGWObjectCtx& obj_ctx;
+
+  string source_zone;
+
+  rgw_data_sync_status *sync_status;
+
+public:
+  RGWReadDataSyncStatusCoroutine(RGWAsyncRadosProcessor *_async_rados, RGWRados *_store,
+		      RGWObjectCtx& _obj_ctx, const string& _source_zone,
+		      rgw_data_sync_status *_status) : RGWSimpleRadosReadCR(_async_rados, _store, _obj_ctx,
+									    _store->get_zone_params().log_pool,
+									    datalog_sync_status_oid,
+									    &_status->sync_info),
+                                                                            async_rados(_async_rados), store(_store),
+                                                                            obj_ctx(_obj_ctx), source_zone(_source_zone),
+									    sync_status(_status) {}
+
+  int handle_data(rgw_data_sync_info& data);
+};
+
+int RGWReadDataSyncStatusCoroutine::handle_data(rgw_data_sync_info& data)
+{
+  if (retcode == -ENOENT) {
+    return retcode;
+  }
+
+  map<uint32_t, rgw_data_sync_marker>& markers = sync_status->sync_markers;
+  for (int i = 0; i < (int)data.num_shards; i++) {
+    spawn(new RGWSimpleRadosReadCR<rgw_data_sync_marker>(async_rados, store, obj_ctx, store->get_zone_params().log_pool,
+				                    RGWDataSyncStatusManager::shard_obj_name(source_zone, i), &markers[i]), true);
+  }
+  return 0;
+}
+
 int RGWRemoteDataLog::read_log_info(rgw_datalog_info *log_info)
 {
   rgw_http_param_pair pairs[] = { { "type", "data" },
@@ -72,13 +109,14 @@ int RGWRemoteDataLog::read_log_info(rgw_datalog_info *log_info)
   return 0;
 }
 
-int RGWRemoteDataLog::init(RGWRESTConn *_conn)
+int RGWRemoteDataLog::init(const string& _source_zone, RGWRESTConn *_conn)
 {
   CephContext *cct = store->ctx();
   async_rados = new RGWAsyncRadosProcessor(store, cct->_conf->rgw_num_async_rados_threads);
   async_rados->start();
 
   conn = _conn;
+  source_zone = _source_zone;
 
   int ret = http_manager.set_threaded();
   if (ret < 0) {
@@ -163,6 +201,12 @@ int RGWRemoteDataLog::get_shard_info(int shard_id)
   return 0;
 }
 
+int RGWRemoteDataLog::read_sync_status(rgw_data_sync_status *sync_status)
+{
+  RGWObjectCtx obj_ctx(store, NULL);
+  return run(new RGWReadDataSyncStatusCoroutine(async_rados, store, obj_ctx, source_zone, sync_status));
+}
+
 int RGWDataSyncStatusManager::init()
 {
   map<string, RGWRESTConn *>::iterator iter = store->zone_conn_map.find(source_zone);
@@ -183,7 +227,7 @@ int RGWDataSyncStatusManager::init()
 
   source_status_obj = rgw_obj(store->get_zone_params().log_pool, datalog_sync_status_oid);
 
-  r = source_log.init(conn);
+  r = source_log.init(source_zone, conn);
   if (r < 0) {
     lderr(store->ctx()) << "ERROR: failed to init remote log, r=" << r << dendl;
     return r;
