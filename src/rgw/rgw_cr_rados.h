@@ -349,4 +349,61 @@ public:
   void finish();
 };
 
+class RGWAsyncWait : public RGWAsyncRadosRequest {
+  CephContext *cct;
+  Mutex *lock;
+  Cond *cond;
+  utime_t interval;
+protected:
+  int _send_request() {
+    Mutex::Locker l(*lock);
+    return cond->WaitInterval(cct, *lock, interval);
+  }
+public:
+  RGWAsyncWait(RGWAioCompletionNotifier *cn, CephContext *_cct, Mutex *_lock, Cond *_cond, int _secs) : RGWAsyncRadosRequest(cn),
+                                       cct(_cct),
+                                       lock(_lock), cond(_cond), interval(_secs, 0) {}
+
+  void wakeup() {
+    Mutex::Locker l(*lock);
+    cond->Signal();
+  }
+};
+
+class RGWWaitCR : public RGWSimpleCoroutine {
+  CephContext *cct;
+  RGWAsyncRadosProcessor *async_rados;
+  Mutex *lock;
+  Cond *cond;
+  int secs;
+
+  RGWAsyncWait *req;
+
+public:
+  RGWWaitCR(RGWAsyncRadosProcessor *_async_rados, CephContext *_cct,
+	    Mutex *_lock, Cond *_cond,
+            int _secs) : RGWSimpleCoroutine(cct), cct(_cct),
+                         async_rados(_async_rados), lock(_lock), cond(_cond), secs(_secs) {
+  }
+
+  ~RGWWaitCR() {
+    wakeup();
+    delete req;
+  }
+
+  int send_request() {
+    req = new RGWAsyncWait(stack->create_completion_notifier(), cct,  lock, cond, secs);
+    async_rados->queue(req);
+    return 0;
+  }
+
+  int request_complete() {
+    return req->get_ret_status();
+  }
+
+  void wakeup() {
+    req->wakeup();
+  }
+};
+
 #endif
