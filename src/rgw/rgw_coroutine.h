@@ -44,10 +44,14 @@ class RGWCompletionManager {
   public:
     WaitContext(RGWCompletionManager *_cm, void *_opaque) : manager(_cm), opaque(_opaque) {}
     void finish(int r) {
-      manager->wakeup(opaque);
+      manager->_wakeup(opaque);
     }
   };
 
+  friend class WaitContext;
+
+protected:
+  void _wakeup(void *opaque);
   void _complete(void *user_info);
 public:
   RGWCompletionManager(CephContext *_cct);
@@ -62,7 +66,7 @@ public:
   /*
    * wait for interval length to complete user_info
    */
-  void wait_interval(void *opaque, utime_t& interval, void *user_info);
+  void wait_interval(void *opaque, const utime_t& interval, void *user_info);
   void wakeup(void *opaque);
 };
 
@@ -159,7 +163,7 @@ public:
   void spawn(RGWCoroutine *op, bool wait); /* execute on a different stack */
   bool collect(int *ret); /* returns true if needs to be called again */
 
-  int wait(utime_t& interval);
+  int wait(const utime_t& interval);
   void wakeup();
 };
 
@@ -276,7 +280,7 @@ public:
   void spawn(RGWCoroutine *next_op, bool wait);
   int unwind(int retcode);
 
-  int wait(utime_t& interval);
+  int wait(const utime_t& interval);
   void wakeup();
 
   bool collect(int *ret); /* returns true if needs to be called again */

@@ -18,6 +18,7 @@ RGWCompletionManager::~RGWCompletionManager()
 {
   Mutex::Locker l(lock);
   timer.cancel_all_events();
+  timer.shutdown();
 }
 
 void RGWCompletionManager::complete(void *user_info)
@@ -64,10 +65,10 @@ void RGWCompletionManager::go_down()
   cond.Signal();
 }
 
-void RGWCompletionManager::wait_interval(void *opaque, utime_t& interval, void *user_info)
+void RGWCompletionManager::wait_interval(void *opaque, const utime_t& interval, void *user_info)
 {
   Mutex::Locker l(lock);
-  assert(waiters.find(opaque) != waiters.end());
+  assert(waiters.find(opaque) == waiters.end());
   waiters[opaque] = user_info;
   timer.add_event_after(interval, new WaitContext(this, opaque));
 }
@@ -75,6 +76,11 @@ void RGWCompletionManager::wait_interval(void *opaque, utime_t& interval, void *
 void RGWCompletionManager::wakeup(void *opaque)
 {
   Mutex::Locker l(lock);
+  _wakeup(opaque);
+}
+
+void RGWCompletionManager::_wakeup(void *opaque)
+{
   map<void *, void *>::iterator iter = waiters.find(opaque);
   if (iter != waiters.end()) {
     void *user_id = iter->second;
@@ -187,7 +193,7 @@ void RGWCoroutinesStack::spawn(RGWCoroutine *op, bool wait)
   spawn(NULL, op, wait);
 }
 
-int RGWCoroutinesStack::wait(utime_t& interval)
+int RGWCoroutinesStack::wait(const utime_t& interval)
 {
   RGWCompletionManager *completion_mgr = env->manager->get_completion_mgr();
   completion_mgr->wait_interval((void *)this, interval, (void *)this);
@@ -427,7 +433,7 @@ bool RGWCoroutine::collect(int *ret) /* returns true if needs to be called again
   return stack->collect(this, ret);
 }
 
-int RGWCoroutine::wait(utime_t& interval)
+int RGWCoroutine::wait(const utime_t& interval)
 {
   return stack->wait(interval);
 }
