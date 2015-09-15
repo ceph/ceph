@@ -3487,6 +3487,7 @@ void Monitor::dispatch(MonOpRequestRef op)
     }
     if (reuse_caps)
       s->caps = caps;
+    s->put();
   } else {
     dout(20) << "ms_dispatch existing session " << s << " for " << s->inst << dendl;
   }
