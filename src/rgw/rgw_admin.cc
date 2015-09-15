@@ -3825,8 +3825,11 @@ next:
   }
 
   if (opt_cmd == OPT_DATA_SYNC_INIT) {
-#if 0
-    RGWDataSyncStatusManager sync(store);
+    if (source_zone.empty()) {
+      cerr << "ERROR: source zone not specified" << std::endl;
+      return EINVAL;
+    }
+    RGWDataSyncStatusManager sync(store, source_zone);
 
     int ret = sync.init();
     if (ret < 0) {
@@ -3839,7 +3842,6 @@ next:
       cerr << "ERROR: sync.get_sync_status() returned ret=" << ret << std::endl;
       return -ret;
     }
-#endif
   }
 
   if (opt_cmd == OPT_BILOG_LIST) {
