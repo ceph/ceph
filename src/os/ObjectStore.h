@@ -1600,18 +1600,10 @@ public:
   };
 
   // synchronous wrappers
-  unsigned apply_transaction(Transaction& t, Context *ondisk=0) {
-    list<Transaction*> tls;
-    tls.push_back(&t);
-    return apply_transactions(NULL, tls, ondisk);
-  }
   unsigned apply_transaction(Sequencer *osr, Transaction& t, Context *ondisk=0) {
     list<Transaction*> tls;
     tls.push_back(&t);
     return apply_transactions(osr, tls, ondisk);
-  }
-  unsigned apply_transactions(list<Transaction*>& tls, Context *ondisk=0) {
-    return apply_transactions(NULL, tls, ondisk);
   }
   unsigned apply_transactions(Sequencer *osr, list<Transaction*>& tls, Context *ondisk=0);
 
