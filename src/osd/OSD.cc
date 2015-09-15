@@ -1555,7 +1555,7 @@ OSD::OSD(CephContext *cct_, ObjectStore *store_,
   debug_drop_pg_create_duration(cct->_conf->osd_debug_drop_pg_create_duration),
   debug_drop_pg_create_left(-1),
   stats_ack_timeout(cct->_conf->osd_mon_ack_timeout),
-  outstanding_pg_stats(false),
+  outstanding_pg_stats(0),
   up_thru_wanted(0), up_thru_pending(0),
   pg_stat_queue_lock("OSD::pg_stat_queue_lock"),
   osd_stat_updated(false),
@@ -3986,7 +3986,7 @@ void OSD::tick()
       last_pg_stats_sent = utime_t();
       stats_ack_timeout = MAX(g_conf->osd_mon_ack_timeout,
 			      stats_ack_timeout * 2.0);
-      outstanding_pg_stats = false;
+      outstanding_pg_stats = 0;
     }
     if (now - last_pg_stats_sent > cct->_conf->osd_mon_report_interval_max) {
       osd_stat_updated = true;
@@ -4705,9 +4705,12 @@ void OSD::send_pg_stats(const utime_t &now)
     }
 
     if (!outstanding_pg_stats) {
-      outstanding_pg_stats = true;
       last_pg_stats_ack = ceph_clock_now(cct);
     }
+    ++outstanding_pg_stats;
+    dout(20) << __func__ << "  " << outstanding_pg_stats << " updates pending"
+	     << dendl;
+
     monc->send_mon_message(m);
   }
 
@@ -4762,10 +4765,14 @@ void OSD::handle_pg_stats_ack(MPGStatsAck *ack)
 	       << ":" << pg->pg_stats_publish.reported_seq << dendl;
     }
   }
-  
+
+  assert(outstanding_pg_stats > 0);
+  --outstanding_pg_stats;
   if (!pg_stat_queue.size()) {
-    outstanding_pg_stats = false;
+    assert(outstanding_pg_stats == 0);
   }
+  dout(20) << __func__ << "  " << outstanding_pg_stats << " updates pending"
+	   << dendl;
 
   pg_stat_queue_lock.Unlock();
 
