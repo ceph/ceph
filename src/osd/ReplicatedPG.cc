@@ -2011,15 +2011,10 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op,
       }
 
       // Promote too?
-      bool promoting = false;
       if (!op->need_skip_promote()) {
-        promoting = maybe_promote(obc, missing_oid, oloc, in_hit_set,
-                                  pool.info.min_write_recency_for_promote,
-                                  OpRequestRef());
-      }
-      // purge the object in the cache if not promoting
-      if (!promoting) {
-	object_contexts.purge(obc->obs.oi.soid);
+        maybe_promote(obc, missing_oid, oloc, in_hit_set,
+	              pool.info.min_write_recency_for_promote,
+		      OpRequestRef());
       }
     } else {
       if (can_proxy_read)
