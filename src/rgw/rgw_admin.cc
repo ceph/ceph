@@ -307,6 +307,9 @@ enum {
   OPT_MDLOG_FETCH,
   OPT_BILOG_LIST,
   OPT_BILOG_TRIM,
+  OPT_DATA_SYNC_STATUS,
+  OPT_DATA_SYNC_INIT,
+  OPT_DATA_SYNC_RUN,
   OPT_DATALOG_LIST,
   OPT_DATALOG_TRIM,
   OPT_OPSTATE_LIST,
@@ -345,6 +348,7 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
       strcmp(cmd, "bucket") == 0 ||
       strcmp(cmd, "buckets") == 0 ||
       strcmp(cmd, "caps") == 0 ||
+      strcmp(cmd, "data") == 0 ||
       strcmp(cmd, "datalog") == 0 ||
       strcmp(cmd, "gc") == 0 || 
       strcmp(cmd, "key") == 0 ||
@@ -612,11 +616,24 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
       return OPT_BILOG_LIST;
     if (strcmp(cmd, "trim") == 0)
       return OPT_BILOG_TRIM;
+  } else if (strcmp(prev_cmd, "data") == 0) {
+    if (strcmp(cmd, "sync") == 0) {
+      *need_more = true;
+      return 0;
+    }
   } else if (strcmp(prev_cmd, "datalog") == 0) {
     if (strcmp(cmd, "list") == 0)
       return OPT_DATALOG_LIST;
     if (strcmp(cmd, "trim") == 0)
       return OPT_DATALOG_TRIM;
+  } else if ((strcmp(prev_prev_cmd, "data") == 0) &&
+	     (strcmp(prev_cmd, "sync") == 0)) {
+    if (strcmp(cmd, "status") == 0)
+      return OPT_DATA_SYNC_STATUS;
+    if (strcmp(cmd, "init") == 0)
+      return OPT_DATA_SYNC_INIT;
+    if (strcmp(cmd, "run") == 0)
+      return OPT_DATA_SYNC_RUN;
   } else if (strcmp(prev_cmd, "opstate") == 0) {
     if (strcmp(cmd, "list") == 0)
       return OPT_OPSTATE_LIST;
@@ -3750,6 +3767,48 @@ next:
       return -ret;
     }
   }
+
+  if (opt_cmd == OPT_DATA_SYNC_STATUS) {
+#if 0
+    RGWDataSyncStatusManager sync(store);
+
+    int ret = sync.init();
+    if (ret < 0) {
+      cerr << "ERROR: sync.init() returned ret=" << ret << std::endl;
+      return -ret;
+    }
+
+    ret = sync.read_sync_status();
+    if (ret < 0) {
+      cerr << "ERROR: sync.read_sync_status() returned ret=" << ret << std::endl;
+      return -ret;
+    }
+
+    rgw_data_sync_status& sync_status = sync.get_sync_status();
+
+    encode_json("sync_status", sync_status, formatter);
+    formatter->flush(cout);
+#endif
+  }
+
+  if (opt_cmd == OPT_DATA_SYNC_INIT) {
+#if 0
+    RGWDataSyncStatusManager sync(store);
+
+    int ret = sync.init();
+    if (ret < 0) {
+      cerr << "ERROR: sync.init() returned ret=" << ret << std::endl;
+      return -ret;
+    }
+
+    ret = sync.init_sync_status();
+    if (ret < 0) {
+      cerr << "ERROR: sync.get_sync_status() returned ret=" << ret << std::endl;
+      return -ret;
+    }
+#endif
+  }
+
   if (opt_cmd == OPT_BILOG_LIST) {
     if (bucket_name.empty()) {
       cerr << "ERROR: bucket not specified" << std::endl;
