@@ -1971,7 +1971,7 @@ protected:
    */
   utime_t last_pg_stats_ack;
   float stats_ack_timeout;
-  bool outstanding_pg_stats; // some stat updates haven't been acked yet
+  int outstanding_pg_stats; // how many stat updates haven't been acked yet
 
   void do_mon_report();
 
