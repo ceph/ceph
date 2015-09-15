@@ -852,7 +852,7 @@ struct RGWZoneParams : RGWSystemMetaObj {
   map<string, RGWZonePlacementInfo> placement_pools;
 
   RGWZoneParams() : is_master(false) {}
-  RGWZoneParams(const string& name) : RGWSystemMetaObj(name), is_master(false) {}
+  RGWZoneParams(const string& name, bool _is_master = false) : RGWSystemMetaObj(name), is_master(_is_master) {}
   RGWZoneParams(const string& id, const string& name) : RGWSystemMetaObj(id, name), is_master(false) {}
 
   const string& get_pool_name(CephContext *cct);
@@ -863,7 +863,7 @@ struct RGWZoneParams : RGWSystemMetaObj {
 
   int init(CephContext *_cct, RGWRados *_store, RGWZoneGroup& zonegroup, bool setup_obj = true,
 	   bool old_format = false);
-
+  using RGWSystemMetaObj::init;
   void init_id(CephContext *cct, RGWZoneGroup& zonegroup);
   int create_default(bool old_format = false);
 

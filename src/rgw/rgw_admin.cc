@@ -100,6 +100,7 @@ void _usage()
   cerr << "  zonegroups list            list all zone groups set on this cluster\n";
   cerr << "  zonegroup-map get          show zonegroup-map\n";
   cerr << "  zonegroup-map set          set zonegroup-map (requires infile)\n";
+  cerr << "  zone add                   add a zone to a zonegroup\n";
   cerr << "  zone create                create a new zone\n";
   cerr << "  zone get                   show zone cluster params\n";
   cerr << "  zone set                   set zone cluster params (requires infile)\n";
@@ -285,7 +286,8 @@ enum {
   OPT_ZONEGROUPMAP_GET,
   OPT_ZONEGROUPMAP_SET,
   OPT_ZONEGROUPMAP_UPDATE,
-  OPT_ZONE_CREATE,
+  OPT_ZONE_ADD,
+  OPT_ZONE_CREATE,  
   OPT_ZONE_DELETE,
   OPT_ZONE_GET,
   OPT_ZONE_SET,
@@ -554,6 +556,8 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
       return OPT_ZONE_DELETE;
     if (strcmp(cmd, "create") == 0)
       return OPT_ZONE_CREATE;
+    if (strcmp(cmd, "add") == 0)
+      return OPT_ZONE_ADD;
     if (strcmp(cmd, "get") == 0)
       return OPT_ZONE_GET;
     if (strcmp(cmd, "set") == 0)
@@ -1657,9 +1661,9 @@ int main(int argc, char **argv)
 			 opt_cmd == OPT_ZONEGROUP_RENAME ||
                          opt_cmd == OPT_ZONEGROUPMAP_GET || opt_cmd == OPT_ZONEGROUPMAP_SET ||
                          opt_cmd == OPT_ZONEGROUPMAP_UPDATE ||
-			 opt_cmd == OPT_ZONE_CREATE || opt_cmd == OPT_ZONE_DELETE ||
+			 opt_cmd == OPT_ZONE_ADD || opt_cmd == OPT_ZONE_CREATE || opt_cmd == OPT_ZONE_DELETE ||
                          opt_cmd == OPT_ZONE_GET || opt_cmd == OPT_ZONE_SET || opt_cmd == OPT_ZONE_RENAME ||
-                         opt_cmd == OPT_ZONE_LIST || opt_cmd == OPT_ZONE_CREATE || opt_cmd == OPT_REALM_CREATE ||
+                         opt_cmd == OPT_ZONE_LIST || opt_cmd == OPT_REALM_CREATE ||
 			 opt_cmd == OPT_PERIOD_PREPARE || opt_cmd == OPT_PERIOD_ACTIVATE ||
 			 opt_cmd == OPT_PERIOD_DELETE || opt_cmd == OPT_PERIOD_GET ||
 			 opt_cmd == OPT_PERIOD_GET_CURRENT || opt_cmd == OPT_PERIOD_LIST ||
@@ -2211,16 +2215,42 @@ int main(int argc, char **argv)
 	formatter->flush(cout);
       }
       break;
-    case OPT_ZONE_CREATE:
+    case OPT_ZONE_ADD:
       {
 	RGWZoneGroup zonegroup(zonegroup_id,zonegroup_name);
 	int ret = zonegroup.init(g_ceph_context, store);
-	if (ret < 0 && ret != -ENOENT) {
-	  cerr << "failed to initialize zonegroup " << zonegroup_name << std::endl;
+	if (ret < 0) {
+	  cerr << "failed to initialize zonegroup " << zonegroup_name << " id " << zonegroup_id << " :"
+	       << cpp_strerror(-ret) << std::endl;
 	  return ret;
 	}
-	RGWZoneParams zone(zone_name);
-	ret = zone.init(g_ceph_context, store, zonegroup, false);
+	RGWZoneParams zone(zone_id, zone_name);
+	ret = zone.init(g_ceph_context, store, zonegroup);
+	if (ret < 0) {
+	  cerr << "unable to initialize zone: " << cpp_strerror(-ret) << std::endl;
+	  return -ret;
+	}
+	ret = zonegroup.add_zone(zone);
+	if (ret < 0) {
+	  cerr << "failed to add zone " << zone_name << " to zonegroup " << zonegroup.get_name() << ": "
+	       << cpp_strerror(-ret) << std::endl;
+	  return ret;
+	}
+      }
+      break;
+    case OPT_ZONE_CREATE:
+      {
+	int ret;
+	RGWZoneGroup zonegroup(zonegroup_id, zonegroup_name);
+	if (!zonegroup_id.empty() || !zonegroup_name.empty()) {
+	  ret = zonegroup.init(g_ceph_context, store);
+	  if (ret < 0) {
+	    cerr << "unable to initialize zonegroup " << zonegroup_name << ": " << cpp_strerror(-ret) << std::endl;
+	    return ret;
+	  }
+	}
+	RGWZoneParams zone(zone_name, is_master);
+	ret = zone.init(g_ceph_context, store, false);
 	if (ret < 0) {
 	  cerr << "unable to initialize zone: " << cpp_strerror(-ret) << std::endl;
 	  return -ret;
@@ -2230,13 +2260,14 @@ int main(int argc, char **argv)
 	  cerr << "failed to create zone " << zone_name << ": " << cpp_strerror(-ret) << std::endl;
 	  return ret;
 	}
-	ret = zonegroup.add_zone(zone);
-	if (ret < 0) {
-	  cerr << "failed to add zone " << zone_name << " to zonegroup " << zonegroup.get_name() << ": "
-	       << cpp_strerror(-ret) << std::endl;
-	  return ret;
+	if (!zonegroup_id.empty() || !zonegroup_name.empty()) {
+	  ret = zonegroup.add_zone(zone);
+	  if (ret < 0) {
+	    cerr << "failed to add zone " << zone_name << " to zonegroup " << zonegroup.get_name() << ": "
+		 << cpp_strerror(-ret) << std::endl;
+	    return ret;
+	  }
 	}
-
 	encode_json("zone", zone, formatter);
 	formatter->flush(cout);
 	cout << std::endl;
