@@ -202,6 +202,9 @@ struct RGWUserAdminOpState {
   bool system_specified;
   bool key_op;
   bool temp_url_key_specified;
+  bool found_existing_uid = false;
+  bool found_existing_email = false;
+  bool found_existing_key = false;
 
   // req parameters
   bool populated;
