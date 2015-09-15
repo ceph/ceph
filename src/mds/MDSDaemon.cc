@@ -517,18 +517,10 @@ void MDSDaemon::tick()
   // reschedule
   reset_tick();
 
-  if (beacon.is_laggy()) {
-    dout(5) << "tick bailing out since we seem laggy" << dendl;
-    return;
-  }
-
   // Call through to subsystems' tick functions
   if (mds_rank) {
     mds_rank->tick();
   }
-
-  // Expose ourselves to Beacon to update health indicators
-  beacon.notify_health(mds_rank);
 }
 
 /* This function DOES put the passed message before returning*/
