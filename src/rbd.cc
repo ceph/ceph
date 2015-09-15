@@ -3504,6 +3504,11 @@ if (!set_conf_param(v, p1, p2, p3)) { \
   // the relevant parts
   set_pool_image_name(imgname, (char **)&poolname,
 		      (char **)&imgname, (char **)&snapname);
+  if ((imgname) && (imgname[0] == '\0')) {
+    cerr << "rbd: image name was not specified" << std::endl;
+    return EXIT_FAILRE;
+  }
+
   if (snapname && opt_cmd != OPT_SNAP_CREATE && opt_cmd != OPT_SNAP_ROLLBACK &&
       opt_cmd != OPT_SNAP_REMOVE && opt_cmd != OPT_INFO &&
       opt_cmd != OPT_EXPORT && opt_cmd != OPT_EXPORT_DIFF &&
