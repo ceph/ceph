@@ -5,13 +5,31 @@ import contextlib
 import logging
 import os
 import subprocess
-from teuthology.task import install
-from teuthology import misc as teuthology
 from teuthology import contextutil, packaging
+from teuthology import misc as teuthology
+from teuthology.config import config as teuth_config
+from teuthology.task import install
 import urlparse
 
 log = logging.getLogger(__name__)
 
+def get_install_config(ctx):
+    for task in ctx.config['tasks']:
+        if task.keys()[0] == 'install':
+            config = task['install']
+    if config is None:
+        config = {}
+    assert isinstance(config, dict), \
+        "task install only supports a dictionary for configuration"
+
+    project, = config.get('project', 'ceph'),
+    log.debug('project %s' % project)
+    overrides = ctx.config.get('overrides')
+    if overrides:
+        install_overrides = overrides.get('install', {})
+        teuthology.deep_merge(config, install_overrides.get(project, {}))
+    log.debug('install config %s' % config)
+    return config
 
 @contextlib.contextmanager
 def task(ctx, config):
@@ -39,18 +57,25 @@ def task(ctx, config):
     - install:
     """
     log.info('Beginning buildpackages...')
+    if config is None:
+        config = {}
     assert isinstance(config, dict), \
         'task only accepts a dict for config not ' + str(config)
     d = os.path.join(os.path.dirname(__file__), 'buildpackages')
+    install_config = get_install_config(ctx)
     for remote in ctx.cluster.remotes.iterkeys():
-        gitbuilder = install._get_gitbuilder_project(ctx, remote, config)
-        tag = _get_config_value_for_remote(ctx, remote, config, 'tag')
-        branch = _get_config_value_for_remote(ctx, remote, config, 'branch')
-        sha1 = _get_config_value_for_remote(ctx, remote, config, 'sha1')
+        gitbuilder = install._get_gitbuilder_project(
+            ctx, remote, install_config)
+        tag = packaging._get_config_value_for_remote(
+            ctx, remote, install_config, 'tag')
+        branch = packaging._get_config_value_for_remote(
+            ctx, remote, install_config, 'branch')
+        sha1 = packaging._get_config_value_for_remote(
+            ctx, remote, install_config, 'sha1')
         uri_reference = gitbuilder.uri_reference
         url = gitbuilder.base_url
         assert '/' + uri_reference in url, \
-            (url + ' (from template ' + config.baseurl_template +
+            (url + ' (from template ' + teuth_config.baseurl_template +
              ') does not contain /' + uri_reference)
         if 'ref/' in uri_reference:
             ref = os.path.basename(uri_reference)
