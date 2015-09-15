@@ -300,7 +300,6 @@ bool MDSMonitor::preprocess_beacon(MonOpRequestRef op)
       dout(7) << "mds_beacon " << *m << " is not in mdsmap (state "
               << ceph_mds_state_name(state) << ")" << dendl;
       mon->send_reply(op, new MMDSMap(mon->monmap->fsid, &mdsmap));
-      m->put();
       return true;
     } else {
       return false;  // not booted yet.

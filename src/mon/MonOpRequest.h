@@ -84,7 +84,7 @@ private:
 
   MonOpRequest(Message *req, OpTracker *tracker) :
     TrackedOp(tracker, req->get_recv_stamp()),
-    request(req->get()),
+    request(req),
     session(NULL),
     con(NULL),
     forwarded_to_leader(false),
@@ -140,7 +140,7 @@ public:
   MonSession *get_session() const {
     if (!session)
       return NULL;
-    return (MonSession*)session->get();
+    return session;
   }
 
   template<class T>
