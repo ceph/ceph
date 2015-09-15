@@ -3189,7 +3189,8 @@ void Monitor::send_reply(MonOpRequestRef op, Message *reply)
   Message *req = op->get_req();
   ConnectionRef con = op->get_connection();
 
-  dout(2) << __func__ << " " << op << " " << *reply << dendl;
+  reply->set_cct(g_ceph_context);
+  dout(2) << __func__ << " " << op << " " << reply << " " << *reply << dendl;
 
   if (!con) {
     dout(2) << "send_reply no connection, dropping reply " << *reply
