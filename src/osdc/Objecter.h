@@ -1734,6 +1734,7 @@ public:
    */
   bool osdmap_pool_full(const int64_t pool_id) const;
   bool _osdmap_pool_full(const int64_t pool_id) const;
+  bool _osdmap_pool_full(const pg_pool_t &p) const;
   void update_pool_full_map(map<int64_t, bool>& pool_full_map);
 
  private:
