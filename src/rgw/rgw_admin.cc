@@ -2240,8 +2240,9 @@ int main(int argc, char **argv)
       {
 	RGWZoneGroup zonegroup(zonegroup_id,zonegroup_name);
 	int ret = zonegroup.init(g_ceph_context, store);
-	if (ret < 0) {
-	  cerr << "WARNING: failed to initialize zonegroup " << zonegroup_name << std::endl;
+	if (ret < 0 && ret != -ENOENT) {
+	  cerr << "failed to initialize zonegroup " << zonegroup_name << std::endl;
+	  return ret;
 	}
 	RGWZoneParams zone(zone_name);
 	ret = zone.init(g_ceph_context, store, zonegroup, false);
