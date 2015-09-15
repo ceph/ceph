@@ -1972,22 +1972,6 @@ protected:
   utime_t last_pg_stats_ack;
   float stats_ack_timeout;
   bool outstanding_pg_stats; // some stat updates haven't been acked yet
-  bool timeout_mon_on_pg_stats;
-  void restart_stats_timer() {
-    Mutex::Locker l(osd_lock);
-    last_pg_stats_ack = ceph_clock_now(cct);
-    timeout_mon_on_pg_stats = true;
-  }
-
-  class C_MonStatsAckTimer : public Context {
-    OSD *osd;
-  public:
-    C_MonStatsAckTimer(OSD *o) : osd(o) {}
-    void finish(int r) {
-      osd->restart_stats_timer();
-    }
-  };
-  friend class C_MonStatsAckTimer;
 
   void do_mon_report();
 
