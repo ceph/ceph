@@ -2712,7 +2712,7 @@ int RGWRados::list_periods(list<string>& periods)
 
 int RGWRados::list_periods(const string& current_period, list<string>& periods)
 {
-  int ret;
+  int ret = 0;
   string period_id = current_period;
   while(!period_id.empty()) {
     RGWPeriod period(cct, this, period_id);
