@@ -780,7 +780,7 @@ public:
   int read_default_id(string& default_id, bool old_format = false);
   int set_as_default();
   int delete_default();
-  int create();
+  virtual int create();
   int delete_obj(bool old_format = false);
   int rename(const string& new_name);
   int update() { return store_info(false);}
@@ -1183,6 +1183,7 @@ public:
     DECODE_FINISH(bl);
   }
 
+  int create();
   const string& get_pool_name(CephContext *cct);
   const string& get_default_oid(bool old_format = false);
   const string& get_names_oid_prefix();
@@ -1252,10 +1253,9 @@ public:
     : id(period_id), epoch(_epoch), cct(_cct), store(_store) {}
 
   RGWPeriod(CephContext *_cct, RGWRados *_store,
-	    const string& _master_zonegroup, const string& _master_zone,
-	    const string& period_id = "", epoch_t _epoch = 0)
-    : id(period_id), epoch(_epoch), master_zonegroup(_master_zonegroup), master_zone(_master_zone), cct(_cct),
-      store(_store) {}
+	    const string& _master_zonegroup, const string& _master_zone)
+    : epoch(0), master_zonegroup(_master_zonegroup), master_zone(_master_zone),
+      cct(_cct), store(_store) {}
 
   const string& get_id() { return id;}
   epoch_t get_epoch() { return epoch;}
@@ -1272,10 +1272,13 @@ public:
   {
     predecessor_uuid = predecessor;
   }
+
+  void set_realm_id(const string& _realm_id) {
+    realm_id = _realm_id;
+  }
   int get_latest_epoch(epoch_t& epoch);
-  int init(const string& realm_id, const string &realm_name, bool setup_obj = true);
+  int init(const string &period_realm_id = "", const string &realm_name = "", bool setup_obj = true);
   int init(const string& period_id, epoch_t epoch = 0, bool setup_obj = true);
-  int init(bool setup_obj = true, const string& realm_name = "");
   int create();
   int delete_obj();
   int store_info(bool exclusive);
