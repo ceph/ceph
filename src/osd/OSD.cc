@@ -3993,6 +3993,9 @@ void OSD::tick()
     if (now - last_pg_stats_sent > cct->_conf->osd_mon_report_interval_max) {
       osd_stat_updated = true;
       report = true;
+    } else if (outstanding_pg_stats >= cct->_conf->osd_mon_report_max_in_flight) {
+      dout(20) << __func__ << " have max " << outstanding_pg_stats
+	       << " stats updates in flight" << dendl;
     } else {
       double backoff = stats_ack_timeout / g_conf->osd_mon_ack_timeout;
       double adjusted_min = cct->_conf->osd_mon_report_interval_min * backoff;
