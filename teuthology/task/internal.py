@@ -234,6 +234,12 @@ def check_packages(ctx, config):
 
     If there are missing packages, fail the job.
     """
+    for task in ctx.config['tasks']:
+        if task.keys()[0] == 'buildpackages':
+            log.info("Checking packages skipped because "
+                     "the task buildpackages was found.")
+            return
+
     log.info("Checking packages...")
     os_type = ctx.config.get("os_type")
     sha1 = ctx.config.get("sha1")
