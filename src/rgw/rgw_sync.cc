@@ -1144,17 +1144,12 @@ public:
 	ldout(store->ctx(), 20) << __func__ << ":" << __LINE__ << ": shard_id=" << shard_id << " mdlog_marker=" << mdlog_marker << " sync_marker.marker=" << sync_marker.marker << dendl;
 	if (mdlog_marker == sync_marker.marker) {
 #define INCREMENTAL_INTERVAL 20
-	  yield call(new RGWWaitCR(async_rados, store->ctx(), &inc_lock, &inc_cond, INCREMENTAL_INTERVAL));
+	  yield wait(utime_t(INCREMENTAL_INTERVAL, 0));
 	}
       } while (true);
     }
     /* TODO */
     return 0;
-  }
-
-  void wakeup() {
-    Mutex::Locker l(inc_lock);
-    inc_cond.Signal();
   }
 };
 
