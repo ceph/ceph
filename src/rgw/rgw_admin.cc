@@ -31,6 +31,7 @@
 #include "rgw_replica_log.h"
 #include "rgw_orphan.h"
 #include "rgw_sync.h"
+#include "rgw_data_sync.h"
 #include "rgw_rest_conn.h"
 
 using namespace std;

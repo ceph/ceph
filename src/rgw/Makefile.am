@@ -51,9 +51,10 @@ librgw_la_SOURCES =  \
 	rgw/rgw_replica_log.cc \
 	rgw/rgw_keystone.cc \
 	rgw/rgw_quota.cc \
-	rgw/rgw_sync.cc \
 	rgw/rgw_dencoder.cc \
-	rgw/rgw_object_expirer_core.cc
+	rgw/rgw_object_expirer_core.cc \
+	rgw/rgw_sync.cc \
+	rgw/rgw_data_sync.cc
 librgw_la_CXXFLAGS = -Woverloaded-virtual ${AM_CXXFLAGS}
 noinst_LTLIBRARIES += librgw.la
 
@@ -183,6 +184,7 @@ noinst_HEADERS += \
 	rgw/rgw_rest_replica_log.h \
 	rgw/rgw_rest_config.h \
 	rgw/rgw_sync.h \
+	rgw/rgw_data_sync.h \
 	rgw/rgw_usage.h \
 	rgw/rgw_user.h \
 	rgw/rgw_bucket.h \
