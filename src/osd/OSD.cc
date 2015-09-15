@@ -3991,8 +3991,15 @@ void OSD::tick()
     if (now - last_pg_stats_sent > cct->_conf->osd_mon_report_interval_max) {
       osd_stat_updated = true;
       do_mon_report();
-    } else if (now - last_mon_report > cct->_conf->osd_mon_report_interval_min) {
-      do_mon_report();
+    } else {
+      double backoff = stats_ack_timeout / g_conf->osd_mon_ack_timeout;
+      double adjusted_min = cct->_conf->osd_mon_report_interval_min * backoff;
+      if (now - last_mon_report > adjusted_min) {
+	dout(20) << __func__ << " stats backoff " << backoff
+		 << " adjusted_min " << adjusted_min << " - sending report"
+		 << dendl;
+	do_mon_report();
+      }
     }
 
     map_lock.put_read();
