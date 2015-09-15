@@ -132,6 +132,7 @@ class RGWDataSyncCR;
 class RGWRemoteDataLog : public RGWCoroutinesManager {
   RGWRados *store;
   RGWRESTConn *conn;
+  string source_zone;
   RGWAsyncRadosProcessor *async_rados;
 
   RGWHTTPManager http_manager;
@@ -145,7 +146,7 @@ public:
                                        http_manager(store->ctx(), &completion_mgr),
                                        status_manager(_sm), data_sync_cr(NULL) {}
 
-  int init(RGWRESTConn *_conn);
+  int init(const string& _source_zone, RGWRESTConn *_conn);
   void finish();
 
   int read_log_info(rgw_datalog_info *log_info);

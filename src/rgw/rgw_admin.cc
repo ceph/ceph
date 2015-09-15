@@ -597,7 +597,7 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
       *need_more = true;
       return 0;
     }
-  } else if ((strcmp(prev_prev_cmd, "metadata") == 0) &&
+  } else if ((prev_prev_cmd && strcmp(prev_prev_cmd, "metadata") == 0) &&
 	     (strcmp(prev_cmd, "sync") == 0)) {
     if (strcmp(cmd, "status") == 0)
       return OPT_METADATA_SYNC_STATUS;
@@ -627,7 +627,7 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
       return OPT_DATALOG_LIST;
     if (strcmp(cmd, "trim") == 0)
       return OPT_DATALOG_TRIM;
-  } else if ((strcmp(prev_prev_cmd, "data") == 0) &&
+  } else if ((prev_prev_cmd && strcmp(prev_prev_cmd, "data") == 0) &&
 	     (strcmp(prev_cmd, "sync") == 0)) {
     if (strcmp(cmd, "status") == 0)
       return OPT_DATA_SYNC_STATUS;
@@ -1378,6 +1378,8 @@ int main(int argc, char **argv)
   string err;
   long long tmp = 0;
 
+  string source_zone;
+
   for (std::vector<const char*>::iterator i = args.begin(); i != args.end(); ) {
     if (ceph_argparse_double_dash(args, i)) {
       break;
@@ -1599,6 +1601,8 @@ int main(int argc, char **argv)
       zone_id = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--zone-new-name", (char*)NULL)) {
       zone_new_name = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--source-zone", (char*)NULL)) {
+      source_zone = val;
     } else if (strncmp(*i, "-", 1) == 0) {
       cerr << "ERROR: invalid flag " << *i << std::endl;
       return EINVAL;
@@ -3770,8 +3774,11 @@ next:
   }
 
   if (opt_cmd == OPT_DATA_SYNC_STATUS) {
-#if 0
-    RGWDataSyncStatusManager sync(store);
+    if (source_zone.empty()) {
+      cerr << "ERROR: source zone not specified" << std::endl;
+      return EINVAL;
+    }
+    RGWDataSyncStatusManager sync(store, source_zone);
 
     int ret = sync.init();
     if (ret < 0) {
@@ -3789,7 +3796,6 @@ next:
 
     encode_json("sync_status", sync_status, formatter);
     formatter->flush(cout);
-#endif
   }
 
   if (opt_cmd == OPT_DATA_SYNC_INIT) {
