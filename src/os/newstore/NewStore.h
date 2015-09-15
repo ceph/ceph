@@ -504,8 +504,6 @@ private:
 
   Logger *logger;
 
-  Sequencer default_osr;
-
   Mutex reap_lock;
   Cond reap_cond;
   list<CollectionRef> removed_collections;

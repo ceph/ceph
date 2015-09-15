@@ -90,6 +90,7 @@ uint64_t do_run(ObjectStore *store, int attrsize, int numattrs,
   Mutex lock("lock");
   Cond cond;
   int in_flight = 0;
+  ObjectStore::Sequencer osr(__func__);
   ObjectStore::Transaction t;
   map<coll_t, pair<set<string>, ObjectStore::Sequencer*> > collections;
   for (int i = 0; i < 3*THREADS; ++i) {
@@ -105,7 +106,7 @@ uint64_t do_run(ObjectStore *store, int attrsize, int numattrs,
     }
     collections[coll] = make_pair(objects, new ObjectStore::Sequencer(coll.to_str()));
   }
-  store->apply_transaction(t);
+  store->apply_transaction(&osr, t);
 
   bufferlist bl;
   for (int i = 0; i < attrsize; ++i) {

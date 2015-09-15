@@ -223,9 +223,10 @@ int main(int argc, const char *argv[])
   spg_t pg;
   const coll_t cid(pg);
   {
+    ObjectStore::Sequencer osr(__func__);
     ObjectStore::Transaction t;
     t.create_collection(cid, 0);
-    os->apply_transaction(t);
+    os->apply_transaction(&osr, t);
   }
 
   // create the objects
@@ -237,17 +238,19 @@ int main(int argc, const char *argv[])
       oss << "osbench-thread-" << i;
       oids.emplace_back(pg.make_temp_object(oss.str()));
 
+      ObjectStore::Sequencer osr(__func__);
       ObjectStore::Transaction t;
       t.touch(cid, oids[i]);
-      int r = os->apply_transaction(t);
+      int r = os->apply_transaction(&osr, t);
       assert(r == 0);
     }
   } else {
     oids.emplace_back(pg.make_temp_object("osbench"));
 
+    ObjectStore::Sequencer osr(__func__);
     ObjectStore::Transaction t;
     t.touch(cid, oids.back());
-    int r = os->apply_transaction(t);
+    int r = os->apply_transaction(&osr, t);
     assert(r == 0);
   }
 
@@ -276,10 +279,11 @@ int main(int argc, const char *argv[])
       << iops << " iops" << dendl;
 
   // remove the objects
+  ObjectStore::Sequencer osr(__func__);
   ObjectStore::Transaction t;
   for (const auto &oid : oids)
     t.remove(cid, oid);
-  os->apply_transaction(t);
+  os->apply_transaction(&osr,t);
 
   os->umount();
   return 0;

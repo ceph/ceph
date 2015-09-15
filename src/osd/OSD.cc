@@ -2515,7 +2515,7 @@ void OSD::clear_temp_objects()
 	dout(20) << "  removing " << *p << " object " << *q << dendl;
 	t.remove(*p, *q);
       }
-      store->apply_transaction(t);
+      store->apply_transaction(service.meta_osr.get(), t);
     }
   }
 }
@@ -6446,7 +6446,7 @@ void OSD::handle_osd_map(MOSDMap *m)
   // superblock and commit
   write_superblock(t);
   store->queue_transaction(
-    0,
+    service.meta_osr.get(),
     _t,
     new C_OnMapApply(&service, _t, pinned_maps, osdmap->get_epoch()),
     0, 0);
@@ -6537,7 +6537,7 @@ void OSD::check_osdmap_features(ObjectStore *fs)
       superblock.compat_features.incompat.insert(CEPH_OSD_FEATURE_INCOMPAT_SHARDS);
       ObjectStore::Transaction *t = new ObjectStore::Transaction;
       write_superblock(*t);
-      int err = store->queue_transaction_and_cleanup(NULL, t);
+      int err = store->queue_transaction_and_cleanup(service.meta_osr.get(), t);
       assert(err == 0);
       fs->set_allow_sharded_objects();
     }

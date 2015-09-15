@@ -55,6 +55,7 @@ int main(int argc, const char **argv)
     return -1;
   }
 
+  ObjectStore::Sequencer osr(__func__);
   ObjectStore::Transaction t;
   char buf[1 << 20];
   bufferlist bl;
@@ -71,7 +72,7 @@ int main(int argc, const char **argv)
   dout(0) << "starting thread" << dendl;
   foo.create();
   dout(0) << "starting op" << dendl;
-  fs->apply_transaction(t);
+  fs->apply_transaction(&osr, t);
 
 }
 
