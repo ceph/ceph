@@ -8092,8 +8092,8 @@ void OSD::handle_op(OpRequestRef& op, OSDMapRef& osdmap)
     }
     // pool is full ?
     map<int64_t, epoch_t> &pool_last_map_marked_full = superblock.pool_last_map_marked_full;
-    if (pi->has_flag(pg_pool_t::FLAG_FULL) || 
-       (pool_last_map_marked_full.count(pool) && (m->get_map_epoch() < pool_last_map_marked_full[pool]))) {
+    if ((pi->has_flag(pg_pool_t::FLAG_FULL) ||
+       (pool_last_map_marked_full.count(pool) && (m->get_map_epoch() < pool_last_map_marked_full[pool]))) && !m->get_source().is_mds()) {
       return;
     }
     
