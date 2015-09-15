@@ -730,4 +730,28 @@ void Journal::handle_wait_for_ready(Context *on_ready) {
   }
 }
 
+std::ostream &operator<<(std::ostream &os, const Journal::State &state) {
+  switch (state) {
+  case Journal::STATE_UNINITIALIZED:
+    os << "Uninitialized";
+    break;
+  case Journal::STATE_INITIALIZING:
+    os << "Initializing";
+    break;
+  case Journal::STATE_REPLAYING:
+    os << "Replaying";
+    break;
+  case Journal::STATE_RECORDING:
+    os << "Recording";
+    break;
+  case Journal::STATE_STOPPING_RECORDING:
+    os << "StoppingRecording";
+    break;
+  default:
+    os << "Unknown (" << static_cast<uint32_t>(state) << ")";
+    break;
+  }
+  return os;
+}
+
 } // namespace librbd
