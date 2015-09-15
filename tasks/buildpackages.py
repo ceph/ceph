@@ -5,7 +5,7 @@ import contextlib
 import logging
 import os
 import subprocess
-from teuthology import install
+from teuthology.task import install
 from teuthology import misc as teuthology
 from teuthology import contextutil, packaging
 import urlparse
