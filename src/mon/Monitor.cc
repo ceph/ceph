@@ -3410,6 +3410,7 @@ void Monitor::waitlist_or_zap_client(MonOpRequestRef op)
 void Monitor::_ms_dispatch(Message *m)
 {
   if (is_shutdown()) {
+    m->put();
     return;
   }
 
