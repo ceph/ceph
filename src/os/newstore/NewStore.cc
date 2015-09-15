@@ -608,7 +608,6 @@ NewStore::NewStore(CephContext *cct, const string& path)
     kv_lock("NewStore::kv_lock"),
     kv_stop(false),
     logger(NULL),
-    default_osr("default"),
     reap_lock("NewStore::reap_lock")
 {
   _init_logger();
@@ -2759,16 +2758,15 @@ int NewStore::queue_transactions(
 
   // set up the sequencer
   OpSequencer *osr;
-  if (!posr)
-    posr = &default_osr;
+  assert(posr);
   if (posr->p) {
     osr = static_cast<OpSequencer *>(posr->p.get());
-    dout(5) << __func__ << " existing " << *osr << "/" << osr->parent << dendl; //<< " w/ q " << osr->q << dendl;
+    dout(5) << __func__ << " existing " << osr << " " << *osr << dendl;
   } else {
     osr = new OpSequencer;
     osr->parent = posr;
     posr->p = osr;
-    dout(5) << __func__ << " new " << *osr << "/" << osr->parent << dendl;
+    dout(5) << __func__ << " new " << osr << " " << *osr << dendl;
   }
 
   // prepare
