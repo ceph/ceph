@@ -299,12 +299,12 @@ enum {
   OPT_METADATA_PUT,
   OPT_METADATA_RM,
   OPT_METADATA_LIST,
+  OPT_METADATA_SYNC_STATUS,
+  OPT_METADATA_SYNC_INIT,
+  OPT_METADATA_SYNC_RUN,
   OPT_MDLOG_LIST,
   OPT_MDLOG_TRIM,
   OPT_MDLOG_FETCH,
-  OPT_MDLOG_SYNC_STATUS,
-  OPT_MDLOG_SYNC_INIT,
-  OPT_MDLOG_SYNC_RUN,
   OPT_BILOG_LIST,
   OPT_BILOG_TRIM,
   OPT_DATALOG_LIST,
@@ -588,6 +588,18 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
       return OPT_METADATA_RM;
     if (strcmp(cmd, "list") == 0)
       return OPT_METADATA_LIST;
+    if (strcmp(cmd, "sync") == 0) {
+      *need_more = true;
+      return 0;
+    }
+  } else if ((strcmp(prev_prev_cmd, "metadata") == 0) &&
+	     (strcmp(prev_cmd, "sync") == 0)) {
+    if (strcmp(cmd, "status") == 0)
+      return OPT_METADATA_SYNC_STATUS;
+    if (strcmp(cmd, "init") == 0)
+      return OPT_METADATA_SYNC_INIT;
+    if (strcmp(cmd, "run") == 0)
+      return OPT_METADATA_SYNC_RUN;
   } else if (strcmp(prev_cmd, "mdlog") == 0) {
     if (strcmp(cmd, "list") == 0)
       return OPT_MDLOG_LIST;
@@ -595,18 +607,6 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
       return OPT_MDLOG_TRIM;
     if (strcmp(cmd, "fetch") == 0)
       return OPT_MDLOG_FETCH;
-    if (strcmp(cmd, "sync") == 0) {
-      *need_more = true;
-      return 0;
-    }
-  } else if ((strcmp(prev_prev_cmd, "mdlog") == 0) &&
-	     (strcmp(prev_cmd, "sync") == 0)) {
-    if (strcmp(cmd, "status") == 0)
-      return OPT_MDLOG_SYNC_STATUS;
-    if (strcmp(cmd, "init") == 0)
-      return OPT_MDLOG_SYNC_INIT;
-    if (strcmp(cmd, "run") == 0)
-      return OPT_MDLOG_SYNC_RUN;
   } else if (strcmp(prev_cmd, "bilog") == 0) {
     if (strcmp(cmd, "list") == 0)
       return OPT_BILOG_LIST;
@@ -3696,7 +3696,7 @@ next:
 
   }
 
-  if (opt_cmd == OPT_MDLOG_SYNC_STATUS) {
+  if (opt_cmd == OPT_METADATA_SYNC_STATUS) {
     RGWMetaSyncStatusManager sync(store);
 
     int ret = sync.init();
@@ -3718,7 +3718,7 @@ next:
 
   }
 
-  if (opt_cmd == OPT_MDLOG_SYNC_INIT) {
+  if (opt_cmd == OPT_METADATA_SYNC_INIT) {
     RGWMetaSyncStatusManager sync(store);
 
     int ret = sync.init();
@@ -3735,7 +3735,7 @@ next:
   }
 
 
-  if (opt_cmd == OPT_MDLOG_SYNC_RUN) {
+  if (opt_cmd == OPT_METADATA_SYNC_RUN) {
     RGWMetaSyncStatusManager sync(store);
 
     int ret = sync.init();
