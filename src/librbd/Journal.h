@@ -223,6 +223,8 @@ private:
   void wait_for_state_transition();
   void schedule_wait_for_ready(Context *on_ready);
   void handle_wait_for_ready(Context *on_ready);
+
+  friend std::ostream &operator<<(std::ostream &os, const State &state);
 };
 
 } // namespace librbd
