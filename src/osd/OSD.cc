@@ -3986,6 +3986,7 @@ void OSD::tick()
       last_pg_stats_sent = utime_t();
       stats_ack_timeout = MAX(g_conf->osd_mon_ack_timeout,
 			      stats_ack_timeout * 2.0);
+      outstanding_pg_stats = false;
     }
     if (now - last_pg_stats_sent > cct->_conf->osd_mon_report_interval_max) {
       osd_stat_updated = true;
