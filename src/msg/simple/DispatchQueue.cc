@@ -227,6 +227,17 @@ void DispatchQueue::wait()
   dispatch_thread.join();
 }
 
+void DispatchQueue::discard_local()
+{
+  for (list<pair<Message *, int> >::iterator p = local_messages.begin();
+       p != local_messages.end();
+       ++p) {
+    ldout(cct,20) << __func__ << " " << p->first << dendl;
+    p->first->put();
+  }
+  local_messages.clear();
+}
+
 void DispatchQueue::shutdown()
 {
   // stop my local delivery thread
