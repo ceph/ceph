@@ -93,6 +93,157 @@ int RGWReadDataSyncStatusCoroutine::handle_data(rgw_data_sync_info& data)
   return 0;
 }
 
+class RGWReadRemoteDataLogShardInfoCR : public RGWCoroutine {
+  RGWRados *store;
+  RGWHTTPManager *http_manager;
+  RGWAsyncRadosProcessor *async_rados;
+
+  RGWRESTReadResource *http_op;
+
+  int shard_id;
+  RGWDataChangesLogInfo *shard_info;
+
+public:
+  RGWReadRemoteDataLogShardInfoCR(RGWRados *_store, RGWHTTPManager *_mgr, RGWAsyncRadosProcessor *_async_rados,
+                                                      int _shard_id, RGWDataChangesLogInfo *_shard_info) : RGWCoroutine(_store->ctx()), store(_store),
+                                                      http_manager(_mgr),
+						      async_rados(_async_rados),
+                                                      http_op(NULL),
+                                                      shard_id(_shard_id),
+                                                      shard_info(_shard_info) {
+  }
+
+  int operate() {
+    RGWRESTConn *conn = store->rest_master_conn;
+    reenter(this) {
+      yield {
+	char buf[16];
+	snprintf(buf, sizeof(buf), "%d", shard_id);
+        rgw_http_param_pair pairs[] = { { "type" , "data" },
+	                                { "id", buf },
+					{ "info" , NULL },
+	                                { NULL, NULL } };
+
+        string p = "/admin/log/";
+
+        http_op = new RGWRESTReadResource(conn, p, pairs, NULL, http_manager);
+
+        http_op->set_user_info((void *)stack);
+
+        int ret = http_op->aio_read();
+        if (ret < 0) {
+          ldout(store->ctx(), 0) << "ERROR: failed to read from " << p << dendl;
+          log_error() << "failed to send http operation: " << http_op->to_str() << " ret=" << ret << std::endl;
+          http_op->put();
+          return set_state(RGWCoroutine_Error, ret);
+        }
+
+        return io_block(0);
+      }
+      yield {
+        int ret = http_op->wait(shard_info);
+        if (ret < 0) {
+          return set_state(RGWCoroutine_Error, ret);
+        }
+        return set_state(RGWCoroutine_Done, 0);
+      }
+    }
+    return 0;
+  }
+};
+
+class RGWInitDataSyncStatusCoroutine : public RGWCoroutine {
+  RGWAsyncRadosProcessor *async_rados;
+  RGWRados *store;
+  RGWHTTPManager *http_manager;
+  RGWObjectCtx& obj_ctx;
+  string source_zone;
+
+  string lock_name;
+  string cookie;
+  rgw_data_sync_info status;
+  map<int, RGWDataChangesLogInfo> shards_info;
+public:
+  RGWInitDataSyncStatusCoroutine(RGWAsyncRadosProcessor *_async_rados, RGWRados *_store, RGWHTTPManager *_http_mgr,
+		      RGWObjectCtx& _obj_ctx, const string& _source_zone, uint32_t _num_shards) : RGWCoroutine(_store->ctx()), async_rados(_async_rados), store(_store),
+                                                http_manager(_http_mgr),
+                                                obj_ctx(_obj_ctx), source_zone(_source_zone) {
+    lock_name = "sync_lock";
+    status.num_shards = _num_shards;
+
+#define COOKIE_LEN 16
+    char buf[COOKIE_LEN + 1];
+
+    gen_rand_alphanumeric(cct, buf, sizeof(buf) - 1);
+    string cookie = buf;
+  }
+
+  int operate() {
+    int ret;
+    reenter(this) {
+      yield {
+	uint32_t lock_duration = 30;
+	call(new RGWSimpleRadosLockCR(async_rados, store, store->get_zone_params().log_pool, datalog_sync_status_oid,
+			             lock_name, cookie, lock_duration));
+	if (retcode < 0) {
+	  ldout(cct, 0) << "ERROR: failed to take a lock on " << datalog_sync_status_oid << dendl;
+	  return set_state(RGWCoroutine_Error, retcode);
+	}
+      }
+      yield {
+        call(new RGWSimpleRadosWriteCR<rgw_data_sync_info>(async_rados, store, store->get_zone_params().log_pool,
+				 datalog_sync_status_oid, status));
+      }
+      yield { /* take lock again, we just recreated the object */
+	uint32_t lock_duration = 30;
+	call(new RGWSimpleRadosLockCR(async_rados, store, store->get_zone_params().log_pool, datalog_sync_status_oid,
+			             lock_name, cookie, lock_duration));
+	if (retcode < 0) {
+	  ldout(cct, 0) << "ERROR: failed to take a lock on " << datalog_sync_status_oid << dendl;
+	  return set_state(RGWCoroutine_Error, retcode);
+	}
+      }
+      /* fetch current position in logs */
+      yield {
+        for (int i = 0; i < (int)status.num_shards; i++) {
+          spawn(new RGWReadRemoteDataLogShardInfoCR(store, http_manager, async_rados, i, &shards_info[i]), false);
+	}
+      }
+      while (collect(&ret)) {
+	if (ret < 0) {
+	  return set_state(RGWCoroutine_Error);
+	}
+        yield;
+      }
+      yield {
+        for (int i = 0; i < (int)status.num_shards; i++) {
+	  rgw_data_sync_marker marker;
+	  marker.next_step_marker = shards_info[i].marker;
+          spawn(new RGWSimpleRadosWriteCR<rgw_data_sync_marker>(async_rados, store, store->get_zone_params().log_pool,
+				                          RGWDataSyncStatusManager::shard_obj_name(source_zone, i), marker), true);
+        }
+      }
+      yield {
+	status.state = rgw_data_sync_info::StateBuildingFullSyncMaps;
+        call(new RGWSimpleRadosWriteCR<rgw_data_sync_info>(async_rados, store, store->get_zone_params().log_pool,
+				 datalog_sync_status_oid, status));
+      }
+      yield { /* unlock */
+	call(new RGWSimpleRadosUnlockCR(async_rados, store, store->get_zone_params().log_pool, datalog_sync_status_oid,
+			             lock_name, cookie));
+      }
+      while (collect(&ret)) {
+	if (ret < 0) {
+	  return set_state(RGWCoroutine_Error);
+	}
+        yield;
+      }
+      return set_state(RGWCoroutine_Done);
+    }
+    return 0;
+  }
+};
+
 int RGWRemoteDataLog::read_log_info(rgw_datalog_info *log_info)
 {
   rgw_http_param_pair pairs[] = { { "type", "data" },
@@ -205,6 +356,12 @@ int RGWRemoteDataLog::read_sync_status(rgw_data_sync_status *sync_status)
 {
   RGWObjectCtx obj_ctx(store, NULL);
   return run(new RGWReadDataSyncStatusCoroutine(async_rados, store, obj_ctx, source_zone, sync_status));
+}
+
+int RGWRemoteDataLog::init_sync_status(int num_shards)
+{
+  RGWObjectCtx obj_ctx(store, NULL);
+  return run(new RGWInitDataSyncStatusCoroutine(async_rados, store, &http_manager, obj_ctx, source_zone, num_shards));
 }
 
 int RGWDataSyncStatusManager::init()
