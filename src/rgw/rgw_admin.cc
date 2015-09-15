@@ -1739,7 +1739,11 @@ int main(int argc, char **argv)
 	  cerr << "missing period id" << std::endl;
 	  return -EINVAL;
 	}
-	RGWPeriod period(g_ceph_context, store, period_id);
+	epoch_t epoch = 0;
+	if (!period_epoch.empty()) {
+	  epoch = atoi(period_epoch.c_str());
+	}
+	RGWPeriod period(g_ceph_context, store, period_id, epoch);
 	int ret = period.init();
 	if (ret < 0) {
 	  cerr << "period init failed: " << cpp_strerror(-ret) << std::endl;

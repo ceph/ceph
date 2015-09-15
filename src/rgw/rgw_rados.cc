@@ -545,6 +545,29 @@ int RGWSystemMetaObj::store_info(bool exclusive)
   return  rgw_put_system_obj(store, pool, oid, bl.c_str(), bl.length(), exclusive, NULL, 0, NULL);
 }
 
+
+int RGWRealm::create()
+{
+
+  int ret = RGWSystemMetaObj::create();
+  if (ret < 0) {
+    ldout(cct, 0) << "ERROR creating new realm object " << name << ": " << cpp_strerror(-ret) << dendl;
+    return ret;
+  }
+  /* create new period for the realm */
+  RGWPeriod period(cct, store);
+  ret = period.init(id, name, false);
+  if (ret < 0 ) {
+    return ret;
+  }
+  ret = period.create();
+  if (ret < 0) {
+    ldout(cct, 0) << "ERROR creating new period for realm " << name << ": " << cpp_strerror(-ret) << dendl;
+    return ret;
+  }
+  return set_current_period(period.get_id());
+}
+
 const string& RGWRealm::get_pool_name(CephContext *cct)
 {
   if (cct->_conf->rgw_realm_root_pool.empty()) {
@@ -573,10 +596,10 @@ const string& RGWRealm::get_info_oid_prefix(bool old_format)
 
 int RGWRealm::set_current_period(const string& period_id) {
   /* check to see period id is valid */
-  RGWPeriod new_current(cct, store);
-  int ret = new_current.init(period_id);
+  RGWPeriod new_current(cct, store, period_id);
+  int ret = new_current.init(id, name);
   if (ret < 0) {
-    derr << "Error init new period id " << period_id << " : " << cpp_strerror(-ret) << dendl;
+    ldout(cct, 0) << "Error init new period id " << period_id << " : " << cpp_strerror(-ret) << dendl;
     return ret;
   }
   new_current.set_predecessor(current_period);
@@ -588,7 +611,7 @@ int RGWRealm::set_current_period(const string& period_id) {
   return update();
 }
 
-int RGWPeriod::init(const string& period_id, epoch_t period_epoch,  bool setup_obj)
+int RGWPeriod::init(const string& period_id, epoch_t period_epoch, bool setup_obj)
 {
   if (!period_id.empty()) {
     id = period_id;
@@ -602,29 +625,20 @@ int RGWPeriod::init(const string& period_id, epoch_t period_epoch,  bool setup_o
     return 0;
   }
 
-  return init(setup_obj);
+  return init();
 }
 
-int RGWPeriod::init(const string& period_realm_id, const string& period_realm_name, bool setup_obj)
+int RGWPeriod::init(const string& period_realm_id, const string& realm_name, bool setup_obj)
 {
   realm_id = period_realm_id;
 
   if (!setup_obj)
     return 0;
 
-  return init(setup_obj,period_realm_name);
-}
-
-
-int RGWPeriod::init(bool setup_obj,const string& realm_name)
-{
-  if (!setup_obj)
-    return 0;
-
   RGWRealm realm(realm_id, realm_name);
   int ret = realm.init(cct, store);
   if (ret < 0) {
-    derr << "failed to init realm " << realm_name  << " id " << realm_id << " : " << cpp_strerror(-ret) <<
+    ldout(cct, 0) << "failed to init realm " << realm_name  << " id " << realm_id << " : " << cpp_strerror(-ret) <<
       dendl;
     return ret;
   }
@@ -641,7 +655,7 @@ int RGWPeriod::init(bool setup_obj,const string& realm_name)
   if (!epoch) {
     ret = use_latest_epoch();
     if (ret < 0) {
-      derr << "failed to use_latest_epoch " << realm_name  << " id " << realm_id << " : "
+      derr << "failed to use_latest_epoch period id " << id << " realm " << realm_name  << " id " << realm_id << " : "
 	   << cpp_strerror(-ret) << dendl;
       return ret;
     }
@@ -823,7 +837,6 @@ int RGWPeriod::store_info(bool exclusive)
   std::ostringstream oss;
   oss << get_info_oid_prefix() << realm_id << "." << id << "." << epoch;
   string oid = oss.str();
-  derr << " period store_info " << oid << dendl;
   bufferlist bl;
   ::encode(*this, bl);
   return rgw_put_system_obj(store, pool, oid, bl.c_str(), bl.length(), exclusive, NULL, 0, NULL);
@@ -2400,8 +2413,8 @@ int RGWRados::list_periods(const string& current_period, list<string>& periods)
   int ret;
   string period_id = current_period;
   while(!period_id.empty()) {
-    RGWPeriod period(cct, this);
-    ret = period.init(period_id);
+    RGWPeriod period(cct, this, period_id);
+    ret = period.init();
     if (ret < 0) {
       return ret;
     }
