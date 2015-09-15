@@ -29,10 +29,23 @@ fi
 if test -d ${dir_osd} ; then
     losd=`ls ${dir_osd} | grep ${cluster}`
 fi
+ceph_conf="/etc/ceph/${cluster}.conf"
+lrgw=`ceph-conf -c ${ceph_conf} -l client.radosgw`
 prefix="${cluster}-"
 
 case $action in start | stop | status | enable | disable | mask | unmask | restart | is-active | is-failed | show | kill | reset-failed  )
     n=0
+    if test -n "${lrgw}" ; then
+        lrgw_prefix="client.radosgw."
+        for s in ${lrgw} ; do
+            rgwhost=`ceph-conf -c ${ceph_conf} --name $s host`
+            if [[ "${rgwhost}" == `hostname`* ]] ; then
+                systemctl "${action}" ceph-radosgw@${s#$lrgw_prefix}.service
+                rc_check
+                ((++n))
+            fi
+        done
+    fi
     if test -n "${lmon}" ; then
         for s in ${lmon#=${prefix}} ; do
             systemctl "${action}" ceph-mon@${s#$prefix}.service
