@@ -321,8 +321,8 @@ void Beacon::notify_health(MDSRank const *mds)
         << "/" << g_conf->mds_log_max_segments << ")";
 
       MDSHealthMetric m(MDS_HEALTH_TRIM, HEALTH_WARN, oss.str());
-      m.metadata["num_segments"] = mds->mdlog->get_num_segments();
-      m.metadata["max_segments"] = g_conf->mds_log_max_segments;
+      m.metadata["num_segments"] = stringify(mds->mdlog->get_num_segments());
+      m.metadata["max_segments"] = stringify(g_conf->mds_log_max_segments);
       health.metrics.push_back(m);
     }
   }
@@ -361,7 +361,7 @@ void Beacon::notify_health(MDSRank const *mds)
       oss << "Many clients (" << late_cap_metrics.size()
           << ") failing to respond to capability release";
       MDSHealthMetric m(MDS_HEALTH_CLIENT_LATE_RELEASE_MANY, HEALTH_WARN, oss.str());
-      m.metadata["client_count"] = late_cap_metrics.size();
+      m.metadata["client_count"] = stringify(late_cap_metrics.size());
       health.metrics.push_back(m);
       late_cap_metrics.clear();
     }
@@ -390,7 +390,7 @@ void Beacon::notify_health(MDSRank const *mds)
           std::ostringstream oss;
 	  oss << "Client " << session->get_human_name() << " failing to respond to cache pressure";
           MDSHealthMetric m(MDS_HEALTH_CLIENT_RECALL, HEALTH_WARN, oss.str());
-          m.metadata["client_id"] = session->info.inst.name.num();
+          m.metadata["client_id"] = stringify(session->info.inst.name.num());
           late_recall_metrics.push_back(m);
         } else {
           dout(20) << "  within timeout " << session->recalled_at << " vs. " << cutoff << dendl;
@@ -401,7 +401,7 @@ void Beacon::notify_health(MDSRank const *mds)
 	std::ostringstream oss;
 	oss << "Client " << session->get_human_name() << " failing to advance its oldest_client_tid";
 	MDSHealthMetric m(MDS_HEALTH_CLIENT_OLDEST_TID, HEALTH_WARN, oss.str());
-	m.metadata["client_id"] = session->info.inst.name.num();
+	m.metadata["client_id"] = stringify(session->info.inst.name.num());
 	large_completed_requests_metrics.push_back(m);
       }
     }
@@ -413,7 +413,7 @@ void Beacon::notify_health(MDSRank const *mds)
       oss << "Many clients (" << late_recall_metrics.size()
           << ") failing to respond to cache pressure";
       MDSHealthMetric m(MDS_HEALTH_CLIENT_RECALL_MANY, HEALTH_WARN, oss.str());
-      m.metadata["client_count"] = late_recall_metrics.size();
+      m.metadata["client_count"] = stringify(late_recall_metrics.size());
       health.metrics.push_back(m);
       late_recall_metrics.clear();
     }
@@ -425,7 +425,7 @@ void Beacon::notify_health(MDSRank const *mds)
       oss << "Many clients (" << large_completed_requests_metrics.size()
 	<< ") failing to advance their oldest_client_tid";
       MDSHealthMetric m(MDS_HEALTH_CLIENT_OLDEST_TID_MANY, HEALTH_WARN, oss.str());
-      m.metadata["client_count"] = large_completed_requests_metrics.size();
+      m.metadata["client_count"] = stringify(large_completed_requests_metrics.size());
       health.metrics.push_back(m);
       large_completed_requests_metrics.clear();
     }
