@@ -99,7 +99,9 @@ int RGWRemoteMetaLog::init()
 void RGWRemoteMetaLog::finish()
 {
   stop();
-  async_rados->stop();
+  if (async_rados) {
+    async_rados->stop();
+  }
   delete async_rados;
 }
 
