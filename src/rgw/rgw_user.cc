@@ -1643,17 +1643,22 @@ int RGWUser::init(RGWUserAdminOpState& op_state)
     }
   }
 
-  if (!uid.empty() && (uid.compare(RGW_USER_ANON_ID) != 0))
+  if (!uid.empty() && (uid.compare(RGW_USER_ANON_ID) != 0)) {
     found = (rgw_get_user_info_by_uid(store, uid, user_info, &op_state.objv) >= 0);
-
-  if (!user_email.empty() && !found)
+    op_state.found_existing_uid = found;
+  }
+  if (!user_email.empty() && !found) {
     found = (rgw_get_user_info_by_email(store, user_email, user_info, &op_state.objv) >= 0);
-
-  if (!swift_user.empty() && !found)
+    op_state.found_existing_email = found;
+  }
+  if (!swift_user.empty() && !found) {
     found = (rgw_get_user_info_by_swift(store, swift_user, user_info, &op_state.objv) >= 0);
-
-  if (!access_key.empty() && !found)
+    op_state.found_existing_key = found;
+  }
+  if (!access_key.empty() && !found) {
     found = (rgw_get_user_info_by_access_key(store, access_key, user_info, &op_state.objv) >= 0);
+    op_state.found_existing_key = found;
+  }
 
   op_state.set_existing_user(found);
   if (found) {
@@ -1772,7 +1777,7 @@ int RGWUser::execute_add(RGWUserAdminOpState& op_state, std::string *err_msg)
   std::string display_name = op_state.get_display_name();
 
   // fail if the user exists already
-  if (op_state.has_existing_user()) {
+  if (op_state.found_existing_uid) {
     if (!op_state.exclusive &&
         (user_email.empty() || old_info.user_email == user_email) &&
         old_info.display_name == display_name) {
@@ -1784,12 +1789,6 @@ int RGWUser::execute_add(RGWUserAdminOpState& op_state, std::string *err_msg)
     return -EEXIST;
   }
 
-  // fail if the user_info has already been populated
-  if (op_state.is_populated()) {
-    set_err_msg(err_msg, "cannot overwrite already populated user");
-    return -EEXIST;
-  }
-
   // fail if the display name was not included
   if (display_name.empty()) {
     set_err_msg(err_msg, "no display name specified");
@@ -1797,8 +1796,14 @@ int RGWUser::execute_add(RGWUserAdminOpState& op_state, std::string *err_msg)
   }
 
   // fail if the user email is a duplicate
-  if (op_state.has_existing_email()) {
+  if (op_state.found_existing_email) {
     set_err_msg(err_msg, "duplicate email provided");
+    return -EEXIST;
+  }
+
+  // fail if the user key is a duplicate
+  if (op_state.found_existing_key) {
+    set_err_msg(err_msg, "duplicate key provided");
     return -EEXIST;
   }
 
