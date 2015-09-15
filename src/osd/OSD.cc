@@ -1554,6 +1554,7 @@ OSD::OSD(CephContext *cct_, ObjectStore *store_,
   debug_drop_pg_create_probability(cct->_conf->osd_debug_drop_pg_create_probability),
   debug_drop_pg_create_duration(cct->_conf->osd_debug_drop_pg_create_duration),
   debug_drop_pg_create_left(-1),
+  stats_ack_timeout(cct->_conf->osd_mon_ack_timeout),
   outstanding_pg_stats(false),
   timeout_mon_on_pg_stats(true),
   up_thru_wanted(0), up_thru_pending(0),
@@ -3977,13 +3978,16 @@ void OSD::tick()
     // mon report?
     utime_t now = ceph_clock_now(cct);
     if (outstanding_pg_stats && timeout_mon_on_pg_stats &&
-	(now - cct->_conf->osd_mon_ack_timeout) > last_pg_stats_ack) {
-      dout(1) << "mon hasn't acked PGStats in " << now - last_pg_stats_ack
+	(now - stats_ack_timeout) > last_pg_stats_ack) {
+      dout(1) << __func__ << " mon hasn't acked PGStats in "
+	      << now - last_pg_stats_ack
 	      << " seconds, reconnecting elsewhere" << dendl;
       monc->reopen_session(new C_MonStatsAckTimer(this));
       timeout_mon_on_pg_stats = false;
       last_pg_stats_ack = ceph_clock_now(cct);  // reset clock
       last_pg_stats_sent = utime_t();
+      stats_ack_timeout = MAX(g_conf->osd_mon_ack_timeout,
+			      stats_ack_timeout * 2.0);
     }
     if (now - last_pg_stats_sent > cct->_conf->osd_mon_report_interval_max) {
       osd_stat_updated = true;
@@ -4721,6 +4725,11 @@ void OSD::handle_pg_stats_ack(MPGStatsAck *ack)
   }
 
   last_pg_stats_ack = ceph_clock_now(cct);
+
+  // decay timeout slowly (analogous to TCP)
+  stats_ack_timeout = MAX(g_conf->osd_mon_ack_timeout,
+			  stats_ack_timeout * .9);
+  dout(20) << __func__ << "  timeout now " << stats_ack_timeout << dendl;
 
   pg_stat_queue_lock.Lock();
 
