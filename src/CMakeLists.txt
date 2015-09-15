@@ -856,7 +856,8 @@ if(${WITH_RBD})
   endif(${ENABLE_SHARED})
   install(TARGETS librados librbd DESTINATION lib)
   set(rbd_srcs
-    rbd.cc common/TextTable.cc)
+    tools/rbd/rbd.cc
+    common/TextTable.cc)
   add_executable(rbd ${rbd_srcs} $<TARGET_OBJECTS:common_util_obj>
     $<TARGET_OBJECTS:parse_secret_objs>
     $<TARGET_OBJECTS:heap_profiler_objs>)
