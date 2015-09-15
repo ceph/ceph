@@ -1970,6 +1970,7 @@ protected:
    *  elsewhere.
    */
   utime_t last_pg_stats_ack;
+  float stats_ack_timeout;
   bool outstanding_pg_stats; // some stat updates haven't been acked yet
   bool timeout_mon_on_pg_stats;
   void restart_stats_timer() {

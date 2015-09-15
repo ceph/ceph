@@ -660,6 +660,8 @@ OPTION(osd_mon_report_interval_max, OPT_INT, 120)
 OPTION(osd_mon_report_interval_min, OPT_INT, 5)  // pg stats, failures, up_thru, boot.
 OPTION(osd_pg_stat_report_interval_max, OPT_INT, 500)  // report pg stats for any given pg at least this often
 OPTION(osd_mon_ack_timeout, OPT_INT, 30) // time out a mon if it doesn't ack stats
+OPTION(osd_stats_ack_timeout_factor, OPT_DOUBLE, 2.0) // multiples of mon_ack_timeout
+OPTION(osd_stats_ack_timeout_decay, OPT_DOUBLE, .9)
 OPTION(osd_default_data_pool_replay_window, OPT_INT, 45)
 OPTION(osd_preserve_trimmed_log, OPT_BOOL, false)
 OPTION(osd_auto_mark_unfound_lost, OPT_BOOL, false)
